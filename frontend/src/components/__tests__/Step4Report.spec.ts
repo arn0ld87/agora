@@ -845,6 +845,52 @@ describe('Step4Report — Report-Modus-Persistenz und API-Übergabe (P4.1)', () 
   })
 })
 
+// PR #975 (CodeRabbit): Die Report-Navigation darf die Registry-Run-ID nicht
+// verlieren. simulation_id und run_id sind seit #764 verschieden — ohne
+// ?runId=<id> faellt loadRunUsage() auf die simulationId zurueck und
+// /api/runs/<id> trifft die falsche Ressource.
+describe('Step4Report — runId ueberlebt die Report-Navigation (PR #975)', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    localStorageMock.clear()
+    resetMockSelection()
+    await router.push('/')
+  })
+
+  it('haengt die runId als Query an, wenn die Regenerierung eine neue reportId liefert', async () => {
+    const wrapper = mountComponent({ simulationId: 'sim_test01', runId: 'run_registry_01' })
+    await wrapper.vm.$nextTick()
+
+    await (wrapper.vm as unknown as { regenerateWithModel: () => Promise<void> }).regenerateWithModel()
+    await flushPromises()
+
+    expect(router.currentRoute.value.name).toBe('Report')
+    expect(router.currentRoute.value.params.reportId).toBe('report_test01')
+    expect(router.currentRoute.value.query.runId).toBe('run_registry_01')
+  })
+
+  it('haengt die runId auch beim Report-Start an', async () => {
+    const wrapper = mountComponent({ simulationId: 'sim_test01', runId: 'run_registry_02' })
+    await wrapper.vm.$nextTick()
+
+    await (wrapper.vm as unknown as { startReportConfirmed: () => Promise<void> }).startReportConfirmed()
+    await flushPromises()
+
+    expect(router.currentRoute.value.query.runId).toBe('run_registry_02')
+  })
+
+  it('navigiert ohne Query, wenn keine Registry-Run-ID bekannt ist', async () => {
+    const wrapper = mountComponent({ simulationId: 'sim_test01' })
+    await wrapper.vm.$nextTick()
+
+    await (wrapper.vm as unknown as { regenerateWithModel: () => Promise<void> }).regenerateWithModel()
+    await flushPromises()
+
+    expect(router.currentRoute.value.name).toBe('Report')
+    expect(router.currentRoute.value.query.runId).toBeUndefined()
+  })
+})
+
 // Sub-Slice Confirm-Dialog + Stop-Button (2026-05-16)
 describe('Step4Report — Confirm-Dialog + Stop-Button', () => {
   beforeEach(() => {

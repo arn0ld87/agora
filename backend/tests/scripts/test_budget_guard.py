@@ -8,6 +8,10 @@ from pathlib import Path
 
 import pytest
 
+# camel-ai ist harte Dependency (pyproject) — die echte Basisklasse wird für
+# den Typ-Transparenz-Test des Proxys gebraucht (PR #975).
+from camel.models.base_model import BaseModelBackend as _BaseModelBackend  # type: ignore[import]
+
 # backend/scripts auf sys.path, wie zur Laufzeit des OASIS-Subprozesses
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 
@@ -73,6 +77,26 @@ class _FakeModel:
     async def _arun(self, messages, *args, **kwargs):
         self.calls += 1
         return _FakeCompletion(self._usage)
+
+
+class _TypedFakeModel(_FakeModel, _BaseModelBackend):  # type: ignore[misc]
+    """``_FakeModel`` mit echter CAMEL-Vererbung.
+
+    CAMEL akzeptiert vorinstanziierte Backends nur, wenn sie
+    ``isinstance(model, BaseModelBackend)`` erfüllen (siehe
+    ``ChatAgent._resolve_models``). Für den Typ-Transparenz-Test des Proxys
+    reicht ein struktureller Fake deshalb nicht.
+    """
+
+    def __init__(self, usage=None):
+        _FakeModel.__init__(self, usage)
+
+    @property
+    def token_counter(self):  # pragma: no cover — von CAMEL nie aufgerufen
+        raise NotImplementedError
+
+    def check_model_config(self):  # pragma: no cover — s.o.
+        pass
 
 
 class _RaiseModel:
@@ -318,6 +342,39 @@ class TestProxyProtocolSurface:
         proxy = guard.wrap_model(_FakeModel(_FakeUsage(1, 1)))
         with pytest.raises(TypeError):
             proxy([])  # type: ignore[call-arg]
+
+    def test_proxy_stays_isinstance_of_base_model_backend(self, run_ledger):
+        # PR #975 (CodeRabbit): CAMEL prüft das übergebene Backend in
+        # ``ChatAgent._resolve_models`` per ``isinstance(model,
+        # BaseModelBackend)`` und wirft sonst ``TypeError: Unsupported type
+        # for model parameter``. Ein Proxy, der nur ``__getattr__``
+        # delegiert, fällt durch diesen Check — die Simulation stirbt beim
+        # Agent-Graph-Aufbau, sobald AGORA_RUN_ID gesetzt ist.
+        guard = SubprocessBudgetGuard(str(run_ledger), "run_sim1")
+        proxy = guard.wrap_model(_TypedFakeModel(_FakeUsage(1, 1)))
+        assert isinstance(proxy, _BaseModelBackend)
+
+    def test_proxy_resolves_through_camel_chat_agent(self, run_ledger):
+        # Regressionsanker am echten CAMEL-Aufrufpfad statt nur am
+        # isinstance-Verhalten (PR #975).
+        from camel.agents.chat_agent import ChatAgent
+
+        guard = SubprocessBudgetGuard(str(run_ledger), "run_sim1")
+        proxy = guard.wrap_model(_TypedFakeModel(_FakeUsage(1, 1)))
+        resolved = ChatAgent._resolve_models(object.__new__(ChatAgent), proxy)
+        assert resolved is proxy
+
+    def test_proxy_type_stays_distinct_from_target(self, run_ledger):
+        # Die ``__class__``-Delegation darf nur den *gemeldeten* Typ
+        # angleichen — der reale Typ bleibt der Proxy, sonst wäre die
+        # Instrumentierung weg.
+        from sim_runtime.budget_guard import _UsageTrackingModelProxy
+
+        guard = SubprocessBudgetGuard(str(run_ledger), "run_sim1")
+        proxy = guard.wrap_model(_TypedFakeModel(_FakeUsage(1, 1)))
+        assert type(proxy) is _UsageTrackingModelProxy
+        proxy.run([])
+        assert self._events(run_ledger)[-1]["success"] is True
 
     def test_proxy_has_no_copy_or_reduce_protocol(self, run_ledger):
         # Issue #764 (Review): CAMEL/OASIS pickelt/copied ModelBackends

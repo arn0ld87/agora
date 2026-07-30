@@ -225,13 +225,31 @@ class _UsageTrackingModelProxy:
         die vier Methoden explizit durch und reichen alles andere via
         ``__getattr__`` / ``__setattr__`` an das Target durch. Copy,
         Pickle und ``__call__`` werden absichtlich NICHT implementiert —
-        wäre das nötig, würden die Tests ``test_copy_not_required_for_oasis``
-        und ``test_proxy_has_no_dunder_call`` fehlschlagen.
+        wäre das nötig, würden die Tests
+        ``test_proxy_has_no_copy_or_reduce_protocol`` und
+        ``test_proxy_does_not_implement_call`` fehlschlagen.
+
+    PR #975 (CodeRabbit) — Typ-Transparenz:
+        Der Aufruf-Audit oben war unvollständig: CAMEL prüft das
+        übergebene Backend in ``ChatAgent._resolve_models`` per
+        ``isinstance(model, BaseModelBackend)`` und wirft sonst
+        ``TypeError: Unsupported type for model parameter``. Da
+        ``__getattr__`` erst nach der regulären Attributsuche greift,
+        liefert ein nackter Proxy sein eigenes ``__class__`` und fällt
+        durch den Check — die Simulation stirbt beim Agent-Graph-Aufbau,
+        sobald ``AGORA_RUN_ID`` gesetzt ist. Deshalb delegiert
+        ``__class__`` an das Target: ``isinstance`` prüft nach dem
+        ``type()``-Treffer auch ``obj.__class__``. Der reale Typ bleibt
+        der Proxy, die Instrumentierung damit erhalten.
     """
 
     def __init__(self, target: Any, guard: SubprocessBudgetGuard):
         object.__setattr__(self, "_target", target)
         object.__setattr__(self, "_guard", guard)
+
+    @property  # type: ignore[misc]
+    def __class__(self) -> Any:  # type: ignore[override]
+        return object.__getattribute__(self, "_target").__class__
 
     def __getattr__(self, name: str) -> Any:
         return getattr(object.__getattribute__(self, "_target"), name)

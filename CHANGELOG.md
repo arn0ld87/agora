@@ -5,6 +5,12 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (Budget-Guard-Proxy und Report-Navigation — 2026-07-30, PR #975-Review)
+
+- **Budget-Guard-Proxy blieb für CAMEL unsichtbar.** `_UsageTrackingModelProxy` in `backend/scripts/sim_runtime/budget_guard.py` delegierte ausschließlich über `__getattr__`. CAMEL prüft vorinstanziierte Backends aber in `ChatAgent._resolve_models` per `isinstance(model, BaseModelBackend)` und wirft sonst `TypeError: Unsupported type for model parameter` — jede Simulation mit gesetztem `AGORA_RUN_ID` wäre beim Agent-Graph-Aufbau gestorben. Der Proxy delegiert jetzt zusätzlich `__class__` an das Target; der reale Typ (und damit die Instrumentierung von `run`/`_run`/`arun`/`_arun`) bleibt unverändert. Der Protokoll-Audit im Docstring nannte außerdem zwei nicht existierende Testnamen — auf die tatsächlichen Anker korrigiert.
+- **`runId` überlebt die Report-Navigation.** `Step4Report.vue` navigierte bei Report-Start und Regenerierung mit `router.push({ name: 'Report', params: … })` ohne Query. Damit ging die Registry-Run-ID verloren und `loadRunUsage()` fiel still auf die `simulationId` zurück, obwohl `/api/runs/<id>` seit #764 die Run-Registry-ID braucht. Neue Utility `frontend/src/utils/reportRoute.ts` (`buildReportRoute`) hängt `?runId=<id>` an, sofern bekannt.
+- **Tests.** 3 neue Backend-Tests (`isinstance`-Transparenz, echter `ChatAgent._resolve_models`-Pfad, Proxy-Typ bleibt distinct) sowie 3 Utility- und 3 Komponententests für die Query-Weitergabe bei Start, Regenerierung und fehlender `runId`.
+
 ### Added (Kosten-, Token- und Zeitbudgets für Runs — 2026-07-29, Issue #764)
 
 - **Kanonischer Budget-Vertrag (v1).** Neuer Pydantic-Contract `backend/app/contracts/run_budget_contract.py` mit Schema-Dump (`run-budget-config`, `run-usage`, `run-budget-status`, `run-preflight-estimate`) und Zod-Spiegel `frontend/src/contracts/runBudgetContract.ts` inkl. Drift-Test. Geldbeträge ausschließlich als Integer-Micros; unbekannte Werte sind nullable mit ehrlichem Status (`unknown`/`estimated`/`free`/`measured`) statt 0. Architektur: [ADR-0012](docs/decisions/0012-run-budgets.md).

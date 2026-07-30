@@ -33,6 +33,7 @@ import type { AiModelRef } from '../../../contracts/aiModelRef'
 import { useEffectiveModelSelection } from '@/composables/useEffectiveModelSelection'
 import { parseAgentEntry } from '../../../utils/reportAgentLog'
 import { parseSourceAnchor } from '../../../utils/sourceAnchor'
+import { buildReportRoute } from '../../../utils/reportRoute'
 import {
   ReportSchema,
   ReportOutlineSchema,
@@ -308,6 +309,14 @@ function buildModelSelection(): Pick<GenerateReportData, 'ai_model_ref'> {
   return {}
 }
 
+// PR #975 (CodeRabbit): Beim Start und beim Regenerieren wechselt die Route
+// auf die neue reportId. Ohne den ?runId=<id>-Query verliert StepReportView
+// die Registry-Run-ID und Step4Report faellt auf simulationId zurueck —
+// /api/runs/<simulation_id> ist aber nicht dieselbe ID (siehe props.runId).
+function reportNavigationTarget(reportId: string) {
+  return buildReportRoute(reportId, props.runId)
+}
+
 async function regenerateWithModel() {
   const simId = resolvedSimulationId.value || props.simulationId
   if (!simId) { addLog('simulationId fehlt — Regenerieren nicht möglich.'); return }
@@ -327,7 +336,7 @@ async function regenerateWithModel() {
       generatedSections.value = {}; currentSectionIndex.value = null
       resetAgentLogs(); resetConsoleLogs(); fullReport.value = null
       emit('update-status', 'processing')
-      router.push({ name: 'Report', params: { reportId: res.data.report_id as string } })
+      router.push(reportNavigationTarget(res.data.report_id as string))
       startPolling()
     } else { addLog(`Fehler: ${res?.error || 'unbekannt'}`) }
   } catch (err) { addLog((err as Error).message) }
@@ -353,7 +362,7 @@ async function startReportConfirmed() {
       generatedSections.value = {}; currentSectionIndex.value = null
       resetAgentLogs(); resetConsoleLogs(); fullReport.value = null
       emit('update-status', 'processing')
-      router.push({ name: 'Report', params: { reportId: res.data.report_id as string } })
+      router.push(reportNavigationTarget(res.data.report_id as string))
       startPolling()
     } else { addLog(`Fehler: ${res?.error || 'unbekannt'}`); reportPending.value = true }
   } catch (err) { addLog((err as Error).message); reportPending.value = true }
