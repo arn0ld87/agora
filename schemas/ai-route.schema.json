@@ -40,6 +40,25 @@
     "LegacyStageRouteOptions": {
       "additionalProperties": false,
       "properties": {
+        "ai_model_ref_source": {
+          "anyOf": [
+            {
+              "enum": [
+                "stage-override",
+                "run-override",
+                "project-default",
+                "workspace-default",
+                "explicit",
+                "fallback"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Ai Model Ref Source"
+        },
         "had_reserved_value": {
           "title": "Had Reserved Value",
           "type": "boolean"

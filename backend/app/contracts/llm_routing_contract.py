@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Dict, Literal, Optional, Any, List
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from .provider_types import ProviderType
+from .provider_types import AiModelRefSource, ProviderType
 
 _STRICT = ConfigDict(extra="forbid")
 
@@ -35,6 +35,39 @@ class StageLLMRoute(BaseModel):
     max_tokens: Optional[int] = None
     reasoning_effort: Optional[ReasoningEffort] = "none"
     provider_options: Dict[str, Any] = Field(default_factory=dict)
+
+    # Issue #901: Herkunft der Routing-Entscheidung. Vorher ging sie beim
+    # Seeden verloren und ai_route_from_stage_route schrieb hart
+    # source="legacy" — jede explizite UI-Modellwahl war im Snapshot und im
+    # AiRouteAudit von einem Legacy-Fallback ununterscheidbar.
+    #
+    # Bewusst das AiModelRef-Vokabular und nicht RouteSource: hier steht, was
+    # das UI ausgewaehlt hat. Die Abbildung auf RouteSource passiert erst bei
+    # der Projektion nach AiRoute. Umgekehrt waere sie verlustbehaftet —
+    # "explicit" und "project-default" haben dort kein exaktes Pendant.
+    #
+    # None = Bestandsroute ohne das Feld; projiziert weiterhin auf "legacy".
+    ai_model_ref_source: Optional[AiModelRefSource] = None
+    fallback_reason: Optional[str] = None
+
+    @model_validator(mode="after")
+    def require_fallback_reason(self) -> "StageLLMRoute":
+        """``fallback`` bildet auf ``RouteSource="provider_fallback"`` ab, und
+        dessen Validator verlangt einen nicht-leeren ``fallback_reason``.
+
+        Die Pruefung steht hier statt in ``ai_route_from_stage_route``, damit
+        der Fehler dort auftritt, wo die Route gebaut wird — sonst braeche ein
+        Run erst spaeter beim Projizieren, an einer Stelle ohne Bezug zur
+        Ursache.
+        """
+        if self.ai_model_ref_source == "fallback" and not (
+            self.fallback_reason and self.fallback_reason.strip()
+        ):
+            raise ValueError(
+                "ai_model_ref_source='fallback' erfordert einen nicht-leeren "
+                "fallback_reason"
+            )
+        return self
 
     @model_validator(mode="before")
     @classmethod

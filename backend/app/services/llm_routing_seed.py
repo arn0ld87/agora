@@ -144,6 +144,35 @@ def _bind_connection_secret(
     options["connection_only"] = True
 
 
+# Issue #901: Ersatzgrund, wenn das UI source="fallback" ohne Begruendung
+# schickt. Der Wert ist bewusst maschinenlesbar und als Luecke erkennbar —
+# nicht als echter Grund getarnt.
+_UNSPECIFIED_FALLBACK_REASON = "unspecified_fallback"
+
+
+def _fallback_reason_for(ai_model_ref: AiModelRef) -> Optional[str]:
+    """Fallback-Grund fuer die Stage-Route bestimmen.
+
+    ``AiModelRef.fallback_reason`` ist optional, ``source="fallback"`` bildet
+    aber auf ``RouteSource="provider_fallback"`` ab, dessen Validator einen
+    nicht-leeren Grund verlangt. Diese Kombination ist ueber die UI real
+    erreichbar: ``AiModelPicker`` setzt bei einer unbekannten Item-ID
+    ``source="fallback"``, ohne einen Grund ableiten zu koennen.
+
+    Der Seed darf daran nicht scheitern. ``seed_run_stage_routing`` laeuft in
+    ``simulation_run.py`` **nach** ``run_registry.create_run`` und ist dort
+    nicht in ein ``try/except`` gefasst — eine Exception hinterliesse einen
+    verwaisten ``pending``-Run und antwortete mit 500. Statt den Aufrufpfad
+    umzubauen, fuellt der Seed die Luecke deterministisch auf; die Information
+    "Fallback ohne angegebenen Grund" bleibt dabei erhalten und ist im Audit
+    von einem echten Grund unterscheidbar.
+    """
+    if ai_model_ref.source != "fallback":
+        return ai_model_ref.fallback_reason
+    reason = (ai_model_ref.fallback_reason or "").strip()
+    return reason or _UNSPECIFIED_FALLBACK_REASON
+
+
 def prevalidate_ai_model_ref(ai_model_ref: AiModelRef) -> ProviderConnection:
     """Günstige Vorab-Prüfung einer ``ai_model_ref`` ohne Live-Discovery.
 
@@ -357,10 +386,16 @@ def seed_run_stage_routing(
         if connection_base_url:
             ref_options["base_url"] = connection_base_url
         _bind_connection_secret(connection, ref_options)
+        # Issue #901: Herkunft und ggf. Fallback-Grund wandern mit in den
+        # Snapshot. Ohne sie schrieb ai_route_from_stage_route beim Auflesen
+        # hart source="legacy" — eine bewusste Nutzerwahl war danach von einem
+        # Provider-Fallback nicht mehr zu unterscheiden.
         config.stage_overrides[stage_id] = StageLLMRoute(
             provider_id=connection.id,
             model=ai_model_ref.model_id,
             provider_options=ref_options,
+            ai_model_ref_source=ai_model_ref.source,
+            fallback_reason=_fallback_reason_for(ai_model_ref),
         )
         if has_existing_config:
             config.routing_version += 1

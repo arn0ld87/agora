@@ -14,6 +14,8 @@
  */
 import { z } from 'zod';
 
+import { AiModelSourceSchema } from './aiModelRef';
+
 // StageId + ReasoningEffort sind Basis-Enums, auf denen LlmRoute aufsetzt.
 // Sie leben hier (unterste Vertrags-Ebene), damit `llmRoutingContract.ts`
 // `LlmRouteSchema` importieren kann, ohne einen zirkulären Import zu erzeugen.
@@ -41,6 +43,13 @@ export const LlmRouteSchema = z
     max_tokens: z.number().int().optional().nullable(),
     reasoning_effort: ReasoningEffortSchema.default('none'),
     provider_options: z.record(z.string(), z.any()).default({}),
+    // Issue #901: Das Backend fuehrt die Herkunft der Routing-Entscheidung
+    // seit diesem Slice auf der StageLLMRoute mit. Ohne den Spiegel wuerde
+    // `.strict()` beim Zuruecklesen von Routing-Defaults hart scheitern —
+    // genau der Pfad, fuer den das strict-Schema laut Kopfkommentar existiert.
+    // Optional + nullable, weil Bestandsrouten das Feld nicht tragen.
+    ai_model_ref_source: AiModelSourceSchema.optional().nullable(),
+    fallback_reason: z.string().optional().nullable(),
   })
   .strict();
 

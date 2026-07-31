@@ -14,6 +14,7 @@ import {
   ProviderConnectionSchema,
   ProviderConnectionResponseSchema,
   ProviderConnectionUpsertRequestSchema,
+  LegacyStageRouteOptionsSchema,
 } from '../aiProviderContract'
 
 describe('canonical AI provider contracts', () => {
@@ -96,6 +97,41 @@ describe('canonical AI provider contracts', () => {
     expect(
       aiRouteJsonSchema.$defs.LegacyStageRouteOptions.properties.reasoning_effort.anyOf,
     ).toContainEqual({ type: 'null' })
+
+    // Issue #901: Der Legacy-Kanal war bisher nur punktuell geprüft — die
+    // Key-Parität oben galt allein `AiProviderOptionsSchema`. Genau deshalb
+    // konnte `ai_model_ref_source` im Backend landen, ohne dass der `.strict()`
+    // -Spiegel es bemerkte. Dieselbe Paritätsaussage gilt jetzt auch hier.
+    const legacySchema = aiRouteJsonSchema.$defs.LegacyStageRouteOptions
+    expect(legacySchema.additionalProperties).toBe(false)
+    expect(Object.keys(LegacyStageRouteOptionsSchema.shape).sort()).toEqual(
+      Object.keys(legacySchema.properties).sort(),
+    )
+  })
+
+  it('accepts and rejects ai_model_ref_source in the legacy channel per contract', () => {
+    const base = {
+      temperature: null,
+      max_tokens: null,
+      reasoning_effort: null,
+      had_reserved_value: false,
+      reserved_value: null,
+    }
+
+    // NotRequired[AiModelRefSource | None] — fehlend, null und gültiger Wert
+    // müssen alle durchgehen; Bestands-Options ohne den Schlüssel dürfen nicht
+    // brechen.
+    expect(LegacyStageRouteOptionsSchema.safeParse(base).success).toBe(true)
+    expect(LegacyStageRouteOptionsSchema.safeParse({ ...base, ai_model_ref_source: null }).success).toBe(true)
+    expect(
+      LegacyStageRouteOptionsSchema.safeParse({ ...base, ai_model_ref_source: 'stage-override' }).success,
+    ).toBe(true)
+
+    // Kein RouteSource-Vokabular: die beiden Enums sind bewusst getrennt,
+    // ein Unterstrich-Wert wäre eine stille Vermischung.
+    expect(
+      LegacyStageRouteOptionsSchema.safeParse({ ...base, ai_model_ref_source: 'stage_override' }).success,
+    ).toBe(false)
   })
 
   it('mirrors strict backend contracts and keeps unknown capabilities unsupported', () => {

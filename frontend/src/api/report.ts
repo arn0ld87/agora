@@ -10,7 +10,15 @@ import type { AiModelRef } from '../contracts/aiModelRef'
 
 /** Explizite (Connection, Modell)-Auswahl aus dem Report-Picker (Issue #817).
  * Direkt vom kanonischen `AiModelRef` abgeleitet, damit die Enum-Constraint auf
- * `source` erhalten bleibt und kein Parallel-Contract entsteht. */
+ * `source` erhalten bleibt und kein Parallel-Contract entsteht.
+ *
+ * `fallback_reason` fehlt hier bewusst (Issue #901): die einzige Stelle, an der
+ * das UI `source: 'fallback'` setzt, ist `AiModelPicker` bei einer unbekannten
+ * Item-ID — dort existiert kein ableitbarer Grund, den man mitsenden könnte.
+ * Ein Feld zu übertragen, das immer leer wäre, hätte nur den Anschein von
+ * Vollständigkeit. Backend-seitig füllt `llm_routing_seed._fallback_reason_for`
+ * die Lücke mit einem als solchen erkennbaren Ersatzwert auf, weil
+ * `RouteSource='provider_fallback'` einen nicht-leeren Grund verlangt. */
 export type AiModelRefPayload = Pick<AiModelRef, 'provider_connection_id' | 'model_id' | 'source'>
 
 export interface GenerateReportData {
