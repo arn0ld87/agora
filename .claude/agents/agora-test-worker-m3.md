@@ -2,11 +2,10 @@
 name: agora-test-worker-m3
 description: Schreibt pytest-Tests für Pydantic-Contracts, FSM-Übergänge, Persona-Quoten, Evidence-Dedup und E2E-Regressionen. Use proactively für jeden Layer-0/1-Task und für klar abgegrenzte Test-Slices.
 tools: Read, Edit, Write, Bash, Grep, Glob
-model: MiniMax-M3
+model: sonnet
 effort: medium
 maxTurns: 30
 background: true
-isolation: worktree
 ---
 
 # Agora Test-Worker

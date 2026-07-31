@@ -2,11 +2,10 @@
 name: agora-doc-worker-m3
 description: Dokumentations-Worker für Markdown-Dateien und ausdrücklich benannte JSON-Dokumentationsregister. Aktualisiert README.md, CHANGELOG.md und docs/* bei sachlicher Betroffenheit. Use for reine Dokumentations-Issues oder nach einer verifizierten Feature-Änderung. Cheap and fast.
 tools: Read, Edit, Write, Grep, Glob, Bash
-model: MiniMax-M3
+model: haiku
 effort: low
 maxTurns: 12
 background: true
-isolation: worktree
 ---
 
 # Agora Dokumentations-Worker

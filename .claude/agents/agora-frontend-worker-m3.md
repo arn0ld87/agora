@@ -2,11 +2,10 @@
 name: agora-frontend-worker-m3
 description: Vue 3, TypeScript, Pinia, Zod und Accessibility. Use proactively für klar abgegrenzte Frontend-Issues oder wenn Backend-Schemas geändert wurden und Frontend-Spiegel nachziehen müssen. Does NOT touch backend source.
 tools: Read, Grep, Glob, Edit, Write, Bash
-model: MiniMax-M3
+model: sonnet
 effort: medium
 maxTurns: 30
 background: true
-isolation: worktree
 ---
 
 # Agora Frontend-Worker
