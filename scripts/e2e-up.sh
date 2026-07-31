@@ -121,8 +121,18 @@ _env_upsert AGORA_PROXY_PORT "${PROXY_PORT}"
 # Stub-Modus stillschweigend weiter.
 if [[ -n "${AGORA_E2E_LLM_MODE:-}" ]]; then
   _env_upsert AGORA_E2E_LLM_MODE "${AGORA_E2E_LLM_MODE}"
-elif agora_env_drop_key AGORA_E2E_LLM_MODE "${REPO_ROOT}/.env"; then
-  echo "[e2e-up] stale AGORA_E2E_LLM_MODE from a previous run removed from .env" >&2
+else
+  drop_rc=0
+  agora_env_drop_key AGORA_E2E_LLM_MODE "${REPO_ROOT}/.env" || drop_rc=$?
+  case "$drop_rc" in
+    0) echo "[e2e-up] stale AGORA_E2E_LLM_MODE from a previous run removed from .env" >&2 ;;
+    1) : ;;  # war nicht gesetzt
+    # Weiterlaufen waere hier falsch: der Stack startete im Stub-Modus, obwohl
+    # der Aufrufer echte Modell-Calls erwartet — genau die stille Verwechslung
+    # aus Issue #989.
+    *) echo "::error::[e2e-up] stale AGORA_E2E_LLM_MODE konnte nicht entfernt werden — Abbruch" >&2
+       exit 1 ;;
+  esac
 fi
 echo "[e2e-up] runtime credentials written to .env (one line per key)" >&2
 

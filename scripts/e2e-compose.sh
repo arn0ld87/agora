@@ -18,8 +18,13 @@ set -euo pipefail
 # --project-name: fester Projektname statt des Compose-Defaults (Name des
 # Verzeichnisses). Ohne ihn heisst das Projekt im Hauptrepo `agora`, in einem
 # Worktree aber z. B. `989-e2e-env-idempotent` — `down` aus dem einen Verzeichnis
-# raeumte den Stack des anderen nicht ab. Ueber AGORA_E2E_PROJECT ueberschreibbar,
-# falls jemand zwei E2E-Stacks nebeneinander braucht.
+# raeumte den Stack des anderen nicht ab.
+#
+# Ueber AGORA_E2E_PROJECT ueberschreibbar. Der Wert isoliert Projektname,
+# Volumes, Netzwerk UND Container-Namen (das E2E-Override interpoliert ihn als
+# container_name-Praefix). Nicht projektabhaengig ist der veroeffentlichte
+# Host-Port: zwei parallele Stacks brauchen zusaetzlich unterschiedliche
+# AGORA_PROXY_PORT-Werte, sonst scheitert der zweite an der Portbindung.
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
 

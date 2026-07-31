@@ -12,7 +12,7 @@ Der E2E-Stack läuft unter dem festen Compose-Projektnamen `agora-e2e` und vergi
 - `down -v` im E2E-Teardown trifft ausschließlich die Volumes des Projekts `agora-e2e`. Dev-Daten in Neo4j bleiben unberührt.
 - Host-Ports kollidieren nicht: nach außen publiziert der E2E-Stack nur nginx auf `AGORA_PROXY_PORT`. Die Neo4j-Ports resettet `docker-compose.prod.yml`, den Backend-Port der Proxy-Override.
 
-Auch zwei E2E-Stacks nebeneinander sind möglich: `AGORA_E2E_PROJECT=<name>` wählt Projektnamen **und** Container-Präfix.
+Auch zwei E2E-Stacks nebeneinander sind möglich, dann aber **beide** Variablen setzen: `AGORA_E2E_PROJECT=<name>` wählt Projektnamen, Volumes, Netzwerk und Container-Präfix — der veröffentlichte Host-Port hängt allein an `AGORA_PROXY_PORT` und ist nicht projektabhängig. Ohne unterschiedliche Ports scheitert der zweite Stack an der Portbindung, nicht mehr am Container-Namen.
 
 **Einzige Kollisionsquelle bleibt `AGORA_PROXY_PORT`.** Der Default ist `80` — er stammt aus `scripts/e2e-up.sh` und deckt sich mit `playwright.config.ts`. Wer dort schon etwas liegen hat, **exportiert** einen anderen Wert (siehe unten).
 
@@ -58,7 +58,8 @@ AGORA_PROXY_PORT=8099 \
 AGORA_E2E_BASE_URL=http://127.0.0.1:8099 \
 npx playwright test <spec>.spec.ts --reporter=list
 
-# 3. Am Ende abräumen
+# 3. Am Ende abräumen — zurück ins Repo-Root, Schritt 2 hat nach frontend/ gewechselt
+cd ..
 bash scripts/e2e-down.sh
 ```
 
@@ -106,8 +107,14 @@ In CI dumpt `global-teardown.ts` diese Logs automatisch, sobald `CI` gesetzt ist
 ## Wenn doch etwas hängen bleibt
 
 ```bash
-docker compose -p agora-e2e ps -a
-docker compose -p agora-e2e down -v --remove-orphans
+bash scripts/e2e-compose.sh ps -a
+bash scripts/e2e-compose.sh down -v --remove-orphans
+```
+
+Der Wrapper trägt dieselbe `-f`-Kette und denselben Projektnamen wie Up und Down — ein handgeschriebenes `docker compose -p agora-e2e …` ohne die Override-Dateien kennt `mock-models` nicht. Ein abweichendes `AGORA_E2E_PROJECT` muss auch hier gesetzt sein:
+
+```bash
+AGORA_E2E_PROJECT=<name> bash scripts/e2e-compose.sh down -v --remove-orphans
 ```
 
 Der feste Projektname macht das aus jedem Verzeichnis heraus möglich — auch aus einem anderen Worktree als dem, der den Stack gestartet hat.

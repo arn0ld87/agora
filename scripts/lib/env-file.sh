@@ -127,10 +127,19 @@ agora_env_upsert() {
 # EXIT-Trap von e2e-down.sh stumm — und AGORA_E2E_LLM_MODE=stub stuende weiter
 # in der .env, also genau der Zustand, den der Trap verhindern soll.
 agora_env_drop_key() {
-  local key="$1" env_file="$2"
+  local key="$1" env_file="$2" probe=0
 
   [[ -f "$env_file" ]] || return 1
-  grep -q "^${key}=" "$env_file" || return 1
+
+  # Auch die Vorab-Pruefung muss Exit 1 von Exit >=2 trennen. Ein pauschales
+  # `|| return 1` deutete eine unlesbare .env als "Schluessel nicht vorhanden"
+  # und meldete faelschlich Erfolg — der Stub-Schalter bliebe stehen.
+  grep -q "^${key}=" "$env_file" || probe=$?
+  if (( probe >= 2 )); then
+    echo "::error::[agora-env] ${env_file} ist nicht lesbar (grep exit ${probe})" >&2
+    return 2
+  fi
+  (( probe == 1 )) && return 1
 
   if ! _agora_env_rewrite "$key" "$env_file" "" no; then
     echo "::error::[agora-env] ${key} konnte nicht aus ${env_file} entfernt werden" >&2
