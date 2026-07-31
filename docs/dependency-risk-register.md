@@ -11,7 +11,8 @@ Automation: [.github/workflows/cve-monitor.yml](../.github/workflows/cve-monitor
 > und Restrisiko dokumentiert in [docs/decisions/0004-cve-upstream-escalation.md](decisions/0004-cve-upstream-escalation.md).
 > Erfordert User-Sign-off (Alex) im Risikoakzeptanz-PR. Betrifft **nur** die beiden
 > nltk-Advisories (PYSEC-2026-597, GHSA-p4gq-832x-fm9v); die Trivy-Baseline (2026-08-30)
-> bleibt unberührt.
+> bleibt unberührt. — **Nachtrag 2026-07-31:** Die Trivy-Baseline ist inzwischen aufgelöst
+> (Issue #772), ihr Hardstop 2026-08-30 entfällt ersatzlos. Siehe Abschnitt unten.
 Supply-Chain-Baseline: [.github/workflows/scorecard.yml](../.github/workflows/scorecard.yml) läuft wöchentlich Mo 04:30 UTC und auf `push` nach `main`. SARIF-Ergebnisse werden ins Code-Scanning-Dashboard hochgeladen; der erste Remote-Run nach Merge ist die Scorecard-Baseline.
 
 Dieses Dokument trackt bewusst ignorierte `pip-audit`-Findings und Trivy-Container-Scans.
@@ -51,16 +52,34 @@ Ohne erfüllte Bedingungen gilt: sofort fixen, kein Register-Eintrag.
 | PYSEC-2026-597 | `nltk` | unbekannt | Nein (kein Upstream-Fix released) | NLTK | 2026-09-28 | open (konsolidiert in #672) | [#672](https://github.com/arn0ld87/agora/issues/672) | [nltk/nltk/releases](https://github.com/nltk/nltk/releases) |
 | GHSA-p4gq-832x-fm9v | `nltk` | High | Nein (kein Upstream-Fix in 3.9.x) | NLTK | 2026-09-28 | open | [#672](https://github.com/arn0ld87/agora/issues/672) | [nltk/nltk/releases](https://github.com/nltk/nltk/releases) |
 
-## Trivy Container Scan Baseline (Hardstop 2026-08-30)
+## Trivy Container Scan Baseline — aufgelöst 2026-07-31 (vormals Hardstop 2026-08-30)
 
 Trivy-Findings aus `.github/workflows/docker-image.yml` (`exit-code: "1"`, `ignore-unfixed: true`).
-Diese CVEs sind in transitiven Dependencies der Basis-Image-Layer (nicht in Python-Packages per pip-audit).
-Fix erfordert Basis-Image-Update; kein Paket-Pin möglich.
 
-| CVE | Quelle | Schweregrad | Fix verfügbar? | Owner | Frist | Status | Blocker |
-|---|---|---|---|---|---|---|---|
-| CVE-2026-24049 | `wheel` (OS-Layer, transitive) | High | Nein (Base-Image Update erforderlich) | alex | 2026-08-30 | open | Basis-Image in `Dockerfile` |
-| CVE-2026-23949 | `jaraco.context` (OS-Layer, transitive) | High | Nein (Base-Image Update erforderlich) | alex | 2026-08-30 | open | Basis-Image in `Dockerfile` |
+**Status: erledigt. Der Hardstop 2026-08-30 entfällt, die `.trivyignore`-Einträge sind entfernt.**
+
+| CVE | Quelle | Schweregrad | Owner | Status | Auflösung |
+|---|---|---|---|---|---|
+| CVE-2026-24049 | `wheel` — **nicht OS-Layer**, sondern `setuptools/_vendor/wheel` in der Backend-`.venv` | High | alex | resolved 2026-07-31 | `setuptools 80.9.0 → 83.0.0` (`33b3f310`, PR #828) hebt vendored `wheel` auf 0.46.3 (fixed ≥ 0.46.2) |
+| CVE-2026-23949 | `jaraco.context` — **nicht OS-Layer**, sondern `setuptools/_vendor/jaraco` in der Backend-`.venv` | High | alex | resolved 2026-07-31 | derselbe Bump hebt vendored `jaraco.context` auf 6.1.0 (fixed ≥ 6.1.0) |
+
+**Ursachenkorrektur:** Die ursprüngliche Begründung „Basis-Image-Update erforderlich" (Eintrag vom
+2026-07-05, `63e923db`) war eine Fehldiagnose. `python:3.14-slim` liefert nur `pip` aus — der
+CPython-Build nutzt `--with-ensurepip`, und `ensurepip` bündelt seit Python 3.12 weder `setuptools`
+noch `wheel`. Beide Pakete kamen ausschließlich über `setuptools/_vendor/` in die `.venv`. Sachlich
+richtig gewesen wäre „setuptools-Bump erforderlich"; ein Basis-Image-Update hätte die Findings nie
+beheben können. Verifiziert am real gebauten Prod-Image (siehe unten).
+
+**Verifikation (2026-07-31, lokal, linux/arm64):** Vollständiger Build der Prod-Stage, Scan mit
+`trivy image --scanners vuln --severity CRITICAL,HIGH --ignore-unfixed` **ohne** `.trivyignore`.
+Ergebnis: beide CVEs nicht mehr vorhanden; die `.venv` enthält `setuptools-83.0.0` mit
+`_vendor/wheel-0.46.3` und `_vendor/jaraco_context-6.1.0`.
+
+Vollständige Belege inkl. Primärquellen: [2026-07-31-issue-772-cve-basisimage-research.md](2026-07-31-issue-772-cve-basisimage-research.md).
+
+**Prozess-Lehre:** Die beiden CVEs standen nie in `dependency-risk-exceptions.json`, weshalb die
+Deadline-Prüfung in `cve-monitor.yml` ihre Frist nie überwacht hat — der Hardstop existierte nur als
+Fließtext. Künftig gehört **jede** `.trivyignore`-Zeile auch in die JSON.
 
 ### Pin-Begruendungen
 
