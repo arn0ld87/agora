@@ -14,7 +14,7 @@ import json
 import os
 import re
 import time as _time_mod
-from typing import Literal, Optional, Dict, Any, List
+from typing import Literal, Optional, Dict, Any, List, Tuple
 from openai import OpenAI
 from pydantic import BaseModel
 
@@ -378,6 +378,69 @@ class LLMClient:
                 "model_event_bus.publish failed (LLM call proceeds): %s", exc
             )
 
+    def _budget_enforcer(self):
+        """RunBudgetEnforcer für diesen Run (None ohne Budget oder run_id).
+
+        Lazy + gecacht pro Client-Instanz. Fehler beim Aufbau werden geloggt
+        und blockieren den LLM-Call nicht (Budget ist Zusatz, kein Hotpath-
+        Risiko).
+        """
+        cached = getattr(self, "_budget_enforcer_cache", "unset")
+        if cached != "unset":
+            return cached
+        enforcer = None
+        run_id = getattr(self, "run_id", None)
+        if run_id:
+            try:
+                from ..services.run_budget import RunBudgetEnforcer
+
+                enforcer = RunBudgetEnforcer.for_run(run_id)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("budget enforcer unavailable (LLM call proceeds): %s", exc)
+        self._budget_enforcer_cache = enforcer
+        return enforcer
+
+    def _budget_check(self) -> None:
+        """Hard-Limit-Prüfung VOR dem Call.
+
+        :class:`BudgetExceededError` wird absichtlich durchgereicht — harte
+        Limits müssen weiterhin greifen. Alle anderen Fehler (Datei-,
+        Ledger-, Parsing-Probleme etc.) werden geloggt und führen nicht zum
+        Blockieren des eigentlichen LLM-Calls (Budget ist Zusatz, nicht
+        Hotpath-Risiko).
+        """
+        from ..services.run_budget import BudgetExceededError
+
+        enforcer = self._budget_enforcer()
+        if enforcer is None:
+            return
+        try:
+            enforcer.check_before_call()
+        except BudgetExceededError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "budget check_before_call failed (LLM call proceeds): %s", exc
+            )
+
+    def _budget_record(self) -> None:
+        """Weiche-Limit-Prüfung NACH dem Call.
+
+        Darf einen erfolgreich abgeschlossenen LLM-Call NICHT nachträglich
+        in einen Fehler verwandeln — interne Budget-Fehler werden geloggt
+        und geschluckt.
+        """
+        enforcer = self._budget_enforcer()
+        if enforcer is None:
+            return
+        try:
+            enforcer.record_after_call()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "budget record_after_call failed (recorded call stays successful): %s",
+                exc,
+            )
+
     def _log_invocation_event(
         self,
         *,
@@ -387,6 +450,8 @@ class LLMClient:
         error_type: Optional[str] = None,
         http_status: Optional[int] = None,
         remote_request_id: Optional[str] = None,
+        prompt_tokens: Optional[int] = None,
+        completion_tokens: Optional[int] = None,
     ) -> None:
         """Persist LLM call telemetry for routed runs without blocking execution."""
         if not getattr(self, "run_id", None):
@@ -407,9 +472,88 @@ class LLMClient:
                 error_type=error_type,
                 http_status=http_status,
                 remote_request_id=remote_request_id,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning("llm invocation logging failed (LLM call proceeds): %s", exc)
+
+    def _provider_attempt(
+        self,
+        call_kwargs: Dict[str, Any],
+        context: str,
+    ) -> Tuple[Any, float]:
+        """Run a SINGLE physical provider request with budget gate + failure telemetry.
+
+        Pro Aufruf:
+            1. ``_budget_check`` (BudgetExceededError passiert sauber durch, ohne
+               Event/Record — der Hard-Limit ist bereits entschieden).
+            2. ``self.client.chat.completions.create(**call_kwargs)``.
+            3. Bei Exception: log failed Invocation-Event + ``_budget_record``
+               + re-raise.
+            4. Bei Erfolg: return ``(response, latency_ms)``; der Aufrufer
+               loggt das Success-Event und führt ``_budget_record`` aus, sobald
+               Usage-Informationen verfügbar sind (Streaming sammelt Usage
+               erst während der Iteration).
+
+        Wird absichtlich INNERHALB von ``llm_call_with_retry`` aufgerufen, damit
+        jeder Retried-Attempt eine eigene Check/Event/Record-Triplet erhält.
+        """
+        from ..services.run_budget import BudgetExceededError
+
+        self._budget_check()
+        started = _time_mod.monotonic()
+        try:
+            response = self.client.chat.completions.create(**call_kwargs)
+        except BudgetExceededError:
+            # Sollte nicht passieren (Budget-Check liegt VOR dem Call),
+            # aber wenn doch: kein doppelter Event/Record.
+            raise
+        except Exception as exc:  # noqa: BLE001 — Failure-Telemetrie, weiterreichen
+            latency_ms = (_time_mod.monotonic() - started) * 1000.0
+            self._log_invocation_event(
+                stage=context,
+                latency_ms=latency_ms,
+                success=False,
+                error_type=type(exc).__name__,
+                http_status=getattr(exc, "status_code", None),
+            )
+            # Issue #764 (Codex P2): Fehlgeschlagener OpenAI-kompatibler
+            # Call zaehlt ebenfalls als Providerattempt — ``_budget_record``
+            # muss auch im Failure-Pfad laufen, sonst unterlaeuft der Call
+            # das weiche ``max_llm_calls``-Limit (Fail-open ist hier explizit
+            # erwuenscht — Hard-Limits greifen bereits vor dem Call).
+            self._budget_record()
+            raise
+        latency_ms = (_time_mod.monotonic() - started) * 1000.0
+        return response, latency_ms
+
+    def _record_provider_success(
+        self,
+        response: Any,
+        latency_ms: float,
+        context: str,
+        usage: Any = None,
+    ) -> None:
+        """Log Success-Invocation-Event + ``_budget_record`` nach erfolgreichem Provider-Attempt.
+
+        ``usage`` ist optional: bei regulären Responses wird es aus
+        ``response.usage`` abgeleitet, bei Streams wird die Usage des letzten
+        Chunks uebergeben.
+        """
+        if usage is None:
+            usage = getattr(response, "usage", None)
+        prompt_tokens = getattr(usage, "prompt_tokens", None) if usage else None
+        completion_tokens = getattr(usage, "completion_tokens", None) if usage else None
+        self._log_invocation_event(
+            stage=context,
+            latency_ms=latency_ms,
+            success=True,
+            prompt_tokens=prompt_tokens if isinstance(prompt_tokens, int) else None,
+            completion_tokens=completion_tokens if isinstance(completion_tokens, int) else None,
+        )
+        # Weiche Budget-Limits nach dem abgeschlossenen Call pruefen (#764).
+        self._budget_record()
 
     def chat(
         self,
@@ -456,6 +600,12 @@ class LLMClient:
                 "LLMClient.chat: E2E-Stub aktiv — ueberspringe LLM-Call (context=%s)",
                 context,
             )
+            # Budget-Gate fuer den Stub: ein Stub-Aufruf = ein Providerattempt
+            # (Issue #764, Codex P1). Symmetrisch zum OpenAI-Pfad, der seinen
+            # Check in ``_provider_attempt`` erhaelt.
+            self._budget_check()
+            self._log_invocation_event(stage=context, latency_ms=0.0, success=True)
+            self._budget_record()
             return e2e_stub_chat_response(messages=messages)
         kwargs: Dict[str, Any] = {
             "model": self.model,
@@ -493,24 +643,30 @@ class LLMClient:
             and os.environ.get("LLM_FORCE_STREAM", "true").lower() in ("1", "true", "yes")
         )
 
-        import time as _time
-        _t0 = _time.monotonic()
+        def _create(call_kwargs: Dict[str, Any]) -> Tuple[Any, float]:
+            """Single-Attempt-Wrapper mit transient-retry. Budget-Check,
+            Failure-Telemetrie und -Record laufen INNERHALB des Wrappers —
+            jeder Retried-Attempt erzeugt damit genau eine
+            Check/Event/Record-Triplet.
 
-        def _create(call_kwargs: Dict[str, Any]):
-            """One-shot call mit transient-retry. KEINE 400-Behandlung — die macht der äußere Wrapper."""
+            KEINE 400-Behandlung — die macht der aeussere Wrapper
+            ``_call_with_token_key_fallback``.
+            """
             return llm_call_with_retry(
-                self.client.chat.completions.create,
+                lambda: self._provider_attempt(call_kwargs, context),
                 max_retries=self._max_retries,
                 initial_delay=self._retry_initial_delay,
                 max_delay=self._retry_max_delay,
-                **call_kwargs,
             )
 
-        def _call_with_token_key_fallback(call_kwargs: Dict[str, Any]):
+        def _call_with_token_key_fallback(call_kwargs: Dict[str, Any]) -> Tuple[Any, float]:
             """Fallback-Retry: bei 400 wg. max_tokens/max_completion_tokens-Inkompatibilität
             einmalig den anderen Schlüssel verwenden. Heuristik in
             ``_uses_max_completion_tokens`` deckt die bekannten Familien ab; der
             Fallback schützt vor neuen Modellen/Proxies, die wir noch nicht kennen.
+
+            Jeder Aufruf von ``_create`` zaehlt als separater Providerattempt
+            mit eigener Check/Event/Record-Triplet.
             """
             try:
                 return _create(call_kwargs)
@@ -527,68 +683,90 @@ class LLMClient:
                 )
                 return _create(swapped)
 
+        # Provider-Pfad: jeder physische Request (erster Call, jeder Retry,
+        # Token-Key-Fallback) erhaelt GENAU EINE
+        # _budget_check / _log_invocation_event / _budget_record-Triplet.
+        # ``_provider_attempt`` kuemmert sich um Check + Failure-Telemetrie;
+        # ``_record_provider_success`` finalisiert die Success-Telemetrie
+        # (nach Usage-Extraktion, sodass auch der Streaming-Pfad mit einem
+        # einzigen Event auskommt).
         _usage_for_counter: Optional[Any] = None
+        _response: Any = None
+        _latency_ms: float = 0.0
+        finish_reason: Optional[str] = None
+        completion_tokens: Optional[int] = None
         try:
             if force_stream:
                 kwargs["stream"] = True
-                stream = _call_with_token_key_fallback(kwargs)
+                _response, _latency_ms = _call_with_token_key_fallback(kwargs)
                 chunks: List[str] = []
-                finish_reason = None
-                completion_tokens = None
-                for event in stream:
-                    if not event.choices:
-                        continue
-                    delta = event.choices[0].delta
-                    piece = getattr(delta, "content", None)
-                    if piece:
-                        chunks.append(piece)
-                    if event.choices[0].finish_reason:
-                        finish_reason = event.choices[0].finish_reason
-                    usage = getattr(event, "usage", None)
-                    if usage and getattr(usage, "completion_tokens", None) is not None:
-                        completion_tokens = usage.completion_tokens
-                        _usage_for_counter = usage
+                try:
+                    for event in _response:  # type: ignore[union-attr]
+                        if not event.choices:
+                            continue
+                        delta = event.choices[0].delta
+                        piece = getattr(delta, "content", None)
+                        if piece:
+                            chunks.append(piece)
+                        if event.choices[0].finish_reason:
+                            finish_reason = event.choices[0].finish_reason
+                        usage = getattr(event, "usage", None)
+                        if usage and getattr(usage, "completion_tokens", None) is not None:
+                            completion_tokens = usage.completion_tokens
+                            _usage_for_counter = usage
+                except Exception as exc:  # noqa: BLE001
+                    # Streaming-Iteration-Fehler (Mid-Stream-Network-Reset o.ae.)
+                    # zaehlt als fehlgeschlagener Providerattempt — Telemetrie
+                    # + Record, dann durchreichen. ``_provider_attempt`` hat
+                    # fuer den HTTP-Connect bereits geloggt; hier geht es um
+                    # den Datenempfang nach erfolgreichem 200.
+                    self._log_invocation_event(
+                        stage=context,
+                        latency_ms=_latency_ms,
+                        success=False,
+                        error_type=type(exc).__name__,
+                        http_status=getattr(exc, "status_code", None),
+                    )
+                    self._budget_record()
+                    raise
                 content = "".join(chunks)
             else:
-                response = _call_with_token_key_fallback(kwargs)
-                choice = response.choices[0]
+                _response, _latency_ms = _call_with_token_key_fallback(kwargs)
+                choice = _response.choices[0]
                 finish_reason = getattr(choice, "finish_reason", None)
-                usage = getattr(response, "usage", None)
+                usage = getattr(_response, "usage", None)
                 completion_tokens = getattr(usage, "completion_tokens", None) if usage else None
                 _usage_for_counter = usage
                 content = choice.message.content or ""
-        except Exception as exc:  # noqa: BLE001
-            elapsed = _time.monotonic() - _t0
-            self._log_invocation_event(
-                stage=context,
-                latency_ms=elapsed * 1000,
-                success=False,
-                error_type=exc.__class__.__name__,
-                http_status=getattr(exc, "status_code", None),
-            )
+        except Exception:
+            # ``_provider_attempt`` hat fuer create()-Fehler bereits geloggt +
+            # recordet. Streaming-Iterationsfehler wurden im inneren try-Block
+            # behandelt. Hier nur sauber durchreichen.
             raise
-        elapsed = _time.monotonic() - _t0
         logger.info(
-            "LLM chat returned model=%s finish=%s tokens_out=%s elapsed=%.1fs max_tokens=%s stream=%s",
-            self.model, finish_reason, completion_tokens, elapsed, max_tokens, force_stream,
+            "LLM chat returned model=%s finish=%s tokens_out=%s max_tokens=%s stream=%s",
+            self.model, finish_reason, completion_tokens, max_tokens, force_stream,
         )
         if require_complete and finish_reason == "length":
             # Nicht als Erfolg verbuchen: der Caller kann mit dem Fragment nichts
             # anfangen, und ein "success" hier verzerrt die Telemetrie.
             self._log_invocation_event(
                 stage=context,
-                latency_ms=elapsed * 1000,
+                latency_ms=_latency_ms,
                 success=False,
                 error_type="LLMOutputTruncatedError",
             )
+            # Issue #764 (Codex P2): record_after_call auch im Truncation-Pfad
+            # — sonst zaehlt der fehlgeschlagene Call nicht in den weichen
+            # Budget-Limits (calls) und der Enforcer verliert einen Eintrag.
+            self._budget_record()
             raise LLMOutputTruncatedError(
                 f"LLM output truncated at token cap: model={self.model}, "
                 f"completion_tokens={completion_tokens}, max_tokens={max_tokens}"
             )
-        self._log_invocation_event(
-            stage=context,
-            latency_ms=elapsed * 1000,
-            success=True,
+        # Erfolgreicher Providerattempt: Success-Event + Record (genau einmal).
+        self._record_provider_success(
+            _response, _latency_ms, context, usage=_usage_for_counter
         )
         # Token-Counter — nur bei vorhandenen Integer-Usage-Daten, kein Log-Spam bei fehlendem Usage.
         # isinstance-Check schützt gegen MagicMock-Attribute in Tests (Mock gibt immer
@@ -702,12 +880,14 @@ class LLMClient:
         temperature: float,
         max_tokens: int,
         force_no_thinking: bool = False,
-    ) -> str:
+    ) -> Tuple[str, Dict[str, Optional[int]]]:
         """Direkter Aufruf gegen Ollamas /api/chat mit format=<schema>.
 
         Delegiert an ``app.llm.providers.ollama.chat_with_schema`` (native
         httpx-Call, Schema-Enforcement laut Ollama-Doku — siehe dort für
-        Details/Fehlerverhalten).
+        Details/Fehlerverhalten). Liefert ``(content, usage)`` mit
+        ``usage`` = ``{prompt_eval_count, eval_count, total_duration_ns}``
+        oder None-Werten, wenn Ollama keine Usage mitschickt.
         """
         think_flag = False if force_no_thinking else self._think
         return _provider_ollama.chat_with_schema(
@@ -763,9 +943,16 @@ class LLMClient:
             pydantic.ValidationError: Parsed JSON does not match *schema*
                 when *schema* is a Pydantic model.
         """
+        # Budget-Gate (Issue #764, Codex P1): jeder physische Providerrequest
+        # bekommt GENAU EINEN ``_budget_check`` unmittelbar vor dem Call.
+        # Pfade, die an ``chat()`` delegieren (OpenAI-kompatibel), erhalten
+        # dort ihren Check — ``chat_json`` ruft hier KEINEN Check mehr auf.
+        # E2E-Stub und nativer Ollama-Schema-Pfad hingegen umgehen ``chat()``
+        # und brauchen daher einen eigenen Check.
         # E2E-Stub-Pfad — nur aktiv wenn AGORA_E2E_LLM_MODE=stub gesetzt.
         # Muss VOR Cache-Lookup, Token-Counter, Retry und allen LLM-Calls liegen.
         if os.environ.get("AGORA_E2E_LLM_MODE") == "stub":
+            self._budget_check()
             from app.utils.llm_e2e_stub import e2e_stub_response
             logger.info(
                 "LLMClient.chat_json: E2E-Stub aktiv — ueberspringe LLM-Call (context=%s)",
@@ -778,6 +965,8 @@ class LLMClient:
                     schema_for_stub = schema.model_json_schema()
                 elif isinstance(schema, dict):
                     schema_for_stub = schema
+            self._log_invocation_event(stage=context, latency_ms=0.0, success=True)
+            self._budget_record()
             return e2e_stub_response(
                 schema=schema_for_stub,
                 messages=list(messages),
@@ -855,29 +1044,81 @@ class LLMClient:
             # Bei Netz-/4xx-Fehler fall-through zum OpenAI-SDK-Pfad mit
             # json_object-Fallback (Resilienz, kein Hard-Fail).
             if self._is_ollama() and isinstance(schema, type) and issubclass(schema, BaseModel):
+                # Issue #764 (Codex P1, Codex P2): Der native Ollama-Pfad
+                # umgeht ``chat()`` und damit dessen Budget-Gates. Hier daher
+                # der eigene ``_budget_check`` unmittelbar vor dem Transport-
+                # Call, und je genau EIN Invocation-Event + ``_budget_record``
+                # je nach Outcome:
+                #   * Erfolg → success=True Event + record + lokales Parsen
+                #   * LLMOutputTruncatedError → success=False Event + record,
+                #     kein Fallback (gleiches Cap, sonst 2. verschwendeter Call)
+                #   * Sonstiger Provider-/Transportfehler → success=False
+                #     Event + record + Fall-through zum OpenAI-Wrapper (auch
+                #     der hat seinen eigenen Check in chat()).
+                # Rein lokale Fehler (JSON-Parsing, Pydantic-Validation) NACH
+                # erfolgreicher Providerantwort erzeugen KEIN zusaetzliches
+                # Providerevent — der Attempt war erfolgreich, nur die
+                # Weiterverarbeitung ist gescheitert.
+                self._budget_check()
+                _ollama_call_started = _time_mod.monotonic()
                 try:
-                    response = self._ollama_chat_with_schema(
+                    ollama_response, ollama_usage = self._ollama_chat_with_schema(
                         messages=messages,
                         schema=schema,
                         temperature=temperature,
                         max_tokens=max_tokens,
                         force_no_thinking=force_no_thinking,
                     )
-                    cleaned_response = _strip_llm_json_envelope(response)
-                    parsed: Dict[str, Any] = json.loads(cleaned_response)
-                    return self._maybe_validate(parsed, schema)
                 except LLMOutputTruncatedError:
-                    # Kein Transportfehler: derselbe Request ueber den
-                    # OpenAI-Wrapper wird am selben Limit wieder gekappt und
-                    # kostet nur einen zweiten vollen Call. Durchreichen.
+                    ollama_latency_ms = (
+                        _time_mod.monotonic() - _ollama_call_started
+                    ) * 1000.0
+                    self._log_invocation_event(
+                        stage=context,
+                        latency_ms=ollama_latency_ms,
+                        success=False,
+                        error_type="LLMOutputTruncatedError",
+                    )
+                    self._budget_record()
+                    # Kein Fallback: dasselbe Cap, zweiter Call waere
+                    # verschwendet. Hart durchreichen.
                     raise
                 except Exception as exc:  # noqa: BLE001 — bewusst breit, Fallback ist sicher
+                    ollama_latency_ms = (
+                        _time_mod.monotonic() - _ollama_call_started
+                    ) * 1000.0
                     logger.warning(
                         "LLMClient.chat_json: native Ollama /api/chat-Pfad fehlgeschlagen "
                         "(%s: %s), fallback auf OpenAI-Wrapper",
                         type(exc).__name__, exc,
                     )
+                    self._log_invocation_event(
+                        stage=context,
+                        latency_ms=ollama_latency_ms,
+                        success=False,
+                        error_type=type(exc).__name__,
+                        http_status=getattr(exc, "status_code", None),
+                    )
+                    # Fehlversuch zaehlt als Providerattempt — der nachfolgende
+                    # OpenAI-Wrapper fuehrt seinen eigenen ``_budget_check``
+                    # in ``chat()`` durch, daher KEIN doppelter Check hier.
+                    self._budget_record()
                     # Fall through zum bestehenden Strict-OpenAI-Pfad
+                else:
+                    ollama_latency_ms = (
+                        _time_mod.monotonic() - _ollama_call_started
+                    ) * 1000.0
+                    self._log_invocation_event(
+                        stage=context,
+                        latency_ms=ollama_latency_ms,
+                        success=True,
+                        prompt_tokens=ollama_usage.get("prompt_eval_count"),
+                        completion_tokens=ollama_usage.get("eval_count"),
+                    )
+                    self._budget_record()
+                    cleaned_response = _strip_llm_json_envelope(ollama_response)
+                    parsed: Dict[str, Any] = json.loads(cleaned_response)
+                    return self._maybe_validate(parsed, schema)
             # Strict-schema path: single fallback on unsupported-provider errors.
             try:
                 response = self.chat(

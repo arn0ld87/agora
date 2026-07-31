@@ -34,7 +34,7 @@ class ReportGenerationService:
         return not force_regenerate and not llm_model_override and not runtime_provider_override
 
     @classmethod
-    def start_generation(cls, simulation_id, report_mode, force_regenerate, llm_model_override, llm_runtime, llm_profile_id=None, ai_model_ref=None):
+    def start_generation(cls, simulation_id, report_mode, force_regenerate, llm_model_override, llm_runtime, llm_profile_id=None, ai_model_ref=None, budget=None):
         manager = SimulationManager()
         state = manager.get_simulation(simulation_id)
         if not state:
@@ -125,6 +125,18 @@ class ReportGenerationService:
             task_type="report_generate",
             metadata={"simulation_id": simulation_id, "graph_id": graph_id, "report_id": report_id, "run_id": run_record["run_id"]}
         )
+        # Issue #764: Budget des Simulationslaufs auf den Report-Run vererben.
+        try:
+            from .run_budget import inherit_budget_from_simulation
+
+            inherit_budget_from_simulation(run_record["run_id"], simulation_id)
+        except Exception:  # noqa: BLE001 — Vererbung ist best-effort
+            logger.debug("budget inheritance skipped", exc_info=True)
+        # Explizit mitgesendetes Budget schlägt die Vererbung (#764).
+        if budget is not None:
+            from .run_budget import set_run_budget_config
+
+            set_run_budget_config(run_record["run_id"], budget)
         # Single Source of Truth: das (ggf. aus dem Projekt geerbte) Profil ist nur
         # ein Eingang zur Routenerzeugung — es darf keinen zweiten Client-Pfad neben
         # der gelockten Route öffnen. seed → resolve → lock bestimmen die Route; der
@@ -180,6 +192,8 @@ class ReportGenerationService:
         graph_tools = GraphToolsService(storage=storage, llm_client=shared_llm_client)
 
         def run_generate():
+            from .run_budget import BudgetExceededError, mark_budget_abort
+
             try:
                 task_manager.update_task(task_id, status=TaskStatus.PROCESSING, progress=0, message="Initializing Report Agent...")
                 agent = ReportAgent(
@@ -220,6 +234,17 @@ class ReportGenerationService:
                         resume_capability={"available": True, "action": "resume", "label": "Continue report generation"},
                     )
                     task_manager.fail_task(task_id, report.error or "Report generation failed")
+            except BudgetExceededError as exc:
+                # Budgetabbruch (#764): Teilresultate bleiben erhalten, Status
+                # "stopped" + termination_reason statt technischem "failed".
+                logger.warning(
+                    "Report generation budget-aborted (run_id=%s, report_id=%s): %s",
+                    run_record["run_id"], report_id, exc,
+                )
+                mark_budget_abort(
+                    run_record["run_id"], exc.dimension, exc.observed, exc.threshold
+                )
+                task_manager.fail_task(task_id, str(exc))
             except Exception:
                 logger.exception("Report generation failed (run_id=%s, report_id=%s)", run_record["run_id"], report_id)
                 import traceback
