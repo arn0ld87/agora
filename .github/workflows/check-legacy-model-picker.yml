@@ -19,6 +19,11 @@ on:
 permissions:
   contents: read
 
+# Veraltete PR-Laeufe abbrechen (der Workflow laeuft nur auf PRs + dispatch).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   grep:
     name: Keine v3-Picker-Importe
@@ -37,6 +42,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
 
       - name: Setup Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0

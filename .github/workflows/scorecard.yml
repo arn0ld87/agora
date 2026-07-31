@@ -10,10 +10,18 @@ on:
 
 permissions: read-all
 
+# Kein PR-Trigger — verhindert nur Ueberlappung von geplantem und
+# push-getriebenem Lauf. Kein cancel-in-progress: ein abgebrochener Lauf
+# wuerde einen unvollstaendigen SARIF-Upload hinterlassen.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   analysis:
     name: Scorecard analysis
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       security-events: write
       id-token: write
