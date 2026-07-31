@@ -3,7 +3,7 @@ name: agora-reviewer-m3
 description: MUST BE USED after an Agora issue implementation is committed locally. Reviews exactly one issue commit against acceptance criteria, architecture, security, contracts, evidence anchors and test evidence. Read-only; never fixes code.
 tools: Read, Grep, Glob, Bash
 disallowedTools: Edit, Write, Agent
-model: MiniMax-M3
+model: opus
 effort: high
 maxTurns: 12
 background: true

@@ -104,7 +104,7 @@ Strukturelle Lücken liegen vor allem in OASIS-/Neo4j-Integrationspfaden, Canvas
 - kanonische Modellauswahl: `frontend/src/components/v4/forms/AiModelPicker.vue`; seit Issue #890 auch im Step-2-Environment-Setup. Eine Auswahl ist eine `AiModelRef` und wird als `ai_model_ref` an `/prepare` gesendet; ohne Auswahl entscheidet die Backend-Präzedenz (Projektprofil vor Workspace-Default). Modellauswahl wird im Frontend nicht mehr persistiert
 - aktive Embedding-Konfiguration: `embedding_service.py` und `embedding_migration.py`
 - strukturierte LLM-JSON-Outputs: `LLMClient.chat_json` mit Pydantic-Schema (strict-json_schema-Pfad); rohe OpenAI-Clients für strukturierte Outputs vermeiden
-- Subagent-Dispatch: Routing-Matrix in [`docs/runbooks/subagent-routing.md`](runbooks/subagent-routing.md) und [`CLAUDE.md`](../CLAUDE.md); Agentdefinitionen unter `.claude/agents/*-m3.md` (Modell `MiniMax-M3`, ab 20.07.2026). Die historischen Subagenten ohne Suffix (z. B. `agora-doc-worker.md`) wurden am 27.07.2026 auf denselben Härtungsgrad gehoben.
+- Subagent-Dispatch: Routing-Matrix in [`docs/runbooks/subagent-routing.md`](runbooks/subagent-routing.md) und [`CLAUDE.md`](../CLAUDE.md); Agentdefinitionen unter `.claude/agents/*-m3.md`. Der `-m3`-Suffix ist seit dem 31.07.2026 nur noch ein historischer Name: die Definitionen trugen `model: MiniMax-M3` (ab 20.07.2026) und waren damit nicht dispatchfähig — sie laufen jetzt auf Anthropic-Modellen (`opus` für den Reviewer, sonst `sonnet`). Die historischen Subagenten ohne Suffix (z. B. `agora-doc-worker.md`) wurden am 27.07.2026 auf denselben Härtungsgrad gehoben.
 - Evidence-Gating: ADR-0002-Hartanker
 
 Chat-Routing und Embedding-Konfiguration bleiben getrennte Vertragswelten.

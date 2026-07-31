@@ -25,17 +25,19 @@ Allgemeine Tool-Pipeline und Skill-Discovery-Regeln stehen in der globalen `~/.c
 
 ## Subagent-Routing
 
-Für jede Rolle existieren aktuell zwei parallele Agent-Definitionen unter `.claude/agents/`: eine mit `-m3`-Suffix (`model: MiniMax-M3`) und eine ohne Suffix (echte Anthropic-Modelle, z. B. `agora-refactor-worker` mit `model: sonnet`, `agora-opus-reviewer` mit `model: opus`). Issue [#803](https://github.com/arn0ld87/agora/issues/803) trackt die Konsolidierung dieser Dopplung — bis dahin sind beide Varianten gültige, registrierte Subagent-Typen. Diese Tabelle nennt die laut Routing-Absicht **bevorzugte** (`-m3`) Variante; welche ein konkreter Skript-/Slash-Command-Text tatsächlich aufruft, kann davon abweichen (siehe Hinweis oben zu `agora-opus-reviewer`) — im Zweifel gilt, was der jeweilige Skripttext wörtlich benennt.
+Für jede Rolle existieren aktuell zwei parallele Agent-Definitionen unter `.claude/agents/`: eine mit `-m3`-Suffix und eine ohne. Issue [#803](https://github.com/arn0ld87/agora/issues/803) trackt die Konsolidierung dieser Dopplung — bis dahin sind beide Varianten gültige, registrierte Subagent-Typen. Diese Tabelle nennt die laut Routing-Absicht **bevorzugte** (`-m3`) Variante; welche ein konkreter Skript-/Slash-Command-Text tatsächlich aufruft, kann davon abweichen (siehe Hinweis oben zu `agora-opus-reviewer`) — im Zweifel gilt, was der jeweilige Skripttext wörtlich benennt.
+
+**Der `-m3`-Suffix ist seit dem 31.07.2026 nur noch ein historischer Name, keine Modellangabe.** Die Definitionen trugen `model: MiniMax-M3`; dieses Modell ist in einer regulären Claude-Code-Session nicht auflösbar, jeder Dispatch brach sofort ab. Sie laufen jetzt auf Anthropic-Modellen. Damit unterscheiden sich die Paare fachlich nicht mehr — genau das ist der Gegenstand von #803. MiniMax-M3 bleibt über eine eigene Claude-Code-Instanz gegen `api.minimax.io/anthropic` nutzbar, nicht als `subagent_type` innerhalb einer laufenden Session.
 
 | Aufgabe | Bevorzugtes Modell | Bevorzugter Subagent |
 |---|---|---|
-| Architektur, Cross-Layer, ambige Specs | Lead (MiniMax-M3) | kein Implementer-Subagent |
-| Abschlussreview eines Issue-Commits | MiniMax-M3 | `agora-reviewer-m3` |
-| Backend-Refactor, Pydantic, Provider, Persistenz | MiniMax-M3 | `agora-refactor-worker-m3` |
-| Tests, FSM, E2E, Persona-Quoten | MiniMax-M3 | `agora-test-worker-m3` |
-| Vue, Pinia, Zod, A11y | MiniMax-M3 | `agora-frontend-worker-m3` |
-| Evidence/Wording-Audit | MiniMax-M3 | `agora-evidence-auditor-m3` |
-| Doku, CHANGELOG, Worklogs, ADR-Drafts | MiniMax-M3 | `agora-doc-worker-m3` |
+| Architektur, Cross-Layer, ambige Specs | Lead-Modell | kein Implementer-Subagent |
+| Abschlussreview eines Issue-Commits | `opus` | `agora-reviewer-m3` |
+| Backend-Refactor, Pydantic, Provider, Persistenz | `sonnet` | `agora-refactor-worker-m3` |
+| Tests, FSM, E2E, Persona-Quoten | `sonnet` | `agora-test-worker-m3` |
+| Vue, Pinia, Zod, A11y | `sonnet` | `agora-frontend-worker-m3` |
+| Evidence/Wording-Audit | `sonnet` | `agora-evidence-auditor-m3` |
+| Doku, CHANGELOG, Worklogs, ADR-Drafts | `sonnet` | `agora-doc-worker-m3` |
 
 Lead-Trigger: Layer 0, Cross-Layer, Wording/Prompt-Semantik, Security, Auth, Secrets, Datenmigration, Provider-Routing, ambige Specs oder fehlende Tests.
 

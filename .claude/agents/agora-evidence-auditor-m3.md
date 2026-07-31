@@ -3,7 +3,7 @@ name: agora-evidence-auditor-m3
 description: Read-only Auditor für Evidence-Qualität, Confidence-Begründungen, Provenance-Anker und Prompt-Semantik. Schreibt NIE Code. Use proactively bei Layer-1- und Layer-3-Tasks und vor Releases.
 tools: Read, Grep, Glob, Bash
 disallowedTools: Edit, Write, Agent
-model: MiniMax-M3
+model: sonnet
 effort: medium
 maxTurns: 18
 background: true

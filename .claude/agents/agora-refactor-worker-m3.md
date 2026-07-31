@@ -2,7 +2,7 @@
 name: agora-refactor-worker-m3
 description: MUST BE USED for Python refactors in backend/app/services and backend/app/api. Use proactively when changes span 2+ files, when extracting helpers, when migrating from @dataclass to pydantic.BaseModel, or when modifying llm_client/report_agent/evidence_binder. Does NOT touch frontend or OASIS-Source.
 tools: Read, Edit, Write, Bash, Grep, Glob
-model: MiniMax-M3
+model: sonnet
 effort: high
 maxTurns: 35
 background: true
