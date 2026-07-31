@@ -364,7 +364,7 @@ function setDraftValue(key: string, value: unknown) {
   padding: 12px 16px;
   border-radius: 10px;
   background: var(--surface-tint);
-  color: var(--text-secondary);
+  color: var(--text-primary);
   font-size: 13px;
 }
 .v4-banner--error {
@@ -391,14 +391,14 @@ function setDraftValue(key: string, value: unknown) {
   border-radius: 999px;
   border: 1px solid transparent;
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: 13px;
   cursor: pointer;
 }
 .v4-tab:hover {
   background: var(--surface-hover);
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 .v4-tab--active {
   background: var(--accent-tint-bg);
@@ -451,7 +451,7 @@ function setDraftValue(key: string, value: unknown) {
 .v4-fields__cell-key code {
   font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 .v4-fields__row--dirty {
   background: var(--accent-tint-bg);
@@ -468,7 +468,7 @@ function setDraftValue(key: string, value: unknown) {
   border: 1px solid var(--hairline-strong);
   border-radius: 8px;
   background: var(--surface-base);
-  color: var(--text-secondary);
+  color: var(--text-primary);
   width: 100%;
   max-width: 320px;
 }
@@ -479,7 +479,7 @@ function setDraftValue(key: string, value: unknown) {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 .v4-hint {
@@ -497,7 +497,7 @@ function setDraftValue(key: string, value: unknown) {
 .v4-flash {
   margin-right: auto;
   font-size: 13px;
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 .v4-flash--error {
   color: var(--status-red, #c00);

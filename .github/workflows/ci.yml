@@ -10,18 +10,10 @@ on:
 permissions:
   contents: read
 
-# Veraltete PR-Laeufe abbrechen, sobald ein neuer Commit gepusht wird.
-# Auf push:main und workflow_dispatch NICHT abbrechen — dort ist jeder Lauf
-# ein eigenstaendiger Nachweis fuer genau einen main-Stand.
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 jobs:
   security:
     name: Security scans
     runs-on: ubuntu-latest
-    timeout-minutes: 20
     if: |
       github.event_name != 'pull_request' ||
       (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
@@ -48,9 +40,6 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
-          # Gitleaks liest die Historie nur lokal und authentifiziert sich
-          # ueber GITHUB_TOKEN im env, nicht ueber den Git-Credential-Helper.
-          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -115,7 +104,6 @@ jobs:
   backend:
     name: Backend tests + lint
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     # 2026-05-17: PR-Skip — Backend-Tests laufen nur noch auf push:main.
     # Auf PR via Label 'needs-backend-ci' reaktivierbar. Reaktivieren ohne
     # Label: if-Zeile entfernen.
@@ -151,8 +139,6 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -197,7 +183,6 @@ jobs:
   frontend:
     name: Frontend build + lint
     runs-on: ubuntu-latest
-    timeout-minutes: 20
     # 2026-05-17: PR-Skip — Frontend-CI läuft nur noch auf push:main.
     # Auf PR via Label 'needs-frontend-ci' reaktivierbar. Reaktivieren ohne
     # Label: if-Zeile entfernen.
@@ -218,8 +203,6 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
@@ -259,7 +242,6 @@ jobs:
   backend-pr-gate:
     name: Backend PR smoke gate (ruff + mypy + pytest-contracts)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
     # Runs on every PR — fast mandatory gate, no label required.
     # Heavy backend jobs (full coverage, matrix) remain in the 'backend' job on push:main.
     if: github.event_name == 'pull_request'
@@ -281,8 +263,6 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -319,7 +299,6 @@ jobs:
   frontend-pr-gate:
     name: Frontend PR smoke gate (lint + typecheck + test + build)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
     # Runs on every PR — fast mandatory gate, no label required.
     # Full test + coverage remain in the 'frontend' job on push:main.
     if: github.event_name == 'pull_request'
@@ -337,8 +316,6 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2

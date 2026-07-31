@@ -151,13 +151,13 @@ async function save(): Promise<void> {
   padding: 6px 14px;
   border-radius: var(--r-5, 10px);
   /* v4-state-interactive liefert border/background/transition/hover/focus-ring/cursor */
-  color: var(--text-secondary);
+  color: var(--text-primary);
   /* Override: Hover-Farbe bleibt text-primary (kein bg-Swap) */
   --v4-state-rest-bg: var(--surface-elevated, #fff);
   --v4-state-hover-bg: var(--surface-elevated, #fff);
 }
 /* Hover-Farb-Override via scoped selector */
-.llm-preset:hover:not(.llm-preset--active) { color: var(--text-secondary); }
+.llm-preset:hover:not(.llm-preset--active) { color: var(--text-primary); }
 .llm-preset--active {
   border-color: var(--accent);
   color: var(--accent);
@@ -172,7 +172,7 @@ async function save(): Promise<void> {
   font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 500;
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 .llm-input {
@@ -182,7 +182,7 @@ async function save(): Promise<void> {
   border: 1px solid var(--hairline);
   border-radius: var(--r-4, 8px);
   background: var(--surface-elevated, #fff);
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 .llm-input--mono { font-family: var(--font-mono); }
 .llm-input:hover { border-color: var(--hairline-strong); }

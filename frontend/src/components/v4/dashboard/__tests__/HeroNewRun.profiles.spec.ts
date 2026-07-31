@@ -160,8 +160,6 @@ describe('HeroNewRun — LLM-Profile (P5.5)', () => {
       'abc',
       30,
       10,
-      // Issue #764: sechstes Argument ist das Run-Budget (Default: keines).
-      null,
     )
     expect(pushSpy).toHaveBeenCalledWith({ name: 'Process', params: { projectId: 'new' } })
   })

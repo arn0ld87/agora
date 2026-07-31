@@ -13,23 +13,14 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Card from '../forms/Card.vue'
 import AiModelPicker from '../forms/AiModelPicker.vue'
-import Button from '../forms/Button.vue'
 import IconPlus from '../shell/icons/IconPlus.vue'
-import RunBudgetForm from '../run-budget/RunBudgetForm.vue'
-import PreflightEstimateCard from '../run-budget/PreflightEstimateCard.vue'
 import { fetchLlmProfiles } from '../../../api/llmProfiles'
-import { preflightEstimate } from '../../../api/budget'
-import type { PreflightEstimateParams } from '../../../api/budget'
 import { setPendingUpload } from '../../../store/pendingUpload'
 import { STORAGE_LANG } from '../../../composables/useEnvForm'
 import { useEffectiveModelSelection } from '@/composables/useEffectiveModelSelection'
 import { setRunModelOverride, clearRunModelOverride } from '@/store/runModelOverride'
 import type { LlmProfile } from '../../../contracts/llmProfileContract'
 import type { AiModelRef } from '@/contracts/aiModelRef'
-import type {
-  PreflightEstimate,
-  RunBudgetConfig,
-} from '../../../contracts/runBudgetContract'
 import { getSystemStatus } from '../../../api/status'
 import { getAvailableModels } from '../../../api/simulation'
 
@@ -137,47 +128,6 @@ const NUM_ROUNDS_MAX = 30
 const allowSmallSim = ref<boolean>(false)
 const numAgents = ref<number>(NUM_AGENTS_DEFAULT)
 const numRounds = ref<number>(NUM_ROUNDS_DEFAULT)
-
-// ---- Issue #764: optionale Run-Budgets + Preflight-Schätzung ----
-// Das Budget wandert über den pendingUpload-Store zu Step3Simulation, die es
-// beim Sim-Start als `budget` an /api/simulation/start durchreicht. Die
-// Preflight-Schätzung ist rein informativ (is_estimate=true) und wird per
-// Button aktualisiert — bewusst kein Debounce auf jeden Slider-Tick.
-const budget = ref<RunBudgetConfig | null>(null)
-const estimate = ref<PreflightEstimate | null>(null)
-const estimateLoading = ref<boolean>(false)
-const estimateError = ref<string | null>(null)
-
-async function refreshEstimate() {
-  estimateLoading.value = true
-  estimateError.value = null
-  try {
-    const params: PreflightEstimateParams = {
-      num_agents: numAgents.value,
-      max_rounds: numRounds.value,
-    }
-    // Expliziter Picker-Pick gewinnt; sonst der Kanon (routing/defaults.global).
-    const modelRef = hasExplicitPick.value
-      ? selectedModel.value
-      : effectiveModel.effectiveRef.value
-    if (modelRef?.provider_connection_id && modelRef?.model_id) {
-      params.ai_model_ref = {
-        provider_connection_id: modelRef.provider_connection_id,
-        model_id: modelRef.model_id,
-      }
-    }
-    const res = await preflightEstimate(params)
-    if (res?.success && res.data) {
-      estimate.value = res.data
-    } else {
-      estimateError.value = res?.error || 'unknown'
-    }
-  } catch (e) {
-    estimateError.value = e instanceof Error ? e.message : String(e)
-  } finally {
-    estimateLoading.value = false
-  }
-}
 
 const numAgentsMin = computed<number>(
   () => (allowSmallSim.value ? NUM_AGENTS_OVERRIDE_FLOOR : NUM_AGENTS_HARD_FLOOR),
@@ -327,7 +277,6 @@ async function startSimulation() {
       profileId,
       numAgents.value,
       numRounds.value,
-      budget.value,
     )
     router.push({ name: 'Process', params: { projectId: 'new' } })
   } catch (e) {
@@ -513,31 +462,6 @@ onMounted(() => {
             :aria-valuemin="NUM_ROUNDS_MIN"
             :aria-valuemax="NUM_ROUNDS_MAX"
           />
-        </div>
-        <div class="hero-field hero-field--full">
-          <details class="hero-budget">
-            <summary class="hero-label hero-budget__summary">
-              {{ $t('runBudget.sectionTitle') }}
-            </summary>
-            <div class="hero-budget__body">
-              <RunBudgetForm v-model="budget" />
-              <PreflightEstimateCard
-                :estimate="estimate"
-                :loading="estimateLoading"
-                :error="estimateError"
-              />
-              <div class="hero-budget__estimate-actions">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  :loading="estimateLoading"
-                  @click="refreshEstimate"
-                >
-                  {{ $t('runBudget.estimateRefresh') }}
-                </Button>
-              </div>
-            </div>
-          </details>
         </div>
         <div class="hero-field hero-field--full">
           <label class="hero-label" for="hero-requirement">
@@ -824,57 +748,6 @@ onMounted(() => {
 
 .hero-field--full {
   width: 100%;
-}
-
-/* Budget-Section (Issue #764): aufklappbarer Block in Zone 2 */
-.hero-budget {
-  border: 1px solid var(--hairline);
-  border-radius: var(--r-4, 8px);
-  background: var(--surface-inset, #f2f2f7);
-  padding: 10px 12px;
-}
-
-.hero-budget__summary {
-  cursor: pointer;
-  user-select: none;
-  list-style: none;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.hero-budget__summary::before {
-  content: '▸';
-  font-size: 10px;
-  transition: transform 120ms ease;
-}
-
-.hero-budget[open] .hero-budget__summary::before {
-  transform: rotate(90deg);
-}
-
-.hero-budget__summary:focus-visible {
-  outline: none;
-  border-radius: var(--r-3, 6px);
-  box-shadow: 0 0 0 3px var(--focus-ring);
-}
-
-.hero-budget__body {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  margin-top: 12px;
-}
-
-.hero-budget__estimate-actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .hero-budget__summary::before {
-    transition: none;
-  }
 }
 
 /* Slider */

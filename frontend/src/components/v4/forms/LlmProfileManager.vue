@@ -580,7 +580,7 @@ onMounted(() => {
   font-family: var(--font-sans);
   font-size: 14px;
   font-weight: 600;
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 .pm-provider-badge {
@@ -590,7 +590,7 @@ onMounted(() => {
   padding: 2px 8px;
   border-radius: var(--r-5, 10px);
   border: 1px solid var(--hairline);
-  color: var(--text-secondary);
+  color: var(--text-primary);
   background: var(--surface-elevated, #fff);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -599,7 +599,7 @@ onMounted(() => {
 .pm-item-model {
   font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 .pm-default-badge {
@@ -626,13 +626,13 @@ onMounted(() => {
   font-weight: 500;
   padding: 4px 10px;
   border-radius: var(--r-4, 8px);
-  color: var(--text-secondary);
+  color: var(--text-primary);
   /* Override: eigener BG-Token für Rest-State */
   --v4-state-rest-bg: var(--surface-elevated, #fff);
   --v4-state-hover-bg: var(--surface-elevated, #fff);
 }
 /* Hover-Farbe: text-primary statt default */
-.pm-action-btn:hover:not(:disabled):not([data-disabled]) { color: var(--text-secondary); }
+.pm-action-btn:hover:not(:disabled):not([data-disabled]) { color: var(--text-primary); }
 /* Disabled-Opacity: etwas weniger als Standard */
 .pm-action-btn:disabled { opacity: 0.4; }
 /* Danger-Variante: Danger-Farbe override */
@@ -669,21 +669,21 @@ onMounted(() => {
 
 .pm-key-hint {
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 /* Zustände */
 .pm-empty {
   font-family: var(--font-sans);
   font-size: 14px;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   padding: 8px 0 16px;
 }
 
 .pm-loading {
   font-family: var(--font-sans);
   font-size: 14px;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   padding: 8px 0;
 }
 
@@ -712,11 +712,11 @@ onMounted(() => {
   padding: 6px 14px;
   border-radius: var(--r-5, 10px);
   /* v4-state-interactive liefert border/background/transition/hover/focus-ring/cursor */
-  color: var(--text-secondary);
+  color: var(--text-primary);
   --v4-state-rest-bg: var(--surface-elevated, #fff);
   --v4-state-hover-bg: var(--surface-elevated, #fff);
 }
-.llm-preset:hover:not(.llm-preset--active) { color: var(--text-secondary); }
+.llm-preset:hover:not(.llm-preset--active) { color: var(--text-primary); }
 .llm-preset--active {
   border-color: var(--accent);
   color: var(--accent);
@@ -730,7 +730,7 @@ onMounted(() => {
   font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 500;
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 .llm-input {
@@ -740,7 +740,7 @@ onMounted(() => {
   border: 1px solid var(--hairline);
   border-radius: var(--r-4, 8px);
   background: var(--surface-elevated, #fff);
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 .llm-input--mono { font-family: var(--font-mono); }
 .llm-input:hover { border-color: var(--hairline-strong); }
