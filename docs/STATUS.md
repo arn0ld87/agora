@@ -141,7 +141,7 @@ Chat-Routing und Embedding-Konfiguration bleiben getrennte Vertragswelten.
 Aktuelle Hardstops:
 
 - NLTK-Advisories: 28.09.2026 gemäß ADR-0004/Risk Register
-- Trivy OS-Layer: 30.08.2026
+- ~~Trivy OS-Layer: 30.08.2026~~ — entfällt, aufgelöst am 31.07.2026 ([#772](https://github.com/arn0ld87/agora/issues/772)). CVE-2026-24049 und CVE-2026-23949 kamen nicht aus dem OS-Layer, sondern aus `setuptools/_vendor/` in der Backend-`.venv`, und sind mit `setuptools 83.0.0` behoben.
 
 ## Nächste Prioritäten
 

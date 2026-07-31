@@ -12,7 +12,12 @@
 # `docker-compose.prod.yml`.
 
 # ---------- shared base ----------
-FROM python:3.14@sha256:09b29c360b84742bf98eba40b214f7f6b4b53286bb2c8a8b5b1afa188a8d9c0e AS base
+# Digest-Stand 2026-07-14 (python:3.14, buildpack-deps:trixie). Bump am
+# 2026-07-31 im Zuge von #772: senkt die HIGH/CRITICAL-Findings der Build-
+# Stages von 129 auf 32 und beseitigt die einzige CRITICAL (CVE-2026-56367,
+# imagemagick). Betrifft nur base/dev/frontend-build/backend-build — die
+# Prod-Stage erbt von python:3.14-slim und übernimmt per COPY nur .venv+dist.
+FROM python:3.14@sha256:5f1cdbcab9a50594a79502dd73e885456d2a2fc31f1a1fa18484815b37ee9152 AS base
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends curl unzip \
@@ -115,7 +120,13 @@ RUN cd backend && uv sync --frozen --no-dev \
   && chown -R agora:agora /app
 
 # ---------- prod ----------
-FROM python:3.14-slim@sha256:b877e50bd90de10af8d82c57a022fc2e0dc731c5320d762a27986facfc3355c1 AS prod
+# Digest-Stand 2026-07-14 (python:3.14.6-slim-trixie). Bump am 2026-07-31 im
+# Zuge von #772. Reine Image-Hygiene: alter wie neuer Digest sind Trivy-sauber
+# (0 HIGH/CRITICAL mit Fix). Das Image enthält weder wheel noch jaraco.context
+# — es liefert nur pip aus (CPython-Build mit --with-ensurepip), weshalb die
+# beiden #772-CVEs nie aus dieser Schicht stammten. Siehe
+# docs/2026-07-31-issue-772-cve-basisimage-research.md.
+FROM python:3.14-slim@sha256:cea0e6040540fb2b965b6e7fb5ffa00871e632eef63719f0ea54bca189ce14a6 AS prod
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

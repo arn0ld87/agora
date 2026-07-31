@@ -1,27 +1,49 @@
 # Trivy Ignore File
-# Known CVEs from docu/dependency-risk-register.md
-# These are currently ignored because they are blocked by upstream pins or base-image pins.
-# Hardstop: 2026-09-28 (pip-audit/nltk baseline, verlängert via ADR-0004/ALE-20), 2026-08-30 (Trivy container scan baseline)
+#
+# Menschenlesbare Dokumentation: docs/dependency-risk-register.md
+# Maschinenlesbare Ausnahmen:    docs/dependency-risk-exceptions.json
+#
+# Jeder Eintrag hier braucht ein GitHub-Issue, einen Owner und eine Frist.
+# Die Blöcke unten sind nach Hardstop gruppiert — beim Bearbeiten immer nur
+# den Block anfassen, dessen Hardstop gemeint ist.
+#
+# ACHTUNG: Trivy matcht Ignore-Zeilen auf die ID, unter der es das Finding
+# meldet. Advisory-Aliase (GHSA <-> CVE <-> PYSEC) werden NICHT aufgelöst.
+# Steht hier eine GHSA-ID und Trivy meldet die CVE-ID, greift der Eintrag
+# nicht. Im Zweifel alle Aliase eintragen.
+# Konkreter offener Fall: GHSA-p4gq-832x-fm9v unten wird von Trivy als
+# CVE-2026-54293 gemeldet und deshalb nicht unterdrückt — siehe Issue #995.
 
-# CVE-2026-24049: wheel (OS-Layer, transitive via base image)
-# Risk: High (Privilege Escalation or Arbitrary Code Execution via wheel unpacking)
-# Blocker: Basis-Image-Update erforderlich
-# Deadline: 2026-08-30
-CVE-2026-24049
+# =============================================================================
+# Block 1 — pip-audit/nltk-Baseline · Hardstop 2026-09-28
+# Verlängert via ADR-0004 / ALE-20 (docs/decisions/0004-cve-upstream-escalation.md)
+# =============================================================================
 
-# CVE-2026-23949: jaraco.context (OS-Layer, transitive via base image)
-# Risk: High (Path traversal via malicious tar archives)
-# Blocker: Basis-Image-Update erforderlich
-# Deadline: 2026-08-30
-CVE-2026-23949
-
-# PYSEC-2026-597: nltk==3.9.4 (transitive via unstructured)
-# Risk: unknown (No upstream fix available)
-# Issue: https://github.com/arn0ld87/agora/issues/661
+# PYSEC-2026-597 (alias CVE-2026-12243): nltk==3.9.4 (transitiv via unstructured)
+# Risk: unknown — kein Upstream-Fix released, keine gefixte Version in der Advisory-DB
+# Issue: https://github.com/arn0ld87/agora/issues/661 (konsolidiert in #672)
+# Deadline: 2026-09-28
 PYSEC-2026-597
 
 # GHSA-p4gq-832x-fm9v: nltk.data.load() URL-Encoded Path Traversal (nltk==3.9.4)
-# Risk: High (Arbitrary Local File Read) — Agora nutzt nltk nur statisch (Tokenisierung),
-# kein user-kontrollierter Pfad in nltk.data.load(). Risiko-Ausnahme mit PYSEC-2026-597.
+# Risk: High (Arbitrary Local File Read) — Agora nutzt nltk nur statisch
+# (Tokenisierung), kein user-kontrollierter Pfad in nltk.data.load().
 # Issue: https://github.com/arn0ld87/agora/issues/672
+# Deadline: 2026-09-28
 GHSA-p4gq-832x-fm9v
+
+# =============================================================================
+# Block 2 — Trivy-Container-Baseline · aufgelöst 2026-07-31 (Issue #772)
+# =============================================================================
+#
+# Dieser Block ist leer und der zugehörige Hardstop (2026-08-30) entfällt.
+#
+# CVE-2026-24049 (wheel) und CVE-2026-23949 (jaraco.context) waren hier mit
+# der Begründung "Basis-Image-Update erforderlich" eingetragen. Diese Diagnose
+# war falsch: beide Pakete stammten nie aus dem Basis-Image, sondern aus
+# setuptools/_vendor/ in der Backend-.venv. Der Bump setuptools 80.9.0 -> 83.0.0
+# (33b3f310, PR #828, seit 2026-07-22 in main) hebt vendored wheel auf 0.46.3
+# (fixed >= 0.46.2) und vendored jaraco.context auf 6.1.0 (fixed >= 6.1.0).
+# Am realen Prod-Image verifiziert: beide Findings sind fort.
+#
+# Belege: docs/2026-07-31-issue-772-cve-basisimage-research.md
