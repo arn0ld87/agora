@@ -3,6 +3,13 @@
 **Status:** umgesetzt in Issue #890 (2026-07-26) · **Vorgänger:** Phase 1 (PR feat/frontend-next-phase12) ·
 **Datum:** 2026-07-17 · **Quelle:** Scout-Workflow `frontend-next-scout` (CRG + Spec-Gap-Analyse) + Alex-Entscheidung 2026-07-17.
 
+> **Gehört nicht zum React-/Lovable-Vorhaben.** Dieses Dokument liegt aus historischen Gründen in
+> `docs/epics/frontend-next/`, behandelt aber ausschließlich **Vue**-Komponenten des bestehenden
+> Produktfrontends (`EnvSetupModelPanel.vue`, `Step2EnvSetup.vue`, `AiModelPicker.vue`) und gehört zu
+> [Issue #890](https://github.com/arn0ld87/agora/issues/890). Der Ablageort ist bewusst beibehalten,
+> weil auf diesen Pfad aus `CHANGELOG.md` sowie aus `PHASE-2-ONBOARDING-HANDOVER.md` (Zeile 5 und 78)
+> verwiesen wird. Wer hier React-Code sucht, ist falsch (Issue #910).
+
 > **Nachtrag 2026-07-26:** Die Umsetzung weicht in zwei Punkten bewusst von §3(b) und §4
 > ab. Verbindlich ist ab jetzt **§6 (Umsetzungsstand)** am Ende dieses Dokuments; §3 und §4
 > bleiben als Planungsstand von 2026-07-17 erhalten.
