@@ -35,15 +35,22 @@
 # Neo4j-Ports, der Proxy-Override die des Backends; nach aussen publiziert der
 # E2E-Stack nur nginx auf AGORA_PROXY_PORT.
 #
+# Die Namen tragen den Compose-Projektnamen als Praefix, damit zwei parallele
+# E2E-Stacks (`AGORA_E2E_PROJECT=…`) sich nicht gegenseitig blockieren. Feste
+# Namen haetten das Versprechen aus scripts/e2e-compose.sh gebrochen: Projekt-
+# Netzwerke und -Volumes isolieren zwar, container_name aber nicht, sodass der
+# zweite Stack an denselben Namen gescheitert waere wie zuvor am Dev-Stack.
+# Der Default deckt sich mit dem --project-name-Default in e2e-compose.sh.
+#
 # Die Service-Namen bleiben unveraendert — Compose-internes DNS und der
 # nginx-Upstream (`agora:5001`) haengen am Service-Key, nicht am
 # container_name.
 services:
   redis:
-    container_name: agora-e2e-redis
+    container_name: ${AGORA_E2E_PROJECT:-agora-e2e}-redis
 
   nginx:
-    container_name: agora-e2e-nginx
+    container_name: ${AGORA_E2E_PROJECT:-agora-e2e}-nginx
 
   # Prod-Defaults (docker-compose.yml: heap_max=2g, pagecache=4g, macher
   # zusammen ~6g Reservierung) lassen Neo4js Boot-Guard auf CI-Runnern
@@ -55,14 +62,14 @@ services:
   # zwischen running/exit=3 je nach Limit). E2E-Fixtures sind klein,
   # 512m/512m reichen mit deutlichem Sicherheitsabstand.
   neo4j:
-    container_name: agora-e2e-neo4j
+    container_name: ${AGORA_E2E_PROJECT:-agora-e2e}-neo4j
     environment:
       - NEO4J_server_memory_heap_initial__size=256m
       - NEO4J_server_memory_heap_max__size=512m
       - NEO4J_server_memory_pagecache_size=512m
 
   agora:
-    container_name: agora-e2e
+    container_name: ${AGORA_E2E_PROJECT:-agora-e2e}
     read_only: false
     environment:
       # E2E-Stub-Modus: ersetzt alle LLM-Calls durch deterministische
@@ -85,7 +92,7 @@ services:
   # OpenAI-kompatible /models-Antwort (`data[].id`), siehe
   # adapters._HttpModelsAdapter (protocol openai_compatible).
   mock-models:
-    container_name: agora-e2e-mock-models
+    container_name: ${AGORA_E2E_PROJECT:-agora-e2e}-mock-models
     image: nginx:alpine
     init: true
     volumes:

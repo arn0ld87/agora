@@ -12,9 +12,13 @@ Der E2E-Stack läuft unter dem festen Compose-Projektnamen `agora-e2e` und vergi
 - `down -v` im E2E-Teardown trifft ausschließlich die Volumes des Projekts `agora-e2e`. Dev-Daten in Neo4j bleiben unberührt.
 - Host-Ports kollidieren nicht: nach außen publiziert der E2E-Stack nur nginx auf `AGORA_PROXY_PORT`. Die Neo4j-Ports resettet `docker-compose.prod.yml`, den Backend-Port der Proxy-Override.
 
-**Einzige Kollisionsquelle bleibt `AGORA_PROXY_PORT`.** Der Default ist `80` — er stammt aus `scripts/e2e-up.sh` und deckt sich mit `playwright.config.ts`. Wer dort schon etwas liegen hat, setzt einen anderen Wert (siehe unten).
+Auch zwei E2E-Stacks nebeneinander sind möglich: `AGORA_E2E_PROJECT=<name>` wählt Projektnamen **und** Container-Präfix.
 
-> Der Proxy-Override trägt für dieselbe Variable den Default `8080`. Ohne gesetzte Variable publizierte Compose deshalb auf 8080, während `e2e-up.sh` und Playwright auf 80 warteten — ein lokaler Lauf lief garantiert in den Health-Timeout. Seit Issue #989 schreibt `e2e-up.sh` den aufgelösten Port **immer** in die `.env`, wodurch beide Seiten denselben Wert sehen.
+**Einzige Kollisionsquelle bleibt `AGORA_PROXY_PORT`.** Der Default ist `80` — er stammt aus `scripts/e2e-up.sh` und deckt sich mit `playwright.config.ts`. Wer dort schon etwas liegen hat, **exportiert** einen anderen Wert (siehe unten).
+
+> **Der Port muss exportiert werden, ein Eintrag allein in der `.env` genügt nicht** — und wird vom E2E-Lauf überschrieben. Grund: `e2e-up.sh` läuft als Kindprozess von Playwright. Ein aus der `.env` gelesener Port wäre für den Elternprozess unsichtbar; `playwright.config.ts` (`baseURL`) und `global-setup.ts` (Provider-Seeding) lesen beide nur `process.env.AGORA_PROXY_PORT`. Der Stack wäre dann auf dem einen Port gesund, während die Specs den anderen ansprechen.
+>
+> Umgekehrt trägt der Proxy-Override für dieselbe Variable den Compose-Default `8080`. Deshalb schreibt `e2e-up.sh` den aufgelösten Port **immer** in die `.env` — sonst publizierte Compose auf 8080, während `e2e-up.sh` und Playwright auf 80 warten. Beides zusammen ergibt genau einen Wert auf allen drei Seiten.
 
 Die Compose-Invocation liegt an genau einer Stelle: [`scripts/e2e-compose.sh`](../../scripts/e2e-compose.sh). `e2e-up.sh`, `e2e-down.sh` und der Log-Dump in `frontend/tests/e2e/global-teardown.ts` rufen dieses Skript auf, statt die `-f`-Kette je eigenständig zu pflegen.
 
@@ -62,7 +66,7 @@ bash scripts/e2e-down.sh
 
 ## Ephemere Credentials
 
-`scripts/e2e-up.sh` erzeugt selbst nur zwei Werte: `AGORA_SECRET_KEY` (Fernet-Key für den Provider-Secrets-Store — ohne ihn schlägt das Seeding mit HTTP 503 fehl) und `AGORA_PROXY_PORT` aus seiner Präzedenz Process-Env → bestehende `.env` → `80`. Alle übrigen Werte kommen aus der Umgebung; fehlen sie, greifen die Platzhalter aus `.env.example`, die `Config.validate()` mit `RuntimeError` ablehnt.
+`scripts/e2e-up.sh` erzeugt selbst nur zwei Werte: `AGORA_SECRET_KEY` (Fernet-Key für den Provider-Secrets-Store — ohne ihn schlägt das Seeding mit HTTP 503 fehl) und `AGORA_PROXY_PORT` aus der Process-Env, ersatzweise `80`. Alle übrigen Werte kommen aus der Umgebung; fehlen sie, greifen die Platzhalter aus `.env.example`, die `Config.validate()` mit `RuntimeError` ablehnt.
 
 Lokal einmalig erzeugen und exportieren:
 

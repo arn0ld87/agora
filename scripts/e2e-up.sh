@@ -22,21 +22,25 @@ if [[ ! -f "${REPO_ROOT}/.env" ]]; then
   fi
 fi
 
-# Proxy-Port aufloesen — Praezedenz: Process-Env > bestehende .env > 80.
+# Proxy-Port aufloesen — ausschliesslich aus der Process-Env, Default 80.
 #
-# Die .env-Stufe ist wichtig, seit dieses Skript den Port immer schreibt
-# (Issue #989): wer AGORA_PROXY_PORT dauerhaft in seiner .env stehen hat und
-# E2E ohne Export startet, bekaeme den Wert sonst still ueberschrieben — und
-# damit den Publish-Port seines lokalen Proxy-Stacks veraendert.
+# Bewusst KEIN Rueckgriff auf einen nur in der .env stehenden Wert (Issue #989):
+# dieses Skript laeuft als Kindprozess von Playwright. Ein hier aus der .env
+# gelesener Port waere fuer den Elternprozess unsichtbar —
+# `playwright.config.ts` (baseURL) und `global-setup.ts` (Provider-Seeding)
+# lesen beide nur `process.env.AGORA_PROXY_PORT` und blieben auf 80. Der Stack
+# waere dann auf dem einen Port gesund, waehrend die Specs den anderen
+# ansprechen.
 #
-# Der Default 80 stammt aus playwright.config.ts (`http://127.0.0.1:80`) und
-# gilt bewusst nicht der Compose-Default 8080 des Proxy-Overrides: die
-# Health-Waits unten und Playwright muessen denselben Port treffen.
-PROXY_PORT="${AGORA_PROXY_PORT:-}"
-if [[ -z "$PROXY_PORT" ]]; then
-  PROXY_PORT="$(sed -n 's/^AGORA_PROXY_PORT=//p' "${REPO_ROOT}/.env" | tail -1)"
-fi
-PROXY_PORT="${PROXY_PORT:-80}"
+# Konsequenz, bewusst in Kauf genommen und im Runbook dokumentiert: ein nur in
+# der .env stehender AGORA_PROXY_PORT wird vom E2E-Lauf ueberschrieben. Ein
+# abweichender Port muss exportiert werden, damit ihn alle drei Seiten sehen.
+#
+# Der Default 80 deckt sich mit playwright.config.ts. Der Proxy-Override traegt
+# fuer dieselbe Variable den Compose-Default 8080 — deshalb wird der aufgeloeste
+# Wert weiter unten IMMER in die .env geschrieben, sonst publizierte Compose auf
+# 8080, waehrend hier auf 80 gewartet wird.
+PROXY_PORT="${AGORA_PROXY_PORT:-80}"
 
 # Reverse-Proxy-Health (statisches nginx-200) + App-Health (proxied -> Backend).
 # Beide müssen pass sein, sonst startet Playwright zu früh und sieht 502 Bad
@@ -99,9 +103,9 @@ _env_upsert AGORA_SECRET_KEY "${AGORA_SECRET_KEY}"
 # Immer schreiben, nicht nur bei gesetzter Variable (Issue #989): der
 # Proxy-Override publiziert ohne die Variable auf 8080, waehrend dieses Skript
 # und playwright.config.ts auf 80 warten. Ein lokaler Lauf ohne gesetzten Port
-# lief damit garantiert in den Health-Timeout. PROXY_PORT traegt bereits den
-# aufgeloesten Wert — inklusive eines bereits in der .env stehenden, der damit
-# erhalten bleibt statt ueberschrieben zu werden.
+# lief damit garantiert in den Health-Timeout. PROXY_PORT traegt den aus der
+# Process-Env aufgeloesten Wert; ein nur in der .env stehender wird dabei
+# ueberschrieben (siehe Begruendung oben).
 _env_upsert AGORA_PROXY_PORT "${PROXY_PORT}"
 # Ollama gibt es im CI-Stack nicht — Backend-Boot würde sonst an der
 # Live-Embedding-Probe scheitern (Issue #276). Statische Dimension-Check
