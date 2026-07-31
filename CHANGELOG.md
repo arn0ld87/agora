@@ -267,6 +267,12 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 - **`low`-Claims ohne Evidence bleiben unangetastet** — sie sind vertraglich zulässig, und ein Umhängen würde gültige Aussagen aus dem Report entfernen. Durch eine eigene Gegenprobe abgesichert.
 - **Keine Abschwächung der fünf ADR-0002-Hartanker.** Weder Validator noch Contract noch Wording wurden geändert; die Migration bereitet ausschließlich Bestandsdaten so auf, dass der unveränderte Validator sie beurteilen kann.
 - **Tests.** 5 neue API-Tests in `backend/tests/api/test_report_evidence_route.py`: orphan `medium`, orphan `high`, orphan `verified`, die `low`-Gegenprobe und ein Idempotenz-Test, der alle drei Migrationen gemeinsam zweimal durch die Route schickt und Gleichheit der Antworten prüft.
+### Fixed (Codex-Findings zu PR #977 — 2026-07-31)
+
+- **`retries: 1` allein hätte das E2E-Gate geschwächt.** Playwright beendet einen Lauf mit flaky-Tests mit **Exit-Code 0**; der Retry-Report allein hält den Check nicht rot. Da alle sechs Smokes Required Checks sind, wäre eine intermittierende Regression damit zum grünen Merge-Gate geworden — das Gate wäre schwächer gewesen als vorher, nicht nur besser instrumentiert. `failOnFlakyTests: !!process.env.CI` ergänzt: Der Retry liefert weiterhin Trace und „flaky"-Ausweis, der Lauf bleibt aber rot.
+- **Falsche Aussage in `docs/ci-e2e-audit.md` §9 korrigiert.** Der Text nannte einen „neuen `run-budget`-Job in CI" als „lokal verifiziert" — beides unzutreffend: es gibt keinen solchen Job, die Spec ist nicht verdrahtet, und lokal ist sie nicht grün, sondern deckt den offenen Defekt aus #978 auf. Der Pfad hat damit **keinerlei** CI-Abdeckung; genau das steht jetzt dort.
+- **Auditdokument ist keine Planungsquelle mehr.** Die Empfehlungen E1–E9 werden ab sofort über GitHub Issues nachverfolgt (#978 für den Budget-Defekt, #979 als Sammel-Issue E1–E8), wie es AGENTS.md verlangt. `docs/ci-e2e-audit.md` bleibt Auditbefund und Belegkontext; bei Abweichungen gilt der Issue-Stand.
+- **Branch-Protection erweitert (ehem. E5).** `Backend PR smoke gate` und `Frontend PR smoke gate` sind jetzt Required Checks — 17 statt 15, `strict: true` unverändert. Vorher war ein PR mit rotem Lint, Typecheck oder Unit-Test mergebar.
 
 ### Changed (CI- und E2E-Audit — 2026-07-31)
 
