@@ -231,6 +231,13 @@ def _run_red_team_review(
         else:
             findings = []
     except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
+        # Issue #978: Budgetabbruch (#764) ist kein Review-Fehler — hart
+        # durchreichen, sonst schreibt der Red-Team-Schritt nach einem harten
+        # Limit klaglos leere findings und der Run endet auf completed.
+        from ..run_budget import BudgetExceededError
+
+        if isinstance(exc, BudgetExceededError):
+            raise
         logger.warning("_run_red_team_review: LLM-Call fehlgeschlagen: %r", exc)
         findings = []
 
@@ -746,6 +753,13 @@ def generate_section_metadata(
         )
         return result
     except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
+        # Issue #978: Budgetabbruch (#764) ist kein Extraktionsfehler — hart
+        # durchreichen, sonst läuft die Section-Schleife nach einem harten
+        # Limit klaglos weiter statt mit termination_reason=budget_* zu enden.
+        from ..run_budget import BudgetExceededError
+
+        if isinstance(exc, BudgetExceededError):
+            raise
         logger.warning(
             "generate_section_metadata: section=%d schema=%s extraction failed: %r",
             section_index,
@@ -1214,6 +1228,16 @@ def generate_report(
                         echo_index,
                     )
         except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
+            # Issue #978: Dieser Handler umschliesst den _run_red_team_review-Aufruf.
+            # Ohne den Reraise waere der Fix INNERHALB von _run_red_team_review
+            # wirkungslos — der dort korrekt durchgereichte Budgetabbruch wuerde
+            # hier erneut verschluckt, die naechste Zeile setzte "completed", und
+            # report_generation.py::except BudgetExceededError -> mark_budget_abort
+            # wuerde nie erreicht. Genau das Symptom aus #978.
+            from ..run_budget import BudgetExceededError
+
+            if isinstance(exc, BudgetExceededError):
+                raise
             logger.warning("generate_report: red_team_review fehlgeschlagen: %r", exc)
         ReportManager.update_progress(report_id, "completed", 100, "reportgeneratecomplete", completed_sections=completed_section_titles)
         if progress_callback:

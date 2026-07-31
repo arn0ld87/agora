@@ -26,6 +26,7 @@
 
 import { test, expect, request, type APIRequestContext } from '@playwright/test';
 import { injectAuthToken, authHeader } from './helpers/auth';
+import { ensureOnboardingDismissed } from './helpers/onboarding';
 import { assertStubModeActive } from './helpers/diagnostics';
 import { uploadMarkdown } from './helpers/upload';
 import { triggerGraphBuild, pollGraphReady } from './helpers/graph';
@@ -256,6 +257,15 @@ test.describe('#764 · Run-Budget-Smoke', () => {
         // =============================================================
         // Schritt 8: UI — Verbrauchsanalyse + Abbruch-Banner
         // =============================================================
+        // onboardingGuard (router/onboardingGuard.ts:32) redirected JEDE
+        // nicht-exempte Route auf /onboarding, solange onboarding_required
+        // gilt — Default-Zustand eines frischen E2E-Stacks. Ohne diesen
+        // Aufruf landet page.goto('/runs/<id>') auf dem Einrichtungs-Wizard
+        // und getByTestId('usage-totals') existiert schlicht nicht; der
+        // DOM-Snapshot des fehlgeschlagenen CI-Laufs zeigte genau das.
+        // Der Aufruf ist idempotent (onboarding_state_store.py::dismiss).
+        await ensureOnboardingDismissed(page);
+
         await page.goto(`${baseURL}/runs/${runId}`);
         await expect(
           page.getByTestId('usage-totals'),

@@ -241,10 +241,19 @@ class ReportGenerationService:
                     "Report generation budget-aborted (run_id=%s, report_id=%s): %s",
                     run_record["run_id"], report_id, exc,
                 )
+                # Reihenfolge ist bindend (Issue #978, gleiche Falle wie #841 in
+                # api/simulation_prepare.py): fail_task() spiegelt den Task per
+                # TaskManager.update_task -> RunRegistry.sync_task auf den Run
+                # zurueck und setzt dabei status="failed" + message="Task failed".
+                # Liefe es nach mark_budget_abort(), wuerde es den soeben
+                # gesetzten "stopped"-Status samt Budgetbegruendung wieder
+                # ueberschreiben — genau das Symptom im E2E-Smoke
+                # frontend/tests/e2e/run-budget.spec.ts. Der detaillierte
+                # Run-Update muss deshalb zuletzt laufen.
+                task_manager.fail_task(task_id, str(exc))
                 mark_budget_abort(
                     run_record["run_id"], exc.dimension, exc.observed, exc.threshold
                 )
-                task_manager.fail_task(task_id, str(exc))
             except Exception:
                 logger.exception("Report generation failed (run_id=%s, report_id=%s)", run_record["run_id"], report_id)
                 import traceback

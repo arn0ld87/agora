@@ -149,6 +149,14 @@ def plan_outline(
         return outline
 
     except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
+        # Issue #978: Budgetabbruch (#764) ist kein Fallback-Fall — hart
+        # durchreichen, sonst läuft der Report nach einem harten Limit mit
+        # einem Default-Outline weiter statt mit termination_reason=budget_*
+        # zu enden.
+        from ..run_budget import BudgetExceededError
+
+        if isinstance(e, BudgetExceededError):
+            raise
         logger.error(f"Outline planning failed: {str(e)}")
         # Return default outline (3 sections as fallback) — all descriptions filled.
         return ReportOutline(

@@ -537,6 +537,13 @@ Please select up to {max_agents} most suitable Agents for interview and explain 
             return selected_agents, valid_indices, reasoning
 
         except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
+            # Issue #978: Budgetabbruch (#764) ist kein Auswahlfehler — hart
+            # durchreichen, sonst interviewt der Run nach einem harten Limit
+            # klaglos mit einer Default-Auswahl weiter.
+            from .run_budget import BudgetExceededError
+
+            if isinstance(e, BudgetExceededError):
+                raise
             logger.warning(f"LLM agent selection failed, using default selection: {e}")
             selected = profiles[:max_agents]
             indices = list(range(min(max_agents, len(profiles))))
@@ -585,6 +592,13 @@ Please generate 3-5 interview questions."""
             return response.get("questions", [f"What is your perspective on {interview_requirement}?"])
 
         except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
+            # Issue #978: Budgetabbruch (#764) ist kein Generierungsfehler —
+            # hart durchreichen, sonst interviewt der Run nach einem harten
+            # Limit klaglos mit Default-Fragen weiter.
+            from .run_budget import BudgetExceededError
+
+            if isinstance(e, BudgetExceededError):
+                raise
             logger.warning(f"Failed to generate interview questions: {e}")
             return [
                 f"What is your perspective on {interview_requirement}?",
@@ -641,5 +655,12 @@ Please generate an interview summary."""
             return summary
 
         except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
+            # Issue #978: Budgetabbruch (#764) ist kein Generierungsfehler —
+            # hart durchreichen, sonst interviewt der Run nach einem harten
+            # Limit klaglos mit einem Default-Summary-Text weiter.
+            from .run_budget import BudgetExceededError
+
+            if isinstance(e, BudgetExceededError):
+                raise
             logger.warning(f"Failed to generate interview summary: {e}")
             return f"Interviewed {len(interviews)} interviewees, including: " + ", ".join([i.agent_name for i in interviews])

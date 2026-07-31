@@ -268,7 +268,10 @@ defineExpose({
   opacity: 0.8;
 }
 .locked-badge {
-  color: #666;
+  /* WCAG AA (#978): #666 ergab auf .locked nur 3.44:1 — der Elternteil traegt
+     opacity: 0.8, die den Text mitdaempft. --text-primary kommt auch mit der
+     Daempfung noch auf 8.25:1. */
+  color: var(--text-primary);
   font-size: 0.8rem;
   margin-bottom: 0.5rem;
 }
@@ -295,6 +298,8 @@ defineExpose({
 }
 .timestamp {
   font-size: 0.7rem;
-  color: #999;
+  /* WCAG AA (#978): #999 auf weiss sind 2.85:1 — deutlich unter 4.5.
+     --text-secondary liefert 5.07:1 und bleibt visuell zurueckhaltend. */
+  color: var(--text-secondary);
 }
 </style>
