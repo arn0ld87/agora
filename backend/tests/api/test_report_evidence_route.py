@@ -109,3 +109,154 @@ class TestReportEvidenceRoute:
         body = resp.get_json()
         claim = body["data"]["sections"][0]["claims"][0]
         assert claim["confidence_label"] == "medium"
+
+
+def _orphan_claim_map(confidence_label: str = "medium"):
+    """Schema-v2-Map mit einem Claim ganz OHNE Evidence (Issue #968).
+
+    Solche Bestandsdaten scheitern an ``ReportClaimModel``s Validator
+    ``non_low_claims_need_evidence``, sobald das Label nicht ``low`` ist.
+    ``migrate_legacy_claims_to_anchored`` fängt sie ohne Datenverlust ab,
+    indem es sie nach ``data_gaps`` umhängt.
+    """
+    return {
+        "schema_version": 2,
+        "report_id": VALID_REPORT_ID,
+        "simulation_id": "sim_0123456789ab",
+        "global_evidence": [],
+        "sections": [
+            {
+                "section_index": 1,
+                "section_title": "Kontext",
+                "section_summary": "Zusammenfassung",
+                "claims": [
+                    {
+                        "claim_id": "claim_90",
+                        "claim_text": "Behauptung ganz ohne Beleg.",
+                        "confidence_label": confidence_label,
+                        "confidence_score": 0.6,
+                        "evidence": [],
+                        "audit_trail": [],
+                        "notes": None,
+                    }
+                ],
+                "hypotheses": [],
+                "data_gaps": [],
+            }
+        ],
+    }
+
+
+class TestReportEvidenceRouteOrphanClaims:
+    """Issue #968 — ``migrate_legacy_claims_to_anchored`` im Live-Lese-Pfad.
+
+    Die Migration lief bisher nur in Evaluationstests und im Bulk-Skript,
+    nicht in ``GET /<report_id>/evidence``.
+    """
+
+    def test_orphan_medium_claim_becomes_data_gap(self, client):
+        """RED ohne den Fix: der Claim ohne Evidence lässt
+        ``non_low_claims_need_evidence`` scheitern, statt als ``data_gaps``-
+        Eintrag mit ``gap_reason="no_evidence_bound"`` zurückzukommen."""
+        with (
+            patch("app.api.report.validate_report_id", return_value=True),
+            patch(
+                "app.api.report.ReportManager.get_evidence_map",
+                return_value=_orphan_claim_map("medium"),
+            ),
+        ):
+            resp = client.get(f"/api/report/{VALID_REPORT_ID}/evidence")
+
+        assert resp.status_code == 200, resp.get_data(as_text=True)
+        section = resp.get_json()["data"]["sections"][0]
+
+        assert section["claims"] == [], (
+            "Der orphan Claim muss aus claims[] entfernt sein, "
+            f"vorgefunden: {section['claims']}"
+        )
+        assert len(section["data_gaps"]) == 1
+        gap = section["data_gaps"][0]
+        assert gap["gap_reason"] == "no_evidence_bound"
+        assert gap["claim_text"] == "Behauptung ganz ohne Beleg."
+
+    @pytest.mark.parametrize("label", ["high", "verified"])
+    def test_orphan_high_and_verified_claims_become_data_gaps(self, client, label):
+        with (
+            patch("app.api.report.validate_report_id", return_value=True),
+            patch(
+                "app.api.report.ReportManager.get_evidence_map",
+                return_value=_orphan_claim_map(label),
+            ),
+        ):
+            resp = client.get(f"/api/report/{VALID_REPORT_ID}/evidence")
+
+        assert resp.status_code == 200, resp.get_data(as_text=True)
+        section = resp.get_json()["data"]["sections"][0]
+        assert section["claims"] == []
+        assert section["data_gaps"][0]["gap_reason"] == "no_evidence_bound"
+
+    def test_orphan_low_claim_stays_a_claim(self, client):
+        """Gegenprobe: ``low`` ohne Evidence ist zulässig und darf NICHT
+        umgehängt werden — sonst verlöre der Report gültige Aussagen."""
+        with (
+            patch("app.api.report.validate_report_id", return_value=True),
+            patch(
+                "app.api.report.ReportManager.get_evidence_map",
+                return_value=_orphan_claim_map("low"),
+            ),
+        ):
+            resp = client.get(f"/api/report/{VALID_REPORT_ID}/evidence")
+
+        assert resp.status_code == 200, resp.get_data(as_text=True)
+        section = resp.get_json()["data"]["sections"][0]
+        assert len(section["claims"]) == 1
+        assert section["claims"][0]["claim_id"] == "claim_90"
+        assert section["data_gaps"] == []
+
+    def test_pipeline_is_idempotent(self, client):
+        """Zweimal dieselbe Map durch die Route liefert dasselbe Ergebnis.
+
+        Deckt alle drei Migrationen gemeinsam ab (AK: Idempotenz bleibt für
+        die ganze Pipeline erhalten), nicht nur die neu eingehängte.
+        """
+        evidence_map = _orphan_claim_map("medium")
+        # Zusätzlich ein medium-seed-only-Claim, damit die #963-Migration in
+        # derselben Pipeline mitläuft und die Reihenfolge wirklich geprüft ist.
+        evidence_map["sections"][0]["claims"].append(
+            {
+                "claim_id": "claim_91",
+                "claim_text": "Nutzer bevorzugen Variante A.",
+                "confidence_label": "medium",
+                "confidence_score": 0.6,
+                "evidence": [
+                    {
+                        "type": "entity_summary",
+                        "source_kind": "seed_corpus",
+                        "source": "seed:doc_1",
+                        "snippet": "Beleg aus dem Korpus.",
+                    }
+                ],
+                "audit_trail": [],
+                "notes": None,
+            }
+        )
+
+        with (
+            patch("app.api.report.validate_report_id", return_value=True),
+            patch(
+                "app.api.report.ReportManager.get_evidence_map",
+                return_value=evidence_map,
+            ),
+        ):
+            first = client.get(f"/api/report/{VALID_REPORT_ID}/evidence").get_json()
+            second = client.get(f"/api/report/{VALID_REPORT_ID}/evidence").get_json()
+
+        assert first == second, "Pipeline ist nicht idempotent"
+
+        section = first["data"]["sections"][0]
+        # orphan -> data_gaps, seed-only -> bleibt Claim, aber auf low abgestuft
+        assert len(section["data_gaps"]) == 1
+        assert section["data_gaps"][0]["gap_reason"] == "no_evidence_bound"
+        assert len(section["claims"]) == 1
+        assert section["claims"][0]["claim_id"] == "claim_91"
+        assert section["claims"][0]["confidence_label"] == "low"
