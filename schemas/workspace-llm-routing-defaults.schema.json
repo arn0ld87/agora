@@ -4,6 +4,38 @@
       "additionalProperties": false,
       "description": "Configuration for a single stage route.",
       "properties": {
+        "ai_model_ref_source": {
+          "anyOf": [
+            {
+              "enum": [
+                "stage-override",
+                "run-override",
+                "project-default",
+                "workspace-default",
+                "explicit",
+                "fallback"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ai Model Ref Source"
+        },
+        "fallback_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fallback Reason"
+        },
         "max_tokens": {
           "anyOf": [
             {

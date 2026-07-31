@@ -539,6 +539,148 @@ def test_ai_model_ref_valid_model_passes_discovery_check(mock_run_dir, monkeypat
     assert route.model == "gpt-4o-mini"
 
 
+def _seed_with_ref(mock_run_dir, monkeypatch, tmp_path, run_id: str, ref: AiModelRef):
+    """Seed-Aufruf mit gestellter Discovery — Kern von #901."""
+    run_dir = tmp_path / "runs" / run_id
+    run_dir.mkdir(parents=True)
+    mock_run_dir.return_value = str(run_dir)
+
+    connection = _mismatch_connection()
+    connection_store = MagicMock()
+    connection_store.list_connections.return_value = [connection]
+    _stub_probe(
+        monkeypatch,
+        connection_store,
+        ProviderProbeResult(
+            status="available",
+            status_message=None,
+            models=(
+                AiModel(
+                    provider_connection_id=connection.id,
+                    model_id="gpt-4o-mini",
+                    display_name="gpt-4o-mini",
+                    source="live",
+                    status="available",
+                    local_or_cloud="cloud",
+                ),
+            ),
+        ),
+    )
+
+    return seed_run_stage_routing(
+        run_id,
+        "report_generation",
+        llm_model_override=None,
+        llm_runtime=RuntimeLlmConfig(),
+        ai_model_ref=ref,
+    )
+
+
+@pytest.mark.parametrize(
+    "ref_source",
+    ["stage-override", "run-override", "project-default", "workspace-default", "explicit"],
+)
+@patch("app.utils.artifact_locator.ArtifactLocator.run_dir")
+def test_ai_model_ref_source_landet_im_stage_route_snapshot(
+    mock_run_dir, monkeypatch, tmp_path, ref_source
+):
+    """Issue #901 — AK 1: die geseedete Route trägt die ursprüngliche Herkunft.
+
+    Vorher verwarf ``seed_run_stage_routing`` ``AiModelRef.source``, weil
+    ``StageLLMRoute`` kein Feld dafür hatte; ``ai_route_from_stage_route``
+    schrieb beim Zurückprojizieren hart ``source="legacy"``. Jede explizite
+    UI-Modellwahl war danach im Snapshot und im ``AiRouteAudit`` von einem
+    Legacy-Fallback ununterscheidbar.
+    """
+    ref = AiModelRef(
+        provider_connection_id="conn-mismatch",
+        model_id="gpt-4o-mini",
+        source=ref_source,
+    )
+    config = _seed_with_ref(
+        mock_run_dir, monkeypatch, tmp_path, f"run_src_{ref_source.replace('-', '_')}", ref
+    )
+
+    route = config.stage_overrides["report_generation"]
+    assert route.ai_model_ref_source == ref_source, (
+        "Die Herkunft der Routing-Entscheidung darf beim Seeden nicht verloren gehen"
+    )
+    assert route.ai_model_ref_source != "legacy"
+
+
+@patch("app.utils.artifact_locator.ArtifactLocator.run_dir")
+def test_ai_model_ref_fallback_reicht_den_grund_mit_durch(
+    mock_run_dir, monkeypatch, tmp_path
+):
+    """``fallback`` bildet auf ``provider_fallback`` ab, das einen Grund verlangt.
+
+    Ohne Durchreichen scheiterte erst die spätere AiRoute-Projektion — an einer
+    Stelle ohne Bezug zur Ursache.
+    """
+    ref = AiModelRef(
+        provider_connection_id="conn-mismatch",
+        model_id="gpt-4o-mini",
+        source="fallback",
+        fallback_reason="Primaermodell nicht erreichbar",
+    )
+    config = _seed_with_ref(mock_run_dir, monkeypatch, tmp_path, "run_src_fallback", ref)
+
+    route = config.stage_overrides["report_generation"]
+    assert route.ai_model_ref_source == "fallback"
+    assert route.fallback_reason == "Primaermodell nicht erreichbar"
+
+    # Die Projektion muss damit ohne ValidationError durchlaufen.
+    from app.contracts.ai_provider_contract import ai_route_from_stage_route
+
+    ai_route = ai_route_from_stage_route(route)
+    assert ai_route.source == "provider_fallback"
+    assert ai_route.fallback_reason == "Primaermodell nicht erreichbar"
+
+
+@pytest.mark.parametrize("missing_reason", [None, "", "   "])
+@patch("app.utils.artifact_locator.ArtifactLocator.run_dir")
+def test_ai_model_ref_fallback_ohne_grund_laesst_den_seed_nicht_scheitern(
+    mock_run_dir, monkeypatch, tmp_path, missing_reason
+):
+    """``source="fallback"`` ohne Grund ist über die UI real erreichbar.
+
+    ``AiModelPicker.vue`` emittiert bei einer unbekannten Item-ID
+    ``source: 'fallback'``, ohne einen Grund ableiten zu können, und
+    ``AiModelRefPayload`` überträgt ``fallback_reason`` gar nicht erst.
+    ``provider_fallback`` verlangt aber einen nicht-leeren Grund.
+
+    Der Seed darf daran nicht scheitern: ``seed_run_stage_routing`` läuft in
+    ``api/simulation_run.py`` **nach** ``run_registry.create_run`` und ist dort
+    nicht in ein ``try/except`` gefasst — eine Exception hinterließe einen
+    verwaisten ``pending``-Run und antwortete mit 500.
+
+    Die Lücke wird deterministisch aufgefüllt, nicht kaschiert: der Ersatzwert
+    ist als solcher erkennbar und im Audit von einem echten Grund
+    unterscheidbar.
+    """
+    ref = AiModelRef(
+        provider_connection_id="conn-mismatch",
+        model_id="gpt-4o-mini",
+        source="fallback",
+        fallback_reason=missing_reason,
+    )
+    config = _seed_with_ref(
+        mock_run_dir, monkeypatch, tmp_path, f"run_fb_{len(missing_reason or '')}", ref
+    )
+
+    route = config.stage_overrides["report_generation"]
+    assert route.ai_model_ref_source == "fallback"
+    assert route.fallback_reason == "unspecified_fallback"
+
+    # Entscheidend ist nicht der Ersatzwert, sondern dass die Projektion
+    # durchläuft — genau dort schlug die Kombination vorher fehl.
+    from app.contracts.ai_provider_contract import ai_route_from_stage_route
+
+    ai_route = ai_route_from_stage_route(route)
+    assert ai_route.source == "provider_fallback"
+    assert ai_route.fallback_reason == "unspecified_fallback"
+
+
 def test_build_runtime_llm_config_maps_resolved_route_for_legacy_callers():
     route = ResolvedRoute(
         stage="persona_generation",

@@ -9,6 +9,19 @@ from ..contracts.llm_routing_contract import StageId
 from .runtime_run_config import RuntimeRunConfig, _publish_json_once_atomic
 
 
+def _carried_ai_model_ref_source(route: AiRoute) -> str | None:
+    """Die urspruengliche ``AiModelRef.source`` aus dem Legacy-Kanal lesen.
+
+    Defensiv gehalten: das Audit darf an einer Bestandsroute ohne den Schluessel
+    nicht scheitern -- ``ai_model_ref_source`` ist ``NotRequired`` und fehlt in
+    allen vor Issue #901 geschriebenen Snapshots.
+    """
+    legacy = route.provider_options.get("__legacy_stage_route__")
+    if not isinstance(legacy, dict):
+        return None
+    return legacy.get("ai_model_ref_source")
+
+
 class AiRouteAudit:
     def __init__(self, run_id: str):
         self.runtime = RuntimeRunConfig(run_id)
@@ -30,6 +43,18 @@ class AiRouteAudit:
             "provider_connection_id": route.provider_connection_id,
             "model_id": route.model_id,
             "source": route.source,
+            # Issue #901: ``source`` beantwortet, welche Routing-EBENE gewonnen
+            # hat -- ``resolve_ai_route`` setzt sie auf den Slot-Namen
+            # ("stage_override", "run_override", ...) und verwirft dabei die
+            # ``source`` des Kandidaten. Ohne dieses zweite Feld waeren im Audit
+            # genau die Faelle wieder ununterscheidbar, die #901 trennen soll:
+            # eine bewusste Nutzerwahl ("explicit"), ein Run-Override und ein
+            # Provider-Fallback landen alle als "stage_override".
+            #
+            # Der Wert ueberlebt die Aufloesung, weil resolve_ai_route
+            # ``provider_options`` unveraendert kopiert und die Herkunft im
+            # ``__legacy_stage_route__``-Kanal mitreist.
+            "ai_model_ref_source": _carried_ai_model_ref_source(route),
             "validated_capabilities": dict(route.validated_capabilities),
             "resolved_at": timestamp.astimezone(timezone.utc).isoformat(),
             "fallback_reason": (

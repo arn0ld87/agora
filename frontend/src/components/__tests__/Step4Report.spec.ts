@@ -1150,6 +1150,32 @@ describe('Step4Report — Report-Route-SSoT-Payload (#817)', () => {
     expect(payload.llm_model).toBeUndefined()
   })
 
+  it('reicht den fallback_reason des Pickers mit durch (Issue #901)', async () => {
+    // AiModelPicker liefert bei einer Fallback-Auswahl einen konkreten Grund
+    // (unknown_provider / provider_offline / provider_degraded). Wird er hier
+    // verworfen, schreibt llm_routing_seed._fallback_reason_for den Platzhalter
+    // "unspecified_fallback" in die Route — der Grund waere nur scheinbar
+    // unbekannt.
+    const payload = await callRegenerate({
+      ...PICK,
+      source: 'fallback',
+      fallback_reason: 'provider_offline',
+    })
+
+    expect(payload.ai_model_ref).toEqual({
+      provider_connection_id: 'conn_minimax',
+      model_id: 'MiniMax-M3',
+      source: 'fallback',
+      fallback_reason: 'provider_offline',
+    })
+  })
+
+  it('sendet fallback_reason nicht als leeres Feld mit', async () => {
+    const payload = await callRegenerate(PICK)
+
+    expect(payload.ai_model_ref).not.toHaveProperty('fallback_reason')
+  })
+
   it('erzeugt aus dem beim Mount übernommenen Kanon-Default KEINEN Override', async () => {
     // Kanon trägt einen Wert, aber der Nutzer hat den Picker nie angefasst.
     mockEffectiveRef.value = PICK

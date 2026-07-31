@@ -1,5 +1,6 @@
 /** Canonical Zod mirror of backend/app/contracts/ai_provider_contract.py. */
 import { z } from 'zod'
+import { AiModelSourceSchema } from './aiModelRef'
 
 export const CapabilityStateSchema = z.enum(['supported', 'unsupported', 'unknown'])
 export type CapabilityState = z.infer<typeof CapabilityStateSchema>
@@ -208,12 +209,22 @@ const StageIdSchema = z.enum([
   'evaluation',
 ])
 
-const LegacyStageRouteOptionsSchema = z.object({
+export const LegacyStageRouteOptionsSchema = z.object({
   temperature: z.number().nullable(),
   max_tokens: z.number().int().nullable(),
   reasoning_effort: z.enum(['none', 'minimal', 'low', 'medium', 'high']).nullable(),
   had_reserved_value: z.boolean(),
   reserved_value: z.null(),
+  // Issue #901: spiegelt `ai_model_ref_source: NotRequired[AiModelRefSource | None]`
+  // aus `LegacyStageRouteOptions` (ai_provider_contract.py). Ohne diesen Eintrag
+  // hätte `.strict()` eine Route mit dem neuen Schlüssel abgelehnt — dieselbe
+  // Drift-Klasse, für die dieser Slice `llmRoute.ts` nachgezogen hat.
+  //
+  // Heute kein Live-Bruch, weil `_serialize_public_ai_route`
+  // (backend/app/api/llm_routing.py) `__legacy_stage_route__` vor der
+  // Auslieferung entfernt. Der Spiegel steht trotzdem korrekt: er ist die
+  // Aussage über den Vertrag, nicht über den aktuellen Serialisierungspfad.
+  ai_model_ref_source: AiModelSourceSchema.nullable().optional(),
 }).strict()
 
 export const AiProviderOptionsSchema = z.object({
