@@ -1,6 +1,10 @@
 # Frontend-Next-Brief — Agora React-Redesign
 
-**Status:** Entwurf / Analyse-Ergebnis, noch kein Lovable-Projekt angelegt, keine Umsetzung gestartet.
+**Status:** Historischer Entwurf vom 2026-07-16 — **überholt**. Entgegen der ursprünglichen Zeile existiert
+inzwischen ein Lovable-Projekt mit substanzieller Umsetzung; der verifizierte Ist-Stand steht in
+[`2026-STATUS.md`](2026-STATUS.md) (erhoben 2026-07-26, Issue #836). Unabhängig davon ist ein
+React-/Lovable-Rewrite vor 1.0.0 **nicht freigegeben** ([Issue #837](https://github.com/arn0ld87/agora/issues/837),
+[`AGENTS.md`](../../../AGENTS.md)). Dieses Dokument beschreibt eine Zielarchitektur, keine beschlossene Umsetzung.
 **Erstellt:** 2026-07-16, Branch `feat/frontend-next`.
 **Quelle:** code-review-graph + gezielte Datei-Reads gegen `main`-Stand von `frontend/`, `backend/app/api/`, `backend/app/contracts/`, `docs/auth.md`, `README.md`, `deploy/nginx/agora.conf`.
 
