@@ -8,12 +8,19 @@ export interface RunModelResolution {
 }
 
 function toPayload(
-  ref: Pick<AiModelRefPayload, 'provider_connection_id' | 'model_id' | 'source'>,
+  ref: Pick<AiModelRefPayload, 'provider_connection_id' | 'model_id' | 'source'> & {
+    fallback_reason?: string | null
+  },
 ): AiModelRefPayload {
   return {
     provider_connection_id: ref.provider_connection_id,
     model_id: ref.model_id,
     source: ref.source,
+    // Issue #901: nur mitsenden, wenn vorhanden. Ein leeres Feld im Request
+    // waere kein Erkenntnisgewinn, ein verworfener Grund dagegen ein echter
+    // Diagnoseverlust — AiModelPicker liefert unknown_provider,
+    // provider_offline oder provider_degraded.
+    ...(ref.fallback_reason ? { fallback_reason: ref.fallback_reason } : {}),
   }
 }
 
