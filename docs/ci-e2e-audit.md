@@ -66,6 +66,8 @@ Das schnelle PR-Gate ist damit lokal in unter 40 Sekunden vollständig reproduzi
 
 Der lokale E2E-Lauf erforderte, den laufenden Dev-Stack abzuräumen, weil die Compose-Dateien feste `container_name` setzen (`agora`, `agora-neo4j`, `agora-redis`, `agora-nginx`). `COMPOSE_PROJECT_NAME` isoliert dadurch **nicht**, und `scripts/e2e-down.sh` löscht mit `down -v` die Volumes. Das wurde vor der Ausführung ausdrücklich freigegeben.
 
+> **Nachtrag (Issue #989, 2026-07-31):** dieser Befund ist behoben. Das E2E-Override vergibt eigene `container_name`-Werte (`agora-e2e*`), der Stack läuft unter dem festen Projektnamen `agora-e2e` und `scripts/e2e-compose.sh` hält die Compose-Invocation für Up, Down und Log-Dump an einer Stelle. Ein lokaler E2E-Lauf neben dem laufenden Dev-Stack ist damit möglich; `down -v` trifft ausschließlich die Volumes des E2E-Projekts. Anleitung: [`docs/runbooks/e2e-local.md`](runbooks/e2e-local.md).
+
 Ein erster Lauf schlug vollständig fehl, weil der Playwright-Chromium-Build lokal nicht installiert war (`browserType.launch: Executable doesn't exist`). Die reinen API-Tests (health 1/2/4, report-modes 4/4) liefen dabei bereits grün durch — der Stack selbst war also gesund. Nach `npx playwright install chromium` wurde der Lauf wiederholt.
 
 **Ergebnis des vollständigen Laufs: siehe §5.**

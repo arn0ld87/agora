@@ -119,6 +119,7 @@ Kein `--no-verify`-Bypass. Runbook: [`docs/runbooks/pre-push-gate.md`](docs/runb
 | [`docs/runbooks/pr-workflow.md`](docs/runbooks/pr-workflow.md) | PR + Gemini-Sichtung |
 | [`docs/runbooks/worktree-strategy.md`](docs/runbooks/worktree-strategy.md) | Worktree-Isolation |
 | [`docs/runbooks/pre-push-gate.md`](docs/runbooks/pre-push-gate.md) | Zentrales Pre-Push-Gate |
+| [`docs/runbooks/e2e-local.md`](docs/runbooks/e2e-local.md) | Lokaler E2E-Lauf neben dem Dev-Stack |
 | [`docs/runbooks/subagent-routing.md`](docs/runbooks/subagent-routing.md) | Dispatch-, Parallelitäts- und Review-Workflow |
 | [`docs/runbooks/architecture-layers.md`](docs/runbooks/architecture-layers.md) | Layer 0–10 |
 
