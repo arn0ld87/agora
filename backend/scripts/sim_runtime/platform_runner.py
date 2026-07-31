@@ -364,6 +364,23 @@ class SinglePlatformRunner:
         # Create model
         print("\nInitialize LLM model...")
         model = self._create_model()
+        # Budget-Guard (Issue #764): Usage-Recording in den gemeinsamen
+        # Run-Ledger + harte Limits an Runden-Grenzen. Aktiv sobald
+        # AGORA_RUN_ID gesetzt ist; Hard-Limits nur mit budget_config.json.
+        budget_guard = None
+        try:
+            try:
+                from .budget_guard import SubprocessBudgetGuard
+            except ImportError:  # direct script execution
+                from sim_runtime.budget_guard import SubprocessBudgetGuard
+            budget_guard = SubprocessBudgetGuard.from_environment(self.simulation_dir)
+            if budget_guard is not None:
+                model = budget_guard.wrap_model(model)
+                print("[budget-guard] usage recording active"
+                      + (f" (enforcement={budget_guard.enforcement})" if budget_guard.budget_config else ""))
+        except Exception as exc:  # noqa: BLE001 — Guard ist Zusatz, kein Blocker
+            print(f"[budget-guard] setup failed ({exc}); continuing without", flush=True)
+            budget_guard = None
         # Preflight: ein einzelner Probe-Call vor dem Fan-out fängt permanente
         # Auth-/Routing-Fehler (401/403/404) mit klarer Root-Cause ab.
         preflight_model_probe(model)
@@ -479,6 +496,7 @@ class SinglePlatformRunner:
         elif enable_tools and not AGENT_TOOLS_AVAILABLE:
             print("[ToolUse] WARNING: enable_agent_tools=true but agent_tools.py could not be imported")
 
+        budget_abort_info = None
         for round_num in range(total_rounds):
             # Honour pause flag from Flask (Phase 4 — soft-pause between rounds).
             try:
@@ -489,6 +507,26 @@ class SinglePlatformRunner:
                     break
             except Exception:
                 pass
+
+            # Budget-Guard (Issue #764): harte Limits an der Runden-Grenze,
+            # BEVOR weitere planbare Modellaufrufe entstehen. Die laufende
+            # Runde wurde zuvor sauber abgeschlossen; Teilresultate bleiben
+            # in der SQLite-DB erhalten.
+            if budget_guard is not None:
+                try:
+                    budget_abort_info = budget_guard.check_round_boundary(round_num)
+                except Exception as exc:  # noqa: BLE001 — Check-Fehler stoppt die Sim nicht
+                    print(f"[budget-guard] round check failed ({exc})", flush=True)
+                    budget_abort_info = None
+                if budget_abort_info is not None:
+                    print(
+                        f"  [budget-guard] hard budget exceeded "
+                        f"({budget_abort_info['dimension']}: "
+                        f"{budget_abort_info['observed']} >= {budget_abort_info['threshold']}) "
+                        f"— stopping before round {round_num + 1}",
+                        flush=True,
+                    )
+                    break
 
             # Calculate current simulation time
             simulated_minutes = round_num * minutes_per_round
@@ -559,7 +597,10 @@ class SinglePlatformRunner:
         print(f"  - Database: {db_path}")
 
         # Whether to enter wait mode
-        if self.wait_for_commands:
+        # Bei Budgetabbruch nicht in den Wait-Mode gehen: der Run soll
+        # deterministisch enden, damit der Backend-Monitor den Abbruchgrund
+        # (budget_abort.json) übernehmen kann (Issue #764).
+        if self.wait_for_commands and budget_abort_info is None:
             print("\n" + "=" * 60)
             print("Enter wait mode - environment keeps running")
             print("Supported commands: interview, batch_interview, close_env")
