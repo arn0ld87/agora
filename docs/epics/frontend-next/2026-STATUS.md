@@ -104,6 +104,22 @@ Der Dateiname `PHASE-5-VERIFICATION-HANDOVER.md` trägt keine Aussage über tats
 
 `SLICE-5.2-ENVSETUP-KANON-MIGRATION.md` liegt zwar hier, behandelt aber ausschließlich **Vue**-Komponenten (`EnvSetupModelPanel.vue`, `Step2EnvSetup.vue`, `AiModelPicker.vue`) und gehört zu [Issue #890](https://github.com/arn0ld87/agora/issues/890) am bestehenden Produktfrontend. Es ist als einziges Dokument des Verzeichnisses am 2026-07-26 geändert worden, alle übrigen stammen vom 2026-07-18. Es zählt nicht zum React-Vorhaben.
 
+Die Datei trägt seit Issue #910 einen entsprechenden Hinweis im Dokumentkopf. Sie wurde bewusst **nicht** verschoben: auf ihren Pfad verweisen `CHANGELOG.md` (Eintrag zu #890) sowie `PHASE-2-ONBOARDING-HANDOVER.md` an zwei Stellen, und ein CHANGELOG-Eintrag ist Auslieferungshistorie, die nicht nachträglich umgeschrieben wird.
+
+### Irreführende Branch-Benennung
+
+Die Branchnamen `feat/frontend-next`, `origin/feat/frontend-next-phase12` und `origin/feat/frontend-next-phase2-onboarding-granularity` legen React-Arbeit nahe. Tatsächlich enthält keiner der drei eine einzige `.tsx`-Datei — es ist durchgehend Vue-Arbeit am bestehenden Frontend.
+
+Beleg via `git ls-tree -r --name-only <branch> | grep -c '\.tsx$'`, erhoben 2026-07-31:
+
+| Branch | `.tsx`-Dateien |
+|---|---|
+| `feat/frontend-next` | 0 |
+| `origin/feat/frontend-next-phase12` | 0 |
+| `origin/feat/frontend-next-phase2-onboarding-granularity` | 0 |
+
+Wer in diesen Branches React-Code sucht, sucht vergeblich. Der React-Code liegt im separaten, privaten Repository `arn0ld87/agora-runs-dashboard` (siehe „Belegt").
+
 ---
 
 ## Unklar
