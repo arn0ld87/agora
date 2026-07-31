@@ -6,6 +6,7 @@ model: sonnet
 effort: high
 maxTurns: 35
 background: true
+isolation: worktree
 ---
 
 # Agora Backend-Refactor-Worker

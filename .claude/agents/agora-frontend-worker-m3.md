@@ -6,6 +6,7 @@ model: sonnet
 effort: medium
 maxTurns: 30
 background: true
+isolation: worktree
 ---
 
 # Agora Frontend-Worker
