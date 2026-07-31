@@ -137,9 +137,25 @@ test.describe('#764 · Run-Budget-Smoke', () => {
         // =============================================================
         // Schritt 4: Preflight-Schätzung (ehrlich gekennzeichnet)
         // =============================================================
+        // num_agents/max_rounds MUESSEN mitgegeben werden. Der Endpunkt leitet
+        // sie sonst aus dem Artefakt `simulation_config` ab — das entsteht aber
+        // erst bei der Simulations-VORBEREITUNG, nicht durch
+        // POST /api/simulation/create + Profil-Seeding. Ohne die beiden Felder
+        // antwortet das Backend deterministisch mit HTTP 400
+        // ("num_agents und max_rounds werden benötigt …",
+        // backend/app/api/simulation_budget.py:140-148).
+        // Befund des CI-/E2E-Audits 2026-07-31: Diese Datei lief seit PR #975
+        // in keinem Workflow, deshalb blieb der Fehler unentdeckt.
+        // simulation_id bleibt im Body — damit laeuft der Config-Lookup-Zweig
+        // weiterhin mit (er liefert hier None und faellt auf die Direktwerte
+        // zurueck), statt still einen anderen Codepfad zu testen.
         const preflightRes = await apiCtx.post(`${baseURL}/api/simulation/preflight-estimate`, {
           headers: { ...headers, 'Content-Type': 'application/json' },
-          data: { simulation_id: simulationId },
+          data: {
+            simulation_id: simulationId,
+            num_agents: MIN_PERSONA_TABLE_ROWS,
+            max_rounds: 2,
+          },
         });
         expect(
           preflightRes.ok(),
