@@ -1,0 +1,196 @@
+{
+  "$defs": {
+    "UsageMetrics": {
+      "additionalProperties": false,
+      "description": "Gemessener Verbrauch eines Runs oder einer Teilmenge (Stage/Provider/Modell).\n\nOptionale Felder bleiben None, wenn die Datenquelle sie nicht liefert \u2014\nder jeweilige Status macht die Datenqualit\u00e4t explizit.",
+      "properties": {
+        "cost_micros": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cost Micros"
+        },
+        "cost_status": {
+          "default": "unknown",
+          "enum": [
+            "measured",
+            "estimated",
+            "free",
+            "unknown"
+          ],
+          "title": "Cost Status",
+          "type": "string"
+        },
+        "duration_ms": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Duration Ms",
+          "type": "integer"
+        },
+        "input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Tokens"
+        },
+        "llm_calls": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Llm Calls",
+          "type": "integer"
+        },
+        "output_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Tokens"
+        },
+        "tokens_status": {
+          "default": "unknown",
+          "enum": [
+            "measured",
+            "partial",
+            "unknown"
+          ],
+          "title": "Tokens Status",
+          "type": "string"
+        },
+        "total_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total Tokens"
+        }
+      },
+      "title": "UsageMetrics",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/run-usage.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Tats\u00e4chlicher Verbrauch eines Runs, aufgeschl\u00fcsselt nach Stage/Provider/Modell.",
+  "properties": {
+    "by_model": {
+      "additionalProperties": {
+        "$ref": "#/$defs/UsageMetrics"
+      },
+      "title": "By Model",
+      "type": "object"
+    },
+    "by_provider": {
+      "additionalProperties": {
+        "$ref": "#/$defs/UsageMetrics"
+      },
+      "title": "By Provider",
+      "type": "object"
+    },
+    "by_stage": {
+      "additionalProperties": {
+        "$ref": "#/$defs/UsageMetrics"
+      },
+      "title": "By Stage",
+      "type": "object"
+    },
+    "ended_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ended At"
+    },
+    "measurement_status": {
+      "default": "unknown",
+      "enum": [
+        "complete",
+        "partial",
+        "unknown"
+      ],
+      "title": "Measurement Status",
+      "type": "string"
+    },
+    "pricing_source": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Pricing Source"
+    },
+    "pricing_version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Pricing Version"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "started_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Started At"
+    },
+    "totals": {
+      "$ref": "#/$defs/UsageMetrics"
+    }
+  },
+  "required": [
+    "totals"
+  ],
+  "title": "RunUsage",
+  "type": "object"
+}

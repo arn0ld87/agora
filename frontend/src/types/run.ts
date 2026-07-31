@@ -72,6 +72,10 @@ export interface RunRecord {
   resume_capability: RunResumeCapability
   /** Read-path enrichment from `/api/runs` and `/api/runs/<id>` (Slice 3.1). */
   summary?: RunSummary
+  /** Issue #764: Budgetstatus + Verbrauch, angereichert in GET /api/runs/<id>. */
+  budget?: import('../contracts/runBudgetContract').RunBudgetStatus | null
+  usage?: import('../contracts/runBudgetContract').RunUsage | null
+  termination_reason?: import('../contracts/runBudgetContract').TerminationReason | null
 }
 
 export interface RunEvent {

@@ -253,6 +253,21 @@ def prepare_simulation():
             message=f"Simulation does not exist: {simulation_id}",
         )
 
+    # Run-Budget (Issue #764): optionale Limits für den Prepare-Run.
+    budget_config = None
+    raw_budget = data.get('budget')
+    if raw_budget is not None:
+        from ..contracts.run_budget_contract import RunBudgetConfig
+
+        try:
+            budget_config = RunBudgetConfig.model_validate(raw_budget)
+        except ValidationError:
+            return json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=400,
+                message="budget ist ungültig",
+            )
+
     force_regenerate = data.get('force_regenerate', False)
 
     # Project einmalig laden — wird sowohl für den P5.3-Profil-Fallback als
@@ -450,6 +465,8 @@ def prepare_simulation():
             "branch_depth": state.branch_depth,
             "llm_model": llm_model_override,
             "llm_provider": llm_runtime.redacted_metadata() or None,
+            # Budget-Config (Issue #764) — nur Limits, keine Secrets
+            **({"budget": budget_config.model_dump(mode="json")} if budget_config else {}),
         },
     )
     task_id = task_manager.create_task(
