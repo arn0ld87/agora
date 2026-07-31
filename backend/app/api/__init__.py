@@ -29,7 +29,6 @@ from . import simulation_profiles  # noqa: E402, F401
 from . import simulation_run  # noqa: E402, F401
 from . import simulation_interviews  # noqa: E402, F401
 from . import simulation_history  # noqa: E402, F401
-from . import simulation_budget  # noqa: E402, F401 -- Issue #764: Budget/Preflight
 from . import simulation_stream  # noqa: E402, F401 -- Issue #9 Phase C: SSE bridge
 from . import simulation_metrics  # noqa: E402, F401 -- Issue #12: polarization metrics
 from . import simulation_compare  # noqa: E402, F401 -- Sub-Slice 24 (#66): Branch-Compare-API

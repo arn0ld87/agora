@@ -14,12 +14,6 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.contracts.run_budget_contract import (
-    RunBudgetStatus,
-    RunUsage,
-    TerminationReason,
-)
-
 # Exakt die kanonischen Ausgabewerte aus RunRegistry.canonical_status()
 RunStatus = Literal["pending", "processing", "paused", "completed", "failed", "stopped"]
 
@@ -71,13 +65,6 @@ class RunDetail(BaseModel):
     log_tail: Optional[list[str]] = None
     # metrics: beliebige numerische/String-Kennzahlen aus dem Manifest
     metrics: Optional[dict[str, float | int | str]] = None
-
-    # Budgets & Verbrauch (Issue #764) — optional, damit Alt-Manifeste lesbar
-    # bleiben; fehlende Felder bedeuten „kein Budget / kein gemessener
-    # Verbrauch" und werden im Frontend als unknown dargestellt.
-    termination_reason: Optional[TerminationReason] = None
-    budget: Optional[RunBudgetStatus] = None
-    usage: Optional[RunUsage] = None
 
 
 class RunsAggregation(BaseModel):

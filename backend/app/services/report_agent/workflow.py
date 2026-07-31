@@ -339,12 +339,6 @@ def _safe_generate_section_react(
             section_index=section_index,
         )
     except Exception as exc:  # noqa: BLE001 — Pipeline darf nicht crashen
-        # Budgetabbruch (#764) ist kein Fallback-Fall: hart durchreichen, damit
-        # der Run deterministisch mit termination_reason budget_* endet.
-        from ..run_budget import BudgetExceededError
-
-        if isinstance(exc, BudgetExceededError):
-            raise
         logger.error(
             "section %d (%r): generate_section_react warf eine Exception: %r — "
             "Fallback-Content wird eingefügt.",
@@ -1224,12 +1218,6 @@ def generate_report(
         return report
 
     except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
-        # Budgetabbruch (#764) ist kein technischer Fehler: durchreichen, damit
-        # report_generation den Run als "stopped" + termination_reason markiert.
-        from ..run_budget import BudgetExceededError
-
-        if isinstance(e, BudgetExceededError):
-            raise
         logger.error(f"reportgeneratefailed: {str(e)}")
         report.status = ReportStatus.FAILED
         report.error = str(e)

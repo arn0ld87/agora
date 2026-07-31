@@ -9,16 +9,6 @@ import { renderMarkdown } from '../../../utils/markdown'
 import { generateReport, getAgentLog, getConsoleLog, getReport, getReportStatus, getReportEvidence } from '../../../api/report'
 import type { GenerateReportData } from '../../../api/report'
 import { createSimulationBranch } from '../../../api/simulation'
-import { getRun } from '../../../api/runs'
-import {
-  RunBudgetStatusSchema,
-  RunUsageSchema,
-  type CostStatus,
-  type RunBudgetStatus,
-  type RunUsage,
-  type TokensStatus,
-  type UsageMetrics,
-} from '../../../contracts/runBudgetContract'
 import Button from '@/components/v4/forms/Button.vue'
 import Badge from '@/components/v4/forms/Badge.vue'
 import Kicker from '@/components/v4/data/Kicker.vue'
@@ -27,13 +17,11 @@ import ReportModeControls from '../../step4/ReportModeControls.vue'
 import ReportOutlinePanel from '../../step4/ReportOutlinePanel.vue'
 import ReportLiveLogPane from '../../step4/ReportLiveLogPane.vue'
 import ReportFinalView from '../../step4/ReportFinalView.vue'
-import RunUsageBreakdown from '@/components/v4/run-budget/RunUsageBreakdown.vue'
 import { useReportExports } from '../../../composables/useReportExports'
 import type { AiModelRef } from '../../../contracts/aiModelRef'
 import { useEffectiveModelSelection } from '@/composables/useEffectiveModelSelection'
 import { parseAgentEntry } from '../../../utils/reportAgentLog'
 import { parseSourceAnchor } from '../../../utils/sourceAnchor'
-import { buildReportRoute } from '../../../utils/reportRoute'
 import {
   ReportSchema,
   ReportOutlineSchema,
@@ -55,8 +43,6 @@ interface StatusData {
   current_section_index?: number
   simulation_id?: string
   report_id?: string
-  /** Issue #764 (Codex P1): Registry-ID des Report-Runs (report_generation). */
-  run_id?: string
   status?: string
   error?: string
 }
@@ -78,12 +64,6 @@ const router = useRouter()
 
 const props = defineProps({
   reportId: String,
-  // Issue #764 (Codex P1): Run-Registry-ID wird von Step3 als
-  // ?runId=<id> weitergereicht. simulation_id und run_id sind seit #764
-  // nicht mehr identisch — die Run-Registry generiert beim Start eine
-  // eigene UUID, die fuer /api/runs/<id> zwingend noetig ist.
-  // loadRunUsage() priorisiert runId, faellt auf simulationId zurueck.
-  runId: String,
   simulationId: String,
   systemLogs: Array,
   cancelEndpointAvailable: { type: Boolean, default: false },
@@ -104,128 +84,6 @@ const generatedSections = ref<Record<string, unknown>>({})
 const currentSectionIndex = ref<number | null>(null)
 const isComplete = ref(false)
 const fullReport = ref<Report | null>(null)
-// Issue #764 (Codex P1): letztes Report-Status-Objekt, damit loadReportRunUsage
-// den Report-Run (report_generation) ueber dessen run_id nachladen kann.
-const lastReportStatus = ref<StatusData | null>(null)
-
-// Issue #764: Verbrauchsübersicht zum Sim-Run, einmalig nach Abschluss
-// geladen (die Simulation ist der Run — simulation_id == run_id).
-// Wir halten Sim- und Report-Verbrauch in getrennten Refs, leiten den
-// angezeigten `runUsage` als computed ab und mutieren dabei keine der
-// beiden Quellen — damit eine Regeneration des Reports den Sim-Stand
-// nicht überschreibt und Aggregationsverluste ausbleiben.
-const simUsage = ref<RunUsage | null>(null)
-const reportUsage = ref<RunUsage | null>(null)
-const runUsageLoaded = ref(false)
-const runBudget = ref<RunBudgetStatus | null>(null)
-
-function sumOptInt(
-  a: number | null | undefined,
-  b: number | null | undefined,
-): number | null {
-  const av = typeof a === 'number' ? a : null
-  const bv = typeof b === 'number' ? b : null
-  if (av === null && bv === null) return null
-  return (av ?? 0) + (bv ?? 0)
-}
-
-function combineCostStatus(
-  a: CostStatus | undefined,
-  b: CostStatus | undefined,
-): CostStatus {
-  // 'unknown' ist die konservativste Aussage und dominiert; 'estimated'
-  // dominiert über 'measured'/'free', sobald eine Seite nur eine
-  // Teilsumme liefern kann.
-  if (a === 'unknown' || b === 'unknown') return 'unknown'
-  if (a === 'estimated' || b === 'estimated') return 'estimated'
-  if (a === 'free' || b === 'free') return 'free'
-  return 'measured'
-}
-
-function combineTokensStatus(
-  a: TokensStatus | undefined,
-  b: TokensStatus | undefined,
-): TokensStatus {
-  if (a === 'unknown' || b === 'unknown') return 'unknown'
-  if (a === 'partial' || b === 'partial') return 'partial'
-  return 'measured'
-}
-
-const runUsage = computed<RunUsage | null>(() => {
-  const sim = simUsage.value
-  const rep = reportUsage.value
-  if (!sim && !rep) return null
-  // Baseline-Objekt kopieren (spread), damit by_stage / by_provider /
-  // by_model aus genau einer Quelle stammen, die Totals aber aggregiert
-  // werden. Mutationen der Quellen sind ausgeschlossen.
-  const baseline: RunUsage = sim ?? (rep as RunUsage)
-  const simTotals: UsageMetrics = sim?.totals ?? ({} as UsageMetrics)
-  const repTotals: UsageMetrics = rep?.totals ?? ({} as UsageMetrics)
-  const totals: UsageMetrics = {
-    ...baseline.totals,
-    input_tokens: sumOptInt(simTotals.input_tokens, repTotals.input_tokens),
-    output_tokens: sumOptInt(simTotals.output_tokens, repTotals.output_tokens),
-    total_tokens: sumOptInt(simTotals.total_tokens, repTotals.total_tokens),
-    llm_calls:
-      (simTotals.llm_calls ?? 0) + (repTotals.llm_calls ?? 0),
-    cost_micros: sumOptInt(simTotals.cost_micros, repTotals.cost_micros),
-    duration_ms:
-      (simTotals.duration_ms ?? 0) + (repTotals.duration_ms ?? 0),
-    cost_status: combineCostStatus(simTotals.cost_status, repTotals.cost_status),
-    tokens_status: combineTokensStatus(
-      simTotals.tokens_status,
-      repTotals.tokens_status,
-    ),
-  }
-  return { ...baseline, totals }
-})
-
-async function loadRunUsage(): Promise<void> {
-  // Issue #764 (Codex P1): runId (Registry-eindeutig) hat Vorrang vor
-  // resolvedSimulationId / simulationId — /api/runs/<id> erwartet die
-  // Registry-ID, sonst liefert das Backend einen Run-not-found.
-  const simId = props.runId || resolvedSimulationId.value || props.simulationId
-  if (!simId || runUsageLoaded.value) return
-  runUsageLoaded.value = true
-  try {
-    const envelope = await getRun(simId)
-    if (!envelope?.success) return
-    const raw = (envelope.data ?? {}) as unknown as Record<string, unknown>
-    const usage = RunUsageSchema.nullable().safeParse(raw.usage ?? null)
-    simUsage.value = usage.success ? usage.data : null
-    const budget = RunBudgetStatusSchema.nullable().safeParse(raw.budget ?? null)
-    runBudget.value = budget.success ? budget.data : null
-  } catch { /* Verbrauchsdaten sind optional — Report bleibt nutzbar */ }
-}
-
-// Issue #764 (Codex P1): der Report-Workflow hat einen eigenen Run
-// (report_generation), der den weichen/harten Budget-Limits unterliegt
-// und ueber getReportStatus geliefert wird. Wir laden seinen Verbrauch
-// nach Abschluss zusaetzlich in `reportUsage` — das `runUsage`-Computed
-// uebernimmt die ehrliche Aggregation aus beiden Quellen.
-async function loadReportRunUsage(): Promise<void> {
-  const st = lastReportStatus.value as StatusData | null
-  const reportRunId = st?.run_id
-  if (!reportRunId) return
-  try {
-    const envelope = await getRun(reportRunId)
-    if (!envelope?.success) return
-    const raw = (envelope.data ?? {}) as unknown as Record<string, unknown>
-    const usage = RunUsageSchema.nullable().safeParse(raw.usage ?? null)
-    if (!usage.success || !usage.data) return
-    reportUsage.value = usage.data
-  } catch { /* Report-Run ist optional */ }
-}
-
-// Sobald der Report terminal ist (completed/incomplete/failed), einmalig
-// die Abschluss-Verbrauchsdaten ziehen. Sim-Ladevorgang zuerst, damit
-// der Report-Verbrauch nicht in einen leeren Baseline aggregiert wird
-// (sonst wirken spaetere Regenerationen wie sprunghafte Zahlen).
-watch(isComplete, async (done) => {
-  if (!done) return
-  await loadRunUsage()
-  await loadReportRunUsage()
-})
 const evidenceMap = ref<EvidenceMap | null>(null)
 const selectedEvidenceSection = ref<number | null>(null)
 const branchBusy = ref(false)
@@ -309,14 +167,6 @@ function buildModelSelection(): Pick<GenerateReportData, 'ai_model_ref'> {
   return {}
 }
 
-// PR #975 (CodeRabbit): Beim Start und beim Regenerieren wechselt die Route
-// auf die neue reportId. Ohne den ?runId=<id>-Query verliert StepReportView
-// die Registry-Run-ID und Step4Report faellt auf simulationId zurueck —
-// /api/runs/<simulation_id> ist aber nicht dieselbe ID (siehe props.runId).
-function reportNavigationTarget(reportId: string) {
-  return buildReportRoute(reportId, props.runId)
-}
-
 async function regenerateWithModel() {
   const simId = resolvedSimulationId.value || props.simulationId
   if (!simId) { addLog('simulationId fehlt — Regenerieren nicht möglich.'); return }
@@ -336,7 +186,7 @@ async function regenerateWithModel() {
       generatedSections.value = {}; currentSectionIndex.value = null
       resetAgentLogs(); resetConsoleLogs(); fullReport.value = null
       emit('update-status', 'processing')
-      router.push(reportNavigationTarget(res.data.report_id as string))
+      router.push({ name: 'Report', params: { reportId: res.data.report_id as string } })
       startPolling()
     } else { addLog(`Fehler: ${res?.error || 'unbekannt'}`) }
   } catch (err) { addLog((err as Error).message) }
@@ -362,7 +212,7 @@ async function startReportConfirmed() {
       generatedSections.value = {}; currentSectionIndex.value = null
       resetAgentLogs(); resetConsoleLogs(); fullReport.value = null
       emit('update-status', 'processing')
-      router.push(reportNavigationTarget(res.data.report_id as string))
+      router.push({ name: 'Report', params: { reportId: res.data.report_id as string } })
       startPolling()
     } else { addLog(`Fehler: ${res?.error || 'unbekannt'}`); reportPending.value = true }
   } catch (err) { addLog((err as Error).message); reportPending.value = true }
@@ -419,7 +269,6 @@ async function pollStatus() {
     })) as StatusApiResult
     if (res?.success && res.data) {
       const st = res.data
-      lastReportStatus.value = st
       statusMsg.value = st.message || ''
       if (st.outline) { try { reportOutline.value = ReportOutlineSchema.parse(st.outline) } catch (err) { recordSchemaError('outline', err) } }
       if (st.sections) generatedSections.value = st.sections
@@ -729,13 +578,6 @@ onUnmounted(stopPolling)
         @download-html="downloadHtml"
         @print-report="printReport"
         @download-evidence="downloadEvidence"
-      />
-
-      <!-- Issue #764: Abschluss-Verbrauchsübersicht (Tokens/Kosten/Laufzeit) -->
-      <RunUsageBreakdown
-        v-if="phase === 2 && runUsage"
-        :usage="runUsage"
-        :budget="runBudget"
       />
 
       <!-- Conversation hand-off when no report yet (phase 2, no html) -->

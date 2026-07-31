@@ -154,23 +154,6 @@ def generate_report():
         llm_runtime = parse_runtime_llm_config({})
         llm_profile_id = None
 
-    # Run-Budget (Issue #764): optionale Limits, überschreiben die Vererbung
-    # von der Simulation. Validierung hier, damit 400 vor dem Enqueue greift.
-    budget_config = None
-    raw_budget = data.get('budget')
-    if raw_budget is not None:
-        from pydantic import ValidationError as _BudgetValidationError
-
-        from ..contracts.run_budget_contract import RunBudgetConfig as _RunBudgetConfig
-        try:
-            budget_config = _RunBudgetConfig.model_validate(raw_budget)
-        except _BudgetValidationError as exc:
-            return json_error(
-                ApiErrorCode.VALIDATION_FAILED,
-                status=400,
-                message=f"budget ist ungültig: {exc.errors()[0].get('msg', 'validation error')}",
-            )
-
     try:
         result = ReportGenerationService.start_generation(
             simulation_id=simulation_id,
@@ -180,7 +163,6 @@ def generate_report():
             llm_runtime=llm_runtime,
             llm_profile_id=llm_profile_id,
             ai_model_ref=ai_model_ref,
-            budget=budget_config,
         )
         return json_success(result)
     except ValueError as exc:

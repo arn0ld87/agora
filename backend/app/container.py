@@ -20,7 +20,7 @@ exercise services without a Flask app context.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from .services.artifact_store import SimulationArtifactStore
@@ -55,9 +55,9 @@ class AgoraContainer:
     def __init__(
         self,
         *,
-        neo4j_storage: "Neo4jStorage | None" = None,
-        artifact_store: "SimulationArtifactStore | None" = None,
-        event_bus: "SimulationEventBus | None" = None,
+        neo4j_storage: "Optional[Neo4jStorage]" = None,
+        artifact_store: "Optional[SimulationArtifactStore]" = None,
+        event_bus: "Optional[SimulationEventBus]" = None,
     ) -> None:
         self._neo4j_storage = neo4j_storage
         self._artifact_store = artifact_store

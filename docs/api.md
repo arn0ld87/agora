@@ -57,9 +57,6 @@ Quelle der Wahrheit für die Routen ist der Code in [`../backend/app/api/`](../b
 | [`simulation_history.py`](../backend/app/api/simulation_history.py) | Historie |
 | [`simulation_metrics.py`](../backend/app/api/simulation_metrics.py) | `GET /<id>/metrics`, `GET /<id>/metrics/export` |
 | [`simulation_compare.py`](../backend/app/api/simulation_compare.py) | `GET /<id>/compare` (Branch-Compare, #66) |
-| [`simulation_budget.py`](../backend/app/api/simulation_budget.py) | `POST /preflight-estimate` (Token-/Kosten-/Laufzeit-Schätzung vor Run-Start, #764) |
-
-Budget-Hinweis (#764, [ADR-0012](decisions/0012-run-budgets.md)): `POST /prepare` und `POST /start` akzeptieren ein optionales `budget`-Objekt (Contract `run-budget-config.schema.json`: `max_tokens`, `max_cost_micros`, `max_duration_seconds`, `max_llm_calls`, `enforcement` soft/hard, `currency`). Report-Generierung erbt das Budget der zugehörigen Simulation.
 
 ### Report — `/api/report` (`report_bp`)
 
@@ -67,13 +64,11 @@ Budget-Hinweis (#764, [ADR-0012](decisions/0012-run-budgets.md)): `POST /prepare
 |---|---|
 | [`report.py`](../backend/app/api/report.py) | `POST /generate`, `POST /generate/status`, `GET /<id>`, `GET /by-simulation/<sim_id>`, `GET /list`, `GET /<id>/evidence`, `GET /<id>/evidence/<section>/<claim_id>`, `GET /<id>/export`, `GET /<id>/download`, `DELETE /<id>`, `POST /chat`, `GET /<id>/progress`, `GET /<id>/sections`, `GET /<id>/section/<i>`, `GET /check/<sim_id>`, `GET /<id>/agent-log` (22 Routen) |
 
-Export-Hinweis (#764): ZIP-Exporte (`/export`, `/download`) enthalten zusätzlich `usage.json` (Verbrauch) und `budget.json` (Limits + Warnungen) des Report-Runs, secretsfrei. `POST /generate` akzeptiert ein optionales `budget`-Objekt (`run-budget-config.schema.json`); ohne Angabe erbt der Report-Run das Budget der Simulation.
-
 ### Runs — `/api/runs` (`runs_bp`)
 
 | Modul | Auswahl |
 |---|---|
-| [`runs.py`](../backend/app/api/runs.py) | Run-Status, Run-Verwaltung; `GET /<run_id>` reichert `budget`/`usage`/`termination_reason` an (#764), `GET /<run_id>/usage` (Verbrauchsaufstellung) |
+| [`runs.py`](../backend/app/api/runs.py) | Run-Status, Run-Verwaltung |
 | [`llm_routing.py`](../backend/app/api/llm_routing.py) | `GET/PUT /<run_id>/llm-routing`, `PATCH /<run_id>/llm-routing/stages/<stage_id>` |
 
 ### LLM — `/api/llm` (`llm_bp`)
