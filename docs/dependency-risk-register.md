@@ -18,8 +18,10 @@ Supply-Chain-Baseline: [.github/workflows/scorecard.yml](../.github/workflows/sc
 Dieses Dokument trackt bewusst ignorierte `pip-audit`-Findings und Trivy-Container-Scans.
 Jedes Ignored-CVE hat ein GitHub-Issue, eine Frist und einen Owner. Neue Findings duerfen
 nicht hinzugefuegt werden ohne dass sie zuerst als Issue aufgenommen werden.
-Die hier gelisteten CVEs sind auch in der `.trivyignore`-Datei im Root-Verzeichnis
-hinterlegt, um den Container-Scan nicht zu blockieren.
+Die CVEs der **aktiven** Baseline sind auch in der `.trivyignore`-Datei im Root-Verzeichnis
+hinterlegt, um den Container-Scan nicht zu blockieren. Für Einträge im Status `resolved` gilt das
+ausdrücklich nicht — sie bleiben hier nur als Historie stehen und sind aus `.trivyignore` entfernt
+(so geschehen mit CVE-2026-24049 und CVE-2026-23949 am 2026-07-31).
 
 **Maschinenlesbare Quelle:** [docs/dependency-risk-exceptions.json](dependency-risk-exceptions.json) —
 wird von CI ([.github/workflows/cve-monitor.yml](../.github/workflows/cve-monitor.yml)) bei jedem Run
