@@ -7,8 +7,8 @@
 > `docs/epics/frontend-next/`, behandelt aber ausschließlich **Vue**-Komponenten des bestehenden
 > Produktfrontends (`EnvSetupModelPanel.vue`, `Step2EnvSetup.vue`, `AiModelPicker.vue`) und gehört zu
 > [Issue #890](https://github.com/arn0ld87/agora/issues/890). Der Ablageort ist bewusst beibehalten,
-> weil auf diesen Pfad aus `CHANGELOG.md` und zwei Handover-Dokumenten verwiesen wird. Wer hier
-> React-Code sucht, ist falsch (Issue #910).
+> weil auf diesen Pfad aus `CHANGELOG.md` sowie aus `PHASE-2-ONBOARDING-HANDOVER.md` (Zeile 5 und 78)
+> verwiesen wird. Wer hier React-Code sucht, ist falsch (Issue #910).
 
 > **Nachtrag 2026-07-26:** Die Umsetzung weicht in zwei Punkten bewusst von §3(b) und §4
 > ab. Verbindlich ist ab jetzt **§6 (Umsetzungsstand)** am Ende dieses Dokuments; §3 und §4

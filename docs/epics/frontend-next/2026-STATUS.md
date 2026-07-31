@@ -90,7 +90,7 @@ Was ausschließlich in Planungs- und Übergabedokumenten steht. Diese Dokumente 
 
 | Dokument | Typ | Inhalt |
 |---|---|---|
-| `brief.md` | Konzept | vollständiger Architektur-Brief für die React-SPA; Stand-Zeile veraltet (siehe oben) |
+| `brief.md` | Konzept | vollständiger Architektur-Brief für die React-SPA; die veraltete Stand-Zeile ist seit Issue #910 korrigiert und verweist für den Ist-Stand auf dieses Dokument |
 | `HANDOVER.md` | Übergabe-Prompt | nennt Projekt-ID, Editor-, Preview- und GitHub-Sync-URL; bezeichnet Slices 1–3 als „live in der Preview" |
 | `HANDOVER-GLM-MMX.md` | Übergabe-Prompt | Übergabe Phase 1+2 an eine Folge-Session |
 | `PHASE-1-2-OPUS-HANDOVER.md` | Übergabe-Prompt | Kanon-Entscheidung `routing/defaults.global_default` als SSoT |
@@ -108,7 +108,9 @@ Die Datei trägt seit Issue #910 einen entsprechenden Hinweis im Dokumentkopf. S
 
 ### Irreführende Branch-Benennung
 
-Die Branchnamen `feat/frontend-next`, `origin/feat/frontend-next-phase12` und `origin/feat/frontend-next-phase2-onboarding-granularity` legen React-Arbeit nahe. Tatsächlich enthält keiner der drei eine einzige `.tsx`-Datei — es ist durchgehend Vue-Arbeit am bestehenden Frontend.
+Die Branchnamen `feat/frontend-next`, `origin/feat/frontend-next-phase12` und `origin/feat/frontend-next-phase2-onboarding-granularity` legen React-Arbeit nahe. Tatsächlich enthält keiner der drei eine einzige `.tsx`-Datei.
+
+Der Beleg zählt ausschließlich die Dateiendung `.tsx`. Er schließt damit React-Komponenten in JSX-Syntax aus, **nicht** React-Code in reinen `.ts`-Dateien. Für die praktische Frage „liegt hier eine React-SPA?" reicht das: eine React-Oberfläche ohne eine einzige `.tsx`-Datei ist unrealistisch. Eine erschöpfende Framework-Inventur der drei Branches ist damit aber nicht erbracht.
 
 Beleg via `git ls-tree -r --name-only <branch> | grep -c '\.tsx$'`, erhoben 2026-07-31:
 
@@ -118,7 +120,7 @@ Beleg via `git ls-tree -r --name-only <branch> | grep -c '\.tsx$'`, erhoben 2026
 | `origin/feat/frontend-next-phase12` | 0 |
 | `origin/feat/frontend-next-phase2-onboarding-granularity` | 0 |
 
-Wer in diesen Branches React-Code sucht, sucht vergeblich. Der React-Code liegt im separaten, privaten Repository `arn0ld87/agora-runs-dashboard` (siehe „Belegt").
+Wer in diesen Branches eine React-SPA sucht, sucht vergeblich. Der React-Code entsteht im Lovable-Projekt und wird ins separate, private Repository `arn0ld87/agora-runs-dashboard` synchronisiert (siehe „Belegt“).
 
 ---
 
