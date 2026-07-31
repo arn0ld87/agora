@@ -502,8 +502,49 @@ describe('HeroNewRun (Phase-1, Kanon-First Migration)', () => {
       'abc',
       30,
       10,
+      // Issue #764: sechstes Argument ist das Run-Budget (Default: keines).
+      null,
     )
     expect(routerPushMock).toHaveBeenCalledWith({ name: 'Process', params: { projectId: 'new' } })
+  })
+
+  it('startSimulation: gesetztes Run-Budget wird als sechstes Argument durchgereicht (Issue #764)', async () => {
+    const w = await mountHero()
+
+    const file = new File(['x'], 'briefing.md', { type: 'text/markdown' })
+    const input = w.find<HTMLInputElement>('input[type=file]')
+    Object.defineProperty(input.element, 'files', { value: [file] })
+    await input.trigger('change')
+    await flushPromises()
+
+    const textarea = w.find<HTMLTextAreaElement>('textarea#hero-requirement')
+    await textarea.setValue('Wie reagiert die DACH-Region?')
+    await flushPromises()
+
+    // Token-Limit über das eingebundene RunBudgetForm setzen (echtes Form,
+    // erstes Feld = Token-Limit). Details-Content ist auch eingeklappt im DOM.
+    const budgetForm = w.findComponent({ name: 'RunBudgetForm' })
+    expect(budgetForm.exists()).toBe(true)
+    const tokenInput = budgetForm.findAll('input')[0]
+    await tokenInput.setValue('50000')
+    await flushPromises()
+
+    await w.find('.hero-cta').trigger('click')
+    await flushPromises()
+
+    expect(setPendingUploadMock).toHaveBeenCalledWith(
+      [file],
+      'Wie reagiert die DACH-Region?',
+      null,
+      30,
+      10,
+      {
+        schema_version: 1,
+        enforcement: 'soft',
+        currency: 'USD',
+        max_tokens: 50000,
+      },
+    )
   })
 
   it('startSimulation: ohne Profile lässt Legacy-Modell-Keys unangetastet', async () => {

@@ -14,6 +14,13 @@ on:
 permissions:
   contents: read
 
+# Groesster Hebel dieses Workflows: sechs Docker-Stack-Jobs a 20-30 min pro Lauf.
+# Ohne concurrency laufen bei schneller Push-Folge mehrere komplette Generationen
+# parallel weiter. push:main, schedule und workflow_dispatch bleiben unangetastet.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   health-smoke:
     name: Playwright Health-Smoke
@@ -69,6 +76,8 @@ jobs:
             *.blob.core.windows.net:443
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.3.14
@@ -160,6 +169,8 @@ jobs:
             *.blob.core.windows.net:443
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.3.14
@@ -249,6 +260,8 @@ jobs:
             *.blob.core.windows.net:443
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.3.14
@@ -330,6 +343,8 @@ jobs:
             *.blob.core.windows.net:443
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.3.14
@@ -414,7 +429,9 @@ jobs:
             *.blob.core.windows.net:443
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: oven-sh/setup-bun@v2
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.3.14
       - name: Generate ephemeral E2E credentials
@@ -436,10 +453,17 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Run Playwright Golden-Gate-Accessibility-Smoke
         working-directory: frontend
-        run: npx playwright test golden-gate-accessibility.spec.ts --reporter=list,github
+        # drawer-focus-trap.spec.ts laeuft hier mit, NICHT in einem eigenen Job:
+        # es ist inhaltlich ein Accessibility-Gate (Focus-Trap, inert, Escape)
+        # und braucht denselben Stack. Lokal gemessen: 5 Tests in ~11 s — ein
+        # eigener Job haette dafuer einen kompletten Docker-Stack-Boot (20+ min)
+        # gekostet. Die Datei lief seit ihrer Einfuehrung in PR #723 in KEINEM
+        # Workflow; sieben Tests waren toter Code (Audit 2026-07-31).
+        # Der Job-`name:` bleibt unveraendert — er ist ein Required Check.
+        run: npx playwright test golden-gate-accessibility.spec.ts drawer-focus-trap.spec.ts --reporter=list,github
       - name: Upload trace on failure
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: playwright-trace-golden-gate-accessibility
           path: frontend/test-results/
@@ -494,7 +518,9 @@ jobs:
             *.blob.core.windows.net:443
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: oven-sh/setup-bun@v2
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.3.14
       - name: Generate ephemeral E2E credentials
@@ -521,7 +547,7 @@ jobs:
         run: npx playwright test ai-model-picker.spec.ts --reporter=list,github
       - name: Upload trace on failure
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: playwright-trace-ai-model-picker
           path: frontend/test-results/
