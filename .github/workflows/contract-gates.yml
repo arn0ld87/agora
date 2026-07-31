@@ -13,10 +13,17 @@ on:
 permissions:
   contents: read
 
+# Veraltete PR-Laeufe abbrechen, sobald ein neuer Commit gepusht wird.
+# push:main und workflow_dispatch laufen unangetastet zu Ende.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   schema-drift:
     name: Schema-Drift verhindern
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
@@ -31,6 +38,8 @@ jobs:
             pypi.org:443
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.14"
@@ -47,6 +56,7 @@ jobs:
   contract-tests:
     name: Pydantic-Contract-Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
@@ -61,6 +71,8 @@ jobs:
             pypi.org:443
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.14"
@@ -73,6 +85,7 @@ jobs:
   evidence-quality:
     name: Evidence-Quality-Gate
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
@@ -87,6 +100,8 @@ jobs:
             pypi.org:443
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.14"
@@ -115,6 +130,7 @@ jobs:
   zod-mirror-drift:
     name: Frontend-Zod muss Backend-Schema spiegeln
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
@@ -128,6 +144,8 @@ jobs:
             registry.npmjs.org:443
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.3.14
@@ -138,6 +156,7 @@ jobs:
   voice-lint:
     name: Voice-Lint (DACH-Voice + Anti-Forecast)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # 2026-05-17: PR-Skip — Wording-Gate läuft nur noch auf push:main,
     # damit PRs nicht durch False-Positives bei Code-Kommentaren blockiert
     # werden. Reaktivieren: if-Zeile entfernen.
@@ -156,6 +175,8 @@ jobs:
             pypi.org:443
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.14"
@@ -190,6 +211,8 @@ jobs:
             pypi.org:443
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.14"

@@ -5,6 +5,22 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Changed (CI- und E2E-Audit — 2026-07-31)
+
+- **`concurrency` in allen 11 Workflows.** Bisher hatte kein einziger Workflow einen `concurrency`-Block; bei schneller Push-Folge liefen mehrere komplette Generationen weiter (beim E2E-Workflow je 6 parallele Docker-Stack-Jobs, gemessen ~3,2–3,8 min pro Job). Abgebrochen werden ausschließlich PR-Läufe: `push:main`, `schedule` und `workflow_dispatch` laufen zu Ende, weil dort jeder Lauf ein eigenständiger Nachweis ist. `docker-image.yml` bricht push/tag-Läufe ausdrücklich nicht ab (halb hochgeladene GHCR-Tags), `cve-monitor.yml` und `scorecard.yml` verwenden `cancel-in-progress: false`.
+- **`timeout-minutes` auf allen 27 Jobs** (vorher 7). Ein hängender Job lief bis zum GitHub-Default von 360 min — betroffen waren u. a. alle 5 Jobs in `ci.yml` und alle 3 in `docker-image.yml`.
+- **`persist-credentials: false` auf allen 27 `actions/checkout`-Schritten** (vorher 1). Vorab geprüft: kein Workflow führt `git push`/`commit`/`tag` aus oder nutzt eine PR-erstellende Action. **Schließt Issue #805.**
+- **Vier fehlende SHA-Pins ergänzt** (`oven-sh/setup-bun`, `actions/upload-artifact` in `e2e-smokes.yml`) — Konsistenz zur Policy aus PR #719.
+- **`drawer-focus-trap.spec.ts` läuft wieder.** Die Datei lief seit PR #723 in **keinem** Workflow — sieben Test-Definitionen waren toter Code. Sie hängt jetzt am bestehenden Golden-Gate-Job (inhaltlich ein Accessibility-Gate, gleicher Stack, ~11 s Zusatzlaufzeit) statt an einem eigenen Job mit komplettem Stack-Boot. Lokal verifiziert: 5/5 grün.
+- **Playwright-Konfiguration gehärtet.** `forbidOnly` in CI (ein committetes `test.only` hätte den Rest der Datei still übersprungen und trotzdem grün gemeldet) und `retries: 1` **nur** in CI — Playwright meldet einen erst im Retry bestehenden Test als „flaky", nicht als „passed", macht Instabilität also sichtbar statt sie zu verstecken. Lokal bleibt es bei 0.
+- **Kein Job umbenannt und kein `pull_request`-Trigger entfernt.** Die Branch-Protection auf `main` führt 13 Checks über ihren exakten `name:`-String; ein required Check, der nicht startet, blockiert den PR unbefristet.
+- **Neu: [`docs/ci-e2e-audit.md`](docs/ci-e2e-audit.md)** — Baseline-Messungen, Bewertung jeder E2E-Spec, Vorher/Nachher-Tabelle und offene Empfehlungen.
+
+### Fixed (Run-Budget-E2E-Spec: Preflight-Request — 2026-07-31, Audit-Befund)
+
+- **`run-budget.spec.ts` schickte einen ungültigen Preflight-Request.** Die Spec übergab `POST /api/simulation/preflight-estimate` nur `{ simulation_id }`. Der Endpunkt leitet `num_agents`/`max_rounds` aus dem Artefakt `simulation_config` ab, das erst bei der Simulations-**Vorbereitung** entsteht — nicht durch `POST /api/simulation/create` + Profil-Seeding. Ergebnis: deterministisch HTTP 400 (`backend/app/api/simulation_budget.py:140-148`). Beide Felder werden jetzt mitgegeben; `simulation_id` bleibt im Body, damit der Config-Lookup-Zweig weiterhin durchlaufen wird. Der Fehler blieb unentdeckt, weil die Datei seit PR #975 in **keinem** Workflow lief.
+- **Offen: das harte Budget greift im Report-Pfad nicht.** Nach dieser Korrektur läuft die Spec weiter und scheitert an ihrer Kernaussage — der Report läuft trotz `max_llm_calls: 2, enforcement: "hard"` bis `completed` durch statt `stopped`. Die Assertion wurde **nicht** abgeschwächt und **kein** Produktivcode angepasst, um den Test grün zu machen. Die Spec bleibt deshalb vorerst unverdrahtet; Analyse und empfohlenes Vorgehen in `docs/ci-e2e-audit.md` §5 und §9 (E9).
+
 ### Fixed (Budget-Guard-Proxy und Report-Navigation — 2026-07-30, PR #975-Review)
 
 - **Budget-Guard-Proxy blieb für CAMEL unsichtbar.** `_UsageTrackingModelProxy` in `backend/scripts/sim_runtime/budget_guard.py` delegierte ausschließlich über `__getattr__`. CAMEL prüft vorinstanziierte Backends aber in `ChatAgent._resolve_models` per `isinstance(model, BaseModelBackend)` und wirft sonst `TypeError: Unsupported type for model parameter` — jede Simulation mit gesetztem `AGORA_RUN_ID` wäre beim Agent-Graph-Aufbau gestorben. Der Proxy delegiert jetzt zusätzlich `__class__` an das Target; der reale Typ (und damit die Instrumentierung von `run`/`_run`/`arun`/`_arun`) bleibt unverändert. Der Protokoll-Audit im Docstring nannte außerdem zwei nicht existierende Testnamen — auf die tatsächlichen Anker korrigiert.
