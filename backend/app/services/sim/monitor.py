@@ -29,87 +29,6 @@ from .run_state_store import RunnerStatus, SimulationRunState
 
 logger = get_logger("agora.monitor")
 
-BUDGET_ABORT_FILENAME = "budget_abort.json"
-
-
-def _read_budget_abort(sim_dir: str) -> Optional[Dict[str, Any]]:
-    """budget_abort.json lesen (vom Subprozess-Guard oder Monitor geschrieben)."""
-    import json
-
-    path = os.path.join(sim_dir, BUDGET_ABORT_FILENAME)
-    try:
-        with open(path, encoding="utf-8") as handle:
-            data = json.load(handle)
-        return data if isinstance(data, dict) else None
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return None
-
-
-def _write_budget_abort(sim_dir: str, abort_info: Dict[str, Any]) -> None:
-    """First-writer-wins — Guard und Monitor dürfen nicht überschreiben."""
-    import json
-
-    path = os.path.join(sim_dir, BUDGET_ABORT_FILENAME)
-    if os.path.exists(path):
-        return
-    try:
-        tmp_path = f"{path}.tmp"
-        with open(tmp_path, "w", encoding="utf-8") as handle:
-            json.dump(abort_info, handle)
-            handle.write("\n")
-        os.replace(tmp_path, path)
-    except OSError as exc:
-        logger.warning("budget abort marker write failed: %s", exc)
-
-
-def _budget_supervision(simulation_id: str, sim_dir: str) -> Optional[Dict[str, Any]]:
-    """Harte Budgets im Monitor durchsetzen (Issue #764).
-
-    Zwei Quellen: (1) der Subprozess-Guard hat budget_abort.json geschrieben
-    (Token-/Kosten-/Aufruflimits an Runden-Grenzen), (2) der Monitor selbst
-    prüft über den geteilten Ledger — insbesondere das Zeitbudget, das auch
-    ohne Subprozess-Instrumentierung deterministisch greift.
-
-    Bei Überschreitung: kooperativer Stop via control_state.json; die
-    laufende Runde endet sauber, Teilresultate bleiben erhalten.
-    """
-    abort_info = _read_budget_abort(sim_dir)
-    if abort_info is None:
-        try:
-            from ..run_budget import BudgetExceededError, RunBudgetEnforcer
-            from ..run_registry import RunRegistry
-
-            run = RunRegistry().get_latest_by_linked_id(
-                "simulation_id", simulation_id, run_type="simulation_run"
-            )
-            if run:
-                enforcer = RunBudgetEnforcer.for_run(run["run_id"])
-                if enforcer is not None:
-                    try:
-                        enforcer.check_before_call()
-                    except BudgetExceededError as exc:
-                        abort_info = {
-                            "dimension": exc.dimension,
-                            "observed": exc.observed,
-                            "threshold": exc.threshold,
-                            "ts": time.time(),
-                            "source": "backend-monitor",
-                        }
-                        _write_budget_abort(sim_dir, abort_info)
-        except Exception as exc:  # noqa: BLE001 — Supervision darf Monitor nicht killen
-            logger.warning("budget supervision failed for %s: %s", simulation_id, exc)
-            return None
-
-    if abort_info is not None:
-        try:
-            from ..simulation_ipc import write_control_state
-
-            write_control_state(simulation_id, stop_requested=True)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("budget stop request failed for %s: %s", simulation_id, exc)
-        return abort_info
-    return None
-
 
 def _compute_elapsed_seconds(started_at: Optional[str]) -> float:
     """Berechnet die vergangene Zeit seit ``started_at`` in Sekunden.
@@ -188,10 +107,6 @@ def monitor_simulation(
                     graph_memory_enabled=graph_memory_enabled.get(simulation_id, False),
                 )
 
-            # Budget-Supervision (Issue #764): harte Limits prüfen, ggf.
-            # kooperativen Stop anfordern.
-            _budget_supervision(simulation_id, sim_dir)
-
             # Update status
             save_state(state)
             time.sleep(2)
@@ -218,55 +133,7 @@ def monitor_simulation(
         exit_code = process.returncode
         elapsed_seconds = _compute_elapsed_seconds(state.started_at)
 
-        # Budgetabbruch (Issue #764): hat Vorrang vor exit-code-Auswertung —
-        # der Subprozess endet bei kooperativem Budget-Stop mit exit 0, ist
-        # aber kein "completed". Budgetabbruch ≠ technischer Fehler.
-        budget_abort = _read_budget_abort(sim_dir)
-        if budget_abort is not None:
-            state.runner_status = RunnerStatus.STOPPED
-            state.completed_at = datetime.now().isoformat()
-            dimension = budget_abort.get("dimension", "unknown")
-            # Issue #764 (Codex P1): wenn der Subprozess beim Budget-Stop
-            # trotzdem mit non-zero exit endet (Bug im Guard, race, oder
-            # doppelter Marker), bleibt der RunnerStatus STOPPED und der
-            # termination_reason "budget_*" korrekt — aber wir wollen den
-            # exit_code sichtbar machen, damit die Diagnose nicht verloren
-            # geht. Bei exit 0 verhaelt sich der Pfad exakt wie vorher.
-            if exit_code != 0:
-                state.error = (
-                    f"budget_abort (exit_code={exit_code}): {dimension}"
-                )
-                logger.warning(
-                    f"Simulation budget-aborted with non-zero exit: "
-                    f"{simulation_id}, dimension={dimension}, exit_code={exit_code}",
-                    extra={"simulation_id": simulation_id},
-                )
-            else:
-                state.error = None
-            sim_active_gauge().add(-1)
-            sim_counter().add(1, {"status": "budget_abort"})
-            sim_duration_histogram().record(elapsed_seconds, {"status": "budget_abort"})
-            logger.info(
-                f"Simulation budget-aborted: {simulation_id}, dimension={dimension}",
-                extra={"simulation_id": simulation_id},
-            )
-            try:
-                from ..run_budget import mark_budget_abort
-                from ..run_registry import RunRegistry
-
-                run = RunRegistry().get_latest_by_linked_id(
-                    "simulation_id", simulation_id, run_type="simulation_run"
-                )
-                if run:
-                    mark_budget_abort(
-                        run["run_id"],
-                        str(dimension),
-                        int(budget_abort.get("observed", 0)),
-                        int(budget_abort.get("threshold", 0)),
-                    )
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("budget abort registry update failed: %s", exc)
-        elif exit_code == 0:
+        if exit_code == 0:
             state.runner_status = RunnerStatus.COMPLETED
             state.completed_at = datetime.now().isoformat()
             # Slice 2b: Sim-Lifecycle-Metric — RUNNING → COMPLETED

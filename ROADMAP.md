@@ -130,9 +130,9 @@ Agora soll nicht nur technisch laufen, sondern Ergebnisse reproduzierbar, budget
 
 ### Kosten und Ressourcen
 
-- [x] erwartete Modelle, Token, Kosten und Laufzeit werden vor dem Start angezeigt (#764, Preflight-Schätzung mit ehrlichen Bereichen)
-- [x] Token-, Kosten- und Zeitlimits können pro Run gesetzt werden (#764, weich/hart, zusätzlich LLM-Aufruflimit)
-- [x] Abbrüche und Budgetüberschreitungen erzeugen nachvollziehbare Zustände (#764, `termination_reason` + Budgetwarnungen)
+- [ ] erwartete Modelle, Token, Kosten und Laufzeit werden vor dem Start angezeigt
+- [ ] Token-, Kosten- und Zeitlimits können pro Run gesetzt werden
+- [ ] Abbrüche und Budgetüberschreitungen erzeugen nachvollziehbare Zustände
 - [ ] Hardware-Tiers werden durch reproduzierbare Benchmarks statt Schätzwerte beschrieben
 
 ### Produktnachweis

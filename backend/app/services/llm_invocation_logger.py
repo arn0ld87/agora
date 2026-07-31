@@ -30,8 +30,6 @@ class LlmInvocationLogger:
         error_type: Optional[str] = None,
         http_status: Optional[int] = None,
         remote_request_id: Optional[str] = None,
-        prompt_tokens: Optional[int] = None,
-        completion_tokens: Optional[int] = None,
     ) -> None:
         """Append a call event to the log file."""
         event = {
@@ -47,10 +45,6 @@ class LlmInvocationLogger:
             "error_type": error_type,
             "http_status": http_status,
             "remote_request_id": remote_request_id,
-            # Issue #764: Token-Usage fuer Budget-/Verbrauchsvertraege.
-            # None = Provider hat keine Usage geliefert (ehrlich, nicht 0).
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
         }
 
         # Ensure log directory exists

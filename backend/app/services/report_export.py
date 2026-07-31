@@ -100,35 +100,6 @@ class ReportExportService:
         return claims_to_csv(evidence_map.get("sections") or [])
 
     @staticmethod
-    def _add_budget_usage_to_zip(zf: zipfile.ZipFile, prefix: str, report_id: str) -> None:
-        """Verbrauchs- und Budgetdaten des Report-Runs ins Bundle legen (#764).
-
-        Additiv und best-effort: ältere Reports ohne Messdaten erhalten keine
-        zusätzlichen Dateien. Enthält niemals Secrets (nur Limits, Provider-
-        und Modell-IDs, aggregierte Zähler).
-        """
-        try:
-            from .run_budget import get_run_budget_status
-            from .run_registry import RunRegistry
-            from .run_usage_ledger import aggregate_usage, load_usage_summary
-
-            runs = RunRegistry().find_by_linked_id("report_id", report_id)
-            if not runs:
-                return
-            run_id = runs[0]["run_id"]
-
-            usage = load_usage_summary(run_id) or aggregate_usage(run_id)
-            zf.writestr(f"{prefix}/usage.json", usage.model_dump_json(indent=2))
-
-            budget_status = get_run_budget_status(run_id)
-            if budget_status is not None:
-                zf.writestr(
-                    f"{prefix}/budget.json", budget_status.model_dump_json(indent=2)
-                )
-        except Exception:  # noqa: BLE001 — Export darf an Zusatzdateien nicht scheitern
-            logger.debug("budget/usage zip enrichment skipped", exc_info=True)
-
-    @staticmethod
     def build_zip_bundle(report_id: str, report: Any) -> bytes:
         """Baut ein ZIP-Archiv mit allen Report-Artefakten im Speicher."""
         prefix = f"agora-report-{report_id}"
@@ -164,8 +135,6 @@ class ReportExportService:
                 f"{prefix}/claims.csv",
                 claims_to_csv(evidence_map.get("sections") or []),
             )
-
-            ReportExportService._add_budget_usage_to_zip(zf, prefix, report_id)
 
         return buf.getvalue()
 
@@ -227,8 +196,6 @@ class ReportExportService:
                 zf.writestr(f"{prefix}/personas.csv", personas_to_csv(report_v3.get("personas") or []))
                 zf.writestr(f"{prefix}/segments.csv", segments_to_csv(report_v3.get("segments") or []))
                 zf.writestr(f"{prefix}/claims.csv", claims_to_csv(evidence_map.get("sections") or []))
-
-                ReportExportService._add_budget_usage_to_zip(zf, prefix, report_id)
 
             tmp.seek(0)
             while True:

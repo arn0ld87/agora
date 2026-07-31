@@ -41,13 +41,6 @@ on:
 permissions:
   contents: read
 
-# Nur PR-Laeufe werden abgebrochen. push/tag-Laeufe NICHT: publish schiebt nach
-# GHCR, ein Abbruch mitten im Push wuerde eine halb hochgeladene Tag-Referenz
-# hinterlassen. Der self-hosted arm64-Runner wird ohnehin nie von PRs benutzt.
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 jobs:
   build-only:
     # Schritt 1: Image bauen, NICHT pushen.
@@ -64,7 +57,6 @@ jobs:
     # fremder Fork-PR darf diesen Host nie erreichen. Siehe docs/runbooks/
     # self-hosted-runner-meinserver.md.
     runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || fromJSON('["self-hosted", "arm64", "meinserver"]') }}
-    timeout-minutes: 60
     permissions:
       contents: read
       security-events: write
@@ -100,6 +92,8 @@ jobs:
             production.cloudfront.docker.com:443
             pypi.org:443
             registry.npmjs.org:443
+            registry.docker.io:443
+            auth.docker.io:443
             registry-1.docker.io:443
             release-assets.githubusercontent.com:443
             results-receiver.actions.githubusercontent.com:443
@@ -108,8 +102,6 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4
@@ -201,7 +193,6 @@ jobs:
   prod-proxy-smoke:
     name: Smoke-Test Reverse-Proxy-Stack
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     needs: [build-only]
     # Smoke läuft NUR auf release-relevanten Pfaden und workflow_dispatch —
     # nicht auf normalen main-Pushes oder PRs (siehe Header-Kommentar).
@@ -244,14 +235,14 @@ jobs:
             objects.githubusercontent.com:443
             production.cloudflare.docker.com:443
             production.cloudfront.docker.com:443
+            registry.docker.io:443
+            auth.docker.io:443
             registry-1.docker.io:443
             release-assets.githubusercontent.com:443
             results-receiver.actions.githubusercontent.com:443
             *.blob.core.windows.net:443
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
 
       - name: Image-Artefakt herunterladen
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -365,7 +356,6 @@ jobs:
     # force_publish=true darf als Break-glass-Pfad publishen, wenn der Smoke rot
     # war; normale Releases bleiben strikt smoke-gated.
     runs-on: ubuntu-latest
-    timeout-minutes: 45
     needs: [prod-proxy-smoke]
     if: ${{ always() && (needs.prod-proxy-smoke.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.force_publish == true)) }}
     permissions:
@@ -397,6 +387,8 @@ jobs:
             production.cloudfront.docker.com:443
             pypi.org:443
             registry.npmjs.org:443
+            registry.docker.io:443
+            auth.docker.io:443
             registry-1.docker.io:443
             release-assets.githubusercontent.com:443
             results-receiver.actions.githubusercontent.com:443
@@ -405,8 +397,6 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4
