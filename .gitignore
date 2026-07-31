@@ -8,6 +8,14 @@ Thumbs.db
 .env.bak
 .env.*.bak
 .env.bak-*
+# Issue #989: scripts/lib/env-file.sh legt beim atomaren Ersetzen eine
+# mktemp-Datei `.env.<zufall>` an. Sie wird per EXIT-Trap entfernt; diese Regel
+# ist die zweite Schicht, falls der Prozess hart stirbt (SIGKILL, Stromausfall).
+# Die Datei enthaelt AGORA_SECRET_KEY, NEO4J_PASSWORD und AGORA_AUTH_TOKEN im
+# Klartext und darf niemals in einen Commit geraten.
+.env.??????
+.env.tmp
+.env.*.tmp
 .env.local
 .env.*.local
 .env.development

@@ -18,7 +18,33 @@
 # `./backend/uploads/run_registry` mit UID 1000 (Container-User `agora`)
 # an, weil sonst der Docker-Daemon das Verzeichnis als root anlegt und
 # der Container-User nicht reinschreiben kann (CI-Failure 25595884785).
+# Issue #989: eigene container_name-Werte fuer den E2E-Stack.
+#
+# docker-compose.yml und der Proxy-Override setzen feste Namen (`agora`,
+# `agora-neo4j`, `agora-redis`, `agora-nginx`). Container-Namen sind
+# Daemon-global und ignorieren den Compose-Projektnamen — ein E2E-Lauf neben
+# einem laufenden Dev-Stack scheiterte deshalb mit
+#   Conflict. The container name "/agora-neo4j" is already in use
+# und schlimmer: wurde der Dev-Stack danach gestartet, adoptierte Compose den
+# zurueckgebliebenen E2E-Container unter demselben Namen — samt dessen
+# Neo4j-Speicherwerten. Bei knappem Docker-RAM endete das in einer
+# Restart-Schleife ("Invalid memory configuration - exceeds physical memory"),
+# obwohl die .env des Dev-Stacks korrekt war.
+#
+# Host-Ports kollidieren nicht: docker-compose.prod.yml resettet die
+# Neo4j-Ports, der Proxy-Override die des Backends; nach aussen publiziert der
+# E2E-Stack nur nginx auf AGORA_PROXY_PORT.
+#
+# Die Service-Namen bleiben unveraendert — Compose-internes DNS und der
+# nginx-Upstream (`agora:5001`) haengen am Service-Key, nicht am
+# container_name.
 services:
+  redis:
+    container_name: agora-e2e-redis
+
+  nginx:
+    container_name: agora-e2e-nginx
+
   # Prod-Defaults (docker-compose.yml: heap_max=2g, pagecache=4g, macher
   # zusammen ~6g Reservierung) lassen Neo4js Boot-Guard auf CI-Runnern
   # sporadisch mit "Invalid memory configuration - exceeds physical memory"
@@ -29,12 +55,14 @@ services:
   # zwischen running/exit=3 je nach Limit). E2E-Fixtures sind klein,
   # 512m/512m reichen mit deutlichem Sicherheitsabstand.
   neo4j:
+    container_name: agora-e2e-neo4j
     environment:
       - NEO4J_server_memory_heap_initial__size=256m
       - NEO4J_server_memory_heap_max__size=512m
       - NEO4J_server_memory_pagecache_size=512m
 
   agora:
+    container_name: agora-e2e
     read_only: false
     environment:
       # E2E-Stub-Modus: ersetzt alle LLM-Calls durch deterministische
@@ -42,7 +70,9 @@ services:
       # AGORA_E2E_LLM_MODE=stub exportiert hat — sonst leer, kein Effekt.
       # Notwendig, weil docker compose .env mit Vorrang vor Process-Env liest
       # und Job-Level-env ohne .env-Append den Container nicht erreicht.
-      # e2e-up.sh appended den Wert zusätzlich in .env (doppelte Absicherung).
+      # e2e-up.sh schreibt den Wert zusätzlich in die .env (doppelte
+      # Absicherung) — seit Issue #989 idempotent pro Schlüssel, und
+      # e2e-down.sh entfernt ihn danach wieder.
       - AGORA_E2E_LLM_MODE=${AGORA_E2E_LLM_MODE:-}
 
   # Slice 5.6: Mock-Model-Server fuer die AiModelPicker-Discovery-Probe.
@@ -55,6 +85,7 @@ services:
   # OpenAI-kompatible /models-Antwort (`data[].id`), siehe
   # adapters._HttpModelsAdapter (protocol openai_compatible).
   mock-models:
+    container_name: agora-e2e-mock-models
     image: nginx:alpine
     init: true
     volumes:

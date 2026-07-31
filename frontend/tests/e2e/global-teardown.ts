@@ -16,20 +16,19 @@ function repoRootPath(): string {
  * Im Fehlerfall liefert es die Backend-Exception, die sonst unsichtbar wäre
  * (CI zeigt nur den Playwright-Fehler, nicht den Container-Traceback).
  *
- * Compose-Befehl muss identisch mit e2e-down.sh / e2e-up.sh sein.
+ * Compose-Befehl muss identisch mit e2e-down.sh / e2e-up.sh sein. Seit Issue
+ * #989 ist das keine Absichtserklärung mehr, sondern strukturell erzwungen:
+ * scripts/e2e-compose.sh hält Dateiliste und Projektnamen an genau einer
+ * Stelle. Vorher lief die Kette auseinander — e2e-down.sh lud das
+ * E2E-Override nicht mit und ließ `mock-models` als Orphan zurück.
  */
 function dumpContainerLogs(repoRoot: string): void {
-  const composeCmd = [
-    'docker compose',
-    '-f docker-compose.yml',
-    '-f docker-compose.prod.yml',
-    '-f deploy/compose/docker-compose.prod-with-proxy.yml',
-    '-f deploy/compose/docker-compose.e2e.override.yml',
-  ].join(' ');
+  const composeCmd = `bash "${resolve(repoRoot, 'scripts', 'e2e-compose.sh')}"`;
 
   // Compose-SERVICE-Namen (docker-compose.yml), nicht Container-Namen: `docker
   // compose logs <name>` erwartet den Service-Key. Mit den Container-Namen
-  // (agora-neo4j/agora-redis) lieferte der Aufruf im CI-Fehlerfall leere Logs.
+  // (agora-e2e-neo4j/agora-e2e-redis) lieferte der Aufruf im CI-Fehlerfall
+  // leere Logs.
   const services: Array<{ name: string; tail: number }> = [
     { name: 'agora', tail: 500 },
     { name: 'neo4j', tail: 200 },
