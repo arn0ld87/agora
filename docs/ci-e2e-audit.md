@@ -30,12 +30,12 @@ Die Probleme lagen nicht in der Testqualität, sondern in der **Verdrahtung**: T
 | P8 | **`assertStubModeActive()` assertet nie.** Der Helper loggt nur und fängt jeden Fehler mit `try/catch` ab. Der Name verspricht eine Garantie, die die Funktion nicht gibt. Im Baseline-Lauf hat er einen HTTP 401 verschluckt, ohne dass ein Test rot wurde. | mittel | `frontend/tests/e2e/helpers/diagnostics.ts` + Baseline-Log |
 | P9 | An zwei von fünf Aufrufstellen (`golden-gate-accessibility.spec.ts:180`, `report-modes.spec.ts:148`) wird der `APIRequestContext` **ohne** `extraHTTPHeaders` erzeugt. Die Stub-Diagnose läuft dort systematisch in einen 401 und ist wirkungslos. | niedrig | Baseline-Log + Quellenabgleich |
 | P10 | Kein Dependency-Caching für `uv` oder `bun`. Jeder Job installiert von Grund auf neu. | niedrig | `grep 'cache'` — nur Docker-Layer-Cache in `docker-image.yml` |
-| P11 | `docs/runbooks/e2e-required-check.md` behauptet „Required-Erzwingung noch nicht freigegeben". Die Branch-Protection auf `main` erzwingt die sechs Smokes tatsächlich bereits. Dokumentations-Drift. | niedrig | `gh api repos/arn0ld87/agora/branches/main/protection` |
+| P11 | `docs/runbooks/e2e-required-check.md` behauptet „Required-Erzwingung noch nicht freigegeben“. Die Branch-Protection auf `main` erzwingt die sechs Smokes tatsächlich bereits. Dokumentations-Drift. | niedrig | `gh api repos/arn0ld87/agora/branches/main/protection` |
 | P12 | `scripts/e2e-up.sh` **hängt** Credentials an `.env` an (`>>`). Bei wiederholten lokalen Läufen wächst die Datei mit Duplikaten. Funktional unkritisch (Compose: letzte Definition gewinnt), aber unsauber. | niedrig | `scripts/e2e-up.sh:56-71` |
 
 ### Nicht als Problem gewertet
 
-- Die Aufteilung `backend` / `backend-pr-gate` (bzw. `frontend` / `frontend-pr-gate`) sieht nach Duplizierung aus, ist aber die bewusste und sinnvolle Trennung „schnelles Pflicht-Gate auf PR" vs. „volle Suite mit Coverage auf `main`". Beibehalten.
+- Die Aufteilung `backend` / `backend-pr-gate` (bzw. `frontend` / `frontend-pr-gate`) sieht nach Duplizierung aus, ist aber die bewusste und sinnvolle Trennung „schnelles Pflicht-Gate auf PR“ vs. „volle Suite mit Coverage auf `main`“. Beibehalten.
 - Die Label-Steuerung (`needs-backend-ci`, `needs-frontend-ci`) über `pull_request: types: [..., labeled, unlabeled]` ist erklärungsbedürftig, aber funktional korrekt und dokumentiert. Beibehalten.
 - Die drei `continue-on-error: true` in `docker-image.yml` betreffen optionale Docker-Hub-Mirror-Schritte, nicht die Sicherheitsprüfungen. Beibehalten.
 
@@ -80,7 +80,7 @@ Bewertet wurde jede Spec-Datei und jede Test-Case-Definition gegen das tatsächl
 
 | Datei | Tests | Entscheidung | Begründung |
 |-------|-------|--------------|------------|
-| `health.spec.ts` | 4 | **beibehalten** | Deckt Reverse-Proxy-Health, App-Health, SPA-Mount und `/api/status` mit `auth_mode`-Assertion ab. Test 3 ist bewusst auf Smoke-Niveau begrenzt und dokumentiert das; Test 4 prüft einen echten Vertragswert statt nur HTTP 200. Kein reiner „Seite lädt"-Test. |
+| `health.spec.ts` | 4 | **beibehalten** | Deckt Reverse-Proxy-Health, App-Health, SPA-Mount und `/api/status` mit `auth_mode`-Assertion ab. Test 3 ist bewusst auf Smoke-Niveau begrenzt und dokumentiert das; Test 4 prüft einen echten Vertragswert statt nur HTTP 200. Kein reiner „Seite lädt“-Test. |
 | `upload-graph.spec.ts` | 1 (7 Schritte) | **beibehalten** | Vollständiger Ablauf Upload → Ontologie → Graph-Build → Polling → API-Assertion → UI. Nutzt `expect.poll`, keine festen Wartezeiten. Dokumentiert ausdrücklich, dass `node_count=0` im Stub-Modus valide ist — die UI-Assertion prüft den Completed-Zustand, nicht bloß Existenz. |
 | `minimal-report.spec.ts` | 1 (mehrstufig) | **beibehalten** | Der teuerste, aber auch aussagekräftigste Test: Graph + 50 Personas + Report-Generierung + 11 Sections + Persona-Tabelle. Assertions sind inhaltlich (`toBeGreaterThanOrEqual(MIN_PERSONA_TABLE_ROWS)`), nicht bloß Sichtbarkeit. |
 | `report-modes.spec.ts` | 4 | **beibehalten** | Prüft `strict`/`balanced`/`explorative` plus Default-Drift als eigenständigen Test. Der Kommentar begründet nachvollziehbar, warum der Markdown-Banner der korrekte Anker ist und ein JSON-Assert nicht funktioniert (v2-Envelope kennt `report_mode` nicht). Vorbildliche Vertragsverankerung. |
@@ -89,7 +89,7 @@ Bewertet wurde jede Spec-Datei und jede Test-Case-Definition gegen das tatsächl
 | `drawer-focus-trap.spec.ts` | 7 | **beibehalten + in CI verdrahten** | Inhaltlich gut (Focus-Trap zyklisch vorwärts/rückwärts, `inert`, Escape-Rückfokus). Lief seit PR #723 in **keinem** Workflow. Lokal verifiziert: 5/5 grün in 11 s. |
 | `run-budget.spec.ts` | 3 | **überarbeiten — noch nicht in CI** | Zielt auf einen Kostenkontroll-Pfad, dessen Regression echtes Geld kostet — inhaltlich wertvoll und deshalb ausdrücklich **nicht** gelöscht. Lief seit PR #975 in **keinem** Workflow und ist derzeit defekt (§5). Ein Defekt behoben, der zweite offen und tracking-bedürftig. |
 
-**Kein Test wurde entfernt.** Kein Test erwies sich als reiner „Seite lädt"-Test, keiner als reine Implementierungsdetail-Prüfung, keiner als reihenfolgeabhängig im schädlichen Sinne (die `beforeAll`-Fixtures in `report-modes` und `golden-gate` sind dateiintern und dokumentiert).
+**Kein Test wurde entfernt.** Kein Test erwies sich als reiner „Seite lädt“-Test, keiner als reine Implementierungsdetail-Prüfung, keiner als reihenfolgeabhängig im schädlichen Sinne (die `beforeAll`-Fixtures in `report-modes` und `golden-gate` sind dateiintern und dokumentiert).
 
 ### Schwächste Stelle
 
@@ -124,8 +124,8 @@ Damit lassen sich die Fehlschläge sauber zuordnen:
 
 | Fehlschlag | Bewertung | Begründung |
 |------------|-----------|------------|
-| `golden-gate` → „Settings LLM Providers" · `[serious] color-contrast` auf 3 `div[data-provider-id=…]`-Knoten | **lokales, nicht-deterministisches Umgebungsartefakt** | In CI grün. Entscheidender Beleg: in einem zweiten lokalen Lauf derselben Datei fiel **zusätzlich** „Runs" durch, das im ersten Lauf grün war — die Menge der Fehlschläge variiert also zwischen lokalen Läufen. axe-core-Kontrastmessung hängt von Schriftrasterung, Farbprofil und Paint-Timing ab; macOS verhält sich hier anders als der Ubuntu-Runner. **Kein belegter Produktdefekt** — für diese Behauptung fehlt jeder CI-Beleg. |
-| `ai-model-picker` → Test 1 (`↓↓↑Enter`), Abbruch im `beforeEach` an `getStagePicker(...).toBeVisible()` | **lokales Reihenfolge-/Warmlauf-Artefakt** | Die übrigen 4 Tests derselben Datei mit identischem `beforeEach` sind grün. In CI läuft die Datei allein nach vollständigem Stack-Health-Wait; lokal lief sie als erste Spec einer Gesamtsuite. Genau der Fall, für den `retries: 1` einen Trace beider Versuche und den „flaky"-Ausweis liefert. Der Lauf bleibt dank `failOnFlakyTests` trotzdem rot — der Retry verbessert die Diagnose, er senkt die Messlatte nicht. |
+| `golden-gate` → „Settings LLM Providers“ · `[serious] color-contrast` auf 3 `div[data-provider-id=…]`-Knoten | **lokales, nicht-deterministisches Umgebungsartefakt** | In CI grün. Entscheidender Beleg: in einem zweiten lokalen Lauf derselben Datei fiel **zusätzlich** „Runs“ durch, das im ersten Lauf grün war — die Menge der Fehlschläge variiert also zwischen lokalen Läufen. axe-core-Kontrastmessung hängt von Schriftrasterung, Farbprofil und Paint-Timing ab; macOS verhält sich hier anders als der Ubuntu-Runner. **Kein belegter Produktdefekt** — für diese Behauptung fehlt jeder CI-Beleg. |
+| `ai-model-picker` → Test 1 (`↓↓↑Enter`), Abbruch im `beforeEach` an `getStagePicker(...).toBeVisible()` | **lokales Reihenfolge-/Warmlauf-Artefakt** | Die übrigen 4 Tests derselben Datei mit identischem `beforeEach` sind grün. In CI läuft die Datei allein nach vollständigem Stack-Health-Wait; lokal lief sie als erste Spec einer Gesamtsuite. Genau der Fall, für den `retries: 1` den Trace des fehlgeschlagenen Versuchs (via `trace: retain-on-failure`) und den „flaky“-Ausweis liefert. Der Lauf bleibt dank `failOnFlakyTests` trotzdem rot — der Retry verbessert die Diagnose, er senkt die Messlatte nicht. |
 | `run-budget` → Abbruch nach 1,5 s | **echter Defekt in der Spec — zwei Stück** | Siehe unten. |
 
 ### `run-budget.spec.ts` — zwei Defekte, seit PR #975 unentdeckt
@@ -156,7 +156,7 @@ Befundlage, so weit im Rahmen dieses Audits belegbar:
 
 Die naheliegende Hypothese ist damit, dass der Report-Pfad den `LLMClient` ohne Run-Bindung erzeugt und das harte Limit deshalb nie ausgewertet wird. **Das ist eine Hypothese, keine verifizierte Ursache** — sie abschließend zu klären erfordert eine Untersuchung im Produktivcode, die über einen CI-/Test-Audit hinausgeht.
 
-**Bewusst nicht getan:** die Assertion abgeschwächt oder der Test „grün gemacht". Wäre die Kernaussage entfernt worden, hätte der Test genau das nicht mehr geprüft, wofür er existiert — Kostenkontrolle. Ebenso wenig wurde Produktivcode geändert, um den Test passieren zu lassen.
+**Bewusst nicht getan:** die Assertion abgeschwächt oder der Test „grün gemacht“. Wäre die Kernaussage entfernt worden, hätte der Test genau das nicht mehr geprüft, wofür er existiert — Kostenkontrolle. Ebenso wenig wurde Produktivcode geändert, um den Test passieren zu lassen.
 
 **Konsequenz:** `run-budget.spec.ts` wird in dieser Änderung **nicht** in CI verdrahtet. Ein Job, der garantiert rot ist, hilft niemandem. Empfohlenes Vorgehen in §9 (E9).
 
@@ -199,7 +199,7 @@ Playwright Golden-Gate-Accessibility-Smoke (Slice 7.3.1)
 Playwright AiModelPicker-Smoke (Slice 5.6 / 7.3.1)
 ```
 
-Ein als required konfigurierter Check, der auf einem PR **gar nicht startet**, bleibt dauerhaft auf „Expected — Waiting for status to be reported" stehen und blockiert den PR unbefristet. Genau diese Falle ist im Repo bereits dokumentiert (Kommentar in `docker-image.yml`, CHANGELOG-Eintrag 2026-07-28). Deshalb gilt:
+Ein als required konfigurierter Check, der auf einem PR **gar nicht startet**, bleibt dauerhaft auf „Expected — Waiting for status to be reported“ stehen und blockiert den PR unbefristet. Genau diese Falle ist im Repo bereits dokumentiert (Kommentar in `docker-image.yml`, CHANGELOG-Eintrag 2026-07-28). Deshalb gilt:
 
 > **Die `name:`-Strings dieser sechs Jobs und ihr `pull_request`-Trigger sind eingefroren.** Änderungen daran erfordern eine gleichzeitige Anpassung der Branch-Protection und gehören nicht in ein Test-Refactoring.
 
@@ -262,7 +262,7 @@ Vorher hatten 7 Jobs eine Zeitgrenze, jetzt alle 27. Werte an den gemessenen Lau
 | SHA-Pinning | 4 Actions ungepinnt | 0 ungepinnt | Konsistenz zur Repo-Policy aus PR #719; Schutz gegen Tag-Verschiebung. |
 | E2E-Specs in CI | 6 von 8 Dateien | 7 von 8 | `drawer-focus-trap` (5 Tests, lokal grün) verdrahtet. `run-budget` bleibt draußen, weil der erste Lauf überhaupt einen echten Defekt offenlegte (§5) — ein garantiert roter Job hilft niemandem. |
 | `forbidOnly` | nicht gesetzt | in CI aktiv | Ein committetes `test.only` hätte den Rest der Datei still übersprungen. |
-| Playwright-`retries` | 0 (auch in CI) | 1 in CI + `failOnFlakyTests` in CI, lokal 0 | Der Retry liefert Trace und „flaky"-Ausweis; `failOnFlakyTests` hält den Lauf trotzdem rot. **Beides gehört zwingend zusammen** — ohne die zweite Zeile beendet Playwright einen Lauf mit flaky-Tests mit Exit-Code 0, und das Required-Check-Gate wäre schwächer als vorher (Codex-Finding P1 zu PR #977, nachgezogen). |
+| Playwright-`retries` | 0 (auch in CI) | 1 in CI + `failOnFlakyTests` in CI, lokal 0 | Der Retry liefert den „flaky“-Ausweis im Report und — via `trace: retain-on-failure` — den Trace des fehlgeschlagenen Versuchs; `failOnFlakyTests` hält den Lauf trotzdem rot. **Beides gehört zwingend zusammen** — ohne die zweite Zeile beendet Playwright einen Lauf mit flaky-Tests mit Exit-Code 0, und das Required-Check-Gate wäre schwächer als vorher (Codex-Finding P1 zu PR #977, nachgezogen). |
 | Required-Check-Namen | 6 E2E-Jobs gebunden | unverändert | Umbenennen hätte PRs dauerhaft blockiert. |
 | actionlint | 0 Findings | 0 Findings | Regressionsfrei. |
 
@@ -275,26 +275,25 @@ Vorher hatten 7 Jobs eine Zeitgrenze, jetzt alle 27. Werte an den gemessenen Lau
 1. **Das Verhalten der Änderungen auf GitHub-Runnern.** `concurrency`, `timeout-minutes` und `persist-credentials` sind lokal nur statisch prüfbar (actionlint + YAML-Parse, beide grün). Der erste CI-Lauf ist der eigentliche Nachweis. Besonderes Augenmerk: dass `persist-credentials: false` keinen der Checkout-Schritte bricht — vorab geprüft, aber nicht ausgeführt.
 2. **Der Budgetabbruch aus `run-budget.spec.ts`.** Die Spec ist **nicht** in CI verdrahtet und es gibt keinen `run-budget`-Job — der Pfad hat damit **keinerlei CI-Abdeckung**. Lokal ist sie nicht grün, sondern deckt einen offenen Defekt auf (§5, Issue #978).
 
-### Empfehlungen (bewusst nicht umgesetzt)
+### Empfehlungen — Momentaufnahme vom 2026-07-31, wird nicht fortgeschrieben
 
-> **Nachgetragen 2026-07-31 (Codex-Finding P1 zu PR #977):** Dieses Dokument ist ein Auditbefund, **keine Planungsquelle** — AGENTS.md verbietet neue Planungsdateien neben README, STATUS, ROADMAP und Issues. Die Nachverfolgung läuft daher über GitHub Issues; die Tabelle bleibt nur als Begründungs- und Belegkontext stehen:
+> Dieses Dokument ist ein Auditbefund, **keine Planungsquelle** — AGENTS.md verbietet neue Planungsdateien neben README, STATUS, ROADMAP und Issues. Die folgende Tabelle hält fest, was **zum Auditzeitpunkt** offen war und **warum es damals nicht umgesetzt wurde**. Sie führt bewusst keinen Erledigungsstatus: welche Punkte inzwischen erledigt, verworfen oder umpriorisiert sind, steht ausschließlich in den Issues.
 >
-> - **[#978](https://github.com/arn0ld87/agora/issues/978)** — Budget-Defekt (ehem. E9), höchste Priorität
+> - **[#978](https://github.com/arn0ld87/agora/issues/978)** — Budget-Defekt (E9), höchste Priorität
 > - **[#979](https://github.com/arn0ld87/agora/issues/979)** — Sammel-Issue E1–E8
->
-> Bei Abweichungen gilt der Issue-Stand, nicht diese Tabelle.
 
 | # | Empfehlung | Warum nicht jetzt |
 |---|-----------|-------------------|
 | E1 | **Dependency-Caching** für `uv` (via `astral-sh/setup-uv` mit `enable-cache: true`, im Repo bereits in `cve-monitor.yml` gepinnt vorhanden) und `bun`. | Der GitHub-Cache-Dienst braucht `results-receiver.actions.githubusercontent.com:443` und `*.blob.core.windows.net:443` in der Egress-Allowlist. Diese Endpunkte fehlen in den `ci.yml`-Jobs. Ob `harden-runner` sie im `block`-Modus implizit durchlässt, ist lokal nicht feststellbar — ein Fehlgriff bricht die CI. Gehört in einen eigenen Slice mit einem CI-Lauf als Nachweis. |
 | E2 | **`assertStubModeActive` umbenennen** zu `logStubModeDiagnostics` und die Stub-Aktivierung über ein Feld in `/api/status` **wirklich** assertierbar machen. | Die Umbenennung allein ist kosmetisch; der Nutzen entsteht erst mit dem Backend-Feld. Das ist eine Produktivcode-Änderung und lag außerhalb des CI-/Test-Auftrags. Bis dahin bleibt P8 als dokumentierte Schwäche bestehen. |
 | E3 | **Fehlende Auth-Header** an den zwei Aufrufstellen aus P9 ergänzen. | Hängt an E2 — solange der Helper ohnehin nichts assertet, ändert der Header nur die Log-Zeile. Gemeinsam erledigen. |
-| E4 | **`checkKeyboardNavigation` verschärfen**: statt „irgendein Tab setzt Fokus" die tatsächliche Tab-Reihenfolge gegen die DOM-Reihenfolge prüfen. | Die aktuelle Abschwächung war die dokumentierte Lösung für falsch-negative Läufe (#838, #921). Eine Verschärfung ohne neues Konzept holt die Flakiness zurück. Braucht einen eigenen Entwurf. |
-| ~~E5~~ **erledigt** | **PR-Gates als Required Checks aufnehmen.** `Backend PR smoke gate` und `Frontend PR smoke gate` liefen auf jedem PR, waren aber **nicht** required — ein PR mit rotem Lint, Typecheck oder Unit-Test war mergebar. | Am 2026-07-31 nach Freigabe umgesetzt: Branch-Protection von 15 auf 17 Required Checks erweitert, `strict: true` unverändert. Die „Check startet nie"-Falle ist ausgeschlossen — `ci.yml` hat keinen `paths`-Filter, und beide Jobs stehen auf `if: github.event_name == 'pull_request'`. |
+| E4 | **`checkKeyboardNavigation` verschärfen**: statt „irgendein Tab setzt Fokus“ die tatsächliche Tab-Reihenfolge gegen die DOM-Reihenfolge prüfen. | Die aktuelle Abschwächung war die dokumentierte Lösung für falsch-negative Läufe (#838, #921). Eine Verschärfung ohne neues Konzept holt die Flakiness zurück. Braucht einen eigenen Entwurf. |
+| E5 | **PR-Gates als Required Checks aufnehmen.** `Backend PR smoke gate` und `Frontend PR smoke gate` liefen auf jedem PR, waren aber **nicht** required — ein PR mit rotem Lint, Typecheck oder Unit-Test war mergebar. | Branch-Protection zu ändern ist ein Eingriff in die Merge-Regeln des Repos und brauchte eine ausdrückliche Freigabe, keine Audit-Entscheidung. Die „Check startet nie“-Falle wäre auszuschließen gewesen — `ci.yml` hat keinen `paths`-Filter, und beide Jobs stehen auf `if: github.event_name == 'pull_request'`. |
 | E6 | **`docs/runbooks/e2e-required-check.md` korrigieren** (P11) — es behauptet, die Erzwingung sei noch nicht freigegeben, obwohl sie aktiv ist. | Reine Doku-Korrektur, gehört in denselben Slice wie die Runbook-Pflege. |
 | E7 | **`scripts/e2e-up.sh`**: `.env`-Anhängen idempotent machen (P12), statt bei jedem Lauf Duplikate zu erzeugen. | Betrifft das Skript, nicht die CI-Definition; ohne Funktionsfehler. |
 | ~~**E9**~~ **erledigt** | ~~**Issue für `run-budget`-Defekt 2 anlegen** (§5): klären, ob das harte Budget im In-Process-Report-Pfad überhaupt ausgewertet wird, oder ob dem `LLMClient` dort die Run-Bindung fehlt. **Höchste Priorität dieser Liste** — es geht um Kostenkontrolle. Danach `run-budget.spec.ts` als eigenen Job verdrahten.~~ → Als [#978](https://github.com/arn0ld87/agora/issues/978) aufgenommen und behoben. Die hier vermutete fehlende Run-Bindung war **nicht** die Ursache — sie ist korrekt verdrahtet und der Enforcer feuert. Der `BudgetExceededError` wurde stattdessen von neun `except Exception`-Fallback-Handlern im Report-Agent-Pfad verschluckt. `run-budget.spec.ts` läuft seitdem als eigener Job `run-budget-smoke`. | Erfordert eine Untersuchung im Produktivcode und ggf. eine Produktänderung. Beides liegt außerhalb eines CI-/Test-Audits, und ein Test darf nicht dadurch grün werden, dass man Produktivcode passend macht. |
 | E8 | **pytest-Warnungsrauschen eindämmen** — 24 980 `DeprecationWarning` aus `pytest_asyncio`/`neo4j` verdecken echte Warnungen. Ein gezielter `filterwarnings`-Eintrag in `pyproject.toml` für genau diese Upstream-Quellen. | Nicht Teil des CI-/E2E-Auftrags; als Beobachtung festgehalten. |
+| E9 | **`run-budget`-Defekt 2** (§5): klären, ob das harte Budget im In-Process-Report-Pfad überhaupt ausgewertet wird, oder ob dem `LLMClient` dort die Run-Bindung fehlt. **Höchste Priorität** — es geht um Kostenkontrolle. Danach `run-budget.spec.ts` als eigenen Job verdrahten. | Erfordert eine Untersuchung im Produktivcode und ggf. eine Produktänderung. Beides liegt außerhalb eines CI-/Test-Audits, und ein Test darf nicht dadurch grün werden, dass man Produktivcode passend macht. |
 
 ---
 

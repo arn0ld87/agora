@@ -7,9 +7,14 @@ export default defineConfig({
   // Ein versehentlich committetes test.only wuerde in CI sonst still den
   // gesamten Rest der Datei ueberspringen und trotzdem gruen melden.
   forbidOnly: !!process.env.CI,
-  // Ein Retry NUR in CI — ausschliesslich fuer die Diagnose (Trace beider
-  // Versuche, "flaky"-Ausweis im Report). Lokal bleibt es bei 0, damit
-  // Flakiness beim Entwickeln sofort auffaellt.
+  // Ein Retry NUR in CI — ausschliesslich fuer die Diagnose: der Report weist
+  // den Test als "flaky" statt "failed" aus, und `trace: retain-on-failure`
+  // (unten) behaelt den Trace des FEHLGESCHLAGENEN Versuchs. Der Trace des
+  // bestandenen Retrys wird von diesem Modus bewusst verworfen — fuer die
+  // Fehlersuche ist der fehlgeschlagene Versuch der aussagekraeftige, und
+  // `retain-on-failure-and-retries` wuerde die Artefakte ohne echten
+  // Mehrwert vergroessern. Lokal bleibt es bei 0, damit Flakiness beim
+  // Entwickeln sofort auffaellt.
   retries: process.env.CI ? 1 : 0,
   // ZWINGEND zusammen mit `retries`: ohne diese Zeile beendet Playwright einen
   // Lauf mit flaky-Tests mit Exit-Code 0. Da alle sechs Smokes Required Checks
