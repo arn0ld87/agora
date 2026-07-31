@@ -379,8 +379,6 @@ describe('Step4Report — INCOMPLETE-Status und generation_failed (P2.6)', () =>
 })
 
 // Sub-Slice 16b: klickbare Quotes + source_id_anchor-Scroll (Refs #173)
-import { parseSourceAnchor, entryAnchorId } from '../../utils/sourceAnchor'
-
 describe('Quote + Anchor (Sub-Slice 16b)', () => {
   // EvidenceMap mit einem Item, das quote + source_id_anchor hat
   const EVIDENCE_WITH_QUOTE = {
@@ -876,6 +874,8 @@ describe('Step4Report — runId ueberlebt die Report-Navigation (PR #975)', () =
     await (wrapper.vm as unknown as { startReportConfirmed: () => Promise<void> }).startReportConfirmed()
     await flushPromises()
 
+    expect(router.currentRoute.value.name).toBe('Report')
+    expect(router.currentRoute.value.params.reportId).toBe('report_test01')
     expect(router.currentRoute.value.query.runId).toBe('run_registry_02')
   })
 
