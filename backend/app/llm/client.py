@@ -1181,10 +1181,19 @@ class LLMClient:
                     return self._maybe_validate(parsed, schema)
             preview = cleaned_response[:400]
             tail = cleaned_response[-200:] if len(cleaned_response) > 600 else ""
+            # Truncation ist an dieser Stelle ausgeschlossen: chat() wird in
+            # chat_json() durchgaengig mit require_complete=True aufgerufen und
+            # wirft bei finish_reason == "length" bereits LLMOutputTruncatedError.
+            # Wer hier landet, hat eine *vollstaendige* Antwort erhalten, die kein
+            # gueltiges JSON ist — ein Prompt-/Schema-/Provider-Problem, kein
+            # Budget-Problem. Die frueher hier stehende Empfehlung
+            # "likely truncated — try raising max_tokens" war strukturell falsch
+            # und hat Debugging systematisch in die falsche Richtung geschickt.
             raise ValueError(
-                "Invalid JSON format from LLM "
-                f"(len={len(cleaned_response)}; likely truncated — "
-                "try raising max_tokens). "
+                "Invalid JSON format from LLM: provider returned a complete "
+                "response (finish_reason != 'length') that is not valid JSON "
+                f"(len={len(cleaned_response)}). Raising max_tokens will NOT "
+                "help — check prompt, schema or provider json_schema support. "
                 f"Head: {preview}{'…' if tail else ''}"
                 + (f" Tail: …{tail}" if tail else "")
             )
