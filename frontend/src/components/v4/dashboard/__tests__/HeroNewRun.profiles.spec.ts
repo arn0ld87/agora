@@ -102,10 +102,25 @@ vi.mock('@/composables/useEffectiveModelSelection', () => {
 import { setPendingUpload } from '../../../../store/pendingUpload'
 import HeroNewRun from '../HeroNewRun.vue'
 
+// localStorage-Mock (Bun-Testrunner hat kein jsdom built-in) — HeroNewRun liest
+// `agora.hero.profileId` beim Mount aus window.localStorage.
+const localStorageMock = (() => {
+  const store: Record<string, string> = {}
+  return {
+    getItem: (key: string) => store[key] ?? null,
+    setItem: (key: string, value: string) => { store[key] = value },
+    removeItem: (key: string) => { delete store[key] },
+    clear: () => { Object.keys(store).forEach(k => { delete store[k] }) },
+  }
+})()
+Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, writable: true })
+Object.defineProperty(window, 'localStorage', { value: localStorageMock, writable: true })
+
 describe('HeroNewRun — LLM-Profile (P5.5)', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.mocked(setPendingUpload).mockReset()
+    window.localStorage.clear()
   })
 
   it('rendert LLM-Profile aus API im Profile-Dropdown', async () => {
@@ -122,6 +137,54 @@ describe('HeroNewRun — LLM-Profile (P5.5)', () => {
     expect(optionValues).toContain('')
     expect(optionValues).toContain('abc')
     expect(optionValues).toContain('xyz')
+  })
+
+  it('verwirft eine persistierte Profil-ID, die das Backend nicht mehr kennt', async () => {
+    // Regression: `agora.hero.profileId` überlebt das Löschen des Profils. Die
+    // tote ID darf weder als Auswahl stehen bleiben noch als `profile_id` an
+    // den Sim-Start gehen — sonst bricht der Run mit "LLM-Profil nicht gefunden".
+    window.localStorage.setItem('agora.hero.profileId', 'geloeschtes-profil')
+
+    const router = makeRouter()
+    await router.push('/dashboard')
+    const w = mount(HeroNewRun, { global: { plugins: [makeI18n(), router] } })
+    await flushPromises()
+
+    const select = w.find<HTMLSelectElement>('select#hero-profile')
+    expect(select.element.value).toBe('')
+    expect(window.localStorage.getItem('agora.hero.profileId')).toBeNull()
+
+    const file = new File(['x'], 'briefing.md', { type: 'text/markdown' })
+    const input = w.find<HTMLInputElement>('input[type=file]')
+    Object.defineProperty(input.element, 'files', { value: [file] })
+    await input.trigger('change')
+    const textarea = w.find<HTMLTextAreaElement>('textarea#hero-requirement')
+    await textarea.setValue('Wie reagiert die DACH-Region?')
+    await flushPromises()
+
+    await w.find('.hero-cta').trigger('click')
+    await flushPromises()
+
+    expect(setPendingUpload).toHaveBeenCalledWith(
+      [file],
+      'Wie reagiert die DACH-Region?',
+      null,
+      expect.anything(),
+      expect.anything(),
+      null,
+    )
+  })
+
+  it('behält eine persistierte Profil-ID, die das Backend weiterhin kennt', async () => {
+    window.localStorage.setItem('agora.hero.profileId', 'abc')
+
+    const router = makeRouter()
+    await router.push('/dashboard')
+    const w = mount(HeroNewRun, { global: { plugins: [makeI18n(), router] } })
+    await flushPromises()
+
+    expect(w.find<HTMLSelectElement>('select#hero-profile').element.value).toBe('abc')
+    expect(window.localStorage.getItem('agora.hero.profileId')).toBe('abc')
   })
 
   it('übergibt llmProfileId an setPendingUpload bei Profile-Auswahl', async () => {

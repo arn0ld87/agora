@@ -347,7 +347,17 @@ onMounted(() => {
     })
     .catch(() => { /* Kanon nicht ladbar: Picker bleibt leer, Backend nutzt active-config */ })
   fetchLlmProfiles()
-    .then(profiles => { llmProfiles.value = profiles })
+    .then(profiles => {
+      llmProfiles.value = profiles
+      // Stale-Persistenz-Gate: `agora.hero.profileId` überlebt das Löschen des
+      // Profils im Backend. Eine tote ID würde als `profile_id` an den Sim-Start
+      // gehen und dort mit "LLM-Profil ... nicht gefunden" abbrechen — die
+      // Auswahl deshalb verwerfen, sobald sie nicht mehr in der Liste steht.
+      if (selectedProfileId.value && !profiles.some(p => p.id === selectedProfileId.value)) {
+        selectedProfileId.value = null
+        removeLocal(STORAGE_HERO_PROFILE_ID)
+      }
+    })
     .catch(() => { /* Fallback: Profile-Picker bleibt leer, ModelPicker greift */ })
   // backend.allow_small_sim aus /api/status spiegelt AGORA_ALLOW_SMALL_SIM
   // wider. Default-pessimistisch bei Fetch-Fehler: harter 30er-Floor bleibt.
