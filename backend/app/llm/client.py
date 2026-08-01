@@ -731,12 +731,35 @@ class LLMClient:
                 content = "".join(chunks)
             else:
                 _response, _latency_ms = _call_with_token_key_fallback(kwargs)
-                choice = _response.choices[0]
-                finish_reason = getattr(choice, "finish_reason", None)
-                usage = getattr(_response, "usage", None)
-                completion_tokens = getattr(usage, "completion_tokens", None) if usage else None
-                _usage_for_counter = usage
-                content = choice.message.content or ""
+                # Issue #764 (Review): die lokale Verarbeitung einer
+                # HTTP-erfolgreichen Antwort kann fehlschlagen (leeres
+                # ``choices``, ``message`` ohne ``content``, fehlende
+                # ``usage``-Attribute). Damit der fehlgeschlagene
+                # lokale Schritt trotzdem als ein Providerattempt
+                # sichtbar wird, muss GENAU EIN Failure-Event + GENAU
+                # EIN ``_budget_record`` entstehen — sonst zaehlt der
+                # weiche ``max_llm_calls``-Limit diesen Call nicht und
+                # die Telemetrie verliert ihn. ``BudgetExceededError`` ist
+                # hier nicht erreichbar (Check liegt VOR ``create()`` in
+                # ``_provider_attempt``).
+                try:
+                    choice = _response.choices[0]
+                    finish_reason = getattr(choice, "finish_reason", None)
+                    usage = getattr(_response, "usage", None)
+                    completion_tokens = (
+                        getattr(usage, "completion_tokens", None) if usage else None
+                    )
+                    _usage_for_counter = usage
+                    content = choice.message.content or ""
+                except Exception as exc:  # noqa: BLE001 — Failure-Telemetrie, weiterreichen
+                    self._log_invocation_event(
+                        stage=context,
+                        latency_ms=_latency_ms,
+                        success=False,
+                        error_type=type(exc).__name__,
+                    )
+                    self._budget_record()
+                    raise
         except Exception:
             # ``_provider_attempt`` hat fuer create()-Fehler bereits geloggt +
             # recordet. Streaming-Iterationsfehler wurden im inneren try-Block

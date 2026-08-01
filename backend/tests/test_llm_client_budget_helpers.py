@@ -703,6 +703,69 @@ class TestChatExceptionPathRecordsBudget:
 
 
 # ---------------------------------------------------------------------------
+# 8b. Regression Issue #764 (Review-Restpunkt): HTTP-200-Antwort ohne
+#     verarbeitbare ``choices`` muss EIN Failure-Event + EIN Budget-Record
+#     erzeugen, KEIN zusaetzlicher Providerrequest, KEIN doppeltes Event.
+# ---------------------------------------------------------------------------
+
+
+class TestMalformedResponseLocalFailure:
+    """Nach erfolgreichem ``create()`` kann die lokale Verarbeitung der
+    Antwort fehlschlagen (leeres ``choices``, ``message`` ohne ``content``
+    o.ae.). Der ``_provider_attempt`` hat den HTTP-Attempt bereits als
+    Success geloggt — die Telemetrie fuer die anschliessende lokale
+    Verarbeitung muss aber konsistent bleiben.
+    """
+
+    def test_http_200_without_choices_records_one_failure_event_and_one_record(
+        self, monkeypatch
+    ):
+        from types import SimpleNamespace
+
+        from app.llm.client import LLMClient
+
+        enforcer = _RecordingEnforcer()
+        client = _make_client(enforcer)
+        recorder = _wire_invocation_recorder(client)
+        monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
+        monkeypatch.setattr(
+            LLMClient, "_publish_model_active", lambda self, *a, **k: None
+        )
+        # Force den OpenAI-kompatiblen Pfad (kein Ollama).
+        object.__setattr__(client, "_is_ollama", lambda: False)
+        # Streaming-Pfad umgehen — wir wollen den nicht-streaming-Zweig.
+        monkeypatch.setattr(
+            "app.llm.client.os.environ.get",
+            lambda k, default=None: "false" if k == "LLM_FORCE_STREAM" else default,
+        )
+
+        # HTTP 200-Antwort, aber ohne verarbeitbare ``choices``-Liste.
+        malformed = SimpleNamespace(choices=[])
+
+        create_calls = {"n": 0}
+
+        def _create(**kwargs):
+            create_calls["n"] += 1
+            return malformed
+
+        TestRetryAndFallbackTracking._install_create(client, _create)
+
+        with pytest.raises(IndexError):
+            client.chat(messages=[{"role": "user", "content": "x"}])
+
+        # Genau ein Providerrequest — kein Retry nach lokalem Fehler.
+        assert create_calls["n"] == 1
+        # Genau ein Budgetcheck (im ``_provider_attempt`` VOR ``create()``).
+        assert enforcer.check_calls == 1
+        # Genau ein Budgetrecord nach lokalem Fehler (der Fix).
+        assert enforcer.record_calls == 1
+        # Genau ein Failure-Event, success=False — KEIN Success-Event daneben.
+        assert len(recorder.calls) == 1
+        assert recorder.calls[0]["success"] is False
+        assert recorder.calls[0]["error_type"] == "IndexError"
+
+
+# ---------------------------------------------------------------------------
 # 9. Retry- und Fallback-Tracking (Issue #764, letzter Review-Punkt):
 #    Jeder tatsaechliche Providerrequest (Initial, Retry, Token-Key-Fallback,
 #    Streaming) erhaelt GENAU EINE ``_budget_check`` / ``_log_invocation_event``
