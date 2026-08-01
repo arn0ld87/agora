@@ -84,6 +84,12 @@ def _persist_report(*, with_evidence: bool = False) -> None:
                             # 2 Stakeholder-Gruppen via agent_quote — Demo-Fixture
                             # bleibt auf medium, ein Cross-Stakeholder-Setup ist
                             # nicht im Scope des Export-Tests.
+                            #
+                            # Anker 5 verlangt fuer medium aber mind. 1 agent_quote
+                            # (mit Quote-Feld) UND mind. 1 seed_corpus. Die Fixture
+                            # hatte nur eine graph_metric und wurde deshalb vom
+                            # Validator verworfen: der Envelope lieferte
+                            # evidence=None und der Test brach beim Zugriff ab.
                             "confidence_label": "medium",
                             "evidence": [
                                 {
@@ -92,7 +98,25 @@ def _persist_report(*, with_evidence: bool = False) -> None:
                                     "snippet": "echo_chamber_index: 0.42",
                                     "match_score": 0.7,
                                     "supports_claim": True,
-                                }
+                                },
+                                {
+                                    "type": "agent_interview",
+                                    "source_kind": "agent_quote",
+                                    "source": "agent_07",
+                                    "snippet": "Ich warte lieber ab.",
+                                    "quote": "Ich warte lieber ab.",
+                                    "persona_stakeholder_group": "Belegschaft",
+                                    "match_score": 0.8,
+                                    "supports_claim": True,
+                                },
+                                {
+                                    "type": "graph_fact",
+                                    "source_kind": "seed_corpus",
+                                    "source": "briefing.md",
+                                    "snippet": "Das Vorhaben startet im Q3.",
+                                    "match_score": 0.75,
+                                    "supports_claim": True,
+                                },
                             ],
                             "audit_trail": [],
                         }

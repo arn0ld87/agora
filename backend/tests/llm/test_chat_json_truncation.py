@@ -39,6 +39,18 @@ def _make_response(content: str, finish_reason: str) -> MagicMock:
     return response
 
 
+def _retry_result(content: str, finish_reason: str) -> tuple:
+    """Rueckgabeform von ``llm_call_with_retry`` im Client: ``(response, latency_ms)``.
+
+    Ein blanker Response-Mock genuegt hier nicht: ``chat()`` entpackt das
+    Ergebnis in zwei Werte. Ein MagicMock iteriert leer, das Entpacken schlug
+    also mit ``ValueError`` fehl, bevor der Truncation-Guard ueberhaupt
+    erreicht wurde — die drei betroffenen Tests haben lange nichts mehr
+    geprueft, obwohl sie rot waren.
+    """
+    return _make_response(content, finish_reason), 12.5
+
+
 # Am Cap gekappte Persona: display_name ist vollstaendig, persona bricht ab.
 TRUNCATED = '{"display_name": "Maya", "persona": "sehr langer abgeschnittener'
 
@@ -46,10 +58,12 @@ TRUNCATED = '{"display_name": "Maya", "persona": "sehr langer abgeschnittener'
 class TestChatJsonRejectsTruncatedOutput:
     def test_finish_reason_length_raises_typed_error(self):
         client = _make_client()
-        response = _make_response(TRUNCATED, finish_reason="length")
 
         with patch.object(client, "_publish_model_active"):
-            with patch("app.llm.client.llm_call_with_retry", return_value=response):
+            with patch(
+                "app.llm.client.llm_call_with_retry",
+                return_value=_retry_result(TRUNCATED, finish_reason="length"),
+            ):
                 with pytest.raises(LLMOutputTruncatedError):
                     client.chat_json([{"role": "user", "content": "persona bitte"}])
 
@@ -65,11 +79,11 @@ class TestChatJsonRejectsTruncatedOutput:
             persona: str
 
         client = _make_client()
-        response = _make_response(TRUNCATED, finish_reason="length")
 
         with patch.object(client, "_publish_model_active"):
             with patch(
-                "app.llm.client.llm_call_with_retry", return_value=response
+                "app.llm.client.llm_call_with_retry",
+                return_value=_retry_result(TRUNCATED, finish_reason="length"),
             ) as call:
                 with pytest.raises(LLMOutputTruncatedError):
                     client.chat_json(
@@ -157,10 +171,12 @@ class TestChatJsonRejectsTruncatedOutput:
     def test_complete_response_still_parses(self):
         """Gegenprobe: ``finish_reason="stop"`` bleibt der normale Erfolgspfad."""
         client = _make_client()
-        response = _make_response('{"display_name": "Maya"}', finish_reason="stop")
 
         with patch.object(client, "_publish_model_active"):
-            with patch("app.llm.client.llm_call_with_retry", return_value=response):
+            with patch(
+                "app.llm.client.llm_call_with_retry",
+                return_value=_retry_result('{"display_name": "Maya"}', finish_reason="stop"),
+            ):
                 result = client.chat_json(
                     [{"role": "user", "content": "persona bitte"}]
                 )
