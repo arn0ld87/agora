@@ -764,6 +764,81 @@ class TestMalformedResponseLocalFailure:
         assert recorder.calls[0]["success"] is False
         assert recorder.calls[0]["error_type"] == "IndexError"
 
+    def test_malformed_response_keeps_reported_usage_in_failure_event(
+        self, monkeypatch
+    ):
+        """Codex P2: abgerechnete Tokens duerfen beim lokalen Fehler nicht verloren gehen.
+
+        ``run_usage_ledger._Bucket.add`` leitet Verbrauch und Kosten allein aus
+        den Event-Feldern ab. Traegt das Failure-Event keine Tokenzahlen, ist
+        der Call zwar gezaehlt, sein Verbrauch aber unbekannt — harte Token-
+        und Kostenlimits lassen dann zu viele Folgecalls durch.
+        """
+        from types import SimpleNamespace
+
+        from app.llm.client import LLMClient
+
+        enforcer = _RecordingEnforcer()
+        client = _make_client(enforcer)
+        recorder = _wire_invocation_recorder(client)
+        monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
+        monkeypatch.setattr(
+            LLMClient, "_publish_model_active", lambda self, *a, **k: None
+        )
+        object.__setattr__(client, "_is_ollama", lambda: False)
+        monkeypatch.setattr(
+            "app.llm.client.os.environ.get",
+            lambda k, default=None: "false" if k == "LLM_FORCE_STREAM" else default,
+        )
+
+        # Leeres ``choices``, aber der Provider hat abgerechnet.
+        malformed = SimpleNamespace(
+            choices=[],
+            usage=SimpleNamespace(prompt_tokens=1200, completion_tokens=340),
+        )
+        TestRetryAndFallbackTracking._install_create(client, lambda **kw: malformed)
+
+        with pytest.raises(IndexError):
+            client.chat(messages=[{"role": "user", "content": "x"}])
+
+        assert len(recorder.calls) == 1
+        event = recorder.calls[0]
+        assert event["success"] is False
+        assert event["prompt_tokens"] == 1200
+        assert event["completion_tokens"] == 340
+
+    def test_non_numeric_usage_does_not_leak_into_failure_event(self, monkeypatch):
+        """Nicht-numerische Providerwerte bleiben None statt als Tokenzahl zu zaehlen."""
+        from types import SimpleNamespace
+
+        from app.llm.client import LLMClient
+
+        enforcer = _RecordingEnforcer()
+        client = _make_client(enforcer)
+        recorder = _wire_invocation_recorder(client)
+        monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
+        monkeypatch.setattr(
+            LLMClient, "_publish_model_active", lambda self, *a, **k: None
+        )
+        object.__setattr__(client, "_is_ollama", lambda: False)
+        monkeypatch.setattr(
+            "app.llm.client.os.environ.get",
+            lambda k, default=None: "false" if k == "LLM_FORCE_STREAM" else default,
+        )
+
+        malformed = SimpleNamespace(
+            choices=[],
+            usage=SimpleNamespace(prompt_tokens="n/a", completion_tokens=None),
+        )
+        TestRetryAndFallbackTracking._install_create(client, lambda **kw: malformed)
+
+        with pytest.raises(IndexError):
+            client.chat(messages=[{"role": "user", "content": "x"}])
+
+        event = recorder.calls[0]
+        assert event["prompt_tokens"] is None
+        assert event["completion_tokens"] is None
+
 
 # ---------------------------------------------------------------------------
 # 9. Retry- und Fallback-Tracking (Issue #764, letzter Review-Punkt):

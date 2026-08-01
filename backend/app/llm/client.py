@@ -742,21 +742,39 @@ class LLMClient:
                 # die Telemetrie verliert ihn. ``BudgetExceededError`` ist
                 # hier nicht erreichbar (Check liegt VOR ``create()`` in
                 # ``_provider_attempt``).
+                #
+                # Issue #764 (Codex P2): ``usage`` wird VOR dem
+                # ``choices``-Zugriff gelesen. Eine malformed Antwort kann
+                # trotzdem abgerechnete Prompt-/Completion-Tokens tragen
+                # (``choices=[]`` neben gefuellten Totals).
+                # ``run_usage_ledger._Bucket.add`` leitet Verbrauch und Kosten
+                # ausschliesslich aus den Event-Feldern ab — fehlen sie, ist
+                # der Call zwar gezaehlt, sein Verbrauch aber unbekannt, und
+                # nachfolgende harte Token-/Kostenchecks lassen zu viele
+                # Folgecalls durch.
+                usage = None
                 try:
-                    choice = _response.choices[0]
-                    finish_reason = getattr(choice, "finish_reason", None)
                     usage = getattr(_response, "usage", None)
                     completion_tokens = (
                         getattr(usage, "completion_tokens", None) if usage else None
                     )
                     _usage_for_counter = usage
+                    choice = _response.choices[0]
+                    finish_reason = getattr(choice, "finish_reason", None)
                     content = choice.message.content or ""
                 except Exception as exc:  # noqa: BLE001 — Failure-Telemetrie, weiterreichen
+                    # isinstance-Guard wie im Erfolgspfad: MagicMock-Attribute
+                    # in Tests und nicht-numerische Providerwerte duerfen nicht
+                    # als Tokenzahl ins Ledger.
+                    _p = getattr(usage, "prompt_tokens", None)
+                    _c = getattr(usage, "completion_tokens", None)
                     self._log_invocation_event(
                         stage=context,
                         latency_ms=_latency_ms,
                         success=False,
                         error_type=type(exc).__name__,
+                        prompt_tokens=_p if isinstance(_p, int) else None,
+                        completion_tokens=_c if isinstance(_c, int) else None,
                     )
                     self._budget_record()
                     raise
