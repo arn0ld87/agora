@@ -635,7 +635,8 @@
       "asking": "Frage {done} / {total} Agenten…",
       "noResults": "Noch keine Antworten.",
       "exportCsv": "Als CSV exportieren"
-    }
+    },
+    "noResponse": "Keine Antwort erhalten."
   },
   "graph": {
     "panel": "Graph",

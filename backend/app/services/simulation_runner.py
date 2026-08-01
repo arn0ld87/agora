@@ -53,6 +53,9 @@ from .sim.interview_client import interview_all_agents as _interview_all_agents_
 from .sim.interview_client import close_simulation_env as _close_simulation_env_fn
 from .sim.interview_client import _get_interview_history_from_db as _get_hist_from_db_fn
 from .sim.interview_client import get_interview_history as _get_interview_history_fn
+from .sim.interview_direct import (
+    direct_interviews_available as _direct_interviews_available_fn,
+)
 
 # M11 Phase 5 PR 5 — re-export process-manager module functions.
 # The class-method wrappers below delegate to these for backward-compat.
@@ -424,6 +427,13 @@ class SimulationRunner:
     def check_env_alive(cls, simulation_id: str) -> bool:
         """Check if the simulation environment is alive (can receive Interview commands)."""
         return _check_env_alive_fn(simulation_id, run_state_dir=cls.RUN_STATE_DIR)
+
+    @classmethod
+    def direct_interviews_available(cls, simulation_id: str) -> bool:
+        """Check if interviews can be served in-process (personas persisted)."""
+        return _direct_interviews_available_fn(
+            simulation_id, run_state_dir=cls.RUN_STATE_DIR
+        )
 
     @classmethod
     def get_env_status_detail(cls, simulation_id: str) -> Dict[str, Any]:

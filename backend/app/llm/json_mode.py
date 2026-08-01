@@ -269,6 +269,51 @@ def _strip_llm_json_envelope(text: str) -> str:
     return s[start : end + 1]
 
 
+def _parse_llm_json(cleaned_response: str) -> Dict[str, Any]:
+    """Parse eine bereits envelope-bereinigte LLM-Antwort als JSON-Objekt.
+
+    Gemeinsamer Pfad für alle ``chat_json``-Varianten (nativer Ollama-Schema-Pfad
+    und OpenAI-kompatibler Pfad), damit Reparaturversuch und Diagnose überall
+    identisch sind. Vorher parste der native Pfad direkt mit ``json.loads`` und
+    warf einen nackten ``JSONDecodeError`` ohne jede Einordnung.
+
+    Raises:
+        ValueError: Antwort ist auch nach dem Reparaturversuch kein gültiges JSON.
+    """
+    try:
+        return json.loads(cleaned_response)
+    except json.JSONDecodeError:
+        pass
+
+    repaired = _try_repair_truncated_json(cleaned_response)
+    if repaired is not None:
+        # Kein max_tokens-Hinweis: chat_json ruft chat() mit
+        # require_complete=True auf, eine am Token-Limit abgeschnittene Antwort
+        # haette bereits LLMOutputTruncatedError geworfen. Was hier repariert
+        # wird, ist unsauberes JSON einer vollstaendigen Antwort.
+        logger.warning(
+            "LLM JSON war unvollstaendig; per Best-Effort-Reparatur "
+            "wiederhergestellt (%d → %d Zeichen). Antwort war laut Provider "
+            "vollstaendig — Prompt, Schema oder json_schema-Support pruefen.",
+            len(cleaned_response), len(repaired),
+        )
+        try:
+            return json.loads(repaired)
+        except json.JSONDecodeError:
+            pass
+
+    preview = cleaned_response[:400]
+    tail = cleaned_response[-200:] if len(cleaned_response) > 600 else ""
+    raise ValueError(
+        "Invalid JSON format from LLM: provider returned a complete "
+        "response (finish_reason != 'length') that is not valid JSON "
+        f"(len={len(cleaned_response)}). Raising max_tokens will NOT "
+        "help — check prompt, schema or provider json_schema support. "
+        f"Head: {preview}{'…' if tail else ''}"
+        + (f" Tail: …{tail}" if tail else "")
+    )
+
+
 def _try_repair_truncated_json(payload: str) -> Optional[str]:
     """Best-effort recovery for an LLM JSON answer cut off at the output cap.
 

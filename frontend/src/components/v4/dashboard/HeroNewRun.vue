@@ -44,6 +44,11 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const errorMsg = ref('')
 
 const llmProfiles = ref<LlmProfile[]>([])
+// Solange der Profilabruf laeuft, ist unbekannt ob eine persistierte
+// `agora.hero.profileId` noch existiert. Der Start bleibt bis dahin zu —
+// sonst geht eine tote ID als profile_id raus und der Sim-Start bricht mit
+// "LLM-Profil ... nicht gefunden" ab.
+const profilesSettled = ref(false)
 
 // ---- Service-Readiness (Parität zu Home.vue, Portierung aus #915) ----
 // Liefert die Werte, die Home.vue aus /api/simulation/available-models zieht,
@@ -210,8 +215,14 @@ const canSubmit = computed(
   () =>
     files.value.length > 0 &&
     simulationRequirement.value.trim() !== '' &&
-    servicesReady.value,
+    servicesReady.value &&
+    profilesSettled.value,
 )
+
+function discardPersistedProfile() {
+  selectedProfileId.value = null
+  removeLocal(STORAGE_HERO_PROFILE_ID)
+}
 
 function filterAllowed(list: FileList | File[]): File[] {
   return Array.from(list).filter(f => {
@@ -347,8 +358,22 @@ onMounted(() => {
     })
     .catch(() => { /* Kanon nicht ladbar: Picker bleibt leer, Backend nutzt active-config */ })
   fetchLlmProfiles()
-    .then(profiles => { llmProfiles.value = profiles })
-    .catch(() => { /* Fallback: Profile-Picker bleibt leer, ModelPicker greift */ })
+    .then(profiles => {
+      llmProfiles.value = profiles
+      // Stale-Persistenz-Gate: `agora.hero.profileId` überlebt das Löschen des
+      // Profils im Backend. Eine tote ID würde als `profile_id` an den Sim-Start
+      // gehen und dort mit "LLM-Profil ... nicht gefunden" abbrechen — die
+      // Auswahl deshalb verwerfen, sobald sie nicht mehr in der Liste steht.
+      if (selectedProfileId.value && !profiles.some(p => p.id === selectedProfileId.value)) {
+        discardPersistedProfile()
+      }
+    })
+    .catch(() => {
+      // Ohne Liste laesst sich die persistierte ID nicht verifizieren. Sie
+      // trotzdem zu senden waere geraten — der ModelPicker-Pfad greift.
+      discardPersistedProfile()
+    })
+    .finally(() => { profilesSettled.value = true })
   // backend.allow_small_sim aus /api/status spiegelt AGORA_ALLOW_SMALL_SIM
   // wider. Default-pessimistisch bei Fetch-Fehler: harter 30er-Floor bleibt.
   getSystemStatus()

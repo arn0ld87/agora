@@ -2,6 +2,9 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import LogDrawer from './components/LogDrawer.vue'
 
+// Muss zu den .fade-*-Regeln in assets/styles/global.css passen.
+const TRANSITION_DURATION = { enter: 400, leave: 160 }
+
 const STORAGE_KEY = 'agora.ui.logDrawer.open'
 function loadOpen() {
   try { return localStorage.getItem(STORAGE_KEY) === 'true' } catch { return false }
@@ -23,7 +26,12 @@ onUnmounted(() => window.removeEventListener('keydown', handleHotkey))
 
 <template>
   <router-view v-slot="{ Component }">
-    <transition name="fade" mode="out-in">
+    <!-- :duration ist Pflicht, nicht Kosmetik. Ohne explizite Dauer wartet Vue
+         bei mode="out-in" auf ein transitionend-Event. In einem Hintergrund-Tab
+         laesst Chrome CSS-Transitions gar nicht erst laufen, das Event bleibt
+         aus und die leave-Phase endet nie: die URL wechselt, der alte View
+         bleibt stehen. Mit :duration nutzt Vue einen Timer statt des Events. -->
+    <transition name="fade" mode="out-in" :duration="TRANSITION_DURATION">
       <component :is="Component" />
     </transition>
   </router-view>

@@ -3,6 +3,7 @@ import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { chatWithReport, getReport } from '../api/report'
 import { interviewAgents, getSimulationProfilesRealtime } from '../api/simulation'
+import { extractReportAnswer } from '@/utils/reportChatAnswer'
 import Button from '@/components/v4/forms/Button.vue'
 import Badge from './ui/Badge.vue'
 import Kicker from '@/components/v4/data/Kicker.vue'
@@ -21,6 +22,15 @@ const activeTab = ref('chat') // 'chat' | 'survey'
 
 const profiles = ref([])
 const reportData = ref(null)
+
+// Je nach Einstiegspunkt kommt simulationId NICHT als Prop: der v4-Wrapper
+// (StepInteractionView) kennt nur die reportId aus /v4/interaction/:reportId.
+// Ohne Fallback bleibt profiles leer und Chat/Survey senden simulation_id:
+// undefined — es entstehen keine agent_quotes, was das Evidence-Gating des
+// Reports (ADR-0002) leerlaufen laesst.
+const resolvedSimulationId = computed(
+  () => props.simulationId || reportData.value?.simulation_id || null
+)
 
 // ----- Chat (1-on-1) state -----
 const selectedAgentId = ref(null) // null = ReportAgent
@@ -69,9 +79,9 @@ const selectedProfile = computed(() => {
 })
 
 async function loadProfiles() {
-  if (!props.simulationId) return
+  if (!resolvedSimulationId.value) return
   try {
-    const res = await getSimulationProfilesRealtime(props.simulationId, 'reddit')
+    const res = await getSimulationProfilesRealtime(resolvedSimulationId.value, 'reddit')
     if (res?.success && res.data?.profiles) profiles.value = res.data.profiles
   } catch { /* swallow */ }
 }
@@ -104,20 +114,20 @@ async function send() {
   try {
     if (selectedAgentId.value === null) {
       const res = await chatWithReport({
-        simulation_id: props.simulationId,
+        simulation_id: resolvedSimulationId.value,
         message: msg,
         chat_history: chatHistory.value.slice(0, -1).map((m) => ({ role: m.role, content: m.content }))
       })
       if (res?.success) {
         chatHistory.value.push({
           role: 'assistant',
-          content: res.data?.response || res.data?.answer || res.data?.message || '(no response)',
+          content: extractReportAnswer(res.data) || t('step5.noResponse'),
           ts: Date.now()
         })
       }
     } else {
       const res = await interviewAgents({
-        simulation_id: props.simulationId,
+        simulation_id: resolvedSimulationId.value,
         interviews: [{ agent_id: selectedAgentId.value, prompt: msg }]
       })
       if (res?.success) {
@@ -127,7 +137,7 @@ async function send() {
         const entries = Object.values(resultsDict)
         const pick = entries.find((r) => r?.platform === 'reddit') || entries[0]
         const answer = pick?.response || pick?.answer || pick?.result || ''
-        chatHistory.value.push({ role: 'assistant', content: answer || '(no response)', ts: Date.now() })
+        chatHistory.value.push({ role: 'assistant', content: answer || t('step5.noResponse'), ts: Date.now() })
       }
     }
   } catch (err) {
@@ -173,7 +183,7 @@ async function runSurvey() {
   surveyProgress.value = { done: 0, total: ids.length }
   try {
     const res = await interviewAgents({
-      simulation_id: props.simulationId,
+      simulation_id: resolvedSimulationId.value,
       interviews: ids.map((id) => ({ agent_id: id, prompt: q }))
     })
     if (res?.success) {
@@ -231,9 +241,10 @@ onMounted(async () => {
   await Promise.all([loadProfiles(), loadReport()])
 })
 
-// Parent reicht simulationId async nach (kommt erst nach getReport()).
-// Ohne Watcher würden profiles leer bleiben.
-watch(() => props.simulationId, (id) => { if (id) loadProfiles() })
+// simulationId kann als Prop nachgereicht werden ODER erst aus dem geladenen
+// Report stammen. Beide Wege laufen ueber resolvedSimulationId in denselben
+// Watcher — ohne ihn blieben profiles leer.
+watch(() => resolvedSimulationId.value, (id) => { if (id) loadProfiles() })
 watch(() => props.reportId, (id) => { if (id) loadReport() })
 </script>
 

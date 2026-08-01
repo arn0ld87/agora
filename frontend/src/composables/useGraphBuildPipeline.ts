@@ -45,10 +45,16 @@ export function useGraphBuildPipeline({
   const { systemLogs, addLog } = useSystemLog({ cap: 100 })
   const { resolveRunModel } = useRunModelResolver()
 
+  // Der Graph-Build ist ein langlaufender Server-Job (Minuten). Beide Polls
+  // müssen auch im Hintergrund-Tab laufen: usePolling startet bei
+  // document.hidden=true weder Interval noch Immediate-Tick, d. h. ein Build,
+  // der gestartet wird während der Tab nicht sichtbar ist, würde nie
+  // eingesammelt werden — der Fortschritts-Spinner bliebe dauerhaft stehen.
+  // Analog zu useSimulationPrepare (keep polling even in background tab).
   const taskPolling = usePolling(async () => {
     if (currentTaskId.value) await pollTaskStatus(currentTaskId.value)
-  }, 2000)
-  const graphPolling = usePolling(fetchGraphData, 10000)
+  }, 2000, { pauseWhenHidden: false })
+  const graphPolling = usePolling(fetchGraphData, 10000, { pauseWhenHidden: false })
 
   function messageFor(errorValue: unknown): string {
     return errorValue instanceof Error ? errorValue.message : String(errorValue)
