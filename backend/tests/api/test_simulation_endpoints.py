@@ -208,8 +208,13 @@ def test_persona_template_delete_not_found_returns_not_found(client, monkeypatch
 
 
 def test_interview_env_not_alive_returns_service_unavailable(client, monkeypatch):
+    """Weder lebender Worker noch persistierte Personas → 503."""
     monkeypatch.setattr(
         "app.api.simulation_interviews.SimulationRunner.check_env_alive",
+        staticmethod(lambda _sid: False),
+    )
+    monkeypatch.setattr(
+        "app.api.simulation_interviews.SimulationRunner.direct_interviews_available",
         staticmethod(lambda _sid: False),
     )
     response = client.post(
@@ -222,6 +227,44 @@ def test_interview_env_not_alive_returns_service_unavailable(client, monkeypatch
     )
     assert response.status_code == 503
     assert response.get_json()["code"] == "service_unavailable"
+
+
+def test_interview_env_not_alive_uses_direct_path_when_personas_exist(client, monkeypatch):
+    """Geschlossene Umgebung + persistierte Personas → Direktpfad statt 503."""
+    monkeypatch.setattr(
+        "app.api.simulation_interviews.SimulationRunner.check_env_alive",
+        staticmethod(lambda _sid: False),
+    )
+    monkeypatch.setattr(
+        "app.api.simulation_interviews.SimulationRunner.direct_interviews_available",
+        staticmethod(lambda _sid: True),
+    )
+    monkeypatch.setattr(
+        "app.api.simulation_interviews.SimulationRunner.interview_agent",
+        staticmethod(
+            lambda **_kwargs: {
+                "success": True,
+                "agent_id": 1,
+                "prompt": "Hello?",
+                "mode": "direct",
+                "result": {"agent_id": 1, "platform": "reddit", "response": "Passt."},
+                "timestamp": "2026-08-01T12:00:00",
+            }
+        ),
+    )
+    response = client.post(
+        "/api/simulation/interview",
+        json={
+            "simulation_id": VALID_SIM_ID,
+            "agent_id": 1,
+            "prompt": "Hello?",
+        },
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert payload["data"]["mode"] == "direct"
+    assert payload["data"]["result"]["response"] == "Passt."
 
 
 # --- PERSONA_REVIEW_REQUIRED -------------------------------------------------

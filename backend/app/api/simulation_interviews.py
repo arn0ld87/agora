@@ -36,17 +36,26 @@ def _validate_platform(platform):
     return None
 
 
-def _require_env_alive(simulation_id: str):
-    if not SimulationRunner.check_env_alive(simulation_id):
-        return json_error(
-            ApiErrorCode.SERVICE_UNAVAILABLE,
-            status=503,
-            message=(
-                "Simulation environment not running or closed. "
-                "Please ensure simulation is started and wait for it to progress."
-            ),
-        )
-    return None
+def _require_interview_backend(simulation_id: str):
+    """Guard: an interview must be answerable — via a live worker or in-process.
+
+    A live OASIS worker answers via IPC. Once the environment is closed the
+    interview is served directly in the Flask process from the persisted
+    personas (see ``services/sim/interview_direct.py``). Only when neither is
+    available does the request fail with 503.
+    """
+    if SimulationRunner.check_env_alive(simulation_id):
+        return None
+    if SimulationRunner.direct_interviews_available(simulation_id):
+        return None
+    return json_error(
+        ApiErrorCode.SERVICE_UNAVAILABLE,
+        status=503,
+        message=(
+            "Simulation environment not running and no personas persisted. "
+            "Please ensure simulation is started and wait for it to progress."
+        ),
+    )
 
 
 def _echo_result(result: dict):
@@ -90,7 +99,7 @@ def interview_agent():
     if platform_error:
         return platform_error
 
-    env_error = _require_env_alive(simulation_id)
+    env_error = _require_interview_backend(simulation_id)
     if env_error:
         return env_error
 
@@ -148,7 +157,7 @@ def interview_agents_batch():
                 message=f"Interview list item {index}: platform must be 'twitter' or 'reddit'",
             )
 
-    env_error = _require_env_alive(simulation_id)
+    env_error = _require_interview_backend(simulation_id)
     if env_error:
         return env_error
 
@@ -192,7 +201,7 @@ def interview_all_agents():
     if platform_error:
         return platform_error
 
-    env_error = _require_env_alive(simulation_id)
+    env_error = _require_interview_backend(simulation_id)
     if env_error:
         return env_error
 
