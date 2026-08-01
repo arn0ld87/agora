@@ -175,6 +175,40 @@ describe('HeroNewRun — LLM-Profile (P5.5)', () => {
     )
   })
 
+  it('verwirft eine persistierte Profil-ID auch, wenn der Profilabruf scheitert', async () => {
+    // Ohne Liste laesst sich die ID nicht verifizieren. Sie trotzdem zu senden
+    // waere geraten — der Sim-Start braeche dann mit "LLM-Profil nicht gefunden".
+    const { fetchLlmProfiles } = await import('@/api/llmProfiles')
+    vi.mocked(fetchLlmProfiles).mockRejectedValueOnce(new Error('Netzwerk weg'))
+    window.localStorage.setItem('agora.hero.profileId', 'abc')
+
+    const router = makeRouter()
+    await router.push('/dashboard')
+    const w = mount(HeroNewRun, { global: { plugins: [makeI18n(), router] } })
+    await flushPromises()
+
+    expect(window.localStorage.getItem('agora.hero.profileId')).toBeNull()
+
+    const file = new File(['x'], 'briefing.md', { type: 'text/markdown' })
+    const input = w.find<HTMLInputElement>('input[type=file]')
+    Object.defineProperty(input.element, 'files', { value: [file] })
+    await input.trigger('change')
+    await w.find<HTMLTextAreaElement>('textarea#hero-requirement').setValue('Frage?')
+    await flushPromises()
+
+    await w.find('.hero-cta').trigger('click')
+    await flushPromises()
+
+    expect(setPendingUpload).toHaveBeenCalledWith(
+      [file],
+      'Frage?',
+      null,
+      expect.anything(),
+      expect.anything(),
+      null,
+    )
+  })
+
   it('behält eine persistierte Profil-ID, die das Backend weiterhin kennt', async () => {
     window.localStorage.setItem('agora.hero.profileId', 'abc')
 

@@ -2,7 +2,8 @@
 
 Spezifikation des Direktpfads für Post-Simulations-Interviews: kein lebender
 OASIS-Worker, kein IPC. Persona-Profile und Simulationskontext sind
-persistiert, der LLM-Call läuft im Flask-Prozess über ``LLMClient.chat_json``.
+persistiert, der LLM-Call läuft im Flask-Prozess über ``LLMClient.chat`` —
+eine Interview-Antwort ist Freitext, kein strukturiertes JSON.
 """
 
 from __future__ import annotations
@@ -259,6 +260,151 @@ class TestBatchDirect:
 # ---------------------------------------------------------------------------
 # interview_agent_direct
 # ---------------------------------------------------------------------------
+
+
+class TestPlatformResolution:
+    """Ein platform-Override je Item muss die Personas dieser Plattform treffen."""
+
+    TWITTER_PROFILES = [
+        {"user_id": 0, "name": "Nina Twitter", "user_char": "Kurzform-Persona"},
+    ]
+
+    def _store_with_both(self) -> MagicMock:
+        store = MagicMock()
+
+        def read_json(simulation_id, name, default=None):
+            if name == "reddit_profiles":
+                return PROFILES
+            if name == "simulation_config":
+                return SIM_CONFIG
+            return default
+
+        store.read_json.side_effect = read_json
+        return store
+
+    def test_item_platform_override_uses_that_platform_personas(self, tmp_path) -> None:
+        sim_dir = tmp_path / "sim_0123456789ab"
+        sim_dir.mkdir()
+        (sim_dir / "twitter_profiles.csv").write_text(
+            "user_id,name,username,user_char,description\n"
+            "0,Nina Twitter,nina,Kurzform-Persona,Bio\n",
+            encoding="utf-8",
+        )
+        client = _FakeLLMClient()
+
+        with patch.object(interview_direct, "_store", return_value=self._store_with_both()):
+            result = interview_agents_batch_direct(
+                "sim_0123456789ab",
+                [{"agent_id": 0, "prompt": "Frage", "platform": "twitter"}],
+                run_state_dir=str(tmp_path),
+                client_factory=lambda: client,
+            )
+
+        entry = result["result"]["results"]["twitter_0"]
+        assert entry["platform"] == "twitter"
+        assert "Nina Twitter" in client.calls[0]["messages"][0]["content"]
+
+    def test_twitter_only_run_is_answerable(self, tmp_path) -> None:
+        """Ein Lauf ohne reddit_profiles darf nicht am Default scheitern."""
+        sim_dir = tmp_path / "sim_0123456789ab"
+        sim_dir.mkdir()
+        (sim_dir / "twitter_profiles.csv").write_text(
+            "user_id,name,username,user_char,description\n"
+            "0,Nina Twitter,nina,Kurzform-Persona,Bio\n",
+            encoding="utf-8",
+        )
+        store = _store_mock(profiles=[])
+        client = _FakeLLMClient()
+
+        with patch.object(interview_direct, "_store", return_value=store):
+            result = interview_agents_batch_direct(
+                "sim_0123456789ab",
+                [{"agent_id": 0, "prompt": "Frage"}],
+                run_state_dir=str(tmp_path),
+                client_factory=lambda: client,
+            )
+
+        assert result["success"] is True
+        assert result["result"]["results"]["twitter_0"]["response"]
+
+
+class TestBatchDeadline:
+    def test_items_after_the_deadline_are_marked_not_started(self, tmp_path) -> None:
+        """`timeout` ist eine Deadline fuer den Batch, nicht pro Item."""
+        sim_dir = tmp_path / "sim_0123456789ab"
+        sim_dir.mkdir()
+        store = _store_mock()
+        clock = iter([0.0, 0.0, 999.0, 999.0, 999.0, 999.0])
+        client = _FakeLLMClient()
+
+        with patch.object(interview_direct, "_store", return_value=store), patch.object(
+            interview_direct.time, "monotonic", side_effect=lambda: next(clock)
+        ):
+            result = interview_agents_batch_direct(
+                "sim_0123456789ab",
+                [
+                    {"agent_id": 0, "prompt": "Frage A"},
+                    {"agent_id": 1, "prompt": "Frage B"},
+                ],
+                timeout=30.0,
+                run_state_dir=str(tmp_path),
+                client_factory=lambda: client,
+                # Sequentiell, damit die Uhr deterministisch abgefragt wird.
+                max_workers=1,
+            )
+
+        entries = result["result"]["results"]
+        assert entries["reddit_0"]["response"]
+        assert "Deadline" in entries["reddit_1"]["error"]
+        assert len(client.calls) == 1
+
+
+class TestClientFactory:
+    def test_prefers_the_route_persisted_with_the_run(self, tmp_path) -> None:
+        """Die aktive Workspace-Auswahl darf das Interview-Modell nicht verschieben."""
+        captured: List[Dict[str, Any]] = []
+
+        class _Client:
+            def __init__(self, **kwargs):
+                captured.append(kwargs)
+
+            def chat(self, messages, **_kwargs):
+                return "Antwort"
+
+        context = {
+            "requirement": "",
+            "language": "de",
+            "llm_model": "MiniMax-M3",
+            "llm_base_url": "https://api.example.test/v1",
+        }
+        with patch.dict("sys.modules"):
+            import app.llm.client as llm_client_module
+
+            with patch.object(llm_client_module, "LLMClient", _Client):
+                factory = interview_direct._default_client_factory(90.0, context)
+                factory()
+
+        assert captured[0]["model"] == "MiniMax-M3"
+        assert captured[0]["base_url"] == "https://api.example.test/v1"
+        assert captured[0]["timeout"] == 90.0
+
+    def test_falls_back_to_active_config_when_route_unusable(self, tmp_path) -> None:
+        attempts: List[Dict[str, Any]] = []
+
+        class _Client:
+            def __init__(self, **kwargs):
+                attempts.append(kwargs)
+                if kwargs.get("model"):
+                    raise ValueError("LLM_API_KEY not configured")
+
+        context = {"llm_model": "tot", "llm_base_url": ""}
+        import app.llm.client as llm_client_module
+
+        with patch.object(llm_client_module, "LLMClient", _Client):
+            interview_direct._default_client_factory(60.0, context)()
+
+        assert len(attempts) == 2
+        assert attempts[1] == {"timeout": 60.0}
 
 
 class TestInterviewClientRouting:

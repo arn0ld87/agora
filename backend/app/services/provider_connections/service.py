@@ -5,7 +5,10 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 
 from app.contracts.ai_provider_contract import ProviderConnection, ProviderStatus
-from app.services.llm_provider_secrets_store import LlmProviderSecretsStore
+from app.services.llm_provider_secrets_store import (
+    LlmProviderSecretsStore,
+    SecretDecryptionError,
+)
 from app.services.provider_connection_store import ProviderConnectionStore
 
 from .adapters import ProviderConnectionAdapter, ProviderProbeResult, adapter_for_connection
@@ -42,11 +45,18 @@ class ProviderConnectionService:
                 if connection.secret_ref
                 else None
             )
-        except RuntimeError:
-            # Ciphertext passt nicht zum aktuellen AGORA_SECRET_KEY (Key rotiert
-            # oder neu generiert). Das ist ein Credential-Defekt genau dieser
-            # Connection und darf die Discovery-Route nicht als 500 sprengen —
-            # der Key bleibt unbenutzt, der Status wird sichtbar hart.
+        except SecretDecryptionError:
+            # Ciphertext genau dieser Connection passt nicht zum aktuellen
+            # AGORA_SECRET_KEY (Key rotiert oder neu generiert). Das ist ein
+            # Credential-Defekt einer Connection und darf die Discovery-Route
+            # nicht als 500 sprengen — der Key bleibt unbenutzt, der Status wird
+            # sichtbar hart.
+            #
+            # Bewusst NICHT breiter gefangen: fehlender oder ungültiger
+            # AGORA_SECRET_KEY und eine unlesbare Store-Datei sind globale
+            # Konfigurationsfehler. Als "invalid_credentials" getarnt würde
+            # jede Connection einzeln defekt aussehen und die eigentliche
+            # Diagnose verschwinden — die fliegen weiter als RuntimeError.
             result = ProviderProbeResult(
                 status="invalid_credentials",
                 status_message=(

@@ -24,6 +24,15 @@ describe('extractReportAnswer', () => {
     expect(extractReportAnswer({ message: 'aus message' })).toBe('aus message')
   })
 
+  it('nutzt aeussere Legacy-Felder, wenn response kein Textfeld hat', () => {
+    expect(extractReportAnswer({ response: { tool_calls: [] }, answer: 'aus answer' })).toBe(
+      'aus answer',
+    )
+    expect(extractReportAnswer({ response: { sources: [] }, message: 'aus message' })).toBe(
+      'aus message',
+    )
+  })
+
   it('liefert leeren String statt eines Objekts', () => {
     expect(extractReportAnswer({ response: { tool_calls: [] } })).toBe('')
     expect(extractReportAnswer({})).toBe('')

@@ -121,7 +121,7 @@ async function send() {
       if (res?.success) {
         chatHistory.value.push({
           role: 'assistant',
-          content: extractReportAnswer(res.data) || '(no response)',
+          content: extractReportAnswer(res.data) || t('step5.noResponse'),
           ts: Date.now()
         })
       }
@@ -137,7 +137,7 @@ async function send() {
         const entries = Object.values(resultsDict)
         const pick = entries.find((r) => r?.platform === 'reddit') || entries[0]
         const answer = pick?.response || pick?.answer || pick?.result || ''
-        chatHistory.value.push({ role: 'assistant', content: answer || '(no response)', ts: Date.now() })
+        chatHistory.value.push({ role: 'assistant', content: answer || t('step5.noResponse'), ts: Date.now() })
       }
     }
   } catch (err) {

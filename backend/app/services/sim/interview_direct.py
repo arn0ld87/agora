@@ -23,6 +23,7 @@ import json
 import os
 import sqlite3
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
@@ -130,6 +131,9 @@ def _simulation_context(simulation_id: str) -> Dict[str, Any]:
     return {
         "requirement": (config.get("simulation_requirement") or "").strip(),
         "language": config.get("language") or "de",
+        # Route des Laufs — siehe _default_client_factory.
+        "llm_model": (config.get("llm_model") or "").strip(),
+        "llm_base_url": (config.get("llm_base_url") or "").strip(),
     }
 
 
@@ -252,10 +256,37 @@ def _persist_interview(
 # ---------------------------------------------------------------------------
 
 
-def _default_client_factory(timeout: float) -> Callable[[], Any]:
+def _default_client_factory(
+    timeout: float, context: Dict[str, Any]
+) -> Callable[[], Any]:
+    """Client-Factory, die die im Lauf verwendete Route bevorzugt.
+
+    Ein blanker ``LLMClient()`` würde die *aktuelle* Workspace-Auswahl auflösen.
+    Dieselbe Persona antwortete dann je nach Zeitpunkt mit einem anderen Modell
+    oder sogar über einen anderen Provider, nur weil das Interview nach
+    Simulationsende gestellt wurde. ``simulation_config`` hält ``llm_model`` und
+    ``llm_base_url`` des Laufs fest — die haben Vorrang.
+
+    Lässt sich damit kein Client bauen (z. B. weil der Key des Laufs nicht mehr
+    auflösbar ist), fällt die Factory sichtbar auf die aktive Konfiguration
+    zurück, statt das Interview scheitern zu lassen.
+    """
+
     def factory():
         from ...llm.client import LLMClient
 
+        model = context.get("llm_model") or None
+        base_url = context.get("llm_base_url") or None
+        if model:
+            try:
+                return LLMClient(model=model, base_url=base_url, timeout=timeout)
+            except Exception as exc:  # noqa: BLE001 — Fallback ist besser als Abbruch
+                logger.warning(
+                    "Route des Laufs (model=%s) nicht nutzbar (%s) — Interview "
+                    "nutzt die aktive Konfiguration",
+                    model,
+                    exc,
+                )
         return LLMClient(timeout=timeout)
 
     return factory
@@ -306,6 +337,7 @@ def interview_agents_batch_direct(
     run_state_dir: str,
     client_factory: Optional[Callable[[], Any]] = None,
     max_tokens: int = 1024,
+    max_workers: int = _MAX_WORKERS,
 ) -> Dict[str, Any]:
     """Beantworte mehrere Interviews direkt über den LLM-Client.
 
@@ -313,36 +345,71 @@ def interview_agents_batch_direct(
     (``{"result": {"results": {"<platform>_<agent_id>": {...}}}}``) und ergänzt
     ``mode="direct"`` sowie ``simulated=True`` je Eintrag.
 
+    Zwei bewusste Abweichungen vom IPC-Pfad:
+
+    - Ohne ``platform`` fächert IPC das Interview auf *beide* Plattformen auf.
+      Der Direktpfad tut das nicht: dieselbe Frage an dieselbe Persona zweimal
+      zu stellen verdoppelt nur Kosten und Laufzeit, und das Frontend
+      dedupliziert ohnehin auf eine Antwort pro ``agent_id``. Personas werden
+      pro *effektiver* Plattform des Items aufgelöst, ein
+      ``platform``-Override je Item greift also wirklich.
+    - ``timeout`` gilt als Deadline für den gesamten Batch, nicht pro Item.
+
     Raises:
-        ValueError: Simulation existiert nicht oder es sind keine Personas
-            persistiert.
+        ValueError: Simulation existiert nicht oder es sind für keine Plattform
+            Personas persistiert.
     """
     sim_dir = os.path.join(run_state_dir, simulation_id)
     if not os.path.exists(sim_dir):
         raise ValueError(f"Simulation does not exist: {simulation_id}")
 
-    effective_platform = platform if platform in ("twitter", "reddit") else DEFAULT_PLATFORM
-    personas = _load_personas(simulation_id, effective_platform, run_state_dir=run_state_dir)
-    if not personas and effective_platform != DEFAULT_PLATFORM:
-        personas = _load_personas(simulation_id, DEFAULT_PLATFORM, run_state_dir=run_state_dir)
-        if personas:
-            effective_platform = DEFAULT_PLATFORM
-    if not personas:
+    persona_cache: Dict[str, List[Dict[str, Any]]] = {}
+
+    def _personas_for(name: str) -> List[Dict[str, Any]]:
+        if name not in persona_cache:
+            persona_cache[name] = _load_personas(
+                simulation_id, name, run_state_dir=run_state_dir
+            )
+        return persona_cache[name]
+
+    requested_platform = platform if platform in ("twitter", "reddit") else None
+    # Default-Plattform: die angeforderte, sonst die mit persistierten Personas.
+    default_platform = requested_platform or DEFAULT_PLATFORM
+    if not _personas_for(default_platform):
+        fallback = "twitter" if default_platform == "reddit" else "reddit"
+        if _personas_for(fallback):
+            default_platform = fallback
+
+    if not any(_personas_for(name) for name in ("reddit", "twitter")):
         raise ValueError(
             f"Keine Persona-Profile fuer Simulation {simulation_id} persistiert — "
             "Interview ohne laufende Umgebung nicht moeglich"
         )
 
     context = _simulation_context(simulation_id)
-    clients = _ThreadLocalClients(client_factory or _default_client_factory(timeout))
+    clients = _ThreadLocalClients(
+        client_factory or _default_client_factory(timeout, context)
+    )
     timestamp = datetime.now().isoformat()
+    # Gesamt-Deadline: ohne sie summieren sich bei mehr als _MAX_WORKERS Items
+    # die Wellen zu einem Vielfachen des angefragten Timeouts auf. Ein bereits
+    # laufender Call wird nicht abgebrochen — die Obergrenze ist damit
+    # Deadline plus die Dauer eines einzelnen Calls.
+    deadline = time.monotonic() + max(1.0, timeout)
 
     def _run(item: Dict[str, Any]) -> Dict[str, Any]:
         agent_id = item.get("agent_id")
         prompt = item.get("prompt", "")
         item_platform = item.get("platform")
         if item_platform not in ("twitter", "reddit"):
-            item_platform = effective_platform
+            item_platform = default_platform
+
+        personas = _personas_for(item_platform)
+        if not personas and item_platform != default_platform:
+            # Item verlangt eine Plattform ohne Profile — auf die Plattform
+            # ausweichen, die welche hat, statt hart zu scheitern.
+            item_platform = default_platform
+            personas = _personas_for(item_platform)
 
         entry: Dict[str, Any] = {
             "agent_id": agent_id,
@@ -357,6 +424,13 @@ def interview_agents_batch_direct(
         persona = _resolve_persona(personas, agent_id)
         if persona is None:
             entry["error"] = f"Keine Persona zu agent_id={agent_id} gefunden"
+            return entry
+
+        if time.monotonic() >= deadline:
+            entry["error"] = (
+                f"Batch-Deadline von {timeout:.0f}s überschritten — Interview "
+                "nicht mehr gestartet"
+            )
             return entry
 
         try:
@@ -387,12 +461,12 @@ def interview_agents_batch_direct(
 
     logger.info(
         f"Direkt-Interview (ohne IPC): simulation_id={simulation_id}, "
-        f"count={len(interviews)}, platform={effective_platform}"
+        f"count={len(interviews)}, platform={default_platform}"
     )
 
     entries: List[Dict[str, Any]] = []
     if interviews:
-        workers = max(1, min(_MAX_WORKERS, len(interviews)))
+        workers = max(1, min(max_workers, len(interviews)))
         if workers == 1:
             entries = [_run(item) for item in interviews]
         else:

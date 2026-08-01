@@ -21,10 +21,17 @@ export function extractReportAnswer(data: ReportChatPayload | null | undefined):
 
   const payload = data.response
   if (typeof payload === 'string') return payload
-  if (payload && typeof payload === 'object') {
-    const nested = payload as ReportChatPayload
-    return asText(nested.response) || asText(nested.answer) || asText(nested.message)
-  }
 
-  return asText(data.answer) || asText(data.message)
+  const nested = payload && typeof payload === 'object' ? (payload as ReportChatPayload) : null
+
+  // Reihenfolge: verschachtelter Payload zuerst, dann die aeusseren
+  // Legacy-Felder. Ein Objekt ohne Textfeld darf die Kette nicht abbrechen —
+  // sonst geht ein daneben liegendes data.answer verloren.
+  return (
+    asText(nested?.response) ||
+    asText(nested?.answer) ||
+    asText(nested?.message) ||
+    asText(data.answer) ||
+    asText(data.message)
+  )
 }

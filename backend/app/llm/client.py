@@ -10,7 +10,6 @@ orchestration in ``app.llm.json_mode``, and native tool-calling in
 ``app.llm.tool_calls``.
 """
 
-import json
 import os
 import re
 import time as _time_mod
@@ -36,8 +35,8 @@ from .json_mode import (
     _is_json_object_mode_disabled,
     _is_json_schema_mode_disabled,
     _read_active_config_safely,
+    _parse_llm_json,
     _strip_llm_json_envelope,
-    _try_repair_truncated_json,
 )
 from .providers import base as _provider_base
 from .providers import ollama as _provider_ollama
@@ -1117,8 +1116,11 @@ class LLMClient:
                     )
                     self._budget_record()
                     cleaned_response = _strip_llm_json_envelope(ollama_response)
-                    parsed: Dict[str, Any] = json.loads(cleaned_response)
-                    return self._maybe_validate(parsed, schema)
+                    # Gleicher Parse-/Repair-/Diagnose-Pfad wie unten — sonst
+                    # kaeme aus dem nativen Pfad ein nackter JSONDecodeError.
+                    return self._maybe_validate(
+                        _parse_llm_json(cleaned_response), schema
+                    )
             # Strict-schema path: single fallback on unsupported-provider errors.
             try:
                 response = self.chat(
@@ -1162,42 +1164,7 @@ class LLMClient:
         # Codefences + Prosa-Envelope entfernen (Issue #556).
         cleaned_response = _strip_llm_json_envelope(response)
 
-        try:
-            parsed: Dict[str, Any] = json.loads(cleaned_response)
-        except json.JSONDecodeError:
-            repaired = _try_repair_truncated_json(cleaned_response)
-            if repaired is not None:
-                logger.warning(
-                    "LLM JSON looked truncated; recovered with best-effort repair "
-                    "(%d → %d chars). Consider raising the max_tokens budget for "
-                    "this caller.",
-                    len(cleaned_response), len(repaired),
-                )
-                try:
-                    parsed = json.loads(repaired)
-                except json.JSONDecodeError:
-                    pass
-                else:
-                    return self._maybe_validate(parsed, schema)
-            preview = cleaned_response[:400]
-            tail = cleaned_response[-200:] if len(cleaned_response) > 600 else ""
-            # Truncation ist an dieser Stelle ausgeschlossen: chat() wird in
-            # chat_json() durchgaengig mit require_complete=True aufgerufen und
-            # wirft bei finish_reason == "length" bereits LLMOutputTruncatedError.
-            # Wer hier landet, hat eine *vollstaendige* Antwort erhalten, die kein
-            # gueltiges JSON ist — ein Prompt-/Schema-/Provider-Problem, kein
-            # Budget-Problem. Die frueher hier stehende Empfehlung
-            # "likely truncated — try raising max_tokens" war strukturell falsch
-            # und hat Debugging systematisch in die falsche Richtung geschickt.
-            raise ValueError(
-                "Invalid JSON format from LLM: provider returned a complete "
-                "response (finish_reason != 'length') that is not valid JSON "
-                f"(len={len(cleaned_response)}). Raising max_tokens will NOT "
-                "help — check prompt, schema or provider json_schema support. "
-                f"Head: {preview}{'…' if tail else ''}"
-                + (f" Tail: …{tail}" if tail else "")
-            )
-        return self._maybe_validate(parsed, schema)
+        return self._maybe_validate(_parse_llm_json(cleaned_response), schema)
 
 
 # Methode in LLMClient einbinden (siehe app/llm/tool_calls.py — Kommentar dort)
