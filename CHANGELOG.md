@@ -5,6 +5,12 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (Budget-Telemetrie — 2026-08-01, PR #998, Refs #764)
+
+- **Ein lokaler Verarbeitungsfehler nach HTTP 200 zählte nicht als Providerattempt.** Nach erfolgreichem `create()` kann die Antwortverarbeitung noch scheitern — leeres `choices`, `message` ohne `content`, fehlende `usage`-Attribute. Diese Exception flog bisher am Telemetriepfad vorbei: `_provider_attempt` hatte den HTTP-Attempt bereits als Success verbucht, für den anschließend fehlgeschlagenen lokalen Schritt entstand aber weder Failure-Event noch `_budget_record`. Der weiche `max_llm_calls`-Limit zählte den Call damit nicht mit, und die Invocation-Telemetrie verlor ihn still. Jetzt entsteht genau **ein** Failure-Event und **ein** Record, die Exception bleibt unverändert — kein zusätzlicher Providerrequest, kein doppeltes Event.
+- **Abgerechnete Tokens bleiben im Fehlerfall erhalten.** `usage` wird vor dem `choices`-Zugriff gelesen: eine malformed Antwort kann trotzdem Prompt- und Completion-Totals tragen. `run_usage_ledger._Bucket.add` leitet Verbrauch und Kosten ausschließlich aus den Event-Feldern ab — fehlen sie, ist der Call zwar gezählt, sein Verbrauch aber unbekannt, und nachfolgende harte Token- und Kostenchecks lassen zu viele Folgecalls durch. Nicht-numerische Providerwerte werden per `isinstance`-Guard verworfen statt als Tokenzahl ins Ledger zu wandern.
+- **Herkunft:** Restpunkt aus dem Review zu #764. Der Fix lag als uncommittete Änderung in einem Worktree und ist beim Abschluss von PR #975/#976 nie in einen PR gewandert; beim Branch-Cleanup aufgefallen.
+
 ### Fixed (Durchlauf-Blocker aus dem Browser-Test — 2026-08-01, PR #997)
 
 - **Interview-Chat antwortete nach Simulationsende nie und lief in einen 120-Sekunden-Timeout.** Zwei Ursachen, von denen nur die erste offensichtlich war: `SimulationIPCServer.poll_commands()` wird vom regulären Simulations-Worker nie aufgerufen (einzige Aufrufer sind Tests und `run_parallel_simulation.py`), ein Interview-Kommando wurde also nie beantwortet. Zusätzlich meldete `check_env_alive()` weiterhin `alive`: `env_status.json` bleibt nach dem Lauf auf diesem Stand stehen, und ohne `pid` im Status lief auch die PID-Gegenprobe ins Leere. Der zweite Punkt ist der entscheidende — ohne ihn hätte jede Umleitung weiter auf den toten IPC-Pfad gezeigt.
