@@ -72,6 +72,45 @@ def test_probe_persists_normalized_result_without_secret(
     }
 
 
+class _BrokenSecrets:
+    """Ciphertext passt nicht zum aktuellen AGORA_SECRET_KEY."""
+
+    def get_plaintext(self, provider_id: str) -> str | None:
+        raise RuntimeError(
+            "LLM-Provider-Key konnte nicht entschlüsselt werden. "
+            f"AGORA_SECRET_KEY passt nicht zum Ciphertext für '{provider_id}'."
+        )
+
+
+class _ExplodingAdapter:
+    def probe(
+        self, connection: ProviderConnection, api_key: str | None
+    ) -> ProviderProbeResult:
+        raise AssertionError("Adapter darf ohne entschlüsselbaren Key nicht laufen")
+
+
+def test_probe_reports_invalid_credentials_when_secret_undecryptable() -> None:
+    store = _Store(_connection())
+    service = ProviderConnectionService(
+        store=store,
+        secrets_store=_BrokenSecrets(),
+        adapter_factory=lambda _kind: _ExplodingAdapter(),
+        now=lambda: datetime(2026, 8, 1, tzinfo=timezone.utc),
+    )
+
+    result = service.probe(_connection())
+
+    assert result.status == "invalid_credentials"
+    assert result.models == ()
+    assert store.updated is not None
+    assert store.updated["status"] == "error"
+    assert store.updated["tested_at"] == datetime(2026, 8, 1, tzinfo=timezone.utc)
+    # Diagnose nennt den Grund, ohne Key-Material zu leaken.
+    message = str(store.updated["status_message"])
+    assert "AGORA_SECRET_KEY" in message
+    assert "secret-value" not in message
+
+
 class _Adapter:
     def __init__(self, result: ProviderProbeResult) -> None:
         self._result = result

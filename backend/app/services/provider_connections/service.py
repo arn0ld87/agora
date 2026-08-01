@@ -36,11 +36,31 @@ class ProviderConnectionService:
         self._now = now
 
     def probe(self, connection: ProviderConnection) -> ProviderProbeResult:
-        api_key = (
-            self._secrets_store.get_plaintext(connection.secret_ref)
-            if connection.secret_ref
-            else None
-        )
+        try:
+            api_key = (
+                self._secrets_store.get_plaintext(connection.secret_ref)
+                if connection.secret_ref
+                else None
+            )
+        except RuntimeError:
+            # Ciphertext passt nicht zum aktuellen AGORA_SECRET_KEY (Key rotiert
+            # oder neu generiert). Das ist ein Credential-Defekt genau dieser
+            # Connection und darf die Discovery-Route nicht als 500 sprengen —
+            # der Key bleibt unbenutzt, der Status wird sichtbar hart.
+            result = ProviderProbeResult(
+                status="invalid_credentials",
+                status_message=(
+                    "Hinterlegter Key ist mit dem aktuellen AGORA_SECRET_KEY nicht "
+                    "entschlüsselbar. Key unter Einstellungen → LLM-Provider neu hinterlegen."
+                ),
+            )
+            self._store.update_probe(
+                connection.id,
+                status=_STORE_STATUS[result.status],
+                status_message=result.status_message,
+                tested_at=self._now(),
+            )
+            return result
         result = self._adapter_factory(connection.provider_kind).probe(connection, api_key)
         self._store.update_probe(
             connection.id,
