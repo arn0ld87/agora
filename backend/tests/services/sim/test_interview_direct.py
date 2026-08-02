@@ -9,12 +9,15 @@ eine Interview-Antwort ist Freitext, kein strukturiertes JSON.
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
+from types import SimpleNamespace
 from typing import Any, Dict, List
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app.config import Config
 from app.services.sim import interview_direct
 from app.services.sim.interview_direct import (
     direct_interviews_available,
@@ -360,8 +363,18 @@ class TestBatchDeadline:
 
 
 class TestClientFactory:
-    def test_prefers_the_route_persisted_with_the_run(self, tmp_path) -> None:
-        """Die aktive Workspace-Auswahl darf das Interview-Modell nicht verschieben."""
+    def test_prefers_the_route_persisted_with_the_run(self, tmp_path, monkeypatch) -> None:
+        """Die aktive Workspace-Auswahl darf das Interview-Modell nicht verschieben.
+
+        Ohne eine passende ProviderConnection bleibt Modell/Base-URL des Laufs
+        nur dann maßgeblich, wenn die Base-URL des Laufs der globale Endpunkt
+        ist (#1000, Fall 4) — sonst wuerde Config.LLM_API_KEY an einen fremden
+        Endpunkt gehen. Die Base-URL des Kontexts wird deshalb bewusst auf
+        Config.LLM_BASE_URL gelegt; die Store-Auflösung wird explizit leer
+        gehalten, damit der Test nicht zufällig von echten, im Data-Dir
+        liegenden Connections abhängt.
+        """
+        monkeypatch.setattr(Config, "LLM_BASE_URL", "https://api.example.test/v1")
         captured: List[Dict[str, Any]] = []
 
         class _Client:
@@ -377,15 +390,85 @@ class TestClientFactory:
             "llm_model": "MiniMax-M3",
             "llm_base_url": "https://api.example.test/v1",
         }
+        empty_store = MagicMock()
+        empty_store.list_connections.return_value = []
         with patch.dict("sys.modules"):
             import app.llm.client as llm_client_module
 
-            with patch.object(llm_client_module, "LLMClient", _Client):
+            with patch.object(llm_client_module, "LLMClient", _Client), patch(
+                "app.services.provider_connection_store.ProviderConnectionStore",
+                return_value=empty_store,
+            ):
                 factory = interview_direct._default_client_factory(90.0, context)
                 factory()
 
         assert captured[0]["model"] == "MiniMax-M3"
         assert captured[0]["base_url"] == "https://api.example.test/v1"
+        assert captured[0]["timeout"] == 90.0
+
+    def test_uses_connection_secret_when_route_matches_an_enabled_connection(
+        self, monkeypatch
+    ) -> None:
+        """Route ohne persistierte connection_id — die Base-URL identifiziert sie.
+
+        Regressionstest zu Issue #1000: ``_default_client_factory`` baute den
+        Client bisher ohne ``api_key``, weil ``model`` gesetzt war und der
+        Registry-/SecretResolver-Zweig in ``LLMClient.__init__`` deshalb nie
+        griff. Ein Key, der nur verschlüsselt in der ProviderConnection liegt,
+        erreichte den Client nie.
+        """
+        monkeypatch.setattr(Config, "LLM_API_KEY", "")
+
+        connection = SimpleNamespace(
+            id="connection-under-test",
+            provider_kind="openai",
+            base_url="https://api.example.test/v1",
+            enabled=True,
+            auth_mode="api_key",
+            secret_ref="connection-under-test-secret",
+        )
+        store = MagicMock()
+        store.list_connections.return_value = [connection]
+        secrets_store = MagicMock()
+        secrets_store.get_plaintext.side_effect = lambda ref: {
+            "connection-under-test-secret": "connection-secret-for-test",
+        }.get(ref)
+
+        captured: List[Dict[str, Any]] = []
+
+        class _Client:
+            def __init__(self, **kwargs):
+                captured.append(kwargs)
+
+            def chat(self, messages, **_kwargs):
+                return "Antwort"
+
+        context = {
+            "requirement": "",
+            "language": "de",
+            "llm_model": "gpt-4.1-mini",
+            "llm_base_url": "https://api.example.test/v1",
+        }
+        import app.llm.client as llm_client_module
+
+        with patch.object(llm_client_module, "LLMClient", _Client), patch(
+            "app.services.provider_connection_store.ProviderConnectionStore",
+            return_value=store,
+        ), patch(
+            "app.services.llm_provider_secrets_store.get_llm_provider_secrets_store",
+            return_value=secrets_store,
+        ):
+            factory = interview_direct._default_client_factory(90.0, context)
+            factory()
+
+        assert len(captured) == 1
+        assert captured[0]["model"] == "gpt-4.1-mini"
+        assert captured[0]["base_url"] == "https://api.example.test/v1"
+        assert captured[0]["api_key"] == "connection-secret-for-test"
+        assert captured[0]["route_provider_id"] == "connection-under-test"
+        assert captured[0]["api_key_source"] == "connection_store"
+        assert captured[0]["use_active_config"] is False
+        assert captured[0]["allow_api_key_fallback"] is False
         assert captured[0]["timeout"] == 90.0
 
     def test_falls_back_to_active_config_when_route_unusable(self, tmp_path) -> None:
@@ -405,6 +488,179 @@ class TestClientFactory:
 
         assert len(attempts) == 2
         assert attempts[1] == {"timeout": 60.0}
+
+    def test_falls_back_and_logs_named_degradation_when_no_connection_resolves(
+        self, monkeypatch
+    ) -> None:
+        """Akzeptanzkriterium 2: Config.LLM_API_KEY/aktive Konfiguration greifen nur,
+        wenn der Lauf keine Connection referenziert — und das erscheint im Log.
+
+        ``setup_logger`` setzt ``propagate=False`` (siehe
+        ``app/utils/logger.py``), daher kann ``caplog`` hier nichts einfangen
+        — dieselbe Einschränkung dokumentiert bereits
+        ``tests/test_llm_client.py``. Der Nachweis läuft deshalb über ein
+        direktes Monkeypatch von ``logger.warning``.
+
+        Die Base-URL des Kontexts wird bewusst auf ``Config.LLM_BASE_URL``
+        gelegt (#1000, Fall 4): nur dort gehoert Config.LLM_API_KEY zur
+        Base-URL des Laufs; zeigte die Route auf einen fremden Endpunkt,
+        waere Fall 3 einschlaegig und Config.LLM_API_KEY duerfte nicht
+        genannt werden (siehe ``test_falls_back_when_base_url_points_elsewhere``).
+        """
+        monkeypatch.setattr(Config, "LLM_BASE_URL", "https://api.example.test/v1")
+        warnings: List[str] = []
+        interview_logger = logging.getLogger("agora.interview_direct")
+        monkeypatch.setattr(
+            interview_logger,
+            "warning",
+            lambda msg, *args, **kwargs: warnings.append(msg % args if args else msg),
+        )
+
+        empty_store = MagicMock()
+        empty_store.list_connections.return_value = []
+
+        class _Client:
+            def __init__(self, **kwargs):
+                pass
+
+            def chat(self, messages, **_kwargs):
+                return "Antwort"
+
+        context = {"llm_model": "gpt-4.1-mini", "llm_base_url": "https://api.example.test/v1"}
+        import app.llm.client as llm_client_module
+
+        with patch.object(llm_client_module, "LLMClient", _Client), patch(
+            "app.services.provider_connection_store.ProviderConnectionStore",
+            return_value=empty_store,
+        ):
+            interview_direct._default_client_factory(60.0, context)()
+
+        assert any(
+            "keine" in w and "ProviderConnection" in w and "Config.LLM_API_KEY" in w
+            for w in warnings
+        ), warnings
+
+    def test_falls_back_completely_when_connection_has_no_usable_secret(
+        self, monkeypatch
+    ) -> None:
+        """Fall 2 (#1000-Nachziehfix): eine aktivierte Connection wird ueber die
+
+        Base-URL des Laufs getroffen, ihr Secret ist aber nicht aufloesbar
+        (``resolve_connection_for_base_url`` liefert ``(None, connection_id,
+        "api_key")``). Config.LLM_API_KEY darf dann NICHT mit der Base-URL des
+        Laufs kombiniert werden — der Client wird ausschliesslich mit
+        ``timeout`` gebaut, ohne ``model``/``base_url``. Das ist der eigentliche
+        Sicherheitsgewinn dieses Fixes.
+
+        ``caplog`` faengt hier nichts ein, weil ``setup_logger`` fuer
+        ``agora.interview_direct`` ``propagate=False`` setzt (dieselbe
+        dokumentierte Einschraenkung wie in
+        ``test_falls_back_and_logs_named_degradation_when_no_connection_resolves``
+        und ``tests/test_llm_client.py``) — der Nachweis laeuft deshalb ueber
+        dasselbe Monkeypatch-von-``logger.warning``-Muster.
+        """
+        warnings: List[str] = []
+        interview_logger = logging.getLogger("agora.interview_direct")
+        monkeypatch.setattr(
+            interview_logger,
+            "warning",
+            lambda msg, *args, **kwargs: warnings.append(msg % args if args else msg),
+        )
+
+        connection = SimpleNamespace(
+            id="connection-under-test",
+            provider_kind="openai",
+            base_url="https://api.example.test/v1",
+            enabled=True,
+            auth_mode="api_key",
+            secret_ref="connection-under-test-secret",
+        )
+        store = MagicMock()
+        store.list_connections.return_value = [connection]
+        secrets_store = MagicMock()
+        # Secret nicht (mehr) entschluesselbar / vorhanden.
+        secrets_store.get_plaintext.return_value = None
+
+        captured: List[Dict[str, Any]] = []
+
+        class _Client:
+            def __init__(self, **kwargs):
+                captured.append(kwargs)
+
+            def chat(self, messages, **_kwargs):
+                return "Antwort"
+
+        context = {
+            "requirement": "",
+            "language": "de",
+            "llm_model": "gpt-4.1-mini",
+            "llm_base_url": "https://api.example.test/v1",
+        }
+        import app.llm.client as llm_client_module
+
+        with patch.object(llm_client_module, "LLMClient", _Client), patch(
+            "app.services.provider_connection_store.ProviderConnectionStore",
+            return_value=store,
+        ), patch(
+            "app.services.llm_provider_secrets_store.get_llm_provider_secrets_store",
+            return_value=secrets_store,
+        ):
+            interview_direct._default_client_factory(60.0, context)()
+
+        assert len(captured) == 1
+        assert captured[0] == {"timeout": 60.0}
+        assert any("haelt kein nutzbares Secret" in w for w in warnings), warnings
+
+    def test_falls_back_completely_when_base_url_points_elsewhere(
+        self, monkeypatch
+    ) -> None:
+        """Fall 3 (#1000-Nachziehfix): keine Connection referenziert die
+
+        Base-URL des Laufs, und diese Base-URL ist auch nicht der globale
+        ``Config.LLM_BASE_URL``. Config.LLM_API_KEY darf dann nicht an diesen
+        fremden Endpunkt gehen — vollstaendige Degradierung auf die aktive
+        Konfiguration (``LLMClient(timeout=...)``), ohne ``model``/``base_url``.
+        """
+        monkeypatch.setattr(Config, "LLM_BASE_URL", "http://localhost:11434/v1")
+        warnings: List[str] = []
+        interview_logger = logging.getLogger("agora.interview_direct")
+        monkeypatch.setattr(
+            interview_logger,
+            "warning",
+            lambda msg, *args, **kwargs: warnings.append(msg % args if args else msg),
+        )
+
+        empty_store = MagicMock()
+        empty_store.list_connections.return_value = []
+
+        captured: List[Dict[str, Any]] = []
+
+        class _Client:
+            def __init__(self, **kwargs):
+                captured.append(kwargs)
+
+            def chat(self, messages, **_kwargs):
+                return "Antwort"
+
+        context = {
+            "requirement": "",
+            "language": "de",
+            "llm_model": "gpt-4.1-mini",
+            "llm_base_url": "https://api.example.test/v1",
+        }
+        import app.llm.client as llm_client_module
+
+        with patch.object(llm_client_module, "LLMClient", _Client), patch(
+            "app.services.provider_connection_store.ProviderConnectionStore",
+            return_value=empty_store,
+        ):
+            interview_direct._default_client_factory(60.0, context)()
+
+        assert len(captured) == 1
+        assert captured[0] == {"timeout": 60.0}
+        assert any(
+            "zeigt nicht auf den globalen Endpunkt" in w for w in warnings
+        ), warnings
 
 
 class TestInterviewClientRouting:

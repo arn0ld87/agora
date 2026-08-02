@@ -1219,6 +1219,9 @@
   },
   "errors": {
     "network": "Netzwerkfehler. Server erreichbar?",
+    "authError": "Authentifizierungsfehler. Bitte Provider-Zugangsdaten (API-Key) prüfen",
+    "requestError": "Anfragefehler",
+    "serverError": "Serverfehler",
     "backend": "Backend-Fehler.",
     "noNeo4j": "Neo4j nicht erreichbar.",
     "noLlm": "LLM nicht erreichbar.",
