@@ -1643,7 +1643,9 @@ async def run_twitter_simulation(
         if not active_agents:
             # Log round end even without active agents (actions_count=0)
             if action_logger:
-                action_logger.log_round_end(round_num + 1, 0)
+                action_logger.log_round_end(
+                    round_num + 1, 0, simulated_minutes=simulated_minutes + minutes_per_round
+                )
             continue
 
         # Build actions
@@ -1712,7 +1714,13 @@ async def run_twitter_simulation(
                 )
 
         if action_logger:
-            action_logger.log_round_end(round_num + 1, round_action_count)
+            action_logger.log_round_end(
+                round_num + 1,
+                round_action_count,
+                # Zeit NACH Abschluss der Runde — simulated_minutes ist der Stand
+                # zu Rundenbeginn. Damit wächst der Wert je Runde streng monoton.
+                simulated_minutes=simulated_minutes + minutes_per_round,
+            )
 
         if (round_num + 1) % 20 == 0:
             progress = (round_num + 1) / total_rounds * 100
@@ -1925,7 +1933,9 @@ async def run_reddit_simulation(
         if not active_agents:
             # Log round end even without active agents (actions_count=0)
             if action_logger:
-                action_logger.log_round_end(round_num + 1, 0)
+                action_logger.log_round_end(
+                    round_num + 1, 0, simulated_minutes=simulated_minutes + minutes_per_round
+                )
             continue
 
         # Build actions
@@ -1993,7 +2003,13 @@ async def run_reddit_simulation(
                 )
 
         if action_logger:
-            action_logger.log_round_end(round_num + 1, round_action_count)
+            action_logger.log_round_end(
+                round_num + 1,
+                round_action_count,
+                # Zeit NACH Abschluss der Runde — simulated_minutes ist der Stand
+                # zu Rundenbeginn. Damit wächst der Wert je Runde streng monoton.
+                simulated_minutes=simulated_minutes + minutes_per_round,
+            )
 
         if (round_num + 1) % 20 == 0:
             progress = (round_num + 1) / total_rounds * 100

@@ -109,14 +109,16 @@ class SimulationRunState:
     # Progress information
     current_round: int = 0
     total_rounds: int = 0
-    simulated_hours: int = 0
+    # float: bei minutes_per_round=30 ist eine Runde 0.5 h — mit int wäre die
+    # Folge 0, 1, 1, 2 und der Fortschritt nicht mehr streng monoton (B-28).
+    simulated_hours: float = 0.0
     total_simulation_hours: int = 0
 
     # Per-platform independent rounds and simulated time (for dual-platform parallel display)
     twitter_current_round: int = 0
     reddit_current_round: int = 0
-    twitter_simulated_hours: int = 0
-    reddit_simulated_hours: int = 0
+    twitter_simulated_hours: float = 0.0
+    reddit_simulated_hours: float = 0.0
 
     # Platform status
     twitter_running: bool = False
