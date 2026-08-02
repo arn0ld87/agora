@@ -518,7 +518,10 @@ def generate_section_react(
                 })
                 continue
             logger.warning(
-                f"Section {section.title}: consecutive {conflict_retries} conflicts，downgraded to truncate and execute first tool call"
+                "Section %s: %s consecutive conflicts, falling back to truncating the "
+                "reply after the first tool call",
+                section.title,
+                conflict_retries,
             )
             first_tool_end = response.find('</tool_call>')
             if first_tool_end != -1:
@@ -558,7 +561,11 @@ def generate_section_react(
                 section_title=section.title,
                 section_index=section_index,
             )
-            logger.info(f"Section {section.title} generation completed (tool calls: {tool_calls_count}times)")
+            logger.info(
+                "Section %s generation completed (tool calls: %s)",
+                section.title,
+                tool_calls_count,
+            )
             if agent.report_logger:
                 agent.report_logger.log_section_content(
                     section_title=section.title,
@@ -641,7 +648,12 @@ def generate_section_react(
             section_title=section.title,
             section_index=section_index,
         )
-        logger.info(f"Section {section.title} did not detectto 'Final Answer:' prefix, sanitized LLM output adopted as final content（Tool call: {tool_calls_count}times)")
+        logger.info(
+            "Section %s: no 'Final Answer:' prefix detected, using the sanitized LLM "
+            "output as final content (tool calls: %s)",
+            section.title,
+            tool_calls_count,
+        )
         if agent.report_logger:
             agent.report_logger.log_section_content(
                 section_title=section.title,
@@ -652,7 +664,10 @@ def generate_section_react(
         agent._current_section_index = None
         return final_answer
 
-    logger.warning(f"Section {section.title} reachedmaximumiterationscount，Forcegenerate")
+    logger.warning(
+        "Section %s reached the maximum iteration count, forcing final generation",
+        section.title,
+    )
     messages.append({"role": "user", "content": agent.REACT_FORCE_FINAL_MSG})
     if _toolcall_mode == "native":
         force_result = agent.llm.chat_with_tools(
@@ -899,7 +914,7 @@ def generate_report(
         )
         agent.console_logger = agent.ReportConsoleLogger(report_id)
 
-        ReportManager.update_progress(report_id, "pending", 0, "Initializereport...", completed_sections=[])
+        ReportManager.update_progress(report_id, "pending", 0, "Initializing report...", completed_sections=[])
         ReportManager.save_report(report)
 
         report.status = ReportStatus.PLANNING
@@ -920,7 +935,7 @@ def generate_report(
             ReportManager.save_outline(report_id, outline)
 
         report.outline = outline
-        ReportManager.update_progress(report_id, "planning", 15, f"Outline planning completed, total{len(outline.sections)}sections", completed_sections=[])
+        ReportManager.update_progress(report_id, "planning", 15, f"Outline planning completed, {len(outline.sections)} sections in total", completed_sections=[])
         ReportManager.save_report(report)
 
         # Cancel-Check nach Outline (Stage-Boundary 1)
@@ -1013,9 +1028,9 @@ def generate_report(
                         section_num,
                     )
                 continue
-            ReportManager.update_progress(report_id, "generating", base_progress, f"generatinggenerateSection: {section.title} ({section_num}/{total_sections})", current_section=section.title, completed_sections=completed_section_titles)
+            ReportManager.update_progress(report_id, "generating", base_progress, f"Generating section: {section.title} ({section_num}/{total_sections})", current_section=section.title, completed_sections=completed_section_titles)
             if progress_callback:
-                progress_callback("generating", base_progress, f"generatinggenerateSection: {section.title} ({section_num}/{total_sections})")
+                progress_callback("generating", base_progress, f"Generating section: {section.title} ({section_num}/{total_sections})")
             section_content = _safe_generate_section_react(
                 agent,
                 section=section,
@@ -1164,8 +1179,8 @@ def generate_report(
             ReportManager.update_progress(report_id, "generating", base_progress + int(70 / total_sections), f"Section {section.title} completed", current_section=None, completed_sections=completed_section_titles)
 
         if progress_callback:
-            progress_callback("generating", 95, "generatingassemblecompletereport...")
-        ReportManager.update_progress(report_id, "generating", 95, "generatingassemblecompletereport...", completed_sections=completed_section_titles)
+            progress_callback("generating", 95, "Assembling the complete report...")
+        ReportManager.update_progress(report_id, "generating", 95, "Assembling the complete report...", completed_sections=completed_section_titles)
         report.markdown_content = ReportManager.assemble_full_report(report_id, outline)
         # P0-7: Status folgt dem tatsächlichen Erfolg der Abschnitte. Ein
         # Report mit fehlgeschlagener Pflichtsection ist INCOMPLETE — der Rest
@@ -1246,9 +1261,9 @@ def generate_report(
             if isinstance(exc, BudgetExceededError):
                 raise
             logger.warning("generate_report: red_team_review fehlgeschlagen: %r", exc)
-        ReportManager.update_progress(report_id, "completed", 100, "reportgeneratecomplete", completed_sections=completed_section_titles)
+        ReportManager.update_progress(report_id, "completed", 100, "Report generation completed", completed_sections=completed_section_titles)
         if progress_callback:
-            progress_callback("completed", 100, "reportgeneratecomplete")
+            progress_callback("completed", 100, "Report generation completed")
         if agent.console_logger:
             agent.console_logger.close()
             agent.console_logger = None
@@ -1261,14 +1276,14 @@ def generate_report(
 
         if isinstance(e, BudgetExceededError):
             raise
-        logger.error(f"reportgeneratefailed: {str(e)}")
+        logger.error("Report generation failed: %s", e)
         report.status = ReportStatus.FAILED
         report.error = str(e)
         if agent.report_logger:
             agent.report_logger.log_error(str(e), "failed")
         try:
             ReportManager.save_report(report)
-            ReportManager.update_progress(report_id, "failed", -1, f"reportgeneratefailed: {str(e)}", completed_sections=completed_section_titles)
+            ReportManager.update_progress(report_id, "failed", -1, f"Report generation failed: {e}", completed_sections=completed_section_titles)
         except Exception as exc:  # noqa: BLE001 — exc used in report status; error recorded
             logger.debug("workflow: save_report/update_progress failed in error handler, ignoring: %s", exc)
         if agent.console_logger:
@@ -1278,7 +1293,7 @@ def generate_report(
 
 
 def chat(agent: Any, message: str, chat_history: List[Dict[str, str]] = None) -> Dict[str, Any]:
-    logger.info(f"Report Agentchat: {message[:50]}...")
+    logger.info("Report agent chat: %s...", message[:50])
     chat_history = chat_history or []
     report_content = ""
     try:
@@ -1288,7 +1303,7 @@ def chat(agent: Any, message: str, chat_history: List[Dict[str, str]] = None) ->
             if len(report.markdown_content) > 15000:
                 report_content += "\n\n... [reportcontenthasTruncate] ..."
     except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
-        logger.warning(f"getreportcontentfailed: {e}")
+        logger.warning("Could not read the report content: %s", e)
 
     system_prompt = agent.CHAT_SYSTEM_PROMPT_TEMPLATE.format(
         simulation_requirement=agent.simulation_requirement,

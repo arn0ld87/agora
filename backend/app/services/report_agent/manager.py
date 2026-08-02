@@ -415,7 +415,7 @@ class ReportManager:
     def save_outline(cls, report_id: str, outline: ReportOutline) -> None:
         cls._ensure_report_folder(report_id)
         write_outline(cls._get_outline_path(report_id), outline.to_dict())
-        logger.info(f"outlinesaved: {report_id}")
+        logger.info("Outline saved: %s", report_id)
 
     @classmethod
     def save_section(
@@ -429,7 +429,7 @@ class ReportManager:
         file_suffix = f"section_{section_index:02d}.md"
         file_path = os.path.join(cls._get_report_folder(report_id), file_suffix)
         write_section_markdown(file_path, section.title, cleaned_content)
-        logger.info(f"Sectionsaved: {report_id}/{file_suffix}")
+        logger.info("Section saved: %s/%s", report_id, file_suffix)
         return file_path
 
     @classmethod
@@ -865,7 +865,7 @@ class ReportManager:
         # newformat：Deleteentirefilefolder
         if os.path.exists(folder_path) and os.path.isdir(folder_path):
             shutil.rmtree(folder_path)
-            logger.info(f"reportfolderhasDelete: {report_id}")
+            logger.info("Report folder deleted: %s", report_id)
             return True
         
         # backward compatibleformat：Deleteseparatefile

@@ -426,10 +426,14 @@ def prepare_simulation():
         state.entities_count = preview_count
         state.entity_types = list(filtered_preview.entity_types)
         logger.info(
-            f"Expected entity count: {filtered_preview.filtered_count}, [type][model]: {filtered_preview.entity_types}"
+            "Expected entity count: %s, entity types: %s",
+            filtered_preview.filtered_count,
+            filtered_preview.entity_types,
         )
     except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
-        logger.warning(f"Synchronously get entity countFailed（Will retry in background task）: {exc}")
+        logger.warning(
+            "Synchronous entity count failed (will retry in the background task): %s", exc
+        )
 
     task_manager = TaskManager()
     if ai_model_ref is not None:
