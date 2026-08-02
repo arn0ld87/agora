@@ -104,6 +104,91 @@ def _resolve_connection_secret(
     return (key or None), match.id, resolved.base_url, match.auth_mode
 
 
+def resolve_connection_for_base_url(
+    base_url: Optional[str],
+) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """
+    Resolve the single enabled ProviderConnection whose canonical endpoint matches ``base_url``.
+
+    Genutzt vom Interview-Direktpfad (``app.services.sim.interview_direct``), der
+    im persistierten Lauf nur ``llm_model``/``llm_base_url`` haelt, aber keine
+    ``connection_id`` (siehe Issue #1000). Die Base-URL identifiziert die
+    Connection genauso eindeutig wie ``resolve_profile_connection`` es fuer
+    Legacy-Profile tut — hier wird bewusst dieselbe Normalisierung
+    (``normalize_endpoint_url``/``canonical_connection_base_url``) wiederverwendet
+    statt einer neuen lokalen Endpunkt-Heuristik.
+
+    Parameters:
+        base_url: Rohe, unnormalisierte Endpunkt-URL aus dem persistierten Lauf.
+
+    Returns:
+        tuple[Optional[str], Optional[str], Optional[str]]: ``(api_key,
+        connection_id, auth_mode)``. Alle drei sind ``None``, wenn keine oder
+        mehrere aktivierte Connections denselben normalisierten Endpunkt
+        tragen — Mehrdeutigkeit wird geloggt, nicht still aufgeloest
+        (kein "erster gewinnt"). Bei ``auth_mode == "none"`` bleibt ``api_key``
+        ``None``, ``connection_id``/``auth_mode`` sind trotzdem gesetzt.
+    """
+    from ..services.profile_connection_resolver import (
+        canonical_connection_base_url,
+        normalize_endpoint_url,
+    )
+    from ..services.provider_connection_store import ProviderConnectionStore
+
+    target = normalize_endpoint_url(base_url)
+    if not target:
+        return None, None, None
+
+    try:
+        connections = [
+            c for c in ProviderConnectionStore().list_connections() if c.enabled
+        ]
+    except Exception as exc:  # noqa: BLE001 — caller treats an unusable store as "no connection"
+        logger.warning(
+            "ProviderConnection-Lesen fuer base_url=%r fehlgeschlagen: %s",
+            base_url,
+            exc,
+        )
+        return None, None, None
+
+    matches = [
+        connection
+        for connection in connections
+        if (canonical := canonical_connection_base_url(connection))
+        and normalize_endpoint_url(canonical) == target
+    ]
+    if not matches:
+        return None, None, None
+    if len(matches) > 1:
+        logger.warning(
+            "Mehrdeutige ProviderConnection fuer base_url=%r: %d aktivierte "
+            "Connections (%s) teilen denselben Endpunkt — kein Secret aufgeloest",
+            base_url,
+            len(matches),
+            ", ".join(connection.id for connection in matches),
+        )
+        return None, None, None
+
+    match = matches[0]
+    if match.auth_mode == "none":
+        return None, match.id, match.auth_mode
+
+    try:
+        from ..services.llm_provider_secrets_store import (
+            get_llm_provider_secrets_store,
+        )
+
+        key = get_llm_provider_secrets_store().get_plaintext(match.secret_ref or match.id)
+    except Exception as exc:  # noqa: BLE001 — caller treats an unusable secret as "no key"
+        logger.warning(
+            "Connection-Secret-Resolution fuer Connection %r fehlgeschlagen: %s",
+            match.id,
+            exc,
+        )
+        return None, match.id, match.auth_mode
+    return (key or None), match.id, match.auth_mode
+
+
 def build_client_from_profile(
     profile: "LlmProfile",
     *,

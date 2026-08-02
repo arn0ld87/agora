@@ -267,26 +267,106 @@ def _default_client_factory(
     Simulationsende gestellt wurde. ``simulation_config`` hält ``llm_model`` und
     ``llm_base_url`` des Laufs fest — die haben Vorrang.
 
+    Der Lauf persistiert keine ``connection_id`` — nur ``llm_model`` und
+    ``llm_base_url`` (siehe ``simulation_run.py``). Die Base-URL identifiziert
+    die Connection aber genauso eindeutig, wie sie es für Legacy-Profile tut
+    (``profile_connection_resolver``); ``resolve_connection_for_base_url``
+    löst darüber den API-Key aus dem Connection-Store auf, statt auf
+    ``Config.LLM_API_KEY`` zu vertrauen, der nie zur richtigen Connection
+    gehören muss.
+
     Lässt sich damit kein Client bauen (z. B. weil der Key des Laufs nicht mehr
     auflösbar ist), fällt die Factory sichtbar auf die aktive Konfiguration
-    zurück, statt das Interview scheitern zu lassen.
+    zurück, statt das Interview scheitern zu lassen — diese Degradierung wird
+    immer geloggt, unabhängig davon, ob der Fallback-Aufbau selbst gelingt.
     """
 
     def factory():
+        from ...config import Config
         from ...llm.client import LLMClient
+        from ...llm.factory import resolve_connection_for_base_url
+        from ..profile_connection_resolver import normalize_endpoint_url
 
         model = context.get("llm_model") or None
         base_url = context.get("llm_base_url") or None
         if model:
-            try:
-                return LLMClient(model=model, base_url=base_url, timeout=timeout)
-            except Exception as exc:  # noqa: BLE001 — Fallback ist besser als Abbruch
-                logger.warning(
-                    "Route des Laufs (model=%s) nicht nutzbar (%s) — Interview "
-                    "nutzt die aktive Konfiguration",
-                    model,
-                    exc,
+            connection_key = connection_id = connection_auth_mode = None
+            if base_url:
+                connection_key, connection_id, connection_auth_mode = (
+                    resolve_connection_for_base_url(base_url)
                 )
+
+            if connection_id is not None and (
+                connection_auth_mode == "none" or connection_key
+            ):
+                try:
+                    return LLMClient(
+                        model=model,
+                        base_url=base_url,
+                        api_key=connection_key or "ollama",
+                        route_provider_id=connection_id,
+                        api_key_source="connection_store",
+                        use_active_config=False,
+                        allow_api_key_fallback=False,
+                        timeout=timeout,
+                    )
+                except Exception as exc:  # noqa: BLE001 — Fallback ist besser als Abbruch
+                    logger.warning(
+                        "Connection %s der Lauf-Route (model=%s) nicht nutzbar (%s) "
+                        "— Interview nutzt die aktive Konfiguration",
+                        connection_id,
+                        model,
+                        exc,
+                    )
+            elif connection_id is not None:
+                # Der Endpunkt trifft eine aktivierte Connection, deren Secret
+                # aber fehlt, leer ist oder sich nicht entschluesseln laesst.
+                # Config.LLM_API_KEY mit der Base-URL des Laufs zu kombinieren
+                # wuerde einen fremden Key an genau den Endpunkt schicken, den
+                # dieser Fix absichern soll (#778). Deshalb vollstaendige
+                # Degradierung auf die aktive Konfiguration statt einer halben
+                # Route aus zwei Quellen.
+                logger.warning(
+                    "ProviderConnection %s (auth_mode=%s) haelt kein nutzbares "
+                    "Secret — Interview faellt vollstaendig auf die aktive "
+                    "Konfiguration zurueck; die Base-URL des Laufs wird nicht "
+                    "mit einem fremden Key kombiniert",
+                    connection_id,
+                    connection_auth_mode,
+                )
+            elif base_url and normalize_endpoint_url(base_url) != normalize_endpoint_url(
+                Config.LLM_BASE_URL
+            ):
+                # Keine Connection zu diesem Endpunkt, und er ist nicht der
+                # globale. Auch hier gilt #778: Key und Base-URL stammen aus
+                # derselben Quelle oder gar nicht.
+                logger.warning(
+                    "Lauf-Route (model=%s, base_url=%s) referenziert keine "
+                    "aktivierte ProviderConnection und zeigt nicht auf den "
+                    "globalen Endpunkt — Interview faellt vollstaendig auf die "
+                    "aktive Konfiguration zurueck",
+                    model,
+                    base_url,
+                )
+            else:
+                # Endpunkt des Laufs ist der globale: Config.LLM_API_KEY gehoert
+                # zu genau dieser Base-URL, die Invariante bleibt gewahrt.
+                logger.warning(
+                    "Lauf-Route (model=%s, base_url=%s) referenziert keine "
+                    "aktivierte ProviderConnection — Interview faellt auf "
+                    "Config.LLM_API_KEY am selben Endpunkt zurueck",
+                    model,
+                    base_url,
+                )
+                try:
+                    return LLMClient(model=model, base_url=base_url, timeout=timeout)
+                except Exception as exc:  # noqa: BLE001 — Fallback ist besser als Abbruch
+                    logger.warning(
+                        "Route des Laufs (model=%s) nicht nutzbar (%s) — Interview "
+                        "nutzt die aktive Konfiguration",
+                        model,
+                        exc,
+                    )
         return LLMClient(timeout=timeout)
 
     return factory
