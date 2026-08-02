@@ -87,6 +87,7 @@ try:
         build_camel_completion_params,
         build_minimax_extra_body,
         build_parallel_parser,
+        compute_post_sim_time,
         compute_start_hour_offset,
         detect_oasis_platform,
         init_runner_tracing,
@@ -106,6 +107,7 @@ except ImportError:  # direct script execution
         build_camel_completion_params,
         build_minimax_extra_body,
         build_parallel_parser,
+        compute_post_sim_time,
         compute_start_hour_offset,
         detect_oasis_platform,
         init_runner_tracing,
@@ -1687,12 +1689,11 @@ async def run_twitter_simulation(
         round_action_count = 0
         _sim_id_for_emit = config.get("simulation_id") or os.path.basename(simulation_dir.rstrip("/"))
         _redis_url_for_emit = os.environ.get("REDIS_URL")
-        # Sim-Zeit für CREATE_POST-Frames dieser Round.
-        _sim_dt = sim_clock_anchor + timedelta(
-            minutes=start_hour_offset * 60 + simulated_minutes
-        )
-        _sim_time_iso = _sim_dt.isoformat()
-        for action_data in actual_actions:
+        # Sim-Zeit für CREATE_POST-Frames dieser Round — pro Action über das
+        # Minutenbudget der Runde verteilt, damit die Live-Feed-Uhr zwischen
+        # zwei Rundengrenzen nicht stillsteht (#1018).
+        _action_count = len(actual_actions)
+        for _action_idx, action_data in enumerate(actual_actions):
             if action_logger:
                 action_logger.log_action(
                     round_num=round_num + 1,
@@ -1710,7 +1711,14 @@ async def run_twitter_simulation(
                     platform="twitter",
                     action_data=action_data,
                     redis_url=_redis_url_for_emit,
-                    sim_time_iso=_sim_time_iso,
+                    sim_time_iso=compute_post_sim_time(
+                        sim_clock_anchor,
+                        start_hour_offset,
+                        simulated_minutes,
+                        minutes_per_round,
+                        _action_idx,
+                        _action_count,
+                    ).isoformat(),
                 )
 
         if action_logger:
@@ -1977,11 +1985,10 @@ async def run_reddit_simulation(
         round_action_count = 0
         _sim_id_for_emit = config.get("simulation_id") or os.path.basename(simulation_dir.rstrip("/"))
         _redis_url_for_emit = os.environ.get("REDIS_URL")
-        _sim_dt = sim_clock_anchor + timedelta(
-            minutes=start_hour_offset * 60 + simulated_minutes
-        )
-        _sim_time_iso = _sim_dt.isoformat()
-        for action_data in actual_actions:
+        # Siehe Twitter-Pfad: Sim-Zeit pro Action über das Minutenbudget der
+        # Runde verteilt (#1018).
+        _action_count = len(actual_actions)
+        for _action_idx, action_data in enumerate(actual_actions):
             if action_logger:
                 action_logger.log_action(
                     round_num=round_num + 1,
@@ -1999,7 +2006,14 @@ async def run_reddit_simulation(
                     platform="reddit",
                     action_data=action_data,
                     redis_url=_redis_url_for_emit,
-                    sim_time_iso=_sim_time_iso,
+                    sim_time_iso=compute_post_sim_time(
+                        sim_clock_anchor,
+                        start_hour_offset,
+                        simulated_minutes,
+                        minutes_per_round,
+                        _action_idx,
+                        _action_count,
+                    ).isoformat(),
                 )
 
         if action_logger:

@@ -9,3 +9,15 @@ design/** linguist-vendored=true
 # Auto-generierte JSON-Schemas — werden via
 # `uv run python -m app.contracts.dump_schemas` erzeugt.
 schemas/** linguist-generated=true
+
+# Merge-Strategien für Dateien, an denen praktisch jeder Slice anfasst.
+#
+# CHANGELOG.md: jeder PR hängt seinen Block oben unter `## [Unreleased]` ein.
+# Zwei parallele PRs kollidieren damit strukturell an derselben Zeile, obwohl
+# sie inhaltlich nichts miteinander zu tun haben — der zweite Merge zwingt zu
+# Handarbeit, ohne dass es je eine echte inhaltliche Kollision gäbe.
+# `merge=union` behält beide Seiten. Der Preis: bei echter Doppelarbeit am
+# selben Eintrag entsteht eine Dublette statt eines Konflikts — beim
+# Changelog-Review sichtbar und in Sekunden zu entfernen, während der
+# Konflikt jedes Mal Minuten kostet.
+CHANGELOG.md merge=union
