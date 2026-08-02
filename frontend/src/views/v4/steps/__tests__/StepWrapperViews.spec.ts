@@ -337,17 +337,41 @@ describe('StepInteractionView', () => {
   // Regression: Die Route kennt nur die reportId. Ohne Durchreichen der
   // simulation_id laufen Chat, Interview und Profil-Liste in Step 5 ins Leere
   // (POST /api/simulation/undefined/chat -> 404).
-  it('reicht ?runId aus der Query als simulationId an Step5Interaction durch', async () => {
+  it('reicht ?simId aus der Query als simulationId an Step5Interaction durch', async () => {
     const w = await mountView(
       StepInteractionView,
       { reportId: 'rpt-7' },
-      '/v4/interaction/rpt-7?runId=sim_28a4367b2937',
+      '/v4/interaction/rpt-7?simId=sim_28a4367b2937',
     )
     expect(w.find('.stub-step5').attributes('simulation-id')).toBe('sim_28a4367b2937')
   })
 
-  it('setzt simulationId nicht, wenn ?runId fehlt (Komponente faellt auf Report zurueck)', async () => {
+  it('setzt simulationId nicht, wenn ?simId fehlt (Komponente faellt auf Report zurueck)', async () => {
     const w = await mountView(StepInteractionView, { reportId: 'rpt-7' }, '/v4/interaction/rpt-7')
+    expect(w.find('.stub-step5').attributes('simulation-id')).toBeUndefined()
+  })
+
+  // Issue #1023 (Regression aus PR #997): eine echte Registry-Run-ID
+  // (run_..., wie run_registry.py sie vergibt) darf niemals als
+  // simulation_id an Step5Interaction durchgereicht werden — sonst
+  // scheitert jede Chat-/Interview-Anfrage mit "Invalid simulation_id
+  // format". Weder ueber den alten ?runId-Schluessel noch versehentlich
+  // ueber ?simId darf ein run_...-Wert durchrutschen.
+  it('reicht eine Registry-Run-ID (run_...) NICHT als simulationId durch, auch nicht ueber ?runId', async () => {
+    const w = await mountView(
+      StepInteractionView,
+      { reportId: 'rpt-7' },
+      '/v4/interaction/rpt-7?runId=run_a1b2c3d4e5f6',
+    )
+    expect(w.find('.stub-step5').attributes('simulation-id')).toBeUndefined()
+  })
+
+  it('reicht eine Registry-Run-ID (run_...) auch ueber ?simId nicht durch', async () => {
+    const w = await mountView(
+      StepInteractionView,
+      { reportId: 'rpt-7' },
+      '/v4/interaction/rpt-7?simId=run_a1b2c3d4e5f6',
+    )
     expect(w.find('.stub-step5').attributes('simulation-id')).toBeUndefined()
   })
 })

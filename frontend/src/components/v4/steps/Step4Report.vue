@@ -33,7 +33,7 @@ import type { AiModelRef } from '../../../contracts/aiModelRef'
 import { useEffectiveModelSelection } from '@/composables/useEffectiveModelSelection'
 import { parseAgentEntry } from '../../../utils/reportAgentLog'
 import { parseSourceAnchor } from '../../../utils/sourceAnchor'
-import { buildReportRoute } from '../../../utils/reportRoute'
+import { buildReportRoute, buildInteractionRoute } from '../../../utils/reportRoute'
 import {
   ReportSchema,
   ReportOutlineSchema,
@@ -606,7 +606,9 @@ async function createBranchFromReport(branchForm: {
 }
 
 function goConversation() {
-  if (props.reportId) router.push({ name: 'Interaction', params: { reportId: props.reportId } })
+  if (!props.reportId) return
+  const simulationId = resolvedSimulationId.value || props.simulationId || null
+  router.push(buildInteractionRoute(props.reportId, simulationId))
 }
 
 onMounted(async () => {
