@@ -1219,6 +1219,9 @@
   },
   "errors": {
     "network": "Network error. Is the server reachable?",
+    "authError": "Authentication error. Please check provider credentials (API key)",
+    "requestError": "Request error",
+    "serverError": "Server error",
     "backend": "Backend error.",
     "noNeo4j": "Neo4j not reachable.",
     "noLlm": "LLM not reachable.",

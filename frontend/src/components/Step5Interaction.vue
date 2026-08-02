@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { chatWithReport, getReport } from '../api/report'
 import { interviewAgents, getSimulationProfilesRealtime } from '../api/simulation'
 import { extractReportAnswer } from '@/utils/reportChatAnswer'
+import { interviewErrorMessage } from '@/utils/interviewErrorMessage'
 import Button from '@/components/v4/forms/Button.vue'
 import Badge from './ui/Badge.vue'
 import Kicker from '@/components/v4/data/Kicker.vue'
@@ -141,7 +142,7 @@ async function send() {
       }
     }
   } catch (err) {
-    chatHistory.value.push({ role: 'assistant', content: `(${t('errors.network')}: ${err.message})`, ts: Date.now() })
+    chatHistory.value.push({ role: 'assistant', content: interviewErrorMessage(err, t), ts: Date.now() })
   } finally {
     isSending.value = false
     scrollDown()
@@ -213,7 +214,7 @@ async function runSurvey() {
       surveyProgress.value = { done: arr.length, total: ids.length }
     }
   } catch (err) {
-    surveyResults.value = [{ agent_id: -1, username: '–', answer: `(${t('errors.network')}: ${err.message})` }]
+    surveyResults.value = [{ agent_id: -1, username: '–', answer: interviewErrorMessage(err, t) }]
   } finally {
     isSurveying.value = false
   }
