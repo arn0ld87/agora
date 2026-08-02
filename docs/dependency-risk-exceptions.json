@@ -7,26 +7,26 @@
       "package": "nltk",
       "version_constraint": "==3.9.4",
       "severity": "unknown",
-      "reason": "Kein Upstream-Fix released; PYSEC-2026-597 hat keine gefixte Version in der Advisory-DB — Upgrade behebt das Finding derzeit nicht. Tracking konsolidiert in #672 (2026-07-14).",
+      "reason": "Kein Upstream-Fix released; PYSEC-2026-597 hat laut OSV weiterhin kein offizielles 'fixed'-Event, nur last_affected: 3.9.4. Seit dem Bump auf nltk==3.10.1 (2026-08-02, #995) faellt das installierte Paket aus dem affected-Set — pip-audit/Trivy melden den Fund deshalb nicht mehr, OHNE dass die zugrunde liegende Schwachstelle durch einen echten Upstream-Fix behoben waere. Aufschub durch Versions-Drift, keine Behebung.",
       "blocker": "nltk upstream: https://github.com/nltk/nltk/releases",
-      "target_version": "nltk mit gepatchter Advisory-DB-Version",
+      "target_version": "nltk-Release mit offiziellem 'fixed'-Event fuer PYSEC-2026-597 (aktuell keins), ODER Advisory wird zurueckgezogen",
       "owner": "nltk",
       "deadline": "2026-09-28",
-      "issue": "https://github.com/arn0ld87/agora/issues/672",
-      "status": "open"
+      "issue": "https://github.com/arn0ld87/agora/issues/661",
+      "status": "resolved"
     },
     {
       "advisory_id": "GHSA-p4gq-832x-fm9v",
       "package": "nltk",
       "version_constraint": "==3.9.4",
       "severity": "High",
-      "reason": "URL-Encoded Path Traversal in nltk.data.load() (nltk==3.9.4, transitive via unstructured/camel-oasis). Kein Upstream-Fix in 3.9.x. Agora nutzt nltk nur transitiv, kein direkter Aufruf von nltk.data.load() mit user-kontrolliertem Pfad → nicht via Oberfläche exploitierbar.",
+      "reason": "URL-Encoded Path Traversal in nltk.data.load() (ehemals nltk==3.9.4, transitiv via unstructured/camel-oasis). RESOLVED 2026-08-02: echter Upstream-Fix in nltk 3.10.0, Pin auf nltk==3.10.1 gehoben (#995). Kein Trivy-/pip-audit-Finding mehr fuer die installierte Version.",
       "blocker": "nltk upstream: https://github.com/nltk/nltk/releases",
-      "target_version": "nltk mit gefixter nltk.data.load()-Pfadvalidierung",
+      "target_version": "erreicht: nltk==3.10.1 (2026-08-02)",
       "owner": "nltk",
       "deadline": "2026-09-28",
-      "issue": "https://github.com/arn0ld87/agora/issues/672",
-      "status": "open"
+      "issue": "https://github.com/arn0ld87/agora/issues/995",
+      "status": "resolved"
     }
   ]
 }

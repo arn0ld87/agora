@@ -13,6 +13,14 @@ Automation: [.github/workflows/cve-monitor.yml](../.github/workflows/cve-monitor
 > nltk-Advisories (PYSEC-2026-597, GHSA-p4gq-832x-fm9v); die Trivy-Baseline (2026-08-30)
 > bleibt unberührt. — **Nachtrag 2026-07-31:** Die Trivy-Baseline ist inzwischen aufgelöst
 > (Issue #772), ihr Hardstop 2026-08-30 entfällt ersatzlos. Siehe Abschnitt unten.
+> — **Nachtrag 2026-08-02:** Beide nltk-Advisories sind aufgelöst (nltk 3.9.4 → 3.10.1,
+> Issue #995), der Hardstop 2026-09-28 entfällt für sie. GHSA-p4gq-832x-fm9v hat einen
+> echten Upstream-Fix (nltk 3.10.0). PYSEC-2026-597 hat **keinen** — es fällt nur aus dem
+> affected-Set der Advisory-DB (OSV `last_affected: 3.9.4`), Tooling flaggt es deshalb
+> nicht mehr, ohne dass die Schwachstelle behoben wäre. Tracking bleibt offen in
+> [#661](https://github.com/arn0ld87/agora/issues/661); [#672](https://github.com/arn0ld87/agora/issues/672)
+> war die ursprüngliche Konsolidierungs-Referenz und ist seit 2026-07-27 geschlossen.
+> Details unten unter „nltk-Baseline".
 Supply-Chain-Baseline: [.github/workflows/scorecard.yml](../.github/workflows/scorecard.yml) läuft wöchentlich Mo 04:30 UTC und auf `push` nach `main`. SARIF-Ergebnisse werden ins Code-Scanning-Dashboard hochgeladen; der erste Remote-Run nach Merge ist die Scorecard-Baseline.
 
 Dieses Dokument trackt bewusst ignorierte `pip-audit`-Findings und Trivy-Container-Scans.
@@ -47,12 +55,31 @@ Ohne erfüllte Bedingungen gilt: sofort fixen, kein Register-Eintrag.
 
 ---
 
-## Aktive Baseline (Hardstop 2026-09-28)
+## Aktive Baseline
 
-| CVE | Paket | Schweregrad | Fix verfügbar? | Owner | Frist | Status | Issue | Upstream-Release-Watch |
-|---|---|---|---|---|---|---|---|---|
-| PYSEC-2026-597 | `nltk` | unbekannt | Nein (kein Upstream-Fix released) | NLTK | 2026-09-28 | open (konsolidiert in #672) | [#672](https://github.com/arn0ld87/agora/issues/672) | [nltk/nltk/releases](https://github.com/nltk/nltk/releases) |
-| GHSA-p4gq-832x-fm9v | `nltk` | High | Nein (kein Upstream-Fix in 3.9.x) | NLTK | 2026-09-28 | open | [#672](https://github.com/arn0ld87/agora/issues/672) | [nltk/nltk/releases](https://github.com/nltk/nltk/releases) |
+Aktuell keine aktiven pip-audit-Ausnahmen. Die bisher einzigen Einträge betrafen
+`nltk` (Hardstop 2026-09-28) und sind am 2026-08-02 aufgelöst — siehe „nltk-Baseline"
+unten.
+
+## nltk-Baseline — aufgelöst 2026-08-02 (vormals Hardstop 2026-09-28)
+
+pip-audit-Findings für `nltk==3.9.4` (transitiv über `unstructured`/`camel-oasis`),
+zuvor per `--ignore-vuln` in [.github/workflows/ci.yml](../.github/workflows/ci.yml)
+unterdrückt und in [.trivyignore](../.trivyignore) für den Container-Scan eingetragen.
+
+**Status: `nltk` auf `3.10.1` gehoben (Issue #995), verifiziert per vollem Backend-
+Testlauf (4159 passed, keine durch den Bump verursachte Regression). Beide
+`--ignore-vuln`-Flags und die `.trivyignore`-Einträge sind entfernt.** Die zwei
+betroffenen Advisories lösen sich dabei unterschiedlich ehrlich auf:
+
+| Advisory | Schweregrad | Auflösung | Status | Issue |
+|---|---|---|---|---|
+| GHSA-p4gq-832x-fm9v (Alias CVE-2026-54293, PYSEC-2026-2078) | High | Echter Upstream-Fix in nltk 3.10.0. | resolved | [#995](https://github.com/arn0ld87/agora/issues/995) |
+| PYSEC-2026-597 (Alias CVE-2026-12243) | unbekannt | **Kein echter Upstream-Fix.** OSV weist weiterhin kein `fixed`-Event aus, nur `last_affected: 3.9.4`. Ab nltk 3.10.0 fällt das installierte Paket aus dem affected-Set, pip-audit/Trivy melden den Fund deshalb nicht mehr — das ist eine Aufschubentscheidung durch Versions-Drift, keine Behebung der Schwachstelle. | resolved (Tooling flaggt nicht mehr) — **Issue bleibt offen** | [#661](https://github.com/arn0ld87/agora/issues/661) (offen) |
+
+`#672` war die ursprüngliche Konsolidierungs-Referenz für beide Advisories und ist
+seit 2026-07-27 geschlossen; beide Zeiger sind jetzt auf die jeweils zutreffenden
+Issues korrigiert (#995 bzw. #661).
 
 ## Trivy Container Scan Baseline — aufgelöst 2026-07-31 (vormals Hardstop 2026-08-30)
 
@@ -88,11 +115,15 @@ Fließtext. Künftig gehört **jede** `.trivyignore`-Zeile auch in die JSON.
 | Paket | Pinned Version | Upstream-Pin | Erklaerung |
 |---|---|---|---|
 | `transformers` | `>=5.3.0` | — | Upgrade auf v5 via `tool.uv.override-dependencies` unblocked durch `sentence-transformers>=5.3.0`. Behebt CVE-2026-4372, CVE-2026-1839 und PYSEC-2025-217. |
-| `nltk` | `3.9.4` | — (kein Pin) | PYSEC-2026-597 hat keine gefixte Version in der Advisory-DB — Upgrade behebt das Finding derzeit nicht. GHSA-p4gq-832x-fm9v (Path Traversal in `nltk.data.load()`) ebenfalls kein Fix in 3.9.x; Agora nutzt nltk nur transitiv (via `unstructured`/`camel-oasis`), kein direkter Aufruf von `nltk.data.load()` mit user-kontrolliertem Pfad → nicht via Oberfläche exploitierbar. |
+| `nltk` | `3.10.1` | — (kein Upstream-Pin) | Override-Pin `nltk==3.10.1` (2026-08-02, #995) löst GHSA-p4gq-832x-fm9v (echter Fix in 3.10.0) real auf. PYSEC-2026-597 bleibt ohne echten Upstream-Fix (kein `fixed`-Event in OSV), fällt aber ab 3.10.0 aus dem affected-Set (`last_affected: 3.9.4`) und wird deshalb nicht mehr geflaggt — Tracking bleibt offen in #661. Agora nutzt nltk weiterhin nur transitiv (via `unstructured`/`camel-oasis`). |
 
 ---
 
 ## Eskalationspfad (Hardstop 2026-09-28)
+
+**Hinweis 2026-08-02:** Die Baseline, auf die sich dieser Pfad ursprünglich bezog
+(PYSEC-2026-597, GHSA-p4gq-832x-fm9v), ist aufgelöst — siehe „nltk-Baseline" oben.
+Der Abschnitt bleibt als Prozess-Vorlage für künftige Baseline-Einträge stehen.
 
 Wenn am 2026-09-28 noch CVEs in der aktiven Baseline offen sind, greift einer dieser Pfade:
 

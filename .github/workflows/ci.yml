@@ -77,19 +77,22 @@ jobs:
         # Auf PRs ist es Geschwindigkeits-Killer; CVE-Monitor (cve-monitor.yml,
         # wöchentlich) und Dependabot fangen Vulns ab.
         #
-        # Temporary baseline: these advisories have no fixed release
-        # in the advisory DB (PYSEC-2026-597 #661).
         # CVE-2026-1839, CVE-2026-4372 und PYSEC-2025-217 resolved via
         # Transformers v5 upgrade (#624).
+        # nltk 3.9.4 -> 3.10.1 (2026-08-02, #995) resolved PYSEC-2026-597 und
+        # GHSA-p4gq-832x-fm9v (Alias CVE-2026-54293, PYSEC-2026-2078) fuer
+        # pip-audit: GHSA-p4gq-832x-fm9v hat einen echten Upstream-Fix in
+        # 3.10.0; PYSEC-2026-597 hat weiterhin keinen, faellt aber ab 3.10.0
+        # aus dem affected-Set (OSV last_affected: 3.9.4) und wird deshalb
+        # nicht mehr gemeldet — Details siehe docs/dependency-risk-register.md,
+        # Abschnitt "nltk-Baseline". Issue #661 bleibt offen.
         # Tracked in docs/dependency-risk-register.md. Hardstop 2026-09-28
         # (verlängert 2026-07-06 via ADR-0004 / ALE-20; ehem. 2026-07-30) —
         # afterwards this --ignore-vuln list MUST be empty.
-        # Tracked advisories: CVE-2026-1839, CVE-2026-4372, PYSEC-2025-217, PYSEC-2026-597, GHSA-p4gq-832x-fm9v.
+        # Tracked advisories: CVE-2026-1839, CVE-2026-4372, PYSEC-2025-217.
         if: github.event_name != 'pull_request'
         run: |
           uvx pip-audit --strict --no-deps --disable-pip \
-            --ignore-vuln PYSEC-2026-597 \
-            --ignore-vuln GHSA-p4gq-832x-fm9v \
             -r /tmp/agora-backend-requirements.txt
 
       - name: Set up Bun
