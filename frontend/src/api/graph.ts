@@ -19,6 +19,13 @@ export interface BuildProgressDetail {
 
 export interface BuildGraphResponse {
   task_id: string
+  /**
+   * Registry-Run-ID (run_...) des Graph-Build-Laufs. Issue #1023 (Befund
+   * B-23): das Backend liefert sie seit jeher mit
+   * (`backend/app/api/graph_build.py::build_graph_endpoint`), das Frontend
+   * hat sie bisher nie gelesen.
+   */
+  run_id?: string
 }
 
 export interface TaskStatusResponse {

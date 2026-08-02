@@ -1095,7 +1095,9 @@
     "overrideBadge": "override",
     "clearOverride": "Clear override → use default",
     "close": "Close",
-    "lockedBadge": "locked"
+    "lockedBadge": "locked",
+    "sourceRun": "from run",
+    "sourceDefault": "default"
   },
   "activeModel": {
     "label": "Active model",

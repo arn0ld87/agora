@@ -10,7 +10,7 @@
       :subtitle="$t('views.stepGraphBuild.subtitle')"
     >
       <template #right>
-        <StepModelOverrideChip stage-id="graph_build" />
+        <StepModelOverrideChip stage-id="graph_build" :run-id="currentRunId" />
       </template>
     </PageHeader>
     <PipelineStepper :current-step="1" />
@@ -73,6 +73,7 @@ const {
   graphLoading,
   systemLogs,
   error,
+  currentRunId,
   initialize,
 } = useGraphBuildPipeline({ projectId: props.projectId, router, t })
 
