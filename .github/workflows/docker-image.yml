@@ -111,6 +111,18 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Platz auf dem Runner schaffen
+        # Das Prod-Image traegt die volle Backend-venv inklusive der
+        # CUDA-Wheels. Zusammen mit /tmp/image.tar und dem Cache-Export
+        # reicht der freie Speicher des Runners nicht — der Build brach
+        # in genau dieser Kombination ohne Fehlermeldung ab (#994).
+        # Die geloeschten SDKs werden von keinem Schritt dieses Jobs benutzt.
+        run: |
+          echo "vorher:"; df -h / | tail -1
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+                      /usr/local/share/powershell /usr/share/swift || true
+          echo "nachher:"; df -h / | tail -1
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4
 
@@ -132,6 +144,13 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
+          # Ohne target: baut BuildKit die LETZTE Stage des Dockerfiles (aktuell
+          # "proxy", das nginx-Sidecar-Image) statt des App-Runtime-Images.
+          # target: prod stellt sicher, dass Trivy und der prod-proxy-smoke-Job
+          # das tatsaechliche Produktions-Image scannen/starten (#994). Das
+          # separate nginx-Image baut deploy/compose/docker-compose.prod-with-
+          # proxy.yml bereits eigenstaendig mit target: proxy.
+          target: prod
           # push: false — kein Push in dieser Phase.
           # Image wird lokal als tar exportiert und per upload-artifact
           # an den smoke-Job weitergegeben.
@@ -142,10 +161,19 @@ jobs:
           # können wir das geladene Image direkt umbenennen.
           tags: agora-agora:ci-${{ github.sha }}
           labels: ${{ steps.meta.outputs.labels }}
-          # GHA-Cache beschleunigt den zweiten Build im publish-Job auf
-          # nahezu null (alle Layers bereits gecacht).
+          # GHA-Cache beschleunigt den zweiten Build im publish-Job.
+          #
+          # mode=min statt mode=max: mode=max exportiert die Layer *aller*
+          # Stages, also auch backend-build mit den CUDA-Wheels (cudnn ~700 MB,
+          # nvshmem ~300 MB, siehe Dockerfile base-Stage). Solange hier
+          # versehentlich die proxy-Stage gebaut wurde (nginx:alpine, wenige MB),
+          # fiel das nicht auf. Mit target: prod (#994) sprengt der Export
+          # zusammen mit /tmp/image.tar den Speicher des GitHub-Runners — der
+          # Build brach im Cache-Export ohne Fehlermeldung ab.
+          # mode=min exportiert nur die Layer des finalen Images; der
+          # Cache-Nutzen für den publish-Build bleibt erhalten.
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: type=gha,mode=min
           outputs: type=docker,dest=/tmp/image.tar
 
       - name: Trivy container scan
@@ -445,12 +473,17 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
+          # target: prod — siehe Kommentar im build-only-Job weiter oben (#994).
+          # Ohne target würde hier das nginx-proxy-Image statt des App-Images
+          # publiziert.
+          target: prod
           # Erster harter Push im Workflow — NUR nach erfolgreichem Smoke.
           push: true
           tags: ${{ steps.meta_ghcr.outputs.tags }}
           labels: ${{ steps.meta_ghcr.outputs.labels }}
+          # mode=min — siehe Begründung im build-only-Job weiter oben (#994).
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: type=gha,mode=min
 
       - name: Generate GHCR build provenance
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
@@ -494,8 +527,11 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
+          # target: prod — siehe Kommentar im build-only-Job weiter oben (#994).
+          target: prod
           push: true
           tags: ${{ steps.meta_dockerhub.outputs.tags }}
           labels: ${{ steps.meta_dockerhub.outputs.labels }}
+          # mode=min — siehe Begründung im build-only-Job weiter oben (#994).
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: type=gha,mode=min

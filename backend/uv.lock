@@ -9,7 +9,7 @@ resolution-markers = [
 
 [manifest]
 overrides = [
-    { name = "nltk", specifier = "==3.9.4" },
+    { name = "nltk", specifier = "==3.10.1" },
     { name = "numpy", specifier = ">=2.4.4" },
     { name = "pandas", specifier = ">=3.0.3" },
     { name = "pillow", specifier = ">=12.3.0" },
@@ -1601,17 +1601,18 @@ wheels = [
 
 [[package]]
 name = "nltk"
-version = "3.9.4"
+version = "3.10.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
+    { name = "defusedxml" },
     { name = "joblib" },
     { name = "regex" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/74/a1/b3b4adf15585a5bc4c357adde150c01ebeeb642173ded4d871e89468767c/nltk-3.9.4.tar.gz", hash = "sha256:ed03bc098a40481310320808b2db712d95d13ca65b27372f8a403949c8b523d0", size = 2946864, upload-time = "2026-03-24T06:13:40.641Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/4a/65/20fa203b28b258fa1222305593ca281e4ad33729c389676bc0d29a8856fd/nltk-3.10.1.tar.gz", hash = "sha256:86a1b41d9ca0d35a2cb72fa60af4c9aaba9fe405b717161fd94cecd69f467007", size = 3098602, upload-time = "2026-08-01T06:25:20.748Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9d/91/04e965f8e717ba0ab4bdca5c112deeab11c9e750d94c4d4602f050295d39/nltk-3.9.4-py3-none-any.whl", hash = "sha256:f2fa301c3a12718ce4a0e9305c5675299da5ad9e26068218b69d692fda84828f", size = 1552087, upload-time = "2026-03-24T06:13:38.47Z" },
+    { url = "https://files.pythonhosted.org/packages/82/47/44ffb39cb0edf6b7164fdd87441044d0a1924f0a2d8470e1ad0f533711e0/nltk-3.10.1-py3-none-any.whl", hash = "sha256:55b8780b6b97732c1c3806d4ae02d46113204b11bfdc19dddb95729f627f8853", size = 1725226, upload-time = "2026-08-01T06:25:08.199Z" },
 ]
 
 [[package]]
