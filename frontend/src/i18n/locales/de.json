@@ -1242,6 +1242,23 @@
     "reportFailed": "Bericht fehlgeschlagen.",
     "unknown": "Unbekannter Fehler."
   },
+  "degradation": {
+    "title": {
+      "warning": "Durchgelaufen, aber mit Qualitätsverlust",
+      "blocking": "Das Ergebnis reicht nicht zum Weiterarbeiten"
+    },
+    "kind": {
+      "embedding_unavailable": "Semantische Suche nicht verfügbar",
+      "graph_below_threshold": "Graph unter der Qualitätsschwelle",
+      "persona_rule_based_fallback": "Personas als Platzhalter erzeugt"
+    },
+    "action": {
+      "embedding_unavailable": "Embedding-Dienst starten und den Graphen neu aufbauen, sonst bleibt die Vektorsuche wirkungslos.",
+      "graph_below_threshold": "Mit einem stärkeren Modell neu aufbauen oder ein ergiebigeres Dokument verwenden.",
+      "persona_rule_based_fallback": "Personas mit einem stärkeren Modell neu erzeugen — Platzhalterprofile tragen keine belastbaren Aussagen."
+    },
+    "occurrences": "{count}× aufgetreten"
+  },
   "dashboard": {
     "title": "Dashboard",
     "subtitle": "Aktive Runs, Reports, Systemzustand auf einen Blick.",

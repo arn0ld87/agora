@@ -39,6 +39,7 @@ class GraphStorage(ABC):
         text: str,
         round_num: Optional[int] = None,
         ner_extractor: Optional[Any] = None,
+        degradations: Optional[Any] = None,
     ) -> str:
         """
         Process text: NER/RE → create nodes/edges → return episode_id.
@@ -54,6 +55,13 @@ class GraphStorage(ABC):
         frontend-LLM-gesteuerten Extractor durchzureichen, ohne den
         Storage-Singleton-Default zu mutieren. ``None`` greift den
         konfigurierten Default-Extractor.
+
+        ``degradations`` (Issue #1029): optionaler
+        ``services.degradation_collector.DegradationCollector`` für stille
+        Teilausfälle — insbesondere ein fehlgeschlagenes Batch-Embedding,
+        das mit Leer-Vektoren weiterarbeitet. Bewusst als ``Any``
+        typisiert, damit das Storage-Protokoll nicht auf einen Service
+        zurückzeigt.
         """
 
     @abstractmethod

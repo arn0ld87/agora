@@ -450,4 +450,92 @@ describe('useGraphBuildPipeline', () => {
     expect(polling.graphStop).toHaveBeenCalledOnce()
     expect(pipeline.error.value).toBe('Build failed')
   })
+
+  // Issue #1029 — stille Degradierungen aus dem Task-Ergebnis
+  describe('Degradierungen aus dem abgeschlossenen Build', () => {
+    function completedTaskWith(result: Record<string, unknown>) {
+      graphApi.getProject.mockResolvedValue({
+        success: true,
+        data: {
+          project_id: 'project_99',
+          status: 'graph_building',
+          graph_build_task_id: 'task_99',
+          graph_id: 'graph_99',
+        },
+      })
+      graphApi.getTaskStatus.mockResolvedValue({
+        success: true,
+        data: { status: 'completed', result },
+      })
+      graphApi.getGraphData.mockResolvedValue({
+        success: true,
+        data: { graph_id: 'graph_99', nodes: [], edges: [] },
+      })
+    }
+
+    it('liest einen Embedding-Ausfall aus dem Task-Ergebnis', async () => {
+      completedTaskWith({
+        graph_id: 'graph_99',
+        degradations: {
+          schema_version: 1,
+          events: [
+            {
+              kind: 'embedding_unavailable',
+              severity: 'warning',
+              detail: 'Batch-Embedding fehlgeschlagen.',
+              occurred_at: '2026-08-02T20:00:00Z',
+              occurrences: 4,
+              context: { affected_texts: 12 },
+            },
+          ],
+        },
+      })
+      const pipeline = useGraphBuildPipeline({ projectId: 'project_99', router: createRouter(), t })
+
+      await pipeline.initialize()
+      await polling.taskTick?.()
+
+      expect(pipeline.degradations.value.events).toHaveLength(1)
+      expect(pipeline.degradations.value.events[0].kind).toBe('embedding_unavailable')
+      expect(pipeline.degradations.value.events[0].occurrences).toBe(4)
+    })
+
+    it('bleibt leer, wenn der Build sauber durchlief', async () => {
+      completedTaskWith({
+        graph_id: 'graph_99',
+        degradations: { schema_version: 1, events: [] },
+      })
+      const pipeline = useGraphBuildPipeline({ projectId: 'project_99', router: createRouter(), t })
+
+      await pipeline.initialize()
+      await polling.taskTick?.()
+
+      expect(pipeline.degradations.value.events).toEqual([])
+    })
+
+    it('verträgt ein Task-Ergebnis ohne das Feld', async () => {
+      // Ein Ergebnis von vor #1029 darf den Build-Abschluss nicht stören.
+      completedTaskWith({ graph_id: 'graph_99' })
+      const pipeline = useGraphBuildPipeline({ projectId: 'project_99', router: createRouter(), t })
+
+      await pipeline.initialize()
+      await polling.taskTick?.()
+
+      expect(pipeline.degradations.value.events).toEqual([])
+      expect(pipeline.currentPhase.value).toBe(2)
+    })
+
+    it('lässt einen unlesbaren Eintrag den Build nicht blockieren', async () => {
+      // Ein Hinweismechanismus darf nie selbst zum Ausfallgrund werden.
+      completedTaskWith({ graph_id: 'graph_99', degradations: { events: 'kaputt' } })
+      const pipeline = useGraphBuildPipeline({ projectId: 'project_99', router: createRouter(), t })
+
+      await pipeline.initialize()
+      await polling.taskTick?.()
+
+      expect(pipeline.degradations.value.events).toEqual([])
+      expect(pipeline.currentPhase.value).toBe(2)
+      expect(pipeline.error.value).toBe('')
+    })
+  })
 })

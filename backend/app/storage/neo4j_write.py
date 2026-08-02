@@ -32,6 +32,7 @@ from ..services.ingestion_pipeline import (
 from .neo4j_mappings import edge_to_dict, sanitize_label
 
 if TYPE_CHECKING:
+    from ..services.degradation_collector import DegradationCollector
     from .ner_extractor import NERExtractor
 
 logger = logging.getLogger("agora.neo4j_storage")
@@ -206,6 +207,7 @@ class Neo4jWriteMixin:
         text: str,
         round_num: Optional[int] = None,
         ner_extractor: Optional["NERExtractor"] = None,
+        degradations: Optional["DegradationCollector"] = None,
     ) -> str:
         """Process text in three phases — NER, embed, persist.
 
@@ -224,6 +226,12 @@ class Neo4jWriteMixin:
         (``self._ner``) für Phase 1 verwendet. Damit kann der Build-Pfad
         einen pro-Request gebauten Extractor mit Frontend-LLM-Override
         durchreichen, ohne den Storage-Singleton anzufassen.
+
+        ``degradations`` (Issue #1029): Sammler für stille Teilausfälle.
+        Phase 2 fängt Embedding-Fehler ab und arbeitet mit Leer-Vektoren
+        weiter; ohne diesen Sammler bliebe das außerhalb des Logs
+        unsichtbar. Wird von ``GraphBuilderService.add_text_batches``
+        durchgereicht und ist thread-safe — die Chunks laufen parallel.
         """
         episode_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
@@ -242,7 +250,7 @@ class Neo4jWriteMixin:
 
         # Phase 2 — Batch-Embedding
         entity_embeddings, relation_embeddings = embed_entities_and_relations(
-            self._embedding, entities, relations
+            self._embedding, entities, relations, degradations=degradations
         )
 
         # Phase 3 — Persist (Episode-Node, Entities, Relations)

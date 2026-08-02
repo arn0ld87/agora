@@ -11,9 +11,14 @@ und Retry-Logik gekoppelt ist.
 Konsumiert von ``Neo4jStorage.add_text``.
 """
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
+from ..contracts.pipeline_degradation_contract import (
+    DegradationKind,
+    DegradationSeverity,
+)
 from ..utils.logger import get_logger
+from .degradation_collector import DegradationCollector
 
 logger = get_logger("agora.ingestion_pipeline")
 
@@ -51,6 +56,7 @@ def embed_entities_and_relations(
     embedding: Any,
     entities: List[Dict[str, Any]],
     relations: List[Dict[str, Any]],
+    degradations: Optional[DegradationCollector] = None,
 ) -> Tuple[List[List[float]], List[List[float]]]:
     """Phase 2 — Batch-Embedding für Entity-Summaries und Fact-Texts.
 
@@ -59,11 +65,21 @@ def embed_entities_and_relations(
     Bei Embedding-Fehler liefern alle Items ``[]`` zurück, damit der
     Persist-Pfad nicht crasht — entspricht dem historischen Verhalten.
 
+    Issue #1029: Dieser Fallback bleibt, war aber bis dahin **unsichtbar**.
+    War Ollama nicht gestartet, lief der Lauf ohne erkennbaren Fehler
+    weiter und die Vektorsuche arbeitete auf leeren Embeddings. Wird ein
+    ``degradations``-Collector durchgereicht, meldet die Funktion den
+    Ausfall dorthin, und er erreicht über das Task-Ergebnis die
+    Oberfläche.
+
     Args:
         embedding: Embedding-Service mit ``.embed_batch(texts)``-Methode.
         entities: NER-Output ``[{"name": …, "type": …, …}, …]``.
         relations: NER-Output ``[{"source": …, "target": …, "type": …,
             "fact": …}, …]``.
+        degradations: optionaler Sammler für stille Teilausfälle. ``None``
+            behält das bisherige Verhalten (nur ``logger.warning``) — dann
+            erfährt niemand außerhalb des Logs davon.
 
     Returns:
         ``(entity_embeddings, relation_embeddings)`` — zwei Listen, die
@@ -86,6 +102,20 @@ def embed_entities_and_relations(
     except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.warning(f"[ingestion] Batch embedding failed, falling back to empty: {exc}")
         all_embeddings = [[] for _ in all_texts]
+        if degradations is not None:
+            degradations.record(
+                kind=DegradationKind.EMBEDDING_UNAVAILABLE,
+                # Der Lauf bleibt verwertbar — nur die semantische Suche
+                # arbeitet auf Leer-Vektoren. Das ist ein Qualitätsverlust,
+                # kein Abbruchgrund.
+                severity=DegradationSeverity.WARNING,
+                detail=(
+                    "Batch-Embedding fehlgeschlagen, Vektoren bleiben leer. "
+                    "Die semantische Suche im Graphen findet nichts. "
+                    f"Ursache: {exc}"
+                ),
+                context={"affected_texts": len(all_texts)},
+            )
 
     entity_count = len(entities)
     return all_embeddings[:entity_count], all_embeddings[entity_count:]

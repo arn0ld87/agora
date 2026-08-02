@@ -7,6 +7,11 @@ weiterhin via ``test_neo4j_*``-Tests indirekt abgedeckt.
 
 from unittest.mock import MagicMock
 
+from app.contracts.pipeline_degradation_contract import (
+    DegradationKind,
+    DegradationSeverity,
+)
+from app.services.degradation_collector import DegradationCollector
 from app.services.ingestion_pipeline import (
     embed_entities_and_relations,
     extract_entities_and_relations,
@@ -132,6 +137,64 @@ class TestEmbedEntitiesAndRelations:
         # Beide Listen haben die richtige Länge, aber jeder Eintrag ist []
         assert ent_emb == [[]]
         assert rel_emb == [[]]
+
+    def test_embedding_failure_is_recorded_as_degradation(self):
+        """Issue #1029 — der Fallback bleibt, aber er ist nicht mehr stumm.
+
+        War Ollama nicht gestartet, lief der Lauf bis dahin ohne
+        erkennbaren Fehler weiter und die Vektorsuche arbeitete auf leeren
+        Embeddings. Genau dieser Zustand muss am Ergebnis ablesbar sein.
+        """
+        embedding = MagicMock()
+        embedding.embed_batch.side_effect = RuntimeError("connection refused")
+        degradations = DegradationCollector()
+        entities = [{"name": "Alice", "type": "Person"}]
+        relations = [
+            {"source": "Alice", "target": "Bob", "type": "KNOWS", "fact": "Alice knows Bob."}
+        ]
+
+        ent_emb, rel_emb = embed_entities_and_relations(
+            embedding, entities, relations, degradations=degradations
+        )
+
+        # Der Fallback selbst ist unverändert — er ist bewusst gewählt.
+        assert ent_emb == [[]]
+        assert rel_emb == [[]]
+
+        events = degradations.report().events
+        assert len(events) == 1
+        assert events[0].kind is DegradationKind.EMBEDDING_UNAVAILABLE
+        assert events[0].severity is DegradationSeverity.WARNING
+        assert "connection refused" in events[0].detail
+        assert events[0].context["affected_texts"] == 2
+
+    def test_successful_embedding_records_nothing(self):
+        """Kein Ausfall, kein Eintrag — sonst wäre der Hinweis wertlos."""
+        embedding = MagicMock()
+        embedding.embed_batch.return_value = [[0.1], [0.2]]
+        degradations = DegradationCollector()
+
+        embed_entities_and_relations(
+            embedding,
+            [{"name": "Alice", "type": "Person"}],
+            [{"source": "A", "target": "B", "type": "R", "fact": "f"}],
+            degradations=degradations,
+        )
+
+        assert not degradations
+        assert degradations.report().events == []
+
+    def test_collector_is_optional(self):
+        """Ohne Collector bleibt das historische Verhalten unverändert."""
+        embedding = MagicMock()
+        embedding.embed_batch.side_effect = RuntimeError("model down")
+
+        ent_emb, rel_emb = embed_entities_and_relations(
+            embedding, [{"name": "A", "type": "T"}], []
+        )
+
+        assert ent_emb == [[]]
+        assert rel_emb == []
 
     def test_position_alignment_preserved_with_uneven_split(self):
         """3 entities + 1 relation → split[:3] vs split[3:]."""

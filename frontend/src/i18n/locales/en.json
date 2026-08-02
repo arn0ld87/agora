@@ -1242,6 +1242,23 @@
     "reportFailed": "Report failed.",
     "unknown": "Unknown error."
   },
+  "degradation": {
+    "title": {
+      "warning": "Completed, but with a loss of quality",
+      "blocking": "The result is not good enough to continue"
+    },
+    "kind": {
+      "embedding_unavailable": "Semantic search unavailable",
+      "graph_below_threshold": "Graph below the quality threshold",
+      "persona_rule_based_fallback": "Personas generated as placeholders"
+    },
+    "action": {
+      "embedding_unavailable": "Start the embedding service and rebuild the graph, otherwise vector search stays ineffective.",
+      "graph_below_threshold": "Rebuild with a stronger model or use a more substantial document.",
+      "persona_rule_based_fallback": "Regenerate the personas with a stronger model — placeholder profiles carry no reliable statements."
+    },
+    "occurrences": "occurred {count}×"
+  },
   "dashboard": {
     "title": "Dashboard",
     "subtitle": "Active runs, reports, system state at a glance.",

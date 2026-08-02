@@ -134,6 +134,12 @@ from .embedding_contract import (
     embedding_provider_kinds,
     provider_kind_supports_embeddings,
 )
+from .pipeline_degradation_contract import (
+    DegradationKind,
+    DegradationSeverity,
+    PipelineDegradationModel,
+    PipelineDegradationReport,
+)
 from .report_v3 import (
     Claim,
     ChangeRecommendation,
@@ -167,6 +173,8 @@ __all__ = [
     "ClusterSummary",
     "ComparisonDeltas",
     "ConfidenceLabel",
+    "DegradationKind",
+    "DegradationSeverity",
     "EdgeData",
     "EdgeReinforcement",
     "EdgeWeakening",
@@ -185,6 +193,8 @@ __all__ = [
     "NodePropertyShift",
     "PersonaEntityContext",
     "PersonaModel",
+    "PipelineDegradationModel",
+    "PipelineDegradationReport",
     "Platform",
     "PostCreatedEvent",
     "PostVoiceRegister",

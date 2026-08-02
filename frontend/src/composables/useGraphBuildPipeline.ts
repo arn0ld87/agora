@@ -10,6 +10,11 @@ import {
   type ProjectResponse,
 } from '../api/graph'
 import type { AiModelRefPayload } from '../api/report'
+import {
+  EMPTY_DEGRADATION_REPORT,
+  parseDegradationReport,
+  type PipelineDegradationReport,
+} from '../contracts/pipelineDegradationContract'
 import { usePolling } from './usePolling'
 import { useSystemLog } from './useSystemLog'
 import { getPendingUpload, clearPendingUpload } from '../store/pendingUpload'
@@ -46,6 +51,11 @@ export function useGraphBuildPipeline({
   // persistiert keine run_id). StepModelOverrideChip faellt dann auf den
   // Stage-Default zurueck, was der dokumentierte Fallback-Pfad ist.
   const currentRunId = ref<string | null>(null)
+  // Issue #1029: stille Teilausfälle des abgeschlossenen Builds. Leer ist
+  // der Normalfall. Ein Eintrag hier bedeutet, dass der Build zwar
+  // durchgelaufen ist, das Ergebnis aber nachweislich schlechter ist als
+  // es aussieht.
+  const degradations = ref<PipelineDegradationReport>(EMPTY_DEGRADATION_REPORT)
   let activeGeneration = 0
   const { systemLogs, addLog } = useSystemLog({ cap: 100 })
   const { resolveRunModel } = useRunModelResolver()
@@ -255,6 +265,14 @@ export function useGraphBuildPipeline({
       if (task.status === 'completed') {
         stopPolling()
         stopGraphPolling()
+        // Issue #1029: vor dem Weiterschalten auswerten, was still
+        // ausgefallen ist. Ein Build kann technisch fertig sein und
+        // trotzdem ein Ergebnis liefern, mit dem weiterzuarbeiten sich
+        // nicht lohnt.
+        degradations.value = parseDegradationReport(task.result)
+        for (const event of degradations.value.events) {
+          addLog(event.detail)
+        }
         currentPhase.value = 2
         const projectResponse = await getProject(currentProjectId.value)
         if (isCurrent(generation) && projectResponse.success && projectResponse.data.graph_id) {
@@ -309,6 +327,9 @@ export function useGraphBuildPipeline({
     buildProgress,
     currentRunId,
     systemLogs,
+    // Issue #1029: stille Teilausfälle des Builds. Leer heißt „nichts
+    // ausgefallen", nicht „nicht geprüft".
+    degradations,
     initialize,
     // Issue #1023 (Befund B-08): GraphPanel/GraphToolbar emittieren
     // "refresh" seit jeher, StepGraphBuildView hatte dafuer nie einen

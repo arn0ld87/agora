@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from ..config import Config
 from ..models.task import TaskManager, TaskStatus
 from ..storage import GraphStorage
+from .degradation_collector import DegradationCollector
 from .text_processor import TextProcessor
 
 # Forward-import nur fürs Type-Hint — der konkrete Extractor wird vom
@@ -112,6 +113,11 @@ class GraphBuilderService:
         ner_extractor: Optional["NERExtractor"] = None,
     ):
         """Graph build worker thread"""
+        # Issue #1029: sammelt stille Teilausfälle aus allen Phasen dieses
+        # Builds. Wird bis in ``embed_entities_and_relations`` durchgereicht
+        # und landet am Ende im Task-Ergebnis, damit die Oberfläche einen
+        # Qualitätsverlust nicht länger für einen sauberen Lauf hält.
+        degradations = DegradationCollector()
         try:
             self.task_manager.update_task(
                 task_id,
@@ -154,6 +160,7 @@ class GraphBuilderService:
                     message=msg
                 ),
                 ner_extractor=ner_extractor,
+                degradations=degradations,
             )
 
             # 5. Wait for processing (no-op for Neo4j — already synchronous)
@@ -173,6 +180,9 @@ class GraphBuilderService:
                 "graph_id": graph_id,
                 "graph_info": graph_info.to_dict(),
                 "chunks_processed": total_chunks,
+                # Issue #1029: leere Liste ist der Normalfall und heißt
+                # „nichts ist still ausgefallen".
+                "degradations": degradations.report().model_dump(mode="json"),
             })
 
         except Exception as e:  # noqa: BLE001 — exc logged via traceback or propagated
@@ -212,6 +222,7 @@ class GraphBuilderService:
         batch_size: int = 3,
         progress_callback: Optional[Callable[[str, float, int, int], None]] = None,
         ner_extractor: Optional["NERExtractor"] = None,
+        degradations: Optional[DegradationCollector] = None,
     ) -> List[str]:
         """Add text chunks to graph in parallel, return uuid list of all episodes.
 
@@ -227,6 +238,12 @@ class GraphBuilderService:
 
         ``ner_extractor`` wird an jedes ``storage.add_text`` durchgereicht
         (Override pro Run). Ohne Override greift der Storage-Singleton-NER.
+
+        ``degradations`` (Issue #1029) sammelt stille Teilausfälle aus den
+        parallel laufenden Chunks — vor allem einen Embedding-Ausfall, der
+        sonst nur als Logzeile existierte. Der Sammler ist thread-safe und
+        fasst gleichartige Meldungen zusammen, statt sie pro Chunk zu
+        wiederholen.
         """
         total_chunks = len(chunks)
         if total_chunks == 0:
@@ -251,7 +268,11 @@ class GraphBuilderService:
                 # time-travel diffs can distinguish document knowledge from
                 # edges learned during simulation.
                 episode_id = self.storage.add_text(
-                    graph_id, chunk, round_num=0, ner_extractor=ner_extractor
+                    graph_id,
+                    chunk,
+                    round_num=0,
+                    ner_extractor=ner_extractor,
+                    degradations=degradations,
                 )
                 elapsed = time.time() - t0
                 logger.info(

@@ -15,6 +15,13 @@
     </PageHeader>
     <PipelineStepper :current-step="1" />
     <p v-if="error" role="alert">{{ error }}</p>
+    <!--
+      Issue #1029: Ein Build kann durchlaufen und trotzdem ein Ergebnis
+      liefern, mit dem weiterzuarbeiten sich nicht lohnt. Der Hinweis steht
+      bewusst oberhalb des Canvas — er ist die Antwort auf „warum sieht der
+      Graph so leer aus", nicht eine Fußnote darunter.
+    -->
+    <DegradationNotice :report="degradations" />
     <div class="graph-build-layout">
       <!-- Wissensgraph-Canvas: sichtbar sobald graphData geladen ist (Phase 2). -->
       <section v-if="graphData" class="graph-build-canvas">
@@ -50,6 +57,7 @@ import PipelineStepper from '@/components/v4/steps/PipelineStepper.vue'
 import Step1GraphBuild from '@/components/Step1GraphBuild.vue'
 import GraphPanel from '@/components/GraphPanel.vue'
 import StepModelOverrideChip from '@/components/v4/forms/StepModelOverrideChip.vue'
+import DegradationNotice from '@/components/v4/DegradationNotice.vue'
 import { useGraphBuildPipeline } from '@/composables/useGraphBuildPipeline'
 import type { BreadcrumbItem } from '@/components/v4/shell/Breadcrumbs.vue'
 
@@ -77,6 +85,7 @@ const {
   systemLogs,
   error,
   currentRunId,
+  degradations,
   initialize,
   refreshGraph,
 } = useGraphBuildPipeline({ projectId: props.projectId, router, t })
