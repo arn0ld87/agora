@@ -80,6 +80,16 @@ function createStore(simulationId: string) {
   }
 
   function scheduleFlushIfNeeded(): void {
+    // Ein Hintergrund-Tab bekommt keine Animation Frames, waehrend SSE
+    // weiterhin ingest() aufruft. Ohne diese Schranke waere `pending` (und
+    // ueber `seen` auch die Dedup-Menge) die neue unbegrenzt wachsende
+    // Struktur — genau der Defekt, den der Ringpuffer beheben soll. Ist der
+    // Puffer allein schon so gross wie das Feed-Limit, wird er sofort
+    // synchron uebernommen; danach greift die Eviction in appendBatch.
+    if (pending.length >= MAX_POSTS_PER_FEED) {
+      flushPending()
+      return
+    }
     if (flushScheduled) return
     flushScheduled = true
     scheduleFrame(flushPending)
@@ -93,15 +103,22 @@ function createStore(simulationId: string) {
     scheduleFlushIfNeeded()
   }
 
+  /**
+   * Nimmt eine Liste in einem Durchgang auf. Laeuft bewusst ueber denselben
+   * `pending`-Puffer wie ingest() und flusht danach synchron: schriebe die
+   * Funktion direkt in all.value, koennte ein bereits gepufferter, aber noch
+   * nicht uebernommener Post nach den hier ergaenzten landen — die Liste
+   * waere dann nicht mehr in Eingangsreihenfolge, was Ringpuffer-Eviction
+   * und activityRate verfaelscht.
+   */
   function ingestMany(posts: PostCreatedEvent[]): void {
-    const accepted: PostCreatedEvent[] = []
     for (const post of posts) {
       if (post.simulation_id !== simulationId) continue
       if (seen.has(post.post_id)) continue
       seen.add(post.post_id)
-      accepted.push(post)
+      pending.push(post)
     }
-    appendBatch(accepted)
+    flushPending()
   }
 
   function clear(): void {

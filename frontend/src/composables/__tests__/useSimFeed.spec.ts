@@ -191,4 +191,48 @@ describe('useSimFeed', () => {
     const rootB = tree.find((n) => n.post_id === 'root-b')!
     expect(rootB.children).toEqual([])
   })
+
+  // PR-Review #1010 (Codex P1): ein Hintergrund-Tab bekommt keine Animation
+  // Frames, waehrend SSE weiterhin ingest() aufruft. Ohne Schranke im Puffer
+  // waere `pending` die neue unbegrenzt wachsende Struktur — der Ringpuffer
+  // liefe leer, weil er erst beim Flush greift.
+  it('Ringpuffer greift auch ohne Animation Frame (Hintergrund-Tab)', () => {
+    const originalRaf = globalThis.requestAnimationFrame
+    // rAF, das nie zurueckruft — exakt das Verhalten eines inaktiven Tabs.
+    globalThis.requestAnimationFrame = () => 0
+    try {
+      const feed = useSimFeed('sim-1')
+      const total = MAX_POSTS_PER_FEED + 50
+      for (let i = 0; i < total; i++) {
+        feed.ingest(mkPost({ platform: 'reddit', post_id: `bg-${i}` }))
+      }
+
+      // Bewusst OHNE flushPending(): der Puffer muss sich selbst begrenzt
+      // haben. Ohne die Schranke laegen hier alle 550 Posts noch in
+      // `pending`, all.value waere leer und der Ringpuffer haette nie
+      // gegriffen — ein nachtraeglicher Flush wuerde das verdecken.
+      expect(feed.redditPosts.value.length).toBe(MAX_POSTS_PER_FEED)
+
+      // Der Rest folgt beim naechsten Flush, die Obergrenze haelt weiterhin.
+      feed.flushPending()
+      expect(feed.redditPosts.value.length).toBe(MAX_POSTS_PER_FEED)
+      const ids = feed.redditPosts.value.map((p) => p.post_id)
+      expect(ids).not.toContain('bg-0')
+      expect(ids).toContain(`bg-${total - 1}`)
+    } finally {
+      globalThis.requestAnimationFrame = originalRaf
+    }
+  })
+
+  // PR-Review #1010 (CodeRabbit): ingestMany() darf einen bereits gepufferten
+  // Post nicht ueberholen, sonst steht all.value nicht mehr in
+  // Eingangsreihenfolge — was Ringpuffer-Eviction und activityRate verfaelscht.
+  it('Reihenfolge bleibt erhalten, wenn ingest() und ingestMany() sich mischen', () => {
+    const feed = useSimFeed('sim-1')
+    feed.ingest(mkPost({ platform: 'reddit', post_id: 'first' }))
+    feed.ingestMany([mkPost({ platform: 'reddit', post_id: 'second' })])
+    feed.flushPending()
+
+    expect(feed.redditPosts.value.map((p) => p.post_id)).toEqual(['first', 'second'])
+  })
 })

@@ -7,10 +7,10 @@
  * useEventStream-API: handlers werden im Constructor übergeben, nicht via .on().
  * post_created-Handler routet direkt in useSimFeed.ingest().
  */
-import { onMounted, onBeforeUnmount, watch } from 'vue'
+import { onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { useEventStream } from '@/composables/useEventStream'
-import { useSimFeed, clearSimFeed } from '@/composables/useSimFeed'
+import { useSimFeed } from '@/composables/useSimFeed'
 import FeedColumn from '@/components/v4/sim-feed/FeedColumn.vue'
 import RedditThread from '@/components/v4/sim-feed/RedditThread.vue'
 import TwitterPost from '@/components/v4/sim-feed/TwitterPost.vue'
@@ -30,21 +30,6 @@ onMounted(async () => {
   await stream.start()
 })
 
-// Die Route /v4/simulation/:simulationId/feed hat keinen :key auf dem
-// <router-view>-Component (siehe App.vue) — Vue Router wechselt bei einer
-// neuen simulationId also NICHT die Component-Instanz, sondern aktualisiert
-// nur route.params reaktiv. Der lokale `simulationId`-Snapshot (Z. 20) bleibt
-// deshalb bewusst unveraendert (kein Re-Init von feed/stream in diesem
-// Slice, #1007 ist auf den Unmount-Datenverlust begrenzt); dieser watch hat
-// einen einzigen Zweck: den Store der VERLASSENEN Simulation freigeben,
-// sonst waere er nur ueber die MAX_STORES-LRU in useSimFeed erreichbar.
-watch(
-  () => route.params.simulationId,
-  (_next, previous) => {
-    if (previous !== undefined) clearSimFeed(String(previous))
-  },
-)
-
 onBeforeUnmount(() => {
   // Gepufferte, aber noch nicht in all.value geschriebene Posts (rAF-Batch
   // in useSimFeed) vor dem Stream-Stop synchron uebernehmen, sonst gehen sie
@@ -54,10 +39,17 @@ onBeforeUnmount(() => {
   // clearSimFeed(simulationId) bewusst NICHT mehr hier: eine normale
   // Navigation weg von der Feed-Route (und zurueck) hat bislang den
   // gesamten empfangenen Bestand vernichtet (#1007). "Stream schliessen"
-  // und "Daten verwerfen" sind getrennt — ein echter Reset passiert nur
-  // beim Simulationswechsel oben im watch. Über viele Simulationen hinweg
-  // bleibt die MAX_STORES-LRU in useSimFeed die Rueckfallebene gegen
-  // unbegrenztes Wachstum.
+  // und "Daten verwerfen" sind getrennt.
+  //
+  // Beim Wechsel der simulationId wird hier bewusst NICHTS geleert. `feed`
+  // und `stream` sind an den Snapshot aus Z. 20 gebunden; die Component
+  // wird laut Router-Konfiguration ohne :key wiederverwendet, ein Re-Init
+  // faende also nicht statt. Wuerde man den Store der alten ID trotzdem
+  // leeren, zeigte der View danach eine leere Liste UND bekaeme mangels
+  // neuem Stream keine Daten mehr — schlechter als der Zustand vor diesem
+  // Slice. Der Simulationswechsel bleibt damit unveraendert unbehandelt
+  // (#1007 ist auf den Unmount-Datenverlust begrenzt); aufgeraeumt wird
+  // ueber die MAX_STORES-LRU in useSimFeed.
 })
 </script>
 
