@@ -99,6 +99,17 @@ vi.mock('@/composables/useEffectiveModelSelection', () => ({
 
 // useSimFeed: echtes Modul behalten — wir wollen die Routing- und
 // Dedupe-Logik mittesten.
+//
+// useSimFeed batcht eingehende Posts seit #1007 pro Animation Frame. jsdoms
+// requestAnimationFrame loest erst nach ~16ms Realzeit aus; die Assertions
+// unten pruefen den gerenderten Feed direkt nach dem synchronen
+// post_created-Handler ohne auf einen echten Frame zu warten. Der Stub macht
+// rAF synchron, damit die bestehenden Erwartungen unveraendert gelten.
+vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+  cb(0)
+  return 0
+})
+
 import { clearSimFeed } from '../../composables/useSimFeed'
 import Step3Simulation from '@/components/v4/steps/Step3Simulation.vue'
 
