@@ -2,7 +2,9 @@
 Profile, config, branch, and script-download routes split from the main simulation API module.
 """
 
+import io
 import os
+import zipfile
 from datetime import datetime, timezone
 from typing import Any
 
@@ -693,4 +695,52 @@ def download_simulation_script(script_name: str):
             message=f"Script file does not exist: {script_name}",
         )
 
+    if script_name == "action_logger.py":
+        return _download_action_logger_bundle(script_path)
+
     return send_file(script_path, as_attachment=True, download_name=script_name)
+
+
+def _download_action_logger_bundle(script_path: str):
+    """Bundle action_logger.py together with its app.contracts import as a ZIP.
+
+    action_logger.py imports ``app.contracts.sim_action_log_contract`` (see
+    #1016). A bare single-file download breaks with ``ModuleNotFoundError``
+    outside the repo, so the download must ship the contract module alongside
+    it — no local re-definition fallback (that duplicated-truth pattern was
+    the root cause of #1014).
+
+    The archive reproduces the repository layout — script under ``scripts/``,
+    contract under ``app/contracts/`` — rather than placing both side by side.
+    That is load-bearing: ``action_logger.py`` bootstraps its own import path
+    to *two* directories above itself and inserts it at ``sys.path[0]``. With a
+    flat archive that anchor points outside the extraction directory, so an
+    unrelated ``app`` package in the parent directory would shadow the bundled
+    one — silently supplying a stale contract, or failing outright when it has
+    no ``contracts`` submodule.
+    """
+    contracts_dir = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), '../contracts')
+    )
+    contract_path = os.path.join(contracts_dir, "sim_action_log_contract.py")
+    if not os.path.exists(contract_path):
+        return json_error(
+            ApiErrorCode.NOT_FOUND,
+            status=404,
+            message="Contract file does not exist: sim_action_log_contract.py",
+        )
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.write(script_path, arcname="scripts/action_logger.py")
+        zf.writestr("app/__init__.py", "")
+        zf.writestr("app/contracts/__init__.py", "")
+        zf.write(contract_path, arcname="app/contracts/sim_action_log_contract.py")
+    buffer.seek(0)
+
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name="action_logger_bundle.zip",
+        mimetype="application/zip",
+    )
