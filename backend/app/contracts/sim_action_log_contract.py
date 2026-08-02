@@ -6,9 +6,14 @@ Writer: ``backend/scripts/action_logger.py`` (läuft im Simulations-Subprozess)
 Reader: ``backend/app/services/sim/action_log_reader.py``
 
 Beide Seiten tauschten die Felder bisher über ein implizites Dict aus: der
-Reader las ``simulated_hours``, der Writer schrieb den Schlüssel nie. Der
-Fortschrittswert blieb dadurch dauerhaft 0. Dieser Vertrag ist die einzige
-Stelle, an der die Feldnamen des ``round_end``-Events definiert werden.
+Reader las ``simulated_hours``, der Writer schrieb den Schlüssel nie. In
+``run_state.json`` stand deshalb dauerhaft ``simulated_hours: 0`` (#1014).
+Dieser Vertrag ist die einzige Stelle, an der die Feldnamen des
+``round_end``-Events definiert werden.
+
+Reichweite des Fixes: Writer → Reader → ``SimulationRunState`` → Status-API.
+Die Anzeige im Frontend ist laut #1014 ausdrücklich out of scope — sie liest
+den Wert bis heute nicht (siehe #1018).
 
 EINHEITEN — nicht verwechseln:
 
@@ -28,7 +33,7 @@ from __future__ import annotations
 
 from typing import Any, Final, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # ``Final`` statt blankem str: nur so leitet mypy den Literal-Typ ab und die
 # Konstante taugt als Default des ``event_type``-Feldes.
@@ -57,6 +62,22 @@ class RoundEndEvent(BaseModel):
     )
     platform: str | None = None
 
+    @field_validator("simulated_minutes", mode="before")
+    @classmethod
+    def _ganze_minuten(cls, value: Any) -> Any:
+        """Rundet Fließkomma-Minuten auf ganze.
+
+        ``run_parallel_simulation.py:2044`` lädt die Config im Subprozess roh
+        über ``json.load`` — am Schema vorbei, das ``minutes_per_round`` auf
+        ``int`` festlegt. Ein handgeschriebenes ``minutes_per_round: 45.5``
+        erreicht den Writer damit als Float und ließe ``log_round_end`` an
+        einer ValidationError sterben, wo vorher nur ein Dict geschrieben
+        wurde. Runden statt Absturz.
+        """
+        if isinstance(value, float):
+            return round(value)
+        return value
+
     @property
     def simulated_hours(self) -> float:
         """Verstrichene Sim-Zeit in Stunden (float — 30 min ⇒ 0.5)."""
@@ -66,16 +87,13 @@ class RoundEndEvent(BaseModel):
     def from_log_entry(cls, data: dict[str, Any]) -> RoundEndEvent:
         """Parst einen Log-Eintrag, inklusive Alt-Logs ohne ``simulated_minutes``.
 
-        Vor Slice 6 geschriebene Logs enthalten das Feld nicht. Sie werden auf
-        0 Minuten abgebildet, statt einen Fehler zu werfen: ein laufender Run
-        darf an einem alten Eintrag nicht sterben.
+        Vor Slice 6 geschriebene Logs enthalten das Feld nicht — der alte
+        Writer schrieb *keinen* Zeitschlüssel, auch nicht ``simulated_hours``;
+        genau das ist die Prämisse von B-28. Solche Einträge fallen über
+        ``Field(default=0)`` auf 0 Minuten, statt einen Fehler zu werfen: ein
+        laufender Run darf an einem alten Eintrag nicht sterben.
         """
-        payload = dict(data)
-        if payload.get("simulated_minutes") is None:
-            legacy_hours = payload.get("simulated_hours")
-            if isinstance(legacy_hours, (int, float)) and not isinstance(legacy_hours, bool):
-                payload["simulated_minutes"] = int(float(legacy_hours) * MINUTES_PER_HOUR)
-        return cls.model_validate(payload)
+        return cls.model_validate(data)
 
     def to_log_entry(self) -> dict[str, Any]:
         """Serialisiert die JSONL-Zeile. ``platform=None`` wird weggelassen."""

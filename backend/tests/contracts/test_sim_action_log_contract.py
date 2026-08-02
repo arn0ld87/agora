@@ -1,9 +1,14 @@
 """Slice 6 / B-28 — ``log_round_end`` schrieb die simulierte Zeit nie.
 
 Der Reader las ``action_data.get("simulated_hours", 0)``, der Writer legte den
-Schlüssel nie an. Der Fortschritt blieb dadurch in jedem Lauf konstant 0 — die
-UI zeigte dauerhaft „0 h“, obwohl die Simulation lief. Beide Seiten teilen
-jetzt ``RoundEndEvent`` als Vertrag statt eines impliziten Dict-Schlüssels.
+Schlüssel nie an. In ``run_state.json`` stand deshalb über den ganzen Lauf
+``simulated_hours: 0`` bei ``total_simulation_hours: 72`` (#1014). Beide Seiten
+teilen jetzt ``RoundEndEvent`` als Vertrag statt eines impliziten Dict-
+Schlüssels.
+
+Diese Tests decken den Datenpfad Writer → Reader → ``SimulationRunState`` ab.
+Die Frontend-Anzeige ist laut #1014 out of scope und liest den Wert bis heute
+nicht (#1018) — kein Test hier belegt eine Wirkung auf die Oberfläche.
 
 Kanonische Einheit sind Minuten: ``round * minutes_per_round`` ist ganzzahlig
 exakt (``minutes_per_round`` liegt in [30, 120]). Stunden werden als ``float``
@@ -70,7 +75,12 @@ def test_writer_schreibt_den_schluessel_den_der_reader_liest(tmp_path: Path) -> 
 
 
 def test_altlog_ohne_zeitfeld_bricht_den_reader_nicht(tmp_path: Path) -> None:
-    """Vor Slice 6 geschriebene Logs bleiben lesbar — 0 h statt Crash."""
+    """Vor Slice 6 geschriebene Logs bleiben lesbar — 0 h statt Crash.
+
+    Anker ist ``simulated_minutes: int = Field(default=0)``. Ohne den Default
+    ist das Feld required, ``from_log_entry`` wirft eine ValidationError, der
+    Reader verwirft die Zeile — ``current_round`` bliebe dann 0 statt 4.
+    """
     log_path = tmp_path / "twitter" / "actions.jsonl"
     log_path.parent.mkdir(parents=True)
     log_path.write_text(
@@ -118,15 +128,38 @@ def test_defekte_zeile_verwirft_nicht_den_rest_des_chunks(tmp_path: Path) -> Non
     assert state.simulated_hours == 1.0
 
 
-@pytest.mark.parametrize("runde", [48, 96])
+@pytest.mark.parametrize("runde", [48, 49, 97])
 def test_tages_uhrzeit_ist_kein_fortschritt(runde: int) -> None:
     """``simulated_hour`` springt bei ``% 24`` zurück — der Vertrag nicht.
 
     Runde 48 bei 30 min/Runde entspricht 24 h. Die Tages-Uhrzeit wäre wieder 0,
     der Fortschritt muss weiterlaufen. Genau diese Verwechslung soll der
     Vertrag durch die Feldbenennung ausschließen.
+
+    49 und 97 liegen bewusst auf einer halben Stunde (1470 min ⇒ 24.5 h,
+    2910 min ⇒ 48.5 h): sie fallen um, sobald ``simulated_hours`` ganzzahlig
+    dividiert. Ein Parametersatz aus reinen Stunden-Vielfachen wäre gegen
+    ``//`` blind.
     """
     event = RoundEndEvent(round=runde, timestamp="", simulated_minutes=runde * MINUTES_PER_ROUND)
 
     assert event.simulated_hours == runde / 2
     assert event.simulated_hours >= 24.0
+
+
+def test_float_minuten_toeten_den_writer_nicht(tmp_path: Path) -> None:
+    """Eine Config am Schema vorbei darf ``log_round_end`` nicht abstürzen lassen.
+
+    Der Subprozess lädt ``minutes_per_round`` roh aus JSON. Bei ``45.5``
+    erreicht der Writer einen Float; ohne die Rundung im Vertrag stürbe er an
+    einer ValidationError, statt eine Zeile zu schreiben.
+    """
+    logger = PlatformActionLogger("twitter", str(tmp_path))
+    state = SimulationRunState(simulation_id="sim_float")
+
+    logger.log_round_end(1, 0, simulated_minutes=45.5)  # type: ignore[arg-type]
+    _read(logger, state)
+
+    entry = json.loads(Path(logger.log_path).read_text(encoding="utf-8").strip())
+    assert entry["simulated_minutes"] == 46
+    assert state.current_round == 1
