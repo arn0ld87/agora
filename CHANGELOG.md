@@ -5,6 +5,12 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (der Simulationsfortschritt stand dauerhaft auf 0 — 2026-08-02, Issue #1014)
+
+- **Writer und Reader tauschten die Rundendaten über ein implizites Dict aus.** [`backend/scripts/action_logger.py`](backend/scripts/action_logger.py) schrieb das `round_end`-Ereignis ohne den Schlüssel `simulated_hours`; [`backend/app/services/sim/action_log_reader.py`](backend/app/services/sim/action_log_reader.py) las genau diesen Schlüssel. Der Reader fand ihn nie und meldete konstant 0 — die Fortschrittsanzeige einer laufenden Simulation bewegte sich nicht, unabhängig davon, wie viele Runden tatsächlich gelaufen waren.
+- **Beide Seiten hängen jetzt an einem gemeinsamen Vertrag.** Neu ist `RoundEndEvent` in [`backend/app/contracts/sim_action_log_contract.py`](backend/app/contracts/sim_action_log_contract.py). Kanonisch geführt wird `simulated_minutes` als Ganzzahl; die Stunden sind ein daraus abgeleiteter Wert. Damit kann keine der beiden Seiten den Schlüssel mehr einseitig umbenennen, ohne dass die Verträge auseinanderfallen — das war die eigentliche Fehlerursache, nicht der fehlende Wert selbst.
+- **Alt-Logs bleiben lesbar.** `from_log_entry` akzeptiert Einträge ohne `simulated_minutes` weiterhin und rechnet sie aus den vorhandenen Feldern hoch, damit bereits geschriebene Simulationsläufe nicht nachträglich unlesbar werden.
+
 ### Fixed (ein Evidence-Verstoß kippte den ganzen Report — 2026-08-02, Issue #1006)
 
 - **Ein einzelner verletzender Claim vernichtete alle bereits fertigen Abschnitte.** `_save_evidence_section` in [`backend/app/services/report_agent/agent.py`](backend/app/services/report_agent/agent.py) validierte die Evidence-Map ohne lokales `try/except`. Der `ValidationError` lief über die ungeschützte Hauptschleife in [`backend/app/services/report_agent/workflow.py`](backend/app/services/report_agent/workflow.py) bis in den globalen Handler und setzte `report.status = FAILED` mit `md_len=0`. Ein Report mit sechs geplanten und einem bereits ADR-0002-konform ausformulierten Abschnitt endete so als Totalausfall. Acht von acht echten Reports seit dem 27.07. sind daran gescheitert.
