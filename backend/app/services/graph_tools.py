@@ -209,22 +209,25 @@ class GraphToolsService:
             interview_questions=custom_questions or []
         )
 
-        # Sub-Slice 05.6 — Early-Check: Sim-Environment muss erreichbar sein,
-        # bevor wir teure LLM-Calls für Selection + Question-Generation
-        # auslösen. Vorher wurde der Sim-Status erst nach 30-60s LLM-Arbeit
-        # geprüft, das LLM bekam dann ein generisches "please ensure ...
-        # running" und rief das Tool im ReACT-Loop wieder auf → max-iter-
-        # Force-Generate-Schleifen.
-        if not SimulationRunner.check_env_alive(simulation_id):
+        # Sub-Slice 05.6 / Issue #999 — Early-Check: ein Interview muss
+        # überhaupt beantwortbar sein, bevor wir teure LLM-Calls für Selection
+        # + Question-Generation auslösen (30-60s). Vorher prüfte dieser Check
+        # nur die IPC-Liveness (check_env_alive), die für jede abgeschlossene
+        # Simulation False ist — der Normalzustand eines Report-Laufs.
+        # interviews_possible fragt zusätzlich den Direktpfad (persistierte
+        # Personas) ab, den interview_agents_batch ohnehin automatisch
+        # nutzt, sobald die IPC-Umgebung tot ist.
+        if not SimulationRunner.interviews_possible(simulation_id):
             logger.warning(
-                "Interview tool skipped — sim environment for %s is not alive "
-                "(closed or never started). Returning terminal soft-fail.",
+                "Interview tool skipped for %s — neither a running IPC "
+                "worker nor persisted agent personas were found. Returning "
+                "terminal soft-fail.",
                 simulation_id,
             )
             result.summary = (
-                "Interview tool TERMINALLY UNAVAILABLE for this report run — "
-                "the OASIS simulation environment is closed and cannot be "
-                "restarted from the report context. Do NOT call interview_agents "
+                "Interview tool unavailable for this report run — neither a "
+                "running simulation worker nor persisted agent personas "
+                "were found for this simulation. Do NOT call interview_agents "
                 "again. Use insight_forge, panorama_search, or quick_search to "
                 "derive stakeholder perspectives from the graph instead."
             )
