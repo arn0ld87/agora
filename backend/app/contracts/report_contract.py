@@ -501,6 +501,23 @@ class ReportModel(BaseModel):
     red_team_findings: list[str] = Field(default_factory=list, max_length=10)
 
 
+class EvidenceDegradationModel(BaseModel):
+    """Maschinenlesbares Protokoll einer lokalen Claim-Degradierung (Issue #1006).
+
+    Ein einzelner ADR-0002-Verstoss kippte bisher den gesamten Report auf
+    FAILED und vernichtete bereits fertige Sections. Statt den Validator zu
+    lockern, wird der verletzende Claim lokal abgestuft und die Reparatur
+    hier protokolliert.
+    """
+
+    model_config = _STRICT
+    section_index: int
+    claim_id: str
+    violation: str  # Kurzbezeichner der verletzten Regel bzw. Pydantic-Fehlertyp
+    action: str  # "downgraded_to_low" | "moved_to_hypotheses" | "dropped"
+    detail: str  # menschenlesbare Begründung
+
+
 class EvidenceMapModel(BaseModel):
     """Persistierte Evidence-Map. Ablöse für die rohen Dicts in report_agent.py."""
     model_config = _STRICT
@@ -509,6 +526,9 @@ class EvidenceMapModel(BaseModel):
     simulation_id: str = Field(min_length=1)
     global_evidence: list[EvidenceItemModel] = Field(default_factory=list)
     sections: list[ReportSectionModel] = Field(default_factory=list)
+    # Issue #1006: additiv, Default leer — bestehende persistierte
+    # EvidenceMaps ohne dieses Feld validieren unverändert weiter.
+    degradation_log: list[EvidenceDegradationModel] = Field(default_factory=list)
 
 
 class ReportContractModel(BaseModel):

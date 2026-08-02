@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import copy
 import re
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+
+from pydantic import ValidationError
 
 from .schemas import CURRENT_SCHEMA_VERSION, EvidenceMapModel
 
@@ -390,6 +393,12 @@ def normalize_sections_for_contract(
             logger=logger,
             item_kind="hypotheses",
         )
+        item["hypotheses_appendix"] = _filter_placeholder_items(
+            list(item.get("hypotheses_appendix") or []),
+            "hypothesis_text",
+            logger=logger,
+            item_kind="hypotheses_appendix",
+        )
         item["data_gaps"] = _filter_placeholder_items(
             list(item.get("data_gaps") or []),
             "claim_text",
@@ -398,6 +407,195 @@ def normalize_sections_for_contract(
         )
         normalized_sections.append(item)
     return normalized_sections
+
+
+# ---------------------------------------------------------------------------
+# Issue #1006 — Graceful Degradation nach fehlgeschlagener Contract-Validierung
+# ---------------------------------------------------------------------------
+
+_MIN_HYPOTHESIS_TEXT_LEN = 8
+_MAX_HYPOTHESIS_FIELD_LEN = 1000
+_FALLBACK_RATIONALE = (
+    "Automatisch aus einem Claim ohne ausreichende Evidence in eine "
+    "Hypothese überführt, da der ursprüngliche Validierungsfehler keine "
+    "verwertbare Begründung lieferte."
+)
+
+
+def _collect_existing_hypothesis_ids(section: Dict[str, Any]) -> set:
+    ids: set = set()
+    for list_name in ("hypotheses", "hypotheses_appendix"):
+        for entry in section.get(list_name) or []:
+            if isinstance(entry, dict):
+                hid = entry.get("hypothesis_id")
+                if hid:
+                    ids.add(hid)
+    return ids
+
+
+def _next_hypothesis_id(existing: set) -> str:
+    i = 1
+    while True:
+        candidate = f"hypothesis_{i:02d}"
+        if candidate not in existing:
+            return candidate
+        i += 1
+
+
+def degrade_sections_for_violations(
+    sections: List[Dict[str, Any]],
+    error: "ValidationError",
+    *,
+    logger: Any = None,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Repariert Sections nach einem fehlgeschlagenen Contract-Validate.
+
+    Liest ``error.errors()`` (Pydantic) und wendet je nach ``loc``-Pfad eine
+    von drei Reparaturregeln an (ADR-0002-konform: die Reaktion auf einen
+    Verstoss wird angepasst, nicht der Verstoss selbst toleriert):
+
+    - Claim-Verstoss mit Evidence → ``confidence_label`` auf ``low``.
+    - Claim-Verstoss ohne Evidence → Claim entfernen, ggf. als Hypothese
+      wiederaufleben lassen (nur bei ausreichend langem ``claim_text``).
+    - Hypothesen-Verstoss (``hypotheses`` oder ``hypotheses_appendix``) →
+      Eintrag entfernen.
+
+    Verstösse, die keiner dieser Formen entsprechen, werden ignoriert
+    (Section bleibt unverändert, kein Protokolleintrag) — hier wird bewusst
+    nicht geraten.
+
+    Mutiert die Eingabe nicht; arbeitet auf einer tiefen Kopie.
+    """
+    repaired: List[Dict[str, Any]] = copy.deepcopy(sections)
+    violations: List[Dict[str, Any]] = []
+
+    claims_to_remove: Dict[int, set] = {}
+    hyps_to_remove: Dict[Tuple[int, str], set] = {}
+    processed_claims: set = set()
+    processed_hyps: set = set()
+
+    def _log_violation(entry: Dict[str, Any]) -> None:
+        violations.append(entry)
+        if logger is not None:
+            logger.warning(
+                "degrade_sections_for_violations: section=%s claim_id=%s "
+                "violation=%s action=%s detail=%s",
+                entry["section_index"],
+                entry["claim_id"],
+                entry["violation"],
+                entry["action"],
+                entry["detail"],
+            )
+
+    for err in error.errors():
+        loc = err.get("loc") or ()
+        if len(loc) < 4 or loc[0] != "sections":
+            continue
+
+        si = loc[1]
+        kind = loc[2]
+        if not isinstance(si, int) or not (0 <= si < len(repaired)):
+            continue
+        section = repaired[si]
+        section_index_value = section.get("section_index", 0)
+        violation_type = str(err.get("type") or "unknown")
+        detail = str(err.get("msg") or "")[:500]
+
+        if kind == "claims":
+            ci = loc[3]
+            claims_list = section.get("claims") or []
+            if not isinstance(ci, int) or not (0 <= ci < len(claims_list)):
+                continue
+            if (si, ci) in processed_claims:
+                continue
+            processed_claims.add((si, ci))
+            claim = claims_list[ci]
+            if not isinstance(claim, dict):
+                continue
+            claim_id = str(claim.get("claim_id") or "")
+            evidence = claim.get("evidence") or []
+
+            if evidence:
+                claim["confidence_label"] = "low"
+                _log_violation({
+                    "section_index": section_index_value,
+                    "claim_id": claim_id,
+                    "violation": violation_type,
+                    "action": "downgraded_to_low",
+                    "detail": detail,
+                })
+                continue
+
+            claims_to_remove.setdefault(si, set()).add(ci)
+            claim_text = claim.get("claim_text")
+            stripped_text = claim_text.strip() if isinstance(claim_text, str) else ""
+
+            if len(stripped_text) >= _MIN_HYPOTHESIS_TEXT_LEN:
+                existing_ids = _collect_existing_hypothesis_ids(section)
+                new_id = _next_hypothesis_id(existing_ids)
+                hypothesis_text = stripped_text[:_MAX_HYPOTHESIS_FIELD_LEN]
+                rationale = detail.strip() if len(detail.strip()) >= _MIN_HYPOTHESIS_TEXT_LEN else _FALLBACK_RATIONALE
+                rationale = rationale[:_MAX_HYPOTHESIS_FIELD_LEN]
+                new_hypothesis = {
+                    "hypothesis_id": new_id,
+                    "hypothesis_text": hypothesis_text,
+                    "rationale": rationale,
+                }
+                section.setdefault("hypotheses", []).append(new_hypothesis)
+                _log_violation({
+                    "section_index": section_index_value,
+                    "claim_id": claim_id,
+                    "violation": violation_type,
+                    "action": "moved_to_hypotheses",
+                    "detail": detail,
+                })
+            else:
+                _log_violation({
+                    "section_index": section_index_value,
+                    "claim_id": claim_id,
+                    "violation": violation_type,
+                    "action": "dropped",
+                    "detail": detail,
+                })
+
+        elif kind in ("hypotheses", "hypotheses_appendix"):
+            hi = loc[3]
+            hyp_list = section.get(kind) or []
+            if not isinstance(hi, int) or not (0 <= hi < len(hyp_list)):
+                continue
+            key = (si, kind)
+            if (key, hi) in processed_hyps:
+                continue
+            processed_hyps.add((key, hi))
+            hyp_entry = hyp_list[hi]
+            hyp_id = ""
+            if isinstance(hyp_entry, dict):
+                hyp_id = str(hyp_entry.get("hypothesis_id") or "")
+            hyps_to_remove.setdefault(key, set()).add(hi)
+            _log_violation({
+                "section_index": section_index_value,
+                "claim_id": hyp_id,
+                "violation": violation_type,
+                "action": "dropped",
+                "detail": detail,
+            })
+        # Alles andere: keine bekannte Regel, Section bleibt unverändert.
+
+    for si, indices in claims_to_remove.items():
+        claims_list = repaired[si].get("claims")
+        if not isinstance(claims_list, list):
+            continue
+        for idx in sorted(indices, reverse=True):
+            del claims_list[idx]
+
+    for (si, list_name), indices in hyps_to_remove.items():
+        hyp_list = repaired[si].get(list_name)
+        if not isinstance(hyp_list, list):
+            continue
+        for idx in sorted(indices, reverse=True):
+            del hyp_list[idx]
+
+    return repaired, violations
 
 
 __all__ = [
@@ -411,4 +609,6 @@ __all__ = [
     "validate_quote_anchors",
     # Smoke-Live 2026-05-15 — Auto-Downgrade
     "auto_downgrade_unsupported_high_claims",
+    # Issue #1006 — Graceful Degradation
+    "degrade_sections_for_violations",
 ]

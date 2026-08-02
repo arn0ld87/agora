@@ -2,10 +2,13 @@ import re
 from copy import deepcopy
 from typing import Any, Callable, Dict, List, Optional
 
+from pydantic import ValidationError
+
 from ...utils.llm_client import LLMClient
 from ..confidence_calculator import compute_confidence
 from ..evidence_binder import bind_evidence_to_claim, detect_contradiction_penalty
 from .evidence import (
+    degrade_sections_for_violations,
     init_evidence_map,
     normalize_claims_for_contract,
     normalize_sections_for_contract,
@@ -765,7 +768,77 @@ class ReportAgent:
         self.evidence_map["sections"] = normalize_sections_for_contract(
             existing_sections, logger=logger,
         )
-        validated = EvidenceMapModel.model_validate(self.evidence_map).model_dump(mode="json")
+        try:
+            validated = EvidenceMapModel.model_validate(self.evidence_map).model_dump(mode="json")
+        except ValidationError as first_error:
+            # Issue #1006: ein einzelner ADR-0002-Verstoss darf nicht den
+            # gesamten Report auf FAILED kippen und bereits fertige Sections
+            # mitreissen. Statt den Validator zu lockern, wird der
+            # verletzende Claim lokal abgestuft/entfernt und protokolliert.
+            repaired_sections, violations = degrade_sections_for_violations(
+                self.evidence_map["sections"], first_error, logger=logger,
+            )
+            self.evidence_map["sections"] = repaired_sections
+            self.evidence_map["degradation_log"] = (
+                list(self.evidence_map.get("degradation_log") or []) + violations
+            )
+            logger.warning(
+                "_save_evidence_section: section=%d ValidationError repariert — %d Verstoss/Verstösse.",
+                section_index, len(violations),
+            )
+            try:
+                validated = EvidenceMapModel.model_validate(self.evidence_map).model_dump(mode="json")
+            except ValidationError as second_error:
+                # Zweiter Versuch ebenfalls ungültig: degrade_sections_for_violations
+                # kennt nur die Fehlerformen aus dem ersten Durchlauf. Jetzt werden
+                # alle Claims/Hypothesen, deren loc-Pfad im neuen Fehler auftaucht,
+                # ersatzlos aus ihrer Section entfernt.
+                sections = self.evidence_map["sections"]
+                indices_to_remove: Dict[Any, set] = {}
+                removed_entries: List[Dict[str, Any]] = []
+                for err in second_error.errors():
+                    loc = err.get("loc") or ()
+                    if len(loc) < 4 or loc[0] != "sections":
+                        continue
+                    si, kind, idx = loc[1], loc[2], loc[3]
+                    if kind not in ("claims", "hypotheses", "hypotheses_appendix"):
+                        continue
+                    if not isinstance(si, int) or not (0 <= si < len(sections)):
+                        continue
+                    entries = sections[si].get(kind) or []
+                    if not isinstance(idx, int) or not (0 <= idx < len(entries)):
+                        continue
+                    key = (si, kind)
+                    if idx in indices_to_remove.get(key, set()):
+                        continue
+                    indices_to_remove.setdefault(key, set()).add(idx)
+                    entry = entries[idx]
+                    entry_id = ""
+                    if isinstance(entry, dict):
+                        entry_id = str(entry.get("claim_id") or entry.get("hypothesis_id") or "")
+                    removed_entries.append({
+                        "section_index": sections[si].get("section_index", 0),
+                        "claim_id": entry_id,
+                        "violation": str(err.get("type") or "unknown"),
+                        "action": "dropped",
+                        "detail": str(err.get("msg") or "")[:500],
+                    })
+                for (si, kind), indices in indices_to_remove.items():
+                    entries = sections[si].get(kind)
+                    if not isinstance(entries, list):
+                        continue
+                    for i in sorted(indices, reverse=True):
+                        del entries[i]
+                self.evidence_map["degradation_log"] = (
+                    list(self.evidence_map.get("degradation_log") or []) + removed_entries
+                )
+                logger.warning(
+                    "_save_evidence_section: section=%d zweiter ValidationError — %d Eintrag/Einträge hart entfernt.",
+                    section_index, len(removed_entries),
+                )
+                # Dritter Versuch: scheitert er erneut, ist etwas anderes kaputt —
+                # die Exception läuft bewusst ungefangen weiter (Issue #1006).
+                validated = EvidenceMapModel.model_validate(self.evidence_map).model_dump(mode="json")
         self.evidence_map = validated
         ReportManager.save_evidence_map(report_id, validated)
     

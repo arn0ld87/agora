@@ -19,6 +19,7 @@ from .evidence import validate_quote_anchors
 from .manager import ReportManager
 from .output_contract import (
     FinalContentRejected,
+    apply_degradation_downgrade,
     is_fallback_content,
     resolve_report_status,
     sanitize_final_content,
@@ -1173,6 +1174,12 @@ def generate_report(
             total_sections=total_sections,
             failed_section_indices=failed_section_indices,
             required_section_indices=list(range(1, total_sections + 1)),
+        )
+        # Issue #1006: eine lokale Claim-Degradierung darf ein sonst
+        # vollständiges Ergebnis nicht als COMPLETED ausweisen.
+        report.status = apply_degradation_downgrade(
+            report.status,
+            (agent.evidence_map or {}).get("degradation_log") or [],
         )
         if failed_section_indices:
             failed_note = (
