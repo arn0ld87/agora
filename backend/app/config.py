@@ -155,6 +155,25 @@ class Config:
     ONTOLOGY_MAX_ENTITY_TYPES = int(os.environ.get('ONTOLOGY_MAX_ENTITY_TYPES', '16'))
     ONTOLOGY_MAX_EDGE_TYPES = int(os.environ.get('ONTOLOGY_MAX_EDGE_TYPES', '12'))
 
+    # Qualitätsschwellen für den fertigen Graph-Build (Issue #1029).
+    # Ein Build, der technisch durchläuft, aber unterhalb dieser Werte
+    # bleibt, meldete bislang "Graph fertig" und ließ den Report Schritte
+    # später an fehlender Evidenz scheitern — an einem Symptom, dessen
+    # Ursache hier liegt.
+    #
+    # GRAPH_MIN_RELATIONS auf 1: ein Graph ohne eine einzige Kante ist
+    # keine Wissensbasis, sondern eine Stichwortliste. Das ist der Fall aus
+    # Befund B-24 (3 Entitäten, 0 Beziehungen) und blockiert hart.
+    GRAPH_MIN_ENTITIES = int(os.environ.get('GRAPH_MIN_ENTITIES', '3'))
+    GRAPH_MIN_RELATIONS = int(os.environ.get('GRAPH_MIN_RELATIONS', '1'))
+    # Anteil der Chunks, die mindestens eine Entität oder Relation liefern
+    # müssen. Bei B-24 meldeten zwei von vier Chunks "0 entities, 0
+    # relations" — die Hälfte des Dokuments war damit nicht erfasst, ohne
+    # dass die Gesamtzahlen das verraten hätten. 0.0 schaltet die Prüfung ab.
+    GRAPH_MIN_CHUNK_SUCCESS_RATIO = float(
+        os.environ.get('GRAPH_MIN_CHUNK_SUCCESS_RATIO', '0.5')
+    )
+
     # Hybrid search weights (SearchService — vector × keyword/BM25 mix).
     # Defaults reproduce the historical 0.7 / 0.3 split. The two weights do
     # not have to sum to 1; SearchService normalises within each side first.

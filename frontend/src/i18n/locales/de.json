@@ -238,6 +238,8 @@
       "rebuild": "Neu aufbauen",
       "running": "Baut Graph…",
       "completed": "Graph fertig.",
+      "insufficient": "Unzureichend",
+      "insufficientDesc": "Der Graph erfüllt die Qualitätsschwelle nicht. Bau ihn neu auf, bevor du weitergehst — die folgenden Schritte bauen darauf auf.",
       "chunks": "Chunks: {done} / {total}",
       "elapsed": "Dauer: {time}"
     },

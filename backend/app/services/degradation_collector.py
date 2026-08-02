@@ -1,6 +1,11 @@
-"""Sammelstelle für stille Teilausfälle während eines Pipeline-Laufs.
+"""Qualitätssignale, die von unten nach oben durch die Pipeline wandern.
 
 Issue #1029 · 2026-08-02
+
+Zwei Dinge leben hier, weil sie denselben Weg gehen: der
+``DegradationCollector`` für fertige Befunde und der
+``ChunkExtractionTally`` für die Rohzahlen, aus denen erst weiter oben
+ein Befund wird.
 
 Der Ort, an dem eine Degradierung auffällt, ist selten der Ort, an dem sie
 gemeldet werden kann. Das Batch-Embedding scheitert tief in
@@ -112,4 +117,59 @@ class DegradationCollector:
             return len(self._events)
 
 
-__all__ = ["DegradationCollector"]
+class ChunkExtractionTally:
+    """Zählt, wie viele Chunks der NER überhaupt etwas entnommen hat.
+
+    Ein einzelner leerer Chunk ist kein Befund — er kann schlicht eine
+    Kapitelüberschrift enthalten. Erst der Anteil macht ihn zu einem: Bei
+    Befund B-24 meldeten zwei von vier Chunks ``0 entities, 0 relations``,
+    die Hälfte des Dokuments war also nicht erfasst, und die
+    Gesamtzahlen verrieten davon nichts.
+
+    Deshalb ein reiner Zähler und kein ``DegradationCollector``-Eintrag:
+    Die Bewertung passiert einmal am Ende des Builds, wo die Gesamtzahl
+    der Chunks bekannt ist — nicht N-mal währenddessen.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._total = 0
+        self._productive = 0
+
+    def record_chunk(self, entity_count: int, relation_count: int) -> None:
+        """Verbucht einen verarbeiteten Chunk. Thread-safe."""
+        with self._lock:
+            self._total += 1
+            if entity_count > 0 or relation_count > 0:
+                self._productive += 1
+
+    @property
+    def total(self) -> int:
+        with self._lock:
+            return self._total
+
+    @property
+    def productive(self) -> int:
+        with self._lock:
+            return self._productive
+
+    @property
+    def empty(self) -> int:
+        with self._lock:
+            return self._total - self._productive
+
+    @property
+    def success_ratio(self) -> float:
+        """Anteil produktiver Chunks. Ohne Chunks per Definition 1.0.
+
+        Der Leerfall ist bewusst „alles in Ordnung" und nicht 0.0 — ein
+        Build ohne Chunks hat kein Extraktionsproblem, sondern kein
+        Dokument, und das ist ein anderer Fehler an einer anderen Stelle.
+        """
+        with self._lock:
+            if self._total == 0:
+                return 1.0
+            return self._productive / self._total
+
+
+__all__ = ["ChunkExtractionTally", "DegradationCollector"]

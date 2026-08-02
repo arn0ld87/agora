@@ -32,7 +32,10 @@ from ..services.ingestion_pipeline import (
 from .neo4j_mappings import edge_to_dict, sanitize_label
 
 if TYPE_CHECKING:
-    from ..services.degradation_collector import DegradationCollector
+    from ..services.degradation_collector import (
+        ChunkExtractionTally,
+        DegradationCollector,
+    )
     from .ner_extractor import NERExtractor
 
 logger = logging.getLogger("agora.neo4j_storage")
@@ -208,6 +211,7 @@ class Neo4jWriteMixin:
         round_num: Optional[int] = None,
         ner_extractor: Optional["NERExtractor"] = None,
         degradations: Optional["DegradationCollector"] = None,
+        extraction_tally: Optional["ChunkExtractionTally"] = None,
     ) -> str:
         """Process text in three phases — NER, embed, persist.
 
@@ -232,6 +236,10 @@ class Neo4jWriteMixin:
         weiter; ohne diesen Sammler bliebe das außerhalb des Logs
         unsichtbar. Wird von ``GraphBuilderService.add_text_batches``
         durchgereicht und ist thread-safe — die Chunks laufen parallel.
+
+        ``extraction_tally`` (Issue #1029): zählt mit, ob dieser Chunk dem
+        NER überhaupt etwas entnommen hat. Erst der Anteil über den ganzen
+        Build macht daraus einen Befund.
         """
         episode_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
@@ -239,7 +247,9 @@ class Neo4jWriteMixin:
         # Phase 1 — NER + Relation-Extraction
         ontology = self.get_ontology(graph_id)
         ner = ner_extractor if ner_extractor is not None else self._ner
-        extraction = extract_entities_and_relations(ner, text, ontology)
+        extraction = extract_entities_and_relations(
+            ner, text, ontology, tally=extraction_tally
+        )
         entities = extraction.get("entities", [])
         relations = extraction.get("relations", [])
 

@@ -18,7 +18,7 @@ from ..contracts.pipeline_degradation_contract import (
     DegradationSeverity,
 )
 from ..utils.logger import get_logger
-from .degradation_collector import DegradationCollector
+from .degradation_collector import ChunkExtractionTally, DegradationCollector
 
 logger = get_logger("agora.ingestion_pipeline")
 
@@ -27,6 +27,7 @@ def extract_entities_and_relations(
     ner: Any,
     text: str,
     ontology: Dict[str, Any],
+    tally: Optional[ChunkExtractionTally] = None,
 ) -> Dict[str, Any]:
     """Phase 1 — NER + Relation-Extraction.
 
@@ -36,6 +37,10 @@ def extract_entities_and_relations(
         ner: NER-Service mit ``.extract(text, ontology)``-Methode.
         text: Einzelner Text-Chunk (typischerweise eine Episode).
         ontology: Aktuelle Ontologie als Schema-Hinweis für den NER.
+        tally: optionaler Zähler für die Chunk-Erfolgsquote (Issue #1029).
+            Ein Chunk ohne jede Extraktion ist für sich unauffällig; erst
+            der Anteil über den ganzen Build zeigt, ob das Dokument
+            überhaupt erfasst wurde.
 
     Returns:
         Extraction-Dict mit den Schlüsseln ``"entities"`` und ``"relations"``
@@ -49,6 +54,8 @@ def extract_entities_and_relations(
     logger.info(
         f"[ingestion] NER done: {len(entities)} entities, {len(relations)} relations"
     )
+    if tally is not None:
+        tally.record_chunk(len(entities), len(relations))
     return extraction
 
 

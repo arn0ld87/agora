@@ -40,6 +40,7 @@ class GraphStorage(ABC):
         round_num: Optional[int] = None,
         ner_extractor: Optional[Any] = None,
         degradations: Optional[Any] = None,
+        extraction_tally: Optional[Any] = None,
     ) -> str:
         """
         Process text: NER/RE → create nodes/edges → return episode_id.
@@ -62,6 +63,10 @@ class GraphStorage(ABC):
         das mit Leer-Vektoren weiterarbeitet. Bewusst als ``Any``
         typisiert, damit das Storage-Protokoll nicht auf einen Service
         zurückzeigt.
+
+        ``extraction_tally`` (Issue #1029): optionaler
+        ``ChunkExtractionTally``, der zählt, ob dieser Chunk dem NER etwas
+        entnommen hat — Grundlage der Chunk-Erfolgsquote.
         """
 
     @abstractmethod

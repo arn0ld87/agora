@@ -16,7 +16,13 @@ const props = defineProps({
   ontologyProgress: Object,
   buildProgress: Object,
   graphData: Object,
-  systemLogs: { type: Array, default: () => [] }
+  systemLogs: { type: Array, default: () => [] },
+  // Issue #1029: Der Build ist durchgelaufen, das Ergebnis trägt aber
+  // einen blockierenden Befund — etwa ein Graph ohne eine einzige
+  // Beziehung. Bewusst als Boolean statt als Contract-Objekt: diese
+  // v2-Komponente muss den Degradierungsvertrag nicht kennen, nur sein
+  // Urteil. Der Grund selbst steht im DegradationNotice darüber.
+  qualityBlocked: { type: Boolean, default: false }
 })
 
 defineEmits(['next-step'])
@@ -30,6 +36,14 @@ const graphStats = computed(() => {
   const edges = props.graphData?.edge_count || props.graphData?.edges?.length || 0
   const types = props.projectData?.ontology?.entity_types?.length || 0
   return { nodes, edges, types }
+})
+
+// Issue #1029: drei Zustände statt zwei — läuft noch, fertig, oder fertig
+// mit einem Ergebnis, mit dem weiterzuarbeiten sich nicht lohnt.
+const graphStepBadge = computed(() => {
+  if (props.currentPhase < 2) return { variant: 'outline', labelKey: 'common.loading' }
+  if (props.qualityBlocked) return { variant: 'outline', labelKey: 'step1.build.insufficient' }
+  return { variant: 'accent', labelKey: 'common.ready' }
 })
 
 function selectItem(item, type) {
@@ -182,18 +196,28 @@ function phaseVariant(phase) {
       </article>
 
       <!-- Card 3: Done → next -->
-      <article class="card" :class="{ 'is-active': currentPhase >= 2 }">
+      <article class="card" :class="{ 'is-active': currentPhase >= 2 && !qualityBlocked }">
         <header class="card-head">
           <Kicker num="03" accent>{{ t('step1.next') }}</Kicker>
-          <Badge :variant="currentPhase >= 2 ? 'accent' : 'outline'" :dot="currentPhase >= 2">
-            {{ currentPhase >= 2 ? t('common.ready') : t('common.loading') }}
+          <!--
+            Issue #1029: „Bereit" ist eine Aussage über das Ergebnis, nicht
+            über den Programmablauf. Ein Graph ohne Beziehungen hat den
+            Build zwar überstanden, taugt aber nicht als Grundlage.
+          -->
+          <Badge
+            :variant="graphStepBadge.variant"
+            :dot="currentPhase >= 2 && !qualityBlocked"
+          >
+            {{ t(graphStepBadge.labelKey) }}
           </Badge>
         </header>
-        <p class="card-desc">{{ t('step1.build.completed') }}</p>
+        <p class="card-desc">
+          {{ qualityBlocked ? t('step1.build.insufficientDesc') : t('step1.build.completed') }}
+        </p>
         <Button
           variant="primary"
           arrow
-          :disabled="currentPhase < 2 || creatingSimulation"
+          :disabled="currentPhase < 2 || qualityBlocked || creatingSimulation"
           :loading="creatingSimulation"
           @click="enterEnvSetup"
         >

@@ -95,6 +95,9 @@ Embedding-Konfiguration wird vom [`EmbeddingConfigurationStore`](../backend/app/
 |---|---|
 | `GRAPH_CHUNK_SIZE` / `GRAPH_CHUNK_OVERLAP` | Chunking beim Graph-Build |
 | `GRAPH_PARALLEL_CHUNKS` | Parallelität beim Build |
+| `GRAPH_MIN_ENTITIES` | Qualitätsschwelle: Entitäten im fertigen Graphen (Default `3`). Darunter eine Warnung |
+| `GRAPH_MIN_RELATIONS` | Qualitätsschwelle: Beziehungen (Default `1`). Darunter **blockierend** — der Schritt erreicht „bereit" nicht |
+| `GRAPH_MIN_CHUNK_SUCCESS_RATIO` | Anteil der Chunks, die Entitäten oder Beziehungen liefern müssen (Default `0.5`; `0.0` schaltet die Prüfung ab) |
 | `GRAPH_MEMORY_PUT_TIMEOUT` / `GRAPH_MEMORY_QUEUE_MAX` | Graph-Memory-Backpressure |
 | `ONTOLOGY_MAX_ENTITY_TYPES` / `_MAX_EDGE_TYPES` / `_MIN_ENTITY_TYPES` | Ontologie-Grenzen |
 | `ONTOLOGY_MUTATION_MODE` / `_MUTATION_MIN_CONFIDENCE` | Ontologie-Mutation |

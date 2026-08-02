@@ -231,5 +231,50 @@ describe('StepGraphBuildView', () => {
       expect(notice.exists()).toBe(true)
       expect(notice.text()).toContain('Batch-Embedding fehlgeschlagen.')
     })
+
+    // Issue #1029, Befund B-24: Ein Graph ohne Beziehungen darf den
+    // Folgeschritt nicht freigeben.
+    it('meldet einen blockierenden Befund als qualityBlocked an Step1GraphBuild', () => {
+      pipeline.degradations = {
+        schema_version: 1,
+        events: [
+          {
+            kind: 'graph_below_threshold',
+            severity: 'blocking',
+            detail: 'Der Graph enthält 3 Entitäten, aber nur 0 Beziehungen.',
+            occurred_at: '2026-08-02T20:00:00Z',
+            occurrences: 1,
+            context: { node_count: 3, edge_count: 0 },
+          },
+        ],
+      }
+
+      const step = mountView().getComponent({ name: 'Step1GraphBuild' })
+      expect(step.props('qualityBlocked')).toBe(true)
+    })
+
+    it('lässt eine bloße Warnung den Folgeschritt offen', () => {
+      pipeline.degradations = {
+        schema_version: 1,
+        events: [
+          {
+            kind: 'embedding_unavailable',
+            severity: 'warning',
+            detail: 'Batch-Embedding fehlgeschlagen.',
+            occurred_at: '2026-08-02T20:00:00Z',
+            occurrences: 1,
+            context: {},
+          },
+        ],
+      }
+
+      const step = mountView().getComponent({ name: 'Step1GraphBuild' })
+      expect(step.props('qualityBlocked')).toBe(false)
+    })
+
+    it('gibt den Folgeschritt bei sauberem Build frei', () => {
+      const step = mountView().getComponent({ name: 'Step1GraphBuild' })
+      expect(step.props('qualityBlocked')).toBe(false)
+    })
   })
 })

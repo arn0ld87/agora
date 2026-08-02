@@ -17,7 +17,7 @@ Diese Datei prüft deshalb die Verbindungen selbst:
 from unittest.mock import MagicMock
 
 from app.contracts.pipeline_degradation_contract import DegradationKind
-from app.services.degradation_collector import DegradationCollector
+from app.services.degradation_collector import ChunkExtractionTally, DegradationCollector
 from app.services.ingestion_pipeline import embed_entities_and_relations
 
 
@@ -80,6 +80,20 @@ class TestStorageAddTextForwardsCollector:
         assert episode_id
         mixin._persist_episode.assert_called_once()
 
+    def test_extraction_tally_reaches_phase_one(self):
+        """Der Chunk-Zähler muss dieselbe Strecke überstehen wie der Sammler."""
+        from app.storage.neo4j_write import Neo4jWriteMixin
+
+        tally = ChunkExtractionTally()
+        embedding = MagicMock(name="Embedding")
+        embedding.embed_batch.return_value = [[0.1]]
+        mixin = self._mixin_with(embedding)
+
+        Neo4jWriteMixin.add_text(mixin, "graph-1", "Text.", extraction_tally=tally)
+
+        assert tally.total == 1
+        assert tally.productive == 1
+
 
 # ── Ebene 3 — add_text_batches → storage.add_text ──────────────────────
 
@@ -103,6 +117,19 @@ class TestAddTextBatchesForwardsCollector:
         for call in storage.add_text.call_args_list:
             assert call.kwargs["degradations"] is collector
 
+    def test_tally_is_handed_to_every_chunk(self):
+        from app.services.graph_builder import GraphBuilderService
+
+        tally = ChunkExtractionTally()
+        storage = MagicMock(name="Storage")
+        storage.add_text.side_effect = ["uuid-1", "uuid-2"]
+        service = GraphBuilderService(storage=storage)
+
+        service.add_text_batches(graph_id="g1", chunks=["a", "b"], extraction_tally=tally)
+
+        for call in storage.add_text.call_args_list:
+            assert call.kwargs["extraction_tally"] is tally
+
     def test_parallel_chunks_collapse_into_one_finding(self):
         """Alle Chunks scheitern am selben Embedding — ein Befund, nicht N.
 
@@ -115,7 +142,14 @@ class TestAddTextBatchesForwardsCollector:
         collector = DegradationCollector()
         embedding = _failing_embedding("kein Ollama")
 
-        def _add_text(graph_id, chunk, round_num=None, ner_extractor=None, degradations=None):
+        def _add_text(
+            graph_id,
+            chunk,
+            round_num=None,
+            ner_extractor=None,
+            degradations=None,
+            extraction_tally=None,
+        ):
             embed_entities_and_relations(
                 embedding,
                 [{"name": "X", "type": "T"}],
@@ -148,7 +182,14 @@ class TestBuildWorkerPublishesDegradations:
 
         embedding = _failing_embedding("Embedding-Dienst nicht erreichbar")
 
-        def _add_text(graph_id, chunk, round_num=None, ner_extractor=None, degradations=None):
+        def _add_text(
+            graph_id,
+            chunk,
+            round_num=None,
+            ner_extractor=None,
+            degradations=None,
+            extraction_tally=None,
+        ):
             embed_entities_and_relations(
                 embedding,
                 [{"name": "X", "type": "T"}],

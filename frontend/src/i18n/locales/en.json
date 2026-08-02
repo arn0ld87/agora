@@ -238,6 +238,8 @@
       "rebuild": "Rebuild",
       "running": "Building graph…",
       "completed": "Graph done.",
+      "insufficient": "Insufficient",
+      "insufficientDesc": "The graph does not meet the quality threshold. Rebuild it before moving on — the following steps build on it.",
       "chunks": "Chunks: {done} / {total}",
       "elapsed": "Elapsed: {time}"
     },
