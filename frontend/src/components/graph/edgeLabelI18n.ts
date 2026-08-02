@@ -51,18 +51,30 @@ export function humanizeEdgeKey(normalizedKey: string): string {
  *
  * @param rawName Roh-Label aus dem Graph (`edge.name`).
  * @param t vue-i18n `t`-Funktion (legacy:false → composition API).
+ * @param te optionale vue-i18n `te`-Funktion. Issue #1023 (Befund B-04): ohne
+ *   `te()`-Guard ruft jede LLM-generierte, nicht in `graph.edgeLabels`
+ *   hinterlegte Relation `t(fullKey)` auf — vue-i18n loggt das im Dev-Modus
+ *   als "not found"-Warnung, bevor `humanizeEdgeKey()` ueberhaupt greift.
+ *   Mit `te` wird der Lookup nur versucht, wenn der Key tatsaechlich existiert.
  * @returns angezeigter String.
  */
-export function formatEdgeLabel(rawName: string | null | undefined, t?: (key: string) => string): string {
+export function formatEdgeLabel(
+  rawName: string | null | undefined,
+  t?: (key: string) => string,
+  te?: (key: string) => boolean,
+): string {
   if (!rawName || typeof rawName !== 'string') return ''
   const key = normalizeEdgeKey(rawName)
   if (!key) return rawName
 
   if (typeof t === 'function') {
     const fullKey = `${TRANSLATION_PREFIX}.${key}`
-    const translated = t(fullKey)
-    // vue-i18n gibt bei Miss den Key selbst zurück (oder fallback locale value).
-    if (translated && translated !== fullKey) return translated
+    const keyExists = typeof te === 'function' ? te(fullKey) : true
+    if (keyExists) {
+      const translated = t(fullKey)
+      // vue-i18n gibt bei Miss den Key selbst zurück (oder fallback locale value).
+      if (translated && translated !== fullKey) return translated
+    }
   }
 
   return humanizeEdgeKey(key) || rawName

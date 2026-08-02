@@ -14,22 +14,36 @@
  *
  * Wenn ``locked`` gesetzt ist, wird der Chip read-only dargestellt (Run
  * laeuft bereits und die Stage ist versiegelt).
+ *
+ * Issue #1023 (Befund B-23): Ohne ``runId`` zeigte der Chip fuer einen
+ * laufenden oder abgeschlossenen Run immer den Workspace-/Stage-Default
+ * statt des Modells, das dieser Run fuer die Stage tatsaechlich verwendet
+ * hat (`GET /api/runs/<id>/llm-routing` → `snapshots[stageId]`).
+ * Modellvergleiche wurden damit dem falschen Modell zugeordnet. Mit
+ * ``runId`` liest der Chip den Run-Snapshot der Stage, sobald sie
+ * gestartet hat, und markiert die Quelle sichtbar (`sourceRun` /
+ * `sourceDefault`). Ohne Snapshot (Stage noch nicht erreicht oder kein
+ * ``runId``) bleibt der bisherige Default-Pfad aktiv.
  */
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useLlmProvidersStore, useLlmRoutingDefaultsStore } from '@/store/aiModels'
 import { useAiModelRefAdapter } from '@/composables/useAiModelRefAdapter'
+import { getRunLlmRouting } from '@/api/llmRouting'
 import AiModelPicker from './AiModelPicker.vue'
-import type { StageId } from '@/contracts/llmRoutingContract'
+import type { StageId, ResolvedRoute } from '@/contracts/llmRoutingContract'
 import type { AiModelRef } from '@/contracts/aiModelRef'
 
 const props = withDefaults(defineProps<{
   stageId: StageId
   label?: string
   locked?: boolean
+  /** Registry-Run-ID (run_...). Wenn gesetzt, hat der Run-Snapshot Vorrang. */
+  runId?: string | null
 }>(), {
   label: 'Modell',
   locked: false,
+  runId: null,
 })
 
 const { t } = useI18n()
@@ -39,15 +53,46 @@ const defaultsStore = useLlmRoutingDefaultsStore()
 const adapter = useAiModelRefAdapter()
 
 const open = ref(false)
+const runSnapshot = ref<ResolvedRoute | null>(null)
+
+async function loadRunSnapshot(runId: string): Promise<void> {
+  try {
+    const response = await getRunLlmRouting(runId)
+    runSnapshot.value = response.snapshots?.[props.stageId] ?? null
+  } catch {
+    // Run (noch) nicht abrufbar oder Endpoint fehlgeschlagen — Stage-Default
+    // bleibt der sichtbare Fallback, kein Chip-Crash.
+    runSnapshot.value = null
+  }
+}
+
+watch(
+  () => props.runId,
+  (runId) => {
+    if (runId) void loadRunSnapshot(runId)
+    else runSnapshot.value = null
+  },
+  { immediate: true },
+)
+
+const usingRunSnapshot = computed(() => runSnapshot.value !== null)
+// Ein bereits verwendeter Run-Snapshot ist nicht mehr editierbar — die Stage
+// hat mit diesem Modell schon (mindestens einmal) tatsaechlich aufgerufen.
+const effectiveLocked = computed(() => props.locked || usingRunSnapshot.value)
 
 const effectiveRoute = computed(() => defaultsStore.effectiveRouteForStage(props.stageId))
 const hasOverride = computed(() => props.stageId in defaultsStore.stageOverrides)
 
 const displayLabel = computed(() => {
+  if (runSnapshot.value) return `${runSnapshot.value.provider_id} · ${runSnapshot.value.model}`
   const route = effectiveRoute.value
   if (!route?.model) return t('stepModelOverrideChip.modelPlaceholder', 'Modell wählen …')
   return `${route.provider_id ?? '?'} · ${route.model}`
 })
+
+const sourceBadgeLabel = computed(() => usingRunSnapshot.value
+  ? t('stepModelOverrideChip.sourceRun', 'aus Lauf')
+  : t('stepModelOverrideChip.sourceDefault', 'Standard'))
 
 // Slice 5.4: AiModelRef-Aequivalent der effektiven LlmRoute.
 // Wir konvertieren via Adapter, damit der Picker den korrekten Wert
@@ -76,7 +121,7 @@ onMounted(() => {
 })
 
 function toggle(): void {
-  if (props.locked) return
+  if (effectiveLocked.value) return
   open.value = !open.value
 }
 
@@ -96,18 +141,19 @@ async function selectRoute(aiRef: AiModelRef | null): Promise<void> {
     <button
       type="button"
       class="step-model-chip"
-      :class="{ 'step-model-chip--override': hasOverride, 'step-model-chip--locked': locked }"
+      :class="{ 'step-model-chip--override': hasOverride, 'step-model-chip--locked': effectiveLocked }"
       :aria-expanded="open"
-      :disabled="locked"
+      :disabled="effectiveLocked"
       @click="toggle"
     >
       <span class="step-model-chip__label">{{ label }}:</span>
       <span class="step-model-chip__value">{{ displayLabel }}</span>
-      <span v-if="hasOverride && !locked" class="step-model-chip__badge">{{ t('stepModelOverrideChip.overrideBadge', 'override') }}</span>
-      <span v-if="locked" class="step-model-chip__lock" aria-hidden="true">🔒</span>
+      <span class="step-model-chip__source" data-testid="step-model-chip-source">{{ sourceBadgeLabel }}</span>
+      <span v-if="hasOverride && !usingRunSnapshot && !locked" class="step-model-chip__badge">{{ t('stepModelOverrideChip.overrideBadge', 'override') }}</span>
+      <span v-if="effectiveLocked" class="step-model-chip__lock" aria-hidden="true">🔒</span>
     </button>
 
-    <div v-if="open && !locked" class="step-model-chip__popover">
+    <div v-if="open && !effectiveLocked" class="step-model-chip__popover">
       <AiModelPicker
         :model-value="pickerModelValue"
         :placeholder="t('stepModelOverrideChip.modelPlaceholder', 'Modell wählen …')"
@@ -167,6 +213,12 @@ async function selectRoute(aiRef: AiModelRef | null): Promise<void> {
 .step-model-chip__value {
   font-family: var(--font-mono, monospace);
   color: var(--text-primary);
+}
+.step-model-chip__source {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 .step-model-chip__badge {
   font-size: 10px;

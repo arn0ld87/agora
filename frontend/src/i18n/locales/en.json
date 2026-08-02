@@ -585,7 +585,8 @@
     },
     "status": {
       "incomplete": "Report incomplete — some sections failed.",
-      "sectionFailed": "Section failed"
+      "sectionFailed": "Section failed",
+      "pollTransportError": "Lost connection to the server — status could not be fetched for several attempts in a row. Check your connection; this will update automatically once a fetch succeeds again."
     },
     "next": "Next: conversation →"
   },
@@ -654,7 +655,9 @@
       "closePanel": "Close graph panel",
       "exportHtml": "Export as standalone HTML",
       "resetLayout": "Reset layout",
-      "minimapTitle": "Minimap"
+      "minimapTitle": "Minimap",
+      "maximizeLayout": "Maximize",
+      "restoreLayout": "Restore"
     },
     "edgeLabels": {
       "RELATES_TO": "relates to",
@@ -1095,7 +1098,9 @@
     "overrideBadge": "override",
     "clearOverride": "Clear override → use default",
     "close": "Close",
-    "lockedBadge": "locked"
+    "lockedBadge": "locked",
+    "sourceRun": "from run",
+    "sourceDefault": "default"
   },
   "activeModel": {
     "label": "Active model",
@@ -1345,7 +1350,8 @@
     "empty": "No activity yet.",
     "showMoreReplies": "{count} more reply | {count} more replies",
     "pipeline": "Pipeline",
-    "feedTab": "Live Feed"
+    "feedTab": "Live Feed",
+    "sentimentBar": "Sentiment trend of recent posts"
   },
   "observability": {
     "viewTrace": "View trace ({id}…)"
