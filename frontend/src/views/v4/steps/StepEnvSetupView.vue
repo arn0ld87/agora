@@ -29,6 +29,7 @@ import PipelineStepper from '@/components/v4/steps/PipelineStepper.vue'
 import Step2EnvSetup from '@/components/v4/steps/Step2EnvSetup.vue'
 import StepModelOverrideChip from '@/components/v4/forms/StepModelOverrideChip.vue'
 import type { BreadcrumbItem } from '@/components/v4/shell/Breadcrumbs.vue'
+import { toRunParamsQuery } from '@/contracts/runParamsQuery'
 
 const props = defineProps<{
   projectId: string
@@ -42,14 +43,22 @@ const crumbs = computed<BreadcrumbItem[]>(() => [
   { label: 'Personas' },
 ])
 
-function handleNextStep(payload: { simulationId?: unknown }): void {
+function handleNextStep(payload: {
+  simulationId?: unknown
+  maxRounds?: unknown
+  simulationDays?: unknown
+}): void {
   if (typeof payload?.simulationId !== 'string' || payload.simulationId.length === 0) {
     return
   }
+  // Step 2 sendet Runden/Tage nur, wenn der Nutzer den Auto-Vorschlag
+  // überstimmt hat. Sie müssen in die Query: die Route hat ``props: true``,
+  // das überträgt ausschließlich Route-Params — vorher gingen die Werte hier
+  // verloren und Step 3 startete stets mit dem Auto-Wert (B-09/B-27).
   void router.push({
     name: 'StepSimulation',
     params: { simulationId: payload.simulationId },
-    query: { projectId: props.projectId },
+    query: { projectId: props.projectId, ...toRunParamsQuery(payload) },
   })
 }
 
