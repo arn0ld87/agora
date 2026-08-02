@@ -27,7 +27,10 @@ from app.services.report_agent.evidence import (
     degrade_sections_for_violations,
     normalize_sections_for_contract,
 )
-from app.services.report_agent.output_contract import apply_degradation_downgrade
+from app.services.report_agent.output_contract import (
+    apply_degradation_downgrade,
+    is_deliverable_report_status,
+)
 
 
 class _FakeAgentForDegradation:
@@ -304,3 +307,37 @@ def test_medium_validator_bleibt_streng():
 
     with pytest.raises(ValidationError):
         EvidenceMapModel.model_validate(payload)
+
+
+# ---------------------------------------------------------------------------
+# 6. Zustellung: INCOMPLETE ist ein Teilergebnis, kein Fehlschlag
+# ---------------------------------------------------------------------------
+
+
+def test_incomplete_report_ist_auslieferbar():
+    """PR-Review #1011 (Codex P1): ohne diese Unterscheidung landet ein
+    degradierter Report im failed-Zweig von ``ReportGenerationService`` und der
+    Nutzer liest "Report generation failed", obwohl das Ergebnis vorliegt —
+    der Fix aus #1006 waere in der Oberflaeche wirkungslos."""
+    assert is_deliverable_report_status(ReportStatus.INCOMPLETE) is True
+    assert is_deliverable_report_status(ReportStatus.COMPLETED) is True
+
+    assert is_deliverable_report_status(ReportStatus.FAILED) is False
+    assert is_deliverable_report_status(ReportStatus.PENDING) is False
+    assert is_deliverable_report_status(ReportStatus.PLANNING) is False
+    assert is_deliverable_report_status(ReportStatus.GENERATING) is False
+
+
+def test_report_generation_liefert_incomplete_statt_zu_scheitern():
+    """Der Produktivpfad in ``report_generation.py`` nutzt genau diese
+    Unterscheidung — ein Test auf den Helper allein wuerde eine spaetere
+    Rueckkehr zum harten ``== COMPLETED`` nicht bemerken."""
+    import inspect
+
+    from app.services import report_generation
+
+    source = inspect.getsource(report_generation.ReportGenerationService.start_generation)
+    assert "is_deliverable_report_status(report.status)" in source, (
+        "start_generation entscheidet nicht mehr ueber is_deliverable_report_status — "
+        "ein degradierter Report wuerde wieder als Fehlschlag zugestellt."
+    )
