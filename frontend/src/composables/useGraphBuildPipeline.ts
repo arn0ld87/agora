@@ -107,6 +107,7 @@ export function useGraphBuildPipeline({
       buildProgress.value = null
       currentPhase.value = -1
       currentRunId.value = null
+      degradations.value = EMPTY_DEGRADATION_REPORT
     }
     addLog(t('common.starting'))
     if (currentProjectId.value === 'new') {
@@ -190,6 +191,12 @@ export function useGraphBuildPipeline({
         startPollingTask(response.data.graph_build_task_id)
         startGraphPolling()
       } else if ((response.data.status === 'graph_completed' || response.data.status === 'completed') && response.data.graph_id) {
+        // Issue #1029: Erst die Befunde des abgeschlossenen Builds holen,
+        // dann weiterschalten. Ohne diesen Schritt verlöre ein Reload den
+        // blockierenden Befund, und der Weiter-Button wäre wieder offen —
+        // ausgerechnet auf dem Weg, den ein Nutzer nach einem
+        // fehlgeschlagenen Lauf am ehesten nimmt.
+        await restoreDegradations(response.data.graph_build_task_id, generation)
         currentPhase.value = 2
         await loadGraph(response.data.graph_id, generation)
       }
@@ -208,6 +215,8 @@ export function useGraphBuildPipeline({
   ): Promise<void> {
     try {
       currentPhase.value = 1
+      // Befunde des Vorlaufs gehören nicht zum neuen Build.
+      degradations.value = EMPTY_DEGRADATION_REPORT
       buildProgress.value = { progress: 0, message: t('step1.build.running') }
       const payload: BuildGraphData = { project_id: currentProjectId.value }
       const aiModelRef = resolvedAiModelRef === undefined
@@ -254,6 +263,36 @@ export function useGraphBuildPipeline({
     }
   }
 
+  /** Übernimmt die Befunde eines Task-Ergebnisses und protokolliert sie. */
+  function applyDegradations(result: Record<string, unknown> | null | undefined): void {
+    degradations.value = parseDegradationReport(result)
+    for (const event of degradations.value.events) {
+      addLog(event.detail)
+    }
+  }
+
+  /**
+   * Holt die Befunde eines bereits abgeschlossenen Builds nach.
+   *
+   * Der Task ist die einzige Quelle: `ProjectResponse` trägt den Bericht
+   * nicht. Ist die Task-ID nach einem Backend-Neustart nicht mehr
+   * auflösbar, bleibt der Bericht leer — derselbe dokumentierte
+   * Fallback-Pfad wie bei `currentRunId` (#1023).
+   */
+  async function restoreDegradations(taskId: string | undefined, generation: number): Promise<void> {
+    if (!taskId) return
+    try {
+      const response = await getTaskStatus(taskId)
+      if (!isCurrent(generation) || !response.success) return
+      if (response.data.status !== 'completed') return
+      applyDegradations(response.data.result)
+    } catch (caughtError) {
+      // Ein nicht mehr auflösbarer Task darf den Wiedereinstieg nicht
+      // blockieren — das Nachladen ist eine Verbesserung, kein Vertrag.
+      if (isCurrent(generation)) addLog(messageFor(caughtError))
+    }
+  }
+
   async function pollTaskStatus(taskId: string): Promise<void> {
     const generation = activeGeneration
     try {
@@ -269,10 +308,7 @@ export function useGraphBuildPipeline({
         // ausgefallen ist. Ein Build kann technisch fertig sein und
         // trotzdem ein Ergebnis liefern, mit dem weiterzuarbeiten sich
         // nicht lohnt.
-        degradations.value = parseDegradationReport(task.result)
-        for (const event of degradations.value.events) {
-          addLog(event.detail)
-        }
+        applyDegradations(task.result)
         currentPhase.value = 2
         const projectResponse = await getProject(currentProjectId.value)
         if (isCurrent(generation) && projectResponse.success && projectResponse.data.graph_id) {

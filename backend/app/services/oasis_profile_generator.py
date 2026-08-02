@@ -1755,6 +1755,15 @@ Important:
                 item["source_entity_uuid"] = profile.source_entity_uuid
             if profile.source_entity_type:
                 item["source_entity_type"] = profile.source_entity_type
+            # Issue #1029: Diese Methode baut das Dict neu, statt
+            # to_reddit_format() zu benutzen — sie überschreibt die im
+            # Realtime-Pfad bereits korrekt geschriebene Datei. Ohne die
+            # Herkunft hier verlöre das finale Artefakt sie wieder, und
+            # die Persona-Galerie zeigte kein Platzhalter-Abzeichen.
+            if profile.generation_source != "llm":
+                item["generation_source"] = profile.generation_source
+            if profile.generation_error:
+                item["generation_error"] = profile.generation_error
 
             data.append(item)
 

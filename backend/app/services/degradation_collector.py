@@ -25,6 +25,7 @@ Zustand aufzuräumen.
 
 from __future__ import annotations
 
+import re
 import threading
 from collections.abc import Mapping
 from typing import Optional
@@ -38,6 +39,33 @@ from ..contracts.pipeline_degradation_contract import (
 from ..utils.logger import get_logger
 
 logger = get_logger("agora.degradation")
+
+# Schema + Host bleiben stehen, Pfad und Query fallen weg. Genau dort
+# stehen bei HTTP-Clients die Zugangsdaten (``?api_key=…``), und genau
+# der Host ist der Teil, der die Meldung diagnostisch brauchbar macht.
+_URL_PATTERN = re.compile(r"(https?://[^/\s]+)[^\s]*")
+
+_EXCEPTION_DETAIL_LIMIT = 200
+
+
+def describe_exception(exc: BaseException, *, limit: int = _EXCEPTION_DETAIL_LIMIT) -> str:
+    """Beschreibt eine Ausnahme so, dass der Text in die Oberfläche darf.
+
+    ``detail`` verlässt das Backend über das Task-Ergebnis und landet
+    ungefiltert im Browser. Ausnahmen von HTTP-Clients tragen häufig die
+    vollständige Request-URL samt Query — dort steht der API-Key. Der
+    Ausnahmetyp bleibt erhalten, weil er beim Einordnen mehr hilft als der
+    Fließtext, und die Länge wird gedeckelt: ein Provider, der einen
+    kompletten JSON-Body zurückgibt, soll kein Fenster füllen.
+
+    Der vollständige Text bleibt im Log — dort ist er richtig aufgehoben.
+    """
+    message = _URL_PATTERN.sub(r"\1/…", str(exc)).strip()
+    if len(message) > limit:
+        message = message[:limit].rstrip() + "…"
+    if not message:
+        return type(exc).__name__
+    return f"{type(exc).__name__}: {message}"
 
 
 class DegradationCollector:
@@ -172,4 +200,4 @@ class ChunkExtractionTally:
             return self._productive / self._total
 
 
-__all__ = ["ChunkExtractionTally", "DegradationCollector"]
+__all__ = ["ChunkExtractionTally", "DegradationCollector", "describe_exception"]

@@ -18,7 +18,11 @@ from ..contracts.pipeline_degradation_contract import (
     DegradationSeverity,
 )
 from ..utils.logger import get_logger
-from .degradation_collector import ChunkExtractionTally, DegradationCollector
+from .degradation_collector import (
+    ChunkExtractionTally,
+    DegradationCollector,
+    describe_exception,
+)
 
 logger = get_logger("agora.ingestion_pipeline")
 
@@ -119,7 +123,11 @@ def embed_entities_and_relations(
                 detail=(
                     "Batch-Embedding fehlgeschlagen, Vektoren bleiben leer. "
                     "Die semantische Suche im Graphen findet nichts. "
-                    f"Ursache: {exc}"
+                    # describe_exception statt str(exc): der Text geht über
+                    # das Task-Ergebnis in die Oberfläche, und
+                    # HTTP-Client-Ausnahmen tragen die Request-URL samt
+                    # Key in der Query. Vollständig steht sie oben im Log.
+                    f"Ursache: {describe_exception(exc)}"
                 ),
                 context={"affected_texts": len(all_texts)},
             )

@@ -1258,7 +1258,7 @@
     "action": {
       "embedding_unavailable": "Start the embedding service and rebuild the graph, otherwise vector search stays ineffective.",
       "graph_below_threshold": "Rebuild with a stronger model or use a more substantial document.",
-      "persona_rule_based_fallback": "Regenerate the personas with a stronger model — placeholder profiles carry no reliable statements."
+      "persona_rule_based_fallback": "Review the statements from the placeholder profiles or regenerate the personas with a stronger model."
     },
     "occurrences": "occurred {count}×"
   },

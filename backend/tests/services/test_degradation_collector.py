@@ -13,7 +13,7 @@ from app.contracts.pipeline_degradation_contract import (
     DegradationKind,
     DegradationSeverity,
 )
-from app.services.degradation_collector import DegradationCollector
+from app.services.degradation_collector import DegradationCollector, describe_exception
 
 
 class TestRecording:
@@ -176,3 +176,38 @@ class TestReportSerialization:
         assert event["severity"] == "warning"
         assert isinstance(event["occurred_at"], str)
         assert event["context"] == {"attempts": 3, "profile": "AdministrativeEmployee"}
+
+
+class TestExceptionDescription:
+    """``detail`` verlässt das Backend und wird im Browser angezeigt.
+
+    Bis #1029 stand der Ausnahmetext nur im Log. Jetzt ist er Teil einer
+    Endnutzer-Ansicht, und Ausnahmen von HTTP-Clients tragen die
+    Request-URL samt Query — dort steht der API-Key.
+    """
+
+    def test_url_query_is_dropped(self):
+        exc = RuntimeError(
+            "POST https://api.example.com/v1/embeddings?api_key=abcdef123 failed"
+        )
+
+        described = describe_exception(exc)
+
+        assert "api_key" not in described
+        assert "abcdef123" not in described
+        # Der Host bleibt: ohne ihn ist die Meldung diagnostisch wertlos.
+        assert "https://api.example.com" in described
+
+    def test_exception_type_is_kept(self):
+        described = describe_exception(ConnectionRefusedError("connection refused"))
+
+        assert described.startswith("ConnectionRefusedError: ")
+
+    def test_long_text_is_capped(self):
+        described = describe_exception(RuntimeError("x" * 5000))
+
+        assert len(described) < 300
+        assert described.endswith("…")
+
+    def test_empty_message_falls_back_to_the_type(self):
+        assert describe_exception(TimeoutError()) == "TimeoutError"

@@ -538,4 +538,91 @@ describe('useGraphBuildPipeline', () => {
       expect(pipeline.error.value).toBe('')
     })
   })
+
+  // Issue #1029 — ein Reload darf einen blockierenden Befund nicht verlieren
+  describe('Degradierungen nach einem Reload', () => {
+    const BLOCKING_RESULT = {
+      graph_id: 'graph_77',
+      degradations: {
+        schema_version: 1,
+        events: [
+          {
+            kind: 'graph_below_threshold',
+            severity: 'blocking',
+            detail: 'Der Graph enthält keine Beziehungen.',
+            occurred_at: '2026-08-02T20:00:00Z',
+            occurrences: 1,
+            context: { node_count: 2, edge_count: 0 },
+          },
+        ],
+      },
+    }
+
+    function completedProject(overrides: Record<string, unknown> = {}) {
+      graphApi.getProject.mockResolvedValue({
+        success: true,
+        data: {
+          project_id: 'project_77',
+          status: 'graph_completed',
+          graph_id: 'graph_77',
+          graph_build_task_id: 'task_77',
+          ...overrides,
+        },
+      })
+      graphApi.getGraphData.mockResolvedValue({
+        success: true,
+        data: { graph_id: 'graph_77', nodes: [], edges: [] },
+      })
+    }
+
+    it('holt den blockierenden Befund beim Wiedereinstieg nach', async () => {
+      // Ohne Nachladen stünde der Weiter-Button nach jedem Reload wieder
+      // offen — genau auf dem Weg, den ein Nutzer nach einem schlechten
+      // Lauf am ehesten nimmt.
+      completedProject()
+      graphApi.getTaskStatus.mockResolvedValue({
+        success: true,
+        data: { status: 'completed', result: BLOCKING_RESULT },
+      })
+      const pipeline = useGraphBuildPipeline({ projectId: 'project_77', router: createRouter(), t })
+
+      await pipeline.initialize()
+
+      expect(pipeline.degradations.value.events).toHaveLength(1)
+      expect(pipeline.degradations.value.events[0].severity).toBe('blocking')
+      expect(pipeline.currentPhase.value).toBe(2)
+    })
+
+    it('bleibt ohne Task-ID leer, ohne den Wiedereinstieg zu stören', async () => {
+      // Nach einem Backend-Neustart ist der Task nicht mehr auflösbar.
+      completedProject({ graph_build_task_id: undefined })
+      const pipeline = useGraphBuildPipeline({ projectId: 'project_77', router: createRouter(), t })
+
+      await pipeline.initialize()
+
+      expect(pipeline.degradations.value.events).toEqual([])
+      expect(pipeline.currentPhase.value).toBe(2)
+      expect(pipeline.error.value).toBe('')
+      expect(graphApi.getTaskStatus).not.toHaveBeenCalled()
+    })
+
+    it('verwirft die Befunde beim Wechsel auf ein anderes Projekt', async () => {
+      completedProject()
+      graphApi.getTaskStatus.mockResolvedValue({
+        success: true,
+        data: { status: 'completed', result: BLOCKING_RESULT },
+      })
+      const pipeline = useGraphBuildPipeline({ projectId: 'project_77', router: createRouter(), t })
+      await pipeline.initialize()
+      expect(pipeline.degradations.value.events).toHaveLength(1)
+
+      graphApi.getProject.mockResolvedValue({
+        success: true,
+        data: { project_id: 'project_78', status: 'created' },
+      })
+      await pipeline.initialize('project_78')
+
+      expect(pipeline.degradations.value.events).toEqual([])
+    })
+  })
 })

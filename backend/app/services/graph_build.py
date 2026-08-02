@@ -8,6 +8,7 @@ from contextlib import contextmanager
 
 from ..config import Config
 from ..contracts.ai_provider_contract import AiModelRef
+from ..services.degradation_collector import ChunkExtractionTally, DegradationCollector
 from ..services.ontology_generator import OntologyGenerator
 from ..services.llm_routing_seed import resolve_route_api_key, seed_run_stage_routing
 from ..services.stage_model_router import StageModelRouter
@@ -423,6 +424,13 @@ class GraphBuildService:
                 """
                 build_logger = get_logger('agora.build')
                 graph_id = None
+                # Issue #1029: Dies ist der produktive Build-Pfad (Endpunkt
+                # ``/api/graph/build``). ``GraphBuilderService._build_graph_worker``
+                # trägt dieselbe Verdrahtung, wird von hier aber nicht benutzt —
+                # beide Pfade müssen sie haben, sonst ist das Gate genau dort
+                # blind, wo es zählt.
+                degradations = DegradationCollector()
+                extraction_tally = ChunkExtractionTally()
                 try:
                     task_manager.update_task(task_id, status=TaskStatus.PROCESSING, message="Initializing graph build service...")
                     builder = container.graph_builder()
@@ -450,10 +458,28 @@ class GraphBuildService:
                             progress_detail={"batch_count": completed, "total_batches": total, "batch_at": time.time()}
                         )
 
-                    builder.add_text_batches(graph_id, chunks, batch_size=3, progress_callback=add_progress_callback, ner_extractor=ner_override)
+                    builder.add_text_batches(
+                        graph_id, chunks, batch_size=3,
+                        progress_callback=add_progress_callback,
+                        ner_extractor=ner_override,
+                        degradations=degradations,
+                        extraction_tally=extraction_tally,
+                    )
 
                     task_manager.update_task(task_id, message="Retrieving graph data...", progress=95)
                     graph_data = builder.get_graph_data(graph_id)
+
+                    # Issue #1029: Qualitätsgate vor dem Abschluss. Bis hierher
+                    # meldete der Build "completed", auch wenn der Graph keine
+                    # einzige Beziehung trug — der Report scheiterte Minuten
+                    # später an fehlender Evidenz.
+                    builder.assess_graph_quality_from_counts(
+                        node_count=graph_data.get("node_count", 0),
+                        edge_count=graph_data.get("edge_count", 0),
+                        extraction_tally=extraction_tally,
+                        degradations=degradations,
+                    )
+                    degradation_payload = degradations.report().model_dump(mode="json")
 
                     builder.mark_graph_completed(graph_id)
                     project.graph_id = graph_id
@@ -462,7 +488,14 @@ class GraphBuildService:
 
                     task_manager.update_task(
                         task_id, status=TaskStatus.COMPLETED, message="Graph build completed", progress=100,
-                        result={"project_id": project_id, "graph_id": graph_id, "node_count": graph_data.get("node_count", 0), "edge_count": graph_data.get("edge_count", 0)}
+                        result={
+                            "project_id": project_id,
+                            "graph_id": graph_id,
+                            "node_count": graph_data.get("node_count", 0),
+                            "edge_count": graph_data.get("edge_count", 0),
+                            # Leere Liste heißt „nichts ist still ausgefallen".
+                            "degradations": degradation_payload,
+                        }
                     )
                     run_registry.update_run(run_record["run_id"], status="completed", progress=100, message="Graph build completed")
 

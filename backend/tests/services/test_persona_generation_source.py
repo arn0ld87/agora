@@ -8,6 +8,7 @@ Report nicht von echten Personas zu unterscheiden — `OasisAgentProfile`
 besaß kein Feld für Herkunft oder Qualität.
 """
 
+import json
 from unittest.mock import MagicMock, patch
 
 from app.contracts.persona_contract import PersonaModel
@@ -128,6 +129,27 @@ class TestSerializationCarriesTheOrigin:
         payload = self._profile("llm").to_dict()
         assert payload["generation_source"] == "llm"
         assert payload["generation_error"] is None
+
+    def test_final_artifact_keeps_the_origin(self, tmp_path):
+        """``_save_reddit_json`` überschreibt die Realtime-Datei.
+
+        Es baut das Dict neu, statt ``to_reddit_format`` zu benutzen. Ohne
+        die Herkunft dort verlöre das finale Artefakt sie wieder — die
+        Galerie liest genau diese Datei, und das Platzhalter-Abzeichen
+        wäre nach dem Speichern verschwunden.
+        """
+        target = tmp_path / "reddit_profiles.json"
+        _generator()._save_reddit_json(
+            [self._profile("rule_based", "LLM tot"), self._profile("llm")],
+            str(target),
+        )
+
+        entries = json.loads(target.read_text(encoding="utf-8"))
+        assert entries[0]["generation_source"] == "rule_based"
+        assert entries[0]["generation_error"] == "LLM tot"
+        # Das LLM-Profil bleibt formgleich zum bisherigen Artefakt.
+        assert "generation_source" not in entries[1]
+        assert "generation_error" not in entries[1]
 
 
 class TestPersonaContract:

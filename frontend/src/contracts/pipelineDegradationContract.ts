@@ -37,7 +37,9 @@ export const PipelineDegradationSchema = z.object({
   kind: DegradationKindSchema,
   severity: DegradationSeveritySchema,
   detail: z.string().min(1),
-  occurred_at: z.string(),
+  // Spiegelt `datetime` im Backend-Vertrag. `offset: true` lässt sowohl
+  // `Z` als auch `+HH:MM` zu — Pydantic serialisiert je nach tzinfo beides.
+  occurred_at: z.iso.datetime({ offset: true }),
   /** Gleichartige Ereignisse werden backend-seitig zusammengefasst. */
   occurrences: z.number().int().min(1).default(1),
   context: z.record(z.string(), z.union([z.string(), z.number()])).default({}),

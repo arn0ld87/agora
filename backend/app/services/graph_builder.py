@@ -212,7 +212,29 @@ class GraphBuilderService:
         extraction_tally: ChunkExtractionTally,
         degradations: DegradationCollector,
     ) -> None:
+        """``assess_graph_quality_from_counts`` für ein ``GraphInfo``-Objekt."""
+        self.assess_graph_quality_from_counts(
+            node_count=graph_info.node_count,
+            edge_count=graph_info.edge_count,
+            extraction_tally=extraction_tally,
+            degradations=degradations,
+        )
+
+    def assess_graph_quality_from_counts(
+        self,
+        *,
+        node_count: int,
+        edge_count: int,
+        extraction_tally: ChunkExtractionTally,
+        degradations: DegradationCollector,
+    ) -> None:
         """Bewertet den fertigen Graphen gegen die Qualitätsschwellen (Issue #1029).
+
+        Nimmt die Zahlen statt eines ``GraphInfo``, weil der produktive
+        Build-Pfad in ``services/graph_build.py`` mit dem rohen
+        ``get_graph_data()``-Dict arbeitet und kein ``GraphInfo`` baut.
+        Beide Pfade müssen dieses Gate durchlaufen — sonst ist es genau
+        dort blind, wo es zählt.
 
         Bis dahin rief ``_build_graph_worker`` ``complete_task``
         unbedingt, sobald alle Chunks durch waren — ohne ``node_count``,
@@ -229,9 +251,6 @@ class GraphBuilderService:
         Schwellen über ``Config``: ``GRAPH_MIN_ENTITIES``,
         ``GRAPH_MIN_RELATIONS``, ``GRAPH_MIN_CHUNK_SUCCESS_RATIO``.
         """
-        node_count = graph_info.node_count
-        edge_count = graph_info.edge_count
-
         if edge_count < Config.GRAPH_MIN_RELATIONS:
             degradations.record(
                 kind=DegradationKind.GRAPH_BELOW_THRESHOLD,
