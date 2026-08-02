@@ -10,7 +10,7 @@ Optimization improvements:
 
 import json
 import random
-from typing import Dict, Any, List, Optional
+from typing import TYPE_CHECKING, Dict, Any, List, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -19,6 +19,10 @@ from pydantic import BaseModel, Field
 
 from ..config import Config
 from ..contracts import PersonaQuotaPlan
+from ..contracts.pipeline_degradation_contract import (
+    DegradationKind,
+    DegradationSeverity,
+)
 from .settings_layer import get_default_service as _get_settings
 from ..utils.llm_latency import measure_llm_latency
 from ..utils.logger import get_logger
@@ -35,6 +39,9 @@ from .persona_quota_defaults import (
     default_dach_industry_quota,
 )
 from ..llm.json_mode import _try_repair_truncated_json
+
+if TYPE_CHECKING:
+    from .degradation_collector import DegradationCollector
 
 logger = get_logger('agora.oasis_profile')
 
@@ -145,6 +152,16 @@ class OasisAgentProfile:
     # DACH-Voice-Register (Layer 2)
     voice_register: Optional[str] = None
 
+    # Herkunft des Profils (Issue #1029). "llm" oder "rule_based".
+    # Regelbasierte Profile entstehen entweder bewusst (use_llm=False) oder
+    # nach drei gescheiterten LLM-Versuchen. Sie nehmen regulär an der
+    # Simulation teil; ohne dieses Feld sind ihre Beiträge im Report nicht
+    # von denen echter Personas zu unterscheiden.
+    generation_source: str = "llm"
+    # Nur gesetzt, wenn die Degradierung aus einem Ausfall entstand — bei
+    # bewusst regelbasierter Erzeugung bleibt es None.
+    generation_error: Optional[str] = None
+
     created_at: str = field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d"))
     
     def to_reddit_format(self) -> Dict[str, Any]:
@@ -180,6 +197,14 @@ class OasisAgentProfile:
             profile["segment"] = self.segment
         if self.voice_register:
             profile["voice_register"] = self.voice_register
+        # Issue #1029: Die Persona-Galerie liest genau diese Datei. Ohne
+        # die Herkunft hier bliebe die Kennzeichnung im Frontend wirkungslos.
+        # Nur bei Abweichung vom Default geschrieben, damit LLM-Profile
+        # unverändert zum bisherigen Format bleiben.
+        if self.generation_source != "llm":
+            profile["generation_source"] = self.generation_source
+        if self.generation_error:
+            profile["generation_error"] = self.generation_error
 
         return profile
 
@@ -218,6 +243,14 @@ class OasisAgentProfile:
             profile["segment"] = self.segment
         if self.voice_register:
             profile["voice_register"] = self.voice_register
+        # Issue #1029: Die Persona-Galerie liest genau diese Datei. Ohne
+        # die Herkunft hier bliebe die Kennzeichnung im Frontend wirkungslos.
+        # Nur bei Abweichung vom Default geschrieben, damit LLM-Profile
+        # unverändert zum bisherigen Format bleiben.
+        if self.generation_source != "llm":
+            profile["generation_source"] = self.generation_source
+        if self.generation_error:
+            profile["generation_error"] = self.generation_error
 
         return profile
 
@@ -243,6 +276,11 @@ class OasisAgentProfile:
             "source_entity_type": self.source_entity_type,
             "segment": self.segment,
             "voice_register": self.voice_register,
+            # Issue #1029: Herkunft immer mitführen — to_dict ist die
+            # vollständige Darstellung, hier ist auch der Normalfall "llm"
+            # eine Information.
+            "generation_source": self.generation_source,
+            "generation_error": self.generation_error,
             "created_at": self.created_at,
         }
 
@@ -434,6 +472,10 @@ class OasisProfileGenerator:
             source_entity_type=entity_type,
             segment=segment,
             voice_register=profile_data.get("voice_register"),
+            # Issue #1029: Default "llm" — nur der regelbasierte Pfad setzt
+            # den Schlüssel, und er setzt ihn immer.
+            generation_source=profile_data.get("generation_source", "llm"),
+            generation_error=profile_data.get("generation_error"),
         )
     
     def _generate_username(self, name: str) -> str:
@@ -714,8 +756,18 @@ class OasisProfileGenerator:
                 time.sleep(1 * (attempt + 1))  # Exponential backoff
 
         logger.warning(f"LLM persona generation failed ({max_attempts} attempts): {last_error}, using rule-based generation")
+        # Issue #1029: Der Ausfall wandert mit ins Profil. Ohne ihn ist ein
+        # Platzhalterprofil nach dem Erzeugungszeitpunkt nicht mehr von
+        # einem echten zu unterscheiden.
         return self._generate_profile_rule_based(
-            entity_name, entity_type, entity_summary, entity_attributes
+            entity_name,
+            entity_type,
+            entity_summary,
+            entity_attributes,
+            generation_error=(
+                f"LLM-Generierung nach {max_attempts} Versuchen fehlgeschlagen: "
+                f"{str(last_error)[:160]}"
+            ),
         )
 
     def _validate_profile_metadata(self, result: Dict[str, Any]) -> List[str]:
@@ -1109,7 +1161,70 @@ Important:
             return "skeptisch-de"
         return "neutral-de"
 
+    def _report_persona_degradation(
+        self,
+        profiles: List[Optional[OasisAgentProfile]],
+        degradations: "DegradationCollector",
+    ) -> None:
+        """Meldet Platzhalterprofile einmal für die ganze Runde (Issue #1029).
+
+        Ein einzelner Fallback ist unauffällig; erst die Anzahl zeigt, ob
+        die Runde überhaupt echte Stimmen hervorgebracht hat.
+
+        Die Meldung hängt an ``generation_error``, nicht an
+        ``generation_source``: Bei ``use_llm=False`` ist der regelbasierte
+        Pfad die bewusste Wahl und keine Degradierung.
+        """
+        present = [p for p in profiles if p]
+        failed = [p for p in present if p.generation_error]
+        if not failed:
+            return
+
+        first_error = failed[0].generation_error or "unbekannt"
+        degradations.record(
+            kind=DegradationKind.PERSONA_RULE_BASED_FALLBACK,
+            severity=DegradationSeverity.WARNING,
+            detail=(
+                f"{len(failed)} von {len(present)} Personas konnten nicht vom "
+                "Modell erzeugt werden und sind regelbasierte Platzhalter. "
+                "Ihre Beiträge tragen keine belastbaren Aussagen. "
+                f"Erste Ursache: {first_error}"
+            ),
+            context={
+                "fallback_personas": len(failed),
+                "total_personas": len(present),
+            },
+        )
+
     def _generate_profile_rule_based(
+        self,
+        entity_name: str,
+        entity_type: str,
+        entity_summary: str,
+        entity_attributes: Dict[str, Any],
+        generation_error: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Regelbasiertes Profil — immer als solches gekennzeichnet (Issue #1029).
+
+        Diese Profile nehmen regulär an der Simulation teil, und ihre
+        Beiträge waren im Report bis dahin nicht von echten Personas zu
+        unterscheiden. Die Kennzeichnung passiert hier und nicht beim
+        Aufrufer, damit sie keine Aufrufstelle vergessen kann.
+
+        ``generation_error`` unterscheidet die beiden Wege hierher: eine
+        bewusste Wahl (``use_llm=False``, kein Fehler) von einem Ausfall
+        nach drei gescheiterten LLM-Versuchen. Nur der zweite Fall ist
+        eine Degradierung.
+        """
+        payload = self._build_rule_based_payload(
+            entity_name, entity_type, entity_summary, entity_attributes
+        )
+        payload["generation_source"] = "rule_based"
+        if generation_error:
+            payload["generation_error"] = generation_error
+        return payload
+
+    def _build_rule_based_payload(
         self,
         entity_name: str,
         entity_type: str,
@@ -1217,7 +1332,8 @@ Important:
         graph_id: Optional[str] = None,
         parallel_count: Optional[int] = None,
         realtime_output_path: Optional[str] = None,
-        output_platform: str = "reddit"
+        output_platform: str = "reddit",
+        degradations: Optional["DegradationCollector"] = None,
     ) -> List[OasisAgentProfile]:
         """
         Generate Agent Profiles in batch from entities (supports parallel generation)
@@ -1234,6 +1350,9 @@ Important:
                 um KV-Cache-Trashing zu vermeiden.
             realtime_output_path: Real-time output file path (if provided, write after each generation)
             output_platform: Output platform format ("reddit" or "twitter")
+            degradations: optionaler Sammler für stille Teilausfälle
+                (Issue #1029). Gemeldet wird einmal am Ende, mit der Anzahl
+                der Platzhalterprofile — nicht pro Persona.
 
         Returns:
             List of Agent Profiles
@@ -1313,6 +1432,11 @@ Important:
                     persona=entity.summary or "A participant in social discussions.",
                     source_entity_uuid=entity.uuid,
                     source_entity_type=entity_type,
+                    # Issue #1029: Notprofil nach einem Ausfall — noch
+                    # dünner als das regelbasierte, also erst recht nicht
+                    # als echte Stimme zu behandeln.
+                    generation_source="rule_based",
+                    generation_error=str(e)[:160],
                 )
                 return idx, fallback_profile, str(e)
 
@@ -1380,6 +1504,11 @@ Important:
                         persona=entity.summary or "A participant in social discussions.",
                         source_entity_uuid=entity.uuid,
                         source_entity_type=entity_type,
+                        # Issue #1029: Notprofil nach einem Ausfall — noch
+                        # dünner als das regelbasierte, also erst recht
+                        # nicht als echte Stimme zu behandeln.
+                        generation_source="rule_based",
+                        generation_error=str(e)[:160],
                     )
                     return idx, fallback_profile, str(e)
 
@@ -1463,6 +1592,9 @@ Important:
             "Persona generation complete — %d agents generated.",
             len([p for p in profiles if p]),
         )
+
+        if degradations is not None:
+            self._report_persona_degradation(profiles, degradations)
 
         # Re-save after dedup to keep realtime file in sync with final state.
         save_profiles_realtime()

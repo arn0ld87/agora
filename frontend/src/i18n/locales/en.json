@@ -365,6 +365,7 @@
     },
     "cardGrid": {
       "manual": "manual",
+      "ruleBased": "Placeholder",
       "delete": "Delete persona",
       "save": "Save persona",
       "hintCount": "no hint | one hint | {count} hints"

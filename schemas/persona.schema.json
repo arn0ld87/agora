@@ -68,6 +68,28 @@
       "default": null,
       "title": "Gender"
     },
+    "generation_error": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Generation Error"
+    },
+    "generation_source": {
+      "default": "llm",
+      "enum": [
+        "llm",
+        "rule_based"
+      ],
+      "title": "Generation Source",
+      "type": "string"
+    },
     "interested_topics": {
       "items": {
         "type": "string"

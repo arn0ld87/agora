@@ -365,6 +365,7 @@
     },
     "cardGrid": {
       "manual": "manuell",
+      "ruleBased": "Platzhalter",
       "delete": "Persona löschen",
       "save": "Persona speichern",
       "hintCount": "kein Hinweis | ein Hinweis | {count} Hinweise"

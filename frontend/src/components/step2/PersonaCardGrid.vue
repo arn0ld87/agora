@@ -61,6 +61,17 @@ const { t } = useI18n()
           <span v-if="p.is_manual" class="persona-tag">{{ t('step2.cardGrid.manual') }}</span>
         </span>
         <span class="persona-meta-row">
+          <!--
+            Issue #1029: Regelbasierte Profile entstehen nach drei
+            gescheiterten LLM-Versuchen und nehmen regulär an der
+            Simulation teil. Ohne Kennzeichnung sind ihre Beiträge im
+            Report nicht von echten Stimmen zu unterscheiden.
+          -->
+          <Badge
+            v-if="p.generation_source === 'rule_based'"
+            variant="outline"
+            :title="p.generation_error || undefined"
+          >{{ t('step2.cardGrid.ruleBased') }}</Badge>
           <Badge
             v-if="p.review_status"
             :variant="statusVariant(p.review_status)"
