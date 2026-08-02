@@ -132,6 +132,13 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
+          # Ohne target: baut BuildKit die LETZTE Stage des Dockerfiles (aktuell
+          # "proxy", das nginx-Sidecar-Image) statt des App-Runtime-Images.
+          # target: prod stellt sicher, dass Trivy und der prod-proxy-smoke-Job
+          # das tatsaechliche Produktions-Image scannen/starten (#994). Das
+          # separate nginx-Image baut deploy/compose/docker-compose.prod-with-
+          # proxy.yml bereits eigenstaendig mit target: proxy.
+          target: prod
           # push: false — kein Push in dieser Phase.
           # Image wird lokal als tar exportiert und per upload-artifact
           # an den smoke-Job weitergegeben.
@@ -445,6 +452,10 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
+          # target: prod — siehe Kommentar im build-only-Job weiter oben (#994).
+          # Ohne target würde hier das nginx-proxy-Image statt des App-Images
+          # publiziert.
+          target: prod
           # Erster harter Push im Workflow — NUR nach erfolgreichem Smoke.
           push: true
           tags: ${{ steps.meta_ghcr.outputs.tags }}
@@ -494,6 +505,8 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
+          # target: prod — siehe Kommentar im build-only-Job weiter oben (#994).
+          target: prod
           push: true
           tags: ${{ steps.meta_dockerhub.outputs.tags }}
           labels: ${{ steps.meta_dockerhub.outputs.labels }}
