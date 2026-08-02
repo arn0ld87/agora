@@ -6,8 +6,34 @@ Stellt sicher dass:
 3. Fernet-Cache zwischen Tests invalidiert wird.
 4. ApiKeysStore-Singleton für jeden Test zurückgesetzt wird.
 5. AGORA_AUTH_TOKEN nicht aus der lokalen .env in die Suite leakt.
+6. ``torch`` vorab geladen ist (verhindert einen Interpreter-Segfault, s.u.).
 """
 from __future__ import annotations
+
+# ``torch`` MUSS vor der ersten ``mock.patch.dict(sys.modules, ...)`` geladen
+# sein — sonst stirbt der Interpreter mit SIGSEGV.
+#
+# ``patch.dict`` nimmt beim Betreten einen Snapshot von ``sys.modules`` und
+# stellt ihn beim Verlassen über ``clear()`` + ``update(snapshot)`` wieder her.
+# War ``torch`` zum Snapshot-Zeitpunkt noch nicht importiert, wird es *innerhalb*
+# des Blocks aber geladen (``oasis.social_platform.recsys`` zieht es), dann ist
+# der komplette ``torch``-Namensraum danach aus ``sys.modules`` verschwunden —
+# im CPython-Extension-Cache jedoch weiterhin registriert.
+#
+# Der nächste ``import torch`` führt ``torch/__init__.py`` erneut aus und trifft
+# bei ``from torch._C import *`` auf ``reload_singlephase_extension``: CPython
+# ruft ``initModule()`` der single-phase-init-Extension ein zweites Mal auf,
+# torch registriert seine Methodentabelle auf ein Modulobjekt in inkonsistentem
+# Zustand -> ``PyObject_SetAttrString`` auf ungültigem Pointer -> SIGSEGV.
+#
+# Rein reihenfolgeabhängig: ``tests/scripts/test_bert_memory_profile.py`` läuft
+# isoliert sauber durch, im Verbund crasht ``pytest tests/scripts/``.
+# Der Vorab-Import setzt ``torch`` in jeden Snapshot und macht das ``clear()``
+# damit unschädlich.
+try:
+    import torch  # noqa: F401
+except ImportError:  # torch ist optional — Suiten ohne Recsys laufen ohne
+    pass
 
 import pytest
 from cryptography.fernet import Fernet
