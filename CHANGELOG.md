@@ -5,6 +5,14 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Changed (Review-Gate, mypy-strict und Frontend-Build entschärft — 2026-08-02)
+
+- **Der Regelfall braucht keinen Reviewer-Subagenten mehr.** Bisher verlangten [`CLAUDE.md`](CLAUDE.md), [`agora-next-task`](.claude/commands/agora-next-task.md), [`agora-batch-issues`](.claude/commands/agora-batch-issues.md) und [`subagent-routing.md`](docs/runbooks/subagent-routing.md) übereinstimmend ein `APPROVE` des `agora-opus-reviewer` vor Push und PR. Ein Reviewer ist jetzt optional und seine Antwort eine Einschätzung, kein Freigabetor — der Lead entscheidet, welche Blocker er übernimmt. Erforderlich bleiben ein Regressionstest, der den Defekt trifft, und ein grünes `pre-push-gate.sh`.
+- **Kein RED/GREEN-Protokoll im PR-Text, keine Mutationsproben.** Die alte Formulierung verlangte beide Testausgaben wörtlich im PR und war als Aufforderung zur Gegenprobe durch absichtlich verfälschten Code lesbar. Dass der Test vor dem Fix rot ist, prüft man einmal beim Schreiben und dokumentiert es nirgends.
+- **`app.contracts.*` läuft nicht mehr unter `mypy --strict`.** Von den rund zehn Flags, die `strict` zuschaltet, trägt bei Pydantic-Modellen nur `disallow_untyped_defs`; der Rest erzeugte Reibung an Dekoratoren und Fremdcode-Aufrufen. Nur dieses eine Flag bleibt aktiv, der Rest der `[tool.mypy]`-Sektion ist unverändert.
+- **Der Frontend-Build läuft lokal nur noch mit `GATE_BUILD=1`.** Er war der teuerste Schritt des Gates und fängt nach ESLint, `vue-tsc` und Vitest praktisch nichts mehr ab. Die CI baut weiterhin bei jedem PR — die verbleibende Lücke sind reine Bundler-Fehler. Wer Vite-Config, Aliase oder Chunk-Strategie anfasst, setzt die Variable; [`pre-push-gate.md`](docs/runbooks/pre-push-gate.md) benennt die Ausnahme.
+- **Unverändert:** ruff, mypy, Contract-Tests, Schema-Drift, `sync-status --check`, ESLint, `vue-tsc` und Vitest bleiben Pflicht. Die fünf Evidence-Hartanker aus ADR-0002 sind nicht berührt.
+
 ### Fixed (Runden und Tage aus Schritt 2 erreichten Schritt 3 nie — 2026-08-02, Issue #1013)
 
 - **Jede Simulation lief mit dem Auto-Wert, egal was der Nutzer einstellte.** [`StepEnvSetupView.vue`](frontend/src/views/v4/steps/StepEnvSetupView.vue) gab `maxRounds` und `simulationDays` zwar im `next-step`-Ereignis mit, legte beim `router.push` aber nur `simulationId` als Route-Param und `projectId` als Query ab. Da die Ziel-Route mit `props: true` ausschließlich Route-Params durchreicht, fielen beide Werte still auf den Boden; [`StepSimulationView.vue`](frontend/src/views/v4/steps/StepSimulationView.vue) reichte an `Step3Simulation` folglich gar nichts weiter und die Komponente griff auf ihren vom Backend vorgeschlagenen Wert zurück. Es gab keine Fehlermeldung — die Eingabe verschwand zwischen zwei Bildschirmen.
