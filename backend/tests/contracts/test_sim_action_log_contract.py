@@ -23,6 +23,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from app.contracts.sim_action_log_contract import RoundEndEvent
 from app.services.sim.action_log_reader import read_action_log_chunk
@@ -163,3 +164,37 @@ def test_float_minuten_toeten_den_writer_nicht(tmp_path: Path) -> None:
     entry = json.loads(Path(logger.log_path).read_text(encoding="utf-8").strip())
     assert entry["simulated_minutes"] == 46
     assert state.current_round == 1
+
+
+@pytest.mark.parametrize(
+    ("feld", "wert"),
+    [
+        ("simulated_minutes", -1),
+        ("simulated_minutes", -30),
+        ("round", -1),
+        ("actions_count", -1),
+    ],
+)
+def test_negative_werte_werden_abgelehnt(feld: str, wert: int) -> None:
+    """Negative Zähler sind keine gültige Sim-Zeit — der Vertrag muss sie ablehnen.
+
+    Ohne diesen Test bliebe ``ge=0`` ein ungeprüftes Versprechen: Man könnte
+    die Schranke aus dem Feld entfernen, ohne dass ein Test umfällt. Eine
+    negative Minutenzahl würde als Fortschritt durchlaufen und die Anzeige
+    rückwärts laufen lassen — derselbe Klassenfehler wie das dauerhafte 0
+    aus B-28, nur mit umgekehrtem Vorzeichen.
+    """
+    with pytest.raises(ValidationError):
+        RoundEndEvent(**{"timestamp": "", feld: wert})  # type: ignore[arg-type]
+
+
+def test_alt_log_mit_negativer_zeit_bricht_den_reader_nicht(tmp_path: Path) -> None:
+    """Ein defekter Alt-Eintrag wird verworfen, nicht durchgereicht.
+
+    ``from_log_entry`` validiert dieselbe Schranke wie der Konstruktor. Ein
+    von Hand manipuliertes Log darf den Fortschritt nicht zurückdrehen.
+    """
+    with pytest.raises(ValidationError):
+        RoundEndEvent.from_log_entry(
+            {"event_type": "round_end", "round": 1, "simulated_minutes": -60}
+        )
