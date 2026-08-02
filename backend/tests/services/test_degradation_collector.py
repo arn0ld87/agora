@@ -193,10 +193,12 @@ class TestExceptionDescription:
 
         described = describe_exception(exc)
 
-        assert "api_key" not in described
-        assert "abcdef123" not in described
-        # Der Host bleibt: ohne ihn ist die Meldung diagnostisch wertlos.
-        assert "https://api.example.com" in described
+        # Exakter Vergleich statt Substring-Suche: der Host bleibt stehen —
+        # ohne ihn ist die Meldung diagnostisch wertlos —, Pfad und Query
+        # fallen weg. Ein `in`-Check gegen einen URL-Präfix wäre hier
+        # zudem genau das Muster, das CodeQL zu Recht als unvollständige
+        # Sanitisierungsprüfung meldet.
+        assert described == "RuntimeError: POST https://api.example.com/… failed"
 
     def test_exception_type_is_kept(self):
         described = describe_exception(ConnectionRefusedError("connection refused"))
