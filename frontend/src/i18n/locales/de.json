@@ -585,7 +585,8 @@
     },
     "status": {
       "incomplete": "Report unvollständig — einige Abschnitte sind fehlgeschlagen.",
-      "sectionFailed": "Abschnitt fehlgeschlagen"
+      "sectionFailed": "Abschnitt fehlgeschlagen",
+      "pollTransportError": "Verbindung zum Server verloren — der Status konnte mehrfach in Folge nicht abgerufen werden. Prüfe deine Verbindung; die Anzeige aktualisiert sich automatisch, sobald ein Abruf wieder gelingt."
     },
     "next": "Weiter zum Gespräch →"
   },
@@ -654,7 +655,9 @@
       "closePanel": "Graph-Panel schließen",
       "exportHtml": "Als standalone HTML exportieren",
       "resetLayout": "Layout zurücksetzen",
-      "minimapTitle": "Minimap"
+      "minimapTitle": "Minimap",
+      "maximizeLayout": "Vergrößern",
+      "restoreLayout": "Verkleinern"
     },
     "edgeLabels": {
       "RELATES_TO": "verbunden mit",
@@ -1095,7 +1098,9 @@
     "overrideBadge": "override",
     "clearOverride": "Override entfernen → Default nutzen",
     "close": "Schließen",
-    "lockedBadge": "gesperrt"
+    "lockedBadge": "gesperrt",
+    "sourceRun": "aus Lauf",
+    "sourceDefault": "Standard"
   },
   "activeModel": {
     "label": "Aktives Modell",
@@ -1345,7 +1350,8 @@
     "empty": "Noch keine Aktivität.",
     "showMoreReplies": "{count} weitere Replies anzeigen | {count} weitere Replies anzeigen",
     "pipeline": "Pipeline",
-    "feedTab": "Live-Feed"
+    "feedTab": "Live-Feed",
+    "sentimentBar": "Sentiment-Verlauf der letzten Beiträge"
   },
   "observability": {
     "viewTrace": "Trace anzeigen ({id}…)"

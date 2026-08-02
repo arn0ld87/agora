@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
-const pipeline = vi.hoisted(() => ({ initialize: vi.fn() }))
+const pipeline = vi.hoisted(() => ({ initialize: vi.fn(), refreshGraph: vi.fn() }))
 const routerPush = vi.hoisted(() => vi.fn())
 
 vi.mock('@/composables/useGraphBuildPipeline', async () => {
@@ -16,7 +16,9 @@ vi.mock('@/composables/useGraphBuildPipeline', async () => {
       graphData: ref({ graph_id: 'graph_42', nodes: [], edges: [] }),
       systemLogs: ref([{ time: '10:00:00.000', msg: 'building' }]),
       error: ref('Graph build failed'),
+      currentRunId: ref(null),
       initialize: pipeline.initialize,
+      refreshGraph: pipeline.refreshGraph,
     }),
   }
 })
@@ -137,5 +139,40 @@ describe('StepGraphBuildView', () => {
       name: 'StepEnvSetup',
       params: { projectId: 'project_42' },
     })
+  })
+
+  // Issue #1023 (Befund B-08): GraphPanel emittiert refresh/toggle-maximize
+  // seit jeher, StepGraphBuildView hatte dafuer nie einen Listener gebunden.
+  it('verdrahtet GraphPanel @refresh auf refreshGraph() und @toggle-maximize auf den lokalen Maximize-Zustand', async () => {
+    pipeline.refreshGraph.mockClear()
+    const graphPanelStub = {
+      name: 'GraphPanel',
+      props: ['graphData', 'loading', 'currentPhase', 'isMaximized'],
+      emits: ['refresh', 'toggle-maximize'],
+      template: '<div data-testid="graph-panel-stub" :data-maximized="isMaximized" />',
+    }
+    const wrapper = mount(StepGraphBuildView, {
+      props: { projectId: 'project_42' },
+      global: {
+        mocks: { $t: (key: any) => key },
+        stubs: {
+          AppShell: { template: '<main><slot /></main>' },
+          PageHeader: { template: '<header><slot /><slot name="right" /></header>' },
+          PipelineStepper: true,
+          StepModelOverrideChip: true,
+          GraphPanel: graphPanelStub,
+          Step1GraphBuild: true,
+        },
+      },
+    })
+
+    const panel = wrapper.getComponent({ name: 'GraphPanel' })
+    expect(panel.props('isMaximized')).toBe(false)
+
+    await panel.vm.$emit('refresh')
+    expect(pipeline.refreshGraph).toHaveBeenCalledTimes(1)
+
+    await panel.vm.$emit('toggle-maximize')
+    expect(wrapper.getComponent({ name: 'GraphPanel' }).props('isMaximized')).toBe(true)
   })
 })

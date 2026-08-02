@@ -8,7 +8,6 @@ import {
   type BuildGraphData,
   type GraphDataResponse,
   type ProjectResponse,
-  type TaskStatusResponse,
 } from '../api/graph'
 import type { AiModelRefPayload } from '../api/report'
 import { usePolling } from './usePolling'
@@ -41,6 +40,12 @@ export function useGraphBuildPipeline({
   const ontologyProgress = ref<unknown>(null)
   const buildProgress = ref<unknown>(null)
   const currentTaskId = ref<string | null>(null)
+  // Issue #1023 (Befund B-23): Registry-Run-ID des aktuellen Graph-Builds.
+  // Nur im laufenden Session-State verfuegbar — ein Reload nach
+  // Build-Abschluss kann sie nicht rekonstruieren (ProjectResponse
+  // persistiert keine run_id). StepModelOverrideChip faellt dann auf den
+  // Stage-Default zurueck, was der dokumentierte Fallback-Pfad ist.
+  const currentRunId = ref<string | null>(null)
   let activeGeneration = 0
   const { systemLogs, addLog } = useSystemLog({ cap: 100 })
   const { resolveRunModel } = useRunModelResolver()
@@ -91,6 +96,7 @@ export function useGraphBuildPipeline({
       ontologyProgress.value = null
       buildProgress.value = null
       currentPhase.value = -1
+      currentRunId.value = null
     }
     addLog(t('common.starting'))
     if (currentProjectId.value === 'new') {
@@ -207,6 +213,7 @@ export function useGraphBuildPipeline({
         return
       }
 
+      currentRunId.value = response.data.run_id ?? null
       startGraphPolling()
       startPollingTask(response.data.task_id)
     } catch (caughtError) {
@@ -300,7 +307,14 @@ export function useGraphBuildPipeline({
     currentPhase,
     ontologyProgress,
     buildProgress,
+    currentRunId,
     systemLogs,
     initialize,
+    // Issue #1023 (Befund B-08): GraphPanel/GraphToolbar emittieren
+    // "refresh" seit jeher, StepGraphBuildView hatte dafuer nie einen
+    // Listener. fetchGraphData() re-polled Projekt+Graph bereits intern
+    // (Fallback nach Task-Completion) — hier als oeffentliche Funktion
+    // fuer den manuellen Refresh-Button verdrahtet.
+    refreshGraph: fetchGraphData,
   }
 }

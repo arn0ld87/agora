@@ -45,6 +45,12 @@ export interface UseGraphRenderArgs {
   entityTypes: MaybeRefOrGetter<EntityTypeEntry[]>
   showEdgeLabels: Ref<boolean>
   translateLabel?: ((key: string) => string) | null
+  /**
+   * Optionale vue-i18n `te`-Funktion. Issue #1023 (Befund B-04): ohne sie
+   * loggt vue-i18n bei jeder unbekannten Relation eine "not found"-Warnung,
+   * bevor `formatEdgeLabel()` auf die Humanize-Heuristik zurückfällt.
+   */
+  translateLabelExists?: ((key: string) => boolean) | null
   /** Optional reactive signal carrying current batch progress during graph build. */
   batchSignal?: MaybeRefOrGetter<BuildProgressDetail | null>
   /**
@@ -188,6 +194,7 @@ export function useGraphRender({
   entityTypes,
   showEdgeLabels,
   translateLabel = null,
+  translateLabelExists = null,
   batchSignal,
   autoFreezeMs = 800,
 }: UseGraphRenderArgs): UseGraphRenderReturn {
@@ -421,7 +428,7 @@ export function useGraphRender({
       .enter().append('text')
       // reason: formatEdgeLabel is JS (checkJs=false); translateLabel null triggers TS type error
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .text((d: any) => formatEdgeLabel(d.name, translateLabel as any))
+      .text((d: any) => formatEdgeLabel(d.name, translateLabel as any, translateLabelExists as any))
       .attr('font-size', '12px')
       .attr('fill', 'var(--fg-meta)')
       .attr('text-anchor', 'middle')
