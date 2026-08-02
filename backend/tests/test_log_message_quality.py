@@ -95,9 +95,14 @@ def _is_relevant_call(node: ast.Call) -> bool:
             return True
         if func.attr not in LOGGER_METHODS:
             return False
-        # Nur echte Logger, nicht beliebige ``x.info(...)``-Aufrufe.
+        # Nur echte Logger, nicht beliebige ``x.info(...)``-Aufrufe. Geprüft
+        # wird das Attribut direkt vor der Methode: bei ``self.logger.error(…)``
+        # heißt die Wurzel ``self`` und trägt kein ``log`` im Namen — sie allein
+        # anzusehen ließe jeden instanzgebundenen Logger durchrutschen.
         target = func.value
         while isinstance(target, ast.Attribute):
+            if "log" in target.attr.lower():
+                return True
             target = target.value
         return isinstance(target, ast.Name) and "log" in target.id.lower()
     return isinstance(func, ast.Name) and func.id in USER_FACING_CALLS
@@ -226,6 +231,11 @@ def test_no_machine_translated_log_messages() -> None:
             'update_progress(rid, "planning", 15, f"total{n}sections")',
             "klebt am vorangehenden Platzhalter",
             id="klebt-an-platzhalter",
+        ),
+        pytest.param(
+            'self.logger.error(f"reportgeneratefailed: {e}")',
+            "zusammengeklebte Wörter",
+            id="instanzgebundener-logger",
         ),
     ],
 )

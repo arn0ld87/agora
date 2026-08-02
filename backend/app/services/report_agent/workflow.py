@@ -1028,9 +1028,10 @@ def generate_report(
                         section_num,
                     )
                 continue
-            ReportManager.update_progress(report_id, "generating", base_progress, f"Generating section: {section.title} ({section_num}/{total_sections})", current_section=section.title, completed_sections=completed_section_titles)
+            generating_message = f"Generating section: {section.title} ({section_num}/{total_sections})"
+            ReportManager.update_progress(report_id, "generating", base_progress, generating_message, current_section=section.title, completed_sections=completed_section_titles)
             if progress_callback:
-                progress_callback("generating", base_progress, f"Generating section: {section.title} ({section_num}/{total_sections})")
+                progress_callback("generating", base_progress, generating_message)
             section_content = _safe_generate_section_react(
                 agent,
                 section=section,
@@ -1178,9 +1179,10 @@ def generate_report(
                 )
             ReportManager.update_progress(report_id, "generating", base_progress + int(70 / total_sections), f"Section {section.title} completed", current_section=None, completed_sections=completed_section_titles)
 
+        assembling_message = "Assembling the complete report..."
         if progress_callback:
-            progress_callback("generating", 95, "Assembling the complete report...")
-        ReportManager.update_progress(report_id, "generating", 95, "Assembling the complete report...", completed_sections=completed_section_titles)
+            progress_callback("generating", 95, assembling_message)
+        ReportManager.update_progress(report_id, "generating", 95, assembling_message, completed_sections=completed_section_titles)
         report.markdown_content = ReportManager.assemble_full_report(report_id, outline)
         # P0-7: Status folgt dem tatsächlichen Erfolg der Abschnitte. Ein
         # Report mit fehlgeschlagener Pflichtsection ist INCOMPLETE — der Rest
@@ -1261,9 +1263,10 @@ def generate_report(
             if isinstance(exc, BudgetExceededError):
                 raise
             logger.warning("generate_report: red_team_review fehlgeschlagen: %r", exc)
-        ReportManager.update_progress(report_id, "completed", 100, "Report generation completed", completed_sections=completed_section_titles)
+        completed_message = "Report generation completed"
+        ReportManager.update_progress(report_id, "completed", 100, completed_message, completed_sections=completed_section_titles)
         if progress_callback:
-            progress_callback("completed", 100, "Report generation completed")
+            progress_callback("completed", 100, completed_message)
         if agent.console_logger:
             agent.console_logger.close()
             agent.console_logger = None
@@ -1276,6 +1279,9 @@ def generate_report(
 
         if isinstance(e, BudgetExceededError):
             raise
+        # Bewusst nicht dieselbe Variable wie die Fortschrittsmeldung unten: der
+        # Logger formatiert lazy über %, damit bei abgeschaltetem Level gar nichts
+        # zusammengebaut wird. Genau dafür wurde die Zeile umgestellt.
         logger.error("Report generation failed: %s", e)
         report.status = ReportStatus.FAILED
         report.error = str(e)
