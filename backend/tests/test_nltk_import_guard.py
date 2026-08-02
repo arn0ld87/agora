@@ -1,26 +1,35 @@
 """Regressionstest: nltk >= 3.10 darf den Ingestion-Pfad nicht blockieren.
 
 nltk 3.10 installiert beim Import einen Meta-Path-Finder (``nltk/inisec.py``),
-der jeden von nltk ausgelösten Import blockiert, dessen Modul **unterhalb des
-aktuellen Arbeitsverzeichnisses** liegt. Gedacht ist er gegen
+der jeden von nltk ausgelösten Import blockiert, dessen Modul unterhalb des
+aktuellen Arbeitsverzeichnisses liegt. Gedacht ist er gegen
 CWD-Import-Hijacking; er unterscheidet aber nicht zwischen dem Projektbaum und
 einer virtuellen Umgebung, die zufällig darunter liegt.
 
 Genau das ist hier der Normalfall:
 
+* nativ:     ``cd backend && uv run python run.py``, venv unter ``backend/.venv``
 * Container: ``WORKDIR /app``, venv unter ``/app/backend/.venv``
-* lokal: ``cd backend && uv run …``, venv unter ``backend/.venv``
 
 In beiden Fällen gilt *jedes* venv-Paket als "aus dem CWD". Sobald
 ``unstructured`` beim Parsen nltk lädt, fliegen ``regex`` und ``defusedxml`` mit
-einem ``ImportError`` heraus und der Ingestion-Pfad bricht.
+einem ``ImportError`` heraus und der Ingestion-Pfad bricht — zur Laufzeit, nicht
+beim Build.
 
-Gegenmittel ist ``NLTK_DISABLE_IMPORT_SECURITY=1`` — gesetzt im ``Dockerfile``
-(base- und prod-Stage) und in ``backend/tests/conftest.py`` für die Suite.
-``PYTHONSAFEPATH=1`` hilft **nicht**, obwohl die Fehlermeldung von nltk es
-vorschlägt: nltk setzt es selbst per ``setdefault`` und der Hook greift trotzdem.
+Gegenmittel ist ``NLTK_DISABLE_IMPORT_SECURITY=1``, gesetzt an drei Stellen:
 
-Diese Tests schlagen fehl, sobald eine der beiden Setzungen verschwindet.
+* ``backend/app/__init__.py`` — deckt jeden Einstieg ab, der ``app`` importiert
+  (``run.py``, gunicorn, Skripte, Worker),
+* ``Dockerfile`` (base- und prod-Stage) als ENV,
+* ``backend/tests/conftest.py`` für die Suite selbst.
+
+``PYTHONSAFEPATH=1`` ist **keine** Alternative, obwohl die Fehlermeldung von nltk
+es vorschlägt: nltk setzt es selbst per ``setdefault`` und der Hook greift
+trotzdem.
+
+Alle Subprozesse hier laufen mit **entfernter** ``NLTK_DISABLE_IMPORT_SECURITY``.
+Würden sie den Opt-out aus ``conftest.py`` erben, wären sie grün, ohne die
+produktive Konfiguration je zu prüfen.
 """
 from __future__ import annotations
 
@@ -34,11 +43,38 @@ import pytest
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = BACKEND_DIR.parent
 
-_IMPORT_PROBE = (
-    "import nltk\n"
-    "from nltk.text import Text\n"  # zieht `regex`
-    "print('ok')\n"
-)
+
+def _run_without_optout(code: str, cwd: Path) -> subprocess.CompletedProcess[str]:
+    """Subprozess ohne geerbten Opt-out — sonst testet er nichts."""
+    env = os.environ.copy()
+    env.pop("NLTK_DISABLE_IMPORT_SECURITY", None)
+    return subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=180,
+    )
+
+
+def test_guard_is_actually_active_without_optout() -> None:
+    """Vorbedingung: ohne Opt-out blockiert nltk den Import wirklich.
+
+    Ohne diesen Nachweis wären die folgenden Tests tautologisch — sie wären auch
+    dann grün, wenn nltk den Hook upstream wieder entfernt.
+    """
+    result = _run_without_optout("import nltk; from nltk.text import Text", BACKEND_DIR)
+    if result.returncode == 0:
+        pytest.skip(
+            "nltk blockiert Imports aus dem CWD-Baum nicht mehr — der Hook ist "
+            "offenbar upstream entfernt oder entschärft. Dann können "
+            "NLTK_DISABLE_IMPORT_SECURITY und dieser Test entfallen."
+        )
+    assert "Blocked import" in result.stderr, (
+        "Erwartet wurde der nltk-Import-Guard, der Subprozess ist aber an etwas "
+        f"anderem gescheitert:\n{result.stderr}"
+    )
 
 
 @pytest.mark.parametrize(
@@ -48,27 +84,44 @@ _IMPORT_PROBE = (
         pytest.param(REPO_ROOT, id="cwd=repo-root (venv zwei Ebenen darunter)"),
     ],
 )
-def test_nltk_importable_with_venv_below_cwd(cwd: Path) -> None:
-    """``import nltk`` überlebt beide Arbeitsverzeichnisse aus dem echten Betrieb."""
-    result = subprocess.run(
-        [sys.executable, "-c", _IMPORT_PROBE],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        env=os.environ.copy(),
-        timeout=120,
-    )
+def test_importing_app_unblocks_nltk(cwd: Path) -> None:
+    """``import app`` setzt den Opt-out — der produktive Einstieg trägt ihn.
+
+    Das ist der eigentliche Nachweis. ``run.py``, gunicorn und jedes Skript
+    importieren ``app``, bevor irgendetwas nltk anfasst. Fällt die Setzung aus
+    ``app/__init__.py`` heraus, bricht dieser Test — anders als eine Prüfung, die
+    den Opt-out aus der Testumgebung erbt.
+    """
+    result = _run_without_optout("import app; from nltk.text import Text", cwd)
     assert result.returncode == 0, (
-        f"nltk-Import aus {cwd} fehlgeschlagen — vermutlich ist "
-        f"NLTK_DISABLE_IMPORT_SECURITY nicht gesetzt.\nstderr:\n{result.stderr}"
+        f"nltk-Import nach `import app` aus {cwd} fehlgeschlagen — vermutlich "
+        "fehlt os.environ.setdefault('NLTK_DISABLE_IMPORT_SECURITY', '1') in "
+        f"backend/app/__init__.py.\nstderr:\n{result.stderr}"
     )
+
+
+def test_ingestion_entrypoint_can_parse() -> None:
+    """Der reale Bruchpfad: ``unstructured`` lädt nltk beim Parsen lazy.
+
+    Hier ist der Fehler ursprünglich aufgeschlagen — nicht bei ``import nltk``,
+    sondern erst beim ersten echten Parse-Aufruf zur Laufzeit.
+    """
+    result = _run_without_optout(
+        "import app\n"
+        "from unstructured.partition.text import partition_text\n"
+        "els = partition_text(text='Das ist ein Satz. Und noch einer.')\n"
+        "assert els, 'partition_text lieferte keine Elemente'\n",
+        BACKEND_DIR,
+    )
+    assert result.returncode == 0, f"Ingestion-Parse fehlgeschlagen:\n{result.stderr}"
 
 
 def test_dockerfile_disables_nltk_import_guard() -> None:
-    """Beide Container-Stages setzen den Opt-out.
+    """Beide Container-Stages setzen den Opt-out zusätzlich als ENV.
 
-    Ohne ihn bricht der Ingestion-Pfad erst zur Laufzeit im Container — an einer
-    Stelle, die keine Testsuite und kein Build-Schritt erreicht.
+    ``app/__init__.py`` greift im Container ebenfalls; die ENV-Setzung deckt
+    darüber hinaus Prozesse ab, die mit nltk in Berührung kommen, bevor ``app``
+    importiert ist.
     """
     dockerfile = (REPO_ROOT / "Dockerfile").read_text(encoding="utf-8")
     occurrences = dockerfile.count("NLTK_DISABLE_IMPORT_SECURITY=1")

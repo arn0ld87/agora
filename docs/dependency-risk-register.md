@@ -97,9 +97,17 @@ beim Parsen nltk lädt, fliegen `regex` und `defusedxml` mit einem `ImportError`
 heraus — der Ingestion-Pfad bricht zur Laufzeit, nicht beim Build.
 
 **Entscheidung (2026-08-02, mit User-Sign-off):** Der Hook wird per
-`NLTK_DISABLE_IMPORT_SECURITY=1` deaktiviert — gesetzt in der base- und der
-prod-Stage des [`Dockerfile`](../Dockerfile) und in
-[`backend/tests/conftest.py`](../backend/tests/conftest.py) für die Testsuite.
+`NLTK_DISABLE_IMPORT_SECURITY=1` deaktiviert — gesetzt an drei Stellen:
+
+| Stelle | Deckt ab |
+|---|---|
+| [`backend/app/__init__.py`](../backend/app/__init__.py) | jeden Einstieg, der `app` importiert: `run.py`, gunicorn, Skripte, Worker — also auch den nativen Start `cd backend && uv run python run.py` hinter `bun run dev` |
+| [`Dockerfile`](../Dockerfile), base- und prod-Stage | Container-Prozesse, die mit nltk in Berührung kommen, bevor `app` importiert ist |
+| [`backend/tests/conftest.py`](../backend/tests/conftest.py) | die Testsuite selbst |
+
+Die Setzung in `app/__init__.py` ist die entscheidende. Dockerfile und `conftest.py`
+allein hätten den nativen Entwicklungsstart ungeschützt gelassen — dort wäre der
+erste `unstructured`-Parse in den `ImportError` gelaufen.
 
 Das ist **kein** Zurücknehmen des CVE-Fixes: GHSA-p4gq-832x-fm9v betrifft eine
 Path Traversal in `nltk.data.load()`, und dieser Fix bleibt vollständig aktiv. Der
@@ -112,9 +120,13 @@ kann, hat bereits Code-Ausführung.
 vorschlägt — nltk setzt die Variable selbst per `setdefault` und der Hook greift
 trotzdem. Verifiziert am 2026-08-02.
 
-Abgesichert durch [`backend/tests/test_nltk_import_guard.py`](../backend/tests/test_nltk_import_guard.py):
-der Test importiert nltk als Subprozess aus beiden realen Arbeitsverzeichnissen und
-prüft, dass das Dockerfile den Opt-out in beiden Stages setzt.
+Abgesichert durch [`backend/tests/test_nltk_import_guard.py`](../backend/tests/test_nltk_import_guard.py).
+Alle Subprozesse dort laufen mit **entfernter** `NLTK_DISABLE_IMPORT_SECURITY` —
+würden sie den Opt-out aus `conftest.py` erben, wären sie grün, ohne die produktive
+Konfiguration je zu prüfen. Geprüft wird: dass der Hook ohne Opt-out tatsächlich
+blockiert (sonst wären die übrigen Tests tautologisch), dass `import app` ihn aus
+beiden realen Arbeitsverzeichnissen aufhebt, dass `unstructured.partition_text`
+danach durchläuft, und dass das Dockerfile den Opt-out in beiden Stages setzt.
 
 ## Trivy Container Scan Baseline — aufgelöst 2026-07-31 (vormals Hardstop 2026-08-30)
 
