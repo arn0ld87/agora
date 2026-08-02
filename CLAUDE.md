@@ -178,3 +178,9 @@ Verbindliche Quelle für Aufgaben bleibt die Reihenfolge aus [`AGENTS.md`](AGENT
 - Die vereinfachten Wildcard-Regeln sind beabsichtigt und dürfen nicht automatisch wieder in alte Einzelregeln zerlegt oder zurückgesetzt werden.
 - Änderungen an `.claude/settings.json` nur auf ausdrückliche Anweisung des Nutzers.
 - `.claude/settings.local.json` ist maschinenspezifisch, geheimnisfrei und nicht zu committen.
+
+### Keine Claude-Code-Hooks in diesem Repo
+
+**Das Repo definiert bewusst keine `hooks` in `.claude/settings.json`.** Frühere `Stop`- (pytest nach jeder Antwort) und `PostToolUse`-Hooks (ruff nach jedem `.py`-Edit) sind am 02.08.2026 entfernt worden, weil sie pro Turn eine vollständige Test-Suite bzw. pro Edit einen `uv`-Kaltstart auslösten und die Sitzung auf einem 16-GB-Rechner spürbar ausgebremst haben.
+
+Das ändert nichts an den Pflichten: Das [Pre-Commit-Gate](#pre-commit-gate-pflicht-sequentiell-scope-abhängig) und das [Pre-Push-Gate](#pre-push-gate-ci-mirror-vor-jedem-push-pflicht) gelten unverändert und werden **manuell** ausgeführt. Die CI-Statuschecks auf `main` sind ohnehin die harte Absicherung. Wer Automatik will, hängt sie an einen Git-`pre-push`-Hook oder an CI — nicht an einen Claude-Code-Turn.

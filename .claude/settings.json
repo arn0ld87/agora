@@ -37,28 +37,5 @@
       "Read(**/*credentials*.json)"
     ],
     "defaultMode": "bypassPermissions"
-  },
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "FILE=\"$CLAUDE_TOOL_INPUT_FILE_PATH\"; case \"$FILE\" in *.py) cd backend 2>/dev/null && uv run ruff check --fix \"$FILE\" 2>&1 | head -10 ;; esac; exit 0"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "INPUT=$(cat); STOP=$(echo \"$INPUT\" | jq -r '.stop_hook_active // false'); if [ \"$STOP\" = \"true\" ]; then exit 0; fi; cd backend && uv run pytest tests/contracts/ -x -q 2>&1 | tail -10; exit 0"
-          }
-        ]
-      }
-    ]
   }
 }
