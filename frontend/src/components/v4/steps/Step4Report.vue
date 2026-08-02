@@ -10,6 +10,8 @@ import { generateReport, getAgentLog, getConsoleLog, getReport, getReportStatus,
 import type { GenerateReportData } from '../../../api/report'
 import { createSimulationBranch } from '../../../api/simulation'
 import { getRun } from '../../../api/runs'
+import { getRunLlmRouting } from '../../../api/llmRouting'
+import { useAiModelRefAdapter } from '@/composables/useAiModelRefAdapter'
 import {
   RunBudgetStatusSchema,
   RunUsageSchema,
@@ -254,6 +256,48 @@ const resolvedSimulationId = ref(props.simulationId || null)
 const STORAGE_REPORT_ROUTE_LEGACY = 'agora.report.route'
 
 const effectiveModel = useEffectiveModelSelection()
+const aiModelRefAdapter = useAiModelRefAdapter()
+
+/**
+ * Issue #1023 (Befund B-26, P1): der Anzeige-Default fuer das Report-Modell
+ * kam bisher ausschliesslich aus dem Workspace-Kanon
+ * (useEffectiveModelSelection), nie aus dem fuer DIESEN Lauf gewaehlten
+ * Modell. Nutzt denselben Weg wie StepModelOverrideChip.vue (Teilpunkt 3,
+ * #1023): GET /api/runs/<id>/llm-routing.
+ *
+ * Reihenfolge: Snapshot der Stage (falls report_generation in diesem Lauf
+ * schon einmal gelaufen ist, z. B. Regenerierung) > vom Lauf konfigurierte
+ * Stage-Route/Global-Default (RuntimeLlmRouting) > null (Aufrufer faellt
+ * auf den Workspace-Kanon zurueck). Reiner Anzeige-Default — erzeugt
+ * keinen Request-Override (siehe buildModelSelection()).
+ */
+async function loadRunModelDefault(runId: string): Promise<AiModelRef | null> {
+  try {
+    const response = await getRunLlmRouting(runId)
+    const snapshot = response.snapshots?.report_generation
+    if (snapshot?.model) {
+      return aiModelRefAdapter.toAiModelRef({
+        stage: 'report_generation',
+        provider_id: snapshot.provider_id,
+        model: snapshot.model,
+        temperature: null,
+        max_tokens: null,
+        reasoning_effort: snapshot.reasoning_effort ?? 'none',
+        provider_options: {},
+      })
+    }
+    const runtimeConfig = response.runtime_config
+    const runtimeRoute = runtimeConfig?.stage_overrides?.report_generation
+      ?? runtimeConfig?.global_default
+      ?? null
+    if (runtimeRoute?.model) {
+      return aiModelRefAdapter.toAiModelRef(runtimeRoute)
+    }
+  } catch {
+    // Lauf-Routing (noch) nicht abrufbar — Workspace-Kanon bleibt Fallback.
+  }
+  return null
+}
 
 const reportRoute = ref<AiModelRef | null>(null)
 // Expliziter Nutzer-Pick — strikt getrennt vom Anzeige-Default. Der beim Mount
@@ -614,10 +658,21 @@ function goConversation() {
 onMounted(async () => {
   // Slice 7.6c (Storage-Cut): Legacy-Route-Key einmalig defensiv entsorgen.
   localStorage.removeItem(STORAGE_REPORT_ROUTE_LEGACY)
-  // Phase-1 Konsolidierung: Report-Modell aus dem Kanon initialisieren.
+  // Issue #1023 (Befund B-26, P1): das fuer DIESEN Lauf gewaehlte Modell hat
+  // Vorrang vor dem Workspace-Kanon-Default (siehe loadRunModelDefault()).
+  // Beide Quellen setzen nur den Anzeige-Default (reportRoute), keinen
+  // Request-Override — ein spaeterer Kanon-Load darf den Lauf-Default
+  // deshalb nicht mehr ueberschreiben (Race zwischen den beiden .then()-
+  // Zweigen), daher die reportRoute-Pruefung in beiden Zweigen.
+  const runModelPromise = props.runId ? loadRunModelDefault(props.runId) : Promise.resolve(null)
   effectiveModel
     .ensureLoaded()
-    .then(() => { if (!reportRoute.value) reportRoute.value = effectiveModel.effectiveRef.value })
+    .then(async () => {
+      if (reportRoute.value) return
+      const runModel = await runModelPromise
+      if (reportRoute.value) return
+      reportRoute.value = runModel ?? effectiveModel.effectiveRef.value
+    })
     .catch(() => { /* Kanon nicht ladbar: Backend nutzt active-config */ })
   await pollStatus()
   if (!isComplete.value) {

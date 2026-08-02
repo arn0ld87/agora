@@ -308,6 +308,30 @@ describe('StepReportView', () => {
     const stepper = w.findComponent({ name: 'PipelineStepper' })
     expect(stepper.props('currentStep')).toBe(4)
   })
+
+  // Issue #1023 (Befund B-26, P1): Schritt 3 navigiert bei Report-Bereitschaft
+  // auf den Sentinel-reportId 'new' (buildReportReadyRoute()), damit
+  // Step4Report seinen bestehenden Bestaetigungs-Block zeigt statt sofort in
+  // den "running"-Zustand zu springen. StepReportView muss den Sentinel auf
+  // report-id=undefined uebersetzen und simulationId/runId aus der Query
+  // durchreichen.
+  it('uebersetzt den Sentinel-reportId "new" auf report-id=undefined und reicht simulationId/runId durch', async () => {
+    const w = await mountView(
+      StepReportView,
+      { reportId: 'new' },
+      '/v4/report/new?simulationId=sim_test01&runId=run_a1b2c3d4e5f6',
+    )
+    const step4 = w.find('.stub-step4')
+    expect(step4.attributes('report-id')).toBeUndefined()
+    expect(step4.attributes('simulation-id')).toBe('sim_test01')
+    expect(step4.attributes('run-id')).toBe('run_a1b2c3d4e5f6')
+  })
+
+  it('reicht bei echtem reportId report-id unveraendert durch', async () => {
+    const w = await mountView(StepReportView, { reportId: 'rpt-7' }, '/v4/report/rpt-7')
+    const step4 = w.find('.stub-step4')
+    expect(step4.attributes('report-id')).toBe('rpt-7')
+  })
 })
 
 describe('StepInteractionView', () => {

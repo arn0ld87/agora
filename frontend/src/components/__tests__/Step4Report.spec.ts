@@ -91,6 +91,8 @@ function resetMockSelection(): void {
   mockEnsureLoaded.mockResolvedValue(undefined)
   mockSetGlobalSelection.mockReset()
   mockSetGlobalSelection.mockResolvedValue(undefined)
+  getRunLlmRoutingMock.mockReset()
+  getRunLlmRoutingMock.mockResolvedValue({ snapshots: {}, runtime_config: null })
 }
 
 vi.mock('@/composables/useEffectiveModelSelection', () => ({
@@ -101,6 +103,28 @@ vi.mock('@/composables/useEffectiveModelSelection', () => ({
     error: mockError,
     ensureLoaded: mockEnsureLoaded,
     setGlobalSelection: mockSetGlobalSelection,
+  }),
+}))
+
+// Issue #1023 (Befund B-26, P1): loadRunModelDefault() liest das Lauf-Modell
+// ueber denselben Weg wie StepModelOverrideChip.vue (Teilpunkt 3, #1023):
+// GET /api/runs/<id>/llm-routing. getRunLlmRouting() gestubbt, useAiModelRefAdapter
+// gestubbt (instanziiert sonst useLlmProvidersStore/Pinia, das dieser Spec fehlt).
+const getRunLlmRoutingMock = vi.fn().mockResolvedValue({ snapshots: {}, runtime_config: null })
+vi.mock('@/api/llmRouting', () => ({
+  getRunLlmRouting: (runId: string) => getRunLlmRoutingMock(runId),
+}))
+vi.mock('@/composables/useAiModelRefAdapter', () => ({
+  useAiModelRefAdapter: () => ({
+    toLlmRoute: vi.fn(),
+    toAiModelRef: vi.fn((route: { provider_id?: string | null; model?: string | null }) => {
+      if (!route?.provider_id || !route?.model) return null
+      return {
+        provider_connection_id: route.provider_id,
+        model_id: route.model,
+        source: 'explicit',
+      }
+    }),
   }),
 }))
 
@@ -1221,5 +1245,121 @@ describe('Step4Report — Report-Route-SSoT-Payload (#817)', () => {
     await flushPromises()
 
     expect(wrapper.find('.report-profile-picker').exists()).toBe(false)
+  })
+})
+
+// Issue #1023 (Befund B-26, P1): Report startete bisher ungefragt (Step3
+// rief generateReport() direkt auf) und mit dem Workspace-Kanon-Default statt
+// dem fuer den Lauf gewaehlten Modell. Der Bestaetigungs-Block existierte
+// bereits, wurde aber nie erreicht, weil props.reportId im Normalfluss immer
+// schon gesetzt war. Diese Suite deckt beide Teile ab: Bestaetigung erscheint
+// auch OHNE reportId aber MIT runId (realistische run_...-UUID statt "test-id"),
+// und reportRoute wird aus dem Lauf-Modell statt dem Kanon vorbelegt.
+describe('Step4Report — Lauf-Modell-Vorbelegung statt Workspace-Default (#1023)', () => {
+  const RUN_REGISTRY_ID = 'run_a1b2c3d4e5f6'
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorageMock.clear()
+    resetMockSelection()
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: { status: 'idle' },
+    })
+    ;(getReport as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true, data: VALID_REPORT })
+    ;(getReportEvidence as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true, data: VALID_EVIDENCE })
+  })
+
+  function mountPending(extraProps: Record<string, unknown> = {}) {
+    return mount(Step4Report, {
+      props: { simulationId: 'sim_test01', runId: RUN_REGISTRY_ID, ...extraProps },
+      global: { plugins: [router, i18n], stubs: globalStubs },
+    })
+  }
+
+  it('zeigt den Bestaetigungs-Block auch mit gesetzter runId, solange kein reportId vorliegt', async () => {
+    const wrapper = mountPending()
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('[data-testid="report-confirm-block"]').exists()).toBe(true)
+  })
+
+  it('uebernimmt den Snapshot der Stage report_generation als reportRoute-Default, nicht den Kanon', async () => {
+    mockEffectiveRef.value = {
+      provider_connection_id: 'conn_workspace_default',
+      model_id: 'workspace-default-model',
+      source: 'workspace-default',
+    } as AiModelRef
+    getRunLlmRoutingMock.mockResolvedValue({
+      snapshots: {
+        report_generation: {
+          stage: 'report_generation',
+          provider_id: 'conn_run_snapshot',
+          model: 'run-snapshot-model',
+          reasoning_effort: 'none',
+          routing_version: 1,
+        },
+      },
+      runtime_config: null,
+    })
+
+    const wrapper = mountPending()
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    expect(getRunLlmRoutingMock).toHaveBeenCalledWith(RUN_REGISTRY_ID)
+    const vm = wrapper.vm as unknown as { reportRoute: AiModelRef | null }
+    expect(vm.reportRoute).toEqual({
+      provider_connection_id: 'conn_run_snapshot',
+      model_id: 'run-snapshot-model',
+      source: 'explicit',
+    })
+  })
+
+  it('faellt ohne Stage-Snapshot auf die vom Lauf konfigurierte Route zurueck (RuntimeLlmRouting), nicht den Kanon', async () => {
+    mockEffectiveRef.value = {
+      provider_connection_id: 'conn_workspace_default',
+      model_id: 'workspace-default-model',
+      source: 'workspace-default',
+    } as AiModelRef
+    getRunLlmRoutingMock.mockResolvedValue({
+      snapshots: {},
+      runtime_config: {
+        global_default: { provider_id: 'conn_run_global', model: 'run-global-model', reasoning_effort: 'none', provider_options: {} },
+        stage_overrides: {},
+        routing_version: 1,
+      },
+    })
+
+    const wrapper = mountPending()
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    const vm = wrapper.vm as unknown as { reportRoute: AiModelRef | null }
+    expect(vm.reportRoute).toEqual({
+      provider_connection_id: 'conn_run_global',
+      model_id: 'run-global-model',
+      source: 'explicit',
+    })
+  })
+
+  it('faellt ohne runId auf den Workspace-Kanon zurueck (unveraendertes Verhalten)', async () => {
+    mockEffectiveRef.value = {
+      provider_connection_id: 'conn_workspace_default',
+      model_id: 'workspace-default-model',
+      source: 'workspace-default',
+    } as AiModelRef
+
+    const wrapper = mount(Step4Report, {
+      props: { simulationId: 'sim_test01' },
+      global: { plugins: [router, i18n], stubs: globalStubs },
+    })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    expect(getRunLlmRoutingMock).not.toHaveBeenCalled()
+    const vm = wrapper.vm as unknown as { reportRoute: AiModelRef | null }
+    expect(vm.reportRoute).toEqual(mockEffectiveRef.value)
   })
 })

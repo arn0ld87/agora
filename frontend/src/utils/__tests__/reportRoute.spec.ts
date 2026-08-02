@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest'
 
-import { buildReportRoute, buildInteractionRoute, INTERACTION_SIMULATION_ID_QUERY_KEY } from '../reportRoute'
+import {
+  buildReportRoute,
+  buildInteractionRoute,
+  buildReportReadyRoute,
+  INTERACTION_SIMULATION_ID_QUERY_KEY,
+  PENDING_REPORT_ID,
+  REPORT_SIMULATION_ID_QUERY_KEY,
+} from '../reportRoute'
 
 describe('buildReportRoute', () => {
   it('haengt die runId als Query an, wenn sie bekannt ist', () => {
@@ -60,6 +67,29 @@ describe('buildInteractionRoute', () => {
     expect(buildInteractionRoute('rpt-1')).toEqual({
       name: 'Interaction',
       params: { reportId: 'rpt-1' },
+    })
+  })
+})
+
+// Issue #1023 (Befund B-26, P1): Schritt 3 ruft nicht mehr generateReport()
+// direkt auf, sondern navigiert in einen "bereit"-Zustand. Die Report-Route
+// verlangt zwingend einen :reportId-Pfad-Parameter — der Sentinel 'new'
+// spiegelt die Konvention aus useGraphBuildPipeline.ts (currentProjectId
+// === 'new').
+describe('buildReportReadyRoute', () => {
+  it('nutzt den Sentinel-reportId "new" und haengt simulationId + runId als Query an', () => {
+    expect(buildReportReadyRoute({ runId: 'run_a1b2c3d4e5f6', simulationId: 'sim_test01' })).toEqual({
+      name: 'Report',
+      params: { reportId: PENDING_REPORT_ID },
+      query: { [REPORT_SIMULATION_ID_QUERY_KEY]: 'sim_test01', runId: 'run_a1b2c3d4e5f6' },
+    })
+  })
+
+  it('laesst runId im Query weg, wenn keine Registry-Run-ID vorliegt', () => {
+    expect(buildReportReadyRoute({ simulationId: 'sim_test01' })).toEqual({
+      name: 'Report',
+      params: { reportId: PENDING_REPORT_ID },
+      query: { [REPORT_SIMULATION_ID_QUERY_KEY]: 'sim_test01' },
     })
   })
 })

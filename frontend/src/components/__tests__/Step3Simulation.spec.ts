@@ -113,7 +113,6 @@ vi.mock('../../composables/useEventStream', () => ({
 
 import Step3Simulation from '@/components/v4/steps/Step3Simulation.vue'
 import { useEventStream } from '../../composables/useEventStream'
-import { generateReport } from '../../api/report'
 import { cancelRun } from '../../api/runs'
 
 const i18n = createI18n({
@@ -366,16 +365,14 @@ describe('Step3Simulation — phase promotion (Sub-Slice A, #209)', () => {
     vi.restoreAllMocks()
   })
 
-  it('sendet beim initialen Reportstart ohne expliziten Report-Pick nur simulation_id', async () => {
+  // Issue #1023 (Befund B-26, P1): goReport() rief bisher generateReport()
+  // direkt auf — der teuerste Pipeline-Schritt startete ungefragt und mit
+  // dem Workspace-Default-Modell. Schritt 3 navigiert jetzt nur noch in
+  // einen "bereit"-Zustand; der Report-Start ist explizite Nutzeraktion in
+  // Schritt 4 (siehe Step4Report.spec.ts, describe „Lauf-Modell-
+  // Vorbelegung").
+  it('navigiert bei Klick auf "Weiter zum Bericht" in den Bereit-Zustand, ohne generateReport aufzurufen', async () => {
     vi.mocked(simulationApi.getRunStatus).mockResolvedValue({ success: true, data: {} } as never)
-    ;(generateReport as ReturnType<typeof vi.fn>).mockResolvedValue({
-      success: true,
-      data: { report_id: 'report_test123456' },
-    })
-    localStorage.setItem('agora.lastModel', 'custom')
-    localStorage.setItem('agora.lastCustomModel', 'deepseek-v3.2:cloud')
-    localStorage.setItem('agora.reportModel', 'legacy-report-model')
-    localStorage.setItem('agora.reportCustomModel', 'legacy-report-custom')
 
     const wrapper = mountComponent()
     await flushPromises()
@@ -389,7 +386,17 @@ describe('Step3Simulation — phase promotion (Sub-Slice A, #209)', () => {
     await reportBtn!.trigger('click')
     await flushPromises()
 
-    expect(generateReport).toHaveBeenCalledWith({ simulation_id: 'sim_test_smoke' })
+    // Kein direkter Report-Start mehr — nur Navigation.
+    const generateReportMock = vi.mocked((await import('../../api/report')).generateReport)
+    expect(generateReportMock).not.toHaveBeenCalled()
+
+    // Ziel: Report-Route mit Sentinel-reportId 'new' (kein Report existiert
+    // noch), simulationId + runId als Query — effectiveRunId faellt hier auf
+    // props.simulationId zurueck, da kein echter Registry-Run-Start gemockt ist.
+    expect(router.currentRoute.value.name).toBe('Report')
+    expect(router.currentRoute.value.params.reportId).toBe('new')
+    expect(router.currentRoute.value.query.simulationId).toBe('sim_test_smoke')
+    expect(router.currentRoute.value.query.runId).toBe('sim_test_smoke')
   })
 })
 
