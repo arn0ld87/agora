@@ -254,7 +254,12 @@ override-dependencies = [
     # CVE-2026-4372, CVE-2026-1839 und PYSEC-2025-217.
     "sentence-transformers>=5.3.0",
     "transformers>=5.3.0",
-    # PYSEC-2026-597: nltk 3.9.4 has a vulnerability without an upstream fix.
-    # Pinning to the current version until a patch is released.
-    "nltk==3.9.4",
+    # GHSA-p4gq-832x-fm9v / CVE-2026-54293 / PYSEC-2026-2078 (Path Traversal
+    # in nltk.data.load()): fixed upstream in nltk 3.10.0. Bump auf 3.10.1
+    # (aktuell, 2026-08-01) loest diese Advisory auf (#995).
+    # PYSEC-2026-597 / CVE-2026-12243 bleibt unberuehrt: laut OSV existiert
+    # dafuer kein offizielles "fixed"-Event, aber last_affected: 3.9.4 — ab
+    # 3.10.0 faellt das Paket aus dem affected-Set, pip-audit meldet die
+    # Advisory dann nicht mehr, ohne dass ein echter Fix vorliegt (#661).
+    "nltk==3.10.1",
 ]

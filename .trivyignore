@@ -11,26 +11,29 @@
 # meldet. Advisory-Aliase (GHSA <-> CVE <-> PYSEC) werden NICHT aufgelöst.
 # Steht hier eine GHSA-ID und Trivy meldet die CVE-ID, greift der Eintrag
 # nicht. Im Zweifel alle Aliase eintragen.
-# Konkreter offener Fall: GHSA-p4gq-832x-fm9v unten wird von Trivy als
-# CVE-2026-54293 gemeldet und deshalb nicht unterdrückt — siehe Issue #995.
+# Ehemaliger konkreter Fall: GHSA-p4gq-832x-fm9v wurde von Trivy als
+# CVE-2026-54293 gemeldet und dadurch nicht unterdrückt (Issue #995) —
+# inzwischen durch echten Upstream-Fix (nltk 3.10.0) gelöst, siehe Block 1.
 
 # =============================================================================
-# Block 1 — pip-audit/nltk-Baseline · Hardstop 2026-09-28
-# Verlängert via ADR-0004 / ALE-20 (docs/decisions/0004-cve-upstream-escalation.md)
+# Block 1 — pip-audit/nltk-Baseline · aufgelöst 2026-08-02 (vormals Hardstop
+# 2026-09-28, verlängert via ADR-0004 / ALE-20)
 # =============================================================================
-
-# PYSEC-2026-597 (alias CVE-2026-12243): nltk==3.9.4 (transitiv via unstructured)
-# Risk: unknown — kein Upstream-Fix released, keine gefixte Version in der Advisory-DB
-# Issue: https://github.com/arn0ld87/agora/issues/661 (konsolidiert in #672)
-# Deadline: 2026-09-28
-PYSEC-2026-597
-
-# GHSA-p4gq-832x-fm9v: nltk.data.load() URL-Encoded Path Traversal (nltk==3.9.4)
-# Risk: High (Arbitrary Local File Read) — Agora nutzt nltk nur statisch
-# (Tokenisierung), kein user-kontrollierter Pfad in nltk.data.load().
-# Issue: https://github.com/arn0ld87/agora/issues/672
-# Deadline: 2026-09-28
-GHSA-p4gq-832x-fm9v
+#
+# Dieser Block ist leer. nltk wurde von 3.9.4 auf 3.10.1 gehoben (Issue #995,
+# verifiziert per vollem Backend-Testlauf: 4159 passed, keine durch den Bump
+# verursachte Regression). Für die beiden Advisories gilt das unterschiedlich:
+#
+# - GHSA-p4gq-832x-fm9v (Alias CVE-2026-54293, PYSEC-2026-2078): echter
+#   Upstream-Fix in nltk 3.10.0. Real resolved.
+# - PYSEC-2026-597 (Alias CVE-2026-12243): KEIN echter Upstream-Fix — OSV
+#   weist kein "fixed"-Event aus, nur last_affected: 3.9.4. Ab nltk 3.10.0
+#   fällt das installierte Paket aus dem affected-Set; Trivy/pip-audit
+#   melden den Fund deshalb nicht mehr, obwohl die zugrunde liegende
+#   Schwachstelle nicht behoben ist. Aufschub durch Versions-Drift, keine
+#   Behebung. Tracking bleibt offen: Issue #661.
+#
+# Details: docs/dependency-risk-register.md, Abschnitt "nltk-Baseline".
 
 # =============================================================================
 # Block 2 — Trivy-Container-Baseline · aufgelöst 2026-07-31 (Issue #772)

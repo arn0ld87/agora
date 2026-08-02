@@ -5,6 +5,26 @@ Agora Backend - Flask Application Factory
 import os
 import warnings
 
+# nltk >= 3.10 installiert beim Import einen Meta-Path-Finder
+# (``nltk/inisec.py``), der jeden von nltk ausgelösten Import blockiert, dessen
+# Modul unterhalb des aktuellen Arbeitsverzeichnisses liegt. Er unterscheidet
+# nicht zwischen Projektbaum und einer venv, die zufällig darunter liegt — und
+# genau das ist bei Agora der Regelfall: nativ ``cd backend && uv run python
+# run.py`` mit ``backend/.venv``, im Container ``WORKDIR /app`` mit
+# ``/app/backend/.venv``. Damit gilt *jedes* venv-Paket als "aus dem CWD" und
+# ``regex``/``defusedxml`` fliegen mit einem ImportError heraus, sobald
+# ``unstructured`` beim Parsen nltk lädt.
+#
+# Muss VOR dem ersten nltk-Import gesetzt sein; der Hook wird auf Modulebene
+# installiert. Hier statt nur im Entry-Point, damit auch gunicorn, Skripte und
+# Worker abgedeckt sind, die ``app`` importieren, ohne ``run.py`` zu benutzen.
+# Das Dockerfile setzt dieselbe Variable zusätzlich als ENV.
+#
+# Nimmt den CVE-Fix nicht zurück: GHSA-p4gq-832x-fm9v betrifft die Path
+# Traversal in ``nltk.data.load()`` und bleibt behoben. Details in
+# docs/dependency-risk-register.md, Abschnitt "nltk-Baseline".
+os.environ.setdefault("NLTK_DISABLE_IMPORT_SECURITY", "1")
+
 # Suppress multiprocessing resource_tracker warnings (from third-party libraries like transformers)
 # Must be set before all other imports
 warnings.filterwarnings("ignore", message=".*resource_tracker.*")

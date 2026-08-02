@@ -31,6 +31,16 @@ COPY --from=ghcr.io/astral-sh/uv:0.9.26 /uv /uvx /bin/
 ENV UV_HTTP_TIMEOUT=1800
 ENV UV_HTTP_RETRIES=5
 
+# nltk >= 3.10 installiert einen Import-Hook (nltk/inisec.py), der jeden von
+# nltk ausgelösten Import blockiert, dessen Modul unterhalb des CWD liegt.
+# WORKDIR ist /app und die venv liegt unter /app/backend/.venv — damit gilt
+# *jedes* Paket der venv als "aus dem CWD" und `regex`/`defusedxml` werden
+# blockiert, sobald `unstructured` beim Parsen nltk lädt. Der Hook ist
+# Defense-in-Depth gegen CWD-Import-Hijacking, nicht der eigentliche Fix für
+# GHSA-p4gq-832x-fm9v (Path Traversal in nltk.data.load()) — der bleibt aktiv.
+# Siehe docs/dependency-risk-register.md, Abschnitt "nltk-Baseline".
+ENV NLTK_DISABLE_IMPORT_SECURITY=1
+
 ENV TZ=Europe/Berlin
 
 WORKDIR /app
@@ -131,7 +141,8 @@ FROM python:3.14-slim@sha256:cea0e6040540fb2b965b6e7fb5ffa00871e632eef63719f0ea5
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     FLASK_HOST=0.0.0.0 \
-    PATH="/app/backend/.venv/bin:$PATH"
+    PATH="/app/backend/.venv/bin:$PATH" \
+    NLTK_DISABLE_IMPORT_SECURITY=1
 
 WORKDIR /app
 
