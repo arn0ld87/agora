@@ -36,17 +36,56 @@ def _validate_platform(platform):
     return None
 
 
-def _require_env_alive(simulation_id: str):
-    if not SimulationRunner.check_env_alive(simulation_id):
-        return json_error(
-            ApiErrorCode.SERVICE_UNAVAILABLE,
-            status=503,
-            message=(
-                "Simulation environment not running or closed. "
-                "Please ensure simulation is started and wait for it to progress."
-            ),
-        )
-    return None
+def _require_interview_backend(simulation_id: str):
+    """Guard: an interview must be answerable — via a live worker or in-process.
+
+    A live OASIS worker answers via IPC. Once the environment is closed the
+    interview is served directly in the Flask process from the persisted
+    personas (see ``services/sim/interview_direct.py``). Only when neither is
+    available does the request fail with 503.
+    """
+    if SimulationRunner.check_env_alive(simulation_id):
+        return None
+    if SimulationRunner.direct_interviews_available(simulation_id):
+        return None
+    return json_error(
+        ApiErrorCode.SERVICE_UNAVAILABLE,
+        status=503,
+        message=(
+            "Simulation environment not running and no personas persisted. "
+            "Please ensure simulation is started and wait for it to progress."
+        ),
+    )
+
+
+def _aggregate_batch_error(result: dict):
+    """Pull a human-readable error out of the direct-path batch result shape.
+
+    ``interview_agents_batch_direct`` reports failures per agent inside
+    ``result["result"]["results"][<key>]["error"]`` and never sets a top-level
+    ``error`` (unlike the IPC path, which already does). Without this, a
+    failed direct-path batch/all-interview surfaces no usable message at the
+    envelope level — the exact defect behind the "Netzwerkfehler" symptom in
+    #1000. Returns ``None`` when there is nothing to aggregate.
+    """
+    inner = result.get("result")
+    if not isinstance(inner, dict):
+        return None
+    entries = inner.get("results")
+    if not isinstance(entries, dict):
+        return None
+    errors = []
+    for entry in entries.values():
+        if isinstance(entry, dict):
+            error = entry.get("error")
+            if error and error not in errors:
+                errors.append(error)
+    if not errors:
+        return None
+    # Bewusst nur die erste Ursache, ohne generierten Rahmentext: der Wert wird
+    # im Frontend unveraendert angezeigt, und ein hier formulierter Satz waere
+    # ein hartkodierter UI-Text, der die vue-i18n-Lokalisierung umgeht.
+    return errors[0]
 
 
 def _echo_result(result: dict):
@@ -54,9 +93,25 @@ def _echo_result(result: dict):
 
     Preserves the legacy response shape for interview endpoints, where the
     outer ``success`` tracked the runner's internal success rather than the HTTP
-    layer outcome.
+    layer outcome. ``data`` always carries the full, unmodified ``result`` and
+    the HTTP status stays 200 — breaking either would be a contract change for
+    existing consumers and is out of scope here.
+
+    On failure, a top-level ``error`` (and, if present, ``code``) is mirrored
+    additively so the frontend's response interceptor — which only reads
+    top-level fields — can surface the real cause instead of falling back to
+    a generic "Unbekannter Fehler".
     """
-    return jsonify({"success": result.get("success", False), "data": result})
+    success = result.get("success", False)
+    envelope: dict = {"success": success, "data": result}
+    if not success:
+        error = result.get("error") or _aggregate_batch_error(result)
+        if error:
+            envelope["error"] = error
+        code = result.get("code")
+        if code:
+            envelope["code"] = code
+    return jsonify(envelope)
 
 
 @simulation_bp.route('/interview', methods=['POST'])
@@ -90,7 +145,7 @@ def interview_agent():
     if platform_error:
         return platform_error
 
-    env_error = _require_env_alive(simulation_id)
+    env_error = _require_interview_backend(simulation_id)
     if env_error:
         return env_error
 
@@ -148,7 +203,7 @@ def interview_agents_batch():
                 message=f"Interview list item {index}: platform must be 'twitter' or 'reddit'",
             )
 
-    env_error = _require_env_alive(simulation_id)
+    env_error = _require_interview_backend(simulation_id)
     if env_error:
         return env_error
 
@@ -192,7 +247,7 @@ def interview_all_agents():
     if platform_error:
         return platform_error
 
-    env_error = _require_env_alive(simulation_id)
+    env_error = _require_interview_backend(simulation_id)
     if env_error:
         return env_error
 

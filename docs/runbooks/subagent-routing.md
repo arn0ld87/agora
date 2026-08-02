@@ -21,18 +21,20 @@ Schreibende Worker laufen in isolierten Worktrees, bearbeiten genau ein Issue un
 
 | Aufgabe | Lead/Subagent | Modell |
 |---|---|---|
-| Architekturentscheidung | Lead | Lead-Modell mit M3-Reviewer |
+| Architekturentscheidung | Lead | Lead-Modell mit Reviewer-Gegenprüfung |
 | Ambige Spezifikation | Lead | Lead-Modell |
-| Security, Auth, Secrets oder Datenmigration | Lead plant, Worker implementiert eng | M3-Reviewer |
-| Abschlussreview eines Issue-Commits | `agora-reviewer-m3` | MiniMax-M3, read-only |
-| Backend-Refactor | `agora-refactor-worker-m3` | MiniMax-M3 |
-| Pydantic-/Schema-Arbeit | `agora-refactor-worker-m3` | MiniMax-M3 |
-| Tests, FSM und E2E | `agora-test-worker-m3` | MiniMax-M3 |
-| Vue, Pinia, Zod, A11y | `agora-frontend-worker-m3` | MiniMax-M3 |
-| Evidence-/Wording-Audit | `agora-evidence-auditor-m3` | MiniMax-M3, read-only |
-| Dokumentation | `agora-doc-worker-m3` | MiniMax-M3 |
+| Security, Auth, Secrets oder Datenmigration | Lead plant, Worker implementiert eng | Reviewer-Gegenprüfung |
+| Abschlussreview eines Issue-Commits | `agora-reviewer-m3` | `opus`, read-only |
+| Backend-Refactor | `agora-refactor-worker-m3` | `sonnet` |
+| Pydantic-/Schema-Arbeit | `agora-refactor-worker-m3` | `sonnet` |
+| Tests, FSM und E2E | `agora-test-worker-m3` | `sonnet` |
+| Vue, Pinia, Zod, A11y | `agora-frontend-worker-m3` | `sonnet` |
+| Evidence-/Wording-Audit | `agora-evidence-auditor-m3` | `sonnet`, read-only |
+| Dokumentation | `agora-doc-worker-m3` | `sonnet` |
 
-> **Modell-Migration 20.07.2026:** Die historischen Subagenten ohne `-m3`-Suffix bleiben im Repo, werden aber operativ nicht mehr verwendet. Sie existieren nur noch als Referenz für alte Commits. Das Lead-Modell dieser Session ist MiniMax-M3; alle Subagenten werden über die `-m3`-Variante dispatcht. Der Reviewer-Subagent wurde zusätzlich von `agora-opus-reviewer-m3` auf `agora-reviewer-m3` umbenannt, weil das Modell nicht mehr Opus ist.
+> **Modell-Migration 20.07.2026:** Die historischen Subagenten ohne `-m3`-Suffix bleiben im Repo, werden aber operativ nicht mehr verwendet. Sie existieren nur noch als Referenz für alte Commits. Alle Subagenten werden über die `-m3`-Variante dispatcht. Der Reviewer-Subagent wurde zusätzlich von `agora-opus-reviewer-m3` auf `agora-reviewer-m3` umbenannt.
+
+> **Korrektur 31.07.2026 — der `-m3`-Suffix ist nur noch ein Name.** Die `-m3`-Definitionen trugen `model: MiniMax-M3`. Dieses Modell ist in einer regulären Claude-Code-Session nicht auflösbar: jeder Dispatch brach sofort mit „There's an issue with the selected model (MiniMax-M3)" ab, bevor der Worker eine einzige Zeile las. Sie laufen jetzt auf Anthropic-Modellen (siehe Spalte „Modell"). Die oben genannte Umbenennungsbegründung „weil das Modell nicht mehr Opus ist" gilt für den Reviewer damit nicht mehr — er läuft wieder auf `opus`, behält aber den Namen `agora-reviewer-m3`, weil Skript- und Slash-Command-Texte darauf verweisen. Dass sich die `-m3`- und Nicht-`-m3`-Paare fachlich nicht mehr unterscheiden, ist Gegenstand von [#803](https://github.com/arn0ld87/agora/issues/803).
 
 ## Lead-Trigger
 

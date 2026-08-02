@@ -47,6 +47,25 @@ ProviderConnectionKind = Literal[
     "unknown",
 ]
 
+# Herkunft einer vom UI geschickten (Connection, Modell)-Wahl.
+#
+# Liegt hier und nicht in ``ai_provider_contract`` (Issue #901): seit
+# ``StageLLMRoute`` die Herkunft mitführt, brauchen beide Contract-Module das
+# Literal. ``ai_provider_contract`` importiert bereits aus
+# ``llm_routing_contract`` — der Gegenimport wäre ein Zyklus.
+#
+# Bewusst getrennt von ``RouteSource`` in ``ai_provider_contract``: dieses
+# Vokabular beschreibt, was das UI ausgewählt hat, jenes den aufgelösten
+# Routing-Zustand. Die Abbildung steht in ``_AI_MODEL_REF_SOURCE_TO_ROUTE``.
+AiModelRefSource = Literal[
+    "stage-override",
+    "run-override",
+    "project-default",
+    "workspace-default",
+    "explicit",
+    "fallback",
+]
+
 # NOTE: typed as tuple[str, ...] (not tuple[ProviderType, ...]) because
 # the constants above are inferred as `str`, not as specific Literal[...].
 # Promoting each to `Final[Literal[...]]` would be cleaner but is a

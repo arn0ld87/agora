@@ -246,10 +246,42 @@ def get_report_evidence(report_id: str):
     if not evidence_map:
         return json_error(f"No evidence map available for report: {report_id}", status=404)
     from ..services.evidence_migrations import (
+        migrate_legacy_claims_to_anchored,
         migrate_medium_seed_only_claims_to_low,
         migrate_v1_to_v2,
     )
-    migrated = migrate_medium_seed_only_claims_to_low(migrate_v1_to_v2(evidence_map))
+    # Reihenfolge ist bindend (Issue #968):
+    #   migrate_v1_to_v2
+    #   -> migrate_legacy_claims_to_anchored
+    #   -> migrate_medium_seed_only_claims_to_low   (Issue #963)
+    #   -> EvidenceMapModel.model_validate
+    #
+    # Begruendung: migrate_legacy_claims_to_anchored haengt Claims, die GAR
+    # KEINE Evidence tragen, zuerst nach data_gaps um. Danach sieht die
+    # medium-Logik aus #963 nur noch Claims mit tatsaechlich vorhandener
+    # Evidence und prueft keine bereits umgehaengten Claims ein zweites Mal.
+    #
+    # Die umgekehrte Reihenfolge ist nicht bloss ineffizient, sie liefert ein
+    # ANDERES Ergebnis: has_agent_grounded_evidence([]) ist False, also stuft
+    # #963 einen orphan medium-Claim zuerst auf "low" ab. Danach greift
+    # _ANCHOR_REQUIRED_LABELS nicht mehr (low ist dort nicht enthalten) und der
+    # Claim bleibt dauerhaft als evidenzlose Aussage in claims[] stehen, statt
+    # als Datenluecke ausgewiesen zu werden — das unterlaeuft die Zusage, dass
+    # jede Aussage im Report belegt ist. Getauscht ergibt dieselbe Map
+    #   claims=[claim_90:low], data_gaps=[]   statt   claims=[], data_gaps=[1]
+    # Waechter dieser Ordnung ist
+    # tests/api/test_report_evidence_route.py::TestReportEvidenceRouteOrphanClaims
+    # ::test_orphan_medium_claim_becomes_data_gap — er wird bei einem Tausch rot.
+    #
+    # Ohne diesen Aufruf scheitern persistierte Bestands-Maps mit
+    # medium/high/verified-Claims ohne Evidence am Validator
+    # ReportClaimModel.non_low_claims_need_evidence. Die Migration faengt solche
+    # Daten auf, ohne den Claim zu verwerfen — erhalten bleibt der claim_text
+    # als data_gap; claim_id, confidence und audit_trail hat
+    # ReportSectionDataGapModel nicht.
+    migrated = migrate_medium_seed_only_claims_to_low(
+        migrate_legacy_claims_to_anchored(migrate_v1_to_v2(evidence_map))
+    )
     return json_success(EvidenceMapModel.model_validate(migrated).model_dump(mode="json"))
 
 

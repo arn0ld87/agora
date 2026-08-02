@@ -67,6 +67,17 @@ def _mask_key(plaintext: str) -> str:
     return f"{prefix}-...{plaintext[-4:]}"
 
 
+class SecretDecryptionError(RuntimeError):
+    """Ciphertext genau eines Providers passt nicht zum aktuellen Fernet-Key.
+
+    Bewusst von ``RuntimeError`` abgeleitet, damit bestehende Aufrufer
+    unverändert weiterlaufen. Der eigene Typ trennt den Einzel-Credential-Defekt
+    von globalen Store- und Konfigurationsfehlern (fehlender oder ungültiger
+    ``AGORA_SECRET_KEY``, unlesbare Store-Datei), die weiter als blankes
+    ``RuntimeError`` fliegen und hart bleiben müssen.
+    """
+
+
 def _resolve_data_dir() -> Path:
     raw = os.environ.get(_DATA_DIR_ENV)
     if raw:
@@ -223,7 +234,7 @@ class LlmProviderSecretsStore:
         try:
             return self._fernet().decrypt(ciphertext.encode("utf-8")).decode("utf-8")
         except InvalidToken as exc:
-            raise RuntimeError(
+            raise SecretDecryptionError(
                 "LLM-Provider-Key konnte nicht entschlüsselt werden. "
                 f"AGORA_SECRET_KEY passt nicht zum Ciphertext für '{provider_id}'."
             ) from exc

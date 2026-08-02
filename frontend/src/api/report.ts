@@ -10,8 +10,22 @@ import type { AiModelRef } from '../contracts/aiModelRef'
 
 /** Explizite (Connection, Modell)-Auswahl aus dem Report-Picker (Issue #817).
  * Direkt vom kanonischen `AiModelRef` abgeleitet, damit die Enum-Constraint auf
- * `source` erhalten bleibt und kein Parallel-Contract entsteht. */
-export type AiModelRefPayload = Pick<AiModelRef, 'provider_connection_id' | 'model_id' | 'source'>
+ * `source` erhalten bleibt und kein Parallel-Contract entsteht.
+ *
+ * `fallback_reason` reist mit (Issue #901). `AiModelPicker` kennt bei einer
+ * Fallback-Auswahl sehr wohl einen Grund — `unknown_provider` bei unbekannter
+ * Item-ID, `provider_offline` bei `status: 'unavailable'`, `provider_degraded`
+ * bei `status: 'degraded'`. Ohne das Feld verwarfen die Request-Builder genau
+ * diese Diagnose, und `llm_routing_seed._fallback_reason_for` schrieb den
+ * Platzhalter `unspecified_fallback` in die Route — der Grund wäre nur
+ * scheinbar unbekannt gewesen. Der Platzhalter bleibt als Netz fuer die Faelle,
+ * in denen wirklich kein Grund ableitbar ist. */
+export type AiModelRefPayload = Pick<
+  AiModelRef,
+  'provider_connection_id' | 'model_id' | 'source'
+> & {
+  fallback_reason?: string | null
+}
 
 export interface GenerateReportData {
   simulation_id: string

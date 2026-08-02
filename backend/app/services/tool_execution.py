@@ -215,6 +215,14 @@ def execute_tool(
         return rendered
 
     except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
+        # Issue #978: Budgetabbruch (#764) ist kein Tool-Fehler — hart
+        # durchreichen, sonst liest der ReACT-Loop einen harmlosen
+        # "Tool execution failed"-Observation-Text statt den Run mit
+        # termination_reason=budget_* zu beenden.
+        from .run_budget import BudgetExceededError
+
+        if isinstance(e, BudgetExceededError):
+            raise
         logger.error(f"Tool execution failed: {tool_name}, error: {str(e)}")
         return f"Tool execution failed: {str(e)}"
 

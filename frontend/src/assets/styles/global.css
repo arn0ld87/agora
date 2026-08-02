@@ -1174,7 +1174,15 @@ button { font: inherit; cursor: pointer; }
 /* Density modifier from Tweaks-Panel */
 .dense .field-label, .dense .meta-mono { font-size: 10px; }
 
-/* Fade-in route transition */
+/* Fade-in route transition.
+   WICHTIG: App.vue nutzt <transition mode="out-in">. Ohne explizite
+   leave-Klassen wartet Vue auf ein transitionend-Event, das nie feuert,
+   wenn auf dem View-Root eine fremde transition liegt — die neue Route
+   mountet dann nie (URL wechselt, View bleibt stehen). Die leave-Phase
+   muss darum eigene, kurz laufende Regeln haben. */
 .fade-enter-active { transition: opacity 400ms cubic-bezier(.2,.7,.2,1), transform 400ms cubic-bezier(.2,.7,.2,1); }
 .fade-enter-from { opacity: 0; transform: translateY(8px); }
 .fade-enter-to { opacity: 1; transform: translateY(0); }
+.fade-leave-active { transition: opacity 160ms cubic-bezier(.2,.7,.2,1), transform 160ms cubic-bezier(.2,.7,.2,1); }
+.fade-leave-from { opacity: 1; transform: translateY(0); }
+.fade-leave-to { opacity: 0; transform: translateY(-8px); }

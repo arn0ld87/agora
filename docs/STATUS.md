@@ -1,6 +1,6 @@
 # Agora — Status
 
-**Stand:** 27.07.2026
+**Stand:** 29.07.2026  
 **Geprüfte Main-Baseline:** `d5bdbada`  
 **Produktversion:** `0.8.0` Technical Preview
 
@@ -27,8 +27,8 @@ Die Produktreife wird ab diesem Dokumentationsumbau über [`VERSION`](../VERSION
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 3907 | `cd backend && uv run pytest --collect-only -q` |
-| Frontend Test-Files | 167 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
+| Backend Tests (collected) | 4156 | `cd backend && uv run pytest --collect-only -q` |
+| Frontend Test-Files | 178 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
 Hinweise:
@@ -50,6 +50,7 @@ Agora besitzt eine vollständige fachliche Grundpipeline:
 - Evidence-orientierte Reports und Exporte
 - Compare-, Graph-Diff- und Observability-Grundlagen
 - fortsetzbare Embedding-Migration für Entity- und Fact-Vektoren
+- Kosten-, Token- und Zeitbudgets für Runs ([#764](https://github.com/arn0ld87/agora/issues/764), ADR-0012): Preflight-Schätzung mit ehrlichen Bereichen, weiche/harte Limits pro Run, Live-Verbrauchsmonitor, Abschlussanalyse nach Stage/Provider/Modell, Budgetabbruch über `termination_reason` von Fehler/Nutzerabbruch unterscheidbar, Verbrauch im Report-Export
 
 Der Stand ist dennoch Technical Preview, weil die E2E-Kernpipeline noch nicht als verpflichtender Pull-Request-Check erzwungen wird. Die Migration der v3-Inhaltskomponenten (`Step2EnvSetup`/`Step3Simulation`/`Step4Report`) in v4-Wrapper ist abgeschlossen ([#922](https://github.com/arn0ld87/agora/issues/922), PR #938); der credential-basierte Runtime-Provider-Override (`useRuntimeLlmOptions`) ist entfernt. Der `/home`-Redirect auf `/dashboard` ist umgesetzt ([#915](https://github.com/arn0ld87/agora/issues/915), ADR-0010); `Home.vue` bleibt bis `1.0.0` physisch erhalten.
 
@@ -103,7 +104,7 @@ Strukturelle Lücken liegen vor allem in OASIS-/Neo4j-Integrationspfaden, Canvas
 - kanonische Modellauswahl: `frontend/src/components/v4/forms/AiModelPicker.vue`; seit Issue #890 auch im Step-2-Environment-Setup. Eine Auswahl ist eine `AiModelRef` und wird als `ai_model_ref` an `/prepare` gesendet; ohne Auswahl entscheidet die Backend-Präzedenz (Projektprofil vor Workspace-Default). Modellauswahl wird im Frontend nicht mehr persistiert
 - aktive Embedding-Konfiguration: `embedding_service.py` und `embedding_migration.py`
 - strukturierte LLM-JSON-Outputs: `LLMClient.chat_json` mit Pydantic-Schema (strict-json_schema-Pfad); rohe OpenAI-Clients für strukturierte Outputs vermeiden
-- Subagent-Dispatch: Routing-Matrix in [`docs/runbooks/subagent-routing.md`](runbooks/subagent-routing.md) und [`CLAUDE.md`](../CLAUDE.md); Agentdefinitionen unter `.claude/agents/*-m3.md` (Modell `MiniMax-M3`, ab 20.07.2026). Die historischen Subagenten ohne Suffix (z. B. `agora-doc-worker.md`) wurden am 27.07.2026 auf denselben Härtungsgrad gehoben.
+- Subagent-Dispatch: Routing-Matrix in [`docs/runbooks/subagent-routing.md`](runbooks/subagent-routing.md) und [`CLAUDE.md`](../CLAUDE.md); Agentdefinitionen unter `.claude/agents/*-m3.md`. Der `-m3`-Suffix ist seit dem 31.07.2026 nur noch ein historischer Name: die Definitionen trugen `model: MiniMax-M3` (ab 20.07.2026) und waren damit nicht dispatchfähig — sie laufen jetzt auf Anthropic-Modellen (`opus` für den Reviewer, sonst `sonnet`). Die historischen Subagenten ohne Suffix (z. B. `agora-doc-worker.md`) wurden am 27.07.2026 auf denselben Härtungsgrad gehoben.
 - Evidence-Gating: ADR-0002-Hartanker
 
 Chat-Routing und Embedding-Konfiguration bleiben getrennte Vertragswelten.
@@ -140,11 +141,11 @@ Chat-Routing und Embedding-Konfiguration bleiben getrennte Vertragswelten.
 Aktuelle Hardstops:
 
 - NLTK-Advisories: 28.09.2026 gemäß ADR-0004/Risk Register
-- Trivy OS-Layer: 30.08.2026
+- ~~Trivy OS-Layer: 30.08.2026~~ — entfällt, aufgelöst am 31.07.2026 ([#772](https://github.com/arn0ld87/agora/issues/772)). CVE-2026-24049 und CVE-2026-23949 kamen nicht aus dem OS-Layer, sondern aus `setuptools/_vendor/` in der Backend-`.venv`, und sind mit `setuptools 83.0.0` behoben.
 
 ## Nächste Prioritäten
 
 1. E2E als verpflichtenden Pull-Request-Check aktivieren (Läufe sind stabil grün, Branch-Protection auf `main` fehlt noch).
-2. Reproduzierbarkeit, Kostenbudgets und Kalibrierungsbaseline für `0.10.0` umsetzen.
+2. Reproduzierbarkeit, ehrliche Hardware-Tiers (Benchmarks statt Schätzwerte) und Kalibrierungsbaseline für `0.10.0` umsetzen. Die Kosten- und Ressourcenbudgets selbst stehen via [#764](https://github.com/arn0ld87/agora/issues/764) — siehe ROADMAP „Kosten und Ressourcen“.
 
 Die vollständigen Release-Gates stehen in [`ROADMAP.md`](../ROADMAP.md).

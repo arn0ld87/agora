@@ -46,6 +46,7 @@ from .sim.monitor import get_agent_stats as _get_agent_stats_fn
 # M11 Phase 5 PR 4 — re-export interview/IPC module functions.
 # The eight class-method wrappers below delegate to these for backward-compat.
 from .sim.interview_client import check_env_alive as _check_env_alive_fn
+from .sim.interview_client import interviews_possible as _interviews_possible_fn
 from .sim.interview_client import get_env_status_detail as _get_env_status_detail_fn
 from .sim.interview_client import interview_agent as _interview_agent_fn
 from .sim.interview_client import interview_agents_batch as _interview_agents_batch_fn
@@ -53,6 +54,9 @@ from .sim.interview_client import interview_all_agents as _interview_all_agents_
 from .sim.interview_client import close_simulation_env as _close_simulation_env_fn
 from .sim.interview_client import _get_interview_history_from_db as _get_hist_from_db_fn
 from .sim.interview_client import get_interview_history as _get_interview_history_fn
+from .sim.interview_direct import (
+    direct_interviews_available as _direct_interviews_available_fn,
+)
 
 # M11 Phase 5 PR 5 — re-export process-manager module functions.
 # The class-method wrappers below delegate to these for backward-compat.
@@ -424,6 +428,18 @@ class SimulationRunner:
     def check_env_alive(cls, simulation_id: str) -> bool:
         """Check if the simulation environment is alive (can receive Interview commands)."""
         return _check_env_alive_fn(simulation_id, run_state_dir=cls.RUN_STATE_DIR)
+
+    @classmethod
+    def direct_interviews_available(cls, simulation_id: str) -> bool:
+        """Check if interviews can be served in-process (personas persisted)."""
+        return _direct_interviews_available_fn(
+            simulation_id, run_state_dir=cls.RUN_STATE_DIR
+        )
+
+    @classmethod
+    def interviews_possible(cls, simulation_id: str) -> bool:
+        """Check if an interview can be answered at all — via IPC or the direct in-process path (#999)."""
+        return _interviews_possible_fn(simulation_id, run_state_dir=cls.RUN_STATE_DIR)
 
     @classmethod
     def get_env_status_detail(cls, simulation_id: str) -> Dict[str, Any]:

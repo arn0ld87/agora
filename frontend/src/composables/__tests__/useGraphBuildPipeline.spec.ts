@@ -34,6 +34,7 @@ const localStorageMock = {
 }
 const polling = vi.hoisted(() => ({
   calls: 0,
+  optionsByCall: [] as Array<Record<string, unknown> | undefined>,
   taskStart: vi.fn(),
   taskStop: vi.fn(),
   graphStart: vi.fn(),
@@ -44,8 +45,13 @@ const polling = vi.hoisted(() => ({
 vi.mock('../../api/graph', () => graphApi)
 vi.mock('../../store/pendingUpload', () => pendingUpload)
 vi.mock('../usePolling', () => ({
-  usePolling: (task: () => Promise<void> | void) => {
+  usePolling: (
+    task: () => Promise<void> | void,
+    _intervalMs?: unknown,
+    options?: Record<string, unknown>,
+  ) => {
     const isTaskPolling = polling.calls++ === 0
+    polling.optionsByCall.push(options)
     if (isTaskPolling) polling.taskTick = task
     return {
       start: isTaskPolling ? polling.taskStart : polling.graphStart,
@@ -91,6 +97,7 @@ describe('useGraphBuildPipeline', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     polling.calls = 0
+    polling.optionsByCall = []
     polling.taskTick = null
     vi.stubGlobal('localStorage', localStorageMock)
     localStorageMock.clear()
@@ -136,6 +143,19 @@ describe('useGraphBuildPipeline', () => {
     expect(graphApi.buildGraph).toHaveBeenCalledTimes(1)
     expect(graphApi.buildGraph).toHaveBeenCalledWith({ project_id: 'project_42' })
     expect(pipeline.currentProjectId.value).toBe('project_42')
+  })
+
+  it('pollt Task- und Graph-Status auch im Hintergrund-Tab weiter', () => {
+    useGraphBuildPipeline({ projectId: 'new', router: createRouter(), t })
+
+    // Regression: usePolling startet bei document.hidden=true weder Interval
+    // noch Immediate-Tick. Ein Graph-Build, der angestoßen wird während der Tab
+    // im Hintergrund liegt, würde sonst nie eingesammelt — der Fortschritts-
+    // Spinner bliebe dauerhaft stehen, obwohl der Server-Job längst fertig ist.
+    expect(polling.optionsByCall).toHaveLength(2)
+    for (const options of polling.optionsByCall) {
+      expect(options).toMatchObject({ pauseWhenHidden: false })
+    }
   })
 
   it('meldet einen fehlenden Pending-Upload, ohne eine Ontologie zu erzeugen', async () => {

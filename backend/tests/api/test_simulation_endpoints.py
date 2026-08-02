@@ -208,8 +208,13 @@ def test_persona_template_delete_not_found_returns_not_found(client, monkeypatch
 
 
 def test_interview_env_not_alive_returns_service_unavailable(client, monkeypatch):
+    """Weder lebender Worker noch persistierte Personas → 503."""
     monkeypatch.setattr(
         "app.api.simulation_interviews.SimulationRunner.check_env_alive",
+        staticmethod(lambda _sid: False),
+    )
+    monkeypatch.setattr(
+        "app.api.simulation_interviews.SimulationRunner.direct_interviews_available",
         staticmethod(lambda _sid: False),
     )
     response = client.post(
@@ -222,6 +227,44 @@ def test_interview_env_not_alive_returns_service_unavailable(client, monkeypatch
     )
     assert response.status_code == 503
     assert response.get_json()["code"] == "service_unavailable"
+
+
+def test_interview_env_not_alive_uses_direct_path_when_personas_exist(client, monkeypatch):
+    """Geschlossene Umgebung + persistierte Personas → Direktpfad statt 503."""
+    monkeypatch.setattr(
+        "app.api.simulation_interviews.SimulationRunner.check_env_alive",
+        staticmethod(lambda _sid: False),
+    )
+    monkeypatch.setattr(
+        "app.api.simulation_interviews.SimulationRunner.direct_interviews_available",
+        staticmethod(lambda _sid: True),
+    )
+    monkeypatch.setattr(
+        "app.api.simulation_interviews.SimulationRunner.interview_agent",
+        staticmethod(
+            lambda **_kwargs: {
+                "success": True,
+                "agent_id": 1,
+                "prompt": "Hello?",
+                "mode": "direct",
+                "result": {"agent_id": 1, "platform": "reddit", "response": "Passt."},
+                "timestamp": "2026-08-01T12:00:00",
+            }
+        ),
+    )
+    response = client.post(
+        "/api/simulation/interview",
+        json={
+            "simulation_id": VALID_SIM_ID,
+            "agent_id": 1,
+            "prompt": "Hello?",
+        },
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert payload["data"]["mode"] == "direct"
+    assert payload["data"]["result"]["response"] == "Passt."
 
 
 # --- PERSONA_REVIEW_REQUIRED -------------------------------------------------
@@ -260,3 +303,141 @@ def test_start_persona_review_blocks_returns_persona_review_required(client, mon
     payload = response.get_json()
     assert payload["code"] == "persona_review_required"
     assert payload["review"] == fake_review
+
+
+# --- _echo_result envelope: top-level error surfacing (#1000) ---------------
+#
+# _echo_result mirrors the interview result's internal ``success`` flag at the
+# envelope level but always returns HTTP 200 (legacy shape). On failure, the
+# frontend's response interceptor only reads top-level ``error``/``code`` —
+# without mirroring those out of ``data``, a failed interview surfaced as a
+# generic "Netzwerkfehler" instead of the real provider error.
+
+
+def _mock_interview_backend_available(monkeypatch):
+    """Shared setup: pretend the closed-environment direct path is available."""
+    monkeypatch.setattr(
+        "app.api.simulation_interviews.SimulationRunner.check_env_alive",
+        staticmethod(lambda _sid: False),
+    )
+    monkeypatch.setattr(
+        "app.api.simulation_interviews.SimulationRunner.direct_interviews_available",
+        staticmethod(lambda _sid: True),
+    )
+
+
+def test_interview_batch_success_envelope_preserves_data(client, monkeypatch):
+    """Erfolgsfall: kein top-level error/code, data bleibt vollstaendig erhalten."""
+    _mock_interview_backend_available(monkeypatch)
+    fake_result = {
+        "success": True,
+        "interviews_count": 1,
+        "mode": "direct",
+        "result": {
+            "interviews_count": 1,
+            "results": {
+                "reddit_1": {
+                    "agent_id": 1,
+                    "platform": "reddit",
+                    "response": "Klingt gut.",
+                }
+            },
+        },
+        "timestamp": "2026-08-01T12:00:00",
+    }
+    monkeypatch.setattr(
+        "app.api.simulation_interviews.SimulationRunner.interview_agents_batch",
+        staticmethod(lambda **_kwargs: fake_result),
+    )
+    response = client.post(
+        "/api/simulation/interview/batch",
+        json={
+            "simulation_id": VALID_SIM_ID,
+            "interviews": [{"agent_id": 1, "prompt": "Hallo?"}],
+        },
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert "error" not in payload
+    assert "code" not in payload
+    assert payload["data"] == fake_result
+
+
+def test_interview_batch_ipc_error_surfaces_top_level_error(client, monkeypatch):
+    """IPC-Fehlerform: result traegt bereits top-level ``error`` — wird gespiegelt."""
+    _mock_interview_backend_available(monkeypatch)
+    fake_result = {
+        "success": False,
+        "interviews_count": 2,
+        "error": "IPC-Antwort ausgeblieben",
+        "timestamp": "2026-08-01T12:00:00",
+    }
+    monkeypatch.setattr(
+        "app.api.simulation_interviews.SimulationRunner.interview_agents_batch",
+        staticmethod(lambda **_kwargs: fake_result),
+    )
+    response = client.post(
+        "/api/simulation/interview/batch",
+        json={
+            "simulation_id": VALID_SIM_ID,
+            "interviews": [
+                {"agent_id": 1, "prompt": "Hallo?"},
+                {"agent_id": 2, "prompt": "Und du?"},
+            ],
+        },
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is False
+    assert payload["error"] == "IPC-Antwort ausgeblieben"
+    assert payload["data"] == fake_result
+
+
+def test_interview_batch_direct_path_per_agent_error_surfaces_top_level(
+    client, monkeypatch
+):
+    """Wichtigster Fall (#1000): Direktpfad legt Fehler nur pro Agent unter
+    ``data.result.results[<key>].error`` ab und setzt nie ein top-level
+    ``error`` — genau das liess den Provider-Fehler im Frontend als
+    "Netzwerkfehler" erscheinen. Muss top-level ankommen."""
+    _mock_interview_backend_available(monkeypatch)
+    provider_error = "Error code: 400 - Please pass a valid API key"
+    fake_result = {
+        "success": False,
+        "interviews_count": 1,
+        "mode": "direct",
+        "result": {
+            "interviews_count": 1,
+            "results": {
+                "reddit_1": {
+                    "agent_id": 1,
+                    "platform": "reddit",
+                    "prompt": "Hallo?",
+                    "response": None,
+                    "timestamp": "2026-08-01T12:00:00",
+                    "simulated": True,
+                    "mode": "direct",
+                    "error": provider_error,
+                }
+            },
+        },
+        "timestamp": "2026-08-01T12:00:00",
+    }
+    monkeypatch.setattr(
+        "app.api.simulation_interviews.SimulationRunner.interview_agents_batch",
+        staticmethod(lambda **_kwargs: fake_result),
+    )
+    response = client.post(
+        "/api/simulation/interview/batch",
+        json={
+            "simulation_id": VALID_SIM_ID,
+            "interviews": [{"agent_id": 1, "prompt": "Hallo?"}],
+        },
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is False
+    assert payload["error"] == provider_error
+    assert "code" not in payload
+    assert payload["data"] == fake_result

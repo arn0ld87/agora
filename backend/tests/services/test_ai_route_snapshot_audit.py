@@ -148,3 +148,59 @@ def test_routing_audit_is_idempotent_utc_and_secret_free(runtime):
     assert "example.test" not in serialized
     audit_files = list((run_dir / "stages").glob("*_routing_resolved.json"))
     assert len(audit_files) == 1
+
+
+def test_audit_traegt_die_urspruengliche_ai_model_ref_source(runtime):
+    """Issue #901 — die Nutzerwahl muss im Audit vom Slot unterscheidbar sein.
+
+    ``resolve_ai_route`` setzt ``AiRoute.source`` auf den Slot-Namen der
+    gewinnenden Ebene und verwirft dabei die ``source`` des Kandidaten. Ohne
+    das zusaetzliche Audit-Feld landeten eine bewusste Nutzerwahl
+    (``explicit``), ein Run-Override und ein Provider-Fallback alle als
+    ``stage_override`` — also genau der Zustand, den #901 beheben soll.
+    """
+    service, run_dir = runtime
+    route = AiRoute(
+        stage="report_generation",
+        provider_connection_id="openai",
+        model_id="gpt-4o-mini",
+        # Was der Resolver geschrieben hat: die gewinnende Ebene.
+        source="stage_override",
+        resolved_at=datetime(2026, 7, 31, 12, 0, tzinfo=timezone.utc),
+        provider_options={
+            "__legacy_stage_route__": {
+                "temperature": None,
+                "max_tokens": None,
+                "reasoning_effort": "none",
+                "had_reserved_value": False,
+                "reserved_value": None,
+                # Was das UI ausgewaehlt hat — reist im Legacy-Kanal mit.
+                "ai_model_ref_source": "explicit",
+            }
+        },
+    )
+
+    event = AiRouteAudit("run-snapshot").record_routing_resolved(
+        "report_generation", route
+    )
+
+    assert event["source"] == "stage_override", "Die gewinnende Ebene bleibt erhalten"
+    assert event["ai_model_ref_source"] == "explicit", (
+        "Die urspruengliche UI-Auswahl muss im Audit ablesbar bleiben"
+    )
+
+
+def test_audit_ohne_legacy_kanal_meldet_keine_ai_model_ref_source(runtime):
+    """Bestandsrouten aus der Zeit vor #901 duerfen das Audit nicht brechen."""
+    service, _ = runtime
+    route = AiRoute(
+        stage="graph_build",
+        provider_connection_id="ollama",
+        model_id="qwen3:8b",
+        source="workspace",
+        resolved_at=datetime(2026, 7, 31, 12, 0, tzinfo=timezone.utc),
+    )
+
+    event = AiRouteAudit("run-snapshot").record_routing_resolved("graph_build", route)
+
+    assert event["ai_model_ref_source"] is None

@@ -185,6 +185,20 @@ defineSlots<{
   color: var(--text-secondary);
 }
 
+/* WCAG AA (#978): auf den getoenten Varianten-Hintergruenden reicht
+   --text-secondary nicht mehr — gemessen 4.43:1 (warning) bzw. 4.34:1
+   (danger) gegen die geforderten 4.5:1. Der neutrale .al-root-Hintergrund
+   bleibt bei --text-secondary; nur die getoenten Flaechen heben auf
+   --text-primary an (14.7:1 bzw. 14.4:1). info/success tragen dieselbe
+   10%-Toenung und werden bewusst mitgezogen, statt auf den naechsten
+   Zufallsfund zu warten. */
+.al-root--info .al-text,
+.al-root--success .al-text,
+.al-root--warning .al-text,
+.al-root--danger .al-text {
+  color: var(--text-primary);
+}
+
 .al-title + .al-text {
   margin-top: 2px;
 }

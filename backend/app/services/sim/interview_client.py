@@ -20,6 +20,12 @@ from typing import Any, Dict, List, Optional
 from ...utils.logger import get_logger
 from ..artifact_store import resolve_default_store
 from ..simulation_ipc import SimulationIPCClient
+from .interview_direct import (
+    direct_interviews_available,
+    interview_agent_direct,
+    interview_agents_batch_direct,
+)
+from .run_state_store import load_run_state
 
 logger = get_logger("agora.interview_client")
 
@@ -34,13 +40,53 @@ def _store():
 # ---------------------------------------------------------------------------
 
 
+# Runner-Zustände, nach denen kein IPC-Poller mehr läuft. ``env_status.json``
+# bleibt nach einem regulären Lauf auf ``"alive"`` stehen (der Worker schreibt
+# beim Beenden keinen Shutdown-Status), und ohne ``pid`` im Status kann
+# ``SimulationIPCClient.check_env_alive`` das nicht erkennen. Der Run-State ist
+# hier die verlässlichere Quelle.
+_TERMINAL_RUNNER_STATES = frozenset({"stopped", "completed", "failed"})
+
+
+def _run_is_finished(simulation_id: str, *, run_state_dir: str) -> bool:
+    """``True`` wenn der Run laut Run-State beendet ist (kein Poller mehr)."""
+    try:
+        state = load_run_state(simulation_id, run_state_dir)
+    except Exception as exc:  # noqa: BLE001 — unlesbarer Run-State ist kein Interview-Fehler
+        logger.warning(f"Run-State nicht lesbar ({simulation_id}): {exc}")
+        return False
+    if state is None:
+        return False
+    status = getattr(state.runner_status, "value", state.runner_status)
+    return str(status) in _TERMINAL_RUNNER_STATES
+
+
 def check_env_alive(simulation_id: str, *, run_state_dir: str) -> bool:
     """Return ``True`` if the simulation environment is alive (accepts Interview commands)."""
     sim_dir = os.path.join(run_state_dir, simulation_id)
     if not os.path.exists(sim_dir):
         return False
+    if _run_is_finished(simulation_id, run_state_dir=run_state_dir):
+        return False
     ipc_client = SimulationIPCClient(sim_dir)
     return ipc_client.check_env_alive()
+
+
+def interviews_possible(simulation_id: str, *, run_state_dir: str) -> bool:
+    """``True`` wenn ein Interview für diese Simulation überhaupt beantwortbar ist.
+
+    Symmetrisch zur Pfadwahl in :func:`interview_agents_batch`: ``True`` wenn
+    entweder die IPC-Umgebung lebt (:func:`check_env_alive`) oder Interviews
+    ohne lebenden Worker aus persistierten Personas beantwortet werden können
+    (:func:`~.interview_direct.direct_interviews_available`). Ersetzt den
+    reinen IPC-Liveness-Check als Gate-Frage für Aufrufer wie
+    ``GraphToolsService.interview_agents`` (#999) — ``check_env_alive`` allein
+    ist für jede abgeschlossene Simulation ``False``, obwohl der Direktpfad in
+    aller Regel funktioniert.
+    """
+    if check_env_alive(simulation_id, run_state_dir=run_state_dir):
+        return True
+    return direct_interviews_available(simulation_id, run_state_dir=run_state_dir)
 
 
 def get_env_status_detail(simulation_id: str) -> Dict[str, Any]:
@@ -77,28 +123,48 @@ def interview_agent(
     *,
     run_state_dir: str,
 ) -> Dict[str, Any]:
-    """Interview a single agent via IPC.
+    """Interview a single agent.
+
+    Uses IPC while an OASIS worker is polling; falls back to the in-process
+    direct path (:mod:`interview_direct`) once the environment is closed.
 
     Raises:
-        ValueError: Simulation does not exist or environment not running.
+        ValueError: Simulation does not exist, or neither IPC nor persisted
+            personas are available.
         TimeoutError: IPC response timed out.
     """
     sim_dir = os.path.join(run_state_dir, simulation_id)
     if not os.path.exists(sim_dir):
         raise ValueError(f"Simulation does not exist: {simulation_id}")
 
-    ipc_client = SimulationIPCClient(sim_dir)
-    if not ipc_client.check_env_alive():
-        raise ValueError(
-            f"Simulation environment not running or closed, cannot execute Interview: {simulation_id}"
+    def _direct() -> Dict[str, Any]:
+        return interview_agent_direct(
+            simulation_id,
+            agent_id=agent_id,
+            prompt=prompt,
+            platform=platform,
+            timeout=timeout,
+            run_state_dir=run_state_dir,
         )
+
+    if not check_env_alive(simulation_id, run_state_dir=run_state_dir):
+        return _direct()
 
     logger.info(
         f"Send Interview command: simulation_id={simulation_id}, agent_id={agent_id}, platform={platform}"
     )
-    response = ipc_client.send_interview(
-        agent_id=agent_id, prompt=prompt, platform=platform, timeout=timeout
-    )
+    ipc_client = SimulationIPCClient(sim_dir)
+    try:
+        response = ipc_client.send_interview(
+            agent_id=agent_id, prompt=prompt, platform=platform, timeout=timeout
+        )
+    except TimeoutError:
+        # Der Poller galt als lebendig, antwortet aber nicht. Statt den Aufrufer
+        # mit einem Timeout stehen zu lassen, wird direkt beantwortet.
+        logger.warning(
+            f"IPC-Interview ohne Antwort ({simulation_id}) — Fallback auf Direktpfad"
+        )
+        return _direct()
 
     if response.status.value == "completed":
         return {
@@ -125,28 +191,45 @@ def interview_agents_batch(
     *,
     run_state_dir: str,
 ) -> Dict[str, Any]:
-    """Batch-interview multiple agents via IPC.
+    """Batch-interview multiple agents.
+
+    Uses IPC while an OASIS worker is polling; falls back to the in-process
+    direct path (:mod:`interview_direct`) once the environment is closed.
 
     Raises:
-        ValueError: Simulation does not exist or environment not running.
+        ValueError: Simulation does not exist, or neither IPC nor persisted
+            personas are available.
         TimeoutError: IPC response timed out.
     """
     sim_dir = os.path.join(run_state_dir, simulation_id)
     if not os.path.exists(sim_dir):
         raise ValueError(f"Simulation does not exist: {simulation_id}")
 
-    ipc_client = SimulationIPCClient(sim_dir)
-    if not ipc_client.check_env_alive():
-        raise ValueError(
-            f"Simulation environment not running or closed, cannot execute Interview: {simulation_id}"
+    def _direct() -> Dict[str, Any]:
+        return interview_agents_batch_direct(
+            simulation_id,
+            interviews,
+            platform,
+            timeout,
+            run_state_dir=run_state_dir,
         )
+
+    if not check_env_alive(simulation_id, run_state_dir=run_state_dir):
+        return _direct()
 
     logger.info(
         f"Send batch Interview command: simulation_id={simulation_id}, count={len(interviews)}, platform={platform}"
     )
-    response = ipc_client.send_batch_interview(
-        interviews=interviews, platform=platform, timeout=timeout
-    )
+    ipc_client = SimulationIPCClient(sim_dir)
+    try:
+        response = ipc_client.send_batch_interview(
+            interviews=interviews, platform=platform, timeout=timeout
+        )
+    except TimeoutError:
+        logger.warning(
+            f"IPC-Batch-Interview ohne Antwort ({simulation_id}) — Fallback auf Direktpfad"
+        )
+        return _direct()
 
     if response.status.value == "completed":
         return {

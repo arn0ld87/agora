@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import pytest
 
 from app.contracts.ai_provider_contract import ProviderConnection
+from app.services.llm_provider_secrets_store import SecretDecryptionError
 from app.services.provider_connections.adapters import ProviderProbeResult
 from app.services.provider_connections.service import ProviderConnectionService
 
@@ -70,6 +71,83 @@ def test_probe_persists_normalized_result_without_secret(
         "status_message": "normalized",
         "tested_at": datetime(2026, 7, 12, tzinfo=timezone.utc),
     }
+
+
+# Steht im Exception-Text stellvertretend fuer Key-Material. Nicht sensitiv,
+# aber so kann die Leakage-Assertion ueberhaupt rot werden: gaebe der Service
+# den Exception-Text durch, taucht das Sentinel in status_message auf.
+SECRET_SENTINEL = "sentinel-must-not-leak"
+
+_UNDECRYPTABLE_MESSAGE = (
+    "Hinterlegter Key ist mit dem aktuellen AGORA_SECRET_KEY nicht "
+    "entschlüsselbar. Key unter Einstellungen → LLM-Provider neu hinterlegen."
+)
+
+
+class _BrokenSecrets:
+    """Ciphertext passt nicht zum aktuellen AGORA_SECRET_KEY."""
+
+    def get_plaintext(self, provider_id: str) -> str | None:
+        raise SecretDecryptionError(
+            "LLM-Provider-Key konnte nicht entschlüsselt werden "
+            f"({SECRET_SENTINEL}). AGORA_SECRET_KEY passt nicht zum "
+            f"Ciphertext für '{provider_id}'."
+        )
+
+
+class _UnreadableStore:
+    """Globaler Store-/Konfigurationsfehler, kein Credential-Defekt."""
+
+    def get_plaintext(self, provider_id: str) -> str | None:
+        raise RuntimeError("AGORA_SECRET_KEY ist nicht gesetzt.")
+
+
+class _ExplodingAdapter:
+    def probe(
+        self, connection: ProviderConnection, api_key: str | None
+    ) -> ProviderProbeResult:
+        raise AssertionError("Adapter darf ohne entschlüsselbaren Key nicht laufen")
+
+
+def test_probe_reports_invalid_credentials_when_secret_undecryptable() -> None:
+    store = _Store(_connection())
+    service = ProviderConnectionService(
+        store=store,
+        secrets_store=_BrokenSecrets(),
+        adapter_factory=lambda _kind: _ExplodingAdapter(),
+        now=lambda: datetime(2026, 8, 1, tzinfo=timezone.utc),
+    )
+
+    result = service.probe(_connection())
+
+    assert result.status == "invalid_credentials"
+    assert result.models == ()
+    assert store.updated is not None
+    assert store.updated["status"] == "error"
+    assert store.updated["tested_at"] == datetime(2026, 8, 1, tzinfo=timezone.utc)
+    # Diagnose ist der generische Text, nicht der durchgereichte Exception-Text.
+    assert result.status_message == _UNDECRYPTABLE_MESSAGE
+    message = str(store.updated["status_message"])
+    assert message == _UNDECRYPTABLE_MESSAGE
+    assert SECRET_SENTINEL not in message
+    assert SECRET_SENTINEL not in str(result.status_message)
+
+
+def test_probe_lets_store_configuration_errors_fail_hard() -> None:
+    """Fehlender AGORA_SECRET_KEY ist ein globaler Defekt, kein Credential-Problem."""
+    store = _Store(_connection())
+    service = ProviderConnectionService(
+        store=store,
+        secrets_store=_UnreadableStore(),
+        adapter_factory=lambda _kind: _ExplodingAdapter(),
+        now=lambda: datetime(2026, 8, 1, tzinfo=timezone.utc),
+    )
+
+    with pytest.raises(RuntimeError, match="AGORA_SECRET_KEY"):
+        service.probe(_connection())
+
+    # Kein Probe-Status persistiert — sonst saehe jede Connection einzeln defekt aus.
+    assert store.updated is None
 
 
 class _Adapter:

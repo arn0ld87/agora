@@ -1,11 +1,19 @@
-"""Sub-Slice 05.6 — Interview-Tool gibt terminal-Hint bei toter Sim.
+"""Sub-Slice 05.6 / Issue #999 — Interview-Tool gibt terminal-Hint bei toter Sim.
 
-Vorher: `result.summary` endete mit "Please ensure the OASIS environment is
-running" — verleitete den ReACT-Loop, interview_agents immer wieder zu rufen,
-bis die max-iteration-Grenze erreicht war und Force-Generate griff.
+Ursprünglich (05.6): `result.summary` endete mit "Please ensure the OASIS
+environment is running" — verleitete den ReACT-Loop, interview_agents immer
+wieder zu rufen, bis die max-iteration-Grenze erreicht war und Force-Generate
+griff. Fix: Early-Check vor LLM-Calls + klarer Terminal-Hint, der das Modell
+auf insight_forge / panorama_search / quick_search umleitet.
 
-Jetzt: Early-Check vor LLM-Calls + klarer Terminal-Hint, der das Modell auf
-insight_forge / panorama_search / quick_search umleitet.
+Issue #999: der Early-Check prüfte bis dahin ausschließlich die IPC-Liveness
+(`check_env_alive`), die für jede abgeschlossene Simulation `False` ist — der
+Normalzustand eines Report-Laufs. Der Soft-Fail griff dadurch bei praktisch
+jedem Interview, obwohl der Direktpfad (persistierte Personas) in aller Regel
+funktioniert. Der Gate-Check fragt jetzt `interviews_possible` (IPC ODER
+Direktpfad) ab; ein Soft-Fail ist nur noch terminal, wenn BEIDE Pfade fehlen.
+Die Fehlermeldung nennt jetzt die konkrete Ursache statt des pauschalen
+"TERMINALLY UNAVAILABLE"-Markers.
 """
 
 from __future__ import annotations
@@ -16,20 +24,26 @@ from app.services.graph.graph_dtos import InterviewResult
 
 
 class TestInterviewEarlyCheck:
-    """Sim-Status wird vor jedem teuren LLM-Call geprüft."""
+    """Ein Interview wird vor jedem teuren LLM-Call auf Beantwortbarkeit geprüft."""
 
     def _make_service(self):
         from app.services.graph_tools import GraphToolsService
         svc = GraphToolsService.__new__(GraphToolsService)
-        svc.llm_client = MagicMock()
+        # Produktivcode liest self._llm_client (via die self.llm-Property) —
+        # nicht ein Attribut namens "llm_client". Ein Mock unter dem falschen
+        # Namen wuerde die Kostenschutz-Invariante ungetestet lassen (#999).
+        svc._llm_client = MagicMock()
         return svc
 
     def test_sim_dead_returns_terminal_soft_fail_before_llm_call(self):
-        """Bei check_env_alive == False: keine LLM-Calls, sofort Soft-Fail."""
+        """Bei IPC tot UND Direktpfad nicht verfügbar: keine LLM-Calls, sofort Soft-Fail."""
         svc = self._make_service()
 
         with patch(
-            "app.services.simulation_runner.SimulationRunner.check_env_alive",
+            "app.services.sim.interview_client.check_env_alive",
+            return_value=False,
+        ), patch(
+            "app.services.sim.interview_client.direct_interviews_available",
             return_value=False,
         ):
             result = svc.interview_agents(
@@ -41,9 +55,10 @@ class TestInterviewEarlyCheck:
 
         assert isinstance(result, InterviewResult)
         assert result.interviewed_count == 0
-        assert "TERMINALLY UNAVAILABLE" in result.summary, (
-            f"Summary muss terminal markiert sein, bekommen: {result.summary!r}"
-        )
+        assert (
+            "neither a running simulation worker nor persisted agent personas"
+            in result.summary
+        ), f"Summary muss die konkrete Ursache nennen, bekommen: {result.summary!r}"
         assert "Do NOT call interview_agents again" in result.summary, (
             "LLM braucht eine klare Anweisung, das Tool nicht erneut zu rufen"
         )
@@ -51,18 +66,18 @@ class TestInterviewEarlyCheck:
 
         # _select_agents_for_interview macht LLM-Calls — darf NICHT angesprungen
         # worden sein, sonst hat der Slice nichts gebracht.
-        svc.llm_client.chat.assert_not_called()
-        svc.llm_client.chat_json.assert_not_called()
+        svc._llm_client.chat.assert_not_called()
+        svc._llm_client.chat_json.assert_not_called()
 
     def test_sim_alive_proceeds_to_profile_load(self):
-        """Bei alive sim: Pfad geht durch zu _load_agent_profiles (nicht durch dieses Test
-        getrieben — wir checken nur, dass NICHT der Early-Exit-Branch zieht).
+        """Bei beantwortbarem Interview: Pfad geht durch zu _load_agent_profiles (nicht
+        von diesem Test getrieben — wir checken nur, dass NICHT der Early-Exit-Branch zieht).
         """
         svc = self._make_service()
         svc._load_agent_profiles = MagicMock(return_value=[])  # leer → other branch
 
         with patch(
-            "app.services.simulation_runner.SimulationRunner.check_env_alive",
+            "app.services.simulation_runner.SimulationRunner.interviews_possible",
             return_value=True,
         ):
             result = svc.interview_agents(
@@ -75,8 +90,8 @@ class TestInterviewEarlyCheck:
         assert isinstance(result, InterviewResult)
         # _load_agent_profiles MUSS angesprochen worden sein
         svc._load_agent_profiles.assert_called_once_with("sim_alive_abc")
-        # Summary darf NICHT den Terminal-Marker tragen
-        assert "TERMINALLY UNAVAILABLE" not in result.summary
+        # Summary darf NICHT den Early-Exit-Hinweis tragen
+        assert "neither a running simulation worker" not in result.summary
 
 
 class TestInterviewSoftFailMessages:
@@ -85,11 +100,14 @@ class TestInterviewSoftFailMessages:
     """
 
     def test_early_exit_message_format(self):
-        """Early-Exit-Message hat Terminal-Marker + alle drei Alternativen."""
+        """Early-Exit-Message nennt die konkrete Ursache + alle drei Alternativen."""
         svc = TestInterviewEarlyCheck._make_service(TestInterviewEarlyCheck())
 
         with patch(
-            "app.services.simulation_runner.SimulationRunner.check_env_alive",
+            "app.services.sim.interview_client.check_env_alive",
+            return_value=False,
+        ), patch(
+            "app.services.sim.interview_client.direct_interviews_available",
             return_value=False,
         ):
             result = svc.interview_agents(
@@ -99,7 +117,7 @@ class TestInterviewSoftFailMessages:
             )
 
         msg = result.summary
-        assert "TERMINALLY UNAVAILABLE" in msg
+        assert "neither a running simulation worker nor persisted agent personas" in msg
         assert "Do NOT call interview_agents again" in msg
         for alternative in ("insight_forge", "panorama_search", "quick_search"):
             assert alternative in msg, f"Alternative {alternative} fehlt im Hint"
@@ -109,7 +127,10 @@ class TestInterviewSoftFailMessages:
         svc = TestInterviewEarlyCheck._make_service(TestInterviewEarlyCheck())
 
         with patch(
-            "app.services.simulation_runner.SimulationRunner.check_env_alive",
+            "app.services.sim.interview_client.check_env_alive",
+            return_value=False,
+        ), patch(
+            "app.services.sim.interview_client.direct_interviews_available",
             return_value=False,
         ):
             result = svc.interview_agents(

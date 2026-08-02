@@ -101,6 +101,13 @@ def generate_sub_queries(
         return [str(sq) for sq in sub_queries[:max_queries]]
 
     except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
+        # Issue #978: Budgetabbruch (#764) ist kein Generierungsfehler — hart
+        # durchreichen, sonst läuft insight_forge mit Default-Sub-Fragen
+        # weiter statt den Run mit termination_reason=budget_* zu beenden.
+        from ..run_budget import BudgetExceededError
+
+        if isinstance(exc, BudgetExceededError):
+            raise
         logger.warning(
             "Failed to generate sub-questions: %s, using default sub-questions", str(exc)
         )

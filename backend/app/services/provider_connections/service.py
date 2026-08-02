@@ -5,7 +5,10 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 
 from app.contracts.ai_provider_contract import ProviderConnection, ProviderStatus
-from app.services.llm_provider_secrets_store import LlmProviderSecretsStore
+from app.services.llm_provider_secrets_store import (
+    LlmProviderSecretsStore,
+    SecretDecryptionError,
+)
 from app.services.provider_connection_store import ProviderConnectionStore
 
 from .adapters import ProviderConnectionAdapter, ProviderProbeResult, adapter_for_connection
@@ -36,11 +39,38 @@ class ProviderConnectionService:
         self._now = now
 
     def probe(self, connection: ProviderConnection) -> ProviderProbeResult:
-        api_key = (
-            self._secrets_store.get_plaintext(connection.secret_ref)
-            if connection.secret_ref
-            else None
-        )
+        try:
+            api_key = (
+                self._secrets_store.get_plaintext(connection.secret_ref)
+                if connection.secret_ref
+                else None
+            )
+        except SecretDecryptionError:
+            # Ciphertext genau dieser Connection passt nicht zum aktuellen
+            # AGORA_SECRET_KEY (Key rotiert oder neu generiert). Das ist ein
+            # Credential-Defekt einer Connection und darf die Discovery-Route
+            # nicht als 500 sprengen — der Key bleibt unbenutzt, der Status wird
+            # sichtbar hart.
+            #
+            # Bewusst NICHT breiter gefangen: fehlender oder ungültiger
+            # AGORA_SECRET_KEY und eine unlesbare Store-Datei sind globale
+            # Konfigurationsfehler. Als "invalid_credentials" getarnt würde
+            # jede Connection einzeln defekt aussehen und die eigentliche
+            # Diagnose verschwinden — die fliegen weiter als RuntimeError.
+            result = ProviderProbeResult(
+                status="invalid_credentials",
+                status_message=(
+                    "Hinterlegter Key ist mit dem aktuellen AGORA_SECRET_KEY nicht "
+                    "entschlüsselbar. Key unter Einstellungen → LLM-Provider neu hinterlegen."
+                ),
+            )
+            self._store.update_probe(
+                connection.id,
+                status=_STORE_STATUS[result.status],
+                status_message=result.status_message,
+                tested_at=self._now(),
+            )
+            return result
         result = self._adapter_factory(connection.provider_kind).probe(connection, api_key)
         self._store.update_probe(
             connection.id,

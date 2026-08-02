@@ -18,7 +18,7 @@ from pydantic import (
     BeforeValidator,
     model_validator,
 )
-from typing_extensions import TypedDict
+from typing_extensions import NotRequired, TypedDict
 
 from .llm_profile_contract import LlmProfile
 from .llm_routing_contract import (
@@ -28,7 +28,7 @@ from .llm_routing_contract import (
     StageId,
     StageLLMRoute,
 )
-from .provider_types import ProviderConnectionKind
+from .provider_types import AiModelRefSource, ProviderConnectionKind
 
 _STRICT = ConfigDict(extra="forbid")
 _LEGACY_ROUTE_OPTIONS_KEY = "__legacy_stage_route__"
@@ -168,6 +168,13 @@ class LegacyStageRouteOptions(TypedDict, closed=True):  # type: ignore[call-arg]
     reasoning_effort: ReasoningEffort | None
     had_reserved_value: bool
     reserved_value: None
+    # Issue #901: AiRoute kennt nur RouteSource. Die urspruengliche
+    # AiModelRef-Herkunft reist deshalb hier mit, damit
+    # stage_route_from_ai_route sie zurueckgeben kann, ohne aus RouteSource zu
+    # raten — "runtime" liesse sich nicht eindeutig auf "explicit"
+    # zuruecknehmen. NotRequired, damit Bestands-Options ohne den Schluessel
+    # weiterhin validieren.
+    ai_model_ref_source: NotRequired[AiModelRefSource | None]
 
 
 class AiProviderOptions(TypedDict, total=False, closed=True):  # type: ignore[call-arg]  # mypy lacks PEP 728
@@ -283,14 +290,11 @@ class AiModel(BaseModel):
     metadata_updated_at: datetime | None = None
 
 
-AiModelRefSource = Literal[
-    "stage-override",
-    "run-override",
-    "project-default",
-    "workspace-default",
-    "explicit",
-    "fallback",
-]
+# AiModelRefSource lebt seit Issue #901 in provider_types (Import oben), weil
+# auch llm_routing_contract.StageLLMRoute die Herkunft mitfuehrt und dieses
+# Modul bereits aus llm_routing_contract importiert — der Gegenimport waere ein
+# Zyklus. Ueber den Re-Export bleibt der Name hier importierbar, sodass
+# bestehende Aufrufer unveraendert funktionieren.
 
 
 class AiModelRef(BaseModel):
@@ -502,6 +506,41 @@ def model_entry_from_ai_model(model: AiModel) -> ModelEntry:
     )
 
 
+# Issue #901: Abbildung des UI-Vokabulars auf das Routing-Vokabular. Die
+# beiden Literale sind bewusst getrennt — AiModelRefSource beschreibt, WAS
+# ausgewaehlt wurde, RouteSource den aufgeloesten Zustand.
+#
+# "explicit" -> "runtime": eine direkte Auswahl im laufenden Request hat in
+# RouteSource kein wortgleiches Pendant; "runtime" ist der einzige Wert, der
+# eine Entscheidung zur Laufzeit statt aus einer Konfigurationsebene meint.
+#
+# Der Wachtest test_mapping_deckt_jeden_ai_model_ref_source_wert_ab schlaegt
+# fehl, sobald AiModelRefSource einen Wert bekommt, der hier fehlt — sonst
+# fiele er still auf "legacy" zurueck, also genau in den Defekt aus #901.
+_AI_MODEL_REF_SOURCE_TO_ROUTE: dict[AiModelRefSource, RouteSource] = {
+    "stage-override": "stage_override",
+    "run-override": "run_override",
+    "project-default": "project",
+    "workspace-default": "workspace",
+    "explicit": "runtime",
+    "fallback": "provider_fallback",
+}
+
+
+def route_source_from_ai_model_ref_source(
+    source: AiModelRefSource | None,
+) -> RouteSource:
+    """Herkunft einer UI-Auswahl auf das ``AiRoute``-Vokabular abbilden.
+
+    ``None`` steht fuer eine Bestandsroute ohne das Feld und bleibt
+    ``"legacy"`` — genau das Verhalten, das vor Issue #901 fuer *jede* Route
+    galt.
+    """
+    if source is None:
+        return "legacy"
+    return _AI_MODEL_REF_SOURCE_TO_ROUTE[source]
+
+
 def ai_route_from_stage_route(route: StageLLMRoute) -> AiRoute:
     raw_options = dict(route.provider_options)
     had_reserved_value = _LEGACY_ROUTE_OPTIONS_KEY in raw_options
@@ -514,6 +553,7 @@ def ai_route_from_stage_route(route: StageLLMRoute) -> AiRoute:
         "reasoning_effort": route.reasoning_effort,
         "had_reserved_value": had_reserved_value,
         "reserved_value": previous_reserved_value,
+        "ai_model_ref_source": route.ai_model_ref_source,
     }
     raw_options[_LEGACY_ROUTE_OPTIONS_KEY] = legacy_options
     options = _AI_PROVIDER_OPTIONS_ADAPTER.validate_python(raw_options)
@@ -521,8 +561,9 @@ def ai_route_from_stage_route(route: StageLLMRoute) -> AiRoute:
         stage=route.stage,
         provider_connection_id=route.provider_id,
         model_id=route.model,
-        source="legacy",
+        source=route_source_from_ai_model_ref_source(route.ai_model_ref_source),
         provider_options=options,
+        fallback_reason=route.fallback_reason,
     )
 
 
@@ -541,6 +582,12 @@ def stage_route_from_ai_route(route: AiRoute) -> StageLLMRoute:
         reasoning_effort=(
             legacy.get("reasoning_effort", "none") if legacy is not None else "none"
         ),
+        # Issue #901: aus dem Legacy-Kanal zurueckholen, nicht aus
+        # route.source ableiten — die Abbildung ist nicht injektiv.
+        ai_model_ref_source=(
+            legacy.get("ai_model_ref_source") if legacy is not None else None
+        ),
+        fallback_reason=route.fallback_reason,
         provider_options=options,
     )
 

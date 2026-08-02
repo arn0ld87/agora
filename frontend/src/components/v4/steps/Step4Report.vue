@@ -161,6 +161,12 @@ function buildModelSelection(): Pick<GenerateReportData, 'ai_model_ref'> {
         provider_connection_id: reportRouteOverride.value.provider_connection_id,
         model_id: reportRouteOverride.value.model_id,
         source: reportRouteOverride.value.source ?? 'explicit',
+        // Issue #901: den vom Picker gelieferten Grund weiterreichen. Ohne ihn
+        // schreibt llm_routing_seed._fallback_reason_for den Platzhalter
+        // unspecified_fallback, obwohl die Ursache bekannt war.
+        ...(reportRouteOverride.value.fallback_reason
+          ? { fallback_reason: reportRouteOverride.value.fallback_reason }
+          : {}),
       },
     }
   }
