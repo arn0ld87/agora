@@ -10,6 +10,27 @@ Stellt sicher dass:
 """
 from __future__ import annotations
 
+import os
+
+# ``nltk`` >= 3.10 installiert beim Import einen Meta-Path-Finder
+# (``nltk/inisec.py``), der jeden von nltk ausgelösten Import blockiert, dessen
+# Modul unterhalb des aktuellen Arbeitsverzeichnisses liegt. Läuft pytest aus
+# ``backend/`` heraus, liegt ``backend/.venv`` unter dem CWD — damit gilt *jedes*
+# venv-Paket als "aus dem CWD" und ``regex``/``defusedxml`` fliegen mit einem
+# ``ImportError`` raus, sobald ``unstructured`` beim Parsen nltk lädt.
+# Das Setzen MUSS vor dem ersten nltk-Import passieren; der Hook wird auf
+# Modulebene installiert. Dasselbe setzt das Dockerfile für den Container und
+# ``app/__init__.py`` für jeden Einstieg, der ``app`` importiert.
+#
+# Hier bewusst eine unbedingte Zuweisung statt ``setdefault``: nltk deaktiviert
+# den Hook nur beim exakten Wert ``"1"``. Ein aus der Shell geerbtes
+# ``NLTK_DISABLE_IMPORT_SECURITY=0`` ließe ``setdefault`` unverändert und die
+# Suite liefe in genau den ImportError, den sie verhindern soll — dieselbe
+# Hermetik-Erwägung wie bei ``_clean_llm_json_mode_env`` und
+# ``_clean_auth_token_env`` weiter unten. In ``app/__init__.py`` bleibt es
+# dagegen ``setdefault``, damit der Betreiber die Entscheidung überschreiben kann.
+os.environ["NLTK_DISABLE_IMPORT_SECURITY"] = "1"
+
 # ``torch`` MUSS vor der ersten ``mock.patch.dict(sys.modules, ...)`` geladen
 # sein — sonst stirbt der Interpreter mit SIGSEGV.
 #
