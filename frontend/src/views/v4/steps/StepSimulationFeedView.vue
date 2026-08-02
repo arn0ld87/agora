@@ -7,7 +7,7 @@
  * useEventStream-API: handlers werden im Constructor übergeben, nicht via .on().
  * post_created-Handler routet direkt in useSimFeed.ingest().
  */
-import { onMounted, onBeforeUnmount } from 'vue'
+import { onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useEventStream } from '@/composables/useEventStream'
 import { useSimFeed, clearSimFeed } from '@/composables/useSimFeed'
@@ -30,9 +30,34 @@ onMounted(async () => {
   await stream.start()
 })
 
+// Die Route /v4/simulation/:simulationId/feed hat keinen :key auf dem
+// <router-view>-Component (siehe App.vue) — Vue Router wechselt bei einer
+// neuen simulationId also NICHT die Component-Instanz, sondern aktualisiert
+// nur route.params reaktiv. Der lokale `simulationId`-Snapshot (Z. 20) bleibt
+// deshalb bewusst unveraendert (kein Re-Init von feed/stream in diesem
+// Slice, #1007 ist auf den Unmount-Datenverlust begrenzt); dieser watch hat
+// einen einzigen Zweck: den Store der VERLASSENEN Simulation freigeben,
+// sonst waere er nur ueber die MAX_STORES-LRU in useSimFeed erreichbar.
+watch(
+  () => route.params.simulationId,
+  (_next, previous) => {
+    if (previous !== undefined) clearSimFeed(String(previous))
+  },
+)
+
 onBeforeUnmount(() => {
+  // Gepufferte, aber noch nicht in all.value geschriebene Posts (rAF-Batch
+  // in useSimFeed) vor dem Stream-Stop synchron uebernehmen, sonst gehen sie
+  // beim Verlassen der Route verloren.
+  feed.flushPending()
   stream.stop()
-  clearSimFeed(simulationId)
+  // clearSimFeed(simulationId) bewusst NICHT mehr hier: eine normale
+  // Navigation weg von der Feed-Route (und zurueck) hat bislang den
+  // gesamten empfangenen Bestand vernichtet (#1007). "Stream schliessen"
+  // und "Daten verwerfen" sind getrennt — ein echter Reset passiert nur
+  // beim Simulationswechsel oben im watch. Über viele Simulationen hinweg
+  // bleibt die MAX_STORES-LRU in useSimFeed die Rueckfallebene gegen
+  // unbegrenztes Wachstum.
 })
 </script>
 

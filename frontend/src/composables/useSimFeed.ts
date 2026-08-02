@@ -2,10 +2,18 @@
  * useSimFeed — State pro Simulation: Reddit-Thread + Twitter-Flow.
  *
  * Slice FE-Redesign-5 · 2026-05-15
+ * Slice 9 · 2026-08-02 — Ringpuffer (MAX_POSTS_PER_FEED) + rAF-Batching (#1007)
  *
  * Konsumiert PostCreatedEvent (Slice 5-pre), routet nach platform,
  * dedupliziert per post_id, baut Reddit-Reply-Tree, sortiert Twitter
  * nach timestamp DESC.
+ *
+ * Eingehende Posts werden gepuffert und einmal pro Animation Frame
+ * gebündelt in `all.value` geschrieben, um teure Neuberechnungen von
+ * `twitterPosts`/`redditTree` nicht pro Event auszulösen. Dedup (`seen`)
+ * und der simulation_id-Filter greifen weiterhin sofort in ingest()/
+ * ingestMany(). `flushPending()` leert den Puffer synchron — für Tests,
+ * die nicht auf einen Frame warten wollen.
  *
  * Singleton-Map pro simulationId — reset via clearSimFeed(simulationId).
  * LRU-Limit: max. 10 Einträge; ältester wird beim 11. evicted.
@@ -19,22 +27,88 @@ export interface RedditNode extends PostCreatedEvent {
 }
 
 const MAX_STORES = 10
+
+/**
+ * Obergrenze der pro Feed gehaltenen Posts (Ringpuffer).
+ * Ab hier wird das Rendern der TransitionGroup spürbar (Layout-Thrashing,
+ * lange Reflow-Zeiten); 500 deckt beobachtete Lastspitzen einer Simulation
+ * ab, ohne dass ältere Posts für die laufende Analyse noch relevant sind.
+ */
+export const MAX_POSTS_PER_FEED = 500
+
 const stores = new Map<string, ReturnType<typeof createStore>>()
+
+function scheduleFrame(fn: () => void): void {
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(fn)
+  } else {
+    setTimeout(fn, 16)
+  }
+}
 
 function createStore(simulationId: string) {
   const all = ref<PostCreatedEvent[]>([])
   const seen = new Set<string>()
 
+  let pending: PostCreatedEvent[] = []
+  let flushScheduled = false
+
+  /**
+   * Hängt eine Charge an all.value an und wendet dabei den Ringpuffer an:
+   * überschreitet das Ergebnis MAX_POSTS_PER_FEED, fallen die ältesten
+   * Posts heraus — und ihre post_id verlässt auch das seen-Set, sonst
+   * würde ein später erneut eintreffender alter Post fälschlich als
+   * Duplikat verworfen.
+   */
+  function appendBatch(batch: PostCreatedEvent[]): void {
+    if (batch.length === 0) return
+    const next = all.value.concat(batch)
+    const overflow = next.length - MAX_POSTS_PER_FEED
+    if (overflow > 0) {
+      const evicted = next.splice(0, overflow)
+      for (const p of evicted) seen.delete(p.post_id)
+    }
+    all.value = next
+  }
+
+  function flushPending(): void {
+    flushScheduled = false
+    if (pending.length === 0) return
+    const batch = pending
+    pending = []
+    appendBatch(batch)
+  }
+
+  function scheduleFlushIfNeeded(): void {
+    if (flushScheduled) return
+    flushScheduled = true
+    scheduleFrame(flushPending)
+  }
+
   function ingest(post: PostCreatedEvent): void {
     if (post.simulation_id !== simulationId) return
     if (seen.has(post.post_id)) return
     seen.add(post.post_id)
-    all.value.push(post)
+    pending.push(post)
+    scheduleFlushIfNeeded()
+  }
+
+  function ingestMany(posts: PostCreatedEvent[]): void {
+    const accepted: PostCreatedEvent[] = []
+    for (const post of posts) {
+      if (post.simulation_id !== simulationId) continue
+      if (seen.has(post.post_id)) continue
+      seen.add(post.post_id)
+      accepted.push(post)
+    }
+    appendBatch(accepted)
   }
 
   function clear(): void {
     all.value = []
     seen.clear()
+    pending = []
+    flushScheduled = false
   }
 
   const redditPosts = computed(() => all.value.filter((p) => p.platform === 'reddit'))
@@ -74,7 +148,16 @@ function createStore(simulationId: string) {
     return recent.length / minutes
   })
 
-  return { redditPosts, twitterPosts, redditTree, activityRate, ingest, clear }
+  return {
+    redditPosts,
+    twitterPosts,
+    redditTree,
+    activityRate,
+    ingest,
+    ingestMany,
+    clear,
+    flushPending,
+  }
 }
 
 export function useSimFeed(simulationId: string) {
