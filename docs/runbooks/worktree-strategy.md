@@ -1,6 +1,6 @@
 # Worktree-Strategie
 
-Datei: `docs/runbooks/worktree-strategy.md` · Stand: 2026-07-13
+Datei: `docs/runbooks/worktree-strategy.md` · Stand: 2026-08-02
 
 ## Prinzip
 
@@ -25,6 +25,47 @@ Neue Agora-Worktrees werden direkt auf T7 angelegt. `/private/tmp` ist für
 Worktrees verboten; Symlinks von dort auf T7 sind unnötig und verschleiern den
 tatsächlichen Speicherort. Historische Handover dürfen ihre damaligen
 `/private/tmp`-Pfade unverändert dokumentieren.
+
+Diese Konvention gilt für **manuell per `git worktree add` angelegte**
+Worktrees. Für harness-isolierte Subagent-Worktrees gilt der nächste Abschnitt.
+
+---
+
+## Harness-isolierte Subagent-Worktrees
+
+Subagenten, die mit `isolation: worktree` dispatcht werden, bekommen ihren
+Worktree **von der Agent-Runtime zugewiesen**, nicht vom Lead:
+
+```
+/Volumes/T7/Projekte/agora/.claude/worktrees/agent-<agent-id>/
+Branch: worktree-agent-<agent-id>
+```
+
+Dieser Pfad ist **zulässig und der Normalfall** bei Subagent-Dispatch. Er ist
+keine Verletzung der T7-Konvention, sondern liegt außerhalb ihres
+Geltungsbereichs.
+
+**Warum die T7-Konvention hier nicht greift:** Ein PreToolUse-Hook der Runtime
+sperrt für einen isolierten Subagenten jede Git-Operation außerhalb seines
+eigenen Worktrees. Ein vom Lead auf T7 vorbereiteter Pfad ist für einen solchen
+Worker nicht erreichbar — der Versuch, dorthin zu wechseln, wird aktiv
+blockiert. Die Sperre ist eine Permission-Entscheidung, keine Empfehlung; sie
+lässt sich nicht umgehen und soll es auch nicht.
+
+**Konsequenzen für den Lead:**
+
+- Für Worker mit `isolation: worktree` **keinen** T7-Worktree vorbereiten und
+  keinen Zielpfad im Briefing vorgeben. Das erzeugt nur einen Konflikt, den der
+  Worker korrekterweise meldet, statt zu arbeiten.
+- Der Worker committet auf seinem `worktree-agent-<id>`-Branch. Der Lead
+  übernimmt das Ergebnis anschließend selbst — per `git cherry-pick` auf einen
+  sprechend benannten Branch oder durch Branch-Umbenennung vor dem PR.
+- Ein Worker, der ohne `isolation: worktree` läuft, arbeitet weiterhin im
+  Repo-Root oder in einem vom Lead angelegten T7-Worktree. Dort gilt die
+  Pfad-Konvention oben unverändert.
+- Harness-Worktrees sind kurzlebig und können bei Prozess-Neustart oder
+  Systemabsturz verschwinden. Vor dem Aufräumen prüfen, ob dort noch
+  uncommittete Arbeit liegt (`git -C <pfad> status --short`).
 
 ---
 
