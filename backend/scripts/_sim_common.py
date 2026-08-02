@@ -9,6 +9,7 @@ import sys
 import threading
 import time
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Iterable
 
@@ -426,6 +427,41 @@ def compute_start_hour_offset(
     if not hour_counts:
         return 9
     return int(hour_counts.most_common(1)[0][0])
+
+
+def compute_post_sim_time(
+    anchor: datetime,
+    start_hour_offset: int,
+    simulated_minutes: int,
+    minutes_per_round: int,
+    action_index: int,
+    action_count: int,
+) -> datetime:
+    """Spread a round's actions across that round's simulated minute budget.
+
+    Why: the simulated clock only advances once per round, so every
+    CREATE_POST frame of a round used to carry the identical ``sim_time``.
+    The live-feed clock then jumps at round boundaries and stands still in
+    between — for short runs it looks frozen outright (#1018).
+
+    The intra-round offset stays strictly below ``minutes_per_round``, so the
+    last frame of a round is still strictly earlier than the first frame of
+    the next one. That ordering is load-bearing: ``useSimClock`` in the
+    frontend enforces monotonicity and silently drops any frame that would
+    move the clock backwards.
+
+    ``action_index`` counts every action of the round, not just the emitted
+    CREATE_POST ones — it is the round's time axis, not a post counter.
+    """
+    round_start = anchor + timedelta(
+        minutes=start_hour_offset * 60 + simulated_minutes
+    )
+    if action_count <= 1 or action_index <= 0:
+        return round_start
+    index = min(action_index, action_count - 1)
+    return round_start + timedelta(
+        minutes=minutes_per_round * index / action_count
+    )
 
 
 # ---------------------------------------------------------------------------
