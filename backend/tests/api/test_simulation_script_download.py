@@ -29,7 +29,7 @@ _CONTRACT_PATH = os.path.join(
 )
 
 EXPECTED_BUNDLE_NAMES = {
-    "action_logger.py",
+    "scripts/action_logger.py",
     "app/__init__.py",
     "app/contracts/__init__.py",
     "app/contracts/sim_action_log_contract.py",
@@ -81,8 +81,8 @@ class TestActionLoggerBundleDownload:
 
         assert bundled_contract == expected_contract
 
-    def test_extracted_bundle_is_independently_importable(self, client, tmp_path):
-        """Das entpackte Bundle muss außerhalb des Repos importierbar sein.
+    def _extract_and_import(self, client, target_dir):
+        """Bundle nach ``target_dir`` entpacken und dort importieren.
 
         Läuft in einem Subprozess mit bereinigtem PYTHONPATH, da der bereits
         geladene ``app``-Namespace des Testlaufs den Fehler sonst maskieren
@@ -92,20 +92,50 @@ class TestActionLoggerBundleDownload:
         assert resp.status_code == 200
 
         with zipfile.ZipFile(io.BytesIO(resp.data)) as zf:
-            zf.extractall(tmp_path)
+            zf.extractall(target_dir)
 
         env = dict(os.environ)
         env.pop("PYTHONPATH", None)
 
-        result = subprocess.run(
+        return subprocess.run(
             [sys.executable, "-c", "import action_logger"],
-            cwd=str(tmp_path),
+            cwd=str(os.path.join(target_dir, "scripts")),
             env=env,
             capture_output=True,
             text=True,
         )
 
+    def test_extracted_bundle_is_independently_importable(self, client, tmp_path):
+        result = self._extract_and_import(client, tmp_path / "bundle")
+
         assert result.returncode == 0, (
+            f"stdout={result.stdout!r} stderr={result.stderr!r}"
+        )
+        assert "ModuleNotFoundError" not in result.stderr
+
+    def test_parent_app_package_does_not_shadow_the_bundled_contract(
+        self, client, tmp_path
+    ):
+        """Ein fremdes ``app`` im Elternverzeichnis darf nicht gewinnen.
+
+        ``action_logger.py`` setzt seinen Importanker auf *zwei* Ebenen über
+        sich selbst und schiebt ihn auf ``sys.path[0]``. Läge das Skript flach
+        neben ``app/``, zeigte dieser Anker aus dem Entpackverzeichnis heraus —
+        ein beliebiges ``app`` daneben würde das mitgelieferte verdecken und
+        entweder einen veralteten Contract liefern oder gar keinen. Die
+        ``scripts/``-Ebene im Archiv hält den Anker im Bundle.
+        """
+        bundle_dir = tmp_path / "bundle"
+        shadow_pkg = tmp_path / "app"
+        shadow_pkg.mkdir()
+        # Bewusst ohne ``contracts``: greift das Shadowing, schlägt der Import
+        # mit genau dem ModuleNotFoundError fehl, den #1017 beheben soll.
+        (shadow_pkg / "__init__.py").write_text("")
+
+        result = self._extract_and_import(client, bundle_dir)
+
+        assert result.returncode == 0, (
+            f"Fremdes app-Paket hat das gebündelte verdeckt. "
             f"stdout={result.stdout!r} stderr={result.stderr!r}"
         )
         assert "ModuleNotFoundError" not in result.stderr
