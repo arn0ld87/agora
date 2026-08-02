@@ -31,7 +31,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { createPinia, setActivePinia } from 'pinia'
-import { ref, reactive } from 'vue'
+import { reactive } from 'vue'
 import StepModelOverrideChip from '../StepModelOverrideChip.vue'
 
 // AiModelPicker mocken — wir testen das Glue-Code, nicht den Picker selbst.

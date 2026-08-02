@@ -8,7 +8,6 @@ import {
   type BuildGraphData,
   type GraphDataResponse,
   type ProjectResponse,
-  type TaskStatusResponse,
 } from '../api/graph'
 import type { AiModelRefPayload } from '../api/report'
 import { usePolling } from './usePolling'
@@ -311,5 +310,11 @@ export function useGraphBuildPipeline({
     currentRunId,
     systemLogs,
     initialize,
+    // Issue #1023 (Befund B-08): GraphPanel/GraphToolbar emittieren
+    // "refresh" seit jeher, StepGraphBuildView hatte dafuer nie einen
+    // Listener. fetchGraphData() re-polled Projekt+Graph bereits intern
+    // (Fallback nach Task-Completion) — hier als oeffentliche Funktion
+    // fuer den manuellen Refresh-Button verdrahtet.
+    refreshGraph: fetchGraphData,
   }
 }

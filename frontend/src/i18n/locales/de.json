@@ -654,7 +654,9 @@
       "closePanel": "Graph-Panel schließen",
       "exportHtml": "Als standalone HTML exportieren",
       "resetLayout": "Layout zurücksetzen",
-      "minimapTitle": "Minimap"
+      "minimapTitle": "Minimap",
+      "maximizeLayout": "Vergrößern",
+      "restoreLayout": "Verkleinern"
     },
     "edgeLabels": {
       "RELATES_TO": "verbunden mit",

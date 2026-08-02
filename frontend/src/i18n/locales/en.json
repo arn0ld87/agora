@@ -654,7 +654,9 @@
       "closePanel": "Close graph panel",
       "exportHtml": "Export as standalone HTML",
       "resetLayout": "Reset layout",
-      "minimapTitle": "Minimap"
+      "minimapTitle": "Minimap",
+      "maximizeLayout": "Maximize",
+      "restoreLayout": "Restore"
     },
     "edgeLabels": {
       "RELATES_TO": "relates to",
