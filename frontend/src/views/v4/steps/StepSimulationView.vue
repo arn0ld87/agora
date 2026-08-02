@@ -33,6 +33,8 @@
       <Step3Simulation
         v-if="activeTab === 'pipeline'"
         :simulation-id="simulationId"
+        :max-rounds="runParams.maxRounds ?? undefined"
+        :simulation-days="runParams.simulationDays ?? undefined"
         @go-back="handleGoBack"
       />
     </div>
@@ -51,6 +53,7 @@ import StepModelOverrideChip from '@/components/v4/forms/StepModelOverrideChip.v
 import Tabs from '@/components/v4/data/Tabs.vue'
 import type { BreadcrumbItem } from '@/components/v4/shell/Breadcrumbs.vue'
 import type { TabItem } from '@/components/v4/data/Tabs.vue'
+import { readRunParamsFromQuery } from '@/contracts/runParamsQuery'
 
 const props = defineProps<{
   simulationId: string
@@ -65,11 +68,27 @@ const activeTab = computed<string>(() =>
   route.name === 'StepSimulationFeed' ? 'feed' : 'pipeline',
 )
 
+// Runden/Tage aus Step 2 stehen in der Query: ``props: true`` reicht nur
+// Route-Params durch. Die Query überlebt zusätzlich einen Reload auf dieser
+// Route — anders als der pendingUpload-Store, der dem Dashboard-Start gehört.
+const runParams = computed(() => readRunParamsFromQuery(route.query))
+
 function onTabChange(tab: string): void {
+  // Query mitnehmen: sie trägt projectId (Voraussetzung für handleGoBack) und
+  // die Run-Parameter. Ohne sie verlor ein Tab-Wechsel beides.
+  const query = route.query
   if (tab === 'feed') {
-    router.push({ name: 'StepSimulationFeed', params: { simulationId: props.simulationId } })
+    router.push({
+      name: 'StepSimulationFeed',
+      params: { simulationId: props.simulationId },
+      query,
+    })
   } else {
-    router.push({ name: 'StepSimulation', params: { simulationId: props.simulationId } })
+    router.push({
+      name: 'StepSimulation',
+      params: { simulationId: props.simulationId },
+      query,
+    })
   }
 }
 
