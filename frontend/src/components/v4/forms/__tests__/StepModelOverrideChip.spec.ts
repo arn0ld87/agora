@@ -31,7 +31,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { createPinia, setActivePinia } from 'pinia'
-import { ref, reactive } from 'vue'
+import { reactive } from 'vue'
 import StepModelOverrideChip from '../StepModelOverrideChip.vue'
 
 // AiModelPicker mocken — wir testen das Glue-Code, nicht den Picker selbst.
@@ -99,6 +99,13 @@ vi.mock('@/composables/useAiModelRefAdapter', () => ({
   useAiModelRefAdapter: () => adapterMock,
 }))
 
+// Issue #1023 (Befund B-23): getRunLlmRouting liefert den Run-Snapshot je
+// Stage. Der Chip muss ihn bei laufendem/abgeschlossenem Run bevorzugen.
+const getRunLlmRoutingMock = vi.fn()
+vi.mock('@/api/llmRouting', () => ({
+  getRunLlmRouting: (runId: string) => getRunLlmRoutingMock(runId),
+}))
+
 function makeI18n() {
   return createI18n({
     legacy: false,
@@ -113,6 +120,8 @@ function makeI18n() {
           clearOverride: 'Override entfernen → Default nutzen',
           close: 'Schließen',
           lockedBadge: 'locked',
+          sourceRun: 'aus Lauf',
+          sourceDefault: 'Standard',
         },
       },
     },
@@ -139,6 +148,7 @@ async function mountChip(
   llmRoutingDefaultsMock.clearStageOverride.mockResolvedValue(undefined)
   llmRoutingDefaultsMock.load.mockClear()
   llmRoutingDefaultsMock.load.mockResolvedValue(undefined)
+  getRunLlmRoutingMock.mockClear()
 
   const i18n = makeI18n()
   const pinia = createPinia()
@@ -331,6 +341,52 @@ describe('StepModelOverrideChip (Slice 5.4, AiModelPicker-Migration)', () => {
     await mountChip({}, { seedProviders: false, seedHasLoadedOnce: false })
     expect(llmProvidersMock.loadProviders).not.toHaveBeenCalled()
     expect(llmRoutingDefaultsMock.load).not.toHaveBeenCalled()
+  })
+
+  // Issue #1023 (Befund B-23): der Chip zeigte fuer einen laufenden/
+  // abgeschlossenen Run immer den Workspace-/Stage-Default statt des
+  // Modells, das der Run fuer diese Stage tatsaechlich verwendet hat.
+  it('runId + Run-Snapshot vorhanden: zeigt Snapshot-Modell statt Stage-Default, markiert als "aus Lauf", gesperrt', async () => {
+    llmRoutingDefaultsMock.effectiveRouteForStage.mockReturnValue({
+      stage: null, provider_id: 'ollama', model: 'qwen3', temperature: null, max_tokens: null, reasoning_effort: 'none', provider_options: {},
+    })
+    getRunLlmRoutingMock.mockResolvedValue({
+      snapshots: {
+        simulation_rounds: {
+          stage: 'simulation_rounds',
+          provider_id: 'anthropic',
+          model: 'claude-sonnet',
+          reasoning_effort: 'none',
+          routing_version: 1,
+        },
+      },
+    })
+    const w = await mountChip({ runId: 'run_a1b2c3d4e5f6' })
+    expect(getRunLlmRoutingMock).toHaveBeenCalledWith('run_a1b2c3d4e5f6')
+    expect(w.find('.step-model-chip__value').text()).toContain('claude-sonnet')
+    expect(w.find('.step-model-chip__value').text()).not.toContain('qwen3')
+    expect(w.find('[data-testid="step-model-chip-source"]').text()).toBe('aus Lauf')
+    expect((w.find('.step-model-chip').element as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('runId gesetzt, aber Stage noch ohne Snapshot: faellt auf Stage-Default zurueck, markiert als "Standard"', async () => {
+    llmRoutingDefaultsMock.effectiveRouteForStage.mockReturnValue({
+      stage: null, provider_id: 'ollama', model: 'qwen3', temperature: null, max_tokens: null, reasoning_effort: 'none', provider_options: {},
+    })
+    getRunLlmRoutingMock.mockResolvedValue({ snapshots: {} })
+    const w = await mountChip({ runId: 'run_a1b2c3d4e5f6' })
+    expect(w.find('.step-model-chip__value').text()).toContain('qwen3')
+    expect(w.find('[data-testid="step-model-chip-source"]').text()).toBe('Standard')
+    expect((w.find('.step-model-chip').element as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('ohne runId: zeigt Stage-Default und markiert ihn als "Standard"', async () => {
+    llmRoutingDefaultsMock.effectiveRouteForStage.mockReturnValue({
+      stage: null, provider_id: 'ollama', model: 'qwen3', temperature: null, max_tokens: null, reasoning_effort: 'none', provider_options: {},
+    })
+    const w = await mountChip()
+    expect(getRunLlmRoutingMock).not.toHaveBeenCalled()
+    expect(w.find('[data-testid="step-model-chip-source"]').text()).toBe('Standard')
   })
 
   it('i18n: modelLabel placeholder kommt aus i18n-Key', async () => {

@@ -10,7 +10,7 @@
       :subtitle="$t('views.stepGraphBuild.subtitle')"
     >
       <template #right>
-        <StepModelOverrideChip stage-id="graph_build" />
+        <StepModelOverrideChip stage-id="graph_build" :run-id="currentRunId" />
       </template>
     </PageHeader>
     <PipelineStepper :current-step="1" />
@@ -22,6 +22,9 @@
           :graph-data="graphData"
           :loading="graphLoading"
           :current-phase="currentPhase"
+          :is-maximized="isGraphMaximized"
+          @refresh="refreshGraph"
+          @toggle-maximize="isGraphMaximized = !isGraphMaximized"
         />
       </section>
       <Step1GraphBuild
@@ -38,7 +41,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AppShell from '@/components/v4/shell/AppShell.vue'
@@ -73,8 +76,16 @@ const {
   graphLoading,
   systemLogs,
   error,
+  currentRunId,
   initialize,
+  refreshGraph,
 } = useGraphBuildPipeline({ projectId: props.projectId, router, t })
+
+// Issue #1023 (Befund B-08): GraphToolbar emittiert toggle-maximize seit
+// jeher, ohne dass irgendein Consumer zuhoert. CSS-Vollbild-Toggle statt
+// Fullscreen-API (kein requestFullscreen im Repo) — GraphPanel wendet die
+// entsprechende Klasse selbst an (siehe GraphPanel.vue).
+const isGraphMaximized = ref(false)
 
 const crumbs = computed<BreadcrumbItem[]>(() => [
   { label: t('step1.breadcrumbRuns'), path: '/runs' },

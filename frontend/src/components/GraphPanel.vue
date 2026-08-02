@@ -1,10 +1,11 @@
 <template>
-  <div class="graph-panel">
+  <div class="graph-panel" :class="{ 'graph-panel--maximized': isMaximized }">
     <GraphToolbar
       :loading="loading"
       :has-graph-id="!!graphData?.graph_id"
       :has-graph-data="!!graphData"
       :is-paused="canvasRef?.isPaused?.value === true"
+      :is-maximized="isMaximized"
       @refresh="$emit('refresh')"
       @toggle-maximize="$emit('toggle-maximize')"
       @toggle-pause="canvasRef?.togglePause()"
@@ -14,7 +15,6 @@
       @download-png="canvasRef?.downloadPng()"
       @print-pdf="canvasRef?.printPdf()"
       @download-html="canvasRef?.downloadHtml()"
-      @close-graph="$emit('close-graph')"
     />
 
     <GraphCanvas
@@ -58,9 +58,12 @@ const props = defineProps({
   // Issue #137 SUB2 — batch progress signal forwarded from MainView polling.
   // Passed through to GraphCanvas → useGraphRender for Auto-Freeze.
   batchSignal: { type: Object, default: null },
+  // Issue #1023 (Befund B-08): steuert die CSS-Vollbild-Darstellung des
+  // Panels. Der Parent haelt den Zustand (Toggle via @toggle-maximize).
+  isMaximized: { type: Boolean, default: false },
 })
 
-defineEmits(['refresh', 'toggle-maximize', 'close-graph'])
+defineEmits(['refresh', 'toggle-maximize'])
 
 const canvasRef = ref(null)
 
@@ -103,5 +106,16 @@ watch(() => props.isSimulating, (newValue) => {
   background-image: radial-gradient(var(--hairline-strong, var(--mono-700)) 1px, transparent 1px);
   background-size: 24px 24px;
   overflow: hidden;
+}
+
+/* Issue #1023 (Befund B-08): CSS-Vollbild statt Fullscreen-API — der Parent
+   liefert nur eine feste Canvas-Hoehe (clamp(360px, 55vh, 640px)), im
+   maximierten Zustand nimmt das Panel den gesamten Viewport ein. */
+.graph-panel--maximized {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 1000;
 }
 </style>

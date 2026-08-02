@@ -70,11 +70,13 @@
       >
         <span class="btn-text">.html</span>
       </button>
-      <button class="tool-btn" title="Maximize/Restore" @click="$emit('toggle-maximize')">
+      <button
+        class="tool-btn"
+        :title="isMaximized ? $t('graph.ui.restoreLayout') : $t('graph.ui.maximizeLayout')"
+        :aria-pressed="isMaximized"
+        @click="$emit('toggle-maximize')"
+      >
         <span class="icon-maximize">⛶</span>
-      </button>
-      <button class="tool-btn" :title="$t('graph.ui.closePanel')" @click="$emit('close-graph')">
-        <span class="icon-close">✕</span>
       </button>
     </div>
   </div>
@@ -86,6 +88,11 @@ defineProps({
   hasGraphId: { type: Boolean, default: false },
   hasGraphData: { type: Boolean, default: false },
   isPaused: { type: Boolean, default: false },
+  // Issue #1023 (Befund B-08): der Maximize-Button emittierte toggle-maximize
+  // ins Leere (kein Listener an der einzigen Konsument-Stelle
+  // StepGraphBuildView.vue). Jetzt verdrahtet auf einen CSS-Vollbild-Toggle
+  // (kein requestFullscreen im Repo — bewusst kein Browser-Fullscreen).
+  isMaximized: { type: Boolean, default: false },
 })
 
 defineEmits([
@@ -98,7 +105,6 @@ defineEmits([
   'toggle-maximize',
   'toggle-pause',
   'reset-layout',
-  'close-graph',
 ])
 </script>
 

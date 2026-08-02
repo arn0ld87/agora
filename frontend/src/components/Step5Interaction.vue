@@ -5,6 +5,7 @@ import { chatWithReport, getReport } from '../api/report'
 import { interviewAgents, getSimulationProfilesRealtime } from '../api/simulation'
 import { extractReportAnswer } from '@/utils/reportChatAnswer'
 import { interviewErrorMessage } from '@/utils/interviewErrorMessage'
+import { isRunRegistryId } from '@/contracts/runIdentifiers'
 import Button from '@/components/v4/forms/Button.vue'
 import Badge from './ui/Badge.vue'
 import Kicker from '@/components/v4/data/Kicker.vue'
@@ -29,9 +30,17 @@ const reportData = ref(null)
 // Ohne Fallback bleibt profiles leer und Chat/Survey senden simulation_id:
 // undefined — es entstehen keine agent_quotes, was das Evidence-Gating des
 // Reports (ADR-0002) leerlaufen laesst.
-const resolvedSimulationId = computed(
-  () => props.simulationId || reportData.value?.simulation_id || null
-)
+//
+// Issue #1023 (Regression aus PR #997): props.simulationId konnte ueber
+// ?runId= faelschlich eine Registry-Run-ID (`run_…`) statt einer
+// Simulation-ID (`sim_…`) enthalten. Eine solche ID wird hier verworfen,
+// statt sie als simulation_id zu verwenden — sonst scheitert jede
+// Chat-/Interview-Anfrage mit "Invalid simulation_id format".
+const resolvedSimulationId = computed(() => {
+  const propValue = props.simulationId
+  if (propValue && !isRunRegistryId(propValue)) return propValue
+  return reportData.value?.simulation_id || null
+})
 
 // ----- Chat (1-on-1) state -----
 const selectedAgentId = ref(null) // null = ReportAgent

@@ -17,7 +17,7 @@ import {
   getSimulationConsoleLog
 } from '../../../api/simulation'
 import { cancelRun } from '../../../api/runs'
-import { generateReport } from '../../../api/report'
+import { buildReportReadyRoute } from '../../../utils/reportRoute'
 import { useRunModelResolver } from '@/composables/useRunModelResolver'
 import { clearRunModelOverride } from '@/store/runModelOverride'
 import Button from '@/components/v4/forms/Button.vue'
@@ -492,33 +492,23 @@ const budgetMonitorStatus = computed(() => {
 const twitterActions = computed(() => allActions.value.filter((a) => a.platform === 'twitter').length)
 const redditActions = computed(() => allActions.value.filter((a) => a.platform === 'reddit').length)
 
+// Issue #1023 (Befund B-26, P1): goReport() rief bisher generateReport()
+// direkt auf — der teuerste Pipeline-Schritt startete ungefragt und mit
+// dem Workspace-Default-Modell, bevor der Nutzer Schritt 4 auch nur
+// gesehen hat. Schritt 3 navigiert jetzt nur noch in den "bereit"-Zustand
+// (kein Report existiert, buildReportReadyRoute() nutzt dafuer den
+// Sentinel-reportId 'new'); Schritt 4 zeigt dort seinen bestehenden
+// Bestaetigungs-Block (reportPending && phase===0) mit waehlbarem
+// Modell/Modus und startet erst auf explizite Nutzeraktion
+// (startReportConfirmed()).
 async function goReport() {
   if (!props.simulationId) return
   isGeneratingReport.value = true
   try {
-    const payload = { simulation_id: props.simulationId }
-    const res = await generateReport(payload)
-    if (res?.success && res.data?.report_id) {
-      // Issue #764 (Codex P1): run_id als Query-Param an die Report-Route
-      // durchreichen, damit Step4Report.loadRunUsage /api/runs/<run_id>
-      // anstelle der simulation_id pollt. Die simulation_id aus
-      // Route-Params bleibt dem Backend als identifier erhalten; der
-      // run_id-Query ist nur die Registry-Anschrift für die Budget-
-      // Verbrauchsdarstellung.
-      const runIdForReport = effectiveRunId.value
-      // Issue #764 (Review P1): runId IMMER als Query-Param weiterreichen,
-      // sobald vorhanden — auch wenn der Wert zufällig mit simulation_id
-      // übereinstimmt. Die Run-Registry-ID ist die autoritative Anschrift
-      // für /api/runs/<id>; eine fehlende Query würde den Step4Report auf
-      // die legacy simulation_id-Auflösung zurückfallen lassen.
-      router.push({
-        name: 'Report',
-        params: { reportId: res.data.report_id },
-        query: runIdForReport ? { runId: runIdForReport } : undefined,
-      })
-    }
-  } catch (err) {
-    addLog(err.message)
+    await router.push(buildReportReadyRoute({
+      runId: effectiveRunId.value,
+      simulationId: props.simulationId,
+    }))
   } finally {
     isGeneratingReport.value = false
   }

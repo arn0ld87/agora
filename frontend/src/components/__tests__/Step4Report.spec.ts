@@ -91,6 +91,8 @@ function resetMockSelection(): void {
   mockEnsureLoaded.mockResolvedValue(undefined)
   mockSetGlobalSelection.mockReset()
   mockSetGlobalSelection.mockResolvedValue(undefined)
+  getRunLlmRoutingMock.mockReset()
+  getRunLlmRoutingMock.mockResolvedValue({ snapshots: {}, runtime_config: null })
 }
 
 vi.mock('@/composables/useEffectiveModelSelection', () => ({
@@ -101,6 +103,28 @@ vi.mock('@/composables/useEffectiveModelSelection', () => ({
     error: mockError,
     ensureLoaded: mockEnsureLoaded,
     setGlobalSelection: mockSetGlobalSelection,
+  }),
+}))
+
+// Issue #1023 (Befund B-26, P1): loadRunModelDefault() liest das Lauf-Modell
+// ueber denselben Weg wie StepModelOverrideChip.vue (Teilpunkt 3, #1023):
+// GET /api/runs/<id>/llm-routing. getRunLlmRouting() gestubbt, useAiModelRefAdapter
+// gestubbt (instanziiert sonst useLlmProvidersStore/Pinia, das dieser Spec fehlt).
+const getRunLlmRoutingMock = vi.fn().mockResolvedValue({ snapshots: {}, runtime_config: null })
+vi.mock('@/api/llmRouting', () => ({
+  getRunLlmRouting: (runId: string) => getRunLlmRoutingMock(runId),
+}))
+vi.mock('@/composables/useAiModelRefAdapter', () => ({
+  useAiModelRefAdapter: () => ({
+    toLlmRoute: vi.fn(),
+    toAiModelRef: vi.fn((route: { provider_id?: string | null; model?: string | null }) => {
+      if (!route?.provider_id || !route?.model) return null
+      return {
+        provider_connection_id: route.provider_id,
+        model_id: route.model,
+        source: 'explicit',
+      }
+    }),
   }),
 }))
 
@@ -126,6 +150,7 @@ const i18n = createI18n({
       'common.ready': 'Bereit',
       'step4.status.incomplete': 'Report unvollständig — einige Abschnitte sind fehlgeschlagen.',
       'step4.status.sectionFailed': 'Abschnitt fehlgeschlagen',
+      'step4.status.pollTransportError': 'Verbindung zum Server verloren.',
       'errors.reportFailed': 'Fehler',
       'reportMode.label': 'Report-Modus',
       'reportMode.strict.label': 'Strikt',
@@ -1221,5 +1246,285 @@ describe('Step4Report — Report-Route-SSoT-Payload (#817)', () => {
     await flushPromises()
 
     expect(wrapper.find('.report-profile-picker').exists()).toBe(false)
+  })
+})
+
+// Issue #1023 (Befund B-26, P1): Report startete bisher ungefragt (Step3
+// rief generateReport() direkt auf) und mit dem Workspace-Kanon-Default statt
+// dem fuer den Lauf gewaehlten Modell. Der Bestaetigungs-Block existierte
+// bereits, wurde aber nie erreicht, weil props.reportId im Normalfluss immer
+// schon gesetzt war. Diese Suite deckt beide Teile ab: Bestaetigung erscheint
+// auch OHNE reportId aber MIT runId (realistische run_...-UUID statt "test-id"),
+// und reportRoute wird aus dem Lauf-Modell statt dem Kanon vorbelegt.
+describe('Step4Report — Lauf-Modell-Vorbelegung statt Workspace-Default (#1023)', () => {
+  const RUN_REGISTRY_ID = 'run_a1b2c3d4e5f6'
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorageMock.clear()
+    resetMockSelection()
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: { status: 'idle' },
+    })
+    ;(getReport as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true, data: VALID_REPORT })
+    ;(getReportEvidence as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true, data: VALID_EVIDENCE })
+    ;(generateReport as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: { report_id: 'report_new01' },
+    })
+  })
+
+  const RUN_SNAPSHOT_ROUTING = {
+    snapshots: {
+      report_generation: {
+        stage: 'report_generation',
+        provider_id: 'conn_run_snapshot',
+        model: 'run-snapshot-model',
+        reasoning_effort: 'none',
+        routing_version: 1,
+      },
+    },
+    runtime_config: null,
+  }
+
+  const WORKSPACE_DEFAULT = {
+    provider_connection_id: 'conn_workspace_default',
+    model_id: 'workspace-default-model',
+    source: 'workspace-default',
+  } as AiModelRef
+
+  function mountPending(extraProps: Record<string, unknown> = {}) {
+    return mount(Step4Report, {
+      props: { simulationId: 'sim_test01', runId: RUN_REGISTRY_ID, ...extraProps },
+      global: { plugins: [router, i18n], stubs: globalStubs },
+    })
+  }
+
+  it('zeigt den Bestaetigungs-Block auch mit gesetzter runId, solange kein reportId vorliegt', async () => {
+    const wrapper = mountPending()
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('[data-testid="report-confirm-block"]').exists()).toBe(true)
+  })
+
+  it('uebernimmt den Snapshot der Stage report_generation als reportRoute-Default, nicht den Kanon', async () => {
+    mockEffectiveRef.value = {
+      provider_connection_id: 'conn_workspace_default',
+      model_id: 'workspace-default-model',
+      source: 'workspace-default',
+    } as AiModelRef
+    getRunLlmRoutingMock.mockResolvedValue({
+      snapshots: {
+        report_generation: {
+          stage: 'report_generation',
+          provider_id: 'conn_run_snapshot',
+          model: 'run-snapshot-model',
+          reasoning_effort: 'none',
+          routing_version: 1,
+        },
+      },
+      runtime_config: null,
+    })
+
+    const wrapper = mountPending()
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    expect(getRunLlmRoutingMock).toHaveBeenCalledWith(RUN_REGISTRY_ID)
+    const vm = wrapper.vm as unknown as { reportRoute: AiModelRef | null }
+    expect(vm.reportRoute).toEqual({
+      provider_connection_id: 'conn_run_snapshot',
+      model_id: 'run-snapshot-model',
+      source: 'explicit',
+    })
+  })
+
+  it('faellt ohne Stage-Snapshot auf die vom Lauf konfigurierte Route zurueck (RuntimeLlmRouting), nicht den Kanon', async () => {
+    mockEffectiveRef.value = {
+      provider_connection_id: 'conn_workspace_default',
+      model_id: 'workspace-default-model',
+      source: 'workspace-default',
+    } as AiModelRef
+    getRunLlmRoutingMock.mockResolvedValue({
+      snapshots: {},
+      runtime_config: {
+        global_default: { provider_id: 'conn_run_global', model: 'run-global-model', reasoning_effort: 'none', provider_options: {} },
+        stage_overrides: {},
+        routing_version: 1,
+      },
+    })
+
+    const wrapper = mountPending()
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    const vm = wrapper.vm as unknown as { reportRoute: AiModelRef | null }
+    expect(vm.reportRoute).toEqual({
+      provider_connection_id: 'conn_run_global',
+      model_id: 'run-global-model',
+      source: 'explicit',
+    })
+  })
+
+  it('faellt ohne runId auf den Workspace-Kanon zurueck (unveraendertes Verhalten)', async () => {
+    mockEffectiveRef.value = {
+      provider_connection_id: 'conn_workspace_default',
+      model_id: 'workspace-default-model',
+      source: 'workspace-default',
+    } as AiModelRef
+
+    const wrapper = mount(Step4Report, {
+      props: { simulationId: 'sim_test01' },
+      global: { plugins: [router, i18n], stubs: globalStubs },
+    })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    expect(getRunLlmRoutingMock).not.toHaveBeenCalled()
+    const vm = wrapper.vm as unknown as { reportRoute: AiModelRef | null }
+    expect(vm.reportRoute).toEqual(mockEffectiveRef.value)
+  })
+
+  // PR #1025 (CodeRabbit): Die Auswertung des Lauf-Modells hing im
+  // Erfolgszweig von ensureLoaded(). Schlug der Kanon-Load fehl, lief nur
+  // .catch() — und das erfolgreich geladene Lauf-Modell wurde stillschweigend
+  // mitverworfen, obwohl es die hoeher priorisierte Quelle ist.
+  it('zeigt das Lauf-Modell auch dann, wenn der Kanon-Load fehlschlaegt', async () => {
+    mockEnsureLoaded.mockRejectedValue(new Error('routing/defaults nicht erreichbar'))
+    getRunLlmRoutingMock.mockResolvedValue(RUN_SNAPSHOT_ROUTING)
+
+    const wrapper = mountPending()
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    const vm = wrapper.vm as unknown as { reportRoute: AiModelRef | null }
+    expect(vm.reportRoute).toEqual({
+      provider_connection_id: 'conn_run_snapshot',
+      model_id: 'run-snapshot-model',
+      source: 'explicit',
+    })
+  })
+
+  // PR #1025 (Codex P1): Das Lauf-Modell wurde nur angezeigt.
+  // start_generation() legt aber einen neuen Report-Lauf an und seedet ihn aus
+  // dem Request — ohne ai_model_ref lief der Report unter dem
+  // Workspace-Default, waehrend Anzeige und Start-Log das Lauf-Modell nannten.
+  it('sendet das Lauf-Modell als ai_model_ref, auch ohne Picker-Interaktion', async () => {
+    mockEffectiveRef.value = WORKSPACE_DEFAULT
+    getRunLlmRoutingMock.mockResolvedValue(RUN_SNAPSHOT_ROUTING)
+
+    const wrapper = mountPending()
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    await (wrapper.vm as unknown as { startReportConfirmed: () => Promise<void> }).startReportConfirmed()
+    await wrapper.vm.$nextTick()
+
+    const payload = vi.mocked(generateReport).mock.calls.at(-1)![0] as Record<string, unknown>
+    expect(payload.ai_model_ref).toEqual({
+      provider_connection_id: 'conn_run_snapshot',
+      model_id: 'run-snapshot-model',
+      source: 'run-override',
+    })
+  })
+
+  it('sendet keinen ai_model_ref, wenn nur der Workspace-Kanon die Anzeige belegt', async () => {
+    // Gegenstueck zum Test darueber: der Kanon-Default bleibt ein reiner
+    // Anzeigewert. Ihn mitzuschicken wuerde die serverseitigen
+    // Stage-Defaults ueberschreiben, obwohl der Nutzer nichts gewaehlt hat.
+    mockEffectiveRef.value = WORKSPACE_DEFAULT
+
+    const wrapper = mount(Step4Report, {
+      props: { simulationId: 'sim_test01' },
+      global: { plugins: [router, i18n], stubs: globalStubs },
+    })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    await (wrapper.vm as unknown as { startReportConfirmed: () => Promise<void> }).startReportConfirmed()
+    await wrapper.vm.$nextTick()
+
+    const payload = vi.mocked(generateReport).mock.calls.at(-1)![0] as Record<string, unknown>
+    expect(payload.ai_model_ref).toBeUndefined()
+  })
+
+  it('laesst den Picker-Pick gegen das Lauf-Modell gewinnen', async () => {
+    mockEffectiveRef.value = WORKSPACE_DEFAULT
+    getRunLlmRoutingMock.mockResolvedValue(RUN_SNAPSHOT_ROUTING)
+
+    const wrapper = mountPending()
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    const controls = wrapper.findComponent({ name: 'ReportModelControls' })
+    await controls.vm.$emit('update:modelValue', {
+      provider_connection_id: 'conn_picked',
+      model_id: 'picked-model',
+      source: 'explicit',
+    } as AiModelRef)
+    await wrapper.vm.$nextTick()
+
+    await (wrapper.vm as unknown as { startReportConfirmed: () => Promise<void> }).startReportConfirmed()
+    await wrapper.vm.$nextTick()
+
+    const payload = vi.mocked(generateReport).mock.calls.at(-1)![0] as Record<string, unknown>
+    expect(payload.ai_model_ref).toEqual({
+      provider_connection_id: 'conn_picked',
+      model_id: 'picked-model',
+      source: 'explicit',
+    })
+  })
+})
+
+// Issue #1023 (Befund B-17, P2): pollStatus() verschluckte Transportfehler
+// (`catch { /* swallow */ }`) ohne Retry-Zaehler — der Nutzer wartete auf ein
+// Ergebnis, das laengst nicht mehr zustande kommen konnte. Der Defekt zeigt
+// sich nur ueber eine FOLGE fehlgeschlagener Polls, nicht in einem
+// Einzelzustand (genau die Luecke aus #961/#966/#985) — diese Suite ruft
+// pollStatus() deshalb mehrfach in Folge auf statt nur einmal.
+describe('Step4Report — Poll-Transportfehler werden gezaehlt statt verschluckt (#1023, Befund B-17)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorageMock.clear()
+    resetMockSelection()
+  })
+
+  it('zeigt den Transportfehler-Hinweis erst nach 3 aufeinanderfolgenden Fehlschlaegen, nicht bei einem einzelnen', async () => {
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('network down'))
+
+    const wrapper = mountComponent()
+    // onMounted ruft pollStatus() einmal auf — Fehlschlag #1.
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-testid="report-poll-transport-error"]').exists()).toBe(false)
+
+    const vm = wrapper.vm as unknown as { pollStatus: () => Promise<void> }
+    await vm.pollStatus() // Fehlschlag #2
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-testid="report-poll-transport-error"]').exists()).toBe(false)
+
+    await vm.pollStatus() // Fehlschlag #3 — Schwelle erreicht
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-testid="report-poll-transport-error"]').exists()).toBe(true)
+  })
+
+  it('heilt den Transportfehler-Hinweis aus, sobald ein Poll wieder erfolgreich ist', async () => {
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('network down'))
+
+    const wrapper = mountComponent()
+    await flushPromises()
+    const vm = wrapper.vm as unknown as { pollStatus: () => Promise<void> }
+    await vm.pollStatus()
+    await vm.pollStatus()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-testid="report-poll-transport-error"]').exists()).toBe(true)
+
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      success: true,
+      data: { status: 'planning', report_id: 'report_test01', simulation_id: 'sim_test01' },
+    })
+    await vm.pollStatus()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-testid="report-poll-transport-error"]').exists()).toBe(false)
   })
 })

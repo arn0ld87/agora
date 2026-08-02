@@ -70,7 +70,7 @@ import GraphMiniMap from './GraphMiniMap.vue'
 import { useGraphRender } from '../../composables/useGraphRender'
 import { exportGraphMl } from '../../api/graph'
 
-const { t, locale } = useI18n()
+const { t, te, locale } = useI18n()
 
 const props = defineProps({
   graphData: { type: Object, default: null },
@@ -116,6 +116,7 @@ const {
   entityTypes: toRef(props, 'entityTypes'),
   showEdgeLabels,
   translateLabel: t,
+  translateLabelExists: te,
   batchSignal: batchSignalRef,
 })
 

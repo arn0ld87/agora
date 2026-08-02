@@ -116,4 +116,13 @@ describe('locale-coverage', () => {
     expect(enKeys).toContain('topbar.search')
     expect(enKeys).toContain('topbar.notifications')
   })
+
+  // Issue #1023 (Befund B-11): SimulationPulseBar.vue nutzt t('feed.sentimentBar')
+  // fuer das aria-label der Sentiment-Heatbar. Der Key fehlte in beiden Locales —
+  // beide haben je zwei getrennte "feed"-Objekte (verschachtelt und root-level);
+  // nur das root-level-Objekt wird von t() aufgeloest.
+  it('feed.sentimentBar existiert in beiden Locales (Befund B-11)', () => {
+    expect(deKeys).toContain('feed.sentimentBar')
+    expect(enKeys).toContain('feed.sentimentBar')
+  })
 })
