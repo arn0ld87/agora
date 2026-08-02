@@ -15,10 +15,21 @@ describe('buildReportRoute', () => {
     // Wechsel auf die neue reportId die Registry-Run-ID und Step4Report
     // faellt auf simulationId zurueck — /api/runs/<id> braucht aber die
     // Run-Registry-ID.
-    expect(buildReportRoute('rep-1', 'run-42')).toEqual({
+    expect(buildReportRoute('rep-1', 'run_42abcdef0123')).toEqual({
       name: 'Report',
       params: { reportId: 'rep-1' },
-      query: { runId: 'run-42' },
+      query: { runId: 'run_42abcdef0123' },
+    })
+  })
+
+  it('verwirft eine Simulation-ID, statt sie als runId weiterzureichen', () => {
+    // PR #1025 (CodeRabbit): `/api/runs/sim_…` antwortet 404. Der Aufrufer
+    // liest das als "kein Lauf-Routing" und zeigt den Workspace-Default —
+    // also ein anderes Modell, als der Lauf tatsaechlich benutzt hat. Kein
+    // Query ist hier die ehrlichere Auskunft als ein falscher.
+    expect(buildReportRoute('rep-1', 'sim_42abcdef0123')).toEqual({
+      name: 'Report',
+      params: { reportId: 'rep-1' },
     })
   })
 
@@ -87,6 +98,21 @@ describe('buildReportReadyRoute', () => {
 
   it('laesst runId im Query weg, wenn keine Registry-Run-ID vorliegt', () => {
     expect(buildReportReadyRoute({ simulationId: 'sim_test01' })).toEqual({
+      name: 'Report',
+      params: { reportId: PENDING_REPORT_ID },
+      query: { [REPORT_SIMULATION_ID_QUERY_KEY]: 'sim_test01' },
+    })
+  })
+
+  it('verwirft eine als runId durchgereichte Simulation-ID', () => {
+    // PR #1025 (Codex P2): Schritt 3 reicht `runId.value || props.simulationId`
+    // durch. Nach einem Reload ist die Registry-ID nicht mehr im Speicher und
+    // der Fallback liefert die sim_-ID — sie darf nicht als runId landen,
+    // sonst fragt Schritt 4 `/api/runs/sim_…` und zeigt nach dem 404 still
+    // das Workspace-Modell statt des Lauf-Modells.
+    expect(
+      buildReportReadyRoute({ runId: 'sim_test01', simulationId: 'sim_test01' }),
+    ).toEqual({
       name: 'Report',
       params: { reportId: PENDING_REPORT_ID },
       query: { [REPORT_SIMULATION_ID_QUERY_KEY]: 'sim_test01' },

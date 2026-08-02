@@ -43,3 +43,16 @@ export function isSimulationId(value: unknown): value is SimulationId {
 export function asSimulationId(value: unknown): SimulationId | null {
   return isSimulationId(value) ? value : null
 }
+
+/**
+ * Gibt den Wert nur zurück, wenn er wie eine Registry-Run-ID aussieht.
+ *
+ * Gegenstück zu `asSimulationId` für die andere Richtung: `?runId=` darf nur
+ * einen Wert transportieren, mit dem `/api/runs/<id>` etwas anfangen kann. Eine
+ * `sim_…`-ID führt dort zu einem 404, den der Aufrufer als "kein Lauf-Routing
+ * vorhanden" missdeutet und still mit dem Workspace-Default beantwortet — die
+ * Anzeige nennt dann ein anderes Modell als der Lauf tatsächlich benutzt hat.
+ */
+export function asRunRegistryId(value: unknown): RunRegistryId | null {
+  return isRunRegistryId(value) ? value : null
+}

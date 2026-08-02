@@ -278,8 +278,15 @@ const aiModelRefAdapter = useAiModelRefAdapter()
  * Reihenfolge: Snapshot der Stage (falls report_generation in diesem Lauf
  * schon einmal gelaufen ist, z. B. Regenerierung) > vom Lauf konfigurierte
  * Stage-Route/Global-Default (RuntimeLlmRouting) > null (Aufrufer faellt
- * auf den Workspace-Kanon zurueck). Reiner Anzeige-Default — erzeugt
- * keinen Request-Override (siehe buildModelSelection()).
+ * auf den Workspace-Kanon zurueck).
+ *
+ * Der Rueckgabewert ist Anzeige-Default UND Request-Override (siehe
+ * `runModelDefault` und `buildModelSelection()`). Anders als beim
+ * Workspace-Kanon, den das Backend ohnehin selbst zieht, kennt der Server das
+ * Lauf-Modell an dieser Stelle nicht: `ReportGenerationService.start_generation()`
+ * legt einen neuen Report-Lauf an und seedet ihn aus dem Request. Wuerde die UI
+ * das Lauf-Modell nur anzeigen, liefe der Report unter dem Workspace-Default —
+ * die Anzeige und das Start-Log nennten ein Modell, das nicht zum Einsatz kommt.
  */
 async function loadRunModelDefault(runId: string): Promise<AiModelRef | null> {
   try {
@@ -314,6 +321,10 @@ const reportRoute = ref<AiModelRef | null>(null)
 // aus dem Kanon (routing/defaults.global_default) übernommene Wert befüllt nur
 // reportRoute (Anzeige) und darf keinen Request-Override erzeugen.
 const reportRouteOverride = ref<AiModelRef | null>(null)
+// Das Modell dieses Laufs (aus /api/runs/<id>/llm-routing). Es befüllt die
+// Anzeige wie der Kanon-Default, geht aber zusätzlich in den Start-Request:
+// der Server kennt es beim Anlegen des Report-Laufs nicht von selbst.
+const runModelDefault = ref<AiModelRef | null>(null)
 
 function onReportRoutePicked(val: AiModelRef | null) {
   reportRoute.value = val
@@ -342,31 +353,52 @@ function effectiveReportModel(): string | null {
  * Baut die Modellauswahl für den Report-Request (Issue #817, konsolidiert in
  * Issue #834).
  *
- * Nur ein expliziter Picker-Pick (`reportRouteOverride`) wird als Request-
- * Override für genau diese Regenerierung gesendet. Ein beim Mount aus dem
- * Kanon übernommener Anzeige-Default (`reportRoute`) erzeugt KEINEN Override:
- * ohne echte Nutzerwahl bleiben die serverseitigen Stage-/Workspace-Defaults
- * unverändert wirksam. Der Legacy-Profil-Zweig (`llm_profile_id` über
- * v3-Profil-Legacy-Picker) wurde mit Issue #834 entfernt — es gibt nur noch genau
- * eine Auswahlsenke (`ai_model_ref`).
+ * Zwei Quellen erzeugen einen Override, in dieser Reihenfolge:
+ *
+ * 1. der explizite Picker-Pick (`reportRouteOverride`) — er gewinnt immer;
+ * 2. das Modell dieses Laufs (`runModelDefault`, Issue #1023 / PR #1025).
+ *
+ * Der aus dem Workspace-Kanon übernommene Anzeige-Default (`reportRoute` ohne
+ * die beiden oberen Quellen) erzeugt weiterhin KEINEN Override: ihn zieht das
+ * Backend ohnehin selbst, und ohne echte Nutzerwahl sollen die serverseitigen
+ * Stage-Defaults unverändert wirksam bleiben. Beim Lauf-Modell liegt der Fall
+ * anders — `start_generation()` legt einen neuen Report-Lauf an und übernimmt
+ * das Routing des Simulationslaufs nicht. Ohne den Override zeigte die UI
+ * Modell A und der Report liefe unter B.
+ *
+ * Der Legacy-Profil-Zweig (`llm_profile_id` über v3-Profil-Legacy-Picker) wurde
+ * mit Issue #834 entfernt — es gibt nur noch genau eine Auswahlsenke
+ * (`ai_model_ref`).
  */
+function sameModelRef(a: AiModelRef | null, b: AiModelRef | null): boolean {
+  if (!a || !b) return false
+  return a.provider_connection_id === b.provider_connection_id && a.model_id === b.model_id
+}
+
 function buildModelSelection(): Pick<GenerateReportData, 'ai_model_ref'> {
-  if (reportRouteOverride.value) {
-    return {
-      ai_model_ref: {
-        provider_connection_id: reportRouteOverride.value.provider_connection_id,
-        model_id: reportRouteOverride.value.model_id,
-        source: reportRouteOverride.value.source ?? 'explicit',
-        // Issue #901: den vom Picker gelieferten Grund weiterreichen. Ohne ihn
-        // schreibt llm_routing_seed._fallback_reason_for den Platzhalter
-        // unspecified_fallback, obwohl die Ursache bekannt war.
-        ...(reportRouteOverride.value.fallback_reason
-          ? { fallback_reason: reportRouteOverride.value.fallback_reason }
-          : {}),
-      },
-    }
+  const picked = reportRouteOverride.value
+  // Das Lauf-Modell geht nur mit, solange die Anzeige es auch zeigt. Waehlt der
+  // Nutzer im Picker ab (reportRoute wird null), darf der Request nicht heimlich
+  // beim Lauf-Modell bleiben — Anzeige und Ausfuehrung sind hier dasselbe
+  // Versprechen.
+  const runModel = sameModelRef(reportRoute.value, runModelDefault.value)
+    ? runModelDefault.value
+    : null
+  const selected = picked ?? runModel
+  if (!selected) return {}
+  return {
+    ai_model_ref: {
+      provider_connection_id: selected.provider_connection_id,
+      model_id: selected.model_id,
+      // Ohne Picker-Pick ist die Herkunft der Lauf-Kontext, nicht eine
+      // Nutzerentscheidung — llm_routing_seed schreibt sie so ins Run-Log.
+      source: picked ? (picked.source ?? 'explicit') : 'run-override',
+      // Issue #901: den vom Picker gelieferten Grund weiterreichen. Ohne ihn
+      // schreibt llm_routing_seed._fallback_reason_for den Platzhalter
+      // unspecified_fallback, obwohl die Ursache bekannt war.
+      ...(selected.fallback_reason ? { fallback_reason: selected.fallback_reason } : {}),
+    },
   }
-  return {}
 }
 
 // PR #975 (CodeRabbit): Beim Start und beim Regenerieren wechselt die Route
@@ -684,20 +716,27 @@ onMounted(async () => {
   localStorage.removeItem(STORAGE_REPORT_ROUTE_LEGACY)
   // Issue #1023 (Befund B-26, P1): das fuer DIESEN Lauf gewaehlte Modell hat
   // Vorrang vor dem Workspace-Kanon-Default (siehe loadRunModelDefault()).
-  // Beide Quellen setzen nur den Anzeige-Default (reportRoute), keinen
-  // Request-Override — ein spaeterer Kanon-Load darf den Lauf-Default
-  // deshalb nicht mehr ueberschreiben (Race zwischen den beiden .then()-
-  // Zweigen), daher die reportRoute-Pruefung in beiden Zweigen.
+  //
+  // Beide Quellen laufen parallel und werden ueber allSettled zusammengefuehrt,
+  // nicht ueber ein verschachteltes .then(): der Lauf-Default darf nicht davon
+  // abhaengen, dass der Kanon-Load gelingt. Genau das war der Fall, solange die
+  // Auswertung im Erfolgszweig von ensureLoaded() hing — ein fehlgeschlagener
+  // Kanon-Load verwarf das erfolgreich geladene Lauf-Modell gleich mit.
+  //
+  // Die reportRoute-Pruefung bleibt: hat der Nutzer in der Zwischenzeit selbst
+  // gewaehlt, gewinnt seine Wahl gegen jeden nachlaufenden Default.
   const runModelPromise = props.runId ? loadRunModelDefault(props.runId) : Promise.resolve(null)
-  effectiveModel
-    .ensureLoaded()
-    .then(async () => {
-      if (reportRoute.value) return
-      const runModel = await runModelPromise
+  Promise.allSettled([effectiveModel.ensureLoaded(), runModelPromise]).then(
+    ([, runModelResult]) => {
+      const runModel = runModelResult.status === 'fulfilled' ? runModelResult.value : null
+      // Auch als Request-Override merken, unabhaengig davon, ob die Anzeige
+      // ihn noch uebernimmt — sonst startete ein Nutzer, der den Picker gar
+      // nicht anfasst, den Report unter dem Workspace-Default.
+      if (runModel) runModelDefault.value = runModel
       if (reportRoute.value) return
       reportRoute.value = runModel ?? effectiveModel.effectiveRef.value
-    })
-    .catch(() => { /* Kanon nicht ladbar: Backend nutzt active-config */ })
+    },
+  )
   await pollStatus()
   if (!isComplete.value) {
     if (props.reportId) { phase.value = 1; startPolling() }

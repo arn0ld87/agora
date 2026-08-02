@@ -1,5 +1,5 @@
 import type { RouteLocationRaw } from 'vue-router'
-import { isSimulationId } from '../contracts/runIdentifiers'
+import { asRunRegistryId, isSimulationId } from '../contracts/runIdentifiers'
 
 /**
  * Zielroute fuer die Report-Ansicht.
@@ -10,12 +10,18 @@ import { isSimulationId } from '../contracts/runIdentifiers'
  * Query-Parameter `?runId=<id>`. Jede Navigation auf eine neue `reportId`
  * (Report-Start, Regenerieren) muss ihn deshalb mitfuehren, sonst faellt
  * `Step4Report.loadRunUsage()` still auf die `simulationId` zurueck.
+ *
+ * Nur echte `run_…`-IDs landen im Query. Ein `sim_…`-Wert waere hier kein
+ * brauchbarer Naeherungswert, sondern eine falsche Auskunft: `/api/runs/sim_…`
+ * antwortet mit 404, der Aufrufer liest das als "kein Lauf-Routing" und zeigt
+ * den Workspace-Default an, obwohl der Lauf mit einem anderen Modell lief.
  */
 export function buildReportRoute(reportId: string, runId?: string): RouteLocationRaw {
+  const registryRunId = asRunRegistryId(runId)
   return {
     name: 'Report',
     params: { reportId },
-    ...(runId ? { query: { runId } } : {}),
+    ...(registryRunId ? { query: { runId: registryRunId } } : {}),
   }
 }
 
@@ -82,7 +88,13 @@ export function buildReportReadyRoute(params: {
   const query: Record<string, string> = {
     [REPORT_SIMULATION_ID_QUERY_KEY]: params.simulationId,
   }
-  if (params.runId) query.runId = params.runId
+  // Schritt 3 reicht `runId.value || props.simulationId` durch: nach einem
+  // Reload ist die Registry-ID nicht mehr im Speicher und der Fallback liefert
+  // eine `sim_…`-ID. Sie hier zu verwerfen ist der ehrlichere Zustand — Schritt
+  // 4 kennt dann kein Lauf-Routing und sagt das auch, statt ein falsches Modell
+  // aus einem fehlgeschlagenen `/api/runs/sim_…`-Aufruf abzuleiten.
+  const registryRunId = asRunRegistryId(params.runId)
+  if (registryRunId) query.runId = registryRunId
   return {
     name: 'Report',
     params: { reportId: PENDING_REPORT_ID },

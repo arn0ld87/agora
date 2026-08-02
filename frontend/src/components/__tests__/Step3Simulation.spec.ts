@@ -391,12 +391,18 @@ describe('Step3Simulation — phase promotion (Sub-Slice A, #209)', () => {
     expect(generateReportMock).not.toHaveBeenCalled()
 
     // Ziel: Report-Route mit Sentinel-reportId 'new' (kein Report existiert
-    // noch), simulationId + runId als Query — effectiveRunId faellt hier auf
-    // props.simulationId zurueck, da kein echter Registry-Run-Start gemockt ist.
+    // noch) und der simulationId als Query.
     expect(router.currentRoute.value.name).toBe('Report')
     expect(router.currentRoute.value.params.reportId).toBe('new')
     expect(router.currentRoute.value.query.simulationId).toBe('sim_test_smoke')
-    expect(router.currentRoute.value.query.runId).toBe('sim_test_smoke')
+
+    // PR #1025 (Codex P2 / CodeRabbit): `effectiveRunId` faellt hier auf
+    // props.simulationId zurueck, weil kein Registry-Run-Start gemockt ist —
+    // derselbe Zustand wie nach einem Reload der Simulationsseite. Diese
+    // sim_-ID darf NICHT als runId im Query landen: Schritt 4 fragte damit
+    // `/api/runs/sim_…`, bekaeme 404 und zeigte nach dem stillen Fallback das
+    // Workspace-Modell statt des Lauf-Modells an.
+    expect(router.currentRoute.value.query.runId).toBeUndefined()
   })
 })
 
