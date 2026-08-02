@@ -74,6 +74,16 @@ vi.mock('vue-router', async (importOriginal) => {
   }
 })
 
+// useSimFeed batcht eingehende Posts pro Animation Frame (#1007). jsdoms
+// requestAnimationFrame loest erst nach ~16ms Realzeit aus; die Tests unten
+// pruefen den Feed-State direkt nach dem synchronen Handler-Aufruf ohne auf
+// einen echten Frame zu warten. Globaler Stub macht rAF synchron, damit
+// bestehende Assertions unveraendert bleiben.
+vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+  cb(0)
+  return 0
+})
+
 import StepSimulationFeedView from '../StepSimulationFeedView.vue'
 
 // ---- i18n ----
@@ -170,5 +180,29 @@ describe('StepSimulationFeedView', () => {
     const pulseBar = wrapper.find('.pulse-bar')
     expect(Number(pulseBar.attributes('data-twitter'))).toBe(3)
     expect(Number(pulseBar.attributes('data-reddit'))).toBe(0)
+  })
+
+  // Slice 9 · #1007 — kein clearSimFeed mehr in onBeforeUnmount.
+  it('Unmount/Remount: Bestand bleibt erhalten (vor dem Fix wurde er beim Unmount geleert)', async () => {
+    const wrapper1 = mount(StepSimulationFeedView, {
+      global: { plugins: [i18n, router] },
+    })
+    await flushPromises()
+
+    for (let i = 0; i < 4; i++) {
+      capturedPostCreatedHandler?.(mkPost({ platform: 'reddit', post_id: `u-${i}` }))
+    }
+    await flushPromises()
+
+    expect(Number(wrapper1.find('.pulse-bar').attributes('data-reddit'))).toBe(4)
+
+    wrapper1.unmount()
+
+    const wrapper2 = mount(StepSimulationFeedView, {
+      global: { plugins: [i18n, router] },
+    })
+    await flushPromises()
+
+    expect(Number(wrapper2.find('.pulse-bar').attributes('data-reddit'))).toBe(4)
   })
 })
