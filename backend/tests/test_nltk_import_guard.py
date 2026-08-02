@@ -116,16 +116,46 @@ def test_ingestion_entrypoint_can_parse() -> None:
     assert result.returncode == 0, f"Ingestion-Parse fehlgeschlagen:\n{result.stderr}"
 
 
-def test_dockerfile_disables_nltk_import_guard() -> None:
-    """Beide Container-Stages setzen den Opt-out zusätzlich als ENV.
+def _stage_block(dockerfile: str, stage: str) -> str:
+    """Der Textblock einer Dockerfile-Stage, von ``AS <stage>`` bis zum nächsten ``FROM``."""
+    lines = dockerfile.splitlines()
+    start = next(
+        (
+            i
+            for i, line in enumerate(lines)
+            if line.startswith("FROM ") and line.rstrip().endswith(f"AS {stage}")
+        ),
+        None,
+    )
+    assert start is not None, f"Stage '{stage}' nicht im Dockerfile gefunden"
+    end = next(
+        (i for i in range(start + 1, len(lines)) if lines[i].startswith("FROM ")),
+        len(lines),
+    )
+    return "\n".join(lines[start:end])
+
+
+@pytest.mark.parametrize("stage", ["base", "prod"])
+def test_dockerfile_stage_disables_nltk_import_guard(stage: str) -> None:
+    """Jede relevante Container-Stage setzt den Opt-out einzeln als ENV.
+
+    Pro Stage geprüft statt über einen Gesamt-Zähler: eine reine Zählung über die
+    ganze Datei ist auch dann grün, wenn eine Stage den Opt-out doppelt trägt und
+    die andere gar nicht.
 
     ``app/__init__.py`` greift im Container ebenfalls; die ENV-Setzung deckt
     darüber hinaus Prozesse ab, die mit nltk in Berührung kommen, bevor ``app``
     importiert ist.
     """
     dockerfile = (REPO_ROOT / "Dockerfile").read_text(encoding="utf-8")
-    occurrences = dockerfile.count("NLTK_DISABLE_IMPORT_SECURITY=1")
-    assert occurrences >= 2, (
-        "NLTK_DISABLE_IMPORT_SECURITY=1 muss in der base- UND der prod-Stage "
-        f"gesetzt sein, gefunden: {occurrences}x"
+    block = _stage_block(dockerfile, stage)
+    env_lines = [
+        line
+        for line in block.splitlines()
+        if "NLTK_DISABLE_IMPORT_SECURITY=1" in line and not line.lstrip().startswith("#")
+    ]
+    assert env_lines, (
+        f"Stage '{stage}' setzt NLTK_DISABLE_IMPORT_SECURITY=1 nicht (Kommentare "
+        "zählen nicht). Ohne den Opt-out bricht der Ingestion-Pfad im Container "
+        "zur Laufzeit."
     )

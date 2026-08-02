@@ -81,6 +81,27 @@ betroffenen Advisories lösen sich dabei unterschiedlich ehrlich auf:
 seit 2026-07-27 geschlossen; beide Zeiger sind jetzt auf die jeweils zutreffenden
 Issues korrigiert (#995 bzw. #661).
 
+#### Warum #661 offen bleibt, obwohl es plausibel mit behoben ist
+
+Beide Advisories beschreiben eine Path Traversal in derselben Funktion,
+`nltk.data.load()`; PYSEC-2026-597 wird ausdrücklich als *unvollständiger Fix*
+einer früheren Lücke geführt. Es ist deshalb plausibel, dass der Upstream-Fix in
+3.10.0 beide erledigt.
+
+**Belegt ist das nicht.** Gegen die Primärquellen geprüft am 2026-08-02:
+
+* [OSV `PYSEC-2026-597`](https://osv.dev/vulnerability/PYSEC-2026-597) —
+  `events: [{introduced: "0"}, {last_affected: "3.9.4"}]`, **kein `fixed`-Event**,
+  `modified: 2026-07-01`.
+* [PyPA advisory-database, `vulns/nltk/PYSEC-2026-597.yaml`](https://github.com/pypa/advisory-database/blob/main/vulns/nltk/PYSEC-2026-597.yaml)
+  — identischer Stand, ebenfalls ohne `fixed`.
+
+Sekundärquellen behaupten teilweise einen Fix in 3.10.0 und übertragen dabei den
+Fix der *anderen* Advisory (GHSA-p4gq-832x-fm9v / CVE-2026-54293) auf diese; ein
+automatisierter Review von PR #1024 ist genau darauf hereingefallen. Solange die
+Advisory-DB kein `fixed`-Event führt, bleibt die Aussage „behoben" unbelegt —
+#661 bleibt offen und wird geschlossen, sobald OSV nachzieht.
+
 ### Nebenwirkung des Bumps: `NLTK_DISABLE_IMPORT_SECURITY=1`
 
 nltk 3.10 bringt einen zusätzlichen Import-Hook mit ([`nltk/inisec.py`](https://github.com/nltk/nltk)),
