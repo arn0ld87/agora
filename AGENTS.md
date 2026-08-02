@@ -31,7 +31,7 @@ Agora ist eine lokal oder kontrolliert hybrid betreibbare Multi-Agent-Analysepla
 ## Verbindliche Arbeitsweise
 
 1. Nie direkt auf `main` arbeiten. Eigener Branch und atomarer Pull Request.
-2. Tests sind die Spezifikation. Verhaltensänderungen folgen RED → GREEN → Refactor.
+2. Tests sind die Spezifikation. Ein Verhaltensfix bringt einen Regressionstest mit, der den Defekt trifft — dass er vorher rot war, prüft man einmal beim Schreiben und dokumentiert es nirgends.
 3. Vor jedem Push das passende Gate ausführen:
    - `bash scripts/pre-push-gate.sh backend`
    - `bash scripts/pre-push-gate.sh frontend`

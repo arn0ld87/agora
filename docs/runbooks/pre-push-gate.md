@@ -4,10 +4,18 @@ Datei: `docs/runbooks/pre-push-gate.md` · Stand: 2026-07-13 · Eingeführt mit:
 
 ## Zweck
 
-Eine **einzige** ausführbare Datei, die lokal dieselben Checks fährt wie
-CI (`Backend PR smoke gate` + `Frontend PR smoke gate` + `Schema-Drift
-verhindern` + `STATUS.md Drift --check`). Damit gibt es keine
-"lokal grün, CI rot"-Fälle mehr und kein `--no-verify`-Bypass.
+Eine **einzige** ausführbare Datei, die lokal die Checks der CI fährt
+(`Backend PR smoke gate` + `Frontend PR smoke gate` + `Schema-Drift
+verhindern` + `STATUS.md Drift --check`) und "lokal grün, CI rot"
+verhindert, ohne `--no-verify`-Bypass.
+
+**Eine bewusste Ausnahme:** Der `vite build` läuft lokal nur mit
+`GATE_BUILD=1`, in der CI dagegen immer. Er ist der mit Abstand teuerste
+Schritt und fängt nach ESLint, `vue-tsc` und Vitest praktisch nichts
+mehr ab. Ein CI-Fehler, den das lokale Gate durchlässt, ist damit auf
+reine Bundler-Fehler beschränkt (etwa ein fehlender dynamischer Import).
+Wer eine Vite-Config, ein Alias oder eine Chunk-Strategie anfasst, setzt
+`GATE_BUILD=1` — dort ist die Lücke real.
 
 ## Verwendung
 
@@ -35,7 +43,7 @@ Exit-Codes: `0` = alle Gates grün · `1` = mind. ein Gate rot · `2` = falscher
 | 6 | `eslint .` (frontend) | Frontend PR smoke gate | ja |
 | 7 | `vue-tsc --noEmit` | Frontend PR smoke gate | ja |
 | 8 | `vitest run` | Frontend PR smoke gate | ja |
-| 9 | `vite build` | Frontend PR smoke gate | ja |
+| 9 | `vite build` | Frontend PR smoke gate | nur mit `GATE_BUILD=1` |
 | 10 | Schema-Spiegel-Smoke | Frontend-Zod muss Backend-Schema spiegeln | ja |
 
 ## Warum lokales Gate?

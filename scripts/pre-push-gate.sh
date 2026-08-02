@@ -126,8 +126,15 @@ run_frontend() {
   step "Frontend: tests"
   (cd frontend && bun run test) || fail "frontend tests"
 
-  step "Frontend: build"
-  (cd frontend && bun run build) || fail "frontend build"
+  # Der Vite-Build ist der mit Abstand teuerste Schritt des Gates und faengt
+  # nach lint + typecheck + tests fast nichts mehr ab. Die CI baut ohnehin bei
+  # jedem PR. Lokal daher nur auf Anforderung: GATE_BUILD=1 bash scripts/pre-push-gate.sh
+  if [ "${GATE_BUILD:-0}" = "1" ]; then
+    step "Frontend: build (GATE_BUILD=1)"
+    (cd frontend && bun run build) || fail "frontend build"
+  else
+    warn "Frontend-Build uebersprungen (GATE_BUILD=1 erzwingt ihn; CI baut ohnehin)"
+  fi
 
   step "Frontend: Zod muss Backend-Schema spiegeln"
   # Spiegel-Check selbst laeuft in CI gegen generierte Schemas; lokal

@@ -14,7 +14,7 @@ Du bist der Orchestrator, nicht der Implementer. Die aktive Aufgabenquelle sind 
 - Nie direkt auf `main` arbeiten.
 - Der Implementer arbeitet mit `isolation: worktree` und erzeugt genau einen lokalen Commit.
 - Der Implementer pusht, mergt und erstellt keinen PR.
-- Nur der Lead darf nach einem `APPROVE` des `agora-opus-reviewer` pushen und einen PR öffnen.
+- Nur der Lead pusht und öffnet den PR — nach eigener Verifikation von Diff, Tests und Gate. Ein `agora-opus-reviewer` ist optional (Schritt 8) und kein Freigabetor.
 - Kein `--no-verify`, Force-Push oder automatischer Endlos-Fix-Loop.
 - Keine neue Planungsdatei anlegen.
 
@@ -219,9 +219,11 @@ test "${gate_rcs[1]}" -eq 0
 
 Der Issue-Test und das ausgewählte Gate müssen jeweils Exit 0 liefern. Beide vollständigen Ausgaben (`<ISSUE_TEST_LOG>` und `<GATE_LOG>`) werden für Schritt 8 aufbewahrt und dort übergeben. Bei einem Fehler stoppen. Kein kosmetisches Grünmachen und keine unbedingte Ausführung aller Scope-Gates.
 
-## Schritt 8: Opus-Review
+## Schritt 8: Opus-Review (optional)
 
-Starte genau einen `agora-opus-reviewer` und übergib:
+**Der Regelfall überspringt diesen Schritt.** Grünes Gate und ein Regressionstest, der den Defekt trifft, genügen; der Lead hat Diff, Tests und Gate in Schritt 7 selbst verifiziert. Ziehe einen Reviewer nur hinzu, wenn du den Diff nicht sicher beurteilen kannst — etwa bei einer Schema- oder Migrationsänderung mit unklarer Rückwärtskompatibilität. Ohne Reviewer geht es direkt zu Schritt 10.
+
+Wenn du einen startest, dann genau einen `agora-opus-reviewer`, und übergib:
 
 - vollständiges Issue und Akzeptanzkriterien,
 - Release-Ziel,
@@ -231,9 +233,9 @@ Starte genau einen `agora-opus-reviewer` und übergib:
 - frische Gate-Ausgabe,
 - betroffene ADRs, Contracts, Security-Grenzen und Evidence-Hartanker.
 
-Der Reviewer ist read-only und antwortet mit `APPROVE` oder `REQUEST_CHANGES`.
+Der Reviewer ist read-only und antwortet mit `APPROVE` oder `REQUEST_CHANGES`. Seine Antwort ist eine Einschätzung, kein Tor: Der Lead entscheidet, welche Blocker er übernimmt und welche er als Folge-Issue auslagert.
 
-Bei `REQUEST_CHANGES`:
+Bei `REQUEST_CHANGES` mit übernommenen Blockern:
 
 1. keinen Push und keinen PR erstellen,
 2. Blocker an denselben Implementer mit engem Korrekturbriefing zurückgeben,
@@ -271,15 +273,13 @@ Ist ein erforderliches Dokumentationsartefakt sachlich betroffen, aber nicht im 
 1. das Issue einmalig an denselben Implementer zurückgeben,
 2. den bestehenden Issue-Commit amendieren statt einen zweiten Commit zu erzeugen,
 3. den neuen Commit-SHA erfassen,
-4. Schritt 7 (Verifikation, frische Tests, Gate) und Schritt 8 (Opus-Review) für diesen neuen SHA vollständig erneut ausführen.
-
-Erst nach erneutem `APPROVE` darf das Issue weiter zu Schritt 10.
+4. Schritt 7 (Verifikation, frische Tests, Gate) für diesen neuen SHA erneut ausführen. Ein zweiter Reviewer-Lauf ist nicht nötig.
 
 Erzeuge notwendige Folge-Issues vor dem PR und verlinke sie im PR-Body.
 
 ## Schritt 10: Push und PR
 
-Nur bei `APPROVE` und abgeschlossenem Dokumentationssync:
+Bei grünem Gate und abgeschlossenem Dokumentationssync:
 
 ```bash
 git push -u origin <branch>
@@ -315,7 +315,7 @@ git push -u origin <branch>
 - Folge-Issue: <URL | NICHT BETROFFEN + Begründung>
 
 ## Review
-- `agora-opus-reviewer` — APPROVE
+- `agora-opus-reviewer` — APPROVE _(Zeile nur aufnehmen, wenn Schritt 8 tatsächlich lief)_
 ```
 
 ## Abschlussausgabe
@@ -329,7 +329,7 @@ git push -u origin <branch>
 - Issue-Test: PASS
 - Pflichtprüfungen: PASS
 - Gate: PASS
-- Opus: APPROVE
+- Opus: APPROVE | nicht angefordert
 - PR: <URL>
 - Dokumentationssync: <Nachweis>
 - Verbleibende Risiken: keine

@@ -19,7 +19,7 @@ Bearbeite maximal zwei voneinander unabhängige Issues parallel. Jedes Issue erh
 - Maximal zwei Implementer gleichzeitig.
 - Subagenten können keine weiteren Agenten starten. Die gesamte Orchestrierung bleibt beim Lead.
 - Worker pushen, mergen und erstellen keine PRs.
-- Nur der Lead darf nach `APPROVE` pushen und einen PR öffnen.
+- Nur der Lead pusht und öffnet die PRs — nach eigener Verifikation von Diff, Tests und Gate. Ein `agora-opus-reviewer` ist optional (Schritt 8) und kein Freigabetor.
 - Kein `--no-verify`, Force-Push oder automatischer Endlos-Fix-Loop.
 - Keine neue Planungsdatei anlegen.
 
@@ -262,9 +262,11 @@ Prüfe außerdem:
 
 Bei einem Fehler stoppt ausschließlich das betroffene Issue. Das andere darf nur weiter geprüft werden, wenn die in Schritt 3 nachgewiesene Unabhängigkeit weiterhin gilt. Ein Fehler darf weder das andere Issue automatisch stoppen noch durch dessen Erfolg verdeckt werden.
 
-## Schritt 8: Opus-Review pro Commit
+## Schritt 8: Opus-Review pro Commit (optional)
 
-Starte für jeden verifizierten Commit genau einen `agora-opus-reviewer`. Übergib:
+**Der Regelfall überspringt diesen Schritt.** Grünes Gate und ein Regressionstest, der den Defekt trifft, genügen; der Lead hat jeden Commit in Schritt 7 selbst verifiziert. Ziehe einen Reviewer nur für den einzelnen Commit hinzu, dessen Diff du nicht sicher beurteilen kannst — etwa bei einer Schema- oder Migrationsänderung mit unklarer Rückwärtskompatibilität. Ohne Reviewer geht es direkt zu Schritt 10.
+
+Wenn du einen startest, dann genau einen `agora-opus-reviewer` pro betroffenem Commit. Übergib:
 
 - vollständiges Issue und Akzeptanzkriterien,
 - Release-Ziel,
@@ -274,7 +276,7 @@ Starte für jeden verifizierten Commit genau einen `agora-opus-reviewer`. Überg
 - die in Schritt 7 frisch erzeugte Gate-Ausgabe,
 - betroffene ADRs, Contracts, Security-Grenzen und Evidence-Hartanker.
 
-Der Reviewer ist read-only und antwortet mit `APPROVE` oder `REQUEST_CHANGES`.
+Der Reviewer ist read-only und antwortet mit `APPROVE` oder `REQUEST_CHANGES`. Seine Antwort ist eine Einschätzung, kein Tor: Der Lead entscheidet, welche Blocker er übernimmt und welche er als Folge-Issue auslagert.
 
 Bei `REQUEST_CHANGES`:
 
@@ -301,7 +303,7 @@ Erzeuge notwendige Folge-Issues vor dem PR und verlinke sie im PR-Body. Der Doku
 
 ## Schritt 10: Push und PR
 
-Nur bei `APPROVE` und abgeschlossenem Dokumentationssync:
+Bei grünem Gate und abgeschlossenem Dokumentationssync:
 
 ```bash
 git push -u origin <branch>
@@ -339,7 +341,7 @@ PR-Body:
 - Folge-Issue: <URL | NICHT BETROFFEN + Begründung>
 
 ## Review
-- `agora-opus-reviewer` — APPROVE
+- `agora-opus-reviewer` — APPROVE _(Zeile nur aufnehmen, wenn Schritt 8 tatsächlich lief)_
 ```
 
 Keine beiden Issues in einen gemeinsamen PR quetschen. Git kann viel, aber es muss nicht jeden schlechten Gedanken konservieren.
@@ -351,7 +353,7 @@ Keine beiden Issues in einen gemeinsamen PR quetschen. Git kann viel, aber es mu
 
 | Issue | Worker | Commit | Issue-Test | Gate | Opus | Doku-Sync | PR |
 |---|---|---|---|---|---|---|---|
-| #123 | agora-refactor-worker | `<sha>` | PASS | PASS | APPROVE | vollständig | <URL> |
+| #123 | agora-refactor-worker | `<sha>` | PASS | PASS | nicht angefordert | vollständig | <URL> |
 
 ### Gestoppt
 - keine

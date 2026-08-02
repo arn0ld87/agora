@@ -189,9 +189,11 @@ Issue-Test, Gate und das Schreiben beider Protokolle müssen Exit 0 liefern. Der
 
 Bei zwei parallelen Issues werden Test und Gate in den jeweiligen Worktrees ausgeführt. Ein Fehler stoppt nur das betroffene Issue, sofern die nachgewiesene Unabhängigkeit des anderen Issues weiterhin gilt.
 
-### 5. M3-Review
+### 5. Review (optional)
 
-Der Lead startet `agora-reviewer-m3` mit:
+**Der Regelfall überspringt diesen Schritt.** Grünes Gate und ein Regressionstest, der den Defekt trifft, genügen; der Lead hat Diff, Tests und Gate in Schritt 4 selbst verifiziert. Der Lead startet einen Reviewer nur, wenn er den Diff nicht sicher beurteilen kann — etwa bei einer Schema- oder Migrationsänderung mit unklarer Rückwärtskompatibilität.
+
+Wenn er einen startet, dann `agora-reviewer-m3` mit:
 
 - vollständigem Issue und Akzeptanzkriterien,
 - Release-Ziel,
@@ -200,9 +202,7 @@ Der Lead startet `agora-reviewer-m3` mit:
 - frischen Test- und Gate-Ausgaben,
 - betroffenen ADRs, Contracts, Security-Grenzen und Evidence-Hartankern.
 
-Der Reviewer antwortet mit `APPROVE` oder `REQUEST_CHANGES`.
-
-Bei `REQUEST_CHANGES` ist höchstens ein enger Korrekturlauf erlaubt. Danach werden Tests, Gate und Review vollständig wiederholt. Ohne `APPROVE` gibt es keinen Push und keinen PR.
+Der Reviewer antwortet mit `APPROVE` oder `REQUEST_CHANGES`. Seine Antwort ist eine Einschätzung, kein Freigabetor: Der Lead entscheidet, welche Blocker er übernimmt und welche er als Folge-Issue auslagert. Bei übernommenen Blockern ist höchstens ein enger Korrekturlauf erlaubt; danach werden Tests und Gate wiederholt, ein zweiter Reviewer-Lauf ist nicht nötig.
 
 ### 6. Dokumentationssync
 
@@ -213,11 +213,11 @@ Vor Push und PR wird für jedes Issue nachgewiesen:
 - `CHANGELOG.md`: aktualisiert bei ausgeliefertem Nutzer- oder Betriebsverhalten, sonst `NICHT BETROFFEN` mit Begründung,
 - Folge-Issue: erstellt für notwendige, aber nicht erledigte Folgearbeit, sonst `NICHT BETROFFEN` mit Begründung.
 
-Fehlt ein sachlich erforderliches Datei-Artefakt, wird nicht gepusht. Der bestehende lokale Issue-Commit wird einmalig korrigiert und amendiert; danach laufen Lead-Verifikation und Opus-Review für den neuen SHA vollständig erneut.
+Fehlt ein sachlich erforderliches Datei-Artefakt, wird nicht gepusht. Der bestehende lokale Issue-Commit wird einmalig korrigiert und amendiert; danach läuft die Lead-Verifikation für den neuen SHA erneut.
 
 ### 7. Pull Request
 
-Nur nach `APPROVE` und vollständigem Dokumentationssync pusht der Lead den Issue-Branch und öffnet einen separaten PR.
+Bei grünem Gate und vollständigem Dokumentationssync pusht der Lead den Issue-Branch und öffnet einen separaten PR.
 
 Der Pull Request enthält:
 

@@ -189,7 +189,12 @@ warn_unused_configs = true
 module = [
     "app.contracts.*",
 ]
-strict = true
+# Bewusst nicht `strict = true`. Strict schaltet ~10 Flags zu, von denen bei
+# Pydantic-Modellen nur eines trägt: dass Funktionen annotiert sind. Der Rest
+# (disallow_untyped_calls, warn_return_any, disallow_any_generics,
+# no_implicit_reexport) produzierte fast nur Reibung an Pydantic-Dekoratoren
+# und Fremdcode-Aufrufen — Zeit, die kein Contract-Bug rechtfertigt.
+disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
 module = [
