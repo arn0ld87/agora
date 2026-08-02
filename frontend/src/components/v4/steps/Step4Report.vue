@@ -101,6 +101,16 @@ const statusMsg = ref('')
 // steuert Badge-Text/Variant (P2.6: vorher fiel 'incomplete' durch den
 // else-Zweig und blieb als 'running' sichtbar).
 const reportStatus = ref<string>('')
+// Issue #1023 (Befund B-17, P2): pollStatus() verschluckte Transportfehler
+// (`catch { /* swallow */ }`) ohne Retry-Zaehler — bei einem toten Backend
+// wartete der Nutzer auf ein Ergebnis, das laengst nicht mehr zustande kommen
+// konnte. STATUS_POLLING_INTERVAL_MS ist 2500ms (siehe unten); 3
+// aufeinanderfolgende Fehlschlaege sind ~7.5s — lang genug, um eine einzelne
+// verlorene Anfrage oder einen kurzen Backend-Restart zu tolerieren, aber
+// kurz genug, dass der Nutzer nicht minutenlang auf einen toten Poll starrt.
+const POLL_FAILURE_THRESHOLD = 3
+const pollFailureCount = ref(0)
+const pollTransportError = ref(false)
 const reportOutline = ref<ReportOutline | null>(null)
 const generatedSections = ref<Record<string, unknown>>({})
 const currentSectionIndex = ref<number | null>(null)
@@ -468,6 +478,10 @@ async function pollStatus() {
       reportId: props.reportId,
     })) as StatusApiResult
     if (res?.success && res.data) {
+      // Ein erfolgreicher Poll heilt einen zuvor sichtbar gemachten
+      // Transportfehler wieder aus — die Verbindung ist zurueck.
+      pollFailureCount.value = 0
+      pollTransportError.value = false
       const st = res.data
       lastReportStatus.value = st
       statusMsg.value = st.message || ''
@@ -527,7 +541,17 @@ async function pollStatus() {
         stopPolling()
       } else { phase.value = 1 }
     }
-  } catch { /* swallow */ }
+  } catch {
+    // Issue #1023 (Befund B-17): Transportfehler zaehlen statt schweigend
+    // verwerfen. Log nur beim Ueberschreiten der Schwelle (nicht bei jedem
+    // weiteren Fehlschlag danach) — sonst spammt ein anhaltend totes Backend
+    // das Log mit einer Meldung pro Poll-Intervall.
+    pollFailureCount.value++
+    if (pollFailureCount.value === POLL_FAILURE_THRESHOLD) {
+      pollTransportError.value = true
+      addLog(t('step4.status.pollTransportError'))
+    }
+  }
 }
 
 function startPolling() { void statusPolling.start(); void agentLogPolling.start(); void consoleLogPolling.start() }
@@ -719,6 +743,12 @@ onUnmounted(stopPolling)
         </header>
         <p class="card-desc">{{ t('step4.sub') }}</p>
         <p v-if="statusMsg" class="meta">{{ statusMsg }}</p>
+        <!-- Issue #1023 (Befund B-17): Transportfehler beim Status-Polling
+             sichtbar machen statt schweigend zu verschlucken. Heilt sich
+             selbst aus, sobald ein Poll wieder erfolgreich ist. -->
+        <p v-if="pollTransportError" class="meta meta--warn" role="alert" data-testid="report-poll-transport-error">
+          {{ t('step4.status.pollTransportError') }}
+        </p>
         <!-- P2.6: Anzahl fehlgeschlagener Sections sichtbar machen. Auch bei
              status=completed moeglich (z. B. wenn nur optionale Sections
              fehlschlugen) — dann Hinweis statt harte Warnung. -->

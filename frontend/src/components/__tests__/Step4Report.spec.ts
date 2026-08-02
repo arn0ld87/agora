@@ -150,6 +150,7 @@ const i18n = createI18n({
       'common.ready': 'Bereit',
       'step4.status.incomplete': 'Report unvollständig — einige Abschnitte sind fehlgeschlagen.',
       'step4.status.sectionFailed': 'Abschnitt fehlgeschlagen',
+      'step4.status.pollTransportError': 'Verbindung zum Server verloren.',
       'errors.reportFailed': 'Fehler',
       'reportMode.label': 'Report-Modus',
       'reportMode.strict.label': 'Strikt',
@@ -1361,5 +1362,58 @@ describe('Step4Report — Lauf-Modell-Vorbelegung statt Workspace-Default (#1023
     expect(getRunLlmRoutingMock).not.toHaveBeenCalled()
     const vm = wrapper.vm as unknown as { reportRoute: AiModelRef | null }
     expect(vm.reportRoute).toEqual(mockEffectiveRef.value)
+  })
+})
+
+// Issue #1023 (Befund B-17, P2): pollStatus() verschluckte Transportfehler
+// (`catch { /* swallow */ }`) ohne Retry-Zaehler — der Nutzer wartete auf ein
+// Ergebnis, das laengst nicht mehr zustande kommen konnte. Der Defekt zeigt
+// sich nur ueber eine FOLGE fehlgeschlagener Polls, nicht in einem
+// Einzelzustand (genau die Luecke aus #961/#966/#985) — diese Suite ruft
+// pollStatus() deshalb mehrfach in Folge auf statt nur einmal.
+describe('Step4Report — Poll-Transportfehler werden gezaehlt statt verschluckt (#1023, Befund B-17)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorageMock.clear()
+    resetMockSelection()
+  })
+
+  it('zeigt den Transportfehler-Hinweis erst nach 3 aufeinanderfolgenden Fehlschlaegen, nicht bei einem einzelnen', async () => {
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('network down'))
+
+    const wrapper = mountComponent()
+    // onMounted ruft pollStatus() einmal auf — Fehlschlag #1.
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-testid="report-poll-transport-error"]').exists()).toBe(false)
+
+    const vm = wrapper.vm as unknown as { pollStatus: () => Promise<void> }
+    await vm.pollStatus() // Fehlschlag #2
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-testid="report-poll-transport-error"]').exists()).toBe(false)
+
+    await vm.pollStatus() // Fehlschlag #3 — Schwelle erreicht
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-testid="report-poll-transport-error"]').exists()).toBe(true)
+  })
+
+  it('heilt den Transportfehler-Hinweis aus, sobald ein Poll wieder erfolgreich ist', async () => {
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('network down'))
+
+    const wrapper = mountComponent()
+    await flushPromises()
+    const vm = wrapper.vm as unknown as { pollStatus: () => Promise<void> }
+    await vm.pollStatus()
+    await vm.pollStatus()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-testid="report-poll-transport-error"]').exists()).toBe(true)
+
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      success: true,
+      data: { status: 'planning', report_id: 'report_test01', simulation_id: 'sim_test01' },
+    })
+    await vm.pollStatus()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-testid="report-poll-transport-error"]').exists()).toBe(false)
   })
 })

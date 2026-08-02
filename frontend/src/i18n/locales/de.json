@@ -585,7 +585,8 @@
     },
     "status": {
       "incomplete": "Report unvollständig — einige Abschnitte sind fehlgeschlagen.",
-      "sectionFailed": "Abschnitt fehlgeschlagen"
+      "sectionFailed": "Abschnitt fehlgeschlagen",
+      "pollTransportError": "Verbindung zum Server verloren — der Status konnte mehrfach in Folge nicht abgerufen werden. Prüfe deine Verbindung; die Anzeige aktualisiert sich automatisch, sobald ein Abruf wieder gelingt."
     },
     "next": "Weiter zum Gespräch →"
   },

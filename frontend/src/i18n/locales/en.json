@@ -585,7 +585,8 @@
     },
     "status": {
       "incomplete": "Report incomplete — some sections failed.",
-      "sectionFailed": "Section failed"
+      "sectionFailed": "Section failed",
+      "pollTransportError": "Lost connection to the server — status could not be fetched for several attempts in a row. Check your connection; this will update automatically once a fetch succeeds again."
     },
     "next": "Next: conversation →"
   },
