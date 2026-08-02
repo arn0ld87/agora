@@ -20,7 +20,12 @@ Allgemeine Tool-Pipeline und Skill-Discovery-Regeln stehen in der globalen `~/.c
 - `/agora-batch-issues`: maximal zwei nachweislich unabhängige Issues parallel; jedes Issue bleibt in eigenem Worktree, Commit und PR.
 - Schreibende Worker verwenden `isolation: worktree`, pushen nicht und erzeugen genau einen lokalen Commit.
 - Der Lead verifiziert Diff, Tests und Gate selbst. Worker-Zusammenfassungen gelten nicht als Nachweis.
-- Vor Push und PR prüft ein read-only Reviewer den Issue-Commit. Nur `APPROVE` erlaubt die Veröffentlichung. **Aktueller Ist-Zustand:** der `/agora-next-task`-Skripttext ruft `agora-opus-reviewer` auf (Agent-Frontmatter: `model: opus`, echtes Claude-Opus) — nicht `agora-reviewer-m3`. Beide Reviewer-Definitionen existieren parallel (`.claude/agents/agora-opus-reviewer.md` und `.claude/agents/agora-reviewer-m3.md`); welche final bleibt, ist noch nicht entschieden.
+- Vor Push und PR gilt ein **abgestuftes Review-Gate**:
+  - **Regelfall — mechanischer Nachweis statt Reviewer-Subagent.** Der Issue-Commit braucht kein Reviewer-Gate, wenn der Regressionstest nachweislich RED → GREEN läuft: er schlägt auf dem Stand *vor* dem Fix fehl und besteht danach, und beide Ausgaben stehen im PR-Text. Ohne diesen Nachweis ist der Slice nicht fertig. Begründung: ein Test gegen den falschen Codepfad wird gar nicht erst rot — der Nachweis trifft damit genau die Fehlerklasse, die ein Diff-Review erfahrungsgemäß durchlässt (#961, #966 und #985 haben nacheinander denselben Defekt auf dem falschen Pfad adressiert und sind alle durch das Reviewer-Gate gegangen).
+  - **Ausnahme — read-only Reviewer verpflichtend.** Berührt der Commit einen Lead-Trigger (siehe [Subagent-Routing](#subagent-routing)), prüft ein read-only Reviewer den Issue-Commit. Nur `APPROVE` erlaubt die Veröffentlichung.
+  - CodeRabbit läuft in beiden Fällen am PR und blockiert den Lead nicht. Findings werden im PR-Thread beantwortet, nicht nur im Chat entschieden.
+
+  **Ist-Zustand Reviewer:** der `/agora-next-task`-Skripttext ruft `agora-opus-reviewer` auf (Agent-Frontmatter: `model: opus`, echtes Claude-Opus) — nicht `agora-reviewer-m3`. Beide Reviewer-Definitionen existieren parallel (`.claude/agents/agora-opus-reviewer.md` und `.claude/agents/agora-reviewer-m3.md`); welche final bleibt, ist noch nicht entschieden ([#803](https://github.com/arn0ld87/agora/issues/803)). **Solange [#802](https://github.com/arn0ld87/agora/issues/802) offen ist, gilt eine leere Reviewer-Rückgabe als fehlgeschlagenes Review, nicht als Freigabe.**
 - Keine Agent Teams für normale Issue-Arbeit. Subagenten reichen aus und halten die Kontexte getrennt.
 
 ## Subagent-Routing
@@ -32,7 +37,7 @@ Für jede Rolle existieren aktuell zwei parallele Agent-Definitionen unter `.cla
 | Aufgabe | Bevorzugtes Modell | Bevorzugter Subagent |
 |---|---|---|
 | Architektur, Cross-Layer, ambige Specs | Lead-Modell | kein Implementer-Subagent |
-| Abschlussreview eines Issue-Commits | `opus` | `agora-reviewer-m3` |
+| Abschlussreview eines Issue-Commits (nur bei Lead-Trigger) | `opus` | `agora-reviewer-m3` |
 | Backend-Refactor, Pydantic, Provider, Persistenz | `sonnet` | `agora-refactor-worker-m3` |
 | Tests, FSM, E2E, Persona-Quoten | `sonnet` | `agora-test-worker-m3` |
 | Vue, Pinia, Zod, A11y | `sonnet` | `agora-frontend-worker-m3` |

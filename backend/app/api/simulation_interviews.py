@@ -58,14 +58,60 @@ def _require_interview_backend(simulation_id: str):
     )
 
 
+def _aggregate_batch_error(result: dict):
+    """Pull a human-readable error out of the direct-path batch result shape.
+
+    ``interview_agents_batch_direct`` reports failures per agent inside
+    ``result["result"]["results"][<key>]["error"]`` and never sets a top-level
+    ``error`` (unlike the IPC path, which already does). Without this, a
+    failed direct-path batch/all-interview surfaces no usable message at the
+    envelope level — the exact defect behind the "Netzwerkfehler" symptom in
+    #1000. Returns ``None`` when there is nothing to aggregate.
+    """
+    inner = result.get("result")
+    if not isinstance(inner, dict):
+        return None
+    entries = inner.get("results")
+    if not isinstance(entries, dict):
+        return None
+    errors = []
+    for entry in entries.values():
+        if isinstance(entry, dict):
+            error = entry.get("error")
+            if error and error not in errors:
+                errors.append(error)
+    if not errors:
+        return None
+    # Bewusst nur die erste Ursache, ohne generierten Rahmentext: der Wert wird
+    # im Frontend unveraendert angezeigt, und ein hier formulierter Satz waere
+    # ein hartkodierter UI-Text, der die vue-i18n-Lokalisierung umgeht.
+    return errors[0]
+
+
 def _echo_result(result: dict):
     """Return result as data while mirroring its internal ``success`` flag at the envelope level.
 
     Preserves the legacy response shape for interview endpoints, where the
     outer ``success`` tracked the runner's internal success rather than the HTTP
-    layer outcome.
+    layer outcome. ``data`` always carries the full, unmodified ``result`` and
+    the HTTP status stays 200 — breaking either would be a contract change for
+    existing consumers and is out of scope here.
+
+    On failure, a top-level ``error`` (and, if present, ``code``) is mirrored
+    additively so the frontend's response interceptor — which only reads
+    top-level fields — can surface the real cause instead of falling back to
+    a generic "Unbekannter Fehler".
     """
-    return jsonify({"success": result.get("success", False), "data": result})
+    success = result.get("success", False)
+    envelope: dict = {"success": success, "data": result}
+    if not success:
+        error = result.get("error") or _aggregate_batch_error(result)
+        if error:
+            envelope["error"] = error
+        code = result.get("code")
+        if code:
+            envelope["code"] = code
+    return jsonify(envelope)
 
 
 @simulation_bp.route('/interview', methods=['POST'])
