@@ -198,3 +198,31 @@ def test_alt_log_mit_negativer_zeit_bricht_den_reader_nicht(tmp_path: Path) -> N
         RoundEndEvent.from_log_entry(
             {"event_type": "round_end", "round": 1, "simulated_minutes": -60}
         )
+
+
+def test_reader_traegt_die_zeit_ueber_die_tagesgrenze(tmp_path: Path) -> None:
+    """Derselbe Schutz wie ``test_tages_uhrzeit_ist_kein_fortschritt``, eine Ebene tiefer.
+
+    Jener Test endet beim ``RoundEndEvent``. Ob der *Reader* die Stunden
+    kumulativ übernimmt, blieb offen: ``test_simulierte_zeit_waechst_nach_jeder_runde``
+    kommt über Runde 6 (3.0 h) nicht hinaus und sieht die Tagesgrenze nie.
+
+    Baute jemand im Reader ein ``% 24`` ein oder läse er ein Tages-Uhrzeit-Feld,
+    kollabierten 24.0/24.5/48.5 h auf 0.0/0.5/0.5. Das ``max()`` in
+    ``read_action_log_chunk`` würde den Rückschritt *verdecken* statt ihn zu
+    melden — die Anzeige bliebe ab Tag 2 stehen. Genau der Klassenfehler aus
+    B-28 (dauerhafte 0), nur eine Tagesgrenze später.
+    """
+    logger = PlatformActionLogger("twitter", str(tmp_path))
+    state = SimulationRunState(simulation_id="sim_tagesgrenze")
+
+    position = 0
+    verlauf: list[float] = []
+    for round_num in (48, 49, 97):
+        logger.log_round_end(round_num, 3, simulated_minutes=round_num * MINUTES_PER_ROUND)
+        position = _read(logger, state, position)
+        verlauf.append(state.simulated_hours)
+
+    assert verlauf == [24.0, 24.5, 48.5]
+    assert all(spaeter > frueher for frueher, spaeter in zip(verlauf, verlauf[1:])), verlauf
+    assert state.current_round == 97
