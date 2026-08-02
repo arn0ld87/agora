@@ -8,6 +8,7 @@ Pflicht-Lesepfad bei Änderungen:
 """
 from .report_contract import (
     ConfidenceLabel,
+    EvidenceDegradationModel,
     EvidenceItemModel,
     EvidenceMapModel,
     EvidenceSourceKind,
@@ -170,6 +171,7 @@ __all__ = [
     "EdgeReinforcement",
     "EdgeWeakening",
     "EntityRelationship",
+    "EvidenceDegradationModel",
     "EvidenceItemModel",
     "EvidenceMapModel",
     "EvidenceSourceKind",

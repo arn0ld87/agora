@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Iterable, List, Sequence
+from typing import TYPE_CHECKING, Any, Iterable, List, Sequence
 
 if TYPE_CHECKING:  # pragma: no cover - nur für Typprüfung
     from ...models.report import ReportStatus
@@ -267,11 +267,52 @@ def resolve_report_status(
     return ReportStatus.INCOMPLETE
 
 
+def apply_degradation_downgrade(
+    status: "ReportStatus",
+    degradation_log: Iterable[Any],
+) -> "ReportStatus":
+    """Stuft COMPLETED auf INCOMPLETE ab, wenn Claims lokal degradiert wurden.
+
+    Issue #1006: ein Report, in dem ein ADR-0002-Verstoss durch lokale
+    Abstufung aufgefangen wurde, ist inhaltlich unvollständig — der Nutzer
+    soll das sehen, statt ein COMPLETED zu lesen, das der Report nicht
+    einlöst. Bereits INCOMPLETE- oder FAILED-Status werden nicht
+    aufgewertet.
+    """
+    from ...models.report import ReportStatus  # noqa: PLC0415 — zyklischer Import
+
+    if not degradation_log:
+        return status
+    if status == ReportStatus.COMPLETED:
+        return ReportStatus.INCOMPLETE
+    return status
+
+
+def is_deliverable_report_status(status: "ReportStatus") -> bool:
+    """True, wenn der Report ausgeliefert werden kann statt als Fehlschlag zu gelten.
+
+    Issue #1006: ``INCOMPLETE`` ist ein Teilergebnis, kein technischer Fehler.
+    Der Report existiert, ist lesbar und exportierbar — einzelne Claims wurden
+    lokal abgestuft oder eine Section ist fehlgeschlagen. Wird er trotzdem in
+    den failed-Zweig geschickt, liest der Nutzer "Report generation failed",
+    obwohl das Ergebnis vorliegt; genau diese Zustellungslücke hätte die
+    Degradierung aus #1006 in der Oberfläche wirkungslos gemacht.
+
+    ``FAILED``, ``PENDING``, ``PLANNING`` und ``GENERATING`` sind ausdrücklich
+    nicht auslieferbar.
+    """
+    from ...models.report import ReportStatus  # noqa: PLC0415 — zyklischer Import
+
+    return status in (ReportStatus.COMPLETED, ReportStatus.INCOMPLETE)
+
+
 __all__ = [
     "FALLBACK_MARKERS",
     "FinalContentRejected",
     "MIN_CONTENT_CHARS",
     "SanitizedContent",
+    "apply_degradation_downgrade",
+    "is_deliverable_report_status",
     "is_fallback_content",
     "resolve_report_status",
     "sanitize_final_content",

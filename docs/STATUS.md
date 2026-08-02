@@ -27,7 +27,7 @@ Die Produktreife wird ab diesem Dokumentationsumbau über [`VERSION`](../VERSION
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 4156 | `cd backend && uv run pytest --collect-only -q` |
+| Backend Tests (collected) | 4163 | `cd backend && uv run pytest --collect-only -q` |
 | Frontend Test-Files | 178 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
@@ -47,7 +47,7 @@ Agora besitzt eine vollständige fachliche Grundpipeline:
 - Dokument-/Webseitenaufnahme und Knowledge-Graph-Build
 - Persona-Erzeugung, Review und Simulation
 - Run-Dashboard, Status, Stop/Pause/Resume und Live-Ereignisse
-- Evidence-orientierte Reports und Exporte
+- Evidence-orientierte Reports und Exporte; ein einzelner ADR-0002-Verstoß beendet den Report nicht mehr als `failed`, sondern wird lokal abgestuft und maschinenlesbar protokolliert ([#1006](https://github.com/arn0ld87/agora/issues/1006))
 - Compare-, Graph-Diff- und Observability-Grundlagen
 - fortsetzbare Embedding-Migration für Entity- und Fact-Vektoren
 - Kosten-, Token- und Zeitbudgets für Runs ([#764](https://github.com/arn0ld87/agora/issues/764), ADR-0012): Preflight-Schätzung mit ehrlichen Bereichen, weiche/harte Limits pro Run, Live-Verbrauchsmonitor, Abschlussanalyse nach Stage/Provider/Modell, Budgetabbruch über `termination_reason` von Fehler/Nutzerabbruch unterscheidbar, Verbrauch im Report-Export

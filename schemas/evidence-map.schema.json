@@ -53,6 +53,41 @@
       "title": "EntailmentVerdict",
       "type": "string"
     },
+    "EvidenceDegradationModel": {
+      "additionalProperties": false,
+      "description": "Maschinenlesbares Protokoll einer lokalen Claim-Degradierung (Issue #1006).\n\nEin einzelner ADR-0002-Verstoss kippte bisher den gesamten Report auf\nFAILED und vernichtete bereits fertige Sections. Statt den Validator zu\nlockern, wird der verletzende Claim lokal abgestuft und die Reparatur\nhier protokolliert.",
+      "properties": {
+        "action": {
+          "title": "Action",
+          "type": "string"
+        },
+        "claim_id": {
+          "title": "Claim Id",
+          "type": "string"
+        },
+        "detail": {
+          "title": "Detail",
+          "type": "string"
+        },
+        "section_index": {
+          "title": "Section Index",
+          "type": "integer"
+        },
+        "violation": {
+          "title": "Violation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "section_index",
+        "claim_id",
+        "violation",
+        "action",
+        "detail"
+      ],
+      "title": "EvidenceDegradationModel",
+      "type": "object"
+    },
     "EvidenceItemModel": {
       "additionalProperties": false,
       "description": "Bestehende EvidenceItem-Felder aus report_agent.py, jetzt typsicher.",
@@ -541,6 +576,13 @@
   "additionalProperties": false,
   "description": "Persistierte Evidence-Map. Abl\u00f6se f\u00fcr die rohen Dicts in report_agent.py.",
   "properties": {
+    "degradation_log": {
+      "items": {
+        "$ref": "#/$defs/EvidenceDegradationModel"
+      },
+      "title": "Degradation Log",
+      "type": "array"
+    },
     "global_evidence": {
       "items": {
         "$ref": "#/$defs/EvidenceItemModel"

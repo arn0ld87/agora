@@ -6,6 +6,7 @@ import uuid
 from flask import current_app
 
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
+from ..services.report_agent.output_contract import is_deliverable_report_status
 from ..services.run_registry import RunRegistry
 from ..services.simulation_manager import SimulationManager
 from ..models.project import ProjectManager
@@ -208,19 +209,33 @@ class ReportGenerationService:
                     task_manager.update_task(task_id, progress=progress, message=f"[{stage}] {message}")
                 report = agent.generate_report(progress_callback=progress_callback, report_id=report_id, report_mode=report_mode)
                 ReportManager.save_report(report, report_mode=report_mode)
-                if report.status == ReportStatus.COMPLETED:
+                # Issue #1006: INCOMPLETE ist ein Teilergebnis, kein Fehlschlag.
+                # Der Report existiert, ist lesbar und exportierbar — nur
+                # einzelne Claims wurden lokal abgestuft oder eine Section ist
+                # fehlgeschlagen. Ihn in den failed-Zweig zu schicken hiesse:
+                # der Nutzer liest "Report generation failed", obwohl das
+                # Ergebnis vorliegt, und bekommt ein Resume angeboten, das
+                # bereits fertige Sections ohnehin ueberspringt. Genau diese
+                # Zustellungsluecke haette den Fix aus #1006 in der Oberflaeche
+                # wirkungslos gemacht.
+                if is_deliverable_report_status(report.status):
+                    _incomplete = report.status == ReportStatus.INCOMPLETE
                     run_registry.update_run(
                         run_record["run_id"],
                         status="completed",
                         progress=100,
-                        message="Report generated",
+                        message=(
+                            "Report generated with degraded claims"
+                            if _incomplete
+                            else "Report generated"
+                        ),
                         artifacts=ArtifactLocator.existing_paths({
                             "report": ArtifactLocator.report_artifacts(report_id),
                             "simulation": ArtifactLocator.simulation_artifacts(simulation_id),
                         }),
                         resume_capability={"available": False, "action": None, "label": None},
                     )
-                    task_manager.complete_task(task_id, result={"report_id": report.report_id, "simulation_id": simulation_id, "status": "completed"})
+                    task_manager.complete_task(task_id, result={"report_id": report.report_id, "simulation_id": simulation_id, "status": report.status.value})
                 else:
                     run_registry.update_run(
                         run_record["run_id"],

@@ -272,12 +272,33 @@ export const ReportSchema = z.object({
 }).strict();
 export type Report = z.infer<typeof ReportSchema>;
 
+/**
+ * Protokoll einer lokalen Claim-Degradierung (Issue #1006).
+ *
+ * Ein einzelner ADR-0002-Verstoß beendet den Report nicht mehr als `failed`;
+ * der verletzende Claim wird lokal abgestuft und die Reparatur hier
+ * festgehalten. `action` ist einer von "downgraded_to_low",
+ * "moved_to_hypotheses" oder "dropped" — bewusst als String gespiegelt, weil
+ * das Backend dafür ebenfalls keinen Enum führt.
+ */
+export const EvidenceDegradationSchema = z.object({
+  section_index: z.number().int(),
+  claim_id: z.string(),
+  violation: z.string(),
+  action: z.string(),
+  detail: z.string(),
+}).strict();
+export type EvidenceDegradation = z.infer<typeof EvidenceDegradationSchema>;
+
 export const EvidenceMapSchema = z.object({
   schema_version: z.literal(2),
   report_id: z.string().min(1),
   simulation_id: z.string().min(1),
   global_evidence: z.array(EvidenceItemSchema).default([]),
   sections: z.array(ReportSectionSchema).default([]),
+  // Additiv mit Default: persistierte Evidence-Maps von vor #1006 tragen das
+  // Feld nicht und müssen weiterhin parsen.
+  degradation_log: z.array(EvidenceDegradationSchema).default([]),
 }).strict();
 export type EvidenceMap = z.infer<typeof EvidenceMapSchema>;
 

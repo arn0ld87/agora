@@ -185,6 +185,9 @@ const VALID_EVIDENCE: EvidenceMap = {
   simulation_id: 'sim_test01',
   global_evidence: [],
   sections: [],
+  // Issue #1006: additives Feld mit Default. Wie global_evidence und sections
+  // ist es im z.infer-Output-Typ required, obwohl es beim Parsen optional ist.
+  degradation_log: [],
 }
 
 // Hilfsfunktion zum Mounten
