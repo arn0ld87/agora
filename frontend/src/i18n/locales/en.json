@@ -1345,7 +1345,8 @@
     "empty": "No activity yet.",
     "showMoreReplies": "{count} more reply | {count} more replies",
     "pipeline": "Pipeline",
-    "feedTab": "Live Feed"
+    "feedTab": "Live Feed",
+    "sentimentBar": "Sentiment trend of recent posts"
   },
   "observability": {
     "viewTrace": "View trace ({id}…)"

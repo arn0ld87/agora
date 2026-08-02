@@ -3,7 +3,7 @@
 // Sichert ab, dass `formatEdgeLabel` zuerst die i18n-Map nutzt und nur dann
 // auf eine Heuristik zurückfällt, wenn der Lookup misslingt.
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 
 import {
   formatEdgeLabel,
@@ -77,5 +77,25 @@ describe('formatEdgeLabel', () => {
     expect(formatEdgeLabel('', fakeT({}))).toBe('')
     expect(formatEdgeLabel(null, fakeT({}))).toBe('')
     expect(formatEdgeLabel(undefined, fakeT({}))).toBe('')
+  })
+
+  // Issue #1023 (Befund B-04): formatEdgeLabel() rief t(fullKey) fuer jede
+  // LLM-generierte, nicht in graph.edgeLabels hinterlegte Relation auf —
+  // vue-i18n loggt das im Dev-Modus als "not found"-Warnung, bevor
+  // humanizeEdgeKey() ueberhaupt greift. Der te()-Guard verhindert den
+  // t()-Aufruf strukturell, statt sich auf das Miss-Verhalten zu verlassen.
+  it('ruft t() nicht auf, wenn te() den Key als fehlend meldet', () => {
+    const t = vi.fn((key: string) => key)
+    const te = vi.fn(() => false)
+    expect(formatEdgeLabel('SOME_UNKNOWN_RELATION', t, te)).toBe('Some Unknown Relation')
+    expect(te).toHaveBeenCalledWith('graph.edgeLabels.SOME_UNKNOWN_RELATION')
+    expect(t).not.toHaveBeenCalled()
+  })
+
+  it('ruft t() auf, wenn te() den Key als vorhanden meldet', () => {
+    const t = vi.fn(() => 'arbeitet für')
+    const te = vi.fn(() => true)
+    expect(formatEdgeLabel('WORKS_FOR', t, te)).toBe('arbeitet für')
+    expect(t).toHaveBeenCalledWith('graph.edgeLabels.WORKS_FOR')
   })
 })
