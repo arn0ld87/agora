@@ -56,7 +56,11 @@ Runbooks:
 
 ## Worktree-Pfad
 
-**Pflicht:** Alle Agora-Worktrees liegen unter `/Volumes/T7/Worktrees/agora/<slice-id>/`. `/private/tmp` ist verboten. T7-Mount vor dem Anlegen prüfen (`test -d /Volumes/T7`). Volle Strategie in [`docs/runbooks/worktree-strategy.md`](docs/runbooks/worktree-strategy.md).
+**Pflicht für manuell angelegte Worktrees:** Alle per `git worktree add` erzeugten Agora-Worktrees liegen unter `/Volumes/T7/Worktrees/agora/<slice-id>/`. `/private/tmp` ist verboten. T7-Mount vor dem Anlegen prüfen (`test -d /Volumes/T7`).
+
+**Ausnahme:** Harness-isolierte Subagenten (`isolation: worktree`) arbeiten in dem ihnen von der Runtime zugewiesenen Worktree unter `.claude/worktrees/agent-<id>/`. Das ist zulässig; ein Runtime-Hook sperrt für sie jeden anderen Pfad. Der Lead legt für solche Worker keinen T7-Worktree an.
+
+Volle Strategie in [`docs/runbooks/worktree-strategy.md`](docs/runbooks/worktree-strategy.md).
 
 ## Verboten
 

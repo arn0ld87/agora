@@ -131,7 +131,11 @@ Kein `--no-verify`-Bypass. Runbook: [`docs/runbooks/pre-push-gate.md`](docs/runb
 
 ## Worktree-Pfad
 
-**Pflicht:** Alle Agora-Worktrees liegen unter `/Volumes/T7/Worktrees/agora/<slice-id>/`. `/private/tmp` ist für Agora-Worktrees verboten — `git worktree add` ohne T7-Pfad wird vom Lead zurückgewiesen. T7-Mount wird vor dem Anlegen verifiziert (`test -d /Volumes/T7`). Volle Strategie in [`docs/runbooks/worktree-strategy.md`](docs/runbooks/worktree-strategy.md).
+**Pflicht für manuell angelegte Worktrees:** Alle per `git worktree add` erzeugten Agora-Worktrees liegen unter `/Volumes/T7/Worktrees/agora/<slice-id>/`. `/private/tmp` ist verboten. T7-Mount wird vor dem Anlegen verifiziert (`test -d /Volumes/T7`).
+
+**Ausnahme — harness-isolierte Subagenten:** Worker mit `isolation: worktree` bekommen ihren Worktree von der Agent-Runtime unter `.claude/worktrees/agent-<id>/` zugewiesen (Branch `worktree-agent-<id>`). Das ist zulässig und der Normalfall. Ein PreToolUse-Hook sperrt für solche Worker jede Git-Operation außerhalb ihres eigenen Worktrees — ein vom Lead auf T7 vorbereiteter Pfad ist für sie unerreichbar. Der Lead bereitet für diese Worker deshalb **keinen** T7-Worktree vor und gibt keinen Zielpfad im Briefing vor; er übernimmt den Commit anschließend per `git cherry-pick` auf einen sprechenden Branch.
+
+Volle Strategie in [`docs/runbooks/worktree-strategy.md`](docs/runbooks/worktree-strategy.md).
 
 ## Provider-Detection-SSoT
 
