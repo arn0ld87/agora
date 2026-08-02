@@ -24,6 +24,7 @@ Quelle für die Variablennamen ist der Code (Backend `os.getenv` / `pydantic-set
 | `SECRET_KEY` 🔐 | Flask-Session-Signing |
 | `AGORA_FERNET_KEY` 🔐 | symmetrische Verschlüsselung (Secrets-at-rest) — siehe [`secret-key-lifecycle.md`](secret-key-lifecycle.md) |
 | `AGORA_MAX_UPLOAD_SIZE_MB` | Upload-Limit |
+| `NLTK_DISABLE_IMPORT_SECURITY` | schaltet den Import-Hook von nltk ≥ 3.10 ab; nötig, wenn die venv unter dem Arbeitsverzeichnis liegt (Container und `cd backend`). Dockerfile und Testsuite setzen `1` bereits — siehe [`dependency-risk-register.md`](dependency-risk-register.md), Abschnitt „nltk-Baseline" |
 
 ## Auth & Tickets
 

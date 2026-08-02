@@ -81,6 +81,41 @@ betroffenen Advisories lösen sich dabei unterschiedlich ehrlich auf:
 seit 2026-07-27 geschlossen; beide Zeiger sind jetzt auf die jeweils zutreffenden
 Issues korrigiert (#995 bzw. #661).
 
+### Nebenwirkung des Bumps: `NLTK_DISABLE_IMPORT_SECURITY=1`
+
+nltk 3.10 bringt einen zusätzlichen Import-Hook mit ([`nltk/inisec.py`](https://github.com/nltk/nltk)),
+der jeden **von nltk ausgelösten** Import blockiert, dessen Modul unterhalb des
+aktuellen Arbeitsverzeichnisses liegt. Er unterscheidet dabei nicht zwischen dem
+Projektbaum und einer virtuellen Umgebung, die zufällig darunter liegt — und genau
+das ist bei Agora der Regelfall:
+
+* Container: `WORKDIR /app`, venv unter `/app/backend/.venv`
+* lokal: `cd backend && uv run …`, venv unter `backend/.venv`
+
+In beiden Fällen gilt *jedes* venv-Paket als „aus dem CWD". Sobald `unstructured`
+beim Parsen nltk lädt, fliegen `regex` und `defusedxml` mit einem `ImportError`
+heraus — der Ingestion-Pfad bricht zur Laufzeit, nicht beim Build.
+
+**Entscheidung (2026-08-02, mit User-Sign-off):** Der Hook wird per
+`NLTK_DISABLE_IMPORT_SECURITY=1` deaktiviert — gesetzt in der base- und der
+prod-Stage des [`Dockerfile`](../Dockerfile) und in
+[`backend/tests/conftest.py`](../backend/tests/conftest.py) für die Testsuite.
+
+Das ist **kein** Zurücknehmen des CVE-Fixes: GHSA-p4gq-832x-fm9v betrifft eine
+Path Traversal in `nltk.data.load()`, und dieser Fix bleibt vollständig aktiv. Der
+abgeschaltete Hook ist eine zusätzliche Defense-in-Depth gegen
+CWD-Import-Hijacking. Sie greift hier ohnehin ins Leere: Der Container läuft mit
+read-only Rootfs und nicht-root User; wer eine `regex.py` nach `/app` schreiben
+kann, hat bereits Code-Ausführung.
+
+`PYTHONSAFEPATH=1` ist **keine** Alternative, obwohl die Fehlermeldung von nltk es
+vorschlägt — nltk setzt die Variable selbst per `setdefault` und der Hook greift
+trotzdem. Verifiziert am 2026-08-02.
+
+Abgesichert durch [`backend/tests/test_nltk_import_guard.py`](../backend/tests/test_nltk_import_guard.py):
+der Test importiert nltk als Subprozess aus beiden realen Arbeitsverzeichnissen und
+prüft, dass das Dockerfile den Opt-out in beiden Stages setzt.
+
 ## Trivy Container Scan Baseline — aufgelöst 2026-07-31 (vormals Hardstop 2026-08-30)
 
 Trivy-Findings aus `.github/workflows/docker-image.yml` (`exit-code: "1"`, `ignore-unfixed: true`).

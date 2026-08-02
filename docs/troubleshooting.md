@@ -68,6 +68,12 @@
 - **Behebung:** Hardstops beachten — NLTK 28.09.2026, Trivy 30.08.2026; neue Ausnahmen brauchen Issue, Owner, Deadline und Hardstop.
 - **Referenz:** [`dependency-risk-register.md`](dependency-risk-register.md).
 
+### `ImportError: Blocked import of regex from current working directory`
+- **Symptom:** Ingestion bzw. Dokument-Parsing bricht mit `ImportError: Blocked import of regex …` oder `… of defusedxml …`. Tritt zur Laufzeit auf, nicht beim Build.
+- **Ursache:** nltk ≥ 3.10 installiert einen Import-Hook, der von nltk ausgelöste Imports unterhalb des Arbeitsverzeichnisses blockiert. Liegt die venv unter dem CWD (`cd backend && …`, im Container `WORKDIR /app` mit `/app/backend/.venv`), gilt jedes venv-Paket als „aus dem CWD".
+- **Behebung:** `NLTK_DISABLE_IMPORT_SECURITY=1` setzen. Dockerfile und Testsuite tun das bereits; beim manuellen Start ausserhalb beider Wege selbst setzen. `PYTHONSAFEPATH=1` hilft **nicht**, obwohl die Fehlermeldung es vorschlägt.
+- **Referenz:** [`dependency-risk-register.md`](dependency-risk-register.md), Abschnitt „nltk-Baseline".
+
 ## Upload & E2E
 
 ### `upload_too_large` (413) / `unsupported_format` (400)
