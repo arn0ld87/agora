@@ -5,6 +5,13 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Changed (Worktree-Regel und Permission-Modus — 2026-08-02)
+
+- **Die T7-Worktree-Pflicht gilt nur noch für manuell angelegte Worktrees.** Sie war mit `isolation: worktree`-Subagenten nicht einhaltbar: Ein PreToolUse-Hook der Agent-Runtime sperrt einem isolierten Worker jede Git-Operation außerhalb des ihm zugewiesenen Worktrees unter `.claude/worktrees/agent-<id>/`. Ein vom Lead pflichtgemäß auf T7 vorbereiteter Pfad ist für ihn unerreichbar — der Worker meldet den Konflikt und arbeitet nicht. Das ist eine Permission-Entscheidung, keine Empfehlung.
+- **Harness-zugewiesene Worktrees sind damit ausdrücklich zulässig** und der Normalfall bei Subagent-Dispatch. Der Lead bereitet für solche Worker keinen T7-Worktree vor und gibt keinen Zielpfad im Briefing vor; er übernimmt den Commit anschließend per `git cherry-pick` auf einen sprechend benannten Branch. `/private/tmp` bleibt verboten, für manuelle Worktrees gilt die T7-Konvention unverändert. Geändert in [`CLAUDE.md`](CLAUDE.md), [`AGENTS.md`](AGENTS.md) und dem SSoT [`docs/runbooks/worktree-strategy.md`](docs/runbooks/worktree-strategy.md).
+- **Ergänzt: Harness-Worktrees überleben keinen Prozess-Neustart zuverlässig.** Vor dem Aufräumen ist auf uncommittete Arbeit zu prüfen. Genau dieser Fall trat bei der Umsetzung ein — ein Systemabsturz kostete zwei Worker-Ergebnisse, eines davon war im Worktree noch zu retten.
+- **`.claude/settings.json` läuft auf `defaultMode: "bypassPermissions"`.** Die `allow`- und `ask`-Listen entfallen, weil sie in diesem Modus wirkungslos sind.
+
 ### Changed (Review-Gate, mypy-strict und Frontend-Build entschärft — 2026-08-02)
 
 - **Der Regelfall braucht keinen Reviewer-Subagenten mehr.** Bisher verlangten [`CLAUDE.md`](CLAUDE.md), [`agora-next-task`](.claude/commands/agora-next-task.md), [`agora-batch-issues`](.claude/commands/agora-batch-issues.md) und [`subagent-routing.md`](docs/runbooks/subagent-routing.md) übereinstimmend ein `APPROVE` des `agora-opus-reviewer` vor Push und PR. Ein Reviewer ist jetzt optional und seine Antwort eine Einschätzung, kein Freigabetor — der Lead entscheidet, welche Blocker er übernimmt. Erforderlich bleiben ein Regressionstest, der den Defekt trifft, und ein grünes `pre-push-gate.sh`.
