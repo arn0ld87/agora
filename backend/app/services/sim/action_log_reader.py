@@ -25,6 +25,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
+from pydantic import ValidationError
+
+from ...contracts.sim_action_log_contract import RoundEndEvent
 from ...utils.logger import get_logger
 from .run_state_store import AgentAction, RunnerStatus, SimulationRunState
 
@@ -108,17 +111,27 @@ def read_action_log_chunk(
                                 )
 
                         elif event_type == "round_end":
-                            round_num = action_data.get("round", 0)
-                            simulated_hours = action_data.get("simulated_hours", 0)
+                            # Vertrag statt implizitem Dict-Schlüssel: der Writer
+                            # schreibt simulated_minutes, die Stunden werden hier
+                            # abgeleitet (siehe sim_action_log_contract).
+                            round_end = RoundEndEvent.from_log_entry(action_data)
+                            round_num = round_end.round
+                            simulated_hours = round_end.simulated_hours
 
+                            # max(): der Fortschritt darf nie zurückspringen —
+                            # etwa durch Alt-Einträge ohne simulated_minutes.
                             if platform == "twitter":
                                 if round_num > state.twitter_current_round:
                                     state.twitter_current_round = round_num
-                                state.twitter_simulated_hours = simulated_hours
+                                state.twitter_simulated_hours = max(
+                                    state.twitter_simulated_hours, simulated_hours
+                                )
                             elif platform == "reddit":
                                 if round_num > state.reddit_current_round:
                                     state.reddit_current_round = round_num
-                                state.reddit_simulated_hours = simulated_hours
+                                state.reddit_simulated_hours = max(
+                                    state.reddit_simulated_hours, simulated_hours
+                                )
 
                             if round_num > state.current_round:
                                 state.current_round = round_num
@@ -147,7 +160,10 @@ def read_action_log_chunk(
                     if graph_updater:
                         graph_updater.add_activity_from_dict(action_data, platform)
 
-                except json.JSONDecodeError:
+                except (json.JSONDecodeError, ValidationError):
+                    # Eine defekte Zeile überspringen. Ohne ValidationError hier
+                    # würde ein einzelnes kaputtes Event den äußeren Handler
+                    # auslösen und den gesamten restlichen Chunk verwerfen.
                     pass
             return f.tell()
     except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally

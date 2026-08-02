@@ -14,9 +14,19 @@ Log structure:
 
 import json
 import os
+import sys
 import logging
 from datetime import datetime
 from typing import Dict, Any, Optional
+
+# ``app.contracts`` liegt eine Ebene über ``scripts/``. Beim Import aus
+# run_parallel_simulation.py hat install_script_paths() den Pfad bereits
+# gesetzt; beim Direktimport (Tests, Standalone) holen wir ihn hier nach.
+_BACKEND_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _BACKEND_ROOT not in sys.path:
+    sys.path.insert(0, _BACKEND_ROOT)
+
+from app.contracts.sim_action_log_contract import RoundEndEvent  # noqa: E402
 
 
 class PlatformActionLogger:
@@ -77,15 +87,20 @@ class PlatformActionLogger:
         with open(self.log_path, 'a', encoding='utf-8') as f:
             f.write(json.dumps(entry, ensure_ascii=False) + '\n')
     
-    def log_round_end(self, round_num: int, actions_count: int):
-        """Log round end"""
-        entry = {
-            "round": round_num,
-            "timestamp": datetime.now().isoformat(),
-            "event_type": "round_end",
-            "actions_count": actions_count,
-        }
-        
+    def log_round_end(self, round_num: int, actions_count: int, simulated_minutes: int = 0):
+        """Log round end.
+
+        ``simulated_minutes``: seit Sim-Start verstrichene Sim-Zeit. Der Reader
+        leitet daraus den Fortschritt ab — siehe RoundEndEvent. Nicht mit der
+        Tages-Uhrzeit aus ``log_round_start`` verwechseln.
+        """
+        entry = RoundEndEvent(
+            round=round_num,
+            timestamp=datetime.now().isoformat(),
+            actions_count=actions_count,
+            simulated_minutes=simulated_minutes,
+        ).to_log_entry()
+
         with open(self.log_path, 'a', encoding='utf-8') as f:
             f.write(json.dumps(entry, ensure_ascii=False) + '\n')
     
@@ -251,15 +266,18 @@ class ActionLogger:
         with open(self.log_path, 'a', encoding='utf-8') as f:
             f.write(json.dumps(entry, ensure_ascii=False) + '\n')
     
-    def log_round_end(self, round_num: int, actions_count: int, platform: str):
-        entry = {
-            "round": round_num,
-            "timestamp": datetime.now().isoformat(),
-            "platform": platform,
-            "event_type": "round_end",
-            "actions_count": actions_count,
-        }
-        
+    def log_round_end(
+        self, round_num: int, actions_count: int, platform: str, simulated_minutes: int = 0
+    ):
+        """Siehe PlatformActionLogger.log_round_end — hier mit Plattform-Feld."""
+        entry = RoundEndEvent(
+            round=round_num,
+            timestamp=datetime.now().isoformat(),
+            platform=platform,
+            actions_count=actions_count,
+            simulated_minutes=simulated_minutes,
+        ).to_log_entry()
+
         with open(self.log_path, 'a', encoding='utf-8') as f:
             f.write(json.dumps(entry, ensure_ascii=False) + '\n')
     
