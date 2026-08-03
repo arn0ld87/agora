@@ -47,11 +47,51 @@ LlmRuntimeInput = RuntimeLlmConfig | ResolvedRoute
 
 def _resolve_llm_connection(
     llm_runtime: Optional[LlmRuntimeInput],
+    *,
+    require: bool = True,
 ) -> tuple[Optional[str], Optional[str]]:
+    """Loest Key und Endpoint aus der Route — oder bricht ab.
+
+    Fruehere Fassung gab bei nicht aufloesbarer Route ``(None, None)`` zurueck.
+    Das sah harmlos aus, war aber der Ausloeser einer stillen Provider-
+    Vertauschung: ``OasisProfileGenerator.__init__`` fuellt fehlende Werte aus
+    ``Config.LLM_BASE_URL``/``Config.LLM_API_KEY`` auf, waehrend ``model_name``
+    aus der Route weitergereicht wird. Ergebnis war eine Halb-Uebergabe —
+    Modell aus der UI-Route, Endpoint und Key aus der ``.env`` — die das Modell
+    an einen fremden Provider schickte (beobachtet: ``deepseek-v4-flash:0731``
+    an ``https://api.minimax.io/v1`` → HTTP 401). Nach aussen meldete der Lauf
+    trotzdem "30 Personas erfolgreich generiert", weil jeder Einzelfehler still
+    auf ``rule-based generation`` zurueckfiel.
+
+    Der ``#778``-Schutz in ``OasisProfileGenerator`` greift hier nicht: er
+    verhindert nur, dass der ``.env``-Key zu einer *uebergebenen* Fremd-URL
+    einspringt. Wird gar keine URL uebergeben, sind beide aus der ``.env`` —
+    formal "dieselbe Quelle", sachlich die falsche.
+
+    Args:
+        llm_runtime: Aufgeloeste Route oder Legacy-Runtime-Override.
+        require: Wenn ``True`` (Default), ist eine nicht aufloesbare Route ein
+            Fehler. ``False`` nur fuer Pfade, die bewusst ohne LLM laufen
+            (``use_llm_for_profiles=False``) — dort ist regelbasiert das
+            gewollte Ergebnis und kein Notbehelf.
+
+    Raises:
+        ValueError: ``require`` ist gesetzt und weder eine ``ResolvedRoute``
+            noch ein aktiver Runtime-Override liegt vor.
+    """
     if isinstance(llm_runtime, ResolvedRoute):
         return resolve_route_api_key(llm_runtime), llm_runtime.base_url_sanitized
     if llm_runtime and llm_runtime.enabled:
         return llm_runtime.api_key, llm_runtime.base_url
+    if require:
+        raise ValueError(
+            "kein LLM-Provider aufgelöst: die Vorbereitung erwartet eine "
+            "aufgelöste Route oder einen aktiven Runtime-Override. Ohne beides "
+            "würden Endpoint und Schlüssel aus der .env stammen, während das "
+            "Modell aus der Route kommt — diese Mischung erreicht den falschen "
+            "Provider. Bitte unter Einstellungen → LLM-Anbieter eine aktive "
+            "Verbindung wählen."
+        )
     return None, None
 
 
@@ -161,7 +201,12 @@ def _phase_generate_profiles(
     # (IT-Cap ≤ 12 %). total_entities als Pool-Größe für proportionale Verteilung.
     industry_plan = default_dach_industry_quota(max(total_entities, 1))
 
-    api_key, base_url = _resolve_llm_connection(llm_runtime)
+    # ``require`` folgt dem expliziten Nutzerwunsch: nur wenn LLM-Personas
+    # verlangt sind, ist eine fehlende Route ein Fehler. Bei
+    # ``use_llm_for_profiles=False`` ist regelbasiert das gewollte Ergebnis.
+    api_key, base_url = _resolve_llm_connection(
+        llm_runtime, require=use_llm_for_profiles
+    )
 
     generator = OasisProfileGenerator(
         api_key=api_key,
@@ -254,6 +299,7 @@ def _phase_generate_config(
     llm_runtime: Optional[LlmRuntimeInput] = None,
     language: Optional[str],
     run_id: Optional[str] = None,
+    use_llm: bool = True,
     progress_callback: Optional[Callable] = None,
     quota_plan: Optional[PersonaQuotaPlan] = None,
 ) -> None:
@@ -276,7 +322,7 @@ def _phase_generate_config(
             total=3,
         )
 
-    api_key, base_url = _resolve_llm_connection(llm_runtime)
+    api_key, base_url = _resolve_llm_connection(llm_runtime, require=use_llm)
 
     config_generator = SimulationConfigGenerator(
         api_key=api_key,
@@ -577,6 +623,7 @@ def prepare_simulation(
             llm_model=llm_model,
             llm_runtime=llm_runtime,
             language=language,
+            use_llm=use_llm_for_profiles,
             progress_callback=progress_callback,
             quota_plan=quota_plan,
             run_id=run_id,

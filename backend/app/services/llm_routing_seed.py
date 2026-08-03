@@ -488,6 +488,48 @@ def build_runtime_llm_config(route: ResolvedRoute, api_key: Optional[str]) -> Ru
     )
 
 
+def _store_base_url_for_provider(provider_id: Optional[str]) -> Optional[str]:
+    """Liefert die im Store gepflegte Base-URL einer aktivierten Connection.
+
+    ``LlmProviderRegistry.get_providers()`` ist laut eigenem Docstring eine
+    Quelle *statischer, secret-freier* Metadaten: sie liefert ausschliesslich
+    ``definition.default_base_url`` und liest den Store nie. Wer in der UI unter
+    "LLM-Anbieter" eine abweichende Base-URL pflegt, schreibt sie damit zwar
+    nach ``provider_connections.json`` — fuer den OASIS-Subprozess blieb sie
+    aber wirkungslos, weil ``build_route_subprocess_env`` direkt auf den
+    hartkodierten Default zurueckfiel. Ergebnis: eine in der UI korrigierte URL
+    aendert am Simulationslauf nichts, das Eingabefeld wirkt kaputt.
+
+    Diese Funktion schliesst genau diese Luecke und laesst die Registry
+    unangetastet. ``canonical_connection_base_url`` faellt selbst auf den
+    Registry-Default zurueck, wenn die Connection keine eigene URL traegt — die
+    Praezedenz bleibt also Store > Default.
+    """
+    if not provider_id:
+        return None
+    try:
+        connections = ProviderConnectionStore().list_connections()
+    except Exception:  # noqa: BLE001 — ein Store-Ausfall darf keinen Run kippen
+        logger.warning(
+            "_store_base_url_for_provider: Store nicht lesbar für provider_id=%s "
+            "— Registry-Default gilt",
+            provider_id,
+        )
+        return None
+    match = next(
+        (
+            c
+            for c in connections
+            if c.enabled
+            and (getattr(c, "provider_kind", None) == provider_id or c.id == provider_id)
+        ),
+        None,
+    )
+    if match is None:
+        return None
+    return canonical_connection_base_url(match)
+
+
 def build_route_subprocess_env(
     route: ResolvedRoute,
     api_key: Optional[str],
@@ -521,7 +563,16 @@ def build_route_subprocess_env(
     # Provider-Key an einen fremden Endpoint — Root Cause des
     # ``404 model 'MiniMax-M3' not found`` trotz #852. Kein Provider-Fallback:
     # Key und URL stammen aus derselben provider_id.
-    base_url = route.base_url_sanitized or (provider.base_url if provider else None)
+    #
+    # Zwischen Route und Registry-Default liegt seit diesem Fix der Store: die
+    # in der UI gepflegte Connection-Base-URL gewinnt gegen den hartkodierten
+    # ``default_base_url``. Ohne diese Stufe war das UI-Feld fuer Simulationen
+    # wirkungslos — siehe ``_store_base_url_for_provider``.
+    base_url = (
+        route.base_url_sanitized
+        or _store_base_url_for_provider(route.provider_id)
+        or (provider.base_url if provider else None)
+    )
     if not base_url and route.provider_id:
         # Weder Route noch Registry kennen einen Endpoint: der Subprozess wird
         # das Parent-``LLM_BASE_URL`` erben (Alt-Verhalten, Standalone-/

@@ -39,8 +39,10 @@ def detect_oasis_platform(model: str, base_url: str) -> ModelPlatformType:
        ``thought_signature``-Echo in Multi-Turn-Tool-Calls; der
        OpenAI-Compat-Wire-Pfad strippt das Feld → HTTP 400 pro Tool-Turn.
     2. OLLAMA — base_url enthält ``ollama.com`` oder ``:11434`` ODER Modell
-       endet auf ``:cloud`` / ``:latest``.  Ollama Cloud hat keinen
-       OpenAI-Compat-``/v1``-Endpoint mehr; nur nativ ``/api/chat``.
+       endet auf ``:cloud`` / ``:latest``.  CAMELs ``OllamaModel`` erbt von
+       ``OpenAICompatibleModel`` und spricht ``POST {base_url}/chat/
+       completions`` — die Base-URL muss deshalb auf ``/v1`` enden, siehe
+       ``resolve_camel_ollama_url``.
     3. OPENAI — Default / Compat-Gateway.
     """
     from camel.types import ModelPlatformType  # type: ignore[import]
@@ -74,6 +76,27 @@ def _is_ollama_route(model: str, base_url: str) -> bool:
     from app.llm.providers.registry import detect_provider
 
     return detect_provider(base_url, model, mode="oasis") == "ollama"
+
+
+def resolve_camel_ollama_url(base_url: str | None) -> str | None:
+    """Base-URL fuer CAMELs ``OllamaModel`` — mit erzwungenem ``/v1``.
+
+    Duenner Wrapper um die Provider-SSoT
+    (``app.llm.providers.registry.ensure_v1_suffix``), analog zu
+    ``detect_oasis_platform``: keine zweite URL-Heuristik neben der Registry.
+
+    Hintergrund: CAMELs ``OllamaModel`` ist ein ``OpenAICompatibleModel`` und
+    ruft ``POST {base_url}/chat/completions``. Der Registry-Default fuer Ollama
+    Cloud (``https://ollama.com``) und die lokale Default-URL
+    (``http://localhost:11434``) tragen kein ``/v1`` — beide sind fuer Agoras
+    eigenen HTTP-Pfad korrekt, der nativ ``/api/chat`` spricht, fuer CAMEL aber
+    falsch. Ohne diese Normalisierung geht der Preflight-Probe auf
+    ``https://ollama.com/chat/completions`` und faengt sich Ollamas
+    HTML-404-Seite als ``openai.NotFoundError``.
+    """
+    from app.llm.providers.registry import ensure_v1_suffix
+
+    return ensure_v1_suffix(base_url)
 
 
 def uses_max_completion_tokens(model: str) -> bool:

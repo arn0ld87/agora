@@ -99,6 +99,7 @@ try:
         load_project_env,
         make_default_memory_sink,
         preflight_model_probe,
+        resolve_camel_ollama_url,
         resolve_runtime_paths,
     )
 except ImportError:  # direct script execution
@@ -119,6 +120,7 @@ except ImportError:  # direct script execution
         load_project_env,
         make_default_memory_sink,
         preflight_model_probe,
+        resolve_camel_ollama_url,
         resolve_runtime_paths,
     )
 
@@ -1327,9 +1329,16 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
         )
 
     elif platform == ModelPlatformType.OLLAMA:
-        # Ollama Cloud dropped its OpenAI-compat /v1 endpoint; only the native
-        # /api/chat path works.  CAMEL's OllamaModel speaks it natively.
-        # Local Ollama (port 11434) also benefits from the native path.
+        # CAMEL's OllamaModel inherits from OpenAICompatibleModel: it builds an
+        # openai.OpenAI(base_url=url) client and calls POST {url}/chat/
+        # completions.  It has no native /api/chat path — the earlier comment
+        # here claimed the opposite and was the reason nobody normalised the
+        # URL.  Both Ollama defaults (https://ollama.com, http://localhost:11434)
+        # carry no /v1, which is correct for Agora's own HTTP path (native
+        # /api/chat, strips /v1 anyway) and wrong for CAMEL: the preflight probe
+        # hit https://ollama.com/chat/completions and got Ollama's HTML 404 page
+        # back as an openai.NotFoundError.  resolve_camel_ollama_url delegates
+        # to the provider SSoT instead of re-deriving the rule here.
         # Build extra_body inline: we already dispatched via the provider SSoT
         # (detect_oasis_platform), so re-running the _is_ollama_route gate
         # inside build_camel_extra_body() would be redundant detection.
@@ -1343,7 +1352,7 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
         return ModelFactory.create(
             model_platform=ModelPlatformType.OLLAMA,
             model_type=llm_model,
-            url=llm_base_url or None,
+            url=resolve_camel_ollama_url(llm_base_url or None),
             api_key=llm_api_key or None,
             model_config_dict=model_cfg,
         )
