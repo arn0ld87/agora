@@ -1,7 +1,16 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
-const pipeline = vi.hoisted(() => ({ initialize: vi.fn(), refreshGraph: vi.fn() }))
+const pipeline = vi.hoisted(() => ({
+  initialize: vi.fn(),
+  refreshGraph: vi.fn(),
+  // Issue #1029: pro Test setzbar, damit die Verdrahtung des
+  // Degradierungs-Hinweises prüfbar bleibt und nicht nur der Leerfall.
+  degradations: { schema_version: 1, events: [] } as {
+    schema_version: number
+    events: Array<Record<string, unknown>>
+  },
+}))
 const routerPush = vi.hoisted(() => vi.fn())
 
 vi.mock('@/composables/useGraphBuildPipeline', async () => {
@@ -17,6 +26,7 @@ vi.mock('@/composables/useGraphBuildPipeline', async () => {
       systemLogs: ref([{ time: '10:00:00.000', msg: 'building' }]),
       error: ref('Graph build failed'),
       currentRunId: ref(null),
+      degradations: ref(pipeline.degradations),
       initialize: pipeline.initialize,
       refreshGraph: pipeline.refreshGraph,
     }),
@@ -33,6 +43,7 @@ import StepGraphBuildView from '../StepGraphBuildView.vue'
 describe('StepGraphBuildView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    pipeline.degradations = { schema_version: 1, events: [] }
   })
 
   it('bindet den Graph-Build-Pipelinezustand an Step1GraphBuild und macht Fehler zugänglich', () => {
@@ -174,5 +185,96 @@ describe('StepGraphBuildView', () => {
 
     await panel.vm.$emit('toggle-maximize')
     expect(wrapper.getComponent({ name: 'GraphPanel' }).props('isMaximized')).toBe(true)
+  })
+
+  // Issue #1029 — der Hinweis muss den Weg vom Composable in die Ansicht
+  // finden. Ohne diesen Test wäre die Degradierung zwar erfasst, aber die
+  // Oberfläche bliebe genauso stumm wie vorher.
+  describe('Degradierungs-Hinweis', () => {
+    function mountView() {
+      return mount(StepGraphBuildView, {
+        props: { projectId: 'project_42' },
+        global: {
+          mocks: { $t: (key: any) => key },
+          stubs: {
+            AppShell: { template: '<main><slot /></main>' },
+            PageHeader: { template: '<header><slot /></header>' },
+            PipelineStepper: true,
+            StepModelOverrideChip: true,
+            GraphPanel: true,
+            Step1GraphBuild: true,
+          },
+        },
+      })
+    }
+
+    it('zeigt keinen Hinweis, wenn nichts ausgefallen ist', () => {
+      expect(mountView().find('.degradation-notice').exists()).toBe(false)
+    })
+
+    it('reicht einen erfassten Ausfall an DegradationNotice durch', () => {
+      pipeline.degradations = {
+        schema_version: 1,
+        events: [
+          {
+            kind: 'embedding_unavailable',
+            severity: 'warning',
+            detail: 'Batch-Embedding fehlgeschlagen.',
+            occurred_at: '2026-08-02T20:00:00Z',
+            occurrences: 1,
+            context: {},
+          },
+        ],
+      }
+
+      const notice = mountView().find('.degradation-notice')
+      expect(notice.exists()).toBe(true)
+      expect(notice.text()).toContain('Batch-Embedding fehlgeschlagen.')
+    })
+
+    // Issue #1029, Befund B-24: Ein Graph ohne Beziehungen darf den
+    // Folgeschritt nicht freigeben.
+    it('meldet einen blockierenden Befund als qualityBlocked an Step1GraphBuild', () => {
+      pipeline.degradations = {
+        schema_version: 1,
+        events: [
+          {
+            kind: 'graph_below_threshold',
+            severity: 'blocking',
+            detail: 'Der Graph enthält 3 Entitäten, aber nur 0 Beziehungen.',
+            occurred_at: '2026-08-02T20:00:00Z',
+            occurrences: 1,
+            context: { node_count: 3, edge_count: 0 },
+          },
+        ],
+      }
+
+      const step = mountView().getComponent({ name: 'Step1GraphBuild' })
+      expect(step.props('qualityBlocked')).toBe(true)
+    })
+
+    it('lässt eine bloße Warnung den Folgeschritt offen', () => {
+      pipeline.degradations = {
+        schema_version: 1,
+        events: [
+          {
+            kind: 'embedding_unavailable',
+            severity: 'warning',
+            detail: 'Batch-Embedding fehlgeschlagen.',
+            occurred_at: '2026-08-02T20:00:00Z',
+            occurrences: 1,
+            context: {},
+          },
+        ],
+      }
+
+      const step = mountView().getComponent({ name: 'Step1GraphBuild' })
+      expect(step.props('qualityBlocked')).toBe(false)
+    })
+
+    it('gibt den Folgeschritt bei sauberem Build frei', () => {
+      const step = mountView().getComponent({ name: 'Step1GraphBuild' })
+      expect(step.props('qualityBlocked')).toBe(false)
+    })
   })
 })

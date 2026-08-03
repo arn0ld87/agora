@@ -238,6 +238,8 @@
       "rebuild": "Neu aufbauen",
       "running": "Baut Graph…",
       "completed": "Graph fertig.",
+      "insufficient": "Unzureichend",
+      "insufficientDesc": "Der Graph erfüllt die Qualitätsschwelle nicht. Bau ihn neu auf, bevor du weitergehst — die folgenden Schritte bauen darauf auf.",
       "chunks": "Chunks: {done} / {total}",
       "elapsed": "Dauer: {time}"
     },
@@ -363,6 +365,7 @@
     },
     "cardGrid": {
       "manual": "manuell",
+      "ruleBased": "Platzhalter",
       "delete": "Persona löschen",
       "save": "Persona speichern",
       "hintCount": "kein Hinweis | ein Hinweis | {count} Hinweise"
@@ -1241,6 +1244,23 @@
     "simulationFailed": "Simulation fehlgeschlagen.",
     "reportFailed": "Bericht fehlgeschlagen.",
     "unknown": "Unbekannter Fehler."
+  },
+  "degradation": {
+    "title": {
+      "warning": "Durchgelaufen, aber mit Qualitätsverlust",
+      "blocking": "Das Ergebnis reicht nicht zum Weiterarbeiten"
+    },
+    "kind": {
+      "embedding_unavailable": "Semantische Suche nicht verfügbar",
+      "graph_below_threshold": "Graph unter der Qualitätsschwelle",
+      "persona_rule_based_fallback": "Personas als Platzhalter erzeugt"
+    },
+    "action": {
+      "embedding_unavailable": "Embedding-Dienst starten und den Graphen neu aufbauen, sonst bleibt die Vektorsuche wirkungslos.",
+      "graph_below_threshold": "Mit einem stärkeren Modell neu aufbauen oder ein ergiebigeres Dokument verwenden.",
+      "persona_rule_based_fallback": "Aussagen der Platzhalterprofile prüfen oder die Personas mit einem stärkeren Modell neu erzeugen."
+    },
+    "occurrences": "{count}× aufgetreten"
   },
   "dashboard": {
     "title": "Dashboard",

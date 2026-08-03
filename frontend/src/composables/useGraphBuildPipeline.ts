@@ -10,6 +10,11 @@ import {
   type ProjectResponse,
 } from '../api/graph'
 import type { AiModelRefPayload } from '../api/report'
+import {
+  EMPTY_DEGRADATION_REPORT,
+  parseDegradationReport,
+  type PipelineDegradationReport,
+} from '../contracts/pipelineDegradationContract'
 import { usePolling } from './usePolling'
 import { useSystemLog } from './useSystemLog'
 import { getPendingUpload, clearPendingUpload } from '../store/pendingUpload'
@@ -46,6 +51,11 @@ export function useGraphBuildPipeline({
   // persistiert keine run_id). StepModelOverrideChip faellt dann auf den
   // Stage-Default zurueck, was der dokumentierte Fallback-Pfad ist.
   const currentRunId = ref<string | null>(null)
+  // Issue #1029: stille Teilausfälle des abgeschlossenen Builds. Leer ist
+  // der Normalfall. Ein Eintrag hier bedeutet, dass der Build zwar
+  // durchgelaufen ist, das Ergebnis aber nachweislich schlechter ist als
+  // es aussieht.
+  const degradations = ref<PipelineDegradationReport>(EMPTY_DEGRADATION_REPORT)
   let activeGeneration = 0
   const { systemLogs, addLog } = useSystemLog({ cap: 100 })
   const { resolveRunModel } = useRunModelResolver()
@@ -97,6 +107,7 @@ export function useGraphBuildPipeline({
       buildProgress.value = null
       currentPhase.value = -1
       currentRunId.value = null
+      degradations.value = EMPTY_DEGRADATION_REPORT
     }
     addLog(t('common.starting'))
     if (currentProjectId.value === 'new') {
@@ -180,6 +191,12 @@ export function useGraphBuildPipeline({
         startPollingTask(response.data.graph_build_task_id)
         startGraphPolling()
       } else if ((response.data.status === 'graph_completed' || response.data.status === 'completed') && response.data.graph_id) {
+        // Issue #1029: Erst die Befunde des abgeschlossenen Builds holen,
+        // dann weiterschalten. Ohne diesen Schritt verlöre ein Reload den
+        // blockierenden Befund, und der Weiter-Button wäre wieder offen —
+        // ausgerechnet auf dem Weg, den ein Nutzer nach einem
+        // fehlgeschlagenen Lauf am ehesten nimmt.
+        await restoreDegradations(response.data.graph_build_task_id, generation)
         currentPhase.value = 2
         await loadGraph(response.data.graph_id, generation)
       }
@@ -198,6 +215,8 @@ export function useGraphBuildPipeline({
   ): Promise<void> {
     try {
       currentPhase.value = 1
+      // Befunde des Vorlaufs gehören nicht zum neuen Build.
+      degradations.value = EMPTY_DEGRADATION_REPORT
       buildProgress.value = { progress: 0, message: t('step1.build.running') }
       const payload: BuildGraphData = { project_id: currentProjectId.value }
       const aiModelRef = resolvedAiModelRef === undefined
@@ -244,6 +263,36 @@ export function useGraphBuildPipeline({
     }
   }
 
+  /** Übernimmt die Befunde eines Task-Ergebnisses und protokolliert sie. */
+  function applyDegradations(result: Record<string, unknown> | null | undefined): void {
+    degradations.value = parseDegradationReport(result)
+    for (const event of degradations.value.events) {
+      addLog(event.detail)
+    }
+  }
+
+  /**
+   * Holt die Befunde eines bereits abgeschlossenen Builds nach.
+   *
+   * Der Task ist die einzige Quelle: `ProjectResponse` trägt den Bericht
+   * nicht. Ist die Task-ID nach einem Backend-Neustart nicht mehr
+   * auflösbar, bleibt der Bericht leer — derselbe dokumentierte
+   * Fallback-Pfad wie bei `currentRunId` (#1023).
+   */
+  async function restoreDegradations(taskId: string | undefined, generation: number): Promise<void> {
+    if (!taskId) return
+    try {
+      const response = await getTaskStatus(taskId)
+      if (!isCurrent(generation) || !response.success) return
+      if (response.data.status !== 'completed') return
+      applyDegradations(response.data.result)
+    } catch (caughtError) {
+      // Ein nicht mehr auflösbarer Task darf den Wiedereinstieg nicht
+      // blockieren — das Nachladen ist eine Verbesserung, kein Vertrag.
+      if (isCurrent(generation)) addLog(messageFor(caughtError))
+    }
+  }
+
   async function pollTaskStatus(taskId: string): Promise<void> {
     const generation = activeGeneration
     try {
@@ -255,6 +304,11 @@ export function useGraphBuildPipeline({
       if (task.status === 'completed') {
         stopPolling()
         stopGraphPolling()
+        // Issue #1029: vor dem Weiterschalten auswerten, was still
+        // ausgefallen ist. Ein Build kann technisch fertig sein und
+        // trotzdem ein Ergebnis liefern, mit dem weiterzuarbeiten sich
+        // nicht lohnt.
+        applyDegradations(task.result)
         currentPhase.value = 2
         const projectResponse = await getProject(currentProjectId.value)
         if (isCurrent(generation) && projectResponse.success && projectResponse.data.graph_id) {
@@ -309,6 +363,9 @@ export function useGraphBuildPipeline({
     buildProgress,
     currentRunId,
     systemLogs,
+    // Issue #1029: stille Teilausfälle des Builds. Leer heißt „nichts
+    // ausgefallen", nicht „nicht geprüft".
+    degradations,
     initialize,
     // Issue #1023 (Befund B-08): GraphPanel/GraphToolbar emittieren
     // "refresh" seit jeher, StepGraphBuildView hatte dafuer nie einen

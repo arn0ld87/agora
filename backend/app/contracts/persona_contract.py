@@ -63,6 +63,20 @@ class PersonaModel(BaseModel):
     # Layer 1: Segment-Zuordnung — neu, Pflicht ab Persona-Quoten-Vertrag
     segment: Optional[str] = Field(default=None, min_length=1, max_length=64)
 
+    # Herkunft des Profils (Issue #1029). Regelbasierte Profile entstehen
+    # entweder bewusst (use_llm=False) oder nach drei gescheiterten
+    # LLM-Versuchen; sie nehmen regulär an der Simulation teil. Ohne dieses
+    # Feld sind ihre Beiträge im Report nicht von denen echter Personas zu
+    # unterscheiden, und die Oberfläche kann sie nicht kennzeichnen.
+    #
+    # Additiv mit Default: persistierte Personas von vor #1029 tragen es
+    # nicht und validieren unverändert weiter — sie gelten als "llm",
+    # was ihrem damaligen Regelfall entspricht.
+    generation_source: Literal["llm", "rule_based"] = "llm"
+    # Nur bei einem Ausfall gesetzt, nicht bei bewusst regelbasierter
+    # Erzeugung.
+    generation_error: Optional[str] = Field(default=None, max_length=200)
+
 
 class PersonaQuotaPlan(BaseModel):
     """

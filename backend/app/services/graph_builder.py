@@ -11,8 +11,13 @@ from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass
 
 from ..config import Config
+from ..contracts.pipeline_degradation_contract import (
+    DegradationKind,
+    DegradationSeverity,
+)
 from ..models.task import TaskManager, TaskStatus
 from ..storage import GraphStorage
+from .degradation_collector import ChunkExtractionTally, DegradationCollector
 from .text_processor import TextProcessor
 
 # Forward-import nur fürs Type-Hint — der konkrete Extractor wird vom
@@ -112,6 +117,16 @@ class GraphBuilderService:
         ner_extractor: Optional["NERExtractor"] = None,
     ):
         """Graph build worker thread"""
+        # Issue #1029: sammelt stille Teilausfälle aus allen Phasen dieses
+        # Builds. Wird bis in ``embed_entities_and_relations`` durchgereicht
+        # und landet am Ende im Task-Ergebnis, damit die Oberfläche einen
+        # Qualitätsverlust nicht länger für einen sauberen Lauf hält.
+        degradations = DegradationCollector()
+        # Issue #1029: zählt, wie viele Chunks dem NER überhaupt etwas
+        # entnommen haben. Die Gesamtzahlen verraten das nicht — bei
+        # Befund B-24 lieferten zwei von vier Chunks nichts, während
+        # node_count noch nach einem brauchbaren Graphen aussah.
+        extraction_tally = ChunkExtractionTally()
         try:
             self.task_manager.update_task(
                 task_id,
@@ -154,6 +169,8 @@ class GraphBuilderService:
                     message=msg
                 ),
                 ner_extractor=ner_extractor,
+                degradations=degradations,
+                extraction_tally=extraction_tally,
             )
 
             # 5. Wait for processing (no-op for Neo4j — already synchronous)
@@ -168,17 +185,129 @@ class GraphBuilderService:
             # 6. Get graph information
             graph_info = self._get_graph_info(graph_id)
 
+            # 7. Qualitätsgate (Issue #1029). Die Zahlen lagen hier schon
+            # immer vor — sie wurden nur nie bewertet. Ein Graph unter der
+            # Schwelle meldete "Graph fertig" und ließ den Report Schritte
+            # später an fehlender Evidenz scheitern.
+            self._assess_graph_quality(graph_info, extraction_tally, degradations)
+
             # Completed
             self.task_manager.complete_task(task_id, {
                 "graph_id": graph_id,
                 "graph_info": graph_info.to_dict(),
                 "chunks_processed": total_chunks,
+                # Issue #1029: leere Liste ist der Normalfall und heißt
+                # „nichts ist still ausgefallen".
+                "degradations": degradations.report().model_dump(mode="json"),
             })
 
         except Exception as e:  # noqa: BLE001 — exc logged via traceback or propagated
             import traceback
             error_msg = f"{str(e)}\n{traceback.format_exc()}"
             self.task_manager.fail_task(task_id, error_msg)
+
+    def _assess_graph_quality(
+        self,
+        graph_info: GraphInfo,
+        extraction_tally: ChunkExtractionTally,
+        degradations: DegradationCollector,
+    ) -> None:
+        """``assess_graph_quality_from_counts`` für ein ``GraphInfo``-Objekt."""
+        self.assess_graph_quality_from_counts(
+            node_count=graph_info.node_count,
+            edge_count=graph_info.edge_count,
+            extraction_tally=extraction_tally,
+            degradations=degradations,
+        )
+
+    def assess_graph_quality_from_counts(
+        self,
+        *,
+        node_count: int,
+        edge_count: int,
+        extraction_tally: ChunkExtractionTally,
+        degradations: DegradationCollector,
+    ) -> None:
+        """Bewertet den fertigen Graphen gegen die Qualitätsschwellen (Issue #1029).
+
+        Nimmt die Zahlen statt eines ``GraphInfo``, weil der produktive
+        Build-Pfad in ``services/graph_build.py`` mit dem rohen
+        ``get_graph_data()``-Dict arbeitet und kein ``GraphInfo`` baut.
+        Beide Pfade müssen dieses Gate durchlaufen — sonst ist es genau
+        dort blind, wo es zählt.
+
+        Bis dahin rief ``_build_graph_worker`` ``complete_task``
+        unbedingt, sobald alle Chunks durch waren — ohne ``node_count``,
+        ``edge_count`` oder die Chunk-Erfolgsquote auch nur anzusehen. Ein
+        Graph mit 3 Entitäten und 0 Beziehungen meldete „Graph fertig",
+        und der Report scheiterte Minuten später an fehlender Evidenz.
+
+        Fehlende Beziehungen blockieren: Ein Graph ohne eine einzige Kante
+        ist keine Wissensbasis, sondern eine Stichwortliste, und jeder
+        weitere Schritt darauf ist verlorene Zeit. Zu wenige Entitäten und
+        eine schwache Chunk-Quote bleiben Warnungen — dort ist das
+        Ergebnis dünn, aber nicht wertlos.
+
+        Schwellen über ``Config``: ``GRAPH_MIN_ENTITIES``,
+        ``GRAPH_MIN_RELATIONS``, ``GRAPH_MIN_CHUNK_SUCCESS_RATIO``.
+        """
+        if edge_count < Config.GRAPH_MIN_RELATIONS:
+            degradations.record(
+                kind=DegradationKind.GRAPH_BELOW_THRESHOLD,
+                severity=DegradationSeverity.BLOCKING,
+                detail=(
+                    f"Der Graph enthält {node_count} Entitäten, aber nur "
+                    f"{edge_count} Beziehungen (erwartet: mindestens "
+                    f"{Config.GRAPH_MIN_RELATIONS}). Ohne Beziehungen ist "
+                    "der Graph nicht auswertbar."
+                ),
+                context={
+                    "node_count": node_count,
+                    "edge_count": edge_count,
+                    "min_relations": Config.GRAPH_MIN_RELATIONS,
+                },
+            )
+        elif node_count < Config.GRAPH_MIN_ENTITIES:
+            degradations.record(
+                kind=DegradationKind.GRAPH_BELOW_THRESHOLD,
+                severity=DegradationSeverity.WARNING,
+                detail=(
+                    f"Der Graph enthält nur {node_count} Entitäten "
+                    f"(erwartet: mindestens {Config.GRAPH_MIN_ENTITIES}). "
+                    "Die Auswertung wird entsprechend dünn."
+                ),
+                context={
+                    "node_count": node_count,
+                    "edge_count": edge_count,
+                    "min_entities": Config.GRAPH_MIN_ENTITIES,
+                },
+            )
+
+        # Die Chunk-Quote ist unabhängig von den Gesamtzahlen: Ein Graph
+        # kann genug Entitäten tragen und trotzdem aus der Hälfte des
+        # Dokuments nichts gezogen haben.
+        ratio = extraction_tally.success_ratio
+        if (
+            Config.GRAPH_MIN_CHUNK_SUCCESS_RATIO > 0
+            and extraction_tally.total > 0
+            and ratio < Config.GRAPH_MIN_CHUNK_SUCCESS_RATIO
+        ):
+            degradations.record(
+                kind=DegradationKind.GRAPH_BELOW_THRESHOLD,
+                severity=DegradationSeverity.WARNING,
+                detail=(
+                    f"Nur {extraction_tally.productive} von "
+                    f"{extraction_tally.total} Textabschnitten haben "
+                    "Entitäten oder Beziehungen geliefert. Ein großer Teil "
+                    "des Dokuments ist nicht im Graphen abgebildet."
+                ),
+                context={
+                    "productive_chunks": extraction_tally.productive,
+                    "total_chunks": extraction_tally.total,
+                    "success_ratio": round(ratio, 3),
+                    "min_success_ratio": Config.GRAPH_MIN_CHUNK_SUCCESS_RATIO,
+                },
+            )
 
     def create_graph(self, name: str) -> str:
         """Create graph — sets status='building' atomically on first creation."""
@@ -212,6 +341,8 @@ class GraphBuilderService:
         batch_size: int = 3,
         progress_callback: Optional[Callable[[str, float, int, int], None]] = None,
         ner_extractor: Optional["NERExtractor"] = None,
+        degradations: Optional[DegradationCollector] = None,
+        extraction_tally: Optional[ChunkExtractionTally] = None,
     ) -> List[str]:
         """Add text chunks to graph in parallel, return uuid list of all episodes.
 
@@ -227,6 +358,17 @@ class GraphBuilderService:
 
         ``ner_extractor`` wird an jedes ``storage.add_text`` durchgereicht
         (Override pro Run). Ohne Override greift der Storage-Singleton-NER.
+
+        ``degradations`` (Issue #1029) sammelt stille Teilausfälle aus den
+        parallel laufenden Chunks — vor allem einen Embedding-Ausfall, der
+        sonst nur als Logzeile existierte. Der Sammler ist thread-safe und
+        fasst gleichartige Meldungen zusammen, statt sie pro Chunk zu
+        wiederholen.
+
+        ``extraction_tally`` (Issue #1029) zählt, wie viele Chunks der NER
+        überhaupt etwas entnommen hat. Ein technisch erfolgreicher Chunk
+        mit null Extraktionen passierte bislang ungeprüft — auffällig wird
+        er erst im Verhältnis zur Gesamtzahl.
         """
         total_chunks = len(chunks)
         if total_chunks == 0:
@@ -251,7 +393,12 @@ class GraphBuilderService:
                 # time-travel diffs can distinguish document knowledge from
                 # edges learned during simulation.
                 episode_id = self.storage.add_text(
-                    graph_id, chunk, round_num=0, ner_extractor=ner_extractor
+                    graph_id,
+                    chunk,
+                    round_num=0,
+                    ner_extractor=ner_extractor,
+                    degradations=degradations,
+                    extraction_tally=extraction_tally,
                 )
                 elapsed = time.time() - t0
                 logger.info(

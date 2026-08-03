@@ -1,0 +1,79 @@
+{
+  "$defs": {
+    "DegradationKind": {
+      "description": "Art des Teilausfalls.\n\nEng halten. Ein neuer Wert bedeutet, dass eine weitere Stelle der\nPipeline still degradieren konnte \u2014 das geh\u00f6rt in einen eigenen Slice\nmit eigenem Regressionstest, nicht in einen Sammelwert.",
+      "enum": [
+        "embedding_unavailable",
+        "graph_below_threshold",
+        "persona_rule_based_fallback"
+      ],
+      "title": "DegradationKind",
+      "type": "string"
+    },
+    "DegradationSeverity": {
+      "description": "Wie schwer der Ausfall wiegt.\n\nDer Unterschied ist nicht kosmetisch: ``BLOCKING`` hei\u00dft, dass der\nSchritt den Zustand \u201ebereit\" nicht erreichen darf, auch wenn technisch\nkein Fehler aufgetreten ist.",
+      "enum": [
+        "warning",
+        "blocking"
+      ],
+      "title": "DegradationSeverity",
+      "type": "string"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/pipeline-degradation.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Ein Teilausfall, der ohne diesen Eintrag unsichtbar geblieben w\u00e4re.\n\nGleichartige Ereignisse werden vom ``DegradationCollector``\nzusammengefasst: vierzig parallel verarbeitete Chunks, die alle am\nselben abwesenden Ollama scheitern, ergeben **einen** Eintrag mit\n``occurrences=40``, nicht vierzig identische. ``occurred_at`` tr\u00e4gt\ndann den Zeitpunkt des ersten Auftretens.",
+  "properties": {
+    "context": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "number"
+          }
+        ]
+      },
+      "description": "Zahlen, die die Einstufung belegen \u2014 etwa node_count/edge_count bei einem Graph unter der Schwelle. Keine freien Objekte, damit der Zod-Spiegel eng bleibt.",
+      "title": "Context",
+      "type": "object"
+    },
+    "detail": {
+      "description": "Menschenlesbare Ursache \u2014 geht so in die Oberfl\u00e4che.",
+      "minLength": 1,
+      "title": "Detail",
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/DegradationKind"
+    },
+    "occurred_at": {
+      "description": "Erstes Auftreten, nicht das letzte.",
+      "format": "date-time",
+      "title": "Occurred At",
+      "type": "string"
+    },
+    "occurrences": {
+      "default": 1,
+      "description": "Wie oft dieses Ereignis zusammengefasst wurde.",
+      "minimum": 1,
+      "title": "Occurrences",
+      "type": "integer"
+    },
+    "severity": {
+      "$ref": "#/$defs/DegradationSeverity"
+    }
+  },
+  "required": [
+    "kind",
+    "severity",
+    "detail"
+  ],
+  "title": "PipelineDegradationModel",
+  "type": "object"
+}

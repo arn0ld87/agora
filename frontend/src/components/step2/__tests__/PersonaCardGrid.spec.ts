@@ -32,6 +32,7 @@ const i18n = createI18n({
       step2: {
         cardGrid: {
           manual: 'manuell',
+          ruleBased: 'Platzhalter',
           delete: 'Persona löschen',
           save: 'Persona speichern',
           hintCount: 'kein Hinweis | ein Hinweis | {count} Hinweise',
@@ -42,6 +43,7 @@ const i18n = createI18n({
       step2: {
         cardGrid: {
           manual: 'manual',
+          ruleBased: 'Placeholder',
           delete: 'Delete persona',
           save: 'Save persona',
           hintCount: 'no hint | one hint | {count} hints',
@@ -56,6 +58,8 @@ const globalConfig = {
   stubs: {
     Badge: {
       template: '<span class="badge"><slot /></span>',
+      // title bleibt bewusst undeklariert — es fällt wie in der echten
+      // Badge-Komponente als HTML-Attribut auf das Wurzelelement durch.
       props: ['variant', 'dot'],
     },
   },
@@ -332,5 +336,49 @@ describe('PersonaCardGrid', () => {
     const topicsEl = wrapper.find('.persona-topics')
     expect(topicsEl.exists()).toBe(true)
     expect(topicsEl.text()).toBe('Alpha · Beta · Gamma')
+  })
+
+  // ---------------------------------------------------------------------------
+  // (13-16) Issue #1029 — Platzhalter-Kennzeichnung
+  //
+  // Regelbasierte Profile entstehen nach drei gescheiterten LLM-Versuchen
+  // und nehmen regulär an der Simulation teil. Ohne Kennzeichnung sind ihre
+  // Beiträge im Report nicht von echten Stimmen zu unterscheiden.
+  // ---------------------------------------------------------------------------
+  function mountWithSource(overrides: Record<string, unknown>) {
+    return mount(PersonaCardGrid, {
+      props: { ...makeDefaultProps(), personas: [makePersona(overrides)] },
+      global: globalConfig,
+    })
+  }
+
+  it('(13) generation_source=rule_based → Platzhalter-Badge', async () => {
+    const wrapper = mountWithSource({ generation_source: 'rule_based' })
+    await flushPromises()
+    expect(wrapper.text()).toContain('Platzhalter')
+  })
+
+  it('(14) generation_source=llm → kein Platzhalter-Badge', async () => {
+    const wrapper = mountWithSource({ generation_source: 'llm' })
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('Platzhalter')
+  })
+
+  it('(15) fehlendes generation_source → kein Platzhalter-Badge', async () => {
+    // Personas von vor #1029 tragen das Feld nicht.
+    const wrapper = mountWithSource({})
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('Platzhalter')
+  })
+
+  it('(16) generation_error landet als title am Badge', async () => {
+    const wrapper = mountWithSource({
+      generation_source: 'rule_based',
+      generation_error: 'LLM-Generierung nach 3 Versuchen fehlgeschlagen',
+    })
+    await flushPromises()
+
+    const badge = wrapper.findAll('.badge').find((b) => b.text() === 'Platzhalter')
+    expect(badge?.attributes('title')).toBe('LLM-Generierung nach 3 Versuchen fehlgeschlagen')
   })
 })

@@ -15,6 +15,13 @@
     </PageHeader>
     <PipelineStepper :current-step="1" />
     <p v-if="error" role="alert">{{ error }}</p>
+    <!--
+      Issue #1029: Ein Build kann durchlaufen und trotzdem ein Ergebnis
+      liefern, mit dem weiterzuarbeiten sich nicht lohnt. Der Hinweis steht
+      bewusst oberhalb des Canvas — er ist die Antwort auf „warum sieht der
+      Graph so leer aus", nicht eine Fußnote darunter.
+    -->
+    <DegradationNotice :report="degradations" />
     <div class="graph-build-layout">
       <!-- Wissensgraph-Canvas: sichtbar sobald graphData geladen ist (Phase 2). -->
       <section v-if="graphData" class="graph-build-canvas">
@@ -34,6 +41,7 @@
         :buildProgress="buildProgress"
         :graphData="graphData"
         :systemLogs="systemLogs"
+        :qualityBlocked="qualityBlocked"
         @next-step="handleNextStep"
       />
     </div>
@@ -50,7 +58,9 @@ import PipelineStepper from '@/components/v4/steps/PipelineStepper.vue'
 import Step1GraphBuild from '@/components/Step1GraphBuild.vue'
 import GraphPanel from '@/components/GraphPanel.vue'
 import StepModelOverrideChip from '@/components/v4/forms/StepModelOverrideChip.vue'
+import DegradationNotice from '@/components/v4/DegradationNotice.vue'
 import { useGraphBuildPipeline } from '@/composables/useGraphBuildPipeline'
+import { hasBlockingDegradation } from '@/contracts/pipelineDegradationContract'
 import type { BreadcrumbItem } from '@/components/v4/shell/Breadcrumbs.vue'
 
 const props = defineProps<{
@@ -77,6 +87,7 @@ const {
   systemLogs,
   error,
   currentRunId,
+  degradations,
   initialize,
   refreshGraph,
 } = useGraphBuildPipeline({ projectId: props.projectId, router, t })
@@ -86,6 +97,11 @@ const {
 // Fullscreen-API (kein requestFullscreen im Repo) — GraphPanel wendet die
 // entsprechende Klasse selbst an (siehe GraphPanel.vue).
 const isGraphMaximized = ref(false)
+
+// Issue #1029: Ein Graph unterhalb der Qualitätsschwelle hat den Build
+// zwar überstanden, taugt aber nicht als Grundlage für die folgenden
+// Schritte. „Bereit" bleibt deshalb aus, und der Weiter-Knopf ebenso.
+const qualityBlocked = computed(() => hasBlockingDegradation(degradations.value))
 
 const crumbs = computed<BreadcrumbItem[]>(() => [
   { label: t('step1.breadcrumbRuns'), path: '/runs' },

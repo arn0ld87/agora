@@ -19,6 +19,10 @@ from app.contracts.branch_comparison import BranchComparison
 from app.contracts.graph_diff import GraphDiff
 from app.contracts.persona_contract import PersonaModel, PersonaQuotaPlan
 from app.contracts.persona_entity_context import PersonaEntityContext
+from app.contracts.pipeline_degradation_contract import (
+    PipelineDegradationModel,
+    PipelineDegradationReport,
+)
 from app.contracts.report_contract import EvidenceMapModel, ReportContractModel, ReportModel
 from app.contracts.report_v3 import ReportV3
 from app.contracts.run_budget_contract import (
@@ -83,6 +87,9 @@ CONTRACTS: dict[str, type] = {
     "branch-comparison.schema.json": BranchComparison,
     "graph-diff.schema.json": GraphDiff,
     "persona-entity-context.schema.json": PersonaEntityContext,
+    # Pipeline-Degradierung (Issue #1029)
+    "pipeline-degradation.schema.json": PipelineDegradationModel,
+    "pipeline-degradation-report.schema.json": PipelineDegradationReport,
     "report-contract.schema.json": ReportContractModel,
     "report.schema.json": ReportModel,
     "evidence-map.schema.json": EvidenceMapModel,

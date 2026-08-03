@@ -450,4 +450,179 @@ describe('useGraphBuildPipeline', () => {
     expect(polling.graphStop).toHaveBeenCalledOnce()
     expect(pipeline.error.value).toBe('Build failed')
   })
+
+  // Issue #1029 — stille Degradierungen aus dem Task-Ergebnis
+  describe('Degradierungen aus dem abgeschlossenen Build', () => {
+    function completedTaskWith(result: Record<string, unknown>) {
+      graphApi.getProject.mockResolvedValue({
+        success: true,
+        data: {
+          project_id: 'project_99',
+          status: 'graph_building',
+          graph_build_task_id: 'task_99',
+          graph_id: 'graph_99',
+        },
+      })
+      graphApi.getTaskStatus.mockResolvedValue({
+        success: true,
+        data: { status: 'completed', result },
+      })
+      graphApi.getGraphData.mockResolvedValue({
+        success: true,
+        data: { graph_id: 'graph_99', nodes: [], edges: [] },
+      })
+    }
+
+    it('liest einen Embedding-Ausfall aus dem Task-Ergebnis', async () => {
+      completedTaskWith({
+        graph_id: 'graph_99',
+        degradations: {
+          schema_version: 1,
+          events: [
+            {
+              kind: 'embedding_unavailable',
+              severity: 'warning',
+              detail: 'Batch-Embedding fehlgeschlagen.',
+              occurred_at: '2026-08-02T20:00:00Z',
+              occurrences: 4,
+              context: { affected_texts: 12 },
+            },
+          ],
+        },
+      })
+      const pipeline = useGraphBuildPipeline({ projectId: 'project_99', router: createRouter(), t })
+
+      await pipeline.initialize()
+      await polling.taskTick?.()
+
+      expect(pipeline.degradations.value.events).toHaveLength(1)
+      expect(pipeline.degradations.value.events[0].kind).toBe('embedding_unavailable')
+      expect(pipeline.degradations.value.events[0].occurrences).toBe(4)
+    })
+
+    it('bleibt leer, wenn der Build sauber durchlief', async () => {
+      completedTaskWith({
+        graph_id: 'graph_99',
+        degradations: { schema_version: 1, events: [] },
+      })
+      const pipeline = useGraphBuildPipeline({ projectId: 'project_99', router: createRouter(), t })
+
+      await pipeline.initialize()
+      await polling.taskTick?.()
+
+      expect(pipeline.degradations.value.events).toEqual([])
+    })
+
+    it('verträgt ein Task-Ergebnis ohne das Feld', async () => {
+      // Ein Ergebnis von vor #1029 darf den Build-Abschluss nicht stören.
+      completedTaskWith({ graph_id: 'graph_99' })
+      const pipeline = useGraphBuildPipeline({ projectId: 'project_99', router: createRouter(), t })
+
+      await pipeline.initialize()
+      await polling.taskTick?.()
+
+      expect(pipeline.degradations.value.events).toEqual([])
+      expect(pipeline.currentPhase.value).toBe(2)
+    })
+
+    it('lässt einen unlesbaren Eintrag den Build nicht blockieren', async () => {
+      // Ein Hinweismechanismus darf nie selbst zum Ausfallgrund werden.
+      completedTaskWith({ graph_id: 'graph_99', degradations: { events: 'kaputt' } })
+      const pipeline = useGraphBuildPipeline({ projectId: 'project_99', router: createRouter(), t })
+
+      await pipeline.initialize()
+      await polling.taskTick?.()
+
+      expect(pipeline.degradations.value.events).toEqual([])
+      expect(pipeline.currentPhase.value).toBe(2)
+      expect(pipeline.error.value).toBe('')
+    })
+  })
+
+  // Issue #1029 — ein Reload darf einen blockierenden Befund nicht verlieren
+  describe('Degradierungen nach einem Reload', () => {
+    const BLOCKING_RESULT = {
+      graph_id: 'graph_77',
+      degradations: {
+        schema_version: 1,
+        events: [
+          {
+            kind: 'graph_below_threshold',
+            severity: 'blocking',
+            detail: 'Der Graph enthält keine Beziehungen.',
+            occurred_at: '2026-08-02T20:00:00Z',
+            occurrences: 1,
+            context: { node_count: 2, edge_count: 0 },
+          },
+        ],
+      },
+    }
+
+    function completedProject(overrides: Record<string, unknown> = {}) {
+      graphApi.getProject.mockResolvedValue({
+        success: true,
+        data: {
+          project_id: 'project_77',
+          status: 'graph_completed',
+          graph_id: 'graph_77',
+          graph_build_task_id: 'task_77',
+          ...overrides,
+        },
+      })
+      graphApi.getGraphData.mockResolvedValue({
+        success: true,
+        data: { graph_id: 'graph_77', nodes: [], edges: [] },
+      })
+    }
+
+    it('holt den blockierenden Befund beim Wiedereinstieg nach', async () => {
+      // Ohne Nachladen stünde der Weiter-Button nach jedem Reload wieder
+      // offen — genau auf dem Weg, den ein Nutzer nach einem schlechten
+      // Lauf am ehesten nimmt.
+      completedProject()
+      graphApi.getTaskStatus.mockResolvedValue({
+        success: true,
+        data: { status: 'completed', result: BLOCKING_RESULT },
+      })
+      const pipeline = useGraphBuildPipeline({ projectId: 'project_77', router: createRouter(), t })
+
+      await pipeline.initialize()
+
+      expect(pipeline.degradations.value.events).toHaveLength(1)
+      expect(pipeline.degradations.value.events[0].severity).toBe('blocking')
+      expect(pipeline.currentPhase.value).toBe(2)
+    })
+
+    it('bleibt ohne Task-ID leer, ohne den Wiedereinstieg zu stören', async () => {
+      // Nach einem Backend-Neustart ist der Task nicht mehr auflösbar.
+      completedProject({ graph_build_task_id: undefined })
+      const pipeline = useGraphBuildPipeline({ projectId: 'project_77', router: createRouter(), t })
+
+      await pipeline.initialize()
+
+      expect(pipeline.degradations.value.events).toEqual([])
+      expect(pipeline.currentPhase.value).toBe(2)
+      expect(pipeline.error.value).toBe('')
+      expect(graphApi.getTaskStatus).not.toHaveBeenCalled()
+    })
+
+    it('verwirft die Befunde beim Wechsel auf ein anderes Projekt', async () => {
+      completedProject()
+      graphApi.getTaskStatus.mockResolvedValue({
+        success: true,
+        data: { status: 'completed', result: BLOCKING_RESULT },
+      })
+      const pipeline = useGraphBuildPipeline({ projectId: 'project_77', router: createRouter(), t })
+      await pipeline.initialize()
+      expect(pipeline.degradations.value.events).toHaveLength(1)
+
+      graphApi.getProject.mockResolvedValue({
+        success: true,
+        data: { project_id: 'project_78', status: 'created' },
+      })
+      await pipeline.initialize('project_78')
+
+      expect(pipeline.degradations.value.events).toEqual([])
+    })
+  })
 })
