@@ -23,12 +23,16 @@ dependencies = [
     "camel-oasis==0.2.5",
     "camel-ai==0.2.78",
 
-    # torch wird von Agora nirgends importiert — es kommt transitiv ueber
-    # camel-oasis -> sentence-transformers. Es steht hier trotzdem, weil
-    # `[tool.uv.sources]` ausschliesslich auf direkt deklarierte
-    # Dependencies wirkt: ohne diesen Eintrag laesst sich die Bezugsquelle
-    # einer transitiven Abhaengigkeit nicht umlenken. Die Begruendung fuer
-    # die Umlenkung steht bei `[[tool.uv.index]]` weiter unten.
+    # Der Produktionspfad unter `app/` importiert torch nicht — es kommt dort
+    # transitiv ueber camel-oasis -> sentence-transformers. Ausserhalb von
+    # `app/` wird es sehr wohl importiert: `tests/conftest.py` laedt es
+    # bewusst frueh, und `scripts/_sim_common.py` lazy. Beide Pfade laufen
+    # mit dem CPU-Build unveraendert.
+    #
+    # Der Eintrag steht hier, weil `[tool.uv.sources]` ausschliesslich auf
+    # direkt deklarierte Dependencies wirkt: ohne ihn laesst sich die
+    # Bezugsquelle einer transitiven Abhaengigkeit nicht umlenken. Die
+    # Begruendung fuer die Umlenkung steht bei `[[tool.uv.index]]` unten.
     # Die untere Schranke haelt den bereits aufgeloesten Stand und
     # verhindert einen stillen Downgrade; nach oben ist bewusst offen.
     "torch>=2.13.0",
@@ -277,10 +281,14 @@ override-dependencies = [
 # ---------------------------------------------------------------------------
 # torch aus dem CPU-Index statt von PyPI.
 #
-# Agora importiert torch nirgends. Es kommt ausschliesslich transitiv:
+# torch ist keine bewusste Abhaengigkeit von Agora. In den Produktionspfad
+# unter `app/` kommt es ausschliesslich transitiv:
 #   camel-oasis -> sentence-transformers -> torch
-# Der einzige Treffer fuer sentence_transformers unter backend/app/ ist ein
-# warnings.filterwarnings in __init__.py.
+# Der einzige Treffer fuer sentence_transformers dort ist ein
+# warnings.filterwarnings in __init__.py. Direkt importiert wird torch nur
+# ausserhalb von `app/`: in `tests/conftest.py` und lazy in
+# `scripts/_sim_common.py` — beide funktionieren mit dem CPU-Build
+# unveraendert, was im gebauten Image geprueft ist.
 #
 # Das PyPI-Wheel deklariert seine CUDA-Abhaengigkeiten mit dem Marker
 # `sys_platform == 'linux'` ohne Architektur-Einschraenkung. Im Container
