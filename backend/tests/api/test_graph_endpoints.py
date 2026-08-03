@@ -285,9 +285,19 @@ def test_add_progress_callback_sets_progress_detail_on_task_manager(monkeypatch)
     fake_project.llm_profile_id = None
 
     def fake_add_text_batches(
-        graph_id, chunks, batch_size=3, progress_callback=None, ner_extractor=None
+        graph_id,
+        chunks,
+        batch_size=3,
+        progress_callback=None,
+        ner_extractor=None,
+        degradations=None,
+        extraction_tally=None,
     ):
-        # Simulate two chunks completing
+        # Simulate two chunks completing. ``degradations`` and
+        # ``extraction_tally`` wurden mit PR #1030 (Issue #1029) an
+        # ``add_text_batches`` angefuegt; der Test akzeptiert sie explizit,
+        # damit eine kuenftige Signatur-Erweiterung hier wieder laut
+        # aufschlaegt statt unbemerkt durchzurutschen.
         if progress_callback:
             progress_callback("Processed 1/2 chunks...", 0.5, 1, 2)
             progress_callback("Processed 2/2 chunks...", 1.0, 2, 2)
