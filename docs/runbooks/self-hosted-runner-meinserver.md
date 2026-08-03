@@ -2,8 +2,7 @@
 
 > **Status: außer Betrieb genommen am 2026-08-03.** Der Runner wird von keinem
 > Workflow mehr adressiert. `.github/workflows/docker-image.yml` nutzt für alle
-> Trigger GitHub-gehostete Runner; `push`/`tag`/`workflow_dispatch` laufen auf
-> `ubuntu-24.04-arm` und bekommen damit weiterhin native arm64-Builds ohne QEMU.
+> Trigger `ubuntu-latest`.
 >
 > Dieses Dokument bleibt erhalten, weil die Abwägung darunter jedes Mal erneut
 > zu treffen ist, wenn ein self-hosted Runner an diesem Repository erwogen wird.
@@ -35,10 +34,20 @@ trägt. Damit wäre auch die Isolationszusage aus Punkt 4 der alten Fassung
 hinfällig gewesen: Ein Container mit Host-Docker-Socket ist gegenüber dem Host
 nicht isoliert, er kontrolliert ihn.
 
-**GitHub-gehostete arm64-Runner lösen beides.** Sie sind für öffentliche
-Repositories kostenfrei, bringen einen funktionierenden Docker-Daemon mit und
-entfallen als Angriffsfläche auf eigener Hardware. Zusätzlich entfällt der
-wiederkehrende Aufwand für das einstündige Registrierungstoken.
+**Sein Zweck war ohnehin nicht belegt.** `build-only` reicht sein Image an
+`prod-proxy-smoke` weiter, und der läuft auf `ubuntu-latest` — ein
+arm64-Artefakt startet dort nicht. `publish` baut ebenfalls auf `ubuntu-latest`,
+das Image in GHCR war also immer amd64, und die Deployments auf `armserver`
+bauen lokal statt aus der Registry. Für die Kette build → smoke → publish gab es
+keinen Konsumenten der arm64-Variante; der Mangel fiel nur nie auf, weil
+`build-only` stets vorher abbrach.
+
+Der Workflow läuft deshalb vollständig auf `ubuntu-latest`. Werden echte
+arm64-Images gebraucht, gehört das als Multi-Platform-Build
+(`platforms: linux/amd64,linux/arm64`) in den publish-Job — nicht als
+abweichender Runner für einen einzelnen Job. GitHub-gehostete arm64-Runner
+(`ubuntu-24.04-arm`) wären dafür ebenfalls verfügbar und für öffentliche
+Repositories kostenfrei.
 
 ## Sicherheitskontext (public Repo) — weiterhin gültig
 
@@ -56,7 +65,8 @@ jemandem beim Review auffallen muss.
 
 **Wer den Runner wieder aufsetzen will, muss zuvor beantworten:**
 
-1. Warum genügen die GitHub-gehosteten arm64-Runner nicht?
+1. Warum genügen GitHub-gehostete Runner nicht — inklusive `ubuntu-24.04-arm`,
+   falls es um arm64 geht?
 2. Wie wird verhindert, dass je ein `pull_request`-artiger Trigger auf dem
    Runner landet — nicht nur heute, sondern auch nach künftigen Änderungen?
 3. Bekommt der Runner Docker-Zugriff? Falls ja: Warum ist Root-Äquivalenz auf

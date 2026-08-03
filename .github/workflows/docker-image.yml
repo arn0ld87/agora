@@ -58,10 +58,9 @@ jobs:
     # relevanten Pfad-Änderungen (siehe pull_request.paths oben) und auf
     # workflow_dispatch. Kein if:-Guard — Build+Trivy ist blocking für alle
     # Trigger. Smoke-/Push-Gating siehe prod-proxy-smoke/publish weiter unten.
-    # Alle Trigger laufen auf GitHub-gehosteten Runnern; push/tag/dispatch auf
-    # `ubuntu-24.04-arm` für native arm64-Builds ohne QEMU.
+    # Alle Trigger laufen auf `ubuntu-latest`, also amd64 — ohne Sonderfall.
     #
-    # Vorher zeigten diese Trigger auf den self-hosted Runner `meinserver`.
+    # Vorher zeigten push/tag/dispatch auf den self-hosted Runner `meinserver`.
     # Das hatte zwei Mängel. Erstens funktionierte es nicht: der Runner läuft
     # als Container ohne gemounteten Docker-Socket, weshalb `Set up Docker
     # Buildx` ausnahmslos mit "Cannot connect to the Docker daemon" abbrach —
@@ -69,9 +68,22 @@ jobs:
     # gelangte kein Image mehr nach GHCR. Zweitens wäre die naheliegende
     # Reparatur (Socket-Mount) an einem öffentlichen Repository ein
     # Root-Äquivalent auf einem Host, der weitere Dienste trägt.
-    # GitHub-gehostete arm64-Runner lösen beides und sind für öffentliche
-    # Repositories kostenfrei.
-    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'ubuntu-24.04-arm' }}
+    #
+    # Der Zwischenschritt `ubuntu-24.04-arm` hätte beides gelöst und dabei
+    # einen dritten Mangel geerbt, den der kaputte Runner nur verdeckt hat:
+    # `build-only` reicht sein Image an `prod-proxy-smoke` weiter, und der
+    # läuft auf `ubuntu-latest`. Ein arm64-Artefakt startet dort nicht.
+    # Aufgefallen ist das nie, weil `build-only` vorher immer abbrach und der
+    # Smoke-Job deshalb nie zum Zug kam.
+    #
+    # amd64 ist auch die Architektur, die tatsächlich ausgeliefert wird:
+    # `publish` baut auf `ubuntu-latest`, das Image in GHCR war also immer
+    # amd64. Die Deployments auf armserver bauen lokal statt aus der Registry.
+    # Für die Kette build → smoke → publish gibt es damit keinen belegten
+    # arm64-Bedarf. Werden echte arm64-Images gebraucht, gehört das als
+    # Multi-Platform-Build (`platforms: linux/amd64,linux/arm64`) in den
+    # publish-Job — nicht als abweichender Runner für build-only.
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
       contents: read
