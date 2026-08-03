@@ -28,11 +28,13 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 from ..contracts import PersonaQuotaActual, PersonaQuotaPlan
 from ..contracts.llm_routing_contract import ResolvedRoute
 from ..utils.logger import get_logger
+from .degradation_collector import DegradationCollector
 from .entity_reader import EntityReader
 from .settings_layer import get_default_service as _get_settings
 from .llm_routing_seed import resolve_route_api_key
 from .llm_runtime import RuntimeLlmConfig
 from .oasis_profile_generator import OasisAgentProfile, OasisProfileGenerator
+from .persona_eligibility import filter_eligible_entities
 from .persona_quota_defaults import default_dach_industry_quota
 from .report_agent import MIN_PERSONA_TABLE_ROWS
 from .simulation_config_generator import SimulationConfigGenerator
@@ -61,6 +63,7 @@ def _phase_read_entities(
     defined_entity_types: Optional[List[str]],
     max_agents: Optional[int],
     progress_callback: Optional[Callable] = None,
+    degradations: Optional[DegradationCollector] = None,
 ):
     """Phase 1: Entities aus dem Graphen lesen + filtern + cappen.
 
@@ -82,6 +85,18 @@ def _phase_read_entities(
         defined_entity_types=defined_entity_types,
         enrich_with_edges=True,
     )
+
+    # Issue #1034: entity_type-Filter (label-technisch) findet auch
+    # Entitäten ohne menschlichen Träger — "USA" (Country), "Agora"
+    # (Product) usw. Der Eignungsfilter schließt sie vor dem
+    # max_agents-Cap aus, damit sie weder zählen noch generiert werden.
+    eligibility = filter_eligible_entities(filtered.entities, degradations=degradations)
+    if eligibility.exclusions:
+        filtered.entities = eligibility.eligible
+        filtered.filtered_count = len(filtered.entities)
+        filtered.entity_types = {
+            entity.get_entity_type() or "Entity" for entity in filtered.entities
+        }
 
     # User-controlled cap on number of agents (optional).
     # Truncates the entity list before persona generation. Entities are
@@ -128,6 +143,7 @@ def _phase_generate_profiles(
     progress_callback: Optional[Callable] = None,
     quota_plan: Optional[PersonaQuotaPlan] = None,
     persona_floor: int = MIN_PERSONA_TABLE_ROWS,
+    degradations: Optional[DegradationCollector] = None,
 ) -> Tuple[List[Any], List[Any]]:
     """Phase 2: OASIS-Profiles generieren und im Sim-Dir ablegen.
 
@@ -202,6 +218,11 @@ def _phase_generate_profiles(
         parallel_count=parallel_profile_count,
         realtime_output_path=realtime_output_path,
         output_platform=realtime_platform,
+        # Issue #1034: Der Parameter existiert seit #1029 (Slice 12,
+        # regelbasierte Fallback-Profile), wurde aus dem produktiven
+        # Prepare-Pfad aber nie gefüllt — ``_report_persona_degradation``
+        # lief damit nie. Ohne diese Zeile bleibt die Meldung dort tot.
+        degradations=degradations,
     )
 
     state.profiles_count = len(profiles)
@@ -490,6 +511,7 @@ def prepare_simulation(
     max_agents: Optional[int] = None,
     quota_plan: Optional[PersonaQuotaPlan] = None,
     run_id: Optional[str] = None,
+    degradations: Optional[DegradationCollector] = None,
 ) -> SimulationState:
     """Orchestrator für die drei Prepare-Phasen.
 
@@ -515,6 +537,7 @@ def prepare_simulation(
             defined_entity_types,
             max_agents,
             progress_callback=progress_callback,
+            degradations=degradations,
         )
 
         if filtered.filtered_count == 0:
@@ -560,6 +583,7 @@ def prepare_simulation(
             quota_plan=quota_plan,
             persona_floor=persona_floor,
             run_id=run_id,
+            degradations=degradations,
         )
 
         # Optional quota check: ValidationError propagates → FAILED state.
