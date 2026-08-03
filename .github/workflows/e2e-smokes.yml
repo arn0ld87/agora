@@ -107,6 +107,14 @@ jobs:
         working-directory: frontend
         run: bun run build
       - name: Install Playwright browsers (Chromium-only)
+        # Der Download dauert auf einem gesunden Runner 20-30 s. Am 2026-08-03
+        # brauchte er in einem Job 10m48s, waehrend die sechs Geschwister
+        # desselben Laufs bei 31 s lagen; der Rest des 25-min-Budgets reichte
+        # danach nicht mehr, und der Job endete nach 30 min als "cancelled" —
+        # ohne Hinweis darauf, welcher Schritt die Zeit verbraucht hatte.
+        # 8 min sind das Sechzehnfache des beobachteten Normalfalls und
+        # trennen einen langsamen Spiegel von einem defekten Runner.
+        timeout-minutes: 8
         working-directory: frontend
         run: npx playwright install --with-deps chromium
       - name: Run Playwright Health-Smoke
@@ -196,6 +204,14 @@ jobs:
         working-directory: frontend
         run: bun run build
       - name: Install Playwright browsers (Chromium-only)
+        # Der Download dauert auf einem gesunden Runner 20-30 s. Am 2026-08-03
+        # brauchte er in einem Job 10m48s, waehrend die sechs Geschwister
+        # desselben Laufs bei 31 s lagen; der Rest des 25-min-Budgets reichte
+        # danach nicht mehr, und der Job endete nach 30 min als "cancelled" —
+        # ohne Hinweis darauf, welcher Schritt die Zeit verbraucht hatte.
+        # 8 min sind das Sechzehnfache des beobachteten Normalfalls und
+        # trennen einen langsamen Spiegel von einem defekten Runner.
+        timeout-minutes: 8
         working-directory: frontend
         run: npx playwright install --with-deps chromium
       - name: Run Playwright Upload+Graph-Smoke
@@ -288,6 +304,14 @@ jobs:
         working-directory: frontend
         run: bun run build
       - name: Install Playwright browsers (Chromium-only)
+        # Der Download dauert auf einem gesunden Runner 20-30 s. Am 2026-08-03
+        # brauchte er in einem Job 10m48s, waehrend die sechs Geschwister
+        # desselben Laufs bei 31 s lagen; der Rest des 25-min-Budgets reichte
+        # danach nicht mehr, und der Job endete nach 30 min als "cancelled" —
+        # ohne Hinweis darauf, welcher Schritt die Zeit verbraucht hatte.
+        # 8 min sind das Sechzehnfache des beobachteten Normalfalls und
+        # trennen einen langsamen Spiegel von einem defekten Runner.
+        timeout-minutes: 8
         working-directory: frontend
         run: npx playwright install --with-deps chromium
       - name: Run Playwright Minimalreport-Smoke
@@ -372,6 +396,14 @@ jobs:
         working-directory: frontend
         run: bun run build
       - name: Install Playwright browsers (Chromium-only)
+        # Der Download dauert auf einem gesunden Runner 20-30 s. Am 2026-08-03
+        # brauchte er in einem Job 10m48s, waehrend die sechs Geschwister
+        # desselben Laufs bei 31 s lagen; der Rest des 25-min-Budgets reichte
+        # danach nicht mehr, und der Job endete nach 30 min als "cancelled" —
+        # ohne Hinweis darauf, welcher Schritt die Zeit verbraucht hatte.
+        # 8 min sind das Sechzehnfache des beobachteten Normalfalls und
+        # trennen einen langsamen Spiegel von einem defekten Runner.
+        timeout-minutes: 8
         working-directory: frontend
         run: npx playwright install --with-deps chromium
       - name: Run Playwright Report-Modes-Smoke
@@ -461,6 +493,14 @@ jobs:
         working-directory: frontend
         run: bun run build
       - name: Install Playwright browsers (Chromium-only)
+        # Der Download dauert auf einem gesunden Runner 20-30 s. Am 2026-08-03
+        # brauchte er in einem Job 10m48s, waehrend die sechs Geschwister
+        # desselben Laufs bei 31 s lagen; der Rest des 25-min-Budgets reichte
+        # danach nicht mehr, und der Job endete nach 30 min als "cancelled" —
+        # ohne Hinweis darauf, welcher Schritt die Zeit verbraucht hatte.
+        # 8 min sind das Sechzehnfache des beobachteten Normalfalls und
+        # trennen einen langsamen Spiegel von einem defekten Runner.
+        timeout-minutes: 8
         working-directory: frontend
         run: npx playwright install --with-deps chromium
       - name: Run Playwright Golden-Gate-Accessibility-Smoke
@@ -554,6 +594,14 @@ jobs:
         working-directory: frontend
         run: bun run build
       - name: Install Playwright browsers (Chromium-only)
+        # Der Download dauert auf einem gesunden Runner 20-30 s. Am 2026-08-03
+        # brauchte er in einem Job 10m48s, waehrend die sechs Geschwister
+        # desselben Laufs bei 31 s lagen; der Rest des 25-min-Budgets reichte
+        # danach nicht mehr, und der Job endete nach 30 min als "cancelled" —
+        # ohne Hinweis darauf, welcher Schritt die Zeit verbraucht hatte.
+        # 8 min sind das Sechzehnfache des beobachteten Normalfalls und
+        # trennen einen langsamen Spiegel von einem defekten Runner.
+        timeout-minutes: 8
         working-directory: frontend
         run: npx playwright install --with-deps chromium
       - name: Run Playwright AiModelPicker-Smoke
@@ -653,6 +701,14 @@ jobs:
         working-directory: frontend
         run: bun run build
       - name: Install Playwright browsers (Chromium-only)
+        # Der Download dauert auf einem gesunden Runner 20-30 s. Am 2026-08-03
+        # brauchte er in einem Job 10m48s, waehrend die sechs Geschwister
+        # desselben Laufs bei 31 s lagen; der Rest des 25-min-Budgets reichte
+        # danach nicht mehr, und der Job endete nach 30 min als "cancelled" —
+        # ohne Hinweis darauf, welcher Schritt die Zeit verbraucht hatte.
+        # 8 min sind das Sechzehnfache des beobachteten Normalfalls und
+        # trennen einen langsamen Spiegel von einem defekten Runner.
+        timeout-minutes: 8
         working-directory: frontend
         run: npx playwright install --with-deps chromium
       - name: Run Playwright Run-Budget-Smoke
