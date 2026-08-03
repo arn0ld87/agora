@@ -58,17 +58,15 @@ run_backend() {
   # damit die Tests gegen das Produktionsverhalten laufen -- ein
   # Debug-only Sentinel-Leak (Issue #1058) bricht hier nicht.
   # Issue #1054 (offen, pre-existing) lässt test_oasis_preflight rot;
-  # plus Drift in #1059, #1060, #1061, #1062, #1063, #1064, #1065.
-  # Deselect bis Fixes gemerged sind; Liste schrumpft dann.
+  # plus Drift in #1060, #1061, #1062, #1063, #1065.
+  # #1064 Generate-Profiles-Endpoint (2 Tests).
+  # #1059 (LLM-Client-Metriken-Tests) ist mit #1066 gefixt; die fünf
+  # Tests dort sind aus dem Deselect raus. Deselect bis die übrigen
+  # Fixes gemerged sind; Liste schrumpft weiter.
   step "Backend: tests (PR subset, no coverage)"
   (cd backend && FLASK_DEBUG=false uv run pytest tests/ \
       --ignore=tests/contracts \
       --deselect tests/scripts/test_oasis_preflight.py::TestPreflightSkipSwitch::test_skip_env_skips_probe_and_warns \
-      --deselect tests/utils/test_llm_client_metrics.py::TestChatIncrementsTokenCounter::test_chat_increments_token_counter_in_and_out \
-      --deselect tests/utils/test_llm_client_metrics.py::TestChatJsonIncrementsTokenCounter::test_chat_json_increments_token_counter \
-      --deselect tests/utils/test_llm_client_metrics.py::TestRetryDoesNotDoubleCount::test_retry_does_not_double_count \
-      --deselect tests/utils/test_llm_client_metrics.py::TestMissingUsageNoIncrement::test_missing_usage_no_increment \
-      --deselect tests/utils/test_llm_client_metrics.py::TestProviderModelLabels::test_provider_model_labels_set \
       --deselect tests/services/test_oasis_voice_register.py::test_llm_valid_voice_register_lands_in_profile \
       --deselect tests/services/test_oasis_voice_register.py::test_llm_invalid_voice_register_fallback_neutral_de \
       --deselect tests/services/test_oasis_voice_register.py::test_llm_missing_voice_register_fallback_neutral_de \
@@ -77,6 +75,7 @@ run_backend() {
       --deselect tests/services/test_bug_reproductions.py::test_repro_bug_b_oasis_profile_generator_thinking_tokens_parsing \
       --deselect tests/test_entity_propagation.py::test_expanded_entities_propagate_to_config_generator \
       --deselect tests/api/test_simulation_uses_request_model.py::test_generate_profiles_endpoint_falls_back_when_no_llm_model \
+      --deselect tests/api/test_simulation_uses_request_model.py::test_generate_profiles_endpoint_passes_llm_model_to_generator \
       --deselect tests/test_nltk_import_guard.py::test_ingestion_entrypoint_can_parse \
       -q --no-cov -x) \
     || fail "backend tests"
