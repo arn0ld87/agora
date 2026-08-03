@@ -23,6 +23,20 @@ dependencies = [
     "camel-oasis==0.2.5",
     "camel-ai==0.2.78",
 
+    # Der Produktionspfad unter `app/` importiert torch nicht — es kommt dort
+    # transitiv ueber camel-oasis -> sentence-transformers. Ausserhalb von
+    # `app/` wird es sehr wohl importiert: `tests/conftest.py` laedt es
+    # bewusst frueh, und `scripts/_sim_common.py` lazy. Beide Pfade laufen
+    # mit dem CPU-Build unveraendert.
+    #
+    # Der Eintrag steht hier, weil `[tool.uv.sources]` ausschliesslich auf
+    # direkt deklarierte Dependencies wirkt: ohne ihn laesst sich die
+    # Bezugsquelle einer transitiven Abhaengigkeit nicht umlenken. Die
+    # Begruendung fuer die Umlenkung steht bei `[[tool.uv.index]]` unten.
+    # Die untere Schranke haelt den bereits aufgeloesten Stand und
+    # verhindert einen stillen Downgrade; nach oben ist bewusst offen.
+    "torch>=2.13.0",
+
     # File parsing
     "PyMuPDF>=1.24.0",
     # Image handling for PDF vision pipeline (downscale, format conversion)
@@ -263,3 +277,39 @@ override-dependencies = [
     # Advisory dann nicht mehr, ohne dass ein echter Fix vorliegt (#661).
     "nltk==3.10.1",
 ]
+
+# ---------------------------------------------------------------------------
+# torch aus dem CPU-Index statt von PyPI.
+#
+# torch ist keine bewusste Abhaengigkeit von Agora. In den Produktionspfad
+# unter `app/` kommt es ausschliesslich transitiv:
+#   camel-oasis -> sentence-transformers -> torch
+# Der einzige Treffer fuer sentence_transformers dort ist ein
+# warnings.filterwarnings in __init__.py. Direkt importiert wird torch nur
+# ausserhalb von `app/`: in `tests/conftest.py` und lazy in
+# `scripts/_sim_common.py` — beide funktionieren mit dem CPU-Build
+# unveraendert, was im gebauten Image geprueft ist.
+#
+# Das PyPI-Wheel deklariert seine CUDA-Abhaengigkeiten mit dem Marker
+# `sys_platform == 'linux'` ohne Architektur-Einschraenkung. Im Container
+# installiert uv sie deshalb mit, unabhaengig davon, ob eine GPU existiert
+# oder je existieren wird. Gemessen in der laufenden venv auf armserver:
+# nvidia/ 2,9 GB, torch/ 859 MB, triton/ 650 MB — 4,4 GB von 5,3 GB.
+#
+# Der CPU-Index liefert dasselbe torch ohne diese Abhaengigkeiten. Agora
+# betreibt seine Modelle ohnehin ueber Ollama und OpenAI-kompatible
+# Endpunkte, nicht in-process auf einer GPU; die Aufloesung von
+# ADR-0007 (Embeddings ueber den EmbeddingConfigurationStore) bleibt
+# unberuehrt.
+#
+# Die Quelle gilt nur fuer Linux. Auf macOS gibt es im CPU-Index keine
+# Wheels — dort liefert PyPI ohnehin eine CPU-Variante, weil die
+# CUDA-Marker nicht greifen.
+# ---------------------------------------------------------------------------
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]

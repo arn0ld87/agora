@@ -100,6 +100,8 @@ jobs:
             docker-images-prod.s3.amazonaws.com:443
             docker-images-prod.6aa30f8b08e16409b46e0173d6de2f56.r2.cloudflarestorage.com:443
             check.trivy.dev:443
+            download.pytorch.org:443
+            download-r2.pytorch.org:443
             files.pythonhosted.org:443
             get.trivy.dev:443
             ghcr.io:443
@@ -443,6 +445,8 @@ jobs:
             dl-cdn.alpinelinux.org:443
             docker-images-prod.s3.amazonaws.com:443
             docker-images-prod.6aa30f8b08e16409b46e0173d6de2f56.r2.cloudflarestorage.com:443
+            download.pytorch.org:443
+            download-r2.pytorch.org:443
             files.pythonhosted.org:443
             ghcr.io:443
             index.docker.io:443
