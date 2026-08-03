@@ -316,6 +316,7 @@
       "generate": "Generate personas",
       "regenerate": "Regenerate",
       "running": "Generating {done} / {total} personas…",
+      "floorApplied": "The report needs more personas than the graph holds entities. The entity pool is therefore cycled through until {total} personas exist.",
       "completed": "{count} personas generated.",
       "preview": "Preview a persona",
       "edit": "Edit",
@@ -411,7 +412,7 @@
       "label": "Limit max. number of agents",
       "unit": "Agents",
       "minimumHint": "Minimum for the DACH persona table: 10 agents.",
-      "unlimitedHint": "Without a limit, one agent is created for each entity in the graph."
+      "unlimitedHint": "Without a limit, one agent is created per eligible graph entity — but never fewer than the report needs for its persona table."
     },
     "personaPool": {
       "belowQuotaWarning": "Pool size ({pool}) is below the required quota sum ({quota}). Some segments may not be fully populated."

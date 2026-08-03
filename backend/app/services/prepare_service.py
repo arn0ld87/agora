@@ -25,14 +25,20 @@ import os
 import traceback
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
-from ..contracts import PersonaQuotaActual, PersonaQuotaPlan
+from ..contracts import (
+    PersonaQuotaActual,
+    PersonaQuotaPlan,
+    PersonaTargetContract,
+)
 from ..contracts.llm_routing_contract import ResolvedRoute
 from ..utils.logger import get_logger
+from .degradation_collector import DegradationCollector
 from .entity_reader import EntityReader
 from .settings_layer import get_default_service as _get_settings
 from .llm_routing_seed import resolve_route_api_key
 from .llm_runtime import RuntimeLlmConfig
 from .oasis_profile_generator import OasisAgentProfile, OasisProfileGenerator
+from .persona_eligibility import filter_eligible_entities
 from .persona_quota_defaults import default_dach_industry_quota
 from .report_agent import MIN_PERSONA_TABLE_ROWS
 from .simulation_config_generator import SimulationConfigGenerator
@@ -101,6 +107,7 @@ def _phase_read_entities(
     defined_entity_types: Optional[List[str]],
     max_agents: Optional[int],
     progress_callback: Optional[Callable] = None,
+    degradations: Optional[DegradationCollector] = None,
 ):
     """Phase 1: Entities aus dem Graphen lesen + filtern + cappen.
 
@@ -122,6 +129,18 @@ def _phase_read_entities(
         defined_entity_types=defined_entity_types,
         enrich_with_edges=True,
     )
+
+    # Issue #1034: entity_type-Filter (label-technisch) findet auch
+    # Entitäten ohne menschlichen Träger — "USA" (Country), "Agora"
+    # (Product) usw. Der Eignungsfilter schließt sie vor dem
+    # max_agents-Cap aus, damit sie weder zählen noch generiert werden.
+    eligibility = filter_eligible_entities(filtered.entities, degradations=degradations)
+    if eligibility.exclusions:
+        filtered.entities = eligibility.eligible
+        filtered.filtered_count = len(filtered.entities)
+        filtered.entity_types = {
+            entity.get_entity_type() or "Entity" for entity in filtered.entities
+        }
 
     # User-controlled cap on number of agents (optional).
     # Truncates the entity list before persona generation. Entities are
@@ -168,6 +187,8 @@ def _phase_generate_profiles(
     progress_callback: Optional[Callable] = None,
     quota_plan: Optional[PersonaQuotaPlan] = None,
     persona_floor: int = MIN_PERSONA_TABLE_ROWS,
+    max_agents: Optional[int] = None,
+    degradations: Optional[DegradationCollector] = None,
 ) -> Tuple[List[Any], List[Any]]:
     """Phase 2: OASIS-Profiles generieren und im Sim-Dir ablegen.
 
@@ -185,7 +206,16 @@ def _phase_generate_profiles(
     entities = _expand_entities_for_quota(filtered.entities, quota_plan)
     if quota_plan is None:
         entities = _apply_persona_floor_to_entities(entities, minimum=persona_floor)
-    total_entities = len(entities)
+    # Issue #1034: Der Nenner des Fortschrittszählers kommt aus derselben
+    # Funktion, die auch die Preview-Antwort füllt. Vorher stand hier
+    # ``len(entities)`` — richtig, aber eben nur hier: die UI bekam den
+    # Vor-Floor-Wert aus einer zweiten Berechnung und zeigte „22 / 7".
+    total_entities = compute_persona_target(
+        len(filtered.entities),
+        max_agents=max_agents,
+        quota_plan=quota_plan,
+        floor=persona_floor,
+    ).persona_target_count
 
     if progress_callback:
         progress_callback(
@@ -247,6 +277,11 @@ def _phase_generate_profiles(
         parallel_count=parallel_profile_count,
         realtime_output_path=realtime_output_path,
         output_platform=realtime_platform,
+        # Issue #1034: Der Parameter existiert seit #1029 (Slice 12,
+        # regelbasierte Fallback-Profile), wurde aus dem produktiven
+        # Prepare-Pfad aber nie gefüllt — ``_report_persona_degradation``
+        # lief damit nie. Ohne diese Zeile bleibt die Meldung dort tot.
+        degradations=degradations,
     )
 
     state.profiles_count = len(profiles)
@@ -495,6 +530,68 @@ def _apply_persona_floor_to_quota_plan(
     return PersonaQuotaPlan(targets=targets, total=minimum)
 
 
+def compute_persona_target(
+    entity_count: int,
+    *,
+    max_agents: Optional[int] = None,
+    quota_plan: Optional[PersonaQuotaPlan] = None,
+    floor: Optional[int] = None,
+) -> PersonaTargetContract:
+    """Bestimmt das Persona-Generierungsziel — eine Quelle für beide Pfade.
+
+    ``entity_count`` ist die Entitätenzahl nach Eignungsfilter und
+    ``max_agents``-Cap. Der wirksame Floor ist ``MIN_PERSONA_TABLE_ROWS``,
+    gedeckelt durch ein gesetztes ``max_agents > 0`` (Nutzer-Wunsch schlägt
+    Contract). Wer den Floor bereits aufgelöst hat — der Orchestrator tut
+    das für die Generierung —, reicht ihn als ``floor`` herein, statt ihn
+    hier ein zweites Mal berechnen zu lassen.
+
+    Mit ``quota_plan`` ist das Ziel dessen ``total`` nach
+    ``_apply_persona_floor_to_quota_plan``; ohne Plan ist es
+    ``max(entity_count, floor)`` — dasselbe, was
+    ``_apply_persona_floor_to_entities`` auf den Entity-Pool anwendet.
+
+    Ein leerer Pool bleibt leer: ``_apply_persona_floor_to_entities``
+    skaliert nichts hoch, wenn es nichts zu wiederholen gibt. Ein Ziel von
+    50 bei null Entitäten wäre genau die Divergenz zwischen Zähler und
+    Nenner, die dieser Contract beseitigen soll.
+
+    ``api/simulation_prepare.py`` (Preview) und ``_phase_generate_profiles``
+    (Laufpfad) rufen exakt diese Funktion.
+    """
+    effective_floor = MIN_PERSONA_TABLE_ROWS if floor is None else floor
+    if floor is None and max_agents is not None and max_agents > 0:
+        effective_floor = min(effective_floor, max_agents)
+
+    if entity_count == 0:
+        # Vor dem Quota-Zweig, nicht dahinter: auch mit Plan gibt es nichts
+        # zu wiederholen. `_expand_entities_for_quota` wirft hier ohnehin,
+        # und der Orchestrator bricht bei `filtered_count == 0` ab — ein
+        # Nenner von 50 wäre eine Zahl, die nie erreicht werden kann.
+        target = 0
+        floor_applied = False
+    elif quota_plan is not None:
+        adjusted_plan = _apply_persona_floor_to_quota_plan(
+            quota_plan, minimum=effective_floor
+        )
+        target = adjusted_plan.total if adjusted_plan is not None else quota_plan.total
+        # Mit Plan sagt ein Vergleich gegen `entity_count` nichts über den
+        # Floor aus: 80 Entitäten mit einer Quota von 6 werden angehoben,
+        # lägen aber unter der Entitätenzahl. Maßgeblich ist allein, ob der
+        # Plan unter dem Floor lag.
+        floor_applied = quota_plan.total < effective_floor
+    else:
+        target = max(entity_count, effective_floor)
+        floor_applied = entity_count < effective_floor
+
+    return PersonaTargetContract(
+        entity_count=entity_count,
+        persona_target_count=target,
+        floor_applied=floor_applied,
+        floor=effective_floor,
+    )
+
+
 def _validate_persona_quota(
     plan: PersonaQuotaPlan,
     profiles: List[OasisAgentProfile],
@@ -536,6 +633,7 @@ def prepare_simulation(
     max_agents: Optional[int] = None,
     quota_plan: Optional[PersonaQuotaPlan] = None,
     run_id: Optional[str] = None,
+    degradations: Optional[DegradationCollector] = None,
 ) -> SimulationState:
     """Orchestrator für die drei Prepare-Phasen.
 
@@ -561,6 +659,7 @@ def prepare_simulation(
             defined_entity_types,
             max_agents,
             progress_callback=progress_callback,
+            degradations=degradations,
         )
 
         if filtered.filtered_count == 0:
@@ -605,7 +704,9 @@ def prepare_simulation(
             progress_callback=progress_callback,
             quota_plan=quota_plan,
             persona_floor=persona_floor,
+            max_agents=max_agents,
             run_id=run_id,
+            degradations=degradations,
         )
 
         # Optional quota check: ValidationError propagates → FAILED state.
@@ -654,6 +755,7 @@ def prepare_simulation(
 
 __all__ = [
     "prepare_simulation",
+    "compute_persona_target",
     "_apply_persona_floor_to_entities",
     "_apply_persona_floor_to_quota_plan",
     "_validate_persona_quota",
