@@ -76,6 +76,19 @@ jobs:
     permissions:
       contents: read
       security-events: write
+    env:
+      # Das Image-Artefakt hat genau EINEN Konsumenten: prod-proxy-smoke.
+      # Dessen if:-Guard laesst nur workflow_dispatch, Tags und Release-/RC-
+      # Branches durch — auf einem PR-Lauf wird der Job geskippt, publish
+      # haengt an ihm und wird ebenfalls geskippt. Das Artefakt wird dort
+      # also nie heruntergeladen, waehrend der Upload den vollen Prod-Tar
+      # (venv inklusive CUDA-Kette, > 1,6 GB) durch den Runner schiebt.
+      # Diese Bedingung MUSS mit der in prod-proxy-smoke identisch bleiben.
+      IMAGE_ARTIFACT_NEEDED: >-
+        ${{ github.event_name == 'workflow_dispatch' ||
+        startsWith(github.ref, 'refs/tags/v') ||
+        startsWith(github.ref, 'refs/heads/release/') ||
+        startsWith(github.ref, 'refs/heads/rc/') }}
     steps:
       - name: Harden Runner
         # Läuft jetzt für alle Trigger: die Einschränkung auf `pull_request`
@@ -209,7 +222,19 @@ jobs:
         # outputs: type=docker exportiert in /tmp/image.tar, laedt aber NICHT
         # automatisch in den Daemon. sbom-action braucht ein daemon-sichtiges
         # Image; wir laden es einmalig hier.
-        run: docker load -i /tmp/image.tar
+        #
+        # Danach existiert das Image zweimal auf der Platte: als Tar unter
+        # /tmp und als Layer im Daemon. Braucht dieser Lauf das Artefakt
+        # nicht, faellt der Tar hier weg — die SBOM-Erzeugung laeuft dann
+        # nicht mehr gegen die Speicherobergrenze, an der #994 schon einmal
+        # ohne Fehlermeldung abgebrochen ist.
+        run: |
+          docker load -i /tmp/image.tar
+          if [ "${IMAGE_ARTIFACT_NEEDED}" != "true" ]; then
+            echo "Kein Konsument fuer /tmp/image.tar in diesem Lauf — Datei freigegeben."
+            rm -f /tmp/image.tar
+            df -h / | tail -1
+          fi
 
       - name: SBOM fuer Container-Image erzeugen
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
@@ -229,6 +254,10 @@ jobs:
           retention-days: 90
 
       - name: Image-Artefakt hochladen
+        # Nur wenn prod-proxy-smoke in diesem Lauf ueberhaupt startet — siehe
+        # IMAGE_ARTIFACT_NEEDED am Job-Kopf. Ohne diesen Guard lud jeder PR
+        # einen mehrere Gigabyte grossen Tar hoch, den kein Job je abholt.
+        if: env.IMAGE_ARTIFACT_NEEDED == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: docker-image
