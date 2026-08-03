@@ -251,6 +251,25 @@ class TestResidualContractViolationIsVisible:
         assert payload["evidence"] is not None
         assert payload["evidence_omitted"] is None
 
+    def test_empty_persisted_map_is_reported_not_treated_as_missing(self, client):
+        """Eine vorhandene, aber leere evidence-map.json ist kein fehlendes Artefakt.
+
+        Mit einer Truthiness-Pruefung (``if raw_evidence_map``) war ``{}``
+        von „kein Artefakt" nicht zu unterscheiden: Migration und Validierung
+        wurden uebersprungen, der Envelope trug ``evidence: null`` **und**
+        ``evidence_omitted: null``. Genau der stille Verlust, den dieser Slice
+        behebt — eine Ebene tiefer.
+        """
+        _persist({})
+
+        payload = _export_json(client)
+
+        assert payload["evidence"] is None
+        assert payload["evidence_omitted"] is not None, (
+            "leere Evidence-Map wurde wie ein fehlendes Artefakt behandelt"
+        )
+        assert payload["evidence_omitted"]["reason"] == "contract_violation"
+
     def test_report_without_any_evidence_map_carries_no_omission(self, client):
         """Kein Evidence-Artefakt ist kein Verlust — nur ein Report ohne Evidence."""
         ReportManager.save_report(

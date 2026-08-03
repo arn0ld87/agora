@@ -24,7 +24,7 @@ describe('buildStandaloneHtml', () => {
   })
 })
 
-function makeExportsApi(addLog = vi.fn()) {
+function makeExportsApi(addLog = vi.fn(), recordEvidenceOmission = vi.fn()) {
   return useReportExports({
     reportId: () => 'report_abcdef123456',
     reportMarkdown: computed(() => '# Legacy'),
@@ -32,6 +32,7 @@ function makeExportsApi(addLog = vi.fn()) {
     evidenceMap: ref(null),
     addLog,
     recordSchemaError: vi.fn(),
+    recordEvidenceOmission,
   })
 }
 
@@ -186,39 +187,43 @@ describe('useReportExports', () => {
   // Die Fixture ist kein handgebautes Objekt, sondern die woertliche Antwort
   // von GET /api/report/<id>/export?format=json, erzeugt vom echten
   // ReportExportService gegen eine Evidence-Map, die den Vertrag verletzt.
-  // Damit belegt dieser Test die ganze Kette: Pydantic-Produzent -> HTTP ->
-  // Zod-Spiegel -> Composable -> sichtbarer Log-Eintrag. Ein Zod-Schema, das
-  // `evidence_omitted` nicht kennt, laesst den Test an `.strict()` scheitern.
-  it('macht eine verworfene Evidence-Map im JSON-Export sichtbar', async () => {
+  // Damit belegt dieser Test die Kette: Pydantic-Produzent -> HTTP ->
+  // Zod-Spiegel -> Composable. Ein Zod-Schema, das `evidence_omitted` nicht
+  // kennt, laesst den Test an `.strict()` scheitern. Dass der Hinweis danach
+  // auch gerendert wird, sichert Step4Report.spec.ts ab — ueber addLog waere
+  // er beim Nutzer nie angekommen (Codex-Review zu PR #1042).
+  it('meldet eine verworfene Evidence-Map an den Renderer', async () => {
     vi.mocked(exportReport).mockResolvedValue(
       new Blob([JSON.stringify(omittedEnvelope)], { type: 'application/json' })
     )
 
-    const addLog = vi.fn()
-    const exportsApi = makeExportsApi(addLog)
+    const recordEvidenceOmission = vi.fn()
+    const exportsApi = makeExportsApi(vi.fn(), recordEvidenceOmission)
     await exportsApi.downloadCombinedJson()
 
-    expect(addLog).toHaveBeenCalledWith(
-      expect.stringContaining('Evidence fehlt in der Datei')
-    )
-    expect(addLog).toHaveBeenCalledWith(
-      expect.stringContaining('Extra inputs are not permitted')
+    expect(recordEvidenceOmission).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: 'contract_violation',
+        validation_errors: [expect.stringContaining('Extra inputs are not permitted')],
+      })
     )
     // Der Fallback bleibt: der Report-Rumpf wird weiterhin ausgeliefert.
     expect(click).toHaveBeenCalled()
   })
 
-  it('meldet nichts, wenn der Envelope keine Auslassung traegt', async () => {
+  it('loescht den Hinweis, wenn der Envelope keine Auslassung traegt', async () => {
     const healthy = { ...omittedEnvelope, evidence_omitted: null }
     vi.mocked(exportReport).mockResolvedValue(
       new Blob([JSON.stringify(healthy)], { type: 'application/json' })
     )
 
-    const addLog = vi.fn()
-    const exportsApi = makeExportsApi(addLog)
+    const recordEvidenceOmission = vi.fn()
+    const exportsApi = makeExportsApi(vi.fn(), recordEvidenceOmission)
     await exportsApi.downloadCombinedJson()
 
-    expect(addLog).not.toHaveBeenCalled()
+    // Explizit null, nicht "nicht aufgerufen": ein frueherer Hinweis muss
+    // verschwinden, sonst bleibt ein geheilter Export dauerhaft gewarnt.
+    expect(recordEvidenceOmission).toHaveBeenCalledWith(null)
     expect(click).toHaveBeenCalled()
   })
 })

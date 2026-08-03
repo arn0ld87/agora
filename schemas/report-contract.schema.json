@@ -386,13 +386,14 @@
       "description": "Warum ein Export-Envelope keine Evidence-Map traegt (Issue #987).\n\nBis #987 fiel eine Evidence-Map, die nach allen Migrationen den Vertrag\nverletzte, mit einer ``logger.warning`` aus dem Envelope. Der Nutzer bekam\nHTTP 200 und eine herunterladbare JSON-Datei mit ``evidence: null`` \u2014 von\neinem Report ohne Evidence nicht zu unterscheiden.\n\nDer Fallback bleibt: ein unvollstaendiger Export ist besser als gar keiner,\nund der Report-Rumpf ist unbeschaedigt. Er ist nur nicht laenger stumm.\n\nAbgrenzung zu ``EvidenceDegradationModel`` (#1006): das protokolliert die\nAbstufung eines *einzelnen Claims* waehrend der Report-Erzeugung. Hier ist\ndie *gesamte Map* nicht ausliefertbar, und zwar erst beim Export.",
       "properties": {
         "detail": {
-          "description": "Menschenlesbare Ursache \u2014 geht so in die Oberflaeche.",
+          "description": "Erklaerung fuer den Leser der exportierten Datei, nicht fuer die Oberflaeche: wer die JSON spaeter ohne Agora oeffnet, soll den fehlenden Evidence-Teil einordnen koennen.",
           "minLength": 1,
           "title": "Detail",
           "type": "string"
         },
         "reason": {
           "const": "contract_violation",
+          "description": "Stabiler Schluessel. Die Oberflaeche uebersetzt daraus per vue-i18n \u2014 dieser Vertrag transportiert keinen UI-Text.",
           "title": "Reason",
           "type": "string"
         },

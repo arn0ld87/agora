@@ -548,10 +548,19 @@ class EvidenceOmissionModel(BaseModel):
     """
 
     model_config = _STRICT
-    reason: Literal["contract_violation"]
+    reason: Literal["contract_violation"] = Field(
+        description=(
+            "Stabiler Schluessel. Die Oberflaeche uebersetzt daraus per "
+            "vue-i18n — dieser Vertrag transportiert keinen UI-Text."
+        ),
+    )
     detail: str = Field(
         min_length=1,
-        description="Menschenlesbare Ursache — geht so in die Oberflaeche.",
+        description=(
+            "Erklaerung fuer den Leser der exportierten Datei, nicht fuer die "
+            "Oberflaeche: wer die JSON spaeter ohne Agora oeffnet, soll den "
+            "fehlenden Evidence-Teil einordnen koennen."
+        ),
     )
     validation_errors: list[str] = Field(
         default_factory=list,

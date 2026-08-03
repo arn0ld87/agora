@@ -78,8 +78,18 @@ class ReportExportService:
         # und die restlichen Migrationsschritte fehlten — persistierte
         # Bestands-Maps scheiterten dann am Validator und fielen komplett aus
         # dem Envelope.
-        migrated = normalize_persisted_evidence_map(raw_evidence_map) if raw_evidence_map else None
-        if migrated:
+        #
+        # `is not None` statt Truthiness: eine vorhandene, aber leere
+        # evidence-map.json ({}) ist kein fehlendes Artefakt, sondern eine
+        # kaputte Map. Mit `if raw_evidence_map` waere sie stumm wie ein
+        # fehlendes Artefakt behandelt worden — derselbe stille Verlust eine
+        # Ebene tiefer (Codex-Review zu PR #1042).
+        migrated = (
+            normalize_persisted_evidence_map(raw_evidence_map)
+            if raw_evidence_map is not None
+            else None
+        )
+        if migrated is not None:
             try:
                 evidence = EvidenceMapModel.model_validate(migrated)
             except ValidationError as exc:
@@ -94,6 +104,12 @@ class ReportExportService:
                 # ein Export ohne Evidence ist besser als gar keiner. Er darf
                 # nur nicht laenger stumm sein: bis #987 war ein entleerter
                 # Envelope von einem Report ohne Evidence nicht zu unterscheiden.
+                #
+                # `reason` ist der stabile Schluessel — die Oberflaeche
+                # uebersetzt daraus per vue-i18n. `detail` ist kein UI-String,
+                # sondern die Erklaerung *in der exportierten Datei*: wer sie
+                # spaeter ohne Agora oeffnet, soll lesen koennen, warum der
+                # Evidence-Teil fehlt (Codex-Review zu PR #1042).
                 omission = EvidenceOmissionModel(
                     reason="contract_violation",
                     detail=(

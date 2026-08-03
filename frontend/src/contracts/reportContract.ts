@@ -309,6 +309,11 @@ export type EvidenceMap = z.infer<typeof EvidenceMapSchema>;
  * nach der Migration verletzte und deshalb nicht mit exportiert wurde. Ohne
  * dieses Feld war ein entleerter Envelope von einem Report ohne Evidence
  * nicht zu unterscheiden — beide lieferten schlicht `evidence: null`.
+ *
+ * `reason` ist der stabile Schluessel, aus dem die Oberflaeche per vue-i18n
+ * uebersetzt. `detail` ist bewusst KEIN UI-String: es erklaert den fehlenden
+ * Evidence-Teil demjenigen, der die exportierte Datei spaeter ohne Agora
+ * oeffnet. Nicht rendern — sonst haengt die Anzeigesprache am Backend.
  */
 export const EvidenceOmissionSchema = z.object({
   reason: z.literal('contract_violation'),

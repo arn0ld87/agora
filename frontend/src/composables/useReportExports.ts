@@ -1,6 +1,10 @@
 import type { ComputedRef, Ref } from 'vue'
 import { exportReport, fetchReportBundle, fetchReportCsv } from '../api/report'
-import { parseReportContract, type EvidenceMap } from '../contracts/reportContract'
+import {
+  parseReportContract,
+  type EvidenceMap,
+  type EvidenceOmission,
+} from '../contracts/reportContract'
 
 interface UseReportExportsOptions {
   reportId: () => string | undefined
@@ -9,6 +13,12 @@ interface UseReportExportsOptions {
   evidenceMap: Ref<EvidenceMap | null>
   addLog: (message: string) => void
   recordSchemaError: (where: string, error: unknown) => void
+  /**
+   * Issue #987 — meldet, dass der Export ohne Evidence-Map ausgeliefert wurde.
+   * `null` loescht einen frueheren Hinweis, damit ein geheilter Export nicht
+   * dauerhaft gewarnt bleibt.
+   */
+  recordEvidenceOmission: (omission: EvidenceOmission | null) => void
 }
 
 function triggerDownload(blob: Blob, filename: string) {
@@ -145,15 +155,14 @@ export function useReportExports(options: UseReportExportsOptions) {
       // Envelope, auch wenn die Evidence-Map nicht ausgeliefert werden konnte.
       // Ohne diesen Hinweis laedt der Nutzer eine Datei mit `evidence: null`
       // herunter und haelt sie fuer vollstaendig.
-      const omitted = parsed.data.evidence_omitted
-      if (omitted) {
-        options.addLog(
-          `JSON-Export: Evidence fehlt in der Datei — ${omitted.detail}` +
-            (omitted.validation_errors.length
-              ? ` (${omitted.validation_errors.join('; ')})`
-              : '')
-        )
-      }
+      //
+      // Nicht ueber addLog: das emittiert in Step4Report nur ein `add-log`,
+      // und der einzige produktive Mount (StepReportView.vue) hoert darauf
+      // nicht. Ein Logeintrag waere hier also genau das gewesen, was dieser
+      // Slice behebt — eine Meldung, die den Nutzer nie erreicht
+      // (Codex-Review zu PR #1042). Stattdessen ein gerenderter Hinweis,
+      // analog zu schemaError und pollTransportError.
+      options.recordEvidenceOmission(parsed.data.evidence_omitted ?? null)
       const validatedBlob = new Blob([JSON.stringify(parsed.data, null, 2)], { type: 'application/json;charset=utf-8' })
       triggerDownload(validatedBlob, `agora-report-${reportId}.json`)
     } catch (e) {

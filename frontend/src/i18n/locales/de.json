@@ -591,7 +591,12 @@
       "sectionFailed": "Abschnitt fehlgeschlagen",
       "pollTransportError": "Verbindung zum Server verloren — der Status konnte mehrfach in Folge nicht abgerufen werden. Prüfe deine Verbindung; die Anzeige aktualisiert sich automatisch, sobald ein Abruf wieder gelingt."
     },
-    "next": "Weiter zum Gespräch →"
+    "next": "Weiter zum Gespräch →",
+    "export": {
+      "evidenceOmitted": {
+        "contract_violation": "JSON-Export ausgeliefert, aber ohne Evidence-Map: die persistierte Evidence verletzt den Evidence-Vertrag. Der Report-Rumpf in der Datei ist vollständig."
+      }
+    }
   },
   "report": {
     "provenance": {
