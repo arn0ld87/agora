@@ -18,6 +18,7 @@ from . import branching_service, prepare_service
 
 if TYPE_CHECKING:
     from ..contracts import PersonaQuotaPlan
+    from .degradation_collector import DegradationCollector
     from .llm_runtime import RuntimeLlmConfig
 # simulation_state_machine importiert ``SimulationStatus`` aus diesem Modul,
 # daher Lazy-Import in ``_set_status`` (vermeidet Zirkularität).
@@ -309,6 +310,7 @@ class SimulationManager:
         language: Optional[str] = None,
         max_agents: Optional[int] = None,
         quota_plan: Optional["PersonaQuotaPlan"] = None,
+        degradations: Optional["DegradationCollector"] = None,
     ) -> SimulationState:
         return prepare_service.prepare_simulation(
             self,
@@ -325,6 +327,7 @@ class SimulationManager:
             language=language,
             max_agents=max_agents,
             quota_plan=quota_plan,
+            degradations=degradations,
         )
 
     
