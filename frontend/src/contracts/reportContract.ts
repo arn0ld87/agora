@@ -302,11 +302,28 @@ export const EvidenceMapSchema = z.object({
 }).strict();
 export type EvidenceMap = z.infer<typeof EvidenceMapSchema>;
 
+/**
+ * Spiegel zu `EvidenceOmissionModel` (Issue #987).
+ *
+ * Gesetzt genau dann, wenn eine Evidence-Map vorlag, aber den Vertrag auch
+ * nach der Migration verletzte und deshalb nicht mit exportiert wurde. Ohne
+ * dieses Feld war ein entleerter Envelope von einem Report ohne Evidence
+ * nicht zu unterscheiden — beide lieferten schlicht `evidence: null`.
+ */
+export const EvidenceOmissionSchema = z.object({
+  reason: z.literal('contract_violation'),
+  detail: z.string().min(1),
+  validation_errors: z.array(z.string()).max(5).default([]),
+}).strict();
+export type EvidenceOmission = z.infer<typeof EvidenceOmissionSchema>;
+
 export const ReportContractSchema = z.object({
   schema_version: z.literal(2),
   exported_at: z.string().datetime(),
   report: ReportSchema,
   evidence: EvidenceMapSchema.optional().nullable(),
+  // Additiv mit Default null: Envelopes von vor #987 tragen das Feld nicht.
+  evidence_omitted: EvidenceOmissionSchema.optional().nullable().default(null),
 }).strict();
 export type ReportContract = z.infer<typeof ReportContractSchema>;
 

@@ -2,6 +2,7 @@ import { computed, ref } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { exportReport, fetchReportBundle, fetchReportCsv } from '../../api/report'
 import { buildStandaloneHtml, useReportExports } from '../useReportExports'
+import omittedEnvelope from './fixtures/report-export-envelope-evidence-omitted.json'
 
 vi.mock('../../api/report', () => ({
   exportReport: vi.fn(),
@@ -179,5 +180,45 @@ describe('useReportExports', () => {
 
     expect(addLog).toHaveBeenCalledWith(expect.stringContaining('Netzwerk-ZIP-Fehler'))
     expect(click).not.toHaveBeenCalled()
+  })
+  // Issue #987 — Cross-Layer-Kette fuer den JSON-Export.
+  //
+  // Die Fixture ist kein handgebautes Objekt, sondern die woertliche Antwort
+  // von GET /api/report/<id>/export?format=json, erzeugt vom echten
+  // ReportExportService gegen eine Evidence-Map, die den Vertrag verletzt.
+  // Damit belegt dieser Test die ganze Kette: Pydantic-Produzent -> HTTP ->
+  // Zod-Spiegel -> Composable -> sichtbarer Log-Eintrag. Ein Zod-Schema, das
+  // `evidence_omitted` nicht kennt, laesst den Test an `.strict()` scheitern.
+  it('macht eine verworfene Evidence-Map im JSON-Export sichtbar', async () => {
+    vi.mocked(exportReport).mockResolvedValue(
+      new Blob([JSON.stringify(omittedEnvelope)], { type: 'application/json' })
+    )
+
+    const addLog = vi.fn()
+    const exportsApi = makeExportsApi(addLog)
+    await exportsApi.downloadCombinedJson()
+
+    expect(addLog).toHaveBeenCalledWith(
+      expect.stringContaining('Evidence fehlt in der Datei')
+    )
+    expect(addLog).toHaveBeenCalledWith(
+      expect.stringContaining('Extra inputs are not permitted')
+    )
+    // Der Fallback bleibt: der Report-Rumpf wird weiterhin ausgeliefert.
+    expect(click).toHaveBeenCalled()
+  })
+
+  it('meldet nichts, wenn der Envelope keine Auslassung traegt', async () => {
+    const healthy = { ...omittedEnvelope, evidence_omitted: null }
+    vi.mocked(exportReport).mockResolvedValue(
+      new Blob([JSON.stringify(healthy)], { type: 'application/json' })
+    )
+
+    const addLog = vi.fn()
+    const exportsApi = makeExportsApi(addLog)
+    await exportsApi.downloadCombinedJson()
+
+    expect(addLog).not.toHaveBeenCalled()
+    expect(click).toHaveBeenCalled()
   })
 })

@@ -141,6 +141,19 @@ export function useReportExports(options: UseReportExportsOptions) {
         options.addLog('JSON-Export: Schema-Mismatch — siehe rote Box')
         return
       }
+      // Issue #987: Der Server liefert HTTP 200 und ein schemakonformes
+      // Envelope, auch wenn die Evidence-Map nicht ausgeliefert werden konnte.
+      // Ohne diesen Hinweis laedt der Nutzer eine Datei mit `evidence: null`
+      // herunter und haelt sie fuer vollstaendig.
+      const omitted = parsed.data.evidence_omitted
+      if (omitted) {
+        options.addLog(
+          `JSON-Export: Evidence fehlt in der Datei — ${omitted.detail}` +
+            (omitted.validation_errors.length
+              ? ` (${omitted.validation_errors.join('; ')})`
+              : '')
+        )
+      }
       const validatedBlob = new Blob([JSON.stringify(parsed.data, null, 2)], { type: 'application/json;charset=utf-8' })
       triggerDownload(validatedBlob, `agora-report-${reportId}.json`)
     } catch (e) {
