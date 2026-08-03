@@ -67,6 +67,51 @@ def test_quota_plan_above_floor_is_left_alone():
     assert target.floor_applied is False
 
 
+def test_quota_plan_below_floor_reports_floor_applied_despite_large_pool():
+    """Mit Plan zählt der Plan, nicht die Entitätenzahl.
+
+    80 Entitäten mit einer Quota von 6 werden auf den Floor angehoben. Ein
+    Vergleich `target > entity_count` läse das als „kein Floor" — und der
+    Hinweis in Schritt 2, der genau diese Anhebung erklärt, bliebe aus.
+    """
+    plan = PersonaQuotaPlan(targets={"Person": 6}, total=6)
+
+    target = compute_persona_target(80, quota_plan=plan)
+
+    assert target.persona_target_count == MIN_PERSONA_TABLE_ROWS
+    assert target.floor_applied is True
+
+
+def test_valid_quota_above_floor_reports_no_floor_lift_on_small_pool():
+    """Die Gegenrichtung: fünf Entitäten, gültige Quota von 60.
+
+    Hier hebt der Floor nichts an — der Plan lag bereits darüber. Ein
+    Vergleich gegen die Entitätenzahl meldete fälschlich einen Floor.
+    """
+    plan = PersonaQuotaPlan(targets={"Person": 60}, total=60)
+
+    target = compute_persona_target(5, quota_plan=plan)
+
+    assert target.persona_target_count == 60
+    assert target.floor_applied is False
+
+
+def test_empty_pool_with_quota_plan_stays_empty():
+    """Der Guard steht vor dem Quota-Zweig, nicht dahinter.
+
+    Sonst meldete ein leerer Pool mit Plan den floor-angehobenen
+    Quota-Total — einen Nenner, den die Generierung nie erreichen kann,
+    weil `_expand_entities_for_quota` bei leerem Pool wirft und der
+    Orchestrator vorher bei `filtered_count == 0` abbricht.
+    """
+    plan = PersonaQuotaPlan(targets={"Person": 6}, total=6)
+
+    target = compute_persona_target(0, quota_plan=plan)
+
+    assert target.persona_target_count == 0
+    assert target.floor_applied is False
+
+
 def test_empty_pool_stays_empty():
     """Kein Ziel von 50 bei null Entitäten.
 

@@ -517,20 +517,31 @@ def compute_persona_target(
     if floor is None and max_agents is not None and max_agents > 0:
         effective_floor = min(effective_floor, max_agents)
 
-    if quota_plan is not None:
+    if entity_count == 0:
+        # Vor dem Quota-Zweig, nicht dahinter: auch mit Plan gibt es nichts
+        # zu wiederholen. `_expand_entities_for_quota` wirft hier ohnehin,
+        # und der Orchestrator bricht bei `filtered_count == 0` ab — ein
+        # Nenner von 50 wäre eine Zahl, die nie erreicht werden kann.
+        target = 0
+        floor_applied = False
+    elif quota_plan is not None:
         adjusted_plan = _apply_persona_floor_to_quota_plan(
             quota_plan, minimum=effective_floor
         )
         target = adjusted_plan.total if adjusted_plan is not None else quota_plan.total
-    elif entity_count == 0:
-        target = 0
+        # Mit Plan sagt ein Vergleich gegen `entity_count` nichts über den
+        # Floor aus: 80 Entitäten mit einer Quota von 6 werden angehoben,
+        # lägen aber unter der Entitätenzahl. Maßgeblich ist allein, ob der
+        # Plan unter dem Floor lag.
+        floor_applied = quota_plan.total < effective_floor
     else:
         target = max(entity_count, effective_floor)
+        floor_applied = entity_count < effective_floor
 
     return PersonaTargetContract(
         entity_count=entity_count,
         persona_target_count=target,
-        floor_applied=target > entity_count,
+        floor_applied=floor_applied,
         floor=effective_floor,
     )
 

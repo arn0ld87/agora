@@ -316,7 +316,7 @@
       "generate": "Generate personas",
       "regenerate": "Regenerate",
       "running": "Generating {done} / {total} personas…",
-      "floorApplied": "The graph holds fewer entities than the report needs personas. The entity pool is therefore cycled through until {total} personas exist.",
+      "floorApplied": "The report needs more personas than the graph holds entities. The entity pool is therefore cycled through until {total} personas exist.",
       "completed": "{count} personas generated.",
       "preview": "Preview a persona",
       "edit": "Edit",
