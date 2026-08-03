@@ -127,6 +127,74 @@ describe('useSimulationPrepare', () => {
       expect(composable.phase.value).toBe(1)
       expect(composable.expectedTotal.value).toBe(10)
     })
+
+    // Issue #1034: Der Nenner zählt Personas, nicht Entitäten. Ohne
+    // `persona_target` blieb er bei der Entitätenzahl stehen und der
+    // Zähler lief darüber hinaus — „Erzeugt 22 / 7 Personas…".
+    it('nimmt persona_target_count als Nenner, nicht expected_entities_count', async () => {
+      mockPrepare.mockResolvedValue(makePrepareEnvelope({
+        expected_entities_count: 7,
+        persona_target: {
+          entity_count: 7,
+          persona_target_count: 50,
+          floor_applied: true,
+          floor: 50,
+        },
+      }) as TaskStatusData)
+
+      const composable = useSimulationPrepare()
+
+      await composable.startPrepare({
+        payload: { simulation_id: 'sim-001', use_llm_for_profiles: true, parallel_profile_count: 5 },
+        onLog: vi.fn(),
+        onStatusChange: vi.fn(),
+      })
+
+      expect(composable.expectedTotal.value).toBe(50)
+      expect(composable.personaFloorApplied.value).toBe(true)
+    })
+
+    it('meldet keinen gegriffenen Floor, wenn das Ziel der Entitätenzahl entspricht', async () => {
+      mockPrepare.mockResolvedValue(makePrepareEnvelope({
+        expected_entities_count: 80,
+        persona_target: {
+          entity_count: 80,
+          persona_target_count: 80,
+          floor_applied: false,
+          floor: 50,
+        },
+      }) as TaskStatusData)
+
+      const composable = useSimulationPrepare()
+
+      await composable.startPrepare({
+        payload: { simulation_id: 'sim-001', use_llm_for_profiles: true, parallel_profile_count: 5 },
+        onLog: vi.fn(),
+        onStatusChange: vi.fn(),
+      })
+
+      expect(composable.expectedTotal.value).toBe(80)
+      expect(composable.personaFloorApplied.value).toBe(false)
+    })
+
+    it('fällt bei unbrauchbarem persona_target auf die Entitätenzahl zurück statt zu kippen', async () => {
+      mockPrepare.mockResolvedValue(makePrepareEnvelope({
+        expected_entities_count: 12,
+        persona_target: { kaputt: true },
+      }) as TaskStatusData)
+
+      const composable = useSimulationPrepare()
+
+      const result = await composable.startPrepare({
+        payload: { simulation_id: 'sim-001', use_llm_for_profiles: true, parallel_profile_count: 5 },
+        onLog: vi.fn(),
+        onStatusChange: vi.fn(),
+      })
+
+      expect(result).toBe(true)
+      expect(composable.expectedTotal.value).toBe(12)
+      expect(composable.personaFloorApplied.value).toBe(false)
+    })
   })
 
   describe('Case 2 — Pending-Übergang: isPreparing ist deterministisch true während des API-Calls', () => {
