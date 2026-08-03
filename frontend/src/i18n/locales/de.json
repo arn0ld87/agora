@@ -316,6 +316,7 @@
       "generate": "Personas generieren",
       "regenerate": "Neu generieren",
       "running": "Erzeugt {done} / {total} Personas…",
+      "floorApplied": "Der Graph liefert weniger Entitäten als der Report an Personas braucht. Der Entitäten-Pool wird deshalb reihum wiederholt, bis {total} Personas entstanden sind.",
       "completed": "{count} Personas erzeugt.",
       "preview": "Beispiel-Persona ansehen",
       "edit": "Bearbeiten",
@@ -411,7 +412,7 @@
       "label": "Max. Anzahl Agenten begrenzen",
       "unit": "Agenten",
       "minimumHint": "Mindestmenge für die DACH-Persona-Tabelle: 10 Agenten.",
-      "unlimitedHint": "Ohne Begrenzung wird pro Entität im Graph ein Agent erzeugt."
+      "unlimitedHint": "Ohne Begrenzung entsteht pro geeigneter Graph-Entität ein Agent — mindestens jedoch so viele, wie der Report für seine Persona-Tabelle braucht."
     },
     "personaPool": {
       "belowQuotaWarning": "Pool-Größe ({pool}) liegt unter der geforderten Quoten-Summe ({quota}). Einzelne Segmente können ggf. nicht vollständig besetzt werden."

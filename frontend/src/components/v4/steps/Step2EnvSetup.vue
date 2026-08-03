@@ -71,6 +71,7 @@ const {
   isPreparing,
   profiles,
   expectedTotal,
+  personaFloorApplied,
   simulationConfig,
   fetchProfilesRealtime,
   startPrepare,
@@ -299,6 +300,12 @@ onMounted(async () => {
         </header>
         <p class="card-desc" v-if="phase === 1">
           {{ t('step2.personas.running', { done: profiles.length, total: expectedTotal || '?' }) }}
+        </p>
+        <!-- Issue #1034: Ohne diesen Hinweis wirkt der Nenner willkürlich —
+             sieben Entitäten ergeben fünfzig Personas, weil der Report-Contract
+             eine Mindestzahl verlangt. -->
+        <p class="card-hint" v-if="phase >= 1 && personaFloorApplied">
+          {{ t('step2.personas.floorApplied', { total: expectedTotal || '?' }) }}
         </p>
 
         <div v-if="profiles.length" class="persona-search">

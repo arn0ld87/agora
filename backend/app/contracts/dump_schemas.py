@@ -19,6 +19,7 @@ from app.contracts.branch_comparison import BranchComparison
 from app.contracts.graph_diff import GraphDiff
 from app.contracts.persona_contract import PersonaModel, PersonaQuotaPlan
 from app.contracts.persona_entity_context import PersonaEntityContext
+from app.contracts.persona_target_contract import PersonaTargetContract
 from app.contracts.pipeline_degradation_contract import (
     PipelineDegradationModel,
     PipelineDegradationReport,
@@ -95,6 +96,8 @@ CONTRACTS: dict[str, type] = {
     "evidence-map.schema.json": EvidenceMapModel,
     "persona.schema.json": PersonaModel,
     "persona-quota-plan.schema.json": PersonaQuotaPlan,
+    # Persona-Ziel für den Fortschrittszähler (Issue #1034)
+    "persona-target.schema.json": PersonaTargetContract,
     "report-v3.schema.json": ReportV3,
     "run-summary.schema.json": RunSummary,
     "runs-list-response.schema.json": RunsListResponse,
