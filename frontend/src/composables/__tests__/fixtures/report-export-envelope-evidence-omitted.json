@@ -1,0 +1,78 @@
+{
+  "schema_version": 2,
+  "exported_at": "2026-08-03T11:09:21.471500Z",
+  "report": {
+    "schema_version": 2,
+    "report_id": "report_987abcdef012",
+    "simulation_id": "sim_987abcdef012",
+    "graph_id": "graph_987abcdef012",
+    "simulation_requirement": "r",
+    "status": "completed",
+    "outline": {
+      "title": "Demo",
+      "summary": "Summary",
+      "sections": [
+        {
+          "title": "Executive Summary",
+          "description": "Maximal 12 Sätze, was die Simulation gezeigt hat."
+        },
+        {
+          "title": "Segment-Tabelle",
+          "description": "Persona-Segmente mit Größe, Goal, Trust-Score-Aggregat."
+        },
+        {
+          "title": "Persona-Tabelle",
+          "description": "Vollständige Liste der simulierten Personas mit Reaktionen, Drop-off, Decision."
+        },
+        {
+          "title": "Multiplikator-Auswertung",
+          "description": "Multiplikator-Profile mit Reichweite, Wirkung, Reaktion."
+        },
+        {
+          "title": "Top 10 Reibungspunkte",
+          "description": "Stärkste negative Auslöser mit Persona-Refs."
+        },
+        {
+          "title": "Top 10 Vertrauenssignale",
+          "description": "Stärkste positive Auslöser mit Persona-Refs."
+        },
+        {
+          "title": "Top 10 Änderungen",
+          "description": "Konkrete Empfehlungen, priorisiert."
+        },
+        {
+          "title": "Projektwirkung",
+          "description": "Pro Projekt: Wirkung, Glaubwürdigkeit, Risiken."
+        },
+        {
+          "title": "Positionierung",
+          "description": "Drei Positionierungsvarianten mit Trade-offs."
+        },
+        {
+          "title": "Content-Ideen",
+          "description": "Konkrete Themen-/Format-Vorschläge."
+        },
+        {
+          "title": "Datenlücken",
+          "description": "Was die Simulation nicht beantworten kann."
+        }
+      ]
+    },
+    "markdown_content": "# Demo",
+    "missing_sections": [],
+    "created_at": "2026-08-03T10:00:00",
+    "completed_at": "2026-08-03T10:05:00",
+    "error": null,
+    "has_evidence": true,
+    "evidence_sections": 1,
+    "red_team_findings": []
+  },
+  "evidence": null,
+  "evidence_omitted": {
+    "reason": "contract_violation",
+    "detail": "Die Evidence-Map dieses Reports verletzt auch nach der Migration den Evidence-Vertrag und wurde deshalb nicht exportiert. Der Report-Rumpf ist vollstaendig.",
+    "validation_errors": [
+      "voellig_unbekanntes_feld: Extra inputs are not permitted"
+    ]
+  }
+}

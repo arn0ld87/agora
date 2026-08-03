@@ -17,7 +17,11 @@ from ..contracts import (
     ReportContractModel,
     ReportModel,
 )
-from ..services.evidence_migrations import CURRENT_SCHEMA_VERSION, migrate_v1_to_v2
+from ..contracts.report_contract import EvidenceOmissionModel
+from ..services.evidence_migrations import (
+    CURRENT_SCHEMA_VERSION,
+    normalize_persisted_evidence_map,
+)
 from ..services.report_agent import ReportManager, ReportStatus
 from ..services.report_agent.csv_export import claims_to_csv, personas_to_csv, segments_to_csv
 from ..utils.logger import get_logger
@@ -67,16 +71,56 @@ class ReportExportService:
         report = cls.build_report_contract_model(report_obj)
 
         evidence: Optional[EvidenceMapModel] = None
-        migrated = migrate_v1_to_v2(raw_evidence_map) if raw_evidence_map else None
-        if migrated:
+        omission: Optional[EvidenceOmissionModel] = None
+
+        # Issue #987: dieselbe kanonische Normalisierung wie der Lese-Pfad
+        # GET /api/report/<id>/evidence. Vorher lief hier nur migrate_v1_to_v2,
+        # und die restlichen Migrationsschritte fehlten — persistierte
+        # Bestands-Maps scheiterten dann am Validator und fielen komplett aus
+        # dem Envelope.
+        #
+        # `is not None` statt Truthiness: eine vorhandene, aber leere
+        # evidence-map.json ({}) ist kein fehlendes Artefakt, sondern eine
+        # kaputte Map. Mit `if raw_evidence_map` waere sie stumm wie ein
+        # fehlendes Artefakt behandelt worden — derselbe stille Verlust eine
+        # Ebene tiefer (Codex-Review zu PR #1042).
+        migrated = (
+            normalize_persisted_evidence_map(raw_evidence_map)
+            if raw_evidence_map is not None
+            else None
+        )
+        if migrated is not None:
             try:
                 evidence = EvidenceMapModel.model_validate(migrated)
             except ValidationError as exc:
+                errors = exc.errors(include_url=False)[:5]
                 logger.warning(
-                    "Evidence map for report %s is not yet contract-compliant; "
-                    "dropped from envelope. First errors: %s",
+                    "Evidence map for report %s is not contract-compliant even "
+                    "after migration; dropped from envelope. First errors: %s",
                     report_obj.report_id,
-                    exc.errors(include_url=False)[:3],
+                    errors[:3],
+                )
+                # Der Fallback bleibt — der Report-Rumpf ist unbeschaedigt und
+                # ein Export ohne Evidence ist besser als gar keiner. Er darf
+                # nur nicht laenger stumm sein: bis #987 war ein entleerter
+                # Envelope von einem Report ohne Evidence nicht zu unterscheiden.
+                #
+                # `reason` ist der stabile Schluessel — die Oberflaeche
+                # uebersetzt daraus per vue-i18n. `detail` ist kein UI-String,
+                # sondern die Erklaerung *in der exportierten Datei*: wer sie
+                # spaeter ohne Agora oeffnet, soll lesen koennen, warum der
+                # Evidence-Teil fehlt (Codex-Review zu PR #1042).
+                omission = EvidenceOmissionModel(
+                    reason="contract_violation",
+                    detail=(
+                        "Die Evidence-Map dieses Reports verletzt auch nach der "
+                        "Migration den Evidence-Vertrag und wurde deshalb nicht "
+                        "exportiert. Der Report-Rumpf ist vollstaendig."
+                    ),
+                    validation_errors=[
+                        f"{'.'.join(str(part) for part in err.get('loc', ()))}: {err.get('msg', '')}"
+                        for err in errors
+                    ],
                 )
 
         return ReportContractModel(
@@ -84,6 +128,7 @@ class ReportExportService:
             exported_at=datetime.now(timezone.utc),
             report=report,
             evidence=evidence,
+            evidence_omitted=omission,
         )
 
     @staticmethod

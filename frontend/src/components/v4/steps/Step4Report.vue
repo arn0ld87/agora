@@ -43,6 +43,7 @@ import {
   type Report,
   type ReportOutline,
   type EvidenceMap,
+  type EvidenceOmission,
 } from '../../../contracts/reportContract'
 import {
   ReportModeSchema,
@@ -255,6 +256,20 @@ function recordSchemaError(where: string, error: unknown): void {
       : [String((error as { message?: string } | null)?.message ?? error)]
   schemaError.value = { where, issues }
   console.error(`[Step4Report] Schema-Mismatch in ${where}:`, issues)
+}
+
+// Issue #987: Der JSON-Export kann ohne Evidence-Map ausgeliefert werden.
+// Der Hinweis wird gerendert, nicht geloggt — addLog() emittiert hier nur
+// ein `add-log`, auf das der produktive Mount (StepReportView.vue) nicht
+// hoert. Der Text kommt aus vue-i18n; der Vertrag liefert dafuer den
+// stabilen Schluessel `reason`, nicht den Anzeigetext.
+const evidenceOmission = ref<EvidenceOmission | null>(null)
+
+function recordEvidenceOmission(omission: EvidenceOmission | null): void {
+  evidenceOmission.value = omission
+  if (omission) {
+    console.warn('[Step4Report] Evidence-Map fehlt im JSON-Export:', omission)
+  }
 }
 
 const resolvedSimulationId = ref(props.simulationId || null)
@@ -686,6 +701,7 @@ const {
   evidenceMap,
   addLog,
   recordSchemaError,
+  recordEvidenceOmission,
 })
 
 async function createBranchFromReport(branchForm: {
@@ -764,6 +780,20 @@ onUnmounted(stopPolling)
       <strong>Schema-Mismatch in {{ schemaError.where }}:</strong>
       <ul>
         <li v-for="(issue, idx) in schemaError.issues" :key="idx">{{ issue }}</li>
+      </ul>
+    </div>
+    <!-- Issue #987: Der JSON-Export ist ausgeliefert, aber ohne Evidence-Map.
+         Ein Logeintrag haette den Nutzer nicht erreicht — die heruntergeladene
+         Datei saehe vollstaendig aus. -->
+    <div
+      v-if="evidenceOmission"
+      class="schema-error"
+      role="alert"
+      data-testid="report-evidence-omitted"
+    >
+      <strong>{{ t(`step4.export.evidenceOmitted.${evidenceOmission.reason}`) }}</strong>
+      <ul v-if="evidenceOmission.validation_errors.length">
+        <li v-for="(err, idx) in evidenceOmission.validation_errors" :key="idx">{{ err }}</li>
       </ul>
     </div>
     <div class="scroll">

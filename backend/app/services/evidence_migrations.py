@@ -169,6 +169,58 @@ def migrate_medium_seed_only_claims_to_low(raw: Optional[dict]) -> Optional[dict
     return raw
 
 
+def normalize_persisted_evidence_map(raw: Optional[dict]) -> Optional[dict]:
+    """Die kanonische Normalisierung einer persistierten ``evidence-map.json``.
+
+    Jeder produktive Pfad, der eine Evidence-Map von der Platte liest und
+    anschliessend gegen ``EvidenceMapModel`` validiert, ruft **diese** Funktion
+    — nicht die Einzelschritte. Aufrufer sind der Lese-Pfad
+    ``GET /api/report/<id>/evidence`` (``api/report.py``) und der JSON-Export
+    ``GET /api/report/<id>/export?format=json``
+    (``report_export.py::build_export_envelope``).
+
+    Der Export rief bis Issue #987 nur ``migrate_v1_to_v2`` und fing die
+    anschliessende ``ValidationError`` mit einer ``logger.warning`` ab — die
+    gesamte Evidence-Map fiel dann aus dem Envelope, waehrend die Antwort
+    HTTP 200 blieb. Zwei Pfade, zwei Reihenfolgen, ein stiller Datenverlust.
+    Deshalb liegt die Reihenfolge jetzt an genau einer Stelle.
+
+    Die Reihenfolge ist bindend (Issue #968):
+
+    1. ``migrate_v1_to_v2``
+    2. ``migrate_legacy_claims_to_anchored``
+    3. ``migrate_medium_seed_only_claims_to_low`` (Issue #963)
+    4. Aufrufer validiert gegen ``EvidenceMapModel``
+
+    Begruendung: ``migrate_legacy_claims_to_anchored`` haengt Claims, die GAR
+    KEINE Evidence tragen, zuerst nach ``data_gaps`` um. Danach sieht die
+    medium-Logik aus #963 nur noch Claims mit tatsaechlich vorhandener
+    Evidence und prueft keine bereits umgehaengten Claims ein zweites Mal.
+
+    Die umgekehrte Reihenfolge ist nicht bloss ineffizient, sie liefert ein
+    ANDERES Ergebnis: ``has_agent_grounded_evidence([])`` ist False, also stuft
+    #963 einen orphan medium-Claim zuerst auf ``low`` ab. Danach greift
+    ``_ANCHOR_REQUIRED_LABELS`` nicht mehr (``low`` ist dort nicht enthalten)
+    und der Claim bleibt dauerhaft als evidenzlose Aussage in ``claims[]``
+    stehen, statt als Datenluecke ausgewiesen zu werden — das unterlaeuft die
+    Zusage, dass jede Aussage im Report belegt ist. Getauscht ergibt dieselbe
+    Map ``claims=[claim_90:low], data_gaps=[]`` statt
+    ``claims=[], data_gaps=[1]``.
+
+    Waechter dieser Ordnung sind
+    ``tests/api/test_report_evidence_route.py::TestReportEvidenceRouteOrphanClaims
+    ::test_orphan_medium_claim_becomes_data_gap`` (Ordnung) und
+    ``tests/api/test_report_export_evidence_parity.py::TestExportAndReadPathAgree``
+    (Gleichheit beider Pfade).
+
+    Mutiert das uebergebene Dict wie die Einzelschritte und gibt ``None``
+    zurueck, wenn ``raw`` None ist.
+    """
+    return migrate_medium_seed_only_claims_to_low(
+        migrate_legacy_claims_to_anchored(migrate_v1_to_v2(raw))
+    )
+
+
 def _resolve_evidence_refs(
     claim: dict[str, Any],
     section_index: int,

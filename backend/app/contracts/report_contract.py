@@ -531,6 +531,47 @@ class EvidenceMapModel(BaseModel):
     degradation_log: list[EvidenceDegradationModel] = Field(default_factory=list)
 
 
+class EvidenceOmissionModel(BaseModel):
+    """Warum ein Export-Envelope keine Evidence-Map traegt (Issue #987).
+
+    Bis #987 fiel eine Evidence-Map, die nach allen Migrationen den Vertrag
+    verletzte, mit einer ``logger.warning`` aus dem Envelope. Der Nutzer bekam
+    HTTP 200 und eine herunterladbare JSON-Datei mit ``evidence: null`` — von
+    einem Report ohne Evidence nicht zu unterscheiden.
+
+    Der Fallback bleibt: ein unvollstaendiger Export ist besser als gar keiner,
+    und der Report-Rumpf ist unbeschaedigt. Er ist nur nicht laenger stumm.
+
+    Abgrenzung zu ``EvidenceDegradationModel`` (#1006): das protokolliert die
+    Abstufung eines *einzelnen Claims* waehrend der Report-Erzeugung. Hier ist
+    die *gesamte Map* nicht ausliefertbar, und zwar erst beim Export.
+    """
+
+    model_config = _STRICT
+    reason: Literal["contract_violation"] = Field(
+        description=(
+            "Stabiler Schluessel. Die Oberflaeche uebersetzt daraus per "
+            "vue-i18n — dieser Vertrag transportiert keinen UI-Text."
+        ),
+    )
+    detail: str = Field(
+        min_length=1,
+        description=(
+            "Erklaerung fuer den Leser der exportierten Datei, nicht fuer die "
+            "Oberflaeche: wer die JSON spaeter ohne Agora oeffnet, soll den "
+            "fehlenden Evidence-Teil einordnen koennen."
+        ),
+    )
+    validation_errors: list[str] = Field(
+        default_factory=list,
+        max_length=5,
+        description=(
+            "Die ersten Validierungsfehler als ``loc: msg``. Belegt die "
+            "Einstufung, ohne die verworfenen Rohdaten mitzuexportieren."
+        ),
+    )
+
+
 class ReportContractModel(BaseModel):
     """Wurzel — was tatsächlich beim Export rausgeht."""
     model_config = _STRICT
@@ -538,3 +579,7 @@ class ReportContractModel(BaseModel):
     exported_at: datetime
     report: ReportModel
     evidence: Optional[EvidenceMapModel] = None
+    # Issue #987: additiv, Default None. Gesetzt genau dann, wenn eine
+    # Evidence-Map vorlag, aber nicht ausgeliefert werden konnte. Ein Report
+    # ohne Evidence-Artefakt laesst das Feld None — kein Hinweis ohne Anlass.
+    evidence_omitted: Optional[EvidenceOmissionModel] = None

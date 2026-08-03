@@ -128,9 +128,16 @@ vi.mock('@/composables/useAiModelRefAdapter', () => ({
   }),
 }))
 
-import { generateReport, getReport, getReportStatus, getReportEvidence } from '../../api/report'
+import {
+  generateReport,
+  getReport,
+  getReportStatus,
+  getReportEvidence,
+  exportReport,
+} from '../../api/report'
 import { useIncrementalLogPolling } from '../../composables/useIncrementalLogPolling'
 import Step4Report from '@/components/v4/steps/Step4Report.vue'
+import deMessages from '../../i18n/locales/de.json'
 
 // Minimaler i18n-Stub
 const i18n = createI18n({
@@ -188,6 +195,16 @@ const globalStubs = {
   ReportBranchControls: true,
 }
 
+// Issue #987: ReportFinalView traegt den `.json`-Knopf. Als echte Komponente
+// zieht sie halbe Report-Ansicht mit; als Stub mit Emit-Deklaration laesst
+// sie sich gezielt ausloesen, ohne den Produktionspfad zu umgehen — der
+// Handler in Step4Report ist derselbe.
+const REPORT_FINAL_VIEW_STUB = {
+  name: 'ReportFinalView',
+  template: '<div data-testid="report-final-view" />',
+  emits: ['download-json'],
+}
+
 // Valides Report-Payload (ReportSchema-konform)
 const VALID_REPORT: Report = {
   schema_version: 2,
@@ -225,6 +242,99 @@ function mountComponent(props = {}) {
     },
   })
 }
+
+// Issue #987 — der Hinweis muss den Nutzer erreichen, nicht nur den Log-Bus.
+//
+// Erste Fassung dieses Slices rief options.addLog(). addLog() emittiert in
+// dieser Komponente lediglich `add-log`, und der einzige produktive Mount
+// (StepReportView.vue) haengt keinen Listener daran und rendert `systemLogs`
+// nicht. Der Hinweis waere also nirgends angekommen — exakt die Fehlerklasse,
+// die dieser Slice behebt, eine Ebene hoeher (Codex-Review zu PR #1042).
+// Dieser Test mountet die Komponente und prueft das gerenderte Ergebnis.
+describe('Step4Report — Evidence-Auslassung im JSON-Export (Issue #987)', () => {
+  // Bewusst NICHT der flache i18n-Stub dieser Datei, sondern die echte
+  // de.json: der Test soll belegen, dass der Schluessel im ausgelieferten
+  // Locale existiert. Gegen einen Stub gepruefte Uebersetzungen sagen ueber
+  // die Produktion nichts aus — ein fehlender oder umbenannter Schluessel
+  // waere dort unsichtbar.
+  const realI18n = createI18n({ legacy: false, locale: 'de', messages: { de: deMessages } })
+
+  function mountWithFinalView() {
+    return mount(Step4Report, {
+      props: { reportId: 'report_test01' },
+      global: {
+        plugins: [router, realI18n],
+        stubs: { ...globalStubs, ReportFinalView: REPORT_FINAL_VIEW_STUB },
+      },
+    })
+  }
+
+  const EXPECTED_NOTICE = deMessages.step4.export.evidenceOmitted.contract_violation
+
+  function envelope(evidenceOmitted: unknown) {
+    return new Blob([
+      JSON.stringify({
+        schema_version: 2,
+        exported_at: '2026-08-03T10:00:00Z',
+        report: VALID_REPORT,
+        evidence: null,
+        evidence_omitted: evidenceOmitted,
+      }),
+    ])
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    resetMockSelection()
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: { status: 'completed', report_id: 'report_test01', simulation_id: 'sim_test01' },
+    })
+    ;(getReport as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true, data: VALID_REPORT })
+    ;(getReportEvidence as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: VALID_EVIDENCE,
+    })
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:report')
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
+  })
+
+  it('rendert einen Hinweis, wenn der Export ohne Evidence-Map kam', async () => {
+    ;(exportReport as ReturnType<typeof vi.fn>).mockResolvedValue(
+      envelope({
+        reason: 'contract_violation',
+        detail: 'Serverseitige Erklaerung fuer die exportierte Datei.',
+        validation_errors: ['sections.0: Extra inputs are not permitted'],
+      })
+    )
+
+    const wrapper = mountWithFinalView()
+    await flushPromises()
+    await wrapper.findComponent(REPORT_FINAL_VIEW_STUB).vm.$emit('download-json')
+    await flushPromises()
+
+    const notice = wrapper.find('[data-testid="report-evidence-omitted"]')
+    expect(notice.exists()).toBe(true)
+    expect(notice.attributes('role')).toBe('alert')
+    expect(notice.text()).toContain('sections.0: Extra inputs are not permitted')
+    // Der Text kommt aus vue-i18n, nicht aus dem Backend-`detail`
+    // (AGENTS.md: keine hartkodierten UI-Texte).
+    expect(notice.text()).not.toContain('Serverseitige Erklaerung')
+    expect(EXPECTED_NOTICE).toBeTruthy()
+    expect(notice.text()).toContain(EXPECTED_NOTICE)
+  })
+
+  it('rendert keinen Hinweis, wenn der Export vollstaendig war', async () => {
+    ;(exportReport as ReturnType<typeof vi.fn>).mockResolvedValue(envelope(null))
+
+    const wrapper = mountWithFinalView()
+    await flushPromises()
+    await wrapper.findComponent(REPORT_FINAL_VIEW_STUB).vm.$emit('download-json')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="report-evidence-omitted"]').exists()).toBe(false)
+  })
+})
 
 describe('Step4Report — strict-Zod-Parse (Sub-Slice 15)', () => {
   beforeEach(() => {

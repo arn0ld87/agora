@@ -381,6 +381,39 @@
       "title": "EvidenceMapModel",
       "type": "object"
     },
+    "EvidenceOmissionModel": {
+      "additionalProperties": false,
+      "description": "Warum ein Export-Envelope keine Evidence-Map traegt (Issue #987).\n\nBis #987 fiel eine Evidence-Map, die nach allen Migrationen den Vertrag\nverletzte, mit einer ``logger.warning`` aus dem Envelope. Der Nutzer bekam\nHTTP 200 und eine herunterladbare JSON-Datei mit ``evidence: null`` \u2014 von\neinem Report ohne Evidence nicht zu unterscheiden.\n\nDer Fallback bleibt: ein unvollstaendiger Export ist besser als gar keiner,\nund der Report-Rumpf ist unbeschaedigt. Er ist nur nicht laenger stumm.\n\nAbgrenzung zu ``EvidenceDegradationModel`` (#1006): das protokolliert die\nAbstufung eines *einzelnen Claims* waehrend der Report-Erzeugung. Hier ist\ndie *gesamte Map* nicht ausliefertbar, und zwar erst beim Export.",
+      "properties": {
+        "detail": {
+          "description": "Erklaerung fuer den Leser der exportierten Datei, nicht fuer die Oberflaeche: wer die JSON spaeter ohne Agora oeffnet, soll den fehlenden Evidence-Teil einordnen koennen.",
+          "minLength": 1,
+          "title": "Detail",
+          "type": "string"
+        },
+        "reason": {
+          "const": "contract_violation",
+          "description": "Stabiler Schluessel. Die Oberflaeche uebersetzt daraus per vue-i18n \u2014 dieser Vertrag transportiert keinen UI-Text.",
+          "title": "Reason",
+          "type": "string"
+        },
+        "validation_errors": {
+          "description": "Die ersten Validierungsfehler als ``loc: msg``. Belegt die Einstufung, ohne die verworfenen Rohdaten mitzuexportieren.",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 5,
+          "title": "Validation Errors",
+          "type": "array"
+        }
+      },
+      "required": [
+        "reason",
+        "detail"
+      ],
+      "title": "EvidenceOmissionModel",
+      "type": "object"
+    },
     "EvidenceSourceKind": {
       "description": "ADR-0002 Anker 3 \u2014 Quellengattung pro Evidence-Item.\n\nWird von den Cross-Stakeholder-/Inferred-Validators auf\n``ReportClaimModel`` ausgewertet (Sub-Slice M11.7b, Anker 4 + 5).\nDrift-Guard: Diese Werte sind im Prompt-Block\n``backend/app/services/report_prompts/sections.py`` referenziert (Anker 1).\n\nErweiterung (Report-Trust-Slice): ``agent_action`` und ``web_source``\nerg\u00e4nzen die urspr\u00fcnglichen vier Werte. Das ist additiv und versch\u00e4rft\nADR-0002, statt es zu schw\u00e4chen \u2014 vorher liefen Agentenaktionen und\nWeb-Treffer \u00fcber den Default ``seed_corpus`` und verschmolzen damit\nSeed-Dokument, Simulation und Recherche zu einer einzigen Quellengattung.\nF\u00fcr die Confidence-Anker gilt weiterhin: nur ``agent_quote`` z\u00e4hlt als\nStakeholder-Stimme, nur ``seed_corpus`` als Dokumentfakt.",
       "enum": [
@@ -817,6 +850,17 @@
       "anyOf": [
         {
           "$ref": "#/$defs/EvidenceMapModel"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "evidence_omitted": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EvidenceOmissionModel"
         },
         {
           "type": "null"
