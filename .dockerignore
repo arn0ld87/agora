@@ -31,8 +31,23 @@ backend/logs
 backend/log
 backend/.cache
 backend/.pytest_cache
+backend/.mypy_cache
+backend/.ruff_cache
+backend/instance
 *.log
 error.log
+
+# Lokale Arbeitsartefakte, die nie in ein Image gehören. Ohne diese Einträge
+# wandern sie bei jedem Build in den Context, den BuildKit vollständig an den
+# Daemon überträgt, bevor die erste Instruktion läuft — auf einer
+# Docker-Desktop-VM ist das reine Wartezeit.
+# Größenordnung Stand 2026-08-03: backend/.cache ~1 GB, snapshots/ 39 MB,
+# graphify-out/ 35 MB, backend/instance/ 8 MB.
+snapshots
+graphify-out
+agora-logo-animation
+.ctx-mode
+.token-optimizer
 
 # Nicht für den Container-Build nötig; blähen den Context stark auf.
 .git

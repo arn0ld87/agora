@@ -23,13 +23,25 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends curl unzip \
   && rm -rf /var/lib/apt/lists/*
 
-COPY --from=oven/bun:1 /usr/local/bin/bun /usr/local/bin/bun
-COPY --from=ghcr.io/astral-sh/uv:0.9.26 /uv /uvx /bin/
+# bun auf Digest gepinnt (1.3.14, Stand 2026-08-03). Der Rolling-Tag `1`
+# invalidierte diese Layer — und damit jede abgeleitete Stage — bei jedem
+# Upstream-Push, auch ohne Änderung im Repo.
+COPY --from=oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 /usr/local/bin/bun /usr/local/bin/bun
+# uv ebenfalls auf Digest gepinnt. Der Digest ist der Manifest-List-Digest,
+# nicht der einer einzelnen Plattform — die Liste trägt linux/amd64 und
+# linux/arm64, das Image bleibt damit auf beiden Build-Hosts verwendbar.
+COPY --from=ghcr.io/astral-sh/uv:0.9.26@sha256:9a23023be68b2ed09750ae636228e903a54a05ea56ed03a934d00fe9fbeded4b /uv /uvx /bin/
 
 # Große CUDA-Wheels (cudnn ~700 MB, nvshmem ~300 MB) sprengen den
 # uv-Default von 30 s auf langsamen Leitungen.
 ENV UV_HTTP_TIMEOUT=1800
 ENV UV_HTTP_RETRIES=5
+
+# Die uv- und bun-Installationsschritte unten nutzen `--mount=type=cache`.
+# Ein Cache-Mount ist ein eigenes Dateisystem, also kann uv die Wheels nicht
+# per Hardlink in die venv legen; ohne diese Zeile warnt jeder Build und
+# fällt ohnehin auf Copy zurück.
+ENV UV_LINK_MODE=copy
 
 # nltk >= 3.10 installiert einen Import-Hook (nltk/inisec.py), der jeden von
 # nltk ausgelösten Import blockiert, dessen Modul unterhalb des CWD liegt.
@@ -55,7 +67,13 @@ COPY --chown=agora:agora package.json bun.lock ./
 COPY --chown=agora:agora frontend/package.json frontend/bun.lock ./frontend/
 COPY --chown=agora:agora backend/pyproject.toml backend/uv.lock ./backend/
 
-RUN bun install --frozen-lockfile \
+# Cache-Mounts: ohne sie lädt jede Lockfile-Änderung sämtliche Wheels und
+# npm-Tarballs neu aus dem Netz — auch die unveränderten. Der Backend-Baum
+# zieht über camel-oasis → sentence-transformers → torch mehrere GB CUDA-
+# Wheels, das dominiert die Buildzeit nach jedem Dependency-Update.
+RUN --mount=type=cache,target=/root/.bun/install/cache,sharing=locked \
+    --mount=type=cache,target=/root/.cache/uv,sharing=locked \
+    bun install --frozen-lockfile \
   && bun install --frozen-lockfile --cwd frontend \
   && cd backend && uv sync --frozen \
   && chown -R agora:agora /app
@@ -75,6 +93,18 @@ CMD ["bun", "run", "dev"]
 
 # ---------- frontend-build (frontend bundle only) ----------
 FROM base AS frontend-build
+
+# Reihenfolge ist bewusst: erst Dependencies installieren, dann das
+# Token-Gate. Vorher stand der Gate-RUN vor `bun install`, wodurch jede
+# Änderung an ALLOW_BUILD_TIME_TOKEN, VITE_AGORA_TOKEN oder VITE_UI_VERSION
+# auch die Dependency-Installation invalidierte. Die ARG-Deklarationen
+# stehen deshalb ebenfalls erst unten — ein ARG invalidiert den Cache erst
+# an der Stelle, an der es verwendet wird.
+COPY --chown=agora:agora frontend/package.json frontend/bun.lock ./frontend/
+RUN --mount=type=cache,target=/root/.bun/install/cache,sharing=locked \
+    cd frontend && bun install --frozen-lockfile
+
+COPY --chown=agora:agora frontend/ ./frontend/
 
 # Build-Time-Token-Gate (F2.1, Sub-Slice 46).
 #
@@ -102,31 +132,28 @@ ARG VITE_UI_VERSION="v4"
 # ENV VITE_AGORA_TOKEN wird bewusst NICHT gesetzt — ein ENV-Befehl würde
 # den ARG-Wert im RUN-Block überschreiben und das Gate wäre wirkungslos.
 # Vite liest VITE_* zur Build-Zeit aus dem Shell-Kontext von bun run build;
-# die /tmp/.vite_token_env-Datei speist den korrekten Wert ein.
+# Gate-Entscheidung und Build laufen deshalb in einer Shell, der Token-Wert
+# bleibt eine Shell-Variable und wird in keine Datei geschrieben.
 RUN _token="${VITE_AGORA_TOKEN:-}" && \
     if [ "$ALLOW_BUILD_TIME_TOKEN" = "true" ] && [ -n "$_token" ]; then \
       echo "ALLOW_BUILD_TIME_TOKEN=true: VITE_AGORA_TOKEN wird ins Bundle einkompiliert."; \
-      printf 'VITE_AGORA_TOKEN=%s\n' "$_token" > /tmp/.vite_token_env; \
     else \
       echo "ALLOW_BUILD_TIME_TOKEN=false (Default): Frontend-Bundle bekommt leeren Token. Runtime-Login erforderlich."; \
-      echo "VITE_AGORA_TOKEN=" > /tmp/.vite_token_env; \
+      _token=""; \
     fi && \
-    printf 'VITE_UI_VERSION=%s\n' "${VITE_UI_VERSION:-v4}" >> /tmp/.vite_token_env && \
-    echo "VITE_UI_VERSION=${VITE_UI_VERSION:-v4} (Build-Provenance)."
-
-COPY --chown=agora:agora frontend/package.json frontend/bun.lock ./frontend/
-RUN cd frontend && bun install --frozen-lockfile
-
-COPY --chown=agora:agora frontend/ ./frontend/
-RUN export $(cat /tmp/.vite_token_env) && rm /tmp/.vite_token_env && \
-    cd frontend && bun run build
+    echo "VITE_UI_VERSION=${VITE_UI_VERSION:-v4} (Build-Provenance)." && \
+    cd frontend && \
+    VITE_AGORA_TOKEN="$_token" VITE_UI_VERSION="${VITE_UI_VERSION:-v4}" bun run build
 
 # ---------- backend-build (production Python environment only) ----------
 FROM base AS backend-build
 
 COPY --chown=agora:agora backend/pyproject.toml backend/uv.lock ./backend/
 # Backend-Dependencies ohne Dev-Group und strikt aus uv.lock installieren.
-RUN cd backend && uv sync --frozen --no-dev \
+# Der Cache-Mount teilt sich den Wheel-Cache mit der dev-Stage: torch und die
+# CUDA-Wheels werden pro Host einmal geladen statt einmal pro Stage.
+RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
+    cd backend && uv sync --frozen --no-dev \
   && chown -R agora:agora /app
 
 # ---------- prod ----------
