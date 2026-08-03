@@ -12,6 +12,7 @@ from . import simulation_bp
 from ..config import Config
 from ..contracts import PersonaQuotaPlan
 from ..models.project import ProjectManager
+from ..services.degradation_collector import DegradationCollector
 from ..services.entity_reader import EntityReader
 from ..services.llm_routing_seed import (
     build_runtime_llm_config,
@@ -19,6 +20,8 @@ from ..services.llm_routing_seed import (
     seed_run_stage_routing,
 )
 from ..services.llm_runtime import parse_runtime_llm_config
+from ..services.persona_eligibility import filter_eligible_entities
+from ..services.prepare_service import compute_persona_target
 from ..services.report_agent import MIN_SIMULATION_AGENTS
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.stage_model_router import StageModelRouter
@@ -420,6 +423,24 @@ def prepare_simulation():
             defined_entity_types=entity_types_list,
             enrich_with_edges=False,
         )
+        # Issue #1034: derselbe Eignungsfilter wie im Laufpfad
+        # (_phase_read_entities) — sonst zeigt der Preview-Nenner eine
+        # Menge, die die eigentliche Generierung so nie erzeugt.
+        # Bewusst ohne Sammler: diese Vorschau hat kein Task-Ergebnis, in
+        # das ein Befund fließen könnte. Gemeldet wird im Laufpfad, der
+        # dieselbe Menge erneut filtert. Ein Sammler an dieser Stelle
+        # sähe nach Absicherung aus und wäre folgenlos.
+        eligibility_preview = filter_eligible_entities(
+            filtered_preview.entities,
+            degradations=None,
+        )
+        if eligibility_preview.exclusions:
+            filtered_preview.entities = eligibility_preview.eligible
+            filtered_preview.filtered_count = len(filtered_preview.entities)
+            filtered_preview.entity_types = {
+                entity.get_entity_type() or "Entity"
+                for entity in filtered_preview.entities
+            }
         preview_count = filtered_preview.filtered_count
         if max_agents is not None and max_agents > 0:
             preview_count = min(preview_count, max_agents)
@@ -604,6 +625,11 @@ def prepare_simulation():
     manager._set_status(state, SimulationStatus.PREPARING)
 
     def run_prepare():
+        # Issue #1034: Der Collector gehört dem Task, nicht dem Service —
+        # gleiches Muster wie im Graph-Build (``services/graph_build.py``).
+        # Nur so überlebt ein stiller Teilausfall bis ins Task-Ergebnis;
+        # ein im Service erzeugter Sammler wäre nach der Rückkehr weg.
+        degradations = DegradationCollector()
         try:
             task_manager.update_task(
                 task_id,
@@ -684,13 +710,28 @@ def prepare_simulation():
                 language=agent_language_override,
                 max_agents=max_agents,
                 quota_plan=quota_plan,
+                degradations=degradations,
             )
 
-            task_manager.complete_task(task_id, result=result_state.to_simple_dict())
+            task_manager.complete_task(
+                task_id,
+                result={
+                    **result_state.to_simple_dict(),
+                    # Leere Liste heißt „nichts ist still ausgefallen".
+                    "degradations": degradations.report().model_dump(mode="json"),
+                },
+            )
 
         except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.error(f"Failed to prepare simulation: {str(exc)}")
             task_manager.fail_task(task_id, str(exc))
+            # Auch der Fehlerfall trägt die Befunde: sie nennen oft die
+            # Ursache, die die Exception-Message selbst nicht mehr kennt
+            # (etwa "alle Entitäten waren ungeeignet" statt "kein Graph").
+            task_manager.update_task(
+                task_id,
+                result={"degradations": degradations.report().model_dump(mode="json")},
+            )
 
             failed_state = manager.get_simulation(simulation_id)
             if failed_state:
@@ -710,6 +751,15 @@ def prepare_simulation():
         "already_prepared": False,
         "expected_entities_count": state.entities_count,
         "entity_types": state.entity_types,
+        # Issue #1034: Der Fortschrittszähler zählt Personas, nicht
+        # Entitäten. `expected_entities_count` bleibt die Entitätenzahl;
+        # den Nenner liefert `persona_target` aus derselben Funktion, die
+        # auch `_phase_generate_profiles` im Laufpfad verwendet.
+        "persona_target": compute_persona_target(
+            state.entities_count,
+            max_agents=max_agents,
+            quota_plan=quota_plan,
+        ).model_dump(mode="json"),
     })
 
 

@@ -17,6 +17,7 @@
  */
 
 import { ref, onUnmounted, type Ref } from 'vue'
+import { parsePersonaTarget } from '../contracts/personaTargetContract'
 import {
   prepareSimulation,
   getPrepareStatus,
@@ -49,6 +50,12 @@ export interface SimulationPrepareState {
   progressMessage: Ref<string>
   profiles: Ref<ProfileRecord[]>
   expectedTotal: Ref<number | null>
+  /**
+   * Der Persona-Floor hat das Ziel über die Entitätenzahl angehoben
+   * (Issue #1034) — die Oberfläche macht das kenntlich, sonst wirkt der
+   * Nenner willkürlich, wenn sieben Entitäten fünfzig Personas ergeben.
+   */
+  personaFloorApplied: Ref<boolean>
   simulationConfig: Ref<Record<string, unknown> | null>
   error: Ref<string | null>
 }
@@ -85,6 +92,7 @@ interface PrepareEnvelope {
     already_prepared?: boolean
     task_id?: string
     expected_entities_count?: number
+    persona_target?: unknown
   }
 }
 
@@ -119,6 +127,7 @@ export function useSimulationPrepare(): UseSimulationPrepareReturn {
   const progressMessage = ref('')
   const profiles = ref<ProfileRecord[]>([])
   const expectedTotal = ref<number | null>(null)
+  const personaFloorApplied = ref(false)
   const simulationConfig = ref<Record<string, unknown> | null>(null)
   const error = ref<string | null>(null)
 
@@ -240,6 +249,7 @@ export function useSimulationPrepare(): UseSimulationPrepareReturn {
     progressMessage.value = ''
     profiles.value = []
     expectedTotal.value = null
+    personaFloorApplied.value = false
     simulationConfig.value = null
     error.value = null
     _simulationId = null
@@ -301,7 +311,17 @@ export function useSimulationPrepare(): UseSimulationPrepareReturn {
           return false
         }
         onLog(`Task gestartet: ${_taskId}`)
-        if (res.data.expected_entities_count) {
+        // Issue #1034: Der Nenner zählt Personas, nicht Entitäten. Das
+        // Backend liefert das Generierungsziel als eigenes Vertragsfeld;
+        // `expected_entities_count` ist die Entitätenzahl und war als
+        // Nenner falsch, sobald der Persona-Floor gegriffen hat.
+        const target = parsePersonaTarget(res.data.persona_target)
+        if (target) {
+          expectedTotal.value = target.persona_target_count
+          personaFloorApplied.value = target.floor_applied
+        } else if (res.data.expected_entities_count) {
+          // Ältere Backends ohne `persona_target`: lieber die alte Zahl
+          // als gar keine — sie ist nur dann falsch, wenn der Floor greift.
           expectedTotal.value = res.data.expected_entities_count
         }
 
@@ -350,6 +370,7 @@ export function useSimulationPrepare(): UseSimulationPrepareReturn {
     progressMessage,
     profiles,
     expectedTotal,
+    personaFloorApplied,
     simulationConfig,
     error,
     // actions

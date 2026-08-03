@@ -140,6 +140,7 @@ from .pipeline_degradation_contract import (
     PipelineDegradationModel,
     PipelineDegradationReport,
 )
+from .persona_target_contract import PersonaTargetContract
 from .report_v3 import (
     Claim,
     ChangeRecommendation,
@@ -200,6 +201,7 @@ __all__ = [
     "PostVoiceRegister",
     "PersonaQuotaActual",
     "PersonaQuotaPlan",
+    "PersonaTargetContract",
     "ReportClaimModel",
     "ReportContractModel",
     "ReportModel",
