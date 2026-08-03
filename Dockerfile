@@ -27,7 +27,10 @@ RUN apt-get update \
 # invalidierte diese Layer — und damit jede abgeleitete Stage — bei jedem
 # Upstream-Push, auch ohne Änderung im Repo.
 COPY --from=oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 /usr/local/bin/bun /usr/local/bin/bun
-COPY --from=ghcr.io/astral-sh/uv:0.9.26 /uv /uvx /bin/
+# uv ebenfalls auf Digest gepinnt. Der Digest ist der Manifest-List-Digest,
+# nicht der einer einzelnen Plattform — die Liste trägt linux/amd64 und
+# linux/arm64, das Image bleibt damit auf beiden Build-Hosts verwendbar.
+COPY --from=ghcr.io/astral-sh/uv:0.9.26@sha256:9a23023be68b2ed09750ae636228e903a54a05ea56ed03a934d00fe9fbeded4b /uv /uvx /bin/
 
 # Große CUDA-Wheels (cudnn ~700 MB, nvshmem ~300 MB) sprengen den
 # uv-Default von 30 s auf langsamen Leitungen.
