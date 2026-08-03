@@ -25,7 +25,11 @@ import os
 import traceback
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
-from ..contracts import PersonaQuotaActual, PersonaQuotaPlan
+from ..contracts import (
+    PersonaQuotaActual,
+    PersonaQuotaPlan,
+    PersonaTargetContract,
+)
 from ..contracts.llm_routing_contract import ResolvedRoute
 from ..utils.logger import get_logger
 from .degradation_collector import DegradationCollector
@@ -143,6 +147,7 @@ def _phase_generate_profiles(
     progress_callback: Optional[Callable] = None,
     quota_plan: Optional[PersonaQuotaPlan] = None,
     persona_floor: int = MIN_PERSONA_TABLE_ROWS,
+    max_agents: Optional[int] = None,
     degradations: Optional[DegradationCollector] = None,
 ) -> Tuple[List[Any], List[Any]]:
     """Phase 2: OASIS-Profiles generieren und im Sim-Dir ablegen.
@@ -161,7 +166,16 @@ def _phase_generate_profiles(
     entities = _expand_entities_for_quota(filtered.entities, quota_plan)
     if quota_plan is None:
         entities = _apply_persona_floor_to_entities(entities, minimum=persona_floor)
-    total_entities = len(entities)
+    # Issue #1034: Der Nenner des Fortschrittszählers kommt aus derselben
+    # Funktion, die auch die Preview-Antwort füllt. Vorher stand hier
+    # ``len(entities)`` — richtig, aber eben nur hier: die UI bekam den
+    # Vor-Floor-Wert aus einer zweiten Berechnung und zeigte „22 / 7".
+    total_entities = compute_persona_target(
+        len(filtered.entities),
+        max_agents=max_agents,
+        quota_plan=quota_plan,
+        floor=persona_floor,
+    ).persona_target_count
 
     if progress_callback:
         progress_callback(
@@ -470,6 +484,57 @@ def _apply_persona_floor_to_quota_plan(
     return PersonaQuotaPlan(targets=targets, total=minimum)
 
 
+def compute_persona_target(
+    entity_count: int,
+    *,
+    max_agents: Optional[int] = None,
+    quota_plan: Optional[PersonaQuotaPlan] = None,
+    floor: Optional[int] = None,
+) -> PersonaTargetContract:
+    """Bestimmt das Persona-Generierungsziel — eine Quelle für beide Pfade.
+
+    ``entity_count`` ist die Entitätenzahl nach Eignungsfilter und
+    ``max_agents``-Cap. Der wirksame Floor ist ``MIN_PERSONA_TABLE_ROWS``,
+    gedeckelt durch ein gesetztes ``max_agents > 0`` (Nutzer-Wunsch schlägt
+    Contract). Wer den Floor bereits aufgelöst hat — der Orchestrator tut
+    das für die Generierung —, reicht ihn als ``floor`` herein, statt ihn
+    hier ein zweites Mal berechnen zu lassen.
+
+    Mit ``quota_plan`` ist das Ziel dessen ``total`` nach
+    ``_apply_persona_floor_to_quota_plan``; ohne Plan ist es
+    ``max(entity_count, floor)`` — dasselbe, was
+    ``_apply_persona_floor_to_entities`` auf den Entity-Pool anwendet.
+
+    Ein leerer Pool bleibt leer: ``_apply_persona_floor_to_entities``
+    skaliert nichts hoch, wenn es nichts zu wiederholen gibt. Ein Ziel von
+    50 bei null Entitäten wäre genau die Divergenz zwischen Zähler und
+    Nenner, die dieser Contract beseitigen soll.
+
+    ``api/simulation_prepare.py`` (Preview) und ``_phase_generate_profiles``
+    (Laufpfad) rufen exakt diese Funktion.
+    """
+    effective_floor = MIN_PERSONA_TABLE_ROWS if floor is None else floor
+    if floor is None and max_agents is not None and max_agents > 0:
+        effective_floor = min(effective_floor, max_agents)
+
+    if quota_plan is not None:
+        adjusted_plan = _apply_persona_floor_to_quota_plan(
+            quota_plan, minimum=effective_floor
+        )
+        target = adjusted_plan.total if adjusted_plan is not None else quota_plan.total
+    elif entity_count == 0:
+        target = 0
+    else:
+        target = max(entity_count, effective_floor)
+
+    return PersonaTargetContract(
+        entity_count=entity_count,
+        persona_target_count=target,
+        floor_applied=target > entity_count,
+        floor=effective_floor,
+    )
+
+
 def _validate_persona_quota(
     plan: PersonaQuotaPlan,
     profiles: List[OasisAgentProfile],
@@ -582,6 +647,7 @@ def prepare_simulation(
             progress_callback=progress_callback,
             quota_plan=quota_plan,
             persona_floor=persona_floor,
+            max_agents=max_agents,
             run_id=run_id,
             degradations=degradations,
         )
@@ -631,6 +697,7 @@ def prepare_simulation(
 
 __all__ = [
     "prepare_simulation",
+    "compute_persona_target",
     "_apply_persona_floor_to_entities",
     "_apply_persona_floor_to_quota_plan",
     "_validate_persona_quota",

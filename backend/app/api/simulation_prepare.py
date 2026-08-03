@@ -21,6 +21,7 @@ from ..services.llm_routing_seed import (
 )
 from ..services.llm_runtime import parse_runtime_llm_config
 from ..services.persona_eligibility import filter_eligible_entities
+from ..services.prepare_service import compute_persona_target
 from ..services.report_agent import MIN_SIMULATION_AGENTS
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.stage_model_router import StageModelRouter
@@ -750,6 +751,15 @@ def prepare_simulation():
         "already_prepared": False,
         "expected_entities_count": state.entities_count,
         "entity_types": state.entity_types,
+        # Issue #1034: Der Fortschrittszähler zählt Personas, nicht
+        # Entitäten. `expected_entities_count` bleibt die Entitätenzahl;
+        # den Nenner liefert `persona_target` aus derselben Funktion, die
+        # auch `_phase_generate_profiles` im Laufpfad verwendet.
+        "persona_target": compute_persona_target(
+            state.entities_count,
+            max_agents=max_agents,
+            quota_plan=quota_plan,
+        ).model_dump(mode="json"),
     })
 
 
