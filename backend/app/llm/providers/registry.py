@@ -142,8 +142,11 @@ def _detect_oasis(base_url: Optional[str], model: Optional[str]) -> OasisDetecte
        OpenAI-Compat-Pfad strippt das Feld → HTTP 400 bei jedem Tool-Turn.
     2. ``"ollama"`` — Base-URL enthält ``ollama.com`` oder Port ``:11434``
        ODER Modell traegt ein Ollama-Cloud-Tag (``:cloud`` / ``:<size>-cloud``,
-       Issue #670) ODER endet auf ``:latest``. Ollama Cloud bietet keinen
-       OpenAI-Compat-``/v1``-Endpoint mehr; nur ``/api/chat`` (nativ).
+       Issue #670) ODER endet auf ``:latest``. Der CAMEL-Konsument dieses
+       Zweigs spricht OpenAI-Compat und braucht ein ``/v1`` an der Base-URL —
+       siehe :func:`ensure_v1_suffix`. Agoras eigener HTTP-Pfad spricht
+       dagegen nativ ``/api/chat`` und normalisiert per
+       :func:`_strip_v1_suffix` in die Gegenrichtung.
     3. ``"openai"`` — alles andere (echtes OpenAI, Compat-Gateways, Qwen
        Cloud über Nicht-Ollama-URLs, Mistral, DeepSeek, …).
     """
@@ -354,6 +357,39 @@ def _strip_v1_suffix(url: str) -> str:
     if base.endswith("/v1"):
         base = base[:-3]
     return base
+
+
+def ensure_v1_suffix(url: Optional[str]) -> Optional[str]:
+    """Gegenstueck zu :func:`_strip_v1_suffix` — erzwingt das OpenAI-Compat-``/v1``.
+
+    CAMELs ``OllamaModel`` erbt von ``OpenAICompatibleModel``: es baut einen
+    ``openai.OpenAI(base_url=url)``-Client und ruft ``POST {base_url}/chat/
+    completions``. Einen nativen ``/api/chat``-Pfad kennt CAMEL nicht. Eine
+    Base-URL ohne ``/v1`` — der Registry-Default ``https://ollama.com`` ebenso
+    wie ``http://localhost:11434`` — landet damit auf ``…/chat/completions``,
+    einer Route, die es weder bei Ollama Cloud noch lokal gibt: Ollama Cloud
+    antwortet mit seiner HTML-404-Seite, die der OpenAI-SDK in einen
+    ``NotFoundError`` mit HTML-Body verwandelt.
+
+    Fuer Agoras eigenen HTTP-Pfad ist die URL *ohne* ``/v1`` richtig, weil
+    ``app/llm/providers/ollama.py`` nativ ``/api/chat`` spricht und ein
+    vorhandenes ``/v1`` ohnehin abschneidet. Beide Formen sind also legitim —
+    sie gehoeren nur zu verschiedenen Konsumenten. Diese Funktion normalisiert
+    fuer den OpenAI-Compat-Konsumenten, ``_strip_v1_suffix`` fuer den nativen.
+
+    Leere oder fehlende URLs bleiben unveraendert: ein ``None`` bedeutet
+    "CAMEL faellt auf seinen eigenen Default zurueck" und darf nicht zu einem
+    sinnlosen ``"/v1"`` werden.
+    """
+    if not url:
+        return url
+    trimmed = url.strip()
+    if not trimmed:
+        return url
+    base = trimmed.rstrip("/")
+    if base.endswith("/v1"):
+        return base
+    return f"{base}/v1"
 
 
 def resolve_ollama_tags_url(

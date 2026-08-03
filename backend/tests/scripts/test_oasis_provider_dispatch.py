@@ -309,8 +309,57 @@ class TestCreateModelOllamaBranch:
         assert len(calls) == 1
         kwargs = calls[0]["kwargs"]
         assert kwargs.get("model_platform") == ModelPlatformType.OLLAMA
-        assert kwargs.get("url") == "http://localhost:11434"
+        # ``/v1`` ist Pflicht, nicht Kosmetik: CAMELs OllamaModel ist ein
+        # OpenAICompatibleModel und ruft ``POST {url}/chat/completions``. Die
+        # frühere Fassung dieses Tests hat ``http://localhost:11434`` roh
+        # durchgereicht erwartet und damit den Defekt festgeschrieben.
+        assert kwargs.get("url") == "http://localhost:11434/v1"
         assert kwargs.get("api_key") == "my-ollama-key"
+
+    def test_ollama_cloud_url_gets_v1_suffix(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Regression: ``https://ollama.com`` ohne ``/v1`` → OASIS-Preflight-404.
+
+        Der Registry-Default für ``ollama_cloud`` ist ``https://ollama.com``.
+        CAMELs ``OllamaModel`` erbt von ``OpenAICompatibleModel`` und ruft
+        ``POST {url}/chat/completions`` — ohne ``/v1`` landet der Preflight auf
+        ``https://ollama.com/chat/completions``, einer Route, die es nicht gibt.
+        Ollama antwortet mit seiner HTML-404-Seite, das OpenAI-SDK macht daraus
+        einen ``NotFoundError`` mit HTML-Body, und ``preflight_model_probe``
+        lehnt den Lauf ab, bevor auch nur ein Agent startet.
+        """
+        monkeypatch.setenv("LLM_MODEL_NAME", "deepseek-v4-flash:0731-cloud")
+        monkeypatch.setenv("LLM_API_KEY", "cloud-key")
+        monkeypatch.setenv("LLM_BASE_URL", "https://ollama.com")
+
+        mock_factory, calls = _make_model_factory_mock()
+
+        import run_parallel_simulation as rps  # type: ignore[import]
+        monkeypatch.setattr(rps, "ModelFactory", mock_factory)
+
+        rps.create_model({}, use_boost=False)
+
+        kwargs = calls[0]["kwargs"]
+        assert kwargs.get("model_platform") == ModelPlatformType.OLLAMA
+        assert kwargs.get("url") == "https://ollama.com/v1"
+
+    def test_ollama_url_with_v1_is_not_doubled(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Eine bereits korrekte URL bleibt unverändert — kein ``/v1/v1``."""
+        monkeypatch.setenv("LLM_MODEL_NAME", "deepseek-v4-flash:0731-cloud")
+        monkeypatch.setenv("LLM_API_KEY", "cloud-key")
+        monkeypatch.setenv("LLM_BASE_URL", "https://ollama.com/v1/")
+
+        mock_factory, calls = _make_model_factory_mock()
+
+        import run_parallel_simulation as rps  # type: ignore[import]
+        monkeypatch.setattr(rps, "ModelFactory", mock_factory)
+
+        rps.create_model({}, use_boost=False)
+
+        assert calls[0]["kwargs"].get("url") == "https://ollama.com/v1"
 
     def test_ollama_latest_suffix_emits_extra_body(
         self, monkeypatch: pytest.MonkeyPatch
