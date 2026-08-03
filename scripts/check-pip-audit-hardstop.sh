@@ -26,8 +26,11 @@ FLAGS="${PIP_AUDIT_FLAGS:-}"
 TODAY="$(date -u +%F)"
 
 # Datum-Vergleich als ISO-Strings (YYYY-MM-DD sortiert lexikografisch korrekt).
-if [[ ! "$TODAY" > "$HARDCUTOFF" ]]; then
-  echo "OK: $TODAY ist vor Hardcutoff $HARDCUTOFF — pip-audit --ignore-vuln ist erlaubt."
+# Inklusiv: am Cutoff-Tag selbst muss die Liste bereits leer sein (AGENTS.md L76
+# verbietet CVE-Ausnahmen ohne Hardstop; ein Tag ``< Hardcutoff`` wuerde das
+# aushebeln — das letzte 24-Stunden-Fenster vor dem Hardstop waere unguelltig).
+if [[ ! "$TODAY" >= "$HARDCUTOFF" ]]; then
+  echo "OK: $TODAY ist vor oder am Hardcutoff $HARDCUTOFF — pip-audit --ignore-vuln ist erlaubt."
   exit 0
 fi
 
