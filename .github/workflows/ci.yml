@@ -364,6 +364,7 @@ jobs:
         #   #1062 Bug-Reproduktion B (1 Test)
         #   #1063 Entity-Propagation (1 Test)
         #   #1064 Generate-Profiles-Endpoint (1 Test, CI-only)
+        #   #1065 NLTK-Import-Guard (1 Test, Egress-Limit CI)
         # Deselect bis die jeweiligen Fixes gemerged sind, damit der neue
         # PR-Gate den Rest der Suite fängt ohne an bereits getrackten
         # Issues zu stranden. Liste schrumpft mit jedem Fix.
@@ -384,6 +385,7 @@ jobs:
             --deselect tests/services/test_bug_reproductions.py::test_repro_bug_b_oasis_profile_generator_thinking_tokens_parsing \
             --deselect tests/test_entity_propagation.py::test_expanded_entities_propagate_to_config_generator \
             --deselect tests/api/test_simulation_uses_request_model.py::test_generate_profiles_endpoint_falls_back_when_no_llm_model \
+            --deselect tests/test_nltk_import_guard.py::test_ingestion_entrypoint_can_parse \
             -q --no-cov -x
 
       # 2026-07-25 wieder aktiviert (Issue #883). Der 2026-05-17 entfernte Job

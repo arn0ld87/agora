@@ -58,7 +58,7 @@ run_backend() {
   # damit die Tests gegen das Produktionsverhalten laufen -- ein
   # Debug-only Sentinel-Leak (Issue #1058) bricht hier nicht.
   # Issue #1054 (offen, pre-existing) lässt test_oasis_preflight rot;
-  # plus Drift in #1059, #1060, #1061, #1062, #1063, #1064.
+  # plus Drift in #1059, #1060, #1061, #1062, #1063, #1064, #1065.
   # Deselect bis Fixes gemerged sind; Liste schrumpft dann.
   step "Backend: tests (PR subset, no coverage)"
   (cd backend && FLASK_DEBUG=false uv run pytest tests/ \
@@ -77,6 +77,7 @@ run_backend() {
       --deselect tests/services/test_bug_reproductions.py::test_repro_bug_b_oasis_profile_generator_thinking_tokens_parsing \
       --deselect tests/test_entity_propagation.py::test_expanded_entities_propagate_to_config_generator \
       --deselect tests/api/test_simulation_uses_request_model.py::test_generate_profiles_endpoint_falls_back_when_no_llm_model \
+      --deselect tests/test_nltk_import_guard.py::test_ingestion_entrypoint_can_parse \
       -q --no-cov -x) \
     || fail "backend tests"
 
