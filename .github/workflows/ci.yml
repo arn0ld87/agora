@@ -201,6 +201,19 @@ jobs:
         working-directory: backend
         run: uv run ruff check .
 
+      # 2026-08-03 (Issue #1056): Hardstop-Erinnerung für pip-audit
+      # ``--ignore-vuln``-Liste. Aktuell ist die Liste leer (Stand 2026-08-03);
+      # der Step ist die Versicherung, dass eine künftige Wiedereinführung
+      # ohne ADR-Update sofort auffällt. Hintergrund: ADR-0004 / ALE-20.
+      - name: Verify pip-audit --ignore-vuln hardstop
+        if: github.event_name != 'pull_request'
+        env:
+          PIP_AUDIT_HARDCUTOFF: "2026-09-28"
+          # Wenn hier jemals wieder --ignore-vuln auftaucht, MUSS ADR-0004
+          # aktualisiert werden, sonst schlägt der Job nach 2026-09-28 fehl.
+          PIP_AUDIT_FLAGS: ""
+        run: bash scripts/check-pip-audit-hardstop.sh
+
   frontend:
     name: Frontend build + lint
     runs-on: ubuntu-latest
@@ -316,6 +329,15 @@ jobs:
       - name: Pytest contracts (fast subset)
         working-directory: backend
         run: uv run pytest tests/contracts/ -q
+
+      # 2026-08-03 (Issue #1055): Pre-Merge-Backend-Tests. Ohne Coverage-Gate
+      # und ohne DB-abhängige Marker -- die sind in hermetic fixtures gemockt.
+      # fail-fast (-x) ist Absicht: ein roter Test bricht den PR sofort,
+      # statt in einem Wald von Folgefehlern unterzugehen.
+      # Voller Coverage-Lauf bleibt im `backend`-Job auf push:main.
+      - name: Backend tests (PR subset, no coverage)
+        working-directory: backend
+        run: uv run pytest tests/ --ignore=tests/contracts -q --no-cov -x
 
       # 2026-07-25 wieder aktiviert (Issue #883). Der 2026-05-17 entfernte Job
       # lief auf push:main und meldete Drift erst nach dem Merge. Hier laeuft er
