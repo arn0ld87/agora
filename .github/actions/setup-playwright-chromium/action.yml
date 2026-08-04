@@ -1,0 +1,23 @@
+name: 'Setup Playwright Chromium (with cache)'
+description: >-
+  Install Playwright Chromium browser + system dependencies with cache.
+  Restores ~/.cache/ms-playwright from actions/cache so subsequent runs skip
+  the ~120MB browser download. Replaces the inline
+  ``npx playwright install --with-deps chromium`` step and gives the apt-get
+  portion 15 minutes instead of 8.
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Restore Playwright browser cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-chromium-${{ runner.os }}-${{ hashFiles('frontend/package.json') }}
+        restore-keys: |
+          playwright-chromium-${{ runner.os }}-
+
+    - name: Install Playwright Chromium (browser + system deps)
+      working-directory: frontend
+      run: npx playwright install --with-deps chromium
+      shell: bash
