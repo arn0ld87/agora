@@ -336,20 +336,22 @@ npm audit --audit-level=high
 # Backend Runtime Dependency Audit aus uv.lock
 cd ../backend
 uv export --frozen --no-dev --no-hashes --no-emit-project \
-  --format requirements.txt --output-file /tmp/agora-backend-requirements.txt \
+  --format requirements.txt --output-file /tmp/agora-backend-requirements.raw.txt \
   > /dev/null
-uvx pip-audit --strict \
-  --ignore-vuln CVE-2026-25990 \
-  --ignore-vuln CVE-2026-40192 \
-  --ignore-vuln CVE-2026-42308 \
-  --ignore-vuln CVE-2026-42310 \
-  --ignore-vuln CVE-2026-42311 \
-  --ignore-vuln CVE-2025-71176 \
-  --ignore-vuln CVE-2026-1839 \
-  --ignore-vuln CVE-2024-46455 \
-  --ignore-vuln CVE-2025-64712 \
+python scripts/normalize_audit_requirements.py \
+  /tmp/agora-backend-requirements.raw.txt \
+  /tmp/agora-backend-requirements.txt
+uvx pip-audit --strict --no-deps --disable-pip \
   -r /tmp/agora-backend-requirements.txt
 ```
+
+Der Normalisierungsschritt ist auf Linux nicht optional: `uv export` pinnt Torch
+marker-getrennt (`torch==2.13.0+cpu ; sys_platform == 'linux'`), und PyPI führt
+keine PEP-440-Local-Version-Labels. Ohne den Schritt bricht `pip-audit --strict`
+mit „Dependency not found on PyPI and could not be audited" ab — kein Vuln-Fund,
+sondern eine nicht auflösbare Zeile. Auf macOS greift der andere Marker, deshalb
+ist der Fehler lokal unsichtbar. Details und Regressionstests:
+[`backend/scripts/normalize_audit_requirements.py`](../backend/scripts/normalize_audit_requirements.py).
 
 Gitleaks läuft in GitHub Actions mit vollständiger Historie (`fetch-depth: 0`). Bei echten Findings gilt: Secret sofort rotieren, Commit-Historie separat bereinigen und erst danach das Finding suppressen.
 

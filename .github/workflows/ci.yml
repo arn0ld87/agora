@@ -64,6 +64,24 @@ jobs:
 
       - name: Export locked backend runtime requirements
         working-directory: backend
+        # `uv export` schreibt die Torch-Pins marker-getrennt:
+        #   torch==2.13.0      ; sys_platform != 'linux'
+        #   torch==2.13.0+cpu  ; sys_platform == 'linux'
+        # Dieser Job laeuft auf Linux, also greift die `+cpu`-Zeile. `+cpu` ist
+        # ein PEP-440-Local-Version-Label; PyPI weist solche Labels beim Upload
+        # grundsaetzlich zurueck, sie existieren nur auf download.pytorch.org.
+        # pip-audit loest jede Zeile gegen PyPI auf und meldet deshalb
+        # "torch: Dependency not found on PyPI and could not be audited" —
+        # unter `--strict` ein Fehler, Exit 1. Genau daran ist dieser Step seit
+        # 2026-08-03 auf jedem main-Lauf gescheitert; lokal auf macOS faellt es
+        # nicht auf, weil dort der andere Marker greift.
+        #
+        # `--extra-index-url` repariert das nicht: pip-audit fragt den
+        # Vulnerability-Service, nicht den Paket-Index. Das Local-Label zu
+        # strippen ist korrekt und konservativ — Advisories laufen gegen die
+        # Public-Release-Version 2.13.0, aus deren Quellstand der +cpu-Build
+        # gebaut wird. Begruendung und Regressionstests:
+        # backend/scripts/normalize_audit_requirements.py.
         run: |
           uv export \
             --frozen \
@@ -71,8 +89,13 @@ jobs:
             --no-hashes \
             --no-emit-project \
             --format requirements.txt \
-            --output-file /tmp/agora-backend-requirements.txt \
+            --output-file /tmp/agora-backend-requirements.raw.txt \
             > /dev/null
+          python scripts/normalize_audit_requirements.py \
+            /tmp/agora-backend-requirements.raw.txt \
+            /tmp/agora-backend-requirements.txt
+          echo "torch-Zeilen nach Normalisierung:"
+          grep -E '^torch' /tmp/agora-backend-requirements.txt
 
       - name: Run Python dependency audit
         # CI-Welle 2026-05-16: pip-audit läuft NUR auf push:main + workflow_dispatch.
