@@ -82,14 +82,29 @@ def dedup_and_cap_hypotheses(
     appendix = deduped[_VISIBLE_CAP:]
 
     # --- Hard cap (Issue #1073) -------------------------------------------------
-    # deduped ist bereits nach Confidence absteigend sortiert (_sort_key), daher
-    # verwirft der Slice hier ausschließlich die schwächsten Einträge am Ende.
+    # Der Slice greift auf die von ``_sort_key`` erzeugte Reihenfolge zu.
+    #
+    # Wie belastbar diese Rangfolge ist, hängt davon ab, wer die Hypothesen
+    # erzeugt hat: die drei produktiven Pfade (``agent.py`` zweimal,
+    # ``text_verification.py::as_hypothesis``) setzen KEIN ``confidence_score``,
+    # weil ``ReportSectionHypothesisModel`` ein strict-Contract ohne dieses Feld
+    # ist. ``_sort_key`` liest dort also durchgängig 0.0, und effektiv sortiert
+    # allein die Zahl der ``suggested_evidence`` — bei Gleichstand bleibt die
+    # Erzeugungsreihenfolge stehen (Pythons sort ist stabil).
+    #
+    # Der Cap verwirft damit nicht zuverlässig "die schwächsten", sondern die
+    # letzten einer nur schwach qualitätskorrelierten Reihenfolge. Das ist
+    # bewusst so belassen: der akute Defekt ist der harte Abbruch der
+    # Reportgenerierung, nicht die Auswahl. Ein belastbares Ranking-Signal über
+    # diese Grenze zu tragen ist Gegenstand von Issue #1083.
     if len(appendix) > _APPENDIX_CAP:
         dropped = appendix[_APPENDIX_CAP:]
         appendix = appendix[:_APPENDIX_CAP]
         logger.warning(
             "hypothesis_cap: appendix exceeded contract limit of %d, "
-            "dropped %d weakest hypotheses (lowest confidence_score)",
+            "dropped %d trailing hypotheses (sort order: confidence_score "
+            "desc, then suggested_evidence count desc; producers currently "
+            "emit no confidence_score — see #1083)",
             _APPENDIX_CAP,
             len(dropped),
         )
