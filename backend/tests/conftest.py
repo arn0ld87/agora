@@ -168,9 +168,11 @@ def hermetic_settings(monkeypatch, tmp_path):
     from app.services import oasis_profile_generator
     from app.services.settings_layer import SettingsService
 
-    monkeypatch.setattr(
-        oasis_profile_generator,
-        '_get_settings',
-        lambda: SettingsService(instance_path=tmp_path / 'settings.json'),
-    )
+    # Eine Instanz, nicht eine pro Aufruf: der produktive
+    # ``get_default_service()`` haelt ein Modul-Singleton, dessen in-memory
+    # ``_override`` ueber mehrere Zugriffe hinweg lebt. Eine Fabrik wuerde das
+    # Override bei jedem ``_get_settings()`` verlieren und damit ein anderes
+    # Verhalten pruefen als die Anwendung zeigt.
+    service = SettingsService(instance_path=tmp_path / 'settings.json')
+    monkeypatch.setattr(oasis_profile_generator, '_get_settings', lambda: service)
     return oasis_profile_generator
