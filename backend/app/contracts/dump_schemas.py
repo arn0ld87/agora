@@ -33,7 +33,7 @@ from app.contracts.run_budget_contract import (
     RunUsage,
 )
 from app.contracts.runs_contract import RunDetail, RunsListResponse, RunSummary
-from app.contracts.system_status_contract import SystemStatusOllama
+from app.contracts.system_status_contract import SystemStatusE2E, SystemStatusOllama
 from app.contracts.llm_routing_contract import (
     RuntimeLlmRouting,
     ProviderDescriptor,
@@ -134,6 +134,7 @@ CONTRACTS: dict[str, type] = {
     "onboarding-step-update-request.schema.json": OnboardingStepUpdateRequest,
     "onboarding-status-response.schema.json": OnboardingStatusResponse,
     "system-status-ollama.schema.json": SystemStatusOllama,
+    "system-status-e2e.schema.json": SystemStatusE2E,
     # Embedding (Slice 4.1)
     "embedding-configuration.schema.json": EmbeddingConfiguration,
     "embedding-configuration-upsert-request.schema.json": EmbeddingConfigurationUpsertRequest,

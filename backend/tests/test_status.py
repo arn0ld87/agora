@@ -11,6 +11,7 @@ from app import __version__
 from app.config import Config
 from app.api.status import (
     _get_backend_status,
+    _get_e2e_status,
     _get_neo4j_status,
     _get_ollama_status,
     _get_disk_status,
@@ -47,6 +48,35 @@ class TestStatusFunctions:
         assert _get_backend_status()['allow_small_sim'] is False
         monkeypatch.setenv("AGORA_ALLOW_SMALL_SIM", " 1 ")
         assert _get_backend_status()['allow_small_sim'] is False
+
+    def test_get_e2e_status_defaults_to_inactive(self, monkeypatch):
+        """Ohne AGORA_E2E_LLM_MODE ist der Stub aus — Normalfall in Produktion."""
+        monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
+        result = _get_e2e_status()
+        assert result == {"llm_mode": None, "stub_active": False}
+
+    def test_get_e2e_status_reports_active_stub(self, monkeypatch):
+        """AGORA_E2E_LLM_MODE=stub wird als stub_active=True gemeldet.
+
+        Die E2E-Suite assertiert hart auf dieses Feld
+        (frontend/tests/e2e/helpers/diagnostics.ts::assertStubModeActive).
+        Bliebe es aus, liefe die Suite unbemerkt gegen einen echten Provider.
+        """
+        monkeypatch.setenv("AGORA_E2E_LLM_MODE", "stub")
+        result = _get_e2e_status()
+        assert result["llm_mode"] == "stub"
+        assert result["stub_active"] is True
+
+    def test_get_e2e_status_other_modes_are_not_stub(self, monkeypatch):
+        """Nur exakt "stub" zaehlt — jeder andere Wert bedeutet echter Provider."""
+        monkeypatch.setenv("AGORA_E2E_LLM_MODE", "live")
+        result = _get_e2e_status()
+        assert result["llm_mode"] == "live"
+        assert result["stub_active"] is False
+
+        # Leerstring ist "nicht gesetzt", nicht "unbekannter Modus".
+        monkeypatch.setenv("AGORA_E2E_LLM_MODE", "   ")
+        assert _get_e2e_status() == {"llm_mode": None, "stub_active": False}
 
     def test_get_disk_status(self):
         """Test disk status returns expected fields."""
