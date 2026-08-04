@@ -55,6 +55,15 @@ class TestOpenAiCompatBaseUrl:
             # "URL ohne Pfad bekommt /v1"-Heuristik wuerde ihn beschaedigen.
             ("http://mock-models", "any-model"),
             ("https://gateway.example/custom", "any-model"),
+            # Kernfall des Codex-Reviews zu PR #1077: ein Gateway an der
+            # Wurzel, das ein Ollama-Modell durchreicht (LiteLLM/vLLM tun
+            # das). detect_provider() stuft das ueber den :cloud-Tag als
+            # Ollama ein — die Endpunkt-Kanonisierung darf dem nicht folgen,
+            # sonst zeigt jeder chat()-Call dieser Connection ins Leere.
+            ("https://gateway.example", "qwen3-coder-next:cloud"),
+            ("http://mock-models", "gpt-oss:20b-cloud"),
+            # Host-Suffix-Falle: keine echte ollama.com-Domain.
+            ("https://ollama.com.attacker.test", "llama3"),
             # Anthropic ist bewusst NICHT Teil dieses Fixes (Issue #1072):
             # kein Chat-Adapter, keine Detection, unverifiziert.
             ("https://api.anthropic.com", "claude-sonnet-4"),

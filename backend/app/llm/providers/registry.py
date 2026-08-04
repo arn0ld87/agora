@@ -392,8 +392,41 @@ def ensure_v1_suffix(url: Optional[str]) -> Optional[str]:
     return f"{base}/v1"
 
 
+def _has_ollama_url_signal(base_url: Optional[str]) -> bool:
+    """True, wenn die Base-URL selbst einen Ollama-Endpunkt ausweist.
+
+    Bewusst ausschliesslich URL-basiert und ohne Blick auf den Modellnamen:
+    ``detect_provider(mode="http")`` stuft schon ein ``:cloud``-Tag als
+    Ollama ein, was fuer die *Provider*-Wahl richtig ist, fuer die
+    *Endpunkt*-Kanonisierung aber nicht. Ein ``openai_compatible``-Gateway,
+    das an seiner Wurzel lauscht und ein Ollama-Modell durchreicht
+    (LiteLLM/vLLM tun das), wuerde sonst faelschlich ein ``/v1`` bekommen
+    (Codex-Review zu PR #1077).
+
+    Hostname und Port werden exakt geprueft, nicht als Substring — dieselbe
+    Erwaegung wie bei der MiniMax-Erkennung in :func:`_detect_http`
+    (CodeQL #750): ``https://ollama.com.attacker.test`` ist kein Ollama.
+
+    Bekannte Grenze: ein selbstgehostetes Ollama auf einem Nicht-Standard-Port
+    (z. B. ``:11435``) traegt kein URL-Signal und wird nicht kanonisiert. Der
+    Fall ist heute ebenso kaputt wie vor diesem Fix; ihn ueber den Modellnamen
+    aufzufangen wuerde die Gateway-Regression eintauschen, die er verhindert.
+    """
+    if not base_url:
+        return False
+    parsed = urlparse(base_url.strip().lower())
+    host = parsed.hostname or ""
+    if host == "ollama.com" or host.endswith(".ollama.com"):
+        return True
+    try:
+        return parsed.port == 11434
+    except ValueError:
+        # Unparsbarer Port — kein Signal, lieber nicht anfassen.
+        return False
+
+
 def openai_compat_base_url(
-    base_url: Optional[str], model: Optional[str]
+    base_url: Optional[str], model: Optional[str] = None
 ) -> Optional[str]:
     """Base-URL fuer den OpenAI-SDK-Client des Backends (Issue #1072).
 
@@ -414,20 +447,22 @@ def openai_compat_base_url(
     Bewusst KEINE Heuristik der Form "URL ohne Pfad bekommt ``/v1``": eine
     ``openai_compatible``-Connection, die an der Wurzel lauscht, ist ein
     legitimer Fall (der E2E-Mock-Server bedient ``/models``, nicht
-    ``/v1/models``). Stattdessen entscheidet ``detect_provider(mode="http")``
-    — dieselbe SSoT, die auch ``should_probe_ollama_tags`` verwendet. Alles,
-    was nicht als Ollama erkannt wird, bleibt unangetastet; ``"unknown"``
-    (Gateways, ``openai_compatible``) faellt damit ausdruecklich durch.
+    ``/v1/models``). Ebenso bewusst KEIN ``detect_provider(mode="http")``:
+    dessen Ollama-Zweig feuert schon bei einem ``:cloud``-Modelltag, womit
+    ein fremdes Gateway an der Wurzel, das ein Ollama-Modell durchreicht,
+    ein falsches ``/v1`` bekaeme (Codex-Review zu PR #1077). Fuer die
+    *Provider*-Wahl ist das Modellsignal richtig, fuer die *Endpunkt*-Frage
+    nicht — hier zaehlt allein, was die URL selbst ausweist.
 
     Args:
         base_url: Base-URL der Connection, wie persistiert.
-        model: Modellname des Laufs — traegt bei Ollama Cloud das
-            entscheidende Signal (``:cloud``-Tag an einem lokalen Port).
+        model: Nur zur Signatur-Kompatibilitaet mit den uebrigen
+            Registry-Funktionen; die Entscheidung haengt nicht daran.
 
     Returns:
-        Die URL mit ``/v1`` fuer Ollama-Provider, sonst unveraendert.
+        Die URL mit ``/v1`` fuer Ollama-Endpunkte, sonst unveraendert.
     """
-    if detect_provider(base_url, model, mode="http") in ("ollama", "cloud"):
+    if _has_ollama_url_signal(base_url):
         return ensure_v1_suffix(base_url)
     return base_url
 
