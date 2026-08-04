@@ -134,8 +134,14 @@ class TestChatIncrementsTokenCounter:
         client = _make_client(model="llama3")
         response = _make_response(content="hello world", prompt_tokens=42, completion_tokens=17)
 
+        # ``chat()`` geht inzwischen über ``_provider_attempt`` (Budget-Gate-Pfad,
+        # Issue #764) statt direkt über ``llm_call_with_retry``. Die alte Mock-Stelle
+        # wird nicht mehr getroffen, deshalb ValueError "not enough values to unpack".
+        # Mock auf der neuen Schicht: ``_provider_attempt`` liefert (response, latency_ms).
         with patch.object(client, "_publish_model_active"):
-            with patch("app.llm.client.llm_call_with_retry", return_value=response):
+            with patch.object(
+                client, "_provider_attempt", return_value=(response, 12.3)
+            ):
                 client.chat([{"role": "user", "content": "hi"}])
 
         provider.force_flush()
@@ -148,9 +154,9 @@ class TestChatIncrementsTokenCounter:
         assert any(dp.value == 17 for dp in out_dps), f"Kein out-DataPoint=17. DPs: {out_dps}"
 
 
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 # Case 2: chat_json() inkrementiert Token-Counter (über chat()-Delegation)
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 
 
 class TestChatJsonIncrementsTokenCounter:
@@ -162,7 +168,9 @@ class TestChatJsonIncrementsTokenCounter:
         response = _make_response(content='{"result": "ok"}', prompt_tokens=30, completion_tokens=8)
 
         with patch.object(client, "_publish_model_active"):
-            with patch("app.llm.client.llm_call_with_retry", return_value=response):
+            with patch.object(
+                client, "_provider_attempt", return_value=(response, 9.1)
+            ):
                 client.chat_json([{"role": "user", "content": "test"}])
 
         provider.force_flush()
@@ -182,29 +190,45 @@ class TestChatJsonIncrementsTokenCounter:
 
 class TestRetryDoesNotDoubleCount:
     def test_retry_does_not_double_count(self, metrics_provider, monkeypatch):
-        """Retry-Pfad (llm_call_with_retry intern) → Counter nur für finale Response.
+        """Retry-Pfad → Counter nur einmal für die finale Response.
 
-        Da llm_call_with_retry intern retried und nur eine finale Response zurückgibt,
-        wird der Counter nur einmal inkrementiert — kein Doppelzählen.
+        Auch nach dem Refactor auf ``_provider_attempt`` (Issue #764) darf der
+        Token-Counter nur einmal pro chat()-Aufruf inkrementiert werden, nicht
+        pro Retry-Attempt innerhalb von ``llm_call_with_retry``.
+
+        Der erste ``_provider_attempt`` wirft eine transiente
+        ``APIConnectionError`` — genau die Klasse, die
+        ``llm_call_with_retry`` als retry-würdig behandelt. Erst der zweite
+        Aufruf liefert die finale Response. ``call_count == 2`` beweist, dass
+        die Retry-Schleife tatsächlich zweimal durchlaufen wurde und die
+        Counter-Zusicherung nicht nur einen Single-Shot-Pfad abdeckt.
         """
+        from openai import APIConnectionError
+
         provider, reader = metrics_provider
 
         client = _make_client(model="qwen3")
+        # Backoff-Sleep aus dem Test rausnehmen — geprüft wird die Zählung,
+        # nicht das Timing.
+        monkeypatch.setattr(client, "_retry_initial_delay", 0.0)
         final_response = _make_response(content="final", prompt_tokens=20, completion_tokens=10)
 
-        # llm_call_with_retry retried intern, gibt aber nur EINE finale Response zurück.
-        # Der Counter darf nur diesen einen Response zählen.
         call_count = [0]
 
-        def _fake_retry(fn, **kwargs):
+        def _fake_attempt(call_kwargs, context):
             call_count[0] += 1
-            return final_response  # immer finale Response (retry ist intern im Stub)
+            if call_count[0] == 1:
+                raise APIConnectionError(request=MagicMock())
+            return final_response, 5.0
 
         with patch.object(client, "_publish_model_active"):
-            with patch("app.llm.client.llm_call_with_retry", side_effect=_fake_retry):
+            with patch.object(client, "_provider_attempt", side_effect=_fake_attempt):
                 client.chat([{"role": "user", "content": "hi"}])
 
         provider.force_flush()
+
+        # Echter Retry: erster Attempt transient gescheitert, zweiter erfolgreich.
+        assert call_count[0] == 2, f"Erwartet 2 Provider-Attempts, bekam {call_count[0]}"
 
         dps = _collect_datapoints(reader, "agora.llm.tokens")
         in_dps = [dp for dp in dps if dp.attributes.get("direction") == "in"]
@@ -217,9 +241,9 @@ class TestRetryDoesNotDoubleCount:
         assert total_out == 10, f"Erwartet 10 out-Tokens, bekam {total_out}"
 
 
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 # Case 4: Fehlende Usage → kein Increment, keine Exception
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 
 
 class TestMissingUsageNoIncrement:
@@ -233,7 +257,9 @@ class TestMissingUsageNoIncrement:
         response.usage = None  # Provider liefert kein Usage-Objekt
 
         with patch.object(client, "_publish_model_active"):
-            with patch("app.llm.client.llm_call_with_retry", return_value=response):
+            with patch.object(
+                client, "_provider_attempt", return_value=(response, 1.0)
+            ):
                 result = client.chat([{"role": "user", "content": "hi"}])
 
         provider.force_flush()
@@ -243,9 +269,9 @@ class TestMissingUsageNoIncrement:
         assert result == "hello"
 
 
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 # Case 5: provider/model-Labels korrekt gesetzt
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 
 
 class TestProviderModelLabels:
@@ -262,7 +288,9 @@ class TestProviderModelLabels:
         response = _make_response(content="ok", prompt_tokens=5, completion_tokens=3)
 
         with patch.object(client, "_publish_model_active"):
-            with patch("app.llm.client.llm_call_with_retry", return_value=response):
+            with patch.object(
+                client, "_provider_attempt", return_value=(response, 2.5)
+            ):
                 client.chat([{"role": "user", "content": "test"}])
 
         provider.force_flush()
