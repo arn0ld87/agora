@@ -3,8 +3,10 @@ Tests for the unified /api/status endpoint.
 Simpler approach: test the functions directly rather than via Flask test client.
 """
 
+import os
 from unittest.mock import Mock, patch
 
+import pytest
 import requests
 
 from app import __version__
@@ -75,8 +77,30 @@ class TestStatusFunctions:
         assert result["stub_active"] is False
 
         # Leerstring ist "nicht gesetzt", nicht "unbekannter Modus".
-        monkeypatch.setenv("AGORA_E2E_LLM_MODE", "   ")
+        monkeypatch.setenv("AGORA_E2E_LLM_MODE", "")
         assert _get_e2e_status() == {"llm_mode": None, "stub_active": False}
+
+    @pytest.mark.parametrize("padded", [" stub", "stub ", " stub ", "\tstub\n", "   "])
+    def test_get_e2e_status_does_not_strip_before_comparing(self, monkeypatch, padded):
+        """Gepolsterte Werte sind KEIN Stub — exakt wie im LLM-Pfad.
+
+        ``llm/client.py:596``/``:994``, ``llm/tool_calls.py:165`` und
+        ``storage/embedding_service.py:157`` vergleichen den Rohwert ohne
+        ``strip()`` gegen ``"stub"``. Ein ``strip()`` an dieser Stelle wuerde
+        bei ``" stub "`` ``stub_active=True`` melden, waehrend der LLM-Pfad
+        denselben Wert als Nicht-Stub liest und den echten Provider ruft —
+        ``assertStubModeActive`` gaebe dann genau den ungueltigen Lauf frei,
+        den es verhindern soll.
+        """
+        monkeypatch.setenv("AGORA_E2E_LLM_MODE", padded)
+        result = _get_e2e_status()
+        assert result["stub_active"] is False
+        # Rohwert bleibt sichtbar, damit der Tippfehler in der
+        # Playwright-Fehlermeldung auftaucht statt weggeputzt zu werden.
+        assert result["llm_mode"] == padded
+
+        # Gegenprobe: derselbe Vergleich, den der LLM-Pfad zieht.
+        assert os.environ.get("AGORA_E2E_LLM_MODE") != "stub"
 
     def test_get_disk_status(self):
         """Test disk status returns expected fields."""

@@ -7,6 +7,15 @@ Regression für den Abbrechen-Button in Schritt 3: das Frontend
 und werden unabhängig vergeben — kein ``create_run``-Aufruf im Repository setzt
 ``run_id`` explizit. Vor dem Fix scheiterte deshalb jeder Klick an
 ``validate_run_id`` mit HTTP 400, ohne irgendetwas abzubrechen.
+
+**Prüfumfang:** diese Tests decken die ID-Auflösung und das gesetzte
+Cancel-Flag ab — nicht die Terminierung des Simulations-Workers. Für
+``run_type="simulation_run"`` liest niemand das Flag: ``is_cancel_requested``
+hat backendweit genau einen Consumer (``report_agent/workflow.py``), und
+``simulation_runner.py`` enthält kein Cancel-Signal. Ein Test, der hier
+Worker-Terminierung assertierte, würde etwas behaupten, das der Produktivcode
+nicht leistet. Der Defekt ist als
+`#1082 <https://github.com/arn0ld87/agora/issues/1082>`_ ausgelagert.
 """
 
 from __future__ import annotations

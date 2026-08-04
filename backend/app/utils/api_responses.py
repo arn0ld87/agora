@@ -9,11 +9,16 @@ The behaviour preserved by this module (used by the existing API surface):
 
 - Successful JSON responses are shaped as ``{"success": True, ...}`` and, unless
   explicitly overridden, carry a top-level ``data`` field.
-- Validation errors (``ValueError``) map to HTTP 400.
+- Validation errors (``ValueError``) map to HTTP 400 and *do* carry ``str(exc)``
+  as the message. Das ist gewollt: die 400er-Meldung ist die Antwort an einen
+  Aufrufer, der eine korrigierbare Eingabe geschickt hat, und wird an genau
+  dieser Stelle bewusst formuliert.
 - Timeouts map to HTTP 504.
 - Any other exception logs the stack trace and returns a security-safe HTTP 500
-  envelope. Responses never expose exception strings — in no configuration,
-  ``FLASK_DEBUG`` included. Diagnose stays in the server log.
+  envelope. Auf den 5xx-Pfaden erscheint **kein** Exception-String in der
+  Response — in keiner Konfiguration, ``FLASK_DEBUG`` eingeschlossen. Diese
+  Exceptions sind ungeplant; ihr Text kann Pfade, SQL, Hostnamen oder
+  Secret-Fragmente enthalten. Diagnose bleibt im Server-Log.
 
 The decorator never swallows domain results — it only kicks in on exceptions.
 Handlers may continue to return ``Response`` objects, ``(Response, status)``

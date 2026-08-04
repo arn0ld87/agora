@@ -77,13 +77,22 @@ def _get_e2e_status():
     überspringt. Damit ist der Wert an der API genau das, was der LLM-Pfad
     tatsächlich tut, und nicht eine Nebenbuchführung.
 
+    ``stub_active`` vergleicht den **Rohwert** exakt gegen ``"stub"`` — ohne
+    ``strip()``. Das ist bewusst dieselbe Operation wie in
+    ``llm/client.py:596``/``:994``, ``llm/tool_calls.py:165`` und
+    ``storage/embedding_service.py:157``. Ein ``strip()`` hier würde bei einem
+    gepolsterten Wert wie ``" stub "`` ``stub_active=True`` melden, während der
+    LLM-Pfad denselben Wert als Nicht-Stub liest und den echten Provider ruft —
+    die E2E-Diagnose würde dann genau den ungültigen Lauf freigeben, den sie
+    verhindern soll. ``llm_mode`` bleibt der Rohwert, damit ein solcher
+    Tippfehler in der Fehlermeldung sichtbar wird statt weggeputzt zu werden.
+
     Rückgabe folgt dem Contract ``SystemStatusE2E``.
     """
     raw = os.environ.get("AGORA_E2E_LLM_MODE")
-    mode = raw.strip() if raw else None
     return SystemStatusE2E(
-        llm_mode=mode or None,
-        stub_active=mode == "stub",
+        llm_mode=raw or None,
+        stub_active=raw == "stub",
     ).model_dump(mode="json")
 
 
