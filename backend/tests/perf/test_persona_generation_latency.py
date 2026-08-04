@@ -363,34 +363,6 @@ def test_persona_generation_perf_real_llm(parallel_count: int) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def hermetic_settings(monkeypatch: pytest.MonkeyPatch, tmp_path):
-    """Schneidet den persistierten Settings-Layer ab (Issue #1074).
-
-    ``_resolve_persona_detail_level`` liest ueber
-    ``settings_layer.get_default_service()``, dessen File-Layer
-    (``backend/instance/settings.json``) Vorrang vor ``os.environ`` hat.
-    Auf Entwicklermaschinen ist ``AGORA_PERSONA_DETAIL_LEVEL`` dort haeufig
-    gesetzt — ohne Isolation pruefen diese Tests dann die lokale
-    Konfiguration statt das Resolutionsverhalten, und zwar auch dort, wo
-    sie die Variable per ``setenv`` explizit setzen. In CI existiert die
-    Datei nicht, weshalb der Defekt nur lokal sichtbar wird.
-
-    ``SettingsService`` nimmt genau dafuer einen ``instance_path``
-    entgegen (siehe dessen Docstring); hier zeigt er auf ein leeres
-    tmp-Verzeichnis.
-    """
-    from app.services import oasis_profile_generator
-    from app.services.settings_layer import SettingsService
-
-    monkeypatch.setattr(
-        oasis_profile_generator,
-        '_get_settings',
-        lambda: SettingsService(instance_path=tmp_path / 'settings.json'),
-    )
-    return oasis_profile_generator
-
-
 def test_resolve_persona_detail_level_default_is_standard(
     monkeypatch: pytest.MonkeyPatch, hermetic_settings
 ) -> None:

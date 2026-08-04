@@ -41,6 +41,41 @@ def restore_reloaded_modules():
         module.__dict__.clear()
         module.__dict__.update(snapshot)
 
+
+# Die im Code hinterlegten Pool-Defaults (app/config.py). Bewusst als
+# Literale gespiegelt statt aus Config gelesen: eine Assertion gegen
+# ``Config.NEO4J_MAX_POOL_SIZE`` waere tautologisch und wuerde eine
+# Aenderung des Defaults nicht mehr anzeigen.
+_POOL_DEFAULTS = {
+    'NEO4J_MAX_POOL_SIZE': 50,
+    'NEO4J_ACQ_TIMEOUT': 60.0,
+    'NEO4J_CONN_TIMEOUT': 15.0,
+    'NEO4J_MAX_LIFETIME': 3600,
+    'NEO4J_LIVENESS_TIMEOUT': 30.0,
+}
+
+
+@pytest.fixture
+def pinned_pool_defaults(monkeypatch):
+    """Pinnt die Pool-Werte auf die Code-Defaults (Issue #1074).
+
+    ``Config`` liest die Pool-Kwargs beim Klassen-Import einmalig aus
+    ``os.environ`` und friert sie ein. Auf Maschinen mit einer ``.env``, die
+    z.B. ``NEO4J_MAX_POOL_SIZE=80`` setzt, pruefen die Durchreichungs-Tests
+    daher die lokale Betriebskonfiguration statt die Defaults — und
+    ``monkeypatch.delenv`` kommt zu spaet, weil der Wert bereits im
+    Klassenattribut steht. In CI ohne ``.env`` bleibt der Defekt unsichtbar.
+
+    Die Assertions in den Tests bleiben harte Literale; diese Fixture stellt
+    nur sicher, dass sie gegen den Default und nicht gegen den Betriebswert
+    laufen. Die Env-Override-Pfade deckt ``test_env_overrides_*`` ab.
+    """
+    from app.config import Config
+
+    for name, value in _POOL_DEFAULTS.items():
+        monkeypatch.setattr(Config, name, value)
+
+
 def _make_storage(monkeypatch=None, *, extra_patches=None):
     """Erzeugt eine Neo4jStorage-Instanz mit allen externen Deps gemockt.
 
@@ -70,7 +105,7 @@ def _make_storage(monkeypatch=None, *, extra_patches=None):
 # ---------------------------------------------------------------------------
 
 
-def test_init_passes_pool_kwargs():
+def test_init_passes_pool_kwargs(pinned_pool_defaults):
     """Neo4jStorage.__init__ muss GraphDatabase.driver mit allen Pool-Kwargs aufrufen."""
     from app.storage.neo4j_storage import Neo4jStorage
 
@@ -101,7 +136,7 @@ def test_init_passes_pool_kwargs():
 # ---------------------------------------------------------------------------
 
 
-def test_lazy_reconnect_passes_pool_kwargs():
+def test_lazy_reconnect_passes_pool_kwargs(pinned_pool_defaults):
     """Nach _reset_driver_after_fork ruft _get_session() driver erneut mit Pool-Kwargs auf."""
     from app.storage.neo4j_storage import Neo4jStorage
 
