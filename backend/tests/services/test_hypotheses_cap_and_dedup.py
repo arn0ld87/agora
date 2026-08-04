@@ -7,6 +7,8 @@ Cases:
 3. 12 Hypothesen, alle disjunkt → 5 visible + 7 appendix.
 4. Confidence-Sort: absteigende Reihenfolge verifizieren.
 5. Re-ID nach Dedup eindeutig + deterministisch.
+6. Issue #1073: >50 disjunkte Hypothesen im Appendix → hart auf 50 gekappt,
+   verbleibende Einträge sind die mit der höchsten Confidence.
 """
 from __future__ import annotations
 
@@ -229,3 +231,42 @@ def test_case5_reid_unique_and_deterministic() -> None:
     # visible aus section 2 → H2_01, H2_02
     expected_ids = ["H1_01", "H1_02", "H1_03", "H1_04", "H1_05", "HA1_01", "H2_01", "H2_02"]
     assert ids == expected_ids, f"IDs nicht deterministisch. Erwartet {expected_ids}, bekommen {ids}"
+
+
+# ---------------------------------------------------------------------------
+# Case 6 (Issue #1073): 56 disjunkte Hypothesen → Appendix hart auf 50 gekappt
+# ---------------------------------------------------------------------------
+
+def test_case6_appendix_hard_capped_at_fifty() -> None:
+    """ReportSectionModel.hypotheses_appendix erlaubt max_length=50
+    (report_contract.py:412). dedup_and_cap_hypotheses muss den Appendix
+    entsprechend kappen, sonst schlägt die EvidenceMapModel-Validierung fehl.
+    """
+    import hashlib
+
+    from app.services.report_agent.hypothesis_cap import dedup_and_cap_hypotheses
+
+    total = 56
+    hyps = [
+        _make_hyp(
+            i,
+            hashlib.sha256(f"disjoint-topic-{i}".encode()).hexdigest(),
+            confidence=1.0 - (i * 0.01),
+        )
+        for i in range(total)
+    ]
+
+    visible, appendix = dedup_and_cap_hypotheses(hyps)
+
+    assert len(visible) == 5
+    assert len(appendix) == 50, (
+        f"Appendix muss auf 50 (Contract-Limit) gekappt sein, bekommen {len(appendix)}"
+    )
+
+    # Appendix enthält exakt die 50 nach visible nächsthöchsten Confidence-Werte,
+    # nicht die schwächsten (Sortierung ist absteigend, Cap verwirft am Ende).
+    expected_appendix_scores = sorted(
+        (h["confidence_score"] for h in hyps), reverse=True
+    )[5:55]
+    appendix_scores = [h["confidence_score"] for h in appendix]
+    assert appendix_scores == pytest.approx(expected_appendix_scores)

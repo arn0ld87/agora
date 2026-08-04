@@ -13,6 +13,10 @@ logger = logging.getLogger("agora.hypothesis_cap")
 _DEDUP_THRESHOLD = 88  # rapidfuzz score 0–100
 _VISIBLE_CAP = 5
 _RATIONALE_CONCAT_MAX = 200
+# Issue #1073: muss exakt dem Contract-Limit entsprechen. Quelle der Wahrheit:
+# ReportSectionModel.hypotheses_appendix in
+# backend/app/contracts/report_contract.py (max_length=50).
+_APPENDIX_CAP = 50
 
 
 def _token_set_ratio(a: str, b: str) -> float:
@@ -76,4 +80,18 @@ def dedup_and_cap_hypotheses(
     # --- Split -----------------------------------------------------------------
     visible = deduped[:_VISIBLE_CAP]
     appendix = deduped[_VISIBLE_CAP:]
+
+    # --- Hard cap (Issue #1073) -------------------------------------------------
+    # deduped ist bereits nach Confidence absteigend sortiert (_sort_key), daher
+    # verwirft der Slice hier ausschließlich die schwächsten Einträge am Ende.
+    if len(appendix) > _APPENDIX_CAP:
+        dropped = appendix[_APPENDIX_CAP:]
+        appendix = appendix[:_APPENDIX_CAP]
+        logger.warning(
+            "hypothesis_cap: appendix exceeded contract limit of %d, "
+            "dropped %d weakest hypotheses (lowest confidence_score)",
+            _APPENDIX_CAP,
+            len(dropped),
+        )
+
     return visible, appendix
