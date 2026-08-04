@@ -152,7 +152,7 @@ def test_handle_api_errors_maps_unknown_to_500_and_hides_traceback_outside_debug
     assert "kapow" not in payload.values()
 
 
-def test_handle_api_errors_in_debug_mode_exposes_message_but_not_traceback():
+def test_handle_api_errors_in_debug_mode_exposes_error_class_but_not_message():
     app = _build_app()
 
     @handle_api_errors(log_prefix="Unexpected")
@@ -167,7 +167,9 @@ def test_handle_api_errors_in_debug_mode_exposes_message_but_not_traceback():
     assert status == 500
     assert payload["error"] == "internal server error"
     assert payload["code"] == "internal_error"
-    assert payload["debug_error"] == "kapow"
+    assert payload["debug_error_class"] == "builtins.RuntimeError"
+    assert "debug_error" not in payload
+    assert "kapow" not in payload.values()
     assert "traceback" not in payload
 
 
@@ -295,6 +297,33 @@ def test_json_error_sanitizes_pydantic_validation_error_payload():
             assert isinstance(ctx, dict)
             for v in ctx.values():
                 assert not isinstance(v, BaseException)
+
+
+def test_debug_extra_redacts_exception_message():
+    """_debug_extra darf die Exception-Message nicht in den Response leaken.
+
+    Regression-Test fuer Issue #1058: in DEBUG-Modus wurde str(exc) inkl.
+    Sentinel/Pfade/Secrets in den Response-Body geschrieben. Nach dem Fix
+    enthaelt das Response-Extra nur den Klassennamen.
+    """
+    from app.utils.api_responses import _debug_extra
+
+    secret = "sk-upl-deadbeef-leak-do-not-ship"
+    exc = OSError(f"disk write failed: {secret} on /tmp/secret/path")
+
+    with patch("app.utils.api_responses.Config") as mock_config:
+        mock_config.DEBUG = True
+        extra = _debug_extra(exc)
+
+    assert extra is not None
+    assert "debug_error_class" in extra
+    assert secret not in str(extra)
+    assert "/tmp/secret/path" not in str(extra)
+    # Klassennamen-String ist nicht leer und kein Leerstring-Workaround
+    assert extra["debug_error_class"]
+    assert isinstance(extra["debug_error_class"], str)
+    # Sanity: Klassenname enthaelt "OSError"
+    assert "OSError" in extra["debug_error_class"]
 
 
 def test_json_error_falls_back_to_string_for_unknown_objects():

@@ -92,7 +92,10 @@ def json_error_from_exception(
 def _debug_extra(exc: Exception) -> dict[str, Any] | None:
     if not Config.DEBUG:
         return None
-    return {"debug_error": str(exc)}
+    # Bewusst nur Klassenname + qualname, NICHT die str(exc) -- die kann
+    # Pfade, Sentinels oder Secrets enthalten, die nicht in den Response
+    # gehoeren. Das volle Exception-Detail bleibt im Log (s. _logger.exception).
+    return {"debug_error_class": f"{type(exc).__module__}.{type(exc).__qualname__}"}
 
 
 def _http_error_code(error: HTTPException) -> str:

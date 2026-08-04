@@ -152,15 +152,18 @@ def _assert_atomic_failure(
 
     Der Originalfehler muss dabei serverseitig erkennbar bleiben: er wird
     protokolliert, damit die generische Antwort nicht auch die Diagnose kostet.
+
+    Im DEBUG-Modus haengt ``_debug_extra`` genau ein zusaetzliches Feld an
+    (``debug_error_class``, nur der Exception-Klassenname -- Issue #1058).
+    Jeder andere Zusatzschluessel gilt weiterhin als Leck.
     """
     captured = capsys.readouterr()
     assert response.status_code == 500
     body = response.get_json()
-    assert body == {
-        "success": False,
-        "error": "internal server error",
-        "code": "internal_error",
-    }
+    assert set(body) - {"debug_error_class"} == {"success", "error", "code"}
+    assert body["success"] is False
+    assert body["error"] == "internal server error"
+    assert body["code"] == "internal_error"
     project_manager.delete_project.assert_called_with(expected_project_id)
     response_text = response.get_data(as_text=True)
     assert SECRET_SENTINEL not in response_text
@@ -272,11 +275,10 @@ def test_cleanup_failure_itself_does_not_produce_success(
 
     assert response.status_code == 500
     body = response.get_json()
-    assert body == {
-        "success": False,
-        "error": "internal server error",
-        "code": "internal_error",
-    }
+    assert set(body) - {"debug_error_class"} == {"success", "error", "code"}
+    assert body["success"] is False
+    assert body["error"] == "internal server error"
+    assert body["code"] == "internal_error"
     upload_env.project_manager.delete_project.assert_called_with(PROJECT_ID)
     response_text = response.get_data(as_text=True)
     assert original_failure_sentinel not in response_text

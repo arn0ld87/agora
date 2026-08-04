@@ -324,7 +324,7 @@ Security-Regressions früher erkennen und interne Exception-Details aus produkti
 }
 ```
 
-Im Debug-Modus kann zusätzlich `debug_error` und `traceback` erscheinen. Dieser Modus bleibt lokale Entwicklung und Tests vorbehalten.
+Im Debug-Modus kann zusätzlich `debug_error_class` (nur der Exception-Klassenname, z. B. `builtins.OSError`) und `traceback` erscheinen. Die Exception-Message selbst wird seit #1058 nicht mehr ausgeliefert — sie kann Pfade, Sentinels oder Secrets enthalten und bleibt dem Log vorbehalten. Dieser Modus bleibt lokale Entwicklung und Tests vorbehalten.
 
 ### CI-Checks
 
