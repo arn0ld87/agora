@@ -12,7 +12,8 @@ The behaviour preserved by this module (used by the existing API surface):
 - Validation errors (``ValueError``) map to HTTP 400.
 - Timeouts map to HTTP 504.
 - Any other exception logs the stack trace and returns a security-safe HTTP 500
-  envelope. Production responses do not expose exception strings.
+  envelope. Responses never expose exception strings — in no configuration,
+  ``FLASK_DEBUG`` included. Diagnose stays in the server log.
 
 The decorator never swallows domain results — it only kicks in on exceptions.
 Handlers may continue to return ``Response`` objects, ``(Response, status)``
@@ -29,7 +30,6 @@ from flask import jsonify, request
 from pydantic_core import to_jsonable_python
 from werkzeug.exceptions import HTTPException
 
-from ..config import Config
 from ..utils.logger import get_logger
 from .api_errors import DEFAULT_MESSAGES, ApiErrorCode
 
@@ -87,12 +87,6 @@ def json_error_from_exception(
         status = _API_ERROR_STATUS_MAP.get(code, fallback_status)
         return json_error(code, status=status)
     return json_error(str(exc), status=fallback_status)
-
-
-def _debug_extra(exc: Exception) -> dict[str, Any] | None:
-    if not Config.DEBUG:
-        return None
-    return {"debug_error": str(exc)}
 
 
 def _http_error_code(error: HTTPException) -> str:
@@ -234,8 +228,6 @@ def handle_api_errors(
                     _INTERNAL_ERROR_MESSAGE,
                     status=500,
                     code="internal_error",
-                    include_traceback=bool(Config.DEBUG),
-                    extra=_debug_extra(exc),
                 )
             except TimeoutError as exc:
                 active_logger.warning(f"{prefix}: timeout: {exc}")
@@ -243,7 +235,6 @@ def handle_api_errors(
                     _TIMEOUT_ERROR_MESSAGE,
                     status=504,
                     code="timeout",
-                    extra=_debug_extra(exc),
                 )
             except Exception as exc:
                 active_logger.exception(f"{prefix}: {exc}")
@@ -251,8 +242,6 @@ def handle_api_errors(
                     _INTERNAL_ERROR_MESSAGE,
                     status=500,
                     code="internal_error",
-                    include_traceback=bool(Config.DEBUG),
-                    extra=_debug_extra(exc),
                 )
 
         return wrapper
@@ -304,7 +293,5 @@ def install_api_error_handlers(app) -> None:
                 _INTERNAL_ERROR_MESSAGE,
                 status=500,
                 code="internal_error",
-                include_traceback=bool(Config.DEBUG),
-                extra=_debug_extra(error),
             )
         raise error

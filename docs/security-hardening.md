@@ -310,7 +310,7 @@ Security-Regressions früher erkennen und interne Exception-Details aus produkti
 | `.github/workflows/ci.yml` | Neuer Job `security` mit `npm audit --audit-level=high`, `uv export` + `pip-audit` und Gitleaks Secret Scan. |
 | `.gitleaksignore` | Zwei historische False Positives fingerprint-genau gebaselined; neue Secret-Findings bleiben blockierend. |
 | `backend/uv.lock` | 39 Python-Advisories durch konservative Lockfile-Upgrades beseitigt. |
-| `backend/app/utils/api_responses.py` | 500/504 aus `@handle_api_errors` nutzen sichere Standardmeldungen plus `code`; konkrete Exception-Details nur bei `Config.DEBUG=true`. |
+| `backend/app/utils/api_responses.py` | 500/504 aus `@handle_api_errors` nutzen sichere Standardmeldungen plus `code`; konkrete Exception-Details erscheinen in keinem Modus in der Response. |
 | `backend/app/utils/api_responses.py` | Generische `/api/*`-Handler für `HTTPException` und ungefangene Exceptions ergänzen die zentrale JSON-Envelope. |
 | `backend/tests/test_api_responses.py` | Regression-Tests für nicht-leakende 5xx-Responses und generische Framework-Fehler ergänzt. |
 
@@ -324,7 +324,7 @@ Security-Regressions früher erkennen und interne Exception-Details aus produkti
 }
 ```
 
-Im Debug-Modus kann zusätzlich `debug_error` und `traceback` erscheinen. Dieser Modus bleibt lokale Entwicklung und Tests vorbehalten.
+Dieser Body ist unabhängig von `FLASK_DEBUG` vollständig — es gibt kein `debug_error`- und kein `traceback`-Feld. Exception-Strings tragen Dateipfade, Konfigurationswerte und potenziell Schlüsselmaterial und bleiben deshalb ausschließlich im Server-Log.
 
 ### CI-Checks
 
