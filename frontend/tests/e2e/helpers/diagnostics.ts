@@ -1,4 +1,5 @@
 import { expect, type APIRequestContext } from '@playwright/test';
+import { authHeader } from './auth';
 
 /**
  * Stellt sicher, dass der Backend-Container im E2E-Stub-Modus läuft.
@@ -18,7 +19,16 @@ import { expect, type APIRequestContext } from '@playwright/test';
  * Wirft, wenn der Stub nicht aktiv ist — ein Lauf ohne Stub ist kein
  * Diagnose-Hinweis, sondern ein ungültiger Lauf.
  *
- * @param apiCtx  Playwright APIRequestContext (mit Auth-Header)
+ * Der Auth-Header wird hier selbst gesetzt und nicht vom Aufrufer erwartet:
+ * `/api/status` ist authentifiziert, aber nur drei der fünf Specs bauen ihren
+ * Context mit `extraHTTPHeaders: authHeader()` — `report-modes.spec.ts:148`
+ * und `golden-gate-accessibility.spec.ts:180` übergeben einen nackten Context.
+ * Solange der frühe Return existierte, fiel das nicht auf; der 401 wurde
+ * stillschweigend als „Stub aktiv" durchgewunken. Ein Header auf Request-Ebene
+ * ist gegenüber `extraHTTPHeaders` des Contexts additiv, deshalb bleiben die
+ * drei bereits authentifizierten Aufrufer unverändert korrekt.
+ *
+ * @param apiCtx  Playwright APIRequestContext (Auth-Header optional)
  * @param baseURL Backend-Basis-URL (z. B. http://127.0.0.1:80)
  */
 export async function assertStubModeActive(
@@ -28,6 +38,7 @@ export async function assertStubModeActive(
   console.log('[diagnostics] Stub-Mode-Check via GET /api/status ...');
 
   const res = await apiCtx.get(`${baseURL}/api/status`, {
+    headers: authHeader(),
     // 10 s Timeout — Status-Endpoint sollte sofort antworten
     timeout: 10_000,
   });
