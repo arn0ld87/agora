@@ -346,16 +346,16 @@ jobs:
       # statt in einem Wald von Folgefehlern unterzugehen.
       # Voller Coverage-Lauf bleibt im `backend`-Job auf push:main.
       #
-      # FLASK_DEBUG=false: der `backend-pr-gate`-Job selbst hat FLASK_DEBUG=true,
-      # damit Config.validate() die AGORA_AUTH_TOKEN-Policy nicht erzwungen.
-      # Fuer den Test-Step gilt das nicht -- wir wollen das Produktionsverhalten
-      # (DEBUG=false), weil die Test-Acceptance exakt darauf ausgelegt ist
-      # (siehe test_graph_ontology_upload_atomicity: Sentinel darf NICHT im
-      # Response landen). Issue #1058 trackt den separaten Debug-Modus-Leak.
+      # 2026-08-04: Der Step-Override `FLASK_DEBUG=false` ist entfallen. Er hat
+      # dafuer gesorgt, dass dieser Job die Suite unter DEBUG=false fuhr,
+      # waehrend der `backend`-Job auf push:main sie unter DEBUG=true fuhr --
+      # ein nur unter DEBUG=true auftretender Defekt (#1058) passierte damit
+      # jeden PR und brach erst nach dem Merge auf main. Beide Jobs erben jetzt
+      # denselben Job-Wert `FLASK_DEBUG: "true"`; Tests, deren Verhalten vom
+      # Debug-Modus abhaengt, parametrisieren ihn selbst
+      # (siehe tests/api/test_graph_ontology_upload_atomicity.py::flask_debug).
       - name: Backend tests (PR subset, no coverage)
         working-directory: backend
-        env:
-          FLASK_DEBUG: "false"
         # Issue #1054 (offen, pre-existing) lässt test_oasis_preflight rot.
         # Plus weitere Pre-Existing-Test-Drift, die mit #1055 sichtbar wird:
         #   #1059 LLM-Client-Metriken (5 Tests)
