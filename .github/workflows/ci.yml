@@ -395,6 +395,13 @@ jobs:
       - name: STATUS.md drift check
         run: bash scripts/sync-status.sh --check
 
+      # Spiegelt scripts/pre-push-gate.sh: die generierten JSON-Schemas unter
+      # schemas/ muessen byte-genau zu den Pydantic-Contracts passen. Ohne
+      # diesen Step faellt Schema-Drift erst im push:main-Lauf auf.
+      - name: Backend Schema-Drift (dump_schemas --check)
+        working-directory: backend
+        run: uv run python -m app.contracts.dump_schemas --check
+
   frontend-pr-gate:
     name: Frontend PR smoke gate (lint + typecheck + test + build)
     runs-on: ubuntu-latest

@@ -195,16 +195,30 @@ class TestRetryDoesNotDoubleCount:
         Auch nach dem Refactor auf ``_provider_attempt`` (Issue #764) darf der
         Token-Counter nur einmal pro chat()-Aufruf inkrementiert werden, nicht
         pro Retry-Attempt innerhalb von ``llm_call_with_retry``.
+
+        Der erste ``_provider_attempt`` wirft eine transiente
+        ``APIConnectionError`` — genau die Klasse, die
+        ``llm_call_with_retry`` als retry-würdig behandelt. Erst der zweite
+        Aufruf liefert die finale Response. ``call_count == 2`` beweist, dass
+        die Retry-Schleife tatsächlich zweimal durchlaufen wurde und die
+        Counter-Zusicherung nicht nur einen Single-Shot-Pfad abdeckt.
         """
+        from openai import APIConnectionError
+
         provider, reader = metrics_provider
 
         client = _make_client(model="qwen3")
+        # Backoff-Sleep aus dem Test rausnehmen — geprüft wird die Zählung,
+        # nicht das Timing.
+        monkeypatch.setattr(client, "_retry_initial_delay", 0.0)
         final_response = _make_response(content="final", prompt_tokens=20, completion_tokens=10)
 
         call_count = [0]
 
         def _fake_attempt(call_kwargs, context):
             call_count[0] += 1
+            if call_count[0] == 1:
+                raise APIConnectionError(request=MagicMock())
             return final_response, 5.0
 
         with patch.object(client, "_publish_model_active"):
@@ -212,6 +226,9 @@ class TestRetryDoesNotDoubleCount:
                 client.chat([{"role": "user", "content": "hi"}])
 
         provider.force_flush()
+
+        # Echter Retry: erster Attempt transient gescheitert, zweiter erfolgreich.
+        assert call_count[0] == 2, f"Erwartet 2 Provider-Attempts, bekam {call_count[0]}"
 
         dps = _collect_datapoints(reader, "agora.llm.tokens")
         in_dps = [dp for dp in dps if dp.attributes.get("direction") == "in"]
