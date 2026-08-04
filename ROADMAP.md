@@ -48,7 +48,7 @@ Der aktuelle Stand besitzt eine vollständige fachliche Grundpipeline:
 - Evidence-orientierte Reports
 - Compare-, Export- und Observability-Grundlagen
 
-Der Stand ist trotzdem keine stabile `1.0`, weil die E2E-Pipeline noch nicht als verpflichtender Pull-Request-Check erzwungen wird. Die Vue-v4-Konsolidierung selbst ist abgeschlossen (Migration der v3-Inhaltskomponenten [#922](https://github.com/arn0ld87/agora/issues/922) und der `/home`-Redirect [#915](https://github.com/arn0ld87/agora/issues/915) sind umgesetzt, siehe [#760](https://github.com/arn0ld87/agora/issues/760)).
+Der Stand ist trotzdem keine stabile `1.0` — die verbleibenden Freigabekriterien stehen unter `0.9.0`. Die E2E-Pipeline wird seit 31.07.2026 als verpflichtender Pull-Request-Check erzwungen. Die Vue-v4-Konsolidierung selbst ist abgeschlossen (Migration der v3-Inhaltskomponenten [#922](https://github.com/arn0ld87/agora/issues/922) und der `/home`-Redirect [#915](https://github.com/arn0ld87/agora/issues/915) sind umgesetzt, siehe [#760](https://github.com/arn0ld87/agora/issues/760)).
 
 ## Erreicht
 
@@ -68,7 +68,7 @@ Agora soll als zusammenhängendes Produkt zuverlässig installierbar, bedienbar 
 
 - [x] Health, Upload + Graph, Minimalreport, Report-Modi, Accessibility und AiModelPicker sind stabil grün (20/20 aufeinanderfolgende `e2e-smokes`-Läufe auf `push` und `pull_request`, 21.–22.07.2026)
 - [x] E2E-Smokes laufen mehrfach ohne Flakes (siehe oben)
-- [ ] E2E ist als verpflichtender Pull-Request-Check aktiviert (Branch-Protection auf `main` aktuell nicht gesetzt — Läufe sind grün, aber nicht erzwungen)
+- [x] E2E ist als verpflichtender Pull-Request-Check aktiviert (31.07.2026: Branch-Protection auf `main` mit 17 Required Status Checks — alle sechs Smokes plus die beiden PR-Smoke-Gates, `strict: true`, `enforce_admins: true`)
 - [ ] keine Skips, abgeschwächten Assertions oder pauschalen Retries als Ersatz für Fehlerbehebung
 
 ### Frontend

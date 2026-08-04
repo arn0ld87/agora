@@ -7,14 +7,22 @@ export default defineConfig({
   // Ein versehentlich committetes test.only wuerde in CI sonst still den
   // gesamten Rest der Datei ueberspringen und trotzdem gruen melden.
   forbidOnly: !!process.env.CI,
-  // Ein Retry NUR in CI. Das ist kein Gruen-Faerben: Playwright meldet einen
-  // Test, der erst im Retry besteht, als "flaky" — nicht als "passed". Damit
-  // wird Instabilitaet sichtbar protokolliert statt wie bisher als harter
-  // Fehlschlag, den jemand manuell nachlaufen laesst (ohne Spur). Alle sechs
-  // Smokes sind Required Checks; ein Cold-Start-Hickser im Docker-Stack
-  // blockierte bisher den PR und kostete einen kompletten 25-min-Rerun.
-  // Lokal bleibt es bei 0, damit Flakiness beim Entwickeln sofort auffaellt.
+  // Ein Retry NUR in CI — ausschliesslich fuer die Diagnose: der Report weist
+  // den Test als "flaky" statt "failed" aus, und `trace: retain-on-failure`
+  // (unten) behaelt den Trace des FEHLGESCHLAGENEN Versuchs. Der Trace des
+  // bestandenen Retrys wird von diesem Modus bewusst verworfen — fuer die
+  // Fehlersuche ist der fehlgeschlagene Versuch der aussagekraeftige, und
+  // `retain-on-failure-and-retries` wuerde die Artefakte ohne echten
+  // Mehrwert vergroessern. Lokal bleibt es bei 0, damit Flakiness beim
+  // Entwickeln sofort auffaellt.
   retries: process.env.CI ? 1 : 0,
+  // ZWINGEND zusammen mit `retries`: ohne diese Zeile beendet Playwright einen
+  // Lauf mit flaky-Tests mit Exit-Code 0. Da alle sechs Smokes Required Checks
+  // sind, wuerde eine intermittierende Regression damit zum gruenen Merge-Gate
+  // — das Gate waere schwaecher als vorher, nicht nur besser instrumentiert.
+  // `retries` allein macht Instabilitaet sichtbar; erst `failOnFlakyTests`
+  // haelt sie auch rot. (Codex-Finding P1 zu PR #977.)
+  failOnFlakyTests: !!process.env.CI,
   reporter: process.env.CI ? [['list'], ['github']] : 'list',
   globalSetup: './tests/e2e/global-setup.ts',
   globalTeardown: './tests/e2e/global-teardown.ts',

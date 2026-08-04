@@ -52,13 +52,17 @@ Agora besitzt eine vollständige fachliche Grundpipeline:
 - fortsetzbare Embedding-Migration für Entity- und Fact-Vektoren
 - Kosten-, Token- und Zeitbudgets für Runs ([#764](https://github.com/arn0ld87/agora/issues/764), ADR-0012): Preflight-Schätzung mit ehrlichen Bereichen, weiche/harte Limits pro Run, Live-Verbrauchsmonitor, Abschlussanalyse nach Stage/Provider/Modell, Budgetabbruch über `termination_reason` von Fehler/Nutzerabbruch unterscheidbar, Verbrauch im Report-Export
 
-Der Stand ist dennoch Technical Preview, weil die E2E-Kernpipeline noch nicht als verpflichtender Pull-Request-Check erzwungen wird. Die Migration der v3-Inhaltskomponenten (`Step2EnvSetup`/`Step3Simulation`/`Step4Report`) in v4-Wrapper ist abgeschlossen ([#922](https://github.com/arn0ld87/agora/issues/922), PR #938); der credential-basierte Runtime-Provider-Override (`useRuntimeLlmOptions`) ist entfernt. Der `/home`-Redirect auf `/dashboard` ist umgesetzt ([#915](https://github.com/arn0ld87/agora/issues/915), ADR-0010); `Home.vue` bleibt bis `1.0.0` physisch erhalten.
+Der Stand ist dennoch Technical Preview; die verbleibenden Freigabekriterien stehen unter `0.9.0` in [`ROADMAP.md`](../ROADMAP.md). Die E2E-Kernpipeline wird seit 31.07.2026 als verpflichtender Pull-Request-Check erzwungen. Die Migration der v3-Inhaltskomponenten (`Step2EnvSetup`/`Step3Simulation`/`Step4Report`) in v4-Wrapper ist abgeschlossen ([#922](https://github.com/arn0ld87/agora/issues/922), PR #938); der credential-basierte Runtime-Provider-Override (`useRuntimeLlmOptions`) ist entfernt. Der `/home`-Redirect auf `/dashboard` ist umgesetzt ([#915](https://github.com/arn0ld87/agora/issues/915), ADR-0010); `Home.vue` bleibt bis `1.0.0` physisch erhalten.
 
 ## E2E-Smokes
 
 [Issue #739](https://github.com/arn0ld87/agora/issues/739) (sechs rote E2E-Smokes reparieren) ist **geschlossen** (19.07.2026). Seither laufen die sechs Kern-Smokes (Health, Upload + Graph, Minimalreport, Report-Modi, Golden-Gate Accessibility, AiModelPicker) im `e2e-smokes`-Workflow durchgehend grün: **20 von 20 aufeinanderfolgenden Läufen** über `push` und `pull_request` zwischen 21.07.2026 und 22.07.2026 (letzter Lauf auf Commit `37320dbf`) sind erfolgreich, kein einzelner Flake in dieser Serie.
 
-Offen ist ausschließlich die Erzwingung: `main` besitzt aktuell **keine Branch-Protection** (`gh api repos/arn0ld87/agora/branches/main/protection` → 404 „Branch not protected“). Der `pull_request`-Trigger läuft mit, ist aber kein verpflichtender Merge-Check. Der Weg dahin steht in [`docs/runbooks/e2e-required-check.md`](runbooks/e2e-required-check.md).
+Die Erzwingung ist umgesetzt (Stand 31.07.2026): `main` ist branch-protected und führt **17 Required Status Checks**, darunter alle sechs E2E-Kern-Smokes sowie die beiden PR-Smoke-Gates. `strict: true` (Branch muss vor dem Merge aktuell sein), `enforce_admins: true`, Force-Pushes und Löschung deaktiviert, `required_approving_review_count: 0` (Single-User-Betrieb).
+
+Verifikation: `gh api repos/arn0ld87/agora/branches/main/protection`. Konfiguration und Rollback in [`docs/runbooks/e2e-required-check.md`](runbooks/e2e-required-check.md).
+
+> Der frühere Text an dieser Stelle behauptete, `main` habe keine Branch-Protection (mit einem 404 als Beleg). Das war zum Zeitpunkt des CI-/E2E-Audits am 31.07.2026 nachweislich überholt — es bestanden bereits 15 Required Checks.
 
 ## Quality Gates
 
@@ -69,7 +73,8 @@ Offen ist ausschließlich die Erzwingung: `main` besitzt aktuell **keine Branch-
 | Backend Full Tests + Coverage | `push:main` oder Label |
 | Frontend Full Tests + Coverage | `push:main` oder Label |
 | Schemas und Contract-Spiegel | vorhanden |
-| E2E-Kernpipeline | 20 grüne Läufe in Folge (21.–22.07.2026, zuletzt Commit `37320dbf`); `pull_request`-Trigger aktiv; Required-Erzwingung ausstehend (`main` ohne Branch-Protection) |
+| E2E-Kernpipeline | `pull_request`-Trigger aktiv; **als Required Check erzwungen** (alle sechs Smokes, Stand 31.07.2026) |
+| Branch-Protection `main` | aktiv — 17 Required Status Checks, `strict: true`, `enforce_admins: true`, keine Force-Pushes, keine Löschung |
 
 Lokale Befehle:
 
@@ -146,7 +151,7 @@ Aktuelle Hardstops:
 
 ## Nächste Prioritäten
 
-1. E2E als verpflichtenden Pull-Request-Check aktivieren (Läufe sind stabil grün, Branch-Protection auf `main` fehlt noch).
+1. Hartes Run-Budget im Report-Pfad reparieren — greift derzeit nicht ([#978](https://github.com/arn0ld87/agora/issues/978), Kostenkontrolle).
 2. Reproduzierbarkeit, ehrliche Hardware-Tiers (Benchmarks statt Schätzwerte) und Kalibrierungsbaseline für `0.10.0` umsetzen. Die Kosten- und Ressourcenbudgets selbst stehen via [#764](https://github.com/arn0ld87/agora/issues/764) — siehe ROADMAP „Kosten und Ressourcen“.
 
 Die vollständigen Release-Gates stehen in [`ROADMAP.md`](../ROADMAP.md).

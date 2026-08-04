@@ -28,7 +28,7 @@
 > **Aktueller Reifegrad: `0.8.0` Technical Preview**
 >
 > **Ehrlicher Ist-Zustand des Repositories:**
-> - 🟢 **E2E-Verifizierung:** 6 von 6 E2E-Kern-Smokes laufen in CI durchgehend grün (20/20 erfolgreiche Läufe in Folge). **Offen:** `main` hat aktuell keine Branch-Protection; die Erzwingung als verpflichtender PR-Check steht aus.
+> - 🟢 **E2E-Verifizierung:** 6 von 6 E2E-Kern-Smokes laufen in CI durchgehend grün und sind seit 31.07.2026 als verpflichtender PR-Check erzwungen. `main` ist branch-protected (17 Required Status Checks, `strict: true`, `enforce_admins: true`).
 > - 🟢 **Frontend-Status:** Vue 3 (v4-Routes) ist die **einzige ausgelieferte Produkttechnologie**. `/home` redirected auf `/dashboard` ([#915](https://github.com/arn0ld87/agora/issues/915)); die v3-Inhaltskomponenten sind nach v4 migriert, kein Routing mehr über v4-Wrapper ([#922](https://github.com/arn0ld87/agora/issues/922), [#760](https://github.com/arn0ld87/agora/issues/760)).
 > - 🔵 **React/Lovable-Prototyp:** Ein externer Prototyp existiert in einem separaten Repo, ist jedoch **nicht freigegeben, unveröffentlicht und nicht im Build/Docker verdrahtet**.
 > - 🔒 **Betriebsmodell:** Agora ist ein experimentelles **Single-User-System**. Nicht ungeschützt im öffentlichen Internet betreiben (Tailscale, VPN oder Reverse Proxy nutzen).
@@ -246,7 +246,7 @@ bun run dev
 | **Backend Unit & Contract Tests** | 🟢 3.690+ Tests | `cd backend && uv run pytest` |
 | **Frontend Test Files** | 🟢 171 Test-Files | `cd frontend && bun run test` |
 | **E2E-Kern-Pipeline Smokes** | 🟢 20/20 Grün | 6/6 Kern-Smokes durchgehend stabil in CI |
-| **Branch Protection `main`** | 🟡 Offen | E2E-Smokes laufen in CI, aber noch nicht als verpflichtender Check erzwungen |
+| **Branch Protection `main`** | 🟢 Aktiv | 17 Required Status Checks (inkl. aller 6 E2E-Smokes und beider PR-Gates), `strict: true`, `enforce_admins: true`, keine Force-Pushes |
 | **Frontend v4 Migration** | 🟢 Abgeschlossen | Vue v4 ist einzige produktive UI; `/home` Redirect ([#915](https://github.com/arn0ld87/agora/issues/915)) und Component-Wrapper-Migration ([#922](https://github.com/arn0ld87/agora/issues/922)) umgesetzt, [#760](https://github.com/arn0ld87/agora/issues/760) verifiziert geschlossen |
 | **React / Lovable Prototype** | 🔵 Archiviert / Unfreigegeben | Prototyp existiert separat; kein Produktbestandteil vor 1.0 |
 

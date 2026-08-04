@@ -267,6 +267,19 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 - **`low`-Claims ohne Evidence bleiben unangetastet** — sie sind vertraglich zulässig, und ein Umhängen würde gültige Aussagen aus dem Report entfernen. Durch eine eigene Gegenprobe abgesichert.
 - **Keine Abschwächung der fünf ADR-0002-Hartanker.** Weder Validator noch Contract noch Wording wurden geändert; die Migration bereitet ausschließlich Bestandsdaten so auf, dass der unveränderte Validator sie beurteilen kann.
 - **Tests.** 5 neue API-Tests in `backend/tests/api/test_report_evidence_route.py`: orphan `medium`, orphan `high`, orphan `verified`, die `low`-Gegenprobe und ein Idempotenz-Test, der alle drei Migrationen gemeinsam zweimal durch die Route schickt und Gleichheit der Antworten prüft.
+### Fixed (Review-Findings zu PR #980 — 2026-07-31)
+
+- **Falsche Trace-Behauptung in `frontend/playwright.config.ts` korrigiert.** Der Kommentar versprach „Trace beider Versuche“; `use.trace` steht aber auf `retain-on-failure`, das den Trace eines **bestandenen** Retrys verwirft. Der Kommentar nennt jetzt, was der Modus tatsächlich liefert — den Trace des fehlgeschlagenen Versuchs — und begründet, warum `retain-on-failure-and-retries` bewusst nicht gesetzt wird. Dieselbe Aussage in `docs/ci-e2e-audit.md` (§5, §8) nachgezogen. Keine Verhaltensänderung.
+- **`docs/ci-e2e-audit.md` §9 als datierte Momentaufnahme eingefroren.** Ein Erledigt-Vermerk an E5 hätte das Dokument faktisch als fünften Tracker weitergeführt, obwohl AGENTS.md genau das untersagt. Die Tabelle hält jetzt nur noch fest, was zum Auditzeitpunkt offen war und warum — der Status lebt ausschließlich in #978/#979.
+- **Branch-Protection-Angaben in `README.md`, `docs/STATUS.md` und `ROADMAP.md` korrigiert.** Alle drei behaupteten, `main` besitze **keine** Branch-Protection (Beleg: ein 404 der Protection-API). Nachgemessen: die Protection war bereits vor diesem Slice aktiv (15 Required Checks, inzwischen 17), `strict: true`, `enforce_admins: true`. Die Dokumentation war also schon vor dem Audit nachweislich veraltet.
+- **Deutsche Schlusszeichen** (`"` → `“`) in den selbst verfassten Passagen von `docs/ci-e2e-audit.md` und `CHANGELOG.md`.
+
+### Fixed (Codex-Findings zu PR #977 — 2026-07-31)
+
+- **`retries: 1` allein hätte das E2E-Gate geschwächt.** Playwright beendet einen Lauf mit flaky-Tests mit **Exit-Code 0**; der Retry-Report allein hält den Check nicht rot. Da alle sechs Smokes Required Checks sind, wäre eine intermittierende Regression damit zum grünen Merge-Gate geworden — das Gate wäre schwächer gewesen als vorher, nicht nur besser instrumentiert. `failOnFlakyTests: !!process.env.CI` ergänzt: Der Retry liefert weiterhin den „flaky“-Ausweis im Report und — via `trace: retain-on-failure` — den Trace des fehlgeschlagenen Versuchs; der Lauf bleibt aber rot.
+- **Falsche Aussage in `docs/ci-e2e-audit.md` §9 korrigiert.** Der Text nannte einen „neuen `run-budget`-Job in CI“ als „lokal verifiziert“ — beides unzutreffend: es gibt keinen solchen Job, die Spec ist nicht verdrahtet, und lokal ist sie nicht grün, sondern deckt den offenen Defekt aus #978 auf. Der Pfad hat damit **keinerlei** CI-Abdeckung; genau das steht jetzt dort.
+- **Auditdokument ist keine Planungsquelle mehr.** Die Empfehlungen E1–E9 werden ab sofort über GitHub Issues nachverfolgt (#978 für den Budget-Defekt, #979 als Sammel-Issue E1–E8), wie es AGENTS.md verlangt. `docs/ci-e2e-audit.md` bleibt Auditbefund und Belegkontext; bei Abweichungen gilt der Issue-Stand.
+- **Branch-Protection erweitert (ehem. E5).** `Backend PR smoke gate` und `Frontend PR smoke gate` sind jetzt Required Checks — 17 statt 15, `strict: true` unverändert. Vorher war ein PR mit rotem Lint, Typecheck oder Unit-Test mergebar.
 
 ### Changed (CI- und E2E-Audit — 2026-07-31)
 
@@ -275,7 +288,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 - **`persist-credentials: false` auf allen 27 `actions/checkout`-Schritten** (vorher 1). Vorab geprüft: kein Workflow führt `git push`/`commit`/`tag` aus oder nutzt eine PR-erstellende Action. **Schließt Issue #805.**
 - **Vier fehlende SHA-Pins ergänzt** (`oven-sh/setup-bun`, `actions/upload-artifact` in `e2e-smokes.yml`) — Konsistenz zur Policy aus PR #719.
 - **`drawer-focus-trap.spec.ts` läuft wieder.** Die Datei lief seit PR #723 in **keinem** Workflow — sieben Test-Definitionen waren toter Code. Sie hängt jetzt am bestehenden Golden-Gate-Job (inhaltlich ein Accessibility-Gate, gleicher Stack, ~11 s Zusatzlaufzeit) statt an einem eigenen Job mit komplettem Stack-Boot. Lokal verifiziert: 5/5 grün.
-- **Playwright-Konfiguration gehärtet.** `forbidOnly` in CI (ein committetes `test.only` hätte den Rest der Datei still übersprungen und trotzdem grün gemeldet) und `retries: 1` **nur** in CI — Playwright meldet einen erst im Retry bestehenden Test als „flaky", nicht als „passed", macht Instabilität also sichtbar statt sie zu verstecken. Lokal bleibt es bei 0.
+- **Playwright-Konfiguration gehärtet.** `forbidOnly` in CI (ein committetes `test.only` hätte den Rest der Datei still übersprungen und trotzdem grün gemeldet) und `retries: 1` **nur** in CI — Playwright meldet einen erst im Retry bestehenden Test als „flaky“, nicht als „passed“, macht Instabilität also sichtbar statt sie zu verstecken. Lokal bleibt es bei 0.
 - **Kein Job umbenannt und kein `pull_request`-Trigger entfernt.** Die Branch-Protection auf `main` führt 13 Checks über ihren exakten `name:`-String; ein required Check, der nicht startet, blockiert den PR unbefristet.
 - **Neu: [`docs/ci-e2e-audit.md`](docs/ci-e2e-audit.md)** — Baseline-Messungen, Bewertung jeder E2E-Spec, Vorher/Nachher-Tabelle und offene Empfehlungen.
 
