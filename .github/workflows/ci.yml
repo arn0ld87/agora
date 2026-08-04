@@ -381,16 +381,14 @@ jobs:
         working-directory: backend
         # Issue #1054 (offen, pre-existing) lässt test_oasis_preflight rot.
         # Plus weitere Pre-Existing-Test-Drift, die mit #1055 sichtbar wird:
-        #   #1059 LLM-Client-Metriken (5 Tests)
         #   #1060 OASIS-Voice-Register (3 Tests)
-        #   #1061 Quota-Persistenz (2 Tests)
         #   #1062 Bug-Reproduktion B (1 Test)
-        #   #1063 Entity-Propagation (1 Test)
         #   #1064 Generate-Profiles-Endpoint (2 Tests)
         #   #1065 NLTK-Import-Guard (1 Test, Egress-Limit CI)
-        #   #1059 (LLM-Client-Metriken-Tests) ist mit #1066 gefixt; die
-        #   fünf Tests dort sind aus dem Deselect raus. Deselect bis die
-        #   übrigen Fixes gemerged sind; Liste schrumpft weiter.
+        # Bereits gefixt und deshalb aus dem Deselect raus:
+        #   #1059 LLM-Client-Metriken (5 Tests) — gefixt mit #1066
+        #   #1061 Quota-Persistenz (2 Tests)    — Fixtures um Route/Override ergaenzt
+        #   #1063 Entity-Propagation (1 Test)   — Fixtures um Route/Override ergaenzt
         # Deselect bis die jeweiligen Fixes gemerged sind, damit der neue
         # PR-Gate den Rest der Suite fängt ohne an bereits getrackten
         # Issues zu stranden. Liste schrumpft mit jedem Fix.
@@ -401,10 +399,7 @@ jobs:
             --deselect tests/services/test_oasis_voice_register.py::test_llm_valid_voice_register_lands_in_profile \
             --deselect tests/services/test_oasis_voice_register.py::test_llm_invalid_voice_register_fallback_neutral_de \
             --deselect tests/services/test_oasis_voice_register.py::test_llm_missing_voice_register_fallback_neutral_de \
-            --deselect tests/test_quota_persistence.py::test_phase_generate_config_persists_quota_plan \
-            --deselect tests/test_quota_persistence.py::test_phase_generate_config_omits_quota_plan_when_none \
             --deselect tests/services/test_bug_reproductions.py::test_repro_bug_b_oasis_profile_generator_thinking_tokens_parsing \
-            --deselect tests/test_entity_propagation.py::test_expanded_entities_propagate_to_config_generator \
             --deselect tests/api/test_simulation_uses_request_model.py::test_generate_profiles_endpoint_falls_back_when_no_llm_model \
             --deselect tests/api/test_simulation_uses_request_model.py::test_generate_profiles_endpoint_passes_llm_model_to_generator \
             --deselect tests/test_nltk_import_guard.py::test_ingestion_entrypoint_can_parse \

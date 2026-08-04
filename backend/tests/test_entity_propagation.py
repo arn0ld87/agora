@@ -11,6 +11,23 @@ from unittest.mock import MagicMock
 
 from app.contracts import PersonaQuotaPlan
 from app.services import prepare_service
+from app.services.llm_runtime import RuntimeLlmConfig
+
+
+def _runtime_override() -> RuntimeLlmConfig:
+    """Aktiver Runtime-Override für Phase 3.
+
+    ``_resolve_llm_connection`` verlangt seit dem Provider-Vertauschungs-Fix
+    eine aufgelöste Route oder einen aktiven Override, sobald ``use_llm``
+    gilt — und für ``_phase_generate_config`` ist das der Default. Phase 2
+    läuft in diesem Test bewusst mit ``use_llm_for_profiles=False`` und
+    braucht deshalb weiterhin keinen.
+    """
+    return RuntimeLlmConfig(
+        provider="custom_openai",
+        api_key="runtime-override-placeholder",
+        base_url="http://llm.invalid/v1",
+    )
 
 
 def _make_entity(name: str) -> MagicMock:
@@ -106,7 +123,7 @@ def test_expanded_entities_propagate_to_config_generator(monkeypatch):
         "doc text",
         expanded_entities=expanded,
         llm_model=None,
-        llm_runtime=None,
+        llm_runtime=_runtime_override(),
         language="de",
         quota_plan=quota_plan,
     )
