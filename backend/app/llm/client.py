@@ -41,6 +41,7 @@ from .json_mode import (
 from .providers import base as _provider_base
 from .providers import ollama as _provider_ollama
 from .providers import openai as _provider_openai
+from .providers.registry import openai_compat_base_url
 from .tool_calls import _chat_with_tools
 
 logger = get_logger("agora.llm_client")
@@ -154,9 +155,15 @@ class LLMClient:
             self._api_key_source,
         )
 
+        # Issue #1072: ``self.base_url`` bleibt bewusst roh — Provider-Detection
+        # (``_detect_provider``), das Invocation-Log und der native Ollama-Pfad
+        # (``/api/chat``) haengen daran. Nur der OpenAI-SDK-Client bekommt die
+        # auf den Compat-Pfad kanonisierte Form: Ollama-Connections fuehren eine
+        # Base-URL ohne ``/v1``, ueber die ``POST /chat/completions`` mit
+        # Plaintext ``404 page not found`` beantwortet wird.
         self.client = OpenAI(
             api_key=self.api_key,
-            base_url=self.base_url,
+            base_url=openai_compat_base_url(self.base_url, self.model),
             timeout=timeout,
         )
 

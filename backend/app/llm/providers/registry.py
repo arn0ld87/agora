@@ -392,6 +392,46 @@ def ensure_v1_suffix(url: Optional[str]) -> Optional[str]:
     return f"{base}/v1"
 
 
+def openai_compat_base_url(
+    base_url: Optional[str], model: Optional[str]
+) -> Optional[str]:
+    """Base-URL fuer den OpenAI-SDK-Client des Backends (Issue #1072).
+
+    ``LLMClient`` baut seinen ``openai.OpenAI``-Client aus der Base-URL der
+    Connection und ruft ``POST {base_url}/chat/completions``. Zwei Provider
+    fuehren aber eine Base-URL *ohne* ``/v1``, weil deren nativer Pfad an der
+    Server-Wurzel haengt: lokales Ollama (``http://localhost:11434``, nativ
+    ``/api/chat``) und Ollama Cloud (``https://ollama.com``). Ueber den
+    OpenAI-Compat-Pfad landet ein Call damit auf einer Route, die es dort
+    nicht gibt — Ollama antwortet mit Plaintext ``404 page not found``.
+
+    Getroffen hat das ausschliesslich ``LLMClient.chat``: ``chat_json`` routet
+    bei Ollama auf den nativen ``/api/chat``-Schema-Pfad, fuer den die URL
+    *ohne* ``/v1`` gerade richtig ist. Der Post-Simulations-Interviewpfad
+    (``services/sim/interview_direct.py``) nutzt bewusst ``chat`` und war
+    deshalb der einzige Consumer, der reproduzierbar 404 sah.
+
+    Bewusst KEINE Heuristik der Form "URL ohne Pfad bekommt ``/v1``": eine
+    ``openai_compatible``-Connection, die an der Wurzel lauscht, ist ein
+    legitimer Fall (der E2E-Mock-Server bedient ``/models``, nicht
+    ``/v1/models``). Stattdessen entscheidet ``detect_provider(mode="http")``
+    — dieselbe SSoT, die auch ``should_probe_ollama_tags`` verwendet. Alles,
+    was nicht als Ollama erkannt wird, bleibt unangetastet; ``"unknown"``
+    (Gateways, ``openai_compatible``) faellt damit ausdruecklich durch.
+
+    Args:
+        base_url: Base-URL der Connection, wie persistiert.
+        model: Modellname des Laufs — traegt bei Ollama Cloud das
+            entscheidende Signal (``:cloud``-Tag an einem lokalen Port).
+
+    Returns:
+        Die URL mit ``/v1`` fuer Ollama-Provider, sonst unveraendert.
+    """
+    if detect_provider(base_url, model, mode="http") in ("ollama", "cloud"):
+        return ensure_v1_suffix(base_url)
+    return base_url
+
+
 def resolve_ollama_tags_url(
     base_url: Optional[str],
     model: Optional[str],
