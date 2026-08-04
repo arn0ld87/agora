@@ -13,6 +13,7 @@ deaktivierbar, damit die Simulation ohne erreichbares Ollama starten kann.
 
 from __future__ import annotations
 
+import logging
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -153,6 +154,19 @@ class TestPreflightSkipSwitch:
         nie aufgerufen, Warnung geloggt."""
         monkeypatch.setenv("AGORA_SKIP_PREFLIGHT", "1")
         model = MagicMock()
+
+        # ``caplog`` haengt seinen Handler am Root-Logger. Der ``agora``-Baum
+        # propagiert dorthin bewusst nicht: ``app/utils/logger.py::setup_logger``
+        # setzt ``logging.getLogger("agora").propagate = False``, damit die
+        # eigenen Datei- und Konsolen-Handler nicht zusaetzlich ueber
+        # Root-Handler doppelt ausgeben. Sobald irgendein zuvor importiertes
+        # Testmodul ``setup_logger`` ausgefuehrt hat, endet der Record von
+        # ``agora._sim_common`` deshalb beim Parent ``agora`` und erreicht
+        # ``caplog.records`` nie — der Test war dadurch reihenfolgeabhaengig.
+        # Das ist gewolltes Produktionsverhalten und wird nicht geaendert;
+        # die Propagation wird nur fuer die Dauer dieses Tests
+        # wiederhergestellt (``monkeypatch`` setzt sie danach zurueck).
+        monkeypatch.setattr(logging.getLogger("agora"), "propagate", True)
 
         with caplog.at_level("WARNING", logger="agora._sim_common"):
             preflight_model_probe(model, max_retries=3)
