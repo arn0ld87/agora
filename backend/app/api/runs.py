@@ -42,7 +42,7 @@ from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.llm_client import LLMClient
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.logger import get_logger
-from ..utils.validation import validate_run_id
+from ..utils.validation import validate_run_id, validate_simulation_id
 
 logger = get_logger("agora.api.runs")
 run_registry = RunRegistry()
@@ -61,6 +61,34 @@ def _get_run_or_404(run_id: str):
     if not run:
         return None, json_error(f"Run does not exist: {run_id}", status=404)
     return run, None
+
+
+def _get_run_by_run_or_simulation_id(identifier: str):
+    """Löst ``run_``- *oder* ``sim_``-IDs zu einem Run auf.
+
+    Schritt 3 im Frontend kennt nur die ``simulation_id`` und schickt sie an
+    ``POST /api/runs/<id>/cancel``. ``run_id`` und ``simulation_id`` haben
+    aber unterschiedliche Formate (``run_``/``sim_`` + 12 Hex) und werden
+    unabhängig voneinander vergeben — kein ``create_run``-Aufruf im Repository
+    setzt ``run_id`` explizit, alle nutzen den Default in
+    ``RunRegistry.create_run``. Die einzige Verknüpfung ist
+    ``linked_ids.simulation_id``. Ohne diese Auflösung scheiterte jeder
+    Abbrechen-Klick an ``validate_run_id`` mit HTTP 400, ohne irgendetwas
+    abzubrechen.
+
+    Der Auflösungspfad ist derselbe wie in
+    ``simulation_run.py::stop_simulation`` — kein zweites Muster.
+    """
+    if validate_simulation_id(identifier):
+        run = run_registry.get_latest_by_linked_id(
+            "simulation_id", identifier, run_type="simulation_run"
+        )
+        if not run:
+            return None, json_error(
+                f"Run does not exist for simulation: {identifier}", status=404
+            )
+        return run, None
+    return _get_run_or_404(identifier)
 
 
 def _linked_or_entity_id(run: Mapping[str, Any], linked_key: str, label: str) -> str:
@@ -419,15 +447,23 @@ def cancel_run(run_id: str):
     (SimulationRunner / ReportAgent) prüft das Flag zwischen Stage-Boundaries
     und bricht sauber ab (letzter LLM-Call läuft fertig, dann Teilreport).
 
-    Antwort: 202 Accepted (asynchron — der Abbruch erfolgt kooperativ).
+    ``run_id`` akzeptiert auch eine ``simulation_id`` — Schritt 3 im Frontend
+    kennt nur diese. Die Auflösung läuft über ``linked_ids.simulation_id``,
+    siehe :func:`_get_run_by_run_or_simulation_id`.
+
+    Antwort: 202 Accepted (asynchron — der Abbruch erfolgt kooperativ). Das
+    Feld ``run_id`` im Body trägt immer die aufgelöste ``run_``-ID, nie die
+    übergebene ``simulation_id``.
 
     Fehler:
-    - 404 wenn run_id unbekannt
+    - 404 wenn run_id/simulation_id unbekannt
     - 400 wenn Run nicht im Status ``processing`` ist
     """
-    run, error = _get_run_or_404(run_id)
+    run, error = _get_run_by_run_or_simulation_id(run_id)
     if error:
         return error
+
+    resolved_run_id = run.get("run_id") or run_id
 
     current_status = run.get("status", "")
     if current_status != "processing":
@@ -444,22 +480,24 @@ def cancel_run(run_id: str):
     if not simulation_id:
         return json_error("Run is missing simulation_id linkage", status=409)
 
-    _request_cancel(run_id)
+    _request_cancel(resolved_run_id)
 
     # RunRegistry ist Singleton — Instanz pro Call holen (Gemini-Finding).
     RunRegistry().update_run(
-        run_id,
+        resolved_run_id,
         message="Cancel requested — finishing current stage before stopping",
     )
 
     logger.info(
         "cancel_run: cancel flag set for run_id=%s simulation_id=%s",
-        run_id,
+        resolved_run_id,
         simulation_id,
     )
 
     from flask import make_response, jsonify
-    body = jsonify({"success": True, "status": "cancel_requested", "run_id": run_id})
+    body = jsonify(
+        {"success": True, "status": "cancel_requested", "run_id": resolved_run_id}
+    )
     return make_response(body, 202)
 
 
