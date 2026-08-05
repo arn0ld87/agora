@@ -83,36 +83,51 @@ class LLMClient:
         # (Caller hat den Key direkt übergeben), statt auf "unknown" durchzufallen.
         resolved_source: Optional[str] = (api_key_source or "passed_in") if api_key else None
         active_provider_id: Optional[str] = None
-        if use_active_config and model is None:
+        # Issue #1101: Active-Config-Lookup ist Fallback für fehlende Werte,
+        # nicht an ``model is None`` gekoppelt. Wurde das Modell vom Caller
+        # explizit übergeben (Normalfall im Prepare/Run-Pfad:
+        # ``prepare_simulation(llm_model=resolved_route.model, …)``), fiel
+        # zuvor der *gesamte* Block weg — inkl. ``base_url``-Übernahme — und
+        # ``base_url`` kollabierte auf ``Config.LLM_BASE_URL`` (.env-Ollama-
+        # Gateway). Das Modell aus der UI-Auswahl (OpenAI) ging an den
+        # .env-Endpoint → HTTP 404 → stiller regelbasierter Persona-Fallback.
+        # Aktive Config überschreibt niemals explizit übergebene Werte.
+        # ``active_provider_id`` annotiert das Init-Log (Vorrang vor
+        # ``route_provider_id``) nur, wenn die Active-Config tatsächlich einen
+        # Wert beigetragen hat — sonst behält die aufgelöste Route den Vorrang.
+        if use_active_config:
             active = _read_active_config_safely()
             if active:
-                active_provider_id = active.get("provider_id")
+                active_pid = active.get("provider_id")
                 active_model = active.get("model")
                 active_base = active.get("base_url")
-                if active_model:
+                if active_model and not model:
                     model = active_model
+                    active_provider_id = active_pid
                 if active_base and not base_url:
                     base_url = active_base
-                if active_provider_id and not api_key:
+                    active_provider_id = active_pid
+                if active_pid and not api_key:
+                    active_provider_id = active_pid
                     try:
                         from ..services.llm_provider_registry import LlmProviderRegistry
                         from ..services.secret_resolver import SecretResolver
                         registry = LlmProviderRegistry()
                         descriptor = next(
-                            (p for p in registry.get_providers() if p.id == active_provider_id),
+                            (p for p in registry.get_providers() if p.id == active_pid),
                             None,
                         )
                         if descriptor is not None:
                             if not base_url:
                                 base_url = descriptor.base_url
                             resolver = SecretResolver()
-                            api_key = resolver.get_api_key(active_provider_id, descriptor.type)
+                            api_key = resolver.get_api_key(active_pid, descriptor.type)
                             if api_key:
                                 resolved_source = resolver.last_source
                     except Exception as exc:  # noqa: BLE001 — fall back to Config defaults
                         logger.warning(
                             "Failed to resolve active LLM config (provider=%s): %s",
-                            active_provider_id,
+                            active_pid,
                             exc,
                         )
 

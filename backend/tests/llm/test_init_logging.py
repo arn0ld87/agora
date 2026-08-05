@@ -169,6 +169,67 @@ class TestInitActiveConfigResolver:
 
 
 # ---------------------------------------------------------------------------
+# Issue #1101: Active-Config-``base_url`` muss auch bei explizitem ``model``
+# übernommen werden. Zuvor war der gesamte Active-Config-Lookup an
+# ``model is None`` gekoppelt — wurde das Modell vom Caller übergeben (Normalfall
+# im Prepare/Run-Pfad), übersprang der Client die Active-Config, ``base_url``
+# fiel auf ``Config.LLM_BASE_URL`` (.env-Ollama-Gateway) zurück. Modell aus der
+# UI-Auswahl (OpenAI) ging an den .env-Endpoint → HTTP 404 → stiller
+# regelbasierter Persona-Fallback.
+# ---------------------------------------------------------------------------
+
+
+class TestInitActiveConfigBaseUrlWithExplicitModel:
+    _OLLAMA_ENV_URL = "http://100.71.152.44:11435/v1"
+    _OPENAI_ACTIVE_URL = "https://api.openai.com/v1"
+
+    def _stub_active_config(self, monkeypatch) -> None:
+        monkeypatch.setattr(
+            "app.llm.client._read_active_config_safely",
+            lambda: {
+                "provider_id": "openai",
+                "model": "gpt-5.6-luna",
+                "base_url": self._OPENAI_ACTIVE_URL,
+            },
+        )
+
+    def test_active_config_base_url_used_when_model_explicit(self, caplog, monkeypatch):
+        _patch_openai(monkeypatch)
+        # .env-Default (Ollama-Gateway) — darf NICHT gewinnen.
+        monkeypatch.setattr(
+            "app.llm.client.Config.LLM_BASE_URL", self._OLLAMA_ENV_URL
+        )
+        self._stub_active_config(monkeypatch)
+        with caplog.at_level(logging.INFO, logger=_INIT_LOGGER):
+            client = LLMClient(model="gpt-5.6-luna", api_key="sk-test")
+        # base_url aus Active-Config, nicht aus .env.
+        assert client.base_url == self._OPENAI_ACTIVE_URL
+        # übergebenes Modell wird nicht überschrieben.
+        assert client.model == "gpt-5.6-luna"
+        records = _init_log_records(caplog)
+        assert len(records) == 1
+        msg = records[0].getMessage()
+        assert "provider_id=openai" in msg
+        assert "api.openai.com" in msg
+        assert "100.71.152.44" not in msg
+
+    def test_explicit_base_url_not_overridden_by_active_config(self, monkeypatch):
+        _patch_openai(monkeypatch)
+        monkeypatch.setattr(
+            "app.llm.client.Config.LLM_BASE_URL", self._OLLAMA_ENV_URL
+        )
+        self._stub_active_config(monkeypatch)
+        # Caller übergibt eigene base_url (z. B. aus aufgelöster ResolvedRoute).
+        client = LLMClient(
+            model="gpt-5.6-luna",
+            base_url="https://explicit.example.com/v1",
+            api_key="sk-test",
+        )
+        assert client.base_url == "https://explicit.example.com/v1"
+        assert client.model == "gpt-5.6-luna"
+
+
+# ---------------------------------------------------------------------------
 # from_route: connection_only → "store"
 # ---------------------------------------------------------------------------
 
@@ -212,6 +273,11 @@ class TestFromRouteStore:
 class TestFromRouteOverride:
     def test_api_key_override_annotates_passed_in(self, caplog, monkeypatch):
         _patch_openai(monkeypatch)
+        # Issue #1101: Active-Config-Lookup läuft jetzt auch bei gesetztem
+        # Modell. Dieser Test prüft api_key_override-Annotation, nicht
+        # Active-Config-Interaktion — deshalb Active-Config auf None setzen,
+        # damit die Route (provider_id=openai) unangetastet bleibt.
+        monkeypatch.setattr("app.llm.client._read_active_config_safely", lambda: None)
         route = ResolvedRoute(
             stage="graph_build",
             provider_id="openai",
@@ -278,6 +344,10 @@ class TestFromRouteNoKey:
         monkeypatch.setattr("app.llm.client.Config.LLM_API_KEY", "cfg-key")
         monkeypatch.setattr("app.llm.client.Config.LLM_BASE_URL", "https://api.openai.com/v1")
         monkeypatch.setattr("app.llm.client.Config.LLM_MODEL_NAME", "gpt-4o")
+        # Issue #1101: Active-Config-Lookup läuft jetzt auch bei gesetztem
+        # Modell. Test prüft den Config-Fallback-Pfad, nicht Active-Config —
+        # deshalb Active-Config auf None setzen.
+        monkeypatch.setattr("app.llm.client._read_active_config_safely", lambda: None)
         route = ResolvedRoute(
             stage="graph_build",
             provider_id="openai",
