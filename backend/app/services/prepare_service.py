@@ -83,10 +83,24 @@ def _resolve_llm_connection(
 
     Raises:
         ValueError: ``require`` ist gesetzt und weder eine ``ResolvedRoute``
-            noch ein aktiver Runtime-Override liegt vor.
+            noch ein aktiver Runtime-Override liegt vor, oder die
+            ``ResolvedRoute`` selbst keine aufloesbare ``base_url_sanitized``
+            traegt (#1104: zweite Verteidigungslinie gegen die Halb-Uebergabe,
+            falls der Store-Lookup in ``StageModelRouter`` keine Base-URL
+            findet — z. B. eine deaktivierte oder geloeschte Connection).
     """
     if isinstance(llm_runtime, ResolvedRoute):
-        return resolve_route_api_key(llm_runtime), llm_runtime.base_url_sanitized
+        base_url = llm_runtime.base_url_sanitized
+        if require and not base_url:
+            raise ValueError(
+                f"kein Endpoint für Provider '{llm_runtime.provider_id}' aufgelöst: die "
+                "Route nennt Modell und Provider, aber keine Basis-URL. Ohne Endpoint "
+                "würde die Anfrage an die .env-Konfiguration statt an die konfigurierte "
+                "Verbindung gehen, während Modell und Schlüssel aus der Route stammen — "
+                "diese Mischung erreicht den falschen Provider. Bitte unter Einstellungen "
+                f"→ LLM-Anbieter die Verbindung '{llm_runtime.provider_id}' prüfen."
+            )
+        return resolve_route_api_key(llm_runtime), base_url
     if llm_runtime and llm_runtime.enabled:
         return llm_runtime.api_key, llm_runtime.base_url
     if require:

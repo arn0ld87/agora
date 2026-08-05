@@ -8,6 +8,9 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 ### Fixed (kollidierende `gap_id`-Vergabe bei der Legacy-Claim-Migration — 2026-08-05)
 
 - **`migrate_legacy_claims_to_anchored` vergab neue `gap_id`-Werte über `len(data_gaps) + 1` statt über den tatsächlichen Bestand.** Bei lückenhaft nummerierten Bestands-Gaps (z. B. `gap_01`, `gap_03`) erzeugte das erneut `gap_03` — ein Duplikat. Die Vergabe ermittelt jetzt pro Section das höchste vorhandene `gap_<n>`-Suffix und sichert zusätzlich gegen das Set der bereits vergebenen IDs ab, auch bei mehreren neuen Gaps in derselben Migration. (#986)
+### Fixed (Persona-Generierung schickte das Routing-Modell an den `.env`-Endpoint — 2026-08-05)
+
+- **Eine über das Workspace-Routing gewählte Provider-Route (z. B. OpenAI) lief bei der Persona-Generierung trotzdem gegen den `.env`-Endpoint (lokaler Ollama-Gateway) — HTTP 404 und stiller regelbasierter Fallback für alle Personas.** `workspace_llm_routing.json` persistiert pro Route nur `provider_id` + `model`; die Base-URL gehört zur Provider-Connection, wurde aber nirgends aufgelöst: `ResolvedRoute.base_url_sanitized` blieb `None`, und `OasisProfileGenerator` füllte die Lücke mit `Config.LLM_BASE_URL`, während Modell und API-Key aus der Route stammten. `StageModelRouter` löst die Base-URL jetzt aus der Provider-Connection im Store auf (derselbe Lookup, den der OASIS-Subprozess-Pfad bereits nutzt); eine explizite `provider_options.base_url` behält Vorrang. Findet auch der Store keine URL, bricht `_resolve_llm_connection` mit einer handlungsleitenden Meldung ab, statt still `(key, None)` zurückzugeben. Nachfolger von #1101/#1102, die nur den `LLMClient`-Konstruktor fixten. Bestehende Runs behalten ihre gelockte Route — der Fix greift für neue Runs. (#1104)
 
 ### Fixed (GPT-5-/o-Reasoning-Modelle brachen jeden Run mit 400 `unsupported_value` ab — 2026-08-05)
 
