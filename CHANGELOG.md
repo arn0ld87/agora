@@ -5,6 +5,12 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (GPT-5-/o-Reasoning-Modelle brachen jeden Run mit 400 `unsupported_value` ab — 2026-08-05)
+
+- **Jeder Run gegen OpenAI-Reasoning-Modelle (GPT-5-Familie, o1/o3/o4) scheiterte sofort mit `400 unsupported_value` auf `param=temperature`.** `LLMClient` sendet feste `temperature`-Werte (`chat` 0.7, `describe_image` 0.3, `chat_json` 0.3); diese Modelle akzeptieren ausschließlich den Default (1) und lehnen jeden expliziten Wert ab. `chat()`, `describe_image()` und `chat_json()` lassen den `temperature`-Key jetzt weg, wenn das Zielmodell zur GPT-5-/o-Familie gehört (`omits_temperature`, analog zur bestehenden `max_completion_tokens`-Heuristik) — für noch unbekannte Modelle fängt ein einmaliger Retry ohne `temperature` denselben 400 zusätzlich ab. (#1096)
+- **`chat_json()` deutete denselben 400er bisher als fehlenden Strict-Schema-Support und fiel grundlos auf `json_object` zurück.** OpenAIs Fehlertext für den `temperature`-Quirk enthält dieselben Wörter ("unsupported", "not supported") wie die Heuristik für "Provider kann kein `json_schema`" — die irreführende Warnung `strict json_schema not supported by provider` erschien, obwohl das Schema nie das Problem war. Ein `temperature`-400 wird jetzt vor der Schema-Fallback-Prüfung erkannt und löst stattdessen einen Retry im selben `json_schema`-Modus aus.
+- **Fehlerdiagnose für zukünftige 400er verbessert:** Ein `BadRequestError` loggt jetzt `message`, `code` und `param` aus dem strukturierten API-Fehlerbody, statt nur `error_type=BadRequestError`.
+
 ### Fixed (ein fertig geschriebener Report starb nach 35 Minuten an sechs Hypothesen zu viel — 2026-08-04)
 
 - **`Report generation failed: 1 validation error for EvidenceMapModel`, nachdem alle sechs Abschnitte bereits persistiert waren.** `dedup_and_cap_hypotheses` kappt die sichtbaren Hypothesen auf fünf, reichte den Überhang aber ungekappt als Appendix weiter. `ReportSectionModel.hypotheses_appendix` erlaubt fünfzig; ein Abschnitt mit 56 Hypothesen ließ die abschließende Validierung scheitern und damit den gesamten Lauf.

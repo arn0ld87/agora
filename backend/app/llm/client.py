@@ -317,6 +317,16 @@ class LLMClient:
         """Siehe ``app.llm.providers.openai.swap_token_kwargs``."""
         return _provider_openai.swap_token_kwargs(kwargs)
 
+    @staticmethod
+    def _omits_temperature(model: str) -> bool:
+        """Siehe ``app.llm.providers.openai.omits_temperature`` (#1096)."""
+        return _provider_openai.omits_temperature(model)
+
+    @staticmethod
+    def _is_temperature_400(exc: Exception) -> bool:
+        """Siehe ``app.llm.providers.openai.is_temperature_400`` (#1096)."""
+        return _provider_openai.is_temperature_400(exc)
+
     def _completion_token_kwargs(
         self, max_tokens: int, model: Optional[str] = None
     ) -> Dict[str, int]:
@@ -517,6 +527,20 @@ class LLMClient:
             raise
         except Exception as exc:  # noqa: BLE001 — Failure-Telemetrie, weiterreichen
             latency_ms = (_time_mod.monotonic() - started) * 1000.0
+            # #1096: bei einem BadRequestError liefert das OpenAI-SDK den
+            # entpackten Fehlerbody (message/code/param) ueber ``exc.body`` —
+            # ohne das landete bisher nur "error_type=BadRequestError" im
+            # Log, was 400s wie den temperature-unsupported_value-Quirk
+            # ununterscheidbar von jedem anderen 400 macht.
+            body = getattr(exc, "body", None)
+            if isinstance(body, dict):
+                logger.warning(
+                    "LLM provider 400 detail model=%s message=%s code=%s param=%s",
+                    self.model,
+                    body.get("message"),
+                    body.get("code"),
+                    body.get("param"),
+                )
             self._log_invocation_event(
                 stage=context,
                 latency_ms=latency_ms,
@@ -616,8 +640,12 @@ class LLMClient:
         kwargs: Dict[str, Any] = {
             "model": self.model,
             "messages": messages,
-            "temperature": temperature,
         }
+        # #1096: GPT-5-/o-Reasoning-Familie akzeptiert nur den Default-Wert
+        # (1) und antwortet sonst 400 unsupported_value — kein temperature-
+        # Key im Request statt jedes Mal auf den 400 zu warten.
+        if not self._omits_temperature(self.model or ""):
+            kwargs["temperature"] = temperature
         kwargs.update(self._completion_token_kwargs(max_tokens))
 
         if response_format:
@@ -689,8 +717,38 @@ class LLMClient:
                 )
                 return _create(swapped)
 
+        def _call_with_temperature_fallback(call_kwargs: Dict[str, Any]) -> Tuple[Any, float]:
+            """Fallback-Retry (#1096): bei 400 wg. einem nicht unterstuetzten
+            ``temperature``-Wert (GPT-5-/o-Reasoning-Familie akzeptiert nur
+            den Default) einmalig ohne ``temperature`` retryen.
+            ``_omits_temperature`` deckt die bekannten Familien bereits
+            proaktiv ab (kein ``temperature``-Key im Request); dieser
+            Fallback ist das Netz fuer neue Modelle/Proxies, die wir noch
+            nicht kennen — komponiert mit dem Token-Key-Fallback statt ihn
+            zu ersetzen, damit beide Retries unabhaengig voneinander
+            greifen koennen.
+
+            Jeder Aufruf von ``_call_with_token_key_fallback`` zaehlt als
+            separater Providerattempt mit eigener Check/Event/Record-Triplet.
+            """
+            try:
+                return _call_with_token_key_fallback(call_kwargs)
+            except Exception as exc:  # noqa: BLE001 — wir filtern selbst
+                if not self._is_temperature_400(exc):
+                    raise
+                if "temperature" not in call_kwargs:
+                    raise
+                dropped = dict(call_kwargs)
+                dropped.pop("temperature", None)
+                logger.warning(
+                    "LLM 400 on temperature param — retrying once without temperature (model=%s, msg=%s)",
+                    self.model,
+                    str(exc)[:200],
+                )
+                return _call_with_token_key_fallback(dropped)
+
         # Provider-Pfad: jeder physische Request (erster Call, jeder Retry,
-        # Token-Key-Fallback) erhaelt GENAU EINE
+        # Token-Key-Fallback, Temperature-Fallback) erhaelt GENAU EINE
         # _budget_check / _log_invocation_event / _budget_record-Triplet.
         # ``_provider_attempt`` kuemmert sich um Check + Failure-Telemetrie;
         # ``_record_provider_success`` finalisiert die Success-Telemetrie
@@ -704,7 +762,7 @@ class LLMClient:
         try:
             if force_stream:
                 kwargs["stream"] = True
-                _response, _latency_ms = _call_with_token_key_fallback(kwargs)
+                _response, _latency_ms = _call_with_temperature_fallback(kwargs)
                 chunks: List[str] = []
                 try:
                     for event in _response:  # type: ignore[union-attr]
@@ -737,7 +795,7 @@ class LLMClient:
                     raise
                 content = "".join(chunks)
             else:
-                _response, _latency_ms = _call_with_token_key_fallback(kwargs)
+                _response, _latency_ms = _call_with_temperature_fallback(kwargs)
                 # Issue #764 (Review): die lokale Verarbeitung einer
                 # HTTP-erfolgreichen Antwort kann fehlschlagen (leeres
                 # ``choices``, ``message`` ohne ``content``, fehlende
@@ -865,8 +923,11 @@ class LLMClient:
         kwargs: Dict[str, Any] = {
             "model": vision_model,
             "messages": messages,
-            "temperature": temperature,
         }
+        # #1096: siehe chat() — GPT-5-/o-Reasoning-Familie akzeptiert nur den
+        # Default-``temperature``-Wert (1).
+        if not self._omits_temperature(vision_model or ""):
+            kwargs["temperature"] = temperature
         kwargs.update(self._completion_token_kwargs(max_tokens, model=vision_model))
         if self._is_ollama():
             extra_body: Dict[str, Any] = {"options": {"num_ctx": max(self._num_ctx, 8192)}}
@@ -974,7 +1035,11 @@ class LLMClient:
                 format a single fallback to ``json_object`` is attempted with a
                 warning log.  When *schema* is a Pydantic model the returned
                 dict is also validated against it so that callers can rely on
-                field types matching the model.
+                field types matching the model. A 400 caused by the GPT-5-/o-
+                reasoning-family ``temperature`` quirk (#1096) is NOT treated
+                as unsupported-schema: it retries once without ``temperature``
+                in the same response_format mode instead of degrading to
+                ``json_object``.
             schema_name: Name embedded in the strict json_schema request
                 (used by some providers for caching / routing).
             context: Logical call context label for observability (forwarded
@@ -1181,24 +1246,46 @@ class LLMClient:
                     require_complete=True,
                 )
             except Exception as exc:
-                exc_lower = str(exc).lower()
-                if any(hint in exc_lower for hint in _STRICT_UNSUPPORTED_HINTS):
-                    logger.warning(
-                        "LLMClient.chat_json: strict json_schema not supported by "
-                        "provider, falling back to json_object (caller should not "
-                        "rely on schema enforcement here)"
-                    )
+                # #1096: ein 400 auf param=temperature ist KEIN Hinweis auf
+                # fehlenden strict-json_schema-Support — die Wortlaut-Hints
+                # unten ("unsupported", "not supported") matchen ihn aber
+                # faelschlich, weil OpenAIs unsupported_value-Fehlertext
+                # dieselben Woerter enthaelt. Ohne diese Weiche waere die
+                # Warnung "strict json_schema not supported by provider"
+                # irrefuehrend, und der Retry wuerde grundlos auf
+                # json_object statt auf denselben Schema-Modus wechseln.
+                # ``chat()`` faengt den Quirk bereits proaktiv (Shaping) und
+                # per eigenem Retry ab — dieser Zweig ist das Netz fuer den
+                # Fall, dass die Ausnahme trotzdem bis hierher durchreicht.
+                if self._is_temperature_400(exc):
                     response = self.chat(
                         messages=messages,
                         temperature=temperature,
                         max_tokens=max_tokens,
-                        response_format={"type": "json_object"},
+                        response_format=response_format,
                         context=context,
                         force_no_thinking=force_no_thinking,
                         require_complete=True,
                     )
                 else:
-                    raise
+                    exc_lower = str(exc).lower()
+                    if any(hint in exc_lower for hint in _STRICT_UNSUPPORTED_HINTS):
+                        logger.warning(
+                            "LLMClient.chat_json: strict json_schema not supported by "
+                            "provider, falling back to json_object (caller should not "
+                            "rely on schema enforcement here)"
+                        )
+                        response = self.chat(
+                            messages=messages,
+                            temperature=temperature,
+                            max_tokens=max_tokens,
+                            response_format={"type": "json_object"},
+                            context=context,
+                            force_no_thinking=force_no_thinking,
+                            require_complete=True,
+                        )
+                    else:
+                        raise
         else:
             response = self.chat(
                 messages=messages,
