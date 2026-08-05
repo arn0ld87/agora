@@ -22,6 +22,7 @@ import requests
 
 from ..config import Config, infer_vector_dim_for_model
 from ..llm.providers.registry import detect_embedding_provider
+from ..llm.transport_security import ensure_credentialed_transport_security
 
 logger = logging.getLogger('agora.embedding')
 
@@ -349,6 +350,7 @@ class EmbeddingService:
         return f"{self.base_url}/api/embed"
 
     def _request_headers(self) -> dict[str, str]:
+        ensure_credentialed_transport_security(self.base_url, self.api_key)
         headers = {'Content-Type': 'application/json'}
         if self._provider == 'openai':
             if not self.api_key:

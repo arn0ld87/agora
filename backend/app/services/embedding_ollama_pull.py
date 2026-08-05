@@ -37,6 +37,7 @@ from typing import Any
 import requests
 
 from app.contracts.ai_provider_contract import ProviderConnection
+from app.llm.transport_security import ensure_credentialed_transport_security
 from app.services.llm_provider_secrets_store import LlmProviderSecretsStore
 from app.services.provider_connection_store import ProviderConnectionStore
 
@@ -105,6 +106,7 @@ def pull_model(
         raise OllamaPullError(
             f"base_url muss mit http:// oder https:// beginnen: {base_url!r}"
         )
+    ensure_credentialed_transport_security(base_url, api_key)
 
     url = base_url.rstrip("/") + "/api/pull"
     headers = {"Content-Type": "application/json", "Accept": "application/x-ndjson"}

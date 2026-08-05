@@ -33,6 +33,10 @@ import requests
 
 from app.contracts.ai_provider_contract import ProviderConnection
 from app.contracts.embedding_contract import EmbeddingProviderKind
+from app.llm.transport_security import (
+    InsecureTransportError,
+    ensure_credentialed_transport_security,
+)
 
 EmbeddingProbeStatus = Literal[
     "available",
@@ -104,6 +108,11 @@ class _OpenAICompatibleAdapter:
         headers = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
+
+        try:
+            ensure_credentialed_transport_security(connection.base_url, api_key)
+        except InsecureTransportError as exc:
+            return EmbeddingProbeResult(status="unavailable", status_message=str(exc))
 
         try:
             with self._session_factory() as http:
@@ -288,6 +297,11 @@ class _OllamaAdapter:
         headers = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
+
+        try:
+            ensure_credentialed_transport_security(connection.base_url, api_key)
+        except InsecureTransportError as exc:
+            return EmbeddingProbeResult(status="unavailable", status_message=str(exc))
 
         try:
             with self._session_factory() as http:
