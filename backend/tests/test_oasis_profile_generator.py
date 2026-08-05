@@ -178,7 +178,7 @@ def test_generate_profile_with_llm_uses_sufficient_max_tokens(monkeypatch):
     ('rich', 32768),
 ])
 def test_generate_profile_with_llm_derives_max_tokens_from_detail_level(
-    monkeypatch, level, expected_max_tokens,
+    monkeypatch, hermetic_settings, level, expected_max_tokens,
 ):
     """Issue #868: max_tokens must be derived from AGORA_PERSONA_DETAIL_LEVEL.
 
@@ -207,7 +207,7 @@ def test_generate_profile_with_llm_derives_max_tokens_from_detail_level(
 
 
 def test_generate_profile_with_llm_unknown_detail_level_uses_standard_max_tokens(
-    monkeypatch,
+    monkeypatch, hermetic_settings,
 ):
     """Issue #868: unknown AGORA_PERSONA_DETAIL_LEVEL falls back to 'standard'
     budget (16384), mirroring _resolve_persona_detail_level's existing
