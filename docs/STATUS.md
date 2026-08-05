@@ -1,6 +1,6 @@
 # Agora — Status
 
-**Stand:** 29.07.2026  
+**Stand:** 05.08.2026  
 **Geprüfte Main-Baseline:** `d5bdbada`  
 **Produktversion:** `0.8.0` Technical Preview
 
@@ -27,7 +27,7 @@ Die Produktreife wird ab diesem Dokumentationsumbau über [`VERSION`](../VERSION
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 4509 | `cd backend && uv run pytest --collect-only -q` |
+| Backend Tests (collected) | 4511 | `cd backend && uv run pytest --collect-only -q` |
 | Frontend Test-Files | 185 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
