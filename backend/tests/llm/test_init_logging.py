@@ -214,8 +214,12 @@ class TestInitActiveConfigBaseUrlWithExplicitModel:
         assert len(records) == 1
         msg = records[0].getMessage()
         assert "provider_id=openai" in msg
-        assert "api.openai.com" in msg
-        assert "100.71.152.44" not in msg
+        # Vollständige URL prüfen statt bloßem Substring (CodeQL
+        # py/cs-3260: unvollständige Substring-Sanitization). Die
+        # Active-Config-URL muss im Init-Log stehen, die .env-Ollama-URL
+        # darf gar nicht auftauchen — nicht nur als Substring fehlen.
+        assert self._OPENAI_ACTIVE_URL in msg
+        assert self._OLLAMA_ENV_URL not in msg
 
     def test_explicit_base_url_not_overridden_by_active_config(self, monkeypatch):
         _patch_openai(monkeypatch)
