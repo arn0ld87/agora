@@ -61,6 +61,7 @@ Provider-Erkennung: [`../backend/app/llm/providers/registry.py`](../backend/app/
 | `OLLAMA_API_KEY` 🔐 / `OLLAMA_BASE_URL` / `OLLAMA_NUM_CTX` / `OLLAMA_THINKING` | Ollama (lokal/Cloud) |
 | `TAVILY_API_KEY` 🔐 | Tavily-Web-Suche (Agent-Tools) |
 | `AGENT_LANGUAGE` | Agenten-Sprache |
+| `AGORA_LLM_ALLOW_INSECURE_HTTP` | dokumentierte Ausnahme (CWE-319, [`app/llm/transport_security.py`](../backend/app/llm/transport_security.py)): erlaubt `http://` mit API-Key gegen einen öffentlichen Host. Default aus/sicher — `http://` mit Credential ist sonst nur für lokale/private Hosts (loopback, RFC1918, CGNAT/Tailscale, Docker-Compose-/Host-Gateway-Namen) zulässig, alles andere bricht mit `InsecureTransportError` ab. |
 
 ## Embedding
 

@@ -5,6 +5,10 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Security (HTTPS für credential-behaftete LLM-Endpoints erzwingen — 2026-08-05)
+
+- **`LLMClient` und die LLM-Discovery-Pfade (`ModelCatalogService`, Provider-Connection-Adapter) sendeten `Authorization: Bearer <api_key>` auch an `http://`-Endpoints, ohne den Host zu prüfen (CWE-319) — bei einer öffentlich erreichbaren, versehentlich auf `http://` konfigurierten `base_url` ginge der API-Key im Klartext über die Leitung.** Ein neues, zentrales Gate (`ensure_credentialed_transport_security`, `backend/app/llm/transport_security.py`) läuft jetzt vor jedem credential-behafteten Request und lässt `http://` nur für nachweislich lokale/private Hosts zu (`localhost`, Docker-Compose-Servicenamen, Docker-Host-Gateway-Namen, Loopback, RFC1918, CGNAT/Tailscale-Bereich, Link-Local). Gegen alle anderen Hosts bricht ein unverschlüsselter Request mit einem credential-behafteten Key jetzt mit `InsecureTransportError` ab — fail-closed auch bei unparsebaren URLs. Für dokumentierte Ausnahmen (z. B. ein bewusst unverschlüsseltes internes Gateway ohne TLS-Terminierung) steht `AGORA_LLM_ALLOW_INSECURE_HTTP` zur Verfügung; Default bleibt sicher, die Ausnahme loggt eine sanitisierte Warnung statt still durchzulassen. (#1103)
+
 ### Fixed (kollidierende `gap_id`-Vergabe bei der Legacy-Claim-Migration — 2026-08-05)
 
 - **`migrate_legacy_claims_to_anchored` vergab neue `gap_id`-Werte über `len(data_gaps) + 1` statt über den tatsächlichen Bestand.** Bei lückenhaft nummerierten Bestands-Gaps (z. B. `gap_01`, `gap_03`) erzeugte das erneut `gap_03` — ein Duplikat. Die Vergabe ermittelt jetzt pro Section das höchste vorhandene `gap_<n>`-Suffix und sichert zusätzlich gegen das Set der bereits vergebenen IDs ab, auch bei mehreren neuen Gaps in derselben Migration. (#986)
