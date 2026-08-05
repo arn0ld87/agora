@@ -231,5 +231,8 @@ def test_preview_and_run_path_share_one_target_function(monkeypatch):
     run_path_source = inspect.getsource(ps_mod._phase_generate_profiles)
     assert "compute_persona_target(" in run_path_source
 
-    preview_source = inspect.getsource(sp_mod.prepare_simulation)
+    # Der Preview-Nenner entsteht seit #1080 in der Response-Phase des
+    # /prepare-Endpunkts statt im Handler selbst — die Invariante ist
+    # dieselbe: keine zweite, eigene Rechnung neben compute_persona_target.
+    preview_source = inspect.getsource(sp_mod._build_prepare_response)
     assert "compute_persona_target(" in preview_source

@@ -3,13 +3,16 @@
 # Format: <rel-path>::<func>  (rel-path relativ zu backend/, func = radon-Ausgabe-Name)
 #
 # Gemessen: 2026-05-14, radon 6.0.1, radon cc --min C --no-assert -j app/
-# Anzahl Einträge: 30 (5 x Class F, 1 x Class E, 24 x Class D)
+# Anzahl Einträge bei dieser Messung: 30 (5 x Class F, 1 x Class E, 24 x Class D).
+# Seither entfallen, weil die Funktion zerlegt wurde:
+#   app/api/simulation_run.py::start_simulation (#1079)
+#   app/api/simulation_prepare.py::prepare_simulation (#1080)
 #
-# Top-5 nach Cyclomatic Complexity:
+# Top-5 nach Cyclomatic Complexity (Stand der Messung):
 #   F (cc=50)  app/services/evidence_migrations.py::migrate_v2_to_v3
 #   F (cc=44)  app/api/report.py::get_generate_status
 #   E (cc=38)  app/services/report_agent/workflow.py::generate_report
-#   E (cc=33)  app/api/simulation_run.py::start_simulation
+#   E (cc=33)  app/api/simulation_run.py::start_simulation — zerlegt (#1079)
 #   E (cc=33)  app/services/oasis_profile_generator.py::OasisProfileGenerator.generate_profiles_from_entities
 #
 # Refactor-Kandidaten (eigene Sub-Slices nötig):
@@ -31,7 +34,6 @@ app/utils/file_parser.py::FileParser._extract_from_pdf
 # nur Pfad neu. Refactoring der Funktionen selbst: #590.
 app/llm/client.py::LLMClient.chat_json
 app/api/simulation_profiles.py::add_simulation_profile
-app/api/simulation_prepare.py::prepare_simulation
 app/api/runs.py::_build_run_summary
 app/api/report.py::get_generate_status
 app/services/branching_service.py::create_branch
@@ -116,13 +118,13 @@ app/services/sim/process_manager.py::start_simulation
 #   D cc=24  app/services/report_agent/text_verification.py::verify_prose
 #   D cc=23  app/services/sim/monitor.py::monitor_simulation
 #
-# NICHT neu aufgenommen wurden die beiden Rang-F-Handler. Sie stehen bereits
-# seit 2026-05-14 weiter oben in dieser Datei (Zeilen 33/34), damals mit
-# E (cc=33) vermessen — inzwischen F (cc=68) bzw. F (cc=65). Die Allowlist
-# prueft nur, *ob* eine Funktion geduldet ist, nicht *wie stark* sie gewachsen
-# ist; dieser Zuwachs ist deshalb nie aufgefallen. Refactor-Auftrag:
-#   app/api/simulation_run.py::start_simulation      → https://github.com/arn0ld87/agora/issues/1079
-#   app/api/simulation_prepare.py::prepare_simulation → https://github.com/arn0ld87/agora/issues/1080
+# NICHT neu aufgenommen wurden die beiden Rang-F-Handler. Sie standen bereits
+# seit 2026-05-14 weiter oben in dieser Datei, damals mit E (cc=33) vermessen —
+# inzwischen F (cc=68) bzw. F (cc=65). Die Allowlist prueft nur, *ob* eine
+# Funktion geduldet ist, nicht *wie stark* sie gewachsen ist; dieser Zuwachs ist
+# deshalb nie aufgefallen. Refactor-Auftrag:
+#   app/api/simulation_run.py::start_simulation      → erledigt (#1079), Eintrag entfernt
+#   app/api/simulation_prepare.py::prepare_simulation → erledigt (#1080), Eintrag entfernt
 # Beide Issues schlagen dieselbe Zerlegung vor: Validierung, Routen-/Key-
 # Aufloesung, Budget-Preflight, Run-Registrierung, Prozessstart.
 app/api/graph_build.py::generate_ontology

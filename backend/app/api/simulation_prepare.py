@@ -3,7 +3,8 @@ Preparation-related simulation API routes split from the main module.
 """
 
 import os
-from typing import Any, Optional
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 from flask import request
 from pydantic import ValidationError
@@ -38,6 +39,11 @@ from .simulation_common import (
 
 
 from ..utils.endpoints import LOCAL_NO_AUTH_API_KEY, is_local_endpoint
+
+if TYPE_CHECKING:  # pragma: no cover — nur für Typprüfung
+    from ..contracts.ai_provider_contract import AiModelRef
+    from ..contracts.run_budget_contract import RunBudgetConfig
+    from ..services.llm_runtime import RuntimeLlmConfig
 
 
 def _parse_quota_plan(data: dict) -> Optional[PersonaQuotaPlan]:
@@ -195,50 +201,109 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
         return False, {"reason": f"Failed to read state file: {str(exc)}"}
 
 
-@simulation_bp.route('/prepare', methods=['POST'])
-@handle_api_errors(log_prefix="Failed to start preparation task")
-def prepare_simulation():
-    """Prepare a simulation environment as an async task."""
-    from ..models.task import TaskManager, TaskStatus
+class _PrepareRejected(Exception):
+    """Bricht eine Prepare-Phase mit einer fertig gebauten Fehler-Response ab.
 
-    data = request.get_json() or {}
+    Die Phasen unterhalb von :func:`prepare_simulation` sind einzeln testbar
+    und müssen ihren Ablehnungsfall deshalb selbst formulieren können. Sie
+    tragen die bereits gebaute ``json_error``-Response, damit Status-Code,
+    Fehlercode und Meldung wortgleich das bleiben, was der monolithische
+    Handler vorher zurückgegeben hat (#1080).
+    """
 
+    def __init__(self, response: Any) -> None:
+        super().__init__("simulation prepare rejected")
+        self.response = response
+
+
+@dataclass(frozen=True)
+class _PrepareRequest:
+    """Validierte Eingaben eines ``POST /api/simulation/prepare``.
+
+    Interner Parameter-Container zwischen den Prepare-Phasen, **kein**
+    API-Vertrag: die Wire-Validierung bleibt feldweise in den Parse-Phasen.
+    """
+
+    simulation_id: str
+    ai_model_ref: "AiModelRef | None"
+    budget_config: "RunBudgetConfig | None"
+    force_regenerate: bool
+
+
+@dataclass(frozen=True)
+class _PrepareRouting:
+    """Ergebnis der Routing-Auflösung (Profil, Modell-Override, Runtime)."""
+
+    llm_model_override: "str | None"
+    llm_runtime: "RuntimeLlmConfig"
+    routed_profile_id: "str | None"
+    client_requested_override: bool
+
+
+@dataclass(frozen=True)
+class _PrepareInputs:
+    """Fachliche Eingaben des Vorbereitungslaufs jenseits des Routings."""
+
+    simulation_requirement: str
+    document_text: str
+    entity_types: Any
+    use_llm_for_profiles: Any
+    parallel_profile_count: Any
+    max_agents: "int | None"
+    quota_plan: Optional[PersonaQuotaPlan]
+    agent_language_override: "str | None"
+
+
+def _parse_prepare_identity(data: "dict[str, Any]") -> "tuple[str, AiModelRef | None]":
+    """Phase 1a — ``simulation_id`` und optionale ``ai_model_ref`` validieren.
+
+    Eine explizite Ref ist die alleinige Routing-Quelle und darf deshalb nicht
+    mit Legacy-Feldern kombiniert werden (Issue #817).
+    """
     simulation_id = data.get('simulation_id')
     if not simulation_id:
-        return json_error(
-            ApiErrorCode.VALIDATION_FAILED,
-            status=400,
-            message="Please provide simulation_id",
+        raise _PrepareRejected(
+            json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=400,
+                message="Please provide simulation_id",
+            )
         )
 
     if not validate_simulation_id(simulation_id):
-        return json_error(
-            ApiErrorCode.INVALID_ID,
-            status=400,
-            message="Invalid simulation_id format",
+        raise _PrepareRejected(
+            json_error(
+                ApiErrorCode.INVALID_ID,
+                status=400,
+                message="Invalid simulation_id format",
+            )
         )
 
-    ai_model_ref = None
     raw_ai_model_ref = data.get("ai_model_ref")
-    if raw_ai_model_ref is not None:
-        from ..contracts.ai_provider_contract import AiModelRef
+    if raw_ai_model_ref is None:
+        return simulation_id, None
 
-        try:
-            ai_model_ref = AiModelRef.model_validate(raw_ai_model_ref)
-        except ValidationError:
-            return json_error(
+    from ..contracts.ai_provider_contract import AiModelRef
+
+    try:
+        ai_model_ref = AiModelRef.model_validate(raw_ai_model_ref)
+    except ValidationError:
+        raise _PrepareRejected(
+            json_error(
                 ApiErrorCode.VALIDATION_FAILED,
                 status=400,
                 message="ai_model_ref ist ungültig",
             )
+        ) from None
 
-        conflicting = [
-            key
-            for key in ("llm_model", "llm_profile_id", "llm_provider", "llm_runtime")
-            if data.get(key)
-        ]
-        if conflicting:
-            return json_error(
+    conflicting = [
+        key
+        for key in ("llm_model", "llm_profile_id", "llm_provider", "llm_runtime")
+        if data.get(key)
+    ]
+    if conflicting:
+        raise _PrepareRejected(
+            json_error(
                 ApiErrorCode.VALIDATION_FAILED,
                 status=400,
                 message=(
@@ -246,80 +311,121 @@ def prepare_simulation():
                     "kombiniert werden"
                 ),
             )
-
-    manager = SimulationManager()
-    state = manager.get_simulation(simulation_id)
-    if not state:
-        return json_error(
-            ApiErrorCode.NOT_FOUND,
-            status=404,
-            message=f"Simulation does not exist: {simulation_id}",
         )
+    return simulation_id, ai_model_ref
 
-    # Run-Budget (Issue #764): optionale Limits für den Prepare-Run.
-    budget_config = None
+
+def _parse_prepare_budget(data: "dict[str, Any]") -> "RunBudgetConfig | None":
+    """Phase 1b — Run-Budget (Issue #764): optionale Limits für den Prepare-Run."""
     raw_budget = data.get('budget')
-    if raw_budget is not None:
-        from ..contracts.run_budget_contract import RunBudgetConfig
+    if raw_budget is None:
+        return None
 
-        try:
-            budget_config = RunBudgetConfig.model_validate(raw_budget)
-        except ValidationError:
-            return json_error(
+    from ..contracts.run_budget_contract import RunBudgetConfig
+
+    try:
+        return RunBudgetConfig.model_validate(raw_budget)
+    except ValidationError:
+        raise _PrepareRejected(
+            json_error(
                 ApiErrorCode.VALIDATION_FAILED,
                 status=400,
                 message="budget ist ungültig",
             )
+        ) from None
 
-    force_regenerate = data.get('force_regenerate', False)
 
-    # Project einmalig laden — wird sowohl für den P5.3-Profil-Fallback als
-    # auch für die Anforderungs-Validierung (simulation_requirement) und das
-    # nachfolgende Lesen weiterer Felder benötigt (Gemini-MEDIUM auf PR #528:
-    # vorher wurde derselbe Datensatz zwei Mal aus dem ProjectManager geholt).
+def _load_prepare_project(state):
+    """Projekt einmalig laden — für Profil-Fallback, Anforderung und Metadaten.
+
+    (Gemini-MEDIUM auf PR #528: vorher wurde derselbe Datensatz zwei Mal aus
+    dem ProjectManager geholt.)
+    """
     project = ProjectManager.get_project(state.project_id)
     if not project:
-        return json_error(
-            ApiErrorCode.NOT_FOUND,
-            status=404,
-            message=f"Project does not exist: {state.project_id}",
+        raise _PrepareRejected(
+            json_error(
+                ApiErrorCode.NOT_FOUND,
+                status=404,
+                message=f"Project does not exist: {state.project_id}",
+            )
         )
+    return project
 
-    # Profil-Routing (Issue #888). `llm_profile_id` ist eine Routing-Anweisung,
-    # kein Fallback-Unterdrücker — analog graph.py / report.py, wo das Feld
-    # ebenfalls echtes Routing auslöst.
-    #
-    # Vorher kehrte das Feld seine eigene Absicht um: ein mitgeschicktes
-    # `llm_profile_id` übersprang den P5.3-Fallback, ohne selbst irgendetwas
-    # aufzulösen (`expand_profile_in_data` reagiert nur auf ein `llm_model` mit
-    # `profile:`-Präfix). Der Standardfall — Projekt hat ein Profil, User lässt
-    # die Modellauswahl auf "default" — landete damit still im
-    # Server-Default-Modell.
-    #
-    # Das Profil wird bewusst NICHT hier zu `llm_model` expandiert, sondern als
-    # `llm_profile_id` an `seed_run_stage_routing` durchgereicht. Dessen
-    # Profil-Branch löst die aktivierte ProviderConnection auf und koppelt sie an
-    # deren gebundenes Secret (SSoT, Issue #817); die lokale Expansion würde
-    # stattdessen Endpoint und Key aus dem Legacy-Profil einbrennen und damit
-    # nach einer Connection- oder Secret-Rotation auf veraltete Credentials
-    # zeigen. Ein unauflösbares Profil wirft dort `ValueError` → HTTP 400 über
-    # `@handle_api_errors`, statt mit dem literalen Modellnamen `profile:<id>`
-    # in die Queue zu laufen.
-    #
-    # `default` ist die UI-Platzhalterwahl (`useEnvForm.effectiveModel()` liefert
-    # dafür `null`) und zählt deshalb nicht als explizite Modellwahl.
-    _data_profile = (data.get('llm_profile_id') or '').strip() or None
-    _project_profile = (getattr(project, 'llm_profile_id', None) or '').strip() or None
-    _data_model = (data.get('llm_model') or '').strip() or None
-    explicit_model_override = bool(_data_model and _data_model.lower() != 'default')
-    # Vor der Expansion festhalten: `expand_profile_in_data` schreibt einen
-    # `llm_provider`-Block aus dem Profil (Provider/Key/Base-URL) und würde
-    # `llm_runtime.enabled` sonst ununterscheidbar von einem echten
-    # Client-Provider-Override machen.
-    explicit_runtime_request = bool(data.get('llm_provider'))
+
+@dataclass(frozen=True)
+class _ClientChoice:
+    """Was der Client an Routing *explizit* gewählt hat.
+
+    Wird vor der Profil-Expansion festgehalten: ``expand_profile_in_data``
+    schreibt einen `llm_provider`-Block aus dem Profil (Provider/Key/Base-URL)
+    und würde `llm_runtime.enabled` sonst ununterscheidbar von einem echten
+    Client-Provider-Override machen.
+    """
+
+    data_profile: "str | None"
+    project_profile: "str | None"
+    explicit_model_override: bool
+    explicit_runtime_request: bool
+
+    @property
+    def explicit_profile_override(self) -> bool:
+        return bool(self.data_profile and self.data_profile != self.project_profile)
+
+
+def _read_client_choice(data: "dict[str, Any]", project) -> _ClientChoice:
+    """Explizite Client-Wahl aus Body und Projekt lesen.
+
+    `default` ist die UI-Platzhalterwahl (`useEnvForm.effectiveModel()` liefert
+    dafür `null`) und zählt deshalb nicht als explizite Modellwahl.
+    """
+    data_profile = (data.get('llm_profile_id') or '').strip() or None
+    project_profile = (getattr(project, 'llm_profile_id', None) or '').strip() or None
+    data_model = (data.get('llm_model') or '').strip() or None
+    return _ClientChoice(
+        data_profile=data_profile,
+        project_profile=project_profile,
+        explicit_model_override=bool(data_model and data_model.lower() != 'default'),
+        explicit_runtime_request=bool(data.get('llm_provider')),
+    )
+
+
+def _resolve_prepare_routing(
+    data: "dict[str, Any]", project, ai_model_ref: "AiModelRef | None"
+) -> _PrepareRouting:
+    """Phase 2 — Profil-, Modell- und Runtime-Routing auflösen.
+
+    Profil-Routing (Issue #888). `llm_profile_id` ist eine Routing-Anweisung,
+    kein Fallback-Unterdrücker — analog graph.py / report.py, wo das Feld
+    ebenfalls echtes Routing auslöst.
+
+    Vorher kehrte das Feld seine eigene Absicht um: ein mitgeschicktes
+    `llm_profile_id` übersprang den P5.3-Fallback, ohne selbst irgendetwas
+    aufzulösen (`expand_profile_in_data` reagiert nur auf ein `llm_model` mit
+    `profile:`-Präfix). Der Standardfall — Projekt hat ein Profil, User lässt
+    die Modellauswahl auf "default" — landete damit still im
+    Server-Default-Modell.
+
+    Das Profil wird bewusst NICHT hier zu `llm_model` expandiert, sondern als
+    `llm_profile_id` an `seed_run_stage_routing` durchgereicht. Dessen
+    Profil-Branch löst die aktivierte ProviderConnection auf und koppelt sie an
+    deren gebundenes Secret (SSoT, Issue #817); die lokale Expansion würde
+    stattdessen Endpoint und Key aus dem Legacy-Profil einbrennen und damit
+    nach einer Connection- oder Secret-Rotation auf veraltete Credentials
+    zeigen. Ein unauflösbares Profil wirft dort `ValueError` → HTTP 400 über
+    `@handle_api_errors`, statt mit dem literalen Modellnamen `profile:<id>`
+    in die Queue zu laufen.
+
+    Die explizite Client-Wahl selbst liest :func:`_read_client_choice`.
+    """
+    choice = _read_client_choice(data, project)
     # Request-Profil schlägt Projekt-Profil (Single-Run-Override), beide schlagen
     # das Server-Default-Modell. Eine explizite Modellwahl schlägt alles.
-    routed_profile_id = None if explicit_model_override else (_data_profile or _project_profile)
+    routed_profile_id = (
+        None
+        if choice.explicit_model_override
+        else (choice.data_profile or choice.project_profile)
+    )
     if ai_model_ref is not None:
         # Eine explizite Ref ist die alleinige Routing-Quelle: kein Legacy-
         # Profil, kein Runtime-Override und kein Projektprofil-Fallback.
@@ -337,15 +443,13 @@ def prepare_simulation():
         try:
             llm_runtime = parse_runtime_llm_config(data)
         except ValueError as exc:
-            return json_error(
-                ApiErrorCode.VALIDATION_FAILED,
-                status=400,
-                message=str(exc),
-            )
-    logger.info(
-        f"Start processing /prepare Request: simulation_id={simulation_id}, force_regenerate={force_regenerate}",
-        extra={'simulation_id': simulation_id},
-    )
+            raise _PrepareRejected(
+                json_error(
+                    ApiErrorCode.VALIDATION_FAILED,
+                    status=400,
+                    message=str(exc),
+                )
+            ) from exc
 
     # Der "bereits vorbereitet"-Kurzschluss hängt bewusst an der *expliziten*
     # Client-Wahl, nicht an `llm_model_override`/`llm_runtime.enabled` (Issue
@@ -358,42 +462,53 @@ def prepare_simulation():
     # zurück und die Personas blieben die des vorherigen Modells — im Widerspruch
     # zur Präzedenz "Request-Profil schlägt Projekt-Profil". Dasselbe Profil
     # erneut zu schicken bleibt der billige Revisit.
-    explicit_profile_override = bool(_data_profile and _data_profile != _project_profile)
-    client_requested_override = (
-        explicit_model_override
-        or explicit_profile_override
-        or (llm_runtime.enabled and explicit_runtime_request)
+    client_requested_override = bool(
+        choice.explicit_model_override
+        or choice.explicit_profile_override
+        or (llm_runtime.enabled and choice.explicit_runtime_request)
         or ai_model_ref is not None
     )
-    if not force_regenerate and not client_requested_override:
-        logger.debug(f"Check simulation {simulation_id} Is preparation complete...")
-        is_prepared, prepare_info = _check_simulation_prepared(simulation_id)
-        logger.debug(f"Check result: is_prepared={is_prepared}, prepare_info={prepare_info}")
-        if is_prepared:
-            logger.info(f"Simulation {simulation_id} has preparation complete, no need to regenerate")
-            return json_success({
-                "simulation_id": simulation_id,
-                "status": "ready",
-                "message": "Preparation already completed, no need to regenerate",
-                "already_prepared": True,
-                "prepare_info": prepare_info,
-            })
-        logger.info(f"Simulation {simulation_id} has no preparation complete, preparing now")
+    return _PrepareRouting(
+        llm_model_override=llm_model_override,
+        llm_runtime=llm_runtime,
+        routed_profile_id=routed_profile_id,
+        client_requested_override=client_requested_override,
+    )
 
+
+def _already_prepared_response(simulation_id: str):
+    """Phase 3 — Kurzschluss, wenn alle Vorbereitungs-Artefakte schon liegen.
+
+    Gibt ``None`` zurück, wenn regulär vorbereitet werden muss.
+    """
+    logger.debug(f"Check simulation {simulation_id} Is preparation complete...")
+    is_prepared, prepare_info = _check_simulation_prepared(simulation_id)
+    logger.debug(f"Check result: is_prepared={is_prepared}, prepare_info={prepare_info}")
+    if not is_prepared:
+        logger.info(f"Simulation {simulation_id} has no preparation complete, preparing now")
+        return None
+
+    logger.info(f"Simulation {simulation_id} has preparation complete, no need to regenerate")
+    return json_success({
+        "simulation_id": simulation_id,
+        "status": "ready",
+        "message": "Preparation already completed, no need to regenerate",
+        "already_prepared": True,
+        "prepare_info": prepare_info,
+    })
+
+
+def _collect_prepare_inputs(data: "dict[str, Any]", project, state) -> _PrepareInputs:
+    """Phase 4 — fachliche Eingaben des Laufs einsammeln und validieren."""
     simulation_requirement = project.simulation_requirement or ""
     if not simulation_requirement:
-        return json_error(
-            ApiErrorCode.VALIDATION_FAILED,
-            status=400,
-            message="Project missing simulation requirement description (simulation_requirement)",
+        raise _PrepareRejected(
+            json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=400,
+                message="Project missing simulation requirement description (simulation_requirement)",
+            )
         )
-
-    document_text = ProjectManager.get_extracted_text(state.project_id) or ""
-    entity_types_list = data.get('entity_types')
-    use_llm_for_profiles = data.get('use_llm_for_profiles', True)
-    parallel_profile_count = data.get('parallel_profile_count') or None
-
-    max_agents = _resolve_max_agents_with_floor(data.get("max_agents"))
 
     # Sub-Slice 20a: optional PersonaQuotaPlan aus Body. ValidationError →
     # HTTP 400 mit Pydantic-Fehlermessage; sonst wird der Plan an den
@@ -403,24 +518,42 @@ def prepare_simulation():
     try:
         quota_plan = _parse_quota_plan(data)
     except (ValidationError, ValueError, TypeError) as exc:
-        return json_error(
-            ApiErrorCode.VALIDATION_FAILED,
-            status=400,
-            message=f"Invalid quota_plan: {exc}",
-        )
+        raise _PrepareRejected(
+            json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=400,
+                message=f"Invalid quota_plan: {exc}",
+            )
+        ) from exc
 
     agent_language_override = (data.get('language') or '').strip().lower() or None
     if agent_language_override and agent_language_override not in ('de', 'en'):
         agent_language_override = None
 
-    storage = get_simulation_storage()
+    return _PrepareInputs(
+        simulation_requirement=simulation_requirement,
+        document_text=ProjectManager.get_extracted_text(state.project_id) or "",
+        entity_types=data.get('entity_types'),
+        use_llm_for_profiles=data.get('use_llm_for_profiles', True),
+        parallel_profile_count=data.get('parallel_profile_count') or None,
+        max_agents=_resolve_max_agents_with_floor(data.get("max_agents")),
+        quota_plan=quota_plan,
+        agent_language_override=agent_language_override,
+    )
 
+
+def _preview_entity_counts(state, storage, inputs: _PrepareInputs) -> None:
+    """Phase 5 — Entitätenzahl für die Antwort vorab schätzen (best effort).
+
+    Fehler sind hier bewusst nicht fatal: der Hintergrund-Task liest dieselbe
+    Menge erneut.
+    """
     try:
         logger.info(f"Synchronously get entity count: graph_id={state.graph_id}")
         reader = EntityReader(storage)
         filtered_preview = reader.filter_defined_entities(
             graph_id=state.graph_id,
-            defined_entity_types=entity_types_list,
+            defined_entity_types=inputs.entity_types,
             enrich_with_edges=False,
         )
         # Issue #1034: derselbe Eignungsfilter wie im Laufpfad
@@ -442,8 +575,8 @@ def prepare_simulation():
                 for entity in filtered_preview.entities
             }
         preview_count = filtered_preview.filtered_count
-        if max_agents is not None and max_agents > 0:
-            preview_count = min(preview_count, max_agents)
+        if inputs.max_agents is not None and inputs.max_agents > 0:
+            preview_count = min(preview_count, inputs.max_agents)
         state.entities_count = preview_count
         state.entity_types = list(filtered_preview.entity_types)
         logger.info(
@@ -456,29 +589,41 @@ def prepare_simulation():
             "Synchronous entity count failed (will retry in the background task): %s", exc
         )
 
-    task_manager = TaskManager()
-    if ai_model_ref is not None:
-        from ..services.llm_routing_seed import prevalidate_ai_model_ref
 
-        try:
-            prevalidate_ai_model_ref(ai_model_ref)
-        except ValueError as exc:
-            return json_error(
+def _precheck_prepare_ai_model_ref(ai_model_ref: "AiModelRef | None") -> None:
+    """Phase 6a — Connection der expliziten ``AiModelRef`` vorab prüfen."""
+    if ai_model_ref is None:
+        return
+
+    from ..services.llm_routing_seed import prevalidate_ai_model_ref
+
+    try:
+        prevalidate_ai_model_ref(ai_model_ref)
+    except ValueError as exc:
+        raise _PrepareRejected(
+            json_error(
                 ApiErrorCode.VALIDATION_FAILED,
                 status=400,
                 message=str(exc),
             )
+        ) from exc
+
+
+def _register_prepare_run(
+    req: _PrepareRequest, state, routing: _PrepareRouting, task_manager
+) -> "tuple[dict[str, Any], str]":
+    """Phase 6b — Run-Record und Task für den Vorbereitungslauf anlegen."""
     run_record = run_registry.create_run(
         run_type="simulation_prepare",
-        entity_id=simulation_id,
+        entity_id=req.simulation_id,
         status="pending",
         progress=0,
         message="Simulation preparation queued",
         linked_ids={
-            "simulation_id": simulation_id,
+            "simulation_id": req.simulation_id,
             "project_id": state.project_id,
         },
-        artifacts=_simulation_run_artifacts(simulation_id),
+        artifacts=_simulation_run_artifacts(req.simulation_id),
         resume_capability={"available": True, "action": "restart", "label": "Restart preparation"},
         branch_label=state.branch_name,
         metadata={
@@ -488,76 +633,132 @@ def prepare_simulation():
             "root_simulation_id": state.root_simulation_id,
             "branch_name": state.branch_name,
             "branch_depth": state.branch_depth,
-            "llm_model": llm_model_override,
-            "llm_provider": llm_runtime.redacted_metadata() or None,
+            "llm_model": routing.llm_model_override,
+            "llm_provider": routing.llm_runtime.redacted_metadata() or None,
             # Budget-Config (Issue #764) — nur Limits, keine Secrets
-            **({"budget": budget_config.model_dump(mode="json")} if budget_config else {}),
+            **({"budget": req.budget_config.model_dump(mode="json")} if req.budget_config else {}),
         },
     )
     task_id = task_manager.create_task(
         task_type="simulation_prepare",
         metadata={
-            "simulation_id": simulation_id,
+            "simulation_id": req.simulation_id,
             "project_id": state.project_id,
             "run_id": run_record["run_id"],
         },
     )
-    if ai_model_ref is not None:
-        try:
-            seed_run_stage_routing(
-                run_record["run_id"],
-                "persona_generation",
-                llm_model_override=llm_model_override,
-                llm_runtime=llm_runtime,
-                llm_profile_id=routed_profile_id,
-                ai_model_ref=ai_model_ref,
-            )
-        except ValueError as exc:
-            routing_error = str(exc)
-            task_manager.fail_task(task_id, routing_error)
+    return run_record, task_id
 
-            persistence_error: Optional[Exception] = None
-            try:
-                updated_run = run_registry.update_run(
-                    run_record["run_id"],
-                    status="failed",
-                    message=routing_error,
-                    error=routing_error,
-                )
-            except Exception as update_exc:  # noqa: BLE001 — Persistenzfehler, unten geloggt
-                updated_run = None
-                persistence_error = update_exc
 
-            if updated_run is None:
-                logger.error(
-                    "Persistenzfehler beim Markieren von run_id=%s (task_id=%s) als "
-                    "failed nach AiModelRef-Routingfehler: %s",
-                    run_record["run_id"],
-                    task_id,
-                    persistence_error
-                    or "update_run() lieferte None (Run-Manifest existiert nicht mehr)",
-                )
-                return json_error(
-                    ApiErrorCode.INTERNAL_ERROR,
-                    status=500,
-                    message=(
-                        "Interner Fehler beim Markieren des Runs als fehlgeschlagen. "
-                        "Bitte erneut versuchen."
-                    ),
-                )
-            return json_error(
-                ApiErrorCode.VALIDATION_FAILED,
-                status=400,
-                message=routing_error,
+def _reject_and_fail_prepare_run(
+    run_record: "dict[str, Any]",
+    task_id: str,
+    task_manager,
+    message: str,
+    *,
+    status: int,
+    context: str,
+) -> _PrepareRejected:
+    """Run und Task als ``failed`` markieren und die Ablehnung bauen.
+
+    Issue #841: run_record und task_id existieren an den Aufrufstellen bereits —
+    ohne dieses Markieren bliebe der Datensatz dauerhaft als "pending" in der
+    Registry verwaist. Die Reihenfolge ist bewusst: ``fail_task()`` setzt intern
+    per ``sync_task()`` eine generische Task-Message ("Task failed") auf den Run
+    zurück — der detaillierte ``update_run()``-Aufruf muss deshalb zuletzt
+    laufen, sonst überschreibt ``sync_task()`` die Meldung.
+
+    Issue #844: ``update_run()`` liefert ``None``, wenn das Run-Manifest
+    zwischenzeitlich verschwunden ist, oder es kann eine I/O-Exception werfen
+    (``write_json_atomic`` ist ungeschützt). Beide Fälle dürfen NICHT wie eine
+    erfolgreich persistierte Ablehnung behandelt werden — sonst bleibt der Run
+    unbemerkt "pending" (siehe #841), obwohl der Client bereits eine scheinbar
+    abschließende Antwort erhalten hat. ``fail_task()`` selbst hat keine
+    prüfbare Fehlersemantik (siehe ``TaskManager.update_task``) und bleibt
+    daher best-effort.
+    """
+    task_manager.fail_task(task_id, message)
+
+    persistence_error: Optional[Exception] = None
+    try:
+        updated_run = run_registry.update_run(
+            run_record["run_id"], status="failed", message=message, error=message
+        )
+    except Exception as exc:  # noqa: BLE001 — Persistenzfehler, unten geloggt
+        updated_run = None
+        persistence_error = exc
+
+    if updated_run is None:
+        logger.error(
+            "Persistenzfehler beim Markieren von run_id=%s (task_id=%s) als "
+            "failed %s: %s",
+            run_record["run_id"],
+            task_id,
+            context,
+            persistence_error
+            or "update_run() lieferte None (Run-Manifest existiert nicht mehr)",
+        )
+        return _PrepareRejected(
+            json_error(
+                ApiErrorCode.INTERNAL_ERROR,
+                status=500,
+                message=(
+                    "Interner Fehler beim Markieren des Runs als fehlgeschlagen. "
+                    "Bitte erneut versuchen."
+                ),
             )
-    else:
+        )
+    return _PrepareRejected(
+        json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=status,
+            message=message,
+        )
+    )
+
+
+def _seed_prepare_routing(
+    run_record: "dict[str, Any]",
+    task_id: str,
+    task_manager,
+    routing: _PrepareRouting,
+    ai_model_ref: "AiModelRef | None",
+) -> None:
+    """Phase 7 — Stage-Routing für ``persona_generation`` seeden."""
+    if ai_model_ref is None:
         seed_run_stage_routing(
             run_record["run_id"],
             "persona_generation",
-            llm_model_override=llm_model_override,
-            llm_runtime=llm_runtime,
-            llm_profile_id=routed_profile_id,
+            llm_model_override=routing.llm_model_override,
+            llm_runtime=routing.llm_runtime,
+            llm_profile_id=routing.routed_profile_id,
         )
+        return
+
+    try:
+        seed_run_stage_routing(
+            run_record["run_id"],
+            "persona_generation",
+            llm_model_override=routing.llm_model_override,
+            llm_runtime=routing.llm_runtime,
+            llm_profile_id=routing.routed_profile_id,
+            ai_model_ref=ai_model_ref,
+        )
+    except ValueError as exc:
+        raise _reject_and_fail_prepare_run(
+            run_record,
+            task_id,
+            task_manager,
+            str(exc),
+            status=400,
+            context="nach AiModelRef-Routingfehler",
+        ) from exc
+
+
+def _resolve_prepare_route(
+    run_record: "dict[str, Any]", task_id: str, task_manager, llm_runtime
+):
+    """Phase 8 — Stage-Route auflösen, sperren und den API-Key bestimmen."""
     route_router = StageModelRouter(run_record["run_id"])
     resolved_route = route_router.resolve("persona_generation")
     route_router.lock_stage("persona_generation", resolved_route)
@@ -570,47 +771,13 @@ def prepare_simulation():
             "Bitte in Einstellungen → LLM-Anbieter einen Schlüssel speichern "
             "oder im Sitzungsfeld eingeben."
         )
-        # Issue #841: run_record und task_id existieren an dieser Stelle
-        # bereits (Zeilen 369/393) — ohne dieses Markieren bleibt der
-        # Datensatz dauerhaft als "pending" in der Registry verwaist.
-        # Reihenfolge ist bewusst: fail_task() setzt intern per sync_task()
-        # eine generische Task-Message ("Task failed") auf den Run zurück —
-        # der detaillierte update_run()-Aufruf muss deshalb zuletzt laufen,
-        # sonst überschreibt sync_task() die provider_override-Meldung.
-        task_manager.fail_task(task_id, guard_message)
-        # Issue #844: update_run() liefert None, wenn das Run-Manifest
-        # zwischenzeitlich verschwunden ist, oder es kann eine I/O-Exception
-        # werfen (write_json_atomic ist ungeschützt). Beide Fälle dürfen
-        # NICHT wie eine erfolgreich persistierte Ablehnung behandelt werden
-        # — sonst bleibt der Run unbemerkt "pending" (siehe #841), obwohl der
-        # Client bereits eine scheinbar abschließende 422-Antwort erhalten
-        # hat. fail_task() selbst hat keine prüfbare Fehlersemantik (siehe
-        # TaskManager.update_task) und bleibt daher best-effort.
-        persistence_error: Optional[Exception] = None
-        try:
-            updated_run = run_registry.update_run(
-                run_record["run_id"], status="failed", message=guard_message, error=guard_message
-            )
-        except Exception as exc:  # noqa: BLE001 — Persistenzfehler, unten geloggt
-            updated_run = None
-            persistence_error = exc
-
-        if updated_run is None:
-            logger.error(
-                "Persistenzfehler beim Markieren von run_id=%s (task_id=%s) als "
-                "failed im Provider-Key-Guard: %s",
-                run_record["run_id"], task_id,
-                persistence_error or "update_run() lieferte None (Run-Manifest existiert nicht mehr)",
-            )
-            return json_error(
-                ApiErrorCode.INTERNAL_ERROR,
-                status=500,
-                message="Interner Fehler beim Markieren des Runs als fehlgeschlagen. Bitte erneut versuchen.",
-            )
-        return json_error(
-            ApiErrorCode.VALIDATION_FAILED,
+        raise _reject_and_fail_prepare_run(
+            run_record,
+            task_id,
+            task_manager,
+            guard_message,
             status=422,
-            message=guard_message,
+            context="im Provider-Key-Guard",
         )
 
     if resolved_api_key is None and is_local_endpoint(resolved_route.base_url_sanitized):
@@ -620,11 +787,87 @@ def prepare_simulation():
         # ValueError wirft.
         resolved_api_key = LOCAL_NO_AUTH_API_KEY
 
-    effective_llm_runtime = build_runtime_llm_config(resolved_route, resolved_api_key)
+    return resolved_route, resolved_api_key
 
-    manager._set_status(state, SimulationStatus.PREPARING)
 
-    def run_prepare():
+def _build_progress_callback(task_manager, task_id: str) -> "Callable[..., None]":
+    """Fortschritts-Callback über die vier Vorbereitungs-Stages."""
+    stage_details: "dict[str, dict[str, Any]]" = {}
+
+    def progress_callback(stage, progress, message, **kwargs):
+        stage_weights = {
+            "reading": (0, 20),
+            "generating_profiles": (20, 70),
+            "generating_config": (70, 90),
+            "copying_scripts": (90, 100),
+        }
+
+        start, end = stage_weights.get(stage, (0, 100))
+        current_progress = int(start + (end - start) * progress / 100)
+
+        stage_names = {
+            "reading": "Read knowledge graph entities",
+            "generating_profiles": "GenerateAgentpersona",
+            "generating_config": "Generate simulation configuration",
+            "copying_scripts": "Prepare simulation scripts",
+        }
+
+        stage_index = list(stage_weights.keys()).index(stage) + 1 if stage in stage_weights else 1
+        total_stages = len(stage_weights)
+
+        stage_details[stage] = {
+            "stage_name": stage_names.get(stage, stage),
+            "stage_progress": progress,
+            "current": kwargs.get("current", 0),
+            "total": kwargs.get("total", 0),
+            "item_name": kwargs.get("item_name", ""),
+        }
+
+        detail = stage_details[stage]
+        progress_detail_data = {
+            "current_stage": stage,
+            "current_stage_name": stage_names.get(stage, stage),
+            "stage_index": stage_index,
+            "total_stages": total_stages,
+            "stage_progress": progress,
+            "current_item": detail["current"],
+            "total_items": detail["total"],
+            "item_description": message,
+        }
+
+        if detail["total"] > 0:
+            detailed_message = (
+                f"[{stage_index}/{total_stages}] {stage_names.get(stage, stage)}: "
+                f"{detail['current']}/{detail['total']} - {message}"
+            )
+        else:
+            detailed_message = f"[{stage_index}/{total_stages}] {stage_names.get(stage, stage)}: {message}"
+
+        task_manager.update_task(
+            task_id,
+            progress=current_progress,
+            message=detailed_message,
+            progress_detail=progress_detail_data,
+        )
+
+    return progress_callback
+
+
+def _make_prepare_job(
+    *,
+    manager,
+    task_manager,
+    task_id: str,
+    simulation_id: str,
+    inputs: _PrepareInputs,
+    storage,
+    llm_model: str,
+    effective_llm_runtime,
+) -> "Callable[[], None]":
+    """Phase 9 — den Hintergrund-Job bauen, der die Vorbereitung ausführt."""
+    from ..models.task import TaskStatus
+
+    def run_prepare() -> None:
         # Issue #1034: Der Collector gehört dem Task, nicht dem Service —
         # gleiches Muster wie im Graph-Build (``services/graph_build.py``).
         # Nur so überlebt ein stiller Teilausfall bis ins Task-Ergebnis;
@@ -638,78 +881,20 @@ def prepare_simulation():
                 message="Start preparing simulation environment...",
             )
 
-            stage_details = {}
-
-            def progress_callback(stage, progress, message, **kwargs):
-                stage_weights = {
-                    "reading": (0, 20),
-                    "generating_profiles": (20, 70),
-                    "generating_config": (70, 90),
-                    "copying_scripts": (90, 100),
-                }
-
-                start, end = stage_weights.get(stage, (0, 100))
-                current_progress = int(start + (end - start) * progress / 100)
-
-                stage_names = {
-                    "reading": "Read knowledge graph entities",
-                    "generating_profiles": "GenerateAgentpersona",
-                    "generating_config": "Generate simulation configuration",
-                    "copying_scripts": "Prepare simulation scripts",
-                }
-
-                stage_index = list(stage_weights.keys()).index(stage) + 1 if stage in stage_weights else 1
-                total_stages = len(stage_weights)
-
-                stage_details[stage] = {
-                    "stage_name": stage_names.get(stage, stage),
-                    "stage_progress": progress,
-                    "current": kwargs.get("current", 0),
-                    "total": kwargs.get("total", 0),
-                    "item_name": kwargs.get("item_name", ""),
-                }
-
-                detail = stage_details[stage]
-                progress_detail_data = {
-                    "current_stage": stage,
-                    "current_stage_name": stage_names.get(stage, stage),
-                    "stage_index": stage_index,
-                    "total_stages": total_stages,
-                    "stage_progress": progress,
-                    "current_item": detail["current"],
-                    "total_items": detail["total"],
-                    "item_description": message,
-                }
-
-                if detail["total"] > 0:
-                    detailed_message = (
-                        f"[{stage_index}/{total_stages}] {stage_names.get(stage, stage)}: "
-                        f"{detail['current']}/{detail['total']} - {message}"
-                    )
-                else:
-                    detailed_message = f"[{stage_index}/{total_stages}] {stage_names.get(stage, stage)}: {message}"
-
-                task_manager.update_task(
-                    task_id,
-                    progress=current_progress,
-                    message=detailed_message,
-                    progress_detail=progress_detail_data,
-                )
-
             result_state = manager.prepare_simulation(
                 simulation_id=simulation_id,
-                simulation_requirement=simulation_requirement,
-                document_text=document_text,
-                defined_entity_types=entity_types_list,
-                use_llm_for_profiles=use_llm_for_profiles,
-                progress_callback=progress_callback,
-                parallel_profile_count=parallel_profile_count,
+                simulation_requirement=inputs.simulation_requirement,
+                document_text=inputs.document_text,
+                defined_entity_types=inputs.entity_types,
+                use_llm_for_profiles=inputs.use_llm_for_profiles,
+                progress_callback=_build_progress_callback(task_manager, task_id),
+                parallel_profile_count=inputs.parallel_profile_count,
                 storage=storage,
-                llm_model=resolved_route.model,
+                llm_model=llm_model,
                 llm_runtime=effective_llm_runtime,
-                language=agent_language_override,
-                max_agents=max_agents,
-                quota_plan=quota_plan,
+                language=inputs.agent_language_override,
+                max_agents=inputs.max_agents,
+                quota_plan=inputs.quota_plan,
                 degradations=degradations,
             )
 
@@ -738,11 +923,18 @@ def prepare_simulation():
                 failed_state.error = str(exc)
                 manager._set_status(failed_state, SimulationStatus.FAILED)
 
-    # TODO(P0-queue): migrate to Redis-Queue (RQ) in Wave 2 — see app/jobs/__init__.py
-    from ..jobs import enqueue
-    enqueue("simulation_prepare", run_prepare)
+    return run_prepare
 
-    return json_success({
+
+def _build_prepare_response(
+    simulation_id: str,
+    task_id: str,
+    run_record: "dict[str, Any]",
+    state,
+    inputs: _PrepareInputs,
+) -> "dict[str, Any]":
+    """Phase 10 — Antwort-Payload des angestoßenen Vorbereitungslaufs."""
+    return {
         "simulation_id": simulation_id,
         "task_id": task_id,
         "run_id": run_record["run_id"],
@@ -757,10 +949,88 @@ def prepare_simulation():
         # auch `_phase_generate_profiles` im Laufpfad verwendet.
         "persona_target": compute_persona_target(
             state.entities_count,
-            max_agents=max_agents,
-            quota_plan=quota_plan,
+            max_agents=inputs.max_agents,
+            quota_plan=inputs.quota_plan,
         ).model_dump(mode="json"),
-    })
+    }
+
+
+@simulation_bp.route('/prepare', methods=['POST'])
+@handle_api_errors(log_prefix="Failed to start preparation task")
+def prepare_simulation():
+    """Prepare a simulation environment as an async task."""
+    from ..models.task import TaskManager
+
+    data = request.get_json() or {}
+    try:
+        simulation_id, ai_model_ref = _parse_prepare_identity(data)
+
+        manager = SimulationManager()
+        state = manager.get_simulation(simulation_id)
+        if not state:
+            raise _PrepareRejected(
+                json_error(
+                    ApiErrorCode.NOT_FOUND,
+                    status=404,
+                    message=f"Simulation does not exist: {simulation_id}",
+                )
+            )
+
+        req = _PrepareRequest(
+            simulation_id=simulation_id,
+            ai_model_ref=ai_model_ref,
+            budget_config=_parse_prepare_budget(data),
+            force_regenerate=data.get('force_regenerate', False),
+        )
+        project = _load_prepare_project(state)
+        routing = _resolve_prepare_routing(data, project, ai_model_ref)
+
+        logger.info(
+            f"Start processing /prepare Request: simulation_id={simulation_id}, "
+            f"force_regenerate={req.force_regenerate}",
+            extra={'simulation_id': simulation_id},
+        )
+
+        if not req.force_regenerate and not routing.client_requested_override:
+            already_prepared = _already_prepared_response(simulation_id)
+            if already_prepared is not None:
+                return already_prepared
+
+        inputs = _collect_prepare_inputs(data, project, state)
+        storage = get_simulation_storage()
+        _preview_entity_counts(state, storage, inputs)
+
+        task_manager = TaskManager()
+        _precheck_prepare_ai_model_ref(ai_model_ref)
+        run_record, task_id = _register_prepare_run(req, state, routing, task_manager)
+        _seed_prepare_routing(run_record, task_id, task_manager, routing, ai_model_ref)
+        resolved_route, resolved_api_key = _resolve_prepare_route(
+            run_record, task_id, task_manager, routing.llm_runtime
+        )
+    except _PrepareRejected as rejected:
+        return rejected.response
+
+    effective_llm_runtime = build_runtime_llm_config(resolved_route, resolved_api_key)
+
+    manager._set_status(state, SimulationStatus.PREPARING)
+
+    # TODO(P0-queue): migrate to Redis-Queue (RQ) in Wave 2 — see app/jobs/__init__.py
+    from ..jobs import enqueue
+    enqueue(
+        "simulation_prepare",
+        _make_prepare_job(
+            manager=manager,
+            task_manager=task_manager,
+            task_id=task_id,
+            simulation_id=simulation_id,
+            inputs=inputs,
+            storage=storage,
+            llm_model=resolved_route.model,
+            effective_llm_runtime=effective_llm_runtime,
+        ),
+    )
+
+    return json_success(_build_prepare_response(simulation_id, task_id, run_record, state, inputs))
 
 
 @simulation_bp.route('/prepare/status', methods=['POST'])
