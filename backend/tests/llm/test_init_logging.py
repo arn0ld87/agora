@@ -184,11 +184,15 @@ class TestInitActiveConfigBaseUrlWithExplicitModel:
     _OPENAI_ACTIVE_URL = "https://api.openai.com/v1"
 
     def _stub_active_config(self, monkeypatch) -> None:
+        # CodeRabbit #1102: active["model"] bewusst abweichend vom
+        # caller-Modell, damit ``assert client.model == "gpt-5.6-luna"``
+        # wirklich prueft, dass die Active-Config das uebergebene Modell
+        # nicht ueberschreibt (sonst wuerden gleiche Werte den Guard verdecken).
         monkeypatch.setattr(
             "app.llm.client._read_active_config_safely",
             lambda: {
                 "provider_id": "openai",
-                "model": "gpt-5.6-luna",
+                "model": "active-config-model",
                 "base_url": self._OPENAI_ACTIVE_URL,
             },
         )

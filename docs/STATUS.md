@@ -1,6 +1,6 @@
 # Agora — Status
 
-**Stand:** 29.07.2026  
+**Stand:** 05.08.2026  
 **Geprüfte Main-Baseline:** `d5bdbada`  
 **Produktversion:** `0.8.0` Technical Preview
 
