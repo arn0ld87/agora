@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from typing import Literal, Protocol
 
 from app.contracts.ai_provider_contract import AiModel, ProviderConnection
+from app.llm.transport_security import ensure_credentialed_transport_security
 from app.services.model_catalog_service import CatalogHttpResponse, fetch_catalog_json
 
 ProviderProbeStatus = Literal[
@@ -88,6 +89,9 @@ class _HttpModelsAdapter:
             return ProviderProbeResult(
                 status="unavailable", status_message="Base-URL fehlt"
             )
+        # Issue #1103 (CWE-319): vor dem Request pruefen, sonst geht der
+        # Auth-Header ggf. unverschluesselt an einen oeffentlichen Host raus.
+        ensure_credentialed_transport_security(base_url, api_key)
         try:
             response = self._get_json(
                 f"{base_url.rstrip('/')}{self._protocol.endpoint_path}", headers=headers

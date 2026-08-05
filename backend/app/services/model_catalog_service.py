@@ -26,6 +26,7 @@ from ..contracts import (
     PROVIDER_OPENAI_COMPATIBLE,
 )
 from ..contracts.llm_routing_contract import ModelEntry
+from ..llm.transport_security import ensure_credentialed_transport_security
 from ..utils.logger import get_logger
 
 logger = get_logger("agora.model_catalog")
@@ -78,6 +79,9 @@ def _http_get_json(url: str, *, api_key: Optional[str] = None) -> Optional[dict]
     Helper direkt oder ``_HTTP.request``. Wichtig: keine Verwendung von
     ``requests`` (siehe Modul-Docstring, OTel-Rekursion #529).
     """
+    # Issue #1103 (CWE-319): vor dem Request pruefen, sonst geht der Bearer-
+    # Header ggf. unverschluesselt an einen oeffentlichen Host raus.
+    ensure_credentialed_transport_security(url, api_key)
     headers: Dict[str, str] = {}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"

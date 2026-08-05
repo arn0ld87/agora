@@ -43,6 +43,7 @@ from .providers import ollama as _provider_ollama
 from .providers import openai as _provider_openai
 from .providers.registry import openai_compat_base_url
 from .tool_calls import _chat_with_tools
+from .transport_security import ensure_credentialed_transport_security
 
 logger = get_logger("agora.llm_client")
 
@@ -155,6 +156,12 @@ class LLMClient:
 
         if not self.api_key:
             raise ValueError("LLM_API_KEY not configured")
+
+        # Issue #1103 (CWE-319): credential-behaftete Requests duerfen nicht
+        # unverschluesselt an oeffentliche Hosts gehen. Muss vor dem
+        # OpenAI(...)-Client-Bau laufen, sonst geht der erste Request schon
+        # unverschluesselt raus.
+        ensure_credentialed_transport_security(self.base_url, self.api_key)
 
         # Track 1c Audit-Log: einmalig pro LLMClient-Init. Niemals den Key-Wert
         # selbst loggen — nur die Quelle (session/store/env:NAME/config_fallback/
