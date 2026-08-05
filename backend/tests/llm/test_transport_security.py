@@ -134,7 +134,11 @@ def test_env_override_logs_warning_with_sanitized_url(
     message = warnings[0].getMessage()
     assert "secret-token" not in message
     assert "token=leak" not in message
-    assert "api.example.com" in message
+    # Gleichheit statt Substring-Match auf die Domain: CodeQL wertet
+    # ``"<domain>" in <str>`` als unvollstaendige URL-Sanitization
+    # (py/incomplete-url-substring-sanitization), und die Gleichheit prueft
+    # zugleich, dass exakt die sanitisierte Form geloggt wird.
+    assert warnings[0].args == ("http://api.example.com/v1",)
 
 
 # ---------------------------------------------------------------------------

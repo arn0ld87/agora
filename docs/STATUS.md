@@ -140,6 +140,7 @@ Chat-Routing und Embedding-Konfiguration bleiben getrennte Vertragswelten.
 - API-Auth über `AGORA_AUTH_TOKEN`
 - SSE und Downloads über signierte Tickets
 - Secrets werden nicht in Report-/Simulation-Artefakte serialisiert
+- Credential-behaftete LLM-Requests erzwingen HTTPS; `http://` ist nur für lokale/private Hosts zulässig, dokumentierte Ausnahme über `AGORA_LLM_ALLOW_INSECURE_HTTP` (Issue #1103)
 - Readiness prüft Neo4j, Redis, Upload-Verzeichnis und Embedding-Konfiguration
 - Dependency-Ausnahmen werden im [`dependency-risk-register.md`](dependency-risk-register.md) geführt
 - Ontology-Upload (`/ontology/generate`) räumt bei Datei-I/O-Fehlern zwischen Projektanlage und Service-Übergabe das halb angelegte Projekt zuverlässig auf (Issue #899); ein scheiterndes Aufräumen wird protokolliert, ohne die Fehlerantwort zu verfälschen
