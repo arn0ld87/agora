@@ -26,6 +26,7 @@ from .runtime_run_config import RuntimeRunConfig, _detect_default_provider_id
 from .secret_resolver import SecretResolver
 from .ai_route_audit import AiRouteAudit
 from .ai_route_resolver import resolve_ai_route
+from .llm_routing_seed import store_base_url_for_provider
 from ..utils.logger import get_logger
 
 logger = get_logger("agora.stage_model_router")
@@ -177,6 +178,18 @@ class StageModelRouter:
         options = dict(route.provider_options)
         legacy = options.pop("__legacy_stage_route__", None) or {}
         base_url = options.get("base_url")
+        if not base_url and route.provider_connection_id:
+            # workspace_llm_routing.json persistiert pro Route nur
+            # provider_id + model — keine base_url (die gehoert zur
+            # Connection, nicht zur Route). Ohne diese Auflösung blieb
+            # ``ResolvedRoute.base_url_sanitized`` None; die zweite
+            # Verteidigungslinie in ``prepare_service._resolve_llm_connection``
+            # liess das durch, und ``OasisProfileGenerator`` fuellte die
+            # Luecke mit ``Config.LLM_BASE_URL`` (.env-Endpoint), waehrend
+            # Modell und Key aus der Route stammten (#1104). Store-Lookup
+            # analog zum bereits existierenden OASIS-Subprozess-Env-Pfad in
+            # ``llm_routing_seed.build_route_subprocess_env``.
+            base_url = store_base_url_for_provider(route.provider_connection_id)
         provider_id = route.provider_connection_id or _detect_default_provider_id(
             base_url, route.model_id
         )

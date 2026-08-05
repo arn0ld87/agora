@@ -488,7 +488,7 @@ def build_runtime_llm_config(route: ResolvedRoute, api_key: Optional[str]) -> Ru
     )
 
 
-def _store_base_url_for_provider(provider_id: Optional[str]) -> Optional[str]:
+def store_base_url_for_provider(provider_id: Optional[str]) -> Optional[str]:
     """Liefert die im Store gepflegte Base-URL einer aktivierten Connection.
 
     ``LlmProviderRegistry.get_providers()`` ist laut eigenem Docstring eine
@@ -511,7 +511,7 @@ def _store_base_url_for_provider(provider_id: Optional[str]) -> Optional[str]:
         connections = ProviderConnectionStore().list_connections()
     except Exception:  # noqa: BLE001 — ein Store-Ausfall darf keinen Run kippen
         logger.warning(
-            "_store_base_url_for_provider: Store nicht lesbar für provider_id=%s "
+            "store_base_url_for_provider: Store nicht lesbar für provider_id=%s "
             "— Registry-Default gilt",
             provider_id,
         )
@@ -567,10 +567,10 @@ def build_route_subprocess_env(
     # Zwischen Route und Registry-Default liegt seit diesem Fix der Store: die
     # in der UI gepflegte Connection-Base-URL gewinnt gegen den hartkodierten
     # ``default_base_url``. Ohne diese Stufe war das UI-Feld fuer Simulationen
-    # wirkungslos — siehe ``_store_base_url_for_provider``.
+    # wirkungslos — siehe ``store_base_url_for_provider``.
     base_url = (
         route.base_url_sanitized
-        or _store_base_url_for_provider(route.provider_id)
+        or store_base_url_for_provider(route.provider_id)
         or (provider.base_url if provider else None)
     )
     if not base_url and route.provider_id:
