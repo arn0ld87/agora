@@ -148,6 +148,63 @@ class TestStoreBaseUrlBeatsRegistryDefault:
         assert env["LLM_MODEL_NAME"] == "deepseek-v4-flash:0731"
 
 
+class TestResolvedRouteFromAiRouteFillsBaseUrlFromStore:
+    """#1104: ``workspace_llm_routing.json`` persistiert pro Route nur
+    ``provider_id``/``model`` — keine ``base_url`` (die gehoert zur
+    Provider-Connection). Ohne Store-Lookup blieb ``base_url_sanitized``
+    ``None``, und ``OasisProfileGenerator`` fuellte die Luecke mit
+    ``Config.LLM_BASE_URL`` (.env-Endpoint), waehrend Modell und Key aus der
+    Route stammten — Nachfolge-Defekt von #1101/#1102, die nur den
+    ``LLMClient``-Konstruktor fixten, nicht diesen kanonischen Routing-Pfad.
+    """
+
+    def test_store_base_url_fills_resolved_route(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _patch_store(
+            monkeypatch,
+            [_StubConnection("openai", "openai", "https://store.example/openai/v1")],
+        )
+        from app.contracts.ai_provider_contract import AiRoute
+        from app.services.stage_model_router import StageModelRouter
+
+        route = AiRoute(
+            provider_connection_id="openai",
+            model_id="gpt-5.6-luna",
+            source="workspace",
+        )
+
+        resolved = StageModelRouter(run_id="run-1")._resolved_route_from_ai_route(
+            "persona_generation", route, 1
+        )
+
+        assert resolved.base_url_sanitized == "https://store.example/openai/v1"
+
+    def test_route_provider_options_base_url_still_wins_over_store(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Praezedenz bleibt Route-Option > Store, analog zu Defekt A."""
+        _patch_store(
+            monkeypatch,
+            [_StubConnection("openai", "openai", "https://store.example/openai/v1")],
+        )
+        from app.contracts.ai_provider_contract import AiRoute
+        from app.services.stage_model_router import StageModelRouter
+
+        route = AiRoute(
+            provider_connection_id="openai",
+            model_id="gpt-5.6-luna",
+            source="workspace",
+            provider_options={"base_url": "https://explicit.example/v1"},
+        )
+
+        resolved = StageModelRouter(run_id="run-1")._resolved_route_from_ai_route(
+            "persona_generation", route, 1
+        )
+
+        assert resolved.base_url_sanitized == "https://explicit.example/v1"
+
+
 class TestPrepareRequiresResolvedRoute:
     """Defekt C: keine Route → lauter Abbruch statt stiller ``.env``-Uebernahme."""
 
@@ -178,3 +235,25 @@ class TestPrepareRequiresResolvedRoute:
         _, base_url = _resolve_llm_connection(route)
 
         assert base_url == "https://ollama.com/v1"
+
+    def test_resolved_route_without_base_url_raises(self) -> None:
+        """#1104, zweite Verteidigungslinie: findet auch der Store-Lookup in
+        ``StageModelRouter`` keine base_url (z. B. geloeschte/deaktivierte
+        Connection), darf ``_resolve_llm_connection`` niemals still
+        ``(key, None)`` zurueckgeben — das war die Eintrittskarte fuer den
+        ``.env``-Fallback im Generator-Konstruktor.
+        """
+        route = _route("openai", base_url=None)
+
+        with pytest.raises(ValueError, match="kein Endpoint"):
+            _resolve_llm_connection(route)
+
+    def test_resolved_route_without_base_url_and_require_false_does_not_raise(
+        self,
+    ) -> None:
+        """``require=False`` bleibt wie bisher: kein Abbruch, nur kein Endpoint."""
+        route = _route("openai", base_url=None)
+
+        _, base_url = _resolve_llm_connection(route, require=False)
+
+        assert base_url is None
