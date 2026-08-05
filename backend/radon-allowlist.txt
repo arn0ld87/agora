@@ -82,3 +82,58 @@ app/services/report_agent/agent.py::ReportAgent._finalize_section_claims
 app/services/report_status.py::ReportStatusService
 app/services/report_status.py::ReportStatusService.get_status
 app/services/sim/process_manager.py::start_simulation
+
+# Gemessen: 2026-08-04, radon 6.0.1, `bash scripts/check_complexity.sh` auf 4db7016b.
+#
+# Grund: Bestandskomplexitaet aus vorangegangenen Service-Zusammenfuehrungen.
+# Keine dieser zwoelf Funktionen ist in diesem Slice entstanden oder veraendert
+# worden; sie sind durch das Zusammenlegen frueher getrennter Module in den
+# D+-Bereich gerutscht und seitdem unbemerkt geblieben, weil das Gate rot war
+# und deshalb ohnehin ignoriert wurde. Der Eintrag macht das Gate wieder
+# aussagekraeftig: ab jetzt schlaegt es nur noch bei *neuer* Komplexitaet an.
+#
+# Refactor ist Folgearbeit, kein Teil dieses Slices. Aufgabenkatalog je Cluster:
+#   - graph_build (API + Service): Ontology-/Build-Pfad teilen sich Validierung,
+#     Routen-Aufloesung und Fehlerbehandlung — Extraktion in gemeinsame Helper.
+#   - report_agent (agent/evidence/text_verification): Evidence-Degradation und
+#     Prosa-Verifikation als eigene Strategie-Objekte statt verschachtelter
+#     if-Ketten.
+#   - run_budget_preflight / confidence_calculator: Scoring-Regeln als Tabelle
+#     statt als Verzweigungsbaum.
+#   - sim/monitor + report_generation: Zustandsuebergaenge in eine FSM ziehen.
+#
+# Gemessene Werte zum Zeitpunkt der Aufnahme:
+#   D cc=27  app/api/graph_build.py::generate_ontology
+#   D cc=23  app/api/graph_build.py::build_graph
+#   D cc=21  app/api/runs.py::_build_run_detail
+#   D cc=22  app/services/confidence_calculator.py::compute_confidence
+#   D cc=23  app/services/report_generation.py::ReportGenerationService.start_generation
+#   E cc=34  app/services/evidence_entailment.py::classify_evidence
+#   D cc=25  app/services/graph_build.py::GraphBuildService.build_graph
+#   D cc=28  app/services/run_budget_preflight.py::estimate_run
+#   E cc=36  app/services/report_agent/agent.py::ReportAgent._save_evidence_section
+#   E cc=34  app/services/report_agent/evidence.py::degrade_sections_for_violations
+#   D cc=24  app/services/report_agent/text_verification.py::verify_prose
+#   D cc=23  app/services/sim/monitor.py::monitor_simulation
+#
+# NICHT neu aufgenommen wurden die beiden Rang-F-Handler. Sie stehen bereits
+# seit 2026-05-14 weiter oben in dieser Datei (Zeilen 33/34), damals mit
+# E (cc=33) vermessen — inzwischen F (cc=68) bzw. F (cc=65). Die Allowlist
+# prueft nur, *ob* eine Funktion geduldet ist, nicht *wie stark* sie gewachsen
+# ist; dieser Zuwachs ist deshalb nie aufgefallen. Refactor-Auftrag:
+#   app/api/simulation_run.py::start_simulation      → https://github.com/arn0ld87/agora/issues/1079
+#   app/api/simulation_prepare.py::prepare_simulation → https://github.com/arn0ld87/agora/issues/1080
+# Beide Issues schlagen dieselbe Zerlegung vor: Validierung, Routen-/Key-
+# Aufloesung, Budget-Preflight, Run-Registrierung, Prozessstart.
+app/api/graph_build.py::generate_ontology
+app/api/graph_build.py::build_graph
+app/api/runs.py::_build_run_detail
+app/services/confidence_calculator.py::compute_confidence
+app/services/report_generation.py::ReportGenerationService.start_generation
+app/services/evidence_entailment.py::classify_evidence
+app/services/graph_build.py::GraphBuildService.build_graph
+app/services/run_budget_preflight.py::estimate_run
+app/services/report_agent/agent.py::ReportAgent._save_evidence_section
+app/services/report_agent/evidence.py::degrade_sections_for_violations
+app/services/report_agent/text_verification.py::verify_prose
+app/services/sim/monitor.py::monitor_simulation

@@ -1,9 +1,9 @@
 """Tests for app.utils.api_responses."""
 
-from unittest.mock import patch
-
+import pytest
 from flask import Flask, abort
 
+from app.config import Config
 from app.utils.api_responses import (
     handle_api_errors,
     install_api_error_handlers,
@@ -89,10 +89,8 @@ def test_handle_api_errors_wraps_raw_dict_return():
     def view():
         return {"ok": True}
 
-    with patch("app.utils.api_responses.Config") as mock_config:
-        mock_config.DEBUG = False
-        with app.test_request_context():
-            response, status = view()
+    with app.test_request_context():
+        response, status = view()
     assert status == 200
     assert response.get_json() == {"success": True, "data": {"ok": True}}
 
@@ -110,17 +108,20 @@ def test_handle_api_errors_maps_value_error_to_400():
     assert response.get_json() == {"success": False, "error": "bad input"}
 
 
-def test_handle_api_errors_maps_timeout_to_504_without_leaking_detail_outside_debug():
+@pytest.mark.parametrize("debug", [False, True], ids=["debug-off", "debug-on"])
+def test_handle_api_errors_maps_timeout_to_504_without_leaking_detail(
+    monkeypatch, debug
+):
+    monkeypatch.setenv("FLASK_DEBUG", "true" if debug else "false")
+    monkeypatch.setattr(Config, "DEBUG", debug)
     app = _build_app()
 
     @handle_api_errors(log_prefix="Stuck")
     def view():
         raise TimeoutError("too slow")
 
-    with patch("app.utils.api_responses.Config") as mock_config:
-        mock_config.DEBUG = False
-        with app.test_request_context():
-            response, status = view()
+    with app.test_request_context():
+        response, status = view()
     assert status == 504
     payload = response.get_json()
     assert payload == {
@@ -128,19 +129,29 @@ def test_handle_api_errors_maps_timeout_to_504_without_leaking_detail_outside_de
         "error": "request timed out",
         "code": "timeout",
     }
+    assert "too slow" not in response.get_data(as_text=True)
 
 
-def test_handle_api_errors_maps_unknown_to_500_and_hides_traceback_outside_debug():
+@pytest.mark.parametrize("debug", [False, True], ids=["debug-off", "debug-on"])
+def test_handle_api_errors_maps_unknown_to_500_without_exception_string(
+    monkeypatch, debug
+):
+    """Die 500er-Antwort ist in beiden DEBUG-Modi byte-identisch.
+
+    ``FLASK_DEBUG=true`` hat den Exception-String früher als ``debug_error``
+    an die Antwort gehängt; Exception-Strings tragen Dateipfade,
+    Konfigurationswerte und potenziell Schlüsselmaterial.
+    """
+    monkeypatch.setenv("FLASK_DEBUG", "true" if debug else "false")
+    monkeypatch.setattr(Config, "DEBUG", debug)
     app = _build_app()
 
     @handle_api_errors(log_prefix="Unexpected")
     def view():
         raise RuntimeError("kapow")
 
-    with patch("app.utils.api_responses.Config") as mock_config:
-        mock_config.DEBUG = False
-        with app.test_request_context():
-            response, status = view()
+    with app.test_request_context():
+        response, status = view()
     payload = response.get_json()
     assert status == 500
     assert payload == {
@@ -148,27 +159,7 @@ def test_handle_api_errors_maps_unknown_to_500_and_hides_traceback_outside_debug
         "error": "internal server error",
         "code": "internal_error",
     }
-    assert "traceback" not in payload
-    assert "kapow" not in payload.values()
-
-
-def test_handle_api_errors_in_debug_mode_exposes_message_but_not_traceback():
-    app = _build_app()
-
-    @handle_api_errors(log_prefix="Unexpected")
-    def view():
-        raise RuntimeError("kapow")
-
-    with patch("app.utils.api_responses.Config") as mock_config:
-        mock_config.DEBUG = True
-        with app.test_request_context():
-            response, status = view()
-    payload = response.get_json()
-    assert status == 500
-    assert payload["error"] == "internal server error"
-    assert payload["code"] == "internal_error"
-    assert payload["debug_error"] == "kapow"
-    assert "traceback" not in payload
+    assert "kapow" not in response.get_data(as_text=True)
 
 
 def test_install_api_error_handlers_envelopes_api_404():
@@ -226,7 +217,12 @@ def test_install_api_error_handlers_envelopes_generic_api_http_errors():
     }
 
 
-def test_install_api_error_handlers_envelopes_uncaught_api_exceptions_safely():
+@pytest.mark.parametrize("debug", [False, True], ids=["debug-off", "debug-on"])
+def test_install_api_error_handlers_envelopes_uncaught_api_exceptions_safely(
+    monkeypatch, debug
+):
+    monkeypatch.setenv("FLASK_DEBUG", "true" if debug else "false")
+    monkeypatch.setattr(Config, "DEBUG", debug)
     app = _build_app()
 
     @app.route("/api/explodes")
@@ -236,9 +232,7 @@ def test_install_api_error_handlers_envelopes_uncaught_api_exceptions_safely():
     install_api_error_handlers(app)
     client = app.test_client()
 
-    with patch("app.utils.api_responses.Config") as mock_config:
-        mock_config.DEBUG = False
-        response = client.get("/api/explodes")
+    response = client.get("/api/explodes")
 
     assert response.status_code == 500
     assert response.get_json() == {
@@ -246,6 +240,7 @@ def test_install_api_error_handlers_envelopes_uncaught_api_exceptions_safely():
         "error": "internal server error",
         "code": "internal_error",
     }
+    assert "hunter2" not in response.get_data(as_text=True)
 
 
 def test_install_api_error_handlers_preserves_non_api_404():

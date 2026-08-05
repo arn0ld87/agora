@@ -59,7 +59,10 @@ vi.mock('../../api/report', () => ({
   generateReport: vi.fn(),
 }))
 vi.mock('../../api/runs', () => ({
-  cancelRun: vi.fn().mockResolvedValue({ success: true, data: { run_id: 'sim_test_smoke', status: 'cancel_requested' } }),
+  // run_id ist im Response IMMER die aufgeloeste run_-ID. Der frühere Mock
+  // gab hier eine sim_-ID zurück und zementierte damit die falsche
+  // ID-Form — genau die, an der der Abbrechen-Button mit HTTP 400 scheiterte.
+  cancelRun: vi.fn().mockResolvedValue({ success: true, data: { run_id: 'run_0123456789ab', status: 'cancel_requested' } }),
   // Issue #764: RunResourceMonitor (eingebunden in Step3Simulation) pollt
   // GET /api/runs/<id> für budget/usage — Default: keine Budget-Anreicherung.
   getRun: vi.fn().mockResolvedValue({ success: true, data: {} }),
@@ -144,7 +147,7 @@ const globalStubs = {
 function mountComponent() {
   return mount(Step3Simulation, {
     props: {
-      simulationId: 'sim_test_smoke',
+      simulationId: 'sim_0123456789ab',
       maxRounds: 5,
       simulationDays: 1,
       minutesPerRound: 30,
@@ -360,7 +363,14 @@ describe('Step3Simulation — phase promotion (Sub-Slice A, #209)', () => {
     await flushPromises()
 
     expect(cancelRun).toHaveBeenCalledOnce()
-    expect(cancelRun).toHaveBeenCalledWith('sim_test_smoke')
+    expect(cancelRun).toHaveBeenCalledWith('sim_0123456789ab')
+
+    // Format-Assertion: der Wert muss einer der beiden IDs entsprechen, die
+    // POST /api/runs/<id>/cancel serverseitig akzeptiert. Ein frei erfundener
+    // String wie 'sim_test_smoke' passiert weder validate_simulation_id noch
+    // validate_run_id und wuerde in Produktion mit HTTP 400 abgewiesen.
+    const [calledWith] = vi.mocked(cancelRun).mock.calls[0]
+    expect(calledWith).toMatch(/^(run|sim)_[a-f0-9]{12}$/)
 
     vi.restoreAllMocks()
   })
@@ -394,7 +404,7 @@ describe('Step3Simulation — phase promotion (Sub-Slice A, #209)', () => {
     // noch) und der simulationId als Query.
     expect(router.currentRoute.value.name).toBe('Report')
     expect(router.currentRoute.value.params.reportId).toBe('new')
-    expect(router.currentRoute.value.query.simulationId).toBe('sim_test_smoke')
+    expect(router.currentRoute.value.query.simulationId).toBe('sim_0123456789ab')
 
     // PR #1025 (Codex P2 / CodeRabbit): `effectiveRunId` faellt hier auf
     // props.simulationId zurueck, weil kein Registry-Run-Start gemockt ist —
@@ -437,7 +447,7 @@ describe('Step3Simulation — ai_model_ref beim Simulationsstart (#819)', () => 
 
   it('sendet ai_model_ref aus dem Kanon und lässt llm_model/llm_provider weg', async () => {
     vi.mocked(simulationApi.getRunStatus).mockResolvedValue({ success: true, data: {} } as never)
-    vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_test_smoke' } } as never)
+    vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_0123456789ab' } } as never)
 
     _effectiveRefValue = {
       provider_connection_id: 'conn-minimax',
@@ -469,7 +479,7 @@ describe('Step3Simulation — ai_model_ref beim Simulationsstart (#819)', () => 
 
   it('Dashboard-Run-Override gewinnt vor dem Kanon und wird als ai_model_ref gesendet', async () => {
     vi.mocked(simulationApi.getRunStatus).mockResolvedValue({ success: true, data: {} } as never)
-    vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_test_smoke' } } as never)
+    vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_0123456789ab' } } as never)
 
     // Kanon zeigt ein ANDERES Modell — der transiente Dashboard-Pick muss gewinnen.
     _effectiveRefValue = {
@@ -505,7 +515,7 @@ describe('Step3Simulation — ai_model_ref beim Simulationsstart (#819)', () => 
 
   it('Dashboard-Run-Override greift auch ohne Kanon-Auswahl (kein Legacy-Fallback)', async () => {
     vi.mocked(simulationApi.getRunStatus).mockResolvedValue({ success: true, data: {} } as never)
-    vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_test_smoke' } } as never)
+    vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_0123456789ab' } } as never)
 
     _effectiveRefValue = null
     _runOverrideValue = {
@@ -539,7 +549,7 @@ describe('Step3Simulation — ai_model_ref beim Simulationsstart (#819)', () => 
 
   it('fällt ohne Override und Kanon-Auswahl nicht auf Legacy-Storage zurück', async () => {
     vi.mocked(simulationApi.getRunStatus).mockResolvedValue({ success: true, data: {} } as never)
-    vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_test_smoke' } } as never)
+    vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_0123456789ab' } } as never)
     _effectiveRefValue = null
     localStorage.setItem('agora.lastModel', 'custom')
     localStorage.setItem('agora.lastCustomModel', 'deepseek-v3.2:cloud')
@@ -596,12 +606,12 @@ describe('Step3Simulation — max_rounds aus dem pendingUpload-Store (Dashboard-
 
   it('ohne maxRounds-Prop fällt max_rounds auf den Slider-Wert zurück', async () => {
     vi.mocked(simulationApi.getRunStatus).mockResolvedValue({ success: true, data: {} } as never)
-    vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_test_smoke' } } as never)
+    vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_0123456789ab' } } as never)
 
     // Dashboard-Flow: KEINE maxRounds-Prop.
     const wrapper = mount(Step3Simulation, {
       props: {
-        simulationId: 'sim_test_smoke',
+        simulationId: 'sim_0123456789ab',
         projectData: { name: 'dashboard-flow' },
         graphData: { nodes: [], edges: [] },
         systemLogs: [],
@@ -620,7 +630,7 @@ describe('Step3Simulation — max_rounds aus dem pendingUpload-Store (Dashboard-
 
   it('Budget aus dem pendingUpload-Store wird als budget durchgereicht (Issue #764)', async () => {
     vi.mocked(simulationApi.getRunStatus).mockResolvedValue({ success: true, data: {} } as never)
-    vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_test_smoke' } } as never)
+    vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_0123456789ab' } } as never)
 
     const budget = {
       schema_version: 1 as const,
@@ -633,7 +643,7 @@ describe('Step3Simulation — max_rounds aus dem pendingUpload-Store (Dashboard-
 
     const wrapper = mount(Step3Simulation, {
       props: {
-        simulationId: 'sim_test_smoke',
+        simulationId: 'sim_0123456789ab',
         projectData: { name: 'dashboard-flow' },
         graphData: { nodes: [], edges: [] },
         systemLogs: [],
@@ -652,11 +662,11 @@ describe('Step3Simulation — max_rounds aus dem pendingUpload-Store (Dashboard-
 
   it('ohne Budget im Store bleibt das budget-Feld weg (kein null-Payload)', async () => {
     vi.mocked(simulationApi.getRunStatus).mockResolvedValue({ success: true, data: {} } as never)
-    vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_test_smoke' } } as never)
+    vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_0123456789ab' } } as never)
 
     const wrapper = mount(Step3Simulation, {
       props: {
-        simulationId: 'sim_test_smoke',
+        simulationId: 'sim_0123456789ab',
         projectData: { name: 'dashboard-flow' },
         graphData: { nodes: [], edges: [] },
         systemLogs: [],
@@ -675,7 +685,7 @@ describe('Step3Simulation — max_rounds aus dem pendingUpload-Store (Dashboard-
 
   it('maxRounds-Prop (Stepped-Flow) gewinnt vor dem Slider-Wert', async () => {
     vi.mocked(simulationApi.getRunStatus).mockResolvedValue({ success: true, data: {} } as never)
-    vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_test_smoke' } } as never)
+    vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_0123456789ab' } } as never)
 
     const wrapper = mountComponent() // maxRounds: 5
     await flushPromises()
@@ -724,7 +734,7 @@ describe('Step3Simulation — Aktionen-Zähler aus actions/actions_total (Pagina
 
   it('liest Aktionen aus `actions` (nicht `all_actions`) und den Total aus `actions_total`', async () => {
     vi.mocked(simulationApi.getRunStatus).mockResolvedValue({ success: true, data: {} } as never)
-    vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_test_smoke' } } as never)
+    vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_0123456789ab' } } as never)
 
     const action = {
       round_num: 3,
@@ -765,7 +775,7 @@ describe('Step3Simulation — Aktionen-Zähler aus actions/actions_total (Pagina
 
   it('Dedup: zwei identische Aktionen mit unterschiedlichem Zeitstempel werden beide gezählt', async () => {
     vi.mocked(simulationApi.getRunStatus).mockResolvedValue({ success: true, data: {} } as never)
-    vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_test_smoke' } } as never)
+    vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_0123456789ab' } } as never)
 
     const base = {
       round_num: 3,
