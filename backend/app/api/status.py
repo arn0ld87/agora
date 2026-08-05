@@ -12,7 +12,7 @@ import requests
 from . import status_bp
 from .. import __version__
 from ..config import Config
-from ..contracts.system_status_contract import SystemStatusOllama
+from ..contracts.system_status_contract import SystemStatusE2E, SystemStatusOllama
 from ..llm.providers.registry import detect_provider, resolve_ollama_tags_url
 from ..utils.gpu_probe import detect_gpu
 from ..utils.logger import get_logger
@@ -67,6 +67,33 @@ def _get_backend_status():
         # (_validate_persona_quota nutzt ebenfalls `!= "1"` ohne strip).
         "allow_small_sim": os.environ.get("AGORA_ALLOW_SMALL_SIM") == "1",
     }
+
+
+def _get_e2e_status():
+    """Report whether this backend process serves stubbed LLM answers.
+
+    Liest ``AGORA_E2E_LLM_MODE`` bei jedem Request frisch — dieselbe Variable,
+    die ``LLMClient.chat_json`` auswertet, bevor es den Provider-Call
+    überspringt. Damit ist der Wert an der API genau das, was der LLM-Pfad
+    tatsächlich tut, und nicht eine Nebenbuchführung.
+
+    ``stub_active`` vergleicht den **Rohwert** exakt gegen ``"stub"`` — ohne
+    ``strip()``. Das ist bewusst dieselbe Operation wie in
+    ``llm/client.py:596``/``:994``, ``llm/tool_calls.py:165`` und
+    ``storage/embedding_service.py:157``. Ein ``strip()`` hier würde bei einem
+    gepolsterten Wert wie ``" stub "`` ``stub_active=True`` melden, während der
+    LLM-Pfad denselben Wert als Nicht-Stub liest und den echten Provider ruft —
+    die E2E-Diagnose würde dann genau den ungültigen Lauf freigeben, den sie
+    verhindern soll. ``llm_mode`` bleibt der Rohwert, damit ein solcher
+    Tippfehler in der Fehlermeldung sichtbar wird statt weggeputzt zu werden.
+
+    Rückgabe folgt dem Contract ``SystemStatusE2E``.
+    """
+    raw = os.environ.get("AGORA_E2E_LLM_MODE")
+    return SystemStatusE2E(
+        llm_mode=raw or None,
+        stub_active=raw == "stub",
+    ).model_dump(mode="json")
 
 
 def _get_neo4j_status():
@@ -211,6 +238,7 @@ def get_status():
     - backend: version and operational status
     - neo4j: connectivity and URI
     - ollama: reachability, available models, and default model
+    - e2e: whether this process serves stubbed LLM answers
     - disk: usage statistics for the uploads directory
     - timestamp: ISO-8601 UTC timestamp
 
@@ -239,6 +267,7 @@ def get_status():
         backend=_get_backend_status(),
         neo4j=_get_neo4j_status(),
         ollama=_get_ollama_status(),
+        e2e=_get_e2e_status(),
         disk=_get_disk_status(),
         gpu=gpu,
         timestamp=timestamp

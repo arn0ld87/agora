@@ -1,19 +1,34 @@
-import type { APIRequestContext } from '@playwright/test';
+import { expect, type APIRequestContext } from '@playwright/test';
+import { authHeader } from './auth';
 
 /**
- * Prüft ob der Backend-Container im E2E-Stub-Modus läuft.
+ * Stellt sicher, dass der Backend-Container im E2E-Stub-Modus läuft.
  *
- * Fragt GET /api/status ab und dumpt den AGORA_E2E_LLM_MODE-Hinweis aus den
- * Container-Logs auf stdout. Da /api/status die env-Variable nicht direkt
- * exponiert, ist diese Funktion absichtlich nur informativ (kein hartes assert).
+ * Fragt `GET /api/status` ab und assertiert hart auf `e2e.stub_active`. Dieses
+ * Feld stammt aus `AGORA_E2E_LLM_MODE` im **Backend-Prozess** — derselben
+ * Variable, die `LLMClient.chat_json` auswertet, bevor es den Provider-Call
+ * überspringt.
  *
- * Container-Logs zeigen beim Modulimport von llm_e2e_stub:
- *   INFO agora.llm_e2e_stub: Modul importiert. AGORA_E2E_LLM_MODE=stub ...
+ * Vorher las diese Funktion `process.env.AGORA_E2E_LLM_MODE` aus dem
+ * *Playwright*-Prozess, kehrte bei `!res.ok()` früh zurück und verschluckte
+ * jeden Fehler im catch. Sie hat damit nichts zugesichert: eine Suite konnte
+ * grün durchlaufen, obwohl das Backend gegen einen echten Provider lief. Fünf
+ * Specs (run-budget, minimal-report, golden-gate-accessibility, report-modes,
+ * upload-graph) hingen an dieser Zusicherung.
  *
- * Das garantiert, dass der Stub aktiv ist — auch wenn /api/status keine
- * explizite Stub-Indikator-Spalte hat.
+ * Wirft, wenn der Stub nicht aktiv ist — ein Lauf ohne Stub ist kein
+ * Diagnose-Hinweis, sondern ein ungültiger Lauf.
  *
- * @param apiCtx  Playwright APIRequestContext (mit Auth-Header)
+ * Der Auth-Header wird hier selbst gesetzt und nicht vom Aufrufer erwartet:
+ * `/api/status` ist authentifiziert, aber nur drei der fünf Specs bauen ihren
+ * Context mit `extraHTTPHeaders: authHeader()` — `report-modes.spec.ts:148`
+ * und `golden-gate-accessibility.spec.ts:180` übergeben einen nackten Context.
+ * Solange der frühe Return existierte, fiel das nicht auf; der 401 wurde
+ * stillschweigend als „Stub aktiv" durchgewunken. Ein Header auf Request-Ebene
+ * ist gegenüber `extraHTTPHeaders` des Contexts additiv, deshalb bleiben die
+ * drei bereits authentifizierten Aufrufer unverändert korrekt.
+ *
+ * @param apiCtx  Playwright APIRequestContext (Auth-Header optional)
  * @param baseURL Backend-Basis-URL (z. B. http://127.0.0.1:80)
  */
 export async function assertStubModeActive(
@@ -21,41 +36,45 @@ export async function assertStubModeActive(
   baseURL: string,
 ): Promise<void> {
   console.log('[diagnostics] Stub-Mode-Check via GET /api/status ...');
-  try {
-    const res = await apiCtx.get(`${baseURL}/api/status`, {
-      // 10 s Timeout — Status-Endpoint sollte sofort antworten
-      timeout: 10_000,
-    });
-    if (!res.ok()) {
-      console.warn(
-        `[diagnostics] GET /api/status antwortete ${res.status()} — Stack evtl. nicht bereit.`,
-      );
-      return;
-    }
-    const json = await res.json();
-    // backend.ok muss true sein
-    const backendOk: boolean = json?.backend?.ok === true || json?.data?.backend?.ok === true;
-    const version: string = json?.backend?.version ?? json?.data?.backend?.version ?? 'unbekannt';
-    const neo4jReachable: boolean =
-      json?.neo4j?.reachable === true || json?.data?.neo4j?.reachable === true;
 
-    console.log(
-      `[diagnostics] Backend: ok=${backendOk}, version=${version}, neo4j_reachable=${neo4jReachable}`,
-    );
+  const res = await apiCtx.get(`${baseURL}/api/status`, {
+    headers: authHeader(),
+    // 10 s Timeout — Status-Endpoint sollte sofort antworten
+    timeout: 10_000,
+  });
+  expect(
+    res.ok(),
+    `GET /api/status antwortete ${res.status()} — Stack nicht bereit, Stub-Mode nicht pruefbar.`,
+  ).toBe(true);
 
-    // AGORA_E2E_LLM_MODE ist in /api/status nicht direkt sichtbar.
-    // Die Aktivierung wird beim Container-Start via llm_e2e_stub-Logging belegt
-    // (Container-Logs in global-teardown.ts gesammelt).
-    // Hier nur informatives Logging — kein hartes Assert, um den Test nicht
-    // zu brechen wenn /api/status noch kein stub_mode-Feld hat.
-    const stubModeHint: string = process.env.AGORA_E2E_LLM_MODE ?? '<nicht im Playwright-Env>';
-    console.log(
-      `[diagnostics] AGORA_E2E_LLM_MODE im Playwright-Prozess: ${stubModeHint}`,
-    );
-    console.log(
-      '[diagnostics] Stub-Aktivierung im Container via llm_e2e_stub-Logging in Container-Logs (global-teardown.ts) bestätigen.',
-    );
-  } catch (err) {
-    console.error('[diagnostics] GET /api/status fehlgeschlagen (non-fatal):', err);
-  }
+  const json = await res.json();
+  // json_success legt die Felder top-level ab; ältere Aufrufer erwarteten
+  // teilweise die data-Verschachtelung — beide Formen werden akzeptiert.
+  const root = json?.data ?? json;
+
+  const backendOk: boolean = root?.backend?.ok === true;
+  const version: string = root?.backend?.version ?? 'unbekannt';
+  const neo4jReachable: boolean = root?.neo4j?.reachable === true;
+  console.log(
+    `[diagnostics] Backend: ok=${backendOk}, version=${version}, neo4j_reachable=${neo4jReachable}`,
+  );
+
+  const e2e = root?.e2e;
+  expect(
+    e2e,
+    'GET /api/status liefert keinen e2e-Teilbaum. Backend-Image ist aelter als der '
+      + 'SystemStatusE2E-Contract — Stack neu bauen.',
+  ).toBeDefined();
+
+  console.log(
+    `[diagnostics] Backend AGORA_E2E_LLM_MODE=${e2e?.llm_mode ?? '<nicht gesetzt>'}, `
+      + `stub_active=${e2e?.stub_active}`,
+  );
+
+  expect(
+    e2e?.stub_active,
+    `Backend laeuft NICHT im E2E-Stub-Modus (llm_mode=${e2e?.llm_mode ?? '<nicht gesetzt>'}). `
+      + 'Die Suite wuerde gegen einen echten LLM-Provider laufen; das ist kein gueltiger E2E-Lauf. '
+      + 'AGORA_E2E_LLM_MODE=stub im Backend-Container setzen.',
+  ).toBe(true);
 }

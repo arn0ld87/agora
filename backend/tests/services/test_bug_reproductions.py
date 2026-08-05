@@ -58,15 +58,24 @@ def test_repro_bug_b_oasis_profile_generator_thinking_tokens_parsing():
     """BUG B Repro:
     When reasoning/thinking models (e.g. DeepSeek-R1 / Qwen3-Thinking) output <think>...</think>
     tags before the JSON payload, OasisProfileGenerator should strip the envelope cleanly.
+
+    Der Mock sitzt am OpenAI-Transport *innerhalb* von ``LLMClient``, nicht
+    mehr an ``generator.client``. ``_generate_profile_with_llm`` konstruiert
+    seit der ``chat_json``-Migration intern einen ``LLMClient``; ein Mock am
+    alten Seam wurde wirkungslos und der Test lief gegen den echten Endpunkt
+    (beobachtet: HTTP 401 gegen ``https://api.minimax.io/v1``). Das
+    ``<think>``-Stripping ist damit nach ``LLMClient.chat()`` gewandert — der
+    Transport-Mock hält den kompletten Repair-Pfad im Test.
     """
     generator = OasisProfileGenerator.__new__(OasisProfileGenerator)
     generator.model_name = "qwen3-thinking"
-    generator.base_url = "http://localhost:11434"
+    # Bewusst KEIN Ollama-Endpoint: sonst nimmt chat_json den nativen
+    # /api/chat-Pfad (httpx) und umgeht den hier gemockten OpenAI-Transport.
+    generator.base_url = "https://llm.invalid/v1"
     generator.api_key = "test-key"
     generator.language = "de"
     generator._industry_quota_plan = MagicMock()
 
-    mock_client = MagicMock()
     mock_response = MagicMock()
     mock_response.choices[0].message.content = (
         "<think>\n"
@@ -74,6 +83,8 @@ def test_repro_bug_b_oasis_profile_generator_thinking_tokens_parsing():
         "Age around 30, MBTI INTJ, male.\n"
         "</think>\n"
         "{\n"
+        '  "display_name": "Max Mustermann",\n'
+        '  "handle": "max_mustermann",\n'
         '  "bio": "Softwareentwickler aus Berlin",\n'
         '  "persona": "Detaillierte Persona von Max...",\n'
         '  "age": 32,\n'
@@ -86,10 +97,11 @@ def test_repro_bug_b_oasis_profile_generator_thinking_tokens_parsing():
         "}\n"
     )
     mock_response.choices[0].finish_reason = "stop"
-    mock_client.chat.completions.create.return_value = mock_response
-    generator.client = mock_client
+    mock_transport = MagicMock()
+    mock_transport.chat.completions.create.return_value = mock_response
 
-    with patch.object(generator, "_is_individual_entity", return_value=True), \
+    with patch("app.llm.client.OpenAI", return_value=mock_transport), \
+         patch.object(generator, "_is_individual_entity", return_value=True), \
          patch.object(generator, "_build_individual_persona_prompt", return_value="prompt"), \
          patch.object(generator, "_get_system_prompt", return_value="sys_prompt"):
 
@@ -114,23 +126,25 @@ def test_repro_bug_b_oasis_profile_generator_handles_none_or_empty_content():
     """
     generator = OasisProfileGenerator.__new__(OasisProfileGenerator)
     generator.model_name = "thinking-model"
-    generator.base_url = "http://localhost:11434"
+    # Wie oben: kein Ollama-Endpoint, damit der gemockte OpenAI-Transport greift.
+    generator.base_url = "https://llm.invalid/v1"
     generator.api_key = "test-key"
     generator.language = "de"
     generator._industry_quota_plan = MagicMock()
 
-    mock_client = MagicMock()
     mock_response = MagicMock()
     mock_response.choices[0].message.content = None
     mock_response.choices[0].finish_reason = "stop"
-    mock_client.chat.completions.create.return_value = mock_response
-    generator.client = mock_client
+    mock_transport = MagicMock()
+    mock_transport.chat.completions.create.return_value = mock_response
 
-    with patch.object(generator, "_is_individual_entity", return_value=True), \
+    with patch("app.llm.client.OpenAI", return_value=mock_transport), \
+         patch("time.sleep"), \
+         patch.object(generator, "_is_individual_entity", return_value=True), \
          patch.object(generator, "_build_individual_persona_prompt", return_value="prompt"), \
          patch.object(generator, "_get_system_prompt", return_value="sys_prompt"), \
          patch.object(generator, "_generate_profile_rule_based", return_value={"bio": "Rule Bio", "persona": "Rule Persona", "age": 30, "gender": "male", "mbti": "INTJ"}):
-        
+
         # Should gracefully fall back to rule-based without crashing
         result = generator._generate_profile_with_llm(
             entity_name="Max",

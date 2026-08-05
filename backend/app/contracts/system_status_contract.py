@@ -48,3 +48,34 @@ class SystemStatusOllama(BaseModel):
     models_available: list[str] = Field(default_factory=list)
     default_model: str | None = None
     error: str | None = None
+
+
+class SystemStatusE2E(BaseModel):
+    """E2E-Harness-Teilbaum von ``/api/status``.
+
+    Meldet, ob der **Backend-Prozess** im E2E-Stub-Modus läuft, also ob
+    ``LLMClient.chat_json`` statt eines echten Providers eine Konservenantwort
+    liefert (``AGORA_E2E_LLM_MODE=stub``). Der Wert stammt aus der Umgebung des
+    Backend-Prozesses und wird bei jedem Request frisch gelesen.
+
+    Warum das an der API hängt und nicht nur im Container-Log steht: die
+    E2E-Suite lief bisher gegen ``process.env.AGORA_E2E_LLM_MODE`` des
+    *Playwright*-Prozesses — ein Wert, der über den Zustand des Backends
+    nichts aussagt. Damit konnte eine Suite grün durchlaufen, die in
+    Wirklichkeit gegen einen echten Provider (oder gegen gar keinen) lief.
+
+    Kein Geheimnis: der Teilbaum sagt nur, welchen LLM-Pfad diese Instanz
+    fährt. Für Betreiber ist das eher ein Sicherheitsgewinn — eine
+    Produktivinstanz, die versehentlich mit Stub-LLM läuft, produziert sonst
+    still erfundene Berichte, ohne dass es irgendwo sichtbar wäre.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Rohwert von ``AGORA_E2E_LLM_MODE``; ``None``, wenn die Variable im
+    # Backend-Prozess nicht gesetzt ist (Normalfall in Produktion).
+    llm_mode: str | None = None
+    # Abgeleitet: genau dann ``True``, wenn ``llm_mode == "stub"``. Der
+    # E2E-Helper assertiert hierauf, damit er sich nicht auf String-Vergleiche
+    # im Testcode verlassen muss.
+    stub_active: bool = False

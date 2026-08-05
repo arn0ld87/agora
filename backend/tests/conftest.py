@@ -144,3 +144,35 @@ def _global_fernet_env(monkeypatch, tmp_path):
         _pm._fernet_key_raw = None
     except ImportError:
         pass
+
+
+@pytest.fixture
+def hermetic_settings(monkeypatch, tmp_path):
+    """Schneidet den persistierten Settings-Layer ab (Issue #1074).
+
+    ``app.services.oasis_profile_generator`` liest Settings ueber
+    ``settings_layer.get_default_service()``, dessen File-Layer
+    (``backend/instance/settings.json``) Vorrang vor ``os.environ`` hat.
+    Auf Entwicklermaschinen sind dort Betriebswerte hinterlegt — Tests
+    pruefen dann die lokale Konfiguration statt das Resolutionsverhalten,
+    und zwar auch dort, wo sie die Variable per ``setenv`` explizit setzen.
+    In CI existiert die Datei nicht, weshalb solche Defekte dort unsichtbar
+    bleiben und nur das lokale Gate blockieren.
+
+    ``SettingsService`` nimmt genau dafuer einen ``instance_path`` entgegen
+    (siehe dessen Docstring); hier zeigt er auf ein leeres tmp-Verzeichnis.
+
+    Gibt das Generator-Modul zurueck, damit Tests die zu pruefende Funktion
+    ueber denselben Namespace aufrufen koennen, in dem gepatcht wurde.
+    """
+    from app.services import oasis_profile_generator
+    from app.services.settings_layer import SettingsService
+
+    # Eine Instanz, nicht eine pro Aufruf: der produktive
+    # ``get_default_service()`` haelt ein Modul-Singleton, dessen in-memory
+    # ``_override`` ueber mehrere Zugriffe hinweg lebt. Eine Fabrik wuerde das
+    # Override bei jedem ``_get_settings()`` verlieren und damit ein anderes
+    # Verhalten pruefen als die Anwendung zeigt.
+    service = SettingsService(instance_path=tmp_path / 'settings.json')
+    monkeypatch.setattr(oasis_profile_generator, '_get_settings', lambda: service)
+    return oasis_profile_generator

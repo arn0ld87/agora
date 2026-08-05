@@ -41,6 +41,58 @@ def restore_reloaded_modules():
         module.__dict__.clear()
         module.__dict__.update(snapshot)
 
+
+# Die Env-Variablen, aus denen Config die Pool-Kwargs liest (app/config.py).
+_POOL_ENV_VARS = (
+    'NEO4J_MAX_POOL_SIZE',
+    'NEO4J_ACQ_TIMEOUT',
+    'NEO4J_CONN_TIMEOUT',
+    'NEO4J_MAX_LIFETIME',
+    'NEO4J_LIVENESS_TIMEOUT',
+)
+
+
+@pytest.fixture
+def pool_defaults_from_code(monkeypatch, restore_reloaded_modules):
+    """Laedt ``Config`` ohne Pool-Env neu, damit die Code-Defaults gelten (#1074).
+
+    ``Config`` liest die Pool-Kwargs beim Klassen-Import einmalig aus
+    ``os.environ`` und friert sie ein. Auf Maschinen mit einer ``.env``, die
+    z.B. ``NEO4J_MAX_POOL_SIZE=80`` setzt, pruefen die Durchreichungs-Tests
+    daher die lokale Betriebskonfiguration statt die Defaults — und
+    ``monkeypatch.delenv`` allein kommt zu spaet, weil der Wert bereits im
+    Klassenattribut steht. In CI ohne ``.env`` bleibt der Defekt unsichtbar.
+
+    Bewusst NICHT die Config-Attribute auf die erwarteten Werte setzen: dann
+    pruefte der Test seine eigene Fixture statt der Defaults aus
+    ``app/config.py``, und eine versehentliche Aenderung eines
+    Produktions-Defaults bliebe unentdeckt (Codex-Review zu PR #1076). Env
+    entfernen und neu laden laesst die Assertions scharf.
+
+    Liefert das neu geladene ``neo4j_storage``-Modul: nach ``importlib.reload``
+    sind ``Neo4jStorage`` und ``GraphDatabase`` neue Objekte, ein vorher
+    importierter Name zeigt auf die alte Klasse.
+    """
+    for name in _POOL_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
+
+    # ``config.py`` ruft beim Import ``load_dotenv(override=False)`` auf und
+    # schreibt die Werte aus der ``.env`` zurueck nach ``os.environ`` — genau
+    # die, die gerade entfernt wurden. Ohne diesen Patch macht der Reload das
+    # ``delenv`` wieder rueckgaengig. ``from dotenv import load_dotenv`` in
+    # ``config.py`` wird beim Reload neu ausgefuehrt und holt sich dabei die
+    # gepatchte Funktion aus dem ``dotenv``-Modul.
+    import dotenv
+    monkeypatch.setattr(dotenv, 'load_dotenv', lambda *args, **kwargs: False)
+
+    import app.config as config_module
+    importlib.reload(config_module)
+
+    from app.storage import neo4j_storage as storage_module
+    importlib.reload(storage_module)
+    return storage_module
+
+
 def _make_storage(monkeypatch=None, *, extra_patches=None):
     """Erzeugt eine Neo4jStorage-Instanz mit allen externen Deps gemockt.
 
@@ -70,21 +122,23 @@ def _make_storage(monkeypatch=None, *, extra_patches=None):
 # ---------------------------------------------------------------------------
 
 
-def test_init_passes_pool_kwargs():
+def test_init_passes_pool_kwargs(pool_defaults_from_code):
     """Neo4jStorage.__init__ muss GraphDatabase.driver mit allen Pool-Kwargs aufrufen."""
-    from app.storage.neo4j_storage import Neo4jStorage
+    storage_module = pool_defaults_from_code
 
     mock_driver = MagicMock()
 
     with (
-        patch("app.storage.neo4j_storage.GraphDatabase.driver", return_value=mock_driver) as mock_factory,
-        patch("app.storage.neo4j_storage.Neo4jStorage._verify_connectivity"),
-        patch("app.storage.neo4j_storage.Neo4jStorage._ensure_schema"),
-        patch("app.storage.neo4j_storage.NERExtractor", return_value=MagicMock()),
-        patch("app.storage.neo4j_storage.EmbeddingService", return_value=MagicMock()),
+        patch.object(storage_module, "GraphDatabase") as mock_gdb,
+        patch.object(storage_module.Neo4jStorage, "_verify_connectivity"),
+        patch.object(storage_module.Neo4jStorage, "_ensure_schema"),
+        patch.object(storage_module, "NERExtractor", return_value=MagicMock()),
+        patch.object(storage_module, "EmbeddingService", return_value=MagicMock()),
     ):
-        Neo4jStorage(uri="bolt://localhost:7687", user="neo4j", password="secret")
+        mock_gdb.driver.return_value = mock_driver
+        storage_module.Neo4jStorage(uri="bolt://localhost:7687", user="neo4j", password="secret")
 
+    mock_factory = mock_gdb.driver
     mock_factory.assert_called_once()
     _, kwargs = mock_factory.call_args
     assert kwargs["auth"] == ("neo4j", "secret")
@@ -101,21 +155,23 @@ def test_init_passes_pool_kwargs():
 # ---------------------------------------------------------------------------
 
 
-def test_lazy_reconnect_passes_pool_kwargs():
+def test_lazy_reconnect_passes_pool_kwargs(pool_defaults_from_code):
     """Nach _reset_driver_after_fork ruft _get_session() driver erneut mit Pool-Kwargs auf."""
-    from app.storage.neo4j_storage import Neo4jStorage
+    storage_module = pool_defaults_from_code
 
     mock_driver = MagicMock()
     mock_driver.session.return_value = MagicMock()
 
     with (
-        patch("app.storage.neo4j_storage.GraphDatabase.driver", return_value=mock_driver) as mock_factory,
-        patch("app.storage.neo4j_storage.Neo4jStorage._verify_connectivity"),
-        patch("app.storage.neo4j_storage.Neo4jStorage._ensure_schema"),
-        patch("app.storage.neo4j_storage.NERExtractor", return_value=MagicMock()),
-        patch("app.storage.neo4j_storage.EmbeddingService", return_value=MagicMock()),
+        patch.object(storage_module, "GraphDatabase") as mock_gdb,
+        patch.object(storage_module.Neo4jStorage, "_verify_connectivity"),
+        patch.object(storage_module.Neo4jStorage, "_ensure_schema"),
+        patch.object(storage_module, "NERExtractor", return_value=MagicMock()),
+        patch.object(storage_module, "EmbeddingService", return_value=MagicMock()),
     ):
-        storage = Neo4jStorage(uri="bolt://localhost:7687", user="neo4j", password="secret")
+        mock_gdb.driver.return_value = mock_driver
+        mock_factory = mock_gdb.driver
+        storage = storage_module.Neo4jStorage(uri="bolt://localhost:7687", user="neo4j", password="secret")
         # Simuliert den Fork-Reset (Fix 4)
         storage._driver = None
         storage._get_session()
@@ -123,7 +179,14 @@ def test_lazy_reconnect_passes_pool_kwargs():
     # Erster Call: __init__; zweiter Call: lazy reconnect
     assert mock_factory.call_count == 2
     _, kwargs = mock_factory.call_args  # letzter Call
+    # Alle fuenf Pool-Werte, nicht nur drei: ein Fehler beim Durchreichen von
+    # connection_acquisition_timeout, connection_timeout oder
+    # max_connection_lifetime im Reconnect-Pfad blieb sonst unentdeckt
+    # (CodeRabbit-Review zu PR #1076).
     assert kwargs["max_connection_pool_size"] == 50
+    assert kwargs["connection_acquisition_timeout"] == 60.0
+    assert kwargs["connection_timeout"] == 15.0
+    assert kwargs["max_connection_lifetime"] == 3600
     assert kwargs["liveness_check_timeout"] == 30.0
     assert kwargs["keep_alive"] is True
 

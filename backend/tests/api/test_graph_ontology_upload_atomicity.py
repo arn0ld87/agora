@@ -20,6 +20,7 @@ import pytest
 from flask import Flask
 
 from app.api import graph_bp
+from app.config import Config
 from app.container import AgoraContainer
 from app.models.project import ProjectStatus
 from app.storage.graph_storage import GraphStorage
@@ -46,8 +47,24 @@ def _capture_agora_logs(monkeypatch, caplog) -> None:
             monkeypatch.setattr(candidate, "level", logging.DEBUG)
 
 
+@pytest.fixture(params=["false", "true"], ids=["debug-off", "debug-on"])
+def flask_debug(request, monkeypatch) -> str:
+    """Fährt jeden Testfall gegen beide ``FLASK_DEBUG``-Werte.
+
+    Der Leak, den diese Datei absichert, trat ausschließlich unter
+    ``FLASK_DEBUG=true`` auf — nur ``FLASK_DEBUG=false`` zu prüfen hat ihn
+    jahrelang durchgelassen. ``Config.DEBUG`` wird beim Import aus der
+    Umgebungsvariable evaluiert, deshalb wird das Attribut zusätzlich direkt
+    gesetzt.
+    """
+    value: str = request.param
+    monkeypatch.setenv("FLASK_DEBUG", value)
+    monkeypatch.setattr(Config, "DEBUG", value == "true")
+    return value
+
+
 @pytest.fixture
-def upload_env(monkeypatch, caplog):
+def upload_env(monkeypatch, caplog, flask_debug):
     _capture_agora_logs(monkeypatch, caplog)
     storage = MagicMock(spec=GraphStorage)
     app = Flask(__name__)

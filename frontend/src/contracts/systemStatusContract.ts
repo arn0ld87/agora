@@ -48,6 +48,21 @@ export const SystemStatusOllamaSchema = z
   })
   .passthrough()
 
+/**
+ * Spiegel von `backend/app/contracts/system_status_contract.py::SystemStatusE2E`
+ * (generiert nach `schemas/system-status-e2e.schema.json`).
+ *
+ * Meldet, ob der Backend-Prozess im E2E-Stub-Modus läuft, also ob
+ * `LLMClient.chat_json` Konservenantworten statt echter Provider-Antworten
+ * liefert. `stub_active` ist genau dann `true`, wenn `llm_mode === 'stub'`.
+ */
+export const SystemStatusE2ESchema = z
+  .object({
+    llm_mode: z.string().nullable().optional(),
+    stub_active: z.boolean(),
+  })
+  .passthrough()
+
 export const SystemStatusDiskSchema = z
   .object({
     uploads: z
@@ -75,6 +90,9 @@ export const SystemStatusResponseSchema = z
     backend: SystemStatusBackendSchema,
     neo4j: SystemStatusNeo4jSchema,
     ollama: SystemStatusOllamaSchema,
+    // Optional, damit ein aelteres Backend ohne den Teilbaum nicht am
+    // Zod-Parse scheitert. Der E2E-Helper assertiert die Anwesenheit selbst.
+    e2e: SystemStatusE2ESchema.optional(),
     disk: SystemStatusDiskSchema,
     gpu: SystemStatusGpuSchema.optional(),
     timestamp: z.string(),
