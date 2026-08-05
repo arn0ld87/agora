@@ -94,7 +94,7 @@ def test_index_not_found_warning_wording(svc):
     """ClientError mit IndexNotFound-Code liefert [] und das Warning enthält
     'IndexNotFound' aber NICHT den alten Text 'index may not exist yet'.
     """
-    err = ClientError()
+    err = ClientError("mock message")
     err.code = "Neo.ClientError.Schema.IndexNotFound"
 
     session = MagicMock()
@@ -141,3 +141,49 @@ def test_happy_path_single_session_run_call(svc):
     session.execute_read.assert_called_once()
     mock_tx.run.assert_called_once()
     assert isinstance(results, list)
+
+def test_procedure_not_found_returns_empty(svc):
+    """ClientError with ProcedureNotFound code returns [] and logs a warning."""
+    err = ClientError("mock message")
+    err.code = "Neo.ClientError.Procedure.ProcedureNotFound"
+
+    session = MagicMock()
+    session.execute_read.side_effect = err
+
+    with patch("app.storage.search_service.logger") as mock_logger:
+        results = svc._run_node_vector_search(session, "g1", [0.1] * 1536, 5)
+
+    assert results == []
+    assert mock_logger.warning.called
+    all_warning_args = [str(a) for c in mock_logger.warning.call_args_list for a in c.args]
+    combined = " ".join(all_warning_args)
+    assert "ProcedureNotFound" in combined
+
+
+def test_other_client_error_raises(svc):
+    """ClientError with other code is re-raised."""
+    err = ClientError("mock message")
+    err.code = "Neo.ClientError.Statement.SyntaxError"
+
+    session = MagicMock()
+    session.execute_read.side_effect = err
+
+    with pytest.raises(ClientError):
+        svc._run_node_vector_search(session, "g1", [0.1] * 1536, 5)
+
+
+def test_generic_exception_returns_empty(svc):
+    """Generic Exception returns [] and logs a warning."""
+    err = Exception("Something went wrong")
+
+    session = MagicMock()
+    session.execute_read.side_effect = err
+
+    with patch("app.storage.search_service.logger") as mock_logger:
+        results = svc._run_node_vector_search(session, "g1", [0.1] * 1536, 5)
+
+    assert results == []
+    assert mock_logger.warning.called
+    all_warning_args = [str(a) for c in mock_logger.warning.call_args_list for a in c.args]
+    combined = " ".join(all_warning_args)
+    assert "Something went wrong" in combined
