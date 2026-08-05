@@ -15,7 +15,8 @@
 # Refactor-Kandidaten (eigene Sub-Slices nötig):
 #   - app/api/report.py (F/E): Kandidat für API-Envelope-Refactor (M11.6)
 #   - app/services/report_agent/workflow.py (E/D): Kandidat für Report-Agent-Refactor
-#   - app/api/simulation_run.py (E): Kandidat für Sim-Run-Refactor
+#   - app/api/simulation_run.py (E): erledigt (#1079) — start_simulation ist in
+#     Phasen zerlegt und aus der Allowlist entfernt.
 #   - app/services/oasis_profile_generator.py (E): Kandidat für OASIS-Profil-Refactor
 #   - app/services/evidence_migrations.py (F/D): aus P3.1-Followup (Commit 83b7488),
 #     echte Persona/Segment/FrictionPoint/TrustSignal-Aggregation. Eigener
@@ -30,7 +31,6 @@ app/utils/file_parser.py::FileParser._extract_from_pdf
 # nur Pfad neu. Refactoring der Funktionen selbst: #590.
 app/llm/client.py::LLMClient.chat_json
 app/api/simulation_profiles.py::add_simulation_profile
-app/api/simulation_run.py::start_simulation
 app/api/simulation_prepare.py::prepare_simulation
 app/api/runs.py::_build_run_summary
 app/api/report.py::get_generate_status

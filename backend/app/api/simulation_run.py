@@ -3,6 +3,8 @@ Run-control and live-status routes split from the main simulation API module.
 """
 
 import os
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
 from flask import jsonify, request
 
@@ -16,7 +18,7 @@ from ..services.llm_routing_seed import (
     seed_run_stage_routing,
 )
 from ..utils.endpoints import is_local_endpoint
-from ..services.llm_runtime import parse_runtime_llm_config
+from ..services.llm_runtime import RuntimeLlmConfig, parse_runtime_llm_config
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import SimulationRunner
 from ..services.stage_model_router import StageModelRouter
@@ -34,6 +36,11 @@ from .simulation_common import (
     simulation_run_artifacts as _simulation_run_artifacts,
 )
 from .simulation_prepare import _check_simulation_prepared
+
+if TYPE_CHECKING:  # pragma: no cover — nur für Typprüfung
+    from ..contracts.ai_provider_contract import AiModelRef
+    from ..contracts.llm_routing_contract import ResolvedRoute
+    from ..contracts.run_budget_contract import RunBudgetConfig
 
 
 def _evaluate_persona_review_gate(simulation_id: str):
@@ -96,71 +103,106 @@ def _apply_budget_to_simulation(simulation_id, run_id, budget_config, set_config
                     logger.warning("Konnte veraltetes Budget-Artefakt nicht löschen: %s", stale)
 
 
-@simulation_bp.route('/start', methods=['POST'])
-@require_scope("simulation:control")
-@handle_api_errors(logger=logger, log_prefix="Failed to start simulation")
-def start_simulation():
-    """Start running a prepared simulation."""
-    data = request.get_json() or {}
+class _StartRejected(Exception):
+    """Bricht eine Start-Phase mit einer fertig gebauten Fehler-Response ab.
 
-    simulation_id = data.get('simulation_id')
-    if not simulation_id:
-        return json_error(
-            ApiErrorCode.VALIDATION_FAILED,
-            message="Please provide simulation_id",
-        )
-    if not validate_simulation_id(simulation_id):
-        return json_error(
-            ApiErrorCode.INVALID_ID,
-            message="Invalid simulation_id format",
-        )
+    Die Phasen unterhalb von :func:`start_simulation` sind einzeln testbar und
+    müssen ihren Ablehnungsfall deshalb selbst formulieren können. Sie tragen
+    die bereits gebaute ``json_error``-Response, damit Status-Code, Fehlercode
+    und Meldung wortgleich das bleiben, was der monolithische Handler vorher
+    zurückgegeben hat (#1079).
+    """
 
-    platform = data.get('platform', 'parallel')
-    max_rounds = data.get('max_rounds')
-    simulation_days = data.get('simulation_days')
-    llm_model_override = (data.get('llm_model') or '').strip() or None
+    def __init__(self, response: Any) -> None:
+        super().__init__("simulation start rejected")
+        self.response = response
+
+
+@dataclass(frozen=True)
+class _StartRequest:
+    """Validierte Eingaben eines ``POST /api/simulation/start``.
+
+    Interner Parameter-Container zwischen den Start-Phasen, **kein**
+    API-Vertrag: die Wire-Validierung bleibt feldweise in
+    :func:`_parse_start_request`, und nichts an dieser Klasse wird serialisiert.
+    """
+
+    simulation_id: str
+    platform: str
+    max_rounds: "int | None"
+    simulation_days: "int | None"
+    llm_model_override: "str | None"
+    llm_runtime: RuntimeLlmConfig
+    ai_model_ref: "AiModelRef | None"
+    budget_config: "RunBudgetConfig | None"
+    enable_graph_memory_update: bool
+    force: bool
+
+
+def _parse_bounded_int(
+    raw: Any,
+    *,
+    minimum: int,
+    maximum: "int | None",
+    range_message: str,
+    type_message: str,
+) -> int:
+    """Ganzzahl mit Grenzen parsen; wirft :class:`_StartRejected` bei Verstoß."""
     try:
-        llm_runtime = parse_runtime_llm_config(data)
-    except ValueError as exc:
-        return json_error(
-            ApiErrorCode.VALIDATION_FAILED,
-            status=400,
-            message=str(exc),
+        value = int(raw)
+    except (ValueError, TypeError):
+        raise _StartRejected(
+            json_error(ApiErrorCode.VALIDATION_FAILED, message=type_message)
+        ) from None
+    if value < minimum or (maximum is not None and value > maximum):
+        raise _StartRejected(
+            json_error(ApiErrorCode.VALIDATION_FAILED, message=range_message)
         )
-    # Explizite UI-Auswahl (AiModelRef) ist die autoritative Sim-Route und darf
-    # nicht still mit Legacy-Feldern kombiniert werden (Issue #817, analog
-    # /api/report/generate). Wenn gesetzt, wird die ProviderConnection zur
-    # Single Source of Truth für Modell, Base-URL und gebundenen Key — kein
-    # .env-Fallback. Root Cause des OASIS-404 ``model MiniMax-M3 not found``:
-    # der Legacy-Pfad reichte nur den nackten Modellnamen weiter und produzierte
-    # eine Route ohne Base-URL + Default-Provider-Key → CAMEL traf den
-    # OpenAI-Default-Endpoint. Der ai_model_ref-Pfad bindet Connection-URL und
-    # -Secret atomar (connection_only=True).
-    ai_model_ref = None
-    raw_ref = data.get('ai_model_ref')
-    if raw_ref is not None:
-        from pydantic import ValidationError as _ValidationError
+    return value
 
-        from ..contracts.ai_provider_contract import AiModelRef as _AiModelRef
-        try:
-            ai_model_ref = _AiModelRef.model_validate(raw_ref)
-        except _ValidationError:
-            return json_error(
+
+def _parse_ai_model_ref(data: "dict[str, Any]") -> "AiModelRef | None":
+    """Explizite UI-Auswahl (``AiModelRef``) lesen und gegen Legacy-Felder sperren.
+
+    Die AiModelRef ist die autoritative Sim-Route und darf nicht still mit
+    Legacy-Feldern kombiniert werden (Issue #817, analog /api/report/generate).
+    Wenn gesetzt, wird die ProviderConnection zur Single Source of Truth für
+    Modell, Base-URL und gebundenen Key — kein .env-Fallback. Root Cause des
+    OASIS-404 ``model MiniMax-M3 not found``: der Legacy-Pfad reichte nur den
+    nackten Modellnamen weiter und produzierte eine Route ohne Base-URL +
+    Default-Provider-Key → CAMEL traf den OpenAI-Default-Endpoint. Der
+    ai_model_ref-Pfad bindet Connection-URL und -Secret atomar
+    (connection_only=True).
+    """
+    raw_ref = data.get('ai_model_ref')
+    if raw_ref is None:
+        return None
+
+    from pydantic import ValidationError as _ValidationError
+
+    from ..contracts.ai_provider_contract import AiModelRef as _AiModelRef
+    try:
+        ai_model_ref = _AiModelRef.model_validate(raw_ref)
+    except _ValidationError:
+        raise _StartRejected(
+            json_error(
                 ApiErrorCode.VALIDATION_FAILED,
                 status=400,
                 message="ai_model_ref ist ungültig",
             )
-        # Nur die Legacy-Felder prüfen, die dieser Handler auch ausliest und
-        # weiterreicht (llm_model → llm_model_override, llm_provider →
-        # llm_runtime). llm_profile_id wird im Sim-Start nicht unterstützt und
-        # daher nicht als Konfliktgrund geführt — ein Profilpfad ist hier nicht
-        # implementiert (CodeRabbit PR #852).
-        conflicting = [
-            key for key in ('llm_model', 'llm_provider')
-            if data.get(key)
-        ]
-        if conflicting:
-            return json_error(
+        ) from None
+    # Nur die Legacy-Felder prüfen, die dieser Handler auch ausliest und
+    # weiterreicht (llm_model → llm_model_override, llm_provider →
+    # llm_runtime). llm_profile_id wird im Sim-Start nicht unterstützt und
+    # daher nicht als Konfliktgrund geführt — ein Profilpfad ist hier nicht
+    # implementiert (CodeRabbit PR #852).
+    conflicting = [
+        key for key in ('llm_model', 'llm_provider')
+        if data.get(key)
+    ]
+    if conflicting:
+        raise _StartRejected(
+            json_error(
                 ApiErrorCode.VALIDATION_FAILED,
                 status=400,
                 message=(
@@ -168,80 +210,152 @@ def start_simulation():
                     "kombiniert werden"
                 ),
             )
-        # Legacy-Override stummschalten: die Connection ist maßgeblich.
-        llm_model_override = None
-        llm_runtime = parse_runtime_llm_config({})
-    enable_graph_memory_update = data.get('enable_graph_memory_update', False)
-    force = data.get('force', False)
+        )
+    return ai_model_ref
 
-    # Run-Budget (Issue #764): optionale Token-/Kosten-/Zeit-/Aufruflimits.
-    budget_config = None
+
+def _parse_budget_config(data: "dict[str, Any]") -> "RunBudgetConfig | None":
+    """Run-Budget (Issue #764): optionale Token-/Kosten-/Zeit-/Aufruflimits."""
     raw_budget = data.get('budget')
-    if raw_budget is not None:
-        from pydantic import ValidationError as _BudgetValidationError
+    if raw_budget is None:
+        return None
 
-        from ..contracts.run_budget_contract import RunBudgetConfig as _RunBudgetConfig
-        try:
-            budget_config = _RunBudgetConfig.model_validate(raw_budget)
-        except _BudgetValidationError as exc:
-            return json_error(
+    from pydantic import ValidationError as _BudgetValidationError
+
+    from ..contracts.run_budget_contract import RunBudgetConfig as _RunBudgetConfig
+    try:
+        return _RunBudgetConfig.model_validate(raw_budget)
+    except _BudgetValidationError as exc:
+        raise _StartRejected(
+            json_error(
                 ApiErrorCode.VALIDATION_FAILED,
                 status=400,
                 message=f"budget ist ungültig: {exc.errors()[0].get('msg', 'validation error')}",
             )
+        ) from exc
 
-    if max_rounds is not None:
-        try:
-            max_rounds = int(max_rounds)
-            if max_rounds <= 0:
-                return json_error(
-                    ApiErrorCode.VALIDATION_FAILED,
-                    message="max_rounds must be a positive integer",
-                )
-        except (ValueError, TypeError):
-            return json_error(
-                ApiErrorCode.VALIDATION_FAILED,
-                message="max_rounds must be a valid integer",
-            )
 
-    if simulation_days is not None:
-        try:
-            simulation_days = int(simulation_days)
-            if simulation_days <= 0 or simulation_days > 365:
-                return json_error(
-                    ApiErrorCode.VALIDATION_FAILED,
-                    message="simulation_days must be between 1 and 365",
-                )
-        except (ValueError, TypeError):
-            return json_error(
+def _parse_start_request(data: "dict[str, Any]") -> _StartRequest:
+    """Phase 1 — Request-Payload validieren und in einen Container überführen.
+
+    Die Prüfreihenfolge ist Teil des API-Verhaltens: bei mehreren fehlerhaften
+    Feldern entscheidet sie, welche Meldung der Aufrufer sieht.
+    """
+    simulation_id = data.get('simulation_id')
+    if not simulation_id:
+        raise _StartRejected(
+            json_error(
                 ApiErrorCode.VALIDATION_FAILED,
-                message="simulation_days must be a valid integer",
+                message="Please provide simulation_id",
             )
+        )
+    if not validate_simulation_id(simulation_id):
+        raise _StartRejected(
+            json_error(
+                ApiErrorCode.INVALID_ID,
+                message="Invalid simulation_id format",
+            )
+        )
+
+    platform = data.get('platform', 'parallel')
+    llm_model_override = (data.get('llm_model') or '').strip() or None
+    try:
+        llm_runtime = parse_runtime_llm_config(data)
+    except ValueError as exc:
+        raise _StartRejected(
+            json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=400,
+                message=str(exc),
+            )
+        ) from exc
+
+    ai_model_ref = _parse_ai_model_ref(data)
+    if ai_model_ref is not None:
+        # Legacy-Override stummschalten: die Connection ist maßgeblich.
+        llm_model_override = None
+        llm_runtime = parse_runtime_llm_config({})
+
+    budget_config = _parse_budget_config(data)
+
+    raw_max_rounds = data.get('max_rounds')
+    max_rounds = None if raw_max_rounds is None else _parse_bounded_int(
+        raw_max_rounds,
+        minimum=1,
+        maximum=None,
+        range_message="max_rounds must be a positive integer",
+        type_message="max_rounds must be a valid integer",
+    )
+
+    raw_simulation_days = data.get('simulation_days')
+    simulation_days = None if raw_simulation_days is None else _parse_bounded_int(
+        raw_simulation_days,
+        minimum=1,
+        maximum=365,
+        range_message="simulation_days must be between 1 and 365",
+        type_message="simulation_days must be a valid integer",
+    )
 
     if platform not in ['twitter', 'reddit', 'parallel']:
-        return json_error(
-            ApiErrorCode.VALIDATION_FAILED,
-            message=f"Invalid platform type: {platform}. Allowed: twitter/reddit/parallel",
+        raise _StartRejected(
+            json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                message=f"Invalid platform type: {platform}. Allowed: twitter/reddit/parallel",
+            )
         )
 
-    manager = SimulationManager()
-    state = manager.get_simulation(simulation_id)
-    if not state:
-        return json_error(
-            ApiErrorCode.NOT_FOUND,
-            status=404,
-            message=f"Simulation does not exist: {simulation_id}",
+    return _StartRequest(
+        simulation_id=simulation_id,
+        platform=platform,
+        max_rounds=max_rounds,
+        simulation_days=simulation_days,
+        llm_model_override=llm_model_override,
+        llm_runtime=llm_runtime,
+        ai_model_ref=ai_model_ref,
+        budget_config=budget_config,
+        enable_graph_memory_update=data.get('enable_graph_memory_update', False),
+        force=data.get('force', False),
+    )
+
+
+def _stop_running_simulation(simulation_id: str, force: bool) -> None:
+    """Laufenden Sim-Prozess für einen Force-Restart beenden.
+
+    Ohne ``force`` ist ein laufender Run ein 409 — der Aufrufer muss erst
+    ``/stop`` rufen.
+    """
+    run_state = SimulationRunner.get_run_state(simulation_id)
+    if not (run_state and run_state.runner_status.value == 'running'):
+        return
+    if not force:
+        raise _StartRejected(
+            json_error(
+                ApiErrorCode.SIMULATION_ALREADY_RUNNING,
+                status=409,
+                message=(
+                    "Simulation is running. Please call /stop first or use force=true to force restart."
+                ),
+            )
         )
+    logger.info(f"Force mode: stopping running simulation {simulation_id}")
+    try:
+        SimulationRunner.stop_simulation(simulation_id)
+    except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
+        logger.warning(f"Warning when stopping simulation: {exc}")
 
-    gate_response = _evaluate_persona_review_gate(simulation_id)
-    if gate_response is not None:
-        return gate_response
 
-    force_restarted = False
-    if state.status != SimulationStatus.READY:
-        is_prepared, _prepare_info = _check_simulation_prepared(simulation_id)
-        if not is_prepared:
-            return json_error(
+def _ensure_startable_state(manager, state, req: _StartRequest) -> bool:
+    """Phase 2 — sicherstellen, dass die Simulation startbar ist.
+
+    Gibt zurück, ob dafür ein Force-Restart nötig war (``force_restarted``).
+    """
+    if state.status == SimulationStatus.READY:
+        return False
+
+    is_prepared, _prepare_info = _check_simulation_prepared(req.simulation_id)
+    if not is_prepared:
+        raise _StartRejected(
+            json_error(
                 ApiErrorCode.SIMULATION_NOT_PREPARED,
                 status=409,
                 message=(
@@ -249,138 +363,162 @@ def start_simulation():
                     "Please call /prepare first"
                 ),
             )
-
-        if state.status == SimulationStatus.RUNNING:
-            run_state = SimulationRunner.get_run_state(simulation_id)
-            if run_state and run_state.runner_status.value == 'running':
-                if not force:
-                    return json_error(
-                        ApiErrorCode.SIMULATION_ALREADY_RUNNING,
-                        status=409,
-                        message=(
-                            "Simulation is running. Please call /stop first or use force=true to force restart."
-                        ),
-                    )
-                logger.info(f"Force mode: stopping running simulation {simulation_id}")
-                try:
-                    SimulationRunner.stop_simulation(simulation_id)
-                except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
-                    logger.warning(f"Warning when stopping simulation: {exc}")
-
-        if force:
-            logger.info(f"Force mode: cleaning simulation runtime files for {simulation_id}")
-            cleanup_result = SimulationRunner.cleanup_simulation_logs(simulation_id)
-            if not cleanup_result.get("success"):
-                logger.warning(f"Warning when cleaning logs: {cleanup_result.get('errors')}")
-            force_restarted = True
-
-        manager._reset_to_ready(
-            state,
-            reason=f"force start_run after status={state.status.value}",
         )
 
-    graph_id = None
-    if enable_graph_memory_update:
-        graph_id = state.graph_id
-        if not graph_id:
-            project = ProjectManager.get_project(state.project_id)
-            if project:
-                graph_id = project.graph_id
-        if not graph_id:
-            return json_error(
+    if state.status == SimulationStatus.RUNNING:
+        _stop_running_simulation(req.simulation_id, req.force)
+
+    force_restarted = False
+    if req.force:
+        logger.info(f"Force mode: cleaning simulation runtime files for {req.simulation_id}")
+        cleanup_result = SimulationRunner.cleanup_simulation_logs(req.simulation_id)
+        if not cleanup_result.get("success"):
+            logger.warning(f"Warning when cleaning logs: {cleanup_result.get('errors')}")
+        force_restarted = True
+
+    manager._reset_to_ready(
+        state,
+        reason=f"force start_run after status={state.status.value}",
+    )
+    return force_restarted
+
+
+def _resolve_graph_memory_id(state, req: _StartRequest) -> "str | None":
+    """Phase 3 — Graph-ID für das Knowledge-Graph-Memory-Update auflösen."""
+    if not req.enable_graph_memory_update:
+        return None
+
+    graph_id = state.graph_id
+    if not graph_id:
+        project = ProjectManager.get_project(state.project_id)
+        if project:
+            graph_id = project.graph_id
+    if not graph_id:
+        raise _StartRejected(
+            json_error(
                 ApiErrorCode.VALIDATION_FAILED,
                 message=(
                     "Enable knowledge graph memory update requires valid graph_id. "
                     "Please ensure project graph is built."
                 ),
             )
-        logger.info(
-            f"Enable knowledge graph memory update: simulation_id={simulation_id}, graph_id={graph_id}",
-            extra={'simulation_id': simulation_id},
+        )
+    logger.info(
+        f"Enable knowledge graph memory update: simulation_id={req.simulation_id}, graph_id={graph_id}",
+        extra={'simulation_id': req.simulation_id},
+    )
+    return graph_id
+
+
+def _precheck_runtime_provider_key(llm_runtime: RuntimeLlmConfig) -> None:
+    """Phase 4a — Key-Verfügbarkeit für einen Legacy-Provider-Override prüfen.
+
+    Pre-Check VOR der Run-Record-Creation, damit kein orphaned Run entsteht
+    (Copilot PR #466, simulation_run.py:247). Dafür simulieren wir die
+    Stage-Auflösung ohne Persistenz: ein leerer Routing-Stub reicht für die
+    Provider/Key-Bestimmung, weil ``seed_run_stage_routing`` nichts anderes
+    tut als Workspace-Default + Override zusammenzuführen.
+    """
+    if not (llm_runtime.enabled and not llm_runtime.api_key):
+        return
+
+    from ..services.llm_routing_seed import map_runtime_provider_to_route_provider
+    from ..services.secret_resolver import SecretResolver
+    from ..services.llm_provider_registry import LlmProviderRegistry
+    provider_id_preview = map_runtime_provider_to_route_provider(llm_runtime.provider)
+    if not provider_id_preview:
+        return
+
+    registry = LlmProviderRegistry()
+    descriptor = next((p for p in registry.get_providers() if p.id == provider_id_preview), None)
+    p_type = descriptor.type if descriptor else "openai_compatible"
+    stored_key = SecretResolver().get_api_key(provider_id_preview, p_type)
+    if not stored_key and not is_local_endpoint(
+        (descriptor.base_url if descriptor else None) or llm_runtime.base_url
+    ):
+        raise _StartRejected(
+            json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=422,
+                message=(
+                    f"provider_override: kein api_key im Payload und kein Key in der Settings-DB "
+                    f"für Provider '{provider_id_preview}'. "
+                    "Bitte in Einstellungen → LLM-Anbieter einen Schlüssel speichern "
+                    "oder im Sitzungsfeld eingeben."
+                ),
+            )
         )
 
-    # Pre-Check VOR der Run-Record-Creation, damit kein orphaned Run entsteht
-    # (Copilot PR #466, simulation_run.py:247). Dafür simulieren wir die
-    # Stage-Auflösung ohne Persistenz: ein leerer Routing-Stub reicht für die
-    # Provider/Key-Bestimmung, weil ``seed_run_stage_routing`` nichts anderes
-    # tut als Workspace-Default + Override zusammenzuführen.
-    if llm_runtime.enabled and not llm_runtime.api_key:
-        from ..services.llm_routing_seed import map_runtime_provider_to_route_provider
-        from ..services.secret_resolver import SecretResolver
-        from ..services.llm_provider_registry import LlmProviderRegistry
-        provider_id_preview = map_runtime_provider_to_route_provider(llm_runtime.provider)
-        if provider_id_preview:
-            registry = LlmProviderRegistry()
-            descriptor = next((p for p in registry.get_providers() if p.id == provider_id_preview), None)
-            p_type = descriptor.type if descriptor else "openai_compatible"
-            stored_key = SecretResolver().get_api_key(provider_id_preview, p_type)
-            if not stored_key and not is_local_endpoint(
-                (descriptor.base_url if descriptor else None) or llm_runtime.base_url
-            ):
-                return json_error(
-                    ApiErrorCode.VALIDATION_FAILED,
-                    status=422,
-                    message=(
-                        f"provider_override: kein api_key im Payload und kein Key in der Settings-DB "
-                        f"für Provider '{provider_id_preview}'. "
-                        "Bitte in Einstellungen → LLM-Anbieter einen Schlüssel speichern "
-                        "oder im Sitzungsfeld eingeben."
-                    ),
-                )
 
-    # ai_model_ref-Pre-Check VOR der Run-Record-Creation: die Connection muss
-    # existieren, aktiviert sein und (für api_key-Connections) ein gebundenes
-    # Secret tragen — sonst kein .env-Fallback, sondern 422 (analog dem
-    # Legacy-Pre-Check, kein orphaned Run). Die volle Model-Discovery
-    # (Connection/Model-Mismatch, Issue #819) läuft später in
-    # ``seed_run_stage_routing``; deren ValueError wird am Endpunkt zu 4xx.
-    if ai_model_ref is not None:
-        from ..services.llm_routing_seed import prevalidate_ai_model_ref
-        try:
-            prevalidate_ai_model_ref(ai_model_ref)
-        except ValueError as exc:
-            return json_error(
+def _precheck_ai_model_ref(ai_model_ref: "AiModelRef | None") -> None:
+    """Phase 4b — Connection der expliziten ``AiModelRef`` vorab prüfen.
+
+    Pre-Check VOR der Run-Record-Creation: die Connection muss existieren,
+    aktiviert sein und (für api_key-Connections) ein gebundenes Secret tragen —
+    sonst kein .env-Fallback, sondern 422 (analog dem Legacy-Pre-Check, kein
+    orphaned Run). Die volle Model-Discovery (Connection/Model-Mismatch, Issue
+    #819) läuft später in ``seed_run_stage_routing``; deren ValueError wird am
+    Endpunkt zu 4xx.
+    """
+    if ai_model_ref is None:
+        return
+
+    from ..services.llm_routing_seed import prevalidate_ai_model_ref
+    try:
+        prevalidate_ai_model_ref(ai_model_ref)
+    except ValueError as exc:
+        raise _StartRejected(
+            json_error(
                 ApiErrorCode.VALIDATION_FAILED,
                 status=422,
                 message=str(exc),
             )
+        ) from exc
 
+
+def _register_start_run(req: _StartRequest, state) -> "dict[str, Any]":
+    """Phase 5 — Run-Record anlegen, Routing seeden, Budget verankern."""
     run_record = run_registry.create_run(
         run_type="simulation_run",
-        entity_id=simulation_id,
+        entity_id=req.simulation_id,
         status="pending",
         progress=0,
         message="Simulation run queued",
-        linked_ids={"simulation_id": simulation_id, "project_id": state.project_id},
-        artifacts=_simulation_run_artifacts(simulation_id),
-        resume_capability=_simulation_resume_capability(simulation_id, state),
+        linked_ids={"simulation_id": req.simulation_id, "project_id": state.project_id},
+        artifacts=_simulation_run_artifacts(req.simulation_id),
+        resume_capability=_simulation_resume_capability(req.simulation_id, state),
         branch_label=state.branch_name,
         metadata={
             "graph_id": state.graph_id,
-            "platform": platform,
+            "platform": req.platform,
             "source_simulation_id": state.source_simulation_id,
             "root_simulation_id": state.root_simulation_id,
             "branch_name": state.branch_name,
             "branch_depth": state.branch_depth,
-            "llm_model": llm_model_override,
-            "llm_provider": llm_runtime.redacted_metadata() or None,
+            "llm_model": req.llm_model_override,
+            "llm_provider": req.llm_runtime.redacted_metadata() or None,
         },
     )
     seed_run_stage_routing(
         run_record["run_id"],
         "simulation_rounds",
-        llm_model_override=llm_model_override,
-        llm_runtime=llm_runtime,
-        ai_model_ref=ai_model_ref,
+        llm_model_override=req.llm_model_override,
+        llm_runtime=req.llm_runtime,
+        ai_model_ref=req.ai_model_ref,
     )
     # Budget am Run verankern + Subprozess-Config schreiben (Issue #764).
     # Alt-Artefakte (budget_abort.json eines früheren Runs) werden entfernt,
     # damit ein Neustart nicht sofort wieder abbricht.
     from ..services.run_budget import set_run_budget_config as _set_run_budget_config
     _apply_budget_to_simulation(
-        simulation_id, run_record["run_id"], budget_config, _set_run_budget_config
+        req.simulation_id, run_record["run_id"], req.budget_config, _set_run_budget_config
     )
-    route_router = StageModelRouter(run_record["run_id"])
+    return run_record
+
+
+def _resolve_start_route(run_id: str, llm_runtime: RuntimeLlmConfig):
+    """Phase 6 — Stage-Route auflösen, sperren und den API-Key bestimmen."""
+    route_router = StageModelRouter(run_id)
     resolved_route = route_router.resolve("simulation_rounds")
     route_router.lock_stage("simulation_rounds", resolved_route)
     resolved_api_key = resolve_route_api_key(resolved_route, llm_runtime)
@@ -391,47 +529,133 @@ def start_simulation():
         # damit keine Phantom-Runs in der Liste landen.
         try:
             run_registry.update_run(
-                run_record["run_id"],
+                run_id,
                 status="failed",
                 message=f"Missing API key for provider {resolved_route.provider_id}",
             )
         except Exception:  # noqa: BLE001 — best effort
             logger.warning("Failed to mark orphaned run as failed", exc_info=True)
-        return json_error(
-            ApiErrorCode.VALIDATION_FAILED,
-            status=422,
-            message=(
-                f"provider_override: kein api_key im Payload und kein Key in der Settings-DB "
-                f"für Provider '{resolved_route.provider_id}'. "
-                "Bitte in Einstellungen → LLM-Anbieter einen Schlüssel speichern "
-                "oder im Sitzungsfeld eingeben."
-            ),
+        raise _StartRejected(
+            json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=422,
+                message=(
+                    f"provider_override: kein api_key im Payload und kein Key in der Settings-DB "
+                    f"für Provider '{resolved_route.provider_id}'. "
+                    "Bitte in Einstellungen → LLM-Anbieter einen Schlüssel speichern "
+                    "oder im Sitzungsfeld eingeben."
+                ),
+            )
         )
+    return resolved_route, resolved_api_key
 
-    if simulation_days is not None or llm_model_override or llm_runtime.enabled or ai_model_ref is not None:
-        store = get_artifact_store()
-        config = store.read_json(simulation_id, "simulation_config", default=None)
-        if not config:
-            return json_error(
+
+def _has_config_overrides(req: _StartRequest) -> bool:
+    """Ob der Request die persistierte Sim-Config überhaupt anfasst."""
+    return bool(
+        req.simulation_days is not None
+        or req.llm_model_override
+        or req.llm_runtime.enabled
+        or req.ai_model_ref is not None
+    )
+
+
+def _apply_route_to_simulation_config(
+    req: _StartRequest, resolved_route: "ResolvedRoute"
+) -> None:
+    """Phase 7 — Laufzeit-Overrides in die persistierte Sim-Config schreiben."""
+    if not _has_config_overrides(req):
+        return
+
+    store = get_artifact_store()
+    config = store.read_json(req.simulation_id, "simulation_config", default=None)
+    if not config:
+        raise _StartRejected(
+            json_error(
                 ApiErrorCode.SIMULATION_NOT_PREPARED,
                 status=404,
                 message="Simulation configuration does not exist. Please call /prepare first",
             )
-        if simulation_days is not None:
-            time_config = dict(config.get("time_config") or {})
-            time_config["total_simulation_hours"] = simulation_days * 24
-            config["time_config"] = time_config
-        if llm_model_override or ai_model_ref is not None:
-            config["llm_model"] = resolved_route.model
-        if (llm_runtime.enabled or ai_model_ref is not None) and resolved_route.base_url_sanitized:
-            config["llm_base_url"] = resolved_route.base_url_sanitized
-        store.write_json(simulation_id, "simulation_config", config)
+        )
+    if req.simulation_days is not None:
+        time_config = dict(config.get("time_config") or {})
+        time_config["total_simulation_hours"] = req.simulation_days * 24
+        config["time_config"] = time_config
+    if req.llm_model_override or req.ai_model_ref is not None:
+        config["llm_model"] = resolved_route.model
+    if (req.llm_runtime.enabled or req.ai_model_ref is not None) and resolved_route.base_url_sanitized:
+        config["llm_base_url"] = resolved_route.base_url_sanitized
+    store.write_json(req.simulation_id, "simulation_config", config)
+
+
+def _build_start_response(
+    req: _StartRequest,
+    run_state,
+    run_id: str,
+    graph_id: "str | None",
+    force_restarted: bool,
+) -> "dict[str, Any]":
+    """Phase 8 — Antwort-Payload aus Runner-State und Request-Overrides bauen."""
+    response_data = run_state.to_dict()
+    if req.max_rounds:
+        response_data['max_rounds_applied'] = req.max_rounds
+    if req.simulation_days:
+        response_data['simulation_days_applied'] = req.simulation_days
+    response_data['graph_memory_update_enabled'] = req.enable_graph_memory_update
+    response_data['force_restarted'] = force_restarted
+    response_data['run_id'] = run_id
+    if req.enable_graph_memory_update:
+        response_data['graph_id'] = graph_id
+    return response_data
+
+
+@simulation_bp.route('/start', methods=['POST'])
+@require_scope("simulation:control")
+@handle_api_errors(logger=logger, log_prefix="Failed to start simulation")
+def start_simulation():
+    """Start running a prepared simulation.
+
+    Der Handler orchestriert nur noch die Phasen: Validierung → Startbarkeit →
+    Graph-Memory → Provider-Prechecks → Run-Registrierung → Routen-Auflösung →
+    Config-Overrides → Prozessstart (#1079). Jede Phase lehnt über
+    :class:`_StartRejected` mit einer fertigen Fehler-Response ab.
+    """
+    try:
+        req = _parse_start_request(request.get_json() or {})
+
+        manager = SimulationManager()
+        state = manager.get_simulation(req.simulation_id)
+        if not state:
+            raise _StartRejected(
+                json_error(
+                    ApiErrorCode.NOT_FOUND,
+                    status=404,
+                    message=f"Simulation does not exist: {req.simulation_id}",
+                )
+            )
+
+        gate_response = _evaluate_persona_review_gate(req.simulation_id)
+        if gate_response is not None:
+            return gate_response
+
+        force_restarted = _ensure_startable_state(manager, state, req)
+        graph_id = _resolve_graph_memory_id(state, req)
+        _precheck_runtime_provider_key(req.llm_runtime)
+        _precheck_ai_model_ref(req.ai_model_ref)
+
+        run_record = _register_start_run(req, state)
+        resolved_route, resolved_api_key = _resolve_start_route(
+            run_record["run_id"], req.llm_runtime
+        )
+        _apply_route_to_simulation_config(req, resolved_route)
+    except _StartRejected as rejected:
+        return rejected.response
 
     run_state = SimulationRunner.start_simulation(
-        simulation_id=simulation_id,
-        platform=platform,
-        max_rounds=max_rounds,
-        enable_graph_memory_update=enable_graph_memory_update,
+        simulation_id=req.simulation_id,
+        platform=req.platform,
+        max_rounds=req.max_rounds,
+        enable_graph_memory_update=req.enable_graph_memory_update,
         graph_id=graph_id,
         runtime_env=build_route_subprocess_env(
             resolved_route,
@@ -446,21 +670,14 @@ def start_simulation():
         status="processing",
         progress=0,
         message="Simulation run started",
-        resume_capability=_simulation_resume_capability(simulation_id, state),
+        resume_capability=_simulation_resume_capability(req.simulation_id, state),
     )
 
-    response_data = run_state.to_dict()
-    if max_rounds:
-        response_data['max_rounds_applied'] = max_rounds
-    if simulation_days:
-        response_data['simulation_days_applied'] = simulation_days
-    response_data['graph_memory_update_enabled'] = enable_graph_memory_update
-    response_data['force_restarted'] = force_restarted
-    response_data['run_id'] = run_record["run_id"]
-    if enable_graph_memory_update:
-        response_data['graph_id'] = graph_id
-
-    return json_success(response_data)
+    return json_success(
+        _build_start_response(
+            req, run_state, run_record["run_id"], graph_id, force_restarted
+        )
+    )
 
 
 @simulation_bp.route('/stop', methods=['POST'])
