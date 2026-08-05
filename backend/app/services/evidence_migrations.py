@@ -20,6 +20,7 @@ P3.1-Followup — Echte Persona/Segment/FrictionPoint/TrustSignal-Aggregation
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -37,6 +38,11 @@ _TRUST_KEYWORDS = frozenset({"vertrauenssignal", "vertrauens", "trust", "cialdin
 
 # Signal-Type-Fallback für TrustSignals aus Section-Claims.
 _DEFAULT_TRUST_SIGNAL_TYPE = "authority"
+
+# Issue #986: Erkennt vorhandene ``gap_<n>``-IDs, um bei der Neuvergabe in
+# ``migrate_legacy_claims_to_anchored`` Kollisionen mit lückenhaft nummerierten
+# Bestands-Gaps (z. B. gap_01, gap_03) zu vermeiden.
+_GAP_ID_SUFFIX_RE = re.compile(r"^gap_(\d+)$")
 
 # Erlaubte voice_register-Werte (gespiegelt aus report_v3.Persona).
 _VALID_VOICE_REGISTERS = frozenset({"formal-de", "neutral-de", "technical-de", "skeptisch-de"})
@@ -94,6 +100,24 @@ def migrate_legacy_claims_to_anchored(raw: Optional[dict]) -> Optional[dict]:
         section.setdefault("hypotheses", [])
         section.setdefault("data_gaps", [])
 
+        # Issue #986: Bestands-gap_ids der Section einsammeln, damit neue IDs
+        # weder mit lückenhaft nummerierten Bestands-Gaps (gap_01, gap_03)
+        # noch untereinander kollidieren. Malformed/nicht-dict-Einträge
+        # werden toleriert (kein Crash), einfach ignoriert.
+        existing_gap_ids: set[str] = set()
+        next_gap_index = 1
+        for existing_gap in section["data_gaps"]:
+            if not isinstance(existing_gap, dict):
+                continue
+            gap_id = existing_gap.get("gap_id")
+            if gap_id is None:
+                continue
+            gap_id = str(gap_id)
+            existing_gap_ids.add(gap_id)
+            match = _GAP_ID_SUFFIX_RE.match(gap_id)
+            if match:
+                next_gap_index = max(next_gap_index, int(match.group(1)) + 1)
+
         claims = section.get("claims") or []
         surviving_claims = []
 
@@ -106,13 +130,19 @@ def migrate_legacy_claims_to_anchored(raw: Optional[dict]) -> Optional[dict]:
             label = str(claim.get("confidence_label") or "").lower()
 
             if not evidence and label in _ANCHOR_REQUIRED_LABELS:
-                index = len(section["data_gaps"]) + 1
+                new_gap_id = f"gap_{next_gap_index:02d}"
+                while new_gap_id in existing_gap_ids:
+                    next_gap_index += 1
+                    new_gap_id = f"gap_{next_gap_index:02d}"
+                existing_gap_ids.add(new_gap_id)
+                next_gap_index += 1
+
                 claim_text = (
                     str(claim.get("claim_text") or claim.get("claim") or "").strip()
                     or "Legacy claim ohne Evidence-Text."
                 )[:1000]
                 section["data_gaps"].append({
-                    "gap_id": f"gap_{index:02d}",
+                    "gap_id": new_gap_id,
                     "claim_text": claim_text,
                     "gap_reason": "no_evidence_bound",
                     "suggested_fix": "Evidence per Graph- oder Agent-Tool nachreichen.",
