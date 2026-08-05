@@ -9,17 +9,34 @@ set -euo pipefail
 # Aktualisierungs-Protokoll) are left untouched.
 #
 # Usage:
-#   bash scripts/sync-status.sh           # update STATUS.md in-place
-#   bash scripts/sync-status.sh --check   # drift-check only (exit 1 on drift)
+#   bash scripts/sync-status.sh              # update STATUS.md in-place
+#   bash scripts/sync-status.sh --check      # drift-check only (exit 1 on drift)
+#   bash scripts/sync-status.sh --no-cache   # Testanzahl erzwungen neu messen
+#
+# Die einzige teure Groesse ist die Backend-Testanzahl: `pytest --collect-only`
+# importiert jedes Testmodul und damit die komplette App (Flask, Neo4j-Treiber,
+# OpenTelemetry, sentence-transformers) — je nach Maschine Minuten. Das Ergebnis
+# haengt aber nur an den Python-Dateien unter backend/. Es wird deshalb
+# zwischengespeichert und nur dann neu gemessen, wenn eine dieser Dateien juenger
+# ist als der Cache. Ein direkt folgender `--check`-Lauf kostet damit
+# Millisekunden statt eines zweiten Volldurchlaufs.
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
 STATUS_FILE="$REPO_ROOT/docs/STATUS.md"
+# backend/.cache/ ist bereits gitignored.
+CACHE_DIR="$REPO_ROOT/backend/.cache/sync-status"
+CACHE_FILE="$CACHE_DIR/backend-tests-collected"
 
 CHECK_MODE=false
-if [[ "${1:-}" == "--check" ]]; then
-  CHECK_MODE=true
-fi
+USE_CACHE=true
+for arg in "$@"; do
+  case "$arg" in
+    --check) CHECK_MODE=true ;;
+    --no-cache) USE_CACHE=false ;;
+    *) echo "WARNING: unbekanntes Argument '$arg' ignoriert" >&2 ;;
+  esac
+done
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -45,7 +62,43 @@ BACKEND_TESTS="unknown"
 # weil "unknown" gegen die dokumentierte Zahl diffed.
 BACKEND_TESTS_MEASURED=false
 COLLECT_FAILURE_REASON=""
-if command -v uv &>/dev/null; then
+
+# ---------------------------------------------------------------------------
+# cache_is_fresh: Cache gilt, solange keine Python-Datei unter backend/ und
+# keine pytest-Konfiguration juenger ist als die Cache-Datei. Genau diese
+# Dateien bestimmen die gesammelte Testanzahl — ein Testlauf, ein Branch-Wechsel
+# ohne Python-Aenderung oder ein erneuter Skriptaufruf tun es nicht.
+# ---------------------------------------------------------------------------
+cache_is_fresh() {
+  [[ "$USE_CACHE" == true ]] || return 1
+  [[ -s "$CACHE_FILE" ]] || return 1
+
+  local cached
+  cached=$(<"$CACHE_FILE")
+  [[ "$cached" =~ ^[0-9]+$ ]] || return 1
+
+  local newer
+  newer=$(find "$REPO_ROOT/backend/tests" "$REPO_ROOT/backend/app" \
+            -name '*.py' -newer "$CACHE_FILE" -print -quit 2>/dev/null || true)
+  [[ -z "$newer" ]] || return 1
+
+  # pytest-Konfiguration ebenfalls ueber find pruefen, nicht ueber `[[ -nt ]]`:
+  # die macOS-Systembash (3.2) vergleicht dort nur auf Sekunden genau und
+  # verschluckt eine Aenderung, die in derselben Sekunde wie der
+  # Cache-Schreibvorgang passiert. `find -newer` vergleicht sub-sekundengenau.
+  newer=$(find "$REPO_ROOT/backend" -maxdepth 1 \
+            \( -name 'pyproject.toml' -o -name 'conftest.py' -o -name 'pytest.ini' \) \
+            -newer "$CACHE_FILE" -print -quit 2>/dev/null || true)
+  [[ -z "$newer" ]] || return 1
+
+  BACKEND_TESTS="$cached"
+  BACKEND_TESTS_MEASURED=true
+  return 0
+}
+
+if cache_is_fresh; then
+  : # Zahl kommt aus dem Cache — kein Collect-Lauf noetig.
+elif command -v uv &>/dev/null; then
   # Optional timeout: GNU coreutils auf Linux/CI, gtimeout auf macOS, sonst kein Wrapper.
   if command -v timeout &>/dev/null; then
     TIMEOUT_CMD=(timeout 180)
@@ -62,6 +115,8 @@ if command -v uv &>/dev/null; then
     if [[ -n "$MATCH" ]]; then
       BACKEND_TESTS="$MATCH"
       BACKEND_TESTS_MEASURED=true
+      mkdir -p "$CACHE_DIR"
+      printf '%s\n' "$MATCH" > "$CACHE_FILE"
     else
       echo "WARNING: pytest --collect-only ran but no count found" >&2
       COLLECT_FAILURE_REASON="pytest --collect-only lieferte keine auswertbare Testanzahl"
