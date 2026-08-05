@@ -1,0 +1,27 @@
+{
+  "$id": "https://alexle135.de/schemas/system-status-e2e.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "E2E-Harness-Teilbaum von ``/api/status``.\n\nMeldet, ob der **Backend-Prozess** im E2E-Stub-Modus l\u00e4uft, also ob\n``LLMClient.chat_json`` statt eines echten Providers eine Konservenantwort\nliefert (``AGORA_E2E_LLM_MODE=stub``). Der Wert stammt aus der Umgebung des\nBackend-Prozesses und wird bei jedem Request frisch gelesen.\n\nWarum das an der API h\u00e4ngt und nicht nur im Container-Log steht: die\nE2E-Suite lief bisher gegen ``process.env.AGORA_E2E_LLM_MODE`` des\n*Playwright*-Prozesses \u2014 ein Wert, der \u00fcber den Zustand des Backends\nnichts aussagt. Damit konnte eine Suite gr\u00fcn durchlaufen, die in\nWirklichkeit gegen einen echten Provider (oder gegen gar keinen) lief.\n\nKein Geheimnis: der Teilbaum sagt nur, welchen LLM-Pfad diese Instanz\nf\u00e4hrt. F\u00fcr Betreiber ist das eher ein Sicherheitsgewinn \u2014 eine\nProduktivinstanz, die versehentlich mit Stub-LLM l\u00e4uft, produziert sonst\nstill erfundene Berichte, ohne dass es irgendwo sichtbar w\u00e4re.",
+  "properties": {
+    "llm_mode": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Llm Mode"
+    },
+    "stub_active": {
+      "default": false,
+      "title": "Stub Active",
+      "type": "boolean"
+    }
+  },
+  "title": "SystemStatusE2E",
+  "type": "object"
+}

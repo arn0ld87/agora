@@ -145,7 +145,7 @@ Embedding-Konfiguration wird vom [`EmbeddingConfigurationStore`](../backend/app/
 
 | Variable | Zweck |
 |---|---|
-| `AGORA_E2E_LLM_MODE` | E2E-LLM-Stub-Modus (z. B. `stub`, `compact`) |
+| `AGORA_E2E_LLM_MODE` | E2E-LLM-Stub-Modus (z. B. `stub`, `compact`). Der aktive Wert ist unter `GET /api/status` im `e2e`-Teilbaum sichtbar (`llm_mode`, `stub_active`) — die E2E-Suite assertiert hart darauf. |
 | `AGORA_SKIP_PREFLIGHT` | Preflight überspringen |
 | `AGORA_RUN_ID` | Run-ID für Tests |
 

@@ -19,9 +19,27 @@ import pytest
 from pydantic import ValidationError
 
 from app.contracts import PersonaQuotaPlan
+from app.services.llm_runtime import RuntimeLlmConfig
 
 
 # ---- Persistenz: _phase_generate_config schreibt quota_plan ----------------
+
+
+def _runtime_override() -> RuntimeLlmConfig:
+    """Aktiver Runtime-Override für die Phase-3-Aufrufe.
+
+    ``_resolve_llm_connection`` verlangt seit dem Provider-Vertauschungs-Fix
+    (``prepare_service.py``) eine aufgelöste Route oder einen aktiven
+    Override und wirft sonst ``ValueError``. Diese Tests prüfen die
+    Quota-Persistenz, nicht das Routing — der Override ist die
+    seiteneffektfreie Variante, weil er weder Registry noch Secret-Store
+    anfasst.
+    """
+    return RuntimeLlmConfig(
+        provider="custom_openai",
+        api_key="runtime-override-placeholder",
+        base_url="http://llm.invalid/v1",
+    )
 
 
 def _make_phase_inputs():
@@ -64,6 +82,7 @@ def test_phase_generate_config_persists_quota_plan(monkeypatch):
         "doc",
         expanded_entities=list(filtered.entities),
         llm_model=None,
+        llm_runtime=_runtime_override(),
         language=None,
         quota_plan=plan,
     )
@@ -99,6 +118,7 @@ def test_phase_generate_config_omits_quota_plan_when_none(monkeypatch):
         "doc",
         expanded_entities=list(filtered.entities),
         llm_model=None,
+        llm_runtime=_runtime_override(),
         language=None,
         quota_plan=None,
     )

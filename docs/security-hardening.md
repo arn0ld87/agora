@@ -310,7 +310,7 @@ Security-Regressions früher erkennen und interne Exception-Details aus produkti
 | `.github/workflows/ci.yml` | Neuer Job `security` mit `npm audit --audit-level=high`, `uv export` + `pip-audit` und Gitleaks Secret Scan. |
 | `.gitleaksignore` | Zwei historische False Positives fingerprint-genau gebaselined; neue Secret-Findings bleiben blockierend. |
 | `backend/uv.lock` | 39 Python-Advisories durch konservative Lockfile-Upgrades beseitigt. |
-| `backend/app/utils/api_responses.py` | 500/504 aus `@handle_api_errors` nutzen sichere Standardmeldungen plus `code`; konkrete Exception-Details nur bei `Config.DEBUG=true`. |
+| `backend/app/utils/api_responses.py` | 500/504 aus `@handle_api_errors` nutzen sichere Standardmeldungen plus `code`; konkrete Exception-Details erscheinen in keinem Modus in der Response. |
 | `backend/app/utils/api_responses.py` | Generische `/api/*`-Handler für `HTTPException` und ungefangene Exceptions ergänzen die zentrale JSON-Envelope. |
 | `backend/tests/test_api_responses.py` | Regression-Tests für nicht-leakende 5xx-Responses und generische Framework-Fehler ergänzt. |
 
@@ -324,7 +324,7 @@ Security-Regressions früher erkennen und interne Exception-Details aus produkti
 }
 ```
 
-Im Debug-Modus kann zusätzlich `debug_error` und `traceback` erscheinen. Dieser Modus bleibt lokale Entwicklung und Tests vorbehalten.
+Dieser Body ist unabhängig von `FLASK_DEBUG` vollständig — es gibt kein `debug_error`- und kein `traceback`-Feld. Exception-Strings tragen Dateipfade, Konfigurationswerte und potenziell Schlüsselmaterial und bleiben deshalb ausschließlich im Server-Log.
 
 ### CI-Checks
 
@@ -336,20 +336,22 @@ npm audit --audit-level=high
 # Backend Runtime Dependency Audit aus uv.lock
 cd ../backend
 uv export --frozen --no-dev --no-hashes --no-emit-project \
-  --format requirements.txt --output-file /tmp/agora-backend-requirements.txt \
+  --format requirements.txt --output-file /tmp/agora-backend-requirements.raw.txt \
   > /dev/null
-uvx pip-audit --strict \
-  --ignore-vuln CVE-2026-25990 \
-  --ignore-vuln CVE-2026-40192 \
-  --ignore-vuln CVE-2026-42308 \
-  --ignore-vuln CVE-2026-42310 \
-  --ignore-vuln CVE-2026-42311 \
-  --ignore-vuln CVE-2025-71176 \
-  --ignore-vuln CVE-2026-1839 \
-  --ignore-vuln CVE-2024-46455 \
-  --ignore-vuln CVE-2025-64712 \
+python scripts/normalize_audit_requirements.py \
+  /tmp/agora-backend-requirements.raw.txt \
+  /tmp/agora-backend-requirements.txt
+uvx pip-audit --strict --no-deps --disable-pip \
   -r /tmp/agora-backend-requirements.txt
 ```
+
+Der Normalisierungsschritt ist auf Linux nicht optional: `uv export` pinnt Torch
+marker-getrennt (`torch==2.13.0+cpu ; sys_platform == 'linux'`), und PyPI führt
+keine PEP-440-Local-Version-Labels. Ohne den Schritt bricht `pip-audit --strict`
+mit „Dependency not found on PyPI and could not be audited" ab — kein Vuln-Fund,
+sondern eine nicht auflösbare Zeile. Auf macOS greift der andere Marker, deshalb
+ist der Fehler lokal unsichtbar. Details und Regressionstests:
+[`backend/scripts/normalize_audit_requirements.py`](../backend/scripts/normalize_audit_requirements.py).
 
 Gitleaks läuft in GitHub Actions mit vollständiger Historie (`fetch-depth: 0`). Bei echten Findings gilt: Secret sofort rotieren, Commit-Historie separat bereinigen und erst danach das Finding suppressen.
 
