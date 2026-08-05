@@ -7,6 +7,8 @@ Cases:
 3. 12 Hypothesen, alle disjunkt → 5 visible + 7 appendix.
 4. Confidence-Sort: absteigende Reihenfolge verifizieren.
 5. Re-ID nach Dedup eindeutig + deterministisch.
+6. Issue #1073: >50 disjunkte Hypothesen im Appendix → hart auf 50 gekappt,
+   verbleibende Einträge sind die mit der höchsten Confidence.
 """
 from __future__ import annotations
 
@@ -229,3 +231,101 @@ def test_case5_reid_unique_and_deterministic() -> None:
     # visible aus section 2 → H2_01, H2_02
     expected_ids = ["H1_01", "H1_02", "H1_03", "H1_04", "H1_05", "HA1_01", "H2_01", "H2_02"]
     assert ids == expected_ids, f"IDs nicht deterministisch. Erwartet {expected_ids}, bekommen {ids}"
+
+
+# ---------------------------------------------------------------------------
+# Case 6 (Issue #1073): 56 disjunkte Hypothesen → Appendix hart auf 50 gekappt
+# ---------------------------------------------------------------------------
+
+def test_case6_appendix_hard_capped_at_fifty() -> None:
+    """ReportSectionModel.hypotheses_appendix erlaubt max_length=50
+    (report_contract.py:412). dedup_and_cap_hypotheses muss den Appendix
+    entsprechend kappen, sonst schlägt die EvidenceMapModel-Validierung fehl.
+    """
+    import hashlib
+
+    from app.services.report_agent.hypothesis_cap import dedup_and_cap_hypotheses
+
+    total = 56
+    hyps = [
+        _make_hyp(
+            i,
+            hashlib.sha256(f"disjoint-topic-{i}".encode()).hexdigest(),
+            confidence=1.0 - (i * 0.01),
+        )
+        for i in range(total)
+    ]
+
+    visible, appendix = dedup_and_cap_hypotheses(hyps)
+
+    assert len(visible) == 5
+    assert len(appendix) == 50, (
+        f"Appendix muss auf 50 (Contract-Limit) gekappt sein, bekommen {len(appendix)}"
+    )
+
+    # Appendix enthält exakt die 50 nach visible nächsthöchsten Confidence-Werte,
+    # nicht die schwächsten (Sortierung ist absteigend, Cap verwirft am Ende).
+    expected_appendix_scores = sorted(
+        (h["confidence_score"] for h in hyps), reverse=True
+    )[5:55]
+    appendix_scores = [h["confidence_score"] for h in appendix]
+    assert appendix_scores == pytest.approx(expected_appendix_scores)
+
+
+def test_case7_production_shaped_hypotheses_pass_contract_after_cap() -> None:
+    """Der produktionsnahe Fall: Hypothesen OHNE ``confidence_score``.
+
+    Die drei produktiven Erzeuger (``agent.py`` zweimal,
+    ``text_verification.py::as_hypothesis``) setzen das Feld nicht — es ist im
+    strict-Contract ``ReportSectionHypothesisModel`` gar nicht vorgesehen.
+    ``test_case6`` liefert es und prueft damit eine Rangfolge, die es in der
+    Produktion so nicht gibt (Codex-Review zu PR #1078).
+
+    Dieser Test deckt deshalb das ab, was der Fix tatsaechlich garantieren
+    muss: der Appendix haelt das Contract-Limit ein, und das Ergebnis laeuft
+    durch ``EvidenceMapModel`` — genau die Validierung, an der die
+    Reportgenerierung nach 35 Minuten abbrach.
+
+    Welche 50 der 56 ueberleben, ist hier bewusst NICHT festgeschrieben: ohne
+    Ranking-Signal ist die Auswahl nicht sinnvoll pruefbar. Das ist der
+    Gegenstand von Issue #1083, nicht dieses Fixes.
+    """
+    import hashlib
+
+    from app.contracts.report_contract import EvidenceMapModel
+    from app.services.report_agent.hypothesis_cap import dedup_and_cap_hypotheses
+
+    total = 56
+    hyps = [
+        {
+            "hypothesis_id": f"hypothesis_{i:02d}",
+            "hypothesis_text": hashlib.sha256(
+                f"produktionsnahe-hypothese-{i}".encode()
+            ).hexdigest(),
+            "rationale": f"Ohne stuetzende Quelle uebernommen ({i}).",
+            "suggested_evidence": [],
+        }
+        for i in range(total)
+    ]
+
+    visible, appendix = dedup_and_cap_hypotheses(hyps)
+
+    assert len(visible) == 5
+    assert len(appendix) == 50
+    assert not any("confidence_score" in h for h in visible + appendix), (
+        "Der Cap darf kein Feld ergaenzen, das der strict-Contract verbietet"
+    )
+
+    # Der eigentliche Regressionsnachweis: genau diese Validierung brach vorher.
+    EvidenceMapModel.model_validate({
+        "report_id": "report_0000000000ab",
+        "simulation_id": "sim_0000000000ab",
+        "sections": [{
+            "section_index": 1,
+            "section_title": "Produktionsnaher Abschnitt",
+            "section_summary": "Hypothesen ohne Evidence.",
+            "claims": [],
+            "hypotheses": visible,
+            "hypotheses_appendix": appendix,
+        }],
+    })
