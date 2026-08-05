@@ -63,8 +63,18 @@ run_backend() {
   # #1059 (LLM-Client-Metriken-Tests) ist mit #1066 gefixt; die fünf
   # Tests dort sind aus dem Deselect raus. Deselect bis die übrigen
   # Fixes gemerged sind; Liste schrumpft weiter.
+  # 2026-08-05 (Issue #1106): pytest-xdist parallelisiert den Subset-Lauf;
+  # identische Testmenge (--deselect/--ignore unveraendert), Contract-Tests-
+  # Step bleibt seriell. Gemessen auf M3/16GB: seriell 117s; `-n 4` mit
+  # Warning-Capture 270s+ bzw. Shutdown-Hang (>1.6 Mio Warnings werden pro
+  # Worker ueber die execnet-Pipe serialisiert), `-n 4 -p no:warnings` 33s.
+  # `-p no:warnings` ist hier keine Abschwaechung: das Repo definiert keine
+  # filterwarnings-Regeln (insb. kein `error`), Warnings sind im Smoke reine
+  # Anzeige. `-n auto` (=8) bewusst nicht: acht App-Importe sprengen 16 GB.
+  # Gezielte Warning-Filter bleiben Issue #1090.
   step "Backend: tests (PR subset, no coverage)"
   (cd backend && FLASK_DEBUG=false uv run pytest tests/ \
+      -n 4 -p no:warnings \
       --ignore=tests/contracts \
       --deselect tests/scripts/test_oasis_preflight.py::TestPreflightSkipSwitch::test_skip_env_skips_probe_and_warns \
       --deselect tests/services/test_oasis_voice_register.py::test_llm_valid_voice_register_lands_in_profile \
