@@ -9,7 +9,6 @@ Prüft:
 """
 from __future__ import annotations
 
-import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -67,8 +66,18 @@ def test_validate_rejects_invalid_voice_register():
 # _generate_profile_with_llm — LLM liefert valides voice_register
 # ---------------------------------------------------------------------------
 
-def _build_llm_response(voice_register_value) -> MagicMock:
-    """Baue einen Mock-OpenAI-Response mit dem gewünschten voice_register."""
+def _build_llm_payload(voice_register_value) -> dict:
+    """Persona-Payload, wie ``LLMClient.chat_json`` ihn zurückgibt.
+
+    ``_generate_profile_with_llm`` spricht seit der ``chat_json``-Migration
+    nicht mehr über ``self.client`` (rohes OpenAI-SDK), sondern konstruiert
+    intern einen ``LLMClient`` und bekommt von ``chat_json`` bereits ein
+    geparstes und gegen ``PersonaProfileSchema`` validiertes Dict. Ein
+    Mock-Response-Objekt am alten Seam wurde deshalb schlicht ignoriert und
+    die Tests liefen gegen den echten Endpunkt (beobachtet: HTTP 401 gegen
+    ``https://api.minimax.io/v1``, danach stiller Fallback auf
+    ``rule-based generation``).
+    """
     payload = {
         "bio": "Erfahrene Entwicklerin.",
         "persona": "x" * 400,
@@ -83,56 +92,59 @@ def _build_llm_response(voice_register_value) -> MagicMock:
     }
     if voice_register_value is not None:
         payload["voice_register"] = voice_register_value
+    return payload
 
-    mock_message = MagicMock()
-    mock_message.content = json.dumps(payload)
-    mock_choice = MagicMock()
-    mock_choice.message = mock_message
-    mock_choice.finish_reason = "stop"
-    mock_response = MagicMock()
-    mock_response.choices = [mock_choice]
-    return mock_response
+
+def _patch_chat_json(payload: dict):
+    """Ersetzt die LLM-Schicht durch einen Stub, der ``payload`` liefert.
+
+    ``app.llm.client.LLMClient`` ist der richtige Patch-Punkt: die Methode
+    importiert die Klasse spät (``from ..llm.client import LLMClient``),
+    greift also zur Aufrufzeit auf das Modul-Attribut zu. Dasselbe Muster
+    nutzt bereits ``tests/test_oasis_profile_generator.py``.
+    """
+    stub = MagicMock(name="LLMClient")
+    stub.return_value.chat_json.return_value = payload
+    return patch("app.llm.client.LLMClient", stub)
 
 
 def test_llm_valid_voice_register_lands_in_profile():
     gen = _make_generator()
-    gen.client.chat.completions.create.return_value = _build_llm_response("technical-de")
 
-    result = gen._generate_profile_with_llm(
-        entity_name="Test GmbH",
-        entity_type="company",
-        entity_summary="Eine Softwarefirma.",
-        entity_attributes={},
-        context="",
-    )
+    with _patch_chat_json(_build_llm_payload("technical-de")):
+        result = gen._generate_profile_with_llm(
+            entity_name="Test GmbH",
+            entity_type="company",
+            entity_summary="Eine Softwarefirma.",
+            entity_attributes={},
+            context="",
+        )
     assert result.get("voice_register") == "technical-de"
 
 
 def test_llm_invalid_voice_register_fallback_neutral_de():
-    """LLM liefert ungültiges voice_register → fallback neutral-de + Warning."""
-    import logging
-    gen = _make_generator()
-    gen.client.chat.completions.create.return_value = _build_llm_response("english-uk")
+    """LLM liefert ungültiges voice_register → fallback neutral-de + Warning.
 
-    # Agora-Logger propagiert nicht zum Root-Logger; Handler direkt mitschneiden.
-    oasis_logger = logging.getLogger("agora.oasis_profile")
-    oasis_logger.propagate = True
-    try:
-        with patch("app.services.oasis_profile_generator.logger") as mock_logger:
-            result = gen._generate_profile_with_llm(
-                entity_name="Test",
-                entity_type="person",
-                entity_summary="Jemand.",
-                entity_attributes={},
-                context="",
-            )
-            # Prüfe: warning wurde mit 'neutral-de' gerufen
-            warning_calls = [str(c) for c in mock_logger.warning.call_args_list]
-            assert any("neutral-de" in c for c in warning_calls), (
-                f"Erwartet Warning mit 'neutral-de', got: {warning_calls}"
-            )
-    finally:
-        oasis_logger.propagate = False
+    ``PersonaProfileSchema`` typisiert ``voice_register`` nur als ``str``, der
+    strict-Mode fängt ein ``english-uk`` also nicht ab. Die
+    Enum-Zugehörigkeit prüft erst der Generator — genau diese defensive
+    Schicht steht hier unter Test.
+    """
+    gen = _make_generator()
+
+    with _patch_chat_json(_build_llm_payload("english-uk")), \
+            patch("app.services.oasis_profile_generator.logger") as mock_logger:
+        result = gen._generate_profile_with_llm(
+            entity_name="Test",
+            entity_type="person",
+            entity_summary="Jemand.",
+            entity_attributes={},
+            context="",
+        )
+        warning_calls = [str(c) for c in mock_logger.warning.call_args_list]
+        assert any("neutral-de" in c for c in warning_calls), (
+            f"Erwartet Warning mit 'neutral-de', got: {warning_calls}"
+        )
 
     assert result.get("voice_register") == "neutral-de"
 
@@ -140,10 +152,9 @@ def test_llm_invalid_voice_register_fallback_neutral_de():
 def test_llm_missing_voice_register_fallback_neutral_de():
     """LLM ohne voice_register-Key → fallback neutral-de + Warning."""
     gen = _make_generator()
-    # Kein voice_register-Key in Payload
-    gen.client.chat.completions.create.return_value = _build_llm_response(None)
 
-    with patch("app.services.oasis_profile_generator.logger") as mock_logger:
+    with _patch_chat_json(_build_llm_payload(None)), \
+            patch("app.services.oasis_profile_generator.logger") as mock_logger:
         result = gen._generate_profile_with_llm(
             entity_name="Test",
             entity_type="person",

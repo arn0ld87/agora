@@ -64,6 +64,24 @@ jobs:
 
       - name: Export locked backend runtime requirements
         working-directory: backend
+        # `uv export` schreibt die Torch-Pins marker-getrennt:
+        #   torch==2.13.0      ; sys_platform != 'linux'
+        #   torch==2.13.0+cpu  ; sys_platform == 'linux'
+        # Dieser Job laeuft auf Linux, also greift die `+cpu`-Zeile. `+cpu` ist
+        # ein PEP-440-Local-Version-Label; PyPI weist solche Labels beim Upload
+        # grundsaetzlich zurueck, sie existieren nur auf download.pytorch.org.
+        # pip-audit loest jede Zeile gegen PyPI auf und meldet deshalb
+        # "torch: Dependency not found on PyPI and could not be audited" —
+        # unter `--strict` ein Fehler, Exit 1. Genau daran ist dieser Step seit
+        # 2026-08-03 auf jedem main-Lauf gescheitert; lokal auf macOS faellt es
+        # nicht auf, weil dort der andere Marker greift.
+        #
+        # `--extra-index-url` repariert das nicht: pip-audit fragt den
+        # Vulnerability-Service, nicht den Paket-Index. Das Local-Label zu
+        # strippen ist korrekt und konservativ — Advisories laufen gegen die
+        # Public-Release-Version 2.13.0, aus deren Quellstand der +cpu-Build
+        # gebaut wird. Begruendung und Regressionstests:
+        # backend/scripts/normalize_audit_requirements.py.
         run: |
           uv export \
             --frozen \
@@ -71,8 +89,13 @@ jobs:
             --no-hashes \
             --no-emit-project \
             --format requirements.txt \
-            --output-file /tmp/agora-backend-requirements.txt \
+            --output-file /tmp/agora-backend-requirements.raw.txt \
             > /dev/null
+          python scripts/normalize_audit_requirements.py \
+            /tmp/agora-backend-requirements.raw.txt \
+            /tmp/agora-backend-requirements.txt
+          echo "torch-Zeilen nach Normalisierung:"
+          grep -E '^torch' /tmp/agora-backend-requirements.txt
 
       - name: Run Python dependency audit
         # CI-Welle 2026-05-16: pip-audit läuft NUR auf push:main + workflow_dispatch.
@@ -346,28 +369,26 @@ jobs:
       # statt in einem Wald von Folgefehlern unterzugehen.
       # Voller Coverage-Lauf bleibt im `backend`-Job auf push:main.
       #
-      # FLASK_DEBUG=false: der `backend-pr-gate`-Job selbst hat FLASK_DEBUG=true,
-      # damit Config.validate() die AGORA_AUTH_TOKEN-Policy nicht erzwungen.
-      # Fuer den Test-Step gilt das nicht -- wir wollen das Produktionsverhalten
-      # (DEBUG=false), weil die Test-Acceptance exakt darauf ausgelegt ist
-      # (siehe test_graph_ontology_upload_atomicity: Sentinel darf NICHT im
-      # Response landen). Issue #1058 trackt den separaten Debug-Modus-Leak.
+      # 2026-08-04: Der Step-Override `FLASK_DEBUG=false` ist entfallen. Er hat
+      # dafuer gesorgt, dass dieser Job die Suite unter DEBUG=false fuhr,
+      # waehrend der `backend`-Job auf push:main sie unter DEBUG=true fuhr --
+      # ein nur unter DEBUG=true auftretender Defekt (#1058) passierte damit
+      # jeden PR und brach erst nach dem Merge auf main. Beide Jobs erben jetzt
+      # denselben Job-Wert `FLASK_DEBUG: "true"`; Tests, deren Verhalten vom
+      # Debug-Modus abhaengt, parametrisieren ihn selbst
+      # (siehe tests/api/test_graph_ontology_upload_atomicity.py::flask_debug).
       - name: Backend tests (PR subset, no coverage)
         working-directory: backend
-        env:
-          FLASK_DEBUG: "false"
         # Issue #1054 (offen, pre-existing) lässt test_oasis_preflight rot.
         # Plus weitere Pre-Existing-Test-Drift, die mit #1055 sichtbar wird:
-        #   #1059 LLM-Client-Metriken (5 Tests)
-        #   #1060 OASIS-Voice-Register (3 Tests)
-        #   #1061 Quota-Persistenz (2 Tests)
-        #   #1062 Bug-Reproduktion B (1 Test)
-        #   #1063 Entity-Propagation (1 Test)
         #   #1064 Generate-Profiles-Endpoint (2 Tests)
         #   #1065 NLTK-Import-Guard (1 Test, Egress-Limit CI)
-        #   #1059 (LLM-Client-Metriken-Tests) ist mit #1066 gefixt; die
-        #   fünf Tests dort sind aus dem Deselect raus. Deselect bis die
-        #   übrigen Fixes gemerged sind; Liste schrumpft weiter.
+        # Bereits gefixt und deshalb aus dem Deselect raus:
+        #   #1059 LLM-Client-Metriken (5 Tests)  — gefixt mit #1066
+        #   #1061 Quota-Persistenz (2 Tests)     — Fixtures um Route/Override ergaenzt
+        #   #1063 Entity-Propagation (1 Test)    — Fixtures um Route/Override ergaenzt
+        #   #1060 OASIS-Voice-Register (3 Tests) — auf chat_json-Mock-Schicht gehoben
+        #   #1062 Bug-Reproduktion B (1 Test)    — auf chat_json-Mock-Schicht gehoben
         # Deselect bis die jeweiligen Fixes gemerged sind, damit der neue
         # PR-Gate den Rest der Suite fängt ohne an bereits getrackten
         # Issues zu stranden. Liste schrumpft mit jedem Fix.
@@ -375,13 +396,6 @@ jobs:
           uv run pytest tests/ \
             --ignore=tests/contracts \
             --deselect tests/scripts/test_oasis_preflight.py::TestPreflightSkipSwitch::test_skip_env_skips_probe_and_warns \
-            --deselect tests/services/test_oasis_voice_register.py::test_llm_valid_voice_register_lands_in_profile \
-            --deselect tests/services/test_oasis_voice_register.py::test_llm_invalid_voice_register_fallback_neutral_de \
-            --deselect tests/services/test_oasis_voice_register.py::test_llm_missing_voice_register_fallback_neutral_de \
-            --deselect tests/test_quota_persistence.py::test_phase_generate_config_persists_quota_plan \
-            --deselect tests/test_quota_persistence.py::test_phase_generate_config_omits_quota_plan_when_none \
-            --deselect tests/services/test_bug_reproductions.py::test_repro_bug_b_oasis_profile_generator_thinking_tokens_parsing \
-            --deselect tests/test_entity_propagation.py::test_expanded_entities_propagate_to_config_generator \
             --deselect tests/api/test_simulation_uses_request_model.py::test_generate_profiles_endpoint_falls_back_when_no_llm_model \
             --deselect tests/api/test_simulation_uses_request_model.py::test_generate_profiles_endpoint_passes_llm_model_to_generator \
             --deselect tests/test_nltk_import_guard.py::test_ingestion_entrypoint_can_parse \

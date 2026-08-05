@@ -87,7 +87,14 @@ Seit Issue #989 geschieht das idempotent: pro Schlüssel genau eine Zeile, vorha
 
 Geschrieben werden `AGORA_AUTH_TOKEN`, `SECRET_KEY`, `AGORA_SECRET_KEY`, `NEO4J_PASSWORD`, `AGORA_PROXY_PORT`, `AGORA_SKIP_EMBEDDING_PROBE` und `AGORA_E2E_LLM_MODE` — jeweils nur, wenn ein Wert vorliegt. `AGORA_SECRET_KEY` und `AGORA_PROXY_PORT` liegen immer vor, weil das Skript für beide einen Wert erzeugen kann.
 
-`AGORA_E2E_LLM_MODE` entfernt `e2e-down.sh` am Ende wieder. Bleibt der Schalter stehen, übernimmt ihn der nächste normale `docker compose up` des Dev-Stacks, und das Backend liefert still Stub-Reports statt echter Modellantworten — erkennbar nur an der Log-Zeile `E2E-Stub aktiv — ueberspringe LLM-Call`.
+`AGORA_E2E_LLM_MODE` entfernt `e2e-down.sh` am Ende wieder. Bleibt der Schalter stehen, übernimmt ihn der nächste normale `docker compose up` des Dev-Stacks, und das Backend liefert Stub-Reports statt echter Modellantworten. Sichtbar ist das an zwei Stellen: der Log-Zeile `E2E-Stub aktiv — ueberspringe LLM-Call` und dem `e2e`-Teilbaum von `GET /api/status`:
+
+```bash
+curl -s localhost:8080/api/status | jq .e2e
+# {"llm_mode": "stub", "stub_active": true}
+```
+
+`stub_active: true` auf einer Instanz, die echte Berichte liefern soll, ist immer ein Fehlerzustand.
 
 Die übrigen Schlüssel bleiben bewusst stehen. `AGORA_SECRET_KEY` zu entfernen würde alles unlesbar machen, was damit verschlüsselt wurde.
 
