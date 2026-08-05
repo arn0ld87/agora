@@ -164,12 +164,28 @@ def test_parse_start_request_silences_legacy_fields_for_ai_model_ref(app_ctx):
     assert req.llm_runtime.enabled is False
 
 
-def test_parse_budget_config_rejects_invalid_budget(app_ctx):
+def test_parse_budget_config_rejects_limit_below_one(app_ctx):
+    """`max_tokens` hat `ge=1` — ein negatives Limit ist keine Konfiguration."""
     with pytest.raises(mod._StartRejected) as excinfo:
-        mod._parse_budget_config({"budget": {"max_total_tokens": -5}})
+        mod._parse_budget_config({"budget": {"max_tokens": -5}})
 
     assert _status(excinfo) == 400
     assert _body(excinfo)["error"].startswith("budget ist ungültig")
+
+
+def test_parse_budget_config_rejects_unknown_field(app_ctx):
+    """`RunBudgetConfig` ist strict — ein vertippter Feldname faellt auf."""
+    with pytest.raises(mod._StartRejected) as excinfo:
+        mod._parse_budget_config({"budget": {"max_total_tokens": 500}})
+
+    assert _status(excinfo) == 400
+    assert _body(excinfo)["error"].startswith("budget ist ungültig")
+
+
+def test_parse_budget_config_accepts_valid_budget(app_ctx):
+    budget = mod._parse_budget_config({"budget": {"max_tokens": 5000}})
+
+    assert budget is not None and budget.max_tokens == 5000
 
 
 def test_parse_budget_config_returns_none_without_budget(app_ctx):
