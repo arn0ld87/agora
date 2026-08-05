@@ -93,22 +93,24 @@ class LLMClient:
         # .env-Endpoint → HTTP 404 → stiller regelbasierter Persona-Fallback.
         # Aktive Config überschreibt niemals explizit übergebene Werte.
         # ``active_provider_id`` annotiert das Init-Log (Vorrang vor
-        # ``route_provider_id``) nur, wenn die Active-Config tatsächlich einen
-        # Wert beigetragen hat — sonst behält die aufgelöste Route den Vorrang.
+        # ``route_provider_id``) sobald die Active-Config für einen Lookup
+        # herangezogen wurde (model, base_url oder api_key). Hat der Caller
+        # alle drei explizit übergeben, behält die aufgelöste Route den Vorrang.
         if use_active_config:
             active = _read_active_config_safely()
             if active:
                 active_pid = active.get("provider_id")
                 active_model = active.get("model")
                 active_base = active.get("base_url")
+                active_used = False
                 if active_model and not model:
                     model = active_model
-                    active_provider_id = active_pid
+                    active_used = True
                 if active_base and not base_url:
                     base_url = active_base
-                    active_provider_id = active_pid
+                    active_used = True
                 if active_pid and not api_key:
-                    active_provider_id = active_pid
+                    active_used = True
                     try:
                         from ..services.llm_provider_registry import LlmProviderRegistry
                         from ..services.secret_resolver import SecretResolver
@@ -130,6 +132,8 @@ class LLMClient:
                             active_pid,
                             exc,
                         )
+                if active_pid and active_used:
+                    active_provider_id = active_pid
 
         if api_key:
             self.api_key = api_key
