@@ -59,6 +59,14 @@ _CONNECTION_DEFINITIONS: tuple[ProviderConnectionDefinition, ...] = (
         PROVIDER_MINIMAX, "MiniMax", "http", "api_key", "https://api.minimax.io/v1",
         "minimax", "MINIMAX_API_KEY", True,
     ),
+    # Issue #1072: Die Base-URL bleibt bewusst an der Server-Wurzel, OHNE
+    # ``/v1``. Zwei Konsumenten teilen sie sich mit unvereinbaren Erwartungen:
+    # die Modell-Discovery haengt ``/api/tags`` direkt an (``provider_
+    # connections/adapters.py``), der OpenAI-SDK-Client dagegen braucht
+    # ``/v1/chat/completions``. Ein ``/v1`` im Default wuerde die Discovery zu
+    # ``/v1/api/tags`` verbiegen — 404. Die Kanonisierung fuer den Chat-Pfad
+    # passiert deshalb erst beim Client-Aufbau
+    # (``llm/providers/registry.py::openai_compat_base_url``).
     ProviderConnectionDefinition(
         PROVIDER_OLLAMA_CLOUD, "Ollama (Cloud)", "http", "api_key", "https://ollama.com",
         "ollama_cloud", "OLLAMA_API_KEY",
