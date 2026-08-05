@@ -209,3 +209,90 @@ def test_migrate_legacy_mixed_section() -> None:
     assert section["claims"][0]["claim_id"] == "claim_02"
     assert len(section["data_gaps"]) == 1
     assert section["data_gaps"][0]["gap_reason"] == "no_evidence_bound"
+
+
+def test_migrate_legacy_new_gap_id_avoids_collision_with_gapped_existing_ids() -> None:
+    """Issue #986: Bestands-Gaps gap_01/gap_03 duerfen keine gap_03-Kollision erzeugen.
+
+    ``index = len(data_gaps) + 1`` zaehlte hier vorher naiv die Bestandsliste
+    (2 Eintraege) hoch und vergab ``gap_03`` erneut — ein Duplikat mit dem
+    bereits vorhandenen ``gap_03``. Der Test prueft die tatsaechliche
+    Invariante direkt: alle gap_id-Werte der Section sind nach der Migration
+    paarweise verschieden, und die neue ID liegt hinter dem hoechsten
+    Bestands-Suffix.
+    """
+    raw = {
+        "schema_version": 2,
+        "sections": [{
+            "section_index": 1,
+            "section_title": "Test",
+            "section_summary": "summary",
+            "data_gaps": [
+                {"gap_id": "gap_01", "claim_text": "Bestand 1", "gap_reason": "manual"},
+                {"gap_id": "gap_03", "claim_text": "Bestand 2", "gap_reason": "manual"},
+            ],
+            "claims": [{
+                "claim_id": "claim_01",
+                "claim_text": "Mittlere Konfidenz ohne Beleg, nicht haltbar.",
+                "confidence_label": "medium",
+                "confidence_score": 0.5,
+                "evidence": [],
+                "audit_trail": [],
+            }],
+        }],
+    }
+
+    result = migrate_legacy_claims_to_anchored(raw)
+    assert result is not None
+    section = result["sections"][0]
+    gap_ids = [gap["gap_id"] for gap in section["data_gaps"]]
+    assert len(gap_ids) == len(set(gap_ids)), (
+        f"gap_id-Kollision nach Migration: {gap_ids}"
+    )
+    assert "gap_04" in gap_ids
+
+
+def test_migrate_legacy_two_new_gaps_in_same_section_are_collision_free() -> None:
+    """Issue #986: Zwei ankerlose Claims in derselben Section erzeugen
+
+    untereinander kollisionsfreie neue gap_ids, auch gegen den Bestand.
+    """
+    raw = {
+        "schema_version": 2,
+        "sections": [{
+            "section_index": 1,
+            "section_title": "Test",
+            "section_summary": "summary",
+            "data_gaps": [
+                {"gap_id": "gap_01", "claim_text": "Bestand", "gap_reason": "manual"},
+            ],
+            "claims": [
+                {
+                    "claim_id": "claim_01",
+                    "claim_text": "Erste Behauptung ohne Beleg, mittlere Konfidenz.",
+                    "confidence_label": "medium",
+                    "confidence_score": 0.5,
+                    "evidence": [],
+                    "audit_trail": [],
+                },
+                {
+                    "claim_id": "claim_02",
+                    "claim_text": "Zweite Behauptung ohne Beleg, hohe Konfidenz.",
+                    "confidence_label": "high",
+                    "confidence_score": 0.7,
+                    "evidence": [],
+                    "audit_trail": [],
+                },
+            ],
+        }],
+    }
+
+    result = migrate_legacy_claims_to_anchored(raw)
+    assert result is not None
+    section = result["sections"][0]
+    assert section["claims"] == []
+    gap_ids = [gap["gap_id"] for gap in section["data_gaps"]]
+    assert len(gap_ids) == 3
+    assert len(gap_ids) == len(set(gap_ids)), (
+        f"gap_id-Kollision nach Migration: {gap_ids}"
+    )

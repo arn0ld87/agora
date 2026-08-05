@@ -5,6 +5,10 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (kollidierende `gap_id`-Vergabe bei der Legacy-Claim-Migration — 2026-08-05)
+
+- **`migrate_legacy_claims_to_anchored` vergab neue `gap_id`-Werte über `len(data_gaps) + 1` statt über den tatsächlichen Bestand.** Bei lückenhaft nummerierten Bestands-Gaps (z. B. `gap_01`, `gap_03`) erzeugte das erneut `gap_03` — ein Duplikat. Die Vergabe ermittelt jetzt pro Section das höchste vorhandene `gap_<n>`-Suffix und sichert zusätzlich gegen das Set der bereits vergebenen IDs ab, auch bei mehreren neuen Gaps in derselben Migration. (#986)
+
 ### Fixed (GPT-5-/o-Reasoning-Modelle brachen jeden Run mit 400 `unsupported_value` ab — 2026-08-05)
 
 - **Jeder Run gegen OpenAI-Reasoning-Modelle (GPT-5-Familie, o1/o3/o4) scheiterte sofort mit `400 unsupported_value` auf `param=temperature`.** `LLMClient` sendet feste `temperature`-Werte (`chat` 0.7, `describe_image` 0.3, `chat_json` 0.3); diese Modelle akzeptieren ausschließlich den Default (1) und lehnen jeden expliziten Wert ab. `chat()`, `describe_image()` und `chat_json()` lassen den `temperature`-Key jetzt weg, wenn das Zielmodell zur GPT-5-/o-Familie gehört (`omits_temperature`, analog zur bestehenden `max_completion_tokens`-Heuristik) — für noch unbekannte Modelle fängt ein einmaliger Retry ohne `temperature` denselben 400 zusätzlich ab. (#1096)
