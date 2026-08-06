@@ -38,7 +38,7 @@ def test_migrate_v1_lifts_to_v2():
     # #1037: ReportSectionModel (extra="forbid") kennt kein schema_version —
     # die Migration darf den Schlüssel weder schreiben noch stehen lassen.
     assert all("schema_version" not in s for s in migrated["sections"])
-    # In-place-Mutation entspricht Plan-Snippet (PLAN.md Teil D.2).
+    # In-place-Mutation: raw wird durch die Migration mutiert.
     assert raw["schema_version"] == 2
 
 
