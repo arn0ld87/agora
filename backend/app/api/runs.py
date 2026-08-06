@@ -443,9 +443,13 @@ def stop_run(run_id: str):
 def cancel_run(run_id: str):
     """POST /api/runs/<run_id>/cancel — Cooperative Cancellation.
 
-    Setzt das Cancel-Flag im in-process Cancel-Store. Der laufende Worker
-    (SimulationRunner / ReportAgent) prüft das Flag zwischen Stage-Boundaries
-    und bricht sauber ab (letzter LLM-Call läuft fertig, dann Teilreport).
+    Setzt das Cancel-Flag im in-process Cancel-Store. Konsumenten (#1082):
+    Für ``report_generation`` prüft der ReportAgent das Flag zwischen
+    Stage-Boundaries und bricht sauber ab (letzter LLM-Call läuft fertig,
+    dann Teilreport). Für ``simulation_run`` konsumiert der Monitor-Thread
+    das Flag im Elternprozess und beendet den OASIS-Subprozess (SIGTERM,
+    Grace-Period, dann SIGKILL); der Run endet als ``stopped`` mit
+    ``termination_reason="user_cancel"``, Teilergebnisse bleiben erhalten.
 
     ``run_id`` akzeptiert auch eine ``simulation_id`` — Schritt 3 im Frontend
     kennt nur diese. Die Auflösung läuft über ``linked_ids.simulation_id``,

@@ -20,7 +20,10 @@ nicht aufrief — genau die Luecke, die dieser Slice schliesst.
 
 from __future__ import annotations
 
+import csv
+import io
 import json
+import zipfile
 
 import pytest
 from flask import Flask
@@ -297,3 +300,102 @@ class TestResidualContractViolationIsVisible:
 
         assert payload["evidence"] is None
         assert payload["evidence_omitted"] is None
+
+
+def _zip_json_member(response_data: bytes, name: str) -> dict:
+    with zipfile.ZipFile(io.BytesIO(response_data)) as zf:
+        return json.loads(zf.read(name))
+
+
+def _zip_text_member(response_data: bytes, name: str) -> str:
+    with zipfile.ZipFile(io.BytesIO(response_data)) as zf:
+        return zf.read(name).decode("utf-8")
+
+
+def _csv_rows(text: str) -> list[list[str]]:
+    return list(csv.reader(io.StringIO(text)))
+
+
+class TestZipAndCsvExportMatchJsonExport:
+    """Issue #1036 — ZIP und CSV lesen dieselbe normalisierte Evidence-Map wie JSON.
+
+    Vor dem Fix lasen ``build_zip_bundle``, ``stream_zip_bundle`` und
+    ``build_csv_export`` die Roh-Map ueber ``ReportManager.get_evidence_map``
+    direkt, ohne ``normalize_persisted_evidence_map`` zu durchlaufen. Ein
+    orphan medium-Claim (keine Evidence) blieb in ``evidence-map.json`` im
+    ZIP und in ``claims.csv`` unveraendert als Claim stehen, statt — wie im
+    JSON-Export — nach ``data_gaps`` migriert zu werden.
+    """
+
+    _bundle_prefix = f"agora-report-{REPORT_ID}"
+
+    def test_zip_evidence_map_matches_json_export(self, client):
+        _persist(_orphan_claim_map())
+
+        json_evidence = _export_json(client)["evidence"]
+
+        zip_response = client.get(f"/api/report/{REPORT_ID}/export?format=zip")
+        assert zip_response.status_code == 200, zip_response.data
+        zip_evidence = _zip_json_member(
+            zip_response.data, f"{self._bundle_prefix}/evidence-map.json"
+        )
+
+        assert zip_evidence["sections"][0]["claims"] == [], (
+            "orphan Claim ist im ZIP-evidence-map.json nicht nach data_gaps "
+            "migriert worden — ZIP liest noch die Roh-Map"
+        )
+        assert len(zip_evidence["sections"][0]["data_gaps"]) == 1
+        # ZIP validiert nicht gegen EvidenceMapModel, daher Feld-fuer-Feld statt
+        # Objektgleichheit mit dem JSON-Envelope.
+        assert zip_evidence["sections"][0]["data_gaps"][0]["gap_reason"] == (
+            json_evidence["sections"][0]["data_gaps"][0]["gap_reason"]
+        )
+
+    def test_zip_claims_csv_matches_json_export(self, client):
+        _persist(_orphan_claim_map())
+
+        zip_response = client.get(f"/api/report/{REPORT_ID}/export?format=zip")
+        assert zip_response.status_code == 200, zip_response.data
+        claims_csv = _zip_text_member(zip_response.data, f"{self._bundle_prefix}/claims.csv")
+
+        rows = _csv_rows(claims_csv)
+        assert rows[0][0] == "claim_id"
+        assert len(rows) == 1, (
+            "orphan Claim taucht in claims.csv im ZIP noch als Claim auf, "
+            "statt als data_gap zu verschwinden"
+        )
+
+    def test_csv_claims_export_matches_json_export(self, client):
+        _persist(_orphan_claim_map())
+
+        csv_response = client.get(f"/api/report/{REPORT_ID}/export?format=csv&table=claims")
+        assert csv_response.status_code == 200, csv_response.data
+        rows = _csv_rows(csv_response.data.decode("utf-8"))
+
+        assert rows[0][0] == "claim_id"
+        assert len(rows) == 1, (
+            "orphan Claim taucht in ?format=csv&table=claims noch als Claim "
+            "auf, statt als data_gap zu verschwinden"
+        )
+
+    def test_stream_zip_bundle_matches_build_zip_bundle(self, client, monkeypatch):
+        """Streaming-Pfad (grosse Bundles) normalisiert identisch zum In-Memory-Pfad."""
+        _persist(_orphan_claim_map())
+
+        # ZIP_STREAM_THRESHOLD_BYTES klein patchen, damit der Streaming-Pfad
+        # (app.api.report._stream_zip_bundle statt _build_zip_bundle) greift.
+        import app.api.report as report_route
+
+        monkeypatch.setattr(report_route, "_ZIP_STREAM_THRESHOLD_BYTES", 1)
+
+        zip_response = client.get(f"/api/report/{REPORT_ID}/export?format=zip")
+        assert zip_response.status_code == 200, zip_response.data
+        zip_evidence = _zip_json_member(
+            zip_response.data, f"{self._bundle_prefix}/evidence-map.json"
+        )
+
+        assert zip_evidence["sections"][0]["claims"] == [], (
+            "orphan Claim ist im gestreamten ZIP nicht nach data_gaps "
+            "migriert worden — stream_zip_bundle liest noch die Roh-Map"
+        )
+        assert len(zip_evidence["sections"][0]["data_gaps"]) == 1
