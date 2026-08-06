@@ -132,6 +132,26 @@ class ReportExportService:
         )
 
     @staticmethod
+    def _normalized_evidence_map(report_id: str) -> dict[str, Any]:
+        """Liest die persistierte Evidence-Map und normalisiert sie kanonisch.
+
+        Issue #1036: JSON-, ZIP- und CSV-Export lasen bislang dieselbe
+        persistierte ``evidence-map.json`` mit unterschiedlicher Wahrheit —
+        nur ``build_export_envelope`` (``?format=json``) migrierte ueber
+        ``normalize_persisted_evidence_map`` (siehe Issue #987), waehrend
+        ``build_zip_bundle``, ``stream_zip_bundle`` und ``build_csv_export``
+        (``table=claims``) die Roh-Map ungeprueft weiterreichten. Ein orphan
+        medium-Claim ohne Evidence blieb im ZIP/CSV unveraendert in
+        ``claims[]`` stehen, statt — wie im JSON-Export — nach
+        ``data_gaps`` migriert zu werden. Alle Export-Formate lesen die
+        Evidence-Map jetzt ueber genau diese eine Stelle.
+        """
+        raw = ReportManager.get_evidence_map(report_id)
+        if raw is None:
+            return {}
+        return normalize_persisted_evidence_map(raw) or {}
+
+    @staticmethod
     def build_csv_export(report_id: str, table: str) -> str:
         """Lädt die passende Datenquelle und gibt RFC-4180-CSV zurück."""
         if table in ("personas", "segments"):
@@ -141,7 +161,7 @@ class ReportExportService:
             return segments_to_csv(report_v3.get("segments") or [])
 
         # table == "claims"
-        evidence_map = ReportManager.get_evidence_map(report_id) or {}
+        evidence_map = ReportExportService._normalized_evidence_map(report_id)
         return claims_to_csv(evidence_map.get("sections") or [])
 
     @staticmethod
@@ -190,7 +210,11 @@ class ReportExportService:
                 with open(v3_path, encoding="utf-8") as fh:
                     zf.writestr(f"{prefix}/report-v3.json", fh.read())
 
-            evidence_map = ReportManager.get_evidence_map(report_id) or {}
+            # Issue #1036: normalisierte Sicht, nicht die Roh-Map — dieselbe
+            # Migrationskette wie der JSON-Export (siehe
+            # ``_normalized_evidence_map``), damit ``evidence-map.json`` im
+            # ZIP nicht mehr von den anderen Export-Formaten abweicht.
+            evidence_map = ReportExportService._normalized_evidence_map(report_id)
             zf.writestr(
                 f"{prefix}/evidence-map.json",
                 json.dumps(evidence_map, ensure_ascii=False, indent=2),
@@ -262,7 +286,9 @@ class ReportExportService:
                 if os.path.exists(v3_path):
                     zf.write(v3_path, arcname=f"{prefix}/report-v3.json")
 
-                evidence_map = ReportManager.get_evidence_map(report_id) or {}
+                # Issue #1036: normalisierte Sicht, analog zu
+                # ``build_zip_bundle`` — siehe ``_normalized_evidence_map``.
+                evidence_map = ReportExportService._normalized_evidence_map(report_id)
                 zf.writestr(
                     f"{prefix}/evidence-map.json",
                     json.dumps(evidence_map, ensure_ascii=False, indent=2),
