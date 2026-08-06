@@ -1,11 +1,17 @@
 """Cooperative Cancel-Flag für laufende Simulation-Runs.
 
 Design: Thread-safe in-memory Store (``threading.Event`` pro run_id).
-Der Endpoint-Handler setzt das Flag; Worker-Schleifen (SimulationRunner,
-ReportAgent) prüfen es zwischen Stage-Boundaries — KEIN hartes Task.cancel().
+Der Endpoint-Handler setzt das Flag. Tatsächliche Consumer (Issue #1082):
+
+- ``report_agent/workflow.py`` prüft es zwischen Stage-Boundaries und bricht
+  kooperativ ab (Teilreport) — KEIN hartes Task.cancel().
+- ``sim/monitor.py::_cancel_supervision`` konsumiert es im Monitor-Thread des
+  Elternprozesses für ``run_type="simulation_run"`` und beendet den
+  OASIS-Subprozess (SIGTERM, Grace-Period, dann SIGKILL). Der Run endet als
+  ``stopped`` mit ``termination_reason="user_cancel"``.
 
 Idempotenz: ``request_cancel`` mehrfach aufzurufen ist kein Fehler.
-``clear_cancel`` wird bei sauberem Run-Start aufgerufen, um alteTFlags
+``clear_cancel`` wird bei sauberem Run-Start aufgerufen, um alte Flags
 nach einem Neustart nicht zu erben.
 
 Kein Redis, kein File-IO — rein in-process. Falls künftig multi-worker

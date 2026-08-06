@@ -9,6 +9,9 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 - **Derselbe Report lieferte je nach Exportformat verschiedene Evidence-Wahrheiten:** Der JSON-Export normalisierte über `normalize_persisted_evidence_map` (#987), `build_zip_bundle`, `stream_zip_bundle` und `build_csv_export` (`table=claims`) lasen die Roh-Map — ein orphan medium-Claim stand im JSON in `data_gaps`, in `claims.csv` und `evidence-map.json` (ZIP) unverändert als `medium`. Alle Export-Formate lesen jetzt eine normalisierte Sicht über genau eine Stelle (`ReportExportService._normalized_evidence_map`); `evidence-map.json` im ZIP ist damit bewusst kein Rohabzug mehr. Regressionstests vergleichen ZIP, CSV und Streaming-ZIP (Threshold klein gepatcht) gegen den JSON-Export als Referenzwahrheit. (#1036)
 
+### Fixed (Cancel beendete die laufende OASIS-Simulation nicht — 2026-08-06)
+
+- **`POST /api/runs/<id>/cancel` setzte für `simulation_run` ein prozesslokales Cancel-Flag, das kein Consumer las — API und UI meldeten „Cancel requested", der OASIS-Subprozess lief ungebremst weiter.** Der Monitor-Thread im Elternprozess konsumiert das Flag jetzt pro Tick (`sim/monitor.py::_cancel_supervision`): Marker schreiben, kooperativen Stop via `control_state.json` signalisieren, dann den Subprozess beenden (SIGTERM, 10 s Grace, dann SIGKILL — über das bestehende `process_manager.terminate_run`). Der Run endet deterministisch als `stopped` mit `termination_reason="user_cancel"`; der SIGTERM-typische non-zero Exit wird nicht mehr als `failed` fehlklassifiziert. Cancel zwischen zwei Runden behält Teilergebnisse: bereits getailte Action-Logs und der persistierte Run-State bleiben erhalten. Die Docstrings von `cancel_flag.py` und der Cancel-Route beschreiben jetzt die tatsächliche Consumer-Lage. (#1082)
 ## [0.9.0] — 2026-08-06
 
 ### Changed (Version-Cut `0.8.0` → `0.9.0` Stability Beta — 2026-08-06)

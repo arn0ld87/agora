@@ -62,6 +62,94 @@ def _write_budget_abort(sim_dir: str, abort_info: Dict[str, Any]) -> None:
         logger.warning("budget abort marker write failed: %s", exc)
 
 
+CANCEL_ABORT_FILENAME = "cancel_abort.json"
+# Sekunden zwischen SIGTERM und SIGKILL beim Cancel eines laufenden
+# OASIS-Subprozesses (Issue #1082).
+CANCEL_GRACE_SECONDS = 10.0
+
+
+def _read_cancel_abort(sim_dir: str) -> Optional[Dict[str, Any]]:
+    """cancel_abort.json lesen (vom Monitor bei konsumiertem Cancel-Flag geschrieben)."""
+    import json
+
+    path = os.path.join(sim_dir, CANCEL_ABORT_FILENAME)
+    try:
+        with open(path, encoding="utf-8") as handle:
+            data = json.load(handle)
+        return data if isinstance(data, dict) else None
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return None
+
+
+def _write_cancel_abort(sim_dir: str, abort_info: Dict[str, Any]) -> None:
+    """First-writer-wins — analog zu ``_write_budget_abort``."""
+    import json
+
+    path = os.path.join(sim_dir, CANCEL_ABORT_FILENAME)
+    if os.path.exists(path):
+        return
+    try:
+        tmp_path = f"{path}.tmp"
+        with open(tmp_path, "w", encoding="utf-8") as handle:
+            json.dump(abort_info, handle)
+            handle.write("\n")
+        os.replace(tmp_path, path)
+    except OSError as exc:
+        logger.warning("cancel abort marker write failed: %s", exc)
+
+
+def _cancel_supervision(
+    simulation_id: str,
+    sim_dir: str,
+    *,
+    processes: Dict[str, subprocess.Popen],
+) -> bool:
+    """Cancel-Flag aus dem Endpoint im Elternprozess konsumieren (Issue #1082).
+
+    ``POST /api/runs/<id>/cancel`` setzt ein prozesslokales ``threading.Event``
+    (``sim/cancel_flag.py``); für ``run_type="simulation_run"`` liest es genau
+    dieser Monitor-Tick. Bei gesetztem Flag: Marker schreiben (steuert die
+    Terminal-Auswertung nach Prozessende), kooperativen Stop via
+    ``control_state.json`` signalisieren und den OASIS-Subprozess beenden
+    (SIGTERM, ``CANCEL_GRACE_SECONDS`` Grace, dann SIGKILL).
+
+    Cancel zwischen zwei Runden: Teilergebnisse bleiben erhalten — bereits
+    getailte Action-Logs und der persistierte Run-State werden nicht verworfen.
+    """
+    try:
+        from ..run_registry import RunRegistry
+        from .cancel_flag import is_cancel_requested
+
+        run = RunRegistry().get_latest_by_linked_id(
+            "simulation_id", simulation_id, run_type="simulation_run"
+        )
+        if not run or not is_cancel_requested(run["run_id"]):
+            return False
+        run_id = run["run_id"]
+    except Exception as exc:  # noqa: BLE001 — Supervision darf Monitor nicht killen
+        logger.warning("cancel supervision failed for %s: %s", simulation_id, exc)
+        return False
+
+    _write_cancel_abort(
+        sim_dir, {"run_id": run_id, "ts": time.time(), "source": "backend-monitor"}
+    )
+    try:
+        from ..simulation_ipc import write_control_state
+
+        write_control_state(simulation_id, stop_requested=True)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("cancel stop request failed for %s: %s", simulation_id, exc)
+    try:
+        from .process_manager import terminate_run
+
+        terminate_run(
+            simulation_id, processes=processes, grace_period=CANCEL_GRACE_SECONDS
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("cancel terminate failed for %s: %s", simulation_id, exc)
+    return True
+
+
 def _budget_supervision(simulation_id: str, sim_dir: str) -> Optional[Dict[str, Any]]:
     """Harte Budgets im Monitor durchsetzen (Issue #764).
 
@@ -192,6 +280,10 @@ def monitor_simulation(
             # kooperativen Stop anfordern.
             _budget_supervision(simulation_id, sim_dir)
 
+            # Cancel-Supervision (Issue #1082): Cancel-Flag konsumieren und
+            # den OASIS-Subprozess beenden — poll() beendet danach die Schleife.
+            _cancel_supervision(simulation_id, sim_dir, processes=processes)
+
             # Update status
             save_state(state)
             time.sleep(2)
@@ -218,11 +310,51 @@ def monitor_simulation(
         exit_code = process.returncode
         elapsed_seconds = _compute_elapsed_seconds(state.started_at)
 
+        # Nutzer-Cancel (Issue #1082): hat Vorrang vor Budget- und
+        # exit-code-Auswertung — SIGTERM/SIGKILL erzeugt non-zero exit,
+        # der Abbruch ist aber gewollt, kein technischer Fehler.
+        cancel_abort = _read_cancel_abort(sim_dir)
         # Budgetabbruch (Issue #764): hat Vorrang vor exit-code-Auswertung —
         # der Subprozess endet bei kooperativem Budget-Stop mit exit 0, ist
         # aber kein "completed". Budgetabbruch ≠ technischer Fehler.
         budget_abort = _read_budget_abort(sim_dir)
-        if budget_abort is not None:
+        if cancel_abort is not None:
+            state.runner_status = RunnerStatus.STOPPED
+            state.completed_at = datetime.now().isoformat()
+            state.error = None
+            sim_active_gauge().add(-1)
+            sim_counter().add(1, {"status": "cancelled"})
+            sim_duration_histogram().record(elapsed_seconds, {"status": "cancelled"})
+            logger.info(
+                f"Simulation cancelled by user: {simulation_id}",
+                extra={"simulation_id": simulation_id},
+            )
+            try:
+                from ..run_registry import RunRegistry
+                from .cancel_flag import clear_cancel
+
+                run_id = cancel_abort.get("run_id")
+                if not run_id:
+                    run = RunRegistry().get_latest_by_linked_id(
+                        "simulation_id", simulation_id, run_type="simulation_run"
+                    )
+                    run_id = run["run_id"] if run else None
+                if run_id:
+                    RunRegistry().update_run(
+                        run_id,
+                        status="stopped",
+                        termination_reason="user_cancel",
+                        message=(
+                            "Cancel bestätigt — OASIS-Subprozess beendet, "
+                            "Teilergebnisse bleiben erhalten"
+                        ),
+                        event_type="user_cancel",
+                        event_details={"exit_code": exit_code},
+                    )
+                    clear_cancel(run_id)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("cancel registry update failed: %s", exc)
+        elif budget_abort is not None:
             state.runner_status = RunnerStatus.STOPPED
             state.completed_at = datetime.now().isoformat()
             dimension = budget_abort.get("dimension", "unknown")
