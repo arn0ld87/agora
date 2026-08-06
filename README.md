@@ -1,104 +1,112 @@
 <div align="center">
 
-<img src="./media/agora-logo.gif" alt="Agora Logo" width="520"/>
+<img src="./media/agora-logo-v2-light.png" alt="Agora Logo" width="520"/>
 
 # 🏛️ AGORA
 
-### Evidenzorientierte Multi-Agenten-Analyseplattform für simulierte Zielgruppen-, Stakeholder- und Marktreaktionen
+### Evidenzorientierte Multi-Agenten-Analyse für Stakeholder, Zielgruppen und komplexe Entscheidungen
 
-*Strukturiert komplexe Dokumente, Webseiten und Fragestellungen in wissensgraphen-gestützte Multi-Agenten-Simulationen mit transparenter Evidenzbindung, Confidence-Bewertung und Datenlücken-Analyse.*
+**Dokumente → Knowledge Graph → Personas → Simulation → nachvollziehbarer Bericht**
 
----
+[![Version](https://img.shields.io/badge/version-0.9.0-635BFF?style=flat-square)](./VERSION)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-111827?style=flat-square)](./LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.14-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
+[![Vue](https://img.shields.io/badge/Vue-3.5%2B-42B883?style=flat-square&logo=vuedotjs&logoColor=white)](https://vuejs.org/)
+[![Neo4j](https://img.shields.io/badge/Neo4j-5.18%2B-4581C3?style=flat-square&logo=neo4j&logoColor=white)](https://neo4j.com/)
+[![E2E Smokes](https://img.shields.io/badge/E2E%20Smokes-20%2F20%20Green%20%F0%9F%9F%A2-brightgreen?style=flat-square)](./docs/STATUS.md)
+[![Status](https://img.shields.io/badge/status-Stability%20Beta-F59E0B?style=flat-square)](./docs/STATUS.md)
 
-[![GitHub Repo](https://img.shields.io/badge/GitHub-arn0ld87%2Fagora-111?style=for-the-badge&logo=github&logoColor=white)](https://github.com/arn0ld87/agora)
-[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue?style=for-the-badge&logo=open-source-initiative&logoColor=white)](./LICENSE)
-[![Version](https://img.shields.io/badge/Version-0.9.0-blueviolet?style=for-the-badge&logo=git&logoColor=white)](./VERSION)
-[![Python](https://img.shields.io/badge/Python-3.14-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![Vue.js](https://img.shields.io/badge/Vue.js-v3.5%2B-4FC08D?style=for-the-badge&logo=vuedotjs&logoColor=white)](https://vuejs.org/)
-[![Neo4j](https://img.shields.io/badge/Neo4j-5.18%2B-4581C3?style=for-the-badge&logo=neo4j&logoColor=white)](https://neo4j.com/)
-[![E2E Smokes](https://img.shields.io/badge/E2E%20Smokes-20%2F20%20Green%20%F0%9F%9F%A2-brightgreen?style=for-the-badge&logo=githubactions&logoColor=white)](./docs/STATUS.md)
-
-[⚡ Schnellstart](#-schnellstart) • [✨ Kernfunktionen](#-was-ist-agora) • [🔄 Pipeline](#-pipeline--datenfluss) • [🏗️ Architektur](#-architektur--stack) • [📊 Status & Qualität](#-aktueller-produktstatus-090) • [🗺️ Roadmap](#-release-weg-bis-100) • [🔒 Security](#-sicherheit--betrieb)
+[Demo](#demo) · [Was ist Agora?](#was-ist-agora) · [Funktionsweise](#funktionsweise) · [Prozess im UI](#-prozess-im-ui) · [Schnellstart](#schnellstart) · [Architektur](#architektur) · [Status](#projektstatus) · [Sicherheit](#sicherheit) · [Mitwirken](#projekt-unterstützen)
 
 </div>
 
 ---
 
-> [!WARNING]
-> **Aktueller Reifegrad: `0.9.0` Stability Beta**
->
-> **Ehrlicher Ist-Zustand des Repositories:**
-> - 🟢 **E2E-Verifizierung:** 6 von 6 E2E-Kern-Smokes laufen in CI durchgehend grün und sind seit 31.07.2026 als verpflichtender PR-Check erzwungen. `main` ist branch-protected (17 Required Status Checks, `strict: true`, `enforce_admins: true`).
-> - 🟢 **Frontend-Status:** Vue 3 (v4-Routes) ist die **einzige ausgelieferte Produkttechnologie**. `/home` redirected auf `/dashboard` ([#915](https://github.com/arn0ld87/agora/issues/915)); die v3-Inhaltskomponenten sind nach v4 migriert, kein Routing mehr über v4-Wrapper ([#922](https://github.com/arn0ld87/agora/issues/922), [#760](https://github.com/arn0ld87/agora/issues/760)).
-> - 🟢 **Stabilisierung (Deep-Audit, 05.08.2026):** Welle 1 der Audit-Befunde ist gemergt ([#1116](https://github.com/arn0ld87/agora/pull/1116), [#1117](https://github.com/arn0ld87/agora/pull/1117), [#1118](https://github.com/arn0ld87/agora/pull/1118)) — Transport-Security-Gate für credential-behaftete LLM- **und** Embedding-Endpoints, kein Phantom-Run mehr bei fehlender `simulation_config`, v1→v2-Evidence-Migration repariert.
-> - 🟡 **Offene 0.9-Kriterien:** Fünf Checkboxen der `0.9.0`-Liste (u. a. produktnahe Readiness-/Auth-/Secret-Smokes, Frischer-Host-Test der Installationsanleitung, STATUS-CI-Prüfung) sind bewusst in die `0.9.x`-Linie verschoben — Details in [`ROADMAP.md`](ROADMAP.md).
-> - 🔵 **React/Lovable-Prototyp:** Ein externer Prototyp existiert in einem separaten Repo, ist jedoch **nicht freigegeben, unveröffentlicht und nicht im Build/Docker verdrahtet**.
-> - 🔒 **Betriebsmodell:** Agora ist ein experimentelles **Single-User-System**. Nicht ungeschützt im öffentlichen Internet betreiben (Tailscale, VPN oder Reverse Proxy nutzen).
+> [!IMPORTANT]
+> **Agora sagt menschliches Verhalten nicht voraus.** Die Plattform erzeugt überprüfbare Szenarien, mögliche Einwände, Konfliktlinien und Datenlücken. Simulationsergebnisse ersetzen weder Interviews noch Nutzertests oder empirische Forschung.
+
+## Demo
+
+<p align="center">
+  <a href="./media/agora-demo.mp4">
+    <img src="./media/agora-demo-preview.gif" alt="Agora Demo: Simulation, Agentenreaktionen, Evidence Report und PDF-Export" width="100%">
+  </a>
+</p>
+
+<p align="center">
+  <strong><a href="./media/agora-demo.mp4">▶ Vollständige 38-Sekunden-Demo öffnen</a></strong><br>
+  <sub>Realer Lauf zur Einführung des KI-Lernassistenten „LernKompass 2027“.</sub>
+</p>
+
+Die Demo zeigt:
+
+1. laufende Multi-Agenten-Simulation mit Status und Ressourcenverbrauch,
+2. simulierte Reaktionen und technische Laufzeitdaten,
+3. einen strukturierten Report mit Risiken, Konflikten und Datenlücken,
+4. den Export des Ergebnisses als PDF.
 
 ---
 
-## 💡 Was ist Agora?
+## Was ist Agora?
 
-Agora ist eine lokal oder hybrid betreibbare Analyse- und Simulationsplattform. Sie dient **nicht** dazu, die Zukunft vorherzusagen oder klassische Marktforschung zu ersetzen. Stattdessen strukturiert Agora mögliche Reaktionen, Einwände, Stakeholder-Risiken und Wissenslücken auf Basis geladener Dokumente, Webseiten und konfigurierter LLM-Agenten.
+Agora ist eine lokal oder hybrid betreibbare Analyseplattform. Sie verarbeitet Dokumente, Webseiten und Fragestellungen zu einem Wissensgraphen, erzeugt daraus überprüfbare Stakeholder-Personas und lässt diese in einer kontrollierten Multi-Agenten-Simulation interagieren.
 
-### 🎯 Wofür Agora gedacht ist (Pre-Mortem & Varianten-Test)
+Der anschließende Report trennt dokumentbelegte Aussagen von Hypothesen, unbelegten Behauptungen und fehlenden Informationen. Statt lediglich plausibel klingenden LLM-Text zu erzeugen, versucht Agora jede relevante Aussage auf Quellen, Graphobjekte und Simulationsereignisse zurückzuführen.
 
-| Anwendungsfall | Beschreibung | Nutzen |
-|---|---|---|
-| 📣 **Kommunikation & Kampagnen** | Vorab-Test von Botschaften, Narrativen und PR-Strategien | Frühzeitiges Erkennen von Missverständnissen und Bedenken |
-| 👥 **Stakeholder & Polarisierung** | Simulation von Bedenken verschiedener DACH-Zielgruppen | Sichtbarmachen von Konfliktlinien und Cluster-Meinungen |
-| 🧪 **Produkt & Positionierung** | Vergleich von Landingpages, Pitches, Values & Value Props | Variantenvergleich vor echten Nutzertests oder Go-To-Market |
-| 🔍 **Evidenz & Datenlücken** | Automatische Analyse von Aussagen auf Quellenbelege | Identifikation unbelegter Annahmen & Hypothesen für Research |
+### Kernnutzen
 
-### ⚠️ Grenzen
+| Problem | Agora-Ansatz |
+|---|---|
+| Kritische Stakeholder werden spät berücksichtigt | Konfliktlinien und Einwände vor einer Entscheidung explorieren |
+| LLM-Berichte vermischen Fakten und Spekulation | Claims nach Evidenzgrad klassifizieren und mit Quellen verknüpfen |
+| Varianten werden nur nach Bauchgefühl verglichen | Runs, Prompts, Modelle und Eingabevarianten gegenüberstellen |
+| Entscheidungen beruhen auf unvollständigen Unterlagen | Datenlücken und nicht repräsentierte Gruppen sichtbar machen |
+| Sensible Daten sollen das eigene Netz nicht verlassen | Lokaler Betrieb mit Neo4j, Redis und Ollama möglich |
 
-- **Personas sind simuliert:** Persona-Aussagen sind keine echten Kundenmeinungen oder Testergebnisse.
-- **Confidence ≠ Wahrheit:** Der Confidence-Wert bewertet die interne Evidenzbindung im Graph, keine reale Welt-Wahrheit.
-- **Abhängig von Inputs:** Ergebnisse hängen von Eingangsdaten, Modellen, Prompts und Seeds ab — kleine Modell- oder Prompt-Änderungen können Aussagen deutlich verschieben.
-- **Modell-Größe zählt:** Kleine Modelle erzeugen schneller generische oder schlecht belegte Aussagen.
-- **Cloud-Trade-offs:** Externe Provider bringen Datenschutz-, Compliance- und Kostenfragen mit — Hosting und Datenflüsse bewusst wählen.
-- **Ein Run ist kein Sample:** Ein einzelner Lauf zeigt keine statistisch belastbare Verteilung; belastbare Aussagen erfordern mehrere Varianten, Seeds oder Reviews.
+### Geeignete Anwendungsfälle
 
-Agora ist am stärksten, wenn das Ergebnis anschließend durch echte Interviews, Fachreviews, Nutzertests oder vorhandene Vergleichsdaten geprüft wird.
+- **Stakeholder- und Akzeptanzanalyse:** mögliche Widerstände, Interessen und Kommunikationsprobleme strukturieren.
+- **Pre-Mortem:** untersuchen, warum ein Vorhaben scheitern könnte, bevor es umgesetzt wird.
+- **Kommunikationsvarianten:** Botschaften, Narrative und Positionierungen miteinander vergleichen.
+- **Produkt- und Konzeptreview:** Annahmen, Risiken und unberücksichtigte Zielgruppen identifizieren.
+- **Forschung und Lehre:** Multi-Agenten-, GraphRAG- und Evidence-Gating-Workflows nachvollziehbar untersuchen.
 
 ---
 
-## 🔄 Pipeline & Datenfluss
-
-Der Analyseprozess in Agora verläuft über 10 strukturierte Phasen:
+## Funktionsweise
 
 ```mermaid
 flowchart LR
-    classDef input fill:#2b3a42,stroke:#4f9da6,color:#fff
-    classDef core fill:#1e293b,stroke:#3b82f6,color:#fff
-    classDef output fill:#1d3528,stroke:#10b981,color:#fff
-
-    A[📥 1. Onboarding & Input<br/>PDF, Web, Text] :::input --> B[🕸️ 2. Knowledge Graph<br/>Extraction into Neo4j] :::core
-    B --> C[👥 3. Persona Spawn<br/>Haltungen & Profile] :::core
-    C --> D[🔍 4. Persona Review<br/>Anpassen & Regenerieren] :::core
-    D --> E[🎭 5. OASIS Simulation<br/>Multi-Agenten-Diskussion] :::core
-    E --> F[📊 6. Aggregation<br/>Graph- & Event-Daten] :::core
-    F --> G[📜 7. Report Generation<br/>Claims & Evidence] :::output
-    G --> H[⚖️ 8. Compare & Diff<br/>Runs & Varianten] :::output
-    H --> I[🔄 9. Replay & Export<br/>Audit & Re-Index] :::output
-    I --> J[🧬 10. Re-Embedding & Migration<br/>Versionierte Re-Indexierung] :::output
+    A[Dokumente und Webseiten] --> B[Knowledge Graph]
+    B --> C[Stakeholder-Personas]
+    C --> D[Multi-Agenten-Simulation]
+    D --> E[Claims und Evidenzprüfung]
+    E --> F[Report, Vergleich und Export]
 ```
 
-<details>
-<summary><b>🔍 Phasen im Detail anzeigen</b></summary>
+### 1. Wissen aufnehmen
 
-1. **Onboarding & Configuration:** Profil, LLM-Provider, Secret Store, Routing und Embeddings einrichten.
-2. **Knowledge Acquisition:** Dokumente (PDF, MD, TXT) oder URLs parsen, Sätze und Sinneinheiten strukturiert aufnehmen.
-3. **Graph Building:** Extraktion von Entitäten, Beziehungen, Behauptungen und Fakten in den Neo4j Knowledge Graph.
-4. **Persona Generation:** Ableitung differenzierter Zielgruppen- und Stakeholder-Personas mit DACH-spezifischen Tonalitäten und Interessen.
-5. **Persona Review:** Interaktive Prüfung, Anpassung oder gezielte Regeneration von Personas vor dem Simulationslauf.
-6. **Multi-Agent Simulation:** Ausführung der Interaktionen über die integrierte OASIS/CAMEL-Engine mit Redis-Eventbus.
-7. **Graph & Event Aggregation:** Zusammenführung von Interaktionsgraphen, Metriken, Polarisierungsgraden und Sentimentverläufen.
-8. **Evidence-Gating Report:** Generierung synthetisierter Berichte mit hartgeankerter Evidenzbindung (ADR-0002) und Confidence-Scores.
-9. **Run Comparison:** Vergleichende Gegenüberstellung verschiedener Runs, Prompts, Modelle oder Eingabe-Varianten.
-10. **Re-Embedding & Migration:** Fortsetzbare, versionierte Re-Indexierung von Vektor-Embeddings im Wissensgraphen.
+PDF-, Markdown- und Textdateien sowie Webseiten werden extrahiert, segmentiert und mit ihrer Herkunft gespeichert.
 
-</details>
+### 2. Knowledge Graph aufbauen
+
+Neo4j speichert Entitäten, Beziehungen, Behauptungen, Quellenfragmente und Vektor-Embeddings. Dadurch können semantische Suche und Graphbeziehungen gemeinsam genutzt werden.
+
+### 3. Personas erzeugen und prüfen
+
+Agora leitet Stakeholder-Personas aus dem Wissensgraphen ab. Rollen, Interessen und Haltungen können vor dem Lauf geprüft, verändert oder neu generiert werden.
+
+### 4. Simulation ausführen
+
+Die OASIS-/CAMEL-Laufzeit orchestriert die Agenten. Redis überträgt Status, Ereignisse und Laufzeitdaten zwischen Simulation, Backend und Oberfläche.
+
+### 5. Evidenzorientierten Report erstellen
+
+Der Report verarbeitet Graph- und Simulationsdaten zu strukturierten Claims. Quellenbezug, Confidence und Datenlücken werden gesondert dargestellt.
+
+### 6. Varianten vergleichen und exportieren
+
+Runs können nach Modell, Prompt, Seed und Eingabevariante verglichen, erneut abgespielt und in mehrere Formate exportiert werden.
 
 ---
 
@@ -140,7 +148,7 @@ Während der Generierung füllt sich eine Karten‑Übersicht mit Name, Rolle, I
 
 Während der Simulation laufen die Agenten‑ und Werkzeug‑Aufrufe parallel. Jede Report‑Section wird mit Evidenzbindung (ADR‑0002), Confidence und Quellenverweisen erzeugt; bei fehlgeschlagenem LLM‑Call liefert die Section stattdessen eine nachvollziehbare Fehlermeldung mit Verweis auf den Server‑Log.
 
-![Report-Generierung mit Agent-Logs und Datenlücken-Section](./docs/assets/screenshots/process/08-report-agent-logs.jpeg)
+![Report-Generierung mit Agent-Logs und Datenlücken](./docs/assets/screenshots/process/08-report-agent-logs.jpeg)
 
 ### 5. Interaktion — gezielte Nachfragen an die Personas
 
@@ -150,183 +158,162 @@ Nach Abschluss des Reports lassen sich einzelne Personas direkt ansprechen — e
 
 ---
 
-## 🏗️ Architektur & Stack
+## 🏗️ Architektur
 
 ```mermaid
 graph TD
-    subgraph Frontend ["🖥️ Frontend Layer (Vue 3 + Vite + Pinia)"]
-        UI[v4 Views & Dashboards]
-        ModelPicker[AiModelPicker SSoT]
-        PiniaStore[Pinia State / Event Bus]
-    end
+    UI[Vue 3 + Vite + Pinia] <-->|REST und SSE| API[Flask + Pydantic v2]
 
-    subgraph Backend ["⚙️ Core Backend (Flask + Pydantic v2 + Python 3.14)"]
-        API[REST API & SSE Event Streams]
-        Contracts[backend/app/contracts/ SSoT]
-        Registry[LLM Provider Registry]
-        ChatJSON[LLMClient.chat_json]
-        EvidenceEngine[Evidence-Gating Engine ADR-0002]
-    end
+    API --> REG[LLM Provider Registry]
+    REG --> LOCAL[Ollama lokal]
+    REG --> CLOUD[OpenAI-kompatible Provider]
 
-    subgraph Storage ["💾 Storage & Graph Layer"]
-        Neo4jDB[(Neo4j 5.18+\nKnowledge Graph & Vector Index)]
-        RedisDB[(Redis\nEvents, Status & IPC)]
-    end
+    API --> NEO[(Neo4j Knowledge Graph)]
+    API --> REDIS[(Redis Event Bus)]
+    API --> OASIS[OASIS / CAMEL Runtime]
 
-    subgraph SimEngine ["🎭 Simulation Runtime"]
-        OASIS[OASIS / CAMEL Multi-Agent Engine]
-    end
-
-    subgraph Providers ["🤖 LLM / Embedding Infrastructure"]
-        OllamaLocal[Ollama Local]
-        OllamaCloud[Ollama Cloud]
-        OpenAIComp[OpenAI / Gemini / MiniMax / Gateways]
-    end
-
-    UI <-->|HTTP / SSE| API
-    ModelPicker --> Registry
-    API --> Contracts
-    API --> ChatJSON
-    ChatJSON --> Registry
-    Registry --> Providers
-    API --> Storage
-    API --> SimEngine
-    SimEngine --> Storage
-    ChatJSON --> EvidenceEngine
+    OASIS --> REDIS
+    OASIS --> NEO
+    API --> EVIDENCE[Evidence-Gating Engine]
+    EVIDENCE --> REPORT[Report, Vergleich und Export]
 ```
 
-### 🛠️ Technologie-Stack
+### Technologie-Stack
 
-| Komponente | Technologie | Beschreibung / Rolle |
+| Bereich | Technologie | Aufgabe |
 |---|---|---|
-| **Frontend** | Vue 3, Vite, Pinia, TypeScript, Zod | Single Page Application (v4 Routing Architecture) |
-| **Backend API** | Flask, Pydantic v2, Python 3.14, `uv` | REST API, SSE Streaming, Strict Contract Validation |
-| **Knowledge Graph** | Neo4j 5.18+ | Entitäten, Relationen, Claims, Vektor-Embeddings |
-| **Event Bus & IPC** | Redis 5.0+ | Status, Pub/Sub Events, Simulations-Laufzeit |
-| **Multi-Agent Engine** | OASIS / CAMEL AI | Agenten-Orchestrierung, Diskussionsstränge, Rollen |
-| **LLM Integration** | Pydantic `chat_json`, Provider Registry | Multi-Provider (Ollama, OpenAI, Gemini, MiniMax) |
+| Frontend | Vue 3, Vite, Pinia, TypeScript, Zod | Oberfläche, Statusdarstellung und Eventverarbeitung |
+| Backend | Flask, Pydantic v2, Python 3.14, `uv` | REST API, SSE, Contracts und Orchestrierung |
+| Knowledge Graph | Neo4j 5.18+ | Entitäten, Relationen, Claims und Vektorindizes |
+| Event Bus | Redis 5.0+ | Status, Pub/Sub, IPC und Simulationsereignisse |
+| Simulation | OASIS / CAMEL AI | Multi-Agenten-Interaktionen und Rollensteuerung |
+| LLM-Schicht | Provider Registry und `chat_json` | Ollama sowie OpenAI-kompatible Anbieter |
+| Qualität | Pytest, Frontend-Tests, E2E-Smokes, GitHub Actions | Contracts, Migrationen und Kernabläufe absichern |
 
 ---
 
 ## ⚡ Schnellstart
 
-### 1. Repository klonen & Setup ausführen
+### Voraussetzungen
+
+- Git
+- Linux oder macOS empfohlen
+- ein konfigurierter LLM- und Embedding-Provider
+- für den vollständigen Stack: Docker
+
+### Lokales Setup
 
 ```bash
 git clone https://github.com/arn0ld87/agora.git
 cd agora
 ./install.sh
-```
 
-### 2. Umweltvariablen konfigurieren & Starten
-
-```bash
 cp .env.example .env
-# Passen Sie .env an (LLM Endpunkte, Secrets)
+# LLM-Endpunkte und Secrets in .env konfigurieren
 bun run dev
 ```
 
-### 3. Docker-Variante (Vollständiger Stack)
+### Docker-Setup
 
 ```bash
 ./install.sh --docker
 ```
 
-| Dienst | URL | Funktion |
+| Dienst | Adresse | Funktion |
 |---|---|---|
-| **Frontend UI** | `http://localhost:5173` | Hauptoberfläche (Vue 3 v4) |
-| **Backend API** | `http://localhost:5001` | REST API & SSE Gateway |
-| **Health Check** | `http://localhost:5001/readyz` | Backend Readiness Probe |
-| **Neo4j Browser** | `http://localhost:7474` | Wissensgraph & Cypher Console |
+| Frontend | `http://localhost:5173` | Agora-Weboberfläche |
+| Backend | `http://localhost:5001` | REST API und SSE Gateway |
+| Readiness | `http://localhost:5001/readyz` | Backend-Status |
+| Neo4j Browser | `http://localhost:7474` | Graph und Cypher Console |
+
+> [!WARNING]
+> Agora ist aktuell ein experimentelles Single-User-System. Die Anwendung nicht ungeschützt im öffentlichen Internet betreiben. Nutze Tailscale, WireGuard, ein VPN oder einen korrekt konfigurierten HTTPS-Reverse-Proxy.
 
 ---
 
-## 📊 Aktueller Produktstatus (`0.9.0`)
+## 📊 Projektstatus
 
-| Qualitätsbereich | Status | Detail / Verifikation |
+**Aktuelle Version:** `0.9.0` Stability Beta
+
+| Bereich | Stand |
+|---|---|
+| Backend | mehr als 4.560 gesammelte Unit- und Contract-Tests |
+| Frontend | 171 Testdateien |
+| E2E | 20 grüne Szenarien, darunter 6 verpflichtende Kern-Smokes |
+| Main Branch | geschützt durch 17 Required Status Checks |
+| Produkt-Frontend | Vue-v4-Routen sind die einzige ausgelieferte Oberfläche |
+| Betriebsmodell | stabilisierter Single-User-Betrieb, noch keine allgemeine Produktionsfreigabe |
+
+### Release-Pfad
+
+| Version | Ziel | Status |
 |---|---|---|
-| **Backend Unit & Contract Tests** | 🟢 4.560+ Tests (collected) | `cd backend && uv run pytest` |
-| **Frontend Test Files** | 🟢 171 Test-Files | `cd frontend && bun run test` |
-| **E2E-Kern-Pipeline Smokes** | 🟢 20/20 Grün | 6/6 Kern-Smokes durchgehend stabil in CI |
-| **Branch Protection `main`** | 🟢 Aktiv | 17 Required Status Checks (inkl. aller 6 E2E-Smokes und beider PR-Gates), `strict: true`, `enforce_admins: true`, keine Force-Pushes |
-| **Frontend v4 Migration** | 🟢 Abgeschlossen | Vue v4 ist einzige produktive UI; `/home` Redirect ([#915](https://github.com/arn0ld87/agora/issues/915)) und Component-Wrapper-Migration ([#922](https://github.com/arn0ld87/agora/issues/922)) umgesetzt, [#760](https://github.com/arn0ld87/agora/issues/760) verifiziert geschlossen |
-| **React / Lovable Prototype** | 🔵 Archiviert / Unfreigegeben | Prototyp existiert separat; kein Produktbestandteil vor 1.0 |
+| `0.8.0` | funktionsfähige Technical Preview | abgeschlossen |
+| `0.9.x` | Stabilisierung, Security- und Readiness-Gates | aktuell |
+| `0.10.0` | reproduzierbare Runs, Replay, Budgets, Backup/Restore | geplant |
+| `1.0.0` | stabile Verträge, Referenzlauf und nachgewiesener Produktnutzen | geplant |
 
-### 🧱 Was die `0.9.0`-Linie enthält
-
-Der Schnitt auf `0.9.0` bündelt die Stabilisierungsarbeit seit dem `0.8.0`-Stand:
-
-- **Transport-Security:** HTTPS-Pflicht für credential-behaftete LLM-Endpoints, seit [#1116](https://github.com/arn0ld87/agora/pull/1116) auch für alle Embedding-Pfade (`AGORA_LLM_ALLOW_INSECURE_HTTP` als bewusste, geloggte Ausnahme).
-- **Run-Lifecycle:** Kein Phantom-Run mehr, wenn `/simulation/start` ohne persistierte `simulation_config` aufgerufen wird — der Run endet als `failed` statt ewig `processing` ([#1094](https://github.com/arn0ld87/agora/issues/1094)).
-- **Evidence-Pipeline:** v1→v2-Migration schreibt keine contractwidrigen Section-Keys mehr und heilt vergiftete Bestandsdaten ([#1037](https://github.com/arn0ld87/agora/issues/1037)); `gap_id`-Vergabe kollisionsfrei ([#986](https://github.com/arn0ld87/agora/issues/986)); Hypothesen-Überhang bricht keinen fertigen Report mehr.
-- **Provider-Robustheit:** GPT-5-/o-Reasoning-Modelle laufen ohne `unsupported_value`-Abbrüche; Persona-Generierung respektiert das Routing statt des `.env`-Fallbacks.
-- **Deep-Audit-Stabilisierung:** Welle 2 (Cancel-Durchgriff auf laufende Simulationen [#1082](https://github.com/arn0ld87/agora/issues/1082), Budget-Enforcement in Resume/Prepare [#984](https://github.com/arn0ld87/agora/issues/984), Export-Parität [#1036](https://github.com/arn0ld87/agora/issues/1036)) ist in Arbeit innerhalb der `0.9.x`-Linie.
-
-### 🛠️ Lokale Quality Gates ausführen
-
-```bash
-# Vollständiges Pre-Push-Gate (Backend + Frontend + Schemas)
-bash scripts/pre-push-gate.sh
-
-# Scope-spezifische Gates
-bash scripts/pre-push-gate.sh backend
-bash scripts/pre-push-gate.sh frontend
-bash scripts/pre-push-gate.sh schemas
-```
+Der verifizierte Ist-Zustand steht in [`docs/STATUS.md`](./docs/STATUS.md). Die verbindlichen nächsten Schritte stehen in [`ROADMAP.md`](./ROADMAP.md).
 
 ---
 
-## 🗺️ Release-Weg bis 1.0.0
+## ⚠️ Grenzen und verantwortungsvolle Nutzung
 
-| Version | Entwicklungsstufe | Meilensteine & Freigabekriterien | Status |
-|---|---|---|---|
-| **`0.8.0`** | **Technical Preview** | Kern-Pipeline voll funktionsfähig; Provider- & Secret-SSoTs abgeschlossen; E2E-Smokes stabil grün. | ✅ Abgeschlossen |
-| **`0.9.0`** | **Stability Beta** | E2E als Required Check aktiviert; Vue v4 als einziges Frontend ✅ abgeschlossen ([#760](https://github.com/arn0ld87/agora/issues/760)). Restliche 0.9-Kriterien werden in der 0.9.x-Linie geschlossen (siehe [`ROADMAP.md`](ROADMAP.md)). | 🟢 **Aktuell** |
-| **`0.10.0`** | **Release Candidate** | Reproduzierbare Runs & Replay; Token-, Kosten- & Zeitbudgets; Backup/Restore-Runbooks. | ⚪ Geplant |
-| **`1.0.0`** | **Stable Single-User** | Stabile Verträge & Migrationen; deterministischer Referenzlauf; nachgewiesener Produktnutzen. | ⚪ Geplant |
+- **Personas sind simuliert.** Ihre Aussagen sind keine echten Kunden- oder Bürgermeinungen.
+- **Confidence ist keine Wahrheitsskala.** Der Wert beschreibt die interne Evidenzbindung eines Claims.
+- **Inputs bestimmen die Ergebnisse.** Datenqualität, Prompt, Modell und Seed können den Lauf erheblich verändern.
+- **Ein Run ist keine Stichprobe.** Für belastbarere Aussagen sind mehrere Varianten und externe Reviews nötig.
+- **Kleine Modelle sparen Kosten, reduzieren aber häufig die Qualität.** Besonders strukturierte Ausgaben und Evidenzzuordnung leiden.
+- **Cloud-Provider erzeugen Datenschutz- und Kostenrisiken.** Datenflüsse und Auftragsverarbeitung müssen vorab geprüft werden.
 
----
-
-## 🔒 Sicherheit & Betrieb
-
-Agora folgt einem klaren Security-First-Ansatz für On-Premise & Hybrid-Betrieb:
-
-- 🔑 **Auth-Token:** API-Zugriff über `AGORA_AUTH_TOKEN` geschützt.
-- 🎟️ **Signed Tickets:** SSE-Streams und Dateidownloads nutzen zeitbegrenzte, signierte URL-Tickets (keine Plaintext-Tokens in URLs).
-- 🔐 **Secret Safety:** API-Keys & Secrets werden niemals in Berichte, Logs, Graph-Knoten oder Simulations-Artefakte serialisiert.
-- 🛡️ **Isolation:** Betrieb im lokalen Netz, via Tailscale, WireGuard-VPN oder HTTPS Reverse Proxy.
-
-Detail-Dokumentation:
-- 📖 [`SECURITY.md`](./SECURITY.md) — Vulnerability Disclosure & Guidelines
-- 📖 [`docs/security-hardening.md`](./docs/security-hardening.md) — Hardening & Network Setup
-- 📖 [`docs/dependency-risk-register.md`](./docs/dependency-risk-register.md) — Dependency CVE Tracking & Hardstops
+Agora ist am nützlichsten als **Entscheidungsunterstützung vor realen Interviews, Fachreviews, Nutzertests oder Pilotprojekten**.
 
 ---
 
-## 📚 Dokumentationsarchitektur
+## 🔒 Sicherheit
 
-Verbindliche Hierarchie für Mitwirkende und KI-Agenten:
+- API-Zugriff über `AGORA_AUTH_TOKEN`
+- zeitlich begrenzte, signierte Tickets für SSE und Downloads
+- Secrets werden nicht in Reports, Logs oder Graphobjekte serialisiert
+- HTTPS-Pflicht für credential-behaftete LLM- und Embedding-Endpunkte
+- empfohlener Betrieb im lokalen Netz, über VPN oder hinter einem Reverse Proxy
 
-1. 📄 **[`README.md`](./README.md)** — Produkt-Übersicht, Einstieg, Grenzen & Release-Linie
-2. 📊 **[`docs/STATUS.md`](./docs/STATUS.md)** — Verifizierter, ehrlicher Ist-Zustand
-3. 🗺️ **[`ROADMAP.md`](./ROADMAP.md)** — Strategische Release-Stufen & Kriterien
-4. 🎯 **[GitHub Issues](https://github.com/arn0ld87/agora/issues)** — Konkrete, ausführbare Arbeitspakete
+Weitere Dokumentation:
 
-Für Entwickler & Agenten:
-- 🤖 [`AGENTS.md`](./AGENTS.md) — Agent-Richtlinien & Tool-Pipelines
-- 💬 [`CLAUDE.md`](./CLAUDE.md) — Claude Code Konfiguration & Task-Workflows
-- 🏛️ [`docs/architecture.md`](./docs/architecture.md) — Tiefgehende Systemarchitektur
-- 📖 [`docs/runbooks/`](./docs/runbooks/) — Operational Playbooks & Gates
+- [`SECURITY.md`](./SECURITY.md)
+- [`docs/security-hardening.md`](./docs/security-hardening.md)
+- [`docs/dependency-risk-register.md`](./docs/dependency-risk-register.md)
+
+---
+
+## 🤝 Projekt unterstützen
+
+Agora befindet sich zwischen funktionsfähiger Stability Beta und einer belastbaren Version 1.0. Besonders aufwendig sind wiederholte LLM-Läufe, Hardware für lokale Modelle, reproduzierbare Referenzsimulationen und fachliche Evaluationen.
+
+Gesucht werden:
+
+- **Forschungs- und Evaluationspartner**, die Multi-Agenten-Ergebnisse methodisch prüfen,
+- **Compute- und Hardware-Sponsoren** für wiederholbare lokale Modellläufe,
+- **Pilotpartner** mit echten, dokumentierten Stakeholder-Fragestellungen,
+- **Open-Source-Mitwirkende** for Testing, UX, Security und Release Engineering,
+- **Förder- und Kooperationspartner** für den Weg zu Version 1.0.
+
+Kontakt und Mitarbeit:
+
+- [GitHub Issues](https://github.com/arn0ld87/agora/issues)
+- [Projektseite des Entwicklers](https://alexle135.de)
+- [`AGENTS.md`](./AGENTS.md) für agentische Entwicklungsworkflows
+- [`CLAUDE.md`](./CLAUDE.md) für Claude-Code-Aufgaben
 
 ---
 
 <div align="center">
 
-### ⚖️ Lizenz & Herkunft
+### ⚖️ Lizenz und Herkunft
 
 Agora ist Open Source unter der **AGPL-3.0 Lizenz** ([`LICENSE`](./LICENSE)).  
 Entstanden aus *MiroFish-Offline*, grundlegend weiterentwickelt für professionelle DACH-Simulationen.  
-OASIS-Komponenten basieren auf dem *CAMEL-AI* Ökosystem.
+Teile der Simulationslaufzeit basieren auf dem *CAMEL-AI-/OASIS-Ökosystem*.
 
 *Entwickelt von [Alexander Schneider](https://alexle135.de)*
 
