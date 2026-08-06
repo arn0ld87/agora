@@ -97,14 +97,24 @@ def test_generate_profiles_endpoint_passes_llm_model_to_generator(
         FakeProfileGenerator,
     )
 
-    response = client.post(
-        "/api/simulation/generate-profiles",
-        json={
-            "graph_id": VALID_GRAPH_ID,
-            "llm_model": "qwen3:14b",
-            "platform": "reddit",
-        },
-    )
+    with (
+        patch("app.api.simulation_history.build_preview_stage_route") as mock_route,
+        patch("app.api.simulation_history.resolve_route_api_key") as mock_key,
+    ):
+        mock_route.return_value = MagicMock(
+            base_url_sanitized="http://localhost:11434",
+            provider_id="ollama",
+        )
+        mock_key.return_value = "fake-key"
+
+        response = client.post(
+            "/api/simulation/generate-profiles",
+            json={
+                "graph_id": VALID_GRAPH_ID,
+                "llm_model": "qwen3:14b",
+                "platform": "reddit",
+            },
+        )
 
     assert response.status_code == 200, response.get_data(as_text=True)
     assert captured_model_name.get("model_name") == "qwen3:14b", (
@@ -156,10 +166,20 @@ def test_generate_profiles_endpoint_falls_back_when_no_llm_model(
         FakeProfileGenerator,
     )
 
-    response = client.post(
-        "/api/simulation/generate-profiles",
-        json={"graph_id": VALID_GRAPH_ID},
-    )
+    with (
+        patch("app.api.simulation_history.build_preview_stage_route") as mock_route,
+        patch("app.api.simulation_history.resolve_route_api_key") as mock_key,
+    ):
+        mock_route.return_value = MagicMock(
+            base_url_sanitized="http://localhost:11434",
+            provider_id="ollama",
+        )
+        mock_key.return_value = "fake-key"
+
+        response = client.post(
+            "/api/simulation/generate-profiles",
+            json={"graph_id": VALID_GRAPH_ID},
+        )
 
     assert response.status_code == 200, response.get_data(as_text=True)
     # model_name=None → OasisProfileGenerator nutzt Config.LLM_MODEL_NAME als Fallback

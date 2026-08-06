@@ -184,6 +184,23 @@ Fließtext. Künftig gehört **jede** `.trivyignore`-Zeile auch in die JSON.
 |---|---|---|---|
 | `transformers` | `>=5.3.0` | — | Upgrade auf v5 via `tool.uv.override-dependencies` unblocked durch `sentence-transformers>=5.3.0`. Behebt CVE-2026-4372, CVE-2026-1839 und PYSEC-2025-217. |
 | `nltk` | `3.10.1` | — (kein Upstream-Pin) | Override-Pin `nltk==3.10.1` (2026-08-02, #995) löst GHSA-p4gq-832x-fm9v (echter Fix in 3.10.0) real auf. PYSEC-2026-597 bleibt ohne echten Upstream-Fix (kein `fixed`-Event in OSV), fällt aber ab 3.10.0 aus dem affected-Set (`last_affected: 3.9.4`) und wird deshalb nicht mehr geflaggt — Tracking bleibt offen in #661. Agora nutzt nltk weiterhin nur transitiv (via `unstructured`/`camel-oasis`). |
+| `camel-oasis` / `camel-ai` | `camel-oasis==0.2.5` / `camel-ai==0.2.78` | `camel-ai==0.2.78` (Upstream-Pin in `camel-oasis`) | `camel-oasis` pinnt exakt `camel-ai==0.2.78`. Alle bisherigen PyPI-Releases (0.2.0 bis 0.2.5) erzwingen diese Version. Dies blockiert das Upgrade auf `camel-ai>=0.2.90` und verhindert automatische Dependabot-Bumps (z. B. PR #793). Die Replacement-Evaluation für `camel-oasis` wurde im August 2026 aktiviert. |
+
+---
+
+### Replacement-Evaluation für camel-oasis
+
+**Status:** Aktiviert am 2026-08-03 (keine neue Version auf PyPI, die `camel-ai>=0.2.90` erlaubt)
+**Grund:** Die feste Kopplung von `camel-oasis` an `camel-ai==0.2.78` blockiert sämtliche `camel-ai`-Sicherheits- und Feature-Updates. Solange kein Upstream-Release diese Einschränkung aufhebt, sind Dependabot-PRs (z. B. #793) nicht mergbar.
+**Letzter PyPI-Poll (2026-08-03):** Version `0.2.5` ist weiterhin die neueste Version auf PyPI und schränkt `camel-ai` auf `==0.2.78` ein.
+
+#### Evaluierte Optionen:
+1. **Upstream-Release-Watch:** PyPI periodisch pollen (unter `https://pypi.org/pypi/camel-oasis/json`). Sobald `camel-oasis>=0.2.6` verfügbar ist, das `camel-ai>=0.2.90` erlaubt, wird das Upgrade durchgeführt und der Dependabot-Filter aufgehoben.
+2. **Replacement durch andere Multi-Agenten-Frameworks (z. B. LangGraph):**
+   - **Nutzen:** Vollständige Entkopplung von der veralteten `camel-ai`-Kette. Erleichtert die Integration neuerer LLMs und flexiblerer Agenten-Zustandsmaschinen.
+   - **Risiko:** Hoher Refactoring-Aufwand im Kern des Simulators (Layer 5/OASIS-Integration). Erfordert gründliche Verifikation des Agenten-Verhaltens.
+3. **Eigene Multi-Agenten-Zustandsmaschine (Custom Orchestration):**
+   - **Nutzen:** Minimale Abhängigkeiten, maximale Performance, vollständige Kontrolle über Prompts und Zustandsübergänge, passend zur Local-First-Philosophie von Agora.
 
 ---
 
