@@ -5,6 +5,12 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-08-06
+
+### Changed (Version-Cut `0.8.0` → `0.9.0` Stability Beta — 2026-08-06)
+
+- **Produktversion auf `0.9.0` Stability Beta angehoben** (`VERSION`, Komponentenmanifeste via `check_version_drift.py --write`, `uv.lock`, README-Badge, STATUS, ROADMAP, AGENTS). Grundlage: Deep-Audit-Stabilisierung Welle 1 ist gemergt (#1116, #1117, #1118), die Kern-Freigabekriterien (E2E als Required Check, Vue-v4-Konsolidierung, Provider-/Secret-SSoTs, Dependency-SSoT) sind erfüllt. Fünf Kriterien der 0.9.0-Liste bleiben offen und werden innerhalb der 0.9.x-Linie geschlossen (siehe `ROADMAP.md`).
+
 ### Fixed (v1→v2-Evidence-Migration schrieb einen contractwidrigen Section-Key — 2026-08-06)
 
 - **`migrate_v1_to_v2` schrieb `schema_version` in jede Section, obwohl `ReportSectionModel` strict ist (`extra="forbid"`) und das Feld nicht kennt — die Migration machte damit genau die v1-Maps unlesbar, die sie retten sollte** (`GET /api/report/<id>/evidence` antwortete HTTP 400 mit `Extra inputs are not permitted`). Die Schema-Version gehört an die Map, nicht an jede Section (Variante 1 aus #1037): Die Migration schreibt den Section-Key nicht mehr und entfernt ihn zusätzlich aus Bestandsdaten — auch bei Maps, die bereits auf Top-Level-v2 stehen, weil der In-Memory-Migrationspfad (`report_agent/workflow.py`) vergiftete v2-Bestände persistiert haben kann, für die der frühere Early-Return die Heilung übersprungen hätte. (#1037)
