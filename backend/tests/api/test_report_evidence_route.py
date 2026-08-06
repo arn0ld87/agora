@@ -260,3 +260,65 @@ class TestReportEvidenceRouteOrphanClaims:
         assert len(section["claims"]) == 1
         assert section["claims"][0]["claim_id"] == "claim_91"
         assert section["claims"][0]["confidence_label"] == "low"
+
+
+class TestReportEvidenceRouteV1Migration:
+    """Issue #1037 — echte v1-Maps müssen den Lese-Pfad überleben.
+
+    Die alte ``migrate_v1_to_v2`` schrieb ``section["schema_version"]`` in
+    jede Section; ``ReportSectionModel`` (``extra="forbid"``) lehnte das
+    Ergebnis ab — HTTP 400 statt gerettetem Report.
+    """
+
+    @staticmethod
+    def _v1_map():
+        """Echte v1-Map: kein Top-Level-``schema_version``, eine Section."""
+        return {
+            "report_id": VALID_REPORT_ID,
+            "simulation_id": "sim_0123456789ab",
+            "global_evidence": [],
+            "sections": [
+                {
+                    "section_index": 1,
+                    "section_title": "Kontext",
+                    "section_summary": "Zusammenfassung",
+                    "claims": [],
+                    "data_gaps": [],
+                }
+            ],
+        }
+
+    def test_v1_map_with_section_passes_endpoint(self, client):
+        """RED ohne den Fix: sections.0.schema_version → Extra inputs are not
+        permitted → HTTP 400."""
+        with (
+            patch("app.api.report.validate_report_id", return_value=True),
+            patch(
+                "app.api.report.ReportManager.get_evidence_map",
+                return_value=self._v1_map(),
+            ),
+        ):
+            resp = client.get(f"/api/report/{VALID_REPORT_ID}/evidence")
+
+        assert resp.status_code == 200, resp.get_data(as_text=True)
+        data = resp.get_json()["data"]
+        assert data["schema_version"] == 2
+        assert "schema_version" not in data["sections"][0]
+
+    def test_poisoned_v2_map_is_healed(self, client):
+        """Bestände, die die alte Migration bereits vergiftet hat (Top-Level
+        v2 plus Section-Feld), werden beim Lesen geheilt."""
+        poisoned = self._v1_map()
+        poisoned["schema_version"] = 2
+        poisoned["sections"][0]["schema_version"] = 2
+        with (
+            patch("app.api.report.validate_report_id", return_value=True),
+            patch(
+                "app.api.report.ReportManager.get_evidence_map",
+                return_value=poisoned,
+            ),
+        ):
+            resp = client.get(f"/api/report/{VALID_REPORT_ID}/evidence")
+
+        assert resp.status_code == 200, resp.get_data(as_text=True)
+        assert "schema_version" not in resp.get_json()["data"]["sections"][0]

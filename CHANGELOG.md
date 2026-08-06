@@ -5,6 +5,9 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (v1→v2-Evidence-Migration schrieb einen contractwidrigen Section-Key — 2026-08-06)
+
+- **`migrate_v1_to_v2` schrieb `schema_version` in jede Section, obwohl `ReportSectionModel` strict ist (`extra="forbid"`) und das Feld nicht kennt — die Migration machte damit genau die v1-Maps unlesbar, die sie retten sollte** (`GET /api/report/<id>/evidence` antwortete HTTP 400 mit `Extra inputs are not permitted`). Die Schema-Version gehört an die Map, nicht an jede Section (Variante 1 aus #1037): Die Migration schreibt den Section-Key nicht mehr und entfernt ihn zusätzlich aus Bestandsdaten — auch bei Maps, die bereits auf Top-Level-v2 stehen, weil der In-Memory-Migrationspfad (`report_agent/workflow.py`) vergiftete v2-Bestände persistiert haben kann, für die der frühere Early-Return die Heilung übersprungen hätte. (#1037)
 ### Fixed (`/simulation/start` hinterließ einen Phantom-Run bei fehlender `simulation_config` — 2026-08-06)
 
 - **Fehlte die persistierte `simulation_config` (z. B. weil `/prepare` nie lief), lehnte `_apply_route_to_simulation_config` mit 404 `simulation_not_prepared` ab, ohne den in Phase 5 bereits registrierten Run als `failed` zu markieren.** Der Run blieb als nicht ausführbarer Geisterlauf in der Run-Liste stehen. Vor dem `raise` markiert die Funktion den Run jetzt best-effort als `failed` — dieselbe Vorlage (`try`/`except` mit Log-Warnung statt hartem Fehler), die der API-Key-Guard in `_resolve_start_route` bereits für den analogen Fall nutzt. Die HTTP-Antwort (404, `simulation_not_prepared`) bleibt unverändert. (#1094)

@@ -52,22 +52,29 @@ _DEFAULT_VOICE_REGISTER = "neutral-de"
 def migrate_v1_to_v2(raw: Optional[dict]) -> Optional[dict]:
     """Hebt eine persistierte Evidence-Map auf schema_version=2.
 
-    - ``None`` und bereits auf v2 stehende Maps werden unverändert zurückgegeben.
-    - Mutiert das übergebene Dict in-place (entspricht dem Plan-Snippet aus
-      PLAN.md Teil D.2) und reicht es zurück, damit Caller wahlweise
+    - ``None`` wird unverändert zurückgegeben.
+    - Mutiert das übergebene Dict in-place und gibt es zurück, damit Caller wahlweise
       Rückgabewert oder Original verwenden können.
-    - Section-Einträge erben ``schema_version`` auf v2.
+    - Entfernt ``schema_version`` aus Section-Einträgen (#1037): Die Version
+      gehört an die Map, nicht an jede Section — ``ReportSectionModel`` ist
+      strict (``extra="forbid"``) und kennt das Feld nicht. Bis #1037 schrieb
+      diese Migration den Schlüssel selbst in jede Section und machte damit
+      genau die Maps unlesbar, die sie retten sollte. Die Bereinigung läuft
+      deshalb auch für Maps, die bereits auf v2 stehen: über den in-memory
+      Migrationspfad (report_agent/workflow) können vergiftete v2-Bestände
+      persistiert worden sein, für die der frühere Early-Return die Heilung
+      übersprungen hätte.
     """
     if raw is None:
         return None
+    sections = raw.get("sections") or []
+    for section in sections:
+        if isinstance(section, dict):
+            section.pop("schema_version", None)
     if raw.get("schema_version") == CURRENT_SCHEMA_VERSION:
         return raw
 
     raw["schema_version"] = CURRENT_SCHEMA_VERSION
-    sections = raw.get("sections") or []
-    for section in sections:
-        if isinstance(section, dict):
-            section["schema_version"] = CURRENT_SCHEMA_VERSION
     return raw
 
 
