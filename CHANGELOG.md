@@ -5,6 +5,10 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (`/simulation/start` hinterließ einen Phantom-Run bei fehlender `simulation_config` — 2026-08-06)
+
+- **Fehlte die persistierte `simulation_config` (z. B. weil `/prepare` nie lief), lehnte `_apply_route_to_simulation_config` mit 404 `simulation_not_prepared` ab, ohne den in Phase 5 bereits registrierten Run als `failed` zu markieren.** Der Run blieb als nicht ausführbarer Geisterlauf in der Run-Liste stehen. Vor dem `raise` markiert die Funktion den Run jetzt best-effort als `failed` — dieselbe Vorlage (`try`/`except` mit Log-Warnung statt hartem Fehler), die der API-Key-Guard in `_resolve_start_route` bereits für den analogen Fall nutzt. Die HTTP-Antwort (404, `simulation_not_prepared`) bleibt unverändert. (#1094)
+
 ### Security (HTTPS für credential-behaftete LLM-Endpoints erzwingen — 2026-08-05)
 
 - **`LLMClient` und die LLM-Discovery-Pfade (`ModelCatalogService`, Provider-Connection-Adapter) sendeten `Authorization: Bearer <api_key>` auch an `http://`-Endpoints, ohne den Host zu prüfen (CWE-319) — bei einer öffentlich erreichbaren, versehentlich auf `http://` konfigurierten `base_url` ginge der API-Key im Klartext über die Leitung.** Ein neues, zentrales Gate (`ensure_credentialed_transport_security`, `backend/app/llm/transport_security.py`) läuft jetzt vor jedem credential-behafteten Request und lässt `http://` nur für nachweislich lokale/private Hosts zu (`localhost`, Docker-Compose-Servicenamen, Docker-Host-Gateway-Namen, Loopback, RFC1918, CGNAT/Tailscale-Bereich, Link-Local). Gegen alle anderen Hosts bricht ein unverschlüsselter Request mit einem credential-behafteten Key jetzt mit `InsecureTransportError` ab — fail-closed auch bei unparsebaren URLs. Für dokumentierte Ausnahmen (z. B. ein bewusst unverschlüsseltes internes Gateway ohne TLS-Terminierung) steht `AGORA_LLM_ALLOW_INSECURE_HTTP` zur Verfügung; Default bleibt sicher, die Ausnahme loggt eine sanitisierte Warnung statt still durchzulassen. (#1103)

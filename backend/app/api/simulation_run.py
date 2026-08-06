@@ -561,7 +561,7 @@ def _has_config_overrides(req: _StartRequest) -> bool:
 
 
 def _apply_route_to_simulation_config(
-    req: _StartRequest, resolved_route: "ResolvedRoute"
+    req: _StartRequest, resolved_route: "ResolvedRoute", run_id: str
 ) -> None:
     """Phase 7 — Laufzeit-Overrides in die persistierte Sim-Config schreiben."""
     if not _has_config_overrides(req):
@@ -570,6 +570,16 @@ def _apply_route_to_simulation_config(
     store = get_artifact_store()
     config = store.read_json(req.simulation_id, "simulation_config", default=None)
     if not config:
+        # Der Run wurde in Phase 5 bereits registriert — ohne diese Markierung
+        # bleibt er als Phantom-Run in der Liste stehen (#1094).
+        try:
+            run_registry.update_run(
+                run_id,
+                status="failed",
+                message="Simulation configuration does not exist. Please call /prepare first",
+            )
+        except Exception:  # noqa: BLE001 — best effort
+            logger.warning("Failed to mark orphaned run as failed", exc_info=True)
         raise _StartRejected(
             json_error(
                 ApiErrorCode.SIMULATION_NOT_PREPARED,
@@ -647,7 +657,7 @@ def start_simulation():
         resolved_route, resolved_api_key = _resolve_start_route(
             run_record["run_id"], req.llm_runtime
         )
-        _apply_route_to_simulation_config(req, resolved_route)
+        _apply_route_to_simulation_config(req, resolved_route, run_record["run_id"])
     except _StartRejected as rejected:
         return rejected.response
 

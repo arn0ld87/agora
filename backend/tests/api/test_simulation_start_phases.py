@@ -474,7 +474,7 @@ def test_apply_route_to_simulation_config_skips_without_overrides(app_ctx, monke
     monkeypatch.setattr(mod, "get_artifact_store", lambda: store)
     req = mod._parse_start_request({"simulation_id": VALID_SIM_ID})
 
-    mod._apply_route_to_simulation_config(req, _resolved_route())
+    mod._apply_route_to_simulation_config(req, _resolved_route(), "run-1")
 
     store.read_json.assert_not_called()
     store.write_json.assert_not_called()
@@ -486,7 +486,7 @@ def test_apply_route_to_simulation_config_writes_simulation_hours(app_ctx, monke
     monkeypatch.setattr(mod, "get_artifact_store", lambda: store)
     req = mod._parse_start_request({"simulation_id": VALID_SIM_ID, "simulation_days": 3})
 
-    mod._apply_route_to_simulation_config(req, _resolved_route())
+    mod._apply_route_to_simulation_config(req, _resolved_route(), "run-1")
 
     written = store.write_json.call_args.args[2]
     assert written["time_config"]["total_simulation_hours"] == 72
@@ -499,10 +499,31 @@ def test_apply_route_to_simulation_config_rejects_missing_config(app_ctx, monkey
     req = mod._parse_start_request({"simulation_id": VALID_SIM_ID, "simulation_days": 3})
 
     with pytest.raises(mod._StartRejected) as excinfo:
-        mod._apply_route_to_simulation_config(req, _resolved_route())
+        mod._apply_route_to_simulation_config(req, _resolved_route(), "run-1")
 
     assert _status(excinfo) == 404
     assert _body(excinfo)["code"] == "simulation_not_prepared"
+
+
+def test_apply_route_to_simulation_config_rejects_missing_config_marks_run_failed(
+    app_ctx, monkeypatch
+):
+    """Issue #1094: fehlende simulation_config darf keinen Phantom-Run hinterlassen."""
+    store = MagicMock()
+    store.read_json.return_value = None
+    monkeypatch.setattr(mod, "get_artifact_store", lambda: store)
+    registry = MagicMock()
+    monkeypatch.setattr(mod, "run_registry", registry)
+    req = mod._parse_start_request({"simulation_id": VALID_SIM_ID, "simulation_days": 3})
+
+    with pytest.raises(mod._StartRejected) as excinfo:
+        mod._apply_route_to_simulation_config(req, _resolved_route(), "run-1")
+
+    assert _status(excinfo) == 404
+    assert _body(excinfo)["code"] == "simulation_not_prepared"
+    registry.update_run.assert_called_once()
+    assert registry.update_run.call_args.args[0] == "run-1"
+    assert registry.update_run.call_args.kwargs["status"] == "failed"
 
 
 def test_apply_route_to_simulation_config_writes_model_for_ai_model_ref(app_ctx, monkeypatch):
@@ -520,7 +541,7 @@ def test_apply_route_to_simulation_config_writes_model_for_ai_model_ref(app_ctx,
         }
     )
 
-    mod._apply_route_to_simulation_config(req, _resolved_route())
+    mod._apply_route_to_simulation_config(req, _resolved_route(), "run-1")
 
     written = store.write_json.call_args.args[2]
     assert written["llm_model"] == "gpt-4o"
