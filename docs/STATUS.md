@@ -1,8 +1,8 @@
 # Agora — Status
 
-**Stand:** 05.08.2026  
-**Geprüfte Main-Baseline:** `d5bdbada`  
-**Produktversion:** `0.8.0` Technical Preview
+**Stand:** 06.08.2026  
+**Geprüfte Main-Baseline:** `cc478627`  
+**Produktversion:** `0.9.0` Stability Beta
 
 Diese Datei beschreibt ausschließlich den verifizierten Istzustand. Strategische Release-Ziele stehen in [`ROADMAP.md`](../ROADMAP.md), konkrete Arbeitspakete in [GitHub Issues](https://github.com/arn0ld87/agora/issues), ausgelieferte Änderungen in [`CHANGELOG.md`](../CHANGELOG.md).
 
@@ -15,19 +15,19 @@ Die Produktreife wird ab diesem Dokumentationsumbau über [`VERSION`](../VERSION
 <!-- BEGIN_AUTOGEN_VERSIONS -->
 | Komponente | Pfad | Version |
 |---|---|---|
-| Backend | `backend/pyproject.toml` | 0.8.0 |
-| Frontend | `frontend/package.json` | 0.8.0 |
-| Root | `package.json` | 0.8.0 |
+| Backend | `backend/pyproject.toml` | 0.9.0 |
+| Frontend | `frontend/package.json` | 0.9.0 |
+| Root | `package.json` | 0.9.0 |
 <!-- END_AUTOGEN_VERSIONS -->
 
-`VERSION` ist die Produkt-SSoT. Alle Komponentenmanifeste (`backend/pyproject.toml`, `package.json`, `frontend/package.json`) und der README-Badge sind auf `VERSION=0.8.0` synchronisiert; ein Drift-Check läuft in CI (`version-drift.yml`) und lokal (`pre-push-gate.sh schemas`). Der Version-Cut-Ablauf ist in [`docs/runbooks/release-versioning.md`](runbooks/release-versioning.md) beschrieben.
+`VERSION` ist die Produkt-SSoT. Alle Komponentenmanifeste (`backend/pyproject.toml`, `package.json`, `frontend/package.json`) und der README-Badge sind auf `VERSION=0.9.0` synchronisiert; ein Drift-Check läuft in CI (`version-drift.yml`) und lokal (`pre-push-gate.sh schemas`). Der Version-Cut-Ablauf ist in [`docs/runbooks/release-versioning.md`](runbooks/release-versioning.md) beschrieben.
 
 ## Tests
 
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 4564 | `cd backend && uv run pytest --collect-only -q` |
+| Backend Tests (collected) | 4567 | `cd backend && uv run pytest --collect-only -q` |
 | Frontend Test-Files | 185 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 

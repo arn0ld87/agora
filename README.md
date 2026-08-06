@@ -12,7 +12,7 @@
 
 [![GitHub Repo](https://img.shields.io/badge/GitHub-arn0ld87%2Fagora-111?style=for-the-badge&logo=github&logoColor=white)](https://github.com/arn0ld87/agora)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue?style=for-the-badge&logo=open-source-initiative&logoColor=white)](./LICENSE)
-[![Version](https://img.shields.io/badge/Version-0.8.0-blueviolet?style=for-the-badge&logo=git&logoColor=white)](./VERSION)
+[![Version](https://img.shields.io/badge/Version-0.9.0-blueviolet?style=for-the-badge&logo=git&logoColor=white)](./VERSION)
 [![Python](https://img.shields.io/badge/Python-3.14-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![Vue.js](https://img.shields.io/badge/Vue.js-v3.5%2B-4FC08D?style=for-the-badge&logo=vuedotjs&logoColor=white)](https://vuejs.org/)
 [![Neo4j](https://img.shields.io/badge/Neo4j-5.18%2B-4581C3?style=for-the-badge&logo=neo4j&logoColor=white)](https://neo4j.com/)
@@ -25,11 +25,13 @@
 ---
 
 > [!WARNING]
-> **Aktueller Reifegrad: `0.8.0` Technical Preview**
+> **Aktueller Reifegrad: `0.9.0` Stability Beta**
 >
 > **Ehrlicher Ist-Zustand des Repositories:**
 > - 🟢 **E2E-Verifizierung:** 6 von 6 E2E-Kern-Smokes laufen in CI durchgehend grün und sind seit 31.07.2026 als verpflichtender PR-Check erzwungen. `main` ist branch-protected (17 Required Status Checks, `strict: true`, `enforce_admins: true`).
 > - 🟢 **Frontend-Status:** Vue 3 (v4-Routes) ist die **einzige ausgelieferte Produkttechnologie**. `/home` redirected auf `/dashboard` ([#915](https://github.com/arn0ld87/agora/issues/915)); die v3-Inhaltskomponenten sind nach v4 migriert, kein Routing mehr über v4-Wrapper ([#922](https://github.com/arn0ld87/agora/issues/922), [#760](https://github.com/arn0ld87/agora/issues/760)).
+> - 🟢 **Stabilisierung (Deep-Audit, 05.08.2026):** Welle 1 der Audit-Befunde ist gemergt ([#1116](https://github.com/arn0ld87/agora/pull/1116), [#1117](https://github.com/arn0ld87/agora/pull/1117), [#1118](https://github.com/arn0ld87/agora/pull/1118)) — Transport-Security-Gate für credential-behaftete LLM- **und** Embedding-Endpoints, kein Phantom-Run mehr bei fehlender `simulation_config`, v1→v2-Evidence-Migration repariert.
+> - 🟡 **Offene 0.9-Kriterien:** Fünf Checkboxen der `0.9.0`-Liste (u. a. produktnahe Readiness-/Auth-/Secret-Smokes, Frischer-Host-Test der Installationsanleitung, STATUS-CI-Prüfung) sind bewusst in die `0.9.x`-Linie verschoben — Details in [`ROADMAP.md`](ROADMAP.md).
 > - 🔵 **React/Lovable-Prototyp:** Ein externer Prototyp existiert in einem separaten Repo, ist jedoch **nicht freigegeben, unveröffentlicht und nicht im Build/Docker verdrahtet**.
 > - 🔒 **Betriebsmodell:** Agora ist ein experimentelles **Single-User-System**. Nicht ungeschützt im öffentlichen Internet betreiben (Tailscale, VPN oder Reverse Proxy nutzen).
 
@@ -239,16 +241,26 @@ bun run dev
 
 ---
 
-## 📊 Aktueller Produktstatus (`0.8.0`)
+## 📊 Aktueller Produktstatus (`0.9.0`)
 
 | Qualitätsbereich | Status | Detail / Verifikation |
 |---|---|---|
-| **Backend Unit & Contract Tests** | 🟢 3.690+ Tests | `cd backend && uv run pytest` |
+| **Backend Unit & Contract Tests** | 🟢 4.560+ Tests (collected) | `cd backend && uv run pytest` |
 | **Frontend Test Files** | 🟢 171 Test-Files | `cd frontend && bun run test` |
 | **E2E-Kern-Pipeline Smokes** | 🟢 20/20 Grün | 6/6 Kern-Smokes durchgehend stabil in CI |
 | **Branch Protection `main`** | 🟢 Aktiv | 17 Required Status Checks (inkl. aller 6 E2E-Smokes und beider PR-Gates), `strict: true`, `enforce_admins: true`, keine Force-Pushes |
 | **Frontend v4 Migration** | 🟢 Abgeschlossen | Vue v4 ist einzige produktive UI; `/home` Redirect ([#915](https://github.com/arn0ld87/agora/issues/915)) und Component-Wrapper-Migration ([#922](https://github.com/arn0ld87/agora/issues/922)) umgesetzt, [#760](https://github.com/arn0ld87/agora/issues/760) verifiziert geschlossen |
 | **React / Lovable Prototype** | 🔵 Archiviert / Unfreigegeben | Prototyp existiert separat; kein Produktbestandteil vor 1.0 |
+
+### 🧱 Was die `0.9.0`-Linie enthält
+
+Der Schnitt auf `0.9.0` bündelt die Stabilisierungsarbeit seit dem `0.8.0`-Stand:
+
+- **Transport-Security:** HTTPS-Pflicht für credential-behaftete LLM-Endpoints, seit [#1116](https://github.com/arn0ld87/agora/pull/1116) auch für alle Embedding-Pfade (`AGORA_LLM_ALLOW_INSECURE_HTTP` als bewusste, geloggte Ausnahme).
+- **Run-Lifecycle:** Kein Phantom-Run mehr, wenn `/simulation/start` ohne persistierte `simulation_config` aufgerufen wird — der Run endet als `failed` statt ewig `processing` ([#1094](https://github.com/arn0ld87/agora/issues/1094)).
+- **Evidence-Pipeline:** v1→v2-Migration schreibt keine contractwidrigen Section-Keys mehr und heilt vergiftete Bestandsdaten ([#1037](https://github.com/arn0ld87/agora/issues/1037)); `gap_id`-Vergabe kollisionsfrei ([#986](https://github.com/arn0ld87/agora/issues/986)); Hypothesen-Überhang bricht keinen fertigen Report mehr.
+- **Provider-Robustheit:** GPT-5-/o-Reasoning-Modelle laufen ohne `unsupported_value`-Abbrüche; Persona-Generierung respektiert das Routing statt des `.env`-Fallbacks.
+- **Deep-Audit-Stabilisierung:** Welle 2 (Cancel-Durchgriff auf laufende Simulationen [#1082](https://github.com/arn0ld87/agora/issues/1082), Budget-Enforcement in Resume/Prepare [#984](https://github.com/arn0ld87/agora/issues/984), Export-Parität [#1036](https://github.com/arn0ld87/agora/issues/1036)) ist in Arbeit innerhalb der `0.9.x`-Linie.
 
 ### 🛠️ Lokale Quality Gates ausführen
 
@@ -268,8 +280,8 @@ bash scripts/pre-push-gate.sh schemas
 
 | Version | Entwicklungsstufe | Meilensteine & Freigabekriterien | Status |
 |---|---|---|---|
-| **`0.8.0`** | **Technical Preview** | Kern-Pipeline voll funktionsfähig; Provider- & Secret-SSoTs abgeschlossen; E2E-Smokes stabil grün. | 🟢 **Aktuell** |
-| **`0.9.0`** | **Stability Beta** | E2E als Required Check aktiviert; Coverage-Baseline erneuert. Vue v4 als einziges Frontend ✅ abgeschlossen ([#760](https://github.com/arn0ld87/agora/issues/760)). | 🟡 Geplant |
+| **`0.8.0`** | **Technical Preview** | Kern-Pipeline voll funktionsfähig; Provider- & Secret-SSoTs abgeschlossen; E2E-Smokes stabil grün. | ✅ Abgeschlossen |
+| **`0.9.0`** | **Stability Beta** | E2E als Required Check aktiviert; Vue v4 als einziges Frontend ✅ abgeschlossen ([#760](https://github.com/arn0ld87/agora/issues/760)). Restliche 0.9-Kriterien werden in der 0.9.x-Linie geschlossen (siehe [`ROADMAP.md`](ROADMAP.md)). | 🟢 **Aktuell** |
 | **`0.10.0`** | **Release Candidate** | Reproduzierbare Runs & Replay; Token-, Kosten- & Zeitbudgets; Backup/Restore-Runbooks. | ⚪ Geplant |
 | **`1.0.0`** | **Stable Single-User** | Stabile Verträge & Migrationen; deterministischer Referenzlauf; nachgewiesener Produktnutzen. | ⚪ Geplant |
 
