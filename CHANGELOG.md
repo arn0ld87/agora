@@ -5,6 +5,10 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (Export-Parität: ZIP/CSV lasen eine andere Evidence-Wahrheit als der JSON-Export — 2026-08-06)
+
+- **Derselbe Report lieferte je nach Exportformat verschiedene Evidence-Wahrheiten:** Der JSON-Export normalisierte über `normalize_persisted_evidence_map` (#987), `build_zip_bundle`, `stream_zip_bundle` und `build_csv_export` (`table=claims`) lasen die Roh-Map — ein orphan medium-Claim stand im JSON in `data_gaps`, in `claims.csv` und `evidence-map.json` (ZIP) unverändert als `medium`. Alle Export-Formate lesen jetzt eine normalisierte Sicht über genau eine Stelle (`ReportExportService._normalized_evidence_map`); `evidence-map.json` im ZIP ist damit bewusst kein Rohabzug mehr. Regressionstests vergleichen ZIP, CSV und Streaming-ZIP (Threshold klein gepatcht) gegen den JSON-Export als Referenzwahrheit. (#1036)
+
 ## [0.9.0] — 2026-08-06
 
 ### Changed (Version-Cut `0.8.0` → `0.9.0` Stability Beta — 2026-08-06)

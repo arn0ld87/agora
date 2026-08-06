@@ -27,7 +27,7 @@ Die Produktreife wird ab diesem Dokumentationsumbau über [`VERSION`](../VERSION
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 4567 | `cd backend && uv run pytest --collect-only -q` |
+| Backend Tests (collected) | 4571 | `cd backend && uv run pytest --collect-only -q` |
 | Frontend Test-Files | 185 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
@@ -47,7 +47,7 @@ Agora besitzt eine vollständige fachliche Grundpipeline:
 - Dokument-/Webseitenaufnahme und Knowledge-Graph-Build
 - Persona-Erzeugung, Review und Simulation
 - Run-Dashboard, Status, Stop/Pause/Resume und Live-Ereignisse
-- Evidence-orientierte Reports und Exporte; ein einzelner ADR-0002-Verstoß beendet den Report nicht mehr als `failed`, sondern wird lokal abgestuft und maschinenlesbar protokolliert ([#1006](https://github.com/arn0ld87/agora/issues/1006)). Der JSON-Export normalisiert Evidence über dieselbe kanonische Kette wie der Lese-Pfad und weist eine nicht auslieferbare Evidence-Map im Envelope aus, statt sie stumm zu verwerfen ([#987](https://github.com/arn0ld87/agora/issues/987)); ZIP-/CSV-Export und die Evidence-Sub-Routen normalisieren noch nicht ([#1036](https://github.com/arn0ld87/agora/issues/1036), [#967](https://github.com/arn0ld87/agora/issues/967))
+- Evidence-orientierte Reports und Exporte; ein einzelner ADR-0002-Verstoß beendet den Report nicht mehr als `failed`, sondern wird lokal abgestuft und maschinenlesbar protokolliert ([#1006](https://github.com/arn0ld87/agora/issues/1006)). Der JSON-Export normalisiert Evidence über dieselbe kanonische Kette wie der Lese-Pfad und weist eine nicht auslieferbare Evidence-Map im Envelope aus, statt sie stumm zu verwerfen ([#987](https://github.com/arn0ld87/agora/issues/987)); ZIP-, CSV- und Streaming-ZIP-Export lesen dieselbe normalisierte Sicht ([#1036](https://github.com/arn0ld87/agora/issues/1036)); die Evidence-Sub-Routen normalisieren noch nicht ([#967](https://github.com/arn0ld87/agora/issues/967))
 - Compare-, Graph-Diff- und Observability-Grundlagen
 - fortsetzbare Embedding-Migration für Entity- und Fact-Vektoren
 - Kosten-, Token- und Zeitbudgets für Runs ([#764](https://github.com/arn0ld87/agora/issues/764), ADR-0012): Preflight-Schätzung mit ehrlichen Bereichen, weiche/harte Limits pro Run, Live-Verbrauchsmonitor, Abschlussanalyse nach Stage/Provider/Modell, Budgetabbruch über `termination_reason` von Fehler/Nutzerabbruch unterscheidbar, Verbrauch im Report-Export

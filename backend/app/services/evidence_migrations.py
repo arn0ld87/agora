@@ -209,12 +209,15 @@ def migrate_medium_seed_only_claims_to_low(raw: Optional[dict]) -> Optional[dict
 def normalize_persisted_evidence_map(raw: Optional[dict]) -> Optional[dict]:
     """Die kanonische Normalisierung einer persistierten ``evidence-map.json``.
 
-    Jeder produktive Pfad, der eine Evidence-Map von der Platte liest und
-    anschliessend gegen ``EvidenceMapModel`` validiert, ruft **diese** Funktion
-    — nicht die Einzelschritte. Aufrufer sind der Lese-Pfad
-    ``GET /api/report/<id>/evidence`` (``api/report.py``) und der JSON-Export
+    Jeder produktive Pfad, der eine Evidence-Map von der Platte liest, ruft
+    **diese** Funktion — nicht die Einzelschritte. Aufrufer sind der Lese-Pfad
+    ``GET /api/report/<id>/evidence`` (``api/report.py``), der JSON-Export
     ``GET /api/report/<id>/export?format=json``
-    (``report_export.py::build_export_envelope``).
+    (``report_export.py::build_export_envelope``, validiert zusaetzlich gegen
+    ``EvidenceMapModel``) sowie ZIP- und CSV-Export
+    (``report_export.py::ReportExportService._normalized_evidence_map``,
+    Issue #1036), ueber die ``build_zip_bundle``, ``stream_zip_bundle`` und
+    ``build_csv_export`` laufen.
 
     Der Export rief bis Issue #987 nur ``migrate_v1_to_v2`` und fing die
     anschliessende ``ValidationError`` mit einer ``logger.warning`` ab — die
