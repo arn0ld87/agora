@@ -1,7 +1,7 @@
 # Agora Roadmap
 
-**Stand:** 28.07.2026  
-**Aktuelle Produktversion:** `0.8.0` Technical Preview
+**Stand:** 06.08.2026  
+**Aktuelle Produktversion:** `0.9.0` Stability Beta
 
 Diese Datei beschreibt ausschließlich die strategische Reihenfolge der nächsten Releases. Konkrete Arbeitspakete, Akzeptanzkriterien und Fortschritt werden als GitHub Issues gepflegt.
 
@@ -61,6 +61,10 @@ Die ursprünglichen Voraussetzungen für den `0.8.0`-Stand sind abgeschlossen: d
 ## Ziel
 
 Agora soll als zusammenhängendes Produkt zuverlässig installierbar, bedienbar und testbar sein. Neue große Produktbereiche sind in dieser Phase nachrangig.
+
+## Stand
+
+Der Version-Cut auf `0.9.0` ist am 06.08.2026 erfolgt, nachdem Deep-Audit-Stabilisierung Welle 1 gemergt war (#1116, #1117, #1118) und die Kern-Kriterien (E2E als Required PR-Check, Vue-v4-Konsolidierung, Provider-/Secret-SSoTs, Dependency-SSoT) erfüllt sind. Die unten noch offenen Checkboxen sind bewusst nicht Blocker des Cuts, sondern verbleibende Arbeit der `0.9.x`-Linie vor dem `0.10.0`-Schnitt.
 
 ## Freigabekriterien
 

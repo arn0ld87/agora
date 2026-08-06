@@ -8,6 +8,11 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 ### Fixed (Cancel beendete die laufende OASIS-Simulation nicht — 2026-08-06)
 
 - **`POST /api/runs/<id>/cancel` setzte für `simulation_run` ein prozesslokales Cancel-Flag, das kein Consumer las — API und UI meldeten „Cancel requested", der OASIS-Subprozess lief ungebremst weiter.** Der Monitor-Thread im Elternprozess konsumiert das Flag jetzt pro Tick (`sim/monitor.py::_cancel_supervision`): Marker schreiben, kooperativen Stop via `control_state.json` signalisieren, dann den Subprozess beenden (SIGTERM, 10 s Grace, dann SIGKILL — über das bestehende `process_manager.terminate_run`). Der Run endet deterministisch als `stopped` mit `termination_reason="user_cancel"`; der SIGTERM-typische non-zero Exit wird nicht mehr als `failed` fehlklassifiziert. Cancel zwischen zwei Runden behält Teilergebnisse: bereits getailte Action-Logs und der persistierte Run-State bleiben erhalten. Die Docstrings von `cancel_flag.py` und der Cancel-Route beschreiben jetzt die tatsächliche Consumer-Lage. (#1082)
+## [0.9.0] — 2026-08-06
+
+### Changed (Version-Cut `0.8.0` → `0.9.0` Stability Beta — 2026-08-06)
+
+- **Produktversion auf `0.9.0` Stability Beta angehoben** (`VERSION`, Komponentenmanifeste via `check_version_drift.py --write`, `uv.lock`, README-Badge, STATUS, ROADMAP, AGENTS). Grundlage: Deep-Audit-Stabilisierung Welle 1 ist gemergt (#1116, #1117, #1118), die Kern-Freigabekriterien (E2E als Required Check, Vue-v4-Konsolidierung, Provider-/Secret-SSoTs, Dependency-SSoT) sind erfüllt. Fünf Kriterien der 0.9.0-Liste bleiben offen und werden innerhalb der 0.9.x-Linie geschlossen (siehe `ROADMAP.md`).
 
 ### Fixed (v1→v2-Evidence-Migration schrieb einen contractwidrigen Section-Key — 2026-08-06)
 
