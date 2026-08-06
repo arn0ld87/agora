@@ -8,6 +8,9 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 ### Fixed (`/simulation/start` hinterließ einen Phantom-Run bei fehlender `simulation_config` — 2026-08-06)
 
 - **Fehlte die persistierte `simulation_config` (z. B. weil `/prepare` nie lief), lehnte `_apply_route_to_simulation_config` mit 404 `simulation_not_prepared` ab, ohne den in Phase 5 bereits registrierten Run als `failed` zu markieren.** Der Run blieb als nicht ausführbarer Geisterlauf in der Run-Liste stehen. Vor dem `raise` markiert die Funktion den Run jetzt best-effort als `failed` — dieselbe Vorlage (`try`/`except` mit Log-Warnung statt hartem Fehler), die der API-Key-Guard in `_resolve_start_route` bereits für den analogen Fall nutzt. Die HTTP-Antwort (404, `simulation_not_prepared`) bleibt unverändert. (#1094)
+### Security (Transport-Security-Gate auch für Embedding-Pfade — 2026-08-06)
+
+- **Die Embedding-Pfade bauten weiterhin ungeprüfte credential-behaftete Requests, obwohl #1103 das Transport-Security-Gate für LLM- und Discovery-Pfade eingeführt hatte.** `ensure_credentialed_transport_security` läuft jetzt auch vor jedem credential-behafteten Embedding-Request: im `EmbeddingService` (Konstruktor, analog `LLMClient`), in den drei Embedding-Probe-Adaptern (OpenAI-kompatibel, Ollama, Gemini — eine Gate-Ablehnung wird auf `status="unavailable"` mit sanitisierter Begründung gemappt, weil das Probe-Protokoll Status statt Exceptions meldet) und im Ollama-Modell-Download `pull_model` (Re-Raise als `OllamaPullError`, damit der Endpoint seine bestehende 4xx-Behandlung behält). Identische Policy wie #1103 inklusive `AGORA_LLM_ALLOW_INSECURE_HTTP`-Ausnahme, kein neues Regelwerk. (#1110)
 
 ### Security (HTTPS für credential-behaftete LLM-Endpoints erzwingen — 2026-08-05)
 

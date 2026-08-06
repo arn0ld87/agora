@@ -22,6 +22,7 @@ import requests
 
 from ..config import Config, infer_vector_dim_for_model
 from ..llm.providers.registry import detect_embedding_provider
+from ..llm.transport_security import ensure_credentialed_transport_security
 
 logger = logging.getLogger('agora.embedding')
 
@@ -93,6 +94,8 @@ class EmbeddingService:
         self.model = model or Config.EMBEDDING_MODEL
         self.base_url = (base_url or Config.EMBEDDING_BASE_URL).rstrip('/')
         self.api_key = api_key if api_key is not None else (Config.EMBEDDING_API_KEY or '')
+        # Leerer String = kein Credential; das Gate erwartet dann None (#1110).
+        ensure_credentialed_transport_security(self.base_url, self.api_key or None)
         self.max_retries = max_retries
         self.timeout = timeout
         self._provider = self._detect_provider()
