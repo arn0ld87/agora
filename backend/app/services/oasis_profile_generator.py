@@ -297,6 +297,11 @@ class OasisProfileGenerator:
     3. Distinguish between individual entities and abstract group entities
     """
 
+    # Budget-Enforcement (#984): Class-Level-Default, weil mehrere Tests die
+    # Klasse via ``__new__`` ohne ``__init__`` instanziieren — ohne Default
+    # bräche ``_generate_profile_with_llm`` dort mit AttributeError.
+    run_id: Optional[str] = None
+
     # MBTI types list
     MBTI_TYPES = [
         "INTJ", "INTP", "ENTJ", "ENTP",
