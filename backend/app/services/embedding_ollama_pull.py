@@ -37,6 +37,10 @@ from typing import Any
 import requests
 
 from app.contracts.ai_provider_contract import ProviderConnection
+from app.llm.transport_security import (
+    InsecureTransportError,
+    ensure_credentialed_transport_security,
+)
 from app.services.llm_provider_secrets_store import LlmProviderSecretsStore
 from app.services.provider_connection_store import ProviderConnectionStore
 
@@ -105,6 +109,12 @@ def pull_model(
         raise OllamaPullError(
             f"base_url muss mit http:// oder https:// beginnen: {base_url!r}"
         )
+    # Transport-Security-Gate (#1103/#1110): als OllamaPullError re-raisen,
+    # damit der API-Endpoint seine bestehende 4xx-Fehlerbehandlung behaelt.
+    try:
+        ensure_credentialed_transport_security(base_url, api_key)
+    except InsecureTransportError as exc:
+        raise OllamaPullError(str(exc)) from exc
 
     url = base_url.rstrip("/") + "/api/pull"
     headers = {"Content-Type": "application/json", "Accept": "application/x-ndjson"}
