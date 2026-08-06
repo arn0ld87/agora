@@ -362,7 +362,11 @@ class OasisProfileGenerator:
         graph_id: Optional[str] = None,
         language: Optional[str] = None,
         industry_quota_plan: Optional[PersonaQuotaPlan] = None,
+        run_id: Optional[str] = None,
     ):
+        # Budget-Enforcement (#984): die run_id des Prepare-Runs bindet jeden
+        # LLM-Call dieser Generierung an den Budget-Enforcer des Runs.
+        self.run_id = run_id
         self.base_url = base_url or Config.LLM_BASE_URL
         # Key und Base-URL muessen aus derselben Quelle stammen (#778). Loest der
         # Aufrufer einen Provider-Endpoint auf, darf der .env-Key NICHT einspringen —
@@ -700,6 +704,9 @@ class OasisProfileGenerator:
             api_key=self.api_key,
             base_url=self.base_url,
             model=self.model_name,
+            # Budget-Enforcement (#984): ohne run_id gibt es keinen Enforcer —
+            # Persona-Generierung liefe am harten Run-Budget vorbei.
+            run_id=self.run_id,
         )
         messages = [
             {"role": "system", "content": self._get_system_prompt(is_individual)},

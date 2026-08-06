@@ -863,9 +863,11 @@ def _make_prepare_job(
     storage,
     llm_model: str,
     effective_llm_runtime,
+    run_record: "dict[str, Any]",
 ) -> "Callable[[], None]":
     """Phase 9 — den Hintergrund-Job bauen, der die Vorbereitung ausführt."""
     from ..models.task import TaskStatus
+    from ..services.run_budget import BudgetExceededError, mark_budget_abort
 
     def run_prepare() -> None:
         # Issue #1034: Der Collector gehört dem Task, nicht dem Service —
@@ -895,6 +897,10 @@ def _make_prepare_job(
                 language=inputs.agent_language_override,
                 max_agents=inputs.max_agents,
                 quota_plan=inputs.quota_plan,
+                # Budget-Enforcement (#984): dieselbe persistierte run_id wie
+                # der Prepare-Run — Persona- und Config-Generierung bauen ihre
+                # LLM-Clients damit run-gebunden statt budgetfrei.
+                run_id=run_record["run_id"],
                 degradations=degradations,
             )
 
@@ -907,6 +913,27 @@ def _make_prepare_job(
                 },
             )
 
+        except BudgetExceededError as exc:
+            # Budgetabbruch (#984): Teilresultate bleiben erhalten, der Run
+            # endet "stopped" + termination_reason statt technischem "failed".
+            # Reihenfolge bindend (#978/#841): fail_task() zuerst — sync_task
+            # setzt generisch "failed" —, mark_budget_abort() zuletzt.
+            logger.warning(
+                "Simulation prepare budget-aborted (run_id=%s, simulation_id=%s): %s",
+                run_record["run_id"], simulation_id, exc,
+            )
+            task_manager.fail_task(task_id, str(exc))
+            task_manager.update_task(
+                task_id,
+                result={"degradations": degradations.report().model_dump(mode="json")},
+            )
+            mark_budget_abort(
+                run_record["run_id"], exc.dimension, exc.observed, exc.threshold
+            )
+            failed_state = manager.get_simulation(simulation_id)
+            if failed_state:
+                failed_state.error = str(exc)
+                manager._set_status(failed_state, SimulationStatus.FAILED)
         except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.error(f"Failed to prepare simulation: {str(exc)}")
             task_manager.fail_task(task_id, str(exc))
@@ -1027,6 +1054,7 @@ def prepare_simulation():
             storage=storage,
             llm_model=resolved_route.model,
             effective_llm_runtime=effective_llm_runtime,
+            run_record=run_record,
         ),
     )
 

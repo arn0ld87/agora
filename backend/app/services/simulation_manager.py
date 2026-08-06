@@ -310,6 +310,7 @@ class SimulationManager:
         language: Optional[str] = None,
         max_agents: Optional[int] = None,
         quota_plan: Optional["PersonaQuotaPlan"] = None,
+        run_id: Optional[str] = None,
         degradations: Optional["DegradationCollector"] = None,
     ) -> SimulationState:
         return prepare_service.prepare_simulation(
@@ -327,6 +328,7 @@ class SimulationManager:
             language=language,
             max_agents=max_agents,
             quota_plan=quota_plan,
+            run_id=run_id,
             degradations=degradations,
         )
 

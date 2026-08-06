@@ -650,6 +650,7 @@ def test_prepare_job_runs_service_and_completes_task(app_ctx):
         inputs=_inputs(document_text="doc", max_agents=10),
         storage=MagicMock(),
         llm_model="gpt-4o",
+        run_record={"run_id": "run_test_1"},
         effective_llm_runtime=RuntimeLlmConfig(),
     )
     job()
@@ -679,6 +680,7 @@ def test_prepare_job_marks_simulation_failed_on_error(app_ctx):
         inputs=_inputs(),
         storage=MagicMock(),
         llm_model="gpt-4o",
+        run_record={"run_id": "run_test_1"},
         effective_llm_runtime=RuntimeLlmConfig(),
     )
     job()
