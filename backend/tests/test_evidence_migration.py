@@ -35,8 +35,10 @@ def test_migrate_v1_lifts_to_v2():
 
     assert migrated is not None
     assert migrated["schema_version"] == 2
-    assert all(s["schema_version"] == 2 for s in migrated["sections"])
-    # In-place-Mutation entspricht Plan-Snippet (PLAN.md Teil D.2).
+    # #1037: ReportSectionModel (extra="forbid") kennt kein schema_version —
+    # die Migration darf den Schlüssel weder schreiben noch stehen lassen.
+    assert all("schema_version" not in s for s in migrated["sections"])
+    # In-place-Mutation: raw wird durch die Migration mutiert.
     assert raw["schema_version"] == 2
 
 
@@ -44,7 +46,7 @@ def test_migrate_v2_is_idempotent():
     raw = {
         "schema_version": 2,
         "report_id": "report_abcdef123456",
-        "sections": [{"section_index": 0, "schema_version": 2, "claims": []}],
+        "sections": [{"section_index": 0, "claims": []}],
         "global_evidence": [],
     }
     snapshot = copy.deepcopy(raw)
@@ -53,6 +55,23 @@ def test_migrate_v2_is_idempotent():
 
     assert migrated is raw
     assert migrated == snapshot
+
+
+def test_migrate_heals_poisoned_v2_sections():
+    """#1037: Die alte Migration schrieb section["schema_version"] selbst —
+    solche bereits persistierten v2-Bestände werden trotz Top-Level-v2 geheilt."""
+    raw = {
+        "schema_version": 2,
+        "report_id": "report_abcdef123456",
+        "sections": [{"section_index": 0, "schema_version": 2, "claims": []}],
+        "global_evidence": [],
+    }
+
+    migrated = migrate_v1_to_v2(raw)
+
+    assert migrated is raw
+    assert migrated["schema_version"] == 2
+    assert "schema_version" not in migrated["sections"][0]
 
 
 def test_migrate_missing_schema_version_treated_as_v1():
@@ -66,7 +85,7 @@ def test_migrate_missing_schema_version_treated_as_v1():
     migrated = migrate_v1_to_v2(raw)
 
     assert migrated["schema_version"] == 2
-    assert migrated["sections"][0]["schema_version"] == 2
+    assert "schema_version" not in migrated["sections"][0]
 
 
 def test_migrate_handles_missing_sections_key():
