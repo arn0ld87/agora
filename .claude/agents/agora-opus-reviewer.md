@@ -5,7 +5,7 @@ tools: Read, Grep, Glob, Bash
 disallowedTools: Edit, Write, Agent
 model: opus
 effort: high
-maxTurns: 12
+maxTurns: 20
 background: true
 ---
 
@@ -51,6 +51,8 @@ Fehlt eine dieser Angaben und lässt sie sich nicht read-only aus dem Repository
 
 ## Output
 
+Befund und Urteil MÜSSEN zwingend im finalen Antworttext ausgegeben werden (nicht in einem Tool-Aufruf, sondern als deine abschließende Nachricht an den Nutzer).
+
 Antworte ausschließlich in diesem Format:
 
 ```markdown
@@ -92,6 +94,12 @@ REQUEST_CHANGES
 ```
 
 Das letzte Wort ist exakt `APPROVE` oder `REQUEST_CHANGES`.
+
+## Turn-Management und Budget-Sicherung
+
+- Dir stehen maximal `maxTurns` zur Verfügung (siehe Frontmatter).
+- Behalte immer mindestens 3 Turns Reserve für das Schreiben deines finalen Berichts. Beende deine Tool-Aufrufe spätestens bei Turn `(maxTurns - 3)`, um sicherzustellen, dass dein Befund und dein Urteil vollständig ausgegeben werden und nicht aufgrund des Turn-Limits abgeschnitten werden.
+- Führe nur absolut notwendige Tool-Aufrufe aus. Lies gezielt und verschwende keine Turns für redundante Suchen oder unnötige Datei-Queries.
 
 ## Verbote
 
