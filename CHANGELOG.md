@@ -5,6 +5,10 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (v1→v2-Evidence-Migration schrieb einen contractwidrigen Section-Key — 2026-08-06)
+
+- **`migrate_v1_to_v2` schrieb `schema_version` in jede Section, obwohl `ReportSectionModel` strict ist (`extra="forbid"`) und das Feld nicht kennt — die Migration machte damit genau die v1-Maps unlesbar, die sie retten sollte** (`GET /api/report/<id>/evidence` antwortete HTTP 400 mit `Extra inputs are not permitted`). Die Schema-Version gehört an die Map, nicht an jede Section (Variante 1 aus #1037): Die Migration schreibt den Section-Key nicht mehr und entfernt ihn zusätzlich aus Bestandsdaten — auch bei Maps, die bereits auf Top-Level-v2 stehen, weil der In-Memory-Migrationspfad (`report_agent/workflow.py`) vergiftete v2-Bestände persistiert haben kann, für die der frühere Early-Return die Heilung übersprungen hätte. (#1037)
+
 ### Security (HTTPS für credential-behaftete LLM-Endpoints erzwingen — 2026-08-05)
 
 - **`LLMClient` und die LLM-Discovery-Pfade (`ModelCatalogService`, Provider-Connection-Adapter) sendeten `Authorization: Bearer <api_key>` auch an `http://`-Endpoints, ohne den Host zu prüfen (CWE-319) — bei einer öffentlich erreichbaren, versehentlich auf `http://` konfigurierten `base_url` ginge der API-Key im Klartext über die Leitung.** Ein neues, zentrales Gate (`ensure_credentialed_transport_security`, `backend/app/llm/transport_security.py`) läuft jetzt vor jedem credential-behafteten Request und lässt `http://` nur für nachweislich lokale/private Hosts zu (`localhost`, Docker-Compose-Servicenamen, Docker-Host-Gateway-Namen, Loopback, RFC1918, CGNAT/Tailscale-Bereich, Link-Local). Gegen alle anderen Hosts bricht ein unverschlüsselter Request mit einem credential-behafteten Key jetzt mit `InsecureTransportError` ab — fail-closed auch bei unparsebaren URLs. Für dokumentierte Ausnahmen (z. B. ein bewusst unverschlüsseltes internes Gateway ohne TLS-Terminierung) steht `AGORA_LLM_ALLOW_INSECURE_HTTP` zur Verfügung; Default bleibt sicher, die Ausnahme loggt eine sanitisierte Warnung statt still durchzulassen. (#1103)
