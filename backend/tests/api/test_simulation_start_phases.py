@@ -496,6 +496,7 @@ def test_apply_route_to_simulation_config_rejects_missing_config(app_ctx, monkey
     store = MagicMock()
     store.read_json.return_value = None
     monkeypatch.setattr(mod, "get_artifact_store", lambda: store)
+    monkeypatch.setattr(mod, "run_registry", MagicMock())
     req = mod._parse_start_request({"simulation_id": VALID_SIM_ID, "simulation_days": 3})
 
     with pytest.raises(mod._StartRejected) as excinfo:

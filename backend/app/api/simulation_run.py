@@ -579,7 +579,11 @@ def _apply_route_to_simulation_config(
                 message="Simulation configuration does not exist. Please call /prepare first",
             )
         except Exception:  # noqa: BLE001 — best effort
-            logger.warning("Failed to mark orphaned run as failed", exc_info=True)
+            logger.warning(
+                "Failed to mark run %s as failed after missing simulation_config",
+                run_id,
+                exc_info=True,
+            )
         raise _StartRejected(
             json_error(
                 ApiErrorCode.SIMULATION_NOT_PREPARED,
