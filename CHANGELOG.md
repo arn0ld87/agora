@@ -5,6 +5,10 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (Cancel beendete die laufende OASIS-Simulation nicht — 2026-08-06)
+
+- **`POST /api/runs/<id>/cancel` setzte für `simulation_run` ein prozesslokales Cancel-Flag, das kein Consumer las — API und UI meldeten „Cancel requested", der OASIS-Subprozess lief ungebremst weiter.** Der Monitor-Thread im Elternprozess konsumiert das Flag jetzt pro Tick (`sim/monitor.py::_cancel_supervision`): Marker schreiben, kooperativen Stop via `control_state.json` signalisieren, dann den Subprozess beenden (SIGTERM, 10 s Grace, dann SIGKILL — über das bestehende `process_manager.terminate_run`). Der Run endet deterministisch als `stopped` mit `termination_reason="user_cancel"`; der SIGTERM-typische non-zero Exit wird nicht mehr als `failed` fehlklassifiziert. Cancel zwischen zwei Runden behält Teilergebnisse: bereits getailte Action-Logs und der persistierte Run-State bleiben erhalten. Die Docstrings von `cancel_flag.py` und der Cancel-Route beschreiben jetzt die tatsächliche Consumer-Lage. (#1082)
+
 ### Fixed (v1→v2-Evidence-Migration schrieb einen contractwidrigen Section-Key — 2026-08-06)
 
 - **`migrate_v1_to_v2` schrieb `schema_version` in jede Section, obwohl `ReportSectionModel` strict ist (`extra="forbid"`) und das Feld nicht kennt — die Migration machte damit genau die v1-Maps unlesbar, die sie retten sollte** (`GET /api/report/<id>/evidence` antwortete HTTP 400 mit `Extra inputs are not permitted`). Die Schema-Version gehört an die Map, nicht an jede Section (Variante 1 aus #1037): Die Migration schreibt den Section-Key nicht mehr und entfernt ihn zusätzlich aus Bestandsdaten — auch bei Maps, die bereits auf Top-Level-v2 stehen, weil der In-Memory-Migrationspfad (`report_agent/workflow.py`) vergiftete v2-Bestände persistiert haben kann, für die der frühere Early-Return die Heilung übersprungen hätte. (#1037)
