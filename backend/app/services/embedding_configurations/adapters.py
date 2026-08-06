@@ -33,6 +33,10 @@ import requests
 
 from app.contracts.ai_provider_contract import ProviderConnection
 from app.contracts.embedding_contract import EmbeddingProviderKind
+from app.llm.transport_security import (
+    InsecureTransportError,
+    ensure_credentialed_transport_security,
+)
 
 EmbeddingProbeStatus = Literal[
     "available",
@@ -64,6 +68,22 @@ class EmbeddingProbeAdapter(Protocol):
         model_id: str,
         api_key: str | None,
     ) -> EmbeddingProbeResult: ...
+
+
+def _blocked_by_transport_policy(
+    base_url: str | None, api_key: str | None
+) -> EmbeddingProbeResult | None:
+    """Transport-Security-Gate aus #1103 vor jedem credential-behafteten Probe (#1110).
+
+    Das Probe-Protokoll meldet Fehler als Status statt als Exception; eine
+    Gate-Ablehnung wird deshalb auf ``unavailable`` gemappt — die Message
+    traegt die (bereits sanitisierte) Begruendung.
+    """
+    try:
+        ensure_credentialed_transport_security(base_url, api_key)
+    except InsecureTransportError as exc:
+        return EmbeddingProbeResult(status="unavailable", status_message=str(exc))
+    return None
 
 
 # ----------------------------------------------------------------------
@@ -99,6 +119,9 @@ class _OpenAICompatibleAdapter:
             return EmbeddingProbeResult(
                 status="unavailable", status_message="base_url fehlt"
             )
+        blocked = _blocked_by_transport_policy(connection.base_url, api_key)
+        if blocked is not None:
+            return blocked
         base = connection.base_url.rstrip("/")
         url = f"{base}/embeddings" if base.endswith("/v1") else f"{base}/v1/embeddings"
         headers = {"Content-Type": "application/json"}
@@ -197,6 +220,11 @@ class _GeminiAdapter:
                 status="invalid_credentials",
                 status_message="Gemini Embeddings verlangt API-Key",
             )
+        # x-goog-api-key ist genauso ein Credential wie ein Bearer-Header —
+        # das Gate gilt auch fuer den Gemini-Pfad (#1110).
+        blocked = _blocked_by_transport_policy(connection.base_url, api_key)
+        if blocked is not None:
+            return blocked
         base = connection.base_url.rstrip("/")
         url = f"{base}/v1beta/models/{model_id}:embedContent"
         headers = {
@@ -283,6 +311,9 @@ class _OllamaAdapter:
             return EmbeddingProbeResult(
                 status="unavailable", status_message="base_url fehlt"
             )
+        blocked = _blocked_by_transport_policy(connection.base_url, api_key)
+        if blocked is not None:
+            return blocked
         base = connection.base_url.rstrip("/")
         url = f"{base}/api/embed"
         headers = {"Content-Type": "application/json"}
