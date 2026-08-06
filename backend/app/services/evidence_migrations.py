@@ -53,8 +53,7 @@ def migrate_v1_to_v2(raw: Optional[dict]) -> Optional[dict]:
     """Hebt eine persistierte Evidence-Map auf schema_version=2.
 
     - ``None`` wird unverändert zurückgegeben.
-    - Mutiert das übergebene Dict in-place (entspricht dem Plan-Snippet aus
-      PLAN.md Teil D.2) und reicht es zurück, damit Caller wahlweise
+    - Mutiert das übergebene Dict in-place und gibt es zurück, damit Caller wahlweise
       Rückgabewert oder Original verwenden können.
     - Entfernt ``schema_version`` aus Section-Einträgen (#1037): Die Version
       gehört an die Map, nicht an jede Section — ``ReportSectionModel`` ist
