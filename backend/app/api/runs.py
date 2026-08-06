@@ -838,32 +838,38 @@ def _resume_report_generate(run: dict):
     storage = current_app.extensions.get("neo4j_storage")
     if not storage:
         raise ValueError("GraphStorage not initialized")
-    # Resume-Pfad teilt denselben LLMClient zwischen Agent und GraphTools
-    # — api_key bleibt redacted (Secrets nicht persistiert), aber das Modell
-    # kommt sauber aus der Run-Metadata durch. Vorher hat GraphTools beim
-    # Lazy-Init Config-Default genommen.
-    # Smoke-Fix Slice 04: LLMClient(model=...) ohne api_key wirft wenn Config.LLM_API_KEY
-    # fehlt (z. B. in Test-Umgebung). Fallback auf None → GraphTools/ReportAgent nutzen
-    # dann ihren eigenen Default-Client mit Config-Werten.
-    if llm_model_override:
-        try:
-            shared_llm_client: Optional[LLMClient] = LLMClient(model=llm_model_override)
-        except ValueError as exc:
-            # Kein API-Key konfiguriert → kein sinnvoller Resume-Pfad möglich.
-            # Synchron mit 422 antworten statt still None zu setzen und im
-            # Worker-Thread beim ersten LLM-Call zu sterben (Copilot PR #466).
-            logger.warning(
-                "LLMClient für Resume-Report nicht verfügbar — synchrones 422: %s",
-                exc,
-            )
-            return json_error(
-                f"LLM-Provider nicht verfügbar: {exc}. "
-                "Konfiguriere einen API-Key, bevor der Report fortgesetzt wird.",
-                status=422,
-                code="llm_client_unavailable",
-            )
-    else:
-        shared_llm_client = None
+    # Budget-Enforcement + Routing-SSoT (#984): Der Resume-Client entsteht aus
+    # der beim Original-Start gelockten Stage-Route MIT run_id — das frühere
+    # LLMClient(model=...) ohne run_id lieferte keinen Budget-Enforcer, ein
+    # fortgesetzter Report lief ohne jede Budgetdurchsetzung.
+    # StageModelRouter.resolve() gibt den gelockten Snapshot zurück; nur für
+    # Alt-Runs ohne Snapshot entscheidet der kanonische Resolver. Keine zweite
+    # Client-Bauweise neben der Route (SSoT aus #817).
+    from ..services.ai_route_resolver import NoAiRouteCandidateError
+    from ..services.secret_resolver import SecretResolver
+
+    try:
+        route_router = StageModelRouter(run["run_id"])
+        resolved_route = route_router.resolve("report_generation")
+        shared_llm_client: Optional[LLMClient] = LLMClient.from_route(
+            resolved_route,
+            secret_resolver=SecretResolver(),
+            run_id=run["run_id"],
+        )
+    except (ValueError, NoAiRouteCandidateError) as exc:
+        # Kein API-Key konfiguriert → kein sinnvoller Resume-Pfad möglich.
+        # Synchron mit 422 antworten statt still None zu setzen und im
+        # Worker-Thread beim ersten LLM-Call zu sterben (Copilot PR #466).
+        logger.warning(
+            "LLMClient für Resume-Report nicht verfügbar — synchrones 422: %s",
+            exc,
+        )
+        return json_error(
+            f"LLM-Provider nicht verfügbar: {exc}. "
+            "Konfiguriere einen API-Key, bevor der Report fortgesetzt wird.",
+            status=422,
+            code="llm_client_unavailable",
+        )
     graph_tools = GraphToolsService(storage=storage, llm_client=shared_llm_client)
 
     task_manager = TaskManager()
@@ -871,6 +877,8 @@ def _resume_report_generate(run: dict):
         "report_generate",
         metadata={"simulation_id": simulation_id, "graph_id": graph_id, "report_id": report_id, "run_id": run["run_id"]},
     )
+
+    from ..services.run_budget import BudgetExceededError, mark_budget_abort
 
     def run_generate():
         try:
@@ -905,6 +913,18 @@ def _resume_report_generate(run: dict):
             else:
                 run_registry.update_run(run["run_id"], status="failed", message=report.error or "Report generation failed", error=report.error)
                 task_manager.fail_task(task_id, report.error or "Report generation failed")
+        except BudgetExceededError as exc:
+            # Budgetabbruch (#984): Teilresultate bleiben erhalten, Status
+            # "stopped" + termination_reason statt technischem "failed".
+            # Reihenfolge bindend (#978, gleiche Falle wie #841): fail_task()
+            # zuerst — sync_task setzt generisch "failed" —, der detaillierte
+            # mark_budget_abort() zuletzt (setzt stopped + termination_reason).
+            logger.warning(
+                "Resume report budget-aborted (run_id=%s, report_id=%s): %s",
+                run["run_id"], report_id, exc,
+            )
+            task_manager.fail_task(task_id, str(exc))
+            mark_budget_abort(run["run_id"], exc.dimension, exc.observed, exc.threshold)
         except Exception as exc:  # noqa: BLE001 — exception reported to task/run registry
             run_registry.update_run(run["run_id"], status="failed", message=str(exc), error=str(exc))
             task_manager.fail_task(task_id, str(exc))

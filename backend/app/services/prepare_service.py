@@ -260,6 +260,8 @@ def _phase_generate_profiles(
         model_name=llm_model,
         language=language,
         industry_quota_plan=industry_plan,
+        # Budget-Enforcement (#984): run-gebundene LLM-Calls statt budgetfrei.
+        run_id=run_id,
     )
 
     def profile_progress(current, total, msg):
@@ -378,6 +380,8 @@ def _phase_generate_config(
         base_url=base_url,
         model_name=llm_model,
         language=language,
+        # Budget-Enforcement (#984): run-gebundene LLM-Calls statt budgetfrei.
+        run_id=run_id,
     )
 
     if progress_callback:
