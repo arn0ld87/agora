@@ -34,7 +34,7 @@
 </p>
 
 <p align="center">
-  <strong><a href="./media/agora-demo.mp4">▶ Vollständige 38-Sekunden-Demo öffnen</a></strong><br>
+ <strong><a href="./media/agora-demo.mp4">▶ Vollständige 43-Sekunden-Demo öffnen</a></strong><br>
   <sub>Realer Lauf zur Einführung des KI-Lernassistenten „LernKompass 2027“.</sub>
 </p>
 
