@@ -35,5 +35,5 @@ keywords:
   - open source
 license: AGPL-3.0-or-later
 version: 0.9.0
-# date-released: beim Anlegen des Releases auf das Release-Datum setzen (YYYY-MM-DD)
-# doi: nach dem ersten Zenodo-Release den Concept-DOI hier eintragen
+date-released: "2026-08-07"
+doi: 10.5281/zenodo.21830644
