@@ -14,8 +14,15 @@
     { "name": "Tench, Robbie", "type": "Other" },
     { "name": "Zamengo Pontrelli, Eugenio", "type": "Other" }
   ],
-  "license": "AGPL-3.0-or-later",
+  "license": "agpl-3.0-or-later",
   "access_right": "open",
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/666ghj/MiroFish",
+      "relation": "isDerivedFrom",
+      "resource_type": "software"
+    }
+  ],
   "keywords": [
     "multi-agent simulation",
     "evidence gating",

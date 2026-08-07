@@ -312,7 +312,7 @@ Kontakt und Mitarbeit:
 ### ⚖️ Lizenz und Herkunft
 
 Agora ist Open Source unter der **AGPL-3.0 Lizenz** ([`LICENSE`](./LICENSE)).  
-Entstanden aus *MiroFish-Offline*, grundlegend weiterentwickelt für professionelle DACH-Simulationen.  
+Im März 2026 als Fork von [MiroFish](https://github.com/666ghj/MiroFish) (AGPL-3.0) entstanden, seit April 2026 eigenständig weiterentwickelt für professionelle DACH-Simulationen — Einzelheiten in [`NOTICE`](./NOTICE).  
 Teile der Simulationslaufzeit basieren auf dem *CAMEL-AI-/OASIS-Ökosystem*.
 
 *Entwickelt von [Alexander Schneider](https://alexle135.de)*
