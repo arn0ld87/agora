@@ -10,6 +10,7 @@
 
 [![Version](https://img.shields.io/badge/version-0.9.0-635BFF?style=flat-square)](./VERSION)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-111827?style=flat-square)](./LICENSE)
+[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21830644-1682D4?style=flat-square)](https://doi.org/10.5281/zenodo.21830644)
 [![Python](https://img.shields.io/badge/Python-3.14-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![Vue](https://img.shields.io/badge/Vue-3.5%2B-42B883?style=flat-square&logo=vuedotjs&logoColor=white)](https://vuejs.org/)
 [![Neo4j](https://img.shields.io/badge/Neo4j-5.18%2B-4581C3?style=flat-square&logo=neo4j&logoColor=white)](https://neo4j.com/)
@@ -34,7 +35,7 @@
 </p>
 
 <p align="center">
-  <strong><a href="./media/agora-demo.mp4">▶ Vollständige 38-Sekunden-Demo öffnen</a></strong><br>
+ <strong><a href="./media/agora-demo.mp4">▶ Vollständige 43-Sekunden-Demo öffnen</a></strong><br>
   <sub>Realer Lauf zur Einführung des KI-Lernassistenten „LernKompass 2027“.</sub>
 </p>
 
@@ -312,7 +313,7 @@ Kontakt und Mitarbeit:
 ### ⚖️ Lizenz und Herkunft
 
 Agora ist Open Source unter der **AGPL-3.0 Lizenz** ([`LICENSE`](./LICENSE)).  
-Entstanden aus *MiroFish-Offline*, grundlegend weiterentwickelt für professionelle DACH-Simulationen.  
+Im März 2026 als Fork von [MiroFish](https://github.com/666ghj/MiroFish) (AGPL-3.0) entstanden, seit April 2026 eigenständig weiterentwickelt für professionelle DACH-Simulationen — Einzelheiten in [`NOTICE`](./NOTICE).  
 Teile der Simulationslaufzeit basieren auf dem *CAMEL-AI-/OASIS-Ökosystem*.
 
 *Entwickelt von [Alexander Schneider](https://alexle135.de)*

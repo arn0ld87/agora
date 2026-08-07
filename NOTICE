@@ -1,0 +1,38 @@
+Agora
+Copyright (C) 2026 Alexander Schneider and the Agora contributors
+
+Diese Software ist unter der GNU Affero General Public License v3.0 oder
+später lizenziert. Der vollständige Lizenztext liegt in der Datei LICENSE.
+
+--------------------------------------------------------------------------
+Herkunft
+--------------------------------------------------------------------------
+
+Agora ist aus einem Fork von MiroFish hervorgegangen:
+
+    MiroFish — A Simple and Universal Swarm Intelligence Engine
+    Copyright (C) 2026 666ghj and the MiroFish contributors
+    https://github.com/666ghj/MiroFish
+    Lizenz: GNU Affero General Public License v3.0
+
+Der Fork wurde am 15. März 2026 angelegt und zunächst unter dem Namen
+"MiroFish Offline" weiterentwickelt. Am 21. April 2026 wurde das Projekt
+unter dem Namen Agora fortgeführt.
+
+Gegenüber dem Ursprungswerk wurde die Software erheblich verändert. Zu den
+wesentlichen Änderungen gehören:
+
+  - Ersetzung der ursprünglichen Persistenz- und Modellanbindung durch einen
+    lokal betreibbaren Stack aus Neo4j, Redis und OpenAI-kompatiblen bzw.
+    lokalen Providern
+  - vollständige Neuentwicklung der Report-Erzeugung mit Evidence-Gating:
+    Klassifikation von Aussagen nach Evidenzgrad, Rückführung auf Quellen,
+    Graphobjekte und Simulationsereignisse, Trennung belegter Aussagen von
+    Hypothesen und Datenlücken (siehe docs/decisions/0002-evidence-gating.md)
+  - Einführung von Pydantic-basierten API-Verträgen und Schema-Gates
+  - Neuentwicklung des Frontends auf Vue 3, TypeScript, Pinia und vue-i18n
+  - Ausrichtung auf deutschsprachige Stakeholder- und Zielgruppenanalyse
+    im DACH-Raum
+
+Diese Aufzählung ist nicht abschließend. Die vollständige Änderungshistorie
+ist in der Git-Historie des Repositorys und in CHANGELOG.md dokumentiert.

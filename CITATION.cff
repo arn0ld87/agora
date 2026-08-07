@@ -1,0 +1,39 @@
+cff-version: 1.2.0
+title: >-
+  Agora — Evidenzorientierte Multi-Agenten-Analyse für Stakeholder,
+  Zielgruppen und komplexe Entscheidungen
+message: >-
+  Wenn Sie diese Software verwenden, zitieren Sie sie bitte mit den
+  hier hinterlegten Metadaten.
+type: software
+authors:
+  - given-names: Alexander
+    family-names: Schneider
+    orcid: "https://orcid.org/0009-0008-7552-1819"
+repository-code: "https://github.com/arn0ld87/agora"
+url: "https://github.com/arn0ld87/agora"
+abstract: >-
+  Agora ist eine lokal oder hybrid betreibbare Multi-Agenten-Analyseplattform.
+  Sie verarbeitet Dokumente, Webseiten und Fragestellungen zu einem
+  Wissensgraphen, erzeugt daraus überprüfbare Stakeholder-Personas und lässt
+  diese in einer kontrollierten Simulation interagieren. Kern des Ansatzes ist
+  ein Evidence-Gating-Verfahren, das jede Aussage im erzeugten Report nach
+  Evidenzgrad klassifiziert und auf Quellen, Graphobjekte und
+  Simulationsereignisse zurückführt. Dokumentbelegte Aussagen werden dabei
+  strikt von Hypothesen, unbelegten Behauptungen und Datenlücken getrennt.
+  Agora sagt menschliches Verhalten nicht voraus und ersetzt weder Interviews
+  noch Nutzertests oder empirische Forschung.
+keywords:
+  - multi-agent simulation
+  - evidence gating
+  - retrieval-augmented generation
+  - knowledge graph
+  - stakeholder analysis
+  - decision support
+  - large language models
+  - explainable AI
+  - open source
+license: AGPL-3.0-or-later
+version: 0.9.0
+date-released: "2026-08-07"
+doi: 10.5281/zenodo.21830644

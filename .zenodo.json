@@ -1,0 +1,38 @@
+{
+  "upload_type": "software",
+  "title": "Agora — Evidenzorientierte Multi-Agenten-Analyse für Stakeholder, Zielgruppen und komplexe Entscheidungen",
+  "description": "<p>Agora ist eine lokal oder hybrid betreibbare Multi-Agenten-Analyseplattform. Sie verarbeitet Dokumente, Webseiten und Fragestellungen zu einem Wissensgraphen, erzeugt daraus überprüfbare Stakeholder-Personas und lässt diese in einer kontrollierten Simulation interagieren.</p><p>Kern des Ansatzes ist ein Evidence-Gating-Verfahren, das jede Aussage im erzeugten Report nach Evidenzgrad klassifiziert und auf Quellen, Graphobjekte und Simulationsereignisse zurückführt. Dokumentbelegte Aussagen werden dabei strikt von Hypothesen, unbelegten Behauptungen und Datenlücken getrennt.</p><p><strong>Agora sagt menschliches Verhalten nicht voraus.</strong> Die Plattform erzeugt überprüfbare Szenarien, mögliche Einwände, Konfliktlinien und Datenlücken. Simulationsergebnisse ersetzen weder Interviews noch Nutzertests oder empirische Forschung.</p>",
+  "creators": [
+    {
+      "name": "Schneider, Alexander",
+      "orcid": "0009-0008-7552-1819"
+    }
+  ],
+  "contributors": [
+    { "name": "McFly, Nik", "type": "Other" },
+    { "name": "Mäki, Sebastian", "type": "Other" },
+    { "name": "Tench, Robbie", "type": "Other" },
+    { "name": "Zamengo Pontrelli, Eugenio", "type": "Other" }
+  ],
+  "license": "agpl-3.0-or-later",
+  "access_right": "open",
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/666ghj/MiroFish",
+      "relation": "isDerivedFrom",
+      "resource_type": "software"
+    }
+  ],
+  "keywords": [
+    "multi-agent simulation",
+    "evidence gating",
+    "retrieval-augmented generation",
+    "knowledge graph",
+    "stakeholder analysis",
+    "decision support",
+    "large language models",
+    "explainable AI",
+    "open source"
+  ],
+  "language": "deu"
+}
