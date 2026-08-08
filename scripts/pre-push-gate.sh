@@ -12,6 +12,13 @@
 #   bash scripts/pre-push-gate.sh frontend  # only frontend
 #   bash scripts/pre-push-gate.sh schemas   # only schema drift + sync-status
 #
+# 2026-08-08: Das lokale Gate ist ein schneller Sanity-Check, kein CI-Ersatz.
+# Die teuren Schritte (mypy, Backend-PR-Subset-Pytest, Frontend-Vitest-Suite)
+# laufen per Default NICHT mehr lokal — CI fährt sie auf jedem PR ohnehin
+# (ci.yml: mypy app, pytest --cov --cov-fail-under=60, bun run test:coverage).
+# GATE_FULL=1 stellt das alte Vollverhalten wieder her:
+#   GATE_FULL=1 bash scripts/pre-push-gate.sh backend
+#
 # Exit codes:
 #   0  every gate green
 #   1  at least one gate failed (printed above)
@@ -46,8 +53,12 @@ run_backend() {
   step "Backend: ruff check"
   (cd backend && uv run ruff check app/ tests/) || fail "ruff check"
 
-  step "Backend: mypy app/"
-  (cd backend && uv run mypy app) || fail "mypy"
+  if [ "${GATE_FULL:-0}" = "1" ]; then
+    step "Backend: mypy app/ (GATE_FULL=1)"
+    (cd backend && uv run mypy app) || fail "mypy"
+  else
+    warn "mypy uebersprungen (GATE_FULL=1 erzwingt ihn; CI fährt ihn auf jedem PR)"
+  fi
 
   step "Backend: Pydantic-Contract-Tests"
   (cd backend && uv run pytest tests/contracts/ -x -q) || fail "contract tests"
@@ -72,7 +83,10 @@ run_backend() {
   # filterwarnings-Regeln (insb. kein `error`), Warnings sind im Smoke reine
   # Anzeige. `-n auto` (=8) bewusst nicht: acht App-Importe sprengen 16 GB.
   # Gezielte Warning-Filter bleiben Issue #1090.
-  step "Backend: tests (PR subset, no coverage)"
+  # 2026-08-08: nur noch unter GATE_FULL=1 — CI faehrt die volle Suite mit
+  # Coverage-Gate auf jedem PR, lokal bleibt das Gate ein Sanity-Check.
+  if [ "${GATE_FULL:-0}" = "1" ]; then
+  step "Backend: tests (PR subset, no coverage, GATE_FULL=1)"
   (cd backend && FLASK_DEBUG=false uv run pytest tests/ \
       -n 4 -p no:warnings \
       --ignore=tests/contracts \
@@ -89,6 +103,9 @@ run_backend() {
       --deselect tests/test_nltk_import_guard.py::test_ingestion_entrypoint_can_parse \
       -q --no-cov -x) \
     || fail "backend tests"
+  else
+    warn "Backend-Test-Subset uebersprungen (GATE_FULL=1 erzwingt ihn; CI faehrt die volle Suite)"
+  fi
 
   step "Backend: Schema-Drift (dump_schemas --check)"
   (cd backend && uv run python -m app.contracts.dump_schemas --check) \
@@ -161,8 +178,12 @@ run_frontend() {
   step "Frontend: typecheck"
   (cd frontend && bun run typecheck) || fail "typecheck"
 
-  step "Frontend: tests"
-  (cd frontend && bun run test) || fail "frontend tests"
+  if [ "${GATE_FULL:-0}" = "1" ]; then
+    step "Frontend: tests (GATE_FULL=1)"
+    (cd frontend && bun run test) || fail "frontend tests"
+  else
+    warn "Frontend-Tests uebersprungen (GATE_FULL=1 erzwingt sie; CI faehrt test:coverage)"
+  fi
 
   # Der Vite-Build ist der mit Abstand teuerste Schritt des Gates und faengt
   # nach lint + typecheck + tests fast nichts mehr ab. Die CI baut ohnehin bei
