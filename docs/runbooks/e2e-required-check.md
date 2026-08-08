@@ -36,42 +36,41 @@ Der vollständige, per `gh api` erhobene Satz an Required Checks für `main` umf
 
 Diese Schritte sind bereits umgesetzt und dienen hier als Referenz für spätere Anpassungen (z. B. weitere Checks ergänzen).
 
-## Konfiguration via `gh api` (Beispiel)
+## Konfiguration via `gh api` (sicheres Read/merge/update-Beispiel)
 
 ```bash
-# Voraussetzung: gh CLI installiert, Auth konfiguriert.
-# Wichtig: --method PUT, sonst liefert gh api nur ein GET.
-# Review-Flags MÜSSEN in "required_pull_request_reviews" stehen —
-# außerhalb dieses Blocks werden sie von der GitHub-API verworfen
-# bzw. überschreiben vorhandene Einstellungen.
-gh api --method PUT \
-  repos/arn0ld87/agora/branches/main/protection \
-  --input - <<'EOF'
-{
-  "required_status_checks": {
-    "strict": true,
-    "contexts": [
-      "Playwright Health-Smoke",
-      "Playwright Upload+Graph-Smoke",
-      "Playwright Minimalreport-Smoke",
-      "Playwright Report-Modes-Smoke (P4.4)",
-      "Playwright Golden-Gate-Accessibility-Smoke (Slice 7.3.1)",
-      "Playwright AiModelPicker-Smoke (Slice 5.6 / 7.3.1)"
-    ]
-  },
-  "required_pull_request_reviews": {
-    "dismiss_stale_reviews": false,
-    "require_code_owner_reviews": false,
-    "require_last_push_approval": false
-  },
-  "enforce_admins": true,
-  "allow_force_pushes": false,
-  "allow_deletions": false
-}
-EOF
+# Voraussetzung: gh CLI und jq installiert, Auth konfiguriert.
+# Vorhandene Required Checks inklusive ihrer App-Bindung lesen, die sechs
+# Playwright-Smokes idempotent ergänzen und nur diesen Schutzbereich aktualisieren.
+gh api repos/arn0ld87/agora/branches/main/protection \
+  | jq '
+      .required_status_checks as $current
+      | [
+          "Playwright Health-Smoke",
+          "Playwright Upload+Graph-Smoke",
+          "Playwright Minimalreport-Smoke",
+          "Playwright Report-Modes-Smoke (P4.4)",
+          "Playwright Golden-Gate-Accessibility-Smoke (Slice 7.3.1)",
+          "Playwright AiModelPicker-Smoke (Slice 5.6 / 7.3.1)"
+        ] as $required_playwright_checks
+      | {
+          strict: ($current.strict // true),
+          checks: (
+            ($current.checks // [])
+            + (
+                $required_playwright_checks
+                - (($current.checks // []) | map(.context))
+                | map({context: ., app_id: -1})
+              )
+          )
+        }
+    ' \
+  | gh api --method PATCH \
+      repos/arn0ld87/agora/branches/main/protection/required_status_checks \
+      --input -
 ```
 
-Beachte: `strict: true` bedeutet, dass Checks auch bei neueren Commits erneut erforderlich sind.
+Das Beispiel verwendet bewusst nicht `PUT` auf dem gesamten Branch-Protection-Objekt: Ein Payload mit nur den sechs Playwright-Namen würde alle anderen Required Checks ersetzen. Bestehende Checks und ihre `app_id` bleiben erhalten; nur fehlende Playwright-Smokes werden mit `app_id: -1` (jede App) ergänzt. `strict: true` bedeutet, dass Checks auch bei neueren Commits erneut erforderlich sind.
 
 ## Absicherung gegen Flakes
 
