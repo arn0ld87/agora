@@ -5,6 +5,9 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Changed (STATUS.md-Drift-Check im PR-Gate ohne Backend-Testanzahl-Messung — 2026-08-08)
+
+- **Der CI-Step `STATUS.md drift check` im Job „Backend PR smoke gate" kostete ~115 s pro PR**, weil `scripts/sync-status.sh --check` die Backend-Testanzahl per `uv run pytest --collect-only -q` maß. Neues Flag `--skip-backend-count` (alternativ `SYNC_STATUS_SKIP_BACKEND_COUNT=1`) lässt genau diese eine Zeile aus — weder gemessen noch aus dem Cache gelesen noch verifiziert —, während Frontend-Zähler, Autogen-Block-Format und Generator-Konsistenz unverändert scharf geprüft bleiben. Nur dieser eine CI-Step nutzt das Flag; der lokale `sync-status.sh --check` (z. B. in `pre-push-gate.sh`) bleibt unverändert und misst weiterhin vollständig. (#1107)
 ### Changed (Radon-Gate: Allowlist-Einträge können eine cc-Obergrenze tragen — 2026-08-08)
 
 - **Das Komplexitäts-Gate prüfte bei geduldeten Funktionen nur, OB sie geduldet sind — nicht, wie stark sie weiter wachsen dürfen.** Allowlist-Einträge in `backend/radon-allowlist.txt` können jetzt optional `# cc<=N` tragen: Überschreitet die gemessene Komplexität die Grenze, failt das Gate; unterschreitet sie sie, erscheint ein Absenkungs-Hinweis — auch dann noch, wenn der Hotspot auf rank C gesunken ist. Einträge ohne Obergrenze verhalten sich unverändert (reine Duldung), Bestandseinträge und die D+-Schwelle bleiben unangetastet. Der lokale Schnellcheck `scripts/check_complexity.sh` parst das neue Inline-Kommentar-Format mit. (#1084)
