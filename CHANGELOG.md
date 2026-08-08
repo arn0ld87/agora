@@ -5,6 +5,10 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (cve-monitor lief in denselben torch-Local-Version-Fehler wie früher ci.yml — 2026-08-08)
+
+- **Der wöchentliche CVE-Monitor scheiterte an einer Infrastrukturzeile statt an echten Advisories:** `uv export` schreibt auf Linux den Pin `torch==2.13.0+cpu`, den pip-audit gegen PyPI nicht auflösen kann — `AUDIT_EC` stand damit permanent auf 1 und wäre ab dem Hardstop 2026-09-28 hart rot geworden. Der Export nutzt jetzt dieselbe Lösung wie ci.yml (#1073/#1074): `uv export --frozen --no-dev --no-hashes --no-emit-project` plus `normalize_audit_requirements.py` (strippt PEP-440-Local-Labels), und der Audit-Aufruf übernimmt `--no-deps --disable-pip`, damit pip die Torch-CUDA-Kette nicht von PyPI nachauflöst. `--ignore-vuln`-Politik und Hardstop unverändert. (#1075)
+
 ### Changed (E2E-Required-Check-Runbook auf aktiven Branch-Protection-Stand korrigiert — 2026-08-08)
 
 - **Das Runbook beschrieb die Required-Erzwingung noch als offen und zeigte ein destruktives `PUT`-Beispiel mit nur sechs Playwright-Checks.** Der dokumentierte Status entspricht jetzt der aktiven `main`-Branch-Protection mit 17 Required Checks; das CLI-Beispiel liest den aktuellen Satz, ergänzt die sechs Playwright-Smokes idempotent und aktualisiert ausschließlich `required_status_checks`, sodass CodeQL-, Dependency-, Schema-, Contract-, Security-, Version- und PR-Smoke-Gates erhalten bleiben. (#1089)
