@@ -84,9 +84,13 @@ def main() -> int:
     for path, blocks in data.items():
         for block in blocks:
             rank = block.get("rank", "A")
-            if rank not in SEVERITY_FAIL:
-                continue
             key = build_key(path, block)
+            # Annotierte Eintraege (mit cc-Obergrenze) werden auch unterhalb
+            # von SEVERITY_FAIL ausgewertet: sinkt ein Hotspot auf rank C,
+            # soll der Absenkungs-Hinweis erscheinen statt zu verschwinden.
+            annotated = key in allowed and allowed[key] is not None
+            if rank not in SEVERITY_FAIL and not annotated:
+                continue
             if key not in allowed:
                 violations.append(
                     f"{path}:{block.get('lineno')}  {block['name']}  "

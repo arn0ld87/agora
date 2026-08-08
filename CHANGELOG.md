@@ -5,6 +5,10 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Changed (Radon-Gate: Allowlist-Einträge können eine cc-Obergrenze tragen — 2026-08-08)
+
+- **Das Komplexitäts-Gate prüfte bei geduldeten Funktionen nur, OB sie geduldet sind — nicht, wie stark sie weiter wachsen dürfen.** Allowlist-Einträge in `backend/radon-allowlist.txt` können jetzt optional `# cc<=N` tragen: Überschreitet die gemessene Komplexität die Grenze, failt das Gate; unterschreitet sie sie, erscheint ein Absenkungs-Hinweis — auch dann noch, wenn der Hotspot auf rank C gesunken ist. Einträge ohne Obergrenze verhalten sich unverändert (reine Duldung), Bestandseinträge und die D+-Schwelle bleiben unangetastet. Der lokale Schnellcheck `scripts/check_complexity.sh` parst das neue Inline-Kommentar-Format mit. (#1084)
+
 ### Changed (E2E-Required-Check-Runbook auf aktiven Branch-Protection-Stand korrigiert — 2026-08-08)
 
 - **Das Runbook beschrieb die Required-Erzwingung noch als offen und zeigte ein destruktives `PUT`-Beispiel mit nur sechs Playwright-Checks.** Der dokumentierte Status entspricht jetzt der aktiven `main`-Branch-Protection mit 17 Required Checks; das CLI-Beispiel liest den aktuellen Satz, ergänzt die sechs Playwright-Smokes idempotent und aktualisiert ausschließlich `required_status_checks`, sodass CodeQL-, Dependency-, Schema-, Contract-, Security-, Version- und PR-Smoke-Gates erhalten bleiben. (#1089)
