@@ -441,12 +441,15 @@ jobs:
       # nur das Repo. Exit 2 = Messfehler, nicht Drift.
       #
       # 2026-08-08 (Issue #1107): --skip-backend-count spart den ~115s teuren
-      # `pytest --collect-only`-Lauf pro PR. Frontend-Zaehler, Autogen-Block-
-      # Format und Generator-Konsistenz bleiben scharf geprueft; nur die
-      # Backend-Testanzahl-Zeile wird nicht verifiziert und muss weiterhin
-      # lokal per `bash scripts/sync-status.sh` aktuell gehalten werden.
+      # `pytest --collect-only`-Lauf pro PR.
+      # 2026-08-08 (Merge-Friction): --skip-counts nimmt zusaetzlich den
+      # Frontend-Test-Files-Zaehler aus der PR-Verifikation. Beide Zaehler
+      # werden nur noch in dedizierten Refresh-Laeufen aktualisiert
+      # (`bash scripts/sync-status.sh` ohne Skip-Flags) — sonst schreiben
+      # parallele PRs dieselben STATUS-Zeilen und kollidieren beim Merge.
+      # Autogen-Block-Format und Generator-Konsistenz bleiben scharf.
       - name: STATUS.md drift check
-        run: bash scripts/sync-status.sh --check --skip-backend-count
+        run: bash scripts/sync-status.sh --check --skip-counts
 
       # Spiegelt scripts/pre-push-gate.sh: die generierten JSON-Schemas unter
       # schemas/ muessen byte-genau zu den Pydantic-Contracts passen. Ohne
