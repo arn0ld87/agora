@@ -168,13 +168,13 @@ class ReportManager:
     @classmethod
     def get_console_log_stream(cls, report_id: str) -> List[str]:
         """
-        GetCompleteconsolelog（one-timeGetall）
-        
+        Get the complete console log (fetch all lines at once).
+
         Args:
-            report_id: ReportID
-            
+            report_id: report ID
+
         Returns:
-            logrowlist
+            list of log lines
         """
         result = cls.get_console_log(report_id, from_line=0)
         return result["logs"]
@@ -186,13 +186,13 @@ class ReportManager:
     @classmethod
     def get_agent_log_stream(cls, report_id: str) -> List[Dict[str, Any]]:
         """
-        GetComplete Agent log（for one-timeGetall）
-        
+        Get the complete agent log (fetch all entries at once).
+
         Args:
-            report_id: ReportID
-            
+            report_id: report ID
+
         Returns:
-            logentrylist
+            list of log entries
         """
         result = cls.get_agent_log(report_id, from_line=0)
         return result["logs"]
@@ -470,19 +470,19 @@ class ReportManager:
             if heading_match:
                 title_text = heading_match.group(2).strip()
                 
-                # Checkwhether isandSection Titleduplicatetitle（skip first5rowwithinduplicate）
+                # Check whether this duplicates the section title (only within the first 5 lines)
                 if i < 5:
                     if title_text == section_title or title_text.replace(' ', '') == section_title.replace(' ', ''):
                         skip_next_empty = True
                         continue
                 
-                # convertallleveltitle（#, ##, ###, ####etc）convert tobold
-                # becauseSection Titleadded by system，contentshould not have anytitle
+                # convert headings of all levels (#, ##, ###, #### etc.) to bold
+                # since the section title is added by the system, the content should not have its own heading
                 cleaned_lines.append(f"**{title_text}**")
                 cleaned_lines.append("")  # addempty line
                 continue
             
-            # if previousrowwas skippedtitle，and currentrowempty，also skip
+            # if the previous line was a skipped heading and the current line is empty, skip it too
             if skip_next_empty and stripped == '':
                 skip_next_empty = False
                 continue
@@ -543,9 +543,9 @@ class ReportManager:
     @classmethod
     def assemble_full_report(cls, report_id: str, outline: ReportOutline) -> str:
         """
-        assembleComplete report
-        
-        fromsaveSectionfileassembleComplete report，and processrowtitleclean
+        Assemble the complete report.
+
+        Assembles the complete report from the saved section files and cleans up heading lines.
         """
         # BuildReportheader
         md_content = f"# {outline.title}\n\n"
@@ -570,7 +570,7 @@ class ReportManager:
             if annotations:
                 md_content = md_content.rstrip() + "\n\n" + "\n\n".join(annotations) + "\n\n"
         
-        # post-processing：clean entireReporttitlequestion
+        # post-processing: clean up heading issues in the entire report
         md_content = cls._post_process_report(md_content, outline)
 
         # MAI-06: Nicht mehr auf Disk schreiben — nur zurückgeben.
@@ -585,7 +585,7 @@ class ReportManager:
         post-processingReportcontent
         
         1. removeduplicatetitle
-        2. keepReportmain title(#)andSection Title(##)，removeother levelstitle(###, ####etc)
+        2. keep the report main title (#) and section titles (##); remove headings of other levels (###, #### etc.)
         3. clean redundantempty lineandseparatorline
         
         Args:
@@ -618,7 +618,7 @@ class ReportManager:
                 level = len(heading_match.group(1))
                 title = heading_match.group(2).strip()
                 
-                # Checkwhether isduplicatetitle（inconsecutive5rowappear the same withincontenttitle）
+                # check whether this is a duplicate heading (same title appears again within the last 5 processed lines)
                 is_duplicate = False
                 for j in range(max(0, len(processed_lines) - 5), len(processed_lines)):
                     prev_line = processed_lines[j].strip()
@@ -636,7 +636,7 @@ class ReportManager:
                         i += 1
                     continue
                 
-                # titlelevel handling：
+                # heading level handling:
                 # - # (level=1) onlykeepReportmain title
                 # - ## (level=2) keepSection Title
                 # - ### and below (level>=3) convert toboldtext
@@ -647,7 +647,7 @@ class ReportManager:
                         processed_lines.append(line)
                         prev_was_heading = True
                     elif title in section_titles:
-                        # Section Titleerrorusing#，corrected to##
+                        # section title incorrectly used #, corrected to ##
                         processed_lines.append(f"## {title}")
                         prev_was_heading = True
                     else:
@@ -694,7 +694,7 @@ class ReportManager:
             
             i += 1
         
-        # cleanconsecutivemultipleempty line（keepat most2)
+        # clean up consecutive multiple empty lines (keep at most 2)
         result_lines = []
         empty_count = 0
         for line in processed_lines:
@@ -746,7 +746,7 @@ class ReportManager:
         path = cls._get_report_path(report_id)
         
         if not os.path.exists(path):
-            # backward compatibleformat：Checkdirectlystored inreportsunder directoryfile
+            # backward-compatible format: check for files stored directly in the reports directory
             old_path = os.path.join(cls.REPORTS_DIR, f"{report_id}.json")
             if os.path.exists(old_path):
                 path = old_path
@@ -780,7 +780,7 @@ class ReportManager:
                 sections=sections
             )
         
-        # ifmarkdown_contentempty，attempt tofromfull_report.mdRead
+        # if markdown_content is empty, attempt to read it from full_report.md
         markdown_content = data.get('markdown_content', '')
         if not markdown_content:
             full_report_path = cls._get_report_markdown_path(report_id)
@@ -814,12 +814,12 @@ class ReportManager:
         
         for item in os.listdir(cls.REPORTS_DIR):
             item_path = os.path.join(cls.REPORTS_DIR, item)
-            # newformat：filefolder
+            # new format: report is a folder
             if os.path.isdir(item_path):
                 report = cls.get_report(item)
                 if report and report.simulation_id == simulation_id:
                     return report
-            # backward compatibleformat：JSONfile
+            # Backward-compatible format: single JSON file
             elif item.endswith('.json'):
                 report_id = item[:-5]
                 report = cls.get_report(report_id)
@@ -836,13 +836,13 @@ class ReportManager:
         reports = []
         for item in os.listdir(cls.REPORTS_DIR):
             item_path = os.path.join(cls.REPORTS_DIR, item)
-            # newformat：filefolder
+            # new format: report is a folder
             if os.path.isdir(item_path):
                 report = cls.get_report(item)
                 if report:
                     if simulation_id is None or report.simulation_id == simulation_id:
                         reports.append(report)
-            # backward compatibleformat：JSONfile
+            # Backward-compatible format: single JSON file
             elif item.endswith('.json'):
                 report_id = item[:-5]
                 report = cls.get_report(report_id)
@@ -857,18 +857,18 @@ class ReportManager:
     
     @classmethod
     def delete_report(cls, report_id: str) -> bool:
-        """Deletereport（entirefolder）"""
+        """Delete a report (the entire report folder)."""
         import shutil
         
         folder_path = cls._get_report_folder(report_id)
         
-        # newformat：Deleteentirefilefolder
+        # New format: delete the entire report folder
         if os.path.exists(folder_path) and os.path.isdir(folder_path):
             shutil.rmtree(folder_path)
             logger.info("Report folder deleted: %s", report_id)
             return True
         
-        # backward compatibleformat：Deleteseparatefile
+        # Backward-compatible format: delete the standalone JSON file
         deleted = False
         old_json_path = os.path.join(cls.REPORTS_DIR, f"{report_id}.json")
         old_md_path = os.path.join(cls.REPORTS_DIR, f"{report_id}.md")
