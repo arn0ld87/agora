@@ -5,6 +5,9 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (GPT-5.x-Familie: 400er bei Function-Tools im CAMEL-Sim-Pfad — 2026-08-08)
+
+- **Jeder tool-fähige CAMEL-Agent-Call gegen GPT-5.1+-Modelle (z. B. `gpt-5.6-luna`) scheiterte mit `400 — Function tools with reasoning_effort are not supported ... set reasoning_effort to 'none'`.** `build_camel_completion_params` in `backend/scripts/_sim_common.py` setzt jetzt für GPT-5.1+ explizit `reasoning_effort: "none"` (neuer Helper `supports_reasoning_effort_none`, Zwilling zu `uses_max_completion_tokens`). Das ursprüngliche `gpt-5` (5.0, ohne Minor-Version) kennt `"none"` nicht und bleibt unverändert — die Heuristik trennt Modelle ohne erkennbare Minor-Version (5.0) von `gpt-5.1`+ anhand des Modellnamens. Zwilling des Temperature-Quirks aus #1096, diesmal im OASIS/CAMEL-Pfad statt im `LLMClient`. (#1112)
 ### Changed (STATUS.md-Drift-Check im PR-Gate ohne Backend-Testanzahl-Messung — 2026-08-08)
 
 - **Der CI-Step `STATUS.md drift check` im Job „Backend PR smoke gate" kostete ~115 s pro PR**, weil `scripts/sync-status.sh --check` die Backend-Testanzahl per `uv run pytest --collect-only -q` maß. Neues Flag `--skip-backend-count` (alternativ `SYNC_STATUS_SKIP_BACKEND_COUNT=1`) lässt genau diese eine Zeile aus — weder gemessen noch aus dem Cache gelesen noch verifiziert —, während Frontend-Zähler, Autogen-Block-Format und Generator-Konsistenz unverändert scharf geprüft bleiben. Nur dieser eine CI-Step nutzt das Flag; der lokale `sync-status.sh --check` (z. B. in `pre-push-gate.sh`) bleibt unverändert und misst weiterhin vollständig. (#1107)
