@@ -406,8 +406,14 @@ jobs:
       # auf dem PR und verhindert ihn. Kein eigener Job: uv, Dependencies und
       # Checkout stehen in diesem Gate bereits, und der Frontend-Zaehler braucht
       # nur das Repo. Exit 2 = Messfehler, nicht Drift.
+      #
+      # 2026-08-08 (Issue #1107): --skip-backend-count spart den ~115s teuren
+      # `pytest --collect-only`-Lauf pro PR. Frontend-Zaehler, Autogen-Block-
+      # Format und Generator-Konsistenz bleiben scharf geprueft; nur die
+      # Backend-Testanzahl-Zeile wird nicht verifiziert und muss weiterhin
+      # lokal per `bash scripts/sync-status.sh` aktuell gehalten werden.
       - name: STATUS.md drift check
-        run: bash scripts/sync-status.sh --check
+        run: bash scripts/sync-status.sh --check --skip-backend-count
 
       # Spiegelt scripts/pre-push-gate.sh: die generierten JSON-Schemas unter
       # schemas/ muessen byte-genau zu den Pydantic-Contracts passen. Ohne

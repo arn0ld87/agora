@@ -5,6 +5,10 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Changed (STATUS.md-Drift-Check im PR-Gate ohne Backend-Testanzahl-Messung — 2026-08-08)
+
+- **Der CI-Step `STATUS.md drift check` im Job „Backend PR smoke gate" kostete ~115 s pro PR**, weil `scripts/sync-status.sh --check` die Backend-Testanzahl per `uv run pytest --collect-only -q` maß. Neues Flag `--skip-backend-count` (alternativ `SYNC_STATUS_SKIP_BACKEND_COUNT=1`) lässt genau diese eine Zeile aus — weder gemessen noch aus dem Cache gelesen noch verifiziert —, während Frontend-Zähler, Autogen-Block-Format und Generator-Konsistenz unverändert scharf geprüft bleiben. Nur dieser eine CI-Step nutzt das Flag; der lokale `sync-status.sh --check` (z. B. in `pre-push-gate.sh`) bleibt unverändert und misst weiterhin vollständig. (#1107)
+
 ### Changed (E2E-Required-Check-Runbook auf aktiven Branch-Protection-Stand korrigiert — 2026-08-08)
 
 - **Das Runbook beschrieb die Required-Erzwingung noch als offen und zeigte ein destruktives `PUT`-Beispiel mit nur sechs Playwright-Checks.** Der dokumentierte Status entspricht jetzt der aktiven `main`-Branch-Protection mit 17 Required Checks; das CLI-Beispiel liest den aktuellen Satz, ergänzt die sechs Playwright-Smokes idempotent und aktualisiert ausschließlich `required_status_checks`, sodass CodeQL-, Dependency-, Schema-, Contract-, Security-, Version- und PR-Smoke-Gates erhalten bleiben. (#1089)
