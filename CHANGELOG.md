@@ -5,6 +5,9 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Changed (Radon-Gate: Allowlist-Einträge können eine cc-Obergrenze tragen — 2026-08-08)
+
+- **Das Komplexitäts-Gate prüfte bei geduldeten Funktionen nur, OB sie geduldet sind — nicht, wie stark sie weiter wachsen dürfen.** Allowlist-Einträge in `backend/radon-allowlist.txt` können jetzt optional `# cc<=N` tragen: Überschreitet die gemessene Komplexität die Grenze, failt das Gate; unterschreitet sie sie, erscheint ein Absenkungs-Hinweis — auch dann noch, wenn der Hotspot auf rank C gesunken ist. Einträge ohne Obergrenze verhalten sich unverändert (reine Duldung), Bestandseinträge und die D+-Schwelle bleiben unangetastet. Der lokale Schnellcheck `scripts/check_complexity.sh` parst das neue Inline-Kommentar-Format mit. (#1084)
 ### Fixed (cve-monitor lief in denselben torch-Local-Version-Fehler wie früher ci.yml — 2026-08-08)
 
 - **Der wöchentliche CVE-Monitor scheiterte an einer Infrastrukturzeile statt an echten Advisories:** `uv export` schreibt auf Linux den Pin `torch==2.13.0+cpu`, den pip-audit gegen PyPI nicht auflösen kann — `AUDIT_EC` stand damit permanent auf 1 und wäre ab dem Hardstop 2026-09-28 hart rot geworden. Der Export nutzt jetzt dieselbe Lösung wie ci.yml (#1073/#1074): `uv export --frozen --no-dev --no-hashes --no-emit-project` plus `normalize_audit_requirements.py` (strippt PEP-440-Local-Labels), und der Audit-Aufruf übernimmt `--no-deps --disable-pip`, damit pip die Torch-CUDA-Kette nicht von PyPI nachauflöst. `--ignore-vuln`-Politik und Hardstop unverändert. (#1075)
