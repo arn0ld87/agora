@@ -8,7 +8,7 @@
 
 **Dokumente → Knowledge Graph → Personas → Simulation → nachvollziehbarer Bericht**
 
-[![Version](https://img.shields.io/badge/version-0.9.0-635BFF?style=flat-square)](./VERSION)
+[![Version](https://img.shields.io/badge/version-0.9.3-635BFF?style=flat-square)](./VERSION)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-111827?style=flat-square)](./LICENSE)
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21830644-1682D4?style=flat-square)](https://doi.org/10.5281/zenodo.21830644)
 [![Python](https://img.shields.io/badge/Python-3.14-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -234,7 +234,7 @@ bun run dev
 
 ## 📊 Projektstatus
 
-**Aktuelle Version:** `0.9.0` Stability Beta
+**Aktuelle Version:** `0.9.3` Stability Beta
 
 | Bereich | Stand |
 |---|---|
