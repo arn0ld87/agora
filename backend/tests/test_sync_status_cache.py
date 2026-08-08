@@ -261,3 +261,91 @@ def test_skip_backend_count_still_catches_frontend_drift(cache_state, status_fil
         + result.stdout
         + result.stderr
     )
+
+
+def test_skip_counts_flag_needs_neither_collect_nor_cache(cache_state):
+    """``--skip-counts`` misst weder Backend- noch Frontend-Zähler.
+
+    Wie ``--skip-backend-count``: leerer Cache und PATH ohne ``uv`` — ohne
+    das Flag wäre Exit 2 (Messfehler) die einzig mögliche Antwort.
+    """
+    CACHE_FILE.unlink(missing_ok=True)
+
+    result = _run_check_without_uv(extra_args=["--skip-counts"])
+
+    assert result.returncode != MEASUREMENT_FAILED, (
+        "--skip-counts hat trotzdem versucht zu messen: " + result.stderr
+    )
+
+
+def test_skip_counts_env_var_equivalent_to_flag(cache_state):
+    """``SYNC_STATUS_SKIP_COUNTS=1`` wirkt wie ``--skip-counts``."""
+    CACHE_FILE.unlink(missing_ok=True)
+
+    result = _run_check_without_uv(extra_env={"SYNC_STATUS_SKIP_COUNTS": "1"})
+
+    assert result.returncode != MEASUREMENT_FAILED, (
+        "SYNC_STATUS_SKIP_COUNTS=1 hat trotzdem versucht zu messen: " + result.stderr
+    )
+
+
+def test_skip_counts_carries_frontend_counter_over(cache_state, status_file_state):
+    """``--skip-counts`` übernimmt den Frontend-Zähler 1:1 aus STATUS.md.
+
+    Ein abweichender Frontend-Wert darf mit dem Flag NICHT als Drift auffallen
+    — genau diese Zeile wird per Carry-over mit sich selbst verglichen. (Ohne
+    Flag deckt ``test_skip_backend_count_still_catches_frontend_drift`` die
+    Gegenrichtung ab.)
+    """
+    text = STATUS_FILE.read_text(encoding="utf-8")
+    corrupted, count = re.subn(
+        r"(\| Frontend Test-Files \| )\d+( \|)",
+        r"\g<1>999999\g<2>",
+        text,
+    )
+    assert count == 1, "Testfixture konnte die Frontend-Zeile nicht eindeutig manipulieren"
+    STATUS_FILE.write_text(corrupted, encoding="utf-8")
+
+    result = subprocess.run(
+        ["bash", str(SCRIPT), "--check", "--skip-counts"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+    assert result.returncode == 0, (
+        "--skip-counts hat den Frontend-Zähler nicht übernommen: "
+        + result.stdout
+        + result.stderr
+    )
+
+
+def test_skip_counts_still_catches_version_drift(cache_state, status_file_state):
+    """``--skip-counts`` entschärft nur die Zähler — der Rest bleibt scharf.
+
+    Eine manipulierte Backend-Version im Autogen-Block muss trotz Flag als
+    Drift auffallen, sonst hätte das Flag die gesamte Prüfung deaktiviert.
+    """
+    text = STATUS_FILE.read_text(encoding="utf-8")
+    corrupted, count = re.subn(
+        r"(\| Backend \| `backend/pyproject\.toml` \| )[0-9.]+( \|)",
+        r"\g<1>99.99.99\g<2>",
+        text,
+    )
+    assert count == 1, "Testfixture konnte die Backend-Versionszeile nicht manipulieren"
+    STATUS_FILE.write_text(corrupted, encoding="utf-8")
+
+    result = subprocess.run(
+        ["bash", str(SCRIPT), "--check", "--skip-counts"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+    assert result.returncode == 1, (
+        "Versions-Drift wurde trotz --skip-counts nicht erkannt: "
+        + result.stdout
+        + result.stderr
+    )

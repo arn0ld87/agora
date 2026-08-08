@@ -113,8 +113,11 @@ run_backend() {
   (cd backend && uv run python -m app.contracts.dump_schemas --check) \
     || fail "schema drift — run 'cd backend && uv run python -m app.contracts.dump_schemas' locally and commit"
 
-  step "Backend: sync-status --check"
-  bash scripts/sync-status.sh --check \
+  step "Backend: sync-status --check (--skip-counts)"
+  # --skip-counts: Test-Zaehler werden nicht mehr pro PR verifiziert/committet,
+  # sondern nur in dedizierten Refresh-Laeufen — verhindert, dass parallele
+  # PRs auf denselben STATUS-Zeilen kollidieren (Merge-Friction 2026-08-08).
+  bash scripts/sync-status.sh --check --skip-counts \
     || fail "STATUS.md drift — run 'bash scripts/sync-status.sh' locally and commit"
   ok "backend gates green"
 }
@@ -133,8 +136,8 @@ run_schemas() {
   (cd backend && uv run python scripts/check_version_drift.py) \
     || fail "version drift — run 'cd backend && uv run python scripts/check_version_drift.py --write' locally and commit"
 
-  step "Backend: sync-status --check"
-  bash scripts/sync-status.sh --check \
+  step "Backend: sync-status --check (--skip-counts)"
+  bash scripts/sync-status.sh --check --skip-counts \
     || fail "STATUS.md drift — run 'bash scripts/sync-status.sh' locally and commit"
   ok "schema gates green"
 }

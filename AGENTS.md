@@ -39,10 +39,13 @@ Agora ist eine lokal oder kontrolliert hybrid betreibbare Multi-Agent-Analysepla
    - ohne Scope: vollständiges Gate
 4. Kein `--no-verify` ohne ausdrückliche Freigabe.
 5. Dokumentation im selben Slice synchronisieren:
-   - Istzustand → `docs/STATUS.md`
+   - Istzustand → `docs/STATUS.md` (Test-Zähler ausgenommen — die aktualisiert
+     nur ein dedizierter Refresh-Lauf `bash scripts/sync-status.sh`, nicht jeder PR)
    - strategische Release-Auswirkung → `ROADMAP.md`
    - konkrete Folgearbeit → GitHub Issue
-   - ausgelieferte Änderung → `CHANGELOG.md`
+   - ausgelieferte Änderung → **eine Fragment-Datei in [`changelog.d/`](changelog.d/README.md)**
+     (`<nr>-<slug>.md`); `CHANGELOG.md` selbst wird nur beim Release-Schnitt via
+     `scripts/collect-changelog.py` geschrieben, nie direkt im PR
 6. Keine abgeschwächten Assertions, globalen Skips oder pauschalen Retries, um rote Tests kosmetisch grün zu machen.
 7. Verträge zuerst, Consumer danach.
 8. Kein neuer großer Produktbereich, wenn er nicht in der aktuellen Release-Stufe der Roadmap vorgesehen ist.
