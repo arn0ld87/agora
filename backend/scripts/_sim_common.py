@@ -570,12 +570,12 @@ def preflight_model_probe(
     starten (Tests, Mock-Backends, Offline-Entwicklung). Eine Warnung wird geloggt.
     
     Parameters:
-    	model (Any): Das zu prüfende Modell.
-    	max_retries (int): Maximale Anzahl zusätzlicher Versuche bei vorübergehenden Fehlern.
-    	backoff_base (float): Anfangsverzögerung in Sekunden für den exponentiellen Backoff.
-    
+        model (Any): Das zu prüfende Modell.
+        max_retries (int): Maximale Anzahl zusätzlicher Versuche bei vorübergehenden Fehlern.
+        backoff_base (float): Anfangsverzögerung in Sekunden für den exponentiellen Backoff.
+
     Raises:
-    	ValueError: Wenn ein permanenter oder nicht behebbarer Provider-Fehler auftritt.
+        ValueError: Wenn ein permanenter oder nicht behebbarer Provider-Fehler auftritt.
     """
     if _should_skip_preflight():
         logging.getLogger("agora._sim_common").warning(
@@ -690,7 +690,7 @@ def install_bert_memory_profile(profile: str | None = None) -> str:
         Lädt TWHIN-BERT-Modelle mit speichersparenden Standardeinstellungen.
         
         Returns:
-        	Das von der ursprünglichen Ladefunktion erzeugte Modell.
+            Das von der ursprünglichen Ladefunktion erzeugte Modell.
         """
         model_name = args[0] if args else kwargs.get("pretrained_model_name_or_path")
         if isinstance(model_name, str) and model_name in _TWHIN_BERT_MODEL_NAMES:
@@ -805,7 +805,7 @@ def install_memory_sampler(
             Liefert keinen RSS-Messwert.
             
             Returns:
-            	float | None: Immer `None`.
+                float | None: Immer `None`.
             """
             return None
 

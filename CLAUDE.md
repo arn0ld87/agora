@@ -67,7 +67,7 @@ Backend-Scope, sequentiell mit Exit 0 (ein einziger Wechsel nach `backend`):
 cd backend
 uv run pytest tests/contracts/ -x -q
 uv run python -m app.contracts.dump_schemas --check
-uv run ruff check app/ tests/
+uv run ruff check .
 uv run mypy app
 ```
 
@@ -93,7 +93,7 @@ Cross-Layer-Scope führt beide Blöcke nacheinander aus:
 cd backend
 uv run pytest tests/contracts/ -x -q
 uv run python -m app.contracts.dump_schemas --check
-uv run ruff check app/ tests/
+uv run ruff check .
 uv run mypy app
 cd ../frontend
 bun run test
