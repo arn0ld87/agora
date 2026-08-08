@@ -8,6 +8,9 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 ### Changed (STATUS.md-Drift-Check im PR-Gate ohne Backend-Testanzahl-Messung — 2026-08-08)
 
 - **Der CI-Step `STATUS.md drift check` im Job „Backend PR smoke gate" kostete ~115 s pro PR**, weil `scripts/sync-status.sh --check` die Backend-Testanzahl per `uv run pytest --collect-only -q` maß. Neues Flag `--skip-backend-count` (alternativ `SYNC_STATUS_SKIP_BACKEND_COUNT=1`) lässt genau diese eine Zeile aus — weder gemessen noch aus dem Cache gelesen noch verifiziert —, während Frontend-Zähler, Autogen-Block-Format und Generator-Konsistenz unverändert scharf geprüft bleiben. Nur dieser eine CI-Step nutzt das Flag; der lokale `sync-status.sh --check` (z. B. in `pre-push-gate.sh`) bleibt unverändert und misst weiterhin vollständig. (#1107)
+### Fixed (Trivy-Gate zog MEDIUM-CVEs hart, obwohl es auf CRITICAL/HIGH konfiguriert ist — 2026-08-08)
+
+- **`build-only` (Docker-Image-Workflow) blockierte alle PRs wegen zweier neuer MEDIUM-pypdf-CVEs:** Die trivy-action ignoriert im SARIF-Modus den `severity`-Filter, solange `limit-severities-for-sarif` fehlt — der `exit-code: 1` feuerte damit auf jede fixbare CVE statt nur auf CRITICAL/HIGH. Flag ergänzt; zusätzlich pypdf im Lockfile auf 6.15.0 angehoben (CVE-2026-71852, CVE-2026-71870, transitive Dependency).
 
 ### Changed (E2E-Required-Check-Runbook auf aktiven Branch-Protection-Stand korrigiert — 2026-08-08)
 
