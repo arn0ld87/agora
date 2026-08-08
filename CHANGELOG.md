@@ -5,6 +5,9 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (cve-monitor lief in denselben torch-Local-Version-Fehler wie früher ci.yml — 2026-08-08)
+
+- **Der wöchentliche CVE-Monitor scheiterte an einer Infrastrukturzeile statt an echten Advisories:** `uv export` schreibt auf Linux den Pin `torch==2.13.0+cpu`, den pip-audit gegen PyPI nicht auflösen kann — `AUDIT_EC` stand damit permanent auf 1 und wäre ab dem Hardstop 2026-09-28 hart rot geworden. Der Export nutzt jetzt dieselbe Lösung wie ci.yml (#1073/#1074): `uv export --frozen --no-dev --no-hashes --no-emit-project` plus `normalize_audit_requirements.py` (strippt PEP-440-Local-Labels), und der Audit-Aufruf übernimmt `--no-deps --disable-pip`, damit pip die Torch-CUDA-Kette nicht von PyPI nachauflöst. `--ignore-vuln`-Politik und Hardstop unverändert. (#1075)
 ### Fixed (Trivy-Gate zog MEDIUM-CVEs hart, obwohl es auf CRITICAL/HIGH konfiguriert ist — 2026-08-08)
 
 - **`build-only` (Docker-Image-Workflow) blockierte alle PRs wegen zweier neuer MEDIUM-pypdf-CVEs:** Die trivy-action ignoriert im SARIF-Modus den `severity`-Filter, solange `limit-severities-for-sarif` fehlt — der `exit-code: 1` feuerte damit auf jede fixbare CVE statt nur auf CRITICAL/HIGH. Flag ergänzt; zusätzlich pypdf im Lockfile auf 6.15.0 angehoben (CVE-2026-71852, CVE-2026-71870, transitive Dependency).
