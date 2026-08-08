@@ -5,6 +5,7 @@ Interview-related simulation API routes split from the main module.
 from flask import jsonify, request
 
 from . import simulation_bp
+from ..contracts.interview_envelope_contract import InterviewEnvelope
 from ..services.simulation_runner import SimulationRunner
 from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_error, json_success
@@ -101,17 +102,21 @@ def _echo_result(result: dict):
     additively so the frontend's response interceptor — which only reads
     top-level fields — can surface the real cause instead of falling back to
     a generic "Unbekannter Fehler".
+
+    The envelope is built via the ``InterviewEnvelope`` Pydantic contract
+    (#1005) instead of a handwritten dict — ``exclude_none=True`` keeps the
+    wire form byte-identical to the previous conditional-key-assignment,
+    since ``error``/``code`` are only ever populated when a cause could
+    actually be determined.
     """
     success = result.get("success", False)
-    envelope: dict = {"success": success, "data": result}
+    error: str | None = None
+    code: str | None = None
     if not success:
-        error = result.get("error") or _aggregate_batch_error(result)
-        if error:
-            envelope["error"] = error
-        code = result.get("code")
-        if code:
-            envelope["code"] = code
-    return jsonify(envelope)
+        error = result.get("error") or _aggregate_batch_error(result) or None
+        code = result.get("code") or None
+    envelope = InterviewEnvelope(success=success, data=result, error=error, code=code)
+    return jsonify(envelope.model_dump(exclude_none=True))
 
 
 @simulation_bp.route('/interview', methods=['POST'])

@@ -5,16 +5,15 @@ Cases:
    dann split: 5 visible + 2 appendix.
 2. 3 Hypothesen → 3 visible, 0 appendix.
 3. 12 Hypothesen, alle disjunkt → 5 visible + 7 appendix.
-4. Confidence-Sort: absteigende Reihenfolge verifizieren.
+4. Issue #1083: Sortierung folgt suggested_evidence-Länge, nicht confidence_score.
 5. Re-ID nach Dedup eindeutig + deterministisch.
 6. Issue #1073: >50 disjunkte Hypothesen im Appendix → hart auf 50 gekappt,
-   verbleibende Einträge sind die mit der höchsten Confidence.
+   verbleibende Einträge sind die mit der laut Evidence-Nähe-Sortierung
+   höchsten Einträge (Issue #1083: kein confidence_score-Signal mehr).
 """
 from __future__ import annotations
 
 from typing import Any
-
-import pytest
 
 
 def _make_hyp(
@@ -116,34 +115,61 @@ def test_case3_twelve_disjoint_split() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Case 4: Confidence-Sort — absteigende Reihenfolge
+# Case 4 (Issue #1083): Sortierung folgt suggested_evidence, nicht confidence
 # ---------------------------------------------------------------------------
 
-def test_case4_sort_by_confidence_descending() -> None:
+def test_case4_sort_by_evidence_count_ignores_confidence_score() -> None:
+    """Regressionsnachweis fuer #1083.
+
+    Konstruktion: Hypothese 1 hat hohe confidence_score, aber keine
+    suggested_evidence. Hypothese 2 hat niedrige confidence_score, aber drei
+    suggested_evidence. Die alte Sortierung (``-score, -ev_len``) haette
+    Hypothese 1 zuerst platziert; die neue Sortierung (``-ev_len, text``)
+    ignoriert confidence_score vollstaendig und platziert Hypothese 2 zuerst,
+    weil sie mehr Evidence traegt. Manuell verifiziert: gegen die alte
+    ``_sort_key``-Implementierung war dieser Test rot.
+    """
     from app.services.report_agent.hypothesis_cap import dedup_and_cap_hypotheses
 
     hyps = [
-        _make_hyp(1, "Niedrige Konfidenz-Hypothese über einfaches Thema.", 0.2),
-        _make_hyp(2, "Hohe Konfidenz-Hypothese über wichtiges Thema.", 0.9),
-        _make_hyp(3, "Mittlere Konfidenz-Hypothese über mittleres Thema.", 0.5),
-        _make_hyp(4, "Zweithöchste Konfidenz-Hypothese über Marktlage.", 0.8),
-        _make_hyp(5, "Dritthöchste Konfidenz-Hypothese über Trends.", 0.7),
-        _make_hyp(6, "Sechste Hypothese mit sehr niedriger Konfidenz.", 0.1),
+        _make_hyp(
+            1,
+            "Hypothese mit hoher Konfidenz, aber ohne jede Evidence.",
+            confidence=0.95,
+            suggested_evidence=[],
+        ),
+        _make_hyp(
+            2,
+            "Hypothese mit niedriger Konfidenz, aber drei Evidence-Hinweisen.",
+            confidence=0.05,
+            suggested_evidence=["ev_1", "ev_2", "ev_3"],
+        ),
     ]
 
     visible, appendix = dedup_and_cap_hypotheses(hyps)
 
-    # visible hat max 5, also hyps 2,4,5,3,1 (sorted desc by score)
-    assert len(visible) == 5
-    assert len(appendix) == 1
-
-    scores = [h.get("confidence_score", 0.0) for h in visible]
-    assert scores == sorted(scores, reverse=True), (
-        f"visible nicht absteigend sortiert: {scores}"
+    assert len(visible) == 2
+    assert len(appendix) == 0
+    assert visible[0]["hypothesis_id"] == "hypothesis_02", (
+        "Sortierung muss nach suggested_evidence-Länge gehen, nicht "
+        f"confidence_score. Reihenfolge: {[h['hypothesis_id'] for h in visible]}"
     )
+    assert visible[1]["hypothesis_id"] == "hypothesis_01"
 
-    # Appendix enthält die niedrigste Konfidenz
-    assert appendix[0].get("confidence_score") == pytest.approx(0.1)
+
+def test_case4b_sort_tiebreak_is_hypothesis_text() -> None:
+    """Bei gleicher suggested_evidence-Länge entscheidet der Text (stabil,
+    deterministisch), nicht die Erzeugungsreihenfolge."""
+    from app.services.report_agent.hypothesis_cap import dedup_and_cap_hypotheses
+
+    hyps = [
+        _make_hyp(1, "Zzz-Hypothese über ein spätes Thema im Alphabet.", suggested_evidence=["ev_1"]),
+        _make_hyp(2, "Aaa-Hypothese über ein frühes Thema im Alphabet.", suggested_evidence=["ev_1"]),
+    ]
+
+    visible, _ = dedup_and_cap_hypotheses(hyps)
+
+    assert [h["hypothesis_id"] for h in visible] == ["hypothesis_02", "hypothesis_01"]
 
 
 # ---------------------------------------------------------------------------
@@ -241,6 +267,9 @@ def test_case6_appendix_hard_capped_at_fifty() -> None:
     """ReportSectionModel.hypotheses_appendix erlaubt max_length=50
     (report_contract.py:412). dedup_and_cap_hypotheses muss den Appendix
     entsprechend kappen, sonst schlägt die EvidenceMapModel-Validierung fehl.
+
+    Issue #1083: die Rangfolge kommt aus suggested_evidence-Länge (Text als
+    Tiebreaker), nicht mehr aus confidence_score.
     """
     import hashlib
 
@@ -251,7 +280,7 @@ def test_case6_appendix_hard_capped_at_fifty() -> None:
         _make_hyp(
             i,
             hashlib.sha256(f"disjoint-topic-{i}".encode()).hexdigest(),
-            confidence=1.0 - (i * 0.01),
+            suggested_evidence=[f"ev_{i}_{j}" for j in range(i % 6)],
         )
         for i in range(total)
     ]
@@ -263,13 +292,15 @@ def test_case6_appendix_hard_capped_at_fifty() -> None:
         f"Appendix muss auf 50 (Contract-Limit) gekappt sein, bekommen {len(appendix)}"
     )
 
-    # Appendix enthält exakt die 50 nach visible nächsthöchsten Confidence-Werte,
-    # nicht die schwächsten (Sortierung ist absteigend, Cap verwirft am Ende).
-    expected_appendix_scores = sorted(
-        (h["confidence_score"] for h in hyps), reverse=True
-    )[5:55]
-    appendix_scores = [h["confidence_score"] for h in appendix]
-    assert appendix_scores == pytest.approx(expected_appendix_scores)
+    # Appendix enthält exakt die 50 nach visible nächsten Einträge der nach
+    # suggested_evidence-Länge (desc) und Text (asc) sortierten Liste, nicht
+    # die schwächsten (Sortierung ist absteigend, Cap verwirft am Ende).
+    expected_order = sorted(
+        hyps, key=lambda h: (-len(h["suggested_evidence"]), h["hypothesis_text"])
+    )
+    expected_appendix_texts = [h["hypothesis_text"] for h in expected_order[5:55]]
+    appendix_texts = [h["hypothesis_text"] for h in appendix]
+    assert appendix_texts == expected_appendix_texts
 
 
 def test_case7_production_shaped_hypotheses_pass_contract_after_cap() -> None:
