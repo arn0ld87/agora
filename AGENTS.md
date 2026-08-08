@@ -21,7 +21,7 @@ ADRs, Architektur-, Security- und Runbook-Dateien sind verbindliche Referenzen, 
 
 Agora ist eine lokal oder kontrolliert hybrid betreibbare Multi-Agent-Analyseplattform für simulierte DACH-Zielgruppen-, Stakeholder- und Marktreaktionen.
 
-**Aktueller Reifegrad:** `0.9.0` Stability Beta.  
+**Aktueller Reifegrad:** `0.9.3` Stability Beta.  
 **Ziel:** stabile Single-User-Version `1.0.0` gemäß [`ROADMAP.md`](ROADMAP.md).
 
 **Stack:** Flask/Python 3.14, Pydantic v2, Vue 3, TypeScript, Vite, Pinia, Neo4j, Redis, OASIS/CAMEL und lokale oder OpenAI-kompatible Provider.

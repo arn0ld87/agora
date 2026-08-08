@@ -5,6 +5,26 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+## [0.9.3] — 2026-08-08
+
+### Fixed (CI auf main wieder grün — 2026-08-08)
+
+- **Ruff E101 in `backend/scripts/_sim_common.py`:** Sechs Docstring-Zeilen mit Tab-Einrückung (eingeschleppt via #1136) durch Spaces ersetzt; der push-Job auf main lintet das ganze Backend und schlug deshalb fehl, obwohl das PR-Gate grün war.
+- **Ruff-Scope-Lücke geschlossen:** PR-Smoke-Gate (`ci.yml`) und `scripts/pre-push-gate.sh` linten jetzt wie der main-Job `ruff check .` statt nur `app/ tests/` — `scripts/` fällt nicht mehr durch die Lücke.
+
+### Security (Frontend-Dependency-Audit — 2026-08-08)
+
+- **`bun audit --audit-level=high` wieder grün:** Neue High-Advisories gegen axios, brace-expansion, nanoid, postcss und undici behoben — Lockfile frisch aufgelöst, Overrides auf nanoid ≥3.3.18, postcss ≥8.5.26 und undici ≥7.29.0 angehoben.
+
+### Changed
+
+- Testläufe filtern vier belegte Upstream-Warnquellen (pytest-asyncio, neo4j, OpenTelemetry-Flask) gezielt nach Nachricht und Modul; projekteigene DeprecationWarnings bleiben sichtbar und gate-fähig ([#1090](https://github.com/arn0ld87/agora/issues/1090), [#1140](https://github.com/arn0ld87/agora/pull/1140)).
+
+### Changed (Merge-Friction beseitigt: PRs kollidieren nicht mehr auf CHANGELOG und STATUS-Zählern — 2026-08-08)
+
+- **Jeder Merge machte den nächsten offenen PR konfliktbehaftet,** weil alle PRs ihren CHANGELOG-Eintrag an derselben Zeile unter `[Unreleased]` einfügten und Test-Zähler-Zeilen in `docs/STATUS.md` pro PR neu gemessen und committet wurden. CHANGELOG-Einträge leben jetzt als eindeutige Fragment-Dateien unter `changelog.d/` (Einsammeln beim Release-Schnitt via `scripts/collect-changelog.py`); die STATUS-Zähler prüft und schreibt nur noch ein dedizierter Refresh-Lauf — PR-Gates laufen mit `sync-status.sh --check --skip-counts`. Die flankierende Abschaltung von `strict` („Require branches to be up to date") in der Branch-Protection ist mit #1139 beschlossen und wird separat als Repo-Einstellung umgeschaltet (Stand des Schnitts: noch `strict: true`, siehe `docs/STATUS.md`); Required Checks bleiben unverändert Pflicht, die volle CI auf `main` bleibt der Backstop.
+
+
 ### Fixed (Hypothesen-Sortierung suggerierte ein Ranking-Signal, das nicht existiert — 2026-08-08)
 
 - **`dedup_and_cap_hypotheses` sortierte über `_sort_key` primär nach `confidence_score` — ein Feld, das keiner der drei produktiven Erzeuger setzt, weil `ReportSectionHypothesisModel` als strict-Contract es gar nicht kennt.** In Produktion war `score` durchgängig `0.0`; die Sortierung suggerierte damit eine Rangfolge nach Konfidenz, die es nie gab (Codex-Finding zu PR #1078, siehe #1073). Das betraf beide Auswahlentscheidungen: welche fünf Hypothesen sichtbar sind und welche fünfzig im Appendix überleben.
