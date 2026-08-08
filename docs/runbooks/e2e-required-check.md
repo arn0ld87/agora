@@ -1,21 +1,21 @@
 # E2E-Smokes als Required Check
 
-Datei: `docs/runbooks/e2e-required-check.md` · Stand: 2026-07-19 (Status: 3 grüne Läufe in Folge auf `32bad751`; Required-Erzwingung noch nicht freigegeben) · Eingeführt mit: Issue #739
+Datei: `docs/runbooks/e2e-required-check.md` · Stand: 2026-08-08 (Status: Required-Erzwingung ist aktiv — `main` hat einen konfigurierten Branch-Protection-Regelsatz mit den sechs Playwright-Smokes und weiteren Checks als Pflicht) · Eingeführt mit: Issue #739, aktualisiert für Issue #1089
 
 ## Zweck
 
-Der `pull_request`-Trigger des E2E-Workflows (`.github/workflows/e2e-smokes.yml`) ist aktiviert. Diese Anleitung beschreibt, wie man die sechs Kern-Smokes als **erforderliche Branch-Protection-Checks** für `main` konfiguriert — das verhindert PRs, wenn E2E rot ist.
+Der `pull_request`-Trigger des E2E-Workflows (`.github/workflows/e2e-smokes.yml`) ist aktiviert. Diese Anleitung beschreibt, wie man die sechs Kern-Smokes als **erforderliche Branch-Protection-Checks** für `main` konfiguriert — das verhindert PRs, wenn E2E rot ist. Der hier beschriebene Zielzustand ist inzwischen umgesetzt (siehe Status).
 
 ## Status
 
 | Datum | Ereignis |
 |---|---|
 | 2026-07-19 | Trigger `on: pull_request` reaktiviert (#739); drei aufeinanderfolgende grüne Läufe auf `32bad751` (`29691168025`, `29691166308`, `29691165639`) — *nicht* repräsentativ für dauerhafte Stabilität |
-| offen | Branch-Protection-Erzwingung durch Owner manuell konfigurieren, sobald weitere Läufe die Stabilität bestätigen |
+| 2026-08-08 | Erhoben via `gh api repos/arn0ld87/agora/branches/main/protection`: Required-Erzwingung ist aktiv. Die sechs Playwright-Smokes sind Required Checks, ebenso `Backend PR smoke gate (ruff + mypy + pytest-contracts)` und `Frontend PR smoke gate (lint + typecheck + test + build)` (laut Issue #979, Punkt E5) sowie weitere Checks — vollständige Liste unten |
 
-## Die sechs Required Checks
+## Die sechs Kern-Smokes (Playwright)
 
-Diese Job-Namen müssen als erforderlich konfiguriert werden:
+Diese Job-Namen sind Teil der konfigurierten Required Checks:
 
 1. `Playwright Health-Smoke`
 2. `Playwright Upload+Graph-Smoke`
@@ -24,6 +24,8 @@ Diese Job-Namen müssen als erforderlich konfiguriert werden:
 5. `Playwright Golden-Gate-Accessibility-Smoke (Slice 7.3.1)`
 6. `Playwright AiModelPicker-Smoke (Slice 5.6 / 7.3.1)`
 
+Der vollständige, per `gh api` erhobene Satz an Required Checks für `main` umfasst darüber hinaus (Stand 2026-08-08): `CodeQL (javascript-typescript)`, `CodeQL (python)`, `Dependency Review`, `Schema-Drift verhindern`, `Pydantic-Contract-Tests`, `Evidence-Quality-Gate`, `Frontend-Zod muss Backend-Schema spiegeln`, `Version-Drift-Check`, `Security scans`, `Backend PR smoke gate (ruff + mypy + pytest-contracts)`, `Frontend PR smoke gate (lint + typecheck + test + build)`. Dieses Runbook fokussiert auf die sechs Playwright-Smokes; die übrigen Checks werden von anderen Workflows definiert und sind hier nicht im Detail beschrieben.
+
 ## Konfiguration via GitHub UI
 
 1. `Settings` → `Branches`
@@ -31,6 +33,8 @@ Diese Job-Namen müssen als erforderlich konfiguriert werden:
 3. Checkbox `Require status checks to pass before merging` aktivieren
 4. Im Suchfeld je einen Job-Namen eingeben und auswählen (mind. die sechs oben)
 5. `Save changes`
+
+Diese Schritte sind bereits umgesetzt und dienen hier als Referenz für spätere Anpassungen (z. B. weitere Checks ergänzen).
 
 ## Konfiguration via `gh api` (Beispiel)
 
@@ -71,7 +75,7 @@ Beachte: `strict: true` bedeutet, dass Checks auch bei neueren Commits erneut er
 
 ## Absicherung gegen Flakes
 
-**Erst nach mehreren grünen Läufen erzwingen.** Der Workflow ist neu reaktiviert; gib dem Team Zeit, um zu verifizieren, dass die Checks stabil grün sind.
+Die Erzwingung ist aktiv. Bei wiederholten Flakes auf einem der sechs Playwright-Smokes gilt weiterhin: erst die Ursache im Workflow beheben, dann ggf. den betroffenen Check kurzzeitig über Option B (siehe Rollback) aus der Required-Liste nehmen — nicht dauerhaft, sondern nur für die Dauer der Fehlersuche.
 
 ## Rollback
 
