@@ -131,9 +131,13 @@ def read_readme_badge_version(repo_root: Path) -> str | None:
     readme = repo_root / "README.md"
     text = readme.read_text(encoding="utf-8")
     # Matches: [![Version](https://img.shields.io/badge/Version-1.0.0-blue?...)](...)
+    # sowie das aktuelle README-Format mit kleingeschriebenem Label und
+    # Hex-Farbe: .../badge/version-0.9.3-635BFF?style=flat-square
     # (.+?) fasst auch Bindestrich-Versionen (Pre-Releases wie 0.8.0-rc.1),
     # da bis zum abschliessenden Farb-Suffix vor '?'/')' nicht-gierig gematcht wird.
-    m = re.search(r"img\.shields\.io/badge/Version-(.+?)-\w+(?=[?)])", text)
+    m = re.search(
+        r"img\.shields\.io/badge/version-(.+?)-\w+(?=[?)])", text, re.IGNORECASE
+    )
     return m.group(1) if m else None
 
 
@@ -141,10 +145,11 @@ def write_readme_badge_version(repo_root: Path, version: str) -> None:
     readme = repo_root / "README.md"
     text = readme.read_text(encoding="utf-8")
     new_text, count = re.subn(
-        r"(img\.shields\.io/badge/Version-).+?(-\w+(?=[?)]))",
+        r"(img\.shields\.io/badge/version-).+?(-\w+(?=[?)]))",
         rf"\g<1>{version}\g<2>",
         text,
         count=1,
+        flags=re.IGNORECASE,
     )
     if count == 0:
         # No badge present — nothing to write, not an error.
