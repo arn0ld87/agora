@@ -14,6 +14,7 @@ Usage:
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -22,13 +23,22 @@ FRAGMENT_DIR = REPO_ROOT / "changelog.d"
 CHANGELOG = REPO_ROOT / "CHANGELOG.md"
 UNRELEASED_MARKER = "## [Unreleased]"
 
+_NUM_PREFIX = re.compile(r"^(\d+)")
+
+
+def _sort_key(p: Path) -> tuple[int, str]:
+    # Numerisch nach PR-Nummer sortieren: lexikografisch stuende `999-…`
+    # vor `1140-…`. Dateien ohne Nummernpraefix landen ganz hinten.
+    m = _NUM_PREFIX.match(p.name)
+    return (int(m.group(1)) if m else -1, p.name)
+
 
 def fragments() -> list[Path]:
     if not FRAGMENT_DIR.is_dir():
         return []
     return sorted(
         (p for p in FRAGMENT_DIR.glob("*.md") if p.name != "README.md"),
-        key=lambda p: p.name,
+        key=_sort_key,
         reverse=True,
     )
 
@@ -56,10 +66,25 @@ def main() -> int:
         return 2
 
     blocks = []
+    empty = []
     for p in frags:
         body = p.read_text(encoding="utf-8").strip()
         if body:
             blocks.append(body)
+        else:
+            empty.append(p.name)
+
+    if empty:
+        # Ein leeres Fragment ist ein kaputtes PR-Artefakt. Abbruch VOR jedem
+        # Schreib- oder Loeschvorgang, sonst ginge der Eintrag still verloren.
+        print(
+            "FEHLER: leere Fragmente in changelog.d/ — Inhalt nachtragen oder "
+            "Datei bewusst entfernen:",
+            file=sys.stderr,
+        )
+        for name in empty:
+            print(f"  - {name}", file=sys.stderr)
+        return 2
 
     insertion = "\n\n".join(blocks)
     head, _, tail = text.partition(UNRELEASED_MARKER)

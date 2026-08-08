@@ -19,7 +19,7 @@ auseinanderlaufen.
 ## Verbindlich
 
 - Keine Dataclasses und keine handgeschriebenen Inline-Schemas für API-Verträge.
-- Breaking Changes am Vertrag brauchen einen Eintrag in `CHANGELOG.md` und, bei Release-Wirkung, in `ROADMAP.md`.
+- Breaking Changes am Vertrag brauchen ein CHANGELOG-Fragment unter `changelog.d/<pr-nr>-<slug>.md` (nie direkt `CHANGELOG.md`) und, bei Release-Wirkung, einen Eintrag in `ROADMAP.md`.
 - Feldnamen und Enums nicht stillschweigend umbenennen; Consumer zuerst suchen.
 - `EvidenceSourceKind` und die Evidence-Validatoren stehen unter ADR-0002 und sind gesperrt.
 
