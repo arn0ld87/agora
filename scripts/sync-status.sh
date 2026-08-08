@@ -9,9 +9,14 @@ set -euo pipefail
 # Aktualisierungs-Protokoll) are left untouched.
 #
 # Usage:
-#   bash scripts/sync-status.sh              # update STATUS.md in-place
-#   bash scripts/sync-status.sh --check      # drift-check only (exit 1 on drift)
-#   bash scripts/sync-status.sh --no-cache   # Testanzahl erzwungen neu messen
+#   bash scripts/sync-status.sh                    # update STATUS.md in-place
+#   bash scripts/sync-status.sh --check            # drift-check only (exit 1 on drift)
+#   bash scripts/sync-status.sh --no-cache         # Testanzahl erzwungen neu messen
+#   bash scripts/sync-status.sh --skip-backend-count  # Backend-Testanzahl weder
+#                                                      # messen noch aus dem Cache
+#                                                      # lesen noch verifizieren
+#                                                      # (alternativ env
+#                                                      # SYNC_STATUS_SKIP_BACKEND_COUNT=1)
 #
 # Die einzige teure Groesse ist die Backend-Testanzahl: `pytest --collect-only`
 # importiert jedes Testmodul und damit die komplette App (Flask, Neo4j-Treiber,
@@ -20,6 +25,14 @@ set -euo pipefail
 # zwischengespeichert und nur dann neu gemessen, wenn eine dieser Dateien juenger
 # ist als der Cache. Ein direkt folgender `--check`-Lauf kostet damit
 # Millisekunden statt eines zweiten Volldurchlaufs.
+#
+# `--skip-backend-count` geht noch einen Schritt weiter als der Cache: kein
+# Collect-Lauf, kein Cache-Read, keine Verifikation der Backend-Zeile. Der
+# bestehende Wert aus docs/STATUS.md wird 1:1 uebernommen, damit ausschliesslich
+# diese Zeile nie als Drift auffaellt — Frontend-Zaehler, Autogen-Block-Format
+# und Generator-Konsistenz bleiben unveraendert scharf. Gedacht fuer das
+# PR-Gate in CI, das den 115s-Collect-Lauf pro PR nicht braucht: die Zahl wird
+# ohnehin nur lokal per `bash scripts/sync-status.sh` aktualisiert und committet.
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
@@ -30,10 +43,13 @@ CACHE_FILE="$CACHE_DIR/backend-tests-collected"
 
 CHECK_MODE=false
 USE_CACHE=true
+SKIP_BACKEND_COUNT=false
+[[ "${SYNC_STATUS_SKIP_BACKEND_COUNT:-}" == "1" ]] && SKIP_BACKEND_COUNT=true
 for arg in "$@"; do
   case "$arg" in
     --check) CHECK_MODE=true ;;
     --no-cache) USE_CACHE=false ;;
+    --skip-backend-count) SKIP_BACKEND_COUNT=true ;;
     *) echo "WARNING: unbekanntes Argument '$arg' ignoriert" >&2 ;;
   esac
 done
@@ -96,7 +112,21 @@ cache_is_fresh() {
   return 0
 }
 
-if cache_is_fresh; then
+if [[ "$SKIP_BACKEND_COUNT" == true ]]; then
+  # Weder Collect-Lauf noch Cache-Read: der bestehende Wert aus docs/STATUS.md
+  # wird unveraendert uebernommen. Dadurch vergleicht der spaetere Diff die
+  # Backend-Zeile stets mit sich selbst — sie wird faktisch nicht verifiziert,
+  # ohne dass der Rest des Autogen-Blocks (Format, Frontend-Zaehler) an
+  # Schaerfe verliert.
+  EXISTING_LINE=$(grep -m1 '| Backend Tests (collected) |' "$STATUS_FILE" 2>/dev/null || true)
+  if [[ -n "$EXISTING_LINE" ]]; then
+    EXISTING_BACKEND_TESTS=$(awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $3); print $3}' <<<"$EXISTING_LINE")
+  else
+    EXISTING_BACKEND_TESTS=""
+  fi
+  BACKEND_TESTS="${EXISTING_BACKEND_TESTS:-unknown}"
+  BACKEND_TESTS_MEASURED=true
+elif cache_is_fresh; then
   : # Zahl kommt aus dem Cache — kein Collect-Lauf noetig.
 elif command -v uv &>/dev/null; then
   # Optional timeout: GNU coreutils auf Linux/CI, gtimeout auf macOS, sonst kein Wrapper.

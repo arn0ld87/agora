@@ -18,6 +18,7 @@ verrät damit, welchen Zweig das Skript genommen hat.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -27,15 +28,20 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "sync-status.sh"
 CACHE_FILE = REPO_ROOT / "backend" / ".cache" / "sync-status" / "backend-tests-collected"
+STATUS_FILE = REPO_ROOT / "docs" / "STATUS.md"
 
 MEASUREMENT_FAILED = 2
 
 
-def _run_check_without_uv() -> subprocess.CompletedProcess[str]:
+def _run_check_without_uv(
+    extra_args: list[str] | None = None,
+    extra_env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     """``--check`` mit einem PATH ohne ``uv``.
 
     Ohne ``uv`` ist eine Messung unmöglich. Exit 2 heißt deshalb „der Cache hat
-    nicht getragen", jeder andere Code „die Zahl kam aus dem Cache".
+    nicht getragen", jeder andere Code „die Zahl kam aus dem Cache" (oder die
+    Messung wurde per ``--skip-backend-count`` erst gar nicht versucht).
     """
     env = dict(os.environ)
     uv_path = shutil.which("uv")
@@ -46,8 +52,10 @@ def _run_check_without_uv() -> subprocess.CompletedProcess[str]:
             if entry and not (Path(entry) / "uv").exists()
         ]
         env["PATH"] = os.pathsep.join(pruned)
+    if extra_env:
+        env.update(extra_env)
     return subprocess.run(
-        ["bash", str(SCRIPT), "--check"],
+        ["bash", str(SCRIPT), "--check", *(extra_args or [])],
         cwd=REPO_ROOT,
         env=env,
         capture_output=True,
@@ -180,4 +188,76 @@ def test_no_cache_flag_forces_measurement(cache_state):
 
     assert result.returncode == MEASUREMENT_FAILED, (
         "--no-cache hat trotzdem den Cache verwendet"
+    )
+
+
+def test_skip_backend_count_flag_needs_neither_collect_nor_cache(cache_state):
+    """``--skip-backend-count`` misst nicht und liest nicht aus dem Cache.
+
+    Cache ist leer (kein Read moeglich) und ``uv`` ist vom PATH entfernt (kein
+    Collect-Lauf moeglich) — ohne das Flag waere Exit 2 (Messfehler) die
+    einzig moegliche Antwort. Mit Flag bleibt die Backend-Zeile unangetastet,
+    das Skript vergleicht sie mit dem bestehenden Wert aus docs/STATUS.md.
+    """
+    CACHE_FILE.unlink(missing_ok=True)
+
+    result = _run_check_without_uv(extra_args=["--skip-backend-count"])
+
+    assert result.returncode != MEASUREMENT_FAILED, (
+        "--skip-backend-count hat trotzdem versucht zu messen: " + result.stderr
+    )
+
+
+def test_skip_backend_count_env_var_equivalent_to_flag(cache_state):
+    """``SYNC_STATUS_SKIP_BACKEND_COUNT=1`` wirkt wie ``--skip-backend-count``."""
+    CACHE_FILE.unlink(missing_ok=True)
+
+    result = _run_check_without_uv(
+        extra_env={"SYNC_STATUS_SKIP_BACKEND_COUNT": "1"},
+    )
+
+    assert result.returncode != MEASUREMENT_FAILED, (
+        "SYNC_STATUS_SKIP_BACKEND_COUNT=1 hat trotzdem versucht zu messen: " + result.stderr
+    )
+
+
+@pytest.fixture
+def status_file_state():
+    """Sichert docs/STATUS.md und stellt den Originalinhalt wieder her."""
+    original = STATUS_FILE.read_bytes()
+    try:
+        yield
+    finally:
+        STATUS_FILE.write_bytes(original)
+
+
+def test_skip_backend_count_still_catches_frontend_drift(cache_state, status_file_state):
+    """``--skip-backend-count`` lässt nur die Backend-Zeile aus — der Rest bleibt scharf.
+
+    Eine manipulierte Frontend-Zahl muss trotz Flag als Drift auffallen, sonst
+    haette das Flag versehentlich die gesamte Autogen-Pruefung entschaerft
+    statt nur die teure Backend-Messung zu sparen.
+    """
+    cache_state.write_fresh()
+    text = STATUS_FILE.read_text(encoding="utf-8")
+    corrupted, count = re.subn(
+        r"(\| Frontend Test-Files \| )\d+( \|)",
+        r"\g<1>999999\g<2>",
+        text,
+    )
+    assert count == 1, "Testfixture konnte die Frontend-Zeile nicht eindeutig manipulieren"
+    STATUS_FILE.write_text(corrupted, encoding="utf-8")
+
+    result = subprocess.run(
+        ["bash", str(SCRIPT), "--check", "--skip-backend-count"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+    assert result.returncode == 1, (
+        "Frontend-Drift wurde trotz --skip-backend-count nicht erkannt: "
+        + result.stdout
+        + result.stderr
     )
