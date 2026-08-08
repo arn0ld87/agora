@@ -29,6 +29,7 @@ if str(_SCRIPTS_DIR) not in sys.path:
 
 from _sim_common import (  # noqa: E402
     build_camel_completion_params,
+    supports_reasoning_effort_none,
     uses_max_completion_tokens,
 )
 
@@ -113,7 +114,7 @@ class TestBuildCamelCompletionParams:
 
     def test_gpt5_returns_max_completion_tokens(self) -> None:
         params = build_camel_completion_params(
-            model="gpt-5.4-mini",
+            model="gpt-5-mini",
             completion_max_tokens=4096,
         )
         assert params == {"max_completion_tokens": 4096}
@@ -143,8 +144,77 @@ class TestBuildCamelCompletionParams:
         # Wichtig: NICHT beide Keys gleichzeitig — OpenAI rejected unknown
         # parameters strict bei GPT-5.
         params = build_camel_completion_params(
-            model="gpt-5.4-mini",
+            model="gpt-5-mini",
             completion_max_tokens=4096,
         )
         assert "max_tokens" not in params
         assert set(params.keys()) == {"max_completion_tokens"}
+
+
+class TestSupportsReasoningEffortNone:
+    """GPT-5.1+ akzeptiert ``reasoning_effort: "none"``, GPT-5.0 nicht."""
+
+    @pytest.mark.parametrize(
+        "model",
+        [
+            "gpt-5.6-luna",
+            "gpt-5.1",
+            "gpt-5.1-mini",
+            "GPT-5.1-MINI",
+            "gpt-5.4-thinking",
+        ],
+    )
+    def test_gpt51_plus_supports_none(self, model: str) -> None:
+        assert supports_reasoning_effort_none(model) is True
+
+    @pytest.mark.parametrize(
+        "model",
+        [
+            "gpt-5",
+            "gpt-5-mini",
+            "gpt-5-turbo",
+            "GPT-5",
+        ],
+    )
+    def test_gpt5_zero_does_not_support_none(self, model: str) -> None:
+        assert supports_reasoning_effort_none(model) is False
+
+    @pytest.mark.parametrize(
+        "model",
+        [
+            "gpt-4o",
+            "o1-mini",
+            "qwen3-coder-next:cloud",
+            "claude-opus-4-7",
+            "",
+        ],
+    )
+    def test_non_gpt5_does_not_support_none(self, model: str) -> None:
+        assert supports_reasoning_effort_none(model) is False
+
+
+class TestBuildCamelCompletionParamsReasoningEffort:
+    """``build_camel_completion_params`` setzt ``reasoning_effort`` gezielt."""
+
+    @pytest.mark.parametrize("model", ["gpt-5.6-luna", "gpt-5.1"])
+    def test_gpt51_plus_sets_reasoning_effort_none(self, model: str) -> None:
+        params = build_camel_completion_params(
+            model=model,
+            completion_max_tokens=4096,
+        )
+        assert params["reasoning_effort"] == "none"
+        assert params["max_completion_tokens"] == 4096
+
+    def test_gpt5_zero_does_not_set_reasoning_effort(self) -> None:
+        params = build_camel_completion_params(
+            model="gpt-5",
+            completion_max_tokens=4096,
+        )
+        assert "reasoning_effort" not in params
+
+    def test_non_gpt5_does_not_set_reasoning_effort(self) -> None:
+        params = build_camel_completion_params(
+            model="qwen3-coder-next:cloud",
+            completion_max_tokens=16384,
+        )
+        assert "reasoning_effort" not in params
