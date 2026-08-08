@@ -8,6 +8,9 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 ### Changed (Radon-Gate: Allowlist-Einträge können eine cc-Obergrenze tragen — 2026-08-08)
 
 - **Das Komplexitäts-Gate prüfte bei geduldeten Funktionen nur, OB sie geduldet sind — nicht, wie stark sie weiter wachsen dürfen.** Allowlist-Einträge in `backend/radon-allowlist.txt` können jetzt optional `# cc<=N` tragen: Überschreitet die gemessene Komplexität die Grenze, failt das Gate; unterschreitet sie sie, erscheint ein Absenkungs-Hinweis — auch dann noch, wenn der Hotspot auf rank C gesunken ist. Einträge ohne Obergrenze verhalten sich unverändert (reine Duldung), Bestandseinträge und die D+-Schwelle bleiben unangetastet. Der lokale Schnellcheck `scripts/check_complexity.sh` parst das neue Inline-Kommentar-Format mit. (#1084)
+### Fixed (Trivy-Gate zog MEDIUM-CVEs hart, obwohl es auf CRITICAL/HIGH konfiguriert ist — 2026-08-08)
+
+- **`build-only` (Docker-Image-Workflow) blockierte alle PRs wegen zweier neuer MEDIUM-pypdf-CVEs:** Die trivy-action ignoriert im SARIF-Modus den `severity`-Filter, solange `limit-severities-for-sarif` fehlt — der `exit-code: 1` feuerte damit auf jede fixbare CVE statt nur auf CRITICAL/HIGH. Flag ergänzt; zusätzlich pypdf im Lockfile auf 6.15.0 angehoben (CVE-2026-71852, CVE-2026-71870, transitive Dependency).
 
 ### Changed (E2E-Required-Check-Runbook auf aktiven Branch-Protection-Stand korrigiert — 2026-08-08)
 
