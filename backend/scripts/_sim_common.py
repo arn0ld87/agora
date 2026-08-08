@@ -123,6 +123,39 @@ def uses_max_completion_tokens(model: str) -> bool:
     return False
 
 
+_GPT5_MODEL_RE = re.compile(r"^gpt-5(?:\.(\d+))?(?:-|$)")
+
+
+def supports_reasoning_effort_none(model: str) -> bool:
+    """True wenn das Modell ``reasoning_effort: "none"`` akzeptiert.
+
+    Hintergrund: GPT-5.x verlangt bei Function-Tools auf
+    ``/v1/chat/completions`` ein explizites ``reasoning_effort: "none"`` —
+    ohne den Parameter greift serverseitig ein Reasoning-Default und
+    Tools + Reasoning gibt es nur auf ``/v1/responses`` (400
+    ``Function tools with reasoning_effort are not supported ...``).
+
+    **Wichtig:** Das ursprüngliche ``gpt-5`` (5.0, ohne Minor-Version)
+    kennt ``"none"`` NICHT — dort sind nur ``minimal``…``high`` gültig.
+    Erst ab Minor-Version 5.1 (``gpt-5.1``, ``gpt-5.6-luna`` etc.) ist
+    ``"none"`` ein gültiger Wert. Modelle ohne erkennbare Minor-Version
+    (``gpt-5``, ``gpt-5-mini``, ``gpt-5-turbo``) gelten als 5.0 und
+    bekommen den Parameter NICHT gesetzt.
+
+    Heuristik: Modellname (case-insensitiv, getrimmt) matched
+    ``gpt-5``, optional gefolgt von ``.<minor>``, danach ``-`` oder Ende.
+    Minor-Version muss vorhanden und ``>= 1`` sein.
+    """
+    lowered = model.strip().lower()
+    match = _GPT5_MODEL_RE.match(lowered)
+    if match is None:
+        return False
+    minor = match.group(1)
+    if minor is None:
+        return False
+    return int(minor) >= 1
+
+
 def build_camel_completion_params(
     *,
     model: str,
@@ -131,11 +164,16 @@ def build_camel_completion_params(
     """Baut den Token-Limit-Block für ``ModelFactory.create()``.
 
     Liefert ``{"max_completion_tokens": N}`` für GPT-5/o1/o3/o4 und
-    ``{"max_tokens": N}`` für alle anderen Modelle. Genau ein Schlüssel
-    pro Aufruf — OpenAI lehnt unbekannte Parameter strikt ab.
+    ``{"max_tokens": N}`` für alle anderen Modelle. Für GPT-5.1+
+    (nicht das ursprüngliche GPT-5.0) wird zusätzlich
+    ``reasoning_effort: "none"`` gesetzt, sonst schlagen Function-Tool-
+    Calls mit 400 fehl (siehe ``supports_reasoning_effort_none``).
     """
     key = "max_completion_tokens" if uses_max_completion_tokens(model) else "max_tokens"
-    return {key: completion_max_tokens}
+    params: dict[str, Any] = {key: completion_max_tokens}
+    if supports_reasoning_effort_none(model):
+        params["reasoning_effort"] = "none"
+    return params
 
 
 def build_camel_extra_body(

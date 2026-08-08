@@ -5,6 +5,10 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (GPT-5.x-Familie: 400er bei Function-Tools im CAMEL-Sim-Pfad — 2026-08-08)
+
+- **Jeder tool-fähige CAMEL-Agent-Call gegen GPT-5.1+-Modelle (z. B. `gpt-5.6-luna`) scheiterte mit `400 — Function tools with reasoning_effort are not supported ... set reasoning_effort to 'none'`.** `build_camel_completion_params` in `backend/scripts/_sim_common.py` setzt jetzt für GPT-5.1+ explizit `reasoning_effort: "none"` (neuer Helper `supports_reasoning_effort_none`, Zwilling zu `uses_max_completion_tokens`). Das ursprüngliche `gpt-5` (5.0, ohne Minor-Version) kennt `"none"` nicht und bleibt unverändert — die Heuristik trennt Modelle ohne erkennbare Minor-Version (5.0) von `gpt-5.1`+ anhand des Modellnamens. Zwilling des Temperature-Quirks aus #1096, diesmal im OASIS/CAMEL-Pfad statt im `LLMClient`. (#1112)
+
 ### Changed (E2E-Required-Check-Runbook auf aktiven Branch-Protection-Stand korrigiert — 2026-08-08)
 
 - **Das Runbook beschrieb die Required-Erzwingung noch als offen und zeigte ein destruktives `PUT`-Beispiel mit nur sechs Playwright-Checks.** Der dokumentierte Status entspricht jetzt der aktiven `main`-Branch-Protection mit 17 Required Checks; das CLI-Beispiel liest den aktuellen Satz, ergänzt die sechs Playwright-Smokes idempotent und aktualisiert ausschließlich `required_status_checks`, sodass CodeQL-, Dependency-, Schema-, Contract-, Security-, Version- und PR-Smoke-Gates erhalten bleiben. (#1089)
