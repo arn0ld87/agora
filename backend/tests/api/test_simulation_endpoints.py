@@ -441,3 +441,86 @@ def test_interview_batch_direct_path_per_agent_error_surfaces_top_level(
     assert payload["error"] == provider_error
     assert "code" not in payload
     assert payload["data"] == fake_result
+
+
+def test_interview_batch_code_field_is_mirrored_when_present(client, monkeypatch):
+    """``code`` ist Teil des Vertrags (``InterviewEnvelope``), auch wenn kein
+    aktueller ``SimulationRunner``-Pfad ihn setzt — die Mirroring-Logik selbst
+    muss trotzdem am Endpunkt strukturgleich zum Ist-Verhalten bleiben."""
+    _mock_interview_backend_available(monkeypatch)
+    fake_result = {
+        "success": False,
+        "error": "Rate limit exceeded",
+        "code": "rate_limited",
+        "timestamp": "2026-08-01T12:00:00",
+    }
+    monkeypatch.setattr(
+        "app.api.simulation_interviews.SimulationRunner.interview_agents_batch",
+        staticmethod(lambda **_kwargs: fake_result),
+    )
+    response = client.post(
+        "/api/simulation/interview/batch",
+        json={
+            "simulation_id": VALID_SIM_ID,
+            "interviews": [{"agent_id": 1, "prompt": "Hallo?"}],
+        },
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is False
+    assert payload["error"] == "Rate limit exceeded"
+    assert payload["code"] == "rate_limited"
+    assert payload["data"] == fake_result
+
+
+def test_interview_single_success_envelope_preserves_data(client, monkeypatch):
+    """Der ``/interview``-Einzelendpunkt teilt sich ``_echo_result`` mit
+    ``/interview/batch`` — dieselbe Envelope-Form muss auch hier gelten."""
+    _mock_interview_backend_available(monkeypatch)
+    fake_result = {
+        "success": True,
+        "agent_id": 1,
+        "mode": "direct",
+        "result": {"agent_id": 1, "platform": "reddit", "response": "Passt."},
+        "timestamp": "2026-08-01T12:00:00",
+    }
+    monkeypatch.setattr(
+        "app.api.simulation_interviews.SimulationRunner.interview_agent",
+        staticmethod(lambda **_kwargs: fake_result),
+    )
+    response = client.post(
+        "/api/simulation/interview",
+        json={"simulation_id": VALID_SIM_ID, "agent_id": 1, "prompt": "Hallo?"},
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert "error" not in payload
+    assert "code" not in payload
+    assert payload["data"] == fake_result
+
+
+def test_interview_all_success_envelope_preserves_data(client, monkeypatch):
+    """``/interview/all`` teilt sich ebenfalls ``_echo_result`` — vierter der
+    vier betroffenen Endpunkte aus #1005."""
+    _mock_interview_backend_available(monkeypatch)
+    fake_result = {
+        "success": True,
+        "mode": "direct",
+        "result": {"results": {"reddit_1": {"agent_id": 1, "response": "Klar."}}},
+        "timestamp": "2026-08-01T12:00:00",
+    }
+    monkeypatch.setattr(
+        "app.api.simulation_interviews.SimulationRunner.interview_all_agents",
+        staticmethod(lambda **_kwargs: fake_result),
+    )
+    response = client.post(
+        "/api/simulation/interview/all",
+        json={"simulation_id": VALID_SIM_ID, "prompt": "Wie geht's?"},
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert "error" not in payload
+    assert "code" not in payload
+    assert payload["data"] == fake_result

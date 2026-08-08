@@ -80,6 +80,7 @@ from app.contracts.embedding_contract import (
     EmbeddingMigrationJobResponse,
     EmbeddingModelMetadata,
 )
+from app.contracts.interview_envelope_contract import InterviewEnvelope
 
 # schemas/ liegt im Repo-Root, dump_schemas.py liegt in backend/app/contracts/
 OUT_DIR = Path(__file__).resolve().parents[3] / "schemas"
@@ -143,6 +144,8 @@ CONTRACTS: dict[str, type] = {
     "embedding-migration-job-response.schema.json": EmbeddingMigrationJobResponse,
     "embedding-index-version.schema.json": EmbeddingIndexVersion,
     "embedding-model-metadata.schema.json": EmbeddingModelMetadata,
+    # Interview-Envelope (Issue #1005)
+    "interview-envelope.schema.json": InterviewEnvelope,
 }
 
 

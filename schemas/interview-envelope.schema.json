@@ -1,0 +1,47 @@
+{
+  "$id": "https://alexle135.de/schemas/interview-envelope.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Antwort-Envelope der Interview-Endpunkte (Legacy-Form, HTTP 200 immer).\n\n``error``/``code`` sind nur bei ``success=False`` gesetzt und auch dann nur,\nwenn eine Fehlerursache tats\u00e4chlich ermittelt werden konnte (additiv\ngespiegelt aus ``data`` bzw. aus der Direct-Pfad-Aggregation) \u2014 analog zum\nbisherigen ``if error: envelope[\"error\"] = error``-Verhalten. Bei\n``model_dump(exclude_none=True)`` verschwinden nicht gesetzte Felder aus\nder Antwort, statt als ``null`` zu erscheinen.",
+  "properties": {
+    "code": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Code"
+    },
+    "data": {
+      "additionalProperties": true,
+      "title": "Data",
+      "type": "object"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    },
+    "success": {
+      "title": "Success",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "success",
+    "data"
+  ],
+  "title": "InterviewEnvelope",
+  "type": "object"
+}
