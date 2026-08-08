@@ -8,6 +8,9 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 ### Fixed (GPT-5.x-Familie: 400er bei Function-Tools im CAMEL-Sim-Pfad — 2026-08-08)
 
 - **Jeder tool-fähige CAMEL-Agent-Call gegen GPT-5.1+-Modelle (z. B. `gpt-5.6-luna`) scheiterte mit `400 — Function tools with reasoning_effort are not supported ... set reasoning_effort to 'none'`.** `build_camel_completion_params` in `backend/scripts/_sim_common.py` setzt jetzt für GPT-5.1+ explizit `reasoning_effort: "none"` (neuer Helper `supports_reasoning_effort_none`, Zwilling zu `uses_max_completion_tokens`). Das ursprüngliche `gpt-5` (5.0, ohne Minor-Version) kennt `"none"` nicht und bleibt unverändert — die Heuristik trennt Modelle ohne erkennbare Minor-Version (5.0) von `gpt-5.1`+ anhand des Modellnamens. Zwilling des Temperature-Quirks aus #1096, diesmal im OASIS/CAMEL-Pfad statt im `LLMClient`. (#1112)
+### Fixed (Trivy-Gate zog MEDIUM-CVEs hart, obwohl es auf CRITICAL/HIGH konfiguriert ist — 2026-08-08)
+
+- **`build-only` (Docker-Image-Workflow) blockierte alle PRs wegen zweier neuer MEDIUM-pypdf-CVEs:** Die trivy-action ignoriert im SARIF-Modus den `severity`-Filter, solange `limit-severities-for-sarif` fehlt — der `exit-code: 1` feuerte damit auf jede fixbare CVE statt nur auf CRITICAL/HIGH. Flag ergänzt; zusätzlich pypdf im Lockfile auf 6.15.0 angehoben (CVE-2026-71852, CVE-2026-71870, transitive Dependency).
 
 ### Changed (E2E-Required-Check-Runbook auf aktiven Branch-Protection-Stand korrigiert — 2026-08-08)
 
