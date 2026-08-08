@@ -5,6 +5,11 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (Hypothesen-Sortierung suggerierte ein Ranking-Signal, das nicht existiert — 2026-08-08)
+
+- **`dedup_and_cap_hypotheses` sortierte über `_sort_key` primär nach `confidence_score` — ein Feld, das keiner der drei produktiven Erzeuger setzt, weil `ReportSectionHypothesisModel` als strict-Contract es gar nicht kennt.** In Produktion war `score` durchgängig `0.0`; die Sortierung suggerierte damit eine Rangfolge nach Konfidenz, die es nie gab (Codex-Finding zu PR #1078, siehe #1073). Das betraf beide Auswahlentscheidungen: welche fünf Hypothesen sichtbar sind und welche fünfzig im Appendix überleben.
+- **`confidence_score` ist aus `_sort_key` entfernt, statt einen transienten Schlüssel dafür einzuführen.** Die Reihenfolge ist fachlich gleichgültig, weil Hypothesen per Definition unbelegt sind (Lead-Entscheidung, Variante 2 aus #1083) — sortiert wird jetzt allein nach `suggested_evidence`-Länge (das einzige ehrliche Signal, das über die Producer-Grenze existiert) mit dem Hypothesentext als stabilem, deterministischen Tiebreaker. Keine Contract-Erweiterung. (#1083)
+
 ### Changed (E2E-Required-Check-Runbook auf aktiven Branch-Protection-Stand korrigiert — 2026-08-08)
 
 - **Das Runbook beschrieb die Required-Erzwingung noch als offen und zeigte ein destruktives `PUT`-Beispiel mit nur sechs Playwright-Checks.** Der dokumentierte Status entspricht jetzt der aktiven `main`-Branch-Protection mit 17 Required Checks; das CLI-Beispiel liest den aktuellen Satz, ergänzt die sechs Playwright-Smokes idempotent und aktualisiert ausschließlich `required_status_checks`, sodass CodeQL-, Dependency-, Schema-, Contract-, Security-, Version- und PR-Smoke-Gates erhalten bleiben. (#1089)
