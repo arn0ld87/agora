@@ -29,8 +29,11 @@ TODAY="$(date -u +%F)"
 # Inklusiv: am Cutoff-Tag selbst muss die Liste bereits leer sein (AGENTS.md L76
 # verbietet CVE-Ausnahmen ohne Hardstop; ein Tag ``< Hardcutoff`` wuerde das
 # aushebeln — das letzte 24-Stunden-Fenster vor dem Hardstop waere unguelltig).
-if [[ ! "$TODAY" >= "$HARDCUTOFF" ]]; then
-  echo "OK: $TODAY ist vor oder am Hardcutoff $HARDCUTOFF — pip-audit --ignore-vuln ist erlaubt."
+# ``>=`` existiert in ``[[ ]]`` nicht (Syntaxfehler, Exit 2 bei jedem Lauf);
+# ``<`` ist der lexikografische String-Vergleich und exakt äquivalent zu
+# ``! (TODAY >= HARDCUTOFF)``.
+if [[ "$TODAY" < "$HARDCUTOFF" ]]; then
+  echo "OK: $TODAY ist vor dem Hardcutoff $HARDCUTOFF — pip-audit --ignore-vuln ist erlaubt."
   exit 0
 fi
 
