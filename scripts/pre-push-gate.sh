@@ -53,7 +53,7 @@ fail()  { printf "${RED}  ✗ %s${RESET}\n" "$*"; exit 1; }
 # ---------------------------------------------------------------------------
 run_backend() {
   step "Backend: ruff check"
-  (cd backend && uv run ruff check app/ tests/) || fail "ruff check"
+  (cd backend && uv run ruff check .) || fail "ruff check"
 
   if [ "${GATE_FULL:-0}" = "1" ]; then
     step "Backend: mypy app/ (GATE_FULL=1)"

@@ -386,7 +386,7 @@ jobs:
 
       - name: Ruff lint
         working-directory: backend
-        run: uv run ruff check app/ tests/
+        run: uv run ruff check .
 
       - name: Mypy
         working-directory: backend

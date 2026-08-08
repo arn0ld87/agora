@@ -235,7 +235,10 @@ def test_ci_pr_gate_ruff_scope_covers_tests_dir() -> None:
     (Akzeptanzkriterium 2 aus Issue #881)."""
     ci_scope = _extract_ruff_scope(_ci_ruff_run_command())
 
-    assert "tests/" in ci_scope or "tests" in ci_scope, (
+    # "." lintet das gesamte Backend-Verzeichnis und schliesst tests/ (und
+    # scripts/, siehe Ruff-Scope-Luecke hinter dem main-Rotlauf vom 2026-08-08)
+    # mit ein.
+    assert "." in ci_scope or "tests/" in ci_scope or "tests" in ci_scope, (
         "Das CI-PR-Gate muss backend/tests/ linten, damit Lint-Verstoesse dort "
         f"das PR-Gate rot werden lassen. Gefundener Scope: {sorted(ci_scope)!r}."
     )

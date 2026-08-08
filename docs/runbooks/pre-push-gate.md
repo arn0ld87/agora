@@ -54,7 +54,7 @@ Exit-Codes: `0` = alle Gates grün · `1` = mind. ein Gate rot · `2` = falscher
 
 | # | Gate | CI-Mirror | Pflicht? |
 |---|---|---|---|
-| 1 | `ruff check app/ tests/` | Backend PR smoke gate | ja |
+| 1 | `ruff check .` | Backend PR smoke gate | ja |
 | 2 | `mypy app` | Backend PR smoke gate | nur mit `GATE_FULL=1` |
 | 3 | `pytest tests/contracts/ -x -q` | Backend PR smoke gate + Pydantic-Contract-Tests | ja |
 | 4 | Backend-Test-Subset (`pytest -n 4`) | Backend tests + lint (volle Suite) | nur mit `GATE_FULL=1` |
@@ -88,7 +88,7 @@ Niemals `--no-verify` benutzen. Statt dessen:
 - **Schemata rot** → `cd backend && uv run python -m app.contracts.dump_schemas && git add schemas/` und committen
 - **STATUS.md rot** → `bash scripts/sync-status.sh` und committen
 - **Test rot** → fix + neuen Test, dann nochmal
-- **Lint rot** → `cd backend && uv run ruff check app/ tests/ --fix` (autofix), manuell nachprüfen, committen
+- **Lint rot** → `cd backend && uv run ruff check . --fix` (autofix), manuell nachprüfen, committen
 - **Typecheck rot** → meist fehlende Fixture-Keys in Tests; gezielt fixen
 
 ## CI-Spiegel-Disziplin
