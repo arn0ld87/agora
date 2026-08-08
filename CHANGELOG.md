@@ -5,6 +5,14 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Changed (E2E-Required-Check-Runbook auf aktiven Branch-Protection-Stand korrigiert — 2026-08-08)
+
+- **Das Runbook beschrieb die Required-Erzwingung noch als offen und zeigte ein destruktives `PUT`-Beispiel mit nur sechs Playwright-Checks.** Der dokumentierte Status entspricht jetzt der aktiven `main`-Branch-Protection mit 17 Required Checks; das CLI-Beispiel liest den aktuellen Satz, ergänzt die sechs Playwright-Smokes idempotent und aktualisiert ausschließlich `required_status_checks`, sodass CodeQL-, Dependency-, Schema-, Contract-, Security-, Version- und PR-Smoke-Gates erhalten bleiben. (#1089)
+
+### Changed (Lokales Pre-Push-Gate auf schnellen Sanity-Check verschlankt — 2026-08-08)
+
+- **`scripts/pre-push-gate.sh` ist kein vollständiger CI-Spiegel mehr:** `mypy`, das Backend-Test-Subset und die Frontend-Vitest-Suite laufen lokal nur noch mit `GATE_FULL=1`; per Default bleiben ruff, Contract-Tests, Schema-Drift, `sync-status`, ESLint, `vue-tsc`, Schema-Spiegel-Smoke und Routing-Check (voller Lauf ~63 s statt mehrerer Minuten). Absicherung unverändert über die Required-PR-Smoke-Gates der CI (Backend: `mypy app` + Test-Subset; Frontend: `bun run test` + `vite build`). Ersetzt die frühere Zusage, dass mypy und Vitest lokal Pflicht bleiben. Runbook `docs/runbooks/pre-push-gate.md` entsprechend aktualisiert. (#1127)
+
 ### Fixed (Budget-Enforcement griff nicht in Report-Resume und Prepare-Phasen — 2026-08-06)
 
 - **`POST /api/runs/<id>/resume` baute seinen `LLMClient` ohne `run_id` — ein fortgesetzter Report lief ohne jede Budgetdurchsetzung, selbst mit hartem Budget am Run.** Der Resume-Client entsteht jetzt aus der beim Original-Start gelockten Stage-Route via `LLMClient.from_route(..., run_id=...)` (SSoT aus #817, keine zweite Client-Bauweise neben der Route); Routing-/Key-Fehler antworten weiterhin synchron mit 422. Ein `BudgetExceededError` im Resume-Worker endet als `stopped` + `termination_reason` statt `failed` (Reihenfolge `fail_task()` → `mark_budget_abort()`, #978/#841). (#984)
