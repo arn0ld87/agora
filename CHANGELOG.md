@@ -9,6 +9,9 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 - **`dedup_and_cap_hypotheses` sortierte über `_sort_key` primär nach `confidence_score` — ein Feld, das keiner der drei produktiven Erzeuger setzt, weil `ReportSectionHypothesisModel` als strict-Contract es gar nicht kennt.** In Produktion war `score` durchgängig `0.0`; die Sortierung suggerierte damit eine Rangfolge nach Konfidenz, die es nie gab (Codex-Finding zu PR #1078, siehe #1073). Das betraf beide Auswahlentscheidungen: welche fünf Hypothesen sichtbar sind und welche fünfzig im Appendix überleben.
 - **`confidence_score` ist aus `_sort_key` entfernt, statt einen transienten Schlüssel dafür einzuführen.** Die Reihenfolge ist fachlich gleichgültig, weil Hypothesen per Definition unbelegt sind (Lead-Entscheidung, Variante 2 aus #1083) — sortiert wird jetzt allein nach `suggested_evidence`-Länge (das einzige ehrliche Signal, das über die Producer-Grenze existiert) mit dem Hypothesentext als stabilem, deterministischen Tiebreaker. Keine Contract-Erweiterung. (#1083)
+### Fixed (Trivy-Gate zog MEDIUM-CVEs hart, obwohl es auf CRITICAL/HIGH konfiguriert ist — 2026-08-08)
+
+- **`build-only` (Docker-Image-Workflow) blockierte alle PRs wegen zweier neuer MEDIUM-pypdf-CVEs:** Die trivy-action ignoriert im SARIF-Modus den `severity`-Filter, solange `limit-severities-for-sarif` fehlt — der `exit-code: 1` feuerte damit auf jede fixbare CVE statt nur auf CRITICAL/HIGH. Flag ergänzt; zusätzlich pypdf im Lockfile auf 6.15.0 angehoben (CVE-2026-71852, CVE-2026-71870, transitive Dependency).
 
 ### Changed (E2E-Required-Check-Runbook auf aktiven Branch-Protection-Stand korrigiert — 2026-08-08)
 

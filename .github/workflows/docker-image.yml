@@ -224,6 +224,13 @@ jobs:
           # Documented upstream blockers are managed via .trivyignore.
           exit-code: "1"
           ignore-unfixed: true
+          # Ohne dieses Flag ignoriert die trivy-action im SARIF-Modus den
+          # severity-Filter ("Building SARIF report with all severities") —
+          # der exit-code feuert dann auf JEDE fixbare CVE, auch MEDIUM/LOW.
+          # Genau so haben zwei neue MEDIUM-pypdf-CVEs am 2026-08-08 alle
+          # PRs blockiert, obwohl das Gate laut severity nur CRITICAL,HIGH
+          # hart ziehen soll.
+          limit-severities-for-sarif: true
 
       - name: Upload Trivy SARIF
         if: always() && hashFiles('trivy-results.sarif') != ''
