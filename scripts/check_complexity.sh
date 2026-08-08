@@ -34,8 +34,16 @@ allow: set[str] = set()
 if allow_path.exists():
     for raw_line in allow_path.read_text().splitlines():
         entry = raw_line.strip()
-        if entry and not entry.startswith("#"):
-            allow.add(entry)
+        if not entry or entry.startswith("#"):
+            continue
+        # Eintraege duerfen seit #1084 einen Inline-Kommentar tragen
+        # (z. B. "pfad::name  # cc<=18") — Schluessel ist nur der Teil
+        # vor dem Kommentar. Die cc-Obergrenze prueft ausschliesslich
+        # backend/scripts/check_complexity.py (CI); dieser lokale
+        # Schnellcheck kennt keine Komplexitaetswerte pro Eintrag.
+        key = entry.partition("#")[0].strip()
+        if key:
+            allow.add(key)
 
 current_file: str | None = None
 violations: list[tuple[str, str]] = []
