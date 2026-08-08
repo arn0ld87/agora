@@ -166,6 +166,27 @@ class TestReadReadmeBadgeVersion:
         (tmp_path / "README.md").write_text(readme_content)
         assert mod.read_readme_badge_version(tmp_path) == "1.0.0"
 
+    def test_extracts_version_from_lowercase_badge_with_hex_color(self, tmp_path):
+        # Aktuelles README-Format (Release-Cut 0.9.3, 2026-08-08): kleines
+        # Label + Hex-Farbe. Die Groß-Variante oben bleibt abgedeckt.
+        mod = _load_script()
+        readme_content = (
+            "[![Version](https://img.shields.io/badge/version-0.9.3-635BFF"
+            "?style=flat-square)](./VERSION)\n"
+        )
+        (tmp_path / "README.md").write_text(readme_content)
+        assert mod.read_readme_badge_version(tmp_path) == "0.9.3"
+
+    def test_write_updates_lowercase_badge(self, tmp_path):
+        mod = _load_script()
+        (tmp_path / "README.md").write_text(
+            "[![Version](https://img.shields.io/badge/version-0.9.0-635BFF"
+            "?style=flat-square)](./VERSION)\n"
+        )
+        mod.write_readme_badge_version(tmp_path, "0.9.3")
+        assert mod.read_readme_badge_version(tmp_path) == "0.9.3"
+        assert "badge/version-0.9.3-635BFF" in (tmp_path / "README.md").read_text()
+
 
 class TestMain:
     def test_returns_0_when_all_agree(self, tmp_path, monkeypatch):
