@@ -9,11 +9,17 @@ Sanity-Check vor dem Push fährt (Lint, Contract-Tests, Schema-Drift,
 STATUS-Sync) — ohne `--no-verify`-Bypass. Das lokale Gate ist seit
 2026-08-08 bewusst **kein vollständiger CI-Spiegel mehr**: die teuren
 Schritte (`mypy`, Backend-Test-Subset, Frontend-Vitest-Suite) laufen per
-Default nur noch in der CI, die sie auf jedem PR ohnehin vollständig
-fährt (`ci.yml`: `mypy app`, `pytest --cov --cov-fail-under=60`,
-`bun run test:coverage`, `vite build`). Die CI-Statuschecks auf `main`
-sind die harte Absicherung; das lokale Gate fängt nur die häufigsten
-"lokal grün, CI rot"-Fälle in Sekunden statt Minuten.
+Default nur noch in der CI. Auf jedem normalen PR fahren die beiden
+Required-Smoke-Gates diese Prüfungen: `Backend PR smoke gate` führt
+`mypy app` und das Backend-Test-Subset (ohne Coverage) aus,
+`Frontend PR smoke gate` führt `bun run test` und `vite build` aus.
+Die vollen Coverage-Gates (`pytest --cov --cov-fail-under=60`,
+`bun run test:coverage`) laufen in den Jobs `Backend tests + lint` /
+`Frontend build + lint`, die auf PRs label-gated sind
+(`needs-backend-ci` / `needs-frontend-ci`) und außerhalb von PRs immer
+laufen. Die Required-Statuschecks sind die harte Absicherung; das
+lokale Gate fängt nur die häufigsten "lokal grün, CI rot"-Fälle in
+Sekunden statt Minuten.
 
 **Vollmodus:** `GATE_FULL=1` stellt das alte Verhalten wieder her und
 fährt zusätzlich `mypy`, das Backend-Test-Subset und die
@@ -59,6 +65,7 @@ Exit-Codes: `0` = alle Gates grün · `1` = mind. ein Gate rot · `2` = falscher
 | 9 | `vitest run` | Frontend PR smoke gate (`test:coverage`) | nur mit `GATE_FULL=1` |
 | 10 | `vite build` | Frontend PR smoke gate | nur mit `GATE_BUILD=1` |
 | 11 | Schema-Spiegel-Smoke | Frontend-Zod muss Backend-Schema spiegeln | ja |
+| 12 | Routing-Check (`scripts/check_llm_endpoint_localhost.sh`) | keiner — lokale `.env`-Prüfung, ohne `.env` Skip mit Warnung | ja (Scope `all`/`routing`) |
 
 ## Warum lokales Gate?
 

@@ -14,8 +14,10 @@
 #
 # 2026-08-08: Das lokale Gate ist ein schneller Sanity-Check, kein CI-Ersatz.
 # Die teuren Schritte (mypy, Backend-PR-Subset-Pytest, Frontend-Vitest-Suite)
-# laufen per Default NICHT mehr lokal — CI fährt sie auf jedem PR ohnehin
-# (ci.yml: mypy app, pytest --cov --cov-fail-under=60, bun run test:coverage).
+# laufen per Default NICHT mehr lokal — die Required-PR-Smoke-Gates fahren sie
+# auf jedem PR (Backend: mypy app + Test-Subset ohne Coverage; Frontend:
+# bun run test + vite build); die vollen Coverage-Gates laufen label-gated
+# bzw. außerhalb von PRs (Jobs "Backend tests + lint" / "Frontend build + lint").
 # GATE_FULL=1 stellt das alte Vollverhalten wieder her:
 #   GATE_FULL=1 bash scripts/pre-push-gate.sh backend
 #
