@@ -180,6 +180,7 @@ jobs:
           allowed-endpoints: >
             api.github.com:443
             astral.sh:443
+            raw.githubusercontent.com:443
             download.pytorch.org:443
             download-r2.pytorch.org:443
             files.pythonhosted.org:443
@@ -351,6 +352,7 @@ jobs:
           allowed-endpoints: >
             api.github.com:443
             astral.sh:443
+            raw.githubusercontent.com:443
             download.pytorch.org:443
             download-r2.pytorch.org:443
             files.pythonhosted.org:443
