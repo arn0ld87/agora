@@ -1,7 +1,13 @@
 """Slice 3 (Issue #495): Hypothesen-Cap + Appendix pro Section.
 
-Dedup via Token-Set-Ratio (rapidfuzz) ≥ 0.88, Sort by confidence_score desc,
-Split: [:5] visible, [5:] appendix.
+Dedup via Token-Set-Ratio (rapidfuzz) >= 0.88, Sort by suggested_evidence-Laenge
+desc (Text als stabiler Tiebreaker), Split: [:5] visible, [5:] appendix.
+
+Issue #1083: ``confidence_score`` ist kein Ranking-Signal, weil keiner der
+produktiven Erzeuger es setzt (``ReportSectionHypothesisModel`` ist ein
+strict-Contract ohne dieses Feld). Die Reihenfolge ist fachlich gleichgueltig,
+weil Hypothesen per Definition unbelegt sind -- sortiert wird deshalb nur nach
+der Evidence-Naehe, die tatsaechlich als Signal existiert.
 """
 from __future__ import annotations
 
@@ -70,10 +76,16 @@ def dedup_and_cap_hypotheses(
             deduped.append(dict(candidate))
 
     # --- Sort ------------------------------------------------------------------
-    def _sort_key(h: dict[str, Any]) -> tuple[float, int]:
-        score = float(h.get("confidence_score") or 0.0)
+    # Issue #1083: kein confidence_score-Signal mehr. Keiner der produktiven
+    # Erzeuger setzt das Feld (strict-Contract ``ReportSectionHypothesisModel``
+    # kennt es nicht), eine Sortierung danach haette also nur eine Rangfolge
+    # suggeriert, die es fachlich nicht gibt. Sortiert wird deshalb allein
+    # nach der Anzahl ``suggested_evidence`` (ehrliches Evidence-Naehe-Signal),
+    # mit dem Hypothesentext als stabilem, deterministischem Tiebreaker.
+    def _sort_key(h: dict[str, Any]) -> tuple[int, str]:
         ev_len = len(h.get("suggested_evidence") or [])
-        return (-score, -ev_len)
+        text = str(h.get("hypothesis_text") or "")
+        return (-ev_len, text)
 
     deduped.sort(key=_sort_key)
 
@@ -83,28 +95,16 @@ def dedup_and_cap_hypotheses(
 
     # --- Hard cap (Issue #1073) -------------------------------------------------
     # Der Slice greift auf die von ``_sort_key`` erzeugte Reihenfolge zu.
-    #
-    # Wie belastbar diese Rangfolge ist, hängt davon ab, wer die Hypothesen
-    # erzeugt hat: die drei produktiven Pfade (``agent.py`` zweimal,
-    # ``text_verification.py::as_hypothesis``) setzen KEIN ``confidence_score``,
-    # weil ``ReportSectionHypothesisModel`` ein strict-Contract ohne dieses Feld
-    # ist. ``_sort_key`` liest dort also durchgängig 0.0, und effektiv sortiert
-    # allein die Zahl der ``suggested_evidence`` — bei Gleichstand bleibt die
-    # Erzeugungsreihenfolge stehen (Pythons sort ist stabil).
-    #
-    # Der Cap verwirft damit nicht zuverlässig "die schwächsten", sondern die
-    # letzten einer nur schwach qualitätskorrelierten Reihenfolge. Das ist
-    # bewusst so belassen: der akute Defekt ist der harte Abbruch der
-    # Reportgenerierung, nicht die Auswahl. Ein belastbares Ranking-Signal über
-    # diese Grenze zu tragen ist Gegenstand von Issue #1083.
+    # Der Cap verwirft die letzten Eintraege einer nach Evidence-Naehe
+    # sortierten Liste, nicht "die schwaechsten" im Sinne einer Confidence —
+    # ein solches Signal traegt die Producer-Grenze bewusst nicht (#1083).
     if len(appendix) > _APPENDIX_CAP:
         dropped = appendix[_APPENDIX_CAP:]
         appendix = appendix[:_APPENDIX_CAP]
         logger.warning(
             "hypothesis_cap: appendix exceeded contract limit of %d, "
-            "dropped %d trailing hypotheses (sort order: confidence_score "
-            "desc, then suggested_evidence count desc; producers currently "
-            "emit no confidence_score — see #1083)",
+            "dropped %d trailing hypotheses (sort order: suggested_evidence "
+            "count desc, then hypothesis_text asc — see #1083)",
             _APPENDIX_CAP,
             len(dropped),
         )
