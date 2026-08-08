@@ -210,7 +210,7 @@ Vor Push und PR wird für jedes Issue nachgewiesen:
 
 - `docs/STATUS.md`: aktualisiert, wenn sich der verifizierte Istzustand geändert hat, sonst `NICHT BETROFFEN` mit Begründung,
 - `ROADMAP.md`: aktualisiert bei geändertem Release-Gate oder strategischer Reihenfolge, sonst `NICHT BETROFFEN` mit Begründung,
-- `CHANGELOG.md`: aktualisiert bei ausgeliefertem Nutzer- oder Betriebsverhalten, sonst `NICHT BETROFFEN` mit Begründung,
+- CHANGELOG-Fragment `changelog.d/<pr-nr>-<slug>.md`: angelegt bei ausgeliefertem Nutzer- oder Betriebsverhalten (nie direkt `CHANGELOG.md` editieren; Konvention in `changelog.d/README.md`), sonst `NICHT BETROFFEN` mit Begründung,
 - Folge-Issue: erstellt für notwendige, aber nicht erledigte Folgearbeit, sonst `NICHT BETROFFEN` mit Begründung.
 
 Fehlt ein sachlich erforderliches Datei-Artefakt, wird nicht gepusht. Der bestehende lokale Issue-Commit wird einmalig korrigiert und amendiert; danach läuft die Lead-Verifikation für den neuen SHA erneut.

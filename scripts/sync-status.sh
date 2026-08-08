@@ -17,6 +17,17 @@ set -euo pipefail
 #                                                      # lesen noch verifizieren
 #                                                      # (alternativ env
 #                                                      # SYNC_STATUS_SKIP_BACKEND_COUNT=1)
+#   bash scripts/sync-status.sh --skip-counts      # wie --skip-backend-count, aber
+#                                                  # zusaetzlich auch der Frontend-
+#                                                  # Test-Files-Zaehler: beide Zeilen
+#                                                  # werden 1:1 aus STATUS.md
+#                                                  # uebernommen (alternativ env
+#                                                  # SYNC_STATUS_SKIP_COUNTS=1).
+#                                                  # Standard fuer PR-Gates: Zaehler
+#                                                  # werden nur noch in dedizierten
+#                                                  # Refresh-Laeufen aktualisiert,
+#                                                  # damit parallele PRs nicht auf
+#                                                  # denselben Zeilen kollidieren.
 #
 # Die einzige teure Groesse ist die Backend-Testanzahl: `pytest --collect-only`
 # importiert jedes Testmodul und damit die komplette App (Flask, Neo4j-Treiber,
@@ -44,12 +55,15 @@ CACHE_FILE="$CACHE_DIR/backend-tests-collected"
 CHECK_MODE=false
 USE_CACHE=true
 SKIP_BACKEND_COUNT=false
+SKIP_COUNTS=false
 [[ "${SYNC_STATUS_SKIP_BACKEND_COUNT:-}" == "1" ]] && SKIP_BACKEND_COUNT=true
+[[ "${SYNC_STATUS_SKIP_COUNTS:-}" == "1" ]] && { SKIP_COUNTS=true; SKIP_BACKEND_COUNT=true; }
 for arg in "$@"; do
   case "$arg" in
     --check) CHECK_MODE=true ;;
     --no-cache) USE_CACHE=false ;;
     --skip-backend-count) SKIP_BACKEND_COUNT=true ;;
+    --skip-counts) SKIP_COUNTS=true; SKIP_BACKEND_COUNT=true ;;
     *) echo "WARNING: unbekanntes Argument '$arg' ignoriert" >&2 ;;
   esac
 done
@@ -160,7 +174,20 @@ else
   COLLECT_FAILURE_REASON="uv ist nicht installiert — Backend-Testanzahl nicht messbar"
 fi
 
-FRONTEND_TEST_FILES=$(find "$REPO_ROOT/frontend/src" \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \) 2>/dev/null | wc -l | tr -d ' ')
+if [[ "$SKIP_COUNTS" == true ]]; then
+  # Analog zur Backend-Zeile: bestehenden Wert 1:1 uebernehmen, damit die
+  # Frontend-Zaehler-Zeile im Diff nie als Drift auffaellt. Zaehler werden
+  # ausschliesslich in dedizierten Refresh-Laeufen (sync-status.sh ohne
+  # Skip-Flags) aktualisiert — nicht in jedem PR, sonst kollidieren
+  # parallele PRs auf derselben Zeile.
+  EXISTING_FE_LINE=$(grep -m1 '| Frontend Test-Files |' "$STATUS_FILE" 2>/dev/null || true)
+  if [[ -n "$EXISTING_FE_LINE" ]]; then
+    FRONTEND_TEST_FILES=$(awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $3); print $3}' <<<"$EXISTING_FE_LINE")
+  fi
+  FRONTEND_TEST_FILES="${FRONTEND_TEST_FILES:-unknown}"
+else
+  FRONTEND_TEST_FILES=$(find "$REPO_ROOT/frontend/src" \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \) 2>/dev/null | wc -l | tr -d ' ')
+fi
 
 # ---------------------------------------------------------------------------
 # Build replacement blocks (content between markers, without the marker lines)

@@ -125,7 +125,7 @@ Nur die zuständige Quelle ändern:
 
 - tatsächlicher Istzustand → `docs/STATUS.md`
 - Release-Gate oder strategische Reihenfolge → `ROADMAP.md`
-- ausgeliefertes Verhalten → `CHANGELOG.md`
+- ausgeliefertes Verhalten → Fragment `changelog.d/<pr-nr>-<slug>.md` (nie direkt `CHANGELOG.md`; Konvention in `changelog.d/README.md`)
 - konkrete Folgearbeit → GitHub Issue
 - Architekturentscheidung → ADR
 - operativer Ablauf → Runbook

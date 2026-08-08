@@ -87,6 +87,16 @@ Tags.
 
 ### 1. CHANGELOG `[Unreleased]` → finale Version
 
+Zuerst offene Fragmente einsammeln — PRs schreiben seit 2026-08-08 nicht mehr
+direkt in `CHANGELOG.md`, sondern legen Fragmente unter `changelog.d/` ab:
+
+```bash
+python3 scripts/collect-changelog.py   # faltet changelog.d/ unter [Unreleased]
+python3 scripts/collect-changelog.py --check   # muss danach "OK" melden
+```
+
+Erst danach den Block umbenennen:
+
 ```diff
 -## [Unreleased]
 +## [0.10.0] — 2026-06-01
