@@ -12,6 +12,11 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 ### Changed (Lokales Pre-Push-Gate auf schnellen Sanity-Check verschlankt — 2026-08-08)
 
 - **`scripts/pre-push-gate.sh` ist kein vollständiger CI-Spiegel mehr:** `mypy`, das Backend-Test-Subset und die Frontend-Vitest-Suite laufen lokal nur noch mit `GATE_FULL=1`; per Default bleiben ruff, Contract-Tests, Schema-Drift, `sync-status`, ESLint, `vue-tsc`, Schema-Spiegel-Smoke und Routing-Check (voller Lauf ~63 s statt mehrerer Minuten). Absicherung unverändert über die Required-PR-Smoke-Gates der CI (Backend: `mypy app` + Test-Subset; Frontend: `bun run test` + `vite build`). Ersetzt die frühere Zusage, dass mypy und Vitest lokal Pflicht bleiben. Runbook `docs/runbooks/pre-push-gate.md` entsprechend aktualisiert. (#1127)
+### Changed (Dependency-Caching für uv und bun in der Haupt-CI — 2026-08-08)
+
+- **`backend`- und `backend-pr-gate`-Job installieren `uv` jetzt über `astral-sh/setup-uv` statt manuell per `pip install`** (`enable-cache: true`, `cache-dependency-glob: backend/uv.lock`) — derselbe gepinnte SHA (`37802adc94f370d6bfd71619e3f0bf239e1f3b78`, v7), der in `cve-monitor.yml` bereits produktiv ist. `security` bleibt unverändert: der Job installiert `uv` nur für `uv export` (kein `uv sync`, kein Paket-Download) und Bun nur für `bun audit` (kein `bun install`) — Caching hätte dort keinen Effekt gehabt.
+- **`frontend`- und `frontend-pr-gate`-Job cachen `~/.bun/install/cache`** über ein neu gepinntes `actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9` (v6.1.0), Key an den `bun.lock`-Hash gebunden. `setup-bun` selbst cacht nur die Bun-Binary, nicht die Paket-Installationen.
+- **`step-security/harden-runner`-Allowlist** der vier betroffenen Jobs um `results-receiver.actions.githubusercontent.com:443` und `*.blob.core.windows.net:443` ergänzt — beide Endpunkte sind für den GitHub-Actions-Cache-Service erforderlich. (#1087)
 
 ### Fixed (Budget-Enforcement griff nicht in Report-Resume und Prepare-Phasen — 2026-08-06)
 
