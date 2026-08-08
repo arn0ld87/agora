@@ -129,6 +129,30 @@ markers = [
     "llm: Echter LLM-Aufruf (Ollama-Instanz erforderlich). Ausführen mit: pytest -m llm",
     "perf: Performance-Budget-Tests (Stufe 1 deterministisch via Mock; Stufe 2 mit -m 'perf and llm' gegen echtes Ollama).",
 ]
+# Issue #1090 (E8 aus #979): belegte Upstream-Warnquellen gezielt filtern.
+# Jeder Filter ist auf Nachricht UND Modul eingegrenzt — nie auf eine ganze
+# Kategorie. Projekteigene DeprecationWarnings bleiben dadurch sichtbar und
+# gate-faehig (Beleg: tests/test_warning_filters.py). Messung an
+# tests/contracts/ am 2026-08-08: 30513 Warnungen vorher, danach nur noch
+# die nicht gefilterten Restwarnungen.
+filterwarnings = [
+    # pytest-asyncio 1.x ruft asyncio.iscoroutinefunction auf (deprecated seit
+    # Python 3.14, Entfernung 3.16). 30486 der 30513 Warnungen des
+    # contracts-Laufs; gefixt upstream erst mit Drop von Python<3.10-Support.
+    # Quelle: .venv/…/pytest_asyncio/plugin.py:166 und :429.
+    "ignore:'asyncio\\.iscoroutinefunction' is deprecated:DeprecationWarning:pytest_asyncio\\.plugin",
+    # pytest-asyncio nutzt ausserdem asyncio.get_event_loop_policy (ebenfalls
+    # deprecated seit 3.14, Entfernung 3.16).
+    # Quelle: .venv/…/pytest_asyncio/plugin.py:996.
+    "ignore:'asyncio\\.get_event_loop_policy' is deprecated:DeprecationWarning:pytest_asyncio\\.plugin",
+    # neo4j._meta nutzt dieselbe deprecated asyncio-API fuer seine
+    # Sync/Async-Erkennung. Quelle: .venv/…/neo4j/_meta.py:189.
+    "ignore:'asyncio\\.iscoroutinefunction' is deprecated:DeprecationWarning:neo4j\\._meta",
+    # opentelemetry-instrumentation-flask liest flask.__version__ (deprecated,
+    # Entfernung Flask 3.2). Quelle: .venv/…/opentelemetry/instrumentation/
+    # flask/__init__.py beim App-Import.
+    "ignore:The '__version__' attribute is deprecated:DeprecationWarning:opentelemetry\\.instrumentation\\.flask",
+]
 
 [tool.coverage.run]
 source = ["app"]
