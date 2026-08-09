@@ -308,6 +308,10 @@ export const EvidenceMapSchema = z.object({
   // Additiv mit Default: persistierte Evidence-Maps von vor #1006 tragen das
   // Feld nicht und müssen weiterhin parsen.
   degradation_log: z.array(EvidenceDegradationSchema).default([]),
+  // PR #1151: Audit-Trail regulärer Gate-Entscheidungen (Reviewer-Floor,
+  // fehlende Supporting-Evidence, Fließtext-Entfernungen). Getrennt vom
+  // degradation_log, weil nur Letzterer den Report-Status abstuft.
+  gate_decision_log: z.array(EvidenceDegradationSchema).default([]),
 }).strict().superRefine((value, ctx) => {
   const knownIds = new Set(Object.keys(value.evidence_index));
   const checkRef = (evidenceId: string, path: PropertyKey[]) => {

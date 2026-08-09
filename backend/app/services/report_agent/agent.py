@@ -7,6 +7,7 @@ from pydantic import ValidationError
 from ...utils.llm_client import LLMClient
 from ..confidence_calculator import compute_confidence
 from ..evidence_binder import bind_evidence_to_claim, detect_contradiction_penalty
+from ..evidence_identity import build_producer_key
 from .evidence import (
     degrade_sections_for_violations,
     init_evidence_map,
@@ -78,6 +79,11 @@ FORBIDDEN_EVIDENCE_TYPES = frozenset({
     "model_generated_inference",
     "section_synthesis",
 })
+
+#: Platzhalter, den GraphToolsService für stumme Interview-Plattformen einsetzt
+#: — ein Interview, das nur daraus besteht, ist fehlgeschlagen, keine Evidence.
+_INTERVIEW_NO_RESPONSE = "(No response from this platform)"
+_INTERVIEW_STRUCTURE_RE = re.compile(r"\[(?:Twitter|Reddit) Platform Response\]")
 
 
 class ReportAgent:
@@ -173,11 +179,23 @@ class ReportAgent:
         if self.evidence_map is None:
             self._active_section_unresolved_evidence.append(enriched)
             return
-        record = register_evidence_record(
-            self.evidence_map,
-            enriched,
-            scope_id=self.simulation_id,
-        )
+        try:
+            record = register_evidence_record(
+                self.evidence_map,
+                enriched,
+                scope_id=self.simulation_id,
+            )
+        except ValidationError as exc:
+            # Ein einzelnes defektes Tool-Item darf die Section nicht abbrechen;
+            # es bleibt als unresolved sichtbar statt still zu verschwinden.
+            # producer_key bewusst nicht loggen: web:-Keys tragen volle URLs,
+            # die Query-Secrets enthalten können (CodeRabbit PR #1151, Major).
+            logger.warning(
+                "register_evidence_record: Item verworfen (type=%r, %d Validierungsfehler)",
+                enriched.get("type"), len(exc.errors()),
+            )
+            self._active_section_unresolved_evidence.append(enriched)
+            return
         if record is None:
             self._active_section_unresolved_evidence.append(enriched)
             return
@@ -288,17 +306,32 @@ class ReportAgent:
         rendered_result: str,
         section_index: int,
     ) -> None:
+        # Kanonische Identität für Fakten aus dem Graphen: der Fakt-Text selbst
+        # ist die deterministische Quelle (kein freier LLM-Text), die Query
+        # bleibt außen vor — derselbe Fakt über verschiedene Queries ist
+        # dieselbe Evidence. Ohne producer_key verwirft
+        # register_evidence_record das Item still (report_06f654800817:
+        # 0 von ~40 Interview-/Fakten-Items im evidence_index).
+        def _graph_fact_item(fact: str, item_type: str, query: str, key_prefix: str) -> Optional[Dict[str, Any]]:
+            snippet = self._truncate(fact)
+            if not snippet:
+                return None
+            return {
+                "type": item_type,
+                "tool_name": tool_name,
+                "query": query,
+                "snippet": snippet,
+                "raw": fact,
+                "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
+                "producer_key": build_producer_key(key_prefix, str(fact).strip()),
+            }
+
         items: List[Dict[str, Any]] = []
         if isinstance(structured_result, InsightForgeResult):
             for fact in structured_result.semantic_facts[:10]:
-                items.append({
-                    "type": "graph_fact",
-                    "tool_name": tool_name,
-                    "query": structured_result.query,
-                    "snippet": self._truncate(fact),
-                    "raw": fact,
-                    "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
-                })
+                item = _graph_fact_item(fact, "graph_fact", structured_result.query, "graph-fact")
+                if item:
+                    items.append(item)
             for entity in structured_result.entity_insights[:8]:
                 item = {
                     "type": "entity_summary",
@@ -312,52 +345,71 @@ class ReportAgent:
                     item["producer_key"] = f"graph-node:{entity['uuid']}"
                 items.append(item)
             for chain in structured_result.relationship_chains[:8]:
-                items.append({
-                    "type": "relationship_chain",
-                    "tool_name": tool_name,
-                    "query": structured_result.query,
-                    "snippet": self._truncate(chain),
-                    "raw": chain,
-                    "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
-                })
+                item = _graph_fact_item(chain, "relationship_chain", structured_result.query, "graph-chain")
+                if item:
+                    items.append(item)
         elif isinstance(structured_result, PanoramaResult):
             for fact in structured_result.active_facts[:10]:
-                items.append({
-                    "type": "graph_fact",
-                    "tool_name": tool_name,
-                    "query": structured_result.query,
-                    "snippet": self._truncate(fact),
-                    "raw": fact,
-                    "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
-                })
+                item = _graph_fact_item(fact, "graph_fact", structured_result.query, "graph-fact")
+                if item:
+                    items.append(item)
             for fact in structured_result.historical_facts[:6]:
-                items.append({
-                    "type": "graph_fact",
-                    "tool_name": tool_name,
-                    "query": structured_result.query,
-                    "snippet": self._truncate(fact),
-                    "raw": fact,
-                    "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
-                })
+                item = _graph_fact_item(fact, "graph_fact", structured_result.query, "graph-fact")
+                if item:
+                    items.append(item)
         elif isinstance(structured_result, SearchResult):
             for fact in structured_result.facts[:10]:
-                items.append({
-                    "type": "graph_fact",
-                    "tool_name": tool_name,
-                    "query": structured_result.query,
-                    "snippet": self._truncate(fact),
-                    "raw": fact,
-                    "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
-                })
+                item = _graph_fact_item(fact, "graph_fact", structured_result.query, "graph-fact")
+                if item:
+                    items.append(item)
         elif isinstance(structured_result, InterviewResult):
-            for interview in structured_result.interviews[:6]:
+            # Jede erfolgreiche Interviewantwort wird ein eigenständig
+            # referenzierbares Evidence-Item. Identitätsbasis: Section, Topic,
+            # Agent, Frage UND Antwort-Hash — gleicher Text verschiedener
+            # Agenten kollabiert nicht, zwei Fragen an denselben Agenten
+            # bleiben unterscheidbar. source_kind wird via Typ-Mapping
+            # agent_quote (simulierte Stakeholder-Stimme, ADR-0002) —
+            # deshalb sind quote und persona_stakeholder_group Pflicht.
+            topic = (structured_result.interview_topic or "").strip()
+            for interview in structured_result.interviews[:10]:
+                response = (interview.response or "").strip()
+                # GraphToolsService liefert bei stummen Plattformen einen
+                # strukturierten Platzhalter-Text — der ist kein Interview
+                # und darf nicht als agent_quote-Evidence persistieren
+                # (Codex-Review PR #1151, P2).
+                substance = _INTERVIEW_STRUCTURE_RE.sub("", response)
+                substance = substance.replace(_INTERVIEW_NO_RESPONSE, "").strip()
+                if not substance:
+                    continue
+                # Whitespace-only Werte sind truthy — erst normalisieren, dann
+                # Fallback, sonst wirft build_producer_key ValueError.
+                agent_name = (interview.agent_name or "").strip() or "unknown-agent"
+                question = (interview.question or "").strip() or "no-question"
+                stakeholder_group = (
+                    (interview.agent_role or "").strip()
+                    or (interview.agent_name or "").strip()
+                    or "unbekannt"
+                )
+                quote_source = next(
+                    (q.strip() for q in interview.key_quotes if q and q.strip()),
+                    response,
+                )
                 items.append({
                     "type": "agent_interview",
                     "tool_name": tool_name,
-                    "query": structured_result.interview_topic,
-                    "snippet": self._truncate(interview.response),
+                    "query": topic,
+                    "snippet": self._truncate(response),
                     "raw": interview.to_dict(),
+                    "quote": quote_source[:500],
+                    "persona_stakeholder_group": stakeholder_group[:200],
                     "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
+                    "producer_key": build_producer_key(
+                        f"interview:s{section_index}",
+                        topic or "no-topic",
+                        agent_name,
+                        question,
+                        response,
+                    ),
                 })
         elif isinstance(structured_result, dict) and "results" in structured_result:
             for result in (structured_result.get("results") or [])[:8]:
@@ -569,10 +621,19 @@ class ReportAgent:
     def _finalize_section_claims(
         self,
         claims: List[Dict[str, Any]],
-    ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
+    ) -> tuple[
+        List[Dict[str, Any]],
+        List[Dict[str, Any]],
+        List[Dict[str, Any]],
+        List[Dict[str, Any]],
+    ]:
         finalized_claims: List[Dict[str, Any]] = []
         hypotheses: List[Dict[str, Any]] = []
         data_gaps: List[Dict[str, Any]] = []
+        # Slice 7 (Audit Trail): jede Routing-Entscheidung des Evidence-Gates
+        # wird als EvidenceDegradationModel-Eintrag protokolliert —
+        # section_index ergänzt der Caller (_save_evidence_section).
+        gate_decisions: List[Dict[str, Any]] = []
 
         from app.contracts.report_v3 import CLAIM_MIN_EVIDENCE_FOR_CLAIM  # noqa: PLC0415
 
@@ -638,6 +699,12 @@ class ReportAgent:
                     "rationale": rationale,
                     "suggested_evidence": [],
                 })
+                gate_decisions.append({
+                    "claim_id": str(claim.get("claim_id") or "<no-id>"),
+                    "violation": "reviewer_floor_insufficient_evidence",
+                    "action": "moved_to_hypotheses",
+                    "detail": rationale[:500],
+                })
                 continue
 
             # P0-5: Ohne eine einzige stützende Quelle ist die Aussage eine
@@ -678,6 +745,20 @@ class ReportAgent:
                     ),
                     "suggested_fix": suggestions[0],
                 })
+                # Copilot-Review PR #1151: dieser Zweig fängt auch den Fall
+                # medium/high/verified ohne jede Evidence ab (der spätere
+                # P2.1-Zweig ist dafür unerreichbar) — das Label macht die
+                # Verletzung im Audit-Trail unterscheidbar.
+                gate_decisions.append({
+                    "claim_id": str(claim.get("claim_id") or "<no-id>"),
+                    "violation": (
+                        "confidence_label_without_evidence"
+                        if not evidence and label in ("medium", "high", "verified")
+                        else "no_supporting_evidence"
+                    ),
+                    "action": "moved_to_hypotheses",
+                    "detail": rationale[:500],
+                })
                 continue
             if not evidence and label in ("medium", "high", "verified"):
                 # P2.1: medium/high/verified ohne Evidence darf nicht in claims[]
@@ -698,7 +779,7 @@ class ReportAgent:
                 continue
             finalized_claims.append(claim)
 
-        return finalized_claims, hypotheses, data_gaps
+        return finalized_claims, hypotheses, data_gaps, gate_decisions
 
     def _section_dedup_check(
         self, new_summary: str, existing: List[Dict[str, Any]]
@@ -787,6 +868,7 @@ class ReportAgent:
             )
             claims: List[Dict[str, Any]] = []
             raw_hypotheses: List[Dict[str, Any]] = []
+            gate_decisions: List[Dict[str, Any]] = []
             data_gaps: List[Dict[str, Any]] = [{
                 # ReportSectionDataGapModel.gap_id erzwingt ^gap_\d{2,}$ —
                 # ein sprechendes Präfix ("gap_section_03") lässt die gesamte
@@ -796,19 +878,44 @@ class ReportAgent:
                 "claim_text": section_title,
             }]
         else:
-            claims, raw_hypotheses, data_gaps = self._finalize_section_claims(
+            claims, raw_hypotheses, data_gaps, gate_decisions = self._finalize_section_claims(
                 self._build_claims_for_section(content)
             )
         # Aus dem Fließtext entfernte Faktenaussagen sind Hypothesen, keine
         # gelöschten Sätze — sie bleiben für den Leser nachvollziehbar.
-        raw_hypotheses = list(raw_hypotheses) + (
+        prose_hypotheses = (
             getattr(self, "_pending_prose_hypotheses", {}) or {}
         ).get(section_index, [])
+        raw_hypotheses = list(raw_hypotheses) + prose_hypotheses
         # IDs zentral neu vergeben: Claim-Routing und Fließtext-Prüfung zählen
         # jeweils ab 1, zusammengeführt kollidieren sie sonst.
         for _position, _hypothesis in enumerate(raw_hypotheses, start=1):
             if isinstance(_hypothesis, dict):
                 _hypothesis["hypothesis_id"] = f"hypothesis_{_position:02d}"
+        # Slice 7 (Audit Trail): Gate-Routing und Fließtext-Entfernungen sind
+        # Degradation-Entscheidungen und werden auditierbar protokolliert —
+        # der leere degradation_log bei 17 entfernten Aussagen
+        # (report_06f654800817) war eine Erfassungslücke, keine Absicht.
+        for _prose_hypothesis in prose_hypotheses:
+            if not isinstance(_prose_hypothesis, dict):
+                continue
+            gate_decisions.append({
+                "claim_id": str(_prose_hypothesis.get("hypothesis_id") or "<no-id>"),
+                "violation": "prose_fact_unsupported",
+                "action": "moved_to_hypotheses",
+                "detail": self._truncate(
+                    str(_prose_hypothesis.get("hypothesis_text") or ""), 500
+                ) or "Fließtext-Aussage ohne deckende Evidence entfernt.",
+            })
+        if gate_decisions:
+            # Getrennt vom degradation_log: reguläres Gate-Routing ist kein
+            # Statusmangel und darf apply_degradation_downgrade nicht auslösen.
+            self.evidence_map["gate_decision_log"] = list(
+                self.evidence_map.get("gate_decision_log") or []
+            ) + [
+                {**decision, "section_index": section_index}
+                for decision in gate_decisions
+            ]
         # Slice 3 (Issue #495): Dedup + Cap per Section.
         from .hypothesis_cap import dedup_and_cap_hypotheses  # noqa: PLC0415
         hypotheses_visible, hypotheses_appendix = dedup_and_cap_hypotheses(raw_hypotheses)

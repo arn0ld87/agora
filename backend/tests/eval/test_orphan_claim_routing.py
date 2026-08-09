@@ -15,7 +15,7 @@ def test_all_orphan_claims_route_to_hypotheses_and_data_gaps() -> None:
     raw = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
 
     agent = ReportAgent.__new__(ReportAgent)
-    claims, hypotheses, data_gaps = agent._finalize_section_claims(raw["claims"])
+    claims, hypotheses, data_gaps, _decisions = agent._finalize_section_claims(raw["claims"])
 
     assert claims == []
     assert len(hypotheses) == len(raw["claims"])

@@ -226,7 +226,7 @@ def test_reviewer_floor_counts_unique_evidence_ids(tmp_path):
         ],
     }
 
-    finalized, hypotheses, _ = agent._finalize_section_claims([claim])
+    finalized, hypotheses, _, _decisions = agent._finalize_section_claims([claim])
 
     assert finalized == []
     assert len(hypotheses) == 1

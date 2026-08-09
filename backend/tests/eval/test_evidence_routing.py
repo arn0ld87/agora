@@ -41,7 +41,7 @@ def test_orphan_claims_route_to_hypotheses_and_data_gaps() -> None:
     raw = json.loads(FIXTURE_MIXED.read_text(encoding="utf-8"))
 
     agent = ReportAgent.__new__(ReportAgent)
-    claims, hypotheses, data_gaps = agent._finalize_section_claims(raw["claims"])
+    claims, hypotheses, data_gaps, _decisions = agent._finalize_section_claims(raw["claims"])
 
     assert claims == [], f"Erwartet keine finalisierten Claims, erhalten: {claims}"
     # claim_01 (medium), claim_02 (high), claim_03 (low) — alle ohne Evidence.
@@ -61,7 +61,7 @@ def test_medium_high_orphan_section_validates() -> None:
     raw = json.loads(FIXTURE_MIXED.read_text(encoding="utf-8"))
 
     agent = ReportAgent.__new__(ReportAgent)
-    claims, hypotheses, data_gaps = agent._finalize_section_claims(raw["claims"])
+    claims, hypotheses, data_gaps, _decisions = agent._finalize_section_claims(raw["claims"])
 
     section = ReportSectionModel.model_validate({
         "section_index": 1,

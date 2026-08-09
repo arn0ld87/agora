@@ -61,6 +61,7 @@ class _FakeAgentForDegradation:
             claims,
             hypotheses or [],
             data_gaps or [],
+            [],
         )
         self._truncate = lambda text, length: (
             text[:length] if isinstance(text, str) else text

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import cache
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
@@ -95,6 +96,20 @@ class SectionKeyTakeaway(BaseModel):
     confidence: str = Field(
         default="medium",
         description="Einschätzungsqualität: low | medium | high",
+    )
+    confidence_scope: Literal[
+        "simulation_consensus", "evidence", "empirical"
+    ] = Field(
+        default="simulation_consensus",
+        description=(
+            "Geltungsbereich der Confidence: simulation_consensus "
+            "(Übereinstimmung simulierter Agenten) | evidence (durch "
+            "kanonische Evidence-Referenzen belegt) | empirical (reale "
+            "empirische Daten). Aussagen aus Interviews/Simulation ohne "
+            "Evidence-Bindung sind IMMER simulation_consensus — niemals "
+            "evidence oder empirical angeben, wenn die Aussage nur auf "
+            "simulierten Agenten beruht."
+        ),
     )
 
 

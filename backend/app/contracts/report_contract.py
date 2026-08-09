@@ -624,6 +624,13 @@ class EvidenceMapModel(BaseModel):
     # Issue #1006: additiv, Default leer — bestehende persistierte
     # EvidenceMaps ohne dieses Feld validieren unverändert weiter.
     degradation_log: list[EvidenceDegradationModel] = Field(default_factory=list)
+    #: Audit-Trail regulärer Evidence-Gate-Entscheidungen (Reviewer-Floor,
+    #: fehlende Supporting-Evidence, Fließtext-Entfernungen). Bewusst getrennt
+    #: vom ``degradation_log``: der dokumentiert Validator-Reparaturen und
+    #: stuft den Report-Status über ``apply_degradation_downgrade`` auf
+    #: INCOMPLETE ab — ein erwartetes Hypothesen-Routing im Balanced-Modus
+    #: ist dagegen kein Statusmangel (Codex-Review PR #1151, P1).
+    gate_decision_log: list[EvidenceDegradationModel] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_evidence_cross_references(self) -> "EvidenceMapModel":

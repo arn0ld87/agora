@@ -176,6 +176,31 @@ describe('kanonische Evidence-Identität', () => {
     expect(reportContract.EvidenceMapSchema.safeParse(mismatchedIndexKey).success).toBe(false);
   });
 
+  it('defaultet gate_decision_log auf [] und übernimmt Einträge unverändert (PR #1151)', () => {
+    // Persistierte Maps von vor PR #1151 tragen das Feld nicht.
+    const withoutLog = reportContract.EvidenceMapSchema.safeParse(EVIDENCE_MAP_V3);
+    expect(withoutLog.success).toBe(true);
+    if (withoutLog.success) {
+      expect(withoutLog.data.gate_decision_log).toEqual([]);
+    }
+
+    const gateDecision = {
+      section_index: 2,
+      claim_id: 'claim_01',
+      violation: 'no_supporting_evidence',
+      action: 'moved_to_hypotheses',
+      detail: 'Keine direkte Evidence gebunden.',
+    };
+    const withLog = reportContract.EvidenceMapSchema.safeParse({
+      ...EVIDENCE_MAP_V3,
+      gate_decision_log: [gateDecision],
+    });
+    expect(withLog.success).toBe(true);
+    if (withLog.success) {
+      expect(withLog.data.gate_decision_log).toEqual([gateDecision]);
+    }
+  });
+
   it('lehnt EvidenceMap schema_version 2 nach dem echten Versionssprung ab', () => {
     const legacyVersion = {
       ...EVIDENCE_MAP_V3,
