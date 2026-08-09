@@ -27,14 +27,25 @@ docs/
     └── 2026-08-09-domain-migration/
         ├── README.md
         └── artifacts/
-            ├── report.md
-            └── evidence.json
+            ├── README.md
+            └── evidence-extract.json
 ```
 
 Zusätzlich werden zwei bestehende Einstiegspunkte erweitert:
 
 - `README.md`: kompakter Teaser direkt nach dem Demo-Bereich.
 - `docs/README.md`: neuer Abschnitt „Referenzläufe und Evaluationen“.
+
+## Artefaktstrategie
+
+Die vollständigen historischen Exporte bleiben unverändert erhalten und werden durch SHA-256-Prüfsummen identifiziert. Im Git-Tree wird bewusst **kein zweiter vollständiger, generierter Reportbestand** als Dokumentations-SSoT aufgebaut.
+
+Versioniert werden stattdessen:
+
+- ein deterministischer `evidence-extract.json` mit genau den Evidence-Feldern, die die öffentliche Case Study auswertet,
+- `artifacts/README.md` mit Provenienz, Originalgrößen und SHA-256-Prüfsummen der vollständigen Markdown-, JSON-, HTML- und PDF-Exporte.
+
+Der Extract ist kein neues Agora-Reportformat und ersetzt den vollständigen Evidence-Export nicht. Ein späteres vollständiges Export-Bundle kann als GitHub-Release- oder Zenodo-Artefakt eingefroren werden, ohne die Case Study umzuschreiben.
 
 ## README-Teaser
 
@@ -44,7 +55,7 @@ Er enthält:
 
 1. Titel des Referenzlaufs.
 2. Szenario: Domainmigration `alexle135.de` → `alex-schneider.dev`.
-3. Pipeline: Dokumente → Knowledge Graph → Personas → Social Simulation → Evidence Gating → Report.
+3. Pipeline: Szenario → Knowledge Graph → Personas → Social Simulation → Evidence Gating → Report.
 4. wenige belastbare Laufmetriken aus dem exportierten Evidence-Snapshot.
 5. Hinweis auf die soziale Reddit-/Twitter-Simulation.
 6. klare Einschränkung: kein Nachweis prädiktiver Validität.
@@ -114,16 +125,16 @@ Die Diskrepanz wird nicht erklärt oder glattgebügelt, solange die Ursache nich
 Zeigt ausgewählte Beispiele für:
 
 - Posts,
-- Antworten,
-- Likes/Follows, soweit im Artefakt vorhanden,
+- Kommentare,
+- Likes/Follows,
 - Übernahme und Widerspruch von Argumenten,
-- entstehende Narrative.
+- neu erzeugte, nicht automatisch belegte Behauptungen.
 
 Der Schwerpunkt liegt nicht auf einzelnen Persona-Zitaten, sondern auf der sozialen Dynamik.
 
 ### 6. Graph and interaction metrics
 
-Tabellarische Darstellung der sicher belegten Werte aus dem Evidence-Export, unter anderem:
+Tabellarische Darstellung der sicher belegten Werte aus dem Evidence-Export:
 
 - `total_agents: 24` im Metrics-Snapshot,
 - `total_interactions: 267`,
@@ -132,13 +143,13 @@ Tabellarische Darstellung der sicher belegten Werte aus dem Evidence-Export, unt
 - Bridge Agents `[24, 15, 11, 18, 0]`,
 - Clustergrößen 13, 6 und 5.
 
-Jeder Wert wird ausdrücklich als Metrik dieses konkreten Snapshots bezeichnet.
+Der Evidence-Export weist in den gesampelten `agent_action`-Metadaten zusätzlich `sampled_from_total: 473` aus. `473 Actions` und `267 Interactions` dürfen nicht gleichgesetzt werden.
 
 ### 7. Report outcome
 
 Fasst den Report zusammen:
 
-- starke Tendenz zur kontrollierten 90-Tage-Migration,
+- Tendenz zur kontrollierten 90-Tage-Migration,
 - Identitätsinkonsistenz als wichtiges Risiko,
 - Redirect-/SEO-/E-Mail-Risiken,
 - mögliche Fehlwahrnehmung der `.dev`-Positionierung.
@@ -154,8 +165,9 @@ Gezeigt werden soll:
 - dass simulierte Aussagen nicht automatisch als reale Fakten gelten,
 - dass unbelegte Aussagen als Hypothesen oder Datenlücken erscheinen,
 - dass `RELATED_ONLY` nicht als Beleg zählt,
-- dass Confidence heruntergestuft werden kann,
-- dass numerische Aussagen bei unzureichender Evidenz entfernt oder abgewertet werden.
+- dass `INSUFFICIENT` numerische oder anderweitig unzureichend belegte Aussagen aus dem validierten Fließtext halten kann,
+- dass Reviewer-Floor-Regeln schwach belegte Aussagen als Hypothesen führen,
+- dass Confidence heruntergestuft werden kann.
 
 Dieser Abschnitt ist wichtiger als Marketingaussagen über die Qualität des Reports.
 
@@ -245,22 +257,9 @@ Die Case Study nennt:
 
 Wenn später ein vollständig reproduzierbarer Replay-Run existiert, wird dieser als separater Referenzlauf ergänzt, statt die Historie umzuschreiben.
 
-### 16. Raw artifacts
+### 16. Artifacts
 
-Verlinkung auf die eingefrorenen Artefakte.
-
-Die Artefakte werden nicht redaktionell verändert, außer wenn aus Sicherheits-/Datenschutzgründen eine klar dokumentierte Redaction nötig wäre.
-
-## Artefakte
-
-Für den Referenzlauf werden zunächst nur textbasierte, diffbare Artefakte versioniert:
-
-- `report.md`
-- `evidence.json`
-
-Der HTML- und PDF-Export bleiben als lokale/Release-Artefakte optional. Sie müssen nicht zwingend im Git-Repository liegen, weil sie groß sind und inhaltlich den Markdown-/JSON-Quellen entsprechen.
-
-Falls später ein Release-Bundle oder Zenodo-Artefakt angelegt wird, können PDF und HTML dort eingefroren werden.
+Die Case Study verlinkt den deterministischen Evidence-Extract und die Artefakt-Provenienzdatei. Die vollständigen historischen Exporte werden über Größe und SHA-256 eindeutig gebunden.
 
 ## Sprache
 
@@ -296,15 +295,16 @@ Neuer Abschnitt:
 
 Vor Merge muss geprüft werden:
 
-- alle genannten Zahlen gegen das Evidence-JSON,
-- alle Reportaussagen gegen `report.md`,
-- Audit-/Remediation-Aussagen gegen den Remediation-Plan und gemergte PRs,
+- alle genannten Zahlen gegen den historischen Evidence-Export,
+- alle Reportaussagen gegen den historischen Markdown-Report,
+- der öffentliche Extract enthält nur quellentreu übernommene Felder aus dem Originalexport,
+- SHA-256/Größen der Originalexporte sind dokumentiert,
+- Audit-/Remediation-Aussagen stimmen mit Remediation-Plan und gemergten PRs überein,
 - die Zahl 33 wird ausschließlich als vom Betreiber angegebene Laufpopulation bezeichnet, solange sie nicht durch ein Artefakt bestätigt ist,
 - keine Aussage über 33 vs. 24 Agenten erhält eine unbelegte technische Erklärung,
 - keine Persona-Aussage wird als reale Stakeholdermeinung formuliert,
 - README-Teaser bleibt kurz,
 - Links innerhalb des Repos funktionieren,
-- Rohartefakte bleiben unverändert,
 - keine Secrets oder privaten personenbezogenen Daten werden neu veröffentlicht.
 
 ## Nicht-Ziele
@@ -329,7 +329,7 @@ Der Dokumentations-PR ist fertig, wenn:
 1. die Haupt-README einen kurzen Referenzlauf-Teaser enthält,
 2. `docs/README.md` den Referenzlauf aufführt,
 3. die vollständige Case Study vorhanden ist,
-4. `report.md` und `evidence.json` eingefroren im Referenzlauf liegen,
+4. ein deterministischer Evidence-Extract und eine Provenienzdatei mit SHA-256 der vollständigen historischen Exporte vorhanden sind,
 5. alle harten Metriken belegt sind,
 6. Einschränkungen und Kritik sichtbar dokumentiert sind,
 7. PR #1147 und relevante offene Remediation-Arbeit korrekt verlinkt sind,
