@@ -15,6 +15,7 @@ from ..services.stage_model_router import StageModelRouter
 from ..services.text_processor import TextProcessor
 from ..storage.ner_extractor import NERExtractor
 from ..utils.artifact_locator import ArtifactLocator
+from ..utils.file_parser import split_text_into_chunks_with_documents
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
 from ..models.task import TaskManager, TaskStatus
@@ -436,7 +437,24 @@ class GraphBuildService:
                     builder = container.graph_builder()
 
                     task_manager.update_task(task_id, message="Chunking text...", progress=5)
-                    chunks = TextProcessor.split_text(text, chunk_size=chunk_size, overlap=chunk_overlap)
+                    # Issue #1152 Slice 1, Teil B: Projekte mit einem
+                    # Dokument-Manifest-Sidecar (``extracted_documents.json``)
+                    # chunken über den dokument-verankerten Pfad, damit jeder
+                    # Chunk seine Quelldatei + laufenden Index trägt.
+                    # Altprojekte ohne Sidecar (``manifest is None``) nehmen
+                    # unverändert den bisherigen Pfad — kein neues Verhalten.
+                    manifest = ProjectManager.get_document_manifest(project_id)
+                    document_ids: list[str | None] | None = None
+                    chunk_ids: list[int | None] | None = None
+                    if manifest is not None:
+                        anchored_chunks = split_text_into_chunks_with_documents(
+                            text, manifest, chunk_size=chunk_size, overlap=chunk_overlap
+                        )
+                        chunks = [c.text for c in anchored_chunks]
+                        document_ids = [c.document_id for c in anchored_chunks]
+                        chunk_ids = [c.chunk_id for c in anchored_chunks]
+                    else:
+                        chunks = TextProcessor.split_text(text, chunk_size=chunk_size, overlap=chunk_overlap)
 
                     task_manager.update_task(task_id, message="Creating graph...", progress=10)
                     graph_id = builder.create_graph(name=graph_name)
@@ -464,6 +482,8 @@ class GraphBuildService:
                         ner_extractor=ner_override,
                         degradations=degradations,
                         extraction_tally=extraction_tally,
+                        document_ids=document_ids,
+                        chunk_ids=chunk_ids,
                     )
 
                     task_manager.update_task(task_id, message="Retrieving graph data...", progress=95)

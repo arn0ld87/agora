@@ -292,9 +292,12 @@ def test_add_progress_callback_sets_progress_detail_on_task_manager(monkeypatch)
         ner_extractor=None,
         degradations=None,
         extraction_tally=None,
+        document_ids=None,
+        chunk_ids=None,
     ):
-        # Simulate two chunks completing. ``degradations`` and
-        # ``extraction_tally`` wurden mit PR #1030 (Issue #1029) an
+        # Simulate two chunks completing. ``degradations`` und
+        # ``extraction_tally`` wurden mit PR #1030 (Issue #1029), ``document_ids``
+        # und ``chunk_ids`` mit Issue #1152 Slice 1 Teil B an
         # ``add_text_batches`` angefuegt; der Test akzeptiert sie explizit,
         # damit eine kuenftige Signatur-Erweiterung hier wieder laut
         # aufschlaegt statt unbemerkt durchzurutschen.
