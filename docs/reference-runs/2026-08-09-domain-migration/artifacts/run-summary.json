@@ -1,0 +1,52 @@
+{
+  "schema": "agora-reference-run-summary-v1",
+  "date": "2026-08-09",
+  "scenario": "Domainmigration alexle135.de -> alex-schneider.dev",
+  "report_id": "report_37944872ec76",
+  "report_mode": "balanced",
+  "report_writer": "Gemini 3.6 Flash",
+  "loaded_persona_profiles": 30,
+  "report_sections": 6,
+  "reportv3": {
+    "validated_claim_rows": 24,
+    "unique_claim_ids": 17,
+    "hypotheses": 157,
+    "unique_hypothesis_ids": 157,
+    "data_gap_rows": 133,
+    "unique_gap_ids": 41
+  },
+  "red_team": {
+    "findings": 6,
+    "echo_index": 0.690,
+    "final_artifact_application_verified": false
+  },
+  "confirmed_positive_behaviors": [
+    "Ungrounded fabricated subdomains remained hypotheses instead of validated claims",
+    "A fabricated concrete new email address was not validated",
+    "Several recruiting-causality overclaims were downgraded to hypotheses or RELATED_ONLY",
+    "Numerical overclaims were removed when number, group or statement did not match evidence",
+    "Reviewer-floor and confidence-degradation rules were exercised"
+  ],
+  "known_failures": [
+    "Compound claims can receive validation even when one embedded proposition would fail in isolation",
+    "Claim IDs are not globally unique within the report",
+    "Gap IDs are not globally unique within the report",
+    "Source context can be lost when measures are reused across decision options",
+    "Recommendation binding does not yet guarantee counter-evidence retrieval",
+    "Data Gap currently includes non-gap content such as headings, recommendations and transitions",
+    "Some extracted claims are broken Markdown/list fragments",
+    "Red-team findings are logged after report persistence; application to final artifact is not yet verified",
+    "Tool routing emitted DefaultApi attribute errors and one section hit the max-iteration fallback"
+  ],
+  "priority_follow_up": [
+    "P0: atomize compound claims and bind evidence per proposition",
+    "P0: enforce report-wide unique claim and gap IDs",
+    "P0: preserve source status and context scope in evidence provenance",
+    "P0: require contradiction/counter-evidence retrieval for recommendations",
+    "P1: parse Markdown/quote/list structure before claim extraction",
+    "P1: type genuine data gaps separately from generic ungrounded text",
+    "P1: apply red-team findings before final artifact export",
+    "P2: stabilize tool routing and iteration handling"
+  ],
+  "disclaimer": "This run demonstrates system behavior and known limitations. It is not empirical user research and does not establish predictive validity."
+}
