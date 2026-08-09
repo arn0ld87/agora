@@ -12,6 +12,7 @@ from typing import Dict, Any, List, Optional
 from enum import Enum
 from dataclasses import dataclass, field
 from ..config import Config
+from ..contracts.document_manifest_contract import DocumentManifest
 
 
 class ProjectStatus(str, Enum):
@@ -159,6 +160,16 @@ class ProjectManager:
     def _get_project_text_path(cls, project_id: str) -> str:
         """Get project extracted text storage path"""
         return os.path.join(cls._get_project_dir(project_id), 'extracted_text.txt')
+
+    @classmethod
+    def _get_project_documents_path(cls, project_id: str) -> str:
+        """Get project document-manifest sidecar storage path (ADR-0013 Slice 1, Teil A).
+
+        Sidecar neben ``extracted_text.txt``: ordnet Zeichen-Offsets im Blob
+        den Quelldateien zu, ohne den Blob selbst um Marker-Parsing zu
+        erweitern (Issue #1152).
+        """
+        return os.path.join(cls._get_project_dir(project_id), 'extracted_documents.json')
 
     @classmethod
     def create_project(cls, name: str = "Unnamed Project") -> Project:
@@ -330,6 +341,31 @@ class ProjectManager:
 
         with open(text_path, 'r', encoding='utf-8') as f:
             return f.read()
+
+    @classmethod
+    def save_document_manifest(cls, project_id: str, manifest: DocumentManifest) -> None:
+        """Persist das Dokument-Manifest-Sidecar neben ``extracted_text.txt``.
+
+        ADR-0013 Slice 1, Teil A (Issue #1152).
+        """
+        documents_path = cls._get_project_documents_path(project_id)
+        with open(documents_path, 'w', encoding='utf-8') as f:
+            f.write(manifest.model_dump_json(indent=2))
+
+    @classmethod
+    def get_document_manifest(cls, project_id: str) -> Optional[DocumentManifest]:
+        """Lädt das Dokument-Manifest-Sidecar, falls vorhanden.
+
+        Altprojekte ohne Sidecar liefern ``None`` — das ist KEIN Fehler
+        (ADR-0013 §3: Bestandsgraphen werden nicht nachgerüstet).
+        """
+        documents_path = cls._get_project_documents_path(project_id)
+
+        if not os.path.exists(documents_path):
+            return None
+
+        with open(documents_path, 'r', encoding='utf-8') as f:
+            return DocumentManifest.model_validate_json(f.read())
 
     @classmethod
     def get_project_files(cls, project_id: str) -> List[str]:

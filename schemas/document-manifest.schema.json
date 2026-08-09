@@ -1,0 +1,55 @@
+{
+  "$defs": {
+    "DocumentManifestEntry": {
+      "additionalProperties": false,
+      "description": "Ein Dokument im Manifest: Identit\u00e4t + seine Zeichen-Offsets im Blob.",
+      "properties": {
+        "document_id": {
+          "description": "Dateiname ohne Endung; bei Kollision mit laufendem Suffix eindeutig gemacht (z. B. 'report', 'report-2').",
+          "title": "Document Id",
+          "type": "string"
+        },
+        "end_offset": {
+          "description": "Erstes Zeichen NACH dem Dokumentinhalt im Blob (exklusive).",
+          "minimum": 0,
+          "title": "End Offset",
+          "type": "integer"
+        },
+        "filename": {
+          "description": "Urspr\u00fcnglicher Dateiname inklusive Endung.",
+          "title": "Filename",
+          "type": "string"
+        },
+        "start_offset": {
+          "description": "Erstes Zeichen des Dokumentinhalts im Blob (inklusive).",
+          "minimum": 0,
+          "title": "Start Offset",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "document_id",
+        "filename",
+        "start_offset",
+        "end_offset"
+      ],
+      "title": "DocumentManifestEntry",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/document-manifest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Sidecar-Manifest f\u00fcr einen ``extracted_text.txt``-Blob.\n\nPersistiert neben dem Blob als ``extracted_documents.json``. Dokumente,\nderen Extraktion fehlgeschlagen ist, tragen keinen Eintrag \u2014 der\nPlatzhaltertext im Blob ist kein Dokumentinhalt und kann daher auch\nkeinen Anker liefern.",
+  "properties": {
+    "documents": {
+      "items": {
+        "$ref": "#/$defs/DocumentManifestEntry"
+      },
+      "title": "Documents",
+      "type": "array"
+    }
+  },
+  "title": "DocumentManifest",
+  "type": "object"
+}

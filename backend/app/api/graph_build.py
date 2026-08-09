@@ -21,7 +21,8 @@ from ..services.graph_build import (
     AiModelRefRoutingInputError,
     GraphBuildService,
 )
-from ..utils.file_parser import FileParser
+from ..contracts.document_manifest_contract import DocumentManifest, DocumentManifestEntry
+from ..utils.file_parser import FileParser, derive_document_id
 from ..services.text_processor import TextProcessor
 from ..utils.logger import get_logger
 from ..utils.validation import validate_project_id
@@ -190,6 +191,8 @@ def generate_ontology():
 
     document_texts = []
     all_text = ""
+    document_manifest_entries: list[DocumentManifestEntry] = []
+    existing_document_ids: set = set()
 
     try:
         for file in uploaded_files:
@@ -218,7 +221,26 @@ def generate_ontology():
                 text = FileParser.extract_text(file_info["path"])
                 text = TextProcessor.preprocess_text(text)
                 document_texts.append(text)
-                all_text += f"\n\n=== {file_info['original_filename']} ===\n{text}"
+
+                # ADR-0013 Slice 1, Teil A (Issue #1152): Blob-Konstruktion
+                # bleibt bitgleich zur bisherigen Implementierung — der
+                # Marker wird nur zusätzlich vermessen, um Start-/End-Offset
+                # des Dokumentinhalts im Blob als Sidecar-Manifest
+                # mitzuschreiben. Kein Parsen des Markers aus dem Fließtext.
+                marker = f"\n\n=== {file_info['original_filename']} ===\n"
+                document_id = derive_document_id(file_info["original_filename"], existing_document_ids)
+                existing_document_ids.add(document_id)
+                start_offset = len(all_text) + len(marker)
+                all_text += f"{marker}{text}"
+                end_offset = len(all_text)
+                document_manifest_entries.append(
+                    DocumentManifestEntry(
+                        document_id=document_id,
+                        filename=file_info["original_filename"],
+                        start_offset=start_offset,
+                        end_offset=end_offset,
+                    )
+                )
 
         if not document_texts:
             _discard_project_after_upload_failure(project.project_id)
@@ -226,6 +248,9 @@ def generate_ontology():
 
         project.total_text_length = len(all_text)
         ProjectManager.save_extracted_text(project.project_id, all_text)
+        ProjectManager.save_document_manifest(
+            project.project_id, DocumentManifest(documents=document_manifest_entries)
+        )
 
         # Persistieren, BEVOR der Service das Projekt frisch von Platte lädt —
         # create_project() hat bereits VOR dem Setzen von simulation_requirement,
