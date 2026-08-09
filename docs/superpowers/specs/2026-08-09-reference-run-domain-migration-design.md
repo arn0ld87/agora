@@ -102,9 +102,12 @@ Dokumentiert soweit aus den Artefakten eindeutig rekonstruierbar:
 - Cluster und Bridge Agents,
 - vorhandene Metriken.
 
-Die bekannte Diskrepanz zwischen den laut Run erzeugten 33 Agenten und `total_agents: 24` im Metrics-Snapshot wird nicht erklärt oder glattgebügelt, solange die Ursache nicht aus Artefakten oder Produktcode eindeutig hervorgeht.
+Für die Population werden zwei Provenienzebenen ausdrücklich getrennt:
 
-Sie wird als bekannte Accounting-/Instrumentation-Lücke dokumentiert.
+- **33 Agenten**: vom Betreiber für diesen Lauf angegebene erzeugte Simulationspopulation; diese Zahl ist in den vorliegenden Exportartefakten derzeit nicht als `total_agents` bestätigt.
+- **24 Agenten**: `total_agents` im exportierten Metrics-Snapshot und damit artefaktbelegt.
+
+Die Diskrepanz wird nicht erklärt oder glattgebügelt, solange die Ursache nicht aus weiteren Laufartefakten oder Produktcode eindeutig hervorgeht. Sie wird als bekannte Population-Accounting-/Instrumentation-Lücke dokumentiert.
 
 ### 5. What happened in the social simulation
 
@@ -174,7 +177,7 @@ Keine Aussage wie „Agora sagt reale Stakeholder korrekt voraus“.
 
 Mindestens folgende Punkte aufnehmen:
 
-1. Population Accounting: 33 erzeugte Agenten laut Laufkontext vs. 24 im Metrics-Snapshot.
+1. Population Accounting: 33 vom Betreiber angegebene erzeugte Agenten vs. 24 artefaktbelegte Agenten im Metrics-Snapshot.
 2. Reportdarstellung reduziert die breite Social Simulation teilweise auf wenige vertiefend zitierte Personas.
 3. Begriffe wie „Konsens“ sind stellenweise stärker formuliert als die gebundene Evidence erlaubt.
 4. Social-Graph-Metriken werden im finalen Bericht noch nicht ausreichend genutzt.
@@ -296,7 +299,8 @@ Vor Merge muss geprüft werden:
 - alle genannten Zahlen gegen das Evidence-JSON,
 - alle Reportaussagen gegen `report.md`,
 - Audit-/Remediation-Aussagen gegen den Remediation-Plan und gemergte PRs,
-- keine Aussage über 33 vs. 24 Agenten ohne belegte Erklärung,
+- die Zahl 33 wird ausschließlich als vom Betreiber angegebene Laufpopulation bezeichnet, solange sie nicht durch ein Artefakt bestätigt ist,
+- keine Aussage über 33 vs. 24 Agenten erhält eine unbelegte technische Erklärung,
 - keine Persona-Aussage wird als reale Stakeholdermeinung formuliert,
 - README-Teaser bleibt kurz,
 - Links innerhalb des Repos funktionieren,
