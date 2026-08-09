@@ -1,0 +1,90 @@
+\chapter{Methodik}\label{ch:methodik}
+
+\section{Übersicht: Audit-Pipeline}\label{sec:audit-pipeline}
+
+Die Arbeit folgt einer strukturierten Audit-Pipeline, die statische Quellcode-Analyse mit normativer Bewertung verknüpft. Der Lead-Autor koordiniert acht parallele Subagenten (Tasks~A–G, ergänzt um B1–B3 zur Sim-Tiefe); jeder Subagent produziert eine Research-Note unter \code{docs/paper/research-notes/}. Der Lead führt Counter-Review, Citation-Registry und Schlussredaktion durch. Die Pipeline ist in der Begleitdokumentation des Repositories vollständig dokumentiert~\cite{zenodo-agora}.
+
+\begin{figure}[ht]
+  \centering
+  \begin{tikzpicture}[>=Stealth, node distance=8mm and 6mm]
+    \tikzstyle{box}=[draw, rounded corners, minimum width=32mm, minimum height=8mm, align=center, font=\small]
+    \tikzstyle{arr}=[->, thick]
+    \node[box] (lead) {Lead\\(Plan, Registry, Review)};
+    \node[box, right=of lead] (a) {Task A\\Ingest \& Graph};
+    \node[box, right=of a] (b) {Task B1--B3\\Simulation};
+    \node[box, right=of b] (c) {Task C\\Report \& Gating};
+    \node[box, below=of a] (d) {Task D\\Provenance};
+    \node[box, below=of b] (e) {Task E\\Architektur};
+    \node[box, below=of c] (f) {Task F\\Literatur};
+    \node[box, below=of d] (g) {Task G\\Tests};
+    \draw[arr] (lead) -- (a);
+    \draw[arr] (lead) -- (b);
+    \draw[arr] (lead) -- (c);
+    \draw[arr] (a) -- (d);
+    \draw[arr] (b) -- (e);
+    \draw[arr] (c) -- (f);
+    \draw[arr] (d) -- (g);
+  \end{tikzpicture}
+  \caption{Subagent-Topologie der Audit-Pipeline. Der Lead bleibt im Kontrollthread; jeder Subagent arbeitet isoliert und liefert eine Note zurück.}
+  \label{fig:audit-pipeline}
+\end{figure}
+
+\section{Code-Review-Graph als Strukturspeicher}\label{sec:crg}
+
+Das zentrale Werkzeug ist der im Repository gepflegte Code-Review-Graph (CRG). Er parst den Quellcode mit Tree-Sitter und bildet einen Graphen aus Dateien, Klassen, Funktionen und Aufrufbeziehungen. Die folgenden Operationen wurden eingesetzt:
+
+\begin{itemize}
+  \item \code{semantic\_search\_nodes\_tool} -- zur Identifikation relevanter Symbole zu einem Konzept (z.\,B.\ \enquote{evidence binding}, \enquote{claim entailment}).
+  \item \code{query\_graph\_tool} -- mit dem Pattern~\code{callers\_of} bzw.~\code{callees\_of} zur Extraktion der Aufrufkette.
+  \item \code{get\_impact\_radius\_tool} -- zur Eingrenzung des Initial-Scan auf ~5–10 Knoten pro Subagent.
+  \item \code{detect\_changes\_tool} -- zur Verifikation der Befunde gegen den letzten Commit auf dem Branch.
+\end{itemize}
+
+Diese Vorgehensweise reduziert die Kontext-Last jedes Subagenten auf -- nach interner Messung -- etwa 30–40\,\% im Vergleich zu unkontrolliertem \code{grep}/\code{Read}. Der Lead behält die Kontext-Übersicht und führt die Synthese durch.
+
+\section{Verifikation am Code}\label{sec:verifikation}
+
+Jede Code-Aussage wurde am Branch-Stand \code{7e42ae34} verifiziert. Verwendet wurden:
+
+\begin{itemize}
+  \item Direktes Lesen der Quellen via \code{Read} (nur für die durch CRG benannten ~5–10 Stellen je Subagent).
+  \item Verarbeitende Skripte via \code{ctx\_execute\_file} -- insbesondere für das Parsen der \code{evidence\_map.json}-Schemas, der Verifikations-Spot-Checks und des Failure-Mode-Patterns.
+  \item Statische Aufrufanalyse via \code{query\_graph\_tool} für die Rekonstruktion der Evidence-Chain.
+\end{itemize}
+
+Ein zentrales methodisches Prinzip: \emph{kein} Verlassen auf~\code{README.md}, \code{docs/architecture.md} oder \code{VISION.md} als Belegquelle. Diese Dateien werden als Sekundärbeschreibungen behandelt; Aussagen aus ihnen fließen nur ein, wenn sie am Code bestätigt werden.
+
+\section{Counter-Review}\label{sec:counter-review}
+
+Vor der Schlussfassung wurde die zentrale These (s.\ Kapitel~\ref{ch:schluss}) einem Counter-Review nach~\cite{arxiv:counter-review-methodik} unterzogen. Die folgenden Einwände wurden geprüft:
+
+\begin{enumerate}
+  \item \textbf{Könnte die Schlussfolgerung falsch sein?} Die These \enquote{0~validierte Claims = kein Mehrwert} würde falsch, wenn R2 ein Einzelfall wäre. Gegenbeleg: R1~\cite{audit-r1} (historisch) zeigt 25~Claims auf 100\,\% inferred, ADR-0011~\cite{adr-0011} bestätigt strukturell. Eingeschränkt nach Sim-Verifikation: R2 dokumentiert den Pre-Fix-Stand; ein E2E-Re-Run gegen \code{d7d9f0a4} könnte die Claim-Zahl erhöhen -- die These ruht damit auf einer Säule weniger, ist aber nicht umgestoßen.
+  \item \textbf{Single-Source-Abhängigkeit?} These~D (OASIS-Mehrwert ungeprüft) ruht allein auf Task~E; abgestützt durch L10, L11.
+  \item \textbf{Stale Quellen?} Alle Code-Belege \code{AS\_OF}~2026-08-09. ADR-0011 (13~Tage alt) nach manueller Prüfung weiterhin gültig.
+  \item \textbf{$\geq 3$ Probleme gefunden:} 5~Counter-Claims geprüft, alle gehalten oder als Negativbeweis markiert.
+\end{enumerate}
+
+\section{Reproduzierbarkeit der Methode}\label{sec:reproduzierbarkeit}
+
+Die Methode ist in drei Hinsichten reproduzierbar:
+
+\begin{itemize}
+  \item \textbf{Pipeline:} Die Reihenfolge Lead $\to$ Subagenten $\to$ Notes $\to$ Registry $\to$ Counter-Review ist im Repository dokumentiert (s.\ Task-F, \code{notes/methodik.md}).
+  \item \textbf{Belege:} Alle 33~Belege sind in der Citation-Registry~\cite{citation-registry} mit Symbol, Datei, Zeilennummer verankert. Zeilennummern können bei Refactors driften; Symbole bleiben stabil.
+  \item \textbf{Software-Artefakt:} Ein eingefrorener Snapshot des Repository-Standes ist unter der DOI \code{10.5281/zenodo.21855023} hinterlegt~\cite{zenodo-agora}.
+\end{itemize}
+
+\section{Einschränkungen}\label{sec:einschraenkungen}
+
+Drei Einschränkungen sind zu nennen:
+
+\begin{enumerate}
+  \item \textbf{Pre-Fix-Stand:} Der zentrale Referenzlauf~\cite{audit-r2} wurde vor dem Merge von~\code{d7d9f0a4} (Interview-Binding-Fix) erzeugt. Die Befunde sind dadurch konservativ; ein Re-Run könnte die Zahl validierter Claims erhöhen.
+  \item \textbf{Negativbeweis für OASIS-Mehrwert:} Die Aussage \enquote{OASIS-Mehrwert ungeprüft} stützt sich auf eine leere Suche nach \code{ground\_truth}, \code{destatis}, \code{census} oder \code{sim\_validity} in \code{backend/app/}. Das ist ein Negativbeweis -- kein Beweis, dass der Mehrwert nicht existiert, sondern dass er nicht operationalisiert ist.
+  \item \textbf{Code-Audit $\neq$ Empirie:} Die Befunde sind statische Quellcode-Analysen und Output-Inspektionen. Aussagen über die \emph{Wirkung} der Mechanismen auf reale Populationen können daraus nicht abgeleitet werden; das wäre Aufgabe einer prospektiven Sim-Validity-Studie.
+\end{enumerate}
+
+\section{Annotation der Belege}\label{sec:annotations2}
+
+Im Text werden Code-Belege als \texttt{\src{C11}{split\_text ohne Manifest, \code{graph\_build.py:439}}} inline ausgewiesen. Die Notation folgt~\cite{citation-registry}; eine ausführliche Belegliste ist im Anhang dokumentiert.

@@ -1,0 +1,83 @@
+% =====================================================================
+% Kapitel 6: Diskussion
+% =====================================================================
+
+\chapter{Diskussion}\label{ch:diskussion}
+
+\section{Fünf Kernkontroversen}\label{sec:kontroversen}
+
+Die Ergebnisse werfen fünf Kernkontroversen auf, die im Folgenden einzeln diskutiert werden.
+
+\subsection{Kontroverse~1: Evidence-Pipeline als Differenzierer?}\label{sec:k1}
+
+Die Pipeline wird in~\cite{adr-0011} als zentraler Mehrwert gegen{\"u}ber Standard-Agent-Frameworks ausgewiesen. Der Code belegt die strukturelle Eigenst{\"a}ndigkeit~\src{C24}{zweistufiges Binding}, \src{C25}{Determinismus vor Embedding}. Der Referenzlauf~\cite{audit-r2} zeigt jedoch null validierte Claims -- ein Hinweis darauf, dass die Pipeline aktuell nicht greift. \textbf{These:} konzeptionell echter Differenzierer, aktuell wirkungslos.
+
+\subsection{Kontroverse~2: Anti-Self-Confirmation {\"u}ber Prompt-Level?}\label{sec:k2}
+
+Echo-Cap~\src{C26}{} und Wording-Gate~\src{C30}{} sind strukturell, nicht prompt-basierbar. Aber: Schwellen hartkodiert (0{,}75 bzw.\ 0{,}84), nur cross-stakeholder, ohne externe Ground-Truth bleibt der Mechanismus ein Selbsttest~\cite{analyticflexibility,uas2025}. Die Mechanismen sind real, ihre \emph{Wirkung} ist nicht kalibriert.
+
+\subsection{Kontroverse~3: 0~validierte Claims = kein Mehrwert?}\label{sec:k3}
+
+Das Gate ist korrekt -- der Defekt liegt im Upstream (F1--F3).~\cite{adr-0013} dokumentiert explizit, dass unmittelbar nach Umsetzung von Teil~B \enquote{Reports schlechter aussehen werden als heute}. Der kurzfristige Qualit{\"a}tsverlust ist der Preis f{\"u}r {\"u}berpr{\"u}fbare Provenance. \textbf{These:} kein aktueller Mehrwert, aber das Gate ist nicht schuld.
+
+\subsection{Kontroverse~4: OASIS-Mehrwert?}\label{sec:k4}
+
+Oasis umfasst etwa 5500~LOC Subprozess-Code, ohne dass eine Sim-Validity-Metrik existiert~\cite{mast2025,hiddenbench2025}. Der Mehrwert der Simulation ist weder widerlegt noch best{\"a}tigt -- die zentrale unbewiesene Annahme des Systems.
+
+\subsection{Kontroverse~5: ADR-Honesty = Ersatz f{\"u}r Mehrwert?}\label{sec:k5}
+
+Die ehrliche Selbstkritik in ADR-0011~\cite{adr-0011} ist bemerkenswert und als Engineering-Leistung ernst zu nehmen. Sie ersetzt jedoch nicht den empirischen Nachweis eines Mehrwerts. Dokumentierte Fehler sind ein notwendiger, nicht hinreichender Schritt zur Vertrauensw{\"u}rdigkeit.
+
+\section{Engineering-Score vs.\ Evidence-Research-Score}\label{sec:scores}
+
+Aus der 10-Dimensionen-Bewertung (Tabelle~\ref{tab:scoring}) leiten sich zwei Gesamtscores ab, die das zentrale Spannungsfeld des Systems benennen:
+
+\begin{align*}
+  \mathrm{Engineering\text{-}Score} &= \frac{8 + 7 + 7 + 7 + 9}{5} = 7.6 \to 7.0 \\
+  \mathrm{Evidence\text{-}Research\text{-}Score} &= \frac{3 + 5 + 2 + 2 + 5}{5} = 3.4 \to 3.5
+\end{align*}
+
+Die Scores messen Verschiedenes: der Engineering-Score bewertet die Konstruktion (Konzept, Contracts, Gating, Mechanismen, Dokumentation), der Evidence-Research-Score bewertet den nachweisbaren empirischen Mehrwert. \agora{} ist solide konstruiert (7{,}0), aber empirisch unbewiesen (3{,}5).
+
+\textbf{Interpretation:} Die Diskrepanz ist \emph{nicht} als Schw{\"a}che, sondern als \emph{Arbeitsauftrag} zu lesen. Das System ist eine sorgf{\"a}ltig gebaute Maschine, die beweist, dass sie nichts beweisen kann -- und das ist, paradoxerweise, genau die Ehrlichkeit, die der Forschung zu synthetischen Personas fehlt~\cite{citednotverified,analyticflexibility}.
+
+\section{Warum greift das Gate aktuell ins Leere?}\label{sec:gate-leer}
+
+Das Evidence-Gating~\cite{adr-0002} ist deterministisch und auditierbar (\code{gate\_decision\_log}, \code{degradation\_log}). Es dropt oder degradiert Claims zuverl{\"a}ssig, wenn die Voraussetzungen nicht erf{\"u}llt sind. Im Referenzlauf~\cite{audit-r2} f{\"u}hrt das zu null validierten Claims -- nicht weil das Gate zu streng ist, sondern weil der Upstream (Seed-Ingest, Graph-Aufbau, Tool-Evidence-Erfassung) keine kanonische Evidence liefert. Die Konsequenz: das System erstickt an seiner eigenen Strenge.
+
+Dieser Befund ist f{\"u}r jedes andere System mit {\"a}hnlicher Architektur relevant: \emph{ohne} nachgewiesene Provenance-Upstream f{\"u}hrt striktes Downstream-Gating zu null validierter Ausgabe.
+
+\section{Limitationen}\label{sec:limitationen}
+
+\begin{itemize}
+  \item \textbf{Code-Audit $\neq$ Empirie.} Die Befunde sind statische Quellcode-Analyse und Output-Inspektion. {\"U}ber die Wirkung der Mechanismen auf reale Populationen kann diese Arbeit keine Aussage treffen.
+  \item \textbf{Pre-Fix-Stand:} R2 wurde vor~\code{d7d9f0a4} erzeugt; ein Re-Run k{\"o}nnte die Claim-Zahl erh{\"o}hen -- die Konzepttrennung (F8) bleibt davon unber{\"u}hrt.
+  \item \textbf{Negativbeweis f{\"u}r OASIS-Mehrwert:} Eine leere Suche nach \code{ground\_truth}-Anchern belegt \emph{nicht}, dass der Mehrwert nicht existiert, sondern dass er nicht operationalisiert ist.
+  \item \textbf{Subagenten-L{\"u}cken:} Task~B (Simulation) war im ersten Lauf l{\"u}ckenhaft; drei fokussierte Mini-Worker~\code{B1--B3} wurden nachgezogen und lieferten zentrale Befunde.
+\end{itemize}
+
+\section{Vergleich mit dem Stand der Forschung}\label{sec:vergleich-forschung}
+
+Die in Kapitel~\ref{ch:related} identifizierten Forschungsl{\"u}cken treffen sich mit den \agora{}-Befunden an mehreren Stellen:
+
+\begin{itemize}
+  \item \textbf{Persona-Validierung:} \agora{} implementiert DACH-Quoten-Kalibrierung (Konstanten, kein Mikrodaten-Fit) -- die Forschungsl{\"u}cke bleibt offen~\cite{uas2025,analyticflexibility}.
+  \item \textbf{Provenance-Verifikation:} \agora{} erzwingt serverseitige Anker; die Verifikation {\"u}ber den Anker scheitert jedoch (F1, F3) -- direkt im Anschluss an~\cite{citednotverified}.
+  \item \textbf{Multi-Agent-Debate + Quellenverifikation:} \agora{} kombiniert Red-Team und Evidence-Gating; die isolierte Wirkung der Kombination ist nicht gemessen -- Anschluss an~\cite{mast2025,hiddenbench2025}.
+  \item \textbf{Model-Collapse / Drift:} \agora{} hat keine L{\"a}ngszeit-Stabilit{\"a}tsmessung -- direkte Forschungsl{\"u}cke~\cite{shumailov2024curse}.
+\end{itemize}
+
+\section{Konsequenzen f{\"u}r andere Multi-Agent-Systeme}\label{sec:konsequenzen}
+
+Die Befunde sind nicht \agora{}-spezifisch. Sie verallgemeinern auf jedes LLM-basierte System, das eine Evidence- oder Confidence-Pipeline {\"u}ber Multi-Agent-Simulation implementiert:
+
+\begin{enumerate}
+  \item \emph{Strikte Downstream-Gates ohne Provenance-Upstream erzeugen null validierte Ausgabe -- nicht {\"u}berpr{\"u}fbare Strenge.}
+  \item \emph{Echo-Caps sind nur dann wirksam, wenn sie cross-stakeholder-Konsens adressieren; intra-group-Echo-Kammern bleiben unbeobachtet.}
+  \item \emph{Confidence-Konzepte m{\"u}ssen getrennt werden: synthetischer Konsens, Evidence-gest{\"u}tzte Confidence, empirische Confidence.}
+  \item \emph{Hartkodierte Schwellen sind Engineering-Defaults, keine validierten Hyperparameter; ohne Kalibrierung sind sie Selbsttests.}
+\end{enumerate}
+
+\section{Methodische Lehre}\label{sec:methodische-lehre}
+
+Der zur{\"u}ckgezogene Befund~C56~\cite{zenodo-agora} illustriert eine methodische Falle: eine einzelne Beobachtung (fehlendes Feld) wird ohne Pr{\"u}fung der Schreibpfade zur Ursachenaussage erhoben. Die Schlussfolgerung \enquote{\code{supports\_claim} im Interview-Zweig setzen} w{\"u}rde ADR-0011-Anker~3 wieder hergestellt und ADR-0002-Hartanker~5 unterlaufen haben. Die Korrektur wurde durch einen \code{grep} {\"u}ber den Schreibpfad erreicht -- und ist selbst ein Beispiel daf{\"u}r, dass Ein-Feld-Inspektion ohne Pfad-Kontext irref{\"u}hren kann.

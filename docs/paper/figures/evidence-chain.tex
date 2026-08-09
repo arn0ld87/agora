@@ -1,0 +1,60 @@
+% =====================================================================
+% figures/evidence-chain.tex
+% TikZ-Rekonstruktion der Evidence-Chain (Audit §1, vereinfacht)
+% =====================================================================
+
+\begin{tikzpicture}[
+  font=\small,
+  stage/.style={draw, rounded corners=2pt, minimum width=44mm, minimum height=9mm,
+                align=center, fill=blue!5},
+  losspoint/.style={draw, rounded corners=2pt, minimum width=44mm, minimum height=9mm,
+                    align=center, fill=red!8, drop shadow},
+  arrow/.style={-{Stealth[length=2.5mm]}, thick, draw=blue!60!black},
+  lossyearrow/.style={-{Stealth[length=2.5mm]}, thick, draw=red!70!black, dashed},
+  label/.style={font=\footnotesize, fill=white, inner sep=1pt},
+  losslabel/.style={label, draw=red!70!black, rounded corners=1pt, inner sep=1.5pt}
+]
+
+% Hauptkette (Stufen 1-17)
+\node[stage] (s1)  {[1] Seed-Dok.\\(Upload: PDF/MD/TXT)};
+\node[stage, below=8mm of s1]  (s2)  {[2] Chunks\\\texttt{split\_text}};
+\node[losspoint, below=8mm of s2]  (s3)  {\textbf{[3] KG}\\Neo4j \texttt{add\_text}};
+\node[stage, below=8mm of s3]  (s4)  {[4] Retrieval\\\texttt{search\_graph}};
+\node[losspoint, below=8mm of s4]  (s5)  {\textbf{[5] Report Tools}\\\texttt{\_record\_tool\_evidence}};
+\node[stage, below=8mm of s5]  (s6)  {[6] Persona/Sim\\OASIS/CAMEL};
+\node[stage, below=8mm of s6]  (s7)  {[7] Interview\\\texttt{AgentInterview}};
+\node[stage, below=8mm of s7]  (s8)  {[8] Evid.-Norm.\\\texttt{\_TYPE\_TO\_SOURCE\_KIND}};
+\node[stage, below=8mm of s8]  (s9)  {[9] Evid.-Ident.\\\texttt{build\_evidence\_id}};
+\node[stage, below=8mm of s9]  (s10)  {[10] Evid.-Index\\\texttt{evidence-map.json}};
+\node[stage, below=8mm of s10] (s11) {[11] Claim-Bind.\\\texttt{evidence\_binder}};
+\node[stage, below=8mm of s11] (s12) {[12] Gating\\(ADR-0002)};
+\node[stage, below=8mm of s12] (s13) {[13] Confidence\\\texttt{compute\_conf.}};
+\node[stage, below=8mm of s13] (s14) {[14] Hypothesen\\\texttt{dedup\_and\_cap}};
+\node[stage, below=8mm of s14] (s15) {[15] Red-Team\\(LLM-Judge)};
+\node[losspoint, below=8mm of s15] (s16) {\textbf{[16] Renderer}\\\texttt{markdown\_renderer}};
+\node[stage, below=8mm of s16] (s17) {[17] Export\\(JSON/ZIP/MD/CSV)};
+
+% Pfeile
+\draw[arrow] (s1) -- (s2);
+\draw[lossyearrow] (s2) -- (s3) node[midway, losslabel, xshift=3mm] {\lossmark{} 1};
+\draw[lossyearrow] (s3) -- (s4) node[midway, losslabel, xshift=3mm] {\lossmark{} 2,3,4};
+\draw[lossyearrow] (s4) -- (s5) node[midway, losslabel, xshift=3mm] {\lossmark{} 5};
+\draw[lossyearrow] (s5) -- (s6) node[midway, losslabel, xshift=3mm] {\lossmark{} 6,7};
+\draw[arrow] (s6) -- (s7);
+\draw[arrow] (s7) -- (s8);
+\draw[arrow] (s8) -- (s9);
+\draw[arrow] (s9) -- (s10);
+\draw[arrow] (s10) -- (s11);
+\draw[arrow] (s11) -- (s12);
+\draw[arrow] (s12) -- (s13);
+\draw[arrow] (s13) -- (s14);
+\draw[arrow] (s14) -- (s15);
+\draw[lossyearrow] (s15) -- (s16);
+\draw[arrow] (s16) -- (s17);
+
+% Legende (inline, ohne tikz-matrix)
+\node[stage, minimum width=22mm, minimum height=5mm, below=10mm of s17, xshift=-30mm] (leg1) {};
+\node[losspoint, minimum width=22mm, minimum height=5mm, right=2mm of leg1] (leg2) {};
+\node[label, right=2mm of leg2] {\lossmark{} = Provenance-Verlustpunkt};
+
+\end{tikzpicture}

@@ -1,0 +1,90 @@
+% =====================================================================
+% Anhang A: Verifikationsprotokoll und Citation-Registry
+% =====================================================================
+
+\chapter{Anhang~A: Verifikationsprotokoll}\label{ch:anhang-a}
+
+\section{Verifikations-Spot-Checks}\label{sec:verif}
+
+Die folgenden Spot-Checks wurden exemplarisch durchgef{\"u}hrt; die vollst{\"a}ndige Liste ist in der Research-Note \code{lead-verified-findings}~\cite{zenodo-agora} enthalten.
+
+\begin{table}[h]
+  \centering
+  \small
+  \begin{tabular}{@{}p{0.20\textwidth}p{0.50\textwidth}p{0.20\textwidth}@{}}
+    \toprule
+    \textbf{Beleg} & \textbf{Inhalt} & \textbf{Verifikation} \\
+    \midrule
+    \src{C26}{apply\_echo\_cap} & Cap bei \code{echo\_index > 0.75} $\to$ max 0.84 / medium & \code{confidence\_calculator.py:363--386} \\
+    \src{C11}{split\_text ohne Manifest} & \code{List[str]} ohne \code{doc\_id/chunk\_id} & \code{graph\_build.py:439} \\
+    \src{C9}{opaker Anker} & \code{seed\_doc:}-Pr{\"a}fix akzeptiert, kein Lookup & \code{evidence.py:352} \\
+    \cite{audit-r2} & 0~validierte Claims & \code{docs/reference-runs/2026-08-09-...} \\
+    \cite{adr-0013} & Teil~B fehlt & ADR-0013 §1, kein \code{document\_id} in \code{graph\_build.py} \\
+    \src{C45}{echo\_chamber\_index} & \code{intra/total} & \code{network\_analytics.py:426--432} \\
+    \src{C46}{nicht deterministisch} & \code{random.*} ohne \code{random.seed()} & \code{run\_parallel\_simulation.py:1423,1434,1437} \\
+    \src{C50}{Interview-Fix in HEAD} & \code{producer\_key} + \code{quote} + \code{persona\_stakeholder\_group} & \code{agent.py:365--413}, Test \code{test\_report\_tool\_evidence.py:110} \\
+    \src{C52}{DACH-Quoten} & Destatis WZ 2008 / Mikrozensus 2024 / BFS / Statistik Austria & \code{persona\_quota\_defaults.py:1--9}, \code{persona\_demographics.py:1--6} \\
+    \bottomrule
+  \end{tabular}
+  \caption{Verifikations-Spot-Checks (Auszug). Die vollst{\"a}ndige Liste enth{\"a}lt 33~Belege; jede Kernaussage ruht auf mindestens zwei Belegen.}
+  \label{tab:verif}
+\end{table}
+
+\section{Failure-Mode-Tabelle (vollst{\"a}ndig)}\label{sec:fm-voll}
+
+\begin{table}[h]
+  \centering
+  \small
+  \begin{tabular}{@{}p{0.04\textwidth}p{0.40\textwidth}p{0.10\textwidth}p{0.36\textwidth}@{}}
+    \toprule
+    \textbf{\#} & \textbf{Failure-Mode} & \textbf{Severity} & \textbf{Beleg / Gegenmaßnahme} \\
+    \midrule
+    F1 & Seed-Provenance end-to-end gebrochen & Critical & \src{C11}{}; ADR-0013 Teil~B \\
+    F2 & Interview$\to$Evidence-Binding-Defekt & Medium & \src{C50}{}, \code{d7d9f0a4}; E2E-Re-Run \\
+    F3 & Opaker \code{seed\_doc:}-Anker & Critical & \src{C9}{}, \src{C10}{} \\
+    F4 & Gate zu streng $\to$ 0~validierte Claims & High & Folge von F1+F2 \\
+    F5 & Graph-Fakten ohne Dokumentidentit{\"a}t & High & \src{C19}{}, \src{C20}{}, \src{C21}{} \\
+    F6 & \code{medium}-Stufe unerreichbar & High & \src{C8}{}; Folge von F1 \\
+    F7 & Historische Alt-Labels: 25~medium-Claims auf 100\,\% \code{inferred} & High & \cite{adr-0011}, \cite{audit-r1} \\
+    F8 & Confidence-Konzeptvermischung & Medium & \cite{audit-r2} \\
+    F9 & Keine Sim-Validity-Metrik & Medium & \src{C41}{}, \src{C46}{} \\
+    F10 & Keine Reproduzierbarkeit & Medium & \src{C42}{}, \src{C46}{}, \src{C47}{} \\
+    F11 & Kein Baseline-Vergleich \agora{}-vs-Single-Prompt & Medium & G3 \\
+    F12 & Markdown-Export ohne Producer-Aufl{\"o}sung & Low & \src{C39}{} \\
+    F13 & Evidence-Map f{\"a}llt stumm bei \code{contract\_violation} & Medium & \cite{issue-987}, \src{C37}{} \\
+    F14 & Neo4j overkill & Low & \src{C40}{} \\
+    F15 & CAMEL http/oasis-Divergenz & Low & \src{C40}{} \\
+    F16 & \code{simulated\_hours} nicht exponiert & Low & \cite{issue-1018} \\
+    \bottomrule
+  \end{tabular}
+  \caption{Vollst{\"a}ndige Failure-Mode-Tabelle (16~Eintr{\"a}ge).}
+  \label{tab:fm-voll}
+\end{table}
+
+\section{Citation-Registry}\label{sec:registry}
+
+Die vollst{\"a}ndige Citation-Registry umfasst:
+
+\begin{itemize}
+  \item 57~Code-Belege \code{C1--C57},
+  \item 5~ADRs \code{A1--A5},
+  \item 12~Issues \code{I1--I12},
+  \item 4~Referenzl{\"a}ufe \code{R1--R4},
+  \item 14~Literaturschl{\"u}ssel \code{L1--L14}.
+\end{itemize}
+
+Jeder Beleg ist in der Research-Note \code{citation-registry.md}~\cite{citation-registry} mit Symbol, Datei, Zeilennummer und Vertrauensgrad hinterlegt. \code{README.md}, \code{docs/architecture.md} und \code{VISION.md} werden ausdr{\"u}cklich \emph{nicht} als Belege verwendet.
+
+\section{Der zur{\"u}ckgezogene Befund C56}\label{sec:c56}
+
+Der urspr{\"u}ngliche Befund \enquote{\code{supports\_claim} wird im Interview-Item nicht gesetzt} beruhte auf einer Fehldeutung der zweistufigen Binding-Architektur.
+
+\begin{itemize}
+  \item \code{supports\_claim} wird an genau einer Stelle gesetzt: \code{evidence\_binder.py:123} -- \code{bound["supports\_claim"] = result.verdict is EntailmentVerdict.SUPPORTED}.
+  \item \code{evidence\_entailment.py:11} h{\"a}lt fest: \enquote{Nur hier darf \code{supports\_claim = True}}. \code{agent.py:649} verweist im Kommentar ausdr{\"u}cklich auf die Entailment-Stufe als setzende Instanz.
+  \item Sachlich zwingend: Ein Evidence-Item ohne Claim-Bezug kann nicht beantworten, ob es \emph{einen} Claim st{\"u}tzt. Die Frage entsteht erst beim Binding.
+\end{itemize}
+
+\textbf{Schlussfolgerung:} Die Beobachtung war richtig, die Schlussfolgerung nicht. Die vorgeschlagene Ma{\"s}nahme w{\"a}re eine Regression gewesen -- sie h{\"a}tte Defekt~3 aus~\cite{adr-0011} wieder hergestellt. C56 ist damit als Beleg f{\"u}r einen \code{supports\_claim}-Defekt ung{\"u}ltig; die Methodik der Pr{\"u}fung an einer einzelnen Fundstelle wird in Kapitel~\ref{ch:diskussion} (Abschnitt~\ref{sec:methodische-lehre}) reflektiert.
+
+\textbf{Nicht betroffen:} C56 belegt in~G6, dass \code{persona\_stakeholder\_group} eine freie Rollenbezeichnung ist und keine kodierte Taxonomie. Diese Beobachtung bleibt g{\"u}ltig und ist eigenst{\"a}ndig relevant: \code{cross\_stakeholder\_for\_high} z{\"a}hlt distinkte Werte, sodass zwei Schreibweisen derselben Rolle als zwei Stakeholder-Gruppen z{\"a}hlen.

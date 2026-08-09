@@ -1,0 +1,173 @@
+% =====================================================================
+% agora-evidence-chain-paper.tex
+% Wissenschaftliches Forschungs-Paper aus dem Agora Evidence-Chain-Audit
+% Stand: 2026-08-09 (Repo-HEAD 7e42ae34, Branch feat/1152-provenance-retrieval)
+% Engine: LuaLaTeX / BibLaTeX+Biber / KOMA-Script scrreprt
+% =====================================================================
+
+\documentclass[11pt,a4paper,oneside,open=any,parskip=half-]{scrreprt}
+
+% --- Sprache ---------------------------------------------------------
+\usepackage{polyglossia}
+\setmainlanguage{german}
+\setotherlanguage{english}
+
+% --- Schriften (LuaLaTeX + fontspec) ---------------------------------
+\usepackage{fontspec}
+\setmainfont{Libertinus Serif}[
+  Numbers={OldStyle,Proportional},
+  Ligatures=TeX
+]
+\setsansfont{Libertinus Sans}[
+  Scale=MatchUppercase
+]
+\setmonofont{Libertinus Mono}
+
+% --- Symbole (Kreuz, Haken) ------------------------------------------
+\usepackage{pifont}
+\newcommand{\lossmark}{\texorpdfstring{\ding{55}}{\ding{55}}}
+\newcommand{\okmark}{\texorpdfstring{\ding{51}}{\ding{51}}}
+\newcommand{\partialmark}{\texorpdfstring{\ding{74}}{\ding{74}}}
+% Subscript-Helper fuer Tabellen: \lossmarkX{1} -> ✗₁ (Pifont-Font erzwungen)
+\newcommand{\lossmarkX}[1]{\texorpdfstring{\ding{55}\textsubscript{#1}}{X-#1}}
+
+% --- Mikrotypografie --------------------------------------------------
+\usepackage{microtype}
+\usepackage{csquotes}
+
+% --- Mathe -----------------------------------------------------------
+\usepackage{amsmath,amssymb}
+
+% --- Tabellen --------------------------------------------------------
+\usepackage{booktabs}
+\usepackage{tabularray}
+
+% --- Grafik / TikZ ---------------------------------------------------
+\usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,shapes.geometric,fit,calc,backgrounds,shadows.blur,matrix}
+
+% --- Hyperref (zuletzt) ----------------------------------------------
+\usepackage[
+  bookmarks=true,
+  bookmarksopen=true,
+  bookmarksnumbered=true,
+  hidelinks,
+  pdftitle={Agora Evidence Chain -- Ein Code-Audit zu Provenance und Anti-Self-Confirmation in einer Multi-Agent-Simulationsplattform},
+  pdfauthor={Alexander Schneider},
+  pdfsubject={Code-Audit, Provenance, Evidence-Gating, Multi-Agent-Simulation},
+  pdfkeywords={Agora, Evidence-Gating, Provenance, Multi-Agent, Anti-Self-Confirmation, Code-Audit}
+]{hyperref}
+
+% --- Bibliographie ---------------------------------------------------
+\usepackage[
+  backend=biber,
+  style=numeric-comp,
+  sorting=none,
+  citestyle=numeric-comp,
+  maxnames=6,
+  minnames=1,
+  giveninits=true,
+  isbn=false,
+  doi=true,
+  eprint=true,
+  eprinttype=arxiv
+]{biblatex}
+\addbibresource{references.bib}
+
+% --- Befehle ---------------------------------------------------------
+\newcommand{\agora}{\textsc{Agora}}
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\audit}{\texttt{agora-evidence-chain-audit.md}}
+\newcommand{\citesource}[1]{\hyperlink{src.#1}{[#1]}}
+\newcommand{\src}[2]{\hypertarget{src.#1}{}\textbf{[#1]}\footnote{\raggedright #2}}
+
+% Verbatim-Umgebung fuer Code-Snippets
+\usepackage{fancyvrb}
+
+% Schatten fuer TikZ-Boxen
+\usetikzlibrary{shadows.blur}
+
+% Quellen-Kurztabelle (Belege)
+\newcommand{\beleg}[2]{\hyperlink{src.#1}{\textbf{[#1]}} & \small #2}
+
+% --- Metadaten -------------------------------------------------------
+\title{\agora{} Evidence Chain\\\large Ein Code-Audit zu Provenance und Anti-Self-Confirmation in einer Multi-Agent-Simulationsplattform}
+\author{Alexander Schneider\\
+\small \href{https://orcid.org/0009-0008-7552-1819}{ORCID 0009-0008-7552-1819}}
+\date{2026-08-09 \\
+\small Repository \code{arn0ld87/agora} -- \href{https://github.com/arn0ld87/agora}{github.com/arn0ld87/agora}, Branch \code{feat/1152-provenance-retrieval}, HEAD \code{7e42ae34} \\
+\small Version 0.9.3 Stability Beta \\
+\small Begleitendes Software-Artefakt: \href{https://zenodo.org/records/21855023}{Zenodo 21855023}}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+
+\begin{abstract}
+\noindent
+Diese Arbeit untersucht am Code-Audit eines realen Multi-Agent-Systems (\agora{}, Version 0.9.3 Stability Beta), welche Bestandteile der Evidence-Pipeline einen \emph{tats{\"a}chlich {\"u}berpr{\"u}fbaren} Erkenntnisgewinn gegen{\"u}ber einem einzelnen starken Large-Language-Model-Prompt erzeugen, und welche lediglich zus{\"a}tzliche Komplexit{\"a}t, Kosten oder scheinbare Evidenz. Methodisch verkn{\"u}pft der Beitrag eine statische Code-Audit-Pipeline (acht parallele Subagenten mit Code-Review-Graph-Unterst{\"u}tzung) mit einer normativen Bewertung anhand eines zehn-dimensionalen Scorerasters. Im Mittelpunkt steht die Rekonstruktion der Evidence-Chain vom Seed-Dokument bis zum Claim {\"u}ber 17 Stufen, einschließlich sieben code-verifizierter Provenance-Verlustpunkten. Die Ergebnisse zeigen, dass \agora{} als \emph{ehrlich konstruiertes, aber empirisch unbewiesenes} System zu lesen ist: Der Engineering-Score liegt bei 7,0/10, der Evidence-Research-Score bei 3,5/10; ein Referenzlauf lieferte null validierte Claims. Die Diskussion arbeitet f{\"u}nf Kernkontroversen heraus und priorisiert P0-Maßnahmen (Seed-Provenance, Interview-Binding, Konzepttrennung der Confidence-Scores), die den Mehrwert der Pipeline {\"u}berf{\"u}hrbar machen sollen. Der Beitrag ist sowohl Diagnose als auch Bauplan.
+\end{abstract}
+
+\begin{abstract}[english]
+\noindent
+This paper investigates, via a code audit of a real multi-agent system (\agora{}, v0.9.3 Stability Beta), which parts of the evidence pipeline yield a \emph{verifiable} epistemic gain over a single strong large language model prompt, and which add complexity, cost, or apparent evidence only. Methodologically, the work links a static code-audit pipeline (eight parallel sub-agents, supported by a code-review-graph) with a normative evaluation along a ten-dimensional scoring scheme. The core artefact is a reconstruction of the evidence chain from seed document to claim across seventeen stages, including seven code-verified provenance loss points. The findings read \agora{} as an \emph{honestly engineered but empirically unproven} system: engineering score 7.0/10, evidence-research score 3.5/10, one reference run producing zero validated claims. The discussion isolates five key controversies and prioritises P0 measures (seed-document provenance, interview-binding fix, separation of confidence concepts) that should make the pipeline's added value observable. The contribution is simultaneously diagnosis and blueprint.
+\end{abstract}
+
+\tableofcontents
+\listoffigures
+\listoftables
+
+% =====================================================================
+\part{Kontext und Forschungsfrage}
+% =====================================================================
+
+\input{chapters/01-einleitung.tex}
+
+% =====================================================================
+\part{Stand der Forschung}
+% =====================================================================
+
+\input{chapters/02-related-work.tex}
+
+% =====================================================================
+\part{System und Pipeline}
+% =====================================================================
+
+\input{chapters/03-system.tex}
+
+% =====================================================================
+\part{Methodik}
+% =====================================================================
+
+\input{chapters/04-methodik.tex}
+
+% =====================================================================
+\part{Ergebnisse}
+% =====================================================================
+
+\input{chapters/05-ergebnisse.tex}
+
+% =====================================================================
+\part{Diskussion}
+% =====================================================================
+
+\input{chapters/06-diskussion.tex}
+
+% =====================================================================
+\part{Schluss}
+% =====================================================================
+
+\input{chapters/07-schluss.tex}
+
+% =====================================================================
+\appendix
+% =====================================================================
+
+\input{chapters/appendix-a.tex}
+
+% --- Bibliographie ----------------------------------------------------
+\printbibliography[heading=bibintoc,title={Literaturverzeichnis}]
+
+\end{document}
