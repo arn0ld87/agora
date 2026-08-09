@@ -8,6 +8,22 @@ from dataclasses import dataclass, field
 from typing import Dict, Any, List, Optional
 
 
+def provenance_at(
+    provenance: List[Optional[Dict[str, Any]]], index: int
+) -> Optional[Dict[str, Any]]:
+    """Dokument-Provenance an Position ``index`` — oder ``None`` (Issue #1152).
+
+    Die Provenance-Listen der Retrieval-DTOs sind positionsparallel zur
+    jeweiligen Fakt-Liste, dürfen aber leer sein: Altgraphen ohne
+    Dokumentbezug und Fallback-Pfade füllen sie nicht (ADR-0013 Punkt 3).
+    Dieser Helper macht den Zugriff für Konsumenten unabhängig davon —
+    ``zip`` über eine leere Liste würde die Fakten still verschlucken.
+    """
+    if 0 <= index < len(provenance):
+        return provenance[index]
+    return None
+
+
 @dataclass
 class SearchResult:
     """Search Result"""
@@ -17,14 +33,26 @@ class SearchResult:
     query: str
     total_count: int
 
+    # Issue #1152: positionsparallel zu ``facts`` — ``fact_provenance[i]``
+    # gehört zu ``facts[i]``. Entweder leer (keine Provenance ermittelt)
+    # oder exakt so lang wie ``facts``; Einzelwerte sind ``None``, wenn der
+    # Fakt keine verifizierte Dokumentherkunft hat. Zugriff über
+    # ``provenance_at``.
+    fact_provenance: List[Optional[Dict[str, Any]]] = field(default_factory=list)
+
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        payload: Dict[str, Any] = {
             "facts": self.facts,
             "edges": self.edges,
             "nodes": self.nodes,
             "query": self.query,
             "total_count": self.total_count
         }
+        # Nur bei tatsächlich vorhandener Herkunft — Altgraphen liefern
+        # denselben Payload wie vor Issue #1152.
+        if any(self.fact_provenance):
+            payload["fact_provenance"] = self.fact_provenance
+        return payload
 
     def to_text(self) -> str:
         """Convert to text format for LLM understanding"""
@@ -77,9 +105,14 @@ class EdgeInfo:
     valid_at: Optional[str] = None
     invalid_at: Optional[str] = None
     expired_at: Optional[str] = None
+    # Issue #1152: verifizierte Dokumentherkunft der Episode, aus der diese
+    # Kante stammt. ``None``, wenn der Graph vor ADR-0013 gebaut wurde oder
+    # die Episode keinem Dokument zugeordnet werden konnte.
+    document_id: Optional[str] = None
+    chunk_id: Optional[int] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        payload: Dict[str, Any] = {
             "uuid": self.uuid,
             "name": self.name,
             "fact": self.fact,
@@ -92,6 +125,10 @@ class EdgeInfo:
             "invalid_at": self.invalid_at,
             "expired_at": self.expired_at
         }
+        if self.document_id is not None:
+            payload["document_id"] = self.document_id
+            payload["chunk_id"] = self.chunk_id
+        return payload
 
     def to_text(self, include_temporal: bool = False) -> str:
         """Convert to text format"""
@@ -139,8 +176,14 @@ class InsightForgeResult:
     total_entities: int = 0
     total_relationships: int = 0
 
+    # Issue #1152: positionsparallel zu ``semantic_facts``; siehe
+    # ``SearchResult.fact_provenance``. Zugriff über ``provenance_at``.
+    semantic_facts_provenance: List[Optional[Dict[str, Any]]] = field(
+        default_factory=list
+    )
+
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        payload: Dict[str, Any] = {
             "query": self.query,
             "simulation_requirement": self.simulation_requirement,
             "sub_queries": self.sub_queries,
@@ -151,6 +194,9 @@ class InsightForgeResult:
             "total_entities": self.total_entities,
             "total_relationships": self.total_relationships
         }
+        if any(self.semantic_facts_provenance):
+            payload["semantic_facts_provenance"] = self.semantic_facts_provenance
+        return payload
 
     def to_text(self) -> str:
         """Convert to detailed text format for LLM understanding"""
@@ -209,8 +255,17 @@ class PanoramaResult:
     active_count: int = 0
     historical_count: int = 0
 
+    # Issue #1152: positionsparallel zu ``active_facts`` bzw.
+    # ``historical_facts``; siehe ``SearchResult.fact_provenance``.
+    active_facts_provenance: List[Optional[Dict[str, Any]]] = field(
+        default_factory=list
+    )
+    historical_facts_provenance: List[Optional[Dict[str, Any]]] = field(
+        default_factory=list
+    )
+
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        payload: Dict[str, Any] = {
             "query": self.query,
             "all_nodes": [n.to_dict() for n in self.all_nodes],
             "all_edges": [e.to_dict() for e in self.all_edges],
@@ -221,6 +276,11 @@ class PanoramaResult:
             "active_count": self.active_count,
             "historical_count": self.historical_count
         }
+        if any(self.active_facts_provenance):
+            payload["active_facts_provenance"] = self.active_facts_provenance
+        if any(self.historical_facts_provenance):
+            payload["historical_facts_provenance"] = self.historical_facts_provenance
+        return payload
 
     def to_text(self) -> str:
         """Convert to text format (complete version, no truncation)"""

@@ -254,6 +254,45 @@ class Neo4jReadMixin:
         with self._get_session() as session:
             return self._call_with_retry(session.execute_read, _read)
 
+    def get_episode_provenance(
+        self, episode_ids: List[str]
+    ) -> Dict[str, Dict[str, Any]]:
+        """Dokument-/Chunk-Herkunft der genannten Episoden (Issue #1152).
+
+        Ein einziger ``UNWIND``-Lookup für alle Episoden einer Suche statt
+        eines Joins im Vektor-/Fulltext-Cypher: der Suchpfad bleibt
+        unverändert, und Treffer ohne Dokumentbezug kosten nichts.
+
+        Episoden ohne ``document_id`` fehlen im Ergebnis — Altgraphen vor
+        ADR-0013 liefern damit eine leere Map (ADR-0013 Punkt 3).
+        """
+        unique_ids = [eid for eid in dict.fromkeys(episode_ids) if eid]
+        if not unique_ids:
+            return {}
+
+        def _read(tx):
+            result = tx.run(
+                """
+                UNWIND $ids AS episode_id
+                MATCH (e:Episode {uuid: episode_id})
+                WHERE e.document_id IS NOT NULL
+                RETURN e.uuid AS uuid,
+                       e.document_id AS document_id,
+                       e.chunk_id AS chunk_id
+                """,
+                ids=unique_ids,
+            )
+            return {
+                record["uuid"]: {
+                    "document_id": record["document_id"],
+                    "chunk_id": record["chunk_id"],
+                }
+                for record in result
+            }
+
+        with self._get_session() as session:
+            return self._call_with_retry(session.execute_read, _read)
+
     def get_edges_at_round(
         self, graph_id: str, round_num: int
     ) -> List[Dict[str, Any]]:

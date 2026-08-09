@@ -20,7 +20,7 @@ Extracted symbols
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.storage.graph_storage import GraphStorage
 from app.utils.llm_client import LLMClient
@@ -29,6 +29,7 @@ from app.services.graph.graph_dtos import (
     NodeInfo,
     PanoramaResult,
     SearchResult,
+    provenance_at,
 )
 import app.services.graph.graph_reader as _reader
 
@@ -183,6 +184,10 @@ def insight_forge(
 
     # Step 2: Perform semantic search on each sub-question
     all_facts: List[str] = []
+    # Positionsparallel zu ``all_facts`` (Issue #1152) — die Dedup-Logik
+    # unten verschiebt Indizes, deshalb wird die Herkunft im selben Schritt
+    # mitgeführt statt hinterher zugeordnet.
+    all_fact_provenance: List[Optional[Dict[str, Any]]] = []
     all_edges: List[Dict[str, Any]] = []
     seen_facts: set[str] = set()
 
@@ -195,9 +200,12 @@ def insight_forge(
             limit=15,
             scope="edges",
         )
-        for fact in search_result.facts:
+        for index, fact in enumerate(search_result.facts):
             if fact not in seen_facts:
                 all_facts.append(fact)
+                all_fact_provenance.append(
+                    provenance_at(search_result.fact_provenance, index)
+                )
                 seen_facts.add(fact)
         all_edges.extend(search_result.edges)
 
@@ -210,12 +218,16 @@ def insight_forge(
         limit=20,
         scope="edges",
     )
-    for fact in main_search.facts:
+    for index, fact in enumerate(main_search.facts):
         if fact not in seen_facts:
             all_facts.append(fact)
+            all_fact_provenance.append(
+                provenance_at(main_search.fact_provenance, index)
+            )
             seen_facts.add(fact)
 
     result.semantic_facts = all_facts
+    result.semantic_facts_provenance = all_fact_provenance
     result.total_facts = len(all_facts)
 
     # Step 3: Extract related entity UUIDs from edges
@@ -345,23 +357,29 @@ def panorama_search(
     result.all_edges = all_edges
     result.total_edges = len(all_edges)
 
-    # Categorize facts
-    active_facts: List[str] = []
-    historical_facts: List[str] = []
+    # Categorize facts — Fakt und Herkunft (Issue #1152) bleiben als Paar
+    # zusammen, weil beide Listen anschließend umsortiert werden.
+    active_entries: List[Tuple[str, Optional[Dict[str, Any]]]] = []
+    historical_entries: List[Tuple[str, Optional[Dict[str, Any]]]] = []
 
     for edge in all_edges:
         if not edge.fact:
             continue
 
+        provenance = (
+            {"document_id": edge.document_id, "chunk_id": edge.chunk_id}
+            if edge.document_id is not None
+            else None
+        )
         is_historical = edge.is_expired or edge.is_invalid
 
         if is_historical:
             valid_at = edge.valid_at or "Unknown"
             invalid_at = edge.invalid_at or edge.expired_at or "Unknown"
             fact_with_time = f"[{valid_at} - {invalid_at}] {edge.fact}"
-            historical_facts.append(fact_with_time)
+            historical_entries.append((fact_with_time, provenance))
         else:
-            active_facts.append(edge.fact)
+            active_entries.append((edge.fact, provenance))
 
     # Sort by relevance based on query
     query_lower = query.lower()
@@ -381,13 +399,20 @@ def panorama_search(
                 score += 10
         return score
 
-    active_facts.sort(key=relevance_score, reverse=True)
-    historical_facts.sort(key=relevance_score, reverse=True)
+    active_entries.sort(key=lambda entry: relevance_score(entry[0]), reverse=True)
+    historical_entries.sort(key=lambda entry: relevance_score(entry[0]), reverse=True)
 
-    result.active_facts = active_facts[:limit]
-    result.historical_facts = historical_facts[:limit] if include_expired else []
-    result.active_count = len(active_facts)
-    result.historical_count = len(historical_facts)
+    top_active = active_entries[:limit]
+    top_historical = historical_entries[:limit] if include_expired else []
+
+    result.active_facts = [fact for fact, _ in top_active]
+    result.active_facts_provenance = [provenance for _, provenance in top_active]
+    result.historical_facts = [fact for fact, _ in top_historical]
+    result.historical_facts_provenance = [
+        provenance for _, provenance in top_historical
+    ]
+    result.active_count = len(active_entries)
+    result.historical_count = len(historical_entries)
 
     logger.info(
         "PanoramaSearch complete: %d valid, %d historical",

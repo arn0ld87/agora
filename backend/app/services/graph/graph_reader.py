@@ -21,6 +21,60 @@ from app.services.graph.graph_dtos import EdgeInfo, NodeInfo, SearchResult
 logger = logging.getLogger(__name__)
 
 
+def _resolve_edge_provenance(
+    edge_dicts: List[Dict[str, Any]],
+    *,
+    storage: GraphStorage,
+) -> Dict[str, Optional[Dict[str, Any]]]:
+    """Dokumentherkunft je Kante auflösen (Issue #1152).
+
+    Sammelt die ``episode_ids`` aller übergebenen Kanten ein, holt deren
+    Herkunft in *einem* Storage-Aufruf und ordnet sie den Kanten wieder zu.
+
+    Eine Kante bekommt nur dann einen Anker, wenn ihre Episoden auf genau
+    ein ``(document_id, chunk_id)``-Paar zeigen. Mehrdeutigkeit führt zu
+    ``None`` statt zu einer geratenen Herkunft — Akzeptanzkriterium von
+    #1152 und die Voraussetzung dafür, dass #1154 daraus einen
+    verifizierten Anker nach ADR-0013 bauen darf.
+
+    Fehler sind hier nie fatal: das Retrieval liefert dann Fakten ohne
+    Herkunft, statt auszufallen.
+    """
+    lookup = getattr(storage, "get_episode_provenance", None)
+    if lookup is None:
+        return {}
+
+    episode_ids: List[str] = []
+    for edge in edge_dicts:
+        episode_ids.extend(edge.get("episode_ids") or [])
+    if not episode_ids:
+        return {}
+
+    try:
+        provenance_by_episode = lookup(episode_ids)
+    except Exception as exc:  # noqa: BLE001 — Provenance ist optional, Retrieval nicht
+        logger.warning("Episode provenance lookup failed: %s", exc)
+        return {}
+
+    resolved: Dict[str, Optional[Dict[str, Any]]] = {}
+    for edge in edge_dicts:
+        edge_uuid = edge.get("uuid", "")
+        if not edge_uuid:
+            continue
+        candidates: set[tuple[Any, Any]] = set()
+        for episode_id in edge.get("episode_ids") or []:
+            entry = provenance_by_episode.get(episode_id)
+            if entry is not None:
+                candidates.add((entry.get("document_id"), entry.get("chunk_id")))
+
+        if len(candidates) != 1:
+            resolved[edge_uuid] = None
+            continue
+        document_id, chunk_id = candidates.pop()
+        resolved[edge_uuid] = {"document_id": document_id, "chunk_id": chunk_id}
+
+    return resolved
+
 
 def search_graph(
     graph_id: str,
@@ -43,6 +97,9 @@ def search_graph(
         )
 
         facts: List[str] = []
+        # Positionsparallel zu ``facts`` (Issue #1152) — jeder Fakt bekommt
+        # genau einen Eintrag, auch wenn er keine Herkunft hat (``None``).
+        fact_provenance: List[Optional[Dict[str, Any]]] = []
         edges: List[Dict[str, Any]] = []
         nodes: List[Dict[str, Any]] = []
 
@@ -54,18 +111,25 @@ def search_graph(
         else:
             edge_list = []
 
-        for edge in edge_list:
-            if isinstance(edge, dict):
-                fact = edge.get("fact", "")
-                if fact:
-                    facts.append(fact)
-                edges.append({
-                    "uuid": edge.get("uuid", ""),
-                    "name": edge.get("name", ""),
-                    "fact": fact,
-                    "source_node_uuid": edge.get("source_node_uuid", ""),
-                    "target_node_uuid": edge.get("target_node_uuid", ""),
-                })
+        edge_dicts = [edge for edge in edge_list if isinstance(edge, dict)]
+        provenance_by_edge = _resolve_edge_provenance(edge_dicts, storage=storage)
+
+        for edge in edge_dicts:
+            fact = edge.get("fact", "")
+            provenance = provenance_by_edge.get(edge.get("uuid", ""))
+            if fact:
+                facts.append(fact)
+                fact_provenance.append(provenance)
+            projected = {
+                "uuid": edge.get("uuid", ""),
+                "name": edge.get("name", ""),
+                "fact": fact,
+                "source_node_uuid": edge.get("source_node_uuid", ""),
+                "target_node_uuid": edge.get("target_node_uuid", ""),
+            }
+            if provenance is not None:
+                projected.update(provenance)
+            edges.append(projected)
 
         # Parse node results
         if hasattr(search_results, "nodes"):
@@ -86,6 +150,9 @@ def search_graph(
                 summary = node.get("summary", "")
                 if summary:
                     facts.append(f"[{node.get('name', '')}]: {summary}")
+                    # Entity-Summaries sind aggregiert und lassen sich keinem
+                    # einzelnen Chunk zuordnen — kein Anker, kein Raten.
+                    fact_provenance.append(None)
 
         logger.info("Search complete: Found %d related facts", len(facts))
 
@@ -95,6 +162,7 @@ def search_graph(
             nodes=nodes,
             query=query,
             total_count=len(facts),
+            fact_provenance=fact_provenance,
         )
 
     except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
@@ -123,6 +191,7 @@ def local_search(
     logger.info("Using local search: query=%s...", query[:30])
 
     facts: List[str] = []
+    fact_provenance: List[Optional[Dict[str, Any]]] = []
     edges_result: List[Dict[str, Any]] = []
     nodes_result: List[Dict[str, Any]] = []
 
@@ -158,17 +227,25 @@ def local_search(
 
             scored_edges.sort(key=lambda x: x[0], reverse=True)
 
-            for _score, edge in scored_edges[:limit]:
+            top_edges = [edge for _score, edge in scored_edges[:limit]]
+            provenance_by_edge = _resolve_edge_provenance(top_edges, storage=storage)
+
+            for edge in top_edges:
                 fact = edge.get("fact", "")
+                provenance = provenance_by_edge.get(edge.get("uuid", ""))
                 if fact:
                     facts.append(fact)
-                edges_result.append({
+                    fact_provenance.append(provenance)
+                projected = {
                     "uuid": edge.get("uuid", ""),
                     "name": edge.get("name", ""),
                     "fact": fact,
                     "source_node_uuid": edge.get("source_node_uuid", ""),
                     "target_node_uuid": edge.get("target_node_uuid", ""),
-                })
+                }
+                if provenance is not None:
+                    projected.update(provenance)
+                edges_result.append(projected)
 
         if scope in ["nodes", "both"]:
             all_nodes = storage.get_all_nodes(graph_id)
@@ -192,6 +269,7 @@ def local_search(
                 summary = node.get("summary", "")
                 if summary:
                     facts.append(f"[{node.get('name', '')}]: {summary}")
+                    fact_provenance.append(None)
 
         logger.info("Local search complete: Found %d related facts", len(facts))
 
@@ -204,6 +282,7 @@ def local_search(
         nodes=nodes_result,
         query=query,
         total_count=len(facts),
+        fact_provenance=fact_provenance,
     )
 
 
@@ -240,15 +319,19 @@ def get_all_edges(
     logger.info("Getting all edges in graph %s...", graph_id)
 
     raw_edges = storage.get_all_edges(graph_id)
+    provenance_by_edge = _resolve_edge_provenance(raw_edges, storage=storage)
 
     result = []
     for edge in raw_edges:
+        provenance = provenance_by_edge.get(edge.get("uuid", "")) or {}
         edge_info = EdgeInfo(
             uuid=edge.get("uuid", ""),
             name=edge.get("name", ""),
             fact=edge.get("fact", ""),
             source_node_uuid=edge.get("source_node_uuid", ""),
             target_node_uuid=edge.get("target_node_uuid", ""),
+            document_id=provenance.get("document_id"),
+            chunk_id=provenance.get("chunk_id"),
         )
 
         if include_temporal:
