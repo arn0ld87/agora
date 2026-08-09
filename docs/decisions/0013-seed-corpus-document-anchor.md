@@ -60,29 +60,66 @@ Reihenfolge der Chunks liegt dort ohnehin vor. Sie ist aber der Unterschied
 zwischen „steht irgendwo in einem 80-seitigen Dokument" und einer nachprüfbaren
 Stelle.
 
-Autorengegebene Quellen-Labels im Chunk (etwa `A1`–`J1` im Referenz-Testfall)
-haben Vorrang als `document_id`, wenn sie vorhanden sind.
+`document_id` ist eine kanonische, pro Upload eindeutige Kennung. Autorengegebene
+Quellen-Labels im Chunk (etwa `A1`–`J1` im Referenz-Testfall) sind **keine**
+`document_id`: Sie sind über mehrere hochgeladene Dokumente hinweg nicht
+garantiert eindeutig, und zwei Dateien mit gleichem Label und gleicher lokaler
+Chunk-Nummer erzeugten denselben Anker. Ein Anker, der auf zwei Stellen zeigen
+kann, ist serverseitig nicht verifizierbar — und Verifizierbarkeit ist der
+einzige Zweck dieser Entscheidung. Das Autoren-Label wird als Metadatum am
+Evidence-Item geführt und darf angezeigt werden; die Auflösung läuft
+ausschließlich über die kanonische ID.
 
 ### 3. Bestandsgraphen werden nicht nachgerüstet
 
 Bereits gebaute Neo4j-Graphen tragen Episoden mit `uuid4()` ohne Dateibezug. Der
 Anker ließe sich daraus nicht rekonstruieren, sondern nur erfinden. Es gibt
 deshalb weder Backfill noch Reingest-Zwang: Altgraphen liefern dauerhaft keine
-`seed_corpus`-Evidence, ihre Claims bleiben auf `low`. Wer die Stufe `medium`
-will, baut den Graphen neu. Kompatibilitätscode dafür entsteht nicht.
+`seed_corpus`-Evidence. Wer sie will, baut den Graphen neu. Kompatibilitätscode
+dafür entsteht nicht.
+
+Betroffen ist damit ausschließlich die Stufe `medium`, die über
+`agent_grounded_for_medium` zwingend eine `seed_corpus`-Evidence verlangt. Ein
+Claim aus einem Altgraphen, dessen Confidence auf Seed-Evidence angewiesen ist,
+bleibt auf `low`.
+
+**Kein pauschaler Deckel.** `cross_stakeholder_for_high` wertet ausschließlich
+`agent_quote` aus zwei unterschiedlichen Stakeholder-Gruppen; `seed_corpus`
+kommt darin nicht vor. Ein hinreichend breit gestützter Interview-Claim erreicht
+also auch aus einem Altgraphen weiterhin `high` oder `verified`. Weder
+Implementierung noch Tests dürfen daraus einen generellen `low`-Cap für
+Altgraphen ableiten. Dass `medium` hier strenger ist als `high`, ist eine
+bestehende Eigenheit von ADR-0002 und wird von dieser ADR nicht angefasst.
 
 ### 4. Persistierte Items ohne Anker werden beim Laden abgestuft
 
-Für bestehende `evidence-map.json`-Dateien gilt das etablierte Muster aus
-Issue #963: `normalize_persisted_evidence_map` in
-`backend/app/services/evidence_migrations.py` stuft beim **Lesen** ab, mutiert
-die Datei auf der Platte nicht und ist idempotent. Ein `seed_corpus`-Item ohne
+Für bestehende `evidence-map.json`-Dateien läuft der Downgrade beim **Lesen**
+über `normalize_persisted_evidence_map` in
+`backend/app/services/evidence_migrations.py` — die Datei auf der Platte wird
+nicht mutiert, der Schritt ist idempotent. Ein `seed_corpus`-Item ohne
 verifizierten Anker verliert dort seinen Seed-Status; ein Claim, der dadurch
 seine agent-grounded Basis verliert, fällt von `medium` auf `low`.
 
-Der Downgrade ist kein Zusatzaufwand, sondern die Voraussetzung dafür, dass
-Alt-Reports überhaupt weiter geladen werden können — ohne ihn bricht
-`EvidenceMapModel.model_validate` mit HTTP 422.
+**Der Downgrade ist ein Identitätswechsel, kein Label-Update.**
+`build_evidence_id(scope_id, source_kind, producer_key)` in
+`services/evidence_identity.py` nimmt `source_kind` in den Hash auf. Wer
+`seed_corpus` durch eine andere Gattung ersetzt, ändert damit die kanonische
+Identität des Records. `EvidenceMapModel` prüft beides: dass jeder
+`evidence_index`-Key mit der `evidence_id` seines Records übereinstimmt, und
+dass jede Claim-Bindung auf einen existierenden Key zeigt. Ein Downgrade, der
+nur `source_kind` umschreibt, oder einer, der die Record-ID neu berechnet, ohne
+Index-Key und Bindungen mitzuziehen, produziert deshalb exakt den HTTP 422,
+den er verhindern soll.
+
+Der Schritt ist folglich atomar zu implementieren: neue `evidence_id` berechnen,
+`evidence_index` umschlüsseln, alle Claim-Bindungen und globalen Referenzen in
+derselben Operation nachziehen. Kollidiert die neue ID mit einem bereits
+vorhandenen Record derselben Gattung, werden die Einträge zusammengeführt statt
+überschrieben.
+
+Damit unterscheidet sich dieser Fall ausdrücklich von Issue #963: Dort wurde
+`confidence_label` am Claim geändert, was kein Identitätsbestandteil ist. Das
+Lese-Zeitpunkt-Muster wird von dort übernommen, die Mutationsmechanik nicht.
 
 Eine Legacy-Ausnahme mit Stichtag wird ausdrücklich **nicht** eingeführt.
 
@@ -102,8 +139,12 @@ in `_TYPE_TO_SOURCE_KIND` bereits vor.
   `_record_tool_evidence`. Das ist keine additive DTO-Erweiterung, sondern ein
   Cross-Layer-Slice mit Schema-Anteil.
 - Unmittelbar nach der Umsetzung werden Reports *schlechter* aussehen als heute:
-  Claims aus Altgraphen bleiben auf `low`, und ein bisher stillschweigend als
-  Seed durchgewinkter Anker zählt nicht mehr. Das ist der Zweck.
+  Seed-gestützte Claims aus Altgraphen fallen auf `low`, und ein bisher
+  stillschweigend als Seed durchgewinkter Anker zählt nicht mehr. Das ist der
+  Zweck.
+- Der Downgrade-Pfad fasst die kanonische Evidence-Identität an und braucht
+  deshalb Regressionstests gegen die Cross-Reference-Validierung von
+  `EvidenceMapModel`, nicht nur gegen das Confidence-Label.
 - Ein herabgestufter Claim behält vorerst seinen ungehedgten Wortlaut. Der
   Defekt ist bekannt und getrennt getrackt
   ([#1012](https://github.com/arn0ld87/agora/issues/1012)); er trifft auch
