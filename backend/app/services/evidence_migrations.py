@@ -317,11 +317,6 @@ def demote_unanchored_seed_corpus_records(
         raw["evidence_index"] = rebuilt
         return raw
 
-    # Records, die schon vor der Schleife unter einer Ziel-ID lagen, dürfen
-    # nicht von einem abgestuften Duplikat überschrieben werden.
-    for old_id, new_id in remap.items():
-        if new_id not in rebuilt and old_id in evidence_index:
-            rebuilt[new_id] = evidence_index[old_id]
     raw["evidence_index"] = rebuilt
 
     raw["global_evidence_refs"] = list(dict.fromkeys(

@@ -62,7 +62,14 @@ def build_seed_document_anchor(provenance: Optional[Dict[str, Any]]) -> Optional
     anchor = f"{_SEED_DOC_ANCHOR_PREFIX}{document_id}#chunk:{chunk_id}"
     # ``EvidenceRecordModel.source_id_anchor`` ist auf 200 Zeichen begrenzt.
     # Ein gekappter Anker wäre nicht mehr auflösbar — dann lieber keiner.
-    return anchor if len(anchor) <= 200 else None
+    if len(anchor) > 200:
+        return None
+    # Schreib- und Lesepfad müssen dieselbe Regel anwenden. Sonst entsteht ein
+    # Record, den der Schreibpfad für verankert hält und der Lesepfad nicht —
+    # er würde bei jedem Laden abgestuft und umgeschlüsselt und wechselte so
+    # dauerhaft seine Identität. Deshalb prüft der Bau mit dem Leser gegen
+    # (negative Chunk-Nummer, ``#`` in der Dokument-ID).
+    return anchor if is_verified_seed_document_anchor(anchor) else None
 
 
 def is_verified_seed_document_anchor(anchor: Any) -> bool:

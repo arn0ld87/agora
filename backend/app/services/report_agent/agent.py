@@ -978,20 +978,23 @@ class ReportAgent:
             buffer = getattr(self, attribute, None)
             if not isinstance(buffer, list):
                 continue
-            merged: Dict[str, Dict[str, Any]] = {}
-            passthrough: List[Dict[str, Any]] = []
+            # Reihenfolge bleibt erhalten: ``_build_claims_for_section``
+            # schneidet den Puffer danach mit ``[:10]`` ab — eine Umsortierung
+            # würde die Auswahl der gebundenen Evidence verschieben, obwohl
+            # hier nur IDs ersetzt werden.
+            kept: List[Any] = []
+            seen: set[str] = set()
             for item in buffer:
-                if not isinstance(item, dict):
-                    passthrough.append(item)
+                if not isinstance(item, dict) or not item.get("evidence_id"):
+                    kept.append(item)
                     continue
-                current = str(item.get("evidence_id") or "")
-                if not current:
-                    passthrough.append(item)
-                    continue
-                target = id_remap.get(current, current)
+                target = id_remap.get(str(item["evidence_id"]), str(item["evidence_id"]))
                 item["evidence_id"] = target
-                merged.setdefault(target, item)
-            setattr(self, attribute, passthrough + list(merged.values()))
+                if target in seen:
+                    continue
+                seen.add(target)
+                kept.append(item)
+            setattr(self, attribute, kept)
 
     def _save_evidence_section(self, report_id: str, section_index: int, section_title: str, content: str) -> None:
         from .output_contract import is_fallback_content  # noqa: PLC0415

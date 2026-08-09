@@ -528,6 +528,31 @@ def test_incomplete_or_malformed_provenance_yields_no_anchor() -> None:
     assert build_seed_document_anchor({"document_id": "d" * 200, "chunk_id": 1}) is None
 
 
+def test_builder_rejects_what_the_reader_would_reject() -> None:
+    """Schreib- und Lesepfad teilen dieselbe Regel.
+
+    Ein Record, den der Bau für verankert hält und der Leser nicht, würde bei
+    jedem Laden abgestuft und umgeschlüsselt — sein Beleg wechselte dauerhaft
+    die Identität (CodeRabbit-Review PR #1166).
+    """
+    from app.services.report_agent.evidence import (
+        build_seed_document_anchor,
+        is_verified_seed_document_anchor,
+    )
+
+    # Eine Dokument-ID mit '#' zerlegte den Anker an der falschen Stelle.
+    assert build_seed_document_anchor({"document_id": "doc#x", "chunk_id": 1}) is None
+    # Negative Chunk-Nummern gibt es nicht.
+    assert build_seed_document_anchor({"document_id": "doc_x", "chunk_id": -1}) is None
+
+    for provenance in (
+        {"document_id": "doc_a1b2c3d4", "chunk_id": 0},
+        {"document_id": "doc_a1b2c3d4", "chunk_id": 12345},
+    ):
+        anchor = build_seed_document_anchor(provenance)
+        assert anchor and is_verified_seed_document_anchor(anchor)
+
+
 def test_is_verified_seed_document_anchor_accepts_only_the_canonical_format() -> None:
     from app.services.report_agent.evidence import is_verified_seed_document_anchor
 
