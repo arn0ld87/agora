@@ -144,7 +144,8 @@ Chat-Routing und Embedding-Konfiguration bleiben getrennte Vertragswelten.
 - Readiness prüft Neo4j, Redis, Upload-Verzeichnis und Embedding-Konfiguration
 - Dependency-Ausnahmen werden im [`dependency-risk-register.md`](dependency-risk-register.md) geführt
 - Ontology-Upload (`/ontology/generate`) räumt bei Datei-I/O-Fehlern zwischen Projektanlage und Service-Übergabe das halb angelegte Projekt zuverlässig auf (Issue #899); ein scheiterndes Aufräumen wird protokolliert, ohne die Fehlerantwort zu verfälschen
-- Dokument-Upload schreibt zusätzlich ein Offset-Manifest (`extracted_documents.json`) neben `extracted_text.txt`; der Textblob bleibt unverändert, Projekte ohne Manifest laden weiterhin fehlerfrei ([ADR-0013](decisions/0013-seed-corpus-document-anchor.md), Issue #1152). Die Chunk-Zuordnung steht als Funktion bereit, ist aber noch an keinen Graph-Build angeschlossen — das erfolgt in Teil B desselben Issues
+- Dokument-Upload schreibt zusätzlich ein Offset-Manifest (`extracted_documents.json`) neben `extracted_text.txt`; der Textblob bleibt unverändert, Projekte ohne Manifest laden weiterhin fehlerfrei ([ADR-0013](decisions/0013-seed-corpus-document-anchor.md), Issue #1152)
+- Die Dokumentherkunft läuft durch bis ins Retrieval: der Graph-Build schreibt `document_id`/`chunk_id` auf den Episode-Knoten, und `SearchResult`, `InsightForgeResult` sowie `PanoramaResult` transportieren sie positionsparallel zur jeweiligen Fakt-Liste (Issue #1152). Ein Fakt ohne eindeutig verifizierbare Herkunft bekommt keinen Anker statt eines geratenen; Bestandsgraphen ohne Dokumentbezug liefern durchgängig `None` und denselben Payload wie zuvor. Das Evidence-Mapping darauf (`EvidenceType.seed_document`, Ankererzeugung) ist noch offen — Issue #1154
 
 Aktuelle Hardstops:
 

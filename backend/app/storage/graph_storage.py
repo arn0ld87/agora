@@ -181,6 +181,23 @@ class GraphStorage(ABC):
     def get_all_edges(self, graph_id: str) -> List[Dict[str, Any]]:
         """Get all edges in a graph."""
 
+    # --- Provenance ---
+
+    def get_episode_provenance(
+        self, episode_ids: List[str]
+    ) -> Dict[str, Dict[str, Any]]:
+        """Dokument-/Chunk-Herkunft der genannten Episoden (Issue #1152).
+
+        Liefert eine Map ``episode_uuid -> {"document_id": …, "chunk_id": …}``.
+        Episoden ohne Dokumentbezug — Altgraphen vor ADR-0013, oder Ingest
+        ohne Manifest — fehlen in der Map; es gibt keinen Platzhalter.
+
+        Bewusst *nicht* abstrakt: der Default liefert eine leere Map, damit
+        Storage-Implementierungen ohne Dokumentbezug unverändert
+        weiterlaufen. Aufrufer müssen mit einer leeren Map umgehen können.
+        """
+        return {}
+
     # --- Search ---
 
     @abstractmethod

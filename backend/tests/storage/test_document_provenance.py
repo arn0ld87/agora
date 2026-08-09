@@ -166,3 +166,59 @@ class TestAddTextForwardsDocumentProvenance:
         _, kwargs = mixin._persist_episode.call_args
         assert kwargs["document_id"] is None
         assert kwargs["chunk_id"] is None
+
+
+class TestGetEpisodeProvenance:
+    """Lesepfad (Etappe 2): ein UNWIND-Lookup je Suche, keine Platzhalter."""
+
+    def _read_mixin(self, records):
+        from app.storage.neo4j_read import Neo4jReadMixin
+
+        capture: dict = {}
+
+        def fake_call_with_retry(execute_read_fn, inner_fn=None, *args, **kwargs):
+            tx = MagicMock()
+
+            def _run(query, **params):
+                capture["query"] = query
+                capture["params"] = params
+                return records
+
+            tx.run.side_effect = _run
+            target = inner_fn if inner_fn is not None else execute_read_fn
+            return target(tx)
+
+        mixin = object.__new__(Neo4jReadMixin)  # type: ignore[arg-type]
+        mixin._call_with_retry = fake_call_with_retry  # type: ignore[attr-defined]
+
+        session_ctx = MagicMock()
+        session_ctx.__enter__ = MagicMock(return_value=MagicMock())
+        session_ctx.__exit__ = MagicMock(return_value=False)
+        mixin._get_session = MagicMock(return_value=session_ctx)  # type: ignore[attr-defined]
+        return mixin, capture
+
+    def test_returns_document_and_chunk_per_episode(self):
+        from app.storage.neo4j_read import Neo4jReadMixin
+
+        records = [
+            {"uuid": "ep-1", "document_id": "interview-nord", "chunk_id": 7},
+        ]
+        mixin, capture = self._read_mixin(records)
+
+        result = Neo4jReadMixin.get_episode_provenance(mixin, ["ep-1", "ep-1"])
+
+        assert result == {
+            "ep-1": {"document_id": "interview-nord", "chunk_id": 7}
+        }
+        # Dedupliziert: derselbe Parameter darf nicht zweimal im UNWIND landen.
+        assert capture["params"]["ids"] == ["ep-1"]
+        assert "e.document_id IS NOT NULL" in capture["query"]
+
+    def test_empty_input_skips_the_query_entirely(self):
+        from app.storage.neo4j_read import Neo4jReadMixin
+
+        mixin, capture = self._read_mixin([])
+
+        assert Neo4jReadMixin.get_episode_provenance(mixin, []) == {}
+        assert Neo4jReadMixin.get_episode_provenance(mixin, ["", None]) == {}
+        assert capture == {}
