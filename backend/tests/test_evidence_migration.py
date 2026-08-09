@@ -12,8 +12,8 @@ from app.services.evidence_migrations import (
 )
 
 
-def test_current_schema_version_is_2():
-    assert CURRENT_SCHEMA_VERSION == 2
+def test_current_schema_version_is_3():
+    assert CURRENT_SCHEMA_VERSION == 3
 
 
 def test_migrate_none_returns_none():

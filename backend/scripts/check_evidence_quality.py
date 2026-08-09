@@ -10,7 +10,7 @@ Aufruf:
         --min-evidence-coverage 0.85 \
         --min-claim-support-ratio 0.75 \
         --orphan-claim-rate 0.10 \
-        --require-schema-version 2
+        --require-schema-version 3
 
 Verwendete Metriken (aus ChatGPT-Audit):
 - evidence_coverage:    Claims mit evidence != [] / alle Claims              >= 0.90
@@ -30,7 +30,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from pydantic import ValidationError
 
-from app.contracts.report_contract import EvidenceMapModel, ReportContractModel  # noqa: E402
+from app.contracts.report_contract import EvidenceMapModel  # noqa: E402
+from app.services.evidence_migrations import normalize_persisted_evidence_map  # noqa: E402
 
 
 def evaluate(evidence_map: EvidenceMapModel) -> dict[str, float]:
@@ -71,9 +72,10 @@ def evaluate(evidence_map: EvidenceMapModel) -> dict[str, float]:
     dedup_rate = (dedup_count / total_sections) if total_sections else 0.0
 
     # concentration_index: max(count_pro_source) / total_evidence im
-    # global_evidence-Pool (kleiner Pool oder Single-Source -> hoher Index).
+    # globalen Evidence-Pool (kleiner Pool oder Single-Source -> hoher Index).
     sources_count: dict[str, int] = {}
-    for item in evidence_map.global_evidence:
+    for evidence_id in evidence_map.global_evidence_refs:
+        item = evidence_map.evidence_index[evidence_id]
         src = str(item.source)
         sources_count[src] = sources_count.get(src, 0) + 1
     total_global = sum(sources_count.values())
@@ -92,12 +94,17 @@ def evaluate(evidence_map: EvidenceMapModel) -> dict[str, float]:
 def load_one(path: Path, require_schema_version: int) -> EvidenceMapModel | None:
     raw = json.loads(path.read_text(encoding="utf-8"))
     # Akzeptiere sowohl ReportContract als auch nackte EvidenceMap als Fixture
+    evidence_raw = raw.get("evidence") if isinstance(raw.get("evidence"), dict) else raw
+    if evidence_raw.get("schema_version") != require_schema_version:
+        print(
+            f"Fixture {path.name}: schema_version={evidence_raw.get('schema_version')} "
+            f"!= required {require_schema_version}",
+            file=sys.stderr,
+        )
+        return None
     try:
-        if "evidence" in raw and isinstance(raw.get("evidence"), dict):
-            contract = ReportContractModel.model_validate(raw)
-            ev = contract.evidence
-        else:
-            ev = EvidenceMapModel.model_validate(raw)
+        normalized = normalize_persisted_evidence_map(evidence_raw)
+        ev = EvidenceMapModel.model_validate(normalized)
     except ValidationError as e:
         print(f"  \u2717 {path.name}: {e}", file=sys.stderr)
         return None
@@ -120,7 +127,7 @@ def main() -> int:
     ap.add_argument("--min-evidence-coverage", type=float, default=0.85)
     ap.add_argument("--min-claim-support-ratio", type=float, default=0.75)
     ap.add_argument("--orphan-claim-rate", type=float, default=0.10)
-    ap.add_argument("--require-schema-version", type=int, default=2)
+    ap.add_argument("--require-schema-version", type=int, default=3)
     ap.add_argument(
         "--soft",
         action="store_true",

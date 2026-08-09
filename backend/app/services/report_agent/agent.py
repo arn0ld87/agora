@@ -13,11 +13,12 @@ from .evidence import (
     normalize_claims_for_contract,
     normalize_sections_for_contract,
     record_evidence_item,
+    register_evidence_record,
     resolve_embedder,
 )
 from .manager import ReportManager
 from .planning import plan_outline as plan_outline_impl
-from .schemas import CURRENT_SCHEMA_VERSION, EvidenceMapModel
+from .schemas import CURRENT_SCHEMA_VERSION, EvidenceMapModel, normalize_persisted_evidence_map
 from .sections import (
     attach_provenance,
     atomize_claim_chunk,
@@ -152,6 +153,7 @@ class ReportAgent:
         self.console_logger: Optional[ReportConsoleLogger] = None
         self.evidence_map: Optional[Dict[str, Any]] = None
         self._active_section_evidence: List[Dict[str, Any]] = []
+        self._active_section_unresolved_evidence: List[Dict[str, Any]] = []
         self._current_section_index: Optional[int] = None
 
         logger.info(f"ReportAgent initialization complete: graph_id={graph_id}, simulation_id={simulation_id}")
@@ -167,9 +169,21 @@ class ReportAgent:
         return truncate_text(text, limit)
 
     def _record_evidence_item(self, item: Dict[str, Any]) -> None:
+        enriched = attach_provenance(dict(item))
+        if self.evidence_map is None:
+            self._active_section_unresolved_evidence.append(enriched)
+            return
+        record = register_evidence_record(
+            self.evidence_map,
+            enriched,
+            scope_id=self.simulation_id,
+        )
+        if record is None:
+            self._active_section_unresolved_evidence.append(enriched)
+            return
         self._active_section_evidence = record_evidence_item(
             self._active_section_evidence,
-            item,
+            record,
         )
 
     def _try_get_embedder(self) -> Optional[Callable[[str], List[float]]]:
@@ -216,6 +230,7 @@ class ReportAgent:
                     ),
                     raw={"metrics": metrics},
                 ).to_dict())
+                items[-1]["producer_key"] = "simulation-metric:status"
             else:
                 metric_fields = (
                     "echo_chamber_index",
@@ -234,6 +249,7 @@ class ReportAgent:
                         snippet=f"{field}: {value}",
                         raw={"metric": field, "value": value, "metrics": metrics},
                     ).to_dict())
+                    items[-1]["producer_key"] = f"simulation-metric:{field}"
 
             sampled_actions = self._sample_actions_timeseries(action_dicts, k=8)
             for action in sampled_actions:
@@ -248,6 +264,17 @@ class ReportAgent:
                     snippet=f"{agent} {action_type} on {platform} in round {round_num}",
                     raw=action,
                 ).to_dict())
+                action_identity = (
+                    action.get("platform"),
+                    action.get("round_num"),
+                    action.get("agent_id"),
+                    action.get("action_type"),
+                    action.get("timestamp"),
+                )
+                if all(value is not None and str(value).strip() for value in action_identity):
+                    items[-1]["producer_key"] = "simulation-action:" + ":".join(
+                        str(value) for value in action_identity
+                    )
             return items
         except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.warning(f"Failed to collect simulation evidence: {exc}")
@@ -273,14 +300,17 @@ class ReportAgent:
                     "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
                 })
             for entity in structured_result.entity_insights[:8]:
-                items.append({
+                item = {
                     "type": "entity_summary",
                     "tool_name": tool_name,
                     "query": structured_result.query,
                     "snippet": self._truncate(entity.get("summary") or entity.get("name")),
                     "raw": entity,
                     "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
-                })
+                }
+                if entity.get("uuid"):
+                    item["producer_key"] = f"graph-node:{entity['uuid']}"
+                items.append(item)
             for chain in structured_result.relationship_chains[:8]:
                 items.append({
                     "type": "relationship_chain",
@@ -331,14 +361,18 @@ class ReportAgent:
                 })
         elif isinstance(structured_result, dict) and "results" in structured_result:
             for result in (structured_result.get("results") or [])[:8]:
-                items.append({
+                item = {
                     "type": "web_search_result",
                     "tool_name": tool_name,
                     "query": structured_result.get("query") or parameters.get("query"),
                     "snippet": self._truncate(result.get("content") or result.get("title")),
                     "raw": result,
                     "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
-                })
+                }
+                result_url = result.get("url") or result.get("source_url")
+                if result_url:
+                    item["producer_key"] = f"web:{result_url}"
+                items.append(item)
         elif isinstance(structured_result, dict) and "url" in structured_result:
             items.append({
                 "type": "web_fetch",
@@ -347,6 +381,7 @@ class ReportAgent:
                 "snippet": self._truncate(structured_result.get("content") or structured_result.get("title")),
                 "raw": structured_result,
                 "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
+                "producer_key": f"web:{structured_result['url']}",
             })
 
         if not items and rendered_result:
@@ -398,7 +433,12 @@ class ReportAgent:
             atomic_chunks.extend(atoms or [chunk])
         chunks = atomic_chunks
         claims = []
-        global_items = deepcopy((self.evidence_map or {}).get("global_evidence", [])[:6])
+        evidence_index = (self.evidence_map or {}).get("evidence_index") or {}
+        global_items = [
+            deepcopy(evidence_index[evidence_id])
+            for evidence_id in (self.evidence_map or {}).get("global_evidence_refs", [])[:6]
+            if evidence_id in evidence_index
+        ]
         # S4b: claim-spezifisches Binding wenn ein Embedder verfügbar ist.
         # S5: model_generated_inference und section_synthesis sind keine
         # Evidence — sie sind Modell-Output. Sie wandern in das separate
@@ -418,6 +458,13 @@ class ReportAgent:
                     raw={"content": chunk},
                 ).to_dict()
             ]
+            for unresolved in getattr(self, "_active_section_unresolved_evidence", [])[:10]:
+                audit_trail.append({
+                    "type": "unresolved_evidence",
+                    "source": str(unresolved.get("source") or "report_tool"),
+                    "snippet": self._truncate(str(unresolved.get("snippet") or "")),
+                    "raw": {"reason": "missing_producer_key"},
+                })
 
             bound: List[Dict[str, Any]] = []
             embedder_ok = False
@@ -441,20 +488,28 @@ class ReportAgent:
                 evidence_items = bound
                 direct_count = len(bound)
             else:
-                evidence_items = direct_items
+                evidence_items = [
+                    {"evidence_id": item["evidence_id"]}
+                    for item in direct_items
+                    if item.get("evidence_id")
+                ]
                 direct_count = len(direct_items)
 
-            # Layer 3 (Task 12): Provenance-Anker an jedes Evidence-Item heften.
-            evidence_items = [self._attach_provenance(it) for it in evidence_items]
+            resolved_evidence = []
+            current_index = (self.evidence_map or {}).get("evidence_index") or {}
+            for binding in evidence_items:
+                record = current_index.get(binding.get("evidence_id"))
+                if record:
+                    resolved_evidence.append(dict(record) | dict(binding))
 
             # S6: formelbasierte Confidence statt linear-in-N. Berechnet
             # aus relevance (mean match_score), source_quality (Typ-
             # Gewichtung), specificity (top match_score), consistency
             # (Anzahl unique Quellen). Verified-Label nur bei Top-
             # Match-Score >= 0.85.
-            penalty = detect_contradiction_penalty(evidence_items)
+            penalty = detect_contradiction_penalty(resolved_evidence)
             confidence_score, confidence_label = compute_confidence(
-                evidence_items,
+                resolved_evidence,
                 contradiction_penalty=penalty,
             )
             if penalty > 0.0:
@@ -465,7 +520,7 @@ class ReportAgent:
                 })
             # Anti-Dekorations-Guard: kein Evidence → ehrliches speculative-Label
             # und Audit-Eintrag statt dekorativem global_items-Fallback.
-            if not evidence_items:
+            if not resolved_evidence:
                 confidence_score, confidence_label = 0.15, "speculative"
                 audit_trail.append({
                     "type": "model_generated_inference",
@@ -483,7 +538,7 @@ class ReportAgent:
                 evidence=evidence_items,
                 confidence_score=confidence_score,
                 confidence_label=confidence_label,
-                notes="Section-chunk level evidence mapping (schema_version 2).",
+                notes="Section-chunk level evidence mapping (schema_version 3).",
             ).to_dict()
             claim_dict["audit_trail"] = audit_trail
             claims.append(claim_dict)
@@ -534,14 +589,32 @@ class ReportAgent:
             # Vorher zählte jedes thematisch ähnliche Item mit — dadurch
             # erreichten Interpretationen den Claim-Floor, obwohl kein
             # einziges Item sie belegte.
-            supporting = [
-                item for item in evidence
-                if isinstance(item, dict) and item.get("supports_claim") is True
-            ]
-            evidence_count = len(supporting) or (
-                len(claim.get("evidence_refs") or []) if not evidence else 0
+            evidence_ids = {
+                str(item["evidence_id"])
+                for item in evidence
+                if isinstance(item, dict) and item.get("evidence_id")
+            }
+            supporting_ids = {
+                str(item["evidence_id"])
+                for item in evidence
+                if isinstance(item, dict)
+                and item.get("evidence_id")
+                and item.get("supports_claim") is True
+            }
+            legacy_ref_ids = {
+                str(evidence_ref)
+                for evidence_ref in claim.get("evidence_refs") or []
+                if evidence_ref
+            }
+            evidence_count = len(supporting_ids) or (
+                len(legacy_ref_ids) if not evidence else 0
             )
-            related_only = len(evidence) - len(supporting)
+            unkeyed_related = sum(
+                1
+                for item in evidence
+                if not isinstance(item, dict) or not item.get("evidence_id")
+            )
+            related_only = len(evidence_ids - supporting_ids) + unkeyed_related
             if 0 < evidence_count < CLAIM_MIN_EVIDENCE_FOR_CLAIM:
                 index = len(hypotheses) + 1
                 claim_text = (
@@ -572,7 +645,7 @@ class ReportAgent:
             # anhängt. Vorher griff dieser Zweig nur bei komplett leerer
             # Evidence-Liste und niedrigem Score; Interpretationen mit
             # dekorativer Evidence liefen als Claims durch.
-            if not supporting:
+            if not supporting_ids:
                 index = len(hypotheses) + 1
                 claim_text = (
                     str(claim.get("claim_text") or claim.get("claim") or "").strip()
@@ -647,7 +720,12 @@ class ReportAgent:
         """
         pool: List[Dict[str, Any]] = list(self._active_section_evidence or [])
         if self.evidence_map:
-            pool.extend(self.evidence_map.get("global_evidence") or [])
+            evidence_index = self.evidence_map.get("evidence_index") or {}
+            pool.extend(
+                evidence_index[evidence_id]
+                for evidence_id in self.evidence_map.get("global_evidence_refs") or []
+                if evidence_id in evidence_index
+            )
         return pool
 
     def _record_prose_hypotheses(
@@ -686,8 +764,14 @@ class ReportAgent:
 
         if self.evidence_map is None:
             self._init_evidence_map(report_id)
+        else:
+            self.evidence_map = (
+                normalize_persisted_evidence_map(self.evidence_map)
+                or self.evidence_map
+            )
         self.evidence_map.setdefault("schema_version", CURRENT_SCHEMA_VERSION)
-        self.evidence_map.setdefault("global_evidence", self._collect_simulation_evidence_items())
+        self.evidence_map.setdefault("evidence_index", {})
+        self.evidence_map.setdefault("global_evidence_refs", [])
         # schema_version gehört nur auf Map-Ebene, nicht auf Section-Ebene
         # (ReportSectionModel hat das Feld nicht).
         #

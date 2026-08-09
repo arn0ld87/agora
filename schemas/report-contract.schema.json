@@ -32,6 +32,98 @@
       "title": "AgentLogRef",
       "type": "object"
     },
+    "ClaimEvidenceBindingModel": {
+      "additionalProperties": false,
+      "description": "Claim-relative Bewertung einer Referenz auf ``EvidenceRecordModel``.",
+      "properties": {
+        "contradicts_claim": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Contradicts Claim"
+        },
+        "entailment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EntailmentVerdict"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "entailment_reason": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Entailment Reason"
+        },
+        "evidence_id": {
+          "pattern": "^ev_[0-9a-f]{32}$",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "match_score": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Match Score"
+        },
+        "retrieval_score": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retrieval Score"
+        },
+        "supports_claim": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Supports Claim"
+        }
+      },
+      "required": [
+        "evidence_id"
+      ],
+      "title": "ClaimEvidenceBindingModel",
+      "type": "object"
+    },
     "ConfidenceLabel": {
       "enum": [
         "low",
@@ -88,250 +180,6 @@
       "title": "EvidenceDegradationModel",
       "type": "object"
     },
-    "EvidenceItemModel": {
-      "additionalProperties": false,
-      "description": "Bestehende EvidenceItem-Felder aus report_agent.py, jetzt typsicher.",
-      "properties": {
-        "agent_log_ref": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/AgentLogRef"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "contradicts_claim": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Contradicts Claim"
-        },
-        "entailment": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/EntailmentVerdict"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "entailment_reason": {
-          "anyOf": [
-            {
-              "maxLength": 500,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Entailment Reason"
-        },
-        "match_score": {
-          "anyOf": [
-            {
-              "maximum": 1.0,
-              "minimum": 0.0,
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Match Score"
-        },
-        "persona_stakeholder_group": {
-          "anyOf": [
-            {
-              "maxLength": 200,
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Persona Stakeholder Group"
-        },
-        "query": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Query"
-        },
-        "quote": {
-          "anyOf": [
-            {
-              "maxLength": 500,
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Quote"
-        },
-        "raw": {
-          "anyOf": [
-            {},
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Raw"
-        },
-        "retrieval_score": {
-          "anyOf": [
-            {
-              "maximum": 1.0,
-              "minimum": 0.0,
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Retrieval Score"
-        },
-        "sentiment_score": {
-          "anyOf": [
-            {
-              "maximum": 1.0,
-              "minimum": -1.0,
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Sentiment des Quellen-Snippets (-1 negativ, 0 neutral, +1 positiv).",
-          "title": "Sentiment Score"
-        },
-        "snippet": {
-          "maxLength": 2000,
-          "minLength": 1,
-          "title": "Snippet",
-          "type": "string"
-        },
-        "source": {
-          "minLength": 1,
-          "title": "Source",
-          "type": "string"
-        },
-        "source_id_anchor": {
-          "anyOf": [
-            {
-              "maxLength": 200,
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Source Id Anchor"
-        },
-        "source_kind": {
-          "$ref": "#/$defs/EvidenceSourceKind",
-          "default": "inferred"
-        },
-        "source_model": {
-          "anyOf": [
-            {
-              "maxLength": 200,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Provider+Modell, das diese Evidence-Zeile extrahiert hat (Slice 8).",
-          "title": "Source Model"
-        },
-        "supports_claim": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Supports Claim"
-        },
-        "tool_name": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Tool Name"
-        },
-        "type": {
-          "$ref": "#/$defs/EvidenceType"
-        },
-        "value": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "integer"
-            },
-            {
-              "type": "number"
-            },
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Value"
-        }
-      },
-      "required": [
-        "type",
-        "source",
-        "snippet"
-      ],
-      "title": "EvidenceItemModel",
-      "type": "object"
-    },
     "EvidenceMapModel": {
       "additionalProperties": false,
       "description": "Persistierte Evidence-Map. Abl\u00f6se f\u00fcr die rohen Dicts in report_agent.py.",
@@ -343,11 +191,18 @@
           "title": "Degradation Log",
           "type": "array"
         },
-        "global_evidence": {
-          "items": {
-            "$ref": "#/$defs/EvidenceItemModel"
+        "evidence_index": {
+          "additionalProperties": {
+            "$ref": "#/$defs/EvidenceRecordModel"
           },
-          "title": "Global Evidence",
+          "title": "Evidence Index",
+          "type": "object"
+        },
+        "global_evidence_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Global Evidence Refs",
           "type": "array"
         },
         "report_id": {
@@ -356,8 +211,8 @@
           "type": "string"
         },
         "schema_version": {
-          "const": 2,
-          "default": 2,
+          "const": 3,
+          "default": 3,
           "title": "Schema Version",
           "type": "integer"
         },
@@ -414,6 +269,185 @@
       "title": "EvidenceOmissionModel",
       "type": "object"
     },
+    "EvidenceRecordModel": {
+      "additionalProperties": false,
+      "description": "Claim-unabhaengiger, kanonisch adressierbarer Quellen-Datensatz.",
+      "properties": {
+        "agent_log_ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentLogRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "evidence_id": {
+          "pattern": "^ev_[0-9a-f]{32}$",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "persona_stakeholder_group": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Persona Stakeholder Group"
+        },
+        "producer_key": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Producer Key",
+          "type": "string"
+        },
+        "query": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Query"
+        },
+        "quote": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quote"
+        },
+        "raw": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Raw"
+        },
+        "sentiment_score": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": -1.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sentiment Score"
+        },
+        "snippet": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Snippet",
+          "type": "string"
+        },
+        "source": {
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "source_id_anchor": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Id Anchor"
+        },
+        "source_kind": {
+          "$ref": "#/$defs/EvidenceSourceKind",
+          "default": "inferred"
+        },
+        "source_model": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Model"
+        },
+        "tool_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tool Name"
+        },
+        "type": {
+          "$ref": "#/$defs/EvidenceType"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "producer_key",
+        "type",
+        "source",
+        "snippet"
+      ],
+      "title": "EvidenceRecordModel",
+      "type": "object"
+    },
     "EvidenceSourceKind": {
       "description": "ADR-0002 Anker 3 \u2014 Quellengattung pro Evidence-Item.\n\nWird von den Cross-Stakeholder-/Inferred-Validators auf\n``ReportClaimModel`` ausgewertet (Sub-Slice M11.7b, Anker 4 + 5).\nDrift-Guard: Diese Werte sind im Prompt-Block\n``backend/app/services/report_prompts/sections.py`` referenziert (Anker 1).\n\nErweiterung (Report-Trust-Slice): ``agent_action`` und ``web_source``\nerg\u00e4nzen die urspr\u00fcnglichen vier Werte. Das ist additiv und versch\u00e4rft\nADR-0002, statt es zu schw\u00e4chen \u2014 vorher liefen Agentenaktionen und\nWeb-Treffer \u00fcber den Default ``seed_corpus`` und verschmolzen damit\nSeed-Dokument, Simulation und Recherche zu einer einzigen Quellengattung.\nF\u00fcr die Confidence-Anker gilt weiterhin: nur ``agent_quote`` z\u00e4hlt als\nStakeholder-Stimme, nur ``seed_corpus`` als Dokumentfakt.",
       "enum": [
@@ -444,8 +478,9 @@
       "title": "EvidenceType",
       "type": "string"
     },
-    "ReportClaimModel": {
+    "IndexedReportClaimModel": {
       "additionalProperties": false,
+      "description": "Claim-Shape der EvidenceMap v3 mit referenzierten Bindings.",
       "properties": {
         "audit_trail": {
           "items": {
@@ -476,7 +511,7 @@
         },
         "evidence": {
           "items": {
-            "$ref": "#/$defs/EvidenceItemModel"
+            "$ref": "#/$defs/ClaimEvidenceBindingModel"
           },
           "maxItems": 10,
           "title": "Evidence",
@@ -501,7 +536,7 @@
         "confidence_label",
         "confidence_score"
       ],
-      "title": "ReportClaimModel",
+      "title": "IndexedReportClaimModel",
       "type": "object"
     },
     "ReportModel": {
@@ -766,7 +801,7 @@
       "properties": {
         "claims": {
           "items": {
-            "$ref": "#/$defs/ReportClaimModel"
+            "$ref": "#/$defs/IndexedReportClaimModel"
           },
           "title": "Claims",
           "type": "array"

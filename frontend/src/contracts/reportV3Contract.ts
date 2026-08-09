@@ -12,6 +12,20 @@
  * M11.8c Vorbereitung für M11.8d (Strict-Schema-Forced-Output).
  */
 import { z } from "zod";
+import {
+  EvidenceIdSchema,
+  EvidenceIndexSchema,
+} from "./reportContract";
+export {
+  EvidenceIdSchema,
+  EvidenceIndexSchema,
+  EvidenceRecordSchema,
+} from "./reportContract";
+export type {
+  EvidenceId,
+  EvidenceIndex,
+  EvidenceRecord,
+} from "./reportContract";
 
 // === Persona ===
 export const PersonaV3Schema = z
@@ -30,7 +44,7 @@ export const PersonaV3Schema = z
     haushaltseinkommen: z.string().nullable().optional(),
     needs: z.array(z.string()).default([]),
     values: z.array(z.string()).default([]),
-    evidence_refs: z.array(z.string()).default([]),
+    evidence_refs: z.array(EvidenceIdSchema).default([]),
   })
   .strict();
 export type PersonaV3 = z.infer<typeof PersonaV3Schema>;
@@ -57,7 +71,7 @@ export const ClaimSchema = z
   .object({
     id: z.string().min(1),
     statement: z.string().min(8),
-    evidence_refs: z.array(z.string()).min(1),
+    evidence_refs: z.array(EvidenceIdSchema).min(1),
     confidence: z.enum(["speculative", "low", "medium", "high", "verified"]),
     persona_ids: z.array(z.string()).default([]),
     aggregation_basis: z.enum([
@@ -82,7 +96,7 @@ export const MultiplierSchema = z
       "retention",
     ]),
     reichweite_score: z.number().int().min(1).max(10),
-    evidence_refs: z.array(z.string()).default([]),
+    evidence_refs: z.array(EvidenceIdSchema).default([]),
   })
   .strict();
 export type Multiplier = z.infer<typeof MultiplierSchema>;
@@ -94,7 +108,7 @@ export const FrictionPointSchema = z
     beschreibung: z.string().min(1),
     severity: z.enum(["low", "medium", "high"]),
     affected_persona_ids: z.array(z.string()).default([]),
-    evidence_refs: z.array(z.string()).default([]),
+    evidence_refs: z.array(EvidenceIdSchema).default([]),
   })
   .strict();
 export type FrictionPoint = z.infer<typeof FrictionPointSchema>;
@@ -112,7 +126,7 @@ export const TrustSignalSchema = z
       "scarcity",
       "liking",
     ]),
-    evidence_refs: z.array(z.string()).default([]),
+    evidence_refs: z.array(EvidenceIdSchema).default([]),
   })
   .strict();
 export type TrustSignal = z.infer<typeof TrustSignalSchema>;
@@ -125,7 +139,7 @@ export const ChangeRecommendationSchema = z
     beschreibung: z.string().min(1),
     priority: z.enum(["low", "medium", "high"]),
     aufwand: z.enum(["S", "M", "L"]),
-    evidence_refs: z.array(z.string()).default([]),
+    evidence_refs: z.array(EvidenceIdSchema).default([]),
   })
   .strict();
 export type ChangeRecommendation = z.infer<typeof ChangeRecommendationSchema>;
@@ -137,7 +151,7 @@ export const ProjectImpactSchema = z
     beschreibung: z.string().min(1),
     affected_segments: z.array(z.string()).default([]),
     confidence: z.enum(["speculative", "low", "medium", "high", "verified"]),
-    evidence_refs: z.array(z.string()).default([]),
+    evidence_refs: z.array(EvidenceIdSchema).default([]),
   })
   .strict();
 export type ProjectImpact = z.infer<typeof ProjectImpactSchema>;
@@ -149,7 +163,7 @@ export const PositioningVariantSchema = z
     titel: z.string().min(1),
     claim_text: z.string().min(1),
     ziel_persona_ids: z.array(z.string()).default([]),
-    evidence_refs: z.array(z.string()).default([]),
+    evidence_refs: z.array(EvidenceIdSchema).default([]),
   })
   .strict();
 export type PositioningVariant = z.infer<typeof PositioningVariantSchema>;
@@ -169,7 +183,7 @@ export const ContentIdeaSchema = z
       "other",
     ]),
     persona_ids: z.array(z.string()).default([]),
-    evidence_refs: z.array(z.string()).default([]),
+    evidence_refs: z.array(EvidenceIdSchema).default([]),
   })
   .strict();
 export type ContentIdea = z.infer<typeof ContentIdeaSchema>;
@@ -239,9 +253,10 @@ export type ModelAttribution = z.infer<typeof ModelAttributionSchema>;
 // === ReportV3 Container ===
 export const ReportV3Schema = z
   .object({
-    schema_version: z.literal(3),
+    schema_version: z.literal(4),
     report_id: z.string().min(1),
     generated_at: z.string().datetime(),
+    evidence_index: EvidenceIndexSchema.default({}),
     report_mode: ReportModeSchema.default("balanced"),
     personas: z.array(PersonaV3Schema).default([]),
     segments: z.array(SegmentSchema).default([]),
@@ -259,7 +274,38 @@ export const ReportV3Schema = z
     red_team_findings: z.array(z.string()).max(10).default([]),
     model_attribution: z.array(ModelAttributionSchema).default([]),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    const knownIds = new Set(Object.keys(value.evidence_index));
+    const refCollections: Array<{
+      path: string;
+      entries: Array<{ evidence_refs: string[] }>;
+    }> = [
+      { path: "personas", entries: value.personas },
+      { path: "claims", entries: value.claims },
+      { path: "multipliers", entries: value.multipliers },
+      { path: "friction_points", entries: value.friction_points },
+      { path: "trust_signals", entries: value.trust_signals },
+      { path: "change_recommendations", entries: value.change_recommendations },
+      { path: "project_impacts", entries: value.project_impacts },
+      { path: "positioning_variants", entries: value.positioning_variants },
+      { path: "content_ideas", entries: value.content_ideas },
+    ];
+
+    for (const collection of refCollections) {
+      collection.entries.forEach((entry, entryIndex) => {
+        entry.evidence_refs.forEach((evidenceId, refIndex) => {
+          if (!knownIds.has(evidenceId)) {
+            ctx.addIssue({
+              code: "custom",
+              path: [collection.path, entryIndex, "evidence_refs", refIndex],
+              message: `Unbekannte evidence_id '${evidenceId}'.`,
+            });
+          }
+        });
+      });
+    }
+  });
 export type ReportV3 = z.infer<typeof ReportV3Schema>;
 
 /**

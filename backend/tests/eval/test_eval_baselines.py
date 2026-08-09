@@ -28,7 +28,7 @@ FIXTURE_NAMES = sorted(EXPECTED.keys())
 def metrics() -> dict[str, dict[str, float]]:
     out: dict[str, dict[str, float]] = {}
     for name in FIXTURE_NAMES:
-        ev = load_one(FIXTURES_DIR / name, 2)
+        ev = load_one(FIXTURES_DIR / name, 3)
         assert ev is not None, f"Fixture {name} ist nicht ladbar"
         out[name] = evaluate(ev)
     return out
@@ -54,7 +54,7 @@ def test_metrics_match_snapshot(name: str, metrics: dict[str, dict[str, float]])
 
 def test_evaluate_output_keys() -> None:
     """check_evidence_quality.evaluate() muss alle Layer-5-Metriken liefern."""
-    ev = load_one(FIXTURES_DIR / FIXTURE_NAMES[0], 2)
+    ev = load_one(FIXTURES_DIR / FIXTURE_NAMES[0], 3)
     assert ev is not None
     m = evaluate(ev)
     required = {

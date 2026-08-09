@@ -84,7 +84,7 @@ class TestStubValidatesAgainstReportV3DTO:
         resp = e2e_stub_response(schema=schema, messages=_minimal_messages())
         # Darf keine ValidationError / Exception werfen
         validated = ReportV3.model_validate(resp)
-        assert validated.schema_version == 3
+        assert validated.schema_version == 4
         assert validated.report_id == "e2e-stub-report-001"
 
     def test_stub_passes_pydantic_class_as_schema(self) -> None:
@@ -165,7 +165,7 @@ class TestStubActiveWithEnv:
 
             # Ergebnis ist valides ReportV3
             validated = ReportV3.model_validate(result)
-            assert validated.schema_version == 3
+        assert validated.schema_version == 4
 
 
 # ---------------------------------------------------------------------------

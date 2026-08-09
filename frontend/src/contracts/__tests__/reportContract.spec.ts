@@ -43,10 +43,30 @@ const VALID_PAYLOAD = {
     evidence_sections: 1,
   },
   evidence: {
-    schema_version: 2,
+    schema_version: 3,
     report_id: 'report_abc',
     simulation_id: 'sim_abc',
-    global_evidence: [],
+    evidence_index: {
+      ev_00000000000000000000000000000001: {
+        evidence_id: 'ev_00000000000000000000000000000001',
+        producer_key: 'agent:kmu_ceo:interview:1',
+        type: 'agent_interview',
+        source: 'agent_log',
+        snippet: 'Persona kmu_ceo äußerte Bedenken.',
+        source_kind: 'agent_quote',
+        persona_stakeholder_group: 'Geschaeftsfuehrung',
+      },
+      ev_00000000000000000000000000000002: {
+        evidence_id: 'ev_00000000000000000000000000000002',
+        producer_key: 'agent:it_lead:interview:1',
+        type: 'agent_interview',
+        source: 'agent_log',
+        snippet: 'Persona it_lead bestaetigte das Problem.',
+        source_kind: 'agent_quote',
+        persona_stakeholder_group: 'IT-Abteilung',
+      },
+    },
+    global_evidence_refs: [],
     sections: [
       {
         section_index: 1,
@@ -71,22 +91,14 @@ const VALID_PAYLOAD = {
             // Evidence aus mindestens 2 Stakeholder-Gruppen.
             evidence: [
               {
-                type: 'agent_interview',
-                source: 'agent_log',
-                snippet: 'Persona kmu_ceo äußerte Bedenken.',
+                evidence_id: 'ev_00000000000000000000000000000001',
                 match_score: 0.7,
                 supports_claim: true,
-                source_kind: 'agent_quote',
-                persona_stakeholder_group: 'Geschaeftsfuehrung',
               },
               {
-                type: 'agent_interview',
-                source: 'agent_log',
-                snippet: 'Persona it_lead bestaetigte das Problem.',
+                evidence_id: 'ev_00000000000000000000000000000002',
                 match_score: 0.72,
                 supports_claim: true,
-                source_kind: 'agent_quote',
-                persona_stakeholder_group: 'IT-Abteilung',
               },
             ],
             audit_trail: [],

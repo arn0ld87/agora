@@ -102,6 +102,7 @@ def _persist_report(*, with_evidence: bool = False) -> None:
                                 {
                                     "type": "agent_interview",
                                     "source_kind": "agent_quote",
+                                    "producer_key": "agent_07:interview:1",
                                     "source": "agent_07",
                                     "snippet": "Ich warte lieber ab.",
                                     "quote": "Ich warte lieber ab.",
@@ -112,6 +113,7 @@ def _persist_report(*, with_evidence: bool = False) -> None:
                                 {
                                     "type": "graph_fact",
                                     "source_kind": "seed_corpus",
+                                    "producer_key": "briefing.md#q3",
                                     "source": "briefing.md",
                                     "snippet": "Das Vorhaben startet im Q3.",
                                     "match_score": 0.75,
@@ -290,7 +292,7 @@ def test_export_json_returns_combined_envelope(env):
     # Sub-Slice 02b: Export-Envelope ist ein ReportContractModel — schema_version
     # ist auf v2 fix-getypt (Literal[2]) und kann nicht mehr driften.
     assert payload["schema_version"] == 2
-    assert payload["evidence"]["schema_version"] == 2
+    assert payload["evidence"]["schema_version"] == 3
     assert payload["exported_at"]
     assert payload["report"]["report_id"] == REPORT_ID
     assert payload["report"]["status"] == "completed"

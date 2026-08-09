@@ -180,9 +180,19 @@ def _stub_report_v3() -> dict[str, Any]:
     Verwende minimale, aber valide Objekte je Feldtyp.
     """
     return {
-        "schema_version": 3,
+        "schema_version": 4,
         "report_id": "e2e-stub-report-001",
         "generated_at": _STUB_TIMESTAMP,
+        "evidence_index": {
+            "ev_00000000000000000000000000000000": {
+                "evidence_id": "ev_00000000000000000000000000000000",
+                "producer_key": "e2e-stub:evidence-01",
+                "type": "graph_fact",
+                "source": "e2e_stub",
+                "snippet": "Deterministische Evidence fuer E2E-Smoke-Tests.",
+                "source_kind": "graph_relation",
+            }
+        },
         "personas": [
             {
                 "id": "p-stub-01",
@@ -194,7 +204,7 @@ def _stub_report_v3() -> dict[str, Any]:
                 "haushaltseinkommen": None,
                 "needs": ["Sicherheit", "Verlässlichkeit"],
                 "values": ["Qualität", "Transparenz"],
-                "evidence_refs": ["ev-stub-01"],
+                "evidence_refs": ["ev_00000000000000000000000000000000"],
             }
         ],
         "segments": [
@@ -210,7 +220,7 @@ def _stub_report_v3() -> dict[str, Any]:
             {
                 "id": "claim-stub-01",
                 "statement": "Das Produkt wird von der Zielgruppe als vertrauenswürdig eingeschätzt.",
-                "evidence_refs": ["ev-stub-01"],
+                "evidence_refs": ["ev_00000000000000000000000000000000"],
                 "confidence": "medium",
                 "persona_ids": ["p-stub-01"],
                 "aggregation_basis": "aggregat",

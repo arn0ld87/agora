@@ -7,6 +7,9 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from pydantic import ValidationError
 
+from ...contracts import EvidenceRecordModel
+from ..evidence_identity import build_evidence_id
+from ..evidence_migrations import normalize_persisted_evidence_map
 from .schemas import CURRENT_SCHEMA_VERSION, EvidenceMapModel
 
 
@@ -20,9 +23,14 @@ def init_evidence_map(
         "schema_version": CURRENT_SCHEMA_VERSION,
         "report_id": report_id,
         "simulation_id": simulation_id,
-        "global_evidence": global_evidence,
+        "evidence_index": {},
+        "global_evidence_refs": [],
         "sections": [],
     }
+    for item in global_evidence:
+        record = register_evidence_record(payload, item, scope_id=simulation_id)
+        if record is not None:
+            payload["global_evidence_refs"].append(record["evidence_id"])
     return EvidenceMapModel.model_validate(payload).model_dump(mode="json")
 
 
@@ -89,6 +97,47 @@ def record_evidence_item(
     enriched.setdefault("source_kind", normalize_source_kind(item))
     target.append(enriched)
     return target
+
+
+_CLAIM_RELATIVE_FIELDS = frozenset({
+    "match_score",
+    "retrieval_score",
+    "entailment",
+    "entailment_reason",
+    "supports_claim",
+    "contradicts_claim",
+})
+
+
+def register_evidence_record(
+    evidence_map: Dict[str, Any],
+    item: Dict[str, Any],
+    *,
+    scope_id: str,
+) -> Optional[Dict[str, Any]]:
+    """Validiert und registriert ein Producer-Item mit explizitem Schluessel."""
+
+    producer_key = str(item.get("producer_key") or "").strip()
+    if not producer_key:
+        return None
+    source_kind = normalize_source_kind(item)
+    payload = {
+        key: value
+        for key, value in item.items()
+        if key not in _CLAIM_RELATIVE_FIELDS
+    }
+    payload.update({
+        "evidence_id": build_evidence_id(scope_id, source_kind, producer_key),
+        "producer_key": producer_key,
+        "source_kind": source_kind,
+    })
+    record = EvidenceRecordModel.model_validate(payload).model_dump(mode="json")
+    evidence_index = evidence_map.setdefault("evidence_index", {})
+    existing = evidence_index.get(record["evidence_id"])
+    if existing is not None:
+        return existing
+    evidence_index[record["evidence_id"]] = record
+    return record
 
 
 def resolve_embedder(
@@ -239,14 +288,17 @@ def _extract_known_anchors(evidence_map: Union[Dict[str, Any], Any]) -> set:
     EvidenceMapModel-Instanzen.
     """
     known: set = set()
-    if hasattr(evidence_map, "global_evidence"):
+    if hasattr(evidence_map, "evidence_index"):
         # EvidenceMapModel-Instanz
-        for item in evidence_map.global_evidence:
+        for evidence_id, item in evidence_map.evidence_index.items():
+            known.add(evidence_id)
             anchor = getattr(item, "source_id_anchor", None)
             if anchor:
                 known.add(anchor)
     elif isinstance(evidence_map, dict):
-        for item in evidence_map.get("global_evidence", []):
+        evidence_map = normalize_persisted_evidence_map(evidence_map) or evidence_map
+        for evidence_id, item in (evidence_map.get("evidence_index") or {}).items():
+            known.add(evidence_id)
             anchor = item.get("source_id_anchor")
             if anchor:
                 known.add(anchor)
@@ -489,7 +541,52 @@ def degrade_sections_for_violations(
 
     for err in error.errors():
         loc = err.get("loc") or ()
+        violation_type = str(err.get("type") or "unknown")
+        detail = str(err.get("msg") or "")[:500]
         if len(loc) < 4 or loc[0] != "sections":
+            # Cross-Record-Validatoren hängen ihre Fehler an die EvidenceMap
+            # selbst. Den betroffenen Claim transportieren sie deshalb stabil
+            # im Fehlertext (``Claim <id>: ...``), nicht im ``loc``-Pfad.
+            section_claim_match = re.search(
+                r"\bSection ([^ ]+) Claim ([^:]+):", detail
+            )
+            claim_match = re.search(r"\bClaim ([^:]+):", detail)
+            target_section = (
+                section_claim_match.group(1) if section_claim_match else None
+            )
+            if section_claim_match:
+                target_id = section_claim_match.group(2)
+            elif claim_match:
+                target_id = claim_match.group(1)
+            else:
+                target_id = None
+            if target_id:
+                targeted = False
+                for fallback_si, fallback_section in enumerate(repaired):
+                    if (
+                        target_section is not None
+                        and str(fallback_section.get("section_index")) != target_section
+                    ):
+                        continue
+                    for fallback_ci, claim in enumerate(fallback_section.get("claims") or []):
+                        if not isinstance(claim, dict) or claim.get("claim_id") != target_id:
+                            continue
+                        if (fallback_si, fallback_ci) in processed_claims:
+                            break
+                        processed_claims.add((fallback_si, fallback_ci))
+                        if claim.get("evidence"):
+                            claim["confidence_label"] = "low"
+                            _log_violation({
+                                "section_index": fallback_section.get("section_index", 0),
+                                "claim_id": target_id,
+                                "violation": violation_type,
+                                "action": "downgraded_to_low",
+                                "detail": detail,
+                            })
+                        targeted = True
+                        break
+                    if targeted:
+                        break
             continue
 
         si = loc[1]
@@ -498,9 +595,6 @@ def degrade_sections_for_violations(
             continue
         section = repaired[si]
         section_index_value = section.get("section_index", 0)
-        violation_type = str(err.get("type") or "unknown")
-        detail = str(err.get("msg") or "")[:500]
-
         if kind == "claims":
             ci = loc[3]
             claims_list = section.get("claims") or []
@@ -603,6 +697,7 @@ __all__ = [
     "normalize_claims_for_contract",
     "normalize_sections_for_contract",
     "record_evidence_item",
+    "register_evidence_record",
     "resolve_embedder",
     # M11.8e
     "QuoteValidationResult",

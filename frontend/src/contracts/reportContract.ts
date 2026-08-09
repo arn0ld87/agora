@@ -66,6 +66,9 @@ export const EntailmentVerdictSchema = z.enum([
 ]);
 export type EntailmentVerdict = z.infer<typeof EntailmentVerdictSchema>;
 
+export const EvidenceIdSchema = z.string().regex(/^ev_[0-9a-f]{32}$/);
+export type EvidenceId = z.infer<typeof EvidenceIdSchema>;
+
 export const ReportStatusSchema = z.enum([
   "pending", "planning", "generating", "incomplete", "completed", "failed",
 ]);
@@ -79,7 +82,7 @@ export const AgentLogRefSchema = z.object({
   tool_name: z.string().optional().nullable(),
 }).strict();
 
-export const EvidenceItemSchema = z.object({
+const EvidenceSourceSchema = z.object({
   type: EvidenceTypeSchema,
   source: z.string().min(1),
   snippet: z.string().min(1).max(2000),
@@ -88,15 +91,6 @@ export const EvidenceItemSchema = z.object({
   query: z.string().optional().nullable(),
   raw: z.unknown().optional().nullable(),
   agent_log_ref: AgentLogRefSchema.optional().nullable(),
-  match_score: z.number().min(0).max(1).optional().nullable(),
-  // Retrieval-Score der ersten Binding-Stufe (Cosine-Similarity). Alias von
-  // match_score — beantwortet "gleiches Thema?", nicht "belegt?".
-  retrieval_score: z.number().min(0).max(1).optional().nullable(),
-  // Urteil der zweiten Stufe. supports_claim ist nur bei "SUPPORTED" true.
-  entailment: EntailmentVerdictSchema.optional().nullable(),
-  entailment_reason: z.string().max(500).optional().nullable(),
-  supports_claim: z.boolean().optional().nullable(),
-  contradicts_claim: z.boolean().optional().nullable(),
   // MAI-14 (backend) + Sub-Slice 05.8 (Zod-Spiegel):
   // Sentiment des Quellen-Snippets (-1 negativ, 0 neutral, +1 positiv).
   // confidence_calculator._has_contradiction nutzt es, um widersprüchliche
@@ -113,7 +107,16 @@ export const EvidenceItemSchema = z.object({
   // "<provider>/<model_id>" (z. B. "ollama/qwen2.5:32b"). None bei
   // Pre-Slice-8-Daten — daher .nullable().optional().
   source_model: z.string().max(200).nullable().optional(),
-}).strict().superRefine((value, ctx) => {
+}).strict();
+
+const validateEvidenceSource = (
+  value: {
+    type: string;
+    source_kind: string;
+    persona_stakeholder_group?: string | null;
+  },
+  ctx: z.RefinementCtx,
+) => {
   // Spiegelt EvidenceItemModel.reject_inference_in_evidence
   if (FORBIDDEN_EVIDENCE_TYPES.has(value.type)) {
     ctx.addIssue({
@@ -128,15 +131,51 @@ export const EvidenceItemSchema = z.object({
       message: "source_kind=agent_quote verlangt persona_stakeholder_group.",
     });
   }
-});
+};
+
+export const EvidenceItemSchema = EvidenceSourceSchema.superRefine(validateEvidenceSource);
 export type EvidenceItem = z.infer<typeof EvidenceItemSchema>;
+
+export const EvidenceRecordSchema = EvidenceSourceSchema.extend({
+  evidence_id: EvidenceIdSchema,
+  producer_key: z.string().min(1),
+}).superRefine(validateEvidenceSource);
+export type EvidenceRecord = z.infer<typeof EvidenceRecordSchema>;
+
+export const ClaimEvidenceBindingSchema = z.object({
+  evidence_id: EvidenceIdSchema,
+  // Compatibility-Alias für bestehende Persistenz; beide Scores bleiben
+  // claim-relativ und gehören deshalb nicht in den EvidenceRecord.
+  match_score: z.number().min(0).max(1).optional().nullable(),
+  retrieval_score: z.number().min(0).max(1).optional().nullable(),
+  entailment: EntailmentVerdictSchema.optional().nullable(),
+  entailment_reason: z.string().max(500).optional().nullable(),
+  supports_claim: z.boolean().optional().nullable(),
+  contradicts_claim: z.boolean().optional().nullable(),
+}).strict();
+export type ClaimEvidenceBinding = z.infer<typeof ClaimEvidenceBindingSchema>;
+
+export const EvidenceIndexSchema = z
+  .record(EvidenceIdSchema, EvidenceRecordSchema)
+  .superRefine((index, ctx) => {
+    for (const [key, record] of Object.entries(index)) {
+      if (key !== record.evidence_id) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key, 'evidence_id'],
+          message: `Evidence-Index-Key '${key}' stimmt nicht mit evidence_id '${record.evidence_id}' überein.`,
+        });
+      }
+    }
+  });
+export type EvidenceIndex = z.infer<typeof EvidenceIndexSchema>;
 
 export const ReportClaimSchema = z.object({
   claim_id: z.string().regex(/^claim_\d{2,}$/),
   claim_text: z.string().min(8),
   confidence_label: ConfidenceLabelSchema,
   confidence_score: z.number().min(0).max(1),
-  evidence: z.array(EvidenceItemSchema).max(10).default([]),
+  evidence: z.array(ClaimEvidenceBindingSchema).max(10).default([]),
   audit_trail: z.array(z.record(z.string(), z.unknown())).default([]),
   notes: z.string().optional().nullable(),
 }).strict().superRefine((value, ctx) => {
@@ -164,37 +203,6 @@ export const ReportClaimSchema = z.object({
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: `Label '${value.confidence_label}' verlangt mindestens eine Evidence mit supports_claim=true`,
-      });
-    }
-  }
-  // ADR-0002 Anker 4 (Sub-Slice M11.7b): high/verified verlangt agent_quote-
-  // Evidence aus mindestens 2 unterschiedlichen Stakeholder-Gruppen.
-  // Nur supports_claim=true zählt — widersprechende Quotes dürfen ein
-  // high-Label nicht rechtfertigen (Gemini-Followup PR #343).
-  if (value.confidence_label === "high" || value.confidence_label === "verified") {
-    const groups = new Set(
-      value.evidence
-        .filter(
-          (e) =>
-            e.source_kind === "agent_quote"
-            && e.supports_claim === true
-            && e.persona_stakeholder_group,
-        )
-        .map((e) => e.persona_stakeholder_group as string),
-    );
-    if (groups.size < 2) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: `Label '${value.confidence_label}' verlangt unterstützende agent_quote-Evidence (supports_claim=true) aus mindestens 2 unterschiedlichen Stakeholder-Gruppen. Gefunden: ${groups.size === 0 ? "∅" : Array.from(groups).sort().join(", ")}.`,
-      });
-    }
-  }
-  // ADR-0002 Anker 5 (Sub-Slice M11.7b): high/verified duldet keine inferred-Evidence.
-  if (value.confidence_label === "high" || value.confidence_label === "verified") {
-    if (value.evidence.some((e) => e.source_kind === "inferred")) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: `Label '${value.confidence_label}' duldet keine source_kind=inferred-Evidence.`,
       });
     }
   }
@@ -291,15 +299,77 @@ export const EvidenceDegradationSchema = z.object({
 export type EvidenceDegradation = z.infer<typeof EvidenceDegradationSchema>;
 
 export const EvidenceMapSchema = z.object({
-  schema_version: z.literal(2),
+  schema_version: z.literal(3),
   report_id: z.string().min(1),
   simulation_id: z.string().min(1),
-  global_evidence: z.array(EvidenceItemSchema).default([]),
+  evidence_index: EvidenceIndexSchema,
+  global_evidence_refs: z.array(EvidenceIdSchema).default([]),
   sections: z.array(ReportSectionSchema).default([]),
   // Additiv mit Default: persistierte Evidence-Maps von vor #1006 tragen das
   // Feld nicht und müssen weiterhin parsen.
   degradation_log: z.array(EvidenceDegradationSchema).default([]),
-}).strict();
+}).strict().superRefine((value, ctx) => {
+  const knownIds = new Set(Object.keys(value.evidence_index));
+  const checkRef = (evidenceId: string, path: PropertyKey[]) => {
+    if (!knownIds.has(evidenceId)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path,
+        message: `Unbekannte evidence_id '${evidenceId}'.`,
+      });
+    }
+  };
+
+  value.global_evidence_refs.forEach((evidenceId, index) => {
+    checkRef(evidenceId, ['global_evidence_refs', index]);
+  });
+
+  value.sections.forEach((section, sectionIndex) => {
+    section.claims.forEach((claim, claimIndex) => {
+      claim.evidence.forEach((binding, bindingIndex) => {
+        checkRef(binding.evidence_id, [
+          'sections',
+          sectionIndex,
+          'claims',
+          claimIndex,
+          'evidence',
+          bindingIndex,
+          'evidence_id',
+        ]);
+      });
+
+      if (claim.confidence_label === 'high' || claim.confidence_label === 'verified') {
+        const boundRecords = claim.evidence
+          .map((binding) => value.evidence_index[binding.evidence_id])
+          .filter((record): record is EvidenceRecord => record !== undefined);
+        const supportingRecords = claim.evidence
+          .filter((binding) => binding.supports_claim === true)
+          .map((binding) => value.evidence_index[binding.evidence_id])
+          .filter((record): record is EvidenceRecord => record !== undefined);
+        const stakeholderGroups = new Set(
+          supportingRecords
+            .filter((record) => record.source_kind === 'agent_quote')
+            .map((record) => record.persona_stakeholder_group)
+            .filter((group): group is string => group !== undefined && group !== null),
+        );
+        if (stakeholderGroups.size < 2) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['sections', sectionIndex, 'claims', claimIndex, 'evidence'],
+            message: `Label '${claim.confidence_label}' verlangt unterstützende agent_quote-Evidence aus mindestens 2 unterschiedlichen Stakeholder-Gruppen.`,
+          });
+        }
+        if (boundRecords.some((record) => record.source_kind === 'inferred')) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['sections', sectionIndex, 'claims', claimIndex, 'evidence'],
+            message: `Label '${claim.confidence_label}' duldet keine source_kind=inferred-Evidence.`,
+          });
+        }
+      }
+    });
+  });
+});
 export type EvidenceMap = z.infer<typeof EvidenceMapSchema>;
 
 /**
