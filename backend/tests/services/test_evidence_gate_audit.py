@@ -133,3 +133,187 @@ def test_render_report_v3_includes_evidence_status():
     assert "empirische Nutzerforschung" in rendered
     # Der Status-Block steht vor den Detail-Tabellen.
     assert rendered.index("## Evidenzstatus") < rendered.index("## Claims")
+
+
+# ---------------------------------------------------------------------------
+# medium ohne agent-grounded Evidence (ADR-0002 Stufe agent_grounded)
+#
+# Produktionslauf report_dea78f514e73 (09.08.2026): Der Builder ließ
+# medium-Claims ohne agent_quote+seed_corpus durch, der
+# ReportClaimModel-Validator lehnte sie ab und die gesamte
+# EvidenceMap-Validierung schlug fehl — Report abgebrochen, nicht abgestuft.
+# Der Reparaturlauf half nicht: Pydantic meldet pro Durchgang nur den ersten
+# Verstoß je Modell, nach der Reparatur von claim_01 blieb claim_02 stehen.
+# ---------------------------------------------------------------------------
+
+_EV_ID_A = "ev_" + "a" * 32
+_EV_ID_B = "ev_" + "b" * 32
+
+
+def _evidence(evidence_id: str, source_kind: str, **extra) -> dict:
+    item = {
+        "evidence_id": evidence_id,
+        "type": "graph_fact" if source_kind != "agent_interview" else "agent_interview",
+        "source": "report_tool",
+        "snippet": "Belegtext aus der Quelle.",
+        "source_kind": source_kind,
+        "supports_claim": True,
+    }
+    item.update(extra)
+    return item
+
+
+def test_medium_without_agent_grounded_evidence_is_downgraded_to_low():
+    agent = ReportAgent.__new__(ReportAgent)
+    claims = [{
+        "claim_id": "claim_02",
+        "claim_text": "Die Migration senkt die organische Sichtbarkeit kurzfristig.",
+        "evidence": [
+            _evidence(_EV_ID_A, "seed_corpus"),
+            _evidence(_EV_ID_B, "graph_relation"),
+        ],
+        "confidence_score": 0.55,
+        "confidence_label": "medium",
+    }]
+
+    finalized, hypotheses, _gaps, decisions = agent._finalize_section_claims(claims)
+
+    # Der Claim verschwindet nicht — er verliert nur sein unverdientes Label.
+    assert len(finalized) == 1
+    assert finalized[0]["confidence_label"] == "low"
+    assert hypotheses == []
+    assert len(decisions) == 1
+    assert decisions[0]["claim_id"] == "claim_02"
+    assert decisions[0]["violation"] == "medium_without_agent_grounded_evidence"
+    assert decisions[0]["action"] == "downgraded_to_low"
+
+
+def _record(evidence_id: str, source_kind: str, **extra) -> dict:
+    record = {
+        "evidence_id": evidence_id,
+        "producer_key": f"key:{evidence_id}",
+        "type": "graph_fact",
+        "source": "report_tool",
+        "snippet": "Belegtext aus der Quelle.",
+        "source_kind": source_kind,
+    }
+    record.update(extra)
+    return record
+
+
+def test_downgraded_claim_passes_the_evidence_map_validator():
+    """Der Kern des Defekts: die fertige EvidenceMap muss validieren.
+
+    ``EvidenceMapModel.validate_evidence_cross_references`` urteilt über die
+    Records im ``evidence_index``. Vor dem Fix erreichte ein medium-Claim ohne
+    agent_quote+seed_corpus diesen Validator und ließ die Validierung der
+    gesamten Map scheitern — der Report brach ab, statt den einzelnen Claim
+    ehrlich abzustufen (Produktionslauf report_dea78f514e73).
+    """
+    from app.contracts.report_contract import EvidenceMapModel
+
+    agent = ReportAgent.__new__(ReportAgent)
+    agent.evidence_map = {
+        "schema_version": 3,
+        "report_id": "report_test01",
+        "simulation_id": "sim_test",
+        "evidence_index": {
+            _EV_ID_A: _record(_EV_ID_A, "seed_corpus"),
+            _EV_ID_B: _record(_EV_ID_B, "graph_relation"),
+        },
+        "global_evidence_refs": [],
+        "sections": [],
+    }
+    claims = [{
+        "claim_id": "claim_02",
+        "claim_text": "Die Migration senkt die organische Sichtbarkeit kurzfristig.",
+        "evidence": [
+            _evidence(_EV_ID_A, "seed_corpus"),
+            _evidence(_EV_ID_B, "graph_relation"),
+        ],
+        "confidence_score": 0.55,
+        "confidence_label": "medium",
+    }]
+
+    finalized, _hypotheses, _gaps, _decisions = agent._finalize_section_claims(claims)
+
+    agent.evidence_map["sections"] = [{
+        "section_index": 1,
+        "section_title": "Kurzfazit",
+        "section_summary": "Kurzfazit zur Domainmigration.",
+        "claims": [{
+            "claim_id": finalized[0]["claim_id"],
+            "claim_text": finalized[0]["claim_text"],
+            "confidence_score": finalized[0]["confidence_score"],
+            "confidence_label": finalized[0]["confidence_label"],
+            "evidence": [
+                {"evidence_id": _EV_ID_A, "supports_claim": True},
+                {"evidence_id": _EV_ID_B, "supports_claim": True},
+            ],
+        }],
+    }]
+
+    EvidenceMapModel.model_validate(agent.evidence_map)
+
+
+def test_inline_item_without_source_kind_is_resolved_via_evidence_index():
+    """Die Bewertung folgt den Records, nicht den Inline-Einträgen.
+
+    Ein Inline-Eintrag trägt nur die Referenz; ``source_kind`` und ``quote``
+    stehen kanonisch am Record. Würde der Builder nur die Inline-Daten lesen,
+    fiele dieser vollständig agent-grounded Claim grundlos auf ``low``.
+    """
+    agent = ReportAgent.__new__(ReportAgent)
+    agent.evidence_map = {
+        "evidence_index": {
+            _EV_ID_A: _record(_EV_ID_A, "seed_corpus"),
+            _EV_ID_B: _record(
+                _EV_ID_B,
+                "agent_quote",
+                type="agent_interview",
+                quote="Ich würde die alte Domain mindestens ein Jahr weiterleiten.",
+                persona_stakeholder_group="Bestandsleser",
+            ),
+        },
+    }
+    claims = [{
+        "claim_id": "claim_04",
+        "claim_text": "Bestandsleser erwarten eine lange Weiterleitung.",
+        "evidence": [
+            {"evidence_id": _EV_ID_A, "supports_claim": True},
+            {"evidence_id": _EV_ID_B, "supports_claim": True},
+        ],
+        "confidence_score": 0.6,
+        "confidence_label": "medium",
+    }]
+
+    finalized, _hypotheses, _gaps, decisions = agent._finalize_section_claims(claims)
+
+    assert finalized[0]["confidence_label"] == "medium"
+    assert decisions == []
+
+
+def test_agent_grounded_medium_claim_keeps_its_label():
+    """Gegenprobe: die Abstufung ist keine pauschale medium-Deckelung."""
+    agent = ReportAgent.__new__(ReportAgent)
+    claims = [{
+        "claim_id": "claim_03",
+        "claim_text": "Mehrere Stakeholder erwarten Reibung beim Umzug.",
+        "evidence": [
+            _evidence(_EV_ID_A, "seed_corpus"),
+            _evidence(
+                _EV_ID_B,
+                "agent_quote",
+                type="agent_interview",
+                quote="Ich würde die alte Domain mindestens ein Jahr weiterleiten.",
+                persona_stakeholder_group="Bestandsleser",
+            ),
+        ],
+        "confidence_score": 0.6,
+        "confidence_label": "medium",
+    }]
+
+    finalized, _hypotheses, _gaps, decisions = agent._finalize_section_claims(claims)
+
+    assert finalized[0]["confidence_label"] == "medium"
+    assert decisions == []
