@@ -601,10 +601,19 @@ class ReportAgent:
     def _finalize_section_claims(
         self,
         claims: List[Dict[str, Any]],
-    ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
+    ) -> tuple[
+        List[Dict[str, Any]],
+        List[Dict[str, Any]],
+        List[Dict[str, Any]],
+        List[Dict[str, Any]],
+    ]:
         finalized_claims: List[Dict[str, Any]] = []
         hypotheses: List[Dict[str, Any]] = []
         data_gaps: List[Dict[str, Any]] = []
+        # Slice 7 (Audit Trail): jede Routing-Entscheidung des Evidence-Gates
+        # wird als EvidenceDegradationModel-Eintrag protokolliert —
+        # section_index ergänzt der Caller (_save_evidence_section).
+        gate_decisions: List[Dict[str, Any]] = []
 
         from app.contracts.report_v3 import CLAIM_MIN_EVIDENCE_FOR_CLAIM  # noqa: PLC0415
 
@@ -670,6 +679,12 @@ class ReportAgent:
                     "rationale": rationale,
                     "suggested_evidence": [],
                 })
+                gate_decisions.append({
+                    "claim_id": str(claim.get("claim_id") or "<no-id>"),
+                    "violation": "reviewer_floor_insufficient_evidence",
+                    "action": "moved_to_hypotheses",
+                    "detail": rationale[:500],
+                })
                 continue
 
             # P0-5: Ohne eine einzige stützende Quelle ist die Aussage eine
@@ -710,6 +725,12 @@ class ReportAgent:
                     ),
                     "suggested_fix": suggestions[0],
                 })
+                gate_decisions.append({
+                    "claim_id": str(claim.get("claim_id") or "<no-id>"),
+                    "violation": "no_supporting_evidence",
+                    "action": "moved_to_hypotheses",
+                    "detail": rationale[:500],
+                })
                 continue
             if not evidence and label in ("medium", "high", "verified"):
                 # P2.1: medium/high/verified ohne Evidence darf nicht in claims[]
@@ -727,10 +748,16 @@ class ReportAgent:
                     "gap_reason": "no_evidence_bound",
                     "suggested_fix": suggestions[0] if suggestions else None,
                 })
+                gate_decisions.append({
+                    "claim_id": str(claim.get("claim_id") or "<no-id>"),
+                    "violation": "confidence_label_without_evidence",
+                    "action": "dropped",
+                    "detail": f"Label '{label}' ohne Evidence — als data_gap geführt."[:500],
+                })
                 continue
             finalized_claims.append(claim)
 
-        return finalized_claims, hypotheses, data_gaps
+        return finalized_claims, hypotheses, data_gaps, gate_decisions
 
     def _section_dedup_check(
         self, new_summary: str, existing: List[Dict[str, Any]]
@@ -819,6 +846,7 @@ class ReportAgent:
             )
             claims: List[Dict[str, Any]] = []
             raw_hypotheses: List[Dict[str, Any]] = []
+            gate_decisions: List[Dict[str, Any]] = []
             data_gaps: List[Dict[str, Any]] = [{
                 # ReportSectionDataGapModel.gap_id erzwingt ^gap_\d{2,}$ —
                 # ein sprechendes Präfix ("gap_section_03") lässt die gesamte
@@ -828,19 +856,42 @@ class ReportAgent:
                 "claim_text": section_title,
             }]
         else:
-            claims, raw_hypotheses, data_gaps = self._finalize_section_claims(
+            claims, raw_hypotheses, data_gaps, gate_decisions = self._finalize_section_claims(
                 self._build_claims_for_section(content)
             )
         # Aus dem Fließtext entfernte Faktenaussagen sind Hypothesen, keine
         # gelöschten Sätze — sie bleiben für den Leser nachvollziehbar.
-        raw_hypotheses = list(raw_hypotheses) + (
+        prose_hypotheses = (
             getattr(self, "_pending_prose_hypotheses", {}) or {}
         ).get(section_index, [])
+        raw_hypotheses = list(raw_hypotheses) + prose_hypotheses
         # IDs zentral neu vergeben: Claim-Routing und Fließtext-Prüfung zählen
         # jeweils ab 1, zusammengeführt kollidieren sie sonst.
         for _position, _hypothesis in enumerate(raw_hypotheses, start=1):
             if isinstance(_hypothesis, dict):
                 _hypothesis["hypothesis_id"] = f"hypothesis_{_position:02d}"
+        # Slice 7 (Audit Trail): Gate-Routing und Fließtext-Entfernungen sind
+        # Degradation-Entscheidungen und werden auditierbar protokolliert —
+        # der leere degradation_log bei 17 entfernten Aussagen
+        # (report_06f654800817) war eine Erfassungslücke, keine Absicht.
+        for _prose_hypothesis in prose_hypotheses:
+            if not isinstance(_prose_hypothesis, dict):
+                continue
+            gate_decisions.append({
+                "claim_id": str(_prose_hypothesis.get("hypothesis_id") or "<no-id>"),
+                "violation": "prose_fact_unsupported",
+                "action": "moved_to_hypotheses",
+                "detail": self._truncate(
+                    str(_prose_hypothesis.get("hypothesis_text") or ""), 500
+                ) or "Fließtext-Aussage ohne deckende Evidence entfernt.",
+            })
+        if gate_decisions:
+            self.evidence_map["degradation_log"] = list(
+                self.evidence_map.get("degradation_log") or []
+            ) + [
+                {**decision, "section_index": section_index}
+                for decision in gate_decisions
+            ]
         # Slice 3 (Issue #495): Dedup + Cap per Section.
         from .hypothesis_cap import dedup_and_cap_hypotheses  # noqa: PLC0415
         hypotheses_visible, hypotheses_appendix = dedup_and_cap_hypotheses(raw_hypotheses)

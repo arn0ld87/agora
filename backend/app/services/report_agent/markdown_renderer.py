@@ -145,6 +145,44 @@ _MODE_BANNER: dict[str, str] = {
 }
 
 
+def render_evidence_status(report: ReportV3) -> str:
+    """Kompakte Statusübersicht: was ist belegt, was Hypothese, was fehlt.
+
+    Macht den Balanced-Modus sichtbar (validierte Claims + markierte
+    Hypothesen) und stellt klar, dass Simulationsaussagen keine empirische
+    Nutzerforschung sind — der Leser sieht den Evidenzstand, bevor er den
+    narrativen Text liest.
+    """
+    table = _table(
+        ["Status", "Anzahl", "Bedeutung"],
+        [
+            [
+                "Validierte Claims",
+                len(report.claims),
+                "Durch kanonische Evidence-Referenzen belegt",
+            ],
+            [
+                "Hypothesen",
+                len(report.hypotheses),
+                "Plausibel, aber ohne bindende Evidence — nicht als Fakt lesen",
+            ],
+            [
+                "Data Gaps",
+                len(report.data_gaps),
+                "Fehlende Informationen, die eine belastbare Aussage verhindern",
+            ],
+        ],
+        "Kein Evidenzstatus verfügbar.",
+    )
+    return (
+        "## Evidenzstatus\n\n"
+        + table
+        + "\n\n> Persona-Zitate und Interviewaussagen in diesem Report stammen "
+        "aus **simulierten Agenten**. Sie sind Simulationsevidenz und keine "
+        "empirische Nutzerforschung."
+    )
+
+
 def render_report_v3(report: ReportV3) -> str:
     mode = getattr(report, "report_mode", "balanced") or "balanced"
     banner = _MODE_BANNER.get(mode, _MODE_BANNER["balanced"])
@@ -153,6 +191,7 @@ def render_report_v3(report: ReportV3) -> str:
         f"Report-ID: `{_cell(report.report_id)}`",
         f"Generiert: `{report.generated_at.isoformat()}`",
         banner,
+        render_evidence_status(report),
         "## Persona-Tabelle",
         render_persona_table(report.personas),
         "## Segment-Tabelle",
@@ -209,6 +248,7 @@ def render_report_v3(report: ReportV3) -> str:
 __all__ = [
     "render_claim_table",
     "render_data_gaps",
+    "render_evidence_status",
     "render_hypotheses_table",
     "render_persona_table",
     "render_report_v3",

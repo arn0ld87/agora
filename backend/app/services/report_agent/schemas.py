@@ -96,6 +96,18 @@ class SectionKeyTakeaway(BaseModel):
         default="medium",
         description="Einschätzungsqualität: low | medium | high",
     )
+    confidence_scope: str = Field(
+        default="simulation_consensus",
+        description=(
+            "Geltungsbereich der Confidence: simulation_consensus "
+            "(Übereinstimmung simulierter Agenten) | evidence (durch "
+            "kanonische Evidence-Referenzen belegt) | empirical (reale "
+            "empirische Daten). Aussagen aus Interviews/Simulation ohne "
+            "Evidence-Bindung sind IMMER simulation_consensus — niemals "
+            "evidence oder empirical angeben, wenn die Aussage nur auf "
+            "simulierten Agenten beruht."
+        ),
+    )
 
 
 class SectionMetadata(BaseModel):
