@@ -192,3 +192,25 @@ opencode.jsonc
 .claude/*.bak
 .claude/*.bak.*
 compose.local.yml
+
+# Lokale Render-Ausgaben (z. B. markdown-exporter nach output/pdf/).
+# Reproduzierbar aus den Quellen, gehoert nicht in die Versionierung.
+output/
+
+# LaTeX-Build-Artefakte unter docs/paper/. Die Quellen (.tex, .bib, latexmkrc)
+# und das gebaute Paper-PDF sind versioniert, der Zwischenstand nicht:
+# er enthaelt absolute Maschinenpfade und aendert sich bei jedem Build.
+docs/paper/**/*.aux
+docs/paper/**/*.bbl
+docs/paper/**/*.bcf
+docs/paper/**/*.bcf-SAVE-ERROR
+docs/paper/**/*.blg
+docs/paper/**/*.fdb_latexmk
+docs/paper/**/*.fls
+docs/paper/**/*.lof
+docs/paper/**/*.log
+docs/paper/**/*.lot
+docs/paper/**/*.out
+docs/paper/**/*.run.xml
+docs/paper/**/*.synctex.gz
+docs/paper/**/*.toc

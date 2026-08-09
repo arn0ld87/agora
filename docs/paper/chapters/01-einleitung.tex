@@ -1,0 +1,55 @@
+% =====================================================================
+% Kapitel 1: Einleitung und Forschungsfrage
+% =====================================================================
+
+\chapter{Einleitung und Forschungsfrage}\label{ch:einleitung}
+
+\section{Motivation}\label{sec:motivation}
+
+Multi-Agent-Frameworks auf Basis großer Sprachmodelle werden zunehmend als Werkzeug für die Marktanalyse, Stakeholder-Simulation und Szenarienmodellierung eingesetzt~\cite{park2023generative,argyle2023silicon,horton2023homosilicus}. Die Versprechen sind hoch: synthetische Populationen sollen reale Zielgruppen approximieren, Multi-Agent-Debate soll die Factuality~\cite{du2023multiagent} erhöhen, und Selbstkonsistenz~\cite{wang2022selfconsistency} soll gegen Halluzination absichern. Die Literatur zeigt jedoch zugleich, dass Konsistenz nicht mit Korrektheit gleichgesetzt werden darf~\cite{consistency2024}, dass rekursives Training auf synthetischen Daten zu Model-Collapse führt~\cite{shumailov2024curse}, dass Inline-Zitationen häufig \enquote{cited but not verified} sind~\cite{citednotverified} und dass die Validität von LLM-Personas gegen reale Populationen eine offene empirische Frage bleibt~\cite{uas2025,analyticflexibility}.
+
+Diese Arbeit setzt genau dort an: Sie untersucht am konkreten Code eines realen Multi-Agent-Systems (\agora{}), welche Bausteine der Evidence-Pipeline tatsächlich einen \emph{prüfbaren} Mehrwert liefern -- und welche lediglich zusätzliche Komplexität erzeugen, ohne den Anspruch einzulösen.
+
+\section{Forschungsfrage}\label{sec:forschungsfrage}
+
+Die zentrale Forschungsfrage lautet:
+
+\begin{quote}
+Welche Teile von \agora{} erzeugen einen tatsächlich überprüfbaren Erkenntnisgewinn gegenüber einem einzelnen starken LLM-Prompt -- und welche Teile erzeugen lediglich zusätzliche Komplexität, Kosten oder scheinbare Evidenz?
+\end{quote}
+
+Drei Unterfragen strukturieren die Antwort:
+
+\begin{enumerate}
+  \item \textbf{Provenance:} Lässt sich der Pfad vom Seed-Dokument bis zum ausgelieferten Claim vollständig rekonstruieren -- und an welchen Stellen geht die Herkunft verloren?
+  \item \textbf{Anti-Self-Confirmation:} Welche Mechanismen verhindern, dass synthetische Populationen sich gegenseitig bestätigen, ohne dass diese Mechanismen kalibriert oder extern validiert wären?
+  \item \textbf{Empirischer Mehrwert:} Lässt sich an einem realen Referenzlauf zeigen, dass das System über einen Single-Prompt hinaus zusätzliche, \emph{geprüfte} Aussagen liefert -- oder erstickt es an seiner eigenen Strenge?
+\end{enumerate}
+
+\section{Beitrag}\label{sec:beitrag}
+
+Der Beitrag dieser Arbeit ist dreigliedrig:
+
+\begin{itemize}
+  \item \textbf{Methodisch} wird eine reproduzierbare Code-Audit-Pipeline vorgestellt, die parallele Subagenten mit Code-Review-Graph-Unterstützung und einer normativen Bewertung verknüpft. Die Pipeline ist nicht auf \agora{} beschränkt; sie ist auf jedes Multi-Agent-System übertragbar, dessen Code zugänglich ist.
+  \item \textbf{Diagnostisch} liefert die Arbeit eine Rekonstruktion der Evidence-Chain vom Seed-Dokument bis zum Claim, mit sieben code-verifizierten Provenance-Verlustpunkten, einer 10-Dimensionen-Bewertung und einer priorisierten Roadmap.
+  \item \textbf{Normativ} wird ein Antwortrahmen vorgeschlagen, mit dem sich die Frage \enquote{Liefert ein LLM-System einen messbaren Mehrwert?} überhaupt erst formulieren lässt -- inklusive der Trennung in \emph{engineering score} (Konstruktion) und \emph{evidence-research score} (Empirie).
+\end{itemize}
+
+\section{Gliederung}\label{sec:gliederung}
+
+Die Arbeit gliedert sich in sieben Kapitel. Kapitel~\ref{ch:related} arbeitet den Stand der Forschung anhand von fünf Themenclustern auf und benennt die Forschungslücke, in die der Beitrag fällt. Kapitel~\ref{ch:system} rekonstruiert die Architektur und die Evidence-Chain von \agora{}. Kapitel~\ref{ch:methodik} beschreibt die Audit-Pipeline. Kapitel~\ref{ch:ergebnisse} trägt die Befunde aus Code-Audit, Referenzlauf und Bewertung zusammen. Kapitel~\ref{ch:diskussion} diskutiert fünf Kernkontroversen. Kapitel~\ref{ch:schluss} beantwortet die Forschungsfrage und priorisiert den Ausblick. Anhang~\ref{ch:anhang-a} dokumentiert die Verifikations-Spot-Checks und die Methodik der Citation-Registry.
+
+\section{Begriffliche Abgrenzung}\label{sec:begriffe}
+
+Drei Begriffe werden im Folgenden streng in der hier definierten Bedeutung verwendet:
+
+\begin{description}
+  \item[Seed-Dokument] Ein vom Nutzer hochgeladenes Korpus-Dokument (PDF, Markdown oder Text), das als einzige \emph{echte externe Quelle} in die Pipeline eingeht. Alle anderen \code{EvidenceSourceKind}-Werte~\cite{adr-0013} sind entweder LLM-generiert, synthetisch oder abgeleitet.
+  \item[Validierter Claim] Ein Claim, der eine \code{supports\_claim = True}-Zuordnung von der zweistufigen Entailment-Stufe erhalten hat. Diese Stufe kombiniert eine Cosine-Retrieval-Bewertung mit regelbasierten deterministischen Prüfungen~\cite{adr-0011}.
+  \item[Provenance-Verlust] Ein Punkt in der Pipeline, an dem die Identität einer Information -- ihre doc-ID, chunk-ID oder Herkunftsquelle -- entweder wegfällt oder nicht in einen späteren Verarbeitungsschritt übernommen wird.
+\end{description}
+
+\section{Hinweis zum Reproduktionsstand}\label{sec:reproduktion}
+
+Der Audit wurde am Repo-Stand \code{7e42ae34} durchgeführt. Zwischen Stand des Audits und dieser Niederschrift liegen zwei Merges in den Hauptzweig, die zentrale Befunde teils entschärfen: ADR-0013 Slice~1 Teil~A (PR~\#1155) und der Interview-Binding-Fix (Commit \code{d7d9f0a4}, PR~\#1151). Die Stellen sind in der Diskussion ausdrücklich markiert.

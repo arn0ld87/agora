@@ -1,0 +1,84 @@
+% =====================================================================
+% Kapitel 3: System und Pipeline
+% =====================================================================
+
+\chapter{\agora{}: System und Pipeline}\label{ch:system}
+
+\section{Architekturüberblick}\label{sec:architektur}
+
+\agora{} ist eine lokal oder kontrolliert hybrid betreibbare Multi-Agent-Plattform für simulierte DACH-Zielgruppen-, Stakeholder- und Marktreaktionen. Die Plattform ist als Flask/Python-3.14-Backend mit Neo4j-Graph, Redis-Cache, OASIS- bzw.\ CAMEL-Simulations-Subprozess und Vue-3-Frontend strukturiert. Die Code-Basis umfasst zum Auditzeitpunkt etwa 3500~LOC im Backend-Service-Layer, 5500~LOC im OASIS-Subprozess und etwa 3900~LOC Graph-bezogenen Code. Der Reifegrad ist \emph{0.9.3 Stability Beta}; das Ziel ist nach \code{ROADMAP.md} eine stabile Single-User-Version \code{1.0.0}\footnote{\raggedright Status-Informationen aus~\code{AGENTS.md} und \code{ROADMAP.md} im Repository.}
+
+Für die vorliegende Arbeit sind zwei Schichten zentral: die \textbf{Evidence-Pipeline} (vom Seed-Dokument zum Claim) und die \textbf{Simulations-Pipeline} (Persona-Population, OASIS-Aktionen, Echo-Index). Beide sind über die \code{EvidenceSourceKind}-Taxonomie~\cite{adr-0011} miteinander verbunden.
+
+\section{Die Evidence-Chain}\label{sec:evidencechain}
+
+Abbildung~\ref{fig:evidence-chain} rekonstruiert die Evidence-Chain vom Seed-Dokument bis zum ausgelieferten Claim in 17 Stufen. Die Rekonstruktion beruht auf statischer Code-Analyse von~\code{backend/app/services/} und~\code{backend/app/contracts/}, validiert durch die Code-Review-Graph-Werkzeuge. Sieben Stufen (\textsc{✗}) markieren code-verifizierte Provenance-Verlustpunkte.
+
+\begin{figure}[ht]
+  \centering
+  \input{figures/evidence-chain.tex}
+  \caption{Rekonstruierte Evidence-Chain vom Seed-Dokument bis zum Claim. Die sieben mit \textsc{✗} markierten Stufen sind code-verifizierte Provenance-Verlustpunkte.}
+  \label{fig:evidence-chain}
+\end{figure}
+
+\section{Die \code{EvidenceSourceKind}-Taxonomie}\label{sec:sourcekind}
+
+Der Vertrag~\code{backend/app/contracts/report\_contract.py} definiert sechs Werte für den Enum~\code{EvidenceSourceKind}:
+
+\begin{itemize}
+  \item \code{seed\_corpus} -- echte externe Quelle aus dem hochgeladenen Korpus. Aktuell nur als Zielzustand in~\cite{adr-0013} spezifiziert; im Referenzlauf~\cite{audit-r2} nicht erreicht.
+  \item \code{agent\_quote} -- Persona-Interview-Zitat. Provenance über~\code{persona\_id}, \code{stakeholder\_group}, \code{quote}.
+  \item \code{agent\_action} -- sozialer Akt aus der Simulation (Post, Comment, Reshare). Provenance über \code{sim\_action\_log} (Plattform, Runde, Agent, Aktion, Zeitstempel).
+  \item \code{graph\_relation} -- Fakt aus dem Neo4j-Graph. Aktuell nur syntaktisch referenzierbar; \emph{keine} Dokumentidentität.
+  \item \code{web\_source} -- URL aus externer Recherche. URL im Anker; Fetch ist echtzeitabhängig und kann verfallen.
+  \item \code{inferred} -- Standard-Fallback, wenn die Herkunft unbekannt ist. \code{Confidence}-Gewicht ist 0{,}0, d.\,h.\ ein Claim auf \code{inferred} endet als Hypothese.
+\end{itemize}
+
+Die Trennung ist die Grundlage für die nachfolgend beschriebene Pipeline -- und zugleich der Punkt, an dem die sechs Werte in der praktischen Wirksamkeit sehr ungleich verteilt sind.
+
+\section{Zweistufiges Claim-Binding}\label{sec:binding}
+
+Die \code{evidence\_binder} und \code{evidence\_entailment} (in \code{backend/app/services/}) implementieren ein zweistufiges Binding:
+
+\begin{enumerate}
+  \item \textbf{Retrieval-Stage:} Cosine-Ähnlichkeit zwischen Claim-Vektor und Evidence-Vektor. Schwellen 0{,}55 (niedrige Confidence) und 0{,}65 (hohe Confidence).
+  \item \textbf{Entailment-Stage:} Regelbasierte deterministische Prüfung -- SUPPORTED, CONTRADICTED, RELATED\_ONLY oder INSUFFICIENT. Diese Stufe prüft Zahl, Bezugsgruppe, Menge und Modalität explizit vor dem Embedding und verhindert damit das in~\cite{adr-0011} belegte Defektmuster \enquote{61\,\% Zeitersparnis $\to$ 61\,\% bewerten positiv}.
+\end{enumerate}
+
+Das \code{supports\_claim}-Feld wird ausschließlich in der Entailment-Stufe gesetzt; dies ist im Code-Kommentar zu \code{evidence\_entailment.py} ausdrücklich festgehalten. Diese Architektur ist zentral für das Verständnis des gesamten Audit-Befundes, weshalb sie in Kapitel~\ref{ch:ergebnisse} erneut aufgegriffen wird.
+
+\section{Anti-Self-Confirmation-Mechanismen}\label{sec:anticonf}
+
+\agora{} implementiert vier strukturelle Anti-Self-Confirmation-Mechanismen, die in der folgenden Tabelle zusammengefasst sind. Ausführlich werden sie in Kapitel~\ref{ch:ergebnisse} bewertet.
+
+\begin{table}[ht]
+  \centering
+  \small
+  \begin{tabular}{@{}p{0.32\textwidth}p{0.58\textwidth}@{}}
+    \toprule
+    \textbf{Mechanismus} & \textbf{Wirkung} \\
+    \midrule
+    Echo-Chamber-Index (\code{network\_analytics.py}) &
+    Misst intra-cluster-Anteil synthetischer Aktionen; drosselt Confidence bei Werten $> 0{,}75$ via \code{apply\_echo\_cap}. \\
+    \midrule
+    DACH-Quoten-Kalibrierung &
+    Verhindert willkürliche Persona-Population; IT-Anteil hard-gecappt $\leq 12\,\%$; DACH-Branchenanteile gegen Destatis WZ 2008 / Mikrozensus 2024 kalibriert. \\
+    \midrule
+    Wording-Glossar (\code{\_red\_team\_system\_prompt}) &
+    Verbietet Vorhersagesprache; Volltext-Snapshot; Red-Team-Enforcement post-Assembly. \\
+    \midrule
+    Confidence-Capping &
+    Caps für $< 2$ Evidence-Items (0{,}59), \code{model\_generated\_inference}-Gewicht 0{,}0; Echo-Cap auf 0{,}84/medium. \\
+    \bottomrule
+  \end{tabular}
+  \caption{Anti-Self-Confirmation-Mechanismen in \agora{}; Wirkung und Code-Anker.}
+  \label{tab:anticonf}
+\end{table}
+
+\section{Simulations-Subprozess}\label{sec:simulation}
+
+Der Simulations-Subprozess integriert OASIS- bzw.\ CAMEL-basierte soziale Simulation. Eine Population synthetischer Personas wird über bis zu 5500~LOC Subprozess-Code über mehrere Runden hinweg sozial aktiv (Posts, Comments, Reshares). Der Echo-Chamber-Index berechnet sich als Verhältnis der Intra-Cluster-Aktionen zur Gesamtzahl und koppelt an das Confidence-Gating. Die Simulation ist \emph{code-verifiziert nicht deterministisch} (\code{random.*} ohne \code{random.seed()} an mehreren Stellen; einzige Determinismus-Insel ist \code{louvain(seed=42)} im Community-Detection-Schritt).
+
+\section{Vom Code zum Paper: Annotationsstrategie}\label{sec:annotations}
+
+Jede Code-Aussage in den folgenden Kapiteln ist über einen der vier Schlüssel\texttt{\code{C<n>}}, \texttt{\code{A<n>}}, \texttt{\code{I<n>}} und \texttt{\code{R<n>}} belegt. Eine vollständige Tabelle der Belege ist in der Citation-Registry~\cite{citation-registry} hinterlegt; die Datei listet 57~Code-Belege, 5~ADRs, 12~Issues, 4~Referenzläufe und 14~Literaturschlüssel. Im Text werden die Code-Belege als \texttt{\src{C11}{split\_text ohne Manifest, \code{graph\_build.py:439}}} inline nachgewiesen; \code{AGENTS.md} und \code{README.md} werden ausdrücklich \emph{nicht} als Belege herangezogen.

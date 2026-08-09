@@ -1,0 +1,47 @@
+% =====================================================================
+% Kapitel 2: Stand der Forschung
+% =====================================================================
+
+\chapter{Stand der Forschung}\label{ch:related}
+
+Der Stand der Forschung wird in sechs Themencluster gegliedert, die für die Bewertung von \agora{} direkt relevant sind. Pro Cluster werden zwei bis vier Schlüsselarbeiten referenziert und auf die Forschungslücke zugespitzt, die diese Arbeit schließen hilft.
+
+\section{Synthetische Personas und generative Agenten}\label{sec:personas}
+
+Die zentralen Vorarbeiten stammen von~\cite{park2023generative}, die in der Smallville-Simulation 25 generative Agenten über zwei Tage agieren lassen und qualitative Plausibilität, nicht aber populationsstatistische Repräsentativität nachweisen. \cite{argyle2023silicon} zeigen, dass LLM-Persona-Conditioning Antwortverteilungen replizieren kann, betonen aber die Prompt-Abhängigkeit. \cite{horton2023homosilicus} demonstriert qualitative Replikation ökonomischer Verhaltensweisen. \cite{uas2025} untersuchen systematisch die Replikation realer Survey-Daten und identifizieren persistenten Bias.
+
+\textbf{Forschungslücke:} Es existiert kein kanonisches Protokoll, um LLM-Personas systematisch gegen reale Populationsstatistiken zu validieren~\cite{task-f-literature-note}. Übertragbarkeit auf DACH-Populationen ist eine offene empirische Frage.
+
+\section{Multi-Agent-Debate und Self-Consistency}\label{sec:debate}
+
+\cite{du2023multiagent} zeigen, dass Multi-Agent-Debate die Factuality gegenüber einzelnen Modellen verbessert, dass der Effekt jedoch bei großen Modellen sättigt. \cite{wang2022selfconsistency} liefern das methodische Fundament für Self-Consistency-Ansätze; \cite{consistency2024} relativieren deren Wert durch den Befund, dass Konsistenz nur bedingt mit Korrektheit korreliert. \cite{hiddenbench2025} zeigen, dass Kollektivreasoning am Hidden-Profile-Problem systematisch versagt (30,1\,\% vs.\ 80,7\,\% für einen Einzelagent mit vollständiger Information). \cite{mast2025} klassifizieren Fehlermodi in Multi-Agent-Systemen und stellen fest, dass Benchmark-Gewinne oft minimal sind.
+
+\textbf{Forschungslücke:} Studien, die Multi-Agent-Debate \emph{mit aktiver Quellenverifikation} kombinieren, sind selten;~\cite{zenodo-agora} ist eine Ausnahme.
+
+\section{GraphRAG und Retrieval-Grounding}\label{sec:graphrag}
+
+\cite{edge2024graphrag} zeigen, dass GraphRAG bei globalen, query-fokussierten Zusammenfassungen Standard-RAG übertrifft. Inline-Zitationen sind, wie~\cite{citednotverified} nachweisen, häufig fehlerhaft oder irrelevant -- ein direkter Bezugspunkt zu \agoras{} Evidence-Gating~\cite{adr-0002}.
+
+\textbf{Forschungslücke:} Vergleichende Evaluationen zwischen GraphRAG und Standard-RAG bei festem Budget sind rar; Effizienz-Varianten wie E\textsuperscript{2}GraphRAG oder Practical GraphRAG sind erst seit 2025/2026 verfügbar.
+
+\section{Halluzinationserkennung und Kalibrierung}\label{sec:halluzination}
+
+\cite{bail2024genai} formuliert die Warnung vor Homogenität, Halluzination und fehlender Validierung in der sozialwissenschaftlichen Anwendung generativer KI. \cite{consistency2024} zeigt, dass Selbstvertrauen und Korrektheit entkoppelt sind.
+
+\textbf{Forschungslücke:} Verbindung von Halluzinationserkennung mit prozessualen Gating-Mechanismen -- wie \agora{} sie implementiert~\cite{adr-0002} -- ist methodisch unterentwickelt.
+
+\section{Synthetische Daten und Model-Collapse}\label{sec:modelcollapse}
+
+\cite{shumailov2024curse} zeigen, dass rekursives Training auf synthetisch generierten Daten die Verteilung verengt und schließlich zum Vergessen führt. Diese Erkenntnis ist für \agora{} zentral, da die Persona-Population vollständig synthetisch ist und über mehrere Simulations-Runden weiter aggregiert wird.
+
+\textbf{Forschungslücke:} Langfristige Stabilität synthetischer Multi-Agent-Simulationen über Wochen oder Monate wird kaum systematisch gemessen.
+
+\section{Analytische Flexibilität und Reproduzierbarkeit}\label{sec:flexibility}
+
+\cite{analyticflexibility} untersuchen 252 Konfigurationen eines LLM-basierten Sozialmodells und zeigen, dass die Ergebnisse stark von Prompt, Sampling und Modellwahl abhängen -- ein P-Hacking-Äquivalent.
+
+\textbf{Forschungslücke:} Standardisierte Reproduzierbarkeitsprotokolle für LLM-basierte Simulationen fehlen.
+
+\section{Synthese: Wo setzt \agora{} an?}\label{sec:synthese}
+
+\agora{} sitzt methodisch am Schnittpunkt von drei Clustern: (1)~\emph{Provenance-Grounding} durch serverseitige Anchor-Erzwingung, (2)~\emph{Anti-Self-Confirmation} durch Echo-Chamber-Index und Confidence-Capping, und (3)~\emph{Halluzinationsprävention} durch zweistufiges Binding. Damit berührt es Forschungslücken, die in der Literatur benannt sind, ohne sie bislang geschlossen zu haben. Der vorliegende Beitrag macht diese Lücken am konkreten Code sichtbar und formuliert eine Roadmap, die sie schließen könnte.

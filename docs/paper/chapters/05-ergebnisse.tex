@@ -1,0 +1,201 @@
+% =====================================================================
+% Kapitel 5: Ergebnisse
+% =====================================================================
+
+\chapter{Ergebnisse}\label{ch:ergebnisse}
+
+\section{Referenzlauf und Baseline}\label{sec:r2}
+
+Der Referenzlauf~\cite{audit-r2} (2026-08-09, Eingabe: 16 Seed-Dokumente, 5~Stakeholder-Gruppen, 12~Personas) erzeugte \textbf{null validierte Claims}. Der gesamte Inhalt wanderte in das Hypothesen-Slot~\src{C36}{dedup\_and\_cap\_hypotheses}. Der historische Vergleichslauf~\cite{audit-r1} (2026-07-27) erzeugte 25~Claims, alle~\code{medium}, auf 125~Evidence-Items, die zu 100\,\% den Wert~\code{inferred} trugen -- der dokumentierte Vor-Fix-Zustand aus~\cite{adr-0011}.
+
+\textbf{Beobachtung:} Der Sprung von 25~medium-Claims (mit kaputtem Binding) zu 0~validierten Claims (mit korrektem Binding) belegt, dass das Gating funktioniert -- aber ins Leere greift, weil der Upstream keine kanonische Evidence liefert.
+
+\section{10-Dimensionen-Bewertung}\label{sec:scoring}
+
+Die folgende Bewertung folgt dem Schema aus dem zugrundeliegenden Audit~\cite{zenodo-agora} und ist die Grundlage der Gesamtscores in Kapitel~\ref{ch:diskussion}. Jede Dimension wird auf einer Skala von 0 (v{\"o}llig unzureichend) bis 10 (vorbildlich) bewertet.
+
+\begin{table}[ht]
+  \centering
+  \small
+  \begin{tabular}{@{}p{0.04\textwidth}p{0.32\textwidth}p{0.05\textwidth}p{0.45\textwidth}@{}}
+    \toprule
+    \textbf{\#} & \textbf{Dimension} & \textbf{Score} & \textbf{Begründung} \\
+    \midrule
+    1 & Provenance-Architektur (Konzept) & 8 & Sechs source\_kind, Default \code{inferred}, Anker-Konzept, Identit{\"a}tswechsel; konzeptionell stark und durch ADRs verankert. \\
+    2 & Provenance-Umsetzung (Ist) & 3 & Teil~B fehlt, Anker opak, \code{medium} unerreichbar, 0~validierte Claims. \\
+    3 & Evidence-Binding/Rigour & 7 & Zweistufig, Determinismus vor Embedding, Modalit{\"a}tstrennung; greift ins Leere ohne Upstream-Evidence. \\
+    4 & Confidence-Honesty & 7 & Mehrkomponenten, Caps, contradiction-penalty; aber Konzeptvermischung (key\_takeaways high bei claims:[]). \\
+    5 & Anti-Self-Confirmation & 7 & Echo-Cap, Red-Team, Wording-Gate; aber Schwellen nicht kalibriert, nur cross-stakeholder. \\
+    6 & Testabdeckung & 5 & 363~Tests, starke Contract-/Gating-Tests; aber kein E2E-Provenance, kein Baseline, kein Reproducibility-Test. \\
+    7 & Reproduzierbarkeit & 2 & Simulation nicht deterministisch; E2E nur Stub; kein Same-Seed-Same-Report-Test. \\
+    8 & Sim-Validity/Empirie & 2 & Keine Metrik, kein Ground-Truth, kein A/B; Referenzlauf inhaltlich nicht vertrauensw{\"u}rdig. \\
+    9 & Komplexit{\"a}ts{\"o}konomie & 5 & Neo4j/Redis/CAMEL f{\"u}r Single-User overkill; OASIS \textasciitilde5500~LOC ohne Validierung; Evidence-Pipeline hingegen gerechtfertigt. \\
+    10 & Doku/ADR-Honesty & 9 & ADR-0011 dokumentiert eigenen Fehler offen; 5~Hartanker prozessual gesch{\"u}tzt; Roadmap nennt Schw{\"a}chen beim Namen. \\
+    \bottomrule
+  \end{tabular}
+  \caption{10-Dimensionen-Bewertung von \agora{} zum Auditzeitpunkt.}
+  \label{tab:scoring}
+\end{table}
+
+\section{Failure-Mode-Analyse}\label{sec:failures}
+
+Aus dem Audit wurden 15~Failure-Modes (FM) extrahiert, geordnet nach Severity. Tabelle~\ref{tab:failures} zeigt die kritischen Befunde; die vollständige Liste findet sich im Anhang.
+
+\begin{table}[ht]
+  \centering
+  \small
+  \begin{tabular}{@{}p{0.04\textwidth}p{0.32\textwidth}p{0.10\textwidth}p{0.44\textwidth}@{}}
+    \toprule
+    \textbf{FM} & \textbf{Failure-Mode} & \textbf{Severity} & \textbf{Code-Beleg / Gegenmaßnahme} \\
+    \midrule
+    F1 & Seed-Provenance end-to-end gebrochen (Teil~B fehlt) & Critical & \src{C11}{split\_text ohne Manifest}; ADR-0013 Teil~B \\
+    F2 & Interview$\to$Evidence-Binding-Defekt; Fix in HEAD (\code{d7d9f0a4}), E2E-Re-Run offen & Medium & \src{C50}{producer\_key + quote + persona\_stakeholder\_group} \\
+    F3 & Opaker \code{seed\_doc:}-Anker (LLM nennt eigene Quelle, niemand pr{\"u}ft nach) & Critical & \src{C9}{Anker opak}, \src{C10}{kein Lookup} \\
+    F4 & Gate zu streng f{\"u}r eigenen Throughput $\to$ 0~validierte Claims & High & Folge von F1+F2 \\
+    F5 & Graph-Fakten ohne Dokumentidentit{\"a}t (\code{List[str]}) & High & \src{C19}{Episode ohne doc\_id}, \src{C21}{kein source\_id\_anchor} \\
+    F6 & \code{medium}-Stufe aktuell unerreichbar & High & \src{C8}{has\_agent\_grounded\_evidence} \\
+    F14 & Neo4j f{\"u}r Single-User-Local overkill (\textasciitilde3900~LOC Graph-Code) & Low & \src{C40}{Komplexit{\"a}t} \\
+    F16 & \code{simulated\_hours} nicht in API/Frontend exponiert & Low & Issue~1018~\cite{issue-1018} \\
+    \bottomrule
+  \end{tabular}
+  \caption{Auswahl kritischer Failure-Modes (vollständige Liste im Anhang).}
+  \label{tab:failures}
+\end{table}
+
+\section{Provenance-Verlustpunkte}\label{sec:loss}
+
+Die Rekonstruktion der Evidence-Chain (Abbildung~\ref{fig:evidence-chain}) identifiziert sieben code-verifizierte Provenance-Verlustpunkte. Sie sind in Tabelle~\ref{tab:loss} zusammengefasst.
+
+\begin{table}[ht]
+  \centering
+  \small
+  \begin{tabular}{@{}p{0.05\textwidth}p{0.45\textwidth}p{0.40\textwidth}@{}}
+    \toprule
+    \textbf{\#} & \textbf{Verlustpunkt} & \textbf{Beleg} \\
+    \midrule
+    \lossmarkX{1} & \code{split\_text} ohne Manifest; \code{List[str]} ohne \code{doc\_id/chunk\_id} & \src{C11}{graph\_build.py:439} \\
+    \lossmarkX{2} & \code{episode\_id = uuid4()} ohne Dateibezug & \src{C15}{} \\
+    \lossmarkX{3} & \code{Episode.data} = roher Chunk-String, kein \code{document\_id} & \src{C16}{} \\
+    \lossmarkX{4} & \code{RELATION.episode\_ids = [uuid]}, keine Dokument-Referenz & \src{C17}{} \\
+    \lossmarkX{5} & \code{SearchResult.facts = List[str]}, keine Herkunft & \src{C19}{}, \src{C20}{} \\
+    \lossmarkX{6} & Graph-Fakt $\to$ \code{source\_kind=graph\_relation}, kein \code{source\_id\_anchor} & \src{C21}{}, \src{C7}{} \\
+    \lossmarkX{7} & \code{seed\_doc:}-Pr{\"a}fix opak akzeptiert, kein Lookup & \src{C9}{}, \src{C10}{} \\
+    \bottomrule
+  \end{tabular}
+  \caption{Sieben code-verifizierte Provenance-Verlustpunkte in der Evidence-Chain.}
+  \label{tab:loss}
+\end{table}
+
+\section{Prompt-vs-\agora{}-Matrix}\label{sec:promptvsagora}
+
+Die Matrix prüft für jeden \agora{}-Mechanismus, ob er durch einen einzelnen starken LLM-Prompt ersetzbar w{\"a}re. Bewertung: \lossmark=nein (strukturell), $\bullet$=teilweise (per Instruktion erreichbar), \okmark=ja.
+
+\begin{table}[ht]
+  \centering
+  \small
+  \begin{tabular}{@{}p{0.40\textwidth}p{0.05\textwidth}p{0.45\textwidth}@{}}
+    \toprule
+    \textbf{Mechanismus} & \textbf{Prompt?} & \textbf{Bemerkung} \\
+    \midrule
+    Echo-Chamber-Index + \code{apply\_echo\_cap} & \lossmark & Strukturelle Messung; nicht prompt-basierbar \\
+    Wording-Glossar / Anti-Prediction & $\bullet$ & Per Prompt approximierbar, aber Snapshot-gepinnt \\
+    Zweistufiges Binding (Retrieval vs.\ Entailment) & \lossmark & Zwei verschiedene Fragen, nicht ein Prompt \\
+    Deterministische Checks vor Embedding & \lossmark & Strukturell, nicht prompt-basierbar \\
+    \code{source\_kind}-Trennung (6~Stufen) & \lossmark & Trennt im Datentyp, nicht im Prompt \\
+    Kanonische \code{evidence\_id} (SHA-256) & \lossmark & Reproduzierbare Identit{\"a}t \\
+    Red-Team-Review (LLM-Judge post-Assembly) & $\bullet$ & Self-Critique per Prompt m{\"o}glich, aber an \code{echo\_index} gekoppelt \\
+    Default \code{inferred} (unbekannt = abgeleitet) & \lossmark & Im Vertrag erzwungen \\
+    Mode-Routing (strict dropt, balanced {\"u}berspringt) & $\bullet$ & Im Contract-Validator \\
+    Graceful Degradation (gate-decision-log vs.\ degradation-log) & \lossmark & Getrenntes Audit-Log \\
+    Multi-Agent-Simulation (OASIS/CAMEL) & \lossmark & Mehrwert ungepr{\"u}ft, keine Sim-Validity-Metrik \\
+    Downgrade als Identit{\"a}tswechsel & \lossmark & Im Hash erzwungen \\
+    ADR-0002 Hartanker (5, unantastbar) & \lossmark & Prozessuale Garantie \\
+    \bottomrule
+  \end{tabular}
+  \caption{Prompt-vs-\agora{}-Matrix: Welche Mechanismen sind strukturell (\lossmark) und damit nicht durch einen st{\"a}rkeren System-Prompt ersetzbar?}
+  \label{tab:promptvsagora}
+\end{table}
+
+\section{Novelty-Matrix}\label{sec:novelty}
+
+Zur Einordnung der konzeptionellen Neuheit wird eine vier-stufige Skala verwendet:
+
+\begin{description}
+  \item[L0] Standard-LLM-Prompt
+  \item[L1] strukturierte Output-Felder
+  \item[L2] typisierte Contracts/Validatoren
+  \item[L3] mehrstufige deterministische Checks vor/statt Embedding
+  \item[L4] konzeptionell neu in der Kombination
+\end{description}
+
+Tabelle~\ref{tab:novelty} ordnet die zentralen \agora{}-Eigenschaften ein.
+
+\begin{table}[ht]
+  \centering
+  \small
+  \begin{tabular}{@{}p{0.50\textwidth}p{0.05\textwidth}p{0.35\textwidth}@{}}
+    \toprule
+    \textbf{Eigenschaft} & \textbf{Level} & \textbf{Beleg} \\
+    \midrule
+    Report als Textausgabe & L0 & Standard \\
+    Strukturierte Claim/Evidence-Felder & L1 & Standard f{\"u}r Agent-Frameworks \\
+    Pydantic-Contracts, \code{EvidenceSourceKind}-Enum, Gating-Validatoren & L2 & Standard in typisierten Backends \\
+    Zweistufiges Binding & L3 & ADR-0011 motiviert durch 7~belegte Defekte \\
+    Deterministische Checks vor Embedding & L3 & Verhindert Zahlenwanderung \\
+    Server-seitiger Dokument-Anker (Konzept) & L3 / L0 & Konzept: L3, Umsetzung: L0 \\
+    Echo-Chamber-Index + \code{apply\_echo\_cap} & L4 & Kopplung synthetischer Homogenit{\"a}tsmessung an Confidence-Cap \\
+    Wording-Glossar als Snapshot + Red-Team-Enforcement & L3 & Prozessual verankert \\
+    Downgrade als Identit{\"a}tswechsel & L4 & Erzwingt atomare Umschl{\"u}sselung \\
+    \bottomrule
+  \end{tabular}
+  \caption{Novelty-Matrix: Einordnung zentraler \agora{}-Eigenschaften auf den Stufen~L0--L4.}
+  \label{tab:novelty}
+\end{table}
+
+\section{Anti-Self-Confirmation-Bewertung}\label{sec:anticonfeval}
+
+Aus der Forschungsbasis~\cite{consistency2024,citednotverified,shumailov2024curse,hiddenbench2025} ergibt sich die Frage, welche Anti-Self-Confirmation-Mechanismen \agora{} tats{\"a}chlich implementiert. Tabelle~\ref{tab:anticonfeval} bewertet die Mechanismen gegen{\"u}ber den in der Literatur dokumentierten Risiken.
+
+\begin{table}[ht]
+  \centering
+  \small
+  \begin{tabular}{@{}p{0.36\textwidth}p{0.34\textwidth}p{0.20\textwidth}@{}}
+    \toprule
+    \textbf{Mechanismus} & \textbf{Wirkung gegen das Literatur-Risiko} & \textbf{Caveat} \\
+    \midrule
+    Echo-Chamber-Index & Misst synthetische Homogenit{\"a}t & Misst nicht reale Populationsvalidit{\"a}t \\
+    DACH-Quoten-Kalibrierung & Verhindert willk{\"u}rkliche Persona-Population & Konstanten, kein Mikrodaten-Fit; LLM-Echttest CI-excluded \\
+    \code{apply\_echo\_cap} & Drosselt polarisierte Echo-Kammern & Greift nur bei cross-stakeholder; Schwellen hartkodiert \\
+    Red-Team-Review (LLM-Judge) & Pr{\"u}ft Claims auf Schw{\"a}chen & LLM-Judge kann Confirmation-Bias haben; \code{BudgetExceededError} durchgereicht~\cite{issue-978} \\
+    Wording-Glossar & Positioniert als Szenarienanalyse & An \code{echo\_index} gekoppelt, nicht an Claim-Falschheit \\
+    Default \code{inferred} & Verhindert \enquote{jedes Item = Dokumentfakt} & \code{inferred}-Gewicht 0{,}0 $\to$ Claim endet als Hypothese \\
+    Zweistufiges Binding & Verhindert \enquote{Cosine-only supports\_claim=True} & Schwaches Embedding $\to$ Claim wird Hypothese \\
+    \bottomrule
+  \end{tabular}
+  \caption{Bewertung der Anti-Self-Confirmation-Mechanismen gegen{\"u}ber den in der Literatur dokumentierten Risiken.}
+  \label{tab:anticonfeval}
+\end{table}
+
+\textbf{Befund:} \agora{} hat \emph{konkrete, code-level Mechanismen}, die ein Single-Prompt nicht besitzt. Sie sind der st{\"a}rkste Teil der Architektur -- greifen jedoch ins Leere, weil der Upstream keine kanonische Evidence liefert (R2).
+
+\section{Referenzl{\"a}ufe im Vergleich}\label{sec:referenzlaeufe}
+
+\begin{table}[ht]
+  \centering
+  \small
+  \begin{tabular}{@{}p{0.10\textwidth}p{0.18\textwidth}p{0.18\textwidth}p{0.18\textwidth}p{0.18\textwidth}@{}}
+    \toprule
+    \textbf{Lauf} & \textbf{Datum} & \textbf{Claims} & \textbf{Evidence-Items} & \textbf{Anteil \code{inferred}} \\
+    \midrule
+    R1~\cite{audit-r1} & 2026-07-27 & 25 (\emph{alle medium}) & 125 & 100\,\% \\
+    R2~\cite{audit-r2} & 2026-08-09 & 0 (validiert) & 65 & 78\,\% \\
+    R4~\cite{audit-r4} & 2026-07-25 & (report\_d9023bd1f55a) & -- & -- \\
+    \bottomrule
+  \end{tabular}
+  \caption{Vergleich der Referenzl{\"a}ufe. R1 dokumentiert den Vor-Fix-Zustand; R2 den Pre-Fix-Stand des Interview-Binding-Defekts; R4 ist der in ADR-0011 als Beleg zitierte Report.}
+  \label{tab:referenzlaeufe}
+\end{table}
+
+\section{Zwischenfazit}\label{sec:zwischenfazit}
+
+Die Ergebnisse erlauben eine erste Antwort auf die Forschungsfrage: \textbf{Aktuell liefert \agora{} keinen messbaren Erkenntnisgewinn gegen{\"u}ber einem Single-Prompt}. Die Strukturen sind ehrlich konstruiert; sie greifen jedoch ins Leere, weil die Seed-Provenance end-to-end gebrochen ist (F1) und die Anker opak akzeptiert werden (F3). Diese Aussage wird in Kapitel~\ref{ch:diskussion} anhand von f{\"u}nf Kernkontroversen eingeordnet.

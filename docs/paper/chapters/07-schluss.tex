@@ -1,0 +1,59 @@
+% =====================================================================
+% Kapitel 7: Schluss
+% =====================================================================
+
+\chapter{Schluss}\label{ch:schluss}
+
+\section{Beantwortung der Forschungsfrage}\label{sec:antwort}
+
+Die Forschungsfrage lautete: \emph{Welche Teile von \agora{} erzeugen einen tats{\"a}chlich {\"u}berpr{\"u}fbaren Erkenntnisgewinn gegen{\"u}ber einem einzelnen starken LLM-Prompt -- und welche Teile erzeugen lediglich zus{\"a}tzliche Komplexit{\"a}t, Kosten oder scheinbare Evidenz?}
+
+\textbf{Antwort:} Konzeptionell {\"u}berpr{\"u}fbar sind die Strukturen, die nicht prompt-basierbar sind -- Echo-Cap, zweistufiges Binding, Determinismus vor Embedding, \code{source\_kind}-Trennung, kanonische \code{evidence\_id}, Downgrade als Identit{\"a}tswechsel und die prozessualen Hartanker~\cite{adr-0002}. In der aktuellen Umsetzung (Stand~\code{7e42ae34}) ist \emph{keiner} dieser Mechanismen empirisch wirksam: der Referenzlauf~\cite{audit-r2} erzeugt null validierte Claims, weil die Provenance end-to-end gebrochen ist und der Anker opak akzeptiert wird. Damit erzeugt das System aktuell \emph{keinen} messbaren Mehrwert gegen{\"u}ber einem starken Single-Prompt -- bei gleichzeitig h{\"o}herer Komplexit{\"a}t und h{\"o}heren Kosten.
+
+Die Antwort ist also nicht \enquote{ja, der Mehrwert ist real}, sondern \enquote{der Mehrwert ist \emph{potenziell} real, aber \emph{aktuell} nicht nachweisbar}. Genau diese Asymmetrie -- Konzept vs.\ Wirksamkeit -- ist der eigentliche Befund.
+
+\section{Ausblick: Priorisierte Roadmap}\label{sec:roadmap}
+
+Die priorisierte Roadmap~\cite{zenodo-agora} gliedert sich in vier Stufen:
+
+\begin{description}
+  \item[P0 -- Blocker f{\"u}r 1.0] \mbox{}\\
+    \begin{itemize}
+      \item ADR-0013 Teil~B umsetzen (document\_id/chunk\_id durch Graph bis Anker). Behebt F1, F3, F5, F6.
+      \item Confidence-Konzepte trennen (simulation\_consensus, evidence\_confidence, empirical\_confidence). Behebt F8.
+    \end{itemize}
+  \item[P1 -- Empirischer Mehrwert] \mbox{}\\
+    \begin{itemize}
+      \item E2E-Re-Run gegen~\code{d7d9f0a4} zur Wirkungsbest{\"a}tigung des Interview-Binding-Fix. Behebt F2, G9.
+      \item Baseline-Runner \agora{}-vs-Single-Prompt. Behebt G3.
+      \item Sim-Validity-Metrik gegen Ground-Truth. Behebt G1.
+      \item Reproduzierbarkeit (seed/determinism). Behebt G2.
+    \end{itemize}
+  \item[P2 -- Qualit{\"a}t] \mbox{}\\
+    \begin{itemize}
+      \item Markdown-Export mit Producer-Aufl{\"o}sung. Behebt F12.
+      \item Hardstop bei Evidence-Omission. Behebt F13.
+      \item Chunk-Provenance End-to-End-Test. Behebt G4.
+      \item Negativer E2E-Test (doc\_id fallen lassen $\to$ ablehnen). Behebt G8.
+    \end{itemize}
+  \item[P3 -- Komplexit{\"a}ts{\"o}konomie] \mbox{}\\
+    \begin{itemize}
+      \item Neo4j-Evaluation (SQLite + pgvector f{\"u}r Single-User). Behebt F14.
+      \item CAMEL http/oasis-Konsolidierung. Behebt F15.
+      \item Redis optional markieren.
+      \item Usage-Metrik {\"u}ber \code{EvidenceSourceKind}-H{\"a}ufigkeit. Behebt G7.
+    \end{itemize}
+\end{description}
+
+\section{Verf{\"u}gbarkeit und Reproduzierbarkeit}\label{sec:verfuegbarkeit}
+
+\begin{itemize}
+  \item \textbf{Repository:} \href{https://github.com/arn0ld87/agora}{\code{github.com/arn0ld87/agora}}, Branch \code{feat/1152-provenance-retrieval}, HEAD \code{7e42ae34}.
+  \item \textbf{Eingefrorener Snapshot:} \href{https://zenodo.org/records/21855023}{Zenodo DOI 10.5281/zenodo.21855023}~\cite{zenodo-agora}.
+  \item \textbf{Autor:} Alexander Schneider, ORCID \href{https://orcid.org/0009-0008-7552-1819}{0009-0008-7552-1819}.
+  \item \textbf{Audit-Dokumentation:} \code{docs/paper/agora-evidence-chain-audit.md} (43~KB), Research-Notes unter \code{docs/paper/research-notes/}, Citation-Registry~\cite{citation-registry}.
+\end{itemize}
+
+\section{Schlussbemerkung}\label{sec:schlussbemerkung}
+
+\agora{} ist eine sorgf{\"a}ltig gebaute Maschine, die beweist, dass sie nichts beweisen kann. Das ist, paradoxerweise, genau die Ehrlichkeit, die dem Feld der LLM-basierten Sozialwissenschaft fehlt~\cite{bail2024genai,analyticflexibility}. Der Bauplan f{\"u}r den {\"u}berf{\"u}hrbaren Mehrwert liegt vor -- in~\cite{adr-0011},~\cite{adr-0013} und der Roadmap dieser Arbeit. Was fehlt, ist die Umsetzung.

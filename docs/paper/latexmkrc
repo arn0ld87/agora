@@ -1,0 +1,16 @@
+# latexmkrc — Agora Evidence-Chain Paper
+# LuaLaTeX + Biber; setzt eine lokale TeX-Live-Installation voraus.
+
+# Engine: LuaLaTeX (Unicode, OpenType, Lua-Hooks)
+$pdf_mode = 5;
+$lualatex = 'lualatex -interaction=nonstopmode -file-line-error -synctex=1 %O %S';
+
+# Biber-Integration
+$biber = 'biber %O --bblencoding=utf8 -u -U %S';
+$bibtex_use = 2;
+
+# Saubere Aux-Dateien zwischen Builds
+$clean_ext = 'aux bbl blg log run.xml bcf toc out fls fdb_latexmk synctex.gz';
+
+# Standard-Pattern
+ensure_path('TEXINPUTS', 'figures//');

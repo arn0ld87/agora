@@ -1,0 +1,299 @@
+% references.bib — Agora Evidence-Chain Paper
+% Stand: 2026-08-09
+% Quellen aus docs/paper/research-notes/citation-registry.md (L1–L14) und docs/decisions/
+
+% ===== Architekturentscheidungen (ADRs) =====
+
+@misc{adr-0002,
+  author       = {{Agora-Architekturteam}},
+  title        = {{ADR-0002: Evidence-Gating}},
+  year         = {2026},
+  howpublished = {Agora Architecture Decision Record},
+  note         = {Repository agor{\_}repo, docs/decisions/0002-evidence-gating.md},
+  url          = {https://github.com/arn0ld87/agora/blob/main/docs/decisions/0002-evidence-gating.md},
+}
+
+@misc{adr-0011,
+  author       = {{Agora-Architekturteam}},
+  title        = {{ADR-0011: Evidence-Entailment und Provenance}},
+  year         = {2026},
+  howpublished = {Agora Architecture Decision Record},
+  note         = {Dokumentiert sieben belegte Defekte im Evidenz- und Claim-Bindings historischer Reports; report{\_}d9023bd1f55a als Referenzartefakt.},
+  url          = {https://github.com/arn0ld87/agora/blob/main/docs/decisions/0011-evidence-entailment-and-provenance.md},
+}
+
+@misc{adr-0013,
+  author       = {{Agora-Architekturteam}},
+  title        = {{ADR-0013: Seed-Corpus Document-Anchor}},
+  year         = {2026},
+  howpublished = {Agora Architecture Decision Record},
+  note         = {Teil A umgesetzt, Teil B ausstehend; definiert server-seitige Provenance-Pflicht fuer Seed-Dokumente.},
+  url          = {https://github.com/arn0ld87/agora/blob/main/docs/decisions/0013-seed-corpus-document-anchor.md},
+}
+
+% ===== Issues =====
+
+@misc{issue-987,
+  author       = {{Agora Maintainers}},
+  title        = {{Issue \#987: Evidence-Map faellt stumm bei contract{\_}violation}},
+  year         = {2026},
+  howpublished = {GitHub Issue},
+  url          = {https://github.com/arn0ld87/agora/issues/987},
+}
+
+@misc{issue-978,
+  author       = {{Agora Maintainers}},
+  title        = {{Issue \#978: Red-Team BudgetExceededError wird durchgereicht}},
+  year         = {2026},
+  howpublished = {GitHub Issue},
+  url          = {https://github.com/arn0ld87/agora/issues/978},
+}
+
+@misc{issue-215,
+  author       = {{Agora Maintainers}},
+  title        = {{Issue \#215: IT-Anteil in Persona-Population hard-gecappt ($\leq 12\,\%$)}},
+  year         = {2025},
+  howpublished = {GitHub Issue},
+  url          = {https://github.com/arn0ld87/agora/issues/215},
+}
+
+@misc{issue-1018,
+  author       = {{Agora Maintainers}},
+  title        = {{Issue \#1018: simulated{\_}hours nicht in API/Frontend exponiert}},
+  year         = {2026},
+  howpublished = {GitHub Issue},
+  url          = {https://github.com/arn0ld87/agora/issues/1018},
+}
+
+% ===== Wissenschaftliche Literatur =====
+
+@article{park2023generative,
+  author       = {Park, Joon Sung and O'Brien, Joseph C. and Cai, Carrie J. and Morris, Meredith Ringel and Liang, Percy and Bernstein, Michael S.},
+  title        = {{Generative Agents: Interactive Simulacra of Human Behavior}},
+  journal      = {arXiv preprint arXiv:2304.03442},
+  year         = {2023},
+  eprint       = {2304.03442},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.HC},
+  note         = {UCLA/Stanford; 25 agenten, Smallville-Simulation; Validierung qualitativ, nicht populationsrepraesentativ},
+}
+
+@article{argyle2023silicon,
+  author       = {Argyle, Lisa P. and Busby, Ethan C. and Fulda, Nathan and Gubler, Joshua R. and Rytting, Christian and Wingate, David},
+  title        = {{Out of One, Many: Using Language Models to Simulate Human Samples}},
+  journal      = {arXiv preprint arXiv:2209.06899},
+  year         = {2023},
+  eprint       = {2209.06899},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.CL},
+  note         = {Silicon-Samples-Konzept; Conditioning reproduziert Antwortverteilungen, prompt-abhaengig},
+}
+
+@article{bail2024genai,
+  author       = {Bail, Christopher A.},
+  title        = {{Can Generative AI Improve Social Science?}},
+  journal      = {Proceedings of the National Academy of Sciences / PMC},
+  year         = {2024},
+  note         = {Warnt vor Homogenitaet, Halluzination, fehlender Validierung; PMC11127003},
+  url          = {https://www.ncbi.nlm.nih.gov/pmc/articles/PMC11127003/},
+}
+
+@article{edge2024graphrag,
+  author       = {Edge, Darren and Trinh, Ha and Cheng, Nicholas and Bradley, Joshua and Chao, Alex and Mody, Apurva and Truitt, Steven and Larson, Jonathan},
+  title        = {{From Local to Global: A GraphRAG Approach to Query-Focused Summarization}},
+  journal      = {arXiv preprint arXiv:2404.16130},
+  year         = {2024},
+  eprint       = {2404.16130},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.CL},
+  note         = {Microsoft Research; GraphRAG ueberlegen bei globalen QFS-Fragen},
+}
+
+@inproceedings{du2023multiagent,
+  author       = {Du, Yilun and Li, Shuang and Torralba, Antonio and Tenenbaum, Joshua B. and Mordatch, Igor},
+  title        = {{Improving Factuality and Reasoning in Language Models through Multiagent Debate}},
+  booktitle    = {Proceedings of the 41st International Conference on Machine Learning (ICML)},
+  year         = {2024},
+  eprint       = {2305.14325},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.CL},
+  note         = {Multi-Agent-Debate; verbessert Factuality, saettigt bei grossen Modellen},
+}
+
+@inproceedings{wang2022selfconsistency,
+  author       = {Wang, Xuezhi and Wei, Jason and Schuurmans, Dale and Le, Quoc and Chi, Ed and Narang, Sharan and Chowdhery, Aakanksha and Zhou, Denny},
+  title        = {{Self-Consistency Improves Chain of Thought Reasoning in Language Models}},
+  booktitle    = {Proceedings of the 36th Conference on Neural Information Processing Systems (NeurIPS)},
+  year         = {2022},
+  eprint       = {2203.11171},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.CL},
+}
+
+@article{consistency2024,
+  title        = {{Consistency is Not the Only Truth: Investigating the Impact of Self-Consistency on Hallucination}},
+  journal      = {arXiv preprint arXiv:2407.05778},
+  year         = {2024},
+  eprint       = {2407.05778},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.CL},
+  note         = {Konsistenz korreliert nur bedingt mit Korrektheit},
+}
+
+@inproceedings{shumailov2024curse,
+  author       = {Shumailov, Ilia and Shumaylov, Zakhar and Zhao, Yarin and Gal, Yarin and Papernot, Nicolas and Anderson, Ross},
+  title        = {{The Curse of Recursion: Training on Generated Data Makes Models Forget}},
+  booktitle    = {Proceedings of the 41st International Conference on Machine Learning (ICML)},
+  year         = {2024},
+  eprint       = {2404.05090},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.LG},
+  note         = {Model-Collapse: rekursives Training auf synthetischen Daten verengt die Verteilung},
+}
+
+@article{citednotverified,
+  title        = {{Cited but Not Verified: A Benchmark and Analysis of Citation Behavior in LLMs}},
+  journal      = {arXiv preprint arXiv:2605.06635},
+  year         = {2026},
+  eprint       = {2605.06635},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.CL},
+  note         = {Inline-Zitationen haeufig fehlerhaft/irrelevant; direkter Bezug zu Agoras Evidence-Gating},
+}
+
+@article{mast2025,
+  title        = {{MAST-Data: Why Do Multi-Agent Systems Fail?}},
+  journal      = {arXiv preprint arXiv:2503.13657},
+  year         = {2025},
+  eprint       = {2503.13657},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.CL},
+  note         = {MAS-Fehlerklassifikation; Benchmark-Gewinne oft minimal},
+}
+
+@article{hiddenbench2025,
+  title        = {{HiddenBench: Assessing Collective Reasoning under Hidden Profiles in Multi-Agent Systems}},
+  journal      = {arXiv preprint arXiv:2505.11556},
+  year         = {2025},
+  eprint       = {2505.11556},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.CL},
+  note         = {Kollektivreasoning versagt am Hidden-Profile-Problem (30,1\% vs. 80,7\%)},
+}
+
+@article{analyticflexibility,
+  title        = {{Analytic Flexibility in LLM-Based Social Simulation}},
+  journal      = {arXiv preprint arXiv:2509.13397},
+  year         = {2025},
+  eprint       = {2509.13397},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.CL},
+  note         = {252 Konfigurationen; Ergebnis haengt stark an Prompt/Sampling/Modell (P-Hacking-Aequivalent)},
+}
+
+@article{uas2025,
+  title        = {{UAS Digital Twins: Replicating Survey Data with LLM Agents}},
+  journal      = {arXiv preprint arXiv:2504.08260},
+  year         = {2025},
+  eprint       = {2504.08260},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.CL},
+  note         = {Unvollstaendige Replikation realer Survey-Daten, persistenter Bias},
+}
+
+@article{horton2023homosilicus,
+  author       = {Horton, John J.},
+  title        = {{Large Language Models as Simulated Economic Agents: What Can We Learn from Homo Silicus?}},
+  journal      = {arXiv preprint arXiv:2301.07543},
+  year         = {2023},
+  eprint       = {2301.07543},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.GT},
+  note         = {LLMs als oekonomische Agenten, qualitative Replikation},
+}
+
+% ===== Interne Code- und Test-Referenzen =====
+
+@misc{agora-repo,
+  author       = {{Agora Maintainers}},
+  title        = {{Agora-Repository}},
+  year         = {2026},
+  howpublished = {GitHub Repository},
+  note         = {Branch feat/1152-provenance-retrieval; HEAD 7e42ae34 zum Auditzeitpunkt},
+  url          = {https://github.com/arn0ld87/agora},
+}
+
+@misc{zenodo-agora,
+  author       = {Schneider, Alexander},
+  title        = {{Agora -- Snapshot zum Code-Audit Evidence Chain (2026-08-09)}},
+  year         = {2026},
+  howpublished = {Zenodo},
+  doi          = {10.5281/zenodo.21855023},
+  url          = {https://zenodo.org/records/21855023},
+  note         = {Begleitendes Software-Artefakt (DOI); ORCID 0009-0008-7552-1819},
+}
+
+@misc{report-d9023,
+  author       = {{Agora Maintainers}},
+  title        = {{Referenz-Report report\_d9023bd1f55a}},
+  year         = {2026},
+  howpublished = {Agora Run-Artefakt},
+  note         = {Inhaltlich nicht vertrauenswuerdig; in ADR-0011 als Beleg fuer die Notwendigkeit der Evidence-Pipeline zitiert},
+  url          = {https://github.com/arn0ld87/agora/tree/main/docs/reference-runs},
+}
+
+% ===== Interne Referenzlaeufe und Research-Notes =====
+
+@misc{audit-r1,
+  author       = {{Agora Maintainers}},
+  title        = {{Referenzlauf R1 (2026-07-27) aus dem Evidence-Chain-Audit}},
+  year         = {2026},
+  howpublished = {Agora Reference-Run},
+  note         = {25 Claims (alle medium), 125 Evidence-Items, 100\,\% \texttt{inferred}; Vor-Fix-Zustand},
+  url          = {https://github.com/arn0ld87/agora/tree/main/docs/reference-runs},
+}
+
+@misc{audit-r2,
+  author       = {{Agora Maintainers}},
+  title        = {{Referenzlauf R2 (2026-08-09) aus dem Evidence-Chain-Audit}},
+  year         = {2026},
+  howpublished = {Agora Reference-Run},
+  note         = {0 validierte Claims; 65 Evidence-Items (78\,\% \texttt{inferred}); demonstriert Pre-Fix-Stand des Interview-Binding-Defekts},
+  url          = {https://github.com/arn0ld87/agora/tree/main/docs/reference-runs},
+}
+
+@misc{audit-r4,
+  author       = {{Agora Maintainers}},
+  title        = {{Referenzlauf R4 (2026-07-25) aus dem Evidence-Chain-Audit}},
+  year         = {2026},
+  howpublished = {Agora Reference-Run},
+  note         = {report\_d9023bd1f55a; in ADR-0011 als Beleg fuer die Notwendigkeit der Evidence-Pipeline zitiert},
+  url          = {https://github.com/arn0ld87/agora/tree/main/docs/reference-runs},
+}
+
+@misc{citation-registry,
+  author       = {{Agora Maintainers}},
+  title        = {{Citation-Registry: 57 Code-Belege, 5 ADRs, 12 Issues, 4 Referenzlaeufe, 14 Literaturschluessel}},
+  year         = {2026},
+  howpublished = {Agora Research-Note},
+  note         = {Symbol-, Datei- und Zeilennummern-Index der Code-Belege mit Vertrauensgrad},
+  url          = {https://github.com/arn0ld87/agora/tree/main/docs/paper/research-notes/citation-registry.md},
+}
+
+@misc{task-f-literature-note,
+  author       = {{Agora Research-Team}},
+  title        = {{Research-Note Task F: Literaturuebersicht (L1--L14)}},
+  year         = {2026},
+  howpublished = {Agora Research-Note},
+  note         = {Mapping der L1--L14-Literaturschluessel auf Begruendungen aus Related Work und Methodendiskussion},
+  url          = {https://github.com/arn0ld87/agora/tree/main/docs/paper/research-notes/task-f-literature-note.md},
+}
+
+@misc{arxiv:counter-review-methodik,
+  author       = {{Agora Research-Team}},
+  title        = {{Methodische Anmerkung: Code-Review-Graph als Counter-Review-Werkzeug}},
+  year         = {2026},
+  howpublished = {Agora Research-Note},
+  note         = {Einsatz des Code-Review-Graphen zur unabhaengigen Verifikation der Befunde; ersetzt fehlende externe Zweitbegutachtung},
+  url          = {https://github.com/arn0ld87/agora/tree/main/docs/paper/research-notes},
+}
