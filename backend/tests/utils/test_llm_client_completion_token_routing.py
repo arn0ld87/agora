@@ -16,6 +16,17 @@ import pytest
 from app.utils.llm_client import LLMClient
 
 
+@pytest.fixture(autouse=True)
+def _no_token_floor(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Diese Datei prüft den Schlüssel, nicht den Wert.
+
+    Der zentrale Token-Boden (``app.llm.tokens``) würde jedes ``max_tokens``
+    hier anheben und die Assertions auf einen Wert festnageln, um den es
+    nicht geht. Boden aus — der Schlüssel-Routing-Pfad bleibt derselbe.
+    """
+    monkeypatch.setenv("LLM_MAX_TOKENS_FLOOR", "0")
+
+
 # ---------------------------------------------------------------------------
 # Pure-Heuristik-Unit-Tests
 # ---------------------------------------------------------------------------

@@ -101,6 +101,10 @@ def build_llm_judge(
                 context="report",
                 temperature=0.0,
                 max_tokens=256,
+                # Der Judge gibt ein Label plus eine kurze Begründung zurück.
+                # Ein hoher Token-Boden erlaubt hier nur Geschwafel und kostet
+                # bei lokalen Modellen Laufzeit — enges Limit ist Absicht.
+                enforce_token_floor=False,
             )
         except Exception as exc:  # noqa: BLE001 — Judge-Fehler fallen auf Regelpfad
             # Nur den Exception-Typ loggen: repr(exc) kann Provider-Response-

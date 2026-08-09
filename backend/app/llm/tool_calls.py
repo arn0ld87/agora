@@ -159,6 +159,7 @@ def _chat_with_tools(
         ToolCallResponse: The generated content, tool calls, finish reason, and
         raw response.
     """
+    max_tokens = self._effective_max_tokens(max_tokens)
     self._publish_model_active(context, max_tokens=max_tokens, temperature=temperature)
 
     # E2E-Stub-Pfad
@@ -211,8 +212,9 @@ def _chat_with_tools(
 
     if self._is_ollama():
         extra_body: Dict[str, Any] = {}
-        if self._num_ctx:
-            extra_body["options"] = {"num_ctx": self._num_ctx}
+        effective_num_ctx = self._ollama_num_ctx_for(max_tokens)
+        if effective_num_ctx:
+            extra_body["options"] = {"num_ctx": effective_num_ctx}
         extra_body["think"] = self._think
         kwargs["extra_body"] = extra_body
     elif self._is_minimax():

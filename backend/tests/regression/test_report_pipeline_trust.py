@@ -779,7 +779,17 @@ def test_11e_build_llm_judge_uses_chat_json_with_verdict_schema():
             self.last_messages = None
             self.last_context = None
 
-        def chat_json(self, *, messages, schema, schema_name, context, temperature, max_tokens):
+        def chat_json(
+            self,
+            *,
+            messages,
+            schema,
+            schema_name,
+            context,
+            temperature,
+            max_tokens,
+            enforce_token_floor=True,
+        ):
             self.last_schema = schema
             self.last_messages = messages
             self.last_context = context
