@@ -1,0 +1,255 @@
+{
+  "about": {
+    "description": "Deterministic public extract from the historical Agora evidence export used by the reference-run case study.",
+    "source_filename": "agora-report-report_41f7b1bcf1e4-evidence(1).json",
+    "source_sha256": "a596c8866379dbb86f965850bb7a98ee1b004e2b2b565809fa3c26314caafccf",
+    "source_size_bytes": 419716,
+    "source_line_count": 5809,
+    "full_export_committed": false,
+    "note": "The original full export was supplied for this evaluation. This repository file contains only the evidence fields cited by the public case study."
+  },
+  "schema_version": 2,
+  "report_id": "report_41f7b1bcf1e4",
+  "simulation_id": "sim_1d96603073ae",
+  "simulation_metrics_snapshot": {
+    "bridge_agents": [
+      24,
+      15,
+      11,
+      18,
+      0
+    ],
+    "calculated_at": "2026-08-09T03:15:01+00:00",
+    "cluster_count": 3,
+    "dominant_clusters": [
+      {
+        "agent_ids": [
+          0,
+          2,
+          4,
+          5,
+          10,
+          11,
+          12,
+          14,
+          18,
+          19,
+          20,
+          24,
+          26
+        ],
+        "cluster_id": 0,
+        "label": "cluster-0",
+        "size": 13
+      },
+      {
+        "agent_ids": [
+          1,
+          8,
+          9,
+          15,
+          21,
+          22
+        ],
+        "cluster_id": 1,
+        "label": "cluster-1",
+        "size": 6
+      },
+      {
+        "agent_ids": [
+          6,
+          7,
+          13,
+          17,
+          29
+        ],
+        "cluster_id": 2,
+        "label": "cluster-2",
+        "size": 5
+      }
+    ],
+    "echo_chamber_index": 0.4794,
+    "simulation_id": "sim_1d96603073ae",
+    "snapshot_id": "metrics_38c680efbd43",
+    "status": "ok",
+    "total_agents": 24,
+    "total_interactions": 267,
+    "window_size_rounds": null
+  },
+  "sampled_social_actions": [
+    {
+      "snippet": "HRRecruiter CREATE_POST on reddit in round 0",
+      "action_type": "CREATE_POST",
+      "agent_id": 14,
+      "agent_name": "HRRecruiter",
+      "platform": "reddit",
+      "round_num": 0,
+      "action_args": {
+        "content": "Die neue Domain alex-schneider.dev klingt modern und einprägsam. Als HR-Recruiter sehe ich darin eine Chance, das Profil von Alexander Schneider besser zu vermitteln. Allerdings müssen wir sicherstellen, dass die alte Domain nicht zu früh abgeschaltet wird, um bestehende Kontakte nicht zu verlieren."
+      },
+      "sampled_from_total": 473
+    },
+    {
+      "snippet": "alex-schneider.dev LIKE_POST on reddit in round 1",
+      "action_type": "LIKE_POST",
+      "agent_id": 11,
+      "agent_name": "alex-schneider.dev",
+      "platform": "reddit",
+      "round_num": 1,
+      "action_args": {
+        "like_id": 19,
+        "post_author_name": "Fachblog",
+        "post_content": "Wir freuen uns, den Start unserer neuen Plattform unter alex-schneider.dev bekannt zu geben. Die Migration von alexle135.de ist ein wichtiger Schritt für unsere berufliche Positionierung und technische Glaubwürdigkeit. Wir sind überzeugt, dass die neue Domain unsere Kompetenzen besser widerspiegelt und unsere Sichtbarkeit bei potenziellen Arbeitgebern erhöht.",
+        "post_id": 1
+      },
+      "sampled_from_total": 473
+    },
+    {
+      "snippet": "arn0ld87/alexle-vsco LIKE_POST on twitter in round 1",
+      "action_type": "LIKE_POST",
+      "agent_id": 10,
+      "agent_name": "arn0ld87/alexle-vsco",
+      "platform": "twitter",
+      "round_num": 1,
+      "action_args": {
+        "like_id": 22,
+        "post_author_name": "PotentialEmployer",
+        "post_content": "Als potenzieller Arbeitgeber achte ich auf Konsistenz der Online-Präsenz. Wenn die Domain wechselt, aber GitHub-Profile und E-Mail-Adressen noch die alte Marke tragen, entsteht Misstrauen. Ich erwarte, dass alle Profile und Kontaktdaten synchronisiert werden, um Professionalität zu gewährleisten.",
+        "post_id": 7
+      },
+      "sampled_from_total": 473
+    },
+    {
+      "snippet": "arn0ld87 CREATE_COMMENT on reddit in round 2",
+      "action_type": "CREATE_COMMENT",
+      "agent_id": 7,
+      "agent_name": "arn0ld87",
+      "platform": "reddit",
+      "round_num": 2,
+      "action_args": {
+        "comment_id": 45,
+        "content": "Berechtigte technische Fragen. Ich kann aus erster Hand bestätigen: Die 301-Redirects sind sauber umgesetzt, TLS läuft über Let's Encrypt mit automatischer Erneuerung, und SPF/DKIM/DMARC wurden vor dem Go-Live getestet. Die E-Mail-Zustellung ist damit abgesichert. Wer die Details nachvollziehen will, findet den Migrationsbericht auf alex-schneider.dev. Transparenz war mir bei diesem Projekt von Anfang an wichtig."
+      },
+      "sampled_from_total": 473
+    },
+    {
+      "snippet": "GitHubUser LIKE_POST on reddit in round 3",
+      "action_type": "LIKE_POST",
+      "agent_id": 13,
+      "agent_name": "GitHubUser",
+      "platform": "reddit",
+      "round_num": 3,
+      "action_args": {
+        "like_id": 75,
+        "post_author_name": "HRRecruiter",
+        "post_content": "Die neue Domain alex-schneider.dev klingt modern und einprägsam. Als HR-Recruiter sehe ich darin eine Chance, das Profil von Alexander Schneider besser zu vermitteln. Allerdings müssen wir sicherstellen, dass die alte Domain nicht zu früh abgeschaltet wird, um bestehende Kontakte nicht zu verlieren.",
+        "post_id": 8
+      },
+      "sampled_from_total": 473
+    }
+  ],
+  "related_only_examples": [
+    {
+      "section": "Kurzfazit",
+      "claim_id": "claim_02",
+      "claim_text": "Im Seed-Dokument wird die Absicht formuliert, dass „alex-schneider.dev professioneller auf Recruiter wirken\" und „den Klarnamen stärker in den Mittelpunkt rücken\" soll, um die bisherige Handle-orientierte Bezeichnung „alexle135\" abzulösen.",
+      "evidence_quote": "alex-schneider.dev wird Primärdomain, alexle135.de erhält permanente Weiterleitungen auf die jeweils passende neue URL.",
+      "entailment": "RELATED_ONLY",
+      "reason": "thematisch verwandt, aber kein Beleg",
+      "supports_claim": false
+    },
+    {
+      "section": "Zentrale Risiken",
+      "claim_id": "claim_13",
+      "claim_text": "<simulated_quote persona_id=\"alex_schneider_dev_708\" seed_anchor=\"seed_doc:evaluation_scenario\">\nIch muss saubere 301-Redirects von alexle135.de auf alex-schneider.dev einrichten.",
+      "evidence_quote": "alex-schneider.dev wird Primärdomain, alexle135.de erhält permanente Weiterleitungen auf die jeweils passende neue URL.",
+      "entailment": "RELATED_ONLY",
+      "reason": "thematisch verwandt, aber kein Beleg",
+      "supports_claim": false
+    }
+  ],
+  "insufficient_examples": [
+    {
+      "section": "Kurzfazit",
+      "hypothesis_id": "hypothesis_29",
+      "text": "Die befragten simulierten Stakeholder aus mindestens fünf unterschiedlichen Gruppen – HR-Recruiting, Tech-Recruiting, DevOps-Teamlead, bestehende Leserschaft und sicherheitsorientierte Besucher – kommen übereinstimmend zu dem Schluss, dass eine kontrollierte Übergangsphase von mindestens 90 Tagen erforderlich ist.",
+      "rationale": "Aus dem Fließtext entfernt: numerischer Claim ohne passenden Zahlenbeleg (Urteil: INSUFFICIENT)."
+    },
+    {
+      "section": "Kurzfazit",
+      "hypothesis_id": "hypothesis_31",
+      "text": "Ich erwarte, dass die alte Domain mindestens 90 Tage als Redirect- und Kompatibilitätsschicht aktiv bleibt, idealerweise länger.",
+      "rationale": "Aus dem Fließtext entfernt: numerischer Claim ohne passenden Zahlenbeleg (Urteil: INSUFFICIENT)."
+    },
+    {
+      "section": "Kurzfazit",
+      "hypothesis_id": "hypothesis_30",
+      "text": "Übereinstimmend fordern alle acht befragten simulierten Agenten – ausnahmslos und über alle Stakeholder-Gruppen hinweg –, dass die alte Domain alexle135.de mindestens 90 Tage als Redirect- und Kompatibilitätsschicht aktiv bleibt.",
+      "rationale": "Aus dem Fließtext entfernt: numerischer Claim ohne passenden Zahlenbeleg (Urteil: INSUFFICIENT)."
+    }
+  ],
+  "reviewer_floor_examples": [
+    {
+      "section": "Kurzfazit",
+      "hypothesis_id": "hypothesis_04",
+      "text": "<simulated_quote persona_id=\"leonie_krause_624\" seed_anchor=\"seed_doc:evaluation_scenario\">\nalex-schneider.dev wirkt wie eine echte persönliche Marke, während alexle135.de eher wie ein alter, zufälliger Handle aus der Anfangszeit wirkt.",
+      "rationale": "Reviewer-Floor: nur 1 von 2 geforderten stützenden Evidence-Items — als Hypothese geführt. 4 weitere Quelle(n) sind thematisch verwandt, belegen die Aussage aber nicht."
+    },
+    {
+      "section": "Kurzfazit",
+      "hypothesis_id": "hypothesis_01",
+      "text": "Die Simulation der Domainmigration von **alexle135.de** zu **alex-schneider.dev** zeigt ein klares Bild: Der Wechsel kann die berufliche Positionierung gegenüber Recruiterinnen und Recruitern spürbar stärken, birgt jedoch erhebliche Risiken durch technische Bruchstellen, inkonsistente Identitäten über Plattformen hinweg und unklare SEO-Auswirkungen.",
+      "rationale": "Reviewer-Floor: nur 1 von 2 geforderten stützenden Evidence-Items — als Hypothese geführt. 4 weitere Quelle(n) sind thematisch verwandt, belegen die Aussage aber nicht."
+    },
+    {
+      "section": "Kurzfazit",
+      "hypothesis_id": "hypothesis_26",
+      "text": "Ob Recruiter die neue Domain tatsächlich messbar bevorzugen, ist eine plausible Hypothese, aber nicht belegt – das Seed-Dokument selbst formuliert dies als Erwartung („dass Recruiter die neue Domain tatsächlich bevorzugen\"), nicht als Fakt.",
+      "rationale": "Reviewer-Floor: nur 1 von 2 geforderten stützenden Evidence-Items — als Hypothese geführt."
+    }
+  ],
+  "degradation_log": [
+    {
+      "section_index": 1,
+      "claim_id": "claim_02",
+      "violation": "value_error",
+      "action": "downgraded_to_low",
+      "detail": "Value error, Label 'medium' verlangt Evidence aus mind. 1 agent_quote (mit nicht-leerem quote-Feld, ADR-0002 Z. 54) UND mind. 1 seed_corpus (ADR-0002 Stufe agent_grounded). Gefunden: agent_quote=False, seed_corpus=False."
+    },
+    {
+      "section_index": 3,
+      "claim_id": "claim_13",
+      "violation": "value_error",
+      "action": "downgraded_to_low",
+      "detail": "Value error, Label 'medium' verlangt Evidence aus mind. 1 agent_quote (mit nicht-leerem quote-Feld, ADR-0002 Z. 54) UND mind. 1 seed_corpus (ADR-0002 Stufe agent_grounded). Gefunden: agent_quote=False, seed_corpus=False."
+    },
+    {
+      "section_index": 5,
+      "claim_id": "claim_26",
+      "violation": "value_error",
+      "action": "downgraded_to_low",
+      "detail": "Value error, Label 'medium' verlangt Evidence aus mind. 1 agent_quote (mit nicht-leerem quote-Feld, ADR-0002 Z. 54) UND mind. 1 seed_corpus (ADR-0002 Stufe agent_grounded). Gefunden: agent_quote=False, seed_corpus=False."
+    },
+    {
+      "section_index": 5,
+      "claim_id": "claim_30",
+      "violation": "value_error",
+      "action": "downgraded_to_low",
+      "detail": "Value error, Label 'medium' verlangt Evidence aus mind. 1 agent_quote (mit nicht-leerem quote-Feld, ADR-0002 Z. 54) UND mind. 1 seed_corpus (ADR-0002 Stufe agent_grounded). Gefunden: agent_quote=False, seed_corpus=False."
+    },
+    {
+      "section_index": 6,
+      "claim_id": "claim_04",
+      "violation": "value_error",
+      "action": "downgraded_to_low",
+      "detail": "Value error, Label 'medium' verlangt Evidence aus mind. 1 agent_quote (mit nicht-leerem quote-Feld, ADR-0002 Z. 54) UND mind. 1 seed_corpus (ADR-0002 Stufe agent_grounded). Gefunden: agent_quote=False, seed_corpus=False."
+    },
+    {
+      "section_index": 6,
+      "claim_id": "claim_12",
+      "violation": "value_error",
+      "action": "downgraded_to_low",
+      "detail": "Value error, Label 'medium' verlangt Evidence aus mind. 1 agent_quote (mit nicht-leerem quote-Feld, ADR-0002 Z. 54) UND mind. 1 seed_corpus (ADR-0002 Stufe agent_grounded). Gefunden: agent_quote=False, seed_corpus=False."
+    }
+  ]
+}
