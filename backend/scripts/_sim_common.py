@@ -636,28 +636,63 @@ _TWHIN_BERT_MODEL_NAMES: frozenset[str] = frozenset(
     }
 )
 
-_BERT_PROFILE_DEFAULT = "low"
+_BERT_PROFILE_DEFAULT = "auto"
+
+# Ab dieser verfuegbaren Container-RAM (MB) laden wir TWHIN-BERT in fp32.
+# fp32 besitzt native CPU-Kernel und laeuft 16-threaded (~14 s/Forward);
+# fp16 hat auf CPU keine nativen Kernel und fallt auf eine langsame
+# single-threaded Emulation zurueck (~12 min/Forward — blockiert den
+# asyncio-Event-Loop der OASIS-Plattform). Darunter bleibt fp16 aktiv als
+# OOM-Schutz fuer Kleincontainer der 2.8-GiB-Klasse (Originalanforderung
+# dieses Profils). 4 GB Deckt die ~1.2 GB fp32-Modellgewichte + 250-350 MB
+# torch/transformers-Import-Overhead + Working-Set des Forward sicher ab.
+_BERT_FP32_MIN_AVAIL_MB = 4096
 
 
 def install_bert_memory_profile(profile: str | None = None) -> str:
     """
     Aktiviert ein speicherschonendes Ladeprofil für TWHIN-BERT.
-    
-    Das Profil wird über den Parameter oder `AGORA_BERT_MEMORY_PROFILE` bestimmt
-    und standardmäßig auf `"low"` gesetzt. Für TWHIN-BERT werden geeignete
-    Speicheroptionen gesetzt; andere Modelle bleiben unverändert. Bei deaktiviertem
-    Profil oder fehlender Transformers-Bibliothek erfolgt keine Anpassung.
-    
+
+    Das Profil wird über den Parameter oder ``AGORA_BERT_MEMORY_PROFILE`` bestimmt
+    und standardmäßig auf ``"auto"`` gesetzt. Für TWHIN-BERT werden geeignete
+    Speicheroptionen gesetzt; andere Modelle bleiben unverändert. Bei
+    deaktiviertem Profil oder fehlender Transformers-Bibliothek erfolgt keine
+    Anpassung.
+
+    Profil-Level:
+
+    - ``"off"``  — kein Patch (Bypass).
+    - ``"low"``  — immer ``low_cpu_mem_usage=True`` UND ``torch_dtype=fp16``
+      (OOM-Schutz fuer 2.8-GiB-Kleincontainer; historisches Verhalten).
+    - ``"auto"`` — ``low_cpu_mem_usage=True`` immer; ``fp16`` NUR bei knappem
+      Container-RAM (``< _BERT_FP32_MIN_AVAIL_MB``), sonst fp32 (schnelle
+      native CPU-Kernel). Kann der verfuegbare RAM nicht ermittelt werden,
+      bleibt es konservativ bei fp16. Default seit dem Fix des
+      Round-0-Hangs (fp16-Forward blockierte den Event-Loop ~12 min).
+
     Args:
-        profile: Zu verwendendes Speicherprofil, beispielsweise `"off"` oder
-            `"low"`.
-    
+        profile: Zu verwendendes Speicherprofil (``"off"``, ``"low"`` oder
+            ``"auto"``). Ohne Angabe greift ``AGORA_BERT_MEMORY_PROFILE`` bzw.
+            der Default.
+
     Returns:
         Der effektive Profilname.
     """
     effective = (profile or os.environ.get("AGORA_BERT_MEMORY_PROFILE") or _BERT_PROFILE_DEFAULT).lower()
     if effective == "off":
         return "off"
+
+    # fp16-Injektion entscheiden (einmalig, zur Patch-Zeit):
+    #  - "low":  immer fp16 (OOM-Schutz, historisches Verhalten).
+    #  - "auto": fp16 nur bei knappem Container-RAM (< Schwellenwert),
+    #            sonst fp32 (16-Thread-CPU-Kernel, ~14 s/Forward). Laesst sich
+    #            der RAM nicht ermitteln, konservativ fp16 (OOM-Schutz bleibt).
+    #  - sonst:  fp16 (backward-kompatibel zu unbekannten Profilnamen).
+    if effective == "auto":
+        avail_mb = _read_available_mb_linux()
+        inject_fp16 = not (avail_mb is not None and avail_mb >= _BERT_FP32_MIN_AVAIL_MB)
+    else:
+        inject_fp16 = True
 
     try:
         import transformers  # type: ignore[import-not-found]
@@ -688,7 +723,7 @@ def install_bert_memory_profile(profile: str | None = None) -> str:
         # ``pretrained_model_name_or_path`` als kwarg.
         """
         Lädt TWHIN-BERT-Modelle mit speichersparenden Standardeinstellungen.
-        
+
         Returns:
             Das von der ursprünglichen Ladefunktion erzeugte Modell.
         """
@@ -697,7 +732,7 @@ def install_bert_memory_profile(profile: str | None = None) -> str:
             # User-Override hat Vorrang.
             if "low_cpu_mem_usage" not in kwargs:
                 kwargs["low_cpu_mem_usage"] = True
-            if torch_float16 is not None and "torch_dtype" not in kwargs:
+            if torch_float16 is not None and inject_fp16 and "torch_dtype" not in kwargs:
                 kwargs["torch_dtype"] = torch_float16
         return original(*args, **kwargs)
 
@@ -719,6 +754,58 @@ def _read_rss_mb_linux() -> float | None:
                     return int(line.split()[1]) / 1024.0
     except (OSError, ValueError, IndexError):
         return None
+    return None
+
+
+def _read_available_mb_linux() -> float | None:
+    """Verfuegbaren RAM in MB — cgroup-Limit bevorzugt, Fallback /proc/meminfo.
+
+    In einem Docker-Container zeigt ``/proc/meminfo`` (ohne lxcfs) den
+    Host-Speicher, nicht das tatsaechliche Container-Limit. Daher wird
+    zunaechst das cgroup-Speicherlimit (v2, dann v1) minus aktueller
+    Belegung gelesen; erst wenn kein endliches cgroup-Limit ermittelt werden
+    kann, greift der ``MemAvailable``-Fallback (Bare-Metal-/Dev-Host).
+
+    Liefert ``None``, wenn keine Quelle lesbar ist (z.B. macOS-Dev oder
+    nicht-Linux). Fuer ``"auto"``-Profil bedeutet das: konservativ fp16
+    verwenden (OOM-Schutz bleibt erhalten).
+    """
+    # cgroup v2: /sys/fs/cgroup/memory.max + memory.current.
+    try:
+        limit_text = Path("/sys/fs/cgroup/memory.max").read_text(encoding="utf-8").strip()
+        if limit_text != "max":
+            limit_bytes = int(limit_text)
+            usage_bytes = int(
+                Path("/sys/fs/cgroup/memory.current").read_text(encoding="utf-8").strip()
+            )
+            return max(0.0, (limit_bytes - usage_bytes) / 1024.0 / 1024.0)
+    except (OSError, ValueError):
+        pass
+    # cgroup v1: memory.limit_in_bytes / memory.usage_in_bytes.
+    try:
+        limit_bytes = int(
+            Path("/sys/fs/cgroup/memory/memory.limit_in_bytes")
+            .read_text(encoding="utf-8")
+            .strip()
+        )
+        # v1 kodiert "kein Limit" als sehr grossen Wert (~2^63-1).
+        if limit_bytes < (1 << 62):
+            usage_bytes = int(
+                Path("/sys/fs/cgroup/memory/memory.usage_in_bytes")
+                .read_text(encoding="utf-8")
+                .strip()
+            )
+            return max(0.0, (limit_bytes - usage_bytes) / 1024.0 / 1024.0)
+    except (OSError, ValueError):
+        pass
+    # Fallback: /proc/meminfo MemAvailable (kB -> MB).
+    try:
+        with Path("/proc/meminfo").open("r", encoding="utf-8") as handle:
+            for line in handle:
+                if line.startswith("MemAvailable:"):
+                    return float(line.split()[1]) / 1024.0
+    except (OSError, ValueError, IndexError):
+        pass
     return None
 
 
