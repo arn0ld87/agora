@@ -12,6 +12,7 @@ from ...contracts.report_v3 import DEFAULT_REPORT_MODE, ModelAttribution, Report
 from ...models.report import Report, ReportStatus
 from ...utils.logger import get_logger
 from ..artifact_store import resolve_default_store
+from ..report_intent import ReportIntent, detect_report_intent
 from ..report_prompts import DEFAULT_REPORT_SECTIONS
 from .contract_constants import MIN_PERSONA_TABLE_ROWS
 from .contract_validator import matches_known_preset, validate_required_sections
@@ -162,6 +163,27 @@ def _get_echo_index(agent: Any) -> float:
         return 0.0
 
 
+#: Ab diesem Echo-Chamber-Index lohnt der Red-Team-Call auch bei Report-Typen,
+#: für die er nicht ohnehin verpflichtend ist.
+_RED_TEAM_ECHO_THRESHOLD = 0.6
+
+#: Report-Typen, bei denen die Red-Team-Stage unabhängig vom Echo-Index läuft.
+#: Ein Risiko- oder Vergleichsreport und der vollständige Report stützen eine
+#: Entscheidung — dort ist die Gegenprüfung Teil des Produkts, keine Zugabe für
+#: unausgewogene Personas. Bei Meinungsbild und explorativem Report bleibt die
+#: Schwelle als Kostenbremse.
+_RED_TEAM_MANDATORY_INTENTS = frozenset(
+    {ReportIntent.RISK, ReportIntent.COMPARISON, ReportIntent.FULL}
+)
+
+
+def _red_team_required(intent: ReportIntent, echo_index: float) -> bool:
+    """Entscheidet, ob die Red-Team-Stage einen LLM-Call machen darf."""
+    if intent in _RED_TEAM_MANDATORY_INTENTS:
+        return True
+    return echo_index > _RED_TEAM_ECHO_THRESHOLD
+
+
 _RED_TEAM_SYSTEM_PROMPT = (
     "Du bist ein kritischer Qualitätsprüfer für Szenarienanalysen. "
     "Du prüfst einen Berichtsentwurf auf Schwachstellen im Wording-Glossar v1 "
@@ -186,19 +208,30 @@ def _run_red_team_review(
     agent: Any,
     report_v3: ReportV3,
     echo_index: float,
+    *,
+    intent: ReportIntent,
 ) -> ReportV3:
     """Führt die Red-Team-Review-Stage aus und schreibt Findings in report_v3.
 
     Wird vor report_synthesis aufgerufen. Macht einen LLM-Call mit dem
-    bestehenden agent.llm. Bei echo_index <= 0.6 wird kein LLM-Call ausgeführt
-    (findings bleibt leer). Bei Fehlern wird geloggt und unverändert zurückgegeben.
+    bestehenden agent.llm. Ob der Call stattfindet, entscheidet
+    :func:`_red_team_required` aus Report-Typ und Echo-Index — bei
+    entscheidungstragenden Reports immer, sonst ab der Echo-Schwelle. Bei
+    Fehlern wird geloggt und unverändert zurückgegeben.
 
-    Slice 5 (Issue #497).
+    Ein übersprungener Lauf hinterlässt keinen ``red_team``-Eintrag in
+    ``model_attribution``; daran ist er von einem Lauf ohne Befunde
+    unterscheidbar.
+
+    Slice 5 (Issue #497), Intent-Gate aus dem Evidence-Chain-Audit (#1160).
     """
-    if echo_index <= 0.6:
+    if not _red_team_required(intent, echo_index):
         logger.info(
-            "_run_red_team_review: echo_index=%.3f <= 0.6, kein LLM-Call (balanced Personas)",
+            "_run_red_team_review: intent=%s, echo_index=%.3f <= %.1f — kein LLM-Call "
+            "(balanced Personas, kein entscheidungstragender Report)",
+            intent.value,
             echo_index,
+            _RED_TEAM_ECHO_THRESHOLD,
         )
         return report_v3
 
@@ -262,8 +295,9 @@ def _run_red_team_review(
         }
     )
     logger.info(
-        "_run_red_team_review: %d Befunde, echo_index=%.3f",
+        "_run_red_team_review: %d Befunde, intent=%s, echo_index=%.3f",
         len(findings),
+        intent.value,
         echo_index,
     )
     return report_v3
@@ -1262,12 +1296,20 @@ def generate_report(
                     report_v3_obj = None
                 if report_v3_obj is not None:
                     echo_index = _get_echo_index(agent)
-                    report_v3_obj = _run_red_team_review(agent, report_v3_obj, echo_index)
+                    # Gleiche reine Funktion wie in plan_outline auf derselben
+                    # Eingabe — deterministisch identisch, kein zweiter Zustand.
+                    intent = detect_report_intent(
+                        getattr(agent, "simulation_requirement", "") or ""
+                    )
+                    report_v3_obj = _run_red_team_review(
+                        agent, report_v3_obj, echo_index, intent=intent
+                    )
                     ReportManager.save_report_v3(report_v3_obj)
                     logger.info(
                         "generate_report: red_team_review abgeschlossen, "
-                        "findings=%d, echo_index=%.3f",
+                        "findings=%d, intent=%s, echo_index=%.3f",
                         len(report_v3_obj.red_team_findings),
+                        intent.value,
                         echo_index,
                     )
         except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
