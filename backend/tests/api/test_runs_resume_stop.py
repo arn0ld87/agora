@@ -206,11 +206,22 @@ def test_resume_report_generate_returns_422_when_llm_client_unavailable(env):
     """POST /api/runs/<id>/resume für report_generate mit model_name, aber ohne
     konfigurierten API-Key → synchrones 422 zurück, kein asynchrones Fail im Thread.
 
-    Verifikation: LLMClient-Konstruktion wirft ValueError (kein Key) →
+    Verifikation: die Client-Erzeugung wirft ValueError (kein Key) →
     der Endpunkt antwortet sofort mit 422 statt still None zu setzen
     und erst im Worker-Thread zu scheitern.
+
+    Der Resume-Pfad baut den Client seit #984 über die gelockte Stage-Route
+    (``StageModelRouter.resolve`` + ``LLMClient.from_route``), nicht mehr über
+    ``LLMClient(model=...)``. Das Double hängt deshalb an ``from_route`` —
+    ein Klassen-Patch von ``app.api.runs.LLMClient`` lässt ``from_route``
+    zu einem harmlosen MagicMock werden und prüft den 422-Pfad gar nicht.
+    ``patch.object`` bricht zusätzlich mit AttributeError, falls die Factory
+    verschwindet, statt still am Vertrag vorbeizulaufen.
     """
     from unittest.mock import MagicMock
+
+    from app.contracts.llm_routing_contract import ResolvedRoute
+    from app.llm.client import LLMClient
 
     run = _create_run(
         env["registry"],
@@ -234,11 +245,24 @@ def test_resume_report_generate_returns_422_when_llm_client_unavailable(env):
     fake_project.graph_id = "graph_test"
     fake_project.simulation_requirement = "Test"
 
+    resolved_route = ResolvedRoute(
+        stage="report_generation",
+        provider_id="openai",
+        model="gpt-4o-mini",
+        routing_version=1,
+    )
+
     with (
         patch("app.api.runs.SimulationManager") as mock_sm,
         patch("app.api.runs.ProjectManager") as mock_pm,
-        patch("app.api.runs.LLMClient", side_effect=ValueError("no API key configured")),
+        patch("app.api.runs.StageModelRouter") as mock_router,
+        patch.object(
+            LLMClient,
+            "from_route",
+            side_effect=ValueError("LLM_API_KEY not configured"),
+        ),
     ):
+        mock_router.return_value.resolve.return_value = resolved_route
         mock_sm.return_value.get_simulation.return_value = fake_sim_state
         mock_pm.get_project.return_value = fake_project
         # neo4j_storage ist im env-Fixture nicht gesetzt — in app.extensions hinterlegen
