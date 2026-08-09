@@ -16,6 +16,11 @@ Weitere Einstiegspunkte:
 - Agentenregeln: [`../AGENTS.md`](../AGENTS.md)
 - Claude-spezifische Regeln: [`../CLAUDE.md`](../CLAUDE.md)
 
+## Referenzläufe und Evaluationen
+
+- [Domainmigration alexle135.de → alex-schneider.dev](./reference-runs/2026-08-09-domain-migration/README.md) — realer End-to-End-Lauf mit Social Simulation, Evidence Gating, bekannten Grenzen und Remediation-Folgen.
+- [Übersicht der Referenzläufe](./reference-runs/README.md) — Regeln und Einstieg in weitere Evaluationen.
+
 ## Architektur und Verträge
 
 - [`architecture.md`](architecture.md) — Architektur, Domänen und Komponenten
