@@ -426,3 +426,152 @@ def test_low_profile_no_torch_does_not_inject_torch_dtype(
     # Kein torch → kein torch_dtype-Key (sonst wuerde der echte
     # AutoModel.from_pretrained mit einem ungueltigen dtype fehlschlagen).
     assert "torch_dtype" not in kwargs
+
+
+# ---------------------------------------------------------------------------
+# fix/oasis-fp16-round0-hang: host-adaptives "auto"-Profil
+# ---------------------------------------------------------------------------
+# Root cause: ``install_bert_memory_profile`` zwang TWHIN-BERT immer auf fp16.
+# fp16 hat auf CPU keine nativen Kernel -> langsame single-threaded Emulation
+# -> ein ``update_rec_table()``-Forward blockierte den asyncio-Event-Loop der
+# OASIS-Plattform ~12 min (Round 0-Hang). fp32 laeuft 16-threaded in ~14 s.
+# Fix: neuer Default ``"auto"`` — fp16 nur noch bei knappem Container-RAM
+# (< _BERT_FP32_MIN_AVAIL_MB), sonst fp32. ``low``/``off`` bleiben unveraendert.
+# ---------------------------------------------------------------------------
+
+import _sim_common as _sim_common_module  # noqa: E402
+
+
+def test_auto_is_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default-Profil ist ``"auto"`` (nicht mehr ``"low"``). Sichert, dass
+    der Fix-Default nicht versehentlich zurueckgesetzt wird."""
+    monkeypatch.delenv("AGORA_BERT_MEMORY_PROFILE", raising=False)
+    # _read_available_mb_linux deterministisch stubben, damit der Test nicht
+    # vom echten Host-RAM abhaengt.
+    monkeypatch.setattr(_sim_common_module, "_read_available_mb_linux", lambda: 8192.0)
+
+    def sentinel(*_args: object, **_kwargs: object) -> mock.Mock:
+        return mock.Mock(name="model")
+
+    fake_module = mock.Mock()
+    fake_module.AutoModel.from_pretrained = sentinel
+    with mock.patch.dict(sys.modules, {"transformers": fake_module}):
+        result = install_bert_memory_profile()
+    assert result == "auto"
+    # Patch wird dennoch installiert (low_cpu_mem_usage immer).
+    assert fake_module.AutoModel.from_pretrained is not sentinel
+
+
+def test_auto_profile_fp32_when_ram_plenty(
+    monkeypatch: pytest.MonkeyPatch, fake_torch: mock.Mock
+) -> None:
+    """``auto`` + reichlich Container-RAM (>= Schwellenwert) -> fp32:
+    ``low_cpu_mem_usage=True``, aber KEIN ``torch_dtype`` (kein fp16)."""
+    monkeypatch.setenv("AGORA_BERT_MEMORY_PROFILE", "auto")
+    monkeypatch.setattr(
+        _sim_common_module, "_read_available_mb_linux", lambda: 8192.0
+    )
+
+    captured_calls: list[dict] = []
+
+    def _fake_from_pretrained(*args, **kwargs):
+        captured_calls.append({"args": args, "kwargs": kwargs})
+        return mock.Mock(name="model")
+
+    fake_module = mock.Mock()
+    fake_module.AutoModel.from_pretrained = _fake_from_pretrained
+    with _patch_transformers_and_torch(fake_module, fake_torch):
+        install_bert_memory_profile()
+        patched = fake_module.AutoModel.from_pretrained
+
+    patched("Twitter/twhin-bert-base")
+    assert len(captured_calls) == 1
+    kwargs = captured_calls[0]["kwargs"]
+    assert kwargs.get("low_cpu_mem_usage") is True
+    # Genug RAM -> fp32 -> torch_dtype darf NICHT injiziert werden.
+    assert "torch_dtype" not in kwargs
+
+
+def test_auto_profile_fp16_when_ram_low(
+    monkeypatch: pytest.MonkeyPatch, fake_torch: mock.Mock
+) -> None:
+    """``auto`` + knapper Container-RAM (< Schwellenwert) -> fp16:
+    ``low_cpu_mem_usage=True`` UND ``torch_dtype=fp16`` (OOM-Schutz aktiv)."""
+    monkeypatch.setenv("AGORA_BERT_MEMORY_PROFILE", "auto")
+    monkeypatch.setattr(
+        _sim_common_module, "_read_available_mb_linux", lambda: 1024.0
+    )
+
+    captured_calls: list[dict] = []
+
+    def _fake_from_pretrained(*args, **kwargs):
+        captured_calls.append({"args": args, "kwargs": kwargs})
+        return mock.Mock(name="model")
+
+    fake_module = mock.Mock()
+    fake_module.AutoModel.from_pretrained = _fake_from_pretrained
+    with _patch_transformers_and_torch(fake_module, fake_torch):
+        install_bert_memory_profile()
+        patched = fake_module.AutoModel.from_pretrained
+
+    patched("Twitter/twhin-bert-base")
+    assert len(captured_calls) == 1
+    kwargs = captured_calls[0]["kwargs"]
+    assert kwargs.get("low_cpu_mem_usage") is True
+    assert kwargs.get("torch_dtype") == "fp16"  # fake_torch.float16 sentinel
+
+
+def test_auto_profile_fp16_when_ram_unknown(
+    monkeypatch: pytest.MonkeyPatch, fake_torch: mock.Mock
+) -> None:
+    """``auto`` + RAM nicht ermittelbar (``None``, z.B. macOS) ->
+    konservativ fp16 (OOM-Schutz bleibt als Safe-Default erhalten)."""
+    monkeypatch.setenv("AGORA_BERT_MEMORY_PROFILE", "auto")
+    monkeypatch.setattr(
+        _sim_common_module, "_read_available_mb_linux", lambda: None
+    )
+
+    captured_calls: list[dict] = []
+
+    def _fake_from_pretrained(*args, **kwargs):
+        captured_calls.append({"args": args, "kwargs": kwargs})
+        return mock.Mock(name="model")
+
+    fake_module = mock.Mock()
+    fake_module.AutoModel.from_pretrained = _fake_from_pretrained
+    with _patch_transformers_and_torch(fake_module, fake_torch):
+        install_bert_memory_profile()
+        patched = fake_module.AutoModel.from_pretrained
+
+    patched("Twitter/twhin-bert-base")
+    kwargs = captured_calls[0]["kwargs"]
+    assert kwargs.get("low_cpu_mem_usage") is True
+    assert kwargs.get("torch_dtype") == "fp16"
+
+
+def test_auto_profile_boundary_exact_threshold(
+    monkeypatch: pytest.MonkeyPatch, fake_torch: mock.Mock
+) -> None:
+    """Genau am Schwellenwert (``_BERT_FP32_MIN_AVAIL_MB``) -> fp32
+    (``>=``-Bedingung). Verriegelt die Grenze gegen Off-by-One-Drift."""
+    monkeypatch.setenv("AGORA_BERT_MEMORY_PROFILE", "auto")
+    threshold = _sim_common_module._BERT_FP32_MIN_AVAIL_MB
+    monkeypatch.setattr(
+        _sim_common_module, "_read_available_mb_linux", lambda: float(threshold)
+    )
+
+    captured_calls: list[dict] = []
+
+    def _fake_from_pretrained(*args, **kwargs):
+        captured_calls.append({"args": args, "kwargs": kwargs})
+        return mock.Mock(name="model")
+
+    fake_module = mock.Mock()
+    fake_module.AutoModel.from_pretrained = _fake_from_pretrained
+    with _patch_transformers_and_torch(fake_module, fake_torch):
+        install_bert_memory_profile()
+        patched = fake_module.AutoModel.from_pretrained
+
+    patched("Twitter/twhin-bert-base")
+    kwargs = captured_calls[0]["kwargs"]
+    assert "torch_dtype" not in kwargs  # >= threshold -> fp32

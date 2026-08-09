@@ -1,0 +1,3 @@
+### Fixed (OASIS-Simulation hängt auf Runde 0 — 2026-08-09)
+
+- **Host-adaptives BERT-Memory-Profil (`auto`-Default):** `install_bert_memory_profile` erzwang TWHIN-BERT bedingungslos auf `torch_dtype=fp16`. fp16 hat auf CPU keine nativen Kernel und fällt auf eine single-threaded Emulation zurück, deren Forward ~12 min dauert — `update_rec_table` ist `async`, ruft den Forward aber synchron (ohne `run_in_executor`) auf und blockiert so den gemeinsamen asyncio-Event-Loop von Twitter- und Reddit-Plattform (Runde-0-Hang). Neuer Default `"auto"` injiziert fp16 nur noch bei knappem Container-RAM (< 4 GB verfügbar, OOM-Schutz für 2.8-GiB-Kleincontainer) und lädt sonst fp32 (native CPU-Kernel, 16-Thread, ~14 s/Forward). `"low"`/`"off"` behalten ihre Semantik. (#1148)
