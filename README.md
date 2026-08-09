@@ -104,7 +104,7 @@ flowchart LR
 
 ### 1. Wissen aufnehmen
 
-PDF-, Markdown- und Textdateien sowie Webseiten werden extrahiert und segmentiert. Jedes Segment trägt seine Dokument- und Chunk-Herkunft durch Ingest, Graph-Aufbau und Retrieval (ADR-0013). Im Report ist dieser Anker für Seed-Dokumente noch nicht ausgewertet — siehe Schritt 5.
+PDF-, Markdown- und Textdateien sowie Webseiten werden extrahiert und segmentiert. Bei **hochgeladenen Dateien** trägt jedes Segment seine Dokument- und Chunk-Herkunft durch Ingest, Graph-Aufbau und Retrieval (ADR-0013). Live abgerufene Webseiten durchlaufen diesen Weg nicht: sie kommen als Rechercheergebnis in den Report und erhalten keine Dokument- oder Chunk-ID. Im Report ist der Herkunftsanker auch für Uploads noch nicht ausgewertet — siehe Schritt 5.
 
 ### 2. Knowledge Graph aufbauen
 

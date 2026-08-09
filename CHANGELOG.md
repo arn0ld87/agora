@@ -11,7 +11,9 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 - **Dokumentidentität von der Datei-Extraktion bis ins Retrieval:** Hochgeladene Dateien bekommen jetzt eine eindeutige Dokument-ID mit Blob-Offsets, Text-Chunks werden darüber ihrem Ursprungsdokument samt dokumentinterner Chunk-Nummer zugeordnet, und der Graph-Build hält diese Herkunft am Wissensgraph fest. Die Retrieval-Ergebnisse geben sie wieder heraus: zu jedem gefundenen Fakt ist ablesbar, aus welchem Dokument und welchem Abschnitt er stammt. Lässt sich das nicht eindeutig bestimmen, bleibt die Herkunft leer statt geraten. Bestehende Projekte laufen unverändert weiter und liefern wie bisher keine Herkunftsangaben. Auf Reports wirkt sich das noch nicht aus — die Auswertung der Herkunft in der Belegkette folgt in einem Folge-Slice.
 
-Interview-Antworten und Graph-Fakten werden jetzt als kanonische Evidence
+### Fixed (Evidence-Persistenz und Report-Gating — 2026-08-09)
+
+- Interview-Antworten und Graph-Fakten werden jetzt als kanonische Evidence
 persistiert und sind von Claims referenzierbar — vorher verwarf der
 Evidence-Index sie still, und Reports endeten trotz durchgeführter
 Interviews mit null validierten Claims. Zusätzlich: das neue
