@@ -54,11 +54,11 @@ def _make_valid_evidence_item() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Test 1: _init_evidence_map — schema_version == 2 und EvidenceMapModel-konform
+# Test 1: _init_evidence_map — schema_version == 3 und EvidenceMapModel-konform
 # ---------------------------------------------------------------------------
 
-def test_init_evidence_map_sets_schema_version_2(tmp_path):
-    """_init_evidence_map muss schema_version=2 setzen und EvidenceMapModel-konform sein."""
+def test_init_evidence_map_sets_schema_version_3(tmp_path):
+    """_init_evidence_map muss schema_version=3 setzen und EvidenceMapModel-konform sein."""
     agent = _make_agent(tmp_path)
 
     # _collect_simulation_evidence_items liefert leere Liste (keine echte Simulation)
@@ -68,14 +68,14 @@ def test_init_evidence_map_sets_schema_version_2(tmp_path):
 
     assert agent.evidence_map is not None
     assert agent.evidence_map["schema_version"] == CURRENT_SCHEMA_VERSION
-    assert agent.evidence_map["schema_version"] == 2
+    assert agent.evidence_map["schema_version"] == 3
     assert agent.evidence_map["report_id"] == "report_abc123"
     assert agent.evidence_map["simulation_id"] == "sim_test"
     assert isinstance(agent.evidence_map["sections"], list)
 
     # Nochmals gegen das Modell validieren — darf keine Exception werfen
     validated = EvidenceMapModel.model_validate(agent.evidence_map)
-    assert validated.schema_version == 2
+    assert validated.schema_version == 3
 
 
 # ---------------------------------------------------------------------------
@@ -131,7 +131,7 @@ def test_save_evidence_section_round_trip(tmp_path):
     """
     Vollständiger Round-Trip: _save_evidence_section mit valider Section,
     dann erneutes EvidenceMapModel.model_validate → keine Exception,
-    schema_version bleibt 2.
+    schema_version bleibt 3.
     """
     agent = _make_agent(tmp_path)
     agent._collect_simulation_evidence_items = MagicMock(return_value=[])
@@ -165,7 +165,7 @@ def test_save_evidence_section_round_trip(tmp_path):
 
     # Erneute Validierung des persistierten Dicts
     re_validated = EvidenceMapModel.model_validate(persisted_payload)
-    assert re_validated.schema_version == 2
+    assert re_validated.schema_version == 3
     assert len(re_validated.sections) == 1
     assert re_validated.sections[0].section_index == 1
 
@@ -209,3 +209,25 @@ def test_save_evidence_section_routes_orphans_to_gaps(tmp_path):
     assert len(section.hypotheses) == 1
     assert len(section.data_gaps) == 1
     assert section.data_gaps[0].gap_reason == "no_evidence_bound"
+
+
+def test_reviewer_floor_counts_unique_evidence_ids(tmp_path):
+    """Zwei Bindings auf denselben Record sind nur eine unabhängige Quelle."""
+    agent = _make_agent(tmp_path)
+    evidence_id = "ev_0123456789abcdef0123456789abcdef"
+    claim = {
+        "claim_id": "claim_01",
+        "claim_text": "Eine doppelt gebundene Quelle bleibt nur eine Quelle.",
+        "confidence_label": "low",
+        "confidence_score": 0.4,
+        "evidence": [
+            {"evidence_id": evidence_id, "supports_claim": True},
+            {"evidence_id": evidence_id, "supports_claim": True},
+        ],
+    }
+
+    finalized, hypotheses, _ = agent._finalize_section_claims([claim])
+
+    assert finalized == []
+    assert len(hypotheses) == 1
+    assert "nur 1 von 2" in hypotheses[0]["rationale"]

@@ -74,9 +74,10 @@ def _make_evidence_map():
 
 def _make_report_v3():
     return {
-        "schema_version": 3,
+        "schema_version": 4,
         "report_id": VALID_REPORT_ID,
         "generated_at": "2026-05-10T12:00:00",
+        "evidence_index": {},
         "personas": [
             {
                 "id": "P1",

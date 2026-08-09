@@ -162,8 +162,8 @@ def test_build_claims_uses_embedder_and_emits_match_score():
     assert not any("Bayern" in (e.get("snippet") or "") for e in matches)
 
 
-def test_init_evidence_map_sets_schema_version_2(monkeypatch):
-    """S4b: neue Evidence-Maps tragen schema_version=2."""
+def test_init_evidence_map_sets_schema_version_3(monkeypatch):
+    """Kanonische Evidence-Maps tragen den ID-Vertrag schema_version=3."""
     agent = ReportAgent.__new__(ReportAgent)
     agent.simulation_id = "sim_xyz"
 
@@ -173,7 +173,7 @@ def test_init_evidence_map_sets_schema_version_2(monkeypatch):
         lambda self: [],
     )
     agent._init_evidence_map("rep_001")
-    assert agent.evidence_map["schema_version"] == 2
+    assert agent.evidence_map["schema_version"] == 3
 
 
 def test_report_claim_model_keeps_legacy_fields_and_numeric_score():
@@ -218,14 +218,16 @@ def test_report_claim_model_keeps_legacy_fields_and_numeric_score():
     # (len==2, Bedingung len<2 ist False). consistency: 1 unique (type,source)-Paar → 0.6.
     # relevance(0.5) + source_quality(1.0) + specificity(0.5) + consistency(0.6)
     # = 0.40*0.5 + 0.25*1.0 + 0.20*0.5 + 0.15*0.6 = 0.64, Label "low" (Slice-2: < 0.65).
-    assert claims[0]["confidence"] == "low"
-    assert claims[0]["confidence_score"] == 0.64
+    # Freie ``report_tool``-Strings besitzen keinen Producer-Key und dürfen
+    # deshalb weder Confidence noch Claim-Status dekorativ erhöhen.
+    assert claims[0]["confidence"] == "speculative"
+    assert claims[0]["confidence_score"] == 0.15
     assert claims[0]["evidence"] == claims[0]["evidence_items"]
     # S5: model_generated_inference darf nicht mehr im Evidence-Array sein.
     evidence_types = {item["type"] for item in claims[0]["evidence"]}
     assert "model_generated_inference" not in evidence_types
-    # Nach Sub-Slice 07: nur noch graph_fact (kein global graph_metric-Leak)
-    assert evidence_types == {"graph_fact"}
+    # Ohne stabilen Producer-Key bleibt auch graph_fact reine Audit-Evidence.
+    assert evidence_types == set()
     # Statt dessen lebt die Synthese im audit_trail.
     audit_types = {item["type"] for item in claims[0].get("audit_trail", [])}
     assert "model_generated_inference" in audit_types

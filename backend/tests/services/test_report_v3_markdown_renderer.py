@@ -13,9 +13,20 @@ from app.services.report_agent.markdown_renderer import (
 
 
 def test_report_v3_renderer_outputs_tables_and_data_gaps() -> None:
+    evidence_id = "ev_00000000000000000000000000000001"
     report = ReportV3(
         report_id="report_abcdef123456",
         generated_at=datetime(2026, 5, 10, tzinfo=timezone.utc),
+        evidence_index={
+            evidence_id: {
+                "evidence_id": evidence_id,
+                "producer_key": "metric:echo_chamber_index",
+                "type": "graph_metric",
+                "source": "simulation_metrics",
+                "snippet": "echo_chamber_index: 0.42",
+                "source_kind": "graph_relation",
+            }
+        },
         personas=[
             Persona(
                 id="P01",
@@ -37,7 +48,7 @@ def test_report_v3_renderer_outputs_tables_and_data_gaps() -> None:
             Claim(
                 id="claim_01",
                 statement="Sicherheitsbedenken sind ein sichtbarer Hemmfaktor.",
-                evidence_refs=["kg:metric:echo_chamber_index"],
+                evidence_refs=[evidence_id],
                 confidence="medium",
                 aggregation_basis="persona",
             )

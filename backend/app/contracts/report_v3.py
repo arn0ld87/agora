@@ -13,9 +13,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .provider_types import ProviderType
+from .report_contract import EvidenceRecordModel
 
 
 _STRICT = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -255,15 +256,16 @@ class ReportV3(BaseModel):
     """
     Container für alle 11 Pflichtabschnitte des strukturierten Reports v3.
 
-    schema_version=3 ist als Literal festgelegt — verhindert Versions-Drift
+    schema_version=4 ist als Literal festgelegt — verhindert Versions-Drift
     analog zu ReportContractModel(schema_version=2).
     """
 
     model_config = _STRICT
 
-    schema_version: Literal[3] = 3
+    schema_version: Literal[4] = 4
     report_id: str = Field(min_length=1)
     generated_at: datetime
+    evidence_index: dict[str, EvidenceRecordModel] = Field(default_factory=dict)
     report_mode: ReportMode = Field(
         default=DEFAULT_REPORT_MODE,
         description="Vertrauensmodus (PLAN.md §5.1). Default 'balanced'.",
@@ -293,3 +295,38 @@ class ReportV3(BaseModel):
         max_length=10,
         description="Befunde der Red-Team-Review-Stage (max. 10).",
     )
+
+    @model_validator(mode="after")
+    def validate_evidence_cross_references(self) -> "ReportV3":
+        known_ids = set(self.evidence_index)
+        mismatched = [
+            key
+            for key, record in self.evidence_index.items()
+            if key != record.evidence_id
+        ]
+        if mismatched:
+            raise ValueError(
+                "evidence_index-Key stimmt nicht mit evidence_id ueberein: "
+                + ", ".join(sorted(mismatched))
+            )
+
+        collections = (
+            self.personas,
+            self.claims,
+            self.multipliers,
+            self.friction_points,
+            self.trust_signals,
+            self.change_recommendations,
+            self.project_impacts,
+            self.positioning_variants,
+            self.content_ideas,
+        )
+        for collection in collections:
+            for item in collection:
+                unknown = sorted(set(item.evidence_refs) - known_ids)
+                if unknown:
+                    raise ValueError(
+                        f"evidence_refs von {item.id} enthalten unbekannte Evidence: "
+                        + ", ".join(unknown)
+                    )
+        return self

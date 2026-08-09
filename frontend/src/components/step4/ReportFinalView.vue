@@ -5,7 +5,7 @@ import Kicker from '@/components/v4/data/Kicker.vue'
 import ReportEvidencePanel from './ReportEvidencePanel.vue'
 import ReportBranchControls from './ReportBranchControls.vue'
 import ReportRedTeamSection from '../report/ReportRedTeamSection.vue'
-import type { ReportSection } from '../../contracts/reportContract'
+import type { EvidenceIndex, ReportSection } from '../../contracts/reportContract'
 
 const { t } = useI18n()
 
@@ -13,6 +13,7 @@ withDefaults(defineProps<{
   reportHtml: string
   redTeamFindings?: string[]
   evidenceSections?: ReportSection[]
+  evidenceIndex?: EvidenceIndex
   selectedEvidenceSection?: number | null
   resolvedSimulationId?: string | null
   simulationId?: string
@@ -20,6 +21,7 @@ withDefaults(defineProps<{
 }>(), {
   redTeamFindings: () => [],
   evidenceSections: () => [],
+  evidenceIndex: () => ({}),
   selectedEvidenceSection: null,
   resolvedSimulationId: null,
   simulationId: '',
@@ -62,6 +64,7 @@ const emit = defineEmits([
           v-if="evidenceSections.length"
           :selected-section="selectedEvidenceSection"
           :sections="evidenceSections"
+          :evidence-index="evidenceIndex"
           @update:selected-section="emit('update:selectedEvidenceSection', $event)"
           @navigate="emit('navigate', $event)"
         />

@@ -650,6 +650,7 @@ const sectionHtml = computed((): Record<string, string> => {
 })
 
 const evidenceSections = computed(() => evidenceMap.value?.sections || [])
+const evidenceIndex = computed(() => evidenceMap.value?.evidence_index || {})
 
 function navigateToAnchor(anchor: string | null | undefined) {
   const parsed = parseSourceAnchor(anchor)
@@ -877,6 +878,7 @@ onUnmounted(stopPolling)
         :report-html="reportHtml"
         :red-team-findings="redTeamFindings"
         :evidence-sections="evidenceSections"
+        :evidence-index="evidenceIndex"
         :selected-evidence-section="selectedEvidenceSection"
         :resolved-simulation-id="resolvedSimulationId"
         :simulation-id="simulationId"

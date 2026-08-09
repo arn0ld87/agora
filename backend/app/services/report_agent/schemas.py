@@ -5,7 +5,9 @@ from functools import cache
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
 from ...contracts import (
+    ClaimEvidenceBindingModel,
     EvidenceMapModel,
+    EvidenceRecordModel,
     ReportV3,
     Persona,
     Segment,
@@ -19,7 +21,11 @@ from ...contracts import (
     ContentIdea,
     DataGap,
 )
-from ..evidence_migrations import CURRENT_SCHEMA_VERSION, migrate_v1_to_v2
+from ..evidence_migrations import (
+    CURRENT_SCHEMA_VERSION,
+    migrate_v1_to_v2,
+    normalize_persisted_evidence_map,
+)
 
 _STRICT = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -153,8 +159,11 @@ def _section_schema_for(section_title: str) -> type[BaseModel]:
 __all__ = [
     # Evidence / migration helpers
     "EvidenceMapModel",
+    "EvidenceRecordModel",
+    "ClaimEvidenceBindingModel",
     "CURRENT_SCHEMA_VERSION",
     "migrate_v1_to_v2",
+    "normalize_persisted_evidence_map",
     # ReportV3 container + 11 Pflichtabschnitt-DTOs
     "ReportV3",
     "Persona",

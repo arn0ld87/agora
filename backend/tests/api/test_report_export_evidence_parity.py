@@ -154,6 +154,7 @@ class TestExportRunsFullMigrationPipeline:
                 "type": "graph_fact",
                 "source_kind": "seed_corpus",
                 "source": "briefing.md",
+                "producer_key": "briefing.md#verified-q3-fixture",
                 "snippet": "Das Vorhaben startet im Q3.",
                 "match_score": 0.75,
                 "supports_claim": True,

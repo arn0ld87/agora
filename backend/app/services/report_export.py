@@ -8,7 +8,7 @@ import os
 import tempfile
 import zipfile
 from datetime import datetime, timezone
-from typing import Any, Iterator, Literal, Optional, cast
+from typing import Any, Iterator, Optional
 
 from pydantic import ValidationError
 
@@ -19,7 +19,6 @@ from ..contracts import (
 )
 from ..contracts.report_contract import EvidenceOmissionModel
 from ..services.evidence_migrations import (
-    CURRENT_SCHEMA_VERSION,
     normalize_persisted_evidence_map,
 )
 from ..services.report_agent import ReportManager, ReportStatus
@@ -27,6 +26,7 @@ from ..services.report_agent.csv_export import claims_to_csv, personas_to_csv, s
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
+EXPORT_CONTRACT_SCHEMA_VERSION = 2
 
 # ZIP-Bundle-Schwellwerte
 ZIP_STREAM_THRESHOLD_BYTES: int = 50 * 1024 * 1024   # 50 MB
@@ -57,7 +57,7 @@ class ReportExportService:
     @classmethod
     def build_report_contract_model(cls, report_obj) -> ReportModel:
         report_dict = report_obj.to_dict()
-        report_dict["schema_version"] = CURRENT_SCHEMA_VERSION
+        report_dict["schema_version"] = EXPORT_CONTRACT_SCHEMA_VERSION
         report_dict["missing_sections"] = list(report_dict.get("missing_sections") or [])
         if report_dict.get("status") == ReportStatus.INCOMPLETE.value:
             report_dict["outline"] = None
@@ -124,7 +124,7 @@ class ReportExportService:
                 )
 
         return ReportContractModel(
-            schema_version=cast(Literal[2], CURRENT_SCHEMA_VERSION),
+            schema_version=EXPORT_CONTRACT_SCHEMA_VERSION,
             exported_at=datetime.now(timezone.utc),
             report=report,
             evidence=evidence,

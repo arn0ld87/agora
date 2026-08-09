@@ -196,6 +196,64 @@ class EvidenceItemModel(BaseModel):
         return self
 
 
+EVIDENCE_ID_PATTERN = r"^ev_[0-9a-f]{32}$"
+
+
+class EvidenceRecordModel(BaseModel):
+    """Claim-unabhaengiger, kanonisch adressierbarer Quellen-Datensatz."""
+
+    model_config = _STRICT
+
+    evidence_id: str = Field(pattern=EVIDENCE_ID_PATTERN)
+    producer_key: str = Field(min_length=1, max_length=500)
+    type: EvidenceType
+    source: str = Field(min_length=1)
+    snippet: str = Field(min_length=1, max_length=2000)
+    value: Optional[str | int | float | bool] = None
+    tool_name: Optional[str] = None
+    query: Optional[str] = None
+    raw: Optional[Any] = None
+    agent_log_ref: Optional[AgentLogRef] = None
+    quote: Optional[str] = Field(default=None, min_length=1, max_length=500)
+    source_id_anchor: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    sentiment_score: Optional[float] = Field(default=None, ge=-1.0, le=1.0)
+    source_kind: EvidenceSourceKind = EvidenceSourceKind.inferred
+    source_model: Optional[str] = Field(default=None, max_length=200)
+    persona_stakeholder_group: Optional[str] = Field(
+        default=None, min_length=1, max_length=200
+    )
+
+    @model_validator(mode="after")
+    def reject_inference_in_evidence(self) -> "EvidenceRecordModel":
+        if self.type.value in FORBIDDEN_EVIDENCE_TYPES:
+            raise ValueError(
+                f"EvidenceType '{self.type.value}' ist nur im audit_trail erlaubt."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def agent_quote_needs_stakeholder_group(self) -> "EvidenceRecordModel":
+        if self.source_kind == EvidenceSourceKind.agent_quote and not self.persona_stakeholder_group:
+            raise ValueError(
+                "source_kind=agent_quote verlangt persona_stakeholder_group."
+            )
+        return self
+
+
+class ClaimEvidenceBindingModel(BaseModel):
+    """Claim-relative Bewertung einer Referenz auf ``EvidenceRecordModel``."""
+
+    model_config = _STRICT
+
+    evidence_id: str = Field(pattern=EVIDENCE_ID_PATTERN)
+    match_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    retrieval_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    entailment: Optional[EntailmentVerdict] = None
+    entailment_reason: Optional[str] = Field(default=None, max_length=500)
+    supports_claim: Optional[bool] = None
+    contradicts_claim: Optional[bool] = None
+
+
 class ReportClaimModel(BaseModel):
     model_config = _STRICT
 
@@ -219,6 +277,7 @@ class ReportClaimModel(BaseModel):
                 "eine Evidence mit nachvollziehbarem Anker."
             )
         return self
+
 
     @model_validator(mode="after")
     def verified_needs_strong_match(self) -> "ReportClaimModel":
@@ -309,6 +368,41 @@ class ReportClaimModel(BaseModel):
                 f"Gefunden: agent_quote={has_agent_quote}, "
                 f"seed_corpus={has_seed_corpus}."
             )
+        return self
+
+
+class IndexedReportClaimModel(BaseModel):
+    """Claim-Shape der EvidenceMap v3 mit referenzierten Bindings."""
+
+    model_config = _STRICT
+
+    claim_id: str = Field(pattern=r"^claim_\d{2,}$")
+    claim_text: str = Field(min_length=8)
+    confidence_label: ConfidenceLabel
+    confidence_score: float = Field(ge=0.0, le=1.0)
+    evidence: list[ClaimEvidenceBindingModel] = Field(default_factory=list, max_length=10)
+    audit_trail: list[dict[str, Any]] = Field(default_factory=list)
+    notes: Optional[str] = None
+
+    @model_validator(mode="after")
+    def require_binding_for_non_low_claim(self) -> "IndexedReportClaimModel":
+        if self.confidence_label != ConfidenceLabel.low and not self.evidence:
+            raise ValueError(
+                f"Label '{self.confidence_label.value}' verlangt mindestens ein Evidence-Binding."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def require_strong_supported_binding(self) -> "IndexedReportClaimModel":
+        if self.confidence_label == ConfidenceLabel.verified:
+            top = max((item.match_score or 0.0) for item in self.evidence)
+            if top < 0.85:
+                raise ValueError("Label 'verified' verlangt match_score >= 0.85.")
+        if self.confidence_label in (ConfidenceLabel.high, ConfidenceLabel.verified):
+            if not any(item.supports_claim for item in self.evidence):
+                raise ValueError(
+                    f"Label '{self.confidence_label.value}' verlangt supports_claim=True."
+                )
         return self
 
 
@@ -404,7 +498,7 @@ class ReportSectionModel(BaseModel):
     section_index: int = Field(ge=1)
     section_title: str = Field(min_length=3)
     section_summary: str = Field(min_length=1)
-    claims: list[ReportClaimModel] = Field(default_factory=list)
+    claims: list[IndexedReportClaimModel] = Field(default_factory=list)
     hypotheses: list[ReportSectionHypothesisModel] = Field(default_factory=list)
     # Slice 3 (Issue #495): Hypothesen-Appendix — Überhang nach dem Cap von 5.
     # Frontend kann diesen Slot optional ausklappen. max_length=50 verhindert
@@ -521,14 +615,87 @@ class EvidenceDegradationModel(BaseModel):
 class EvidenceMapModel(BaseModel):
     """Persistierte Evidence-Map. Ablöse für die rohen Dicts in report_agent.py."""
     model_config = _STRICT
-    schema_version: Literal[2] = 2
+    schema_version: Literal[3] = 3
     report_id: str = Field(min_length=1)
     simulation_id: str = Field(min_length=1)
-    global_evidence: list[EvidenceItemModel] = Field(default_factory=list)
+    evidence_index: dict[str, EvidenceRecordModel] = Field(default_factory=dict)
+    global_evidence_refs: list[str] = Field(default_factory=list)
     sections: list[ReportSectionModel] = Field(default_factory=list)
     # Issue #1006: additiv, Default leer — bestehende persistierte
     # EvidenceMaps ohne dieses Feld validieren unverändert weiter.
     degradation_log: list[EvidenceDegradationModel] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_evidence_cross_references(self) -> "EvidenceMapModel":
+        known_ids = set(self.evidence_index)
+        mismatched = [
+            key
+            for key, record in self.evidence_index.items()
+            if key != record.evidence_id
+        ]
+        if mismatched:
+            raise ValueError(
+                "evidence_index-Key stimmt nicht mit evidence_id ueberein: "
+                + ", ".join(sorted(mismatched))
+            )
+
+        unknown_global = sorted(set(self.global_evidence_refs) - known_ids)
+        if unknown_global:
+            raise ValueError(
+                "global_evidence_refs enthalten unbekannte Evidence: "
+                + ", ".join(unknown_global)
+            )
+
+        for section in self.sections:
+            for claim in section.claims:
+                unknown = sorted(
+                    {binding.evidence_id for binding in claim.evidence} - known_ids
+                )
+                if unknown:
+                    raise ValueError(
+                        f"Claim {claim.claim_id} referenziert unbekannte Evidence: "
+                        + ", ".join(unknown)
+                    )
+
+                resolved = [
+                    (binding, self.evidence_index[binding.evidence_id])
+                    for binding in claim.evidence
+                ]
+                if claim.confidence_label in (ConfidenceLabel.high, ConfidenceLabel.verified):
+                    groups = {
+                        record.persona_stakeholder_group
+                        for binding, record in resolved
+                        if binding.supports_claim
+                        and record.source_kind == EvidenceSourceKind.agent_quote
+                        and record.persona_stakeholder_group
+                    }
+                    if len(groups) < 2:
+                        raise ValueError(
+                            f"Claim {claim.claim_id}: high/verified verlangt zwei "
+                            "stuetzende Stakeholder-Gruppen."
+                        )
+                    if any(
+                        record.source_kind == EvidenceSourceKind.inferred
+                        for _, record in resolved
+                    ):
+                        raise ValueError(
+                            f"Claim {claim.claim_id}: inferred Evidence ist fuer "
+                            "high/verified unzulaessig."
+                        )
+                if claim.confidence_label == ConfidenceLabel.medium:
+                    has_agent_quote = any(
+                        record.source_kind == EvidenceSourceKind.agent_quote and record.quote
+                        for _, record in resolved
+                    )
+                    has_seed = any(
+                        record.source_kind == EvidenceSourceKind.seed_corpus
+                        for _, record in resolved
+                    )
+                    if not (has_agent_quote and has_seed):
+                        raise ValueError(
+                            f"Claim {claim.claim_id}: medium verlangt agent_quote und seed_corpus."
+                        )
+        return self
 
 
 class EvidenceOmissionModel(BaseModel):

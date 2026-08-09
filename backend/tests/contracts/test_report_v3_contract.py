@@ -28,6 +28,21 @@ from app.contracts.report_v3 import (
     TrustSignal,
 )
 
+EVIDENCE_ID = "ev_00000000000000000000000000000001"
+
+
+def _evidence_index() -> dict[str, dict]:
+    return {
+        EVIDENCE_ID: {
+            "evidence_id": EVIDENCE_ID,
+            "producer_key": "report-v4-contract-fixture",
+            "type": "graph_fact",
+            "source": "contract-fixture",
+            "snippet": "Vertraglich gebundene Evidence.",
+            "source_kind": "graph_relation",
+        }
+    }
+
 
 # ---- Importierbarkeit aller 13 Klassen ----
 
@@ -140,7 +155,7 @@ def test_persona_invalid_voice_register_rejected():
         )
 
 
-# ---- schema_version == 3 (Literal) ----
+# ---- schema_version == 4 (Literal) ----
 
 def test_schema_version_must_be_3():
     """Literal[3] verhindert schema_version=2."""
@@ -152,13 +167,13 @@ def test_schema_version_must_be_3():
         })
 
 
-def test_schema_version_defaults_to_3():
-    """Ohne explizite schema_version wird 3 gesetzt."""
+def test_schema_version_defaults_to_4():
+    """Ohne explizite schema_version wird 4 gesetzt."""
     r = ReportV3(
         report_id="r1",
         generated_at=datetime(2026, 5, 9, tzinfo=timezone.utc),
     )
-    assert r.schema_version == 3
+    assert r.schema_version == 4
 
 
 # ---- Roundtrip: model_dump_json → model_validate_json ----
@@ -168,6 +183,7 @@ def test_minimal_report_v3_roundtrip():
     original = ReportV3(
         report_id="rep-001",
         generated_at=datetime(2026, 5, 9, 12, 0, 0, tzinfo=timezone.utc),
+        evidence_index=_evidence_index(),
         personas=[
             Persona(
                 id="p1",
@@ -177,14 +193,14 @@ def test_minimal_report_v3_roundtrip():
                 region="Schweiz",
                 needs=["Zuverlässigkeit", "Sicherheit"],
                 values=["Qualität"],
-                evidence_refs=["ev-001"],
+                evidence_refs=[EVIDENCE_ID],
             )
         ],
         claims=[
             Claim(
                 id="c1",
                 statement="Sicherheitsbedenken sind der primäre Hemmfaktor.",
-                evidence_refs=["ev-001"],
+                evidence_refs=[EVIDENCE_ID],
                 confidence="high",
                 persona_ids=["p1"],
                 aggregation_basis="persona",
@@ -213,11 +229,11 @@ def test_minimal_report_v3_roundtrip():
     restored = ReportV3.model_validate_json(json_str)
 
     assert restored.report_id == original.report_id
-    assert restored.schema_version == 3
+    assert restored.schema_version == 4
     assert len(restored.personas) == 1
     assert restored.personas[0].voice_register == "formal-de"
     assert len(restored.claims) == 1
-    assert restored.claims[0].evidence_refs == ["ev-001"]
+    assert restored.claims[0].evidence_refs == [EVIDENCE_ID]
     assert len(restored.data_gaps) == 1
     assert len(restored.hypotheses) == 1
     assert restored.hypotheses[0].suggested_evidence == ["Preisinterviews"]
@@ -287,7 +303,7 @@ def test_persisted_v3_validates(tmp_path, monkeypatch):
     report_v3_markdown = ReportManager.build_report_v3_markdown(report_id)
     assert report_v3_markdown is not None, "build_report_v3_markdown() lieferte None — report-v3.json fehlt oder ungültig"
 
-    assert restored.schema_version == 3
+    assert restored.schema_version == 4
     assert restored.report_id == report_id
     # Reviewer-Floor S1: Claim mit 1 Evidence-Item wird zur Hypothesis geroutet.
     assert len(restored.claims) == 0, (
@@ -338,11 +354,13 @@ def test_migrate_v2_to_v3_minimal():
     result = migrate_v2_to_v3(v2)
     report_v3 = ReportV3.model_validate(result)
 
-    assert report_v3.schema_version == 3
+    assert report_v3.schema_version == 4
     assert report_v3.report_id == "rep-migration-001"
     assert len(report_v3.claims) == 1
     assert report_v3.claims[0].confidence == "medium"
-    assert report_v3.claims[0].evidence_refs == ["kg:node:mobility-001"]
+    evidence_ref = report_v3.claims[0].evidence_refs[0]
+    assert evidence_ref in report_v3.evidence_index
+    assert report_v3.evidence_index[evidence_ref].source_id_anchor == "kg:node:mobility-001"
     # DataGap aus Claim + DataGap aus Migration-Hinweis (keine Personas)
     gap_ids = {dg.id for dg in report_v3.data_gaps}
     assert "g01" in gap_ids
@@ -413,11 +431,12 @@ def test_write_and_read_report_v3_roundtrip(tmp_path):
     original = ReportV3(
         report_id=report_id,
         generated_at=datetime(2026, 5, 10, 10, 0, 0, tzinfo=timezone.utc),
+        evidence_index=_evidence_index(),
         claims=[
             Claim(
                 id="c1",
                 statement="Sicherheitsbedenken hemmen die Adoption sichtbar.",
-                evidence_refs=["ev-001"],
+                evidence_refs=[EVIDENCE_ID],
                 confidence="high",
                 aggregation_basis="persona",
             )
@@ -435,9 +454,9 @@ def test_write_and_read_report_v3_roundtrip(tmp_path):
 
     restored = read_report_v3(report_id, reports_dir=reports_dir)
     assert restored is not None
-    assert restored.schema_version == 3
+    assert restored.schema_version == 4
     assert restored.report_id == report_id
-    assert restored.claims[0].evidence_refs == ["ev-001"]
+    assert restored.claims[0].evidence_refs == [EVIDENCE_ID]
     assert restored.data_gaps[0].id == "dg1"
 
 

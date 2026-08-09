@@ -32,6 +32,8 @@ from app.services.report_agent.output_contract import (
     is_deliverable_report_status,
 )
 
+_SEED_EVIDENCE_ID = "ev_00000000000000000000000000000001"
+
 
 class _FakeAgentForDegradation:
     """Leichtgewichtiges Fake-Objekt für den ungebundenen Aufruf von
@@ -91,10 +93,8 @@ def _seed_only_medium_claim() -> dict:
         "confidence_score": 0.5,
         "evidence": [
             {
-                "type": "graph_fact",
-                "source": "seed_dokument_01",
-                "snippet": "Beleg-Snippet aus dem Seed-Korpus.",
-                "source_kind": "seed_corpus",
+                "evidence_id": _SEED_EVIDENCE_ID,
+                "supports_claim": True,
             },
         ],
         "audit_trail": [],
@@ -109,10 +109,20 @@ def _seed_only_medium_claim() -> dict:
 def test_medium_violation_haelt_uebrige_sections():
     fake_agent = _FakeAgentForDegradation(
         evidence_map={
-            "schema_version": 2,
+            "schema_version": 3,
             "report_id": "r1",
             "simulation_id": "sim1",
-            "global_evidence": [],
+            "evidence_index": {
+                _SEED_EVIDENCE_ID: {
+                    "evidence_id": _SEED_EVIDENCE_ID,
+                    "producer_key": "seed_dokument_01#degradation-fixture",
+                    "type": "graph_fact",
+                    "source": "seed_dokument_01",
+                    "snippet": "Beleg-Snippet aus dem Seed-Korpus.",
+                    "source_kind": "seed_corpus",
+                }
+            },
+            "global_evidence_refs": [],
             "sections": [_valid_existing_section()],
             "degradation_log": [],
         },
@@ -186,10 +196,11 @@ def test_hypotheses_appendix_placeholder_wird_gefiltert():
     assert normalized[0]["hypotheses_appendix"] == []
 
     payload = {
-        "schema_version": 2,
+        "schema_version": 3,
         "report_id": "r1",
         "simulation_id": "sim1",
-        "global_evidence": [],
+        "evidence_index": {},
+        "global_evidence_refs": [],
         "sections": normalized,
     }
     validated = EvidenceMapModel.model_validate(payload)

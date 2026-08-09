@@ -108,7 +108,11 @@ def bind_evidence_to_claim(
         if score < threshold:
             continue
 
-        bound = dict(item)
+        # Canonical Records werden nicht in jeden Claim kopiert. Der
+        # Legacy-Zweig ohne evidence_id bleibt nur fuer interne Alt-Caller;
+        # persistierte v3-Maps akzeptieren ausschliesslich Bindings.
+        evidence_id = item.get("evidence_id")
+        bound = {"evidence_id": evidence_id} if evidence_id else dict(item)
         rounded = round(float(score), 3)
         bound["retrieval_score"] = rounded
         bound["match_score"] = rounded

@@ -242,9 +242,12 @@ class TestEmptySection:
 class TestEvidenceMapModelInstance:
     def test_accepts_evidence_map_model_instance(self):
         """validate_quote_anchors() akzeptiert auch EvidenceMapModel-Objekte."""
-        from app.contracts.report_contract import EvidenceMapModel, EvidenceItemModel, EvidenceType
+        from app.contracts.report_contract import EvidenceMapModel, EvidenceRecordModel, EvidenceType
 
-        item = EvidenceItemModel(
+        evidence_id = "ev_00000000000000000000000000000001"
+        item = EvidenceRecordModel(
+            evidence_id=evidence_id,
+            producer_key="quote-anchor-fixture",
             type=EvidenceType.graph_fact,
             source="test-src",
             snippet="Test-Snippet",
@@ -253,7 +256,8 @@ class TestEvidenceMapModelInstance:
         em = EvidenceMapModel(
             report_id="r1",
             simulation_id="s1",
-            global_evidence=[item],
+            evidence_index={evidence_id: item},
+            global_evidence_refs=[evidence_id],
             sections=[],
         )
 

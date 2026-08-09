@@ -27,11 +27,10 @@ from .output_contract import (
 from .planning import plan_outline as plan_outline_impl
 from .text_verification import verify_prose
 from .schemas import (
-    CURRENT_SCHEMA_VERSION,
     EvidenceMapModel,
     _section_schema_for,
-    migrate_v1_to_v2,
 )
+from ..evidence_migrations import migrate_v1_to_v2, normalize_persisted_evidence_map
 
 logger = get_logger('agora.report_agent')
 
@@ -391,6 +390,7 @@ def generate_section_react(
     logger.info(f"ReACT generating section: {section.title}")
     agent._current_section_index = section_index
     agent._active_section_evidence = []
+    agent._active_section_unresolved_evidence = []
 
     if agent.report_logger:
         agent.report_logger.log_section_start(section.title, section_index)
@@ -896,15 +896,15 @@ def generate_report(
 
     try:
         ReportManager._ensure_report_folder(report_id)
-        agent.evidence_map = migrate_v1_to_v2(ReportManager.get_evidence_map(report_id)) or (
-            EvidenceMapModel.model_validate({
-                "schema_version": CURRENT_SCHEMA_VERSION,
-                "report_id": report_id,
-                "simulation_id": agent.simulation_id,
-                "global_evidence": agent._collect_simulation_evidence_items(),
-                "sections": [],
-            }).model_dump(mode="json")
+        legacy_evidence_map = migrate_v1_to_v2(
+            ReportManager.get_evidence_map(report_id)
         )
+        agent.evidence_map = normalize_persisted_evidence_map(legacy_evidence_map)
+        if agent.evidence_map is None:
+            agent._init_evidence_map(report_id)
+            agent.evidence_map = EvidenceMapModel.model_validate(
+                agent.evidence_map
+            ).model_dump(mode="json")
 
         agent.report_logger = agent.ReportLogger(report_id)
         agent.report_logger.log_start(

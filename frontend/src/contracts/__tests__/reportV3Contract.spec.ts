@@ -25,11 +25,23 @@ function shapeKeys(schema: { shape: Record<string, unknown> }) {
   return Object.keys(schema.shape).sort();
 }
 
+const EVIDENCE_ID = "ev_00000000000000000000000000000001";
+
 const MINIMAL_REPORT_V3 = {
-  schema_version: 3,
+  schema_version: 4,
   report_id: "rep-001",
   generated_at: "2026-05-09T12:00:00Z",
   report_mode: "balanced",
+  evidence_index: {
+    [EVIDENCE_ID]: {
+      evidence_id: EVIDENCE_ID,
+      producer_key: "report-v4-contract-fixture",
+      type: "graph_fact",
+      source: "contract-fixture",
+      snippet: "Vertraglich gebundene Evidence.",
+      source_kind: "graph_relation",
+    },
+  },
   personas: [
     {
       id: "p1",
@@ -39,14 +51,14 @@ const MINIMAL_REPORT_V3 = {
       region: "Schweiz",
       needs: ["Zuverlässigkeit", "Sicherheit"],
       values: ["Qualität"],
-      evidence_refs: ["ev-001"],
+      evidence_refs: [EVIDENCE_ID],
     },
   ],
   claims: [
     {
       id: "c1",
       statement: "Sicherheitsbedenken sind der primäre Hemmfaktor.",
-      evidence_refs: ["ev-001"],
+      evidence_refs: [EVIDENCE_ID],
       confidence: "high",
       persona_ids: ["p1"],
       aggregation_basis: "persona",
@@ -76,9 +88,9 @@ describe("ReportV3Schema (Zod-Spiegel)", () => {
     const result = parseReportV3(MINIMAL_REPORT_V3);
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.data.schema_version).toBe(3);
+      expect(result.data.schema_version).toBe(4);
       expect(result.data.personas[0].voice_register).toBe("formal-de");
-      expect(result.data.claims[0].evidence_refs).toEqual(["ev-001"]);
+      expect(result.data.claims[0].evidence_refs).toEqual([EVIDENCE_ID]);
       expect(result.data.data_gaps[0].severity).toBe("medium");
       expect(result.data.hypotheses[0].suggested_evidence).toEqual([
         "Preisinterviews",
@@ -86,8 +98,8 @@ describe("ReportV3Schema (Zod-Spiegel)", () => {
     }
   });
 
-  it("rejects schema_version=2 (Literal[3] enforced)", () => {
-    const bad = { ...MINIMAL_REPORT_V3, schema_version: 2 };
+  it("rejects schema_version=3 (Literal[4] enforced)", () => {
+    const bad = { ...MINIMAL_REPORT_V3, schema_version: 3 };
     expect(ReportV3Schema.safeParse(bad).success).toBe(false);
   });
 
@@ -172,7 +184,7 @@ describe("ReportV3Schema (Zod-Spiegel)", () => {
 
   it("report_mode defaults to 'balanced' when absent", () => {
     const withoutMode = {
-      schema_version: 3,
+      schema_version: 4,
       report_id: "r-no-mode",
       generated_at: "2026-05-11T00:00:00Z",
     };
@@ -197,7 +209,7 @@ describe("ReportV3Schema (Zod-Spiegel)", () => {
 
   it("parses minimal report with empty section lists", () => {
     const minimal = {
-      schema_version: 3,
+      schema_version: 4,
       report_id: "r-empty",
       generated_at: "2026-05-09T00:00:00Z",
     };

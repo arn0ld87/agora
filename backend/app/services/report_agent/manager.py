@@ -15,6 +15,7 @@ from .metadata_merge import merge_section_metadata
 from ...config import Config
 from ...models.report import Report, ReportOutline, ReportSection, ReportStatus
 from ...utils.logger import get_logger
+from ..evidence_migrations import normalize_persisted_evidence_map
 from .storage import (
     ensure_report_folder,
     ensure_reports_dir,
@@ -240,23 +241,6 @@ class ReportManager:
             return None
 
     @classmethod
-    def _evidence_ref_for_item(
-        cls,
-        item: Dict[str, Any],
-        *,
-        section_index: int,
-        claim_id: str,
-        item_index: int,
-    ) -> str:
-        ref = str(
-            item.get("source_id_anchor")
-            or item.get("anchor")
-            or item.get("source")
-            or f"section_{section_index}:{claim_id}:evidence_{item_index:02d}"
-        )
-        return ref.strip() or f"section_{section_index}:{claim_id}:evidence_{item_index:02d}"
-
-    @classmethod
     def build_report_v3(
         cls,
         report: Report,
@@ -264,6 +248,7 @@ class ReportManager:
         *,
         report_mode: ReportMode = DEFAULT_REPORT_MODE,
     ) -> ReportV3:
+        evidence_map = normalize_persisted_evidence_map(evidence_map) or evidence_map
         claims: List[ReportV3Claim] = []
         data_gaps: List[ReportV3DataGap] = []
         hypotheses: List[ReportV3Hypothesis] = []
@@ -275,16 +260,11 @@ class ReportManager:
                 if not isinstance(claim, dict):
                     continue
                 claim_id = str(claim.get("claim_id") or f"claim_{len(claims) + 1:02d}")
-                evidence_refs = [
-                    cls._evidence_ref_for_item(
-                        item,
-                        section_index=section_index,
-                        claim_id=claim_id,
-                        item_index=index,
-                    )
-                    for index, item in enumerate(claim.get("evidence") or [], 1)
-                    if isinstance(item, dict)
-                ]
+                evidence_refs = list(dict.fromkeys(
+                    str(item.get("evidence_id"))
+                    for item in claim.get("evidence") or []
+                    if isinstance(item, dict) and item.get("evidence_id")
+                ))
                 # balanced/explorative: Claims ohne Evidence → überspringen (kein Evidence-Anker)
                 # strict: Claims ohne Evidence → gedroppt (gleiche Logik, aber auch low-conf)
                 if not evidence_refs:
@@ -401,14 +381,28 @@ class ReportManager:
                 len(merged.rejected),
                 "; ".join(merged.rejected[:5]),
             )
+        evidence_index = dict(evidence_map.get("evidence_index") or {})
+        metadata_kwargs = merged.as_report_v3_kwargs()
+        for slot, items in list(metadata_kwargs.items()):
+            metadata_kwargs[slot] = [
+                item.model_copy(update={
+                    "evidence_refs": [
+                        ref for ref in item.evidence_refs if ref in evidence_index
+                    ]
+                })
+                if hasattr(item, "evidence_refs")
+                else item
+                for item in items
+            ]
         return ReportV3(
             report_id=report.report_id,
             generated_at=datetime.now(timezone.utc),
+            evidence_index=evidence_index,
             report_mode=report_mode,
             claims=claims,
             data_gaps=data_gaps,
             hypotheses=hypotheses,
-            **merged.as_report_v3_kwargs(),
+            **metadata_kwargs,
         )
     
     @classmethod

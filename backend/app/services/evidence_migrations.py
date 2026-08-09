@@ -10,9 +10,10 @@ P3.1-Followup — Echte Persona/Segment/FrictionPoint/TrustSignal-Aggregation
 - ``migrate_legacy_claims_to_anchored`` entfernt orphan Claims VOR Validator,
   damit Bestands-evidence-map.json nicht beim Reload an
   ``ReportClaimModel.non_low_claims_need_evidence`` scheitern.
-- ``migrate_v2_to_v3`` baut aus einem v2-Report-Dict ein dict, das
-  ``ReportV3.model_validate()`` besteht. ``CURRENT_SCHEMA_VERSION`` bleibt 2 —
-  es ist die Evidence-Map-Schema-Version, NICHT die Report-Container-Version.
+- ``migrate_evidence_map_v2_to_v3`` trennt kanonische Evidence-Records von
+  Claim-Bindings und hebt persistierte Evidence-Maps auf schema_version=3.
+- ``migrate_v2_to_v3`` baut aus einem Legacy-Report-Dict ein dict, das gegen
+  den selbstenthaltenen ReportV3-Container mit schema_version=4 validiert.
   Neu (P3.1-Followup): Personas aus ``artifact_store`` (``reddit_profiles``),
   Segments per Gruppen-Aggregation, FrictionPoints/TrustSignals aus
   Sections mit Keyword-Matching auf Section-Titel.
@@ -24,10 +25,13 @@ import re
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Optional
 
+from .evidence_identity import build_evidence_id
+
 if TYPE_CHECKING:
     from .artifact_store import SimulationArtifactStore
 
-CURRENT_SCHEMA_VERSION = 2
+LEGACY_SCHEMA_VERSION = 2
+CURRENT_SCHEMA_VERSION = 3
 
 # Confidence-Labels, die einen Evidence-Anker erfordern (P2.1).
 _ANCHOR_REQUIRED_LABELS = frozenset({"medium", "high", "verified"})
@@ -71,10 +75,10 @@ def migrate_v1_to_v2(raw: Optional[dict]) -> Optional[dict]:
     for section in sections:
         if isinstance(section, dict):
             section.pop("schema_version", None)
-    if raw.get("schema_version") == CURRENT_SCHEMA_VERSION:
+    if raw.get("schema_version") in {LEGACY_SCHEMA_VERSION, CURRENT_SCHEMA_VERSION}:
         return raw
 
-    raw["schema_version"] = CURRENT_SCHEMA_VERSION
+    raw["schema_version"] = LEGACY_SCHEMA_VERSION
     return raw
 
 
@@ -256,31 +260,192 @@ def normalize_persisted_evidence_map(raw: Optional[dict]) -> Optional[dict]:
     Mutiert das uebergebene Dict wie die Einzelschritte und gibt ``None``
     zurueck, wenn ``raw`` None ist.
     """
-    return migrate_medium_seed_only_claims_to_low(
+    if raw is None:
+        return None
+    if (
+        raw.get("schema_version") == CURRENT_SCHEMA_VERSION
+        and "global_evidence" not in raw
+    ):
+        return raw
+    if raw.get("schema_version") == CURRENT_SCHEMA_VERSION:
+        raw["schema_version"] = LEGACY_SCHEMA_VERSION
+    legacy = migrate_medium_seed_only_claims_to_low(
         migrate_legacy_claims_to_anchored(migrate_v1_to_v2(raw))
     )
+    return migrate_evidence_map_v2_to_v3(legacy)
+
+
+_RECORD_FIELDS = frozenset({
+    "type",
+    "source",
+    "snippet",
+    "value",
+    "tool_name",
+    "query",
+    "raw",
+    "agent_log_ref",
+    "quote",
+    "source_id_anchor",
+    "sentiment_score",
+    "source_kind",
+    "source_model",
+    "persona_stakeholder_group",
+})
+_BINDING_FIELDS = frozenset({
+    "match_score",
+    "retrieval_score",
+    "entailment",
+    "entailment_reason",
+    "supports_claim",
+    "contradicts_claim",
+})
+
+
+def _legacy_item_to_record_and_binding(
+    item: dict[str, Any],
+    *,
+    scope_id: str,
+) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    """Konvertiert nur Legacy-Items mit explizitem Producer-Schluessel."""
+
+    anchor = str(item.get("source_id_anchor") or "").strip()
+    producer_key = str(item.get("producer_key") or "").strip()
+    if not producer_key:
+        # Ein vorhandener, nicht vom LLM-Sonderfall ``seed_doc`` stammender
+        # Hartanker erlaubt eine eindeutige Legacy-Zuordnung. Freie ``source``-
+        # Werte wie ``report_tool`` bleiben bewusst unresolved.
+        if anchor and not anchor.startswith("seed_doc:"):
+            producer_key = f"legacy-anchor:{anchor}"
+    if not producer_key:
+        return None
+    source_kind = str(item.get("source_kind") or "").strip()
+    if not source_kind:
+        source_kind = "graph_relation" if anchor.startswith("kg:") else "inferred"
+    evidence_id = build_evidence_id(scope_id, source_kind, producer_key)
+    record = {key: item[key] for key in _RECORD_FIELDS if key in item}
+    if record.get("type") == "graph_node":
+        record["type"] = "graph_fact"
+    if not str(record.get("source") or "").strip():
+        record["source"] = anchor or producer_key
+    if not str(record.get("snippet") or "").strip():
+        record["snippet"] = str(item.get("source") or anchor or producer_key)[:2000]
+    record.update({
+        "evidence_id": evidence_id,
+        "producer_key": producer_key,
+        "source_kind": source_kind,
+    })
+    binding = {key: item[key] for key in _BINDING_FIELDS if key in item}
+    binding["evidence_id"] = evidence_id
+    return record, binding
+
+
+def _next_legacy_hypothesis_id(section: dict[str, Any]) -> str:
+    used = {
+        str(item.get("hypothesis_id"))
+        for slot in ("hypotheses", "hypotheses_appendix")
+        for item in section.get(slot) or []
+        if isinstance(item, dict) and item.get("hypothesis_id")
+    }
+    index = 1
+    while f"hypothesis_{index:02d}" in used:
+        index += 1
+    return f"hypothesis_{index:02d}"
+
+
+def migrate_evidence_map_v2_to_v3(raw: Optional[dict]) -> Optional[dict]:
+    """Hebt eine normalisierte Legacy-EvidenceMap auf den ID-Vertrag v3."""
+
+    if raw is None:
+        return None
+    if raw.get("schema_version") == CURRENT_SCHEMA_VERSION:
+        return raw
+
+    scope_id = str(raw.get("simulation_id") or raw.get("report_id") or "").strip()
+    evidence_index: dict[str, dict[str, Any]] = {}
+    global_refs: list[str] = []
+    for item in raw.get("global_evidence") or []:
+        if not isinstance(item, dict):
+            continue
+        converted = _legacy_item_to_record_and_binding(item, scope_id=scope_id)
+        if converted is None:
+            continue
+        record, _ = converted
+        evidence_index[record["evidence_id"]] = record
+        global_refs.append(record["evidence_id"])
+
+    for section in raw.get("sections") or []:
+        if not isinstance(section, dict):
+            continue
+        section.setdefault("hypotheses", [])
+        surviving_claims: list[Any] = []
+        for claim in section.get("claims") or []:
+            if not isinstance(claim, dict):
+                continue
+            bindings: list[dict[str, Any]] = []
+            unresolved = False
+            for item in claim.get("evidence") or []:
+                if not isinstance(item, dict):
+                    unresolved = True
+                    continue
+                converted = _legacy_item_to_record_and_binding(item, scope_id=scope_id)
+                if converted is None:
+                    unresolved = True
+                    continue
+                record, binding = converted
+                evidence_index[record["evidence_id"]] = record
+                bindings.append(binding)
+            if bindings:
+                migrated_claim = dict(claim)
+                migrated_claim["evidence"] = bindings
+                surviving_claims.append(migrated_claim)
+                continue
+            if unresolved or claim.get("evidence"):
+                claim_text = str(
+                    claim.get("claim_text") or claim.get("claim") or ""
+                ).strip()
+                if claim_text:
+                    section["hypotheses"].append({
+                        "hypothesis_id": _next_legacy_hypothesis_id(section),
+                        "hypothesis_text": claim_text[:1000],
+                        "rationale": (
+                            "legacy_unresolved: Legacy-Evidence besitzt keinen "
+                            "verifizierbaren producer_key."
+                        ),
+                        "suggested_evidence": [],
+                    })
+            else:
+                surviving_claims.append(claim)
+        section["claims"] = surviving_claims
+
+    raw.pop("global_evidence", None)
+    raw["schema_version"] = CURRENT_SCHEMA_VERSION
+    raw["evidence_index"] = evidence_index
+    raw["global_evidence_refs"] = list(dict.fromkeys(global_refs))
+    return raw
 
 
 def _resolve_evidence_refs(
     claim: dict[str, Any],
-    section_index: int,
-    claim_id: str,
-) -> list[str]:
-    """Extrahiert Evidence-Refs aus einem Claim-dict."""
-    evidence_items = [
-        item for item in (claim.get("evidence") or [])
-        if isinstance(item, dict)
-    ]
+    *,
+    scope_id: str,
+    evidence_index: dict[str, dict[str, Any]],
+) -> tuple[list[str], bool]:
+    """Indiziert explizit identifizierbare Legacy-Evidence ohne Fallback-Refs."""
+
     refs: list[str] = []
-    for idx, item in enumerate(evidence_items, 1):
-        ref = str(
-            item.get("source_id_anchor")
-            or item.get("anchor")
-            or item.get("source")
-            or f"section_{section_index}:{claim_id}:evidence_{idx:02d}"
-        ).strip()
-        refs.append(ref or f"section_{section_index}:{claim_id}:evidence_{idx:02d}")
-    return refs
+    unresolved = False
+    for item in claim.get("evidence") or []:
+        if not isinstance(item, dict):
+            unresolved = True
+            continue
+        converted = _legacy_item_to_record_and_binding(item, scope_id=scope_id)
+        if converted is None:
+            unresolved = True
+            continue
+        record, _ = converted
+        evidence_index[record["evidence_id"]] = record
+        refs.append(record["evidence_id"])
+    return list(dict.fromkeys(refs)), unresolved
 
 
 def _label_to_confidence(label: str) -> str:
@@ -421,8 +586,11 @@ def migrate_v2_to_v3(
 
     claims: list[dict] = []
     data_gaps: list[dict] = []
+    hypotheses: list[dict] = []
     friction_points: list[dict] = []
     trust_signals: list[dict] = []
+    evidence_index: dict[str, dict[str, Any]] = {}
+    scope_id = str(raw.get("simulation_id") or simulation_id or report_id)
 
     sections = raw.get("sections") or []
     for section in sections:
@@ -440,9 +608,29 @@ def migrate_v2_to_v3(
             claim_id = str(
                 claim.get("claim_id") or f"claim_{len(claims) + 1:02d}"
             )
-            evidence_refs = _resolve_evidence_refs(claim, section_index, claim_id)
+            evidence_refs, unresolved = _resolve_evidence_refs(
+                claim,
+                scope_id=scope_id,
+                evidence_index=evidence_index,
+            )
 
             if not evidence_refs:
+                if unresolved or claim.get("evidence"):
+                    statement = str(
+                        claim.get("claim_text") or claim.get("claim") or ""
+                    ).strip()
+                    if statement:
+                        hypotheses.append({
+                            "id": f"legacy_unresolved_{len(hypotheses) + 1:02d}",
+                            "hypothesis_text": statement,
+                            "rationale": (
+                                "legacy_unresolved: Legacy-Evidence besitzt keinen "
+                                "verifizierbaren producer_key."
+                            ),
+                            "suggested_evidence": [],
+                            "origin_section_index": section_index or None,
+                            "confidence_score": 0.0,
+                        })
                 continue
 
             statement = str(
@@ -530,6 +718,7 @@ def migrate_v2_to_v3(
     # --- Persona-Aggregation (P3.1-Followup) ---
     personas: list[dict] = []
     segments: list[dict] = []
+    profiles: list[dict] = []
 
     # Zuerst v2-interne Personas prüfen (falls schon im dict vorhanden)
     raw_personas = raw.get("personas") or []
@@ -545,6 +734,40 @@ def migrate_v2_to_v3(
                 for idx, profile in enumerate(profiles, 1)
             ]
             segments = _aggregate_segments(personas, profiles)
+
+    # Persona-Provenance darf nicht als freier ``entity:<uuid>``-String im
+    # ReportV3 stehen. Der Artifact-Store kennt die stabile Entity-ID und kann
+    # deshalb einen echten Record samt run-lokaler ID erzeugen.
+    if profiles:
+        for persona, profile in zip(personas, profiles):
+            source_uuid = str(profile.get("source_entity_uuid") or "").strip()
+            if not source_uuid:
+                persona["evidence_refs"] = []
+                continue
+            producer_key = f"entity:{source_uuid}"
+            evidence_id = build_evidence_id(scope_id, "graph_relation", producer_key)
+            evidence_index[evidence_id] = {
+                "evidence_id": evidence_id,
+                "producer_key": producer_key,
+                "type": "entity_summary",
+                "source": "persona_artifact",
+                "snippet": str(
+                    profile.get("bio")
+                    or profile.get("persona")
+                    or profile.get("name")
+                    or producer_key
+                )[:2000],
+                "raw": profile,
+                "source_id_anchor": producer_key,
+                "source_kind": "graph_relation",
+            }
+            persona["evidence_refs"] = [evidence_id]
+    else:
+        known_ids = set(evidence_index)
+        for persona in personas:
+            persona["evidence_refs"] = [
+                ref for ref in persona.get("evidence_refs") or [] if ref in known_ids
+            ]
 
     # DataGap-Marker wenn keine Personas gefunden
     if not personas:
@@ -564,9 +787,10 @@ def migrate_v2_to_v3(
         )
 
     return {
-        "schema_version": 3,
+        "schema_version": 4,
         "report_id": report_id,
         "generated_at": generated_at,
+        "evidence_index": evidence_index,
         "personas": personas,
         "segments": segments,
         "claims": claims,
@@ -578,4 +802,5 @@ def migrate_v2_to_v3(
         "positioning_variants": [],
         "content_ideas": [],
         "data_gaps": data_gaps,
+        "hypotheses": hypotheses,
     }

@@ -7,11 +7,13 @@ Pflicht-Lesepfad bei Änderungen:
 3. schemas/*.schema.json (auto-generiert via dump_schemas)
 """
 from .report_contract import (
+    ClaimEvidenceBindingModel,
     ConfidenceLabel,
     EvidenceDegradationModel,
     EvidenceItemModel,
     EvidenceMapModel,
     EvidenceOmissionModel,
+    EvidenceRecordModel,
     EvidenceSourceKind,
     EvidenceType,
     ReportClaimModel,
@@ -173,6 +175,7 @@ __all__ = [
     "ClusterChange",
     "ClusterShift",
     "ClusterSummary",
+    "ClaimEvidenceBindingModel",
     "ComparisonDeltas",
     "ConfidenceLabel",
     "DegradationKind",
@@ -185,6 +188,7 @@ __all__ = [
     "EvidenceItemModel",
     "EvidenceMapModel",
     "EvidenceOmissionModel",
+    "EvidenceRecordModel",
     "EvidenceSourceKind",
     "EvidenceType",
     "GraphDiff",

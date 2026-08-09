@@ -1,5 +1,37 @@
 {
   "$defs": {
+    "AgentLogRef": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "title": "Action",
+          "type": "string"
+        },
+        "section_index": {
+          "minimum": 0,
+          "title": "Section Index",
+          "type": "integer"
+        },
+        "tool_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tool Name"
+        }
+      },
+      "required": [
+        "section_index",
+        "action"
+      ],
+      "title": "AgentLogRef",
+      "type": "object"
+    },
     "ChangeRecommendation": {
       "additionalProperties": false,
       "description": "Konkrete Handlungsempfehlung mit Priorit\u00e4t und Umsetzungsaufwand.",
@@ -205,6 +237,215 @@
       ],
       "title": "DataGap",
       "type": "object"
+    },
+    "EvidenceRecordModel": {
+      "additionalProperties": false,
+      "description": "Claim-unabhaengiger, kanonisch adressierbarer Quellen-Datensatz.",
+      "properties": {
+        "agent_log_ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentLogRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "evidence_id": {
+          "pattern": "^ev_[0-9a-f]{32}$",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "persona_stakeholder_group": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Persona Stakeholder Group"
+        },
+        "producer_key": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Producer Key",
+          "type": "string"
+        },
+        "query": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Query"
+        },
+        "quote": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quote"
+        },
+        "raw": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Raw"
+        },
+        "sentiment_score": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": -1.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sentiment Score"
+        },
+        "snippet": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Snippet",
+          "type": "string"
+        },
+        "source": {
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "source_id_anchor": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Id Anchor"
+        },
+        "source_kind": {
+          "$ref": "#/$defs/EvidenceSourceKind",
+          "default": "inferred"
+        },
+        "source_model": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Model"
+        },
+        "tool_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tool Name"
+        },
+        "type": {
+          "$ref": "#/$defs/EvidenceType"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "producer_key",
+        "type",
+        "source",
+        "snippet"
+      ],
+      "title": "EvidenceRecordModel",
+      "type": "object"
+    },
+    "EvidenceSourceKind": {
+      "description": "ADR-0002 Anker 3 \u2014 Quellengattung pro Evidence-Item.\n\nWird von den Cross-Stakeholder-/Inferred-Validators auf\n``ReportClaimModel`` ausgewertet (Sub-Slice M11.7b, Anker 4 + 5).\nDrift-Guard: Diese Werte sind im Prompt-Block\n``backend/app/services/report_prompts/sections.py`` referenziert (Anker 1).\n\nErweiterung (Report-Trust-Slice): ``agent_action`` und ``web_source``\nerg\u00e4nzen die urspr\u00fcnglichen vier Werte. Das ist additiv und versch\u00e4rft\nADR-0002, statt es zu schw\u00e4chen \u2014 vorher liefen Agentenaktionen und\nWeb-Treffer \u00fcber den Default ``seed_corpus`` und verschmolzen damit\nSeed-Dokument, Simulation und Recherche zu einer einzigen Quellengattung.\nF\u00fcr die Confidence-Anker gilt weiterhin: nur ``agent_quote`` z\u00e4hlt als\nStakeholder-Stimme, nur ``seed_corpus`` als Dokumentfakt.",
+      "enum": [
+        "seed_corpus",
+        "agent_quote",
+        "agent_action",
+        "graph_relation",
+        "web_source",
+        "inferred"
+      ],
+      "title": "EvidenceSourceKind",
+      "type": "string"
+    },
+    "EvidenceType": {
+      "description": "\u00dcbernommen aus report_agent.py \u2014 bestehende Typen plus model_generated_inference.",
+      "enum": [
+        "graph_fact",
+        "graph_metric",
+        "graph_metric_status",
+        "relationship_chain",
+        "entity_summary",
+        "agent_action",
+        "agent_interview",
+        "web_search_result",
+        "web_fetch",
+        "model_generated_inference"
+      ],
+      "title": "EvidenceType",
+      "type": "string"
     },
     "FrictionPoint": {
       "additionalProperties": false,
@@ -749,7 +990,7 @@
   "$id": "https://alexle135.de/schemas/report-v3.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Container f\u00fcr alle 11 Pflichtabschnitte des strukturierten Reports v3.\n\nschema_version=3 ist als Literal festgelegt \u2014 verhindert Versions-Drift\nanalog zu ReportContractModel(schema_version=2).",
+  "description": "Container f\u00fcr alle 11 Pflichtabschnitte des strukturierten Reports v3.\n\nschema_version=4 ist als Literal festgelegt \u2014 verhindert Versions-Drift\nanalog zu ReportContractModel(schema_version=2).",
   "properties": {
     "change_recommendations": {
       "items": {
@@ -778,6 +1019,13 @@
       },
       "title": "Data Gaps",
       "type": "array"
+    },
+    "evidence_index": {
+      "additionalProperties": {
+        "$ref": "#/$defs/EvidenceRecordModel"
+      },
+      "title": "Evidence Index",
+      "type": "object"
     },
     "friction_points": {
       "items": {
@@ -860,8 +1108,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": 3,
-      "default": 3,
+      "const": 4,
+      "default": 4,
       "title": "Schema Version",
       "type": "integer"
     },

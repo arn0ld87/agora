@@ -2,14 +2,17 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Badge from '../ui/Badge.vue'
-import type { EvidenceItem, ReportClaim, ReportSection } from '../../contracts/reportContract'
+import type { EvidenceIndex, EvidenceRecord, ReportClaim, ReportSection } from '../../contracts/reportContract'
 
 interface Props {
   sections: ReportSection[]
+  evidenceIndex?: EvidenceIndex
   selectedSection: number | null
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  evidenceIndex: () => ({}),
+})
 
 const emit = defineEmits<{
   'update:selectedSection': [sectionIndex: number]
@@ -51,11 +54,14 @@ function claimConfidenceText(claim: ReportClaim | null | undefined): string {
   return score === null ? label : `${Math.round(score * 100)}% · ${label}`
 }
 
-function claimEvidenceItems(claim: ReportClaim | null | undefined): EvidenceItem[] {
-  return Array.isArray(claim?.evidence) ? claim.evidence : []
+function claimEvidenceItems(claim: ReportClaim | null | undefined): EvidenceRecord[] {
+  if (!Array.isArray(claim?.evidence)) return []
+  return claim.evidence
+    .map((binding) => props.evidenceIndex[binding.evidence_id])
+    .filter((record): record is EvidenceRecord => record !== undefined)
 }
 
-function evidenceSnippet(item: EvidenceItem | null | undefined): string {
+function evidenceSnippet(item: EvidenceRecord | null | undefined): string {
   return item?.snippet ?? ''
 }
 

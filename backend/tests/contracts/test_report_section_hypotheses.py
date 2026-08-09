@@ -7,14 +7,14 @@ from pydantic import ValidationError
 from app.contracts import ReportSectionHypothesisModel
 from app.contracts.report_contract import (
     ConfidenceLabel,
-    ReportClaimModel,
+    IndexedReportClaimModel,
     ReportSectionDataGapModel,
     ReportSectionModel,
 )
 
 
-def _claim() -> ReportClaimModel:
-    return ReportClaimModel(
+def _claim() -> IndexedReportClaimModel:
+    return IndexedReportClaimModel(
         claim_id="claim_01",
         claim_text="Ein belegter Claim mit ausreichend langem Text.",
         confidence_label=ConfidenceLabel.low,

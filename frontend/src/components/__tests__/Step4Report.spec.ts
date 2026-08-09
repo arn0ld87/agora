@@ -222,10 +222,11 @@ const VALID_REPORT: Report = {
 
 // Valides EvidenceMap-Payload
 const VALID_EVIDENCE: EvidenceMap = {
-  schema_version: 2,
+  schema_version: 3,
   report_id: 'report_test01',
   simulation_id: 'sim_test01',
-  global_evidence: [],
+  evidence_index: {},
+  global_evidence_refs: [],
   sections: [],
   // Issue #1006: additives Feld mit Default. Wie global_evidence und sections
   // ist es im z.infer-Output-Typ required, obwohl es beim Parsen optional ist.
@@ -384,10 +385,11 @@ describe('Step4Report — strict-Zod-Parse (Sub-Slice 15)', () => {
     ;(getReportEvidence as ReturnType<typeof vi.fn>).mockResolvedValue({
       success: true,
       data: {
-        schema_version: 2,
+        schema_version: 3,
         report_id: 'report_test01',
         // simulation_id fehlt — Pflichtfeld
-        global_evidence: [],
+        evidence_index: {},
+        global_evidence_refs: [],
         sections: [],
       },
     })
@@ -518,12 +520,35 @@ describe('Step4Report — INCOMPLETE-Status und generation_failed (P2.6)', () =>
 
 // Sub-Slice 16b: klickbare Quotes + source_id_anchor-Scroll (Refs #173)
 describe('Quote + Anchor (Sub-Slice 16b)', () => {
+  const QUOTE_EVIDENCE_ID = 'ev_00000000000000000000000000000011'
+  const SEED_EVIDENCE_ID = 'ev_00000000000000000000000000000012'
   // EvidenceMap mit einem Item, das quote + source_id_anchor hat
   const EVIDENCE_WITH_QUOTE = {
-    schema_version: 2,
+    schema_version: 3,
     report_id: 'report_test01',
     simulation_id: 'sim_test01',
-    global_evidence: [],
+    evidence_index: {
+      [QUOTE_EVIDENCE_ID]: {
+        evidence_id: QUOTE_EVIDENCE_ID,
+        producer_key: 'agent:test:quote:1',
+        type: 'agent_interview',
+        source: 'agent_log',
+        snippet: 'Snippet-Text ohne Quote',
+        quote: 'Dies ist ein wörtliches Zitat aus der Quelle.',
+        source_id_anchor: 'agent-log-1#entry-testentry',
+        source_kind: 'agent_quote',
+        persona_stakeholder_group: 'Testgruppe',
+      },
+      [SEED_EVIDENCE_ID]: {
+        evidence_id: SEED_EVIDENCE_ID,
+        producer_key: 'seed:test:quote:1',
+        type: 'graph_fact',
+        source: 'briefing.md',
+        snippet: 'Seed-Beleg für den Quote-Test.',
+        source_kind: 'seed_corpus',
+      },
+    },
+    global_evidence_refs: [],
     sections: [
       {
         section_index: 1,
@@ -547,13 +572,14 @@ describe('Quote + Anchor (Sub-Slice 16b)', () => {
             confidence_score: 0.85,
             evidence: [
               {
-                type: 'graph_fact',
-                source: 'neo4j',
-                snippet: 'Snippet-Text ohne Quote',
+                evidence_id: QUOTE_EVIDENCE_ID,
                 supports_claim: true,
                 match_score: 0.9,
-                quote: 'Dies ist ein wörtliches Zitat aus der Quelle.',
-                source_id_anchor: 'agent-log-1#entry-testentry',
+              },
+              {
+                evidence_id: SEED_EVIDENCE_ID,
+                supports_claim: true,
+                match_score: 0.8,
               },
             ],
             audit_trail: [],
@@ -564,10 +590,29 @@ describe('Quote + Anchor (Sub-Slice 16b)', () => {
   }
 
   const EVIDENCE_WITHOUT_QUOTE = {
-    schema_version: 2,
+    schema_version: 3,
     report_id: 'report_test01',
     simulation_id: 'sim_test01',
-    global_evidence: [],
+    evidence_index: {
+      [QUOTE_EVIDENCE_ID]: {
+        evidence_id: QUOTE_EVIDENCE_ID,
+        producer_key: 'agent:test:quote:1',
+        type: 'agent_interview',
+        source: 'agent_log',
+        snippet: 'Nur Snippet, kein Quote',
+        source_kind: 'agent_quote',
+        persona_stakeholder_group: 'Testgruppe',
+      },
+      [SEED_EVIDENCE_ID]: {
+        evidence_id: SEED_EVIDENCE_ID,
+        producer_key: 'seed:test:quote:1',
+        type: 'graph_fact',
+        source: 'briefing.md',
+        snippet: 'Seed-Beleg für den Quote-Test.',
+        source_kind: 'seed_corpus',
+      },
+    },
+    global_evidence_refs: [],
     sections: [
       {
         section_index: 1,
@@ -582,11 +627,14 @@ describe('Quote + Anchor (Sub-Slice 16b)', () => {
             confidence_score: 0.85,
             evidence: [
               {
-                type: 'graph_fact',
-                source: 'neo4j',
-                snippet: 'Nur Snippet, kein Quote',
+                evidence_id: QUOTE_EVIDENCE_ID,
                 supports_claim: true,
                 match_score: 0.9,
+              },
+              {
+                evidence_id: SEED_EVIDENCE_ID,
+                supports_claim: true,
+                match_score: 0.8,
               },
             ],
             audit_trail: [],
@@ -665,22 +713,13 @@ describe('Quote + Anchor (Sub-Slice 16b)', () => {
   it('click auf web-anchor ruft window.open auf', async () => {
     const EVIDENCE_WEB = {
       ...EVIDENCE_WITH_QUOTE,
-      sections: [
-        {
-          ...EVIDENCE_WITH_QUOTE.sections[0],
-          claims: [
-            {
-              ...EVIDENCE_WITH_QUOTE.sections[0].claims[0],
-              evidence: [
-                {
-                  ...EVIDENCE_WITH_QUOTE.sections[0].claims[0].evidence[0],
-                  source_id_anchor: 'web:https://example.com/artikel',
-                },
-              ],
-            },
-          ],
+      evidence_index: {
+        ...EVIDENCE_WITH_QUOTE.evidence_index,
+        [QUOTE_EVIDENCE_ID]: {
+          ...EVIDENCE_WITH_QUOTE.evidence_index[QUOTE_EVIDENCE_ID],
+          source_id_anchor: 'web:https://example.com/artikel',
         },
-      ],
+      },
     }
 
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
@@ -803,11 +842,29 @@ describe('Step4Report — agentLog-Polling-Intervall (Sub-Slice J.3)', () => {
 })
 
 describe('Step4Report — ConfidenceBadge-Integration (Sub-Slice 16a)', () => {
+  const C1_QUOTE_ID = 'ev_00000000000000000000000000000021'
+  const C1_SEED_ID = 'ev_00000000000000000000000000000022'
+  const C2_QUOTE_ID = 'ev_00000000000000000000000000000023'
+  const C2_SEED_ID = 'ev_00000000000000000000000000000024'
   const VALID_EVIDENCE_WITH_SECTIONS = {
-    schema_version: 2,
+    schema_version: 3,
     report_id: 'report_test01',
     simulation_id: 'sim_test01',
-    global_evidence: [],
+    evidence_index: Object.fromEntries([
+      [C1_QUOTE_ID, 'Claim 1 Quote', 'agent_quote', 'Gruppe A'],
+      [C1_SEED_ID, 'Claim 1 Seed', 'seed_corpus', null],
+      [C2_QUOTE_ID, 'Claim 2 Quote', 'agent_quote', 'Gruppe B'],
+      [C2_SEED_ID, 'Claim 2 Seed', 'seed_corpus', null],
+    ].map(([evidenceId, snippet, sourceKind, stakeholderGroup]) => [evidenceId, {
+      evidence_id: evidenceId,
+      producer_key: `confidence:${evidenceId}`,
+      type: sourceKind === 'agent_quote' ? 'agent_interview' : 'graph_fact',
+      source: sourceKind === 'agent_quote' ? 'agent_log' : 'briefing.md',
+      snippet,
+      source_kind: sourceKind,
+      ...(stakeholderGroup ? { persona_stakeholder_group: stakeholderGroup } : {}),
+    }])),
+    global_evidence_refs: [],
     sections: [
       {
         section_index: 1,
@@ -823,12 +880,11 @@ describe('Step4Report — ConfidenceBadge-Integration (Sub-Slice 16a)', () => {
             confidence_score: 0.8,
             evidence: [
               {
-                type: 'graph_fact',
-                source: 'neo4j',
-                snippet: 'Graph-Fakt A',
+                evidence_id: C1_QUOTE_ID,
                 supports_claim: true,
                 match_score: 0.9,
               },
+              { evidence_id: C1_SEED_ID, supports_claim: true, match_score: 0.8 },
             ],
             audit_trail: [{ source: 'graph_tool', snippet: 'Audit A' }],
           },
@@ -846,12 +902,11 @@ describe('Step4Report — ConfidenceBadge-Integration (Sub-Slice 16a)', () => {
             confidence_score: 0.5,
             evidence: [
               {
-                type: 'graph_fact',
-                source: 'neo4j',
-                snippet: 'Graph-Fakt B',
+                evidence_id: C2_QUOTE_ID,
                 supports_claim: true,
                 match_score: 0.6,
               },
+              { evidence_id: C2_SEED_ID, supports_claim: true, match_score: 0.7 },
             ],
             audit_trail: [{ source: 'agent_log', snippet: 'Audit B' }],
           },
