@@ -149,6 +149,8 @@ class TestAddTextBatchesForwardsCollector:
             ner_extractor=None,
             degradations=None,
             extraction_tally=None,
+            document_id=None,
+            chunk_id=None,
         ):
             embed_entities_and_relations(
                 embedding,
@@ -189,6 +191,8 @@ class TestBuildWorkerPublishesDegradations:
             ner_extractor=None,
             degradations=None,
             extraction_tally=None,
+            document_id=None,
+            chunk_id=None,
         ):
             embed_entities_and_relations(
                 embedding,
