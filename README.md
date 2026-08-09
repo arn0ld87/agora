@@ -1,12 +1,16 @@
+<p align="center">
+  <strong>English</strong> · <a href="./README.de.md">Deutsch</a>
+</p>
+
 <div align="center">
 
 <img src="./media/agora-logo-v2-light.png" alt="Agora Logo" width="520"/>
 
 # 🏛️ AGORA
 
-### Evidenzorientierte Multi-Agenten-Analyse für Stakeholder, Zielgruppen und komplexe Entscheidungen
+### Evidence-oriented multi-agent analysis for stakeholders, target groups, and complex decisions
 
-**Dokumente → Knowledge Graph → Personas → Simulation → nachvollziehbarer Bericht**
+**Documents → Knowledge Graph → Personas → Simulation → auditable report**
 
 [![Version](https://img.shields.io/badge/version-0.9.4-635BFF?style=flat-square)](./VERSION)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-111827?style=flat-square)](./LICENSE)
@@ -17,172 +21,172 @@
 [![E2E Smokes](https://img.shields.io/badge/E2E%20Smokes-20%2F20%20Green%20%F0%9F%9F%A2-brightgreen?style=flat-square)](./docs/STATUS.md)
 [![Status](https://img.shields.io/badge/status-Stability%20Beta-F59E0B?style=flat-square)](./docs/STATUS.md)
 
-[Demo](#demo) · [Was ist Agora?](#was-ist-agora) · [Funktionsweise](#funktionsweise) · [Prozess im UI](#-prozess-im-ui) · [Schnellstart](#schnellstart) · [Architektur](#architektur) · [Status](#projektstatus) · [Sicherheit](#sicherheit) · [Mitwirken](#projekt-unterstützen)
+[Demo](#demo) · [What is Agora?](#what-is-agora) · [How it works](#how-it-works) · [UI workflow](#-ui-workflow) · [Quickstart](#quickstart) · [Architecture](#architecture) · [Status](#project-status) · [Security](#security) · [Contributing](#support-the-project)
 
 </div>
 
 ---
 
 > [!IMPORTANT]
-> **Agora sagt menschliches Verhalten nicht voraus.** Die Plattform erzeugt überprüfbare Szenarien, mögliche Einwände, Konfliktlinien und Datenlücken. Simulationsergebnisse ersetzen weder Interviews noch Nutzertests oder empirische Forschung.
+> **Agora does not predict human behavior.** The platform generates auditable scenarios, possible objections, conflict lines, and data gaps. Simulation results do not replace interviews, user tests, or empirical research.
 
 ## Demo
 
 <p align="center">
   <a href="./media/agora-demo.mp4">
-    <img src="./media/agora-demo-preview.gif" alt="Agora Demo: Simulation, Agentenreaktionen, Evidence Report und PDF-Export" width="100%">
+    <img src="./media/agora-demo-preview.gif" alt="Agora demo: simulation, agent reactions, evidence report, and PDF export" width="100%">
   </a>
 </p>
 
 <p align="center">
- <strong><a href="./media/agora-demo.mp4">▶ Vollständige 43-Sekunden-Demo öffnen</a></strong><br>
-  <sub>Realer Lauf zur Einführung des KI-Lernassistenten „LernKompass 2027“.</sub>
+ <strong><a href="./media/agora-demo.mp4">▶ Open the full 43-second demo</a></strong><br>
+  <sub>Real run for the planned introduction of the “LernKompass 2027” AI learning assistant.</sub>
 </p>
 
-Die Demo zeigt:
+The demo shows:
 
-1. laufende Multi-Agenten-Simulation mit Status und Ressourcenverbrauch,
-2. simulierte Reaktionen und technische Laufzeitdaten,
-3. einen strukturierten Report mit Risiken, Konflikten und Datenlücken,
-4. den Export des Ergebnisses als PDF.
+1. a running multi-agent simulation with status and resource usage,
+2. simulated reactions and technical runtime data,
+3. a structured report with risks, conflicts, and data gaps,
+4. export of the result as a PDF.
 
 ---
 
-## Referenzlauf
+## Reference run
 
-Der aktuelle, kritisch dokumentierte End-to-End-Lauf im Repository untersucht die **Domainmigration `alexle135.de` → `alex-schneider.dev`** mit **Gemini 3.6 Flash als Report-Writer**.
+The current, critically documented end-to-end run in the repository examines the **domain migration `alexle135.de` → `alex-schneider.dev`** with **Gemini 3.6 Flash as the report writer**.
 
-Der Lauf verarbeitete **30 geladene Persona-Profile** über sechs Report-Sections. ReportV3 enthält **24 Claim-Zeilen, aber nur 17 eindeutige Claim-IDs**, dazu **157 Hypothesen mit 157 eindeutigen IDs** sowie **133 Data-Gap-Zeilen mit 41 eindeutigen Gap-IDs**. Ein Red-Team-Schritt meldete **6 Findings bei `echo_index=0.690`**.
+The run processed **30 loaded persona profiles** across six report sections. ReportV3 contains **24 claim rows but only 17 unique claim IDs**, plus **157 hypotheses with 157 unique IDs** and **133 data-gap rows with 41 unique gap IDs**. A red-team step reported **6 findings at `echo_index=0.690`**.
 
-Wichtiger als das Report-Fazit ist das Verhalten des Evidence-Layers: Er fing mehrere konkrete Gemini-Overclaims ab, darunter erfundene Alt-Subdomains, eine nicht dokumentierte neue Mailadresse und überzogene Recruiting-Kausalitäten. Gleichzeitig zeigt derselbe Lauf offen die aktuellen Grenzen: **Compound Claims können den Gate teilweise umgehen, Claim-/Gap-IDs sind noch nicht reportweit eindeutig, und Source-Kontext beziehungsweise Counter-Evidence bei Empfehlungen sind noch unvollständig.**
+More important than the report conclusion is the behavior of the evidence layer: it caught several concrete Gemini overclaims, including invented legacy subdomains, an undocumented new email address, and overstated recruiting causality. At the same time, the same run openly exposes the current limitations: **compound claims can partially bypass the gate, claim/gap IDs are not yet unique across the report, and source context plus counter-evidence for recommendations remain incomplete.**
 
 > [!NOTE]
-> Der Lauf ist bewusst keine Hochglanz-Demo. Er dokumentiert sowohl funktionierende Guardrails als auch reproduzierbare Fehlerklassen. Er beweist weder prädiktive Validität noch reales Stakeholderverhalten.
+> This run is deliberately not a polished showcase. It documents both working guardrails and reproducible failure classes. It proves neither predictive validity nor real stakeholder behavior.
 
-**[→ Aktuellen Referenzlauf mit Guardrail-Befunden, bekannten Fehlern und Prioritäten lesen](./docs/reference-runs/2026-08-09-domain-migration/README.md)**
+**[→ Read the current reference run with guardrail findings, known failures, and priorities](./docs/reference-runs/2026-08-09-domain-migration/README.md)**
 
 ---
 
-## Was ist Agora?
+## What is Agora?
 
-Agora ist eine lokal oder hybrid betreibbare Analyseplattform. Sie verarbeitet Dokumente, Webseiten und Fragestellungen zu einem Wissensgraphen, erzeugt daraus überprüfbare Stakeholder-Personas und lässt diese in einer kontrollierten Multi-Agenten-Simulation interagieren.
+Agora is an analysis platform that can be operated locally or in a hybrid setup. It processes documents, websites, and research questions into a knowledge graph, derives auditable stakeholder personas, and lets them interact in a controlled multi-agent simulation.
 
-Der anschließende Report trennt dokumentbelegte Aussagen von Hypothesen, unbelegten Behauptungen und fehlenden Informationen. Statt lediglich plausibel klingenden LLM-Text zu erzeugen, versucht Agora jede relevante Aussage auf Quellen, Graphobjekte und Simulationsereignisse zurückzuführen.
+The resulting report separates document-supported statements from hypotheses, unsupported claims, and missing information. Instead of merely producing plausible LLM prose, Agora attempts to trace each relevant statement back to sources, graph objects, and simulation events.
 
-### Kernnutzen
+### Core value
 
-| Problem | Agora-Ansatz |
+| Problem | Agora approach |
 |---|---|
-| Kritische Stakeholder werden spät berücksichtigt | Konfliktlinien und Einwände vor einer Entscheidung explorieren |
-| LLM-Berichte vermischen Fakten und Spekulation | Claims nach Evidenzgrad klassifizieren und mit Quellen verknüpfen |
-| Varianten werden nur nach Bauchgefühl verglichen | Runs, Prompts, Modelle und Eingabevarianten gegenüberstellen |
-| Entscheidungen beruhen auf unvollständigen Unterlagen | Datenlücken und nicht repräsentierte Gruppen sichtbar machen |
-| Sensible Daten sollen das eigene Netz nicht verlassen | Lokaler Betrieb mit Neo4j, Redis und Ollama möglich |
+| Critical stakeholders are considered too late | Explore conflict lines and objections before a decision is made |
+| LLM reports mix facts and speculation | Classify claims by evidence strength and link them to sources |
+| Variants are compared mainly by intuition | Compare runs, prompts, models, and input variants |
+| Decisions are based on incomplete material | Surface data gaps and underrepresented groups |
+| Sensitive data should remain inside your own network | Run locally with Neo4j, Redis, and Ollama |
 
-### Geeignete Anwendungsfälle
+### Suitable use cases
 
-- **Stakeholder- und Akzeptanzanalyse:** mögliche Widerstände, Interessen und Kommunikationsprobleme strukturieren.
-- **Pre-Mortem:** untersuchen, warum ein Vorhaben scheitern könnte, bevor es umgesetzt wird.
-- **Kommunikationsvarianten:** Botschaften, Narrative und Positionierungen miteinander vergleichen.
-- **Produkt- und Konzeptreview:** Annahmen, Risiken und unberücksichtigte Zielgruppen identifizieren.
-- **Forschung und Lehre:** Multi-Agenten-, GraphRAG- und Evidence-Gating-Workflows nachvollziehbar untersuchen.
+- **Stakeholder and acceptance analysis:** structure possible resistance, interests, and communication problems.
+- **Pre-mortem:** investigate why a project could fail before it is implemented.
+- **Communication variants:** compare messages, narratives, and positioning strategies.
+- **Product and concept review:** identify assumptions, risks, and overlooked target groups.
+- **Research and teaching:** inspect multi-agent, GraphRAG, and evidence-gating workflows in a traceable way.
 
 ---
 
-## Funktionsweise
+## How it works
 
 ```mermaid
 flowchart LR
-    A[Dokumente und Webseiten] --> B[Knowledge Graph]
-    B --> C[Stakeholder-Personas]
-    C --> D[Multi-Agenten-Simulation]
-    D --> E[Claims und Evidenzprüfung]
-    E --> F[Report, Vergleich und Export]
+    A[Documents and websites] --> B[Knowledge Graph]
+    B --> C[Stakeholder Personas]
+    C --> D[Multi-Agent Simulation]
+    D --> E[Claims and Evidence Checks]
+    E --> F[Report, Comparison, and Export]
 ```
 
-### 1. Wissen aufnehmen
+### 1. Ingest knowledge
 
-PDF-, Markdown- und Textdateien sowie Webseiten werden extrahiert und segmentiert. Bei **hochgeladenen Dateien** trägt jedes Segment seine Dokument- und Chunk-Herkunft durch Ingest, Graph-Aufbau und Retrieval (ADR-0013). Live abgerufene Webseiten durchlaufen diesen Weg nicht: sie kommen als Rechercheergebnis in den Report und erhalten keine Dokument- oder Chunk-ID. Im Report ist der Herkunftsanker auch für Uploads noch nicht ausgewertet — siehe Schritt 5.
+PDF, Markdown, and text files as well as websites are extracted and segmented. For **uploaded files**, each segment carries document and chunk provenance through ingestion, graph construction, and retrieval (ADR-0013). Live-fetched websites do not use this path: they enter the report as research results and do not receive document or chunk IDs. The report does not yet expose the provenance anchor for uploads either — see step 5.
 
-### 2. Knowledge Graph aufbauen
+### 2. Build the knowledge graph
 
-Neo4j speichert Entitäten, Beziehungen, Behauptungen, Quellenfragmente und Vektor-Embeddings. Dadurch können semantische Suche und Graphbeziehungen gemeinsam genutzt werden.
+Neo4j stores entities, relationships, claims, source fragments, and vector embeddings. This allows semantic search and graph relationships to be used together.
 
-### 3. Personas erzeugen und prüfen
+### 3. Generate and review personas
 
-Agora leitet Stakeholder-Personas aus dem Wissensgraphen ab. Rollen, Interessen und Haltungen können vor dem Lauf geprüft, verändert oder neu generiert werden.
+Agora derives stakeholder personas from the knowledge graph. Roles, interests, and positions can be reviewed, edited, regenerated, or approved before the run.
 
-### 4. Simulation ausführen
+### 4. Run the simulation
 
-Die OASIS-/CAMEL-Laufzeit orchestriert die Agenten. Redis überträgt Status, Ereignisse und Laufzeitdaten zwischen Simulation, Backend und Oberfläche.
+The OASIS/CAMEL runtime orchestrates the agents. Redis transports status, events, and runtime data between the simulation, backend, and UI.
 
-### 5. Evidenzorientierten Report erstellen
+### 5. Generate an evidence-oriented report
 
-Der Report verarbeitet Graph- und Simulationsdaten zu strukturierten Claims. Quellengattung, Confidence und Datenlücken werden gesondert dargestellt; jedes Evidence-Item nennt seine Gattung (Agentenzitat, Agentenaktion, Graph-Relation, Web-Quelle, Seed-Korpus). Ein Evidence-Item aus dem Seed-Korpus zeigt derzeit noch keinen Anker auf das konkrete Ausgangsdokument — dieser Schritt ist offen ([#1154](https://github.com/arn0ld87/agora/issues/1154)).
+The report processes graph and simulation data into structured claims. Source type, confidence, and data gaps are shown separately; every EvidenceItem identifies its source class (agent quote, agent action, graph relation, web source, seed corpus). A seed-corpus EvidenceItem currently does not expose an anchor to the concrete source document — this remains open ([#1154](https://github.com/arn0ld87/agora/issues/1154)).
 
-### 6. Varianten vergleichen und exportieren
+### 6. Compare variants and export
 
-Runs können nach Modell, Prompt, Seed und Eingabevariante verglichen, erneut abgespielt und in mehrere Formate exportiert werden.
-
----
-
-## 📸 Prozess im UI
-
-Die Pipeline in der Agora-Weboberfläche folgt fünf aufeinander aufbauenden Schritten — Run starten, Upload, Personas, Report und Interaktion. Die folgenden Screenshots zeigen einen realen Lauf (`proj_c12f138aa04e` zum Thema SchulKI) von der Quelldatei bis zum 1‑zu‑1‑Gespräch mit den generierten Personas:
-
-### 1. Run starten — Quelle wählen, Modell konfigurieren
-
-Im Dashboard wird ein neuer Run angelegt: Quelldatei ablegen, Modellprofil und Sprache auswählen, Anzahl der Personas und Simulationsrunden einstellen, dann starten.
-
-![Dashboard — Neuer Run mit Quelldatei, Profil, Sprache und Personas/Sim-Runden](./docs/assets/screenshots/process/01-dashboard-neuer-run.jpeg)
-
-### 2. Upload — Wissensgraph aus Dokumenten aufbauen
-
-Direkt nach dem Start extrahiert Agora aus den hochgeladenen Dokumenten Entitäten und Beziehungen und zeigt sie als interaktiven Graphen. Beziehungs‑Labels sind ein‑ und ausblendbar, der Graph ist als `.graphml`, `.svg`, `.png`, `.pdf` oder `.html` exportierbar.
-
-| Frisch hochgeladen | Vollständig aufgebaut |
-|---|---|
-| ![Graph direkt nach Upload](./docs/assets/screenshots/process/02-graph-upload-frisch.jpeg) | ![Graph mit allen Entitäten und Beziehungen](./docs/assets/screenshots/process/03-graph-beziehungen.jpeg) |
-
-Über den Relationship‑Inspector lässt sich jeder Knoten anklicken — die Beziehungen und Selbst‑Referenzen werden in einem seitlichen Panel sichtbar.
-
-![Graph-Detail mit Relationship-Panel](./docs/assets/screenshots/process/04-persona-relationship-detail.jpeg)
-
-### 3. Personas — Zielgruppen aus dem Graphen generieren
-
-Aus dem Wissensgraphen werden hunderte Personas abgeleitet. Vor der Generierung werden LLM‑Modell, Agentensprache und die maximale Anzahl Agenten konfiguriert.
-
-![Persona-Generierung: Modell, Sprache, Agentenanzahl](./docs/assets/screenshots/process/05-personas-konfiguration.jpeg)
-
-Während der Generierung füllt sich eine Karten‑Übersicht mit Name, Rolle, Interessen und Tags. Jede Persona lässt sich vor dem Simulationslauf einzeln prüfen, bearbeiten, neu generieren oder freigeben.
-
-| Generierte Personas | Persona-Detailansicht |
-|---|---|
-| ![Persona-Übersicht, 28/30 erzeugt](./docs/assets/screenshots/process/06-personas-generiert.jpeg) | ![Marko Petrović — Profil, Interessen, Biographie](./docs/assets/screenshots/process/07-persona-detail.jpeg) |
-
-### 4. Report — Evidence-Gating & Section-Generierung
-
-Während der Simulation laufen die Agenten‑ und Werkzeug‑Aufrufe parallel. Jede Report‑Section wird mit Evidenzbindung (ADR‑0002), Confidence und Quellenverweisen erzeugt; bei fehlgeschlagenem LLM‑Call liefert die Section stattdessen eine nachvollziehbare Fehlermeldung mit Verweis auf den Server‑Log.
-
-![Report-Generierung mit Agent-Logs und Datenlücken](./docs/assets/screenshots/process/08-report-agent-logs.jpeg)
-
-### 5. Interaktion — gezielte Nachfragen an die Personas
-
-Nach Abschluss des Reports lassen sich einzelne Personas direkt ansprechen — entweder im 1‑zu‑1‑Gespräch oder als Umfrage. So können hypothesengetriebene Nachfragen gestellt und Evidenzlücken gezielt geschlossen werden.
-
-![Interaktion: Agent auswählen, 1-zu-1-Gespräch führen](./docs/assets/screenshots/process/09-interaktion-1-zu-1.jpeg)
+Runs can be compared by model, prompt, seed, and input variant, replayed, and exported into multiple formats.
 
 ---
 
-## 🏗️ Architektur
+## 📸 UI workflow
+
+The Agora web interface follows five connected steps: start a run, upload material, review personas, generate the report, and interact with the personas. The screenshots below show a real run (`proj_c12f138aa04e`, topic: SchulKI) from source upload to a one-on-one conversation with generated personas.
+
+### 1. Start a run — choose source and configure the model
+
+Create a new run from the dashboard: add source files, select a model profile and language, configure the number of personas and simulation rounds, then start the run.
+
+![Dashboard — new run with source file, profile, language, personas, and simulation rounds](./docs/assets/screenshots/process/01-dashboard-neuer-run.jpeg)
+
+### 2. Upload — build a knowledge graph from documents
+
+Immediately after the run starts, Agora extracts entities and relationships from uploaded documents and displays them as an interactive graph. Relationship labels can be toggled, and the graph can be exported as `.graphml`, `.svg`, `.png`, `.pdf`, or `.html`.
+
+| Freshly uploaded | Fully built |
+|---|---|
+| ![Graph immediately after upload](./docs/assets/screenshots/process/02-graph-upload-frisch.jpeg) | ![Graph with all entities and relationships](./docs/assets/screenshots/process/03-graph-beziehungen.jpeg) |
+
+The Relationship Inspector lets you select any node and inspect relationships and self-references in a side panel.
+
+![Graph detail with relationship panel](./docs/assets/screenshots/process/04-persona-relationship-detail.jpeg)
+
+### 3. Personas — generate target groups from the graph
+
+Hundreds of personas can be derived from the knowledge graph. Before generation, configure the LLM model, agent language, and maximum number of agents.
+
+![Persona generation — model, language, and agent count](./docs/assets/screenshots/process/05-personas-konfiguration.jpeg)
+
+During generation, the card view fills with names, roles, interests, and tags. Every persona can be reviewed, edited, regenerated, or approved before the simulation starts.
+
+| Generated personas | Persona detail view |
+|---|---|
+| ![Persona overview, 28/30 generated](./docs/assets/screenshots/process/06-personas-generiert.jpeg) | ![Marko Petrović — profile, interests, biography](./docs/assets/screenshots/process/07-persona-detail.jpeg) |
+
+### 4. Report — evidence gating and section generation
+
+During the simulation, agent and tool calls run in parallel. Each report section is generated with evidence binding (ADR-0002), confidence, and source references; if an LLM call fails, the section instead provides a traceable error message pointing to the server log.
+
+![Report generation with agent logs and data gaps](./docs/assets/screenshots/process/08-report-agent-logs.jpeg)
+
+### 5. Interaction — ask targeted follow-up questions
+
+After the report is complete, individual personas can be addressed directly, either in a one-on-one conversation or through a survey. This allows hypothesis-driven follow-up questions and targeted work on evidence gaps.
+
+![Interaction — select an agent and start a one-on-one conversation](./docs/assets/screenshots/process/09-interaktion-1-zu-1.jpeg)
+
+---
+
+## 🏗️ Architecture
 
 ```mermaid
 graph TD
-    UI[Vue 3 + Vite + Pinia] <-->|REST und SSE| API[Flask + Pydantic v2]
+    UI[Vue 3 + Vite + Pinia] <-->|REST and SSE| API[Flask + Pydantic v2]
 
     API --> REG[LLM Provider Registry]
-    REG --> LOCAL[Ollama lokal]
-    REG --> CLOUD[OpenAI-kompatible Provider]
+    REG --> LOCAL[Local Ollama]
+    REG --> CLOUD[OpenAI-compatible Providers]
 
     API --> NEO[(Neo4j Knowledge Graph)]
     API --> REDIS[(Redis Event Bus)]
@@ -191,33 +195,33 @@ graph TD
     OASIS --> REDIS
     OASIS --> NEO
     API --> EVIDENCE[Evidence-Gating Engine]
-    EVIDENCE --> REPORT[Report, Vergleich und Export]
+    EVIDENCE --> REPORT[Report, Comparison, and Export]
 ```
 
-### Technologie-Stack
+### Technology stack
 
-| Bereich | Technologie | Aufgabe |
+| Area | Technology | Purpose |
 |---|---|---|
-| Frontend | Vue 3, Vite, Pinia, TypeScript, Zod | Oberfläche, Statusdarstellung und Eventverarbeitung |
-| Backend | Flask, Pydantic v2, Python 3.14, `uv` | REST API, SSE, Contracts und Orchestrierung |
-| Knowledge Graph | Neo4j 5.18+ | Entitäten, Relationen, Claims und Vektorindizes |
-| Event Bus | Redis 5.0+ | Status, Pub/Sub, IPC und Simulationsereignisse |
-| Simulation | OASIS / CAMEL AI | Multi-Agenten-Interaktionen und Rollensteuerung |
-| LLM-Schicht | Provider Registry und `chat_json` | Ollama sowie OpenAI-kompatible Anbieter |
-| Qualität | Pytest, Frontend-Tests, E2E-Smokes, GitHub Actions | Contracts, Migrationen und Kernabläufe absichern |
+| Frontend | Vue 3, Vite, Pinia, TypeScript, Zod | UI, status display, and event processing |
+| Backend | Flask, Pydantic v2, Python 3.14, `uv` | REST API, SSE, contracts, and orchestration |
+| Knowledge Graph | Neo4j 5.18+ | Entities, relationships, claims, and vector indexes |
+| Event Bus | Redis 5.0+ | Status, Pub/Sub, IPC, and simulation events |
+| Simulation | OASIS / CAMEL AI | Multi-agent interactions and role orchestration |
+| LLM layer | Provider Registry and `chat_json` | Ollama and OpenAI-compatible providers |
+| Quality | Pytest, frontend tests, E2E smokes, GitHub Actions | Contracts, migrations, and core-flow validation |
 
 ---
 
-## ⚡ Schnellstart
+## ⚡ Quickstart
 
-### Voraussetzungen
+### Requirements
 
 - Git
-- Linux oder macOS empfohlen
-- ein konfigurierter LLM- und Embedding-Provider
-- für den vollständigen Stack: Docker
+- Linux or macOS recommended
+- a configured LLM and embedding provider
+- Docker for the full stack
 
-### Lokales Setup
+### Local setup
 
 ```bash
 git clone https://github.com/arn0ld87/agora.git
@@ -225,76 +229,76 @@ cd agora
 ./install.sh
 
 cp .env.example .env
-# LLM-Endpunkte und Secrets in .env konfigurieren
+# Configure LLM endpoints and secrets in .env
 bun run dev
 ```
 
-### Docker-Setup
+### Docker setup
 
 ```bash
 ./install.sh --docker
 ```
 
-| Dienst | Adresse | Funktion |
+| Service | Address | Purpose |
 |---|---|---|
-| Frontend | `http://localhost:5173` | Agora-Weboberfläche |
-| Backend | `http://localhost:5001` | REST API und SSE Gateway |
-| Readiness | `http://localhost:5001/readyz` | Backend-Status |
-| Neo4j Browser | `http://localhost:7474` | Graph und Cypher Console |
+| Frontend | `http://localhost:5173` | Agora web interface |
+| Backend | `http://localhost:5001` | REST API and SSE gateway |
+| Readiness | `http://localhost:5001/readyz` | Backend status |
+| Neo4j Browser | `http://localhost:7474` | Graph and Cypher console |
 
 > [!WARNING]
-> Agora ist aktuell ein experimentelles Single-User-System. Die Anwendung nicht ungeschützt im öffentlichen Internet betreiben. Nutze Tailscale, WireGuard, ein VPN oder einen korrekt konfigurierten HTTPS-Reverse-Proxy.
+> Agora is currently an experimental single-user system. Do not expose the application directly to the public internet. Use Tailscale, WireGuard, a VPN, or a correctly configured HTTPS reverse proxy.
 
 ---
 
-## 📊 Projektstatus
+## 📊 Project status
 
-**Aktuelle Version:** `0.9.4` Stability Beta
+**Current version:** `0.9.4` Stability Beta
 
-| Bereich | Stand |
+| Area | Status |
 |---|---|
-| Backend | mehr als 4.560 gesammelte Unit- und Contract-Tests |
-| Frontend | 171 Testdateien |
-| E2E | 20 grüne Szenarien, darunter 6 verpflichtende Kern-Smokes |
-| Main Branch | geschützt durch 17 Required Status Checks |
-| Produkt-Frontend | Vue-v4-Routen sind die einzige ausgelieferte Oberfläche |
-| Betriebsmodell | stabilisierter Single-User-Betrieb, noch keine allgemeine Produktionsfreigabe |
+| Backend | more than 4,560 collected unit and contract tests |
+| Frontend | 171 test files |
+| E2E | 20 green scenarios, including 6 mandatory core smokes |
+| Main branch | protected by 17 required status checks |
+| Product frontend | Vue-v4 routes are the only shipped UI |
+| Operating model | stabilized single-user operation, not yet generally production-ready |
 
-### Release-Pfad
+### Release path
 
-| Version | Ziel | Status |
+| Version | Goal | Status |
 |---|---|---|
-| `0.8.0` | funktionsfähige Technical Preview | abgeschlossen |
-| `0.9.x` | Stabilisierung, Security- und Readiness-Gates | aktuell |
-| `0.10.0` | reproduzierbare Runs, Replay, Budgets, Backup/Restore | geplant |
-| `1.0.0` | stabile Verträge, Referenzlauf und nachgewiesener Produktnutzen | geplant |
+| `0.8.0` | functional technical preview | completed |
+| `0.9.x` | stabilization, security, and readiness gates | current |
+| `0.10.0` | reproducible runs, replay, budgets, backup/restore | planned |
+| `1.0.0` | stable contracts, reference run, and demonstrated product value | planned |
 
-Der verifizierte Ist-Zustand steht in [`docs/STATUS.md`](./docs/STATUS.md). Die verbindlichen nächsten Schritte stehen in [`ROADMAP.md`](./ROADMAP.md).
-
----
-
-## ⚠️ Grenzen und verantwortungsvolle Nutzung
-
-- **Personas sind simuliert.** Ihre Aussagen sind keine echten Kunden- oder Bürgermeinungen.
-- **Confidence ist keine Wahrheitsskala.** Der Wert beschreibt die interne Evidenzbindung eines Claims.
-- **Inputs bestimmen die Ergebnisse.** Datenqualität, Prompt, Modell und Seed können den Lauf erheblich verändern.
-- **Ein Run ist keine Stichprobe.** Für belastbarere Aussagen sind mehrere Varianten und externe Reviews nötig.
-- **Kleine Modelle sparen Kosten, reduzieren aber häufig die Qualität.** Besonders strukturierte Ausgaben und Evidenzzuordnung leiden.
-- **Cloud-Provider erzeugen Datenschutz- und Kostenrisiken.** Datenflüsse und Auftragsverarbeitung müssen vorab geprüft werden.
-
-Agora ist am nützlichsten als **Entscheidungsunterstützung vor realen Interviews, Fachreviews, Nutzertests oder Pilotprojekten**.
+The verified current state is documented in [`docs/STATUS.md`](./docs/STATUS.md). The binding next steps are listed in [`ROADMAP.md`](./ROADMAP.md).
 
 ---
 
-## 🔒 Sicherheit
+## ⚠️ Limitations and responsible use
 
-- API-Zugriff über `AGORA_AUTH_TOKEN`
-- zeitlich begrenzte, signierte Tickets für SSE und Downloads
-- Secrets werden nicht in Reports, Logs oder Graphobjekte serialisiert
-- HTTPS-Pflicht für credential-behaftete LLM- und Embedding-Endpunkte
-- empfohlener Betrieb im lokalen Netz, über VPN oder hinter einem Reverse Proxy
+- **Personas are simulated.** Their statements are not real customer or citizen opinions.
+- **Confidence is not a truth score.** It describes the internal evidence binding of a claim.
+- **Inputs shape the results.** Data quality, prompt, model, and seed can materially change a run.
+- **One run is not a sample.** More robust conclusions require multiple variants and external review.
+- **Smaller models reduce cost but often reduce quality.** Structured output and evidence assignment are particularly sensitive.
+- **Cloud providers introduce privacy and cost risks.** Data flows and processing agreements must be reviewed in advance.
 
-Weitere Dokumentation:
+Agora is most useful as **decision support before real interviews, expert reviews, user tests, or pilot projects**.
+
+---
+
+## 🔒 Security
+
+- API access via `AGORA_AUTH_TOKEN`
+- time-limited signed tickets for SSE and downloads
+- secrets are not serialized into reports, logs, or graph objects
+- HTTPS required for credential-bearing LLM and embedding endpoints
+- recommended operation on a local network, over VPN, or behind a reverse proxy
+
+Further documentation:
 
 - [`SECURITY.md`](./SECURITY.md)
 - [`docs/security-hardening.md`](./docs/security-hardening.md)
@@ -302,35 +306,35 @@ Weitere Dokumentation:
 
 ---
 
-## 🤝 Projekt unterstützen
+## 🤝 Support the project
 
-Agora befindet sich zwischen funktionsfähiger Stability Beta und einer belastbaren Version 1.0. Besonders aufwendig sind wiederholte LLM-Läufe, Hardware für lokale Modelle, reproduzierbare Referenzsimulationen und fachliche Evaluationen.
+Agora is currently between a functional Stability Beta and a robust version 1.0. Repeated LLM runs, hardware for local models, reproducible reference simulations, and expert evaluation are particularly resource-intensive.
 
-Gesucht werden:
+We are looking for:
 
-- **Forschungs- und Evaluationspartner**, die Multi-Agenten-Ergebnisse methodisch prüfen,
-- **Compute- und Hardware-Sponsoren** für wiederholbare lokale Modellläufe,
-- **Pilotpartner** mit echten, dokumentierten Stakeholder-Fragestellungen,
-- **Open-Source-Mitwirkende** for Testing, UX, Security und Release Engineering,
-- **Förder- und Kooperationspartner** für den Weg zu Version 1.0.
+- **research and evaluation partners** who can methodically review multi-agent results,
+- **compute and hardware sponsors** for repeatable local-model runs,
+- **pilot partners** with real, documented stakeholder questions,
+- **open-source contributors** for testing, UX, security, and release engineering,
+- **funding and cooperation partners** for the path to version 1.0.
 
-Kontakt und Mitarbeit:
+Contact and contribution:
 
 - [GitHub Issues](https://github.com/arn0ld87/agora/issues)
-- [Projektseite des Entwicklers](https://alexle135.de)
-- [`AGENTS.md`](./AGENTS.md) für agentische Entwicklungsworkflows
-- [`CLAUDE.md`](./CLAUDE.md) für Claude-Code-Aufgaben
+- [Developer project page](https://alexle135.de)
+- [`AGENTS.md`](./AGENTS.md) for agentic development workflows
+- [`CLAUDE.md`](./CLAUDE.md) for Claude Code tasks
 
 ---
 
 <div align="center">
 
-### ⚖️ Lizenz und Herkunft
+### ⚖️ License and origin
 
-Agora ist Open Source unter der **AGPL-3.0 Lizenz** ([`LICENSE`](./LICENSE)).  
-Im März 2026 als Fork von [MiroFish](https://github.com/666ghj/MiroFish) (AGPL-3.0) entstanden, seit April 2026 eigenständig weiterentwickelt für professionelle DACH-Simulationen — Einzelheiten in [`NOTICE`](./NOTICE).  
-Teile der Simulationslaufzeit basieren auf dem *CAMEL-AI-/OASIS-Ökosystem*.
+Agora is open source under the **AGPL-3.0 license** ([`LICENSE`](./LICENSE)).  
+Originally created as a fork of [MiroFish](https://github.com/666ghj/MiroFish) (AGPL-3.0) in March 2026, Agora has been developed independently since April 2026 for professional DACH-region simulations — see [`NOTICE`](./NOTICE) for details.  
+Parts of the simulation runtime are based on the *CAMEL-AI/OASIS ecosystem*.
 
-*Entwickelt von [Alexander Schneider](https://alexle135.de)*
+*Developed by [Alexander Schneider](https://alexle135.de)*
 
 </div>
