@@ -10,6 +10,7 @@ from ..evidence_binder import bind_evidence_to_claim, detect_contradiction_penal
 from ..evidence_identity import build_producer_key
 from .evidence import (
     degrade_sections_for_violations,
+    has_agent_grounded_evidence,
     init_evidence_map,
     normalize_claims_for_contract,
     normalize_sections_for_contract,
@@ -777,6 +778,46 @@ class ReportAgent:
                     "suggested_fix": suggestions[0] if suggestions else None,
                 })
                 continue
+
+            # ADR-0002 Stufe agent_grounded: `medium` verlangt mind. 1
+            # agent_quote (mit nicht-leerem quote) UND mind. 1 seed_corpus.
+            # Der Builder hat das bisher nicht geprüft — ein medium-Claim ohne
+            # diese Komposition erreichte den ReportClaimModel-Validator und
+            # ließ die gesamte EvidenceMap-Validierung scheitern: Report
+            # abgebrochen statt Claim abgestuft. Der Reparaturlauf in
+            # `degrade_sections_for_violations` fängt das nicht zuverlässig
+            # auf, weil Pydantic pro Durchgang nur den ersten Verstoß je Modell
+            # meldet — bei mehreren betroffenen Claims einer Section bleibt
+            # nach der Reparatur des ersten der nächste stehen.
+            #
+            # Der Validator bleibt unverändert streng (ADR-0002 Anker 4/5
+            # unberührt); hier entsteht das verletzende Label gar nicht erst.
+            # Schwesterregel für high/verified:
+            # `auto_downgrade_unsupported_high_claims`.
+            # getattr: ``_finalize_section_claims`` wird in Tests auch an einer
+            # per ``__new__`` gebauten Instanz ohne ``__init__`` aufgerufen.
+            evidence_index = (getattr(self, "evidence_map", None) or {}).get("evidence_index") or {}
+            if label == "medium" and not has_agent_grounded_evidence(
+                evidence, evidence_index=evidence_index
+            ):
+                claim["confidence_label"] = "low"
+                detail = (
+                    "medium verlangt agent_quote (mit Zitat) UND seed_corpus "
+                    "(ADR-0002 Stufe agent_grounded) — Komposition nicht "
+                    "erfüllt, Claim als low geführt."
+                )
+                logger.warning(
+                    "_finalize_section_claims: %s medium → low (%s)",
+                    str(claim.get("claim_id") or "<no-id>"),
+                    "nicht agent_grounded",
+                )
+                gate_decisions.append({
+                    "claim_id": str(claim.get("claim_id") or "<no-id>"),
+                    "violation": "medium_without_agent_grounded_evidence",
+                    "action": "downgraded_to_low",
+                    "detail": detail[:500],
+                })
+
             finalized_claims.append(claim)
 
         return finalized_claims, hypotheses, data_gaps, gate_decisions

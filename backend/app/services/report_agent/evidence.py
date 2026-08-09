@@ -176,7 +176,11 @@ def _count_supporting_stakeholder_groups(evidence: List[Dict[str, Any]]) -> int:
     return len(groups)
 
 
-def has_agent_grounded_evidence(evidence: List[Dict[str, Any]]) -> bool:
+def has_agent_grounded_evidence(
+    evidence: List[Dict[str, Any]],
+    *,
+    evidence_index: Optional[Dict[str, Any]] = None,
+) -> bool:
     """True, wenn die Evidence mind. 1 ``agent_quote`` (mit nicht-leerem
     ``quote``-Feld) UND mind. 1 ``seed_corpus`` enthält (ADR-0002 Stufe
     agent_grounded → rechtfertigt ``medium``). Spiegelt
@@ -184,14 +188,24 @@ def has_agent_grounded_evidence(evidence: List[Dict[str, Any]]) -> bool:
     ``supports_claim`` wird hier nicht gefordert — analog zum medium-Validator.
     Das Quote-Feld ist Pflicht (ADR-0002 Z. 54; Codex PR-Review #961 P2): ein
     zusammengefasstes Interview ohne Original-Zitat ist nicht agent_grounded.
+
+    Mit ``evidence_index`` wird jede Referenz zuerst über ihre ``evidence_id``
+    auf den kanonischen Record aufgelöst und nur ersatzweise am Inline-Eintrag
+    gemessen. ``EvidenceMapModel.validate_evidence_cross_references`` urteilt
+    ausschließlich über die Records; ohne diese Auflösung könnte ein Claim hier
+    als agent_grounded gelten und dort trotzdem durchfallen — genau der
+    Report-Abbruch, den der Aufrufer verhindern will.
     """
     has_agent_quote = False
     has_seed_corpus = False
+    index = evidence_index or {}
     for entry in evidence or []:
         if not isinstance(entry, dict):
             continue
-        sk = entry.get("source_kind")
-        if sk == "agent_quote" and entry.get("quote"):
+        record = index.get(str(entry.get("evidence_id") or ""))
+        source = record if isinstance(record, dict) else entry
+        sk = source.get("source_kind")
+        if sk == "agent_quote" and source.get("quote"):
             has_agent_quote = True
         elif sk == "seed_corpus":
             has_seed_corpus = True
