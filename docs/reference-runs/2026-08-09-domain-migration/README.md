@@ -1,267 +1,312 @@
 # Referenzlauf: Domainmigration alexle135.de → alex-schneider.dev
 
 > [!IMPORTANT]
-> Dieser Referenzlauf demonstriert Agoras **End-to-End-Pipeline, Social-Simulation und Evidence-Gating-Verhalten** in einem konkreten Szenario. Er validiert **keine** Vorhersage realen menschlichen Verhaltens und ersetzt keine Interviews, Nutzertests oder empirische Stakeholderforschung.
+> Dieser Referenzlauf demonstriert Agoras **aktuelle End-to-End-Pipeline, Evidence-Gating und bekannte Grenzen** an einem absichtlich schwierigen Szenario. Er validiert **keine** Vorhersage realen menschlichen Verhaltens und ersetzt keine Interviews, Nutzertests oder empirische Stakeholderforschung.
 
 | Feld | Wert |
 |---|---|
 | Datum | 9. August 2026 |
-| Report | `report_41f7b1bcf1e4` |
-| Simulation | `sim_1d96603073ae` |
-| Szenario | Domainmigration `alexle135.de` → `alex-schneider.dev` |
-| Social-Umgebungen | Reddit-/Twitter-artige Simulation |
-| Evidence-Schema des historischen Exports | `2` |
-| Öffentlicher Evidence-Auszug | [`artifacts/evidence-extract.json`](./artifacts/evidence-extract.json) |
-| Artefakt-Provenienz | [`artifacts/README.md`](./artifacts/README.md) |
+| Report | `report_37944872ec76` |
+| Report-Modus | `balanced` |
+| Report-Writer | Gemini 3.6 Flash |
+| Simulationsprofile | 30 geladene Agentenprofile |
+| Report-Sections | 6 |
+| Validierte Claim-Zeilen | 24 |
+| Eindeutige Claim-IDs | 17 |
+| Hypothesen | 157 |
+| Eindeutige Hypothesen-IDs | 157 |
+| Data-Gap-Zeilen | 133 |
+| Eindeutige Gap-IDs | 41 |
+| Red-Team | 6 Findings bei `echo_index=0.690` |
 
-## Warum dieser Lauf öffentlich dokumentiert wird
+## Warum dieser Lauf jetzt der Referenzlauf ist
 
-Agora soll nicht dadurch überzeugen, dass ein LLM einen plausibel klingenden Bericht produziert. Interessanter ist, ob die gesamte Pipeline unter realistischen Bedingungen zusammenarbeitet und ob das System mit seinen eigenen Unsicherheiten umgehen kann:
+Der frühere Domainmigrations-Lauf dokumentierte einen älteren Stand der Evidence-Pipeline. Seitdem wurden unter anderem Interview-Binding, kanonische Evidence-Referenzen, Reviewer-Floor und Claim-Gating überarbeitet.
+
+Der aktuelle Lauf ist deshalb aussagekräftiger: **Gemini 3.6 Flash erzeugt einen gut lesbaren, aber stellenweise sehr selbstsicheren Report. Agora muss anschließend entscheiden, welche Aussagen tatsächlich als Claims bestehen dürfen.**
+
+Das ist für die Evaluation wertvoller als ein Writer, der von sich aus extrem vorsichtig formuliert.
 
 ```text
-Dokument / Szenario
-        ↓
-Knowledge Graph
-        ↓
-Stakeholder-Personas
-        ↓
-Social Multi-Agent Simulation
-        ↓
-Graph- und Interaktionsmetriken
-        ↓
-Claim-/Evidence-Prüfung
-        ↓
-Report + Hypothesen + Data Gaps
+Seed / Szenario
+      ↓
+Knowledge Graph + Simulation
+      ↓
+Section-spezifische Agenteninterviews
+      ↓
+Gemini 3.6 Flash als Report-Writer
+      ↓
+Claim Extraction
+      ↓
+Evidence Retrieval + Entailment
+      ↓
+Reviewer-Floor / Confidence-Degradation
+      ↓
+Claims + Hypothesen + Data Gaps
+      ↓
+Red-Team Review
 ```
-
-Der Domainwechsel eignet sich als Referenzfall, weil er mehrere Arten von Konflikten gleichzeitig enthält: Markenwirkung, Recruiting, technische Migration, SEO, E-Mail, Identitätskonsistenz und Bestandsnutzer. Das Seed-Material enthielt außerdem bewusst widersprüchliche und teilweise unbelegte Aussagen. Der Lauf konnte deshalb nicht sinnvoll bestehen, indem Agora einfach alles zusammenfasste und anschließend selbstbewusst nickte.
 
 ## Was Agora als Input bekam
 
-Das Evaluationsszenario kombinierte vier Ebenen:
+Das Testszenario beschreibt die Migration von `alexle135.de` zu `alex-schneider.dev`. Das Seed-Material enthält absichtlich unterschiedliche epistemische Klassen:
 
-1. **dokumentierten Ausgangsbestand**, etwa bestehende Domain-, GitHub- und Website-Informationen,
-2. **Planungsannahmen**, beispielsweise erwartete Vorteile einer Klarnamen-Domain,
-3. **synthetische Stakeholder-Aussagen** für unterschiedliche Perspektiven,
-4. **absichtlich eingebaute Widersprüche und Evidenzlücken**.
+1. dokumentierte Ausgangszustände,
+2. Planungsziele und Optionen,
+3. synthetische Stakeholder-Aussagen,
+4. plausible, aber unbelegte Behauptungen,
+5. Widersprüche und fehlende Informationen.
 
-Die Fragestellung verlangte ausdrücklich die Trennung von dokumentbelegten Aussagen, plausiblen Hypothesen, unbelegten Behauptungen und fehlenden Informationen. Zusätzlich sollte genau eine Migrationsstrategie empfohlen und mit Risiken, Mindestbedingungen und Abbruchkriterien begründet werden.
+Die Fragestellung verlangt ausdrücklich, dokumentbelegte Aussagen, Hypothesen, unbelegte Behauptungen und Datenlücken auseinanderzuhalten und anschließend genau eine Migrationsstrategie zu empfehlen.
 
-Synthetische Aussagen im Seed und alle später von Agenten erzeugten Aussagen sind **keine realen Nutzer- oder Recruiter-Interviews**.
+Synthetische Aussagen im Seed sowie Aussagen der simulierten Agenten sind **Simulationsevidenz, keine empirische Nutzerforschung**.
 
-## Simulation: Population und Snapshot
+## Ablauf des Reports
 
-Für den Lauf wurde vom Betreiber eine **erzeugte Simulationspopulation von 33 Agenten** angegeben. Der exportierte Metrics-Snapshot weist dagegen `total_agents: 24` aus.
+Der Planner erkannte den Intent `risk` und erzeugte sechs Sections:
 
-> [!WARNING]
-> Die Differenz **33 vs. 24** wird hier absichtlich nicht erklärt. Aus den eingefrorenen Exporten lässt sich nicht belastbar ableiten, ob `24` nur aktive Agenten, ein bestimmtes Analysefenster oder eine Instrumentations-/Accounting-Lücke beschreibt. Für die öffentliche Dokumentation gilt daher: **33 = Betreiberangabe zum Laufkontext; 24 = artefaktbelegter Wert des Metrics-Snapshots.**
+1. Kurzfazit
+2. Betroffene Gruppen
+3. Zentrale Risiken
+4. Reibungspunkte und Eskalationspfade
+5. Gegenmaßnahmen
+6. Unsicherheiten und Datenlücken
 
-### Artefaktbelegte Snapshot-Metriken
+Für mehrere Sections wurden jeweils thematisch relevante Agenten aus den 30 geladenen Profilen ausgewählt und über `interview_agents` vertieft befragt. Die Auswahl variierte je Section. Dadurch beziehen sich Aussagen aus den Interviews auf die jeweilige Teilmenge und nicht automatisch auf die gesamte Simulationspopulation.
 
-| Metrik | Wert |
+## Ergebnis des strukturierten ReportV3
+
+Der exportierte ReportV3 weist aus:
+
+| Status | Zeilen |
 |---|---:|
-| `total_agents` | 24 |
-| `total_interactions` | 267 |
-| `cluster_count` | 3 |
-| `echo_chamber_index` | 0.4794 |
-| Bridge Agents | `24, 15, 11, 18, 0` |
-| Clustergrößen | `13 / 6 / 5` |
+| Validierte Claims | 24 |
+| Hypothesen | 157 |
+| Data Gaps | 133 |
 
-Der Evidence-Export enthält außerdem gesampelte `agent_action`-Ereignisse, deren Sampling-Metadaten `sampled_from_total: 473` ausweisen. **473 Actions und 267 Interactions sind unterschiedliche exportierte Größen und werden hier nicht gleichgesetzt.**
+Die reine Zeilenzahl darf allerdings nicht mit eindeutigen Objekten verwechselt werden. Im Export sind nur **17 eindeutige Claim-IDs** und **41 eindeutige Gap-IDs** vorhanden; die Hypothesen-IDs sind dagegen in diesem Lauf **157/157 eindeutig**.
 
-## Was in der Social-Simulation tatsächlich passiert ist
+Das ist ein bewusst dokumentierter Contract-Fehler des aktuellen Stands.
 
-Der Lauf war keine Folge isolierter Persona-Fragebögen. Agenten erzeugten Social-Actions in Reddit-/Twitter-artigen Umgebungen, unter anderem:
+## Was das Evidence-Gating korrekt abgefangen hat
 
-- `CREATE_POST`,
-- `CREATE_COMMENT`,
-- `LIKE_POST`,
-- `LIKE_COMMENT`,
-- `FOLLOW`.
+Der Gemini-Writer erzeugte mehrere plausible, aber nicht belegte Details. Ein wichtiger Teil davon wurde korrekt zurückgestuft.
 
-Der öffentliche Evidence-Auszug enthält konkrete Beispiele aus mehreren Runden. So erstellt ein `HRRecruiter` in Runde 0 einen Reddit-Post zur neuen Domain. In späteren Runden liken andere Agenten Beiträge auf Reddit und Twitter, reagieren auf Aussagen anderer Rollen und tragen Narrative weiter.
+### Erfundenes Infrastrukturdetail bleibt Hypothese
 
-Besonders aufschlussreich ist ein anderes Ereignis: Ein simulierter Agent mit dem Namen `arn0ld87` behauptet in einem Reddit-Kommentar plötzlich, 301-Redirects seien bereits sauber umgesetzt, TLS laufe über Let's Encrypt und SPF/DKIM/DMARC seien getestet worden. Diese konkrete Betriebsbehauptung ist **Simulationsoutput**, nicht automatisch eine dokumentierte Realwelt-Tatsache.
+Gemini erfand konkrete Alt-Subdomains:
 
-Genau solche Ereignisse sind für diesen Referenzlauf wichtiger als ein hübsches Persona-Zitat: Eine Social-Simulation darf neue Behauptungen erzeugen. Der nachgelagerte Report darf sie aber nicht ungeprüft in Fakten verwandeln.
+- `blog.alexle135.de`
+- `demo.alexle135.de`
 
-## Ergebnis des generierten Reports
+Diese Hosts sind im Seed nicht dokumentiert. Der ReportV3 führt den entsprechenden TLS-Eskalationspfad nicht als validierten Claim, sondern als ungegroundete Hypothese/Data Gap.
 
-Der Report tendierte zu **Option B: kontrollierte 90-Tage-Migration**. Als zentrale Themen wurden unter anderem genannt:
+### Erfundenes E-Mail-Ziel bleibt Hypothese
 
-- Identitätsinkonsistenz zwischen Website, GitHub, Repository-Namen und E-Mail,
-- Redirect- und Erreichbarkeitsrisiken,
-- mögliche SEO-Verluste beziehungsweise Unsicherheit während der Migration,
-- E-Mail-/Auth-/CSP-/CORS-Risiken,
-- mögliche Fehlwahrnehmung von `.dev` als reines Softwareentwicklungsprofil,
-- Spannungen zwischen Recruiting-Positionierung und technischer Tiefe.
+Gemini erzeugte die konkrete Adresse `schneider@alex-schneider.dev`, obwohl das Seed keine endgültige neue Mailadresse festlegt. Auch diese Aussage wurde nicht als validierter Claim übernommen.
 
-Dieses Ergebnis ist eine **simulationsbasierte Entscheidungshilfe**, keine empirisch validierte Prognose.
+### Recruiting-Kausalität wird zurückgestuft
 
-Der Report selbst benennt wichtige Grenzen: Ob Recruiter die neue Domain tatsächlich bevorzugen, ob Rankings real sinken und ob `.dev` in echten Auswahlprozessen falsch interpretiert wird, kann aus der Simulation nicht belastbar beantwortet werden. Dafür wären reale Traffic-/Backlink-Daten, Recruiter-Befragungen, Nutzerfeedback und technische Tests nötig.
+Aussagen wie eine systematische Fehlausrichtung im Recruiting-Funnel oder reale Skepsis technischer Entscheider erhielten keine ausreichende bindende Evidence und verblieben als Hypothesen beziehungsweise `RELATED_ONLY`.
 
-## Evidence Gating: der wichtigere Teil des Referenzlaufs
+### Numerische Overclaims werden entfernt
 
-Die für Agora entscheidende Frage lautet nicht: „Klingt der Report plausibel?“ Sondern: **Was passiert, wenn eine plausible Aussage nicht ausreichend belegt ist?**
+Der Lauf entfernte numerische Aussagen, wenn Zahl, Bezugsgruppe oder Aussage nicht ausreichend gedeckt waren. Dazu gehören beispielsweise künstliche Schwellenwerte und zu starke 30-/60-/90-Tage-Aussagen.
 
-Der historische Evidence-Export zeigt mehrere Schutzmechanismen.
+## Wichtigster aktueller Fehler: Compound Claims umgehen den Gate
 
-### `RELATED_ONLY` ist kein Beleg
+Der deutlichste Befund dieses Laufs ist `claim_12`.
 
-Ein Beispiel aus dem Export:
+Dieser eine „Claim“ enthält sieben komplette Risikopunkte gleichzeitig, unter anderem:
 
-- Claim: Die neue Domain solle professioneller auf Recruiter wirken und den Klarnamen stärker hervorheben.
-- gefundene Evidence: Die neue Domain werde Primärdomain und die alte Domain erhalte Redirects.
-- Ergebnis: `RELATED_ONLY`
-- Begründung: `thematisch verwandt, aber kein Beleg`
-- `supports_claim: false`
+- Identitätswirkung auf SRE-/DevOps-Teamleads,
+- E-Mail-/Spam-Kausalität,
+- TLS für nicht belegte Alt-Subdomains,
+- `.dev`-Wahrnehmung,
+- SEO-Risiko,
+- Auswirkungen auf Lernende,
+- Monitoring.
 
-Das ist wichtig, weil semantische Ähnlichkeit allein andernfalls sehr leicht als „Evidence“ missverstanden wird.
+Besonders problematisch ist die eingebettete Aussage, das Seed-Dokument **belege**, dass `alexle135` für Google praktisch wertlos sei und das SEO-Risiko deshalb niedrig sei.
 
-### Numerische Aussagen werden nicht automatisch durchgewunken
+Dieselbe SEO-Aussage fällt an anderer Stelle korrekt durch das Evidence-Gating und wird nur als `RELATED_ONLY` beziehungsweise Hypothese geführt. Innerhalb des großen Compound Claims wird der gesamte Block jedoch als validierter Claim persistiert.
 
-Mehrere Aussagen zum vermeintlichen 90-Tage-Konsens wurden im Evidence-Export mit `INSUFFICIENT` bewertet und aus dem Fließtext entfernt, weil die konkrete Zahl beziehungsweise Bezugsgruppe nicht ausreichend belegt war.
+Damit zeigt der Lauf eine zentrale Grenze:
 
-Dazu gehört beispielsweise die Behauptung, *alle acht* befragten Agenten hätten ausnahmslos mindestens 90 Tage gefordert. Dass eine Aussage plausibel zum Gesamtnarrativ passt, reicht für die numerische Behauptung nicht aus.
+```text
+atomarer problematischer Claim
+→ Gate
+→ RELATED_ONLY
+→ Hypothese ✅
 
-### Reviewer-Floor
+identischer Claim in großem Mehrfach-Block
+→ Gesamtblock erhält passende Evidence
+→ VALIDATED ❌
+```
 
-Mehrere Aussagen wurden als Hypothesen geführt, weil nur eine der zwei geforderten stützenden Evidence-Quellen vorlag. Das betrifft unter anderem Aussagen zur Professionalitätswirkung der neuen Domain.
+**Folgerung:** Claim-Atomicity ist ein P0-Thema. Ein Claim darf nur eine eigenständig überprüfbare Proposition enthalten.
 
-### Confidence-Degradation
+## Context-Scope-Loss
 
-Der Export enthält sechs Einträge im `degradation_log`, bei denen ein ursprünglich zu hoch angesetztes `medium`-Label auf `low` heruntergestuft wurde. Der Validator begründet das damit, dass die für `agent_grounded` benötigte Kombination aus Agent-Zitat und Seed-Corpus-Evidence nicht vorhanden war.
+Ein zweiter struktureller Fehler betrifft den Kontext von Evidence.
 
-Diese Fälle sind im [`evidence-extract.json`](./artifacts/evidence-extract.json) reproduzierbar dokumentiert.
+Das Seed enthält ein Banner `alexle135.de wird alex-schneider.dev` im Kontext einer bestimmten Migrationsoption. Der Writer übernimmt dieses Element später als allgemeine beziehungsweise Option-B-Maßnahme. Weil der Text selbst im Seed vorkommt, kann ein einfacher Provenance-Check die Kontextverschiebung nicht erkennen.
 
-## Was in diesem Lauf funktioniert hat
+Evidence benötigt deshalb nicht nur eine Quelle, sondern auch semantischen Scope, beispielsweise:
 
-Auf Basis der vorhandenen Artefakte lässt sich für diesen konkreten Run belegen:
+```yaml
+source_context:
+  option_id: C
+  object_type: proposed_measure
+  section: migration_options
+```
 
-- die Pipeline lief von Szenario/Knowledge-Graph-Kontext bis zum strukturierten Report,
-- Agenten führten Social-Actions in Reddit-/Twitter-artigen Umgebungen aus,
-- Interaktions- und Graphmetriken wurden erzeugt,
-- mehrere Cluster und Bridge Agents wurden berechnet,
-- der Report strukturierte Stakeholder-Konflikte, Risiken, Hypothesen und Data Gaps,
-- thematisch verwandte, aber nicht tragende Evidence konnte als `RELATED_ONLY` abgelehnt werden,
-- unzureichend belegte numerische Aussagen konnten als `INSUFFICIENT` aus dem Fließtext entfernt werden,
-- Reviewer-Floor-Regeln verschoben schwach belegte Aussagen in Hypothesen,
-- Confidence konnte validatorseitig heruntergestuft werden,
-- Markdown-, HTML-, PDF- und Evidence-JSON-Exporte wurden für denselben Report erzeugt.
+Eine korrekte Quelle im falschen Entscheidungskontext ist kein belastbarer Beleg.
 
-Das ist der eigentliche Nachweis dieses Referenzlaufs: **Agora hat eine nicht-triviale Analyse-Pipeline end-to-end ausgeführt und dabei seine Evidenzgrenzen zumindest teilweise maschinenlesbar sichtbar gemacht.**
+## Recommendation benötigt Counter-Evidence
 
-## Was nicht funktioniert hat oder unklar blieb
+Ähnlich verhält es sich mit Empfehlungen zur GitHub-Umbenennung. Der Report schlägt konkrete GitHub-/Repository-Renames vor und Teile davon gelangen in validierte Claims.
 
-Ein Referenzlauf, der nur Erfolge dokumentiert, wäre Werbung. Deshalb gehören die Schwächen in denselben Bericht.
+Für Entscheidungsempfehlungen reicht es nicht, nur stützende Evidence zu suchen. Der Binder muss auch widersprechende oder einschränkende Evidence abrufen:
 
-### 1. Population Accounting ist nicht eindeutig
+```text
+Recommendation Candidate
+        ↓
+Supporting Evidence
+        +
+Contradicting Evidence
+        ↓
+SUPPORTED / CONFLICT / INSUFFICIENT
+```
 
-Die vom Betreiber angegebene Population von 33 erzeugten Agenten und `total_agents: 24` im Metrics-Snapshot sind nicht sauber miteinander erklärbar. Das sollte künftig im RunManifest beziehungsweise in Simulationsmetriken eindeutig getrennt werden, etwa in `generated`, `activated`, `participating` und `observed_in_snapshot`.
+## Claim- und Gap-Identität
 
-### 2. Der finale Report zeigt die Social-Simulation nur teilweise
+Der Export enthält 24 Claim-Zeilen, aber nur 17 eindeutige Claim-IDs. Beispiele für mehrfach vergebene IDs sind `claim_01`, `claim_08`, `claim_10` und `claim_14`.
 
-Im Evidence-Export sind Social-Actions, Cluster, Bridge Agents und ein Echo-Chamber-Index vorhanden. Der finale Markdown-/PDF-Report wirkt dagegen stellenweise wie eine Folge vertiefender Persona-Interviews. Dadurch wird ausgerechnet der soziale Teil der Multi-Agenten-Simulation schwächer sichtbar als er in den Rohdaten vorhanden ist.
+Bei den Data Gaps ist die Wiederverwendung stärker ausgeprägt: 133 Zeilen teilen sich nur 41 eindeutige `gap_*`-IDs. Die Nummerierung startet offenbar abschnittsweise neu.
 
-### 3. „Konsens“ wird stellenweise zu stark formuliert
+Die Hypothesen-IDs sind dagegen in diesem Lauf eindeutig. Das zeigt, dass globale Identität technisch erreichbar ist, aber noch nicht über alle Report-Objekttypen konsistent erzwungen wird.
 
-Der Report verwendet Formulierungen wie „Konsens“ oder „alle acht“, während das Evidence-Gating einzelne dazugehörige numerische Aussagen später als `INSUFFICIENT` einstuft. Das ist kein Grund, den Validator zu lockern. Die Synthese sollte vorsichtiger formulieren, zum Beispiel `starke Konvergenz` oder `häufiges Muster`, solange die konkrete Bezugsgruppe nicht belegt ist.
+Erwarteter Contract:
 
-### 4. Graphmetriken werden noch zu wenig in die Interpretation eingebaut
+```text
+UNIQUE(report_id, claim_id)
+UNIQUE(report_id, hypothesis_id)
+UNIQUE(report_id, gap_id)
+```
 
-Drei Cluster, Bridge Agents und ein Echo-Chamber-Index von `0.4794` sind vorhanden. Der Report erklärt aber nicht ausreichend, **welche Narrative in welchem Cluster entstanden**, welche Agenten Argumente zwischen Gruppen transportierten oder wie robust eine Konvergenz über Clustergrenzen hinweg war.
+## Data Gaps sind noch zu breit definiert
 
-Gerade hier liegt Potenzial, Agora klar von einem gewöhnlichen LLM-Stakeholderbericht zu unterscheiden.
+Nicht alles, was keine Evidence erhält, ist eine Datenlücke.
 
-### 5. Historische Evidence-Identität war nicht kanonisch genug
+Im Export erscheinen beispielsweise auch:
 
-Der parallel geführte Audit-/Remediation-Prozess bestätigte für den damaligen Stand ein strukturelles Problem: Evidence-Referenzen konnten auf freie Quellenstrings wie `report_tool` zurückfallen und dadurch keine eindeutig auflösbare Evidence-Identität darstellen.
+- Empfehlungen,
+- Überschriften,
+- narrative Übergänge,
+- Einleitungen zu Persona-Zitaten,
+- komplette Eskalationsszenarien
 
-Das ist relevant für diesen historischen Lauf, weil der Evidence-Export genau aus dieser Generation stammt.
+als `Data Gap`.
 
-### 6. Niedrige belastbare Claim-Ausbeute ist sichtbar
+Vor dem Evidence-Binding sollte deshalb zunächst der Satz-/Blocktyp bestimmt werden:
 
-Viele inhaltlich sinnvolle Aussagen landen als Hypothesen oder Data Gaps, weil `no_evidence_bound`, `RELATED_ONLY` oder Reviewer-Floor-Regeln greifen. Das ist sicherer als falsche Sicherheit, zeigt aber zugleich, dass Retrieval, Provenance-Bindung und Claim-Funnel weiter kalibriert werden müssen.
+```text
+FACT
+SIMULATION_OBSERVATION
+HYPOTHESIS
+RECOMMENDATION
+QUESTION
+HEADING
+TRANSITION
+QUOTE
+DATA_GAP
+```
 
-### 7. Der historische Lauf ist noch kein reproduzierbarer Benchmark
+Nur echte fehlende Informationen sollten als Data Gaps gezählt werden. Die aktuelle Kennzahl `133` ist deshalb als Rohzahl sichtbar, aber noch keine saubere Qualitätsmetrik.
 
-Es existieren IDs und Exportartefakte, aber für diesen historischen Run noch kein vollständiger, versionierter RunManifest-/Replay-Vertrag mit allen Input-Hashes, Modell-/Provider-Routen, Prompt-/Schema-Versionen, Seeds und Feature-Flags.
+## Strukturierte Extraktion ist noch unvollständig
 
-Der Lauf wird deshalb als **frozen historical reference run** dokumentiert und nicht nachträglich zum reproduzierbaren Benchmark umetikettiert.
+Einzelne validierte Claims beginnen mitten in Listen oder enthalten mehrere Markdown-Blöcke. Beispiele sind abgeschnittene Listenfragmente wie ein Claim, der mit `B. via Let's Encrypt / ACME)` beginnt.
 
-## Laufbeobachtung, Audit-Finding und Remediation sauber getrennt
+Das deutet darauf hin, dass Claim Extraction teilweise noch auf Textsegmenten statt auf strukturierten Markdown-/AST-Blöcken arbeitet.
 
-| Ebene | Befund | Status |
-|---|---|---|
-| Laufbeobachtung | Social-Actions, 267 Interaktionen, 3 Cluster, Evidence-Gating und Report wurden erzeugt | artefaktbelegt |
-| Laufbeobachtung | 33 erzeugte Agenten laut Betreiberangabe vs. `total_agents: 24` im Metrics-Snapshot | ungeklärt |
-| Laufbeobachtung | Report nutzt teils stärkere Konsenssprache als einzelne Evidence-Urteile tragen | sichtbar im historischen Export |
-| Audit/Analyse | freie/duplizierbare Evidence-Referenzen konnten auf `report_tool` zurückfallen | bestätigt |
-| Remediation | kanonische deterministische `evidence_id`, Evidence-Index und Cross-Reference-Validierung | in [PR #1147](https://github.com/arn0ld87/agora/pull/1147) gemergt |
-| Folgearbeit | serverseitig verifizierte Seed-Chunk-Provenance | weiterhin separate Arbeit, u. a. #1086 |
-| Folgearbeit | Claim-Funnel/Kalibrierung | separate Arbeit, u. a. #765 |
-| Folgearbeit | RunManifest/Replay/Reproduzierbarkeit | Release-Arbeit Richtung `0.10.0`, u. a. #763 |
+Quotes, Listen, Tabellen und Maßnahmenblöcke sollten vor der Claim-Extraktion atomar strukturiert werden.
 
-PR #1147 behebt **nicht** rückwirkend alle Schwächen dieses historischen Reports. Genau deshalb bleibt der alte Lauf als historisches Artefakt interessant: Er zeigt sowohl vorhandene Schutzmechanismen als auch die damaligen Grenzen.
+## Red-Team Review
 
-## Was dieser Lauf demonstriert
+Nach Abschluss der Sections lief ein Red-Team-Schritt und meldete:
 
-Dieser konkrete Lauf unterstützt folgende Aussagen:
+- **6 Findings**
+- `echo_index=0.690`
 
-1. Agora kann einen Dokument-/Entscheidungsfall durch seine Kernpipeline verarbeiten.
-2. Agenten können in einer Social-Simulationsumgebung miteinander interagieren.
-3. Agora kann aus dem Interaktionsgraphen Metriken wie Cluster, Bridge Agents und Echo-Chamber-Index erzeugen.
-4. Report-Synthese kann Risiken, Konfliktlinien, Hypothesen und fehlende Informationen strukturieren.
-5. Evidence-Gating kann semantisch verwandte, aber nicht tragende Quellen erkennen.
-6. Unzureichend belegte numerische Aussagen können aus dem validierten Fließtext herausfallen.
-7. Confidence-Verstöße können maschinenlesbar degradiert werden.
-8. Ein realer End-to-End-Lauf kann Produktmängel aufdecken, die anschließend in konkrete Remediation münden.
+Die Logs zeigen allerdings, dass der Report unmittelbar vor dem Red-Team-Schritt gespeichert wurde und danach kein weiterer Persist-/Export-Schritt sichtbar ist.
 
-## Was dieser Lauf ausdrücklich nicht demonstriert
+Deshalb bleibt für diesen Referenzlauf offen, ob die sechs Findings den final ausgelieferten ReportV3-Zustand tatsächlich verändern oder nur als nachgelagerte Review-Metadaten existieren.
 
-Aus diesem Referenzlauf darf **nicht** abgeleitet werden:
+Das sollte künftig explizit nachvollziehbar sein:
 
-- dass Agora reale Menschen zuverlässig vorhersagt,
-- dass die Agentenpopulation repräsentativ für Recruiter, Entwickler oder Websitebesucher ist,
-- dass `alex-schneider.dev` real bessere Jobchancen erzeugt,
-- dass Recruiter `.dev` tatsächlich bevorzugen,
-- dass die Domainmigration reale SEO-Verluste von bestimmter Höhe verursacht,
-- dass der Echo-Chamber-Index extern validiert oder allgemein interpretierbar ist,
-- dass jeder Agora-Lauf dieselbe Qualität erreicht,
-- dass dieser historische Lauf vollständig reproduzierbar ist,
-- dass mehrere übereinstimmende Agenten eine empirische Mehrheitsmeinung darstellen.
+```text
+Report Draft
+→ Red Team
+→ Findings anwenden / Confidence degradieren
+→ Final Validation
+→ Final Export
+```
 
-## Reproduzierbarkeitsstatus
+## Tool-Routing-Beobachtung
 
-**Status: historischer Referenzlauf, nicht vollständiger Replay-Benchmark.**
+Während der letzten Section protokollierte der Lauf mehrfach Fehler wie:
 
-Vorhanden sind:
+`'DefaultApi' object has no attribute 'insight_forge'`
 
-- Report-ID und Simulation-ID,
-- Report in mehreren Exportformaten,
-- Evidence-Export,
-- Graph-/Interaktionsmetriken,
-- Social-Action-Samples,
-- maschinenlesbare Hypothesen, Data Gaps und Degradation-Einträge,
-- SHA-256-Prüfsummen der für diese Auswertung verwendeten Originalexporte.
+und entsprechende Varianten für weitere Tools. Die eigentlichen Tool-Aufrufe wurden anschließend dennoch ausgeführt. Section 4 erreichte außerdem das maximale Iterationslimit und wurde zwangsfinalisiert.
 
-Für einen echten Replay-Benchmark fehlen beim historischen Lauf noch Teile des geplanten RunManifest-Vertrags. Ein späterer vollständig manifestierter Replay-Run sollte als **neuer** Referenzlauf dokumentiert werden, statt die Historie dieses Laufs zu überschreiben.
+Das beeinträchtigte den Abschluss des Runs nicht, zeigt aber unnötige Routing- und Orchestrierungsinstabilität.
 
-## Artefakte
+## Was dieser Lauf aktuell demonstriert
 
-- [`artifacts/evidence-extract.json`](./artifacts/evidence-extract.json) — deterministischer öffentlicher Extract der in dieser Case Study ausgewerteten Evidence-Felder.
-- [`artifacts/README.md`](./artifacts/README.md) — Provenienz, Originalgrößen und SHA-256-Prüfsummen der vollständigen Markdown-, JSON-, HTML- und PDF-Exporte.
+Aus den eingefrorenen Artefakten lässt sich für diesen Run belastbar ableiten:
 
-Der vollständige historische Evidence-Export umfasste 419.716 Byte und 5.809 Zeilen. Er wird hier nicht als zweite Dokumentations-SSoT eingecheckt; der öffentliche Extract macht stattdessen die für diese Case Study herangezogenen Felder reviewbar und bindet sie per SHA-256 an den ursprünglichen Export.
+- die Report-Pipeline lief über sechs geplante Sections bis zum ReportV3,
+- section-spezifische Agenteninterviews wurden erfolgreich ausgeführt,
+- der Writer erzeugte mehrere konkrete Halluzinationen und Overclaims,
+- ein relevanter Teil davon wurde durch Evidence-Gating und Reviewer-Floor in Hypothesen verschoben,
+- numerische Überdehnungen konnten als `INSUFFICIENT` beziehungsweise `CONTRADICTED` entfernt werden,
+- Confidence wurde für nicht ausreichend agent-grounded Claims heruntergestuft,
+- Hypothesen erhielten reportweit eindeutige IDs,
+- der Red-Team-Mechanismus wurde bei erhöhtem Echo-Index aktiviert.
 
-## Schlussfolgerung
+Damit zeigt der Run einen realen systemischen Mehrwert gegenüber einem ungeprüften Single-Prompt-Report: **Der Writer darf plausible Fehler erzeugen, und ein separater Pfad verwirft einen Teil davon maschinenlesbar.**
 
-Dieser Run ist kein Beweis, dass eine Gruppe künstlicher Agenten die Realität korrekt nachspielt. Er ist ein **technischer Referenznachweis dafür, dass Agora bereits mehr tut als einen Prompt in einen langen Bericht zu verwandeln**:
+## Was dieser Lauf ausdrücklich noch nicht beweist
 
-- soziale Agenteninteraktionen werden erzeugt,
-- daraus entstehen messbare Graphstrukturen,
-- die Report-Synthese versucht daraus eine Entscheidungsvorlage abzuleiten,
-- ein separater Evidence-Layer kann Teile dieser Synthese zurückweisen oder herabstufen,
-- und die dabei sichtbaren Schwächen lassen sich in konkrete technische Remediation überführen.
+Der Lauf beweist nicht:
 
-Die verbleibenden Lücken sind Teil dieses Referenzlaufs, nicht Fußnoten, die für eine hübschere Demo verschwinden sollen.
+- dass ein als `VALIDATED` markierter Claim automatisch fachlich wahr ist,
+- dass Simulationsevidenz empirische Stakeholderforschung ersetzt,
+- dass die aktuelle Claim-Extraktion atomar genug ist,
+- dass Recommendation-Konflikte vollständig erkannt werden,
+- dass Source-Status und Optionskontext lückenlos erhalten bleiben,
+- dass die Zahl der Data Gaps bereits eine sinnvolle Qualitätsmetrik ist,
+- dass Red-Team-Findings den finalen Export nachweisbar verändern,
+- dass ein einzelner Run statistische oder prädiktive Validität zeigt.
+
+## Priorisierte Folgearbeit aus diesem Lauf
+
+1. **P0 — Compound Claims atomisieren und pro Proposition binden.**
+2. **P0 — globale Eindeutigkeit von Claim- und Gap-IDs erzwingen.**
+3. **P0 — Source-Status und Context-Scope als Teil der Evidence-Provenance erhalten.**
+4. **P0 — für Recommendations aktiv Counter-Evidence abrufen.**
+5. **P1 — Markdown-/Quote-/List-Blöcke strukturell vor Claim Extraction parsen.**
+6. **P1 — echte Data-Gap-Typisierung statt `ungedeckt = Gap`.**
+7. **P1 — Red-Team-Findings vor dem finalen Export nachweisbar anwenden.**
+8. **P2 — Tool-Routing und Max-Iteration-Verhalten stabilisieren.**
+
+## Fazit
+
+Dieser Lauf wird nicht als „Beweis, dass Agora recht hat“ veröffentlicht. Er ist interessanter als das:
+
+> **Gemini 3.6 Flash erzeugt einen überzeugend klingenden Bericht mit mehreren plausiblen Fehlern. Agora fängt einen Teil dieser Fehler bereits systematisch ab — und der Referenzlauf zeigt ebenso offen, an welchen Stellen der aktuelle Evidence-Vertrag noch versagt.**
+
+Genau diese Kombination aus funktionierendem Guardrail und reproduzierbar sichtbaren Schwächen macht den Lauf zu einem geeigneten aktuellen Referenzfall.
