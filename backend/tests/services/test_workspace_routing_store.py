@@ -7,12 +7,13 @@ import stat
 import subprocess
 import sys
 import textwrap
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
 
-from app.contracts.llm_routing_contract import StageLLMRoute
+from app.contracts.llm_routing_contract import StageId, StageLLMRoute
 from app.contracts.workspace_routing_contract import WorkspaceLlmRoutingDefaults
 from app.services.workspace_routing_store import (
     WorkspaceRoutingStore,
@@ -81,10 +82,18 @@ def test_singleton_uses_env_data_dir(monkeypatch, tmp_path: Path):
 _CHILD_WORKER_TEMPLATE = textwrap.dedent(
     """
     import sys
+    import time
     from pathlib import Path
+
     sys.path.insert(0, {backend_path!r})
     from app.contracts.llm_routing_contract import StageLLMRoute
     from app.services.workspace_routing_store import WorkspaceRoutingStore
+
+    ready_path = Path({ready_path!r})
+    start_path = Path({start_path!r})
+    ready_path.touch()
+    while not start_path.exists():
+        time.sleep(0.01)
 
     store = WorkspaceRoutingStore(data_dir=Path({data_dir!r}))
     store.set_stage_override(
@@ -96,26 +105,23 @@ _CHILD_WORKER_TEMPLATE = textwrap.dedent(
 
 
 def _spawn_child_set_override(
-    backend_path: Path, data_dir: Path, stage_id: str, model: str
+    backend_path: Path,
+    data_dir: Path,
+    ready_path: Path,
+    start_path: Path,
+    stage_id: StageId,
+    model: str,
 ) -> subprocess.Popen[bytes]:
-    """Startet einen echten neuen Python-Prozess.
-
-    Wir nutzen ``subprocess.Popen`` statt ``multiprocessing.spawn``, weil
-    spawn das Test-Modul re-importieren würde und das beim pytest-Modulpfad
-    fehlschlägt. Ein eigenständiger Python-Prozess ist die exaktere
-    Simulation eines zweiten Gunicorn-Workers.
-    """
+    """Startet einen echten Interpreter mit expliziter Readiness-Barriere."""
     code = _CHILD_WORKER_TEMPLATE.format(
         backend_path=str(backend_path),
         data_dir=str(data_dir),
+        ready_path=str(ready_path),
+        start_path=str(start_path),
         stage_id=stage_id,
         model=model,
     )
-    return subprocess.Popen(
-        [sys.executable, "-c", code],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
+    return subprocess.Popen([sys.executable, "-c", code])
 
 
 def test_parallel_processes_no_lost_update(tmp_path: Path):
@@ -125,9 +131,14 @@ def test_parallel_processes_no_lost_update(tmp_path: Path):
     leeren Defaults, schrieb seinen eigenen Override und überschrieb damit
     die Updates der anderen Worker. Mit ``fcntl.flock`` über die gesamte
     read-modify-write-Sequenz bleibt jeder Override erhalten.
+
+    Jeder Worker meldet nach seinen Cold Imports explizit Readiness. Erst wenn
+    alle sieben bereit sind, gibt der Parent die gleichzeitigen Writes frei.
+    Damit misst die gemeinsame 30-Sekunden-Deadline echte Child-/Lock-Hänger
+    statt plattformabhängiger Importzeit; die Prozess- und ``flock``-Grenze
+    bleibt vollständig erhalten.
     """
-    backend_path = Path(__file__).resolve().parents[2]
-    stages_and_models = [
+    stages_and_models: list[tuple[StageId, str]] = [
         ("document_ingest", "gpt-4o-mini"),
         ("ontology_generation", "gpt-4o"),
         ("graph_build", "gpt-4o"),
@@ -136,17 +147,74 @@ def test_parallel_processes_no_lost_update(tmp_path: Path):
         ("report_generation", "gpt-4o"),
         ("evaluation", "gpt-4o-mini"),
     ]
-    procs = [
-        _spawn_child_set_override(backend_path, tmp_path, stage, model)
-        for stage, model in stages_and_models
-    ]
-    for p in procs:
-        stdout, stderr = p.communicate(timeout=30)
-        assert p.returncode == 0, (
-            f"child process failed: rc={p.returncode}\n"
-            f"stdout={stdout.decode(errors='replace')}\n"
-            f"stderr={stderr.decode(errors='replace')}"
-        )
+    backend_path = Path(__file__).resolve().parents[2]
+    start_path = tmp_path / ".routing-workers-start"
+    workers: list[tuple[StageId, Path, subprocess.Popen[bytes]]] = []
+    try:
+        for index, (stage, model) in enumerate(stages_and_models):
+            ready_path = tmp_path / f".routing-worker-{index}.ready"
+            process = _spawn_child_set_override(
+                backend_path,
+                tmp_path,
+                ready_path,
+                start_path,
+                stage,
+                model,
+            )
+            workers.append((stage, ready_path, process))
+
+        # Import-Readiness ist eine Umgebungsbedingung, nicht die getestete
+        # Lock-Invariante. 120 s sind ein Safety-Bound für langsame lokale
+        # Cold-Starts; gewartet wird auf Marker, nicht auf eine feste Pause.
+        import_deadline = time.monotonic() + 120
+        while not all(ready_path.exists() for _, ready_path, _ in workers):
+            exited = [
+                (stage, process.returncode)
+                for stage, _, process in workers
+                if process.poll() is not None
+            ]
+            assert not exited, f"child exited before readiness: {exited}"
+            missing = [
+                stage for stage, ready_path, _ in workers if not ready_path.exists()
+            ]
+            remaining = import_deadline - time.monotonic()
+            assert remaining > 0, (
+                f"child import readiness timed out; missing stages: {missing}"
+            )
+            time.sleep(min(0.05, remaining))
+
+        start_path.touch()
+        write_deadline = time.monotonic() + 30
+        pending = {process: stage for stage, _, process in workers}
+        while pending:
+            for process, stage in list(pending.items()):
+                returncode = process.poll()
+                if returncode is None:
+                    continue
+                assert returncode == 0, (
+                    f"child process failed: stage={stage}, returncode={returncode}"
+                )
+                del pending[process]
+            if not pending:
+                break
+            remaining = write_deadline - time.monotonic()
+            assert remaining > 0, (
+                "child writes timed out after readiness; pending stages: "
+                f"{list(pending.values())}"
+            )
+            time.sleep(min(0.01, remaining))
+    finally:
+        for _, _, process in workers:
+            if process.poll() is None:
+                process.kill()
+        cleanup_deadline = time.monotonic() + 5
+        survivors = []
+        for stage, _, process in workers:
+            try:
+                process.wait(timeout=max(0, cleanup_deadline - time.monotonic()))
+            except subprocess.TimeoutExpired:
+                survivors.append(stage)
+        assert not survivors, f"child cleanup timed out: {survivors}"
 
     # Verifikation: jeder Stage-Override muss persistiert sein
     store = WorkspaceRoutingStore(data_dir=tmp_path)
