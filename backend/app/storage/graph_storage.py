@@ -41,6 +41,8 @@ class GraphStorage(ABC):
         ner_extractor: Optional[Any] = None,
         degradations: Optional[Any] = None,
         extraction_tally: Optional[Any] = None,
+        document_id: Optional[str] = None,
+        chunk_id: Optional[int] = None,
     ) -> str:
         """
         Process text: NER/RE → create nodes/edges → return episode_id.
@@ -67,6 +69,11 @@ class GraphStorage(ABC):
         ``extraction_tally`` (Issue #1029): optionaler
         ``ChunkExtractionTally``, der zählt, ob dieser Chunk dem NER etwas
         entnommen hat — Grundlage der Chunk-Erfolgsquote.
+
+        ``document_id``/``chunk_id`` (Issue #1152 Slice 1, Teil B): optionale
+        Dokument-Provenance des Chunks (ADR-0013). Beide bleiben ``None``,
+        wenn kein Dokument-Manifest-Sidecar vorliegt (Altprojekte) — kein
+        Schema-Zwang, keine Migration, kein Backfill (ADR-0013 §3).
         """
 
     @abstractmethod

@@ -69,6 +69,8 @@ class _FakeBuilder:
         ner_extractor,
         degradations,
         extraction_tally,
+        document_ids,
+        chunk_ids,
     ):
         if self._batch_effect is not None:
             self._batch_effect(degradations, extraction_tally)

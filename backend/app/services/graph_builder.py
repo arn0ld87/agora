@@ -343,6 +343,8 @@ class GraphBuilderService:
         ner_extractor: Optional["NERExtractor"] = None,
         degradations: Optional[DegradationCollector] = None,
         extraction_tally: Optional[ChunkExtractionTally] = None,
+        document_ids: Optional[List[Optional[str]]] = None,
+        chunk_ids: Optional[List[Optional[int]]] = None,
     ) -> List[str]:
         """Add text chunks to graph in parallel, return uuid list of all episodes.
 
@@ -369,10 +371,23 @@ class GraphBuilderService:
         überhaupt etwas entnommen hat. Ein technisch erfolgreicher Chunk
         mit null Extraktionen passierte bislang ungeprüft — auffällig wird
         er erst im Verhältnis zur Gesamtzahl.
+
+        ``document_ids``/``chunk_ids`` (Issue #1152 Slice 1, Teil B):
+        optionale, zu ``chunks`` parallele Listen gleicher Länge mit der
+        Dokument-Provenance je Chunk (``None`` je Eintrag bei Altprojekten
+        ohne Manifest-Sidecar). Wird an ``storage.add_text`` durchgereicht
+        und dort optional auf den Episode-Knoten geschrieben. Bleiben beide
+        Parameter ``None`` (Default), ändert sich nichts am bisherigen
+        Verhalten.
         """
         total_chunks = len(chunks)
         if total_chunks == 0:
             return []
+
+        if document_ids is not None and len(document_ids) != total_chunks:
+            raise ValueError("document_ids must have the same length as chunks")
+        if chunk_ids is not None and len(chunk_ids) != total_chunks:
+            raise ValueError("chunk_ids must have the same length as chunks")
 
         max_workers = max(1, min(Config.GRAPH_PARALLEL_CHUNKS, total_chunks))
         logger.info(
@@ -399,6 +414,8 @@ class GraphBuilderService:
                     ner_extractor=ner_extractor,
                     degradations=degradations,
                     extraction_tally=extraction_tally,
+                    document_id=document_ids[idx] if document_ids is not None else None,
+                    chunk_id=chunk_ids[idx] if chunk_ids is not None else None,
                 )
                 elapsed = time.time() - t0
                 logger.info(

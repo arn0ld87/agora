@@ -212,6 +212,8 @@ class Neo4jWriteMixin:
         ner_extractor: Optional["NERExtractor"] = None,
         degradations: Optional["DegradationCollector"] = None,
         extraction_tally: Optional["ChunkExtractionTally"] = None,
+        document_id: Optional[str] = None,
+        chunk_id: Optional[int] = None,
     ) -> str:
         """Process text in three phases — NER, embed, persist.
 
@@ -240,6 +242,12 @@ class Neo4jWriteMixin:
         ``extraction_tally`` (Issue #1029): zählt mit, ob dieser Chunk dem
         NER überhaupt etwas entnommen hat. Erst der Anteil über den ganzen
         Build macht daraus einen Befund.
+
+        ``document_id``/``chunk_id`` (Issue #1152 Slice 1, Teil B): optionale
+        Dokument-Provenance, wird unverändert an ``_persist_episode``
+        durchgereicht und dort — falls gesetzt — als Property auf den
+        Episode-Knoten geschrieben. ``None`` (Default) ändert nichts am
+        bisherigen Verhalten (ADR-0013 §3).
         """
         episode_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
@@ -275,6 +283,8 @@ class Neo4jWriteMixin:
             entity_embeddings=entity_embeddings,
             relation_embeddings=relation_embeddings,
             round_num=round_num,
+            document_id=document_id,
+            chunk_id=chunk_id,
         )
 
         logger.info(f"[add_text] Chunk done: episode={episode_id}")
@@ -292,11 +302,20 @@ class Neo4jWriteMixin:
         entity_embeddings: List[List[float]],
         relation_embeddings: List[List[float]],
         round_num: Optional[int],
+        document_id: Optional[str] = None,
+        chunk_id: Optional[int] = None,
     ) -> None:
         """Phase 3 — Persistiert Episode-Node, Entities und Relations in Neo4j.
 
         Storage-intern (Cypher + Driver + Retry); separat von Phase 1/2,
         weil reine Funktionen kein Neo4j-Coupling haben sollen.
+
+        ``document_id``/``chunk_id`` (Issue #1152 Slice 1, Teil B): optionale
+        Dokument-Provenance des Chunks. Neo4j legt für ``null``-wertige
+        Map-Properties in ``CREATE`` keine Property an — bei Altprojekten
+        ohne Manifest (beide Parameter ``None``) trägt der Episode-Knoten
+        also unverändert weder ``document_id`` noch ``chunk_id``. Kein
+        Schema-Zwang, keine Migration, kein Backfill (ADR-0013 §3).
         """
         with self._get_session() as session:
             # Create episode node
@@ -308,13 +327,17 @@ class Neo4jWriteMixin:
                         graph_id: $graph_id,
                         data: $data,
                         processed: true,
-                        created_at: $created_at
+                        created_at: $created_at,
+                        document_id: $document_id,
+                        chunk_id: $chunk_id
                     })
                     """,
                     uuid=episode_id,
                     graph_id=graph_id,
                     data=text,
                     created_at=now,
+                    document_id=document_id,
+                    chunk_id=chunk_id,
                 )
 
             self._call_with_retry(session.execute_write, _create_episode)
