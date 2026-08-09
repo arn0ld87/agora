@@ -68,6 +68,15 @@ class _FakeAgentForDegradation:
         )
         self._section_dedup_check = lambda **kwargs: None
         self._init_evidence_map = lambda report_id: None
+        # Issue #1154: ``_save_evidence_section`` zieht nach der
+        # Normalisierung umgeschlüsselte Evidence-IDs in den Abschnittspuffern
+        # nach. Dieses Double hält keine Puffer — die echte Implementierung
+        # überspringt sie dann folgenlos.
+        self._active_section_evidence: list = []
+        self._active_section_unresolved_evidence: list = []
+        self._remap_active_evidence_ids = (
+            lambda id_remap: ReportAgent._remap_active_evidence_ids(self, id_remap)
+        )
 
 
 def _valid_existing_section() -> dict:

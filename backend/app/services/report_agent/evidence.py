@@ -34,6 +34,59 @@ def init_evidence_map(
     return EvidenceMapModel.model_validate(payload).model_dump(mode="json")
 
 
+#: Präfix des kanonischen Seed-Dokument-Ankers (ADR-0013, Issue #1154).
+_SEED_DOC_ANCHOR_PREFIX = "seed_doc:"
+
+
+def build_seed_document_anchor(provenance: Optional[Dict[str, Any]]) -> Optional[str]:
+    """``seed_doc:<document_id>#chunk:<chunk_id>`` — oder ``None`` (ADR-0013).
+
+    Erwartet die Retrieval-Provenance aus Issue #1152
+    (``provenance_at(...)``). Beide Bestandteile sind Pflicht: Ohne
+    ``chunk_id`` zeigt der Anker auf ein ganzes Dokument statt auf die Stelle,
+    aus der der Fakt stammt, und wäre nicht mehr überprüfbar. Mehrdeutige oder
+    fehlende Herkunft ergibt ``None`` — der Fakt bleibt dann ``graph_relation``,
+    statt einen Dokumentbezug zu behaupten, den niemand nachschlagen kann.
+
+    Autorengegebene Quellen-Labels aus dem Chunk-Text (etwa ``A1``–``J1``)
+    gehen hier bewusst NICHT ein: sie sind über mehrere Uploads nicht
+    eindeutig, zwei Dateien mit gleichem Label und gleicher Chunk-Nummer
+    ergäben denselben Anker (Codex-Review zu PR #1153, ADR-0013 Punkt 2).
+    """
+    if not isinstance(provenance, dict):
+        return None
+    document_id = str(provenance.get("document_id") or "").strip()
+    chunk_id = provenance.get("chunk_id")
+    if not document_id or not isinstance(chunk_id, int) or isinstance(chunk_id, bool):
+        return None
+    anchor = f"{_SEED_DOC_ANCHOR_PREFIX}{document_id}#chunk:{chunk_id}"
+    # ``EvidenceRecordModel.source_id_anchor`` ist auf 200 Zeichen begrenzt.
+    # Ein gekappter Anker wäre nicht mehr auflösbar — dann lieber keiner.
+    if len(anchor) > 200:
+        return None
+    # Schreib- und Lesepfad müssen dieselbe Regel anwenden. Sonst entsteht ein
+    # Record, den der Schreibpfad für verankert hält und der Lesepfad nicht —
+    # er würde bei jedem Laden abgestuft und umgeschlüsselt und wechselte so
+    # dauerhaft seine Identität. Deshalb prüft der Bau mit dem Leser gegen
+    # (negative Chunk-Nummer, ``#`` in der Dokument-ID).
+    return anchor if is_verified_seed_document_anchor(anchor) else None
+
+
+def is_verified_seed_document_anchor(anchor: Any) -> bool:
+    """Prüft, ob ``anchor`` das kanonische Seed-Dokument-Format trägt.
+
+    Gegenstück zu :func:`build_seed_document_anchor` für den Lesepfad: ein
+    persistiertes ``seed_corpus``-Item ohne solchen Anker ist nicht als
+    Dokumentfakt überprüfbar (ADR-0013).
+    """
+    if not isinstance(anchor, str):
+        return False
+    return _SEED_DOC_ANCHOR_RE.fullmatch(anchor.strip()) is not None
+
+
+_SEED_DOC_ANCHOR_RE = re.compile(r"seed_doc:(?P<document_id>[^#]+)#chunk:(?P<chunk_id>\d+)")
+
+
 #: Interner Evidence-`type` → Provenance-`source_kind`.
 #: Ohne diese Abbildung liefen Agentenaktionen, Interviews und Web-Treffer in
 #: den Default und wurden als Seed-Fakt persistiert.

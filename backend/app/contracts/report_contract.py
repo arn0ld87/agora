@@ -44,6 +44,11 @@ class EvidenceType(str, Enum):
     agent_interview = "agent_interview"
     web_search_result = "web_search_result"
     web_fetch = "web_fetch"
+    # ADR-0013 / Issue #1154: Graph-Fakt mit verifizierter Dokumentherkunft.
+    # Additiv — kein bestehender Wert wird angefasst, ``EvidenceSourceKind``
+    # bleibt unverändert (ADR-0002 Anker 3). Das Mapping nach ``seed_corpus``
+    # existiert in ``report_agent/evidence.py::_TYPE_TO_SOURCE_KIND`` bereits.
+    seed_document = "seed_document"
     # NICHT als evidence verwenden, nur in audit_trail (siehe report_agent.py S5-Kommentar)
     model_generated_inference = "model_generated_inference"
 

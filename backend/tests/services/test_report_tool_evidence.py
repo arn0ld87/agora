@@ -329,3 +329,237 @@ def test_metadata_sees_full_section_text() -> None:
     user_msg = next(m["content"] for m in messages if m["role"] == "user")
     assert tail_marker in user_msg
     assert section_content[-200:] in user_msg
+
+
+# ---------------------------------------------------------------------------
+# ADR-0013 / Issue #1154: Graph-Fakt mit Dokumentherkunft wird seed_corpus
+#
+# Slice 1 (#1152) führt document_id/chunk_id bis ins Retrieval. Erst hier
+# entsteht daraus ein Dokumentfakt: ohne dieses Mapping blieb jeder Fakt
+# graph_relation, has_agent_grounded_evidence war unerfüllbar und Claims
+# waren auf low gedeckelt.
+# ---------------------------------------------------------------------------
+
+
+def _search_result_with_provenance(provenance):
+    return SearchResult(
+        facts=["Die Domain wird seit 2019 unter demselben Namen betrieben."],
+        edges=[],
+        nodes=[],
+        query="domainhistorie",
+        total_count=1,
+        fact_provenance=provenance,
+    )
+
+
+def _records(agent):
+    return list(agent.evidence_map["evidence_index"].values())
+
+
+def test_fact_with_document_provenance_becomes_seed_corpus_evidence() -> None:
+    agent = _make_agent()
+
+    agent._record_tool_evidence(
+        tool_name="quick_search",
+        parameters={},
+        structured_result=_search_result_with_provenance(
+            [{"document_id": "doc_a1b2c3d4", "chunk_id": 7}]
+        ),
+        rendered_result="",
+        section_index=1,
+    )
+
+    records = _records(agent)
+    assert len(records) == 1
+    record = records[0]
+    assert record["type"] == "seed_document"
+    assert record["source_kind"] == "seed_corpus"
+    assert record["source_id_anchor"] == "seed_doc:doc_a1b2c3d4#chunk:7"
+    assert EVIDENCE_ID_RE.match(record["evidence_id"])
+
+
+def test_fact_without_document_provenance_stays_graph_relation() -> None:
+    """Kein Raten: ohne verifizierte Herkunft bleibt es eine Graph-Relation."""
+    agent = _make_agent()
+
+    agent._record_tool_evidence(
+        tool_name="quick_search",
+        parameters={},
+        structured_result=_search_result_with_provenance([]),
+        rendered_result="",
+        section_index=1,
+    )
+
+    records = _records(agent)
+    assert len(records) == 1
+    assert records[0]["type"] == "graph_fact"
+    assert records[0]["source_kind"] == "graph_relation"
+    assert records[0].get("source_id_anchor") is None
+
+
+def test_seed_document_identity_follows_the_chunk_not_the_fact_text() -> None:
+    """Derselbe Chunk ist dieselbe Quelle — auch bei anders formuliertem Fakt.
+
+    Der Fakt-Text ist LLM-formuliert und variiert zwischen Abfragen; die
+    Dokumentstelle nicht. Hinge die Identität weiter am Text, entstünden für
+    denselben Beleg mehrere Evidence-Records.
+    """
+    agent = _make_agent()
+    provenance = [{"document_id": "doc_a1b2c3d4", "chunk_id": 7}]
+
+    agent._record_tool_evidence(
+        tool_name="quick_search",
+        parameters={},
+        structured_result=_search_result_with_provenance(provenance),
+        rendered_result="",
+        section_index=1,
+    )
+    first_id = _records(agent)[0]["evidence_id"]
+
+    agent._record_tool_evidence(
+        tool_name="quick_search",
+        parameters={},
+        structured_result=SearchResult(
+            facts=["Der Betrieb der Domain läuft seit 2019 unverändert."],
+            edges=[],
+            nodes=[],
+            query="andere-query",
+            total_count=1,
+            fact_provenance=provenance,
+        ),
+        rendered_result="",
+        section_index=2,
+    )
+
+    records = _records(agent)
+    assert len(records) == 1, "Gleiche Dokumentstelle darf keinen zweiten Record erzeugen."
+    assert records[0]["evidence_id"] == first_id
+
+
+def test_distinct_chunks_of_one_document_stay_distinct_records() -> None:
+    agent = _make_agent()
+
+    agent._record_tool_evidence(
+        tool_name="quick_search",
+        parameters={},
+        structured_result=SearchResult(
+            facts=["Fakt aus Abschnitt sieben.", "Fakt aus Abschnitt acht."],
+            edges=[],
+            nodes=[],
+            query="domainhistorie",
+            total_count=2,
+            fact_provenance=[
+                {"document_id": "doc_a1b2c3d4", "chunk_id": 7},
+                {"document_id": "doc_a1b2c3d4", "chunk_id": 8},
+            ],
+        ),
+        rendered_result="",
+        section_index=1,
+    )
+
+    anchors = {record["source_id_anchor"] for record in _records(agent)}
+    assert anchors == {
+        "seed_doc:doc_a1b2c3d4#chunk:7",
+        "seed_doc:doc_a1b2c3d4#chunk:8",
+    }
+
+
+def test_partial_provenance_list_maps_position_wise() -> None:
+    """Die Provenance-Liste ist positionsparallel — Lücken verschieben nichts."""
+    agent = _make_agent()
+
+    agent._record_tool_evidence(
+        tool_name="quick_search",
+        parameters={},
+        structured_result=SearchResult(
+            facts=["Fakt ohne Herkunft.", "Fakt mit Herkunft."],
+            edges=[],
+            nodes=[],
+            query="domainhistorie",
+            total_count=2,
+            fact_provenance=[None, {"document_id": "doc_a1b2c3d4", "chunk_id": 3}],
+        ),
+        rendered_result="",
+        section_index=1,
+    )
+
+    by_snippet = {record["snippet"]: record for record in _records(agent)}
+    assert by_snippet["Fakt ohne Herkunft."]["source_kind"] == "graph_relation"
+    assert by_snippet["Fakt mit Herkunft."]["source_kind"] == "seed_corpus"
+    assert (
+        by_snippet["Fakt mit Herkunft."]["source_id_anchor"]
+        == "seed_doc:doc_a1b2c3d4#chunk:3"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Anker-Bau: Randfälle
+# ---------------------------------------------------------------------------
+
+
+def test_chunk_id_zero_is_a_valid_anchor() -> None:
+    """Der erste Chunk eines Dokuments hat die Nummer 0.
+
+    Eine Falsy-Prüfung statt einer Typprüfung würde genau ihn verwerfen und
+    ausgerechnet den Dokumentanfang um seinen Beleg bringen.
+    """
+    from app.services.report_agent.evidence import build_seed_document_anchor
+
+    assert (
+        build_seed_document_anchor({"document_id": "doc_a1b2c3d4", "chunk_id": 0})
+        == "seed_doc:doc_a1b2c3d4#chunk:0"
+    )
+
+
+def test_incomplete_or_malformed_provenance_yields_no_anchor() -> None:
+    from app.services.report_agent.evidence import build_seed_document_anchor
+
+    # Ohne chunk_id zeigte der Anker auf ein ganzes Dokument statt auf die
+    # Fundstelle — nicht überprüfbar, also kein Anker.
+    assert build_seed_document_anchor({"document_id": "doc_a1b2c3d4"}) is None
+    assert build_seed_document_anchor({"chunk_id": 3}) is None
+    assert build_seed_document_anchor({"document_id": "  ", "chunk_id": 3}) is None
+    assert build_seed_document_anchor(None) is None
+    assert build_seed_document_anchor("seed_doc:x#chunk:1") is None
+    # bool ist in Python ein int — als Chunk-Nummer trotzdem sinnlos.
+    assert build_seed_document_anchor({"document_id": "doc_x", "chunk_id": True}) is None
+    # Der Anker ist im Vertrag auf 200 Zeichen begrenzt; gekappt wäre er nicht
+    # mehr auflösbar.
+    assert build_seed_document_anchor({"document_id": "d" * 200, "chunk_id": 1}) is None
+
+
+def test_builder_rejects_what_the_reader_would_reject() -> None:
+    """Schreib- und Lesepfad teilen dieselbe Regel.
+
+    Ein Record, den der Bau für verankert hält und der Leser nicht, würde bei
+    jedem Laden abgestuft und umgeschlüsselt — sein Beleg wechselte dauerhaft
+    die Identität (CodeRabbit-Review PR #1166).
+    """
+    from app.services.report_agent.evidence import (
+        build_seed_document_anchor,
+        is_verified_seed_document_anchor,
+    )
+
+    # Eine Dokument-ID mit '#' zerlegte den Anker an der falschen Stelle.
+    assert build_seed_document_anchor({"document_id": "doc#x", "chunk_id": 1}) is None
+    # Negative Chunk-Nummern gibt es nicht.
+    assert build_seed_document_anchor({"document_id": "doc_x", "chunk_id": -1}) is None
+
+    for provenance in (
+        {"document_id": "doc_a1b2c3d4", "chunk_id": 0},
+        {"document_id": "doc_a1b2c3d4", "chunk_id": 12345},
+    ):
+        anchor = build_seed_document_anchor(provenance)
+        assert anchor and is_verified_seed_document_anchor(anchor)
+
+
+def test_is_verified_seed_document_anchor_accepts_only_the_canonical_format() -> None:
+    from app.services.report_agent.evidence import is_verified_seed_document_anchor
+
+    assert is_verified_seed_document_anchor("seed_doc:doc_a1b2c3d4#chunk:7")
+    assert is_verified_seed_document_anchor("seed_doc:doc_a1b2c3d4#chunk:0")
+    assert not is_verified_seed_document_anchor("seed_doc:doc_a1b2c3d4")
+    assert not is_verified_seed_document_anchor("seed_doc:doc_a1b2c3d4#chunk:sieben")
+    assert not is_verified_seed_document_anchor("web:https://example.com")
+    assert not is_verified_seed_document_anchor(None)
+    assert not is_verified_seed_document_anchor("")

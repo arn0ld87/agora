@@ -204,13 +204,159 @@ def migrate_medium_seed_only_claims_to_low(raw: Optional[dict]) -> Optional[dict
             if label != "medium":
                 continue
             evidence = claim.get("evidence") or []
-            if not has_agent_grounded_evidence(evidence):
+            # Ab schema_version 3 tragen die Claim-Einträge nur noch die
+            # Referenz; source_kind und quote stehen kanonisch am Record.
+            # Ohne den Index läse die Prüfung leere Felder und stufte jeden
+            # medium-Claim ab (Issue #1154).
+            if not has_agent_grounded_evidence(
+                evidence, evidence_index=raw.get("evidence_index") or {}
+            ):
                 claim["confidence_label"] = "low"
 
     return raw
 
 
-def normalize_persisted_evidence_map(raw: Optional[dict]) -> Optional[dict]:
+def demote_unanchored_seed_corpus_records(
+    raw: Optional[dict],
+    *,
+    remap_out: Optional[dict[str, str]] = None,
+) -> Optional[dict]:
+    """ADR-0013 / Issue #1154: ``seed_corpus`` ohne verifizierten Dokumentanker.
+
+    Ein Evidence-Record gilt nur dann als Dokumentfakt, wenn er auf eine
+    konkrete Stelle im Ausgangsdokument zeigt
+    (``seed_doc:<document_id>#chunk:<chunk_id>``, siehe
+    ``build_seed_document_anchor``). Vor #1154 war ``seed_corpus`` der Default
+    für alles, was aus dem Graphen kam — solche Records behaupten einen
+    Dokumentbeleg, den niemand nachschlagen kann. Beim Laden verlieren sie
+    ihren Seed-Status und werden zu ``graph_relation``.
+
+    **Warum das ein Identitätswechsel ist, kein Label-Update:**
+    ``build_evidence_id(scope_id, source_kind, producer_key)`` nimmt
+    ``source_kind`` in den Hash. Bliebe die alte ``evidence_id`` stehen, würde
+    derselbe Beleg beim nächsten Schreiben über
+    ``register_evidence_record`` unter einer zweiten ID landen — eine
+    gespaltene Identität für dieselbe Quelle. Deshalb wird umgeschlüsselt.
+
+    Das Umschlüsseln ist genau dann gefährlich, wenn die Referenzen
+    zurückbleiben: ``EvidenceMapModel.validate_evidence_cross_references``
+    prüft ``global_evidence_refs`` und jede Claim-Bindung gegen die Schlüssel
+    des ``evidence_index`` und wirft sonst — das wäre der HTTP 422, den diese
+    Migration verhindern soll. Index-Schlüssel, ``evidence_id`` und alle
+    Referenzen wandern deshalb in einem Durchgang.
+
+    (Der Validator prüft die ID *nicht* gegen den Hash. Ein reines Umschreiben
+    von ``source_kind`` würde also nicht sofort brechen — es hinterließe nur
+    die gespaltene Identität oben. Der Grund für das Re-Key ist Konsistenz,
+    nicht das Abwenden eines unmittelbaren 422.)
+
+    Kollidiert die neue ID mit einem bereits vorhandenen Record, gewinnt der
+    vorhandene und die Referenzen werden zusammengeführt: derselbe
+    ``producer_key`` in derselben Gattung ist dieselbe Quelle.
+
+    ``remap_out`` nimmt die Zuordnung ``alte_id -> neue_id`` entgegen. Wer die
+    Map nicht nur lädt, sondern nebenher noch Referenzen im Speicher hält —
+    ``ReportAgent`` puffert die Evidence des laufenden Abschnitts —, muss sie
+    im selben Zug nachziehen. Ohne das zeigen die als Nächstes gebauten Claims
+    auf die alten Schlüssel, und der Cross-Reference-Validator wirft.
+
+    Idempotent: ein bereits abgestufter Record trägt ``graph_relation`` und
+    wird nicht erneut angefasst. Mutiert das übergebene Dict; gibt ``None``
+    zurück, wenn ``raw`` None ist.
+    """
+    if raw is None:
+        return None
+
+    # Lazy-Import: ``report_agent.evidence`` importiert aus diesem Modul.
+    from .report_agent.evidence import is_verified_seed_document_anchor
+
+    evidence_index = raw.get("evidence_index")
+    if not isinstance(evidence_index, dict) or not evidence_index:
+        return raw
+
+    scope_id = str(raw.get("simulation_id") or raw.get("report_id") or "legacy")
+    rebuilt: dict[str, Any] = {}
+    remap: dict[str, str] = {}
+
+    for evidence_id, record in evidence_index.items():
+        if (
+            not isinstance(record, dict)
+            or record.get("source_kind") != "seed_corpus"
+            or is_verified_seed_document_anchor(record.get("source_id_anchor"))
+        ):
+            rebuilt.setdefault(evidence_id, record)
+            continue
+
+        demoted = dict(record)
+        demoted["source_kind"] = "graph_relation"
+        if demoted.get("type") == "seed_document":
+            # Ohne Anker ist es kein Dokumentfakt — der Typ darf das nicht
+            # weiter behaupten.
+            demoted["type"] = "graph_fact"
+
+        producer_key = str(demoted.get("producer_key") or "").strip()
+        if not producer_key:
+            # Ohne producer_key ist keine kanonische ID berechenbar. Der
+            # Seed-Status fällt trotzdem: lieber ein ehrlich abgestufter
+            # Record unter alter ID als ein unbelegter Dokumentfakt.
+            demoted["evidence_id"] = evidence_id
+            rebuilt[evidence_id] = demoted
+            continue
+
+        new_id = build_evidence_id(scope_id, "graph_relation", producer_key)
+        remap[evidence_id] = new_id
+        if new_id in rebuilt:
+            continue
+        demoted["evidence_id"] = new_id
+        rebuilt[new_id] = demoted
+
+    if remap_out is not None:
+        remap_out.update(remap)
+
+    if not remap:
+        raw["evidence_index"] = rebuilt
+        return raw
+
+    raw["evidence_index"] = rebuilt
+
+    raw["global_evidence_refs"] = list(dict.fromkeys(
+        remap.get(str(ref), str(ref)) for ref in raw.get("global_evidence_refs") or []
+    ))
+
+    for section in raw.get("sections") or []:
+        if not isinstance(section, dict):
+            continue
+        for claim in section.get("claims") or []:
+            if not isinstance(claim, dict):
+                continue
+            bindings = claim.get("evidence")
+            if isinstance(bindings, list):
+                merged: dict[str, Any] = {}
+                for binding in bindings:
+                    if not isinstance(binding, dict):
+                        continue
+                    binding_id = str(binding.get("evidence_id") or "")
+                    target = remap.get(binding_id, binding_id)
+                    binding["evidence_id"] = target
+                    # Zwei Bindungen, die nach dem Re-Key auf dieselbe Quelle
+                    # zeigen, sind eine Bindung — sonst zählt der
+                    # Reviewer-Floor dieselbe Quelle doppelt.
+                    merged.setdefault(target, binding)
+                claim["evidence"] = list(merged.values())
+            legacy_refs = claim.get("evidence_refs")
+            if isinstance(legacy_refs, list):
+                claim["evidence_refs"] = list(dict.fromkeys(
+                    remap.get(str(ref), str(ref)) for ref in legacy_refs
+                ))
+
+    return raw
+
+
+def normalize_persisted_evidence_map(
+    raw: Optional[dict],
+    *,
+    remap_out: Optional[dict[str, str]] = None,
+) -> Optional[dict]:
     """Die kanonische Normalisierung einer persistierten ``evidence-map.json``.
 
     Jeder produktive Pfad, der eine Evidence-Map von der Platte liest, ruft
@@ -282,11 +428,25 @@ def normalize_persisted_evidence_map(raw: Optional[dict]) -> Optional[dict]:
                 evidence_index.setdefault(evidence_id, record)
                 global_refs.append(evidence_id)
             raw["global_evidence_refs"] = list(dict.fromkeys(global_refs))
-        return raw
+        # Issue #1154, Schritte 5 und 6: erst den Seed-Status prüfen, dann die
+        # Claim-Labels. Ein Record, der hier seinen Dokumentbeleg verliert,
+        # kann einen medium-Claim tragen, der danach nicht mehr agent-grounded
+        # ist — der muss im selben Durchgang auf low fallen, sonst scheitert
+        # das Laden am medium-Validator (HTTP 422 statt ehrlicher Abstufung).
+        return migrate_medium_seed_only_claims_to_low(
+            demote_unanchored_seed_corpus_records(raw, remap_out=remap_out)
+        )
     legacy = migrate_medium_seed_only_claims_to_low(
         migrate_legacy_claims_to_anchored(migrate_v1_to_v2(raw))
     )
-    return migrate_evidence_map_v2_to_v3(legacy)
+    # Der Seed-Status hängt an den Records, die erst v2→v3 entstehen — der
+    # Downgrade läuft deshalb nach der Aufteilung. Die anschließende
+    # medium-Prüfung sieht dann Records statt Legacy-Items.
+    return migrate_medium_seed_only_claims_to_low(
+        demote_unanchored_seed_corpus_records(
+            migrate_evidence_map_v2_to_v3(legacy), remap_out=remap_out
+        )
+    )
 
 
 _RECORD_FIELDS = frozenset({
