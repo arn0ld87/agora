@@ -67,9 +67,8 @@ def _legacy_medium_seed_only_map():
 
 
 class TestReportEvidenceRoute:
-    def test_legacy_medium_seed_only_map_returns_200_and_low_label(self, client):
-        """Persistierte medium-seed-only-Map bricht nicht mit 422 — die
-        Migration stuft den Claim vor dem Validator auf ``low``."""
+    def test_legacy_medium_seed_only_map_returns_unresolved_hypothesis(self, client):
+        """Unverifizierbare Legacy-Seed-Evidence wird nicht zum Claim erhoben."""
         with (
             patch("app.api.report.validate_report_id", return_value=True),
             patch(
@@ -81,13 +80,18 @@ class TestReportEvidenceRoute:
 
         assert resp.status_code == 200
         body = resp.get_json()
-        claim = body["data"]["sections"][0]["claims"][0]
-        assert claim["confidence_label"] == "low"
+        section = body["data"]["sections"][0]
+        assert section["claims"] == []
+        assert "legacy_unresolved" in section["hypotheses"][0]["rationale"]
 
     def test_agent_grounded_medium_claim_stays_medium(self, client):
         evidence_map = _legacy_medium_seed_only_map()
+        evidence_map["sections"][0]["claims"][0]["evidence"][0][
+            "producer_key"
+        ] = "fixture-seed:doc_1"
         evidence_map["sections"][0]["claims"][0]["evidence"].append(
             {
+                "producer_key": "agent:persona_1:quote:1",
                 "type": "agent_interview",
                 "source_kind": "agent_quote",
                 "source": "agent:persona_1",
@@ -254,12 +258,14 @@ class TestReportEvidenceRouteOrphanClaims:
         assert first == second, "Pipeline ist nicht idempotent"
 
         section = first["data"]["sections"][0]
-        # orphan -> data_gaps, seed-only -> bleibt Claim, aber auf low abgestuft
+        # orphan -> data_gaps, unverifizierbare Seed-Evidence -> Hypothese
         assert len(section["data_gaps"]) == 1
         assert section["data_gaps"][0]["gap_reason"] == "no_evidence_bound"
-        assert len(section["claims"]) == 1
-        assert section["claims"][0]["claim_id"] == "claim_91"
-        assert section["claims"][0]["confidence_label"] == "low"
+        assert section["claims"] == []
+        assert any(
+            "legacy_unresolved" in item["rationale"]
+            for item in section["hypotheses"]
+        )
 
 
 class TestReportEvidenceRouteV1Migration:
@@ -302,7 +308,7 @@ class TestReportEvidenceRouteV1Migration:
 
         assert resp.status_code == 200, resp.get_data(as_text=True)
         data = resp.get_json()["data"]
-        assert data["schema_version"] == 2
+        assert data["schema_version"] == 3
         assert "schema_version" not in data["sections"][0]
 
     def test_poisoned_v2_map_is_healed(self, client):

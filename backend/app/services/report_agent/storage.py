@@ -207,6 +207,82 @@ def write_report_v3(
     return path
 
 
+_REPORT_V3_REF_COLLECTIONS = (
+    "personas",
+    "claims",
+    "multipliers",
+    "friction_points",
+    "trust_signals",
+    "change_recommendations",
+    "project_impacts",
+    "positioning_variants",
+    "content_ideas",
+)
+
+
+def _upgrade_report_v3_payload(
+    raw: Dict[str, Any],
+    *,
+    report_id: str,
+    reports_dir: str,
+) -> Dict[str, Any]:
+    """Hebt persistierte ReportV3-v3-Daten verlustarm auf Schema 4."""
+
+    if raw.get("schema_version") != 3:
+        return raw
+
+    from ..evidence_migrations import normalize_persisted_evidence_map
+
+    evidence_index: Dict[str, Any] = {}
+    evidence_path = get_evidence_map_path(reports_dir, report_id)
+    if os.path.exists(evidence_path):
+        try:
+            with open(evidence_path, "r", encoding="utf-8") as handle:
+                evidence_raw = json.load(handle)
+            normalized = normalize_persisted_evidence_map(evidence_raw)
+            if isinstance(normalized, dict):
+                evidence_index = dict(normalized.get("evidence_index") or {})
+        except (json.JSONDecodeError, OSError, TypeError, ValueError) as exc:
+            _storage_logger.warning(
+                "Evidence-Index fuer ReportV3-Upgrade nicht lesbar (%s): %s",
+                report_id,
+                exc,
+            )
+
+    aliases: Dict[str, set[str]] = {}
+    for evidence_id, record in evidence_index.items():
+        if not isinstance(record, dict):
+            continue
+        for value in (
+            evidence_id,
+            record.get("evidence_id"),
+            record.get("producer_key"),
+            record.get("source_id_anchor"),
+        ):
+            alias = str(value or "").strip()
+            if alias:
+                aliases.setdefault(alias, set()).add(evidence_id)
+    unique_aliases = {
+        alias: next(iter(candidates))
+        for alias, candidates in aliases.items()
+        if len(candidates) == 1
+    }
+
+    upgraded = dict(raw)
+    upgraded["schema_version"] = 4
+    upgraded["evidence_index"] = evidence_index
+    for collection_name in _REPORT_V3_REF_COLLECTIONS:
+        for entry in upgraded.get(collection_name) or []:
+            if not isinstance(entry, dict):
+                continue
+            entry["evidence_refs"] = list(dict.fromkeys(
+                unique_aliases[ref]
+                for value in entry.get("evidence_refs") or []
+                if (ref := str(value or "").strip()) in unique_aliases
+            ))
+    return upgraded
+
+
 def read_report_v3(
     report_id: str,
     reports_dir: Optional[str] = None,
@@ -231,6 +307,11 @@ def read_report_v3(
     try:
         with open(path, "r", encoding="utf-8") as handle:
             raw = json.load(handle)
+        raw = _upgrade_report_v3_payload(
+            raw,
+            report_id=report_id,
+            reports_dir=base_dir,
+        )
         return ReportV3.model_validate(raw)
     except (json.JSONDecodeError, OSError, ValidationError) as exc:
         _storage_logger.warning(

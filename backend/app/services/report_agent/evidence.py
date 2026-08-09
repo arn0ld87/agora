@@ -132,7 +132,11 @@ def register_evidence_record(
         "source_kind": source_kind,
     })
     record = EvidenceRecordModel.model_validate(payload).model_dump(mode="json")
-    evidence_map.setdefault("evidence_index", {})[record["evidence_id"]] = record
+    evidence_index = evidence_map.setdefault("evidence_index", {})
+    existing = evidence_index.get(record["evidence_id"])
+    if existing is not None:
+        return existing
+    evidence_index[record["evidence_id"]] = record
     return record
 
 
@@ -543,10 +547,27 @@ def degrade_sections_for_violations(
             # Cross-Record-Validatoren hängen ihre Fehler an die EvidenceMap
             # selbst. Den betroffenen Claim transportieren sie deshalb stabil
             # im Fehlertext (``Claim <id>: ...``), nicht im ``loc``-Pfad.
+            section_claim_match = re.search(
+                r"\bSection ([^ ]+) Claim ([^:]+):", detail
+            )
             claim_match = re.search(r"\bClaim ([^:]+):", detail)
-            if claim_match:
+            target_section = (
+                section_claim_match.group(1) if section_claim_match else None
+            )
+            if section_claim_match:
+                target_id = section_claim_match.group(2)
+            elif claim_match:
                 target_id = claim_match.group(1)
+            else:
+                target_id = None
+            if target_id:
+                targeted = False
                 for fallback_si, fallback_section in enumerate(repaired):
+                    if (
+                        target_section is not None
+                        and str(fallback_section.get("section_index")) != target_section
+                    ):
+                        continue
                     for fallback_ci, claim in enumerate(fallback_section.get("claims") or []):
                         if not isinstance(claim, dict) or claim.get("claim_id") != target_id:
                             continue
@@ -562,6 +583,9 @@ def degrade_sections_for_violations(
                                 "action": "downgraded_to_low",
                                 "detail": detail,
                             })
+                        targeted = True
+                        break
+                    if targeted:
                         break
             continue
 

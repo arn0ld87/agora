@@ -134,6 +134,15 @@ def test_report_v3_uses_schema_version_four_and_embeds_evidence_index() -> None:
         ReportV3.model_validate(previous_version)
 
 
+def test_report_v3_rejects_mismatched_evidence_index_key() -> None:
+    payload = _base_report()
+    record = payload["evidence_index"].pop(EVIDENCE_ID)
+    payload["evidence_index"][UNKNOWN_ID] = record
+
+    with pytest.raises(ValidationError, match="evidence_index-Key"):
+        ReportV3.model_validate(payload)
+
+
 def test_report_v3_rejects_unknown_evidence_refs_for_every_ref_dto() -> None:
     for collection, dto in REF_DTO_PAYLOADS:
         payload = _base_report()

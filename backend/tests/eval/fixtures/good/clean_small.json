@@ -1,50 +1,232 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "report_id": "report_clean_small",
   "simulation_id": "sim_clean_small_001",
-  "global_evidence": [
-    {
+  "evidence_index": {
+    "ev_bd3707619202541f01c8170e053b5d90": {
+      "evidence_id": "ev_bd3707619202541f01c8170e053b5d90",
+      "producer_key": "fixture:clean_small:global:0",
       "type": "graph_fact",
       "source": "neo4j-graph",
       "snippet": "Unternehmen A hat 500 Mitarbeiter im DACH-Raum.",
-      "match_score": 0.88,
-      "supports_claim": true
+      "value": null,
+      "tool_name": null,
+      "query": null,
+      "raw": null,
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "graph_relation",
+      "source_model": null,
+      "persona_stakeholder_group": null
     },
-    {
+    "ev_92ea6ee0341643f295fd6e96ad9fa2bb": {
+      "evidence_id": "ev_92ea6ee0341643f295fd6e96ad9fa2bb",
+      "producer_key": "fixture:clean_small:global:1",
       "type": "graph_metric",
       "source": "neo4j-graph",
       "snippet": "Umsatz 2024: 12,4 Mio EUR.",
-      "match_score": 0.91,
-      "supports_claim": true
+      "value": null,
+      "tool_name": null,
+      "query": null,
+      "raw": null,
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "graph_relation",
+      "source_model": null,
+      "persona_stakeholder_group": null
     },
-    {
+    "ev_83b2a89856235c9e4f53a512808b4f90": {
+      "evidence_id": "ev_83b2a89856235c9e4f53a512808b4f90",
+      "producer_key": "fixture:clean_small:global:2",
       "type": "agent_interview",
       "source": "agent-log",
       "snippet": "Persona Maier: Ich sehe das Produkt positiv, aber der Preis ist zu hoch.",
-      "match_score": 0.82,
-      "supports_claim": true
+      "value": null,
+      "tool_name": null,
+      "query": null,
+      "raw": null,
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "agent_quote",
+      "source_model": null,
+      "persona_stakeholder_group": "fixture:agent-log"
     },
-    {
+    "ev_29abbcc24cb9e876cad2e62a3b86fa79": {
+      "evidence_id": "ev_29abbcc24cb9e876cad2e62a3b86fa79",
+      "producer_key": "fixture:clean_small:global:3",
       "type": "web_search_result",
       "source": "web",
       "snippet": "Marktanteil im DACH-Segment steigt laut Branchenreport 2024.",
-      "match_score": 0.79,
-      "supports_claim": true
+      "value": null,
+      "tool_name": null,
+      "query": null,
+      "raw": null,
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "web_source",
+      "source_model": null,
+      "persona_stakeholder_group": null
     },
-    {
+    "ev_dddba0ecd6d647c2bdfbd63ae38a385b": {
+      "evidence_id": "ev_dddba0ecd6d647c2bdfbd63ae38a385b",
+      "producer_key": "fixture:clean_small:global:4",
       "type": "entity_summary",
       "source": "knowledge-base",
       "snippet": "Branche: SaaS B2B, Zielgruppe: KMU Deutschland.",
-      "match_score": 0.85,
-      "supports_claim": true
+      "value": null,
+      "tool_name": null,
+      "query": null,
+      "raw": null,
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "graph_relation",
+      "source_model": null,
+      "persona_stakeholder_group": null
     },
-    {
+    "ev_a000f27c68394b76a12a2ef6e6a21662": {
+      "evidence_id": "ev_a000f27c68394b76a12a2ef6e6a21662",
+      "producer_key": "fixture:clean_small:global:5",
       "type": "graph_fact",
       "source": "neo4j-graph",
       "snippet": "Wettbewerber B hat 30 % geringere Kundenzufriedenheit.",
-      "match_score": 0.77,
-      "supports_claim": true
+      "value": null,
+      "tool_name": null,
+      "query": null,
+      "raw": null,
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "graph_relation",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_8ebdf61fc39b551e88b0770fe2d95999": {
+      "evidence_id": "ev_8ebdf61fc39b551e88b0770fe2d95999",
+      "producer_key": "fixture:clean_small:section:0:claim:0:evidence:0",
+      "type": "graph_metric",
+      "source": "neo4j-graph",
+      "snippet": "Umsatz 2024: 12,4 Mio EUR.",
+      "value": null,
+      "tool_name": null,
+      "query": null,
+      "raw": null,
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "graph_relation",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_c8c050651a44af9a3073db9a7a1b1bcd": {
+      "evidence_id": "ev_c8c050651a44af9a3073db9a7a1b1bcd",
+      "producer_key": "fixture:clean_small:section:0:claim:1:evidence:0",
+      "type": "web_search_result",
+      "source": "web",
+      "snippet": "Marktanteil im DACH-Segment steigt laut Branchenreport 2024.",
+      "value": null,
+      "tool_name": null,
+      "query": null,
+      "raw": null,
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "web_source",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_625aef51faaa012fd48a0bb5b6ff7f1b": {
+      "evidence_id": "ev_625aef51faaa012fd48a0bb5b6ff7f1b",
+      "producer_key": "fixture:clean_small:section:1:claim:0:evidence:0",
+      "type": "graph_fact",
+      "source": "neo4j-graph",
+      "snippet": "Wettbewerber B hat 30 % geringere Kundenzufriedenheit.",
+      "value": null,
+      "tool_name": null,
+      "query": null,
+      "raw": null,
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "graph_relation",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_452a0f436806a880161dde58a897929a": {
+      "evidence_id": "ev_452a0f436806a880161dde58a897929a",
+      "producer_key": "fixture:clean_small:section:1:claim:1:evidence:0",
+      "type": "graph_fact",
+      "source": "neo4j-graph",
+      "snippet": "Unternehmen A hat 500 Mitarbeiter im DACH-Raum.",
+      "value": null,
+      "tool_name": null,
+      "query": null,
+      "raw": null,
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "graph_relation",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_d56bd75f65bba7cf0b3ebaf8251ce403": {
+      "evidence_id": "ev_d56bd75f65bba7cf0b3ebaf8251ce403",
+      "producer_key": "fixture:clean_small:section:2:claim:0:evidence:0",
+      "type": "agent_interview",
+      "source": "agent-log",
+      "snippet": "Persona Maier: Ich sehe das Produkt positiv, aber der Preis ist zu hoch.",
+      "value": null,
+      "tool_name": null,
+      "query": null,
+      "raw": null,
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "agent_quote",
+      "source_model": null,
+      "persona_stakeholder_group": "fixture:agent-log"
+    },
+    "ev_0e678cdf1bf5616c4e70ce35fecf9e81": {
+      "evidence_id": "ev_0e678cdf1bf5616c4e70ce35fecf9e81",
+      "producer_key": "fixture:clean_small:section:2:claim:1:evidence:0",
+      "type": "entity_summary",
+      "source": "knowledge-base",
+      "snippet": "Branche: SaaS B2B, Zielgruppe: KMU Deutschland.",
+      "value": null,
+      "tool_name": null,
+      "query": null,
+      "raw": null,
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "graph_relation",
+      "source_model": null,
+      "persona_stakeholder_group": null
     }
+  },
+  "global_evidence_refs": [
+    "ev_bd3707619202541f01c8170e053b5d90",
+    "ev_92ea6ee0341643f295fd6e96ad9fa2bb",
+    "ev_83b2a89856235c9e4f53a512808b4f90",
+    "ev_29abbcc24cb9e876cad2e62a3b86fa79",
+    "ev_dddba0ecd6d647c2bdfbd63ae38a385b",
+    "ev_a000f27c68394b76a12a2ef6e6a21662"
   ],
   "sections": [
     {
@@ -59,14 +241,17 @@
           "confidence_score": 0.87,
           "evidence": [
             {
-              "type": "graph_metric",
-              "source": "neo4j-graph",
-              "snippet": "Umsatz 2024: 12,4 Mio EUR.",
+              "evidence_id": "ev_8ebdf61fc39b551e88b0770fe2d95999",
               "match_score": 0.91,
-              "supports_claim": true
+              "retrieval_score": null,
+              "entailment": null,
+              "entailment_reason": null,
+              "supports_claim": true,
+              "contradicts_claim": null
             }
           ],
-          "audit_trail": []
+          "audit_trail": [],
+          "notes": null
         },
         {
           "claim_id": "claim_02",
@@ -75,16 +260,24 @@
           "confidence_score": 0.8,
           "evidence": [
             {
-              "type": "web_search_result",
-              "source": "web",
-              "snippet": "Marktanteil im DACH-Segment steigt laut Branchenreport 2024.",
+              "evidence_id": "ev_c8c050651a44af9a3073db9a7a1b1bcd",
               "match_score": 0.79,
-              "supports_claim": true
+              "retrieval_score": null,
+              "entailment": null,
+              "entailment_reason": null,
+              "supports_claim": true,
+              "contradicts_claim": null
             }
           ],
-          "audit_trail": []
+          "audit_trail": [],
+          "notes": null
         }
-      ]
+      ],
+      "hypotheses": [],
+      "hypotheses_appendix": [],
+      "data_gaps": [],
+      "structured_metadata": {},
+      "generation_failed": false
     },
     {
       "section_index": 2,
@@ -98,14 +291,17 @@
           "confidence_score": 0.78,
           "evidence": [
             {
-              "type": "graph_fact",
-              "source": "neo4j-graph",
-              "snippet": "Wettbewerber B hat 30 % geringere Kundenzufriedenheit.",
+              "evidence_id": "ev_625aef51faaa012fd48a0bb5b6ff7f1b",
               "match_score": 0.77,
-              "supports_claim": true
+              "retrieval_score": null,
+              "entailment": null,
+              "entailment_reason": null,
+              "supports_claim": true,
+              "contradicts_claim": null
             }
           ],
-          "audit_trail": []
+          "audit_trail": [],
+          "notes": null
         },
         {
           "claim_id": "claim_04",
@@ -114,16 +310,24 @@
           "confidence_score": 0.88,
           "evidence": [
             {
-              "type": "graph_fact",
-              "source": "neo4j-graph",
-              "snippet": "Unternehmen A hat 500 Mitarbeiter im DACH-Raum.",
+              "evidence_id": "ev_452a0f436806a880161dde58a897929a",
               "match_score": 0.88,
-              "supports_claim": true
+              "retrieval_score": null,
+              "entailment": null,
+              "entailment_reason": null,
+              "supports_claim": true,
+              "contradicts_claim": null
             }
           ],
-          "audit_trail": []
+          "audit_trail": [],
+          "notes": null
         }
-      ]
+      ],
+      "hypotheses": [],
+      "hypotheses_appendix": [],
+      "data_gaps": [],
+      "structured_metadata": {},
+      "generation_failed": false
     },
     {
       "section_index": 3,
@@ -137,14 +341,17 @@
           "confidence_score": 0.82,
           "evidence": [
             {
-              "type": "agent_interview",
-              "source": "agent-log",
-              "snippet": "Persona Maier: Ich sehe das Produkt positiv, aber der Preis ist zu hoch.",
+              "evidence_id": "ev_d56bd75f65bba7cf0b3ebaf8251ce403",
               "match_score": 0.82,
-              "supports_claim": true
+              "retrieval_score": null,
+              "entailment": null,
+              "entailment_reason": null,
+              "supports_claim": true,
+              "contradicts_claim": null
             }
           ],
-          "audit_trail": []
+          "audit_trail": [],
+          "notes": null
         },
         {
           "claim_id": "claim_06",
@@ -153,16 +360,25 @@
           "confidence_score": 0.85,
           "evidence": [
             {
-              "type": "entity_summary",
-              "source": "knowledge-base",
-              "snippet": "Branche: SaaS B2B, Zielgruppe: KMU Deutschland.",
+              "evidence_id": "ev_0e678cdf1bf5616c4e70ce35fecf9e81",
               "match_score": 0.85,
-              "supports_claim": true
+              "retrieval_score": null,
+              "entailment": null,
+              "entailment_reason": null,
+              "supports_claim": true,
+              "contradicts_claim": null
             }
           ],
-          "audit_trail": []
+          "audit_trail": [],
+          "notes": null
         }
-      ]
+      ],
+      "hypotheses": [],
+      "hypotheses_appendix": [],
+      "data_gaps": [],
+      "structured_metadata": {},
+      "generation_failed": false
     }
-  ]
+  ],
+  "degradation_log": []
 }

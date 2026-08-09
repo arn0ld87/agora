@@ -42,6 +42,9 @@ def test_build_evidence_id_is_deterministic_run_local_and_content_independent() 
     assert first != build_evidence_id(
         "run-17", "graph_relation", "report-tool:result-2"
     )
+    assert first != build_evidence_id(
+        "run-17", "web_source", "report-tool:result-1"
+    )
     assert len(first) == 35
     assert first.startswith("ev_")
     assert first[3:] == first[3:].lower()

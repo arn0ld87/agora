@@ -263,7 +263,9 @@ class ReportManager:
                 evidence_refs = list(dict.fromkeys(
                     str(item.get("evidence_id"))
                     for item in claim.get("evidence") or []
-                    if isinstance(item, dict) and item.get("evidence_id")
+                    if isinstance(item, dict)
+                    and item.get("evidence_id")
+                    and item.get("supports_claim") is True
                 ))
                 # balanced/explorative: Claims ohne Evidence → überspringen (kein Evidence-Anker)
                 # strict: Claims ohne Evidence → gedroppt (gleiche Logik, aber auch low-conf)

@@ -297,7 +297,7 @@ export const ReportV3Schema = z
         entry.evidence_refs.forEach((evidenceId, refIndex) => {
           if (!knownIds.has(evidenceId)) {
             ctx.addIssue({
-              code: z.ZodIssueCode.custom,
+              code: "custom",
               path: [collection.path, entryIndex, "evidence_refs", refIndex],
               message: `Unbekannte evidence_id '${evidenceId}'.`,
             });

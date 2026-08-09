@@ -229,7 +229,7 @@ def normalize_persisted_evidence_map(raw: Optional[dict]) -> Optional[dict]:
     HTTP 200 blieb. Zwei Pfade, zwei Reihenfolgen, ein stiller Datenverlust.
     Deshalb liegt die Reihenfolge jetzt an genau einer Stelle.
 
-    Die Reihenfolge ist bindend (Issue #968):
+    Fuer Legacy-Maps ist die Reihenfolge bindend (Issue #968):
 
     1. ``migrate_v1_to_v2``
     2. ``migrate_legacy_claims_to_anchored``
@@ -262,13 +262,27 @@ def normalize_persisted_evidence_map(raw: Optional[dict]) -> Optional[dict]:
     """
     if raw is None:
         return None
-    if (
-        raw.get("schema_version") == CURRENT_SCHEMA_VERSION
-        and "global_evidence" not in raw
-    ):
-        return raw
     if raw.get("schema_version") == CURRENT_SCHEMA_VERSION:
-        raw["schema_version"] = LEGACY_SCHEMA_VERSION
+        if "global_evidence" in raw:
+            scope_id = str(
+                raw.get("simulation_id") or raw.get("report_id") or "legacy"
+            )
+            evidence_index = raw.setdefault("evidence_index", {})
+            global_refs = list(raw.get("global_evidence_refs") or [])
+            for item in raw.pop("global_evidence") or []:
+                if not isinstance(item, dict):
+                    continue
+                resolved = _legacy_item_to_record_and_binding(
+                    item, scope_id=scope_id
+                )
+                if resolved is None:
+                    continue
+                record, _ = resolved
+                evidence_id = record["evidence_id"]
+                evidence_index.setdefault(evidence_id, record)
+                global_refs.append(evidence_id)
+            raw["global_evidence_refs"] = list(dict.fromkeys(global_refs))
+        return raw
     legacy = migrate_medium_seed_only_claims_to_low(
         migrate_legacy_claims_to_anchored(migrate_v1_to_v2(raw))
     )
@@ -328,7 +342,7 @@ def _legacy_item_to_record_and_binding(
     if not str(record.get("source") or "").strip():
         record["source"] = anchor or producer_key
     if not str(record.get("snippet") or "").strip():
-        record["snippet"] = str(item.get("source") or anchor or producer_key)[:2000]
+        record["snippet"] = "[legacy evidence snippet missing]"
     record.update({
         "evidence_id": evidence_id,
         "producer_key": producer_key,
@@ -403,7 +417,7 @@ def migrate_evidence_map_v2_to_v3(raw: Optional[dict]) -> Optional[dict]:
                 claim_text = str(
                     claim.get("claim_text") or claim.get("claim") or ""
                 ).strip()
-                if claim_text:
+                if len(claim_text) >= 8:
                     section["hypotheses"].append({
                         "hypothesis_id": _next_legacy_hypothesis_id(section),
                         "hypothesis_text": claim_text[:1000],
@@ -757,7 +771,10 @@ def migrate_v2_to_v3(
                     or profile.get("name")
                     or producer_key
                 )[:2000],
-                "raw": profile,
+                "raw": {
+                    "source_entity_uuid": source_uuid,
+                    "source_entity_type": profile.get("source_entity_type"),
+                },
                 "source_id_anchor": producer_key,
                 "source_kind": "graph_relation",
             }

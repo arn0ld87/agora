@@ -231,3 +231,31 @@ def test_reviewer_floor_counts_unique_evidence_ids(tmp_path):
     assert finalized == []
     assert len(hypotheses) == 1
     assert "nur 1 von 2" in hypotheses[0]["rationale"]
+
+
+def test_duplicate_producer_key_preserves_first_record() -> None:
+    from app.services.report_agent.evidence import register_evidence_record
+
+    evidence_map = {"evidence_index": {}}
+    first = {
+        "producer_key": "graph-node:17",
+        "type": "graph_fact",
+        "source": "graph",
+        "snippet": "Erster unveränderlicher Payload.",
+        "source_kind": "graph_relation",
+    }
+    conflicting = {
+        **first,
+        "snippet": "Abweichender späterer Payload.",
+    }
+
+    registered_first = register_evidence_record(
+        evidence_map, first, scope_id="sim-17"
+    )
+    registered_conflict = register_evidence_record(
+        evidence_map, conflicting, scope_id="sim-17"
+    )
+
+    evidence_id = registered_first["evidence_id"]
+    assert registered_conflict == registered_first
+    assert evidence_map["evidence_index"][evidence_id]["snippet"] == first["snippet"]

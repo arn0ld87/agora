@@ -1,43 +1,177 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "report_id": "report_orphan_heavy",
   "simulation_id": "sim_orphan_heavy_001",
-  "global_evidence": [
-    {
+  "evidence_index": {
+    "ev_3b9f18904d6425d37c5999e3b8321aa8": {
+      "evidence_id": "ev_3b9f18904d6425d37c5999e3b8321aa8",
+      "producer_key": "fixture:bad-orphan_heavy:global:0",
       "type": "graph_fact",
       "source": "neo4j-graph",
       "snippet": "Netzwerkdichte: 0.34 im Kernsegment.",
-      "match_score": 0.7,
-      "supports_claim": true
+      "value": null,
+      "tool_name": null,
+      "query": null,
+      "raw": null,
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "graph_relation",
+      "source_model": null,
+      "persona_stakeholder_group": null
     },
-    {
+    "ev_c6653ac3e8818e4a74ee33df4fdec7ae": {
+      "evidence_id": "ev_c6653ac3e8818e4a74ee33df4fdec7ae",
+      "producer_key": "fixture:bad-orphan_heavy:global:1",
       "type": "graph_metric",
       "source": "neo4j-graph",
       "snippet": "Durchschnittlicher Degree: 4.2 Knoten.",
-      "match_score": 0.68,
-      "supports_claim": true
+      "value": null,
+      "tool_name": null,
+      "query": null,
+      "raw": null,
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "graph_relation",
+      "source_model": null,
+      "persona_stakeholder_group": null
     },
-    {
+    "ev_4d82443a827f38dd5e901433042577aa": {
+      "evidence_id": "ev_4d82443a827f38dd5e901433042577aa",
+      "producer_key": "fixture:bad-orphan_heavy:global:2",
       "type": "graph_fact",
       "source": "neo4j-graph",
       "snippet": "Cluster-Koeffizient: 0.61 im Community-Graph.",
-      "match_score": 0.72,
-      "supports_claim": true
+      "value": null,
+      "tool_name": null,
+      "query": null,
+      "raw": null,
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "graph_relation",
+      "source_model": null,
+      "persona_stakeholder_group": null
     },
-    {
+    "ev_f577b5711ad60e509492f9bb21302d6e": {
+      "evidence_id": "ev_f577b5711ad60e509492f9bb21302d6e",
+      "producer_key": "fixture:bad-orphan_heavy:global:3",
       "type": "agent_interview",
       "source": "agent-log",
       "snippet": "Persona Hoffmann: Die Vernetzung in meiner Branche ist gering.",
-      "match_score": 0.58,
-      "supports_claim": true
+      "value": null,
+      "tool_name": null,
+      "query": null,
+      "raw": null,
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "agent_quote",
+      "source_model": null,
+      "persona_stakeholder_group": "fixture:agent-log"
     },
-    {
+    "ev_6e177d1da2e303ebc37f7f00def38ed5": {
+      "evidence_id": "ev_6e177d1da2e303ebc37f7f00def38ed5",
+      "producer_key": "fixture:bad-orphan_heavy:global:4",
       "type": "graph_metric",
       "source": "neo4j-graph",
       "snippet": "Isolierte Knoten: 12 % des Gesamtgraphen.",
-      "match_score": 0.65,
-      "supports_claim": true
+      "value": null,
+      "tool_name": null,
+      "query": null,
+      "raw": null,
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "graph_relation",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_d63b5346c3cc4878f42da250e6023555": {
+      "evidence_id": "ev_d63b5346c3cc4878f42da250e6023555",
+      "producer_key": "fixture:bad-orphan_heavy:section:0:claim:0:evidence:0",
+      "type": "graph_fact",
+      "source": "neo4j-graph",
+      "snippet": "Netzwerkdichte: 0.34 im Kernsegment.",
+      "value": null,
+      "tool_name": null,
+      "query": null,
+      "raw": null,
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "graph_relation",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_58af5b8cafa01389ddc9b22011c4494f": {
+      "evidence_id": "ev_58af5b8cafa01389ddc9b22011c4494f",
+      "producer_key": "fixture:bad-orphan_heavy:section:0:claim:3:evidence:0",
+      "type": "graph_metric",
+      "source": "neo4j-graph",
+      "snippet": "Durchschnittlicher Degree: 4.2 Knoten.",
+      "value": null,
+      "tool_name": null,
+      "query": null,
+      "raw": null,
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "graph_relation",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_ae6c22374f68da1b4914e7a146c107e2": {
+      "evidence_id": "ev_ae6c22374f68da1b4914e7a146c107e2",
+      "producer_key": "fixture:bad-orphan_heavy:section:1:claim:1:evidence:0",
+      "type": "graph_fact",
+      "source": "neo4j-graph",
+      "snippet": "Cluster-Koeffizient: 0.61 im Community-Graph.",
+      "value": null,
+      "tool_name": null,
+      "query": null,
+      "raw": null,
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "graph_relation",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_b5d07eaa383b02336ab4cf5bd93b030c": {
+      "evidence_id": "ev_b5d07eaa383b02336ab4cf5bd93b030c",
+      "producer_key": "fixture:bad-orphan_heavy:section:1:claim:3:evidence:0",
+      "type": "graph_metric",
+      "source": "neo4j-graph",
+      "snippet": "Isolierte Knoten: 12 % des Gesamtgraphen.",
+      "value": null,
+      "tool_name": null,
+      "query": null,
+      "raw": null,
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "graph_relation",
+      "source_model": null,
+      "persona_stakeholder_group": null
     }
+  },
+  "global_evidence_refs": [
+    "ev_3b9f18904d6425d37c5999e3b8321aa8",
+    "ev_c6653ac3e8818e4a74ee33df4fdec7ae",
+    "ev_4d82443a827f38dd5e901433042577aa",
+    "ev_f577b5711ad60e509492f9bb21302d6e",
+    "ev_6e177d1da2e303ebc37f7f00def38ed5"
   ],
   "sections": [
     {
@@ -52,14 +186,17 @@
           "confidence_score": 0.7,
           "evidence": [
             {
-              "type": "graph_fact",
-              "source": "neo4j-graph",
-              "snippet": "Netzwerkdichte: 0.34 im Kernsegment.",
+              "evidence_id": "ev_d63b5346c3cc4878f42da250e6023555",
               "match_score": 0.7,
-              "supports_claim": true
+              "retrieval_score": null,
+              "entailment": null,
+              "entailment_reason": null,
+              "supports_claim": true,
+              "contradicts_claim": null
             }
           ],
-          "audit_trail": []
+          "audit_trail": [],
+          "notes": null
         },
         {
           "claim_id": "claim_02",
@@ -67,7 +204,8 @@
           "confidence_label": "low",
           "confidence_score": 0.15,
           "evidence": [],
-          "audit_trail": []
+          "audit_trail": [],
+          "notes": null
         },
         {
           "claim_id": "claim_03",
@@ -75,7 +213,8 @@
           "confidence_label": "low",
           "confidence_score": 0.15,
           "evidence": [],
-          "audit_trail": []
+          "audit_trail": [],
+          "notes": null
         },
         {
           "claim_id": "claim_04",
@@ -84,16 +223,24 @@
           "confidence_score": 0.65,
           "evidence": [
             {
-              "type": "graph_metric",
-              "source": "neo4j-graph",
-              "snippet": "Durchschnittlicher Degree: 4.2 Knoten.",
+              "evidence_id": "ev_58af5b8cafa01389ddc9b22011c4494f",
               "match_score": 0.68,
-              "supports_claim": true
+              "retrieval_score": null,
+              "entailment": null,
+              "entailment_reason": null,
+              "supports_claim": true,
+              "contradicts_claim": null
             }
           ],
-          "audit_trail": []
+          "audit_trail": [],
+          "notes": null
         }
-      ]
+      ],
+      "hypotheses": [],
+      "hypotheses_appendix": [],
+      "data_gaps": [],
+      "structured_metadata": {},
+      "generation_failed": false
     },
     {
       "section_index": 2,
@@ -106,7 +253,8 @@
           "confidence_label": "low",
           "confidence_score": 0.15,
           "evidence": [],
-          "audit_trail": []
+          "audit_trail": [],
+          "notes": null
         },
         {
           "claim_id": "claim_06",
@@ -115,14 +263,17 @@
           "confidence_score": 0.68,
           "evidence": [
             {
-              "type": "graph_fact",
-              "source": "neo4j-graph",
-              "snippet": "Cluster-Koeffizient: 0.61 im Community-Graph.",
+              "evidence_id": "ev_ae6c22374f68da1b4914e7a146c107e2",
               "match_score": 0.72,
-              "supports_claim": true
+              "retrieval_score": null,
+              "entailment": null,
+              "entailment_reason": null,
+              "supports_claim": true,
+              "contradicts_claim": null
             }
           ],
-          "audit_trail": []
+          "audit_trail": [],
+          "notes": null
         },
         {
           "claim_id": "claim_07",
@@ -130,7 +281,8 @@
           "confidence_label": "low",
           "confidence_score": 0.15,
           "evidence": [],
-          "audit_trail": []
+          "audit_trail": [],
+          "notes": null
         },
         {
           "claim_id": "claim_08",
@@ -139,16 +291,25 @@
           "confidence_score": 0.62,
           "evidence": [
             {
-              "type": "graph_metric",
-              "source": "neo4j-graph",
-              "snippet": "Isolierte Knoten: 12 % des Gesamtgraphen.",
+              "evidence_id": "ev_b5d07eaa383b02336ab4cf5bd93b030c",
               "match_score": 0.65,
-              "supports_claim": true
+              "retrieval_score": null,
+              "entailment": null,
+              "entailment_reason": null,
+              "supports_claim": true,
+              "contradicts_claim": null
             }
           ],
-          "audit_trail": []
+          "audit_trail": [],
+          "notes": null
         }
-      ]
+      ],
+      "hypotheses": [],
+      "hypotheses_appendix": [],
+      "data_gaps": [],
+      "structured_metadata": {},
+      "generation_failed": false
     }
-  ]
+  ],
+  "degradation_log": []
 }

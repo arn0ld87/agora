@@ -653,7 +653,8 @@ class EvidenceMapModel(BaseModel):
                 )
                 if unknown:
                     raise ValueError(
-                        f"Claim {claim.claim_id} referenziert unbekannte Evidence: "
+                        f"Section {section.section_index} Claim {claim.claim_id} "
+                        "referenziert unbekannte Evidence: "
                         + ", ".join(unknown)
                     )
 
@@ -671,7 +672,8 @@ class EvidenceMapModel(BaseModel):
                     }
                     if len(groups) < 2:
                         raise ValueError(
-                            f"Claim {claim.claim_id}: high/verified verlangt zwei "
+                            f"Section {section.section_index} Claim {claim.claim_id}: "
+                            "high/verified verlangt zwei "
                             "stuetzende Stakeholder-Gruppen."
                         )
                     if any(
@@ -679,7 +681,8 @@ class EvidenceMapModel(BaseModel):
                         for _, record in resolved
                     ):
                         raise ValueError(
-                            f"Claim {claim.claim_id}: inferred Evidence ist fuer "
+                            f"Section {section.section_index} Claim {claim.claim_id}: "
+                            "inferred Evidence ist fuer "
                             "high/verified unzulaessig."
                         )
                 if claim.confidence_label == ConfidenceLabel.medium:
@@ -693,7 +696,8 @@ class EvidenceMapModel(BaseModel):
                     )
                     if not (has_agent_quote and has_seed):
                         raise ValueError(
-                            f"Claim {claim.claim_id}: medium verlangt agent_quote und seed_corpus."
+                            f"Section {section.section_index} Claim {claim.claim_id}: "
+                            "medium verlangt agent_quote und seed_corpus."
                         )
         return self
 

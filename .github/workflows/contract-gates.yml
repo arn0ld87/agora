@@ -131,7 +131,7 @@ jobs:
             --min-evidence-coverage 0.85 \
             --min-claim-support-ratio 0.75 \
             --orphan-claim-rate 0.10 \
-            --require-schema-version 2
+            --require-schema-version 3
 
   zod-mirror-drift:
     name: Frontend-Zod muss Backend-Schema spiegeln

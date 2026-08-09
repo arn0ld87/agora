@@ -1,4 +1,4 @@
-"""Migrations-Skript: persistierte v1-Evidence-Maps auf schema_version=2 heben.
+"""Migrations-Skript: persistierte v1-Evidence-Maps auf das aktuelle Schema heben.
 
 Aufruf (aus backend/):
     python -m scripts.migrate_reports_v1_to_v2 <pfad> [--dry-run] [--glob "*.json"]
@@ -9,7 +9,7 @@ Bei Verzeichnis: rekursiv mit dem angegebenen Glob-Pattern (Standard: ``*.json``
 Pro Datei:
 - JSON laden (robust gegen kaputte Dateien).
 - schema_version prüfen; falls bereits CURRENT_SCHEMA_VERSION: no-op.
-- Falls v1 (oder kein Feld + v1-Heuristik): migrate_v1_to_v2() aufrufen.
+- Falls v1 (oder kein Feld + v1-Heuristik): kanonische Normalisierung aufrufen.
 - Migriertes Dict gegen EvidenceMapModel revalidieren.
 - Backup <datei>.v1.bak.json anlegen (nur wenn noch nicht vorhanden, idempotent).
 - Atomic write via <datei>.tmp + os.replace.
@@ -30,7 +30,10 @@ from typing import Optional
 from pydantic import ValidationError
 
 from app.contracts import EvidenceMapModel
-from app.services.evidence_migrations import CURRENT_SCHEMA_VERSION, migrate_v1_to_v2
+from app.services.evidence_migrations import (
+    CURRENT_SCHEMA_VERSION,
+    normalize_persisted_evidence_map,
+)
 
 logger = logging.getLogger("migrate_reports_v1_to_v2")
 
@@ -130,9 +133,9 @@ def _process_file(
     )
 
     # Migration
-    migrated = migrate_v1_to_v2(copy.deepcopy(payload))
+    migrated = normalize_persisted_evidence_map(copy.deepcopy(payload))
     if migrated is None:
-        return _STATUS_ERROR, "migrate_v1_to_v2 hat None zurückgegeben"
+        return _STATUS_ERROR, "normalize_persisted_evidence_map hat None zurückgegeben"
 
     _strip_section_schema_version(migrated)
 

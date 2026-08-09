@@ -316,6 +316,62 @@ def test_persisted_v3_validates(tmp_path, monkeypatch):
     assert "Preisbereitschaft ist im Seed-Korpus nicht belegt." in report_v3_markdown
 
 
+def test_build_report_v3_floor_ignores_non_supporting_bindings():
+    from app.models.report import Report, ReportStatus  # noqa: PLC0415
+    from app.services.report_agent.manager import ReportManager  # noqa: PLC0415
+
+    first_id = "ev_11111111111111111111111111111111"
+    second_id = "ev_22222222222222222222222222222222"
+    evidence_index = {
+        evidence_id: {
+            "evidence_id": evidence_id,
+            "producer_key": f"graph-node:{index}",
+            "type": "graph_fact",
+            "source": "graph",
+            "snippet": f"Nicht stützende Quelle {index}.",
+            "source_kind": "graph_relation",
+        }
+        for index, evidence_id in enumerate((first_id, second_id), 1)
+    }
+    evidence_map = {
+        "schema_version": 3,
+        "report_id": "report_non_supporting_floor",
+        "simulation_id": "sim_non_supporting_floor",
+        "evidence_index": evidence_index,
+        "global_evidence_refs": [],
+        "sections": [
+            {
+                "section_index": 1,
+                "section_title": "Floor",
+                "section_summary": "Nicht stützende Bindings zählen nicht.",
+                "claims": [
+                    {
+                        "claim_id": "claim_01",
+                        "claim_text": "Zwei verwandte Quellen belegen die Aussage nicht.",
+                        "confidence_label": "low",
+                        "confidence_score": 0.3,
+                        "evidence": [
+                            {"evidence_id": first_id, "supports_claim": False},
+                            {"evidence_id": second_id, "supports_claim": False},
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+    report = Report(
+        report_id="report_non_supporting_floor",
+        simulation_id="sim_non_supporting_floor",
+        graph_id="graph_non_supporting_floor",
+        simulation_requirement="Test",
+        status=ReportStatus.COMPLETED,
+    )
+
+    migrated = ReportManager.build_report_v3(report, evidence_map)
+
+    assert migrated.claims == []
+
+
 # ---- migrate_v2_to_v3 Unit-Tests ----
 
 def test_migrate_v2_to_v3_minimal():
@@ -458,6 +514,39 @@ def test_write_and_read_report_v3_roundtrip(tmp_path):
     assert restored.report_id == report_id
     assert restored.claims[0].evidence_refs == [EVIDENCE_ID]
     assert restored.data_gaps[0].id == "dg1"
+
+
+def test_read_report_v3_upgrades_persisted_schema_three(tmp_path):
+    from app.services.report_agent.storage import read_report_v3  # noqa: PLC0415
+
+    report_id = "report_legacy_schema_three"
+    reports_dir = tmp_path / "reports"
+    report_dir = reports_dir / report_id
+    report_dir.mkdir(parents=True)
+    (report_dir / "report-v3.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 3,
+                "report_id": report_id,
+                "generated_at": "2026-08-09T00:00:00Z",
+                "hypotheses": [
+                    {
+                        "id": "hypothesis_01",
+                        "hypothesis_text": "Persistierter Inhalt bleibt beim Upgrade erhalten.",
+                        "rationale": "Legacy-ReportV3 ohne Evidence-Index.",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    restored = read_report_v3(report_id, reports_dir=str(reports_dir))
+
+    assert restored is not None
+    assert restored.schema_version == 4
+    assert restored.evidence_index == {}
+    assert restored.hypotheses[0].hypothesis_text.startswith("Persistierter Inhalt")
 
 
 def test_read_report_v3_returns_none_when_missing(tmp_path):

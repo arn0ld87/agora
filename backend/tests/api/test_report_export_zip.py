@@ -13,6 +13,7 @@ Abgedeckt:
 from __future__ import annotations
 
 import io
+import json
 import zipfile
 from unittest.mock import MagicMock, patch
 
@@ -25,7 +26,9 @@ from app.api import report_bp
 VALID_REPORT_ID = "report_abcdef123456"
 
 _REPORT_V3_MD_CONTENT = "# Report V3\n\nInhalt des Berichts."
-_REPORT_V3_JSON_CONTENT = '{"schema_version": 3, "report_id": "report_abcdef123456"}'
+_REPORT_V3_JSON_CONTENT = (
+    '{"schema_version": 4, "report_id": "report_abcdef123456", "evidence_index": {}}'
+)
 
 
 @pytest.fixture
@@ -134,6 +137,11 @@ class TestZipExportEndpoint:
             f"{prefix}/claims.csv",
         }
         assert set(names) == expected
+        report_v3_json = json.loads(
+            zf.read(f"{prefix}/report-v3.json").decode("utf-8")
+        )
+        assert report_v3_json["schema_version"] == 4
+        assert report_v3_json["evidence_index"] == {}
 
     def test_export_zip_personas_csv_header(self, client):
         """personas.csv im ZIP beginnt mit 'id,voice_register'."""

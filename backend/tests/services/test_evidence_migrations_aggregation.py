@@ -164,6 +164,29 @@ class TestVollAggregation:
         assert anna.voice_register == "technical-de"
         assert anna.alter_range == "38"
 
+    def test_persona_evidence_exports_only_minimal_provenance(self):
+        store = InMemoryArtifactStore()
+        sim_id = "sim_profile_provenance"
+        profiles = _make_reddit_profiles()
+        profiles[0]["private_profile_field"] = "darf nicht exportiert werden"
+        store.write_json(sim_id, "reddit_profiles", profiles)
+
+        result = migrate_v2_to_v3(
+            _make_v2_with_sections(),
+            simulation_id=sim_id,
+            artifact_store=store,
+        )
+        record = next(
+            item
+            for item in result["evidence_index"].values()
+            if item["producer_key"] == "entity:ent-001"
+        )
+
+        assert record["raw"] == {
+            "source_entity_uuid": "ent-001",
+            "source_entity_type": "individual",
+        }
+
     def test_no_datengap_personas_marker_wenn_personas_vorhanden(self):
         """Mit Personas kein dg-migration-personas DataGap-Eintrag."""
         store = InMemoryArtifactStore()

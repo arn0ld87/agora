@@ -235,9 +235,18 @@ describe('kanonische Evidence-Identität', () => {
       ],
     };
 
-    expect(
-      reportContract.EvidenceMapSchema.safeParse(highClaimWithNonSupportingInference).success,
-    ).toBe(false);
+    const result = reportContract.EvidenceMapSchema.safeParse(highClaimWithNonSupportingInference);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: ['sections', 0, 'claims', 0, 'evidence'],
+            message: expect.stringContaining('source_kind=inferred'),
+          }),
+        ]),
+      );
+    }
   });
 
   it('parst ReportV3 nur als Version 4 mit eingebettetem, auflösbarem evidence_index', () => {

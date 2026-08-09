@@ -164,6 +164,42 @@ def test_medium_violation_haelt_uebrige_sections():
         assert entry["action"] == "moved_to_hypotheses"
 
 
+def test_root_validator_targets_section_when_claim_ids_repeat():
+    first_section = _valid_existing_section()
+    first_section["claims"] = [_seed_only_medium_claim()]
+    second_section = _valid_existing_section()
+    second_section["section_index"] = 2
+    second_section["section_title"] = "Zweite Sektion"
+    second_section["claims"] = [_seed_only_medium_claim()]
+    payload = {
+        "schema_version": 3,
+        "report_id": "r-duplicate-claims",
+        "simulation_id": "sim-duplicate-claims",
+        "evidence_index": {
+            _SEED_EVIDENCE_ID: {
+                "evidence_id": _SEED_EVIDENCE_ID,
+                "producer_key": "seed:duplicate-claim-fixture",
+                "type": "graph_fact",
+                "source": "seed",
+                "snippet": "Seed-only Evidence.",
+                "source_kind": "seed_corpus",
+            }
+        },
+        "global_evidence_refs": [],
+        "sections": [first_section, second_section],
+    }
+
+    with pytest.raises(ValidationError) as exc_info:
+        EvidenceMapModel.model_validate(payload)
+
+    repaired, _ = degrade_sections_for_violations(
+        payload["sections"], exc_info.value
+    )
+
+    assert repaired[0]["claims"][0]["confidence_label"] == "low"
+    assert repaired[1]["claims"][0]["confidence_label"] == "medium"
+
+
 # ---------------------------------------------------------------------------
 # 2. normalize_sections_for_contract filtert hypotheses_appendix-Platzhalter
 # ---------------------------------------------------------------------------
