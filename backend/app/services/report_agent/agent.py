@@ -9,6 +9,7 @@ from ..confidence_calculator import compute_confidence
 from ..evidence_binder import bind_evidence_to_claim, detect_contradiction_penalty
 from ..evidence_identity import build_producer_key
 from .evidence import (
+    build_seed_document_anchor,
     degrade_sections_for_violations,
     has_agent_grounded_evidence,
     init_evidence_map,
@@ -70,6 +71,10 @@ from ..graph_tools import (
     PanoramaResult,
     InterviewResult
 )
+# Issue #1152: Zugriff auf die positionsparallelen Provenance-Listen der
+# Retrieval-DTOs. Der Helper toleriert leere Listen (Altgraphen), ein `zip`
+# über eine leere Liste würde die Fakten still verschlucken.
+from ..graph.graph_dtos import provenance_at
 
 logger = get_logger('agora.report_agent')
 
@@ -85,6 +90,39 @@ FORBIDDEN_EVIDENCE_TYPES = frozenset({
 #: — ein Interview, das nur daraus besteht, ist fehlgeschlagen, keine Evidence.
 _INTERVIEW_NO_RESPONSE = "(No response from this platform)"
 _INTERVIEW_STRUCTURE_RE = re.compile(r"\[(?:Twitter|Reddit) Platform Response\]")
+
+
+def _remap_claim_bindings(
+    claims: List[Dict[str, Any]],
+    id_remap: Dict[str, str],
+) -> List[Dict[str, Any]]:
+    """Zieht Claim-Bindungen auf umgeschlüsselte Evidence-IDs nach (#1154).
+
+    Zwei Bindungen, die danach auf dieselbe Quelle zeigen, werden zu einer
+    zusammengeführt — sonst zählte der Reviewer-Floor denselben Beleg doppelt.
+    """
+    remapped: List[Dict[str, Any]] = []
+    for claim in claims:
+        if not isinstance(claim, dict):
+            remapped.append(claim)
+            continue
+        bindings = claim.get("evidence")
+        if not isinstance(bindings, list):
+            remapped.append(claim)
+            continue
+        merged: Dict[str, Dict[str, Any]] = {}
+        others: List[Any] = []
+        for binding in bindings:
+            if not isinstance(binding, dict) or not binding.get("evidence_id"):
+                others.append(binding)
+                continue
+            current = str(binding["evidence_id"])
+            target = id_remap.get(current, current)
+            binding["evidence_id"] = target
+            merged.setdefault(target, binding)
+        claim["evidence"] = others + list(merged.values())
+        remapped.append(claim)
+    return remapped
 
 
 class ReportAgent:
@@ -313,11 +351,17 @@ class ReportAgent:
         # dieselbe Evidence. Ohne producer_key verwirft
         # register_evidence_record das Item still (report_06f654800817:
         # 0 von ~40 Interview-/Fakten-Items im evidence_index).
-        def _graph_fact_item(fact: str, item_type: str, query: str, key_prefix: str) -> Optional[Dict[str, Any]]:
+        def _graph_fact_item(
+            fact: str,
+            item_type: str,
+            query: str,
+            key_prefix: str,
+            provenance: Optional[Dict[str, Any]] = None,
+        ) -> Optional[Dict[str, Any]]:
             snippet = self._truncate(fact)
             if not snippet:
                 return None
-            return {
+            item = {
                 "type": item_type,
                 "tool_name": tool_name,
                 "query": query,
@@ -326,11 +370,32 @@ class ReportAgent:
                 "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
                 "producer_key": build_producer_key(key_prefix, str(fact).strip()),
             }
+            # ADR-0013 / #1154: Trägt der Fakt eine verifizierte Dokumentherkunft
+            # (aus #1152), wird er zum Dokumentfakt statt zur Graph-Relation.
+            # Identität dann aus der Doc-Herkunft — derselbe Chunk ist dieselbe
+            # Quelle, unabhängig vom LLM-formulierten Fakt-Text. Ohne Herkunft
+            # bleibt es bei ``graph_relation``: nicht raten (Akzeptanzkriterium 3).
+            anchor = build_seed_document_anchor(provenance)
+            if anchor:
+                item["type"] = "seed_document"
+                item["source_id_anchor"] = anchor
+                item["producer_key"] = build_producer_key(
+                    "seed-doc",
+                    str(provenance["document_id"]).strip(),
+                    str(provenance.get("chunk_id")),
+                )
+            return item
 
         items: List[Dict[str, Any]] = []
         if isinstance(structured_result, InsightForgeResult):
-            for fact in structured_result.semantic_facts[:10]:
-                item = _graph_fact_item(fact, "graph_fact", structured_result.query, "graph-fact")
+            for position, fact in enumerate(structured_result.semantic_facts[:10]):
+                item = _graph_fact_item(
+                    fact,
+                    "graph_fact",
+                    structured_result.query,
+                    "graph-fact",
+                    provenance_at(structured_result.semantic_facts_provenance, position),
+                )
                 if item:
                     items.append(item)
             for entity in structured_result.entity_insights[:8]:
@@ -350,17 +415,35 @@ class ReportAgent:
                 if item:
                     items.append(item)
         elif isinstance(structured_result, PanoramaResult):
-            for fact in structured_result.active_facts[:10]:
-                item = _graph_fact_item(fact, "graph_fact", structured_result.query, "graph-fact")
+            for position, fact in enumerate(structured_result.active_facts[:10]):
+                item = _graph_fact_item(
+                    fact,
+                    "graph_fact",
+                    structured_result.query,
+                    "graph-fact",
+                    provenance_at(structured_result.active_facts_provenance, position),
+                )
                 if item:
                     items.append(item)
-            for fact in structured_result.historical_facts[:6]:
-                item = _graph_fact_item(fact, "graph_fact", structured_result.query, "graph-fact")
+            for position, fact in enumerate(structured_result.historical_facts[:6]):
+                item = _graph_fact_item(
+                    fact,
+                    "graph_fact",
+                    structured_result.query,
+                    "graph-fact",
+                    provenance_at(structured_result.historical_facts_provenance, position),
+                )
                 if item:
                     items.append(item)
         elif isinstance(structured_result, SearchResult):
-            for fact in structured_result.facts[:10]:
-                item = _graph_fact_item(fact, "graph_fact", structured_result.query, "graph-fact")
+            for position, fact in enumerate(structured_result.facts[:10]):
+                item = _graph_fact_item(
+                    fact,
+                    "graph_fact",
+                    structured_result.query,
+                    "graph-fact",
+                    provenance_at(structured_result.fact_provenance, position),
+                )
                 if item:
                     items.append(item)
         elif isinstance(structured_result, InterviewResult):
@@ -881,16 +964,54 @@ class ReportAgent:
             self._pending_section_metadata = {}
         self._pending_section_metadata[section_index] = metadata
 
+    def _remap_active_evidence_ids(self, id_remap: Dict[str, str]) -> None:
+        """Zieht die Puffer des laufenden Abschnitts auf neue Evidence-IDs nach.
+
+        Gegenstück zu ``demote_unanchored_seed_corpus_records`` (Issue #1154):
+        die Migration schlüsselt den ``evidence_index`` um, diese Methode die
+        noch nicht persistierten Referenzen im Speicher. Nach dem Nachzug
+        können zwei Puffereinträge auf dieselbe Quelle zeigen — sie werden zu
+        einem zusammengeführt, damit der Reviewer-Floor dieselbe Quelle nicht
+        doppelt zählt.
+        """
+        for attribute in ("_active_section_evidence", "_active_section_unresolved_evidence"):
+            buffer = getattr(self, attribute, None)
+            if not isinstance(buffer, list):
+                continue
+            merged: Dict[str, Dict[str, Any]] = {}
+            passthrough: List[Dict[str, Any]] = []
+            for item in buffer:
+                if not isinstance(item, dict):
+                    passthrough.append(item)
+                    continue
+                current = str(item.get("evidence_id") or "")
+                if not current:
+                    passthrough.append(item)
+                    continue
+                target = id_remap.get(current, current)
+                item["evidence_id"] = target
+                merged.setdefault(target, item)
+            setattr(self, attribute, passthrough + list(merged.values()))
+
     def _save_evidence_section(self, report_id: str, section_index: int, section_title: str, content: str) -> None:
         from .output_contract import is_fallback_content  # noqa: PLC0415
 
+        id_remap: Dict[str, str] = {}
         if self.evidence_map is None:
             self._init_evidence_map(report_id)
         else:
+            # Issue #1154: Die Normalisierung kann Evidence umschlüsseln
+            # (seed_corpus ohne Dokumentanker → graph_relation, und der
+            # source_kind steckt im Identitäts-Hash). Der Abschnittspuffer hält
+            # die alten IDs; ohne Nachzug bauen die gleich folgenden Claims
+            # Bindungen auf Schlüssel, die es nicht mehr gibt — der
+            # Cross-Reference-Validator lehnt die Map dann ab.
             self.evidence_map = (
-                normalize_persisted_evidence_map(self.evidence_map)
+                normalize_persisted_evidence_map(self.evidence_map, remap_out=id_remap)
                 or self.evidence_map
             )
+            if id_remap:
+                self._remap_active_evidence_ids(id_remap)
         self.evidence_map.setdefault("schema_version", CURRENT_SCHEMA_VERSION)
         self.evidence_map.setdefault("evidence_index", {})
         self.evidence_map.setdefault("global_evidence_refs", [])
@@ -922,6 +1043,12 @@ class ReportAgent:
             claims, raw_hypotheses, data_gaps, gate_decisions = self._finalize_section_claims(
                 self._build_claims_for_section(content)
             )
+            # Issue #1154: letzte Station vor der Validierung. Der Nachzug auf
+            # den Abschnittspuffern deckt den Regelfall ab; hier landen alle
+            # Claims, gleich woher sie stammen. Eine Bindung auf einen
+            # umgeschlüsselten Record würde die ganze Map ungültig machen.
+            if id_remap:
+                claims = _remap_claim_bindings(claims, id_remap)
         # Aus dem Fließtext entfernte Faktenaussagen sind Hypothesen, keine
         # gelöschten Sätze — sie bleiben für den Leser nachvollziehbar.
         prose_hypotheses = (

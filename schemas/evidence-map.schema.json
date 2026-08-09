@@ -384,6 +384,7 @@
         "agent_interview",
         "web_search_result",
         "web_fetch",
+        "seed_document",
         "model_generated_inference"
       ],
       "title": "EvidenceType",

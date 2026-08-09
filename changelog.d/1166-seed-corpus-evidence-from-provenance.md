@@ -1,0 +1,7 @@
+### Added (Dokumentbelege im Report — 2026-08-09)
+
+- **Ein Fakt aus dem Wissensgraphen zählt jetzt als Dokumentbeleg, wenn seine Herkunft bekannt ist:** Trägt ein gefundener Fakt die Dokument- und Chunk-Herkunft aus der Aufnahme, wird er als Beleg aus dem Seed-Korpus geführt und bekommt einen auflösbaren Anker auf die konkrete Stelle im Ausgangsdokument. Damit können Aussagen, die zusätzlich durch ein Agentenzitat gestützt sind, überhaupt erst mittlere Confidence erreichen — vorher war das strukturell unmöglich und jede solche Aussage blieb auf `low`. Fakten ohne belegte Herkunft bleiben Graph-Relationen; geraten wird nichts. Die Identität eines Dokumentbelegs hängt an der Dokumentstelle, nicht am Wortlaut des Fakts: dieselbe Stelle bleibt derselbe Beleg, auch wenn das Modell sie beim nächsten Mal anders formuliert.
+
+### Changed (Seed-Status verlangt einen auflösbaren Anker — 2026-08-09)
+
+- **Bestehende Berichte verlieren beim Laden unbelegte Dokumentbezüge:** Bis zu dieser Änderung war „Seed-Korpus" die Standardgattung für alles, was aus dem Wissensgraphen kam — auch ohne jeden Bezug zu einem konkreten Dokument. Solche Belege behaupteten eine Nachprüfbarkeit, die es nicht gab. Sie werden beim Laden zu Graph-Relationen; eine Aussage, die dadurch ihre Grundlage für mittlere Confidence verliert, wird auf `low` gestuft. Berichte bleiben lesbar und laden ohne Fehler — sie zeigen den Belegstand ehrlicher an als zuvor. Aussagen, die von zwei unterschiedlichen Stakeholder-Gruppen gestützt werden, behalten ihre hohe Confidence unverändert.
