@@ -1,0 +1,154 @@
+{
+  "source_schema_version": 3,
+  "report_id": "report_06f654800817",
+  "simulation_id": "sim_464a7a8e6310",
+  "metrics_snapshot": {
+    "snapshot_id": "metrics_ffae387b279c",
+    "total_agents": 30,
+    "total_interactions": 412,
+    "cluster_count": 3,
+    "echo_chamber_index": 0.5461,
+    "bridge_agents": [28, 6, 22, 29, 0],
+    "dominant_clusters": [
+      {
+        "agent_ids": [0, 1, 4, 5, 8, 9, 12, 18, 23, 24, 25, 29],
+        "cluster_id": 0,
+        "label": "cluster-0",
+        "size": 12
+      },
+      {
+        "agent_ids": [2, 3, 6, 7, 10, 11, 13, 14, 16, 19, 20, 21],
+        "cluster_id": 1,
+        "label": "cluster-1",
+        "size": 12
+      },
+      {
+        "agent_ids": [15, 17, 22, 26, 27, 28],
+        "cluster_id": 2,
+        "label": "cluster-2",
+        "size": 6
+      }
+    ],
+    "calculated_at": "2026-08-09T03:49:18+00:00"
+  },
+  "social_action_sampling": {
+    "sample_count_in_evidence_index": 8,
+    "sampled_from_total": 540,
+    "samples": [
+      {
+        "evidence_id": "ev_36886410740125f7bdc247245888ec99",
+        "producer_key": "simulation-action:reddit:0:29:CREATE_POST:2026-08-09T05:43:31.472218",
+        "agent_id": 29,
+        "agent_name": "LinuxAdministrator",
+        "platform": "reddit",
+        "round_num": 0,
+        "action_type": "CREATE_POST",
+        "sampling": {"bin": 0, "bin_total": 8, "sampled_from_total": 540}
+      },
+      {
+        "evidence_id": "ev_7146e5dad51696a92e88cb3f66fe162e",
+        "producer_key": "simulation-action:reddit:5:3:LIKE_COMMENT:2026-08-09T05:46:35.078217",
+        "agent_id": 3,
+        "agent_name": "Fachblog",
+        "platform": "reddit",
+        "round_num": 5,
+        "action_type": "LIKE_COMMENT",
+        "sampling": {"bin": 4, "bin_total": 8, "sampled_from_total": 540}
+      },
+      {
+        "evidence_id": "ev_89e506f55ff3e1b9d75ae39af19c2c60",
+        "producer_key": "simulation-action:reddit:6:1:LIKE_POST:2026-08-09T05:47:02.296443",
+        "agent_id": 1,
+        "agent_name": "alexle135.de",
+        "platform": "reddit",
+        "round_num": 6,
+        "action_type": "LIKE_POST",
+        "sampling": {"bin": 5, "bin_total": 8, "sampled_from_total": 540}
+      },
+      {
+        "evidence_id": "ev_8db0e92102eee686ddf727457714c5c2",
+        "producer_key": "simulation-action:reddit:3:20:LIKE_COMMENT:2026-08-09T05:45:11.402238",
+        "agent_id": 20,
+        "agent_name": "Docker",
+        "platform": "reddit",
+        "round_num": 3,
+        "action_type": "LIKE_COMMENT",
+        "sampling": {"bin": 3, "bin_total": 8, "sampled_from_total": 540}
+      },
+      {
+        "evidence_id": "ev_b0c2ee832a600e4099add18998a99989",
+        "producer_key": "simulation-action:twitter:2:28:LIKE_POST:2026-08-09T05:44:38.137482",
+        "agent_id": 28,
+        "agent_name": "TechnicalRecruiter",
+        "platform": "twitter",
+        "round_num": 2,
+        "action_type": "LIKE_POST",
+        "sampling": {"bin": 2, "bin_total": 8, "sampled_from_total": 540}
+      },
+      {
+        "evidence_id": "ev_f14d7c3bac5a4c537165bcec5ef86652",
+        "producer_key": "simulation-action:reddit:9:9:LIKE_POST:2026-08-09T05:48:40.978386",
+        "agent_id": 9,
+        "agent_name": "Container",
+        "platform": "reddit",
+        "round_num": 9,
+        "action_type": "LIKE_POST",
+        "sampling": {"bin": 7, "bin_total": 8, "sampled_from_total": 540}
+      },
+      {
+        "evidence_id": "ev_f60c8add37dd4948fc6701241fc7356b",
+        "producer_key": "simulation-action:reddit:7:19:LIKE_COMMENT:2026-08-09T05:47:34.485292",
+        "agent_id": 19,
+        "agent_name": "Better Auth",
+        "platform": "reddit",
+        "round_num": 7,
+        "action_type": "LIKE_COMMENT",
+        "sampling": {"bin": 6, "bin_total": 8, "sampled_from_total": 540}
+      },
+      {
+        "evidence_id": "ev_f8ae096c23e6f8d705dd01aa58770f2e",
+        "producer_key": "simulation-action:twitter:1:4:LIKE_POST:2026-08-09T05:44:20.763173",
+        "agent_id": 4,
+        "agent_name": "Projektübersicht",
+        "platform": "twitter",
+        "round_num": 1,
+        "action_type": "LIKE_POST",
+        "sampling": {"bin": 1, "bin_total": 8, "sampled_from_total": 540}
+      }
+    ]
+  },
+  "evidence_index_summary": {
+    "agent_action": 8,
+    "graph_metric": 4
+  },
+  "section_evidence_summary": [
+    {"section_index": 1, "section_title": "Kurzfazit", "validated_claims": 0, "hypotheses": 5, "data_gaps": 8, "key_takeaways": 5},
+    {"section_index": 2, "section_title": "Betroffene Gruppen", "validated_claims": 0, "hypotheses": 5, "data_gaps": 2, "key_takeaways": 5},
+    {"section_index": 3, "section_title": "Zentrale Risiken", "validated_claims": 0, "hypotheses": 5, "data_gaps": 3, "key_takeaways": 5},
+    {"section_index": 4, "section_title": "Reibungspunkte und Eskalationspfade", "validated_claims": 0, "hypotheses": 5, "data_gaps": 2, "key_takeaways": 5},
+    {"section_index": 5, "section_title": "Gegenmaßnahmen", "validated_claims": 0, "hypotheses": 5, "data_gaps": 3, "key_takeaways": 5},
+    {"section_index": 6, "section_title": "Unsicherheiten und Datenlücken", "validated_claims": 0, "hypotheses": 5, "data_gaps": 12, "key_takeaways": 5}
+  ],
+  "interview_selection_by_section": [
+    {"section_index": 1, "selected_agent_ids": [13, 27, 28, 25, 29, 21, 19, 1]},
+    {"section_index": 2, "selected_agent_ids": [13, 27, 29, 21, 25, 15, 5, 18]},
+    {"section_index": 3, "selected_agent_ids": [13, 0, 21, 19, 27, 25, 1, 29]},
+    {"section_index": 4, "selected_agent_ids": [27, 28, 13, 1, 21, 25, 29, 6]},
+    {"section_index": 5, "selected_agent_ids": [13, 0, 27, 25, 21, 22, 29, 1]},
+    {"section_index": 6, "selected_agent_ids": [13, 27, 25, 0, 1, 29, 19, 5]}
+  ],
+  "evidence_gate_removals": [
+    {"section_index": 3, "section_title": "Zentrale Risiken", "ungrounded_statements_removed": 3},
+    {"section_index": 4, "section_title": "Reibungspunkte und Eskalationspfade", "ungrounded_statements_removed": 2},
+    {"section_index": 5, "section_title": "Gegenmaßnahmen", "ungrounded_statements_removed": 11},
+    {"section_index": 6, "section_title": "Unsicherheiten und Datenlücken", "ungrounded_statements_removed": 1}
+  ],
+  "derived_audit_findings": {
+    "validated_claims_total": 0,
+    "hypotheses_total_primary": 30,
+    "evidence_index_items_total": 12,
+    "interview_evidence_items_detected_in_index": 0,
+    "degradation_log_entries": 0,
+    "note": "Derived from the supplied run artifacts. Interview responses appear in report/suggested-evidence material but are not represented as canonical evidence_index items in this export."
+  }
+}
