@@ -5,12 +5,14 @@ LLM-Calls werden vollständig gemockt — kein echter Ollama-Aufruf.
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
+import pytest
 
 from app.contracts.report_v3 import (
     ModelAttribution,
     ReportV3,
 )
-from app.services.report_agent.workflow import _run_red_team_review
+from app.services.report_intent import ReportIntent
+from app.services.report_agent.workflow import _red_team_required, _run_red_team_review
 
 
 def _make_minimal_report_v3(
@@ -45,7 +47,9 @@ class TestRunRedTeamReview:
         agent = _make_mock_agent(llm_findings=findings_payload)
         report = _make_minimal_report_v3()
 
-        result = _run_red_team_review(agent, report, echo_index=0.80)
+        result = _run_red_team_review(
+            agent, report, echo_index=0.80, intent=ReportIntent.OPINION
+        )
 
         assert len(result.red_team_findings) == 2
         assert result.red_team_findings[0] == findings_payload[0]
@@ -57,7 +61,9 @@ class TestRunRedTeamReview:
         agent = _make_mock_agent(llm_findings=many_findings)
         report = _make_minimal_report_v3()
 
-        result = _run_red_team_review(agent, report, echo_index=0.80)
+        result = _run_red_team_review(
+            agent, report, echo_index=0.80, intent=ReportIntent.OPINION
+        )
 
         assert len(result.red_team_findings) <= 10
 
@@ -66,7 +72,9 @@ class TestRunRedTeamReview:
         agent = _make_mock_agent(llm_findings=["Befund 1"])
         report = _make_minimal_report_v3()
 
-        result = _run_red_team_review(agent, report, echo_index=0.80)
+        result = _run_red_team_review(
+            agent, report, echo_index=0.80, intent=ReportIntent.OPINION
+        )
 
         red_team_attrs = [a for a in result.model_attribution if a.stage == "red_team"]
         assert len(red_team_attrs) == 1
@@ -79,7 +87,9 @@ class TestRunRedTeamReview:
         agent = _make_mock_agent(llm_findings=["Sollte nicht aufgerufen werden"])
         report = _make_minimal_report_v3()
 
-        result = _run_red_team_review(agent, report, echo_index=0.25)
+        result = _run_red_team_review(
+            agent, report, echo_index=0.25, intent=ReportIntent.OPINION
+        )
 
         # Bei echo_index <= 0.6 wird kein LLM-Call gemacht
         assert result.red_team_findings == []
@@ -90,7 +100,9 @@ class TestRunRedTeamReview:
         agent = _make_mock_agent()
         report = _make_minimal_report_v3()
 
-        result = _run_red_team_review(agent, report, echo_index=0.6)
+        result = _run_red_team_review(
+            agent, report, echo_index=0.6, intent=ReportIntent.OPINION
+        )
 
         assert result.red_team_findings == []
         agent.llm.chat_json.assert_not_called()
@@ -104,7 +116,9 @@ class TestRunRedTeamReview:
         agent.llm.chat_json.side_effect = RuntimeError("Timeout")
         report = _make_minimal_report_v3()
 
-        result = _run_red_team_review(agent, report, echo_index=0.80)
+        result = _run_red_team_review(
+            agent, report, echo_index=0.80, intent=ReportIntent.OPINION
+        )
 
         assert result.red_team_findings == []
         # AttributionEntry trotzdem vorhanden (latency_ms unkritisch)
@@ -120,9 +134,93 @@ class TestRunRedTeamReview:
         agent = _make_mock_agent(llm_findings=["Befund"])
         report = _make_minimal_report_v3(model_attribution=[existing_attr])
 
-        result = _run_red_team_review(agent, report, echo_index=0.80)
+        result = _run_red_team_review(
+            agent, report, echo_index=0.80, intent=ReportIntent.OPINION
+        )
 
         stages = [a.stage for a in result.model_attribution]
         assert "report_synthesis" in stages
         assert "red_team" in stages
         assert len(result.model_attribution) == 2
+
+
+class TestRedTeamIntentGate:
+    """Issue #1160 (Audit-Punkt D): entscheidungstragende Reports bekommen die
+    Gegenprüfung unabhängig vom Echo-Index.
+
+    Im Referenzlauf des Audits betrug der Echo-Index 0.5461 — unter der
+    Schwelle. Das Red Team entfiel damit ausgerechnet bei einem vollständigen
+    Report, obwohl die Personas dort nicht auffällig gleichgerichtet waren,
+    sondern der Index schlicht keine Aussage über den Berichtstyp trifft.
+    """
+
+    REFERENCE_ECHO_INDEX = 0.5461
+
+    @pytest.mark.parametrize(
+        "intent",
+        [ReportIntent.RISK, ReportIntent.COMPARISON, ReportIntent.FULL],
+    )
+    def test_decision_bearing_report_runs_below_threshold(
+        self, intent: ReportIntent
+    ) -> None:
+        agent = _make_mock_agent(llm_findings=["Widerspruch zwischen Claim A und B."])
+        report = _make_minimal_report_v3()
+
+        result = _run_red_team_review(
+            agent, report, echo_index=self.REFERENCE_ECHO_INDEX, intent=intent
+        )
+
+        agent.llm.chat_json.assert_called_once()
+        assert result.red_team_findings == ["Widerspruch zwischen Claim A und B."]
+        assert any(a.stage == "red_team" for a in result.model_attribution)
+
+    @pytest.mark.parametrize(
+        "intent",
+        [ReportIntent.OPINION, ReportIntent.EXPLORATIVE],
+    )
+    def test_cost_capped_report_skips_below_threshold(
+        self, intent: ReportIntent
+    ) -> None:
+        """Für Meinungsbild und explorativen Report bleibt die Schwelle."""
+        agent = _make_mock_agent(llm_findings=["Sollte nicht aufgerufen werden"])
+        report = _make_minimal_report_v3()
+
+        result = _run_red_team_review(
+            agent, report, echo_index=self.REFERENCE_ECHO_INDEX, intent=intent
+        )
+
+        agent.llm.chat_json.assert_not_called()
+        assert result.red_team_findings == []
+
+    def test_skipped_run_leaves_no_red_team_attribution(self) -> None:
+        """Übersprungen und 'gelaufen, nichts gefunden' bleiben unterscheidbar."""
+        agent = _make_mock_agent(llm_findings=[])
+        report = _make_minimal_report_v3()
+
+        skipped = _run_red_team_review(
+            agent, report, echo_index=0.25, intent=ReportIntent.OPINION
+        )
+        ran = _run_red_team_review(
+            agent, report, echo_index=0.25, intent=ReportIntent.RISK
+        )
+
+        assert skipped.red_team_findings == [] and ran.red_team_findings == []
+        assert not any(a.stage == "red_team" for a in skipped.model_attribution)
+        assert any(a.stage == "red_team" for a in ran.model_attribution)
+
+    @pytest.mark.parametrize(
+        "intent,echo_index,expected",
+        [
+            (ReportIntent.RISK, 0.0, True),
+            (ReportIntent.COMPARISON, 0.0, True),
+            (ReportIntent.FULL, 0.0, True),
+            (ReportIntent.OPINION, 0.6, False),
+            (ReportIntent.OPINION, 0.61, True),
+            (ReportIntent.EXPLORATIVE, 0.6, False),
+            (ReportIntent.EXPLORATIVE, 0.61, True),
+        ],
+    )
+    def test_red_team_required_matrix(
+        self, intent: ReportIntent, echo_index: float, expected: bool
+    ) -> None:
+        assert _red_team_required(intent, echo_index) is expected

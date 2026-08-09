@@ -220,10 +220,11 @@ def test_run_red_team_review_propagates_budget_exceeded():
     """RED: _run_red_team_review() darf BudgetExceededError nicht in leere
     findings umwandeln.
 
-    echo_index > 0.6 ist Voraussetzung — darunter macht die Funktion
-    absichtlich gar keinen LLM-Call und kann den Fehler nie sehen.
+    Ein Lauf ist Voraussetzung — wo das Gate den LLM-Call unterbindet, kann
+    die Funktion den Fehler nie sehen.
     """
     from app.services.report_agent.workflow import _run_red_team_review
+    from app.services.report_intent import ReportIntent
 
     agent = MagicMock()
     agent.llm = _RaisingLLM()
@@ -233,7 +234,9 @@ def test_run_red_team_review_propagates_budget_exceeded():
     report_v3.hypotheses = []
 
     with pytest.raises(BudgetExceededError):
-        _run_red_team_review(agent, report_v3, echo_index=0.9)
+        _run_red_team_review(
+            agent, report_v3, echo_index=0.9, intent=ReportIntent.OPINION
+        )
 
 
 # ---------------------------------------------------------------------------
