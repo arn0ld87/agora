@@ -60,6 +60,53 @@ def _interview(
     )
 
 
+def test_placeholder_only_interview_is_skipped() -> None:
+    """GraphToolsService-Platzhalter für stumme Plattformen sind keine Evidence."""
+    agent = _make_agent()
+    result = InterviewResult(
+        interview_topic="Produktakzeptanz",
+        interview_questions=["Was halten Sie davon?"],
+        interviews=[_interview(response=(
+            "[Twitter Platform Response]\n(No response from this platform)\n\n"
+            "[Reddit Platform Response]\n(No response from this platform)"
+        ))],
+    )
+
+    agent._record_tool_evidence(
+        tool_name="conduct_agent_interview",
+        parameters={},
+        structured_result=result,
+        rendered_result="",
+        section_index=1,
+    )
+
+    records = list((agent.evidence_map or {})["evidence_index"].values())
+    assert [r for r in records if r["type"] == "agent_interview"] == []
+
+
+def test_interview_cap_registers_at_most_ten() -> None:
+    agent = _make_agent()
+    result = InterviewResult(
+        interview_topic="Produktakzeptanz",
+        interview_questions=["Was halten Sie davon?"],
+        interviews=[
+            _interview(agent_name=f"Agent {i:02d}", response=f"Eigenständige Antwort Nummer {i}.")
+            for i in range(11)
+        ],
+    )
+
+    agent._record_tool_evidence(
+        tool_name="conduct_agent_interview",
+        parameters={},
+        structured_result=result,
+        rendered_result="",
+        section_index=1,
+    )
+
+    records = list((agent.evidence_map or {})["evidence_index"].values())
+    assert len([r for r in records if r["type"] == "agent_interview"]) == 10
+
+
 def test_interview_response_gets_canonical_evidence_id() -> None:
     agent = _make_agent()
     result = InterviewResult(

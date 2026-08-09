@@ -188,9 +188,11 @@ class ReportAgent:
         except ValidationError as exc:
             # Ein einzelnes defektes Tool-Item darf die Section nicht abbrechen;
             # es bleibt als unresolved sichtbar statt still zu verschwinden.
+            # producer_key bewusst nicht loggen: web:-Keys tragen volle URLs,
+            # die Query-Secrets enthalten können (CodeRabbit PR #1151, Major).
             logger.warning(
-                "register_evidence_record: Item verworfen (type=%r, producer_key=%r): %s",
-                enriched.get("type"), enriched.get("producer_key"), exc,
+                "register_evidence_record: Item verworfen (type=%r, %d Validierungsfehler)",
+                enriched.get("type"), len(exc.errors()),
             )
             self._active_section_unresolved_evidence.append(enriched)
             return

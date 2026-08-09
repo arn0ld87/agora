@@ -618,6 +618,13 @@
       "title": "Evidence Index",
       "type": "object"
     },
+    "gate_decision_log": {
+      "items": {
+        "$ref": "#/$defs/EvidenceDegradationModel"
+      },
+      "title": "Gate Decision Log",
+      "type": "array"
+    },
     "global_evidence_refs": {
       "items": {
         "type": "string"

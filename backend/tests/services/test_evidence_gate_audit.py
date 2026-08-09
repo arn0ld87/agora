@@ -116,3 +116,20 @@ def test_render_evidence_status_shows_counts_and_simulation_notice():
     assert "Hypothesen" in rendered
     assert "simulierten Agenten" in rendered
     assert "keine" in rendered and "empirische Nutzerforschung" in rendered
+
+
+def test_render_report_v3_includes_evidence_status():
+    from datetime import datetime, timezone
+
+    from app.contracts.report_v3 import ReportV3
+    from app.services.report_agent.markdown_renderer import render_report_v3
+
+    report = ReportV3(
+        report_id="report_test01",
+        generated_at=datetime(2026, 8, 9, tzinfo=timezone.utc),
+    )
+    rendered = render_report_v3(report)
+    assert "## Evidenzstatus" in rendered
+    assert "empirische Nutzerforschung" in rendered
+    # Der Status-Block steht vor den Detail-Tabellen.
+    assert rendered.index("## Evidenzstatus") < rendered.index("## Claims")
