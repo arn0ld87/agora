@@ -158,6 +158,29 @@ def test_derive_document_id_dedupes_with_running_suffix():
     assert second == "report-3"
 
 
+def test_derive_document_id_bounds_length_for_evidence_anchor():
+    """Sehr lange Dateinamen dürfen den 200-Zeichen-Anker nicht sprengen.
+
+    ADR-0013 schreibt ``seed_doc:<document_id>#chunk:<chunk_id>`` vor; das
+    Feld ``EvidenceItemModel.source_id_anchor`` erlaubt 200 Zeichen. Ohne
+    Längenbegrenzung erzeugte ein langer Upload-Dateiname erst in Slice 2
+    einen unauflösbaren Anker (Codex-Review zu PR #1155).
+    """
+    document_id = derive_document_id("x" * 300 + ".pdf", set())
+    assert len(document_id) == 120
+    anchor = f"seed_doc:{document_id}#chunk:999999"
+    assert len(anchor) <= 200
+
+
+def test_derive_document_id_dedupes_after_truncation():
+    """Kürzen kann Kollisionen erzeugen — der Suffix-Mechanismus fängt sie."""
+    long_stem = "y" * 300
+    first = derive_document_id(long_stem + ".pdf", set())
+    second = derive_document_id(long_stem + ".txt", {first})
+    assert first != second
+    assert second == f"{first}-2"
+
+
 def test_extract_from_multiple_with_manifest_offsets_are_exact(tmp_path):
     """blob[start_offset:end_offset] enthält exakt den Inhalt des Dokuments."""
     f1 = tmp_path / "f1.txt"

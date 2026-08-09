@@ -207,8 +207,25 @@ class _VisionHelper:
             return ""
 
 
+#: Obergrenze für eine ``document_id``. Sie folgt nicht aus dem Dateisystem,
+#: sondern aus dem Anker, den ADR-0013 vorschreibt:
+#: ``seed_doc:<document_id>#chunk:<chunk_id>`` muss in
+#: ``EvidenceItemModel.source_id_anchor`` passen (``max_length=200``, siehe
+#: ``contracts/report_contract.py``). Präfix und Chunk-Teil brauchen rund
+#: 22 Zeichen, das Kollisionssuffix ein paar weitere — 120 lässt Luft und
+#: bleibt für übliche Dateinamen verlustfrei. Ohne diese Grenze erzeugte ein
+#: sehr langer Upload-Dateiname erst in Slice 2 einen unauflösbaren Anker
+#: (Codex-Review zu PR #1155).
+_MAX_DOCUMENT_ID_LENGTH = 120
+
+
 def derive_document_id(filename: str, existing_ids: set) -> str:
     """Leitet eine ``document_id`` aus einem Dateinamen ab (ohne Endung).
+
+    Der Stamm wird auf ``_MAX_DOCUMENT_ID_LENGTH`` gekürzt, damit der daraus
+    gebaute Evidence-Anker in ``source_id_anchor`` passt. Kürzen kann neue
+    Kollisionen erzeugen — die fängt derselbe Suffix-Mechanismus ab wie
+    gleichnamige Uploads.
 
     Bei Kollision mit einer bereits vergebenen ID in ``existing_ids`` wird ein
     laufendes Suffix angehängt (``-2``, ``-3``, ...), bis die ID eindeutig
@@ -221,9 +238,10 @@ def derive_document_id(filename: str, existing_ids: set) -> str:
         existing_ids: Bereits vergebene document_ids.
 
     Returns:
-        Eindeutige document_id.
+        Eindeutige document_id, höchstens ``_MAX_DOCUMENT_ID_LENGTH`` Zeichen
+        plus Kollisionssuffix.
     """
-    stem = Path(filename).stem or filename
+    stem = (Path(filename).stem or filename)[:_MAX_DOCUMENT_ID_LENGTH]
     candidate = stem
     suffix = 2
     while candidate in existing_ids:
