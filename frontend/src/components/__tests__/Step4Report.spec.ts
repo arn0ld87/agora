@@ -231,6 +231,8 @@ const VALID_EVIDENCE: EvidenceMap = {
   // Issue #1006: additives Feld mit Default. Wie global_evidence und sections
   // ist es im z.infer-Output-Typ required, obwohl es beim Parsen optional ist.
   degradation_log: [],
+  // PR #1151: Audit-Trail regulärer Gate-Entscheidungen, gleiche Default-Logik.
+  gate_decision_log: [],
 }
 
 // Hilfsfunktion zum Mounten

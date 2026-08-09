@@ -80,6 +80,11 @@ FORBIDDEN_EVIDENCE_TYPES = frozenset({
     "section_synthesis",
 })
 
+#: Platzhalter, den GraphToolsService für stumme Interview-Plattformen einsetzt
+#: — ein Interview, das nur daraus besteht, ist fehlgeschlagen, keine Evidence.
+_INTERVIEW_NO_RESPONSE = "(No response from this platform)"
+_INTERVIEW_STRUCTURE_RE = re.compile(r"\[(?:Twitter|Reddit) Platform Response\]")
+
 
 class ReportAgent:
     """Simulation report generation agent."""
@@ -363,11 +368,26 @@ class ReportAgent:
             # bleiben unterscheidbar. source_kind wird via Typ-Mapping
             # agent_quote (simulierte Stakeholder-Stimme, ADR-0002) —
             # deshalb sind quote und persona_stakeholder_group Pflicht.
-            topic = structured_result.interview_topic or ""
+            topic = (structured_result.interview_topic or "").strip()
             for interview in structured_result.interviews[:10]:
                 response = (interview.response or "").strip()
-                if not response:
+                # GraphToolsService liefert bei stummen Plattformen einen
+                # strukturierten Platzhalter-Text — der ist kein Interview
+                # und darf nicht als agent_quote-Evidence persistieren
+                # (Codex-Review PR #1151, P2).
+                substance = _INTERVIEW_STRUCTURE_RE.sub("", response)
+                substance = substance.replace(_INTERVIEW_NO_RESPONSE, "").strip()
+                if not substance:
                     continue
+                # Whitespace-only Werte sind truthy — erst normalisieren, dann
+                # Fallback, sonst wirft build_producer_key ValueError.
+                agent_name = (interview.agent_name or "").strip() or "unknown-agent"
+                question = (interview.question or "").strip() or "no-question"
+                stakeholder_group = (
+                    (interview.agent_role or "").strip()
+                    or (interview.agent_name or "").strip()
+                    or "unbekannt"
+                )
                 quote_source = next(
                     (q.strip() for q in interview.key_quotes if q and q.strip()),
                     response,
@@ -379,15 +399,13 @@ class ReportAgent:
                     "snippet": self._truncate(response),
                     "raw": interview.to_dict(),
                     "quote": quote_source[:500],
-                    "persona_stakeholder_group": (
-                        (interview.agent_role or interview.agent_name or "unbekannt").strip()[:200]
-                    ),
+                    "persona_stakeholder_group": stakeholder_group[:200],
                     "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
                     "producer_key": build_producer_key(
                         f"interview:s{section_index}",
                         topic or "no-topic",
-                        interview.agent_name or "unknown-agent",
-                        interview.question or "no-question",
+                        agent_name,
+                        question,
                         response,
                     ),
                 })
@@ -725,9 +743,17 @@ class ReportAgent:
                     ),
                     "suggested_fix": suggestions[0],
                 })
+                # Copilot-Review PR #1151: dieser Zweig fängt auch den Fall
+                # medium/high/verified ohne jede Evidence ab (der spätere
+                # P2.1-Zweig ist dafür unerreichbar) — das Label macht die
+                # Verletzung im Audit-Trail unterscheidbar.
                 gate_decisions.append({
                     "claim_id": str(claim.get("claim_id") or "<no-id>"),
-                    "violation": "no_supporting_evidence",
+                    "violation": (
+                        "confidence_label_without_evidence"
+                        if not evidence and label in ("medium", "high", "verified")
+                        else "no_supporting_evidence"
+                    ),
                     "action": "moved_to_hypotheses",
                     "detail": rationale[:500],
                 })
@@ -747,12 +773,6 @@ class ReportAgent:
                     "claim_text": claim_text,
                     "gap_reason": "no_evidence_bound",
                     "suggested_fix": suggestions[0] if suggestions else None,
-                })
-                gate_decisions.append({
-                    "claim_id": str(claim.get("claim_id") or "<no-id>"),
-                    "violation": "confidence_label_without_evidence",
-                    "action": "dropped",
-                    "detail": f"Label '{label}' ohne Evidence — als data_gap geführt."[:500],
                 })
                 continue
             finalized_claims.append(claim)
@@ -886,8 +906,10 @@ class ReportAgent:
                 ) or "Fließtext-Aussage ohne deckende Evidence entfernt.",
             })
         if gate_decisions:
-            self.evidence_map["degradation_log"] = list(
-                self.evidence_map.get("degradation_log") or []
+            # Getrennt vom degradation_log: reguläres Gate-Routing ist kein
+            # Statusmangel und darf apply_degradation_downgrade nicht auslösen.
+            self.evidence_map["gate_decision_log"] = list(
+                self.evidence_map.get("gate_decision_log") or []
             ) + [
                 {**decision, "section_index": section_index}
                 for decision in gate_decisions

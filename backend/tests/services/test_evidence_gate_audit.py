@@ -1,11 +1,13 @@
 """Regressionstests für den auditierbaren Evidence-Gate-Trail (Slice 7).
 
 Der Referenzlauf report_06f654800817 entfernte 17 Fließtext-Aussagen und
-routete sämtliche Claims in Hypothesen — der ``degradation_log`` blieb
-trotzdem leer. Diese Tests fixieren, dass jede Gate-Entscheidung
-(Reviewer-Floor, fehlende Supporting-Evidence, Fließtext-Entfernung)
-als ``EvidenceDegradationModel``-Eintrag protokolliert wird, ohne das
-Gate selbst zu verändern.
+routete sämtliche Claims in Hypothesen — auditierbar war davon nichts.
+Diese Tests fixieren, dass jede Gate-Entscheidung (Reviewer-Floor,
+fehlende Supporting-Evidence, Fließtext-Entfernung) als
+``EvidenceDegradationModel``-Eintrag im ``gate_decision_log`` landet —
+getrennt vom ``degradation_log``, der über ``apply_degradation_downgrade``
+den Report-Status abstuft und deshalb regulärem Gate-Routing vorbehalten
+bleiben darf (Codex-Review PR #1151, P1).
 """
 from __future__ import annotations
 
@@ -87,7 +89,7 @@ def test_prose_removal_logged_in_degradation_log():
             "Ein ausreichend langer Abschnittstext ohne Fallback-Marker.",
         )
 
-    log = stub.evidence_map.get("degradation_log") or []
+    log = stub.evidence_map.get("gate_decision_log") or []
     prose_entries = [e for e in log if e["violation"] == "prose_fact_unsupported"]
     assert len(prose_entries) == 1
     assert prose_entries[0]["section_index"] == 2
@@ -97,6 +99,9 @@ def test_prose_removal_logged_in_degradation_log():
     assert prose_entries[0]["claim_id"] == "hypothesis_01"
     section = stub.evidence_map["sections"][0]
     assert section["hypotheses"][0]["hypothesis_id"] == "hypothesis_01"
+    # Reguläres Gate-Routing darf den Report-Status NICHT abstufen — der
+    # degradation_log (Trigger für apply_degradation_downgrade) bleibt leer.
+    assert not stub.evidence_map.get("degradation_log")
 
 
 def test_key_takeaway_confidence_scope_defaults_to_simulation():
