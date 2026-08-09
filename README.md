@@ -50,18 +50,16 @@ Die Demo zeigt:
 
 ## Referenzlauf
 
-Ein vollständiger, kritisch dokumentierter End-to-End-Lauf ist im Repository verfügbar:
+Der aktuelle, kritisch dokumentierte End-to-End-Lauf im Repository untersucht die **Domainmigration `alexle135.de` → `alex-schneider.dev`** mit **Gemini 3.6 Flash als Report-Writer**.
 
-**Domainmigration `alexle135.de` → `alex-schneider.dev`**
+Der Lauf verarbeitete **30 geladene Persona-Profile** über sechs Report-Sections. ReportV3 enthält **24 Claim-Zeilen, aber nur 17 eindeutige Claim-IDs**, dazu **157 Hypothesen mit 157 eindeutigen IDs** sowie **133 Data-Gap-Zeilen mit 41 eindeutigen Gap-IDs**. Ein Red-Team-Schritt meldete **6 Findings bei `echo_index=0.690`**.
 
-Der Lauf durchlief **Szenario → Knowledge Graph → Personas → Reddit-/Twitter-artige Social Simulation → Evidence Gating → Report**. Der exportierte Metrics-Snapshot enthält **24 Agenten, 267 Interaktionen, 3 Cluster** und einen **Echo-Chamber-Index von `0.4794`**. Für den Gesamtlauf wurden vom Betreiber 33 erzeugte Agenten angegeben; die Differenz zum Snapshot bleibt ausdrücklich ungeklärt.
-
-Wichtiger als das Report-Fazit: Der Evidence-Layer markierte nur thematisch passende Quellen als `RELATED_ONLY`, entfernte unzureichend belegte numerische Konsensbehauptungen als `INSUFFICIENT` und degradierte zu hoch angesetzte Confidence-Werte.
+Wichtiger als das Report-Fazit ist das Verhalten des Evidence-Layers: Er fing mehrere konkrete Gemini-Overclaims ab, darunter erfundene Alt-Subdomains, eine nicht dokumentierte neue Mailadresse und überzogene Recruiting-Kausalitäten. Gleichzeitig zeigt derselbe Lauf offen die aktuellen Grenzen: **Compound Claims können den Gate teilweise umgehen, Claim-/Gap-IDs sind noch nicht reportweit eindeutig, und Source-Kontext beziehungsweise Counter-Evidence bei Empfehlungen sind noch unvollständig.**
 
 > [!NOTE]
-> Der Lauf demonstriert aktuelle End-to-End-Fähigkeiten und bekannte Grenzen. Er beweist keine prädiktive Validität für reales menschliches Verhalten.
+> Der Lauf ist bewusst keine Hochglanz-Demo. Er dokumentiert sowohl funktionierende Guardrails als auch reproduzierbare Fehlerklassen. Er beweist weder prädiktive Validität noch reales Stakeholderverhalten.
 
-**[→ Vollständigen Referenzlauf mit Kritikpunkten und Evidence-Auszug lesen](./docs/reference-runs/2026-08-09-domain-migration/README.md)**
+**[→ Aktuellen Referenzlauf mit Guardrail-Befunden, bekannten Fehlern und Prioritäten lesen](./docs/reference-runs/2026-08-09-domain-migration/README.md)**
 
 ---
 
