@@ -1,7 +1,7 @@
 {
   "name": "frontend",
   "private": true,
-  "version": "0.9.3",
+  "version": "0.9.4",
   "overrides": {
     "js-cookie": "^3.0.8",
     "undici": "^7.29.0",
