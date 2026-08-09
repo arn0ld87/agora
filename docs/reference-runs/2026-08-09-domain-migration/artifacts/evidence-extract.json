@@ -6,63 +6,30 @@
     "source_size_bytes": 419716,
     "source_line_count": 5809,
     "full_export_committed": false,
-    "note": "The original full export was supplied for this evaluation. This repository file contains only the evidence fields cited by the public case study."
+    "note": "The original full export was supplied for this evaluation. This repository file contains the simulation metrics, all eight sampled social-action records, and evidence-gating records cited by the public case study."
   },
   "schema_version": 2,
   "report_id": "report_41f7b1bcf1e4",
   "simulation_id": "sim_1d96603073ae",
   "simulation_metrics_snapshot": {
-    "bridge_agents": [
-      24,
-      15,
-      11,
-      18,
-      0
-    ],
+    "bridge_agents": [24, 15, 11, 18, 0],
     "calculated_at": "2026-08-09T03:15:01+00:00",
     "cluster_count": 3,
     "dominant_clusters": [
       {
-        "agent_ids": [
-          0,
-          2,
-          4,
-          5,
-          10,
-          11,
-          12,
-          14,
-          18,
-          19,
-          20,
-          24,
-          26
-        ],
+        "agent_ids": [0, 2, 4, 5, 10, 11, 12, 14, 18, 19, 20, 24, 26],
         "cluster_id": 0,
         "label": "cluster-0",
         "size": 13
       },
       {
-        "agent_ids": [
-          1,
-          8,
-          9,
-          15,
-          21,
-          22
-        ],
+        "agent_ids": [1, 8, 9, 15, 21, 22],
         "cluster_id": 1,
         "label": "cluster-1",
         "size": 6
       },
       {
-        "agent_ids": [
-          6,
-          7,
-          13,
-          17,
-          29
-        ],
+        "agent_ids": [6, 7, 13, 17, 29],
         "cluster_id": 2,
         "label": "cluster-2",
         "size": 5
@@ -146,13 +113,55 @@
         "post_id": 8
       },
       "sampled_from_total": 473
+    },
+    {
+      "snippet": "GitHubUser FOLLOW on twitter in round 3",
+      "action_type": "FOLLOW",
+      "agent_id": 13,
+      "agent_name": "GitHubUser",
+      "platform": "twitter",
+      "round_num": 3,
+      "action_args": {
+        "follow_id": 11,
+        "target_user_name": "alexle135"
+      },
+      "sampled_from_total": 473
+    },
+    {
+      "snippet": "SoftwareDeveloper LIKE_COMMENT on reddit in round 4",
+      "action_type": "LIKE_COMMENT",
+      "agent_id": 17,
+      "agent_name": "SoftwareDeveloper",
+      "platform": "reddit",
+      "round_num": 4,
+      "action_args": {
+        "comment_author_name": "arn0ld87",
+        "comment_content": "Ich muss hier ebenfalls klarstellen: Ich bin Alexander Schneider, der tatsächliche Betreiber von alexle135.de und alex-schneider.dev (GitHub: arn0ld87). Mein Repository heißt alexle135.de, nicht \"alexle-vsco\". Die Migration ist mein eigenes Projekt, und ich habe sie selbst durchgeführt. Wer hier in meinem Namen spricht und behauptet, die Migration begleitet oder durchgeführt zu haben, sollte das belegen. Ich bitte alle, die Behauptungen kritisch zu prüfen, bevor sie weiterverbreitet werden.",
+        "comment_id": 51
+      },
+      "sampled_from_total": 473
+    },
+    {
+      "snippet": "alexle135 LIKE_POST on reddit in round 5",
+      "action_type": "LIKE_POST",
+      "agent_id": 22,
+      "agent_name": "alexle135",
+      "platform": "reddit",
+      "round_num": 5,
+      "action_args": {
+        "like_id": 105,
+        "post_author_name": "arn0ld87",
+        "post_content": "Da hier offenbar mehrere Stimmen behaupten, Betreiber von alexle135.de bzw. alex-schneider.dev zu sein, möchte ich das klarstellen: Ich bin Alexander Schneider, der tatsächliche Betreiber beider Domains (GitHub: arn0ld87). Die Migration von alexle135.de auf alex-schneider.dev ist mein eigenes Projekt. Wer anderes behauptet, die Urheberschaft zu haben, sollte das belegen können. Ich habe die 301-Redirects, TLS-Zertifikate (Let's Encrypt) und SPF/DKIM/DMARC selbst eingerichtet und getestet. Bei Fragen zur Migration stehe ich gern direkt zur Verfügung.",
+        "post_id": 13
+      },
+      "sampled_from_total": 473
     }
   ],
   "related_only_examples": [
     {
       "section": "Kurzfazit",
       "claim_id": "claim_02",
-      "claim_text": "Im Seed-Dokument wird die Absicht formuliert, dass „alex-schneider.dev professioneller auf Recruiter wirken\" und „den Klarnamen stärker in den Mittelpunkt rücken\" soll, um die bisherige Handle-orientierte Bezeichnung „alexle135\" abzulösen.",
+      "claim_text": "Im Seed-Dokument wird die Absicht formuliert, dass alex-schneider.dev professioneller auf Recruiter wirken und den Klarnamen stärker in den Mittelpunkt rücken soll, um die bisherige Handle-orientierte Bezeichnung alexle135 abzulösen.",
       "evidence_quote": "alex-schneider.dev wird Primärdomain, alexle135.de erhält permanente Weiterleitungen auf die jeweils passende neue URL.",
       "entailment": "RELATED_ONLY",
       "reason": "thematisch verwandt, aber kein Beleg",
@@ -161,7 +170,7 @@
     {
       "section": "Zentrale Risiken",
       "claim_id": "claim_13",
-      "claim_text": "<simulated_quote persona_id=\"alex_schneider_dev_708\" seed_anchor=\"seed_doc:evaluation_scenario\">\nIch muss saubere 301-Redirects von alexle135.de auf alex-schneider.dev einrichten.",
+      "claim_text": "Simulierter Agent: Ich muss saubere 301-Redirects von alexle135.de auf alex-schneider.dev einrichten.",
       "evidence_quote": "alex-schneider.dev wird Primärdomain, alexle135.de erhält permanente Weiterleitungen auf die jeweils passende neue URL.",
       "entailment": "RELATED_ONLY",
       "reason": "thematisch verwandt, aber kein Beleg",
@@ -172,7 +181,7 @@
     {
       "section": "Kurzfazit",
       "hypothesis_id": "hypothesis_29",
-      "text": "Die befragten simulierten Stakeholder aus mindestens fünf unterschiedlichen Gruppen – HR-Recruiting, Tech-Recruiting, DevOps-Teamlead, bestehende Leserschaft und sicherheitsorientierte Besucher – kommen übereinstimmend zu dem Schluss, dass eine kontrollierte Übergangsphase von mindestens 90 Tagen erforderlich ist.",
+      "text": "Die befragten simulierten Stakeholder aus mindestens fünf unterschiedlichen Gruppen kommen übereinstimmend zu dem Schluss, dass eine kontrollierte Übergangsphase von mindestens 90 Tagen erforderlich ist.",
       "rationale": "Aus dem Fließtext entfernt: numerischer Claim ohne passenden Zahlenbeleg (Urteil: INSUFFICIENT)."
     },
     {
@@ -184,7 +193,7 @@
     {
       "section": "Kurzfazit",
       "hypothesis_id": "hypothesis_30",
-      "text": "Übereinstimmend fordern alle acht befragten simulierten Agenten – ausnahmslos und über alle Stakeholder-Gruppen hinweg –, dass die alte Domain alexle135.de mindestens 90 Tage als Redirect- und Kompatibilitätsschicht aktiv bleibt.",
+      "text": "Übereinstimmend fordern alle acht befragten simulierten Agenten ausnahmslos, dass die alte Domain alexle135.de mindestens 90 Tage als Redirect- und Kompatibilitätsschicht aktiv bleibt.",
       "rationale": "Aus dem Fließtext entfernt: numerischer Claim ohne passenden Zahlenbeleg (Urteil: INSUFFICIENT)."
     }
   ],
@@ -192,19 +201,19 @@
     {
       "section": "Kurzfazit",
       "hypothesis_id": "hypothesis_04",
-      "text": "<simulated_quote persona_id=\"leonie_krause_624\" seed_anchor=\"seed_doc:evaluation_scenario\">\nalex-schneider.dev wirkt wie eine echte persönliche Marke, während alexle135.de eher wie ein alter, zufälliger Handle aus der Anfangszeit wirkt.",
+      "text": "Simulierter Agent: alex-schneider.dev wirkt wie eine echte persönliche Marke, während alexle135.de eher wie ein alter, zufälliger Handle aus der Anfangszeit wirkt.",
       "rationale": "Reviewer-Floor: nur 1 von 2 geforderten stützenden Evidence-Items — als Hypothese geführt. 4 weitere Quelle(n) sind thematisch verwandt, belegen die Aussage aber nicht."
     },
     {
       "section": "Kurzfazit",
       "hypothesis_id": "hypothesis_01",
-      "text": "Die Simulation der Domainmigration von **alexle135.de** zu **alex-schneider.dev** zeigt ein klares Bild: Der Wechsel kann die berufliche Positionierung gegenüber Recruiterinnen und Recruitern spürbar stärken, birgt jedoch erhebliche Risiken durch technische Bruchstellen, inkonsistente Identitäten über Plattformen hinweg und unklare SEO-Auswirkungen.",
+      "text": "Die Simulation der Domainmigration von alexle135.de zu alex-schneider.dev zeigt ein klares Bild: Der Wechsel kann die berufliche Positionierung gegenüber Recruiterinnen und Recruitern spürbar stärken, birgt jedoch erhebliche Risiken durch technische Bruchstellen, inkonsistente Identitäten über Plattformen hinweg und unklare SEO-Auswirkungen.",
       "rationale": "Reviewer-Floor: nur 1 von 2 geforderten stützenden Evidence-Items — als Hypothese geführt. 4 weitere Quelle(n) sind thematisch verwandt, belegen die Aussage aber nicht."
     },
     {
       "section": "Kurzfazit",
       "hypothesis_id": "hypothesis_26",
-      "text": "Ob Recruiter die neue Domain tatsächlich messbar bevorzugen, ist eine plausible Hypothese, aber nicht belegt – das Seed-Dokument selbst formuliert dies als Erwartung („dass Recruiter die neue Domain tatsächlich bevorzugen\"), nicht als Fakt.",
+      "text": "Ob Recruiter die neue Domain tatsächlich messbar bevorzugen, ist eine plausible Hypothese, aber nicht belegt.",
       "rationale": "Reviewer-Floor: nur 1 von 2 geforderten stützenden Evidence-Items — als Hypothese geführt."
     }
   ],
