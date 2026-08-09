@@ -7,6 +7,7 @@ from pydantic import ValidationError
 from ...utils.llm_client import LLMClient
 from ..confidence_calculator import compute_confidence
 from ..evidence_binder import bind_evidence_to_claim, detect_contradiction_penalty
+from ..evidence_identity import build_producer_key
 from .evidence import (
     degrade_sections_for_violations,
     init_evidence_map,
@@ -173,11 +174,21 @@ class ReportAgent:
         if self.evidence_map is None:
             self._active_section_unresolved_evidence.append(enriched)
             return
-        record = register_evidence_record(
-            self.evidence_map,
-            enriched,
-            scope_id=self.simulation_id,
-        )
+        try:
+            record = register_evidence_record(
+                self.evidence_map,
+                enriched,
+                scope_id=self.simulation_id,
+            )
+        except ValidationError as exc:
+            # Ein einzelnes defektes Tool-Item darf die Section nicht abbrechen;
+            # es bleibt als unresolved sichtbar statt still zu verschwinden.
+            logger.warning(
+                "register_evidence_record: Item verworfen (type=%r, producer_key=%r): %s",
+                enriched.get("type"), enriched.get("producer_key"), exc,
+            )
+            self._active_section_unresolved_evidence.append(enriched)
+            return
         if record is None:
             self._active_section_unresolved_evidence.append(enriched)
             return
@@ -288,17 +299,32 @@ class ReportAgent:
         rendered_result: str,
         section_index: int,
     ) -> None:
+        # Kanonische Identität für Fakten aus dem Graphen: der Fakt-Text selbst
+        # ist die deterministische Quelle (kein freier LLM-Text), die Query
+        # bleibt außen vor — derselbe Fakt über verschiedene Queries ist
+        # dieselbe Evidence. Ohne producer_key verwirft
+        # register_evidence_record das Item still (report_06f654800817:
+        # 0 von ~40 Interview-/Fakten-Items im evidence_index).
+        def _graph_fact_item(fact: str, item_type: str, query: str, key_prefix: str) -> Optional[Dict[str, Any]]:
+            snippet = self._truncate(fact)
+            if not snippet:
+                return None
+            return {
+                "type": item_type,
+                "tool_name": tool_name,
+                "query": query,
+                "snippet": snippet,
+                "raw": fact,
+                "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
+                "producer_key": build_producer_key(key_prefix, str(fact).strip()),
+            }
+
         items: List[Dict[str, Any]] = []
         if isinstance(structured_result, InsightForgeResult):
             for fact in structured_result.semantic_facts[:10]:
-                items.append({
-                    "type": "graph_fact",
-                    "tool_name": tool_name,
-                    "query": structured_result.query,
-                    "snippet": self._truncate(fact),
-                    "raw": fact,
-                    "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
-                })
+                item = _graph_fact_item(fact, "graph_fact", structured_result.query, "graph-fact")
+                if item:
+                    items.append(item)
             for entity in structured_result.entity_insights[:8]:
                 item = {
                     "type": "entity_summary",
@@ -312,52 +338,58 @@ class ReportAgent:
                     item["producer_key"] = f"graph-node:{entity['uuid']}"
                 items.append(item)
             for chain in structured_result.relationship_chains[:8]:
-                items.append({
-                    "type": "relationship_chain",
-                    "tool_name": tool_name,
-                    "query": structured_result.query,
-                    "snippet": self._truncate(chain),
-                    "raw": chain,
-                    "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
-                })
+                item = _graph_fact_item(chain, "relationship_chain", structured_result.query, "graph-chain")
+                if item:
+                    items.append(item)
         elif isinstance(structured_result, PanoramaResult):
             for fact in structured_result.active_facts[:10]:
-                items.append({
-                    "type": "graph_fact",
-                    "tool_name": tool_name,
-                    "query": structured_result.query,
-                    "snippet": self._truncate(fact),
-                    "raw": fact,
-                    "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
-                })
+                item = _graph_fact_item(fact, "graph_fact", structured_result.query, "graph-fact")
+                if item:
+                    items.append(item)
             for fact in structured_result.historical_facts[:6]:
-                items.append({
-                    "type": "graph_fact",
-                    "tool_name": tool_name,
-                    "query": structured_result.query,
-                    "snippet": self._truncate(fact),
-                    "raw": fact,
-                    "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
-                })
+                item = _graph_fact_item(fact, "graph_fact", structured_result.query, "graph-fact")
+                if item:
+                    items.append(item)
         elif isinstance(structured_result, SearchResult):
             for fact in structured_result.facts[:10]:
-                items.append({
-                    "type": "graph_fact",
-                    "tool_name": tool_name,
-                    "query": structured_result.query,
-                    "snippet": self._truncate(fact),
-                    "raw": fact,
-                    "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
-                })
+                item = _graph_fact_item(fact, "graph_fact", structured_result.query, "graph-fact")
+                if item:
+                    items.append(item)
         elif isinstance(structured_result, InterviewResult):
-            for interview in structured_result.interviews[:6]:
+            # Jede erfolgreiche Interviewantwort wird ein eigenständig
+            # referenzierbares Evidence-Item. Identitätsbasis: Section, Topic,
+            # Agent, Frage UND Antwort-Hash — gleicher Text verschiedener
+            # Agenten kollabiert nicht, zwei Fragen an denselben Agenten
+            # bleiben unterscheidbar. source_kind wird via Typ-Mapping
+            # agent_quote (simulierte Stakeholder-Stimme, ADR-0002) —
+            # deshalb sind quote und persona_stakeholder_group Pflicht.
+            topic = structured_result.interview_topic or ""
+            for interview in structured_result.interviews[:10]:
+                response = (interview.response or "").strip()
+                if not response:
+                    continue
+                quote_source = next(
+                    (q.strip() for q in interview.key_quotes if q and q.strip()),
+                    response,
+                )
                 items.append({
                     "type": "agent_interview",
                     "tool_name": tool_name,
-                    "query": structured_result.interview_topic,
-                    "snippet": self._truncate(interview.response),
+                    "query": topic,
+                    "snippet": self._truncate(response),
                     "raw": interview.to_dict(),
+                    "quote": quote_source[:500],
+                    "persona_stakeholder_group": (
+                        (interview.agent_role or interview.agent_name or "unbekannt").strip()[:200]
+                    ),
                     "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
+                    "producer_key": build_producer_key(
+                        f"interview:s{section_index}",
+                        topic or "no-topic",
+                        interview.agent_name or "unknown-agent",
+                        interview.question or "no-question",
+                        response,
+                    ),
                 })
         elif isinstance(structured_result, dict) and "results" in structured_result:
             for result in (structured_result.get("results") or [])[:8]:

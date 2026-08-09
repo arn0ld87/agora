@@ -700,6 +700,12 @@ def generate_section_react(
     return final_answer
 
 
+#: Notbremse für die Metadata-Extraktion: reale Sections liegen bei 5-12k
+#: Zeichen; erst weit darüber wird gekürzt (und geloggt), damit keine
+#: falschen "Abschnitt bricht ab"-Data-Gaps aus einem Preview entstehen.
+METADATA_MAX_CONTENT_CHARS = 24000
+
+
 def generate_section_metadata(
     agent: Any,
     section_title: str,
@@ -745,9 +751,22 @@ def generate_section_metadata(
         "4. Bei fehlenden Informationen: leere Liste oder Default-Wert. "
         "Nicht halluzinieren, nicht auffüllen."
     )
+    # Der frühere 6000-Zeichen-Cap schnitt reale Sections mittendrin ab —
+    # die Metadata-Extraktion meldete daraufhin erfundene Data-Gaps wie
+    # "Abschnitt bricht ab", obwohl der persistierte Text vollständig war
+    # (report_06f654800817, Sections 3-6). Der Guard bleibt nur als
+    # Notbremse gegen entartete Inhalte weit oberhalb realer Sectionlängen.
+    if len(section_content) > METADATA_MAX_CONTENT_CHARS:
+        logger.warning(
+            "generate_section_metadata: section=%d Inhalt %d Zeichen > %d — "
+            "Metadaten sehen einen gekürzten Text.",
+            section_index,
+            len(section_content),
+            METADATA_MAX_CONTENT_CHARS,
+        )
     user_msg = (
         f"## Abschnittstitel\n{section_title}\n\n"
-        f"## Inhalt\n{section_content[:6000]}"
+        f"## Inhalt\n{section_content[:METADATA_MAX_CONTENT_CHARS]}"
     )
 
     try:
