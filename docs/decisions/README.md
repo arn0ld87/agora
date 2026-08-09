@@ -14,7 +14,9 @@ Sammlung der Architektur-Entscheidungen für Agora. Format: [MADR-Light](https:/
 | [0007](0007-embedding-configuration-and-index-migration.md) | Embedding-Konfiguration und Indexmigration | Proposed | Onboarding/Provider-Unification Slice 0 |
 | [0008](0008-single-user-profile-and-onboarding.md) | Single-User-Profil und Erst-Onboarding | Proposed | Onboarding/Provider-Unification Slice 0 |
 | [0010](0010-vue-v4-route-consolidation.md) | Vue-v4-Referenzrouten und Deep-Link-Lebenszyklus | Proposed | #830 |
+| [0011](0011-evidence-entailment-and-provenance.md) | Evidence-Entailment, Provenance-Trennung und Final-Content-Contract | Accepted (2026-07-27) | Report-Trust-Slice |
 | [0012](0012-run-budgets.md) | Run-Budgets — Micros-Preise, Termination-Reason, ehrliche Unbekannt-Status | Accepted (2026-07-29) | #764 |
+| [0013](0013-seed-corpus-document-anchor.md) | Verifizierter Dokument-Anker für seed_corpus-Evidence | Accepted (2026-08-09) | #1086 |
 
 ## Geplante ADRs
 
