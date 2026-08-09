@@ -144,6 +144,7 @@ Chat-Routing und Embedding-Konfiguration bleiben getrennte Vertragswelten.
 - Readiness prüft Neo4j, Redis, Upload-Verzeichnis und Embedding-Konfiguration
 - Dependency-Ausnahmen werden im [`dependency-risk-register.md`](dependency-risk-register.md) geführt
 - Ontology-Upload (`/ontology/generate`) räumt bei Datei-I/O-Fehlern zwischen Projektanlage und Service-Übergabe das halb angelegte Projekt zuverlässig auf (Issue #899); ein scheiterndes Aufräumen wird protokolliert, ohne die Fehlerantwort zu verfälschen
+- Dokument-Upload schreibt zusätzlich ein Offset-Manifest (`extracted_documents.json`) neben `extracted_text.txt`; der Textblob bleibt unverändert, Projekte ohne Manifest laden weiterhin fehlerfrei ([ADR-0013](decisions/0013-seed-corpus-document-anchor.md), Issue #1152). Die Chunk-Zuordnung steht als Funktion bereit, ist aber noch an keinen Graph-Build angeschlossen — das erfolgt in Teil B desselben Issues
 
 Aktuelle Hardstops:
 

@@ -22,7 +22,13 @@ import base64
 import io
 import os
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
+
+from ..contracts.document_manifest_contract import (
+    DocumentAnchoredChunk,
+    DocumentManifest,
+    DocumentManifestEntry,
+)
 
 
 def _read_text_with_fallback(file_path: str) -> str:
@@ -201,6 +207,49 @@ class _VisionHelper:
             return ""
 
 
+#: Obergrenze für eine ``document_id``. Sie folgt nicht aus dem Dateisystem,
+#: sondern aus dem Anker, den ADR-0013 vorschreibt:
+#: ``seed_doc:<document_id>#chunk:<chunk_id>`` muss in
+#: ``EvidenceItemModel.source_id_anchor`` passen (``max_length=200``, siehe
+#: ``contracts/report_contract.py``). Präfix und Chunk-Teil brauchen rund
+#: 22 Zeichen, das Kollisionssuffix ein paar weitere — 120 lässt Luft und
+#: bleibt für übliche Dateinamen verlustfrei. Ohne diese Grenze erzeugte ein
+#: sehr langer Upload-Dateiname erst in Slice 2 einen unauflösbaren Anker
+#: (Codex-Review zu PR #1155).
+_MAX_DOCUMENT_ID_LENGTH = 120
+
+
+def derive_document_id(filename: str, existing_ids: set) -> str:
+    """Leitet eine ``document_id`` aus einem Dateinamen ab (ohne Endung).
+
+    Der Stamm wird auf ``_MAX_DOCUMENT_ID_LENGTH`` gekürzt, damit der daraus
+    gebaute Evidence-Anker in ``source_id_anchor`` passt. Kürzen kann neue
+    Kollisionen erzeugen — die fängt derselbe Suffix-Mechanismus ab wie
+    gleichnamige Uploads.
+
+    Bei Kollision mit einer bereits vergebenen ID in ``existing_ids`` wird ein
+    laufendes Suffix angehängt (``-2``, ``-3``, ...), bis die ID eindeutig
+    ist. Der Aufrufer ist dafür verantwortlich, die zurückgegebene ID
+    anschließend zu ``existing_ids`` hinzuzufügen (diese Funktion ist rein
+    und mutiert das übergebene Set nicht).
+
+    Args:
+        filename: Dateiname (mit oder ohne Endung).
+        existing_ids: Bereits vergebene document_ids.
+
+    Returns:
+        Eindeutige document_id, höchstens ``_MAX_DOCUMENT_ID_LENGTH`` Zeichen
+        plus Kollisionssuffix.
+    """
+    stem = (Path(filename).stem or filename)[:_MAX_DOCUMENT_ID_LENGTH]
+    candidate = stem
+    suffix = 2
+    while candidate in existing_ids:
+        candidate = f"{stem}-{suffix}"
+        suffix += 1
+    return candidate
+
+
 class FileParser:
     """File Parser"""
 
@@ -335,23 +384,78 @@ class FileParser:
         """
         Extract text from multiple files and merge
 
+        Rückwärtskompatible Delegation an ``extract_from_multiple_with_manifest``
+        (ADR-0013 Slice 1, Teil A, Issue #1152): bestehende Aufrufer, die nur
+        den zusammengeführten Text wollen (z. B. ``TextProcessor.extract_from_files``),
+        bleiben unverändert lauffähig — das Manifest wird hier verworfen. Wer
+        Dokumentidentität braucht, ruft ``extract_from_multiple_with_manifest``
+        direkt. Diese Form wurde gewählt statt einer Signaturänderung, weil
+        letztere jeden bestehenden Aufrufer angefasst hätte, obwohl nur ein
+        Teil der Pipeline (Graph-Build) das Manifest tatsächlich braucht.
+
         Args:
             file_paths: List of file paths
 
         Returns:
             Merged text
         """
-        all_texts = []
+        text, _manifest = cls.extract_from_multiple_with_manifest(file_paths)
+        return text
+
+    @classmethod
+    def extract_from_multiple_with_manifest(cls, file_paths: List[str]) -> Tuple[str, DocumentManifest]:
+        """
+        Wie ``extract_from_multiple``, liefert zusätzlich ein Offset-Manifest.
+
+        Der zurückgegebene Blob ist bitgleich mit dem von ``extract_from_multiple``
+        — die Konstruktion pro Dokument-Block ist identisch; zusätzlich werden
+        Start-/End-Offset des jeweiligen Dokumentinhalts im gemergten Blob
+        mitgezählt. Fehlgeschlagene Extraktionen bekommen keinen
+        Manifest-Eintrag: der Platzhaltertext im Blob ist kein Dokumentinhalt
+        (ADR-0013 §1).
+
+        Args:
+            file_paths: List of file paths
+
+        Returns:
+            Tuple aus (gemergter Text, ``DocumentManifest``).
+        """
+        all_texts: List[str] = []
+        documents: List[DocumentManifestEntry] = []
+        existing_ids: set = set()
+        cumulative = 0
 
         for i, file_path in enumerate(file_paths, 1):
+            if i > 1:
+                cumulative += 2  # Länge des "\n\n"-Separators von "\n\n".join(...)
+
             try:
                 text = cls.extract_text(file_path)
                 filename = Path(file_path).name
-                all_texts.append(f"=== Document {i}: {filename} ===\n{text}")
-            except Exception as e:  # noqa: BLE001 — per-file error logged inline; continue extracting remaining files
-                all_texts.append(f"=== Document {i}: {file_path} (extraction failed: {str(e)}) ===")
+                marker = f"=== Document {i}: {filename} ===\n"
+                block = f"{marker}{text}"
 
-        return "\n\n".join(all_texts)
+                document_id = derive_document_id(filename, existing_ids)
+                existing_ids.add(document_id)
+
+                start_offset = cumulative + len(marker)
+                end_offset = start_offset + len(text)
+                documents.append(
+                    DocumentManifestEntry(
+                        document_id=document_id,
+                        filename=filename,
+                        start_offset=start_offset,
+                        end_offset=end_offset,
+                    )
+                )
+            except Exception as e:  # noqa: BLE001 — per-file error logged inline; continue extracting remaining files
+                block = f"=== Document {i}: {file_path} (extraction failed: {str(e)}) ==="
+
+            all_texts.append(block)
+            cumulative += len(block)
+
+        merged_text = "\n\n".join(all_texts)
+        return merged_text, DocumentManifest(documents=documents)
 
 
 def _snap_to_word_start(text: str, pos: int, *, lower_bound: int, upper_bound: int) -> int:
@@ -418,6 +522,63 @@ def _snap_to_word_start(text: str, pos: int, *, lower_bound: int, upper_bound: i
     return fallback
 
 
+def _chunk_windows(text: str, chunk_size: int, overlap: int) -> List[Tuple[int, int]]:
+    """Berechnet die rohen (ungestrippten) Chunk-Fenstergrenzen im Text.
+
+    Extrahiert aus ``split_text_into_chunks`` (ADR-0013 Slice 1, Teil A,
+    Issue #1152), damit ein offset-bewusster Chunker
+    (``split_text_into_chunks_with_documents``) dieselbe Fenster-Logik nutzen
+    kann, ohne sie zu duplizieren — nur die Fenstergrenzen VOR dem Stripping,
+    das Stripping selbst bleibt Sache des jeweiligen Aufrufers. Gilt nur für
+    den Fall ``len(text) > chunk_size``; den Kurztext-Sonderfall behandelt
+    jeder Aufrufer selbst.
+    """
+    windows: List[Tuple[int, int]] = []
+    start = 0
+
+    while start < len(text):
+        end = start + chunk_size
+
+        # Try to split at sentence boundaries
+        if end < len(text):
+            # Find nearest sentence ending
+            for sep in ['。', '！', '？', '.\n', '!\n', '?\n', '\n\n', '. ', '! ', '? ']:
+                last_sep = text[start:end].rfind(sep)
+                if last_sep != -1 and last_sep > chunk_size * 0.3:
+                    end = start + last_sep + len(sep)
+                    break
+
+        windows.append((start, end))
+
+        if end >= len(text):
+            break
+
+        # Folgechunk startet mit ``overlap`` Zeichen Kontext und wird
+        # rückwärts auf einen Wortanfang gesnappt — so entstehen keine
+        # 'uß-…'/'atische…'-Chunkanfänge mehr, ohne dass Text zwischen
+        # ``end`` und dem neuen Start verloren geht. ``lower_bound`` ist die
+        # Terminierungsgarantie: der neue Start ist immer strikt größer als
+        # der alte, auch wenn die Satzgrenzen-Logik ``end`` so weit nach vorn
+        # zieht, dass ``end - overlap <= start`` gilt (bei
+        # ``overlap > 0.3 * chunk_size`` möglich).
+        #
+        # ``min_progress`` verhindert zusätzlich ein Degenerieren auf
+        # Ein-Zeichen-Schritte: zieht die Satzgrenzen-Logik ``end`` weit nach
+        # vorn und ist der Overlap groß, kann ``end - overlap`` hinter
+        # ``start`` liegen. Ohne Mindestfortschritt entstünden dann tausende
+        # fast identischer Chunks statt einer sinnvollen Aufteilung.
+        min_progress = max(1, (end - start) // 2)
+        next_start = max(end - overlap, start + min_progress)
+        start = _snap_to_word_start(
+            text,
+            next_start,
+            lower_bound=start + 1,
+            upper_bound=end,
+        )
+
+    return windows
+
+
 def split_text_into_chunks(
     text: str,
     chunk_size: int = 500,
@@ -449,49 +610,115 @@ def split_text_into_chunks(
         return [text] if text.strip() else []
 
     chunks = []
-    start = 0
-
-    while start < len(text):
-        end = start + chunk_size
-
-        # Try to split at sentence boundaries
-        if end < len(text):
-            # Find nearest sentence ending
-            for sep in ['。', '！', '？', '.\n', '!\n', '?\n', '\n\n', '. ', '! ', '? ']:
-                last_sep = text[start:end].rfind(sep)
-                if last_sep != -1 and last_sep > chunk_size * 0.3:
-                    end = start + last_sep + len(sep)
-                    break
-
+    for start, end in _chunk_windows(text, chunk_size, overlap):
         chunk = text[start:end].strip()
         if chunk:
             chunks.append(chunk)
 
-        if end >= len(text):
-            break
+    return chunks
 
-        # Folgechunk startet mit ``overlap`` Zeichen Kontext und wird
-        # rückwärts auf einen Wortanfang gesnappt — so entstehen keine
-        # 'uß-…'/'atische…'-Chunkanfänge mehr, ohne dass Text zwischen
-        # ``end`` und dem neuen Start verloren geht. ``lower_bound`` ist die
-        # Terminierungsgarantie: der neue Start ist immer strikt größer als
-        # der alte, auch wenn die Satzgrenzen-Logik ``end`` so weit nach vorn
-        # zieht, dass ``end - overlap <= start`` gilt (bei
-        # ``overlap > 0.3 * chunk_size`` möglich).
-        #
-        # ``min_progress`` verhindert zusätzlich ein Degenerieren auf
-        # Ein-Zeichen-Schritte: zieht die Satzgrenzen-Logik ``end`` weit nach
-        # vorn und ist der Overlap groß, kann ``end - overlap`` hinter
-        # ``start`` liegen. Ohne Mindestfortschritt entstünden dann tausende
-        # fast identischer Chunks statt einer sinnvollen Aufteilung.
-        min_progress = max(1, (end - start) // 2)
-        next_start = max(end - overlap, start + min_progress)
-        start = _snap_to_word_start(
-            text,
-            next_start,
-            lower_bound=start + 1,
-            upper_bound=end,
+
+def _assign_document(
+    start: int,
+    end: int,
+    documents: List[DocumentManifestEntry],
+    next_chunk_id: dict,
+) -> Tuple[Optional[str], Optional[int]]:
+    """Ordnet ein Chunk-Intervall ``[start, end)`` einem Manifest-Dokument zu.
+
+    Gewinner ist das Dokument mit dem größten Zeichen-Overlap zwischen dem
+    Chunk-Intervall und dem Dokument-Intervall (``[doc.start_offset,
+    doc.end_offset)``) — so entscheidet bei einem grenzüberspannenden Chunk
+    der größere Textanteil (ADR-0013 Slice 1, Teil A). Ohne Treffer im
+    Manifest: ``(None, None)``, es wird nicht geraten.
+
+    ``chunk_id`` ist ein pro ``document_id`` laufender Zähler, der bei 0
+    beginnt — er läuft dokumentintern, nicht über das gesamte Manifest.
+    """
+    best_document_id: Optional[str] = None
+    best_overlap = 0
+    for doc in documents:
+        overlap_len = min(end, doc.end_offset) - max(start, doc.start_offset)
+        if overlap_len > best_overlap:
+            best_overlap = overlap_len
+            best_document_id = doc.document_id
+
+    if best_document_id is None:
+        return None, None
+
+    chunk_id = next_chunk_id.get(best_document_id, 0)
+    next_chunk_id[best_document_id] = chunk_id + 1
+    return best_document_id, chunk_id
+
+
+def split_text_into_chunks_with_documents(
+    text: str,
+    manifest: Optional[DocumentManifest] = None,
+    chunk_size: int = 500,
+    overlap: int = 50,
+) -> List[DocumentAnchoredChunk]:
+    """
+    Wie ``split_text_into_chunks``, liefert zusätzlich Blob-Offsets und je
+    Chunk eine Dokument-Zuordnung anhand von ``manifest`` (ADR-0013 Slice 1,
+    Teil A, Issue #1152). ``split_text_into_chunks`` selbst bleibt
+    unverändert (auch intern nur um :func:`_chunk_windows` erweitert, deren
+    Fenster-Logik 1:1 aus der alten Implementierung übernommen ist) — andere
+    Aufrufer sind von dieser Erweiterung nicht betroffen.
+
+    Ein Chunk, der eine Dokumentgrenze überspannt, wird dem Dokument
+    zugeordnet, in dem sein größter Textanteil liegt (siehe
+    :func:`_assign_document`). Ohne Manifest (oder ohne Treffer im Manifest,
+    etwa bei Altprojekten ohne Sidecar) sind ``document_id``/``chunk_id``
+    ``None`` — geraten wird nicht.
+
+    Args:
+        text: Original text (z. B. der ``extracted_text.txt``-Blob).
+        manifest: Dokument-Manifest mit Blob-Offsets, oder ``None``.
+        chunk_size: Characters per chunk.
+        overlap: Overlapping characters.
+
+    Returns:
+        Liste von ``DocumentAnchoredChunk``.
+    """
+    documents = manifest.documents if manifest is not None else []
+    next_chunk_id: dict = {}
+
+    if len(text) <= chunk_size:
+        windows = [(0, len(text))] if text.strip() else []
+        strip_windows = False
+    else:
+        windows = _chunk_windows(text, chunk_size, overlap)
+        strip_windows = True
+
+    result: List[DocumentAnchoredChunk] = []
+    for start, end in windows:
+        raw = text[start:end]
+        if strip_windows:
+            stripped = raw.strip()
+            if not stripped:
+                continue
+            lstrip_len = len(raw) - len(raw.lstrip())
+            actual_start = start + lstrip_len
+            actual_end = actual_start + len(stripped)
+            chunk_text = stripped
+        else:
+            # Kurztext-Sonderfall: split_text_into_chunks() gibt hier den
+            # unveränderten Originaltext zurück (kein .strip()) — dieselbe
+            # Semantik gilt hier für Konsistenz mit der Textform.
+            chunk_text = raw
+            actual_start = start
+            actual_end = end
+
+        document_id, chunk_id = _assign_document(actual_start, actual_end, documents, next_chunk_id)
+        result.append(
+            DocumentAnchoredChunk(
+                text=chunk_text,
+                start_offset=actual_start,
+                end_offset=actual_end,
+                document_id=document_id,
+                chunk_id=chunk_id,
+            )
         )
 
-    return chunks
+    return result
 

@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from app.contracts.document_manifest_contract import DocumentManifest, DocumentManifestEntry
 from app.models.project import ProjectManager, ProjectStatus
 
 
@@ -63,3 +64,31 @@ def test_save_file_to_project_rejects_invalid_project_id(isolated_projects_dir):
             file_storage,
             "notes.txt",
         )
+
+
+def test_save_and_get_document_manifest_roundtrip(isolated_projects_dir):
+    """ADR-0013 Slice 1, Teil A (Issue #1152): Sidecar-Roundtrip."""
+    project = ProjectManager.create_project(name="Manifest Roundtrip")
+    manifest = DocumentManifest(
+        documents=[
+            DocumentManifestEntry(
+                document_id="report", filename="report.pdf", start_offset=30, end_offset=120
+            )
+        ]
+    )
+
+    ProjectManager.save_document_manifest(project.project_id, manifest)
+    loaded = ProjectManager.get_document_manifest(project.project_id)
+
+    assert loaded is not None
+    assert loaded == manifest
+
+
+def test_get_document_manifest_returns_none_for_legacy_project_without_sidecar(isolated_projects_dir):
+    """Altprojekt ohne extracted_documents.json lädt fehlerfrei (KEIN Fehler, ADR-0013 §3)."""
+    project = ProjectManager.create_project(name="Legacy Project")
+    ProjectManager.save_extracted_text(project.project_id, "some legacy text without a sidecar")
+
+    loaded = ProjectManager.get_document_manifest(project.project_id)
+
+    assert loaded is None

@@ -1,7 +1,14 @@
 import re
 
 import pytest
-from app.utils.file_parser import FileParser, _read_text_with_fallback, split_text_into_chunks
+from app.contracts.document_manifest_contract import DocumentManifest, DocumentManifestEntry
+from app.utils.file_parser import (
+    FileParser,
+    _read_text_with_fallback,
+    derive_document_id,
+    split_text_into_chunks,
+    split_text_into_chunks_with_documents,
+)
 
 def test_read_text_with_fallback_utf8(tmp_path):
     file_path = tmp_path / "test_utf8.txt"
@@ -135,6 +142,230 @@ def test_split_text_into_chunks_german_fliesstext():
         assert not starts_mid_word, (
             f"Chunk startet mitten im Wort: {chunk!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# ADR-0013 Slice 1, Teil A (Issue #1152): Dokument-Manifest + Chunk-Zuordnung.
+# ---------------------------------------------------------------------------
+
+
+def test_derive_document_id_dedupes_with_running_suffix():
+    existing = {"report"}
+    first = derive_document_id("report.pdf", existing)
+    assert first == "report-2"
+    existing.add(first)
+    second = derive_document_id("report.pdf", existing)
+    assert second == "report-3"
+
+
+def test_derive_document_id_bounds_length_for_evidence_anchor():
+    """Sehr lange Dateinamen dürfen den 200-Zeichen-Anker nicht sprengen.
+
+    ADR-0013 schreibt ``seed_doc:<document_id>#chunk:<chunk_id>`` vor; das
+    Feld ``EvidenceItemModel.source_id_anchor`` erlaubt 200 Zeichen. Ohne
+    Längenbegrenzung erzeugte ein langer Upload-Dateiname erst in Slice 2
+    einen unauflösbaren Anker (Codex-Review zu PR #1155).
+    """
+    document_id = derive_document_id("x" * 300 + ".pdf", set())
+    assert len(document_id) == 120
+    anchor = f"seed_doc:{document_id}#chunk:999999"
+    assert len(anchor) <= 200
+
+
+def test_derive_document_id_dedupes_after_truncation():
+    """Kürzen kann Kollisionen erzeugen — der Suffix-Mechanismus fängt sie."""
+    long_stem = "y" * 300
+    first = derive_document_id(long_stem + ".pdf", set())
+    second = derive_document_id(long_stem + ".txt", {first})
+    assert first != second
+    assert second == f"{first}-2"
+
+
+def test_extract_from_multiple_with_manifest_offsets_are_exact(tmp_path):
+    """blob[start_offset:end_offset] enthält exakt den Inhalt des Dokuments."""
+    f1 = tmp_path / "f1.txt"
+    f1.write_text("content one, with some words.")
+    f2 = tmp_path / "f2.txt"
+    f2.write_text("content two, entirely different text here.")
+
+    text, manifest = FileParser.extract_from_multiple_with_manifest([str(f1), str(f2)])
+
+    assert len(manifest.documents) == 2
+    entry1, entry2 = manifest.documents
+    assert text[entry1.start_offset:entry1.end_offset] == "content one, with some words."
+    assert text[entry2.start_offset:entry2.end_offset] == "content two, entirely different text here."
+
+
+def test_extract_from_multiple_with_manifest_duplicate_filenames_get_unique_ids(tmp_path):
+    """Zwei hochgeladene Dateien mit identischem Namen -> unterschiedliche document_id."""
+    dir1 = tmp_path / "a"
+    dir1.mkdir()
+    dir2 = tmp_path / "b"
+    dir2.mkdir()
+    f1 = dir1 / "report.txt"
+    f1.write_text("first report")
+    f2 = dir2 / "report.txt"
+    f2.write_text("second report")
+
+    text, manifest = FileParser.extract_from_multiple_with_manifest([str(f1), str(f2)])
+
+    ids = [entry.document_id for entry in manifest.documents]
+    assert len(ids) == 2
+    assert len(set(ids)) == 2
+    entry1, entry2 = manifest.documents
+    assert text[entry1.start_offset:entry1.end_offset] == "first report"
+    assert text[entry2.start_offset:entry2.end_offset] == "second report"
+
+
+def test_extract_from_multiple_with_manifest_failed_extraction_has_no_entry(tmp_path):
+    """Eine fehlgeschlagene Extraktion erzeugt keinen Manifest-Eintrag."""
+    f1 = tmp_path / "f1.txt"
+    f1.write_text("content 1")
+
+    text, manifest = FileParser.extract_from_multiple_with_manifest([str(f1), "non_existent.txt"])
+
+    assert "extraction failed" in text
+    assert len(manifest.documents) == 1
+    assert manifest.documents[0].filename == "f1.txt"
+
+
+def test_extract_from_multiple_delegates_to_manifest_variant_bit_identical(tmp_path):
+    """extract_from_multiple bleibt rückwärtskompatibel: Blob bitgleich zur alten Implementierung."""
+    f1 = tmp_path / "f1.txt"
+    f1.write_text("content 1")
+    f2 = tmp_path / "f2.md"
+    f2.write_text("content 2")
+
+    plain = FileParser.extract_from_multiple([str(f1), str(f2)])
+    text, _manifest = FileParser.extract_from_multiple_with_manifest([str(f1), str(f2)])
+
+    assert plain == text
+
+
+def test_split_text_into_chunks_with_documents_mid_document_chunk_id_starts_at_zero():
+    """Chunk mitten in Dokument 2 bekommt dessen document_id, chunk_id beginnt dokumentintern bei 0."""
+    doc1_text = "word1 " * 30
+    doc2_text = "word2 " * 30
+    doc3_text = "word3 " * 30
+    text = doc1_text + doc2_text + doc3_text
+
+    manifest = DocumentManifest(
+        documents=[
+            DocumentManifestEntry(
+                document_id="doc1", filename="doc1.txt", start_offset=0, end_offset=len(doc1_text)
+            ),
+            DocumentManifestEntry(
+                document_id="doc2",
+                filename="doc2.txt",
+                start_offset=len(doc1_text),
+                end_offset=len(doc1_text) + len(doc2_text),
+            ),
+            DocumentManifestEntry(
+                document_id="doc3",
+                filename="doc3.txt",
+                start_offset=len(doc1_text) + len(doc2_text),
+                end_offset=len(text),
+            ),
+        ]
+    )
+
+    chunks = split_text_into_chunks_with_documents(text, manifest, chunk_size=50, overlap=10)
+
+    doc2_chunks = [c for c in chunks if c.document_id == "doc2"]
+    assert len(doc2_chunks) >= 1, "Erwarte mindestens einen Chunk mit document_id=doc2"
+    chunk_ids = [c.chunk_id for c in doc2_chunks]
+    assert chunk_ids == list(range(len(doc2_chunks))), (
+        "chunk_id muss dokumentintern bei 0 beginnen und fortlaufend sein, nicht global gezählt"
+    )
+    # Mindestens ein doc2-Chunk liegt vollständig innerhalb von Dokument 2 (kein Grenzfall).
+    assert any(
+        c.start_offset >= len(doc1_text) and c.end_offset <= len(doc1_text) + len(doc2_text)
+        for c in doc2_chunks
+    )
+
+
+def test_split_text_into_chunks_with_documents_boundary_chunk_goes_to_larger_share():
+    """Ein Chunk, der eine Dokumentgrenze überspannt, geht an das Dokument mit dem größeren Anteil."""
+    doc1_text = "A" * 10
+    doc2_text = "B" * 100
+    text = doc1_text + doc2_text
+
+    manifest = DocumentManifest(
+        documents=[
+            DocumentManifestEntry(document_id="doc1", filename="doc1.txt", start_offset=0, end_offset=10),
+            DocumentManifestEntry(document_id="doc2", filename="doc2.txt", start_offset=10, end_offset=110),
+        ]
+    )
+
+    # Kein Satzzeichen/Leerzeichen im Text -> das erste Fenster ist exakt
+    # [0, chunk_size), unbeeinflusst von der Satzgrenzen-Heuristik. Mit
+    # chunk_size=50 liegen 10 Zeichen in doc1 und 40 in doc2 -> doc2 gewinnt.
+    chunks = split_text_into_chunks_with_documents(text, manifest, chunk_size=50, overlap=0)
+
+    first_chunk = chunks[0]
+    assert first_chunk.start_offset == 0
+    assert first_chunk.end_offset == 50
+    assert first_chunk.document_id == "doc2"
+    assert first_chunk.chunk_id == 0
+
+
+def test_split_text_into_chunks_with_documents_without_manifest_is_none():
+    """Ohne Manifest sind document_id und chunk_id None — es wird nicht geraten."""
+    text = "This is a test sentence. This is another one, with more words padding it out further."
+
+    chunks = split_text_into_chunks_with_documents(text, manifest=None, chunk_size=30, overlap=5)
+
+    assert len(chunks) >= 1
+    for chunk in chunks:
+        assert chunk.document_id is None
+        assert chunk.chunk_id is None
+
+    # Der Text-Anteil bleibt identisch zu split_text_into_chunks().
+    assert [c.text for c in chunks] == split_text_into_chunks(text, chunk_size=30, overlap=5)
+
+
+def test_assign_document_ignores_embedded_marker_text_uses_offsets_only():
+    """Ein Dokument, dessen Inhalt selbst ``=== Document 1: fake.txt ===`` enthält,
+    verschiebt die Zuordnung NICHT — es wird ausschließlich über Offsets zugeordnet,
+    kein Marker-Parsing (ADR-0013 §1)."""
+    from app.utils.file_parser import _assign_document
+
+    fake_marker_line = "=== Document 1: fake.txt ===\n"
+    doc1 = DocumentManifestEntry(document_id="doc1", filename="doc1.txt", start_offset=0, end_offset=20)
+    doc2 = DocumentManifestEntry(
+        document_id="doc2",
+        filename="doc2.txt",
+        start_offset=20,
+        end_offset=20 + len(fake_marker_line) + 50,
+    )
+    documents = [doc1, doc2]
+
+    # Ein Chunk, der genau die eingebettete Fake-Marker-Zeile innerhalb von
+    # Dokument 2 abdeckt — der Chunk-TEXT sieht wie ein "Document 1"-Marker
+    # aus, liegt aber vollständig im Offset-Intervall von doc2.
+    chunk_start = 20
+    chunk_end = 20 + len(fake_marker_line)
+    document_id, chunk_id = _assign_document(chunk_start, chunk_end, documents, {})
+
+    assert document_id == "doc2"
+    assert chunk_id == 0
+
+
+def test_extract_from_multiple_with_manifest_embedded_marker_does_not_corrupt_offsets(tmp_path):
+    """Ein Dokument, das selbst eine '=== Document N: ... ==='-Zeile enthält, bekommt
+    trotzdem korrekte Offsets für seinen tatsächlichen Inhalt (kein Marker-Parsing)."""
+    f1 = tmp_path / "f1.txt"
+    f1.write_text("Real content of document one.")
+    f2 = tmp_path / "f2.txt"
+    fake_marker_content = "=== Document 1: fake.txt ===\nThis text pretends to be another document boundary."
+    f2.write_text(fake_marker_content)
+
+    text, manifest = FileParser.extract_from_multiple_with_manifest([str(f1), str(f2)])
+
+    assert len(manifest.documents) == 2
+    entry1, entry2 = manifest.documents
+    assert text[entry1.start_offset:entry1.end_offset] == "Real content of document one."
+    assert text[entry2.start_offset:entry2.end_offset] == fake_marker_content
 
 
 def test_split_text_into_chunks_markdown_with_headings():
