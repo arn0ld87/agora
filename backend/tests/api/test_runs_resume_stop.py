@@ -206,7 +206,7 @@ def test_resume_report_generate_returns_422_when_llm_client_unavailable(env):
     """POST /api/runs/<id>/resume für report_generate mit model_name, aber ohne
     konfigurierten API-Key → synchrones 422 zurück, kein asynchrones Fail im Thread.
 
-    Verifikation: LLMClient-Konstruktion wirft ValueError (kein Key) →
+    Verifikation: LLMClient.from_route wirft ValueError (kein Key) →
     der Endpunkt antwortet sofort mit 422 statt still None zu setzen
     und erst im Worker-Thread zu scheitern.
     """
@@ -234,13 +234,26 @@ def test_resume_report_generate_returns_422_when_llm_client_unavailable(env):
     fake_project.graph_id = "graph_test"
     fake_project.simulation_requirement = "Test"
 
+    fake_locked_route = ResolvedRoute(
+        stage="report_generation",
+        provider_id="openai",
+        model="gpt-4o-mini",
+        base_url_sanitized="https://api.openai.com/v1",
+        routing_version=1,
+    )
+
     with (
         patch("app.api.runs.SimulationManager") as mock_sm,
         patch("app.api.runs.ProjectManager") as mock_pm,
-        patch("app.api.runs.LLMClient", side_effect=ValueError("no API key configured")),
+        patch("app.api.runs.StageModelRouter") as mock_router,
+        patch(
+            "app.api.runs.LLMClient.from_route",
+            side_effect=ValueError("no API key configured"),
+        ) as mock_from_route,
     ):
         mock_sm.return_value.get_simulation.return_value = fake_sim_state
         mock_pm.get_project.return_value = fake_project
+        mock_router.return_value.resolve.return_value = fake_locked_route
         # neo4j_storage ist im env-Fixture nicht gesetzt — in app.extensions hinterlegen
         env["app"].extensions["neo4j_storage"] = MagicMock(name="Neo4jStorage")
 
@@ -252,6 +265,13 @@ def test_resume_report_generate_returns_422_when_llm_client_unavailable(env):
     payload = resp.get_json()
     assert payload["success"] is False
     assert payload.get("error")
+    assert payload["code"] == "llm_client_unavailable"
+    mock_router.assert_called_once_with(run["run_id"])
+    mock_router.return_value.resolve.assert_called_once_with("report_generation")
+    mock_from_route.assert_called_once()
+    route_args, route_kwargs = mock_from_route.call_args
+    assert route_args == (fake_locked_route,)
+    assert route_kwargs["run_id"] == run["run_id"]
 
 
 # ---------------------------------------------------------------------------
