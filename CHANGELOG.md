@@ -5,6 +5,55 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+## [0.9.4] — 2026-08-09
+
+### Added (Dokument-Provenance — 2026-08-09)
+
+- **Dokumentidentität von der Datei-Extraktion bis ins Retrieval:** Hochgeladene Dateien bekommen jetzt eine eindeutige Dokument-ID mit Blob-Offsets, Text-Chunks werden darüber ihrem Ursprungsdokument samt dokumentinterner Chunk-Nummer zugeordnet, und der Graph-Build hält diese Herkunft am Wissensgraph fest. Die Retrieval-Ergebnisse geben sie wieder heraus: zu jedem gefundenen Fakt ist ablesbar, aus welchem Dokument und welchem Abschnitt er stammt. Lässt sich das nicht eindeutig bestimmen, bleibt die Herkunft leer statt geraten. Bestehende Projekte laufen unverändert weiter und liefern wie bisher keine Herkunftsangaben. Auf Reports wirkt sich das noch nicht aus — die Auswertung der Herkunft in der Belegkette folgt in einem Folge-Slice.
+
+Interview-Antworten und Graph-Fakten werden jetzt als kanonische Evidence
+persistiert und sind von Claims referenzierbar — vorher verwarf der
+Evidence-Index sie still, und Reports endeten trotz durchgeführter
+Interviews mit null validierten Claims. Zusätzlich: das neue
+`gate_decision_log` protokolliert jede Gate-Entscheidung (Reviewer-Floor,
+fehlende Evidence, Fließtext-Entfernungen) getrennt vom statusrelevanten
+`degradation_log`, Key-Takeaways tragen einen `confidence_scope`
+(Simulations-Konsens vs. Evidenz), der ReportV3-Export beginnt mit einem
+Evidenzstatus-Block, und die Structured-Metadata-Extraktion sieht den
+vollständigen Section-Text statt eines 6000-Zeichen-Ausschnitts (beendet
+erfundene „Abschnitt bricht ab"-Data-Gaps).
+
+### Added (Referenzlauf Domainmigration — 2026-08-09)
+
+- **Zwei vollständig dokumentierte End-to-End-Referenzläufe im Repository:** Der Fall „Domainmigration `alexle135.de` → `alex-schneider.dev`" liegt als technische Case Study unter `docs/reference-runs/` — inklusive Pipeline-Verlauf, Metrics-Snapshot, Evidence-Gating-Ergebnissen, bekannten Grenzen und Audit-Findings.
+- **Deterministische Evidence-Extracts als Artefakte:** Jeder Lauf trägt einen quellentreuen `evidence-extract.json` mit Provenienzangaben, Größen und SHA-256-Prüfsummen; README und Dokumentationsindex verlinken den Referenzlauf.
+
+### Fixed (OASIS-Simulation hängt auf Runde 0 — 2026-08-09)
+
+- **Host-adaptives BERT-Memory-Profil (`auto`-Default):** `install_bert_memory_profile` erzwang TWHIN-BERT bedingungslos auf `torch_dtype=fp16`. fp16 hat auf CPU keine nativen Kernel und fällt auf eine single-threaded Emulation zurück, deren Forward ~12 min dauert — `update_rec_table` ist `async`, ruft den Forward aber synchron (ohne `run_in_executor`) auf und blockiert so den gemeinsamen asyncio-Event-Loop von Twitter- und Reddit-Plattform (Runde-0-Hang). Neuer Default `"auto"` injiziert fp16 nur noch bei knappem Container-RAM (< 4 GB verfügbar, OOM-Schutz für 2.8-GiB-Kleincontainer) und lädt sonst fp32 (native CPU-Kernel, 16-Thread, ~14 s/Forward). `"low"`/`"off"` behalten ihre Semantik. (#1148)
+
+### Fixed (Kanonische Evidence-Identität — 2026-08-09)
+
+- **Report-Claims referenzieren Evidence jetzt über deterministische IDs:** EvidenceMap v3 und ReportV3 v4 trennen unveränderliche Source-Records von Claim-relativen Bindings, validieren alle Cross-References und stufen nicht auflösbare Legacy-Refs ehrlich zu Hypothesen ab.
+- **Legacy- und CI-Pfade verwenden denselben aktuellen Evidence-Vertrag:** Persistierte ReportV3-v3-Daten werden vor der Validierung kompatibel hochgestuft, EvidenceMap-v3-Ergänzungen bleiben verlustfrei und der Quality-Gate prüft kanonische v3-Fixtures.
+
+### Fixed
+
+- CI: `prod-proxy-smoke` blockte via Harden-Runner-Egress jeden Zugriff auf `ghcr.io` und scheiterte damit auf jedem Release-/Tag-Push am Pull des `astral-sh/uv`-Basis-Images — der GHCR-Publish wurde dadurch nie erreicht. `ghcr.io:443` und `pkg-containers.githubusercontent.com:443` in die Smoke-Allowlist aufgenommen ([#1145](https://github.com/arn0ld87/agora/pull/1145)).
+
+### Fixed (Drift-Fixer erkennt den README-Version-Badge wieder — 2026-08-08)
+
+- **`check_version_drift.py` meldete „No version badge found in README.md", obwohl Zeile 11 einen Badge trägt:** Die Regex matchte nur `badge/Version-` (großes V), das README nutzt seit dem Redesign `badge/version-<semver>-<hexfarbe>`. Lese- und Schreib-Regex matchen jetzt case-insensitiv; beim Release-Cut 0.9.3 musste der Badge deshalb manuell nachgezogen werden. Regressionstests decken das aktuelle Kleinschreibungs-Format mit Hex-Farbe für Read- und Write-Pfad ab.
+
+### Fixed (Hardstop-Check brach den Backend-Job auf main mit Bash-Syntaxfehler — 2026-08-08)
+
+- **`scripts/check-pip-audit-hardstop.sh` endete bei jedem Lauf mit „syntax error in conditional expression" (Exit 2):** `[[ "$TODAY" >= "$HARDCUTOFF" ]]` — den Operator `>=` gibt es in Bash-`[[ ]]` nicht. Ersetzt durch den äquivalenten lexikografischen `<`-Vergleich; Regressionstests führen das Skript jetzt tatsächlich aus (vor/nach/am Cutoff-Tag). Der Defekt blieb unbemerkt, weil frühere main-Läufe schon am Ruff-Step scheiterten, bevor der Hardstop-Step erreicht wurde.
+
+### Fixed (Robuster Multi-Prozess-Routing-Test — 2026-08-09)
+
+- **Routing-Store-Test misst wieder die Lock-Invariante:** Die sieben Subprocess-Worker melden nach ihren Cold Imports explizit Readiness; erst danach beginnt die gemeinsame Lock-Deadline. Deterministisches Cleanup verhindert zugleich verwaiste Children. (#450)
+
+
 ## [0.9.3] — 2026-08-08
 
 ### Fixed (CI auf main wieder grün — 2026-08-08)

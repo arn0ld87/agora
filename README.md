@@ -8,7 +8,7 @@
 
 **Dokumente → Knowledge Graph → Personas → Simulation → nachvollziehbarer Bericht**
 
-[![Version](https://img.shields.io/badge/version-0.9.3-635BFF?style=flat-square)](./VERSION)
+[![Version](https://img.shields.io/badge/version-0.9.4-635BFF?style=flat-square)](./VERSION)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-111827?style=flat-square)](./LICENSE)
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21830644-1682D4?style=flat-square)](https://doi.org/10.5281/zenodo.21830644)
 [![Python](https://img.shields.io/badge/Python-3.14-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -104,7 +104,7 @@ flowchart LR
 
 ### 1. Wissen aufnehmen
 
-PDF-, Markdown- und Textdateien sowie Webseiten werden extrahiert, segmentiert und mit ihrer Herkunft gespeichert.
+PDF-, Markdown- und Textdateien sowie Webseiten werden extrahiert und segmentiert. Jedes Segment trägt seine Dokument- und Chunk-Herkunft durch Ingest, Graph-Aufbau und Retrieval (ADR-0013). Im Report ist dieser Anker für Seed-Dokumente noch nicht ausgewertet — siehe Schritt 5.
 
 ### 2. Knowledge Graph aufbauen
 
@@ -120,7 +120,7 @@ Die OASIS-/CAMEL-Laufzeit orchestriert die Agenten. Redis überträgt Status, Er
 
 ### 5. Evidenzorientierten Report erstellen
 
-Der Report verarbeitet Graph- und Simulationsdaten zu strukturierten Claims. Quellenbezug, Confidence und Datenlücken werden gesondert dargestellt.
+Der Report verarbeitet Graph- und Simulationsdaten zu strukturierten Claims. Quellengattung, Confidence und Datenlücken werden gesondert dargestellt; jedes Evidence-Item nennt seine Gattung (Agentenzitat, Agentenaktion, Graph-Relation, Web-Quelle, Seed-Korpus). Ein Evidence-Item aus dem Seed-Korpus zeigt derzeit noch keinen Anker auf das konkrete Ausgangsdokument — dieser Schritt ist offen ([#1154](https://github.com/arn0ld87/agora/issues/1154)).
 
 ### 6. Varianten vergleichen und exportieren
 
@@ -251,7 +251,7 @@ bun run dev
 
 ## 📊 Projektstatus
 
-**Aktuelle Version:** `0.9.3` Stability Beta
+**Aktuelle Version:** `0.9.4` Stability Beta
 
 | Bereich | Stand |
 |---|---|
