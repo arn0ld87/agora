@@ -159,7 +159,24 @@ async function captureFocusStyle(element: ElementHandle<HTMLElement>): Promise<F
 /**
  * Führt axe-core im Browser-Kontext aus und gibt die Results zurück.
  */
-export async function runAxe(page: Page, options: AxeCheckOptions = {}): Promise<AxeResults> {
+export async function runAxe(
+  page: Page,
+  options: AxeCheckOptions = {},
+  guard: { allowOnboarding?: boolean } = {},
+): Promise<AxeResults> {
+  // Issue #988: zweite Verteidigungslinie für Specs, die runAxe direkt nach
+  // eigenem page.goto aufrufen und deshalb nicht durch die Prüfung in
+  // checkAccessibilityGate laufen. Ohne sie prüft ein vergessener
+  // Onboarding-Bypass den Wizard und meldet grün.
+  if (!guard.allowOnboarding && pathOf(page.url()).startsWith('/onboarding')) {
+    throw new Error(
+      'runAxe laeuft auf /onboarding. Entweder fehlt der Bypass ' +
+        '(ensureOnboardingDismissed(page) vor dem page.goto) — dann prueft das ' +
+        'Gate den Wizard statt der Zielseite —, oder der Wizard ist wirklich ' +
+        'gemeint: dann runAxe(page, options, { allowOnboarding: true }) aufrufen.',
+    );
+  }
+
   const appRoot = page.locator('#app > *').first();
   await expect(appRoot).toBeVisible();
 
@@ -371,8 +388,19 @@ export async function checkAccessibilityGate(page: Page, route: string, options:
   await page.goto(route, { waitUntil: 'domcontentloaded' });
   await waitForStyledPaint(page);
 
+  // Issue #988: erst prüfen, WO wir gelandet sind. Der Onboarding-Guard
+  // (src/router/onboardingGuard.ts) leitet jede nicht-exempte Route auf
+  // /onboarding um, solange onboarding_required gilt — der Default eines
+  // frischen E2E-Stacks. Ohne diese Prüfung laufen alle folgenden Checks
+  // gegen den Wizard statt gegen die Zielseite und melden zuverlässig grün.
+  // Genau so blieben in run-budget.spec.ts monatelang sechs echte
+  // color-contrast-Verstöße unentdeckt.
+  assertRouteNotHijacked(route, page.url());
+
   // axe-core
-  const axeResults = await runAxe(page, options);
+  const axeResults = await runAxe(page, options, {
+    allowOnboarding: pathOf(route).startsWith('/onboarding'),
+  });
   assertNoCriticalViolations(axeResults);
 
   // 320px
@@ -394,3 +422,39 @@ export async function checkAccessibilityGate(page: Page, route: string, options:
   // Reduced motion
   await checkReducedMotion(page);
 }
+
+// ---------------------------------------------------------------------------
+// Issue #988 — Route-Entführung durch den Onboarding-Guard erkennen
+// ---------------------------------------------------------------------------
+
+/** Pfad aus einer absoluten oder relativen URL, ohne Query und Hash. */
+export function pathOf(url: string): string {
+  const withoutOrigin = url.replace(/^[a-z]+:\/\/[^/]+/i, '');
+  return withoutOrigin.split(/[?#]/)[0] || '/';
+}
+
+/**
+ * Wurde die angeforderte Route auf den Onboarding-Wizard umgeleitet?
+ *
+ * Reine Funktion, damit der Fall ohne laufenden Stack prüfbar ist. Wer den
+ * Wizard *absichtlich* gatet — `checkAccessibilityGate(page, '/onboarding')` —
+ * bekommt kein false positive.
+ */
+export function isOnboardingHijack(intendedRoute: string, actualUrl: string): boolean {
+  const intended = pathOf(intendedRoute);
+  const actual = pathOf(actualUrl);
+  if (intended.startsWith('/onboarding')) return false;
+  return actual === '/onboarding' || actual.startsWith('/onboarding/');
+}
+
+export function assertRouteNotHijacked(intendedRoute: string, actualUrl: string): void {
+  if (!isOnboardingHijack(intendedRoute, actualUrl)) return;
+  throw new Error(
+    `Accessibility-Gate laeuft gegen die falsche Seite: angefordert war ${intendedRoute}, ` +
+      `gelandet auf ${pathOf(actualUrl)}. Der Onboarding-Guard hat umgeleitet. ` +
+      'Die Spec muss vor dem page.goto ensureOnboardingDismissed(page) aufrufen ' +
+      '(oder POST /api/onboarding/dismiss senden) — sonst prueft das Gate den ' +
+      'Wizard und meldet gruen, ohne die Zielseite je gesehen zu haben.',
+  );
+}
+

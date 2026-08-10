@@ -22,10 +22,13 @@ vi.mock('@axe-core/playwright', () => ({
 }));
 
 import {
+  assertRouteNotHijacked,
   checkFocusVisible,
   checkReducedMotion,
   diffFocusStyle,
+  isOnboardingHijack,
   parseMaxDuration,
+  pathOf,
   type FocusStyleSnapshot,
 } from './e2e/helpers/accessibility';
 
@@ -256,5 +259,44 @@ describe('parseMaxDuration', () => {
     expect(parseMaxDuration('invalid, 100msjunk, -2s')).toBe(0);
     expect(parseMaxDuration('invalid, 75ms')).toBe(0.075);
     expect(parseMaxDuration('')).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #988 — Route-Entführung durch den Onboarding-Guard
+// ---------------------------------------------------------------------------
+
+describe('isOnboardingHijack', () => {
+  it('erkennt die Umleitung einer beliebigen Zielroute auf den Wizard', () => {
+    expect(isOnboardingHijack('/runs/run_42', 'http://localhost:5173/onboarding')).toBe(true);
+    expect(isOnboardingHijack('/dashboard', '/onboarding?step=2')).toBe(true);
+    expect(isOnboardingHijack('/settings/general', '/onboarding/welcome')).toBe(true);
+  });
+
+  it('meldet nichts, wenn die Zielroute erreicht wurde', () => {
+    expect(isOnboardingHijack('/runs/run_42', 'http://localhost:5173/runs/run_42')).toBe(false);
+    expect(isOnboardingHijack('/dashboard', '/dashboard#main')).toBe(false);
+  });
+
+  it('meldet nichts, wenn der Wizard absichtlich gegatet wird', () => {
+    // golden-gate-accessibility.spec.ts prüft /onboarding selbst — das darf
+    // kein false positive werden, sonst wird der Riegel wieder ausgebaut.
+    expect(isOnboardingHijack('/onboarding', 'http://localhost:5173/onboarding')).toBe(false);
+  });
+
+  it('assertRouteNotHijacked wirft mit einem Hinweis auf den fehlenden Bypass', () => {
+    expect(() => assertRouteNotHijacked('/runs/run_42', '/onboarding')).toThrowError(
+      /ensureOnboardingDismissed/,
+    );
+    expect(() => assertRouteNotHijacked('/runs/run_42', '/runs/run_42')).not.toThrow();
+  });
+});
+
+
+describe('pathOf', () => {
+  it('entfernt Origin, Query und Hash', () => {
+    expect(pathOf('http://localhost:5173/runs/run_42?tab=budget#top')).toBe('/runs/run_42');
+    expect(pathOf('/dashboard')).toBe('/dashboard');
+    expect(pathOf('http://localhost:5173')).toBe('/');
   });
 });
