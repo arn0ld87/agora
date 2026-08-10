@@ -563,7 +563,8 @@
       "raw": "Rohausgabe",
       "exportMd": "Als Markdown exportieren",
       "exportPdf": "Als PDF exportieren",
-      "printPdf": "Als PDF drucken (Browser)"
+      "printPdf": "Als PDF drucken (Browser)",
+      "evidenceJson": "Evidence JSON"
     },
     "model": {
       "reportLabel": "Modell für Report",
@@ -596,7 +597,9 @@
     "export": {
       "evidenceOmitted": {
         "contract_violation": "JSON-Export ausgeliefert, aber ohne Evidence-Map: die persistierte Evidence verletzt den Evidence-Vertrag. Der Report-Rumpf in der Datei ist vollständig."
-      }
+      },
+      "evidencePending": "Evidenzkarte wird noch erzeugt — der Export steht zur Verfügung, sobald sie fertig ist.",
+      "evidenceUnavailable": "Evidenzkarte für diesen Report nicht verfügbar."
     }
   },
   "report": {
