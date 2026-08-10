@@ -159,7 +159,24 @@ async function captureFocusStyle(element: ElementHandle<HTMLElement>): Promise<F
 /**
  * Führt axe-core im Browser-Kontext aus und gibt die Results zurück.
  */
-export async function runAxe(page: Page, options: AxeCheckOptions = {}): Promise<AxeResults> {
+export async function runAxe(
+  page: Page,
+  options: AxeCheckOptions = {},
+  guard: { allowOnboarding?: boolean } = {},
+): Promise<AxeResults> {
+  // Issue #988: zweite Verteidigungslinie für Specs, die runAxe direkt nach
+  // eigenem page.goto aufrufen und deshalb nicht durch die Prüfung in
+  // checkAccessibilityGate laufen. Ohne sie prüft ein vergessener
+  // Onboarding-Bypass den Wizard und meldet grün.
+  if (!guard.allowOnboarding && pathOf(page.url()).startsWith('/onboarding')) {
+    throw new Error(
+      'runAxe laeuft auf /onboarding. Entweder fehlt der Bypass ' +
+        '(ensureOnboardingDismissed(page) vor dem page.goto) — dann prueft das ' +
+        'Gate den Wizard statt der Zielseite —, oder der Wizard ist wirklich ' +
+        'gemeint: dann runAxe(page, options, { allowOnboarding: true }) aufrufen.',
+    );
+  }
+
   const appRoot = page.locator('#app > *').first();
   await expect(appRoot).toBeVisible();
 
@@ -371,8 +388,19 @@ export async function checkAccessibilityGate(page: Page, route: string, options:
   await page.goto(route, { waitUntil: 'domcontentloaded' });
   await waitForStyledPaint(page);
 
+  // Issue #988: erst prüfen, WO wir gelandet sind. Der Onboarding-Guard
+  // (src/router/onboardingGuard.ts) leitet jede nicht-exempte Route auf
+  // /onboarding um, solange onboarding_required gilt — der Default eines
+  // frischen E2E-Stacks. Ohne diese Prüfung laufen alle folgenden Checks
+  // gegen den Wizard statt gegen die Zielseite und melden zuverlässig grün.
+  // Genau so blieben in run-budget.spec.ts monatelang sechs echte
+  // color-contrast-Verstöße unentdeckt.
+  assertRouteNotHijacked(route, page.url());
+
   // axe-core
-  const axeResults = await runAxe(page, options);
+  const axeResults = await runAxe(page, options, {
+    allowOnboarding: pathOf(route).startsWith('/onboarding'),
+  });
   assertNoCriticalViolations(axeResults);
 
   // 320px
@@ -388,9 +416,195 @@ export async function checkAccessibilityGate(page: Page, route: string, options:
   // Keyboard
   await checkKeyboardNavigation(page);
 
+  // Issue #1088: Reihenfolge, nicht nur Erreichbarkeit.
+  await checkTabOrderFollowsReadingOrder(page);
+
   // Focus visible
   await checkFocusVisible(page);
 
   // Reduced motion
   await checkReducedMotion(page);
+}
+
+// ---------------------------------------------------------------------------
+// Issue #988 — Route-Entführung durch den Onboarding-Guard erkennen
+// ---------------------------------------------------------------------------
+
+/** Pfad aus einer absoluten oder relativen URL, ohne Query und Hash. */
+export function pathOf(url: string): string {
+  const withoutOrigin = url.replace(/^[a-z]+:\/\/[^/]+/i, '');
+  return withoutOrigin.split(/[?#]/)[0] || '/';
+}
+
+/**
+ * Wurde die angeforderte Route auf den Onboarding-Wizard umgeleitet?
+ *
+ * Reine Funktion, damit der Fall ohne laufenden Stack prüfbar ist. Wer den
+ * Wizard *absichtlich* gatet — `checkAccessibilityGate(page, '/onboarding')` —
+ * bekommt kein false positive.
+ */
+export function isOnboardingHijack(intendedRoute: string, actualUrl: string): boolean {
+  const intended = pathOf(intendedRoute);
+  const actual = pathOf(actualUrl);
+  if (intended.startsWith('/onboarding')) return false;
+  return actual === '/onboarding' || actual.startsWith('/onboarding/');
+}
+
+export function assertRouteNotHijacked(intendedRoute: string, actualUrl: string): void {
+  if (!isOnboardingHijack(intendedRoute, actualUrl)) return;
+  throw new Error(
+    `Accessibility-Gate laeuft gegen die falsche Seite: angefordert war ${intendedRoute}, ` +
+      `gelandet auf ${pathOf(actualUrl)}. Der Onboarding-Guard hat umgeleitet. ` +
+      'Die Spec muss vor dem page.goto ensureOnboardingDismissed(page) aufrufen ' +
+      '(oder POST /api/onboarding/dismiss senden) — sonst prueft das Gate den ' +
+      'Wizard und meldet gruen, ohne die Zielseite je gesehen zu haben.',
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Issue #1088 — Tab-Reihenfolge gegen die visuelle Lesereihenfolge
+// ---------------------------------------------------------------------------
+
+/** Ein per Tab erreichter Fokus-Stopp mit Position und umgebendem Landmark. */
+export interface TabStop {
+  /** Nullbasierte Position in der Tab-Kette. */
+  order: number;
+  /** Landmark-Kennung (`main`, `nav[1]`, …) oder `document`. */
+  landmark: string;
+  /** Menschenlesbare Kennzeichnung für die Fehlermeldung. */
+  label: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Zwei Elemente gelten als in derselben Zeile, wenn sich ihre vertikalen
+ * Bereiche um mehr als die Hälfte der kleineren Höhe überlappen.
+ *
+ * Ohne diese Toleranz wäre jede Button-Leiste ein Verstoß: Elemente
+ * nebeneinander haben fast nie exakt dasselbe `y`.
+ */
+export function isSameRow(a: TabStop, b: TabStop): boolean {
+  const overlap = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+  const reference = Math.min(a.height, b.height);
+  if (reference <= 0) return Math.abs(a.y - b.y) <= ROW_TOLERANCE_PX;
+  return overlap > reference / 2;
+}
+
+/** Zulässiger Rückwärtsversatz in Pixeln, um Rundung und Rahmen abzufangen. */
+const ROW_TOLERANCE_PX = 4;
+
+/**
+ * Verstöße gegen die visuelle Lesereihenfolge — reine Funktion.
+ *
+ * Geprüft wird je Landmark getrennt: innerhalb einer Zeile muss die
+ * Tab-Reihenfolge nach rechts laufen, über Zeilen hinweg nach unten. Der Sprung
+ * zwischen zwei Landmarks wird bewusst nicht bewertet — eine Sprungmarke
+ * ("Zum Inhalt springen") führt korrekterweise nach unten und vorne zugleich.
+ *
+ * Diese Regel ist absichtlich nicht die DOM-Reihenfolge: der Fehler, um den es
+ * geht, ist "sieht oben aus, kommt beim Tabben zuletzt" — erzeugt durch CSS
+ * (`order`, `grid-area`) oder positives `tabindex`. Die DOM-Reihenfolge bleibt
+ * dabei unverändert und würde den Fehler nie sehen.
+ */
+export function findReadingOrderViolations(stops: readonly TabStop[]): string[] {
+  const violations: string[] = [];
+  for (let i = 1; i < stops.length; i++) {
+    const previous = stops[i - 1];
+    const current = stops[i];
+    if (previous.landmark !== current.landmark) continue;
+
+    if (isSameRow(previous, current)) {
+      if (current.x < previous.x - ROW_TOLERANCE_PX) {
+        violations.push(
+          `${current.landmark}: Tab-Stopp ${current.order} (${current.label}) liegt links von ` +
+            `Stopp ${previous.order} (${previous.label}) in derselben Zeile ` +
+            `(x=${Math.round(current.x)} < ${Math.round(previous.x)}).`,
+        );
+      }
+      continue;
+    }
+
+    if (current.y < previous.y - ROW_TOLERANCE_PX) {
+      violations.push(
+        `${current.landmark}: Tab-Stopp ${current.order} (${current.label}) liegt oberhalb von ` +
+          `Stopp ${previous.order} (${previous.label}) ` +
+          `(y=${Math.round(current.y)} < ${Math.round(previous.y)}).`,
+      );
+    }
+  }
+  return violations;
+}
+
+/** Obergrenze für die Tab-Kette — schützt vor Fokusfallen mit Endlosschleife. */
+const MAX_TAB_STOPS = 60;
+
+/**
+ * Sammelt die tatsächliche Tab-Kette und prüft sie gegen die Lesereihenfolge.
+ *
+ * Bewusst getabbt statt aus dem DOM abgeleitet: nur so wird ein positives
+ * `tabindex` sichtbar. Geprüft wird ausschließlich die Reihenfolge der
+ * Elemente, die im Moment der Prüfung fokussierbar sind — ob ein bestimmtes
+ * Element vorhanden ist, gehört in einen Funktionstest. Vermischt man beides,
+ * wird der Check bei jeder bedingten Anzeige rot und endet bei pauschalen
+ * Retries.
+ */
+export async function checkTabOrderFollowsReadingOrder(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  });
+
+  const stops: TabStop[] = [];
+  const seen = new Set<string>();
+
+  for (let index = 0; index < MAX_TAB_STOPS; index++) {
+    await page.keyboard.press('Tab');
+    const stop = await page.evaluate(() => {
+      const active = document.activeElement;
+      if (!(active instanceof HTMLElement) || active === document.body) return null;
+
+      const landmarkSelector = 'main, nav, aside, header, footer, [role="main"], [role="navigation"], [role="complementary"], [role="banner"], [role="contentinfo"]';
+      const container = active.closest<HTMLElement>(landmarkSelector);
+      let landmark = 'document';
+      if (container) {
+        const role = container.getAttribute('role');
+        const tag = container.tagName.toLowerCase();
+        const base = role ?? tag;
+        const siblings = Array.from(document.querySelectorAll<HTMLElement>(landmarkSelector)).filter(
+          (node) => (node.getAttribute('role') ?? node.tagName.toLowerCase()) === base,
+        );
+        landmark = siblings.length > 1 ? `${base}[${siblings.indexOf(container)}]` : base;
+      }
+
+      const rect = active.getBoundingClientRect();
+      const text = (active.getAttribute('aria-label') || active.textContent || '').trim().slice(0, 40);
+      const id = active.id ? `#${active.id}` : '';
+      return {
+        key: `${active.tagName}${id}:${rect.x},${rect.y}`,
+        landmark,
+        label: `${active.tagName.toLowerCase()}${id}${text ? ` "${text}"` : ''}`,
+        x: rect.x + window.scrollX,
+        y: rect.y + window.scrollY,
+        width: rect.width,
+        height: rect.height,
+      };
+    });
+
+    // Fokus hat das Dokument verlassen (Browser-Chrome) oder die Kette hat sich
+    // geschlossen — beides beendet die Sammlung, keins ist ein Mangel.
+    if (!stop) break;
+    if (seen.has(stop.key)) break;
+    seen.add(stop.key);
+    stops.push({ order: index, landmark: stop.landmark, label: stop.label, x: stop.x, y: stop.y, width: stop.width, height: stop.height });
+  }
+
+  const violations = findReadingOrderViolations(stops);
+  if (violations.length > 0) {
+    throw new Error(
+      `Tab-Reihenfolge folgt nicht der visuellen Lesereihenfolge (${stops.length} Stopps gesammelt):\n` +
+        violations.join('\n'),
+    );
+  }
 }
