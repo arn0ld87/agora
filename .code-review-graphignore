@@ -21,8 +21,14 @@ backend/venv311/**
 backend/data/**
 backend/instance/**
 
-# Worktrees (lokale Slice-Workspaces)
+# Worktrees (lokale Slice-Workspaces und Harness-Worktrees der Subagenten)
 .worktrees/**
+.claude/worktrees/**
+
+# Design-Archive: statische Referenz-Assets, kein Produktivcode
+design/**
+frontend/public/design/**
+docs/design-reference/**
 
 # OASIS / Runtime
 backend/uploads/**
