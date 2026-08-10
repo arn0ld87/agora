@@ -22,7 +22,13 @@ import PageHeader from '@/components/v4/shell/PageHeader.vue'
 import Card from '@/components/v4/forms/Card.vue'
 import Badge from '@/components/v4/forms/Badge.vue'
 import { useEmbeddingConfigurationsStore } from '@/store/embeddingConfigurations'
-import type { EmbeddingConfiguration, EmbeddingMigrationJob } from '@/contracts/embeddingContract'
+import { listProviderConnections } from '@/api/providerConnections'
+import type { ProviderConnection } from '@/contracts/aiProviderContract'
+import type {
+  EmbeddingConfiguration,
+  EmbeddingMigrationJob,
+  EmbeddingProviderKind,
+} from '@/contracts/embeddingContract'
 
 const { t } = useI18n()
 
@@ -70,6 +76,79 @@ const ollamaDraft = reactive<OllamaPullDraft>({
 
 const ollamaModalOpen = ref(false);
 
+// Provider-Connections fuer das Anlege-Formular (Slice 4.4, Etappe 1/2).
+const providerConnections = ref<ProviderConnection[]>([]);
+
+// Anlege-Formular fuer eine neue Embedding-Konfiguration.
+interface CreateConfigDraft {
+  providerConnectionId: string;
+  modelId: string;
+  dimensions: string;
+  isSubmitting: boolean;
+  lastError: string | null;
+}
+
+const createConfigDraft = reactive<CreateConfigDraft>({
+  providerConnectionId: '',
+  modelId: '',
+  dimensions: '',
+  isSubmitting: false,
+  lastError: null,
+});
+
+const createConfigModalOpen = ref(false);
+
+function openCreateConfigModal(): void {
+  createConfigDraft.providerConnectionId = providerConnections.value[0]?.id ?? '';
+  createConfigDraft.modelId = '';
+  createConfigDraft.dimensions = '';
+  createConfigDraft.lastError = null;
+  createConfigModalOpen.value = true;
+}
+
+async function submitCreateConfig(): Promise<void> {
+  const connection = providerConnections.value.find(
+    (c) => c.id === createConfigDraft.providerConnectionId,
+  );
+  if (!connection) {
+    createConfigDraft.lastError = t('embedding.create.connectionRequired', 'Bitte eine Provider-Connection waehlen.');
+    return;
+  }
+  if (!createConfigDraft.modelId) {
+    createConfigDraft.lastError = t('embedding.create.modelRequired', 'Modell-Name ist erforderlich.');
+    return;
+  }
+  const dimensions = Number(createConfigDraft.dimensions);
+  if (!Number.isInteger(dimensions) || dimensions <= 0) {
+    createConfigDraft.lastError = t('embedding.create.dimensionsInvalid', 'Dimension muss eine positive Ganzzahl sein.');
+    return;
+  }
+
+  createConfigDraft.isSubmitting = true;
+  createConfigDraft.lastError = null;
+  try {
+    const created = await store.upsertConfiguration('new', {
+      provider_connection_id: connection.id,
+      provider_kind: connection.provider_kind as EmbeddingProviderKind,
+      model_id: createConfigDraft.modelId,
+      dimensions,
+      scope: 'global',
+      project_id: null,
+    });
+    try {
+      await store.testConfiguration(created.id);
+    } catch {
+      // Eine fehlgeschlagene Probe darf das Anlegen nicht abbrechen —
+      // die Konfiguration bleibt sichtbar (Status "proposed"/"failed").
+    }
+    createConfigModalOpen.value = false;
+  } catch (err) {
+    createConfigDraft.lastError = errorMessage(err);
+  } finally {
+    createConfigDraft.isSubmitting = false;
+  }
+}
+
 // Gemini-Finding (HIGH): die Helferfunktion ``migration``
 // wurde pro Render-Zyklus 15 Mal pro Konfiguration aufgerufen. Das
 // ist teuer und unnoetig — eine computed-Eigenschaft berechnet das
@@ -112,7 +191,12 @@ const isOllama = (config: EmbeddingConfiguration): boolean =>
   config.provider_kind === 'ollama' || config.provider_kind === 'ollama_cloud';
 
 onMounted(async () => {
-  await Promise.all([store.loadConfigurations(), store.loadActiveConfiguration()]);
+  const [, , connectionsResp] = await Promise.all([
+    store.loadConfigurations(),
+    store.loadActiveConfiguration(),
+    listProviderConnections(),
+  ]);
+  providerConnections.value = connectionsResp.items;
 });
 
 const progressPct = (job: EmbeddingMigrationJob): number => {
@@ -167,6 +251,14 @@ function errorMessage(err: unknown): string {
 <template>
   <AppShell>
     <PageHeader :breadcrumbs="BREADCRUMBS" :title="$t('settings.v4.embedding.title', 'Embedding-Konfiguration')">
+      <button
+        type="button"
+        class="btn btn-primary"
+        data-testid="open-create-config"
+        @click="openCreateConfigModal"
+      >
+        {{ $t('embedding.create.open', 'Neue Konfiguration') }}
+      </button>
       <button
         type="button"
         class="btn btn-secondary"
@@ -342,6 +434,68 @@ function errorMessage(err: unknown): string {
             {{ $t('embedding.ollama.submit', 'Download starten') }}
           </button>
         </div>
+      </div>
+    </div>
+
+    <!-- Anlege-Modal fuer eine neue Embedding-Konfiguration -->
+    <div v-if="createConfigModalOpen" class="modal-backdrop" @click.self="createConfigModalOpen = false">
+      <div class="modal" data-testid="create-config-modal">
+        <h3>{{ $t('embedding.create.title', 'Neue Embedding-Konfiguration') }}</h3>
+
+        <template v-if="providerConnections.length === 0">
+          <p class="text-warn">
+            {{ $t('embedding.create.noConnections', 'Keine Provider-Connections vorhanden. Zuerst eine Verbindung anlegen.') }}
+          </p>
+          <router-link :to="{ name: 'SettingsLlmProviders' }" class="btn btn-secondary">
+            {{ $t('embedding.create.toProviders', 'Zu den LLM-Anbietern') }}
+          </router-link>
+        </template>
+        <template v-else>
+          <label>
+            {{ $t('embedding.create.connection', 'Provider-Connection') }}
+            <select v-model="createConfigDraft.providerConnectionId" data-testid="create-config-connection">
+              <option v-for="conn in providerConnections" :key="conn.id" :value="conn.id">
+                {{ conn.display_name }}
+              </option>
+            </select>
+          </label>
+          <label>
+            {{ $t('embedding.create.model', 'Modell-Name') }}
+            <input
+              v-model="createConfigDraft.modelId"
+              type="text"
+              data-testid="create-config-model"
+              placeholder="nomic-embed-text"
+            />
+          </label>
+          <label>
+            {{ $t('embedding.create.dimensions', 'Dimension') }}
+            <input
+              v-model="createConfigDraft.dimensions"
+              type="number"
+              min="1"
+              step="1"
+              data-testid="create-config-dimensions"
+            />
+          </label>
+          <p v-if="createConfigDraft.lastError" class="text-warn">
+            {{ createConfigDraft.lastError }}
+          </p>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" @click="createConfigModalOpen = false">
+              {{ $t('common.cancel', 'Abbrechen') }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              :disabled="createConfigDraft.isSubmitting"
+              data-testid="create-config-submit"
+              @click="submitCreateConfig"
+            >
+              {{ $t('embedding.create.submit', 'Konfiguration anlegen') }}
+            </button>
+          </div>
+        </template>
       </div>
     </div>
   </AppShell>
