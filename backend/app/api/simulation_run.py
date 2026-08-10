@@ -476,6 +476,21 @@ def _precheck_ai_model_ref(ai_model_ref: "AiModelRef | None") -> None:
         ) from exc
 
 
+def _mark_run_failed(run_id: str, message: str) -> None:
+    """Bringt einen registrierten Run auf einen Endzustand (Issue #1176).
+
+    Best effort und bewusst schluckend: diese Funktion laeuft in
+    ``except``-Zweigen. Wuerde sie selbst werfen, ginge der urspruengliche
+    Fehler verloren — und der Aufrufer stuende ohne Diagnose da.
+    """
+    try:
+        run_registry.update_run(run_id, status="failed", message=message)
+    except Exception:  # noqa: BLE001 — der Ursprungsfehler ist wichtiger
+        logger.warning(
+            "Failed to mark run %s as failed after a start error", run_id, exc_info=True
+        )
+
+
 def _register_start_run(req: _StartRequest, state) -> "dict[str, Any]":
     """Phase 5 — Run-Record anlegen, Routing seeden, Budget verankern."""
     run_record = run_registry.create_run(
@@ -524,17 +539,11 @@ def _resolve_start_route(run_id: str, llm_runtime: RuntimeLlmConfig):
     resolved_api_key = resolve_route_api_key(resolved_route, llm_runtime)
 
     if resolved_api_key is None and not is_local_endpoint(resolved_route.base_url_sanitized):
-        # Fallback-422 bleibt für Workspace-Default-Fälle (kein Frontend-Override) —
-        # da kann die Run-Record schon erstellt sein; markiere sie als failed,
-        # damit keine Phantom-Runs in der Liste landen.
-        try:
-            run_registry.update_run(
-                run_id,
-                status="failed",
-                message=f"Missing API key for provider {resolved_route.provider_id}",
-            )
-        except Exception:  # noqa: BLE001 — best effort
-            logger.warning("Failed to mark orphaned run as failed", exc_info=True)
+        # Fallback-422 für Workspace-Default-Fälle (kein Frontend-Override).
+        # Issue #1176: Die Markierung als ``failed`` steht nicht mehr hier,
+        # sondern im Netz um den gesamten Startabschnitt — sonst gäbe es zwei
+        # Stellen mit derselben Verantwortung, und nur eine davon würde bei
+        # einem neuen Abbruchpfad mitgezogen.
         raise _StartRejected(
             json_error(
                 ApiErrorCode.VALIDATION_FAILED,
@@ -657,26 +666,49 @@ def start_simulation():
         _precheck_runtime_provider_key(req.llm_runtime)
         _precheck_ai_model_ref(req.ai_model_ref)
 
-        run_record = _register_start_run(req, state)
-        resolved_route, resolved_api_key = _resolve_start_route(
-            run_record["run_id"], req.llm_runtime
-        )
-        _apply_route_to_simulation_config(req, resolved_route, run_record["run_id"])
     except _StartRejected as rejected:
+        # Vor _register_start_run — es gibt noch keinen Run-Record, der
+        # verwaisen koennte.
         return rejected.response
 
-    run_state = SimulationRunner.start_simulation(
-        simulation_id=req.simulation_id,
-        platform=req.platform,
-        max_rounds=req.max_rounds,
-        enable_graph_memory_update=req.enable_graph_memory_update,
-        graph_id=graph_id,
-        runtime_env=build_route_subprocess_env(
-            resolved_route,
-            resolved_api_key,
-            run_record["run_id"],
-        ),
-    )
+    # Issue #1176: Ab hier existiert ein Run-Record mit status="pending".
+    # Jeder Ausgang, der ihn nicht auf einen Endzustand bringt, hinterlaesst
+    # einen Phantom-Run: er steht dauerhaft in der Liste, das Frontend zeigt
+    # weiter "Bereit", und ``POST /api/runs/<id>/cancel`` greift bei ihm nicht.
+    #
+    # #1094 hat zwei bekannte Abbruchpfade einzeln markiert. Das deckt die
+    # Fehlerklasse nicht ab — ``SimulationRunner.start_simulation`` lag ganz
+    # ausserhalb des try, und jeder kuenftige Abbruchpfad haette dieselbe
+    # Luecke wieder aufgerissen. Statt weiterer Einzelmarkierungen faengt ein
+    # Netz um den gesamten Abschnitt.
+    run_record = _register_start_run(req, state)
+    run_id = run_record["run_id"]
+    try:
+        resolved_route, resolved_api_key = _resolve_start_route(run_id, req.llm_runtime)
+        _apply_route_to_simulation_config(req, resolved_route, run_id)
+
+        run_state = SimulationRunner.start_simulation(
+            simulation_id=req.simulation_id,
+            platform=req.platform,
+            max_rounds=req.max_rounds,
+            enable_graph_memory_update=req.enable_graph_memory_update,
+            graph_id=graph_id,
+            runtime_env=build_route_subprocess_env(
+                resolved_route,
+                resolved_api_key,
+                run_id,
+            ),
+        )
+    except _StartRejected as rejected:
+        _mark_run_failed(run_id, "Simulation start rejected before launch")
+        return rejected.response
+    except BaseException as exc:  # noqa: BLE001 — sofort weitergeworfen
+        # BaseException, nicht Exception: ein Worker-Timeout erreicht den
+        # Handler als Signal-Ableitung (SystemExit), und genau der Fall — der
+        # haengende Request — hat die Phantom-Runs erzeugt. Ein
+        # ``except Exception`` haette ihn durchgelassen.
+        _mark_run_failed(run_id, f"Simulation start failed: {type(exc).__name__}")
+        raise
 
     manager._set_status(state, SimulationStatus.RUNNING)
     run_registry.update_run(

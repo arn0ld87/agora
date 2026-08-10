@@ -113,7 +113,11 @@ def test_cancel_processing_run_returns_202(env):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("bad_status", ["completed", "failed", "stopped", "pending"])
+# Issue #1176: ``pending`` steht bewusst nicht mehr in dieser Liste. Ein Run
+# ohne Subprozess ist kooperativ nicht abbrechbar — er wurde deshalb
+# abgelehnt und blieb dauerhaft in der Liste stehen. Die Route beendet ihn
+# jetzt direkt; abgedeckt in ``test_runs_cancel.py::test_cancel_beendet_einen_pending_run``.
+@pytest.mark.parametrize("bad_status", ["completed", "failed", "stopped"])
 def test_cancel_non_processing_run_returns_400(env, bad_status):
     run = _create_run(env["registry"], status=bad_status)
 

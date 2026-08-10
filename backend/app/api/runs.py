@@ -470,6 +470,27 @@ def cancel_run(run_id: str):
     resolved_run_id = run.get("run_id") or run_id
 
     current_status = run.get("status", "")
+    if current_status == "pending":
+        # Issue #1176: Ein Run in ``pending`` hat noch keinen Subprozess, den
+        # ein Cancel-Flag erreichen könnte — kooperativer Abbruch läuft ins
+        # Leere. Vor diesem Slice lehnte die Route ihn deshalb ab, und die
+        # betroffenen Runs blieben dauerhaft in der Liste stehen: nicht
+        # abbrechbar, weil nicht aktiv, und nicht aktiv werdend, weil der
+        # Start nie durchlief. Sie werden direkt beendet.
+        RunRegistry().update_run(
+            resolved_run_id,
+            status="failed",
+            message="Vom Nutzer abgebrochen, bevor die Simulation gestartet war",
+        )
+        from flask import jsonify, make_response
+
+        return make_response(
+            jsonify(
+                {"success": True, "status": "cancelled", "run_id": resolved_run_id}
+            ),
+            200,
+        )
+
     if current_status != "processing":
         return json_error(
             f"Run is not in 'processing' state (current: {current_status!r}). "
