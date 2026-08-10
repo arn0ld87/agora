@@ -134,6 +134,43 @@ describe('canonical AI provider contracts', () => {
     ).toBe(false)
   })
 
+  it('accepts fallback_reason in the legacy channel and stays strict about unknown keys', () => {
+    // Issue #992: `fallback_reason` reist im Legacy-Kanal mit, weil
+    // `resolve_ai_route` das oberste `AiRoute.fallback_reason` für jeden Slot
+    // außer `provider_fallback` löscht. Ohne diesen Spiegel wäre der neue
+    // Schlüssel im Backend gelandet, ohne dass `.strict()` es bemerkt — genau
+    // der Fall, der in #901 schon einmal durchgerutscht ist.
+    const base = {
+      temperature: null,
+      max_tokens: null,
+      reasoning_effort: null,
+      had_reserved_value: false,
+      reserved_value: null,
+    }
+
+    // NotRequired[str | None] — fehlend, null und ein Textwert gehen durch.
+    expect(LegacyStageRouteOptionsSchema.safeParse(base).success).toBe(true)
+    expect(LegacyStageRouteOptionsSchema.safeParse({ ...base, fallback_reason: null }).success).toBe(true)
+    expect(
+      LegacyStageRouteOptionsSchema.safeParse({ ...base, fallback_reason: 'Primaermodell nicht erreichbar' })
+        .success,
+    ).toBe(true)
+    // Der leere String ist ein gültiger Wert und darf nicht wie `null`
+    // behandelt werden — Backend-seitig wird deshalb auf `is None` geprüft
+    // und nicht auf den Wahrheitswert.
+    expect(LegacyStageRouteOptionsSchema.safeParse({ ...base, fallback_reason: '' }).success).toBe(true)
+
+    // Falscher Typ bleibt ein Fehler.
+    expect(LegacyStageRouteOptionsSchema.safeParse({ ...base, fallback_reason: 42 }).success).toBe(false)
+
+    // `.strict()` gilt weiterhin: ein benachbarter, nicht deklarierter
+    // Schlüssel wird abgelehnt. Ohne diese Zusicherung würde der Test oben
+    // auch dann grün, wenn das Schema versehentlich durchlässig würde.
+    expect(
+      LegacyStageRouteOptionsSchema.safeParse({ ...base, fallback_reasons: 'tippfehler' }).success,
+    ).toBe(false)
+  })
+
   it('mirrors strict backend contracts and keeps unknown capabilities unsupported', () => {
     const capabilities = ModelCapabilitiesSchema.parse({})
     expect(capabilities.chat).toBe('unknown')

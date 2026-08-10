@@ -275,3 +275,51 @@ def test_camel_case_class_names_are_not_flagged(
     monkeypatch.setattr(sys.modules[__name__], "APP_DIR", tmp_path)
 
     assert _findings() == []
+
+
+#: Module, deren String-Literale den LLM oder die API-Antwort erreichen. Der
+#: Guard oben prüft nur ``logger.*``, ``update_progress`` und
+#: ``progress_callback`` — Prompt-Bausteine und Response-Felder laufen an ihm
+#: vorbei, obwohl dort dieselben Übersetzungsreste stecken.
+LLM_FACING_MODULES = (
+    "services/report_agent/workflow.py",
+    "api/simulation_prepare.py",
+)
+
+
+@pytest.mark.parametrize("relative_path", LLM_FACING_MODULES)
+def test_llm_facing_strings_have_no_fullwidth_punctuation(relative_path: str) -> None:
+    """Issue #1091: kein Fullwidth- oder CJK-Zeichen in Strings, die den LLM erreichen.
+
+    In ``workflow.py`` steckten Reste wie ``"… recommend using them: a, b）"``
+    (öffnende ASCII-, schließende Fullwidth-Klammer), ``"、".join(...)`` als
+    Aufzählungstrenner und ``"（nonereport）"`` im Chat-System-Prompt; in
+    ``simulation_prepare.py`` ging ``"Task complete（PrepareWork already
+    exists）"`` als JSON ans Frontend.
+
+    Das ist kein Kosmetikproblem: Prompt-Strings sind Verhalten. Die
+    Werkzeug-Hinweise entscheiden mit darüber, ob der Agent seine Tools
+    überhaupt einsetzt, und ein Zeichen, das das Modell nicht erwartet, kostet
+    im schlechtesten Fall genau diese Wirkung.
+
+    Bewusst schärfer als der Guard oben und auf zwei Dateien begrenzt: hier
+    zählt jedes String-Literal, nicht nur die Argumente bestimmter Aufrufe. Eine
+    Ausweitung des allgemeinen Guards auf Prompt-Strings ist laut #1091
+    ausdrücklich ein eigener Schnitt.
+    """
+    path = APP_DIR / relative_path
+    assert path.is_file(), f"Erwartete Datei fehlt: {path}"
+
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    offenders = [
+        (node.lineno, node.value)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and any(char in node.value for char in FULLWIDTH_PUNCTUATION)
+    ]
+
+    assert not offenders, (
+        f"Fullwidth-/CJK-Interpunktion in {relative_path}:\n"
+        + "\n".join(f"  Zeile {lineno}: {value!r}" for lineno, value in offenders)
+    )

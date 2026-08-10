@@ -378,3 +378,41 @@ def test_router_snapshot_is_complete_and_secret_free(temp_run_dir):
     assert audit["provider_connection_id"] == raw["provider_connection_id"]
     assert audit["model_id"] == raw["model_id"]
     assert audit["fallback_reason"] == raw["fallback_reason"]
+
+
+def test_router_audit_carries_fallback_reason_for_stage_override(temp_run_dir):
+    """Regression #992: ``fallback_reason`` überlebt die Route-Auflösung bis
+    ins Audit, auch wenn die gewinnende Ebene ``stage_override`` ist statt
+    ``provider_fallback``.
+
+    ``resolve_ai_route`` löscht das oberste ``AiRoute.fallback_reason`` für
+    jeden Slot außer ``provider_fallback``. Eine ``AiModelRef`` mit
+    ``source="fallback"`` landet aber im Stage-Slot (analog zu
+    ``ai_model_ref_source``, das denselben Weg schon nimmt) — ihr Grund darf
+    dabei nicht verworfen werden, bevor ``AiRouteAudit.record_routing_resolved``
+    ihn schreiben kann.
+    """
+    from pathlib import Path
+
+    service = RuntimeRunConfig(temp_run_dir)
+    stage_route = StageLLMRoute(
+        provider_id="conn-b",
+        model="qwen3",
+        ai_model_ref_source="fallback",
+        fallback_reason="Primaermodell nicht erreichbar",
+    )
+    service.save_config(RuntimeLlmRouting(
+        global_default=stage_route,
+        stage_overrides={"graph_build": stage_route},
+        routing_version=1,
+    ))
+    router = StageModelRouter(temp_run_dir)
+    resolved = router.resolve("graph_build")
+    router.lock_stage("graph_build", resolved)
+
+    audit_path = Path(service.stages_dir) / "graph_build_routing_resolved.json"
+    audit = json.loads(audit_path.read_text(encoding="utf-8"))
+
+    assert audit["source"] == "stage_override"
+    assert audit["ai_model_ref_source"] == "fallback"
+    assert audit["fallback_reason"] == "Primaermodell nicht erreichbar"

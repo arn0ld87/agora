@@ -48,6 +48,15 @@ def _run_without_optout(code: str, cwd: Path) -> subprocess.CompletedProcess[str
     """Subprozess ohne geerbten Opt-out — sonst testet er nichts."""
     env = os.environ.copy()
     env.pop("NLTK_DISABLE_IMPORT_SECURITY", None)
+    # Issue #1065: ``unstructured.nlp.tokenize`` laedt beim Import Korpora
+    # nach, sofern AUTO_DOWNLOAD_NLTK nicht ausdruecklich abgeschaltet ist
+    # (``tokenize.py``: ``os.getenv("AUTO_DOWNLOAD_NLTK", "True")``). Der
+    # ``import nltk`` am Modulkopf — und damit der hier gepruefte Guard —
+    # laeuft unabhaengig davon. Abschalten macht den Test also nicht
+    # schwaecher, sondern nimmt ihm nur die Netzabhaengigkeit: ohne diese
+    # Zeile haengt sein Verhalten davon ab, ob der ausfuehrende Rechner die
+    # Korpora zufaellig im Cache hat und ob ausgehender Verkehr erlaubt ist.
+    env["AUTO_DOWNLOAD_NLTK"] = "False"
     return subprocess.run(
         [sys.executable, "-c", code],
         cwd=cwd,
@@ -100,20 +109,44 @@ def test_importing_app_unblocks_nltk(cwd: Path) -> None:
     )
 
 
-def test_ingestion_entrypoint_can_parse() -> None:
-    """Der reale Bruchpfad: ``unstructured`` lädt nltk beim Parsen lazy.
+def test_ingestion_entrypoint_unblocks_lazy_nltk_import() -> None:
+    """Der reale Bruchpfad: ``unstructured`` lädt nltk lazy nach.
 
-    Hier ist der Fehler ursprünglich aufgeschlagen — nicht bei ``import nltk``,
-    sondern erst beim ersten echten Parse-Aufruf zur Laufzeit.
+    Hier ist der Fehler ursprünglich aufgeschlagen — nicht bei einem direkten
+    ``import nltk`` im Projektcode, sondern erst, als ``unstructured`` im
+    Ingestion-Pfad seinerseits nltk nachlud.
+
+    Ausgelöst wird der Guard beim **Import** von ``unstructured.nlp.tokenize``
+    (das Modul, über das jeder ``partition_*``-Aufruf läuft): nltk zieht dort
+    ``regex`` und ``defusedxml``, und genau die blockiert der Hook. Der Test
+    importiert deshalb dieses Modul direkt, statt ``partition_text`` aufzurufen.
+
+    Issue #1065: Der frühere ``partition_text``-Aufruf brauchte zusätzlich die
+    NLTK-Korpora ``punkt_tab`` und ``averaged_perceptron_tagger_eng``. Die
+    liegen lokal im Nutzer-Cache ``~/nltk_data`` und werden sonst zur Laufzeit
+    heruntergeladen — auf CI mit ``egress-policy: block`` schlägt das mit
+    ``Connection refused`` fehl, und der Test war rot aus einem Grund, der mit
+    dem Import-Guard nichts zu tun hat. Die Korpora-Verfügbarkeit gehört nicht
+    zur Aussage dieses Tests; sie ist hier ersatzlos entfallen.
     """
     result = _run_without_optout(
         "import app\n"
-        "from unstructured.partition.text import partition_text\n"
-        "els = partition_text(text='Das ist ein Satz. Und noch einer.')\n"
-        "assert els, 'partition_text lieferte keine Elemente'\n",
+        # Derselbe lazy nltk-Import, den jeder partition_*-Aufruf durchlaeuft --
+        # aber ohne Korpora-Download.
+        "from unstructured.nlp.tokenize import sent_tokenize\n"
+        # Genau die beiden Module, die der nltk-Hook blockiert hat.
+        "import regex\n"
+        "import defusedxml\n"
+        "assert sent_tokenize is not None\n",
         BACKEND_DIR,
     )
-    assert result.returncode == 0, f"Ingestion-Parse fehlgeschlagen:\n{result.stderr}"
+    assert result.returncode == 0, (
+        f"Lazy nltk-Import ueber unstructured fehlgeschlagen:\n{result.stderr}"
+    )
+    assert "Blocked import" not in result.stderr, (
+        "Der nltk-Import-Guard hat trotz `import app` zugeschlagen — der Opt-out "
+        f"aus backend/app/__init__.py greift nicht mehr.\nstderr:\n{result.stderr}"
+    )
 
 
 def _stage_block(dockerfile: str, stage: str) -> str:

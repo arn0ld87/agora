@@ -22,6 +22,24 @@ def _carried_ai_model_ref_source(route: AiRoute) -> str | None:
     return legacy.get("ai_model_ref_source")
 
 
+def _carried_fallback_reason(route: AiRoute) -> str | None:
+    """Den urspruenglichen ``fallback_reason`` aus dem Legacy-Kanal lesen.
+
+    Issue #992: ``resolve_ai_route`` loescht das oberste
+    ``AiRoute.fallback_reason`` fuer jeden Slot ausser ``provider_fallback``.
+    Eine ``AiModelRef`` mit ``source="fallback"`` landet aber im Stage-/
+    Run-Slot -- ihr Grund reist deshalb, analog zu
+    ``ai_model_ref_source``, im ``__legacy_stage_route__``-Kanal mit.
+    Defensiv gehalten: Bestandssnapshots ohne den Schluessel duerfen das
+    Audit nicht scheitern lassen -- ``fallback_reason`` ist im Legacy-Kanal
+    ``NotRequired`` und fehlt in allen vor Issue #992 geschriebenen Snapshots.
+    """
+    legacy = route.provider_options.get("__legacy_stage_route__")
+    if not isinstance(legacy, dict):
+        return None
+    return legacy.get("fallback_reason")
+
+
 class AiRouteAudit:
     def __init__(self, run_id: str):
         self.runtime = RuntimeRunConfig(run_id)
@@ -57,10 +75,17 @@ class AiRouteAudit:
             "ai_model_ref_source": _carried_ai_model_ref_source(route),
             "validated_capabilities": dict(route.validated_capabilities),
             "resolved_at": timestamp.astimezone(timezone.utc).isoformat(),
+            # Auf ``is None`` geprueft, nicht auf Wahrheitswert: der leere
+            # String ist ein gueltiger fallback_reason und darf nicht
+            # stillschweigend durch den Legacy-Wert ersetzt werden.
             "fallback_reason": (
                 fallback_reason
                 if fallback_reason is not None
-                else route.fallback_reason
+                else (
+                    route.fallback_reason
+                    if route.fallback_reason is not None
+                    else _carried_fallback_reason(route)
+                )
             ),
         }
         path = os.path.join(
