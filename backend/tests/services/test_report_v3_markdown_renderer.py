@@ -77,7 +77,10 @@ def test_report_v3_renderer_outputs_tables_and_data_gaps() -> None:
     assert "# Agora ReportV3" in markdown
     assert "| P01 | neutral-de | 35-50 | Gruenderin | DACH |" in markdown
     assert "| S01 | KMU | Kleine und mittlere Unternehmen | P01 |" in markdown
-    assert "| claim_01 | medium | persona | Sicherheitsbedenken" in markdown
+    # Issue #1160 A: Zwischen Label und Basis steht jetzt der Geltungsbereich.
+    # Dieser Claim traegt kein ``confidence_scope`` — ein Bestands-Artefakt
+    # behauptet keinen Geltungsbereich, es zeigt "-".
+    assert "| claim_01 | medium | - | persona | Sicherheitsbedenken" in markdown
     assert "## Hypothesen ohne Evidence" in markdown
     assert "| hyp_01 | Preisbereitschaft koennte segmentabhaengig sein. |" in markdown
     assert "## Data Gaps" in markdown

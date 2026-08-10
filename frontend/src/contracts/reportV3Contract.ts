@@ -80,6 +80,15 @@ export const ClaimSchema = z
       "aggregat",
       "datenluecke",
     ]),
+    // Issue #1160 A: Geltungsbereich der Confidence. Spiegelt
+    // backend/app/contracts/report_v3.py::Claim.confidence_scope.
+    // Optional/nullable, weil report-v3.json aus der Zeit davor das Feld
+    // nicht traegt — nicht erfasst ist nicht dasselbe wie
+    // "simulation_consensus" und darf deshalb keinen Default bekommen.
+    confidence_scope: z
+      .enum(["simulation_consensus", "evidence", "empirical"])
+      .optional()
+      .nullable(),
   })
   .strict();
 export type Claim = z.infer<typeof ClaimSchema>;

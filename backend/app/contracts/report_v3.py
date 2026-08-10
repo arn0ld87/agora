@@ -84,6 +84,17 @@ class Claim(BaseModel):
     confidence: Literal["speculative", "low", "medium", "high", "verified"]
     persona_ids: list[str] = Field(default_factory=list)
     aggregation_basis: Literal["seed", "persona", "aggregat", "datenluecke"]
+    # Issue #1160 A (Sign-off 2026-08-09): Geltungsbereich der Confidence.
+    # Ein Claim, den ausschliesslich simulierte Stakeholder stuetzen, kann
+    # dasselbe Label tragen wie ein quellengebundener — die Skala allein
+    # unterscheidet das nicht. Das Feld macht den Unterschied im Report
+    # sichtbar, ohne die Label-Semantik anzutasten (additiv, kein
+    # ADR-0002-Eingriff). ``None`` = nicht erfasst, damit report-v3.json aus
+    # der Zeit vor dieser Aenderung weiter validiert.
+    #
+    # ``empirical`` wird nie automatisch vergeben: Agora erhebt keine realen
+    # empirischen Daten. Der Wert bleibt fuer manuell kuratierte Reports.
+    confidence_scope: Literal["simulation_consensus", "evidence", "empirical"] | None = None
 
 
 class Multiplier(BaseModel):

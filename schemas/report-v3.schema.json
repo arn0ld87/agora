@@ -112,6 +112,23 @@
           "title": "Confidence",
           "type": "string"
         },
+        "confidence_scope": {
+          "anyOf": [
+            {
+              "enum": [
+                "simulation_consensus",
+                "evidence",
+                "empirical"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confidence Scope"
+        },
         "evidence_refs": {
           "description": "Pflicht: mind. 1 Evidenz-Anker",
           "items": {
