@@ -79,7 +79,9 @@ def test_prose_removal_logged_in_degradation_log():
         "suggested_evidence": [],
     }]}
     stub._pending_section_metadata = {}
-    stub._build_claims_for_section = lambda content: []
+    # Issue #1187: die echte Signatur nimmt einen optionalen
+    # ``heartbeat``-Callback entgegen; der Stub spiegelt sie.
+    stub._build_claims_for_section = lambda content, heartbeat=None: []
     stub._finalize_section_claims = lambda raw: ([], [], [], [])
     stub._section_dedup_check = lambda **kwargs: None
 

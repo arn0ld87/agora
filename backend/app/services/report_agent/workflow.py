@@ -26,6 +26,7 @@ from .output_contract import (
     sanitize_final_content,
 )
 from .planning import plan_outline as plan_outline_impl
+from .postprocess_timing import PostprocessPhaseTracker
 from .text_verification import verify_prose
 from .schemas import (
     EvidenceMapModel,
@@ -1200,12 +1201,27 @@ def generate_report(
                 )
                 section_meta = {}
             else:
-                section_meta = generate_section_metadata(
-                    agent,
-                    section_title=section.title,
-                    section_content=section_content,
+                # Issue #1187: macht die bislang unsichtbare
+                # Metadaten-Extraktion sichtbar/messbar — kein
+                # Verhaltensaenderung an section_meta selbst.
+                metadata_phase_tracker = PostprocessPhaseTracker(
+                    report_id,
                     section_index=section_num,
+                    section_title=section.title,
+                    base_progress=base_progress,
+                    completed_sections=completed_section_titles,
+                    report_logger=agent.report_logger,
+                    # eigene, in Tests patchbare Namensbindung durchreichen
+                    # (siehe postprocess_timing.PostprocessPhaseTracker).
+                    report_manager=ReportManager,
                 )
+                with metadata_phase_tracker.phase("section_metadata"):
+                    section_meta = generate_section_metadata(
+                        agent,
+                        section_title=section.title,
+                        section_content=section_content,
+                        section_index=section_num,
+                    )
             if section_meta and agent.report_logger and hasattr(agent.report_logger, "log_section_metadata"):
                 agent.report_logger.log_section_metadata(
                     section_title=section.title,

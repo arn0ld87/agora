@@ -270,6 +270,32 @@ class ReportLogger:
             }
         )
 
+    def log_phase_timing(
+        self,
+        phase: str,
+        duration_seconds: float,
+        section_title: Optional[str] = None,
+        section_index: Optional[int] = None,
+    ):
+        """Log start/end duration of a post-processing phase (Issue #1187).
+
+        Makes the previously silent post-processing (claim extraction,
+        evidence binding, section-metadata extraction, evidence-map
+        persistence) measurable. A follow-up run with this instrumentation
+        is the prerequisite for Issue #1190 (performance optimisation).
+        """
+        self.log(
+            action="phase_timing",
+            stage="generating",
+            section_title=section_title,
+            section_index=section_index,
+            details={
+                "phase": phase,
+                "duration_seconds": round(duration_seconds, 3),
+                "message": f"Phase {phase} completed in {duration_seconds:.2f}s",
+            },
+        )
+
     def log_report_complete(self, total_sections: int, total_time_seconds: float):
         """Log report generation completion"""
         self.log(
