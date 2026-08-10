@@ -339,9 +339,12 @@ function errorMessage(err: unknown): string {
 <template>
   <AppShell>
     <PageHeader :breadcrumbs="BREADCRUMBS" :title="$t('settings.v4.embedding.title', 'Embedding-Konfiguration')">
+      <!-- PageHeader rendert ausschliesslich den benannten Slot "right";
+           Default-Slot-Inhalt wird verworfen. -->
+      <template #right>
       <button
         type="button"
-        class="btn btn-primary"
+        class="btn btn--primary"
         data-testid="open-create-config"
         @click="openCreateConfigModal"
       >
@@ -349,12 +352,13 @@ function errorMessage(err: unknown): string {
       </button>
       <button
         type="button"
-        class="btn btn-secondary"
+        class="btn btn--secondary"
         data-testid="open-ollama-pull"
         @click="openOllamaModal"
       >
         {{ $t('embedding.ollama.download', 'Ollama-Modell herunterladen') }}
       </button>
+      </template>
     </PageHeader>
 
     <section class="grid gap-4">
@@ -381,7 +385,7 @@ function errorMessage(err: unknown): string {
           </p>
           <button
             type="button"
-            class="btn btn-primary"
+            class="btn btn--primary"
             data-testid="adopt-legacy"
             @click="openAdoptModal"
           >
@@ -413,7 +417,7 @@ function errorMessage(err: unknown): string {
         <div class="config-actions">
           <button
             type="button"
-            class="btn btn-secondary"
+            class="btn btn--secondary"
             :disabled="config.status === 'failed'"
             data-testid="probe-config"
             @click="runTest(config)"
@@ -422,7 +426,7 @@ function errorMessage(err: unknown): string {
           </button>
           <button
             type="button"
-            class="btn btn-primary"
+            class="btn btn--primary"
             :disabled="config.status !== 'probed' && config.status !== 'rolled_back'"
             data-testid="activate-config"
             @click="runActivate(config)"
@@ -432,7 +436,7 @@ function errorMessage(err: unknown): string {
           <button
             v-if="measuredDimensions(config) !== null"
             type="button"
-            class="btn btn-secondary"
+            class="btn btn--secondary"
             data-testid="apply-measured-dimensions"
             @click="applyMeasuredDimensions(config)"
           >
@@ -441,7 +445,7 @@ function errorMessage(err: unknown): string {
           </button>
           <button
             type="button"
-            class="btn btn-secondary"
+            class="btn btn--secondary"
             :disabled="config.status === 'active'"
             data-testid="delete-config"
             @click="requestDelete(config)"
@@ -455,12 +459,12 @@ function errorMessage(err: unknown): string {
             {{ $t('embedding.delete.confirm', 'Konfiguration wirklich loeschen?') }}
           </p>
           <div class="config-actions">
-            <button type="button" class="btn btn-secondary" @click="pendingDeleteId = null">
+            <button type="button" class="btn btn--secondary" @click="pendingDeleteId = null">
               {{ $t('common.cancel', 'Abbrechen') }}
             </button>
             <button
               type="button"
-              class="btn btn-primary"
+              class="btn btn--primary"
               data-testid="delete-confirm-submit"
               @click="confirmDelete"
             >
@@ -495,7 +499,7 @@ function errorMessage(err: unknown): string {
             <button
               v-if="!migration"
               type="button"
-              class="btn btn-primary"
+              class="btn btn--primary"
               data-testid="start-migration"
               @click="runStartMigration(config)"
             >
@@ -504,7 +508,7 @@ function errorMessage(err: unknown): string {
             <button
               v-if="migration && (migration!.status === 'pending' || migration!.status === 'running' || migration!.status === 'validating')"
               type="button"
-              class="btn btn-secondary"
+              class="btn btn--secondary"
               data-testid="cancel-migration"
               @click="runCancelMigration(migration as EmbeddingMigrationJob)"
             >
@@ -513,7 +517,7 @@ function errorMessage(err: unknown): string {
             <button
               v-if="isOllama(config)"
               type="button"
-              class="btn btn-secondary"
+              class="btn btn--secondary"
               data-testid="open-ollama-pull-inline"
               @click="openOllamaModal"
             >
@@ -557,12 +561,12 @@ function errorMessage(err: unknown): string {
           {{ ollamaDraft.lastError }}
         </p>
         <div class="modal-actions">
-          <button type="button" class="btn btn-secondary" @click="ollamaModalOpen = false">
+          <button type="button" class="btn btn--secondary" @click="ollamaModalOpen = false">
             {{ $t('common.cancel', 'Abbrechen') }}
           </button>
           <button
             type="button"
-            class="btn btn-primary"
+            class="btn btn--primary"
             :disabled="ollamaDraft.isPulling || !ollamaDraft.model"
             data-testid="ollama-pull-submit"
             @click="submitOllamaPull"
@@ -585,7 +589,7 @@ function errorMessage(err: unknown): string {
           <p class="text-warn">
             {{ $t('embedding.adopt.noConnections', 'Keine Provider-Connections vorhanden. Zuerst eine Verbindung anlegen.') }}
           </p>
-          <router-link :to="{ name: 'SettingsLlmProviders' }" class="btn btn-secondary">
+          <router-link :to="{ name: 'SettingsLlmProviders' }" class="btn btn--secondary">
             {{ $t('embedding.adopt.toProviders', 'Zu den LLM-Anbietern') }}
           </router-link>
         </template>
@@ -605,13 +609,13 @@ function errorMessage(err: unknown): string {
         </p>
 
         <div class="modal-actions">
-          <button type="button" class="btn btn-secondary" @click="adoptModalOpen = false">
+          <button type="button" class="btn btn--secondary" @click="adoptModalOpen = false">
             {{ $t('common.cancel', 'Abbrechen') }}
           </button>
           <button
             v-if="providerConnections.length > 0"
             type="button"
-            class="btn btn-primary"
+            class="btn btn--primary"
             :disabled="adoptDraft.isSubmitting"
             data-testid="adopt-legacy-submit"
             @click="submitAdoptLegacy"
@@ -631,7 +635,7 @@ function errorMessage(err: unknown): string {
           <p class="text-warn">
             {{ $t('embedding.create.noConnections', 'Keine Provider-Connections vorhanden. Zuerst eine Verbindung anlegen.') }}
           </p>
-          <router-link :to="{ name: 'SettingsLlmProviders' }" class="btn btn-secondary">
+          <router-link :to="{ name: 'SettingsLlmProviders' }" class="btn btn--secondary">
             {{ $t('embedding.create.toProviders', 'Zu den LLM-Anbietern') }}
           </router-link>
         </template>
@@ -667,12 +671,12 @@ function errorMessage(err: unknown): string {
             {{ createConfigDraft.lastError }}
           </p>
           <div class="modal-actions">
-            <button type="button" class="btn btn-secondary" @click="createConfigModalOpen = false">
+            <button type="button" class="btn btn--secondary" @click="createConfigModalOpen = false">
               {{ $t('common.cancel', 'Abbrechen') }}
             </button>
             <button
               type="button"
-              class="btn btn-primary"
+              class="btn btn--primary"
               :disabled="createConfigDraft.isSubmitting"
               data-testid="create-config-submit"
               @click="submitCreateConfig"
