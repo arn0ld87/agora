@@ -147,3 +147,50 @@ def test_cancel_non_processing_run_returns_400(env):
     payload = resp.get_json()
     assert payload["code"] == "run_not_active"
     assert is_cancel_requested(run["run_id"]) is False
+
+
+# ---------------------------------------------------------------------------
+# Issue #1176 — Phantom-Runs sind abbrechbar
+# ---------------------------------------------------------------------------
+
+
+def _create_pending_run(registry: RunRegistry, simulation_id: str) -> dict[str, Any]:
+    """Ein Run, wie ``_register_start_run`` ihn anlegt — vor dem Prozessstart."""
+    return registry.create_run(
+        run_type="simulation_run",
+        entity_id=simulation_id,
+        status="pending",
+        message="Simulation run queued",
+        linked_ids={"simulation_id": simulation_id, "project_id": "proj_test"},
+        metadata={},
+    )
+
+
+def test_cancel_beendet_einen_pending_run(env):
+    """Vor #1176 antwortete die Route hier 400 ``run_not_active``.
+
+    Ein Run in ``pending`` hat keinen Subprozess, den ein Cancel-Flag erreichen
+    könnte — kooperativer Abbruch läuft ins Leere. Die Route lehnte ihn deshalb
+    ab, womit er weder abbrechbar war (nicht aktiv) noch je aktiv wurde (der
+    Start lief nie durch). Neun solcher Runs standen dauerhaft in der Liste.
+    """
+    simulation_id = _new_simulation_id()
+    run = _create_pending_run(env["registry"], simulation_id)
+
+    resp = env["client"].post(f"/api/runs/{run['run_id']}/cancel")
+
+    assert resp.status_code == 200, resp.data
+    assert resp.get_json()["status"] == "cancelled"
+    assert env["registry"].get_run(run["run_id"])["status"] == "failed"
+
+
+def test_cancel_lehnt_einen_bereits_beendeten_run_weiterhin_ab(env):
+    """Gegenprobe: der neue Zweig darf nicht jeden Status durchlassen."""
+    simulation_id = _new_simulation_id()
+    run = _create_pending_run(env["registry"], simulation_id)
+    env["registry"].update_run(run["run_id"], status="completed")
+
+    resp = env["client"].post(f"/api/runs/{run['run_id']}/cancel")
+
+    assert resp.status_code == 400
+    assert resp.get_json()["code"] == "run_not_active"

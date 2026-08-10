@@ -441,7 +441,17 @@ def test_resolve_start_route_locks_stage_and_returns_key(app_ctx, monkeypatch):
     router.lock_stage.assert_called_once_with("simulation_rounds", route)
 
 
-def test_resolve_start_route_marks_run_failed_when_key_missing(app_ctx, monkeypatch):
+def test_resolve_start_route_rejects_when_key_missing(app_ctx, monkeypatch):
+    """Issue #1176: Die Phase lehnt ab, markiert den Run aber nicht mehr selbst.
+
+    Die Markierung als ``failed`` liegt jetzt im Auffangnetz um den gesamten
+    Startabschnitt im Handler — sonst gaebe es zwei Stellen mit derselben
+    Verantwortung, und nur eine davon wuerde bei einem neuen Abbruchpfad
+    mitgezogen. Genau daran ist #1094 gescheitert. Das Verhalten auf
+    HTTP-Ebene deckt
+    ``test_start_run_never_stuck_pending.py::test_ein_fehlender_api_key_hinterlaesst_keinen_pending_run``
+    ab.
+    """
     _patch_router(monkeypatch, _resolved_route())
     monkeypatch.setattr(mod, "resolve_route_api_key", lambda _route, _runtime: None)
     registry = MagicMock()
@@ -451,7 +461,7 @@ def test_resolve_start_route_marks_run_failed_when_key_missing(app_ctx, monkeypa
         mod._resolve_start_route("run-1", RuntimeLlmConfig())
 
     assert _status(excinfo) == 422
-    assert registry.update_run.call_args.kwargs["status"] == "failed"
+    registry.update_run.assert_not_called()
 
 
 def test_resolve_start_route_allows_local_endpoint_without_key(app_ctx, monkeypatch):
