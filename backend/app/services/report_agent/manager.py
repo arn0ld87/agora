@@ -16,6 +16,7 @@ from ...config import Config
 from ...models.report import Report, ReportOutline, ReportSection, ReportStatus
 from ...utils.logger import get_logger
 from ..evidence_migrations import normalize_persisted_evidence_map
+from .evidence import text_confidence_label_of
 from .storage import (
     ensure_report_folder,
     ensure_reports_dir,
@@ -91,6 +92,24 @@ def _render_simulated_quote_blocks(content: str) -> str:
 # stuetzen, ist Simulationskonsens — unabhaengig davon, wie hoch sein Label
 # ausfaellt.
 _EVIDENCE_BOUND_SOURCE_KINDS = frozenset({"seed_corpus", "graph_relation", "web_source"})
+
+
+def _text_confidence_for(
+    claim: dict[str, Any], current: str
+) -> "Literal['speculative', 'low', 'medium', 'high', 'verified'] | None":
+    """Die Stufe, unter der der Wortlaut entstand — oder ``None`` (#1012).
+
+    ``None`` ist der Normalfall: der Wortlaut passt zum Label. Stimmt die
+    protokollierte Ausgangsstufe mit dem aktuellen Label ueberein, wurde
+    faktisch nichts abgestuft — dann ebenfalls ``None``, statt eine Abstufung
+    auszuweisen, die keine ist.
+    """
+    recorded = text_confidence_label_of(claim)
+    if not recorded or recorded == current:
+        return None
+    if recorded not in {"speculative", "low", "medium", "high", "verified"}:
+        return None
+    return recorded  # type: ignore[return-value]
 
 
 def _derive_confidence_scope(
@@ -347,6 +366,11 @@ class ReportManager:
                     confidence=confidence,
                     aggregation_basis="persona",
                     confidence_scope=_derive_confidence_scope(claim.get("evidence")),
+                    # Issue #1012: nur gesetzt, wenn der Claim nachtraeglich
+                    # abgestuft wurde. Der Wortlaut stammt dann aus einer
+                    # hoeheren Stufe und deckt mehr Sicherheit ab als das
+                    # Label — ohne dass irgendetwas am Text geaendert wird.
+                    text_confidence=_text_confidence_for(claim, confidence),
                 ))
             for gap in section.get("data_gaps") or []:
                 if not isinstance(gap, dict):

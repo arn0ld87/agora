@@ -89,6 +89,14 @@ export const ClaimSchema = z
       .enum(["simulation_consensus", "evidence", "empirical"])
       .optional()
       .nullable(),
+    // Issue #1012: Stufe, unter der der statement-Wortlaut entstand. Nur
+    // gesetzt, wenn der Claim nachtraeglich abgestuft wurde — dann deckt
+    // seine Formulierung mehr Sicherheit ab, als das Label ausweist.
+    // null/undefined heisst "nicht abgestuft", nicht "unbekannt".
+    text_confidence: z
+      .enum(["speculative", "low", "medium", "high", "verified"])
+      .optional()
+      .nullable(),
   })
   .strict();
 export type Claim = z.infer<typeof ClaimSchema>;

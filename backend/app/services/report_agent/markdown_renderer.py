@@ -88,13 +88,26 @@ _CONFIDENCE_SCOPE_LABELS = {
 }
 
 
+def _confidence_cell(claim: Claim) -> str:
+    """Label, bei nachtraeglicher Abstufung mit Herkunft des Wortlauts (#1012).
+
+    Der ``statement``-Text bleibt unveraendert — er stammt vom Modell und
+    wird nicht nachtraeglich umgeschrieben. Sichtbar wird stattdessen, dass
+    seine Formulierung aus einer hoeheren Stufe kommt und deshalb sicherer
+    klingen kann, als das Label deckt.
+    """
+    if claim.text_confidence and claim.text_confidence != claim.confidence:
+        return f"{claim.confidence} (Wortlaut: {claim.text_confidence})"
+    return str(claim.confidence)
+
+
 def render_claim_table(claims: list[Claim]) -> str:
     return _table(
         ["ID", "Confidence", "Geltungsbereich", "Basis", "Statement", "Evidence"],
         [
             [
                 claim.id,
-                claim.confidence,
+                _confidence_cell(claim),
                 # Bestands-Artefakte ohne das Feld: "-" statt einer Behauptung
                 # ueber einen Geltungsbereich, der nie erfasst wurde.
                 _CONFIDENCE_SCOPE_LABELS.get(claim.confidence_scope or "", "-"),
@@ -242,6 +255,20 @@ def render_evidence_status(report: ReportV3) -> str:
                 "Data Gaps",
                 len(report.data_gaps),
                 "Fehlende Informationen, die eine belastbare Aussage verhindern",
+            ],
+            # Issue #1012: Diese Zahl steht bewusst hier — vor dem narrativen
+            # Text. Ein nachtraeglich abgestufter Claim behaelt seine
+            # urspruengliche, oft deklarative Formulierung; wer den Fliesstext
+            # liest, soll das vorher wissen.
+            [
+                "Nachtraeglich abgestuft",
+                sum(
+                    1
+                    for claim in report.claims
+                    if claim.text_confidence and claim.text_confidence != claim.confidence
+                ),
+                "Wortlaut stammt aus einer hoeheren Vertrauensstufe — nicht als "
+                "Formulierung der aktuellen Stufe lesen",
             ],
         ],
         "Kein Evidenzstatus verfügbar.",
