@@ -1,6 +1,7 @@
 # Deployment — Prod-Like
 
 **Stand:** 2026-05-07, Europe/Berlin
+**Gegen den Code geprüft:** 2026-08-11 — Dateipfade, Kommandos, Skript- und Dokumentverweise. Die fachlichen Aussagen dieses Dokuments sind dabei **nicht** einzeln nachvollzogen worden.
 **Scope:** Hardened Single-Tenant-Deployment — kein Multi-User-AuthN, aber
 Loopback-Bind, Gunicorn, Reverse-Proxy, Token-Pflicht und enge CORS. Zielbild
 ist „lokal hinter Tailscale/WireGuard“, **nicht** ein direkt im Internet
@@ -37,7 +38,7 @@ setzt drei Dinge gegenüber dem Default-Compose:
 
 1. **`build.target: prod`** — Multi-Stage-Dockerfile zieht das schlanke
    Runtime-Stage mit gebautem Frontend-Bundle und Gunicorn vor Flask. Kein
-   Node/npm/curl, kein Vite, kein `npm run dev`, kein Bind-Mount auf
+   Node/bun/curl, kein Vite, kein `bun run dev`, kein Bind-Mount auf
    Quellcode. Backend-Dependencies entstehen im `backend-build`-Stage per
    `uv sync --frozen --no-dev`; das finale Image kopiert nur `.venv`,
    Backend-App/Skripte und `frontend/dist`.
@@ -431,8 +432,7 @@ Im Prod-Override hat Neo4j keinen Host-Port. Konsequenzen:
   `NEO4J_PAGECACHE_SIZE=4g`. Bei kleineren Hosts vor Start in `.env`
   überschreiben; nicht direkt im Compose-File patchen.
 - **Backups** über `neo4j-admin database dump` aus dem Container-Kontext;
-  zugehörige Cron-/Restore-Strategie ist Folge-Sub-Slice F3 (siehe
-  [`2026-05-01-v0.9.0-review-folge-slices-plan.md`](2026-05-01-v0.9.0-review-folge-slices-plan.md)).
+  Cron- und Restore-Strategie stehen in [`backup-restore.md`](backup-restore.md).
 
 ---
 
@@ -535,8 +535,9 @@ Ansatz bevorzugt, weil:
 - `docker load` ist explizit und auditierbar; ein Cache-only-Ansatz lädt
   das Image implizit beim Build-Step, was schwerer zu debuggen ist.
 
-Verweis: [PLAN.md N1](../PLAN.md), Arbeitsprotokoll
-[`docs/2026-05-04-n1-docker-publish-order-arbeitsprotokoll.md`](2026-05-04-n1-docker-publish-order-arbeitsprotokoll.md).
+Der zugehörige Plan und das Arbeitsprotokoll liegen nicht mehr im
+Repository; die Publish-Reihenfolge ist in `.github/workflows/docker-image.yml`
+festgeschrieben und in [`release-process.md`](release-process.md) beschrieben.
 
 ---
 
@@ -569,5 +570,5 @@ Backend-Dependency für PDF-Erzeugung.
   CI-Security-Scans + Slice 3 Redis-Tickets.
 - [`dependency-risk-register.md`](dependency-risk-register.md) — aktive
   CVE-Baseline und Aufräum-Prozess.
-- [`SECURITY_REVIEW_SUMMARY.md`](SECURITY_REVIEW_SUMMARY.md) — historischer
-  Review-Stand (vor v0.9.0).
+- [`security-hardening.md`](security-hardening.md) — Härtungsphasen 1–4.
+  Die frühere `SECURITY_REVIEW_SUMMARY.md` liegt nicht mehr im Repository.

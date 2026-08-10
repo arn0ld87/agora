@@ -1,7 +1,7 @@
 # Agora — Status
 
-**Stand:** 06.08.2026  
-**Geprüfte Main-Baseline:** `cc478627`  
+**Stand:** 11.08.2026  
+**Geprüfte Main-Baseline:** `b72a443b`  
 **Produktversion:** `0.9.4` Stability Beta
 
 Diese Datei beschreibt ausschließlich den verifizierten Istzustand. Strategische Release-Ziele stehen in [`ROADMAP.md`](../ROADMAP.md), konkrete Arbeitspakete in [GitHub Issues](https://github.com/arn0ld87/agora/issues), ausgelieferte Änderungen in [`CHANGELOG.md`](../CHANGELOG.md).
@@ -27,15 +27,17 @@ Die Produktreife wird ab diesem Dokumentationsumbau über [`VERSION`](../VERSION
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 4712 | `cd backend && uv run pytest --collect-only -q` |
-| Frontend Test-Files | 187 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
+| Backend Tests (collected) | 4954 | `cd backend && uv run pytest --collect-only -q` |
+| Frontend Test-Files | 188 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
 Hinweise:
 
 - Zwei Redis-Integrationstests skippen ohne `TEST_REDIS_URL` kontrolliert.
-- Die Frontend-Zahl zählt Testdateien, nicht einzelne Testfälle.
+- Die Backend-Zahl ist der Gesamtwert aus `pytest --collect-only`; im Messlauf vom 11.08.2026 waren davon 7 deselektiert (4947 ausgeführt).
+- Die Frontend-Zahl zählt Testdateien, nicht einzelne Testfälle. Die acht Playwright-E2E-Specs unter `frontend/tests/e2e/` sind darin nicht enthalten.
 - Die Zahlen stammen aus dem letzten synchronisierten Status und müssen nach größeren Merges erneut erzeugt werden.
+- `scripts/sync-status.sh` legt seinen Zähler-Cache unter `backend/.cache/sync-status/` an. Gehört `backend/.cache` einem anderen Benutzer — etwa nach einem Container-Lauf als root —, bricht das Skript mit „Keine Berechtigung" ab; dann `sudo chown -R "$USER" backend/.cache` oder das Verzeichnis löschen.
 
 ## Produktreife
 
@@ -47,10 +49,20 @@ Agora besitzt eine vollständige fachliche Grundpipeline:
 - Dokument-/Webseitenaufnahme und Knowledge-Graph-Build
 - Persona-Erzeugung, Review und Simulation
 - Run-Dashboard, Status, Stop/Pause/Resume und Live-Ereignisse
-- Evidence-orientierte Reports und Exporte; ein einzelner ADR-0002-Verstoß beendet den Report nicht mehr als `failed`, sondern wird lokal abgestuft und maschinenlesbar protokolliert ([#1006](https://github.com/arn0ld87/agora/issues/1006)). Der JSON-Export normalisiert Evidence über dieselbe kanonische Kette wie der Lese-Pfad und weist eine nicht auslieferbare Evidence-Map im Envelope aus, statt sie stumm zu verwerfen ([#987](https://github.com/arn0ld87/agora/issues/987)); ZIP-, CSV- und Streaming-ZIP-Export lesen dieselbe normalisierte Sicht ([#1036](https://github.com/arn0ld87/agora/issues/1036)) und **validieren sie seit [#1160](https://github.com/arn0ld87/agora/issues/1160) G auch** — vertragswidrige Evidenz verlässt das System in keinem Format mehr als scheinbar geprüfte Datei: das ZIP trägt `evidence-omitted.json` statt `evidence-map.json`/`claims.csv`, der Claims-CSV-Abruf und `GET /api/report/<id>/evidence` antworten mit 422 und demselben `reason=contract_violation` wie der JSON-Envelope; die Evidence-Sub-Routen normalisieren noch nicht ([#967](https://github.com/arn0ld87/agora/issues/967))
+- Evidence-orientierte Reports und Exporte; ein einzelner ADR-0002-Verstoß beendet den Report nicht mehr als `failed`, sondern wird lokal abgestuft und maschinenlesbar protokolliert ([#1006](https://github.com/arn0ld87/agora/issues/1006)). Der JSON-Export normalisiert Evidence über dieselbe kanonische Kette wie der Lese-Pfad und weist eine nicht auslieferbare Evidence-Map im Envelope aus, statt sie stumm zu verwerfen ([#987](https://github.com/arn0ld87/agora/issues/987)); ZIP-, CSV- und Streaming-ZIP-Export lesen dieselbe normalisierte Sicht ([#1036](https://github.com/arn0ld87/agora/issues/1036)) und **validieren sie seit [#1160](https://github.com/arn0ld87/agora/issues/1160) G auch** — vertragswidrige Evidenz verlässt das System in keinem Format mehr als scheinbar geprüfte Datei: das ZIP trägt `evidence-omitted.json` statt `evidence-map.json`/`claims.csv`, der Claims-CSV-Abruf und `GET /api/report/<id>/evidence` antworten mit 422 und demselben `reason=contract_violation` wie der JSON-Envelope. Die Evidence-Sub-Routen (Section und Claim) normalisieren seit [#967](https://github.com/arn0ld87/agora/issues/967) über dieselbe kanonische Kette; damit gibt es keinen Consumer mehr mit eigener Evidence-Sicht
 - Compare-, Graph-Diff- und Observability-Grundlagen
 - fortsetzbare Embedding-Migration für Entity- und Fact-Vektoren
-- Kosten-, Token- und Zeitbudgets für Runs ([#764](https://github.com/arn0ld87/agora/issues/764), ADR-0012): Preflight-Schätzung mit ehrlichen Bereichen, weiche/harte Limits pro Run, Live-Verbrauchsmonitor, Abschlussanalyse nach Stage/Provider/Modell, Budgetabbruch über `termination_reason` von Fehler/Nutzerabbruch unterscheidbar, Verbrauch im Report-Export
+- Kosten-, Token- und Zeitbudgets für Runs ([#764](https://github.com/arn0ld87/agora/issues/764), ADR-0012): Preflight-Schätzung mit ehrlichen Bereichen, weiche/harte Limits pro Run, Live-Verbrauchsmonitor, Abschlussanalyse nach Stage/Provider/Modell, Budgetabbruch über `termination_reason` von Fehler/Nutzerabbruch unterscheidbar, Verbrauch im Report-Export. Die harte Durchsetzung im Report-Pfad ist seit [#978](https://github.com/arn0ld87/agora/issues/978) (31.07.2026) korrekt — ein Budgetabbruch endet auf `stopped`, nicht mehr auf `completed`
+
+Nach dem `0.9.4`-Schnitt (09.08.2026) ist zusätzlich in `main`:
+
+- **Dokumentbelege mit auflösbarem Anker** ([#1154](https://github.com/arn0ld87/agora/issues/1154)): ein Graph-Fakt mit Dokument-/Chunk-Herkunft aus der Aufnahme wird als `seed_corpus`-Evidence mit Anker auf die konkrete Dokumentstelle geführt. Erst dadurch kann eine zusätzlich agentengestützte Aussage überhaupt `medium` erreichen. Fakten ohne belegte Herkunft bleiben Graph-Relation; Bestandsberichte verlieren beim Laden unbelegte Dokumentbezüge und werden entsprechend abgestuft
+- **Der Report weist seinen Simulationsstand aus** ([#1192](https://github.com/arn0ld87/agora/issues/1192)): abgeschlossene Runden, geplante Gesamtzahl und ob die Simulation beim Start der Generierung noch lief. Erfasst wird beim Start, nicht beim Abschluss. Nicht ermittelbar → „unbekannt", keine erfundene Null
+- **Nachträglich abgestufte Aussagen weisen ihren Wortlaut aus** ([#1012](https://github.com/arn0ld87/agora/issues/1012)): die Aussagentabelle nennt die Stufe, unter der formuliert wurde; die Übersicht vor dem Fließtext zählt die betroffenen Aussagen. Der generierte Text bleibt bewusst unangetastet
+- **Markdown-Export löst seine Belegkennungen auf** (#1181) und **operative Zahlen weisen ihre Herkunft aus** (#1182)
+- **Die Nachbearbeitungsphase meldet Fortschritt und Phasenzeiten** ([#1187](https://github.com/arn0ld87/agora/issues/1187)) statt stumm zu laufen; der Evidence-Export bleibt sichtbar, solange die Evidenzkarte fehlt ([#1188](https://github.com/arn0ld87/agora/issues/1188))
+- **Kein Run bleibt nach gescheitertem Start auf `pending`** ([#1176](https://github.com/arn0ld87/agora/issues/1176)); Persona-Capping dedupliziert und verteilt über Stakeholdergruppen ([#1177](https://github.com/arn0ld87/agora/issues/1177)); das finale Speichern eines Persona-Profils verliert keine Felder mehr ([#1186](https://github.com/arn0ld87/agora/issues/1186))
+- **Zentraler `max_tokens`-Boden von 32k** für generative Calls ([#1168](https://github.com/arn0ld87/agora/issues/1168), `LLM_MAX_TOKENS_FLOOR`)
 
 Der Stand ist `0.9.4` Stability Beta; die innerhalb der `0.9.x`-Linie noch offenen Freigabekriterien stehen unter `0.9.0` in [`ROADMAP.md`](../ROADMAP.md). Die E2E-Kernpipeline wird seit 31.07.2026 als verpflichtender Pull-Request-Check erzwungen. Die Migration der v3-Inhaltskomponenten (`Step2EnvSetup`/`Step3Simulation`/`Step4Report`) in v4-Wrapper ist abgeschlossen ([#922](https://github.com/arn0ld87/agora/issues/922), PR #938); der credential-basierte Runtime-Provider-Override (`useRuntimeLlmOptions`) ist entfernt. Der `/home`-Redirect auf `/dashboard` ist umgesetzt ([#915](https://github.com/arn0ld87/agora/issues/915), ADR-0010); `Home.vue` bleibt bis `1.0.0` physisch erhalten.
 
@@ -87,17 +99,37 @@ bash scripts/pre-push-gate.sh schemas
 
 ## Coverage-Baseline
 
-Die Werte sind älter als der aktuelle Codebestand und müssen für `0.9.4` neu erzeugt werden.
+Neu gemessen am 11.08.2026 auf `b72a443b`.
 
-| Bereich | letzte Messung | Ergebnis | CI-Schwelle |
-|---|---|---:|---:|
-| Backend gesamt | 10.06.2026 | 66,00 % | 60 % |
-| Frontend Statements | 10.05.2026 | 50,46 % | 28 % |
-| Frontend Branches | 10.05.2026 | 39,56 % | 28 % |
-| Frontend Functions | 10.05.2026 | 38,59 % | 28 % |
-| Frontend Lines | 10.05.2026 | 52,50 % | 28 % |
+| Bereich | letzte Messung | Ergebnis | vorher | CI-Schwelle |
+|---|---|---:|---:|---:|
+| Backend gesamt | 11.08.2026 | 79,00 % | 66,00 % (10.06.) | 60 % |
+| Frontend Statements | 11.08.2026 | 71,03 % | 50,46 % (10.05.) | 28 % |
+| Frontend Branches | 11.08.2026 | 58,44 % | 39,56 % (10.05.) | 28 % |
+| Frontend Functions | 11.08.2026 | 64,19 % | 38,59 % (10.05.) | 28 % |
+| Frontend Lines | 11.08.2026 | 73,32 % | 52,50 % (10.05.) | 28 % |
+
+Backend: 26993 Statements, 5542 nicht abgedeckt (`uv run pytest --cov=app`).
+Frontend: `bun run test:coverage`; Schwellen stehen in `frontend/vite.config.js`.
+
+**Die CI-Schwellen sind damit wirkungslos geworden.** Die Frontend-Schwelle von
+28 % liegt 30 bis 45 Punkte unter dem Istwert, die Backend-Schwelle von 60 %
+19 Punkte darunter — ein Rückfall müsste erst einen großen Teil der Suite
+zerstören, bevor ein Gate anschlägt. Das Anheben ist eine Code-Änderung und
+gehört in ein eigenes Issue, nicht in einen Doku-Sync.
 
 Strukturelle Lücken liegen vor allem in OASIS-/Neo4j-Integrationspfaden, Canvas-/WebGL-Komponenten und großen Wizard-/View-Komponenten.
+
+Im Messlauf schlugen 7 Tests fehl, keiner davon im Produktivcode:
+
+- 5 × `tests/test_sync_status_cache.py` — scheitern am root-eigenen
+  `backend/.cache` (siehe Hinweis unter „Tests"), nicht an der Logik.
+- 1 × `tests/scripts/test_check_pip_audit_hardstop.py::test_on_hardcutoff_day_list_must_already_be_empty`
+  — der Test bildet „heute" mit `datetime.date.today()` (lokal),
+  `scripts/check-pip-audit-hardstop.sh` mit `date -u`. Zwischen 00:00 und
+  02:00 Europe/Berlin sind das zwei verschiedene Tage, und der Test schlägt
+  in diesem Fenster deterministisch fehl. In CI (UTC) fällt das nie auf
+  ([#1203](https://github.com/arn0ld87/agora/issues/1203)).
 
 ## Kanonische technische Pfade
 
@@ -145,7 +177,7 @@ Chat-Routing und Embedding-Konfiguration bleiben getrennte Vertragswelten.
 - Dependency-Ausnahmen werden im [`dependency-risk-register.md`](dependency-risk-register.md) geführt
 - Ontology-Upload (`/ontology/generate`) räumt bei Datei-I/O-Fehlern zwischen Projektanlage und Service-Übergabe das halb angelegte Projekt zuverlässig auf (Issue #899); ein scheiterndes Aufräumen wird protokolliert, ohne die Fehlerantwort zu verfälschen
 - Dokument-Upload schreibt zusätzlich ein Offset-Manifest (`extracted_documents.json`) neben `extracted_text.txt`; der Textblob bleibt unverändert, Projekte ohne Manifest laden weiterhin fehlerfrei ([ADR-0013](decisions/0013-seed-corpus-document-anchor.md), Issue #1152)
-- Die Dokumentherkunft läuft durch bis ins Retrieval: der Graph-Build schreibt `document_id`/`chunk_id` auf den Episode-Knoten, und `SearchResult`, `InsightForgeResult` sowie `PanoramaResult` transportieren sie positionsparallel zur jeweiligen Fakt-Liste (Issue #1152). Ein Fakt ohne eindeutig verifizierbare Herkunft bekommt keinen Anker statt eines geratenen; Bestandsgraphen ohne Dokumentbezug liefern durchgängig `None` und denselben Payload wie zuvor. Das Evidence-Mapping darauf (`EvidenceType.seed_document`, Ankererzeugung) ist noch offen — Issue #1154
+- Die Dokumentherkunft läuft durch bis ins Retrieval: der Graph-Build schreibt `document_id`/`chunk_id` auf den Episode-Knoten, und `SearchResult`, `InsightForgeResult` sowie `PanoramaResult` transportieren sie positionsparallel zur jeweiligen Fakt-Liste (Issue #1152). Ein Fakt ohne eindeutig verifizierbare Herkunft bekommt keinen Anker statt eines geratenen; Bestandsgraphen ohne Dokumentbezug liefern durchgängig `None` und denselben Payload wie zuvor. Das Evidence-Mapping darauf (`EvidenceSourceKind.seed_corpus`, Ankererzeugung) ist mit [#1154](https://github.com/arn0ld87/agora/issues/1154) umgesetzt (09.08.2026); die Identität eines Dokumentbelegs hängt an der Dokumentstelle, nicht am Wortlaut des Fakts
 
 Aktuelle Hardstops:
 
@@ -154,8 +186,16 @@ Aktuelle Hardstops:
 
 ## Nächste Prioritäten
 
-1. Hartes Run-Budget im Report-Pfad reparieren — greift derzeit nicht ([#978](https://github.com/arn0ld87/agora/issues/978), Kostenkontrolle).
-2. Reproduzierbarkeit, ehrliche Hardware-Tiers (Benchmarks statt Schätzwerte) und Kalibrierungsbaseline für `0.10.0` umsetzen. Die Kosten- und Ressourcenbudgets selbst stehen via [#764](https://github.com/arn0ld87/agora/issues/764) — siehe ROADMAP „Kosten und Ressourcen“.
+Die `0.10.0`-Arbeit ist auf vier offene Issues zugeschnitten; `0.9.x` hat keine eigenen Blocker mehr im Tracker.
+
+1. **Reproduzierbare Runs, Manifest und Replay** ([#763](https://github.com/arn0ld87/agora/issues/763)) — Teilstand siehe unten.
+2. **Kalibrierungs- und Baseline-Suite für den Produktnutzen** ([#765](https://github.com/arn0ld87/agora/issues/765)), inklusive ehrlicher Hardware-Tiers aus Benchmarks statt Schätzwerten.
+3. **Backup, Restore, Upgrade und Release-Artefakte verifizieren** ([#766](https://github.com/arn0ld87/agora/issues/766)).
+4. **Stable Single-User Release Gate** ([#767](https://github.com/arn0ld87/agora/issues/767)) als Sammelpunkt für `1.0.0`.
+
+Die Kosten- und Ressourcenbudgets selbst stehen via [#764](https://github.com/arn0ld87/agora/issues/764) — siehe ROADMAP „Kosten und Ressourcen".
+
+Stand Issue-Tracker am 11.08.2026: 12 offene Issues. Ein bekannter, noch nicht triagierter Performance-Befund ist [#1190](https://github.com/arn0ld87/agora/issues/1190) — die Nachbearbeitung pro Abschnitt wächst mit der Evidenzkarte, statt konstant zu bleiben.
 
 Teilstand Reproduzierbarkeit ([#1160](https://github.com/arn0ld87/agora/issues/1160) F): der **stochastische Anteil** eines Simulationslaufs ist seit dem 10.08.2026 wiederholbar — `_sim_common.seed_simulation_rng` seedt den globalen RNG des Subprozesses aus `simulation_config.json::random_seed` oder deterministisch (SHA-256) aus der `simulation_id`; der verwendete Seed steht im Simulationslog. **Nicht** reproduzierbar ist der Report: die LLM-Antworten bleiben nichtdeterministisch. Same-Seed-Same-Report braucht zusätzlich eine Aufzeichnung der Modellantworten ([#763](https://github.com/arn0ld87/agora/issues/763)). Die Profilerzeugung (`oasis_profile_generator.py`) ist bewusst nicht geseedet — Profile werden einmal erzeugt und persistiert, ein Re-Run liest dieselben Dateien.
 

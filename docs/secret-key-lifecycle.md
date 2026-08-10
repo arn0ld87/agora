@@ -1,6 +1,7 @@
 # AGORA_SECRET_KEY Lifecycle
 
 **Stand:** 2026-05-15
+**Gegen den Code geprüft:** 2026-08-11 — Dateipfade, Kommandos, Skript- und Dokumentverweise. Die fachlichen Aussagen dieses Dokuments sind dabei **nicht** einzeln nachvollzogen worden.
 **Scope:** Wie der Fernet-Master-Key für den Multi-Provider-Hub
 (`backend/data/llm_provider_secrets.json`) erzeugt, sicher gespeichert,
 rotiert und im Verlustfall wiederhergestellt wird.

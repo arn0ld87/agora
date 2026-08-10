@@ -1,6 +1,7 @@
 # Security Hardening — Changelog und Migrations-Hinweise
 
 **Stand:** 2026-05-07, Europe/Berlin
+**Gegen den Code geprüft:** 2026-08-11 — Dateipfade, Kommandos, Skript- und Dokumentverweise. Die fachlichen Aussagen dieses Dokuments sind dabei **nicht** einzeln nachvollzogen worden.
 **Ausgelöst durch:** Veröffentlichung des Repos auf GitHub (`github.com/arn0ld87/agora`). Parallel-Audit durch Claude (general-purpose) und Codex (rescue). Ergebnisberichte sind im Review-Transcript dokumentiert; dieses Dokument listet die daraus umgesetzten Fixes und die nötigen Env-Änderungen für bestehende Deployments.
 
 > Kurzfassung: Der Backend lief vorher als unauthentifizierter, `0.0.0.0`-gebundener Prototyp mit wildcard-CORS, Debug-Defaults, statischem Secret-Key und Default-Neo4j-Passwort. Nach den drei Phasen ist die Angriffsfläche auf ein loopback-gebundenes, token-geschütztes API mit restriktivem CORS, Prod-tauglichen Defaults und SSRF-/Injection-Hardenings reduziert.
@@ -55,7 +56,7 @@ Netzwerk-Exposition absichern: CORS auf bekannte Origins, Token-Auth für alle `
 | `backend/app/__init__.py` | `CORS(app, resources={r"/api/*": {"origins": "*"}})` → Whitelist `['http://localhost:5173', 'http://127.0.0.1:5173']` + optional `AGORA_EXTRA_ORIGINS` (Komma-separiert). Wildcard nur via `AGORA_CORS_ALLOW_ALL=true` mit Log-Warning. `supports_credentials=True`. |
 | `backend/app/utils/auth.py` (neu) | `install_blueprint_guard(bp)`, `token_required`-Decorator, `log_auth_mode()`. Token-Extraktion aus `X-Agora-Token`, `Authorization: Bearer …` oder `?token=` (Fallback für `send_file`-Downloads). Vergleich timing-safe via `hmac.compare_digest`. |
 | `backend/app/__init__.py` | Jedes API-Blueprint bekommt `install_blueprint_guard(bp)` vor der Registrierung. Auth-Modus wird beim Start geloggt. |
-| `frontend/src/api/index.js` | Axios-Request-Interceptor hängt `X-Agora-Token` aus `localStorage.agora_token` oder `VITE_AGORA_TOKEN` an jeden Request. |
+| `frontend/src/api/index.ts` | Axios-Request-Interceptor hängt `X-Agora-Token` aus `localStorage.agora_token` oder `VITE_AGORA_TOKEN` an jeden Request. |
 
 ### Warum
 - **Wildcard-CORS + keine Auth:** jede Website konnte per `fetch()` die API ansprechen, inklusive `DELETE /api/graph/project/<id>`.
@@ -290,7 +291,7 @@ F2.2 Sub-Slice 47 für das Hard-Disable des Query-Fallbacks).
 
 ## Offene Punkte (nach Phase 3 abgearbeitet)
 
-- Upstream-Review-Status aus `SECURITY_REVIEW_SUMMARY.md` ist durch diese Phasen teilweise überholt; der Abschnitt dort wird in einem Follow-up abgeglichen.
+- Der frühere Upstream-Review-Status (`SECURITY_REVIEW_SUMMARY.md`) liegt nicht mehr im Repository; er war durch diese Phasen ohnehin überholt. Aktive CVE-Baseline und Ausnahmeprozess stehen in [`dependency-risk-register.md`](dependency-risk-register.md).
 - ~~Langfristig: echte Session-/Login-Auth statt Static-Token.~~ Durch [ADR-0001](decisions/0001-auth-model.md) (2026-05-04, Accepted) beantwortet: v1.0 bleibt **bewusst Single-User-only**, ein echtes Session-/Login-Modell ist v2-Material. Siehe Sektion „Auth-Modell v1.0" am Ende dieses Dokuments.
 
 ---
@@ -307,7 +308,7 @@ Security-Regressions früher erkennen und interne Exception-Details aus produkti
 
 | Datei | Änderung |
 |---|---|
-| `.github/workflows/ci.yml` | Neuer Job `security` mit `npm audit --audit-level=high`, `uv export` + `pip-audit` und Gitleaks Secret Scan. |
+| `.github/workflows/ci.yml` | Job `Security scans` mit `bun audit --audit-level=high` (bis 2026 `npm audit`), `uv export` + `pip-audit` und Gitleaks Secret Scan. |
 | `.gitleaksignore` | Zwei historische False Positives fingerprint-genau gebaselined; neue Secret-Findings bleiben blockierend. |
 | `backend/uv.lock` | 39 Python-Advisories durch konservative Lockfile-Upgrades beseitigt. |
 | `backend/app/utils/api_responses.py` | 500/504 aus `@handle_api_errors` nutzen sichere Standardmeldungen plus `code`; konkrete Exception-Details erscheinen in keinem Modus in der Response. |
@@ -331,7 +332,7 @@ Dieser Body ist unabhängig von `FLASK_DEBUG` vollständig — es gibt kein `deb
 ```bash
 # Frontend Dependency Audit
 cd frontend
-npm audit --audit-level=high
+bun audit --audit-level=high
 
 # Backend Runtime Dependency Audit aus uv.lock
 cd ../backend

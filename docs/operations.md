@@ -1,6 +1,7 @@
 # Operations
 
 **Stand:** 2026-05-07, Europe/Berlin
+**Gegen den Code geprüft:** 2026-08-11 — Dateipfade, Kommandos, Skript- und Dokumentverweise. Die fachlichen Aussagen dieses Dokuments sind dabei **nicht** einzeln nachvollzogen worden.
 **Scope:** Was ein Ops-Mensch (oder Future-Alex um 02:30 Uhr) wissen muss,
 um den Stack zu beobachten, zu reparieren und zu verstehen, warum etwas
 gerade nicht geht. Single-User-Vertrauensmodell — kein Pager-Setup, keine
@@ -286,7 +287,7 @@ docker inspect agora --format '{{json .State}}' | jq
 | Trigger | Aktion |
 |---|---|
 | Neue Version | `git pull` + `docker compose -f docker-compose.yml -f docker-compose.prod.yml build agora` + `up -d --no-deps --force-recreate agora`. Siehe [`deployment-prod-like.md`](deployment-prod-like.md). |
-| Neue Dependency | `npm audit` lokal, dann `pip-audit`-Job auf CI. CVEs ohne Upstream-Fix → Eintrag in [`dependency-risk-register.md`](dependency-risk-register.md). |
+| Neue Dependency | `bun audit --audit-level=high` lokal (in `frontend/`), dann `pip-audit`-Job auf CI. CVEs ohne Upstream-Fix → Eintrag in [`dependency-risk-register.md`](dependency-risk-register.md). |
 | Backup | tägliches Neo4j-Dump + Uploads-Snapshot, siehe [`backup-restore.md`](backup-restore.md). |
 | Restore-Drill | Quartalsweise. Restore aus Backup auf Test-Volume, Smoke-Test gegen `/api/status`. |
 | `.env`-Rotation | `SECRET_KEY` und `AGORA_AUTH_TOKEN` mindestens zweimal jährlich oder bei Verdacht. Container-Restart pflicht. |

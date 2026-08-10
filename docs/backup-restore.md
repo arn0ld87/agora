@@ -1,6 +1,7 @@
 # Backup & Restore
 
 **Stand:** 2026-05-01, Europe/Berlin
+**Gegen den Code geprüft:** 2026-08-11 — Dateipfade, Kommandos, Skript- und Dokumentverweise. Die fachlichen Aussagen dieses Dokuments sind dabei **nicht** einzeln nachvollzogen worden.
 **Scope:** Wie Agora-Daten gesichert und wiederhergestellt werden. Drei
 Asset-Klassen: Neo4j-Graph, FS-Artefakte (Uploads, Reports, OASIS-State)
 und `.env` mit Secrets. Kein Cluster-Backup, kein PITR — Single-User-

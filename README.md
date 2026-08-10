@@ -106,7 +106,7 @@ flowchart LR
 
 ### 1. Ingest knowledge
 
-PDF, Markdown, and text files as well as websites are extracted and segmented. For **uploaded files**, each segment carries document and chunk provenance through ingestion, graph construction, and retrieval (ADR-0013). Live-fetched websites do not use this path: they enter the report as research results and do not receive document or chunk IDs. The report does not yet expose the provenance anchor for uploads either — see step 5.
+PDF, Markdown, and text files as well as websites are extracted and segmented. For **uploaded files**, each segment carries document and chunk provenance through ingestion, graph construction, and retrieval (ADR-0013), and that provenance reaches the report as a resolvable evidence anchor — see step 5. Live-fetched websites do not use this path: they enter the report as research results and do not receive document or chunk IDs.
 
 ### 2. Build the knowledge graph
 
@@ -122,11 +122,15 @@ The OASIS/CAMEL runtime orchestrates the agents. Redis transports status, events
 
 ### 5. Generate an evidence-oriented report
 
-The report processes graph and simulation data into structured claims. Source type, confidence, and data gaps are shown separately; every EvidenceItem identifies its source class (agent quote, agent action, graph relation, web source, seed corpus). A seed-corpus EvidenceItem currently does not expose an anchor to the concrete source document — this remains open ([#1154](https://github.com/arn0ld87/agora/issues/1154)).
+The report processes graph and simulation data into structured claims. Source type, confidence, and data gaps are shown separately; every EvidenceItem identifies its source class (agent quote, agent action, graph relation, web source, seed corpus). A seed-corpus EvidenceItem carries a resolvable anchor to the concrete location in the source document ([#1154](https://github.com/arn0ld87/agora/issues/1154)); a graph fact without documented provenance stays a graph relation rather than receiving a guessed anchor.
+
+Confidence states its own scope: it separates simulation consensus from source binding, and `verified` requires an entailment check on the same evidence item, not merely a similarity score. A claim that is downgraded after the fact keeps the wording it was written under and discloses that fact in the claim table. The report header states which simulation state it is based on — completed rounds, planned total, and whether the simulation was still running when report generation started.
 
 ### 6. Compare variants and export
 
-Runs can be compared by model, prompt, seed, and input variant, replayed, and exported into multiple formats.
+Runs can be compared by model, prompt, and input variant and exported into multiple formats (JSON, Markdown, CSV, ZIP). Every export carries the same contract-validated evidence view as the read path; evidence that fails the contract is withheld with a machine-readable reason instead of shipping as an apparently checked file.
+
+The stochastic part of a simulation run is seeded and therefore repeatable. A full replay — same seed, same report — additionally requires a recording of the model responses and is still open ([#763](https://github.com/arn0ld87/agora/issues/763)).
 
 ---
 
@@ -257,8 +261,8 @@ bun run dev
 
 | Area | Status |
 |---|---|
-| Backend | more than 4,560 collected unit and contract tests |
-| Frontend | 171 test files |
+| Backend | more than 4,700 collected unit and contract tests |
+| Frontend | more than 180 test files |
 | E2E | 20 green scenarios, including 6 mandatory core smokes |
 | Main branch | protected by 17 required status checks |
 | Product frontend | Vue-v4 routes are the only shipped UI |

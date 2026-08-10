@@ -106,7 +106,7 @@ flowchart LR
 
 ### 1. Wissen aufnehmen
 
-PDF-, Markdown- und Textdateien sowie Webseiten werden extrahiert und segmentiert. Bei **hochgeladenen Dateien** trägt jedes Segment seine Dokument- und Chunk-Herkunft durch Ingest, Graph-Aufbau und Retrieval (ADR-0013). Live abgerufene Webseiten durchlaufen diesen Weg nicht: sie kommen als Rechercheergebnis in den Report und erhalten keine Dokument- oder Chunk-ID. Im Report ist der Herkunftsanker auch für Uploads noch nicht ausgewertet — siehe Schritt 5.
+PDF-, Markdown- und Textdateien sowie Webseiten werden extrahiert und segmentiert. Bei **hochgeladenen Dateien** trägt jedes Segment seine Dokument- und Chunk-Herkunft durch Ingest, Graph-Aufbau und Retrieval (ADR-0013), und diese Herkunft erreicht den Report als auflösbaren Belegsanker — siehe Schritt 5. Live abgerufene Webseiten durchlaufen diesen Weg nicht: sie kommen als Rechercheergebnis in den Report und erhalten keine Dokument- oder Chunk-ID.
 
 ### 2. Knowledge Graph aufbauen
 
@@ -122,11 +122,15 @@ Die OASIS-/CAMEL-Laufzeit orchestriert die Agenten. Redis überträgt Status, Er
 
 ### 5. Evidenzorientierten Report erstellen
 
-Der Report verarbeitet Graph- und Simulationsdaten zu strukturierten Claims. Quellengattung, Confidence und Datenlücken werden gesondert dargestellt; jedes Evidence-Item nennt seine Gattung (Agentenzitat, Agentenaktion, Graph-Relation, Web-Quelle, Seed-Korpus). Ein Evidence-Item aus dem Seed-Korpus zeigt derzeit noch keinen Anker auf das konkrete Ausgangsdokument — dieser Schritt ist offen ([#1154](https://github.com/arn0ld87/agora/issues/1154)).
+Der Report verarbeitet Graph- und Simulationsdaten zu strukturierten Claims. Quellengattung, Confidence und Datenlücken werden gesondert dargestellt; jedes Evidence-Item nennt seine Gattung (Agentenzitat, Agentenaktion, Graph-Relation, Web-Quelle, Seed-Korpus). Ein Evidence-Item aus dem Seed-Korpus trägt einen auflösbaren Anker auf die konkrete Stelle im Ausgangsdokument ([#1154](https://github.com/arn0ld87/agora/issues/1154)); ein Graph-Fakt ohne belegte Herkunft bleibt Graph-Relation, statt einen geratenen Anker zu bekommen.
+
+Confidence weist ihren eigenen Geltungsbereich aus: sie trennt Simulationskonsens von Quellenbindung, und `verified` verlangt eine Entailment-Prüfung am selben Evidence-Item, nicht bloß einen Ähnlichkeitswert. Eine nachträglich herabgestufte Aussage behält ihren Wortlaut und weist in der Aussagentabelle aus, unter welcher Stufe er entstanden ist. Der Berichtskopf nennt den Simulationsstand, auf dem der Bericht beruht — abgeschlossene Runden, geplante Gesamtzahl und ob die Simulation beim Start der Reportgenerierung noch lief.
 
 ### 6. Varianten vergleichen und exportieren
 
-Runs können nach Modell, Prompt, Seed und Eingabevariante verglichen, erneut abgespielt und in mehrere Formate exportiert werden.
+Runs können nach Modell, Prompt und Eingabevariante verglichen und in mehrere Formate exportiert werden (JSON, Markdown, CSV, ZIP). Jeder Export trägt dieselbe vertragsgeprüfte Evidenzsicht wie der Lesepfad; vertragswidrige Evidenz wird mit maschinenlesbarer Begründung zurückgehalten, statt als scheinbar geprüfte Datei auszuliefern.
+
+Der stochastische Anteil eines Simulationslaufs ist geseedet und damit wiederholbar. Ein vollständiger Replay — gleicher Seed, gleicher Report — verlangt zusätzlich eine Aufzeichnung der Modellantworten und ist offen ([#763](https://github.com/arn0ld87/agora/issues/763)).
 
 ---
 
@@ -257,8 +261,8 @@ bun run dev
 
 | Bereich | Stand |
 |---|---|
-| Backend | mehr als 4.560 gesammelte Unit- und Contract-Tests |
-| Frontend | 171 Testdateien |
+| Backend | mehr als 4.700 gesammelte Unit- und Contract-Tests |
+| Frontend | mehr als 180 Testdateien |
 | E2E | 20 grüne Szenarien, darunter 6 verpflichtende Kern-Smokes |
 | Main Branch | geschützt durch 17 Required Status Checks |
 | Produkt-Frontend | Vue-v4-Routen sind die einzige ausgelieferte Oberfläche |

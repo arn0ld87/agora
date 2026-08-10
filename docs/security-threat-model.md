@@ -1,6 +1,7 @@
 # Security Threat Model
 
 **Stand:** 2026-05-01, Europe/Berlin
+**Gegen den Code geprüft:** 2026-08-11 — Dateipfade, Kommandos, Skript- und Dokumentverweise. Die fachlichen Aussagen dieses Dokuments sind dabei **nicht** einzeln nachvollzogen worden.
 **Scope:** Single-User-Agora hinter Loopback / Tailscale, mit optionalem
 Reverse-Proxy. Kein Mehrbenutzer-AuthN/AuthZ-Stack. Das Modell deckt
 Application-Layer-Angriffe auf den lokalen Stack und Drive-by-Vektoren
@@ -76,7 +77,7 @@ Verwandte Dokumente:
 | Boundary | Vom → Ins | Kontrolle |
 |---|---|---|
 | **B0** Reverse-Proxy ↔ Backend | Internet/Tailnet → Loopback | TLS, Rate-Limit, Header-Hardening, `client_max_body_size`. Backend bindet auf `127.0.0.1:5001`. |
-| **B1** Browser ↔ Frontend | Untrusted Browser-Renderer → Vue-SPA | Vue-Default-HTML-Escape, eigener Markdown-Sanitizer (`frontend/src/utils/markdown.js`), keine `v-html` ohne Sanitize, Token in JS-Heap (Memory-Mode) statt `localStorage`. |
+| **B1** Browser ↔ Frontend | Untrusted Browser-Renderer → Vue-SPA | Vue-Default-HTML-Escape, eigener Markdown-Sanitizer (`frontend/src/utils/markdown.ts`), keine `v-html` ohne Sanitize, Token in JS-Heap (Memory-Mode) statt `localStorage`. |
 | **B2** Frontend ↔ Backend | Browser-fetch → Flask | `install_blueprint_guard()` auf jedem `/api/*`-Blueprint, `token_required` Decorator, CORS-Whitelist (Loopback + `AGORA_EXTRA_ORIGINS`), Tickets für SSE/Download-Pfade. |
 | **B3** Backend ↔ Neo4j/Redis/Ollama | Backend → Internal-Service | Compose-Netzwerk, kein Host-Port-Publishing in Prod-Override. Neo4j-Auth, Redis ohne Auth (Compose-intern), Ollama ohne Auth (Loopback-only). |
 | **B4** Backend ↔ OASIS-Subprozess | Flask-Prozess → fork/exec Python | IPC über File + Redis-Bus (`subprocess_redis_bridge.py`). Persona-Felder werden in Subprozess-System-Prompts gespiegelt — Whitelist-Filter beim `POST /<sim>/profiles`-Merge. |
@@ -127,7 +128,7 @@ Site oder ein Plugin landet im selben Browser.
 **Aktive Mitigations:**
 - Memory-Mode (`VITE_AGORA_TOKEN_STORAGE=memory`) als Prod-Empfehlung —
   Token überlebt keinen Page-Reload.
-- Markdown-Sanitizer (`frontend/src/utils/markdown.js`, 9 Regression-Tests
+- Markdown-Sanitizer (`frontend/src/utils/markdown.ts`, 9 Regression-Tests
   seit v0.9.0) blockt aktive XSS-Vektoren in Report-Inhalten.
 - CORS-Whitelist verhindert Cross-Origin-Aufrufe aus fremden Tabs.
 
@@ -149,7 +150,7 @@ Zielarchitektur dokumentiert; aktuell nicht implementiert).
   `vite build`.
 
 **Aktive Mitigations:**
-- `npm audit --audit-level=high` und `pip-audit` als CI-Gates (siehe
+- `bun audit --audit-level=high` und `pip-audit` als CI-Gates (siehe
   [`security-hardening.md`](security-hardening.md), P1-Sektion).
 - Gitleaks-Scan in CI mit historischer Baseline (`.gitleaksignore`,
   fingerprint-genau).
@@ -157,12 +158,13 @@ Zielarchitektur dokumentiert; aktuell nicht implementiert).
   ([`dependency-risk-register.md`](dependency-risk-register.md)) trackt
   bewusst ignorierte CVEs mit Owner, Frist und Issue-Link; alle 30 Tage
   Review.
-- Lockfiles versioniert (`package-lock.json`, `uv.lock`).
+- Lockfiles versioniert (`bun.lock` in Root und `frontend/`, `backend/uv.lock`).
 
 **Restrisiko:** Ein neues Advisory kann mehrere Tage zwischen Disclosure
 und CI-Detection liegen. CI deckt **bekannte** Findings, nicht
 Zero-Day-Lieferketten-Hijacks. Mitigation = niedrige Dependency-Anzahl,
-explizite Pins, Supply-Chain-Disziplin (kein blindes `npm install` aus
+explizite Pins, Supply-Chain-Disziplin (kein blindes `bun install` ohne
+`--frozen-lockfile` aus
 Forks).
 
 ### A4 — Geleakter `AGORA_AUTH_TOKEN`
@@ -212,8 +214,9 @@ berechtigt — kein Rollenmodell.
 **Restrisiko:** Prompt-Injection im **Inhalt** des Uploads bleibt — das
 LLM verarbeitet User-Content und kann durch geschicktes Wording
 umkonditioniert werden. Test-Coverage für SSRF, Upload-Limits und
-Cypher-Sanitizer steht im Plan als Sub-Slice F5
-([`2026-05-01-v0.9.0-review-folge-slices-plan.md`](2026-05-01-v0.9.0-review-folge-slices-plan.md)).
+Cypher-Sanitizer ist umgesetzt (`backend/tests/test_ssrf_blocker.py`,
+`test_upload_limits.py`, `test_cypher_label_sanitizer.py`); der zugehörige
+Plan liegt nicht mehr im Repository.
 
 ### A6 — Ungewollt erreichbare interne Ressource (SSRF)
 
@@ -299,7 +302,7 @@ Bei einem zukünftigen Direkt-Fetch-Pfad muss das Modell neu bewertet werden.
 | Bekannte Platzhalter-Secrets | Slice 1 PR1 | `backend/app/config.py`, `backend/tests/test_config_security.py` |
 | Multi-Worker-Replay auf SSE-Tickets | Slice 3 PR3 | `backend/app/utils/signed_ticket.py`, `backend/tests/test_signed_ticket_redis.py` |
 | Aktive CVEs ohne Exit-Plan | Slice 4 PR4 | [`dependency-risk-register.md`](dependency-risk-register.md), `.github/workflows/ci.yml` |
-| `localStorage`-Token + XSS-Residuum | Slice 5 PR5 | `frontend/src/api/index.js`, [`auth.md`](auth.md) |
+| `localStorage`-Token + XSS-Residuum | Slice 5 PR5 | `frontend/src/api/index.ts`, [`auth.md`](auth.md) |
 | SSRF auf interne IPs | Phase 3.1 | `backend/app/services/web_tools.py` |
 | Prompt-Injection über Persona-Merge | Phase 3.2 | `backend/app/api/simulation_profiles.py` |
 | Vision-Cost-Explosion | Phase 3.3 | `backend/app/utils/file_parser.py` |

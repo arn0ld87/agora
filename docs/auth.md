@@ -1,7 +1,8 @@
 # Auth-Dokumentation
 
-**Stand:** 2026-05-01, Europe/Berlin
-**Scope:** API-Token-Vertrag, Ticket-Flow, Frontend-Storage-Optionen.
+**Stand:** 2026-08-11, Europe/Berlin
+**Scope:** API-Token-Vertrag, Workspace-API-Keys, Scopes, Ticket-Flow, Frontend-Storage-Optionen.
+**Code:** [`../backend/app/utils/auth.py`](../backend/app/utils/auth.py), [`../backend/app/utils/scopes.py`](../backend/app/utils/scopes.py), [`../backend/app/api/auth.py`](../backend/app/api/auth.py), [ADR-0001](decisions/0001-auth-model.md)
 
 ---
 
@@ -17,6 +18,31 @@ Agora schuetzt alle `/api/*`-Routen mit einem statischen Bearer-Token
 | `Authorization` | `Bearer <token>` | Fallback, z.B. fuer curl/Postman. |
 
 Der Token-Vergleich im Backend ist timing-safe (`hmac.compare_digest`).
+
+---
+
+## Die drei Auth-Wege
+
+`_extract_token()` liest genau einen Wert (Header zuerst), und die Guards
+pruefen ihn danach in fester Reihenfolge:
+
+1. **Master-Token** — `AGORA_AUTH_TOKEN`, timing-safe verglichen.
+2. **Workspace-API-Key** — jeder Token mit Praefix `ago_` wird gegen den
+   API-Key-Store geprueft und muss `status == "active"` tragen. Ein
+   widerrufener Key wird abgelehnt und protokolliert. Verwaltung ueber
+   `/api/api-keys`.
+3. **Open Mode** — ist **kein** `AGORA_AUTH_TOKEN` gesetzt, laesst der Guard
+   jeden Aufruf durch. Das ist kein Fehler, sondern der lokale
+   Bequemlichkeitsmodus — und der Grund, warum `/api/status` den Auth-Modus
+   (`token` / `anonymous` / `open` / `misconfigured`) ausweist. Fuer jeden
+   Betrieb ausserhalb des eigenen Rechners ist er unzulaessig.
+
+## Scopes
+
+API-Keys tragen Scopes; einzelne Routen fordern sie ueber
+`@require_scope("report:read")`, `"report:write"`, `"simulation:control"`,
+`"graph:write"` und weitere. Der Master-Token unterliegt keiner
+Scope-Pruefung. Katalog und Ableitungslogik: [`scopes.py`](../backend/app/utils/scopes.py).
 
 ---
 
@@ -37,15 +63,21 @@ Fuer Ressourcen, die Browser nicht per Custom-Header anfragen koennen
 4. Backend prueft Signatur, Scope und Single-Use via Redis (Multi-Worker-
    safe) oder In-Memory-Fallback.
 
-Das Ticket ist 60 s gueltig, scope-bound und single-use. Kein Bearer im
-URL, Proxy-Log oder Referer.
+Das Ticket ist scope-bound und single-use. `ttl_seconds` ist optional:
+Default **60 s**, Maximum **300 s** — darueber antwortet der Endpunkt mit
+400 und `code=invalid_ttl`. Kein Bearer im URL, Proxy-Log oder Referer.
 
 ---
 
-## Query-Token-Deprecation
+## Query-Token: in Produktion abgeschaltet
 
-`?token=<bearer>` ist noch aktiv, aber deprecated. Jeder Aufruf loggt ein
-Warning. Neuer Code sollte `?ticket=<signed>` verwenden.
+`?token=<bearer>` wird **ausserhalb des Flask-Debug-Modus verworfen** — der
+Wert wird nicht ausgewertet, der Aufruf laeuft in den Auth-Fehler, und das
+Backend protokolliert das auf Log-Level `error`. Nur mit `FLASK_DEBUG` wird
+er noch als Fallback akzeptiert und mit einer Warnung quittiert.
+
+Neue Query-Tokens sind projektweit untersagt; URL-Auth laeuft
+ausschliesslich ueber `?ticket=<signed>`.
 
 ---
 
