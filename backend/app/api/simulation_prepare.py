@@ -1122,7 +1122,7 @@ def get_prepare_status():
                     "task_id": task_id,
                     "status": "ready",
                     "progress": 100,
-                    "message": "Task complete（PrepareWork already exists）",
+                    "message": "Task complete (PrepareWork already exists)",
                     "already_prepared": True,
                     "prepare_info": prepare_info,
                 })

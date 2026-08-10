@@ -579,7 +579,7 @@ def generate_section_react(
             if tool_calls_count < min_tool_calls:
                 messages.append({"role": "assistant", "content": response})
                 unused_tools = all_tools - used_tools
-                unused_hint = f"(These tools have not been used, recommend using them: {', '.join(unused_tools)}）" if unused_tools else ""
+                unused_hint = f"(These tools have not been used, recommend using them: {', '.join(unused_tools)})" if unused_tools else ""
                 messages.append({
                     "role": "user",
                     "content": agent.REACT_INSUFFICIENT_TOOLS_MSG.format(
@@ -645,7 +645,7 @@ def generate_section_react(
             unused_tools = all_tools - used_tools
             unused_hint = ""
             if unused_tools and tool_calls_count < agent.MAX_TOOL_CALLS_PER_SECTION:
-                unused_hint = agent.REACT_UNUSED_TOOLS_HINT.format(unused_list="、".join(unused_tools))
+                unused_hint = agent.REACT_UNUSED_TOOLS_HINT.format(unused_list=", ".join(unused_tools))
             messages.append({"role": "assistant", "content": response})
             messages.append({
                 "role": "user",
@@ -663,7 +663,7 @@ def generate_section_react(
         messages.append({"role": "assistant", "content": response})
         if tool_calls_count < min_tool_calls:
             unused_tools = all_tools - used_tools
-            unused_hint = f"(These tools have not been used, recommend using them: {', '.join(unused_tools)}）" if unused_tools else ""
+            unused_hint = f"(These tools have not been used, recommend using them: {', '.join(unused_tools)})" if unused_tools else ""
             messages.append({
                 "role": "user",
                 "content": agent.REACT_INSUFFICIENT_TOOLS_MSG_ALT.format(
@@ -1374,7 +1374,7 @@ def chat(agent: Any, message: str, chat_history: List[Dict[str, str]] = None) ->
 
     system_prompt = agent.CHAT_SYSTEM_PROMPT_TEMPLATE.format(
         simulation_requirement=agent.simulation_requirement,
-        report_content=report_content if report_content else "（nonereport）",
+        report_content=report_content if report_content else "(nonereport)",
         tools_description=agent._get_tools_description(),
         language=Config.REPORT_LANGUAGE,
     )
