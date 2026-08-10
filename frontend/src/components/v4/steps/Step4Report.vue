@@ -2,11 +2,15 @@
 import { ref, computed, onMounted, onUnmounted, watch, type ComponentPublicInstance } from 'vue'
 import { useIncrementalLogPolling } from '../../../composables/useIncrementalLogPolling'
 import { useStickyScroll } from '../../../composables/useStickyScroll'
-import { usePolling } from '../../../composables/usePolling'
+import {
+  useReportGeneration,
+  REPORT_STATUS_POLL_INTERVAL_MS,
+  type ReportGenerationStatusData,
+} from '../../../composables/useReportGeneration'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { renderMarkdown } from '../../../utils/markdown'
-import { generateReport, getAgentLog, getConsoleLog, getReport, getReportStatus, getReportEvidence } from '../../../api/report'
+import { getAgentLog, getConsoleLog, getReportEvidence } from '../../../api/report'
 import type { GenerateReportData } from '../../../api/report'
 import { createSimulationBranch } from '../../../api/simulation'
 import { getRun } from '../../../api/runs'
@@ -37,11 +41,7 @@ import { parseAgentEntry } from '../../../utils/reportAgentLog'
 import { parseSourceAnchor } from '../../../utils/sourceAnchor'
 import { buildReportRoute, buildInteractionRoute } from '../../../utils/reportRoute'
 import {
-  ReportSchema,
-  ReportOutlineSchema,
   EvidenceMapSchema,
-  type Report,
-  type ReportOutline,
   type EvidenceMap,
   type EvidenceOmission,
 } from '../../../contracts/reportContract'
@@ -51,18 +51,6 @@ import {
   type ReportMode,
 } from '../../../contracts/reportV3Contract'
 
-interface StatusData {
-  message?: string
-  outline?: unknown
-  sections?: Record<string, unknown>
-  current_section_index?: number
-  simulation_id?: string
-  report_id?: string
-  /** Issue #764 (Codex P1): Registry-ID des Report-Runs (report_generation). */
-  run_id?: string
-  status?: string
-  error?: string
-}
 interface ApiResult {
   success?: boolean
   data?: Record<string, unknown> & {
@@ -70,10 +58,6 @@ interface ApiResult {
     simulation_id?: string
   }
   error?: string
-}
-interface StatusApiResult {
-  success?: boolean
-  data?: StatusData
 }
 
 const { t } = useI18n()
@@ -93,33 +77,6 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['add-log', 'update-status', 'stop'])
-
-const phase = ref(0)
-const reportPending = ref(false)
-const statusMsg = ref('')
-// Tatsaechlicher Backend-Status: 'pending' | 'planning' | 'generating' |
-// 'incomplete' | 'completed' | 'failed'. Wird im Status-Poll gesetzt und
-// steuert Badge-Text/Variant (P2.6: vorher fiel 'incomplete' durch den
-// else-Zweig und blieb als 'running' sichtbar).
-const reportStatus = ref<string>('')
-// Issue #1023 (Befund B-17, P2): pollStatus() verschluckte Transportfehler
-// (`catch { /* swallow */ }`) ohne Retry-Zaehler — bei einem toten Backend
-// wartete der Nutzer auf ein Ergebnis, das laengst nicht mehr zustande kommen
-// konnte. STATUS_POLLING_INTERVAL_MS ist 2500ms (siehe unten); 3
-// aufeinanderfolgende Fehlschlaege sind ~7.5s — lang genug, um eine einzelne
-// verlorene Anfrage oder einen kurzen Backend-Restart zu tolerieren, aber
-// kurz genug, dass der Nutzer nicht minutenlang auf einen toten Poll starrt.
-const POLL_FAILURE_THRESHOLD = 3
-const pollFailureCount = ref(0)
-const pollTransportError = ref(false)
-const reportOutline = ref<ReportOutline | null>(null)
-const generatedSections = ref<Record<string, unknown>>({})
-const currentSectionIndex = ref<number | null>(null)
-const isComplete = ref(false)
-const fullReport = ref<Report | null>(null)
-// Issue #764 (Codex P1): letztes Report-Status-Objekt, damit loadReportRunUsage
-// den Report-Run (report_generation) ueber dessen run_id nachladen kann.
-const lastReportStatus = ref<StatusData | null>(null)
 
 // Issue #764: Verbrauchsübersicht zum Sim-Run, einmalig nach Abschluss
 // geladen (die Simulation ist der Run — simulation_id == run_id).
@@ -217,7 +174,7 @@ async function loadRunUsage(): Promise<void> {
 // nach Abschluss zusaetzlich in `reportUsage` — das `runUsage`-Computed
 // uebernimmt die ehrliche Aggregation aus beiden Quellen.
 async function loadReportRunUsage(): Promise<void> {
-  const st = lastReportStatus.value as StatusData | null
+  const st = lastReportStatus.value as ReportGenerationStatusData | null
   const reportRunId = st?.run_id
   if (!reportRunId) return
   try {
@@ -230,15 +187,6 @@ async function loadReportRunUsage(): Promise<void> {
   } catch { /* Report-Run ist optional */ }
 }
 
-// Sobald der Report terminal ist (completed/incomplete/failed), einmalig
-// die Abschluss-Verbrauchsdaten ziehen. Sim-Ladevorgang zuerst, damit
-// der Report-Verbrauch nicht in einen leeren Baseline aggregiert wird
-// (sonst wirken spaetere Regenerationen wie sprunghafte Zahlen).
-watch(isComplete, async (done) => {
-  if (!done) return
-  await loadRunUsage()
-  await loadReportRunUsage()
-})
 const evidenceMap = ref<EvidenceMap | null>(null)
 const selectedEvidenceSection = ref<number | null>(null)
 const branchBusy = ref(false)
@@ -272,7 +220,6 @@ function recordEvidenceOmission(omission: EvidenceOmission | null): void {
   }
 }
 
-const resolvedSimulationId = ref(props.simulationId || null)
 // Phase-1 Konsolidierung: Das Report-Modell wird aus dem Kanon
 // (routing/defaults.global via useEffectiveModelSelection) initialisiert, nicht
 // mehr aus einem eigenen agora.report.aiModelRef-Key. Ein Picker-Pick ist ein
@@ -345,7 +292,6 @@ function onReportRoutePicked(val: AiModelRef | null) {
   reportRoute.value = val
   reportRouteOverride.value = val
 }
-const isRegenerating = ref(false)
 
 const STORAGE_REPORT_MODE = 'agora.reportMode'
 function resolveStoredReportMode(): ReportMode {
@@ -424,65 +370,11 @@ function reportNavigationTarget(reportId: string) {
   return buildReportRoute(reportId, props.runId)
 }
 
-async function regenerateWithModel() {
-  const simId = resolvedSimulationId.value || props.simulationId
-  if (!simId) { addLog('simulationId fehlt — Regenerieren nicht möglich.'); return }
-  isRegenerating.value = true
-  try {
-    const payload: GenerateReportData = {
-      simulation_id: simId,
-      force_regenerate: true,
-      mode: reportMode.value,
-      ...buildModelSelection(),
-    }
-    const m = effectiveReportModel()
-    addLog(`Report neu generieren${m ? ` mit ${m}` : ''} (Modus: ${reportMode.value})…`)
-    const res = (await generateReport(payload)) as ApiResult
-    if (res?.success && res.data?.report_id) {
-      isComplete.value = false; phase.value = 1; reportOutline.value = null
-      generatedSections.value = {}; currentSectionIndex.value = null
-      resetAgentLogs(); resetConsoleLogs(); fullReport.value = null
-      emit('update-status', 'processing')
-      router.push(reportNavigationTarget(res.data.report_id as string))
-      startPolling()
-    } else { addLog(`Fehler: ${res?.error || 'unbekannt'}`) }
-  } catch (err) { addLog((err as Error).message) }
-  finally { isRegenerating.value = false }
-}
-
-async function startReportConfirmed() {
-  const simId = resolvedSimulationId.value || props.simulationId
-  if (!simId) { addLog('simulationId fehlt — Report-Start nicht möglich.'); return }
-  reportPending.value = false
-  isRegenerating.value = true
-  try {
-    const payload: GenerateReportData = {
-      simulation_id: simId,
-      mode: reportMode.value,
-      ...buildModelSelection(),
-    }
-    const m = effectiveReportModel()
-    addLog(`Report starten${m ? ` mit ${m}` : ''} (Modus: ${reportMode.value})…`)
-    const res = (await generateReport(payload)) as ApiResult
-    if (res?.success && res.data?.report_id) {
-      isComplete.value = false; phase.value = 1; reportOutline.value = null
-      generatedSections.value = {}; currentSectionIndex.value = null
-      resetAgentLogs(); resetConsoleLogs(); fullReport.value = null
-      emit('update-status', 'processing')
-      router.push(reportNavigationTarget(res.data.report_id as string))
-      startPolling()
-    } else { addLog(`Fehler: ${res?.error || 'unbekannt'}`); reportPending.value = true }
-  } catch (err) { addLog((err as Error).message); reportPending.value = true }
-  finally { isRegenerating.value = false }
-}
-
 function addLog(msg: string) { emit('add-log', msg) }
 
-const STATUS_POLLING_INTERVAL_MS = 2500
-const AGENT_LOG_POLLING_INTERVAL_MS = STATUS_POLLING_INTERVAL_MS
+// Die Log-Polls takten im selben Raster wie die Statusabfrage (Sub-Slice J.3).
+const AGENT_LOG_POLLING_INTERVAL_MS = REPORT_STATUS_POLL_INTERVAL_MS
 const CONSOLE_LOG_POLLING_INTERVAL_MS = 2000
-
-const statusPolling = usePolling(pollStatus, STATUS_POLLING_INTERVAL_MS)
 
 const agentLogRef = ref<HTMLElement | null>(null)
 const consoleLogRef = ref<HTMLElement | null>(null)
@@ -517,92 +409,65 @@ const {
   stickyScroll: consoleSticky,
 })
 
-async function pollStatus() {
-  if (!props.reportId && !props.simulationId) return
-  try {
-    const res = (await getReportStatus({
-      simulationId: resolvedSimulationId.value || props.simulationId,
-      reportId: props.reportId,
-    })) as StatusApiResult
-    if (res?.success && res.data) {
-      // Ein erfolgreicher Poll heilt einen zuvor sichtbar gemachten
-      // Transportfehler wieder aus — die Verbindung ist zurueck.
-      pollFailureCount.value = 0
-      pollTransportError.value = false
-      const st = res.data
-      lastReportStatus.value = st
-      statusMsg.value = st.message || ''
-      if (st.outline) { try { reportOutline.value = ReportOutlineSchema.parse(st.outline) } catch (err) { recordSchemaError('outline', err) } }
-      if (st.sections) generatedSections.value = st.sections
-      currentSectionIndex.value = st.current_section_index ?? currentSectionIndex.value
-      if (st.simulation_id && !resolvedSimulationId.value) resolvedSimulationId.value = st.simulation_id
-      // P2.6: Backend-Status separat merken — er treibt das Badge und die
-      // 'incomplete'-Transition. 'completed' und 'incomplete' sind beide
-      // Endzustände mit unterschiedlicher User-Botschaft.
-      reportStatus.value = st.status || ''
-      if (st.status === 'completed') {
-        const resolvedId = (st.report_id || props.reportId) as string
-        isComplete.value = true; phase.value = 2
-        emit('update-status', 'completed')
-        try {
-          const full = (await getReport(resolvedId)) as ApiResult
-          if (full?.success) {
-            try {
-              const parsed = ReportSchema.parse(full.data)
-              fullReport.value = parsed
-              syncOutlineFromReport(parsed)
-            } catch (err) { recordSchemaError('report', err); fullReport.value = null }
-            await loadEvidence()
-          }
-        } catch { /* report not yet flushed */ }
-        stopPolling()
-      } else if (st.status === 'incomplete') {
-        // Backend liefert fehlgeschlagene Pflichtsections → INCOMPLETE.
-        // Rest des Reports ist nutzbar; der Nutzer sieht, was fehlt.
-        const resolvedId = (st.report_id || props.reportId) as string
-        // INCOMPLETE ist terminal: isComplete verhindert, dass onMounted nach
-        // einem Reload erneut in den Polling-Pfad springt.
-        isComplete.value = true; phase.value = 2
-        emit('update-status', 'incomplete')
-        addLog(t('step4.status.incomplete') || 'Report unvollständig — einige Abschnitte fehlen.')
-        try {
-          const full = (await getReport(resolvedId)) as ApiResult
-          if (full?.success) {
-            try {
-              const parsed = ReportSchema.parse(full.data)
-              fullReport.value = parsed
-              syncOutlineFromReport(parsed)
-            } catch (err) { recordSchemaError('report', err); fullReport.value = null }
-            await loadEvidence()
-          }
-        } catch { /* report not yet flushed */ }
-        stopPolling()
-      } else if (st.status === 'failed') {
-        // FAILED ist terminal: isComplete verhindert, dass onMounted nach
-        // einem Reload erneut in den Polling-Pfad springt und den
-        // "Failed"-Zustand durch "Running" ersetzt (analog zu
-        // completed/incomplete).
-        isComplete.value = true; phase.value = 2
-        emit('update-status', 'error')
-        addLog(`${t('errors.reportFailed')}: ${st.error || ''}`)
-        stopPolling()
-      } else { phase.value = 1 }
-    }
-  } catch {
-    // Issue #1023 (Befund B-17): Transportfehler zaehlen statt schweigend
-    // verwerfen. Log nur beim Ueberschreiten der Schwelle (nicht bei jedem
-    // weiteren Fehlschlag danach) — sonst spammt ein anhaltend totes Backend
-    // das Log mit einer Meldung pro Poll-Intervall.
-    pollFailureCount.value++
-    if (pollFailureCount.value === POLL_FAILURE_THRESHOLD) {
-      pollTransportError.value = true
-      addLog(t('step4.status.pollTransportError'))
-    }
-  }
-}
+/**
+ * Issue #1206: die Report-Statusmaschine liegt hinter `useReportGeneration`.
+ * Diese Komponente verdrahtet sie nur noch — sie liefert die Umgebung
+ * (Route-IDs, i18n, Log-Senke, Modell-/Modusauswahl, Navigation) und bekommt
+ * `status` / `progress` / `report` zurueck. Die Refs werden auf ihre bisherigen
+ * Namen aufgeloest, damit Template und Verbraucher unveraendert bleiben.
+ */
+const reportGeneration = useReportGeneration({
+  reportId: () => props.reportId,
+  simulationId: () => props.simulationId,
+  t,
+  addLog,
+  onLifecycleChange: (status) => emit('update-status', status),
+  recordSchemaError,
+  loadEvidence,
+  buildRequestOptions: () => ({ mode: reportMode.value, ...buildModelSelection() }),
+  describeModel: effectiveReportModel,
+  onStarted: (reportId) => { router.push(reportNavigationTarget(reportId)) },
+  logStreams: [
+    { polling: agentLogPolling, reset: resetAgentLogs },
+    { polling: consoleLogPolling, reset: resetConsoleLogs },
+  ],
+})
 
-function startPolling() { void statusPolling.start(); void agentLogPolling.start(); void consoleLogPolling.start() }
-function stopPolling() { statusPolling.stop(); agentLogPolling.stop(); consoleLogPolling.stop() }
+const {
+  phase,
+  pending: reportPending,
+  message: statusMsg,
+  backendStatus: reportStatus,
+  transportError: pollTransportError,
+  isComplete,
+  isBusy: isRegenerating,
+} = reportGeneration.status
+const {
+  outline: reportOutline,
+  sections: generatedSections,
+  currentSectionIndex,
+} = reportGeneration.progress
+const {
+  full: fullReport,
+  resolvedSimulationId,
+  lastStatus: lastReportStatus,
+} = reportGeneration.report
+const {
+  bootstrap: bootstrapReport,
+  start: startReportConfirmed,
+  regenerate: regenerateWithModel,
+  stop: stopPolling,
+} = reportGeneration
+
+// Sobald der Report terminal ist (completed/incomplete/failed), einmalig
+// die Abschluss-Verbrauchsdaten ziehen. Sim-Ladevorgang zuerst, damit
+// der Report-Verbrauch nicht in einen leeren Baseline aggregiert wird
+// (sonst wirken spaetere Regenerationen wie sprunghafte Zahlen).
+watch(isComplete, async (done) => {
+  if (!done) return
+  await loadRunUsage()
+  await loadReportRunUsage()
+})
 
 const reportMarkdown = computed((): string => fullReport.value?.markdown_content ?? '')
 const reportHtml = computed(() => renderMarkdown(reportMarkdown.value))
@@ -738,19 +603,6 @@ async function loadEvidence() {
   } catch (err) { recordSchemaError('evidence', err) }
 }
 
-// Sub-Slice 2 von 5 (Issue #739): synchronisiere reportOutline aus
-// fullReport.outline. Wenn /report/<id> nach completed-Status betreten wird
-// (Direct-Page-Goto, Refresh oder Regenerate-Stream), liefert der
-// Status-Endpoint oft kein `outline`-Feld — das Outline hängt aber am
-// Report-Contract. Setzt reportOutline idempotent, damit ReportOutlinePanel
-// auch ohne vorherige Status-Poll-Outline-Daten rendert.
-function syncOutlineFromReport(report: Report | null) {
-  if (!report?.outline || reportOutline.value) return
-  try {
-    reportOutline.value = ReportOutlineSchema.parse(report.outline)
-  } catch (err) { recordSchemaError('outline', err) }
-}
-
 const {
   copyMarkdown,
   downloadCombinedJson,
@@ -817,23 +669,7 @@ onMounted(async () => {
       reportRoute.value = runModel ?? effectiveModel.effectiveRef.value
     },
   )
-  await pollStatus()
-  if (!isComplete.value) {
-    if (props.reportId) { phase.value = 1; startPolling() }
-    else { phase.value = 0; reportPending.value = true }
-  } else if (!fullReport.value) {
-    try {
-      const full = (await getReport(props.reportId!)) as ApiResult
-      if (full?.success) {
-        try {
-          const parsed = ReportSchema.parse(full.data)
-          fullReport.value = parsed
-          syncOutlineFromReport(parsed)
-        } catch (err) { recordSchemaError('report', err); fullReport.value = null }
-        await loadEvidence()
-      }
-    } catch { /* swallow */ }
-  }
+  await bootstrapReport()
 })
 onUnmounted(() => { stopPolling(); clearEvidenceRetry() })
 </script>
