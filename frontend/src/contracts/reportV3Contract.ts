@@ -304,6 +304,23 @@ export const ModelAttributionSchema = z
   .strict();
 export type ModelAttribution = z.infer<typeof ModelAttributionSchema>;
 
+/**
+ * Issue #1192: Stand der Simulation zum Startzeitpunkt der Reportgenerierung.
+ *
+ * Ein Report darf auf einem Zwischenstand beruhen — er muss nur ausweisen,
+ * dass er es tut. Spiegelt `SimulationSnapshotModel` aus
+ * `backend/app/contracts/report_contract.py`.
+ */
+export const SimulationSnapshotSchema = z
+  .object({
+    rounds_completed: z.number().int().nonnegative(),
+    total_rounds: z.number().int().nonnegative().default(0),
+    simulation_running: z.boolean().default(false),
+    captured_at: z.string().nullable().default(null),
+  })
+  .strict();
+export type SimulationSnapshot = z.infer<typeof SimulationSnapshotSchema>;
+
 // === ReportV3 Container ===
 export const ReportV3Schema = z
   .object({
@@ -329,6 +346,9 @@ export const ReportV3Schema = z
     // Slice 5 (Issue #497): Red-Team-Befunde — max 10, Backward-compat default [].
     red_team_findings: z.array(z.string()).max(10).default([]),
     model_attribution: z.array(ModelAttributionSchema).default([]),
+    // Issue #1192: Simulationsstand zum Startzeitpunkt des Reports. Nullable
+    // mit Default — Bestandsreports ohne den Slot bleiben gueltig.
+    simulation_snapshot: SimulationSnapshotSchema.nullable().default(null),
   })
   .strict()
   .superRefine((value, ctx) => {
