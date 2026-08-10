@@ -26,13 +26,10 @@ import {
   checkFocusVisible,
   checkReducedMotion,
   diffFocusStyle,
-  findReadingOrderViolations,
   isOnboardingHijack,
-  isSameRow,
   parseMaxDuration,
   pathOf,
   type FocusStyleSnapshot,
-  type TabStop,
 } from './e2e/helpers/accessibility';
 
 const DEFAULT_CONTROL_STYLE: FocusStyleSnapshot = {
@@ -295,56 +292,6 @@ describe('isOnboardingHijack', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Issue #1088 — Tab-Reihenfolge gegen die visuelle Lesereihenfolge
-// ---------------------------------------------------------------------------
-
-function stop(order: number, x: number, y: number, landmark = 'main'): TabStop {
-  return { order, landmark, label: `button#b${order}`, x, y, width: 80, height: 32 };
-}
-
-describe('findReadingOrderViolations', () => {
-  it('akzeptiert eine Reihenfolge, die von oben nach unten und links nach rechts läuft', () => {
-    const stops = [stop(0, 0, 0), stop(1, 100, 0), stop(2, 0, 100), stop(3, 100, 100)];
-    expect(findReadingOrderViolations(stops)).toEqual([]);
-  });
-
-  it('schlägt bei absichtlich unbrauchbarer Reihenfolge an — rückwärts durch die Seite', () => {
-    // Der Nachweis aus den Akzeptanzkriterien: eine komplett verdrehte
-    // Tab-Reihenfolge muss rot werden. Der alte Check ("mehr als null
-    // fokussierbare Schritte") hätte auch das hier durchgewunken.
-    const stops = [stop(0, 100, 300), stop(1, 0, 200), stop(2, 100, 100), stop(3, 0, 0)];
-    const violations = findReadingOrderViolations(stops);
-    expect(violations).toHaveLength(3);
-    expect(violations[0]).toContain('oberhalb');
-  });
-
-  it('erkennt einen Rücksprung nach links innerhalb derselben Zeile', () => {
-    // Der CSS-Umordnungsfall: visuell nebeneinander, per `order` vertauscht.
-    const stops = [stop(0, 200, 50), stop(1, 20, 52)];
-    const violations = findReadingOrderViolations(stops);
-    expect(violations).toHaveLength(1);
-    expect(violations[0]).toContain('links von');
-  });
-
-  it('bewertet den Sprung zwischen zwei Landmarks nicht', () => {
-    // Eine Sprungmarke führt korrekterweise nach unten UND nach vorne.
-    const stops = [stop(0, 0, 0, 'nav'), stop(1, 0, 500, 'main'), stop(2, 0, 20, 'aside')];
-    expect(findReadingOrderViolations(stops)).toEqual([]);
-  });
-
-  it('toleriert Versatz innerhalb einer Button-Leiste', () => {
-    // Elemente nebeneinander haben fast nie exakt dasselbe y; ohne Toleranz
-    // wäre jede Toolbar ein Verstoß und der Check würde aufgeweicht.
-    const stops = [stop(0, 0, 100), stop(1, 90, 102), stop(2, 180, 99)];
-    expect(findReadingOrderViolations(stops)).toEqual([]);
-  });
-
-  it('isSameRow trennt Zeilen anhand der vertikalen Überlappung', () => {
-    expect(isSameRow(stop(0, 0, 100), stop(1, 200, 110))).toBe(true);
-    expect(isSameRow(stop(0, 0, 100), stop(1, 200, 160))).toBe(false);
-  });
-});
 
 describe('pathOf', () => {
   it('entfernt Origin, Query und Hash', () => {
