@@ -338,6 +338,34 @@ def render_evidence_index(report: ReportV3) -> str:
     )
 
 
+def render_simulation_snapshot(report: ReportV3) -> str:
+    """Weist aus, auf welchem Simulationsstand der Report beruht (Issue #1192).
+
+    Ein Report darf auf einem Zwischenstand beruhen — er darf nur nicht
+    verschweigen, dass er es tut. Fehlt der Snapshot ganz, stammt der Report
+    aus der Zeit vor dieser Ausweisung; dann ist "unbekannt" die einzige
+    ehrliche Aussage.
+    """
+    snapshot = getattr(report, "simulation_snapshot", None)
+    if snapshot is None:
+        return "Simulationsstand: `unbekannt` (vor Einführung der Standausweisung erzeugt)"
+
+    von_gesamt = (
+        f" von {snapshot.total_rounds}" if snapshot.total_rounds else ""
+    )
+    if snapshot.simulation_running:
+        return (
+            f"Simulationsstand: **Zwischenstand** — {snapshot.rounds_completed}"
+            f"{von_gesamt} Runden abgeschlossen; die Simulation lief zum "
+            f"Startzeitpunkt dieses Reports noch weiter. Spätere Runden sind "
+            f"nicht eingeflossen."
+        )
+    return (
+        f"Simulationsstand: {snapshot.rounds_completed}{von_gesamt} Runden "
+        f"abgeschlossen; die Simulation lief zum Startzeitpunkt nicht mehr."
+    )
+
+
 def render_report_v3(report: ReportV3) -> str:
     mode = getattr(report, "report_mode", "balanced") or "balanced"
     banner = _MODE_BANNER.get(mode, _MODE_BANNER["balanced"])
@@ -345,6 +373,7 @@ def render_report_v3(report: ReportV3) -> str:
         "# Agora ReportV3",
         f"Report-ID: `{_cell(report.report_id)}`",
         f"Generiert: `{report.generated_at.isoformat()}`",
+        render_simulation_snapshot(report),
         banner,
         render_evidence_status(report),
         "## Persona-Tabelle",

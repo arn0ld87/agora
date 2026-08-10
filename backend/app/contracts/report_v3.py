@@ -16,7 +16,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .provider_types import ProviderType
-from .report_contract import EvidenceRecordModel
+from .report_contract import EvidenceRecordModel, SimulationSnapshotModel
 
 
 _STRICT = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -382,6 +382,12 @@ class ReportV3(BaseModel):
     model_attribution: list[ModelAttribution] = Field(
         default_factory=list,
         description="Welches LLM-Modell hat welche Stage produziert.",
+    )
+    # Issue #1192: Stand der Simulation beim Start dieser Reportgenerierung.
+    # Additiv, Default None — Bestandsreports ohne den Slot laden unveraendert.
+    simulation_snapshot: SimulationSnapshotModel | None = Field(
+        default=None,
+        description="Simulationsstand zum Startzeitpunkt des Reports.",
     )
     # Slice 5 (2026-05-17): Red-Team-Findings aus echo_chamber_review-Stage.
     # max_length=10 begrenzt die Anzahl der Befunde; leer = kein Echo-Problem erkannt.

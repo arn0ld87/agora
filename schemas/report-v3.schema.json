@@ -981,6 +981,45 @@
       "title": "Segment",
       "type": "object"
     },
+    "SimulationSnapshotModel": {
+      "additionalProperties": false,
+      "description": "Stand der Simulation zum Startzeitpunkt der Reportgenerierung (Issue #1192).\n\nEin Report darf starten, w\u00e4hrend die zugrunde liegende Simulation noch\nl\u00e4uft \u2014 dann analysiert er aber einen Zwischenstand. Ohne diesen Snapshot\nist einem fertigen Report nicht anzusehen, ob er auf zehn abgeschlossenen\nRunden beruht oder auf vieren. Erfasst wird der Stand *beim Start*, nicht\nbeim Abschluss: das ist der Datenbestand, den der Agent tats\u00e4chlich\ngesehen hat.",
+      "properties": {
+        "captured_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Captured At"
+        },
+        "rounds_completed": {
+          "minimum": 0,
+          "title": "Rounds Completed",
+          "type": "integer"
+        },
+        "simulation_running": {
+          "default": false,
+          "title": "Simulation Running",
+          "type": "boolean"
+        },
+        "total_rounds": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Total Rounds",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "rounds_completed"
+      ],
+      "title": "SimulationSnapshotModel",
+      "type": "object"
+    },
     "Threshold": {
       "additionalProperties": false,
       "description": "Operative Zahl mit ausgewiesener Herkunft (Issue #1160 E).\n\nZahlen wie \u201e>90 % Traffic-Baseline\" oder \u201e14-Tage-Rankinggrenze\" sehen im\nFlie\u00dftext alle gleich aus \u2014 egal ob sie aus dem Auftragsdokument stammen,\naus gemessenen Daten, aus einer Norm, aus einer Betreiberentscheidung oder\ndaraus, dass ein Sprachmodell sie plausibel fand. Der Leser kann sie nicht\nunterscheiden und behandelt im Zweifel alle gleich verbindlich.\n\n``origin`` ist eine **eigene Dimension neben** ``EvidenceSourceKind`` und\nwird ausdr\u00fccklich nicht mit ihr vermischt: die Quellengattung beschreibt,\nwoher ein *Beleg* kommt, ``origin`` beschreibt, wie eine *Zahl* zustande\nkam. Eine Vermischung w\u00fcrde ADR-0002 Anker 3 verw\u00e4ssern.",
@@ -1236,6 +1275,18 @@
       },
       "title": "Segments",
       "type": "array"
+    },
+    "simulation_snapshot": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SimulationSnapshotModel"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Simulationsstand zum Startzeitpunkt des Reports."
     },
     "thresholds": {
       "items": {

@@ -84,6 +84,9 @@ class Report:
     error: Optional[str] = None
     has_evidence: bool = False
     evidence_sections: int = 0
+    # Issue #1192: Stand der Simulation beim Start dieser Reportgenerierung.
+    # None bei Reports, die vor der Einführung geschrieben wurden.
+    simulation_snapshot: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -100,6 +103,7 @@ class Report:
             "error": self.error,
             "has_evidence": self.has_evidence,
             "evidence_sections": self.evidence_sections,
+            "simulation_snapshot": self.simulation_snapshot,
         }
 
 

@@ -33,6 +33,7 @@ from .search_dedup import (
     query_of,
     registry_for,
 )
+from .simulation_snapshot import capture_simulation_snapshot
 from .text_verification import verify_prose
 from .schemas import (
     EvidenceMapModel,
@@ -984,6 +985,9 @@ def generate_report(
         simulation_requirement=agent.simulation_requirement,
         status=ReportStatus.PENDING,
         created_at=datetime.now().isoformat(),
+        # Issue #1192: hier — und nicht am Ende — ist der Datenbestand
+        # festgehalten, den der Agent tatsaechlich sieht.
+        simulation_snapshot=capture_simulation_snapshot(agent.simulation_id),
     )
 
     completed_section_titles = []

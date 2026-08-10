@@ -261,6 +261,21 @@ export const ReportOutlineSchema = z.object({
 }).strict();
 export type ReportOutline = z.infer<typeof ReportOutlineSchema>;
 
+/**
+ * Issue #1192: Stand der Simulation zum Startzeitpunkt der Reportgenerierung.
+ *
+ * Spiegelt `SimulationSnapshotModel` aus
+ * `backend/app/contracts/report_contract.py`. Ein Report darf auf einem
+ * Zwischenstand beruhen — er muss nur ausweisen, dass er es tut.
+ */
+export const SimulationSnapshotSchema = z.object({
+  rounds_completed: z.number().int().min(0),
+  total_rounds: z.number().int().min(0).default(0),
+  simulation_running: z.boolean().default(false),
+  captured_at: z.string().optional().nullable(),
+}).strict();
+export type SimulationSnapshot = z.infer<typeof SimulationSnapshotSchema>;
+
 export const ReportSchema = z.object({
   schema_version: z.literal(2),
   report_id: z.string().min(1),
@@ -277,6 +292,9 @@ export const ReportSchema = z.object({
   has_evidence: z.boolean().default(false),
   evidence_sections: z.number().int().min(0).default(0),
   red_team_findings: z.array(z.string()).max(10).default([]),
+  // Issue #1192: Simulationsstand zum Startzeitpunkt des Reports. Nullable
+  // mit Default — Bestandsreports ohne den Slot bleiben gültig.
+  simulation_snapshot: SimulationSnapshotSchema.optional().nullable(),
 }).strict();
 export type Report = z.infer<typeof ReportSchema>;
 

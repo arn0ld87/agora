@@ -651,6 +651,28 @@ class ReportStatus(str, Enum):
     failed = "failed"
 
 
+class SimulationSnapshotModel(BaseModel):
+    """Stand der Simulation zum Startzeitpunkt der Reportgenerierung (Issue #1192).
+
+    Ein Report darf starten, während die zugrunde liegende Simulation noch
+    läuft — dann analysiert er aber einen Zwischenstand. Ohne diesen Snapshot
+    ist einem fertigen Report nicht anzusehen, ob er auf zehn abgeschlossenen
+    Runden beruht oder auf vieren. Erfasst wird der Stand *beim Start*, nicht
+    beim Abschluss: das ist der Datenbestand, den der Agent tatsächlich
+    gesehen hat.
+    """
+
+    model_config = _STRICT
+    #: Zum Startzeitpunkt abgeschlossene Runden.
+    rounds_completed: int = Field(ge=0)
+    #: Geplante Gesamtrundenzahl; 0 wenn der Runner sie nicht kennt.
+    total_rounds: int = Field(default=0, ge=0)
+    #: Lief die Simulation beim Start der Reportgenerierung noch?
+    simulation_running: bool = False
+    #: ISO-8601-Zeitpunkt der Erfassung.
+    captured_at: Optional[str] = None
+
+
 class ReportModel(BaseModel):
     """Spiegelt models/report.py:Report — aber als Pydantic mit Validierung."""
     model_config = _STRICT
@@ -669,6 +691,9 @@ class ReportModel(BaseModel):
     has_evidence: bool = False
     evidence_sections: int = Field(default=0, ge=0)
     red_team_findings: list[str] = Field(default_factory=list, max_length=10)
+    # Issue #1192: additiv, Default None — vor dieser Änderung persistierte
+    # Reports kennen das Feld nicht und müssen weiter validieren.
+    simulation_snapshot: Optional[SimulationSnapshotModel] = None
 
 
 class EvidenceDegradationModel(BaseModel):

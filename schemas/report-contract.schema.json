@@ -655,6 +655,17 @@
           "title": "Simulation Requirement",
           "type": "string"
         },
+        "simulation_snapshot": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SimulationSnapshotModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "status": {
           "$ref": "#/$defs/ReportStatus"
         }
@@ -882,6 +893,45 @@
       ],
       "title": "ReportStatus",
       "type": "string"
+    },
+    "SimulationSnapshotModel": {
+      "additionalProperties": false,
+      "description": "Stand der Simulation zum Startzeitpunkt der Reportgenerierung (Issue #1192).\n\nEin Report darf starten, w\u00e4hrend die zugrunde liegende Simulation noch\nl\u00e4uft \u2014 dann analysiert er aber einen Zwischenstand. Ohne diesen Snapshot\nist einem fertigen Report nicht anzusehen, ob er auf zehn abgeschlossenen\nRunden beruht oder auf vieren. Erfasst wird der Stand *beim Start*, nicht\nbeim Abschluss: das ist der Datenbestand, den der Agent tats\u00e4chlich\ngesehen hat.",
+      "properties": {
+        "captured_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Captured At"
+        },
+        "rounds_completed": {
+          "minimum": 0,
+          "title": "Rounds Completed",
+          "type": "integer"
+        },
+        "simulation_running": {
+          "default": false,
+          "title": "Simulation Running",
+          "type": "boolean"
+        },
+        "total_rounds": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Total Rounds",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "rounds_completed"
+      ],
+      "title": "SimulationSnapshotModel",
+      "type": "object"
     }
   },
   "$id": "https://alexle135.de/schemas/report-contract.schema.json",

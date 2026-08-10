@@ -464,6 +464,9 @@ class ReportManager:
             claims=claims,
             data_gaps=data_gaps,
             hypotheses=hypotheses,
+            # Issue #1192: der Stand wandert unveraendert aus meta.json ins
+            # v3-Artefakt, damit der Markdown-Export ihn ausweisen kann.
+            simulation_snapshot=report.simulation_snapshot,
             **metadata_kwargs,
         )
     
@@ -861,6 +864,9 @@ class ReportManager:
             evidence_sections=int(
                 data.get('evidence_sections', 0) or len((evidence_map or {}).get("sections", []))
             ),
+            # Issue #1192: fehlt bei Reports, die vor der Einfuehrung
+            # geschrieben wurden — dort bleibt der Stand unbekannt.
+            simulation_snapshot=data.get('simulation_snapshot'),
         )
     
     @classmethod
