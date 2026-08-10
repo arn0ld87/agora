@@ -197,6 +197,62 @@ def render_evidence_status(report: ReportV3) -> str:
     )
 
 
+# Issue #1160 H: Klartext statt Enum-Wert. Wer den Report als Markdown liest,
+# soll nicht erst nachschlagen muessen, was ``seed_corpus`` bedeutet.
+_SOURCE_KIND_LABELS = {
+    "seed_corpus": "Seed-Dokument",
+    "agent_quote": "Agentenzitat",
+    "agent_action": "Agentenaktion",
+    "graph_relation": "Graph-Relation",
+    "web_source": "Web-Quelle",
+    "inferred": "abgeleitet",
+}
+
+# Ein Snippet darf bis zu 2000 Zeichen lang sein (EvidenceRecordModel). In einer
+# Markdown-Tabellenzelle waere das unlesbar; der Nachweis soll die Zuordnung
+# ermoeglichen, nicht die Quelle ersetzen.
+_EVIDENCE_SNIPPET_MAX = 240
+
+
+def _shorten(text: str, limit: int = _EVIDENCE_SNIPPET_MAX) -> str:
+    cleaned = _cell(text)
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[: limit - 1].rstrip() + "…"
+
+
+def render_evidence_index(report: ReportV3) -> str:
+    """Loest die ``evidence_refs``-IDs der Tabellen zu ihren Quellen auf.
+
+    Issue #1160 H: Der Markdown-Export zeigte nur Belegkennungen. JSON und ZIP
+    tragen die Provenance vollstaendig, Markdown nicht — wer den Report so las,
+    sah Verweise ohne Belege. Das ist besonders unguenstig, weil Markdown das
+    Format ist, das weitergereicht und ausgedruckt wird.
+
+    Bewusst ein eigener Abschnitt am Ende statt breiterer Tabellen weiter oben:
+    dieselbe Evidence stuetzt oft mehrere Claims, und die Tabellen bleiben so
+    lesbar. Die Aufloesung funktioniert wie ein Quellenverzeichnis.
+    """
+    return _table(
+        ["Evidence-ID", "Gattung", "Producer", "Quelle", "Auszug"],
+        [
+            [
+                evidence_id,
+                _SOURCE_KIND_LABELS.get(
+                    record.source_kind.value, record.source_kind.value
+                ),
+                record.producer_key,
+                record.source,
+                # Das Originalzitat ist der bessere Beleg, wo es existiert —
+                # der Snippet ist nur der Kontext, aus dem es stammt.
+                _shorten(record.quote or record.snippet),
+            ]
+            for evidence_id, record in sorted(report.evidence_index.items())
+        ],
+        "Keine Evidence-Records im ReportV3-Artefakt.",
+    )
+
+
 def render_report_v3(report: ReportV3) -> str:
     mode = getattr(report, "report_mode", "balanced") or "balanced"
     banner = _MODE_BANNER.get(mode, _MODE_BANNER["balanced"])
@@ -255,6 +311,10 @@ def render_report_v3(report: ReportV3) -> str:
         render_hypotheses_table(report.hypotheses),
         "## Data Gaps",
         render_data_gaps(report.data_gaps),
+        # Issue #1160 H: zuletzt, weil es ein Nachschlagewerk ist — die
+        # Belegkennungen in den Tabellen darueber werden hier aufloesbar.
+        "## Evidenz-Nachweise",
+        render_evidence_index(report),
     ]
     return "\n\n".join(parts).rstrip() + "\n"
 
@@ -262,6 +322,7 @@ def render_report_v3(report: ReportV3) -> str:
 __all__ = [
     "render_claim_table",
     "render_data_gaps",
+    "render_evidence_index",
     "render_evidence_status",
     "render_hypotheses_table",
     "render_persona_table",
