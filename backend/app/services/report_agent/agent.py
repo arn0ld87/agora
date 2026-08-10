@@ -22,6 +22,13 @@ from .evidence import (
 )
 from .manager import ReportManager
 from .planning import plan_outline as plan_outline_impl
+from .search_dedup import (
+    EmptySearchRegistry,
+    is_empty_result,
+    is_search_tool,
+    query_of,
+    registry_for,
+)
 from .postprocess_timing import PostprocessPhaseTracker
 from .schemas import CURRENT_SCHEMA_VERSION, EvidenceMapModel, normalize_persisted_evidence_map
 from .sections import (
@@ -347,6 +354,12 @@ class ReportAgent:
         rendered_result: str,
         section_index: int,
     ) -> None:
+        # Issue #1191: der einzige Ort, an dem das strukturierte Ergebnis
+        # anfaellt — die ReACT-Schleife sieht nur den gerenderten Text. Ein
+        # Leertreffer wird hier gemerkt, damit dieselbe Suche im selben
+        # Abschnitt nicht mit einem anderen Werkzeug wiederholt wird.
+        if is_search_tool(tool_name) and is_empty_result(structured_result):
+            registry_for(self).record_empty(query_of(parameters))
         # Kanonische Identität für Fakten aus dem Graphen: der Fakt-Text selbst
         # ist die deterministische Quelle (kein freier LLM-Text), die Query
         # bleibt außen vor — derselbe Fakt über verschiedene Queries ist
@@ -552,6 +565,16 @@ class ReportAgent:
     @staticmethod
     def _build_source_id_anchor(item: Dict[str, Any]) -> Optional[str]:
         return build_source_id_anchor(item)
+
+    @property
+    def empty_searches(self) -> EmptySearchRegistry:
+        """Merkliste ergebnisloser Suchen des laufenden Abschnitts (#1191).
+
+        Lazy angelegt statt in ``__init__``: zahlreiche Tests bauen den Agent
+        ueber ``ReportAgent.__new__`` ohne Konstruktor, und die Merkliste darf
+        dort nicht fehlen.
+        """
+        return registry_for(self)
 
     @staticmethod
     def _attach_provenance(item: Dict[str, Any]) -> Dict[str, Any]:
