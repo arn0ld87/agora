@@ -141,7 +141,10 @@ async function mountView(initial: { connections?: unknown[] } = {}) {
         PageHeader: {
           name: 'PageHeader',
           props: ['breadcrumbs', 'title'],
-          template: '<div><slot /></div>',
+          // Spiegelt das Original: nur der benannte Slot "right" wird
+          // gerendert. Ein Stub mit Default-Slot wuerde verdecken, dass
+          // die View ihre Header-Buttons am falschen Slot uebergibt.
+          template: '<div><slot name="right" /></div>',
         },
       },
     },
