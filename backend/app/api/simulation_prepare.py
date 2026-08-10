@@ -574,6 +574,21 @@ def _preview_entity_counts(state, storage, inputs: _PrepareInputs) -> None:
                 entity.get_entity_type() or "Entity"
                 for entity in filtered_preview.entities
             }
+        # Issue #1177: derselbe Dedup wie im Laufpfad. Ohne ihn zeigte die
+        # Vorschau die Zahl vor der Bereinigung und damit mehr Personas, als
+        # die Generierung anschliessend erzeugt — der Nutzer saehe eine Zahl,
+        # die nie eintritt. Der Kommentar oben nennt genau diese Gefahr
+        # bereits fuer den Eignungsfilter.
+        from ..services.prepare_service import _dedupe_entities
+
+        deduped_preview, duplicate_count = _dedupe_entities(filtered_preview.entities)
+        if duplicate_count:
+            filtered_preview.entities = deduped_preview
+            filtered_preview.filtered_count = len(deduped_preview)
+            filtered_preview.entity_types = {
+                entity.get_entity_type() or "Entity" for entity in deduped_preview
+            }
+
         preview_count = filtered_preview.filtered_count
         if inputs.max_agents is not None and inputs.max_agents > 0:
             preview_count = min(preview_count, inputs.max_agents)

@@ -332,8 +332,19 @@ def test_collect_prepare_inputs_applies_max_agents_floor(app_ctx, monkeypatch):
 # ---------------------------------------------------------------------------
 
 def _patch_entity_preview(monkeypatch, *, count=7, types=("Person",), exclusions=()):
+    # Issue #1177: unterscheidbare Entitaeten statt austauschbarer MagicMocks.
+    # Die Vorschau dedupliziert jetzt wie der Laufpfad; ``count`` identische
+    # Attrappen waeren nach der Bereinigung eine einzige, und der Test haette
+    # geprueft, dass die Vorschau Dubletten mitzaehlt — genau das, was der
+    # Nutzer als zu hohe Personazahl gemeldet hat.
+    def _entity(index: int) -> MagicMock:
+        entity = MagicMock()
+        entity.name = f"Entity {index}"
+        entity.get_entity_type.return_value = types[index % len(types)]
+        return entity
+
     preview = SimpleNamespace(
-        entities=[MagicMock() for _ in range(count)],
+        entities=[_entity(i) for i in range(count)],
         filtered_count=count,
         entity_types=set(types),
     )

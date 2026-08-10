@@ -44,6 +44,7 @@ from .report_agent import MIN_PERSONA_TABLE_ROWS
 from .simulation_config_generator import SimulationConfigGenerator
 
 if TYPE_CHECKING:
+    from .entity_reader import EntityNode
     from .simulation_manager import SimulationManager, SimulationState
 
 logger = get_logger("agora.prepare")
@@ -115,6 +116,87 @@ def _resolve_llm_connection(
     return None, None
 
 
+def _entity_identity_key(entity: "EntityNode") -> tuple[str, str]:
+    """Vergleichsschluessel fuer Persona-Kandidaten (Issue #1177).
+
+    Normalisiert wie ``report_contract._stakeholder_group_key``: casefold plus
+    Whitespace-Kollaps. Die Ontologie liefert denselben Stakeholder mehrfach in
+    leicht abweichender Schreibweise; roh verglichen zaehlt jede Variante als
+    eigene Gruppe.
+
+    Der Typ gehoert in den Schluessel: derselbe Name unter zwei Typen ist
+    fachlich nicht dasselbe — der Bildungstraeger als ``Traeger`` und als
+    ``Kostentraeger`` sind zwei Rollen, auch wenn der Typfehler selbst
+    (zweiter Befund in #1177) hier nicht behoben wird.
+    """
+    name = " ".join((entity.name or "").split()).casefold()
+    entity_type = " ".join((entity.get_entity_type() or "Entity").split()).casefold()
+    return name, entity_type
+
+
+def _dedupe_entities(
+    entities: "List[EntityNode]",
+) -> "tuple[List[EntityNode], int]":
+    """Entfernt Mehrfachnennungen; erste Nennung gewinnt.
+
+    Gibt die bereinigte Liste und die Zahl entfernter Dubletten zurueck.
+    """
+    seen: set[tuple[str, str]] = set()
+    unique: List[EntityNode] = []
+    for entity in entities:
+        key = _entity_identity_key(entity)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(entity)
+    return unique, len(entities) - len(unique)
+
+
+def _cap_entities_across_types(
+    entities: "List[EntityNode]", max_agents: int
+) -> "List[EntityNode]":
+    """Kappt auf ``max_agents`` und sichert dabei jedem Typ einen Platz.
+
+    Issue #1177: ``entities[:max_agents]`` liess eine ueberrepraesentierte
+    Gruppe alle Plaetze belegen — kleine, aber fachlich wichtige Gruppen
+    (``Betriebsrat``, ``Honorarkraft``) fielen komplett heraus. Die Auswahl
+    geht deshalb reihum durch die Typen: erst je ein Vertreter pro Typ, dann
+    der zweite und so weiter, bis das Limit erreicht ist.
+
+    Innerhalb eines Typs bleibt die Reihenfolge der Quelle erhalten. Sie ist
+    unsortiert — der Lesepfad kennt kein ``ORDER BY``; welcher Vertreter eines
+    Typs gewinnt, ist damit weiterhin willkuerlich. Was diese Funktion
+    aendert, ist nur, dass *jeder* Typ vertreten ist, solange Plaetze
+    reichen. Eine Sortierung nach Grad oder Zentralitaet waere der naechste
+    Schritt und braucht eine Aenderung im Reader.
+    """
+    if max_agents <= 0 or len(entities) <= max_agents:
+        return list(entities)
+
+    by_type: Dict[str, List[EntityNode]] = {}
+    for entity in entities:
+        by_type.setdefault(entity.get_entity_type() or "Entity", []).append(entity)
+
+    selected: List[EntityNode] = []
+    round_index = 0
+    # Typen in Erstauftrittsreihenfolge — deterministisch und ohne stille
+    # Bevorzugung alphabetisch frueher Bezeichnungen.
+    while len(selected) < max_agents:
+        added_this_round = False
+        for bucket in by_type.values():
+            if round_index >= len(bucket):
+                continue
+            selected.append(bucket[round_index])
+            added_this_round = True
+            if len(selected) >= max_agents:
+                break
+        if not added_this_round:
+            break
+        round_index += 1
+
+    return selected
+
+
 def _phase_read_entities(
     state: SimulationState,
     storage: Any,
@@ -156,10 +238,29 @@ def _phase_read_entities(
             entity.get_entity_type() or "Entity" for entity in filtered.entities
         }
 
+    # Issue #1177: Vor dem Cap deduplizieren. Mehrfachnennungen derselben
+    # Stakeholdergruppe belegten sonst die begrenzten Persona-Plaetze und
+    # verdraengten tatsaechlich verschiedene Gruppen.
+    deduped, duplicate_count = _dedupe_entities(filtered.entities)
+    if duplicate_count:
+        logger.info(
+            "Persona-Kandidaten: %d Dublette(n) vor dem Cap entfernt "
+            "(%d → %d Entitaeten)",
+            duplicate_count,
+            len(filtered.entities),
+            len(deduped),
+        )
+        filtered.entities = deduped
+        filtered.filtered_count = len(deduped)
+
     # User-controlled cap on number of agents (optional).
-    # Truncates the entity list before persona generation. Entities are
-    # kept in reader order so the most relevant ones win if the reader
-    # already sorts by degree/importance.
+    #
+    # Issue #1177: Frueher ``entities[:max_agents]`` mit der Begruendung, der
+    # Reader sortiere nach Grad/Wichtigkeit. Diese Annahme stimmt nicht —
+    # weder ``filter_defined_entities`` noch der Neo4j-Lesepfad enthalten ein
+    # ``ORDER BY``. Die Auswahl war damit die unsortierte
+    # Rueckgabereihenfolge der Query, also willkuerlich, und eine
+    # ueberrepraesentierte Gruppe konnte alle Plaetze belegen.
     if (
         max_agents is not None
         and max_agents > 0
@@ -169,8 +270,11 @@ def _phase_read_entities(
             f"Capping agent count at {max_agents} "
             f"(originally {len(filtered.entities)} entities)"
         )
-        filtered.entities = filtered.entities[:max_agents]
+        filtered.entities = _cap_entities_across_types(filtered.entities, max_agents)
         filtered.filtered_count = len(filtered.entities)
+        filtered.entity_types = {
+            entity.get_entity_type() or "Entity" for entity in filtered.entities
+        }
 
     state.entities_count = filtered.filtered_count
     state.entity_types = list(filtered.entity_types)

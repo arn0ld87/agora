@@ -149,6 +149,7 @@ def filter_eligible_entities(
     known_types = _known_entity_types()
     eligible: list[EntityNode] = []
     exclusions: list[EligibilityExclusion] = []
+    unknown_types: list[tuple[str, str]] = []
 
     for entity in entities:
         entity_type = entity.get_entity_type() or "Entity"
@@ -175,7 +176,15 @@ def filter_eligible_entities(
             continue
 
         if normalized not in known_types:
-            logger.info(
+            # Issue #1177 (dritter Befund): Verglichen wird gegen eine feste
+            # Typliste, waehrend die Ontologie ihre Typen frei und
+            # deutschsprachig generiert — praktisch *jeder* Typ ist damit
+            # "unbekannt". Auf INFO feuerte die Zeile fuer 100 % der
+            # Entitaeten und markierte dadurch nichts; die tatsaechlichen
+            # Ausschluesse gingen darin unter. Aggregiert wird sie nach der
+            # Schleife einmal ausgegeben.
+            unknown_types.append((entity.name, entity_type))
+            logger.debug(
                 "Persona-Eligibility: unbekannter entity_type name=%s type=%s "
                 "— wird NICHT ausgeschlossen (konservativ, siehe Issue #1034)",
                 entity.name,
@@ -200,6 +209,20 @@ def filter_eligible_entities(
                 "entities_after": 0,
                 "excluded_types": ", ".join(excluded_types),
             },
+        )
+
+    if unknown_types:
+        # Issue #1177: einmal aggregiert statt einmal pro Entitaet. Die
+        # Einzelzeilen standen auf INFO und feuerten fuer praktisch jede
+        # Entitaet — die tatsaechlichen Ausschluesse gingen darin unter.
+        distinct = sorted({entity_type for _name, entity_type in unknown_types})
+        logger.info(
+            "Persona-Eligibility: %d von %d Entitaeten tragen einen entity_type "
+            "ausserhalb der bekannten Liste und werden konservativ zugelassen "
+            "(Issue #1034). Betroffene Typen: %s",
+            len(unknown_types),
+            len(entities),
+            ", ".join(distinct),
         )
 
     return PersonaEligibilityResult(eligible=eligible, exclusions=exclusions)
