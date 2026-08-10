@@ -322,9 +322,16 @@ export function useReportGeneration(
       }
       backendStatus.value = st.status || ''
 
+      // Die Statusabfrage kommt auch mit reiner Simulations-ID durch; liefert
+      // die Antwort dann kein `report_id`, gibt es nichts nachzuladen. Vorher
+      // stand hier ein `as string`-Cast, der `getReport(undefined)` auf die
+      // Reise schickte — der Fehlschlag verschwand im leeren catch und der
+      // Report blieb ohne Meldung leer (CodeRabbit zu PR #1207).
+      const terminalReportId = st.report_id || options.reportId()
+
       if (st.status === 'completed') {
         enterTerminal('completed')
-        await loadFullReport((st.report_id || options.reportId()) as string)
+        if (terminalReportId) await loadFullReport(terminalReportId)
         stopPolling()
       } else if (st.status === 'incomplete') {
         // Backend meldet fehlgeschlagene Pflichtsections. Der Rest des Reports
@@ -333,7 +340,7 @@ export function useReportGeneration(
         options.addLog(
           options.t('step4.status.incomplete') || 'Report unvollständig — einige Abschnitte fehlen.'
         )
-        await loadFullReport((st.report_id || options.reportId()) as string)
+        if (terminalReportId) await loadFullReport(terminalReportId)
         stopPolling()
       } else if (st.status === 'failed') {
         enterTerminal('error')
@@ -444,8 +451,9 @@ export function useReportGeneration(
       }
       return
     }
-    if (!full.value) {
-      await loadFullReport(options.reportId() as string)
+    const reportId = options.reportId()
+    if (!full.value && reportId) {
+      await loadFullReport(reportId)
     }
   }
 

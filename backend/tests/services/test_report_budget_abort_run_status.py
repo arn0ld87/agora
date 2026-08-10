@@ -55,8 +55,13 @@ def budget_abort_env(tmp_path, monkeypatch):
     created: dict[str, str] = {}
     _real_create_run = registry.create_run
 
-    def _capture_create_run(**kwargs):
-        record = _real_create_run(**kwargs)
+    # Reicht durch, statt die Signatur nachzubilden: seit PR #1205 ruft
+    # ``RunLifecycle.__enter__`` ``create_run(run_type, entity_id, ...)`` mit
+    # zwei positionalen Argumenten. Ein Fake, der nur ``**kwargs`` annimmt,
+    # bricht bei jeder solchen Verlagerung erneut — obwohl er nichts weiter
+    # tut, als die run_id mitzuschneiden (Issue #1210).
+    def _capture_create_run(*args, **kwargs):
+        record = _real_create_run(*args, **kwargs)
         created["run_id"] = record["run_id"]
         return record
 

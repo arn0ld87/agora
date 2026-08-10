@@ -254,6 +254,19 @@ describe('useReportGeneration — Endzustaende', () => {
     expect(h.loadEvidence).toHaveBeenCalled()
   })
 
+  it('laedt keinen Report nach, wenn der Endzustand ohne Report-ID kommt', async () => {
+    // Die Statusabfrage kommt auch mit reiner Simulations-ID durch. Fehlt in
+    // der Antwort dann `report_id`, gibt es nichts nachzuladen — ein
+    // getReport(undefined) landete still im leeren catch (CodeRabbit, PR #1207).
+    const h = setup({ reportId: () => undefined, simulationId: () => 'sim_1' })
+    h.api.getReportStatus.mockResolvedValue({ success: true, data: { status: 'completed' } })
+
+    await h.generation.bootstrap()
+
+    expect(h.generation.status.isComplete.value).toBe(true)
+    expect(h.api.getReport).not.toHaveBeenCalled()
+  })
+
   it('zieht die Outline aus dem Report nach, wenn der Status keine liefert (#739)', async () => {
     const h = setup()
     h.api.getReportStatus.mockResolvedValue({
