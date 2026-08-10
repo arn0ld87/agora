@@ -12,6 +12,7 @@ import {
   ReportV3Schema,
   ReportModeSchema,
   ClaimSchema,
+  ThresholdSchema,
   HypothesisSchema,
   PersonaV3Schema,
 } from "../reportV3Contract";
@@ -151,6 +152,66 @@ describe("ReportV3Schema (Zod-Spiegel)", () => {
     }
     expect(
       ClaimSchema.safeParse({ ...base, confidence_scope: "gefuehlt" }).success,
+    ).toBe(false);
+  });
+
+  // Issue #1160 E: operative Zahlen tragen ihre Herkunft mit.
+  it("akzeptiert eine operative Zahl mit ausgewiesener Herkunft", () => {
+    const parsed = ThresholdSchema.safeParse({
+      id: "thr_01",
+      label: "Traffic-Baseline",
+      value: 90,
+      unit: "percent",
+      purpose: "baseline",
+      origin: "document_requirement",
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      // Im Zweifel unbelegt — nicht belegt.
+      expect(parsed.data.evidence_status).toBe("heuristic");
+    }
+  });
+
+  it("weist eine als belegt markierte Zahl ohne Beleg ab", () => {
+    // Spiegelt Threshold.verified_needs_an_evidence_ref im Backend: eine Zahl
+    // als belegt auszuweisen, ohne einen Beleg zu nennen, ist genau die
+    // Behauptung, die #1160 E adressiert.
+    const result = ThresholdSchema.safeParse({
+      id: "thr_01",
+      label: "Traffic-Baseline",
+      value: 90,
+      unit: "percent",
+      purpose: "baseline",
+      origin: "empirical_data",
+      evidence_status: "verified",
+      evidence_refs: [],
+    });
+    expect(result.success).toBe(false);
+
+    expect(
+      ThresholdSchema.safeParse({
+        id: "thr_01",
+        label: "Traffic-Baseline",
+        value: 90,
+        unit: "percent",
+        purpose: "baseline",
+        origin: "empirical_data",
+        evidence_status: "verified",
+        evidence_refs: [EVIDENCE_ID],
+      }).success,
+    ).toBe(true);
+  });
+
+  it("weist eine erfundene Herkunft ab", () => {
+    expect(
+      ThresholdSchema.safeParse({
+        id: "thr_01",
+        label: "Traffic-Baseline",
+        value: 90,
+        unit: "percent",
+        purpose: "baseline",
+        origin: "bauchgefuehl",
+      }).success,
     ).toBe(false);
   });
 

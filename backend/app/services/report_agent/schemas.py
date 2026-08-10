@@ -21,6 +21,7 @@ from ...contracts import (
     PositioningVariant,
     ContentIdea,
     DataGap,
+    Threshold,
 )
 from ..evidence_migrations import (
     CURRENT_SCHEMA_VERSION,
@@ -130,6 +131,20 @@ class SectionMetadata(BaseModel):
     data_gaps: list[str] = Field(
         default_factory=list,
         description="Identifizierte Datenlücken (optional)",
+    )
+    # Issue #1160 E: Operative Zahlen tragen ihre Herkunft mit. Die
+    # Feld-Beschreibungen von ``Threshold`` gehen ueber
+    # ``model_json_schema()`` an das Modell — der Prompt-Block in
+    # ``report_prompts/sections.py`` (ADR-0002 Anker 1) bleibt unberuehrt.
+    thresholds: list[Threshold] = Field(
+        default_factory=list,
+        description=(
+            "Operative Zahlen aus dem Abschnitt (Schwellen, Grenzwerte, "
+            "Zielwerte, Baselines) mit ausgewiesener Herkunft. Nur Zahlen "
+            "aufnehmen, die im Abschnittstext tatsaechlich vorkommen — keine "
+            "erfinden, um die Liste zu fuellen. Leere Liste ist ein "
+            "gueltiges Ergebnis."
+        ),
     )
 
 
