@@ -1,6 +1,6 @@
 # HTTP-API — Agora Backend
 
-**Status:** Referenz zu Backend `0.8.0`. Diese Datei beschreibt die HTTP-Endpunkte nach Domänen (Übersicht, nicht jede Einzelroute). Für Response-Envelopes, `ApiErrorCode`-Katalog und Schema-Tests siehe [`api-contracts.md`](api-contracts.md). Für die Vertragsmodelle siehe [`../backend/app/contracts/`](../backend/app/contracts/) und die generierten Schemas via `uv run python -m app.contracts.dump_schemas`.
+**Status:** Referenz zu Backend `0.9.4` (Stand 11.08.2026). Diese Datei beschreibt die HTTP-Endpunkte nach Domänen (Übersicht, nicht jede Einzelroute). Für Response-Envelopes, `ApiErrorCode`-Katalog und Schema-Tests siehe [`api-contracts.md`](api-contracts.md). Für die Vertragsmodelle siehe [`../backend/app/contracts/`](../backend/app/contracts/) und die generierten Schemas via `uv run python -m app.contracts.dump_schemas`.
 
 Quelle der Wahrheit für die Routen ist der Code in [`../backend/app/api/`](../backend/app/api/) (Blueprints registriert in [`../backend/app/__init__.py`](../backend/app/__init__.py)). Bei Änderungen am Code: diese Datei mit-pflegen, sonst driftet die Doku.
 
@@ -18,7 +18,7 @@ Quelle der Wahrheit für die Routen ist der Code in [`../backend/app/api/`](../b
 
 ## Domänen-Übersicht
 
-13 Blueprints, ~169 Routen. Mount-Pfade aus `app/__init__.py`.
+13 Blueprints, 171 Routen (Zählung der Route-Dekoratoren unter `backend/app/api/`, Stand 11.08.2026). Mount-Pfade aus `app/__init__.py`.
 
 ### Auth & API-Keys
 
@@ -65,9 +65,13 @@ Budget-Hinweis (#764, [ADR-0012](decisions/0012-run-budgets.md)): `POST /prepare
 
 | Modul | Auswahl |
 |---|---|
-| [`report.py`](../backend/app/api/report.py) | `POST /generate`, `POST /generate/status`, `GET /<id>`, `GET /by-simulation/<sim_id>`, `GET /list`, `GET /<id>/evidence`, `GET /<id>/evidence/<section>/<claim_id>`, `GET /<id>/export`, `GET /<id>/download`, `DELETE /<id>`, `POST /chat`, `GET /<id>/progress`, `GET /<id>/sections`, `GET /<id>/section/<i>`, `GET /check/<sim_id>`, `GET /<id>/agent-log` (22 Routen) |
+| [`report.py`](../backend/app/api/report.py) | `POST /generate`, `POST /generate/status`, `GET /<id>`, `GET /by-simulation/<sim_id>`, `GET /list`, `GET /<id>/evidence`, `GET /<id>/evidence/<section>`, `GET /<id>/evidence/<section>/<claim_id>`, `GET /<id>/export`, `GET /<id>/download`, `DELETE /<id>`, `POST /chat`, `GET /<id>/progress`, `GET /<id>/sections`, `GET /<id>/section/<i>`, `GET /check/<sim_id>`, `GET /<id>/agent-log`, `GET /<id>/agent-log/stream`, `GET /<id>/console-log`, `GET /<id>/console-log/stream`, `POST /tools/search`, `POST /tools/statistics` (22 Routen) |
+
+`GET /<id>/export` nimmt `?format=md|json|csv|zip`; `/agent-log/stream` und `/console-log/stream` sind **kein** SSE, sondern liefern den bisherigen Logpuffer als JSON-Envelope.
 
 Export-Hinweis (#764): ZIP-Exporte (`/export`, `/download`) enthalten zusätzlich `usage.json` (Verbrauch) und `budget.json` (Limits + Warnungen) des Report-Runs, secretsfrei. `POST /generate` akzeptiert ein optionales `budget`-Objekt (`run-budget-config.schema.json`); ohne Angabe erbt der Report-Run das Budget der Simulation.
+
+Evidence-Hinweis ([#1160](https://github.com/arn0ld87/agora/issues/1160) G): vertragswidrige Evidenz verlässt das System in keinem Format als scheinbar geprüfte Datei. `GET /<id>/evidence`, die Claim-Sub-Route und der Claims-CSV-Abruf antworten dann mit **422** und `reason=contract_violation` — derselbe Grund, den auch der JSON-Envelope trägt; das ZIP enthält in diesem Fall `evidence-omitted.json` statt `evidence-map.json`/`claims.csv`.
 
 ### Runs — `/api/runs` (`runs_bp`)
 

@@ -1,6 +1,6 @@
 # Troubleshooting — bekannte Fehlerbilder
 
-**Status:** Referenz zu `0.8.0`. Symptom → Ursache → Behebung → Referenz. Für Fehlercodes und HTTP-Status siehe [`api-contracts.md`](api-contracts.md); für Konfiguration [`configuration.md`](configuration.md).
+**Status:** Referenz zu `0.9.4` (Stand 11.08.2026). Symptom → Ursache → Behebung → Referenz. Für Fehlercodes und HTTP-Status siehe [`api-contracts.md`](api-contracts.md); für Konfiguration [`configuration.md`](configuration.md).
 
 ---
 
@@ -65,7 +65,7 @@
 ### CVE-Hardstops
 - **Symptom:** Dependency-Scan schlägt fehl, Build blockiert.
 - **Ursache:** offene CVE-Ausnahmen mit abgelaufener Frist.
-- **Behebung:** Hardstops beachten — NLTK 28.09.2026, Trivy 30.08.2026; neue Ausnahmen brauchen Issue, Owner, Deadline und Hardstop.
+- **Behebung:** Hardstops beachten — derzeit nur NLTK 28.09.2026. Der Trivy-OS-Layer-Hardstop (30.08.2026) ist am 31.07.2026 mit [#772](https://github.com/arn0ld87/agora/issues/772) entfallen: CVE-2026-24049 und CVE-2026-23949 kamen nicht aus dem OS-Layer, sondern aus `setuptools/_vendor/`, und sind mit setuptools 83.0.0 behoben. Neue Ausnahmen brauchen Issue, Owner, Deadline und Hardstop.
 - **Referenz:** [`dependency-risk-register.md`](dependency-risk-register.md).
 
 ### `ImportError: Blocked import of regex from current working directory`
@@ -81,4 +81,4 @@
 
 ### E2E-LLM-Calls in CI fake/skip
 - **Behebung:** `AGORA_E2E_LLM_MODE` (z. B. `stub`, `compact`) korrekt setzen; `AGORA_SKIP_PREFLIGHT` nur gezielt.
-- **Referenz:** [`testing/`](testing/), [`runbooks/pre-push-gate.md`](runbooks/pre-push-gate.md).
+- **Referenz:** [`runbooks/e2e-local.md`](runbooks/e2e-local.md), [`runbooks/pre-push-gate.md`](runbooks/pre-push-gate.md).

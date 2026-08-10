@@ -1,6 +1,6 @@
 # Konfiguration — Umgebungsvariablen
 
-**Status:** Referenz zu Backend `0.8.0`. Konkrete Defaults und Beispiele liefert [`.env.example`](../.env.example) — bei Abweichung ist `.env.example` führend. Einstellungen werden über `pydantic-settings` geladen (ADR-0003). Geheimnisse 🔐 niemals committen, in Logs ausgeben oder in Doku schreiben — Secrets liegen im Vaultwarden bzw. im lokalen Secret Store.
+**Status:** Referenz zu Backend `0.9.4` (Stand 11.08.2026). Konkrete Defaults und Beispiele liefert [`.env.example`](../.env.example) — bei Abweichung ist `.env.example` führend. Einstellungen werden über `pydantic-settings` geladen (ADR-0003). Geheimnisse 🔐 niemals committen, in Logs ausgeben oder in Doku schreiben — Secrets liegen im Vaultwarden bzw. im lokalen Secret Store.
 
 Quelle für die Variablennamen ist der Code (Backend `os.getenv` / `pydantic-settings` `validation_alias`). Bei neuen Variablen: hier und in `.env.example` mit-pflegen.
 
@@ -59,6 +59,7 @@ Provider-Erkennung: [`../backend/app/llm/providers/registry.py`](../backend/app/
 | `LLM_MAX_TOKENS_FLOOR` | Untergrenze für `max_tokens` je Call (Default `32768`, `0` schaltet ab) — siehe [`app/llm/tokens.py`](../backend/app/llm/tokens.py) |
 | `LLM_MODEL_OUTPUT_LIMITS_JSON` | modellspezifische **Ausgabe**-Limits (JSON), deckeln den Boden; nicht zu verwechseln mit den Context-Limits |
 | `OPENAI_API_KEY` 🔐 / `OPENAI_BASE_URL` | OpenAI-kompatibel |
+| `OPENAI_API_BASE` / `OPENAI_API_BASE_URL` | werden vom Backend **an den OASIS-Subprozess durchgereicht** ([`app/services/llm_runtime.py`](../backend/app/services/llm_runtime.py)), nicht als Eingangskonfiguration gelesen. Nicht selbst setzen — der Wert kommt aus der aufgelösten Route |
 | `GEMINI_API_KEY` 🔐 / `GOOGLE_API_KEY` 🔐 | Google/Gemini |
 | `OLLAMA_API_KEY` 🔐 / `OLLAMA_BASE_URL` / `OLLAMA_NUM_CTX` / `OLLAMA_THINKING` | Ollama (lokal/Cloud) |
 | `TAVILY_API_KEY` 🔐 | Tavily-Web-Suche (Agent-Tools) |

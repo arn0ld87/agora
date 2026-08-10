@@ -1,6 +1,6 @@
 # Agora Roadmap
 
-**Stand:** 06.08.2026  
+**Stand:** 11.08.2026  
 **Aktuelle Produktversion:** `0.9.4` Stability Beta
 
 Diese Datei beschreibt ausschließlich die strategische Reihenfolge der nächsten Releases. Konkrete Arbeitspakete, Akzeptanzkriterien und Fortschritt werden als GitHub Issues gepflegt.
@@ -96,12 +96,12 @@ Der Version-Cut auf `0.9.0` ist am 06.08.2026 erfolgt, nachdem Deep-Audit-Stabil
 - [x] `pyproject.toml` und `uv.lock` sind einzige Backend-Dependency-SSoT (Issue #762)
 - [x] `requirements.txt` ist entfernt oder automatisch generiert (`backend/requirements.txt` existiert nicht mehr)
 - [x] Produktversion und Komponentenmanifest-Versionen werden automatisch synchronisiert (Issue #759, `.github/workflows/version-drift.yml`, `pre-push-gate.sh schemas`)
-- [x] offene CVE-Ausnahmen besitzen aktuelle Owner, Fristen und Auflösungsweg (siehe `docs/dependency-risk-register.md`; Hardstops NLTK 28.09.2026, Trivy 30.08.2026)
+- [x] offene CVE-Ausnahmen besitzen aktuelle Owner, Fristen und Auflösungsweg (siehe `docs/dependency-risk-register.md`; verbleibender Hardstop NLTK 28.09.2026 — der Trivy-OS-Layer-Hardstop 30.08.2026 ist am 31.07.2026 mit [#772](https://github.com/arn0ld87/agora/issues/772) ersatzlos entfallen)
 - [ ] Readiness, Auth, Tickets und Secret Stores sind durch produktnahe Smokes abgedeckt
 
 ### Dokumentation
 
-- [x] README, STATUS, ROADMAP und Issues widersprechen sich nicht (Stand 27.07.2026 — laufend bei jeder größeren Änderung neu zu verifizieren)
+- [x] README, STATUS, ROADMAP und Issues widersprechen sich nicht (zuletzt verifiziert 11.08.2026 — laufend bei jeder größeren Änderung neu zu prüfen)
 - [ ] `docs/STATUS.md` wird automatisch erzeugt oder CI-geprüft — `scripts/sync-status.sh` regeneriert nur die markierten Versions-/Test-Blöcke, nicht die Fließtext-Abschnitte; die STATUS-Sync-Prüfung läuft ausschließlich lokal über `pre-push-gate.sh schemas`. Der CI-Job dafür wurde am 17.05.2026 entfernt (`.github/workflows/ci.yml`, Kommentar „2026-05-17 entfernt: status-sync (MAI-16)"), `docs/STATUS.md` bleibt laut diesem Kommentar bewusst manuell pflegbar
 - [ ] historische Pläne liegen ausschließlich im Archiv
 - [ ] Installations- und Betriebsanleitung sind gegen einen frischen Host geprüft
@@ -127,8 +127,8 @@ Agora soll nicht nur technisch laufen, sondern Ergebnisse reproduzierbar, budget
 
 ### Reproduzierbarkeit
 
-- [ ] jeder Run speichert Eingangsdaten-Hash, Graph-Version, Modelle, Provider, Routing-Snapshot, Prompt-Versionen und Seeds
-- [ ] ein vorhandener Run kann mit gleicher oder bewusst geänderter Konfiguration reproduziert werden
+- [ ] jeder Run speichert Eingangsdaten-Hash, Graph-Version, Modelle, Provider, Routing-Snapshot, Prompt-Versionen und Seeds — **Teilstand:** der Seed steht (`simulation_config.json::random_seed`, sonst deterministisch aus der `simulation_id` abgeleitet) und wird im Simulationslog ausgewiesen ([#1160](https://github.com/arn0ld87/agora/issues/1160) F, 10.08.2026); die übrigen Felder fehlen
+- [ ] ein vorhandener Run kann mit gleicher oder bewusst geänderter Konfiguration reproduziert werden — der **stochastische** Anteil ist wiederholbar, die LLM-Antworten sind es nicht; Same-Seed-Same-Report verlangt zusätzlich eine Aufzeichnung der Modellantworten ([#763](https://github.com/arn0ld87/agora/issues/763))
 - [ ] Exporte enthalten ein maschinenlesbares Run-Manifest
 - [ ] Datenmigrationen besitzen Resume-, Rollback- und Fehlerpfade
 
@@ -201,6 +201,6 @@ Diese Punkte sind keine Zusagen für `1.0.0` und erhalten erst nach dem stabilen
 
 - Die Roadmap enthält keine ausführbaren Kleintasks.
 - GitHub Issues enthalten Scope, Akzeptanzkriterien, Owner und Abhängigkeiten.
-- Ausgelieferte Änderungen gehören in `CHANGELOG.md`.
+- Ausgelieferte Änderungen gehören als Fragment nach [`changelog.d/`](changelog.d/README.md); `CHANGELOG.md` wird ausschließlich beim Release-Schnitt aus diesen Fragmenten erzeugt (`scripts/collect-changelog.py`), nie direkt im PR.
 - Der tatsächliche Stand gehört in `docs/STATUS.md`.
 - Erledigte historische Planung wird nicht an diese Datei angehängt.

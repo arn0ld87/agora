@@ -15,6 +15,7 @@ Weitere Einstiegspunkte:
 - Sicherheitsmeldungen: [`../SECURITY.md`](../SECURITY.md)
 - Agentenregeln: [`../AGENTS.md`](../AGENTS.md)
 - Claude-spezifische Regeln: [`../CLAUDE.md`](../CLAUDE.md)
+- Ausgelieferte Änderungen: [`../changelog.d/`](../changelog.d/README.md) — je PR eine Fragment-Datei; [`../CHANGELOG.md`](../CHANGELOG.md) entsteht daraus erst beim Release-Schnitt
 
 ## Referenzläufe und Evaluationen
 
@@ -23,7 +24,8 @@ Weitere Einstiegspunkte:
 
 ## Architektur und Verträge
 
-- [`architecture.md`](architecture.md) — Architektur, Domänen und Komponenten
+- [`architecture.md`](architecture.md) — **Zielarchitektur** (verfasst 04/2026, Migrationspfad umgesetzt, zuletzt gegen den Code geprüft 11.08.2026). Kein Istzustandsbericht — dafür [`STATUS.md`](STATUS.md)
+- [`runbooks/architecture-layers.md`](runbooks/architecture-layers.md) — Schichtenkarte Layer 0–10
 - [`api.md`](api.md) — HTTP-Endpunkte nach Domänen (Übersicht)
 - [`api-contracts.md`](api-contracts.md) — Response-Envelopes, Fehlercodes, Schema-Tests
 - [`configuration.md`](configuration.md) — Umgebungsvariablen-Referenz

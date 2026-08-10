@@ -1,9 +1,14 @@
-# Agora / MiroFish-Offline — Zielarchitektur
+# Agora — Zielarchitektur
 
-**Stand:** 2026-04-22  
-**Ableitung aus:**
-- `docs/2026-04-22-refactoring-produkt-audit.md`
-- `docs/refactoring-backlog.md`
+**Verfasst:** 2026-04-22 — abgeleitet aus dem Refactoring-Produkt-Audit und dem priorisierten Refactoring-Backlog jener Woche. Beide Quelldateien existieren nicht mehr im Repository; historische Planung liegt unter [`archive/planning/`](archive/planning/).  
+**Zuletzt gegen den Code geprüft:** 2026-08-11 (`b72a443b`, Produktversion `0.9.4`)
+
+> [!IMPORTANT]
+> **Dies ist ein Zielbild, kein Istzustandsbericht.** Es beschreibt, wohin die Architektur ab April 2026 entwickelt werden sollte, und dient weiterhin als Referenz für Modulgrenzen, Schnitt- und Vertragsentscheidungen.
+>
+> **Der Migrationspfad aus Abschnitt 13 ist inzwischen im Wesentlichen umgesetzt** — Belege stehen dort phasenweise. Die Namen einzelner Zielkomponenten weichen vom umgesetzten Code ab; maßgeblich ist der Code, nicht dieses Dokument.
+>
+> Für den **verifizierten Istzustand** siehe [`STATUS.md`](STATUS.md), für die realen Endpunkte [`api.md`](api.md), für die Verträge [`../backend/app/contracts/`](../backend/app/contracts/), für die Schichtenkarte [`runbooks/architecture-layers.md`](runbooks/architecture-layers.md).
 
 ---
 
@@ -678,6 +683,8 @@ Mindestens auf Anwendungsebene sinnvoll:
 
 Die Zielarchitektur wird **inkrementell** erreicht. Die Reihenfolge folgt Audit und priorisiertem Backlog.
 
+**Stand 11.08.2026:** Alle acht Phasen sind im Kern umgesetzt. Die Belegzeile je Phase nennt, woran das im Code sichtbar ist, und wo der umgesetzte Schnitt von der hier geplanten Benennung abweicht. Die Phasen sind damit **abgeschlossen im Sinne des Migrationspfads** — sie sagen nichts darüber aus, ob einzelne Module heute noch weiter geschnitten werden sollten; solche Befunde gehören in Issues, nicht in dieses Dokument.
+
 ### Phase 0 — Qualitätsfundament
 **Ziel:** Refactoring absichern.
 
@@ -688,6 +695,8 @@ Die Zielarchitektur wird **inkrementell** erreicht. Die Reihenfolge folgt Audit 
 
 **Ergebnis:** Änderungen werden früh geprüft; Refactoring erfolgt nicht mehr im Blindflug.
 
+**Status: umgesetzt.** `main` führt 17 Required Status Checks inklusive sechs E2E-Kern-Smokes; Ruff, Mypy und Contract-Tests sind PR-Pflicht. Lokaler Spiegel: `scripts/pre-push-gate.sh` (siehe [`runbooks/pre-push-gate.md`](runbooks/pre-push-gate.md)).
+
 ### Phase 1 — Simulation API entflechten
 **Ziel:** größtes API-Monolithrisiko reduzieren.
 
@@ -695,6 +704,8 @@ Die Zielarchitektur wird **inkrementell** erreicht. Die Reihenfolge folgt Audit 
 - gemeinsame Helper für Validierung, Fehler-Mapping und Run-Updates extrahieren
 
 **Ergebnis:** dünnere Endpunkte, klarere Zuständigkeiten, kleinere Änderungsflächen.
+
+**Status: umgesetzt.** `backend/app/api/` enthält heute `simulation_lifecycle.py`, `simulation_prepare.py`, `simulation_run.py`, `simulation_profiles.py`, `simulation_interviews.py`, `simulation_stream.py`, `simulation_entities.py`, `simulation_history.py`, `simulation_metrics.py`, `simulation_compare.py` und `simulation_budget.py`; gemeinsame Helfer liegen in `simulation_common.py`.
 
 ### Phase 2 — Frontend-Workspace konsolidieren
 **Ziel:** Layout-Duplikate und UI-Streuverantwortung reduzieren.
@@ -705,6 +716,8 @@ Die Zielarchitektur wird **inkrementell** erreicht. Die Reihenfolge folgt Audit 
 
 **Ergebnis:** konsistente UX, weniger duplizierte View-Struktur.
 
+**Status: umgesetzt, abweichend benannt.** Die hier geplanten `WorkspaceLayout.vue` / `WorkspaceHeader.vue` / `WorkspaceSplit.vue` sind nie entstanden. Die gemeinsame Shell heißt `frontend/src/components/v4/shell/` (`AppShell.vue`, `Topbar.vue`, `Sidebar.vue`, `PageHeader.vue`, `Breadcrumbs.vue`). Die Konsolidierung auf genau eine v4-Route je fachlicher Hauptfunktion ist über [#760](https://github.com/arn0ld87/agora/issues/760) verifiziert abgeschlossen und in [ADR-0010](decisions/0010-vue-v4-route-consolidation.md) festgehalten.
+
 ### Phase 3 — Polling und Async-State zentralisieren
 **Ziel:** einheitliche Langläuferbehandlung im Frontend.
 
@@ -712,6 +725,8 @@ Die Zielarchitektur wird **inkrementell** erreicht. Die Reihenfolge folgt Audit 
 - Inline-Polling aus Views und Step-Komponenten entfernen
 
 **Ergebnis:** berechenbares UI-Verhalten, sauberes Cleanup, weniger Boilerplate.
+
+**Status: umgesetzt.** `frontend/src/composables/` führt `usePolling.ts`, `useRunsPolling.ts` und `useIncrementalLogPolling.ts` (das geplante `useTaskPolling` ist in diesen aufgegangen).
 
 ### Phase 4 — Simulationsdomäne schneiden
 **Ziel:** saubere Fachlogik und Statusverwaltung.
@@ -722,6 +737,8 @@ Die Zielarchitektur wird **inkrementell** erreicht. Die Reihenfolge folgt Audit 
 
 **Ergebnis:** robuste Simulationslogik und stabile Single Source of Truth.
 
+**Status: umgesetzt, abweichend benannt.** `backend/app/services/` führt `prepare_service.py`, `branching_service.py`, `simulation_state_machine.py`, `simulation_manager.py`, `simulation_runner.py` und `simulation_ipc.py`. Ein Modul namens `SimulationRepository` existiert nicht; die Persistenzkapselung liegt in `simulation_manager.py` und den Config-Schemas (`simulation_config_schemas.py`).
+
 ### Phase 5 — Report-Engine modularisieren
 **Ziel:** größten Service-Hotspot strukturieren.
 
@@ -729,6 +746,8 @@ Die Zielarchitektur wird **inkrementell** erreicht. Die Reihenfolge folgt Audit 
 - `ReportAgent` auf Orchestrierung reduzieren
 
 **Ergebnis:** bessere Testbarkeit und Erweiterbarkeit für Report-Features.
+
+**Status: umgesetzt.** Der Report-Hotspot ist in das Paket `backend/app/services/report_agent/` plus `report_generation.py`, `report_export.py`, `report_logger.py`, `report_status.py`, `report_intent.py` und das Prompt-Paket `report_prompts/` zerlegt. `report_prompts/sections.py` trägt den `<evidence_gating priority="hard">`-Block aus [ADR-0002](decisions/0002-evidence-gating.md) — einen der fünf Hartanker, die ohne Supersedes-ADR und Sign-off nicht geschwächt werden dürfen.
 
 ### Phase 6 — Graph-/Storage-Schicht schärfen
 **Ziel:** Neo4j- und Ingestion-Komplexität kontrollieren.
@@ -738,6 +757,8 @@ Die Zielarchitektur wird **inkrementell** erreicht. Die Reihenfolge folgt Audit 
 - Graph-DTOs standardisieren
 
 **Ergebnis:** klarere Graph-Schnittstellen und bessere Grundlage für Graph Diff und Compare.
+
+**Status: umgesetzt.** `backend/app/storage/` trennt `neo4j_read.py`, `neo4j_write.py`, `neo4j_search.py` und `neo4j_mappings.py`; `neo4j_storage.py` hält nur noch Lifecycle, Health-Status und Retry-Wrapper. Die Ingestion-Pipeline liegt in `services/ingestion_pipeline.py`.
 
 ### Phase 7 — Vertrags- und Typisierungsschicht
 **Ziel:** Stabilität über die Schichten hinweg.
@@ -749,6 +770,8 @@ Die Zielarchitektur wird **inkrementell** erreicht. Die Reihenfolge folgt Audit 
 
 **Ergebnis:** weniger Integrationsfehler und besser abgesicherte Evolution.
 
+**Status: umgesetzt.** Pydantic-v2-Verträge liegen in `backend/app/contracts/`, der Zod-Spiegel in `frontend/src/contracts/`, die generierten JSON-Schemas unter `schemas/`. Ein Schema-Drift-Gate (`uv run python -m app.contracts.dump_schemas --check`) läuft in CI und im Pre-Push-Gate. Dataclasses und handgeschriebene Inline-Schemas für API-Verträge sind projektweit untersagt.
+
 ### Phase 8 — Produktausbau auf stabiler Basis
 **Ziel:** neue Features auf tragfähiger Architektur aufsetzen.
 
@@ -758,6 +781,8 @@ Die Zielarchitektur wird **inkrementell** erreicht. Die Reihenfolge folgt Audit 
 - Graph Diff
 - Confidence-/Evidence-Scoring
 - SSE/WebSocket-Live-Updates
+
+**Status: umgesetzt.** Alle sechs Features sind ausgeliefert: Run-Dashboard und `/api/runs`, Branch-Compare (`simulation_compare.py`, `contracts/branch_comparison.py`), Persona-Review (`PERSONA_REVIEW_ENABLED`, Fehlercode `persona_review_required`), Graph-Diff (`contracts/graph_diff.py`, `GET /api/graph/<id>/diff`), Evidence-/Confidence-Scoring nach ADR-0002 und ADR-0011 sowie SSE-Live-Updates über signierte Tickets. Der darauf aufbauende Produktausbau läuft seither über die Roadmap-Linien `0.10.0` und `1.0.0`, nicht mehr über diesen Migrationspfad.
 
 ---
 
