@@ -56,6 +56,8 @@ Provider-Erkennung: [`../backend/app/llm/providers/registry.py`](../backend/app/
 | `LLM_FORCE_STREAM` | Streaming erzwingen |
 | `LLM_BOOST_API_KEY` 🔐 / `LLM_BOOST_BASE_URL` / `LLM_BOOST_MODEL_NAME` | Boost-Provider |
 | `LLM_MODEL_CONTEXT_LIMITS_JSON` | modellspezifische Context-Limits (JSON) |
+| `LLM_MAX_TOKENS_FLOOR` | Untergrenze für `max_tokens` je Call (Default `32768`, `0` schaltet ab) — siehe [`app/llm/tokens.py`](../backend/app/llm/tokens.py) |
+| `LLM_MODEL_OUTPUT_LIMITS_JSON` | modellspezifische **Ausgabe**-Limits (JSON), deckeln den Boden; nicht zu verwechseln mit den Context-Limits |
 | `OPENAI_API_KEY` 🔐 / `OPENAI_BASE_URL` | OpenAI-kompatibel |
 | `GEMINI_API_KEY` 🔐 / `GOOGLE_API_KEY` 🔐 | Google/Gemini |
 | `OLLAMA_API_KEY` 🔐 / `OLLAMA_BASE_URL` / `OLLAMA_NUM_CTX` / `OLLAMA_THINKING` | Ollama (lokal/Cloud) |

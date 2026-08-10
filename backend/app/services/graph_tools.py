@@ -653,7 +653,10 @@ Please generate an interview summary."""
                     {"role": "user", "content": user_prompt}
                 ],
                 temperature=0.3,
-                max_tokens=800
+                max_tokens=800,
+                # Kurzzusammenfassung mit bewusst engem Limit — der
+                # Token-Boden gilt hier nicht.
+                enforce_token_floor=False,
             )
             return summary
 

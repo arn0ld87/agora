@@ -23,6 +23,7 @@ from ..utils.logger import get_logger
 from ..utils.retry import llm_call_with_retry
 
 from .context import _resolve_num_ctx
+from .tokens import resolve_max_tokens, resolve_num_ctx_for_output
 # Re-Export: ``from app.llm.client import LLMOutputTruncatedError`` bleibt der
 # gewohnte Importpfad, auch wenn der Typ jetzt in ``errors`` lebt (Provider-
 # Adapter brauchen ihn und werden von diesem Modul importiert).
@@ -353,6 +354,38 @@ class LLMClient:
         """Siehe ``app.llm.providers.openai.is_temperature_400`` (#1096)."""
         return _provider_openai.is_temperature_400(exc)
 
+    def _effective_max_tokens(
+        self,
+        max_tokens: int,
+        *,
+        model: Optional[str] = None,
+        enforce_floor: bool = True,
+    ) -> int:
+        """Siehe :func:`app.llm.tokens.resolve_max_tokens`.
+
+        Jede öffentliche Methode, die ein ``max_tokens`` entgegennimmt, führt
+        es hier durch — der Boden gilt damit unabhängig davon, was der
+        einzelne Aufrufer angefordert hat.
+        """
+        return resolve_max_tokens(
+            max_tokens,
+            model=model if model is not None else self.model,
+            enforce_floor=enforce_floor,
+        )
+
+    def _ollama_num_ctx_for(self, max_tokens: int, *, model: Optional[str] = None) -> Optional[int]:
+        """``num_ctx``, angehoben auf das, was *max_tokens* Ausgabe braucht.
+
+        Bei Ollama ist ``max_tokens`` das ``num_predict`` und teilt sich das
+        Fenster mit dem Prompt — siehe
+        :func:`app.llm.tokens.resolve_num_ctx_for_output`.
+        """
+        return resolve_num_ctx_for_output(
+            self._num_ctx,
+            max_tokens,
+            model=model if model is not None else self.model,
+        )
+
     def _completion_token_kwargs(
         self, max_tokens: int, model: Optional[str] = None
     ) -> Dict[str, int]:
@@ -622,14 +655,17 @@ class LLMClient:
         ] = "chat",
         force_no_thinking: bool = False,
         require_complete: bool = False,
+        enforce_token_floor: bool = True,
     ) -> str:
         """
         Send a chat request and return the cleaned model response.
-        
+
         Parameters:
             messages (List[Dict[str, str]]): Chat messages to send.
             temperature (float): Sampling temperature.
-            max_tokens (int): Maximum number of completion tokens.
+            max_tokens (int): Requested completion-token limit. Wird über
+                :meth:`_effective_max_tokens` auf den konfigurierten Boden
+                angehoben und am Ausgabelimit des Modells gedeckelt.
             response_format (Optional[Dict]): Optional requested response format.
             context (Literal): Logical context label for observability.
             force_no_thinking (bool): Whether to disable reasoning output when supported
@@ -638,6 +674,9 @@ class LLMClient:
                 off at the token cap (``finish_reason == "length"``) raises
                 :class:`LLMOutputTruncatedError` instead of returning partial text.
                 Callers that parse the result structurally should set this.
+            enforce_token_floor (bool): Auf ``False`` setzen, wenn das enge
+                ``max_tokens`` Absicht ist — Klassifikation, Label-Ausgabe,
+                Ein-Wort-Antworten. Der Deckel am Ausgabelimit greift auch dann.
 
         Returns:
             str: The model response text with thinking blocks removed.
@@ -646,6 +685,9 @@ class LLMClient:
             LLMOutputTruncatedError: When *require_complete* is set and the provider
                 reported ``finish_reason == "length"``.
         """
+        max_tokens = self._effective_max_tokens(
+            max_tokens, enforce_floor=enforce_token_floor
+        )
         self._publish_model_active(context, max_tokens=max_tokens, temperature=temperature)
         # E2E-Stub-Pfad für chat() — symmetrisch zum Stub-Pfad in chat_json().
         # Aktiviert ausschließlich via AGORA_E2E_LLM_MODE=stub.
@@ -683,8 +725,9 @@ class LLMClient:
         # verhindert, dass Reasoning-Profile den Token-Cap mit Thoughts belegen.
         if self._is_ollama():
             extra_body: Dict[str, Any] = {}
-            if self._num_ctx:
-                extra_body["options"] = {"num_ctx": self._num_ctx}
+            effective_num_ctx = self._ollama_num_ctx_for(max_tokens)
+            if effective_num_ctx:
+                extra_body["options"] = {"num_ctx": effective_num_ctx}
             extra_body["think"] = False if force_no_thinking else self._think
             kwargs["extra_body"] = extra_body
         elif self._is_minimax():
@@ -939,6 +982,7 @@ class LLMClient:
         Works against Ollama Cloud vision models (e.g. gemini-3-flash-preview:cloud).
         """
         vision_model = model or os.environ.get('VISION_MODEL_NAME') or self.model
+        max_tokens = self._effective_max_tokens(max_tokens, model=vision_model)
         messages = [{
             "role": "user",
             "content": [
@@ -956,7 +1000,14 @@ class LLMClient:
             kwargs["temperature"] = temperature
         kwargs.update(self._completion_token_kwargs(max_tokens, model=vision_model))
         if self._is_ollama():
-            extra_body: Dict[str, Any] = {"options": {"num_ctx": max(self._num_ctx, 8192)}}
+            extra_body: Dict[str, Any] = {
+                "options": {
+                    "num_ctx": max(
+                        self._ollama_num_ctx_for(max_tokens, model=vision_model) or 0,
+                        8192,
+                    )
+                }
+            }
             extra_body["think"] = False  # never want reasoning noise in vision output
             kwargs["extra_body"] = extra_body
 
@@ -1029,7 +1080,7 @@ class LLMClient:
             model=self.model,
             api_key=self.api_key,
             think=think_flag,
-            num_ctx=self._num_ctx,
+            num_ctx=self._ollama_num_ctx_for(max_tokens) or self._num_ctx,
             messages=messages,
             schema=schema,
             temperature=temperature,
@@ -1047,6 +1098,7 @@ class LLMClient:
             "chat", "chat_json", "embedding", "report", "persona", "graph", "unknown"
         ] = "chat_json",
         force_no_thinking: bool = False,
+        enforce_token_floor: bool = True,
     ) -> Dict[str, Any]:
         """
         Send chat request and return JSON.
@@ -1054,7 +1106,10 @@ class LLMClient:
         Args:
             messages: Message list
             temperature: Temperature parameter
-            max_tokens: Max token count
+            max_tokens: Angefordertes Token-Limit. Wird wie in :meth:`chat`
+                auf den Boden angehoben und am Ausgabelimit gedeckelt — hier
+                einmal zentral, damit auch der native Ollama-Schema-Pfad
+                denselben Wert sieht wie der OpenAI-kompatible.
             schema: Optional Pydantic model class or JSON-Schema dict.
                 When provided, attempts strict ``response_format={"type":
                 "json_schema", ...}``.  On providers that do not support this
@@ -1072,6 +1127,8 @@ class LLMClient:
                 to :meth:`chat` which publishes it to the model event bus).
             force_no_thinking: Wird an chat() weitergereicht — bei Ollama wird
                 ``think=False`` hart gesetzt, unabhaengig vom Profil.
+            enforce_token_floor: Auf ``False`` setzen, wenn das enge
+                ``max_tokens`` Absicht ist (Klassifikation, Label-Ausgabe).
 
         Returns:
             Parsed JSON object (dict).
@@ -1081,6 +1138,9 @@ class LLMClient:
             pydantic.ValidationError: Parsed JSON does not match *schema*
                 when *schema* is a Pydantic model.
         """
+        max_tokens = self._effective_max_tokens(
+            max_tokens, enforce_floor=enforce_token_floor
+        )
         # Budget-Gate (Issue #764, Codex P1): jeder physische Providerrequest
         # bekommt GENAU EINEN ``_budget_check`` unmittelbar vor dem Call.
         # Pfade, die an ``chat()`` delegieren (OpenAI-kompatibel), erhalten
@@ -1261,6 +1321,10 @@ class LLMClient:
                         _parse_llm_json(cleaned_response), schema
                     )
             # Strict-schema path: single fallback on unsupported-provider errors.
+            # ``enforce_token_floor`` wird durchgereicht, nicht unterdrückt:
+            # ``max_tokens`` ist oben bereits aufgelöst, und die Auflösung ist
+            # idempotent — ein zweiter Durchlauf mit derselben Flagge ändert
+            # den Wert nicht, ein Durchlauf mit der falschen schon.
             try:
                 response = self.chat(
                     messages=messages,
@@ -1270,6 +1334,7 @@ class LLMClient:
                     context=context,
                     force_no_thinking=force_no_thinking,
                     require_complete=True,
+                    enforce_token_floor=enforce_token_floor,
                 )
             except Exception as exc:
                 # #1096: ein 400 auf param=temperature ist KEIN Hinweis auf
@@ -1292,6 +1357,7 @@ class LLMClient:
                         context=context,
                         force_no_thinking=force_no_thinking,
                         require_complete=True,
+                        enforce_token_floor=enforce_token_floor,
                     )
                 else:
                     exc_lower = str(exc).lower()
@@ -1309,6 +1375,7 @@ class LLMClient:
                             context=context,
                             force_no_thinking=force_no_thinking,
                             require_complete=True,
+                            enforce_token_floor=enforce_token_floor,
                         )
                     else:
                         raise
@@ -1321,6 +1388,7 @@ class LLMClient:
                 context=context,
                 force_no_thinking=force_no_thinking,
                 require_complete=True,
+                enforce_token_floor=enforce_token_floor,
             )
         # Codefences + Prosa-Envelope entfernen (Issue #556).
         cleaned_response = _strip_llm_json_envelope(response)

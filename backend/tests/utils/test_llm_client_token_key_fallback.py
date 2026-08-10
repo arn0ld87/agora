@@ -17,6 +17,17 @@ import pytest
 from app.utils.llm_client import LLMClient
 
 
+@pytest.fixture(autouse=True)
+def _no_token_floor(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Der 400-Fallback tauscht den Schlüssel, nicht den Wert.
+
+    Der zentrale Token-Boden (``app.llm.tokens``) würde die
+    ``max_tokens``-Erwartungen hier auf einen Wert festnageln, um den es
+    nicht geht.
+    """
+    monkeypatch.setenv("LLM_MAX_TOKENS_FLOOR", "0")
+
+
 # ---------------------------------------------------------------------------
 # Heuristik-Unit-Tests
 # ---------------------------------------------------------------------------

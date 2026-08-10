@@ -309,7 +309,8 @@ class TestChatJsonSingleBudgetCheckPerProvider:
         # Stub bildet den echten chat()-Budget-Pfad nach: jeder Provider-
         # aufruf erzeugt genau einen check + ein event + ein record.
         def _fake_chat(messages, temperature=0.7, max_tokens=4096, response_format=None,
-                       context="chat", force_no_thinking=False, require_complete=False):
+                       context="chat", force_no_thinking=False, require_complete=False,
+                       enforce_token_floor=True):
             client._budget_check()
             client._log_invocation_event(stage=context, latency_ms=10.0, success=True)
             client._budget_record()
@@ -388,7 +389,8 @@ class TestChatJsonSingleBudgetCheckPerProvider:
         chat_calls = {"n": 0}
 
         def _fake_chat(messages, temperature=0.7, max_tokens=4096, response_format=None,
-                       context="chat", force_no_thinking=False, require_complete=False):
+                       context="chat", force_no_thinking=False, require_complete=False,
+                       enforce_token_floor=True):
             chat_calls["n"] += 1
             client._budget_check()
             if chat_calls["n"] == 1:
@@ -449,7 +451,8 @@ class TestFailedRequestsCountAsProviderAttempts:
         # Fake-Chat() bildet den echten chat()-Budget-Pfad nach: jeder
         # Provideraufruf erzeugt genau einen check + ein event + ein record.
         def _fake_chat(messages, temperature=0.7, max_tokens=4096, response_format=None,
-                       context="chat", force_no_thinking=False, require_complete=False):
+                       context="chat", force_no_thinking=False, require_complete=False,
+                       enforce_token_floor=True):
             client._budget_check()
             client._log_invocation_event(stage=context, latency_ms=10.0, success=True)
             client._budget_record()
@@ -488,7 +491,8 @@ class TestFailedRequestsCountAsProviderAttempts:
         object.__setattr__(client, "_ollama_chat_with_schema", _fake_ollama)
 
         def _fake_chat(messages, temperature=0.7, max_tokens=4096, response_format=None,
-                       context="chat", force_no_thinking=False, require_complete=False):
+                       context="chat", force_no_thinking=False, require_complete=False,
+                       enforce_token_floor=True):
             client._budget_check()
             client._log_invocation_event(stage=context, latency_ms=10.0, success=False, error_type="RuntimeError")
             client._budget_record()
@@ -552,7 +556,8 @@ class TestFailedRequestsCountAsProviderAttempts:
         object.__setattr__(client, "_is_ollama", lambda: False)
 
         def _fake_chat(messages, temperature=0.7, max_tokens=4096, response_format=None,
-                       context="chat", force_no_thinking=False, require_complete=False):
+                       context="chat", force_no_thinking=False, require_complete=False,
+                       enforce_token_floor=True):
             client._budget_check()
             client._log_invocation_event(stage=context, latency_ms=10.0, success=True)
             client._budget_record()
@@ -586,7 +591,8 @@ class TestFailedRequestsCountAsProviderAttempts:
         object.__setattr__(client, "_is_ollama", lambda: False)
 
         def _fake_chat(messages, temperature=0.7, max_tokens=4096, response_format=None,
-                       context="chat", force_no_thinking=False, require_complete=False):
+                       context="chat", force_no_thinking=False, require_complete=False,
+                       enforce_token_floor=True):
             client._budget_check()
             client._log_invocation_event(stage=context, latency_ms=10.0, success=True)
             client._budget_record()
@@ -639,7 +645,8 @@ class TestFailedRequestsCountAsProviderAttempts:
         chat_called = {"n": 0}
 
         def _fake_chat(messages, temperature=0.7, max_tokens=4096, response_format=None,
-                       context="chat", force_no_thinking=False, require_complete=False):
+                       context="chat", force_no_thinking=False, require_complete=False,
+                       enforce_token_floor=True):
             # Reihenfolge wie im echten chat(): Budget-Check VOR jedem
             # anderen Schritt. Wenn der Enforcer blockt, wird der Stub-
             # Body nie erreicht.
