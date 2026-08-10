@@ -75,10 +75,17 @@ class AiRouteAudit:
             "ai_model_ref_source": _carried_ai_model_ref_source(route),
             "validated_capabilities": dict(route.validated_capabilities),
             "resolved_at": timestamp.astimezone(timezone.utc).isoformat(),
+            # Auf ``is None`` geprueft, nicht auf Wahrheitswert: der leere
+            # String ist ein gueltiger fallback_reason und darf nicht
+            # stillschweigend durch den Legacy-Wert ersetzt werden.
             "fallback_reason": (
                 fallback_reason
                 if fallback_reason is not None
-                else route.fallback_reason or _carried_fallback_reason(route)
+                else (
+                    route.fallback_reason
+                    if route.fallback_reason is not None
+                    else _carried_fallback_reason(route)
+                )
             ),
         }
         path = os.path.join(

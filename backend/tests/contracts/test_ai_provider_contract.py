@@ -516,6 +516,36 @@ def test_stage_route_adapter_roundtrip_preserves_legacy_tuning() -> None:
     assert stage_route_from_ai_route(canonical) == legacy
 
 
+def test_stage_route_restores_empty_fallback_reason_from_legacy_channel() -> None:
+    """Issue #992: der leere String ist ein Wert, keine Abwesenheit.
+
+    ``stage_route_from_ai_route`` bevorzugt den Legacy-Kanal vor dem obersten
+    ``AiRoute.fallback_reason``. Waehlte es den Kanal per Wahrheitswert statt
+    per ``is None``, ginge ein leerer Grund verloren, sobald das oberste Feld
+    geleert ist — und geleert ist es laut ``resolve_ai_route`` bei jedem Slot
+    ausser ``provider_fallback``.
+
+    Der leere String ist hier zulaessig, weil ``ai_model_ref_source`` nicht
+    ``"fallback"`` ist; nur diese Kombination verbietet ``StageLLMRoute``.
+    """
+    legacy = StageLLMRoute(
+        stage="report_generation",
+        provider_id="ollama-local",
+        model="qwen3:8b",
+        fallback_reason="",
+    )
+
+    canonical = ai_route_from_stage_route(legacy)
+    # Nachstellen, was resolve_ai_route mit dem obersten Feld macht. Ohne
+    # Validierung kopiert, damit genau der Zustand entsteht, den das Audit
+    # spaeter vorfindet.
+    cleared = canonical.model_copy(update={"fallback_reason": None})
+
+    restored = stage_route_from_ai_route(cleared)
+
+    assert restored.fallback_reason == ""
+
+
 def test_stage_route_roundtrip_preserves_reserved_none_collision() -> None:
     legacy = StageLLMRoute(
         stage="report_generation",

@@ -48,6 +48,15 @@ def _run_without_optout(code: str, cwd: Path) -> subprocess.CompletedProcess[str
     """Subprozess ohne geerbten Opt-out — sonst testet er nichts."""
     env = os.environ.copy()
     env.pop("NLTK_DISABLE_IMPORT_SECURITY", None)
+    # Issue #1065: ``unstructured.nlp.tokenize`` laedt beim Import Korpora
+    # nach, sofern AUTO_DOWNLOAD_NLTK nicht ausdruecklich abgeschaltet ist
+    # (``tokenize.py``: ``os.getenv("AUTO_DOWNLOAD_NLTK", "True")``). Der
+    # ``import nltk`` am Modulkopf — und damit der hier gepruefte Guard —
+    # laeuft unabhaengig davon. Abschalten macht den Test also nicht
+    # schwaecher, sondern nimmt ihm nur die Netzabhaengigkeit: ohne diese
+    # Zeile haengt sein Verhalten davon ab, ob der ausfuehrende Rechner die
+    # Korpora zufaellig im Cache hat und ob ausgehender Verkehr erlaubt ist.
+    env["AUTO_DOWNLOAD_NLTK"] = "False"
     return subprocess.run(
         [sys.executable, "-c", code],
         cwd=cwd,

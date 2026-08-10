@@ -583,6 +583,20 @@ def stage_route_from_ai_route(route: AiRoute) -> StageLLMRoute:
     options.pop(_LEGACY_ROUTE_OPTIONS_KEY, None)
     if legacy is not None and legacy.get("had_reserved_value"):
         options[_LEGACY_ROUTE_OPTIONS_KEY] = legacy.get("reserved_value")
+    # Issue #992: bevorzugt aus dem Legacy-Kanal zurueckholen --
+    # resolve_ai_route loescht das oberste AiRoute.fallback_reason fuer jeden
+    # Slot ausser provider_fallback. Das oberste Feld bleibt der Rueckfall und
+    # darf nicht uebersprungen werden: der provider_fallback-Slot durchlaeuft
+    # ai_route_from_stage_route nicht (er wird direkt synthetisiert) und traegt
+    # deshalb keinen Legacy-Kanal, und Snapshots von vor #992 haben einen
+    # Legacy-Kanal ohne diesen Schluessel.
+    #
+    # Auf `is None` geprueft, nicht auf Wahrheitswert: der leere String ist ein
+    # gueltiger, wenn auch unschoener fallback_reason. Mit ``or`` wuerde er
+    # stillschweigend durch das oberste Feld ersetzt.
+    carried_fallback_reason = (
+        legacy.get("fallback_reason") if legacy is not None else None
+    )
     return StageLLMRoute(
         stage=route.stage,
         provider_id=route.provider_connection_id,
@@ -597,17 +611,10 @@ def stage_route_from_ai_route(route: AiRoute) -> StageLLMRoute:
         ai_model_ref_source=(
             legacy.get("ai_model_ref_source") if legacy is not None else None
         ),
-        # Issue #992: bevorzugt aus dem Legacy-Kanal zurueckholen --
-        # resolve_ai_route loescht das oberste AiRoute.fallback_reason fuer
-        # jeden Slot ausser provider_fallback. Das oberste Feld bleibt der
-        # Rueckfall und darf nicht uebersprungen werden: der
-        # provider_fallback-Slot durchlaeuft ai_route_from_stage_route nicht
-        # (er wird direkt synthetisiert) und traegt deshalb keinen
-        # Legacy-Kanal, und Snapshots von vor #992 haben einen Legacy-Kanal
-        # ohne diesen Schluessel.
         fallback_reason=(
-            (legacy.get("fallback_reason") if legacy is not None else None)
-            or route.fallback_reason
+            carried_fallback_reason
+            if carried_fallback_reason is not None
+            else route.fallback_reason
         ),
         provider_options=options,
     )
