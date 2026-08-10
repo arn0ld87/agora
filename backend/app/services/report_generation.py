@@ -7,6 +7,7 @@ from flask import current_app
 
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
 from ..services.report_agent.output_contract import is_deliverable_report_status
+from ..services.run_lifecycle import RunLifecycle
 from ..services.run_registry import RunRegistry
 from ..services.simulation_manager import SimulationManager
 from ..models.project import ProjectManager
@@ -95,10 +96,14 @@ class ReportGenerationService:
         report_id = f"report_{uuid.uuid4().hex[:12]}"
 
         task_manager = TaskManager()
-        run_record = run_registry.create_run(
-            run_type="report_generate",
-            entity_id=report_id,
-            status="pending",
+        # Issue #1183: Anlage-Fenster (create_run bis enqueue) hinter
+        # RunLifecycle — jeder Abbruch bis zur Übergabe an den Job-Worker
+        # markiert Run und Task als failed statt sie pending zu verwaisen.
+        with RunLifecycle.begin(
+            run_registry,
+            "report_generate",
+            report_id,
+            failure_message="Report generation start failed: {exc_type}",
             progress=0,
             message="Report generation queued",
             linked_ids={
@@ -121,11 +126,65 @@ class ReportGenerationService:
                 "llm_model": llm_model_override,
                 "llm_provider": llm_runtime.redacted_metadata() or None,
             },
-        )
-        task_id = task_manager.create_task(
-            task_type="report_generate",
-            metadata={"simulation_id": simulation_id, "graph_id": graph_id, "report_id": report_id, "run_id": run_record["run_id"]}
-        )
+        ) as lifecycle:
+            run_record = lifecycle.record
+            task_id = task_manager.create_task(
+                task_type="report_generate",
+                metadata={"simulation_id": simulation_id, "graph_id": graph_id, "report_id": report_id, "run_id": run_record["run_id"]}
+            )
+            lifecycle.attach_task(task_manager, task_id)
+            cls._wire_and_enqueue_generation(
+                simulation_requirement=simulation_requirement,
+                task_manager=task_manager,
+                task_id=task_id,
+                simulation_id=simulation_id,
+                report_id=report_id,
+                report_mode=report_mode,
+                run_record=run_record,
+                graph_id=graph_id,
+                state=state,
+                llm_model_override=llm_model_override,
+                llm_runtime=llm_runtime,
+                llm_profile_id=llm_profile_id,
+                ai_model_ref=ai_model_ref,
+                budget=budget,
+            )
+
+        return {
+            "simulation_id": simulation_id,
+            "report_id": report_id,
+            "task_id": task_id,
+            "run_id": run_record["run_id"],
+            "status": "generating",
+            "message": "Report generation task started. Query progress via /api/report/generate/status",
+            "already_generated": False
+        }
+
+    @classmethod
+    def _wire_and_enqueue_generation(
+        cls,
+        *,
+        simulation_requirement,
+        task_manager,
+        task_id,
+        simulation_id,
+        report_id,
+        report_mode,
+        run_record,
+        graph_id,
+        state,
+        llm_model_override,
+        llm_runtime,
+        llm_profile_id,
+        ai_model_ref,
+        budget,
+    ):
+        """Routing, Budget und Worker-Closure des Reports verdrahten.
+
+        Läuft vollständig innerhalb des RunLifecycle-Fensters von
+        :meth:`start_generation` — jede Exception hier markiert Run und
+        Task als failed (#1183).
+        """
         # Issue #764: Budget des Simulationslaufs auf den Report-Run vererben.
         try:
             from .run_budget import inherit_budget_from_simulation
@@ -287,13 +346,3 @@ class ReportGenerationService:
 
         from ..jobs import enqueue
         enqueue("report_generate", run_generate)
-
-        return {
-            "simulation_id": simulation_id,
-            "report_id": report_id,
-            "task_id": task_id,
-            "run_id": run_record["run_id"],
-            "status": "generating",
-            "message": "Report generation task started. Query progress via /api/report/generate/status",
-            "already_generated": False
-        }

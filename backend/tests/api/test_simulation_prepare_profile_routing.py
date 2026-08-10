@@ -154,6 +154,13 @@ def prepare_env(monkeypatch):
     monkeypatch.setattr(
         f"{prefix}.run_registry.create_run", lambda *a, **k: {"run_id": "run_prepare_1"}
     )
+    monkeypatch.setattr(
+        # Der RunLifecycle markiert seit #1183 jeden Fensterabbruch strikt als
+        # failed (#844) — der gestubbte Run braucht deshalb auch ein
+        # erfolgreiches update_run, sonst würde jeder Fehlerpfad-Test hier
+        # fälschlich im 500-Persistenzfehler enden.
+        f"{prefix}.run_registry.update_run", lambda *a, **k: {"run_id": "run_prepare_1"}
+    )
     monkeypatch.setattr("app.jobs.threading.Thread.start", run_inline)
     monkeypatch.setattr("app.models.task.TaskManager", FakeTaskManager)
 

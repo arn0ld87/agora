@@ -538,7 +538,7 @@ def test_resume_simulation_prepare_raises_internal_error_when_run_update_returns
     ValueError("provider_override..."). Kein Task wird erzeugt,
     prepare_simulation wird nicht gestartet.
     """
-    from app.utils.api_errors import ApiErrorCode
+    from app.services.run_lifecycle import RunPersistenceError
 
     run = _create_run(
         env["registry"],
@@ -587,10 +587,9 @@ def test_resume_simulation_prepare_raises_internal_error_when_run_update_returns
         env["app"].extensions["neo4j_storage"] = MagicMock(name="Neo4jStorage")
 
         with env["app"].app_context():
-            with pytest.raises(RuntimeError) as exc_info:
+            with pytest.raises(RunPersistenceError) as exc_info:
                 _run_restart_prepare_sync(run)
 
-        assert exc_info.value.args and exc_info.value.args[0] == ApiErrorCode.INTERNAL_ERROR
         # Die irreführende 422-Provider-Key-Meldung darf nicht auftauchen.
         assert "provider_override" not in str(exc_info.value)
         assert not MockMgr.return_value.prepare_simulation.called
@@ -602,7 +601,7 @@ def test_resume_simulation_prepare_raises_internal_error_when_run_update_raises(
     interner Persistenzfehler statt Maskierung als normaler Guard-Fall.
     Kein Task wird erzeugt, prepare_simulation wird nicht gestartet.
     """
-    from app.utils.api_errors import ApiErrorCode
+    from app.services.run_lifecycle import RunPersistenceError
 
     run = _create_run(
         env["registry"],
@@ -651,10 +650,9 @@ def test_resume_simulation_prepare_raises_internal_error_when_run_update_raises(
         env["app"].extensions["neo4j_storage"] = MagicMock(name="Neo4jStorage")
 
         with env["app"].app_context():
-            with pytest.raises(RuntimeError) as exc_info:
+            with pytest.raises(RunPersistenceError) as exc_info:
                 _run_restart_prepare_sync(run)
 
-        assert exc_info.value.args and exc_info.value.args[0] == ApiErrorCode.INTERNAL_ERROR
         assert "provider_override" not in str(exc_info.value)
         assert "disk full" not in str(exc_info.value)
         assert not MockMgr.return_value.prepare_simulation.called

@@ -395,8 +395,11 @@ def test_report_generation_liefert_incomplete_statt_zu_scheitern():
 
     from app.services import report_generation
 
-    source = inspect.getsource(report_generation.ReportGenerationService.start_generation)
+    # Der Worker-Zweig lebt seit dem RunLifecycle-Slice in
+    # ``_wire_and_enqueue_generation`` (von ``start_generation`` aufgerufen) —
+    # geprueft wird die ganze Service-Klasse, nicht eine einzelne Methode.
+    source = inspect.getsource(report_generation.ReportGenerationService)
     assert "is_deliverable_report_status(report.status)" in source, (
-        "start_generation entscheidet nicht mehr ueber is_deliverable_report_status — "
+        "ReportGenerationService entscheidet nicht mehr ueber is_deliverable_report_status — "
         "ein degradierter Report wuerde wieder als Fehlschlag zugestellt."
     )

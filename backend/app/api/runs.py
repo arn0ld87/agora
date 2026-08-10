@@ -32,12 +32,12 @@ from ..services.llm_routing_seed import (
     seed_run_stage_routing,
 )
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
+from ..services.run_lifecycle import RunLifecycle
 from ..services.run_registry import RunRegistry
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import RunnerStatus, SimulationRunner
 from ..services.stage_model_router import StageModelRouter
 from ..services.sim.cancel_flag import request_cancel as _request_cancel
-from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.llm_client import LLMClient
 from ..utils.artifact_locator import ArtifactLocator
@@ -547,86 +547,92 @@ def _restart_graph_build(run: dict):
     chunk_size = project.chunk_size or Config.DEFAULT_CHUNK_SIZE
     chunk_overlap = project.chunk_overlap or Config.DEFAULT_CHUNK_OVERLAP
 
-    new_run = run_registry.create_run(
-        run_type="graph_build",
-        entity_id=project_id,
+    # Issue #1183: Anlage-Fenster hinter RunLifecycle — jeder Abbruch bis zum
+    # Thread-Start markiert den Run als failed statt ihn pending zu verwaisen.
+    with RunLifecycle.begin(
+        run_registry,
+        "graph_build",
+        project_id,
         parent_run_id=run["run_id"],
-        status="pending",
+        failure_message="Graph build restart failed: {exc_type}",
         progress=0,
         message="Graph build restart queued",
         linked_ids={"project_id": project_id},
         artifacts=ArtifactLocator.existing_paths({"project_dir": ProjectManager._get_project_dir(project_id)}),
         resume_capability={"available": True, "action": "restart", "label": "Restart graph build"},
         metadata={"graph_name": graph_name},
-    )
-    task_manager = TaskManager()
-    task_id = task_manager.create_task(
-        f"Build graph: {graph_name}",
-        metadata={"project_id": project_id, "run_id": new_run["run_id"]},
-    )
-    project.status = ProjectStatus.GRAPH_BUILDING
-    project.graph_build_task_id = task_id
-    ProjectManager.save_project(project)
+    ) as lifecycle:
+        new_run = lifecycle.record
+        task_manager = TaskManager()
+        task_id = task_manager.create_task(
+            f"Build graph: {graph_name}",
+            metadata={"project_id": project_id, "run_id": new_run["run_id"]},
+        )
+        lifecycle.attach_task(task_manager, task_id)
+        project.status = ProjectStatus.GRAPH_BUILDING
+        project.graph_build_task_id = task_id
+        ProjectManager.save_project(project)
 
-    def build_task():
-        try:
-            task_manager.update_task(task_id, status=TaskStatus.PROCESSING, message="Initializing graph build service...")
-            builder = container.graph_builder()
-            task_manager.update_task(task_id, message="Chunking text...", progress=5)
-            from ..services.text_processor import TextProcessor
-            chunks = TextProcessor.split_text(text, chunk_size=chunk_size, overlap=chunk_overlap)
-            total_chunks = len(chunks)
-            task_manager.update_task(task_id, message="Creating graph...", progress=10)
-            graph_id = builder.create_graph(name=graph_name)
-            project.graph_id = graph_id
-            ProjectManager.save_project(project)
-            run_registry.update_run(new_run["run_id"], linked_ids={"graph_id": graph_id}, entity_id=graph_id)
-            task_manager.update_task(task_id, message="Setting ontology definition...", progress=15)
-            builder.set_ontology(graph_id, ontology)
+        def build_task():
+            try:
+                task_manager.update_task(task_id, status=TaskStatus.PROCESSING, message="Initializing graph build service...")
+                builder = container.graph_builder()
+                task_manager.update_task(task_id, message="Chunking text...", progress=5)
+                from ..services.text_processor import TextProcessor
+                chunks = TextProcessor.split_text(text, chunk_size=chunk_size, overlap=chunk_overlap)
+                total_chunks = len(chunks)
+                task_manager.update_task(task_id, message="Creating graph...", progress=10)
+                graph_id = builder.create_graph(name=graph_name)
+                project.graph_id = graph_id
+                ProjectManager.save_project(project)
+                run_registry.update_run(new_run["run_id"], linked_ids={"graph_id": graph_id}, entity_id=graph_id)
+                task_manager.update_task(task_id, message="Setting ontology definition...", progress=15)
+                builder.set_ontology(graph_id, ontology)
 
-            def add_progress_callback(msg, progress_ratio):
-                progress = 15 + int(progress_ratio * 40)
-                task_manager.update_task(task_id, message=msg, progress=progress)
+                def add_progress_callback(msg, progress_ratio):
+                    progress = 15 + int(progress_ratio * 40)
+                    task_manager.update_task(task_id, message=msg, progress=progress)
 
-            episodes = builder.add_text_batches(graph_id, chunks, batch_size=3, progress_callback=add_progress_callback)
-            task_manager.update_task(task_id, message="Retrieving graph data...", progress=95)
-            graph_data = builder.get_graph_data(graph_id)
-            project.status = ProjectStatus.GRAPH_COMPLETED
-            ProjectManager.save_project(project)
-            task_manager.update_task(
-                task_id,
-                status=TaskStatus.COMPLETED,
-                message="Graph build completed",
-                progress=100,
-                result={
-                    "project_id": project_id,
-                    "graph_id": graph_id,
-                    "node_count": graph_data.get("node_count", 0),
-                    "edge_count": graph_data.get("edge_count", 0),
-                    "chunk_count": total_chunks,
-                    "episode_count": len(episodes),
-                },
-            )
-            run_registry.update_run(
-                new_run["run_id"],
-                status="completed",
-                progress=100,
-                message="Graph build completed",
-                artifacts=ArtifactLocator.existing_paths({"project_dir": ProjectManager._get_project_dir(project_id)}),
-            )
-        except Exception as exc:  # noqa: BLE001 — exception reported to task/run registry
-            project.status = ProjectStatus.FAILED
-            project.error = str(exc)
-            ProjectManager.save_project(project)
-            task_manager.update_task(
-                task_id,
-                status=TaskStatus.FAILED,
-                message=f"Build failed: {exc}",
-                error=traceback.format_exc(),
-            )
-            run_registry.update_run(new_run["run_id"], status="failed", message=str(exc), error=str(exc))
+                episodes = builder.add_text_batches(graph_id, chunks, batch_size=3, progress_callback=add_progress_callback)
+                task_manager.update_task(task_id, message="Retrieving graph data...", progress=95)
+                graph_data = builder.get_graph_data(graph_id)
+                project.status = ProjectStatus.GRAPH_COMPLETED
+                ProjectManager.save_project(project)
+                task_manager.update_task(
+                    task_id,
+                    status=TaskStatus.COMPLETED,
+                    message="Graph build completed",
+                    progress=100,
+                    result={
+                        "project_id": project_id,
+                        "graph_id": graph_id,
+                        "node_count": graph_data.get("node_count", 0),
+                        "edge_count": graph_data.get("edge_count", 0),
+                        "chunk_count": total_chunks,
+                        "episode_count": len(episodes),
+                    },
+                )
+                run_registry.update_run(
+                    new_run["run_id"],
+                    status="completed",
+                    progress=100,
+                    message="Graph build completed",
+                    artifacts=ArtifactLocator.existing_paths({"project_dir": ProjectManager._get_project_dir(project_id)}),
+                )
+            except Exception as exc:  # noqa: BLE001 — exception reported to task/run registry
+                project.status = ProjectStatus.FAILED
+                project.error = str(exc)
+                ProjectManager.save_project(project)
+                task_manager.update_task(
+                    task_id,
+                    status=TaskStatus.FAILED,
+                    message=f"Build failed: {exc}",
+                    error=traceback.format_exc(),
+                )
+                run_registry.update_run(new_run["run_id"], status="failed", message=str(exc), error=str(exc))
 
-    threading.Thread(target=build_task, daemon=True).start()
+        threading.Thread(target=build_task, daemon=True).start()
+
     return {"run_id": new_run["run_id"], "task_id": task_id, "status": "processing"}
 
 
@@ -648,11 +654,14 @@ def _restart_simulation_prepare(run: dict):
         raise ValueError("GraphStorage not initialized")
 
     config = manager.get_simulation_config(simulation_id) or {}
-    new_run = run_registry.create_run(
-        run_type="simulation_prepare",
-        entity_id=simulation_id,
+    # Issue #841/#844/#1183: Anlage-Fenster hinter RunLifecycle — Markierung,
+    # Task-Reihenfolge und strikte Persistenzsemantik liegen im Kontextmanager.
+    with RunLifecycle.begin(
+        run_registry,
+        "simulation_prepare",
+        simulation_id,
         parent_run_id=run["run_id"],
-        status="pending",
+        failure_message="Simulation preparation restart failed: {exc_type}",
         progress=0,
         message="Simulation preparation restart queued",
         linked_ids={"simulation_id": simulation_id, "project_id": state.project_id},
@@ -660,131 +669,109 @@ def _restart_simulation_prepare(run: dict):
         resume_capability={"available": True, "action": "restart", "label": "Restart preparation"},
         branch_label=state.branch_name,
         metadata={"graph_id": state.graph_id, "branch_name": state.branch_name},
-    )
-    run_id = new_run["run_id"]
+    ) as lifecycle:
+        new_run = lifecycle.record
+        run_id = new_run["run_id"]
 
-    # Restart hat keinen Request-Payload — llm_runtime=None, damit das
-    # Resolving ausschließlich über die persistierte Route bzw. den in der
-    # Settings-DB hinterlegten Store-Key läuft und nicht still auf
-    # Config.LLM_API_KEY/LLM_BASE_URL aus der lokalen .env zurückfällt (#798,
-    # Opus-Review-Folgebefund zu #778). Exakt derselbe Resolver-Pfad wie
-    # simulation_prepare.py::prepare_simulation (Zeilen 401-431).
-    from ..utils.endpoints import LOCAL_NO_AUTH_API_KEY, is_local_endpoint
+        # Restart hat keinen Request-Payload — llm_runtime=None, damit das
+        # Resolving ausschließlich über die persistierte Route bzw. den in der
+        # Settings-DB hinterlegten Store-Key läuft und nicht still auf
+        # Config.LLM_API_KEY/LLM_BASE_URL aus der lokalen .env zurückfällt (#798,
+        # Opus-Review-Folgebefund zu #778). Exakt derselbe Resolver-Pfad wie
+        # simulation_prepare.py::prepare_simulation.
+        from ..utils.endpoints import LOCAL_NO_AUTH_API_KEY, is_local_endpoint
 
-    seed_run_stage_routing(
-        run_id,
-        "persona_generation",
-        llm_model_override=config.get("llm_model"),
-        llm_runtime=None,
-    )
-    route_router = StageModelRouter(run_id)
-    resolved_route = route_router.resolve("persona_generation")
-    route_router.lock_stage("persona_generation", resolved_route)
-    resolved_api_key = resolve_route_api_key(resolved_route, None)
-
-    if resolved_api_key is None and not is_local_endpoint(resolved_route.base_url_sanitized):
-        guard_message = (
-            f"provider_override: kein api_key im Payload und kein Key in der Settings-DB "
-            f"für Provider '{resolved_route.provider_id}'. "
-            "Bitte in Einstellungen → LLM-Anbieter einen Schlüssel speichern "
-            "oder im Sitzungsfeld eingeben."
+        seed_run_stage_routing(
+            run_id,
+            "persona_generation",
+            llm_model_override=config.get("llm_model"),
+            llm_runtime=None,
         )
-        # Issue #841: new_run existiert an dieser Stelle bereits (Zeile 523) —
-        # ein Task wird erst danach erzeugt (Zeile 570), daher hier kein
-        # task_manager.fail_task. Ohne dieses Markieren bleibt der Run-Datensatz
-        # dauerhaft als "pending" in der Registry verwaist.
-        #
-        # Issue #844: update_run() liefert None, wenn das Run-Manifest
-        # zwischenzeitlich verschwunden ist, oder es kann eine I/O-Exception
-        # werfen. Beide Fälle dürfen NICHT als erfolgreich persistierte
-        # Ablehnung durchgehen — sonst wirft der Code weiterhin den regulären
-        # ValueError("provider_override...") und täuscht damit eine sauber
-        # gespeicherte Statusänderung vor, die tatsächlich nicht stattfand.
-        persistence_error: Optional[Exception] = None
-        try:
-            updated_run = run_registry.update_run(
-                new_run["run_id"], status="failed", message=guard_message, error=guard_message
+        route_router = StageModelRouter(run_id)
+        resolved_route = route_router.resolve("persona_generation")
+        route_router.lock_stage("persona_generation", resolved_route)
+        resolved_api_key = resolve_route_api_key(resolved_route, None)
+
+        if resolved_api_key is None and not is_local_endpoint(resolved_route.base_url_sanitized):
+            guard_message = (
+                f"provider_override: kein api_key im Payload und kein Key in der Settings-DB "
+                f"für Provider '{resolved_route.provider_id}'. "
+                "Bitte in Einstellungen → LLM-Anbieter einen Schlüssel speichern "
+                "oder im Sitzungsfeld eingeben."
             )
-        except Exception as exc:  # noqa: BLE001 — Persistenzfehler, unten geloggt
-            updated_run = None
-            persistence_error = exc
+            guard_error = ValueError(guard_message)
+            # RunLifecycle liest die failed-Meldung über dieses Attribut (#841).
+            guard_error.run_failure_message = guard_message  # type: ignore[attr-defined]
+            raise guard_error
 
-        if updated_run is None:
-            logger.error(
-                "Persistenzfehler beim Markieren von run_id=%s als failed im "
-                "Restart-Provider-Key-Guard: %s",
-                new_run["run_id"],
-                persistence_error or "update_run() lieferte None (Run-Manifest existiert nicht mehr)",
-            )
-            raise RuntimeError(ApiErrorCode.INTERNAL_ERROR) from persistence_error
-        raise ValueError(guard_message)
+        if resolved_api_key is None and is_local_endpoint(resolved_route.base_url_sanitized):
+            resolved_api_key = LOCAL_NO_AUTH_API_KEY
 
-    if resolved_api_key is None and is_local_endpoint(resolved_route.base_url_sanitized):
-        resolved_api_key = LOCAL_NO_AUTH_API_KEY
+        effective_llm_runtime = build_runtime_llm_config(resolved_route, resolved_api_key)
 
-    effective_llm_runtime = build_runtime_llm_config(resolved_route, resolved_api_key)
+        task_manager = TaskManager()
+        task_id = task_manager.create_task(
+            "simulation_prepare",
+            metadata={"simulation_id": simulation_id, "project_id": state.project_id, "run_id": new_run["run_id"]},
+        )
+        lifecycle.attach_task(task_manager, task_id)
+        state.status = SimulationStatus.PREPARING
+        manager._save_simulation_state(state)
 
-    task_manager = TaskManager()
-    task_id = task_manager.create_task(
-        "simulation_prepare",
-        metadata={"simulation_id": simulation_id, "project_id": state.project_id, "run_id": new_run["run_id"]},
-    )
-    state.status = SimulationStatus.PREPARING
-    manager._save_simulation_state(state)
+        def run_prepare():
+            try:
+                task_manager.update_task(task_id, status=TaskStatus.PROCESSING, progress=0, message="Start preparing simulation environment...")
 
-    def run_prepare():
-        try:
-            task_manager.update_task(task_id, status=TaskStatus.PROCESSING, progress=0, message="Start preparing simulation environment...")
+                def progress_callback(stage, progress, message, **kwargs):
+                    stage_weights = {
+                        "reading": (0, 20),
+                        "generating_profiles": (20, 70),
+                        "generating_config": (70, 90),
+                        "copying_scripts": (90, 100),
+                    }
+                    start, end = stage_weights.get(stage, (0, 100))
+                    current_progress = int(start + (end - start) * progress / 100)
+                    task_manager.update_task(task_id, progress=current_progress, message=f"[{stage}] {message}")
 
-            def progress_callback(stage, progress, message, **kwargs):
-                stage_weights = {
-                    "reading": (0, 20),
-                    "generating_profiles": (20, 70),
-                    "generating_config": (70, 90),
-                    "copying_scripts": (90, 100),
-                }
-                start, end = stage_weights.get(stage, (0, 100))
-                current_progress = int(start + (end - start) * progress / 100)
-                task_manager.update_task(task_id, progress=current_progress, message=f"[{stage}] {message}")
+                # Sub-Slice 20a: quota_plan aus persistierter Run-Config wieder
+                # aufnehmen, damit Restart denselben Soll-Plan nutzt wie der
+                # ursprüngliche Prepare-Run. Inkonsistenter Plan im persisted
+                # Config-Snapshot würde im Service-Layer als ValidationError
+                # propagieren und den Restart als FAILED markieren — das ist
+                # gewollt (kein silent-Fallback auf "ohne Plan").
+                from ..api.simulation_prepare import _parse_quota_plan
+                quota_plan = _parse_quota_plan(config or {})
 
-            # Sub-Slice 20a: quota_plan aus persistierter Run-Config wieder
-            # aufnehmen, damit Restart denselben Soll-Plan nutzt wie der
-            # ursprüngliche Prepare-Run. Inkonsistenter Plan im persisted
-            # Config-Snapshot würde im Service-Layer als ValidationError
-            # propagieren und den Restart als FAILED markieren — das ist
-            # gewollt (kein silent-Fallback auf "ohne Plan").
-            from ..api.simulation_prepare import _parse_quota_plan
-            quota_plan = _parse_quota_plan(config or {})
+                result_state = manager.prepare_simulation(
+                    simulation_id=simulation_id,
+                    simulation_requirement=simulation_requirement,
+                    document_text=document_text,
+                    defined_entity_types=None,
+                    use_llm_for_profiles=True,
+                    progress_callback=progress_callback,
+                    parallel_profile_count=None,
+                    storage=storage,
+                    llm_model=config.get("llm_model"),
+                    llm_runtime=effective_llm_runtime,
+                    language=config.get("language"),
+                    max_agents=config.get("max_agents"),
+                    quota_plan=quota_plan,
+                )
+                task_manager.complete_task(task_id, result=result_state.to_simple_dict())
+                run_registry.update_run(
+                    new_run["run_id"],
+                    status="completed",
+                    progress=100,
+                    message="Simulation preparation completed",
+                    artifacts=_simulation_artifacts(simulation_id),
+                    resume_capability={"available": True, "action": "restart", "label": "Restart preparation"},
+                )
+            except Exception as exc:  # noqa: BLE001 — exception reported to task/run registry
+                task_manager.fail_task(task_id, str(exc))
+                run_registry.update_run(new_run["run_id"], status="failed", message=str(exc), error=str(exc))
 
-            result_state = manager.prepare_simulation(
-                simulation_id=simulation_id,
-                simulation_requirement=simulation_requirement,
-                document_text=document_text,
-                defined_entity_types=None,
-                use_llm_for_profiles=True,
-                progress_callback=progress_callback,
-                parallel_profile_count=None,
-                storage=storage,
-                llm_model=config.get("llm_model"),
-                llm_runtime=effective_llm_runtime,
-                language=config.get("language"),
-                max_agents=config.get("max_agents"),
-                quota_plan=quota_plan,
-            )
-            task_manager.complete_task(task_id, result=result_state.to_simple_dict())
-            run_registry.update_run(
-                new_run["run_id"],
-                status="completed",
-                progress=100,
-                message="Simulation preparation completed",
-                artifacts=_simulation_artifacts(simulation_id),
-                resume_capability={"available": True, "action": "restart", "label": "Restart preparation"},
-            )
-        except Exception as exc:  # noqa: BLE001 — exception reported to task/run registry
-            task_manager.fail_task(task_id, str(exc))
-            run_registry.update_run(new_run["run_id"], status="failed", message=str(exc), error=str(exc))
+        threading.Thread(target=run_prepare, daemon=True).start()
 
-    threading.Thread(target=run_prepare, daemon=True).start()
     return {"run_id": new_run["run_id"], "task_id": task_id, "status": "processing"}
 
 
@@ -808,22 +795,28 @@ def _resume_or_restart_simulation_run(run: dict):
         )
         return {"run_id": run["run_id"], "status": "processing", "message": "Simulation resumed"}
 
-    new_run_state = SimulationRunner.start_simulation(simulation_id=simulation_id, platform="parallel")
-    state.status = SimulationStatus.RUNNING
-    manager._save_simulation_state(state)
-    new_run = run_registry.create_run(
-        run_type="simulation_run",
-        entity_id=simulation_id,
+    # Issue #1183: Der Run-Record entsteht VOR dem Prozessstart im
+    # Lifecycle-Fenster — schlägt der Start fehl, existiert ein failed-Record
+    # statt gar keinem (vorher: create_run erst nach start_simulation).
+    with RunLifecycle.begin(
+        run_registry,
+        "simulation_run",
+        simulation_id,
         parent_run_id=run["run_id"],
-        status="processing",
+        failure_message="Simulation restart failed: {exc_type}",
         progress=0,
-        message="Simulation restarted",
+        message="Simulation restart queued",
         linked_ids={"simulation_id": simulation_id, "project_id": state.project_id},
         artifacts=_simulation_artifacts(simulation_id),
         resume_capability={"available": True, "action": "resume", "label": "Resume run"},
         branch_label=state.branch_name,
         metadata={"graph_id": state.graph_id, "branch_name": state.branch_name},
-    )
+    ) as lifecycle:
+        new_run = lifecycle.record
+        new_run_state = SimulationRunner.start_simulation(simulation_id=simulation_id, platform="parallel")
+        state.status = SimulationStatus.RUNNING
+        manager._save_simulation_state(state)
+        lifecycle.succeed(status="processing", message="Simulation restarted")
     return {"run_id": new_run["run_id"], "status": new_run_state.runner_status.value, "message": "Simulation restarted"}
 
 
