@@ -962,6 +962,86 @@
       "title": "Segment",
       "type": "object"
     },
+    "Threshold": {
+      "additionalProperties": false,
+      "description": "Operative Zahl mit ausgewiesener Herkunft (Issue #1160 E).\n\nZahlen wie \u201e>90 % Traffic-Baseline\" oder \u201e14-Tage-Rankinggrenze\" sehen im\nFlie\u00dftext alle gleich aus \u2014 egal ob sie aus dem Auftragsdokument stammen,\naus gemessenen Daten, aus einer Norm, aus einer Betreiberentscheidung oder\ndaraus, dass ein Sprachmodell sie plausibel fand. Der Leser kann sie nicht\nunterscheiden und behandelt im Zweifel alle gleich verbindlich.\n\n``origin`` ist eine **eigene Dimension neben** ``EvidenceSourceKind`` und\nwird ausdr\u00fccklich nicht mit ihr vermischt: die Quellengattung beschreibt,\nwoher ein *Beleg* kommt, ``origin`` beschreibt, wie eine *Zahl* zustande\nkam. Eine Vermischung w\u00fcrde ADR-0002 Anker 3 verw\u00e4ssern.",
+      "properties": {
+        "evidence_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Refs",
+          "type": "array"
+        },
+        "evidence_status": {
+          "default": "heuristic",
+          "description": "verified: durch eine Evidence-Referenz belegt. derived: aus belegten Werten berechnet. heuristic: plausibel, aber unbelegt.",
+          "enum": [
+            "verified",
+            "derived",
+            "heuristic"
+          ],
+          "title": "Evidence Status",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "description": "Wof\u00fcr die Zahl gilt, z. B. 'Traffic-Baseline' oder 'Rankinggrenze'",
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "origin": {
+          "description": "Herkunft der Zahl. document_requirement: steht so im Auftrags- oder Seed-Dokument. empirical_data: aus gemessenen Daten abgeleitet. external_standard: aus Norm, Gesetz oder Branchenstandard. operator_policy: Festlegung des Betreibers. model_proposal: vom Sprachmodell vorgeschlagen, ohne Quelle. simulation_proposal: aus dem Verhalten der simulierten Agenten abgeleitet. Im Zweifel model_proposal \u2014 eine Zahl ohne belegbare Herkunft ist ein Vorschlag, keine Anforderung.",
+          "enum": [
+            "document_requirement",
+            "empirical_data",
+            "external_standard",
+            "operator_policy",
+            "model_proposal",
+            "simulation_proposal"
+          ],
+          "title": "Origin",
+          "type": "string"
+        },
+        "purpose": {
+          "description": "Rolle der Zahl: alert (l\u00f6st eine Reaktion aus) | target (angestrebt) | limit (darf nicht \u00fcberschritten werden) | baseline (Ausgangswert)",
+          "enum": [
+            "alert",
+            "target",
+            "limit",
+            "baseline"
+          ],
+          "title": "Purpose",
+          "type": "string"
+        },
+        "unit": {
+          "description": "Einheit, z. B. 'percent', 'days', 'eur', 'count'",
+          "minLength": 1,
+          "title": "Unit",
+          "type": "string"
+        },
+        "value": {
+          "description": "Der Zahlenwert selbst",
+          "title": "Value",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "value",
+        "unit",
+        "purpose",
+        "origin"
+      ],
+      "title": "Threshold",
+      "type": "object"
+    },
     "TrustSignal": {
       "additionalProperties": false,
       "description": "Vertrauenssignal nach Cialdini-Kategorien (DACH-kontext).",
@@ -1136,6 +1216,13 @@
         "$ref": "#/$defs/Segment"
       },
       "title": "Segments",
+      "type": "array"
+    },
+    "thresholds": {
+      "items": {
+        "$ref": "#/$defs/Threshold"
+      },
+      "title": "Thresholds",
       "type": "array"
     },
     "trust_signals": {

@@ -197,6 +197,43 @@ export const ContentIdeaSchema = z
   .strict();
 export type ContentIdea = z.infer<typeof ContentIdeaSchema>;
 
+// === Threshold (Issue #1160 E) ===
+// Operative Zahlen tragen ihre Herkunft mit. `origin` ist eine eigene
+// Dimension neben EvidenceSourceKind — die Quellengattung beschreibt, woher
+// ein Beleg kommt, `origin` beschreibt, wie eine Zahl zustande kam.
+export const ThresholdSchema = z
+  .object({
+    id: z.string().min(1),
+    label: z.string().min(1),
+    value: z.number(),
+    unit: z.string().min(1),
+    purpose: z.enum(["alert", "target", "limit", "baseline"]),
+    origin: z.enum([
+      "document_requirement",
+      "empirical_data",
+      "external_standard",
+      "operator_policy",
+      "model_proposal",
+      "simulation_proposal",
+    ]),
+    evidence_status: z.enum(["verified", "derived", "heuristic"]).default("heuristic"),
+    evidence_refs: z.array(EvidenceIdSchema).default([]),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    // Spiegelt Threshold.verified_needs_an_evidence_ref: eine Zahl als belegt
+    // auszuweisen, ohne einen Beleg zu nennen, ist genau die Behauptung, die
+    // #1160 E adressiert.
+    if (value.evidence_status === "verified" && value.evidence_refs.length === 0) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["evidence_refs"],
+        message: "evidence_status='verified' verlangt mindestens eine evidence_ref.",
+      });
+    }
+  });
+export type Threshold = z.infer<typeof ThresholdSchema>;
+
 // === DataGap ===
 export const DataGapSchema = z
   .object({
@@ -279,6 +316,8 @@ export const ReportV3Schema = z
     content_ideas: z.array(ContentIdeaSchema).default([]),
     data_gaps: z.array(DataGapSchema).default([]),
     hypotheses: z.array(HypothesisSchema).default([]),
+    // Issue #1160 E: operative Zahlen mit ausgewiesener Herkunft.
+    thresholds: z.array(ThresholdSchema).default([]),
     // Slice 5 (Issue #497): Red-Team-Befunde — max 10, Backward-compat default [].
     red_team_findings: z.array(z.string()).max(10).default([]),
     model_attribution: z.array(ModelAttributionSchema).default([]),
@@ -299,6 +338,7 @@ export const ReportV3Schema = z
       { path: "project_impacts", entries: value.project_impacts },
       { path: "positioning_variants", entries: value.positioning_variants },
       { path: "content_ideas", entries: value.content_ideas },
+      { path: "thresholds", entries: value.thresholds },
     ];
 
     for (const collection of refCollections) {

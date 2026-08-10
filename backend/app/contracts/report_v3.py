@@ -188,6 +188,82 @@ class ContentIdea(BaseModel):
     evidence_refs: list[str] = Field(default_factory=list)
 
 
+class Threshold(BaseModel):
+    """Operative Zahl mit ausgewiesener Herkunft (Issue #1160 E).
+
+    Zahlen wie „>90 % Traffic-Baseline" oder „14-Tage-Rankinggrenze" sehen im
+    Fließtext alle gleich aus — egal ob sie aus dem Auftragsdokument stammen,
+    aus gemessenen Daten, aus einer Norm, aus einer Betreiberentscheidung oder
+    daraus, dass ein Sprachmodell sie plausibel fand. Der Leser kann sie nicht
+    unterscheiden und behandelt im Zweifel alle gleich verbindlich.
+
+    ``origin`` ist eine **eigene Dimension neben** ``EvidenceSourceKind`` und
+    wird ausdrücklich nicht mit ihr vermischt: die Quellengattung beschreibt,
+    woher ein *Beleg* kommt, ``origin`` beschreibt, wie eine *Zahl* zustande
+    kam. Eine Vermischung würde ADR-0002 Anker 3 verwässern.
+    """
+
+    model_config = _STRICT
+
+    id: str = Field(min_length=1)
+    label: str = Field(
+        min_length=1,
+        description="Wofür die Zahl gilt, z. B. 'Traffic-Baseline' oder 'Rankinggrenze'",
+    )
+    value: float = Field(description="Der Zahlenwert selbst")
+    unit: str = Field(
+        min_length=1,
+        description="Einheit, z. B. 'percent', 'days', 'eur', 'count'",
+    )
+    purpose: Literal["alert", "target", "limit", "baseline"] = Field(
+        description=(
+            "Rolle der Zahl: alert (löst eine Reaktion aus) | target (angestrebt) "
+            "| limit (darf nicht überschritten werden) | baseline (Ausgangswert)"
+        )
+    )
+    origin: Literal[
+        "document_requirement",
+        "empirical_data",
+        "external_standard",
+        "operator_policy",
+        "model_proposal",
+        "simulation_proposal",
+    ] = Field(
+        description=(
+            "Herkunft der Zahl. document_requirement: steht so im Auftrags- oder "
+            "Seed-Dokument. empirical_data: aus gemessenen Daten abgeleitet. "
+            "external_standard: aus Norm, Gesetz oder Branchenstandard. "
+            "operator_policy: Festlegung des Betreibers. model_proposal: vom "
+            "Sprachmodell vorgeschlagen, ohne Quelle. simulation_proposal: aus "
+            "dem Verhalten der simulierten Agenten abgeleitet. Im Zweifel "
+            "model_proposal — eine Zahl ohne belegbare Herkunft ist ein "
+            "Vorschlag, keine Anforderung."
+        )
+    )
+    evidence_status: Literal["verified", "derived", "heuristic"] = Field(
+        default="heuristic",
+        description=(
+            "verified: durch eine Evidence-Referenz belegt. derived: aus belegten "
+            "Werten berechnet. heuristic: plausibel, aber unbelegt."
+        ),
+    )
+    evidence_refs: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def verified_needs_an_evidence_ref(self) -> "Threshold":
+        """``verified`` ohne Beleg wäre genau die Behauptung, die #1160 E adressiert.
+
+        Ein Modell, das eine Zahl erfindet und sie als belegt markiert, wäre
+        schlimmer als eines, das sie ehrlich als ``heuristic`` ausweist — der
+        Leser verlässt sich dann auf einen Beleg, den es nicht gibt.
+        """
+        if self.evidence_status == "verified" and not self.evidence_refs:
+            raise ValueError(
+                "evidence_status='verified' verlangt mindestens eine evidence_ref."
+            )
+        return self
+
+
 class DataGap(BaseModel):
     """Datenlücke, die Einschätzungsqualität einschränkt."""
 
@@ -293,6 +369,9 @@ class ReportV3(BaseModel):
     content_ideas: list[ContentIdea] = Field(default_factory=list)
     data_gaps: list[DataGap] = Field(default_factory=list)
     hypotheses: list[Hypothesis] = Field(default_factory=list)
+    # Issue #1160 E: operative Zahlen mit ausgewiesener Herkunft. Additiv,
+    # Default leer — Bestandsreports ohne den Slot laden unveraendert.
+    thresholds: list[Threshold] = Field(default_factory=list)
     # Slice 8 (2026-05-16): Modell-Provenance pro Pipeline-Stage. Default
     # leer → backward-kompatibel zu Reports vor v3.1 (alte Fixtures laden ok).
     model_attribution: list[ModelAttribution] = Field(

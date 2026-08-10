@@ -11,6 +11,7 @@ from ...contracts.report_v3 import (
     Persona,
     ReportV3,
     Segment,
+    Threshold,
     TrustSignal,
 )
 
@@ -148,6 +149,63 @@ def render_hypotheses_table(hypotheses: list[Hypothesis]) -> str:
     )
 
 
+# Issue #1160 E: Herkunft im Klartext. Ein Leser muss auf einen Blick sehen,
+# ob eine Zahl im Auftragsdokument stand oder ob ein Sprachmodell sie plausibel
+# fand — als Enum-Wert leistet das Feld genau das nicht.
+_THRESHOLD_ORIGIN_LABELS = {
+    "document_requirement": "Vorgabe aus Dokument",
+    "empirical_data": "aus Daten abgeleitet",
+    "external_standard": "externer Standard",
+    "operator_policy": "Betreiber-Festlegung",
+    "model_proposal": "Modellvorschlag",
+    "simulation_proposal": "Simulationsvorschlag",
+}
+
+_THRESHOLD_PURPOSE_LABELS = {
+    "alert": "Alarmschwelle",
+    "target": "Zielwert",
+    "limit": "Obergrenze",
+    "baseline": "Ausgangswert",
+}
+
+_THRESHOLD_EVIDENCE_STATUS_LABELS = {
+    "verified": "belegt",
+    "derived": "abgeleitet",
+    "heuristic": "unbelegt",
+}
+
+
+def render_threshold_table(thresholds: list[Threshold]) -> str:
+    """Operative Zahlen mit ihrer Herkunft — Issue #1160 E.
+
+    Zahlen wie „>90 % Traffic-Baseline" sehen im Fliesstext alle gleich aus,
+    unabhaengig davon, ob sie aus dem Auftragsdokument, aus gemessenen Daten
+    oder aus einem Modellvorschlag stammen. Diese Tabelle macht den
+    Unterschied lesbar; der Fliesstext bleibt unangetastet.
+    """
+    return _table(
+        ["Bezeichnung", "Wert", "Rolle", "Herkunft", "Beleglage", "Evidence"],
+        [
+            [
+                threshold.label,
+                # Ganze Zahlen ohne Nachkommastelle: "80 percent" statt
+                # "80.0 percent" — der Wert wird gelesen, nicht gerechnet.
+                (
+                    f"{threshold.value:g} {threshold.unit}"
+                ),
+                _THRESHOLD_PURPOSE_LABELS.get(threshold.purpose, threshold.purpose),
+                _THRESHOLD_ORIGIN_LABELS.get(threshold.origin, threshold.origin),
+                _THRESHOLD_EVIDENCE_STATUS_LABELS.get(
+                    threshold.evidence_status, threshold.evidence_status
+                ),
+                _list_cell(threshold.evidence_refs),
+            ]
+            for threshold in thresholds
+        ],
+        "Keine operativen Zahlen im ReportV3-Artefakt.",
+    )
+
+
 def _render_generic_table(title: str, rows: list[list[object]], headers: list[str]) -> str:
     return f"## {title}\n\n" + _table(headers, rows, f"Keine Eintraege fuer {title}.")
 
@@ -251,6 +309,8 @@ def render_report_v3(report: ReportV3) -> str:
             ],
             ["ID", "Format", "Titel", "Personas"],
         ),
+        "## Operative Zahlen",
+        render_threshold_table(report.thresholds),
         "## Hypothesen ohne Evidence",
         render_hypotheses_table(report.hypotheses),
         "## Data Gaps",
@@ -267,5 +327,6 @@ __all__ = [
     "render_persona_table",
     "render_report_v3",
     "render_segment_table",
+    "render_threshold_table",
     "render_top10_list",
 ]

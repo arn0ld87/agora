@@ -28,6 +28,7 @@ from ...contracts.report_v3 import (
     PositioningVariant,
     ProjectImpact,
     Segment,
+    Threshold,
     TrustSignal,
 )
 
@@ -46,6 +47,7 @@ STRUCTURED_SLOTS: Dict[str, type[BaseModel]] = {
     "project_impacts": ProjectImpact,
     "positioning_variants": PositioningVariant,
     "content_ideas": ContentIdea,
+    "thresholds": Threshold,
 }
 
 
@@ -62,6 +64,7 @@ class MergedMetadata:
     project_impacts: List[ProjectImpact] = field(default_factory=list)
     positioning_variants: List[PositioningVariant] = field(default_factory=list)
     content_ideas: List[ContentIdea] = field(default_factory=list)
+    thresholds: List[Threshold] = field(default_factory=list)
     rejected: List[str] = field(default_factory=list)
 
     def as_report_v3_kwargs(self) -> Dict[str, List[BaseModel]]:
