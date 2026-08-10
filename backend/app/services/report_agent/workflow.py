@@ -27,6 +27,12 @@ from .output_contract import (
 )
 from .planning import plan_outline as plan_outline_impl
 from .postprocess_timing import PostprocessPhaseTracker
+from .search_dedup import (
+    REPEATED_EMPTY_SEARCH_MSG,
+    is_search_tool,
+    query_of,
+    registry_for,
+)
 from .text_verification import verify_prose
 from .schemas import (
     EvidenceMapModel,
@@ -462,6 +468,15 @@ def generate_section_react(
     max_iterations = 5
     min_tool_calls = 3
     conflict_retries = 0
+    # Issue #1191: die Merkliste ergebnisloser Suchen gilt pro Abschnitt. Ein
+    # anderer Abschnitt darf dieselbe Suche erneut versuchen — sein Kontext ist
+    # ein anderer, und die Suche ist billig genug, um sie nicht
+    # abschnittsuebergreifend zu verbieten.
+    # registry_for statt agent.empty_searches: der Zugriff muss auch dann eine
+    # echte Merkliste liefern, wenn der Agent ein Test-Double ist — ein
+    # MagicMock gaebe sonst fuer jede Suche ein truthy "war schon leer"
+    # zurueck und wuerde alle Tool-Calls unterdruecken.
+    registry_for(agent).reset()
     used_tools = set()
     all_tools = {"insight_forge", "panorama_search", "quick_search", "interview_agents"}
     report_context = f"Section Title: {section.title}\nSimulation Requirement: {agent.simulation_requirement}"
@@ -624,6 +639,31 @@ def generate_section_react(
                 continue
 
             call = tool_calls[0]
+            # Issue #1191: eine bereits ergebnislose Suche wird nicht mit einem
+            # anderen Werkzeug wiederholt. Der Versuch zaehlt bewusst NICHT
+            # gegen tool_calls_count — sonst spart die Unterdrueckung keine
+            # Iteration ein und der Iterationsanschlag kommt genauso.
+            _call_params = call.get("parameters", {}) or {}
+            _call_query = query_of(_call_params)
+            if is_search_tool(call["name"]) and registry_for(agent).was_empty(_call_query):
+                logger.info(
+                    "section %r: Suche %r uebersprungen — in diesem Abschnitt "
+                    "bereits ergebnislos (Werkzeug %s)",
+                    section.title,
+                    _call_query,
+                    call["name"],
+                )
+                messages.append({"role": "assistant", "content": response})
+                messages.append({
+                    "role": "user",
+                    "content": REPEATED_EMPTY_SEARCH_MSG.format(
+                        query=_call_query,
+                        tool_calls_count=tool_calls_count,
+                        max_tool_calls=agent.MAX_TOOL_CALLS_PER_SECTION,
+                    ),
+                })
+                continue
+
             if agent.report_logger:
                 agent.report_logger.log_tool_call(
                     section_title=section.title,
