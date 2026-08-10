@@ -664,13 +664,76 @@ function navigateToAnchor(anchor: string | null | undefined) {
   if (parsed.kind === 'kg') console.info('[Step4Report] KG-Anchor noch nicht aufrufbar:', parsed.payload)
 }
 
+// Issue #1188 (Befund 3, Nachbesserung): loadEvidence() wurde bislang genau
+// einmal je Abschluss-Handler aufgerufen. Schlug der Abruf fehl — z. B. weil
+// die Evidenzkarte serverseitig noch in der Nachbearbeitungsphase liegt und
+// die Datei zum Zeitpunkt des ersten GET noch nicht geschrieben ist — blieb
+// evidenceMap fuer immer null und der Export-Button (ReportFinalView) damit
+// dauerhaft im "wird erzeugt"-Zustand, ohne dass je ein zweiter Versuch
+// folgte.
+//
+// Dimensionierung: Issue #1187 misst 178-347s Nachbearbeitung PRO Abschnitt,
+// in Summe bis zu 1344s von 2285s Gesamtlaufzeit. Ein 15s-Gesamtbudget (5x
+// alle 3s) verfehlt dieses Zeitfenster um zwei Groessenordnungen. Backoff
+// startet bei 3s, verdoppelt sich je Fehlschlag und deckelt bei 30s, das
+// Gesamtbudget betraegt 10 Minuten.
+//
+// Das Budget zaehlt nur, sobald der Lauf laut reportStatus terminal ist
+// (completed/incomplete/failed) und die Karte trotzdem fehlt — das ist der
+// fachlich echte "Karte fehlt dauerhaft"-Fall. Waehrend eines laufenden
+// Laufs ist ein fehlender GET erwartbar und wird nicht gegen das Budget
+// verrechnet (in der Praxis ruft nur der terminale Zweig von pollStatus()
+// bzw. onMounted() loadEvidence() ueberhaupt auf).
+//
+// Ein Zod-Parse-Fehler ist dagegen kein transienter Zustand
+// (Schema-Mismatch statt "noch nicht fertig") und wird weiterhin nicht
+// retried, sondern wie zuvor als schemaError gemeldet.
+const EVIDENCE_RETRY_INITIAL_DELAY_MS = 3000
+const EVIDENCE_RETRY_MAX_DELAY_MS = 30000
+const EVIDENCE_RETRY_BACKOFF_FACTOR = 2
+const EVIDENCE_RETRY_TOTAL_BUDGET_MS = 10 * 60 * 1000
+const TERMINAL_REPORT_STATUSES = new Set(['completed', 'incomplete', 'failed'])
+
+const evidenceRetryDelayMs = ref(EVIDENCE_RETRY_INITIAL_DELAY_MS)
+const evidenceRetryElapsedMs = ref(0)
+// Terminaler Endzustand: Lauf abgeschlossen, Karte bleibt trotz
+// ausgeschoepftem Retry-Budget dauerhaft weg. Steuert den Tooltip-Text in
+// ReportFinalView — "wird noch erzeugt" waere ab hier eine Falschaussage.
+const evidenceUnavailable = ref(false)
+let evidenceRetryTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearEvidenceRetry(): void {
+  if (evidenceRetryTimer !== null) { clearTimeout(evidenceRetryTimer); evidenceRetryTimer = null }
+}
+
+function resetEvidenceRetryState(): void {
+  clearEvidenceRetry()
+  evidenceRetryDelayMs.value = EVIDENCE_RETRY_INITIAL_DELAY_MS
+  evidenceRetryElapsedMs.value = 0
+  evidenceUnavailable.value = false
+}
+
+function scheduleEvidenceRetry(): void {
+  const isTerminal = TERMINAL_REPORT_STATUSES.has(reportStatus.value)
+  if (isTerminal && evidenceRetryElapsedMs.value >= EVIDENCE_RETRY_TOTAL_BUDGET_MS) {
+    evidenceUnavailable.value = true
+    return
+  }
+  clearEvidenceRetry()
+  const delay = evidenceRetryDelayMs.value
+  if (isTerminal) evidenceRetryElapsedMs.value += delay
+  evidenceRetryDelayMs.value = Math.min(delay * EVIDENCE_RETRY_BACKOFF_FACTOR, EVIDENCE_RETRY_MAX_DELAY_MS)
+  evidenceRetryTimer = setTimeout(() => { void loadEvidence() }, delay)
+}
+
 async function loadEvidence() {
   if (!props.reportId) return
   try {
     const res = (await getReportEvidence(props.reportId)) as ApiResult
-    if (!res?.success) return
+    if (!res?.success) { scheduleEvidenceRetry(); return }
     const parsed = EvidenceMapSchema.parse(res.data)
     evidenceMap.value = parsed
+    resetEvidenceRetryState()
     if (!selectedEvidenceSection.value && parsed.sections.length) selectedEvidenceSection.value = parsed.sections[0].section_index
   } catch (err) { recordSchemaError('evidence', err) }
 }
@@ -772,7 +835,7 @@ onMounted(async () => {
     } catch { /* swallow */ }
   }
 })
-onUnmounted(stopPolling)
+onUnmounted(() => { stopPolling(); clearEvidenceRetry() })
 </script>
 
 <template>
@@ -879,6 +942,7 @@ onUnmounted(stopPolling)
         :red-team-findings="redTeamFindings"
         :evidence-sections="evidenceSections"
         :evidence-index="evidenceIndex"
+        :evidence-unavailable="evidenceUnavailable"
         :selected-evidence-section="selectedEvidenceSection"
         :resolved-simulation-id="resolvedSimulationId"
         :simulation-id="simulationId"

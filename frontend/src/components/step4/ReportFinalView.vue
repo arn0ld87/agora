@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from '@/components/v4/forms/Button.vue'
 import Kicker from '@/components/v4/data/Kicker.vue'
@@ -9,7 +10,7 @@ import type { EvidenceIndex, ReportSection } from '../../contracts/reportContrac
 
 const { t } = useI18n()
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   reportHtml: string
   redTeamFindings?: string[]
   evidenceSections?: ReportSection[]
@@ -18,6 +19,12 @@ withDefaults(defineProps<{
   resolvedSimulationId?: string | null
   simulationId?: string
   branchBusy?: boolean
+  /** Issue #1188 (Nachbesserung): true, sobald Step4Report.vue das
+   *  Retry-Budget fuer die Evidenzkarte ausgeschoepft hat (Lauf terminal,
+   *  Karte bleibt weg). Steuert, ob der Tooltip "wird noch erzeugt" oder
+   *  "nicht verfuegbar" zeigt — Ersteres waere nach Budget-Ende eine
+   *  Falschaussage an den Nutzer. */
+  evidenceUnavailable?: boolean
 }>(), {
   redTeamFindings: () => [],
   evidenceSections: () => [],
@@ -26,6 +33,7 @@ withDefaults(defineProps<{
   resolvedSimulationId: null,
   simulationId: '',
   branchBusy: false,
+  evidenceUnavailable: false,
 })
 
 const emit = defineEmits([
@@ -40,6 +48,24 @@ const emit = defineEmits([
   'print-report',
   'download-evidence',
 ])
+
+// Issue #1188: der Evidence-Export darf nicht ersatzlos verschwinden, nur
+// weil die Evidenzkarte (noch) nicht vorliegt — fuer den Nutzer ist das nicht
+// von einem entfernten Feature unterscheidbar. Der Button bleibt sichtbar
+// und wird stattdessen deaktiviert (aria-disabled + zugaengliche Beschreibung
+// via aria-describedby, nicht nur ein title-Attribut), solange keine
+// Evidence-Sections vorliegen. Step4Report.vue laedt die Evidenzkarte nach
+// Abschluss des Laufs erneut (mit Retry), sodass der Button aktiv wird,
+// sobald die Karte eintrifft — siehe loadEvidence()/scheduleEvidenceRetry().
+const evidenceReady = computed(() => (props.evidenceSections?.length ?? 0) > 0)
+const evidencePendingDescKey = computed(() =>
+  props.evidenceUnavailable ? 'step4.export.evidenceUnavailable' : 'step4.export.evidencePending',
+)
+
+function handleDownloadEvidence() {
+  if (!evidenceReady.value) return
+  emit('download-evidence')
+}
 </script>
 
 <template>
@@ -54,7 +80,26 @@ const emit = defineEmits([
           <Button variant="ghost" @click="emit('download-json')">.json</Button>
           <Button variant="ghost" @click="emit('download-html')">.html</Button>
           <Button variant="ghost" @click="emit('print-report')">{{ t('step4.view.printPdf') }}</Button>
-          <Button v-if="evidenceSections.length" variant="ghost" @click="emit('download-evidence')">Evidence JSON</Button>
+          <span class="evidence-export-wrap">
+            <Button
+              variant="ghost"
+              :aria-disabled="!evidenceReady"
+              :aria-describedby="!evidenceReady ? 'evidence-export-pending-desc' : undefined"
+              :class="{ 'is-pending': !evidenceReady }"
+              data-testid="download-evidence-btn"
+              @click="handleDownloadEvidence"
+            >
+              {{ t('step4.view.evidenceJson') }}
+            </Button>
+            <span
+              v-if="!evidenceReady"
+              id="evidence-export-pending-desc"
+              class="sr-only"
+              data-testid="evidence-export-pending-desc"
+            >
+              {{ t(evidencePendingDescKey) }}
+            </span>
+          </span>
         </div>
       </header>
       <ReportRedTeamSection :findings="redTeamFindings ?? []" />
@@ -93,6 +138,19 @@ const emit = defineEmits([
 .card { background: var(--bg); border: 1px solid var(--rule); border-radius: var(--r-1); padding: var(--s-5); display: flex; flex-direction: column; gap: var(--s-4); }
 .card-head { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--rule); padding-bottom: var(--s-3); }
 .log-meta { display: flex; gap: var(--s-2); flex-wrap: wrap; }
+.evidence-export-wrap { display: inline-flex; }
+.evidence-export-wrap :deep(.is-pending) { opacity: 0.55; cursor: not-allowed; }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 .actions { display: flex; gap: var(--s-3); justify-content: flex-end; }
 .report-body {
   max-width: 72ch;

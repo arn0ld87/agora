@@ -563,7 +563,8 @@
       "raw": "Raw output",
       "exportMd": "Export as Markdown",
       "exportPdf": "Export as PDF",
-      "printPdf": "Print as PDF (browser)"
+      "printPdf": "Print as PDF (browser)",
+      "evidenceJson": "Evidence JSON"
     },
     "model": {
       "reportLabel": "Model for report",
@@ -596,7 +597,9 @@
     "export": {
       "evidenceOmitted": {
         "contract_violation": "JSON export delivered without its evidence map: the persisted evidence violates the evidence contract. The report body in the file is complete."
-      }
+      },
+      "evidencePending": "Evidence map is still being generated — the export will be available once it is ready.",
+      "evidenceUnavailable": "Evidence map is not available for this report."
     }
   },
   "report": {

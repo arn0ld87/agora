@@ -6,7 +6,7 @@
  * - Unbekanntes Top-Level-Feld in Report (strict): schemaError gesetzt, Banner sichtbar.
  * - Fehlendes confidence_label im Claim: EvidenceMap-Parse schlaegt fehl → schemaError.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createI18n } from 'vue-i18n'
@@ -1693,5 +1693,62 @@ describe('Step4Report — Poll-Transportfehler werden gezaehlt statt verschluckt
     await vm.pollStatus()
     await wrapper.vm.$nextTick()
     expect(wrapper.find('[data-testid="report-poll-transport-error"]').exists()).toBe(false)
+  })
+})
+
+// Issue #1188 (Nachbesserung): 15s Gesamtbudget (5x alle 3s) verfehlte das
+// reale Zeitfenster aus Issue #1187 (bis zu 1344s Nachbearbeitung) um zwei
+// Groessenordnungen. Belegt: solange der Lauf terminal ist und die
+// Evidenzkarte trotzdem fehlt, retried Step4Report.vue mit Backoff
+// (3s → 30s gedeckelt) ueber ein 10-Minuten-Budget, bevor der Button auf
+// "nicht verfuegbar" statt "wird noch erzeugt" umspringt.
+describe('Step4Report — Evidence-Retry-Budget nach Laufende (#1188, Nachbesserung)', () => {
+  const evidenceI18n = createI18n({ legacy: false, locale: 'de', messages: { de: deMessages } })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    resetMockSelection()
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: { status: 'completed', report_id: 'report_test01', simulation_id: 'sim_test01' },
+    })
+    ;(getReport as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true, data: VALID_REPORT })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('haelt den Button auf "wird noch erzeugt", solange das 10-Minuten-Budget nicht ausgeschoepft ist, und wechselt danach auf "nicht verfuegbar"', async () => {
+    vi.useFakeTimers()
+    ;(getReportEvidence as ReturnType<typeof vi.fn>).mockResolvedValue({ success: false })
+
+    const wrapper = mount(Step4Report, {
+      props: { reportId: 'report_test01' },
+      global: { plugins: [router, evidenceI18n], stubs: globalStubs },
+    })
+    await flushPromises()
+
+    const desc = () => wrapper.find('[data-testid="evidence-export-pending-desc"]')
+    expect(desc().exists()).toBe(true)
+    expect(desc().text()).toBe(deMessages.step4.export.evidencePending)
+
+    // Kurz nach dem ersten Fehlschlag (< 10 Minuten Budget) bleibt der Text
+    // "wird noch erzeugt" — kein vorzeitiges Aufgeben mehr wie beim alten
+    // 15s-Budget.
+    await vi.advanceTimersByTimeAsync(20000)
+    await flushPromises()
+    expect(desc().exists()).toBe(true)
+    expect(desc().text()).toBe(deMessages.step4.export.evidencePending)
+
+    // Budget (10 Minuten) ueberschreiten: der Text muss auf "nicht
+    // verfuegbar" wechseln, sonst behauptet die UI faelschlich, die Karte
+    // sei noch unterwegs.
+    await vi.advanceTimersByTimeAsync(650000)
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    expect(desc().exists()).toBe(true)
+    expect(desc().text()).toBe(deMessages.step4.export.evidenceUnavailable)
   })
 })
