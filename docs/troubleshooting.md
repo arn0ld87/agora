@@ -1,6 +1,6 @@
 # Troubleshooting — bekannte Fehlerbilder
 
-**Status:** Referenz zu `0.9.4` (Stand 11.08.2026). Symptom → Ursache → Behebung → Referenz. Für Fehlercodes und HTTP-Status siehe [`api-contracts.md`](api-contracts.md); für Konfiguration [`configuration.md`](configuration.md).
+**Status:** Referenz zu `0.9.4` (Stand 11.08.2026, Europe/Berlin). Symptom → Ursache → Behebung → Referenz. Für Fehlercodes und HTTP-Status siehe [`api-contracts.md`](api-contracts.md); für Konfiguration [`configuration.md`](configuration.md).
 
 ---
 

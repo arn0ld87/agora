@@ -1,6 +1,7 @@
 # Deployment
 
 **Stand:** 2026-05-07, Europe/Berlin
+**Gegen den Code geprüft:** 2026-08-11 — Dateipfade, Kommandos, Skript- und Dokumentverweise. Die fachlichen Aussagen dieses Dokuments sind dabei **nicht** einzeln nachvollzogen worden.
 
 Diese Datei ist der Einstieg fuer Deployment-Fragen. Die Detaildokumentation
 bleibt bewusst aufgeteilt:

@@ -99,17 +99,37 @@ bash scripts/pre-push-gate.sh schemas
 
 ## Coverage-Baseline
 
-Die Werte sind älter als der aktuelle Codebestand und müssen für `0.9.4` neu erzeugt werden.
+Neu gemessen am 11.08.2026 auf `b72a443b`.
 
-| Bereich | letzte Messung | Ergebnis | CI-Schwelle |
-|---|---|---:|---:|
-| Backend gesamt | 10.06.2026 | 66,00 % | 60 % |
-| Frontend Statements | 10.05.2026 | 50,46 % | 28 % |
-| Frontend Branches | 10.05.2026 | 39,56 % | 28 % |
-| Frontend Functions | 10.05.2026 | 38,59 % | 28 % |
-| Frontend Lines | 10.05.2026 | 52,50 % | 28 % |
+| Bereich | letzte Messung | Ergebnis | vorher | CI-Schwelle |
+|---|---|---:|---:|---:|
+| Backend gesamt | 11.08.2026 | 79,00 % | 66,00 % (10.06.) | 60 % |
+| Frontend Statements | 11.08.2026 | 71,03 % | 50,46 % (10.05.) | 28 % |
+| Frontend Branches | 11.08.2026 | 58,44 % | 39,56 % (10.05.) | 28 % |
+| Frontend Functions | 11.08.2026 | 64,19 % | 38,59 % (10.05.) | 28 % |
+| Frontend Lines | 11.08.2026 | 73,32 % | 52,50 % (10.05.) | 28 % |
+
+Backend: 26993 Statements, 5542 nicht abgedeckt (`uv run pytest --cov=app`).
+Frontend: `bun run test:coverage`; Schwellen stehen in `frontend/vite.config.js`.
+
+**Die CI-Schwellen sind damit wirkungslos geworden.** Die Frontend-Schwelle von
+28 % liegt 30 bis 45 Punkte unter dem Istwert, die Backend-Schwelle von 60 %
+19 Punkte darunter — ein Rückfall müsste erst einen großen Teil der Suite
+zerstören, bevor ein Gate anschlägt. Das Anheben ist eine Code-Änderung und
+gehört in ein eigenes Issue, nicht in einen Doku-Sync.
 
 Strukturelle Lücken liegen vor allem in OASIS-/Neo4j-Integrationspfaden, Canvas-/WebGL-Komponenten und großen Wizard-/View-Komponenten.
+
+Im Messlauf schlugen 7 Tests fehl, keiner davon im Produktivcode:
+
+- 5 × `tests/test_sync_status_cache.py` — scheitern am root-eigenen
+  `backend/.cache` (siehe Hinweis unter „Tests"), nicht an der Logik.
+- 1 × `tests/scripts/test_check_pip_audit_hardstop.py::test_on_hardcutoff_day_list_must_already_be_empty`
+  — der Test bildet „heute" mit `datetime.date.today()` (lokal),
+  `scripts/check-pip-audit-hardstop.sh` mit `date -u`. Zwischen 00:00 und
+  02:00 Europe/Berlin sind das zwei verschiedene Tage, und der Test schlägt
+  in diesem Fenster deterministisch fehl. In CI (UTC) fällt das nie auf
+  ([#1203](https://github.com/arn0ld87/agora/issues/1203)).
 
 ## Kanonische technische Pfade
 

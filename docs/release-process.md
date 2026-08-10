@@ -1,11 +1,19 @@
 # Release-Process
 
-**Stand:** 2026-05-07, Europe/Berlin
-**Scope:** Wie ein neuer Tag (`vX.Y.Z`) entsteht. Versionsquellen, Reihenfolge,
-Release-Notes, optionaler Container-Build. Linear-Git-Flow gegen `main`,
+**Stand:** 2026-08-11, Europe/Berlin
+**Scope:** Wie ein neuer Tag (`vX.Y.Z`) entsteht. Reihenfolge, Release-Notes,
+Publish-Gate, Hotfix- und Rollback-Pfad. Linear-Git-Flow gegen `main`,
 Release-Candidate-Branches nur als Smoke-Gate (`release/**`, `rc/**`).
 
+> [!IMPORTANT]
+> **Den Versions-Bump selbst beschreibt dieses Dokument nicht mehr.** Seit
+> dem `VERSION`-Umbau ist [`runbooks/release-versioning.md`](runbooks/release-versioning.md)
+> dafür die maßgebliche Quelle. Dieses Dokument setzt einen erfolgten
+> Version-Cut voraus und beschreibt, was danach passiert.
+
 Verwandte Dokumente:
+- [`runbooks/release-versioning.md`](runbooks/release-versioning.md) — Version-Cut,
+  `VERSION` als SSoT, Drift-Check.
 - [`deployment-prod-like.md`](deployment-prod-like.md) — Update- und
   Rollback-Pfad für laufende Setups.
 - [`operations.md`](operations.md) — Healthcheck nach Deployment.
@@ -43,22 +51,35 @@ Branch-Protection-Regeln fuer `main`:
 
 ## Versionsquellen
 
-Sechs Stellen halten die Versionsnummer. Eine Release-Sequenz ist nur
-dann sauber durch, wenn alle sechs auf derselben SemVer stehen.
+**[`VERSION`](../VERSION) in der Repo-Root ist die einzige Quelle der Wahrheit.**
+Alle Manifeste leiten sich davon ab und werden nicht von Hand gepflegt:
 
-| # | Pfad | Format | Source-of-Truth-Hinweis |
-|---|---|---|---|
-| 1 | [`package.json`](../package.json) (`version`) | `0.9.0` | Root-Paket, gibt den NPM-Tag-Anker. |
-| 2 | [`frontend/package.json`](../frontend/package.json) (`version`) | `0.9.0` | Frontend-Paket; muss synchron zur Root sein. |
-| 3 | [`backend/pyproject.toml`](../backend/pyproject.toml) (`project.version`) | `0.6.1` (drift, siehe unten) | Backend-Paket-Metadaten. |
-| 4 | [`backend/app/__init__.py`](../backend/app/__init__.py) (`__version__`) | `0.8.0` (drift, siehe unten) | Wird von `/api/status.backend.version` exposed. |
-| 5 | [`README.md`](../README.md) Status-Block (Zeile ~24) und Top-Banner (Zeile ~11) | `v0.9.0 — released 2026-05-01` | Sichtbarkeit nach außen. |
-| 6 | [`frontend/src/i18n/locales/de.json`](../frontend/src/i18n/locales/de.json) und [`en.json`](../frontend/src/i18n/locales/en.json) (`*.version`) | `v0.9.0 alpha` | Frontend-Startseite-Badge. |
+| Pfad | Wie es synchronisiert wird |
+|---|---|
+| [`backend/pyproject.toml`](../backend/pyproject.toml) (`[project].version`) | `check_version_drift.py --write` |
+| [`package.json`](../package.json) (`version`, Root) | `check_version_drift.py --write` |
+| [`frontend/package.json`](../frontend/package.json) (`version`) | `check_version_drift.py --write` |
+| [`README.md`](../README.md) Version-Badge | `check_version_drift.py --write` |
 
-> **Bekannter Drift (Stand 2026-05-01):** Quelle 3 (`pyproject.toml`,
-> `0.6.1`) und Quelle 4 (`__init__.py`, `0.8.0`) sind hinter v0.9.0
-> zurück. Wird in einem eigenen Sync-Slice nachgezogen — siehe
-> [Followups](#followups).
+```bash
+cd backend
+uv run python scripts/check_version_drift.py          # prüfen, Exit 0 = kein Drift
+uv run python scripts/check_version_drift.py --write  # aus VERSION nachziehen
+```
+
+Der Drift-Check läuft in CI (`version-drift.yml`) und lokal über
+`bash scripts/pre-push-gate.sh schemas`.
+
+`backend/app/__init__.py::__version__` ist **keine** eigene Quelle mehr: der
+Wert wird zur Laufzeit aus den Paket-Metadaten gelesen (Fallback: Regex auf
+`pyproject.toml`), und genau er erscheint unter `/api/status.backend.version`.
+
+> **Bekannter, wirkungsloser Altwert:** `frontend/src/i18n/locales/{de,en}.json`
+> tragen unter `home.tags.version` noch `v0.9.1-dev`. Der Schlüssel wird
+> ausschließlich in `Home.vue` gerendert, und `/home` leitet seit
+> [ADR-0010](decisions/0010-vue-v4-route-consolidation.md) auf `/dashboard` um —
+> der Wert ist damit nicht sichtbar und nicht Teil des Drift-Checks. Er wird
+> bewusst nicht gepflegt und verschwindet mit `Home.vue` in `1.0.0`.
 
 ---
 
@@ -108,36 +129,33 @@ Erst danach den Block umbenennen:
 Den `[Unreleased]`-Block leeren oder eine neue leere Sektion drüber
 setzen, sobald der erste Post-Release-Commit auf `main` landet.
 
-### 2. SemVer-Bump in allen sechs Quellen
+### 2. Version-Cut
+
+Vollständig beschrieben in [`runbooks/release-versioning.md`](runbooks/release-versioning.md).
+Kurzform:
 
 ```bash
 NEW=0.10.0
-# Quelle 1+2: Root-NPM und Frontend-NPM
-npm version --no-git-tag-version --workspaces=false "$NEW"
-( cd frontend && npm version --no-git-tag-version "$NEW" )
-
-# Quelle 3: Backend pyproject
-sed -i 's/^version = ".*"/version = "'"$NEW"'"/' backend/pyproject.toml
-
-# Quelle 4: Backend __init__.py
-sed -i 's/^__version__ = ".*"/__version__ = "'"$NEW"'"/' backend/app/__init__.py
-
-# Quelle 5: README — manuell, weil Banner + Status-Block + Engineering-Stand
-#   sich nicht regex-sicher behandeln lassen. Drei Stellen anfassen.
-
-# Quelle 6: i18n-Locales
-sed -i 's/"version": "v[^"]*"/"version": "v'"$NEW"' alpha"/' \
-  frontend/src/i18n/locales/de.json frontend/src/i18n/locales/en.json
+echo "$NEW" > VERSION
+cd backend && uv run python scripts/check_version_drift.py --write && uv lock && cd ..
+bash scripts/sync-status.sh
+cd backend && uv run python scripts/check_version_drift.py   # Exit 0 erwartet
 ```
 
-`uv lock --check` und `npm run check` müssen nach dem Bump grün sein.
+Der Status-Block in README.md (`**Current version:**` / `**Aktuelle Version:**`
+in beiden Sprachfassungen) wird vom Drift-Fixer **nicht** angefasst — nur der
+Badge. Diese zwei Zeilen bleiben Handarbeit.
 
 ### 3. Release-Notes schreiben
 
-Datei: `docs/<YYYY-MM-DD>-v<NEW>-release-notes.md`. Vorlage:
-[`docs/2026-05-01-v0.9.0-release-notes.md`](2026-05-01-v0.9.0-release-notes.md).
+Datei: `docs/<YYYY-MM-DD>-v<NEW>-release-notes.md`.
 
-Blöcke (Reihenfolge wie im v0.9.0-File):
+> Die frühere Vorlage `docs/2026-05-01-v0.9.0-release-notes.md` liegt nicht
+> mehr im Repository. Bis eine neue Vorlagendatei existiert, ist die
+> folgende Blockliste die Vorgabe; der letzte veröffentlichte Release-Text
+> steht unter `gh release view v<letzte-version>`.
+
+Blöcke in dieser Reihenfolge:
 
 1. **Header** — Versionsnummer, Datum, Milestone-Name.
 2. **TL;DR** — 1–2 Absätze, was das Release macht; absolute Testzahlen.
@@ -150,10 +168,10 @@ Blöcke (Reihenfolge wie im v0.9.0-File):
 ### 4. Tag
 
 ```bash
-git add CHANGELOG.md package.json frontend/package.json \
-        backend/pyproject.toml backend/app/__init__.py \
-        frontend/src/i18n/locales/de.json frontend/src/i18n/locales/en.json \
-        README.md docs/<datum>-v<NEW>-release-notes.md
+git add VERSION CHANGELOG.md package.json frontend/package.json \
+        backend/pyproject.toml backend/uv.lock \
+        README.md README.de.md docs/STATUS.md \
+        docs/<datum>-v<NEW>-release-notes.md
 git commit -m "release: v$NEW"
 git tag -a "v$NEW" -m "Agora v$NEW"
 git push origin main "v$NEW"
@@ -198,11 +216,13 @@ sie das Smoke-Gate umgehen wuerden.
 | GitHub-Release sichtbar | `gh release view "v$NEW"` |
 | `/api/status.backend.version` zeigt neue Version | `curl -H "X-Agora-Token: $TOKEN" https://<host>/api/status \| jq .backend.version` |
 | Frontend-Badge zeigt neue Version | UI-Smoke nach Cache-Bust. |
-| `pip-audit` und `npm audit` grün | CI auf `main` post-Tag. |
+| `pip-audit` und `bun audit` grün | CI-Job `Security scans` auf `main` post-Tag. |
 
-Bei Mismatch zwischen `/api/status.backend.version` und Tag: Quelle 4
-(`__init__.py`) wurde nicht synchronisiert. Hotfix-Bump als
-PATCH-Release.
+Bei Mismatch zwischen `/api/status.backend.version` und Tag: `VERSION` und
+`backend/pyproject.toml` stehen auseinander, oder das Backend läuft noch aus
+einer alten installierten Paket-Metadata. `check_version_drift.py` ohne
+`--write` zeigt den ersten Fall; der zweite verschwindet mit einem
+Neu-Install der Umgebung (`uv sync`) bzw. einem Image-Rebuild.
 
 ---
 
@@ -242,20 +262,26 @@ v$NEXT."`).
 
 ## Followups
 
-- **Versions-Sync-Slice** — `backend/pyproject.toml` (`0.6.1`) und
-  `backend/app/__init__.py` (`__version__ = "0.8.0"`) auf `0.9.0` heben.
-  Eigenes Sub-Slice, weil das einen `git tag`-Pfad anschneidet, den
-  diese Doku nur beschreibt.
-- **`scripts/release.sh`** — die Bump-Sequenz aus Schritt 2 als Skript
-  zusammenziehen, damit kein Step manuell vergessen wird. Kandidat für
-  ein eigenes Slice nach dem Versions-Sync.
+- **Release-Notes-Vorlage** — es existiert keine Vorlagendatei mehr im
+  Repository. Entweder eine anlegen oder die Blockliste aus Schritt 3
+  als alleinige Vorgabe festschreiben.
+- **`scripts/release.sh`** — die Sequenz aus den Schritten 1–5 als Skript
+  zusammenziehen, damit kein Schritt manuell vergessen wird. Der
+  Version-Cut selbst ist mit `check_version_drift.py --write` bereits
+  automatisiert; offen sind Changelog-Fold, Tag und GitHub-Release.
+
+Der frühere Followup „Versions-Sync-Slice" ist erledigt: alle
+Versionsquellen laufen über `VERSION` und werden von CI und Pre-Push-Gate
+gegen Drift geprüft.
 
 ---
 
 ## Quellen, die nicht hier stehen
 
-- Was im `[Unreleased]`-Block landet, regelt der Slice-Workflow im
-  [`MEMORY.md`](https://github.com/arn0ld87/agora/blob/main/CLAUDE.md)
-  (siehe „Slice-Workflow" und „CHANGELOG.md ist tracked").
+- Was in den `[Unreleased]`-Block einfließt, regelt
+  [`changelog.d/README.md`](../changelog.d/README.md) — ein Fragment pro PR,
+  eingesammelt von `scripts/collect-changelog.py`.
+- Der Version-Cut selbst steht in
+  [`runbooks/release-versioning.md`](runbooks/release-versioning.md).
 - Migrations-Inhalt von Releases steht in den jeweiligen
   Release-Notes-Dateien unter `docs/<datum>-v<X.Y.Z>-release-notes.md`.

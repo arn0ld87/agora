@@ -1,6 +1,6 @@
 # Konfiguration — Umgebungsvariablen
 
-**Status:** Referenz zu Backend `0.9.4` (Stand 11.08.2026). Konkrete Defaults und Beispiele liefert [`.env.example`](../.env.example) — bei Abweichung ist `.env.example` führend. Einstellungen werden über `pydantic-settings` geladen (ADR-0003). Geheimnisse 🔐 niemals committen, in Logs ausgeben oder in Doku schreiben — Secrets liegen im Vaultwarden bzw. im lokalen Secret Store.
+**Status:** Referenz zu Backend `0.9.4` (Stand 11.08.2026, Europe/Berlin). Konkrete Defaults und Beispiele liefert [`.env.example`](../.env.example) — bei Abweichung ist `.env.example` führend. Einstellungen werden über `pydantic-settings` geladen (ADR-0003). Geheimnisse 🔐 niemals committen, in Logs ausgeben oder in Doku schreiben — Secrets liegen im Vaultwarden bzw. im lokalen Secret Store.
 
 Quelle für die Variablennamen ist der Code (Backend `os.getenv` / `pydantic-settings` `validation_alias`). Bei neuen Variablen: hier und in `.env.example` mit-pflegen.
 
@@ -19,6 +19,7 @@ Quelle für die Variablennamen ist der Code (Backend `os.getenv` / `pydantic-set
 | `AGORA_LOG_FORMAT` | Log-Format |
 | `AGORA_WERKZEUG_LOG_LEVEL` | Werkzeug-Log-Level |
 | `FLASK_HOST` / `FLASK_PORT` / `FLASK_DEBUG` | Flask-Run-Parameter |
+| `AGORA_BIND_HOST` / `AGORA_FRONTEND_PORT` / `AGORA_BACKEND_PORT` | Host-Bind und Host-Ports des Compose-Stacks (Defaults `127.0.0.1`, `5173`, `5001`). Nur `docker-compose.yml` liest sie; Neo4j und Redis binden fest auf Loopback. Ein anderer Bind-Host öffnet den Stack auf LAN-/Tailscale-Interfaces |
 | `WERKZEUG_RUN_MAIN` | Werkzeug-Reloader-Internal |
 | `DOCKER_IPV4_ONLY` | Docker-IPv4-Beschränkung |
 | `SECRET_KEY` 🔐 | Flask-Session-Signing |

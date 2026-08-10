@@ -1,6 +1,6 @@
 # HTTP-API — Agora Backend
 
-**Status:** Referenz zu Backend `0.9.4` (Stand 11.08.2026). Diese Datei beschreibt die HTTP-Endpunkte nach Domänen (Übersicht, nicht jede Einzelroute). Für Response-Envelopes, `ApiErrorCode`-Katalog und Schema-Tests siehe [`api-contracts.md`](api-contracts.md). Für die Vertragsmodelle siehe [`../backend/app/contracts/`](../backend/app/contracts/) und die generierten Schemas via `uv run python -m app.contracts.dump_schemas`.
+**Status:** Referenz zu Backend `0.9.4` (Stand 11.08.2026, Europe/Berlin). Diese Datei beschreibt die HTTP-Endpunkte nach Domänen (Übersicht, nicht jede Einzelroute). Für Response-Envelopes, `ApiErrorCode`-Katalog und Schema-Tests siehe [`api-contracts.md`](api-contracts.md). Für die Vertragsmodelle siehe [`../backend/app/contracts/`](../backend/app/contracts/) und die generierten Schemas via `uv run python -m app.contracts.dump_schemas`.
 
 Quelle der Wahrheit für die Routen ist der Code in [`../backend/app/api/`](../backend/app/api/) (Blueprints registriert in [`../backend/app/__init__.py`](../backend/app/__init__.py)). Bei Änderungen am Code: diese Datei mit-pflegen, sonst driftet die Doku.
 

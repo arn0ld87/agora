@@ -1,9 +1,14 @@
 # Deployment — Dev
 
-**Stand:** 2026-05-01, Europe/Berlin
+**Stand:** 2026-08-11, Europe/Berlin
 **Scope:** Lokaler Entwicklungsbetrieb auf einer Single-User-Maschine. Zwei
-Pfade: bare-metal mit `npm run dev` und Docker-Compose-Dev-Stage. Beide laufen
+Pfade: bare-metal mit `bun run dev` und Docker-Compose-Dev-Stage. Beide laufen
 gegen `127.0.0.1`, beide nutzen Hot-Reload.
+
+> **Paketmanager ist `bun`, nicht `npm`.** Root und Frontend halten je eine
+> `bun.lock`; eine `package-lock.json` gibt es nicht. Wer `npm install` fährt,
+> erzeugt einen zweiten, nicht committeten Lockfile-Pfad. Der bequemste
+> Einstieg ist `./install.sh` (Host-Modus) bzw. `./install.sh --docker`.
 
 Für Prod-Härtung (Gunicorn, Reverse-Proxy, restriktive CORS) siehe
 [`deployment-prod-like.md`](deployment-prod-like.md).
@@ -14,9 +19,9 @@ Für Prod-Härtung (Gunicorn, Reverse-Proxy, restriktive CORS) siehe
 
 | Komponente | Mindestversion | Zweck |
 |---|---|---|
-| Node.js | 18.x | Vite, Frontend-Build, Test-Runner |
-| `npm` | mit Node geliefert | `package-lock.json`-Pfad |
-| Python | 3.11 | Backend-Runtime |
+| `bun` | 1.3.0+ | Paketmanager und Task-Runner (`engines.bun` in beiden `package.json`) |
+| Node.js | 20.x+ | Laufzeit für Vite und die Test-Runner (`engines.node`) |
+| Python | 3.14 (`>=3.14,<3.15`) | Backend-Runtime, gepinnt in `backend/pyproject.toml` |
 | `uv` | 0.4+ | Python-Dependency-Manager (statt `pip`/`venv`) |
 | Neo4j | 5.18+ | Graph-Storage. Lokal oder via Compose. |
 | Ollama | aktuell | LLM + Embedding. Auf dem Host, nicht im Container. |
@@ -39,7 +44,7 @@ ollama pull qwen3-embedding:4b       # 2560-dim, erfordert VECTOR_DIM=2560
 
 ---
 
-## Pfad A — Bare-Metal (`npm run dev`)
+## Pfad A — Bare-Metal (`bun run dev`)
 
 Schnellster Pfad für aktive Entwicklung. Kein Container, kein Build-Layer.
 
@@ -51,7 +56,7 @@ cd agora
 cp .env.example .env
 
 # Dependencies (root + frontend + backend)
-npm run setup:all
+bun run setup:all
 ```
 
 `.env` minimal anpassen:
@@ -71,7 +76,7 @@ Token-Auth optional, siehe Abschnitt
 ### Start
 
 ```bash
-npm run dev
+bun run dev
 ```
 
 Startet Backend und Frontend parallel über `concurrently`:
@@ -105,7 +110,7 @@ docker compose up -d neo4j redis
 ### Tests + Lint
 
 ```bash
-npm run check
+bun run check
 ```
 
 Stufen: Backend-Lint (`ruff check app/ tests/`), Backend-Tests (`pytest`),
@@ -141,11 +146,15 @@ Was läuft:
 
 | Service | Port (Host) | Bind | Zweck |
 |---|---|---|---|
-| `agora` (Vite) | 5173 | 127.0.0.1 | Frontend Hot-Reload |
-| `agora` (Flask) | 5001 | 127.0.0.1 | API + `/health` |
-| `neo4j` (Browser) | 7474 | 127.0.0.1 | Neo4j-Web-UI |
-| `neo4j` (Bolt) | 7687 | 127.0.0.1 | Bolt-Treiber |
+| `agora` (Vite) | `AGORA_FRONTEND_PORT`, Default 5173 | `AGORA_BIND_HOST`, Default 127.0.0.1 | Frontend Hot-Reload |
+| `agora` (Flask) | `AGORA_BACKEND_PORT`, Default 5001 | `AGORA_BIND_HOST`, Default 127.0.0.1 | API + `/health` |
+| `neo4j` (Browser) | 7474 (fest) | 127.0.0.1 (fest) | Neo4j-Web-UI |
+| `neo4j` (Bolt) | 7687 (fest) | 127.0.0.1 (fest) | Bolt-Treiber |
 | `redis` | — | nur Compose-intern | Event-Bus + Tickets |
+
+Die drei `AGORA_*`-Variablen stehen auskommentiert in `.env.example`. Der
+Default `127.0.0.1` ist die sichere Wahl; ihn zu ändern öffnet den Stack auf
+LAN- oder Tailscale-Interfaces.
 
 Container-zu-Container-Verbindungen laufen über das Compose-Netzwerk und
 brauchen die Host-Ports nicht. Die Loopback-Bindings sind explizit gewählt,
@@ -181,12 +190,31 @@ docker compose down -v && docker compose up -d
 | `neo4j_logs` (Named) | Neo4j-Logs. |
 | `redis_data` (Named) | Redis-Persistenz (RDB-Snapshots). |
 
-### Read-Only-Rootfs
+### Read-Only-Rootfs — nur im Prod-Compose
 
-Der `agora`-Container läuft mit `read_only: true`. Schreibbar sind nur
-explizite `tmpfs`-Mounts (`/tmp`, `/app/backend/logs`, Caches) und die oben
-gelisteten Volumes. Wenn beim Dev-Pfad neue Schreibziele dazukommen, muss der
-Mount im Compose oder im Code geändert werden — nicht das Read-Only-Flag.
+Der Dev-Stack setzt bewusst `read_only: false` (`docker-compose.yml`), damit
+Hot-Reload und Zwischenartefakte nicht an Mount-Grenzen scheitern. Erst
+`docker-compose.prod.yml` schaltet `read_only: true`; dort sind nur explizite
+`tmpfs`-Mounts (`/tmp`, `/app/backend/logs`, Caches) und die oben gelisteten
+Volumes schreibbar.
+
+Wer eine Änderung gegen den Prod-Pfad absichern will, testet sie deshalb mit
+`docker-compose.prod.yml` — im Dev-Stack fällt ein neues Schreibziel nicht auf.
+Kommt eines dazu, gehört der Mount ins Compose oder der Pfad geändert — nicht
+das Read-Only-Flag.
+
+### Der `backend/.cache`-Bind gehört danach root
+
+`./backend/.cache/huggingface` ist ein Bind-Mount. Legt der Container das
+Verzeichnis an, gehört `backend/.cache` auf dem Host anschließend `root` — und
+Host-Werkzeuge, die darunter schreiben wollen, brechen ab. Betroffen ist unter
+anderem `scripts/sync-status.sh`, das seinen Zähler-Cache in
+`backend/.cache/sync-status/` ablegt und dann mit „Keine Berechtigung"
+aussteigt.
+
+```bash
+sudo chown -R "$USER" backend/.cache    # oder: sudo rm -rf backend/.cache
+```
 
 ---
 

@@ -1,6 +1,7 @@
 # Agora Operator Guide
 
 **Stand:** 2026-05-15
+**Gegen den Code geprüft:** 2026-08-11 — Dateipfade, Kommandos, Skript- und Dokumentverweise. Die fachlichen Aussagen dieses Dokuments sind dabei **nicht** einzeln nachvollzogen worden.
 **Scope:** Komplette Anleitung für Operatoren, die eine Agora-Instanz
 installieren, betreiben, aktualisieren und im Fehlerfall debuggen
 müssen. Single-User-Setup auf Tailnet oder hinter Reverse-Proxy.
