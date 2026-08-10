@@ -104,3 +104,13 @@ export async function activateEmbeddingConfiguration(
   );
   return unwrapAndParse(resp, EmbeddingConfigurationResponseSchema).configuration;
 }
+
+export async function syncLegacyEmbeddingConfiguration(
+  providerConnectionId: string,
+): Promise<EmbeddingConfiguration> {
+  const resp = await service.post<ApiSuccessEnvelope<unknown>>(
+    "/api/llm/embedding/configurations/sync-legacy",
+    { provider_connection_id: providerConnectionId },
+  );
+  return unwrapAndParse(resp, EmbeddingConfigurationResponseSchema).configuration;
+}

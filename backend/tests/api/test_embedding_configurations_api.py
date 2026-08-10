@@ -447,6 +447,116 @@ def test_test_endpoint_invokes_service(
     assert stub.probe_calls == ["emb-1"]
 
 
+def test_sync_legacy_creates_proposed_configuration(
+    client: object,
+    fake_store: _FakeConfigurationStore,
+    fake_connection_store: _FakeConnectionStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_connection_store.connections.append(
+        _make_test_connection("conn-1", kind="ollama")
+    )
+    from app.config import Config
+
+    monkeypatch.setattr(Config, "EMBEDDING_MODEL", "nomic-embed-text")
+    monkeypatch.setattr(Config, "EMBEDDING_BASE_URL", "http://localhost:11434")
+    monkeypatch.setattr(Config, "EMBEDDING_API_KEY", None)
+    monkeypatch.setattr(Config, "VECTOR_DIM", 768)
+
+    response = client.post(  # type: ignore[attr-defined]
+        "/api/llm/embedding/configurations/sync-legacy",
+        json={"provider_connection_id": "conn-1"},
+    )
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["data"]["configuration"]["status"] == "proposed"
+    assert body["data"]["configuration"]["model_id"] == "nomic-embed-text"
+
+    list_response = client.get("/api/llm/embedding/configurations")  # type: ignore[attr-defined]
+    list_body = list_response.get_json()
+    assert any(
+        c["model_id"] == "nomic-embed-text"
+        for c in list_body["data"]["configurations"]
+    )
+
+
+def test_sync_legacy_with_empty_provider_connection_id_returns_400(
+    client: object,
+) -> None:
+    response = client.post(  # type: ignore[attr-defined]
+        "/api/llm/embedding/configurations/sync-legacy",
+        json={"provider_connection_id": ""},
+    )
+    assert response.status_code == 400
+
+
+def test_sync_legacy_with_unknown_provider_connection_returns_404(
+    client: object,
+) -> None:
+    response = client.post(  # type: ignore[attr-defined]
+        "/api/llm/embedding/configurations/sync-legacy",
+        json={"provider_connection_id": "conn-bogus"},
+    )
+    assert response.status_code == 404
+
+
+def test_sync_legacy_without_legacy_config_returns_409(
+    client: object,
+    fake_connection_store: _FakeConnectionStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_connection_store.connections.append(
+        _make_test_connection("conn-1", kind="ollama")
+    )
+    from app.config import Config
+
+    monkeypatch.setattr(Config, "EMBEDDING_MODEL", "")
+    monkeypatch.setattr(Config, "EMBEDDING_BASE_URL", "")
+
+    response = client.post(  # type: ignore[attr-defined]
+        "/api/llm/embedding/configurations/sync-legacy",
+        json={"provider_connection_id": "conn-1"},
+    )
+    assert response.status_code == 409
+    body = response.get_json()
+    assert body["code"] == "no_legacy_config"
+
+
+def test_sync_legacy_with_existing_active_configuration_returns_409(
+    client: object,
+    fake_store: _FakeConfigurationStore,
+    fake_connection_store: _FakeConnectionStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_connection_store.connections.append(
+        _make_test_connection("conn-1", kind="ollama")
+    )
+    fake_store.upsert_configuration(
+        configuration_id="emb-active",
+        provider_connection_id="conn-1",
+        provider_kind="ollama",
+        model_id="nomic-embed-text",
+        dimensions=768,
+        scope="global",
+        project_id=None,
+        status="active",
+    )
+    from app.config import Config
+
+    monkeypatch.setattr(Config, "EMBEDDING_MODEL", "nomic-embed-text")
+    monkeypatch.setattr(Config, "EMBEDDING_BASE_URL", "http://localhost:11434")
+    monkeypatch.setattr(Config, "EMBEDDING_API_KEY", None)
+    monkeypatch.setattr(Config, "VECTOR_DIM", 768)
+
+    response = client.post(  # type: ignore[attr-defined]
+        "/api/llm/embedding/configurations/sync-legacy",
+        json={"provider_connection_id": "conn-1"},
+    )
+    assert response.status_code == 409
+    body = response.get_json()
+    assert body["code"] == "active_configuration_exists"
+
+
 def test_activate_endpoint_invokes_service(
     client: object,
     fake_store: _FakeConfigurationStore,

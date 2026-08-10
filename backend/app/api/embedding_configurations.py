@@ -12,6 +12,9 @@ Routen unter ``/api/llm/embedding/configurations``:
   interpretiert und in eine persistente Konfiguration umgewandelt.
 * ``DELETE /<id>`` loescht eine Konfiguration.
 * ``POST /<id>/test`` fuehrt die Probe aus und aktualisiert den Status.
+* ``POST /sync-legacy`` uebernimmt ``Config.EMBEDDING_*`` als neue,
+  persistente Konfiguration (Status ``proposed``), sofern noch keine
+  aktive globale Konfiguration existiert.
 
 Die Routen folgen dem Slice-3-Stil: ``handle_api_errors``-Decorator,
 ``json_success``/``json_error``, ``pydantic.ValidationError`` → 400,
@@ -31,6 +34,7 @@ from . import llm_bp
 from ..contracts.embedding_contract import (
     EmbeddingConfiguration,
     EmbeddingConfigurationUpsertRequest,
+    EmbeddingLegacySyncRequest,
 )
 from ..services.embedding_configuration_store import EmbeddingConfigurationStore
 from ..services.embedding_configurations.legacy import (
@@ -232,4 +236,45 @@ def activate_embedding_configuration(configuration_id: str):
         return json_error(str(exc), status=404, code="not_found")
     except ValueError as exc:
         return json_error(str(exc), status=409, code="invalid_status_transition")
+    return json_success({"configuration": config.model_dump(mode="json")})
+
+
+@llm_bp.route("/embedding/configurations/sync-legacy", methods=["POST"])
+@handle_api_errors(logger=logger)
+def sync_legacy_embedding_configuration():
+    try:
+        payload = request.get_json(force=True, silent=False) or {}
+        request_model = EmbeddingLegacySyncRequest.model_validate(payload)
+    except ValidationError as exc:
+        return json_error(
+            "Invalid embedding legacy-sync request",
+            status=400,
+            code="invalid_request",
+            extra={"errors": exc.errors(include_url=False)},
+        )
+    try:
+        _ensure_known_provider_connection(request_model.provider_connection_id)
+    except KeyError as exc:
+        return json_error(str(exc), status=404, code="not_found")
+
+    view = build_legacy_view()
+    if view is None:
+        return json_error(
+            "Keine Legacy-Embedding-Konfiguration vorhanden (Config.EMBEDDING_* leer)",
+            status=409,
+            code="no_legacy_config",
+        )
+
+    config = get_embedding_configuration_service().sync_legacy(
+        provider_connection_id=request_model.provider_connection_id,
+        provider_kind=view.provider_kind,
+        model_id=view.model_id,
+        dimensions=view.dimensions,
+    )
+    if config is None:
+        return json_error(
+            "Es existiert bereits eine aktive globale Embedding-Konfiguration",
+            status=409,
+            code="active_configuration_exists",
+        )
     return json_success({"configuration": config.model_dump(mode="json")})

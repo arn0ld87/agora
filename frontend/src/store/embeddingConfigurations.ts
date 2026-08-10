@@ -43,6 +43,20 @@ interface EmbeddingConfigurationsState {
    * Wird vom Ollama-Download-Wizard geschrieben, von der View gelesen.
    */
   lastOllamaPull: OllamaPullReport | null;
+
+  /**
+   * Read-only mirror des zuletzt gesehenen Probe-Ergebnisses pro
+   * Konfiguration (Issue #1193). Wird von ``testConfiguration()``
+   * befuellt, zusaetzlich zum bestehenden Rueckgabewert.
+   */
+  probeByConfiguration: Record<
+    string,
+    {
+      status: string;
+      status_message: string | null;
+      actual_dimensions: number | null;
+    }
+  >;
 }
 
 export const useEmbeddingConfigurationsStore = defineStore(
@@ -58,6 +72,7 @@ export const useEmbeddingConfigurationsStore = defineStore(
       activeError: null,
       migrationByConfiguration: {},
       lastOllamaPull: null,
+      probeByConfiguration: {},
     }),
 
     getters: {
@@ -149,6 +164,7 @@ export const useEmbeddingConfigurationsStore = defineStore(
         // Status serverseitig (proposed -> probed/failed). Konfigurationen
         // neu laden, damit der UI-Status sofort stimmt.
         await this.loadConfigurations();
+        this.probeByConfiguration[configurationId] = res.probe;
         return res;
       },
 
@@ -167,6 +183,25 @@ export const useEmbeddingConfigurationsStore = defineStore(
           this.loadConfigurations(),
         ]);
         return activated;
+      },
+
+      /**
+       * Uebernimmt die Legacy-Config.EMBEDDING_*-Konfiguration einer
+       * Provider-Connection als kanonische, proposed EmbeddingConfiguration
+       * (Issue #1193). Nach dem Sync muessen Liste und Active-Konfiguration
+       * neu geladen werden, damit die UI den neuen Vorschlag sofort sieht.
+       */
+      async syncLegacy(
+        providerConnectionId: string,
+      ): Promise<EmbeddingConfiguration> {
+        const synced = await api.syncLegacyEmbeddingConfiguration(
+          providerConnectionId,
+        );
+        await Promise.all([
+          this.loadConfigurations(),
+          this.loadActiveConfiguration(),
+        ]);
+        return synced;
       },
 
       // ----------------------------------------------------------------

@@ -219,6 +219,20 @@ class EmbeddingConfigurationUpsertRequest(BaseModel):
         return self
 
 
+class EmbeddingLegacySyncRequest(BaseModel):
+    """Request-Vertrag fuer den Legacy-Sync-Endpoint (``sync-legacy``).
+
+    Uebernimmt ``Config.EMBEDDING_*`` als kanonische ``EmbeddingConfiguration``.
+    Provider-Art, Modell und Dimension kommen aus der Legacy-Sicht
+    (``build_legacy_view``), nicht aus dem Request-Body — der Aufrufer
+    liefert nur die Ziel-``ProviderConnection``.
+    """
+
+    model_config = _STRICT
+
+    provider_connection_id: str = Field(min_length=1)
+
+
 class EmbeddingConfigurationResponse(BaseModel):
     """Antwort-Wrapper analog zu ``ProviderConnectionResponse``."""
 
@@ -377,6 +391,7 @@ __all__ = [
     "EmbeddingModelMetadata",
     "EmbeddingConfiguration",
     "EmbeddingConfigurationUpsertRequest",
+    "EmbeddingLegacySyncRequest",
     "EmbeddingConfigurationResponse",
     "EmbeddingMigrationProgress",
     "EmbeddingMigrationJob",
