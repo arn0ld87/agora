@@ -1742,40 +1742,36 @@ Important:
         """
         data = []
         for idx, profile in enumerate(profiles):
-            # Use format consistent with to_reddit_format()
-            item = {
-                "user_id": profile.user_id if profile.user_id is not None else idx,  # Key: must include user_id
-                "username": profile.user_name,
-                "name": profile.name,
+            # Issue #1186: ``to_reddit_format()`` ist die Quelle, nicht eine
+            # handgepflegte Feldliste.
+            #
+            # Diese Methode baute das Dict frueher neu — und ueberschrieb damit
+            # die Datei, die der Realtime-Pfad zuvor korrekt ueber
+            # ``to_reddit_format()`` geschrieben hatte. Jedes Feld, das hier
+            # nicht einzeln aufgefuehrt war, ging beim finalen Speichern
+            # verloren: ``voice_register`` und ``segment`` fehlten in allen
+            # 262 persistierten Profilen ueber sechs Laeufe, unabhaengig
+            # davon, ob sie vom LLM oder regelbasiert erzeugt wurden.
+            #
+            # #1029 hat dasselbe Muster schon einmal getroffen und damals nur
+            # ``generation_source`` nachgetragen. Eine zweite Nachtragung
+            # waere die dritte Gelegenheit fuer denselben Fehler — deshalb
+            # jetzt die Umkehrung: das vollstaendige Format als Basis, und
+            # obendrauf nur die Defaults, die OASIS verlangt und die im
+            # Format bewusst fehlen (dort ist ein nicht gesetztes Feld
+            # abwesend, hier braucht OASIS einen Wert).
+            item = profile.to_reddit_format()
+            item.update({
+                "user_id": profile.user_id if profile.user_id is not None else idx,
                 "bio": profile.bio[:150] if profile.bio else f"{profile.name}",
                 "persona": profile.persona or f"{profile.name} is a participant in social discussions.",
                 "karma": profile.karma if profile.karma else 1000,
-                "created_at": profile.created_at,
                 # OASIS required fields - ensure all have defaults
                 "age": profile.age if profile.age else 30,
                 "gender": self._normalize_gender(profile.gender),
                 "mbti": profile.mbti if profile.mbti else "ISTJ",
                 "country": profile.country if profile.country else "US",
-            }
-
-            # Optional fields
-            if profile.profession:
-                item["profession"] = profile.profession
-            if profile.interested_topics:
-                item["interested_topics"] = profile.interested_topics
-            if profile.source_entity_uuid:
-                item["source_entity_uuid"] = profile.source_entity_uuid
-            if profile.source_entity_type:
-                item["source_entity_type"] = profile.source_entity_type
-            # Issue #1029: Diese Methode baut das Dict neu, statt
-            # to_reddit_format() zu benutzen — sie überschreibt die im
-            # Realtime-Pfad bereits korrekt geschriebene Datei. Ohne die
-            # Herkunft hier verlöre das finale Artefakt sie wieder, und
-            # die Persona-Galerie zeigte kein Platzhalter-Abzeichen.
-            if profile.generation_source != "llm":
-                item["generation_source"] = profile.generation_source
-            if profile.generation_error:
-                item["generation_error"] = profile.generation_error
+            })
 
             data.append(item)
 
