@@ -136,6 +136,7 @@ import {
   exportReport,
 } from '../../api/report'
 import { useIncrementalLogPolling } from '../../composables/useIncrementalLogPolling'
+import { REPORT_STATUS_POLL_INTERVAL_MS } from '../../composables/useReportGeneration'
 import Step4Report from '@/components/v4/steps/Step4Report.vue'
 import deMessages from '../../i18n/locales/de.json'
 
@@ -1647,52 +1648,67 @@ describe('Step4Report — Lauf-Modell-Vorbelegung statt Workspace-Default (#1023
 // (`catch { /* swallow */ }`) ohne Retry-Zaehler — der Nutzer wartete auf ein
 // Ergebnis, das laengst nicht mehr zustande kommen konnte. Der Defekt zeigt
 // sich nur ueber eine FOLGE fehlgeschlagener Polls, nicht in einem
-// Einzelzustand (genau die Luecke aus #961/#966/#985) — diese Suite ruft
-// pollStatus() deshalb mehrfach in Folge auf statt nur einmal.
+// Einzelzustand (genau die Luecke aus #961/#966/#985).
+//
+// Issue #1206: die Zaehl-Semantik selbst liegt jetzt in
+// composables/__tests__/useReportGeneration.spec.ts und wird dort direkt
+// ueber das Interface geprueft. Hier bleibt, was nur ein Mount zeigen kann:
+// dass der gezaehlte Zustand tatsaechlich im DOM ankommt. Die Poll-Folge
+// entsteht dafuer ueber den echten Timer-Loop statt ueber einen Aufruf des
+// komponenteninternen pollStatus() — vorher war das eine Kopplung an ein
+// Internum, das es nicht mehr gibt.
 describe('Step4Report — Poll-Transportfehler werden gezaehlt statt verschluckt (#1023, Befund B-17)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorageMock.clear()
     resetMockSelection()
+    vi.useFakeTimers()
   })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const transportErrorVisible = (wrapper: ReturnType<typeof mountComponent>) =>
+    wrapper.find('[data-testid="report-poll-transport-error"]').exists()
 
   it('zeigt den Transportfehler-Hinweis erst nach 3 aufeinanderfolgenden Fehlschlaegen, nicht bei einem einzelnen', async () => {
     ;(getReportStatus as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('network down'))
 
     const wrapper = mountComponent()
-    // onMounted ruft pollStatus() einmal auf — Fehlschlag #1.
-    await flushPromises()
+    // onMounted pollt einmal — Fehlschlag #1.
+    await vi.advanceTimersByTimeAsync(0)
     await wrapper.vm.$nextTick()
-    expect(wrapper.find('[data-testid="report-poll-transport-error"]').exists()).toBe(false)
+    expect(transportErrorVisible(wrapper)).toBe(false)
 
-    const vm = wrapper.vm as unknown as { pollStatus: () => Promise<void> }
-    await vm.pollStatus() // Fehlschlag #2
+    // Fehlschlag #2 aus dem laufenden Poll-Intervall.
+    await vi.advanceTimersByTimeAsync(REPORT_STATUS_POLL_INTERVAL_MS)
     await wrapper.vm.$nextTick()
-    expect(wrapper.find('[data-testid="report-poll-transport-error"]').exists()).toBe(false)
+    expect(transportErrorVisible(wrapper)).toBe(false)
 
-    await vm.pollStatus() // Fehlschlag #3 — Schwelle erreicht
+    // Fehlschlag #3 — Schwelle erreicht.
+    await vi.advanceTimersByTimeAsync(REPORT_STATUS_POLL_INTERVAL_MS)
     await wrapper.vm.$nextTick()
-    expect(wrapper.find('[data-testid="report-poll-transport-error"]').exists()).toBe(true)
+    expect(transportErrorVisible(wrapper)).toBe(true)
   })
 
   it('heilt den Transportfehler-Hinweis aus, sobald ein Poll wieder erfolgreich ist', async () => {
     ;(getReportStatus as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('network down'))
 
     const wrapper = mountComponent()
-    await flushPromises()
-    const vm = wrapper.vm as unknown as { pollStatus: () => Promise<void> }
-    await vm.pollStatus()
-    await vm.pollStatus()
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(REPORT_STATUS_POLL_INTERVAL_MS)
+    await vi.advanceTimersByTimeAsync(REPORT_STATUS_POLL_INTERVAL_MS)
     await wrapper.vm.$nextTick()
-    expect(wrapper.find('[data-testid="report-poll-transport-error"]').exists()).toBe(true)
+    expect(transportErrorVisible(wrapper)).toBe(true)
 
     ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       success: true,
       data: { status: 'planning', report_id: 'report_test01', simulation_id: 'sim_test01' },
     })
-    await vm.pollStatus()
+    await vi.advanceTimersByTimeAsync(REPORT_STATUS_POLL_INTERVAL_MS)
     await wrapper.vm.$nextTick()
-    expect(wrapper.find('[data-testid="report-poll-transport-error"]').exists()).toBe(false)
+    expect(transportErrorVisible(wrapper)).toBe(false)
   })
 })
 
