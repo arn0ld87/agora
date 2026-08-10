@@ -23,17 +23,32 @@ import EmbeddingConfigurationsView from '../Settings/EmbeddingConfigurationsView
 const configurationsArr = reactive<unknown[]>([])
 const migrationByConfigurationObj = reactive<Record<string, unknown>>({})
 
+const probeByConfigurationObj = reactive<Record<string, unknown>>({})
+
+// Steuerbar, damit einzelne Tests die Legacy-Quelle bzw. eine aktive
+// Konfiguration einstellen koennen.
+const storeState = reactive<{
+  activeConfiguration: unknown
+  activeSource: 'store' | 'legacy' | 'none'
+}>({
+  activeConfiguration: null,
+  activeSource: 'none',
+})
+
 const storeMock = {
   get configurations() { return configurationsArr },
   get configurationsLoading() { return false },
   get configurationsError() { return null },
-  get activeConfiguration() { return null },
-  get activeSource() { return 'none' as const },
+  get activeConfiguration() { return storeState.activeConfiguration },
+  get activeSource() { return storeState.activeSource },
   get migrationByConfiguration() { return migrationByConfigurationObj },
+  get probeByConfiguration() { return probeByConfigurationObj },
   loadConfigurations: vi.fn().mockResolvedValue(undefined),
   loadActiveConfiguration: vi.fn().mockResolvedValue(undefined),
   upsertConfiguration: vi.fn(),
   testConfiguration: vi.fn().mockResolvedValue(undefined),
+  syncLegacy: vi.fn(),
+  deleteConfiguration: vi.fn().mockResolvedValue(undefined),
 }
 
 vi.mock('@/store/embeddingConfigurations', () => ({
@@ -93,6 +108,13 @@ async function mountView(initial: { connections?: unknown[] } = {}) {
   storeMock.testConfiguration.mockClear()
   storeMock.upsertConfiguration.mockResolvedValue({ id: 'cfg-new-1' })
   storeMock.testConfiguration.mockResolvedValue(undefined)
+  storeMock.syncLegacy.mockClear()
+  storeMock.syncLegacy.mockResolvedValue({ id: 'cfg-adopted' })
+  storeMock.deleteConfiguration.mockClear()
+  storeMock.deleteConfiguration.mockResolvedValue(undefined)
+  for (const k of Object.keys(probeByConfigurationObj)) delete probeByConfigurationObj[k]
+  storeState.activeConfiguration = null
+  storeState.activeSource = 'none'
 
   listProviderConnectionsMock.mockClear()
   listProviderConnectionsMock.mockResolvedValue({
@@ -220,5 +242,123 @@ describe('EmbeddingConfigurationsView (Anlege-Formular, #1193)', () => {
     await w.find('[data-testid="open-create-config"]').trigger('click')
     expect(w.find('[data-testid="create-config-connection"]').exists()).toBe(false)
     expect(w.text()).toContain('Keine Provider-Connections vorhanden')
+  })
+})
+
+const CONFIG_PROBED = {
+  id: 'cfg-1',
+  provider_connection_id: 'conn-ollama-1',
+  provider_kind: 'ollama',
+  model_id: 'nomic-embed-text',
+  dimensions: 768,
+  scope: 'global',
+  project_id: null,
+  index_version: 1,
+  status: 'probed',
+  status_message: null,
+  created_at: null,
+  updated_at: null,
+  last_validated_at: null,
+}
+
+describe('EmbeddingConfigurationsView — Legacy-Uebernahme (#1193)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('zeigt den Uebernehmen-Button nur bei activeSource "legacy"', async () => {
+    const w = await mountView()
+    expect(w.find('[data-testid="adopt-legacy"]').exists()).toBe(false)
+
+    storeState.activeConfiguration = CONFIG_PROBED
+    storeState.activeSource = 'legacy'
+    await flushPromises()
+
+    expect(w.find('[data-testid="adopt-legacy"]').exists()).toBe(true)
+  })
+
+  it('Submit ruft syncLegacy mit der gewaehlten Connection und danach testConfiguration', async () => {
+    const w = await mountView()
+    storeState.activeConfiguration = CONFIG_PROBED
+    storeState.activeSource = 'legacy'
+    await flushPromises()
+
+    await w.find('[data-testid="adopt-legacy"]').trigger('click')
+    expect(w.find('[data-testid="adopt-legacy-modal"]').exists()).toBe(true)
+
+    await w.find('[data-testid="adopt-legacy-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(storeMock.syncLegacy).toHaveBeenCalledWith('conn-ollama-1')
+    expect(storeMock.testConfiguration).toHaveBeenCalledWith('cfg-adopted')
+    expect(w.find('[data-testid="adopt-legacy-modal"]').exists()).toBe(false)
+  })
+
+  it('haelt das Modal offen und zeigt den Fehler, wenn syncLegacy scheitert', async () => {
+    const w = await mountView()
+    storeState.activeConfiguration = CONFIG_PROBED
+    storeState.activeSource = 'legacy'
+    await flushPromises()
+    storeMock.syncLegacy.mockRejectedValue(new Error('active_configuration_exists'))
+
+    await w.find('[data-testid="adopt-legacy"]').trigger('click')
+    await w.find('[data-testid="adopt-legacy-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(w.find('[data-testid="adopt-legacy-modal"]').exists()).toBe(true)
+    expect(w.find('[data-testid="adopt-legacy-error"]').text()).toContain('active_configuration_exists')
+  })
+})
+
+describe('EmbeddingConfigurationsView — Loeschen und Dimension-Korrektur (#1193)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('loescht erst nach Bestaetigung', async () => {
+    const w = await mountView()
+    configurationsArr.push(CONFIG_PROBED)
+    await flushPromises()
+
+    await w.find('[data-testid="delete-config"]').trigger('click')
+    expect(storeMock.deleteConfiguration).not.toHaveBeenCalled()
+
+    await w.find('[data-testid="delete-confirm-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(storeMock.deleteConfiguration).toHaveBeenCalledWith('cfg-1')
+  })
+
+  it('schuetzt die aktive Konfiguration vor dem Loeschen', async () => {
+    const w = await mountView()
+    configurationsArr.push({ ...CONFIG_PROBED, status: 'active' })
+    await flushPromises()
+
+    expect(w.find('[data-testid="delete-config"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('bietet die gemessene Dimension nur bei Abweichung an und uebernimmt sie', async () => {
+    const w = await mountView()
+    configurationsArr.push({ ...CONFIG_PROBED, status: 'failed' })
+    await flushPromises()
+    expect(w.find('[data-testid="apply-measured-dimensions"]').exists()).toBe(false)
+
+    probeByConfigurationObj['cfg-1'] = {
+      status: 'available',
+      status_message: null,
+      actual_dimensions: 1024,
+    }
+    await flushPromises()
+
+    const button = w.find('[data-testid="apply-measured-dimensions"]')
+    expect(button.exists()).toBe(true)
+    await button.trigger('click')
+    await flushPromises()
+
+    expect(storeMock.upsertConfiguration).toHaveBeenCalledWith(
+      'cfg-1',
+      expect.objectContaining({ dimensions: 1024, model_id: 'nomic-embed-text' }),
+    )
+    expect(storeMock.testConfiguration).toHaveBeenCalledWith('cfg-1')
   })
 })

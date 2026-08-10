@@ -149,6 +149,94 @@ async function submitCreateConfig(): Promise<void> {
   }
 }
 
+// Legacy-Uebernahme: aus Config.EMBEDDING_* wird eine kanonische
+// Konfiguration. Der Provider-Connection-Bezug wird bewusst abgefragt
+// statt geraten — Verbindungen sind ein eigener Lifecycle und werden
+// nie still angelegt (siehe services/embedding_configurations/legacy.py).
+interface AdoptLegacyDraft {
+  providerConnectionId: string;
+  isSubmitting: boolean;
+  lastError: string | null;
+}
+
+const adoptDraft = reactive<AdoptLegacyDraft>({
+  providerConnectionId: '',
+  isSubmitting: false,
+  lastError: null,
+});
+
+const adoptModalOpen = ref(false);
+
+function openAdoptModal(): void {
+  adoptDraft.providerConnectionId = providerConnections.value[0]?.id ?? '';
+  adoptDraft.lastError = null;
+  adoptModalOpen.value = true;
+}
+
+async function submitAdoptLegacy(): Promise<void> {
+  if (!adoptDraft.providerConnectionId) {
+    adoptDraft.lastError = t('embedding.adopt.connectionRequired', 'Bitte eine Provider-Connection waehlen.');
+    return;
+  }
+  adoptDraft.isSubmitting = true;
+  adoptDraft.lastError = null;
+  try {
+    const adopted = await store.syncLegacy(adoptDraft.providerConnectionId);
+    try {
+      await store.testConfiguration(adopted.id);
+    } catch {
+      // Eine fehlgeschlagene Probe darf die Uebernahme nicht abbrechen.
+    }
+    adoptModalOpen.value = false;
+  } catch (err) {
+    adoptDraft.lastError = errorMessage(err);
+  } finally {
+    adoptDraft.isSubmitting = false;
+  }
+}
+
+// Loeschen: die aktive Konfiguration ist geschuetzt, sonst wuerde der
+// Vektor-Index ohne zugehoerige Konfiguration zurueckbleiben.
+const pendingDeleteId = ref<string | null>(null);
+
+function requestDelete(config: EmbeddingConfiguration): void {
+  pendingDeleteId.value = config.id;
+}
+
+async function confirmDelete(): Promise<void> {
+  const id = pendingDeleteId.value;
+  if (!id) return;
+  pendingDeleteId.value = null;
+  await store.deleteConfiguration(id);
+}
+
+// Dimension-Korrektur: die Probe meldet die tatsaechlich gelieferte
+// Dimension. Weicht sie von der deklarierten ab, ist die Konfiguration
+// "failed" — hier wird der gemessene Wert uebernommen und erneut geprobt.
+const measuredDimensions = (config: EmbeddingConfiguration): number | null => {
+  const probe = store.probeByConfiguration[config.id];
+  if (!probe || probe.actual_dimensions === null) return null;
+  return probe.actual_dimensions === config.dimensions ? null : probe.actual_dimensions;
+};
+
+async function applyMeasuredDimensions(config: EmbeddingConfiguration): Promise<void> {
+  const measured = measuredDimensions(config);
+  if (measured === null) return;
+  await store.upsertConfiguration(config.id, {
+    provider_connection_id: config.provider_connection_id,
+    provider_kind: config.provider_kind,
+    model_id: config.model_id,
+    dimensions: measured,
+    scope: config.scope,
+    project_id: config.project_id,
+  });
+  try {
+    await store.testConfiguration(config.id);
+  } catch {
+    // Status bleibt auf der Karte sichtbar.
+  }
+}
+
 // Gemini-Finding (HIGH): die Helferfunktion ``migration``
 // wurde pro Render-Zyklus 15 Mal pro Konfiguration aufgerufen. Das
 // ist teuer und unnoetig — eine computed-Eigenschaft berechnet das
@@ -287,9 +375,19 @@ function errorMessage(err: unknown): string {
           <strong>{{ store.activeConfiguration.model_id }}</strong>
           ({{ store.activeConfiguration.dimensions }}d, {{ store.activeConfiguration.provider_kind }})
         </p>
-        <p v-if="store.activeSource === 'legacy'" class="text-warn">
-          {{ $t('embedding.active.legacyHint', 'Quelle: Legacy Config.EMBEDDING_* — bitte uebernehmen.') }}
-        </p>
+        <template v-if="store.activeSource === 'legacy'">
+          <p class="text-warn">
+            {{ $t('embedding.active.legacyHint', 'Quelle: Legacy Config.EMBEDDING_* — bitte uebernehmen.') }}
+          </p>
+          <button
+            type="button"
+            class="btn btn-primary"
+            data-testid="adopt-legacy"
+            @click="openAdoptModal"
+          >
+            {{ $t('embedding.adopt.open', 'Uebernehmen') }}
+          </button>
+        </template>
       </Card>
 
       <Card
@@ -331,6 +429,44 @@ function errorMessage(err: unknown): string {
           >
             {{ $t('embedding.action.activate', 'Aktivieren') }}
           </button>
+          <button
+            v-if="measuredDimensions(config) !== null"
+            type="button"
+            class="btn btn-secondary"
+            data-testid="apply-measured-dimensions"
+            @click="applyMeasuredDimensions(config)"
+          >
+            {{ $t('embedding.action.applyMeasured', 'Gemessene Dimension uebernehmen') }}
+            ({{ measuredDimensions(config) }}d)
+          </button>
+          <button
+            type="button"
+            class="btn btn-secondary"
+            :disabled="config.status === 'active'"
+            data-testid="delete-config"
+            @click="requestDelete(config)"
+          >
+            {{ $t('embedding.action.delete', 'Loeschen') }}
+          </button>
+        </div>
+
+        <div v-if="pendingDeleteId === config.id" class="delete-confirm" data-testid="delete-confirm">
+          <p>
+            {{ $t('embedding.delete.confirm', 'Konfiguration wirklich loeschen?') }}
+          </p>
+          <div class="config-actions">
+            <button type="button" class="btn btn-secondary" @click="pendingDeleteId = null">
+              {{ $t('common.cancel', 'Abbrechen') }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              data-testid="delete-confirm-submit"
+              @click="confirmDelete"
+            >
+              {{ $t('embedding.delete.submit', 'Endgueltig loeschen') }}
+            </button>
+          </div>
         </div>
 
         <!-- Migrations-Section -->
@@ -432,6 +568,55 @@ function errorMessage(err: unknown): string {
             @click="submitOllamaPull"
           >
             {{ $t('embedding.ollama.submit', 'Download starten') }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Uebernahme-Modal fuer die Legacy-Konfiguration -->
+    <div v-if="adoptModalOpen" class="modal-backdrop" @click.self="adoptModalOpen = false">
+      <div class="modal" data-testid="adopt-legacy-modal">
+        <h3>{{ $t('embedding.adopt.title', 'Legacy-Konfiguration uebernehmen') }}</h3>
+        <p class="text-muted">
+          {{ $t('embedding.adopt.hint', 'Modell und Dimension stammen aus Config.EMBEDDING_*. Waehle die Provider-Connection, ueber die dieses Modell erreichbar ist.') }}
+        </p>
+
+        <template v-if="providerConnections.length === 0">
+          <p class="text-warn">
+            {{ $t('embedding.adopt.noConnections', 'Keine Provider-Connections vorhanden. Zuerst eine Verbindung anlegen.') }}
+          </p>
+          <router-link :to="{ name: 'SettingsLlmProviders' }" class="btn btn-secondary">
+            {{ $t('embedding.adopt.toProviders', 'Zu den LLM-Anbietern') }}
+          </router-link>
+        </template>
+        <template v-else>
+          <label>
+            {{ $t('embedding.adopt.connection', 'Provider-Connection') }}
+            <select v-model="adoptDraft.providerConnectionId" data-testid="adopt-legacy-connection">
+              <option v-for="conn in providerConnections" :key="conn.id" :value="conn.id">
+                {{ conn.display_name }}
+              </option>
+            </select>
+          </label>
+        </template>
+
+        <p v-if="adoptDraft.lastError" class="text-warn" data-testid="adopt-legacy-error">
+          {{ adoptDraft.lastError }}
+        </p>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" @click="adoptModalOpen = false">
+            {{ $t('common.cancel', 'Abbrechen') }}
+          </button>
+          <button
+            v-if="providerConnections.length > 0"
+            type="button"
+            class="btn btn-primary"
+            :disabled="adoptDraft.isSubmitting"
+            data-testid="adopt-legacy-submit"
+            @click="submitAdoptLegacy"
+          >
+            {{ $t('embedding.adopt.submit', 'Uebernehmen') }}
           </button>
         </div>
       </div>
