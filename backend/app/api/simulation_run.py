@@ -19,6 +19,7 @@ from ..services.llm_routing_seed import (
 )
 from ..utils.endpoints import is_local_endpoint
 from ..services.llm_runtime import RuntimeLlmConfig, parse_runtime_llm_config
+from ..services.run_lifecycle import RunLifecycle, RunPersistenceError
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import SimulationRunner
 from ..services.stage_model_router import StageModelRouter
@@ -112,6 +113,9 @@ class _StartRejected(Exception):
     und Meldung wortgleich das bleiben, was der monolithische Handler vorher
     zurückgegeben hat (#1079).
     """
+
+    #: Failed-Meldung für einen bereits registrierten Run (RunLifecycle).
+    run_failure_message = "Simulation start rejected before launch"
 
     def __init__(self, response: Any) -> None:
         super().__init__("simulation start rejected")
@@ -476,27 +480,13 @@ def _precheck_ai_model_ref(ai_model_ref: "AiModelRef | None") -> None:
         ) from exc
 
 
-def _mark_run_failed(run_id: str, message: str) -> None:
-    """Bringt einen registrierten Run auf einen Endzustand (Issue #1176).
-
-    Best effort und bewusst schluckend: diese Funktion laeuft in
-    ``except``-Zweigen. Wuerde sie selbst werfen, ginge der urspruengliche
-    Fehler verloren — und der Aufrufer stuende ohne Diagnose da.
-    """
-    try:
-        run_registry.update_run(run_id, status="failed", message=message)
-    except Exception:  # noqa: BLE001 — der Ursprungsfehler ist wichtiger
-        logger.warning(
-            "Failed to mark run %s as failed after a start error", run_id, exc_info=True
-        )
-
-
-def _register_start_run(req: _StartRequest, state) -> "dict[str, Any]":
-    """Phase 5 — Run-Record anlegen, Routing seeden, Budget verankern."""
-    run_record = run_registry.create_run(
-        run_type="simulation_run",
-        entity_id=req.simulation_id,
-        status="pending",
+def _begin_start_run(req: _StartRequest, state) -> RunLifecycle:
+    """Phase 5 — Lifecycle für den Run-Record des Startlaufs bauen."""
+    return RunLifecycle.begin(
+        run_registry,
+        "simulation_run",
+        req.simulation_id,
+        failure_message="Simulation start failed: {exc_type}",
         progress=0,
         message="Simulation run queued",
         linked_ids={"simulation_id": req.simulation_id, "project_id": state.project_id},
@@ -514,21 +504,6 @@ def _register_start_run(req: _StartRequest, state) -> "dict[str, Any]":
             "llm_provider": req.llm_runtime.redacted_metadata() or None,
         },
     )
-    seed_run_stage_routing(
-        run_record["run_id"],
-        "simulation_rounds",
-        llm_model_override=req.llm_model_override,
-        llm_runtime=req.llm_runtime,
-        ai_model_ref=req.ai_model_ref,
-    )
-    # Budget am Run verankern + Subprozess-Config schreiben (Issue #764).
-    # Alt-Artefakte (budget_abort.json eines früheren Runs) werden entfernt,
-    # damit ein Neustart nicht sofort wieder abbricht.
-    from ..services.run_budget import set_run_budget_config as _set_run_budget_config
-    _apply_budget_to_simulation(
-        req.simulation_id, run_record["run_id"], req.budget_config, _set_run_budget_config
-    )
-    return run_record
 
 
 def _resolve_start_route(run_id: str, llm_runtime: RuntimeLlmConfig):
@@ -579,20 +554,8 @@ def _apply_route_to_simulation_config(
     store = get_artifact_store()
     config = store.read_json(req.simulation_id, "simulation_config", default=None)
     if not config:
-        # Der Run wurde in Phase 5 bereits registriert — ohne diese Markierung
-        # bleibt er als Phantom-Run in der Liste stehen (#1094).
-        try:
-            run_registry.update_run(
-                run_id,
-                status="failed",
-                message="Simulation configuration does not exist. Please call /prepare first",
-            )
-        except Exception:  # noqa: BLE001 — best effort
-            logger.warning(
-                "Failed to mark run %s as failed after missing simulation_config",
-                run_id,
-                exc_info=True,
-            )
+        # Der Run wurde in Phase 5 bereits registriert — die failed-Markierung
+        # übernimmt der RunLifecycle um den Startabschnitt (#1094, #1183).
         raise _StartRejected(
             json_error(
                 ApiErrorCode.SIMULATION_NOT_PREPARED,
@@ -667,62 +630,74 @@ def start_simulation():
         _precheck_ai_model_ref(req.ai_model_ref)
 
     except _StartRejected as rejected:
-        # Vor _register_start_run — es gibt noch keinen Run-Record, der
+        # Vor der Run-Registrierung — es gibt noch keinen Run-Record, der
         # verwaisen koennte.
         return rejected.response
 
-    # Issue #1176: Ab hier existiert ein Run-Record mit status="pending".
-    # Jeder Ausgang, der ihn nicht auf einen Endzustand bringt, hinterlaesst
-    # einen Phantom-Run: er steht dauerhaft in der Liste, das Frontend zeigt
-    # weiter "Bereit", und ``POST /api/runs/<id>/cancel`` greift bei ihm nicht.
-    #
-    # #1094 hat zwei bekannte Abbruchpfade einzeln markiert. Das deckt die
-    # Fehlerklasse nicht ab — ``SimulationRunner.start_simulation`` lag ganz
-    # ausserhalb des try, und jeder kuenftige Abbruchpfad haette dieselbe
-    # Luecke wieder aufgerissen. Statt weiterer Einzelmarkierungen faengt ein
-    # Netz um den gesamten Abschnitt.
-    run_record = _register_start_run(req, state)
-    run_id = run_record["run_id"]
+    # Issue #1176/#1183: Ab der Registrierung existiert ein Run-Record mit
+    # status="pending". Jeder Ausgang, der ihn nicht auf einen Endzustand
+    # bringt, hinterlaesst einen Phantom-Run. Das BaseException-Netz und die
+    # strikte Persistenzsemantik (#844) liegen im RunLifecycle — hier steht
+    # nur noch, was start-spezifisch ist. Routing-Seed und Budget-Anker
+    # laufen bewusst innerhalb des Fensters: auch ihr Scheitern darf keinen
+    # pending-Run hinterlassen.
     try:
-        resolved_route, resolved_api_key = _resolve_start_route(run_id, req.llm_runtime)
-        _apply_route_to_simulation_config(req, resolved_route, run_id)
-
-        run_state = SimulationRunner.start_simulation(
-            simulation_id=req.simulation_id,
-            platform=req.platform,
-            max_rounds=req.max_rounds,
-            enable_graph_memory_update=req.enable_graph_memory_update,
-            graph_id=graph_id,
-            runtime_env=build_route_subprocess_env(
-                resolved_route,
-                resolved_api_key,
+        with _begin_start_run(req, state) as run:
+            run_id = run.run_id
+            seed_run_stage_routing(
                 run_id,
+                "simulation_rounds",
+                llm_model_override=req.llm_model_override,
+                llm_runtime=req.llm_runtime,
+                ai_model_ref=req.ai_model_ref,
+            )
+            # Budget am Run verankern + Subprozess-Config schreiben (#764).
+            # Alt-Artefakte (budget_abort.json eines früheren Runs) werden
+            # entfernt, damit ein Neustart nicht sofort wieder abbricht.
+            from ..services.run_budget import set_run_budget_config as _set_run_budget_config
+            _apply_budget_to_simulation(
+                req.simulation_id, run_id, req.budget_config, _set_run_budget_config
+            )
+
+            resolved_route, resolved_api_key = _resolve_start_route(run_id, req.llm_runtime)
+            _apply_route_to_simulation_config(req, resolved_route, run_id)
+
+            run_state = SimulationRunner.start_simulation(
+                simulation_id=req.simulation_id,
+                platform=req.platform,
+                max_rounds=req.max_rounds,
+                enable_graph_memory_update=req.enable_graph_memory_update,
+                graph_id=graph_id,
+                runtime_env=build_route_subprocess_env(
+                    resolved_route,
+                    resolved_api_key,
+                    run_id,
+                ),
+            )
+
+            manager._set_status(state, SimulationStatus.RUNNING)
+            run.succeed(
+                status="processing",
+                progress=0,
+                message="Simulation run started",
+                resume_capability=_simulation_resume_capability(req.simulation_id, state),
+            )
+    except RunPersistenceError:
+        # #844: Die failed-/processing-Markierung wurde nicht persistiert —
+        # das darf nicht wie ein sauber abgeschlossener Vorgang aussehen.
+        return json_error(
+            ApiErrorCode.INTERNAL_ERROR,
+            status=500,
+            message=(
+                "Interner Fehler beim Persistieren des Run-Status. "
+                "Bitte erneut versuchen."
             ),
         )
     except _StartRejected as rejected:
-        _mark_run_failed(run_id, "Simulation start rejected before launch")
         return rejected.response
-    except BaseException as exc:  # noqa: BLE001 — sofort weitergeworfen
-        # BaseException, nicht Exception: ein Worker-Timeout erreicht den
-        # Handler als Signal-Ableitung (SystemExit), und genau der Fall — der
-        # haengende Request — hat die Phantom-Runs erzeugt. Ein
-        # ``except Exception`` haette ihn durchgelassen.
-        _mark_run_failed(run_id, f"Simulation start failed: {type(exc).__name__}")
-        raise
-
-    manager._set_status(state, SimulationStatus.RUNNING)
-    run_registry.update_run(
-        run_record["run_id"],
-        status="processing",
-        progress=0,
-        message="Simulation run started",
-        resume_capability=_simulation_resume_capability(req.simulation_id, state),
-    )
 
     return json_success(
-        _build_start_response(
-            req, run_state, run_record["run_id"], graph_id, force_restarted
-        )
+        _build_start_response(req, run_state, run_id, graph_id, force_restarted)
     )
 
 

@@ -379,31 +379,28 @@ def test_precheck_ai_model_ref_maps_value_error_to_422(app_ctx, monkeypatch):
 # Phase 5 — Run-Registrierung
 # ---------------------------------------------------------------------------
 
-def test_register_start_run_creates_run_and_seeds_routing(app_ctx, monkeypatch):
+def test_begin_start_run_creates_pending_run(app_ctx, monkeypatch):
+    """Phase 5 heißt jetzt RunLifecycle: der Eintritt legt den pending-Record an.
+
+    Routing-Seed und Budget-Anker laufen nicht mehr in der Registrierung,
+    sondern im Handler innerhalb des Lifecycle-Fensters — ihr Scheitern deckt
+    ``test_start_run_never_stuck_pending.py`` auf HTTP-Ebene ab.
+    """
     registry = MagicMock()
     registry.create_run.return_value = {"run_id": "run-1"}
     monkeypatch.setattr(mod, "run_registry", registry)
     monkeypatch.setattr(mod, "_simulation_run_artifacts", lambda _sid: [])
     monkeypatch.setattr(mod, "_simulation_resume_capability", lambda _sid, _state: {"resumable": False})
-    seed = MagicMock()
-    monkeypatch.setattr(mod, "seed_run_stage_routing", seed)
-    applied = {}
-    monkeypatch.setattr(
-        mod,
-        "_apply_budget_to_simulation",
-        lambda sid, rid, budget, _fn: applied.update(sid=sid, rid=rid, budget=budget),
-    )
     req = mod._parse_start_request({"simulation_id": VALID_SIM_ID, "platform": "reddit"})
 
-    run_record = mod._register_start_run(req, _state(graph_id="graph-1"))
+    with mod._begin_start_run(req, _state(graph_id="graph-1")) as run:
+        assert run.record == {"run_id": "run-1"}
+        assert run.run_id == "run-1"
 
-    assert run_record == {"run_id": "run-1"}
-    create_kwargs = registry.create_run.call_args.kwargs
-    assert create_kwargs["run_type"] == "simulation_run"
-    assert create_kwargs["entity_id"] == VALID_SIM_ID
-    assert create_kwargs["metadata"]["platform"] == "reddit"
-    assert seed.call_args.args == ("run-1", "simulation_rounds")
-    assert applied == {"sid": VALID_SIM_ID, "rid": "run-1", "budget": None}
+    create_call = registry.create_run.call_args
+    assert create_call.args == ("simulation_run", VALID_SIM_ID)
+    assert create_call.kwargs["status"] == "pending"
+    assert create_call.kwargs["metadata"]["platform"] == "reddit"
 
 
 # ---------------------------------------------------------------------------
@@ -516,10 +513,15 @@ def test_apply_route_to_simulation_config_rejects_missing_config(app_ctx, monkey
     assert _body(excinfo)["code"] == "simulation_not_prepared"
 
 
-def test_apply_route_to_simulation_config_rejects_missing_config_marks_run_failed(
+def test_apply_route_to_simulation_config_rejects_without_marking(
     app_ctx, monkeypatch
 ):
-    """Issue #1094: fehlende simulation_config darf keinen Phantom-Run hinterlassen."""
+    """Issue #1094/#1183: Die Phase lehnt nur noch ab — die failed-Markierung
+    liegt im RunLifecycle um den Startabschnitt, nicht mehr in der Phase.
+
+    Dass der Run dabei nicht pending verwaist, deckt
+    ``test_start_run_never_stuck_pending.py`` auf HTTP-Ebene ab.
+    """
     store = MagicMock()
     store.read_json.return_value = None
     monkeypatch.setattr(mod, "get_artifact_store", lambda: store)
@@ -532,9 +534,7 @@ def test_apply_route_to_simulation_config_rejects_missing_config_marks_run_faile
 
     assert _status(excinfo) == 404
     assert _body(excinfo)["code"] == "simulation_not_prepared"
-    registry.update_run.assert_called_once()
-    assert registry.update_run.call_args.args[0] == "run-1"
-    assert registry.update_run.call_args.kwargs["status"] == "failed"
+    registry.update_run.assert_not_called()
 
 
 def test_apply_route_to_simulation_config_writes_model_for_ai_model_ref(app_ctx, monkeypatch):

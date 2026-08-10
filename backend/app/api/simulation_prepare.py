@@ -24,6 +24,7 @@ from ..services.llm_runtime import parse_runtime_llm_config
 from ..services.persona_eligibility import filter_eligible_entities
 from ..services.prepare_service import compute_persona_target
 from ..services.report_agent import MIN_SIMULATION_AGENTS
+from ..services.run_lifecycle import RunLifecycle, RunPersistenceError
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.stage_model_router import StageModelRouter
 from ..utils.validation import validate_simulation_id, validate_task_id
@@ -211,9 +212,14 @@ class _PrepareRejected(Exception):
     Handler vorher zurückgegeben hat (#1080).
     """
 
-    def __init__(self, response: Any) -> None:
+    def __init__(self, response: Any, run_failure_message: "str | None" = None) -> None:
         super().__init__("simulation prepare rejected")
         self.response = response
+        if run_failure_message is not None:
+            # Sprechende failed-Meldung für einen bereits registrierten Run —
+            # ausgewertet vom RunLifecycle (#841: die detaillierte Meldung
+            # landet zuletzt auf dem Run, nach fail_task()).
+            self.run_failure_message = run_failure_message
 
 
 @dataclass(frozen=True)
@@ -624,14 +630,15 @@ def _precheck_prepare_ai_model_ref(ai_model_ref: "AiModelRef | None") -> None:
         ) from exc
 
 
-def _register_prepare_run(
-    req: _PrepareRequest, state, routing: _PrepareRouting, task_manager
-) -> "tuple[dict[str, Any], str]":
-    """Phase 6b — Run-Record und Task für den Vorbereitungslauf anlegen."""
-    run_record = run_registry.create_run(
-        run_type="simulation_prepare",
-        entity_id=req.simulation_id,
-        status="pending",
+def _begin_prepare_run(
+    req: _PrepareRequest, state, routing: _PrepareRouting
+) -> RunLifecycle:
+    """Phase 6b — Lifecycle für den Run-Record des Vorbereitungslaufs bauen."""
+    return RunLifecycle.begin(
+        run_registry,
+        "simulation_prepare",
+        req.simulation_id,
+        failure_message="Simulation preparation failed: {exc_type}",
         progress=0,
         message="Simulation preparation queued",
         linked_ids={
@@ -654,88 +661,10 @@ def _register_prepare_run(
             **({"budget": req.budget_config.model_dump(mode="json")} if req.budget_config else {}),
         },
     )
-    task_id = task_manager.create_task(
-        task_type="simulation_prepare",
-        metadata={
-            "simulation_id": req.simulation_id,
-            "project_id": state.project_id,
-            "run_id": run_record["run_id"],
-        },
-    )
-    return run_record, task_id
-
-
-def _reject_and_fail_prepare_run(
-    run_record: "dict[str, Any]",
-    task_id: str,
-    task_manager,
-    message: str,
-    *,
-    status: int,
-    context: str,
-) -> _PrepareRejected:
-    """Run und Task als ``failed`` markieren und die Ablehnung bauen.
-
-    Issue #841: run_record und task_id existieren an den Aufrufstellen bereits —
-    ohne dieses Markieren bliebe der Datensatz dauerhaft als "pending" in der
-    Registry verwaist. Die Reihenfolge ist bewusst: ``fail_task()`` setzt intern
-    per ``sync_task()`` eine generische Task-Message ("Task failed") auf den Run
-    zurück — der detaillierte ``update_run()``-Aufruf muss deshalb zuletzt
-    laufen, sonst überschreibt ``sync_task()`` die Meldung.
-
-    Issue #844: ``update_run()`` liefert ``None``, wenn das Run-Manifest
-    zwischenzeitlich verschwunden ist, oder es kann eine I/O-Exception werfen
-    (``write_json_atomic`` ist ungeschützt). Beide Fälle dürfen NICHT wie eine
-    erfolgreich persistierte Ablehnung behandelt werden — sonst bleibt der Run
-    unbemerkt "pending" (siehe #841), obwohl der Client bereits eine scheinbar
-    abschließende Antwort erhalten hat. ``fail_task()`` selbst hat keine
-    prüfbare Fehlersemantik (siehe ``TaskManager.update_task``) und bleibt
-    daher best-effort.
-    """
-    task_manager.fail_task(task_id, message)
-
-    persistence_error: Optional[Exception] = None
-    try:
-        updated_run = run_registry.update_run(
-            run_record["run_id"], status="failed", message=message, error=message
-        )
-    except Exception as exc:  # noqa: BLE001 — Persistenzfehler, unten geloggt
-        updated_run = None
-        persistence_error = exc
-
-    if updated_run is None:
-        logger.error(
-            "Persistenzfehler beim Markieren von run_id=%s (task_id=%s) als "
-            "failed %s: %s",
-            run_record["run_id"],
-            task_id,
-            context,
-            persistence_error
-            or "update_run() lieferte None (Run-Manifest existiert nicht mehr)",
-        )
-        return _PrepareRejected(
-            json_error(
-                ApiErrorCode.INTERNAL_ERROR,
-                status=500,
-                message=(
-                    "Interner Fehler beim Markieren des Runs als fehlgeschlagen. "
-                    "Bitte erneut versuchen."
-                ),
-            )
-        )
-    return _PrepareRejected(
-        json_error(
-            ApiErrorCode.VALIDATION_FAILED,
-            status=status,
-            message=message,
-        )
-    )
 
 
 def _seed_prepare_routing(
     run_record: "dict[str, Any]",
-    task_id: str,
-    task_manager,
     routing: _PrepareRouting,
     ai_model_ref: "AiModelRef | None",
 ) -> None:
@@ -760,19 +689,17 @@ def _seed_prepare_routing(
             ai_model_ref=ai_model_ref,
         )
     except ValueError as exc:
-        raise _reject_and_fail_prepare_run(
-            run_record,
-            task_id,
-            task_manager,
-            str(exc),
-            status=400,
-            context="nach AiModelRef-Routingfehler",
+        raise _PrepareRejected(
+            json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=400,
+                message=str(exc),
+            ),
+            run_failure_message=str(exc),
         ) from exc
 
 
-def _resolve_prepare_route(
-    run_record: "dict[str, Any]", task_id: str, task_manager, llm_runtime
-):
+def _resolve_prepare_route(run_record: "dict[str, Any]", llm_runtime):
     """Phase 8 — Stage-Route auflösen, sperren und den API-Key bestimmen."""
     route_router = StageModelRouter(run_record["run_id"])
     resolved_route = route_router.resolve("persona_generation")
@@ -786,13 +713,13 @@ def _resolve_prepare_route(
             "Bitte in Einstellungen → LLM-Anbieter einen Schlüssel speichern "
             "oder im Sitzungsfeld eingeben."
         )
-        raise _reject_and_fail_prepare_run(
-            run_record,
-            task_id,
-            task_manager,
-            guard_message,
-            status=422,
-            context="im Provider-Key-Guard",
+        raise _PrepareRejected(
+            json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=422,
+                message=guard_message,
+            ),
+            run_failure_message=guard_message,
         )
 
     if resolved_api_key is None and is_local_endpoint(resolved_route.base_url_sanitized):
@@ -1044,34 +971,66 @@ def prepare_simulation():
 
         task_manager = TaskManager()
         _precheck_prepare_ai_model_ref(ai_model_ref)
-        run_record, task_id = _register_prepare_run(req, state, routing, task_manager)
-        _seed_prepare_routing(run_record, task_id, task_manager, routing, ai_model_ref)
-        resolved_route, resolved_api_key = _resolve_prepare_route(
-            run_record, task_id, task_manager, routing.llm_runtime
+    except _PrepareRejected as rejected:
+        # Vor der Run-Registrierung — es gibt noch keinen Record, der
+        # verwaisen könnte.
+        return rejected.response
+
+    # Issue #841/#1183: Ab der Registrierung existiert ein Run-Record mit
+    # status="pending". Task-Kopplung (#841-Reihenfolge), BaseException-Netz
+    # und strikte Persistenzsemantik (#844) liegen im RunLifecycle. Auch
+    # Statuswechsel und Enqueue laufen innerhalb des Fensters — ihr Scheitern
+    # hinterließ vorher einen pending-Phantom.
+    try:
+        with _begin_prepare_run(req, state, routing) as run:
+            run_record = run.record
+            task_id = task_manager.create_task(
+                task_type="simulation_prepare",
+                metadata={
+                    "simulation_id": req.simulation_id,
+                    "project_id": state.project_id,
+                    "run_id": run_record["run_id"],
+                },
+            )
+            run.attach_task(task_manager, task_id)
+            _seed_prepare_routing(run_record, routing, ai_model_ref)
+            resolved_route, resolved_api_key = _resolve_prepare_route(
+                run_record, routing.llm_runtime
+            )
+
+            effective_llm_runtime = build_runtime_llm_config(resolved_route, resolved_api_key)
+
+            manager._set_status(state, SimulationStatus.PREPARING)
+
+            # TODO(P0-queue): migrate to Redis-Queue (RQ) in Wave 2 — see app/jobs/__init__.py
+            from ..jobs import enqueue
+            enqueue(
+                "simulation_prepare",
+                _make_prepare_job(
+                    manager=manager,
+                    task_manager=task_manager,
+                    task_id=task_id,
+                    simulation_id=simulation_id,
+                    inputs=inputs,
+                    storage=storage,
+                    llm_model=resolved_route.model,
+                    effective_llm_runtime=effective_llm_runtime,
+                    run_record=run_record,
+                ),
+            )
+    except RunPersistenceError:
+        # #844: Die failed-Markierung wurde nicht persistiert — das darf nicht
+        # wie eine sauber abgeschlossene Ablehnung aussehen.
+        return json_error(
+            ApiErrorCode.INTERNAL_ERROR,
+            status=500,
+            message=(
+                "Interner Fehler beim Markieren des Runs als fehlgeschlagen. "
+                "Bitte erneut versuchen."
+            ),
         )
     except _PrepareRejected as rejected:
         return rejected.response
-
-    effective_llm_runtime = build_runtime_llm_config(resolved_route, resolved_api_key)
-
-    manager._set_status(state, SimulationStatus.PREPARING)
-
-    # TODO(P0-queue): migrate to Redis-Queue (RQ) in Wave 2 — see app/jobs/__init__.py
-    from ..jobs import enqueue
-    enqueue(
-        "simulation_prepare",
-        _make_prepare_job(
-            manager=manager,
-            task_manager=task_manager,
-            task_id=task_id,
-            simulation_id=simulation_id,
-            inputs=inputs,
-            storage=storage,
-            llm_model=resolved_route.model,
-            effective_llm_runtime=effective_llm_runtime,
-            run_record=run_record,
-        ),
-    )
 
     return json_success(_build_prepare_response(simulation_id, task_id, run_record, state, inputs))
 

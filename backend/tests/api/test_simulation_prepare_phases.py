@@ -413,13 +413,17 @@ def test_precheck_prepare_ai_model_ref_maps_value_error_to_400(app_ctx, monkeypa
     assert _body(excinfo)["error"] == "connection disabled"
 
 
-def test_register_prepare_run_creates_run_and_task(app_ctx, monkeypatch):
+def test_begin_prepare_run_creates_pending_run(app_ctx, monkeypatch):
+    """Phase 6b heißt jetzt RunLifecycle: der Eintritt legt den pending-Record an.
+
+    Task-Anlage und -Kopplung laufen im Handler (``run.attach_task``); die
+    Fehlerpfad-Semantik (#841-Reihenfolge, #844-Persistenz) deckt
+    ``tests/services/test_run_lifecycle.py`` durchs Lifecycle-Interface ab.
+    """
     registry = MagicMock()
     registry.create_run.return_value = {"run_id": "run-1"}
     monkeypatch.setattr(mod, "run_registry", registry)
     monkeypatch.setattr(mod, "_simulation_run_artifacts", lambda _sid: [])
-    task_manager = MagicMock()
-    task_manager.create_task.return_value = "task-1"
     req = mod._PrepareRequest(
         simulation_id=VALID_SIM_ID,
         ai_model_ref=None,
@@ -427,28 +431,23 @@ def test_register_prepare_run_creates_run_and_task(app_ctx, monkeypatch):
         force_regenerate=False,
     )
 
-    run_record, task_id = mod._register_prepare_run(
-        req, _state(), _routing(llm_model_override="gpt-4o"), task_manager
-    )
+    with mod._begin_prepare_run(req, _state(), _routing(llm_model_override="gpt-4o")) as run:
+        assert run.record == {"run_id": "run-1"}
 
-    assert run_record == {"run_id": "run-1"}
-    assert task_id == "task-1"
-    create_kwargs = registry.create_run.call_args.kwargs
-    assert create_kwargs["run_type"] == "simulation_prepare"
-    assert create_kwargs["metadata"]["llm_model"] == "gpt-4o"
-    assert "budget" not in create_kwargs["metadata"]
-    assert task_manager.create_task.call_args.kwargs["metadata"]["run_id"] == "run-1"
+    create_call = registry.create_run.call_args
+    assert create_call.args == ("simulation_prepare", VALID_SIM_ID)
+    assert create_call.kwargs["status"] == "pending"
+    assert create_call.kwargs["metadata"]["llm_model"] == "gpt-4o"
+    assert "budget" not in create_call.kwargs["metadata"]
 
 
-def test_register_prepare_run_carries_budget_metadata(app_ctx, monkeypatch):
+def test_begin_prepare_run_carries_budget_metadata(app_ctx, monkeypatch):
     from app.contracts.run_budget_contract import RunBudgetConfig
 
     registry = MagicMock()
     registry.create_run.return_value = {"run_id": "run-1"}
     monkeypatch.setattr(mod, "run_registry", registry)
     monkeypatch.setattr(mod, "_simulation_run_artifacts", lambda _sid: [])
-    task_manager = MagicMock()
-    task_manager.create_task.return_value = "task-1"
     req = mod._PrepareRequest(
         simulation_id=VALID_SIM_ID,
         ai_model_ref=None,
@@ -456,54 +455,11 @@ def test_register_prepare_run_carries_budget_metadata(app_ctx, monkeypatch):
         force_regenerate=False,
     )
 
-    mod._register_prepare_run(req, _state(), _routing(), task_manager)
+    with mod._begin_prepare_run(req, _state(), _routing()):
+        pass
 
     metadata = registry.create_run.call_args.kwargs["metadata"]
     assert metadata["budget"]["max_tokens"] == 1000
-
-
-# ---------------------------------------------------------------------------
-# Fehlerpfad — Run/Task als failed markieren
-# ---------------------------------------------------------------------------
-
-def test_reject_and_fail_prepare_run_marks_run_failed(app_ctx, monkeypatch):
-    registry = MagicMock()
-    registry.update_run.return_value = {"run_id": "run-1", "status": "failed"}
-    monkeypatch.setattr(mod, "run_registry", registry)
-    task_manager = MagicMock()
-
-    rejected = mod._reject_and_fail_prepare_run(
-        {"run_id": "run-1"}, "task-1", task_manager, "kaputt", status=422, context="im Test"
-    )
-
-    assert rejected.response[1] == 422
-    task_manager.fail_task.assert_called_once_with("task-1", "kaputt")
-    assert registry.update_run.call_args.kwargs["status"] == "failed"
-
-
-def test_reject_and_fail_prepare_run_returns_500_when_run_vanished(app_ctx, monkeypatch):
-    registry = MagicMock()
-    registry.update_run.return_value = None
-    monkeypatch.setattr(mod, "run_registry", registry)
-
-    rejected = mod._reject_and_fail_prepare_run(
-        {"run_id": "run-1"}, "task-1", MagicMock(), "kaputt", status=422, context="im Test"
-    )
-
-    assert rejected.response[1] == 500
-    assert rejected.response[0].get_json()["code"] == "internal_error"
-
-
-def test_reject_and_fail_prepare_run_returns_500_on_persistence_error(app_ctx, monkeypatch):
-    registry = MagicMock()
-    registry.update_run.side_effect = OSError("disk full")
-    monkeypatch.setattr(mod, "run_registry", registry)
-
-    rejected = mod._reject_and_fail_prepare_run(
-        {"run_id": "run-1"}, "task-1", MagicMock(), "kaputt", status=400, context="im Test"
-    )
-
-    assert rejected.response[1] == 500
 
 
 # ---------------------------------------------------------------------------
@@ -514,9 +470,7 @@ def test_seed_prepare_routing_without_ref_passes_profile(app_ctx, monkeypatch):
     seed = MagicMock()
     monkeypatch.setattr(mod, "seed_run_stage_routing", seed)
 
-    mod._seed_prepare_routing(
-        {"run_id": "run-1"}, "task-1", MagicMock(), _routing(routed_profile_id="p1"), None
-    )
+    mod._seed_prepare_routing({"run_id": "run-1"}, _routing(routed_profile_id="p1"), None)
 
     assert seed.call_args.args == ("run-1", "persona_generation")
     assert seed.call_args.kwargs["llm_profile_id"] == "p1"
@@ -528,29 +482,29 @@ def test_seed_prepare_routing_with_ref_forwards_ref(app_ctx, monkeypatch):
     monkeypatch.setattr(mod, "seed_run_stage_routing", seed)
     ref = MagicMock(name="AiModelRef")
 
-    mod._seed_prepare_routing({"run_id": "run-1"}, "task-1", MagicMock(), _routing(), ref)
+    mod._seed_prepare_routing({"run_id": "run-1"}, _routing(), ref)
 
     assert seed.call_args.kwargs["ai_model_ref"] is ref
 
 
-def test_seed_prepare_routing_failure_marks_run_failed(app_ctx, monkeypatch):
+def test_seed_prepare_routing_failure_rejects_with_run_message(app_ctx, monkeypatch):
+    """Die Phase markiert nicht mehr selbst — sie lehnt ab und gibt die
+    failed-Meldung über ``run_failure_message`` an den RunLifecycle weiter
+    (#841: fail_task zuerst, detaillierte Run-Meldung zuletzt)."""
     def _raise(*_args, **_kwargs):
         raise ValueError("model not on connection")
 
     monkeypatch.setattr(mod, "seed_run_stage_routing", _raise)
     registry = MagicMock()
-    registry.update_run.return_value = {"run_id": "run-1"}
     monkeypatch.setattr(mod, "run_registry", registry)
-    task_manager = MagicMock()
 
     with pytest.raises(mod._PrepareRejected) as excinfo:
-        mod._seed_prepare_routing(
-            {"run_id": "run-1"}, "task-1", task_manager, _routing(), MagicMock()
-        )
+        mod._seed_prepare_routing({"run_id": "run-1"}, _routing(), MagicMock())
 
     assert _status(excinfo) == 400
     assert _body(excinfo)["error"] == "model not on connection"
-    task_manager.fail_task.assert_called_once_with("task-1", "model not on connection")
+    assert excinfo.value.run_failure_message == "model not on connection"
+    registry.update_run.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -581,9 +535,7 @@ def test_resolve_prepare_route_locks_stage_and_returns_key(app_ctx, monkeypatch)
     router = _patch_router(monkeypatch, route)
     monkeypatch.setattr(mod, "resolve_route_api_key", lambda _route, _runtime: "sk-bound")
 
-    resolved, api_key = mod._resolve_prepare_route(
-        {"run_id": "run-1"}, "task-1", MagicMock(), RuntimeLlmConfig()
-    )
+    resolved, api_key = mod._resolve_prepare_route({"run_id": "run-1"}, RuntimeLlmConfig())
 
     assert resolved is route
     assert api_key == "sk-bound"
@@ -591,30 +543,27 @@ def test_resolve_prepare_route_locks_stage_and_returns_key(app_ctx, monkeypatch)
 
 
 def test_resolve_prepare_route_guards_missing_key_with_422(app_ctx, monkeypatch):
+    """Die failed-Markierung liegt im RunLifecycle — die Phase lehnt nur ab
+    und trägt die Run-Meldung als ``run_failure_message``."""
     _patch_router(monkeypatch, _resolved_route())
     monkeypatch.setattr(mod, "resolve_route_api_key", lambda _route, _runtime: None)
     registry = MagicMock()
-    registry.update_run.return_value = {"run_id": "run-1"}
     monkeypatch.setattr(mod, "run_registry", registry)
-    task_manager = MagicMock()
 
     with pytest.raises(mod._PrepareRejected) as excinfo:
-        mod._resolve_prepare_route(
-            {"run_id": "run-1"}, "task-1", task_manager, RuntimeLlmConfig()
-        )
+        mod._resolve_prepare_route({"run_id": "run-1"}, RuntimeLlmConfig())
 
     assert _status(excinfo) == 422
     assert "provider_override" in _body(excinfo)["error"]
-    task_manager.fail_task.assert_called_once()
+    assert "provider_override" in excinfo.value.run_failure_message
+    registry.update_run.assert_not_called()
 
 
 def test_resolve_prepare_route_uses_placeholder_for_local_endpoint(app_ctx, monkeypatch):
     _patch_router(monkeypatch, _resolved_route(base_url="http://localhost:11434/v1"))
     monkeypatch.setattr(mod, "resolve_route_api_key", lambda _route, _runtime: None)
 
-    _resolved, api_key = mod._resolve_prepare_route(
-        {"run_id": "run-1"}, "task-1", MagicMock(), RuntimeLlmConfig()
-    )
+    _resolved, api_key = mod._resolve_prepare_route({"run_id": "run-1"}, RuntimeLlmConfig())
 
     assert api_key == mod.LOCAL_NO_AUTH_API_KEY
 

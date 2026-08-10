@@ -233,20 +233,38 @@ class TestFailureAfterRegistrationEndsTheRun:
         assert _final_status(registry) == "failed"
 
 
-class TestMarkRunFailedSwallowsItsOwnErrors:
-    def test_ein_registry_fehler_verdeckt_nicht_den_ursprungsfehler(
-        self, monkeypatch
+class TestPersistenzfehlerBeimMarkierenWirdSichtbar:
+    def test_ein_persistenzfehler_ersetzt_die_ablehnung_durch_500(
+        self, client, monkeypatch
     ) -> None:
-        """``_mark_run_failed`` läuft in ``except``-Zweigen.
+        """Issue #844, vereinheitlicht auf die strenge Semantik.
 
-        Würde sie selbst werfen, ginge der ursprüngliche Fehler verloren — und
-        der Aufrufer stünde ohne Diagnose da. Ein nicht markierter Run ist
-        ärgerlich; eine verschluckte Ursache ist schlimmer.
+        Früher schluckte ``_mark_run_failed`` Registry-Fehler best-effort —
+        der Client bekam die reguläre Ablehnung (hier: 422), obwohl der Run
+        weiter ``pending`` in der Registry stand. Jetzt gilt der Prepare-Weg
+        auch beim Start: eine nicht persistierte failed-Markierung darf nicht
+        wie eine sauber abgeschlossene Ablehnung aussehen — der Handler
+        antwortet 500.
         """
-        import app.api.simulation_run as mod
+        registry = _stub_start_infra(monkeypatch)
+        registry.update_run.side_effect = OSError("Registry nicht schreibbar")
+        remote = ResolvedRoute(
+            stage="simulation_rounds",
+            provider_id="conn-openai",
+            model="gpt-4o",
+            base_url_sanitized="https://api.openai.com/v1",
+            routing_version=1,
+            provider_options={"base_url": "https://api.openai.com/v1"},
+        )
+        router = MagicMock()
+        router.resolve.return_value = remote
+        router.lock_stage.return_value = remote
+        monkeypatch.setattr("app.api.simulation_run.StageModelRouter", lambda _r: router)
+        monkeypatch.setattr(
+            "app.api.simulation_run.resolve_route_api_key", lambda _r, _rt: None
+        )
 
-        broken = MagicMock()
-        broken.update_run.side_effect = RuntimeError("Registry nicht erreichbar")
-        monkeypatch.setattr(mod, "run_registry", broken)
+        response = _start(client)
 
-        mod._mark_run_failed("run_01", "egal")  # darf nicht werfen
+        assert response.status_code == 500, response.data
+        registry.update_run.assert_called()
