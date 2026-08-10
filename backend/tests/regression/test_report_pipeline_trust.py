@@ -778,6 +778,8 @@ def test_11e_build_llm_judge_uses_chat_json_with_verdict_schema():
             self.last_schema = None
             self.last_messages = None
             self.last_context = None
+            self.last_max_tokens = None
+            self.last_enforce_token_floor = None
 
         def chat_json(
             self,
@@ -793,6 +795,8 @@ def test_11e_build_llm_judge_uses_chat_json_with_verdict_schema():
             self.last_schema = schema
             self.last_messages = messages
             self.last_context = context
+            self.last_max_tokens = max_tokens
+            self.last_enforce_token_floor = enforce_token_floor
             # Pydantic-Schema → chat_json liefert validiertes Dict.
             return EntailmentJudgeVerdict(verdict=EntailmentVerdict.RELATED_ONLY, reason="test").model_dump()
 
@@ -803,6 +807,12 @@ def test_11e_build_llm_judge_uses_chat_json_with_verdict_schema():
     assert verdict_name == "RELATED_ONLY"
     assert stub.last_schema is EntailmentJudgeVerdict
     assert stub.last_context == "report"
+    # Issue #1168: Das enge Limit ist Absicht — der Judge gibt ein Label plus
+    # kurze Begründung zurück. Der Stub hatte den neuen Parameter bisher nur
+    # geschluckt; fiele das Opt-out weg, ginge derselbe Call mit dem
+    # 32k-Boden raus, ohne dass irgendwo etwas rot wird.
+    assert stub.last_enforce_token_floor is False
+    assert stub.last_max_tokens == 256
     # System-Prompt erwähnt die Verdict-Typen.
     assert stub.last_messages[0]["role"] == "system"
     assert "SUPPORTED" in stub.last_messages[0]["content"]

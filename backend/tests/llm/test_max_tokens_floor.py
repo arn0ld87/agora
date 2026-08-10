@@ -141,22 +141,16 @@ class TestNumCtxFollows:
 class _FakeCompletions:
     def __init__(self) -> None:
         self.captured_kwargs = None
+        #: Antworttext des Fakes. ``chat_json`` braucht gueltiges JSON.
+        self.content = "ok"
 
     def create(self, **kwargs):
         self.captured_kwargs = kwargs
-
-        class _Msg:
-            content = "ok"
-
-        class _Choice:
-            message = _Msg()
-            finish_reason = "stop"
-
-        class _Resp:
-            choices = [_Choice()]
-            usage = None
-
-        return _Resp()
+        # ``tool_calls`` liest der Tool-Call-Pfad; ohne Tool-Aufruf ist None die
+        # korrekte Antwort und fuer die uebrigen Pfade folgenlos.
+        message = type("_Msg", (), {"content": self.content, "tool_calls": None})()
+        choice = type("_Choice", (), {"message": message, "finish_reason": "stop"})()
+        return type("_Resp", (), {"choices": [choice], "usage": None})()
 
 
 class _FakeOpenAI:
@@ -217,3 +211,156 @@ class TestClientAppliesTheFloor:
 
         captured = fake_client.client.chat.completions.captured_kwargs
         assert captured["max_tokens"] == 16_384
+
+
+class TestChatJsonAppliesTheFloor:
+    """``chat_json`` setzt den Boden selbst, nicht erst ueber ``chat``.
+
+    Der native Ollama-Schema-Pfad umgeht ``chat`` vollstaendig. Wuerde der
+    Boden nur in ``chat`` sitzen, saehen die beiden Pfade unterschiedliche
+    Limits — und der Entailment-Judge, der hier als einziger Aufrufer
+    ausdruecklich aussteigt, haette sein Opt-out nur auf einem davon.
+    """
+
+    def test_chat_json_raises_a_low_request_to_the_floor(self, fake_client) -> None:
+        fake_client.client.chat.completions.content = '{"ok": true}'
+        fake_client.chat_json(messages=[{"role": "user", "content": "hi"}], max_tokens=4096)
+
+        captured = fake_client.client.chat.completions.captured_kwargs
+        assert captured["max_tokens"] == DEFAULT_MAX_TOKENS_FLOOR
+
+    def test_chat_json_opt_out_keeps_the_narrow_limit(self, fake_client) -> None:
+        fake_client.client.chat.completions.content = '{"ok": true}'
+        fake_client.chat_json(
+            messages=[{"role": "user", "content": "hi"}],
+            max_tokens=256,
+            enforce_token_floor=False,
+        )
+
+        captured = fake_client.client.chat.completions.captured_kwargs
+        assert captured["max_tokens"] == 256
+
+
+class TestDescribeImageAppliesTheFloor:
+    """Vision lief mit 1024 Tokens — zu wenig fuer eine brauchbare Beschreibung."""
+
+    def test_vision_request_is_raised_to_the_floor(self, fake_client) -> None:
+        fake_client.describe_image(image_b64="AA==", prompt="Was ist zu sehen?")
+
+        captured = fake_client.client.chat.completions.captured_kwargs
+        assert captured["max_tokens"] == DEFAULT_MAX_TOKENS_FLOOR
+
+    def test_vision_num_ctx_follows_the_raised_limit(self, fake_client) -> None:
+        fake_client.describe_image(image_b64="AA==", prompt="Was ist zu sehen?")
+
+        captured = fake_client.client.chat.completions.captured_kwargs
+        assert captured["extra_body"]["options"]["num_ctx"] == (
+            DEFAULT_MAX_TOKENS_FLOOR + PROMPT_HEADROOM_TOKENS
+        )
+
+    def test_vision_num_ctx_never_falls_below_the_documented_minimum(
+        self, fake_client, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Ohne Boden bleibt die alte Untergrenze von 8192 stehen.
+
+        ``describe_image`` klammert ``num_ctx`` mit ``max(..., 8192)``. Faellt
+        der Boden weg (``LLM_MAX_TOKENS_FLOOR=0``), darf das Vision-Fenster
+        nicht auf den Wert eines 1024-Token-Requests zusammenschrumpfen.
+        """
+        monkeypatch.setenv("LLM_MAX_TOKENS_FLOOR", "0")
+        fake_client.describe_image(image_b64="AA==", prompt="Was ist zu sehen?")
+
+        captured = fake_client.client.chat.completions.captured_kwargs
+        assert captured["max_tokens"] == 1024
+        assert captured["extra_body"]["options"]["num_ctx"] >= 8192
+
+
+class TestToolCallsApplyTheFloor:
+    """Der Tool-Pfad hat kein Opt-out — dort gilt der Boden immer."""
+
+    _TOOLS = [
+        {
+            "type": "function",
+            "function": {
+                "name": "noop",
+                "description": "tut nichts",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        }
+    ]
+
+    def test_tool_request_is_raised_to_the_floor(self, fake_client) -> None:
+        fake_client.chat_with_tools(
+            messages=[{"role": "user", "content": "hi"}],
+            tools=self._TOOLS,
+            max_tokens=4096,
+        )
+
+        captured = fake_client.client.chat.completions.captured_kwargs
+        assert captured["max_tokens"] == DEFAULT_MAX_TOKENS_FLOOR
+
+    def test_tool_num_ctx_follows_the_raised_limit(self, fake_client) -> None:
+        fake_client.chat_with_tools(
+            messages=[{"role": "user", "content": "hi"}],
+            tools=self._TOOLS,
+            max_tokens=4096,
+        )
+
+        captured = fake_client.client.chat.completions.captured_kwargs
+        assert captured["extra_body"]["options"]["num_ctx"] == (
+            DEFAULT_MAX_TOKENS_FLOOR + PROMPT_HEADROOM_TOKENS
+        )
+
+
+class TestNarrowLimitCallSitesOptOut:
+    """Zwei Aufrufer bleiben absichtlich eng — das darf nicht stillschweigend kippen.
+
+    Ein verlorenes ``enforce_token_floor=False`` faellt sonst nirgends auf: das
+    Ergebnis bliebe fachlich korrekt, nur wuerde ein Label-Urteil statt mit 256
+    mit 32768 Tokens angefordert. Bei lokalen Modellen kostet das Laufzeit und
+    laedt zu Geschwafel ein, ohne dass ein Test rot wird.
+    """
+
+    def test_entailment_judge_opts_out(self) -> None:
+        from app.services.llm_entailment_judge import (
+            EntailmentJudgeVerdict,
+            EntailmentVerdict,
+            build_llm_judge,
+        )
+
+        captured: dict = {}
+
+        class _Stub:
+            def chat_json(self, **kwargs):
+                captured.update(kwargs)
+                return EntailmentJudgeVerdict(
+                    verdict=EntailmentVerdict.RELATED_ONLY, reason="test"
+                ).model_dump()
+
+        build_llm_judge(_Stub())("Ein Claim.", "Eine Evidence.")  # type: ignore[arg-type]
+
+        assert captured["enforce_token_floor"] is False
+        assert captured["max_tokens"] == 256
+
+    def test_graph_interview_summary_opts_out(self) -> None:
+        from types import SimpleNamespace
+
+        from app.services.graph_tools import GraphToolsService
+
+        captured: dict = {}
+
+        class _Stub:
+            def chat(self, **kwargs):
+                captured.update(kwargs)
+                return "Zusammenfassung"
+
+        service = GraphToolsService.__new__(GraphToolsService)
+        # ``llm`` ist eine lazy Property ohne Setter — das Backing-Feld
+        # vorbelegen verhindert, dass ein echter LLMClient gebaut wird.
+        service._llm_client = _Stub()  # type: ignore[assignment]
+        interview = SimpleNamespace(agent_name="A", agent_role="R", response="Text")
+
+        service._generate_interview_summary([interview], "Thema")  # type: ignore[arg-type]
+
+        assert captured["enforce_token_floor"] is False
+        assert captured["max_tokens"] == 800
