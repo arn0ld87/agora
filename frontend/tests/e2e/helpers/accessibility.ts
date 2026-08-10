@@ -467,10 +467,7 @@ export function assertRouteNotHijacked(intendedRoute: string, actualUrl: string)
 
 /** Ein per Tab erreichter Fokus-Stopp mit Position und umgebendem Landmark. */
 export interface TabStop {
-  /** Nullbasierte Position in der Tab-Kette. */
-  order: number;
-  /** Landmark-Kennung (`main`, `nav[1]`, …) oder `document`. */
-  landmark: string;
+  /** Landmark-Kennung (`main`, `nav[0]`, …) oder `document`. */
   /** Menschenlesbare Kennzeichnung für die Fehlermeldung. */
   label: string;
   x: number;
