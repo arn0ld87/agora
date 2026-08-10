@@ -81,6 +81,41 @@ def _render_simulated_quote_blocks(content: str) -> str:
     return _SIMULATED_QUOTE_TAG_RE.sub(_replace, content)
 
 
+# ---------------------------------------------------------------------------
+# Issue #1160 A — Geltungsbereich der Confidence ableiten
+# ---------------------------------------------------------------------------
+
+# Quellengattungen, die den Claim an etwas ausserhalb der Simulation binden.
+# ``agent_quote`` und ``agent_action`` fehlen hier bewusst: beides sind
+# Aeusserungen bzw. Handlungen simulierter Agenten. Ein Claim, den nur sie
+# stuetzen, ist Simulationskonsens — unabhaengig davon, wie hoch sein Label
+# ausfaellt.
+_EVIDENCE_BOUND_SOURCE_KINDS = frozenset({"seed_corpus", "graph_relation", "web_source"})
+
+
+def _derive_confidence_scope(
+    evidence: Any,
+) -> Literal["simulation_consensus", "evidence", "empirical"]:
+    """Leitet den Geltungsbereich aus den stuetzenden Evidence-Items ab.
+
+    Gezaehlt wird nur ``supports_claim is True`` — dieselbe Menge, aus der
+    ``evidence_refs`` entsteht. Widersprechende oder nur thematisch verwandte
+    Items begruenden keine Quellenbindung.
+
+    ``empirical`` wird hier nie vergeben: der Wert bezeichnet reale empirische
+    Daten, die Agora nicht erhebt. Die Ableitung kennt daher nur die beiden
+    Faelle, die im Lauf tatsaechlich vorkommen.
+    """
+    if not isinstance(evidence, list):
+        return "simulation_consensus"
+    for item in evidence:
+        if not isinstance(item, dict) or item.get("supports_claim") is not True:
+            continue
+        if str(item.get("source_kind") or "") in _EVIDENCE_BOUND_SOURCE_KINDS:
+            return "evidence"
+    return "simulation_consensus"
+
+
 class ReportManager:
     """Persistence and retrieval facade for generated reports."""
     
@@ -311,6 +346,7 @@ class ReportManager:
                     evidence_refs=evidence_refs,
                     confidence=confidence,
                     aggregation_basis="persona",
+                    confidence_scope=_derive_confidence_scope(claim.get("evidence")),
                 ))
             for gap in section.get("data_gaps") or []:
                 if not isinstance(gap, dict):

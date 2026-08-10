@@ -259,6 +259,29 @@ class ClaimEvidenceBindingModel(BaseModel):
     contradicts_claim: Optional[bool] = None
 
 
+def _stakeholder_group_key(value: Optional[str]) -> str:
+    """Vergleichsschluessel fuer ``persona_stakeholder_group`` (Issue #1160 C).
+
+    Der Cross-Stakeholder-Validator zaehlt unterschiedliche Werte dieses
+    Feldes. Ohne Normalisierung gelten ``"Buerger"``, ``"buerger"`` und
+    ``"Buerger "`` als drei Gruppen — ein ``high``-Label liesse sich damit
+    aus einer einzigen Stakeholder-Gruppe erzeugen, indem dieselbe
+    Bezeichnung unterschiedlich geschrieben wird.
+
+    Normalisiert wird ausschliesslich fuer den Vergleich (casefold +
+    Whitespace-Kollaps, Sign-off 2026-08-09). Der gespeicherte Wortlaut
+    bleibt unveraendert, damit Anzeige und Export weiterhin die Schreibweise
+    der Quelle zeigen. Eine kontrollierte Taxonomie ist ausdruecklich nicht
+    Teil dieser Aenderung.
+
+    Das ist eine Verschaerfung von ADR-0002 Anker 4, keine Schwaechung:
+    die Zahl unterscheidbarer Gruppen kann dadurch nur sinken.
+    """
+    if not value:
+        return ""
+    return " ".join(value.split()).casefold()
+
+
 class ReportClaimModel(BaseModel):
     model_config = _STRICT
 
@@ -287,14 +310,55 @@ class ReportClaimModel(BaseModel):
     @model_validator(mode="after")
     def verified_needs_strong_match(self) -> "ReportClaimModel":
         # Schwelle aus confidence_calculator.py-Kommentar: verified nur ab match_score >= 0.85
-        if self.confidence_label == ConfidenceLabel.verified:
-            top = max((e.match_score or 0.0) for e in self.evidence) if self.evidence else 0.0
-            if top < 0.85:
-                raise ValueError(
-                    f"Label 'verified' verlangt mindestens eine Evidence mit "
-                    f"match_score >= 0.85. Top: {top:.2f}"
-                )
-        return self
+        if self.confidence_label != ConfidenceLabel.verified:
+            return self
+        top = max((e.match_score or 0.0) for e in self.evidence) if self.evidence else 0.0
+        if top < 0.85:
+            raise ValueError(
+                f"Label 'verified' verlangt mindestens eine Evidence mit "
+                f"match_score >= 0.85. Top: {top:.2f}"
+            )
+
+        # Issue #1160 B (Sign-off 2026-08-09): ``match_score`` ist ein
+        # Retrieval-Wert — er beantwortet "gleiches Thema?", nicht "belegt?"
+        # (siehe evidence_binder.py). Die 0.85-Schwelle bleibt notwendige,
+        # ist aber keine hinreichende Bedingung mehr: das oberste Label
+        # verlangt zusaetzlich ein Entailment-Urteil ``SUPPORTED`` — und
+        # zwar am selben Item. Sonst koennte ein thematisch passendes, aber
+        # nur ``RELATED_ONLY``-eingestuftes Item die Schwelle liefern,
+        # waehrend das Entailment von einem schwach gerankten zweiten Item
+        # kommt; genau diese Trennung soll das Label sichtbar machen.
+        if any(
+            (e.match_score or 0.0) >= 0.85 and e.entailment == EntailmentVerdict.SUPPORTED
+            for e in self.evidence
+        ):
+            return self
+
+        if all(e.entailment is None for e in self.evidence):
+            # Bestandsdaten aus der Zeit vor der zweiten Binding-Stufe tragen
+            # ueberhaupt kein ``entailment``. Die werden beim Laden auf
+            # ``high`` abgestuft statt abgelehnt: der Bestand wird ehrlicher,
+            # nicht unlesbar. Das Downgrade ist idempotent — beim naechsten
+            # Laden greift der Validator nicht mehr, weil das Label dann
+            # ``high`` lautet.
+            self.confidence_label = ConfidenceLabel.high
+            self.audit_trail = [
+                *self.audit_trail,
+                {
+                    "event": "confidence_downgraded",
+                    "from": ConfidenceLabel.verified.value,
+                    "to": ConfidenceLabel.high.value,
+                    "reason": "no_entailment_recorded",
+                    "issue": "1160-B",
+                },
+            ]
+            return self
+
+        raise ValueError(
+            "Label 'verified' verlangt eine Evidence, die match_score >= 0.85 "
+            "UND entailment=SUPPORTED traegt. Vorhandene Urteile: "
+            f"{sorted({e.entailment.value for e in self.evidence if e.entailment})}."
+        )
 
     @model_validator(mode="after")
     def reject_orphan_high_confidence(self) -> "ReportClaimModel":
@@ -316,19 +380,26 @@ class ReportClaimModel(BaseModel):
         # (Gemini-Followup PR #343).
         if self.confidence_label not in (ConfidenceLabel.high, ConfidenceLabel.verified):
             return self
-        groups = {
-            e.persona_stakeholder_group
+        supporting = [
+            e
             for e in self.evidence
             if e.source_kind == EvidenceSourceKind.agent_quote
             and e.supports_claim
             and e.persona_stakeholder_group
-        }
+        ]
+        # Issue #1160 C: verglichen wird normalisiert (siehe
+        # ``_stakeholder_group_key``), gemeldet wird der Originalwortlaut —
+        # sonst zeigt die Meldung zwei scheinbar verschiedene Eintraege und
+        # behauptet gleichzeitig, es sei nur eine Gruppe.
+        groups = {_stakeholder_group_key(e.persona_stakeholder_group) for e in supporting}
         if len(groups) < 2:
+            raw_groups = sorted({e.persona_stakeholder_group or "" for e in supporting})
             raise ValueError(
                 f"Label '{self.confidence_label.value}' verlangt unterstützende "
                 f"agent_quote-Evidence (supports_claim=True) aus mindestens 2 "
-                f"unterschiedlichen Stakeholder-Gruppen. "
-                f"Gefunden: {sorted(groups) if groups else '∅'}."
+                f"unterschiedlichen Stakeholder-Gruppen. Verglichen wird ohne "
+                f"Gross-/Kleinschreibung und ohne Whitespace-Unterschiede. "
+                f"Gefunden: {raw_groups if raw_groups else '∅'}."
             )
         return self
 

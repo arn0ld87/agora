@@ -119,6 +119,41 @@ describe("ReportV3Schema (Zod-Spiegel)", () => {
     expect(ClaimSchema.safeParse(badClaim).success).toBe(false);
   });
 
+  // Issue #1160 A: confidence_scope trennt Simulationskonsens von
+  // Quellenbindung. Das Feld ist optional, weil report-v3.json aus der Zeit
+  // davor es nicht traegt — "nicht erfasst" darf nicht stillschweigend zu
+  // "simulation_consensus" werden.
+  it("akzeptiert einen Claim ohne confidence_scope (Bestandsartefakt)", () => {
+    const legacyClaim = {
+      id: "c1",
+      statement: "Dieser Claim ist ausreichend lang.",
+      evidence_refs: [EVIDENCE_ID],
+      confidence: "medium",
+      aggregation_basis: "persona",
+    };
+    const parsed = ClaimSchema.safeParse(legacyClaim);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.confidence_scope ?? null).toBe(null);
+    }
+  });
+
+  it("akzeptiert die drei Geltungsbereiche und weist andere ab", () => {
+    const base = {
+      id: "c1",
+      statement: "Dieser Claim ist ausreichend lang.",
+      evidence_refs: [EVIDENCE_ID],
+      confidence: "high",
+      aggregation_basis: "persona",
+    };
+    for (const scope of ["simulation_consensus", "evidence", "empirical"]) {
+      expect(ClaimSchema.safeParse({ ...base, confidence_scope: scope }).success).toBe(true);
+    }
+    expect(
+      ClaimSchema.safeParse({ ...base, confidence_scope: "gefuehlt" }).success,
+    ).toBe(false);
+  });
+
   it("rejects Claim with invalid confidence value", () => {
     const badClaim = {
       id: "c1",

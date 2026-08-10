@@ -76,13 +76,27 @@ def render_segment_table(segments: list[Segment]) -> str:
     )
 
 
+# Issue #1160 A: Der Geltungsbereich steht als Klartext neben dem Label.
+# "high" allein sagt nicht, ob dahinter Quellen oder uebereinstimmende
+# simulierte Agenten stehen — genau diese Verwechslung soll die Spalte
+# verhindern.
+_CONFIDENCE_SCOPE_LABELS = {
+    "simulation_consensus": "Simulationskonsens",
+    "evidence": "Quellenbindung",
+    "empirical": "Empirische Daten",
+}
+
+
 def render_claim_table(claims: list[Claim]) -> str:
     return _table(
-        ["ID", "Confidence", "Basis", "Statement", "Evidence"],
+        ["ID", "Confidence", "Geltungsbereich", "Basis", "Statement", "Evidence"],
         [
             [
                 claim.id,
                 claim.confidence,
+                # Bestands-Artefakte ohne das Feld: "-" statt einer Behauptung
+                # ueber einen Geltungsbereich, der nie erfasst wurde.
+                _CONFIDENCE_SCOPE_LABELS.get(claim.confidence_scope or "", "-"),
                 claim.aggregation_basis,
                 claim.statement,
                 _list_cell(claim.evidence_refs),

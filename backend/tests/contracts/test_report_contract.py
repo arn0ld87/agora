@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from app.contracts.report_contract import (
     ConfidenceLabel,
+    EntailmentVerdict,
     EvidenceItemModel,
     EvidenceMapModel,
     EvidenceSourceKind,
@@ -86,6 +87,11 @@ def _agent_quote_evidence(group: str, score: float = 0.88) -> EvidenceItemModel:
         snippet=f"Aussage aus {group}.",
         quote=f"Original-Zitat aus {group}.",
         match_score=score,
+        # Issue #1160 B: ``supports_claim`` ist laut Contract-Kommentar genau
+        # dann True, wenn das Entailment SUPPORTED lautet. Der Helfer hat das
+        # bisher behauptet, ohne das Urteil mitzuliefern — seit `verified` das
+        # Urteil verlangt, muss die Fixture den Vertrag vollstaendig erfuellen.
+        entailment=EntailmentVerdict.SUPPORTED,
         supports_claim=True,
         source_kind=EvidenceSourceKind.agent_quote,
         persona_stakeholder_group=group,

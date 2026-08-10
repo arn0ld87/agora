@@ -20,6 +20,7 @@ from app.contracts import (
     EvidenceType,
     ReportClaimModel,
 )
+from app.contracts.report_contract import EntailmentVerdict
 
 
 def _agent_quote(group: str, *, supports: bool = True, score: float = 0.7) -> EvidenceItemModel:
@@ -29,6 +30,11 @@ def _agent_quote(group: str, *, supports: bool = True, score: float = 0.7) -> Ev
         snippet=f"Persona aus {group}: Beispiel-Aussage.",
         quote=f"Original-Zitat aus {group}.",
         match_score=score,
+        # Issue #1160 B: ``supports_claim=True`` ohne Entailment-Urteil ist
+        # laut Contract-Kommentar kein gueltiger Zustand. Nur der stuetzende
+        # Fall bekommt das Urteil — bei ``supports=False`` bleibt es bewusst
+        # offen, damit die Widerspruchs-Tests unveraendert greifen.
+        entailment=EntailmentVerdict.SUPPORTED if supports else None,
         supports_claim=supports,
         source_kind=EvidenceSourceKind.agent_quote,
         persona_stakeholder_group=group,
