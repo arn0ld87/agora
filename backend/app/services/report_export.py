@@ -34,6 +34,50 @@ ZIP_HARD_CAP_BYTES: int = 500 * 1024 * 1024           # 500 MB
 CSV_TABLES = frozenset({"personas", "segments", "claims"})
 
 
+class EvidenceContractViolation(Exception):
+    """Die Evidence-Map dieses Reports ist auch nach der Migration vertragswidrig.
+
+    Issue #1160 G: Genutzt von Export-Formaten, die — anders als der
+    JSON-Envelope — keinen Platz fuer einen Auslassungshinweis haben. Ein CSV
+    hat keine Stelle, an der stehen koennte "hier fehlt etwas"; es wuerde wie
+    eine vollstaendige, geprueft Evidenzliste aussehen. Deshalb bricht der
+    CSV-Weg ab, statt eine stille Behauptung auszuliefern.
+    """
+
+    def __init__(self, omission: "EvidenceOmissionModel") -> None:
+        super().__init__(omission.detail)
+        self.omission = omission
+
+
+def build_evidence_omission(exc: ValidationError) -> "EvidenceOmissionModel":
+    """Baut die Auslassungsinformation aus einem Validierungsfehler.
+
+    Issue #1160 G: Bis hierher gab es diese Uebersetzung nur im JSON-Export.
+    ZIP und CSV validierten gar nicht, der Lese-Endpoint validierte ohne
+    ``try`` — drei Pfade, drei Verhaltensweisen bei derselben kaputten Map.
+    Die gemeinsame Funktion sorgt dafuer, dass ein Konsument in jedem Format
+    denselben ``reason`` und dieselbe Fehlerliste sieht.
+
+    ``reason`` ist der stabile Schluessel — die Oberflaeche uebersetzt daraus
+    per vue-i18n. ``detail`` ist kein UI-String, sondern die Erklaerung *in
+    der exportierten Datei*: wer sie spaeter ohne Agora oeffnet, soll lesen
+    koennen, warum der Evidence-Teil fehlt (Codex-Review zu PR #1042).
+    """
+    errors = exc.errors(include_url=False)[:5]
+    return EvidenceOmissionModel(
+        reason="contract_violation",
+        detail=(
+            "Die Evidence-Map dieses Reports verletzt auch nach der "
+            "Migration den Evidence-Vertrag und wurde deshalb nicht "
+            "exportiert. Der Report-Rumpf ist vollstaendig."
+        ),
+        validation_errors=[
+            f"{'.'.join(str(part) for part in err.get('loc', ()))}: {err.get('msg', '')}"
+            for err in errors
+        ],
+    )
+
+
 class ReportExportService:
     @staticmethod
     def map_outline_for_contract(outline: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
@@ -93,35 +137,17 @@ class ReportExportService:
             try:
                 evidence = EvidenceMapModel.model_validate(migrated)
             except ValidationError as exc:
-                errors = exc.errors(include_url=False)[:5]
                 logger.warning(
                     "Evidence map for report %s is not contract-compliant even "
                     "after migration; dropped from envelope. First errors: %s",
                     report_obj.report_id,
-                    errors[:3],
+                    exc.errors(include_url=False)[:3],
                 )
                 # Der Fallback bleibt — der Report-Rumpf ist unbeschaedigt und
                 # ein Export ohne Evidence ist besser als gar keiner. Er darf
                 # nur nicht laenger stumm sein: bis #987 war ein entleerter
                 # Envelope von einem Report ohne Evidence nicht zu unterscheiden.
-                #
-                # `reason` ist der stabile Schluessel — die Oberflaeche
-                # uebersetzt daraus per vue-i18n. `detail` ist kein UI-String,
-                # sondern die Erklaerung *in der exportierten Datei*: wer sie
-                # spaeter ohne Agora oeffnet, soll lesen koennen, warum der
-                # Evidence-Teil fehlt (Codex-Review zu PR #1042).
-                omission = EvidenceOmissionModel(
-                    reason="contract_violation",
-                    detail=(
-                        "Die Evidence-Map dieses Reports verletzt auch nach der "
-                        "Migration den Evidence-Vertrag und wurde deshalb nicht "
-                        "exportiert. Der Report-Rumpf ist vollstaendig."
-                    ),
-                    validation_errors=[
-                        f"{'.'.join(str(part) for part in err.get('loc', ()))}: {err.get('msg', '')}"
-                        for err in errors
-                    ],
-                )
+                omission = build_evidence_omission(exc)
 
         return ReportContractModel(
             schema_version=EXPORT_CONTRACT_SCHEMA_VERSION,
@@ -152,8 +178,49 @@ class ReportExportService:
         return normalize_persisted_evidence_map(raw) or {}
 
     @staticmethod
+    def _validated_evidence_map(
+        report_id: str,
+    ) -> tuple[dict[str, Any], Optional["EvidenceOmissionModel"]]:
+        """Normalisierte Evidence-Map plus Urteil, ob sie den Vertrag erfuellt.
+
+        Issue #1160 G: ``_normalized_evidence_map`` migriert, validiert aber
+        nie. Wer den Report als ZIP oder CSV zog, bekam eine Datei, die
+        aussieht wie geprueft Evidenz, ohne dass die Pruefung je stattgefunden
+        haette — kein Hinweis, kein ``evidence_omitted``. Das ist kein stiller
+        Verlust wie in #987, sondern eine stille Behauptung, und damit der
+        gravierendere Fall.
+
+        Die Migration bleibt vorgeschaltet: erst normalisieren, dann
+        validieren — dieselbe Reihenfolge wie im JSON-Export. Sonst wuerde
+        Bestand abgelehnt, den die Migrationskette auffangen kann.
+
+        Gibt bei einer leeren oder fehlenden Map ``({}, None)`` zurueck: kein
+        Artefakt ist kein Vertragsbruch.
+        """
+        evidence_map = ReportExportService._normalized_evidence_map(report_id)
+        if not evidence_map:
+            return {}, None
+        try:
+            EvidenceMapModel.model_validate(evidence_map)
+        except ValidationError as exc:
+            logger.warning(
+                "Evidence map for report %s is not contract-compliant even "
+                "after migration; withheld from export. First errors: %s",
+                report_id,
+                exc.errors(include_url=False)[:3],
+            )
+            return evidence_map, build_evidence_omission(exc)
+        return evidence_map, None
+
+    @staticmethod
     def build_csv_export(report_id: str, table: str) -> str:
-        """Lädt die passende Datenquelle und gibt RFC-4180-CSV zurück."""
+        """Lädt die passende Datenquelle und gibt RFC-4180-CSV zurück.
+
+        Wirft ``EvidenceContractViolation``, wenn die Claims-Tabelle aus einer
+        vertragswidrigen Evidence-Map stammen wuerde (#1160 G). Ein CSV kann
+        keinen Auslassungshinweis tragen — die Alternative waere eine Datei,
+        die wie geprueft Evidenz aussieht.
+        """
         if table in ("personas", "segments"):
             report_v3 = ReportManager.get_report_v3(report_id) or {}
             if table == "personas":
@@ -161,7 +228,9 @@ class ReportExportService:
             return segments_to_csv(report_v3.get("segments") or [])
 
         # table == "claims"
-        evidence_map = ReportExportService._normalized_evidence_map(report_id)
+        evidence_map, omission = ReportExportService._validated_evidence_map(report_id)
+        if omission is not None:
+            raise EvidenceContractViolation(omission)
         return claims_to_csv(evidence_map.get("sections") or [])
 
     @staticmethod
@@ -194,6 +263,38 @@ class ReportExportService:
             logger.debug("budget/usage zip enrichment skipped", exc_info=True)
 
     @staticmethod
+    def _write_evidence_artifacts(
+        zf: zipfile.ZipFile,
+        prefix: str,
+        evidence_map: dict[str, Any],
+        omission: Optional["EvidenceOmissionModel"],
+    ) -> None:
+        """Legt Evidence-Map und Claims-CSV ins ZIP — oder den Auslassungshinweis.
+
+        Issue #1160 G: Bei einer vertragswidrigen Map wandern weder
+        ``evidence-map.json`` noch ``claims.csv`` ins Archiv. Beide stammen aus
+        derselben Quelle; eine der beiden auszuliefern wuerde genau die stille
+        Behauptung erhalten, um die es hier geht. An ihre Stelle tritt
+        ``evidence-omitted.json`` mit demselben ``reason`` und derselben
+        Fehlerliste, die der JSON-Envelope in ``evidence_omitted`` fuehrt — wer
+        das Archiv spaeter ohne Agora oeffnet, findet die Begruendung darin.
+        """
+        if omission is not None:
+            zf.writestr(
+                f"{prefix}/evidence-omitted.json",
+                omission.model_dump_json(indent=2),
+            )
+            return
+        zf.writestr(
+            f"{prefix}/evidence-map.json",
+            json.dumps(evidence_map, ensure_ascii=False, indent=2),
+        )
+        zf.writestr(
+            f"{prefix}/claims.csv",
+            claims_to_csv(evidence_map.get("sections") or []),
+        )
+
+    @staticmethod
     def build_zip_bundle(report_id: str, report: Any) -> bytes:
         """Baut ein ZIP-Archiv mit allen Report-Artefakten im Speicher."""
         prefix = f"agora-report-{report_id}"
@@ -214,13 +315,13 @@ class ReportExportService:
             # Migrationskette wie der JSON-Export (siehe
             # ``_normalized_evidence_map``), damit ``evidence-map.json`` im
             # ZIP nicht mehr von den anderen Export-Formaten abweicht.
-            evidence_map = ReportExportService._normalized_evidence_map(report_id)
-            zf.writestr(
-                f"{prefix}/evidence-map.json",
-                json.dumps(evidence_map, ensure_ascii=False, indent=2),
-            )
-
+            # Issue #1160 G: zusaetzlich validiert — vertragswidrige Evidenz
+            # verlaesst das System nicht mehr als scheinbar geprueft Datei.
+            evidence_map, omission = ReportExportService._validated_evidence_map(report_id)
             report_v3 = ReportManager.get_report_v3(report_id) or {}
+            ReportExportService._write_evidence_artifacts(
+                zf, prefix, evidence_map, omission
+            )
             zf.writestr(
                 f"{prefix}/personas.csv",
                 personas_to_csv(report_v3.get("personas") or []),
@@ -228,10 +329,6 @@ class ReportExportService:
             zf.writestr(
                 f"{prefix}/segments.csv",
                 segments_to_csv(report_v3.get("segments") or []),
-            )
-            zf.writestr(
-                f"{prefix}/claims.csv",
-                claims_to_csv(evidence_map.get("sections") or []),
             )
 
             ReportExportService._add_budget_usage_to_zip(zf, prefix, report_id)
@@ -288,16 +385,16 @@ class ReportExportService:
 
                 # Issue #1036: normalisierte Sicht, analog zu
                 # ``build_zip_bundle`` — siehe ``_normalized_evidence_map``.
-                evidence_map = ReportExportService._normalized_evidence_map(report_id)
-                zf.writestr(
-                    f"{prefix}/evidence-map.json",
-                    json.dumps(evidence_map, ensure_ascii=False, indent=2),
-                )
-
+                # Issue #1160 G: dieselbe Validierung wie dort, ueber dieselbe
+                # Schreibroutine — sonst hinge das Verhalten wieder daran, ob
+                # ein Report gross genug fuer den Streaming-Pfad ist.
+                evidence_map, omission = ReportExportService._validated_evidence_map(report_id)
                 report_v3 = ReportManager.get_report_v3(report_id) or {}
+                ReportExportService._write_evidence_artifacts(
+                    zf, prefix, evidence_map, omission
+                )
                 zf.writestr(f"{prefix}/personas.csv", personas_to_csv(report_v3.get("personas") or []))
                 zf.writestr(f"{prefix}/segments.csv", segments_to_csv(report_v3.get("segments") or []))
-                zf.writestr(f"{prefix}/claims.csv", claims_to_csv(evidence_map.get("sections") or []))
 
                 ReportExportService._add_budget_usage_to_zip(zf, prefix, report_id)
 

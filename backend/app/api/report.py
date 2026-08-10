@@ -6,6 +6,7 @@ Provides interfaces for simulation report generation, retrieval, and conversatio
 import os
 
 from flask import Response, request, send_file, current_app
+from pydantic import ValidationError
 
 from . import report_bp
 from ..contracts import (
@@ -34,10 +35,12 @@ from ..utils.rate_limit import build_rate_limit_key, report_rate_limiter
 from ..services.report_generation import ReportGenerationService
 from ..services.report_status import ReportStatusService
 from ..services.report_export import (
+    EvidenceContractViolation,
     ReportExportService,
     ZIP_STREAM_THRESHOLD_BYTES,
     ZIP_HARD_CAP_BYTES,
-    CSV_TABLES
+    CSV_TABLES,
+    build_evidence_omission,
 )
 
 logger = get_logger(__name__)
@@ -276,7 +279,28 @@ def get_report_evidence(report_id: str):
     # als data_gap; claim_id, confidence und audit_trail hat
     # ReportSectionDataGapModel nicht.
     migrated = normalize_persisted_evidence_map(evidence_map)
-    return json_success(EvidenceMapModel.model_validate(migrated).model_dump(mode="json"))
+    try:
+        validated = EvidenceMapModel.model_validate(migrated)
+    except ValidationError as exc:
+        # Issue #1160 G: Vorher lief diese Validierung ohne ``try`` — eine
+        # vertragswidrige Map wurde zum 500er, und der Aufrufer konnte nicht
+        # unterscheiden, ob Agora kaputt ist oder die Daten. Der JSON-Export
+        # meldet denselben Fall seit #987 strukturiert; dieser Endpoint tut es
+        # jetzt auch, mit demselben ``reason``-Schluessel.
+        omission = build_evidence_omission(exc)
+        logger.warning(
+            "Evidence map for report %s is not contract-compliant even after "
+            "migration; refused with 422. First errors: %s",
+            report_id,
+            omission.validation_errors[:3],
+        )
+        return json_error(
+            omission.detail,
+            status=422,
+            code=omission.reason,
+            extra={"evidence_omitted": omission.model_dump(mode="json")},
+        )
+    return json_success(validated.model_dump(mode="json"))
 
 
 @report_bp.route('/<report_id>/evidence/<int:section_index>', methods=['GET'])
@@ -357,7 +381,19 @@ def export_report(report_id: str):
         if not report:
             return json_error(f"Report does not exist: {report_id}", status=404)
 
-        csv_body = _build_csv_export(report_id, table)
+        try:
+            csv_body = _build_csv_export(report_id, table)
+        except EvidenceContractViolation as exc:
+            # Issue #1160 G: Ein CSV hat keine Stelle fuer einen
+            # Auslassungshinweis — die Datei saehe aus wie eine vollstaendige,
+            # geprueft Evidenzliste. Also lieber keine Datei plus Begruendung
+            # als eine stille Behauptung.
+            return json_error(
+                exc.omission.detail,
+                status=422,
+                code=exc.omission.reason,
+                extra={"evidence_omitted": exc.omission.model_dump(mode="json")},
+            )
         filename = f"agora-report-{report_id}-{table}.csv"
         response = Response(csv_body, mimetype="text/csv; charset=utf-8")
         response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
