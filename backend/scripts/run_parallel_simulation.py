@@ -101,6 +101,7 @@ try:
         preflight_model_probe,
         resolve_camel_ollama_url,
         resolve_runtime_paths,
+        seed_simulation_rng,
     )
 except ImportError:  # direct script execution
     from _sim_common import (
@@ -122,6 +123,7 @@ except ImportError:  # direct script execution
         preflight_model_probe,
         resolve_camel_ollama_url,
         resolve_runtime_paths,
+        seed_simulation_rng,
     )
 
 _runtime_paths = resolve_runtime_paths(__file__)
@@ -2066,6 +2068,13 @@ async def main():
     
     config = load_config(args.config)
     simulation_dir = os.path.dirname(args.config) or "."
+    # Issue #1160 F: Der Seed steht vor jeder Zufallsentscheidung des Laufs —
+    # ``get_active_agents_for_round`` wuerfelt sonst aus dem globalen,
+    # ungeseedeten Zustand, und zwei Laeufe derselben Konfiguration waeren
+    # nicht vergleichbar.
+    simulation_seed = seed_simulation_rng(
+        config, fallback=os.path.basename(simulation_dir.rstrip("/"))
+    )
     wait_for_commands = not args.no_wait
     
     # Initialize logging configuration (disable OASIS logs, clean up old files)
@@ -2080,6 +2089,9 @@ async def main():
     log_manager.info("OASIS dual-platform parallel simulation")
     log_manager.info(f"Configuration file: {args.config}")
     log_manager.info(f"Simulation ID: {config.get('simulation_id', 'unknown')}")
+    # Protokolliert, damit ein Lauf gezielt wiederholbar ist: der Wert gehoert
+    # als ``random_seed`` in die simulation_config.json des Re-Runs (#1160 F).
+    log_manager.info(f"Random seed: {simulation_seed}")
     log_manager.info(f"Wait mode: {'Enabled' if wait_for_commands else 'Disabled'}")
     log_manager.info("=" * 60)
     

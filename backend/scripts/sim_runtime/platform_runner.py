@@ -39,6 +39,7 @@ try:
         compute_start_hour_offset,
         detect_oasis_platform,
         preflight_model_probe,
+        seed_simulation_rng,
     )
 except ImportError:  # direct script execution
     from _sim_common import (
@@ -46,6 +47,7 @@ except ImportError:  # direct script execution
         compute_start_hour_offset,
         detect_oasis_platform,
         preflight_model_probe,
+        seed_simulation_rng,
     )
 
 # IPC layer (CommandType, constants, IPCHandler) — zentral in sim_runtime.ipc.
@@ -130,6 +132,15 @@ class SinglePlatformRunner:
         self.config_path = config_path
         self.config = self._load_config()
         self.simulation_dir = os.path.dirname(config_path)
+        # Issue #1160 F: Vor der ersten Zufallsentscheidung seeden — die faellt
+        # in ``get_active_agents_for_round``, also lange nach ``__init__``, aber
+        # OASIS und CAMEL greifen ihrerseits frueher auf ``random`` zu. Der
+        # Fallback auf den Verzeichnisnamen deckt Bestands-Konfigurationen ohne
+        # ``simulation_id`` ab; ohne ihn haetten die einen konstanten Seed und
+        # waeren untereinander nicht mehr unterscheidbar.
+        self.random_seed = seed_simulation_rng(
+            self.config, fallback=os.path.basename(self.simulation_dir.rstrip("/"))
+        )
         self.wait_for_commands = wait_for_commands
         self.env = None
         self.agent_graph = None
