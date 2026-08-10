@@ -157,4 +157,6 @@ Aktuelle Hardstops:
 1. Hartes Run-Budget im Report-Pfad reparieren — greift derzeit nicht ([#978](https://github.com/arn0ld87/agora/issues/978), Kostenkontrolle).
 2. Reproduzierbarkeit, ehrliche Hardware-Tiers (Benchmarks statt Schätzwerte) und Kalibrierungsbaseline für `0.10.0` umsetzen. Die Kosten- und Ressourcenbudgets selbst stehen via [#764](https://github.com/arn0ld87/agora/issues/764) — siehe ROADMAP „Kosten und Ressourcen“.
 
+Teilstand Reproduzierbarkeit ([#1160](https://github.com/arn0ld87/agora/issues/1160) F): der **stochastische Anteil** eines Simulationslaufs ist seit dem 10.08.2026 wiederholbar — `_sim_common.seed_simulation_rng` seedt den globalen RNG des Subprozesses aus `simulation_config.json::random_seed` oder deterministisch (SHA-256) aus der `simulation_id`; der verwendete Seed steht im Simulationslog. **Nicht** reproduzierbar ist der Report: die LLM-Antworten bleiben nichtdeterministisch. Same-Seed-Same-Report braucht zusätzlich eine Aufzeichnung der Modellantworten ([#763](https://github.com/arn0ld87/agora/issues/763)). Die Profilerzeugung (`oasis_profile_generator.py`) ist bewusst nicht geseedet — Profile werden einmal erzeugt und persistiert, ein Re-Run liest dieselben Dateien.
+
 Die vollständigen Release-Gates stehen in [`ROADMAP.md`](../ROADMAP.md).

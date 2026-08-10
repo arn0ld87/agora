@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 import os
+import random
 import re
 import sys
 import threading
@@ -19,6 +21,70 @@ if TYPE_CHECKING:
 from dotenv import load_dotenv
 from opentelemetry import context as otel_context
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
+
+
+# ---------------------------------------------------------------------------
+# Issue #1160 F — reproduzierbare Zufallsentscheidungen im Simulationslauf
+# ---------------------------------------------------------------------------
+
+SIMULATION_SEED_CONFIG_KEY = "random_seed"
+"""Feld in ``simulation_config.json``, mit dem ein Seed vorgegeben wird."""
+
+_SEED_MODULUS = 2**32
+"""Obergrenze des abgeleiteten Seeds — ``random.seed`` nimmt beliebige ints,
+aber ein begrenzter Wertebereich bleibt les- und protokollierbar."""
+
+
+def derive_simulation_seed(config: dict[str, Any], *, fallback: str = "") -> int:
+    """Bestimmt den Seed eines Laufs — vorgegeben oder aus der Lauf-ID abgeleitet.
+
+    Issue #1160 F: Der Simulationslauf traf seine Zufallsentscheidungen
+    (welche Agenten in einer Runde aktiv werden, wie viele es sind) aus dem
+    globalen, ungeseedeten ``random``-Zustand. Zwei Laeufe derselben
+    Konfiguration waren damit nicht vergleichbar — und ohne Vergleichbarkeit
+    ist jeder Re-Run und jede Baseline-Messung methodisch angreifbar.
+
+    Reihenfolge:
+
+    1. ``config["random_seed"]``, wenn gesetzt und als ganze Zahl lesbar —
+       der Weg, um einen Lauf gezielt zu wiederholen.
+    2. sonst deterministisch aus ``config["simulation_id"]`` (ersatzweise
+       ``fallback``): derselbe Lauf ergibt beim Neustart denselben Seed,
+       verschiedene Laeufe verschiedene.
+
+    Abgeleitet wird ueber SHA-256, **nicht** ueber ``hash()``: Pythons
+    String-Hash ist pro Prozess zufaellig gesalzen (``PYTHONHASHSEED``), ein
+    darauf gebauter Seed waere also genau das Gegenteil von reproduzierbar.
+    """
+    raw = config.get(SIMULATION_SEED_CONFIG_KEY)
+    if raw is not None and not isinstance(raw, bool):
+        try:
+            return int(raw) % _SEED_MODULUS
+        except (TypeError, ValueError):
+            pass
+
+    identity = str(config.get("simulation_id") or fallback or "agora-simulation")
+    digest = hashlib.sha256(identity.encode("utf-8")).digest()
+    return int.from_bytes(digest[:4], "big")
+
+
+def seed_simulation_rng(config: dict[str, Any], *, fallback: str = "") -> int:
+    """Seedet den globalen ``random``-Zustand des Subprozesses und gibt den Seed zurueck.
+
+    Bewusst der **globale** Zustand und keine eigene ``random.Random``-Instanz:
+    die Zufallsentscheidungen stecken nicht nur in Agora-Code, sondern auch in
+    OASIS und CAMEL. Eine eigene Instanz haette nur die Aufrufstellen erfasst,
+    die wir kennen, und den Rest weiter unkontrolliert gelassen.
+
+    Grenze, die dieser Aufruf **nicht** aufhebt: die Antworten der Sprachmodelle
+    bleiben nichtdeterministisch. Reproduzierbar wird damit der stochastische
+    Anteil des Laufs (Agentenauswahl, Aktivitaetswuerfe), nicht der Report.
+    Wer identische Berichte braucht, braucht zusaetzlich die Aufzeichnung der
+    LLM-Antworten — eigener Slice (#763).
+    """
+    seed = derive_simulation_seed(config, fallback=fallback)
+    random.seed(seed)
+    return seed
 
 
 def detect_oasis_platform(model: str, base_url: str) -> ModelPlatformType:
