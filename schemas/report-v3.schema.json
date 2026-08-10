@@ -154,6 +154,25 @@
           "minLength": 8,
           "title": "Statement",
           "type": "string"
+        },
+        "text_confidence": {
+          "anyOf": [
+            {
+              "enum": [
+                "speculative",
+                "low",
+                "medium",
+                "high",
+                "verified"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Text Confidence"
         }
       },
       "required": [

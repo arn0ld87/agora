@@ -95,6 +95,11 @@ class Claim(BaseModel):
     # ``empirical`` wird nie automatisch vergeben: Agora erhebt keine realen
     # empirischen Daten. Der Wert bleibt fuer manuell kuratierte Reports.
     confidence_scope: Literal["simulation_consensus", "evidence", "empirical"] | None = None
+    # Issue #1012: Stufe, unter der der ``statement``-Wortlaut entstanden
+    # ist. Gesetzt nur, wenn der Claim nachtraeglich abgestuft wurde —
+    # dann deckt seine Formulierung eine hoehere Sicherheit ab, als das
+    # Label ausweist. ``None`` heisst "nicht abgestuft", nicht "unbekannt".
+    text_confidence: Literal["speculative", "low", "medium", "high", "verified"] | None = None
 
 
 class Multiplier(BaseModel):

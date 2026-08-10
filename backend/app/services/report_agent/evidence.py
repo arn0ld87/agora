@@ -265,6 +265,71 @@ def has_agent_grounded_evidence(
     return has_agent_quote and has_seed_corpus
 
 
+TEXT_CONFIDENCE_DOWNGRADE_EVENT = "text_confidence_downgraded"
+"""``audit_trail``-Ereignis: der Wortlaut stammt aus einer hoeheren Stufe."""
+
+
+def _record_text_confidence_downgrade(
+    claim: Dict[str, Any], *, from_label: str, to_label: str
+) -> None:
+    """Haelt fest, unter welchem Label der ``claim_text`` entstanden ist (#1012).
+
+    Wird ein Claim nachtraeglich abgestuft, aendert sich nur das Label. Der
+    ``claim_text`` — und der bereits gerenderte Abschnittstext — behalten ihre
+    Formulierung, oft eine deklarative ohne Hedge, weil das Modell sie unter
+    ``high`` geschrieben hat. Der Report besteht die Validierung, transportiert
+    im Fliesstext aber weiter eine Behauptung in einer Sicherheit, die das
+    Label nicht mehr deckt.
+
+    Statt den generierten Text zu bearbeiten (mit den Folgefragen Sprache,
+    Doppel-Hedging und Idempotenz bei mehrfachem Downgrade) wird die Abstufung
+    ausgewiesen — dieselbe Linie wie #1160 A/B/E: Agora aendert nicht, was das
+    Modell geschrieben hat, sondern sagt dem Leser, was er vor sich hat.
+
+    Der erste Eintrag gewinnt: bei einem zweiten Downgrade bleibt die
+    *urspruengliche* Stufe stehen, unter der der Wortlaut tatsaechlich
+    entstanden ist. Ein spaeteres ``medium`` waere bereits abgestuft und
+    damit die falsche Referenz.
+    """
+    trail = claim.get("audit_trail")
+    if not isinstance(trail, list):
+        trail = []
+    if any(
+        isinstance(entry, dict)
+        and entry.get("event") == TEXT_CONFIDENCE_DOWNGRADE_EVENT
+        for entry in trail
+    ):
+        return
+    claim["audit_trail"] = [
+        *trail,
+        {
+            "event": TEXT_CONFIDENCE_DOWNGRADE_EVENT,
+            "text_confidence_label": from_label,
+            "to": to_label,
+            "issue": "1012",
+        },
+    ]
+
+
+def text_confidence_label_of(claim: Dict[str, Any]) -> str | None:
+    """Die Stufe, unter der der Wortlaut entstand — oder ``None``.
+
+    ``None`` heisst: nicht abgestuft, der Wortlaut passt zum Label. Das ist
+    der Normalfall und darf nicht mit "unbekannt" verwechselt werden.
+    """
+    trail = claim.get("audit_trail")
+    if not isinstance(trail, list):
+        return None
+    for entry in trail:
+        if (
+            isinstance(entry, dict)
+            and entry.get("event") == TEXT_CONFIDENCE_DOWNGRADE_EVENT
+        ):
+            label = entry.get("text_confidence_label")
+            return str(label) if label else None
+    return None
+
+
 def auto_downgrade_unsupported_high_claims(
     claims: List[Dict[str, Any]],
     *,
@@ -306,6 +371,7 @@ def auto_downgrade_unsupported_high_claims(
                         target == "medium",
                     )
                 item["confidence_label"] = target
+                _record_text_confidence_downgrade(item, from_label=label, to_label=target)
         downgraded.append(item)
     return downgraded
 
@@ -642,6 +708,13 @@ def degrade_sections_for_violations(
                             break
                         processed_claims.add((fallback_si, fallback_ci))
                         if claim.get("evidence"):
+                            # Issue #1012: auch dieser Pfad haelt fest, unter
+                            # welcher Stufe der Wortlaut entstanden ist.
+                            _record_text_confidence_downgrade(
+                                claim,
+                                from_label=str(claim.get("confidence_label") or ""),
+                                to_label="low",
+                            )
                             claim["confidence_label"] = "low"
                             _log_violation({
                                 "section_index": fallback_section.get("section_index", 0),
@@ -677,6 +750,14 @@ def degrade_sections_for_violations(
             evidence = claim.get("evidence") or []
 
             if evidence:
+                # Issue #1012: siehe oben — beide Abstufungspfade werden
+                # gleich behandelt, sonst haengt die Sichtbarkeit davon ab,
+                # welcher Validator zuerst anschlaegt.
+                _record_text_confidence_downgrade(
+                    claim,
+                    from_label=str(claim.get("confidence_label") or ""),
+                    to_label="low",
+                )
                 claim["confidence_label"] = "low"
                 _log_violation({
                     "section_index": section_index_value,
