@@ -56,7 +56,9 @@ class _FakeAgentForDegradation:
         self._pending_prose_hypotheses: dict = {}
         self._pending_section_metadata: dict = {}
         self._collect_simulation_evidence_items = lambda: []
-        self._build_claims_for_section = lambda content: []
+        # Issue #1187: die echte Signatur nimmt einen optionalen
+        # ``heartbeat``-Callback entgegen; der Fake spiegelt sie.
+        self._build_claims_for_section = lambda content, heartbeat=None: []
         self._finalize_section_claims = lambda raw: (
             claims,
             hypotheses or [],

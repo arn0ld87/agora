@@ -1,4 +1,5 @@
 import re
+from contextlib import nullcontext
 from copy import deepcopy
 from typing import Any, Callable, Dict, List, Optional
 
@@ -21,6 +22,7 @@ from .evidence import (
 )
 from .manager import ReportManager
 from .planning import plan_outline as plan_outline_impl
+from .postprocess_timing import PostprocessPhaseTracker
 from .schemas import CURRENT_SCHEMA_VERSION, EvidenceMapModel, normalize_persisted_evidence_map
 from .sections import (
     attach_provenance,
@@ -555,7 +557,11 @@ class ReportAgent:
     def _attach_provenance(item: Dict[str, Any]) -> Dict[str, Any]:
         return attach_provenance(item)
 
-    def _build_claims_for_section(self, content: str) -> List[Dict[str, Any]]:
+    def _build_claims_for_section(
+        self,
+        content: str,
+        heartbeat: Optional[Callable[[str], None]] = None,
+    ) -> List[Dict[str, Any]]:
         raw_chunks = [part.strip() for part in re.split(r"\n\s*\n", (content or "").strip()) if part.strip()]
         # S3a: Strukturmarkup (Header, Bold-Section-Titel) verwerfen.
         chunks = [c for c in raw_chunks if self._is_claim_candidate(c)]
@@ -581,6 +587,13 @@ class ReportAgent:
         # `audit_trail`-Feld der Claim-Dataclass, nicht ins `evidence`-Array.
         embedder = self._try_get_embedder()
         for index, chunk in enumerate(chunks, 1):
+            # Issue #1187: dies ist die im gemessenen Lauf bestaetigte
+            # lange Nachbearbeitungsschleife (Claim-Extraktion +
+            # Evidence-Binding, 178-347s ohne jedes Signal). Ein
+            # zeitgesteuerter Heartbeat haelt progress.json waehrend der
+            # Schleife in Bewegung, ohne bei jedem Claim zu schreiben.
+            if heartbeat is not None:
+                heartbeat(f"Claim {index}/{len(chunks)}")
             direct_items = [
                 deepcopy(item) for item in self._active_section_evidence[:10]
                 if item.get("type") not in FORBIDDEN_EVIDENCE_TYPES
@@ -999,6 +1012,30 @@ class ReportAgent:
     def _save_evidence_section(self, report_id: str, section_index: int, section_title: str, content: str) -> None:
         from .output_contract import is_fallback_content  # noqa: PLC0415
 
+        # Issue #1187: macht die bislang unsichtbare Nachbearbeitung
+        # (Claim-Extraktion, Evidence-Binding, Persistenz der Evidenzkarte)
+        # sichtbar und messbar — ohne ihr Verhalten zu aendern.
+        #
+        # Nur aktiv, wenn ein echter ``report_logger`` gesetzt ist (wie beim
+        # bestehenden ``if agent.report_logger:``-Muster in workflow.py) —
+        # das ist ausserhalb eines echten ``generate_report``-Laufs nicht der
+        # Fall (u. a. viele Unit-Tests bauen ``ReportAgent.__new__`` ohne
+        # ``report_logger``) und verhindert dort ungewollte
+        # progress.json-Schreibzugriffe auf das reale ``ReportManager``.
+        report_logger = getattr(self, "report_logger", None)
+        phase_tracker: Optional[PostprocessPhaseTracker] = None
+        if report_logger is not None:
+            phase_tracker = PostprocessPhaseTracker(
+                report_id,
+                section_index=section_index,
+                section_title=section_title,
+                report_logger=report_logger,
+                report_manager=ReportManager,
+            )
+
+        def _phase(name: str):
+            return phase_tracker.phase(name) if phase_tracker is not None else nullcontext()
+
         id_remap: Dict[str, str] = {}
         if self.evidence_map is None:
             self._init_evidence_map(report_id)
@@ -1043,9 +1080,15 @@ class ReportAgent:
                 "claim_text": section_title,
             }]
         else:
-            claims, raw_hypotheses, data_gaps, gate_decisions = self._finalize_section_claims(
-                self._build_claims_for_section(content)
-            )
+            heartbeat_cb = phase_tracker.heartbeat if phase_tracker is not None else None
+            with _phase("claim_extraction_and_evidence_binding"):
+                extracted_claims = self._build_claims_for_section(
+                    content, heartbeat=heartbeat_cb
+                )
+            with _phase("claim_finalization"):
+                claims, raw_hypotheses, data_gaps, gate_decisions = self._finalize_section_claims(
+                    extracted_claims
+                )
             # Issue #1154: letzte Station vor der Validierung. Der Nachzug auf
             # den Abschnittspuffern deckt den Regelfall ab; hier landen alle
             # Claims, gleich woher sie stammen. Eine Bindung auf einen
@@ -1103,6 +1146,12 @@ class ReportAgent:
             ).get(section_index, {}),
             "generation_failed": generation_failed,
         }
+        # Issue #1187: Persistenz-Phase startet hier explizit statt per
+        # ``with``, damit der weit verschachtelte Validierungs-/Reparatur-
+        # block unten unveraendert bleibt (keine Re-Indentation der
+        # ADR-0002-Degradationslogik).
+        if phase_tracker is not None:
+            phase_tracker.start_phase("evidence_map_persistence")
         # schema_version auf Section-Ebene entfernen — Überbleibsel von
         # migrate_v1_to_v2 oder alten Persistierungen; ReportSectionModel
         # erlaubt das Feld nicht (extra="forbid").
@@ -1203,7 +1252,9 @@ class ReportAgent:
                 validated = EvidenceMapModel.model_validate(self.evidence_map).model_dump(mode="json")
         self.evidence_map = validated
         ReportManager.save_evidence_map(report_id, validated)
-    
+        if phase_tracker is not None:
+            phase_tracker.end_phase()
+
     def _define_tools(self) -> Dict[str, Dict[str, Any]]:
         return define_tools(self)
 
