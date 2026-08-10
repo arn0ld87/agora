@@ -175,6 +175,15 @@ class LegacyStageRouteOptions(TypedDict, closed=True):  # type: ignore[call-arg]
     # zuruecknehmen. NotRequired, damit Bestands-Options ohne den Schluessel
     # weiterhin validieren.
     ai_model_ref_source: NotRequired[AiModelRefSource | None]
+    # Issue #992: analog zu ai_model_ref_source. resolve_ai_route loescht das
+    # oberste AiRoute.fallback_reason fuer jeden Slot ausser
+    # provider_fallback -- eine AiModelRef mit source="fallback" landet aber
+    # im Stage-/Run-Slot, nicht im provider_fallback-Slot. Ohne diesen
+    # zweiten Kanal wuerde ihr Grund verworfen, bevor
+    # AiRouteAudit.record_routing_resolved ihn schreiben koennte.
+    # NotRequired, damit Bestands-Options ohne den Schluessel weiterhin
+    # validieren.
+    fallback_reason: NotRequired[str | None]
 
 
 class AiProviderOptions(TypedDict, total=False, closed=True):  # type: ignore[call-arg]  # mypy lacks PEP 728
@@ -554,6 +563,7 @@ def ai_route_from_stage_route(route: StageLLMRoute) -> AiRoute:
         "had_reserved_value": had_reserved_value,
         "reserved_value": previous_reserved_value,
         "ai_model_ref_source": route.ai_model_ref_source,
+        "fallback_reason": route.fallback_reason,
     }
     raw_options[_LEGACY_ROUTE_OPTIONS_KEY] = legacy_options
     options = _AI_PROVIDER_OPTIONS_ADAPTER.validate_python(raw_options)
@@ -587,7 +597,18 @@ def stage_route_from_ai_route(route: AiRoute) -> StageLLMRoute:
         ai_model_ref_source=(
             legacy.get("ai_model_ref_source") if legacy is not None else None
         ),
-        fallback_reason=route.fallback_reason,
+        # Issue #992: bevorzugt aus dem Legacy-Kanal zurueckholen --
+        # resolve_ai_route loescht das oberste AiRoute.fallback_reason fuer
+        # jeden Slot ausser provider_fallback. Das oberste Feld bleibt der
+        # Rueckfall und darf nicht uebersprungen werden: der
+        # provider_fallback-Slot durchlaeuft ai_route_from_stage_route nicht
+        # (er wird direkt synthetisiert) und traegt deshalb keinen
+        # Legacy-Kanal, und Snapshots von vor #992 haben einen Legacy-Kanal
+        # ohne diesen Schluessel.
+        fallback_reason=(
+            (legacy.get("fallback_reason") if legacy is not None else None)
+            or route.fallback_reason
+        ),
         provider_options=options,
     )
 

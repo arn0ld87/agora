@@ -59,6 +59,17 @@
           ],
           "title": "Ai Model Ref Source"
         },
+        "fallback_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Fallback Reason"
+        },
         "had_reserved_value": {
           "title": "Had Reserved Value",
           "type": "boolean"

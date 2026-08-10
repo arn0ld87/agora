@@ -225,6 +225,12 @@ export const LegacyStageRouteOptionsSchema = z.object({
   // Auslieferung entfernt. Der Spiegel steht trotzdem korrekt: er ist die
   // Aussage über den Vertrag, nicht über den aktuellen Serialisierungspfad.
   ai_model_ref_source: AiModelSourceSchema.nullable().optional(),
+  // Issue #992: spiegelt `fallback_reason: NotRequired[str | None]` aus
+  // `LegacyStageRouteOptions` (ai_provider_contract.py). Analog zu
+  // `ai_model_ref_source` reist der Grund hier mit, weil `resolve_ai_route`
+  // das oberste `AiRoute.fallback_reason` fuer jeden Slot ausser
+  // `provider_fallback` loescht.
+  fallback_reason: z.string().nullable().optional(),
 }).strict()
 
 export const AiProviderOptionsSchema = z.object({
