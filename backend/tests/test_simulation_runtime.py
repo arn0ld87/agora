@@ -1,6 +1,9 @@
+import ast
 import importlib.util
 import sys
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -439,6 +442,15 @@ def test_create_manual_action_rejects_actions_not_in_available_actions():
 
 
 def test_build_agent_prompt_with_tools_binds_conflict_rule_to_available_actions():
+    """ACHTUNG (#1215): prueft den Prompt-Text, nicht den Produktivpfad.
+
+    ``build_agent_prompt_with_tools`` wird im Lauf ueber
+    ``ToolAwareActionLoop.decide_action`` erreicht, und der Loop ist seit der
+    Umstellung auf natives CAMEL-Function-Calling abgeschaltet
+    (``tool_loop = None``). Dieser Test ist gruen und sagt nichts darueber aus,
+    ob ein Agent die Konfliktregel je zu sehen bekommt. Den Erreichbarkeits-
+    Nachweis fuehrt ``test_prompt_builder_is_reachable_from_a_live_runner_path``.
+    """
     module = _load_module(
         "agent_tools_prompt_conflict_test", "backend/scripts/agent_tools.py"
     )
@@ -486,3 +498,80 @@ def test_build_agent_prompt_with_tools_skips_tools_for_dislike_actions():
     skip_window = prompt.lower().split("trivial reactions", 1)[1][:300]
     assert "dislike_post" in skip_window
     assert "dislike_comment" in skip_window
+
+
+def _dead_guarded_branches(source: str) -> list[str]:
+    """Findet ``if <name> and ...``-Zweige, deren Name nur ``None`` sein kann.
+
+    Bewusst konservativ: gemeldet wird nur, wenn *jede* Zuweisung an den Namen
+    innerhalb derselben Funktion die Konstante ``None`` ist. Eine zweite
+    Zuweisung — auch in einem anderen Zweig — macht den Guard erreichbar und
+    den Fund hinfaellig. Tupel-Ziele und ``AugAssign`` werden nicht erfasst;
+    das kostet hoechstens einen uebersehenen Fund, nie einen falschen.
+    """
+    none_dump = ast.dump(ast.Constant(value=None))
+    findings: list[str] = []
+    for fn in ast.walk(ast.parse(source)):
+        if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        assigned: dict[str, set[str]] = {}
+        for node in ast.walk(fn):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        assigned.setdefault(target.id, set()).add(ast.dump(node.value))
+        constant_none = {name for name, vals in assigned.items() if vals == {none_dump}}
+        if not constant_none:
+            continue
+        for node in ast.walk(fn):
+            if not isinstance(node, ast.If):
+                continue
+            used = {
+                sub.id for sub in ast.walk(node.test)
+                if isinstance(sub, ast.Name) and sub.id in constant_none
+            }
+            for name in sorted(used):
+                findings.append(f"{fn.name}():{node.lineno} — Guard auf '{name}', das nur None ist")
+    return findings
+
+
+def test_single_platform_runner_keeps_the_tool_loop_reachable():
+    """Der Einzelplattform-Pfad baut den Prompt tatsaechlich.
+
+    ``SinglePlatformRunner`` (``sim_runtime/platform_runner.py``) weist
+    ``self.tool_loop`` per ``create_tool_aware_loop`` zu. Diese Seite ist der
+    Gegenbeweis dazu, dass der Defekt in #1215 eine generelle Eigenschaft des
+    Systems waere — er betrifft ausschliesslich den Parallel-Runner.
+    """
+    source = (REPO_ROOT / "backend/scripts/sim_runtime/platform_runner.py").read_text(
+        encoding="utf-8"
+    )
+    assert "create_tool_aware_loop(" in source
+    assert not _dead_guarded_branches(source)
+
+
+@pytest.mark.xfail(
+    reason=(
+        "#1215: run_parallel_simulation setzt tool_loop in beiden Plattform-Pfaden "
+        "hart auf None ('Native CAMEL function-calling replaces the old ReACT-style "
+        "tool_loop'). Damit ist ToolAwareActionLoop.decide_action unerreichbar und "
+        "build_agent_prompt_with_tools wird nie gebaut — die Konfliktregel aus #1220 "
+        "und die Tool-Skip-Klausel aus #1223 erreichen keinen Agenten. Produktive "
+        "Laeufe fahren genau dieses Skript; SinglePlatformRunner ist nicht betroffen. "
+        "Faellt weg, sobald entschieden ist, wohin die Regel wandert (Persona-/"
+        "System-Message, Angleichung an SinglePlatformRunner oder Entfernung)."
+    ),
+    strict=True,
+)
+def test_parallel_runner_prompt_builder_is_reachable():
+    """Eine Prompt-Regel muss von einem erreichbaren Produktivpfad gebaut werden.
+
+    Guard gegen die Fehlerklasse, die #1230 fuer Befund 5c benannt hat und die
+    sich bei #1215 wiederholt hat: ein Fix ist nominell vorhanden, feuert aber
+    nie, und der zugehoerige Test prueft die Annahme statt der Realitaet. Ein
+    toter ``if <flag> and ...``-Zweig ist die billigste maschinell pruefbare
+    Signatur dafuer.
+    """
+    script = "backend/scripts/run_parallel_simulation.py"
+    findings = _dead_guarded_branches((REPO_ROOT / script).read_text(encoding="utf-8"))
+    assert not findings, f"{script}: unerreichbare Zweige — " + "; ".join(findings)
