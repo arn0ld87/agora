@@ -41,7 +41,9 @@ from .storage import (
 )
 from .markdown_renderer import render_report_v3
 from .sections import (
+    mark_hypotheses_in_content,
     render_confidence_markers_for_section,
+    render_data_gaps_for_section,
     render_hypotheses_for_section,
 )
 
@@ -619,13 +621,18 @@ class ReportManager:
             if section.get("section_index") is not None
         }
         for section_info in sections:
-            md_content += section_info["content"]
             evidence_section = evidence_sections.get(int(section_info.get("section_index", 0)))
+            md_content += mark_hypotheses_in_content(
+                section_info["content"], evidence_section
+            )
             hypotheses = render_hypotheses_for_section(evidence_section)
+            data_gaps = render_data_gaps_for_section(evidence_section)
             confidence_markers = render_confidence_markers_for_section(
                 evidence_section
             )
-            annotations = [item for item in (hypotheses, confidence_markers) if item]
+            annotations = [
+                item for item in (hypotheses, data_gaps, confidence_markers) if item
+            ]
             if annotations:
                 md_content = md_content.rstrip() + "\n\n" + "\n\n".join(annotations) + "\n\n"
         
@@ -724,7 +731,10 @@ class ReportManager:
                         processed_lines.append(f"**{title}**")
                         processed_lines.append("")
                         prev_was_heading = False
-                elif level == 3 and title == "Hypothesen ohne Evidence":
+                elif level == 3 and title in {
+                    "Hypothesen ohne Evidence",
+                    "Datenlücken dieses Abschnitts",
+                }:
                     processed_lines.append(line)
                     prev_was_heading = True
                 else:

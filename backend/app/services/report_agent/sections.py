@@ -218,6 +218,76 @@ def render_hypotheses_for_section(section: Optional[Dict[str, Any]]) -> str:
     return "\n".join(lines) if len(lines) > 2 else ""
 
 
+def mark_hypotheses_in_content(
+    content: str,
+    section: Optional[Dict[str, Any]],
+) -> str:
+    """Kennzeichnet Hypothesensätze direkt im narrativen Abschnitt (#1232).
+
+    Das Evidence-Gate persistiert die atomisierte Aussage separat in
+    ``hypotheses[]``. Ohne diese Markierung blieb dieselbe Zeichenfolge im
+    Fließtext jedoch eine apodiktische Feststellung. Whitespace darf zwischen
+    Atomisierung und Markdown-Persistenz variieren; deshalb wird er beim
+    Abgleich flexibel behandelt.
+    """
+    if not content or not section:
+        return content
+
+    marker = "**Hypothese (unbelegt):**"
+    hypothesis_texts = {
+        str(hypothesis.get("hypothesis_text") or "").strip()
+        for hypothesis in (section.get("hypotheses") or [])
+        if isinstance(hypothesis, dict)
+        and str(hypothesis.get("hypothesis_text") or "").strip()
+    }
+    rendered = content
+    for hypothesis_text in sorted(hypothesis_texts, key=len, reverse=True):
+        pattern = r"\s+".join(
+            re.escape(part) for part in re.split(r"\s+", hypothesis_text)
+        )
+        rendered = re.sub(
+            pattern,
+            lambda match: f"{marker} {match.group(0)}",
+            rendered,
+            flags=re.IGNORECASE,
+        )
+    return rendered
+
+
+def render_data_gaps_for_section(section: Optional[Dict[str, Any]]) -> str:
+    """Rendert die maschinenlesbaren Datenlücken direkt an ihrer Section."""
+    if not section:
+        return ""
+    data_gaps = [
+        gap for gap in (section.get("data_gaps") or []) if isinstance(gap, dict)
+    ]
+    if not data_gaps:
+        return ""
+
+    lines = ["### Datenlücken dieses Abschnitts", ""]
+    visible_limit = 5
+    for gap in data_gaps[:visible_limit]:
+        gap_id = _hypothesis_text_for_markdown(gap.get("gap_id") or "gap")
+        claim_text = _hypothesis_text_for_markdown(gap.get("claim_text"))
+        reason = _hypothesis_text_for_markdown(gap.get("gap_reason"))
+        suggested_fix = _hypothesis_text_for_markdown(gap.get("suggested_fix"))
+        if not claim_text:
+            continue
+        lines.append(f"- **{gap_id}:** {claim_text}")
+        if reason:
+            lines.append(f"  - Grund: {reason}")
+        if suggested_fix:
+            lines.append(f"  - Nächster Schritt: {suggested_fix}")
+    remaining = len(data_gaps) - visible_limit
+    if remaining > 0:
+        noun = "Datenlücke" if remaining == 1 else "Datenlücken"
+        lines.append(
+            f"- _{remaining} weitere {noun} stehen im maschinenlesbaren "
+            "Evidence-Export._"
+        )
+    return "\n".join(lines) if len(lines) > 2 else ""
+
+
 def section_dedup_check(
     new_summary: str,
     existing: List[Dict[str, Any]],
@@ -291,8 +361,10 @@ __all__ = [
     "build_source_id_anchor",
     "is_atomic_claim",
     "is_claim_candidate",
+    "mark_hypotheses_in_content",
     "render_claim_to_markdown",
     "render_confidence_markers_for_section",
+    "render_data_gaps_for_section",
     "render_hypotheses_for_section",
     "sample_actions_timeseries",
     "section_dedup_check",
