@@ -3,6 +3,39 @@
 Alle nennenswerten Änderungen an Agora werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+### Documentation (Zwei neue Referenzläufe, der aktuelle zweisprachig — 2026-08-11)
+
+- **Der Referenzpfad zeigte bisher nur die Domainmigration, in zwei Varianten derselben Domäne:** Damit ließ sich nicht unterscheiden, welche Befunde am Testfall hingen und welche am System. Zwei neue Referenzläufe in einer anderen Domäne sind jetzt dokumentiert — Einführung eines selbstgehosteten KI-Lernassistenten bei einem AZAV-zertifizierten Umschulungsträger.
+
+  Der **dritte Lauf** (10 Runden, `deepseek-v4-flash`, erstmals `gemini-embedding-2` statt lokalem Ollama) hält vier Mechanismen fest, die vorher nicht benannt waren: dass das Seed-Dokument seine eigenen Antworten mitliefert und der Report sie als Simulationsergebnis abruft; dass von 130 Aussagen genau eine an Evidence bindet, und diese nur, weil sie ihre Evidence wörtlich zitiert; dass der Fließtext-Gate ausschließlich Sätze mit einer Zahl prüft und qualitative Behauptungen ungeprüft durchlässt; und dass das Entfernen einer Aussage in zwei von sechs Sections eine Aufzählung ohne ihren Punkt oder einen Rückverweis ohne Bezug hinterlässt.
+
+  Der **vierte Lauf** (20 Runden, `gemini-3.6-flash` als Writer und NER) ist der neue Referenzlauf in der README und liegt auf Deutsch und Englisch vor. Er ist der erste, in dem die Evidence-Bindung arbeitet — 39 validierte Claims gegen null oder einen in fünf Vorgängerreports — und die Poster-Zuordnung mit 8 von 8 strukturell statt zufällig trifft. Gerade dadurch werden die verbleibenden Lücken messbar: Jedes Zitat trägt jetzt einen eigenen Provenance-Anker, und keiner davon existiert; das Modell erfindet sie pro Persona, und der `seed_doc:`-Präfix umgeht die Prüfung vollständig. Alle 39 Claims stehen auf `low` mit identischem Score. Derselbe Fakt bindet in Section 1 als SUPPORTED und wird in Section 2 als ungedeckt entfernt. Und über 20 Runden, 665 Aktionen und 84 Kommentare fällt — bei erstmals sauber getrennten Konfliktparteien — kein einziges Dislike und kein Widerspruch.
+
+### Fixed
+
+- Der Dashboard-Start reicht Rundenzahl und Run-Budget wieder bis zum
+  Simulationsstart durch. Beide reisten über den `pendingUpload`-Store, den
+  Schritt 1 nach dem Ontologie-Upload leert — Schritt 3 las anschließend den
+  Reset-Default 10 statt der eingestellten Runden und fand gar kein Budget
+  mehr vor. Sie laufen jetzt über den Query-Vertrag
+  `contracts/runParamsQuery.ts`, der schon die Übergabe Schritt 2 → Schritt 3
+  trägt, und überleben damit auch einen Reload auf der Simulationsroute
+  ([#1234](https://github.com/arn0ld87/agora/issues/1234)).
+
+### Fixed (Ein stützender Beleg bleibt als Low-Claim sichtbar — 2026-08-11)
+
+- **Der generische Zweier-Floor entfernte gültige ADR-0002-Claims:** Die Bindungsphase fand nach #1217 passende Belege, routete atomisierte Aussagen mit genau einer stützenden Quelle danach aber weiterhin zur Hypothese. Das Gate verlangt jetzt mindestens einen stützenden Beleg; eine einzelne Quelle wird auf `low` begrenzt, während Aussagen ohne stützende Evidence unverändert Hypothese und Data-Gap werden. Der Replay des betroffenen DeepSeek-Artefakts hebt damit drei belegte Claims von 0 auf 3. (#1233)
+
+### Fixed (Reporttext kennzeichnet unbelegte Aussagen — 2026-08-11)
+
+- **Das Evidence-Gate stufte Aussagen korrekt als Hypothesen ein, der narrative Abschnitt formulierte sie aber weiter als Feststellungen:** Die Section-Assembly markiert dieselben Sätze jetzt direkt im Fließtext als `Hypothese (unbelegt)` und behält die separate Hypothesenliste als Audit-Sicht. Section-Datenlücken werden ebenfalls gerendert; sichtbar sind höchstens fünf, danach nennt der Report die Restzahl und verweist auf den maschinenlesbaren Evidence-Export. (#1232)
+
+### Fixed (Die Bindungsphase sieht wieder alle Belege einer Section — 2026-08-11)
+
+- **Kein einziger Claim wurde an Evidence gebunden, obwohl der Beleg wörtlich im Index stand:** Die Bindungsphase reichte dem Binder pro Claim nur die zehn *zuerst erhobenen* Evidence-Items einer Section (`_active_section_evidence[:10]`) plus die ersten sechs globalen Referenzen. Diese Reihenfolge ist die Reihenfolge der Tool-Aufrufe, keine Rangfolge nach Relevanz — und ein einziger `insight_forge`-Aufruf erzeugt bis zu 26 Items. Das Fenster war damit nach dem ersten Tool-Aufruf gefüllt, und was der Agent danach gezielt suchte, war für die Bindung unerreichbar: die Persona-Zitate aus `interview_agents` und die Seed-Corpus-Treffer aus `quick_search` landeten im `evidence_index`, wurden dort gezählt und nie einem Claim angeboten. In zwei vollständigen Läufen blieben so 163 bzw. 131 Claims ungebunden, bei 66 bzw. 79 Einträgen im Index. Die Auswahl bewertet die Kandidaten jetzt erst und kürzt danach: alle Belege einer Section werden gegen den Claim-Text gemessen, und nur die semantisch nächsten gehen weiter. Das Evidence-Gate selbst bleibt unverändert — Schwellenwert, Entailment-Urteil und der Reviewer-Floor von zwei stützenden Quellen entscheiden weiterhin allein darüber, ob eine Aussage ein Claim wird. Ein Claim, der jetzt gebunden wird, hat es unter denselben Regeln verdient wie vorher; er bekommt sie nur erstmals angewandt.
+- **Nebeneffekt: die Nachbearbeitung wird schneller statt langsamer.** Die Vektoren hängen jetzt am Text und nicht mehr am Claim. Vorher bettete jeder Claim jeden Kandidaten neu ein — bei 30 Claims und 16 Kandidaten 480 Aufrufe pro Section. Jetzt fällt pro Section einmal die Kandidatenmenge an, plus einen Aufruf je Claim.
+
+
 ## [0.9.5] - 2026-08-11
 
 Das Zusammensetzen eines Provider-Requests und das Durchbringen dieses Requests gegen bekannte Provider-400er liegen nicht mehr in `LLMClient.chat`, sondern hinter `build_request` und `execute` im neuen Modul `app/llm/request_plan.py`. `chat` schrumpft von 315 auf 257 Zeilen und behält nur noch, was wirklich dazugehört: Stub-Pfad, Streaming-Reassembly, Budget- und Telemetrie-Buchführung.

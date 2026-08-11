@@ -27,7 +27,7 @@ Die Produktreife wird ab diesem Dokumentationsumbau über [`VERSION`](../VERSION
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 5041 | `cd backend && uv run pytest --collect-only -q` |
+| Backend Tests (collected) | 5049 | `cd backend && uv run pytest --collect-only -q` |
 | Frontend Test-Files | 192 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
@@ -65,6 +65,7 @@ Nach dem `0.9.4`-Schnitt (09.08.2026) bis zum `0.9.5`-Schnitt (11.08.2026) kam h
 - **Die Claim-Bindung bewertet alle Section-Belege vor dem Kürzen** ([#1217](https://github.com/arn0ld87/agora/issues/1217)); ein einzelner stützender Beleg bleibt gemäß ADR-0002 als sichtbarer `low` Claim erhalten, während Aussagen ohne stützende Evidence weiter als Hypothese und Data-Gap geführt werden ([#1233](https://github.com/arn0ld87/agora/issues/1233))
 - **Kein Run bleibt nach gescheitertem Start auf `pending`** ([#1176](https://github.com/arn0ld87/agora/issues/1176)); Persona-Capping dedupliziert und verteilt über Stakeholdergruppen ([#1177](https://github.com/arn0ld87/agora/issues/1177)); das finale Speichern eines Persona-Profils verliert keine Felder mehr ([#1186](https://github.com/arn0ld87/agora/issues/1186))
 - **Zentraler `max_tokens`-Boden von 32k** für generative Calls ([#1168](https://github.com/arn0ld87/agora/issues/1168), `LLM_MAX_TOKENS_FLOOR`)
+- **Rundenzahl und Run-Budget überleben den Dashboard-Start bis zur Simulation** ([#1234](https://github.com/arn0ld87/agora/issues/1234)) über den Query-Vertrag `runParamsQuery.ts`, auch bei einem Reload auf der Simulationsroute
 
 Der Stand ist `0.9.5` Stability Beta; die innerhalb der `0.9.x`-Linie noch offenen Freigabekriterien stehen unter `0.9.0` in [`ROADMAP.md`](../ROADMAP.md). Die E2E-Kernpipeline wird seit 31.07.2026 als verpflichtender Pull-Request-Check erzwungen. Die Migration der v3-Inhaltskomponenten (`Step2EnvSetup`/`Step3Simulation`/`Step4Report`) in v4-Wrapper ist abgeschlossen ([#922](https://github.com/arn0ld87/agora/issues/922), PR #938); der credential-basierte Runtime-Provider-Override (`useRuntimeLlmOptions`) ist entfernt. Der `/home`-Redirect auf `/dashboard` ist umgesetzt ([#915](https://github.com/arn0ld87/agora/issues/915), ADR-0010); `Home.vue` bleibt bis `1.0.0` physisch erhalten.
 
