@@ -32,6 +32,7 @@ from ..services.llm_routing_seed import (
     seed_run_stage_routing,
 )
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
+from ..services.report_generation import finish_cancelled_run, was_run_cancelled
 from ..services.run_lifecycle import RunLifecycle
 from ..services.run_registry import RunRegistry
 from ..services.simulation_manager import SimulationManager, SimulationStatus
@@ -909,9 +910,33 @@ def _resume_report_generate(run: dict):
             def progress_callback(stage, progress, message):
                 task_manager.update_task(task_id, progress=progress, message=f"[{stage}] {message}")
 
-            report = agent.generate_report(progress_callback=progress_callback, report_id=report_id)
+            # Issue #1243: auch der Resume-Pfad muss abbrechbar sein — ohne
+            # cancel_run_id liest generate_report das Flag nie.
+            report = agent.generate_report(
+                progress_callback=progress_callback,
+                report_id=report_id,
+                cancel_run_id=run["run_id"],
+            )
             ReportManager.save_report(report)
-            if report.status == ReportStatus.COMPLETED:
+            if was_run_cancelled(run["run_id"]):
+                # Teilreport nach Nutzerabbruch traegt status=COMPLETED; ohne
+                # diesen Zweig waere er von einem vollstaendigen Lauf nicht zu
+                # unterscheiden.
+                # Reihenfolge bindend (#978): complete_task spiegelt sich per
+                # sync_task auf den Run zurueck und wuerde "stopped" wieder
+                # ueberschreiben. Der Run-Update laeuft zuletzt.
+                task_manager.complete_task(
+                    task_id,
+                    result={
+                        "report_id": report_id,
+                        "simulation_id": simulation_id,
+                        "cancelled": True,
+                    },
+                )
+                finish_cancelled_run(
+                    run["run_id"], report_id=report_id, simulation_id=simulation_id
+                )
+            elif report.status == ReportStatus.COMPLETED:
                 run_registry.update_run(
                     run["run_id"],
                     status="completed",
