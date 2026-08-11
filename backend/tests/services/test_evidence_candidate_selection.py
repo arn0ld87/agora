@@ -230,3 +230,35 @@ def test_pool_embeds_each_text_once_across_claims() -> None:
         f"Erwartet {len(evidence)} Kandidaten- plus 1 Claim-Embedding, "
         f"gezaehlt wurden {pool.embed_calls}"
     )
+
+
+def test_failed_embedding_is_not_retried_per_claim() -> None:
+    """Ein deterministisch scheiterndes Item kostet genau einen Versuch.
+
+    Ohne den Cache-Eintrag fuer den Fehlschlag wiederholt jeder Claim der
+    Section denselben Provider-Aufruf samt Retries und Timeouts — ein
+    einzelnes defektes Evidence-Item wuerde die Nachbearbeitung ausbremsen.
+    """
+    broken = {
+        "evidence_id": f"ev_{99:032x}",
+        "type": "web_fetch",
+        "source": "report_tool",
+        "snippet": "Ein Snippet, dessen Einbettung beim Provider scheitert.",
+    }
+    attempts: List[str] = []
+
+    def flaky_embed(text: str) -> List[float]:
+        attempts.append(text)
+        if text == broken["snippet"]:
+            raise RuntimeError("context window exceeded")
+        return [1.0, 0.0]
+
+    pool = EvidenceCandidatePool([broken, _filler_item(1)], flaky_embed)
+
+    for _ in range(4):
+        assert pool.select(CLAIM_TEXT), "der intakte Kandidat muss weiterhin kommen"
+
+    assert attempts.count(broken["snippet"]) == 1, (
+        f"Der scheiternde Kandidat wurde {attempts.count(broken['snippet'])}x "
+        "eingebettet statt genau einmal"
+    )

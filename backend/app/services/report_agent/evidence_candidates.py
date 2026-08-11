@@ -78,8 +78,17 @@ class EvidenceCandidatePool:
             if cached is None:
                 raise RuntimeError("embedding previously failed for this text")
             return cached
-        vector = self._raw_embed(key)
         self._embed_calls += 1
+        try:
+            vector = self._raw_embed(key)
+        except Exception:
+            # Der Fehlschlag gehoert genauso in den Cache wie der Erfolg.
+            # Ein Kandidat, der deterministisch scheitert (etwa ein
+            # web_fetch-Record, dessen ``raw.content`` das Kontextfenster
+            # sprengt), wuerde sonst fuer jeden Claim der Section erneut
+            # versucht — samt Provider-Retries und Timeouts.
+            self._vectors[key] = None
+            raise
         self._vectors[key] = vector
         return vector
 
