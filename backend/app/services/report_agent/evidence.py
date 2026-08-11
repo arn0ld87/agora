@@ -230,8 +230,13 @@ def _count_supporting_stakeholder_groups(evidence: List[Dict[str, Any]]) -> int:
         # eine Familie "Lecturer" nicht von einem gleichnamigen Jobtitel zu
         # unterscheiden. Spiegelt ``report_contract._role_family_key``.
         family = entry.get("persona_role_family")
-        if family:
-            groups.add(f"family:{' '.join(str(family).split()).casefold()}")
+        family_key = " ".join(str(family or "").split()).casefold()
+        # Issue #1248 (CodeRabbit PR #1260): Auffangtypen bezeichnen keine
+        # Rollenfamilie. Spiegelt ``report_contract._GENERIC_ENTITY_TYPES``.
+        if family_key and family_key not in {
+            "person", "organization", "entity", "node", "unknown", "other",
+        }:
+            groups.add(f"family:{family_key}")
             continue
         group = entry.get("persona_stakeholder_group")
         if group:

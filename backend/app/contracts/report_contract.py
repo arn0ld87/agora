@@ -293,6 +293,23 @@ def _stakeholder_group_key(value: Optional[str]) -> str:
     return " ".join(value.split()).casefold()
 
 
+#: Auffangtypen, die keine Rollenfamilie bezeichnen (Issue #1248, CodeRabbit
+#: PR #1260). Die Ontologie fuehrt ``Person`` und ``Organization`` bewusst als
+#: breite Fallback-Typen. Sie als Rollenfamilie zu zaehlen wuerde zwei
+#: voellig verschiedene Stakeholder — etwa einen Bildungstraeger und eine
+#: Aufsichtsbehoerde, beide als ``Organization`` klassifiziert — zu einer
+#: Stimme verschmelzen und damit die Cross-Stakeholder-Stuetzung unmoeglich
+#: machen. Genau die Verwechslung von Auffangtopf und Label ist der Grund,
+#: warum die Typbindung in #1247 nicht getragen hat.
+#:
+#: Fuer diese Typen bleibt der Berufstitel die Vergleichsgroesse — das
+#: bisherige Verhalten. Das Label wirkt nur dort, wo es tatsaechlich eine
+#: Rolle bezeichnet.
+_GENERIC_ENTITY_TYPES: frozenset[str] = frozenset({
+    "person", "organization", "entity", "node", "unknown", "other",
+})
+
+
 def _role_family_key(item: Any) -> str:
     """Zaehlschluessel fuer ``cross_stakeholder_for_high`` (Issue #1248).
 
@@ -320,7 +337,7 @@ def _role_family_key(item: Any) -> str:
     unterscheidbarer Gruppen kann dadurch nur sinken.
     """
     family = getattr(item, "persona_role_family", None)
-    if family:
+    if family and _stakeholder_group_key(family) not in _GENERIC_ENTITY_TYPES:
         return f"family:{_stakeholder_group_key(family)}"
     return f"title:{_stakeholder_group_key(getattr(item, 'persona_stakeholder_group', None))}"
 
