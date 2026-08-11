@@ -323,14 +323,28 @@ class SinglePlatformRunner:
     def _assign_initial_action(self, initial_actions: Dict, agent: Any, content: str) -> None:
         """Assign an initial CREATE_POST action for ``agent``.
 
-        Default (Twitter-Verhalten): überschreibt eine bestehende Zuweisung.
-        Reddit überschreibt diese Methode, um an eine bestehende Liste zu
-        appenden statt zu überschreiben.
+        Issue #1245 (CodeRabbit PR #1256): Die Standardimplementierung
+        ueberschrieb eine bestehende Zuweisung — mehrere Seed-Posts desselben
+        Agenten kollabierten auf den letzten, still und ohne Warnung. Das galt
+        fuer jeden Lauf mit ``platform="twitter"``, der ueber
+        ``run_twitter_simulation.py`` und diesen Runner geht; der Fix im
+        Parallel-Skript erreichte diesen Pfad nicht.
+
+        Kollisionsbehandlung gehoert nicht auf eine Plattform, sondern in die
+        Basis: ``env.step`` akzeptiert je Agent einen Einzelwert oder eine
+        Liste. Ohne Kollision entsteht weiterhin kein zusaetzliches Wrapping.
         """
-        initial_actions[agent] = ManualAction(
+        action = ManualAction(
             action_type=ActionType.CREATE_POST,
             action_args={"content": content}
         )
+        existing = initial_actions.get(agent)
+        if existing is None:
+            initial_actions[agent] = action
+        elif isinstance(existing, list):
+            existing.append(action)
+        else:
+            initial_actions[agent] = [existing, action]
 
     async def run(self, max_rounds: int = None):
         """Run single-platform simulation
@@ -485,7 +499,19 @@ class SinglePlatformRunner:
 
             if initial_actions:
                 await self.env.step(initial_actions)
-                print(f"  Published {len(initial_actions)} initial posts")
+                # Issue #1245: Posts und distinkte Agenten getrennt ausweisen.
+                # len(initial_actions) zaehlt Dict-Eintraege, also Agenten —
+                # bei kollabierten Seed-Posts meldete die Zeile einen Erfolg,
+                # der den Defekt verdeckte.
+                published = sum(
+                    len(value) if isinstance(value, list) else 1
+                    for value in initial_actions.values()
+                )
+                print(
+                    f"  Published {published} initial post"
+                    f"{'' if published == 1 else 's'} from {len(initial_actions)} "
+                    f"distinct agent{'' if len(initial_actions) == 1 else 's'}"
+                )
 
         print("\nStart simulation loop...")
         start_time = datetime.now()
