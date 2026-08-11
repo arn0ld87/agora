@@ -32,7 +32,7 @@ def _make_evidence_map(
             "claim_id": "claim_high_ev",
             "claim_text": "Sicherheitsbedenken hemmen die Adoption nachweislich.",
             "confidence_label": "high",
-            # Reviewer-Floor S1: ≥2 Evidence-Items erforderlich, damit Claim bleibt.
+            # Zwei Quellen tragen die hohe Confidence dieses Claims.
             "evidence": [
                 {
                     "source_id_anchor": "kg:metric:adoption_friction",
@@ -182,19 +182,15 @@ class TestClaimFilteringByMode:
         claim_ids = {c.id for c in v3.claims}
         assert "claim_high_ev" in claim_ids
 
-    def test_explorative_mode_keeps_all_with_evidence(self):
-        """explorative: Claims mit ≥2 Evidence-Items bleiben alle durch.
-
-        Reviewer-Floor S1 greift in allen Modi: claim_low hat nur 1 Evidence-Item
-        und wird zur Hypothesis geroutet. claim_high_ev hat 2 → bleibt Claim.
-        """
+    def test_explorative_mode_keeps_only_supported_claims(self):
+        """explorative: Thematisch verwandte, nicht stützende Bindings zählen nicht."""
         from app.services.report_agent.manager import ReportManager  # noqa: PLC0415
 
         evidence_map = _make_evidence_map(include_no_evidence=False, include_low_confidence=True)
         report = self._make_report()
         v3 = ReportManager.build_report_v3(report, evidence_map, report_mode="explorative")
         claim_ids = {c.id for c in v3.claims}
-        # claim_low hat nur 1 Evidence-Item → Reviewer-Floor → Hypothesis
+        # claim_low hat nur ein nicht stützendes Binding und damit keinen Beleg.
         assert "claim_low" not in claim_ids
         assert "claim_high_ev" in claim_ids
 
@@ -250,7 +246,7 @@ class TestMarkdownBannerByMode:
 
 
 # ---------------------------------------------------------------------------
-# Tests: Reviewer-Floor S1 — Evidence-Coverage-Floor (min=2)
+# Tests: ADR-0002 — ein stützender Beleg trägt einen low Claim
 # ---------------------------------------------------------------------------
 
 def _make_evidence_map_with_evidence_count(evidence_count: int) -> dict:
@@ -273,12 +269,12 @@ def _make_evidence_map_with_evidence_count(evidence_count: int) -> dict:
             {
                 "section_index": 1,
                 "section_title": "Evidence-Floor-Test",
-                "section_summary": "Testabschnitt für Reviewer-Floor",
+                "section_summary": "Testabschnitt für den Evidence-Floor",
                 "claims": [
                     {
                         "claim_id": "claim_floor_test",
                         "claim_text": "Ein Claim mit variabler Evidence-Anzahl.",
-                        "confidence_label": "high",
+                        "confidence_label": "low" if evidence_count == 1 else "high",
                         "confidence_score": 0.75,
                         "evidence": evidence,
                     }
@@ -302,30 +298,27 @@ class TestEvidenceFloorS1:
             markdown_content="# Test",
         )
 
-    def test_single_evidence_routes_to_hypothesis(self):
-        """Reviewer-Floor S1: Claim mit nur 1 Evidence-Item → Hypothesis, nicht Claim."""
+    def test_single_evidence_keeps_low_claim(self):
+        """ADR-0002: Ein stützendes Evidence-Item trägt einen low Claim."""
         from app.services.report_agent.manager import ReportManager  # noqa: PLC0415
 
         evidence_map = _make_evidence_map_with_evidence_count(1)
         report = self._make_report()
         v3 = ReportManager.build_report_v3(report, evidence_map, report_mode="balanced")
         claim_ids = {c.id for c in v3.claims}
-        assert "claim_floor_test" not in claim_ids, (
-            "Claim mit 1 Evidence-Item darf nicht als Claim durchlaufen (Reviewer-Floor S1)"
-        )
-        hypothesis_texts = [h.hypothesis_text for h in v3.hypotheses]
-        assert any("Evidence-Floor-Test" in t or "variabler Evidence" in t for t in hypothesis_texts), (
-            "Claim mit 1 Evidence-Item muss in Hypotheses auftauchen"
-        )
+        assert "claim_floor_test" in claim_ids
+        claim = next(item for item in v3.claims if item.id == "claim_floor_test")
+        assert claim.confidence == "low"
+        assert len(claim.evidence_refs) == 1
+        assert claim.evidence_refs[0].startswith("ev_")
+        assert not v3.hypotheses
 
     def test_two_evidence_keeps_claim(self):
-        """Reviewer-Floor S1: Claim mit 2+ Evidence-Items bleibt Claim."""
+        """Zwei stützende Evidence-Items bleiben unverändert ein Claim."""
         from app.services.report_agent.manager import ReportManager  # noqa: PLC0415
 
         evidence_map = _make_evidence_map_with_evidence_count(2)
         report = self._make_report()
         v3 = ReportManager.build_report_v3(report, evidence_map, report_mode="balanced")
         claim_ids = {c.id for c in v3.claims}
-        assert "claim_floor_test" in claim_ids, (
-            "Claim mit 2 Evidence-Items muss als Claim durchlaufen (Reviewer-Floor S1)"
-        )
+        assert "claim_floor_test" in claim_ids

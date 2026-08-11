@@ -305,13 +305,13 @@ def test_persisted_v3_validates(tmp_path, monkeypatch):
 
     assert restored.schema_version == 4
     assert restored.report_id == report_id
-    # Reviewer-Floor S1: Claim mit 1 Evidence-Item wird zur Hypothesis geroutet.
-    assert len(restored.claims) == 0, (
-        "Claim mit 1 Evidence-Item darf nicht als Claim persistiert werden (Reviewer-Floor S1)"
-    )
-    assert any(
+    # ADR-0002: Ein stützender Beleg reicht für einen sichtbaren Claim.
+    assert len(restored.claims) == 1
+    assert "Sicherheitsbedenken" in restored.claims[0].statement
+    assert len(restored.claims[0].evidence_refs) == 1
+    assert not any(
         "Sicherheitsbedenken" in h.hypothesis_text for h in restored.hypotheses
-    ), "Claim mit 1 Evidence muss als Hypothesis auftauchen"
+    )
     assert restored.data_gaps[0].id == "gap_01"
     assert "Preisbereitschaft ist im Seed-Korpus nicht belegt." in report_v3_markdown
 
@@ -370,6 +370,51 @@ def test_build_report_v3_floor_ignores_non_supporting_bindings():
     migrated = ReportManager.build_report_v3(report, evidence_map)
 
     assert migrated.claims == []
+
+
+def test_build_report_v3_caps_legacy_single_source_claim_at_low():
+    """Persistierte Claims mit nur einer stützenden Quelle werden ehrlich abgestuft."""
+    from app.models.report import Report, ReportStatus  # noqa: PLC0415
+    from app.services.report_agent.manager import ReportManager  # noqa: PLC0415
+
+    evidence_map = {
+        "schema_version": 3,
+        "report_id": "report_legacy_single_source",
+        "simulation_id": "sim_legacy_single_source",
+        "evidence_index": _evidence_index(),
+        "global_evidence_refs": [],
+        "sections": [
+            {
+                "section_index": 1,
+                "section_title": "Legacy-Claim",
+                "section_summary": "Ein alter Claim trägt nur eine Quelle.",
+                "claims": [
+                    {
+                        "claim_id": "claim_01",
+                        "claim_text": "Eine einzelne Quelle darf keine hohe Confidence tragen.",
+                        "confidence_label": "high",
+                        "confidence_score": 0.88,
+                        "evidence": [
+                            {"evidence_id": EVIDENCE_ID, "supports_claim": True},
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+    report = Report(
+        report_id="report_legacy_single_source",
+        simulation_id="sim_legacy_single_source",
+        graph_id="graph_legacy_single_source",
+        simulation_requirement="Test",
+        status=ReportStatus.COMPLETED,
+    )
+
+    migrated = ReportManager.build_report_v3(report, evidence_map)
+
+    assert len(migrated.claims) == 1
+    assert migrated.claims[0].confidence == "low"
+    assert migrated.claims[0].text_confidence == "high"
 
 
 # ---- migrate_v2_to_v3 Unit-Tests ----

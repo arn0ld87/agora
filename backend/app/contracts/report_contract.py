@@ -725,7 +725,7 @@ class EvidenceMapModel(BaseModel):
     # Issue #1006: additiv, Default leer — bestehende persistierte
     # EvidenceMaps ohne dieses Feld validieren unverändert weiter.
     degradation_log: list[EvidenceDegradationModel] = Field(default_factory=list)
-    #: Audit-Trail regulärer Evidence-Gate-Entscheidungen (Reviewer-Floor,
+    #: Audit-Trail regulärer Evidence-Gate-Entscheidungen (fehlende Evidence,
     #: fehlende Supporting-Evidence, Fließtext-Entfernungen). Bewusst getrennt
     #: vom ``degradation_log``: der dokumentiert Validator-Reparaturen und
     #: stuft den Report-Status über ``apply_degradation_downgrade`` auf

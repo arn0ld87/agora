@@ -2,8 +2,8 @@
 
 Der Referenzlauf report_06f654800817 entfernte 17 Fließtext-Aussagen und
 routete sämtliche Claims in Hypothesen — auditierbar war davon nichts.
-Diese Tests fixieren, dass jede Gate-Entscheidung (Reviewer-Floor,
-fehlende Supporting-Evidence, Fließtext-Entfernung) als
+Diese Tests fixieren, dass jede Gate-Entscheidung (fehlende
+Supporting-Evidence, Fließtext-Entfernung) als
 ``EvidenceDegradationModel``-Eintrag im ``gate_decision_log`` landet —
 getrennt vom ``degradation_log``, der über ``apply_degradation_downgrade``
 den Report-Status abstuft und deshalb regulärem Gate-Routing vorbehalten
@@ -14,7 +14,6 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from app.contracts.report_v3 import CLAIM_MIN_EVIDENCE_FOR_CLAIM
 from app.services.report_agent import ReportAgent
 from app.services.report_agent.markdown_renderer import render_evidence_status
 from app.services.report_agent.schemas import SectionKeyTakeaway
@@ -42,8 +41,7 @@ def test_unsupported_claim_routing_writes_gate_decision():
     assert decisions[0]["action"] == "moved_to_hypotheses"
 
 
-def test_reviewer_floor_routing_writes_gate_decision():
-    assert CLAIM_MIN_EVIDENCE_FOR_CLAIM >= 2, "Test setzt Reviewer-Floor >= 2 voraus."
+def test_single_supported_evidence_keeps_low_claim():
     agent = ReportAgent.__new__(ReportAgent)
     claims = [{
         "claim_id": "claim_07",
@@ -55,11 +53,14 @@ def test_reviewer_floor_routing_writes_gate_decision():
 
     finalized, hypotheses, _gaps, decisions = agent._finalize_section_claims(claims)
 
-    assert finalized == []
-    assert len(hypotheses) == 1
-    assert decisions[0]["claim_id"] == "claim_07"
-    assert decisions[0]["violation"] == "reviewer_floor_insufficient_evidence"
-    assert decisions[0]["action"] == "moved_to_hypotheses"
+    assert len(finalized) == 1
+    assert finalized[0]["claim_id"] == "claim_07"
+    assert finalized[0]["confidence_label"] == "low"
+    assert finalized[0]["evidence"] == [
+        {"evidence_id": _EV_ID, "supports_claim": True}
+    ]
+    assert hypotheses == []
+    assert decisions == []
 
 
 def test_prose_removal_logged_in_degradation_log():

@@ -177,7 +177,7 @@ def test_collision_with_an_existing_record_merges_instead_of_duplicating() -> No
     assert len(migrated["evidence_index"]) == 1
     bindings = migrated["sections"][0]["claims"][0]["evidence"]
     assert [b["evidence_id"] for b in bindings] == [target_id], (
-        "Zwei Bindungen auf dieselbe Quelle würden den Reviewer-Floor täuschen."
+        "Zwei Bindungen auf dieselbe Quelle würden Evidence-Anzahl und Confidence aufblähen."
     )
 
 

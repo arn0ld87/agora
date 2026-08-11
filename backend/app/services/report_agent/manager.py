@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import ValidationError
 
-from ...contracts.report_v3 import CLAIM_MIN_EVIDENCE_FOR_CLAIM, DEFAULT_REPORT_MODE, ReportMode, ReportV3
+from ...contracts.report_v3 import DEFAULT_REPORT_MODE, ReportMode, ReportV3
 from ...contracts.report_v3 import Claim as ReportV3Claim
 from ...contracts.report_v3 import DataGap as ReportV3DataGap
 from ...contracts.report_v3 import Hypothesis as ReportV3Hypothesis
@@ -327,21 +327,6 @@ class ReportManager:
                 # strict: Claims ohne Evidence → gedroppt (gleiche Logik, aber auch low-conf)
                 if not evidence_refs:
                     continue
-                # Reviewer-Floor (report_4fe2dacd80ba, Sub-Slice S1):
-                # Claim braucht ≥2 Evidence-Items, sonst Routing zur Hypothesis.
-                if len(evidence_refs) < CLAIM_MIN_EVIDENCE_FOR_CLAIM:
-                    h_index = len(hypotheses) + 1
-                    h_text = str(claim.get("claim_text") or claim.get("claim") or "").strip()
-                    if h_text:
-                        hypotheses.append(ReportV3Hypothesis(
-                            id=f"hypothesis_{h_index:02d}",
-                            hypothesis_text=h_text,
-                            rationale=(
-                                f"Reviewer-Floor: nur {len(evidence_refs)} Evidence-Item(s) — "
-                                "Claim-Floor ist 2."
-                            ),
-                        ))
-                    continue
                 statement = str(claim.get("claim_text") or claim.get("claim") or "").strip()
                 if len(statement) < 8:
                     continue
@@ -358,6 +343,12 @@ class ReportManager:
                     confidence = "low"
                 else:
                     confidence = "speculative"
+                single_source_text_confidence: Literal[
+                    "speculative", "low", "medium", "high", "verified"
+                ] | None = None
+                if len(evidence_refs) == 1 and confidence in {"medium", "high", "verified"}:
+                    single_source_text_confidence = confidence
+                    confidence = "low"
                 # strict: speculative/low-confidence Claims werden gedroppt
                 if report_mode == "strict" and confidence in {"speculative", "low"}:
                     continue
@@ -372,7 +363,10 @@ class ReportManager:
                     # abgestuft wurde. Der Wortlaut stammt dann aus einer
                     # hoeheren Stufe und deckt mehr Sicherheit ab als das
                     # Label — ohne dass irgendetwas am Text geaendert wird.
-                    text_confidence=_text_confidence_for(claim, confidence),
+                    text_confidence=(
+                        _text_confidence_for(claim, confidence)
+                        or single_source_text_confidence
+                    ),
                 ))
             for gap in section.get("data_gaps") or []:
                 if not isinstance(gap, dict):
