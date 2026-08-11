@@ -21,6 +21,7 @@ import { fetchLlmProfiles } from '../../../api/llmProfiles'
 import { preflightEstimate } from '../../../api/budget'
 import type { PreflightEstimateParams } from '../../../api/budget'
 import { setPendingUpload } from '../../../store/pendingUpload'
+import { toRunParamsQuery } from '../../../contracts/runParamsQuery'
 import { STORAGE_LANG } from '../../../composables/useEnvForm'
 import { useEffectiveModelSelection } from '@/composables/useEffectiveModelSelection'
 import { setRunModelOverride, clearRunModelOverride } from '@/store/runModelOverride'
@@ -144,8 +145,10 @@ const numAgents = ref<number>(NUM_AGENTS_DEFAULT)
 const numRounds = ref<number>(NUM_ROUNDS_DEFAULT)
 
 // ---- Issue #764: optionale Run-Budgets + Preflight-Schätzung ----
-// Das Budget wandert über den pendingUpload-Store zu Step3Simulation, die es
-// beim Sim-Start als `budget` an /api/simulation/start durchreicht. Die
+// Das Budget wandert über die Route-Query (contracts/runParamsQuery) zu
+// Step3Simulation, die es beim Sim-Start als `budget` an
+// /api/simulation/start durchreicht. Nicht über den pendingUpload-Store: den
+// leert Schritt 1 nach dem Upload, das Budget kam nie an (Issue #1234). Die
 // Preflight-Schätzung ist rein informativ (is_estimate=true) und wird per
 // Button aktualisiert — bewusst kein Debounce auf jeden Slider-Tick.
 const budget = ref<RunBudgetConfig | null>(null)
@@ -338,9 +341,17 @@ async function startSimulation() {
       profileId,
       numAgents.value,
       numRounds.value,
-      budget.value,
     )
-    router.push({ name: 'Process', params: { projectId: 'new' } })
+    // Rundenzahl und Budget gehen in die Query, nicht in den Store: Schritt 1
+    // leert ihn nach dem Upload (`clearPendingUpload`), Schritt 3 las danach
+    // Reset-Defaults — die eingestellte Rundenzahl wurde still zu 10, das
+    // Budget verschwand ganz (Issue #1234). Die Dateien bleiben zwangsläufig
+    // im Store, sie sind nicht serialisierbar.
+    router.push({
+      name: 'Process',
+      params: { projectId: 'new' },
+      query: toRunParamsQuery({ maxRounds: numRounds.value, budget: budget.value }),
+    })
   } catch (e) {
     errorMsg.value = e instanceof Error ? e.message : String(e)
   }

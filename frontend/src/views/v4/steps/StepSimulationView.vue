@@ -35,6 +35,7 @@
         :simulation-id="simulationId"
         :max-rounds="runParams.maxRounds ?? undefined"
         :simulation-days="runParams.simulationDays ?? undefined"
+        :budget="runParams.budget ?? undefined"
         @go-back="handleGoBack"
       />
     </div>

@@ -171,7 +171,6 @@ describe('HeroNewRun — LLM-Profile (P5.5)', () => {
       null,
       expect.anything(),
       expect.anything(),
-      null,
     )
   })
 
@@ -205,7 +204,6 @@ describe('HeroNewRun — LLM-Profile (P5.5)', () => {
       null,
       expect.anything(),
       expect.anything(),
-      null,
     )
   })
 
@@ -257,9 +255,12 @@ describe('HeroNewRun — LLM-Profile (P5.5)', () => {
       'abc',
       30,
       10,
-      // Issue #764: sechstes Argument ist das Run-Budget (Default: keines).
-      null,
     )
-    expect(pushSpy).toHaveBeenCalledWith({ name: 'Process', params: { projectId: 'new' } })
+    // Issue #1234: Rundenzahl und Budget reisen in der Query, nicht im Store.
+    expect(pushSpy).toHaveBeenCalledWith({
+      name: 'Process',
+      params: { projectId: 'new' },
+      query: { maxRounds: '10' },
+    })
   })
 })

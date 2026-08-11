@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import {
+  coerceBudget,
   coercePositiveInt,
   readRunParamsFromQuery,
   toRunParamsQuery,
+  BUDGET_QUERY_KEY,
   MAX_ROUNDS_QUERY_KEY,
   SIMULATION_DAYS_QUERY_KEY,
   MAX_SIMULATION_DAYS,
@@ -89,13 +91,62 @@ describe('runParamsQuery — Query-Vertrag', () => {
     // Schluessel. Genau dieser implizite Tausch war vorher gebrochen.
     const query = toRunParamsQuery({ maxRounds: 12, simulationDays: 4 })
 
-    expect(readRunParamsFromQuery(query)).toEqual({ maxRounds: 12, simulationDays: 4 })
+    expect(readRunParamsFromQuery(query)).toEqual({
+      maxRounds: 12,
+      simulationDays: 4,
+      budget: null,
+    })
   })
 
   it('meldet fehlende Werte als null statt als 0', () => {
     // null bedeutet "nicht gesetzt" — 0 waere eine gueltige, aber falsche
     // Rundenzahl und wuerde als Wert an das Backend gehen.
-    expect(readRunParamsFromQuery({})).toEqual({ maxRounds: null, simulationDays: null })
-    expect(readRunParamsFromQuery(undefined)).toEqual({ maxRounds: null, simulationDays: null })
+    expect(readRunParamsFromQuery({})).toEqual({
+      maxRounds: null,
+      simulationDays: null,
+      budget: null,
+    })
+    expect(readRunParamsFromQuery(undefined)).toEqual({
+      maxRounds: null,
+      simulationDays: null,
+      budget: null,
+    })
+  })
+})
+
+// Issue #1234: Das Run-Budget des Dashboard-Starts reist im selben Vertrag.
+// Es lag vorher im pendingUpload-Store und erreichte den Simulationsstart nie,
+// weil Schritt 1 den Store nach dem Upload leert.
+describe('runParamsQuery — Run-Budget', () => {
+  const BUDGET = {
+    schema_version: 1 as const,
+    max_tokens: 5000,
+    enforcement: 'hard' as const,
+    currency: 'USD',
+  }
+
+  it('macht den Roundtrip Objekt -> Query -> Objekt, ohne Budget keinen Schluessel', () => {
+    const query = toRunParamsQuery({ budget: BUDGET })
+
+    // Ein bereits serialisierter Wert (Zwischenstationen sehen nur den String)
+    // ueberlebt eine weitere Runde unveraendert.
+    expect(toRunParamsQuery({ budget: query[BUDGET_QUERY_KEY] })).toEqual(query)
+    expect(readRunParamsFromQuery(query).budget).toEqual(BUDGET)
+    expect(toRunParamsQuery({ budget: null })).toEqual({})
+  })
+
+  it('verwirft alles, was RunBudgetConfigSchema nicht annimmt', () => {
+    // Die URL ist Nutzereingabe. Ein Budget, das das Schema ablehnt, darf
+    // nicht als Limit an /api/simulation/start gehen — auch nicht teilweise.
+    expect(coerceBudget('kein json')).toBeNull()
+    expect(coerceBudget('{"max_tokens":0}')).toBeNull()
+    expect(coerceBudget('{"max_tokens":5000,"unbekannt":true}')).toBeNull()
+    // Schema-Defaults gelten auch fuer eine verkuerzte URL.
+    expect(coerceBudget('{"max_tokens":5000}')).toEqual({
+      schema_version: 1,
+      max_tokens: 5000,
+      enforcement: 'soft',
+      currency: 'USD',
+    })
   })
 })
