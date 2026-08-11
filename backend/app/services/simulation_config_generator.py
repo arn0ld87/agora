@@ -890,20 +890,43 @@ Return JSON format (no markdown):
         """
         Assign appropriate publisher agents to initial posts
 
-        Match agent_id based on each post's poster_type
+        Match agent_id based on each post's poster_type.
+
+        Issue #1226: ``poster_type`` traegt je nach Lauf entweder Entity-Typen
+        (``management``, ``retrainee``) oder Entity-**Namen** (``betriebsrat``,
+        ``kostentraeger``) — welchen Namensraum das Event-Config-Modell waehlt,
+        schwankt bei identischem Prompt und Testfall. Ein Index allein auf
+        ``entity_type`` kann den Namensfall strukturell nie treffen; dort fiel
+        vor diesem Fix jeder Seed-Post in den Fallback und damit auf denselben
+        Agenten. Der Namens-Index deckt beide Ausgabeformen ab, unabhaengig vom
+        NER-Vokabular des jeweiligen Laufs.
         """
         if not event_config.initial_posts:
             return event_config
 
-        # Build agent index by entity type
+        # Zwei Indizes, ein gemeinsamer Rotationszaehler. Die Schluessel tragen
+        # ein Praefix, damit ein Entity-Name, der zufaellig wie ein Entity-Typ
+        # heisst, nicht den Zaehler des Typs mitbenutzt.
+        agents_by_name: Dict[str, List[AgentActivityConfig]] = {}
         agents_by_type: Dict[str, List[AgentActivityConfig]] = {}
         for agent in agent_configs:
-            etype = agent.entity_type.lower()
-            if etype not in agents_by_type:
-                agents_by_type[etype] = []
-            agents_by_type[etype].append(agent)
+            agents_by_name.setdefault(agent.entity_name.strip().lower(), []).append(agent)
+            agents_by_type.setdefault(agent.entity_type.strip().lower(), []).append(agent)
 
-        # Type mapping table (handle different formats LLM might output)
+        # Fallback-Reihenfolge: hoechster Einfluss zuerst, bei Gleichstand die
+        # niedrigste agent_id. Ohne den zweiten Schluessel entschied faktisch
+        # die Sortierstabilitaet der Kandidatenliste, also die Zufaelligkeit der
+        # Persona-Generierungsreihenfolge (#1226).
+        fallback_agents = sorted(
+            agent_configs, key=lambda a: (-a.influence_weight, a.agent_id)
+        )
+
+        # Type mapping table (handle different formats LLM might output).
+        # Herkunft: OASIS-Campus-Demo-Domaene. Ausserhalb davon — insbesondere
+        # fuer jede deutschsprachige Domaene — greift keiner dieser Aliase. Die
+        # Tabelle bleibt fuer die Campus-Demo erhalten, deckt aber nichts
+        # darueber hinaus ab; die tatsaechliche Abdeckung leistet der
+        # Namens-Index oben.
         type_aliases = {
             "official": ["official", "university", "governmentagency", "government"],
             "university": ["university", "official"],
@@ -926,38 +949,51 @@ Return JSON format (no markdown):
             # Try to find matching agent
             matched_agent_id = None
 
-            # 1. Direct match
-            if poster_type in agents_by_type:
-                agents = agents_by_type[poster_type]
-                idx = used_indices.get(poster_type, 0) % len(agents)
-                matched_agent_id = agents[idx].agent_id
-                used_indices[poster_type] = idx + 1
+            def _take(bucket: List[AgentActivityConfig], counter_key: str) -> int:
+                """Naechster Agent aus ``bucket``, reihum ueber ``used_indices``."""
+                idx = used_indices.get(counter_key, 0) % len(bucket)
+                used_indices[counter_key] = idx + 1
+                return bucket[idx].agent_id
+
+            # 1. Name match — der Entity-Name ist die spezifischere Angabe und
+            #    wird deshalb vor dem Typ versucht.
+            if poster_type in agents_by_name:
+                matched_agent_id = _take(agents_by_name[poster_type], f"name:{poster_type}")
+
+            # 2. Direct type match
+            elif poster_type in agents_by_type:
+                matched_agent_id = _take(agents_by_type[poster_type], f"type:{poster_type}")
             else:
-                # 2. Match using aliases
+                # 3. Match using aliases
                 for alias_key, aliases in type_aliases.items():
                     if poster_type in aliases or alias_key == poster_type:
                         for alias in aliases:
                             if alias in agents_by_type:
-                                agents = agents_by_type[alias]
-                                idx = used_indices.get(alias, 0) % len(agents)
-                                matched_agent_id = agents[idx].agent_id
-                                used_indices[alias] = idx + 1
+                                matched_agent_id = _take(
+                                    agents_by_type[alias], f"type:{alias}"
+                                )
                                 break
                     if matched_agent_id is not None:
                         break
 
-            # 3. If still not found, use agent with highest influence
+            # 4. Immer noch nichts: reihum ueber alle Agenten verteilen. Vorher
+            #    wurde hier stets derselbe Agent gewaehlt — ein einziger Miss
+            #    legte damit saemtliche Seed-Posts auf eine Stimme (#1226).
             if matched_agent_id is None:
-                logger.warning(
-                    f"No matching agent found for type '{poster_type}', using agent with highest influence"
-                )
-                if agent_configs:
-                    # Sort by influence, select highest
-                    sorted_agents = sorted(
-                        agent_configs, key=lambda a: a.influence_weight, reverse=True
+                if fallback_agents:
+                    matched_agent_id = _take(fallback_agents, "__fallback__")
+                    logger.warning(
+                        "No matching agent found for poster_type '%s' — "
+                        "round-robin fallback to agent_id=%s",
+                        poster_type,
+                        matched_agent_id,
                     )
-                    matched_agent_id = sorted_agents[0].agent_id
                 else:
+                    logger.warning(
+                        "No agent configs available for poster_type '%s' — "
+                        "falling back to agent_id=0",
+                        poster_type,
+                    )
                     matched_agent_id = 0
 
             updated_posts.append(
