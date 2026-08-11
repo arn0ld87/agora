@@ -66,6 +66,7 @@ Exit-Codes: `0` = alle Gates grün · `1` = mind. ein Gate rot · `2` = falscher
 | 10 | `vite build` | Frontend PR smoke gate | nur mit `GATE_BUILD=1` |
 | 11 | Schema-Spiegel-Smoke | Frontend-Zod muss Backend-Schema spiegeln | ja |
 | 12 | Routing-Check (`scripts/check_llm_endpoint_localhost.sh`) | keiner — lokale `.env`-Prüfung, ohne `.env` Skip mit Warnung | ja (Scope `all`/`routing`) |
+| 13 | Komplexitäts-Gate (`scripts/check_complexity.py`) | contract-gates-Workflow (`push:main`) | ja (Scope `backend`/`all`) |
 
 ## Warum lokales Gate?
 
