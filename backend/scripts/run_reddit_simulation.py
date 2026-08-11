@@ -168,9 +168,12 @@ setup_signal_handlers = _platform_runner.setup_signal_handlers
 class RedditSimulationRunner(SinglePlatformRunner):
     """Reddit simulation runner — dünne Subklasse der SinglePlatformRunner-Basis.
 
-    Einzige Verhaltensdifferenz zu Twitter: ``_assign_initial_action`` appended
-    an eine bestehende Action-Liste pro Agent statt sie zu überschreiben
-    (Reddit erlaubt mehrere Initial-Posts desselben Agents).
+    Issue #1245: Die Kollisionsbehandlung für mehrere Initial-Posts desselben
+    Agenten stand bis hierher als Reddit-Override. Sie ist keine
+    Plattformeigenheit, sondern die einzig richtige Behandlung — Twitter
+    verwarf über die überschreibende Basisimplementierung still Seed-Posts.
+    Sie liegt jetzt in ``SinglePlatformRunner``, diese Klasse unterscheidet
+    sich nur noch in Aktionsliste, Dateinamen und Graph-Generator.
     """
 
     # Reddit available actions (INTERVIEW not included, INTERVIEW can only be triggered manually via ManualAction)
@@ -202,21 +205,6 @@ class RedditSimulationRunner(SinglePlatformRunner):
     DB_FILENAME = "reddit_simulation.db"
     PLATFORM_TYPE = oasis.DefaultPlatformType.REDDIT
     GRAPH_GENERATOR = staticmethod(generate_reddit_agent_graph)
-
-    def _assign_initial_action(self, initial_actions, agent, content: str) -> None:
-        """Reddit: mehrere Initial-Posts pro Agent → append an Liste statt überschreiben."""
-        if agent in initial_actions:
-            if not isinstance(initial_actions[agent], list):
-                initial_actions[agent] = [initial_actions[agent]]
-            initial_actions[agent].append(ManualAction(
-                action_type=ActionType.CREATE_POST,
-                action_args={"content": content}
-            ))
-        else:
-            initial_actions[agent] = ManualAction(
-                action_type=ActionType.CREATE_POST,
-                action_args={"content": content}
-            )
 
 
 async def main():

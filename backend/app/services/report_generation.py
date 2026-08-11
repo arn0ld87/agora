@@ -39,6 +39,34 @@ def was_run_cancelled(run_id: str) -> bool:
         return False
 
 
+def finish_completed_run(run_id: str, *, report_id: str, simulation_id: str) -> None:
+    """Setzt den Erfolgs-Endzustand eines fertigen Reports (Issue #1243).
+
+    Bewusst eine eigene Funktion statt eines Inline-Blocks: der Resume-Pfad
+    ist die einzige Stelle, an der ein Run von ``stopped`` +
+    ``termination_reason="user_cancel"`` wieder in den Erfolg laufen kann.
+    ``RunRegistry.update_run`` laesst das Feld stehen, solange es nicht
+    ausdruecklich ueberschrieben wird — der erfolgreich zu Ende gefuehrte Lauf
+    stuende sonst als "completed" da und waere im Monitor gleichzeitig als
+    nutzerabgebrochen gefuehrt.
+
+    Als Funktion ist der Endzustand gegen eine echte Registry pruefbar, statt
+    nur als Textmuster im Quelltext (CodeRabbit PR #1262).
+    """
+    RunRegistry().update_run(
+        run_id,
+        status="completed",
+        progress=100,
+        message="Report generated",
+        termination_reason=None,
+        artifacts=ArtifactLocator.existing_paths({
+            "report": ArtifactLocator.report_artifacts(report_id),
+            "simulation": ArtifactLocator.simulation_artifacts(simulation_id),
+        }),
+        resume_capability={"available": False, "action": None, "label": None},
+    )
+
+
 def finish_cancelled_run(run_id: str, *, report_id: str, simulation_id: str) -> None:
     """Setzt den Abbruch-Endzustand eines per ``/cancel`` gestoppten Reports.
 

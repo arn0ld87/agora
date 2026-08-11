@@ -32,7 +32,11 @@ from ..services.llm_routing_seed import (
     seed_run_stage_routing,
 )
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
-from ..services.report_generation import finish_cancelled_run, was_run_cancelled
+from ..services.report_generation import (
+    finish_cancelled_run,
+    finish_completed_run,
+    was_run_cancelled,
+)
 from ..services.run_lifecycle import RunLifecycle
 from ..services.run_registry import RunRegistry
 from ..services.simulation_manager import SimulationManager, SimulationStatus
@@ -937,16 +941,8 @@ def _resume_report_generate(run: dict):
                     run["run_id"], report_id=report_id, simulation_id=simulation_id
                 )
             elif report.status == ReportStatus.COMPLETED:
-                run_registry.update_run(
-                    run["run_id"],
-                    status="completed",
-                    progress=100,
-                    message="Report generated",
-                    artifacts=ArtifactLocator.existing_paths({
-                        "report": ArtifactLocator.report_artifacts(report_id),
-                        "simulation": ArtifactLocator.simulation_artifacts(simulation_id),
-                    }),
-                    resume_capability={"available": False, "action": None, "label": None},
+                finish_completed_run(
+                    run["run_id"], report_id=report_id, simulation_id=simulation_id
                 )
                 task_manager.complete_task(task_id, result={"report_id": report_id, "simulation_id": simulation_id})
             else:
