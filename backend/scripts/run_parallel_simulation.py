@@ -231,6 +231,7 @@ try:
         create_tool_aware_loop,
         build_camel_function_tools,
         attach_tools_to_agents,
+        apply_conflict_instruction,
     )
     AGENT_TOOLS_AVAILABLE = True
 except ImportError as _e:
@@ -1694,6 +1695,14 @@ async def run_twitter_simulation(
         except Exception as e:
             log_info(f"enforce_memory_token_limit (twitter) failed: {e}")
 
+    # Konflikt-Regel gegen den Zustimmungs-Bias (#1215). Bewusst
+    # unabhaengig von enable_agent_tools: sie hat mit Werkzeugen nichts
+    # zu tun, und der ReACT-Pfad, der sie frueher trug, ist hier
+    # abgeschaltet (tool_loop = None).
+    if AGENT_TOOLS_AVAILABLE:
+        patched = apply_conflict_instruction(result.agent_graph)
+        log_info(f"Conflict rule applied to {patched} Twitter agents")
+
     # Native CAMEL function-calling: attach web_search / web_fetch / search_graph
     # to every SocialAgent. OASIS triggers these through its normal LLMAction()
     # step — no ReACT prompt parsing required.
@@ -1978,6 +1987,14 @@ async def run_reddit_simulation(
             enforce_memory_token_limit(result.agent_graph)
         except Exception as e:
             log_info(f"enforce_memory_token_limit (reddit) failed: {e}")
+
+    # Konflikt-Regel gegen den Zustimmungs-Bias (#1215). Bewusst
+    # unabhaengig von enable_agent_tools: sie hat mit Werkzeugen nichts
+    # zu tun, und der ReACT-Pfad, der sie frueher trug, ist hier
+    # abgeschaltet (tool_loop = None).
+    if AGENT_TOOLS_AVAILABLE:
+        patched = apply_conflict_instruction(result.agent_graph)
+        log_info(f"Conflict rule applied to {patched} Reddit agents")
 
     # Native CAMEL function-calling for Reddit agents (see Twitter branch).
     if enable_tools and AGENT_TOOLS_AVAILABLE:

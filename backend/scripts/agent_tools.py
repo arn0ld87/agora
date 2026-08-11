@@ -989,6 +989,25 @@ TOOL_USE_INSTRUCTION = (
     "reacting to another agent's post."
 )
 
+#: Gegengewicht zum Zustimmungs-Bias der Modelle (#1215). Die Regel *erlaubt*
+#: Widerspruch, sie verordnet ihn nicht — der letzte Satz ist der eigentliche
+#: Hebel. Eine Anweisung "sei streitlustig" wuerde Dissens erzeugen, wo die
+#: Rolle keinen hergibt, und damit denselben Fehler in die Gegenrichtung
+#: machen: Agora soll Stakeholder-Widerstand prognostizieren, nicht erfinden.
+CONFLICT_INSTRUCTION = (
+    "\n\n## Interaction and Conflict\n"
+    "Do not default to agreement. Real stakeholders disagree, and a discussion\n"
+    "in which nobody objects is not a realistic one.\n"
+    "When a post or comment conflicts with your role, your interests or your\n"
+    "stated beliefs, say so — and pick the action that matches the objection\n"
+    "instead of a polite one: DISLIKE_POST or DISLIKE_COMMENT to reject,\n"
+    "CREATE_COMMENT to state the objection, QUOTE_POST to contradict publicly.\n"
+    "Use only actions that are offered to you this round; if none of them fits\n"
+    "your objection, choose one that is listed rather than inventing one.\n"
+    "Agreeing is right wherever your persona would genuinely agree. What is\n"
+    "wrong is agreeing because it is the safer answer."
+)
+
 
 def _role_value(role: Any) -> str:
     return str(getattr(role, "value", role) or "").lower()
@@ -1175,6 +1194,69 @@ def enforce_memory_token_limit(agent_graph) -> int:
     return patched
 
 
+def extend_system_message(agent: Any, agent_id: Any, addition: str) -> bool:
+    """Haengt ``addition`` an die System-Message eines CAMEL-Agenten an.
+
+    OASIS' ``generate_*_agent_graph`` nimmt keine zusaetzlichen Prompt-Bausteine
+    entgegen; der einzige Weg an den Agenten fuehrt ueber sein ``system_message``
+    nach der Graph-Erzeugung. Das ist nicht mit einem Attribut-Setter getan:
+    CAMEL serialisiert die System-Message in ``ChatAgent.__init__`` via
+    ``init_messages()`` in den Speicher, und ``ChatHistoryMemory`` haelt
+    Dict-Snapshots statt Referenzen. Wer nur das lebende ``BaseMessage``-Objekt
+    aendert, aendert nichts an dem, was das Modell zu sehen bekommt.
+
+    Idempotent: ein bereits enthaltener Baustein wird nicht erneut angehaengt.
+    Gibt zurueck, ob tatsaechlich gepatcht wurde.
+    """
+    try:
+        sm = getattr(agent, "system_message", None)
+        if sm is None or not hasattr(sm, "content"):
+            return False
+        if addition.strip() in sm.content:
+            return False
+        sm.content = sm.content + addition
+        original_sm = getattr(agent, "_original_system_message", None)
+        if original_sm is not None and hasattr(original_sm, "content"):
+            if addition.strip() not in original_sm.content:
+                original_sm.content = original_sm.content + addition
+        if hasattr(agent, "init_messages"):
+            agent.init_messages()
+        return True
+    except Exception as e:  # noqa: BLE001 — ein Agent darf die Graph-Vorbereitung nicht kippen
+        logger.warning("[system_message] agent %s prompt patch failed: %s", agent_id, e)
+        return False
+
+
+def apply_conflict_instruction(agent_graph) -> int:
+    """Bringt :data:`CONFLICT_INSTRUCTION` an jeden Agenten des Graphen.
+
+    Bewusst getrennt von :func:`attach_tools_to_agents`: die Regel hat mit
+    Werkzeugen nichts zu tun und muss auch dann greifen, wenn ein Lauf ohne
+    ``enable_agent_tools`` faehrt.
+
+    Hintergrund (#1215): dieselbe Regel existierte bereits in
+    ``build_agent_prompt_with_tools``, also im ReACT-Pfad
+    ``ToolAwareActionLoop.decide_action``. ``run_parallel_simulation`` hat den
+    Loop mit der Umstellung auf natives CAMEL-Function-Calling abgeschaltet
+    (``tool_loop = None``), womit die Regel keinen Agenten mehr erreichte —
+    fuenf vollstaendige Laeufe ueber vier Modellkonfigurationen ergaben null
+    Dislikes und null Dissens-Marker im Textkorpus.
+
+    Gibt die Zahl der tatsaechlich gepatchten Agenten zurueck.
+    """
+    if agent_graph is None:
+        return 0
+    try:
+        agents_iter = agent_graph.get_agents()
+    except Exception as e:  # noqa: BLE001 — wie in attach_tools_to_agents
+        logger.warning("[conflict_rule] get_agents failed: %s", e)
+        return 0
+    return sum(
+        1 for agent_id, agent in agents_iter
+        if extend_system_message(agent, agent_id, CONFLICT_INSTRUCTION)
+    )
+
+
 def attach_tools_to_agents(agent_graph, tools: List[Any]) -> int:
     """Inject the given FunctionTools into every SocialAgent in an AgentGraph.
 
@@ -1203,23 +1285,7 @@ def attach_tools_to_agents(agent_graph, tools: List[Any]) -> int:
                 logger.warning("[attach_tools] agent %s add_tool failed: %s", agent_id, e)
                 break
         # Extend system_message so the persona actively uses the tools.
-        try:
-            sm = getattr(agent, "system_message", None)
-            if sm is not None and hasattr(sm, "content"):
-                if TOOL_USE_INSTRUCTION.strip() not in sm.content:
-                    sm.content = sm.content + TOOL_USE_INSTRUCTION
-                    # CAMEL serialized the original system message into memory
-                    # during ChatAgent.__init__ via init_messages(). Updating
-                    # only the live BaseMessage object is not enough because
-                    # ChatHistoryMemory stores dict snapshots, not references.
-                    original_sm = getattr(agent, "_original_system_message", None)
-                    if original_sm is not None and hasattr(original_sm, "content"):
-                        if TOOL_USE_INSTRUCTION.strip() not in original_sm.content:
-                            original_sm.content = original_sm.content + TOOL_USE_INSTRUCTION
-                    if hasattr(agent, "init_messages"):
-                        agent.init_messages()
-        except Exception as e:
-            logger.warning("[attach_tools] agent %s prompt patch failed: %s", agent_id, e)
+        extend_system_message(agent, agent_id, TOOL_USE_INSTRUCTION)
         # OASIS SocialAgent defaults to max_iteration=1 — meaning the LLM gets
         # exactly one turn, so it can either call a research tool OR a social
         # action, never both. Raise it so research → action can happen in one

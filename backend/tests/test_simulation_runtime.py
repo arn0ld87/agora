@@ -148,6 +148,108 @@ def test_attach_tools_to_agents_patches_context_and_sanity(monkeypatch):
     assert "Research Tools" in graph.agent._original_system_message.content
 
 
+def _conflict_graph(module):
+    """Minimaler AgentGraph mit den drei Feldern, an denen CAMEL haengt."""
+
+    class DummyMessage:
+        def __init__(self, content):
+            self.content = content
+
+    class DummyAgent:
+        def __init__(self):
+            self.system_message = DummyMessage("persona")
+            self._original_system_message = DummyMessage("persona")
+            self.init_messages_called = 0
+
+        def init_messages(self):
+            self.init_messages_called += 1
+
+    class DummyGraph:
+        def __init__(self):
+            self.agents = [DummyAgent(), DummyAgent()]
+
+        def get_agents(self):
+            return list(enumerate(self.agents))
+
+    return DummyGraph()
+
+
+def test_conflict_instruction_reaches_every_agent_system_message():
+    """#1215: die Regel muss ueber den realen Patch-Pfad ankommen.
+
+    Bewusst gegen ``apply_conflict_instruction`` statt gegen die Konstante:
+    ein Test, der nur ``CONFLICT_INSTRUCTION`` auf Stichworte prueft, waere
+    genau der Fehler, den dieser Slice dokumentiert — die Vorgaenger-Tests aus
+    #1220/#1223 waren gruen, waehrend die Regel keinen Agenten erreichte.
+
+    ``_original_system_message`` ist kein Beiwerk: CAMEL serialisiert die
+    System-Message beim Init in den Speicher, und ``ChatHistoryMemory`` haelt
+    Dict-Snapshots. Ohne diesen zweiten Patch plus ``init_messages()`` sieht
+    das Modell den alten Text.
+    """
+    module = _load_module("agent_tools_conflict_test", "backend/scripts/agent_tools.py")
+    graph = _conflict_graph(module)
+
+    patched = module.apply_conflict_instruction(graph)
+
+    assert patched == 2
+    for agent in graph.agents:
+        assert "Interaction and Conflict" in agent.system_message.content
+        assert "Interaction and Conflict" in agent._original_system_message.content
+        assert "DISLIKE_POST" in agent.system_message.content
+        assert agent.init_messages_called == 1
+
+
+def test_conflict_instruction_is_idempotent():
+    """Zweimal anwenden darf den Prompt nicht verdoppeln.
+
+    Der Runner ruft die Funktion je Plattform einmal; ein zweiter Aufruf ist
+    nach einem Retry oder einer Graph-Wiederverwendung trotzdem moeglich.
+    """
+    module = _load_module("agent_tools_conflict_idem_test", "backend/scripts/agent_tools.py")
+    graph = _conflict_graph(module)
+
+    assert module.apply_conflict_instruction(graph) == 2
+    assert module.apply_conflict_instruction(graph) == 0
+    for agent in graph.agents:
+        assert agent.system_message.content.count("Interaction and Conflict") == 1
+        assert agent.init_messages_called == 1
+
+
+def test_conflict_instruction_survives_a_broken_agent():
+    """Ein Agent ohne ``system_message`` darf die Graph-Vorbereitung nicht kippen."""
+    module = _load_module("agent_tools_conflict_robust_test", "backend/scripts/agent_tools.py")
+    graph = _conflict_graph(module)
+    graph.agents.insert(0, object())
+
+    assert module.apply_conflict_instruction(graph) == 2
+
+
+def test_conflict_rule_is_wired_into_both_parallel_platform_paths():
+    """Die Regel muss im Runner haengen, nicht nur importierbar sein.
+
+    Sie wird bewusst ausserhalb des ``enable_agent_tools``-Zweigs aufgerufen:
+    sie hat mit Werkzeugen nichts zu tun. Der Test bindet sich an die
+    Aufrufstelle, weil genau deren Fehlen der Defekt war.
+    """
+    source = (REPO_ROOT / "backend/scripts/run_parallel_simulation.py").read_text(
+        encoding="utf-8"
+    )
+    tree = ast.parse(source)
+    called_in = {
+        fn.name
+        for fn in ast.walk(tree)
+        if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and any(
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "apply_conflict_instruction"
+            for node in ast.walk(fn)
+        )
+    }
+    assert {"run_twitter_simulation", "run_reddit_simulation"} <= called_in, called_in
+
+
 def test_sanitize_memory_records_drops_empty_assistant_without_tool_calls():
     module = _load_module("agent_tools_sanitize_test", "backend/scripts/agent_tools.py")
 
@@ -442,14 +544,16 @@ def test_create_manual_action_rejects_actions_not_in_available_actions():
 
 
 def test_build_agent_prompt_with_tools_binds_conflict_rule_to_available_actions():
-    """ACHTUNG (#1215): prueft den Prompt-Text, nicht den Produktivpfad.
+    """ACHTUNG (#1215): prueft den Prompt-Text eines toten Pfads.
 
     ``build_agent_prompt_with_tools`` wird im Lauf ueber
-    ``ToolAwareActionLoop.decide_action`` erreicht, und der Loop ist seit der
-    Umstellung auf natives CAMEL-Function-Calling abgeschaltet
-    (``tool_loop = None``). Dieser Test ist gruen und sagt nichts darueber aus,
-    ob ein Agent die Konfliktregel je zu sehen bekommt. Den Erreichbarkeits-
-    Nachweis fuehrt ``test_prompt_builder_is_reachable_from_a_live_runner_path``.
+    ``ToolAwareActionLoop.decide_action`` erreicht, und der Loop ist im
+    Parallel-Runner seit der Umstellung auf natives CAMEL-Function-Calling
+    abgeschaltet (``tool_loop = None``). Dieser Test ist gruen und sagt nichts
+    darueber aus, ob ein Agent die Konfliktregel zu sehen bekommt — das tut
+    ``test_conflict_instruction_reaches_every_agent_system_message`` gegen
+    ``apply_conflict_instruction``. Er bleibt stehen, weil
+    ``SinglePlatformRunner`` den ReACT-Pfad weiterhin nutzt.
     """
     module = _load_module(
         "agent_tools_prompt_conflict_test", "backend/scripts/agent_tools.py"
@@ -554,12 +658,11 @@ def test_single_platform_runner_keeps_the_tool_loop_reachable():
     reason=(
         "#1215: run_parallel_simulation setzt tool_loop in beiden Plattform-Pfaden "
         "hart auf None ('Native CAMEL function-calling replaces the old ReACT-style "
-        "tool_loop'). Damit ist ToolAwareActionLoop.decide_action unerreichbar und "
-        "build_agent_prompt_with_tools wird nie gebaut — die Konfliktregel aus #1220 "
-        "und die Tool-Skip-Klausel aus #1223 erreichen keinen Agenten. Produktive "
-        "Laeufe fahren genau dieses Skript; SinglePlatformRunner ist nicht betroffen. "
-        "Faellt weg, sobald entschieden ist, wohin die Regel wandert (Persona-/"
-        "System-Message, Angleichung an SinglePlatformRunner oder Entfernung)."
+        "tool_loop'), womit ToolAwareActionLoop.decide_action unerreichbar ist. "
+        "Die Konfliktregel haengt seit apply_conflict_instruction nicht mehr daran; "
+        "offen bleibt nur das Aufraeumen des toten Pfads samt "
+        "build_agent_prompt_with_tools und seinen Tests. Der Guard bleibt bis dahin "
+        "stehen, damit die naechste Prompt-Regel nicht wieder dort landet."
     ),
     strict=True,
 )
