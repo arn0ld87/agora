@@ -54,16 +54,19 @@ The demo shows:
 
 ## Reference run
 
-The current, critically documented end-to-end run in the repository examines the **domain migration `alexle135.de` → `alex-schneider.dev`** with **Gemini 3.6 Flash as the report writer**.
+The current, critically documented end-to-end run examines the **introduction of a self-hosted AI learning assistant at an AZAV-certified retraining provider**, with **`deepseek-v4-flash` as the report writer** and **`gemini-embedding-2` (3072 dim) for the knowledge graph**.
 
-The run processed **30 loaded persona profiles** across six report sections. ReportV3 contains **24 claim rows but only 17 unique claim IDs**, plus **157 hypotheses with 157 unique IDs** and **133 data-gap rows with 41 unique gap IDs**. A red-team step reported **6 findings at `echo_index=0.690`**.
+The run completed cleanly: 50 persona profiles, 10/10 simulation rounds, 451 actions, six report sections, no missing sections, zero embedding errors. Persona diversity holds at that scale — 50/50 unique names, no personality type above 12 %, no single age above 4 %.
 
-More important than the report conclusion is the behavior of the evidence layer: it caught several concrete Gemini overclaims, including invented legacy subdomains, an undocumented new email address, and overstated recruiting causality. At the same time, the same run openly exposes the current limitations: **compound claims can partially bypass the gate, claim/gap IDs are not yet unique across the report, and source context plus counter-evidence for recommendations remain incomplete.**
+Precisely because the pipeline runs cleanly, it exposes what sits underneath. The evidence layer demoted **129 statements to hypotheses and recorded 111 data gaps, while binding exactly one claim** — and that one binds only because it quotes its own evidence verbatim. The prose gate removed exactly one sentence per section, in all six, because it only inspects sentences containing a number. And the source document turned out to carry its own answers: several statements the report presents as findings ("the chamber of commerce views generated exercises uncritically") are verbatim sentences from the input.
 
 > [!NOTE]
 > This run is deliberately not a polished showcase. It documents both working guardrails and reproducible failure classes. It proves neither predictive validity nor real stakeholder behavior.
 
-**[→ Read the current reference run with guardrail findings, known failures, and priorities](./docs/reference-runs/2026-08-09-domain-migration/README.md)**
+**[→ Read the current reference run with findings, mechanisms, and remediation priorities](./docs/reference-runs/2026-08-11-ki-lernassistent/README.md)**
+
+Earlier runs, both on the domain migration `alexle135.de` → `alex-schneider.dev`:
+[first run](./docs/reference-runs/2026-08-09-domain-migration/README.md) · [second run](./docs/reference-runs/2026-08-09-domain-migration-v2/README.md)
 
 ---
 

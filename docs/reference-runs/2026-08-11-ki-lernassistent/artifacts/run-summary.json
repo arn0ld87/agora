@@ -1,0 +1,97 @@
+{
+  "schema": "agora-reference-run-summary-v1",
+  "date": "2026-08-11",
+  "scenario": "Einfuehrung eines selbstgehosteten KI-Lernassistenten bei einem AZAV-zertifizierten Umschulungstraeger in Sachsen-Anhalt",
+  "report_id": "report_40236c4a59f0",
+  "simulation_id": "sim_8495a5fe314b",
+  "graph_id": "b677b8f9-0530-4fb8-a310-3295fbc5e50a",
+  "report_mode": "balanced",
+  "report_intent": "opinion",
+  "report_writer": "deepseek-v4-flash:0731",
+  "persona_model": "deepseek-v4-flash:0731",
+  "embedding": {
+    "model": "gemini-embedding-2",
+    "dimensions": 3072,
+    "endpoint": "openai-compatible",
+    "errors": 0,
+    "note": "Erster Referenzlauf mit Cloud-Embedding statt lokalem Ollama. Der native Gemini-Pfad (:embedContent) ist beim Re-Embedding ausdruecklich abgelehnt; nur der OpenAI-kompatible Pfad funktioniert."
+  },
+  "loaded_persona_profiles": 50,
+  "agents_in_metrics_snapshot": 38,
+  "matched_graph_entities": 47,
+  "report_sections": 6,
+  "simulation": {
+    "rounds_completed": 10,
+    "total_rounds": 10,
+    "total_actions": 451,
+    "graph_interactions": 286,
+    "cluster_count": 4,
+    "cluster_sizes": [12, 10, 9, 7],
+    "echo_chamber_index": 0.4685,
+    "bridge_agents": [14, 16, 11, 42, 21],
+    "dislikes": 0,
+    "comment_dislikes": 0,
+    "reddit_comments": 77,
+    "dissent_markers_in_comments": 0
+  },
+  "evidence_map": {
+    "validated_claims": 1,
+    "hypotheses": 129,
+    "data_gaps": 111,
+    "evidence_index_entries": 85,
+    "evidence_types": {
+      "agent_interview": 40,
+      "seed_document": 22,
+      "relationship_chain": 11,
+      "agent_action": 8,
+      "graph_metric": 4
+    },
+    "gate_decisions": {
+      "no_supporting_evidence": 111,
+      "reviewer_floor_insufficient_evidence": 12,
+      "prose_fact_unsupported": 6,
+      "medium_without_agent_grounded_evidence": 1
+    },
+    "degradation_log_entries": 0
+  },
+  "persona_diversity": {
+    "unique_names": "50/50",
+    "max_surname_frequency": 1,
+    "max_mbti_share_percent": 12,
+    "max_age_share_percent": 4,
+    "name_gender_mismatches": 0,
+    "note": "Die Rohausgabe des Generierungslogs zeigt weiterhin Modus-Kollaps; der Dedup-Schritt repariert ihn vollstaendig. Massgeblich ist reddit_profiles.json."
+  },
+  "confirmed_positive_behaviors": [
+    "Embedding-Umstellung auf Gemini laeuft ueber den kompletten Graph-Build ohne einen einzigen Fehler",
+    "Persona-Attributdiversitaet haelt bei 50 Agenten: 50/50 unique Namen, kein MBTI-Typ ueber 12 Prozent, kein Alterswert ueber 4 Prozent",
+    "Adaptive Reportplanung erkennt Intent 'opinion' und reduziert die Outline von 11 auf 6 Abschnitte",
+    "Keine Section laeuft ins Iterationslimit",
+    "Der Bericht behandelt die Geschaeftsfuehrungsaussagen durchgehend als unbelegte Behauptung, wie im Requirement verlangt",
+    "Der Bericht benennt ausbleibende erwartete Effekte, statt sie zu relativieren",
+    "Das Evidence-Gate greift und degradiert 129 Aussagen zu Hypothesen"
+  ],
+  "known_failures": [
+    "Das Seed-Dokument enthaelt Konstruktionsnotizen und erwartete Ergebnisse; der Report ruft sie als Evidence ab und praesentiert sie als Simulationsergebnis",
+    "Nur ein Claim von 130 bindet, und dieser nur, weil er seine eigene Evidence woertlich zitiert",
+    "Die Entailment-Stufe vergibt SUPPORTED offenbar nur bei Nahezu-Wortgleichheit gegen ein einzelnes Evidence-Item; synthetisierende Aussagen koennen strukturell nicht binden",
+    "Der Fliesstext-Gate prueft ausschliesslich Saetze mit einer Zahl (_has_factual_claim); qualitative Behauptungen laufen ungeprueft und ungekennzeichnet durch",
+    "Die Exzision beschaedigt die Textstruktur: in 2 von 6 Sections bleibt eine Aufzaehlung ohne ihren Punkt oder ein Rueckverweis ohne Bezug",
+    "Personas antworten in fremden Rollen ('Als Betriebsrat...'), der Report uebernimmt die Zuschreibung",
+    "Nicht-Stakeholder-Entitaeten (Datum, Verwaltungsverfahren, Zertifizierungsstandard, Hardware) werden zu Personas und treten im Report als bestaetigende Quellen auf",
+    "Persona-Rollendubletten: neunmal Retrainee in unterschiedlicher Benennung; 50 Personas verdichten sich im Report auf acht Meinungsgruppen",
+    "Ueber 451 Aktionen faellt kein einziges Dislike; 77 Kommentare enthalten null Dissens-Marker",
+    "Population-Accounting-Diskrepanz zurueck: 50 konfigurierte Profile gegen 38 Agenten im Metrics-Snapshot",
+    "Alle Zitat-Anker lauten seed_doc:simulation_requirement; der seed_doc-Praefix umgeht die Bindungspruefung vollstaendig",
+    "Die SIM-Kennzeichnung schwankt innerhalb einer Section: in Section 6 tragen nur 2 von rund 10 woertlichen Zitaten persona_id und Anker"
+  ],
+  "remediation_priority": [
+    "Testfall-Hygiene und Evidence-Typisierung: Aussagen ueber das Szenario von Aussagen ueber die Domaene trennen",
+    "Entailment-Stufe: pruefen, ob Claims gegen einzelne Evidence-Items statt gegen Kombinationen bewertet werden",
+    "Prosa-Gate ueber Zahlen hinaus auf qualitative Aussagen ausdehnen",
+    "Strukturerhaltende Exzision: Aufzaehlungen und Rueckverweise beim Entfernen mitfuehren",
+    "Persona-Eligibility: Nicht-Stakeholder ausschliessen, Rollendubletten zusammenfuehren",
+    "Population-Accounting: total_agents korrekt zaehlen oder korrekt benennen"
+  ],
+  "related_issues": [1209, 1226, 1236]
+}
