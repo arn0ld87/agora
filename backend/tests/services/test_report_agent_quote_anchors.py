@@ -152,17 +152,30 @@ class TestUnboundSeedAnchor:
 # 5. seed_anchor="seed_doc:abc" → valid=True (opaque OK)
 # ---------------------------------------------------------------------------
 
-class TestSeedDocPrefixOpaqueOk:
-    def test_seed_doc_prefix_is_accepted_without_map_lookup(self):
-        """seed_anchor mit 'seed_doc:'-Prefix → immer akzeptiert (opaque)."""
+class TestSeedDocPrefixWirdGebunden:
+    """Issue #1249: Das ``seed_doc:``-Präfix ist keine Freikarte mehr.
+
+    Dieser Test forderte bis zum Sign-off vom 2026-08-11 das Gegenteil — ein
+    Anker mit diesem Präfix galt als opake Referenz und wurde nie aufgelöst.
+    Genau diesen einen ungeprüften Pfad wählte das Modell in den beobachteten
+    Läufen, mit dem Beispielwert aus dem Prompt: acht Zitate von sieben
+    Personas trugen ``seed_doc:interview_transcript_07``, ein Dokument dieses
+    Namens gab es nicht.
+
+    Die Erwartung ist bewusst umgedreht, nicht abgeschwächt: Das Zitat bleibt
+    gültig — verworfen wird nichts —, aber der Anker erscheint als
+    ``unbound_evidence_refs`` und ist damit sichtbar.
+    """
+
+    def test_nicht_aufloesbarer_seed_doc_anker_wird_unbound(self):
         evidence_map = _make_evidence_map([])  # leere EvidenceMap
         persona_ids = ["persona_01"]
 
         tag = _make_quote_tag(persona_id="persona_01", seed_anchor="seed_doc:abc123")
         result = validate_quote_anchors(tag, evidence_map, persona_ids)
 
-        assert result.valid is True
-        assert result.unbound_evidence_refs == []
+        assert result.unbound_evidence_refs == ["seed_doc:abc123"]
+        # Die gewählte Politik verwirft nicht — der Inhalt bleibt erhalten.
         assert result.invalid_quotes == []
 
 

@@ -415,7 +415,9 @@ _QUOTE_TAG_RE = re.compile(
     re.DOTALL,
 )
 _ATTR_RE = re.compile(r'(\w+)="([^"]*)"')
-_SEED_DOC_PREFIX = "seed_doc:"
+# Issue #1249: ``_SEED_DOC_PREFIX`` ist mit der Praefix-Ausnahme entfallen.
+# Sie war die einzige Verwendung — ein Anker wird jetzt unabhaengig von seinem
+# Praefix gegen ``known_anchors`` geprueft.
 
 
 @dataclass(frozen=True)
@@ -467,8 +469,11 @@ def validate_quote_anchors(
 
     Returns:
         QuoteValidationResult mit valid=True nur wenn alle Quotes korrekt
-        annotiert sind (persona_id vorhanden + bekannt, seed_anchor vorhanden +
-        gebunden ODER mit seed_doc:-Prefix). Sections ohne Quotes → valid=True.
+        annotiert sind (persona_id vorhanden + bekannt, seed_anchor vorhanden).
+        Ein vorhandener, aber nicht aufloesbarer Anker macht das Zitat nicht
+        ungueltig, erscheint aber in ``unbound_evidence_refs`` — seit #1249
+        unabhaengig davon, ob er ein ``ev_``- oder ein ``seed_doc:``-Anker ist.
+        Sections ohne Quotes → valid=True.
     """
     known_anchors = _extract_known_anchors(evidence_map)
     persona_id_set = set(persona_ids)
@@ -496,14 +501,32 @@ def validate_quote_anchors(
 
         if not seed_anchor:
             reasons.append("missing seed_anchor")
-        else:
-            # seed_doc:-Prefix ist immer akzeptiert (opaque Referenz)
-            if not seed_anchor.startswith(_SEED_DOC_PREFIX):
-                if seed_anchor not in known_anchors:
-                    # Strukturell korrekt aber Referenz ungebunden → kein invalid_quote,
-                    # aber unbound_evidence_refs-Eintrag
-                    if not reasons:
-                        unbound_refs.append(seed_anchor)
+        elif seed_anchor not in known_anchors:
+            # Issue #1249: Bis zu diesem Slice umging jeder Anker mit
+            # ``seed_doc:``-Praefix die Bindungspruefung vollstaendig — er galt
+            # als opake Referenz und wurde nie aufgeloest. Ein ``ev_``-Anker
+            # ohne Bindung war als ``unbound_evidence_refs`` sichtbar,
+            # ``seed_doc:beliebig`` niemals.
+            #
+            # Das Modell waehlte in den beobachteten Laeufen exakt diesen einen
+            # ungeprueften Pfad, mit dem Wert, den der Prompt ihm vorgab: alle
+            # acht Zitate einer Section trugen ``seed_doc:interview_transcript_07``,
+            # ein Dokument dieses Namens existierte im Lauf nicht. Ein
+            # staerkeres Modell konstruierte stattdessen pro Persona einen
+            # individuell klingenden Anker, der ebenfalls auf nichts verweist —
+            # dann sieht jedes Zitat einzeln belegt aus.
+            #
+            # Eine eigene Aufloesungsquelle braucht es dafuer nicht: echte
+            # Seed-Anker haben nach ADR-0013 die Form
+            # ``seed_doc:<document_id>#chunk:<chunk_id>`` und stehen als
+            # ``source_id_anchor`` bereits in ``known_anchors``.
+            #
+            # Politik (Sign-off 2026-08-11): fuehren wie einen ungebundenen
+            # ``ev_``-Anker — sichtbar, ohne das Zitat hart zu verwerfen. Ein
+            # real existierendes, aber aus technischen Gruenden nicht
+            # indiziertes Dokument kostet damit Sichtbarkeit, keinen Inhalt.
+            if not reasons:
+                unbound_refs.append(seed_anchor)
 
         if reasons:
             invalid_quotes.append({
