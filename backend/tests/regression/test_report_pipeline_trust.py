@@ -208,6 +208,92 @@ def test_1d_en_english_seeds_yield_numeric_facts():
         assert fact.predicate, f"leeres Prädikat: {sentence!r}"
 
 
+_WORD_ORDER_EVIDENCE = "31 Honorarkräfte stehen auf der Personalliste des Trägers."
+
+#: Reine Umstellung: identisches Wortmaterial, nur das Vorfeld wechselt.
+#: Deutsch besetzt das Vorfeld frei, der Aussageteil darf links der Zahl stehen.
+_WORD_ORDER_VARIANTS = [
+    "31 Honorarkräfte stehen auf der Personalliste des Trägers.",
+    "Auf der Personalliste des Trägers stehen 31 Honorarkräfte.",
+]
+
+#: Umstellung *und* Verbwechsel ("stehen auf" → "werden geführt"). Das ist
+#: Synonymie, nicht Wortstellung — der lexikalische Vergleich in
+#: ``coverage_ratio`` kann das nicht überbrücken. Bewusst als offene Lücke
+#: geführt statt stillschweigend übergangen; siehe #1217.
+_PARAPHRASE_VARIANTS = [
+    "Auf der Personalliste des Trägers werden 31 Honorarkräfte geführt.",
+    "Der Träger führt auf seiner Personalliste 31 Honorarkräfte.",
+]
+
+
+@pytest.mark.parametrize("sentence", _WORD_ORDER_VARIANTS + _PARAPHRASE_VARIANTS)
+def test_1j_predicate_covers_the_whole_sentence_not_only_the_tail(sentence):
+    """Das Prädikat darf nicht davon abhängen, wo im Satz die Zahl steht.
+
+    ``extract_numeric_facts`` las den Aussageteil nur aus ``sentence[match.end():]``
+    — dem Text *rechts* der Zahl. Im deutschen Vorfeld steht er oft links, dann
+    blieb ein Fragment übrig ("geführt") und die Deckungsprüfung verglich gegen
+    fast nichts. Reproduziert an #1209/#1217 (Report ``report_4786a1a3d4ea``,
+    Section 2): "31 Honorarkräfte" wurde aus dem Fließtext entfernt, obwohl der
+    Satz wörtlich im Evidence-Pool steht.
+    """
+    facts = extract_numeric_facts(sentence)
+    assert facts, f"kein Fakt extrahiert: {sentence!r}"
+    fact = facts[0]
+    assert fact.value == pytest.approx(31.0)
+    assert "honorarkr" in fact.subject.lower()
+    assert "personalliste" in fact.predicate.lower(), (
+        f"Aussageteil links der Zahl verloren: predicate={fact.predicate!r} — {sentence!r}"
+    )
+
+
+@pytest.mark.parametrize("sentence", _WORD_ORDER_VARIANTS)
+def test_1k_belegter_fakt_ist_bei_umstellung_kein_widerspruch(sentence):
+    """Eine Umstellung darf einen belegten Fakt nicht zum Widerspruch machen.
+
+    ``CONTRADICTED`` ist das teuerste Urteil: es entfernt den Satz aus dem
+    Fließtext *und* schlägt über ``detect_contradiction_penalty`` auf die
+    Confidence durch. Vor dem Fix trugen zwei der vier Varianten
+    ``predicate_overreach`` mit "Deckung 0.00" — die Deckung war nicht 0, sie
+    war nie gemessen worden.
+    """
+    result = classify_evidence(sentence, {"snippet": _WORD_ORDER_EVIDENCE})
+    assert result.verdict is not EntailmentVerdict.CONTRADICTED, (
+        f"{sentence!r} → {result.verdict.value} ({result.reason}); checks={result.checks}"
+    )
+
+
+@pytest.mark.parametrize("sentence", _WORD_ORDER_VARIANTS)
+def test_1l_umgestellter_belegter_satz_bleibt_im_fliesstext(sentence):
+    """Regression am Seam, an dem der Defekt sichtbar wurde."""
+    from app.services.report_agent.text_verification import verify_prose
+
+    result = verify_prose(sentence, [_seed_item(_WORD_ORDER_EVIDENCE)])
+    assert not result.rejected, (
+        f"belegter Satz entfernt: {sentence!r} — "
+        f"{result.rejected[0].verdict.value}: {result.rejected[0].reason}"
+    )
+
+
+@pytest.mark.xfail(
+    reason=(
+        "Offene Lücke #1217: coverage_ratio vergleicht Prädikate lexikalisch. "
+        "Ein Verbwechsel ('stehen auf' → 'werden geführt') senkt die Deckung "
+        "unter PREDICATE_COVERAGE_THRESHOLD, obwohl die Evidence den Satz "
+        "vollständig trägt. Braucht Stemming oder den LLM-Judge im "
+        "numerischen Pfad — beides ist eine ADR-0002-Entscheidung."
+    ),
+    strict=True,
+)
+@pytest.mark.parametrize("sentence", _PARAPHRASE_VARIANTS)
+def test_1m_paraphrasierter_belegter_satz_bleibt_im_fliesstext(sentence):
+    from app.services.report_agent.text_verification import verify_prose
+
+    result = verify_prose(sentence, [_seed_item(_WORD_ORDER_EVIDENCE)])
+    assert not result.rejected
+
+
 # ---------------------------------------------------------------------------
 # Test 2 — kein Thought-/Tool-Leak im sichtbaren Content
 # ---------------------------------------------------------------------------
@@ -383,7 +469,7 @@ def test_4e_explicit_inferred_source_kind_is_respected():
     ``_TYPE_TO_SOURCE_KIND.values()`` — die Menge schloss ``inferred`` aus.
     Ein Caller, der ein Modellableitungs-Fakt bewusst als ``inferred``
     markierte, wurde ignoriert und der interne ``type`` übernahm. Der Docstring
-    sagt aber: „Ein explizit gesetztes source_kind gewinnt."
+    sagt aber: „Ein explizit gesetztes source_kind gewinnt.“
     """
     from app.services.report_agent.evidence import normalize_source_kind
 
