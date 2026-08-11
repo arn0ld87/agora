@@ -30,6 +30,8 @@ Entitätstyp wörtlich als Beruf durch: ``profession: "AIProvider"``,
 
 from __future__ import annotations
 
+import json
+
 
 import pytest
 
@@ -208,3 +210,123 @@ class TestEntitaetstypIstKeinBeruf:
         profile = generator.generate_profile_from_entity(entity, user_id=1, use_llm=False)
 
         assert profile.profession in (None, "")
+
+
+# ------------------------------------- Review-Findings (CodeRabbit PR #1257)
+
+
+class TestKollektivUeberlebtDiePersistenz:
+    """Die Kollektiv-Semantik darf nicht am finalen Speichern scheitern."""
+
+    def test_reddit_json_fuellt_kollektiv_demografie_nicht_auf(
+        self, generator, tmp_path
+    ):
+        """RED ohne den Fix: `_save_reddit_json` schrieb age=30, gender=other, mbti=ISTJ.
+
+        Die Realtime-Datei war korrekt, der finale Save überschrieb sie — und
+        genau diese Datei lesen Persona-Galerie und Simulation.
+        """
+        entity = _entity("Nordharz Bildungswerk gGmbH", "Organization")
+        profile = generator.generate_profile_from_entity(entity, user_id=1, use_llm=False)
+
+        target = tmp_path / "reddit_profiles.json"
+        generator._save_reddit_json([profile], str(target))
+        written = json.loads(target.read_text(encoding="utf-8"))[0]
+
+        assert "age" not in written or written["age"] is None
+        assert "gender" not in written or written["gender"] is None
+        assert "mbti" not in written or written["mbti"] is None
+
+    def test_reddit_json_behaelt_die_oasis_defaults_fuer_individuen(
+        self, generator, tmp_path
+    ):
+        """Gegenprobe: OASIS braucht für echte Personas weiterhin Werte."""
+        entity = _entity("Dozent", "Person")
+        profile = generator.generate_profile_from_entity(entity, user_id=1, use_llm=False)
+        profile.age = None
+        profile.mbti = None
+
+        target = tmp_path / "reddit_profiles.json"
+        generator._save_reddit_json([profile], str(target))
+        written = json.loads(target.read_text(encoding="utf-8"))[0]
+
+        assert written["age"] == 30
+        assert written["mbti"] == "ISTJ"
+        assert written["gender"]
+
+
+class TestKollektivNameUeberlebtDieDedup:
+    def test_zwei_organisationen_mit_gleichem_schlusstoken_behalten_ihre_namen(
+        self, generator
+    ):
+        """RED ohne den Fix: `GmbH` gilt als doppelter Nachname.
+
+        Die zweite Organisation bekam einen zufälligen DACH-Personennamen,
+        während ihr Personatext weiter die Organisation beschreibt — exakt der
+        Identitätsbruch, den dieser Slice schließt.
+        """
+        entities = [
+            _entity("Nordharz Bildungswerk gGmbH", "Organization"),
+            _entity("Regionale Bildungswerke gGmbH", "Organization"),
+        ]
+        profiles = generator.generate_profiles_from_entities(
+            entities=entities, use_llm=False, parallel_count=1
+        )
+
+        names = sorted(p.name for p in profiles if p is not None)
+        assert names == [
+            "Nordharz Bildungswerk gGmbH",
+            "Regionale Bildungswerke gGmbH",
+        ]
+
+
+class TestSchemaTrenntIndividuumUndKollektiv:
+    def test_kollektiv_schema_verlangt_keine_personenfelder(self):
+        """Ein Kollektiv-Schema mit Pflicht-`age` liesse jeden LLM-Call scheitern."""
+        from app.services.oasis_profile_generator import CollectivePersonaSchema
+
+        fields = CollectivePersonaSchema.model_fields
+        for person_field in ("age", "gender", "mbti", "display_name", "handle", "profession"):
+            assert person_field not in fields, (
+                f"{person_field} gehört nicht in den Kollektiv-Vertrag"
+            )
+        assert "persona" in fields and "voice_register" in fields
+
+    def test_metadaten_pruefung_meldet_fuer_kollektive_keine_personenfelder(
+        self, generator
+    ):
+        """RED ohne den Fix: `age`/`gender`/`mbti` fehlten → drei Retries → regelbasiert."""
+        missing = generator._validate_profile_metadata(
+            {"country": "DE", "voice_register": "formal-de"}, is_collective=True
+        )
+
+        assert missing == []
+
+    def test_metadaten_pruefung_bleibt_fuer_individuen_streng(self, generator):
+        missing = generator._validate_profile_metadata(
+            {"country": "DE", "voice_register": "formal-de"}, is_collective=False
+        )
+
+        assert "age" in missing and "gender" in missing
+
+
+class TestEroeffnungsnameBrauchtEineGrenze:
+    def test_rollenformulierung_am_satzanfang_ist_kein_name(self, generator):
+        """RED ohne den Fix: `Als IT-Leiter` wurde als Name ersetzt."""
+        persona = "Als IT-Leiter verantwortet er den Rollout und schult die Teams."
+
+        assert generator._align_persona_identity(persona, "Katharina Schäfer") == persona
+
+    def test_name_mit_komma_wird_weiterhin_gezogen(self, generator):
+        persona = "Sabine Krüger, 47, ist Dozentin."
+
+        aligned = generator._align_persona_identity(persona, "Katharina Schäfer")
+        assert aligned.startswith("Katharina Schäfer,")
+
+
+class TestPersonaKindImVertrag:
+    def test_persona_model_kennt_persona_kind(self):
+        """`extra="forbid"` würde serialisierte Profile sonst ablehnen."""
+        from app.contracts.persona_contract import PersonaModel
+
+        assert "persona_kind" in PersonaModel.model_fields

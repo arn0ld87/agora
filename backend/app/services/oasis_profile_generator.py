@@ -77,6 +77,28 @@ class PersonaProfileSchema(BaseModel):
     interested_topics: List[str] = Field(default_factory=list, description="Topic strings")
     voice_register: str = Field(..., description="One of formal-de/neutral-de/technical-de/skeptisch-de")
 
+
+class CollectivePersonaSchema(BaseModel):
+    """Antwortvertrag fuer Kollektiv-Personas (Issue #1246, CodeRabbit PR #1257).
+
+    ``PersonaProfileSchema`` beschreibt ausschliesslich die individuelle
+    Persona und fuehrt ``display_name``, ``handle``, ``age`` (18-75),
+    ``gender`` und ``mbti`` als Pflichtfelder. Der Kollektiv-Prompt weist das
+    Modell ausdruecklich an, genau diese Felder wegzulassen — eine Organisation
+    hat davon nichts. Beides zusammen liess im strict-``json_schema``-Mode jede
+    Gruppen-Entitaet dreimal scheitern und auf den regelbasierten Pfad
+    zurueckfallen: der LLM-Kollektivzweig waere nie zum Zug gekommen.
+
+    Getrennter Vertrag statt aufgeweichter Pflichtfelder, damit der
+    Individuenpfad seine Garantien behaelt.
+    """
+
+    bio: str = Field("", description="Short description of the organization, <=200 chars")
+    persona: str = Field("", description="Detailed description of the organization, pure text")
+    country: str = Field(..., description="ISO country code, e.g. DE, AT, CH")
+    interested_topics: List[str] = Field(default_factory=list, description="Topic strings")
+    voice_register: str = Field(..., description="One of formal-de/neutral-de/technical-de/skeptisch-de")
+
 # Persona-Detail-Level steuert die Output-Größe pro Persona — direkter
 # Hebel auf Cloud-LLM-Inference-Zeit (Output-Tokens dominieren). Issue #217.
 PERSONA_DETAIL_LEVELS = {
@@ -868,12 +890,23 @@ class OasisProfileGenerator:
         
         return "\n\n".join(context_parts)
     
-    #: Erster Eigenname am Textanfang: zwei bis drei grossgeschriebene Tokens.
-    #: Mindestens zwei, weil im Deutschen auch Verben und Substantive am
+    #: Erster Eigenname am Textanfang: zwei bis drei grossgeschriebene Tokens,
+    #: gefolgt von einer namenstypischen Grenze.
+    #:
+    #: Mindestens zwei Tokens, weil im Deutschen auch Verben und Substantive am
     #: Satzanfang grossgeschrieben sind — "Arbeitet seit zwölf Jahren…" ist
     #: kein Name, "Sabine Krüger, 47…" schon.
+    #:
+    #: Die Grenze ist Pflicht (CodeRabbit PR #1257): "Als IT-Leiter
+    #: verantwortet …" besteht ebenfalls aus zwei grossgeschriebenen Tokens.
+    #: Ohne die Bedingung haette ``_align_persona_identity`` daraus einen Namen
+    #: gemacht, ihn durch den Anzeigenamen ersetzt und spaetere Vorkommen von
+    #: "Als" und "IT-Leiter" gleich mit — der Text haette seine Rollensemantik
+    #: verloren. Ein Personenname am Satzanfang wird im Profiltext praktisch
+    #: immer von Komma, Klammer, Gedankenstrich oder Satzende gefolgt.
     _LEADING_NAME_RE = re.compile(
         r"^\s*([A-ZÄÖÜ][\wäöüßáàéèíìóòúù'-]+(?:\s+[A-ZÄÖÜ][\wäöüßáàéèíìóòúù'-]+){1,2})"
+        r"(?=\s*[,;:(]|\s+[–—]|\s*$)"
     )
 
     @classmethod
@@ -955,7 +988,22 @@ class OasisProfileGenerator:
         - Group/institutional entities: generate representative account profiles
         """
 
-        is_individual = self._is_individual_entity(entity_type)
+        # Issue #1246 (CodeRabbit PR #1257): Prompt-Auswahl und
+        # Kollektiv-Behandlung muessen dasselbe Praedikat benutzen. Vorher
+        # entschied hier ``_is_individual_entity`` und in
+        # ``generate_profile_from_entity`` ``_is_group_entity`` — ein
+        # unbekannter Typ wie ``WorkingGroup`` bekam damit den Kollektiv-Prompt
+        # und trotzdem die Individuen-Nachbehandlung: Demografie aus dem Slot,
+        # Personenname vom Modell, ``persona_kind="individual"`` neben einem
+        # Text ueber eine Organisation.
+        #
+        # Ausgerichtet auf ``_is_group_entity``: nur explizit als Gruppe
+        # gefuehrte Typen werden Kollektive. Unbekannte Typen sind in dieser
+        # Domaene ueberwiegend deutsche Rollennamen (``Dozent``,
+        # ``Betriebsrat``) und damit Personen; sie bekommen jetzt auch den
+        # Individuen-Prompt statt einer Beschreibung, die nicht zu ihrer
+        # Nachbehandlung passt.
+        is_individual = not self._is_group_entity(entity_type)
         detail_level = _resolve_persona_detail_level()
         max_tokens = detail_level['max_tokens']
 
@@ -1002,8 +1050,12 @@ class OasisProfileGenerator:
                     messages=messages,
                     temperature=0.7 - (attempt * 0.1),
                     max_tokens=max_tokens,
-                    schema=PersonaProfileSchema,
-                    schema_name="persona_profile",
+                    # Issue #1246: Der Kollektiv-Prompt fordert die
+                    # Personenfelder nicht an — mit dem Individuen-Schema
+                    # scheiterte jede Gruppen-Entitaet dreimal und fiel auf
+                    # den regelbasierten Pfad zurueck.
+                    schema=PersonaProfileSchema if is_individual else CollectivePersonaSchema,
+                    schema_name="persona_profile" if is_individual else "collective_persona",
                     context="persona",
                     force_no_thinking=True,
                 )
@@ -1028,7 +1080,9 @@ class OasisProfileGenerator:
                     )
                     result["voice_register"] = "neutral-de"
 
-                missing_fields = self._validate_profile_metadata(result)
+                missing_fields = self._validate_profile_metadata(
+                    result, is_collective=not is_individual
+                )
                 if missing_fields:
                     last_error = ValueError(
                         f"Missing required persona metadata: {', '.join(missing_fields)}"
@@ -1062,9 +1116,27 @@ class OasisProfileGenerator:
             ),
         )
 
-    def _validate_profile_metadata(self, result: Dict[str, Any]) -> List[str]:
-        """Validate and normalize structured fields that OASIS actually consumes."""
+    def _validate_profile_metadata(
+        self, result: Dict[str, Any], *, is_collective: bool = False
+    ) -> List[str]:
+        """Validate and normalize structured fields that OASIS actually consumes.
+
+        Issue #1246 (CodeRabbit PR #1257): Fuer Kollektive pruefen nur die
+        Felder, die eine Organisation ueberhaupt haben kann. Alter, Geschlecht,
+        MBTI und Berufsbezeichnung als fehlend zu melden hiesse, eine
+        vollstaendige Antwort dreimal zu verwerfen und auf den regelbasierten
+        Pfad zu fallen — dieselbe Falle wie beim Schema.
+        """
         missing_fields = []
+
+        if is_collective:
+            country = result.get("country")
+            if not isinstance(country, str) or not country.strip():
+                missing_fields.append("country")
+            register = result.get("voice_register")
+            if not isinstance(register, str) or register.strip() not in VOICE_REGISTERS:
+                missing_fields.append("voice_register")
+            return missing_fields
 
         age = result.get("age")
         if isinstance(age, str) and age.strip().isdigit():
@@ -1771,9 +1843,22 @@ Important:
                         import csv
                         profiles_data = [p.to_twitter_format() for p in existing_profiles]
                         if profiles_data:
-                            fieldnames = list(profiles_data[0].keys())
+                            # Issue #1246 (CodeRabbit PR #1257): Spaltenmenge
+                            # ueber ALLE Profile vereinigen. ``to_twitter_format``
+                            # laesst nicht gesetzte Felder weg, und Kollektive
+                            # haben garantiert kein Alter, Geschlecht oder MBTI.
+                            # War das erste fertige Profil ein Kollektiv, warf
+                            # jedes spaetere Individualprofil
+                            # "dict contains fields not in fieldnames" — der
+                            # Fehler wurde unten geschluckt und die
+                            # Realtime-Datei blieb ab da veraltet.
+                            fieldnames: List[str] = []
+                            for row in profiles_data:
+                                for key in row:
+                                    if key not in fieldnames:
+                                        fieldnames.append(key)
                             with open(realtime_output_path, 'w', encoding='utf-8', newline='') as f:
-                                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                                writer = csv.DictWriter(f, fieldnames=fieldnames, restval="")
                                 writer.writeheader()
                                 writer.writerows(profiles_data)
                 except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
@@ -1934,6 +2019,15 @@ Important:
         seen_handles: set = set()
         for p in profiles:
             if p is None:
+                continue
+            # Issue #1246 (CodeRabbit PR #1257): Kollektive nehmen an der
+            # Personennamen-Dedup nicht teil. Zwei Organisationen mit gleichem
+            # Schlusstoken — "… GmbH", "… e.V." — galten hier als doppelter
+            # Nachname, und die zweite bekam einen zufaelligen DACH-Personen-
+            # namen zugewiesen, waehrend ihr Personatext weiter die
+            # Organisation beschreibt. Das ist exakt der Identitaetsbruch,
+            # den dieser Slice schliesst.
+            if p.persona_kind == "collective":
                 continue
             norm_name = (p.name or "").strip().lower()
             last_name = self._last_name(p.name or "")
@@ -2129,12 +2223,20 @@ Important:
                 "bio": profile.bio[:150] if profile.bio else f"{profile.name}",
                 "persona": profile.persona or f"{profile.name} is a participant in social discussions.",
                 "karma": profile.karma if profile.karma else 1000,
-                # OASIS required fields - ensure all have defaults
-                "age": profile.age if profile.age else 30,
-                "gender": self._normalize_gender(profile.gender),
-                "mbti": profile.mbti if profile.mbti else "ISTJ",
                 "country": profile.country if profile.country else "US",
             })
+            # Issue #1246 (CodeRabbit PR #1257): Die OASIS-Defaults gelten nur
+            # fuer Individuen. Vorher fuellte dieser Block Alter, Geschlecht und
+            # MBTI unbedingt auf — und schrieb damit genau die erfundene
+            # Demografie zurueck in reddit_profiles.json, die der Kollektivzweig
+            # entfernt. Die Realtime-Datei war korrekt, der finale Save
+            # ueberschrieb sie. Persona-Galerie und Simulation lesen diese Datei.
+            if profile.persona_kind != "collective":
+                item.update({
+                    "age": profile.age if profile.age else 30,
+                    "gender": self._normalize_gender(profile.gender),
+                    "mbti": profile.mbti if profile.mbti else "ISTJ",
+                })
 
             data.append(item)
 

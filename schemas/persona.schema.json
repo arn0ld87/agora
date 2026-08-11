@@ -157,6 +157,22 @@
       "title": "Persona",
       "type": "string"
     },
+    "persona_kind": {
+      "anyOf": [
+        {
+          "enum": [
+            "individual",
+            "collective"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": "individual",
+      "title": "Persona Kind"
+    },
     "profession": {
       "anyOf": [
         {
