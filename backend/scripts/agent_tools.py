@@ -585,10 +585,13 @@ You can perform one of these actions: {action_names}
 {tools.tools_description_text}
 
 ## Tool Usage Rules (IMPORTANT)
-1. You SHOULD call a tool FIRST to gather real information before posting.
+1. You SHOULD call a tool FIRST to gather real information before posting (CREATE_POST).
    Especially use `web_search` or `web_fetch` when the topic mentions
    a specific website, blog, company, or person — never invent facts.
-   Only skip tools if the situation is a trivial LIKE_POST or DO_NOTHING.
+   Call a tool only when the action needs facts you do not already have.
+   For trivial reactions where the observation already shows the target
+   (LIKE_POST, DISLIKE_POST, DISLIKE_COMMENT, LIKE_COMMENT, FOLLOW, MUTE,
+   REPOST, QUOTE_POST, DO_NOTHING), skip tools and output the action directly.
 2. To call a tool, use EXACTLY this format (must appear on its own):
 <tool_call>
 {{"name": "tool_name", "parameters": {{"param": "value"}}}}
