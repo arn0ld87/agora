@@ -36,8 +36,10 @@ export const PostCreatedEventSchema = z
     is_simulated: z.boolean().default(true),
     body: z.string().min(1),
     timestamp: z.string().datetime({ offset: true }),
-    // Phase B — Sentiment-Heatbar + Voting-Score
-    sentiment: z.number().min(-1).max(1).nullable().optional(),
+    // Voting-Score aus der Simulations-DB (num_likes - num_dislikes); Twitter
+    // kennt kein Voting → 0. #1209 5b: `sentiment` ist aus dem Vertrag
+    // entfernt — es gab nie einen Sentiment-Service und das Feld trug nie
+    // einen Wert. `.strict()` weist es jetzt aktiv zurück.
     score: z.number().int().default(0),
     // Task 1 — virtuelle Sim-Zeit (tz-aware ISO-8601 mit Offset). null oder
     // weggelassen bei Pre-Task-1-Daten.

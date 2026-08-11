@@ -1380,7 +1380,7 @@
     "showMoreReplies": "{count} weitere Replies anzeigen | {count} weitere Replies anzeigen",
     "pipeline": "Pipeline",
     "feedTab": "Live-Feed",
-    "sentimentBar": "Sentiment-Verlauf der letzten Beiträge"
+    "resonanceBar": "Resonanz der letzten Beiträge (Zustimmung minus Widerspruch)"
   },
   "observability": {
     "viewTrace": "Trace anzeigen ({id}…)"

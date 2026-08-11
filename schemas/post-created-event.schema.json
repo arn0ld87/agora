@@ -75,22 +75,9 @@
     },
     "score": {
       "default": 0,
-      "description": "Voting-Score (Reddit-Pattern), akkumuliert aus der Simulations-DB (num_likes - num_dislikes). Twitter-Posts haben kein Voting \u2192 0. Live-Events starten bei 0 (echter Wert zum Erzeugungszeitpunkt), der Snapshot liefert den akkumulierten Stand (#1216 5b).",
+      "description": "Voting-Score (Reddit-Pattern) aus der Simulations-DB (num_likes - num_dislikes). Twitter-Posts haben kein Voting \u2192 0. Live-Events tragen den Stand zum Erzeugungszeitpunkt, der Snapshot den akkumulierten Endstand; sp\u00e4tere Votes aktualisieren ein bereits gesendetes Live-Event nicht (#1209 5b).",
       "title": "Score",
       "type": "integer"
-    },
-    "sentiment": {
-      "anyOf": [
-        {
-          "type": "number"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "Sentiment-Architektur-Slot. Aktuell NICHT unterst\u00fctzt \u2014 es gibt keinen aktiven Sentiment-Service, das Feld ist immer None. Wird nicht als Messwert gerendert (#1216 5b).",
-      "title": "Sentiment"
     },
     "sim_time": {
       "anyOf": [

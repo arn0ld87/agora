@@ -12,7 +12,7 @@ const i18n = createI18n({
       feed: {
         live: 'Live',
         activity: 'Posts/min',
-        sentimentBar: 'Sentiment-Verlauf',
+        resonanceBar: 'Resonanz-Verlauf',
       },
     },
   },
@@ -31,7 +31,6 @@ persona_id: 'persona-1',
     is_simulated: true,
     body: 'Test',
     timestamp: '2026-05-15T12:00:00Z',
-    sentiment: null,
     score: 0,
     ...overrides,
   }
@@ -71,61 +70,61 @@ describe('SimulationPulseBar', () => {
     expect(wrapper.find('[role="status"]').exists()).toBe(true)
   })
 
-  // Phase B — Heatbar-Tests
-  it('rendert sentiment-negative Klasse für Sentiment < -0.33', () => {
-    const posts = [mkPost({ sentiment: -0.8 }), mkPost({ sentiment: -0.5 })]
+  // #1209 5b — die Leiste färbt nach Voting-Score statt nach einem nie
+  // erhobenen Sentiment.
+  it('rendert score-negative Klasse bei negativem Score', () => {
+    const posts = [mkPost({ score: -4 }), mkPost({ score: -1 })]
     const wrapper = mount(SimulationPulseBar, {
       props: { activityRate: 1, redditCount: 2, twitterCount: 0, recentPosts: posts },
       global: { plugins: [i18n] },
     })
-    const pulses = wrapper.findAll('.spb-pulse.sentiment-negative')
-    expect(pulses).toHaveLength(2)
+    expect(wrapper.findAll('.spb-pulse.score-negative')).toHaveLength(2)
   })
 
-  it('rendert sentiment-positive Klasse für Sentiment > 0.33', () => {
-    const posts = [mkPost({ sentiment: 0.9 }), mkPost({ sentiment: 0.5 })]
+  it('rendert score-positive Klasse bei positivem Score', () => {
+    const posts = [mkPost({ score: 9 }), mkPost({ score: 1 })]
     const wrapper = mount(SimulationPulseBar, {
       props: { activityRate: 1, redditCount: 2, twitterCount: 0, recentPosts: posts },
       global: { plugins: [i18n] },
     })
-    const pulses = wrapper.findAll('.spb-pulse.sentiment-positive')
-    expect(pulses).toHaveLength(2)
+    expect(wrapper.findAll('.spb-pulse.score-positive')).toHaveLength(2)
   })
 
-  it('rendert sentiment-neutral Klasse für Sentiment in [-0.33, 0.33]', () => {
-    const posts = [mkPost({ sentiment: 0.0 }), mkPost({ sentiment: 0.2 }), mkPost({ sentiment: -0.1 })]
+  it('rendert score-neutral Klasse bei Score 0', () => {
+    const posts = [mkPost({ score: 0 }), mkPost({ score: 0 }), mkPost({ score: 0 })]
     const wrapper = mount(SimulationPulseBar, {
       props: { activityRate: 1, redditCount: 3, twitterCount: 0, recentPosts: posts },
       global: { plugins: [i18n] },
     })
-    const pulses = wrapper.findAll('.spb-pulse.sentiment-neutral')
-    expect(pulses).toHaveLength(3)
+    expect(wrapper.findAll('.spb-pulse.score-neutral')).toHaveLength(3)
   })
 
-  it('rendert sentiment-null Klasse wenn sentiment null (Sentiment-Service inaktiv)', () => {
-    const posts = [mkPost({ sentiment: null }), mkPost({ sentiment: null })]
+  it('dimmt die Leiste, solange kein Post Resonanz hat', () => {
+    const posts = [mkPost({ score: 0 }), mkPost({ score: 0 })]
     const wrapper = mount(SimulationPulseBar, {
       props: { activityRate: 0, redditCount: 2, twitterCount: 0, recentPosts: posts },
       global: { plugins: [i18n] },
     })
-    const pulses = wrapper.findAll('.spb-pulse.sentiment-null')
-    expect(pulses).toHaveLength(2)
+    expect(wrapper.findAll('.spb-pulse--dim')).toHaveLength(2)
   })
 
-  it('gemischte Sentiments werden korrekt klassifiziert', () => {
-    const posts = [
-      mkPost({ sentiment: -0.8 }),
-      mkPost({ sentiment: 0.1 }),
-      mkPost({ sentiment: 0.7 }),
-      mkPost({ sentiment: null }),
-    ]
+  it('dimmt nicht mehr, sobald ein Post Resonanz hat', () => {
+    const posts = [mkPost({ score: 0 }), mkPost({ score: 3 })]
     const wrapper = mount(SimulationPulseBar, {
-      props: { activityRate: 2, redditCount: 4, twitterCount: 0, recentPosts: posts },
+      props: { activityRate: 1, redditCount: 2, twitterCount: 0, recentPosts: posts },
       global: { plugins: [i18n] },
     })
-    expect(wrapper.findAll('.sentiment-negative')).toHaveLength(1)
-    expect(wrapper.findAll('.sentiment-neutral')).toHaveLength(1)
-    expect(wrapper.findAll('.sentiment-positive')).toHaveLength(1)
-    expect(wrapper.findAll('.sentiment-null')).toHaveLength(1)
+    expect(wrapper.findAll('.spb-pulse--dim')).toHaveLength(0)
+  })
+
+  it('gemischte Scores werden korrekt klassifiziert', () => {
+    const posts = [mkPost({ score: -8 }), mkPost({ score: 0 }), mkPost({ score: 7 })]
+    const wrapper = mount(SimulationPulseBar, {
+      props: { activityRate: 2, redditCount: 3, twitterCount: 0, recentPosts: posts },
+      global: { plugins: [i18n] },
+    })
+    expect(wrapper.findAll('.score-negative')).toHaveLength(1)
+    expect(wrapper.findAll('.score-neutral')).toHaveLength(1)
+    expect(wrapper.findAll('.score-positive')).toHaveLength(1)
   })
 })

@@ -117,12 +117,14 @@ describe('locale-coverage', () => {
     expect(enKeys).toContain('topbar.notifications')
   })
 
-  // Issue #1023 (Befund B-11): SimulationPulseBar.vue nutzt t('feed.sentimentBar')
-  // fuer das aria-label der Sentiment-Heatbar. Der Key fehlte in beiden Locales —
+  // Issue #1023 (Befund B-11): SimulationPulseBar.vue nutzt t('feed.resonanceBar')
+  // fuer das aria-label der Resonanz-Leiste. Der Key fehlte in beiden Locales —
   // beide haben je zwei getrennte "feed"-Objekte (verschachtelt und root-level);
   // nur das root-level-Objekt wird von t() aufgeloest.
-  it('feed.sentimentBar existiert in beiden Locales (Befund B-11)', () => {
-    expect(deKeys).toContain('feed.sentimentBar')
-    expect(enKeys).toContain('feed.sentimentBar')
+  // #1209 5b: hiess bis 2026-08-11 feed.sentimentBar; die Leiste zeigt jetzt
+  // den Voting-Score statt eines nie erhobenen Sentiments.
+  it('feed.resonanceBar existiert in beiden Locales (Befund B-11)', () => {
+    expect(deKeys).toContain('feed.resonanceBar')
+    expect(enKeys).toContain('feed.resonanceBar')
   })
 })

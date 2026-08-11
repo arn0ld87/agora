@@ -146,35 +146,11 @@ describe('PostCreatedEventSchema', () => {
     }
   })
 
-  // Phase B — sentiment + score
-  it('sentiment-Default ist undefined (optional)', () => {
-    const result = PostCreatedEventSchema.safeParse(VALID_PAYLOAD)
-    expect(result.success).toBe(true)
-    if (result.success) {
-      expect(result.data.sentiment).toBeUndefined()
-    }
-  })
-
-  it('sentiment akzeptiert null', () => {
-    const result = PostCreatedEventSchema.safeParse({ ...VALID_PAYLOAD, sentiment: null })
-    expect(result.success).toBe(true)
-    if (result.success) {
-      expect(result.data.sentiment).toBeNull()
-    }
-  })
-
-  it('sentiment akzeptiert 0.0, 1.0, -1.0', () => {
-    for (const v of [0.0, 1.0, -1.0]) {
-      const result = PostCreatedEventSchema.safeParse({ ...VALID_PAYLOAD, sentiment: v })
-      expect(result.success).toBe(true)
-    }
-  })
-
-  it('sentiment lehnt Werte außerhalb [-1, 1] ab', () => {
-    for (const v of [1.5, -1.5, 2.0]) {
-      const result = PostCreatedEventSchema.safeParse({ ...VALID_PAYLOAD, sentiment: v })
-      expect(result.success).toBe(false)
-    }
+  // #1209 5b — sentiment ist aus dem Vertrag entfernt: nie ein Service,
+  // nie ein Wert, nie gerendert. `.strict()` weist es jetzt zurück.
+  it('sentiment wird als unbekanntes Feld zurückgewiesen', () => {
+    const result = PostCreatedEventSchema.safeParse({ ...VALID_PAYLOAD, sentiment: 0.5 })
+    expect(result.success).toBe(false)
   })
 
   it('score-Default ist 0', () => {
@@ -192,12 +168,12 @@ describe('PostCreatedEventSchema', () => {
     }
   })
 
-  it('Schema-Drift-Gate deckt score und sentiment ab', () => {
+  it('Schema-Drift-Gate deckt score ab und kennt kein sentiment mehr', () => {
     const backendKeys = propertyKeys(postCreatedEventJson)
-    expect(backendKeys).toContain('sentiment')
     expect(backendKeys).toContain('score')
+    expect(backendKeys).not.toContain('sentiment')
     const zodKeys = shapeKeys(PostCreatedEventSchema)
-    expect(zodKeys).toContain('sentiment')
     expect(zodKeys).toContain('score')
+    expect(zodKeys).not.toContain('sentiment')
   })
 })

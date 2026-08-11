@@ -1380,7 +1380,7 @@
     "showMoreReplies": "{count} more reply | {count} more replies",
     "pipeline": "Pipeline",
     "feedTab": "Live Feed",
-    "sentimentBar": "Sentiment trend of recent posts"
+    "resonanceBar": "Resonance of recent posts (upvotes minus downvotes)"
   },
   "observability": {
     "viewTrace": "View trace ({id}…)"
