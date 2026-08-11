@@ -105,7 +105,7 @@ def test_agent_quote_requires_stakeholder_group() -> None:
 def test_high_needs_two_stakeholder_groups() -> None:
     """high/verified: agent_quote-Evidence aus mindestens 2 verschiedenen Gruppen."""
     # Single-Group -> Fehler
-    with pytest.raises(ValidationError, match="2 unterschiedlichen Stakeholder-Gruppen"):
+    with pytest.raises(ValidationError, match="2 unterschiedlichen Stakeholder-Rollenfamilien"):
         ReportClaimModel(
             claim_id="claim_01",
             claim_text="High-Claim mit nur einer Stakeholder-Gruppe.",
@@ -265,7 +265,7 @@ def test_agent_action_does_not_count_as_stakeholder_voice() -> None:
             persona_stakeholder_group=group,
         )
 
-    with pytest.raises(ValidationError, match="2 unterschiedlichen Stakeholder-Gruppen"):
+    with pytest.raises(ValidationError, match="2 unterschiedlichen Stakeholder-Rollenfamilien"):
         ReportClaimModel(
             claim_id="claim_80",
             claim_text="High-Claim, der nur auf Agentenaktionen beruht.",

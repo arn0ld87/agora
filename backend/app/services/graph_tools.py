@@ -320,6 +320,12 @@ class GraphToolsService:
                 agent = selected_agents[i]
                 agent_name = agent.get("realname", agent.get("username", f"Agent_{agent_idx}"))
                 agent_role = agent.get("profession", "Unknown")
+                # Issue #1248: Das Rollenfamilien-Label ist der Entitaetstyp der
+                # Quellentitaet — kontrolliert und pro Lauf stabil, im Gegensatz
+                # zum frei formulierten Berufstitel. Kollektiv- und
+                # Individual-Persona derselben Organisation tragen denselben Typ
+                # und zaehlen damit als eine Familie.
+                agent_role_family = (agent.get("source_entity_type") or "").strip() or None
                 agent_bio = agent.get("bio", "")
 
                 twitter_result = results_dict.get(f"twitter_{agent_idx}", {})
@@ -362,6 +368,7 @@ class GraphToolsService:
                 interview = AgentInterview(
                     agent_name=agent_name,
                     agent_role=agent_role,
+                    agent_role_family=agent_role_family,
                     agent_bio=agent_bio[:1000],
                     question=combined_prompt,
                     response=response_text,

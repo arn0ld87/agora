@@ -464,6 +464,10 @@ _RECORD_FIELDS = frozenset({
     "source_kind",
     "source_model",
     "persona_stakeholder_group",
+    # Issue #1248: Rollenfamilien-Label. Ohne diesen Eintrag faellt es beim
+    # Migrieren aelterer Artefakte still weg und der Cross-Stakeholder-Anker
+    # rechnete wieder mit Berufstiteln.
+    "persona_role_family",
 })
 _BINDING_FIELDS = frozenset({
     "match_score",

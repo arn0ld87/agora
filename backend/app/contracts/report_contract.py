@@ -177,6 +177,13 @@ class EvidenceItemModel(BaseModel):
     persona_stakeholder_group: Optional[str] = Field(
         default=None, min_length=1, max_length=200
     )
+    # Issue #1248: Kontrolliertes Rollenfamilien-Label aus dem Entitaetstyp der
+    # Quellentitaet. Der Jobtitel oben bleibt Anzeigetext; gezaehlt wird dieses
+    # Feld. Optional, weil Artefakte aus Laeufen vor diesem Slice es nicht
+    # tragen — dort faellt der Vergleich auf den Jobtitel zurueck.
+    persona_role_family: Optional[str] = Field(
+        default=None, min_length=1, max_length=120
+    )
 
     @model_validator(mode="after")
     def reject_inference_in_evidence(self) -> "EvidenceItemModel":
@@ -226,6 +233,10 @@ class EvidenceRecordModel(BaseModel):
     source_model: Optional[str] = Field(default=None, max_length=200)
     persona_stakeholder_group: Optional[str] = Field(
         default=None, min_length=1, max_length=200
+    )
+    # Issue #1248, siehe EvidenceItemModel.
+    persona_role_family: Optional[str] = Field(
+        default=None, min_length=1, max_length=120
     )
 
     @model_validator(mode="after")
@@ -280,6 +291,38 @@ def _stakeholder_group_key(value: Optional[str]) -> str:
     if not value:
         return ""
     return " ".join(value.split()).casefold()
+
+
+def _role_family_key(item: Any) -> str:
+    """Zaehlschluessel fuer ``cross_stakeholder_for_high`` (Issue #1248).
+
+    Bis zu diesem Slice zaehlte der Validator ``persona_stakeholder_group`` —
+    einen frei formulierten Berufstitel. Normalisiert wurde nur Schreibweise
+    und Whitespace, also zaehlten Wortwahl- und Genusvarianten derselben Rolle
+    als verschiedene Gruppen. Gemessen an zwei Referenzlaeufen:
+
+        4x  "Umschueler im IT-Bereich (Teilnehmer)"
+        2x  "Teilnehmer einer IT-Umschulung (Retrainee)"   <- dieselbe Rolle
+
+        "Festangestellte Dozentin fuer IT-Umschulungen und Betriebsratsmitglied"
+        "Festangestellter Fachdozent fuer IT-Umschulungen und Betriebsratsmitglied"
+
+    Der Anker verlangt zwei distinkte Gruppen fuer ``high``. Es genuegte also
+    eine andere Formulierung desselben Berufs, um eine Aussage als breit
+    gestuetzt einzustufen, obwohl nur eine Perspektive gesprochen hat.
+
+    Gezaehlt wird jetzt das kontrollierte Rollenfamilien-Label. Faellt es —
+    etwa bei Artefakten aus aelteren Laeufen —, bleibt der Jobtitel der
+    Vergleichswert; das ist das bisherige Verhalten und nie strenger als
+    vorher, aber auch nie lockerer.
+
+    Verschaerfung von ADR-0002 Anker 4, keine Schwaechung: die Zahl
+    unterscheidbarer Gruppen kann dadurch nur sinken.
+    """
+    family = getattr(item, "persona_role_family", None)
+    if family:
+        return f"family:{_stakeholder_group_key(family)}"
+    return f"title:{_stakeholder_group_key(getattr(item, 'persona_stakeholder_group', None))}"
 
 
 class ReportClaimModel(BaseModel):
@@ -391,15 +434,22 @@ class ReportClaimModel(BaseModel):
         # ``_stakeholder_group_key``), gemeldet wird der Originalwortlaut —
         # sonst zeigt die Meldung zwei scheinbar verschiedene Eintraege und
         # behauptet gleichzeitig, es sei nur eine Gruppe.
-        groups = {_stakeholder_group_key(e.persona_stakeholder_group) for e in supporting}
+        # Issue #1248: gezaehlt wird das Rollenfamilien-Label, nicht der
+        # Berufstitel. Zwei Formulierungen derselben Rolle sind eine Gruppe.
+        groups = {_role_family_key(e) for e in supporting}
         if len(groups) < 2:
             raw_groups = sorted({e.persona_stakeholder_group or "" for e in supporting})
+            raw_families = sorted({e.persona_role_family or "" for e in supporting if e.persona_role_family})
             raise ValueError(
                 f"Label '{self.confidence_label.value}' verlangt unterstützende "
                 f"agent_quote-Evidence (supports_claim=True) aus mindestens 2 "
-                f"unterschiedlichen Stakeholder-Gruppen. Verglichen wird ohne "
-                f"Gross-/Kleinschreibung und ohne Whitespace-Unterschiede. "
-                f"Gefunden: {raw_groups if raw_groups else '∅'}."
+                f"unterschiedlichen Stakeholder-Rollenfamilien. Verglichen wird "
+                f"das Rollenfamilien-Label, nicht der Berufstitel — zwei "
+                f"Formulierungen derselben Rolle sind eine Gruppe. Verglichen "
+                f"wird ohne Gross-/Kleinschreibung und ohne "
+                f"Whitespace-Unterschiede. "
+                f"Rollenfamilien: {raw_families if raw_families else '∅'}. "
+                f"Berufstitel: {raw_groups if raw_groups else '∅'}."
             )
         return self
 

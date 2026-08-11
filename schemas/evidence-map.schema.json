@@ -200,6 +200,20 @@
           "title": "Evidence Id",
           "type": "string"
         },
+        "persona_role_family": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Persona Role Family"
+        },
         "persona_stakeholder_group": {
           "anyOf": [
             {
