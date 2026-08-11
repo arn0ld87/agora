@@ -57,6 +57,48 @@ def test_twitter_format_omits_entity_link_when_unset():
     assert "source_entity_type" not in out
 
 
+def test_reddit_format_always_writes_age_gender_mbti_keys_for_collective():
+    """Seit #1246 fehlen bei Kollektiv-Personas die Schluessel ``age``,
+    ``gender`` und ``mbti`` in ``reddit_profiles.json`` ganz, weil
+    ``to_reddit_format()`` sie bei ``None`` vollstaendig ausliess statt nur
+    den Wert wegzulassen. OASIS greift in agents_generator.py::process_agent
+    ungeschuetzt auf agent_info[i]["mbti"]/["gender"]/["age"] zu. Fehlt der
+    Schluessel (statt nur der Wert), reisst der Reddit-Zweig mit KeyError ab —
+    und weil beide Plattformen ueber ein gemeinsames asyncio.gather laufen,
+    den ganzen Subprozess mit.
+
+    Kollektiv-Personas duerfen aber weiterhin keine erfundene Demografie
+    tragen (#1246) — der Wert ist deshalb der Leerstring, nicht ``None``.
+    """
+    out = _profile(
+        persona_kind="collective",
+        age=None,
+        gender=None,
+        mbti=None,
+    ).to_reddit_format()
+
+    assert "age" in out
+    assert "gender" in out
+    assert "mbti" in out
+    assert out["age"] == ""
+    assert out["gender"] == ""
+    assert out["mbti"] == ""
+
+
+def test_reddit_format_keeps_real_values_for_individual():
+    """Gegenprobe: eine individuelle Persona behaelt ihre echte Demografie."""
+    out = _profile(
+        persona_kind="individual",
+        age=47,
+        gender="female",
+        mbti="INTJ",
+    ).to_reddit_format()
+
+    assert out["age"] == 47
+    assert out["gender"] == "female"
+    assert out["mbti"] == "INTJ"
+
+
 def test_save_reddit_json_persists_entity_link(tmp_path):
     gen = OasisProfileGenerator.__new__(OasisProfileGenerator)
     profiles = [_profile(), _profile(user_id=2, user_name="bob",

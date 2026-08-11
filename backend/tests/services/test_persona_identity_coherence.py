@@ -221,10 +221,16 @@ class TestKollektivUeberlebtDiePersistenz:
     def test_reddit_json_fuellt_kollektiv_demografie_nicht_auf(
         self, generator, tmp_path
     ):
-        """RED ohne den Fix: `_save_reddit_json` schrieb age=30, gender=other, mbti=ISTJ.
+        """RED ohne den urspruenglichen Fix (#1246): `_save_reddit_json` schrieb
+        age=30, gender=other, mbti=ISTJ.
 
         Die Realtime-Datei war korrekt, der finale Save überschrieb sie — und
         genau diese Datei lesen Persona-Galerie und Simulation.
+
+        Die Schluessel selbst bleiben trotzdem immer vorhanden (Leerstring
+        statt fehlendem Feld) — sonst reisst OASIS beim ungeschuetzten
+        `agent_info[i]["mbti"]`-Zugriff mit KeyError ab. Nur der erfundene
+        Wert bleibt aus.
         """
         entity = _entity("Nordharz Bildungswerk gGmbH", "Organization")
         profile = generator.generate_profile_from_entity(entity, user_id=1, use_llm=False)
@@ -233,9 +239,9 @@ class TestKollektivUeberlebtDiePersistenz:
         generator._save_reddit_json([profile], str(target))
         written = json.loads(target.read_text(encoding="utf-8"))[0]
 
-        assert "age" not in written or written["age"] is None
-        assert "gender" not in written or written["gender"] is None
-        assert "mbti" not in written or written["mbti"] is None
+        assert written["age"] == ""
+        assert written["gender"] == ""
+        assert written["mbti"] == ""
 
     def test_reddit_json_behaelt_die_oasis_defaults_fuer_individuen(
         self, generator, tmp_path
