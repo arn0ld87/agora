@@ -341,6 +341,12 @@ class ReportManager:
                     confidence = "low"
                 else:
                     confidence = "speculative"
+                single_source_text_confidence: Literal[
+                    "speculative", "low", "medium", "high", "verified"
+                ] | None = None
+                if len(evidence_refs) == 1 and confidence in {"medium", "high", "verified"}:
+                    single_source_text_confidence = confidence
+                    confidence = "low"
                 # strict: speculative/low-confidence Claims werden gedroppt
                 if report_mode == "strict" and confidence in {"speculative", "low"}:
                     continue
@@ -355,7 +361,10 @@ class ReportManager:
                     # abgestuft wurde. Der Wortlaut stammt dann aus einer
                     # hoeheren Stufe und deckt mehr Sicherheit ab als das
                     # Label — ohne dass irgendetwas am Text geaendert wird.
-                    text_confidence=_text_confidence_for(claim, confidence),
+                    text_confidence=(
+                        _text_confidence_for(claim, confidence)
+                        or single_source_text_confidence
+                    ),
                 ))
             for gap in section.get("data_gaps") or []:
                 if not isinstance(gap, dict):

@@ -49,8 +49,8 @@ def test_strong_match_score_unlocks_verified():
     assert label == "verified"
 
 
-def test_high_score_without_strong_match_caps_at_medium():
-    """Ohne match_score-≥-0.85 bleibt verified geblockt; score ~0.81 → medium (< 0.85)."""
+def test_repeated_high_scores_from_one_source_cap_at_low():
+    """Mehrere Treffer derselben Quelle bleiben ein Single-Source-Claim."""
     items = [
         {"type": "graph_fact", "source": "panorama_search",
          "snippet": f"x{i}", "match_score": 0.78}
@@ -60,9 +60,8 @@ def test_high_score_without_strong_match_caps_at_medium():
     # Alle Items gleiche source → 1 unique source → consistency=0.6
     # relevance=0.78, source_quality=1.0, specificity=0.8 (0.78≥0.70), consistency=0.6
     # raw = 0.40*0.78 + 0.25*1.0 + 0.20*0.8 + 0.15*0.6 = 0.312+0.25+0.16+0.09 = 0.812
-    # 0.65 ≤ 0.812 < 0.85 → "medium"
-    assert score < 0.85
-    assert label == "medium"
+    assert score <= 0.59
+    assert label == "low"
 
 
 def test_off_topic_low_match_score_yields_speculative_or_low():

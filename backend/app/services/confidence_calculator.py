@@ -223,9 +223,9 @@ def compute_confidence(
     )
     unique_sources = len({(e.get("type"), e.get("source")) for e in evidence})
 
-    # Eine einzelne Quelle darf nie hohe Confidence erzeugen. Der Claim bleibt
-    # als ``low`` sichtbar; strengere Stufen brauchen unabhängige Abstützung.
-    if len(evidence) < 2:
+    # Eine einzelne Quelle erzeugt höchstens ``low``; Contradiction-Penaltys
+    # können sie weiter auf ``speculative`` senken. Der Claim bleibt sichtbar.
+    if unique_sources < 2:
         score = min(score, 0.59)
 
     # Task 08: Medium-Cap — kein Claim darf "high" sein, wenn alle

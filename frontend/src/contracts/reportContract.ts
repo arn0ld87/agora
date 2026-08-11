@@ -179,12 +179,13 @@ export const ReportClaimSchema = z.object({
   audit_trail: z.array(z.record(z.string(), z.unknown())).default([]),
   notes: z.string().optional().nullable(),
 }).strict().superRefine((value, ctx) => {
-  // Spiegelt ReportClaimModel.non_low_claims_need_evidence
-  // speculative und low dürfen ohne Evidence auskommen
-  if (value.confidence_label !== "low" && value.confidence_label !== "speculative" && value.evidence.length === 0) {
+  const supportingEvidenceCount = value.evidence.filter(
+    (binding) => binding.supports_claim === true,
+  ).length;
+  if (supportingEvidenceCount < CLAIM_MIN_EVIDENCE_FOR_CLAIM) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: `Label '${value.confidence_label}' verlangt mindestens eine Evidence mit nachvollziehbarem Anker.`,
+      message: `Label '${value.confidence_label}' verlangt mindestens ${CLAIM_MIN_EVIDENCE_FOR_CLAIM} stützende Evidence.`,
     });
   }
   // Spiegelt ReportClaimModel.verified_needs_strong_match

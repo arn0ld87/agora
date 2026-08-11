@@ -372,6 +372,51 @@ def test_build_report_v3_floor_ignores_non_supporting_bindings():
     assert migrated.claims == []
 
 
+def test_build_report_v3_caps_legacy_single_source_claim_at_low():
+    """Persistierte Claims mit nur einer stützenden Quelle werden ehrlich abgestuft."""
+    from app.models.report import Report, ReportStatus  # noqa: PLC0415
+    from app.services.report_agent.manager import ReportManager  # noqa: PLC0415
+
+    evidence_map = {
+        "schema_version": 3,
+        "report_id": "report_legacy_single_source",
+        "simulation_id": "sim_legacy_single_source",
+        "evidence_index": _evidence_index(),
+        "global_evidence_refs": [],
+        "sections": [
+            {
+                "section_index": 1,
+                "section_title": "Legacy-Claim",
+                "section_summary": "Ein alter Claim trägt nur eine Quelle.",
+                "claims": [
+                    {
+                        "claim_id": "claim_01",
+                        "claim_text": "Eine einzelne Quelle darf keine hohe Confidence tragen.",
+                        "confidence_label": "high",
+                        "confidence_score": 0.88,
+                        "evidence": [
+                            {"evidence_id": EVIDENCE_ID, "supports_claim": True},
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+    report = Report(
+        report_id="report_legacy_single_source",
+        simulation_id="sim_legacy_single_source",
+        graph_id="graph_legacy_single_source",
+        simulation_requirement="Test",
+        status=ReportStatus.COMPLETED,
+    )
+
+    migrated = ReportManager.build_report_v3(report, evidence_map)
+
+    assert len(migrated.claims) == 1
+    assert migrated.claims[0].confidence == "low"
+    assert migrated.claims[0].text_confidence == "high"
+
+
 # ---- migrate_v2_to_v3 Unit-Tests ----
 
 def test_migrate_v2_to_v3_minimal():

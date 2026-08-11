@@ -113,6 +113,27 @@ const VALID_PAYLOAD = {
 describe('ReportContractSchema (Zod-Spiegel)', () => {
   it('spiegelt den ADR-0002-Floor von einem stützenden Beleg', () => {
     expect(CLAIM_MIN_EVIDENCE_FOR_CLAIM).toBe(1);
+
+    const lowClaim = {
+      claim_id: 'claim_01',
+      claim_text: 'Ein stützender Beleg trägt diesen Claim.',
+      confidence_label: 'low',
+      confidence_score: 0.55,
+      evidence: [
+        {
+          evidence_id: 'ev_00000000000000000000000000000001',
+          supports_claim: true,
+        },
+      ],
+      audit_trail: [],
+    };
+
+    expect(ReportClaimSchema.safeParse(lowClaim).success).toBe(true);
+    expect(ReportClaimSchema.safeParse({ ...lowClaim, evidence: [] }).success).toBe(false);
+    expect(ReportClaimSchema.safeParse({
+      ...lowClaim,
+      evidence: [{ ...lowClaim.evidence[0], supports_claim: false }],
+    }).success).toBe(false);
   });
 
   it('parses the canonical Backend round-trip payload', () => {
