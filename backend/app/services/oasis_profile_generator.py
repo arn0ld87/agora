@@ -32,6 +32,7 @@ from .persona_demographics import (
     DACH_NAME_ORIGIN_QUOTAS,
     build_name_quota_prompt_block,
     build_name_quota_prompt_block_en,
+    filter_first_names_for_gender,
 )
 from .persona_quota_defaults import (
     build_industry_quota_prompt_block,
@@ -163,7 +164,6 @@ class OasisAgentProfile:
     generation_error: Optional[str] = None
 
     created_at: str = field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d"))
-    
     def to_reddit_format(self) -> Dict[str, Any]:
         """Convert to Reddit platform format"""
         profile = {
@@ -285,6 +285,13 @@ class OasisAgentProfile:
         }
 
 
+@dataclass(frozen=True)
+class PersonaDemographicSlot:
+    age: int
+    gender: str
+    mbti: str
+
+
 class OasisProfileGenerator:
     """
     OASIS Profile Generator
@@ -311,6 +318,43 @@ class OasisProfileGenerator:
     ]
     REQUIRED_PROFILE_FIELDS = ("age", "gender", "mbti", "country")
     VALID_PROFILE_GENDERS = {"male", "female", "nonbinary", "other"}
+    PERSONA_GENDER_WEIGHTS = (
+        ("male", 0.47),
+        ("female", 0.47),
+        ("nonbinary", 0.06),
+    )
+    PERSONA_MBTI_WEIGHTS = (
+        ("ISFJ", 0.13),
+        ("ESFJ", 0.12),
+        ("ISTJ", 0.11),
+        ("ISFP", 0.09),
+        ("ESTJ", 0.08),
+        ("ESFP", 0.08),
+        ("ENFP", 0.08),
+        ("INFP", 0.07),
+        ("ESTP", 0.06),
+        ("INTP", 0.05),
+        ("ENTP", 0.04),
+        ("ENFJ", 0.03),
+        ("ISTP", 0.02),
+        ("INTJ", 0.02),
+        ("ENTJ", 0.01),
+        ("INFJ", 0.01),
+    )
+    INDIVIDUAL_AGE_BANDS = (
+        ((18, 24), 0.10),
+        ((25, 34), 0.22),
+        ((35, 44), 0.22),
+        ((45, 54), 0.20),
+        ((55, 65), 0.16),
+        ((66, 75), 0.10),
+    )
+    GROUP_AGE_BANDS = (
+        ((25, 34), 0.18),
+        ((35, 44), 0.30),
+        ((45, 54), 0.30),
+        ((55, 65), 0.22),
+    )
 
     # Common countries list
     COUNTRIES = [
@@ -322,7 +366,7 @@ class OasisProfileGenerator:
     # kein separater Pool mehr, damit alle Pfade dieselbe demographische Verteilung nutzen.
 
     @staticmethod
-    def _pick_dach_name() -> str:
+    def _pick_dach_name(gender: Optional[str] = None) -> str:
         """Wählt einen Vor- und Nachnamen gewichtet nach DACH-Mikrozensus-Quoten.
 
         Nutzt DACH_NAME_ORIGIN_QUOTAS als Single Source of Truth statt eines
@@ -330,7 +374,7 @@ class OasisProfileGenerator:
         """
         weights = [q.share for q in DACH_NAME_ORIGIN_QUOTAS]
         bucket = random.choices(DACH_NAME_ORIGIN_QUOTAS, weights=weights, k=1)[0]
-        first = random.choice(bucket.first_names)
+        first = random.choice(filter_first_names_for_gender(bucket.first_names, gender))
         last = random.choice(bucket.last_names)
         return f"{first} {last}"
 
@@ -345,6 +389,117 @@ class OasisProfileGenerator:
     def _pick_individual_gender() -> str:
         # ~47% male, ~47% female, ~6% nonbinary (statistisch grob realistisch, genug Varianz)
         return random.choices(["male", "female", "nonbinary"], weights=[47, 47, 6], k=1)[0]
+
+    @staticmethod
+    def _largest_remainder_counts(weighted_values: tuple[tuple[object, float], ...], total: int) -> list[int]:
+        raw = [share * total for _, share in weighted_values]
+        counts = [int(value) for value in raw]
+        remainder = total - sum(counts)
+        ranked = sorted(
+            ((raw[idx] - counts[idx], idx) for idx in range(len(weighted_values))),
+            reverse=True,
+        )
+        for _, idx in ranked[:remainder]:
+            counts[idx] += 1
+        return counts
+
+    @classmethod
+    def _build_weighted_slots(cls, weighted_values: tuple[tuple[str, float], ...], total: int) -> list[str]:
+        slots: list[str] = []
+        for (value, _share), count in zip(
+            weighted_values,
+            cls._largest_remainder_counts(weighted_values, total),
+        ):
+            slots.extend([value] * count)
+        random.shuffle(slots)
+        return slots
+
+    @classmethod
+    def _build_age_slots(
+        cls,
+        weighted_bands: tuple[tuple[tuple[int, int], float], ...],
+        total: int,
+    ) -> list[int]:
+        ages: list[int] = []
+        for (age_range, _share), count in zip(
+            weighted_bands,
+            cls._largest_remainder_counts(weighted_bands, total),
+        ):
+            start, end = age_range
+            band_ages = list(range(start, end + 1))
+            random.shuffle(band_ages)
+            ages.extend(band_ages[idx % len(band_ages)] for idx in range(count))
+        random.shuffle(ages)
+        return ages
+
+    def _build_demographic_slots(self, entities: List[EntityNode]) -> list[PersonaDemographicSlot]:
+        total = len(entities)
+        if total == 0:
+            return []
+
+        genders = self._build_weighted_slots(self.PERSONA_GENDER_WEIGHTS, total)
+        mbtis = self._build_weighted_slots(self.PERSONA_MBTI_WEIGHTS, total)
+
+        age_by_index: list[Optional[int]] = [None] * total
+        individual_indices: list[int] = []
+        group_indices: list[int] = []
+        for idx, entity in enumerate(entities):
+            entity_type = entity.get_entity_type() or "Entity"
+            if self._is_group_entity(entity_type):
+                group_indices.append(idx)
+            else:
+                individual_indices.append(idx)
+
+        if individual_indices:
+            for idx, age in zip(
+                individual_indices,
+                self._build_age_slots(self.INDIVIDUAL_AGE_BANDS, len(individual_indices)),
+            ):
+                age_by_index[idx] = age
+        if group_indices:
+            for idx, age in zip(
+                group_indices,
+                self._build_age_slots(self.GROUP_AGE_BANDS, len(group_indices)),
+            ):
+                age_by_index[idx] = age
+
+        if any(age is None for age in age_by_index):
+            raise AssertionError("Demographic slot planning left at least one age unassigned.")
+
+        slots: list[PersonaDemographicSlot] = []
+        for idx in range(total):
+            assigned_age = age_by_index[idx]
+            assert assigned_age is not None  # guarded above; keeps the invariant explicit for type-checkers
+            slots.append(
+                PersonaDemographicSlot(
+                    age=assigned_age,
+                    gender=genders[idx],
+                    mbti=mbtis[idx],
+                )
+            )
+        return slots
+
+    def _build_demographic_slot_prompt_block(
+        self,
+        demographic_slot: PersonaDemographicSlot,
+    ) -> str:
+        if self.language == "de":
+            return (
+                "### Zugewiesener Demografie-Slot (verbindlich)\n"
+                f"- age: exakt {demographic_slot.age}\n"
+                f"- gender: exakt \"{demographic_slot.gender}\"\n"
+                f"- mbti: exakt \"{demographic_slot.mbti}\"\n"
+                "- Diese drei Felder sind vorgegeben und müssen unverändert ins JSON übernommen werden.\n"
+                "- display_name muss zu diesem Gender passen."
+            )
+        return (
+            "### Assigned demographic slot (mandatory)\n"
+            f"- age: exactly {demographic_slot.age}\n"
+            f"- gender: exactly \"{demographic_slot.gender}\"\n"
+            f"- mbti: exactly \"{demographic_slot.mbti}\"\n"
+            "- These three fields are fixed and must be copied into the JSON unchanged.\n"
+            "- display_name must match this gender."
+        )
 
     # Individual type entities (need to generate specific personas)
     INDIVIDUAL_ENTITY_TYPES = [
@@ -406,7 +561,8 @@ class OasisProfileGenerator:
         self,
         entity: EntityNode,
         user_id: int,
-        use_llm: bool = True
+        use_llm: bool = True,
+        demographic_slot: Optional[PersonaDemographicSlot] = None,
     ) -> OasisAgentProfile:
         """
         Generate OASIS Agent Profile from knowledge graph entity
@@ -436,7 +592,8 @@ class OasisProfileGenerator:
                 entity_type=entity_type,
                 entity_summary=entity.summary,
                 entity_attributes=entity.attributes,
-                context=context
+                context=context,
+                demographic_slot=demographic_slot,
             )
         else:
             # Use rules to generate basic persona
@@ -444,8 +601,14 @@ class OasisProfileGenerator:
                 entity_name=name,
                 entity_type=entity_type,
                 entity_summary=entity.summary,
-                entity_attributes=entity.attributes
+                entity_attributes=entity.attributes,
+                demographic_slot=demographic_slot,
             )
+
+        if demographic_slot is not None:
+            profile_data["age"] = demographic_slot.age
+            profile_data["gender"] = demographic_slot.gender
+            profile_data["mbti"] = demographic_slot.mbti
         
         # LLM/Rule-based darf display_name (echter Name) + handle (kurzes Social-Handle)
         # überschreiben. So wird aus Entity "GraphRAG" z.B. Person "Lena Hoffmann" mit
@@ -671,7 +834,8 @@ class OasisProfileGenerator:
         entity_type: str,
         entity_summary: str,
         entity_attributes: Dict[str, Any],
-        context: str
+        context: str,
+        demographic_slot: Optional[PersonaDemographicSlot] = None,
     ) -> Dict[str, Any]:
         """
         Use LLM to generate very detailed persona
@@ -687,11 +851,13 @@ class OasisProfileGenerator:
 
         if is_individual:
             prompt = self._build_individual_persona_prompt(
-                entity_name, entity_type, entity_summary, entity_attributes, context, detail_level=detail_level
+                entity_name, entity_type, entity_summary, entity_attributes, context,
+                detail_level=detail_level, demographic_slot=demographic_slot,
             )
         else:
             prompt = self._build_group_persona_prompt(
-                entity_name, entity_type, entity_summary, entity_attributes, context, detail_level=detail_level
+                entity_name, entity_type, entity_summary, entity_attributes, context,
+                detail_level=detail_level, demographic_slot=demographic_slot,
             )
 
         # Try multiple times until successful or max retry attempts reached
@@ -735,6 +901,10 @@ class OasisProfileGenerator:
                 # chat_json validiert bereits gegen das Pydantic-Schema; die
                 # nachfolgenden Fallbacks (bio, persona, voice_register)
                 # bleiben als Defensive-Programmierung bestehen.
+                if demographic_slot is not None:
+                    result["age"] = demographic_slot.age
+                    result["gender"] = demographic_slot.gender
+                    result["mbti"] = demographic_slot.mbti
                 if not result.get("bio"):
                     result["bio"] = entity_summary[:200] if entity_summary else f"{entity_type}: {entity_name}"
                 if not result.get("persona"):
@@ -927,7 +1097,8 @@ class OasisProfileGenerator:
         entity_summary: str,
         entity_attributes: Dict[str, Any],
         context: str,
-        detail_level: Optional[dict] = None
+        detail_level: Optional[dict] = None,
+        demographic_slot: Optional[PersonaDemographicSlot] = None,
     ) -> str:
         """Build detailed persona prompt for individual entities — language-aware."""
 
@@ -937,6 +1108,11 @@ class OasisProfileGenerator:
 
         _quota_block_de = build_name_quota_prompt_block()
         _industry_block_de = build_industry_quota_prompt_block(self._industry_quota_plan)
+        _slot_block = (
+            self._build_demographic_slot_prompt_block(demographic_slot)
+            if demographic_slot is not None
+            else ""
+        )
 
         if self.language == "de":
             return f"""Erzeuge eine detaillierte Social-Media-Persona für die folgende Entität. Bleibe nah an der bekannten Realität.
@@ -952,6 +1128,8 @@ Kontext:
 {_quota_block_de}
 
 {_industry_block_de}
+
+{_slot_block}
 
 Antworte als JSON mit folgenden Feldern:
 
@@ -1005,6 +1183,8 @@ Context Information:
 
 {_industry_block_en}
 
+{_slot_block}
+
 Please generate JSON containing the following fields:
 
 1. display_name: Realistic first + last name of a person — following the name distribution above (DACH Mikrozensus 2024). IMPORTANT: Only use a real person's actual name if "{entity_name}" itself IS a personal name AND matches reality. For roles, topics, products, or job titles ALWAYS pick a different, freshly chosen name — do NOT reuse names of people mentioned in the context. Every persona must have its own unique name.
@@ -1047,7 +1227,8 @@ Important:
         entity_summary: str,
         entity_attributes: Dict[str, Any],
         context: str,
-        detail_level: Optional[dict] = None
+        detail_level: Optional[dict] = None,
+        demographic_slot: Optional[PersonaDemographicSlot] = None,
     ) -> str:
         """Build detailed persona prompt for group/institutional entities — language-aware."""
 
@@ -1057,6 +1238,11 @@ Important:
 
         _quota_block_de_grp = build_name_quota_prompt_block()
         _industry_block_de_grp = build_industry_quota_prompt_block(self._industry_quota_plan)
+        _slot_block = (
+            self._build_demographic_slot_prompt_block(demographic_slot)
+            if demographic_slot is not None
+            else ""
+        )
 
         if self.language == "de":
             return f"""Erzeuge einen realistischen **Menschen**, der als Repräsentantin/Repräsentant oder Mitarbeiter:in für die folgende Organisation / Gruppe auf Social Media spricht — keinen Institutions-Account. Bleibe nah an der bekannten Realität.
@@ -1072,6 +1258,8 @@ Kontext:
 {_quota_block_de_grp}
 
 {_industry_block_de_grp}
+
+{_slot_block}
 
 Antworte als JSON mit folgenden Feldern:
 
@@ -1125,6 +1313,8 @@ Context Information:
 {_quota_block_en_grp}
 
 {_industry_block_en_grp}
+
+{_slot_block}
 
 Please generate JSON containing the following fields:
 
@@ -1215,6 +1405,7 @@ Important:
         entity_summary: str,
         entity_attributes: Dict[str, Any],
         generation_error: Optional[str] = None,
+        demographic_slot: Optional[PersonaDemographicSlot] = None,
     ) -> Dict[str, Any]:
         """Regelbasiertes Profil — immer als solches gekennzeichnet (Issue #1029).
 
@@ -1229,7 +1420,7 @@ Important:
         eine Degradierung.
         """
         payload = self._build_rule_based_payload(
-            entity_name, entity_type, entity_summary, entity_attributes
+            entity_name, entity_type, entity_summary, entity_attributes, demographic_slot
         )
         payload["generation_source"] = "rule_based"
         if generation_error:
@@ -1241,24 +1432,30 @@ Important:
         entity_name: str,
         entity_type: str,
         entity_summary: str,
-        entity_attributes: Dict[str, Any]
+        entity_attributes: Dict[str, Any],
+        demographic_slot: Optional[PersonaDemographicSlot] = None,
     ) -> Dict[str, Any]:
         """Generate basic persona using rules"""
 
         # Generate different personas based on entity type
         entity_type_lower = entity_type.lower()
+        assigned_gender = (
+            demographic_slot.gender if demographic_slot is not None else self._pick_individual_gender()
+        )
+        assigned_age = demographic_slot.age if demographic_slot is not None else None
+        assigned_mbti = demographic_slot.mbti if demographic_slot is not None else None
 
         # Personen-Fallback: echter DACH-Name + breite Altersstreuung + realistisches Gender.
         if entity_type_lower in ["student", "alumni"]:
-            dach = self._pick_dach_name()
+            dach = self._pick_dach_name(assigned_gender)
             return {
                 "display_name": dach,
                 "handle": dach.lower().replace(" ", "_"),
                 "bio": f"{entity_type} with interests in academics and social issues.",
                 "persona": f"{dach} ist {entity_type.lower()} und aktiv in akademischen und sozialen Diskussionen. Teilt Perspektiven und vernetzt sich mit Peers.",
-                "age": random.randint(18, 32),
-                "gender": self._pick_individual_gender(),
-                "mbti": random.choice(self.MBTI_TYPES),
+                "age": assigned_age if assigned_age is not None else random.randint(18, 32),
+                "gender": assigned_gender,
+                "mbti": assigned_mbti or random.choice(self.MBTI_TYPES),
                 "country": "DE",
                 "profession": "Student",
                 "interested_topics": ["Bildung", "Gesellschaft", "Technologie"],
@@ -1266,16 +1463,16 @@ Important:
             }
 
         elif entity_type_lower in ["publicfigure", "expert", "faculty"]:
-            dach = self._pick_dach_name()
+            dach = self._pick_dach_name(assigned_gender)
             profession_str = entity_attributes.get("occupation", "Fachexpertin/Fachexperte")
             return {
                 "display_name": dach,
                 "handle": dach.lower().replace(" ", "_"),
                 "bio": "Expert and thought leader in their field.",
                 "persona": f"{dach} ist eine anerkannte Fachperson und teilt Einschätzungen zu relevanten Themen. Bekannt für Expertise und Einfluss im öffentlichen Diskurs.",
-                "age": random.randint(32, 68),
-                "gender": self._pick_individual_gender(),
-                "mbti": random.choice(["ENTJ", "INTJ", "ENTP", "INTP"]),
+                "age": assigned_age if assigned_age is not None else random.randint(32, 68),
+                "gender": assigned_gender,
+                "mbti": assigned_mbti or random.choice(["ENTJ", "INTJ", "ENTP", "INTP"]),
                 "country": "DE",
                 "profession": profession_str,
                 "interested_topics": ["Politik", "Wirtschaft", "Gesellschaft"],
@@ -1284,15 +1481,15 @@ Important:
 
         # Institutionen-Fallback: ECHTE PERSON als Repräsentant/in der Organisation.
         elif entity_type_lower in ["mediaoutlet", "socialmediaplatform"]:
-            dach = self._pick_dach_name()
+            dach = self._pick_dach_name(assigned_gender)
             return {
                 "display_name": dach,
                 "handle": dach.lower().replace(" ", "_"),
                 "bio": f"Redaktion bei {entity_name} | Nachrichten, Analysen, Einordnung",
                 "persona": f"{dach} arbeitet als Redakteur:in bei {entity_name} und teilt berufliche Einschätzungen zu aktuellen Themen sowie gelegentlich persönliche Meinungen.",
-                "age": random.randint(28, 58),
-                "gender": self._pick_individual_gender(),
-                "mbti": random.choice(self.MBTI_TYPES),
+                "age": assigned_age if assigned_age is not None else random.randint(28, 58),
+                "gender": assigned_gender,
+                "mbti": assigned_mbti or random.choice(self.MBTI_TYPES),
                 "country": "DE",
                 "profession": f"Redakteur:in bei {entity_name}",
                 "interested_topics": ["Nachrichten", "Aktuelles", "Öffentlichkeit"],
@@ -1300,15 +1497,15 @@ Important:
             }
 
         elif entity_type_lower in ["university", "governmentagency", "ngo", "organization"]:
-            dach = self._pick_dach_name()
+            dach = self._pick_dach_name(assigned_gender)
             return {
                 "display_name": dach,
                 "handle": dach.lower().replace(" ", "_"),
                 "bio": f"Mitarbeiter:in bei {entity_name} | spricht aus der Praxis",
                 "persona": f"{dach} ist bei {entity_name} beschäftigt und vertritt die Organisation öffentlich — mal mit offizieller Position, mal mit persönlicher Sicht aus dem Arbeitsalltag.",
-                "age": random.randint(25, 62),
-                "gender": self._pick_individual_gender(),
-                "mbti": random.choice(self.MBTI_TYPES),
+                "age": assigned_age if assigned_age is not None else random.randint(25, 62),
+                "gender": assigned_gender,
+                "mbti": assigned_mbti or random.choice(self.MBTI_TYPES),
                 "country": "DE",
                 "profession": f"Mitarbeiter:in bei {entity_name}",
                 "interested_topics": ["Politik", "Community", "Arbeit"],
@@ -1317,15 +1514,15 @@ Important:
 
         else:
             # Default: behandeln wir als Person mit breiter Streuung.
-            dach = self._pick_dach_name()
+            dach = self._pick_dach_name(assigned_gender)
             return {
                 "display_name": dach,
                 "handle": dach.lower().replace(" ", "_"),
                 "bio": entity_summary[:150] if entity_summary else f"{entity_type}: {entity_name}",
                 "persona": entity_summary or f"{dach} nimmt aktiv an sozialen Diskussionen teil.",
-                "age": random.randint(20, 70),
-                "gender": self._pick_individual_gender(),
-                "mbti": random.choice(self.MBTI_TYPES),
+                "age": assigned_age if assigned_age is not None else random.randint(20, 70),
+                "gender": assigned_gender,
+                "mbti": assigned_mbti or random.choice(self.MBTI_TYPES),
                 "country": "DE",
                 "profession": entity_type,
                 "interested_topics": ["Allgemein", "Gesellschaft"],
@@ -1385,6 +1582,7 @@ Important:
         profiles = [None] * total  # Pre-allocate list to maintain order
         completed_count = [0]  # Use list for modification in closure
         lock = Lock()
+        demographic_slots = self._build_demographic_slots(entities)
 
         # Helper function for real-time file writing
         def save_profiles_realtime():
@@ -1425,7 +1623,8 @@ Important:
                 profile = self.generate_profile_from_entity(
                     entity=entity,
                     user_id=idx,
-                    use_llm=use_llm
+                    use_llm=use_llm,
+                    demographic_slot=demographic_slots[idx],
                 )
 
                 # Real-time output generated persona to console and log
@@ -1578,13 +1777,13 @@ Important:
                 norm_name in seen_names
                 or (last_name is not None and last_name in seen_last_names)
             ):
-                new_name = self._pick_dach_name()
+                new_name = self._pick_dach_name(p.gender)
                 attempts = 0
                 while (
                     new_name.lower() in seen_names
                     or (self._last_name(new_name) or "") in seen_last_names
                 ) and attempts < 30:
-                    new_name = self._pick_dach_name()
+                    new_name = self._pick_dach_name(p.gender)
                     attempts += 1
                 p.name = new_name
                 p.user_name = self._generate_username(new_name)

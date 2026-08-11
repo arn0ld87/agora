@@ -7,8 +7,10 @@ get dropped during JSON serialization, which downstream causes
 
 from __future__ import annotations
 
+from collections import Counter
 import json
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from app.services.oasis_profile_generator import (
     OasisAgentProfile,
@@ -86,10 +88,11 @@ def test_generate_profiles_replaces_duplicate_last_names(monkeypatch):
     gen.graph_id = None
     gen._print_generated_profile = lambda *args, **kwargs: None
     picked_names = iter(["Mara Scholz", "Jonas Becker", "Lea Hoffmann"])
-    gen._pick_dach_name = lambda: next(picked_names)
+    picked_genders = []
+    gen._pick_dach_name = lambda gender=None: picked_genders.append(gender) or next(picked_names)
     gen._generate_username = lambda name: name.lower().replace(" ", "_")
 
-    def fake_generate(entity, user_id, use_llm=True):
+    def fake_generate(entity, user_id, use_llm=True, demographic_slot=None):
         return OasisAgentProfile(
             user_id=user_id,
             user_name=f"user_{user_id}",
@@ -116,3 +119,53 @@ def test_generate_profiles_replaces_duplicate_last_names(monkeypatch):
 
     last_names = [profile.name.split()[-1] for profile in profiles]
     assert len(last_names) == len(set(last_names))
+    assert picked_genders == ["male", "male"]
+
+
+def test_generate_profiles_rebalances_demographics_when_llm_returns_single_mode(monkeypatch):
+    payload = {
+        "display_name": "Lena Hoffmann",
+        "handle": "lena_hoffmann",
+        "bio": "Mobilitätsberaterin aus München.",
+        "persona": "Ausführliche Personenbeschreibung.",
+        "age": 52,
+        "gender": "female",
+        "mbti": "ISTJ",
+        "country": "DE",
+        "profession": "Verkehrsplanerin",
+        "interested_topics": ["Mobilität"],
+        "voice_register": "neutral-de",
+    }
+
+    class _LLMStub:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def chat_json(self, **kwargs):
+            return dict(payload)
+
+    with patch("app.services.oasis_profile_generator.OpenAI"), \
+            patch("app.llm.client.LLMClient", _LLMStub):
+        gen = OasisProfileGenerator(api_key="test-key", base_url="https://example.test/v1")
+        gen.graph_id = None
+        gen._print_generated_profile = lambda *args, **kwargs: None
+
+        entities = [
+            EntityNode(str(idx), f"Entity {idx}", ["Entity", "Person"], "Summary", {})
+            for idx in range(30)
+        ]
+
+        profiles = gen.generate_profiles_from_entities(
+            entities,
+            use_llm=True,
+            parallel_count=1,
+        )
+
+    mbti_counts = Counter(profile.mbti for profile in profiles)
+    age_counts = Counter(profile.age for profile in profiles)
+    gender_counts = Counter(profile.gender for profile in profiles)
+
+    assert max(mbti_counts.values()) <= 9
+    assert max(age_counts.values()) <= 4
+    assert max(gender_counts.values()) < 30
+    assert len(gender_counts) >= 2
