@@ -27,7 +27,6 @@ persona_id: 'alice',
     is_simulated: true,
     body: 'Test-Post',
     timestamp: '2026-05-15T12:30:00Z',
-    sentiment: null,
     score: 0,
     ...overrides,
   }

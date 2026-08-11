@@ -1,7 +1,11 @@
 """PostCreatedEvent — Layer-0-Contract für Live-Sim-Feed.
 
 Slice FE-Redesign-5-pre · 2026-05-15
-Phase B · 2026-05-15 — sentiment + score Felder ergänzt.
+Phase B · 2026-05-15 — score-Feld ergänzt.
+2026-08-11 — ``sentiment`` entfernt (#1209 5b): es gab nie einen
+Sentiment-Service, das Feld trug nie einen Wert und wurde nirgends gerendert.
+Ein Layer-0-Feld, das nur aus seiner eigenen Nicht-Unterstützung besteht, ist
+kein Vertrag. Wiedereinführung erst mit einem Dienst, der es befüllt.
 
 Wird emittiert nach jedem CREATE_POST-Action im OASIS-Runner. Geht via
 event_bus + simulation_stream als SSE-Frame ``event: post_created`` ans
@@ -71,21 +75,14 @@ class PostCreatedEvent(BaseModel):
     is_simulated: bool = True
     body: str = Field(..., min_length=1)
     timestamp: datetime
-    sentiment: float | None = Field(
-        default=None,
-        description=(
-            "Sentiment-Architektur-Slot. Aktuell NICHT unterstützt — es gibt "
-            "keinen aktiven Sentiment-Service, das Feld ist immer None. Wird "
-            "nicht als Messwert gerendert (#1216 5b)."
-        ),
-    )
     score: int = Field(
         default=0,
         description=(
-            "Voting-Score (Reddit-Pattern), akkumuliert aus der Simulations-DB "
+            "Voting-Score (Reddit-Pattern) aus der Simulations-DB "
             "(num_likes - num_dislikes). Twitter-Posts haben kein Voting → 0. "
-            "Live-Events starten bei 0 (echter Wert zum Erzeugungszeitpunkt), "
-            "der Snapshot liefert den akkumulierten Stand (#1216 5b)."
+            "Live-Events tragen den Stand zum Erzeugungszeitpunkt, der Snapshot "
+            "den akkumulierten Endstand; spätere Votes aktualisieren ein bereits "
+            "gesendetes Live-Event nicht (#1209 5b)."
         ),
     )
     sim_time: datetime | None = Field(
@@ -115,13 +112,6 @@ class PostCreatedEvent(BaseModel):
         # eine andere TZ als der Browser hat.
         if v is not None and v.tzinfo is None:
             raise ValueError("sim_time muss tz-aware sein (UTC + Offset)")
-        return v
-
-    @field_validator("sentiment")
-    @classmethod
-    def sentiment_in_range(cls, v: float | None) -> float | None:
-        if v is not None and not (-1.0 <= v <= 1.0):
-            raise ValueError(f"sentiment muss zwischen -1.0 und 1.0 liegen, erhalten: {v}")
         return v
 
 

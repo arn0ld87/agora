@@ -57,7 +57,6 @@ persona_id: 'persona-1',
     is_simulated: true,
     body: 'tick',
     timestamp: '2026-08-01T22:00:00.000Z',
-    sentiment: null,
     score: 0,
     sim_time: simTime,
   }

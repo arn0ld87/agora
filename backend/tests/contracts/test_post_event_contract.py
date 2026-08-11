@@ -126,40 +126,19 @@ class TestPostCreatedEvent:
             PostCreatedEvent.model_validate(payload)
 
 
-class TestPostCreatedEventSentimentScore:
-    """Phase B — neue optionale Felder sentiment + score."""
+class TestPostCreatedEventScore:
+    """score — Voting-Stand aus der Simulations-DB (#1209 5b).
 
-    def test_sentiment_default_is_none(self) -> None:
-        ev = PostCreatedEvent.model_validate(_valid_payload())
-        assert ev.sentiment is None
+    ``sentiment`` ist aus dem Vertrag entfernt: es gab nie einen
+    Sentiment-Service, das Feld trug nie einen Wert und wurde nirgends
+    gerendert. ``extra="forbid"`` weist es jetzt aktiv zurück.
+    """
 
-    def test_sentiment_accepts_null(self) -> None:
-        payload = {**_valid_payload(), "sentiment": None}
-        ev = PostCreatedEvent.model_validate(payload)
-        assert ev.sentiment is None
+    def test_sentiment_field_is_gone(self) -> None:
+        assert "sentiment" not in PostCreatedEvent.model_fields
 
-    def test_sentiment_accepts_zero(self) -> None:
-        payload = {**_valid_payload(), "sentiment": 0.0}
-        ev = PostCreatedEvent.model_validate(payload)
-        assert ev.sentiment == 0.0
-
-    def test_sentiment_accepts_positive_one(self) -> None:
-        payload = {**_valid_payload(), "sentiment": 1.0}
-        ev = PostCreatedEvent.model_validate(payload)
-        assert ev.sentiment == 1.0
-
-    def test_sentiment_accepts_negative_one(self) -> None:
-        payload = {**_valid_payload(), "sentiment": -1.0}
-        ev = PostCreatedEvent.model_validate(payload)
-        assert ev.sentiment == -1.0
-
-    def test_sentiment_rejects_above_range(self) -> None:
-        payload = {**_valid_payload(), "sentiment": 1.5}
-        with pytest.raises(ValidationError):
-            PostCreatedEvent.model_validate(payload)
-
-    def test_sentiment_rejects_below_range(self) -> None:
-        payload = {**_valid_payload(), "sentiment": -1.5}
+    def test_sentiment_is_rejected_as_unknown_field(self) -> None:
+        payload = {**_valid_payload(), "sentiment": 0.5}
         with pytest.raises(ValidationError):
             PostCreatedEvent.model_validate(payload)
 

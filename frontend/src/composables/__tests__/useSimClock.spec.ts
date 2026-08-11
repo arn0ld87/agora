@@ -24,7 +24,6 @@ persona_id: 'persona-1',
     is_simulated: true,
     body: 'tick',
     timestamp: '2026-05-16T10:00:00.000Z',
-    sentiment: null,
     score: 0,
     ...overrides,
   }

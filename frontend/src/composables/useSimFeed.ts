@@ -156,6 +156,13 @@ function createStore(simulationId: string) {
     return roots
   })
 
+  /**
+   * Die jüngsten Posts beider Plattformen in Eingangsreihenfolge — Datenquelle
+   * der Resonanz-Leiste (#1209 5b). Dasselbe Fenster wie activityRate, damit
+   * Leiste und Rate denselben Ausschnitt beschreiben.
+   */
+  const recentPosts = computed<PostCreatedEvent[]>(() => all.value.slice(-30))
+
   const activityRate = computed<number>(() => {
     const recent = all.value.slice(-30)
     if (recent.length < 2) return 0
@@ -169,6 +176,7 @@ function createStore(simulationId: string) {
     redditPosts,
     twitterPosts,
     redditTree,
+    recentPosts,
     activityRate,
     ingest,
     ingestMany,

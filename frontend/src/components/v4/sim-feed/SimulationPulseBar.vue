@@ -21,42 +21,48 @@ const rateDisplay = computed(() => {
 const totalCount = computed(() => props.redditCount + props.twitterCount)
 
 /**
- * Mappt einen Sentiment-Wert auf einen CSS-Klassen-Namen.
- * null → 'neutral-dim' (Sentiment-Service inaktiv)
- * [-1, -0.33) → 'negative'
- * [-0.33, 0.33] → 'neutral'
- * (0.33, 1] → 'positive'
+ * Mappt den Voting-Score eines Posts auf einen CSS-Klassen-Namen.
+ *
+ * #1209 5b: Die Leiste zeigte zuvor `sentiment` — ein Feld, das nie einen Wert
+ * trug, also garantiert immer im „nicht erhoben"-Zweig landete und trotzdem wie
+ * eine Messung aussah. Sie zeigt jetzt `score` (num_likes - num_dislikes aus der
+ * Simulations-DB), einen tatsächlich erhobenen Wert. 0 heißt „keine Votes", nicht
+ * „nicht gemessen".
+ *
+ * score < 0 → negative (Widerspruch), 0 → neutral, > 0 → positive (Zustimmung)
  */
-function sentimentClass(s: number | null | undefined): string {
-  if (s == null) return 'sentiment-null'
-  if (s < -0.33) return 'sentiment-negative'
-  if (s > 0.33) return 'sentiment-positive'
-  return 'sentiment-neutral'
+function scoreClass(s: number | null | undefined): string {
+  const value = s ?? 0
+  if (value < 0) return 'score-negative'
+  if (value > 0) return 'score-positive'
+  return 'score-neutral'
 }
 
 const heatbarPulses = computed(() => {
   const posts = props.recentPosts ?? []
   if (posts.length === 0) return []
-  return posts.map((p) => sentimentClass(p.sentiment))
+  return posts.map((p) => scoreClass(p.score))
 })
 
-/** true wenn alle sentiments null/undefined → "Sentiment-Service nicht aktiv" Hinweis */
-const allSentimentNull = computed(() => {
+/** true wenn kein Post Resonanz erfahren hat — die Leiste wird gedimmt, damit
+ * „alle neutral" nicht wie ein ausgewogenes Meinungsbild aussieht. */
+const noResonanceYet = computed(() => {
   const posts = props.recentPosts ?? []
-  return posts.length > 0 && posts.every((p) => p.sentiment == null)
+  return posts.length > 0 && posts.every((p) => (p.score ?? 0) === 0)
 })
 </script>
 
 <template>
   <div class="spb-root" role="status" :aria-label="t('feed.live')">
-    <div class="spb-bar" :aria-label="t('feed.sentimentBar')" role="img">
-      <!-- Sentiment-Heatbar: ein Segment pro Post aus recentPosts -->
+    <div class="spb-bar" :aria-label="t('feed.resonanceBar')" role="img">
+      <!-- Resonanz-Leiste: ein Segment pro Post aus recentPosts, eingefärbt
+           nach Voting-Score (#1209 5b). -->
       <template v-if="heatbarPulses.length > 0">
         <div
           v-for="(cls, idx) in heatbarPulses"
           :key="idx"
           class="spb-pulse"
-          :class="[cls, { 'spb-pulse--dim': allSentimentNull }]"
+          :class="[cls, { 'spb-pulse--dim': noResonanceYet }]"
         ></div>
       </template>
       <!-- Fallback wenn keine Posts vorhanden -->
@@ -102,27 +108,23 @@ const allSentimentNull = computed(() => {
   opacity: 0.6;
   border-radius: 2px;
 }
-/* Sentiment-Pulse-Segmente */
+/* Resonanz-Segmente, eingefärbt nach Voting-Score */
 .spb-pulse {
   flex: 1;
   height: 100%;
   border-radius: 1px;
   transition: background-color 0.3s ease;
 }
-.spb-pulse.sentiment-negative {
+.spb-pulse.score-negative {
   background: var(--status-red, #dc2626);
 }
-.spb-pulse.sentiment-neutral {
+.spb-pulse.score-neutral {
   background: var(--text-tertiary, #6b7280);
 }
-.spb-pulse.sentiment-positive {
+.spb-pulse.score-positive {
   background: var(--status-green, #10b981);
 }
-.spb-pulse.sentiment-null {
-  background: var(--text-tertiary, #6b7280);
-  opacity: 0.4;
-}
-/* Alle null → Pulse-Animation als visueller Hinweis */
+/* Noch keine Resonanz → Pulse-Animation als visueller Hinweis */
 .spb-pulse--dim {
   animation: pulse-dim 1.8s ease-in-out infinite;
 }

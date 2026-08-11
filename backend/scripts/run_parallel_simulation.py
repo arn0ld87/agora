@@ -312,6 +312,17 @@ async def _emit_post_created_to_redis(
     if voice_register not in ("formal-de", "neutral-de", "technical-de", "skeptisch-de"):
         voice_register = "neutral-de"
 
+    # Voting-Stand aus der Simulations-DB (fetch_new_actions_from_db reichert
+    # ihn an). Twitter kennt kein Up/Down-Voting → 0, gleiche Semantik wie im
+    # Mount-Snapshot (#1209 5b).
+    if platform_value == "reddit":
+        try:
+            score = int(action_args.get("score", 0) or 0)
+        except (TypeError, ValueError):
+            score = 0
+    else:
+        score = 0
+
     payload: Dict[str, Any] = {
         "event_type": "post_created",
         "simulation_id": simulation_id,
@@ -324,11 +335,7 @@ async def _emit_post_created_to_redis(
         "is_simulated": True,
         "body": body,
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        # Sentiment-Architektur-Slot — aktuell nicht unterstützt (#1216 5b).
-        "sentiment": None,
-        # Voting-Score — 0 ist der echte Wert zum Erzeugungszeitpunkt (frischer
-        # Post hat keine Votes); der Snapshot liefert den akkumulierten Stand.
-        "score": 0,
+        "score": score,
         # Task 1 — virtuelle Sim-Zeit pro CREATE_POST. None bei alten Callern.
         "sim_time": sim_time_iso,
     }
@@ -1059,16 +1066,77 @@ def _enrich_action_context(
         
         # Post comment: supplement commented post information
         elif action_type == 'CREATE_COMMENT':
+            # OASIS schreibt in die trace-Zeile einer Kommentar-Aktion nur
+            # content + comment_id; der Elternpost steht ausschließlich in der
+            # comment-Tabelle. Ohne diese Auflösung bleibt post_id leer, der
+            # Live-Emit verwirft jeden realen Kommentar und der Reddit-Feed
+            # bleibt leer — 86 % der Reddit-Aktivität sind Kommentare
+            # (#1209 5c/5d).
             post_id = action_args.get('post_id')
+            if not post_id:
+                comment_id = action_args.get('comment_id')
+                if comment_id:
+                    cursor.execute(
+                        "SELECT post_id FROM comment WHERE comment_id = ?", (comment_id,)
+                    )
+                    row = cursor.fetchone()
+                    if row and row[0] is not None:
+                        post_id = row[0]
+                        action_args['post_id'] = post_id
             if post_id:
                 post_info = _get_post_info(cursor, post_id, agent_names)
                 if post_info:
                     action_args['post_content'] = post_info.get('content', '')
                     action_args['post_author_name'] = post_info.get('author_name', '')
-    
-    except Exception as e:
+            _attach_engagement_score(cursor, 'comment', 'comment_id', action_args)
+
+        # Create post: Voting-Stand zum Erzeugungszeitpunkt mitführen, damit der
+        # Live-Feed einen echten Wert zeigt statt einer hartkodierten 0
+        # (#1209 5b). Die Post-ID wird vorher normalisiert: der Emitter kennt
+        # den Fallback post_id → new_post_id, und ohne dieselbe Normalisierung
+        # bliebe ein Post, dessen Trace-Zeile new_post_id trägt, ohne Score —
+        # der Feed zeigte wieder eine unechte 0. Den dritten Emitter-Fallback
+        # `id` gibt es hier bewusst nicht: fetch_new_actions_from_db reicht
+        # diesen Schlüssel gar nicht durch, er kann action_args nie erreichen.
+        elif action_type == 'CREATE_POST':
+            if not action_args.get('post_id') and action_args.get('new_post_id'):
+                action_args['post_id'] = action_args['new_post_id']
+            _attach_engagement_score(cursor, 'post', 'post_id', action_args)
+
+    except Exception:
         # Context supplement failure does not affect main process
-        print(f"Failed to supplement action context: {e}")
+        logging.getLogger("agora.run_parallel_simulation").warning(
+            "Failed to supplement action context", exc_info=True
+        )
+
+
+def _attach_engagement_score(
+    cursor,
+    table: str,
+    id_field: str,
+    action_args: Dict[str, Any],
+) -> None:
+    """Setzt ``action_args['score']`` auf ``num_likes - num_dislikes``.
+
+    Quelle ist die OASIS-SQLite (``post`` bzw. ``comment``). Der Wert gilt für
+    den Erzeugungszeitpunkt der Action — spätere Votes derselben Simulation
+    aktualisieren ein bereits emittiertes Feed-Event nicht. Der Mount-Snapshot
+    liefert dafür den akkumulierten Endstand.
+
+    ``table`` und ``id_field`` sind ausschließlich modulinterne Literale
+    ('post'/'post_id', 'comment'/'comment_id') — keine Nutzereingabe.
+    """
+    row_id = action_args.get(id_field)
+    if not row_id:
+        return
+    cursor.execute(
+        f"SELECT num_likes, num_dislikes FROM {table} WHERE {id_field} = ?",  # noqa: S608
+        (row_id,),
+    )
+    row = cursor.fetchone()
+    if not row:
+        return
+    action_args['score'] = int(row[0] or 0) - int(row[1] or 0)
 
 
 def _get_post_info(

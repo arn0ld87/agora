@@ -226,7 +226,6 @@ persona_id: 'p-1',
       is_simulated: true,
       body: 'Tweet body',
       timestamp: '2026-05-16T10:00:00+00:00',
-      sentiment: null,
       score: 0,
     })
     capturedHandlers.post_created({
@@ -241,7 +240,6 @@ persona_id: 'p-2',
       is_simulated: true,
       body: 'Reddit body',
       timestamp: '2026-05-16T10:01:00+00:00',
-      sentiment: null,
       score: 0,
     })
     await nextTick()

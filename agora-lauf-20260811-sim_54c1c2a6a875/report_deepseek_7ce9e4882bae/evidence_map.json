@@ -1,0 +1,1840 @@
+{
+  "schema_version": 3,
+  "report_id": "report_7ce9e4882bae",
+  "simulation_id": "sim_54c1c2a6a875",
+  "evidence_index": {
+    "ev_7f616d69f9de4eadcae9b28579ee1ce9": {
+      "evidence_id": "ev_7f616d69f9de4eadcae9b28579ee1ce9",
+      "producer_key": "simulation-metric:echo_chamber_index",
+      "type": "graph_metric",
+      "source": "simulation_metrics",
+      "snippet": "echo_chamber_index: 0.5036",
+      "value": "echo_chamber_index=0.5036",
+      "tool_name": null,
+      "query": null,
+      "raw": {
+        "metric": "echo_chamber_index",
+        "value": 0.5036,
+        "metrics": {
+          "simulation_id": "sim_54c1c2a6a875",
+          "snapshot_id": "metrics_77342ce56530",
+          "calculated_at": "2026-08-11T02:06:26+00:00",
+          "status": "ok",
+          "window_size_rounds": null,
+          "total_agents": 30,
+          "total_interactions": 274,
+          "echo_chamber_index": 0.5036,
+          "cluster_count": 4,
+          "dominant_clusters": [
+            {
+              "cluster_id": 0,
+              "size": 11,
+              "agent_ids": [
+                0,
+                1,
+                6,
+                7,
+                9,
+                13,
+                16,
+                17,
+                18,
+                20,
+                29
+              ],
+              "label": "cluster-0"
+            },
+            {
+              "cluster_id": 1,
+              "size": 7,
+              "agent_ids": [
+                2,
+                12,
+                14,
+                21,
+                23,
+                24,
+                26
+              ],
+              "label": "cluster-1"
+            },
+            {
+              "cluster_id": 2,
+              "size": 7,
+              "agent_ids": [
+                3,
+                4,
+                8,
+                10,
+                15,
+                25,
+                28
+              ],
+              "label": "cluster-2"
+            },
+            {
+              "cluster_id": 3,
+              "size": 5,
+              "agent_ids": [
+                5,
+                11,
+                19,
+                22,
+                27
+              ],
+              "label": "cluster-3"
+            }
+          ],
+          "bridge_agents": [
+            4,
+            27,
+            23,
+            18,
+            1
+          ]
+        }
+      },
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "graph_relation",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_4fc5a4d28eb8b63132419ca17b7c7934": {
+      "evidence_id": "ev_4fc5a4d28eb8b63132419ca17b7c7934",
+      "producer_key": "simulation-metric:cluster_count",
+      "type": "graph_metric",
+      "source": "simulation_metrics",
+      "snippet": "cluster_count: 4",
+      "value": "cluster_count=4",
+      "tool_name": null,
+      "query": null,
+      "raw": {
+        "metric": "cluster_count",
+        "value": 4,
+        "metrics": {
+          "simulation_id": "sim_54c1c2a6a875",
+          "snapshot_id": "metrics_77342ce56530",
+          "calculated_at": "2026-08-11T02:06:26+00:00",
+          "status": "ok",
+          "window_size_rounds": null,
+          "total_agents": 30,
+          "total_interactions": 274,
+          "echo_chamber_index": 0.5036,
+          "cluster_count": 4,
+          "dominant_clusters": [
+            {
+              "cluster_id": 0,
+              "size": 11,
+              "agent_ids": [
+                0,
+                1,
+                6,
+                7,
+                9,
+                13,
+                16,
+                17,
+                18,
+                20,
+                29
+              ],
+              "label": "cluster-0"
+            },
+            {
+              "cluster_id": 1,
+              "size": 7,
+              "agent_ids": [
+                2,
+                12,
+                14,
+                21,
+                23,
+                24,
+                26
+              ],
+              "label": "cluster-1"
+            },
+            {
+              "cluster_id": 2,
+              "size": 7,
+              "agent_ids": [
+                3,
+                4,
+                8,
+                10,
+                15,
+                25,
+                28
+              ],
+              "label": "cluster-2"
+            },
+            {
+              "cluster_id": 3,
+              "size": 5,
+              "agent_ids": [
+                5,
+                11,
+                19,
+                22,
+                27
+              ],
+              "label": "cluster-3"
+            }
+          ],
+          "bridge_agents": [
+            4,
+            27,
+            23,
+            18,
+            1
+          ]
+        }
+      },
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "graph_relation",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_2fae2b2dd4d288071e4b3e8b9c9a939a": {
+      "evidence_id": "ev_2fae2b2dd4d288071e4b3e8b9c9a939a",
+      "producer_key": "simulation-metric:total_interactions",
+      "type": "graph_metric",
+      "source": "simulation_metrics",
+      "snippet": "total_interactions: 274",
+      "value": "total_interactions=274",
+      "tool_name": null,
+      "query": null,
+      "raw": {
+        "metric": "total_interactions",
+        "value": 274,
+        "metrics": {
+          "simulation_id": "sim_54c1c2a6a875",
+          "snapshot_id": "metrics_77342ce56530",
+          "calculated_at": "2026-08-11T02:06:26+00:00",
+          "status": "ok",
+          "window_size_rounds": null,
+          "total_agents": 30,
+          "total_interactions": 274,
+          "echo_chamber_index": 0.5036,
+          "cluster_count": 4,
+          "dominant_clusters": [
+            {
+              "cluster_id": 0,
+              "size": 11,
+              "agent_ids": [
+                0,
+                1,
+                6,
+                7,
+                9,
+                13,
+                16,
+                17,
+                18,
+                20,
+                29
+              ],
+              "label": "cluster-0"
+            },
+            {
+              "cluster_id": 1,
+              "size": 7,
+              "agent_ids": [
+                2,
+                12,
+                14,
+                21,
+                23,
+                24,
+                26
+              ],
+              "label": "cluster-1"
+            },
+            {
+              "cluster_id": 2,
+              "size": 7,
+              "agent_ids": [
+                3,
+                4,
+                8,
+                10,
+                15,
+                25,
+                28
+              ],
+              "label": "cluster-2"
+            },
+            {
+              "cluster_id": 3,
+              "size": 5,
+              "agent_ids": [
+                5,
+                11,
+                19,
+                22,
+                27
+              ],
+              "label": "cluster-3"
+            }
+          ],
+          "bridge_agents": [
+            4,
+            27,
+            23,
+            18,
+            1
+          ]
+        }
+      },
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "graph_relation",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_e4b0d86a1da5195a3429956511f1b9c5": {
+      "evidence_id": "ev_e4b0d86a1da5195a3429956511f1b9c5",
+      "producer_key": "simulation-metric:bridge_agents",
+      "type": "graph_metric",
+      "source": "simulation_metrics",
+      "snippet": "bridge_agents: [4, 27, 23, 18, 1]",
+      "value": "bridge_agents=[4, 27, 23, 18, 1]",
+      "tool_name": null,
+      "query": null,
+      "raw": {
+        "metric": "bridge_agents",
+        "value": [
+          4,
+          27,
+          23,
+          18,
+          1
+        ],
+        "metrics": {
+          "simulation_id": "sim_54c1c2a6a875",
+          "snapshot_id": "metrics_77342ce56530",
+          "calculated_at": "2026-08-11T02:06:26+00:00",
+          "status": "ok",
+          "window_size_rounds": null,
+          "total_agents": 30,
+          "total_interactions": 274,
+          "echo_chamber_index": 0.5036,
+          "cluster_count": 4,
+          "dominant_clusters": [
+            {
+              "cluster_id": 0,
+              "size": 11,
+              "agent_ids": [
+                0,
+                1,
+                6,
+                7,
+                9,
+                13,
+                16,
+                17,
+                18,
+                20,
+                29
+              ],
+              "label": "cluster-0"
+            },
+            {
+              "cluster_id": 1,
+              "size": 7,
+              "agent_ids": [
+                2,
+                12,
+                14,
+                21,
+                23,
+                24,
+                26
+              ],
+              "label": "cluster-1"
+            },
+            {
+              "cluster_id": 2,
+              "size": 7,
+              "agent_ids": [
+                3,
+                4,
+                8,
+                10,
+                15,
+                25,
+                28
+              ],
+              "label": "cluster-2"
+            },
+            {
+              "cluster_id": 3,
+              "size": 5,
+              "agent_ids": [
+                5,
+                11,
+                19,
+                22,
+                27
+              ],
+              "label": "cluster-3"
+            }
+          ],
+          "bridge_agents": [
+            4,
+            27,
+            23,
+            18,
+            1
+          ]
+        }
+      },
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "graph_relation",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_db0f4500451b76415d6e9f284c66684e": {
+      "evidence_id": "ev_db0f4500451b76415d6e9f284c66684e",
+      "producer_key": "simulation-action:reddit:0:1:CREATE_POST:2026-08-11T03:43:13.491119",
+      "type": "agent_action",
+      "source": "simulation_actions",
+      "snippet": "IHK CREATE_POST on reddit in round 0",
+      "value": "CREATE_POST",
+      "tool_name": null,
+      "query": null,
+      "raw": {
+        "round_num": 0,
+        "timestamp": "2026-08-11T03:43:13.491119",
+        "platform": "reddit",
+        "agent_id": 1,
+        "agent_name": "IHK",
+        "action_type": "CREATE_POST",
+        "action_args": {
+          "content": "Die aufnehmenden Betriebe erwarten von den Umschülern, dass sie die Prüfung bestehen und im Arbeitsalltag bestehen können. Ein KI-Assistent kann helfen, aber er darf nicht die fachliche Tiefe ersetzen."
+        },
+        "result": null,
+        "success": true,
+        "_sampling": {
+          "bin": 0,
+          "bin_total": 8,
+          "sampled_from_total": 404
+        }
+      },
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "agent_action",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_ab849ee061e8fb975a2fc2b3b9754e83": {
+      "evidence_id": "ev_ab849ee061e8fb975a2fc2b3b9754e83",
+      "producer_key": "simulation-action:reddit:1:8:LIKE_POST:2026-08-11T03:43:56.309560",
+      "type": "agent_action",
+      "source": "simulation_actions",
+      "snippet": "Aufnehmende Betriebe LIKE_POST on reddit in round 1",
+      "value": "LIKE_POST",
+      "tool_name": null,
+      "query": null,
+      "raw": {
+        "round_num": 1,
+        "timestamp": "2026-08-11T03:43:56.309560",
+        "platform": "reddit",
+        "agent_id": 8,
+        "agent_name": "Aufnehmende Betriebe",
+        "action_type": "LIKE_POST",
+        "action_args": {
+          "post_id": 2,
+          "like_id": 9,
+          "post_content": "Schön, wieder ein neues System. Aber wer kontrolliert die Qualität der generierten Aufgaben? Wenn der Assistent falsche Antworten gibt, müssen wir das wieder ausbügeln. Und die Nacharbeit wird nicht weniger, nur anders.",
+          "post_author_name": "IHK"
+        },
+        "result": null,
+        "success": true,
+        "_sampling": {
+          "bin": 1,
+          "bin_total": 8,
+          "sampled_from_total": 404
+        }
+      },
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "agent_action",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_325eca5a338aacd804d18f5d2c97f2fe": {
+      "evidence_id": "ev_325eca5a338aacd804d18f5d2c97f2fe",
+      "producer_key": "simulation-action:reddit:2:14:LIKE_POST:2026-08-11T03:44:16.701778",
+      "type": "agent_action",
+      "source": "simulation_actions",
+      "snippet": "kaufmännische Leitung LIKE_POST on reddit in round 2",
+      "value": "LIKE_POST",
+      "tool_name": null,
+      "query": null,
+      "raw": {
+        "round_num": 2,
+        "timestamp": "2026-08-11T03:44:16.701778",
+        "platform": "reddit",
+        "agent_id": 14,
+        "agent_name": "kaufmännische Leitung",
+        "action_type": "LIKE_POST",
+        "action_args": {
+          "post_id": 9,
+          "like_id": 38,
+          "post_content": "Die aufnehmenden Betriebe erwarten von den Umschülern, dass sie die Prüfung bestehen und im Arbeitsalltag bestehen können. Ein KI-Assistent kann helfen, aber er darf nicht die fachliche Tiefe ersetzen.",
+          "post_author_name": "IHK"
+        },
+        "result": null,
+        "success": true,
+        "_sampling": {
+          "bin": 2,
+          "bin_total": 8,
+          "sampled_from_total": 404
+        }
+      },
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "agent_action",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_dfee55dc3718bd239584ad3507edaefc": {
+      "evidence_id": "ev_dfee55dc3718bd239584ad3507edaefc",
+      "producer_key": "simulation-action:reddit:3:5:LIKE_POST:2026-08-11T03:44:45.884840",
+      "type": "agent_action",
+      "source": "simulation_actions",
+      "snippet": "Dozenten LIKE_POST on reddit in round 3",
+      "value": "LIKE_POST",
+      "tool_name": null,
+      "query": null,
+      "raw": {
+        "round_num": 3,
+        "timestamp": "2026-08-11T03:44:45.884840",
+        "platform": "reddit",
+        "agent_id": 5,
+        "agent_name": "Dozenten",
+        "action_type": "LIKE_POST",
+        "action_args": {
+          "post_id": 9,
+          "like_id": 56,
+          "post_content": "Die aufnehmenden Betriebe erwarten von den Umschülern, dass sie die Prüfung bestehen und im Arbeitsalltag bestehen können. Ein KI-Assistent kann helfen, aber er darf nicht die fachliche Tiefe ersetzen.",
+          "post_author_name": "IHK"
+        },
+        "result": null,
+        "success": true,
+        "_sampling": {
+          "bin": 3,
+          "bin_total": 8,
+          "sampled_from_total": 404
+        }
+      },
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "agent_action",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_3d7949222a0a3dc9b63e4697f095808f": {
+      "evidence_id": "ev_3d7949222a0a3dc9b63e4697f095808f",
+      "producer_key": "simulation-action:reddit:4:24:LIKE_POST:2026-08-11T03:45:04.893696",
+      "type": "agent_action",
+      "source": "simulation_actions",
+      "snippet": "Rechenzentrum Magdeburg LIKE_POST on reddit in round 4",
+      "value": "LIKE_POST",
+      "tool_name": null,
+      "query": null,
+      "raw": {
+        "round_num": 4,
+        "timestamp": "2026-08-11T03:45:04.893696",
+        "platform": "reddit",
+        "agent_id": 24,
+        "agent_name": "Rechenzentrum Magdeburg",
+        "action_type": "LIKE_POST",
+        "action_args": {
+          "post_id": 8,
+          "like_id": 67,
+          "post_content": "Ich bin mir unsicher. Wenn ich dem Assistenten eine Frage stelle, weiß ich nicht, ob die Antwort wirklich stimmt. Und wer sieht, was ich frage? Datenschutz ist mir wichtig.",
+          "post_author_name": "IHK"
+        },
+        "result": null,
+        "success": true,
+        "_sampling": {
+          "bin": 4,
+          "bin_total": 8,
+          "sampled_from_total": 404
+        }
+      },
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "agent_action",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_981b856fa7ffd613cf21760a7105a6cf": {
+      "evidence_id": "ev_981b856fa7ffd613cf21760a7105a6cf",
+      "producer_key": "simulation-action:twitter:5:18:LIKE_POST:2026-08-11T03:45:18.656807",
+      "type": "agent_action",
+      "source": "simulation_actions",
+      "snippet": "KI-Lernassistent LIKE_POST on twitter in round 5",
+      "value": "LIKE_POST",
+      "tool_name": null,
+      "query": null,
+      "raw": {
+        "round_num": 5,
+        "timestamp": "2026-08-11T03:45:18.656807",
+        "platform": "twitter",
+        "agent_id": 18,
+        "agent_name": "KI-Lernassistent",
+        "action_type": "LIKE_POST",
+        "action_args": {
+          "post_id": 26,
+          "like_id": 33,
+          "post_content": "Manchmal frage ich mich, wer bei uns eigentlich noch die Verantwortung für echte Bildung übernehmen will. Statt kleinere Klassen und bessere Ausstattung zu fordern, wird einfach ein Chatbot hingestellt. Meine Teilnehmer kämpfen jeden Tag mit der deutschen Sprache – die brauchen keinen Algorithmus, die brauchen Menschen, die ihnen zuhören und sie begleiten. Da kann ich nur mit dem Kopf schütteln. 🤦‍♀️📚 #Bildung #Integration #KeinErsatzFuerLehrer",
+          "post_author_name": "Betriebsrat"
+        },
+        "result": null,
+        "success": true,
+        "_sampling": {
+          "bin": 5,
+          "bin_total": 8,
+          "sampled_from_total": 404
+        }
+      },
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "agent_action",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_dd0be02ddc430f499bba506fa4104f66": {
+      "evidence_id": "ev_dd0be02ddc430f499bba506fa4104f66",
+      "producer_key": "simulation-action:twitter:7:14:LIKE_POST:2026-08-11T03:46:03.639076",
+      "type": "agent_action",
+      "source": "simulation_actions",
+      "snippet": "kaufmännische Leitung LIKE_POST on twitter in round 7",
+      "value": "LIKE_POST",
+      "tool_name": null,
+      "query": null,
+      "raw": {
+        "round_num": 7,
+        "timestamp": "2026-08-11T03:46:03.639076",
+        "platform": "twitter",
+        "agent_id": 14,
+        "agent_name": "kaufmännische Leitung",
+        "action_type": "LIKE_POST",
+        "action_args": {
+          "post_id": 14,
+          "like_id": 50,
+          "post_content": "Wer heute im technischen Bereich Fuß fassen will, kommt um lebenslanges Lernen nicht herum. Ich erlebe es täglich in meiner Beratung: Der Bildungsgutschein eröffnet vielen Menschen den Weg zurück in den Arbeitsmarkt – aber nur, wenn die Umschulung praxisnah ist und die Teilnehmenden wirklich mitgenommen werden. Das kann ich aus eigener Erfahrung sagen, denn ich habe selbst vor über 20 Jahren diesen Weg gegangen. Die Zusammenarbeit zwischen Bildungsträgern, Agentur für Arbeit und aufnehmenden Betrieben ist der Schlüssel für nachhaltige Integration. Genau dafür setzen wir uns beim Nordharz Bildungswerk ein.",
+          "post_author_name": "Nordharz Bildungswerk gGmbH"
+        },
+        "result": null,
+        "success": true,
+        "_sampling": {
+          "bin": 6,
+          "bin_total": 8,
+          "sampled_from_total": 404
+        }
+      },
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "agent_action",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_ce87ee5b1bc98c695325170a45a31b16": {
+      "evidence_id": "ev_ce87ee5b1bc98c695325170a45a31b16",
+      "producer_key": "simulation-action:reddit:9:28:LIKE_POST:2026-08-11T03:47:12.180304",
+      "type": "agent_action",
+      "source": "simulation_actions",
+      "snippet": "Teilnehmende mit Migrationsgeschichte LIKE_POST on reddit in round 9",
+      "value": "LIKE_POST",
+      "tool_name": null,
+      "query": null,
+      "raw": {
+        "round_num": 9,
+        "timestamp": "2026-08-11T03:47:12.180304",
+        "platform": "reddit",
+        "agent_id": 28,
+        "agent_name": "Teilnehmende mit Migrationsgeschichte",
+        "action_type": "LIKE_POST",
+        "action_args": {
+          "post_id": 7,
+          "like_id": 117,
+          "post_content": "Endlich ein System, das auch nachts Fragen beantwortet! Kein Warten bis zum nächsten Tag. Das hilft mir enorm beim Lernen.",
+          "post_author_name": "IHK"
+        },
+        "result": null,
+        "success": true,
+        "_sampling": {
+          "bin": 7,
+          "bin_total": 8,
+          "sampled_from_total": 404
+        }
+      },
+      "agent_log_ref": null,
+      "quote": null,
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "agent_action",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_869845a914602cc30c827e4209e87823": {
+      "evidence_id": "ev_869845a914602cc30c827e4209e87823",
+      "producer_key": "seed-doc:928619e11e714fc9add100ac",
+      "type": "seed_document",
+      "source": "report_tool",
+      "snippet": "Simuliere die Reaktion der beteiligten Gruppen: Umschüler in ihren verschiedenen Ausgangslagen, festangestellte Dozenten, Honorarkräfte, Geschäftsführung, Kostenträger, IHK-Prüfungsausschuss, Betriebsrat und aufnehmende Betriebe.",
+      "value": null,
+      "tool_name": "insight_forge",
+      "query": "Akzeptanzbruch KI-Lernassistent Umschulungsträger: Wo kippt die Akzeptanz zuerst, Bewertungskompetenz, curriculare Kontrolle, Datensouveränität unbelegt",
+      "raw": "Simuliere die Reaktion der beteiligten Gruppen: Umschüler in ihren verschiedenen Ausgangslagen, festangestellte Dozenten, Honorarkräfte, Geschäftsführung, Kostenträger, IHK-Prüfungsausschuss, Betriebsrat und aufnehmende Betriebe.",
+      "agent_log_ref": {
+        "section_index": 1,
+        "action": "tool_result",
+        "tool_name": "insight_forge"
+      },
+      "quote": "Simuliere die Reaktion der beteiligten Gruppen: Umschüler in ihren verschiedenen Ausgangslagen, festangestellte Dozenten, Honorarkräfte, Geschäftsführung, Kostenträger, IHK-Prüfungsausschuss, Betriebsrat und aufnehmende Betriebe.",
+      "source_id_anchor": "seed_doc:agora_testfall_ki-lernassistent-umschulung#chunk:43",
+      "sentiment_score": null,
+      "source_kind": "seed_corpus",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_7b7fe96a30d40c6e2a7b3f81c3d036fa": {
+      "evidence_id": "ev_7b7fe96a30d40c6e2a7b3f81c3d036fa",
+      "producer_key": "seed-doc:0ceb00016d0cc872341417f1",
+      "type": "seed_document",
+      "source": "report_tool",
+      "snippet": "Simuliere die Reaktion von Umschülern, festangestellten Dozenten, Honorarkräften, Geschäftsführung, Kostenträger, IHK-Prüfungsausschuss und Betriebsrat.",
+      "value": null,
+      "tool_name": "insight_forge",
+      "query": "Akzeptanzbruch KI-Lernassistent Umschulungsträger: Wo kippt die Akzeptanz zuerst, Bewertungskompetenz, curriculare Kontrolle, Datensouveränität unbelegt",
+      "raw": "Simuliere die Reaktion von Umschülern, festangestellten Dozenten, Honorarkräften, Geschäftsführung, Kostenträger, IHK-Prüfungsausschuss und Betriebsrat.",
+      "agent_log_ref": {
+        "section_index": 1,
+        "action": "tool_result",
+        "tool_name": "insight_forge"
+      },
+      "quote": "Simuliere die Reaktion von Umschülern, festangestellten Dozenten, Honorarkräften, Geschäftsführung, Kostenträger, IHK-Prüfungsausschuss und Betriebsrat.",
+      "source_id_anchor": "seed_doc:agora_testfall_ki-lernassistent-umschulung#chunk:37",
+      "sentiment_score": null,
+      "source_kind": "seed_corpus",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_56e3965e9e0a506a5116c75047539b52": {
+      "evidence_id": "ev_56e3965e9e0a506a5116c75047539b52",
+      "producer_key": "seed-doc:2241512f9d0fefe683c5e651",
+      "type": "seed_document",
+      "source": "report_tool",
+      "snippet": "KI-Lernassistent bei einem Umschulungsträger",
+      "value": null,
+      "tool_name": "insight_forge",
+      "query": "Akzeptanzbruch KI-Lernassistent Umschulungsträger: Wo kippt die Akzeptanz zuerst, Bewertungskompetenz, curriculare Kontrolle, Datensouveränität unbelegt",
+      "raw": "KI-Lernassistent bei einem Umschulungsträger",
+      "agent_log_ref": {
+        "section_index": 1,
+        "action": "tool_result",
+        "tool_name": "insight_forge"
+      },
+      "quote": "KI-Lernassistent bei einem Umschulungsträger",
+      "source_id_anchor": "seed_doc:agora_testfall_ki-lernassistent-umschulung#chunk:0",
+      "sentiment_score": null,
+      "source_kind": "seed_corpus",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_2a4272cf02572ea86b8785d52a11db37": {
+      "evidence_id": "ev_2a4272cf02572ea86b8785d52a11db37",
+      "producer_key": "seed-doc:81397b4bd8113a4f49388330",
+      "type": "seed_document",
+      "source": "report_tool",
+      "snippet": "Der Assistent beantwortet Fachfragen aus unserem eigenen Kursmaterial, erfasst Lernstände und erzeugt Übungsaufgaben im Stil der IHK-Abschlussprüfung.",
+      "value": null,
+      "tool_name": "insight_forge",
+      "query": "Akzeptanzbruch KI-Lernassistent Umschulungsträger: Wo kippt die Akzeptanz zuerst, Bewertungskompetenz, curriculare Kontrolle, Datensouveränität unbelegt",
+      "raw": "Der Assistent beantwortet Fachfragen aus unserem eigenen Kursmaterial, erfasst Lernstände und erzeugt Übungsaufgaben im Stil der IHK-Abschlussprüfung.",
+      "agent_log_ref": {
+        "section_index": 1,
+        "action": "tool_result",
+        "tool_name": "insight_forge"
+      },
+      "quote": "Der Assistent beantwortet Fachfragen aus unserem eigenen Kursmaterial, erfasst Lernstände und erzeugt Übungsaufgaben im Stil der IHK-Abschlussprüfung.",
+      "source_id_anchor": "seed_doc:agora_testfall_ki-lernassistent-umschulung#chunk:42",
+      "sentiment_score": null,
+      "source_kind": "seed_corpus",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_cf9b3fd0baeee5d76b3a0ab580e6d8a3": {
+      "evidence_id": "ev_cf9b3fd0baeee5d76b3a0ab580e6d8a3",
+      "producer_key": "seed-doc:5265b70b1f7e12f29ca43e1b",
+      "type": "seed_document",
+      "source": "report_tool",
+      "snippet": "Sorge: ein Träger, der KI-generierte Übungsaufgaben einsetzt, trainiert auf die Prüfung statt auf den Beruf.",
+      "value": null,
+      "tool_name": "insight_forge",
+      "query": "Akzeptanzbruch KI-Lernassistent Umschulungsträger: Wo kippt die Akzeptanz zuerst, Bewertungskompetenz, curriculare Kontrolle, Datensouveränität unbelegt",
+      "raw": "Sorge: ein Träger, der KI-generierte Übungsaufgaben einsetzt, trainiert auf die Prüfung statt auf den Beruf.",
+      "agent_log_ref": {
+        "section_index": 1,
+        "action": "tool_result",
+        "tool_name": "insight_forge"
+      },
+      "quote": "Sorge: ein Träger, der KI-generierte Übungsaufgaben einsetzt, trainiert auf die Prüfung statt auf den Beruf.",
+      "source_id_anchor": "seed_doc:agora_testfall_ki-lernassistent-umschulung#chunk:13",
+      "sentiment_score": null,
+      "source_kind": "seed_corpus",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_7e254ebdea24116af0cd0bb2becb08a5": {
+      "evidence_id": "ev_7e254ebdea24116af0cd0bb2becb08a5",
+      "producer_key": "seed-doc:331ad5a082aa95ea575d5b06",
+      "type": "seed_document",
+      "source": "report_tool",
+      "snippet": "KI-Lernassistent wird als selbstgehosteter Assistent in der IT-Umschulung eingeführt",
+      "value": null,
+      "tool_name": "insight_forge",
+      "query": "Akzeptanzbruch KI-Lernassistent Umschulungsträger: Wo kippt die Akzeptanz zuerst, Bewertungskompetenz, curriculare Kontrolle, Datensouveränität unbelegt",
+      "raw": "KI-Lernassistent wird als selbstgehosteter Assistent in der IT-Umschulung eingeführt",
+      "agent_log_ref": {
+        "section_index": 1,
+        "action": "tool_result",
+        "tool_name": "insight_forge"
+      },
+      "quote": "KI-Lernassistent wird als selbstgehosteter Assistent in der IT-Umschulung eingeführt",
+      "source_id_anchor": "seed_doc:agora_testfall_ki-lernassistent-umschulung#chunk:38",
+      "sentiment_score": null,
+      "source_kind": "seed_corpus",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_d49baa74089adc12beaad3f94f93024a": {
+      "evidence_id": "ev_d49baa74089adc12beaad3f94f93024a",
+      "producer_key": "seed-doc:5f748b6a12f364d6dcf455bb",
+      "type": "seed_document",
+      "source": "report_tool",
+      "snippet": "Die IHK sieht generierte Übungsaufgaben unkritisch.",
+      "value": null,
+      "tool_name": "insight_forge",
+      "query": "Akzeptanzbruch KI-Lernassistent Umschulungsträger: Wo kippt die Akzeptanz zuerst, Bewertungskompetenz, curriculare Kontrolle, Datensouveränität unbelegt",
+      "raw": "Die IHK sieht generierte Übungsaufgaben unkritisch.",
+      "agent_log_ref": {
+        "section_index": 1,
+        "action": "tool_result",
+        "tool_name": "insight_forge"
+      },
+      "quote": "Die IHK sieht generierte Übungsaufgaben unkritisch.",
+      "source_id_anchor": "seed_doc:agora_testfall_ki-lernassistent-umschulung#chunk:20",
+      "sentiment_score": null,
+      "source_kind": "seed_corpus",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_0a6654910fafd3fe91e486eda19f7c5b": {
+      "evidence_id": "ev_0a6654910fafd3fe91e486eda19f7c5b",
+      "producer_key": "seed-doc:19987607521e726a141706a4",
+      "type": "seed_document",
+      "source": "report_tool",
+      "snippet": "Wenn der Assistent die einfachen Fragen abfängt, bleibt für den Dozenten nur das Schwierige — mehr Qualität, aber auch mehr Dichte.",
+      "value": null,
+      "tool_name": "insight_forge",
+      "query": "Akzeptanzbruch KI-Lernassistent Umschulungsträger: Wo kippt die Akzeptanz zuerst, Bewertungskompetenz, curriculare Kontrolle, Datensouveränität unbelegt",
+      "raw": "Wenn der Assistent die einfachen Fragen abfängt, bleibt für den Dozenten nur das Schwierige — mehr Qualität, aber auch mehr Dichte.",
+      "agent_log_ref": {
+        "section_index": 1,
+        "action": "tool_result",
+        "tool_name": "insight_forge"
+      },
+      "quote": "Wenn der Assistent die einfachen Fragen abfängt, bleibt für den Dozenten nur das Schwierige — mehr Qualität, aber auch mehr Dichte.",
+      "source_id_anchor": "seed_doc:agora_testfall_ki-lernassistent-umschulung#chunk:15",
+      "sentiment_score": null,
+      "source_kind": "seed_corpus",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_fbb9dabccd6aa86c7dca614c9c9d170c": {
+      "evidence_id": "ev_fbb9dabccd6aa86c7dca614c9c9d170c",
+      "producer_key": "seed-doc:3036b65b1c2925fbe7829192",
+      "type": "seed_document",
+      "source": "report_tool",
+      "snippet": "Dozent kritisiert die Chatbot-Nutzung: 'Meine Teilnehmer können kein Deutsch schreiben, die sollen jetzt mit einem Chatbot lernen?'",
+      "value": null,
+      "tool_name": "insight_forge",
+      "query": "Akzeptanzbruch KI-Lernassistent Umschulungsträger: Wo kippt die Akzeptanz zuerst, Bewertungskompetenz, curriculare Kontrolle, Datensouveränität unbelegt",
+      "raw": "Dozent kritisiert die Chatbot-Nutzung: 'Meine Teilnehmer können kein Deutsch schreiben, die sollen jetzt mit einem Chatbot lernen?'",
+      "agent_log_ref": {
+        "section_index": 1,
+        "action": "tool_result",
+        "tool_name": "insight_forge"
+      },
+      "quote": "Dozent kritisiert die Chatbot-Nutzung: 'Meine Teilnehmer können kein Deutsch schreiben, die sollen jetzt mit einem Chatbot lernen?'",
+      "source_id_anchor": "seed_doc:agora_testfall_ki-lernassistent-umschulung#chunk:22",
+      "sentiment_score": null,
+      "source_kind": "seed_corpus",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_557701a5cb6f055fd2aabf6109003b12": {
+      "evidence_id": "ev_557701a5cb6f055fd2aabf6109003b12",
+      "producer_key": "graph-chain:3b006058c684b182c4056074",
+      "type": "relationship_chain",
+      "source": "report_tool",
+      "snippet": "--[RESPONDS_TO]-->",
+      "value": null,
+      "tool_name": "insight_forge",
+      "query": "Akzeptanzbruch KI-Lernassistent Umschulungsträger: Wo kippt die Akzeptanz zuerst, Bewertungskompetenz, curriculare Kontrolle, Datensouveränität unbelegt",
+      "raw": " --[RESPONDS_TO]--> ",
+      "agent_log_ref": {
+        "section_index": 1,
+        "action": "tool_result",
+        "tool_name": "insight_forge"
+      },
+      "quote": "--[RESPONDS_TO]-->",
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "graph_relation",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_fb87ec0542fadbb9e0e1d1d5dfcfada8": {
+      "evidence_id": "ev_fb87ec0542fadbb9e0e1d1d5dfcfada8",
+      "producer_key": "graph-chain:12ff75524a2cd64e7544181e",
+      "type": "relationship_chain",
+      "source": "report_tool",
+      "snippet": "--[COMMENTS_ON]-->",
+      "value": null,
+      "tool_name": "insight_forge",
+      "query": "Akzeptanzbruch KI-Lernassistent Umschulungsträger: Wo kippt die Akzeptanz zuerst, Bewertungskompetenz, curriculare Kontrolle, Datensouveränität unbelegt",
+      "raw": " --[COMMENTS_ON]--> ",
+      "agent_log_ref": {
+        "section_index": 1,
+        "action": "tool_result",
+        "tool_name": "insight_forge"
+      },
+      "quote": "--[COMMENTS_ON]-->",
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "graph_relation",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_fed8a55c4278d41992e144c904936f56": {
+      "evidence_id": "ev_fed8a55c4278d41992e144c904936f56",
+      "producer_key": "graph-chain:8b4edd0337a18f544fcf9c13",
+      "type": "relationship_chain",
+      "source": "report_tool",
+      "snippet": "--[CERTIFIES]-->",
+      "value": null,
+      "tool_name": "insight_forge",
+      "query": "Akzeptanzbruch KI-Lernassistent Umschulungsträger: Wo kippt die Akzeptanz zuerst, Bewertungskompetenz, curriculare Kontrolle, Datensouveränität unbelegt",
+      "raw": " --[CERTIFIES]--> ",
+      "agent_log_ref": {
+        "section_index": 1,
+        "action": "tool_result",
+        "tool_name": "insight_forge"
+      },
+      "quote": "--[CERTIFIES]-->",
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "graph_relation",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_d8e8f2e70f0eda98c805bde5e96850dc": {
+      "evidence_id": "ev_d8e8f2e70f0eda98c805bde5e96850dc",
+      "producer_key": "graph-chain:6251e4a3ae4c49d1c469355b",
+      "type": "relationship_chain",
+      "source": "report_tool",
+      "snippet": "--[WORKS_FOR]-->",
+      "value": null,
+      "tool_name": "insight_forge",
+      "query": "Akzeptanzbruch KI-Lernassistent Umschulungsträger: Wo kippt die Akzeptanz zuerst, Bewertungskompetenz, curriculare Kontrolle, Datensouveränität unbelegt",
+      "raw": " --[WORKS_FOR]--> ",
+      "agent_log_ref": {
+        "section_index": 1,
+        "action": "tool_result",
+        "tool_name": "insight_forge"
+      },
+      "quote": "--[WORKS_FOR]-->",
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "graph_relation",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_5140ec2d772cf516442f177c4774337c": {
+      "evidence_id": "ev_5140ec2d772cf516442f177c4774337c",
+      "producer_key": "graph-chain:0f2418d27ab2b7b20e54654c",
+      "type": "relationship_chain",
+      "source": "report_tool",
+      "snippet": "--[STUDIES_AT]-->",
+      "value": null,
+      "tool_name": "insight_forge",
+      "query": "Akzeptanzbruch KI-Lernassistent Umschulungsträger: Wo kippt die Akzeptanz zuerst, Bewertungskompetenz, curriculare Kontrolle, Datensouveränität unbelegt",
+      "raw": " --[STUDIES_AT]--> ",
+      "agent_log_ref": {
+        "section_index": 1,
+        "action": "tool_result",
+        "tool_name": "insight_forge"
+      },
+      "quote": "--[STUDIES_AT]-->",
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "graph_relation",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_2e831bfb4d214f607335386cb73a541c": {
+      "evidence_id": "ev_2e831bfb4d214f607335386cb73a541c",
+      "producer_key": "graph-chain:17396f05bfaa2d203395764e",
+      "type": "relationship_chain",
+      "source": "report_tool",
+      "snippet": "--[REPRESENTS]-->",
+      "value": null,
+      "tool_name": "insight_forge",
+      "query": "Akzeptanzbruch KI-Lernassistent Umschulungsträger: Wo kippt die Akzeptanz zuerst, Bewertungskompetenz, curriculare Kontrolle, Datensouveränität unbelegt",
+      "raw": " --[REPRESENTS]--> ",
+      "agent_log_ref": {
+        "section_index": 1,
+        "action": "tool_result",
+        "tool_name": "insight_forge"
+      },
+      "quote": "--[REPRESENTS]-->",
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "graph_relation",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_923b42a94ec8d20e38c5aac7fbe099a3": {
+      "evidence_id": "ev_923b42a94ec8d20e38c5aac7fbe099a3",
+      "producer_key": "graph-chain:516f1b07f106d566a16f2e54",
+      "type": "relationship_chain",
+      "source": "report_tool",
+      "snippet": "--[OPPOSES]-->",
+      "value": null,
+      "tool_name": "insight_forge",
+      "query": "Akzeptanzbruch KI-Lernassistent Umschulungsträger: Wo kippt die Akzeptanz zuerst, Bewertungskompetenz, curriculare Kontrolle, Datensouveränität unbelegt",
+      "raw": " --[OPPOSES]--> ",
+      "agent_log_ref": {
+        "section_index": 1,
+        "action": "tool_result",
+        "tool_name": "insight_forge"
+      },
+      "quote": "--[OPPOSES]-->",
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "graph_relation",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_257c9685cbd0f88d77bab0d60eb22320": {
+      "evidence_id": "ev_257c9685cbd0f88d77bab0d60eb22320",
+      "producer_key": "graph-chain:f92c2d917f8d1be3bfa75d80",
+      "type": "relationship_chain",
+      "source": "report_tool",
+      "snippet": "--[FUNDS]-->",
+      "value": null,
+      "tool_name": "insight_forge",
+      "query": "Akzeptanzbruch KI-Lernassistent Umschulungsträger: Wo kippt die Akzeptanz zuerst, Bewertungskompetenz, curriculare Kontrolle, Datensouveränität unbelegt",
+      "raw": " --[FUNDS]--> ",
+      "agent_log_ref": {
+        "section_index": 1,
+        "action": "tool_result",
+        "tool_name": "insight_forge"
+      },
+      "quote": "--[FUNDS]-->",
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "graph_relation",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_546a458d3380179aa75e621f52d117ef": {
+      "evidence_id": "ev_546a458d3380179aa75e621f52d117ef",
+      "producer_key": "interview:s1:bd5448e5a5466bee5e321e0b",
+      "type": "agent_interview",
+      "source": "report_tool",
+      "snippet": "[Twitter Platform Response]\n(No response from this platform)\n\n[Reddit Platform Response]\nQuestion 1: Die Akzeptanz bricht zuerst bei den Honorarkräften, konkret in dem Moment, wenn der KI-Assistent in einer Übungsstunde erstmals Aufgaben generiert, die nicht exakt zum eigenen Unterrichtsstil passen ...",
+      "value": null,
+      "tool_name": "interview_agents",
+      "query": "Einführung eines selbstgehosteten KI-Lernassistenten: Wo bricht die Akzeptanz zuerst? Bewertungskompetenz, curriculare Kontrolle, Datensouveränität unbelegt",
+      "raw": {
+        "agent_name": "lena_hoffmann_230",
+        "agent_role": "IT-Systemadministratorin im Rechenzentrum Magdeburg",
+        "agent_bio": "IT-Systemadministratorin im Rechenzentrum Magdeburg | Datenschutz & Prüfungsintegrität | Für souveräne IT-Lösungen",
+        "question": "1. Wo genau bricht die Akzeptanz zuerst?\n2. Welche zwei Gruppen kollidieren unversöhnlich?\n3. Was muss vor Kursstart entschieden sein?",
+        "response": "[Twitter Platform Response]\n(No response from this platform)\n\n[Reddit Platform Response]\nQuestion 1: Die Akzeptanz bricht zuerst bei den Honorarkräften, konkret in dem Moment, wenn der KI-Assistent in einer Übungsstunde erstmals Aufgaben generiert, die nicht exakt zum eigenen Unterrichtsstil passen – sie fühlen sich als austauschbar und nicht mehr als Gestalter des Lernprozesses. Das ist nicht das Thema KI an sich, sondern der Punkt, an dem ihre fachliche Autonomie infrage gestellt wird.\n\nQuestion 2: Die festangestellten Dozenten und die Geschäftsführung kollidieren unversöhnlich: Die Dozenten fordern Kontrolle über die Inhalte und die Bewertungslogik des Assistenten, während die Geschäftsführung auf Standardisierung und Effizienzgewinne pocht. Ein Kompromiss, der beiden gerecht wird, würde die Maßnahme entwerten – entweder ist der Assistent zu starr für die Dozenten oder zu aufwendig für die GF.\n\nQuestion 3: Vor Kursstart muss eindeutig geklärt sein, wer bei Fehlern des Assistenten (falsche Übungsaufgaben, Datenschutzverletzungen) die Verantwortung trägt und wie mit Widersprüchen zwischen Assistenten-Empfehlungen und Dozentenurteilen umgegangen wird. Außerdem brauchen wir eine feste Zuständigkeit für die Pflege der Kursmaterialien – ohne diese Entscheidungen wird es wie bei Moodle: niemand fühlt sich zuständig, und das System versandet.",
+        "key_quotes": []
+      },
+      "agent_log_ref": {
+        "section_index": 1,
+        "action": "tool_result",
+        "tool_name": "interview_agents"
+      },
+      "quote": "[Twitter Platform Response]\n(No response from this platform)\n\n[Reddit Platform Response]\nQuestion 1: Die Akzeptanz bricht zuerst bei den Honorarkräften, konkret in dem Moment, wenn der KI-Assistent in einer Übungsstunde erstmals Aufgaben generiert, die nicht exakt zum eigenen Unterrichtsstil passen – sie fühlen sich als austauschbar und nicht mehr als Gestalter des Lernprozesses. Das ist nicht das Thema KI an sich, sondern der Punkt, an dem ihre fachliche Autonomie infrage gestellt wird.\n\nQuesti",
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "agent_quote",
+      "source_model": null,
+      "persona_stakeholder_group": "IT-Systemadministratorin im Rechenzentrum Magdeburg"
+    },
+    "ev_9aad1151b7178483110746a6993f36a2": {
+      "evidence_id": "ev_9aad1151b7178483110746a6993f36a2",
+      "producer_key": "interview:s1:a71015993e718e184c6d31f1",
+      "type": "agent_interview",
+      "source": "report_tool",
+      "snippet": "[Twitter Platform Response]\n(No response from this platform)\n\n[Reddit Platform Response]\nQuestion 1: Die Akzeptanz bricht zuerst bei den Honorarkräften, und zwar genau an dem Punkt, wo sie merken, dass der KI-Assistent auf ihren selbst erstellten Kursmaterialien trainiert wird, ohne dass sie vorher ...",
+      "value": null,
+      "tool_name": "interview_agents",
+      "query": "Einführung eines selbstgehosteten KI-Lernassistenten: Wo bricht die Akzeptanz zuerst? Bewertungskompetenz, curriculare Kontrolle, Datensouveränität unbelegt",
+      "raw": {
+        "agent_name": "clara_braun_609",
+        "agent_role": "Stellvertretende Betriebsratsvorsitzende bei einem Bildungsträger für IT-Umschulungen",
+        "agent_bio": "Betriebsrätin bei einem Bildungsträger | Für faire Arbeit, Datenschutz & Mitbestimmung | Solidarisch mit Umschülern & Dozenten",
+        "question": "1. Wo genau bricht die Akzeptanz zuerst?\n2. Welche zwei Gruppen kollidieren unversöhnlich?\n3. Was muss vor Kursstart entschieden sein?",
+        "response": "[Twitter Platform Response]\n(No response from this platform)\n\n[Reddit Platform Response]\nQuestion 1: Die Akzeptanz bricht zuerst bei den Honorarkräften, und zwar genau an dem Punkt, wo sie merken, dass der KI-Assistent auf ihren selbst erstellten Kursmaterialien trainiert wird, ohne dass sie vorher gefragt wurden oder eine Vergütung dafür bekommen. Sie sind nicht festangestellt, haben keinen Kündigungsschutz und erleben das als Enteignung ihrer Arbeit – da hilft auch die Zusicherung nicht, dass keine Daten nach außen gehen, denn das Problem ist die interne Nutzung.\n\nQuestion 2: Die Geschäftsführung und der Betriebsrat kollidieren so unversöhnlich, dass ein Kompromiss die Maßnahme für beide entwerten würde. Die Geschäftsführung will die Auswertungsfunktion für Lernstände nutzen, um Qualität zu belegen – ich bestehe darauf, dass diese Funktion abgeschaltet oder so anonymisiert wird, dass keine Rückschlüsse auf einzelne Dozenten möglich sind. Jede Einigung, die beiden Seiten etwas gibt, nimmt der einen die Kontrolle und der anderen den Schutz, also bleibt nur ein Entweder-oder.\n\nQuestion 3: Vor dem Kursstart müssen wir verbindlich geklärt haben, welche Daten der Assistent erhebt, wer sie einsehen darf und wie lange sie gespeichert werden – und das in einer Betriebsvereinbarung, nicht in einer mündlichen Zusage. Außerdem brauchen wir eine klare Regelung für die Honorarkräfte, dass ihre Materialien nur mit ihrer Zustimmung verwendet werden, und ein Schulungskonzept für alle Beteiligten, das die Ängste ernst nimmt. Ohne diese Entscheidungen wird es wie bei Moodle: Die ersten Wochen läuft es, dann kippt das Vertrauen und niemand nutzt das System mehr.",
+        "key_quotes": []
+      },
+      "agent_log_ref": {
+        "section_index": 1,
+        "action": "tool_result",
+        "tool_name": "interview_agents"
+      },
+      "quote": "[Twitter Platform Response]\n(No response from this platform)\n\n[Reddit Platform Response]\nQuestion 1: Die Akzeptanz bricht zuerst bei den Honorarkräften, und zwar genau an dem Punkt, wo sie merken, dass der KI-Assistent auf ihren selbst erstellten Kursmaterialien trainiert wird, ohne dass sie vorher gefragt wurden oder eine Vergütung dafür bekommen. Sie sind nicht festangestellt, haben keinen Kündigungsschutz und erleben das als Enteignung ihrer Arbeit – da hilft auch die Zusicherung nicht, dass ",
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "agent_quote",
+      "source_model": null,
+      "persona_stakeholder_group": "Stellvertretende Betriebsratsvorsitzende bei einem Bildungsträger für IT-Umschulungen"
+    },
+    "ev_09de45809267e1fc22d1944f0db91506": {
+      "evidence_id": "ev_09de45809267e1fc22d1944f0db91506",
+      "producer_key": "interview:s1:12dc0c3e81ce86ab95bdd0a5",
+      "type": "agent_interview",
+      "source": "report_tool",
+      "snippet": "[Twitter Platform Response]\n(No response from this platform)\n\n[Reddit Platform Response]\nQuestion 1: Die Akzeptanz bricht zuerst bei den Umschülern, die schon vor der Einführung skeptisch sind – konkret in dem Moment, wo sie merken, dass der Assistent Lernstände erfasst und diese Daten irgendwo gesp...",
+      "value": null,
+      "tool_name": "interview_agents",
+      "query": "Einführung eines selbstgehosteten KI-Lernassistenten: Wo bricht die Akzeptanz zuerst? Bewertungskompetenz, curriculare Kontrolle, Datensouveränität unbelegt",
+      "raw": {
+        "agent_name": "niklas_schmitz_936",
+        "agent_role": "IT-Umschüler (Fachinformatiker Anwendungsentwicklung)",
+        "agent_bio": "36, IT-Umschüler, Familienvater. Immer neugierig auf neue Technik, aber kritisch, wenn's um Daten geht. #Umschulung #Digitalisierung #Datenschutz",
+        "question": "1. Wo genau bricht die Akzeptanz zuerst?\n2. Welche zwei Gruppen kollidieren unversöhnlich?\n3. Was muss vor Kursstart entschieden sein?",
+        "response": "[Twitter Platform Response]\n(No response from this platform)\n\n[Reddit Platform Response]\nQuestion 1: Die Akzeptanz bricht zuerst bei den Umschülern, die schon vor der Einführung skeptisch sind – konkret in dem Moment, wo sie merken, dass der Assistent Lernstände erfasst und diese Daten irgendwo gespeichert werden, auch wenn nur intern. Ich sehe das bei mir selbst: Sobald ich das Gefühl habe, dass meine Lernfortschritte gegen mich verwendet werden könnten, bin ich raus. Der Punkt ist nicht die Technik, sondern die fehlende Transparenz darüber, wer diese Daten einsehen kann und ob sie später bei der Prüfungszulassung oder im Betrieb eine Rolle spielen.\n\nQuestion 2: Die Geschäftsführung und der Betriebsrat kollidieren so, dass ein Kompromiss die Maßnahme für beide entwertet. Die Geschäftsführung will den Assistenten als Effizienzgewinn und Marketingargument verkaufen, der Betriebsrat will absolute Datensparsamkeit und Kontrolle – jeder Kompromiss, der dem einen Zugeständnisse macht, nimmt dem anderen das, was ihm wichtig ist. Wenn wir den Assistenten so stark einschränken, dass der Betriebsrat zufrieden ist, ist er für die Geschäftsführung nur noch ein teures Spielzeug; wenn wir ihn so freigeben, wie die Geschäftsführung will, ist er für den Betriebsrat ein Überwachungstool.\n\nQuestion 3: Vor Kursstart muss entschieden sein, wer Zugriff auf die Lernstandsdaten hat, wie lange sie gespeichert werden und ob es eine unabhängige Prüfstelle gibt, die das kontrolliert – und das muss allen Teilnehmern schriftlich und verständlich kommuniziert werden. Außerdem brauchen wir eine klare Antwort auf die Frage, was passiert, wenn der Assistent falsche Antworten gibt oder Lücken im Kursmaterial hat – wer haftet dann? Ohne diese Entscheidungen wird es wie bei Moodle: erst Euphorie, dann Misstrauen, dann Stillstand, weil keiner mehr das Tool nutzt und die Dozenten es ignorieren.",
+        "key_quotes": []
+      },
+      "agent_log_ref": {
+        "section_index": 1,
+        "action": "tool_result",
+        "tool_name": "interview_agents"
+      },
+      "quote": "[Twitter Platform Response]\n(No response from this platform)\n\n[Reddit Platform Response]\nQuestion 1: Die Akzeptanz bricht zuerst bei den Umschülern, die schon vor der Einführung skeptisch sind – konkret in dem Moment, wo sie merken, dass der Assistent Lernstände erfasst und diese Daten irgendwo gespeichert werden, auch wenn nur intern. Ich sehe das bei mir selbst: Sobald ich das Gefühl habe, dass meine Lernfortschritte gegen mich verwendet werden könnten, bin ich raus. Der Punkt ist nicht die Te",
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "agent_quote",
+      "source_model": null,
+      "persona_stakeholder_group": "IT-Umschüler (Fachinformatiker Anwendungsentwicklung)"
+    },
+    "ev_cc19dc087ccabeda191e37d79f72f44f": {
+      "evidence_id": "ev_cc19dc087ccabeda191e37d79f72f44f",
+      "producer_key": "interview:s1:c1ab61a735439c079a3207e3",
+      "type": "agent_interview",
+      "source": "report_tool",
+      "snippet": "[Twitter Platform Response]\n(No response from this platform)\n\n[Reddit Platform Response]\n**Frage 1:** Die Akzeptanz bricht zuerst bei den festangestellten Dozenten, konkret in dem Moment, wenn sie merken, dass der KI-Assistent ihre selbst erstellten Übungsaufgaben ersetzt und sie nur noch als Kontro...",
+      "value": null,
+      "tool_name": "interview_agents",
+      "query": "Einführung eines selbstgehosteten KI-Lernassistenten: Wo bricht die Akzeptanz zuerst? Bewertungskompetenz, curriculare Kontrolle, Datensouveränität unbelegt",
+      "raw": {
+        "agent_name": "gisela_brandt_ihk_450",
+        "agent_role": "Ehrenamtliches Mitglied im IHK-Prüfungsausschuss für IT-Berufe",
+        "agent_bio": "Ehem. Ausbildungsleiterin, jetzt ehrenamtlich im IHK-Prüfungsausschuss IT. Für faire Prüfungen und echte Berufsbildung.",
+        "question": "1. Wo genau bricht die Akzeptanz zuerst?\n2. Welche zwei Gruppen kollidieren unversöhnlich?\n3. Was muss vor Kursstart entschieden sein?",
+        "response": "[Twitter Platform Response]\n(No response from this platform)\n\n[Reddit Platform Response]\n**Frage 1:** Die Akzeptanz bricht zuerst bei den festangestellten Dozenten, konkret in dem Moment, wenn sie merken, dass der KI-Assistent ihre selbst erstellten Übungsaufgaben ersetzt und sie nur noch als Kontrolleure dastehen. Sie sehen ihre jahrelange Erfahrung entwertet, und das wird spätestens beim ersten Korrekturgespräch mit der Geschäftsführung offen ausgetragen.\n\n**Frage 2:** Die Geschäftsführung und die Dozenten kollidieren unversöhnlich, weil die einen den Assistenten als Kostensenkungsinstrument sehen und die anderen ihn als Qualitätsbedrohung. Ein Kompromiss, der den Dozenten mehr Kontrolle gibt, verteuert das System für die Geschäftsführung, und einer, der die Kosten senkt, nimmt den Dozenten die pädagogische Verantwortung – beides entwertet die Maßnahme für die jeweils andere Seite.\n\n**Frage 3:** Vor Kursstart muss entschieden sein, dass der KI-Assistent ausschließlich als Ergänzung zu den von erfahrenen Ausbildern erstellten Übungsaufgaben dient und keine eigenständigen Prüfungsaufgaben generiert. Außerdem braucht es eine klare Regelung, wer die Inhalte des Assistenten regelmäßig prüft und aktualisiert, sowie ein verbindliches Feedback-Verfahren, in dem die Dozenten ihre Bedenken einbringen können, ohne dass die Geschäftsführung sie überstimmt. Sonst wiederholt sich das Moodle-Desaster von 2022, weil die Nutzung im Alltag versandet, sobald der erste Enthusiasmus verflogen ist.",
+        "key_quotes": []
+      },
+      "agent_log_ref": {
+        "section_index": 1,
+        "action": "tool_result",
+        "tool_name": "interview_agents"
+      },
+      "quote": "[Twitter Platform Response]\n(No response from this platform)\n\n[Reddit Platform Response]\n**Frage 1:** Die Akzeptanz bricht zuerst bei den festangestellten Dozenten, konkret in dem Moment, wenn sie merken, dass der KI-Assistent ihre selbst erstellten Übungsaufgaben ersetzt und sie nur noch als Kontrolleure dastehen. Sie sehen ihre jahrelange Erfahrung entwertet, und das wird spätestens beim ersten Korrekturgespräch mit der Geschäftsführung offen ausgetragen.\n\n**Frage 2:** Die Geschäftsführung und",
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "agent_quote",
+      "source_model": null,
+      "persona_stakeholder_group": "Ehrenamtliches Mitglied im IHK-Prüfungsausschuss für IT-Berufe"
+    },
+    "ev_ba1eb656de6eb78292feca11db431541": {
+      "evidence_id": "ev_ba1eb656de6eb78292feca11db431541",
+      "producer_key": "interview:s1:3b6d2c154a2adb30dd22baa9",
+      "type": "agent_interview",
+      "source": "report_tool",
+      "snippet": "[Twitter Platform Response]\n(No response from this platform)\n\n[Reddit Platform Response]\nQuestion 1: Die Akzeptanz bricht zuerst bei den festangestellten Dozenten – und zwar genau in dem Moment, wenn der Chatbot zum ersten Mal eine Lernstandserfassung ausspuckt, die einem Teilnehmer ein falsches Niv...",
+      "value": null,
+      "tool_name": "interview_agents",
+      "query": "Einführung eines selbstgehosteten KI-Lernassistenten: Wo bricht die Akzeptanz zuerst? Bewertungskompetenz, curriculare Kontrolle, Datensouveränität unbelegt",
+      "raw": {
+        "agent_name": "nora_krüger_217",
+        "agent_role": "Dozentin für Deutsch als Zweitsprache",
+        "agent_bio": "Dozentin aus Leidenschaft 📚 | Sprachen & Integration | Kritisch gegenüber KI-Hype | Für echte Bildung statt Chatbot-Sparprogramme",
+        "question": "1. Wo genau bricht die Akzeptanz zuerst?\n2. Welche zwei Gruppen kollidieren unversöhnlich?\n3. Was muss vor Kursstart entschieden sein?",
+        "response": "[Twitter Platform Response]\n(No response from this platform)\n\n[Reddit Platform Response]\nQuestion 1: Die Akzeptanz bricht zuerst bei den festangestellten Dozenten – und zwar genau in dem Moment, wenn der Chatbot zum ersten Mal eine Lernstandserfassung ausspuckt, die einem Teilnehmer ein falsches Niveau bescheinigt. Dann sitzen wir da und sollen erklären, warum der Algorithmus das besser weiß als wir, die wir seit Monaten mit den Leuten arbeiten – das ist der Punkt, wo ich nur noch mit dem Kopf schütteln kann.\n\nQuestion 2: Die Geschäftsführung und die Dozenten kollidieren unversöhnlich: Die einen wollen Stunden sparen und den Bot als Beleg für Modernität verkaufen, die anderen sehen ihre pädagogische Arbeit entwertet. Ein Kompromiss, der beiden gerecht wird, gibt es nicht – wenn wir weniger Stunden bekommen, ist die Qualität futsch, und wenn der Bot nur Beiwerk bleibt, lohnt sich die Investition für die GF nicht.\n\nQuestion 3: Vor Kursstart muss entschieden sein, dass der Chatbot ausschließlich als Übungs- und Wiederholungstool dient, niemals als Bewertungsinstrument, und dass wir Dozenten die Kontrolle über alle Lernstandsdaten behalten. Außerdem brauchen wir eine klare Zusage, dass keine Dozentenstunden gestrichen werden – sonst wiederholt sich die Moodle-Geschichte von 2022, wo keiner Verantwortung übernahm und das System nach drei Monaten tot war.",
+        "key_quotes": []
+      },
+      "agent_log_ref": {
+        "section_index": 1,
+        "action": "tool_result",
+        "tool_name": "interview_agents"
+      },
+      "quote": "[Twitter Platform Response]\n(No response from this platform)\n\n[Reddit Platform Response]\nQuestion 1: Die Akzeptanz bricht zuerst bei den festangestellten Dozenten – und zwar genau in dem Moment, wenn der Chatbot zum ersten Mal eine Lernstandserfassung ausspuckt, die einem Teilnehmer ein falsches Niveau bescheinigt. Dann sitzen wir da und sollen erklären, warum der Algorithmus das besser weiß als wir, die wir seit Monaten mit den Leuten arbeiten – das ist der Punkt, wo ich nur noch mit dem Kopf s",
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "agent_quote",
+      "source_model": null,
+      "persona_stakeholder_group": "Dozentin für Deutsch als Zweitsprache"
+    },
+    "ev_d1692d2844d26658111a603a8b02391e": {
+      "evidence_id": "ev_d1692d2844d26658111a603a8b02391e",
+      "producer_key": "interview:s1:8679552271b8676d2933e3aa",
+      "type": "agent_interview",
+      "source": "report_tool",
+      "snippet": "[Twitter Platform Response]\n(No response from this platform)\n\n[Reddit Platform Response]\nQuestion 1: Die Akzeptanz bricht zuerst bei den Honorarkräften, und zwar in dem Moment, in dem sie merken, dass der KI-Assistent Übungsaufgaben im Stil der IHK-Prüfung erzeugt und damit ihre bisherige Rolle als ...",
+      "value": null,
+      "tool_name": "interview_agents",
+      "query": "Einführung eines selbstgehosteten KI-Lernassistenten: Wo bricht die Akzeptanz zuerst? Bewertungskompetenz, curriculare Kontrolle, Datensouveränität unbelegt",
+      "raw": {
+        "agent_name": "katharina_maier_156",
+        "agent_role": "Sachbearbeiterin beim Kostenträger für Fördermittel und Umschulungsmaßnahmen",
+        "agent_bio": "Sachbearbeiterin beim Kostenträger | Fördermittel für Umschulungen | Qualität vor Schnelligkeit | Für faire Chancen im Arbeitsmarkt",
+        "question": "1. Wo genau bricht die Akzeptanz zuerst?\n2. Welche zwei Gruppen kollidieren unversöhnlich?\n3. Was muss vor Kursstart entschieden sein?",
+        "response": "[Twitter Platform Response]\n(No response from this platform)\n\n[Reddit Platform Response]\nQuestion 1: Die Akzeptanz bricht zuerst bei den Honorarkräften, und zwar in dem Moment, in dem sie merken, dass der KI-Assistent Übungsaufgaben im Stil der IHK-Prüfung erzeugt und damit ihre bisherige Rolle als Aufgabenentwickler infrage stellt – konkret, wenn sie zum ersten Mal eine vom Assistenten generierte Aufgabe korrigieren sollen und feststellen, dass ihre Stundenzahl dafür gekürzt wird. Das ist kein Thema, sondern ein handfester wirtschaftlicher Punkt.\n\nQuestion 2: Die festangestellten Dozenten und die Honorarkräfte kollidieren unversöhnlich: Die einen sehen den Assistenten als Werkzeug, das ihre Arbeit ergänzt, die anderen als Ersatz, der ihre Vergütung bedroht. Ein Kompromiss, der beiden gerecht wird, würde bedeuten, dass die Honorarkräfte weniger Stunden bekommen, aber die Dozenten mehr Aufwand mit der Qualitätskontrolle haben – das entwertet die Maßnahme für beide, weil keiner mehr das bekommt, was er braucht.\n\nQuestion 3: Vor Kursstart müssen wir entschieden haben, dass der KI-Assistent ausschließlich als Ergänzung zum Präsenzunterricht eingesetzt wird, dass die IHK-Prüfung unverändert bleibt und dass die Lernstandserfassung nicht als Bewertungsgrundlage für Fördergelder dient – sonst wiederholt sich das Scheitern wie bei Moodle 2022, wo niemand die Verantwortung für die Pflege und Aktualisierung übernommen hat. Außerdem brauchen wir eine klare Regelung, wer bei technischen Fehlern haftet und wie wir die Vergleichbarkeit der Abschlüsse gegenüber dem Kostenträger nachweisen, sonst kippt die Akzeptanz bei mir und meinen Kollegen im ersten Quartal.",
+        "key_quotes": []
+      },
+      "agent_log_ref": {
+        "section_index": 1,
+        "action": "tool_result",
+        "tool_name": "interview_agents"
+      },
+      "quote": "[Twitter Platform Response]\n(No response from this platform)\n\n[Reddit Platform Response]\nQuestion 1: Die Akzeptanz bricht zuerst bei den Honorarkräften, und zwar in dem Moment, in dem sie merken, dass der KI-Assistent Übungsaufgaben im Stil der IHK-Prüfung erzeugt und damit ihre bisherige Rolle als Aufgabenentwickler infrage stellt – konkret, wenn sie zum ersten Mal eine vom Assistenten generierte Aufgabe korrigieren sollen und feststellen, dass ihre Stundenzahl dafür gekürzt wird. Das ist kein ",
+      "source_id_anchor": null,
+      "sentiment_score": null,
+      "source_kind": "agent_quote",
+      "source_model": null,
+      "persona_stakeholder_group": "Sachbearbeiterin beim Kostenträger für Fördermittel und Umschulungsmaßnahmen"
+    },
+    "ev_ff7b2efc18acbf6ee6b2f75094cb0e8d": {
+      "evidence_id": "ev_ff7b2efc18acbf6ee6b2f75094cb0e8d",
+      "producer_key": "seed-doc:83203fe2e962286e96752048",
+      "type": "seed_document",
+      "source": "report_tool",
+      "snippet": "Behandle die Aussagen der Geschäftsführung (Abschnitt 7 des Seed-Dokuments) als unbelegte Behauptung, nicht als Datenlage.",
+      "value": null,
+      "tool_name": "panorama_search",
+      "query": "Akzeptanzbruch KI-Lernassistent Geschäftsführung Datensouveränität unbelegt Moodle 2022 Bewertungskompetenz curriculare Kontrolle",
+      "raw": "Behandle die Aussagen der Geschäftsführung (Abschnitt 7 des Seed-Dokuments) als unbelegte Behauptung, nicht als Datenlage.",
+      "agent_log_ref": {
+        "section_index": 1,
+        "action": "tool_result",
+        "tool_name": "panorama_search"
+      },
+      "quote": "Behandle die Aussagen der Geschäftsführung (Abschnitt 7 des Seed-Dokuments) als unbelegte Behauptung, nicht als Datenlage.",
+      "source_id_anchor": "seed_doc:agora_testfall_ki-lernassistent-umschulung#chunk:45",
+      "sentiment_score": null,
+      "source_kind": "seed_corpus",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_d173744bd8766c5d8e3ed8768c2261ed": {
+      "evidence_id": "ev_d173744bd8766c5d8e3ed8768c2261ed",
+      "producer_key": "seed-doc:1ec7ab17ab7befc0c8f66e14",
+      "type": "seed_document",
+      "source": "report_tool",
+      "snippet": "der Konflikt Honorarkräfte ↔ Geschäftsführung braucht Gegenrede",
+      "value": null,
+      "tool_name": "panorama_search",
+      "query": "Akzeptanzbruch KI-Lernassistent Geschäftsführung Datensouveränität unbelegt Moodle 2022 Bewertungskompetenz curriculare Kontrolle",
+      "raw": "der Konflikt Honorarkräfte ↔ Geschäftsführung braucht Gegenrede",
+      "agent_log_ref": {
+        "section_index": 1,
+        "action": "tool_result",
+        "tool_name": "panorama_search"
+      },
+      "quote": "der Konflikt Honorarkräfte ↔ Geschäftsführung braucht Gegenrede",
+      "source_id_anchor": "seed_doc:agora_testfall_ki-lernassistent-umschulung#chunk:47",
+      "sentiment_score": null,
+      "source_kind": "seed_corpus",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    },
+    "ev_984b145d494fa70852c3b1738ab5bb1c": {
+      "evidence_id": "ev_984b145d494fa70852c3b1738ab5bb1c",
+      "producer_key": "seed-doc:50c663168f0c9936941fd1ab",
+      "type": "seed_document",
+      "source": "report_tool",
+      "snippet": "Betriebsrat prüft, ob der Assistent Leistungs- oder Verhaltenskontrolle der Dozenten ermöglicht.",
+      "value": null,
+      "tool_name": "quick_search",
+      "query": "Geschäftsführung Datensouveränität unbelegt Behauptung Abschnitt 7 Seed-Dokument Bewertungskompetenz curriculare Kontrolle",
+      "raw": "Betriebsrat prüft, ob der Assistent Leistungs- oder Verhaltenskontrolle der Dozenten ermöglicht.",
+      "agent_log_ref": {
+        "section_index": 1,
+        "action": "tool_result",
+        "tool_name": "quick_search"
+      },
+      "quote": "Betriebsrat prüft, ob der Assistent Leistungs- oder Verhaltenskontrolle der Dozenten ermöglicht.",
+      "source_id_anchor": "seed_doc:agora_testfall_ki-lernassistent-umschulung#chunk:14",
+      "sentiment_score": null,
+      "source_kind": "seed_corpus",
+      "source_model": null,
+      "persona_stakeholder_group": null
+    }
+  },
+  "global_evidence_refs": [
+    "ev_7f616d69f9de4eadcae9b28579ee1ce9",
+    "ev_4fc5a4d28eb8b63132419ca17b7c7934",
+    "ev_2fae2b2dd4d288071e4b3e8b9c9a939a",
+    "ev_e4b0d86a1da5195a3429956511f1b9c5",
+    "ev_db0f4500451b76415d6e9f284c66684e",
+    "ev_ab849ee061e8fb975a2fc2b3b9754e83",
+    "ev_325eca5a338aacd804d18f5d2c97f2fe",
+    "ev_dfee55dc3718bd239584ad3507edaefc",
+    "ev_3d7949222a0a3dc9b63e4697f095808f",
+    "ev_981b856fa7ffd613cf21760a7105a6cf",
+    "ev_dd0be02ddc430f499bba506fa4104f66",
+    "ev_ce87ee5b1bc98c695325170a45a31b16"
+  ],
+  "sections": [
+    {
+      "section_index": 1,
+      "section_title": "Kurzfazit",
+      "section_summary": "Die Simulation verdichtet sich auf einen einzigen Kipppunkt, der sich durch alle Gruppen zieht: die **Bewertungskompetenz und curriculare Kontrolle**, nicht die Technik und nicht das Datenschutzversprechen. Die Behauptungen der Geschäftsführung aus Abschnitt 7 des Seed-Dokuments zur Datensouveränität tauchen in den simulierten Reaktionen als Argument praktisch nicht auf – sie werden von keiner Gru...",
+      "claims": [],
+      "hypotheses": [
+        {
+          "hypothesis_id": "hypothesis_16",
+          "hypothesis_text": "- **Haftungs- und Verantwortungsregelung**: Wer trägt die Verantwortung, wenn der Assistent fachlich Falsches ausgibt?",
+          "rationale": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert.",
+          "suggested_evidence": [
+            "- **Haftungs- und Verantwortungsregelung**: Wer trägt die Verantwortung, wenn der Assistent fachlich Falsches ausgibt?",
+            "Direkte Evidence per Graph- oder Agent-Tool nachreichen."
+          ]
+        },
+        {
+          "hypothesis_id": "hypothesis_08",
+          "hypothesis_text": "> „Die Akzeptanz bricht zuerst bei den Honorarkräften, und zwar genau an dem Punkt, wo sie merken, dass der KI-Assistent auf ihren selbst erstellten Kursmaterialien trainiert wird, ohne dass sie vorher gefragt wurden oder eine Vergütung dafür bekommen.\"",
+          "rationale": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert.",
+          "suggested_evidence": [
+            "> „Die Akzeptanz bricht zuerst bei den Honorarkräften, und zwar genau an dem Punkt, wo sie merken, dass der KI-Assistent auf ihren selbst erstellten Kursmaterialien trainiert wird, ohne dass sie vorhe",
+            "Direkte Evidence per Graph- oder Agent-Tool nachreichen."
+          ]
+        },
+        {
+          "hypothesis_id": "hypothesis_11",
+          "hypothesis_text": "> „Die Geschäftsführung will die Auswertungsfunktion für Lernstände nutzen, um Qualität zu belegen – ich bestehe darauf, dass diese Funktion abgeschaltet oder so anonymisiert wird, dass keine Rückschlüsse auf einzelne Dozenten möglich sind.",
+          "rationale": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert.",
+          "suggested_evidence": [
+            "> „Die Geschäftsführung will die Auswertungsfunktion für Lernstände nutzen, um Qualität zu belegen – ich bestehe darauf, dass diese Funktion abgeschaltet oder so anonymisiert wird, dass keine Rückschl",
+            "Direkte Evidence per Graph- oder Agent-Tool nachreichen."
+          ]
+        },
+        {
+          "hypothesis_id": "hypothesis_20",
+          "hypothesis_text": "Der Kipppunkt liegt nicht bei den externen Prüfinstanzen, sondern intern – zwischen Honorarkräften, Dozenten, Betriebsrat und Geschäftsführung.",
+          "rationale": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert.",
+          "suggested_evidence": [
+            "Der Kipppunkt liegt nicht bei den externen Prüfinstanzen, sondern intern – zwischen Honorarkräften, Dozenten, Betriebsrat und Geschäftsführung.",
+            "Direkte Evidence per Graph- oder Agent-Tool nachreichen."
+          ]
+        },
+        {
+          "hypothesis_id": "hypothesis_12",
+          "hypothesis_text": "Der Umschüler bestätigt die Logik aus Teilnehmersicht: „Wenn wir den Assistenten so stark einschränken, dass der Betriebsrat zufrieden ist, ist er für die Geschäftsführung nur noch ein teures Spielzeug; wenn wir ihn so freigeben, wie die Geschäftsführung will, ist er für den Betriebsrat ein Überwachungstool.\" Der Betriebsrat blockiert dabei nicht die Einführung, sondern gezielt die Auswertungsfunktion – ein Kompromiss, der die Funktion teilweise freigibt, nimmt dem Betriebsrat den Schutz und der Geschäftsführung die Qualitätsbeleg-Logik.",
+          "rationale": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert.",
+          "suggested_evidence": [
+            "Der Umschüler bestätigt die Logik aus Teilnehmersicht: „Wenn wir den Assistenten so stark einschränken, dass der Betriebsrat zufrieden ist, ist er für die Geschäftsführung nur noch ein teures Spielzeu",
+            "Direkte Evidence per Graph- oder Agent-Tool nachreichen."
+          ]
+        }
+      ],
+      "hypotheses_appendix": [
+        {
+          "hypothesis_id": "hypothesis_03",
+          "hypothesis_text": "Der erwartete Effekt, dass die Zusicherung „keine Daten verlassen unser Rechenzentrum\" Vertrauen schafft, tritt in der Simulation nicht ein.",
+          "rationale": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert.",
+          "suggested_evidence": [
+            "Der erwartete Effekt, dass die Zusicherung „keine Daten verlassen unser Rechenzentrum\" Vertrauen schafft, tritt in der Simulation nicht ein.",
+            "Direkte Evidence per Graph- oder Agent-Tool nachreichen."
+          ]
+        },
+        {
+          "hypothesis_id": "hypothesis_05",
+          "hypothesis_text": "Die Akzeptanz bricht zuerst bei den **Honorarkräften**, und zwar an einem sehr konkreten wirtschaftlichen Punkt, nicht am Thema KI. Die IT-Systemadministratorin benennt den Moment präzise:",
+          "rationale": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert.",
+          "suggested_evidence": [
+            "Die Akzeptanz bricht zuerst bei den **Honorarkräften**, und zwar an einem sehr konkreten wirtschaftlichen Punkt, nicht am Thema KI. Die IT-Systemadministratorin benennt den Moment präzise:",
+            "Direkte Evidence per Graph- oder Agent-Tool nachreichen."
+          ]
+        },
+        {
+          "hypothesis_id": "hypothesis_02",
+          "hypothesis_text": "Die Behauptungen der Geschäftsführung aus Abschnitt 7 des Seed-Dokuments zur Datensouveränität tauchen in den simulierten Reaktionen als Argument praktisch nicht auf – sie werden von keiner Gruppe als Datenlage akzeptiert, sondern schlicht übergangen.",
+          "rationale": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert.",
+          "suggested_evidence": [
+            "Die Behauptungen der Geschäftsführung aus Abschnitt 7 des Seed-Dokuments zur Datensouveränität tauchen in den simulierten Reaktionen als Argument praktisch nicht auf – sie werden von keiner Gruppe als",
+            "Direkte Evidence per Graph- oder Agent-Tool nachreichen."
+          ]
+        },
+        {
+          "hypothesis_id": "hypothesis_07",
+          "hypothesis_text": "Die Betriebsrätin verschärft denselben Punkt zur Enteignung der eigenen Arbeit:",
+          "rationale": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert.",
+          "suggested_evidence": [
+            "Die Betriebsrätin verschärft denselben Punkt zur Enteignung der eigenen Arbeit:",
+            "Direkte Evidence per Graph- oder Agent-Tool nachreichen."
+          ]
+        },
+        {
+          "hypothesis_id": "hypothesis_09",
+          "hypothesis_text": "Die Sachbearbeiterin des Kostenträgers bestätigt, dass es sich nicht um ein Thema, sondern um einen handfesten wirtschaftlichen Punkt handelt: „wenn sie zum ersten Mal eine vom Assistenten generierte Aufgabe korrigieren sollen und feststellen, dass ihre Stundenzahl dafür gekürzt wird.\" Die Honorarkräfte lehnen stärker ab als Festangestellte, weil sie keinen Anteil an der Entlastung haben – die Simulation bestätigt dies als durchgängigen Befund.",
+          "rationale": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert.",
+          "suggested_evidence": [
+            "Die Sachbearbeiterin des Kostenträgers bestätigt, dass es sich nicht um ein Thema, sondern um einen handfesten wirtschaftlichen Punkt handelt: „wenn sie zum ersten Mal eine vom Assistenten generierte ",
+            "Direkte Evidence per Graph- oder Agent-Tool nachreichen."
+          ]
+        },
+        {
+          "hypothesis_id": "hypothesis_14",
+          "hypothesis_text": "Die Simulation ist sich über die fehlenden Vorentscheidungen einig – und sie verweist durchgängig auf das Moodle-Desaster von 2022 als drohende Wiederholung.",
+          "rationale": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert.",
+          "suggested_evidence": [
+            "Die Simulation ist sich über die fehlenden Vorentscheidungen einig – und sie verweist durchgängig auf das Moodle-Desaster von 2022 als drohende Wiederholung.",
+            "Direkte Evidence per Graph- oder Agent-Tool nachreichen."
+          ]
+        },
+        {
+          "hypothesis_id": "hypothesis_01",
+          "hypothesis_text": "Die Simulation verdichtet sich auf einen einzigen Kipppunkt, der sich durch alle Gruppen zieht: die **Bewertungskompetenz und curriculare Kontrolle**, nicht die Technik und nicht das Datenschutzversprechen.",
+          "rationale": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert.",
+          "suggested_evidence": [
+            "Die Simulation verdichtet sich auf einen einzigen Kipppunkt, der sich durch alle Gruppen zieht: die **Bewertungskompetenz und curriculare Kontrolle**, nicht die Technik und nicht das Datenschutzverspr",
+            "Direkte Evidence per Graph- oder Agent-Tool nachreichen."
+          ]
+        },
+        {
+          "hypothesis_id": "hypothesis_17",
+          "hypothesis_text": "Die Systemadministratorin fordert: „Vor Kursstart muss eindeutig geklärt sein, wer bei Fehlern des Assistenten (falsche Übungsaufgaben, Datenschutzverletzungen) die Verantwortung trägt.\" Die IHK-Prüferin ergänzt die Haftungsfrage: „Wer haftet, wenn das Ding einem Umschüler fachlich Falsches erzählt und der fällt durch die Prüfung?\"",
+          "rationale": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert.",
+          "suggested_evidence": [
+            "Die Systemadministratorin fordert: „Vor Kursstart muss eindeutig geklärt sein, wer bei Fehlern des Assistenten (falsche Übungsaufgaben, Datenschutzverletzungen) die Verantwortung trägt.\" Die IHK-Prüfe",
+            "Direkte Evidence per Graph- oder Agent-Tool nachreichen."
+          ]
+        },
+        {
+          "hypothesis_id": "hypothesis_19",
+          "hypothesis_text": "Die aufnehmenden Betriebe und die IHK-Prüfungsausschuss-Mitglieder äußern keine substanzielle Akzeptanzbarriere.",
+          "rationale": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert.",
+          "suggested_evidence": [
+            "Die aufnehmenden Betriebe und die IHK-Prüfungsausschuss-Mitglieder äußern keine substanzielle Akzeptanzbarriere.",
+            "Direkte Evidence per Graph- oder Agent-Tool nachreichen."
+          ]
+        },
+        {
+          "hypothesis_id": "hypothesis_10",
+          "hypothesis_text": "Die zwei Gruppen, deren Konflikt die Maßnahme für beide entwertet, sind die **Geschäftsführung und der Betriebsrat** – über die Auswertungsfunktion.",
+          "rationale": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert.",
+          "suggested_evidence": [
+            "Die zwei Gruppen, deren Konflikt die Maßnahme für beide entwertet, sind die **Geschäftsführung und der Betriebsrat** – über die Auswertungsfunktion.",
+            "Direkte Evidence per Graph- oder Agent-Tool nachreichen."
+          ]
+        },
+        {
+          "hypothesis_id": "hypothesis_13",
+          "hypothesis_text": "Genau diese Kollision entwertet die Maßnahme für beide Seiten.",
+          "rationale": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert.",
+          "suggested_evidence": [
+            "Genau diese Kollision entwertet die Maßnahme für beide Seiten.",
+            "Direkte Evidence per Graph- oder Agent-Tool nachreichen."
+          ]
+        },
+        {
+          "hypothesis_id": "hypothesis_21",
+          "hypothesis_text": "Ohne die vier Vorentscheidungen wiederholt sich das Muster von 2022: erste Euphorie, dann Misstrauen, dann Stillstand, weil niemand sich für das System verantwortlich fühlt.",
+          "rationale": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert.",
+          "suggested_evidence": [
+            "Ohne die vier Vorentscheidungen wiederholt sich das Muster von 2022: erste Euphorie, dann Misstrauen, dann Stillstand, weil niemand sich für das System verantwortlich fühlt.",
+            "Direkte Evidence per Graph- oder Agent-Tool nachreichen."
+          ]
+        },
+        {
+          "hypothesis_id": "hypothesis_04",
+          "hypothesis_text": "Stattdessen verschiebt sich der Konflikt auf die Frage, wer die Inhalte und die Lernstandserfassung kontrolliert.",
+          "rationale": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert.",
+          "suggested_evidence": [
+            "Stattdessen verschiebt sich der Konflikt auf die Frage, wer die Inhalte und die Lernstandserfassung kontrolliert.",
+            "Direkte Evidence per Graph- oder Agent-Tool nachreichen."
+          ]
+        },
+        {
+          "hypothesis_id": "hypothesis_15",
+          "hypothesis_text": "Vier Entscheidungen werden von mehreren Gruppen unabhängig voneinander gefordert:",
+          "rationale": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert.",
+          "suggested_evidence": [
+            "Vier Entscheidungen werden von mehreren Gruppen unabhängig voneinander gefordert:",
+            "Direkte Evidence per Graph- oder Agent-Tool nachreichen."
+          ]
+        },
+        {
+          "hypothesis_id": "hypothesis_06",
+          "hypothesis_text": "> „Die Akzeptanz bricht zuerst bei den Honorarkräften, konkret in dem Moment, wenn der KI-Assistent in einer Übungsstunde erstmals Aufgaben generiert, die nicht exakt zum eigenen Unterrichtsstil passen – sie fühlen sich als austauschbar und nicht mehr als Gestalter des Lernprozesses.\"",
+          "rationale": "1 Quelle(n) sind thematisch verwandt, belegen die Aussage aber nicht (kein SUPPORTED-Urteil) — deshalb als Hypothese geführt.",
+          "suggested_evidence": [
+            "> „Die Akzeptanz bricht zuerst bei den Honorarkräften, konkret in dem Moment, wenn der KI-Assistent in einer Übungsstunde erstmals Aufgaben generiert, die nicht exakt zum eigenen Unterrichtsstil passe"
+          ]
+        },
+        {
+          "hypothesis_id": "hypothesis_18",
+          "hypothesis_text": "Bemerkenswert ist, was in der Simulation **nicht** auftritt: Die IHK sieht die generierten Übungsaufgaben unkritisch, und der Kostenträger bleibt gleichgültig, solange der Unterrichtsumfang formal unverändert bleibt.",
+          "rationale": "Reviewer-Floor: nur 1 von 2 geforderten stützenden Evidence-Items — als Hypothese geführt. 1 weitere Quelle(n) sind thematisch verwandt, belegen die Aussage aber nicht.",
+          "suggested_evidence": []
+        }
+      ],
+      "data_gaps": [
+        {
+          "gap_id": "gap_01",
+          "claim_text": "Die Simulation verdichtet sich auf einen einzigen Kipppunkt, der sich durch alle Gruppen zieht: die **Bewertungskompetenz und curriculare Kontrolle**, nicht die Technik und nicht das Datenschutzversprechen.",
+          "gap_reason": "no_evidence_bound",
+          "suggested_fix": "Die Simulation verdichtet sich auf einen einzigen Kipppunkt, der sich durch alle Gruppen zieht: die **Bewertungskompetenz und curriculare Kontrolle**, nicht die Technik und nicht das Datenschutzverspr"
+        },
+        {
+          "gap_id": "gap_02",
+          "claim_text": "Die Behauptungen der Geschäftsführung aus Abschnitt 7 des Seed-Dokuments zur Datensouveränität tauchen in den simulierten Reaktionen als Argument praktisch nicht auf – sie werden von keiner Gruppe als Datenlage akzeptiert, sondern schlicht übergangen.",
+          "gap_reason": "no_evidence_bound",
+          "suggested_fix": "Die Behauptungen der Geschäftsführung aus Abschnitt 7 des Seed-Dokuments zur Datensouveränität tauchen in den simulierten Reaktionen als Argument praktisch nicht auf – sie werden von keiner Gruppe als"
+        },
+        {
+          "gap_id": "gap_03",
+          "claim_text": "Der erwartete Effekt, dass die Zusicherung „keine Daten verlassen unser Rechenzentrum\" Vertrauen schafft, tritt in der Simulation nicht ein.",
+          "gap_reason": "no_evidence_bound",
+          "suggested_fix": "Der erwartete Effekt, dass die Zusicherung „keine Daten verlassen unser Rechenzentrum\" Vertrauen schafft, tritt in der Simulation nicht ein."
+        },
+        {
+          "gap_id": "gap_04",
+          "claim_text": "Stattdessen verschiebt sich der Konflikt auf die Frage, wer die Inhalte und die Lernstandserfassung kontrolliert.",
+          "gap_reason": "no_evidence_bound",
+          "suggested_fix": "Stattdessen verschiebt sich der Konflikt auf die Frage, wer die Inhalte und die Lernstandserfassung kontrolliert."
+        },
+        {
+          "gap_id": "gap_05",
+          "claim_text": "Die Akzeptanz bricht zuerst bei den **Honorarkräften**, und zwar an einem sehr konkreten wirtschaftlichen Punkt, nicht am Thema KI. Die IT-Systemadministratorin benennt den Moment präzise:",
+          "gap_reason": "no_evidence_bound",
+          "suggested_fix": "Die Akzeptanz bricht zuerst bei den **Honorarkräften**, und zwar an einem sehr konkreten wirtschaftlichen Punkt, nicht am Thema KI. Die IT-Systemadministratorin benennt den Moment präzise:"
+        },
+        {
+          "gap_id": "gap_06",
+          "claim_text": "> „Die Akzeptanz bricht zuerst bei den Honorarkräften, konkret in dem Moment, wenn der KI-Assistent in einer Übungsstunde erstmals Aufgaben generiert, die nicht exakt zum eigenen Unterrichtsstil passen – sie fühlen sich als austauschbar und nicht mehr als Gestalter des Lernprozesses.\"",
+          "gap_reason": "related_evidence_only",
+          "suggested_fix": "> „Die Akzeptanz bricht zuerst bei den Honorarkräften, konkret in dem Moment, wenn der KI-Assistent in einer Übungsstunde erstmals Aufgaben generiert, die nicht exakt zum eigenen Unterrichtsstil passe"
+        },
+        {
+          "gap_id": "gap_07",
+          "claim_text": "Die Betriebsrätin verschärft denselben Punkt zur Enteignung der eigenen Arbeit:",
+          "gap_reason": "no_evidence_bound",
+          "suggested_fix": "Die Betriebsrätin verschärft denselben Punkt zur Enteignung der eigenen Arbeit:"
+        },
+        {
+          "gap_id": "gap_08",
+          "claim_text": "> „Die Akzeptanz bricht zuerst bei den Honorarkräften, und zwar genau an dem Punkt, wo sie merken, dass der KI-Assistent auf ihren selbst erstellten Kursmaterialien trainiert wird, ohne dass sie vorher gefragt wurden oder eine Vergütung dafür bekommen.\"",
+          "gap_reason": "no_evidence_bound",
+          "suggested_fix": "> „Die Akzeptanz bricht zuerst bei den Honorarkräften, und zwar genau an dem Punkt, wo sie merken, dass der KI-Assistent auf ihren selbst erstellten Kursmaterialien trainiert wird, ohne dass sie vorhe"
+        },
+        {
+          "gap_id": "gap_09",
+          "claim_text": "Die Sachbearbeiterin des Kostenträgers bestätigt, dass es sich nicht um ein Thema, sondern um einen handfesten wirtschaftlichen Punkt handelt: „wenn sie zum ersten Mal eine vom Assistenten generierte Aufgabe korrigieren sollen und feststellen, dass ihre Stundenzahl dafür gekürzt wird.\" Die Honorarkräfte lehnen stärker ab als Festangestellte, weil sie keinen Anteil an der Entlastung haben – die Simulation bestätigt dies als durchgängigen Befund.",
+          "gap_reason": "no_evidence_bound",
+          "suggested_fix": "Die Sachbearbeiterin des Kostenträgers bestätigt, dass es sich nicht um ein Thema, sondern um einen handfesten wirtschaftlichen Punkt handelt: „wenn sie zum ersten Mal eine vom Assistenten generierte "
+        },
+        {
+          "gap_id": "gap_10",
+          "claim_text": "Die zwei Gruppen, deren Konflikt die Maßnahme für beide entwertet, sind die **Geschäftsführung und der Betriebsrat** – über die Auswertungsfunktion.",
+          "gap_reason": "no_evidence_bound",
+          "suggested_fix": "Die zwei Gruppen, deren Konflikt die Maßnahme für beide entwertet, sind die **Geschäftsführung und der Betriebsrat** – über die Auswertungsfunktion."
+        },
+        {
+          "gap_id": "gap_11",
+          "claim_text": "> „Die Geschäftsführung will die Auswertungsfunktion für Lernstände nutzen, um Qualität zu belegen – ich bestehe darauf, dass diese Funktion abgeschaltet oder so anonymisiert wird, dass keine Rückschlüsse auf einzelne Dozenten möglich sind.",
+          "gap_reason": "no_evidence_bound",
+          "suggested_fix": "> „Die Geschäftsführung will die Auswertungsfunktion für Lernstände nutzen, um Qualität zu belegen – ich bestehe darauf, dass diese Funktion abgeschaltet oder so anonymisiert wird, dass keine Rückschl"
+        },
+        {
+          "gap_id": "gap_12",
+          "claim_text": "Der Umschüler bestätigt die Logik aus Teilnehmersicht: „Wenn wir den Assistenten so stark einschränken, dass der Betriebsrat zufrieden ist, ist er für die Geschäftsführung nur noch ein teures Spielzeug; wenn wir ihn so freigeben, wie die Geschäftsführung will, ist er für den Betriebsrat ein Überwachungstool.\" Der Betriebsrat blockiert dabei nicht die Einführung, sondern gezielt die Auswertungsfunktion – ein Kompromiss, der die Funktion teilweise freigibt, nimmt dem Betriebsrat den Schutz und der Geschäftsführung die Qualitätsbeleg-Logik.",
+          "gap_reason": "no_evidence_bound",
+          "suggested_fix": "Der Umschüler bestätigt die Logik aus Teilnehmersicht: „Wenn wir den Assistenten so stark einschränken, dass der Betriebsrat zufrieden ist, ist er für die Geschäftsführung nur noch ein teures Spielzeu"
+        },
+        {
+          "gap_id": "gap_13",
+          "claim_text": "Genau diese Kollision entwertet die Maßnahme für beide Seiten.",
+          "gap_reason": "no_evidence_bound",
+          "suggested_fix": "Genau diese Kollision entwertet die Maßnahme für beide Seiten."
+        },
+        {
+          "gap_id": "gap_14",
+          "claim_text": "Die Simulation ist sich über die fehlenden Vorentscheidungen einig – und sie verweist durchgängig auf das Moodle-Desaster von 2022 als drohende Wiederholung.",
+          "gap_reason": "no_evidence_bound",
+          "suggested_fix": "Die Simulation ist sich über die fehlenden Vorentscheidungen einig – und sie verweist durchgängig auf das Moodle-Desaster von 2022 als drohende Wiederholung."
+        },
+        {
+          "gap_id": "gap_15",
+          "claim_text": "Vier Entscheidungen werden von mehreren Gruppen unabhängig voneinander gefordert:",
+          "gap_reason": "no_evidence_bound",
+          "suggested_fix": "Vier Entscheidungen werden von mehreren Gruppen unabhängig voneinander gefordert:"
+        },
+        {
+          "gap_id": "gap_16",
+          "claim_text": "- **Haftungs- und Verantwortungsregelung**: Wer trägt die Verantwortung, wenn der Assistent fachlich Falsches ausgibt?",
+          "gap_reason": "no_evidence_bound",
+          "suggested_fix": "- **Haftungs- und Verantwortungsregelung**: Wer trägt die Verantwortung, wenn der Assistent fachlich Falsches ausgibt?"
+        },
+        {
+          "gap_id": "gap_17",
+          "claim_text": "Die Systemadministratorin fordert: „Vor Kursstart muss eindeutig geklärt sein, wer bei Fehlern des Assistenten (falsche Übungsaufgaben, Datenschutzverletzungen) die Verantwortung trägt.\" Die IHK-Prüferin ergänzt die Haftungsfrage: „Wer haftet, wenn das Ding einem Umschüler fachlich Falsches erzählt und der fällt durch die Prüfung?\"",
+          "gap_reason": "no_evidence_bound",
+          "suggested_fix": "Die Systemadministratorin fordert: „Vor Kursstart muss eindeutig geklärt sein, wer bei Fehlern des Assistenten (falsche Übungsaufgaben, Datenschutzverletzungen) die Verantwortung trägt.\" Die IHK-Prüfe"
+        },
+        {
+          "gap_id": "gap_19",
+          "claim_text": "Die aufnehmenden Betriebe und die IHK-Prüfungsausschuss-Mitglieder äußern keine substanzielle Akzeptanzbarriere.",
+          "gap_reason": "no_evidence_bound",
+          "suggested_fix": "Die aufnehmenden Betriebe und die IHK-Prüfungsausschuss-Mitglieder äußern keine substanzielle Akzeptanzbarriere."
+        },
+        {
+          "gap_id": "gap_20",
+          "claim_text": "Der Kipppunkt liegt nicht bei den externen Prüfinstanzen, sondern intern – zwischen Honorarkräften, Dozenten, Betriebsrat und Geschäftsführung.",
+          "gap_reason": "no_evidence_bound",
+          "suggested_fix": "Der Kipppunkt liegt nicht bei den externen Prüfinstanzen, sondern intern – zwischen Honorarkräften, Dozenten, Betriebsrat und Geschäftsführung."
+        },
+        {
+          "gap_id": "gap_21",
+          "claim_text": "Ohne die vier Vorentscheidungen wiederholt sich das Muster von 2022: erste Euphorie, dann Misstrauen, dann Stillstand, weil niemand sich für das System verantwortlich fühlt.",
+          "gap_reason": "no_evidence_bound",
+          "suggested_fix": "Ohne die vier Vorentscheidungen wiederholt sich das Muster von 2022: erste Euphorie, dann Misstrauen, dann Stillstand, weil niemand sich für das System verantwortlich fühlt."
+        }
+      ],
+      "structured_metadata": {
+        "section_title": "Kurzfazit",
+        "key_takeaways": [
+          {
+            "statement": "Der zentrale Kipppunkt der Akzeptanz ist die Bewertungskompetenz und curriculare Kontrolle, nicht die Technik oder das Datenschutzversprechen.",
+            "confidence": "high",
+            "confidence_scope": "simulation_consensus"
+          },
+          {
+            "statement": "Die Akzeptanz bricht zuerst bei den Honorarkräften an einem wirtschaftlichen Punkt: der Entwertung ihrer Arbeit durch den KI-Assistenten.",
+            "confidence": "high",
+            "confidence_scope": "simulation_consensus"
+          },
+          {
+            "statement": "Die unversöhnliche Kollision zwischen Geschäftsführung und Betriebsrat über die Auswertungsfunktion entwertet die Maßnahme für beide Seiten.",
+            "confidence": "high",
+            "confidence_scope": "simulation_consensus"
+          },
+          {
+            "statement": "Ohne vier Vorentscheidungen (Haftung, Datenzugriff, Materialnutzung, Stundenerhalt) droht eine Wiederholung des Moodle-Desasters von 2022.",
+            "confidence": "high",
+            "confidence_scope": "simulation_consensus"
+          },
+          {
+            "statement": "Externe Prüfinstanzen (IHK, Kostenträger, Betriebe) stellen keine substanzielle Akzeptanzbarriere dar; der Konflikt liegt intern.",
+            "confidence": "medium",
+            "confidence_scope": "simulation_consensus"
+          }
+        ],
+        "data_gaps": [],
+        "thresholds": []
+      },
+      "generation_failed": false
+    }
+  ],
+  "degradation_log": [],
+  "gate_decision_log": [
+    {
+      "section_index": 1,
+      "claim_id": "claim_01",
+      "violation": "no_supporting_evidence",
+      "action": "moved_to_hypotheses",
+      "detail": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert."
+    },
+    {
+      "section_index": 1,
+      "claim_id": "claim_02",
+      "violation": "no_supporting_evidence",
+      "action": "moved_to_hypotheses",
+      "detail": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert."
+    },
+    {
+      "section_index": 1,
+      "claim_id": "claim_03",
+      "violation": "no_supporting_evidence",
+      "action": "moved_to_hypotheses",
+      "detail": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert."
+    },
+    {
+      "section_index": 1,
+      "claim_id": "claim_04",
+      "violation": "no_supporting_evidence",
+      "action": "moved_to_hypotheses",
+      "detail": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert."
+    },
+    {
+      "section_index": 1,
+      "claim_id": "claim_05",
+      "violation": "no_supporting_evidence",
+      "action": "moved_to_hypotheses",
+      "detail": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert."
+    },
+    {
+      "section_index": 1,
+      "claim_id": "claim_06",
+      "violation": "no_supporting_evidence",
+      "action": "moved_to_hypotheses",
+      "detail": "1 Quelle(n) sind thematisch verwandt, belegen die Aussage aber nicht (kein SUPPORTED-Urteil) — deshalb als Hypothese geführt."
+    },
+    {
+      "section_index": 1,
+      "claim_id": "claim_07",
+      "violation": "no_supporting_evidence",
+      "action": "moved_to_hypotheses",
+      "detail": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert."
+    },
+    {
+      "section_index": 1,
+      "claim_id": "claim_08",
+      "violation": "no_supporting_evidence",
+      "action": "moved_to_hypotheses",
+      "detail": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert."
+    },
+    {
+      "section_index": 1,
+      "claim_id": "claim_09",
+      "violation": "no_supporting_evidence",
+      "action": "moved_to_hypotheses",
+      "detail": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert."
+    },
+    {
+      "section_index": 1,
+      "claim_id": "claim_10",
+      "violation": "no_supporting_evidence",
+      "action": "moved_to_hypotheses",
+      "detail": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert."
+    },
+    {
+      "section_index": 1,
+      "claim_id": "claim_11",
+      "violation": "no_supporting_evidence",
+      "action": "moved_to_hypotheses",
+      "detail": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert."
+    },
+    {
+      "section_index": 1,
+      "claim_id": "claim_12",
+      "violation": "no_supporting_evidence",
+      "action": "moved_to_hypotheses",
+      "detail": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert."
+    },
+    {
+      "section_index": 1,
+      "claim_id": "claim_13",
+      "violation": "no_supporting_evidence",
+      "action": "moved_to_hypotheses",
+      "detail": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert."
+    },
+    {
+      "section_index": 1,
+      "claim_id": "claim_14",
+      "violation": "no_supporting_evidence",
+      "action": "moved_to_hypotheses",
+      "detail": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert."
+    },
+    {
+      "section_index": 1,
+      "claim_id": "claim_15",
+      "violation": "no_supporting_evidence",
+      "action": "moved_to_hypotheses",
+      "detail": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert."
+    },
+    {
+      "section_index": 1,
+      "claim_id": "claim_16",
+      "violation": "no_supporting_evidence",
+      "action": "moved_to_hypotheses",
+      "detail": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert."
+    },
+    {
+      "section_index": 1,
+      "claim_id": "claim_17",
+      "violation": "no_supporting_evidence",
+      "action": "moved_to_hypotheses",
+      "detail": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert."
+    },
+    {
+      "section_index": 1,
+      "claim_id": "claim_18",
+      "violation": "reviewer_floor_insufficient_evidence",
+      "action": "moved_to_hypotheses",
+      "detail": "Reviewer-Floor: nur 1 von 2 geforderten stützenden Evidence-Items — als Hypothese geführt. 1 weitere Quelle(n) sind thematisch verwandt, belegen die Aussage aber nicht."
+    },
+    {
+      "section_index": 1,
+      "claim_id": "claim_19",
+      "violation": "no_supporting_evidence",
+      "action": "moved_to_hypotheses",
+      "detail": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert."
+    },
+    {
+      "section_index": 1,
+      "claim_id": "claim_20",
+      "violation": "no_supporting_evidence",
+      "action": "moved_to_hypotheses",
+      "detail": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert."
+    },
+    {
+      "section_index": 1,
+      "claim_id": "claim_21",
+      "violation": "no_supporting_evidence",
+      "action": "moved_to_hypotheses",
+      "detail": "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert."
+    }
+  ]
+}
