@@ -55,6 +55,13 @@ run_backend() {
   step "Backend: ruff check"
   (cd backend && uv run ruff check .) || fail "ruff check"
 
+  step "Backend: Komplexitäts-Gate (radon, MAI-17)"
+  # Spiegel des CI-Jobs "Komplexitaets-Gate (radon)" im contract-gates-Workflow.
+  # Blockiert neue Cyclomatic-Complexity-Hotspots (rank D+) lokal, bevor sie
+  # erst auf push:main auffallen (#1213). Bestand steht in radon-allowlist.txt.
+  (cd backend && uv run python scripts/check_complexity.py) \
+    || fail "complexity gate — neue D+-Hotspots; siehe backend/radon-allowlist.txt"
+
   if [ "${GATE_FULL:-0}" = "1" ]; then
     step "Backend: mypy app/ (GATE_FULL=1)"
     (cd backend && uv run mypy app) || fail "mypy"

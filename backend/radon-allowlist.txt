@@ -139,3 +139,21 @@ app/services/report_agent/agent.py::ReportAgent._save_evidence_section
 app/services/report_agent/evidence.py::degrade_sections_for_violations
 app/services/report_agent/text_verification.py::verify_prose
 app/services/sim/monitor.py::monitor_simulation
+
+# Drift zwischen Allowlist (2026-08-04) und HEAD — kanonische Evidence-Identität
+# (#1147) und seed_corpus-Evidence (#1166) haben fuenf weitere D-Hotspots in den
+# Bestand gebracht, deren Allowlist-Nachzug ausgeblieben war. contract-gates
+# lief auf main deshalb seit mindestens acht Laeufen rot (#1213). Eintraege mit
+# cc-Obergrenze, damit weiteres Wachstum anschlaegt; Refactor ist Folgearbeit,
+# kein Teil dieses Slices.
+# Gemessene Werte zum Zeitpunkt der Aufnahme (radon 6.0.1, HEAD ea01acb2):
+#   D cc=25  app/contracts/report_contract.py::EvidenceMapModel
+#   D cc=24  app/contracts/report_contract.py::EvidenceMapModel.validate_evidence_cross_references
+#   D cc=30  app/services/evidence_migrations.py::demote_unanchored_seed_corpus_records
+#   D cc=25  app/services/evidence_migrations.py::migrate_evidence_map_v2_to_v3
+#   D cc=21  app/services/report_agent/storage.py::_upgrade_report_v3_payload
+app/contracts/report_contract.py::EvidenceMapModel  # cc<=25
+app/contracts/report_contract.py::EvidenceMapModel.validate_evidence_cross_references  # cc<=24
+app/services/evidence_migrations.py::demote_unanchored_seed_corpus_records  # cc<=30
+app/services/evidence_migrations.py::migrate_evidence_map_v2_to_v3  # cc<=25
+app/services/report_agent/storage.py::_upgrade_report_v3_payload  # cc<=21
