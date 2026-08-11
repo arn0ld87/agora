@@ -1,5 +1,0 @@
-### Fixed (Schaltflächen der Embedding-Konfiguration waren unsichtbar oder unformatiert — 2026-08-11)
-
-- **Die Schaltflächen im Seitenkopf wurden nie angezeigt.** `PageHeader` rendert ausschließlich den benannten Slot `right`; die Ansicht übergab ihre Schaltflächen jedoch im Standard-Slot, dessen Inhalt die Komponente verwirft. Betroffen waren „Neue Konfiguration" und das ältere „Ollama-Modell herunterladen" — letzteres war seit seiner Einführung unsichtbar, ohne dass es auffiel.
-- **Die übrigen Schaltflächen trugen Klassennamen, die es nicht gibt.** Die Ansicht verwendete `btn-primary` und `btn-secondary`; das Gestaltungssystem definiert `btn--primary` und `btn--secondary` mit doppeltem Bindestrich. Alle zwanzig Vorkommen waren betroffen, weshalb etwa „Uebernehmen" als unformatierter Text erschien.
-- **Der Test deckte das nicht ab, weil der Prüfaufbau großzügiger war als das Original.** Der Platzhalter für `PageHeader` rendert im Test jetzt nur den Slot `right` — übergibt eine Ansicht ihre Schaltflächen künftig am falschen Slot, wird der Test rot statt grün.

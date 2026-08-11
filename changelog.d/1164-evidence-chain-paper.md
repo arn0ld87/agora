@@ -1,4 +1,0 @@
-### Added (Evidence-Chain-Audit und Paper — 2026-08-09)
-
-- **Der Audit der Evidenzkette liegt als versionierte Quelle im Repository:** `docs/paper/agora-evidence-chain-audit.md` dokumentiert den geprüften Ist-Zustand von Ingest, Graph-Aufbau, Simulation, Evidence-Gating und Report — mit Belegstellen im Code statt aus README-Behauptungen abgeleitet. Die begleitenden Rechercheprotokolle unter `docs/paper/research-notes/` halten je Teilbereich fest, welche Aussage an welcher Codestelle verifiziert wurde.
-- **LaTeX-Quellen des Papers zur Evidenzkette:** Kapitel, Literaturverzeichnis, Abbildung und `latexmkrc` (LuaLaTeX + Biber) sind versioniert, das gebaute PDF liegt daneben. LaTeX-Zwischendateien und lokale Render-Ausgaben unter `output/` bleiben per `.gitignore` außen vor — sie enthalten absolute Maschinenpfade und ändern sich bei jedem Build.

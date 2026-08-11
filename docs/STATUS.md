@@ -2,7 +2,7 @@
 
 **Stand:** 11.08.2026  
 **Geprüfte Main-Baseline:** `b72a443b`  
-**Produktversion:** `0.9.4` Stability Beta
+**Produktversion:** `0.9.5` Stability Beta
 
 Diese Datei beschreibt ausschließlich den verifizierten Istzustand. Strategische Release-Ziele stehen in [`ROADMAP.md`](../ROADMAP.md), konkrete Arbeitspakete in [GitHub Issues](https://github.com/arn0ld87/agora/issues), ausgelieferte Änderungen in [`CHANGELOG.md`](../CHANGELOG.md).
 
@@ -15,20 +15,20 @@ Die Produktreife wird ab diesem Dokumentationsumbau über [`VERSION`](../VERSION
 <!-- BEGIN_AUTOGEN_VERSIONS -->
 | Komponente | Pfad | Version |
 |---|---|---|
-| Backend | `backend/pyproject.toml` | 0.9.4 |
-| Frontend | `frontend/package.json` | 0.9.4 |
-| Root | `package.json` | 0.9.4 |
+| Backend | `backend/pyproject.toml` | 0.9.5 |
+| Frontend | `frontend/package.json` | 0.9.5 |
+| Root | `package.json` | 0.9.5 |
 <!-- END_AUTOGEN_VERSIONS -->
 
-`VERSION` ist die Produkt-SSoT. Alle Komponentenmanifeste (`backend/pyproject.toml`, `package.json`, `frontend/package.json`) und der README-Badge sind auf `VERSION=0.9.4` synchronisiert; ein Drift-Check läuft in CI (`version-drift.yml`) und lokal (`pre-push-gate.sh schemas`). Der Version-Cut-Ablauf ist in [`docs/runbooks/release-versioning.md`](runbooks/release-versioning.md) beschrieben.
+`VERSION` ist die Produkt-SSoT. Alle Komponentenmanifeste (`backend/pyproject.toml`, `package.json`, `frontend/package.json`) und der README-Badge sind auf `VERSION=0.9.5` synchronisiert; ein Drift-Check läuft in CI (`version-drift.yml`) und lokal (`pre-push-gate.sh schemas`). Der Version-Cut-Ablauf ist in [`docs/runbooks/release-versioning.md`](runbooks/release-versioning.md) beschrieben.
 
 ## Tests
 
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 4954 | `cd backend && uv run pytest --collect-only -q` |
-| Frontend Test-Files | 188 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
+| Backend Tests (collected) | 5041 | `cd backend && uv run pytest --collect-only -q` |
+| Frontend Test-Files | 192 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
 Hinweise:
@@ -54,7 +54,7 @@ Agora besitzt eine vollständige fachliche Grundpipeline:
 - fortsetzbare Embedding-Migration für Entity- und Fact-Vektoren
 - Kosten-, Token- und Zeitbudgets für Runs ([#764](https://github.com/arn0ld87/agora/issues/764), ADR-0012): Preflight-Schätzung mit ehrlichen Bereichen, weiche/harte Limits pro Run, Live-Verbrauchsmonitor, Abschlussanalyse nach Stage/Provider/Modell, Budgetabbruch über `termination_reason` von Fehler/Nutzerabbruch unterscheidbar, Verbrauch im Report-Export. Die harte Durchsetzung im Report-Pfad ist seit [#978](https://github.com/arn0ld87/agora/issues/978) (31.07.2026) korrekt — ein Budgetabbruch endet auf `stopped`, nicht mehr auf `completed`
 
-Nach dem `0.9.4`-Schnitt (09.08.2026) ist zusätzlich in `main`:
+Nach dem `0.9.4`-Schnitt (09.08.2026) bis zum `0.9.5`-Schnitt (11.08.2026) kam hinzu:
 
 - **Dokumentbelege mit auflösbarem Anker** ([#1154](https://github.com/arn0ld87/agora/issues/1154)): ein Graph-Fakt mit Dokument-/Chunk-Herkunft aus der Aufnahme wird als `seed_corpus`-Evidence mit Anker auf die konkrete Dokumentstelle geführt. Erst dadurch kann eine zusätzlich agentengestützte Aussage überhaupt `medium` erreichen. Fakten ohne belegte Herkunft bleiben Graph-Relation; Bestandsberichte verlieren beim Laden unbelegte Dokumentbezüge und werden entsprechend abgestuft
 - **Der Report weist seinen Simulationsstand aus** ([#1192](https://github.com/arn0ld87/agora/issues/1192)): abgeschlossene Runden, geplante Gesamtzahl und ob die Simulation beim Start der Generierung noch lief. Erfasst wird beim Start, nicht beim Abschluss. Nicht ermittelbar → „unbekannt", keine erfundene Null
@@ -64,7 +64,7 @@ Nach dem `0.9.4`-Schnitt (09.08.2026) ist zusätzlich in `main`:
 - **Kein Run bleibt nach gescheitertem Start auf `pending`** ([#1176](https://github.com/arn0ld87/agora/issues/1176)); Persona-Capping dedupliziert und verteilt über Stakeholdergruppen ([#1177](https://github.com/arn0ld87/agora/issues/1177)); das finale Speichern eines Persona-Profils verliert keine Felder mehr ([#1186](https://github.com/arn0ld87/agora/issues/1186))
 - **Zentraler `max_tokens`-Boden von 32k** für generative Calls ([#1168](https://github.com/arn0ld87/agora/issues/1168), `LLM_MAX_TOKENS_FLOOR`)
 
-Der Stand ist `0.9.4` Stability Beta; die innerhalb der `0.9.x`-Linie noch offenen Freigabekriterien stehen unter `0.9.0` in [`ROADMAP.md`](../ROADMAP.md). Die E2E-Kernpipeline wird seit 31.07.2026 als verpflichtender Pull-Request-Check erzwungen. Die Migration der v3-Inhaltskomponenten (`Step2EnvSetup`/`Step3Simulation`/`Step4Report`) in v4-Wrapper ist abgeschlossen ([#922](https://github.com/arn0ld87/agora/issues/922), PR #938); der credential-basierte Runtime-Provider-Override (`useRuntimeLlmOptions`) ist entfernt. Der `/home`-Redirect auf `/dashboard` ist umgesetzt ([#915](https://github.com/arn0ld87/agora/issues/915), ADR-0010); `Home.vue` bleibt bis `1.0.0` physisch erhalten.
+Der Stand ist `0.9.5` Stability Beta; die innerhalb der `0.9.x`-Linie noch offenen Freigabekriterien stehen unter `0.9.0` in [`ROADMAP.md`](../ROADMAP.md). Die E2E-Kernpipeline wird seit 31.07.2026 als verpflichtender Pull-Request-Check erzwungen. Die Migration der v3-Inhaltskomponenten (`Step2EnvSetup`/`Step3Simulation`/`Step4Report`) in v4-Wrapper ist abgeschlossen ([#922](https://github.com/arn0ld87/agora/issues/922), PR #938); der credential-basierte Runtime-Provider-Override (`useRuntimeLlmOptions`) ist entfernt. Der `/home`-Redirect auf `/dashboard` ist umgesetzt ([#915](https://github.com/arn0ld87/agora/issues/915), ADR-0010); `Home.vue` bleibt bis `1.0.0` physisch erhalten.
 
 ## E2E-Smokes
 

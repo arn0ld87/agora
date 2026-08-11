@@ -1,7 +1,7 @@
 {
   "name": "agora",
   "private": true,
-  "version": "0.9.4",
+  "version": "0.9.5",
   "description": "Agora — hybrid multi-agent resonance simulator (Neo4j + Ollama)",
   "author": "Alexander Schneider <https://alexle135.de>",
   "homepage": "https://alexle135.de",
