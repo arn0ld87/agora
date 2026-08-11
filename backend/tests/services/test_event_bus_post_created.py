@@ -33,7 +33,8 @@ def _make_event(simulation_id: str = "sim-test") -> PostCreatedEvent:
         parent_post_id=None,
         platform=Platform.REDDIT,
         persona_id="persona-42",
-        voice_register=VoiceRegister.CASUAL,
+        persona_name="Mara Lindner",
+        voice_register=VoiceRegister.NEUTRAL_DE,
         is_simulated=True,
         body="Hallo Welt.",
         timestamp=datetime(2026, 5, 15, 10, 0, tzinfo=timezone.utc),
@@ -100,7 +101,8 @@ class TestInMemoryEventBusEmitPostCreated:
                 post_id="p1",
                 platform="mastodon",  # type: ignore[arg-type]
                 persona_id="pid",
-                voice_register="casual",  # type: ignore[arg-type]
+                persona_name="Test Persona",
+                voice_register="neutral-de",  # type: ignore[arg-type]
                 body="x",
                 timestamp=datetime.now(tz=timezone.utc),
             )

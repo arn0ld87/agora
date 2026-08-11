@@ -11,6 +11,7 @@ import { onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { useEventStream } from '@/composables/useEventStream'
 import { useSimFeed } from '@/composables/useSimFeed'
+import { getSimulationFeedSnapshot } from '@/api/simulation'
 import FeedColumn from '@/components/v4/sim-feed/FeedColumn.vue'
 import RedditThread from '@/components/v4/sim-feed/RedditThread.vue'
 import TwitterPost from '@/components/v4/sim-feed/TwitterPost.vue'
@@ -27,6 +28,21 @@ const stream = useEventStream(simulationId, {
 })
 
 onMounted(async () => {
+  // #1009 — Snapshot beim Mount: den bisherigen Sim-Bestand aus der SQLite-DB
+  // laden, bevor der SSE-Stream startet. So ist der Feed sofort befüllt und
+  // dedup (useSimFeed.seen per post_id) verhindert, dass Live-Events die
+  // bereits geladenen Posts doppelt einfügen. Fehler beim Fetch brechen den
+  // Stream-Start nicht — der Live-Pfad bleibt allein nutzbar.
+  try {
+    const [reddit, twitter] = await Promise.all([
+      getSimulationFeedSnapshot(simulationId, 'reddit').catch(() => []),
+      getSimulationFeedSnapshot(simulationId, 'twitter').catch(() => []),
+    ])
+    feed.ingestMany([...reddit, ...twitter])
+  } catch {
+    // Beide Catches oben schlucken schon den Einzelfehler; dieser Block ist
+    // nur die Defensive für den Fall, dass ingestMany selbst wirft.
+  }
   await stream.start()
 })
 

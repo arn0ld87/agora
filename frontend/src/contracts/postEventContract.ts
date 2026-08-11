@@ -14,7 +14,12 @@ import { z } from 'zod'
 export const PlatformSchema = z.enum(['reddit', 'twitter'])
 export type Platform = z.infer<typeof PlatformSchema>
 
-export const VoiceRegisterSchema = z.enum(['formal', 'casual', 'jugendsprache'])
+export const VoiceRegisterSchema = z.enum([
+  'formal-de',
+  'neutral-de',
+  'technical-de',
+  'skeptisch-de',
+])
 export type VoiceRegister = z.infer<typeof VoiceRegisterSchema>
 
 export const PostCreatedEventSchema = z
@@ -25,6 +30,8 @@ export const PostCreatedEventSchema = z
     parent_post_id: z.string().nullable(),
     platform: PlatformSchema,
     persona_id: z.string().min(1),
+    // #1216 5a — Anzeigename der Persona (keine erfundene ID-Muster mehr).
+    persona_name: z.string().min(1),
     voice_register: VoiceRegisterSchema,
     is_simulated: z.boolean().default(true),
     body: z.string().min(1),

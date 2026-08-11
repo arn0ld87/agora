@@ -10,11 +10,12 @@
       "type": "string"
     },
     "VoiceRegister": {
-      "description": "Voice-Register aus oasis_profile_generator (Sub-Slice 10).\n\nFrontend rendert Badge in PersonaAvatar.",
+      "description": "Voice-Register aus oasis_profile_generator (Sub-Slice 10).\n\nVokabular ist der Profil-Generator-SSoT (``formal-de``/``neutral-de``/\n``technical-de``/``skeptisch-de``). Das alte Vokabular\n``formal``/``casual``/``jugendsprache`` war nie an den Generator\nangebunden und ist entfernt \u2014 der Runner-Fallback auf ``casual``\nverschleierte bisher jede Persona als \u201ecasual`` (#1009/#1216).\nFrontend rendert Badge in PersonaAvatar.",
       "enum": [
-        "formal",
-        "casual",
-        "jugendsprache"
+        "formal-de",
+        "neutral-de",
+        "technical-de",
+        "skeptisch-de"
       ],
       "title": "VoiceRegister",
       "type": "string"
@@ -58,6 +59,12 @@
       "title": "Persona Id",
       "type": "string"
     },
+    "persona_name": {
+      "description": "Anzeigename der Persona (z. B. 'Mara Lindner'). ``persona_id`` bleibt der stabile Identifikator (agent_id); dieses Feld steuert die UI-Anzeige und ersetzt die reine Agent-ID (#1216 5a).",
+      "minLength": 1,
+      "title": "Persona Name",
+      "type": "string"
+    },
     "platform": {
       "$ref": "#/$defs/Platform"
     },
@@ -68,7 +75,7 @@
     },
     "score": {
       "default": 0,
-      "description": "Voting-Score (Reddit-Pattern). Twitter-Posts haben kein Voting \u2192 0.",
+      "description": "Voting-Score (Reddit-Pattern), akkumuliert aus der Simulations-DB (num_likes - num_dislikes). Twitter-Posts haben kein Voting \u2192 0. Live-Events starten bei 0 (echter Wert zum Erzeugungszeitpunkt), der Snapshot liefert den akkumulierten Stand (#1216 5b).",
       "title": "Score",
       "type": "integer"
     },
@@ -82,7 +89,7 @@
         }
       ],
       "default": null,
-      "description": "Sentiment-Score -1.0 (negativ) bis 1.0 (positiv). None wenn Sentiment-Service nicht aktiv.",
+      "description": "Sentiment-Architektur-Slot. Aktuell NICHT unterst\u00fctzt \u2014 es gibt keinen aktiven Sentiment-Service, das Feld ist immer None. Wird nicht als Messwert gerendert (#1216 5b).",
       "title": "Sentiment"
     },
     "sim_time": {
@@ -118,6 +125,7 @@
     "post_id",
     "platform",
     "persona_id",
+    "persona_name",
     "voice_register",
     "body",
     "timestamp"

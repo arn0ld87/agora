@@ -21,8 +21,9 @@ function mkPost(overrides: Partial<PostCreatedEvent> = {}): PostCreatedEvent {
     post_id: 'p1',
     parent_post_id: null,
     platform: 'reddit',
-    persona_id: 'alice',
-    voice_register: 'casual',
+persona_id: 'alice',
+    persona_name: 'Test Persona',
+    voice_register: 'neutral-de',
     is_simulated: true,
     body: 'Test-Post',
     timestamp: '2026-05-15T12:30:00Z',
@@ -49,12 +50,12 @@ describe('RedditPost', () => {
     expect(wrapper.text()).toContain('Hallo Reddit!')
   })
 
-  it('rendert Persona-ID als u/<id>', () => {
+  it('rendert Persona-Name als u/<name>', () => {
     const wrapper = mount(RedditPost, {
-      props: { post: mkPost({ persona_id: 'bob' }), depth: 0 },
+      props: { post: mkPost({ persona_name: 'Bob Tester' }), depth: 0 },
       global: globalConfig,
     })
-    expect(wrapper.text()).toContain('u/bob')
+    expect(wrapper.text()).toContain('u/Bob Tester')
   })
 
   it('hat role=article', () => {

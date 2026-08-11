@@ -50,10 +50,14 @@ const scoreDisplay = computed(() => {
         <path d="M6 10L1 4H11L6 10Z" fill="currentColor" />
       </svg>
     </div>
-    <PersonaAvatar :persona-id="post.persona_id" :voice-register="post.voice_register" />
+    <PersonaAvatar
+      :persona-id="post.persona_id"
+      :persona-name="post.persona_name"
+      :voice-register="post.voice_register"
+    />
     <div class="rp-body">
       <header class="rp-header">
-        <span class="rp-user">u/{{ post.persona_id }}</span>
+        <span class="rp-user">u/{{ post.persona_name }}</span>
         <SimBadge v-if="post.is_simulated" />
         <time class="rp-time" :datetime="post.timestamp">{{ post.timestamp.slice(11, 16) }}</time>
       </header>

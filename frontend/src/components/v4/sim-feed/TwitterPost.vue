@@ -8,10 +8,14 @@ defineProps<{ post: PostCreatedEvent }>()
 
 <template>
   <article class="tw-root" role="article">
-    <PersonaAvatar :persona-id="post.persona_id" :voice-register="post.voice_register" />
+    <PersonaAvatar
+      :persona-id="post.persona_id"
+      :persona-name="post.persona_name"
+      :voice-register="post.voice_register"
+    />
     <div class="tw-body">
       <header class="tw-header">
-        <span class="tw-handle">@{{ post.persona_id }}</span>
+        <span class="tw-handle">@{{ post.persona_name }}</span>
         <SimBadge v-if="post.is_simulated" />
         <time class="tw-time" :datetime="post.timestamp">{{ post.timestamp.slice(11, 16) }}</time>
       </header>

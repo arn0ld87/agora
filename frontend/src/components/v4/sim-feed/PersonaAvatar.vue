@@ -4,20 +4,26 @@ import type { VoiceRegister } from '@/contracts/postEventContract'
 
 const props = defineProps<{
   personaId: string
+  personaName: string
   voiceRegister: VoiceRegister
 }>()
 
-const initials = computed(() => props.personaId.slice(0, 2).toUpperCase())
+// Initialen aus dem Anzeigenamen, nicht aus der technischen persona_id —
+// #1216 5a: die Nutzerin sieht einen Namen, keine ID-Muster.
+const initials = computed(() =>
+  (props.personaName || props.personaId).slice(0, 2).toUpperCase(),
+)
 
 const registerColor: Record<VoiceRegister, string> = {
-  formal: 'var(--accent-blue, #2563eb)',
-  casual: 'var(--accent-green, #10b981)',
-  jugendsprache: 'var(--accent-purple, #a855f7)',
+  'formal-de': 'var(--accent-blue, #2563eb)',
+  'neutral-de': 'var(--accent-green, #10b981)',
+  'technical-de': 'var(--accent-amber, #d97706)',
+  'skeptisch-de': 'var(--accent-purple, #a855f7)',
 }
 </script>
 
 <template>
-  <div class="pa-root" :title="`${personaId} · ${voiceRegister}`">
+  <div class="pa-root" :title="`${personaName} · ${voiceRegister}`">
     <div class="pa-circle" :style="{ '--ring': registerColor[voiceRegister] }">
       {{ initials }}
     </div>

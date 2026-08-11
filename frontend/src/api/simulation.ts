@@ -1,7 +1,12 @@
 import service from './index'
+import { z } from 'zod'
 import type { LlmRuntimePayload } from './llmRuntime'
 import type { PersonaQuotaPlan } from '../contracts/personaQuotaContract'
 import type { AiModelRefPayload } from './report'
+import {
+  PostCreatedEventSchema,
+  type PostCreatedEvent,
+} from '../contracts/postEventContract'
 
 // --- Local types --------------------------------------------------------
 
@@ -299,6 +304,42 @@ export const getSimulationPosts = (
   return service.get(`/api/simulation/${simulationId}/posts`, {
     params: { platform, limit, offset }
   })
+}
+
+/**
+ * Get feed snapshot — initialer Bestand beim Mount der Feed-View (#1009).
+ *
+ * Joined die SQLite-Post-/-Comment-/-User-Tabellen gegen die Profil-Datei
+ * und liefert eine chronologisch sortierte Liste validierter
+ * PostCreatedEvent-Objekte. `persona_name` und `voice_register` werden aus
+ * dem Profil aufgelöst (keine erfundenen Werte).
+ *
+ * @param simulationId
+ * @param platform - 'reddit' | 'twitter'
+ */
+export const getSimulationFeedSnapshot = async (
+  simulationId: string,
+  platform: SimulationPlatform
+): Promise<PostCreatedEvent[]> => {
+  // Der Response-Interceptor in api/index.ts entpackt die Axios-Hülle und
+  // gibt den Envelope-Body ({ success, data }) zurück; daher casten wir auf
+  // den Body-Typ, nicht auf AxiosResponse.
+  const envelope = (await service.get(
+    `/api/simulation/${simulationId}/feed-snapshot`,
+    { params: { platform } }
+  )) as unknown as {
+    success: boolean
+    data: { posts: PostCreatedEvent[] }
+  }
+  const posts = envelope?.data?.posts ?? []
+  // Gegen den Layer-0-Vertrag validieren (persona_name + voice_register
+  // Pflicht); invalide Einträge fallen still raus, statt den ganzen Feed
+  // beim Mount zu brechen — eine teilweise befüllte Spalte ist besser als
+  // eine leere.
+  return posts
+    .map((p) => PostCreatedEventSchema.safeParse(p))
+    .filter((r): r is z.ZodSafeParseSuccess<PostCreatedEvent> => r.success)
+    .map((r) => r.data)
 }
 
 /**

@@ -2,14 +2,17 @@
 History, standalone profile generation, and database-query routes split from the main module.
 """
 
+import csv
 import json
 import os
 import sqlite3
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, Optional
 
 from flask import current_app, request
 
 from . import simulation_bp
+from ..contracts.post_event_contract import Platform, PostCreatedEvent
 from ..utils.endpoints import LOCAL_NO_AUTH_API_KEY, is_local_endpoint
 from ..models.project import ProjectManager
 from ..services.ai_route_resolver import AiRouteResolutionError
@@ -338,3 +341,235 @@ def get_simulation_comments(simulation_id: str):
         conn.close()
 
     return json_success({"count": len(comments), "comments": comments})
+
+
+# ---------------------------------------------------------------------------
+# Feed-Snapshot (#1009) — /posts-Join (Option 1) gegen PostCreatedEvent.
+# ---------------------------------------------------------------------------
+
+# Twitter-CSV persistiert kein voice_register (analog #1186, aber CSV-Pfad);
+# neutral-de ist der designierte Generator-Default, keine Erfindung.
+_VOICE_REGISTER_FALLBACK = "neutral-de"
+
+
+def _load_profiles_by_user_id(simulation_id: str, platform: str) -> Dict[int, Dict[str, Any]]:
+    """Lädt die Profil-Datei einer Plattform und keyed sie nach ``user_id``.
+
+    Reddit legt JSON ab, Twitter CSV. Stimmt ``platform`` mit keinen Profilen
+    überein, wird ein leeres Mapping geliefert — der Caller fällt auf
+    ``user``-Tabellen-Namen bzw. den voice_register-Default zurück.
+    """
+    if platform == "reddit":
+        path = ArtifactLocator.simulation_file(simulation_id, "reddit_profiles.json")
+        if not os.path.exists(path):
+            return {}
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                data = json.load(handle)
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("Unlesbare reddit_profiles.json für %s: %s", simulation_id, exc)
+            return {}
+        return {int(entry["user_id"]): entry for entry in data if "user_id" in entry}
+
+    if platform == "twitter":
+        path = ArtifactLocator.simulation_file(simulation_id, "twitter_profiles.csv")
+        if not os.path.exists(path):
+            return {}
+        profiles: Dict[int, Dict[str, Any]] = {}
+        try:
+            with open(path, "r", encoding="utf-8", newline="") as handle:
+                for row in csv.DictReader(handle):
+                    if "user_id" in row and row["user_id"] != "":
+                        profiles[int(row["user_id"])] = row
+        except OSError as exc:
+            logger.warning("Unlesbare twitter_profiles.csv für %s: %s", simulation_id, exc)
+            return {}
+        return profiles
+
+    return {}
+
+
+def _parse_created_at_tz(raw: Any) -> Optional[datetime]:
+    """Macht den naiven SQLite-DATETIME-Wert tz-aware (UTC).
+
+    OASIS schreibt ``created_at`` als naive Zeichenkette (``CURRENT_TIMESTAMP``
+    bzw. Sim-Zeit). Wir interpretieren sie als UTC, damit das Frontend keinen
+    Local-Time-Drift bekommt, sobald Container und Browser unterschiedliche
+    Zeitzonen haben.
+    """
+    if raw is None:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(raw))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def _build_snapshot_event(
+    *,
+    simulation_id: str,
+    platform: str,
+    post_id_prefixed: str,
+    parent_post_id: Optional[str],
+    user_id: Optional[int],
+    agent_id: Optional[int],
+    user_name: Optional[str],
+    body: str,
+    created_at: Any,
+    num_likes: int,
+    num_dislikes: int,
+    profiles: Dict[int, Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    """Baut ein validiertes PostCreatedEvent-Dict oder None bei unbrauchbaren Daten."""
+    timestamp = _parse_created_at_tz(created_at)
+    if timestamp is None or not body:
+        return None
+
+    profile = profiles.get(int(user_id)) if user_id is not None else None
+    persona_name = (
+        (profile.get("name") if profile else None)
+        or user_name
+        or (f"Agent {user_id}" if user_id is not None else "Unbekannt")
+    )
+    voice_register = (
+        (profile.get("voice_register") if profile else None)
+        or _VOICE_REGISTER_FALLBACK
+    )
+    persona_id = str(agent_id) if agent_id is not None else str(user_id)
+    # Twitter hat kein Up/Down-Voting → score 0 (contract-semantik); Reddit
+    # liefert den akkumulierten Voting-Stand.
+    score = (num_likes - num_dislikes) if platform == "reddit" else 0
+
+    event = PostCreatedEvent(
+        simulation_id=simulation_id,
+        post_id=post_id_prefixed,
+        parent_post_id=parent_post_id,
+        platform=Platform(platform),
+        persona_id=persona_id,
+        persona_name=persona_name,
+        voice_register=voice_register,  # type: ignore[arg-type]
+        is_simulated=True,
+        body=body,
+        timestamp=timestamp,
+        score=score,
+    )
+    return event.model_dump(mode="json")
+
+
+def _build_feed_snapshot(
+    simulation_id: str,
+    platform: str,
+    limit: int,
+) -> list[Dict[str, Any]]:
+    """Joined SQLite post/comment + user + Profil-Datei → PostCreatedEvent-Liste."""
+    db_path = ArtifactLocator.simulation_file(simulation_id, f"{platform}_simulation.db")
+    if not os.path.exists(db_path):
+        return []
+
+    profiles = _load_profiles_by_user_id(simulation_id, platform)
+    events: list[Dict[str, Any]] = []
+    conn = _connect_sqlite_readonly(db_path)
+    try:
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                "SELECT p.post_id, p.user_id, p.content, p.created_at, "
+                "p.num_likes, p.num_dislikes, u.agent_id, u.name "
+                "FROM post p LEFT JOIN user u ON p.user_id = u.user_id "
+                "ORDER BY p.created_at ASC",
+            )
+            for row in cur.fetchall():
+                ev = _build_snapshot_event(
+                    simulation_id=simulation_id,
+                    platform=platform,
+                    post_id_prefixed=f"{platform}:{row['post_id']}",
+                    parent_post_id=None,
+                    user_id=row["user_id"],
+                    agent_id=row["agent_id"],
+                    user_name=row["name"],
+                    body=row["content"] or "",
+                    created_at=row["created_at"],
+                    num_likes=row["num_likes"] or 0,
+                    num_dislikes=row["num_dislikes"] or 0,
+                    profiles=profiles,
+                )
+                if ev is not None:
+                    events.append(ev)
+        except sqlite3.OperationalError:
+            return []
+
+        # Reddit ist die Kommentar-Plattform; Kommentare hängen unter ihrem
+        # Elternpost und füllen den Reply-Tree (#1216 5c).
+        if platform == "reddit":
+            try:
+                cur.execute(
+                    "SELECT c.comment_id, c.post_id, c.user_id, c.content, "
+                    "c.created_at, c.num_likes, c.num_dislikes, u.agent_id, u.name "
+                    "FROM comment c LEFT JOIN user u ON c.user_id = u.user_id "
+                    "ORDER BY c.created_at ASC",
+                )
+                for row in cur.fetchall():
+                    ev = _build_snapshot_event(
+                        simulation_id=simulation_id,
+                        platform=platform,
+                        post_id_prefixed=f"{platform}:comment:{row['comment_id']}",
+                        parent_post_id=f"{platform}:{row['post_id']}",
+                        user_id=row["user_id"],
+                        agent_id=row["agent_id"],
+                        user_name=row["name"],
+                        body=row["content"] or "",
+                        created_at=row["created_at"],
+                        num_likes=row["num_likes"] or 0,
+                        num_dislikes=row["num_dislikes"] or 0,
+                        profiles=profiles,
+                    )
+                    if ev is not None:
+                        events.append(ev)
+            except sqlite3.OperationalError:
+                # Ohne comment-Tabelle liefert der Snapshot nur Posts.
+                pass
+    finally:
+        conn.close()
+
+    # Chronologisch sortieren (ältester zuerst — useSimFeed.ingestMany hängt an)
+    # und auf das Limit kappen.
+    events.sort(key=lambda e: e["timestamp"])
+    return events[:limit]
+
+
+@simulation_bp.route('/<simulation_id>/feed-snapshot', methods=['GET'])
+@handle_api_errors(logger=logger, log_prefix="Failed to get feed snapshot")
+def get_simulation_feed_snapshot(simulation_id: str):
+    """Feed-Snapshot beim Mount — bestehende Posts als PostCreatedEvent-Liste (#1009).
+
+    Joined die SQLite ``post``/``comment``/``user``-Tabellen gegen die
+    Plattform-Profil-Datei und liefert echte ``PostCreatedEvent``-Einträge,
+    die gegen den Layer-0-Vertrag validieren — ohne erfundene Feldwerte.
+    ``post_id`` ist plattformpräfixt (``<platform>:<id>`` bzw.
+    ``<platform>:comment:<id>``), damit es plattformübergreifend eindeutig ist
+    und mit nachfolgenden SSE-Events dedupliziert.
+    """
+    if not validate_simulation_id(simulation_id):
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            message="Invalid simulation_id format",
+        )
+
+    platform = request.args.get('platform', 'reddit')
+    if platform not in ("reddit", "twitter"):
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message=f"platform muss 'reddit' oder 'twitter' sein, erhalten: {platform}",
+        )
+    limit = request.args.get('limit', 200, type=int)
+
+    posts = _build_feed_snapshot(simulation_id, platform, limit)
+    return json_success({
+        "platform": platform,
+        "count": len(posts),
+        "posts": posts,
+    })

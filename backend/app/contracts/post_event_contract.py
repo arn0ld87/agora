@@ -33,12 +33,18 @@ class Platform(str, Enum):
 class VoiceRegister(str, Enum):
     """Voice-Register aus oasis_profile_generator (Sub-Slice 10).
 
+    Vokabular ist der Profil-Generator-SSoT (``formal-de``/``neutral-de``/
+    ``technical-de``/``skeptisch-de``). Das alte Vokabular
+    ``formal``/``casual``/``jugendsprache`` war nie an den Generator
+    angebunden und ist entfernt — der Runner-Fallback auf ``casual``
+    verschleierte bisher jede Persona als „casual`` (#1009/#1216).
     Frontend rendert Badge in PersonaAvatar.
     """
 
-    FORMAL = "formal"
-    CASUAL = "casual"
-    JUGENDSPRACHE = "jugendsprache"
+    FORMAL_DE = "formal-de"
+    NEUTRAL_DE = "neutral-de"
+    TECHNICAL_DE = "technical-de"
+    SKEPTISCH_DE = "skeptisch-de"
 
 
 class PostCreatedEvent(BaseModel):
@@ -52,17 +58,35 @@ class PostCreatedEvent(BaseModel):
     parent_post_id: str | None = None
     platform: Platform
     persona_id: str = Field(..., min_length=1)
+    persona_name: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Anzeigename der Persona (z. B. 'Mara Lindner'). ``persona_id`` "
+            "bleibt der stabile Identifikator (agent_id); dieses Feld steuert "
+            "die UI-Anzeige und ersetzt die reine Agent-ID (#1216 5a)."
+        ),
+    )
     voice_register: VoiceRegister
     is_simulated: bool = True
     body: str = Field(..., min_length=1)
     timestamp: datetime
     sentiment: float | None = Field(
         default=None,
-        description="Sentiment-Score -1.0 (negativ) bis 1.0 (positiv). None wenn Sentiment-Service nicht aktiv.",
+        description=(
+            "Sentiment-Architektur-Slot. Aktuell NICHT unterstützt — es gibt "
+            "keinen aktiven Sentiment-Service, das Feld ist immer None. Wird "
+            "nicht als Messwert gerendert (#1216 5b)."
+        ),
     )
     score: int = Field(
         default=0,
-        description="Voting-Score (Reddit-Pattern). Twitter-Posts haben kein Voting → 0.",
+        description=(
+            "Voting-Score (Reddit-Pattern), akkumuliert aus der Simulations-DB "
+            "(num_likes - num_dislikes). Twitter-Posts haben kein Voting → 0. "
+            "Live-Events starten bei 0 (echter Wert zum Erzeugungszeitpunkt), "
+            "der Snapshot liefert den akkumulierten Stand (#1216 5b)."
+        ),
     )
     sim_time: datetime | None = Field(
         default=None,
@@ -73,6 +97,15 @@ class PostCreatedEvent(BaseModel):
             "None bei Pre-Slice-5-Daten und für Persistenz-Snapshots ohne Feld."
         ),
     )
+
+    @field_validator("persona_name")
+    @classmethod
+    def persona_name_not_blank(cls, v: str) -> str:
+        # min_length=1 lässt reines Whitespace durch; ein Nur-Leerzeichen-Name
+        # wäre im Feed ein Nicht-Wert und damit eine Falschaussage (#1216 5a).
+        if not v.strip():
+            raise ValueError("persona_name darf nicht leer oder nur Whitespace sein")
+        return v
 
     @field_validator("sim_time")
     @classmethod
