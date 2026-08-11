@@ -615,9 +615,10 @@ You can perform one of these actions: {action_names}
 
 ## Interaction and Conflict (IMPORTANT)
 Do not be overly polite, agreeable, or passive. In real-world social media, users frequently express dissent, disagreement, or opposition.
-If any post, comment, or opinion on your timeline contradicts your bio, beliefs, professional role, or political alignment, you should actively:
-- DISLIKE the post or comment, or
-- Write a reply comment with clear dissent, expressing disagreement, criticism, or alternative viewpoints.
+If a post, comment, or opinion on your timeline contradicts your bio, beliefs, professional role, or political alignment, you should actively dissent — but ONLY via an action that is listed in "Available Actions" above. For example:
+- DISLIKE via DISLIKE_POST or DISLIKE_COMMENT, or
+- reply via CREATE_COMMENT with clear disagreement, criticism, or alternative viewpoints.
+If none of these conflict actions are listed in "Available Actions", choose another listed action (e.g. DO_NOTHING) rather than emitting an action that is not available — the parser will drop unavailable actions anyway.
 Ensure your actions and text content realistically reflect conflicts, concerns, or opposition exactly as your persona would in the real world.
 
 ## Response Language
@@ -793,37 +794,94 @@ class ToolAwareActionLoop:
         return LLMAction()
 
     def _create_manual_action(self, action_data: Dict[str, Any], available_actions: List[str]) -> Any:
-        """Convert parsed action JSON to OASIS ManualAction"""
+        """Convert parsed action JSON to an OASIS ManualAction.
+
+        The prompt contract (see ``build_agent_prompt_with_tools``) asks the
+        model to supply target IDs as ``post_id`` / ``comment_id`` / ``agent_id``
+        and free text as ``content``. OASIS' platform functions, however,
+        expect action-specific kwargs (``followee_id`` for FOLLOW,
+        ``mutee_id`` for MUTE, ``quote_content`` for QUOTE_POST — see
+        ``oasis/social_agent/agent_action.py``). This method maps the prompt
+        contract onto those kwarg names and, when ``available_actions`` is
+        non-empty, rejects any action the platform does not offer.
+
+        Any action whose required payload field is missing falls back to
+        ``DO_NOTHING`` — otherwise OASIS would raise a ``TypeError`` at
+        ``env.step`` time, which surfaces as a silent no-op in the simulation
+        log. That mismatch was the root cause of #1215 (B1/B2): pairwise
+        actions were emitted but never executed because their target IDs
+        were discarded here.
+        """
         from oasis import ManualAction, ActionType
 
         action_name = action_data.get("action", "DO_NOTHING").upper()
+        post_id = action_data.get("post_id")
+        comment_id = action_data.get("comment_id")
+        agent_id = action_data.get("agent_id")
         content = action_data.get("content", "")
 
-        # Map action name to ActionType
         action_type_map = {
             "CREATE_POST": ActionType.CREATE_POST,
             "LIKE_POST": ActionType.LIKE_POST,
+            "DISLIKE_POST": ActionType.DISLIKE_POST,
             "REPOST": ActionType.REPOST,
-            "FOLLOW": ActionType.FOLLOW,
-            "DO_NOTHING": ActionType.DO_NOTHING,
             "QUOTE_POST": ActionType.QUOTE_POST,
-            "COMMENT": ActionType.CREATE_POST,  # Reddit uses CREATE_POST for comments
+            "FOLLOW": ActionType.FOLLOW,
+            "MUTE": ActionType.MUTE,
+            "CREATE_COMMENT": ActionType.CREATE_COMMENT,
+            "LIKE_COMMENT": ActionType.LIKE_COMMENT,
+            "DISLIKE_COMMENT": ActionType.DISLIKE_COMMENT,
+            "DO_NOTHING": ActionType.DO_NOTHING,
         }
 
         action_type = action_type_map.get(action_name, ActionType.DO_NOTHING)
 
-        # For actions that need content
-        if action_type in (ActionType.CREATE_POST, ActionType.QUOTE_POST) and content:
+        def _noop() -> ManualAction:
+            return ManualAction(action_type=ActionType.DO_NOTHING, action_args={})
+
+        # Reject actions the platform does not offer — the prompt lists them
+        # as "Available Actions", and emitting a non-listed action would no-op
+        # at the OASIS level anyway (e.g. DISLIKE_* on Twitter).
+        if available_actions and action_name not in available_actions:
+            return _noop()
+
+        if action_type == ActionType.CREATE_POST:
+            if not content:
+                return _noop()
+            return ManualAction(
+                action_type=action_type, action_args={"content": content}
+            )
+        if action_type == ActionType.QUOTE_POST:
+            if post_id is None:
+                return _noop()
             return ManualAction(
                 action_type=action_type,
-                action_args={"content": content}
+                action_args={"post_id": post_id, "quote_content": content},
             )
-        elif action_type == ActionType.LIKE_POST:
-            return ManualAction(action_type=action_type, action_args={})
-        elif action_type == ActionType.REPOST:
-            return ManualAction(action_type=action_type, action_args={"content": content or ""})
-        else:
-            return ManualAction(action_type=ActionType.DO_NOTHING, action_args={})
+        if action_type == ActionType.CREATE_COMMENT:
+            if post_id is None or not content:
+                return _noop()
+            return ManualAction(
+                action_type=action_type,
+                action_args={"post_id": post_id, "content": content},
+            )
+        if action_type in (ActionType.LIKE_POST, ActionType.DISLIKE_POST, ActionType.REPOST):
+            if post_id is None:
+                return _noop()
+            return ManualAction(action_type=action_type, action_args={"post_id": post_id})
+        if action_type in (ActionType.LIKE_COMMENT, ActionType.DISLIKE_COMMENT):
+            if comment_id is None:
+                return _noop()
+            return ManualAction(action_type=action_type, action_args={"comment_id": comment_id})
+        if action_type == ActionType.FOLLOW:
+            if agent_id is None:
+                return _noop()
+            return ManualAction(action_type=action_type, action_args={"followee_id": agent_id})
+        if action_type == ActionType.MUTE:
+            if agent_id is None:
+                return _noop()
+            return ManualAction(action_type=action_type, action_args={"mutee_id": agent_id})
+        return _noop()
 
 
 # ── Convenience: wrap for sync use ──
