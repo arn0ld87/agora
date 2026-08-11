@@ -15,8 +15,29 @@ from typing import Any, Dict, List, Literal, TypedDict
 
 from ..utils.logger import get_logger
 from ..utils.retry import llm_call_with_retry
+from .request_plan import (
+    TOKEN_KEY_QUIRK,
+    RequestOptions,
+    build_request,
+    execute,
+    thinking_extra_body,
+)
 
 logger = get_logger("agora.llm_client")
+
+
+def _never_omits_temperature(model: str) -> bool:
+    """Der Tools-Pfad setzt ``temperature`` bedingungslos.
+
+    Der ``temperature``-Quirk aus #1096 (GPT-5-/o-Reasoning-Familie akzeptiert
+    nur den Default) ist hier nie nachgezogen worden. Ihn jetzt zu aktivieren
+    wäre ein Verhaltensfix, kein Refactor — deshalb steht die Abweichung als
+    sichtbarer Seam da statt als eigene Kopie des Request-Shapings.
+    """
+    return False
+
+
+_TOOLS_REQUEST_OPTIONS = RequestOptions(omits_temperature=_never_omits_temperature)
 
 
 class ToolCallItem(TypedDict):
@@ -201,28 +222,24 @@ def _chat_with_tools(
     import time as _time
     _t0 = _time.monotonic()
 
-    kwargs: Dict[str, Any] = {
-        "model": self.model,
-        "messages": messages,
-        "temperature": temperature,
-        "tools": tools,
-        "tool_choice": tool_choice,
-    }
-    kwargs.update(self._completion_token_kwargs(max_tokens))
-
-    if self._is_ollama():
-        extra_body: Dict[str, Any] = {}
-        effective_num_ctx = self._ollama_num_ctx_for(max_tokens)
-        if effective_num_ctx:
-            extra_body["options"] = {"num_ctx": effective_num_ctx}
-        extra_body["think"] = self._think
-        kwargs["extra_body"] = extra_body
-    elif self._is_minimax():
-        kwargs["extra_body"] = self._minimax_thinking_extra_body()
-
     force_stream = (
         self._is_ollama()
         and os.environ.get("LLM_FORCE_STREAM", "true").lower() in ("1", "true", "yes")
+    )
+    plan = build_request(
+        model=self.model,
+        messages=messages,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        extra_body=thinking_extra_body(
+            ollama=self._is_ollama(),
+            minimax=self._is_minimax(),
+            num_ctx=self._ollama_num_ctx_for(max_tokens),
+            think=self._think,
+        ),
+        stream=force_stream,
+        extra={"tools": tools, "tool_choice": tool_choice},
+        options=_TOOLS_REQUEST_OPTIONS,
     )
 
     def _create(call_kwargs: Dict[str, Any]) -> Any:
@@ -234,22 +251,8 @@ def _chat_with_tools(
             **call_kwargs,
         )
 
-    def _create_with_fallback(call_kwargs: Dict[str, Any]) -> Any:
-        try:
-            return _create(call_kwargs)
-        except Exception as exc:  # noqa: BLE001
-            if not self._is_token_key_400(exc):
-                raise
-            swapped = self._swap_token_kwargs(call_kwargs)
-            if swapped is None:
-                raise
-            logger.warning(
-                "LLM 400 on token-limit key (tools path) — retrying once with swapped key "
-                "(model=%s, msg=%s)",
-                self.model,
-                str(exc)[:200],
-            )
-            return _create(swapped)
+    def _create_with_fallback() -> Any:
+        return execute(plan, _create, quirks=(TOKEN_KEY_QUIRK,), label="tools")
 
     content: str = ""
     tool_calls: List[ToolCallItem] = []
@@ -258,11 +261,10 @@ def _chat_with_tools(
 
     try:
         if force_stream:
-            kwargs["stream"] = True
-            stream = _create_with_fallback(kwargs)
+            stream = _create_with_fallback()
             content, tool_calls, finish_reason = _accumulate_streaming_tool_calls(stream)
         else:
-            raw_response = _create_with_fallback(kwargs)
+            raw_response = _create_with_fallback()
             choice = raw_response.choices[0]
             finish_reason = getattr(choice, "finish_reason", "stop") or "stop"
             message = choice.message
