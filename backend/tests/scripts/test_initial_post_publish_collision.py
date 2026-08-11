@@ -165,3 +165,61 @@ def test_callback_meldet_jeden_veroeffentlichten_post():
 def test_logzeile_nennt_posts_und_distinkte_agenten(posts_count, agents_count, expected):
     """`Published 1 initial posts` bei neun Posts war der Kern der Irreführung."""
     assert rps.format_initial_posts_log(posts_count, agents_count) == expected
+
+
+# --------------------------------------- Review-Finding (CodeRabbit PR #1256)
+
+
+def test_standalone_runner_verwirft_keine_posts():
+    """Der Einzelplattform-Pfad hatte dieselbe Überschreib-Logik.
+
+    ``platform="twitter"`` startet ``run_twitter_simulation.py``, dessen Runner
+    von ``SinglePlatformRunner`` erbt. Die Basisimplementierung von
+    ``_assign_initial_action`` überschrieb — mehrere Seed-Posts desselben
+    Agenten verschwanden also weiterhin still, obwohl der Parallel-Pfad
+    korrigiert war. Der erste Test dieser Datei ruft nur den Parallel-Helfer
+    zweimal auf und konnte die Divergenz nicht sehen.
+    """
+    import importlib.util
+    from pathlib import Path as _Path
+
+    runtime_dir = _Path(__file__).resolve().parents[2] / "scripts" / "sim_runtime"
+    spec = importlib.util.spec_from_file_location(
+        "_platform_runner_under_test", runtime_dir / "platform_runner.py"
+    )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    runner = module.SinglePlatformRunner.__new__(module.SinglePlatformRunner)
+    agent = _FakeAgent(1)
+    actions: dict = {}
+
+    runner._assign_initial_action(actions, agent, "Betriebsrat")
+    runner._assign_initial_action(actions, agent, "Kostenträger")
+    runner._assign_initial_action(actions, agent, "Honorarkraft")
+
+    assert len(actions) == 1
+    assert sorted(_flatten(actions)) == ["Betriebsrat", "Honorarkraft", "Kostenträger"]
+
+
+def test_standalone_runner_ohne_kollision_unveraendert():
+    """Gegenprobe: ein Post pro Agent bleibt ein Einzelwert, keine Liste."""
+    import importlib.util
+    from pathlib import Path as _Path
+
+    runtime_dir = _Path(__file__).resolve().parents[2] / "scripts" / "sim_runtime"
+    spec = importlib.util.spec_from_file_location(
+        "_platform_runner_under_test2", runtime_dir / "platform_runner.py"
+    )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    runner = module.SinglePlatformRunner.__new__(module.SinglePlatformRunner)
+    actions: dict = {}
+    runner._assign_initial_action(actions, _FakeAgent(1), "A")
+    runner._assign_initial_action(actions, _FakeAgent(2), "B")
+
+    assert len(actions) == 2
+    assert all(not isinstance(v, list) for v in actions.values())

@@ -239,7 +239,7 @@ Diese Beobachtungen sind dokumentiert und erklärt. Wer sie als Neufund meldet, 
 | Viele identische Posts, manche mit leerem `content` | Reposts und Quotes, siehe Auswertungsfalle oben. |
 | `pooler.dense.weight MISSING` beim Laden von `twhin-bert-base` | Bekannt, Issue #1236 — der Twitter-Recommender rankt über zufällig initialisierte Gewichte. |
 | Rohes Persona-Log zeigt Namens- und Gender-Kollaps | Der Dedup-Schritt repariert das. Maßgeblich ist `reddit_profiles.json`, nicht das Log. |
-| `Published 1 initial posts` bei mehr konfigurierten Posts | Der Zähler zählt **distinkte Poster-Agenten**, nicht Posts. |
+| `Published N initial posts from M distinct agents` | Seit #1245 weist die Zeile beide Größen getrennt aus. `N` sind Posts, `M` distinkte Poster-Agenten. Ist `M` deutlich kleiner als `N`, liegen viele Seed-Posts auf wenigen Stimmen — das ist ein Befund, kein Rauschen (vgl. #1226). Die alte Form `Published 1 initial posts` zählte Agenten und nannte sie Posts; Logs aus Läufen vor #1245 sind entsprechend zu lesen. |
 
 ---
 

@@ -3,12 +3,16 @@
 Verhaltensneutral aus ``run_twitter_simulation.py`` und
 ``run_reddit_simulation.py`` extrahiert: beide Runner-Klassen waren bis auf
 Plattform-Konfiguration (verfügbare Actions, Profile-Dateiname, DB-Dateiname,
-``oasis.DefaultPlatformType``, Graph-Generator) und das Handling von
-``initial_actions`` (Reddit appended an bestehende Listen, Twitter
-überschreibt) identisch.
+``oasis.DefaultPlatformType``, Graph-Generator) identisch.
 
-Plattform-spezifische Werte werden über Klassen-Attribute und die
-Template-Method ``_assign_initial_action`` injiziert; die Entry-Points
+Das Handling von ``initial_actions`` war ursprünglich ebenfalls verschieden —
+Reddit appendete an bestehende Listen, Twitter überschrieb. Das war kein
+Plattformunterschied, sondern ein Defekt: Twitter verwarf dadurch still
+Seed-Posts desselben Agenten (Issue #1245). ``_assign_initial_action`` liegt
+seitdem als gemeinsame Implementierung in dieser Basisklasse und ist **kein**
+Erweiterungspunkt mehr.
+
+Plattform-spezifische Werte werden über Klassen-Attribute injiziert; die Entry-Points
 (``run_twitter_simulation.py`` / ``run_reddit_simulation.py``) definieren
 dünne Subklassen plus Modul-Setup (Profiling, Parser, ``main``).
 
@@ -106,9 +110,10 @@ def setup_signal_handlers():
 class SinglePlatformRunner:
     """Single-platform OASIS simulation runner (Twitter/Reddit).
 
-    Subclasses setzen die Plattform-Konfiguration via Klassen-Attribute und
-    überschreiben ggf. ``_assign_initial_action`` für plattform-spezifisches
-    Initial-Posts-Handling.
+    Subclasses setzen die Plattform-Konfiguration via Klassen-Attribute.
+    ``_assign_initial_action`` ist bewusst nicht zu überschreiben: die
+    Kollisionsbehandlung für mehrere Seed-Posts desselben Agenten gilt für
+    beide Plattformen gleich (Issue #1245).
     """
 
     # --- Plattform-Konfiguration (von Subklasse zu setzen) ---
@@ -323,14 +328,28 @@ class SinglePlatformRunner:
     def _assign_initial_action(self, initial_actions: Dict, agent: Any, content: str) -> None:
         """Assign an initial CREATE_POST action for ``agent``.
 
-        Default (Twitter-Verhalten): überschreibt eine bestehende Zuweisung.
-        Reddit überschreibt diese Methode, um an eine bestehende Liste zu
-        appenden statt zu überschreiben.
+        Issue #1245 (CodeRabbit PR #1256): Die Standardimplementierung
+        ueberschrieb eine bestehende Zuweisung — mehrere Seed-Posts desselben
+        Agenten kollabierten auf den letzten, still und ohne Warnung. Das galt
+        fuer jeden Lauf mit ``platform="twitter"``, der ueber
+        ``run_twitter_simulation.py`` und diesen Runner geht; der Fix im
+        Parallel-Skript erreichte diesen Pfad nicht.
+
+        Kollisionsbehandlung gehoert nicht auf eine Plattform, sondern in die
+        Basis: ``env.step`` akzeptiert je Agent einen Einzelwert oder eine
+        Liste. Ohne Kollision entsteht weiterhin kein zusaetzliches Wrapping.
         """
-        initial_actions[agent] = ManualAction(
+        action = ManualAction(
             action_type=ActionType.CREATE_POST,
             action_args={"content": content}
         )
+        existing = initial_actions.get(agent)
+        if existing is None:
+            initial_actions[agent] = action
+        elif isinstance(existing, list):
+            existing.append(action)
+        else:
+            initial_actions[agent] = [existing, action]
 
     async def run(self, max_rounds: int = None):
         """Run single-platform simulation
@@ -485,7 +504,19 @@ class SinglePlatformRunner:
 
             if initial_actions:
                 await self.env.step(initial_actions)
-                print(f"  Published {len(initial_actions)} initial posts")
+                # Issue #1245: Posts und distinkte Agenten getrennt ausweisen.
+                # len(initial_actions) zaehlt Dict-Eintraege, also Agenten —
+                # bei kollabierten Seed-Posts meldete die Zeile einen Erfolg,
+                # der den Defekt verdeckte.
+                published = sum(
+                    len(value) if isinstance(value, list) else 1
+                    for value in initial_actions.values()
+                )
+                print(
+                    f"  Published {published} initial post"
+                    f"{'' if published == 1 else 's'} from {len(initial_actions)} "
+                    f"distinct agent{'' if len(initial_actions) == 1 else 's'}"
+                )
 
         print("\nStart simulation loop...")
         start_time = datetime.now()
