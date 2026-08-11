@@ -168,7 +168,7 @@ Konfiguration für externe Skill-Sammlungen, die dieses Repository als Kontext l
 | Triage-Labels | [`docs/agents/triage-labels.md`](docs/agents/triage-labels.md) | die fünf kanonischen Labels `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix` — unverändert übernommen |
 | Domänen-Doku | [`docs/agents/domain.md`](docs/agents/domain.md) | Single-Context-Layout: ADRs unter `docs/decisions/`, optionales `CONTEXT.md` |
 
-`CONTEXT.md` existiert derzeit nicht und wird erst angelegt, wenn tatsächlich Begriffe oder Entscheidungen festzuhalten sind. Sein Fehlen ist kein Defekt und wird nicht gemeldet.
+[`CONTEXT.md`](CONTEXT.md) existiert seit dem 11.08.2026 und beschreibt die **Laufzeit-Mechanik**: die fünf Phasen mit ihren Artefakt-IDs, den `interview_agents`-Mechanismus, das Evidence-Modell mit seinen zwei getrennten Prüfstellen (`claim_extraction_and_evidence_binding` gegen `verify_prose`), Artefaktpfade im Container, das Sim-DB-Schema samt der `original_post_id`-Auswertungsfalle, das getrennte Embedding-Routing und eine Liste bekannter Fehlerbilder, die **nicht** als Neufund zu melden sind. Vor jeder Lauf-Beobachtung, -Auswertung oder -Fehlersuche lesen.
 
 Verbindliche Quelle für Aufgaben bleibt die Reihenfolge aus [`AGENTS.md`](AGENTS.md): `README.md` → `docs/STATUS.md` → `ROADMAP.md` → GitHub Issues.
 
