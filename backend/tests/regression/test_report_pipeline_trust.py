@@ -469,7 +469,7 @@ def test_4e_explicit_inferred_source_kind_is_respected():
     ``_TYPE_TO_SOURCE_KIND.values()`` — die Menge schloss ``inferred`` aus.
     Ein Caller, der ein Modellableitungs-Fakt bewusst als ``inferred``
     markierte, wurde ignoriert und der interne ``type`` übernahm. Der Docstring
-    sagt aber: „Ein explizit gesetztes source_kind gewinnt."
+    sagt aber: „Ein explizit gesetztes source_kind gewinnt.“
     """
     from app.services.report_agent.evidence import normalize_source_kind
 
