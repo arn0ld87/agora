@@ -27,6 +27,12 @@ from .output_contract import (
 )
 from .planning import plan_outline as plan_outline_impl
 from .postprocess_timing import PostprocessPhaseTracker
+from .section_pipeline import (
+    SectionContext,
+    SectionResult,
+    _section_expects_quotes,
+    process_section,
+)
 from .search_dedup import (
     REPEATED_EMPTY_SEARCH_MSG,
     is_search_tool,
@@ -43,30 +49,10 @@ from ..evidence_migrations import migrate_v1_to_v2, normalize_persisted_evidence
 
 logger = get_logger('agora.report_agent')
 
-# M11.8e — Section-Typen, die Persona-Zitate enthalten können/sollen.
-# Für diese Sections wird validate_quote_anchors mit strict-Repair-Retry ausgeführt.
-# Meta-Sections (Plan, Executive Summary, Datenlücken) sind ausgenommen.
-_QUOTE_REQUIRED_SECTION_KEYWORDS = frozenset({
-    "persona",
-    "personas",
-    "zielgrupp",
-    "segment",
-    "multipli",
-    "multiplier",
-    "friction",
-    "reibung",
-    "trust",
-    "vertrauen",
-    "interview",
-    "reaktion",
-    "reaction",
-})
-
-
-def _section_expects_quotes(section_title: str) -> bool:
-    """Gibt True zurück wenn der Abschnittstyp Persona-Zitate erwarten lässt."""
-    lower = section_title.lower()
-    return any(kw in lower for kw in _QUOTE_REQUIRED_SECTION_KEYWORDS)
+# Die Abschnittsverarbeitung liegt seit Issue #1212 in ``section_pipeline``.
+# ``_section_expects_quotes`` bleibt hier als Name erreichbar, damit bestehende
+# Referenzen auf ``workflow`` nicht brechen.
+__all__ = ["_section_expects_quotes", "chat", "generate_report", "generate_section_react"]
 
 
 def _load_persona_count(agent: Any) -> int:
@@ -1103,6 +1089,28 @@ def generate_report(
             completed_section_titles.append(title)
             generated_sections.append(section_info["content"])
 
+        # Issue #1212: Der Abschnitts-Durchlauf steht in ``section_pipeline``.
+        # Die Seams werden hier aus den Modul-Globals dieses Moduls gebunden —
+        # damit bleibt patchbar, was bisher patchbar war, ohne dass die
+        # Pipeline ``workflow`` kennen muss.
+        section_ctx = SectionContext(
+            report_id=report_id,
+            outline=outline,
+            total_sections=total_sections,
+            generate_section=_safe_generate_section_react,
+            generate_metadata=generate_section_metadata,
+            report_mode=report_mode,
+            previous_sections=generated_sections,
+            completed_section_titles=completed_section_titles,
+            persisted_section_contents=existing_sections,
+            progress_callback=progress_callback,
+            validate_quotes=validate_quote_anchors,
+            verify_prose_fn=verify_prose,
+            is_fallback=is_fallback_content,
+            report_manager=ReportManager,
+            phase_tracker_factory=PostprocessPhaseTracker,
+        )
+
         for i, section in enumerate(outline.sections):
             # Cancel-Check am Anfang jeder Section-Iteration (Stage-Boundary 2+)
             if _is_cancel_requested(cancel_run_id):
@@ -1115,182 +1123,29 @@ def generate_report(
                     progress_callback=progress_callback,
                 )
             section_num = i + 1
-            base_progress = 20 + int((i / total_sections) * 70)
-            if section_num in existing_sections:
-                section.content = ReportManager._clean_section_content(existing_sections[section_num], section.title)
-                persisted_sections = (agent.evidence_map or {}).get("sections") or []
-                has_persisted_evidence = any(s.get("section_index") == section_num for s in persisted_sections)
-                if not has_persisted_evidence:
-                    logger.warning(
-                        "Section %s already exists on disk without persisted evidence; preserving markdown and leaving evidence unchanged",
-                        section_num,
-                    )
-                continue
-            generating_message = f"Generating section: {section.title} ({section_num}/{total_sections})"
-            ReportManager.update_progress(report_id, "generating", base_progress, generating_message, current_section=section.title, completed_sections=completed_section_titles)
-            if progress_callback:
-                progress_callback("generating", base_progress, generating_message)
-            section_content = _safe_generate_section_react(
-                agent,
-                section=section,
-                outline=outline,
-                previous_sections=generated_sections,
-                progress_callback=lambda stage, prog, msg: progress_callback(stage, base_progress + int(prog * 0.7 / total_sections), msg) if progress_callback else None,
-                section_index=section_num,
-                report_id=report_id,
+            result: SectionResult = process_section(
+                agent, section, section_ctx, section_index=section_num
             )
-            # M11.8e + P4.1: Quote-Anchor-Validierung für Persona-/Segment-/Friction-Sections.
-            # Nur bei Section-Typen, die Persona-Zitate erwarten (nicht Plan/Meta-Sections).
-            # explorative: Validierung vollständig überspringen.
-            # balanced: Best-Effort-Repair-Retry (aktuelles Verhalten).
-            # strict: Hart — fehlgeschlagener Repair setzt quota_validation_failed=True
-            #         und wird prominent geloggt; kein weiteres Fallback.
-            if _section_expects_quotes(section.title) and report_mode != "explorative":
-                evidence_map_for_validation = agent.evidence_map or {}
-                persona_ids_for_validation: List[str] = getattr(agent, "persona_ids", []) or []
-                quote_result = validate_quote_anchors(
-                    section_content,
-                    evidence_map_for_validation,
-                    persona_ids_for_validation,
-                )
-                if not quote_result.valid:
-                    repair_hint = (
-                        f"Korrigiere die Persona-Zitate: "
-                        f"invalid_quotes={quote_result.invalid_quotes!r}, "
-                        f"unbound_evidence_refs={quote_result.unbound_evidence_refs!r}. "
-                        f"Jedes Zitat MUSS <simulated_quote persona_id=\"...\" seed_anchor=\"...\">...</simulated_quote> "
-                        f"mit gültigen Attributen verwenden."
-                    )
-                    logger.warning(
-                        "quote_anchor_validation: section=%d title=%r mode=%s — "
-                        "invalid quotes detected, attempting repair retry. "
-                        "invalid_quotes=%r unbound_refs=%r",
-                        section_num,
-                        section.title,
-                        report_mode,
-                        quote_result.invalid_quotes,
-                        quote_result.unbound_evidence_refs,
-                    )
-                    repair_content = _safe_generate_section_react(
-                        agent,
-                        section=section,
-                        outline=outline,
-                        previous_sections=generated_sections,
-                        progress_callback=None,
-                        section_index=section_num,
-                        report_id=report_id,
-                    )
-                    repair_result = validate_quote_anchors(
-                        repair_content,
-                        evidence_map_for_validation,
-                        persona_ids_for_validation,
-                    )
-                    if repair_result.valid:
-                        section_content = repair_content
-                        logger.info(
-                            "quote_anchor_validation: section=%d repair successful",
-                            section_num,
-                        )
-                    else:
-                        # Repair fehlgeschlagen — Section trotzdem weiter, Flag setzen
-                        log_fn = logger.error if report_mode == "strict" else logger.warning
-                        log_fn(
-                            "quote_anchor_validation: section=%d mode=%s repair retry also failed. "
-                            "Setting quote_validation_failed=True. "
-                            "repair_invalid_quotes=%r repair_unbound=%r",
-                            section_num,
-                            report_mode,
-                            repair_result.invalid_quotes,
-                            repair_result.unbound_evidence_refs,
-                        )
-                        if not hasattr(section, "metadata") or section.metadata is None:
-                            section.metadata = {}
-                        section.metadata["quote_validation_failed"] = True
-                        section_content = repair_content
-                        _ = repair_hint  # consumed in log above
-            # M11.8d: Strukturierte Metadaten-Extraktion via strict-schema chat_json.
-            # Fehler blockieren nicht die Hauptgenerierung (generate_section_metadata
-            # gibt bei Exception {} zurück). Metadaten werden im Report-Logger
-            # für Provenance-Tracking gespeichert.
-            # P0: Faktenprüfung des sichtbaren Fließtexts. Quantitative
-            # Aussagen ohne deckende Quelle werden entfernt und als Hypothese
-            # geführt — sonst steht im gelesenen Report weiter, was das
-            # Entailment längst verworfen hat.
-            if not is_fallback_content(section_content):
-                verified = verify_prose(
-                    section_content,
-                    agent._prose_evidence_pool(),
-                )
-                if verified.changed:
-                    logger.warning(
-                        "section %d (%r): %d ungedeckte Faktenaussage(n) aus dem "
-                        "Fließtext entfernt und als Hypothese geführt.",
-                        section_num,
-                        section.title,
-                        len(verified.rejected),
-                    )
-                    agent._record_prose_hypotheses(section_num, verified.rejected)
-                    section_content = verified.content
-
-            # Fehlgeschlagene Sections liefern Fehlertext, keinen Inhalt: keine
-            # Metadaten-Extraktion, keine Claims, keine Evidence daraus.
-            section_failed = is_fallback_content(section_content)
-            if section_failed:
+            if result.restored:
+                continue
+            if result.failed:
                 failed_section_indices.append(section_num)
-                logger.warning(
-                    "section %d (%r): Fallback-Inhalt erkannt — Metadaten- und "
-                    "Claim-Extraktion werden übersprungen.",
-                    section_num,
-                    section.title,
-                )
-                section_meta = {}
-            else:
-                # Issue #1187: macht die bislang unsichtbare
-                # Metadaten-Extraktion sichtbar/messbar — kein
-                # Verhaltensaenderung an section_meta selbst.
-                metadata_phase_tracker = PostprocessPhaseTracker(
-                    report_id,
-                    section_index=section_num,
-                    section_title=section.title,
-                    base_progress=base_progress,
-                    completed_sections=completed_section_titles,
-                    report_logger=agent.report_logger,
-                    # eigene, in Tests patchbare Namensbindung durchreichen
-                    # (siehe postprocess_timing.PostprocessPhaseTracker).
-                    report_manager=ReportManager,
-                )
-                with metadata_phase_tracker.phase("section_metadata"):
-                    section_meta = generate_section_metadata(
-                        agent,
-                        section_title=section.title,
-                        section_content=section_content,
-                        section_index=section_num,
-                    )
-            if section_meta and agent.report_logger and hasattr(agent.report_logger, "log_section_metadata"):
-                agent.report_logger.log_section_metadata(
-                    section_title=section.title,
-                    section_index=section_num,
-                    metadata=section_meta,
-                )
-            if section_meta:
-                # P0-6: Die extrahierten Struktur-Daten sind ab hier die
-                # kanonische Quelle für ReportV3 — vorher endeten sie im Logger.
-                if not hasattr(section, "metadata") or section.metadata is None:
-                    section.metadata = {}
-                section.metadata["structured_metadata"] = section_meta
-                agent._record_section_metadata(section_num, section_meta)
-            section.content = section_content
-            generated_sections.append(f"## {section.title}\n\n{section_content}")
-            ReportManager.save_section(report_id, section_num, section)
-            agent._save_evidence_section(report_id, section_num, section.title, section_content)
-            completed_section_titles.append(section.title)
+            generated_sections.append(result.markdown)
+            completed_section_titles.append(result.title)
             if agent.report_logger:
                 agent.report_logger.log_section_full_complete(
-                    section_title=section.title,
+                    section_title=result.title,
                     section_index=section_num,
-                    full_content=f"## {section.title}\n\n{section_content}".strip(),
+                    full_content=result.markdown.strip(),
                 )
-            ReportManager.update_progress(report_id, "generating", base_progress + int(70 / total_sections), f"Section {section.title} completed", current_section=None, completed_sections=completed_section_titles)
+            ReportManager.update_progress(
+                report_id,
+                "generating",
+                section_ctx.base_progress_for(section_num) + int(70 / total_sections),
+                f"Section {result.title} completed",
+                current_section=None,
+                completed_sections=completed_section_titles,
+            )
 
         assembling_message = "Assembling the complete report..."
         if progress_callback:

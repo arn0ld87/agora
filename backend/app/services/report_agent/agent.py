@@ -60,6 +60,7 @@ from .tools import (
     is_valid_tool_call,
     parse_tool_calls,
 )
+from .section_pipeline import SectionEvidenceOutcome
 from .workflow import chat as chat_impl, generate_report as generate_report_impl, generate_section_react as generate_section_react_impl
 from .prompts import (
     CHAT_OBSERVATION_SUFFIX,
@@ -1032,7 +1033,16 @@ class ReportAgent:
                 kept.append(item)
             setattr(self, attribute, kept)
 
-    def _save_evidence_section(self, report_id: str, section_index: int, section_title: str, content: str) -> None:
+    def _save_evidence_section(
+        self, report_id: str, section_index: int, section_title: str, content: str
+    ) -> SectionEvidenceOutcome:
+        """Extrahiert Claims, bindet Evidence und persistiert die Evidenzkarte.
+
+        Issue #1212: Der Rückgabewert ist additiv — die Persistenz und alle
+        Seiteneffekte auf ``self.evidence_map`` sind unverändert. Er macht
+        beobachtbar, was gebunden und was vom Gate verworfen wurde, ohne dass
+        ein Aufrufer dafür die persistierte Karte durchsuchen muss.
+        """
         from .output_contract import is_fallback_content  # noqa: PLC0415
 
         # Issue #1187: macht die bislang unsichtbare Nachbearbeitung
@@ -1277,6 +1287,12 @@ class ReportAgent:
         ReportManager.save_evidence_map(report_id, validated)
         if phase_tracker is not None:
             phase_tracker.end_phase()
+        return SectionEvidenceOutcome.from_persisted_section(
+            validated,
+            section_index,
+            gate_decisions=gate_decisions,
+            generation_failed=generation_failed,
+        )
 
     def _define_tools(self) -> Dict[str, Dict[str, Any]]:
         return define_tools(self)
