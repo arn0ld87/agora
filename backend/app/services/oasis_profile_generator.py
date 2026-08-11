@@ -246,12 +246,19 @@ class OasisAgentProfile:
         }
 
         # Add additional persona information (if available)
-        if self.age:
-            profile["age"] = self.age
-        if self.gender:
-            profile["gender"] = self.gender
-        if self.mbti:
-            profile["mbti"] = self.mbti
+        # age/gender/mbti werden IMMER als Schluessel geschrieben,
+        # auch wenn sie bei Kollektiv-Personas None sind. oasis/social_platform/
+        # config/user.py::to_reddit_system_message greift auf agent_info[i]["mbti"]
+        # etc. ungeschuetzt zu — ein fehlender Schluessel ist dort ein KeyError,
+        # kein fehlender Wert. Der Leerstring erfindet keine Demografie und
+        # haelt damit die Zusage aus #1246 ("Organisationen haben keine Vita")
+        # ein: ein `None` stuende sonst woertlich im Satz "You are a {gender},
+        # {age} years old, with an MBTI personality type of {mbti} from
+        # {country}." im Agent-Prompt. Die Substanz der Kollektiv-Persona
+        # steht im vorangehenden `user_profile`, nicht in diesen drei Feldern.
+        profile["age"] = self.age if self.age else ""
+        profile["gender"] = self.gender if self.gender else ""
+        profile["mbti"] = self.mbti if self.mbti else ""
         if self.country:
             profile["country"] = self.country
         if self.profession:
