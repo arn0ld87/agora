@@ -128,6 +128,14 @@ class CollectivePersonaSchema(BaseModel):
     country: str = Field(..., description="ISO country code, e.g. DE, AT, CH")
     interested_topics: List[str] = Field(default_factory=list, description="Topic strings")
     voice_register: str = Field(..., description="One of formal-de/neutral-de/technical-de/skeptisch-de")
+    # Issue #1247: Der Eignungsblock haengt an beiden Prompts, also braucht auch
+    # der Kollektiv-Vertrag das Ablehnungsfeld — sonst scheitert eine Ablehnung
+    # fuer Gruppen-Entitaeten an der Schemavalidierung.
+    ineligible: bool = Field(
+        False,
+        description="True if this entity cannot have a human bearer and must not become a persona",
+    )
+    ineligible_reason: str = Field("", description="Short reason when ineligible is true")
 
 # Persona-Detail-Level steuert die Output-Größe pro Persona — direkter
 # Hebel auf Cloud-LLM-Inference-Zeit (Output-Tokens dominieren). Issue #217.
@@ -1044,7 +1052,7 @@ Setze `ineligible: true` und begründe knapp in `ineligible_reason`, wenn „{en
 
 Der Entitätstyp ist dabei nur ein Hinweis, keine Antwort — er trägt in der Praxis häufig „Organization", auch wenn die Entität eine Software oder eine Stadt ist. Entscheide nach dem Namen und dem Kontext.
 
-Bei `ineligible: true` sind alle übrigen Felder bedeutungslos; fülle sie mit leeren Strings, `0` und leeren Listen. Erfinde in diesem Fall KEINE Persona.
+Bei `ineligible: true` sind alle übrigen Felder bedeutungslos, müssen aber weiterhin schemagültig sein — sonst wird die Antwort verworfen, drei Versuche scheitern und die Entität landet über den regelbasierten Pfad doch als Persona im Lauf. Verwende genau: display_name und handle je ein Minuszeichen, age 30, gender other, mbti ISTJ, country DE, voice_register neutral-de, leere Strings für bio, persona und profession, leere Liste für interested_topics. Erfinde in diesem Fall KEINE Persona.
 
 Bei `ineligible: false` beantworte die Aufgabe oben wie beschrieben."""
 
@@ -1062,7 +1070,7 @@ Set `ineligible: true` and give a short `ineligible_reason` if "{entity_name}" i
 
 The entity type is a hint, not an answer — in practice it often reads "Organization" even when the entity is software or a city. Decide from the name and the context.
 
-When `ineligible: true`, all other fields are meaningless; fill them with empty strings, `0`, and empty lists. Do NOT invent a persona in that case.
+When `ineligible: true`, all other fields are meaningless but must still be schema-valid — otherwise the response is rejected, three attempts fail and the entity becomes a persona anyway via the rule-based path. Use exactly: display_name and handle each a single hyphen, age 30, gender other, mbti ISTJ, country DE, voice_register neutral-de, empty strings for bio, persona and profession, empty list for interested_topics. Do NOT invent a persona in that case.
 
 When `ineligible: false`, answer the task above as described."""
 
@@ -1879,6 +1887,7 @@ Important:
         self,
         *,
         profiles: List[Optional[OasisAgentProfile]],
+        entities: List[EntityNode],
         reserve_entities: List[EntityNode],
         use_llm: bool,
         rejected: List["PersonaIneligible"],
@@ -1896,21 +1905,56 @@ Important:
         Ein Parallelisieren brauchte eine Koordination, die den Aufwand nicht
         rechtfertigt.
 
-        Mutiert ``profiles`` in place.
+        Mutiert ``profiles`` **und** ``entities`` in place. Beides ist noetig:
+        ``_phase_generate_profiles`` reicht seine Entity-Liste an
+        ``SimulationConfigGenerator.generate_config`` weiter. Ohne den Tausch
+        bekaeme das nachbesetzte Profil den ``AgentConfig`` und die
+        Initial-Post-Klassifikation der abgelehnten Entitaet — eine
+        Honorarkraft liefe dann mit UUID, Name, Typ und Aktivitaetsprofil von
+        Moodle (CodeRabbit PR #1258).
         """
+        slot_types = {
+            idx: (entity.get_entity_type() or "Entity")
+            for idx, entity in enumerate(entities)
+        }
         open_slots = [idx for idx, profile in enumerate(profiles) if profile is None]
         if not open_slots:
             return
 
         reserve_slots = self._build_demographic_slots(reserve_entities)
-        reserve_index = 0
+        used: set[int] = set()
         filled = 0
 
+        def _next_candidate(preferred_type: Optional[str]) -> Optional[int]:
+            """Naechster unverbrauchter Reserve-Index, Typgleichheit bevorzugt.
+
+            Issue #1247 (CodeRabbit PR #1258): Ohne Typpraeferenz verbraucht die
+            Nachbesetzung stur den naechsten Eintrag. Gehoert der einer anderen
+            Rollenfamilie, faellt ein aktiver ``PersonaQuotaPlan`` anschliessend
+            durch ``_validate_persona_quota`` — und auch ohne Plan verschwindet
+            die Typvertretung, die das Round-Robin des Caps gerade gesichert
+            hat, obwohl weiter hinten ein gleichartiger Kandidat steht.
+            """
+            if preferred_type:
+                for idx, entity in enumerate(reserve_entities):
+                    if idx in used:
+                        continue
+                    if (entity.get_entity_type() or "Entity") == preferred_type:
+                        return idx
+            for idx in range(len(reserve_entities)):
+                if idx not in used:
+                    return idx
+            return None
+
         for slot_idx in open_slots:
-            while reserve_index < len(reserve_entities):
+            preferred = slot_types.get(slot_idx) if slot_types else None
+            while True:
+                reserve_index = _next_candidate(preferred)
+                if reserve_index is None:
+                    break
                 candidate = reserve_entities[reserve_index]
                 candidate_slot = reserve_slots[reserve_index]
-                reserve_index += 1
+                used.add(reserve_index)
                 try:
                     profiles[slot_idx] = self.generate_profile_from_entity(
                         entity=candidate,
@@ -1929,6 +1973,11 @@ Important:
                         exc,
                     )
                     continue
+                # Die Entity am selben Index mittauschen, damit die
+                # Config-Generierung den Nachruecker beschreibt und nicht die
+                # abgelehnte Entitaet.
+                if slot_idx < len(entities):
+                    entities[slot_idx] = candidate
                 filled += 1
                 break
 
@@ -2205,6 +2254,7 @@ Important:
         if rejected:
             self._backfill_rejected_slots(
                 profiles=profiles,
+                entities=entities,
                 reserve_entities=list(reserve_entities or []),
                 use_llm=use_llm,
                 rejected=rejected,
@@ -2267,7 +2317,13 @@ Important:
         # Re-save after dedup to keep realtime file in sync with final state.
         save_profiles_realtime()
 
-        return profiles
+        # Issue #1247 (CodeRabbit PR #1258): Leere Slots verdichten. Eine
+        # Ablehnung ohne verfuegbaren Nachruecker liess bisher ``None`` in der
+        # Liste stehen; ``save_profiles`` dereferenziert aber jeden Eintrag und
+        # waere daran gescheitert — der bewusst unterstuetzte Fall "Platz bleibt
+        # leer" haette die Vorbereitung abgebrochen statt einen kleineren, aber
+        # gueltigen Personensatz zu liefern.
+        return [profile for profile in profiles if profile is not None]
     
     def _print_generated_profile(self, entity_name: str, entity_type: str, profile: OasisAgentProfile):
         """Log generated persona details at INFO level (visible in default log config)."""

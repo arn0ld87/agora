@@ -330,3 +330,161 @@ class TestReservePoolAusDemCap:
         )
 
         assert filtered.reserve_entities == []
+
+
+# ------------------------------------- Review-Findings (CodeRabbit PR #1258)
+
+
+class TestAblehnungPassiertDasSchema:
+    def test_ablehnungsfelder_stehen_in_beiden_vertraegen(self):
+        """Der Eignungsblock hängt an beiden Prompts — also braucht ihn jeder Vertrag."""
+        from app.services.oasis_profile_generator import (
+            CollectivePersonaSchema,
+            PersonaProfileSchema,
+        )
+
+        for schema in (PersonaProfileSchema, CollectivePersonaSchema):
+            assert "ineligible" in schema.model_fields
+            assert "ineligible_reason" in schema.model_fields
+
+    def test_prompt_fordert_schemagueltige_platzhalter(self, generator):
+        """RED ohne den Fix: der Prompt verlangte `0` für `age` (Schema: 18–75).
+
+        Ein Modell, das der Anweisung folgt, hätte alle drei Versuche gerissen
+        und die Entität über den regelbasierten Pfad doch zur Persona gemacht.
+        """
+        block = generator._build_eligibility_prompt_block("Moodle", "Organization")
+
+        assert "schemagültig" in block
+        assert "age 30" in block
+        # Der alte, schemawidrige Hinweis darf nicht zurückkommen.
+        assert "`0`" not in block
+
+    def test_platzhalter_aus_dem_prompt_validieren_gegen_das_schema(self):
+        """Die im Prompt genannten Werte müssen tatsächlich durchgehen."""
+        from app.services.oasis_profile_generator import PersonaProfileSchema
+
+        payload = PersonaProfileSchema.model_validate({
+            "display_name": "-",
+            "handle": "-",
+            "bio": "",
+            "persona": "",
+            "age": 30,
+            "gender": "other",
+            "mbti": "ISTJ",
+            "country": "DE",
+            "profession": "",
+            "interested_topics": [],
+            "voice_register": "neutral-de",
+            "ineligible": True,
+            "ineligible_reason": "Lernplattform",
+        })
+        assert payload.ineligible is True
+
+
+class TestKeineLeerenSlotsNachAussen:
+    def test_unbesetzte_slots_werden_verdichtet(self, generator, monkeypatch):
+        """RED ohne den Fix: `None` erreichte `save_profiles` und kippte die Vorbereitung."""
+        monkeypatch.setattr(
+            generator,
+            "_generate_profile_with_llm",
+            lambda **kwargs: {"ineligible": True, "ineligible_reason": "kein Träger"},
+        )
+
+        profiles = generator.generate_profiles_from_entities(
+            entities=[_entity("Moodle", "Organization")],
+            use_llm=True,
+            parallel_count=1,
+            reserve_entities=[],
+        )
+
+        assert profiles == []
+        assert all(p is not None for p in profiles)
+
+
+class TestNachbesetzungBleibtInDerRollenfamilie:
+    def _llm(self, rejects):
+        def fake(**kwargs):
+            name = kwargs["entity_name"]
+            if name in rejects:
+                return {"ineligible": True, "ineligible_reason": "kein Träger"}
+            return {
+                "ineligible": False,
+                "display_name": name,
+                "handle": name.lower().replace(" ", "_"),
+                "bio": "",
+                "persona": f"{name} nimmt teil.",
+                "age": 40,
+                "gender": "female",
+                "mbti": "INTJ",
+                "country": "DE",
+                "profession": "",
+                "voice_register": "neutral-de",
+            }
+        return fake
+
+    def test_gleicher_typ_wird_bevorzugt_nachgezogen(self, generator, monkeypatch):
+        """RED ohne den Fix: der nächste Reserve-Eintrag gewinnt, egal welcher Typ.
+
+        Das nimmt dem Cap-Round-Robin die Typvertretung wieder weg und lässt
+        einen aktiven PersonaQuotaPlan durchfallen, obwohl weiter hinten ein
+        gleichartiger Kandidat steht.
+        """
+        monkeypatch.setattr(
+            generator, "_generate_profile_with_llm", self._llm({"Moodle"})
+        )
+
+        profiles = generator.generate_profiles_from_entities(
+            entities=[_entity("Moodle", "FundingAgency")],
+            use_llm=True,
+            parallel_count=1,
+            reserve_entities=[
+                _entity("Dozent", "Lecturer"),
+                _entity("Jobcenter", "FundingAgency"),
+            ],
+        )
+
+        names = [p.name for p in profiles if p is not None]
+        assert names == ["Jobcenter"], (
+            f"Der typgleiche Nachrücker muss gewinnen: {names}"
+        )
+
+    def test_ohne_typgleichen_kandidaten_wird_trotzdem_nachbesetzt(
+        self, generator, monkeypatch
+    ):
+        """Ein leerer Platz wäre schlechter als ein andersartiger Nachrücker."""
+        monkeypatch.setattr(
+            generator, "_generate_profile_with_llm", self._llm({"Moodle"})
+        )
+
+        profiles = generator.generate_profiles_from_entities(
+            entities=[_entity("Moodle", "FundingAgency")],
+            use_llm=True,
+            parallel_count=1,
+            reserve_entities=[_entity("Dozent", "Lecturer")],
+        )
+
+        assert [p.name for p in profiles if p is not None] == ["Dozent"]
+
+    def test_die_entity_wird_mitgetauscht(self, generator, monkeypatch):
+        """RED ohne den Fix: die Config-Generierung beschreibt weiter Moodle.
+
+        `_phase_generate_profiles` reicht seine Entity-Liste an
+        `SimulationConfigGenerator.generate_config` weiter — ohne Tausch bekäme
+        die Honorarkraft UUID, Name, Typ und Aktivitätsprofil der abgelehnten
+        Entität.
+        """
+        monkeypatch.setattr(
+            generator, "_generate_profile_with_llm", self._llm({"Moodle"})
+        )
+        entities = [_entity("Moodle", "Organization")]
+
+        generator.generate_profiles_from_entities(
+            entities=entities,
+            use_llm=True,
+            parallel_count=1,
+            reserve_entities=[_entity("Honorarkraft", "Lecturer")],
+        )
+
+        assert entities[0].name == "Honorarkraft"
+        assert entities[0].get_entity_type() == "Lecturer"
