@@ -28,8 +28,18 @@ let capturedPostCreatedHandler: ((data: PostCreatedEvent) => void) | undefined
 let snapshotFetchCalls: { simulationId: string; platform: string }[] = []
 let snapshotFeed: PostCreatedEvent[] = []
 
+// Reihenfolge-Tracker: Race-Condition-Regression (#1009 Codex-Finding).
+// start() muss VOR dem ersten Snapshot-Fetch aufgerufen werden, sonst geht
+// ein Post verloren, der zwischen Snapshot-Read und stream.start() geschrieben
+// wird (post_created hat kein Replay). Ein globaler Zähler fixiert die
+// Aufrufreihenfolge unabhängig von Timern.
+let callOrder = 0
+let streamStartOrder = -1
+let snapshotFirstFetchOrder = -1
+
 vi.mock('@/api/simulation', () => ({
   getSimulationFeedSnapshot: (simulationId: string, platform: string) => {
+    if (snapshotFirstFetchOrder === -1) snapshotFirstFetchOrder = callOrder++
     snapshotFetchCalls.push({ simulationId, platform })
     return Promise.resolve(snapshotFeed.filter((p) => p.platform === platform))
   },
@@ -43,7 +53,10 @@ vi.mock('@/composables/useEventStream', () => ({
       error: { value: null },
       lastEventAt: { value: null },
       lastTraceId: { value: null },
-      start: vi.fn().mockResolvedValue(undefined),
+      start: vi.fn(() => {
+        streamStartOrder = callOrder++
+        return Promise.resolve()
+      }),
       stop: vi.fn(),
     }
   },
@@ -156,6 +169,9 @@ describe('StepSimulationFeedView', () => {
     capturedPostCreatedHandler = undefined
     snapshotFetchCalls = []
     snapshotFeed = []
+    callOrder = 0
+    streamStartOrder = -1
+    snapshotFirstFetchOrder = -1
   })
 
   it('mountet ohne Crash und stellt Stream auf', async () => {
@@ -174,6 +190,20 @@ describe('StepSimulationFeedView', () => {
     const platforms = snapshotFetchCalls.map((c) => c.platform).sort()
     expect(platforms).toEqual(['reddit', 'twitter'])
     expect(snapshotFetchCalls.every((c) => c.simulationId === 'test-sim-1')).toBe(true)
+  })
+
+  it('#1009: startet den Stream VOR dem Snapshot-Fetch (Race-Condition, Codex-Finding)', async () => {
+    // post_created hat kein Replay: ein Post, der zwischen Snapshot-Read und
+    // stream.start() geschrieben wird, fehlt im Snapshot UND vor start() gibt
+    // es keinen Listener. Also muss start() zuerst kommen; die seen-Dedup
+    // fängt den Overlap ab. Vor dem Fix stand stream.start() NACH dem Fetch.
+    mount(StepSimulationFeedView, {
+      global: { plugins: [i18n, router] },
+    })
+    await flushPromises()
+    expect(streamStartOrder).toBeGreaterThanOrEqual(0)
+    expect(snapshotFirstFetchOrder).toBeGreaterThanOrEqual(0)
+    expect(streamStartOrder).toBeLessThan(snapshotFirstFetchOrder)
   })
 
   it('#1009: Snapshot-Posts werden beim Mount in den Feed ingestiert', async () => {

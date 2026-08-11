@@ -535,9 +535,13 @@ def _build_feed_snapshot(
         conn.close()
 
     # Chronologisch sortieren (ältester zuerst — useSimFeed.ingestMany hängt an)
-    # und auf das Limit kappen.
+    # und auf das Limit kappen. Bei fertigen Simulationen mit > limit Posts gäbe
+    # `events[:limit]` nur den Anfang wieder und keine nachfolgenden SSE-Events
+    # füllen die Lücke — also die NEUESTEN limit Entries behalten (#1009).
     events.sort(key=lambda e: e["timestamp"])
-    return events[:limit]
+    if limit > 0 and len(events) > limit:
+        events = events[-limit:]
+    return events
 
 
 @simulation_bp.route('/<simulation_id>/feed-snapshot', methods=['GET'])

@@ -240,3 +240,47 @@ class TestFeedSnapshot:
         app = _build_app()
         resp = app.test_client().get("/api/simulation/not-a-sim-id/feed-snapshot")
         assert resp.status_code in (400, 404)
+
+    def test_limit_keeps_newest_events(self, _sim_dir) -> None:
+        """Bei > limit Posts behält der Snapshot die NEUESTEN, chronologisch (#1009).
+
+        Regression: ``events[:limit]`` lieferte die ältesten Entries — bei
+        fertigen Simulationen ohne nachfolgende SSE-Events fehlten die
+        aktuellen Ergebnisse dauerhaft.
+        """
+        sim_id, sim_dir = _sim_dir
+        conn = sqlite3.connect(str(sim_dir / "reddit_simulation.db"))
+        cur = conn.cursor()
+        cur.executescript(
+            "CREATE TABLE user (user_id INTEGER PRIMARY KEY, agent_id INTEGER, "
+            "user_name TEXT, name TEXT, bio TEXT, created_at DATETIME, "
+            "num_followings INTEGER DEFAULT 0, num_followers INTEGER DEFAULT 0);"
+            "CREATE TABLE post (post_id INTEGER PRIMARY KEY, user_id INTEGER, "
+            "original_post_id INTEGER, content TEXT DEFAULT '', quote_content TEXT, "
+            "created_at DATETIME, num_likes INTEGER DEFAULT 0, "
+            "num_dislikes INTEGER DEFAULT 0, num_shares INTEGER DEFAULT 0, "
+            "num_reports INTEGER DEFAULT 0);"
+        )
+        cur.execute(
+            "INSERT INTO user (user_id, agent_id, user_name, name) VALUES (1, 101, 'a', 'A')"
+        )
+        cur.executemany(
+            "INSERT INTO post (post_id, user_id, content, created_at) VALUES (?, ?, ?, ?)",
+            [(i, 1, f"Post {i}", f"2026-05-14 23:33:{i:02d}") for i in range(5)],
+        )
+        conn.commit()
+        conn.close()
+        (sim_dir / "reddit_profiles.json").write_text(
+            json.dumps([{"user_id": 1, "name": "A", "voice_register": "neutral-de"}]),
+            encoding="utf-8",
+        )
+
+        app = _build_app()
+        posts = app.test_client().get(
+            f"/api/simulation/{sim_id}/feed-snapshot?platform=reddit&limit=3"
+        ).get_json()["data"]["posts"]
+        # Neueste 3 → post_id 2, 3, 4 (nicht die ältesten 0, 1, 2).
+        assert [p["post_id"] for p in posts] == ["reddit:2", "reddit:3", "reddit:4"]
+        # ... und weiterhin chronologisch aufsteigend.
+        timestamps = [p["timestamp"] for p in posts]
+        assert timestamps == sorted(timestamps)

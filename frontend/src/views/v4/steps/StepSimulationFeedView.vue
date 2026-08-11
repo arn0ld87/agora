@@ -28,11 +28,14 @@ const stream = useEventStream(simulationId, {
 })
 
 onMounted(async () => {
-  // #1009 — Snapshot beim Mount: den bisherigen Sim-Bestand aus der SQLite-DB
-  // laden, bevor der SSE-Stream startet. So ist der Feed sofort befüllt und
-  // dedup (useSimFeed.seen per post_id) verhindert, dass Live-Events die
-  // bereits geladenen Posts doppelt einfügen. Fehler beim Fetch brechen den
-  // Stream-Start nicht — der Live-Pfad bleibt allein nutzbar.
+  // #1009 — Stream zuerst starten, danach den Snapshot mergen. Umgekehrte
+  // Reihenfolge ließe Posts verloren gehen, die zwischen Snapshot-Read und
+  // stream.start() geschrieben werden: post_created hat kein Replay und die
+  // EventSource existiert vor start() noch nicht. Die seen-Dedup per post_id
+  // fängt den Overlap ab — ein Post, der im Snapshot UND live ankommt, wird
+  // beim zweiten ingest übersprungen. Fehler beim Snapshot-Fetch brechen
+  // nichts: der Live-Pfad bleibt allein nutzbar.
+  await stream.start()
   try {
     const [reddit, twitter] = await Promise.all([
       getSimulationFeedSnapshot(simulationId, 'reddit').catch(() => []),
@@ -43,7 +46,6 @@ onMounted(async () => {
     // Beide Catches oben schlucken schon den Einzelfehler; dieser Block ist
     // nur die Defensive für den Fall, dass ingestMany selbst wirft.
   }
-  await stream.start()
 })
 
 onBeforeUnmount(() => {
