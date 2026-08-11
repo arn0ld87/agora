@@ -1,0 +1,122 @@
+{
+  "schema": "agora-reference-run-summary-v1",
+  "date": "2026-08-11",
+  "scenario": "Einfuehrung eines selbstgehosteten KI-Lernassistenten bei einem AZAV-zertifizierten Umschulungstraeger in Sachsen-Anhalt, 20 Runden",
+  "report_id": "report_4786a1a3d4ea",
+  "simulation_id": "sim_eb9037a01fb4",
+  "graph_id": "951b6064-ad30-4b9d-a8e9-0b4790369817",
+  "report_mode": "balanced",
+  "report_intent": "opinion",
+  "report_writer": "models/gemini-3.6-flash",
+  "ner_model": "models/gemini-3.6-flash",
+  "persona_model": "deepseek-v4-flash:0731",
+  "embedding": {
+    "model": "gemini-embedding-2",
+    "dimensions": 3072,
+    "endpoint": "openai-compatible",
+    "errors": 0
+  },
+  "loaded_persona_profiles": 50,
+  "agents_in_metrics_snapshot": 42,
+  "matched_graph_entities": 47,
+  "report_sections": 6,
+  "report_status_field": "incomplete",
+  "report_missing_sections": [],
+  "simulation": {
+    "rounds_completed": 20,
+    "total_rounds": 20,
+    "twitter_actions": 291,
+    "reddit_actions": 374,
+    "reddit_comments": 84,
+    "likes": 74,
+    "comment_likes": 6,
+    "dislikes": 0,
+    "comment_dislikes": 0,
+    "dissent_markers_in_comments": 0,
+    "graph_interactions": 162,
+    "cluster_count": 6,
+    "cluster_sizes": [10, 10, 8, 5, 5, 4],
+    "echo_chamber_index": 0.5741,
+    "bridge_agents": [20, 12, 27, 7, 37]
+  },
+  "initial_post_assignment": {
+    "posts": 8,
+    "distinct_agents": 8,
+    "no_matching_agent_warnings": 0,
+    "all_semantically_correct": true
+  },
+  "evidence_map": {
+    "validated_claims": 39,
+    "validated_claims_prose": 17,
+    "validated_claims_quote_tags": 22,
+    "confidence_labels": { "low": 39 },
+    "distinct_confidence_scores": [0.59],
+    "hypotheses": 141,
+    "data_gaps": 131,
+    "evidence_index_entries": 76,
+    "evidence_types": {
+      "agent_interview": 33,
+      "seed_document": 17,
+      "relationship_chain": 14,
+      "agent_action": 8,
+      "graph_metric": 4
+    },
+    "gate_decisions": {
+      "no_supporting_evidence": 131,
+      "prose_fact_unsupported": 13
+    },
+    "prose_removals_per_section": [1, 7, null, 2, 3, 1]
+  },
+  "persona_eligibility": {
+    "entities_checked": 48,
+    "via_unknown_type_fallback": 36,
+    "fallback_share_percent": 75,
+    "blocked_by_blocklist": [
+      { "name": "Der Assistent", "type": "Technology" }
+    ],
+    "distinct_entity_names": 44,
+    "distinct_entity_types": 12,
+    "largest_type_buckets": {
+      "RetrainingStudent": 10,
+      "Organization": 8,
+      "EducationalInstitution": 6,
+      "FundingAgency": 6,
+      "PermanentLecturer": 5,
+      "ExecutiveManager": 4
+    }
+  },
+  "confirmed_positive_behaviors": [
+    "Evidence-Bindung arbeitet erstmals: 39 validierte Claims gegen 0 bis 1 in fuenf Vorgaengerlaeufen",
+    "Poster-Zuordnung 8/8 semantisch korrekt, null No-matching-agent-Warnungen — strukturell statt zufaellig, weil Typ ungefaehr Rolle gilt",
+    "Prosa-Gate skaliert korrekt mit dem Anteil quantitativer Saetze (1, 7, 2, 3, 1 statt konstant 1)",
+    "Der Bericht benennt den Kipppunkt als beobachtbares Ereignis statt als Thema",
+    "Eine Kausalkette gefunden, die kein frueherer Lauf hatte: Routinefragen werden abgefangen, im Praesenzunterricht verbleiben nur verdichtete Problemfaelle, daraus folgt unkompensierte Arbeitsverdichtung",
+    "Die Persona-Blockliste hat gegriffen (Der Assistent, Typ Technology)",
+    "Embedding fehlerfrei ueber den kompletten Graph-Build"
+  ],
+  "known_failures": [
+    "Provenance-Anker sind pro Zitat erfunden (seed_doc:interview_<personenname>); keiner kommt in einem tool_result vor, im Graphen existiert nur die Entitaet 'Stakeholder-Interviews'",
+    "Der seed_doc-Praefix umgeht die Bindungspruefung in evidence.py vollstaendig — ein staerkeres Modell nutzt die Luecke systematischer aus als ein schwaecheres",
+    "Entailment-Judge urteilt inkonsistent: '31 Honorarkraefte' bindet in Section 1 als SUPPORTED und wird in Section 2 als ungedeckt entfernt, bei identischer Evidence",
+    "Alle 39 Claims tragen confidence_label low und exakt denselben Score 0.59 — das Konfidenzmass differenziert nicht",
+    "22 der 39 Claims sind reine simulated_quote-Tags, also Selbstbezug; 17 echte Prosa-Claims bei 141 Hypothesen",
+    "Der Abschnitt 'Unsicherheiten und Datenlücken' behandelt die Luecken des Bildungstraegers und erwaehnt die 141 Hypothesen und 131 Datenluecken des Berichts selbst mit keinem Wort",
+    "meta.json meldet status incomplete bei leerem missing_sections und sechs gespeicherten Sections",
+    "Worthalluzination 'Zeiterforderung' statt 'Zeiterfassung' in einem ansonsten korrekt belegten Satz",
+    "Ueber 20 Runden, 665 Aktionen und 84 Kommentare faellt kein einziges Dislike und kein Dissens-Marker — trotz korrekt getrennter Konfliktparteien FreelanceLecturer und PermanentLecturer",
+    "Population-Accounting-Diskrepanz: 50 konfigurierte Profile gegen 42 Agenten im Metrics-Snapshot",
+    "Nicht-Stakeholder bestehen fort, weil sie als Organization typisiert werden: ChatGPT, Moodle, Auswertungsfunktion",
+    "Rollendubletten bestehen fort: 10 Entitaeten unter RetrainingStudent, 6 unter FundingAgency, 5 unter PermanentLecturer",
+    "Gute Domaenenmodellierung wird bestraft: das fachlich beste Typvokabular hat mit 75 Prozent den hoechsten Fallback-Anteil, weil die bekannte Typ-Liste die Domaene nicht kennt"
+  ],
+  "remediation_priority": [
+    "seed_doc-Bypass in evidence.py schliessen und Anker gegen real vorhandene Dokumente aufloesen",
+    "Entailment-Konsistenz herstellen: derselbe Fakt darf nicht in einer Section binden und in einer anderen entfernt werden",
+    "Konfidenzmass differenzieren — ein Score ueber alle Claims ist kein Mass",
+    "Prosa-Gate ueber Saetze mit Ziffern hinaus auf qualitative Aussagen ausdehnen",
+    "Persona-Eignung typunabhaengig pruefen; die Blockliste ist korrekt, wird aber ueber Organization umgangen",
+    "Bekannte Typ-Liste um domaenenspezifische Typen erweitern statt die NER zu generischen zu draengen",
+    "Population-Accounting und den Widerspruch status incomplete bei leerem missing_sections bereinigen"
+  ],
+  "related_issues": [1209, 1226, 1236, 1240]
+}
