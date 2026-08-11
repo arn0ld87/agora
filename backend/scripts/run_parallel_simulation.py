@@ -261,39 +261,57 @@ async def _emit_post_created_to_redis(
     redis_url: Optional[str],
     sim_time_iso: Optional[str] = None,
 ) -> None:
-    """Publish a PostCreatedEvent to Redis after a CREATE_POST action.
+    """Publish a PostCreatedEvent to Redis after a CREATE_POST/CREATE_COMMENT action.
 
     Runs inside the asyncio event loop of the OASIS subprocess (Pfad B).
     Silently no-ops when REDIS_URL is unset or Redis is unreachable.
 
     Channel: agora:sim:{simulation_id}:post_created
+
+    ``post_id`` ist plattformpräfixt (``<platform>:<id>`` bzw.
+    ``<platform>:comment:<id>``), damit es plattformübergreifend eindeutig ist
+    und mit dem Mount-Snapshot (#1009) dedupliziert. Kommentare tragen
+    ``parent_post_id`` = Elternpost, damit der Reddit-Reply-Tree Äste bekommt
+    (#1216 5c).
     """
     if not redis_url:
         return
     action_args = action_data.get("action_args", {})
-    post_id = str(
-        action_args.get("post_id")
-        or action_args.get("new_post_id")
-        or action_args.get("id")
-        or ""
-    )
-    body = (
-        action_args.get("content")
-        or action_args.get("text")
-        or ""
-    )
-    if not post_id or not body:
-        return
-    persona_id = str(action_data.get("agent_id", ""))
-    voice_register = str(action_args.get("voice_register", "casual"))
-    if voice_register not in ("formal", "casual", "jugendsprache"):
-        voice_register = "casual"
+    action_type = action_data.get("action_type", "CREATE_POST")
     platform_value = "twitter" if "twitter" in platform.lower() else "reddit"
-    parent_post_id = (
-        str(action_args.get("parent_post_id"))
-        if action_args.get("parent_post_id")
-        else None
-    )
+    body = action_args.get("content") or action_args.get("text") or ""
+
+    # post_id / parent_post_id plattformpräfixen; Kommentare referenzieren
+    # ihren Elternpost, Posts haben keinen Parent (top-level).
+    if action_type == "CREATE_COMMENT":
+        raw_id = action_args.get("comment_id") or action_args.get("id")
+        parent_raw = action_args.get("post_id") or action_args.get("new_post_id")
+        if not raw_id or not parent_raw or not body:
+            return
+        post_id = f"{platform_value}:comment:{raw_id}"
+        parent_post_id = f"{platform_value}:{parent_raw}"
+    else:  # CREATE_POST
+        raw_id = str(
+            action_args.get("post_id")
+            or action_args.get("new_post_id")
+            or action_args.get("id")
+            or ""
+        )
+        if not raw_id or not body:
+            return
+        post_id = f"{platform_value}:{raw_id}"
+        parent_raw = action_args.get("parent_post_id")
+        parent_post_id = f"{platform_value}:{parent_raw}" if parent_raw else None
+
+    persona_id = str(action_data.get("agent_id", ""))
+    persona_name = action_data.get("agent_name") or f"Agent {persona_id}"
+    # voice_register-Vokabular ist der Profil-Generator-SSoT
+    # (formal-de/neutral-de/technical-de/skeptisch-de); altes Vokabular
+    # (formal/casual/jugendsprache) war nie an den Generator angebunden.
+    voice_register = str(action_args.get("voice_register", "neutral-de"))
+    if voice_register not in ("formal-de", "neutral-de", "technical-de", "skeptisch-de"):
+        voice_register = "neutral-de"
+
     payload: Dict[str, Any] = {
         "event_type": "post_created",
         "simulation_id": simulation_id,
@@ -301,13 +319,15 @@ async def _emit_post_created_to_redis(
         "parent_post_id": parent_post_id,
         "platform": platform_value,
         "persona_id": persona_id,
+        "persona_name": persona_name,
         "voice_register": voice_register,
         "is_simulated": True,
         "body": body,
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        # Phase B: Sentiment-Architektur-Slot — None bis Sentiment-Service aktiv.
+        # Sentiment-Architektur-Slot — aktuell nicht unterstützt (#1216 5b).
         "sentiment": None,
-        # Phase B: Voting-Score — 0 als neutraler Default (Twitter hat kein Voting).
+        # Voting-Score — 0 ist der echte Wert zum Erzeugungszeitpunkt (frischer
+        # Post hat keine Votes); der Snapshot liefert den akkumulierten Stand.
         "score": 0,
         # Task 1 — virtuelle Sim-Zeit pro CREATE_POST. None bei alten Callern.
         "sim_time": sim_time_iso,
@@ -2011,7 +2031,9 @@ async def run_reddit_simulation(
                 total_actions += 1
                 round_action_count += 1
             # Slice 5-pre: emit PostCreatedEvent to Redis for SSE live-feed.
-            if action_data.get("action_type") == "CREATE_POST":
+            # Reddit emittiert Posts und Kommentare — Kommentare tragen
+            # parent_post_id, damit der Reply-Tree Äste bekommt (#1216 5c).
+            if action_data.get("action_type") in ("CREATE_POST", "CREATE_COMMENT"):
                 await _emit_post_created_to_redis(
                     simulation_id=_sim_id_for_emit,
                     platform="reddit",

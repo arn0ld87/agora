@@ -34,8 +34,9 @@ const VALID_PAYLOAD = {
   post_id: 'post-abc',
   parent_post_id: null,
   platform: 'reddit' as const,
-  persona_id: 'persona-7',
-  voice_register: 'casual' as const,
+persona_id: 'persona-7',
+  persona_name: 'Test Persona',
+  voice_register: 'neutral-de' as const,
   is_simulated: true,
   body: 'Mein erster Post.',
   timestamp: '2026-05-15T12:00:00+00:00',
@@ -50,24 +51,24 @@ describe('PostCreatedEventSchema', () => {
     }
   })
 
-  it('akzeptiert gültigen Payload (reddit/casual)', () => {
+  it('akzeptiert gültigen Payload (reddit/neutral-de)', () => {
     const result = PostCreatedEventSchema.safeParse(VALID_PAYLOAD)
     expect(result.success).toBe(true)
   })
 
-  it('akzeptiert twitter/formal', () => {
+  it('akzeptiert twitter/formal-de', () => {
     const result = PostCreatedEventSchema.safeParse({
       ...VALID_PAYLOAD,
       platform: 'twitter',
-      voice_register: 'formal',
+      voice_register: 'formal-de',
     })
     expect(result.success).toBe(true)
   })
 
-  it('akzeptiert jugendsprache voice_register', () => {
+  it('akzeptiert skeptisch-de voice_register', () => {
     const result = PostCreatedEventSchema.safeParse({
       ...VALID_PAYLOAD,
-      voice_register: 'jugendsprache',
+      voice_register: 'skeptisch-de',
     })
     expect(result.success).toBe(true)
   })
@@ -128,10 +129,21 @@ describe('PostCreatedEventSchema', () => {
     expect(PlatformSchema.options).toContain('twitter')
   })
 
-  it('VoiceRegisterSchema kennt formal/casual/jugendsprache', () => {
-    expect(VoiceRegisterSchema.options).toContain('formal')
-    expect(VoiceRegisterSchema.options).toContain('casual')
-    expect(VoiceRegisterSchema.options).toContain('jugendsprache')
+  it('VoiceRegisterSchema kennt formal-de/neutral-de/technical-de/skeptisch-de', () => {
+    expect(VoiceRegisterSchema.options).toContain('formal-de')
+    expect(VoiceRegisterSchema.options).toContain('neutral-de')
+    expect(VoiceRegisterSchema.options).toContain('technical-de')
+    expect(VoiceRegisterSchema.options).toContain('skeptisch-de')
+  })
+
+  it('lehnt Legacy-voice_register-Werte ab (Anti-Dekorations-Linie #1216)', () => {
+    for (const v of ['formal', 'casual', 'jugendsprache']) {
+      const result = PostCreatedEventSchema.safeParse({
+        ...VALID_PAYLOAD,
+        voice_register: v,
+      })
+      expect(result.success).toBe(false)
+    }
   })
 
   // Phase B — sentiment + score

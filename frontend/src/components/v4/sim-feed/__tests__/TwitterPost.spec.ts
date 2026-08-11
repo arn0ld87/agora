@@ -17,8 +17,9 @@ function mkPost(overrides: Partial<PostCreatedEvent> = {}): PostCreatedEvent {
     post_id: 'p-1',
     parent_post_id: null,
     platform: 'twitter',
-    persona_id: 'testuser',
-    voice_register: 'casual',
+persona_id: 'testuser',
+    persona_name: 'Test Persona',
+    voice_register: 'neutral-de',
     is_simulated: true,
     body: 'Test-Post-Inhalt',
     timestamp: '2026-05-15T14:30:00Z',
@@ -28,12 +29,12 @@ function mkPost(overrides: Partial<PostCreatedEvent> = {}): PostCreatedEvent {
 }
 
 describe('TwitterPost', () => {
-  it('rendert @handle aus persona_id', () => {
+  it('rendert @handle aus persona_name', () => {
     const wrapper = mount(TwitterPost, {
-      props: { post: mkPost() },
+      props: { post: mkPost({ persona_name: 'Testperson' }) },
       global: { plugins: [i18n] },
     })
-    expect(wrapper.text()).toContain('@testuser')
+    expect(wrapper.text()).toContain('@Testperson')
   })
 
   it('zeigt SIM-Badge wenn is_simulated=true', () => {

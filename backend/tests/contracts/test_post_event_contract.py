@@ -24,7 +24,8 @@ def _valid_payload() -> dict:
         "parent_post_id": None,
         "platform": "reddit",
         "persona_id": "persona-7",
-        "voice_register": "casual",
+        "persona_name": "Alex Schneider",
+        "voice_register": "neutral-de",
         "is_simulated": True,
         "body": "Mein erster Post.",
         "timestamp": datetime(2026, 5, 15, 12, 0, tzinfo=timezone.utc).isoformat(),
@@ -80,17 +81,37 @@ class TestPostCreatedEvent:
         ev = PostCreatedEvent.model_validate(payload)
         assert ev.platform is Platform.TWITTER
 
-    def test_formal_voice_register_accepted(self) -> None:
+    def test_formal_de_voice_register_accepted(self) -> None:
         payload = _valid_payload()
-        payload["voice_register"] = "formal"
+        payload["voice_register"] = "formal-de"
         ev = PostCreatedEvent.model_validate(payload)
-        assert ev.voice_register is VoiceRegister.FORMAL
+        assert ev.voice_register is VoiceRegister.FORMAL_DE
 
-    def test_jugendsprache_voice_register_accepted(self) -> None:
+    def test_neutral_de_voice_register_accepted(self) -> None:
         payload = _valid_payload()
-        payload["voice_register"] = "jugendsprache"
+        payload["voice_register"] = "neutral-de"
         ev = PostCreatedEvent.model_validate(payload)
-        assert ev.voice_register is VoiceRegister.JUGENDSPRACHE
+        assert ev.voice_register is VoiceRegister.NEUTRAL_DE
+
+    def test_technical_de_voice_register_accepted(self) -> None:
+        payload = _valid_payload()
+        payload["voice_register"] = "technical-de"
+        ev = PostCreatedEvent.model_validate(payload)
+        assert ev.voice_register is VoiceRegister.TECHNICAL_DE
+
+    def test_skeptisch_de_voice_register_accepted(self) -> None:
+        payload = _valid_payload()
+        payload["voice_register"] = "skeptisch-de"
+        ev = PostCreatedEvent.model_validate(payload)
+        assert ev.voice_register is VoiceRegister.SKEPTISCH_DE
+
+    def test_rejects_legacy_voice_register_vocabulary(self) -> None:
+        """Altes Vokabular (formal/casual/jugendsprache) ist nicht mehr gültig."""
+        for legacy in ("formal", "casual", "jugendsprache"):
+            payload = _valid_payload()
+            payload["voice_register"] = legacy
+            with pytest.raises(ValidationError):
+                PostCreatedEvent.model_validate(payload)
 
     def test_body_required_non_empty(self) -> None:
         payload = _valid_payload()
@@ -166,3 +187,34 @@ class TestPostCreatedEventSentimentScore:
         payload = {**_valid_payload(), "platform": "twitter"}
         ev = PostCreatedEvent.model_validate(payload)
         assert ev.score == 0
+
+
+class TestPostCreatedEventPersonaName:
+    """#1216 5a — persona_name als Anzeigename (persona_id bleibt Identifikator)."""
+
+    def test_persona_name_accepted(self) -> None:
+        ev = PostCreatedEvent.model_validate(_valid_payload())
+        assert ev.persona_name == "Alex Schneider"
+
+    def test_persona_name_required(self) -> None:
+        payload = _valid_payload()
+        del payload["persona_name"]
+        with pytest.raises(ValidationError):
+            PostCreatedEvent.model_validate(payload)
+
+    def test_persona_name_rejects_empty(self) -> None:
+        payload = {**_valid_payload(), "persona_name": ""}
+        with pytest.raises(ValidationError):
+            PostCreatedEvent.model_validate(payload)
+
+    def test_persona_name_rejects_whitespace_only(self) -> None:
+        payload = {**_valid_payload(), "persona_name": "   "}
+        with pytest.raises(ValidationError):
+            PostCreatedEvent.model_validate(payload)
+
+    def test_persona_id_stays_separate_from_name(self) -> None:
+        """persona_id ist der stabile Identifikator, persona_name die Anzeige."""
+        payload = {**_valid_payload(), "persona_id": "agent-14", "persona_name": "Mira"}
+        ev = PostCreatedEvent.model_validate(payload)
+        assert ev.persona_id == "agent-14"
+        assert ev.persona_name == "Mira"

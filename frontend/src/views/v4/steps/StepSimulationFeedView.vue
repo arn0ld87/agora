@@ -11,6 +11,7 @@ import { onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { useEventStream } from '@/composables/useEventStream'
 import { useSimFeed } from '@/composables/useSimFeed'
+import { getSimulationFeedSnapshot } from '@/api/simulation'
 import FeedColumn from '@/components/v4/sim-feed/FeedColumn.vue'
 import RedditThread from '@/components/v4/sim-feed/RedditThread.vue'
 import TwitterPost from '@/components/v4/sim-feed/TwitterPost.vue'
@@ -27,7 +28,24 @@ const stream = useEventStream(simulationId, {
 })
 
 onMounted(async () => {
+  // #1009 — Stream zuerst starten, danach den Snapshot mergen. Umgekehrte
+  // Reihenfolge ließe Posts verloren gehen, die zwischen Snapshot-Read und
+  // stream.start() geschrieben werden: post_created hat kein Replay und die
+  // EventSource existiert vor start() noch nicht. Die seen-Dedup per post_id
+  // fängt den Overlap ab — ein Post, der im Snapshot UND live ankommt, wird
+  // beim zweiten ingest übersprungen. Fehler beim Snapshot-Fetch brechen
+  // nichts: der Live-Pfad bleibt allein nutzbar.
   await stream.start()
+  try {
+    const [reddit, twitter] = await Promise.all([
+      getSimulationFeedSnapshot(simulationId, 'reddit').catch(() => []),
+      getSimulationFeedSnapshot(simulationId, 'twitter').catch(() => []),
+    ])
+    feed.ingestMany([...reddit, ...twitter])
+  } catch {
+    // Beide Catches oben schlucken schon den Einzelfehler; dieser Block ist
+    // nur die Defensive für den Fall, dass ingestMany selbst wirft.
+  }
 })
 
 onBeforeUnmount(() => {
