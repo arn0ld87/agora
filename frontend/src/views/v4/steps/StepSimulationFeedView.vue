@@ -77,6 +77,7 @@ onBeforeUnmount(() => {
       :activity-rate="feed.activityRate.value"
       :reddit-count="feed.redditPosts.value.length"
       :twitter-count="feed.twitterPosts.value.length"
+      :recent-posts="feed.recentPosts.value"
     />
     <div class="sf-columns">
       <FeedColumn

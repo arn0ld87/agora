@@ -1092,13 +1092,22 @@ def _enrich_action_context(
 
         # Create post: Voting-Stand zum Erzeugungszeitpunkt mitführen, damit der
         # Live-Feed einen echten Wert zeigt statt einer hartkodierten 0
-        # (#1209 5b).
+        # (#1209 5b). Die Post-ID wird vorher normalisiert: der Emitter kennt
+        # den Fallback post_id → new_post_id, und ohne dieselbe Normalisierung
+        # bliebe ein Post, dessen Trace-Zeile new_post_id trägt, ohne Score —
+        # der Feed zeigte wieder eine unechte 0. Den dritten Emitter-Fallback
+        # `id` gibt es hier bewusst nicht: fetch_new_actions_from_db reicht
+        # diesen Schlüssel gar nicht durch, er kann action_args nie erreichen.
         elif action_type == 'CREATE_POST':
+            if not action_args.get('post_id') and action_args.get('new_post_id'):
+                action_args['post_id'] = action_args['new_post_id']
             _attach_engagement_score(cursor, 'post', 'post_id', action_args)
 
-    except Exception as e:
+    except Exception:
         # Context supplement failure does not affect main process
-        print(f"Failed to supplement action context: {e}")
+        logging.getLogger("agora.run_parallel_simulation").warning(
+            "Failed to supplement action context", exc_info=True
+        )
 
 
 def _attach_engagement_score(

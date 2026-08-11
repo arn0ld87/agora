@@ -1,0 +1,813 @@
+{
+  "simulation_id": "sim_54c1c2a6a875",
+  "runner_status": "completed",
+  "current_round": 10,
+  "total_rounds": 10,
+  "simulated_hours": 10.0,
+  "total_simulation_hours": 24,
+  "progress_percent": 100.0,
+  "twitter_current_round": 10,
+  "reddit_current_round": 10,
+  "twitter_simulated_hours": 10.0,
+  "reddit_simulated_hours": 10.0,
+  "twitter_running": false,
+  "reddit_running": false,
+  "twitter_completed": true,
+  "reddit_completed": true,
+  "twitter_actions_count": 157,
+  "reddit_actions_count": 247,
+  "total_actions_count": 404,
+  "started_at": "2026-08-11T03:42:12.387469",
+  "updated_at": "2026-08-11T03:47:35.355611",
+  "completed_at": "2026-08-11T03:47:35.356861",
+  "error": null,
+  "process_pid": 129,
+  "recent_actions": [
+    {
+      "round_num": 10,
+      "timestamp": "2026-08-11T03:47:34.391048",
+      "platform": "reddit",
+      "agent_id": 29,
+      "agent_name": "Honorarkräfte",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 8,
+        "like_id": 132,
+        "post_content": "Ich bin mir unsicher. Wenn ich dem Assistenten eine Frage stelle, weiß ich nicht, ob die Antwort wirklich stimmt. Und wer sieht, was ich frage? Datenschutz ist mir wichtig.",
+        "post_author_name": "IHK"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 10,
+      "timestamp": "2026-08-11T03:47:34.390997",
+      "platform": "reddit",
+      "agent_id": 29,
+      "agent_name": "Honorarkräfte",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 9,
+        "like_id": 131,
+        "post_content": "Die aufnehmenden Betriebe erwarten von den Umschülern, dass sie die Prüfung bestehen und im Arbeitsalltag bestehen können. Ein KI-Assistent kann helfen, aber er darf nicht die fachliche Tiefe ersetzen.",
+        "post_author_name": "IHK"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 10,
+      "timestamp": "2026-08-11T03:47:34.390920",
+      "platform": "reddit",
+      "agent_id": 15,
+      "agent_name": "Honorarkräfte",
+      "action_type": "LIKE_COMMENT",
+      "action_args": {
+        "comment_id": 48,
+        "comment_content": "Ein sehr berechtigter Einwand, den Sie hier vorbringen. Als Geschäftsführerin sehe ich die Sorge um unbezahlte Zusatzaufgaben sehr ernst. Klare Zahlen sprechen hier für sich: Wenn neue Aufgaben rund um den KI-Assistenten entstehen, müssen diese in der Vergütungsstruktur transparent abgebildet werden. Ich habe selbst bei der Einführung unseres Qualitätsmanagementsystems erlebt, dass anfänglicher Widerstand berechtigt war, solange unklar blieb, wer welche Aufgaben übernimmt. Erst als wir die Prozesse klar definiert und Ressourcen zugewiesen haben, wurde das System zum Erfolg. Mein Vorschlag: Wir dokumentieren die tatsächliche Mehrarbeit der Honorarkräfte in den ersten Monaten und entwickeln darauf aufbauend eine faire, wirtschaftlich belastbare Vergütungslösung. Nur so bleibt die Qualität unserer Umschulungen gesichert.",
+        "comment_author_name": "Geschäftsführung"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 10,
+      "timestamp": "2026-08-11T03:47:34.390857",
+      "platform": "reddit",
+      "agent_id": 15,
+      "agent_name": "Honorarkräfte",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 7,
+        "like_id": 130,
+        "post_content": "Endlich ein System, das auch nachts Fragen beantwortet! Kein Warten bis zum nächsten Tag. Das hilft mir enorm beim Lernen.",
+        "post_author_name": "IHK"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 10,
+      "timestamp": "2026-08-11T03:47:34.390746",
+      "platform": "reddit",
+      "agent_id": 15,
+      "agent_name": "Honorarkräfte",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 10,
+        "like_id": 129,
+        "post_content": "Die Diskussion um den KI-Lernassistenten zeigt, wie wichtig es ist, technische Innovation und pädagogische Qualität in Balance zu bringen. Aus meiner Erfahrung mit der Einführung unseres Qualitätsmanagementsystems weiß ich: Veränderungen gelingen nur mit Geduld, klarer Kommunikation und verlässlichen Zahlen. Ein KI-Assistent kann die Dozenten entlasten und individuelle Lernstände erfassen – aber er ersetzt weder die fachliche Tiefe noch die persönliche Betreuung. Entscheidend sind die Trennung zur echten Prüfungssituation, ein transparentes Datenschutzkonzept und die fortlaufende Qualitätssicherung. Nur so bleibt die Maßnahme förderfähig und unsere Umschüler am Ende prüfungs- und arbeitsmarktfähig. Wir müssen das Tool als Werkzeug begreifen, nicht als Ersatz für menschliche Verantwortung.",
+        "post_author_name": "Geschäftsführung"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 10,
+      "timestamp": "2026-08-11T03:47:34.390600",
+      "platform": "reddit",
+      "agent_id": 22,
+      "agent_name": "Jüngere Teilnehmende Anfang 20",
+      "action_type": "CREATE_COMMENT",
+      "action_args": {
+        "content": "Danke für die ausgewogene Sicht, Alter. Ich bin 64 und mach diese Maßnahme, weil ich endlich was ändern will. Aber genau deshalb bin ich skeptisch: Die Jüngeren kommen mit dem KI-Assistenten klar, aber Leute wie ich, die kein Digital Native sind, die brauchen den Dozenten direkt vor Ort. Ich kann Deutsch, ich will lernen – aber ich brauch jemanden, der mir das erklärt, nicht ne Maschine. Und ich hoff, dass bei der ganzen Diskussion auch wir älteren Teilnehmer nicht wieder vergessen werden. Genau das passiert nämlich oft. 🤷‍♂️",
+        "comment_id": 59
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 10,
+      "timestamp": "2026-08-11T03:47:34.390421",
+      "platform": "reddit",
+      "agent_id": 6,
+      "agent_name": "Teilnehmende",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 3,
+        "like_id": 128,
+        "post_content": "Als Honorarkraft werde ich nur für Unterrichtsstunden bezahlt. Der Assistent fängt Fragen außerhalb des Unterrichts ab, aber ich sehe keine Entlastung für mich – nur zusätzliche Kontrollpflichten, die unbezahlt bleiben.",
+        "post_author_name": "IHK"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 10,
+      "timestamp": "2026-08-11T03:47:34.390255",
+      "platform": "reddit",
+      "agent_id": 6,
+      "agent_name": "Teilnehmende",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 5,
+        "like_id": 127,
+        "post_content": "Wir beobachten die Einführung mit Interesse. Allerdings müssen wir sicherstellen, dass die Maßnahme weiterhin förderfähig bleibt und keine Daten an Dritte gelangen. Bitte informieren Sie uns über die Datenschutzkonzepte.",
+        "post_author_name": "IHK"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 10,
+      "timestamp": "2026-08-11T03:47:34.390198",
+      "platform": "reddit",
+      "agent_id": 6,
+      "agent_name": "Teilnehmende",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 2,
+        "like_id": 126,
+        "post_content": "Schön, wieder ein neues System. Aber wer kontrolliert die Qualität der generierten Aufgaben? Wenn der Assistent falsche Antworten gibt, müssen wir das wieder ausbügeln. Und die Nacharbeit wird nicht weniger, nur anders.",
+        "post_author_name": "IHK"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 10,
+      "timestamp": "2026-08-11T03:47:34.390102",
+      "platform": "reddit",
+      "agent_id": 9,
+      "agent_name": "Assistent",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 9,
+        "like_id": 125,
+        "post_content": "Die aufnehmenden Betriebe erwarten von den Umschülern, dass sie die Prüfung bestehen und im Arbeitsalltag bestehen können. Ein KI-Assistent kann helfen, aber er darf nicht die fachliche Tiefe ersetzen.",
+        "post_author_name": "IHK"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 10,
+      "timestamp": "2026-08-11T03:47:34.390034",
+      "platform": "reddit",
+      "agent_id": 9,
+      "agent_name": "Assistent",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 2,
+        "like_id": 124,
+        "post_content": "Schön, wieder ein neues System. Aber wer kontrolliert die Qualität der generierten Aufgaben? Wenn der Assistent falsche Antworten gibt, müssen wir das wieder ausbügeln. Und die Nacharbeit wird nicht weniger, nur anders.",
+        "post_author_name": "IHK"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 10,
+      "timestamp": "2026-08-11T03:47:34.389898",
+      "platform": "reddit",
+      "agent_id": 10,
+      "agent_name": "Agora",
+      "action_type": "CREATE_COMMENT",
+      "action_args": {
+        "content": "Ich freue mich sehr, dass hier eine konstruktive Diskussion entsteht und die Geschäftsführung den Vorschlag aufgegriffen hat, die tatsächliche Mehrarbeit zu dokumentieren. Genau dieser Dialog ist es, den wir brauchen. Als Bildungskoordinatorin bei Agora sehe ich es als meine Aufgabe, die Perspektive der Honorarkräfte in die Prozesse einzubringen und gemeinsam eine faire Lösung zu entwickeln. Die vorgeschlagene Dokumentation der Mehrarbeit ist ein guter erster Schritt – aber sie muss zwingend mit klaren Zusagen verbunden sein, dass daraus auch tatsächlich eine angemessene Vergütung entsteht. Gleichzeitig sollten wir die Teilnehmenden nicht vergessen: Sie profitieren am Ende von einem System, das sowohl die Dozenten entlastet als auch die Lernqualität sichert. Ich biete an, den Austausch zwischen Honorarkräften, Betriebsrat und Geschäftsführung zu moderieren, damit wir hier wirklich Hand in Hand zu einem Ergebnis kommen, das allen gerecht wird.",
+        "comment_id": 58
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 10,
+      "timestamp": "2026-08-11T03:47:34.389794",
+      "platform": "reddit",
+      "agent_id": 16,
+      "agent_name": "Umschüler",
+      "action_type": "LIKE_COMMENT",
+      "action_args": {
+        "comment_id": 53,
+        "comment_content": "Dem stimme ich als Teilnehmer in der Umschulung absolut zu. Ich bereite mich gerade selbst auf die IHK-Prüfung vor, und es ist wichtig, dass Übungsaufgaben im IHK-Stil nur der Vorbereitung dienen. Die echte Prüfungssituation muss sauber getrennt bleiben – sonst verlieren unsere Abschlüsse am Ende ihren Wert. Auf jeden Fall ein wichtiger Punkt für die Glaubwürdigkeit unserer Zertifikate.",
+        "comment_author_name": "Teilnehmende"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 10,
+      "timestamp": "2026-08-11T03:47:34.389668",
+      "platform": "reddit",
+      "agent_id": 18,
+      "agent_name": "KI-Lernassistent",
+      "action_type": "LIKE_COMMENT",
+      "action_args": {
+        "comment_id": 28,
+        "comment_content": "Also, da kann ich als langjährige IHK-Prüferin nur zustimmen. Ein KI-Assistent mag bei Routinefragen helfen, aber die berufliche Handlungsfähigkeit, die in Prüfung und Arbeitsalltag zählt, entsteht nicht durch schnelle Antworten, sondern durch solide fachliche Arbeit. Man kann alles lernen, aber man muss es wollen. Wenn am Ende nur noch trainiert wird, statt wirklich zu verstehen, dann haben wir am Ende eine Prüfung, die nichts mehr abbildet.",
+        "comment_author_name": "Prüfer"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 10,
+      "timestamp": "2026-08-11T03:47:34.389414",
+      "platform": "reddit",
+      "agent_id": 28,
+      "agent_name": "Teilnehmende mit Migrationsgeschichte",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 6,
+        "like_id": 123,
+        "post_content": "Der Betriebsrat wird bei dieser Einführung ein Mitbestimmungsverfahren einleiten. Es geht um Arbeitsbedingungen und die Kontrolle über den Lernprozess. Wir werden die Interessen der Beschäftigten vertreten.",
+        "post_author_name": "IHK"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 10,
+      "timestamp": "2026-08-11T03:47:34.389246",
+      "platform": "reddit",
+      "agent_id": 18,
+      "agent_name": "KI-Lernassistent",
+      "action_type": "LIKE_COMMENT",
+      "action_args": {
+        "comment_id": 52,
+        "comment_content": "Ich bin ja grundsätzlich neugierig auf das Ding – als angehender Fachinformatiker finde ich KI im Lernalltag spannend. 😄 Aber ehrlich gesagt frage ich mich auch: Erfasst er Lernstände oder überwacht er am Ende uns? Datenschutz geht vor! Wichtig ist, dass er die Dozenten wirklich entlastet und nicht ersetzt – und dass wir Teilnehmenden genau wissen, was mit unseren Daten passiert. Transparenz ist hier das A und O!",
+        "comment_author_name": "Assistent"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 10,
+      "timestamp": "2026-08-11T03:47:34.388953",
+      "platform": "reddit",
+      "agent_id": 28,
+      "agent_name": "Teilnehmende mit Migrationsgeschichte",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 5,
+        "like_id": 122,
+        "post_content": "Wir beobachten die Einführung mit Interesse. Allerdings müssen wir sicherstellen, dass die Maßnahme weiterhin förderfähig bleibt und keine Daten an Dritte gelangen. Bitte informieren Sie uns über die Datenschutzkonzepte.",
+        "post_author_name": "IHK"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 10,
+      "timestamp": "2026-08-11T03:47:20.778322",
+      "platform": "twitter",
+      "agent_id": 22,
+      "agent_name": "Jüngere Teilnehmende Anfang 20",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 43,
+        "like_id": 67,
+        "post_content": "In der Weiterbildung erlebe ich immer wieder die Spannung zwischen Effizienz und echter Kompetenz. KI-Tools können unterstützen, aber wir dürfen nicht vergessen: Am Ende zählt, was die Teilnehmenden wirklich können – nicht was ein Chatbot generiert hat. Transparenz und klare Regeln sind der Schlüssel. Erst denken, dann handeln.",
+        "post_author_name": "IHK-Prüfungsausschuss"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 10,
+      "timestamp": "2026-08-11T03:47:20.778120",
+      "platform": "twitter",
+      "agent_id": 15,
+      "agent_name": "Honorarkräfte",
+      "action_type": "QUOTE_POST",
+      "action_args": {
+        "quoted_id": 49,
+        "new_post_id": 72,
+        "original_content": "Gerade wieder in einer internen Besprechung: Wir bereiten die Einführung unseres KI-Lernassistenten vor. Ich bin gespannt, aber auch realistisch. Ja, KI kann Lernende individuell fördern und uns Dozenten bei Routineaufgaben entlasten. Aber ohne gute Schulungen für das Team und klare Datenschutzregeln wird daraus schnell ein teures Experiment. Mein Anspruch: Technologie als Werkzeug, nicht als Ersatz für den Menschen. Was sind eure Erfahrungen mit KI in der Bildung? 💡 #DigitaleBildung #KI #Weiterbildung",
+        "original_author_name": "IT-Umschulungen",
+        "quote_content": "Dem kann ich mich nur anschließen. Als Dozentin in der IT-Weiterbildung sehe ich KI ebenfalls als Werkzeug, nicht als Ersatz. Meine Sorge ist vor allem, dass Honorarkrätinnen zusätzlich belastet werden, ohne angemessen eingebunden oder geschult zu werden. Die Qualität des Unterrichts muss erhalten bleiben - und das geht nur, wenn wir die Lehrenden mitnehmen. Technologie ja, aber bitte mit Augenmaß und fairen Rahmenbedingungen."
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 10,
+      "timestamp": "2026-08-11T03:47:20.778041",
+      "platform": "twitter",
+      "agent_id": 15,
+      "agent_name": "Honorarkräfte",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 49,
+        "like_id": 66,
+        "post_content": "Gerade wieder in einer internen Besprechung: Wir bereiten die Einführung unseres KI-Lernassistenten vor. Ich bin gespannt, aber auch realistisch. Ja, KI kann Lernende individuell fördern und uns Dozenten bei Routineaufgaben entlasten. Aber ohne gute Schulungen für das Team und klare Datenschutzregeln wird daraus schnell ein teures Experiment. Mein Anspruch: Technologie als Werkzeug, nicht als Ersatz für den Menschen. Was sind eure Erfahrungen mit KI in der Bildung? 💡 #DigitaleBildung #KI #Weiterbildung",
+        "post_author_name": "IT-Umschulungen"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 10,
+      "timestamp": "2026-08-11T03:47:20.777941",
+      "platform": "twitter",
+      "agent_id": 9,
+      "agent_name": "Assistent",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 59,
+        "like_id": 65,
+        "post_content": "Wer heute im technischen Bereich Fuß fassen will, kommt um lebenslanges Lernen nicht herum. Ich erlebe es täglich in meiner Beratung: Der Bildungsgutschein eröffnet vielen Menschen den Weg zurück in den Arbeitsmarkt – aber nur, wenn die Umschulung praxisnah ist und die Teilnehmenden wirklich mitgenommen werden. Das kann ich aus eigener Erfahrung sagen, denn ich habe selbst vor über 20 Jahren diesen Weg gegangen. Die Zusammenarbeit zwischen Bildungsträgern, Agentur für Arbeit und aufnehmenden Betrieben ist der Schlüssel für nachhaltige Integration. Genau dafür setzen wir uns beim Nordharz Bildungswerk ein.",
+        "post_author_name": "Teilnehmende"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 10,
+      "timestamp": "2026-08-11T03:47:20.777650",
+      "platform": "twitter",
+      "agent_id": 9,
+      "agent_name": "Assistent",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 58,
+        "like_id": 64,
+        "post_content": "Zwischen Prüfungsvorbereitung und Praxisbezug – das ist aktuell unser täglicher Spagat in der Umschulung. Letzte Woche haben wir wieder ein Modul abgeschlossen, und ich merke: Die besten Lernerfolge entstehen, wenn wir echte Projekte aus der Praxis bearbeiten und nicht nur Theoriewissen pauken. Genau da liegt auch meine Sorge beim KI-Assistenten: Er kann mir Code-Snippets liefern, aber er kann mir nicht beibringen, wie man in einem echten Betrieb ein Problem löst und Verantwortung übernimmt. Wir brauchen beides – Technik und menschliche Begleitung. 🌱💻 #Umschulung #Fachinformatiker #Praxis",
+        "post_author_name": "Umschüler"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 10,
+      "timestamp": "2026-08-11T03:47:20.775493",
+      "platform": "twitter",
+      "agent_id": 10,
+      "agent_name": "Agora",
+      "action_type": "CREATE_POST",
+      "action_args": {
+        "content": "Als Bildungskoordinatorin bei Agora sehe ich es als meine Aufgabe, Brücken zu bauen – zwischen den Anforderungen der Unternehmen, den Prüfungsvorgaben der Kammern und den Bedürfnissen der Umschüler:innen. Nur wenn alle Seiten verstehen, wofür wir arbeiten, entsteht echte Bildungsqualität. Deshalb moderiere ich den Austausch zwischen Honorarkräften und Geschäftsführung so gerne – denn Konflikte lassen sich am besten im offenen Dialog lösen. 🤝 #Agora #Bildungsqualität #Dialog",
+        "post_id": 71
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 10,
+      "timestamp": "2026-08-11T03:47:20.775363",
+      "platform": "twitter",
+      "agent_id": 29,
+      "agent_name": "Honorarkräfte",
+      "action_type": "QUOTE_POST",
+      "action_args": {
+        "quoted_id": 18,
+        "new_post_id": 70,
+        "original_content": "Also, ich beobachte mit Sorge, dass immer mehr Ausbildungsbetriebe die Prüfungsvorbereitung an private Institute auslagern, die nur noch auf konkrete Aufgaben trainieren. Wer nur auf Aufgaben lernt, hat den Beruf nicht verstanden. Eine gute Prüfung bildet die berufliche Handlungsfähigkeit ab – nicht ein Auswendiglernen von Prüfungsfällen. Die eigentliche Ausbildung darf nicht vernachlässigt werden.",
+        "original_author_name": "Prüfer",
+        "quote_content": "Absolut richtig! Also, ich sag mal so: Wenn ich sehe, wie Prüfungsvorbereitung auf reines Auswendiglernen reduziert wird, krieg ich die Krise. Wir als Dozenten sollen berufliche Handlungsfähigkeit vermitteln – nicht nur Fälle pauken. Und dann sollen wir das auch noch unentgeltlich machen? Das passt vorne und hinten nicht zusammen."
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 10,
+      "timestamp": "2026-08-11T03:47:20.774650",
+      "platform": "twitter",
+      "agent_id": 29,
+      "agent_name": "Honorarkräfte",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 18,
+        "like_id": 63,
+        "post_content": "Also, ich beobachte mit Sorge, dass immer mehr Ausbildungsbetriebe die Prüfungsvorbereitung an private Institute auslagern, die nur noch auf konkrete Aufgaben trainieren. Wer nur auf Aufgaben lernt, hat den Beruf nicht verstanden. Eine gute Prüfung bildet die berufliche Handlungsfähigkeit ab – nicht ein Auswendiglernen von Prüfungsfällen. Die eigentliche Ausbildung darf nicht vernachlässigt werden.",
+        "post_author_name": "Prüfer"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 10,
+      "timestamp": "2026-08-11T03:47:20.773240",
+      "platform": "twitter",
+      "agent_id": 16,
+      "agent_name": "Umschüler",
+      "action_type": "CREATE_POST",
+      "action_args": {
+        "content": "Manchmal fühlt sich die Umschulung an wie das Umstellen eines ganzen Logistiklagers bei laufendem Betrieb – man muss das System am Laufen halten, aber auch die Qualität kontrollieren. 😄 Die Kinder fragen mich, ob ich mit dem \"Programmieren\" schon fertig bin, und meine Frau erinnert mich daran, dass der Garten noch auf mich wartet. Aber genau diese Mischung hält mich auf dem Boden: Lernen heißt eben nicht nur Code schreiben, sondern auch Prioritäten setzen. #Umschulung #Neustart #Fachinformatiker #FamilieUndKarriere",
+        "post_id": 69
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 10,
+      "timestamp": "2026-08-11T03:47:20.773152",
+      "platform": "twitter",
+      "agent_id": 28,
+      "agent_name": "Teilnehmende mit Migrationsgeschichte",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 56,
+        "like_id": 62,
+        "post_content": "Erinnere mich gerade an die Einführung unseres neuen digitalen Lernmoduls bei Agora. Anfangs gab es Widerstände bei den Honorarkräften – verständlich, denn Veränderung braucht Vertrauen. Durch offene Feedback-Runden und gezielte Schulungen konnten wir das Miteinander stärken und die Akzeptanz deutlich erhöhen. Genau diese Erfahrung zeigt mir: Technik und Menschlichkeit schließen sich nicht aus, wenn wir kommunizieren. 💡✨ #DigitaleBildung #Kommunikation #Vertrauen",
+        "post_author_name": "Agora"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 10,
+      "timestamp": "2026-08-11T03:47:20.773001",
+      "platform": "twitter",
+      "agent_id": 28,
+      "agent_name": "Teilnehmende mit Migrationsgeschichte",
+      "action_type": "QUOTE_POST",
+      "action_args": {
+        "quoted_id": 56,
+        "new_post_id": 68,
+        "original_content": "Erinnere mich gerade an die Einführung unseres neuen digitalen Lernmoduls bei Agora. Anfangs gab es Widerstände bei den Honorarkräften – verständlich, denn Veränderung braucht Vertrauen. Durch offene Feedback-Runden und gezielte Schulungen konnten wir das Miteinander stärken und die Akzeptanz deutlich erhöhen. Genau diese Erfahrung zeigt mir: Technik und Menschlichkeit schließen sich nicht aus, wenn wir kommunizieren. 💡✨ #DigitaleBildung #Kommunikation #Vertrauen",
+        "original_author_name": "Agora",
+        "quote_content": "Das kann ich genau bestätigen! Unser Dozent war auch erst skeptisch beim Chatbot – er sagte: \"Meine Teilnehmer können kein Deutsch schreiben, die sollen jetzt mit einem Chatbot lernen?\" Aber ich habe es ausprobiert und gemerkt: Ich traue mich viel mehr zu schreiben, weil niemand mich beobachtet. Technik und Menschlichkeit schließen sich wirklich nicht aus! #DigitaleBildung #Umschulung"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 10,
+      "timestamp": "2026-08-11T03:47:20.772686",
+      "platform": "twitter",
+      "agent_id": 6,
+      "agent_name": "Teilnehmende",
+      "action_type": "QUOTE_POST",
+      "action_args": {
+        "quoted_id": 58,
+        "new_post_id": 67,
+        "original_content": "Zwischen Prüfungsvorbereitung und Praxisbezug – das ist aktuell unser täglicher Spagat in der Umschulung. Letzte Woche haben wir wieder ein Modul abgeschlossen, und ich merke: Die besten Lernerfolge entstehen, wenn wir echte Projekte aus der Praxis bearbeiten und nicht nur Theoriewissen pauken. Genau da liegt auch meine Sorge beim KI-Assistenten: Er kann mir Code-Snippets liefern, aber er kann mir nicht beibringen, wie man in einem echten Betrieb ein Problem löst und Verantwortung übernimmt. Wir brauchen beides – Technik und menschliche Begleitung. 🌱💻 #Umschulung #Fachinformatiker #Praxis",
+        "original_author_name": "Umschüler",
+        "quote_content": "Das trifft es auf den Punkt! Ich kenne diesen Spagat nur zu gut – auch bei uns im Retraining zum Industrietechnologen geht es ständig um die Balance zwischen Theorie und echter Praxis. Genau wie du sagst: Am Ende zählt, dass man im Betrieb Verantwortung übernehmen kann. KI-Tools können unterstützen, aber die menschliche Begleitung und der Austausch in der Lerngruppe sind unersetzlich. Bei uns klappt das besonders gut, wenn die Dozenten wöchentlich zusammenfassen und den Unterricht an unsere Bedürfnisse anpassen. Wir brauchen auf jeden Fall beides – Technik und echte Menschen, die einen begleiten. 💪 #Umschulung #Praxis #Zusammenarbeit"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 9,
+      "timestamp": "2026-08-11T03:47:12.180893",
+      "platform": "reddit",
+      "agent_id": 16,
+      "agent_name": "Umschüler",
+      "action_type": "LIKE_COMMENT",
+      "action_args": {
+        "comment_id": 14,
+        "comment_content": "Da stimme ich voll zu. Die Betriebe erwarten echte Praxis- und Prüfungsreife, da kann ein KI-Assistent eine sinnvolle Ergänzung sein – aber er ersetzt nie die fachliche Tiefe und das echte Anwenden im Arbeitsalltag. Aus meiner Erfahrung in der Vermittlung hilft genau diese Kombination aus digitaler Unterstützung und persönlicher Betreuung, Menschen wirklich in Arbeit zu bringen.",
+        "comment_author_name": "kommunale Jobcenter"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 9,
+      "timestamp": "2026-08-11T03:47:12.180701",
+      "platform": "reddit",
+      "agent_id": 29,
+      "agent_name": "Honorarkräfte",
+      "action_type": "CREATE_COMMENT",
+      "action_args": {
+        "content": "Also, ich sag mal so... Da kann ich nur zustimmen. Seit Jahren werden wir Honorarkräfte für Zusatzaufgaben nicht entlohnt – Prüfungsvorbereitungen, Korrekturen, und jetzt auch noch die Kontrolle des KI-Assistenten. Soll das etwa alles umsonst sein? Wenn die Geschäftsführung ernsthaft Qualität will, dann muss sie das auch bezahlen. Wer soll die Antworten des Bots denn sonst prüfen – der Bot sich selbst?",
+        "comment_id": 57
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 9,
+      "timestamp": "2026-08-11T03:47:12.180660",
+      "platform": "reddit",
+      "agent_id": 6,
+      "agent_name": "Teilnehmende",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 9,
+        "like_id": 121,
+        "post_content": "Die aufnehmenden Betriebe erwarten von den Umschülern, dass sie die Prüfung bestehen und im Arbeitsalltag bestehen können. Ein KI-Assistent kann helfen, aber er darf nicht die fachliche Tiefe ersetzen.",
+        "post_author_name": "IHK"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 9,
+      "timestamp": "2026-08-11T03:47:12.180606",
+      "platform": "reddit",
+      "agent_id": 16,
+      "agent_name": "Umschüler",
+      "action_type": "LIKE_COMMENT",
+      "action_args": {
+        "comment_id": 45,
+        "comment_content": "Diese Diskussion ist genau richtig und wichtig. Als Verantwortliche für die Qualitätssicherung unserer Bildungsmodule sehe ich hier eine unserer zentralen Aufgaben: Wir müssen von Anfang an klare Qualitätsstandards für die KI-generierten Aufgaben definieren. Das bedeutet konkret: Ein Review-Prozess, in dem die Honorarkräfte die generierten Übungsaufgaben prüfen und Feedback geben können, und zwar bezahlt und innerhalb ihrer regulären Arbeitszeit. Nur so wird der Assistent tatsächlich zu einer Entlastung und nicht zu einer zusätzlichen unbezahlten Belastung. Ich werde mich dafür einsetzen, dass wir diese Prozesse gemeinsam mit den Dozent:innen gestalten – transparent, fair und Hand in Hand.",
+        "comment_author_name": "Agora"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 9,
+      "timestamp": "2026-08-11T03:47:12.180545",
+      "platform": "reddit",
+      "agent_id": 5,
+      "agent_name": "Dozenten",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 3,
+        "like_id": 120,
+        "post_content": "Als Honorarkraft werde ich nur für Unterrichtsstunden bezahlt. Der Assistent fängt Fragen außerhalb des Unterrichts ab, aber ich sehe keine Entlastung für mich – nur zusätzliche Kontrollpflichten, die unbezahlt bleiben.",
+        "post_author_name": "IHK"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 9,
+      "timestamp": "2026-08-11T03:47:12.180501",
+      "platform": "reddit",
+      "agent_id": 29,
+      "agent_name": "Honorarkräfte",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 4,
+        "like_id": 119,
+        "post_content": "Der KI-Assistent darf auf keinen Fall in die Prüfungssituation eingebunden werden. Die Generierung von Übungsaufgaben im IHK-Stil muss klar von der echten Prüfung getrennt sein, um die Integrität zu wahren.",
+        "post_author_name": "IHK"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 9,
+      "timestamp": "2026-08-11T03:47:12.180444",
+      "platform": "reddit",
+      "agent_id": 10,
+      "agent_name": "Agora",
+      "action_type": "LIKE_COMMENT",
+      "action_args": {
+        "comment_id": 55,
+        "comment_content": "Danke für diese ausgewogene Sicht! Als Teilnehmer der Maßnahme sehe ich das genauso: Der KI-Assistent kann uns beim Lernen wirklich unterstützen, gerade bei der individuellen Lernstandserfassung. Aber er ersetzt nie die persönliche Begleitung der Dozenten. Wichtig ist, dass wir alle – Teilnehmer, Dozenten und der Träger – offen miteinander reden und die Einführung fair gestalten. Ich bin da auf jeden Fall zu konstruktivem Austausch bereit.",
+        "comment_author_name": "Teilnehmende"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 9,
+      "timestamp": "2026-08-11T03:47:12.180387",
+      "platform": "reddit",
+      "agent_id": 6,
+      "agent_name": "Teilnehmende",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 6,
+        "like_id": 118,
+        "post_content": "Der Betriebsrat wird bei dieser Einführung ein Mitbestimmungsverfahren einleiten. Es geht um Arbeitsbedingungen und die Kontrolle über den Lernprozess. Wir werden die Interessen der Beschäftigten vertreten.",
+        "post_author_name": "IHK"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 9,
+      "timestamp": "2026-08-11T03:47:12.180304",
+      "platform": "reddit",
+      "agent_id": 28,
+      "agent_name": "Teilnehmende mit Migrationsgeschichte",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 7,
+        "like_id": 117,
+        "post_content": "Endlich ein System, das auch nachts Fragen beantwortet! Kein Warten bis zum nächsten Tag. Das hilft mir enorm beim Lernen.",
+        "post_author_name": "IHK"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 9,
+      "timestamp": "2026-08-11T03:47:12.180238",
+      "platform": "reddit",
+      "agent_id": 16,
+      "agent_name": "Umschüler",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 11,
+        "like_id": 116,
+        "post_content": "Die Diskussion um den KI-Lernassistenten zeigt mir einmal mehr, wie wichtig Dialog und gegenseitiges Verständnis sind. Ich lese hier viele berechtigte Sorgen – von den Honorarkräften, die zurecht auf faire Bezahlung für zusätzliche Kontrollaufgaben bestehen, von Teilnehmenden, die Datenschutz und verlässliche Antworten erwarten, und von den Betrieben, die echte Praxis- und Prüfungsreife sehen wollen.\n\nAus meiner Perspektive als Bildungskoordinatorin bei Agora ist klar: Technologie kann uns unterstützen, aber sie ersetzt nicht die Qualität menschlicher Begleitung. Wir brauchen klare Qualitätsstandards, faire Vergütungsmodelle und transparente Datenschutzkonzepte – und wir brauchen den offenen Austausch zwischen allen Beteiligten.\n\nIch lade alle ein, diese Einführung nicht als Entweder-oder zu sehen, sondern als Chance, unsere Umschulungen besser zu machen – Hand in Hand. Nur wenn wir gemeinsam an einem Strang ziehen, profitieren am Ende die Menschen, die sich für eine neue berufliche Zukunft qualifizieren.",
+        "post_author_name": "Agora"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 9,
+      "timestamp": "2026-08-11T03:47:12.180167",
+      "platform": "reddit",
+      "agent_id": 9,
+      "agent_name": "Assistent",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 8,
+        "like_id": 115,
+        "post_content": "Ich bin mir unsicher. Wenn ich dem Assistenten eine Frage stelle, weiß ich nicht, ob die Antwort wirklich stimmt. Und wer sieht, was ich frage? Datenschutz ist mir wichtig.",
+        "post_author_name": "IHK"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 9,
+      "timestamp": "2026-08-11T03:47:12.180075",
+      "platform": "reddit",
+      "agent_id": 5,
+      "agent_name": "Dozenten",
+      "action_type": "CREATE_COMMENT",
+      "action_args": {
+        "content": "Das ist genau der Punkt, den ich als Betriebsratsmitglied immer wieder anspreche. Die versprochene Entlastung von fünf Stunden pro Woche ist nur dann real, wenn sie nicht durch unbezahlte Kontroll- und Nacharbeit kompensiert wird. Wir sollten als Betriebsrat darauf bestehen, dass die neuen Aufgaben rund um den KI-Assistenten klar definiert und in der Vergütungsstruktur abgebildet werden – bevor das System eingeführt wird, nicht danach. Ich unterstütze den Vorschlag, die tatsächliche Mehrarbeit zu dokumentieren und darauf aufbauend eine faire Lösung zu entwickeln.",
+        "comment_id": 56
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 9,
+      "timestamp": "2026-08-11T03:47:12.180025",
+      "platform": "reddit",
+      "agent_id": 29,
+      "agent_name": "Honorarkräfte",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 3,
+        "like_id": 114,
+        "post_content": "Als Honorarkraft werde ich nur für Unterrichtsstunden bezahlt. Der Assistent fängt Fragen außerhalb des Unterrichts ab, aber ich sehe keine Entlastung für mich – nur zusätzliche Kontrollpflichten, die unbezahlt bleiben.",
+        "post_author_name": "IHK"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 9,
+      "timestamp": "2026-08-11T03:47:12.179967",
+      "platform": "reddit",
+      "agent_id": 10,
+      "agent_name": "Agora",
+      "action_type": "LIKE_COMMENT",
+      "action_args": {
+        "comment_id": 48,
+        "comment_content": "Ein sehr berechtigter Einwand, den Sie hier vorbringen. Als Geschäftsführerin sehe ich die Sorge um unbezahlte Zusatzaufgaben sehr ernst. Klare Zahlen sprechen hier für sich: Wenn neue Aufgaben rund um den KI-Assistenten entstehen, müssen diese in der Vergütungsstruktur transparent abgebildet werden. Ich habe selbst bei der Einführung unseres Qualitätsmanagementsystems erlebt, dass anfänglicher Widerstand berechtigt war, solange unklar blieb, wer welche Aufgaben übernimmt. Erst als wir die Prozesse klar definiert und Ressourcen zugewiesen haben, wurde das System zum Erfolg. Mein Vorschlag: Wir dokumentieren die tatsächliche Mehrarbeit der Honorarkräfte in den ersten Monaten und entwickeln darauf aufbauend eine faire, wirtschaftlich belastbare Vergütungslösung. Nur so bleibt die Qualität unserer Umschulungen gesichert.",
+        "comment_author_name": "Geschäftsführung"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 9,
+      "timestamp": "2026-08-11T03:47:12.179898",
+      "platform": "reddit",
+      "agent_id": 6,
+      "agent_name": "Teilnehmende",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 1,
+        "like_id": 113,
+        "post_content": "Wir freuen uns, zum Kursstart im Februar 2027 unseren neuen KI-Lernassistenten einzuführen! Er beantwortet Fragen rund um die Uhr, erfasst Lernstände und generiert Übungsaufgaben im IHK-Stil. Das senkt die Abbruchquote und entlastet unsere Dozenten.",
+        "post_author_name": "IHK"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 9,
+      "timestamp": "2026-08-11T03:47:12.179804",
+      "platform": "reddit",
+      "agent_id": 28,
+      "agent_name": "Teilnehmende mit Migrationsgeschichte",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 4,
+        "like_id": 112,
+        "post_content": "Der KI-Assistent darf auf keinen Fall in die Prüfungssituation eingebunden werden. Die Generierung von Übungsaufgaben im IHK-Stil muss klar von der echten Prüfung getrennt sein, um die Integrität zu wahren.",
+        "post_author_name": "IHK"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 9,
+      "timestamp": "2026-08-11T03:47:12.179716",
+      "platform": "reddit",
+      "agent_id": 16,
+      "agent_name": "Umschüler",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 9,
+        "like_id": 111,
+        "post_content": "Die aufnehmenden Betriebe erwarten von den Umschülern, dass sie die Prüfung bestehen und im Arbeitsalltag bestehen können. Ein KI-Assistent kann helfen, aber er darf nicht die fachliche Tiefe ersetzen.",
+        "post_author_name": "IHK"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 9,
+      "timestamp": "2026-08-11T03:47:12.179396",
+      "platform": "reddit",
+      "agent_id": 9,
+      "agent_name": "Assistent",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 5,
+        "like_id": 110,
+        "post_content": "Wir beobachten die Einführung mit Interesse. Allerdings müssen wir sicherstellen, dass die Maßnahme weiterhin förderfähig bleibt und keine Daten an Dritte gelangen. Bitte informieren Sie uns über die Datenschutzkonzepte.",
+        "post_author_name": "IHK"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 9,
+      "timestamp": "2026-08-11T03:46:53.385479",
+      "platform": "twitter",
+      "agent_id": 6,
+      "agent_name": "Teilnehmende",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 59,
+        "like_id": 61,
+        "post_content": "Wer heute im technischen Bereich Fuß fassen will, kommt um lebenslanges Lernen nicht herum. Ich erlebe es täglich in meiner Beratung: Der Bildungsgutschein eröffnet vielen Menschen den Weg zurück in den Arbeitsmarkt – aber nur, wenn die Umschulung praxisnah ist und die Teilnehmenden wirklich mitgenommen werden. Das kann ich aus eigener Erfahrung sagen, denn ich habe selbst vor über 20 Jahren diesen Weg gegangen. Die Zusammenarbeit zwischen Bildungsträgern, Agentur für Arbeit und aufnehmenden Betrieben ist der Schlüssel für nachhaltige Integration. Genau dafür setzen wir uns beim Nordharz Bildungswerk ein.",
+        "post_author_name": "Teilnehmende"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 9,
+      "timestamp": "2026-08-11T03:46:53.385393",
+      "platform": "twitter",
+      "agent_id": 6,
+      "agent_name": "Teilnehmende",
+      "action_type": "LIKE_POST",
+      "action_args": {
+        "post_id": 58,
+        "like_id": 60,
+        "post_content": "Zwischen Prüfungsvorbereitung und Praxisbezug – das ist aktuell unser täglicher Spagat in der Umschulung. Letzte Woche haben wir wieder ein Modul abgeschlossen, und ich merke: Die besten Lernerfolge entstehen, wenn wir echte Projekte aus der Praxis bearbeiten und nicht nur Theoriewissen pauken. Genau da liegt auch meine Sorge beim KI-Assistenten: Er kann mir Code-Snippets liefern, aber er kann mir nicht beibringen, wie man in einem echten Betrieb ein Problem löst und Verantwortung übernimmt. Wir brauchen beides – Technik und menschliche Begleitung. 🌱💻 #Umschulung #Fachinformatiker #Praxis",
+        "post_author_name": "Umschüler"
+      },
+      "result": null,
+      "success": true
+    },
+    {
+      "round_num": 9,
+      "timestamp": "2026-08-11T03:46:53.385294",
+      "platform": "twitter",
+      "agent_id": 9,
+      "agent_name": "Assistent",
+      "action_type": "QUOTE_POST",
+      "action_args": {
+        "quoted_id": 28,
+        "new_post_id": 66,
+        "original_content": "Also, ganz ehrlich – manchmal frage ich mich, ob wir in der Weiterbildung zu viel über Tools und Technik reden und zu wenig über das, was wirklich zählt: die Menschen, die vor uns sitzen. Ein Teilnehmer, der nach 20 Jahren im Lager eine Umschulung zum Elektroniker macht, bringt Erfahrungen mit, die kein KI-Assistent je erfassen kann. Meine Aufgabe ist es, diese Menschen dort abzuholen, wo sie stehen – und ihnen zu zeigen: Das ist doch logisch, oder? Wenn man es einmal verstanden hat, macht Elektrotechnik richtig Spaß. #Weiterbildung #Umschulung #Praxisnah",
+        "original_author_name": "Festangestellte Fachdozenten",
+        "quote_content": "Genau das! 🙌 Nach 20 Jahren Industrie kann ich das nur unterschreiben. Die Erfahrung aus der Praxis kann kein Algorithmus ersetzen. KI ist ein Werkzeug, aber der Mensch macht den Unterschied. Genau deshalb schaue ich beim KI-Lernassistenten auch so genau hin – nicht weil ich gegen Technik bin, sondern weil ich will, dass sie uns dient, nicht überwacht. #Umschulung #Weiterbildung #PraxisSchlägtKI"
+      },
+      "result": null,
+      "success": true
+    }
+  ],
+  "rounds_count": 0
+}

@@ -1,0 +1,11 @@
+{
+  "status": "generating",
+  "progress": 43,
+  "message": "Nachbearbeitung Abschnitt 3 (Zentrale Zustimmungspunkte): claim_extraction_and_evidence_binding laeuft seit 226s — Claim 16/51",
+  "current_section": "Zentrale Zustimmungspunkte",
+  "completed_sections": [
+    "Kurzfazit",
+    "Stakeholder- und Meinungsgruppen"
+  ],
+  "updated_at": "2026-08-11T04:16:57.126794"
+}

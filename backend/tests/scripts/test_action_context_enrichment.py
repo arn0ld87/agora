@@ -173,6 +173,39 @@ class TestEngagementScore:
         by_type = _fetch(_build_db(tmp_path))
         assert by_type["CREATE_POST"]["action_args"]["score"] == 0
 
+    def test_score_resolves_new_post_id_fallback(self, tmp_path) -> None:
+        # _emit_post_created_to_redis akzeptiert post_id, new_post_id und id.
+        # Der Score-Lookup muss denselben Fallback kennen, sonst trägt ein Post
+        # mit abweichendem Schlüssel wieder eine unechte 0 in den Feed.
+        #
+        # `id` ist bewusst nicht abgedeckt: fetch_new_actions_from_db filtert
+        # die Trace-Keys auf eine feste Liste, und `id` steht nicht darauf — der
+        # Schlüssel kann action_args auf diesem Pfad nie erreichen. Der Test
+        # weiter unten hält das fest.
+        id_key = "new_post_id"
+        db_path = tmp_path / "reddit_simulation.db"
+        conn = sqlite3.connect(db_path)
+        conn.executescript(_SCHEMA)
+        conn.execute(
+            "INSERT INTO user (user_id, agent_id, user_name, name) VALUES (?, ?, ?, ?)",
+            (3, 3, "mara_l", "Mara Lindner"),
+        )
+        conn.execute(
+            "INSERT INTO post (post_id, user_id, content, num_likes, num_dislikes) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (42, 3, "Post mit Resonanz.", 6, 2),
+        )
+        conn.execute(
+            "INSERT INTO trace (user_id, created_at, action, info) VALUES (?, ?, ?, ?)",
+            (3, "2026-08-11 10:00:00", "create_post",
+             json.dumps({"content": "Post mit Resonanz.", id_key: 42})),
+        )
+        conn.commit()
+        conn.close()
+        actions, _ = rps.fetch_new_actions_from_db(str(db_path), 0, {3: "Mara Lindner"})
+        post = [a for a in actions if a["action_type"] == "CREATE_POST"][0]
+        assert post["action_args"]["score"] == 4
+
 
 def _captured_publish(monkeypatch):
     client = MagicMock()

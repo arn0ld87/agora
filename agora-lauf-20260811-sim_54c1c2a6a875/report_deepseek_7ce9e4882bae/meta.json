@@ -1,0 +1,56 @@
+{
+  "report_id": "report_7ce9e4882bae",
+  "simulation_id": "sim_54c1c2a6a875",
+  "graph_id": "b8d0c6dc-3509-45ad-a19d-1b2de08135ea",
+  "simulation_requirement": "Wir sind ein AZAV-zertifizierter Umschulungsträger in Sachsen-Anhalt und wollen zum\r\nKursstart im Februar 2027 einen selbstgehosteten KI-Lernassistenten für unsere\r\nUmschülerinnen und Umschüler einführen. Der Assistent beantwortet Fachfragen aus\r\nunserem eigenen Kursmaterial, erfasst Lernstände und erzeugt Übungsaufgaben im Stil\r\nder IHK-Abschlussprüfung. Er bewertet nicht, er kommt in der Prüfung nicht zum\r\nEinsatz, und keine Daten verlassen unser Rechenzentrum.\r\n\r\nSimuliere die Reaktion der beteiligten Gruppen: Umschüler in ihren verschiedenen\r\nAusgangslagen, festangestellte Dozenten, Honorarkräfte, Geschäftsführung,\r\nKostenträger, IHK-Prüfungsausschuss, Betriebsrat und aufnehmende Betriebe.\r\n\r\nBeantworte drei Fragen:\r\n\r\n1. Wo bricht die Akzeptanz zuerst — und an welchem konkreten Punkt, nicht an welchem\r\n   Thema?\r\n2. Welche zwei Gruppen kollidieren so, dass ein Kompromiss die Maßnahme für beide\r\n   entwertet?\r\n3. Was müssten wir vor dem Kursstart entschieden haben, damit die Einführung nicht\r\n   nach dem ersten Quartal im Sande verläuft wie unsere Moodle-Einführung 2022?\r\n\r\nBehandle die Aussagen der Geschäftsführung (Abschnitt 7 des Seed-Dokuments) als\r\nunbelegte Behauptung, nicht als Datenlage. Wenn ein erwarteter Effekt in der\r\nSimulation nicht auftritt, schreib das hin, statt ihn zu relativieren. Wir brauchen\r\nkein ausgewogenes Bild, wir brauchen die Stelle, an der es kippt.",
+  "status": "planning",
+  "outline": {
+    "title": "Evaluierungsbericht: Einführung eines selbstgehosteten KI-Lernassistenten bei einem AZAV-zertifizierten Umschulungsträger in Sachsen-Anhalt",
+    "summary": "Die Simulation zeigt, dass die Akzeptanz des KI-Lernassistenten zuerst bei den Honorarkräften und Teilen der festangestellten Dozenten an der konkreten Frage der Bewertungskompetenz und der curricularen Kontrolle kippt, während die Geschäftsführung ihre Behauptungen zur Datensouveränität nicht belegen kann.",
+    "sections": [
+      {
+        "title": "Kurzfazit",
+        "content": "",
+        "description": "Die simulierten Gruppen zeigen ein gespaltenes Bild: Umschüler sind überwiegend pragmatisch-offen, Dozenten und Honorarkräfte skeptisch bis ablehnend, Kostenträger und IHK abwartend-neutral, Betriebe interessiert, aber fordernd. Die Geschäftsführung wirkt optimistisch, aber ihre Aussagen bleiben unbelegt. Insgesamt ist die Stimmung fragil, mit ersten Akzeptanzbrüchen bereits vor Kursstart."
+      },
+      {
+        "title": "Stakeholder- und Meinungsgruppen",
+        "content": "",
+        "description": "Es äußern sich neun Gruppen: Umschüler (differenziert nach IT-Affinen, Lernschwachen und Prüfungsängstlichen), festangestellte Dozenten, Honorarkräfte, Geschäftsführung, Kostenträger (Agentur für Arbeit, Jobcenter), IHK-Prüfungsausschuss, Betriebsrat und aufnehmende Betriebe. Die Grundhaltungen reichen von enthusiastisch (Geschäftsführung) über pragmatisch (Umschüler, Betriebe) bis zu misstrauisch (Honorarkräfte, Betriebsrat)."
+      },
+      {
+        "title": "Zentrale Zustimmungspunkte",
+        "content": "",
+        "description": "Zustimmung entsteht bei Umschülern durch die Aussicht auf individualisiertes Üben im IHK-Stil und die Betonung, dass der Assistent nicht bewertet. Betriebe sehen Potenzial für praxisnähere Vorbereitung. Einige Dozenten begrüßen die Entlastung bei Routinefragen. Diese Zustimmung stützt sich auf die Simulationsannahmen zur Selbsthosting-Architektur und zur Prüfungsferne des Tools."
+      },
+      {
+        "title": "Zentrale Kritikpunkte",
+        "content": "",
+        "description": "Kritik konzentriert sich auf drei Punkte: (1) Honorarkräfte befürchten eine Entwertung ihrer Lehrmethoden und eine Zunahme von Kontrolle durch die Geschäftsführung, (2) festangestellte Dozenten kritisieren die fehlende Einbindung in die inhaltliche Gestaltung des KI-Assistenten, (3) Betriebsrat und Datenschutzbeauftragte hinterfragen die behauptete Datensouveränität, da die Geschäftsführung keine belastbaren Nachweise liefert. Die IHK zeigt sich skeptisch, ob die Übungsaufgaben wirklich prüfungskonform sind."
+      },
+      {
+        "title": "Konfliktlinien",
+        "content": "",
+        "description": "Die zentrale Kollision entsteht zwischen Honorarkräften und Geschäftsführung: Ein Kompromiss, der die Honorarkräfte zufriedenstellt (starke Mitbestimmung, Begrenzung der KI-Nutzung), würde den von der Geschäftsführung angestrebten Effizienzgewinn entwerten. Eine zweite Konfliktlinie verläuft zwischen Dozenten und Umschülern: Dozenten wollen pädagogische Kontrolle behalten, während ein Teil der Umschüler den Assistenten als Ersatz für langsame Dozentenantworten nutzen möchte."
+      },
+      {
+        "title": "Unsicherheiten und Datenlücken",
+        "content": "",
+        "description": "Die Simulation kann nicht beantworten, ob die technische Infrastruktur tatsächlich den Datenschutzanforderungen genügt, wie die IHK real auf die Übungsaufgaben reagieren würde und ob die Kostenträger die Einführung als Qualitätsmerkmal oder als Risiko bewerten. Zudem bleibt unklar, ob die Umschüler den Assistenten langfristig nutzen oder nach anfänglicher Neugier wieder fallen lassen – ein Effekt, der in der Simulation nicht auftrat, aber aus der Moodle-Einführung 2022 bekannt ist."
+      }
+    ]
+  },
+  "markdown_content": "",
+  "missing_sections": [],
+  "created_at": "2026-08-11T04:06:26.953464",
+  "completed_at": "",
+  "error": null,
+  "has_evidence": false,
+  "evidence_sections": 0,
+  "simulation_snapshot": {
+    "rounds_completed": 10,
+    "total_rounds": 10,
+    "simulation_running": false,
+    "captured_at": "2026-08-11T04:06:26.953523"
+  }
+}

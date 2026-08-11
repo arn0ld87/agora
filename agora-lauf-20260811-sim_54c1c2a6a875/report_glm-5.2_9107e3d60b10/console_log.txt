@@ -1,0 +1,148 @@
+[03:48:29] INFO: report saved (meta + v3-json): report_9107e3d60b10
+[03:48:29] INFO: Starting to plan report outline...
+[03:48:42] INFO: plan_outline: Intent 'opinion' erkannt — 6 statt 11 Abschnitte.
+[03:49:02] INFO: Outline planning completed: 6 sections
+[03:49:02] INFO: Outline saved: report_9107e3d60b10
+[03:49:02] INFO: Outline saved: report_9107e3d60b10
+[03:49:02] INFO: report saved (meta + v3-json): report_9107e3d60b10
+[03:49:02] INFO: ReACT generating section: Kurzfazit
+[03:50:21] INFO: InterviewAgents deep interview (real API): Honorarkräfte Reaktion auf KI-Lernassistent Einfüh...
+[03:50:21] INFO: Loaded 30 profiles from reddit_profiles.json
+[03:50:21] INFO: Loaded 30 Agent profiles
+[03:50:24] INFO: Selected 8 Agents for interview: [15, 29, 4, 7, 21, 9, 11, 14]
+[03:50:41] INFO: Generated 4 interview questions
+[03:50:41] INFO: Calling batch interview API (dual platform): 8 Agents
+[03:51:00] INFO: Interview API returned: 8 results, success=True
+[03:51:12] INFO: InterviewAgents complete: Interviewed 8 Agents (dual platform)
+[03:52:18] WARNING: Section Kurzfazit reached the maximum iteration count, forcing final generation
+[03:52:51] INFO: section 1 ('Kurzfazit'): 1 Arbeitsspur-Segment(e) aus dem Abschnittsinhalt entfernt.
+[03:52:51] WARNING: section 1 ('Kurzfazit'): 1 ungedeckte Faktenaussage(n) aus dem Fließtext entfernt und als Hypothese geführt.
+[03:52:51] INFO: postprocess phase start: report=report_9107e3d60b10 section=1 phase=section_metadata
+[03:52:59] INFO: generate_section_metadata: section=1 title='Kurzfazit' schema=SectionMetadata
+[03:52:59] INFO: postprocess phase end: report=report_9107e3d60b10 section=1 phase=section_metadata duration_seconds=7.62
+[03:52:59] INFO: Section saved: report_9107e3d60b10/section_01.md
+[03:52:59] INFO: postprocess phase start: report=report_9107e3d60b10 section=1 phase=claim_extraction_and_evidence_binding
+[03:54:52] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=1 phase=claim_extraction_and_evidence_binding elapsed_seconds=113 detail='Claim 2/40'
+[03:55:21] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=1 phase=claim_extraction_and_evidence_binding elapsed_seconds=142 detail='Claim 6/40'
+[03:55:42] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=1 phase=claim_extraction_and_evidence_binding elapsed_seconds=163 detail='Claim 9/40'
+[03:56:06] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=1 phase=claim_extraction_and_evidence_binding elapsed_seconds=188 detail='Claim 13/40'
+[03:56:35] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=1 phase=claim_extraction_and_evidence_binding elapsed_seconds=216 detail='Claim 17/40'
+[03:56:57] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=1 phase=claim_extraction_and_evidence_binding elapsed_seconds=239 detail='Claim 20/40'
+[03:57:21] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=1 phase=claim_extraction_and_evidence_binding elapsed_seconds=263 detail='Claim 23/40'
+[03:57:49] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=1 phase=claim_extraction_and_evidence_binding elapsed_seconds=290 detail='Claim 27/40'
+[03:58:10] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=1 phase=claim_extraction_and_evidence_binding elapsed_seconds=311 detail='Claim 32/40'
+[03:58:32] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=1 phase=claim_extraction_and_evidence_binding elapsed_seconds=333 detail='Claim 38/40'
+[03:58:42] INFO: postprocess phase end: report=report_9107e3d60b10 section=1 phase=claim_extraction_and_evidence_binding duration_seconds=343.35
+[03:58:42] INFO: postprocess phase start: report=report_9107e3d60b10 section=1 phase=claim_finalization
+[03:58:42] INFO: postprocess phase end: report=report_9107e3d60b10 section=1 phase=claim_finalization duration_seconds=0.01
+[03:58:42] INFO: postprocess phase start: report=report_9107e3d60b10 section=1 phase=evidence_map_persistence
+[03:58:42] INFO: postprocess phase end: report=report_9107e3d60b10 section=1 phase=evidence_map_persistence duration_seconds=0.03
+[03:58:42] INFO: ReACT generating section: Stakeholder- und Meinungsgruppen
+[03:59:28] INFO: InterviewAgents deep interview (real API): Wie reagieren die verschiedenen Stakeholder-Gruppe...
+[03:59:28] INFO: Loaded 30 profiles from reddit_profiles.json
+[03:59:28] INFO: Loaded 30 Agent profiles
+[03:59:40] INFO: Selected 10 Agents for interview: [7, 11, 15, 21, 4, 26, 8, 9, 28, 27]
+[03:59:51] INFO: Generated 5 interview questions
+[03:59:51] INFO: Calling batch interview API (dual platform): 10 Agents
+[04:00:19] INFO: Interview API returned: 10 results, success=True
+[04:00:30] INFO: InterviewAgents complete: Interviewed 10 Agents (dual platform)
+[04:01:11] INFO: section 2 ('Stakeholder- und Meinungsgruppen'): 1 Arbeitsspur-Segment(e) aus dem Abschnittsinhalt entfernt.
+[04:01:11] INFO: Section Stakeholder- und Meinungsgruppen generation completed (tool calls: 3)
+[04:01:11] WARNING: section 2 ('Stakeholder- und Meinungsgruppen'): 1 ungedeckte Faktenaussage(n) aus dem Fließtext entfernt und als Hypothese geführt.
+[04:01:11] INFO: postprocess phase start: report=report_9107e3d60b10 section=2 phase=section_metadata
+[04:01:20] INFO: generate_section_metadata: section=2 title='Stakeholder- und Meinungsgruppen' schema=SectionMetadata
+[04:01:20] INFO: postprocess phase end: report=report_9107e3d60b10 section=2 phase=section_metadata duration_seconds=8.81
+[04:01:20] INFO: Section saved: report_9107e3d60b10/section_02.md
+[04:01:20] INFO: postprocess phase start: report=report_9107e3d60b10 section=2 phase=claim_extraction_and_evidence_binding
+[04:01:51] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=2 phase=claim_extraction_and_evidence_binding elapsed_seconds=31 detail='Claim 2/55'
+[04:02:21] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=2 phase=claim_extraction_and_evidence_binding elapsed_seconds=62 detail='Claim 5/55'
+[04:02:43] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=2 phase=claim_extraction_and_evidence_binding elapsed_seconds=83 detail='Claim 7/55'
+[04:03:09] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=2 phase=claim_extraction_and_evidence_binding elapsed_seconds=110 detail='Claim 9/55'
+[04:03:30] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=2 phase=claim_extraction_and_evidence_binding elapsed_seconds=130 detail='Claim 11/55'
+[04:03:50] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=2 phase=claim_extraction_and_evidence_binding elapsed_seconds=151 detail='Claim 13/55'
+[04:04:10] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=2 phase=claim_extraction_and_evidence_binding elapsed_seconds=171 detail='Claim 15/55'
+[04:04:31] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=2 phase=claim_extraction_and_evidence_binding elapsed_seconds=191 detail='Claim 17/55'
+[04:04:59] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=2 phase=claim_extraction_and_evidence_binding elapsed_seconds=219 detail='Claim 20/55'
+[04:05:25] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=2 phase=claim_extraction_and_evidence_binding elapsed_seconds=245 detail='Claim 22/55'
+[04:05:47] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=2 phase=claim_extraction_and_evidence_binding elapsed_seconds=267 detail='Claim 26/55'
+[04:06:15] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=2 phase=claim_extraction_and_evidence_binding elapsed_seconds=295 detail='Claim 29/55'
+[04:06:26] INFO: GraphToolsService initialization complete
+[04:06:26] INFO: ReportAgent initialization complete: graph_id=b8d0c6dc-3509-45ad-a19d-1b2de08135ea, simulation_id=sim_54c1c2a6a875
+[04:06:26] INFO: report saved (meta + v3-json): report_7ce9e4882bae
+[04:06:27] INFO: Starting to plan report outline...
+[04:06:31] INFO: plan_outline: Intent 'opinion' erkannt — 6 statt 11 Abschnitte.
+[04:06:41] INFO: Outline planning completed: 6 sections
+[04:06:41] INFO: Outline saved: report_7ce9e4882bae
+[04:06:41] INFO: Outline saved: report_7ce9e4882bae
+[04:06:41] INFO: report saved (meta + v3-json): report_7ce9e4882bae
+[04:06:41] INFO: ReACT generating section: Kurzfazit
+[04:06:46] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=2 phase=claim_extraction_and_evidence_binding elapsed_seconds=326 detail='Claim 32/55'
+[04:07:11] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=2 phase=claim_extraction_and_evidence_binding elapsed_seconds=351 detail='Claim 35/55'
+[04:07:36] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=2 phase=claim_extraction_and_evidence_binding elapsed_seconds=376 detail='Claim 37/55'
+[04:08:01] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=2 phase=claim_extraction_and_evidence_binding elapsed_seconds=402 detail='Claim 39/55'
+[04:08:11] INFO: InterviewAgents deep interview (real API): Einführung eines selbstgehosteten KI-Lernassistent...
+[04:08:11] INFO: Loaded 30 profiles from reddit_profiles.json
+[04:08:11] INFO: Loaded 30 Agent profiles
+[04:08:26] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=2 phase=claim_extraction_and_evidence_binding elapsed_seconds=426 detail='Claim 42/55'
+[04:08:26] INFO: Selected 6 Agents for interview: [0, 7, 9, 11, 17, 26]
+[04:08:47] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=2 phase=claim_extraction_and_evidence_binding elapsed_seconds=448 detail='Claim 45/55'
+[04:08:47] INFO: Generated 3 interview questions
+[04:08:47] INFO: Calling batch interview API (dual platform): 6 Agents
+[04:09:11] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=2 phase=claim_extraction_and_evidence_binding elapsed_seconds=472 detail='Claim 52/55'
+[04:09:32] INFO: postprocess phase end: report=report_9107e3d60b10 section=2 phase=claim_extraction_and_evidence_binding duration_seconds=491.73
+[04:09:32] INFO: postprocess phase start: report=report_9107e3d60b10 section=2 phase=claim_finalization
+[04:09:32] INFO: postprocess phase end: report=report_9107e3d60b10 section=2 phase=claim_finalization duration_seconds=0.01
+[04:09:32] INFO: postprocess phase start: report=report_9107e3d60b10 section=2 phase=evidence_map_persistence
+[04:09:44] INFO: postprocess phase end: report=report_9107e3d60b10 section=2 phase=evidence_map_persistence duration_seconds=12.88
+[04:09:44] INFO: ReACT generating section: Zentrale Zustimmungspunkte
+[04:09:50] INFO: Interview API returned: 6 results, success=True
+[04:10:01] INFO: InterviewAgents complete: Interviewed 6 Agents (dual platform)
+[04:10:38] INFO: section 1 ('Kurzfazit'): 1 Arbeitsspur-Segment(e) aus dem Abschnittsinhalt entfernt.
+[04:10:38] INFO: Section Kurzfazit generation completed (tool calls: 4)
+[04:10:38] INFO: postprocess phase start: report=report_7ce9e4882bae section=1 phase=section_metadata
+[04:10:42] INFO: generate_section_metadata: section=1 title='Kurzfazit' schema=SectionMetadata
+[04:10:42] INFO: postprocess phase end: report=report_7ce9e4882bae section=1 phase=section_metadata duration_seconds=4.00
+[04:10:42] INFO: Section saved: report_7ce9e4882bae/section_01.md
+[04:10:42] INFO: postprocess phase start: report=report_7ce9e4882bae section=1 phase=claim_extraction_and_evidence_binding
+[04:11:01] INFO: InterviewAgents deep interview (real API): Welche konkreten Zustimmungspunkte und Mehrwerte s...
+[04:11:01] INFO: Loaded 30 profiles from reddit_profiles.json
+[04:11:01] INFO: Loaded 30 Agent profiles
+[04:11:11] INFO: Selected 8 Agents for interview: [9, 28, 5, 15, 4, 7, 11, 8]
+[04:11:21] INFO: Generated 5 interview questions
+[04:11:21] INFO: Calling batch interview API (dual platform): 8 Agents
+[04:11:40] INFO: Interview API returned: 8 results, success=True
+[04:11:51] INFO: InterviewAgents complete: Interviewed 8 Agents (dual platform)
+[04:12:49] INFO: postprocess heartbeat: report=report_7ce9e4882bae section=1 phase=claim_extraction_and_evidence_binding elapsed_seconds=127 detail='Claim 2/21'
+[04:13:02] INFO: section 3 ('Zentrale Zustimmungspunkte'): 1 Arbeitsspur-Segment(e) aus dem Abschnittsinhalt entfernt.
+[04:13:02] INFO: Section Zentrale Zustimmungspunkte generation completed (tool calls: 4)
+[04:13:02] INFO: postprocess phase start: report=report_9107e3d60b10 section=3 phase=section_metadata
+[04:13:10] INFO: postprocess heartbeat: report=report_7ce9e4882bae section=1 phase=claim_extraction_and_evidence_binding elapsed_seconds=148 detail='Claim 4/21'
+[04:13:11] INFO: generate_section_metadata: section=3 title='Zentrale Zustimmungspunkte' schema=SectionMetadata
+[04:13:11] INFO: postprocess phase end: report=report_9107e3d60b10 section=3 phase=section_metadata duration_seconds=8.29
+[04:13:11] INFO: Section saved: report_9107e3d60b10/section_03.md
+[04:13:11] INFO: postprocess phase start: report=report_9107e3d60b10 section=3 phase=claim_extraction_and_evidence_binding
+[04:13:31] INFO: postprocess heartbeat: report=report_7ce9e4882bae section=1 phase=claim_extraction_and_evidence_binding elapsed_seconds=169 detail='Claim 6/21'
+[04:13:52] INFO: postprocess heartbeat: report=report_7ce9e4882bae section=1 phase=claim_extraction_and_evidence_binding elapsed_seconds=190 detail='Claim 8/21'
+[04:14:00] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=3 phase=claim_extraction_and_evidence_binding elapsed_seconds=49 detail='Claim 2/51'
+[04:14:21] INFO: postprocess heartbeat: report=report_7ce9e4882bae section=1 phase=claim_extraction_and_evidence_binding elapsed_seconds=219 detail='Claim 10/21'
+[04:14:24] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=3 phase=claim_extraction_and_evidence_binding elapsed_seconds=74 detail='Claim 4/51'
+[04:14:43] INFO: postprocess heartbeat: report=report_7ce9e4882bae section=1 phase=claim_extraction_and_evidence_binding elapsed_seconds=241 detail='Claim 12/21'
+[04:14:51] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=3 phase=claim_extraction_and_evidence_binding elapsed_seconds=101 detail='Claim 6/51'
+[04:15:14] INFO: postprocess heartbeat: report=report_7ce9e4882bae section=1 phase=claim_extraction_and_evidence_binding elapsed_seconds=272 detail='Claim 14/21'
+[04:15:14] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=3 phase=claim_extraction_and_evidence_binding elapsed_seconds=123 detail='Claim 8/51'
+[04:15:40] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=3 phase=claim_extraction_and_evidence_binding elapsed_seconds=150 detail='Claim 10/51'
+[04:15:42] INFO: postprocess heartbeat: report=report_7ce9e4882bae section=1 phase=claim_extraction_and_evidence_binding elapsed_seconds=300 detail='Claim 17/21'
+[04:16:10] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=3 phase=claim_extraction_and_evidence_binding elapsed_seconds=179 detail='Claim 12/51'
+[04:16:14] INFO: postprocess heartbeat: report=report_7ce9e4882bae section=1 phase=claim_extraction_and_evidence_binding elapsed_seconds=332 detail='Claim 19/21'
+[04:16:33] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=3 phase=claim_extraction_and_evidence_binding elapsed_seconds=202 detail='Claim 14/51'
+[04:16:37] INFO: postprocess heartbeat: report=report_7ce9e4882bae section=1 phase=claim_extraction_and_evidence_binding elapsed_seconds=355 detail='Claim 21/21'
+[04:16:52] INFO: postprocess phase end: report=report_7ce9e4882bae section=1 phase=claim_extraction_and_evidence_binding duration_seconds=370.11
+[04:16:52] INFO: postprocess phase start: report=report_7ce9e4882bae section=1 phase=claim_finalization
+[04:16:52] INFO: postprocess phase end: report=report_7ce9e4882bae section=1 phase=claim_finalization duration_seconds=0.00
+[04:16:52] INFO: postprocess phase start: report=report_7ce9e4882bae section=1 phase=evidence_map_persistence
+[04:16:52] INFO: postprocess phase end: report=report_7ce9e4882bae section=1 phase=evidence_map_persistence duration_seconds=0.02
+[04:16:52] INFO: ReACT generating section: Stakeholder- und Meinungsgruppen
+[04:16:57] INFO: postprocess heartbeat: report=report_9107e3d60b10 section=3 phase=claim_extraction_and_evidence_binding elapsed_seconds=226 detail='Claim 16/51'
+[04:16:58] INFO: InterviewAgents deep interview (real API): Wie bewerten Sie die Einführung des selbstgehostet...
+[04:16:58] INFO: Loaded 30 profiles from reddit_profiles.json
+[04:16:58] INFO: Loaded 30 Agent profiles

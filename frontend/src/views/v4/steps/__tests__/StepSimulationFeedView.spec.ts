@@ -73,8 +73,12 @@ vi.mock('@/components/v4/sim-feed/FeedColumn.vue', () => ({
 vi.mock('@/components/v4/sim-feed/SimulationPulseBar.vue', () => ({
   default: {
     name: 'SimulationPulseBar',
-    props: ['activityRate', 'redditCount', 'twitterCount'],
-    template: '<div class="pulse-bar" :data-reddit="redditCount" :data-twitter="twitterCount" />',
+    // #1209 5b — recentPosts speist die Resonanz-Leiste. Der Stub macht die
+    // Anzahl sichtbar, damit der Test die Übergabe am echten Elternpfad prüft.
+    props: ['activityRate', 'redditCount', 'twitterCount', 'recentPosts'],
+    template:
+      '<div class="pulse-bar" :data-reddit="redditCount" :data-twitter="twitterCount"' +
+      ' :data-recent="(recentPosts || []).length" />',
   },
 }))
 vi.mock('@/components/v4/sim-feed/RedditThread.vue', () => ({
@@ -255,6 +259,26 @@ describe('StepSimulationFeedView', () => {
     const pulseBar = wrapper.find('.pulse-bar')
     expect(Number(pulseBar.attributes('data-twitter'))).toBe(3)
     expect(Number(pulseBar.attributes('data-reddit'))).toBe(0)
+  })
+
+  // #1209 5b — die Resonanz-Leiste bekam `recentPosts` nie übergeben und fiel
+  // deshalb immer auf den statischen Fallback zurück; die Score-Einfärbung lief
+  // in der echten Anwendung nie. Dieser Test deckt den Produktionspfad ab, nicht
+  // den Component-Test mit handgereichten Props.
+  it('#1209: die View reicht recentPosts an die Resonanz-Leiste durch', async () => {
+    const wrapper = mount(StepSimulationFeedView, {
+      global: { plugins: [i18n, router] },
+    })
+    await flushPromises()
+
+    expect(Number(wrapper.find('.pulse-bar').attributes('data-recent'))).toBe(0)
+
+    for (let i = 0; i < 3; i++) {
+      capturedPostCreatedHandler?.(mkPost({ platform: 'reddit', post_id: `res-${i}`, score: i }))
+    }
+    await flushPromises()
+
+    expect(Number(wrapper.find('.pulse-bar').attributes('data-recent'))).toBe(3)
   })
 
   // Slice 9 · #1007 — kein clearSimFeed mehr in onBeforeUnmount.

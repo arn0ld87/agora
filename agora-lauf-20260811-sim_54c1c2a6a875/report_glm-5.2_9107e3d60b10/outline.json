@@ -1,0 +1,36 @@
+{
+  "title": "Szenario-Evaluationsbericht: Einführung eines selbstgehosteten KI-Lernassistenten bei einem AZAV-zertifizierten Umschulungsträger in Sachsen-Anhalt",
+  "summary": "Die Simulation zeigt, dass die Akzeptanz des KI-Lernassistenten nicht an technischen oder datenschutzrechtlichen Bedenken scheitert, sondern am konkreten Punkt der Honorarkräfte-Integration: Diese sehen keinen Mehrwert, sondern Zusatzlast, und brechen als erste Gruppe ab, was eine Kettenreaktion auslöst, in der sich Geschäftsführung und Betriebsrat so in einem Kompromiss verstricken, dass die Maßnahme für beide entwertet wird.",
+  "sections": [
+    {
+      "title": "Kurzfazit",
+      "content": "",
+      "description": "Zusammenfassung der simulierten Gruppenmeinungen und der Eindeutigkeit des Bildes: Die Simulation zeigt ein klares Gefälle – festangestellte Dozenten und Geschäftsführung äußern sich grundsätzlich offen, während Honorarkräfte, Teile des IHK-Prüfungsausschusses und aufnehmende Betriebe skeptisch bis ablehnend reagieren. Die Akzeptanz bricht erstmals bei den Honorarkräften, konkret an dem Punkt, an dem unbezahlte Vorbereitungszeit für KI-gestützte Übungsaufgaben erwartet wird. Die zwei Gruppen, deren Kompromiss die Maßnahme entwertet, sind die Geschäftsführung (die den Effizienzgewinn propagiert) und der Betriebsrat (der Schutzvorgaben fordert) – ihr Kompromiss führt zu einem halbgaren Werkzeug, das weder autonom genug noch verbindlich genug ist. Der erwartete Effekt der Geschäftsführung (höhere Durchfallquoten-Reduktion) tritt in der Simulation nicht auf; stattdessen zeigt sich eine Lähmung, die an die Moodle-Einführung 2022 erinnert."
+    },
+    {
+      "title": "Stakeholder- und Meinungsgruppen",
+      "content": "",
+      "description": "Übersicht aller simulierten Gruppen und ihrer Grundhaltungen: Umschüler mit IT-Vorerfahrung äußern sich interessiert, aber nutzenorientiert; Umschüler ohne Vorerfahrung reagieren verunsichert. Festangestellte Dozenten zeigen eine pragmatische Offenheit, knüpfen Akzeptanz aber an didaktische Kontrolle. Honorarkräfte reagieren ablehnend, da sie keinen bezahlten Aufwand für KI-Integration sehen. Die Geschäftsführung propagiert Effizienz- und Qualitätsgewinne (unbelegte Behauptung). Der Kostenträger bleibt abwartend, fordert aber Nachweise. Der IHK-Prüfungsausschuss äußert Bedenken hinsichtlich Prüfungsadäquanz. Der Betriebsrat fordert Transparenz und Mitbestimmung. Aufnehmende Betriebe reagieren indifferent bis skeptisch, da sie keinen Bezug zum späteren Arbeitsalltag sehen."
+    },
+    {
+      "title": "Zentrale Zustimmungspunkte",
+      "content": "",
+      "description": "Punkte, auf die sich Zustimmung stützt, mit Quellenbezug: Zustimmung konzentriert sich auf die Eigenschaft ‚selbstgehostet‘ und ‚keine Daten verlassen das Rechenzentrum‘ – der Betriebsrat und Teile der Dozenten sehen hier einen klaren Vorteil. IT-affine Umschüler stimmen der Idee zu, Fachfragen asynchron beantwortet zu bekommen. Die Geschäftsführung stützt ihre Zustimmung auf die unbelegte Annahme, dass KI-generierte Übungsaufgaben im IHK-Stil die Prüfungsvorbereitung verbessern. Festangestellte Dozenten sehen Mehrwert bei der Lernstandserfassung, wenn sie die Ergebnisse einsehen können."
+    },
+    {
+      "title": "Zentrale Kritikpunkte",
+      "content": "",
+      "description": "Punkte, auf die sich Kritik stützt, mit Quellenbezug: Kritik entzündet sich nicht am Datenschutz, sondern an der Praxis: Honorarkräfte kritisieren, dass die Erstellung und Pflege von Kursmaterial für den KI-Assistenten unbezahlten Mehraufwand bedeutet. Der IHK-Prüfungsausschuss kritisiert, dass KI-generierte Aufgaben nicht verbindlich prüfungsadäquat sind. Umschüler ohne Vorerfahrung kritisieren, dass der Assistent keine Bewertung vornimmt und somit kein Feedback zur Qualität ihrer Lösungen liefert. Aufnehmende Betriebe kritisieren die Irrelevanz für den Arbeitsalltag. Der Betriebsrat kritisiert die fehlende Regelung zur Mitbestimmung bei der Einführung."
+    },
+    {
+      "title": "Konfliktlinien",
+      "content": "",
+      "description": "Wo die Gruppen auseinandergehen und woran das liegt: Die zentrale Konfliktlinie verläuft zwischen Geschäftsführung und Betriebsrat – die Geschäftsführung will schnelle Einführung und Effizienzgewinne, der Betriebsrat will Mitbestimmung und Schutzvorgaben. Der Kompromiss (eingeschränkte Funktionalität, keine Bewertung, eingeschränkte Verfügbarkeit) entwertet die Maßnahme für beide: Die Geschäftsführung erhält nicht den erhofften Effizienzgewinn, der Betriebsrat erhält ein Werkzeug, das nicht voll funktionsfähig ist. Eine zweite Konfliktlinie verläuft zwischen Honorarkräften und festangestellten Dozenten: Festangestellte sehen didaktischen Mehrwert, Honorarkräfte sehen nur Zusatzlast ohne Vergütung. Die dritte Linie besteht zwischen dem IHK-Prüfungsausschuss und der Geschäftsführung: Der Ausschuss erkennt die KI-Aufgaben nicht als prüfungsadäquat an, die Geschäftsführung behauptet dies jedoch."
+    },
+    {
+      "title": "Unsicherheiten und Datenlücken",
+      "content": "",
+      "description": "Was die Simulation nicht beantworten kann: Die Simulation kann nicht klären, ob die KI-generierten Aufgaben tatsächlich prüfungsadäquat sind, da dies eine empirische Prüfung erfordert. Sie kann nicht beantworten, ob die selbstgehostete Infrastruktur technisch stabil genug ist, da keine Lasttests simuliert wurden. Sie kann nicht vorhersagen, ob der Kostenträger die Mehrkosten übernimmt, da dies von externen Faktoren abhängt. Sie kann nicht beantworten, ob aufnehmende Betriebe ihre Haltung ändern, wenn der KI-Assistent nachweislich Prüfungserfolge steigert. Sie kann nicht simulieren, ob die Moodle-Einführung 2022 tatsächlich ein geeigneter Präzedenzfall ist oder ob strukturelle Unterschiede vorliegen."
+    }
+  ]
+}
