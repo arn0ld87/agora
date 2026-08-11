@@ -502,13 +502,17 @@ describe('HeroNewRun (Phase-1, Kanon-First Migration)', () => {
       'abc',
       30,
       10,
-      // Issue #764: sechstes Argument ist das Run-Budget (Default: keines).
-      null,
     )
-    expect(routerPushMock).toHaveBeenCalledWith({ name: 'Process', params: { projectId: 'new' } })
+    // Issue #1234: Die Rundenzahl reist in der Query, nicht im Store — den
+    // leert Schritt 1 nach dem Upload.
+    expect(routerPushMock).toHaveBeenCalledWith({
+      name: 'Process',
+      params: { projectId: 'new' },
+      query: { maxRounds: '10' },
+    })
   })
 
-  it('startSimulation: gesetztes Run-Budget wird als sechstes Argument durchgereicht (Issue #764)', async () => {
+  it('startSimulation: gesetztes Run-Budget wird in die Query geschrieben (Issue #764, #1234)', async () => {
     const w = await mountHero()
 
     const file = new File(['x'], 'briefing.md', { type: 'text/markdown' })
@@ -532,19 +536,22 @@ describe('HeroNewRun (Phase-1, Kanon-First Migration)', () => {
     await w.find('.hero-cta').trigger('click')
     await flushPromises()
 
+    // Das Budget gehoert nicht mehr in den Store: Schritt 1 raeumt ihn nach
+    // dem Upload, Schritt 3 fand dort nie eines vor (Issue #1234).
     expect(setPendingUploadMock).toHaveBeenCalledWith(
       [file],
       'Wie reagiert die DACH-Region?',
       null,
       30,
       10,
-      {
-        schema_version: 1,
-        enforcement: 'soft',
-        currency: 'USD',
-        max_tokens: 50000,
-      },
     )
+    const pushed = routerPushMock.mock.calls.at(-1)?.[0] as { query?: Record<string, string> }
+    expect(JSON.parse(String(pushed.query?.budget))).toEqual({
+      schema_version: 1,
+      enforcement: 'soft',
+      currency: 'USD',
+      max_tokens: 50000,
+    })
   })
 
   it('startSimulation: ohne Profile lässt Legacy-Modell-Keys unangetastet', async () => {
@@ -576,7 +583,11 @@ describe('HeroNewRun (Phase-1, Kanon-First Migration)', () => {
     expect(localStorageMock.removeItem).not.toHaveBeenCalledWith('agora.lastModel')
     expect(localStorageMock.removeItem).not.toHaveBeenCalledWith('agora.lastCustomModel')
     expect(setPendingUploadMock).toHaveBeenCalled()
-    expect(routerPushMock).toHaveBeenCalledWith({ name: 'Process', params: { projectId: 'new' } })
+    expect(routerPushMock).toHaveBeenCalledWith({
+      name: 'Process',
+      params: { projectId: 'new' },
+      query: { maxRounds: '10' },
+    })
   })
 
   it('startSimulation: ohne Profile setzt die Picker-Wahl den Run-Override (voller AiModelRef)', async () => {

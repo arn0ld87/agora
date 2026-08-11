@@ -20,8 +20,16 @@ import { useSystemLog } from './useSystemLog'
 import { getPendingUpload, clearPendingUpload } from '../store/pendingUpload'
 import { useRunModelResolver } from './useRunModelResolver'
 
+/** Strukturaequivalent zu vue-routers ``LocationQueryRaw`` — ohne Import, der Adapter bleibt Router-agnostisch. */
+type RouteQueryValue = string | number | null | undefined
+type RouteQuery = Record<string, RouteQueryValue | RouteQueryValue[]>
+
 type RouterAdapter = {
-  replace: (location: { name: string; params: Record<string, string> }) => Promise<unknown> | void
+  replace: (location: {
+    name: string
+    params: Record<string, string>
+    query?: RouteQuery
+  }) => Promise<unknown> | void
 }
 
 type Translate = (key: string) => string
@@ -30,10 +38,17 @@ export function useGraphBuildPipeline({
   projectId,
   router,
   t,
+  preserveQuery,
 }: {
   projectId: MaybeRef<string>
   router: RouterAdapter
   t: Translate
+  /**
+   * Query der aktuellen Route. Der interne ``replace`` auf die echte
+   * Projekt-ID muss sie mitnehmen, sonst enden die Run-Parameter des
+   * Dashboard-Starts in Schritt 1 (Issue #1234).
+   */
+  preserveQuery?: MaybeRef<RouteQuery>
 }) {
   const currentProjectId = ref(String(unref(projectId)))
   const loading = ref(false)
@@ -160,7 +175,14 @@ export function useGraphBuildPipeline({
       currentProjectId.value = response.data.project_id
       projectData.value = response.data
       ontologyProgress.value = null
-      await router.replace({ name: 'StepGraphBuild', params: { projectId: response.data.project_id } })
+      // Die Query trägt die Run-Parameter des Dashboard-Starts weiter. Ohne
+      // sie endet die Kette hier: `clearPendingUpload()` eine Zeile darüber
+      // hat den Store bereits geräumt (Issue #1234).
+      await router.replace({
+        name: 'StepGraphBuild',
+        params: { projectId: response.data.project_id },
+        query: { ...unref(preserveQuery) },
+      })
       if (isCurrent(generation)) await startBuildGraph(generation, aiModelRef)
     } catch (caughtError) {
       if (!isCurrent(generation)) return

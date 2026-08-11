@@ -27,7 +27,6 @@ import { tokenizeFeedText } from '../../../utils/feedHighlight'
 import { isErrorLine } from '@/utils/errorLinePattern'
 import { useSimFeed, clearSimFeed } from '../../../composables/useSimFeed'
 import { useSimClock, clearSimClock } from '../../../composables/useSimClock'
-import { getPendingUpload } from '../../../store/pendingUpload'
 import SimulationProgressPanel from '../../step3/SimulationProgressPanel.vue'
 import PersonaActionFeed from '../../step3/PersonaActionFeed.vue'
 import SimulationToolPanel from '../../step3/SimulationToolPanel.vue'
@@ -40,6 +39,10 @@ const props = defineProps({
   simulationId: String,
   maxRounds: Number,
   simulationDays: Number,
+  // Issue #1234: Run-Budget aus der Route-Query. Kommt vom Dashboard-Start
+  // und ueberlebt anders als der pendingUpload-Store sowohl Schritt 1 als
+  // auch einen Reload auf dieser Route.
+  budget: Object,
   minutesPerRound: { type: Number, default: 30 },
   projectData: Object,
   graphData: Object,
@@ -251,19 +254,16 @@ async function doStart() {
       platform: 'parallel',
       enable_graph_memory_update: false
     }
-    // Der Dashboard-Start (HeroNewRun) hat keinen Step2-Durchlauf — dessen
-    // Slider-Wert liegt im pendingUpload-Store. Der Stepped-Flow übergibt
-    // maxRounds als Prop und gewinnt. Vorher wurde der Slider-Wert nur beim
-    // Ontologie-Upload gesendet, wo das Backend ihn still verwirft — die
-    // eingestellte Rundenzahl hatte keinerlei Effekt (Bug: Slider ohne
-    // Wirkung, Simulation lief immer auf total_simulation_hours).
-    const effectiveMaxRounds = props.maxRounds ?? (getPendingUpload().numRounds || null)
-    if (effectiveMaxRounds) params.max_rounds = effectiveMaxRounds
-    // Issue #764: Optionale Run-Budgets aus dem Dashboard-Start (HeroNewRun)
-    // werden unverändert an /api/simulation/start durchgereicht. Ohne Budget
-    // bleibt das Feld weg — das Backend läuft dann ohne Limit.
-    const pendingBudget = getPendingUpload().budget
-    if (pendingBudget) params.budget = pendingBudget
+    // Rundenzahl und Budget kommen ueber die Route-Query herein — vom
+    // Dashboard-Start (HeroNewRun) oder, falls der Nutzer dort ueberstimmt
+    // hat, aus Schritt 2. Frueher lasen wir beides aus dem pendingUpload-
+    // Store; den leert Schritt 1 nach dem Upload, sodass hier stets der
+    // Reset-Default 10 und gar kein Budget ankam (Issue #1234).
+    if (props.maxRounds) params.max_rounds = props.maxRounds
+    // Issue #764: Optionale Run-Budgets werden unveraendert an
+    // /api/simulation/start durchgereicht. Ohne Budget bleibt das Feld weg —
+    // das Backend laeuft dann ohne Limit.
+    if (props.budget) params.budget = props.budget
     if (props.simulationDays) params.simulation_days = props.simulationDays
     // Autoritative (Connection, Modell)-Auswahl: Der transiente Dashboard-
     // Run-Override (HeroNewRun-Pick, store/runModelOverride) gewinnt vor dem
@@ -297,7 +297,7 @@ async function doStart() {
       // im selben Tab den alten Override stillschweigend erbt.
       if (usedRunOverride) clearRunModelOverride()
       phase.value = 1
-      addLog(t('step3.status.running', { current: 0, total: effectiveMaxRounds || '?' }))
+      addLog(t('step3.status.running', { current: 0, total: params.max_rounds || '?' }))
       startPolling()
     } else {
       startError.value = res?.error || 'unknown'
@@ -468,9 +468,9 @@ const statusLabel = computed(() => {
       : t('step3.status.completed', { total: runStatus.value.current_round || '?' })
   }
   if (runStatus.value.paused) {
-    return t('step3.status.paused', { current: runStatus.value.current_round || 0, total: runStatus.value.total_rounds || props.maxRounds || getPendingUpload().numRounds || '?' })
+    return t('step3.status.paused', { current: runStatus.value.current_round || 0, total: runStatus.value.total_rounds || props.maxRounds || '?' })
   }
-  return t('step3.status.running', { current: runStatus.value.current_round || 0, total: runStatus.value.total_rounds || props.maxRounds || getPendingUpload().numRounds || '?' })
+  return t('step3.status.running', { current: runStatus.value.current_round || 0, total: runStatus.value.total_rounds || props.maxRounds || '?' })
 })
 
 const statusKind = computed(() => {

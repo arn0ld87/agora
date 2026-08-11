@@ -22,19 +22,20 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
 import PipelineStepper from '@/components/v4/steps/PipelineStepper.vue'
 import Step2EnvSetup from '@/components/v4/steps/Step2EnvSetup.vue'
 import StepModelOverrideChip from '@/components/v4/forms/StepModelOverrideChip.vue'
 import type { BreadcrumbItem } from '@/components/v4/shell/Breadcrumbs.vue'
-import { toRunParamsQuery } from '@/contracts/runParamsQuery'
+import { readRunParamsFromQuery, toRunParamsQuery } from '@/contracts/runParamsQuery'
 
 const props = defineProps<{
   projectId: string
 }>()
 
+const route = useRoute()
 const router = useRouter()
 
 const crumbs = computed<BreadcrumbItem[]>(() => [
@@ -55,10 +56,22 @@ function handleNextStep(payload: {
   // überstimmt hat. Sie müssen in die Query: die Route hat ``props: true``,
   // das überträgt ausschließlich Route-Params — vorher gingen die Werte hier
   // verloren und Step 3 startete stets mit dem Auto-Wert (B-09/B-27).
+  //
+  // Was schon in der Query steht, kommt vom Dashboard-Start und bleibt, sofern
+  // Schritt 2 nichts Eigenes dazu sagt (Issue #1234). Das Budget kennt Schritt
+  // 2 gar nicht — es reist unverändert durch.
+  const inherited = readRunParamsFromQuery(route.query)
   void router.push({
     name: 'StepSimulation',
     params: { simulationId: payload.simulationId },
-    query: { projectId: props.projectId, ...toRunParamsQuery(payload) },
+    query: {
+      projectId: props.projectId,
+      ...toRunParamsQuery({
+        maxRounds: payload.maxRounds ?? inherited.maxRounds,
+        simulationDays: payload.simulationDays ?? inherited.simulationDays,
+        budget: inherited.budget,
+      }),
+    },
   })
 }
 

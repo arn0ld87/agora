@@ -26,6 +26,21 @@ import StepSimulationView from '../StepSimulationView.vue'
 
 const i18nMock = { $t: (key: string) => key }
 
+// Budget, wie HeroNewRun es aufbaut — inkl. der Schema-Defaults, die
+// RunBudgetConfigSchema beim Parsen setzt.
+const DASHBOARD_BUDGET = {
+  schema_version: 1,
+  enforcement: 'hard',
+  currency: 'USD',
+  max_tokens: 5000,
+}
+
+/** Query der letzten Navigation. Das Budget wird als JSON verglichen, nicht als String — die Schluesselreihenfolge gehoert dem Zod-Schema. */
+function pushedQuery(): Record<string, unknown> {
+  const call = routerPush.mock.calls.at(-1)?.[0] as { query?: Record<string, unknown> }
+  return call?.query ?? {}
+}
+
 function mountEnvSetup() {
   return mount(StepEnvSetupView, {
     props: { projectId: 'project_42' },
@@ -61,7 +76,7 @@ function mountSimulation() {
         PageHeader: { template: '<header><slot /><slot name="right" /></header>' },
         Step3Simulation: {
           name: 'Step3Simulation',
-          props: ['simulationId', 'maxRounds', 'simulationDays'],
+          props: ['simulationId', 'maxRounds', 'simulationDays', 'budget'],
           emits: ['go-back'],
           template: '<section />',
         },
@@ -116,6 +131,38 @@ describe('Schritt 2 -> Schritt 3: Uebergabe der Run-Parameter', () => {
   })
 })
 
+// Regressionstest fuer #1234: Rundenzahl und Budget aus dem Dashboard-Start
+// erreichten Schritt 3 nie. Sie reisten ueber den pendingUpload-Store, den
+// Schritt 1 nach dem Ontologie-Upload leert — Schritt 3 las anschliessend den
+// Reset-Default 10 und gar kein Budget. Nicht erst nach einem Reload, sondern
+// im normalen Durchlauf.
+describe('Dashboard -> Schritt 3: Uebergabe ueber Schritt 2 hinweg', () => {
+  it('erbt die Dashboard-Werte, laesst aber eine Eingabe in Schritt 2 gewinnen', async () => {
+    route.query = {
+      projectId: 'project_42',
+      maxRounds: '25',
+      budget: JSON.stringify(DASHBOARD_BUDGET),
+    }
+
+    await mountEnvSetup()
+      .getComponent({ name: 'Step2EnvSetup' })
+      .vm.$emit('next-step', { simulationId: 'sim_x' })
+
+    expect(pushedQuery().maxRounds).toBe('25')
+
+    await mountEnvSetup()
+      .getComponent({ name: 'Step2EnvSetup' })
+      .vm.$emit('next-step', { simulationId: 'sim_x', maxRounds: 7 })
+
+    // Schritt 2 kennt das Budget nicht und darf es deshalb auch nicht
+    // verlieren — nur die Rundenzahl wird ueberschrieben.
+    const query = pushedQuery()
+    expect(query.projectId).toBe('project_42')
+    expect(query.maxRounds).toBe('7')
+    expect(JSON.parse(String(query.budget))).toEqual(DASHBOARD_BUDGET)
+  })
+})
+
 describe('Schritt 3: Uebernahme der Run-Parameter', () => {
   it('reicht Runden/Tage aus der Query als Zahlen an Step3Simulation', () => {
     route.query = { projectId: 'project_42', maxRounds: '7', simulationDays: '2' }
@@ -145,6 +192,14 @@ describe('Schritt 3: Uebernahme der Run-Parameter', () => {
 
     expect(step3.props('maxRounds')).toBeUndefined()
     expect(step3.props('simulationDays')).toBeUndefined()
+  })
+
+  it('reicht das Run-Budget aus der Query als Objekt an Step3Simulation', () => {
+    route.query = { projectId: 'project_42', budget: JSON.stringify(DASHBOARD_BUDGET) }
+
+    const step3 = mountSimulation().getComponent({ name: 'Step3Simulation' })
+
+    expect(step3.props('budget')).toEqual(DASHBOARD_BUDGET)
   })
 
   it('nimmt die Query beim Tab-Wechsel mit', async () => {

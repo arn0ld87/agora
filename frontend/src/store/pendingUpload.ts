@@ -1,18 +1,25 @@
 /**
  * Temporarily store files and requirements to be uploaded
  * Used to immediately navigate after clicking Start Engine on home page, API call is made on Process page
+ *
+ * Der Store gehört Schritt 1 und trägt genau das, was der Ontologie-Upload
+ * braucht — allen voran die Dateien, die nicht serialisierbar sind. Er wird
+ * nach dem Upload geleert (``useGraphBuildPipeline`` → ``clearPendingUpload``).
+ *
+ * Was Schritt 3 braucht, gehört deshalb NICHT hierher: Rundenzahl und
+ * Run-Budget reisen über die Route-Query (``contracts/runParamsQuery``). Vor
+ * Issue #1234 lag das Budget hier und erreichte den Simulationsstart nie, weil
+ * Schritt 1 es zwischendurch weggeräumt hatte.
  */
 import { reactive } from 'vue'
-import type { RunBudgetConfig } from '../contracts/runBudgetContract'
 
 interface PendingUploadState {
   files: File[]
   simulationRequirement: string
   llmProfileId: string | null
   numAgents: number
+  /** Nur für den Upload-Payload in Schritt 1. Der Simulationsstart liest ``maxRounds`` aus der Query. */
   numRounds: number
-  /** Issue #764: optionale Run-Budgets, werden in Step3Simulation an /simulation/start durchgereicht. */
-  budget: RunBudgetConfig | null
   isPending: boolean
 }
 
@@ -22,7 +29,6 @@ const state = reactive<PendingUploadState>({
   llmProfileId: null,
   numAgents: 30,
   numRounds: 10,
-  budget: null,
   isPending: false
 })
 
@@ -32,14 +38,12 @@ export function setPendingUpload(
   llmProfileId: string | null = null,
   numAgents = 30,
   numRounds = 10,
-  budget: RunBudgetConfig | null = null,
 ): void {
   state.files = files
   state.simulationRequirement = requirement
   state.llmProfileId = llmProfileId
   state.numAgents = numAgents
   state.numRounds = numRounds
-  state.budget = budget
   state.isPending = true
 }
 
@@ -50,7 +54,6 @@ export function getPendingUpload(): PendingUploadState {
     llmProfileId: state.llmProfileId,
     numAgents: state.numAgents,
     numRounds: state.numRounds,
-    budget: state.budget,
     isPending: state.isPending,
   }
 }
@@ -61,7 +64,6 @@ export function clearPendingUpload(): void {
   state.llmProfileId = null
   state.numAgents = 30
   state.numRounds = 10
-  state.budget = null
   state.isPending = false
 }
 

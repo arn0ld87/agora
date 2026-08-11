@@ -32,9 +32,15 @@ vi.mock('@/composables/useGraphBuildPipeline', async () => {
     }),
   }
 })
+const route = vi.hoisted(() => ({
+  name: 'StepGraphBuild',
+  params: {} as Record<string, unknown>,
+  query: {} as Record<string, unknown>,
+}))
+
 vi.mock('vue-router', () => ({
   useRouter: () => ({ replace: vi.fn(), push: routerPush }),
-  useRoute: () => ({ name: 'StepGraphBuild', params: {} }),
+  useRoute: () => route,
 }))
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 
@@ -44,6 +50,7 @@ describe('StepGraphBuildView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     pipeline.degradations = { schema_version: 1, events: [] }
+    route.query = {}
   })
 
   it('bindet den Graph-Build-Pipelinezustand an Step1GraphBuild und macht Fehler zugänglich', () => {
@@ -149,6 +156,43 @@ describe('StepGraphBuildView', () => {
     expect(routerPush).toHaveBeenCalledWith({
       name: 'StepEnvSetup',
       params: { projectId: 'project_42' },
+      query: {},
+    })
+  })
+
+  // Issue #1234: Schritt 1 verbraucht die Run-Parameter des Dashboard-Starts
+  // nicht, ist aber die einzige Station zwischen ihnen und Schritt 3. Ohne
+  // Weitergabe endete die Kette hier — der pendingUpload-Store, der sie
+  // frueher trug, wird genau in diesem Schritt geleert.
+  it('reicht die Run-Parameter aus der Query an Schritt 2 weiter', async () => {
+    routerPush.mockClear()
+    route.query = { maxRounds: '25', budget: '{"schema_version":1,"max_tokens":5000}' }
+    const wrapper = mount(StepGraphBuildView, {
+      props: { projectId: 'project_42' },
+      global: {
+        mocks: { $t: (key: any) => key },
+        stubs: {
+          AppShell: { template: '<main><slot /></main>' },
+          PageHeader: { template: '<header><slot /><slot name="right" /></header>' },
+          PipelineStepper: true,
+          StepModelOverrideChip: true,
+          GraphPanel: true,
+          Step1GraphBuild: {
+            name: 'Step1GraphBuild',
+            props: ['projectData', 'currentPhase', 'ontologyProgress', 'buildProgress', 'graphData', 'systemLogs'],
+            emits: ['next-step'],
+            template: '<section />',
+          },
+        },
+      },
+    })
+
+    await wrapper.getComponent({ name: 'Step1GraphBuild' }).vm.$emit('next-step')
+
+    expect(routerPush).toHaveBeenCalledWith({
+      name: 'StepEnvSetup',
+      params: { projectId: 'project_42' },
+      query: { maxRounds: '25', budget: '{"schema_version":1,"max_tokens":5000}' },
     })
   })
 

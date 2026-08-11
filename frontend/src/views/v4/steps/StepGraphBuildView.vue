@@ -50,7 +50,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
@@ -67,13 +67,18 @@ const props = defineProps<{
   projectId: string
 }>()
 
+const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 
+// Der Dashboard-Start hängt Rundenzahl und Budget an die Route. Schritt 1
+// verbraucht sie nicht, muss sie aber weiterreichen — sonst enden sie hier,
+// weil der pendingUpload-Store nach dem Upload geleert wird (Issue #1234).
 function handleNextStep(): void {
   void router.push({
     name: 'StepEnvSetup',
     params: { projectId: props.projectId },
+    query: { ...route.query },
   })
 }
 const {
@@ -90,7 +95,12 @@ const {
   degradations,
   initialize,
   refreshGraph,
-} = useGraphBuildPipeline({ projectId: props.projectId, router, t })
+} = useGraphBuildPipeline({
+  projectId: props.projectId,
+  router,
+  t,
+  preserveQuery: computed(() => ({ ...route.query })),
+})
 
 // Issue #1023 (Befund B-08): GraphToolbar emittiert toggle-maximize seit
 // jeher, ohne dass irgendein Consumer zuhoert. CSS-Vollbild-Toggle statt

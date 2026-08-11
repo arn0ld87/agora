@@ -572,16 +572,20 @@ describe('Step3Simulation — ai_model_ref beim Simulationsstart (#819)', () => 
 })
 
 /**
- * Regression: numRounds-Slider aus HeroNewRun hatte keinerlei Effekt.
+ * Regression: Rundenzahl und Budget aus HeroNewRun hatten keinerlei Effekt.
  *
- * Der Dashboard-Flow legt den Slider-Wert im pendingUpload-Store ab; Step2
- * (der ihn als Prop durchgereicht hätte) wird dabei übersprungen. Vor dem Fix
- * landete max_rounds deshalb NIE im Start-Request — die Simulation lief
- * immer auf die LLM-generierten total_simulation_hours (z. B. 96 Runden
- * statt der eingestellten 10). Gegenprobe zum Bug-Report: Slider auf 10,
- * Log zeigte "Runde x/96".
+ * Erster Anlauf (Slider ohne Wirkung): Der Dashboard-Flow legte den Wert im
+ * pendingUpload-Store ab und Step 3 las ihn von dort. Das war nur scheinbar
+ * ein Fix — Schritt 1 leert den Store nach dem Ontologie-Upload
+ * (`useGraphBuildPipeline` → `clearPendingUpload`), sodass Step 3 den
+ * Reset-Default 10 statt der eingestellten Runden las und das Budget aus
+ * #764 gar nicht mehr vorfand (Issue #1234).
+ *
+ * Seitdem kommen beide Werte ausschliesslich ueber die Route-Query herein und
+ * erreichen Step 3 als Props. Der Store bleibt hier bewusst befuellt: Er darf
+ * das Ergebnis nicht mehr beeinflussen.
  */
-describe('Step3Simulation — max_rounds aus dem pendingUpload-Store (Dashboard-Flow)', () => {
+describe('Step3Simulation — Run-Parameter aus der Route-Query (Dashboard-Flow)', () => {
   beforeEach(async () => {
     vi.clearAllMocks()
     localStorage.clear()
@@ -604,11 +608,10 @@ describe('Step3Simulation — max_rounds aus dem pendingUpload-Store (Dashboard-
     )
   })
 
-  it('ohne maxRounds-Prop fällt max_rounds auf den Slider-Wert zurück', async () => {
+  it('ohne maxRounds-Prop bleibt max_rounds weg — der Store ist kein Ersatz', async () => {
     vi.mocked(simulationApi.getRunStatus).mockResolvedValue({ success: true, data: {} } as never)
     vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_0123456789ab' } } as never)
 
-    // Dashboard-Flow: KEINE maxRounds-Prop.
     const wrapper = mount(Step3Simulation, {
       props: {
         simulationId: 'sim_0123456789ab',
@@ -624,11 +627,14 @@ describe('Step3Simulation — max_rounds aus dem pendingUpload-Store (Dashboard-
     await startBtn!.trigger('click')
     await flushPromises()
 
+    // Der Store trug hier frueher die 10 bei — ein Wert, der in Wahrheit der
+    // Reset-Default war und die Nutzereingabe still ueberschrieb. Ohne Query
+    // gilt jetzt der Auto-Wert des Backends.
     const payload = vi.mocked(simulationApi.startSimulation).mock.calls[0][0] as unknown as Record<string, unknown>
-    expect(payload.max_rounds).toBe(10)
+    expect('max_rounds' in payload).toBe(false)
   })
 
-  it('Budget aus dem pendingUpload-Store wird als budget durchgereicht (Issue #764)', async () => {
+  it('reicht das Budget aus der Prop an /simulation/start durch (Issue #764, #1234)', async () => {
     vi.mocked(simulationApi.getRunStatus).mockResolvedValue({ success: true, data: {} } as never)
     vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_0123456789ab' } } as never)
 
@@ -638,12 +644,11 @@ describe('Step3Simulation — max_rounds aus dem pendingUpload-Store (Dashboard-
       currency: 'USD',
       max_tokens: 5000,
     }
-    const { setPendingUpload } = await import('../../store/pendingUpload')
-    setPendingUpload([], 'requirement', null, 30, 10, budget)
 
     const wrapper = mount(Step3Simulation, {
       props: {
         simulationId: 'sim_0123456789ab',
+        budget,
         projectData: { name: 'dashboard-flow' },
         graphData: { nodes: [], edges: [] },
         systemLogs: [],
@@ -660,7 +665,7 @@ describe('Step3Simulation — max_rounds aus dem pendingUpload-Store (Dashboard-
     expect(payload.budget).toEqual(budget)
   })
 
-  it('ohne Budget im Store bleibt das budget-Feld weg (kein null-Payload)', async () => {
+  it('ohne Budget-Prop bleibt das budget-Feld weg (kein null-Payload)', async () => {
     vi.mocked(simulationApi.getRunStatus).mockResolvedValue({ success: true, data: {} } as never)
     vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_0123456789ab' } } as never)
 
@@ -683,7 +688,7 @@ describe('Step3Simulation — max_rounds aus dem pendingUpload-Store (Dashboard-
     expect('budget' in payload).toBe(false)
   })
 
-  it('maxRounds-Prop (Stepped-Flow) gewinnt vor dem Slider-Wert', async () => {
+  it('nimmt die maxRounds-Prop des Stepped-Flows unveraendert an', async () => {
     vi.mocked(simulationApi.getRunStatus).mockResolvedValue({ success: true, data: {} } as never)
     vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_0123456789ab' } } as never)
 

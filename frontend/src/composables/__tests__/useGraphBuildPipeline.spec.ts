@@ -139,10 +139,32 @@ describe('useGraphBuildPipeline', () => {
     expect(router.replace).toHaveBeenCalledWith({
       name: 'StepGraphBuild',
       params: { projectId: 'project_42' },
+      query: {},
     })
     expect(graphApi.buildGraph).toHaveBeenCalledTimes(1)
     expect(graphApi.buildGraph).toHaveBeenCalledWith({ project_id: 'project_42' })
     expect(pipeline.currentProjectId.value).toBe('project_42')
+  })
+
+  // Issue #1234: Der Replace auf die konkrete Projekt-ID liegt genau eine
+  // Zeile hinter `clearPendingUpload()`. Verliert er die Query, sind die
+  // Run-Parameter des Dashboard-Starts danach nirgends mehr.
+  it('nimmt die Query der aktuellen Route in den Replace mit', async () => {
+    const router = createRouter()
+    const pipeline = useGraphBuildPipeline({
+      projectId: 'new',
+      router,
+      t,
+      preserveQuery: { maxRounds: '25', budget: '{"schema_version":1,"max_tokens":5000}' },
+    })
+
+    await pipeline.initialize()
+
+    expect(router.replace).toHaveBeenCalledWith({
+      name: 'StepGraphBuild',
+      params: { projectId: 'project_42' },
+      query: { maxRounds: '25', budget: '{"schema_version":1,"max_tokens":5000}' },
+    })
   })
 
   it('pollt Task- und Graph-Status auch im Hintergrund-Tab weiter', () => {

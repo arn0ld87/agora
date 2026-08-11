@@ -118,7 +118,14 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/process/:projectId',
     name: 'Process',
-    redirect: (to) => ({ name: 'StepGraphBuild', params: { projectId: String(to.params.projectId) } }),
+    // Query explizit mitnehmen: der Dashboard-Start hängt die Run-Parameter
+    // (Rundenzahl, Budget) an diese Route. Ein Redirect, der sie nicht nennt,
+    // verwirft sie — der Start landete dann auf Reset-Defaults (Issue #1234).
+    redirect: (to) => ({
+      name: 'StepGraphBuild',
+      params: { projectId: String(to.params.projectId) },
+      query: to.query,
+    }),
   },
   {
     path: '/simulation/:simulationId',
