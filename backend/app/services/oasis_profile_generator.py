@@ -463,14 +463,21 @@ class OasisProfileGenerator:
             ):
                 age_by_index[idx] = age
 
-        return [
-            PersonaDemographicSlot(
-                age=age_by_index[idx] or 35,
-                gender=genders[idx],
-                mbti=mbtis[idx],
+        if any(age is None for age in age_by_index):
+            raise AssertionError("Demographic slot planning left at least one age unassigned.")
+
+        slots: list[PersonaDemographicSlot] = []
+        for idx in range(total):
+            assigned_age = age_by_index[idx]
+            assert assigned_age is not None  # guarded above; keeps the invariant explicit for type-checkers
+            slots.append(
+                PersonaDemographicSlot(
+                    age=assigned_age,
+                    gender=genders[idx],
+                    mbti=mbtis[idx],
+                )
             )
-            for idx in range(total)
-        ]
+        return slots
 
     def _build_demographic_slot_prompt_block(
         self,
