@@ -291,3 +291,80 @@ class TestVertragUndSchema:
         from app.services.evidence_migrations import _RECORD_FIELDS
 
         assert "persona_role_family" in _RECORD_FIELDS
+
+
+class TestAuffangtypenSindKeineRollenfamilie:
+    """CodeRabbit PR #1260: `Person` und `Organization` sind Fallback-Töpfe.
+
+    Die Ontologie führt sie bewusst als breite Auffangtypen. Sie als
+    Rollenfamilie zu zählen würde zwei völlig verschiedene Stakeholder — etwa
+    einen Bildungsträger und eine Aufsichtsbehörde, beide `Organization` —
+    zu einer Stimme verschmelzen und Cross-Stakeholder-Stützung unmöglich
+    machen. Für sie bleibt der Berufstitel die Vergleichsgröße.
+    """
+
+    def test_zwei_organisationen_bleiben_zwei_gruppen(self):
+        evidence = [
+            _quote(1, job_title="Nordharz Bildungswerk gGmbH", role_family="Organization"),
+            _quote(2, job_title="Agentur für Arbeit", role_family="Organization"),
+        ]
+
+        claim = ReportClaimModel.model_validate(_claim(evidence))
+        assert claim.confidence_label == ConfidenceLabel.high
+
+    def test_zwei_personen_bleiben_zwei_gruppen(self):
+        evidence = [
+            _quote(1, job_title="Dozentin", role_family="Person"),
+            _quote(2, job_title="Betriebsrätin", role_family="Person"),
+        ]
+
+        claim = ReportClaimModel.model_validate(_claim(evidence))
+        assert claim.confidence_label == ConfidenceLabel.high
+
+    def test_gleicher_jobtitel_unter_auffangtyp_bleibt_eine_gruppe(self):
+        """Die Whitespace-Normalisierung aus #1160 C greift weiterhin."""
+        evidence = [
+            _quote(1, job_title="Umschüler", role_family="Organization"),
+            _quote(2, job_title="  umschüler ", role_family="Organization"),
+        ]
+
+        with pytest.raises(ValidationError):
+            ReportClaimModel.model_validate(_claim(evidence))
+
+    def test_spezifische_familie_wirkt_weiterhin(self):
+        """Gegenprobe: ein echtes Rollenlabel kollabiert wie vorgesehen."""
+        evidence = [
+            _quote(1, job_title="Umschüler im IT-Bereich", role_family="Retrainee"),
+            _quote(2, job_title="Teilnehmer einer Umschulung", role_family="Retrainee"),
+        ]
+
+        with pytest.raises(ValidationError):
+            ReportClaimModel.model_validate(_claim(evidence))
+
+    def test_beide_zaehler_teilen_die_ausnahme(self):
+        from app.services.confidence_calculator import compute_confidence_breakdown
+        from app.services.report_agent.evidence import (
+            _count_supporting_stakeholder_groups as count_groups,
+        )
+
+        items = [
+            {
+                "type": "agent_interview",
+                "source_kind": "agent_quote",
+                "supports_claim": True,
+                "quote": "A",
+                "persona_stakeholder_group": "Bildungsträger",
+                "persona_role_family": "Organization",
+            },
+            {
+                "type": "agent_interview",
+                "source_kind": "agent_quote",
+                "supports_claim": True,
+                "quote": "B",
+                "persona_stakeholder_group": "Aufsichtsbehörde",
+                "persona_role_family": "Organization",
+            },
+        ]
+
+        assert count_groups(items) == 2
+        assert compute_confidence_breakdown(items)["stakeholder_group_count"] == 2.0

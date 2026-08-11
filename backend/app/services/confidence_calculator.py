@@ -53,6 +53,13 @@ _CONTRADICTION_STD_THRESHOLD: float = 0.6
 _CONTRADICTION_RANGE_LOW: float = -0.3
 _CONTRADICTION_RANGE_HIGH: float = 0.3
 
+#: Auffangtypen zaehlen nicht als Rollenfamilie (Issue #1248). Spiegelt
+#: ``report_contract._GENERIC_ENTITY_TYPES`` — der Konsenswert muss dieselbe
+#: Vorstellung von "Gruppe" haben wie der Validator, der darueber entscheidet.
+_GENERIC_ENTITY_TYPES: frozenset[str] = frozenset(
+    {"person", "organization", "entity", "node", "unknown", "other"}
+)
+
 
 def _has_contradiction(sentiment_scores: List[float]) -> bool:
     """Erkennt widersprüchliche Sentiment-Vektoren in einem Evidence-Set.
@@ -337,16 +344,15 @@ def compute_confidence_breakdown(evidence: List[Dict]) -> Dict[str, float]:
     # Rollenfamilien-Label, ersatzweise der Berufstitel. Sonst haette der
     # Konsenswert eine andere Vorstellung von "Gruppe" als der Validator, der
     # ueber dasselbe Label entscheidet.
-    groups = {
-        (
-            f"family:{' '.join(str(e.get('persona_role_family')).split()).casefold()}"
-            if e.get("persona_role_family")
-            else f"title:{' '.join(str(e.get('persona_stakeholder_group')).split()).casefold()}"
-        )
-        for e in quote_items
-        if e.get("persona_role_family")
-        or str(e.get("persona_stakeholder_group") or "").strip()
-    }
+    groups: set[str] = set()
+    for e in quote_items:
+        family = " ".join(str(e.get("persona_role_family") or "").split()).casefold()
+        if family and family not in _GENERIC_ENTITY_TYPES:
+            groups.add(f"family:{family}")
+            continue
+        title = " ".join(str(e.get("persona_stakeholder_group") or "").split()).casefold()
+        if title:
+            groups.add(f"title:{title}")
     if len(groups) >= 3:
         consensus = 1.0
     elif len(groups) == 2:
