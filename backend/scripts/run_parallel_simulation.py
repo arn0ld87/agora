@@ -1487,6 +1487,83 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
         )
 
 
+def build_initial_post_actions(
+    initial_posts: List[Dict[str, Any]],
+    agent_graph,
+    *,
+    on_published=None,
+):
+    """Baut die Agent->Aktion(en)-Struktur fuer die Seed-Posts beider Plattformen.
+
+    Issue #1245: Der Twitter-Zweig wies hier per ``initial_actions[agent] = ...``
+    zu. Mehrere Posts desselben Agenten ueberschrieben sich damit gegenseitig —
+    der letzte gewann, alle vorherigen verschwanden ersatzlos, ohne Fehler und
+    ohne Warnung. Der Reddit-Zweig behandelte dieselbe Kollision bereits korrekt;
+    es war ein Copy-Paste-Divergenzfehler, kein Designunterschied. Beide Zweige
+    benutzen jetzt diesen Helfer, damit die Vorlage nicht wieder auseinanderlaeuft.
+
+    Die Struktur bleibt bewusst heterogen (Einzelwert oder Liste) — genau das
+    erwartet ``env.step``. Ohne Kollision entsteht kein zusaetzliches Wrapping.
+
+    Args:
+        initial_posts: ``event_config.initial_posts`` aus der Simulationsconfig.
+        agent_graph: OASIS-Agentengraph mit ``get_agent(agent_id)``.
+        on_published: optionaler Callback ``(agent_id, content)`` je
+            veroeffentlichtem Post — nicht je Agent.
+
+    Returns:
+        ``(initial_actions, published_count)``. ``published_count`` zaehlt Posts,
+        nicht Dict-Eintraege; die Differenz ist genau das, was die alte Logzeile
+        verschleierte.
+    """
+    initial_actions: Dict[Any, Any] = {}
+    published_count = 0
+
+    for post in initial_posts:
+        agent_id = post.get("poster_agent_id", 0)
+        content = post.get("content", "")
+        try:
+            agent = agent_graph.get_agent(agent_id)
+        except Exception:
+            # Ein nicht aufloesbarer Agent darf die uebrigen Posts nicht mitreissen.
+            continue
+
+        action = ManualAction(
+            action_type=ActionType.CREATE_POST,
+            action_args={"content": content},
+        )
+        existing = initial_actions.get(agent)
+        if existing is None:
+            initial_actions[agent] = action
+        elif isinstance(existing, list):
+            existing.append(action)
+        else:
+            initial_actions[agent] = [existing, action]
+
+        published_count += 1
+        if on_published is not None:
+            on_published(agent_id, content)
+
+    return initial_actions, published_count
+
+
+def format_initial_posts_log(published_count: int, distinct_agents: int) -> str:
+    """Formuliert die Publish-Meldung so, dass ein Kollaps im Log sichtbar ist.
+
+    Die alte Zeile gab ``len(initial_actions)`` aus und nannte den Wert
+    "initial posts" — sie zaehlte also Agenten. Bei neun auf einen Agenten
+    kollabierten Posts meldete sie "Published 1 initial posts", was wie ein
+    Erfolg aussah und den Defekt aus #1226 verdeckte. Beide Groessen getrennt
+    auszuweisen macht denselben Fall auf den ersten Blick lesbar.
+    """
+    post_word = "post" if published_count == 1 else "posts"
+    agent_word = "agent" if distinct_agents == 1 else "agents"
+    return (
+        f"Published {published_count} initial {post_word} "
+        f"from {distinct_agents} distinct {agent_word}"
+    )
+
+
 def get_active_agents_for_round(
     env,
     config: Dict[str, Any],
@@ -1665,33 +1742,26 @@ async def run_twitter_simulation(
     
     initial_action_count = 0
     if initial_posts:
-        initial_actions = {}
-        for post in initial_posts:
-            agent_id = post.get("poster_agent_id", 0)
-            content = post.get("content", "")
-            try:
-                agent = result.env.agent_graph.get_agent(agent_id)
-                initial_actions[agent] = ManualAction(
-                    action_type=ActionType.CREATE_POST,
+        def _log_initial_post(agent_id, content):
+            nonlocal total_actions, initial_action_count
+            if action_logger:
+                action_logger.log_action(
+                    round_num=0,
+                    agent_id=agent_id,
+                    agent_name=agent_names.get(agent_id, f"Agent_{agent_id}"),
+                    action_type="CREATE_POST",
                     action_args={"content": content}
                 )
-                
-                if action_logger:
-                    action_logger.log_action(
-                        round_num=0,
-                        agent_id=agent_id,
-                        agent_name=agent_names.get(agent_id, f"Agent_{agent_id}"),
-                        action_type="CREATE_POST",
-                        action_args={"content": content}
-                    )
-                    total_actions += 1
-                    initial_action_count += 1
-            except Exception:
-                pass
-        
+                total_actions += 1
+                initial_action_count += 1
+
+        initial_actions, published_count = build_initial_post_actions(
+            initial_posts, result.env.agent_graph, on_published=_log_initial_post
+        )
+
         if initial_actions:
             await result.env.step(initial_actions)
-            log_info(f"Published {len(initial_actions)} initial posts")
+            log_info(format_initial_posts_log(published_count, len(initial_actions)))
     
     # Log round 0 end
     if action_logger:
@@ -1955,41 +2025,26 @@ async def run_reddit_simulation(
     
     initial_action_count = 0
     if initial_posts:
-        initial_actions = {}
-        for post in initial_posts:
-            agent_id = post.get("poster_agent_id", 0)
-            content = post.get("content", "")
-            try:
-                agent = result.env.agent_graph.get_agent(agent_id)
-                if agent in initial_actions:
-                    if not isinstance(initial_actions[agent], list):
-                        initial_actions[agent] = [initial_actions[agent]]
-                    initial_actions[agent].append(ManualAction(
-                        action_type=ActionType.CREATE_POST,
-                        action_args={"content": content}
-                    ))
-                else:
-                    initial_actions[agent] = ManualAction(
-                        action_type=ActionType.CREATE_POST,
-                        action_args={"content": content}
-                    )
-                
-                if action_logger:
-                    action_logger.log_action(
-                        round_num=0,
-                        agent_id=agent_id,
-                        agent_name=agent_names.get(agent_id, f"Agent_{agent_id}"),
-                        action_type="CREATE_POST",
-                        action_args={"content": content}
-                    )
-                    total_actions += 1
-                    initial_action_count += 1
-            except Exception:
-                pass
-        
+        def _log_initial_post(agent_id, content):
+            nonlocal total_actions, initial_action_count
+            if action_logger:
+                action_logger.log_action(
+                    round_num=0,
+                    agent_id=agent_id,
+                    agent_name=agent_names.get(agent_id, f"Agent_{agent_id}"),
+                    action_type="CREATE_POST",
+                    action_args={"content": content}
+                )
+                total_actions += 1
+                initial_action_count += 1
+
+        initial_actions, published_count = build_initial_post_actions(
+            initial_posts, result.env.agent_graph, on_published=_log_initial_post
+        )
+
         if initial_actions:
             await result.env.step(initial_actions)
-            log_info(f"Published {len(initial_actions)} initial posts")
+            log_info(format_initial_posts_log(published_count, len(initial_actions)))
     
     # Log round 0 end
     if action_logger:
