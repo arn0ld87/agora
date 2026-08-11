@@ -13,6 +13,8 @@ Agenten verwenden genau diese Reihenfolge:
 3. [`ROADMAP.md`](ROADMAP.md) — strategische Release-Reihenfolge
 4. [GitHub Issues](https://github.com/arn0ld87/agora/issues) — ausführbare Tasks und Akzeptanzkriterien
 
+[`CONTEXT.md`](CONTEXT.md) — **wie Agora zur Laufzeit tatsächlich arbeitet**: die fünf Phasen und ihre Artefakte, der Interview-Mechanismus, das Evidence-Modell mit seinen zwei getrennten Prüfstellen, Artefaktpfade, Sim-DB-Schema samt Auswertungsfallen, und die bekannten Fehlerbilder, die **nicht** als Neufund zu melden sind. Wer einen Lauf beobachtet, auswertet oder debuggt, liest diese Datei zuerst.
+
 [`VISION.md`](VISION.md) — nicht-bindender North-Star (das *Warum* und die Langzeitrichtung), keine Planungsdatei und keine konkurrierende Roadmap.
 
 ADRs, Architektur-, Security- und Runbook-Dateien sind verbindliche Referenzen, aber keine konkurrierenden Roadmaps. Historische Planung liegt unter [`docs/archive/planning/`](docs/archive/planning/).
