@@ -87,7 +87,7 @@ def test_high_faellt_bei_derselben_gruppe_in_zwei_schreibweisen(
     Vor der Normalisierung war genau das der Weg, ``high`` aus einer einzigen
     Stakeholder-Gruppe zu erzeugen — ohne dass ein Validator anschlug.
     """
-    with pytest.raises(ValidationError, match="unterschiedlichen Stakeholder-Gruppen"):
+    with pytest.raises(ValidationError, match="unterschiedlichen Stakeholder-Rollenfamilien"):
         _claim(ConfidenceLabel.high, [_agent_quote(first), _agent_quote(second)])
 
 

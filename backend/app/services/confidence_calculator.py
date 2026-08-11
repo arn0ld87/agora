@@ -333,10 +333,19 @@ def compute_confidence_breakdown(evidence: List[Dict]) -> Dict[str, float]:
 
     # Simulationskonsens: Anzahl unterschiedlicher Stakeholder-Gruppen unter
     # den stützenden Agentenzitaten.
+    # Issue #1248: dieselbe Zaehlgroesse wie im Cross-Stakeholder-Anker — das
+    # Rollenfamilien-Label, ersatzweise der Berufstitel. Sonst haette der
+    # Konsenswert eine andere Vorstellung von "Gruppe" als der Validator, der
+    # ueber dasselbe Label entscheidet.
     groups = {
-        str(e.get("persona_stakeholder_group") or "").strip()
+        (
+            f"family:{' '.join(str(e.get('persona_role_family')).split()).casefold()}"
+            if e.get("persona_role_family")
+            else f"title:{' '.join(str(e.get('persona_stakeholder_group')).split()).casefold()}"
+        )
         for e in quote_items
-        if str(e.get("persona_stakeholder_group") or "").strip()
+        if e.get("persona_role_family")
+        or str(e.get("persona_stakeholder_group") or "").strip()
     }
     if len(groups) >= 3:
         consensus = 1.0
