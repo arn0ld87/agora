@@ -43,6 +43,13 @@ from .providers import base as _provider_base
 from .providers import ollama as _provider_ollama
 from .providers import openai as _provider_openai
 from .providers.registry import openai_compat_base_url
+from .request_plan import (
+    TEMPERATURE_QUIRK,
+    TOKEN_KEY_QUIRK,
+    build_request,
+    execute,
+    thinking_extra_body,
+)
 from .tool_calls import _chat_with_tools
 from .transport_security import ensure_credentialed_transport_security
 
@@ -705,37 +712,6 @@ class LLMClient:
             self._log_invocation_event(stage=context, latency_ms=0.0, success=True)
             self._budget_record()
             return e2e_stub_chat_response(messages=messages)
-        kwargs: Dict[str, Any] = {
-            "model": self.model,
-            "messages": messages,
-        }
-        # #1096: GPT-5-/o-Reasoning-Familie akzeptiert nur den Default-Wert
-        # (1) und antwortet sonst 400 unsupported_value — kein temperature-
-        # Key im Request statt jedes Mal auf den 400 zu warten.
-        if not self._omits_temperature(self.model or ""):
-            kwargs["temperature"] = temperature
-        kwargs.update(self._completion_token_kwargs(max_tokens))
-
-        if response_format:
-            kwargs["response_format"] = response_format
-
-        # For Ollama: pass num_ctx via extra_body to prevent prompt truncation,
-        # plus think flag to control reasoning output on capable models.
-        # force_no_thinking=True überschreibt self._think hart auf False —
-        # verhindert, dass Reasoning-Profile den Token-Cap mit Thoughts belegen.
-        if self._is_ollama():
-            extra_body: Dict[str, Any] = {}
-            effective_num_ctx = self._ollama_num_ctx_for(max_tokens)
-            if effective_num_ctx:
-                extra_body["options"] = {"num_ctx": effective_num_ctx}
-            extra_body["think"] = False if force_no_thinking else self._think
-            kwargs["extra_body"] = extra_body
-        elif self._is_minimax():
-            # MiniMax-eigenes ``thinking``-Feld (Spec) statt Ollama-``think``.
-            kwargs["extra_body"] = self._minimax_thinking_extra_body(
-                force_no_thinking=force_no_thinking
-            )
-
         # Force streaming for Ollama: the OpenAI-compatible endpoint in Ollama
         # 0.21.0 stalls on non-streaming completions for cloud models (e.g.
         # qwen3-coder-next:cloud, deepseek-v4-flash:cloud) — the call never
@@ -745,15 +721,31 @@ class LLMClient:
             self._is_ollama()
             and os.environ.get("LLM_FORCE_STREAM", "true").lower() in ("1", "true", "yes")
         )
+        # force_no_thinking=True überschreibt self._think hart auf False —
+        # verhindert, dass Reasoning-Profile den Token-Cap mit Thoughts belegen.
+        plan = build_request(
+            model=self.model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format=response_format,
+            extra_body=thinking_extra_body(
+                ollama=self._is_ollama(),
+                minimax=self._is_minimax(),
+                num_ctx=self._ollama_num_ctx_for(max_tokens),
+                think=False if force_no_thinking else self._think,
+            ),
+            stream=force_stream,
+        )
 
         def _create(call_kwargs: Dict[str, Any]) -> Tuple[Any, float]:
-            """Single-Attempt-Wrapper mit transient-retry. Budget-Check,
-            Failure-Telemetrie und -Record laufen INNERHALB des Wrappers —
-            jeder Retried-Attempt erzeugt damit genau eine
+            """Ein physischer Providerattempt mit transient-retry.
+
+            Budget-Check, Failure-Telemetrie und -Record laufen INNERHALB des
+            Wrappers — jeder Retried-Attempt erzeugt damit genau eine
             Check/Event/Record-Triplet.
 
-            KEINE 400-Behandlung — die macht der aeussere Wrapper
-            ``_call_with_token_key_fallback``.
+            KEINE 400-Behandlung: die machen die Quirks in ``execute``.
             """
             return llm_call_with_retry(
                 lambda: self._provider_attempt(call_kwargs, context),
@@ -762,59 +754,17 @@ class LLMClient:
                 max_delay=self._retry_max_delay,
             )
 
-        def _call_with_token_key_fallback(call_kwargs: Dict[str, Any]) -> Tuple[Any, float]:
-            """Fallback-Retry: bei 400 wg. max_tokens/max_completion_tokens-Inkompatibilität
-            einmalig den anderen Schlüssel verwenden. Heuristik in
-            ``_uses_max_completion_tokens`` deckt die bekannten Familien ab; der
-            Fallback schützt vor neuen Modellen/Proxies, die wir noch nicht kennen.
+        def _call() -> Tuple[Any, float]:
+            """Der abgesicherte Call: Token-Key-Quirk innen, Temperature aussen.
 
-            Jeder Aufruf von ``_create`` zaehlt als separater Providerattempt
-            mit eigener Check/Event/Record-Triplet.
+            Beide Quirks greifen unabhaengig voneinander — der aeussere setzt
+            auf dem Originalrequest auf, und der innere steht dem korrigierten
+            Lauf wieder zur Verfuegung. Jeder Neuversuch zaehlt als eigener
+            Providerattempt mit eigener Check/Event/Record-Triplet.
             """
-            try:
-                return _create(call_kwargs)
-            except Exception as exc:  # noqa: BLE001 — wir filtern selbst
-                if not self._is_token_key_400(exc):
-                    raise
-                swapped = self._swap_token_kwargs(call_kwargs)
-                if swapped is None:
-                    raise
-                logger.warning(
-                    "LLM 400 on token-limit key — retrying once with swapped key (model=%s, msg=%s)",
-                    self.model,
-                    str(exc)[:200],
-                )
-                return _create(swapped)
-
-        def _call_with_temperature_fallback(call_kwargs: Dict[str, Any]) -> Tuple[Any, float]:
-            """Fallback-Retry (#1096): bei 400 wg. einem nicht unterstuetzten
-            ``temperature``-Wert (GPT-5-/o-Reasoning-Familie akzeptiert nur
-            den Default) einmalig ohne ``temperature`` retryen.
-            ``_omits_temperature`` deckt die bekannten Familien bereits
-            proaktiv ab (kein ``temperature``-Key im Request); dieser
-            Fallback ist das Netz fuer neue Modelle/Proxies, die wir noch
-            nicht kennen — komponiert mit dem Token-Key-Fallback statt ihn
-            zu ersetzen, damit beide Retries unabhaengig voneinander
-            greifen koennen.
-
-            Jeder Aufruf von ``_call_with_token_key_fallback`` zaehlt als
-            separater Providerattempt mit eigener Check/Event/Record-Triplet.
-            """
-            try:
-                return _call_with_token_key_fallback(call_kwargs)
-            except Exception as exc:  # noqa: BLE001 — wir filtern selbst
-                if not self._is_temperature_400(exc):
-                    raise
-                if "temperature" not in call_kwargs:
-                    raise
-                dropped = dict(call_kwargs)
-                dropped.pop("temperature", None)
-                logger.warning(
-                    "LLM 400 on temperature param — retrying once without temperature (model=%s, msg=%s)",
-                    self.model,
-                    str(exc)[:200],
-                )
-                return _call_with_token_key_fallback(dropped)
+            return execute(
+                plan, _create, quirks=(TOKEN_KEY_QUIRK, TEMPERATURE_QUIRK)
+            )
 
         # Provider-Pfad: jeder physische Request (erster Call, jeder Retry,
         # Token-Key-Fallback, Temperature-Fallback) erhaelt GENAU EINE
@@ -830,8 +780,7 @@ class LLMClient:
         completion_tokens: Optional[int] = None
         try:
             if force_stream:
-                kwargs["stream"] = True
-                _response, _latency_ms = _call_with_temperature_fallback(kwargs)
+                _response, _latency_ms = _call()
                 chunks: List[str] = []
                 try:
                     for event in _response:  # type: ignore[union-attr]
@@ -864,7 +813,7 @@ class LLMClient:
                     raise
                 content = "".join(chunks)
             else:
-                _response, _latency_ms = _call_with_temperature_fallback(kwargs)
+                _response, _latency_ms = _call()
                 # Issue #764 (Review): die lokale Verarbeitung einer
                 # HTTP-erfolgreichen Antwort kann fehlschlagen (leeres
                 # ``choices``, ``message`` ohne ``content``, fehlende
@@ -990,28 +939,28 @@ class LLMClient:
                 {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{image_b64}"}},
             ],
         }]
-        kwargs: Dict[str, Any] = {
-            "model": vision_model,
-            "messages": messages,
-        }
-        # #1096: siehe chat() — GPT-5-/o-Reasoning-Familie akzeptiert nur den
-        # Default-``temperature``-Wert (1).
-        if not self._omits_temperature(vision_model or ""):
-            kwargs["temperature"] = temperature
-        kwargs.update(self._completion_token_kwargs(max_tokens, model=vision_model))
-        if self._is_ollama():
-            extra_body: Dict[str, Any] = {
-                "options": {
-                    "num_ctx": max(
-                        self._ollama_num_ctx_for(max_tokens, model=vision_model) or 0,
-                        8192,
-                    )
-                }
-            }
-            extra_body["think"] = False  # never want reasoning noise in vision output
-            kwargs["extra_body"] = extra_body
+        plan = build_request(
+            model=vision_model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            extra_body=thinking_extra_body(
+                ollama=self._is_ollama(),
+                # MiniMax wird auf dem Vision-Pfad bewusst nicht behandelt —
+                # das ist der Ist-Zustand, kein Versehen dieses Refactorings.
+                minimax=False,
+                # Vision-Boden: ein Bild belegt das Kontextfenster spürbar,
+                # deshalb hier mehr als das, was max_tokens allein verlangt.
+                num_ctx=max(
+                    self._ollama_num_ctx_for(max_tokens, model=vision_model) or 0,
+                    8192,
+                ),
+                # never want reasoning noise in vision output
+                think=False,
+            ),
+        )
 
-        def _create_vision(call_kwargs: Dict[str, Any]):
+        def _create_vision(call_kwargs: Dict[str, Any]) -> Any:
             return llm_call_with_retry(
                 self.client.chat.completions.create,
                 max_retries=self._max_retries,
@@ -1020,19 +969,9 @@ class LLMClient:
                 **call_kwargs,
             )
 
-        try:
-            response = _create_vision(kwargs)
-        except Exception as exc:  # noqa: BLE001
-            if not self._is_token_key_400(exc):
-                raise
-            swapped = self._swap_token_kwargs(kwargs)
-            if swapped is None:
-                raise
-            logger.warning(
-                "Vision LLM 400 on token-limit key — retrying once with swapped key (model=%s)",
-                vision_model,
-            )
-            response = _create_vision(swapped)
+        response = execute(
+            plan, _create_vision, quirks=(TOKEN_KEY_QUIRK,), label="vision"
+        )
         content = response.choices[0].message.content or ""
         content = re.sub(r'<think>[\s\S]*?</think>', '', content, flags=re.IGNORECASE).strip()
         return content
