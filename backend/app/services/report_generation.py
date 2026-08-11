@@ -25,6 +25,52 @@ logger = get_logger(__name__)
 run_registry = RunRegistry()
 
 
+def was_run_cancelled(run_id: str) -> bool:
+    """Prueft, ob fuer ``run_id`` ein Abbruch angefordert wurde.
+
+    Bewusst tolerant: ein Fehler im Cancel-Store darf einen fertigen Report
+    nicht in den Abbruchzweig schicken.
+    """
+    try:
+        from .sim.cancel_flag import is_cancel_requested
+
+        return is_cancel_requested(run_id)
+    except Exception:  # noqa: BLE001 — Cancel-Check ist best effort
+        return False
+
+
+def finish_cancelled_run(run_id: str, *, report_id: str, simulation_id: str) -> None:
+    """Setzt den Abbruch-Endzustand eines per ``/cancel`` gestoppten Reports.
+
+    Issue #1243. Spiegelt bewusst ``sim/monitor.py::_cancel_supervision``:
+    ``stopped`` + ``termination_reason="user_cancel"``, Teilergebnisse bleiben
+    als Artefakt erhalten. Das Flag wird danach geloescht, damit ein Resume
+    desselben Runs nicht sofort wieder abbricht.
+    """
+    from .sim.cancel_flag import clear_cancel
+
+    RunRegistry().update_run(
+        run_id,
+        status="stopped",
+        termination_reason="user_cancel",
+        message=(
+            "Vom Nutzer abgebrochen — bereits geschriebene Sections "
+            "bleiben als Teilreport erhalten"
+        ),
+        event_type="user_cancel",
+        artifacts=ArtifactLocator.existing_paths({
+            "report": ArtifactLocator.report_artifacts(report_id),
+            "simulation": ArtifactLocator.simulation_artifacts(simulation_id),
+        }),
+        resume_capability={
+            "available": True,
+            "action": "resume",
+            "label": "Continue report generation",
+        },
+    )
+    clear_cancel(run_id)
+
+
 class ReportGenerationService:
     @staticmethod
     def can_reuse_existing_report(
@@ -266,7 +312,15 @@ class ReportGenerationService:
                 )
                 def progress_callback(stage, progress, message):
                     task_manager.update_task(task_id, progress=progress, message=f"[{stage}] {message}")
-                report = agent.generate_report(progress_callback=progress_callback, report_id=report_id, report_mode=report_mode)
+                # Issue #1243: ohne cancel_run_id prueft generate_report gar
+                # nicht erst — der /cancel-Endpoint quittierte 202 und der
+                # Report lief bis zum Ende durch.
+                report = agent.generate_report(
+                    progress_callback=progress_callback,
+                    report_id=report_id,
+                    report_mode=report_mode,
+                    cancel_run_id=run_record["run_id"],
+                )
                 ReportManager.save_report(report, report_mode=report_mode)
                 # Issue #1006: INCOMPLETE ist ein Teilergebnis, kein Fehlschlag.
                 # Der Report existiert, ist lesbar und exportierbar — nur
@@ -277,7 +331,31 @@ class ReportGenerationService:
                 # bereits fertige Sections ohnehin ueberspringt. Genau diese
                 # Zustellungsluecke haette den Fix aus #1006 in der Oberflaeche
                 # wirkungslos gemacht.
-                if is_deliverable_report_status(report.status):
+                if was_run_cancelled(run_record["run_id"]):
+                    # Issue #1243: der Teilreport aus _build_partial_report
+                    # traegt status=COMPLETED (success-with-caveat). Ohne
+                    # diesen Zweig faende der Nutzer den abgebrochenen Lauf als
+                    # regulaer abgeschlossen wieder — nicht unterscheidbar von
+                    # einem Report, der alle Sections geschrieben hat.
+                    # Reihenfolge ist bindend (dieselbe Falle wie #978): der
+                    # Task spiegelt sich per RunRegistry.sync_task auf den Run
+                    # zurueck und wuerde "stopped" wieder mit "completed"
+                    # ueberschreiben. Der detaillierte Run-Update laeuft zuletzt.
+                    task_manager.complete_task(
+                        task_id,
+                        result={
+                            "report_id": report.report_id,
+                            "simulation_id": simulation_id,
+                            "status": report.status.value,
+                            "cancelled": True,
+                        },
+                    )
+                    finish_cancelled_run(
+                        run_record["run_id"],
+                        report_id=report_id,
+                        simulation_id=simulation_id,
+                    )
+                elif is_deliverable_report_status(report.status):
                     _incomplete = report.status == ReportStatus.INCOMPLETE
                     run_registry.update_run(
                         run_record["run_id"],

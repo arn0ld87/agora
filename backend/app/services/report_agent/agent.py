@@ -1365,8 +1365,15 @@ class ReportAgent:
         report_id: Optional[str] = None,
         *,
         report_mode: str = "balanced",
+        cancel_run_id: Optional[str] = None,
     ) -> Report:
-        return generate_report_impl(self, progress_callback=progress_callback, report_id=report_id, report_mode=report_mode)  # type: ignore[arg-type]
+        return generate_report_impl(  # type: ignore[arg-type]
+            self,
+            progress_callback=progress_callback,
+            report_id=report_id,
+            report_mode=report_mode,
+            cancel_run_id=cancel_run_id,
+        )
 
     def chat(
         self,
