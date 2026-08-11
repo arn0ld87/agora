@@ -270,7 +270,17 @@ def _phase_read_entities(
             f"Capping agent count at {max_agents} "
             f"(originally {len(filtered.entities)} entities)"
         )
-        filtered.entities = _cap_entities_across_types(filtered.entities, max_agents)
+        capped = _cap_entities_across_types(filtered.entities, max_agents)
+        # Issue #1247: Was der Cap wegschneidet, ist die Reserve. Die
+        # typunabhaengige Eignungspruefung faellt erst im
+        # Persona-Generierungsaufruf, also *nach* dem Cap — ohne Reservepool
+        # bliebe jeder dort abgelehnte Platz ersatzlos leer und der
+        # konfigurierte max_agents-Wert wuerde unterschritten.
+        selected_uuids = {entity.uuid for entity in capped}
+        filtered.reserve_entities = [
+            entity for entity in filtered.entities if entity.uuid not in selected_uuids
+        ]
+        filtered.entities = capped
         filtered.filtered_count = len(filtered.entities)
         filtered.entity_types = {
             entity.get_entity_type() or "Entity" for entity in filtered.entities
@@ -402,6 +412,9 @@ def _phase_generate_profiles(
         # Prepare-Pfad aber nie gefüllt — ``_report_persona_degradation``
         # lief damit nie. Ohne diese Zeile bleibt die Meldung dort tot.
         degradations=degradations,
+        # Issue #1247: Nachrücker für Kandidaten, die der Generator als nicht
+        # personenfähig zurückweist.
+        reserve_entities=getattr(filtered, "reserve_entities", None),
     )
 
     state.profiles_count = len(profiles)

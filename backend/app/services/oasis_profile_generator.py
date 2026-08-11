@@ -76,6 +76,36 @@ class PersonaProfileSchema(BaseModel):
     profession: str = Field("", description="Profession")
     interested_topics: List[str] = Field(default_factory=list, description="Topic strings")
     voice_register: str = Field(..., description="One of formal-de/neutral-de/technical-de/skeptisch-de")
+    # Issue #1247: Ablehnung statt Erfindung. Die Frage "kann diese Entitaet
+    # einen menschlichen Traeger haben" haengt am Namen und am Kontext, nicht
+    # am Typlabel — 28 von 29 beobachteten Nicht-Stakeholdern trugen den
+    # voellig legitimen Typ ``Organization``. Die Pruefung wird in den ohnehin
+    # stattfindenden Generierungsaufruf gefaltet und kostet damit keinen
+    # zusaetzlichen Roundtrip.
+    ineligible: bool = Field(
+        False,
+        description="True if this entity cannot have a human bearer and must not become a persona",
+    )
+    ineligible_reason: str = Field("", description="Short reason when ineligible is true")
+
+
+class PersonaIneligible(Exception):
+    """Das Modell hat die Entitaet als nicht personenfaehig zurueckgewiesen (#1247).
+
+    Bewusst eine eigene Ausnahme und kein stiller ``None``-Rueckgabewert: der
+    Aufrufer muss den Unterschied zwischen "Generierung fehlgeschlagen"
+    (Notprofil, Slot bleibt besetzt) und "Kandidat abgelehnt" (Slot wird
+    nachbesetzt) kennen. Vor diesem Slice gab es diesen Unterschied nicht —
+    jede Entitaet, die den Generator erreichte, wurde zu einer Persona.
+    """
+
+    def __init__(self, entity_name: str, entity_type: str, reason: str) -> None:
+        self.entity_name = entity_name
+        self.entity_type = entity_type
+        self.reason = reason
+        super().__init__(
+            f"{entity_name} ({entity_type}) ist nicht personenfaehig: {reason}"
+        )
 
 
 class CollectivePersonaSchema(BaseModel):
@@ -98,6 +128,14 @@ class CollectivePersonaSchema(BaseModel):
     country: str = Field(..., description="ISO country code, e.g. DE, AT, CH")
     interested_topics: List[str] = Field(default_factory=list, description="Topic strings")
     voice_register: str = Field(..., description="One of formal-de/neutral-de/technical-de/skeptisch-de")
+    # Issue #1247: Der Eignungsblock haengt an beiden Prompts, also braucht auch
+    # der Kollektiv-Vertrag das Ablehnungsfeld — sonst scheitert eine Ablehnung
+    # fuer Gruppen-Entitaeten an der Schemavalidierung.
+    ineligible: bool = Field(
+        False,
+        description="True if this entity cannot have a human bearer and must not become a persona",
+    )
+    ineligible_reason: str = Field("", description="Short reason when ineligible is true")
 
 # Persona-Detail-Level steuert die Output-Größe pro Persona — direkter
 # Hebel auf Cloud-LLM-Inference-Zeit (Output-Tokens dominieren). Issue #217.
@@ -643,6 +681,21 @@ class OasisProfileGenerator:
                 demographic_slot=demographic_slot,
             )
 
+        # Issue #1247: Das Modell darf die Entitaet zurueckweisen, statt eine
+        # Persona zu erfinden. Bewusst als Ausnahme und nicht als stilles
+        # Ueberspringen — der Aufrufer muss den Slot nachbesetzen koennen.
+        if profile_data.get("ineligible"):
+            reason = (profile_data.get("ineligible_reason") or "").strip() or (
+                "vom Persona-Generator als nicht personenfaehig zurueckgewiesen"
+            )
+            logger.info(
+                "Persona-Eligibility (LLM): Entitaet abgelehnt name=%s type=%s reason=%s",
+                name,
+                entity_type,
+                reason,
+            )
+            raise PersonaIneligible(name, entity_type, reason)
+
         # Issue #1246: Der Kollektiv-Zweig ist bewusst hier sichtbar und nicht
         # in den Individuenpfad eingebettet. Eine Organisation bekommt keine
         # Demografie zugewiesen — es gibt kein Alter, kein Geschlecht und
@@ -965,7 +1018,63 @@ class OasisProfileGenerator:
     def _is_group_entity(self, entity_type: str) -> bool:
         """Determine if entity is a group/institutional type"""
         return entity_type.lower() in self.GROUP_ENTITY_TYPES
-    
+
+    def _build_eligibility_prompt_block(self, entity_name: str, entity_type: str) -> str:
+        """Erlaubt dem Modell, die Entitaet abzulehnen statt sie zu erfinden (#1247).
+
+        Die Blockliste in ``persona_eligibility`` haengt am ``entity_type`` und
+        kann diesen Fall strukturell nicht fangen: 28 von 29 beobachteten
+        Nicht-Stakeholdern trugen den Typ ``Organization`` — ``Moodle``,
+        ``ChatGPT``, ``Magdeburg``, ``AZAV-Zulassung``, ``Kursstart Februar
+        2027``. ``organization`` kann nicht auf die Blockliste, weil
+        Bildungstraeger, Betriebe und Behoerden legitime Stakeholder sind.
+
+        Ein enger gefasstes Typvokabular hilft ebenfalls nicht: In einem Lauf
+        lieferte das Modell ausschliesslich kanonische Typen — und trotzdem
+        landeten 16 von 16 Nicht-Stakeholdern in ``Organization``. Der Typ ist
+        gleichzeitig legitimes Label und Auffangtopf fuer alles Unklare.
+
+        Die Frage wird deshalb am Namen und am Kontext beantwortet, nicht am
+        Label, und in den ohnehin stattfindenden Generierungsaufruf gefaltet.
+        """
+        if self.language == "de":
+            return f"""### Eignungsprüfung (vor allem anderen zu beantworten)
+
+Prüfe zuerst, ob „{entity_name}" überhaupt einen menschlichen Träger haben kann — also ob es Menschen gibt, die für diese Entität sprechen und im Szenario eine eigene Interessenlage vertreten.
+
+Setze `ineligible: true` und begründe knapp in `ineligible_reason`, wenn „{entity_name}" eines der folgenden ist:
+- eine Software, ein Modell, ein Werkzeug oder ein technisches System (auch wenn der Typ „{entity_type}" etwas anderes nahelegt)
+- ein Ort, eine Stadt, ein Bundesland oder eine Region
+- ein Datum, ein Termin, ein Zeitraum oder ein Meilenstein
+- ein Dokument, ein Abschnitt, eine Zulassung, ein Verfahren oder ein Regelwerk
+- ein Gerät, eine Infrastruktur oder eine Systemkomponente
+- ein abstrakter Begriff, ein Sammelbegriff oder das Analysewerkzeug selbst
+
+Der Entitätstyp ist dabei nur ein Hinweis, keine Antwort — er trägt in der Praxis häufig „Organization", auch wenn die Entität eine Software oder eine Stadt ist. Entscheide nach dem Namen und dem Kontext.
+
+Bei `ineligible: true` sind alle übrigen Felder bedeutungslos, müssen aber weiterhin schemagültig sein — sonst wird die Antwort verworfen, drei Versuche scheitern und die Entität landet über den regelbasierten Pfad doch als Persona im Lauf. Verwende genau: display_name und handle je ein Minuszeichen, age 30, gender other, mbti ISTJ, country DE, voice_register neutral-de, leere Strings für bio, persona und profession, leere Liste für interested_topics. Erfinde in diesem Fall KEINE Persona.
+
+Bei `ineligible: false` beantworte die Aufgabe oben wie beschrieben."""
+
+        return f"""### Eligibility check (answer this first)
+
+First decide whether "{entity_name}" can have a human bearer at all — that is, whether there are people who speak for this entity and hold their own stake in the scenario.
+
+Set `ineligible: true` and give a short `ineligible_reason` if "{entity_name}" is any of:
+- a piece of software, a model, a tool, or a technical system (even if the type "{entity_type}" suggests otherwise)
+- a place, city, state, or region
+- a date, deadline, period, or milestone
+- a document, section, accreditation, procedure, or set of rules
+- a device, infrastructure, or system component
+- an abstract concept, an umbrella term, or the analysis tool itself
+
+The entity type is a hint, not an answer — in practice it often reads "Organization" even when the entity is software or a city. Decide from the name and the context.
+
+When `ineligible: true`, all other fields are meaningless but must still be schema-valid — otherwise the response is rejected, three attempts fail and the entity becomes a persona anyway via the rule-based path. Use exactly: display_name and handle each a single hyphen, age 30, gender other, mbti ISTJ, country DE, voice_register neutral-de, empty strings for bio, persona and profession, empty list for interested_topics. Do NOT invent a persona in that case.
+
+When `ineligible: false`, answer the task above as described."""
+
+
     @measure_llm_latency(
         operation='persona_generation',
         extract_model=lambda self, *a, **kw: getattr(self, 'model_name', None),
@@ -1017,6 +1126,11 @@ class OasisProfileGenerator:
                 entity_name, entity_type, entity_summary, entity_attributes, context,
                 detail_level=detail_level, demographic_slot=demographic_slot,
             )
+
+        # Issue #1247: Einmal angehaengt statt in beide Prompts kopiert — es ist
+        # dieselbe Frage, unabhaengig davon, ob die Entitaet als Individuum oder
+        # als Kollektiv gefuehrt wird.
+        prompt = f"{prompt}\n\n{self._build_eligibility_prompt_block(entity_name, entity_type)}"
 
         # Try multiple times until successful or max retry attempts reached
         max_attempts = 3
@@ -1769,6 +1883,115 @@ Important:
         """Set knowledge graph ID for knowledge graph search"""
         self.graph_id = graph_id
     
+    def _backfill_rejected_slots(
+        self,
+        *,
+        profiles: List[Optional[OasisAgentProfile]],
+        entities: List[EntityNode],
+        reserve_entities: List[EntityNode],
+        use_llm: bool,
+        rejected: List["PersonaIneligible"],
+    ) -> None:
+        """Besetzt abgelehnte Persona-Slots aus dem Reservepool nach (#1247).
+
+        Der Eignungsfilter ueber die Blockliste laeuft vor dem ``max_agents``-Cap
+        und ist damit unproblematisch. Die typunabhaengige Pruefung faellt aber
+        erst im Generierungsaufruf, also *nach* dem Cap — eine Ablehnung dort
+        liess den Platz bisher ersatzlos leer.
+
+        Sequentiell und nicht parallel: die Reserve ist klein (die Differenz
+        zwischen Kandidatenpool und Cap), und jeder Nachrücker kann selbst
+        abgelehnt werden, was einen weiteren Zug aus derselben Liste erfordert.
+        Ein Parallelisieren brauchte eine Koordination, die den Aufwand nicht
+        rechtfertigt.
+
+        Mutiert ``profiles`` **und** ``entities`` in place. Beides ist noetig:
+        ``_phase_generate_profiles`` reicht seine Entity-Liste an
+        ``SimulationConfigGenerator.generate_config`` weiter. Ohne den Tausch
+        bekaeme das nachbesetzte Profil den ``AgentConfig`` und die
+        Initial-Post-Klassifikation der abgelehnten Entitaet — eine
+        Honorarkraft liefe dann mit UUID, Name, Typ und Aktivitaetsprofil von
+        Moodle (CodeRabbit PR #1258).
+        """
+        slot_types = {
+            idx: (entity.get_entity_type() or "Entity")
+            for idx, entity in enumerate(entities)
+        }
+        open_slots = [idx for idx, profile in enumerate(profiles) if profile is None]
+        if not open_slots:
+            return
+
+        reserve_slots = self._build_demographic_slots(reserve_entities)
+        used: set[int] = set()
+        filled = 0
+
+        def _next_candidate(preferred_type: Optional[str]) -> Optional[int]:
+            """Naechster unverbrauchter Reserve-Index, Typgleichheit bevorzugt.
+
+            Issue #1247 (CodeRabbit PR #1258): Ohne Typpraeferenz verbraucht die
+            Nachbesetzung stur den naechsten Eintrag. Gehoert der einer anderen
+            Rollenfamilie, faellt ein aktiver ``PersonaQuotaPlan`` anschliessend
+            durch ``_validate_persona_quota`` — und auch ohne Plan verschwindet
+            die Typvertretung, die das Round-Robin des Caps gerade gesichert
+            hat, obwohl weiter hinten ein gleichartiger Kandidat steht.
+            """
+            if preferred_type:
+                for idx, entity in enumerate(reserve_entities):
+                    if idx in used:
+                        continue
+                    if (entity.get_entity_type() or "Entity") == preferred_type:
+                        return idx
+            for idx in range(len(reserve_entities)):
+                if idx not in used:
+                    return idx
+            return None
+
+        for slot_idx in open_slots:
+            preferred = slot_types.get(slot_idx) if slot_types else None
+            while True:
+                reserve_index = _next_candidate(preferred)
+                if reserve_index is None:
+                    break
+                candidate = reserve_entities[reserve_index]
+                candidate_slot = reserve_slots[reserve_index]
+                used.add(reserve_index)
+                try:
+                    profiles[slot_idx] = self.generate_profile_from_entity(
+                        entity=candidate,
+                        user_id=slot_idx,
+                        use_llm=use_llm,
+                        demographic_slot=candidate_slot,
+                    )
+                except PersonaIneligible as rejection:
+                    rejected.append(rejection)
+                    continue
+                except Exception as exc:  # noqa: BLE001 — Nachrücker duerfen den Lauf nicht kippen
+                    logger.warning(
+                        "Nachbesetzung fuer Slot %d fehlgeschlagen (%s): %r",
+                        slot_idx,
+                        candidate.name,
+                        exc,
+                    )
+                    continue
+                # Die Entity am selben Index mittauschen, damit die
+                # Config-Generierung den Nachruecker beschreibt und nicht die
+                # abgelehnte Entitaet.
+                if slot_idx < len(entities):
+                    entities[slot_idx] = candidate
+                filled += 1
+                break
+
+        logger.info(
+            "Persona-Eligibility: %d Kandidat(en) abgelehnt, %d von %d freien "
+            "Plaetzen aus der Reserve nachbesetzt (Reserve: %d Kandidaten). "
+            "Abgelehnt: %s",
+            len(rejected),
+            filled,
+            len(open_slots),
+            len(reserve_entities),
+            ", ".join(f"{r.entity_name} ({r.entity_type})" for r in rejected[:10]),
+        )
+
     def generate_profiles_from_entities(
         self,
         entities: List[EntityNode],
@@ -1779,6 +2002,7 @@ Important:
         realtime_output_path: Optional[str] = None,
         output_platform: str = "reddit",
         degradations: Optional["DegradationCollector"] = None,
+        reserve_entities: Optional[List[EntityNode]] = None,
     ) -> List[OasisAgentProfile]:
         """
         Generate Agent Profiles in batch from entities (supports parallel generation)
@@ -1819,6 +2043,8 @@ Important:
         completed_count = [0]  # Use list for modification in closure
         lock = Lock()
         demographic_slots = self._build_demographic_slots(entities)
+        # Issue #1247: abgelehnte Kandidaten, gesammelt fuer die Nachbesetzung.
+        rejected: List[PersonaIneligible] = []
 
         # Helper function for real-time file writing
         def save_profiles_realtime():
@@ -1880,6 +2106,15 @@ Important:
                 self._print_generated_profile(entity.name, entity_type, profile)
 
                 return idx, profile, None
+
+            except PersonaIneligible as rejection:
+                # Issue #1247: Ablehnung ist kein Fehlschlag. Der Slot bleibt
+                # leer und wird aus dem Reservepool nachbesetzt — vor diesem
+                # Slice bekam jede Entitaet, die den Generator erreichte, eine
+                # Persona, auch "Moodle" und "Kursstart Februar 2027".
+                with lock:
+                    rejected.append(rejection)
+                return idx, None, None
 
             except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
                 logger.error(f"Failed to generate persona for entity {entity.name}: {str(e)}")
@@ -2011,6 +2246,20 @@ Important:
                         result_idx, error = idx, str(e)
                     _process_result(result_idx, profile, error)
 
+        # Issue #1247: Abgelehnte Slots aus dem Reservepool nachbesetzen. Ohne
+        # diesen Schritt unterschreitet jede Ablehnung den konfigurierten
+        # max_agents-Wert — bei einem Cap von 30 (nach eigener Empfehlung der
+        # Floor ohne Puffer) und einer beobachteten Ablehnungsquote von bis zu
+        # 32 % waere das der Unterschied zwischen 30 und 20 Stimmen.
+        if rejected:
+            self._backfill_rejected_slots(
+                profiles=profiles,
+                entities=entities,
+                reserve_entities=list(reserve_entities or []),
+                use_llm=use_llm,
+                rejected=rejected,
+            )
+
         # Dedup display_name und user_name: LLM neigt dazu, dieselbe reale Person
         # mehrfach zu klonen wenn sie im Doc prominent ist. Bei Dubletten neuen
         # DACH-Namen aus dem Pool ziehen, Handle entsprechend neu bauen.
@@ -2068,7 +2317,13 @@ Important:
         # Re-save after dedup to keep realtime file in sync with final state.
         save_profiles_realtime()
 
-        return profiles
+        # Issue #1247 (CodeRabbit PR #1258): Leere Slots verdichten. Eine
+        # Ablehnung ohne verfuegbaren Nachruecker liess bisher ``None`` in der
+        # Liste stehen; ``save_profiles`` dereferenziert aber jeden Eintrag und
+        # waere daran gescheitert — der bewusst unterstuetzte Fall "Platz bleibt
+        # leer" haette die Vorbereitung abgebrochen statt einen kleineren, aber
+        # gueltigen Personensatz zu liefern.
+        return [profile for profile in profiles if profile is not None]
     
     def _print_generated_profile(self, entity_name: str, entity_type: str, profile: OasisAgentProfile):
         """Log generated persona details at INFO level (visible in default log config)."""
