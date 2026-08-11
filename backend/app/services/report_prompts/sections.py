@@ -193,10 +193,11 @@ FIX:   Set confidence_label="low" with source_kind="seed_corpus" and
      This MUST reference an actual persona that participates in the simulation.
    - seed_anchor: Either an evidence identifier from the EvidenceMap
      (e.g. "ev_kg_042") OR a seed document reference using the prefix
-     "seed_doc:" followed by the actual document ID from the scenario's
-     seed data, in the format "seed_doc:<document_id>". This placeholder
-     format must NOT be copied literally — substitute the real document ID.
-     The "seed_doc:" prefix is accepted as an opaque reference without further lookup.
+     "seed_doc:" followed by the actual document ID and chunk from the
+     scenario's seed data, in the shape seed_doc:DOCUMENT_ID#chunk:NUMBER.
+     DOCUMENT_ID and NUMBER are placeholders — substitute the real values.
+     Never invent a document ID. If you cannot determine a real one, use an
+     EvidenceMap identifier instead.
 
    ✅ Correct example:
    <simulated_quote persona_id="persona_03" seed_anchor="ev_kg_042">

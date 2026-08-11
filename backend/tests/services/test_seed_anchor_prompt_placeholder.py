@@ -31,3 +31,44 @@ def test_section_system_prompt_does_not_contain_literal_example_anchor() -> None
     # Die Formatbeschreibung selbst muss weiterhin vermittelt werden.
     assert "seed_doc:" in rendered
     assert "document ID" in rendered
+
+
+def test_platzhalter_enthaelt_keine_spitzen_klammern() -> None:
+    """CodeRabbit PR #1254: ``<document_id>`` bricht das Quote-Regex.
+
+    Kopiert ein Modell den Ersatz-Platzhalter wörtlich in das
+    ``<simulated_quote …>``-Tag, beendet das ``>`` in ``<document_id>`` das
+    Tag vorzeitig. ``_QUOTE_TAG_RE`` findet dann null Zitate — und eine
+    Section ohne Zitate gilt als gültig. Der Ersatz wäre damit unsichtbarer
+    gewesen als der Beispielwert, den er ablöst.
+    """
+    rendered = report_prompts.SECTION_SYSTEM_PROMPT_TEMPLATE.format(
+        report_title="T",
+        report_summary="S",
+        simulation_requirement="R",
+        section_title="Sec",
+        language="German",
+        tools_description="tools",
+    )
+
+    anchor_line = next(
+        line for line in rendered.splitlines() if "seed_doc:DOCUMENT_ID" in line
+    )
+    assert "<" not in anchor_line and ">" not in anchor_line
+
+    # Die Chunk-Angabe ist nach ADR-0013 Pflichtbestandteil eines echten Ankers.
+    assert "#chunk:" in rendered
+
+
+def test_prompt_nennt_seed_doc_nicht_mehr_als_opake_referenz() -> None:
+    """Ein Anker, der laut Prompt nicht nachgeschlagen wird, lädt zum Erfinden ein."""
+    rendered = report_prompts.SECTION_SYSTEM_PROMPT_TEMPLATE.format(
+        report_title="T",
+        report_summary="S",
+        simulation_requirement="R",
+        section_title="Sec",
+        language="German",
+        tools_description="tools",
+    )
+
+    assert "opaque reference without further lookup" not in rendered
