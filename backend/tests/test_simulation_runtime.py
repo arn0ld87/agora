@@ -328,3 +328,132 @@ def test_resolve_memory_token_limit_uses_substring_heuristic_for_unknown_models(
     assert module._resolve_memory_token_limit("qwen3-coder-next:cloud") >= 262_144
     assert module._resolve_memory_token_limit("gpt-oss:120b-cloud") >= 131_072
     assert module._resolve_memory_token_limit("some-unknown-model") == 262_144
+
+
+# ── _create_manual_action: OASIS-Vertrag (#1215 / CodeRabbit Finding A) ──
+#
+# Der Prompt-Builder verlangt Ziel-IDs als post_id/comment_id/agent_id und
+# Content als "content". OASIS' Plattform-Funktionen erwarten aber teils andere
+# kwarg-Namen (followee_id, mutee_id, quote_content). _create_manual_action
+# muss mappen; zuvor wurden Dislike/Comment/Mute gar nicht gemappt und
+# Ziel-IDs verworfen — jede paarerweise Aktion schlug bei env.step fehl und
+# hinterließ nur CREATE_POST (B1) bzw. keinen Dislike (B2).
+
+_ALL_ACTIONS = [
+    "CREATE_POST", "LIKE_POST", "DISLIKE_POST", "REPOST", "QUOTE_POST",
+    "FOLLOW", "MUTE", "CREATE_COMMENT", "LIKE_COMMENT", "DISLIKE_COMMENT",
+    "DO_NOTHING",
+]
+
+
+def _action_loop():
+    module = _load_module(
+        "agent_tools_action_map_test", "backend/scripts/agent_tools.py"
+    )
+    return module.ToolAwareActionLoop(model=None, tools=None), module
+
+
+def test_create_manual_action_maps_all_pairwise_actions_with_oasis_kwargs():
+    from oasis import ActionType
+
+    loop, _ = _action_loop()
+
+    cases = [
+        ({"action": "CREATE_POST", "content": "hi"}, ActionType.CREATE_POST, {"content": "hi"}),
+        ({"action": "LIKE_POST", "post_id": 7}, ActionType.LIKE_POST, {"post_id": 7}),
+        ({"action": "DISLIKE_POST", "post_id": 7}, ActionType.DISLIKE_POST, {"post_id": 7}),
+        ({"action": "REPOST", "post_id": 9}, ActionType.REPOST, {"post_id": 9}),
+        ({"action": "QUOTE_POST", "post_id": 3, "content": "q"},
+         ActionType.QUOTE_POST, {"post_id": 3, "quote_content": "q"}),
+        ({"action": "FOLLOW", "agent_id": 42}, ActionType.FOLLOW, {"followee_id": 42}),
+        ({"action": "MUTE", "agent_id": 42}, ActionType.MUTE, {"mutee_id": 42}),
+        ({"action": "CREATE_COMMENT", "post_id": 5, "content": "c"},
+         ActionType.CREATE_COMMENT, {"post_id": 5, "content": "c"}),
+        ({"action": "LIKE_COMMENT", "comment_id": 11},
+         ActionType.LIKE_COMMENT, {"comment_id": 11}),
+        ({"action": "DISLIKE_COMMENT", "comment_id": 11},
+         ActionType.DISLIKE_COMMENT, {"comment_id": 11}),
+        ({"action": "DO_NOTHING"}, ActionType.DO_NOTHING, {}),
+    ]
+
+    for action_data, exp_type, exp_args in cases:
+        action = loop._create_manual_action(action_data, _ALL_ACTIONS)
+        assert action.action_type == exp_type, (
+            f"{action_data}: action_type {action.action_type} != {exp_type}"
+        )
+        assert action.action_args == exp_args, (
+            f"{action_data}: action_args {action.action_args} != {exp_args}"
+        )
+
+
+def test_create_manual_action_falls_back_to_do_nothing_on_missing_required_payload():
+    from oasis import ActionType
+
+    loop, _ = _action_loop()
+
+    missing_cases = [
+        {"action": "CREATE_POST"},                       # kein content
+        {"action": "LIKE_POST"},                        # kein post_id
+        {"action": "DISLIKE_POST"},                     # kein post_id
+        {"action": "REPOST"},                           # kein post_id
+        {"action": "QUOTE_POST", "content": "q"},        # kein post_id
+        {"action": "FOLLOW"},                           # kein agent_id
+        {"action": "MUTE"},                             # kein agent_id
+        {"action": "CREATE_COMMENT", "post_id": 5},      # kein content
+        {"action": "CREATE_COMMENT", "content": "c"},    # kein post_id
+        {"action": "LIKE_COMMENT"},                     # kein comment_id
+        {"action": "DISLIKE_COMMENT"},                  # kein comment_id
+    ]
+
+    for action_data in missing_cases:
+        action = loop._create_manual_action(action_data, _ALL_ACTIONS)
+        assert action.action_type == ActionType.DO_NOTHING, (
+            f"{action_data}: sollte auf DO_NOTHING fallen, got {action.action_type}"
+        )
+        assert action.action_args == {}
+
+
+def test_create_manual_action_rejects_actions_not_in_available_actions():
+    from oasis import ActionType
+
+    loop, _ = _action_loop()
+    # Twitter-Action-Space: weder DISLIKE_* noch CREATE_COMMENT verfügbar.
+    twitter_actions = [
+        "CREATE_POST", "LIKE_POST", "REPOST", "FOLLOW", "DO_NOTHING", "QUOTE_POST",
+    ]
+
+    assert loop._create_manual_action(
+        {"action": "DISLIKE_POST", "post_id": 1}, twitter_actions
+    ).action_type == ActionType.DO_NOTHING
+    assert loop._create_manual_action(
+        {"action": "CREATE_COMMENT", "post_id": 1, "content": "x"}, twitter_actions
+    ).action_type == ActionType.DO_NOTHING
+    # Erlaubte Aktion wird ausgeführt.
+    assert loop._create_manual_action(
+        {"action": "LIKE_POST", "post_id": 1}, twitter_actions
+    ).action_type == ActionType.LIKE_POST
+    # Leere available_actions = kein Filter (Fallback-Pfad).
+    assert loop._create_manual_action(
+        {"action": "DISLIKE_POST", "post_id": 1}, []
+    ).action_type == ActionType.DISLIKE_POST
+
+
+def test_build_agent_prompt_with_tools_binds_conflict_rule_to_available_actions():
+    module = _load_module(
+        "agent_tools_prompt_conflict_test", "backend/scripts/agent_tools.py"
+    )
+
+    class DummyTools:
+        def tools_description_text(self):
+            return ""
+
+    prompt = module.build_agent_prompt_with_tools(
+        agent_name="A", agent_role="r", agent_bio="b",
+        observation="o", available_actions=["CREATE_POST", "LIKE_POST"],
+        tools=DummyTools(), language="de",
+    )
+    # Die Konflikt-Regel muss die Modell-Auswahl an "Available Actions" binden,
+    # damit auf Plattformen ohne DISLIKE_*/CREATE_COMMENT keine nicht verfügbaren
+    # Aktionen emittiert werden (#1215 / CodeRabbit Finding B).
+    assert "Available Actions" in prompt
+    assert "not available" in prompt.lower()
