@@ -943,7 +943,12 @@ Return JSON format (no markdown):
 
         updated_posts = []
         for post in event_config.initial_posts:
-            poster_type = post.get("poster_type", "").lower()
+            # Issue #1226 (CodeRabbit PR #1252): Dieselbe Normalisierung wie bei
+            # den Indexschluesseln. ``InitialPostSchema`` strippt nicht — ein
+            # valides "Betriebsrat " mit Leerzeichen traf sonst weder Namens-
+            # noch Typindex und landete im Round-Robin-Fallback bei einem
+            # fremden Agenten.
+            poster_type = post.get("poster_type", "").strip().lower()
             content = post.get("content", "")
 
             # Try to find matching agent

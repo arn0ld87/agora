@@ -201,3 +201,16 @@ def test_leere_agentenliste_bleibt_fehlerfrei(generator):
     assigned = _assign(generator, [], ["irgendwas"])
 
     assert assigned == [0]
+
+
+def test_poster_type_mit_umgebendem_whitespace_trifft_trotzdem(generator):
+    """CodeRabbit PR #1252: die Indexschlüssel sind gestrippt, der Lookup war es nicht.
+
+    ``InitialPostSchema`` strippt nicht. Ein valides ``"Betriebsrat "`` traf
+    damit weder Namens- noch Typindex und landete im Round-Robin-Fallback bei
+    einem fremden Agenten — dem Defekt, den dieses Issue schließt.
+    """
+    assigned = _assign(generator, _DACH_AGENTS, ["  Betriebsrat  ", "\tKostenträger\n"])
+
+    by_name = {a.entity_name.lower(): a.agent_id for a in _DACH_AGENTS}
+    assert assigned == [by_name["betriebsrat"], by_name["kostenträger"]]
