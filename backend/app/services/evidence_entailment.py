@@ -237,6 +237,36 @@ def _sentences(text: str) -> List[str]:
     return [p for p in parts if p.strip()]
 
 
+#: Ab wie vielen Inhaltswörtern der Teil rechts der Zahl als eigenständige
+#: Aussage gilt. Darunter ist er ein Fragment ("", "geführt") und das Vorfeld
+#: trägt die Aussage.
+_TAIL_PREDICATE_MIN_TOKENS = 2
+
+
+def _full_predicate(prefix: str, tail_predicate: str) -> str:
+    """Wählt die Satzhälfte, die die Aussage trägt.
+
+    Deutsch besetzt das Vorfeld frei: "Auf der Personalliste des Trägers
+    stehen 31 Honorarkräfte." trägt seine gesamte Aussage *links* der Zahl.
+    Wer nur ``sentence[match.end():]`` liest, behält dort ein leeres Prädikat
+    und misst anschließend eine Deckung von 0.00 gegen eine Evidence, die
+    denselben Satz in anderer Wortstellung enthält — der Satz wird als
+    Widerspruch aus dem Fließtext entfernt (#1209/#1217).
+
+    Das Vorfeld wird deshalb **nur ergänzend** herangezogen, nicht generell:
+    trägt der Teil rechts der Zahl bereits eine Aussage, bleibt er allein
+    maßgeblich. Sonst wanderte Rahmensprache ("Die Datenlage zeigt, dass …")
+    ins Prädikat, blähte die Claim-Seite von :func:`coverage_ratio` auf und
+    machte belegte Aussagen fälschlich zu ``predicate_overreach``.
+
+    Die Bezugsgruppe bleibt außen vor: sie wird aus dem Tail bestimmt und
+    separat über :func:`subjects_match` geprüft.
+    """
+    if len(_content_tokens(tail_predicate)) >= _TAIL_PREDICATE_MIN_TOKENS:
+        return tail_predicate
+    return " ".join(part for part in (prefix.strip(",.;:() "), tail_predicate) if part).strip()
+
+
 def extract_numeric_facts(text: str) -> List[NumericFact]:
     """Extrahiert Zahlen samt Bezugsgruppe, Aussage und Modalität.
 
@@ -249,9 +279,10 @@ def extract_numeric_facts(text: str) -> List[NumericFact]:
             value = _parse_number(match.group("value"))
             if value is None:
                 continue
-            subject, predicate = _split_subject_predicate(sentence[match.end():])
+            subject, tail = _split_subject_predicate(sentence[match.end():])
             if not subject:
                 continue
+            predicate = _full_predicate(sentence[: match.start()], tail)
             facts.append(
                 NumericFact(
                     value=value,
@@ -267,9 +298,10 @@ def extract_numeric_facts(text: str) -> List[NumericFact]:
                 value = _parse_number(match.group("value"))
                 if value is None:
                     continue
-                subject, predicate = _split_subject_predicate(sentence[match.start("noun"):])
+                subject, tail = _split_subject_predicate(sentence[match.start("noun"):])
                 if not subject:
                     continue
+                predicate = _full_predicate(sentence[: match.start()], tail)
                 facts.append(
                     NumericFact(
                         value=value,
