@@ -1,0 +1,3 @@
+### Fixed (Sim Tool-Skip für DISLIKE — 2026-08-11)
+
+- **DISLIKE_* ohne erzwungenen Tool-Aufruf:** Die Tool-Usage-Rule erlaubte den Tool-Skip nur für `LIKE_POST`/`DO_NOTHING` und zwang für `DISLIKE_POST`/`DISLIKE_COMMENT` einen `web_search`/`web_fetch`-Aufruf, der bei Tool-Limit oder Tool-Fehler auf `DO_NOTHING` zurückfiel — Reddit-Agenten dislike-ten nie (B2 aus #1215). Die Skip-Klausel nennt jetzt die volle Reaktionsmenge (`LIKE_POST`, `DISLIKE_POST`, `DISLIKE_COMMENT`, `LIKE_COMMENT`, `FOLLOW`, `MUTE`, `REPOST`, `QUOTE_POST`, `DO_NOTHING`) und fordert Tools nur, wenn Fakten fehlen, die das Modell nicht schon aus der Observation hat. (#1215)

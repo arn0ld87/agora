@@ -457,3 +457,32 @@ def test_build_agent_prompt_with_tools_binds_conflict_rule_to_available_actions(
     # Aktionen emittiert werden (#1215 / CodeRabbit Finding B).
     assert "Available Actions" in prompt
     assert "not available" in prompt.lower()
+
+
+def test_build_agent_prompt_with_tools_skips_tools_for_dislike_actions():
+    """CodeRabbit Finding 1316 (#1215): Die Tool-Usage-Rule darf keinen
+    Tool-Aufruf fuer DISLIKE_* erzwingen. Vorher erlaubte die Klausel den
+    Tool-Skip nur fuer LIKE_POST/DO_NOTHING — bei Tool-Limit oder Tool-Fehler
+    fiel DISLIKE_* auf DO_NOTHING zurueck, was B2 (Reddit nie Dislike)
+    mit-erklaert. Die Skip-Klausel muss DISLIKE_POST/DISLIKE_COMMENT explizit
+    nennen, damit das Modell sie direkt ausgeben kann, wenn die Observation
+    das Ziel schon zeigt."""
+    module = _load_module(
+        "agent_tools_prompt_toolskip_test", "backend/scripts/agent_tools.py"
+    )
+
+    class DummyTools:
+        def tools_description_text(self):
+            return ""
+
+    prompt = module.build_agent_prompt_with_tools(
+        agent_name="A", agent_role="r", agent_bio="b",
+        observation="o",
+        available_actions=["CREATE_POST", "LIKE_POST", "DISLIKE_POST",
+                           "DISLIKE_COMMENT", "DO_NOTHING"],
+        tools=DummyTools(), language="de",
+    )
+    assert "trivial reactions" in prompt.lower()
+    skip_window = prompt.lower().split("trivial reactions", 1)[1][:300]
+    assert "dislike_post" in skip_window
+    assert "dislike_comment" in skip_window
