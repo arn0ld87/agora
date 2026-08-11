@@ -223,9 +223,19 @@ def _count_supporting_stakeholder_groups(evidence: List[Dict[str, Any]]) -> int:
             continue
         if not entry.get("supports_claim"):
             continue
+        # Issue #1248: Gezaehlt wird das kontrollierte Rollenfamilien-Label,
+        # nicht der frei formulierte Berufstitel — sonst zaehlen Wortwahl- und
+        # Genusvarianten derselben Rolle als verschiedene Gruppen. Die
+        # Praefixe halten die beiden Namensraeume auseinander; ohne sie waere
+        # eine Familie "Lecturer" nicht von einem gleichnamigen Jobtitel zu
+        # unterscheiden. Spiegelt ``report_contract._role_family_key``.
+        family = entry.get("persona_role_family")
+        if family:
+            groups.add(f"family:{' '.join(str(family).split()).casefold()}")
+            continue
         group = entry.get("persona_stakeholder_group")
         if group:
-            groups.add(group)
+            groups.add(f"title:{' '.join(str(group).split()).casefold()}")
     return len(groups)
 
 

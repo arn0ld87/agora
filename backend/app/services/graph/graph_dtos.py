@@ -322,11 +322,16 @@ class AgentInterview:
     question: str
     response: str
     key_quotes: List[str] = field(default_factory=list)
+    # Issue #1248: Kontrolliertes Rollenfamilien-Label der Persona, gezogen aus
+    # dem Entitaetstyp ihrer Quellentitaet. ``agent_role`` bleibt der
+    # Freitext-Jobtitel und damit Anzeigetext; gezaehlt wird dieses Feld.
+    agent_role_family: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "agent_name": self.agent_name,
             "agent_role": self.agent_role,
+            "agent_role_family": self.agent_role_family,
             "agent_bio": self.agent_bio,
             "question": self.question,
             "response": self.response,

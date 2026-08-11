@@ -495,7 +495,10 @@ class ReportAgent:
                     (q.strip() for q in interview.key_quotes if q and q.strip()),
                     response,
                 )
-                items.append({
+                role_family = (
+                    getattr(interview, "agent_role_family", None) or ""
+                ).strip() or None
+                item: Dict[str, Any] = {
                     "type": "agent_interview",
                     "tool_name": tool_name,
                     "query": topic,
@@ -503,6 +506,7 @@ class ReportAgent:
                     "raw": interview.to_dict(),
                     "quote": quote_source[:500],
                     "persona_stakeholder_group": stakeholder_group[:200],
+                    "persona_role_family": role_family[:120] if role_family else None,
                     "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
                     "producer_key": build_producer_key(
                         f"interview:s{section_index}",
@@ -511,7 +515,8 @@ class ReportAgent:
                         question,
                         response,
                     ),
-                })
+                }
+                items.append(item)
         elif isinstance(structured_result, dict) and "results" in structured_result:
             for result in (structured_result.get("results") or [])[:8]:
                 item = {
