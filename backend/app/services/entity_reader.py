@@ -53,6 +53,12 @@ class FilteredEntities:
     entity_types: Set[str]
     total_count: int
     filtered_count: int
+    # Issue #1247: Kandidaten, die der ``max_agents``-Cap weggeschnitten hat.
+    # Die typunabhaengige Eignungspruefung faellt erst im Persona-Generierungs-
+    # aufruf, also nach dem Cap — abgelehnte Plaetze werden aus dieser Liste
+    # nachbesetzt. Bewusst nicht in ``to_dict``: die Reserve ist ein internes
+    # Auswahldetail und kein Bestandteil des Prepare-Ergebnisses.
+    reserve_entities: List[EntityNode] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
