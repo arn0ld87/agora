@@ -225,3 +225,39 @@ def test_report_agent_fassade_reicht_cancel_run_id_weiter():
         "Die Agent-Fassade kennt cancel_run_id nicht — der Parameter endet dort"
     )
     assert params["cancel_run_id"].kind is inspect.Parameter.KEYWORD_ONLY
+
+
+def test_resume_loescht_die_abbruchbegruendung():
+    """CodeRabbit PR #1251: `termination_reason` überlebte den Resume.
+
+    `update_run` lässt das Feld stehen, solange es nicht ausdrücklich
+    überschrieben wird. Ein abgebrochener, dann fortgesetzter und erfolgreich
+    beendeter Run stünde als `completed` da und wäre im Monitor trotzdem als
+    nutzerabgebrochen geführt.
+    """
+    import inspect
+
+    from app.api import runs as runs_api
+
+    source = inspect.getsource(runs_api._resume_report_generate)
+    assert "termination_reason=None" in source, (
+        "Der Resume-Erfolgspfad löscht die Abbruchbegründung nicht"
+    )
+
+
+def test_registry_kann_die_abbruchbegruendung_ueberhaupt_loeschen(tmp_path, monkeypatch):
+    """Ohne diese Zusicherung wäre der Fix oben wirkungslos."""
+    registry_dir = tmp_path / "reg"
+    registry_dir.mkdir()
+    monkeypatch.setattr(RunRegistry, "REGISTRY_DIR", str(registry_dir))
+    RunRegistry._instance = None
+    registry = RunRegistry()
+
+    record = registry.create_run("report_generate", "report_x")
+    registry.update_run(record["run_id"], status="stopped", termination_reason="user_cancel")
+    assert registry.get_run(record["run_id"])["termination_reason"] == "user_cancel"
+
+    registry.update_run(record["run_id"], status="completed", termination_reason=None)
+    assert registry.get_run(record["run_id"])["termination_reason"] is None
+
+    RunRegistry._instance = None
