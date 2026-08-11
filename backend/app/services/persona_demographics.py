@@ -102,6 +102,46 @@ DACH_NAME_ORIGIN_QUOTAS: list[NameOriginQuota] = [
     ),
 ]
 
+_FIRST_NAMES_BY_GENDER: dict[str, frozenset[str]] = {
+    "female": frozenset({
+        "Lena", "Marie", "Sophie", "Hannah", "Emma", "Laura", "Julia", "Katharina",
+        "Anna", "Sarah", "Lisa", "Nora", "Clara", "Mia", "Leonie", "Fatma", "Ayşe",
+        "Zeynep", "Elif", "Layla", "Fatima", "Nour", "Sara", "Agnieszka", "Katarzyna",
+        "Monika", "Ana", "Maja", "Jovana", "Milica", "Natalia", "Olena", "Iryna",
+        "Oksana", "Giulia", "Sofia", "Chiara", "Valentina", "Maria",
+        "Linh", "Ji-won", "Fang", "Aisha", "Fatou", "Amara", "Zainab",
+    }),
+    "male": frozenset({
+        "Jonas", "Leon", "Felix", "Maximilian", "Tim", "Lukas", "Paul", "Julian",
+        "Niklas", "Jan", "Philipp", "David", "Moritz", "Finn", "Tobias", "Yusuf",
+        "Mehmet", "Ali", "Murat", "Ahmed", "Omar", "Khalid", "Ibrahim", "Piotr",
+        "Krzysztof", "Marcin", "Andrzej", "Tomasz", "Marko", "Stefan", "Ivan", "Nikola",
+        "Dmitri", "Aleksei", "Sergei", "Andrii", "Marco", "Luca", "Matteo", "Lorenzo",
+        "Jean", "Pierre", "Carlos", "João", "Nikos", "Pavlos", "Radu", "Minh", "Min-jun", "Wei",
+        "Yuki", "Haruto", "Chidi", "Kwame", "Mamadou", "Emeka",
+    }),
+    "neutral": frozenset({"Alex", "Kim", "Robin", "Sam"}),
+}
+
+
+def filter_first_names_for_gender(first_names: list[str], gender: str | None) -> list[str]:
+    """Filtert Vornamen auf möglichst gender-konsistente Kandidaten.
+
+    Die Namenspools selbst bleiben in ``DACH_NAME_ORIGIN_QUOTAS``; diese Funktion
+    annotiert nur die vorhandenen Vornamen so weit, dass der Generator beim
+    gezielten Neuziehen keinen offensichtlichen Gender-Bruch erzeugt.
+    """
+    normalized_gender = (gender or "").strip().lower()
+    if normalized_gender in {"male", "female"}:
+        filtered = [name for name in first_names if name in _FIRST_NAMES_BY_GENDER[normalized_gender]]
+        if filtered:
+            return filtered
+    elif normalized_gender in {"nonbinary", "other"}:
+        filtered = [name for name in first_names if name in _FIRST_NAMES_BY_GENDER["neutral"]]
+        if filtered:
+            return filtered
+    return list(first_names)
+
 # Summen-Validierung — schlägt sofort bei Import fehl, wenn jemand Werte ändert.
 assert abs(sum(q.share for q in DACH_NAME_ORIGIN_QUOTAS) - 1.0) < 0.01, (
     f"DACH_NAME_ORIGIN_QUOTAS-Summe ist {sum(q.share for q in DACH_NAME_ORIGIN_QUOTAS):.4f}, erwartet 1.0 ± 0.01"

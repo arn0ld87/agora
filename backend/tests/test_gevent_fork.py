@@ -82,7 +82,7 @@ def test_gevent_pool_execution_fallback(monkeypatch):
     # Test profile generator with gevent
     gen = OasisProfileGenerator(api_key="test-key", base_url="https://example.test/v1")
     # Stub generate_profile_from_entity to avoid LLM call
-    def mock_gen_profile(entity, user_id, use_llm=True):
+    def mock_gen_profile(entity, user_id, use_llm=True, demographic_slot=None):
         from app.services.oasis_profile_generator import OasisAgentProfile
         return OasisAgentProfile(
             user_id=user_id,
@@ -174,7 +174,7 @@ def test_is_gevent_detected_when_socket_patched(monkeypatch):
             return []
 
     gen = OasisProfileGenerator(api_key="test-key", base_url="https://example.test/v1")
-    def mock_gen_profile(entity, user_id, use_llm=True):
+    def mock_gen_profile(entity, user_id, use_llm=True, demographic_slot=None):
         from app.services.oasis_profile_generator import OasisAgentProfile
         return OasisAgentProfile(
             user_id=user_id,
@@ -234,7 +234,7 @@ def test_is_gevent_false_when_socket_not_patched(monkeypatch):
             return []
 
     gen = OasisProfileGenerator(api_key="test-key", base_url="https://example.test/v1")
-    def mock_gen_profile(entity, user_id, use_llm=True):
+    def mock_gen_profile(entity, user_id, use_llm=True, demographic_slot=None):
         from app.services.oasis_profile_generator import OasisAgentProfile
         return OasisAgentProfile(
             user_id=user_id,
@@ -295,7 +295,7 @@ def test_is_gevent_false_when_gevent_not_importable(monkeypatch):
             return []
 
     gen = OasisProfileGenerator(api_key="test-key", base_url="https://example.test/v1")
-    def mock_gen_profile(entity, user_id, use_llm=True):
+    def mock_gen_profile(entity, user_id, use_llm=True, demographic_slot=None):
         from app.services.oasis_profile_generator import OasisAgentProfile
         return OasisAgentProfile(
             user_id=user_id,
