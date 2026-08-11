@@ -1,7 +1,7 @@
 # Agora Roadmap
 
 **Stand:** 11.08.2026  
-**Aktuelle Produktversion:** `0.9.4` Stability Beta
+**Aktuelle Produktversion:** `0.9.5` Stability Beta
 
 Diese Datei beschreibt ausschließlich die strategische Reihenfolge der nächsten Releases. Konkrete Arbeitspakete, Akzeptanzkriterien und Fortschritt werden als GitHub Issues gepflegt.
 

@@ -3,7 +3,244 @@
 Alle nennenswerten Änderungen an Agora werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
-## [Unreleased]
+## [0.9.5] - 2026-08-11
+
+Das Zusammensetzen eines Provider-Requests und das Durchbringen dieses Requests gegen bekannte Provider-400er liegen nicht mehr in `LLMClient.chat`, sondern hinter `build_request` und `execute` im neuen Modul `app/llm/request_plan.py`. `chat` schrumpft von 315 auf 257 Zeilen und behält nur noch, was wirklich dazugehört: Stub-Pfad, Streaming-Reassembly, Budget- und Telemetrie-Buchführung.
+
+Die Quirks stehen damit genau einmal im Code. Bisher standen sie viermal: `chat`, `describe_image` und `tool_calls` hatten je eine eigene Kopie des Request-Shapings, drei davon je eine eigene Fallback-Kaskade. Jede Kopie hatte eine andere Lücke — der Tools-Pfad kennt den `temperature`-Quirk aus #1096 nicht, der Vision-Pfad kennt MiniMax nicht. Diese Lücken bleiben unverändert bestehen, stehen jetzt aber als benannter Seam sichtbar da statt als stiller Unterschied zwischen drei Textstellen.
+
+Was ein Request über seine Umgebung braucht, kommt über `RequestOptions` herein — Provider-Seams mit Default-Bindung an die echten Heuristiken. Ein Test setzt Fakes in die Options und prüft `build_request` und `execute` direkt am Interface, ohne `patch()` auf Modulnamen.
+
+`detect_provider` bleibt Single Source of Truth für die Provider-Erkennung; `request_plan` erkennt nichts selbst, sondern bekommt das Ergebnis übergeben.
+
+Verhalten unverändert — reiner Deepening-Refactor.
+
+### Fixed (Sim Tool-Skip für DISLIKE — 2026-08-11)
+
+- **DISLIKE_* ohne erzwungenen Tool-Aufruf:** Die Tool-Usage-Rule erlaubte den Tool-Skip nur für `LIKE_POST`/`DO_NOTHING` und zwang für `DISLIKE_POST`/`DISLIKE_COMMENT` einen `web_search`/`web_fetch`-Aufruf, der bei Tool-Limit oder Tool-Fehler auf `DO_NOTHING` zurückfiel — Reddit-Agenten dislike-ten nie (B2 aus #1215). Die Skip-Klausel nennt jetzt die volle Reaktionsmenge (`LIKE_POST`, `DISLIKE_POST`, `DISLIKE_COMMENT`, `LIKE_COMMENT`, `FOLLOW`, `MUTE`, `REPOST`, `QUOTE_POST`, `DO_NOTHING`) und fordert Tools nur, wenn Fakten fehlen, die das Modell nicht schon aus der Observation hat. (#1215)
+
+### Fixed (Persona-Slot-Verteilung und gender-konsistenter Dedup — 2026-08-11)
+
+- **Persona-Generierung verteilt Alter, Gender und MBTI jetzt vorab auf Slots:** Gleichförmige LLM-Antworten werden auf eine geplante Kohorte normalisiert, und der Namens-Dedup zieht gender-konsistente Ersatznamen, ohne die bestehende Namens- und Nachnamens-Eindeutigkeit zu verlieren. (#1214)
+
+### Fixed (CI-Komplexitäts-Gate — 2026-08-11)
+
+- **`contract-gates` auf `main` wieder grün:** Fünf pre-existing D-Hotspots aus der kanonischen Evidence-Identität (#1147) und der seed_corpus-Evidence (#1166) fehlten in `backend/radon-allowlist.txt` und hielten das radon-Komplexitäts-Gate seit mindestens acht `push:main`-Läufen rot. Nachgezogen als Allowlist-Einträge mit `# cc<=N`-Obergrenze — sie dulden den Bestand und schlagen bei weiterem Wachstum an, ohne einen Refactor zu erzwingen. (#1213)
+
+### Added
+
+- **Komplexitäts-Gate im Pre-Push-Gate:** `scripts/pre-push-gate.sh` ruft im Backend-Scope jetzt `scripts/check_complexity.py` auf. Der Driftfall fällt damit lokal vor dem Push auf statt Tage später nur auf `push:main`. (#1213)
+
+Der Abschnitts-Durchlauf der Reportgenerierung liegt nicht mehr als Schleife in `generate_report`, sondern hinter `process_section` im neuen Modul `app/services/report_agent/section_pipeline.py`. `generate_report` schrumpft von 455 auf 322 Zeilen und behält nur noch die Orchestrierung: Abbruchprüfung, Akkumulation der fertigen Abschnitte und Statusableitung.
+
+Was ein Abschnitt beim Verarbeiten braucht, kommt über `SectionContext` herein — Daten und Seams, mit Default-Bindung an die echten Implementierungen. Das Ergebnis steht in `SectionResult` und trägt beobachtbar, was gebunden und was vom Evidence-Gate verworfen wurde. `ReportAgent._save_evidence_section` gibt dieses Ergebnis dafür zurück, statt es nur als Seiteneffekt in der Evidenzkarte abzulegen; die Persistenz bleibt unverändert.
+
+Verhalten unverändert — reiner Deepening-Refactor.
+
+- Live-Feed: Reddit-Kommentare erreichen den Feed wieder. Der Emitter erwartete den
+  Elternpost in der OASIS-Trace-Zeile, die ihn nie enthält — er wird jetzt über die
+  `comment`-Tabelle aufgelöst. Damit bekommt der Reply-Tree Äste und die rund 86 %
+  der Reddit-Aktivität, die Kommentare sind, werden sichtbar (#1209 5c/5d).
+- Live-Feed: `score` trägt den echten Voting-Stand aus der Simulations-DB
+  (`num_likes - num_dislikes`) statt einer hartkodierten 0; Twitter bleibt bei 0,
+  weil es kein Up-/Down-Voting kennt (#1209 5b).
+- `PostCreatedEvent`: Feld `sentiment` entfernt. Es gab nie einen Sentiment-Service,
+  das Feld trug nie einen Wert und wurde nirgends gerendert (#1209 5b).
+
+### Geändert
+
+- Report-Statusmaschine aus `Step4Report.vue` in das Composable
+  `useReportGeneration` gezogen (#1206). Neun offene Status-Refs, die
+  141-zeilige `pollStatus()`-Schleife samt Endzustands-Zweigen, die
+  Transportfehler-Zählung aus #1023 und die Koordination der drei
+  Polling-Instanzen liegen jetzt hinter dem Interface
+  `{ status, progress, report, bootstrap(), start(), stop(), regenerate() }`;
+  `usePolling` ist damit interne Abhängigkeit statt Detail der Komponente.
+  Frontend-Gegenstück zu `RunLifecycle` (#1204). Verhalten unverändert — der
+  Flow ist jetzt zusätzlich ohne `mount()` und ohne Modul-Mocks testbar.
+
+### Geändert
+
+- Run-Zustandsführung zentralisiert: das handgeschriebene Muster „Run anlegen
+  (pending) → Arbeit → Endzustand" an sechs Stellen (Simulationsstart und
+  -vorbereitung, Run-Restarts, Report-Start) läuft jetzt über den
+  Kontextmanager `RunLifecycle` (#1204). Kein Abbruchpfad — auch
+  `SystemExit`-artige — hinterlässt mehr einen pending-Phantom-Run; ein nicht
+  persistierter Statusübergang wird als Fehler sichtbar (500) statt still
+  verschluckt.
+
+### Changed (Betriebs- und Security-Doku gegen den Code geprüft, Coverage neu gemessen — 2026-08-11)
+
+- **Die Doku beschrieb an mehreren Stellen einen Paketmanager, den das Projekt nicht mehr benutzt.** `deployment-dev.md` führte `npm run dev`, `npm run setup:all`, `npm run check`, eine `package-lock.json` und Node 18 als Voraussetzung — real fährt das Projekt seit langem `bun` (je eine `bun.lock` in Root und `frontend/`), verlangt `bun >= 1.3.0` und Node >= 20, und das Backend ist auf Python `>=3.14,<3.15` gepinnt, nicht auf 3.11. Auch die CI-Kommandos in `security-hardening.md`, `security-threat-model.md`, `operations.md`, `release-process.md` und `dependency-risk-register.md` nannten `npm audit`, während der Job `Security scans` `bun audit --audit-level=high` ausführt.
+- **`release-process.md` beschrieb einen Versionsprozess, den es nicht mehr gibt.** Das Dokument führte „sechs Stellen halten die Versionsnummer", nannte zwei davon als bekannten Drift auf `0.6.1` und `0.8.0`, und gab eine `sed`-Sequenz vor, die unter anderem `backend/app/__init__.py` beschreibt — dort steht seit dem Umbau kein statischer Wert mehr, der Wert kommt aus den Paket-Metadaten. Maßgeblich ist `VERSION` plus `check_version_drift.py --write`; das Dokument verweist dafür jetzt auf `runbooks/release-versioning.md` und beschreibt nur noch, was nach dem Version-Cut passiert.
+- **`auth.md` kannte nur einen von drei Auth-Wegen.** Ergänzt sind die Workspace-API-Keys (Präfix `ago_`, Status-Prüfung gegen den Key-Store) und der Open Mode, in dem ohne gesetztes `AGORA_AUTH_TOKEN` jeder Aufruf durchgeht. Korrigiert ist außerdem die Aussage zu `?token=`: der Query-Parameter ist außerhalb des Debug-Modus **abgeschaltet** — der Wert wird verworfen und auf Log-Level `error` protokolliert —, nicht bloß „deprecated mit Warning". Die Ticket-TTL ist Default 60 s bei Maximum 300 s.
+- **`deployment-dev.md` behauptete ein Read-Only-Rootfs, das im Dev-Stack nicht gilt.** `docker-compose.yml` setzt `read_only: false`; erst `docker-compose.prod.yml` schaltet es scharf. Wer eine Änderung gegen den Prod-Pfad absichern will, muss deshalb gegen das Prod-Compose testen. Ergänzt sind außerdem `AGORA_BIND_HOST`, `AGORA_FRONTEND_PORT` und `AGORA_BACKEND_PORT`, die die Host-Bindung des Stacks steuern und in keiner Doku standen — auch nicht in der Env-Referenz.
+- **Coverage-Baseline neu erzeugt statt weiter als „überholt" markiert:** Backend 79,00 % (vorher 66,00 % vom 10.06.), Frontend 71,03 / 58,44 / 64,19 / 73,32 % für Statements / Branches / Functions / Lines (vorher 50,46 / 39,56 / 38,59 / 52,50 % vom 10.05.). **Damit sind die CI-Schwellen wirkungslos:** 28 % im Frontend liegen 30 bis 45 Punkte unter dem Istwert, 60 % im Backend 19 Punkte darunter. Das Anheben ist eine Code-Änderung und bleibt einem eigenen Issue vorbehalten.
+- **Neun tote Verweise entfernt**, darunter zwei gelöschte Planungsdateien, ein nicht mehr existierendes `SECURITY_REVIEW_SUMMARY.md` und zwei Frontend-Dateien, die seit der TypeScript-Migration `index.ts` und `markdown.ts` heißen.
+- **Der Prüfumfang steht in den Dokumenten selbst.** Die acht Betriebs- und Security-Dateien tragen jetzt einen Vermerk, dass Pfade, Kommandos und Verweise am 11.08.2026 gegen den Code geprüft wurden — und dass die fachlichen Aussagen dabei **nicht** einzeln nachvollzogen worden sind. Ein „Stand"-Datum ohne diese Einschränkung hätte mehr Prüftiefe behauptet, als stattgefunden hat.
+
+### Fixed (Schaltflächen der Embedding-Konfiguration waren unsichtbar oder unformatiert — 2026-08-11)
+
+- **Die Schaltflächen im Seitenkopf wurden nie angezeigt.** `PageHeader` rendert ausschließlich den benannten Slot `right`; die Ansicht übergab ihre Schaltflächen jedoch im Standard-Slot, dessen Inhalt die Komponente verwirft. Betroffen waren „Neue Konfiguration" und das ältere „Ollama-Modell herunterladen" — letzteres war seit seiner Einführung unsichtbar, ohne dass es auffiel.
+- **Die übrigen Schaltflächen trugen Klassennamen, die es nicht gibt.** Die Ansicht verwendete `btn-primary` und `btn-secondary`; das Gestaltungssystem definiert `btn--primary` und `btn--secondary` mit doppeltem Bindestrich. Alle zwanzig Vorkommen waren betroffen, weshalb etwa „Uebernehmen" als unformatierter Text erschien.
+- **Der Test deckte das nicht ab, weil der Prüfaufbau großzügiger war als das Original.** Der Platzhalter für `PageHeader` rendert im Test jetzt nur den Slot `right` — übergibt eine Ansicht ihre Schaltflächen künftig am falschen Slot, wird der Test rot statt grün.
+
+### Changed (Dokumentations-Sync auf den Stand nach `0.9.4` — 2026-08-11)
+
+- **Die Doku behauptete an mehreren Stellen offene Arbeit, die längst erledigt war.** README (beide Sprachen) führte den fehlenden Dokumentanker für Seed-Korpus-Belege als offenen Punkt, obwohl #1154 seit dem 09.08. geschlossen ist; `docs/STATUS.md` nannte als erste Priorität das harte Run-Budget (#978, geschlossen am 31.07.) und die nicht normalisierenden Evidence-Sub-Routen (#967, geschlossen); `ROADMAP.md` und `docs/troubleshooting.md` führten den Trivy-OS-Layer-Hardstop 30.08.2026, der mit #772 ersatzlos entfallen ist. Alle vier Stellen nennen jetzt den Istzustand mit Beleg.
+- **Ein Überclaim ist entfernt:** die README versprach in beiden Sprachen, Runs könnten „erneut abgespielt" werden. Replay ist nicht implementiert — der stochastische Anteil eines Laufs ist seit #1160 F geseedet und damit wiederholbar, ein Same-Seed-Same-Report verlangt zusätzlich eine Aufzeichnung der Modellantworten und steht offen unter #763. Der Text sagt das jetzt so.
+- **Testzähler und Routenzahl neu gemessen** statt fortgeschrieben: `docs/STATUS.md` steht auf 4954 gesammelten Backend-Tests (davon 7 deselektiert) und 188 Frontend-Testdateien; `docs/api.md` auf 171 Routen und Referenzstand `0.9.4` statt `0.8.0` — derselbe veraltete Versionsanker stand auch in `configuration.md` und `troubleshooting.md`.
+- **`docs/architecture.md` ist als Zielbild kenntlich gemacht, nicht als Istzustand.** Das Dokument stammt vom 22.04.2026, trug noch den Titel „Agora / MiroFish-Offline" und leitete sich aus zwei Dateien ab, die es im Repository nicht mehr gibt. Der Migrationspfad Phase 0–8 ist inzwischen umgesetzt; jede Phase trägt jetzt eine Belegzeile, und dort, wo der umgesetzte Schnitt anders benannt ist als geplant (`WorkspaceLayout.vue` → `components/v4/shell/`, `SimulationRepository` → `simulation_manager.py` plus Config-Schemas), steht das ausdrücklich dabei. **Was das nicht leistet:** eine Ist-Architektur ist das weiterhin nicht — für den verifizierten Stand bleibt `docs/STATUS.md` zuständig.
+- **Zwei tote Verweise entfernt:** `docs/troubleshooting.md` verwies auf ein nie existierendes `docs/testing/`. `OPENAI_API_BASE`/`OPENAI_API_BASE_URL` fehlten in der Env-Referenz und sind jetzt als das dokumentiert, was sie sind — an den OASIS-Subprozess durchgereichte Werte, keine Eingangskonfiguration.
+
+### Added (Embedding-Konfiguration lässt sich in den Einstellungen anlegen und übernehmen — 2026-08-10)
+
+- **Die Einstellungsseite zeigte Embedding-Konfigurationen an, ließ aber keine anlegen.** Wer Agora ohne kanonische Konfiguration betrieb, sah dort den Hinweis „Quelle: Legacy Config.EMBEDDING_* — bitte übernehmen" und darunter „Noch keine Embedding-Konfigurationen vorhanden". Einen Weg, dieser Aufforderung nachzukommen, gab es nicht: Die Übernahme war im Backend seit der Einführung des kanonischen Lifecycles vorbereitet, aber nie mit einer Bedienoberfläche verbunden.
+- **Die Legacy-Werte lassen sich jetzt übernehmen.** Der Hinweis trägt einen Schalter, der nach der Provider-Verbindung fragt, über die das Modell erreichbar ist. Modell und Dimension stammen unverändert aus der bestehenden Konfiguration. Die Verbindung wird bewusst abgefragt statt erraten — Verbindungen sind ein eigener Lebenszyklus und werden nie im Hintergrund angelegt. Existiert noch keine, verweist der Dialog auf die Anbieter-Einstellungen.
+- **Neue Konfigurationen entstehen über ein Formular** aus Verbindung, Modellname und Dimension. Direkt nach dem Anlegen und nach der Übernahme läuft die Prüfung gegen den Anbieter; ihr Ergebnis steht auf der Karte. Schlägt sie fehl, bleibt die Konfiguration erhalten, statt den Vorgang abzubrechen.
+- **Eine falsch angegebene Dimension ist kein Sackgassen-Zustand mehr.** Meldet die Prüfung eine andere Dimension als deklariert, bietet die Karte an, den gemessenen Wert zu übernehmen und erneut zu prüfen. Konfigurationen lassen sich außerdem nach Rückfrage löschen — außer der gerade aktiven, die geschützt bleibt.
+
+### Added (Ein Report sagt jetzt, auf welchem Simulationsstand er beruht — 2026-08-10)
+
+- **Eine Reportgenerierung darf weiterhin starten, während die Simulation noch läuft.** Das bleibt erlaubt und bekommt weder eine Sperre noch eine Warteschlange — bei Einzelnutzung wäre beides mehr Apparat als Nutzen. Fragwürdig war nie der Start, sondern das Schweigen darüber: der Bericht analysierte dann einen Zwischenstand, und wie viele Runden dieser Zwischenstand umfasste, stand nirgends. Einem fertigen Bericht war nicht anzusehen, ob zehn Runden dahinterstehen oder vier.
+- **Der Stand steht jetzt im Bericht, gleich im Kopf.** Ausgewiesen werden die abgeschlossenen Runden, die geplante Gesamtzahl und die Feststellung, ob die Simulation zum Startzeitpunkt noch weiterlief. Lief sie weiter, wird der Bericht ausdrücklich als Zwischenstand bezeichnet und vermerkt, dass spätere Runden nicht eingeflossen sind.
+- **Erfasst wird beim Start, nicht beim Abschluss.** Das ist der Datenbestand, den die Auswertung tatsächlich gesehen hat. Runden, die während der Berichtserstellung noch dazukommen, stehen in keinem Satz des Berichts — sie hier mitzuzählen wäre die bequemere, aber falsche Zahl.
+- **Ist der Stand nicht ermittelbar, steht dort „unbekannt".** Das betrifft Berichte aus der Zeit vor dieser Änderung und Simulationen, die nie über den Runner liefen. Eine erfundene Null wäre schlechter als ein ehrliches Fragezeichen. Bestehende Berichte laden, validieren und exportieren unverändert.
+
+### Fixed (Eine erfolglose Suche wird nicht mehr wiederholt — 2026-08-10)
+
+- **Der Berichtsagent suchte dreimal nach derselben Sache, die es nicht gab.** In einem vermessenen Lauf ging er im Abschnitt „Unsicherheiten und Datenlücken" dreimal einer Stakeholdergruppe nach, die das Personen-Capping zuvor aus dem Pool verdrängt hatte — einmal mit der Panorama-Suche, zweimal mit der Schnellsuche. Er verbrauchte damit fünf statt vier Werkzeugaufrufe und lief in die Iterationsgrenze. Ausgerechnet der Abschnitt, der Datenlücken benennen soll, verlor sein Budget an die Suche nach einer solchen.
+- **Ein Leertreffer ist jetzt ein Befund, kein Grund zur Wiederholung.** Bleibt eine Suche ohne Ergebnis, wird dieselbe Suche im selben Abschnitt nicht noch einmal ausgeführt — auch nicht mit einem anderen Werkzeug. Das Modell erhält stattdessen den Hinweis, dass der Gegenstand im Datenbestand nicht vorkommt, und die Aufforderung, das als Datenlücke zu benennen.
+- **Der unterdrückte Versuch zählt nicht gegen das Werkzeugbudget.** Täte er es, wäre keine einzige Iteration gespart und die Änderung folgenlos.
+- **Als „dieselbe Suche" gilt die normalisierte Anfrage:** Groß- und Kleinschreibung, Leerraum und Satzzeichen bleiben außer Betracht. Keine Ähnlichkeitsschätzung — die Regel ist damit vorhersagbar und prüfbar, statt von einem Schwellenwert abzuhängen. Die Merkliste gilt pro Abschnitt; ein anderer Abschnitt darf dieselbe Suche erneut versuchen.
+- **Am Evidenzmodell ändert sich nichts.** Der Hinweis bleibt eine Mitteilung an das Modell und wird kein Eintrag in den Evidenzverträgen — das wäre eine eigene Entscheidung und ist bewusst nicht Teil dieser Änderung. Ergebnislose Interviews sind ebenfalls ausgenommen: dort ist ein zweiter Versuch mit anderem Zuschnitt durchaus sinnvoll.
+
+### Fixed (Evidence-Export bleibt sichtbar — 2026-08-10)
+
+- **Evidence-JSON-Button verschwindet nicht mehr spurlos:** Solange die
+  Evidenzkarte eines Reports noch nicht vorliegt, bleibt der Export-Button in
+  der Report-Ansicht sichtbar, ist aber deaktiviert (`aria-disabled` plus
+  zugängliche Beschreibung). `Step4Report.vue` lädt die Evidenzkarte nach
+  Laufende mit exponentiellem Backoff (3 s bis 30 s gedeckelt) über ein
+  10-Minuten-Budget nach, statt sie nach wenigen Sekunden dauerhaft leer zu
+  belassen — dimensioniert auf die in #1187 gemessene Nachbearbeitungsdauer.
+  Ist das Budget ausgeschöpft, zeigt der Tooltip „nicht verfügbar" statt
+  weiterhin „wird noch erzeugt" zu behaupten. (#1188)
+
+### Fixed (Die stille Phase der Reportgenerierung meldet Fortschritt — 2026-08-10)
+
+- **Nach jedem fertigen Abschnitt arbeitete die Reportgenerierung minutenlang, ohne das mitzuteilen.** In einem vermessenen Lauf lagen zwischen "Abschnittstext fertig" und "Abschnitt gespeichert" jedes Mal drei bis sechs Minuten ohne eine einzige Logzeile — zusammen 59 % der gesamten Laufzeit. Der Fortschrittsstand blieb derweil auf dem Wert stehen, den er beim letzten Abschnittswechsel hatte, mitsamt einem Zeitstempel, der Minuten alt war. Für den Nutzer war ein arbeitender Lauf damit nicht von einem abgestürzten zu unterscheiden.
+- **Diese Phase meldet sich jetzt.** Die Nachbearbeitung ist in benannte Schritte zerlegt — Metadaten-Extraktion, Claim-Extraktion samt Evidenzbindung, Abschluss der Aussagen, Persistenz der Evidenzkarte. Jeder Schritt meldet Beginn und Ende mit seiner Dauer, und der Fortschrittsstand bewegt sich bei jedem Wechsel statt nur beim Abschnittswechsel. Innerhalb der langen Bindungsschleife hält ein Lebenszeichen im Zwanzig-Sekunden-Takt die Anzeige in Bewegung, ohne bei jeder einzelnen Aussage zu schreiben.
+- **Eine fehlgeschlagene Fortschrittsmeldung bricht den Lauf nicht ab.** Sie wird protokolliert und die Nachbearbeitung läuft weiter — eine Anzeige darf den Bericht nicht kosten, den sie beschreibt.
+- **Was das ausdrücklich nicht leistet: schneller wird dabei nichts.** Die Nachbearbeitung dauert genauso lange wie vorher, sie ist jetzt nur sichtbar und messbar. Die eigentliche Beschleunigung hängt an belastbaren Phasenzeiten aus einem Lauf mit dieser Instrumentierung — ohne die wäre jede Optimierung geraten. Ebenso unverändert bleiben sämtliche Evidenzbindungen und Vertrauenseinstufungen: gemessen wird, nicht eingegriffen.
+
+### Fixed (Persona-Profile verlieren beim Speichern keine Angaben mehr — 2026-08-10)
+
+- **Die Stimmlage einer Persona fehlte in jeder gespeicherten Profildatei.** In 262 Profilen über sechs Simulationsläufe trug kein einziges das Feld — unabhängig davon, ob das Sprachmodell es erzeugt hatte oder die regelbasierte Erzeugung. Drei der betroffenen Läufe stammten vom selben Tag wie dieser Fix; die zugehörige Absicherung im Generator existiert seit Mai. Der Defekt war also aktuell und nicht ein Überbleibsel alter Daten.
+- **Ursache war das finale Speichern, nicht die Erzeugung.** Während des Laufs wird die Profildatei fortlaufend korrekt geschrieben. Zum Abschluss speichert die Anwendung sie noch einmal — und baute dabei den Inhalt aus einer von Hand gepflegten Feldliste neu auf, statt das vollständige Profilformat zu verwenden. Jede Angabe, die in dieser Liste fehlte, ging beim Überschreiben verloren: neben der Stimmlage auch die Segmentzuordnung.
+- **Behoben ist nicht das einzelne Feld, sondern das Muster.** Dasselbe Problem war schon einmal aufgetreten und damals durch Nachtragen einer einzelnen Angabe behoben worden — die nächste hätte es erneut getroffen. Das Speichern verwendet jetzt das vollständige Profilformat als Grundlage und ergänzt nur noch die Standardwerte, die die Simulationsumgebung zwingend braucht. Ein Test prüft die Vollständigkeit statt einer Aufzählung bekannter Felder: kommt eine Angabe hinzu, wird sie automatisch mitgespeichert.
+- Damit ist die Voraussetzung für den Feed-Schnappschuss beim Öffnen einer laufenden Simulation geschaffen — der scheiterte bislang daran, dass die Stimmlage nicht auflösbar war und ein erfundener Wert nicht in Frage kommt.
+
+### Fixed (Personenauswahl verdrängt keine Stakeholdergruppen mehr — 2026-08-10)
+
+- **Die Begrenzung der Personenzahl schnitt die Kandidatenliste bisher stumpf ab.** Wer die Zahl der Simulationsteilnehmer begrenzte, bekam nicht die wichtigsten Kandidaten, sondern schlicht die ersten — die Reihenfolge stammte unverändert aus der Datenbankabfrage, die keine Sortierung vornimmt. Der Kommentar im Code nannte die Sortierung als Voraussetzung; sie existierte nie. In einem gemeldeten Lauf belegte dadurch eine einzige, häufig genannte Gruppe alle 30 Plätze, während kleinere, fachlich wichtige Gruppen wie Betriebsrat und Honorarkraft komplett herausfielen.
+- **Jetzt wird zuerst bereinigt, dann verteilt.** Mehrfachnennungen derselben Gruppe — auch in abweichender Schreibweise — zählen als eine und belegen keine Plätze mehr doppelt. Die verbleibenden Plätze werden reihum über die vorkommenden Gruppen vergeben: erst je ein Vertreter pro Gruppe, dann der zweite, und so weiter. Solange Plätze reichen, ist jede Gruppe vertreten.
+- **Was das nicht leistet:** *welcher* Vertreter einer Gruppe gewinnt, bleibt willkürlich, solange die Datenbankabfrage nicht sortiert. Eine Auswahl nach Vernetzungsgrad oder Wichtigkeit wäre der nächste Schritt und erfordert eine Änderung am Lesepfad. Der irreführende Kommentar ist entfernt.
+- **Die Vorschau zeigt dieselbe Zahl wie der spätere Lauf.** Sie bereinigt jetzt ebenfalls, statt Dubletten mitzuzählen — sonst kündigte sie mehr Personen an, als anschließend erzeugt werden.
+- Eine Protokollzeile, die bei praktisch jeder Entität ansprang und dadurch nichts markierte, erscheint nur noch einmal je Durchlauf in zusammengefasster Form. Die eigentlichen Ausschlüsse gingen darin unter.
+
+### Fixed (Simulationsstart bleibt nicht mehr stumm hängen — 2026-08-10)
+
+- **Ein Startversuch endet jetzt immer sichtbar.** Der Start legt zuerst einen Laufeintrag mit dem Status „wartet" an und startet erst danach den Simulationsprozess. Ging dabei irgendetwas schief, blieb der Eintrag auf „wartet" stehen: die Oberfläche zeigte weiterhin „Bereit", in der Laufliste sammelten sich Einträge, die nie etwas taten, und abbrechen ließen sie sich auch nicht. Im gemeldeten Fall waren neun solcher Einträge aufgelaufen. Jeder Abbruch nach dem Anlegen des Eintrags markiert ihn jetzt als fehlgeschlagen — unabhängig davon, woran es lag.
+- Zuvor waren zwei bekannte Abbruchgründe einzeln behandelt worden. Das genügte nicht: der eigentliche Prozessstart lag außerhalb der Absicherung, und jeder neu hinzukommende Abbruchweg hätte dieselbe Lücke wieder geöffnet. Die Absicherung umschließt jetzt den gesamten Abschnitt, einschließlich des Falls, dass der Server die Anfrage nach zu langer Laufzeit selbst abbricht — genau dieser Fall hatte die stummen Einträge erzeugt.
+- **Hängengebliebene Einträge lassen sich abbrechen.** „Abbrechen" war bisher nur für laufende Simulationen vorgesehen und wies Einträge im Wartezustand ab. Damit waren sie weder abbrechbar (weil nicht laufend) noch wurden sie je laufend (weil der Start nie durchlief). Sie werden jetzt direkt beendet; für bereits abgeschlossene Läufe bleibt „Abbrechen" wie bisher wirkungslos.
+
+### Changed (Mehr Platz für die Antwort — 2026-08-09)
+
+- **Jeder generative Modellaufruf bekommt jetzt mindestens 32.768 Ausgabe-Tokens statt der bisherigen 1.024 bis 4.096:** Ein Berichtsabschnitt mit Belegen passte nicht zuverlässig in vier Kilotoken, und ein am Limit abgeschnittener Abschnitt war im fertigen Report nicht als abgeschnitten erkennbar. Die Untergrenze gilt zentral im Modell-Client, nicht mehr pro Aufrufer. Zwei Grenzen bleiben gewahrt: Modelle mit kleinerem Ausgabelimit werden auf ihr Limit gedeckelt statt mit einem Fehler abzubrechen, und bei lokal betriebenen Modellen wächst das Kontextfenster mit, weil dort Eingabe und Ausgabe sich einen Platz teilen — ohne das hätte die höhere Grenze den Prompt verdrängt statt mehr Text zu erlauben. Klassifizierende Aufrufe mit bewusst enger Antwort behalten ihr kleines Limit. Einstellbar über `LLM_MAX_TOKENS_FLOOR`; `0` stellt das alte Verhalten her.
+
+### Added (Dokumentbelege im Report — 2026-08-09)
+
+- **Ein Fakt aus dem Wissensgraphen zählt jetzt als Dokumentbeleg, wenn seine Herkunft bekannt ist:** Trägt ein gefundener Fakt die Dokument- und Chunk-Herkunft aus der Aufnahme, wird er als Beleg aus dem Seed-Korpus geführt und bekommt einen auflösbaren Anker auf die konkrete Stelle im Ausgangsdokument. Damit können Aussagen, die zusätzlich durch ein Agentenzitat gestützt sind, überhaupt erst mittlere Confidence erreichen — vorher war das strukturell unmöglich und jede solche Aussage blieb auf `low`. Fakten ohne belegte Herkunft bleiben Graph-Relationen; geraten wird nichts. Die Identität eines Dokumentbelegs hängt an der Dokumentstelle, nicht am Wortlaut des Fakts: dieselbe Stelle bleibt derselbe Beleg, auch wenn das Modell sie beim nächsten Mal anders formuliert.
+
+### Changed (Seed-Status verlangt einen auflösbaren Anker — 2026-08-09)
+
+- **Bestehende Berichte verlieren beim Laden unbelegte Dokumentbezüge:** Bis zu dieser Änderung war „Seed-Korpus“ die Standardgattung für alles, was aus dem Wissensgraphen kam — auch ohne jeden Bezug zu einem konkreten Dokument. Solche Belege behaupteten eine Nachprüfbarkeit, die es nicht gab. Sie werden beim Laden zu Graph-Relationen; eine Aussage, die dadurch ihre Grundlage für mittlere Confidence verliert, wird auf `low` gestuft. Berichte bleiben lesbar und laden ohne Fehler — sie zeigen den Belegstand ehrlicher an als zuvor. Aussagen, die von zwei unterschiedlichen Stakeholder-Gruppen gestützt werden, behalten ihre hohe Confidence unverändert.
+
+### Fixed (Report-Abbruch bei nicht agent-grounded medium-Claims — 2026-08-09)
+
+- **Ein Claim mit unverdientem `medium`-Label beendet nicht mehr den ganzen Report:** Die Confidence-Stufe `medium` verlangt laut ADR-0002 mindestens ein Agentenzitat (mit Originalzitat) und mindestens einen Beleg aus dem Seed-Korpus. Der Report-Builder hat das beim Zusammenstellen der Claims nicht geprüft — die Verletzung fiel erst der Schlussvalidierung der Evidence-Map auf, und die bricht die gesamte Report-Erzeugung ab. Der eingebaute Reparaturlauf half nicht: die Validierung meldet pro Durchgang nur den ersten Verstoß je Abschnitt, sodass nach der Reparatur des ersten Claims der nächste stehen blieb. Betroffene Claims werden jetzt beim Bauen ehrlich auf `low` abgestuft und mit Begründung im Gate-Protokoll vermerkt, statt den Lauf zu beenden. Die Prüfung folgt dabei den kanonischen Evidence-Records, nicht den Referenzeinträgen am Claim — sonst könnte sie zu einem anderen Urteil kommen als die Schlussvalidierung. Der Validator selbst bleibt unverändert streng.
+
+### Added (Evidence-Chain-Audit und Paper — 2026-08-09)
+
+- **Der Audit der Evidenzkette liegt als versionierte Quelle im Repository:** `docs/paper/agora-evidence-chain-audit.md` dokumentiert den geprüften Ist-Zustand von Ingest, Graph-Aufbau, Simulation, Evidence-Gating und Report — mit Belegstellen im Code statt aus README-Behauptungen abgeleitet. Die begleitenden Rechercheprotokolle unter `docs/paper/research-notes/` halten je Teilbereich fest, welche Aussage an welcher Codestelle verifiziert wurde.
+- **LaTeX-Quellen des Papers zur Evidenzkette:** Kapitel, Literaturverzeichnis, Abbildung und `latexmkrc` (LuaLaTeX + Biber) sind versioniert, das gebaute PDF liegt daneben. LaTeX-Zwischendateien und lokale Render-Ausgaben unter `output/` bleiben per `.gitignore` außen vor — sie enthalten absolute Maschinenpfade und ändern sich bei jedem Build.
+
+### Added (Simulationsläufe sind im Zufallsanteil wiederholbar — 2026-08-10)
+
+- **Ein Lauf trifft seine Zufallsentscheidungen nicht mehr aus dem Nichts.** Wie viele Agenten pro Runde aktiv werden, welche davon in Frage kommen und welche schließlich gezogen werden, entschied bisher der ungeseedete globale Zufallsgenerator des Simulationsprozesses. Zwei Läufe derselben Konfiguration waren damit nicht vergleichbar — und ohne Vergleichbarkeit ist jede Wiederholung und jeder Baseline-Vergleich methodisch angreifbar. Der Lauf setzt jetzt vor der ersten Zufallsentscheidung einen Startwert: entweder das Feld `random_seed` aus `simulation_config.json`, oder — wenn dort nichts steht — einen aus der Lauf-Kennung abgeleiteten Wert. Derselbe Lauf ergibt beim Neustart denselben Startwert, verschiedene Läufe verschiedene.
+- **Einen Lauf gezielt wiederholen** geht damit so: den protokollierten Startwert (`Random seed: …` im Simulationslog) als `random_seed` in die Konfiguration des neuen Laufs schreiben. Der Startwert wird über einen stabilen Hash abgeleitet, nicht über Pythons prozesslokalen String-Hash — sonst wäre er zwischen zwei Prozessen verschieden gewesen, also genau das Gegenteil von wiederholbar.
+- **Was das ausdrücklich nicht zusichert:** Die Antworten der Sprachmodelle bleiben unvorhersagbar. Gleicher Startwert heißt deshalb *nicht* gleicher Bericht. Reproduzierbar ist der Zufallsanteil des Laufs, nicht sein Ergebnis; für identische Berichte müssten zusätzlich die Modellantworten aufgezeichnet werden, was ein eigenes Vorhaben ist.
+
+### Added (Operative Zahlen weisen aus, woher sie kommen — 2026-08-10)
+
+- **Eine Zahl im Report sagt jetzt, wie sie zustande kam.** Angaben wie „>90 % Traffic-Baseline" oder „14-Tage-Rankinggrenze" sahen im Fließtext alle gleich aus — unabhängig davon, ob sie so im Auftragsdokument standen, aus gemessenen Daten stammten, aus einer Norm, aus einer Festlegung des Betreibers oder schlicht daraus, dass ein Sprachmodell sie plausibel fand. Wer den Bericht las, konnte das nicht unterscheiden und behandelte im Zweifel alle gleich verbindlich. Der Report führt operative Zahlen deshalb in einem eigenen Abschnitt „Operative Zahlen" mit ihrer Rolle (Alarmschwelle, Zielwert, Obergrenze, Ausgangswert), ihrer Herkunft im Klartext und ihrer Beleglage.
+- **Sechs Herkunftsarten** stehen zur Verfügung: Vorgabe aus dem Dokument, aus Daten abgeleitet, externer Standard, Betreiber-Festlegung, Modellvorschlag und Simulationsvorschlag. Im Zweifel gilt „Modellvorschlag" — eine Zahl ohne belegbare Herkunft ist ein Vorschlag, keine Anforderung. Die Beleglage steht daneben und ist standardmäßig „unbelegt"; eine Zahl als belegt auszuweisen, ohne einen Beleg zu nennen, weist der Vertrag zurück. Das wäre schlimmer als ehrliche Unbelegtheit, weil der Leser sich dann auf einen Beleg verlässt, den es nicht gibt.
+- Die Herkunft einer Zahl ist bewusst **getrennt** von der Quellengattung eines Belegs geführt: die eine beschreibt, wie eine Zahl entstand, die andere, woher ein Beleg stammt. Eine Vermischung hätte die Evidenzregeln verwässert. Berichte ohne Zahlenangaben bleiben unverändert gültig.
+
+### Changed (Gegenprüfung bei entscheidungstragenden Reports — 2026-08-09)
+
+- **Die Red-Team-Gegenprüfung hängt nicht mehr allein am Echo-Kammer-Index:** Bisher lief sie nur, wenn die simulierten Personas auffällig gleichgerichtet waren (Index über 0.6). Im Referenzlauf des Evidenzketten-Audits lag der Index bei 0.55 — die Gegenprüfung entfiel damit ausgerechnet bei einem vollständigen Report, obwohl der Index gar nichts über den Berichtstyp aussagt. Risiko-, Vergleichs- und Vollreports bekommen die Gegenprüfung jetzt immer; sie stützen eine Entscheidung, dort gehört der Widerspruch zum Produkt. Beim Meinungsbild und beim explorativen Report bleibt die Schwelle als Kostenbremse. Ein übersprungener Lauf hinterlässt weiterhin keinen Modelleintrag und ist dadurch von einem Lauf ohne Befunde unterscheidbar.
+
+### Added (Markdown-Report zeigt seine Belege, nicht nur Belegnummern — 2026-08-10)
+
+- **Der Markdown-Export löst seine Belegkennungen auf.** Claim- und Multiplier-Tabellen führten bisher nur Kennungen wie `ev_00000…`; wer den Report als Markdown las, sah Verweise ohne Belege. JSON- und ZIP-Export tragen die Herkunft seit jeher vollständig — ausgerechnet das Format, das weitergereicht und ausgedruckt wird, tat es nicht. Am Ende des Berichts steht jetzt ein Abschnitt „Evidenz-Nachweise": pro Kennung die Quellengattung im Klartext (etwa „Seed-Dokument" statt `seed_corpus`), der Produzent, die Quelle und der belegende Auszug. Wo ein Originalzitat vorliegt, steht es dort — es belegt die Aussage, während der umgebende Textausschnitt sie nur einbettet.
+- Der Abschnitt steht bewusst hinten und nicht in den Tabellen selbst: dieselbe Evidenz stützt oft mehrere Aussagen, und die Tabellen bleiben schmal genug zum Lesen. Lange Auszüge werden gekürzt — der Nachweis soll die Zuordnung ermöglichen, nicht die Quelle ersetzen. Die Reihenfolge ist stabil, damit zwei Exporte desselben Berichts nicht grundlos verschiedene Dateien ergeben.
+
+### Fixed (Export liefert keine ungeprüfte Evidenz mehr aus — 2026-08-10)
+
+- **ZIP- und CSV-Export prüften die Evidenz nie.** Wer einen Report als ZIP oder als Claims-CSV zog, bekam eine Datei, die aussieht wie geprüfte Evidenz — ohne dass die Prüfung je stattgefunden hätte. Kein Hinweis, kein Vermerk. Der JSON-Export verhielt sich seit jeher korrekt und wies eine vertragswidrige Evidenz-Übersicht als ausgelassen aus; der Lese-Endpunkt `GET /api/report/<id>/evidence` wiederum brach mit einem Serverfehler ab, an dem nicht zu erkennen war, ob die Anwendung defekt ist oder die Daten. Drei Wege, dieselbe kaputte Datenlage, drei verschiedene Antworten.
+- **Alle vier Wege antworten jetzt gleich.** Verletzt die Evidenz auch nach der Migration den Vertrag, tragen JSON-Envelope, ZIP-Archiv, CSV-Abruf und Lese-Endpunkt denselben Grund (`contract_violation`), dieselbe Erläuterung und dieselbe Fehlerliste. Im ZIP liegt statt `evidence-map.json` und `claims.csv` eine Datei `evidence-omitted.json` mit der Begründung — auch lesbar für jemanden, der das Archiv später ohne Agora öffnet. Der Claims-CSV-Abruf wird abgelehnt statt beantwortet: eine CSV-Datei hat keine Stelle, an der ein Auslassungshinweis stehen könnte, und sähe damit wie eine vollständige Evidenzliste aus. Der Lese-Endpunkt antwortet mit einem Datenfehler statt mit einem Serverfehler.
+- **Der Report-Rumpf bleibt in allen Fällen vollständig** — Personas, Segmente, Markdown und Verbrauchsdaten sind unberührt. Betroffen ist ausschließlich der Evidenz-Teil, und nur dann, wenn er den Vertrag tatsächlich verletzt.
+
+### Changed (Confidence-Semantik: Geltungsbereich sichtbar, `verified` belastbar — 2026-08-10)
+
+- **Reports weisen jetzt aus, worauf eine Confidence beruht.** Ein Befund, den ausschließlich simulierte Agenten stützen, konnte dasselbe Label tragen wie ein quellengebundener — die Skala allein unterscheidet das nicht, und im Report stand nur „high". Die Claim-Tabelle führt deshalb eine Spalte „Geltungsbereich": *Simulationskonsens* bei Aussagen, hinter denen nur Agentenstimmen stehen, *Quellenbindung*, sobald mindestens ein stützender Beleg aus Seed-Korpus, Wissensgraph oder Recherche stammt. Abgeleitet wird das aus derselben Evidenzmenge, aus der auch die Belegverweise entstehen; ein widersprechender oder nur thematisch verwandter Treffer begründet keine Quellenbindung. Berichte aus der Zeit vor dieser Änderung zeigen „-" statt einer Behauptung über einen Geltungsbereich, der nie erfasst wurde. Die Label-Semantik selbst bleibt unangetastet.
+- **Das oberste Vertrauenslabel hängt nicht mehr allein an Textähnlichkeit.** `verified` verlangte bisher nur einen Ähnlichkeitswert ab 0.85 — ein Wert, der beantwortet, ob es um dasselbe Thema geht, nicht, ob die Quelle die Aussage trägt. Die Schwelle bleibt Voraussetzung, genügt aber nicht mehr: dasselbe Belegstück muss zusätzlich das Prüfurteil „stützt die Aussage" tragen. Getrennte Belege dürfen die Bedingung nicht zusammenstückeln. Bestandsreports ohne dieses Urteil werden beim Laden auf `high` abgestuft und mit einer Begründung im Prüfprotokoll versehen, statt abgelehnt zu werden — der Bestand wird ehrlicher, nicht unlesbar.
+- **Zwei Schreibweisen derselben Stakeholder-Gruppe zählen als eine.** Das oberste Vertrauenslabel verlangt Stimmen aus mindestens zwei unterschiedlichen Gruppen. Da die Gruppenbezeichnung ein freies Textfeld ist, ließ sich diese Bedingung bisher mit einer einzigen Gruppe erfüllen, indem ihr Name unterschiedlich geschrieben wurde. Verglichen wird jetzt ohne Groß-/Kleinschreibung und ohne Leerzeichenunterschiede. Angezeigt und gespeichert bleibt die Schreibweise der Quelle; eine feste Liste erlaubter Gruppenbezeichnungen ist ausdrücklich nicht eingeführt worden.
+
+### Fixed (Übersetzungsreste in Modell-Anweisungen und einer API-Antwort — 2026-08-10)
+
+- **Aus einem chinesischsprachigen Upstream stehengebliebene Schriftzeichen sind aus den Texten verschwunden, die an das Sprachmodell gehen:** Betroffen waren die Hinweise, mit denen der Report-Agent auf noch ungenutzte Werkzeuge aufmerksam gemacht wird, sowie der Platzhalter für einen noch leeren Bericht im Chat. Dort standen halbseitig geöffnete, aber vollbreit geschlossene Klammern und ein ostasiatisches Aufzählungskomma als Trennzeichen. Das ist kein Schönheitsfehler: Diese Hinweise entscheiden mit darüber, ob der Agent seine Werkzeuge überhaupt einsetzt, und ein Zeichen, mit dem das Modell nicht rechnet, kann diese Wirkung kosten. Ebenfalls bereinigt ist eine Statusmeldung der Vorbereitungs-Schnittstelle, die unverändert an die Oberfläche durchgereicht wird. Die Formulierungen selbst sind absichtlich unangetastet geblieben — geändert wurde ausschließlich die Zeichensetzung, damit sich das Verhalten des Modells nachvollziehbar nicht aus einem anderen Grund verschiebt. Ein Test wacht künftig über beide Dateien.
+
+### Changed (Ingestion-Schutztest läuft ohne Netzzugang — 2026-08-10)
+
+- **Der Regressionstest für den nltk-Import-Schutz braucht keine Downloads mehr:** Er hat bisher einen echten Parse-Aufruf gefahren und damit zwei Sprachmodelle nachgeladen, die auf einem frischen Rechner nicht vorliegen. Wo ausgehender Netzverkehr gesperrt ist — etwa in der CI —, schlug er deshalb fehl, obwohl der geprüfte Schutzmechanismus einwandfrei funktionierte; auf Entwicklerrechnern blieb er grün, weil die Modelle dort aus einem früheren Lauf im Nutzer-Cache lagen. Der Test prüft jetzt genau die Stelle, an der der Fehler tatsächlich auftritt: den nachgelagerten Import, den jeder Parse-Aufruf durchläuft. Er ist damit auf jedem Rechner und in jeder Umgebung gleich aussagekräftig und schlägt nur noch an, wenn der Schutzmechanismus wirklich versagt.
+
+### Fixed (Nachträglich abgestufte Aussagen weisen ihre Herkunft aus — 2026-08-10)
+
+- **Wird eine Aussage nachträglich herabgestuft, änderte sich bisher nur die Vertrauensstufe.** Der Wortlaut blieb, wie er war — und der stammt vom Sprachmodell, das ihn unter der höheren Stufe geschrieben hat: deklarativ, ohne die Vorsicht, die die niedrigere Stufe verlangt. Der Bericht bestand seine Prüfung, transportierte im Fließtext aber weiterhin eine Behauptung in einer Sicherheit, die seine eigene Einstufung nicht mehr deckte.
+- **Solche Aussagen sind jetzt als solche erkennbar.** In der Aussagentabelle steht neben der Stufe, unter welcher Stufe der Wortlaut entstanden ist. Die Übersicht am Anfang des Berichts — vor dem Fließtext — nennt zusätzlich, wie viele Aussagen davon betroffen sind. Bei mehrfacher Herabstufung bleibt die *ursprüngliche* Stufe stehen: unter ihr wurde formuliert, eine zwischenzeitliche wäre die falsche Bezugsgröße.
+- **Der generierte Text bleibt unangetastet.** Das ist eine bewusste Entscheidung gegen die naheliegende Alternative, dem Satz nachträglich eine abschwächende Formulierung voranzustellen: die hätte Sprachfragen aufgeworfen, sich bei mehrfacher Herabstufung selbst verdoppelt und in einen Text eingegriffen, für den das Modell verantwortlich zeichnet. **Was das nicht leistet:** eine deklarativ formulierte Passage im Fließtext bleibt deklarativ formuliert. Sie steht dort aber nicht mehr unkommentiert — Tabelle und Übersicht weisen sie aus, und die Übersicht liest man zuerst.
+
+### Added — Feed-Snapshot beim Mount (#1009)
+
+- **Feed ist beim Öffnen sofort befüllt:** Die Simulations-Feed-View lädt beim Mount den bisherigen Sim-Bestand aus der SQLite-DB über einen neuen `/feed-snapshot`-Endpoint und ingestiert ihn vor SSE-Stream-Start. `useSimFeed`-Dedup per `post_id` verhindert Doppeleinträge, wenn Live-Events für bereits geladene Posts eintreffen. (#1009)
+
+### Changed — PostCreatedEvent-Vertrag: persona_name + voice_register-Vokabular (#1216)
+
+- **`persona_name` ist Pflichtfeld:** Der Layer-0-Vertrag (`PostCreatedEvent`) führt den Anzeigenamen der Persona als Pflichtfeld; Frontend-Komponenten (RedditPost, TwitterPost, PersonaAvatar) zeigen den Namen statt der technischen `persona_id`. (#1216 5a)
+- **`voice_register`-Vokabular an Profil-Generator angebunden:** Die Enum-Werte sind jetzt `formal-de`/`neutral-de`/`technical-de`/`skeptisch-de` (zuvor `formal`/`casual`/`jugendsprache`, was nie an den Generator angebunden war und per Fallback jede Persona verschleierte). Legacy-Werte werden vom Vertrag abgelehnt (Anti-Dekorations-Linie). Twitter-Profile (CSV persistiert kein `voice_register`) erhalten dokumentiert `neutral-de` als Generator-Default. (#1216)
+- **Kommentare als PostCreatedEvent:** Der OASIS-Runner emittiert `CREATE_COMMENT`-Aktionen mit plattformpräfixtem `post_id` (`<platform>:comment:<id>`) und `parent_post_id` = Elternpost, sodass der Reddit-Reply-Tree im Live-Feed Äste bekommt. `post_id` ist plattformübergreifend eindeutig (`<platform>:<id>`), was Dedup-Kollisionen zwischen Reddit und Twitter auflöst. (#1216 5c)
+
+### Fixed (Routing-Audit hält den Fallback-Grund fest — 2026-08-10)
+
+- **Der Grund für einen Modell-Fallback verschwand aus dem Routing-Audit, sobald er nicht aus dem Provider-Fallback stammte:** Die Routen-Auflösung leert das oberste `fallback_reason` für jede Ebene außer `provider_fallback`. Ein Modellverweis mit `source="fallback"` landet aber in der Stage- oder Run-Ebene — sein Grund wurde damit verworfen, bevor das Audit ihn schreiben konnte, und im Protokoll stand nur noch `null`. Wer im Nachhinein wissen wollte, warum ein Lauf auf ein Ersatzmodell ausgewichen ist, fand die Antwort nicht mehr. Der Grund reist jetzt im selben Legacy-Kanal mit, den `ai_model_ref_source` schon nutzt, und das Audit liest ihn von dort. Bestandsprotokolle ohne den neuen Schlüssel bleiben gültig: fehlt er, gilt weiterhin das oberste Feld, sodass auch vor dieser Änderung geschriebene Läufe ihren Grund behalten.
+
+### Fixed (Barrierefreiheits-Prüfungen können nicht mehr die falsche Seite prüfen — 2026-08-10)
+
+- **Ein Prüflauf, der versehentlich auf dem Einrichtungs-Assistenten landet, bricht jetzt ab, statt grün zu melden:** Solange die Ersteinrichtung nicht abgeschlossen ist, leitet die Anwendung jeden Aufruf einer anderen Seite dorthin um. Ein automatisierter Barrierefreiheits-Check, der das nicht bemerkt, prüft monatelang den Assistenten und bescheinigt der eigentlich gemeinten Seite Fehlerfreiheit — genau das war bei der Kostenübersicht passiert, wo nach dem Beheben sofort sechs echte Kontrastverstöße sichtbar wurden. Die Prüfung vergleicht nun die angeforderte mit der tatsächlich erreichten Adresse und nennt im Fehlerfall den fehlenden Schritt beim Namen. Wer den Assistenten absichtlich prüft, bekommt weiterhin keinen Fehlalarm. Eine Bestandsaufnahme aller vorhandenen Prüfläufe hat ergeben, dass aktuell keiner weiteren Seite dasselbe passiert.
+
 
 ## [0.9.4] — 2026-08-09
 
