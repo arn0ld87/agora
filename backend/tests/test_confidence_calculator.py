@@ -92,8 +92,7 @@ def test_audit_trail_types_get_zero_source_weight():
 
 
 def test_contradiction_penalty_lowers_score():
-    """Mit ≥2 Evidence-Items greift der Reviewer-Floor (Slice S1) nicht;
-    die Penalty senkt den Score messbar."""
+    """Mit zwei Evidence-Items senkt die Penalty den Score messbar."""
     items = [
         {"type": "graph_fact", "source": "x", "match_score": 0.9},
         {"type": "graph_fact", "source": "y", "match_score": 0.85},

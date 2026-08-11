@@ -305,13 +305,13 @@ def test_persisted_v3_validates(tmp_path, monkeypatch):
 
     assert restored.schema_version == 4
     assert restored.report_id == report_id
-    # Reviewer-Floor S1: Claim mit 1 Evidence-Item wird zur Hypothesis geroutet.
-    assert len(restored.claims) == 0, (
-        "Claim mit 1 Evidence-Item darf nicht als Claim persistiert werden (Reviewer-Floor S1)"
-    )
-    assert any(
+    # ADR-0002: Ein stützender Beleg reicht für einen sichtbaren Claim.
+    assert len(restored.claims) == 1
+    assert "Sicherheitsbedenken" in restored.claims[0].statement
+    assert len(restored.claims[0].evidence_refs) == 1
+    assert not any(
         "Sicherheitsbedenken" in h.hypothesis_text for h in restored.hypotheses
-    ), "Claim mit 1 Evidence muss als Hypothesis auftauchen"
+    )
     assert restored.data_gaps[0].id == "gap_01"
     assert "Preisbereitschaft ist im Seed-Korpus nicht belegt." in report_v3_markdown
 

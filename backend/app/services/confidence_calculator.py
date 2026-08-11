@@ -223,7 +223,8 @@ def compute_confidence(
     )
     unique_sources = len({(e.get("type"), e.get("source")) for e in evidence})
 
-    # Reviewer-Floor (Sub-Slice S1): bei <2 Evidence-Items kein "high" möglich.
+    # Eine einzelne Quelle darf nie hohe Confidence erzeugen. Der Claim bleibt
+    # als ``low`` sichtbar; strengere Stufen brauchen unabhängige Abstützung.
     if len(evidence) < 2:
         score = min(score, 0.59)
 

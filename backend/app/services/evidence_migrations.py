@@ -340,7 +340,7 @@ def demote_unanchored_seed_corpus_records(
                     binding["evidence_id"] = target
                     # Zwei Bindungen, die nach dem Re-Key auf dieselbe Quelle
                     # zeigen, sind eine Bindung — sonst zählt der
-                    # Reviewer-Floor dieselbe Quelle doppelt.
+                    # Confidence-Berechnung dieselbe Quelle doppelt.
                     merged.setdefault(target, binding)
                 claim["evidence"] = list(merged.values())
             legacy_refs = claim.get("evidence_refs")

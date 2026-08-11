@@ -211,8 +211,8 @@ def test_save_evidence_section_routes_orphans_to_gaps(tmp_path):
     assert section.data_gaps[0].gap_reason == "no_evidence_bound"
 
 
-def test_reviewer_floor_counts_unique_evidence_ids(tmp_path):
-    """Zwei Bindings auf denselben Record sind nur eine unabhängige Quelle."""
+def test_duplicate_bindings_do_not_raise_single_source_confidence(tmp_path):
+    """Doppelte Bindings machen aus einem low Claim keinen Mehrquellen-Claim."""
     agent = _make_agent(tmp_path)
     evidence_id = "ev_0123456789abcdef0123456789abcdef"
     claim = {
@@ -228,9 +228,10 @@ def test_reviewer_floor_counts_unique_evidence_ids(tmp_path):
 
     finalized, hypotheses, _, _decisions = agent._finalize_section_claims([claim])
 
-    assert finalized == []
-    assert len(hypotheses) == 1
-    assert "nur 1 von 2" in hypotheses[0]["rationale"]
+    assert len(finalized) == 1
+    assert finalized[0]["confidence_label"] == "low"
+    assert {item["evidence_id"] for item in finalized[0]["evidence"]} == {evidence_id}
+    assert hypotheses == []
 
 
 def test_duplicate_producer_key_preserves_first_record() -> None:

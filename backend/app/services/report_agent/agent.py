@@ -110,7 +110,7 @@ def _remap_claim_bindings(
     """Zieht Claim-Bindungen auf umgeschlüsselte Evidence-IDs nach (#1154).
 
     Zwei Bindungen, die danach auf dieselbe Quelle zeigen, werden zu einer
-    zusammengeführt — sonst zählte der Reviewer-Floor denselben Beleg doppelt.
+    zusammengeführt — sonst zählte die Confidence denselben Beleg doppelt.
     """
     remapped: List[Dict[str, Any]] = []
     for claim in claims:
@@ -774,16 +774,10 @@ class ReportAgent:
         # section_index ergänzt der Caller (_save_evidence_section).
         gate_decisions: List[Dict[str, Any]] = []
 
-        from app.contracts.report_v3 import CLAIM_MIN_EVIDENCE_FOR_CLAIM  # noqa: PLC0415
-
         for claim in normalize_claims_for_contract(claims):
             evidence = claim.get("evidence") or []
             label = str(claim.get("confidence_label") or "").lower()
 
-            # Reviewer-Floor (report_4fe2dacd80ba, Sub-Slice S1):
-            # Claim braucht ≥2 unabhängige Evidence-Items, sonst Routing zur Hypothesis.
-            # evidence_count==0 fällt durch zum Bestands-Low-Confidence-Branch (mit data_gap).
-            #
             # P0-5: Gezählt wird nur, was den Claim tatsächlich stützt
             # (``supports_claim is True``, gesetzt von der Entailment-Stufe).
             # Vorher zählte jedes thematisch ähnliche Item mit — dadurch
@@ -801,51 +795,12 @@ class ReportAgent:
                 and item.get("evidence_id")
                 and item.get("supports_claim") is True
             }
-            legacy_ref_ids = {
-                str(evidence_ref)
-                for evidence_ref in claim.get("evidence_refs") or []
-                if evidence_ref
-            }
-            evidence_count = len(supporting_ids) or (
-                len(legacy_ref_ids) if not evidence else 0
-            )
             unkeyed_related = sum(
                 1
                 for item in evidence
                 if not isinstance(item, dict) or not item.get("evidence_id")
             )
             related_only = len(evidence_ids - supporting_ids) + unkeyed_related
-            if 0 < evidence_count < CLAIM_MIN_EVIDENCE_FOR_CLAIM:
-                index = len(hypotheses) + 1
-                claim_text = (
-                    str(claim.get("claim_text") or claim.get("claim") or "").strip()
-                    or "No evidence-bound claim text available."
-                )
-                claim_text = self._truncate(claim_text, 1000)
-                rationale = (
-                    f"Reviewer-Floor: nur {evidence_count} von "
-                    f"{CLAIM_MIN_EVIDENCE_FOR_CLAIM} geforderten stützenden "
-                    "Evidence-Items — als Hypothese geführt."
-                )
-                if related_only:
-                    rationale += (
-                        f" {related_only} weitere Quelle(n) sind thematisch "
-                        "verwandt, belegen die Aussage aber nicht."
-                    )
-                hypotheses.append({
-                    "hypothesis_id": f"hypothesis_{index:02d}",
-                    "hypothesis_text": claim_text,
-                    "rationale": rationale,
-                    "suggested_evidence": [],
-                })
-                gate_decisions.append({
-                    "claim_id": str(claim.get("claim_id") or "<no-id>"),
-                    "violation": "reviewer_floor_insufficient_evidence",
-                    "action": "moved_to_hypotheses",
-                    "detail": rationale[:500],
-                })
-                continue
-
             # P0-5: Ohne eine einzige stützende Quelle ist die Aussage eine
             # Hypothese — auch dann, wenn thematisch verwandte Evidence
             # anhängt. Vorher griff dieser Zweig nur bei komplett leerer
@@ -1026,7 +981,7 @@ class ReportAgent:
         die Migration schlüsselt den ``evidence_index`` um, diese Methode die
         noch nicht persistierten Referenzen im Speicher. Nach dem Nachzug
         können zwei Puffereinträge auf dieselbe Quelle zeigen — sie werden zu
-        einem zusammengeführt, damit der Reviewer-Floor dieselbe Quelle nicht
+        einem zusammengeführt, damit die Confidence dieselbe Quelle nicht
         doppelt zählt.
         """
         for attribute in ("_active_section_evidence", "_active_section_unresolved_evidence"):

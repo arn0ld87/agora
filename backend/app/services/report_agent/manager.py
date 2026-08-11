@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import ValidationError
 
-from ...contracts.report_v3 import CLAIM_MIN_EVIDENCE_FOR_CLAIM, DEFAULT_REPORT_MODE, ReportMode, ReportV3
+from ...contracts.report_v3 import DEFAULT_REPORT_MODE, ReportMode, ReportV3
 from ...contracts.report_v3 import Claim as ReportV3Claim
 from ...contracts.report_v3 import DataGap as ReportV3DataGap
 from ...contracts.report_v3 import Hypothesis as ReportV3Hypothesis
@@ -324,21 +324,6 @@ class ReportManager:
                 # balanced/explorative: Claims ohne Evidence → überspringen (kein Evidence-Anker)
                 # strict: Claims ohne Evidence → gedroppt (gleiche Logik, aber auch low-conf)
                 if not evidence_refs:
-                    continue
-                # Reviewer-Floor (report_4fe2dacd80ba, Sub-Slice S1):
-                # Claim braucht ≥2 Evidence-Items, sonst Routing zur Hypothesis.
-                if len(evidence_refs) < CLAIM_MIN_EVIDENCE_FOR_CLAIM:
-                    h_index = len(hypotheses) + 1
-                    h_text = str(claim.get("claim_text") or claim.get("claim") or "").strip()
-                    if h_text:
-                        hypotheses.append(ReportV3Hypothesis(
-                            id=f"hypothesis_{h_index:02d}",
-                            hypothesis_text=h_text,
-                            rationale=(
-                                f"Reviewer-Floor: nur {len(evidence_refs)} Evidence-Item(s) — "
-                                "Claim-Floor ist 2."
-                            ),
-                        ))
                     continue
                 statement = str(claim.get("claim_text") or claim.get("claim") or "").strip()
                 if len(statement) < 8:

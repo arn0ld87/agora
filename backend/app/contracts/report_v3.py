@@ -21,10 +21,13 @@ from .report_contract import EvidenceRecordModel, SimulationSnapshotModel
 
 _STRICT = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-CLAIM_MIN_EVIDENCE_FOR_CLAIM: int = 2
-"""Reviewer-Floor (report_4fe2dacd80ba): Claims mit <2 Evidence-Items werden
-in `_finalize_section_claims` zur Hypothesis geroutet, statt als Claim
-durchzulaufen. ADR-0002-konform — verschärft, schwächt nicht."""
+CLAIM_MIN_EVIDENCE_FOR_CLAIM: int = 1
+"""ADR-0002-Floor: Ein Claim braucht mindestens ein stützendes Evidence-Item.
+
+Ohne stützende Evidence wird die Aussage zur Hypothese. Genau eine Quelle
+trägt höchstens einen ``low``-Claim; ``medium``, ``high`` und ``verified``
+behalten ihre strengeren Provenance- und Confidence-Regeln.
+"""
 
 
 ReportMode = Literal["strict", "balanced", "explorative"]

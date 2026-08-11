@@ -8,6 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   parseReportContract,
+  CLAIM_MIN_EVIDENCE_FOR_CLAIM,
   EvidenceMapSchema,
   ReportContractSchema,
   ReportClaimSchema,
@@ -110,6 +111,10 @@ const VALID_PAYLOAD = {
 };
 
 describe('ReportContractSchema (Zod-Spiegel)', () => {
+  it('spiegelt den ADR-0002-Floor von einem stützenden Beleg', () => {
+    expect(CLAIM_MIN_EVIDENCE_FOR_CLAIM).toBe(1);
+  });
+
   it('parses the canonical Backend round-trip payload', () => {
     const result = parseReportContract(VALID_PAYLOAD);
     expect(result.ok).toBe(true);
