@@ -9,11 +9,11 @@
 import { z } from "zod";
 
 /**
- * Reviewer-Floor (report_4fe2dacd80ba): Claims mit <2 Evidence-Items werden
- * im Backend zur Hypothesis geroutet, bevor der Report das Frontend erreicht.
- * Das Schema bleibt permissive (min 1), damit alte Reports lesbar bleiben.
+ * ADR-0002: Claims brauchen mindestens ein stützendes Evidence-Item.
+ * Eine einzelne Quelle trägt höchstens einen low Claim; ohne Quelle routet
+ * das Backend die Aussage zur Hypothesis.
  */
-export const CLAIM_MIN_EVIDENCE_FOR_CLAIM = 2;
+export const CLAIM_MIN_EVIDENCE_FOR_CLAIM = 1;
 
 // === Enums ===
 export const ConfidenceLabelSchema = z.enum(["speculative", "low", "medium", "high", "verified"]);
@@ -179,12 +179,13 @@ export const ReportClaimSchema = z.object({
   audit_trail: z.array(z.record(z.string(), z.unknown())).default([]),
   notes: z.string().optional().nullable(),
 }).strict().superRefine((value, ctx) => {
-  // Spiegelt ReportClaimModel.non_low_claims_need_evidence
-  // speculative und low dürfen ohne Evidence auskommen
-  if (value.confidence_label !== "low" && value.confidence_label !== "speculative" && value.evidence.length === 0) {
+  const supportingEvidenceCount = value.evidence.filter(
+    (binding) => binding.supports_claim === true,
+  ).length;
+  if (supportingEvidenceCount < CLAIM_MIN_EVIDENCE_FOR_CLAIM) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: `Label '${value.confidence_label}' verlangt mindestens eine Evidence mit nachvollziehbarem Anker.`,
+      message: `Label '${value.confidence_label}' verlangt mindestens ${CLAIM_MIN_EVIDENCE_FOR_CLAIM} stützende Evidence.`,
     });
   }
   // Spiegelt ReportClaimModel.verified_needs_strong_match
@@ -326,7 +327,7 @@ export const EvidenceMapSchema = z.object({
   // Additiv mit Default: persistierte Evidence-Maps von vor #1006 tragen das
   // Feld nicht und müssen weiterhin parsen.
   degradation_log: z.array(EvidenceDegradationSchema).default([]),
-  // PR #1151: Audit-Trail regulärer Gate-Entscheidungen (Reviewer-Floor,
+  // PR #1151: Audit-Trail regulärer Gate-Entscheidungen (fehlende Evidence,
   // fehlende Supporting-Evidence, Fließtext-Entfernungen). Getrennt vom
   // degradation_log, weil nur Letzterer den Report-Status abstuft.
   gate_decision_log: z.array(EvidenceDegradationSchema).default([]),

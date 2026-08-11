@@ -13,7 +13,7 @@ die Bindung unerreichbar, obwohl sie im ``evidence_index`` stehen.
 Der Pool dreht die Reihenfolge um: **erst bewerten, dann kuerzen**. Er
 bekommt alle Kandidaten der Section, sortiert sie per Cosine gegen den
 Claim-Text und gibt die semantisch naechsten weiter. Das Evidence-Gate
-selbst (Threshold, Entailment, Reviewer-Floor) bleibt unberuehrt — dieses
+selbst (Threshold, Entailment, Confidence-Regeln) bleibt unberuehrt — dieses
 Modul entscheidet nur, *was* das Gate ueberhaupt zu sehen bekommt.
 
 Der Embedding-Cache ist kein Beiwerk, sondern die Bedingung dafuer, dass

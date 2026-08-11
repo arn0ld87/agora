@@ -18,8 +18,8 @@ deterministischen Embedder und pruefen, welche Evidence als Kandidat
 ueberhaupt bewertet wird.
 
 ADR-0002 bleibt unberuehrt: Threshold, Entailment-Urteil und
-Reviewer-Floor entscheiden unveraendert. Getestet wird ausschliesslich, dass
-das Gate den vorhandenen Beleg auch zu sehen bekommt.
+Confidence-Regeln entscheiden unveraendert. Getestet wird ausschliesslich,
+dass das Gate den vorhandenen Beleg auch zu sehen bekommt.
 """
 
 from __future__ import annotations
@@ -169,12 +169,11 @@ def test_late_evidence_reaches_the_binder(agent_with_late_evidence) -> None:
 
 
 def test_claim_survives_the_evidence_gate(agent_with_late_evidence) -> None:
-    """Mit zwei stuetzenden Items passiert der Claim den Reviewer-Floor.
+    """Mit zwei stuetzenden Items passiert der Claim das Evidence-Gate.
 
     Das ist das Akzeptanzkriterium aus #1217 auf Ebene der Bindungsphase:
     ein Claim mit eindeutig passender Evidence wird als Claim persistiert und
-    nicht zur Hypothese degradiert. Der Floor selbst (>= 2 stuetzende Items)
-    bleibt unveraendert — er wird erfuellt, nicht gesenkt.
+    nicht zur Hypothese degradiert.
     """
     extracted = agent_with_late_evidence._build_claims_for_section(CLAIM_TEXT)
     claims, hypotheses, data_gaps, gate_decisions = (
