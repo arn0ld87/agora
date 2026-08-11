@@ -40,7 +40,7 @@ def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
     return dot / (math.sqrt(na) * math.sqrt(nb))
 
 
-def _candidate_text(item: Dict[str, Any]) -> str:
+def candidate_text(item: Dict[str, Any]) -> str:
     """Verwendet die textuell aussagekräftigsten Felder eines Evidence-Items."""
     parts = [
         str(item.get("snippet") or ""),
@@ -55,6 +55,12 @@ def _candidate_text(item: Dict[str, Any]) -> str:
     elif isinstance(raw, str):
         parts.append(raw)
     return " ".join(p for p in parts if p).strip()
+
+
+#: Alias fuer Alt-Aufrufer; ``candidate_text`` ist seit #1217 die oeffentliche
+#: Form, weil die Kandidatenauswahl (``evidence_candidates``) dieselbe
+#: Textextraktion braucht wie das Binding.
+_candidate_text = candidate_text
 
 
 def bind_evidence_to_claim(
@@ -97,7 +103,7 @@ def bind_evidence_to_claim(
     claim_vec = embed(claim_text.strip())
     scored: List[Dict[str, Any]] = []
     for item in candidates:
-        text = _candidate_text(item)
+        text = candidate_text(item)
         if not text:
             continue
         try:
@@ -187,4 +193,9 @@ def detect_contradiction_penalty(
     return round(min(penalty, max_penalty), 3)
 
 
-__all__ = ["bind_evidence_to_claim", "detect_contradiction_penalty", "EmbedFn"]
+__all__ = [
+    "bind_evidence_to_claim",
+    "candidate_text",
+    "detect_contradiction_penalty",
+    "EmbedFn",
+]

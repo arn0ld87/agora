@@ -20,6 +20,7 @@ from .evidence import (
     register_evidence_record,
     resolve_embedder,
 )
+from .evidence_candidates import EvidenceCandidatePool
 from .manager import ReportManager
 from .planning import plan_outline as plan_outline_impl
 from .search_dedup import (
@@ -602,14 +603,30 @@ class ReportAgent:
         evidence_index = (self.evidence_map or {}).get("evidence_index") or {}
         global_items = [
             deepcopy(evidence_index[evidence_id])
-            for evidence_id in (self.evidence_map or {}).get("global_evidence_refs", [])[:6]
+            for evidence_id in (self.evidence_map or {}).get("global_evidence_refs", [])
             if evidence_id in evidence_index
+        ]
+        # #1217: die Kandidatenliste wird einmal pro Section aufgebaut, nicht
+        # pro Claim zugeschnitten. Vorher standen hier
+        # ``_active_section_evidence[:10]`` und ``global_evidence_refs[:6]`` —
+        # eine Kappung nach Erhebungsreihenfolge. Ein einziger
+        # ``insight_forge``-Call liefert bis zu 26 Items, das Fenster war also
+        # nach dem ersten Tool-Call voll und die spaeter erhobenen
+        # Persona-Zitate und Seed-Treffer waren fuer die Bindung unerreichbar.
+        direct_items = [
+            deepcopy(item) for item in self._active_section_evidence
+            if item.get("type") not in FORBIDDEN_EVIDENCE_TYPES
         ]
         # S4b: claim-spezifisches Binding wenn ein Embedder verfügbar ist.
         # S5: model_generated_inference und section_synthesis sind keine
         # Evidence — sie sind Modell-Output. Sie wandern in das separate
         # `audit_trail`-Feld der Claim-Dataclass, nicht ins `evidence`-Array.
         embedder = self._try_get_embedder()
+        pool = (
+            EvidenceCandidatePool(direct_items + global_items, embedder)
+            if embedder is not None
+            else None
+        )
         for index, chunk in enumerate(chunks, 1):
             # Issue #1187: dies ist die im gemessenen Lauf bestaetigte
             # lange Nachbearbeitungsschleife (Claim-Extraktion +
@@ -618,10 +635,6 @@ class ReportAgent:
             # Schleife in Bewegung, ohne bei jedem Claim zu schreiben.
             if heartbeat is not None:
                 heartbeat(f"Claim {index}/{len(chunks)}")
-            direct_items = [
-                deepcopy(item) for item in self._active_section_evidence[:10]
-                if item.get("type") not in FORBIDDEN_EVIDENCE_TYPES
-            ]
             audit_trail = [
                 EvidenceItem(
                     type="model_generated_inference",
@@ -641,12 +654,16 @@ class ReportAgent:
 
             bound: List[Dict[str, Any]] = []
             embedder_ok = False
-            if embedder is not None:
+            if embedder is not None and pool is not None:
                 try:
+                    # Erst nach Relevanz auswaehlen, dann binden. Der Pool
+                    # reicht seinen memoisierten Embedder weiter, damit die
+                    # zweite Stufe dieselben Vektoren benutzt statt sie je
+                    # Claim neu zu berechnen (#1187).
                     bound = bind_evidence_to_claim(
                         chunk,
-                        direct_items + global_items,
-                        embedder,
+                        pool.select(chunk),
+                        pool.embed,
                         threshold=0.55,
                         top_k=5,
                     )
@@ -657,6 +674,7 @@ class ReportAgent:
                     )
                     self._embed_cache = None
                     embedder = None
+                    pool = None
             if embedder_ok:
                 evidence_items = bound
                 direct_count = len(bound)
