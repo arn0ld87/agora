@@ -53,6 +53,14 @@ class PersonaModel(BaseModel):
     source_entity_uuid: Optional[str] = None
     source_entity_type: Optional[str] = None
 
+    # Issue #1246: "individual" oder "collective". Das Modell ist ein 1:1-
+    # Spiegel von ``OasisAgentProfile`` und ``extra="forbid"`` — ohne dieses
+    # Feld wuerde jedes serialisierte Profil, das ``persona_kind`` traegt, von
+    # vertragspruefenden Konsumenten abgelehnt (CodeRabbit PR #1257).
+    # Optional mit Default, damit Profile aus Laeufen vor diesem Slice
+    # unveraendert validieren.
+    persona_kind: Optional[Literal["individual", "collective"]] = "individual"
+
     # Review-Status (kommt aus persona_review_service.py)
     review_status: Optional[Literal["pending", "approved", "rejected"]] = None
     is_manual: Optional[bool] = False

@@ -10,6 +10,7 @@ Optimization improvements:
 
 import json
 import random
+import re
 from typing import TYPE_CHECKING, Dict, Any, List, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -73,6 +74,28 @@ class PersonaProfileSchema(BaseModel):
     mbti: str = Field(..., description="MBTI type, e.g. INTJ, ENFP")
     country: str = Field(..., description="ISO country code, e.g. DE, AT, CH")
     profession: str = Field("", description="Profession")
+    interested_topics: List[str] = Field(default_factory=list, description="Topic strings")
+    voice_register: str = Field(..., description="One of formal-de/neutral-de/technical-de/skeptisch-de")
+
+
+class CollectivePersonaSchema(BaseModel):
+    """Antwortvertrag fuer Kollektiv-Personas (Issue #1246, CodeRabbit PR #1257).
+
+    ``PersonaProfileSchema`` beschreibt ausschliesslich die individuelle
+    Persona und fuehrt ``display_name``, ``handle``, ``age`` (18-75),
+    ``gender`` und ``mbti`` als Pflichtfelder. Der Kollektiv-Prompt weist das
+    Modell ausdruecklich an, genau diese Felder wegzulassen — eine Organisation
+    hat davon nichts. Beides zusammen liess im strict-``json_schema``-Mode jede
+    Gruppen-Entitaet dreimal scheitern und auf den regelbasierten Pfad
+    zurueckfallen: der LLM-Kollektivzweig waere nie zum Zug gekommen.
+
+    Getrennter Vertrag statt aufgeweichter Pflichtfelder, damit der
+    Individuenpfad seine Garantien behaelt.
+    """
+
+    bio: str = Field("", description="Short description of the organization, <=200 chars")
+    persona: str = Field("", description="Detailed description of the organization, pure text")
+    country: str = Field(..., description="ISO country code, e.g. DE, AT, CH")
     interested_topics: List[str] = Field(default_factory=list, description="Topic strings")
     voice_register: str = Field(..., description="One of formal-de/neutral-de/technical-de/skeptisch-de")
 
@@ -150,6 +173,14 @@ class OasisAgentProfile:
     # Segment tag for PersonaQuotaPlan validation (= entity_type by default)
     segment: Optional[str] = None
 
+    # Issue #1246: "individual" oder "collective". Eine Organisation hat kein
+    # Alter, kein Geschlecht, keinen MBTI-Typ und keine Berufsbezeichnung —
+    # wer sie als Einzelperson beschreibt, muss all das erfinden. Genau so
+    # entstand aus dem Bildungstraeger "Nordharz Bildungswerk gGmbH" ein
+    # "Juergen Hartmann, 57, Dozent und Betriebsratsmitglied". Kollektiv-
+    # Personas tragen keine Vita, also nichts, was erfunden werden koennte.
+    persona_kind: str = "individual"
+
     # DACH-Voice-Register (Layer 2)
     voice_register: Optional[str] = None
 
@@ -193,6 +224,9 @@ class OasisAgentProfile:
             profile["source_entity_uuid"] = self.source_entity_uuid
         if self.source_entity_type:
             profile["source_entity_type"] = self.source_entity_type
+        # Issue #1246: immer geschrieben — der Konsument muss Kollektiv und
+        # Individuum unterscheiden koennen, ohne den Entitaetstyp nachzuschlagen.
+        profile["persona_kind"] = self.persona_kind
         if self.segment:
             profile["segment"] = self.segment
         if self.voice_register:
@@ -239,6 +273,9 @@ class OasisAgentProfile:
             profile["source_entity_uuid"] = self.source_entity_uuid
         if self.source_entity_type:
             profile["source_entity_type"] = self.source_entity_type
+        # Issue #1246: immer geschrieben — der Konsument muss Kollektiv und
+        # Individuum unterscheiden koennen, ohne den Entitaetstyp nachzuschlagen.
+        profile["persona_kind"] = self.persona_kind
         if self.segment:
             profile["segment"] = self.segment
         if self.voice_register:
@@ -274,6 +311,7 @@ class OasisAgentProfile:
             "interested_topics": self.interested_topics,
             "source_entity_uuid": self.source_entity_uuid,
             "source_entity_type": self.source_entity_type,
+            "persona_kind": self.persona_kind,
             "segment": self.segment,
             "voice_register": self.voice_register,
             # Issue #1029: Herkunft immer mitführen — to_dict ist die
@@ -605,20 +643,56 @@ class OasisProfileGenerator:
                 demographic_slot=demographic_slot,
             )
 
-        if demographic_slot is not None:
+        # Issue #1246: Der Kollektiv-Zweig ist bewusst hier sichtbar und nicht
+        # in den Individuenpfad eingebettet. Eine Organisation bekommt keine
+        # Demografie zugewiesen — es gibt kein Alter, kein Geschlecht und
+        # keinen MBTI-Typ, den man ihr zuschreiben koennte, und jeder Wert an
+        # dieser Stelle waere eine Erfindung.
+        is_collective = self._is_group_entity(entity_type)
+        persona_kind = "collective" if is_collective else "individual"
+
+        if is_collective:
+            profile_data["age"] = None
+            profile_data["gender"] = None
+            profile_data["mbti"] = None
+            # Eine Kollektiv-Persona hat keinen Beruf. "Dozent und
+            # Betriebsratsmitglied" war aus einem Bildungstraeger nicht
+            # ableitbar, sondern eine plausible Vita.
+            profile_data["profession"] = None
+        elif demographic_slot is not None:
             profile_data["age"] = demographic_slot.age
             profile_data["gender"] = demographic_slot.gender
             profile_data["mbti"] = demographic_slot.mbti
-        
+
         # LLM/Rule-based darf display_name (echter Name) + handle (kurzes Social-Handle)
         # überschreiben. So wird aus Entity "GraphRAG" z.B. Person "Lena Hoffmann" mit
-        # Handle "lena_hoffmann" oder Organisation "Docker Inc." mit "docker".
-        display_name = (profile_data.get("display_name") or "").strip()
-        if display_name:
-            name = display_name
-        handle = (profile_data.get("handle") or "").strip()
-        if handle:
-            user_name = self._generate_username(handle)
+        # Handle "lena_hoffmann". Fuer Kollektive bleibt der Entitaetsname stehen:
+        # der Traeger spricht als Traeger, nicht als erfundener Mitarbeiter.
+        if not is_collective:
+            display_name = (profile_data.get("display_name") or "").strip()
+            if display_name:
+                name = display_name
+            handle = (profile_data.get("handle") or "").strip()
+            if handle:
+                user_name = self._generate_username(handle)
+
+        # Issue #1246 (P1): Der Freitext muss dieselbe Person beschreiben, die
+        # oben benannt ist. Fuer Kollektive entfaellt die Frage.
+        persona_text = profile_data.get("persona", entity.summary or f"A {entity_type} named {name}.")
+        if not is_collective:
+            persona_text = self._align_persona_identity(persona_text, name)
+
+        # Issue #1246 (P3): Der Entitaetstyp ist keine Berufsbezeichnung. Wo
+        # der degradierte Pfad nichts abzuleiten wusste, reichte er ihn woertlich
+        # durch — "AIProvider", "WorkingGroup", "TechnologyVendor". Lieber keine
+        # Angabe als eine falsche.
+        profession = profile_data.get("profession")
+        if isinstance(profession, str) and profession.strip().lower() == entity_type.strip().lower():
+            logger.debug(
+                "Persona-Beruf verworfen: entity_type wurde als profession durchgereicht (%s)",
+                entity_type,
+            )
+            profession = None
 
         # Segment = entity_type string for PersonaQuotaPlan validation.
         # entity_type is already resolved above (get_entity_type() or "Entity").
@@ -629,7 +703,7 @@ class OasisProfileGenerator:
             user_name=user_name,
             name=name,
             bio=profile_data.get("bio", f"{entity_type}: {name}"),
-            persona=profile_data.get("persona", entity.summary or f"A {entity_type} named {name}."),
+            persona=persona_text,
             karma=profile_data.get("karma", random.randint(500, 5000)),
             friend_count=profile_data.get("friend_count", random.randint(50, 500)),
             follower_count=profile_data.get("follower_count", random.randint(100, 1000)),
@@ -638,11 +712,12 @@ class OasisProfileGenerator:
             gender=profile_data.get("gender"),
             mbti=profile_data.get("mbti"),
             country=profile_data.get("country"),
-            profession=profile_data.get("profession"),
+            profession=profession,
             interested_topics=profile_data.get("interested_topics", []),
             source_entity_uuid=entity.uuid,
             source_entity_type=entity_type,
             segment=segment,
+            persona_kind=persona_kind,
             voice_register=profile_data.get("voice_register"),
             # Issue #1029: Default "llm" — nur der regelbasierte Pfad setzt
             # den Schlüssel, und er setzt ihn immer.
@@ -815,6 +890,74 @@ class OasisProfileGenerator:
         
         return "\n\n".join(context_parts)
     
+    #: Erster Eigenname am Textanfang: zwei bis drei grossgeschriebene Tokens,
+    #: gefolgt von einer namenstypischen Grenze.
+    #:
+    #: Mindestens zwei Tokens, weil im Deutschen auch Verben und Substantive am
+    #: Satzanfang grossgeschrieben sind — "Arbeitet seit zwölf Jahren…" ist
+    #: kein Name, "Sabine Krüger, 47…" schon.
+    #:
+    #: Die Grenze ist Pflicht (CodeRabbit PR #1257): "Als IT-Leiter
+    #: verantwortet …" besteht ebenfalls aus zwei grossgeschriebenen Tokens.
+    #: Ohne die Bedingung haette ``_align_persona_identity`` daraus einen Namen
+    #: gemacht, ihn durch den Anzeigenamen ersetzt und spaetere Vorkommen von
+    #: "Als" und "IT-Leiter" gleich mit — der Text haette seine Rollensemantik
+    #: verloren. Ein Personenname am Satzanfang wird im Profiltext praktisch
+    #: immer von Komma, Klammer, Gedankenstrich oder Satzende gefolgt.
+    _LEADING_NAME_RE = re.compile(
+        r"^\s*([A-ZÄÖÜ][\wäöüßáàéèíìóòúù'-]+(?:\s+[A-ZÄÖÜ][\wäöüßáàéèíìóòúù'-]+){1,2})"
+        r"(?=\s*[,;:(]|\s+[–—]|\s*$)"
+    )
+
+    @classmethod
+    def _align_persona_identity(cls, persona: str, display_name: str) -> str:
+        """Zieht den Namen im Persona-Freitext auf den Anzeigenamen (#1246).
+
+        Der Generator liefert ``display_name`` und ``persona`` als getrennte
+        Felder, und in 50 bis 81 Prozent der messbaren Faelle beschrieben sie
+        verschiedene Menschen — haeufig mit abweichendem Geschlecht. Der
+        Interview-Systemprompt setzt beides zusammen ("Du bist <label>" plus
+        Profiltext), die Persona bekommt damit zwei Identitaeten in derselben
+        Nachricht. Das ist die plausibelste Erklaerung fuer die beobachtete
+        Rollenuebernahme in den Interview-Antworten.
+
+        Die Reparatur ist bewusst deterministisch statt ein weiterer
+        Prompt-Appell: der Prompt enthielt bereits eine Rollentreue-Regel, das
+        Modell verletzte also eine vorhandene Regel, keine fehlende.
+
+        Ersetzt werden der vollstaendige Eroeffnungsname und seine einzelnen
+        Bestandteile, damit auch spaetere Erwaehnungen ("Sabine schaetzt…",
+        "Frau Krueger meldet…") mitgezogen werden. Findet sich kein
+        Eroeffnungsname oder stimmt er bereits, bleibt der Text unangetastet.
+        """
+        if not persona or not display_name:
+            return persona
+
+        match = cls._LEADING_NAME_RE.match(persona)
+        if not match:
+            return persona
+
+        found = match.group(1).strip()
+        if found == display_name:
+            return persona
+
+        found_parts = found.split()
+        target_parts = display_name.split()
+
+        # Laengste Zeichenketten zuerst, sonst zerlegt die Teilersetzung den
+        # Vollnamen, bevor er als Ganzes getroffen wird.
+        replacements: List[tuple[str, str]] = [(found, display_name)]
+        for idx, part in enumerate(found_parts):
+            if len(part) < 3:
+                continue
+            target = target_parts[idx] if idx < len(target_parts) else target_parts[-1]
+            replacements.append((part, target))
+
+        aligned = persona
+        for source, target in sorted(replacements, key=lambda p: -len(p[0])):
+            aligned = re.sub(rf"\b{re.escape(source)}\b", target, aligned)
+        return aligned
+
     def _is_individual_entity(self, entity_type: str) -> bool:
         """Determine if entity is an individual type"""
         return entity_type.lower() in self.INDIVIDUAL_ENTITY_TYPES
@@ -845,7 +988,22 @@ class OasisProfileGenerator:
         - Group/institutional entities: generate representative account profiles
         """
 
-        is_individual = self._is_individual_entity(entity_type)
+        # Issue #1246 (CodeRabbit PR #1257): Prompt-Auswahl und
+        # Kollektiv-Behandlung muessen dasselbe Praedikat benutzen. Vorher
+        # entschied hier ``_is_individual_entity`` und in
+        # ``generate_profile_from_entity`` ``_is_group_entity`` — ein
+        # unbekannter Typ wie ``WorkingGroup`` bekam damit den Kollektiv-Prompt
+        # und trotzdem die Individuen-Nachbehandlung: Demografie aus dem Slot,
+        # Personenname vom Modell, ``persona_kind="individual"`` neben einem
+        # Text ueber eine Organisation.
+        #
+        # Ausgerichtet auf ``_is_group_entity``: nur explizit als Gruppe
+        # gefuehrte Typen werden Kollektive. Unbekannte Typen sind in dieser
+        # Domaene ueberwiegend deutsche Rollennamen (``Dozent``,
+        # ``Betriebsrat``) und damit Personen; sie bekommen jetzt auch den
+        # Individuen-Prompt statt einer Beschreibung, die nicht zu ihrer
+        # Nachbehandlung passt.
+        is_individual = not self._is_group_entity(entity_type)
         detail_level = _resolve_persona_detail_level()
         max_tokens = detail_level['max_tokens']
 
@@ -892,8 +1050,12 @@ class OasisProfileGenerator:
                     messages=messages,
                     temperature=0.7 - (attempt * 0.1),
                     max_tokens=max_tokens,
-                    schema=PersonaProfileSchema,
-                    schema_name="persona_profile",
+                    # Issue #1246: Der Kollektiv-Prompt fordert die
+                    # Personenfelder nicht an — mit dem Individuen-Schema
+                    # scheiterte jede Gruppen-Entitaet dreimal und fiel auf
+                    # den regelbasierten Pfad zurueck.
+                    schema=PersonaProfileSchema if is_individual else CollectivePersonaSchema,
+                    schema_name="persona_profile" if is_individual else "collective_persona",
                     context="persona",
                     force_no_thinking=True,
                 )
@@ -918,7 +1080,9 @@ class OasisProfileGenerator:
                     )
                     result["voice_register"] = "neutral-de"
 
-                missing_fields = self._validate_profile_metadata(result)
+                missing_fields = self._validate_profile_metadata(
+                    result, is_collective=not is_individual
+                )
                 if missing_fields:
                     last_error = ValueError(
                         f"Missing required persona metadata: {', '.join(missing_fields)}"
@@ -952,9 +1116,27 @@ class OasisProfileGenerator:
             ),
         )
 
-    def _validate_profile_metadata(self, result: Dict[str, Any]) -> List[str]:
-        """Validate and normalize structured fields that OASIS actually consumes."""
+    def _validate_profile_metadata(
+        self, result: Dict[str, Any], *, is_collective: bool = False
+    ) -> List[str]:
+        """Validate and normalize structured fields that OASIS actually consumes.
+
+        Issue #1246 (CodeRabbit PR #1257): Fuer Kollektive pruefen nur die
+        Felder, die eine Organisation ueberhaupt haben kann. Alter, Geschlecht,
+        MBTI und Berufsbezeichnung als fehlend zu melden hiesse, eine
+        vollstaendige Antwort dreimal zu verwerfen und auf den regelbasierten
+        Pfad zu fallen — dieselbe Falle wie beim Schema.
+        """
         missing_fields = []
+
+        if is_collective:
+            country = result.get("country")
+            if not isinstance(country, str) or not country.strip():
+                missing_fields.append("country")
+            register = result.get("voice_register")
+            if not isinstance(register, str) or register.strip() not in VOICE_REGISTERS:
+                missing_fields.append("voice_register")
+            return missing_fields
 
         age = result.get("age")
         if isinstance(age, str) and age.strip().isdigit():
@@ -1230,22 +1412,33 @@ Important:
         detail_level: Optional[dict] = None,
         demographic_slot: Optional[PersonaDemographicSlot] = None,
     ) -> str:
-        """Build detailed persona prompt for group/institutional entities — language-aware."""
+        """Build the collective persona prompt for group/institutional entities.
+
+        Issue #1246: Dieser Prompt forderte bis zu diesem Slice einen erfundenen
+        **Menschen** als Repraesentant der Organisation an — mit Alter,
+        Geschlecht, MBTI-Typ, Bildungsweg und "praegenden Erfahrungen". Eine
+        gGmbH hat davon nichts. Der Generator musste all das erfinden, und
+        genau so entstand aus dem Bildungstraeger "Nordharz Bildungswerk gGmbH"
+        ein "Juergen Hartmann, 57, Dozent fuer IT-Umschulungen und
+        Betriebsratsmitglied" — weder "Dozent" noch "Betriebsratsmitglied" war
+        aus der Quellentitaet ableitbar.
+
+        Der Prompt beschreibt jetzt das Kollektiv selbst: Auftrag, Interessen,
+        Positionen, Kommunikationsstil. Eine Kollektiv-Persona hat keine Vita,
+        also nichts, was erfunden werden koennte. Der Demografie-Slot wird
+        bewusst nicht eingespielt.
+
+        Das ist eine Darstellungs-, keine Architekturaenderung: Der
+        Simulations-Agent bleibt ein Agent und fuehrt weiterhin individuelle
+        Aktionen aus. Was sich aendert, ist die Selbstbeschreibung.
+        """
 
         detail = detail_level if detail_level is not None else _resolve_persona_detail_level()
         attrs_str = json.dumps(entity_attributes, ensure_ascii=False) if entity_attributes else "Keine"
         context_str = context[:detail['context_limit']] if context else "Keine zusätzlichen Informationen"
 
-        _quota_block_de_grp = build_name_quota_prompt_block()
-        _industry_block_de_grp = build_industry_quota_prompt_block(self._industry_quota_plan)
-        _slot_block = (
-            self._build_demographic_slot_prompt_block(demographic_slot)
-            if demographic_slot is not None
-            else ""
-        )
-
         if self.language == "de":
-            return f"""Erzeuge einen realistischen **Menschen**, der als Repräsentantin/Repräsentant oder Mitarbeiter:in für die folgende Organisation / Gruppe auf Social Media spricht — keinen Institutions-Account. Bleibe nah an der bekannten Realität.
+            return f"""Beschreibe die folgende Organisation / Gruppe als **kollektive Stimme** im Szenario. Sie äußert sich als Organisation — nicht als erfundene Einzelperson. Erfinde KEINE Person, KEINEN Namen, KEINEN Lebenslauf.
 
 Organisation/Gruppe: {entity_name}
 Typ: {entity_type}
@@ -1255,34 +1448,21 @@ Attribute: {attrs_str}
 Kontext:
 {context_str}
 
-{_quota_block_de_grp}
-
-{_industry_block_de_grp}
-
-{_slot_block}
-
 Antworte als JSON mit folgenden Feldern:
 
-1. display_name: Echter Vor- und Nachname einer Person — entsprechend der obigen Namensverteilung. KEIN Organisationsname.
-2. handle: Kurzes Social-Media-Handle der Person in Kleinbuchstaben (z. B. "lena_hoffmann"). Keine Zahlen.
-3. bio: Social-Bio der Person, max. 200 Zeichen, Deutsch. Darf die Rolle in der Organisation erwähnen (z. B. "Senior Tech-Recruiter @TalentCore | Karriereberatung für Quereinsteiger").
-4. persona: Ausführliche Personen-Beschreibung ({detail['word_count_de']}, Fließtext, Deutsch). Enthalten:
-   - Eckdaten (Alter, Bildungsweg, Wohnort)
-   - Rolle in/Beziehung zur Organisation "{entity_name}" (Position, Dauer, Aufgaben)
-   - Persönlicher Hintergrund (wie kam sie/er dahin, prägende Erfahrungen)
-   - Persönlichkeit (MBTI, Kernzüge, emotionaler Ausdruck)
-   - Social-Media-Verhalten (Frequenz, Themen, Stil — offizielle Linie vs. persönliche Meinung)
-   - Haltungen (wo vertritt sie/er die Organisation, wo eigene Meinung)
-   - Eigenheiten (Sprachmarotten, Hobbys)
-   - Erinnerungen (Bezug zu Ereignissen im Kontext der Organisation)
-5. age: Ganzzahl 25–65 (arbeitsfähiges Alter einer:s Repräsentant:in). Variieren, nicht auf 30/40 festnageln.
-6. gender: Genau einer von "male", "female", "nonbinary". KEIN "other".
-7. mbti: MBTI-Typ (z. B. INTJ, ENFP)
-8. country: ISO-Land in Englisch (z. B. "DE", "AT", "CH")
-9. profession: Konkrete Rolle bei/Beziehung zu "{entity_name}" (z. B. "Senior Tech-Recruiter bei TalentCore GmbH", "Developer Advocate bei Docker Inc.", "Redakteur bei alexle135.de").
-10. interested_topics: Array deutscher Themen-Strings
-11. voice_register: Genau einer von "formal-de" | "neutral-de" | "technical-de" | "skeptisch-de".
-    Passend zu Rolle und Kontext der Persona bei "{entity_name}":
+1. bio: Kurzbeschreibung der Organisation, max. 200 Zeichen, Deutsch. Was sie ist und wofür sie steht.
+2. persona: Ausführliche Beschreibung der Organisation ({detail['word_count_de']}, Fließtext, Deutsch). Enthalten:
+   - Auftrag und Zuständigkeit (wofür ist sie da, woran wird sie gemessen)
+   - Verhältnis zum Szenario (was betrifft sie daran konkret)
+   - Interessenlage (was gewinnt sie, was verliert sie)
+   - Bekannte Positionen und typische Argumentationslinien
+   - Kommunikationsverhalten (wie äußert sie sich öffentlich, wie förmlich, wie schnell)
+   - Konfliktlinien zu anderen Beteiligten
+   Schreibe durchgehend über die Organisation ("Der Träger…", "Die Kammer…"), nie über eine Einzelperson.
+3. country: ISO-Land in Englisch (z. B. "DE", "AT", "CH")
+4. interested_topics: Array deutscher Themen-Strings
+5. voice_register: Genau einer von "formal-de" | "neutral-de" | "technical-de" | "skeptisch-de".
+    Passend zu Auftrag und Kontext von "{entity_name}":
     - "formal-de": gehoben, Sie-Form, Behörden-/Konzern-Ton, keine Anglizismen.
     - "neutral-de": alltagssprachlich, Du-Form möglich, keine Werbesprache.
     - "technical-de": präzise, Fachvokabular, knapp, kein Marketing.
@@ -1292,15 +1472,12 @@ Wichtig:
 - Antworte ausschließlich mit JSON.
 - Texte auf Deutsch.
 - Keine unescapten Zeilenumbrüche.
-- display_name MUSS ein echter Personenname sein, NICHT der Name der Organisation.
-- gender MUSS "male"/"female"/"nonbinary" sein, age MUSS im Bereich 25–65 liegen.
+- KEIN Alter, KEIN Geschlecht, KEIN MBTI-Typ, KEINE Berufsbezeichnung — eine Organisation hat davon nichts.
+- KEIN erfundener Personenname. Die Organisation spricht unter ihrem eigenen Namen.
 - voice_register MUSS eines der vier exakten Werte sein.
 """
 
-        _quota_block_en_grp = build_name_quota_prompt_block_en()
-        _industry_block_en_grp = build_industry_quota_prompt_block_en(self._industry_quota_plan)
-
-        return f"""Generate a realistic **human person** who speaks FOR the following organization/group on social media — not an institutional account. The person can be an employee, advocate, official representative, or community member.
+        return f"""Describe the following organization/group as a **collective voice** in the scenario. It speaks as an organization — not as an invented individual. Do NOT invent a person, a name, or a biography.
 
 Organization/Group: {entity_name}
 Entity Type: {entity_type}
@@ -1310,43 +1487,30 @@ Entity Attributes: {attrs_str}
 Context Information:
 {context_str}
 
-{_quota_block_en_grp}
-
-{_industry_block_en_grp}
-
-{_slot_block}
-
 Please generate JSON containing the following fields:
 
-1. display_name: Realistic first + last name of a person — following the name distribution above (DACH Mikrozensus 2024). NOT the organization's name.
-2. handle: Short lowercase social handle of the person (e.g. "lena_hoffmann"). Do not append digits.
-3. bio: Personal social bio, 200 characters. May reference the role (e.g. "Senior Recruiter @TalentCore | hiring engineers").
-4. persona: Detailed person description ({detail['word_count_en']} of pure text), must include:
-   - Basic information (age, education, location)
-   - Role in / relationship to "{entity_name}" (position, tenure, responsibilities)
-   - Personal background (how they got there, formative experiences)
-   - Personality traits (MBTI, core personality)
-   - Social media behavior (frequency, topics, style — official line vs. personal view)
-   - Positions (where they represent the org, where they share personal opinion)
-   - Unique features (catchphrases, hobbies)
-   - Memories (connection to events in the org's context)
-5. age: Integer 25–65 (working-age representative). Vary — do not pin to 30 or 40.
-6. gender: Exactly one of "male", "female", "nonbinary". NOT "other".
-7. mbti: MBTI type (e.g., INTJ, ENFP)
-8. country: Country ISO code (e.g., "DE", "AT", "CH")
-9. profession: Concrete role at/relation to "{entity_name}" (e.g. "Senior Tech Recruiter at TalentCore GmbH", "Developer Advocate at Docker Inc.").
-10. interested_topics: Array of topics
-11. voice_register: Exactly one of "formal-de" | "neutral-de" | "technical-de" | "skeptisch-de".
-    Choose based on role at "{entity_name}":
+1. bio: Short description of the organization, 200 characters. What it is and what it stands for.
+2. persona: Detailed description of the organization ({detail['word_count_en']} of pure text), must include:
+   - Mandate and remit (what it exists for, what it is measured on)
+   - Relationship to the scenario (what concretely affects it)
+   - Interests (what it stands to gain or lose)
+   - Known positions and typical lines of argument
+   - Communication behaviour (how it speaks publicly, how formal, how fast)
+   - Lines of conflict with other participants
+   Write throughout about the organization, never about an individual.
+3. country: Country ISO code (e.g., "DE", "AT", "CH")
+4. interested_topics: Array of topics
+5. voice_register: Exactly one of "formal-de" | "neutral-de" | "technical-de" | "skeptisch-de".
+    Choose based on the mandate of "{entity_name}":
     - "formal-de": elevated style, formal address, bureaucratic tone, no anglicisms.
     - "neutral-de": everyday language, casual address, no marketing speak.
     - "technical-de": precise, specialist vocabulary, concise, no marketing.
     - "skeptisch-de": critical, questioning, uses quotation marks for buzzwords.
 
 Important:
-- All field values must be strings or numbers, no null values allowed
-- display_name MUST be a real personal name, NEVER the organization's name.
-- gender MUST be "male"/"female"/"nonbinary"; age MUST be in 25–65.
+- All field values must be strings or arrays, no null values allowed
+- NO age, NO gender, NO MBTI type, NO profession — an organization has none of these.
+- NO invented personal name. The organization speaks under its own name.
 - persona must be coherent, no newlines.
 - voice_register MUST be one of the four exact values listed above.
 - Use English."""
@@ -1427,6 +1591,38 @@ Important:
             payload["generation_error"] = generation_error
         return payload
 
+    def _build_collective_payload(
+        self,
+        entity_name: str,
+        entity_type: str,
+        entity_summary: str,
+    ) -> Dict[str, Any]:
+        """Regelbasierte Kollektiv-Persona fuer Gruppen-Entitaeten (#1246).
+
+        Bewusst eine eigene Methode und kein Zweig im Personen-Pfad: Alter,
+        Geschlecht, Persoenlichkeitstyp und Beruf sind die vier Felder, die es
+        an einer Institution nicht zu wissen gibt. Wer sie hier fuellt,
+        erfindet — genau so wurde aus einem Bildungstraeger ein "Dozent und
+        Betriebsratsmitglied".
+        """
+        return {
+            "display_name": entity_name,
+            "handle": self._generate_username(entity_name),
+            "bio": (entity_summary[:150] if entity_summary else entity_name),
+            "persona": (
+                f"{entity_name} ist eine {entity_type}-Entität im Szenario und "
+                f"äußert sich als Organisation, nicht als Einzelperson. "
+                f"{entity_summary}"
+            ).strip(),
+            "age": None,
+            "gender": None,
+            "mbti": None,
+            "country": "DE",
+            "profession": None,
+            "interested_topics": ["Organisation", "Positionen"],
+            "voice_register": self._rule_based_voice_register(entity_type.lower(), ""),
+        }
+
     def _build_rule_based_payload(
         self,
         entity_name: str,
@@ -1444,6 +1640,12 @@ Important:
         )
         assigned_age = demographic_slot.age if demographic_slot is not None else None
         assigned_mbti = demographic_slot.mbti if demographic_slot is not None else None
+
+        # Issue #1246: Kollektiv-Fallback. Sichtbar vor allen Personenzweigen,
+        # damit eine Organisation gar nicht erst in einen Pfad geraet, der ihr
+        # eine Vita andichtet.
+        if self._is_group_entity(entity_type_lower):
+            return self._build_collective_payload(entity_name, entity_type, entity_summary)
 
         # Personen-Fallback: echter DACH-Name + breite Altersstreuung + realistisches Gender.
         if entity_type_lower in ["student", "alumni"]:
@@ -1513,21 +1715,55 @@ Important:
             }
 
         else:
-            # Default: behandeln wir als Person mit breiter Streuung.
-            dach = self._pick_dach_name(assigned_gender)
-            return {
-                "display_name": dach,
-                "handle": dach.lower().replace(" ", "_"),
-                "bio": entity_summary[:150] if entity_summary else f"{entity_type}: {entity_name}",
-                "persona": entity_summary or f"{dach} nimmt aktiv an sozialen Diskussionen teil.",
-                "age": assigned_age if assigned_age is not None else random.randint(20, 70),
-                "gender": assigned_gender,
-                "mbti": assigned_mbti or random.choice(self.MBTI_TYPES),
-                "country": "DE",
-                "profession": entity_type,
-                "interested_topics": ["Allgemein", "Gesellschaft"],
-                "voice_register": self._rule_based_voice_register(entity_type_lower, entity_type),
-            }
+            return self._build_generic_person_payload(
+                entity_name=entity_name,
+                entity_type=entity_type,
+                entity_summary=entity_summary,
+                assigned_gender=assigned_gender,
+                assigned_age=assigned_age,
+                assigned_mbti=assigned_mbti,
+            )
+
+    def _build_generic_person_payload(
+        self,
+        *,
+        entity_name: str,
+        entity_type: str,
+        entity_summary: str,
+        assigned_gender: str,
+        assigned_age: Optional[int],
+        assigned_mbti: Optional[str],
+    ) -> Dict[str, Any]:
+        """Default-Pfad: Entitaet ohne eigenen Zweig wird Person mit breiter Streuung.
+
+        Issue #1246: Zwei Defekte sassen hier. Der Personatext war die blanke
+        ``entity_summary`` — ohne den Namen, unter dem die Persona auftritt; der
+        Interview-Prompt setzte damit "Du bist Maria Martin" und eine
+        Beschreibung zusammen, die niemanden benennt. Und ``profession`` trug
+        den Entitaetstyp, was Berufsbezeichnungen wie "AIProvider" oder
+        "WorkingGroup" ergab. Wo nichts abzuleiten ist, bleibt das Feld leer.
+        """
+        dach = self._pick_dach_name(assigned_gender)
+        persona = (
+            f"{dach} steht im Szenario für „{entity_name}“. {entity_summary}".strip()
+            if entity_summary
+            else f"{dach} nimmt aktiv an sozialen Diskussionen teil."
+        )
+        return {
+            "display_name": dach,
+            "handle": dach.lower().replace(" ", "_"),
+            "bio": entity_summary[:150] if entity_summary else f"{entity_type}: {entity_name}",
+            "persona": persona,
+            "age": assigned_age if assigned_age is not None else random.randint(20, 70),
+            "gender": assigned_gender,
+            "mbti": assigned_mbti or random.choice(self.MBTI_TYPES),
+            "country": "DE",
+            "profession": None,
+            "interested_topics": ["Allgemein", "Gesellschaft"],
+            "voice_register": self._rule_based_voice_register(
+                entity_type.lower(), entity_type
+            ),
+        }
     
     def set_graph_id(self, graph_id: str):
         """Set knowledge graph ID for knowledge graph search"""
@@ -1607,9 +1843,22 @@ Important:
                         import csv
                         profiles_data = [p.to_twitter_format() for p in existing_profiles]
                         if profiles_data:
-                            fieldnames = list(profiles_data[0].keys())
+                            # Issue #1246 (CodeRabbit PR #1257): Spaltenmenge
+                            # ueber ALLE Profile vereinigen. ``to_twitter_format``
+                            # laesst nicht gesetzte Felder weg, und Kollektive
+                            # haben garantiert kein Alter, Geschlecht oder MBTI.
+                            # War das erste fertige Profil ein Kollektiv, warf
+                            # jedes spaetere Individualprofil
+                            # "dict contains fields not in fieldnames" — der
+                            # Fehler wurde unten geschluckt und die
+                            # Realtime-Datei blieb ab da veraltet.
+                            fieldnames: List[str] = []
+                            for row in profiles_data:
+                                for key in row:
+                                    if key not in fieldnames:
+                                        fieldnames.append(key)
                             with open(realtime_output_path, 'w', encoding='utf-8', newline='') as f:
-                                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                                writer = csv.DictWriter(f, fieldnames=fieldnames, restval="")
                                 writer.writeheader()
                                 writer.writerows(profiles_data)
                 except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
@@ -1770,6 +2019,15 @@ Important:
         seen_handles: set = set()
         for p in profiles:
             if p is None:
+                continue
+            # Issue #1246 (CodeRabbit PR #1257): Kollektive nehmen an der
+            # Personennamen-Dedup nicht teil. Zwei Organisationen mit gleichem
+            # Schlusstoken — "… GmbH", "… e.V." — galten hier als doppelter
+            # Nachname, und die zweite bekam einen zufaelligen DACH-Personen-
+            # namen zugewiesen, waehrend ihr Personatext weiter die
+            # Organisation beschreibt. Das ist exakt der Identitaetsbruch,
+            # den dieser Slice schliesst.
+            if p.persona_kind == "collective":
                 continue
             norm_name = (p.name or "").strip().lower()
             last_name = self._last_name(p.name or "")
@@ -1965,12 +2223,20 @@ Important:
                 "bio": profile.bio[:150] if profile.bio else f"{profile.name}",
                 "persona": profile.persona or f"{profile.name} is a participant in social discussions.",
                 "karma": profile.karma if profile.karma else 1000,
-                # OASIS required fields - ensure all have defaults
-                "age": profile.age if profile.age else 30,
-                "gender": self._normalize_gender(profile.gender),
-                "mbti": profile.mbti if profile.mbti else "ISTJ",
                 "country": profile.country if profile.country else "US",
             })
+            # Issue #1246 (CodeRabbit PR #1257): Die OASIS-Defaults gelten nur
+            # fuer Individuen. Vorher fuellte dieser Block Alter, Geschlecht und
+            # MBTI unbedingt auf — und schrieb damit genau die erfundene
+            # Demografie zurueck in reddit_profiles.json, die der Kollektivzweig
+            # entfernt. Die Realtime-Datei war korrekt, der finale Save
+            # ueberschrieb sie. Persona-Galerie und Simulation lesen diese Datei.
+            if profile.persona_kind != "collective":
+                item.update({
+                    "age": profile.age if profile.age else 30,
+                    "gender": self._normalize_gender(profile.gender),
+                    "mbti": profile.mbti if profile.mbti else "ISTJ",
+                })
 
             data.append(item)
 
