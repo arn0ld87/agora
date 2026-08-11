@@ -54,16 +54,18 @@ The demo shows:
 
 ## Reference run
 
-The current, critically documented end-to-end run in the repository examines the **domain migration `alexle135.de` → `alex-schneider.dev`** with **Gemini 3.6 Flash as the report writer**.
+The current, critically documented end-to-end run examines the **introduction of a self-hosted AI learning assistant at an AZAV-certified retraining provider**, over **20 simulation rounds** with **`gemini-3.6-flash` as the report writer** and **`gemini-embedding-2` (3072 dim) for the knowledge graph**.
 
-The run processed **30 loaded persona profiles** across six report sections. ReportV3 contains **24 claim rows but only 17 unique claim IDs**, plus **157 hypotheses with 157 unique IDs** and **133 data-gap rows with 41 unique gap IDs**. A red-team step reported **6 findings at `echo_index=0.690`**.
+It is the first run in which evidence binding actually works. Five preceding reports across four model configurations bound **zero or one** claim; this one binds **39**. Initial-post assignment lands on the semantically correct persona 8 times out of 8, because domain-specific entity typing makes type ≈ role.
 
-More important than the report conclusion is the behavior of the evidence layer: it caught several concrete Gemini overclaims, including invented legacy subdomains, an undocumented new email address, and overstated recruiting causality. At the same time, the same run openly exposes the current limitations: **compound claims can partially bypass the gate, claim/gap IDs are not yet unique across the report, and source context plus counter-evidence for recommendations remain incomplete.**
+Precisely because more of the pipeline works, the remaining gaps become measurable. Every quote now carries its **own** provenance anchor — and none of those anchors exists: the model invents them per persona, and the `seed_doc:` prefix bypasses the binding check entirely. All 39 claims sit at confidence `low` with the identical score, so the confidence measure distinguishes nothing. The same fact binds as SUPPORTED in section 1 and is deleted as unsupported in section 2. And across 20 rounds, 665 actions and 84 comments — with the two conflicting groups correctly separated for the first time — not one dislike and not one dissenting statement occurs.
 
 > [!NOTE]
 > This run is deliberately not a polished showcase. It documents both working guardrails and reproducible failure classes. It proves neither predictive validity nor real stakeholder behavior.
 
-**[→ Read the current reference run with guardrail findings, known failures, and priorities](./docs/reference-runs/2026-08-09-domain-migration/README.md)**
+**[→ Read the current reference run](./docs/reference-runs/2026-08-11-ki-lernassistent-20-runden/README.md)** · **[auf Deutsch](./docs/reference-runs/2026-08-11-ki-lernassistent-20-runden/README.de.md)**
+
+Earlier runs: [third run](./docs/reference-runs/2026-08-11-ki-lernassistent/README.md) (same domain, 10 rounds, `deepseek-v4-flash`) · [first](./docs/reference-runs/2026-08-09-domain-migration/README.md) and [second run](./docs/reference-runs/2026-08-09-domain-migration-v2/README.md) on the domain migration `alexle135.de` → `alex-schneider.dev`
 
 ---
 
