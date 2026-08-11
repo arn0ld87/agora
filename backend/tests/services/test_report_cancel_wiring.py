@@ -227,22 +227,61 @@ def test_report_agent_fassade_reicht_cancel_run_id_weiter():
     assert params["cancel_run_id"].kind is inspect.Parameter.KEYWORD_ONLY
 
 
-def test_resume_loescht_die_abbruchbegruendung():
-    """CodeRabbit PR #1251: `termination_reason` überlebte den Resume.
+def test_erfolgreicher_abschluss_loescht_die_abbruchbegruendung(tmp_path, monkeypatch):
+    """CodeRabbit PR #1262: `termination_reason` überlebte den Resume.
 
-    `update_run` lässt das Feld stehen, solange es nicht ausdrücklich
-    überschrieben wird. Ein abgebrochener, dann fortgesetzter und erfolgreich
-    beendeter Run stünde als `completed` da und wäre im Monitor trotzdem als
-    nutzerabgebrochen geführt.
+    Vorher prüfte dieser Test nur, ob der Quelltext den String
+    ``termination_reason=None`` enthält. Das wäre grün geblieben, wenn das
+    Schlüsselwort in den falschen Zweig gewandert oder toter Code geworden
+    wäre. Jetzt läuft der Endzustand gegen eine echte Registry.
+
+    Der Lebenszyklus ist der reale: abgebrochen → fortgesetzt → erfolgreich
+    beendet. Ohne den Fix stünde der Run als ``completed`` da und wäre im
+    Monitor gleichzeitig als nutzerabgebrochen geführt.
+    """
+    from app.services.report_generation import (
+        finish_cancelled_run,
+        finish_completed_run,
+    )
+
+    registry_dir = tmp_path / "reg"
+    registry_dir.mkdir()
+    monkeypatch.setattr(RunRegistry, "REGISTRY_DIR", str(registry_dir))
+    RunRegistry._instance = None
+    registry = RunRegistry()
+
+    record = registry.create_run("report_generate", "report_x")
+    run_id = record["run_id"]
+
+    finish_cancelled_run(run_id, report_id="report_x", simulation_id="sim_x")
+    cancelled = registry.get_run(run_id)
+    assert cancelled["status"] == "stopped"
+    assert cancelled["termination_reason"] == "user_cancel"
+
+    finish_completed_run(run_id, report_id="report_x", simulation_id="sim_x")
+    resumed = registry.get_run(run_id)
+    assert resumed["status"] == "completed"
+    assert resumed["termination_reason"] is None, (
+        "Der erfolgreich fortgesetzte Run trägt weiterhin die Abbruchbegründung"
+    )
+    assert resumed["progress"] == 100
+    assert resumed["resume_capability"]["available"] is False
+
+    RunRegistry._instance = None
+
+
+def test_resume_pfad_nutzt_den_gemeinsamen_endzustand():
+    """Der Resume-Handler darf den Endzustand nicht selbst nachbauen.
+
+    Sonst driftet er wieder von ``finish_completed_run`` ab — genau so ist die
+    Lücke entstanden.
     """
     import inspect
 
     from app.api import runs as runs_api
 
     source = inspect.getsource(runs_api._resume_report_generate)
-    assert "termination_reason=None" in source, (
-        "Der Resume-Erfolgspfad löscht die Abbruchbegründung nicht"
-    )
+    assert "finish_completed_run(" in source
 
 
 def test_registry_kann_die_abbruchbegruendung_ueberhaupt_loeschen(tmp_path, monkeypatch):
