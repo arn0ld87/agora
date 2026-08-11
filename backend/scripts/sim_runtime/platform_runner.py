@@ -3,12 +3,16 @@
 Verhaltensneutral aus ``run_twitter_simulation.py`` und
 ``run_reddit_simulation.py`` extrahiert: beide Runner-Klassen waren bis auf
 Plattform-Konfiguration (verfügbare Actions, Profile-Dateiname, DB-Dateiname,
-``oasis.DefaultPlatformType``, Graph-Generator) und das Handling von
-``initial_actions`` (Reddit appended an bestehende Listen, Twitter
-überschreibt) identisch.
+``oasis.DefaultPlatformType``, Graph-Generator) identisch.
 
-Plattform-spezifische Werte werden über Klassen-Attribute und die
-Template-Method ``_assign_initial_action`` injiziert; die Entry-Points
+Das Handling von ``initial_actions`` war ursprünglich ebenfalls verschieden —
+Reddit appendete an bestehende Listen, Twitter überschrieb. Das war kein
+Plattformunterschied, sondern ein Defekt: Twitter verwarf dadurch still
+Seed-Posts desselben Agenten (Issue #1245). ``_assign_initial_action`` liegt
+seitdem als gemeinsame Implementierung in dieser Basisklasse und ist **kein**
+Erweiterungspunkt mehr.
+
+Plattform-spezifische Werte werden über Klassen-Attribute injiziert; die Entry-Points
 (``run_twitter_simulation.py`` / ``run_reddit_simulation.py``) definieren
 dünne Subklassen plus Modul-Setup (Profiling, Parser, ``main``).
 
@@ -106,9 +110,10 @@ def setup_signal_handlers():
 class SinglePlatformRunner:
     """Single-platform OASIS simulation runner (Twitter/Reddit).
 
-    Subclasses setzen die Plattform-Konfiguration via Klassen-Attribute und
-    überschreiben ggf. ``_assign_initial_action`` für plattform-spezifisches
-    Initial-Posts-Handling.
+    Subclasses setzen die Plattform-Konfiguration via Klassen-Attribute.
+    ``_assign_initial_action`` ist bewusst nicht zu überschreiben: die
+    Kollisionsbehandlung für mehrere Seed-Posts desselben Agenten gilt für
+    beide Plattformen gleich (Issue #1245).
     """
 
     # --- Plattform-Konfiguration (von Subklasse zu setzen) ---
