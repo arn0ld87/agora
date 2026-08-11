@@ -108,22 +108,42 @@ Die Nachbearbeitung kann wesentlich länger dauern als das eigentliche Schreiben
 
 ## 2. Interviews sind eine zweite LLM-Befragung, keine Feed-Auswertung
 
-`interview_agents` liest nicht einfach die Posts der Simulation zusammen. Es startet **nach der Simulation eine zweite LLM-Befragung derselben Persona-Profile**.
+`interview_agents` liest nicht einfach die Posts der Simulation zusammen. Es startet **eine zusätzliche LLM-Befragung anhand der Persona-Profile**. Dabei gibt es zwei Transportpfade, die bei Audits nicht vermischt werden dürfen.
 
-Typischer Ablauf:
+### Lebender Simulations-Worker: IPC-Pfad
+
+Solange der OASIS-Worker noch pollt, routet `interview_client` die Anfrage über `SimulationIPCClient`. Ein Timeout dieses Pfads führt auf den Direct-Pfad zurück. Ein IPC-Interview ist deshalb eine Befragung über die noch lebende Simulationsumgebung.
+
+### Abgeschlossener Run: Direct-Pfad
+
+`completed`, `stopped` und `failed` gelten als terminale Runner-Zustände; für sie wird kein lebender IPC-Poller angenommen. `interview_client.interview_agents_batch(...)` delegiert dann an `interview_agents_batch_direct(...)`. Dieser Pfad läuft im Flask-Prozess über den zentralen `LLMClient` und nutzt persistierte Persona-Profile, Simulationskontext und Trace-DBs.
+
+Der Direct-Pfad ist **nicht automatisch dual-platform**:
+
+- Ein explizites `platform=twitter|reddit` wird verwendet, wenn dort Profile verfügbar sind.
+- Ohne Plattformvorgabe ist `reddit` der Default.
+- Fehlen dort Profile, wird auf die andere verfügbare Plattform ausgewichen.
+- Pro Interview-Request wird damit genau **eine** Plattform gewählt.
+
+`GraphToolsService.interview_agents(...)` ruft den Batch-Pfad mit `platform=None` auf und rendert das Ergebnis anschließend weiterhin in einer kompatiblen Twitter-/Reddit-Form. Für die nicht befragte Plattform erscheint dabei `(No response from this platform)`. **Dieser Platzhalter bedeutet nicht, dass ein zweites Plattform-Interview versucht wurde und gescheitert ist.**
+
+Typischer Report-Ablauf:
 
 ```text
 InterviewAgents deep interview (real API): <topic>
-Loaded 30 profiles from reddit_profiles.json
+Loaded 30 Agent profiles
 Selected 8 Agents for interview: [15, 29, 4, 7, 21, 9, 11, 14]
 Generated 4 interview questions
 Calling batch interview API (dual platform): 8 Agents
 Interview API returned: 8 results, success=True
 ```
 
+Die Logformulierung `dual platform` beschreibt hier die kompatible Ergebnisform, nicht zwingend zwei tatsächliche LLM-Befragungen pro Persona.
+
+Unabhängig vom Transportpfad gilt:
+
 - Der Report-Agent formuliert ein `interview_topic` und wählt Personas aus.
 - Daraus werden typischerweise 4–5 Fragen erzeugt.
-- Jede ausgewählte Persona wird pro Plattform befragt.
 - Die Antworten werden als `agent_interview`-Evidence verarbeitet.
 - Ein Zitat aus dem Bericht stammt deshalb häufig aus diesem Interview und **nicht** aus einem Simulationspost.
 
@@ -133,7 +153,7 @@ Interview API returned: 8 results, success=True
 
 **Rollenübernahme:** Der strukturelle Identitätsbruch aus #1246 ist code-seitig behoben, aber damit ist nicht bewiesen, dass jede Rollenübernahme verschwunden ist. Das `interview_topic` kann Rollen explizit nennen, und eine Persona kann weiterhin eine fremde Rolle formulieren. Die explizite Fremdrollen-Detektion für `agent_quote`-Evidence ist die noch offene Restarbeit aus #1248.
 
-**Zitat ≠ Simulationsäußerung:** Wer ein Report-Zitat im Feed sucht und dort nicht findet, hat damit noch keinen Provenance-Fehler bewiesen. Zuerst `agent_log.jsonl` und den Evidence-Typ prüfen.
+**Zitat ≠ Simulationsäußerung:** Wer ein Report-Zitat im Feed sucht und dort nicht findet, hat damit noch keinen Provenance-Fehler bewiesen. Zuerst `agent_log.jsonl`, den Evidence-Typ und den Interview-Pfad prüfen.
 
 ---
 
