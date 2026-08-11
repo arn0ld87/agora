@@ -1,28 +1,30 @@
 # CONTEXT.md — Wie Agora tatsächlich arbeitet
 
-Diese Datei erklärt die Laufzeit-Mechanik von Agora für Agenten und LLMs, die mit dem System oder seinen Artefakten arbeiten. Sie beschreibt, **was passiert**, nicht was wünschenswert wäre. Produktbeschreibung steht in [`README.md`](README.md), Arbeitsregeln in [`AGENTS.md`](AGENTS.md).
+Diese Datei erklärt die Laufzeit-Mechanik von Agora für Agenten und LLMs, die mit dem System oder seinen Artefakten arbeiten. Sie beschreibt **den verifizierten Istzustand**, nicht die Zielarchitektur. Produktbeschreibung steht in [`README.md`](README.md), Arbeitsregeln in [`AGENTS.md`](AGENTS.md), Release-Status in [`docs/STATUS.md`](docs/STATUS.md).
 
-> Kurzfassung in einem Satz: Agora zerlegt Dokumente in einen Wissensgraphen, leitet daraus Stakeholder-Personas ab, lässt diese in einer OASIS-Simulation auf zwei Social-Plattformen interagieren, befragt sie anschließend in Tiefeninterviews, und erzeugt daraus einen Bericht, dessen Aussagen einzeln gegen Evidence geprüft werden.
+> **Runtime-Verifikation:** gegen `main@a3cebd38f38fc2c0043dc245766869eb05b41e0f` am 2026-08-11 geprüft. Ändert ein PR die hier beschriebene Laufzeit-Mechanik, wird `CONTEXT.md` im selben PR nachgezogen und diese Referenz aktualisiert.
+
+> Kurzfassung: Agora zerlegt Dokumente in einen Wissensgraphen, leitet daraus geeignete Einzel- oder Kollektiv-Personas ab, lässt diese in einer OASIS-Simulation auf zwei Social-Plattformen interagieren, befragt ausgewählte Personas anschließend in separaten Tiefeninterviews und erzeugt daraus einen Bericht. **Extrahierte Claims** werden gegen Evidence gebunden; der Fließtext hat zusätzlich eine eigene, deutlich engere Prüfstrecke.
 
 ---
 
-## 1. Die fünf Phasen und ihre Artefakte
+## 1. Vier Laufzeitphasen plus Run-Registry
 
-Jede Phase erzeugt Artefakte mit stabilen IDs. Wer einen Lauf auswertet, arbeitet immer mit diesen IDs.
+Agora hat vier eigentliche Laufzeitphasen. Die Run-Registry ist die phasenübergreifende Klammer, keine fünfte Verarbeitungsphase.
 
 | Phase | Erzeugt | ID-Präfix |
 |---|---|---|
-| 1 Graph-Build | Neo4j-Knoten, Vektoren | `graph` = UUID |
-| 2 Prepare | Personas, Agent-Konfiguration | `sim_…` |
-| 3 Simulation | Zwei SQLite-DBs mit Posts, Kommentaren, Aktionen | `sim_…` |
-| 4 Report | Sections, Evidence-Map | `report_…` |
-| — Klammer | Run-Registry über alle Phasen | `run_…` |
+| 1 Graph-Build | Neo4j-Knoten, Relationen, Vektoren | `graph` = UUID |
+| 2 Prepare | gefilterte Entitäten, Personas, Agent- und Event-Konfiguration | `sim_…` |
+| 3 Simulation | Plattform-DBs, Aktionen, Posts, Kommentare, Laufzustand | `sim_…` |
+| 4 Report | Sections, Evidence-Map, Agent-Trace, Exporte | `report_…` |
+| Klammer | Run-Registry über alle Phasen | `run_…` |
 
 ### Phase 1 — Graph-Build
 
-Das Quelldokument wird gechunkt. Pro Chunk ein NER-Call gegen ein Pydantic-Schema (`NerExtractionResult`), der Entitäten und Relationen liefert, dann ein Batch-Embedding, dann ein Schreibvorgang nach Neo4j.
+Das Quelldokument wird gechunkt. Pro Chunk läuft ein strukturierter NER-Call gegen `NerExtractionResult`; danach folgen Embeddings und die Persistenz in Neo4j.
 
-```
+```text
 [graph_build] Chunk 12/48 (413 chars): "…"
 [ingestion] NER done: 5 entities, 4 relations
 [ingestion] Batch-embedding 9 texts...
@@ -30,161 +32,231 @@ Das Quelldokument wird gechunkt. Pro Chunk ein NER-Call gegen ein Pydantic-Schem
 Graph <uuid> marked as completed
 ```
 
-**Wichtig:** Die NER erfindet ihr Typvokabular pro Lauf neu. Dasselbe Dokument ergab mit drei Modellen drei disjunkte Vokabulare (`Lecturer`/`Employer` — `Organization`/`Student`/`Professor` — `FreelanceLecturer`/`PermanentLecturer`/`WorksCouncilMember`), und zwei Läufe mit demselben Modell ebenfalls unterschiedliche. Jede Logik, die auf `entity_type` matcht, ist damit lauf-abhängig.
+**Wichtig:** Das NER-Typvokabular ist nicht über Läufe stabil. Dasselbe Dokument kann mit verschiedenen Modellen oder sogar mit demselben Modell unterschiedliche Typen liefern, etwa `Lecturer`, `FreelanceInstructor`, `Organization` oder `WorksCouncilMember`. Logik, die `entity_type` als semantisch stabiles Rollenlabel behandelt, muss deshalb besonders geprüft werden. Die vollständige Bindung extrahierter Typen an die lauf-spezifische Ontologie ist auf dem oben genannten Runtime-Stand noch nicht abgeschlossen; siehe #1247.
 
 ### Phase 2 — Prepare
 
-Entitäten werden gefiltert und auf Persona-Eignung geprüft (`backend/app/services/persona_eligibility.py`, zwei Stufen):
+Prepare besteht aus mehreren Schutzstufen. Entscheidend ist, **welche Stufe welche Fehlerklasse abfängt**.
 
-1. **Harte Blockliste** über `entity_type` (`INELIGIBLE_ENTITY_TYPES`) — `city`, `software`, `date`, `concept`, `document`, `technology` u. a. „hat keinen menschlichen Träger".
-2. **Unbekannte Typen** werden konservativ **zugelassen** (Issue #1034) und geloggt.
+1. **Typbasierter Vorfilter.** `persona_eligibility.py` blockiert bekannte nicht-personenfähige Typen wie Stadt, Software, Datum, Konzept, Dokument oder Technologie. Unbekannte Typen werden weiterhin konservativ zugelassen; ein unbekanntes Label ist für sich allein kein Ausschlussgrund.
+2. **Dedup vor dem Cap.** Kandidaten werden über den normalisierten Schlüssel `(name, entity_type)` dedupliziert. Der erste Treffer gewinnt.
+3. **Typbewusster `max_agents`-Cap.** Wenn ein Cap greift, wird nicht einfach `entities[:max_agents]` verwendet. Die Auswahl läuft Round-Robin über die vorhandenen Typen, damit kleine Typgruppen nicht allein durch die Query-Reihenfolge verschwinden. Nicht ausgewählte Kandidaten bleiben als Reserve erhalten.
+4. **LLM-seitige Eignungsprüfung am Namen und Kontext.** Im ohnehin stattfindenden Persona-Generierungsaufruf darf das Modell `ineligible: true` zurückgeben. Eine solche Ablehnung ist von einem Generierungsfehler getrennt (`PersonaIneligible`) und kann aus dem Reservepool nachbesetzt werden. Das schließt den beobachteten Fall, dass etwa Software, Orte oder Dokumentverweise trotz des Typs `Organization` zu Personas wurden (#1247).
+5. **Persona-Art.** Individuen und Gruppen benutzen getrennte Verträge. Gruppen-/Organisationsentitäten werden als `persona_kind: collective` geführt und erhalten keine erfundene persönliche Vita mit Alter, Geschlecht, MBTI oder Beruf. Individuen bleiben `persona_kind: individual` (#1246).
+6. **Identitätsangleichung bei Individuen.** Wenn der Persona-Freitext mit einem erkennbaren Personennamen beginnt, wird dieser deterministisch auf den finalen Anzeigenamen ausgerichtet. Damit bekommt der nachgelagerte Interview-Prompt nicht mehr absichtlich zwei verschiedene Identitäten für dieselbe Persona.
 
-Danach eine Persona pro Entität, generiert in parallelen Einzel-Calls gegen `PersonaProfileSchema`. Jeder Call sieht nur seine eigene Entität.
+**Grenze der Eignungsprüfung:** Der regelbasierte/degradierte Persona-Pfad führt keine semantische LLM-Ablehnung durch. Ein LLM-Ausfall ist absichtlich nicht dasselbe wie `ineligible`; sonst würde ein Providerfehler still als fachlicher Ausschluss interpretiert. Bei Runs mit Degradierung muss deshalb `generation_source` in den finalen Profilen mitbewertet werden.
 
-```
-Persona-Eligibility: 36 von 48 Entitaeten tragen einen entity_type
-  ausserhalb der bekannten Liste und werden konservativ zugelassen
-Starting parallel generation of 50 agent personas (parallel count: 10)
-```
+Danach erzeugt `simulation_config_generator.py` unter anderem die `initial_posts` und ordnet Poster zu. Die Reihenfolge auf dem verifizierten Runtime-Stand ist:
 
-Anschließend baut `simulation_config_generator.py` die `initial_posts` und weist ihnen Poster-Agenten zu — Direct-Match über `entity_type`, dann eine Alias-Tabelle, dann Fallback auf den Agenten mit höchstem `influence_weight`.
+1. exakter Match auf `entity_name`,
+2. Match auf `entity_type`,
+3. bekannte Alias-Zuordnung,
+4. deterministischer Round-Robin-Fallback über die Fallback-Agenten.
+
+Der Fallback-Pool ist nach `influence_weight` absteigend und bei Gleichstand nach `agent_id` aufsteigend geordnet. Mehrere Posts dürfen legitim demselben Agenten zugeordnet sein.
 
 ### Phase 3 — Simulation
 
-Ein **eigener Subprozess** (OASIS/CAMEL) läuft zwei Plattformen parallel:
+Die eigentliche OASIS/CAMEL-Simulation läuft in einem **separaten Subprozess**. Twitter und Reddit werden parallel mit derselben Simulationskonfiguration betrieben, haben aber unterschiedliche Aktionsräume.
 
-| Plattform | Recsys | Aktionen |
+| Plattform | Recsys | produktiv zugelassene Aktionen |
 |---|---|---|
-| Twitter | `twhin-bert` | `create_post`, `quote_post`, `repost`, `like_post`, `follow`, `refresh` |
-| Reddit | `reddit` | `create_post`, `create_comment`, `like_post`, `like_comment`, `refresh` |
+| Twitter | `twhin-bert` | `create_post`, `like_post`, `repost`, `follow`, `do_nothing`, `quote_post` |
+| Reddit | `reddit` | `like_post`, `dislike_post`, `create_post`, `create_comment`, `like_comment`, `dislike_comment`, `search_posts`, `search_user`, `trend`, `refresh`, `do_nothing`, `follow`, `mute` |
 
-Twitter kennt **keine Kommentare** — `quote_post` übernimmt diese Rolle. Das ist kein Defekt.
+Twitter kennt **keine Kommentare**. `quote_post` ist die dortige zitierende Reaktionsform; `0 comments` auf Twitter ist deshalb erwartetes Verhalten.
 
-`max_rounds` schneidet die geplanten Runden ab (`Rounds truncated: 24 -> 10`).
+`max_rounds` kann die geplante Rundenzahl abschneiden:
+
+```text
+Rounds truncated: 24 -> 10
+```
+
+#### Initial-Posts werden plattformgleich gebaut
+
+Twitter und Reddit benutzen inzwischen denselben `build_initial_post_actions(...)`-Pfad (#1245). Mehrere Seed-Posts desselben Agenten werden als mehrere Aktionen erhalten und überschreiben sich nicht mehr gegenseitig.
+
+Der Log-Eintrag unterscheidet deshalb bewusst **Post-Anzahl** und **Zahl distinkter Poster-Agenten**:
+
+```text
+Published 9 initial posts from 1 distinct agent
+```
+
+Ein alter Lauf mit `Published 1 initial posts` kann noch aus dem früheren, fehlerhaften Zähler-/Publish-Pfad stammen und muss gegen den verwendeten Commit eingeordnet werden.
+
+#### Twitter-Recommender ist derzeit ein bekannter Validitäts-/Reproduzierbarkeitsfehler
+
+Auf `main@a3cebd3` ist #1236 offen: `Twitter/twhin-bert-base` ist ein MLM-Checkpoint ohne trainierten Pooler, OASIS liest aber `pooler_output`. Die fehlenden Pooler-Gewichte werden zufällig initialisiert. Das betrifft nur den Twitter-Recommender, nicht Reddit.
+
+Bis #1236 geschlossen und mit einem Reproduzierbarkeitstest belegt ist, sind Vergleiche zwischen Twitter-Läufen mit besonderer Vorsicht zu interpretieren.
 
 ### Phase 4 — Report
 
-Pro Section ein ReAct-Loop mit vier Tools, danach eine mehrstufige Nachbearbeitung.
+Pro Section läuft ein ReAct-Loop mit vier zentralen Tools, danach folgt die Evidence-/Validierungs-Nachbearbeitung.
 
 | Tool | Zweck |
 |---|---|
-| `insight_forge` | Tiefenanalyse gegen den Graphen, liefert Fakten-Listen |
+| `insight_forge` | Tiefenanalyse gegen Graph/Evidence, liefert Faktenlisten |
 | `panorama_search` | Breitensuche |
 | `quick_search` | gezielte Einzelabfrage |
-| `interview_agents` | **Tiefeninterview mit ausgewählten Agenten** |
+| `interview_agents` | nachgelagertes Tiefeninterview mit ausgewählten Personas |
+
+Die Nachbearbeitung kann wesentlich länger dauern als das eigentliche Schreiben der Section. Das bekannte Performanceproblem ist in #1190 dokumentiert; eine Optimierung darf die Evidence-Gates nicht verändern.
 
 ---
 
-## 2. Die Interviews — das am häufigsten missverstandene Stück
+## 2. Interviews sind eine zweite LLM-Befragung, keine Feed-Auswertung
 
-`interview_agents` ist **keine** Auswertung der Simulationsposts. Es ist eine **zweite, nachgelagerte LLM-Befragung** derselben Personas, nach Abschluss der Simulation.
+`interview_agents` liest nicht einfach die Posts der Simulation zusammen. Es startet **eine zusätzliche LLM-Befragung anhand der Persona-Profile**. Dabei gibt es zwei Transportpfade, die bei Audits nicht vermischt werden dürfen.
 
-Ablauf pro Section:
+### Lebender Simulations-Worker: IPC-Pfad
 
-```
+Solange der OASIS-Worker noch pollt, routet `interview_client` die Anfrage über `SimulationIPCClient`. Ein Timeout dieses Pfads führt auf den Direct-Pfad zurück. Ein IPC-Interview ist deshalb eine Befragung über die noch lebende Simulationsumgebung.
+
+### Abgeschlossener Run: Direct-Pfad
+
+`completed`, `stopped` und `failed` gelten als terminale Runner-Zustände; für sie wird kein lebender IPC-Poller angenommen. `interview_client.interview_agents_batch(...)` delegiert dann an `interview_agents_batch_direct(...)`. Dieser Pfad läuft im Flask-Prozess über den zentralen `LLMClient` und nutzt persistierte Persona-Profile, Simulationskontext und Trace-DBs.
+
+Der Direct-Pfad ist **nicht automatisch dual-platform**:
+
+- Ein explizites `platform=twitter|reddit` wird verwendet, wenn dort Profile verfügbar sind.
+- Ohne Plattformvorgabe ist `reddit` der Default.
+- Fehlen dort Profile, wird auf die andere verfügbare Plattform ausgewichen.
+- Pro Interview-Request wird damit genau **eine** Plattform gewählt.
+
+`GraphToolsService.interview_agents(...)` ruft den Batch-Pfad mit `platform=None` auf und rendert das Ergebnis anschließend weiterhin in einer kompatiblen Twitter-/Reddit-Form. Für die nicht befragte Plattform erscheint dabei `(No response from this platform)`. **Dieser Platzhalter bedeutet nicht, dass ein zweites Plattform-Interview versucht wurde und gescheitert ist.**
+
+Typischer Report-Ablauf:
+
+```text
 InterviewAgents deep interview (real API): <topic>
-Loaded 30 profiles from reddit_profiles.json
+Loaded 30 Agent profiles
 Selected 8 Agents for interview: [15, 29, 4, 7, 21, 9, 11, 14]
 Generated 4 interview questions
 Calling batch interview API (dual platform): 8 Agents
 Interview API returned: 8 results, success=True
 ```
 
-- Der Report-Agent formuliert ein **`interview_topic`** und wählt bis zu `max_agents` Personas aus, mit einer Begründung im Ergebnis (`Selection Rationale`).
-- Daraus werden **4–5 Fragen** generiert. Diese Fragen sind neutral formuliert („Welcher Moment lässt Sie am stärksten an der KI zweifeln?"), das **Thema** ist es nicht — es nennt regelmäßig konkrete Stakeholder-Gruppen.
-- Jede Persona antwortet **pro Plattform getrennt**. Twitter liefert häufig `(No response from this platform)`; die Reddit-Antwort trägt den Inhalt.
-- Die Antworten werden zu `agent_interview`-Evidence und sind in vielen Läufen der **größte Evidence-Typ**.
+Die Logformulierung `dual platform` beschreibt hier die kompatible Ergebnisform, nicht zwingend zwei tatsächliche LLM-Befragungen pro Persona.
 
-**Drei Eigenheiten, die man kennen muss:**
+Unabhängig vom Transportpfad gilt:
 
-1. **Frage-Echo.** Personas beginnen ihre Antwort oft mit der Formulierung der Frage („Die Akzeptanz bricht zuerst bei den Honorarkräften, konkret in dem Moment, wo …"). Wenn mehrere Personas dieselbe Frage bekommen, wirken ihre Antworten dadurch wie unabhängige Bestätigung, sind es aber nicht.
-2. **Rollenübernahme.** Personas präfixieren Antworten mit einer Rolle, die nicht ihre ist — eine Rechenzentrums-Technikerin antwortet „Als Betriebsrat hätte ich vorab klären müssen …". Der Report übernimmt diese Zuschreibung.
-3. **Zitat ≠ Simulationsäußerung.** Ein Zitat im Report stammt meist aus dem Interview, nicht aus einem Post der Simulation. Wer im Feed danach sucht, findet es nicht.
+- Der Report-Agent formuliert ein `interview_topic` und wählt Personas aus.
+- Daraus werden typischerweise 4–5 Fragen erzeugt.
+- Die Antworten werden als `agent_interview`-Evidence verarbeitet.
+- Ein Zitat aus dem Bericht stammt deshalb häufig aus diesem Interview und **nicht** aus einem Simulationspost.
+
+### Bekannte Interview-Effekte
+
+**Frage-Echo:** Mehrere Personas können Teile derselben Frage übernehmen. Gleiche Formulierungen sind dann keine unabhängigen Beobachtungen.
+
+**Rollenübernahme:** Der strukturelle Identitätsbruch aus #1246 ist code-seitig behoben, aber damit ist nicht bewiesen, dass jede Rollenübernahme verschwunden ist. Das `interview_topic` kann Rollen explizit nennen, und eine Persona kann weiterhin eine fremde Rolle formulieren. Die explizite Fremdrollen-Detektion für `agent_quote`-Evidence ist die noch offene Restarbeit aus #1248.
+
+**Zitat ≠ Simulationsäußerung:** Wer ein Report-Zitat im Feed sucht und dort nicht findet, hat damit noch keinen Provenance-Fehler bewiesen. Zuerst `agent_log.jsonl`, den Evidence-Typ und den Interview-Pfad prüfen.
 
 ---
 
-## 3. Das Evidence-Modell
+## 3. Evidence: Claim-Binding und Fließtextprüfung sind zwei verschiedene Dinge
 
-Jede Aussage des Berichts durchläuft eine Prüfung und landet in genau einer Kategorie.
+Die Aussage „jede Aussage im Bericht wird geprüft" ist zu grob und soll nicht verwendet werden.
+
+### Maschinenschicht: Claims
+
+Aus dem Section-Text werden Claims extrahiert und gegen Evidence gebunden.
 
 | Kategorie | Bedeutung |
 |---|---|
-| **Claim** | mit Evidence gebunden, `entailment: SUPPORTED` |
-| **Hypothese** | keine deckende Evidence gefunden → aus dem validierten Bestand entfernt |
-| **Data Gap** | benannte Lücke |
+| **Claim** | mit passender Evidence gebunden; stützende Bindung hat `entailment: SUPPORTED` |
+| **Hypothese** | nicht ausreichend belegt; gehört nicht in den validierten Claim-Bestand |
+| **Data Gap** | explizit benannte Informationslücke |
 
-Evidence-Typen im `evidence_index`:
+Typische Evidence-Records im `evidence_index`:
 
-```
+```text
 agent_interview     Antworten aus Phase 4
-seed_document       Sätze aus dem Quelldokument
+seed_document       belegbare Stellen aus dem Quelldokument
 relationship_chain  Pfade im Graphen
-agent_action        "IHK CREATE_POST on reddit in round 0"
-graph_metric        echo_chamber_index, cluster_count, …
+agent_action        Simulationsaktionen
+graph_metric        z. B. Cluster-/Echo-Kennzahlen
+web_search_result   optionale externe Recherche
+web_fetch           optionale externe Recherche
 ```
 
-### Zwei getrennte Prüfstellen — häufige Verwechslung
+Die Provenance-Schicht unterscheidet unter anderem `seed_corpus`, `agent_quote`, `agent_action`, `graph_relation`, `web_source` und `inferred`. Unbekannte Herkunft wird **nicht** automatisch zum Dokumentfakt.
 
-| | `claim_extraction_and_evidence_binding` | `verify_prose` |
+### Fließtext: `verify_prose`
+
+Die zweite Prüfstrecke ist enger:
+
+| | Claim-Binding | `verify_prose` |
 |---|---|---|
 | prüft | extrahierte Claims | Sätze im Fließtext |
-| Umfang | alle Claims | **nur Sätze mit einer Zahl** |
-| Ergebnis | Claim oder Hypothese | Satz bleibt oder wird entfernt |
+| Umfang | Claim-Kandidaten | derzeit nur erkannte numerische Faktenaussagen |
+| Ergebnis | Claim/Hypothese/Data Gap | Satz bleibt oder wird entfernt |
 
-`backend/app/services/report_agent/text_verification.py`:
+`backend/app/services/report_agent/text_verification.py` entscheidet über `_has_factual_claim(...)` anhand extrahierbarer Zahlenfakten.
 
-```python
-def _has_factual_claim(sentence: str) -> bool:
-    """Nur Sätze mit einer Zahl samt Bezugsgruppe sind prüfbare Faktenaussagen."""
-    return bool(extract_numeric_facts(sentence))
-```
+**Konsequenz:** Evidence-Map und ausgelieferte Prosa können auseinanderdriften. Ein qualitativer Satz wie „Die Simulation zeigt ein klares Ergebnis" wird nicht allein deshalb von `verify_prose` geprüft, weil er wie eine Tatsachenbehauptung klingt. Bei Audits deshalb immer Report **und** Evidence-Map lesen.
 
-**Folge:** Der Bericht kann 130 Hypothesen in der Maschinenschicht führen und im Text nur einen Satz pro Section verlieren. Text und Belegschicht driften auseinander. Ein Satz wie „Die Simulation zeigt ein klares Ergebnis" wird nie geprüft.
+### Cross-Stakeholder-Confidence
+
+Für hohe Confidence zählt nicht mehr nur der frei formulierte Jobtitel. `agent_quote`-Evidence kann `persona_role_family` tragen; dieses Label wird aus dem `source_entity_type` der Persona durchgereicht und für die Stakeholder-Diversität verwendet. Fehlt das Label, fällt der Code auf den Jobtitel zurück.
+
+Breite Auffangtypen wie `Person`, `Organization`, `Entity`, `Node`, `Unknown` und `Other` zählen **nicht** als Rollenfamilie. Für sie wird ebenfalls der normalisierte Jobtitel verwendet (#1248). Damit werden zwei fachlich verschiedene Organisationen nicht allein wegen des gemeinsamen Fallback-Typs zu einer Stimme zusammengezogen.
+
+**Verbleibende Grenze aus #1248:** Eine Interview-Antwort mit expliziter Fremdrollen-Zuschreibung verliert noch nicht automatisch ihre Eignung als `agent_quote`. Das Rollenfamilien-Label ist deshalb ein Diversitätsanker, aber kein vollständiger Rollenwahrheits-Validator.
 
 ### Zitat-Anker
 
-Zitate tragen `persona_id` und `seed_anchor`. Die Validierung in `backend/app/services/report_agent/evidence.py` prüft Anker gegen `known_anchors` — **außer** wenn sie mit `seed_doc:` beginnen:
+`<simulated_quote>`-Tags tragen `persona_id` und `seed_anchor`.
 
-```python
-# seed_doc:-Prefix ist immer akzeptiert (opaque Referenz)
-if not seed_anchor.startswith(_SEED_DOC_PREFIX):
-    if seed_anchor not in known_anchors:
-        unbound_refs.append(seed_anchor)
+Für echte Dokumentherkunft erzeugt Agora kanonische Anker der Form:
+
+```text
+seed_doc:<document_id>#chunk:<chunk_id>
 ```
 
-Beobachtet: Modelle setzen `seed_doc:`-Anker, die auf nichts verweisen — mal einen konstanten Wert für alle Zitate, mal pro Persona konstruierte wie `seed_doc:interview_<name>`. Beides passiert die Prüfung.
+Seit #1249 gilt `seed_doc:` **nicht mehr als Freikarte**. `validate_quote_anchors(...)` vergleicht jeden vorhandenen Anker mit `known_anchors`, unabhängig vom Präfix.
 
-Zusätzlich: Sections **ohne** `<simulated_quote>`-Tags gelten als valide. Ein Modell, das Personas wörtlich zitiert, ohne die Tag-Syntax zu verwenden, erzeugt keinen Verstoß.
+- fehlender `seed_anchor` → `invalid_quote`,
+- unbekannte `persona_id` bei konfigurierter Persona-Liste → `invalid_quote`,
+- vorhandener, aber nicht auflösbarer Anker → Eintrag in `unbound_evidence_refs`, das Zitat wird nicht allein deshalb verworfen,
+- auflösbarer Anker → gebunden.
+
+Das ist bewusst keine Garantie, dass jedes ausgelieferte Zitat vollständig gebunden ist. Ungebundene Referenzen bleiben sichtbar statt still akzeptiert zu werden.
+
+**Weitere Grenze:** Sections ohne `<simulated_quote>`-Tags bestehen die Quote-Tag-Prüfung. Ein Modell kann wörtliche Persona-Formulierungen in normaler Prosa verwenden, ohne dass dieser spezielle Validator anspringt. Das ist bei Audits separat zu prüfen.
 
 ---
 
 ## 4. Wo die Artefakte liegen
 
-Im Container `agora`:
+Im Standard-Container `agora`:
 
-```
+```text
 /app/backend/uploads/simulations/<sim_id>/
     simulation_config.json     agent_configs[], event_config.initial_posts[]
     run_state.json             runner_status, current_round, total_actions_count
-    reddit_profiles.json       die finalen 30–50 Personas
+    reddit_profiles.json       finale Persona-Profile
     twitter_simulation.db      SQLite
     reddit_simulation.db       SQLite
-    simulation.log             Subprozess-Log — NICHT auf Container-stdout
+    simulation.log             Subprozess-Log; nicht Container-stdout
 
 /app/backend/uploads/reports/<report_id>/
     outline.json               geplante Sections
-    section_01.md … NN.md      ausgelieferter Text
-    evidence_map.json          claims, hypotheses, data_gaps, evidence_index, gate_decision_log
-    agent_log.jsonl            jeder Tool-Call und jedes Tool-Result
-    console_log.txt            Phasenprotokoll mit Heartbeats
-    meta.json                  status, markdown_content, simulation_snapshot
+    section_01.md … NN.md      ausgelieferter Section-Text
+    evidence_map.json          Claims, Hypothesen, Data Gaps, Evidence-Index, Gates
+    agent_log.jsonl            Tool-Calls und Tool-Results
+    console_log.txt            Report-/Phasenprotokoll mit Heartbeats
+    meta.json                  Status, Markdown, Simulation-Snapshot
 ```
 
-`docker logs agora` zeigt Backend, Prepare und Report — **nicht** die Simulationsrunden. Die stehen in `simulation.log` im Container.
+`docker logs agora` zeigt Backend, Prepare und Report, aber nicht zuverlässig die eigentlichen Simulationsrunden. Für Phase 3 ist `simulation.log` im Simulationsverzeichnis die zentrale Quelle.
 
-### Sim-DB-Schema
+### Simulations-DB
 
-Beide Plattformen identisch:
+Die Plattform-DBs enthalten unter anderem:
 
 ```sql
 post(post_id, user_id, original_post_id, content, quote_content, created_at,
@@ -193,57 +265,62 @@ trace(user_id, created_at, action, info)
 comment, like, dislike, comment_like, comment_dislike, follow, mute, rec, user
 ```
 
-**Auswertungsfalle:** Reposts und Quotes sind eigene `post`-Zeilen mit gesetztem `original_post_id`; reine Reposts tragen **leeres `content`**. Ohne den Filter `original_post_id IS NULL` sieht jede Auswertung nach Mode-Collapse und leeren Posts aus, obwohl die Semantik korrekt ist.
+**Auswertungsfalle:** Reposts und Quotes sind eigene `post`-Zeilen mit `original_post_id`. Reine Reposts können leeres `content` tragen. Wer jede `post`-Zeile wie einen originären Text behandelt, erzeugt künstlich „leere Posts" und scheinbaren Mode-Collapse.
 
 ---
 
-## 5. Modell- und Provider-Routing
+## 5. Modell-, Provider- und Embedding-Routing
 
-Ein Lauf nutzt typischerweise **mehrere Modelle gleichzeitig**:
+Ein Run kann mehrere Modelle gleichzeitig verwenden.
 
-| Aufgabe | Schema | Beispiel |
+| Aufgabe | strukturierter Vertrag / Pfad | typische Granularität |
 |---|---|---|
-| Ontologie | `OntologyDefinition` | 1 Call |
-| NER | `NerExtractionResult` | 1 Call pro Chunk |
-| Personas | `PersonaProfileSchema` | 1 Call pro Entität |
-| Report | ReAct + Sections | viele |
+| Ontologie | `OntologyDefinition` | wenige Calls |
+| NER | `NerExtractionResult` | pro Chunk |
+| Individual-Persona | `PersonaProfileSchema` | pro Kandidat |
+| Kollektiv-Persona | `CollectivePersonaSchema` | pro Kandidat |
+| Report | ReAct + Section-Pipeline | viele Calls |
 
-Das Log meldet die Bindung explizit:
+Das Runtime-Log bindet Report-Routen an Provider/Modell und Run-Kontext, zum Beispiel:
 
-```
+```text
 Report LLM route locked provider_id=google model=models/gemini-3.6-flash
   [simulation_id=…, report_id=…, project_id=…, run_id=…]
 ```
 
-**Strukturierte JSON-Calls laufen ausschließlich über `LLMClient.chat_json` mit Pydantic-Schema.** Der rohe OpenAI-Client umgeht Provider-Detection, strict-json_schema und die JSON-Repair-Logik — siehe [`CLAUDE.md`](CLAUDE.md).
+Strukturierte JSON-Calls laufen über `LLMClient.chat_json` mit Pydantic-Schema. Provider-Routing, JSON-Schema und Repair-Logik dürfen nicht durch lokale Parallel-Heuristiken umgangen werden; siehe [`CLAUDE.md`](CLAUDE.md) und [`AGENTS.md`](AGENTS.md).
 
-### Embedding hat einen eigenen, getrennten Pfad
+### Embeddings haben einen getrennten Konfigurationspfad
 
 | Pfad | Konfigurationsquelle |
 |---|---|
 | Graph-Ingestion | Env `EMBEDDING_MODEL`, `EMBEDDING_BASE_URL`, `EMBEDDING_API_KEY` |
-| Re-Embedding / Migration | `EmbeddingConfigurationStore`, JSON unter `AGORA_DATA_DIR` |
+| Re-Embedding / Migration | `EmbeddingConfigurationStore` unter `AGORA_DATA_DIR` |
 
-Was in der Embedding-UI konfiguriert wird, erreicht den Graph-Build **nicht**. `VECTOR_DIM` wird aus `KNOWN_EMBEDDING_DIMS` abgeleitet; ein abweichender expliziter Wert löst einen Guard aus. Die Neo4j-Vektorindizes `entity_embedding` und `fact_embedding` müssen zur Dimension passen.
-
----
-
-## 6. Bekannte Fehlerbilder — nicht als neue Befunde melden
-
-Diese Beobachtungen sind dokumentiert und erklärt. Wer sie als Neufund meldet, verbrennt Zeit.
-
-| Beobachtung | Erklärung |
-|---|---|
-| `Failed to write data to connection … neo4j:7687`, gehäuft beim Simulationsstart | Docker-Bridge killt Bolt-Sockets in der Fork-Idle-Phase; `liveness_check_timeout` fängt es ab, der Treiber baut neu auf. Dokumentiert in `backend/app/storage/neo4j_storage.py`. Kein Defekt. |
-| Twitter hat 0 Kommentare | Twitter kennt keine; `quote_post` übernimmt die Rolle. |
-| Viele identische Posts, manche mit leerem `content` | Reposts und Quotes, siehe Auswertungsfalle oben. |
-| `pooler.dense.weight MISSING` beim Laden von `twhin-bert-base` | Bekannt, Issue #1236 — der Twitter-Recommender rankt über zufällig initialisierte Gewichte. |
-| Rohes Persona-Log zeigt Namens- und Gender-Kollaps | Der Dedup-Schritt repariert das. Maßgeblich ist `reddit_profiles.json`, nicht das Log. |
-| `Published N initial posts from M distinct agents` | Seit #1245 weist die Zeile beide Größen getrennt aus. `N` sind Posts, `M` distinkte Poster-Agenten. Ist `M` deutlich kleiner als `N`, liegen viele Seed-Posts auf wenigen Stimmen — das ist ein Befund, kein Rauschen (vgl. #1226). Die alte Form `Published 1 initial posts` zählte Agenten und nannte sie Posts; Logs aus Läufen vor #1245 sind entsprechend zu lesen. |
+Die Embedding-UI ist damit nicht automatisch die Konfigurationsquelle des Graph-Builds. `VECTOR_DIM` und die Neo4j-Vektorindizes müssen zur tatsächlich verwendeten Embedding-Dimension passen.
 
 ---
 
-## 7. Einen Lauf auswerten — Standardgriffe
+## 6. Bekannte Signaturen: Status unterscheiden, nicht pauschal ignorieren
+
+„Bekannt" bedeutet **nicht** „korrekt". Wenn eine Beobachtung bereits dokumentiert ist, zuerst Status und bestehendes Issue prüfen. Ein neuer Manifestationstyp, andere Ursache oder verletztes Akzeptanzkriterium bleibt ein legitimer neuer Befund.
+
+| Status | Beobachtung | Einordnung |
+|---|---|---|
+| `handled` | `Failed to write data to connection … neo4j:7687` gehäuft um den Simulationsstart | Bekannter Fork-/Idle-Socket-Effekt; `liveness_check_timeout` und Treiber-Reconnect behandeln den erwarteten Transienten. Nur eskalieren, wenn der Run dadurch fehlschlägt oder Daten verliert. |
+| `expected` | Twitter hat 0 Kommentare | Plattformmodell; Twitter nutzt `quote_post`, nicht `create_comment`. |
+| `expected` | Reposts/Quotes erzeugen zusätzliche Post-Zeilen, reine Reposts teils mit leerem `content` | DB-Semantik, kein originärer Leerpost. |
+| `fixed-code` | mehrere `initial_posts` mit demselben Poster | Seit #1245 werden sie für Twitter und Reddit gemeinsam aufgebaut und nicht mehr überschrieben. Aktuelles Log: `Published N initial posts from M distinct agents`. |
+| `fixed-code / rerun sinnvoll` | Persona-Anzeigename und Persona-Text beschrieben verschiedene Menschen; Organisationen bekamen erfundene persönliche Viten | Strukturell in #1246 geändert: Identitätsangleichung + `individual`/`collective`. Ein produktnaher Nachlauf bleibt der relevante Wirksamkeitsnachweis. |
+| `known-bug` | `pooler.dense.weight MISSING` bei `twhin-bert-base` | #1236; Twitter-Recommender nutzt auf diesem Runtime-Stand zufällig initialisierte Pooler-Gewichte. |
+| `known-bug` | Evaluationsdokument enthält erwartete Antworten/Meta-Text, die später als Befund wieder auftauchen | #1240; Testfall-Hygiene und Evidence-Typisierung. Solche Runs beweisen keinen isolierten Simulationsmehrwert. |
+| `known-gap` | Extrahierte `entity_type`-Werte sind nicht vollständig an die Lauf-Ontologie gebunden | Restarbeit aus #1247. Die typunabhängige Eignungsprüfung ist derzeit die tragende Schutzschicht. |
+| `known-gap` | Persona antwortet im Interview ausdrücklich aus einer fremden Rolle | Restarbeit aus #1248. Der Inhalt kann erhalten bleiben, darf aber bis zur Detektion nicht unkritisch als unabhängige Rollen-Evidence interpretiert werden. |
+| `fixed-code` | frei erfundene `seed_doc:`-Anker liefen ungeprüft durch | Seit #1249 werden auch `seed_doc:`-Anker gegen `known_anchors` geprüft und bei fehlender Bindung als `unbound_evidence_refs` sichtbar. |
+
+---
+
+## 7. Einen Run auswerten: Standardgriffe
 
 ```bash
 # Phasen und IDs
@@ -252,11 +329,22 @@ docker logs agora 2>&1 | grep -E "marked as completed|Create simulation|Simulati
 # Simulationsstand
 docker exec agora cat /app/backend/uploads/simulations/<sim_id>/run_state.json
 
-# Aktionsverteilung und Dislikes
+# Initial-Post-Publish prüfen
+docker exec agora grep -E "Published [0-9]+ initial posts" \
+  /app/backend/uploads/simulations/<sim_id>/simulation.log
+
+# Aktionsverteilung und Dislikes, Beispiel Reddit
 docker exec agora python -c "
 import sqlite3,collections
 c=sqlite3.connect('file:/app/backend/uploads/simulations/<sim_id>/reddit_simulation.db?mode=ro',uri=True)
 print(collections.Counter(r[0] for r in c.execute('select action from trace')))"
+
+# Persona-Arten und Degradierungen prüfen
+docker exec agora python -c "
+import json,collections
+p=json.load(open('/app/backend/uploads/simulations/<sim_id>/reddit_profiles.json'))
+print('kind', collections.Counter(x.get('persona_kind','legacy') for x in p))
+print('source', collections.Counter(x.get('generation_source','llm') for x in p))"
 
 # Evidence-Bilanz
 docker exec agora python -c "
@@ -265,20 +353,32 @@ m=json.load(open('/app/backend/uploads/reports/<report_id>/evidence_map.json'))
 for s in m['sections']:
     print(s['section_index'], len(s.get('claims') or []), len(s.get('hypotheses') or []))"
 
-# Woher stammt eine Aussage im Report?
+# Woher stammt eine konkrete Formulierung?
 docker exec agora grep -o '.\{200\}SUCHTEXT.\{100\}' \
   /app/backend/uploads/reports/<report_id>/agent_log.jsonl
 ```
 
-Der letzte Griff ist der wichtigste: **`agent_log.jsonl` enthält jeden Tool-Call und jedes Tool-Result.** Damit lässt sich jede Formulierung im Bericht bis zu ihrer Quelle zurückverfolgen — und feststellen, ob sie aus einem Interview, aus dem Graphen oder aus dem Quelldokument stammt.
+Der letzte Griff ist für Forensik der wichtigste: **`agent_log.jsonl` enthält Tool-Calls und Tool-Results.** Damit lässt sich feststellen, ob eine Formulierung aus einem Interview, aus Graph-/Seed-Evidence, aus Web-Recherche oder aus einer anderen Report-Stufe stammt.
+
+Für eine belastbare Bewertung eines Runs nicht nur auf `runner_status: completed` schauen. Mindestens zusätzlich prüfen:
+
+- finale Persona-Profile und `generation_source`,
+- Zahl und Verteilung der publizierten Initial-Posts,
+- Aktionsverteilung beider Plattformen,
+- Claims/Hypothesen/Data Gaps,
+- `unbound_evidence_refs` und Quote-Tags,
+- ob Kernaussagen bereits im Seed-Dokument standen,
+- bei Vergleichsläufen die Reproduzierbarkeitsgrenzen aus #1236 und #763.
 
 ---
 
 ## 8. Was Agora nicht ist
 
-- **Keine Verhaltensprognose.** Die Personas sind LLM-Konstrukte aus einem Dokument, keine Stichprobe. Der Bericht liefert mögliche Einwände und Konfliktlinien, keine Vorhersage.
-- **Kein Ersatz für Interviews oder Nutzertests.**
-- **Keine Garantie, dass ein Zitat belegt ist.** Zitate tragen Anker, deren Prüfung Lücken hat (Abschnitt 3).
-- **Keine Aussage darüber, was die Simulation beigetragen hat**, wenn das Quelldokument bereits Antworten enthält — siehe Issue #1240.
+- **Keine Verhaltensprognose.** Die Personas sind synthetische, dokumentbasierte LLM-Konstrukte und keine repräsentative Stichprobe.
+- **Kein Ersatz für reale Interviews, Nutzertests oder historische Vergleichsdaten.** Agora kann Hypothesen, Konfliktlinien und Datenlücken erzeugen, nicht reale Reaktionen garantieren.
+- **Keine Garantie, dass jedes Zitat hart gebunden ist.** Unauflösbare vorhandene Anker werden sichtbar als `unbound_evidence_refs` geführt; ungetaggte wörtliche Prosa fällt nicht automatisch in den Quote-Validator.
+- **Kein Nachweis des Simulationsbeitrags, wenn der Seed die Antworten bereits enthält.** Das ist der Kern von #1240.
+- **Noch kein vollständig reproduzierbares Experiment-System.** Run-Manifest/Replay (#763) und der Twitter-Recommender (#1236) sind dafür relevante offene Punkte.
+- **Noch keine systematisch kalibrierte Überlegenheit gegenüber einfacheren LLM-Baselines.** Diese Messung gehört zu #765 und muss auch negative Ergebnisse enthalten.
 
-Aktuelle Belege für alle vier Punkte stehen in den [Referenzläufen](docs/reference-runs/), die bewusst Fehlerklassen mitdokumentieren.
+Die Referenzläufe unter [`docs/reference-runs/`](docs/reference-runs/) dokumentieren bewusst nicht nur erfolgreiche Ergebnisse, sondern auch Fehlerklassen und Grenzen. Genau dafür sind sie wertvoll.
