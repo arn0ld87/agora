@@ -151,16 +151,16 @@ Aus dem Section-Text werden Claims extrahiert und gegen Evidence gebunden.
 | **Hypothese** | nicht ausreichend belegt; gehört nicht in den validierten Claim-Bestand |
 | **Data Gap** | explizit benannte Informationslücke |
 
-Typische Evidence-Typen im `evidence_index`:
+Typische Evidence-Records im `evidence_index`:
 
 ```text
 agent_interview     Antworten aus Phase 4
 seed_document       belegbare Stellen aus dem Quelldokument
 relationship_chain  Pfade im Graphen
 agent_action        Simulationsaktionen
-agent_post/quote    Persona-Äußerungen
 graph_metric        z. B. Cluster-/Echo-Kennzahlen
-web_*               optionale externe Recherche
+web_search_result   optionale externe Recherche
+web_fetch           optionale externe Recherche
 ```
 
 Die Provenance-Schicht unterscheidet unter anderem `seed_corpus`, `agent_quote`, `agent_action`, `graph_relation`, `web_source` und `inferred`. Unbekannte Herkunft wird **nicht** automatisch zum Dokumentfakt.
