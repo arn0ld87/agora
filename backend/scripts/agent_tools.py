@@ -577,7 +577,7 @@ def build_agent_prompt_with_tools(
 Bio: {agent_bio[:300]}
 
 ## Current Situation
-{observation[:800]}
+{observation[:1500]}
 
 ## Available Actions
 You can perform one of these actions: {action_names}
@@ -595,10 +595,30 @@ You can perform one of these actions: {action_names}
 </tool_call>
 3. You can call up to the configured tool-call limit in sequence. After each
    tool result, you will see the output and can call another tool or decide.
-4. Only AFTER you have gathered information, output your FINAL ACTION:
+4. Only AFTER you have gathered information, output your FINAL ACTION in <action> tags with the appropriate parameters.
+   If the action is a pairwise action, you MUST provide the target ID in your JSON payload:
+   - For LIKE_POST, DISLIKE_POST, REPOST, CREATE_COMMENT, QUOTE_POST, you MUST specify "post_id" (integer) of the post you are targeting.
+   - For CREATE_COMMENT, also specify "content" (string) for the comment's content.
+   - For QUOTE_POST, also specify "content" (string) for the quote's content.
+   - For LIKE_COMMENT, DISLIKE_COMMENT, you MUST specify "comment_id" (integer) of the comment you are targeting.
+   - For FOLLOW, MUTE, you MUST specify "agent_id" (integer) of the user you want to follow or mute.
+
 <action>
-{{"action": "ACTION_NAME", "content": "Your post content or action details"}}
+{{
+  "action": "ACTION_NAME",
+  "content": "Your post or comment content (if applicable)",
+  "post_id": 123,
+  "comment_id": 456,
+  "agent_id": 789
+}}
 </action>
+
+## Interaction and Conflict (IMPORTANT)
+Do not be overly polite, agreeable, or passive. In real-world social media, users frequently express dissent, disagreement, or opposition.
+If any post, comment, or opinion on your timeline contradicts your bio, beliefs, professional role, or political alignment, you should actively:
+- DISLIKE the post or comment, or
+- Write a reply comment with clear dissent, expressing disagreement, criticism, or alternative viewpoints.
+Ensure your actions and text content realistically reflect conflicts, concerns, or opposition exactly as your persona would in the real world.
 
 ## Response Language
 ALWAYS respond in {lang_instruction}.
@@ -611,7 +631,10 @@ ALWAYS respond in {lang_instruction}.
 [Tool results appear here...]
 
 <action>
-{{"action": "CREATE_POST", "content": "Based on the latest data, I think..."}}
+{{
+  "action": "CREATE_POST",
+  "content": "Based on the latest data, I think..."
+}}
 </action>
 
 Now decide your action."""
