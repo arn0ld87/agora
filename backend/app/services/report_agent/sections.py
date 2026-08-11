@@ -225,10 +225,11 @@ def mark_hypotheses_in_content(
     """Kennzeichnet Hypothesensätze direkt im narrativen Abschnitt (#1232).
 
     Das Evidence-Gate persistiert die atomisierte Aussage separat in
-    ``hypotheses[]``. Ohne diese Markierung blieb dieselbe Zeichenfolge im
-    Fließtext jedoch eine apodiktische Feststellung. Whitespace darf zwischen
-    Atomisierung und Markdown-Persistenz variieren; deshalb wird er beim
-    Abgleich flexibel behandelt.
+    ``hypotheses[]`` oder bei Überschreitung des sichtbaren Caps in
+    ``hypotheses_appendix[]``. Ohne diese Markierung blieb dieselbe
+    Zeichenfolge im Fließtext jedoch eine apodiktische Feststellung. Whitespace
+    darf zwischen Atomisierung und Markdown-Persistenz variieren; deshalb wird
+    er beim Abgleich flexibel behandelt.
     """
     if not content or not section:
         return content
@@ -236,7 +237,8 @@ def mark_hypotheses_in_content(
     marker = "**Hypothese (unbelegt):**"
     hypothesis_texts = {
         str(hypothesis.get("hypothesis_text") or "").strip()
-        for hypothesis in (section.get("hypotheses") or [])
+        for slot in ("hypotheses", "hypotheses_appendix")
+        for hypothesis in (section.get(slot) or [])
         if isinstance(hypothesis, dict)
         and str(hypothesis.get("hypothesis_text") or "").strip()
     }

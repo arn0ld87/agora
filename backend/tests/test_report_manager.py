@@ -366,6 +366,7 @@ def test_assemble_full_report_marks_hypotheses_and_renders_section_data_gaps(
     monkeypatch.setattr(ReportManager, "REPORTS_DIR", str(tmp_path))
     report_id = "report_abcdef123456"
     hypothesis_text = "Der Kipppunkt tritt ein, sobald die Akzeptanz sinkt."
+    appendix_hypothesis_text = "Ein zweiter Kipppunkt bleibt ebenfalls unbelegt."
     outline = ReportOutline(
         title="Demo",
         summary="Summary",
@@ -376,7 +377,10 @@ def test_assemble_full_report_marks_hypotheses_and_renders_section_data_gaps(
         1,
         ReportSection(
             title="Intro",
-            content=f"{hypothesis_text}\n\nEin belegter Kontext bleibt unverändert.",
+            content=(
+                f"{hypothesis_text}\n\n{appendix_hypothesis_text}\n\n"
+                "Ein belegter Kontext bleibt unverändert."
+            ),
         ),
     )
     ReportManager.save_evidence_map(report_id, {
@@ -395,6 +399,12 @@ def test_assemble_full_report_marks_hypotheses_and_renders_section_data_gaps(
                 "rationale": "Keine stützende Evidence gebunden.",
                 "suggested_evidence": ["Stakeholder-Interview nacherheben"],
             }],
+            "hypotheses_appendix": [{
+                "hypothesis_id": "hypothesis_06",
+                "hypothesis_text": appendix_hypothesis_text,
+                "rationale": "Mehr als fünf Hypothesen in diesem Abschnitt.",
+                "suggested_evidence": [],
+            }],
             "data_gaps": [{
                 "gap_id": "gap_01",
                 "claim_text": hypothesis_text,
@@ -408,6 +418,7 @@ def test_assemble_full_report_marks_hypotheses_and_renders_section_data_gaps(
     narrative = markdown.split("### Hypothesen ohne Evidence", 1)[0]
 
     assert f"**Hypothese (unbelegt):** {hypothesis_text}" in narrative
+    assert f"**Hypothese (unbelegt):** {appendix_hypothesis_text}" in narrative
     assert "Ein belegter Kontext bleibt unverändert." in narrative
     assert "### Hypothesen ohne Evidence" in markdown
     assert "### Datenlücken dieses Abschnitts" in markdown
