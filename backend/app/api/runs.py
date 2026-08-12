@@ -29,6 +29,7 @@ from ..container import get_container
 from ..services.graph_builder import GraphBuilderService  # noqa: F401
 from ..services.graph_tools import GraphToolsService
 from ..services.llm_routing_seed import (
+    build_route_subprocess_env,
     build_runtime_llm_config,
     resolve_route_api_key,
     seed_run_stage_routing,
@@ -971,20 +972,119 @@ def _resume_report_generate(run: dict):
     return {"run_id": run["run_id"], "task_id": task_id, "status": "processing"}
 
 
+def _replay_simulation_run(run: dict, run_id: str, overrides):
+    """Klont die Original-Simulation per ``create_branch`` und startet sie neu.
+
+    ``create_branch`` liefert bereits Config+Profile-Klon inklusive
+    ``llm_model``-Override auf ``READY`` — danach läuft exakt derselbe
+    Start-Flow wie ``POST /api/simulation/start`` (Routing auflösen, Route
+    sperren, Subprozess starten).
+
+    Rückgabe: entweder ein dict ``{run_id, status}`` (Erfolg) oder eine
+    fertige Flask-Error-Response (``json_error(...)``).
+    """
+    simulation_id = (run.get("linked_ids") or {}).get("simulation_id")
+    if not simulation_id:
+        return json_error("Run is missing simulation_id linkage", status=409)
+
+    manager = SimulationManager()
+    source_state = manager.get_simulation(simulation_id)
+    if not source_state:
+        return json_error(f"Simulation does not exist: {simulation_id}", status=404)
+
+    branch_overrides: dict = {}
+    llm_model_override = None
+    if overrides is not None:
+        if overrides.ai_model_ref is not None:
+            branch_overrides["llm_model"] = overrides.ai_model_ref.get("model_id")
+            llm_model_override = overrides.ai_model_ref.get("model_id")
+
+    branch_state = manager.create_branch(
+        simulation_id,
+        f"replay-of-{run_id}",
+        copy_profiles=True,
+        copy_report_artifacts=False,
+        overrides=branch_overrides,
+    )
+    new_simulation_id = branch_state.simulation_id
+
+    with RunLifecycle.begin(
+        run_registry,
+        "simulation_run",
+        new_simulation_id,
+        parent_run_id=None,
+        replayed_from_run_id=run_id,
+        failure_message="Replay failed: {exc_type}",
+        progress=0,
+        message=f"Replay of {run_id} queued",
+        linked_ids={
+            "simulation_id": new_simulation_id,
+            "project_id": branch_state.project_id,
+        },
+        artifacts=_simulation_artifacts(new_simulation_id),
+        resume_capability={"available": True, "action": "resume", "label": "Resume run"},
+        branch_label=branch_state.branch_name,
+        metadata={
+            "graph_id": branch_state.graph_id,
+            "branch_name": branch_state.branch_name,
+            **(
+                {"replay_overrides": overrides.model_dump(exclude_none=True)}
+                if overrides is not None
+                else {}
+            ),
+        },
+    ) as lifecycle:
+        new_run = lifecycle.record
+        new_run_id = new_run["run_id"]
+
+        seed_run_stage_routing(
+            new_run_id,
+            "simulation_rounds",
+            llm_model_override=llm_model_override,
+            llm_runtime=None,
+        )
+        route_router = StageModelRouter(new_run_id)
+        resolved_route = route_router.resolve("simulation_rounds")
+        route_router.lock_stage("simulation_rounds", resolved_route)
+        resolved_api_key = resolve_route_api_key(resolved_route, None)
+
+        SimulationRunner.start_simulation(
+            simulation_id=new_simulation_id,
+            platform="parallel",
+            runtime_env=build_route_subprocess_env(
+                resolved_route, resolved_api_key, new_run_id
+            ),
+        )
+        manager._set_status(branch_state, SimulationStatus.RUNNING)
+        lifecycle.succeed(status="processing", message=f"Replay of {run_id} started")
+
+    return {"run_id": new_run["run_id"], "status": "processing"}
+
+
 @runs_bp.route("/<run_id>/replay", methods=["POST"])
 @handle_api_errors(logger=logger, log_prefix="Failed to replay run")
 def replay_run(run_id: str):
     """POST /api/runs/<run_id>/replay — Neuen Run aus Manifest starten (Issue #763).
 
-    Liest das manifest.json des Original-Runs und erzeugt einen neuen Run
-    mit identischer Konfiguration. Optionale Overrides erlauben Varianten-
-    Replay mit anderem Seed-Dokument, Seed-Wert oder AI-Modell.
+    Klont die Original-Simulation (Config + Profile) in eine neue
+    ``simulation_id`` und startet sie. Optionale Overrides erlauben
+    Varianten-Replay mit anderem Seed-Wert oder AI-Modell.
+    ``seed_document_id``-Overrides sind noch nicht unterstützt — es gibt
+    keinen Mechanismus, einen Branch mit einem neuen Ausgangsdokument neu
+    vorzubereiten.
 
-    Antwort: 202 { run_id, status: "pending" }
+    Antwort: 202 { run_id, status: "processing" }
     """
     run, error = _get_run_or_404(run_id)
     if error:
         return error
+
+    if run.get("run_type") != "simulation_run":
+        return json_error(
+            f"Replay is only supported for simulation_run in this version "
+            f"(run_type={run.get('run_type')!r})",
+            status=409,
+        )
 
     manifest_path = os.path.join(ArtifactLocator.run_dir(run_id), "manifest.json")
     if not os.path.exists(manifest_path):
@@ -1005,27 +1105,21 @@ def replay_run(run_id: str):
         except ValidationError as exc:
             return json_error(exc.errors(), status=400)
 
-    # Neuen Run anlegen
-    new_run = run_registry.create_run(
-        run_type=run.get("run_type", "simulation_run"),
-        entity_id=run.get("entity_id", ""),
-        replayed_from_run_id=run_id,
-        status="pending",
-        message=f"Replay of {run_id}",
-        linked_ids=dict(run.get("linked_ids", {}) or {}),
-        metadata=dict(run.get("metadata", {}) or {}),
-    )
+    if overrides is not None and overrides.seed_document_id is not None:
+        return json_error(
+            "seed_document_id-Overrides werden noch nicht unterstützt — "
+            "es gibt keinen Mechanismus, einen Branch mit einem neuen "
+            "Ausgangsdokument neu vorzubereiten.",
+            status=400,
+            code="seed_document_override_unsupported",
+        )
 
-    # Overrides im neuen Run vermerken
-    if overrides is not None:
-        override_meta = overrides.model_dump(exclude_none=True)
-        if override_meta:
-            current_meta = dict(new_run.get("metadata", {}) or {})
-            current_meta["replay_overrides"] = override_meta
-            run_registry.update_run(new_run["run_id"], metadata=current_meta)
+    result = _replay_simulation_run(run, run_id, overrides)
+    if not isinstance(result, dict):
+        return result  # bereits eine fertige json_error(...)-Response
 
     from flask import make_response, jsonify
-    body = jsonify({"run_id": new_run["run_id"], "status": "pending"})
+    body = jsonify(result)
     return make_response(body, 202)
 
 
