@@ -14,10 +14,9 @@ Regeln:
 """
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 _STRICT = ConfigDict(extra="forbid")
 
@@ -96,8 +95,8 @@ class ManifestRuntime(BaseModel):
 
     model_config = _STRICT
 
-    started_at: datetime
-    completed_at: Optional[datetime] = None
+    started_at: AwareDatetime
+    completed_at: Optional[AwareDatetime] = None
     duration_seconds: Optional[int] = None
     rounds_completed: Optional[int] = None
     usage_summary: Optional[dict[str, Any]] = None
@@ -116,7 +115,7 @@ class RunManifest(BaseModel):
     schema_version: Literal[1] = 1
     run_id: str
     replayed_from_run_id: Optional[str] = None
-    captured_at: datetime
+    captured_at: AwareDatetime
 
     inputs: ManifestInputs
     versions: ManifestVersions

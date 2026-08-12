@@ -134,4 +134,33 @@ def test_missing_draft_manifest_does_not_raise(env):
     )
 
     _finalize_manifest_for_simulation(SIM_ID, state)
-    # Kein Assert nötig — bestehen heißt: keine Exception.
+
+    manifest_path = os.path.join(str(env), "runs", SIM_ID, "manifest.json")
+    assert not os.path.exists(manifest_path), (
+        "ohne Draft darf kein Manifest neu entstehen — best-effort heißt "
+        "'nichts tun', nicht 'stillschweigend ein leeres Manifest anlegen'"
+    )
+
+
+def test_budget_abort_gets_budget_termination_reason_not_user_cancel(env):
+    """Codex-Fund: STOPPED wird pauschal als user_cancel gemappt — auch für
+    Budget-Aborts, wo termination_reason den Budget-Grund tragen muss."""
+    run_id = _create_run_with_draft(env)
+
+    state = SimulationRunState(
+        simulation_id=SIM_ID,
+        runner_status=RunnerStatus.STOPPED,
+        started_at="2026-08-12T10:00:00",
+        completed_at="2026-08-12T10:10:00",
+        current_round=5,
+    )
+
+    _finalize_manifest_for_simulation(
+        SIM_ID, state, termination_reason_override="budget_tokens"
+    )
+
+    manifest_path = os.path.join(str(env), "runs", run_id, "manifest.json")
+    with open(manifest_path, encoding="utf-8") as f:
+        data = json.load(f)
+
+    assert data["runtime"]["termination_reason"] == "budget_tokens"

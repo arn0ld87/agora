@@ -1012,7 +1012,7 @@ def _replay_simulation_run(run: dict, run_id: str, overrides):
         run_registry,
         "simulation_run",
         new_simulation_id,
-        parent_run_id=None,
+        parent_run_id=run_id,
         replayed_from_run_id=run_id,
         failure_message="Replay failed: {exc_type}",
         progress=0,
@@ -1096,14 +1096,19 @@ def replay_run(run_id: str):
 
     # Overrides aus dem Request-Body parsen — body ist die ReplayRequest-Hülle
     # {overrides: {...}}, nicht die flachen ReplayOverrides-Felder selbst.
+    # model_validate() statt ReplayRequest(**body): **body wirft bei einem
+    # Nicht-Mapping-Body (z.B. einem JSON-Array) einen rohen TypeError statt
+    # einer ValidationError — @handle_api_errors hätte das als 500 beantwortet.
     overrides = None
     if request.is_json and request.get_json(silent=True):
         body = request.get_json(silent=True) or {}
         from ..contracts.run_manifest_contract import ReplayRequest
         try:
-            overrides = ReplayRequest(**body).overrides if body else None
+            overrides = ReplayRequest.model_validate(body).overrides if body else None
         except ValidationError as exc:
             return json_error(exc.errors(), status=400)
+        except TypeError:
+            return json_error("Request body must be a JSON object", status=400)
 
     if overrides is not None and overrides.seed_document_id is not None:
         return json_error(
@@ -1112,6 +1117,15 @@ def replay_run(run_id: str):
             "Ausgangsdokument neu vorzubereiten.",
             status=400,
             code="seed_document_override_unsupported",
+        )
+
+    if overrides is not None and overrides.random_seed is not None:
+        return json_error(
+            "random_seed-Overrides werden noch nicht unterstützt — es gibt "
+            "kein Runtime-Konzept für einen deterministischen Zufalls-Seed, "
+            "der an die Simulation durchgereicht werden könnte.",
+            status=400,
+            code="random_seed_override_unsupported",
         )
 
     result = _replay_simulation_run(run, run_id, overrides)

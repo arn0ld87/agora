@@ -11,7 +11,6 @@ from app.contracts.run_manifest_contract import (
     ManifestRouting,
     ManifestRuntime,
     ManifestSeeds,
-    ManifestStatus,
     ManifestVersions,
     PromptSnapshot,
     ReplayOverrides,
@@ -174,6 +173,36 @@ class TestRunManifest:
                 status="draft",
                 geheim_feld="sollte_nicht_drin_sein",  # type: ignore[call-arg]
             )
+
+    def test_rejects_naive_captured_at(self):
+        """Codex-Fund: captured_at muss tz-aware sein — sonst crasht der
+        Vergleich zwischen einem Draft-Manifest (tz-aware UTC) und einem
+        Legacy-Manifest, das vor dem tz-Fix erzeugt wurde."""
+        with pytest.raises(ValidationError):
+            RunManifest(
+                schema_version=1,
+                run_id="run_abc123def456",
+                captured_at=datetime(2026, 8, 12, 10, 0, 0),  # naiv, kein tzinfo
+                inputs=ManifestInputs(
+                    seed_document_hash="sha256:abc123",
+                    seed_document_filename="testfall.md",
+                    simulation_config_hash="sha256:def456",
+                    graph_id="graph_001",
+                ),
+                versions=ManifestVersions(
+                    agora_version="0.9.5",
+                    schema_version="1.0.0",
+                ),
+                routing=ManifestRouting(stages={}),
+                prompts=ManifestPrompts(entries={}),
+                seeds=ManifestSeeds(random_seed=42, simulation_id_seed="sim_abc123"),
+                status="draft",
+            )
+
+    def test_rejects_naive_runtime_started_at(self):
+        """Gleiche Anforderung für ManifestRuntime.started_at/completed_at."""
+        with pytest.raises(ValidationError):
+            ManifestRuntime(started_at=datetime(2026, 8, 12, 10, 0, 0))
 
 
 class TestReplayRequest:

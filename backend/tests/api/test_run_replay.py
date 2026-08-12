@@ -183,20 +183,23 @@ def test_replay_sets_replayed_from_run_id(env, monkeypatch):
 
 
 def test_replay_accepts_envelope_body_with_overrides(env, monkeypatch):
-    """Bug_002: Frontend sendet {overrides: {...}} — nicht die flachen Felder."""
+    """Bug_002: Frontend sendet {overrides: {...}} — nicht die flachen Felder.
+
+    ai_model_ref statt random_seed als Override, weil random_seed jetzt
+    explizit abgelehnt wird (siehe test_replay_rejects_random_seed_override)."""
     _stub_replay_infra(monkeypatch)
     run = _create_run_with_manifest(env["registry"], env["tmp_path"])
     run_id = run["run_id"]
 
     resp = env["client"].post(
         f"/api/runs/{run_id}/replay",
-        json={"overrides": {"random_seed": 42}},
+        json={"overrides": {"ai_model_ref": {"model_id": "gpt-4o"}}},
     )
 
     assert resp.status_code == 202, resp.get_json()
     payload = resp.get_json()
     new_run = env["registry"].get_run(payload["run_id"])
-    assert new_run["metadata"]["replay_overrides"]["random_seed"] == 42
+    assert new_run["metadata"]["replay_overrides"]["ai_model_ref"]["model_id"] == "gpt-4o"
 
 
 def test_replay_starts_a_worker_not_just_a_pending_record(env, monkeypatch):
@@ -308,6 +311,25 @@ def test_replay_new_run_has_fresh_linked_ids_not_original(env, monkeypatch):
     new_run = env["registry"].get_run(new_run_id)
     assert new_run["linked_ids"]["simulation_id"] == "sim_branch_fresh"
     assert new_run["linked_ids"]["simulation_id"] != "sim_test"
+    assert new_run["parent_run_id"] == run_id, (
+        "Codex-Fund: parent_run_id war hardcoded None — bricht die "
+        "Run-Hierarchie zwischen Original und Replay"
+    )
+
+
+def test_replay_bad_body_type_returns_400_not_500(env):
+    """Codex-Fund: ReplayRequest(**body) crasht mit TypeError statt
+    ValidationError, wenn body kein Mapping ist (z.B. ein JSON-Array) —
+    @handle_api_errors fängt das als 500 ab, statt 400 zu liefern."""
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+    run_id = run["run_id"]
+
+    resp = env["client"].post(
+        f"/api/runs/{run_id}/replay",
+        json=["not", "a", "mapping"],
+    )
+
+    assert resp.status_code == 400, resp.get_json()
 
 
 def test_replay_rejects_seed_document_override_not_yet_supported(env):
@@ -323,6 +345,23 @@ def test_replay_rejects_seed_document_override_not_yet_supported(env):
 
     assert resp.status_code == 400
     assert resp.get_json()["code"] == "seed_document_override_unsupported"
+
+
+def test_replay_rejects_random_seed_override_not_yet_supported(env):
+    """Codex-Fund: random_seed landete nur in Metadaten, wurde nie an
+    create_branch/seed_run_stage_routing/Subprozess durchgereicht — der
+    Override war wirkungslos. Lehnt jetzt analog zu seed_document_id ab,
+    statt einen wirkungslosen Replay zu starten."""
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+    run_id = run["run_id"]
+
+    resp = env["client"].post(
+        f"/api/runs/{run_id}/replay",
+        json={"overrides": {"random_seed": 42}},
+    )
+
+    assert resp.status_code == 400
+    assert resp.get_json()["code"] == "random_seed_override_unsupported"
 
 
 def test_replay_non_simulation_run_returns_409(env):
