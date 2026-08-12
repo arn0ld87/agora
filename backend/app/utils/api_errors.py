@@ -43,6 +43,7 @@ class ApiErrorCode(StrEnum):
 
     SIMULATION_NOT_PREPARED = "simulation_not_prepared"
     SIMULATION_ALREADY_RUNNING = "simulation_already_running"
+    SIMULATION_PREPARE_IN_PROGRESS = "simulation_prepare_in_progress"
     PERSONA_REVIEW_REQUIRED = "persona_review_required"
 
     GRAPH_BUILD_IN_PROGRESS = "graph_build_in_progress"
@@ -77,6 +78,7 @@ DEFAULT_MESSAGES: dict[ApiErrorCode, str] = {
 
     ApiErrorCode.SIMULATION_NOT_PREPARED: "Simulation noch nicht vorbereitet",
     ApiErrorCode.SIMULATION_ALREADY_RUNNING: "Simulation läuft bereits",
+    ApiErrorCode.SIMULATION_PREPARE_IN_PROGRESS: "Simulation wird bereits vorbereitet",
     ApiErrorCode.PERSONA_REVIEW_REQUIRED: "Persona-Review erforderlich",
 
     ApiErrorCode.GRAPH_BUILD_IN_PROGRESS: "Graph-Build läuft bereits",

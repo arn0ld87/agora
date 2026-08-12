@@ -9,6 +9,7 @@ from flask import Flask
 
 from app.api import simulation_bp
 from app.contracts.llm_routing_contract import ResolvedRoute
+from app.services.simulation_manager import SimulationStatus
 
 
 VALID_SIM_ID = "sim_0123456789ab"
@@ -47,6 +48,7 @@ def prepare_route_env(monkeypatch):
         llm_profile_id=None,
     )
     state = SimpleNamespace(
+        status=SimulationStatus.CREATED,
         project_id="proj_123",
         graph_id="graph_123",
         source_simulation_id=None,

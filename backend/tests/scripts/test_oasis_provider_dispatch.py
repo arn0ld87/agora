@@ -140,20 +140,27 @@ class TestCreateModelGeminiBranch:
         monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
         monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
 
-        mock_factory, calls = _make_model_factory_mock()
-
         import run_parallel_simulation as rps  # type: ignore[import]
-        monkeypatch.setattr(rps, "ModelFactory", mock_factory)
+        create_gemini = MagicMock(return_value=MagicMock())
+        monkeypatch.setattr(rps, "create_gemini_thought_signature_model", create_gemini)
 
         config: dict[str, Any] = {}
-        rps.create_model(config, use_boost=False)
+        result = rps.create_model(config, use_boost=False)
 
         assert os.environ.get("OPENAI_BASE_URL", "") == "", \
             "OPENAI_BASE_URL must not be set for Gemini branch"
         assert os.environ.get("GOOGLE_API_KEY") == "my-google-key"
-        assert len(calls) == 1
-        platform_arg = calls[0]["args"][0] if calls[0]["args"] else calls[0]["kwargs"].get("model_platform")
-        assert platform_arg == ModelPlatformType.GEMINI
+        assert result is create_gemini.return_value
+        create_gemini.assert_called_once_with(
+            model_type="gemini-3-flash-preview",
+            model_config_dict=rps.build_camel_completion_params(
+                model="gemini-3-flash-preview",
+                completion_max_tokens=rps.resolve_model_runtime_settings(
+                    "gemini-3-flash-preview"
+                )["completion_max_tokens"],
+            ),
+            api_key="my-google-key",
+        )
 
 
 @skipif_py314_aarch64

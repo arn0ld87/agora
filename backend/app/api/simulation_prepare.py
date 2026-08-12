@@ -3,6 +3,7 @@ Preparation-related simulation API routes split from the main module.
 """
 
 import os
+import threading
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
@@ -45,6 +46,15 @@ if TYPE_CHECKING:  # pragma: no cover — nur für Typprüfung
     from ..contracts.ai_provider_contract import AiModelRef
     from ..contracts.run_budget_contract import RunBudgetConfig
     from ..services.llm_runtime import RuntimeLlmConfig
+
+
+_prepare_start_locks: dict[str, threading.Lock] = {}
+_prepare_start_locks_guard = threading.Lock()
+
+
+def _prepare_start_lock_for(simulation_id: str) -> threading.Lock:
+    with _prepare_start_locks_guard:
+        return _prepare_start_locks.setdefault(simulation_id, threading.Lock())
 
 
 def _parse_quota_plan(data: dict) -> Optional[PersonaQuotaPlan]:
@@ -220,6 +230,19 @@ class _PrepareRejected(Exception):
             # ausgewertet vom RunLifecycle (#841: die detaillierte Meldung
             # landet zuletzt auf dem Run, nach fail_task()).
             self.run_failure_message = run_failure_message
+
+
+def _ensure_prepare_startable(state: Any) -> None:
+    """Verhindert zwei schreibende Prepare-Jobs fuer dieselbe Simulation."""
+    if state.status != SimulationStatus.PREPARING:
+        return
+    raise _PrepareRejected(
+        json_error(
+            ApiErrorCode.SIMULATION_PREPARE_IN_PROGRESS,
+            status=409,
+            message="Simulation preparation is already in progress",
+        )
+    )
 
 
 @dataclass(frozen=True)
@@ -924,16 +947,15 @@ def _build_prepare_response(
     }
 
 
-@simulation_bp.route('/prepare', methods=['POST'])
-@handle_api_errors(log_prefix="Failed to start preparation task")
-def prepare_simulation():
-    """Prepare a simulation environment as an async task."""
+def _prepare_simulation_under_start_lock(
+    data: "dict[str, Any]",
+    simulation_id: str,
+    ai_model_ref: "AiModelRef | None",
+):
+    """Prüft und startet Prepare innerhalb des simulationsbezogenen Locks."""
     from ..models.task import TaskManager
 
-    data = request.get_json() or {}
     try:
-        simulation_id, ai_model_ref = _parse_prepare_identity(data)
-
         manager = SimulationManager()
         state = manager.get_simulation(simulation_id)
         if not state:
@@ -944,6 +966,8 @@ def prepare_simulation():
                     message=f"Simulation does not exist: {simulation_id}",
                 )
             )
+
+        _ensure_prepare_startable(state)
 
         req = _PrepareRequest(
             simulation_id=simulation_id,
@@ -1033,6 +1057,20 @@ def prepare_simulation():
         return rejected.response
 
     return json_success(_build_prepare_response(simulation_id, task_id, run_record, state, inputs))
+
+
+@simulation_bp.route('/prepare', methods=['POST'])
+@handle_api_errors(log_prefix="Failed to start preparation task")
+def prepare_simulation():
+    """Prepare a simulation environment as an async task."""
+    data = request.get_json() or {}
+    try:
+        simulation_id, ai_model_ref = _parse_prepare_identity(data)
+    except _PrepareRejected as rejected:
+        return rejected.response
+
+    with _prepare_start_lock_for(simulation_id):
+        return _prepare_simulation_under_start_lock(data, simulation_id, ai_model_ref)
 
 
 @simulation_bp.route('/prepare/status', methods=['POST'])

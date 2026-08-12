@@ -126,6 +126,11 @@ except ImportError:  # direct script execution
         seed_simulation_rng,
     )
 
+try:
+    from .gemini_thought_signatures import create_gemini_thought_signature_model
+except ImportError:  # direct script execution
+    from gemini_thought_signatures import create_gemini_thought_signature_model
+
 _runtime_paths = resolve_runtime_paths(__file__)
 install_script_paths(_runtime_paths)
 init_runner_tracing("agora-oasis-runner")
@@ -1393,11 +1398,10 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
     )
 
     if platform == ModelPlatformType.GEMINI:
-        # Gemini-3 requires thought_signature echo in multi-turn tool calls.
-        # The OpenAI-compat wire path strips that field → HTTP 400 on every
-        # tool turn.  Route directly via CAMEL's GeminiModel instead.
-        # Auth: GOOGLE_API_KEY (not OPENAI_API_KEY).
-        # Do NOT set OPENAI_BASE_URL — it would break CAMEL's Gemini backend.
+        # CAMEL 0.2.78 nennt den Adapter GeminiModel, spricht aber weiterhin
+        # Googles OpenAI-Compat-API und rekonstruiert Tool-Historie ohne
+        # extra_content.google.thought_signature. Unser Adapter bindet die
+        # Signatur an die Tool-Call-ID und echoed sie im Folgeturn.
         # Praezedenz wie beim urspruenglichen GOOGLE_API_KEY: der aufgeloeste
         # llm_api_key (aus Store/Route via LLM_API_KEY injiziert) ist massgeblich;
         # ambientes GEMINI_/GOOGLE_API_KEY nur als Fallback.
@@ -1412,10 +1416,10 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
         # (build_route_subprocess_env); dieser Fallback deckt den Standalone-/
         # Dev-Pfad ab, in dem nur LLM_API_KEY/GOOGLE_API_KEY gesetzt ist.
         os.environ["GEMINI_API_KEY"] = _gemini_key
-        return ModelFactory.create(
-            model_platform=ModelPlatformType.GEMINI,
+        return create_gemini_thought_signature_model(
             model_type=llm_model,
             model_config_dict=model_cfg,
+            api_key=_gemini_key,
         )
 
     elif platform == ModelPlatformType.OLLAMA:
