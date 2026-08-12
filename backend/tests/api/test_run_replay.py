@@ -136,3 +136,46 @@ def test_replay_sets_replayed_from_run_id(env):
     new_run = env["registry"].get_run(new_run_id)
     assert new_run is not None
     assert new_run.get("replayed_from_run_id") == run_id
+
+
+# ---------------------------------------------------------------------------
+# Export-Endpoint (Ticket 5)
+# ---------------------------------------------------------------------------
+
+
+def test_export_returns_200_with_zip(env):
+    """S1: Export-Endpoint gibt 200 mit ZIP-Content-Type."""
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+    run_id = run["run_id"]
+
+    resp = env["client"].get(f"/api/runs/{run_id}/export")
+
+    assert resp.status_code == 200, (
+        f"Erwartet 200, erhalten: {resp.status_code}"
+    )
+    assert resp.content_type == "application/zip"
+    assert resp.headers.get("Content-Disposition", "").startswith(
+        f"attachment; filename=agora-run-{run_id}"
+    )
+
+
+def test_export_zip_contains_manifest(env):
+    """S2: ZIP enthält manifest.json."""
+    import io
+    import zipfile
+
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+    run_id = run["run_id"]
+
+    resp = env["client"].get(f"/api/runs/{run_id}/export")
+    assert resp.status_code == 200
+
+    zf = zipfile.ZipFile(io.BytesIO(resp.data))
+    names = zf.namelist()
+    assert "manifest.json" in names
+
+
+def test_export_unknown_run_returns_404(env):
+    """S3: Export eines nicht existierenden Runs gibt 404."""
+    resp = env["client"].get("/api/runs/run_000000000000/export")
+    assert resp.status_code == 404

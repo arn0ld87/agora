@@ -1027,6 +1027,53 @@ def replay_run(run_id: str):
     return make_response(body, 202)
 
 
+@runs_bp.route("/<run_id>/export", methods=["GET"])
+@handle_api_errors(logger=logger, log_prefix="Failed to export run")
+def export_run(run_id: str):
+    """GET /api/runs/<run_id>/export — ZIP-Download mit Manifest + Artefakten (Issue #763).
+
+    Erzeugt ein ZIP-Archiv mit manifest.json und allen Dateien aus dem
+    Run-Verzeichnis. Streaming-Response, kein Temp-File.
+    """
+    import io
+    import zipfile
+
+    run, error = _get_run_or_404(run_id)
+    if error:
+        return error
+
+    run_dir = ArtifactLocator.run_dir(run_id)
+    manifest_path = os.path.join(run_dir, "manifest.json")
+    if not os.path.exists(manifest_path):
+        return json_error(
+            f"Run {run_id} has no manifest — export requires a manifest",
+            status=400,
+            code="no_manifest",
+        )
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        # manifest.json
+        zf.write(manifest_path, "manifest.json")
+
+        # Alle weiteren Dateien im Run-Verzeichnis (keine Secrets)
+        for entry in os.listdir(run_dir):
+            entry_path = os.path.join(run_dir, entry)
+            if os.path.isfile(entry_path) and entry != "manifest.json":
+                zf.write(entry_path, entry)
+
+    buf.seek(0)
+
+    from flask import Response
+    return Response(
+        buf.getvalue(),
+        mimetype="application/zip",
+        headers={
+            "Content-Disposition": f"attachment; filename=agora-run-{run_id}.zip",
+        },
+    )
+
+
 @runs_bp.route("/<run_id>/resume", methods=["POST"])
 @handle_api_errors(logger=logger, log_prefix="Failed to resume run")
 def resume_run(run_id: str):
