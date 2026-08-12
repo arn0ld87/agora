@@ -1238,15 +1238,15 @@
         "dialog_description": "Identical replay reuses every parameter from the manifest. A variant allows overrides.",
         "mode_identical": "Replay identically",
         "mode_variant": "Variant",
-        "field_seed_document_id": "Seed document ID",
-        "field_random_seed": "Random seed",
         "field_provider_connection_id": "Provider connection ID",
         "field_model_id": "Model ID",
+        "model_override_incomplete": "Provider connection ID and model ID must both be set.",
         "cancel": "Cancel",
         "submit": "Start replay",
         "submitting": "Starting…",
         "success": "Replay started — new run: {run_id}",
         "error": "Replay failed: {message}",
+        "unknown_error": "Unknown error",
         "no_manifest": "No manifest available — replay not possible."
       }
     }

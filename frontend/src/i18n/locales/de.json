@@ -1238,15 +1238,15 @@
         "dialog_description": "Identisch wiederholen übernimmt alle Parameter aus dem Manifest. Eine Variante erlaubt Overrides.",
         "mode_identical": "Identisch wiederholen",
         "mode_variant": "Variante",
-        "field_seed_document_id": "Seed-Dokument-ID",
-        "field_random_seed": "Zufalls-Seed",
         "field_provider_connection_id": "Provider-Connection-ID",
         "field_model_id": "Modell-ID",
+        "model_override_incomplete": "Provider-Connection-ID und Modell-ID müssen beide gesetzt sein.",
         "cancel": "Abbrechen",
         "submit": "Replay starten",
         "submitting": "Wird gestartet…",
         "success": "Replay gestartet — neuer Run: {run_id}",
         "error": "Replay fehlgeschlagen: {message}",
+        "unknown_error": "Unbekannter Fehler",
         "no_manifest": "Kein Manifest verfügbar — Replay nicht möglich."
       }
     }

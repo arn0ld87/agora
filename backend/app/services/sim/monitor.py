@@ -46,6 +46,19 @@ def _as_aware_utc(dt: datetime) -> datetime:
     return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
 
 
+def _read_run_usage_summary(run_dir: str) -> Optional[Dict[str, Any]]:
+    """``usage_summary.json`` aus dem Run-Verzeichnis lesen (Issue #763, Ticket 3).
+
+    Fehlende oder unlesbare Datei ist kein Fehler: nicht jeder Run erzeugt eine
+    Usage-Summary (Stub-Modus, Abbruch vor dem ersten LLM-Call).
+    """
+    from ...services.run_usage_ledger import USAGE_SUMMARY_FILENAME
+    from ...utils.json_io import read_json_file
+
+    data = read_json_file(os.path.join(run_dir, USAGE_SUMMARY_FILENAME), default=None)
+    return data if isinstance(data, dict) else None
+
+
 def _finalize_manifest_for_simulation(
     simulation_id: str,
     state: SimulationRunState,
@@ -91,13 +104,21 @@ def _finalize_manifest_for_simulation(
             int((completed_at - started_at).total_seconds()) if completed_at else None
         )
 
+        run_dir = ArtifactLocator.run_dir(run["run_id"])
+
+        # usage_summary.json wird vom Run-Usage-Ledger am Run-Ende geschrieben.
+        # Ohne diesen Read bliebe runtime.usage_summary in jedem finalisierten
+        # Manifest leer, obwohl der Verbrauch bereits persistiert ist.
+        usage_summary = _read_run_usage_summary(run_dir)
+
         ManifestCapture.capture_final_best_effort(
             run_id=run["run_id"],
-            run_dir=ArtifactLocator.run_dir(run["run_id"]),
+            run_dir=run_dir,
             started_at=started_at,
             completed_at=completed_at,
             duration_seconds=duration_seconds,
             rounds_completed=state.current_round,
+            usage_summary=usage_summary,
             termination_reason=(
                 termination_reason_override
                 or _TERMINATION_REASON_BY_STATUS.get(state.runner_status)

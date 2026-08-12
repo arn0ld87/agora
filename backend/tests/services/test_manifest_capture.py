@@ -469,3 +469,62 @@ class TestManifestCaptureBestEffort:
         with open(manifest_path) as f:
             data = json.load(f)
         assert data["status"] == "final"
+
+
+class TestManifestAtomicWrite:
+    """CodeRabbit-Fund: Manifest-Writes liefen über ``open(..., "w")``.
+
+    Das trunkiert die Zieldatei bereits beim Öffnen — bricht der Dump danach
+    ab, bleibt statt eines gültigen Manifests eine Ruine zurück. Parallele
+    Leser (``GET /manifest``, ZIP-Export) konnten außerdem halbfertiges JSON
+    erwischen.
+    """
+
+    @pytest.fixture
+    def run_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            yield tmp
+
+    def _draft(self, run_dir, *, graph_id="graph_001"):
+        ManifestCapture.capture_draft(
+            run_id="run_test123456",
+            run_dir=run_dir,
+            seed_document_hash="sha256:abc",
+            seed_document_filename="test.md",
+            simulation_config_hash="sha256:def",
+            graph_id=graph_id,
+            agora_version="0.9.5",
+            schema_version="1.0.0",
+            random_seed=42,
+            simulation_id_seed="sim_test",
+        )
+
+    def test_failed_write_leaves_previous_manifest_intact(self, run_dir, monkeypatch):
+        self._draft(run_dir, graph_id="graph_original")
+        manifest_path = os.path.join(run_dir, "manifest.json")
+
+        def _boom(*args, **kwargs):
+            raise OSError("Disk voll")
+
+        monkeypatch.setattr("app.utils.json_io.json.dump", _boom)
+
+        with pytest.raises(OSError):
+            self._draft(run_dir, graph_id="graph_neu")
+
+        with open(manifest_path) as f:
+            data = json.load(f)
+        assert data["inputs"]["graph_id"] == "graph_original"
+        assert RunManifest(**data).status == "draft"
+
+    def test_failed_write_leaves_no_temp_file_behind(self, run_dir, monkeypatch):
+        self._draft(run_dir)
+
+        def _boom(*args, **kwargs):
+            raise OSError("Disk voll")
+
+        monkeypatch.setattr("app.utils.json_io.json.dump", _boom)
+
+        with pytest.raises(OSError):
+            self._draft(run_dir, graph_id="graph_neu")
+
+        assert os.listdir(run_dir) == ["manifest.json"]

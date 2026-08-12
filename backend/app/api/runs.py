@@ -994,10 +994,10 @@ def _replay_simulation_run(run: dict, run_id: str, overrides):
 
     branch_overrides: dict = {}
     llm_model_override = None
-    if overrides is not None:
-        if overrides.ai_model_ref is not None:
-            branch_overrides["llm_model"] = overrides.ai_model_ref.get("model_id")
-            llm_model_override = overrides.ai_model_ref.get("model_id")
+    ai_model_ref = overrides.ai_model_ref if overrides is not None else None
+    if ai_model_ref is not None:
+        branch_overrides["llm_model"] = ai_model_ref.model_id
+        llm_model_override = ai_model_ref.model_id
 
     branch_state = manager.create_branch(
         simulation_id,
@@ -1037,11 +1037,15 @@ def _replay_simulation_run(run: dict, run_id: str, overrides):
         new_run = lifecycle.record
         new_run_id = new_run["run_id"]
 
+        # ai_model_ref durchreichen, nicht nur model_id: dieselbe Modell-ID kann
+        # auf mehreren Provider-Connections liegen. Ohne die Connection-ID
+        # liefe das Replay auf einer anderen Connection als das Original.
         seed_run_stage_routing(
             new_run_id,
             "simulation_rounds",
             llm_model_override=llm_model_override,
             llm_runtime=None,
+            ai_model_ref=ai_model_ref,
         )
         route_router = StageModelRouter(new_run_id)
         resolved_route = route_router.resolve("simulation_rounds")
@@ -1106,7 +1110,16 @@ def replay_run(run_id: str):
         try:
             overrides = ReplayRequest.model_validate(body).overrides if body else None
         except ValidationError as exc:
-            return json_error(exc.errors(), status=400)
+            # exc.errors() gehört in ``extra``, nicht in den ``error``-Parameter:
+            # json_error sanitisiert nur ``extra``. ValidationError-Payloads
+            # tragen in ``ctx`` lebende ValueError-Instanzen, an denen Flasks
+            # JSON-Encoder abbricht — aus der 400 würde sonst eine 500.
+            return json_error(
+                "Invalid replay request body",
+                status=400,
+                code="validation_error",
+                extra={"details": exc.errors()},
+            )
         except TypeError:
             return json_error("Request body must be a JSON object", status=400)
 

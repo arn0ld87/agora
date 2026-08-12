@@ -4,7 +4,12 @@
  *
  * Zwei Modi:
  *   - "Identisch wiederholen": POST /replay ohne Overrides.
- *   - "Variante": POST /replay mit ReplayOverrides (Seed-Dokument, Random-Seed, Modell).
+ *   - "Variante": POST /replay mit ReplayOverrides (Modell).
+ *
+ * Bewusst nur das Modell-Override: das Backend lehnt ``seed_document_id`` und
+ * ``random_seed`` mit HTTP 400 ab (kein Re-Prepare-Mechanismus für ein neues
+ * Ausgangsdokument, kein Runtime-Konzept für einen deterministischen Seed).
+ * Eingabefelder dafür würden garantiert in einen Fehler laufen.
  */
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -30,8 +35,6 @@ const { t } = useI18n()
 type ReplayMode = 'identical' | 'variant'
 
 const mode = ref<ReplayMode>('identical')
-const seedDocumentId = ref('')
-const randomSeed = ref('')
 const providerConnectionId = ref('')
 const modelId = ref('')
 
@@ -44,8 +47,6 @@ watch(
   (open) => {
     if (open) {
       mode.value = 'identical'
-      seedDocumentId.value = ''
-      randomSeed.value = ''
       providerConnectionId.value = ''
       modelId.value = ''
       errorMessage.value = ''
@@ -53,31 +54,27 @@ watch(
   },
 )
 
-const canSubmit = computed(() => !submitting.value)
+// Ein halb ausgefülltes Modell-Override (nur Connection oder nur Modell) ist
+// kein gültiger AiModelRef und würde still verworfen — der Submit-Button
+// bleibt in dem Fall gesperrt statt das Original-Modell zu verwenden.
+const variantIncomplete = computed(
+  () =>
+    mode.value === 'variant' &&
+    Boolean(providerConnectionId.value.trim()) !== Boolean(modelId.value.trim()),
+)
+
+const canSubmit = computed(() => !submitting.value && !variantIncomplete.value)
 
 function buildOverrides(): ReplayOverrides | undefined {
   if (mode.value === 'identical') return undefined
+  if (!providerConnectionId.value.trim() || !modelId.value.trim()) return undefined
 
-  const overrides: ReplayOverrides = {}
-  if (seedDocumentId.value.trim()) {
-    overrides.seed_document_id = seedDocumentId.value.trim()
-  }
-  if (randomSeed.value.trim()) {
-    const parsed = Number.parseInt(randomSeed.value, 10)
-    if (!Number.isNaN(parsed)) overrides.random_seed = parsed
-  }
-  if (providerConnectionId.value.trim() && modelId.value.trim()) {
-    overrides.ai_model_ref = {
+  return {
+    ai_model_ref: {
       provider_connection_id: providerConnectionId.value.trim(),
       model_id: modelId.value.trim(),
-    }
+    },
   }
-
-  const isEmpty =
-    overrides.seed_document_id === undefined &&
-    overrides.random_seed === undefined &&
-    overrides.ai_model_ref === undefined
-  return isEmpty ? undefined : overrides
 }
 
 async function submit(): Promise<void> {
@@ -90,7 +87,9 @@ async function submit(): Promise<void> {
     emit('update:modelValue', false)
   } catch (e) {
     errorMessage.value =
-      e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'Unbekannter Fehler'
+      e instanceof ApiError || e instanceof Error
+        ? e.message
+        : t('runs.dashboard.replay.unknown_error')
   } finally {
     submitting.value = false
   }
@@ -123,14 +122,6 @@ function close(): void {
 
       <div v-if="mode === 'variant'" class="variant-fields">
         <label class="field">
-          <span class="field-label">{{ t('runs.dashboard.replay.field_seed_document_id') }}</span>
-          <Input v-model="seedDocumentId" placeholder="doc_..." mono />
-        </label>
-        <label class="field">
-          <span class="field-label">{{ t('runs.dashboard.replay.field_random_seed') }}</span>
-          <Input v-model="randomSeed" type="number" mono />
-        </label>
-        <label class="field">
           <span class="field-label">{{ t('runs.dashboard.replay.field_provider_connection_id') }}</span>
           <Input v-model="providerConnectionId" placeholder="conn_..." mono />
         </label>
@@ -138,6 +129,9 @@ function close(): void {
           <span class="field-label">{{ t('runs.dashboard.replay.field_model_id') }}</span>
           <Input v-model="modelId" placeholder="gemini-2.5-pro" mono />
         </label>
+        <p v-if="variantIncomplete" class="field-hint" role="status">
+          {{ t('runs.dashboard.replay.model_override_incomplete') }}
+        </p>
       </div>
 
       <p v-if="errorMessage" class="replay-error" role="alert">
@@ -193,6 +187,12 @@ function close(): void {
   font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  color: var(--text-secondary, #888);
+}
+
+.field-hint {
+  margin: 0;
+  font-size: 12px;
   color: var(--text-secondary, #888);
 }
 

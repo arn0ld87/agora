@@ -204,6 +204,49 @@ class TestRunManifest:
         with pytest.raises(ValidationError):
             ManifestRuntime(started_at=datetime(2026, 8, 12, 10, 0, 0))
 
+    def _manifest_kwargs(self, **overrides):
+        base = dict(
+            schema_version=1,
+            run_id="run_abc123def456",
+            captured_at=datetime(2026, 8, 12, 10, 0, 0, tzinfo=timezone.utc),
+            inputs=ManifestInputs(
+                seed_document_hash="sha256:abc123",
+                seed_document_filename="testfall.md",
+                simulation_config_hash="sha256:def456",
+                graph_id="graph_001",
+            ),
+            versions=ManifestVersions(agora_version="0.9.5", schema_version="1.0.0"),
+            routing=ManifestRouting(stages={}),
+            prompts=ManifestPrompts(entries={}),
+            seeds=ManifestSeeds(random_seed=42, simulation_id_seed="sim_abc123"),
+        )
+        base.update(overrides)
+        return base
+
+    def test_final_without_runtime_is_rejected(self):
+        """CodeRabbit-Fund: ``status="final"`` ohne ``runtime`` war gültig und
+        verletzte damit den dokumentierten Lifecycle-Vertrag — ein finales
+        Manifest ohne Start-/Endzeit ist kein Reproduktionsanker."""
+        with pytest.raises(ValidationError):
+            RunManifest(**self._manifest_kwargs(status="final"))
+
+    def test_draft_and_legacy_stay_valid_without_runtime(self):
+        """Draft (Run läuft noch) und Legacy (Alt-Run) bleiben ohne runtime gültig."""
+        for status in ("draft", "legacy"):
+            manifest = RunManifest(**self._manifest_kwargs(status=status))
+            assert manifest.runtime is None
+
+    def test_final_with_runtime_is_accepted(self):
+        manifest = RunManifest(
+            **self._manifest_kwargs(
+                status="final",
+                runtime=ManifestRuntime(
+                    started_at=datetime(2026, 8, 12, 10, 0, 0, tzinfo=timezone.utc)
+                ),
+            )
+        )
+        assert manifest.runtime is not None
+
 
 class TestReplayRequest:
     """S2: ReplayRequest — valide/invalide Overrides."""
@@ -239,6 +282,39 @@ class TestReplayRequest:
         """Unbekannte Override-Keys werden abgelehnt (extra=forbid)."""
         with pytest.raises(ValidationError):
             ReplayOverrides(geheim_override="value")  # type: ignore[call-arg]
+
+    def test_ai_model_ref_requires_provider_connection_id(self):
+        """CodeRabbit-Fund: ``ai_model_ref`` war ein offenes ``dict[str, str]``
+        und akzeptierte ein Override ohne Connection. Gleiche Modell-ID auf
+        zwei Connections ist damit nicht unterscheidbar."""
+        with pytest.raises(ValidationError):
+            ReplayOverrides.model_validate({"ai_model_ref": {"model_id": "gpt-4o"}})
+
+    def test_ai_model_ref_rejects_unknown_key(self):
+        """Der kanonische AiModelRef lehnt unbekannte Schlüssel ab."""
+        with pytest.raises(ValidationError):
+            ReplayOverrides.model_validate(
+                {
+                    "ai_model_ref": {
+                        "provider_connection_id": "conn_1",
+                        "model_id": "gpt-4o",
+                        "api_key": "sk-leak",
+                    }
+                }
+            )
+
+    def test_ai_model_ref_preserves_connection_id(self):
+        """Die Connection-ID überlebt die Validierung als typisiertes Feld."""
+        overrides = ReplayOverrides.model_validate(
+            {
+                "ai_model_ref": {
+                    "provider_connection_id": "conn_1",
+                    "model_id": "gemini-2.5-pro",
+                }
+            }
+        )
+        assert overrides.ai_model_ref is not None
+        assert overrides.ai_model_ref.provider_connection_id == "conn_1"
 
 
 class TestReplayResponse:

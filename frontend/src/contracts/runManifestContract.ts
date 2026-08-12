@@ -13,6 +13,8 @@
  */
 import { z } from 'zod'
 
+import { AiModelSourceSchema } from './aiModelRef'
+
 // === ManifestStatus ===
 export const ManifestStatusSchema = z.enum(['draft', 'final', 'legacy'])
 export type ManifestStatus = z.infer<typeof ManifestStatusSchema>
@@ -116,11 +118,24 @@ export const RunManifestSchema = z
 export type RunManifest = z.infer<typeof RunManifestSchema>
 
 // === ReplayOverrides ===
+// ai_model_ref spiegelt den kanonischen Backend-``AiModelRef``: beide
+// Pflichtfelder erzwungen, unbekannte Schlüssel abgelehnt. ``source`` hat
+// backendseitig einen Default und ist deshalb hier optional.
+export const ReplayAiModelRefSchema = z
+  .object({
+    provider_connection_id: z.string().min(1),
+    model_id: z.string().min(1),
+    source: AiModelSourceSchema.optional(),
+    capability_filter: z.string().nullable().optional(),
+    fallback_reason: z.string().nullable().optional(),
+  })
+  .strict()
+
 export const ReplayOverridesSchema = z
   .object({
     seed_document_id: z.string().nullable().optional(),
     random_seed: z.number().int().nullable().optional(),
-    ai_model_ref: z.record(z.string(), z.string()).nullable().optional(),
+    ai_model_ref: ReplayAiModelRefSchema.nullable().optional(),
   })
   .strict()
 export type ReplayOverrides = z.infer<typeof ReplayOverridesSchema>

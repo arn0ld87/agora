@@ -65,13 +65,14 @@ describe('RunReplayDialog', () => {
     expect(wrapper.emitted('replayed')?.[0]).toEqual(['run-new456'])
   })
 
-  it('Varianten-Replay mit random_seed baut korrekte Overrides', async () => {
+  it('Varianten-Replay baut ai_model_ref inklusive Connection-ID', async () => {
     replayRunMock.mockResolvedValueOnce({ run_id: 'run-new789', status: 'pending' })
     const wrapper = mountDialog()
 
     await wrapper.find('input[value="variant"]').setValue(true)
-    const seedInput = wrapper.find('input[type="number"]')
-    await seedInput.setValue('12345')
+    const fields = wrapper.findAll('.variant-fields input')
+    await fields[0].setValue('conn-gemini')
+    await fields[1].setValue('gemini-2.5-pro')
 
     const submitBtn = wrapper.findAll('button').find((b) => b.text().includes('Replay starten'))
     await submitBtn?.trigger('click')
@@ -79,8 +80,52 @@ describe('RunReplayDialog', () => {
     await new Promise((r) => setTimeout(r, 0))
 
     expect(replayRunMock).toHaveBeenCalledWith('run-abc123', {
-      overrides: { random_seed: 12345 },
+      overrides: {
+        ai_model_ref: { provider_connection_id: 'conn-gemini', model_id: 'gemini-2.5-pro' },
+      },
     })
+  })
+
+  it('bietet keine Felder an, die das Backend garantiert mit 400 ablehnt', async () => {
+    // CodeRabbit-Fund: seed_document_id und random_seed werden serverseitig
+    // mit 400 abgelehnt (kein Re-Prepare, kein Runtime-Seed-Konzept). Felder
+    // dafuer im Dialog fuehren jeden Nutzer sicher in einen Fehler.
+    const wrapper = mountDialog()
+    await wrapper.find('input[value="variant"]').setValue(true)
+
+    expect(wrapper.find('.variant-fields input[type="number"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('Seed-Dokument-ID')
+    expect(wrapper.text()).not.toContain('Zufalls-Seed')
+    expect(wrapper.findAll('.variant-fields input')).toHaveLength(2)
+  })
+
+  it('sperrt den Submit bei halb ausgefuelltem Modell-Override', async () => {
+    // CodeRabbit-Fund: buildOverrides verwarf ein Override mit nur einem der
+    // beiden Felder still — das Replay lief dann unbemerkt auf dem Originalmodell.
+    const wrapper = mountDialog()
+    await wrapper.find('input[value="variant"]').setValue(true)
+    await wrapper.findAll('.variant-fields input')[0].setValue('conn-gemini')
+
+    expect(wrapper.text()).toContain('müssen beide gesetzt sein')
+
+    const submitBtn = wrapper.findAll('button').find((b) => b.text().includes('Replay starten'))
+    await submitBtn?.trigger('click')
+    await wrapper.vm.$nextTick()
+
+    expect(replayRunMock).not.toHaveBeenCalled()
+  })
+
+  it('nutzt einen i18n-Key statt eines hartkodierten Fehlertexts', async () => {
+    replayRunMock.mockRejectedValueOnce('kein Error-Objekt')
+    const wrapper = mountDialog()
+
+    const submitBtn = wrapper.findAll('button').find((b) => b.text().includes('Replay starten'))
+    await submitBtn?.trigger('click')
+    await wrapper.vm.$nextTick()
+    await new Promise((r) => setTimeout(r, 0))
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.text()).toContain(de.runs.dashboard.replay.unknown_error)
   })
 
   it('zeigt eine Fehlermeldung, wenn replayRun fehlschlägt', async () => {

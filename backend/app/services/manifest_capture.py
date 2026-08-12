@@ -18,8 +18,20 @@ from app.contracts.run_manifest_contract import (
     RunManifest,
     StageRoute,
 )
+from app.utils.json_io import write_json_atomic
 
 logger = logging.getLogger("agora.manifest_capture")
+
+
+def _write_manifest(manifest_path: str, manifest: RunManifest) -> None:
+    """Manifest atomar schreiben (tmp-File + ``os.replace``).
+
+    Ein direkter ``open(..., "w")`` würde ein vorhandenes gültiges Manifest
+    bereits beim Öffnen abschneiden; bricht der Dump danach ab, bleibt eine
+    Ruine zurück. Zusätzlich können ``GET /manifest`` und der ZIP-Export
+    parallel lesen und dabei halbfertiges JSON erwischen.
+    """
+    write_json_atomic(manifest_path, manifest.model_dump(mode="json"))
 
 
 class ManifestCapture:
@@ -82,9 +94,7 @@ class ManifestCapture:
         )
 
         os.makedirs(run_dir, exist_ok=True)
-        manifest_path = os.path.join(run_dir, "manifest.json")
-        with open(manifest_path, "w", encoding="utf-8") as f:
-            json.dump(manifest.model_dump(mode="json"), f, indent=2, sort_keys=True)
+        _write_manifest(os.path.join(run_dir, "manifest.json"), manifest)
 
     @staticmethod
     def capture_final(
@@ -119,8 +129,7 @@ class ManifestCapture:
             termination_reason=termination_reason,
         )
 
-        with open(manifest_path, "w", encoding="utf-8") as f:
-            json.dump(manifest.model_dump(mode="json"), f, indent=2, sort_keys=True)
+        _write_manifest(manifest_path, manifest)
 
     @staticmethod
     def migrate_legacy(
@@ -183,8 +192,7 @@ class ManifestCapture:
         )
 
         os.makedirs(run_dir, exist_ok=True)
-        with open(manifest_path, "w", encoding="utf-8") as f:
-            json.dump(manifest.model_dump(mode="json"), f, indent=2, sort_keys=True)
+        _write_manifest(manifest_path, manifest)
 
     @staticmethod
     def capture_draft_best_effort(*, run_id: str, **kwargs: Any) -> None:

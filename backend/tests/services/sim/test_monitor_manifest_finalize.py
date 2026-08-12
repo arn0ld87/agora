@@ -164,3 +164,52 @@ def test_budget_abort_gets_budget_termination_reason_not_user_cancel(env):
         data = json.load(f)
 
     assert data["runtime"]["termination_reason"] == "budget_tokens"
+
+
+def test_usage_summary_is_carried_into_final_manifest(env):
+    """CodeRabbit-Fund: ``capture_final`` unterstützt ``usage_summary``, aber
+    dieser Aufrufer übergab den Wert nie — ``runtime.usage_summary`` blieb in
+    jedem finalisierten Simulations-Manifest leer, obwohl der Verbrauch als
+    ``usage_summary.json`` bereits im Run-Verzeichnis lag."""
+    run_id = _create_run_with_draft(env)
+
+    run_dir = os.path.join(str(env), "runs", run_id)
+    summary = {"total_tokens": 12345, "total_cost_usd": 0.42, "calls": 17}
+    with open(os.path.join(run_dir, "usage_summary.json"), "w", encoding="utf-8") as f:
+        json.dump(summary, f)
+
+    state = SimulationRunState(
+        simulation_id=SIM_ID,
+        runner_status=RunnerStatus.COMPLETED,
+        started_at="2026-08-12T10:00:00",
+        completed_at="2026-08-12T10:30:00",
+        current_round=10,
+    )
+
+    _finalize_manifest_for_simulation(SIM_ID, state)
+
+    with open(os.path.join(run_dir, "manifest.json"), encoding="utf-8") as f:
+        data = json.load(f)
+
+    assert data["runtime"]["usage_summary"] == summary
+
+
+def test_missing_usage_summary_stays_none(env):
+    """Nicht jeder Run erzeugt eine Usage-Summary (Stub-Modus, früher Abbruch)
+    — das Fehlen ist kein Fehler und darf die Finalisierung nicht stören."""
+    run_id = _create_run_with_draft(env)
+
+    state = SimulationRunState(
+        simulation_id=SIM_ID,
+        runner_status=RunnerStatus.COMPLETED,
+        started_at="2026-08-12T10:00:00",
+        completed_at="2026-08-12T10:30:00",
+    )
+
+    _finalize_manifest_for_simulation(SIM_ID, state)
+
+    manifest_path = os.path.join(str(env), "runs", run_id, "manifest.json")
+    with open(manifest_path, encoding="utf-8") as f:
+        data = json.load(f)
+
+    assert data["runtime"]["usage_summary"] is None

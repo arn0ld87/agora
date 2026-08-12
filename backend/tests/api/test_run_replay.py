@@ -193,7 +193,14 @@ def test_replay_accepts_envelope_body_with_overrides(env, monkeypatch):
 
     resp = env["client"].post(
         f"/api/runs/{run_id}/replay",
-        json={"overrides": {"ai_model_ref": {"model_id": "gpt-4o"}}},
+        json={
+            "overrides": {
+                "ai_model_ref": {
+                    "provider_connection_id": "conn-a",
+                    "model_id": "gpt-4o",
+                }
+            }
+        },
     )
 
     assert resp.status_code == 202, resp.get_json()
@@ -330,6 +337,81 @@ def test_replay_bad_body_type_returns_400_not_500(env):
     )
 
     assert resp.status_code == 400, resp.get_json()
+
+
+def test_replay_validation_error_returns_structured_envelope(env):
+    """CodeRabbit-Fund: ``exc.errors()`` ging als ``error``-Argument in
+    ``json_error``, das dort ``str | ApiErrorCode`` erwartet — der mypy-Gate
+    ist daran gebrochen.
+
+    Fachlich umgeht der Pfad damit die Sanitisierung: ``json_error`` bereinigt
+    nur ``extra``, weil ValidationError-Payloads in ``ctx`` lebende
+    ``ValueError``-Instanzen tragen können, an denen Flasks JSON-Encoder
+    abbricht. Über ``error`` gab es diesen Schutz nicht, und der Envelope kam
+    ohne ``code`` beim Client an."""
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+    run_id = run["run_id"]
+
+    resp = env["client"].post(
+        f"/api/runs/{run_id}/replay",
+        json={
+            "overrides": {
+                "ai_model_ref": {"provider_connection_id": "", "model_id": "gpt-4o"}
+            }
+        },
+    )
+
+    assert resp.status_code == 400, resp.get_json()
+    payload = resp.get_json()
+    assert payload["code"] == "validation_error"
+    assert payload["details"], "Validierungsdetails müssen erhalten bleiben"
+
+
+def test_replay_rejects_ai_model_ref_without_connection_id(env):
+    """CodeRabbit-Fund: ``ai_model_ref`` war ein offenes ``dict[str, str]``.
+    Ein Override ohne ``provider_connection_id`` wurde akzeptiert und die
+    Connection stillschweigend verworfen."""
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+    run_id = run["run_id"]
+
+    resp = env["client"].post(
+        f"/api/runs/{run_id}/replay",
+        json={"overrides": {"ai_model_ref": {"model_id": "gpt-4o"}}},
+    )
+
+    assert resp.status_code == 400, resp.get_json()
+
+
+def test_replay_passes_provider_connection_id_to_routing(env, monkeypatch):
+    """CodeRabbit-Fund: ``replay_run`` las nur ``model_id`` aus dem Override.
+    Dieselbe Modell-ID kann auf mehreren Provider-Connections liegen — ohne
+    die Connection-ID lief das Replay auf einer anderen Connection als vom
+    Nutzer gewählt."""
+    from unittest.mock import MagicMock
+
+    _stub_replay_infra(monkeypatch)
+    seed_mock = MagicMock()
+    monkeypatch.setattr("app.api.runs.seed_run_stage_routing", seed_mock)
+
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+
+    resp = env["client"].post(
+        f"/api/runs/{run['run_id']}/replay",
+        json={
+            "overrides": {
+                "ai_model_ref": {
+                    "provider_connection_id": "conn-gemini",
+                    "model_id": "gemini-2.5-pro",
+                }
+            }
+        },
+    )
+
+    assert resp.status_code == 202, resp.get_json()
+    passed_ref = seed_mock.call_args.kwargs["ai_model_ref"]
+    assert passed_ref is not None, "ai_model_ref wurde gar nicht durchgereicht"
+    assert passed_ref.provider_connection_id == "conn-gemini"
+    assert passed_ref.model_id == "gemini-2.5-pro"
 
 
 def test_replay_rejects_seed_document_override_not_yet_supported(env):

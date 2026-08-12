@@ -16,7 +16,9 @@ from __future__ import annotations
 
 from typing import Any, Literal, Optional
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
+
+from .ai_provider_contract import AiModelRef
 
 _STRICT = ConfigDict(extra="forbid")
 
@@ -126,6 +128,19 @@ class RunManifest(BaseModel):
 
     status: ManifestStatus
 
+    @model_validator(mode="after")
+    def _final_requires_runtime(self) -> "RunManifest":
+        """``status="final"`` ohne Laufzeitdaten verletzt den Lifecycle-Vertrag.
+
+        Ein finales Manifest ist der Reproduktionsanker eines abgeschlossenen
+        Runs — ohne ``runtime`` fehlen Start-, Endzeit und Terminierungsgrund.
+        ``draft`` (Run läuft noch) und ``legacy`` (Alt-Run ohne erfasste
+        Laufzeitdaten) bleiben bewusst ohne ``runtime`` gültig.
+        """
+        if self.status == "final" and self.runtime is None:
+            raise ValueError('status="final" requires runtime data')
+        return self
+
 
 class ReplayOverrides(BaseModel):
     """Override-Parameter für Varianten-Replay.
@@ -137,7 +152,10 @@ class ReplayOverrides(BaseModel):
 
     seed_document_id: Optional[str] = None
     random_seed: Optional[int] = None
-    ai_model_ref: Optional[dict[str, str]] = None
+    # Kanonischer AiModelRef statt offenem dict: erzwingt beide Pflichtfelder
+    # (provider_connection_id, model_id) und lehnt unbekannte Schlüssel ab.
+    # Gleiche Modell-ID auf zwei Connections ist sonst nicht unterscheidbar.
+    ai_model_ref: Optional[AiModelRef] = None
 
 
 class ReplayRequest(BaseModel):
