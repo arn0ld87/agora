@@ -1,0 +1,3 @@
+### Fixed (Output-Contract — toter Zweig nach PR #929 — 2026-08-12)
+
+- **Toter `required`-Schnittmengen-Zweig in `resolve_report_status` entfernt:** Beide Arme nach dem `COMPLETED`-Early-Return lieferten `INCOMPLETE`; `required` und die Schnittmenge `failed & required` wurden bei jedem Aufruf berechnet und verworfen. Die Invariante (jeder Aufrufer übergibt `required_section_indices=list(range(1, total+1))` → jede failed Section wird `INCOMPLETE`) macht die Prüfung überflüssig. Eingedampft auf `COMPLETED if not failed else INCOMPLETE`; `required_section_indices` bleibt als Parameter, damit Aufrufer nicht geändert werden müssen. Verhaltensneutral — bestehende Trust-Tests decken beide Pfade ab. (#1277-5)

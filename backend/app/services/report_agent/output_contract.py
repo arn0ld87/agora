@@ -243,28 +243,25 @@ def resolve_report_status(
 ) -> "ReportStatus":
     """Ermittelt den Report-Status aus dem Erfolg der Einzelabschnitte.
 
-    Eine fehlgeschlagene Pflichtsection macht den Report ``INCOMPLETE``. Der
-    Rest bleibt nutzbar — der Nutzer sieht, was fehlt, statt ein ``COMPLETED``
+    Eine fehlgeschlagene Section macht den Report ``INCOMPLETE``. Der Rest
+    bleibt nutzbar — der Nutzer sieht, was fehlt, statt ein ``COMPLETED``
     zu lesen, das der Report nicht einlöst.
 
     ``FAILED`` wird bewusst **nicht** hier erzeugt: der Workflow setzt ihn
-    direkt bei.schema-Validierungsfehlern oder Totalausfällen
+    direkt bei Schema-Validierungsfehlern oder Totalausfällen
     (``workflow.py``), nicht aus der Section-Erfolgsbilanz. Jeder Aufrufer
     übergibt ``required_section_indices=list(range(1, total+1))`` — damit ist
-    ``required`` nie leer und jede failed Section schlägt als ``INCOMPLETE``
-    durch. Ein früherer ``FAILED``-Zweig (``len(failed) >= total_sections``)
-    war unter dieser Aufruf invariant unreachable (CodeRabbit PR #929).
+    jede failed Section zwingend ``INCOMPLETE``. Ein früherer
+    ``FAILED``-Zweig (``len(failed) >= total_sections``) war unter dieser
+    Aufruf invariant unreachable (CodeRabbit PR #929); die verbliebene
+    ``required``-Schnittmengenprüfung war ein weiterer toter Arm (#1277-5)
+    und ist entfernt. ``required_section_indices`` bleibt als Parameter,
+    damit Aufrufer nicht geändert werden müssen.
     """
     from ...models.report import ReportStatus  # noqa: PLC0415 — zyklischer Import
 
     failed = set(failed_section_indices)
-    if not failed:
-        return ReportStatus.COMPLETED
-
-    required = set(required_section_indices)
-    if required and failed & required:
-        return ReportStatus.INCOMPLETE
-    return ReportStatus.INCOMPLETE
+    return ReportStatus.COMPLETED if not failed else ReportStatus.INCOMPLETE
 
 
 def apply_degradation_downgrade(
