@@ -23,9 +23,8 @@ Priorität         Base-URL zuerst             ``gemini-``-Modell-Prefix
                   11434 → openai → google)    Default OpenAI
 Gemini-Erkennung  nur über Base-URL           Base-URL ODER Modell-Prefix
                   (googleapis/generativelang) ``gemini-`` (Gemini-3 braucht
-                                              ``thought_signature``-Echo,
-                                              das der OpenAI-Compat-Pfad
-                                              wegstrippt)
+                                              den lokalen
+                                              ``thought_signature``-Adapter)
 Ollama-Port       Substring ``"11434"``       Regex ``:11434(?:/|$)``
                   (matcht auch ``:114340``)   (nur exakter Port)
 ``:latest``-Tag   kein Signal                 → ``"ollama"``
@@ -36,7 +35,7 @@ Vokabular         ollama/cloud/openai/        google/ollama/openai
 
 Hybrid-Beispiel: ``gemini-2.5-pro`` @ ``http://localhost:11434`` ergibt
 ``http → "ollama"``, aber ``oasis → "google"`` — der OASIS-Pfad MUSS die
-native Gemini-API nutzen (Tool-Turns schlagen sonst mit HTTP 400 fehl),
+Gemini-spezifische CAMEL-Modellklasse mit Signatur-Adapter nutzen,
 während der HTTP-Client weiterhin den lokalen Ollama-Proxy anspricht.
 
 Hinweis: Diese Datei ist im Zuge von #591 auf den main-Split (``8b552b4``)
@@ -138,8 +137,8 @@ def _detect_oasis(base_url: Optional[str], model: Optional[str]) -> OasisDetecte
     Prioritäten (first match wins):
     1. ``"google"`` — Base-URL enthält ``generativelanguage.googleapis.com``
        ODER Modell beginnt mit ``gemini-``. Gemini-3 verlangt ein
-       ``thought_signature``-Echo in Multi-Turn-Tool-Calls; der
-       OpenAI-Compat-Pfad strippt das Feld → HTTP 400 bei jedem Tool-Turn.
+       ``thought_signature``-Echo in Multi-Turn-Tool-Calls; der lokale
+       CAMEL-Adapter ergänzt das Feld in der rekonstruierten Historie.
     2. ``"ollama"`` — Base-URL enthält ``ollama.com`` oder Port ``:11434``
        ODER Modell traegt ein Ollama-Cloud-Tag (``:cloud`` / ``:<size>-cloud``,
        Issue #670) ODER endet auf ``:latest``. Der CAMEL-Konsument dieses

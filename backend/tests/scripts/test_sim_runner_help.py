@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import importlib.util
+import os
 import subprocess
 import sys
 
@@ -62,12 +63,17 @@ def test_max_tokens_warning_filter_matches_only_target_warning():
     assert _sim_common.should_filter_max_tokens_warning(other) is False
 
 
-def _run_help(script_name: str) -> subprocess.CompletedProcess[str]:
+def _run_help(
+    script_name: str,
+    *,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(SCRIPTS_DIR / script_name), "--help"],
         capture_output=True,
         text=True,
         cwd=str(ROOT),
+        env=env,
         timeout=20,
     )
 
@@ -85,3 +91,28 @@ def test_runner_help_smoke_exits_zero(script_name: str, expected_text: str):
     assert result.returncode == 0
     assert expected_text in result.stdout
     assert "--config" in result.stdout
+
+
+def test_parallel_runner_help_does_not_import_camel(tmp_path: Path) -> None:
+    (tmp_path / "sitecustomize.py").write_text(
+        """
+import builtins
+
+original_import = builtins.__import__
+
+def guarded_import(name, *args, **kwargs):
+    if name == "camel" or name.startswith("camel."):
+        raise RuntimeError("CAMEL must not be imported for --help")
+    return original_import(name, *args, **kwargs)
+
+builtins.__import__ = guarded_import
+""",
+        encoding="utf-8",
+    )
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(tmp_path)
+
+    result = _run_help("run_parallel_simulation.py", env=env)
+
+    assert result.returncode == 0, result.stderr
+    assert "OASIS Dual-Platform Parallel Simulation" in result.stdout

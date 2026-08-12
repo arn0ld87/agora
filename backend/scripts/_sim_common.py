@@ -102,8 +102,8 @@ def detect_oasis_platform(model: str, base_url: str) -> ModelPlatformType:
 
     1. GEMINI — base_url enthält ``generativelanguage.googleapis.com`` ODER
        Modell beginnt mit ``gemini-``.  Gemini-3 braucht ein
-       ``thought_signature``-Echo in Multi-Turn-Tool-Calls; der
-       OpenAI-Compat-Wire-Pfad strippt das Feld → HTTP 400 pro Tool-Turn.
+       ``thought_signature``-Echo in Multi-Turn-Tool-Calls; der lokale
+       CAMEL-Adapter ergänzt es in der rekonstruierten Tool-Historie.
     2. OLLAMA — base_url enthält ``ollama.com`` oder ``:11434`` ODER Modell
        endet auf ``:cloud`` / ``:latest``.  CAMELs ``OllamaModel`` erbt von
        ``OpenAICompatibleModel`` und spricht ``POST {base_url}/chat/

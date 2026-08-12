@@ -6,9 +6,8 @@ Provider-Quirks, die dieser Adapter kapselt bzw. dokumentiert:
   Fallback wird von Geminis Function-Filter mit MALFORMED_FUNCTION_CALL
   abgelehnt (siehe ``LLMClient._chat_with_tools``-Branch).
 - Gemini-3 verlangt ein ``thought_signature``-Echo in Multi-Turn-Tool-Calls.
-  Der OpenAI-Compat-Wire-Pfad strippt das Feld — deshalb routet der
-  OASIS-Dispatch (``detect_provider(mode="oasis")``) Gemini-Modelle auf die
-  native CAMEL-GEMINI-Plattform statt auf den Compat-Layer.
+  CAMEL 0.2.78 rekonstruiert Tool-Historie ohne dieses Feld; der lokale
+  OASIS-Adapter bewahrt und ergänzt es deshalb im Compat-Layer.
 - Kein ``extra_body``: Ollama-Optionen (``options.num_ctx``/``think``)
   fuehren auf dem Compat-Layer zu 400ern.
 """
