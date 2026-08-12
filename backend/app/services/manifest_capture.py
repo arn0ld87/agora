@@ -102,3 +102,60 @@ class ManifestCapture:
 
         with open(manifest_path, "w", encoding="utf-8") as f:
             json.dump(manifest.model_dump(mode="json"), f, indent=2, sort_keys=True)
+
+    @staticmethod
+    def migrate_legacy(
+        *,
+        run_id: str,
+        run_dir: str,
+        run_metadata: dict,
+        agora_version: str,
+        schema_version: str,
+    ) -> None:
+        """Erzeugt ein Legacy-Manifest für einen Alt-Run ohne Manifest.
+
+        Überschreibt kein vorhandenes Manifest. Rekonstruiert bekannte Felder
+        aus den Run-Metadaten; nicht rekonstruierbare Felder bleiben auf
+        Platzhalter-Werten.
+        """
+        manifest_path = os.path.join(run_dir, "manifest.json")
+        if os.path.exists(manifest_path):
+            return  # Kein Überschreiben
+
+        started_at_str = run_metadata.get("started_at")
+        captured_at = datetime.now(timezone.utc)
+        if started_at_str:
+            try:
+                captured_at = datetime.fromisoformat(started_at_str)
+            except (ValueError, TypeError):
+                pass
+
+        graph_id = run_metadata.get("graph_id", "unknown")
+        seed_document_filename = run_metadata.get("document_name", "unknown")
+
+        manifest = RunManifest(
+            schema_version=1,
+            run_id=run_id,
+            captured_at=captured_at,
+            inputs=ManifestInputs(
+                seed_document_hash="unknown",
+                seed_document_filename=seed_document_filename,
+                simulation_config_hash="unknown",
+                graph_id=graph_id,
+            ),
+            versions=ManifestVersions(
+                agora_version=agora_version,
+                schema_version=schema_version,
+            ),
+            routing=ManifestRouting(stages={}),
+            prompts=ManifestPrompts(entries={}),
+            seeds=ManifestSeeds(
+                random_seed=0,
+                simulation_id_seed="legacy",
+            ),
+            status="legacy",
+        )
+
+        os.makedirs(run_dir, exist_ok=True)
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(manifest.model_dump(mode="json"), f, indent=2, sort_keys=True)

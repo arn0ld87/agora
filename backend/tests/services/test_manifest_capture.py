@@ -217,3 +217,117 @@ class TestManifestCaptureFinal:
                 rounds_completed=10,
                 termination_reason="completed",
             )
+
+
+class TestManifestCaptureLegacy:
+    """S7-S9: ManifestCapture.migrate_legacy() — Legacy-Manifest für Alt-Runs."""
+
+    @pytest.fixture
+    def run_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            yield tmp
+
+    def test_creates_legacy_manifest(self, run_dir):
+        """S7: migrate_legacy schreibt Manifest mit status legacy."""
+        ManifestCapture.migrate_legacy(
+            run_id="run_legacy123",
+            run_dir=run_dir,
+            run_metadata={
+                "started_at": "2026-01-15T10:00:00",
+                "completed_at": "2026-01-15T10:30:00",
+                "status": "completed",
+                "llm_model": "gemini-2.5-flash",
+                "graph_id": "graph_001",
+            },
+            agora_version="0.9.0",
+            schema_version="1.0.0",
+        )
+
+        manifest_path = os.path.join(run_dir, "manifest.json")
+        assert os.path.exists(manifest_path)
+
+        with open(manifest_path) as f:
+            data = json.load(f)
+
+        assert data["status"] == "legacy"
+        assert data["run_id"] == "run_legacy123"
+
+    def test_legacy_fills_known_fields(self, run_dir):
+        """S8: Bekannte Felder sind gefüllt, unbekannte null."""
+        ManifestCapture.migrate_legacy(
+            run_id="run_legacy123",
+            run_dir=run_dir,
+            run_metadata={
+                "started_at": "2026-01-15T10:00:00",
+                "status": "completed",
+                "llm_model": "gemini-2.5-flash",
+                "graph_id": "graph_001",
+            },
+            agora_version="0.9.0",
+            schema_version="1.0.0",
+        )
+
+        manifest_path = os.path.join(run_dir, "manifest.json")
+        with open(manifest_path) as f:
+            data = json.load(f)
+
+        # Bekannte Felder
+        assert data["versions"]["agora_version"] == "0.9.0"
+        assert data["inputs"]["graph_id"] == "graph_001"
+        # Nicht rekonstruierbare Felder
+        assert data["inputs"]["seed_document_hash"] == "unknown"
+        assert data["inputs"]["simulation_config_hash"] == "unknown"
+        assert data["seeds"]["random_seed"] == 0
+
+    def test_legacy_is_valid_pydantic(self, run_dir):
+        """S8: Legacy-Manifest ist als RunManifest validierbar."""
+        ManifestCapture.migrate_legacy(
+            run_id="run_legacy123",
+            run_dir=run_dir,
+            run_metadata={
+                "started_at": "2026-01-15T10:00:00",
+                "status": "completed",
+            },
+            agora_version="0.9.0",
+            schema_version="1.0.0",
+        )
+
+        manifest_path = os.path.join(run_dir, "manifest.json")
+        with open(manifest_path) as f:
+            data = json.load(f)
+
+        manifest = RunManifest(**data)
+        assert manifest.status == "legacy"
+
+    def test_does_not_overwrite_existing_manifest(self, run_dir):
+        """S9: Überschreibt kein vorhandenes Manifest."""
+        # Erst ein Draft schreiben
+        ManifestCapture.capture_draft(
+            run_id="run_test123456",
+            run_dir=run_dir,
+            seed_document_hash="sha256:abc",
+            seed_document_filename="test.md",
+            simulation_config_hash="sha256:def",
+            graph_id="graph_001",
+            agora_version="0.9.5",
+            schema_version="1.0.0",
+            random_seed=42,
+            simulation_id_seed="sim_test",
+        )
+
+        # Migration sollte das Draft nicht überschreiben
+        ManifestCapture.migrate_legacy(
+            run_id="run_test123456",
+            run_dir=run_dir,
+            run_metadata={"status": "completed"},
+            agora_version="0.9.0",
+            schema_version="1.0.0",
+        )
+
+        manifest_path = os.path.join(run_dir, "manifest.json")
+        with open(manifest_path) as f:
+            data = json.load(f)
+
+        # Sollte immer noch das Draft sein
+        assert data["status"] == "draft"
+        assert data["seeds"]["random_seed"] == 42
