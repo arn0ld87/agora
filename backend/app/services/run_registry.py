@@ -99,6 +99,7 @@ class RunRegistry:
         *,
         linked_ids: Optional[Dict[str, Any]] = None,
         parent_run_id: Optional[str] = None,
+        replayed_from_run_id: Optional[str] = None,
         status: str = "pending",
         progress: int = 0,
         message: str = "",
@@ -117,6 +118,7 @@ class RunRegistry:
                 "run_type": run_type,
                 "entity_id": entity_id,
                 "parent_run_id": parent_run_id,
+                "replayed_from_run_id": replayed_from_run_id,
                 "status": self.canonical_status(status),
                 "progress": progress,
                 "message": message or "",
@@ -189,6 +191,8 @@ class RunRegistry:
                 manifest["entity_id"] = updates["entity_id"]
             if "parent_run_id" in updates:
                 manifest["parent_run_id"] = updates["parent_run_id"]
+            if "replayed_from_run_id" in updates:
+                manifest["replayed_from_run_id"] = updates["replayed_from_run_id"]
             if "branch_label" in updates:
                 manifest["branch_label"] = updates["branch_label"]
             if "termination_reason" in updates:

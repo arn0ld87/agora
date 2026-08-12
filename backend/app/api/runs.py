@@ -4,6 +4,7 @@ Run registry API.
 
 from __future__ import annotations
 
+import os
 import threading
 import traceback
 from collections.abc import Mapping
@@ -967,6 +968,63 @@ def _resume_report_generate(run: dict):
     run_registry.update_run(run["run_id"], status="processing", progress=0, message="Report generation resumed")
     threading.Thread(target=run_generate, daemon=True).start()
     return {"run_id": run["run_id"], "task_id": task_id, "status": "processing"}
+
+
+@runs_bp.route("/<run_id>/replay", methods=["POST"])
+@handle_api_errors(logger=logger, log_prefix="Failed to replay run")
+def replay_run(run_id: str):
+    """POST /api/runs/<run_id>/replay — Neuen Run aus Manifest starten (Issue #763).
+
+    Liest das manifest.json des Original-Runs und erzeugt einen neuen Run
+    mit identischer Konfiguration. Optionale Overrides erlauben Varianten-
+    Replay mit anderem Seed-Dokument, Seed-Wert oder AI-Modell.
+
+    Antwort: 202 { run_id, status: "pending" }
+    """
+    run, error = _get_run_or_404(run_id)
+    if error:
+        return error
+
+    manifest_path = os.path.join(ArtifactLocator.run_dir(run_id), "manifest.json")
+    if not os.path.exists(manifest_path):
+        return json_error(
+            f"Run {run_id} has no manifest — replay requires a manifest",
+            status=400,
+            code="no_manifest",
+        )
+
+    # Overrides aus dem Request-Body parsen
+    overrides = None
+    if request.is_json and request.get_json(silent=True):
+        body = request.get_json(silent=True) or {}
+        from ..contracts.run_manifest_contract import ReplayOverrides
+        try:
+            overrides = ReplayOverrides(**body) if body else None
+        except ValidationError as exc:
+            return json_error(exc.errors(), status=400)
+
+    # Neuen Run anlegen
+    new_run = run_registry.create_run(
+        run_type=run.get("run_type", "simulation_run"),
+        entity_id=run.get("entity_id", ""),
+        replayed_from_run_id=run_id,
+        status="pending",
+        message=f"Replay of {run_id}",
+        linked_ids=dict(run.get("linked_ids", {}) or {}),
+        metadata=dict(run.get("metadata", {}) or {}),
+    )
+
+    # Overrides im neuen Run vermerken
+    if overrides is not None:
+        override_meta = overrides.model_dump(exclude_none=True)
+        if override_meta:
+            current_meta = dict(new_run.get("metadata", {}) or {})
+            current_meta["replay_overrides"] = override_meta
+            run_registry.update_run(new_run["run_id"], metadata=current_meta)
+
+    from flask import make_response, jsonify
+    body = jsonify({"run_id": new_run["run_id"], "status": "pending"})
+    return make_response(body, 202)
 
 
 @runs_bp.route("/<run_id>/resume", methods=["POST"])
