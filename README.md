@@ -54,18 +54,18 @@ The demo shows:
 
 ## Reference run
 
-The current, critically documented end-to-end run examines the **introduction of a self-hosted AI learning assistant at an AZAV-certified retraining provider**, over **20 simulation rounds** with **`gemini-3.6-flash` as the report writer** and **`gemini-embedding-2` (3072 dim) for the knowledge graph**.
+The current, critically documented end-to-end run revisits the **domain migration `alexle135.de` → `alex-schneider.dev`** over **20 completed simulation rounds** after the 0.9.x evidence and provenance hardening.
 
-It is the first run in which evidence binding actually works. Five preceding reports across four model configurations bound **zero or one** claim; this one binds **39**. Initial-post assignment lands on the semantically correct persona 8 times out of 8, because domain-specific entity typing makes type ≈ role.
+The report binds **46 claim rows** (22 unique rendered IDs), with **141 hypotheses** and **133 data gaps**. Unlike earlier runs, the dominant failure is no longer missing evidence binding. The run exposes the next trust boundary: Agora can bind a statement to a real seed fragment while still losing whether that fragment was a documented fact, an unsupported assertion, a hypothesis, a contradiction, or a synthetic statement. In the adversarial seed, one unsupported SEO assertion is therefore promoted to a validated world-claim, while another section correctly describes the same proposition as unsubstantiated.
 
-Precisely because more of the pipeline works, the remaining gaps become measurable. Every quote now carries its **own** provenance anchor — and none of those anchors exists: the model invents them per persona, and the `seed_doc:` prefix bypasses the binding check entirely. All 39 claims sit at confidence `low` with the identical score, so the confidence measure distinguishes nothing. The same fact binds as SUPPORTED in section 1 and is deleted as unsupported in section 2. And across 20 rounds, 665 actions and 84 comments — with the two conflicting groups correctly separated for the first time — not one dislike and not one dissenting statement occurs.
+The same run also turns a foreign-role interview answer into the only `medium` claim, renders seed-only claims as `Simulationskonsens`, and still admits a non-stakeholder (`Fachblog`) into the social trace. At the same time, the gate correctly catches several unsupported numerical targets and weakens the claim that Option B is uniquely viable.
 
 > [!NOTE]
-> This run is deliberately not a polished showcase. It documents both working guardrails and reproducible failure classes. It proves neither predictive validity nor real stakeholder behavior.
+> This is the current **trust-pipeline reference**, not a polished showcase or proof of predictive validity. The preceding learning-assistant run remains the richer simulation-dynamics reference: 665 actions and six clusters versus 109 interactions and three clusters here.
 
-**[→ Read the current reference run](./docs/reference-runs/2026-08-11-ki-lernassistent-20-runden/README.md)** · **[auf Deutsch](./docs/reference-runs/2026-08-11-ki-lernassistent-20-runden/README.de.md)**
+**[→ Read reference run 5](./docs/reference-runs/2026-08-12-domain-migration-20-runden/README.md)** · **[auf Deutsch](./docs/reference-runs/2026-08-12-domain-migration-20-runden/README.de.md)**
 
-Earlier runs: [third run](./docs/reference-runs/2026-08-11-ki-lernassistent/README.md) (same domain, 10 rounds, `deepseek-v4-flash`) · [first](./docs/reference-runs/2026-08-09-domain-migration/README.md) and [second run](./docs/reference-runs/2026-08-09-domain-migration-v2/README.md) on the domain migration `alexle135.de` → `alex-schneider.dev`
+Earlier runs: [reference run 4](./docs/reference-runs/2026-08-11-ki-lernassistent-20-runden/README.md) (first evidence-binding-at-scale run; richer simulation dynamics) · [run 3](./docs/reference-runs/2026-08-11-ki-lernassistent/README.md) · [run 2](./docs/reference-runs/2026-08-09-domain-migration-v2/README.md) · [run 1](./docs/reference-runs/2026-08-09-domain-migration/README.md)
 
 ---
 
