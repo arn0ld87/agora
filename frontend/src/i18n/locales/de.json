@@ -1231,7 +1231,24 @@
         "started": "Gestartet",
         "progress": "Fortschritt"
       },
-      "back_to_dashboard": "← Zurück zum Dashboard"
+      "back_to_dashboard": "← Zurück zum Dashboard",
+      "replay": {
+        "button": "Replay",
+        "dialog_title": "Run wiederholen",
+        "dialog_description": "Identisch wiederholen übernimmt alle Parameter aus dem Manifest. Eine Variante erlaubt Overrides.",
+        "mode_identical": "Identisch wiederholen",
+        "mode_variant": "Variante",
+        "field_seed_document_id": "Seed-Dokument-ID",
+        "field_random_seed": "Zufalls-Seed",
+        "field_provider_connection_id": "Provider-Connection-ID",
+        "field_model_id": "Modell-ID",
+        "cancel": "Abbrechen",
+        "submit": "Replay starten",
+        "submitting": "Wird gestartet…",
+        "success": "Replay gestartet — neuer Run: {run_id}",
+        "error": "Replay fehlgeschlagen: {message}",
+        "no_manifest": "Kein Manifest verfügbar — Replay nicht möglich."
+      }
     }
   },
   "errors": {
