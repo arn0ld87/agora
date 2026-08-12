@@ -43,6 +43,7 @@ export const ProviderDescriptorSchema = z.object({
     "minimax",
     "opencode_go",
     "github_copilot",
+    "bedrock",
     "cloud",
     "unknown",
   ]),

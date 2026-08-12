@@ -52,7 +52,7 @@ if TYPE_CHECKING:
 
 # Teilmengen von app.contracts.provider_types.ProviderType
 HttpDetectedProvider = Literal[
-    "ollama", "cloud", "minimax", "openai", "google", "unknown"
+    "ollama", "cloud", "minimax", "openai", "google", "bedrock", "unknown"
 ]
 OasisDetectedProvider = Literal["google", "ollama", "openai"]
 DetectionMode = Literal["http", "oasis"]
@@ -128,6 +128,19 @@ def _detect_http(base_url: Optional[str], model: Optional[str]) -> HttpDetectedP
         return "openai"
     if "googleapis.com" in base or "generativelanguage" in base:
         return "google"
+    # Issue #1282 — Amazon Bedrock OpenAI-kompatibler mantle-Pfad. Hostname-
+    # basiert (wie der MiniMax-Zweig, CodeQL #750), kein raw substring: ein
+    # Drittanbieter-Host mit „bedrock" im Pfad darf NICHT matchen. Erkennt
+    # bedrock-mantle.<region>.api.aws (empfohlener mantle-Endpunkt) und
+    # bedrock-runtime.<region>.amazonaws.com (Fallback, falls jemand den
+    # Runtime-Host einträgt — ebenfalls OpenAI-Compat via mantle). Beide
+    # sprechen OpenAI-Chat-Completions + Bearer-API-Key.
+    _bedrock_host = urlparse(base).hostname
+    if _bedrock_host and (
+        _bedrock_host.startswith("bedrock-mantle.")
+        or _bedrock_host.startswith("bedrock-runtime.")
+    ):
+        return "bedrock"
     return "unknown"
 
 
@@ -283,6 +296,12 @@ def get_adapter(
         from app.llm.providers.gemini import GeminiAdapter
 
         return GeminiAdapter(num_ctx=num_ctx, think=think)
+    if provider == "bedrock":
+        # Bedrock mantle spricht OpenAI-Chat-Completions (Issue #1282) —
+        # kein eigener Adapter, sondern OpenAIAdapter mit Bearer-API-Key.
+        from app.llm.providers.openai import OpenAIAdapter
+
+        return OpenAIAdapter(num_ctx=num_ctx, think=think)
     from app.llm.providers.openai import OpenAIAdapter
 
     return OpenAIAdapter(num_ctx=num_ctx, think=think)
@@ -308,7 +327,7 @@ def is_ollama_compatible_provider(base_url: Optional[str], model: Optional[str])
 # Dritt-Gateway (``https://gateway.example/v1``) fällt ebenfalls auf
 # ``"unknown"`` zurück, bedient ``/api/tags`` aber nicht — es pauschal zu
 # proben würde genau die 404-Klasse reproduzieren, die dieser Fix beseitigt.
-_NON_OLLAMA_TAG_PROVIDERS = ("minimax", "openai", "google")
+_NON_OLLAMA_TAG_PROVIDERS = ("minimax", "openai", "google", "bedrock")
 
 # Lokale/Loopback-Hosts, auf denen ein ``unknown``-Endpoint plausibel ein
 # selbstgehostetes Ollama ist. ``host.docker.internal`` deckt den
@@ -424,6 +443,29 @@ def _has_ollama_url_signal(base_url: Optional[str]) -> bool:
         return False
 
 
+def _has_bedrock_url_signal(base_url: Optional[str]) -> bool:
+    """True, wenn die Base-URL einen Amazon-Bedrock-Endpunkt ausweist.
+
+    Analog zu :func:`_has_ollama_url_signal`: ausschliesslich URL-basiert,
+    hostnamenbasiert (kein Substring, CodeQL #750). Erkennt die mantle- und
+    runtime-Hosts, die der OpenAI-kompatiblen Chat-Completions-Route
+    zugrunde liegen (Issue #1282):
+      - ``bedrock-mantle.<region>.api.aws`` (empfohlener mantle-Endpunkt)
+      - ``bedrock-runtime.<region>.amazonaws.com`` (Fallback-Host)
+
+    Ein Drittanbieter-Host mit ``bedrock`` im Pfad (z. B.
+    ``https://example.com/bedrock-mantle/v1``) wird bewusst NICHT erkannt —
+    die Endpunkt-Kanonisierung greift nur bei echten Bedrock-Hosts.
+    """
+    if not base_url:
+        return False
+    parsed = urlparse(base_url.strip().lower())
+    host = parsed.hostname or ""
+    if not host:
+        return False
+    return host.startswith("bedrock-mantle.") or host.startswith("bedrock-runtime.")
+
+
 def openai_compat_base_url(
     base_url: Optional[str], model: Optional[str] = None
 ) -> Optional[str]:
@@ -460,8 +502,18 @@ def openai_compat_base_url(
 
     Returns:
         Die URL mit ``/v1`` fuer Ollama-Endpunkte, sonst unveraendert.
+
+    Bedrock (Issue #1282): der mantle-Default
+    ``https://bedrock-mantle.<region>.api.aws/v1`` traegt bereits ``/v1``,
+    aber ein Free-Text-Override im Connection-UI kann es weglassen — ohne
+    ``/v1`` landet der Chat-Client auf einer Route, die Bedrock nicht kennt
+    (404). ``_has_bedrock_url_signal`` erkennt echte Bedrock-Hosts und
+    erzwingt das Suffix idempotent. Ein Drittanbieter-Host mit ``bedrock``
+    im Pfad wird bewusst nicht angefasst (kein False-Positive).
     """
     if _has_ollama_url_signal(base_url):
+        return ensure_v1_suffix(base_url)
+    if _has_bedrock_url_signal(base_url):
         return ensure_v1_suffix(base_url)
     return base_url
 

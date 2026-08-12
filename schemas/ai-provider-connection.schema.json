@@ -91,6 +91,7 @@
         "openai_compatible",
         "minimax",
         "github_copilot",
+        "bedrock",
         "cloud",
         "unknown"
       ],

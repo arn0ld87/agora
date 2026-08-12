@@ -10,6 +10,7 @@ PROVIDER_OPENAI_COMPATIBLE = "openai_compatible"
 PROVIDER_MINIMAX = "minimax"
 PROVIDER_OPENCODE_GO = "opencode_go"
 PROVIDER_GITHUB_COPILOT = "github_copilot"
+PROVIDER_BEDROCK = "bedrock"
 PROVIDER_CLOUD = "cloud"
 PROVIDER_UNKNOWN = "unknown"
 
@@ -27,6 +28,7 @@ ProviderType = Literal[
     "minimax",
     "opencode_go",
     "github_copilot",
+    "bedrock",
     "cloud",
     "unknown",
 ]
@@ -43,6 +45,7 @@ ProviderConnectionKind = Literal[
     "openai_compatible",
     "minimax",
     "github_copilot",
+    "bedrock",
     "cloud",
     "unknown",
 ]
@@ -81,6 +84,7 @@ ALL_PROVIDER_TYPES: tuple[str, ...] = (
     PROVIDER_MINIMAX,
     PROVIDER_OPENCODE_GO,
     PROVIDER_GITHUB_COPILOT,
+    PROVIDER_BEDROCK,
     PROVIDER_CLOUD,
     PROVIDER_UNKNOWN,
 )

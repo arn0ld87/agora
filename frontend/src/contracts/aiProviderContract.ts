@@ -40,6 +40,7 @@ const ProviderConnectionKindSchema = z.enum([
   'openai_compatible',
   'minimax',
   'github_copilot',
+  'bedrock',
   'cloud',
   'unknown',
 ])
