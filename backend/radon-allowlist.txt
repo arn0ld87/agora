@@ -108,7 +108,7 @@ app/services/sim/process_manager.py::start_simulation
 #   D cc=27  app/api/graph_build.py::generate_ontology
 #   D cc=23  app/api/graph_build.py::build_graph
 #   D cc=21  app/api/runs.py::_build_run_detail
-#   D cc=22  app/services/confidence_calculator.py::compute_confidence
+#   D cc=23  app/services/confidence_calculator.py::_compute_confidence_with_penalties
 #   D cc=23  app/services/report_generation.py::ReportGenerationService.start_generation
 #   E cc=34  app/services/evidence_entailment.py::classify_evidence
 #   D cc=25  app/services/graph_build.py::GraphBuildService.build_graph
@@ -130,7 +130,7 @@ app/services/sim/process_manager.py::start_simulation
 app/api/graph_build.py::generate_ontology
 app/api/graph_build.py::build_graph
 app/api/runs.py::_build_run_detail
-app/services/confidence_calculator.py::compute_confidence
+app/services/confidence_calculator.py::_compute_confidence_with_penalties
 app/services/report_generation.py::ReportGenerationService.start_generation
 app/services/evidence_entailment.py::classify_evidence
 app/services/graph_build.py::GraphBuildService.build_graph
