@@ -216,6 +216,48 @@ def migrate_medium_seed_only_claims_to_low(raw: Optional[dict]) -> Optional[dict
     return raw
 
 
+# Binding-Stärke für Merge-Kollisionen (Spiegelung von
+# ``report_agent.agent._binding_strength``). Beide Stellen nutzen dieselbe
+# strongest-binding-Policy; eine Konsolidierung in ein gemeinsames Modul
+# steht als Folgearbeit aus (siehe #1277-6).
+_ENTAILMENT_RANK: dict[str, int] = {
+    "SUPPORTED": 3,
+    "RELATED_ONLY": 2,
+    "INSUFFICIENT": 1,
+    "CONTRADICTED": 0,
+}
+
+
+def _binding_strength(binding: dict[str, Any]) -> tuple[int, float]:
+    """Entailment-Rang, Tie-Break über ``match_score`` — höhere Werte gewinnen."""
+    rank = _ENTAILMENT_RANK.get(str(binding.get("entailment") or ""), 0)
+    return (rank, float(binding.get("match_score") or 0.0))
+
+
+def _remap_and_merge_bindings(
+    bindings: list[Any], remap: dict[str, str]
+) -> list[dict[str, Any]]:
+    """Re-Keyt Bindungen und führt Kollisionen zur stärksten Bindung zusammen.
+
+    Zwei Bindungen, die nach dem Re-Key auf dieselbe Quelle zeigen, sind eine
+    Bindung — sonst zählt die Confidence-Berechnung dieselbe Quelle doppelt.
+    Bei Kollision gewinnt die stärkere Bindung (Entailment-Rang, Tie-Break über
+    ``match_score``), nicht die erste — eine schwächere ``RELATED_ONLY``-Bindung
+    darf eine stärkere ``SUPPORTED``-Bindung nicht still verdrängen (#1277-6).
+    """
+    merged: dict[str, Any] = {}
+    for binding in bindings:
+        if not isinstance(binding, dict):
+            continue
+        binding_id = str(binding.get("evidence_id") or "")
+        target = remap.get(binding_id, binding_id)
+        binding["evidence_id"] = target
+        existing = merged.get(target)
+        if existing is None or _binding_strength(binding) > _binding_strength(existing):
+            merged[target] = binding
+    return list(merged.values())
+
+
 def demote_unanchored_seed_corpus_records(
     raw: Optional[dict],
     *,
@@ -331,18 +373,7 @@ def demote_unanchored_seed_corpus_records(
                 continue
             bindings = claim.get("evidence")
             if isinstance(bindings, list):
-                merged: dict[str, Any] = {}
-                for binding in bindings:
-                    if not isinstance(binding, dict):
-                        continue
-                    binding_id = str(binding.get("evidence_id") or "")
-                    target = remap.get(binding_id, binding_id)
-                    binding["evidence_id"] = target
-                    # Zwei Bindungen, die nach dem Re-Key auf dieselbe Quelle
-                    # zeigen, sind eine Bindung — sonst zählt der
-                    # Confidence-Berechnung dieselbe Quelle doppelt.
-                    merged.setdefault(target, binding)
-                claim["evidence"] = list(merged.values())
+                claim["evidence"] = _remap_and_merge_bindings(bindings, remap)
             legacy_refs = claim.get("evidence_refs")
             if isinstance(legacy_refs, list):
                 claim["evidence_refs"] = list(dict.fromkeys(
