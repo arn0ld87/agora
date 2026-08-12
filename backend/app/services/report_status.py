@@ -57,6 +57,30 @@ class ReportStatusService:
                     "sections": generated_sections,
                     "current_section_index": len(progress_state.get("completed_sections") or []),
                 }
+                # Issue #1277-2: Run-Registry ``completed`` heißt „Run beendet",
+                # nicht „Report vollständig". ``run_generate`` schreibt den
+                # Registry-Status auch bei INCOMPLETE auf ``completed``
+                # (Teilergebnis, kein Fehlschlag — siehe #1006). Der
+                # Polling-Consumer (``/api/report/generate/status`` ->
+                # ``useReportGeneration``) müsste sonst den completed-Branch
+                # nehmen und würde die Lücke verschweigen. Der Report-Status
+                # ist die fachliche Wahrheit; er gewinnt, wenn der Run
+                # terminal ist.
+                # Issue #1277-2: Run-Registry ``completed`` heißt „Run beendet",
+                # nicht „Report vollständig". ``run_generate`` schreibt den
+                # Registry-Status auch bei INCOMPLETE auf ``completed``
+                # (Teilergebnis, kein Fehlschlag — siehe #1006). Der
+                # Polling-Consumer (``/api/report/generate/status`` ->
+                # ``useReportGeneration``) müsste sonst den completed-Branch
+                # nehmen und würde die Lücke verschweigen. Der Report-Status
+                # ist die fachliche Wahrheit; er gewinnt, wenn der Run
+                # terminal ist.
+                if (
+                    run.get("status") == "completed"
+                    and report_obj is not None
+                    and report_obj.status == ReportStatus.INCOMPLETE
+                ):
+                    data["status"] = "incomplete"
                 if run.get("status") in {"completed", "failed", "paused", "stopped", "processing", "pending"}:
                     return data
 
