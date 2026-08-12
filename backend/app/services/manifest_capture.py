@@ -10,6 +10,7 @@ from app.contracts.run_manifest_contract import (
     ManifestInputs,
     ManifestPrompts,
     ManifestRouting,
+    ManifestRuntime,
     ManifestSeeds,
     ManifestVersions,
     RunManifest,
@@ -63,5 +64,41 @@ class ManifestCapture:
 
         os.makedirs(run_dir, exist_ok=True)
         manifest_path = os.path.join(run_dir, "manifest.json")
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(manifest.model_dump(mode="json"), f, indent=2, sort_keys=True)
+
+    @staticmethod
+    def capture_final(
+        *,
+        run_id: str,
+        run_dir: str,
+        started_at: datetime,
+        completed_at: datetime | None = None,
+        duration_seconds: int | None = None,
+        rounds_completed: int | None = None,
+        usage_summary: dict | None = None,
+        termination_reason: str | None = None,
+    ) -> None:
+        """Liest das Draft-Manifest und schreibt es als final mit Runtime-Daten."""
+        manifest_path = os.path.join(run_dir, "manifest.json")
+        if not os.path.exists(manifest_path):
+            raise FileNotFoundError(
+                f"Kein Draft-Manifest gefunden unter {manifest_path}"
+            )
+
+        with open(manifest_path, encoding="utf-8") as f:
+            data = json.load(f)
+
+        manifest = RunManifest(**data)
+        manifest.status = "final"
+        manifest.runtime = ManifestRuntime(
+            started_at=started_at,
+            completed_at=completed_at,
+            duration_seconds=duration_seconds,
+            rounds_completed=rounds_completed,
+            usage_summary=usage_summary,
+            termination_reason=termination_reason,
+        )
+
         with open(manifest_path, "w", encoding="utf-8") as f:
             json.dump(manifest.model_dump(mode="json"), f, indent=2, sort_keys=True)
