@@ -518,6 +518,79 @@ class TestReactLoopNativeToolCalls:
         assert agent.llm.chat_with_tools.called
         assert agent._execute_tool.call_count >= 3
 
+    def test_react_loop_native_none_content_triggers_retry_not_typeerror(self) -> None:
+        """Issue #1277-1: ``content: None`` + leere ``tool_calls`` auf dem nativen
+        Pfad darf keinen TypeError werfen, der den Section dauerhaft auf
+        ``generation_failed`` setzt. Der bestehende None-Guard (Retry mit
+        „Response empty") muss stattdessen greifen — ein folgender Versuch darf
+        die Section noch erfolgreich abschließen.
+        """
+        from app.services.report_agent.workflow import generate_section_react
+
+        agent = self._make_minimal_agent()
+
+        # Erster Call: content=None, tool_calls=[] (z. B. erschöpftes max_tokens
+        # oder Safety-Filter). Danach drei Tool-Calls (min_tool_calls=3) und
+        # schließlich der Final Answer.
+        tool_calls_sequence = [
+            {
+                "content": None,
+                "tool_calls": [],
+                "finish_reason": "stop",
+                "raw_response": None,
+            },
+            {
+                "content": "",
+                "tool_calls": [{"id": "c1", "name": "panorama_search", "arguments": {"query": "q1"}}],
+                "finish_reason": "tool_calls",
+                "raw_response": None,
+            },
+            {
+                "content": "",
+                "tool_calls": [{"id": "c2", "name": "panorama_search", "arguments": {"query": "q2"}}],
+                "finish_reason": "tool_calls",
+                "raw_response": None,
+            },
+            {
+                "content": "",
+                "tool_calls": [{"id": "c3", "name": "panorama_search", "arguments": {"query": "q3"}}],
+                "finish_reason": "tool_calls",
+                "raw_response": None,
+            },
+            {
+                "content": (
+                    "Final Answer: Segment-Analyse der simulierten Zielgruppen "
+                    "mit den beobachteten Reaktionsmustern."
+                ),
+                "tool_calls": [],
+                "finish_reason": "stop",
+                "raw_response": None,
+            },
+        ]
+        agent.llm.chat_with_tools.side_effect = tool_calls_sequence
+
+        section = self._make_section()
+        outline = self._make_outline()
+
+        with patch("app.services.report_agent.workflow.Config") as mock_cfg:
+            mock_cfg.REPORT_TOOLCALL_MODE = "native"
+            mock_cfg.REPORT_LANGUAGE = "German"
+            result = generate_section_react(
+                agent=agent,
+                section=section,
+                outline=outline,
+                previous_sections=[],
+                section_index=0,
+            )
+
+        # Vor dem Fix warf Zeile 516 ``"Final Answer:" in None`` einen TypeError,
+        # den _safe_generate_section_react abfing → SECTION_FALLBACK_BODY,
+        # Section dauerhaft generation_failed. Nach dem Fix greift der None-Retry,
+        # der fünfte Call liefert den Final Answer.
+        assert isinstance(result, str)
+        assert "Segment-Analyse" in result
+        assert agent.llm.chat_with_tools.call_count == 5
+
     def test_react_loop_falls_back_to_xml_when_flag_disabled(self) -> None:
         """Mit REPORT_TOOLCALL_MODE=xml bleibt der alte XML-Parsing-Pfad aktiv."""
         from app.services.report_agent.workflow import generate_section_react

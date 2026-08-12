@@ -504,16 +504,29 @@ def generate_section_react(
                 has_tool_calls = True
                 has_final_answer = False
             else:
-                # Kein nativer Tool-Call — Soft-Fallback: XML-Parser einmal probieren
-                xml_fallback = agent._parse_tool_calls(response)
-                if xml_fallback:
-                    tool_calls = xml_fallback
-                    has_tool_calls = True
-                    has_final_answer = False
-                else:
+                # Kein nativer Tool-Call — Soft-Fallback: XML-Parser einmal probieren.
+                # Issue #1277-1: ``content`` kann bei erschöpftem max_tokens,
+                # Safety-Filter oder leerer Completion None sein. Dann wirft
+                # ``_parse_tool_calls(None)`` (und ``"…" in None``) einen
+                # TypeError, den ``_safe_generate_section_react`` abfängt — der
+                # Section wird dauerhaft ``generation_failed``, obwohl der
+                # vorgesehene None-Retry (weiter unten) einen weiteren Versuch
+                # erlaubt. Hier None frühzeitig abfangen und den Retry-Pfad
+                # erreichen lassen.
+                if response is None:
                     tool_calls = []
                     has_tool_calls = False
-                    has_final_answer = "Final Answer:" in response
+                    has_final_answer = False
+                else:
+                    xml_fallback = agent._parse_tool_calls(response)
+                    if xml_fallback:
+                        tool_calls = xml_fallback
+                        has_tool_calls = True
+                        has_final_answer = False
+                    else:
+                        tool_calls = []
+                        has_tool_calls = False
+                        has_final_answer = "Final Answer:" in response
         else:
             # Legacy XML-Pfad
             response = agent.llm.chat(messages=messages, temperature=0.5, max_tokens=4096)
@@ -1239,10 +1252,22 @@ def generate_report(
             if isinstance(exc, BudgetExceededError):
                 raise
             logger.warning("generate_report: red_team_review fehlgeschlagen: %r", exc)
-        completed_message = "Report generation completed"
-        ReportManager.update_progress(report_id, "completed", 100, completed_message, completed_sections=completed_section_titles)
+        # Issue #1277-2: Stage und Message folgen dem tatsächlichen Report-Status.
+        # ``resolve_report_status``/``apply_degradation_downgrade`` können den
+        # Report auf INCOMPLETE setzen (fehlgeschlagene Pflichtsection, lokale
+        # Claim-Degradierung). Ein unbedingtes „completed" bei 100 % würde
+        # Consumern (WebSocket, Polling-Client, Streaming-UI) Erfolg vorgaukeln,
+        # den die Pipeline selbst nicht einlöst — genau die Fehldarstellung, die
+        # #1006 / P0-7 beseitigen sollte.
+        if report.status == ReportStatus.INCOMPLETE:
+            terminal_stage = "incomplete"
+            terminal_message = report.error or "Report generation incomplete"
+        else:
+            terminal_stage = "completed"
+            terminal_message = "Report generation completed"
+        ReportManager.update_progress(report_id, terminal_stage, 100, terminal_message, completed_sections=completed_section_titles)
         if progress_callback:
-            progress_callback("completed", 100, completed_message)
+            progress_callback(terminal_stage, 100, terminal_message)
         if agent.console_logger:
             agent.console_logger.close()
             agent.console_logger = None
