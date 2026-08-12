@@ -7,7 +7,9 @@
  */
 import { z } from "zod";
 
-export const MASKED_KEY_PATTERN = /^.{1,8}\.\.\.[A-Za-z0-9_\-]{4}$/;
+// End-Klasse deckt Base64-Padding (``=``) und Standard-Base64 (``+``/``/``) ab —
+// AWS-Bedrock-Bearer-Tokens sind URL-safe-Base64 und enden haeufig auf ``=``.
+export const MASKED_KEY_PATTERN = /^.{1,8}\.\.\.[A-Za-z0-9_\-=+/]{4}$/;
 
 export const LlmProviderKeyEntrySchema = z
   .object({

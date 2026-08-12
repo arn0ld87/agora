@@ -1,0 +1,3 @@
+### Fixed (Provider-Key-Masking akzeptiert Base64-Suffix — 2026-08-12)
+
+- **`MASKED_KEY_PATTERN` nimmt `=`/`+`/`/` auf:** AWS-Bedrock-Bearer-Tokens sind URL-safe-Base64 und enden häufig auf `=`, was das bisherige Pattern `[A-Za-z0-9_\-]{4}` ablehnte — ein Bedrock-Key ließ sich unter „OpenAI Compatible“ gar nicht persistieren (Pydantic `string_pattern_mismatch`). Die End-Klasse deckt jetzt Standard- und URL-safe-Base64.
