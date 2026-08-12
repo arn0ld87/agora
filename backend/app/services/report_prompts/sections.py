@@ -186,25 +186,42 @@ FIX:   Set confidence_label="low" with source_kind="seed_corpus" and
    Every simulated persona statement or reaction MUST be wrapped in the
    following XML tag — no exceptions:
 
-   <simulated_quote persona_id="<persona_id>" seed_anchor="<evidence_id_or_seed_doc>">…statement text…</simulated_quote>
+   <simulated_quote persona_id="PERSONA_ID" seed_anchor="EVIDENCE_ID_OR_SEED_DOC_ANCHOR">…statement text…</simulated_quote>
 
    Attribute rules (BOTH attributes are REQUIRED — a quote without them is invalid):
    - persona_id: The ID of the simulated persona from the scenario plan (e.g. "persona_03").
      This MUST reference an actual persona that participates in the simulation.
-   - seed_anchor: Either an evidence identifier from the EvidenceMap
-     (e.g. "ev_kg_042") OR a seed document reference using the prefix
-     "seed_doc:" followed by the actual document ID from the scenario's
-     seed data, in the format "seed_doc:<document_id>". This placeholder
-     format must NOT be copied literally — substitute the real document ID.
-     The "seed_doc:" prefix is accepted as an opaque reference without further lookup.
+   - seed_anchor: A reference that MUST resolve to evidence collected during
+     this run. Two accepted forms:
+       a) An evidence identifier from the EvidenceMap: the literal prefix
+          "ev_" followed by exactly 32 hexadecimal characters. Use an
+          identifier that actually appeared in a tool result — never
+          construct one.
+       b) A seed document reference in the exact format
+          "seed_doc:DOCUMENT_ID#chunk:CHUNK_INDEX", where DOCUMENT_ID is the
+          document ID of a document from this run's seed data and
+          CHUNK_INDEX is the integer index of the passage inside that
+          document. Both parts are mandatory — an anchor without the
+          "#chunk:" part can never be resolved and is always treated as
+          unbound.
+     Words in CAPITALS are placeholders and must NOT be copied literally —
+     substitute real values that occurred in this run. Never put "<" or ">"
+     inside an attribute value: the parser cuts the tag at the first ">",
+     which drops the anchor and spills the rest into the quoted text.
 
-   ✅ Correct example:
-   <simulated_quote persona_id="persona_03" seed_anchor="ev_kg_042">
+     Every anchor is checked against the evidence collected during this run,
+     regardless of its prefix. An anchor that does not resolve is reported as
+     an unbound reference and the section is sent back for one repair pass.
+     Inventing a plausible-looking anchor does not create evidence — it only
+     costs the section a retry that cannot succeed.
+
+   ✅ Correct shape (substitute real values from this run):
+   <simulated_quote persona_id="persona_03" seed_anchor="seed_doc:DOCUMENT_ID#chunk:CHUNK_INDEX">
    Ich sehe keinen überzeugenden Mehrwert gegenüber bestehenden Angeboten.
    </simulated_quote>
 
    ❌ Invalid — missing persona_id:
-   <simulated_quote seed_anchor="ev_kg_042">Text</simulated_quote>
+   <simulated_quote seed_anchor="seed_doc:DOCUMENT_ID#chunk:CHUNK_INDEX">Text</simulated_quote>
 
    ❌ Invalid — missing seed_anchor:
    <simulated_quote persona_id="persona_03">Text</simulated_quote>
@@ -357,7 +374,7 @@ Completed Section Content (Please Read Carefully to Avoid Duplication):
 
 [⚠️ Quote Format Reminder — Mandatory]
 Every simulated persona statement MUST use the XML tag with BOTH attributes:
-<simulated_quote persona_id="<persona_id>" seed_anchor="<ev_id_or_seed_doc:...>">statement</simulated_quote>
+<simulated_quote persona_id="PERSONA_ID" seed_anchor="EVIDENCE_ID_OR_SEED_DOC_ANCHOR">statement</simulated_quote>
 Plain Markdown quotes (> "...") for persona statements are NOT accepted.
 
 [⚠️ Provenance Reminder — Seed Facts vs. Simulation]
