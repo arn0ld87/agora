@@ -50,16 +50,18 @@ def echo_thought_signatures(
         if not isinstance(tool_calls, list) or not tool_calls:
             continue
 
-        first_call = tool_calls[0]
-        if not isinstance(first_call, dict) or first_call.get("extra_content"):
-            continue
-        tool_call_id = first_call.get("id")
-        captured = signatures.get(tool_call_id) if isinstance(tool_call_id, str) else None
-        first_call["extra_content"] = deepcopy(captured) if captured else {
-            "google": {
-                "thought_signature": THOUGHT_SIGNATURE_VALIDATOR_ESCAPE,
+        for tool_call in tool_calls:
+            if not isinstance(tool_call, dict) or tool_call.get("extra_content"):
+                continue
+            tool_call_id = tool_call.get("id")
+            captured = (
+                signatures.get(tool_call_id) if isinstance(tool_call_id, str) else None
+            )
+            tool_call["extra_content"] = deepcopy(captured) if captured else {
+                "google": {
+                    "thought_signature": THOUGHT_SIGNATURE_VALIDATOR_ESCAPE,
+                }
             }
-        }
     return processed
 
 

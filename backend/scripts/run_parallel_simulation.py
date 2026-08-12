@@ -126,11 +126,6 @@ except ImportError:  # direct script execution
         seed_simulation_rng,
     )
 
-try:
-    from .gemini_thought_signatures import create_gemini_thought_signature_model
-except ImportError:  # direct script execution
-    from gemini_thought_signatures import create_gemini_thought_signature_model
-
 _runtime_paths = resolve_runtime_paths(__file__)
 install_script_paths(_runtime_paths)
 init_runner_tracing("agora-oasis-runner")
@@ -169,6 +164,24 @@ if __name__ == '__main__' and any(arg in sys.argv for arg in ('-h', '--help')):
     sys.exit(0)
 
 from app.config import Config
+
+
+def _create_gemini_model(
+    *,
+    model_type: str,
+    model_config_dict: dict[str, Any],
+    api_key: str,
+):
+    try:
+        from .gemini_thought_signatures import create_gemini_thought_signature_model
+    except ImportError:  # direct script execution
+        from gemini_thought_signatures import create_gemini_thought_signature_model
+
+    return create_gemini_thought_signature_model(
+        model_type=model_type,
+        model_config_dict=model_config_dict,
+        api_key=api_key,
+    )
 
 
 def disable_oasis_logging():
@@ -1416,7 +1429,7 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
         # (build_route_subprocess_env); dieser Fallback deckt den Standalone-/
         # Dev-Pfad ab, in dem nur LLM_API_KEY/GOOGLE_API_KEY gesetzt ist.
         os.environ["GEMINI_API_KEY"] = _gemini_key
-        return create_gemini_thought_signature_model(
+        return _create_gemini_model(
             model_type=llm_model,
             model_config_dict=model_cfg,
             api_key=_gemini_key,

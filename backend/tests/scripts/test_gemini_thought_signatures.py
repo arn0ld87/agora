@@ -23,7 +23,12 @@ def test_echoes_captured_signature_into_reconstructed_tool_call() -> None:
                     "id": "call-1",
                     "type": "function",
                     "function": {"name": "create_post", "arguments": "{}"},
-                }
+                },
+                {
+                    "id": "call-2",
+                    "type": "function",
+                    "function": {"name": "like_post", "arguments": "{}"},
+                },
             ],
         },
         {"role": "tool", "tool_call_id": "call-1", "content": "ok"},
@@ -31,13 +36,20 @@ def test_echoes_captured_signature_into_reconstructed_tool_call() -> None:
 
     processed = echo_thought_signatures(
         messages,
-        {"call-1": {"google": {"thought_signature": "signature-1"}}},
+        {
+            "call-1": {"google": {"thought_signature": "signature-1"}},
+            "call-2": {"google": {"thought_signature": "signature-2"}},
+        },
     )
 
     assert processed[1]["tool_calls"][0]["extra_content"] == {
         "google": {"thought_signature": "signature-1"}
     }
+    assert processed[1]["tool_calls"][1]["extra_content"] == {
+        "google": {"thought_signature": "signature-2"}
+    }
     assert "extra_content" not in messages[1]["tool_calls"][0]
+    assert "extra_content" not in messages[1]["tool_calls"][1]
 
 
 def test_extracts_google_signature_from_openai_compat_response() -> None:

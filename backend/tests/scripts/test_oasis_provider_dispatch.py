@@ -142,7 +142,7 @@ class TestCreateModelGeminiBranch:
 
         import run_parallel_simulation as rps  # type: ignore[import]
         create_gemini = MagicMock(return_value=MagicMock())
-        monkeypatch.setattr(rps, "create_gemini_thought_signature_model", create_gemini)
+        monkeypatch.setattr(rps, "_create_gemini_model", create_gemini)
 
         config: dict[str, Any] = {}
         result = rps.create_model(config, use_boost=False)

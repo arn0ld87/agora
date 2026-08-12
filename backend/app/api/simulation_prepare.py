@@ -4,8 +4,9 @@ Preparation-related simulation API routes split from the main module.
 
 import os
 import threading
+from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Iterator, Optional
 
 from flask import request
 from pydantic import ValidationError
@@ -48,13 +49,33 @@ if TYPE_CHECKING:  # pragma: no cover — nur für Typprüfung
     from ..services.llm_runtime import RuntimeLlmConfig
 
 
-_prepare_start_locks: dict[str, threading.Lock] = {}
+@dataclass
+class _PrepareStartLockEntry:
+    lock: threading.Lock
+    users: int = 0
+
+
+_prepare_start_locks: dict[str, _PrepareStartLockEntry] = {}
 _prepare_start_locks_guard = threading.Lock()
+_active_prepare_jobs: set[str] = set()
 
 
-def _prepare_start_lock_for(simulation_id: str) -> threading.Lock:
+@contextmanager
+def _prepare_start_lock(simulation_id: str) -> Iterator[None]:
     with _prepare_start_locks_guard:
-        return _prepare_start_locks.setdefault(simulation_id, threading.Lock())
+        entry = _prepare_start_locks.setdefault(
+            simulation_id,
+            _PrepareStartLockEntry(lock=threading.Lock()),
+        )
+        entry.users += 1
+    try:
+        with entry.lock:
+            yield
+    finally:
+        with _prepare_start_locks_guard:
+            entry.users -= 1
+            if entry.users == 0 and _prepare_start_locks.get(simulation_id) is entry:
+                del _prepare_start_locks[simulation_id]
 
 
 def _parse_quota_plan(data: dict) -> Optional[PersonaQuotaPlan]:
@@ -232,9 +253,16 @@ class _PrepareRejected(Exception):
             self.run_failure_message = run_failure_message
 
 
-def _ensure_prepare_startable(state: Any) -> None:
+def _ensure_prepare_startable(
+    state: Any,
+    simulation_id: str,
+) -> None:
     """Verhindert zwei schreibende Prepare-Jobs fuer dieselbe Simulation."""
     if state.status != SimulationStatus.PREPARING:
+        return
+    with _prepare_start_locks_guard:
+        active_job_exists = simulation_id in _active_prepare_jobs
+    if not active_job_exists:
         return
     raise _PrepareRejected(
         json_error(
@@ -918,6 +946,28 @@ def _make_prepare_job(
     return run_prepare
 
 
+def _track_active_prepare_job(
+    simulation_id: str,
+    target: "Callable[[], None]",
+) -> "Callable[[], None]":
+    with _prepare_start_locks_guard:
+        _active_prepare_jobs.add(simulation_id)
+
+    def tracked() -> None:
+        try:
+            target()
+        finally:
+            with _prepare_start_locks_guard:
+                _active_prepare_jobs.discard(simulation_id)
+
+    return tracked
+
+
+def _discard_active_prepare_job(simulation_id: str) -> None:
+    with _prepare_start_locks_guard:
+        _active_prepare_jobs.discard(simulation_id)
+
+
 def _build_prepare_response(
     simulation_id: str,
     task_id: str,
@@ -957,6 +1007,7 @@ def _prepare_simulation_under_start_lock(
 
     try:
         manager = SimulationManager()
+        task_manager = TaskManager()
         state = manager.get_simulation(simulation_id)
         if not state:
             raise _PrepareRejected(
@@ -967,7 +1018,7 @@ def _prepare_simulation_under_start_lock(
                 )
             )
 
-        _ensure_prepare_startable(state)
+        _ensure_prepare_startable(state, simulation_id)
 
         req = _PrepareRequest(
             simulation_id=simulation_id,
@@ -993,7 +1044,6 @@ def _prepare_simulation_under_start_lock(
         storage = get_simulation_storage()
         _preview_entity_counts(state, storage, inputs)
 
-        task_manager = TaskManager()
         _precheck_prepare_ai_model_ref(ai_model_ref)
     except _PrepareRejected as rejected:
         # Vor der Run-Registrierung — es gibt noch keinen Record, der
@@ -1028,8 +1078,8 @@ def _prepare_simulation_under_start_lock(
 
             # TODO(P0-queue): migrate to Redis-Queue (RQ) in Wave 2 — see app/jobs/__init__.py
             from ..jobs import enqueue
-            enqueue(
-                "simulation_prepare",
+            tracked_job = _track_active_prepare_job(
+                simulation_id,
                 _make_prepare_job(
                     manager=manager,
                     task_manager=task_manager,
@@ -1042,6 +1092,11 @@ def _prepare_simulation_under_start_lock(
                     run_record=run_record,
                 ),
             )
+            try:
+                enqueue("simulation_prepare", tracked_job)
+            except BaseException:
+                _discard_active_prepare_job(simulation_id)
+                raise
     except RunPersistenceError:
         # #844: Die failed-Markierung wurde nicht persistiert — das darf nicht
         # wie eine sauber abgeschlossene Ablehnung aussehen.
@@ -1069,7 +1124,7 @@ def prepare_simulation():
     except _PrepareRejected as rejected:
         return rejected.response
 
-    with _prepare_start_lock_for(simulation_id):
+    with _prepare_start_lock(simulation_id):
         return _prepare_simulation_under_start_lock(data, simulation_id, ai_model_ref)
 
 

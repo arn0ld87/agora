@@ -61,7 +61,7 @@ Quelle der Wahrheit für die Routen ist der Code in [`../backend/app/api/`](../b
 
 Budget-Hinweis (#764, [ADR-0012](decisions/0012-run-budgets.md)): `POST /prepare` und `POST /start` akzeptieren ein optionales `budget`-Objekt (Contract `run-budget-config.schema.json`: `max_tokens`, `max_cost_micros`, `max_duration_seconds`, `max_llm_calls`, `enforcement` soft/hard, `currency`). Report-Generierung erbt das Budget der zugehörigen Simulation.
 
-Prepare-Kollision (#1271): Läuft für dieselbe Simulation bereits ein Prepare-Task (`status=preparing`), antwortet `POST /prepare` mit HTTP 409 und `code=simulation_prepare_in_progress`. Dabei wird kein weiterer Run oder Task erzeugt; `force_regenerate` ändert daran nichts.
+Prepare-Kollision (#1271): Läuft für dieselbe Simulation tatsächlich noch ein Prepare-Task (`status=preparing`), antwortet `POST /prepare` mit HTTP 409 und `code=simulation_prepare_in_progress`. Dabei wird kein weiterer Run oder Task erzeugt; `force_regenerate` ändert daran nichts. Ein verwaister `preparing`-Zustand ohne aktiven Task bleibt recoverbar.
 
 ### Report — `/api/report` (`report_bp`)
 
