@@ -87,7 +87,11 @@ def _extract_sentiment_scores(evidence: List[Dict]) -> List[float]:
     result: List[float] = []
     for e in evidence:
         val = e.get("sentiment_score")
-        if val is not None and isinstance(val, (int, float)):
+        # Issue #1277-7(4): ``bool`` erbt von ``int`` — ``isinstance(True,
+        # (int, float))`` ist True, wodurch boolesche Sentinel-Werte als
+        # numerische Sentiment-Scores durchrutschten und eine Schein-Penalty
+        # auslösen konnten. Boolesche Werte sind keine Sentiments.
+        if val is not None and isinstance(val, (int, float)) and not isinstance(val, bool):
             result.append(float(val))
     return result
 
@@ -174,33 +178,37 @@ def partition_by_entailment(evidence: List[Dict]) -> Tuple[List[Dict], List[Dict
     return supporting, contradicting, related
 
 
-def compute_confidence(
+def _compute_confidence_with_penalties(
     evidence: List[Dict],
     *,
     contradiction_penalty: float = 0.0,
-) -> Tuple[float, str]:
-    """Liefert (score, label) für eine Evidence-Liste.
+) -> Tuple[float, str, List[str]]:
+    """Authoritative Stelle für Score, Label und Audit-Trail.
 
-    Nur tatsächlich stützende Evidence geht in den Score ein. Thematisch
-    verwandte Treffer (``RELATED_ONLY``/``INSUFFICIENT``) erhöhen die
-    Confidence nicht — vorher floss ihr Retrieval-``match_score`` mit 40 %
-    Gewicht in die Relevanz und machte Ähnlichkeit zu Sicherheit.
-    Widersprechende Evidence senkt den Score zusätzlich.
-
-    MAI-14: Wenn sentiment_score-Felder in den Evidence-Items vorhanden sind
-    und _has_contradiction() anschlägt, wird automatisch ein Sentiment-
-    Contradiction-Penalty von 0.2 aufaddiert (zusätzlich zum extern
-    übergebenen contradiction_penalty).
+    Issue #1277-7: ``compute_confidence`` und ``compute_claim_confidence``
+    müssen denselben Penalty-Satz beschreiben. Bisher extrahierte
+    ``compute_claim_confidence`` Sentiment-Scores über die *gesamte* Evidence
+    (inkl. widersprechender und nur verwandter Items), während der Score in
+    ``compute_confidence`` nur über die stützende Teilmenge lief — der
+    Audit-Trail konnte Penalties aufführen, die der Score gar nicht abbildete,
+    und umgekehrt fehlte die Entailment-Penalty im Audit. Beide Wrapper leiten
+    jetzt hieraus ab, sodass Score und Audit-Trail dieselbe Penalty-Menge
+    tragen.
     """
+    applied_penalties: List[str] = []
+
     if not evidence:
-        return 0.15, "speculative"
+        return 0.15, "speculative", applied_penalties
 
     supporting, contradicting, _related = partition_by_entailment(evidence)
     if not supporting:
         # Kein einziger Beleg — thematische Nähe allein trägt keinen Claim.
-        return 0.15, "speculative"
+        return 0.15, "speculative", applied_penalties
+    extra_entailment_penalty = 0.0
     if contradicting:
-        contradiction_penalty += _CONTRADICTION_PENALTY_AMOUNT * min(len(contradicting), 2)
+        extra_entailment_penalty = _CONTRADICTION_PENALTY_AMOUNT * min(len(contradicting), 2)
+        applied_penalties.append("entailment_contradiction_penalty")
+    effective_contradiction_penalty = contradiction_penalty + extra_entailment_penalty
     evidence = supporting
 
     relevance = _component_relevance(evidence)
@@ -211,8 +219,10 @@ def compute_confidence(
     # MAI-14: Sentiment-Contradiction-Penalty auto-berechnen
     sentiments = _extract_sentiment_scores(evidence)
     sentiment_penalty = _CONTRADICTION_PENALTY_AMOUNT if _has_contradiction(sentiments) else 0.0
+    if sentiment_penalty:
+        applied_penalties.append("contradiction_penalty")
 
-    total_penalty = max(0.0, contradiction_penalty) + sentiment_penalty
+    total_penalty = max(0.0, effective_contradiction_penalty) + sentiment_penalty
 
     raw = (
         0.40 * relevance
@@ -261,13 +271,36 @@ def compute_confidence(
     else:
         label = "verified"
 
-    return round(score, 3), label
+    return round(score, 3), label, applied_penalties
+
+
+def compute_confidence(
+    evidence: List[Dict],
+    *,
+    contradiction_penalty: float = 0.0,
+) -> Tuple[float, str]:
+    """Liefert (score, label) für eine Evidence-Liste.
+
+    Nur tatsächlich stützende Evidence geht in den Score ein. Thematisch
+    verwandte Treffer (``RELATED_ONLY``/``INSUFFICIENT``) erhöhen die
+    Confidence nicht — vorher floss ihr Retrieval-``match_score`` mit 40 %
+    Gewicht in die Relevanz und machte Ähnlichkeit zu Sicherheit.
+    Widersprechende Evidence senkt den Score zusätzlich.
+
+    MAI-14: Wenn sentiment_score-Felder in den Evidence-Items vorhanden sind
+    und _has_contradiction() anschlägt, wird automatisch ein Sentiment-
+    Contradiction-Penalty von 0.2 aufaddiert (zusätzlich zum extern
+    übergebenen contradiction_penalty).
+    """
+    score, label, _applied = _compute_confidence_with_penalties(
+        evidence, contradiction_penalty=contradiction_penalty
+    )
+    return score, label
 
 
 def compute_claim_confidence(
     evidence: List[Dict],
     *,
-    base_score: float = 0.5,
     contradiction_penalty: float = 0.0,
 ) -> Tuple[float, str, List[str]]:
     """Erweiterte Variante von compute_confidence mit Penalty-Audit-Trail.
@@ -278,26 +311,15 @@ def compute_claim_confidence(
         label: "speculative" | "low" | "medium" | "high" | "verified"
         applied_penalties: Namen aller angewandten Penalties für Audit.
 
-    MAI-14: Erkennt Sentiment-Widersprüche (std > 0.6 ODER Range > 0.6)
-    und trägt "contradiction_penalty" in applied_penalties ein.
+    Issue #1277-7: Audit-Trail und Score stammen aus derselben Berechnung
+    (``_compute_confidence_with_penalties``). Zuvor extrahierte diese Funktion
+    Sentiment-Scores über die gesamte Evidence-Menge, während der Score nur
+    die stützende Teilmenge sah — der Audit-Trail konnte Penalties nennen, die
+    der Score nicht abbildete, und die Entailment-Penalty fehlte im Audit.
+    Der tote ``base_score``-Parameter ist entfallen; er wurde nie ausgewertet.
     """
-    applied_penalties: List[str] = []
-
-    # MAI-14: Sentiment-Contradiction-Heuristik
-    sentiments = _extract_sentiment_scores(evidence)
-    sentiment_contradiction = _has_contradiction(sentiments)
-    if sentiment_contradiction:
-        applied_penalties.append("contradiction_penalty")
-
-    # Delegiere an compute_confidence — dadurch bleiben alle bestehenden
-    # Formeln (relevance, source_quality, specificity, consistency, caps)
-    # konsistent.
-    score, label = compute_confidence(
-        evidence,
-        contradiction_penalty=contradiction_penalty,
-        # Hinweis: compute_confidence berechnet den Sentiment-Penalty intern
-        # nochmal selbst — das ist korrekt, da es die einzige Authoritative
-        # Stelle für die Formel ist.
+    score, label, applied_penalties = _compute_confidence_with_penalties(
+        evidence, contradiction_penalty=contradiction_penalty
     )
     return score, label, applied_penalties
 
@@ -397,8 +419,10 @@ def apply_echo_cap(
     capped_label = label
     if label in ("high", "verified"):
         capped_label = "medium"
-    elif capped_score < 0.85 and label in ("high", "verified"):
-        capped_label = "medium"
+    # Issue #1277-3: Der folgende elif-Zweig war tot. Er lief nur, wenn label
+    # NICHT in ("high", "verified") ist — dann ist sein zweites Prädikat
+    # ``label in ("high", "verified")`` aber immer False. Abgestuft wurde also
+    # nie; das ``if`` oben deckt den einzigen realen Fall ab.
     return round(capped_score, 3), capped_label
 
 
