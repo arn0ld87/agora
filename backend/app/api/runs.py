@@ -1027,6 +1027,28 @@ def replay_run(run_id: str):
     return make_response(body, 202)
 
 
+@runs_bp.route("/<run_id>/manifest", methods=["GET"])
+@handle_api_errors(logger=logger, log_prefix="Failed to get run manifest")
+def get_run_manifest(run_id: str):
+    """GET /api/runs/<run_id>/manifest — RunManifest abrufen (Issue #763)."""
+    run, error = _get_run_or_404(run_id)
+    if error:
+        return error
+
+    manifest_path = os.path.join(ArtifactLocator.run_dir(run_id), "manifest.json")
+    if not os.path.exists(manifest_path):
+        return json_error(
+            f"Run {run_id} has no manifest",
+            status=404,
+            code="no_manifest",
+        )
+
+    with open(manifest_path, encoding="utf-8") as f:
+        data = json.load(f)
+
+    return json_success(data)
+
+
 @runs_bp.route("/<run_id>/export", methods=["GET"])
 @handle_api_errors(logger=logger, log_prefix="Failed to export run")
 def export_run(run_id: str):
