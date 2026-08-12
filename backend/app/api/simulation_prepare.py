@@ -3,8 +3,10 @@ Preparation-related simulation API routes split from the main module.
 """
 
 import os
+import threading
+from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Iterator, Optional
 
 from flask import request
 from pydantic import ValidationError
@@ -45,6 +47,35 @@ if TYPE_CHECKING:  # pragma: no cover — nur für Typprüfung
     from ..contracts.ai_provider_contract import AiModelRef
     from ..contracts.run_budget_contract import RunBudgetConfig
     from ..services.llm_runtime import RuntimeLlmConfig
+
+
+@dataclass
+class _PrepareStartLockEntry:
+    lock: threading.Lock
+    users: int = 0
+
+
+_prepare_start_locks: dict[str, _PrepareStartLockEntry] = {}
+_prepare_start_locks_guard = threading.Lock()
+_active_prepare_jobs: set[str] = set()
+
+
+@contextmanager
+def _prepare_start_lock(simulation_id: str) -> Iterator[None]:
+    with _prepare_start_locks_guard:
+        entry = _prepare_start_locks.setdefault(
+            simulation_id,
+            _PrepareStartLockEntry(lock=threading.Lock()),
+        )
+        entry.users += 1
+    try:
+        with entry.lock:
+            yield
+    finally:
+        with _prepare_start_locks_guard:
+            entry.users -= 1
+            if entry.users == 0 and _prepare_start_locks.get(simulation_id) is entry:
+                del _prepare_start_locks[simulation_id]
 
 
 def _parse_quota_plan(data: dict) -> Optional[PersonaQuotaPlan]:
@@ -220,6 +251,26 @@ class _PrepareRejected(Exception):
             # ausgewertet vom RunLifecycle (#841: die detaillierte Meldung
             # landet zuletzt auf dem Run, nach fail_task()).
             self.run_failure_message = run_failure_message
+
+
+def _ensure_prepare_startable(
+    state: Any,
+    simulation_id: str,
+) -> None:
+    """Verhindert zwei schreibende Prepare-Jobs fuer dieselbe Simulation."""
+    if state.status != SimulationStatus.PREPARING:
+        return
+    with _prepare_start_locks_guard:
+        active_job_exists = simulation_id in _active_prepare_jobs
+    if not active_job_exists:
+        return
+    raise _PrepareRejected(
+        json_error(
+            ApiErrorCode.SIMULATION_PREPARE_IN_PROGRESS,
+            status=409,
+            message="Simulation preparation is already in progress",
+        )
+    )
 
 
 @dataclass(frozen=True)
@@ -895,6 +946,28 @@ def _make_prepare_job(
     return run_prepare
 
 
+def _track_active_prepare_job(
+    simulation_id: str,
+    target: "Callable[[], None]",
+) -> "Callable[[], None]":
+    with _prepare_start_locks_guard:
+        _active_prepare_jobs.add(simulation_id)
+
+    def tracked() -> None:
+        try:
+            target()
+        finally:
+            with _prepare_start_locks_guard:
+                _active_prepare_jobs.discard(simulation_id)
+
+    return tracked
+
+
+def _discard_active_prepare_job(simulation_id: str) -> None:
+    with _prepare_start_locks_guard:
+        _active_prepare_jobs.discard(simulation_id)
+
+
 def _build_prepare_response(
     simulation_id: str,
     task_id: str,
@@ -924,17 +997,17 @@ def _build_prepare_response(
     }
 
 
-@simulation_bp.route('/prepare', methods=['POST'])
-@handle_api_errors(log_prefix="Failed to start preparation task")
-def prepare_simulation():
-    """Prepare a simulation environment as an async task."""
+def _prepare_simulation_under_start_lock(
+    data: "dict[str, Any]",
+    simulation_id: str,
+    ai_model_ref: "AiModelRef | None",
+):
+    """Prüft und startet Prepare innerhalb des simulationsbezogenen Locks."""
     from ..models.task import TaskManager
 
-    data = request.get_json() or {}
     try:
-        simulation_id, ai_model_ref = _parse_prepare_identity(data)
-
         manager = SimulationManager()
+        task_manager = TaskManager()
         state = manager.get_simulation(simulation_id)
         if not state:
             raise _PrepareRejected(
@@ -944,6 +1017,8 @@ def prepare_simulation():
                     message=f"Simulation does not exist: {simulation_id}",
                 )
             )
+
+        _ensure_prepare_startable(state, simulation_id)
 
         req = _PrepareRequest(
             simulation_id=simulation_id,
@@ -969,7 +1044,6 @@ def prepare_simulation():
         storage = get_simulation_storage()
         _preview_entity_counts(state, storage, inputs)
 
-        task_manager = TaskManager()
         _precheck_prepare_ai_model_ref(ai_model_ref)
     except _PrepareRejected as rejected:
         # Vor der Run-Registrierung — es gibt noch keinen Record, der
@@ -1004,8 +1078,8 @@ def prepare_simulation():
 
             # TODO(P0-queue): migrate to Redis-Queue (RQ) in Wave 2 — see app/jobs/__init__.py
             from ..jobs import enqueue
-            enqueue(
-                "simulation_prepare",
+            tracked_job = _track_active_prepare_job(
+                simulation_id,
                 _make_prepare_job(
                     manager=manager,
                     task_manager=task_manager,
@@ -1018,6 +1092,11 @@ def prepare_simulation():
                     run_record=run_record,
                 ),
             )
+            try:
+                enqueue("simulation_prepare", tracked_job)
+            except BaseException:
+                _discard_active_prepare_job(simulation_id)
+                raise
     except RunPersistenceError:
         # #844: Die failed-Markierung wurde nicht persistiert — das darf nicht
         # wie eine sauber abgeschlossene Ablehnung aussehen.
@@ -1033,6 +1112,20 @@ def prepare_simulation():
         return rejected.response
 
     return json_success(_build_prepare_response(simulation_id, task_id, run_record, state, inputs))
+
+
+@simulation_bp.route('/prepare', methods=['POST'])
+@handle_api_errors(log_prefix="Failed to start preparation task")
+def prepare_simulation():
+    """Prepare a simulation environment as an async task."""
+    data = request.get_json() or {}
+    try:
+        simulation_id, ai_model_ref = _parse_prepare_identity(data)
+    except _PrepareRejected as rejected:
+        return rejected.response
+
+    with _prepare_start_lock(simulation_id):
+        return _prepare_simulation_under_start_lock(data, simulation_id, ai_model_ref)
 
 
 @simulation_bp.route('/prepare/status', methods=['POST'])

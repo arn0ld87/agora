@@ -2,7 +2,7 @@
 
 Diese Datei erklärt die Laufzeit-Mechanik von Agora für Agenten und LLMs, die mit dem System oder seinen Artefakten arbeiten. Sie beschreibt **den verifizierten Istzustand**, nicht die Zielarchitektur. Produktbeschreibung steht in [`README.md`](README.md), Arbeitsregeln in [`AGENTS.md`](AGENTS.md), Release-Status in [`docs/STATUS.md`](docs/STATUS.md).
 
-> **Runtime-Verifikation:** gegen `main@a3cebd38f38fc2c0043dc245766869eb05b41e0f` am 2026-08-11 geprüft. Ändert ein PR die hier beschriebene Laufzeit-Mechanik, wird `CONTEXT.md` im selben PR nachgezogen und diese Referenz aktualisiert.
+> **Runtime-Verifikation:** gegen `origin/main@7748d7b1` plus die Laufzeitänderungen aus #1271 am 2026-08-12 geprüft. Ändert ein PR die hier beschriebene Laufzeit-Mechanik, wird `CONTEXT.md` im selben PR nachgezogen und diese Referenz aktualisiert.
 
 > Kurzfassung: Agora zerlegt Dokumente in einen Wissensgraphen, leitet daraus geeignete Einzel- oder Kollektiv-Personas ab, lässt diese in einer OASIS-Simulation auf zwei Social-Plattformen interagieren, befragt ausgewählte Personas anschließend in separaten Tiefeninterviews und erzeugt daraus einen Bericht. **Extrahierte Claims** werden gegen Evidence gebunden; der Fließtext hat zusätzlich eine eigene, deutlich engere Prüfstrecke.
 
@@ -44,6 +44,7 @@ Prepare besteht aus mehreren Schutzstufen. Entscheidend ist, **welche Stufe welc
 4. **LLM-seitige Eignungsprüfung am Namen und Kontext.** Im ohnehin stattfindenden Persona-Generierungsaufruf darf das Modell `ineligible: true` zurückgeben. Eine solche Ablehnung ist von einem Generierungsfehler getrennt (`PersonaIneligible`) und kann aus dem Reservepool nachbesetzt werden. Das schließt den beobachteten Fall, dass etwa Software, Orte oder Dokumentverweise trotz des Typs `Organization` zu Personas wurden (#1247).
 5. **Persona-Art.** Individuen und Gruppen benutzen getrennte Verträge. Gruppen-/Organisationsentitäten werden als `persona_kind: collective` geführt und erhalten keine erfundene persönliche Vita mit Alter, Geschlecht, MBTI oder Beruf. Individuen bleiben `persona_kind: individual` (#1246).
 6. **Identitätsangleichung bei Individuen.** Wenn der Persona-Freitext mit einem erkennbaren Personennamen beginnt, wird dieser deterministisch auf den finalen Anzeigenamen ausgerichtet. Damit bekommt der nachgelagerte Interview-Prompt nicht mehr absichtlich zwei verschiedene Identitäten für dieselbe Persona.
+7. **Exklusiver Prepare-Schreiber.** Ein zweites `POST /api/simulation/prepare` wird bei Zustand `preparing` und einem tatsächlich aktiven Prepare-Task vor Run-, Task- und Artefakterzeugung mit HTTP 409 und `simulation_prepare_in_progress` abgelehnt. Ohne lebenden Task bleibt die bestehende Recovery für verwaiste Zustände erreichbar; `force_regenerate` umgeht nur den Aktivitäts-Guard nicht (#1271).
 
 **Grenze der Eignungsprüfung:** Der regelbasierte/degradierte Persona-Pfad führt keine semantische LLM-Ablehnung durch. Ein LLM-Ausfall ist absichtlich nicht dasselbe wie `ineligible`; sonst würde ein Providerfehler still als fachlicher Ausschluss interpretiert. Bei Runs mit Degradierung muss deshalb `generation_source` in den finalen Profilen mitbewertet werden.
 
@@ -66,6 +67,8 @@ Die eigentliche OASIS/CAMEL-Simulation läuft in einem **separaten Subprozess**.
 | Reddit | `reddit` | `like_post`, `dislike_post`, `create_post`, `create_comment`, `like_comment`, `dislike_comment`, `search_posts`, `search_user`, `trend`, `refresh`, `do_nothing`, `follow`, `mute` |
 
 Twitter kennt **keine Kommentare**. `quote_post` ist die dortige zitierende Reaktionsform; `0 comments` auf Twitter ist deshalb erwartetes Verhalten.
+
+Gemini-3-Tool-Turns laufen in CAMEL 0.2.78 weiterhin über dessen OpenAI-kompatiblen Modellpfad. Agora übernimmt deshalb `extra_content.google.thought_signature` aus der Provider-Antwort anhand der Tool-Call-ID in die rekonstruierte Assistant-Historie. Nur wenn CAMEL einen synthetischen Tool-Call ohne zuvor empfangene Signatur rekonstruiert, wird der von Google dokumentierte Validator-Ersatz verwendet (#1271).
 
 `max_rounds` kann die geplante Rundenzahl abschneiden:
 
@@ -312,6 +315,8 @@ Die Embedding-UI ist damit nicht automatisch die Konfigurationsquelle des Graph-
 | `expected` | Reposts/Quotes erzeugen zusätzliche Post-Zeilen, reine Reposts teils mit leerem `content` | DB-Semantik, kein originärer Leerpost. |
 | `fixed-code` | mehrere `initial_posts` mit demselben Poster | Seit #1245 werden sie für Twitter und Reddit gemeinsam aufgebaut und nicht mehr überschrieben. Aktuelles Log: `Published N initial posts from M distinct agents`. |
 | `fixed-code / rerun sinnvoll` | Persona-Anzeigename und Persona-Text beschrieben verschiedene Menschen; Organisationen bekamen erfundene persönliche Viten | Strukturell in #1246 geändert: Identitätsangleichung + `individual`/`collective`. Ein produktnaher Nachlauf bleibt der relevante Wirksamkeitsnachweis. |
+| `fixed-code` | parallele Prepare-Aufrufe schrieben dieselben Simulationsartefakte | Seit #1271 wird der zweite Aufruf bei aktivem Prepare-Task vor Run- und Task-Erzeugung mit HTTP 409 abgelehnt; verwaiste `preparing`-Zustände bleiben wiederherstellbar. |
+| `fixed-code` | Gemini meldet `Function call is missing a thought_signature` nach einem Tool-Turn | Seit #1271 bewahrt der CAMEL-Adapter die Signatur pro Tool-Call und schreibt sie in die Folgehistorie zurück. |
 | `known-bug` | `pooler.dense.weight MISSING` bei `twhin-bert-base` | #1236; Twitter-Recommender nutzt auf diesem Runtime-Stand zufällig initialisierte Pooler-Gewichte. |
 | `known-bug` | Evaluationsdokument enthält erwartete Antworten/Meta-Text, die später als Befund wieder auftauchen | #1240; Testfall-Hygiene und Evidence-Typisierung. Solche Runs beweisen keinen isolierten Simulationsmehrwert. |
 | `known-gap` | Extrahierte `entity_type`-Werte sind nicht vollständig an die Lauf-Ontologie gebunden | Restarbeit aus #1247. Die typunabhängige Eignungsprüfung ist derzeit die tragende Schutzschicht. |
