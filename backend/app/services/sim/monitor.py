@@ -50,12 +50,19 @@ def _read_run_usage_summary(run_dir: str) -> Optional[Dict[str, Any]]:
     """``usage_summary.json`` aus dem Run-Verzeichnis lesen (Issue #763, Ticket 3).
 
     Fehlende oder unlesbare Datei ist kein Fehler: nicht jeder Run erzeugt eine
-    Usage-Summary (Stub-Modus, Abbruch vor dem ersten LLM-Call).
+    Usage-Summary (Stub-Modus, Abbruch vor dem ersten LLM-Call). Bewusst ohne
+    ``utils.json_io`` — der Guard in ``tests/test_no_json_io_leakage.py``
+    reserviert diesen Helper für den ``SimulationArtifactStore``-Adapter.
     """
-    from ...services.run_usage_ledger import USAGE_SUMMARY_FILENAME
-    from ...utils.json_io import read_json_file
+    import json
 
-    data = read_json_file(os.path.join(run_dir, USAGE_SUMMARY_FILENAME), default=None)
+    from ..run_usage_ledger import USAGE_SUMMARY_FILENAME
+
+    try:
+        with open(os.path.join(run_dir, USAGE_SUMMARY_FILENAME), encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return None
     return data if isinstance(data, dict) else None
 
 

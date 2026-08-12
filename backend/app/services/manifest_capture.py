@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import tempfile
 from datetime import datetime, timezone
 from typing import Any
 
@@ -18,7 +19,6 @@ from app.contracts.run_manifest_contract import (
     RunManifest,
     StageRoute,
 )
-from app.utils.json_io import write_json_atomic
 
 logger = logging.getLogger("agora.manifest_capture")
 
@@ -30,8 +30,24 @@ def _write_manifest(manifest_path: str, manifest: RunManifest) -> None:
     bereits beim Öffnen abschneiden; bricht der Dump danach ab, bleibt eine
     Ruine zurück. Zusätzlich können ``GET /manifest`` und der ZIP-Export
     parallel lesen und dabei halbfertiges JSON erwischen.
+
+    Bewusst lokal statt über ``utils.json_io``: der Guard in
+    ``tests/test_no_json_io_leakage.py`` reserviert diesen Helper für den
+    ``SimulationArtifactStore``-Adapter. Das Manifest braucht außerdem
+    ``sort_keys=True`` für stabile Diffs zwischen Draft und Final.
     """
-    write_json_atomic(manifest_path, manifest.model_dump(mode="json"))
+    directory = os.path.dirname(manifest_path) or "."
+    os.makedirs(directory, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(prefix=".tmp-manifest-", suffix=".json", dir=directory)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(manifest.model_dump(mode="json"), handle, indent=2, sort_keys=True)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_path, manifest_path)
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
 
 class ManifestCapture:

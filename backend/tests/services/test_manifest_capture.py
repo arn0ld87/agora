@@ -506,7 +506,7 @@ class TestManifestAtomicWrite:
         def _boom(*args, **kwargs):
             raise OSError("Disk voll")
 
-        monkeypatch.setattr("app.utils.json_io.json.dump", _boom)
+        monkeypatch.setattr("app.services.manifest_capture.json.dump", _boom)
 
         with pytest.raises(OSError):
             self._draft(run_dir, graph_id="graph_neu")
@@ -522,7 +522,7 @@ class TestManifestAtomicWrite:
         def _boom(*args, **kwargs):
             raise OSError("Disk voll")
 
-        monkeypatch.setattr("app.utils.json_io.json.dump", _boom)
+        monkeypatch.setattr("app.services.manifest_capture.json.dump", _boom)
 
         with pytest.raises(OSError):
             self._draft(run_dir, graph_id="graph_neu")
