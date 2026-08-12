@@ -4,7 +4,6 @@ import json
 import os
 import tempfile
 from datetime import datetime, timezone
-from unittest.mock import patch
 
 import pytest
 
@@ -115,6 +114,34 @@ class TestManifestCaptureDraft:
         assert data["runtime"] is None
         assert data["inputs"]["graph_version"] is None
         assert data["inputs"]["embedding_version"] is None
+
+    def test_accepts_optional_routing_dict(self, run_dir):
+        """S9 (Ticket 9): capture_draft nimmt optional Stage-Routing-Snapshots an."""
+        ManifestCapture.capture_draft(
+            run_id="run_test123456",
+            run_dir=run_dir,
+            seed_document_hash="sha256:abc",
+            seed_document_filename="test.md",
+            simulation_config_hash="sha256:def",
+            graph_id="graph_001",
+            agora_version="0.9.5",
+            schema_version="1.0.0",
+            random_seed=42,
+            simulation_id_seed="sim_test",
+            routing={
+                "simulation_rounds": {
+                    "model": "gemini-2.5-flash",
+                    "provider": "google",
+                    "base_url": "https://generativelanguage.googleapis.com",
+                }
+            },
+        )
+
+        manifest_path = os.path.join(run_dir, "manifest.json")
+        with open(manifest_path) as f:
+            data = json.load(f)
+
+        assert data["routing"]["stages"]["simulation_rounds"]["model"] == "gemini-2.5-flash"
 
 
 class TestManifestCaptureFinal:
@@ -331,3 +358,95 @@ class TestManifestCaptureLegacy:
         # Sollte immer noch das Draft sein
         assert data["status"] == "draft"
         assert data["seeds"]["random_seed"] == 42
+
+
+class TestManifestCaptureBestEffort:
+    """S10-S13: Best-Effort-Wrapper — dürfen niemals einen Run zum Scheitern bringen."""
+
+    @pytest.fixture
+    def run_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            yield tmp
+
+    def test_best_effort_draft_writes_manifest(self, run_dir):
+        """S10: capture_draft_best_effort schreibt bei gültigen Daten normal."""
+        ManifestCapture.capture_draft_best_effort(
+            run_id="run_test123456",
+            run_dir=run_dir,
+            seed_document_hash="sha256:abc",
+            seed_document_filename="test.md",
+            simulation_config_hash="sha256:def",
+            graph_id="graph_001",
+            agora_version="0.9.5",
+            schema_version="1.0.0",
+            random_seed=42,
+            simulation_id_seed="sim_test",
+        )
+
+        manifest_path = os.path.join(run_dir, "manifest.json")
+        assert os.path.exists(manifest_path)
+
+    def test_best_effort_draft_swallows_errors(self, run_dir, monkeypatch):
+        """S11: Ein interner Fehler beim Schreiben darf nicht propagieren."""
+        def _boom(*args, **kwargs):
+            raise OSError("Disk voll")
+
+        monkeypatch.setattr("app.services.manifest_capture.ManifestCapture.capture_draft", _boom)
+
+        # Darf NICHT werfen — best-effort.
+        ManifestCapture.capture_draft_best_effort(
+            run_id="run_test123456",
+            run_dir=run_dir,
+            seed_document_hash="sha256:abc",
+            seed_document_filename="test.md",
+            simulation_config_hash="sha256:def",
+            graph_id="graph_001",
+            agora_version="0.9.5",
+            schema_version="1.0.0",
+            random_seed=42,
+            simulation_id_seed="sim_test",
+        )
+
+    def test_best_effort_final_swallows_missing_draft(self, run_dir):
+        """S12: Fehlendes Draft-Manifest darf capture_final_best_effort nicht crashen lassen."""
+        # Kein vorheriges capture_draft — Datei existiert nicht.
+        ManifestCapture.capture_final_best_effort(
+            run_id="run_nonexistent",
+            run_dir=run_dir,
+            started_at=datetime(2026, 8, 12, 10, 0, tzinfo=timezone.utc),
+            completed_at=datetime(2026, 8, 12, 10, 30, tzinfo=timezone.utc),
+            duration_seconds=1800,
+            rounds_completed=10,
+            termination_reason="completed",
+        )
+        # Kein Assert nötig — der Test besteht, wenn keine Exception fliegt.
+
+    def test_best_effort_final_writes_when_draft_exists(self, run_dir):
+        """S13: Bei vorhandenem Draft finalisiert der Best-Effort-Wrapper normal."""
+        ManifestCapture.capture_draft(
+            run_id="run_test123456",
+            run_dir=run_dir,
+            seed_document_hash="sha256:abc",
+            seed_document_filename="test.md",
+            simulation_config_hash="sha256:def",
+            graph_id="graph_001",
+            agora_version="0.9.5",
+            schema_version="1.0.0",
+            random_seed=42,
+            simulation_id_seed="sim_test",
+        )
+
+        ManifestCapture.capture_final_best_effort(
+            run_id="run_test123456",
+            run_dir=run_dir,
+            started_at=datetime(2026, 8, 12, 10, 0, tzinfo=timezone.utc),
+            completed_at=datetime(2026, 8, 12, 10, 30, tzinfo=timezone.utc),
+            duration_seconds=1800,
+            rounds_completed=10,
+            termination_reason="completed",
+        )
+
+        manifest_path = os.path.join(run_dir, "manifest.json")
+        with open(manifest_path) as f:
+            data = json.load(f)
+        assert data["status"] == "final"

@@ -1,10 +1,12 @@
-"""ManifestCapture — Draft- und Final-Manifest schreiben (Issue #763, Ticket 2+3)."""
+"""ManifestCapture — Draft- und Final-Manifest schreiben (Issue #763, Ticket 2+3+9)."""
 
 from __future__ import annotations
 
 import json
+import logging
 import os
 from datetime import datetime, timezone
+from typing import Any
 
 from app.contracts.run_manifest_contract import (
     ManifestInputs,
@@ -14,7 +16,10 @@ from app.contracts.run_manifest_contract import (
     ManifestSeeds,
     ManifestVersions,
     RunManifest,
+    StageRoute,
 )
+
+logger = logging.getLogger("agora.manifest_capture")
 
 
 class ManifestCapture:
@@ -35,8 +40,22 @@ class ManifestCapture:
         simulation_id_seed: str,
         graph_version: str | None = None,
         embedding_version: str | None = None,
+        routing: dict[str, dict[str, str]] | None = None,
     ) -> None:
-        """Schreibt ein Draft-Manifest in das Run-Verzeichnis."""
+        """Schreibt ein Draft-Manifest in das Run-Verzeichnis.
+
+        ``routing`` (optional): {stage_id: {model, provider, base_url}} —
+        Stage-Routing-Snapshots zum Zeitpunkt des Run-Starts (Issue #763,
+        Ticket 9).
+        """
+        stages = {
+            stage_id: StageRoute(
+                model=route["model"],
+                provider=route["provider"],
+                base_url=route["base_url"],
+            )
+            for stage_id, route in (routing or {}).items()
+        }
         manifest = RunManifest(
             schema_version=1,
             run_id=run_id,
@@ -53,7 +72,7 @@ class ManifestCapture:
                 agora_version=agora_version,
                 schema_version=schema_version,
             ),
-            routing=ManifestRouting(stages={}),
+            routing=ManifestRouting(stages=stages),
             prompts=ManifestPrompts(entries={}),
             seeds=ManifestSeeds(
                 random_seed=random_seed,
@@ -159,3 +178,38 @@ class ManifestCapture:
         os.makedirs(run_dir, exist_ok=True)
         with open(manifest_path, "w", encoding="utf-8") as f:
             json.dump(manifest.model_dump(mode="json"), f, indent=2, sort_keys=True)
+
+    @staticmethod
+    def capture_draft_best_effort(*, run_id: str, **kwargs: Any) -> None:
+        """Best-Effort-Wrapper um :meth:`capture_draft` (Issue #763, Ticket 9).
+
+        Für die Verdrahtung in echte Run-Start-Pfade: ein Manifest-Fehler
+        (Disk voll, unerwartete Datenlücke) darf niemals einen laufenden
+        Simulations- oder Report-Run zum Absturz bringen. Fehler werden
+        geloggt und geschluckt.
+        """
+        try:
+            ManifestCapture.capture_draft(run_id=run_id, **kwargs)  # type: ignore[arg-type]
+        except Exception:  # noqa: BLE001 — best-effort, siehe Docstring
+            logger.warning(
+                "Manifest-Draft für run_id=%s konnte nicht geschrieben werden",
+                run_id,
+                exc_info=True,
+            )
+
+    @staticmethod
+    def capture_final_best_effort(*, run_id: str, **kwargs: Any) -> None:
+        """Best-Effort-Wrapper um :meth:`capture_final` (Issue #763, Ticket 9).
+
+        Gleiche Begründung wie :meth:`capture_draft_best_effort`: das
+        Finalisieren des Manifests am Run-Ende darf den bereits abgeschlossenen
+        Run (completed/failed/stopped) nicht mehr gefährden.
+        """
+        try:
+            ManifestCapture.capture_final(run_id=run_id, **kwargs)  # type: ignore[arg-type]
+        except Exception:  # noqa: BLE001 — best-effort, siehe Docstring
+            logger.warning(
+                "Manifest-Final für run_id=%s konnte nicht geschrieben werden",
+                run_id,
+                exc_info=True,
+            )

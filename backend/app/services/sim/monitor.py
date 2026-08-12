@@ -31,6 +31,57 @@ logger = get_logger("agora.monitor")
 
 BUDGET_ABORT_FILENAME = "budget_abort.json"
 
+#: RunnerStatus → ManifestRuntime.termination_reason (Issue #763, Ticket 9).
+_TERMINATION_REASON_BY_STATUS = {
+    RunnerStatus.COMPLETED: "completed",
+    RunnerStatus.FAILED: "error",
+    RunnerStatus.STOPPED: "user_cancel",
+}
+
+
+def _finalize_manifest_for_simulation(
+    simulation_id: str, state: SimulationRunState
+) -> None:
+    """Finalisiert das Draft-Manifest des zugehörigen Runs (Issue #763, Ticket 9).
+
+    Vollständig best-effort: kein Run gefunden, kein Draft-Manifest vorhanden,
+    oder ein I/O-Fehler beim Finalisieren dürfen die Terminal-Markierung des
+    Simulationslaufs nicht mehr stören — der Run selbst ist an dieser Stelle
+    bereits abgeschlossen (COMPLETED/FAILED/STOPPED).
+    """
+    try:
+        from ...utils.artifact_locator import ArtifactLocator
+        from ..manifest_capture import ManifestCapture
+        from ..run_registry import RunRegistry
+
+        run = RunRegistry().get_latest_by_linked_id(
+            "simulation_id", simulation_id, run_type="simulation_run"
+        )
+        if not run:
+            return
+
+        started_at = datetime.fromisoformat(state.started_at) if state.started_at else datetime.now()
+        completed_at = datetime.fromisoformat(state.completed_at) if state.completed_at else None
+        duration_seconds = (
+            int((completed_at - started_at).total_seconds()) if completed_at else None
+        )
+
+        ManifestCapture.capture_final_best_effort(
+            run_id=run["run_id"],
+            run_dir=ArtifactLocator.run_dir(run["run_id"]),
+            started_at=started_at,
+            completed_at=completed_at,
+            duration_seconds=duration_seconds,
+            rounds_completed=state.current_round,
+            termination_reason=_TERMINATION_REASON_BY_STATUS.get(state.runner_status),
+        )
+    except Exception:  # noqa: BLE001 — best-effort, siehe Docstring
+        logger.warning(
+            "Manifest-Finalisierung für simulation_id=%s fehlgeschlagen",
+            simulation_id,
+            exc_info=True,
+        )
+
 
 def _read_budget_abort(sim_dir: str) -> Optional[Dict[str, Any]]:
     """budget_abort.json lesen (vom Subprozess-Guard oder Monitor geschrieben)."""
@@ -433,6 +484,9 @@ def monitor_simulation(
         state.twitter_running = False
         state.reddit_running = False
         save_state(state)
+
+        # Issue #763 (Ticket 9): Draft-Manifest beim Run-Ende finalisieren.
+        _finalize_manifest_for_simulation(simulation_id, state)
 
     except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.error(f"Monitor thread exception: {simulation_id}, error={str(e)}")
