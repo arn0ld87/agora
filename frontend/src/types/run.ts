@@ -117,3 +117,11 @@ export interface ListRunsParams {
   project?: string
   branch?: string
 }
+
+/** Re-exported Zod-inferred types (Issue #763) — see contracts/runManifestContract.ts. */
+export type {
+  RunManifest,
+  ReplayRequest,
+  ReplayResponse,
+  ReplayOverrides,
+} from '../contracts/runManifestContract'

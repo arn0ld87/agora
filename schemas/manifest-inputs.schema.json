@@ -1,0 +1,56 @@
+{
+  "$id": "https://alexle135.de/schemas/manifest-inputs.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Eingangsdaten-Hashes und -Referenzen.",
+  "properties": {
+    "embedding_version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Embedding Version"
+    },
+    "graph_id": {
+      "title": "Graph Id",
+      "type": "string"
+    },
+    "graph_version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Graph Version"
+    },
+    "seed_document_filename": {
+      "title": "Seed Document Filename",
+      "type": "string"
+    },
+    "seed_document_hash": {
+      "title": "Seed Document Hash",
+      "type": "string"
+    },
+    "simulation_config_hash": {
+      "title": "Simulation Config Hash",
+      "type": "string"
+    }
+  },
+  "required": [
+    "seed_document_hash",
+    "seed_document_filename",
+    "simulation_config_hash",
+    "graph_id"
+  ],
+  "title": "ManifestInputs",
+  "type": "object"
+}

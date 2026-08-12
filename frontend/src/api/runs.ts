@@ -6,7 +6,10 @@ import type {
   ApiResponse,
   CancelRunResponse,
   ListRunsParams,
+  ReplayRequest,
+  ReplayResponse,
   RunEvent,
+  RunManifest,
   RunRecord,
 } from '../types/run'
 import type { RunsListResponse } from '../contracts/runsContract'
@@ -32,3 +35,26 @@ export const stopRun = (runId: string): Promise<ApiResponse<RunRecord>> =>
 
 export const cancelRun = (runId: string): Promise<CancelRunResponse> =>
   service.post(`/api/runs/${runId}/cancel`)
+
+/** GET /api/runs/<run_id>/manifest — Run-Manifest abrufen (Issue #763). */
+export const getRunManifest = (
+  runId: string
+): Promise<ApiResponse<RunManifest>> =>
+  service.get(`/api/runs/${runId}/manifest`)
+
+/**
+ * POST /api/runs/<run_id>/replay — neuen Run aus Manifest starten (Issue #763).
+ * Response ist flach OHNE `data`-Envelope: {run_id, status} bei 202 Accepted.
+ */
+export const replayRun = (
+  runId: string,
+  request?: ReplayRequest
+): Promise<ReplayResponse> =>
+  service.post(`/api/runs/${runId}/replay`, request)
+
+/**
+ * GET /api/runs/<run_id>/export — ZIP-Download mit Manifest + Artefakten
+ * (Issue #763). responseType 'blob', da der Endpoint ein Binary liefert.
+ */
+export const exportRun = (runId: string): Promise<Blob> =>
+  service.get(`/api/runs/${runId}/export`, { responseType: 'blob' })

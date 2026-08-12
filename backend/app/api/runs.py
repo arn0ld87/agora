@@ -4,6 +4,8 @@ Run registry API.
 
 from __future__ import annotations
 
+import json
+import os
 import threading
 import traceback
 from collections.abc import Mapping
@@ -27,6 +29,7 @@ from ..container import get_container
 from ..services.graph_builder import GraphBuilderService  # noqa: F401
 from ..services.graph_tools import GraphToolsService
 from ..services.llm_routing_seed import (
+    build_route_subprocess_env,
     build_runtime_llm_config,
     resolve_route_api_key,
     seed_run_stage_routing,
@@ -967,6 +970,258 @@ def _resume_report_generate(run: dict):
     run_registry.update_run(run["run_id"], status="processing", progress=0, message="Report generation resumed")
     threading.Thread(target=run_generate, daemon=True).start()
     return {"run_id": run["run_id"], "task_id": task_id, "status": "processing"}
+
+
+def _replay_simulation_run(run: dict, run_id: str, overrides):
+    """Klont die Original-Simulation per ``create_branch`` und startet sie neu.
+
+    ``create_branch`` liefert bereits Config+Profile-Klon inklusive
+    ``llm_model``-Override auf ``READY`` — danach läuft exakt derselbe
+    Start-Flow wie ``POST /api/simulation/start`` (Routing auflösen, Route
+    sperren, Subprozess starten).
+
+    Rückgabe: entweder ein dict ``{run_id, status}`` (Erfolg) oder eine
+    fertige Flask-Error-Response (``json_error(...)``).
+    """
+    simulation_id = (run.get("linked_ids") or {}).get("simulation_id")
+    if not simulation_id:
+        return json_error("Run is missing simulation_id linkage", status=409)
+
+    manager = SimulationManager()
+    source_state = manager.get_simulation(simulation_id)
+    if not source_state:
+        return json_error(f"Simulation does not exist: {simulation_id}", status=404)
+
+    branch_overrides: dict = {}
+    llm_model_override = None
+    ai_model_ref = overrides.ai_model_ref if overrides is not None else None
+    if ai_model_ref is not None:
+        branch_overrides["llm_model"] = ai_model_ref.model_id
+        llm_model_override = ai_model_ref.model_id
+
+    branch_state = manager.create_branch(
+        simulation_id,
+        f"replay-of-{run_id}",
+        copy_profiles=True,
+        copy_report_artifacts=False,
+        overrides=branch_overrides,
+    )
+    new_simulation_id = branch_state.simulation_id
+
+    with RunLifecycle.begin(
+        run_registry,
+        "simulation_run",
+        new_simulation_id,
+        parent_run_id=run_id,
+        replayed_from_run_id=run_id,
+        failure_message="Replay failed: {exc_type}",
+        progress=0,
+        message=f"Replay of {run_id} queued",
+        linked_ids={
+            "simulation_id": new_simulation_id,
+            "project_id": branch_state.project_id,
+        },
+        artifacts=_simulation_artifacts(new_simulation_id),
+        resume_capability={"available": True, "action": "resume", "label": "Resume run"},
+        branch_label=branch_state.branch_name,
+        metadata={
+            "graph_id": branch_state.graph_id,
+            "branch_name": branch_state.branch_name,
+            **(
+                {"replay_overrides": overrides.model_dump(exclude_none=True)}
+                if overrides is not None
+                else {}
+            ),
+        },
+    ) as lifecycle:
+        new_run = lifecycle.record
+        new_run_id = new_run["run_id"]
+
+        # ai_model_ref durchreichen, nicht nur model_id: dieselbe Modell-ID kann
+        # auf mehreren Provider-Connections liegen. Ohne die Connection-ID
+        # liefe das Replay auf einer anderen Connection als das Original.
+        seed_run_stage_routing(
+            new_run_id,
+            "simulation_rounds",
+            llm_model_override=llm_model_override,
+            llm_runtime=None,
+            ai_model_ref=ai_model_ref,
+        )
+        route_router = StageModelRouter(new_run_id)
+        resolved_route = route_router.resolve("simulation_rounds")
+        route_router.lock_stage("simulation_rounds", resolved_route)
+        resolved_api_key = resolve_route_api_key(resolved_route, None)
+
+        SimulationRunner.start_simulation(
+            simulation_id=new_simulation_id,
+            platform="parallel",
+            runtime_env=build_route_subprocess_env(
+                resolved_route, resolved_api_key, new_run_id
+            ),
+        )
+        manager._set_status(branch_state, SimulationStatus.RUNNING)
+        lifecycle.succeed(status="processing", message=f"Replay of {run_id} started")
+
+    return {"run_id": new_run["run_id"], "status": "processing"}
+
+
+@runs_bp.route("/<run_id>/replay", methods=["POST"])
+@handle_api_errors(logger=logger, log_prefix="Failed to replay run")
+def replay_run(run_id: str):
+    """POST /api/runs/<run_id>/replay — Neuen Run aus Manifest starten (Issue #763).
+
+    Klont die Original-Simulation (Config + Profile) in eine neue
+    ``simulation_id`` und startet sie. Optionale Overrides erlauben
+    Varianten-Replay mit anderem Seed-Wert oder AI-Modell.
+    ``seed_document_id``-Overrides sind noch nicht unterstützt — es gibt
+    keinen Mechanismus, einen Branch mit einem neuen Ausgangsdokument neu
+    vorzubereiten.
+
+    Antwort: 202 { run_id, status: "processing" }
+    """
+    run, error = _get_run_or_404(run_id)
+    if error:
+        return error
+
+    if run.get("run_type") != "simulation_run":
+        return json_error(
+            f"Replay is only supported for simulation_run in this version "
+            f"(run_type={run.get('run_type')!r})",
+            status=409,
+        )
+
+    manifest_path = os.path.join(ArtifactLocator.run_dir(run_id), "manifest.json")
+    if not os.path.exists(manifest_path):
+        return json_error(
+            f"Run {run_id} has no manifest — replay requires a manifest",
+            status=400,
+            code="no_manifest",
+        )
+
+    # Overrides aus dem Request-Body parsen — body ist die ReplayRequest-Hülle
+    # {overrides: {...}}, nicht die flachen ReplayOverrides-Felder selbst.
+    # model_validate() statt ReplayRequest(**body): **body wirft bei einem
+    # Nicht-Mapping-Body (z.B. einem JSON-Array) einen rohen TypeError statt
+    # einer ValidationError — @handle_api_errors hätte das als 500 beantwortet.
+    overrides = None
+    if request.is_json and request.get_json(silent=True):
+        body = request.get_json(silent=True) or {}
+        from ..contracts.run_manifest_contract import ReplayRequest
+        try:
+            overrides = ReplayRequest.model_validate(body).overrides if body else None
+        except ValidationError as exc:
+            # exc.errors() gehört in ``extra``, nicht in den ``error``-Parameter:
+            # json_error sanitisiert nur ``extra``. ValidationError-Payloads
+            # tragen in ``ctx`` lebende ValueError-Instanzen, an denen Flasks
+            # JSON-Encoder abbricht — aus der 400 würde sonst eine 500.
+            return json_error(
+                "Invalid replay request body",
+                status=400,
+                code="validation_error",
+                extra={"details": exc.errors()},
+            )
+        except TypeError:
+            return json_error("Request body must be a JSON object", status=400)
+
+    if overrides is not None and overrides.seed_document_id is not None:
+        return json_error(
+            "seed_document_id-Overrides werden noch nicht unterstützt — "
+            "es gibt keinen Mechanismus, einen Branch mit einem neuen "
+            "Ausgangsdokument neu vorzubereiten.",
+            status=400,
+            code="seed_document_override_unsupported",
+        )
+
+    if overrides is not None and overrides.random_seed is not None:
+        return json_error(
+            "random_seed-Overrides werden noch nicht unterstützt — es gibt "
+            "kein Runtime-Konzept für einen deterministischen Zufalls-Seed, "
+            "der an die Simulation durchgereicht werden könnte.",
+            status=400,
+            code="random_seed_override_unsupported",
+        )
+
+    result = _replay_simulation_run(run, run_id, overrides)
+    if not isinstance(result, dict):
+        return result  # bereits eine fertige json_error(...)-Response
+
+    from flask import make_response, jsonify
+    body = jsonify(result)
+    return make_response(body, 202)
+
+
+@runs_bp.route("/<run_id>/manifest", methods=["GET"])
+@handle_api_errors(logger=logger, log_prefix="Failed to get run manifest")
+def get_run_manifest(run_id: str):
+    """GET /api/runs/<run_id>/manifest — RunManifest abrufen (Issue #763)."""
+    run, error = _get_run_or_404(run_id)
+    if error:
+        return error
+
+    manifest_path = os.path.join(ArtifactLocator.run_dir(run_id), "manifest.json")
+    if not os.path.exists(manifest_path):
+        return json_error(
+            f"Run {run_id} has no manifest",
+            status=404,
+            code="no_manifest",
+        )
+
+    with open(manifest_path, encoding="utf-8") as f:
+        data = json.load(f)
+
+    return json_success(data)
+
+
+@runs_bp.route("/<run_id>/export", methods=["GET"])
+@handle_api_errors(logger=logger, log_prefix="Failed to export run")
+def export_run(run_id: str):
+    """GET /api/runs/<run_id>/export — ZIP-Download mit Manifest + Artefakten (Issue #763).
+
+    Erzeugt ein ZIP-Archiv mit manifest.json und allen Dateien aus dem
+    Run-Verzeichnis. Streaming-Response, kein Temp-File.
+    """
+    import io
+    import zipfile
+
+    run, error = _get_run_or_404(run_id)
+    if error:
+        return error
+
+    run_dir = ArtifactLocator.run_dir(run_id)
+    manifest_path = os.path.join(run_dir, "manifest.json")
+    if not os.path.exists(manifest_path):
+        return json_error(
+            f"Run {run_id} has no manifest — export requires a manifest",
+            status=400,
+            code="no_manifest",
+        )
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        # manifest.json
+        zf.write(manifest_path, "manifest.json")
+
+        # Alle weiteren Dateien im Run-Verzeichnis rekursiv (keine Secrets) —
+        # os.listdir+isfile hätte Unterverzeichnisse wie stages/ (eingefrorene
+        # Routing-Snapshots) stillschweigend übersprungen.
+        for root, _dirs, files in os.walk(run_dir):
+            for name in files:
+                full_path = os.path.join(root, name)
+                arcname = os.path.relpath(full_path, run_dir)
+                if arcname == "manifest.json":
+                    continue
+                zf.write(full_path, arcname)
+
+    buf.seek(0)
+
+    from flask import Response
+    return Response(
+        buf.getvalue(),
+        mimetype="application/zip",
+        headers={
+            "Content-Disposition": f"attachment; filename=agora-run-{run_id}.zip",
+        },
+    )
 
 
 @runs_bp.route("/<run_id>/resume", methods=["POST"])

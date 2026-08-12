@@ -2,6 +2,7 @@
 Run-control and live-status routes split from the main simulation API module.
 """
 
+import json
 import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -19,6 +20,7 @@ from ..services.llm_routing_seed import (
 )
 from ..utils.endpoints import is_local_endpoint
 from ..services.llm_runtime import RuntimeLlmConfig, parse_runtime_llm_config
+from ..services.manifest_capture import ManifestCapture
 from ..services.run_lifecycle import RunLifecycle, RunPersistenceError
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import SimulationRunner
@@ -595,6 +597,58 @@ def _build_start_response(
     return response_data
 
 
+def _capture_start_manifest_draft(
+    run_id: str, req: "_StartRequest", state, resolved_route: "ResolvedRoute"
+) -> None:
+    """Issue #763 (Ticket 9): Draft-Manifest beim Run-Start schreiben.
+
+    Vollständig best-effort — inklusive der Datenaufbereitung, nicht nur des
+    Schreibvorgangs. Ein Fehler hier (z. B. beim Config-Read oder Hashing)
+    darf den bereits erfolgreich gestarteten Run nicht mehr gefährden; die
+    Route hat an dieser Stelle bereits ``run.succeed()`` aufgerufen. Es
+    existiert kein echtes RNG-Seed-Konzept im System (kein
+    ``np.random.seed`` o.ä.); ``random_seed`` ist daher ein deterministischer
+    Platzhalter aus der ``simulation_id``, nicht ein tatsächlich verwendeter
+    Zufalls-Seed.
+    """
+    try:
+        import hashlib
+
+        from .. import __version__
+
+        config = SimulationManager().get_simulation_config(req.simulation_id) or {}
+        config_hash = hashlib.sha256(
+            json.dumps(config, sort_keys=True, default=str).encode("utf-8")
+        ).hexdigest()
+        seed_placeholder = int.from_bytes(
+            hashlib.sha256(req.simulation_id.encode("utf-8")).digest()[:4], "big"
+        )
+
+        ManifestCapture.capture_draft_best_effort(
+            run_id=run_id,
+            run_dir=ArtifactLocator.run_dir(run_id),
+            seed_document_hash="unknown",
+            seed_document_filename="unknown",
+            simulation_config_hash=f"sha256:{config_hash}",
+            graph_id=state.graph_id or "unknown",
+            agora_version=__version__,
+            schema_version="1.0.0",
+            random_seed=seed_placeholder,
+            simulation_id_seed=req.simulation_id,
+            routing={
+                "simulation_rounds": {
+                    "model": resolved_route.model,
+                    "provider": resolved_route.provider_id,
+                    "base_url": resolved_route.base_url_sanitized or "",
+                }
+            },
+        )
+    except Exception:  # noqa: BLE001 — best-effort, siehe Docstring
+        logger.warning(
+            "Draft-Manifest-Vorbereitung für run_id=%s fehlgeschlagen", run_id, exc_info=True
+        )
+
+
 @simulation_bp.route('/start', methods=['POST'])
 @require_scope("simulation:control")
 @handle_api_errors(logger=logger, log_prefix="Failed to start simulation")
@@ -682,6 +736,11 @@ def start_simulation():
                 message="Simulation run started",
                 resume_capability=_simulation_resume_capability(req.simulation_id, state),
             )
+
+            # Issue #763 (Ticket 9): Draft-Manifest beim Run-Start. Best-Effort —
+            # ein Manifest-Fehler darf den bereits erfolgreich gestarteten Run
+            # nicht mehr gefährden.
+            _capture_start_manifest_draft(run_id, req, state, resolved_route)
     except RunPersistenceError:
         # #844: Die failed-/processing-Markierung wurde nicht persistiert —
         # das darf nicht wie ein sauber abgeschlossener Vorgang aussehen.

@@ -1,0 +1,22 @@
+{
+  "$id": "https://alexle135.de/schemas/manifest-versions.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Agora- und Schema-Version zum Zeitpunkt des Runs.",
+  "properties": {
+    "agora_version": {
+      "title": "Agora Version",
+      "type": "string"
+    },
+    "schema_version": {
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "agora_version",
+    "schema_version"
+  ],
+  "title": "ManifestVersions",
+  "type": "object"
+}

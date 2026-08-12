@@ -9,7 +9,7 @@ vi.mock('../index', () => ({
   default: serviceMock,
 }))
 
-import { cancelRun, resumeRun, stopRun } from '../runs'
+import { cancelRun, exportRun, getRunManifest, replayRun, resumeRun, stopRun } from '../runs'
 
 describe('runs api client', () => {
   beforeEach(() => {
@@ -43,5 +43,48 @@ describe('runs api client', () => {
     serviceMock.post.mockResolvedValueOnce({ success: true, data: { run_id: 'run-xyz', status: 'processing' } })
     await resumeRun('run-xyz')
     expect(serviceMock.post).toHaveBeenCalledWith('/api/runs/run-xyz/resume')
+  })
+
+  // Issue #763 (Ticket 8/6): Replay + Export + Manifest-Abruf.
+  it('replayRun posts to /api/runs/<id>/replay without body for identical replay', async () => {
+    const mockResponse = { run_id: 'run-new', status: 'pending' }
+    serviceMock.post.mockResolvedValueOnce(mockResponse)
+
+    const result = await replayRun('run-orig')
+
+    expect(serviceMock.post).toHaveBeenCalledWith('/api/runs/run-orig/replay', undefined)
+    expect(result).toEqual(mockResponse)
+  })
+
+  it('replayRun posts overrides for variant replay', async () => {
+    serviceMock.post.mockResolvedValueOnce({ run_id: 'run-new', status: 'pending' })
+
+    await replayRun('run-orig', { overrides: { random_seed: 42 } })
+
+    expect(serviceMock.post).toHaveBeenCalledWith('/api/runs/run-orig/replay', {
+      overrides: { random_seed: 42 },
+    })
+  })
+
+  it('exportRun gets /api/runs/<id>/export as blob', async () => {
+    const mockBlob = new Blob(['zip-bytes'])
+    serviceMock.get.mockResolvedValueOnce(mockBlob)
+
+    const result = await exportRun('run-abc')
+
+    expect(serviceMock.get).toHaveBeenCalledWith('/api/runs/run-abc/export', {
+      responseType: 'blob',
+    })
+    expect(result).toBe(mockBlob)
+  })
+
+  it('getRunManifest gets /api/runs/<id>/manifest', async () => {
+    const mockManifest = { success: true, data: { run_id: 'run-abc', status: 'final' } }
+    serviceMock.get.mockResolvedValueOnce(mockManifest)
+
+    const result = await getRunManifest('run-abc')
+
+    expect(serviceMock.get).toHaveBeenCalledWith('/api/runs/run-abc/manifest')
+    expect(result).toEqual(mockManifest)
   })
 })

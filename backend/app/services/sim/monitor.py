@@ -18,7 +18,7 @@ from __future__ import annotations
 import os
 import subprocess
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 from ...observability import sim_active_gauge, sim_counter, sim_duration_histogram
@@ -30,6 +30,113 @@ from .run_state_store import RunnerStatus, SimulationRunState
 logger = get_logger("agora.monitor")
 
 BUDGET_ABORT_FILENAME = "budget_abort.json"
+
+#: RunnerStatus → ManifestRuntime.termination_reason (Issue #763, Ticket 9).
+_TERMINATION_REASON_BY_STATUS = {
+    RunnerStatus.COMPLETED: "completed",
+    RunnerStatus.FAILED: "error",
+    RunnerStatus.STOPPED: "user_cancel",
+}
+
+
+def _as_aware_utc(dt: datetime) -> datetime:
+    """Naive datetimes als UTC annehmen — ``SimulationRunState``-Timestamps
+    stammen aus ``datetime.now().isoformat()`` ohne tzinfo, während
+    ``ManifestRuntime`` (Codex-Fund) jetzt ``AwareDatetime`` verlangt."""
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+
+def _read_run_usage_summary(run_dir: str) -> Optional[Dict[str, Any]]:
+    """``usage_summary.json`` aus dem Run-Verzeichnis lesen (Issue #763, Ticket 3).
+
+    Fehlende oder unlesbare Datei ist kein Fehler: nicht jeder Run erzeugt eine
+    Usage-Summary (Stub-Modus, Abbruch vor dem ersten LLM-Call). Bewusst ohne
+    ``utils.json_io`` — der Guard in ``tests/test_no_json_io_leakage.py``
+    reserviert diesen Helper für den ``SimulationArtifactStore``-Adapter.
+    """
+    import json
+
+    from ..run_usage_ledger import USAGE_SUMMARY_FILENAME
+
+    try:
+        with open(os.path.join(run_dir, USAGE_SUMMARY_FILENAME), encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _finalize_manifest_for_simulation(
+    simulation_id: str,
+    state: SimulationRunState,
+    *,
+    termination_reason_override: Optional[str] = None,
+) -> None:
+    """Finalisiert das Draft-Manifest des zugehörigen Runs (Issue #763, Ticket 9).
+
+    Vollständig best-effort: kein Run gefunden, kein Draft-Manifest vorhanden,
+    oder ein I/O-Fehler beim Finalisieren dürfen die Terminal-Markierung des
+    Simulationslaufs nicht mehr stören — der Run selbst ist an dieser Stelle
+    bereits abgeschlossen (COMPLETED/FAILED/STOPPED).
+
+    ``termination_reason_override``: STOPPED ist mehrdeutig — sowohl
+    Nutzer-Cancel als auch Budget-Abort setzen diesen Status. Der pauschale
+    Status→Reason-Fallback (``_TERMINATION_REASON_BY_STATUS``) würde einen
+    Budget-Abort fälschlich als ``user_cancel`` ausweisen; Aufrufer mit
+    genauerem Wissen (Budget-Dimension, echter Abbruchgrund) reichen ihn
+    hier explizit durch.
+    """
+    try:
+        from ...utils.artifact_locator import ArtifactLocator
+        from ..manifest_capture import ManifestCapture
+        from ..run_registry import RunRegistry
+
+        run = RunRegistry().get_latest_by_linked_id(
+            "simulation_id", simulation_id, run_type="simulation_run"
+        )
+        if not run:
+            return
+
+        started_at = (
+            _as_aware_utc(datetime.fromisoformat(state.started_at))
+            if state.started_at
+            else datetime.now(timezone.utc)
+        )
+        completed_at = (
+            _as_aware_utc(datetime.fromisoformat(state.completed_at))
+            if state.completed_at
+            else None
+        )
+        duration_seconds = (
+            int((completed_at - started_at).total_seconds()) if completed_at else None
+        )
+
+        run_dir = ArtifactLocator.run_dir(run["run_id"])
+
+        # usage_summary.json wird vom Run-Usage-Ledger am Run-Ende geschrieben.
+        # Ohne diesen Read bliebe runtime.usage_summary in jedem finalisierten
+        # Manifest leer, obwohl der Verbrauch bereits persistiert ist.
+        usage_summary = _read_run_usage_summary(run_dir)
+
+        ManifestCapture.capture_final_best_effort(
+            run_id=run["run_id"],
+            run_dir=run_dir,
+            started_at=started_at,
+            completed_at=completed_at,
+            duration_seconds=duration_seconds,
+            rounds_completed=state.current_round,
+            usage_summary=usage_summary,
+            termination_reason=(
+                termination_reason_override
+                or _TERMINATION_REASON_BY_STATUS.get(state.runner_status)
+            ),
+        )
+    except Exception:  # noqa: BLE001 — best-effort, siehe Docstring
+        logger.warning(
+            "Manifest-Finalisierung für simulation_id=%s fehlgeschlagen",
+            simulation_id,
+            exc_info=True,
+        )
 
 
 def _read_budget_abort(sim_dir: str) -> Optional[Dict[str, Any]]:
@@ -309,6 +416,11 @@ def monitor_simulation(
         # Process ended
         exit_code = process.returncode
         elapsed_seconds = _compute_elapsed_seconds(state.started_at)
+        # Issue #763 (Ticket 9): STOPPED ist mehrdeutig (Nutzer-Cancel vs.
+        # Budget-Abort) — dieser Zweig trägt den genauen Grund für die
+        # Manifest-Finalisierung, damit sie ihn nicht pauschal als
+        # user_cancel ausweist.
+        manifest_termination_reason: Optional[str] = None
 
         # Nutzer-Cancel (Issue #1082): hat Vorrang vor Budget- und
         # exit-code-Auswertung — SIGTERM/SIGKILL erzeugt non-zero exit,
@@ -358,6 +470,7 @@ def monitor_simulation(
             state.runner_status = RunnerStatus.STOPPED
             state.completed_at = datetime.now().isoformat()
             dimension = budget_abort.get("dimension", "unknown")
+            manifest_termination_reason = f"budget_{dimension}"
             # Issue #764 (Codex P1): wenn der Subprozess beim Budget-Stop
             # trotzdem mit non-zero exit endet (Bug im Guard, race, oder
             # doppelter Marker), bleibt der RunnerStatus STOPPED und der
@@ -434,6 +547,11 @@ def monitor_simulation(
         state.reddit_running = False
         save_state(state)
 
+        # Issue #763 (Ticket 9): Draft-Manifest beim Run-Ende finalisieren.
+        _finalize_manifest_for_simulation(
+            simulation_id, state, termination_reason_override=manifest_termination_reason
+        )
+
     except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.error(f"Monitor thread exception: {simulation_id}, error={str(e)}")
         elapsed_seconds = _compute_elapsed_seconds(state.started_at)
@@ -443,7 +561,14 @@ def monitor_simulation(
         sim_duration_histogram().record(elapsed_seconds, {"status": "failed"})
         state.runner_status = RunnerStatus.FAILED
         state.error = str(e)
+        state.completed_at = state.completed_at or datetime.now().isoformat()
         save_state(state)
+
+        # Issue #763 (Ticket 9)/Codex-Fund: der Exception-Pfad rief
+        # _finalize_manifest_for_simulation nie auf — ein Monitor-Crash
+        # hinterließ das Manifest dauerhaft auf status=draft, obwohl der Run
+        # in der Registry bereits als failed markiert war.
+        _finalize_manifest_for_simulation(simulation_id, state)
 
     finally:
         # Stop graph memory updater

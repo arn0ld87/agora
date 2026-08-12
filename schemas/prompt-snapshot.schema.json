@@ -1,0 +1,22 @@
+{
+  "$id": "https://alexle135.de/schemas/prompt-snapshot.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Byte-genauer Prompt-Text mit Herkunftsangabe.",
+  "properties": {
+    "content": {
+      "title": "Content",
+      "type": "string"
+    },
+    "source_file": {
+      "title": "Source File",
+      "type": "string"
+    }
+  },
+  "required": [
+    "content",
+    "source_file"
+  ],
+  "title": "PromptSnapshot",
+  "type": "object"
+}

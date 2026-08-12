@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { getRun } from '../api/runs'
@@ -14,6 +14,7 @@ import {
 } from '../contracts/runBudgetContract'
 import LlmRoutingView from '../components/LlmRouting/LlmRoutingView.vue'
 import RunUsageBreakdown from '../components/v4/run-budget/RunUsageBreakdown.vue'
+import RunReplayDialog from '../components/RunReplayDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -24,6 +25,18 @@ const runId = String(route.params.id)
 const run = ref<RunDetail | null>(null)
 const loading = ref(false)
 const error = ref('')
+
+// Replay (Issue #763, Ticket 6): Button nur bei abgeschlossenen Runs sinnvoll —
+// ein Manifest existiert erst nach capture_final(), also nur für terminale Status.
+const REPLAYABLE_STATUSES = new Set(['completed', 'failed', 'stopped'])
+const replayDialogOpen = ref(false)
+const replaySuccessMessage = ref('')
+
+const canReplay = computed(() => !!run.value && REPLAYABLE_STATUSES.has(run.value.status))
+
+function onReplayed(newRunId: string): void {
+  replaySuccessMessage.value = t('runs.dashboard.replay.success', { run_id: newRunId })
+}
 
 // Issue #764: Budget/Verbrauch kommen als Read-Path-Anreicherung in
 // GET /api/runs/<id> mit. RunDetailSchema ist passthrough — die Blöcke
@@ -170,7 +183,12 @@ onMounted(() => void loadRun())
       </section>
     </template>
 
-    <!-- Refresh button -->
+    <!-- Replay success banner -->
+    <div v-if="replaySuccessMessage" class="replay-success-banner" role="status">
+      {{ replaySuccessMessage }}
+    </div>
+
+    <!-- Refresh + Replay buttons -->
     <div class="detail-actions">
       <button
         type="button"
@@ -180,7 +198,21 @@ onMounted(() => void loadRun())
       >
         {{ t('common.refresh') }}
       </button>
+      <button
+        v-if="canReplay"
+        type="button"
+        class="action-btn"
+        @click="replayDialogOpen = true"
+      >
+        {{ t('runs.dashboard.replay.button') }}
+      </button>
     </div>
+
+    <RunReplayDialog
+      v-model="replayDialogOpen"
+      :run-id="runId"
+      @replayed="onReplayed"
+    />
   </div>
 </template>
 
@@ -231,6 +263,14 @@ onMounted(() => void loadRun())
   background: #fee2e2;
   border: 1px solid #f87171;
   color: #7f1d1d;
+  font-size: 13px;
+}
+
+.replay-success-banner {
+  padding: var(--s-4, 1rem);
+  background: #dcfce7;
+  border: 1px solid #4ade80;
+  color: #166534;
   font-size: 13px;
 }
 

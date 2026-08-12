@@ -1,0 +1,125 @@
+{
+  "$defs": {
+    "AiModelRef": {
+      "additionalProperties": false,
+      "description": "Kanonische (Provider-Connection, Modell)-Referenz \u2014 Backend-Spiegel des\nFrontend-``AiModelRefSchema`` (``frontend/src/contracts/aiModelRef.ts``).\n\nBewusst klein: identifiziert genau die vom UI gew\u00e4hlte Route. Gr\u00f6\u00dfere\nMetadaten (Capabilities, Status) bleiben in der ``ProviderConnection`` bzw.\nim Model-Katalog. Tr\u00e4gt keine Secrets.",
+      "properties": {
+        "capability_filter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Capability Filter"
+        },
+        "fallback_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fallback Reason"
+        },
+        "model_id": {
+          "minLength": 1,
+          "title": "Model Id",
+          "type": "string"
+        },
+        "provider_connection_id": {
+          "minLength": 1,
+          "title": "Provider Connection Id",
+          "type": "string"
+        },
+        "source": {
+          "default": "explicit",
+          "enum": [
+            "stage-override",
+            "run-override",
+            "project-default",
+            "workspace-default",
+            "explicit",
+            "fallback"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider_connection_id",
+        "model_id"
+      ],
+      "title": "AiModelRef",
+      "type": "object"
+    },
+    "ReplayOverrides": {
+      "additionalProperties": false,
+      "description": "Override-Parameter f\u00fcr Varianten-Replay.\n\nAlle Felder optional \u2014 nur gesetzte Felder werden \u00fcberschrieben.",
+      "properties": {
+        "ai_model_ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AiModelRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "random_seed": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Random Seed"
+        },
+        "seed_document_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seed Document Id"
+        }
+      },
+      "title": "ReplayOverrides",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/replay-request.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Request-Body f\u00fcr POST /api/runs/<run_id>/replay.\n\nLeere Overrides = identisches Replay.",
+  "properties": {
+    "overrides": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ReplayOverrides"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "title": "ReplayRequest",
+  "type": "object"
+}

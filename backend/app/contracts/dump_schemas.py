@@ -82,6 +82,20 @@ from app.contracts.embedding_contract import (
 )
 from app.contracts.interview_envelope_contract import InterviewEnvelope
 from app.contracts.document_manifest_contract import DocumentManifest, DocumentManifestEntry
+from app.contracts.run_manifest_contract import (
+    ManifestInputs,
+    ManifestPrompts,
+    ManifestRouting,
+    ManifestRuntime,
+    ManifestSeeds,
+    ManifestVersions,
+    PromptSnapshot,
+    ReplayOverrides,
+    ReplayRequest,
+    ReplayResponse,
+    RunManifest,
+    StageRoute,
+)
 
 # schemas/ liegt im Repo-Root, dump_schemas.py liegt in backend/app/contracts/
 OUT_DIR = Path(__file__).resolve().parents[3] / "schemas"
@@ -150,6 +164,19 @@ CONTRACTS: dict[str, type] = {
     # Dokument-Manifest-Sidecar (ADR-0013 Slice 1, Teil A — Issue #1152)
     "document-manifest.schema.json": DocumentManifest,
     "document-manifest-entry.schema.json": DocumentManifestEntry,
+    # Run-Manifest (Issue #763 — Reproduzierbare Runs)
+    "run-manifest.schema.json": RunManifest,
+    "manifest-inputs.schema.json": ManifestInputs,
+    "manifest-versions.schema.json": ManifestVersions,
+    "manifest-routing.schema.json": ManifestRouting,
+    "manifest-prompts.schema.json": ManifestPrompts,
+    "manifest-seeds.schema.json": ManifestSeeds,
+    "manifest-runtime.schema.json": ManifestRuntime,
+    "stage-route.schema.json": StageRoute,
+    "prompt-snapshot.schema.json": PromptSnapshot,
+    "replay-request.schema.json": ReplayRequest,
+    "replay-overrides.schema.json": ReplayOverrides,
+    "replay-response.schema.json": ReplayResponse,
 }
 
 
