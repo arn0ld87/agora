@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import os
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 from cryptography.fernet import Fernet
 
+from app.contracts.llm_provider_keys_contract import LlmProviderKeyEntry
 from app.services.llm_provider_secrets_store import (
     LlmProviderSecretsStore,
     _mask_key,
@@ -103,6 +105,23 @@ def test_mask_key_format():
     # Sehr kurzer Key fällt auf Sentinel zurück
     short = _mask_key("abc")
     assert "..." in short
+
+
+def test_mask_key_base64_suffix_is_contract_compliant():
+    # AWS-Bedrock-Bearer-Tokens enden häufig auf "=" (Base64-Padding). Das
+    # maskierte Ergebnis muss dem Contract-Pattern (MASKED_KEY_PATTERN)
+    # genügen, sonst fällt die Persistierung des Eintrags weg. Regression für
+    # den Defekt, bei dem ein Bedrock-Key gar nicht gespeichert werden konnte.
+    masked = _mask_key("ABSsomekeyMD0=")
+    assert masked == "ABS-...MD0="
+    LlmProviderKeyEntry.model_validate(
+        {
+            "provider_id": "openai_compatible",
+            "masked_value": masked,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
 
 
 def test_singleton_persists_across_calls(monkeypatch, tmp_path):

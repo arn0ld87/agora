@@ -18,8 +18,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 _STRICT = ConfigDict(extra="forbid")
 
-# "sk-...abc" → vier Zeichen vom Ende sichtbar, davor immer das gleiche Präfix
-MASKED_KEY_PATTERN = r"^.{1,8}\.\.\.[A-Za-z0-9_\-]{4}$"
+# "sk-...abc" → vier Zeichen vom Ende sichtbar, davor immer das gleiche Präfix.
+# Die End-Klasse deckt Base64-Padding (``=``) und Standard-Base64-Zeichen
+# (``+``/``/``) ab — AWS-Bedrock-Bearer-Tokens sind URL-safe-Base64 und enden
+# häufig auf ``=``, ohne diese Erweiterung ließen sie sich nicht persistieren.
+MASKED_KEY_PATTERN = r"^.{1,8}\.\.\.[A-Za-z0-9_\-=+/]{4}$"
 
 
 class LlmProviderKeyEntry(BaseModel):

@@ -24,6 +24,20 @@ def test_entry_accepts_masked_value():
     assert entry.provider_id == "openai"
 
 
+def test_entry_accepts_masked_value_with_base64_suffix():
+    # AWS-Bedrock-Bearer-Tokens sind URL-safe-Base64 und enden häufig auf
+    # "=" (Padding). Das Masking darf solche Suffixe nicht ablehnen — sonst
+    # kann ein Bedrock-Key (``ABS...MD0=``) gar nicht persistiert werden.
+    entry = LlmProviderKeyEntry(
+        provider_id="openai_compatible",
+        masked_value="ABS-...MD0=",
+        base_url="https://bedrock-mantle.eu-central-1.api.aws/v1",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    assert entry.masked_value.endswith("=")
+
+
 def test_entry_rejects_plain_key_as_masked_value():
     with pytest.raises(ValidationError):
         LlmProviderKeyEntry(

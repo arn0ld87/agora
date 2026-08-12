@@ -48,7 +48,7 @@
           "title": "Last Validation Ok"
         },
         "masked_value": {
-          "pattern": "^.{1,8}\\.\\.\\.[A-Za-z0-9_\\-]{4}$",
+          "pattern": "^.{1,8}\\.\\.\\.[A-Za-z0-9_\\-=+/]{4}$",
           "title": "Masked Value",
           "type": "string"
         },
