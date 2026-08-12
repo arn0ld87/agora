@@ -68,7 +68,7 @@ oder im Recruiting vor.
 | Typ | Erwartung | Prüfhinweis |
 |---|---|---|
 | `agent_interview` | Größter Beitrag (6 Personas × 2 Plattformen) | CONTEXT.md §2 — Viele Frage-Echos erwarten |
-| `seed_document` | Sollte VORKOMMEN, nicht notwendigerweise häufig | CONTEXT.md §3 — seed_doc:-Anker sind opaque |
+| `seed_document` | Sollte VORKOMMEN, nicht notwendigerweise häufig | Anker müssen auflösbar sein (`seed_doc:<id>#chunk:<n>`) |
 | `graph_relation` | Mittel (Fakten aus dem Graph-Retrieval) | Gekoppelt an Jensen-Studie, Kosten, Zeitplan |
 | `agent_action` | Wenig (Simulation produziert viele Aktionen, aber nur wenige werden als Evidence gebunden) | CONTEXT.md §3 |
 | `graph_metric` | Kaum bis gar nicht | Echo-Chamber-Index etc. |
@@ -112,11 +112,14 @@ Wer das Feed nach Zitaten durchsucht, wird sie dort nicht finden.
 **Prüfung:** Zitat aus Report nehmen und gegen `reddit_simulation.db.posts.content`
 und `twitter_simulation.db.posts.content` matchen — sollte kein Treffer sein.
 
-### 4.4 seed_doc:-Anker ohne Prüfung (§3)
-Erwartet: Mindestens ein `seed_doc:`-Anker im Evidence-Index, der auf keine
-existierende Chunk-ID verweist (opaque Referenz).
+### 4.4 seed_doc:-Anker mit Laufzeitprüfung (§3)
+Erwartet: Mindestens ein `seed_doc:`-Anker im Evidence-Index im Format
+`seed_doc:<id>#chunk:<n>`, der gegen `known_anchors` auflösbar ist.
+Nicht auflösbare Anker setzen `QuoteValidationResult.valid` auf `False`
+und lösen einen zweiten ReAct-Durchlauf für die Section aus.
 
-**Prüfung:** Im `evidence_map.json` nach `seed_doc:` suchen — sollten vorhanden sein.
+**Prüfung:** Im `evidence_map.json` nach `seed_doc:` suchen — das Format
+muss `#chunk:` enthalten, sonst schlägt `_SEED_DOC_ANCHOR_RE` fehl.
 
 ### 4.5 verify_prose beschränkt sich auf Zahlen (§3)
 Erwartet: Nur Sätze mit konkreten Zahlen werden von `verify_prose` geprüft.
@@ -158,7 +161,7 @@ Ein Testlauf gilt als **erfolgreich**, wenn:
 - [ ] Mindestens 3 der 5 Evidence-Typen im `evidence_index` auftauchen
 - [ ] Der Report 5–7 Sections enthält
 - [ ] `verify_prose` mindestens einen Satz mit Zahl geprüft hat
-- [ ] `seed_doc:`-Anker im `evidence_index` vorhanden sind
+- [ ] `seed_doc:`-Anker im `evidence_index` vorhanden und im Format `seed_doc:<id>#chunk:<n>` auflösbar sind
 
 Ein Testlauf gilt als **auffällig**, wenn:
 

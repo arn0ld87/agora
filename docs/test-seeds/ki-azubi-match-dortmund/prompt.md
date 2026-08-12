@@ -90,8 +90,8 @@ und internationale Erfahrungen.
 ### Qualitätskriterien
 
 - Jeder Claim muss eine nachvollziehbare Quelle im `evidence_index` haben
-- Zitate tragen `persona_id` und `seed_anchor` — vorzugsweise als
-  `<simulated_quote>`-Tag, aber auch Freitext-Zitate werden akzeptiert
+- Zitate tragen `persona_id` und `seed_anchor` als `<simulated_quote>`-Tag
+  (Freitext-Zitate ohne Tag werden vom Parser nicht als Zitat erkannt)
 - Vermeide Frage-Echo: Wenn alle Personas gleich klingen, hast du die
   Fragen suggestiv formuliert
 - Prüfe Rollenübernahme: Antwortet ein Rechenzentrums-Techniker als
@@ -108,7 +108,7 @@ Diese Liste warnt den Report-Agenten vor bekannten Systemeigenheiten:
   aus der Simulation
 - **verify_prose-Lücke** (§3): Nur Sätze mit Zahlen werden geprüft —
   meinungsstarke Aussagen ohne Zahl passieren ungeprüft
-- **seed_doc:-Anker** (§3): opake Referenz, serverseitig nicht verifiziert
+- **seed_doc:-Anker** (§3): auflösbare Referenz im Format `seed_doc:<id>#chunk:<n>`, serverseitig gegen `known_anchors` verifiziert
 - **Twitter ohne Kommentare** (§6): Twitter kennt nur `quote_post`, keine
   Comments — kein Defekt
 - **Reposts mit leerem `content`** (§4): `original_post_id IS NULL` filtert
