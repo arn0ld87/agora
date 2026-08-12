@@ -1,0 +1,49 @@
+{
+  "$id": "https://alexle135.de/schemas/replay-overrides.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Override-Parameter f\u00fcr Varianten-Replay.\n\nAlle Felder optional \u2014 nur gesetzte Felder werden \u00fcberschrieben.",
+  "properties": {
+    "ai_model_ref": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ai Model Ref"
+    },
+    "random_seed": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Random Seed"
+    },
+    "seed_document_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Seed Document Id"
+    }
+  },
+  "title": "ReplayOverrides",
+  "type": "object"
+}

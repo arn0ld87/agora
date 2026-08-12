@@ -1,0 +1,39 @@
+{
+  "$defs": {
+    "PromptSnapshot": {
+      "additionalProperties": false,
+      "description": "Byte-genauer Prompt-Text mit Herkunftsangabe.",
+      "properties": {
+        "content": {
+          "title": "Content",
+          "type": "string"
+        },
+        "source_file": {
+          "title": "Source File",
+          "type": "string"
+        }
+      },
+      "required": [
+        "content",
+        "source_file"
+      ],
+      "title": "PromptSnapshot",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/manifest-prompts.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Alle Prompt-Snapshots eines Runs.",
+  "properties": {
+    "entries": {
+      "additionalProperties": {
+        "$ref": "#/$defs/PromptSnapshot"
+      },
+      "title": "Entries",
+      "type": "object"
+    }
+  },
+  "title": "ManifestPrompts",
+  "type": "object"
+}

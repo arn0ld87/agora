@@ -1,0 +1,22 @@
+{
+  "$id": "https://alexle135.de/schemas/replay-response.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Response f\u00fcr gestartetes Replay.",
+  "properties": {
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "status": {
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id",
+    "status"
+  ],
+  "title": "ReplayResponse",
+  "type": "object"
+}

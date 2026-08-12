@@ -1,0 +1,22 @@
+{
+  "$id": "https://alexle135.de/schemas/manifest-seeds.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Random-Seed-Informationen.",
+  "properties": {
+    "random_seed": {
+      "title": "Random Seed",
+      "type": "integer"
+    },
+    "simulation_id_seed": {
+      "title": "Simulation Id Seed",
+      "type": "string"
+    }
+  },
+  "required": [
+    "random_seed",
+    "simulation_id_seed"
+  ],
+  "title": "ManifestSeeds",
+  "type": "object"
+}

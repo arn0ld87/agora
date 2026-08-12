@@ -1,0 +1,57 @@
+{
+  "$defs": {
+    "StageRoute": {
+      "additionalProperties": false,
+      "description": "Pro-Stage-Modell- und Provider-Information (ohne Secrets).",
+      "properties": {
+        "ai_route_snapshot": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ai Route Snapshot"
+        },
+        "base_url": {
+          "title": "Base Url",
+          "type": "string"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        }
+      },
+      "required": [
+        "model",
+        "provider",
+        "base_url"
+      ],
+      "title": "StageRoute",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/manifest-routing.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "LLM-Routing-Tabelle pro Stage.",
+  "properties": {
+    "stages": {
+      "additionalProperties": {
+        "$ref": "#/$defs/StageRoute"
+      },
+      "title": "Stages",
+      "type": "object"
+    }
+  },
+  "title": "ManifestRouting",
+  "type": "object"
+}
