@@ -54,16 +54,18 @@ Die Demo zeigt:
 
 ## Referenzlauf
 
-Der aktuelle, kritisch dokumentierte End-to-End-Lauf im Repository untersucht die **Domainmigration `alexle135.de` → `alex-schneider.dev`** mit **Gemini 3.6 Flash als Report-Writer**.
+Der aktuelle, kritisch dokumentierte End-to-End-Lauf untersucht erneut die **Domainmigration `alexle135.de` → `alex-schneider.dev`** über **20 vollständig abgeschlossene Simulationsrunden** nach dem 0.9.x-Hardening von Evidence und Provenance.
 
-Der Lauf verarbeitete **30 geladene Persona-Profile** über sechs Report-Sections. ReportV3 enthält **24 Claim-Zeilen, aber nur 17 eindeutige Claim-IDs**, dazu **157 Hypothesen mit 157 eindeutigen IDs** sowie **133 Data-Gap-Zeilen mit 41 eindeutigen Gap-IDs**. Ein Red-Team-Schritt meldete **6 Findings bei `echo_index=0.690`**.
+Der Report bindet **46 Claim-Zeilen** (22 eindeutige gerenderte IDs) und enthält **141 Hypothesen** sowie **133 Data Gaps**. Anders als in früheren Läufen ist die dominante Fehlerklasse nicht mehr fehlendes Evidence Binding. Der Lauf legt die nächste Trust-Grenze offen: Agora kann eine Aussage an ein reales Seed-Fragment binden und trotzdem verlieren, ob dieses Fragment selbst einen dokumentierten Fakt, eine unbelegte Behauptung, eine Hypothese, einen Widerspruch oder eine synthetische Aussage darstellt. Im adversarialen Seed wird dadurch eine ausdrücklich unbelegte SEO-Aussage zu einem validierten Welt-Claim hochgestuft, während eine andere Section dieselbe Aussage korrekt als unbelegt bezeichnet.
 
-Wichtiger als das Report-Fazit ist das Verhalten des Evidence-Layers: Er fing mehrere konkrete Gemini-Overclaims ab, darunter erfundene Alt-Subdomains, eine nicht dokumentierte neue Mailadresse und überzogene Recruiting-Kausalitäten. Gleichzeitig zeigt derselbe Lauf offen die aktuellen Grenzen: **Compound Claims können den Gate teilweise umgehen, Claim-/Gap-IDs sind noch nicht reportweit eindeutig, und Source-Kontext beziehungsweise Counter-Evidence bei Empfehlungen sind noch unvollständig.**
+Derselbe Lauf macht außerdem eine Fremdrollen-Interviewantwort zum einzigen `medium`-Claim, rendert Seed-only-Claims als `Simulationskonsens` und lässt weiterhin einen Nicht-Stakeholder (`Fachblog`) in den Social-Trace. Gleichzeitig fängt der Gate mehrere unbelegte numerische Zielwerte korrekt ab und schwächt die Aussage, Option B sei die einzig tragfähige Strategie.
 
 > [!NOTE]
-> Der Lauf ist bewusst keine Hochglanz-Demo. Er dokumentiert sowohl funktionierende Guardrails als auch reproduzierbare Fehlerklassen. Er beweist weder prädiktive Validität noch reales Stakeholderverhalten.
+> Dies ist die aktuelle **Trust-Pipeline-Referenz**, keine Hochglanz-Demo und kein Nachweis prädiktiver Validität. Der vorherige Lernassistenten-Lauf bleibt die reichhaltigere Referenz für Simulationsdynamik: 665 Aktionen und sechs Cluster gegenüber 109 Interaktionen und drei Clustern hier.
 
-**[→ Aktuellen Referenzlauf mit Guardrail-Befunden, bekannten Fehlern und Prioritäten lesen](./docs/reference-runs/2026-08-09-domain-migration/README.md)**
+**[→ Referenzlauf 5 lesen](./docs/reference-runs/2026-08-12-domain-migration-20-runden/README.de.md)** · **[English](./docs/reference-runs/2026-08-12-domain-migration-20-runden/README.md)**
+
+Frühere Läufe: [Referenzlauf 4](./docs/reference-runs/2026-08-11-ki-lernassistent-20-runden/README.de.md) (erster Evidence-Binding-at-Scale-Lauf; reichhaltigere Simulationsdynamik) · [Lauf 3](./docs/reference-runs/2026-08-11-ki-lernassistent/README.md) · [Lauf 2](./docs/reference-runs/2026-08-09-domain-migration-v2/README.md) · [Lauf 1](./docs/reference-runs/2026-08-09-domain-migration/README.md)
 
 ---
 

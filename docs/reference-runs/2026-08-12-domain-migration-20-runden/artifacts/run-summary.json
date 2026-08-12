@@ -1,0 +1,77 @@
+{
+  "reference_run": 5,
+  "status": "current",
+  "date": "2026-08-12",
+  "scenario": "Domain migration alexle135.de -> alex-schneider.dev",
+  "report_id": "report_fb5dfaf69ffa",
+  "generated_at": "2026-08-12T13:57:13.249205+00:00",
+  "report_mode": "balanced",
+  "rounds": {
+    "completed": 20,
+    "planned": 20,
+    "simulation_running_at_report_start": false
+  },
+  "report": {
+    "validated_claim_rows": 46,
+    "unique_rendered_claim_ids": 22,
+    "hypotheses": 141,
+    "data_gaps": 133,
+    "post_downgraded": 0
+  },
+  "confidence": {
+    "low": 45,
+    "medium": 1,
+    "high": 0
+  },
+  "rendered_claim_scope": {
+    "Simulationskonsens": 46
+  },
+  "rendered_claim_basis": {
+    "persona": 46
+  },
+  "evidence_index": {
+    "total": 70,
+    "agent_quote": 33,
+    "seed_document": 16,
+    "graph_relation_or_metric": 13,
+    "agent_action": 8
+  },
+  "validated_claim_support_composition": {
+    "seed_only": 38,
+    "agent_quote_only": 6,
+    "seed_plus_agent_quote": 1,
+    "agent_action_only": 1
+  },
+  "simulation_metrics": {
+    "total_interactions": 109,
+    "cluster_count": 3,
+    "echo_chamber_index": 0.5963
+  },
+  "missing_from_markdown_artifact": [
+    "report_model",
+    "simulation_id",
+    "graph_id"
+  ],
+  "primary_findings": [
+    "Seed assertion status is not preserved strongly enough to prevent an explicitly unsupported source assertion from validating a direct world-claim.",
+    "Foreign-role takeover in a simulated interview can remain eligible as agent_quote evidence and reach a validated claim.",
+    "All validated claims render as simulation consensus/persona even though most are supported only by seed-document evidence.",
+    "Final visible prose can remain stronger than the later trust-gate verdict.",
+    "Simulated authority personas can be phrased in a way that risks authority laundering.",
+    "Non-stakeholder content objects can still enter the simulation (Fachblog).",
+    "Flat-export claim IDs are not globally unambiguous."
+  ],
+  "comparison_reference_run_4": {
+    "rounds": 20,
+    "validated_claims": 39,
+    "hypotheses": 141,
+    "data_gaps": 131,
+    "actions": 665,
+    "clusters": 6,
+    "echo_chamber_index": 0.5741
+  },
+  "notes": [
+    "Lower interaction volume is a red flag, not a proven regression, because run configuration/model/recommender conditions may differ.",
+    "This run is the current trust-pipeline reference; reference run 4 remains the richer simulation-dynamics reference."
+  ]
+}
