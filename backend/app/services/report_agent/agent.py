@@ -103,6 +103,22 @@ _INTERVIEW_NO_RESPONSE = "(No response from this platform)"
 _INTERVIEW_STRUCTURE_RE = re.compile(r"\[(?:Twitter|Reddit) Platform Response\]")
 
 
+# Issue #1277-6: Stärkste Bindung bei ID-Kollision gewinnen lassen, statt
+# per First-Wins die schwächere zu behalten und die stärkere still zu
+# verwerfen. Rang nach Entailment, Tie-Break über match_score.
+_ENTAILMENT_RANK: Dict[str, int] = {
+    "SUPPORTED": 3,
+    "RELATED_ONLY": 2,
+    "INSUFFICIENT": 1,
+    "CONTRADICTED": 0,
+}
+
+
+def _binding_strength(binding: Dict[str, Any]) -> tuple[int, float]:
+    rank = _ENTAILMENT_RANK.get(str(binding.get("entailment") or ""), 0)
+    return (rank, float(binding.get("match_score") or 0.0))
+
+
 def _remap_claim_bindings(
     claims: List[Dict[str, Any]],
     id_remap: Dict[str, str],
@@ -130,7 +146,9 @@ def _remap_claim_bindings(
             current = str(binding["evidence_id"])
             target = id_remap.get(current, current)
             binding["evidence_id"] = target
-            merged.setdefault(target, binding)
+            existing = merged.get(target)
+            if existing is None or _binding_strength(binding) > _binding_strength(existing):
+                merged[target] = binding
         claim["evidence"] = others + list(merged.values())
         remapped.append(claim)
     return remapped
@@ -491,9 +509,12 @@ class ReportAgent:
                     or (interview.agent_name or "").strip()
                     or "unbekannt"
                 )
+                # Issue #1277-4: Fallback ist das bereinigte substance, nicht
+                # das rohe response — sonst bleiben Plattform-Strukturmarker
+                # wie "[Twitter Platform Response]" im persistierten quote.
                 quote_source = next(
                     (q.strip() for q in interview.key_quotes if q and q.strip()),
-                    response,
+                    substance,
                 )
                 role_family = (
                     getattr(interview, "agent_role_family", None) or ""
