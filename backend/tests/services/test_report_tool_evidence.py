@@ -563,3 +563,39 @@ def test_is_verified_seed_document_anchor_accepts_only_the_canonical_format() ->
     assert not is_verified_seed_document_anchor("web:https://example.com")
     assert not is_verified_seed_document_anchor(None)
     assert not is_verified_seed_document_anchor("")
+
+
+# ---------------------------------------------------------------------------
+# Issue #1277-4: Quote-Fallback behält Plattform-Strukturmarker
+# ---------------------------------------------------------------------------
+
+
+def test_interview_quote_fallback_strips_platform_markers() -> None:
+    """#1277-4: Bei leeren key_quotes fällt quote_source auf das bereinigte
+    substance zurück, nicht auf das rohe response — sonst bleibt der
+    Plattform-Strukturmarker "[Twitter Platform Response]" im persistierten
+    quote und wird in die Report-Prosa gerendert.
+    """
+    agent = _make_agent()
+    result = InterviewResult(
+        interview_topic="Produktakzeptanz",
+        interview_questions=["Was halten Sie davon?"],
+        interviews=[_interview(
+            agent_name="Agent A",
+            response="[Twitter Platform Response]\nI think this policy is important.",
+        )],
+    )
+
+    agent._record_tool_evidence(
+        tool_name="conduct_agent_interview",
+        parameters={},
+        structured_result=result,
+        rendered_result="",
+        section_index=1,
+    )
+
+    record = agent._active_section_evidence[0]
+    assert "[Twitter Platform Response]" not in record["quote"], (
+        f"Plattform-Marker darf nicht im quote landen: {record['quote']!r}"
+    )
+    assert "I think this policy is important." in record["quote"]

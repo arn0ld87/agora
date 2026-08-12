@@ -265,3 +265,54 @@ def test_high_claim_with_two_stakeholder_groups_keeps_high_without_seed() -> Non
 
     assert migrated["sections"][0]["claims"][0]["confidence_label"] == "high"
     EvidenceMapModel.model_validate(migrated)
+
+
+def test_collision_merge_keeps_strongest_binding() -> None:
+    """#1277-6: Bei Kollision gewinnt die stärkere Bindung, nicht die erste.
+
+    Zwei Bindungen zeigen nach Re-Key auf dieselbe Quelle — eine schwächere
+    ``RELATED_ONLY`` und eine stärkere ``SUPPORTED``. Vor dem Fix behielt
+    ``setdefault`` die erste Bindung und verwarf die stärkere still; der Claim
+    verlor seine Stütze und konnte durchs Evidence-Gating fallen.
+    """
+    raw = _v3_map(with_agent_quote=False)
+    target_id = build_evidence_id(_SIM_ID, "graph_relation", _UNANCHORED_KEY)
+    # Stärkere Bindung zeigt bereits auf die graph_relation-Ziel-ID.
+    raw["sections"][0]["claims"][0]["evidence"].append(
+        {"evidence_id": target_id, "entailment": "SUPPORTED",
+         "match_score": 0.9, "supports_claim": True}
+    )
+    # Schwächere Bindung zeigt auf die seed_corpus-ID; sie wird beim Re-Key
+    # auf target_id gemapt und kollidiert. Sie steht zuerst in der Liste.
+    raw["sections"][0]["claims"][0]["evidence"][0]["entailment"] = "RELATED_ONLY"
+    raw["sections"][0]["claims"][0]["evidence"][0]["match_score"] = 0.3
+
+    migrated = demote_unanchored_seed_corpus_records(raw)
+
+    bindings = migrated["sections"][0]["claims"][0]["evidence"]
+    assert len(bindings) == 1, (
+        f"eine Bindung nach Merge erwartet, bekam {len(bindings)}: {bindings}"
+    )
+    assert bindings[0]["entailment"] == "SUPPORTED"
+    assert bindings[0]["match_score"] == 0.9
+
+
+def test_collision_merge_strongest_wins_regardless_of_order() -> None:
+    """#1277-6 Guard: stärkere Bindung gewinnt unabhängig von der Reihenfolge."""
+    raw = _v3_map(with_agent_quote=False)
+    target_id = build_evidence_id(_SIM_ID, "graph_relation", _UNANCHORED_KEY)
+    # Stärkere Bindung zuerst (direkt auf target_id).
+    raw["sections"][0]["claims"][0]["evidence"][0]["entailment"] = "SUPPORTED"
+    raw["sections"][0]["claims"][0]["evidence"][0]["match_score"] = 0.9
+    # Schwächere Bindung danach (seed_corpus-ID wird auf target_id gemapt).
+    raw["sections"][0]["claims"][0]["evidence"].append(
+        {"evidence_id": target_id, "entailment": "RELATED_ONLY",
+         "match_score": 0.3, "supports_claim": True}
+    )
+
+    migrated = demote_unanchored_seed_corpus_records(raw)
+
+    bindings = migrated["sections"][0]["claims"][0]["evidence"]
+    assert len(bindings) == 1
+    assert bindings[0]["entailment"] == "SUPPORTED"
+    assert bindings[0]["match_score"] == 0.9
