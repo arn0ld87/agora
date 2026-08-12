@@ -4,6 +4,7 @@ Run registry API.
 
 from __future__ import annotations
 
+import json
 import os
 import threading
 import traceback
@@ -993,13 +994,14 @@ def replay_run(run_id: str):
             code="no_manifest",
         )
 
-    # Overrides aus dem Request-Body parsen
+    # Overrides aus dem Request-Body parsen — body ist die ReplayRequest-Hülle
+    # {overrides: {...}}, nicht die flachen ReplayOverrides-Felder selbst.
     overrides = None
     if request.is_json and request.get_json(silent=True):
         body = request.get_json(silent=True) or {}
-        from ..contracts.run_manifest_contract import ReplayOverrides
+        from ..contracts.run_manifest_contract import ReplayRequest
         try:
-            overrides = ReplayOverrides(**body) if body else None
+            overrides = ReplayRequest(**body).overrides if body else None
         except ValidationError as exc:
             return json_error(exc.errors(), status=400)
 
@@ -1078,11 +1080,16 @@ def export_run(run_id: str):
         # manifest.json
         zf.write(manifest_path, "manifest.json")
 
-        # Alle weiteren Dateien im Run-Verzeichnis (keine Secrets)
-        for entry in os.listdir(run_dir):
-            entry_path = os.path.join(run_dir, entry)
-            if os.path.isfile(entry_path) and entry != "manifest.json":
-                zf.write(entry_path, entry)
+        # Alle weiteren Dateien im Run-Verzeichnis rekursiv (keine Secrets) —
+        # os.listdir+isfile hätte Unterverzeichnisse wie stages/ (eingefrorene
+        # Routing-Snapshots) stillschweigend übersprungen.
+        for root, _dirs, files in os.walk(run_dir):
+            for name in files:
+                full_path = os.path.join(root, name)
+                arcname = os.path.relpath(full_path, run_dir)
+                if arcname == "manifest.json":
+                    continue
+                zf.write(full_path, arcname)
 
     buf.seek(0)
 

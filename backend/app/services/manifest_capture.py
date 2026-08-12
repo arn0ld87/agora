@@ -145,7 +145,14 @@ class ManifestCapture:
         captured_at = datetime.now(timezone.utc)
         if started_at_str:
             try:
-                captured_at = datetime.fromisoformat(started_at_str)
+                parsed = datetime.fromisoformat(started_at_str)
+                # RunRegistry.create_run schreibt started_at als naives
+                # datetime.now().isoformat() — ohne Coercion würde dieses
+                # captured_at nicht mit den tz-aware Werten aus capture_draft
+                # vergleichbar sein (TypeError bei Subtraktion/Vergleich).
+                captured_at = (
+                    parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed
+                )
             except (ValueError, TypeError):
                 pass
 

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 from typing import Any
 
@@ -138,6 +137,51 @@ def test_replay_sets_replayed_from_run_id(env):
     assert new_run.get("replayed_from_run_id") == run_id
 
 
+def test_replay_accepts_envelope_body_with_overrides(env):
+    """Bug_002: Frontend sendet {overrides: {...}} — nicht die flachen Felder."""
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+    run_id = run["run_id"]
+
+    resp = env["client"].post(
+        f"/api/runs/{run_id}/replay",
+        json={"overrides": {"random_seed": 42}},
+    )
+
+    assert resp.status_code == 202, resp.get_json()
+    payload = resp.get_json()
+    new_run = env["registry"].get_run(payload["run_id"])
+    assert new_run["metadata"]["replay_overrides"]["random_seed"] == 42
+
+
+def test_replay_rejects_unknown_override_key_in_envelope(env):
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+    run_id = run["run_id"]
+
+    resp = env["client"].post(
+        f"/api/runs/{run_id}/replay",
+        json={"overrides": {"geheim_feld": "x"}},
+    )
+
+    assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# GET /manifest (Ticket 8)
+# ---------------------------------------------------------------------------
+
+
+def test_get_manifest_returns_200(env):
+    """Bug_001: json war nicht importiert — jeder erfolgreiche Aufruf crashte 500."""
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+    run_id = run["run_id"]
+
+    resp = env["client"].get(f"/api/runs/{run_id}/manifest")
+
+    assert resp.status_code == 200, resp.get_json()
+    payload = resp.get_json()
+    assert payload["data"]["run_id"] == run_id
+
+
 # ---------------------------------------------------------------------------
 # Export-Endpoint (Ticket 5)
 # ---------------------------------------------------------------------------
@@ -179,3 +223,26 @@ def test_export_unknown_run_returns_404(env):
     """S3: Export eines nicht existierenden Runs gibt 404."""
     resp = env["client"].get("/api/runs/run_000000000000/export")
     assert resp.status_code == 404
+
+
+def test_export_zip_includes_subdirectory_files(env):
+    """Bug_019: os.listdir+isfile dropte stages/ — die eingefrorenen
+    Routing-Snapshots fehlten im Export."""
+    import io
+    import zipfile
+
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+    run_id = run["run_id"]
+
+    run_dir = os.path.join(str(env["tmp_path"]), "runs", run_id)
+    stages_dir = os.path.join(run_dir, "stages")
+    os.makedirs(stages_dir, exist_ok=True)
+    with open(os.path.join(stages_dir, "persona_generation_ai_route_snapshot.json"), "w") as f:
+        f.write("{}")
+
+    resp = env["client"].get(f"/api/runs/{run_id}/export")
+    assert resp.status_code == 200
+
+    zf = zipfile.ZipFile(io.BytesIO(resp.data))
+    names = zf.namelist()
+    assert "stages/persona_generation_ai_route_snapshot.json" in names

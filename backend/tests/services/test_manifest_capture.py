@@ -254,6 +254,25 @@ class TestManifestCaptureLegacy:
         with tempfile.TemporaryDirectory() as tmp:
             yield tmp
 
+    def test_legacy_captured_at_is_timezone_aware(self, run_dir):
+        """Bug_015: naive started_at-Strings dürfen kein naives captured_at
+        erzeugen — sonst crasht der Vergleich mit tz-aware Draft-Manifesten."""
+        ManifestCapture.migrate_legacy(
+            run_id="run_legacy_tz",
+            run_dir=run_dir,
+            run_metadata={"started_at": "2026-01-15T10:00:00"},
+            agora_version="0.9.0",
+            schema_version="1.0.0",
+        )
+
+        manifest_path = os.path.join(run_dir, "manifest.json")
+        with open(manifest_path) as f:
+            data = json.load(f)
+
+        # tz-aware Serialisierung trägt einen Offset (+00:00 oder Z).
+        captured_at = data["captured_at"]
+        assert captured_at.endswith("+00:00") or captured_at.endswith("Z")
+
     def test_creates_legacy_manifest(self, run_dir):
         """S7: migrate_legacy schreibt Manifest mit status legacy."""
         ManifestCapture.migrate_legacy(
