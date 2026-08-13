@@ -445,6 +445,17 @@ def _prepare_startup_env(monkeypatch):
     fehlenden ``AGORA_AUTH_TOKEN`` (das conftest-Fixture setzt ihn bewusst auf
     Leerstring) — der Test wuerde dann gruen sein, ohne den Embedding-Pfad je
     erreicht zu haben.
+
+    ``SECRET_KEY`` und ``NEO4J_PASSWORD`` werden aus demselben Grund gesetzt:
+    mit ``DEBUG=False`` verlangt ``Config.validate()`` beide. In einer
+    Entwicklerumgebung liefert ``load_dotenv`` sie stillschweigend aus der
+    lokalen ``.env``, in CI existieren sie nicht — der Test war dadurch lokal
+    gruen und in CI rot (``Critical configuration missing``). Gesetzt wird
+    direkt auf ``Config``, nicht per ``monkeypatch.setenv``: die Klasse liest
+    das Env beim Import, spaetere Env-Aenderungen erreichen sie nicht mehr.
+    Die Werte muessen ausserhalb von ``SECRET_KEY_PLACEHOLDERS`` bzw.
+    ``NEO4J_PASSWORD_PLACEHOLDERS`` liegen, sonst lehnt ``validate()`` sie als
+    bekannte Platzhalter ab.
     """
     monkeypatch.setenv("FLASK_DEBUG", "false")
     monkeypatch.setenv("AGORA_ALLOW_ANONYMOUS", "true")
@@ -453,6 +464,8 @@ def _prepare_startup_env(monkeypatch):
 
     from app.config import Config as _Config
     monkeypatch.setattr(_Config, "DEBUG", False)
+    monkeypatch.setattr(_Config, "SECRET_KEY", "test-secret-key-not-a-placeholder")
+    monkeypatch.setattr(_Config, "NEO4J_PASSWORD", "test-neo4j-password")
 
 
 def test_create_app_survives_unavailable_embedding_backend(monkeypatch):
