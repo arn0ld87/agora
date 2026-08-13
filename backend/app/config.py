@@ -299,12 +299,21 @@ class Config:
         {"name": "gpt-oss:20b", "label": "GPT-OSS 20B (lokal)", "kind": "ollama"},
         # Issue #1282 — Amazon Bedrock via OpenAI-kompatibler mantle-Pfad.
         # Auth via AWS_BEARER_TOKEN_BEDROCK, kein boto3/SigV4.
-        {"name": "anthropic.claude-sonnet-5", "label": "Claude Sonnet 5 (Bedrock)", "kind": "bedrock"},
-        {"name": "anthropic.claude-opus-4-8", "label": "Claude Opus 4.8 (Bedrock)", "kind": "bedrock"},
-        {"name": "openai.gpt-5.6-sol", "label": "GPT-5.6 Sol (Bedrock)", "kind": "bedrock"},
-        {"name": "openai.gpt-5.6-terra", "label": "GPT-5.6 Terra (Bedrock)", "kind": "bedrock"},
-        {"name": "openai.gpt-5.6-luna", "label": "GPT-5.6 Luna (Bedrock)", "kind": "bedrock"},
+        # REGIONSGEBUNDEN und CHAT-VERIFIZIERT: jede ID ist am 2026-08-13 mit
+        # einem echten ``POST /v1/chat/completions`` gegen die Default-Region
+        # eu-central-1 geprueft worden. Katalog-Praesenz allein genuegt nicht —
+        # der mantle-Pfad fuehrt Modelle, die diese Route ablehnen (die
+        # gesamte ``anthropic.*``-Familie und alle ``openai.gpt-5.x``; die
+        # brauchen die native Converse-API mit SigV4). Liste, Default-Region
+        # und die ``fallback_models`` in ``llm_provider_registry.py`` werden
+        # gemeinsam gepflegt; ``tests/llm/test_bedrock_model_catalog.py``
+        # haelt sie deckungsgleich und probt sie gegen den Live-Endpunkt.
         {"name": "openai.gpt-oss-120b", "label": "GPT-OSS 120B (Bedrock)", "kind": "bedrock"},
+        {"name": "qwen.qwen3-235b-a22b-2507", "label": "Qwen3 235B A22B (Bedrock)", "kind": "bedrock"},
+        {"name": "minimax.minimax-m2.5", "label": "MiniMax M2.5 (Bedrock)", "kind": "bedrock"},
+        {"name": "mistral.devstral-2-123b", "label": "Devstral 2 123B (Bedrock)", "kind": "bedrock"},
+        {"name": "nvidia.nemotron-super-3-120b", "label": "Nemotron Super 3 120B (Bedrock)", "kind": "bedrock"},
+        {"name": "zai.glm-4.7-flash", "label": "GLM-4.7 Flash (Bedrock)", "kind": "bedrock"},
     ]
 
     @classmethod

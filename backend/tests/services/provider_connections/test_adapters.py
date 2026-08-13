@@ -129,4 +129,7 @@ def test_registry_has_one_canonical_connection_matrix() -> None:
     assert definitions[9].auth_mode == "api_key"
     assert definitions[9].api_key_ref == "AWS_BEARER_TOKEN_BEDROCK"
     assert definitions[9].supports_tools is True
+    # Region eu-central-1 ist an ``fallback_models``/``LLM_MODEL_PRESETS``
+    # gekoppelt: die Preset-IDs sind gegen genau diesen mantle-Katalog
+    # chat-verifiziert (siehe tests/llm/test_bedrock_model_catalog.py).
     assert definitions[9].default_base_url == "https://bedrock-mantle.eu-central-1.api.aws/v1"
