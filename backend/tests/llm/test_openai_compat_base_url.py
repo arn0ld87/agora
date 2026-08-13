@@ -77,6 +77,38 @@ class TestOpenAiCompatBaseUrl:
         assert openai_compat_base_url(None, "llama3") is None
         assert openai_compat_base_url("", "llama3") == ""
 
+    @pytest.mark.parametrize(
+        "base_url, model, expected",
+        [
+            # Issue #1282 — Bedrock mantle ohne /v1: Suffix wird angehaengt.
+            (
+                "https://bedrock-mantle.eu-central-1.api.aws",
+                "anthropic.claude-sonnet-5",
+                "https://bedrock-mantle.eu-central-1.api.aws/v1",
+            ),
+            # bedrock-mantle mit /v1: idempotent, kein doppeltes /v1.
+            (
+                "https://bedrock-mantle.eu-central-1.api.aws/v1",
+                "anthropic.claude-opus-4-8",
+                "https://bedrock-mantle.eu-central-1.api.aws/v1",
+            ),
+            # bedrock-runtime ohne /v1: Suffix wird angehaengt.
+            (
+                "https://bedrock-runtime.us-east-1.amazonaws.com",
+                "openai.gpt-5.6-sol",
+                "https://bedrock-runtime.us-east-1.amazonaws.com/v1",
+            ),
+            # bedrock-runtime mit /v1: idempotent.
+            (
+                "https://bedrock-runtime.us-east-1.amazonaws.com/v1",
+                "openai.gpt-oss-120b",
+                "https://bedrock-runtime.us-east-1.amazonaws.com/v1",
+            ),
+        ],
+    )
+    def test_bedrock_endpoints_get_v1(self, base_url, model, expected):
+        assert openai_compat_base_url(base_url, model) == expected
+
 
 class TestLlmClientAppliesCanonicalUrl:
     """Integrationsebene — der Client verdrahtet die Kanonisierung korrekt."""

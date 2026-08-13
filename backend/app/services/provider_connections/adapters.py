@@ -16,6 +16,12 @@ Protokollentscheidungen sind gegen die Primaerdokumentation verifiziert:
 * OpenCode Go veroeffentlicht zwar eine Modell-URL, dokumentiert aber in der
   Go-Referenz keinen Header-Vertrag fuer einen direkten Probe-Request. Es bleibt
   daher bewusst ``unsupported`` statt eine Auth-Semantik zu erraten.
+* Amazon Bedrock: https://docs.aws.amazon.com/bedrock/latest/userguide/inference-
+  chat-completions-mantle.html dokumentiert den mantle-Pfad, der OpenAI-Chat-
+  Completions (``/v1/chat/completions``) sowie ``GET /v1/models`` mit
+  Bearer-API-Key bedient. ``default_base_url`` enthaelt bereits ``/v1``,
+  deshalb haengt die Discovery ``/models`` (nicht ``/v1/models``) an — analog
+  zu OpenAI/MiniMax. Kein boto3/SigV4 (Issue #1282).
 """
 from __future__ import annotations
 
@@ -63,6 +69,7 @@ _PROTOCOLS: dict[str, _AdapterProtocol] = {
     "ollama_cloud": _AdapterProtocol("/api/tags", "models", "bearer"),
     "openai_compatible": _AdapterProtocol("/models", "data", "bearer"),
     "ollama": _AdapterProtocol("/api/tags", "models", "none"),
+    "bedrock": _AdapterProtocol("/models", "data", "bearer"),
 }
 
 

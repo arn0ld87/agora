@@ -41,7 +41,10 @@ const LLM_PROVIDER_TO_AI_KIND: Record<LlmProvider, AiProviderKind | null> = {
   custom: null,
   ollama_cloud: 'ollama_cloud',
   openai_compatible: 'openai_compatible',
+  minimax: null,
+  opencode_go: null,
   github_copilot: null,
+  bedrock: null,
   cloud: null,
   unknown: null,
 }
@@ -57,6 +60,7 @@ const CONNECTION_KIND_TO_AI_KIND: Record<ProviderConnectionKind, AiProviderKind 
   openai_compatible: 'openai_compatible',
   minimax: null,
   github_copilot: null,
+  bedrock: null,
   cloud: null,
   unknown: null,
 }
@@ -73,6 +77,7 @@ const CONNECTION_KIND_TO_LLM_PROVIDER: Record<ProviderConnectionKind, LlmProvide
   openai_compatible: 'openai_compatible',
   minimax: 'custom',
   github_copilot: 'github_copilot',
+  bedrock: 'custom',
   cloud: 'cloud',
   unknown: 'unknown',
 }

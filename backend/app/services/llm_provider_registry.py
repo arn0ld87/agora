@@ -6,6 +6,7 @@ from typing import Literal, Optional
 
 from ..contracts import (
     PROVIDER_ANTHROPIC,
+    PROVIDER_BEDROCK,
     PROVIDER_GITHUB_COPILOT,
     PROVIDER_GOOGLE,
     PROVIDER_MINIMAX,
@@ -90,6 +91,29 @@ _CONNECTION_DEFINITIONS: tuple[ProviderConnectionDefinition, ...] = (
         "https://api.githubcopilot.com", "unsupported", "GH_AUTH_TOKEN", True,
         fallback_models=_copilot_models(),
     ),
+    # Issue #1282 — Amazon Bedrock via OpenAI-kompatibler mantle-Pfad
+    # (https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-
+    # completions-mantle.html). Auth via Bedrock-Bearer-API-Key
+    # (AWS_BEARER_TOKEN_BEDROCK), kein boto3/SigV4. Default-Region
+    # eu-central-1; die Region ist Teil der Host-Subdomain und vom Nutzer im
+    # Connection-UI frei editierbar. ``default_base_url`` enthaelt bereits
+    # ``/v1``: die Discovery haengt ``/models`` an (→ ``…/v1/models``), und der
+    # Chat-Client spricht ``…/v1/chat/completions``. Damit unterscheidet sich
+    # Bedrock von Ollama (dessen Default bewusst OHNE ``/v1`` steht, weil
+    # ``/api/tags`` an der Wurzel haengt) und gleicht dem OpenAI-Default.
+    ProviderConnectionDefinition(
+        PROVIDER_BEDROCK, "Amazon Bedrock", "http", "api_key",
+        "https://bedrock-mantle.eu-central-1.api.aws/v1",
+        "bedrock", "AWS_BEARER_TOKEN_BEDROCK", True,
+        fallback_models=(
+            "anthropic.claude-sonnet-5",
+            "anthropic.claude-opus-4-8",
+            "openai.gpt-5.6-sol",
+            "openai.gpt-5.6-terra",
+            "openai.gpt-5.6-luna",
+            "openai.gpt-oss-120b",
+        ),
+    ),
 )
 
 
@@ -134,7 +158,7 @@ class LlmProviderRegistry:
         mid = model_id.lower()
         if "ministral" in mid:
             return False
-        if provider_type in ("openai", "google", "anthropic", "github_copilot"):
+        if provider_type in ("openai", "google", "anthropic", "github_copilot", "bedrock"):
             return True
         tool_capable_families = (
             "gpt-4", "gpt-3.5", "o1-", "o3-", "gemini-", "llama-3.1",

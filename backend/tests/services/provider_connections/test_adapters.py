@@ -116,6 +116,7 @@ def test_registry_has_one_canonical_connection_matrix() -> None:
         "ollama",
         "opencode_go",
         "github_copilot",
+        "bedrock",
     )
     assert definitions[2].default_base_url == (
         "https://generativelanguage.googleapis.com/v1beta/openai"
@@ -123,3 +124,9 @@ def test_registry_has_one_canonical_connection_matrix() -> None:
     assert definitions[6].transport == "local"
     assert definitions[7].adapter_kind == "unsupported"
     assert definitions[8].adapter_kind == "unsupported"
+    # Issue #1282 — Amazon Bedrock OpenAI-kompatibler Mantle-Pfad.
+    assert definitions[9].adapter_kind == "bedrock"
+    assert definitions[9].auth_mode == "api_key"
+    assert definitions[9].api_key_ref == "AWS_BEARER_TOKEN_BEDROCK"
+    assert definitions[9].supports_tools is True
+    assert definitions[9].default_base_url == "https://bedrock-mantle.eu-central-1.api.aws/v1"

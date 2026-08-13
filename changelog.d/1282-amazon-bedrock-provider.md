@@ -1,0 +1,3 @@
+### Added (Amazon Bedrock als LLM-Provider — 2026-08-12)
+
+- **Amazon Bedrock (OpenAI-kompatibler mantle-Pfad) als LLM-Provider:** `detect_provider` erkennt `bedrock-mantle.<region>.api.aws` / `bedrock-runtime.<region>.amazonaws.com` und resolved sie zu `OpenAIAdapter`; `openai_compat_base_url` erzwingt das nötige `/v1`. Connection-Discovery-Eintrag (`adapter_kind="bedrock"`, `api_key_ref=AWS_BEARER_TOKEN_BEDROCK`, Bearer-Auth) plus `/v1/models`-Discovery-Protokoll; Default-Region `eu-central-1` (im Connection-UI frei editierbar). `LLM_MODEL_PRESETS` um sechs Bedrock-Modelle ergänzt (Claude Sonnet 5, Claude Opus 4.8, OpenAI GPT-5.6 Sol/Terra/Luna, gpt-oss-120b). Frontend-Zod-Provider-Kind-Enums gespiegelt. Auth via Bedrock-API-Key (Bearer), kein boto3/SigV4. (#1282)

@@ -19,3 +19,4 @@
 1ad9b21ccf12fd9906267ec1550ad7cf95c33335:backend/tests/services/test_secret_resolver_store.py:generic-api-key:49
 1ad9b21ccf12fd9906267ec1550ad7cf95c33335:backend/tests/services/test_secret_resolver_env_sanitation.py:generic-api-key:117
 d891461697eb733fb8c36e0ccb5705b0d43b03cc:backend/tests/api/test_simulation_history_provider_passing.py:generic-api-key:79
+cca4fb75bca892e738d5dc321d33ad01316660f3:backend/tests/llm/test_provider_registry.py:generic-api-key:69

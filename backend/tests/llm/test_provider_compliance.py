@@ -333,6 +333,7 @@ def test_response_format_json_schema_without_schema_rejected_at_contract() -> No
         ("google", GeminiAdapter),
         ("openai", OpenAIAdapter),
         ("openai_compatible", OpenAIAdapter),
+        ("bedrock", OpenAIAdapter),  # Issue #1282 — mantle OpenAI-Compat
         ("unknown", OpenAIAdapter),  # OpenAI-Wire-Format als Default
     ],
 )

@@ -297,6 +297,14 @@ class Config:
         {"name": "qwen2.5:14b", "label": "Qwen 2.5 14B (lokal, GPU-arm)", "kind": "ollama"},
         {"name": "llama3.1:8b", "label": "Llama 3.1 8B (lokal, schnell)", "kind": "ollama"},
         {"name": "gpt-oss:20b", "label": "GPT-OSS 20B (lokal)", "kind": "ollama"},
+        # Issue #1282 — Amazon Bedrock via OpenAI-kompatibler mantle-Pfad.
+        # Auth via AWS_BEARER_TOKEN_BEDROCK, kein boto3/SigV4.
+        {"name": "anthropic.claude-sonnet-5", "label": "Claude Sonnet 5 (Bedrock)", "kind": "bedrock"},
+        {"name": "anthropic.claude-opus-4-8", "label": "Claude Opus 4.8 (Bedrock)", "kind": "bedrock"},
+        {"name": "openai.gpt-5.6-sol", "label": "GPT-5.6 Sol (Bedrock)", "kind": "bedrock"},
+        {"name": "openai.gpt-5.6-terra", "label": "GPT-5.6 Terra (Bedrock)", "kind": "bedrock"},
+        {"name": "openai.gpt-5.6-luna", "label": "GPT-5.6 Luna (Bedrock)", "kind": "bedrock"},
+        {"name": "openai.gpt-oss-120b", "label": "GPT-OSS 120B (Bedrock)", "kind": "bedrock"},
     ]
 
     @classmethod

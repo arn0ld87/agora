@@ -59,6 +59,25 @@ HTTP_CASES = [
     ("https://api.openai.com/proxy/api.minimax.io", "MiniMax-M3", "openai"),
     # Kein False Positive: Modellname enthaelt "minimax", Base-URL aber nicht.
     ("https://api.openai.com/v1", "minimax-mock", "openai"),
+    # Issue #1282 — Amazon Bedrock OpenAI-kompatibler mantle-Pfad. Hostname-
+    # basiert (wie MiniMax, CodeQL #750), kein Substring. Erkennt mantle- und
+    # runtime-Hosts in beliebiger Region.
+    ("https://bedrock-mantle.eu-central-1.api.aws/v1", "anthropic.claude-sonnet-5", "bedrock"),
+    ("https://bedrock-mantle.us-east-1.api.aws/v1", "openai.gpt-oss-120b", "bedrock"),
+    ("https://bedrock-runtime.us-east-1.amazonaws.com/v1", "openai.gpt-5.6-sol", "bedrock"),
+    # ohne /v1 — Detection ist hostbasiert, nicht pfadbasiert.
+    # gitleaks:allow — der folgende Eintrag ist ein AWS-Service-Hostname als
+    # Test-Fixture, kein Secret (siehe .gitleaksignore-Konvention).
+    ("https://bedrock-mantle.eu-central-1.api.aws", "anthropic.claude-opus-4-8", "bedrock"),  # gitleaks:allow
+    # Kein False Positive: Drittanbieter-Host mit „bedrock-mantle" im Pfad —
+    # die Detection prueft den Hostnamen, nicht den Pfad (CodeQL #750-Stil).
+    ("https://example.com/bedrock-mantle/v1", "foo", "unknown"),
+    # Kein Praefix-False-Positive: Drittanbieter-Host, der mit „bedrock-mantle."
+    # bzw. „bedrock-runtime." beginnt, aber nicht auf .api.aws /.amazonaws.com
+    # endet — darf NICHT als bedrock erkannt werden (sonst Leak des Bearer-
+    # Tokens an einen Nicht-AWS-Host). Suffix-Pruefung wie der MiniMax-Zweig.
+    ("https://bedrock-mantle.attacker.example/v1", "anthropic.claude-sonnet-5", "unknown"),
+    ("https://bedrock-runtime.attacker.example/v1", "openai.gpt-5.6-sol", "unknown"),
 ]
 
 

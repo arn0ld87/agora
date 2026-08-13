@@ -71,6 +71,7 @@ describe('canonical AI provider contracts', () => {
       'openai_compatible',
       'minimax',
       'github_copilot',
+      'bedrock',
       'cloud',
       'unknown',
     ])

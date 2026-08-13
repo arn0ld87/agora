@@ -8,6 +8,10 @@ def test_provider_types_include_minimax_and_opencode_go() -> None:
     assert "minimax" in ALL_PROVIDER_TYPES
     assert "opencode_go" in ALL_PROVIDER_TYPES
 
+
+def test_provider_types_include_bedrock() -> None:
+    assert "bedrock" in ALL_PROVIDER_TYPES
+
 def test_no_gemini_literals_in_code():
     """
     Regression gate: Ensure 'gemini' literal is not used for provider identification
