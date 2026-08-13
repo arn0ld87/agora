@@ -134,12 +134,11 @@ def _detect_http(base_url: Optional[str], model: Optional[str]) -> HttpDetectedP
     # bedrock-mantle.<region>.api.aws (empfohlener mantle-Endpunkt) und
     # bedrock-runtime.<region>.amazonaws.com (Fallback, falls jemand den
     # Runtime-Host einträgt — ebenfalls OpenAI-Compat via mantle). Beide
-    # sprechen OpenAI-Chat-Completions + Bearer-API-Key.
+    # sprechen OpenAI-Chat-Completions + Bearer-API-Key. Die Suffix-Pruefung
+    # (``.api.aws``/``.amazonaws.com``) schliesst Praefix-False-Positives wie
+    # ``bedrock-mantle.attacker.example`` aus (siehe :func:`_is_bedrock_host`).
     _bedrock_host = urlparse(base).hostname
-    if _bedrock_host and (
-        _bedrock_host.startswith("bedrock-mantle.")
-        or _bedrock_host.startswith("bedrock-runtime.")
-    ):
+    if _bedrock_host and _is_bedrock_host(_bedrock_host):
         return "bedrock"
     return "unknown"
 
@@ -443,6 +442,30 @@ def _has_ollama_url_signal(base_url: Optional[str]) -> bool:
         return False
 
 
+def _is_bedrock_host(host: str) -> bool:
+    """Praezise Bedrock-Host-Erkennung, Spiegel des MiniMax-Zweigs.
+
+    Akzeptiert nur echte AWS-Service-Hosts (Issue #1282):
+      - ``bedrock-mantle.<region>.api.aws`` (empfohlener mantle-Endpunkt)
+      - ``bedrock-runtime.<region>.amazonaws.com`` (Fallback-Host)
+
+    Ein reiner Prefix-Check (``host.startswith("bedrock-mantle.")``) wuerde
+    auch Drittanbieter-Hosts wie ``bedrock-mantle.attacker.example``
+    akzeptieren und den Bedrock-Bearer-Token dorthin leiten. Die zusaetzliche
+    Suffix-Pruefung (``.api.aws`` bzw. ``.amazonaws.com``) schliesst das aus
+    und entspricht der Praezision des MiniMax-Zweigs
+    (``host == "api.minimax.io" or host.endswith(".api.minimax.io")``).
+
+    ``host`` muss kleingeschrieben sein; beide Aufrufer
+    (:func:`_detect_http` und :func:`_has_bedrock_url_signal`) lowercase den
+    Hostnamen vor dem Aufruf.
+    """
+    return (
+        (host.startswith("bedrock-mantle.") and host.endswith(".api.aws"))
+        or (host.startswith("bedrock-runtime.") and host.endswith(".amazonaws.com"))
+    )
+
+
 def _has_bedrock_url_signal(base_url: Optional[str]) -> bool:
     """True, wenn die Base-URL einen Amazon-Bedrock-Endpunkt ausweist.
 
@@ -455,7 +478,9 @@ def _has_bedrock_url_signal(base_url: Optional[str]) -> bool:
 
     Ein Drittanbieter-Host mit ``bedrock`` im Pfad (z. B.
     ``https://example.com/bedrock-mantle/v1``) wird bewusst NICHT erkannt —
-    die Endpunkt-Kanonisierung greift nur bei echten Bedrock-Hosts.
+    die Endpunkt-Kanonisierung greift nur bei echten Bedrock-Hosts. Ebenso
+    werden Praefix-False-Positives wie ``bedrock-mantle.attacker.example``
+    abgelehnt (siehe :func:`_is_bedrock_host`).
     """
     if not base_url:
         return False
@@ -463,7 +488,7 @@ def _has_bedrock_url_signal(base_url: Optional[str]) -> bool:
     host = parsed.hostname or ""
     if not host:
         return False
-    return host.startswith("bedrock-mantle.") or host.startswith("bedrock-runtime.")
+    return _is_bedrock_host(host)
 
 
 def openai_compat_base_url(
