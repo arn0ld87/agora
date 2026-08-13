@@ -193,7 +193,12 @@ def create_app(config_class=Config):
     # contexts without a reachable embedding backend). Static KNOWN_EMBEDDING_DIMS
     # validation still runs — dimension mismatches are caught even without Ollama.
     skip_embedding_probe = os.environ.get('AGORA_SKIP_EMBEDDING_PROBE', 'false').lower() in ('true', '1', 'yes')
-    from .storage.embedding_service import EmbeddingError, validate_embedding_configuration
+    from .storage.embedding_service import (
+        EmbeddingBackendUnavailableError,
+        EmbeddingError,
+        validate_embedding_configuration,
+    )
+    app.config['EMBEDDING_DEGRADED'] = False
     try:
         actual_embedding_dim = validate_embedding_configuration(skip_probe=skip_embedding_probe)
         if skip_embedding_probe:
@@ -208,6 +213,21 @@ def create_app(config_class=Config):
                 Config.EMBEDDING_MODEL,
                 actual_embedding_dim,
             )
+    except EmbeddingBackendUnavailableError as e:
+        # Provider-Ausfall, keine Fehlkonfiguration: Quota erschoepft (429),
+        # Serverfehler oder Host nicht erreichbar. Ein Abbruch wuerde hier nur
+        # einen Crash-Loop erzeugen — der Reverse Proxy antwortet dann 502 auf
+        # *alle* Routen, obwohl nur die Embedding-Funktion betroffen ist.
+        # Deshalb: laut loggen, degradiert weiterlaufen. Semantische Suche und
+        # Graph-Embeddings schlagen zur Laufzeit fehl, bis der Provider zurueck
+        # ist; der Rest der Anwendung bleibt bedienbar.
+        app.config['EMBEDDING_DEGRADED'] = True
+        logger.error(
+            "Embedding backend unavailable (%s) — starting in DEGRADED mode. "
+            "Semantic search and graph embeddings will fail until the backend "
+            "recovers. Configuration itself is valid; no restart will fix this.",
+            e,
+        )
     except EmbeddingError as e:
         logger.error("Embedding configuration invalid: %s", e)
         raise RuntimeError(f"Embedding configuration invalid: {e}") from e

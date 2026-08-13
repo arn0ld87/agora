@@ -19,7 +19,10 @@ KNOWN_EMBEDDING_DIMS = {
     'qwen3-embedding:4b': 2560,
     'qwen3-embedding:8b': 4096,
     'gemini-embedding-2': 3072,
-    'gemini-embedding-001': 768,
+    # gemini-embedding-001 liefert per Default 3072 Dimensionen (Matryoshka,
+    # per output_dimensionality auf 1536/768 kuerzbar — der OpenAI-Compat-Pfad
+    # in EmbeddingService sendet diesen Parameter nicht, also gilt 3072).
+    'gemini-embedding-001': 3072,
 }
 
 # Bekannte Platzhalter-Werte aus `.env.example` und altem Default-Code.

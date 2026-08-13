@@ -260,37 +260,9 @@ class EmbeddingService:
                     timeout=self.timeout,
                 )
                 response.raise_for_status()
-                data = response.json()
-
-                # Validate response structure
-                if not isinstance(data, dict):
-                    raise EmbeddingError(f"Invalid {provider_label} response: expected dict, got {type(data).__name__}")
-
-                embeddings = self._extract_embeddings(data)
-
-                # Validate response is a list
-                if not isinstance(embeddings, list):
-                    raise EmbeddingError(f"Invalid {provider_label} response: embeddings must be a list")
-
-                # Validate count
-                if len(embeddings) != len(texts):
-                    raise EmbeddingError(
-                        f"Expected {len(texts)} embeddings, got {len(embeddings)}"
-                    )
-
-                # Validate each embedding vector
-                for i, embedding in enumerate(embeddings):
-                    if not isinstance(embedding, list):
-                        raise EmbeddingError(
-                            f"Invalid {provider_label} response: embedding {i} must be a list, got {type(embedding).__name__}"
-                        )
-                    for j, value in enumerate(embedding):
-                        if not isinstance(value, (int, float)):
-                            raise EmbeddingError(
-                                f"Invalid {provider_label} response: embedding {i}[{j}] must be numeric, got {type(value).__name__}"
-                            )
-
-                return embeddings
+                return self._parse_embeddings_response(
+                    response.json(), len(texts), provider_label
+                )
 
             except requests.exceptions.ConnectionError as e:
                 last_error = e
@@ -311,9 +283,7 @@ class EmbeddingService:
                     e.response.status_code if e.response is not None else 'n/a',
                     body,
                 )
-                if e.response is not None and e.response.status_code >= 500:
-                    pass
-                else:
+                if not _is_transient_http_error(e):
                     raise EmbeddingError(f"{provider_label} embedding failed: {e}") from e
             except (KeyError, ValueError, TypeError) as e:
                 raise EmbeddingError(f"Invalid {provider_label} response: {e}") from e
@@ -323,9 +293,57 @@ class EmbeddingService:
                 logger.info(f"Retrying in {wait}s...")
                 time.sleep(wait)
 
-        raise EmbeddingError(
+        # Hierher fuehren nur erschoepfte Retries — Connection, Timeout, 5xx
+        # oder 429. Alles davon ist ein Provider-Ausfall, keine Fehlkonfiguration.
+        raise EmbeddingBackendUnavailableError(
             f"{provider_label} embedding failed after {self.max_retries} retries: {last_error}"
         )
+
+    def _parse_embeddings_response(
+        self, data: object, expected_count: int, provider_label: str
+    ) -> List[List[float]]:
+        """Validate the provider payload and return the vectors.
+
+        Ausgelagert aus ``_request_embeddings``: dort standen Transport-Retry
+        und Payload-Validierung in einer Funktion, was das Komplexitaets-Gate
+        (radon rank D) reisst, sobald der Retry-Zweig um eine Fallunterscheidung
+        waechst. Beides sind ohnehin getrennte Anliegen — hier wird nichts mehr
+        wiederholt, hier wird nur noch geprueft.
+
+        Raises:
+            EmbeddingError: Struktur, Anzahl oder Elementtypen passen nicht.
+        """
+        if not isinstance(data, dict):
+            raise EmbeddingError(
+                f"Invalid {provider_label} response: expected dict, got {type(data).__name__}"
+            )
+
+        embeddings = self._extract_embeddings(data)
+
+        if not isinstance(embeddings, list):
+            raise EmbeddingError(
+                f"Invalid {provider_label} response: embeddings must be a list"
+            )
+
+        if len(embeddings) != expected_count:
+            raise EmbeddingError(
+                f"Expected {expected_count} embeddings, got {len(embeddings)}"
+            )
+
+        for i, embedding in enumerate(embeddings):
+            if not isinstance(embedding, list):
+                raise EmbeddingError(
+                    f"Invalid {provider_label} response: embedding {i} must be a list, "
+                    f"got {type(embedding).__name__}"
+                )
+            for j, value in enumerate(embedding):
+                if not isinstance(value, (int, float)):
+                    raise EmbeddingError(
+                        f"Invalid {provider_label} response: embedding {i}[{j}] must be "
+                        f"numeric, got {type(value).__name__}"
+                    )
+
+        return embeddings
 
     def _detect_provider(self) -> str:
         """Infer which embeddings API shape to use from the configured base URL/model.
@@ -389,6 +407,53 @@ class EmbeddingService:
             return False
 
 
+def _is_transient_http_error(exc: requests.exceptions.HTTPError) -> bool:
+    """True, wenn die Antwort einen Provider-Ausfall statt Fehlkonfiguration meldet.
+
+    Die Trennlinie ist „hilft ein Retry oder ein Warten?":
+
+    * ``5xx`` — Serverfehler auf Providerseite, transient.
+    * ``429`` — Quota bzw. Rate Limit erschoepft (u. a. Googles Spend Cap). Die
+      Konfiguration ist korrekt, nur das Kontingent ist weg. Frueher brach
+      dieser Fall sofort ab und wurde damit wie ein Konfigurationsfehler
+      behandelt — genau daran ist der Start am 12.08.2026 in einen Crash-Loop
+      gelaufen.
+    * alles uebrige ``4xx`` — 401/403 falscher oder fehlender Key, 404
+      unbekanntes Modell. Fehlkonfiguration, scheitert sofort und hart.
+
+    Eine Antwort ohne ``response`` (Statuscode unbekannt) gilt als NICHT
+    transient: ohne Beleg fuer einen Providerausfall wird nicht stillschweigend
+    weiterretried.
+    """
+    if exc.response is None:
+        return False
+    status_code = exc.response.status_code
+    return status_code >= 500 or status_code == 429
+
+
 class EmbeddingError(Exception):
     """Raised when embedding generation fails."""
+    pass
+
+
+class EmbeddingBackendUnavailableError(EmbeddingError):
+    """Das Embedding-Backend ist vorübergehend nicht verfügbar.
+
+    Abgrenzung zur Basisklasse entlang der Frage "hilft ein Neustart?":
+
+    * ``EmbeddingBackendUnavailableError`` — Quota erschöpft (429), Serverfehler
+      (5xx), Verbindungsfehler oder Timeout. Die Konfiguration ist korrekt, der
+      Provider antwortet nur gerade nicht. Ein Neustart repariert nichts, und
+      der Startpfad in ``app/__init__.py`` läuft deshalb degradiert weiter statt
+      das ganze Backend zu beenden.
+    * ``EmbeddingError`` (direkt) — Fehlkonfiguration: falscher oder fehlender
+      API-Key (401/403), unbekanntes Modell (404 "model not found"), Dimension
+      passt nicht zu ``KNOWN_EMBEDDING_DIMS``. Das bleibt fatal.
+
+    Hintergrund: am 12.08.2026 hat Googles Spend Cap den Embeddings-Endpunkt
+    dauerhaft 429 antworten lassen. Weil der Startpfad jeden ``EmbeddingError``
+    als fatal behandelt hat, lief das Backend in einen Crash-Loop und der
+    Reverse Proxy lieferte 502 auf ``/api/*`` — ein externes Zahlungslimit hat
+    damit das komplette Dashboard lahmgelegt.
+    """
     pass
