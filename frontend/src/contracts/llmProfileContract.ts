@@ -13,7 +13,10 @@ export const LlmProviderSchema = z.enum([
   "custom",
   "ollama_cloud",
   "openai_compatible",
+  "minimax",
+  "opencode_go",
   "github_copilot",
+  "bedrock",
   "cloud",
   "unknown",
 ]);
