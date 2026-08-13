@@ -66,7 +66,9 @@ HTTP_CASES = [
     ("https://bedrock-mantle.us-east-1.api.aws/v1", "openai.gpt-oss-120b", "bedrock"),
     ("https://bedrock-runtime.us-east-1.amazonaws.com/v1", "openai.gpt-5.6-sol", "bedrock"),
     # ohne /v1 — Detection ist hostbasiert, nicht pfadbasiert.
-    ("https://bedrock-mantle.eu-central-1.api.aws", "anthropic.claude-opus-4-8", "bedrock"),
+    # gitleaks:allow — der folgende Eintrag ist ein AWS-Service-Hostname als
+    # Test-Fixture, kein Secret (siehe .gitleaksignore-Konvention).
+    ("https://bedrock-mantle.eu-central-1.api.aws", "anthropic.claude-opus-4-8", "bedrock"),  # gitleaks:allow
     # Kein False Positive: Drittanbieter-Host mit „bedrock-mantle" im Pfad —
     # die Detection prueft den Hostnamen, nicht den Pfad (CodeQL #750-Stil).
     ("https://example.com/bedrock-mantle/v1", "foo", "unknown"),
