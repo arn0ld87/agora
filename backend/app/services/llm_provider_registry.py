@@ -94,9 +94,40 @@ _CONNECTION_DEFINITIONS: tuple[ProviderConnectionDefinition, ...] = (
     # Issue #1282 — Amazon Bedrock via OpenAI-kompatibler mantle-Pfad
     # (https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-
     # completions-mantle.html). Auth via Bedrock-Bearer-API-Key
-    # (AWS_BEARER_TOKEN_BEDROCK), kein boto3/SigV4. Default-Region
-    # eu-central-1; die Region ist Teil der Host-Subdomain und vom Nutzer im
-    # Connection-UI frei editierbar. ``default_base_url`` enthaelt bereits
+    # (AWS_BEARER_TOKEN_BEDROCK), kein boto3/SigV4.
+    #
+    # Default-Region eu-central-1 (Datenresidenz). ``fallback_models`` unten
+    # ist an diese Region gekoppelt und NICHT frei waehlbar — zwei Gruende,
+    # beide am 2026-08-13 gegen den Live-Endpunkt gemessen:
+    #
+    # 1. Der mantle-Katalog ist regional verschieden. us-east-1 fuehrt 55
+    #    Modelle, eu-central-1 nur 33. Wer die Region wechselt, ohne die
+    #    Modellwahl mitzuziehen, bekommt ``404 The model '<id>' does not
+    #    exist``.
+    # 2. Katalog-Praesenz heisst NICHT Chat-Faehigkeit. Der mantle-Pfad
+    #    bedient nur einen Teil seiner eigenen Modelle ueber
+    #    ``/v1/chat/completions``; in us-east-1 sind es 38 von 55. Die
+    #    gesamte ``anthropic.*``-Familie und alle ``openai.gpt-5.x`` stehen
+    #    zwar im Katalog, antworten aber mit ``400 does not support the
+    #    '/v1/chat/completions' API`` — und ebenso auf ``/v1/responses``.
+    #    Diese Modelle sind ueber den OpenAI-kompatiblen Pfad grundsaetzlich
+    #    nicht erreichbar; sie brauchen die native Converse/InvokeModel-API
+    #    mit SigV4 (bewusst ausserhalb dieses Slice, siehe Folge-Issue).
+    #    ``GET /v1/models`` gibt kein Capability-Feld her, das man offline
+    #    auswerten koennte — deshalb probt der netzgebundene Test
+    #    ``tests/llm/test_bedrock_model_catalog.py`` jedes Preset mit einem
+    #    echten Chat-Call statt nur die Katalog-Mitgliedschaft zu pruefen.
+    #
+    # Die Region ist Teil der Host-Subdomain. Sie im Connection-UI zu
+    # aendern reicht derzeit NICHT: der Wert landet zwar in
+    # ``ProviderConnection.base_url``, aber ``api/llm_active.py::
+    # put_active_config`` schreibt beim Aktivieren den Registry-Default hier
+    # aus der Definition in die Active-Config — und genau die steuert die
+    # Laufzeit (``llm/client.py``). Wer die Region wirklich wechseln will,
+    # aendert bis zur Behebung von #1289 diesen Default. Der Trugschluss hat
+    # die Bedrock-Diagnose mehrere Runden gekostet.
+    #
+    # ``default_base_url`` enthaelt bereits
     # ``/v1``: die Discovery haengt ``/models`` an (→ ``…/v1/models``), und der
     # Chat-Client spricht ``…/v1/chat/completions``. Damit unterscheidet sich
     # Bedrock von Ollama (dessen Default bewusst OHNE ``/v1`` steht, weil
@@ -106,12 +137,12 @@ _CONNECTION_DEFINITIONS: tuple[ProviderConnectionDefinition, ...] = (
         "https://bedrock-mantle.eu-central-1.api.aws/v1",
         "bedrock", "AWS_BEARER_TOKEN_BEDROCK", True,
         fallback_models=(
-            "anthropic.claude-sonnet-5",
-            "anthropic.claude-opus-4-8",
-            "openai.gpt-5.6-sol",
-            "openai.gpt-5.6-terra",
-            "openai.gpt-5.6-luna",
             "openai.gpt-oss-120b",
+            "qwen.qwen3-235b-a22b-2507",
+            "minimax.minimax-m2.5",
+            "mistral.devstral-2-123b",
+            "nvidia.nemotron-super-3-120b",
+            "zai.glm-4.7-flash",
         ),
     ),
 )
