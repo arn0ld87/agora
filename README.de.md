@@ -54,18 +54,26 @@ Die Demo zeigt:
 
 ## Referenzlauf
 
-Der aktuelle, kritisch dokumentierte End-to-End-Lauf untersucht erneut die **Domainmigration `alexle135.de` → `alex-schneider.dev`** über **20 vollständig abgeschlossene Simulationsrunden** nach dem 0.9.x-Hardening von Evidence und Provenance.
+Die aktuelle Referenz ist **Referenzlauf 6: AURORA**. Der Lauf untersucht für den fiktiven Städtischen Klinikverbund Falkenbrück den geplanten Produktivstart des KI-gestützten Triage- und Dokumentationssystems **Nexora Triage Assist**. Der Report wurde am **14. August 2026** als `report_3c594fcc7613` aus der bereits abgeschlossenen Simulation `sim_4245ff3d7b23` erzeugt.
 
-Der Report bindet **46 Claim-Zeilen** (22 eindeutige gerenderte IDs) und enthält **141 Hypothesen** sowie **133 Data Gaps**. Anders als in früheren Läufen ist die dominante Fehlerklasse nicht mehr fehlendes Evidence Binding. Der Lauf legt die nächste Trust-Grenze offen: Agora kann eine Aussage an ein reales Seed-Fragment binden und trotzdem verlieren, ob dieses Fragment selbst einen dokumentierten Fakt, eine unbelegte Behauptung, eine Hypothese, einen Widerspruch oder eine synthetische Aussage darstellt. Im adversarialen Seed wird dadurch eine ausdrücklich unbelegte SEO-Aussage zu einem validierten Welt-Claim hochgestuft, während eine andere Section dieselbe Aussage korrekt als unbelegt bezeichnet.
+Besonders nützlich ist dieser Lauf, weil **die Simulation unverändert blieb und nur die Report-Pipeline geändert wurde**. Dadurch ist er eine beobachtbare Reporter-Regression. Die Reportlaufzeit sank von ungefähr **17:52 Minuten auf 8:19 Minuten**, während `interview_agents` gezielt über alle sechs Reportabschnitte eingesetzt wurde.
 
-Derselbe Lauf macht außerdem eine Fremdrollen-Interviewantwort zum einzigen `medium`-Claim, rendert Seed-only-Claims als `Simulationskonsens` und lässt weiterhin einen Nicht-Stakeholder (`Fachblog`) in den Social-Trace. Gleichzeitig fängt der Gate mehrere unbelegte numerische Zielwerte korrekt ab und schwächt die Aussage, Option B sei die einzig tragfähige Strategie.
+Der Report empfiehlt einen **konditionierten, gestaffelten Rollout beginnend in Falkenbrück-Mitte**. Der Evidence Inspector stellt Reporttext, Claims, Hypothesen, Confidence und gebundene Evidenz nebeneinander dar.
+
+### Evidence Inspector: Claims und Hypothesen
+
+[![AURORA Referenzreport mit Sections, Claims und Hypothesen im Evidence Inspector](./docs/assets/screenshots/reference-runs/2026-08-14-aurora/01-evidence-inspector.jpg)](./docs/assets/screenshots/reference-runs/2026-08-14-aurora/01-evidence-inspector.jpg)
+
+### Agenteninterviews als Evidenz
+
+[![AURORA Referenzreport mit simuliertem Persona-O-Ton und Agenteninterview-Evidenz](./docs/assets/screenshots/reference-runs/2026-08-14-aurora/02-agent-interviews.jpg)](./docs/assets/screenshots/reference-runs/2026-08-14-aurora/02-agent-interviews.jpg)
 
 > [!NOTE]
-> Dies ist die aktuelle **Trust-Pipeline-Referenz**, keine Hochglanz-Demo und kein Nachweis prädiktiver Validität. Der vorherige Lernassistenten-Lauf bleibt die reichhaltigere Referenz für Simulationsdynamik: 665 Aktionen und sechs Cluster gegenüber 109 Interaktionen und drei Clustern hier.
+> Dies ist bewusst **ein Referenzlauf und keine Hochglanz-Demo**. Er zeigt Fortschritte bei Laufzeit, Interviewintegration und Evidence Gating, dokumentiert aber weiterhin bekannte Trust-Grenzen. Der Repository-Stand enthält außerdem nicht alle Artefakte und Replay-Daten für eine vollständige Reproduktion aus einem frischen Checkout; der Lauf ist deshalb eine beobachtbare Regressionreferenz und kein vollständig reproduzierbarer Golden Run.
 
-**[→ Referenzlauf 5 lesen](./docs/reference-runs/2026-08-12-domain-migration-20-runden/README.de.md)** · **[English](./docs/reference-runs/2026-08-12-domain-migration-20-runden/README.md)**
+**[→ Vollständige Notizen zu Referenzlauf 6](./docs/reference-runs/2026-08-14-aurora-report/README.de.md)** · **[English](./docs/reference-runs/2026-08-14-aurora-report/README.md)**
 
-Frühere Läufe: [Referenzlauf 4](./docs/reference-runs/2026-08-11-ki-lernassistent-20-runden/README.de.md) (erster Evidence-Binding-at-Scale-Lauf; reichhaltigere Simulationsdynamik) · [Lauf 3](./docs/reference-runs/2026-08-11-ki-lernassistent/README.md) · [Lauf 2](./docs/reference-runs/2026-08-09-domain-migration-v2/README.md) · [Lauf 1](./docs/reference-runs/2026-08-09-domain-migration/README.md)
+Frühere Läufe: [Referenzlauf 5](./docs/reference-runs/2026-08-12-domain-migration-20-runden/README.de.md) · [Referenzlauf 4](./docs/reference-runs/2026-08-11-ki-lernassistent-20-runden/README.de.md) · [Lauf 3](./docs/reference-runs/2026-08-11-ki-lernassistent/README.md) · [Lauf 2](./docs/reference-runs/2026-08-09-domain-migration-v2/README.md) · [Lauf 1](./docs/reference-runs/2026-08-09-domain-migration/README.md)
 
 ---
 
@@ -189,15 +197,12 @@ Nach Abschluss des Reports lassen sich einzelne Personas direkt ansprechen — e
 ```mermaid
 graph TD
     UI[Vue 3 + Vite + Pinia] <-->|REST und SSE| API[Flask + Pydantic v2]
-
     API --> REG[LLM Provider Registry]
     REG --> LOCAL[Ollama lokal]
     REG --> CLOUD[OpenAI-kompatible Provider]
-
     API --> NEO[(Neo4j Knowledge Graph)]
     API --> REDIS[(Redis Event Bus)]
     API --> OASIS[OASIS / CAMEL Runtime]
-
     OASIS --> REDIS
     OASIS --> NEO
     API --> EVIDENCE[Evidence-Gating Engine]
