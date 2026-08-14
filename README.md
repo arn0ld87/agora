@@ -54,18 +54,24 @@ The demo shows:
 
 ## Reference run
 
-The current, critically documented end-to-end run revisits the **domain migration `alexle135.de` → `alex-schneider.dev`** over **20 completed simulation rounds** after the 0.9.x evidence and provenance hardening.
+The current reference is **Reference run 6: AURORA**, a decision report for the fictional Städtischer Klinikverbund Falkenbrück about the planned rollout of the AI-assisted triage and documentation system **Nexora Triage Assist**. The report was generated on **2026-08-14** as `report_3c594fcc7613` from the already completed simulation `sim_4245ff3d7b23`.
 
-The report binds **46 claim rows** (22 unique rendered IDs), with **141 hypotheses** and **133 data gaps**. Unlike earlier runs, the dominant failure is no longer missing evidence binding. The run exposes the next trust boundary: Agora can bind a statement to a real seed fragment while still losing whether that fragment was a documented fact, an unsupported assertion, a hypothesis, a contradiction, or a synthetic statement. In the adversarial seed, one unsupported SEO assertion is therefore promoted to a validated world-claim, while another section correctly describes the same proposition as unsubstantiated.
+This run is especially useful because the **simulation stayed constant while only the report pipeline changed**. It therefore acts as a reporter regression reference rather than a comparison between two different stochastic simulations. The revised reporter reduced end-to-end report generation from roughly **17:52 min to 8:19 min** while using targeted `interview_agents` calls throughout the six report sections instead of relying mostly on document retrieval and late-stage interviews.
 
-The same run also turns a foreign-role interview answer into the only `medium` claim, renders seed-only claims as `Simulationskonsens`, and still admits a non-stakeholder (`Fachblog`) into the social trace. At the same time, the gate correctly catches several unsupported numerical targets and weakens the claim that Option B is uniquely viable.
+The report recommends a **conditioned, staged rollout starting at Falkenbrück-Mitte** and ties expansion to safety, training, worker-representation and fallback conditions. The UI exposes the generated report next to an Evidence Inspector where claims, hypotheses, confidence and the evidence records behind individual statements can be inspected directly.
+
+![AURORA reference report — report sections, claims and hypotheses in the Evidence Inspector](./docs/assets/screenshots/reference-runs/2026-08-14-aurora/01-evidence-inspector.jpg)
+
+The second view shows the link between report prose, a simulated persona statement and concrete `agent_interview` evidence cards. This is the part of the workflow that goes beyond a document-only RAG summary: the simulated stakeholders are queried again during report generation and their answers can be inspected as evidence used by individual claims.
+
+![AURORA reference report — simulated persona quote and agent interview evidence](./docs/assets/screenshots/reference-runs/2026-08-14-aurora/02-agent-interviews.jpg)
 
 > [!NOTE]
-> This is the current **trust-pipeline reference**, not a polished showcase or proof of predictive validity. The preceding learning-assistant run remains the richer simulation-dynamics reference: 665 actions and six clusters versus 109 interactions and three clusters here.
+> This is deliberately a **reference run, not a polished showcase**. It demonstrates real progress in report speed, interview integration and evidence gating, but it also preserves known trust-boundary failures as regression targets. In this artifact, a documented seed fact about **38 cases with a different urgency suggestion** is still downgraded in some sections as if matching numerical evidence were missing; some simulated quotes still carry a generic `seed_doc:seed_aurora#chunk:0` anchor; strongly matching `SUPPORTED` evidence can remain `low` confidence; and the canonical ReportV3 artifact can fail validation while the overall task reaches a completed state.
 
-**[→ Read reference run 5](./docs/reference-runs/2026-08-12-domain-migration-20-runden/README.md)** · **[auf Deutsch](./docs/reference-runs/2026-08-12-domain-migration-20-runden/README.de.md)**
+**[→ Read the full Reference run 6 notes](./docs/reference-runs/2026-08-14-aurora-report/README.md)**
 
-Earlier runs: [reference run 4](./docs/reference-runs/2026-08-11-ki-lernassistent-20-runden/README.md) (first evidence-binding-at-scale run; richer simulation dynamics) · [run 3](./docs/reference-runs/2026-08-11-ki-lernassistent/README.md) · [run 2](./docs/reference-runs/2026-08-09-domain-migration-v2/README.md) · [run 1](./docs/reference-runs/2026-08-09-domain-migration/README.md)
+Earlier runs: [reference run 5](./docs/reference-runs/2026-08-12-domain-migration-20-runden/README.md) (trust-pipeline reference) · [reference run 4](./docs/reference-runs/2026-08-11-ki-lernassistent-20-runden/README.md) (first evidence-binding-at-scale run; richer simulation dynamics) · [run 3](./docs/reference-runs/2026-08-11-ki-lernassistent/README.md) · [run 2](./docs/reference-runs/2026-08-09-domain-migration-v2/README.md) · [run 1](./docs/reference-runs/2026-08-09-domain-migration/README.md)
 
 ---
 
