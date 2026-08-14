@@ -518,6 +518,57 @@ class TestReactLoopNativeToolCalls:
         assert agent.llm.chat_with_tools.called
         assert agent._execute_tool.call_count >= 3
 
+    def test_react_loop_accepts_final_answer_after_one_tool_call(self) -> None:
+        """min_tool_calls=1: Final Answer nach genau 1 Tool-Call wird akzeptiert."""
+        from app.services.report_agent.workflow import generate_section_react
+
+        agent = self._make_minimal_agent()
+
+        # Genau 1 Tool-Call, dann sofort Final Answer
+        tool_calls_sequence = [
+            {
+                "content": "",
+                "tool_calls": [{"id": "c1", "name": "panorama_search", "arguments": {"query": "q1"}}],
+                "finish_reason": "tool_calls",
+                "raw_response": None,
+            },
+            {
+                "content": (
+                    "Final Answer: Hier ist die Segment-Analyse der simulierten "
+                    "Zielgruppen mit den beobachteten Reaktionsmustern."
+                ),
+                "tool_calls": [],
+                "finish_reason": "stop",
+                "raw_response": None,
+            },
+        ]
+        agent.llm.chat_with_tools.side_effect = tool_calls_sequence
+
+        section = self._make_section()
+        outline = self._make_outline()
+
+        with patch.dict("os.environ", {"REPORT_TOOLCALL_MODE": "native"}):
+            with patch("app.services.report_agent.workflow.Config") as mock_cfg:
+                mock_cfg.REPORT_TOOLCALL_MODE = "native"
+                mock_cfg.REPORT_LANGUAGE = "German"
+                result = generate_section_react(
+                    agent=agent,
+                    section=section,
+                    outline=outline,
+                    previous_sections=[],
+                    section_index=0,
+                )
+
+        assert isinstance(result, str)
+        assert "Segment-Analyse" in result
+        assert agent._execute_tool.call_count == 1
+        # Kein REACT_INSUFFICIENT_TOOLS_MSG darf gesendet worden sein
+        for call_args in agent.llm.chat_with_tools.call_args_list:
+            msgs = call_args[1].get("messages", call_args[0][0] if call_args[0] else [])
+            for msg in msgs:
+                if msg.get("role") == "user":
+                    assert "Insufficient" not in msg.get("content", "")
+
     def test_react_loop_native_none_content_triggers_retry_not_typeerror(self) -> None:
         """Issue #1277-1: ``content: None`` + leere ``tool_calls`` auf dem nativen
         Pfad darf keinen TypeError werfen, der den Section dauerhaft auf
