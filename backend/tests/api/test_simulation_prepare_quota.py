@@ -83,10 +83,10 @@ def test_parse_quota_plan_rejects_non_dict_payload():
 
 
 def test_resolve_max_agents_with_floor_enforces_minimum():
-    """Floor steht auf MIN_SIMULATION_AGENTS (10), nicht mehr auf MIN_PERSONA_TABLE_ROWS (50).
+    """Floor steht auf MIN_SIMULATION_AGENTS (10), nicht mehr auf MIN_PERSONA_TABLE_ROWS (20).
 
-    Begründung: Smoke #6 erlaubt Mini-Seeds < 50 Agenten; die Persona-Pool-
-    Hochskalierung auf 50 Personas passiert erst im Report-Pfad via
+    Begründung: Smoke #6 erlaubt Mini-Seeds < 20 Agenten; die Persona-Pool-
+    Hochskalierung auf 20 Personas passiert erst im Report-Pfad via
     Round-Robin (siehe ``_apply_persona_floor_to_entities``).
     """
     assert _resolve_max_agents_with_floor(1) == MIN_SIMULATION_AGENTS

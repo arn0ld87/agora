@@ -123,10 +123,21 @@ ensure_secret() {
   fi
   local val
   val=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
-  if sed --version >/dev/null 2>&1; then
-    sed -i "s|^${key}=\$|${key}=${val}|" .env
+  if grep -qE "^${key}=[[:space:]]*\$" .env; then
+    # Leere Zuweisung vorhanden — inplace ersetzen (GNU- und BSD-sed-kompatibel).
+    if sed --version >/dev/null 2>&1; then
+      sed -i "s|^${key}=[[:space:]]*\$|${key}=${val}|" .env
+    else
+      sed -i '' "s|^${key}=[[:space:]]*\$|${key}=${val}|" .env
+    fi
   else
-    sed -i '' "s|^${key}=\$|${key}=${val}|" .env
+    # Schlüssel fehlt ganz (ältere .env vor Einführung des Keys) — anhängen.
+    # Ohne diesen Zweig fasst sed nichts an und der Key bleibt still ungesetzt.
+    [[ -s .env && -n "$(tail -c 1 .env)" ]] && printf '\n' >>.env
+    printf '%s=%s\n' "$key" "$val" >>.env
+  fi
+  if ! grep -qE "^${key}=[^[:space:]]+" .env; then
+    die "$key konnte nicht in .env gesetzt werden."
   fi
   info "  $key automatisch erzeugt"
 }

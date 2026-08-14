@@ -89,7 +89,7 @@ def test_generate_report_blocks_incomplete_outline_before_markdown_finalize() ->
 
 
 def test_generate_report_blocks_when_persona_floor_is_not_met() -> None:
-    """P1.2: Vollstaendige Outline reicht nicht, wenn weniger als 50 Personas existieren."""
+    """P1.2: Vollstaendige Outline reicht nicht, wenn weniger als MIN_PERSONA_TABLE_ROWS Personas existieren."""
     from app.services.report_prompts import DEFAULT_REPORT_SECTIONS
 
     agent = _make_agent()
@@ -134,6 +134,6 @@ def test_generate_report_blocks_when_persona_floor_is_not_met() -> None:
     assert report.markdown_content == ""
     assert report.error is not None
     assert "Persona-Mindestanzahl" in report.error
-    assert "12/50" in report.error
+    assert "12/20" in report.error
     mock_gsr.assert_not_called()
     mock_rm.assemble_full_report.assert_not_called()

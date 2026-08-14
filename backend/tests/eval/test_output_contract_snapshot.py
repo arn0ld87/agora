@@ -45,13 +45,17 @@ def test_default_report_sections_descriptions_non_empty():
         )
 
 
-def test_min_persona_table_rows_pinned_to_fifty():
+def test_min_persona_table_rows_pinned_to_twenty():
     """MIN_PERSONA_TABLE_ROWS pinnt das Mengengerüst aus der externen Bewertung.
 
-    Quelle: docs/2026-05-09-output-vertrag-bewertung-evidence-quality.md §6.1.
-    Eine Änderung verlangt expliziten Sub-Slice + Bewertungs-Begründung.
+    Quelle: docs/2026-05-09-output-vertrag-bewertung-evidence-quality.md §6.1
+    (ursprünglich 50). Senkung auf 20 im Sub-Slice persona-floor-20
+    (2026-08-12): dokumenttreue Läufe erreichen nach Eligibility/Dedup häufig
+    nur ~40 elige Personas und scheiterten am 50er-Gate, obwohl der Report
+    inhaltlich erstellbar war. 20 bleibt eine statistisch belastbare Untergrenze.
+    Eine weitere Änderung verlangt erneut expliziten Sub-Slice + Begründung.
     """
-    assert MIN_PERSONA_TABLE_ROWS == 50
+    assert MIN_PERSONA_TABLE_ROWS == 20
 
 
 def test_required_sections_count_is_eleven():
