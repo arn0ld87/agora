@@ -202,10 +202,16 @@ def test_prompt_positive_example_is_not_an_interview_with_seed_doc_anchor() -> N
     """
     rendered = _rendered_section_prompt()
 
+    # Nicht auf das erste "✅" im gesamten Prompt ankern: Section 1 enthält
+    # bereits ein unabhängiges ✅ (Zeile ~25), und der Format-Hinweis in
+    # Regel 5 zeigt VOR dem eigentlichen Positivbeispiel ein in sich
+    # geschlossenes ``<simulated_quote ...>…</simulated_quote>``-Template
+    # (Zeile ~189) — ein nicht verankertes "✅.*?</simulated_quote>" träfe
+    # dessen schließenden Tag zuerst und ließe das echte Beispiel unten aus.
     example = re.search(
-        r"✅.*?</simulated_quote>", rendered, re.DOTALL
+        r"✅ Correct shape.*?</simulated_quote>", rendered, re.DOTALL
     )
-    assert example is not None, "Kein Positivbeispiel (✅) im Prompt."
+    assert example is not None, "Kein Positivbeispiel (✅ Correct shape) im Prompt."
     assert "seed_doc:" not in example.group(0), (
         "Das Positivbeispiel zeigt weiterhin einen seed_doc:-Anker an einer "
         "Persona-Aussage — die Kombination, die Issue #1300 verbietet."
