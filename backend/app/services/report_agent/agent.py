@@ -86,6 +86,8 @@ from ..graph_tools import (
 # Retrieval-DTOs. Der Helper toleriert leere Listen (Altgraphen), ein `zip`
 # über eine leere Liste würde die Fakten still verschlucken.
 from ..graph.graph_dtos import provenance_at
+# Issue #1303: Interview-Panel-Rotation über den gesamten Report-Lauf.
+from ..interview_panel_scheduler import InterviewPanelScheduler
 
 logger = get_logger('agora.report_agent')
 
@@ -229,6 +231,10 @@ class ReportAgent:
         self._active_section_evidence: List[Dict[str, Any]] = []
         self._active_section_unresolved_evidence: List[Dict[str, Any]] = []
         self._current_section_index: Optional[int] = None
+        # Issue #1303: eine Instanz pro Report, konstruiert einmal hier
+        # (analog zu self.evidence_map) — überlebt alle Sections und trackt,
+        # welche Personas unter welchem Topic bereits interviewt wurden.
+        self.interview_scheduler = InterviewPanelScheduler()
 
         logger.info(f"ReportAgent initialization complete: graph_id={graph_id}, simulation_id={simulation_id}")
 

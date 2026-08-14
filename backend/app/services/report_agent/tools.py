@@ -89,6 +89,9 @@ def execute_tool_call(agent: Any, tool_name: str, parameters: Dict[str, Any], re
         simulation_requirement=agent.simulation_requirement,
         record_evidence=agent._record_tool_evidence,
         section_index=agent._current_section_index or 0,
+        # Issue #1303: eine Instanz pro Report (siehe ReportAgent.__init__),
+        # nicht pro Tool-Call — trackt Interview-Diversität über alle Sections.
+        panel_scheduler=getattr(agent, "interview_scheduler", None),
     )
 
 

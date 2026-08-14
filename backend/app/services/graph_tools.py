@@ -16,6 +16,7 @@ from typing import Dict, Any, List, Optional
 from ..utils.logger import get_logger
 from ..utils.llm_client import LLMClient
 from ..storage import GraphStorage
+from .interview_panel_scheduler import InterviewPanelScheduler
 import app.services.graph.graph_reader as _reader
 import app.services.graph.insight_forge_tool as _forge
 
@@ -191,7 +192,9 @@ class GraphToolsService:
         interview_requirement: str,
         simulation_requirement: str = "",
         max_agents: int = 5,
-        custom_questions: List[str] = None
+        custom_questions: List[str] = None,
+        panel_scheduler: Optional[InterviewPanelScheduler] = None,
+        section_index: Optional[int] = None,
     ) -> InterviewResult:
         """
         [InterviewAgents - Deep Interview]
@@ -199,6 +202,13 @@ class GraphToolsService:
         Call the real OASIS interview API to interview Agents running in the simulation.
         This method does NOT use GraphStorage — it calls SimulationRunner
         and reads agent profiles from disk.
+
+        Issue #1303: ``panel_scheduler`` is optional (``None`` = old behaviour,
+        no diversity bias) — it tracks which personas were already interviewed
+        (and under which topic) across the whole report and biases/filters the
+        candidate pool that ``_select_agents_for_interview`` offers to the LLM.
+        ``section_index`` is only used to attribute a completed interview to a
+        report section for the panel-diversity metric.
         """
         from .simulation_runner import SimulationRunner
 
@@ -249,7 +259,8 @@ class GraphToolsService:
             profiles=profiles,
             interview_requirement=interview_requirement,
             simulation_requirement=simulation_requirement,
-            max_agents=max_agents
+            max_agents=max_agents,
+            panel_scheduler=panel_scheduler,
         )
 
         result.selected_agents = selected_agents
@@ -378,6 +389,17 @@ class GraphToolsService:
 
             result.interviewed_count = len(result.interviews)
 
+            # Issue #1303: nur tatsächlich durchgeführte Interviews vermerken —
+            # ``selected_indices`` sind an dieser Stelle die Agents, für die
+            # oben wirklich ein ``AgentInterview`` angelegt wurde.
+            if panel_scheduler is not None and selected_indices:
+                panel_scheduler.record(
+                    profiles=profiles,
+                    selected_indices=selected_indices,
+                    interview_topic=interview_requirement,
+                    section_index=section_index,
+                )
+
         except ValueError as e:
             logger.warning(f"Interview API call failed (environment not running?): {e}")
             # Sub-Slice 05.6 — Terminal-Hint. Der alte "please ensure ...
@@ -475,9 +497,20 @@ class GraphToolsService:
         profiles: List[Dict[str, Any]],
         interview_requirement: str,
         simulation_requirement: str,
-        max_agents: int
+        max_agents: int,
+        panel_scheduler: Optional[InterviewPanelScheduler] = None,
     ) -> tuple:
-        """Use LLM to select Agents for interview"""
+        """Use LLM to select Agents for interview
+
+        Issue #1303: wenn ``panel_scheduler`` gesetzt ist, bekommt das
+        Auswahl-LLM nicht die volle ``profiles``-Liste als Kandidatenpool
+        vorgelegt, sondern eine vom Scheduler nach Interview-Diversität
+        vorgefilterte/sortierte Teilmenge (bereits interviewte Personas am
+        Cap fehlen im Regelfall komplett). Die vom LLM zurückgegebenen
+        Indizes werden zusätzlich gegen genau diese angebotene Menge
+        gefiltert — der Cap gilt damit auch, wenn das Modell die
+        Prompt-Instruktion ignoriert (siehe ``InterviewPanelScheduler``-Moduldoc).
+        """
 
         agent_summaries = []
         for i, profile in enumerate(profiles):
@@ -490,6 +523,22 @@ class GraphToolsService:
             }
             agent_summaries.append(summary)
 
+        candidate_summaries = agent_summaries
+        allowed_indices: Optional[set] = None
+        if panel_scheduler is not None:
+            candidate_summaries = panel_scheduler.rank_candidates(
+                agent_summaries=agent_summaries,
+                profiles=profiles,
+                interview_topic=interview_requirement,
+                max_agents=max_agents,
+            )
+            if candidate_summaries:
+                allowed_indices = {s["index"] for s in candidate_summaries}
+            else:
+                # Sicherheitsnetz: sollte bei nicht-leeren profiles durch den
+                # Exhaustion-Fallback im Scheduler nie eintreten.
+                candidate_summaries = agent_summaries
+
         system_prompt = """You are a professional interview planning expert. Your task is to select the most suitable Agents for interview from the simulated Agent list based on the interview requirements.
 
 Selection Criteria:
@@ -497,6 +546,7 @@ Selection Criteria:
 2. Agent may hold unique or valuable perspectives
 3. Select diverse perspectives (e.g., supporters, opposers, neutral, experts, etc.)
 4. Prioritize roles directly related to the event
+5. The candidate list below is already pre-filtered to favor agents not yet interviewed in this report — respect that ordering, do not seek out agents outside this list
 
 Return JSON format:
 {
@@ -512,8 +562,8 @@ Keep `reasoning` deliberately short — the truncation budget caps the payload."
 Simulation Background:
 {simulation_requirement if simulation_requirement else "Not provided"}
 
-Available Agent List ({len(agent_summaries)} total):
-{json.dumps(agent_summaries, ensure_ascii=False, indent=2)}
+Available Agent List ({len(candidate_summaries)} total):
+{json.dumps(candidate_summaries, ensure_ascii=False, indent=2)}
 
 Please select up to {max_agents} most suitable Agents for interview and explain your selection rationale."""
 
@@ -540,7 +590,7 @@ Please select up to {max_agents} most suitable Agents for interview and explain 
             selected_agents = []
             valid_indices = []
             for idx in selected_indices:
-                if 0 <= idx < len(profiles):
+                if 0 <= idx < len(profiles) and (allowed_indices is None or idx in allowed_indices):
                     selected_agents.append(profiles[idx])
                     valid_indices.append(idx)
 
@@ -555,9 +605,13 @@ Please select up to {max_agents} most suitable Agents for interview and explain 
             if isinstance(e, BudgetExceededError):
                 raise
             logger.warning(f"LLM agent selection failed, using default selection: {e}")
-            selected = profiles[:max_agents]
-            indices = list(range(min(max_agents, len(profiles))))
-            return selected, indices, "Using default selection strategy"
+            # Issue #1303: Default-Fallback respektiert denselben vorgefilterten
+            # Kandidatenpool statt roh auf profiles[:max_agents] zuzugreifen —
+            # sonst würde ein LLM-Fehler den Diversity-Cap umgehen.
+            default_source = candidate_summaries if panel_scheduler is not None else agent_summaries
+            default_indices = [s["index"] for s in default_source[:max_agents]]
+            selected = [profiles[i] for i in default_indices]
+            return selected, default_indices, "Using default selection strategy"
 
     def _generate_interview_questions(
         self,

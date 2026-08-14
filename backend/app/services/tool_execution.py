@@ -49,6 +49,7 @@ def execute_tool(
     simulation_requirement: str,
     record_evidence: Optional[Callable[[str, Dict[str, Any], Any, str, int], Optional[Dict[int, str]]]] = None,
     section_index: int = 0,
+    panel_scheduler: Optional[Any] = None,
 ) -> str:
     """Dispatcht einen Tool-Aufruf und liefert das gerenderte Resultat als String.
 
@@ -70,6 +71,11 @@ def execute_tool(
             wird der Interview-Text damit angereichert neu gerendert.
         section_index: Index der aktuellen Report-Section, wird an den
             Evidence-Callback weitergereicht.
+        panel_scheduler: optionale ``InterviewPanelScheduler``-Instanz (Issue
+            #1303). Nur für ``interview_agents`` relevant — bei ``None`` (Default)
+            unverändertes Altverhalten (kein Diversity-Bias). Lebt eine ganze
+            Report-Laufzeit lang auf ``ReportAgent`` (siehe
+            ``report_agent/tools.py::execute_tool_call``), nicht pro Aufruf.
 
     Returns:
         Gerendertes Ergebnis als String. Bei unbekanntem Tool oder Exception
@@ -130,6 +136,8 @@ def execute_tool(
                 interview_requirement=interview_topic,
                 simulation_requirement=simulation_requirement,
                 max_agents=max_agents,
+                panel_scheduler=panel_scheduler,
+                section_index=section_index,
             )
             rendered = structured_result.to_text()
 
@@ -164,6 +172,7 @@ def execute_tool(
                 simulation_requirement=simulation_requirement,
                 record_evidence=record_evidence,
                 section_index=section_index,
+                panel_scheduler=panel_scheduler,
             )
 
         elif tool_name == "get_simulation_context":
@@ -180,6 +189,7 @@ def execute_tool(
                 simulation_requirement=simulation_requirement,
                 record_evidence=record_evidence,
                 section_index=section_index,
+                panel_scheduler=panel_scheduler,
             )
 
         elif tool_name == "get_graph_statistics":
