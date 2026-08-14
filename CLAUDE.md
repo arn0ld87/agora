@@ -168,7 +168,7 @@ Konfiguration für externe Skill-Sammlungen, die dieses Repository als Kontext l
 | Triage-Labels | [`docs/agents/triage-labels.md`](docs/agents/triage-labels.md) | die fünf kanonischen Labels `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix` — unverändert übernommen |
 | Domänen-Doku | [`docs/agents/domain.md`](docs/agents/domain.md) | Single-Context-Layout: ADRs unter `docs/decisions/`, optionales `CONTEXT.md` |
 
-[`CONTEXT.md`](CONTEXT.md) existiert seit dem 11.08.2026 und beschreibt die **Laufzeit-Mechanik**: die fünf Phasen mit ihren Artefakt-IDs, den `interview_agents`-Mechanismus, das Evidence-Modell mit seinen zwei getrennten Prüfstellen (`claim_extraction_and_evidence_binding` gegen `verify_prose`), Artefaktpfade im Container, das Sim-DB-Schema samt der `original_post_id`-Auswertungsfalle, das getrennte Embedding-Routing und eine Liste bekannter Fehlerbilder, die **nicht** als Neufund zu melden sind. Vor jeder Lauf-Beobachtung, -Auswertung oder -Fehlersuche lesen.
+[`CONTEXT.md`](CONTEXT.md) existiert seit dem 11.08.2026 und beschreibt die **Laufzeit-Mechanik**: vier Laufzeitphasen plus Run-Registry mit Artefakt-IDs, die vollständige Report-Pipeline (Planning → Section-ReAct mit parallelen Tool-Calls → Phase-Timing/Evidence-Binding), den `interview_agents`-Mechanismus, das Evidence-Modell mit seinen zwei getrennten Prüfstellen (`claim_extraction_and_evidence_binding` gegen `verify_prose`), Artefaktpfade im Container, das Sim-DB-Schema samt der `original_post_id`-Auswertungsfalle, das getrennte Embedding-Routing und eine Liste bekannter Fehlerbilder, die **nicht** als Neufund zu melden sind. Vor jeder Lauf-Beobachtung, -Auswertung oder -Fehlersuche lesen.
 
 Verbindliche Quelle für Aufgaben bleibt die Reihenfolge aus [`AGENTS.md`](AGENTS.md): `README.md` → `docs/STATUS.md` → `ROADMAP.md` → GitHub Issues.
 
@@ -184,3 +184,42 @@ Verbindliche Quelle für Aufgaben bleibt die Reihenfolge aus [`AGENTS.md`](AGENT
 **Das Repo definiert bewusst keine `hooks` in `.claude/settings.json`.** Frühere `Stop`- (pytest nach jeder Antwort) und `PostToolUse`-Hooks (ruff nach jedem `.py`-Edit) sind am 02.08.2026 entfernt worden, weil sie pro Turn eine vollständige Test-Suite bzw. pro Edit einen `uv`-Kaltstart auslösten und die Sitzung auf einem 16-GB-Rechner spürbar ausgebremst haben.
 
 Das ändert nichts an den Pflichten: Das [Pre-Commit-Gate](#pre-commit-gate-pflicht-sequentiell-scope-abhängig) und das [Pre-Push-Gate](#pre-push-gate-ci-mirror-vor-jedem-push-pflicht) gelten unverändert und werden **manuell** ausgeführt. Die CI-Statuschecks auf `main` sind ohnehin die harte Absicherung. Wer Automatik will, hängt sie an einen Git-`pre-push`-Hook oder an CI — nicht an einen Claude-Code-Turn.
+
+<!-- code-review-graph MCP tools -->
+## MCP Tools: code-review-graph
+
+**IMPORTANT: This project has a knowledge graph. ALWAYS use the
+code-review-graph MCP tools BEFORE using Grep/Glob/Read to explore
+the codebase.** The graph is faster, cheaper (fewer tokens), and gives
+you structural context (callers, dependents, test coverage) that file
+scanning cannot.
+
+### When to use graph tools FIRST
+
+- **Exploring code**: `semantic_search_nodes` or `query_graph` instead of Grep
+- **Understanding impact**: `get_impact_radius` instead of manually tracing imports
+- **Code review**: `detect_changes` + `get_review_context` instead of reading entire files
+- **Finding relationships**: `query_graph` with callers_of/callees_of/imports_of/tests_for
+- **Architecture questions**: `get_architecture_overview` + `list_communities`
+
+Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
+
+### Key Tools
+
+| Tool | Use when |
+| ------ | ---------- |
+| `detect_changes` | Reviewing code changes — gives risk-scored analysis |
+| `get_review_context` | Need source snippets for review — token-efficient |
+| `get_impact_radius` | Understanding blast radius of a change |
+| `get_affected_flows` | Finding which execution paths are impacted |
+| `query_graph` | Tracing callers, callees, imports, tests, dependencies |
+| `semantic_search_nodes` | Finding functions/classes by name or keyword |
+| `get_architecture_overview` | Understanding high-level codebase structure |
+| `refactor_tool` | Planning renames, finding dead code |
+
+### Workflow
+
+1. The graph auto-updates on file changes (via hooks).
+2. Use `detect_changes` for code review.
+3. Use `get_affected_flows` to understand impact.
+4. Use `query_graph` pattern="tests_for" to check coverage.

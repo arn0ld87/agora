@@ -96,16 +96,57 @@ Bis #1236 geschlossen und mit einem Reproduzierbarkeitstest belegt ist, sind Ver
 
 ### Phase 4 — Report
 
-Pro Section läuft ein ReAct-Loop mit vier zentralen Tools, danach folgt die Evidence-/Validierungs-Nachbearbeitung.
+Die Report-Phase gliedert sich in drei aufeinanderfolgende Stufen: **Planning**, **Section-Generierung** (ReAct-Loop) und **Phase-Timing** (Evidence-Binding/Validierung).
 
-| Tool | Zweck |
-|---|---|
-| `insight_forge` | Tiefenanalyse gegen Graph/Evidence, liefert Faktenlisten |
-| `panorama_search` | Breitensuche |
-| `quick_search` | gezielte Einzelabfrage |
-| `interview_agents` | nachgelagertes Tiefeninterview mit ausgewählten Personas |
+#### 4a — Planning
 
-Die Nachbearbeitung kann wesentlich länger dauern als das eigentliche Schreiben der Section. Das bekannte Performanceproblem ist in #1190 dokumentiert; eine Optimierung darf die Evidence-Gates nicht verändern.
+Vor der ersten Section läuft ein eigener LLM-Call, der das Szenario und die Fragestellung in einen Report-Plan mit benannten Sections überführt. Der Plan legt Titel und Reihenfolge fest; die Section-Zahl ist variabel (typisch 4–8).
+
+```text
+report start
+planning start
+PLAN  24.7s  6 sections
+```
+
+#### 4b — Section-Generierung (ReAct-Loop)
+
+Pro Section läuft ein iterativer ReAct-Loop mit vier zentralen Tools. Jede Iteration ist entweder ein Tool-Call-Turn (`tool_calls=true, final=false`) oder der finale Antwort-Turn (`tool_calls=false, final=true`). Typisch sind 3–5 Iterationen pro Section.
+
+| Tool | Parameter | Zweck |
+|---|---|---|
+| `insight_forge` | `query`, opt. `report_context` | Tiefenanalyse/Synthese gegen Graph + Evidence |
+| `panorama_search` | `query`, `include_expired` | Breitensuche über alle Quelltypen |
+| `quick_search` | `query`, opt. `limit` | gezielte Einzelabfrage |
+| `interview_agents` | `interview_topic`, `max_agents` (3–5) | Tiefeninterview mit ausgewählten Personas |
+
+**Parallele Tool-Calls:** Der Report-Agent kann in einer einzigen Iteration mehrere Tools gleichzeitig aufrufen (beobachtet: `insight_forge` + `interview_agents` + `quick_search` in einem Turn). Die Ergebnisse aller parallelen Calls fließen gemeinsam in den nächsten LLM-Turn.
+
+**Section-Retry:** Wenn eine Section-Generierung fehlschlägt oder die Qualitätsprüfung nicht besteht, wird sie erneut ausgelöst. Im Log erscheint dann derselbe Section-Titel ein zweites Mal.
+
+```text
+▶ Section 4: Unterschiede in den Reaktionsmustern
+  LLM  iter 1 · tool_calls=true · final=false
+    TOOL → insight_forge  (7369 chars)
+  LLM  iter 2 · tool_calls=true · final=false
+    TOOL → interview_agents  max_agents=5  (13784 chars)
+  LLM  iter 3 · tool_calls=true · final=false
+    TOOL → quick_search  (1246 chars)
+  LLM  iter 4 · tool_calls=false · final=true
+  section content
+✓ Section 4
+```
+
+#### 4c — Phase-Timing (Nachbearbeitung)
+
+Nach dem `section content`-Schritt folgen pro Section mehrere `phase timing`-Einträge (typisch 3–4). Diese umfassen Claim-Extraktion, Evidence-Binding, `verify_prose` und Gate-Checks. Die Nachbearbeitung kann wesentlich länger dauern als das eigentliche Schreiben der Section. Das bekannte Performanceproblem ist in #1190 dokumentiert; eine Optimierung darf die Evidence-Gates nicht verändern.
+
+#### Timing-Charakteristik (Referenzwert)
+
+Ein typischer 6-Section-Report benötigt 15–20 Minuten Gesamtlaufzeit:
+
+- Planning: ~25 s
+- Section-Generierung + Phase-Timing: jeweils 90–250 s pro Section
+- Der größte Einzelposten ist `interview_agents` (20–40 s pro Call bei `max_agents=5`)
 
 ---
 
