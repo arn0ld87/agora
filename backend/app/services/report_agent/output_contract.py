@@ -285,6 +285,49 @@ def apply_degradation_downgrade(
     return status
 
 
+def apply_report_v3_validation_downgrade(
+    status: "ReportStatus",
+    validation_errors: Iterable[Any],
+) -> "ReportStatus":
+    """Stuft COMPLETED auf INCOMPLETE ab, wenn ``ReportV3.model_validate`` scheitert.
+
+    Issue #1299: ``ReportV3`` ist der ausgelieferte Contract — schlägt seine
+    Validierung fehl (z. B. fehlendes Pflichtfeld aus einem gescheiterten
+    LLM-Call), ist der Report strukturell nicht das, was ein ``COMPLETED``
+    dem Nutzer zusichert. Bereits ``INCOMPLETE``- oder ``FAILED``-Status
+    werden nicht aufgewertet — analog zu :func:`apply_degradation_downgrade`.
+    """
+    from ...models.report import ReportStatus  # noqa: PLC0415 — zyklischer Import
+
+    if not list(validation_errors):
+        return status
+    if status == ReportStatus.COMPLETED:
+        return ReportStatus.INCOMPLETE
+    return status
+
+
+def apply_quote_validation_downgrade(
+    status: "ReportStatus",
+    quote_validation_failed_section_indices: Iterable[int],
+) -> "ReportStatus":
+    """Stuft COMPLETED auf INCOMPLETE ab, wenn eine Section ``quote_validation_failed`` ist.
+
+    Issue #1299: eine Section, deren Zitatprüfung inklusive Repair-Retry
+    erfolglos blieb (``section.metadata["quote_validation_failed"] = True``),
+    enthält Zitate, die nicht gegen die Evidenzbasis verifiziert werden
+    konnten. Ein ``COMPLETED``-Report darf das nicht verschweigen. Bereits
+    ``INCOMPLETE``- oder ``FAILED``-Status werden nicht aufgewertet — analog
+    zu :func:`apply_degradation_downgrade`.
+    """
+    from ...models.report import ReportStatus  # noqa: PLC0415 — zyklischer Import
+
+    if not list(quote_validation_failed_section_indices):
+        return status
+    if status == ReportStatus.COMPLETED:
+        return ReportStatus.INCOMPLETE
+    return status
+
+
 def is_deliverable_report_status(status: "ReportStatus") -> bool:
     """True, wenn der Report ausgeliefert werden kann statt als Fehlschlag zu gelten.
 
@@ -309,6 +352,8 @@ __all__ = [
     "MIN_CONTENT_CHARS",
     "SanitizedContent",
     "apply_degradation_downgrade",
+    "apply_quote_validation_downgrade",
+    "apply_report_v3_validation_downgrade",
     "is_deliverable_report_status",
     "is_fallback_content",
     "resolve_report_status",
