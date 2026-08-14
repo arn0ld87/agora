@@ -1,0 +1,30 @@
+name: One-off AURORA doc sync
+
+on:
+  push:
+    branches:
+      - docs/fix-aurora-screenshot-readability
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: docs/fix-aurora-screenshot-readability
+      - name: Point documentation to readable source crops
+        run: |
+          for f in README.md README.de.md docs/reference-runs/2026-08-14-aurora-report/README.md docs/reference-runs/2026-08-14-aurora-report/README.de.md; do
+            sed -i 's/01-evidence-inspector\.jpg/01-evidence-inspector.webp/g; s/02-agent-interviews\.jpg/02-agent-interviews.webp/g' "$f"
+          done
+      - name: Commit documentation updates
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add README.md README.de.md docs/reference-runs/2026-08-14-aurora-report/README.md docs/reference-runs/2026-08-14-aurora-report/README.de.md
+          git commit -m 'docs: use readable AURORA source crops'
+          git push origin HEAD:docs/fix-aurora-screenshot-readability
