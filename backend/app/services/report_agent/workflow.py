@@ -453,7 +453,7 @@ def generate_section_react(
 
     tool_calls_count = 0
     max_iterations = 5
-    min_tool_calls = 3
+    min_tool_calls = 1
     conflict_retries = 0
     # Issue #1191: die Merkliste ergebnisloser Suchen gilt pro Abschnitt. Ein
     # anderer Abschnitt darf dieselbe Suche erneut versuchen — sein Kontext ist

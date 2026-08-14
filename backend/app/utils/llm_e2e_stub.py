@@ -12,7 +12,7 @@ Liefert:
 - Deterministischen Tool-Return für die vier registrierten Report-Agent-Tools.
 - Generisches {"ok": true, "stub": true} als Fallback.
 - e2e_stub_chat_response: deterministischer String-Return für chat()-Aufrufe
-  (ReACT-Loop in generate_section_react — min_tool_calls=3 wird durch
+  (ReACT-Loop in generate_section_react — min_tool_calls=1 wird durch
   Zählen der assistant-Nachrichten in der Message-History erfüllt).
 """
 from __future__ import annotations
@@ -408,8 +408,8 @@ def e2e_stub_chat_response(
     """Deterministischer String-Return für LLMClient.chat() im Stub-Modus.
 
     Entscheidungslogik für den ReACT-Loop in generate_section_react:
-    - Die erste ≥ min_tool_calls (= 3) Iterationen geben Tool-Call-Strings zurück.
-    - Ab der vierten Iteration wird "Final Answer:" zurückgegeben.
+    - Die erste ≥ min_tool_calls (= 1) Iterationen geben Tool-Call-Strings zurück.
+    - Ab der zweiten Iteration wird "Final Answer:" zurückgegeben.
 
     Die Entscheidung basiert auf dem Zählen vorhandener assistant-Nachrichten
     in der Message-History — kein globaler Zustand nötig.
