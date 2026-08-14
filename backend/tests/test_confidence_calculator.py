@@ -64,6 +64,20 @@ def test_repeated_high_scores_from_one_source_cap_at_low():
     assert label == "low"
 
 
+def test_single_strong_match_supported_source_reaches_medium():
+    """Issue #1301: Ein einzelner, aber stark gematchter SUPPORTED-Beleg
+    darf ``medium`` erreichen — der pauschale Single-Source-Deckel auf 0.59
+    unterschätzte bislang jeden Claim mit nur einer (auch sehr starken)
+    Quelle. Ein schwach gematchter Einzelbeleg bleibt weiterhin bei 0.59
+    (siehe ``test_repeated_high_scores_from_one_source_cap_at_low``)."""
+    score, label = compute_confidence([
+        {"type": "graph_fact", "source": "panorama_search", "snippet": "x",
+         "match_score": 0.946, "entailment": "SUPPORTED"},
+    ])
+    assert score >= 0.65
+    assert label == "medium"
+
+
 def test_off_topic_low_match_score_yields_speculative_or_low():
     """Niedrige match_scores drücken den Score in speculative/low."""
     items = [

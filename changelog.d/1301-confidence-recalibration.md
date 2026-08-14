@@ -1,0 +1,3 @@
+### Fixed (Confidence-Kalibrierung — starke Einzelbelege nicht mehr pauschal auf low gedeckelt — 2026-08-14)
+
+- `compute_confidence` deckelte jeden Claim mit nur einer unabhängigen Quelle pauschal auf `0.59`/`low` — auch einen SUPPORTED-Beleg mit `match_score=0.946`. Der Deckel gilt jetzt nur noch für schwach gematchte Einzelbelege (`match_score < 0.85`); ein stark gematchter Einzelbeleg (`match_score >= 0.85`, derselbe Schwellwert wie `has_strong_match`) erreicht mindestens `medium` (Deckel `0.84`). `high`/`verified` bleiben über `cross_stakeholder_for_high` unverändert an ≥2 Stakeholder-Rollenfamilien gebunden — ein Einzelbeleg kann diese Labels weiterhin nicht erreichen ([#1301](https://github.com/arn0ld87/agora/issues/1301)).

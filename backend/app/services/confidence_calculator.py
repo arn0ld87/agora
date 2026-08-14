@@ -27,6 +27,9 @@ Labels:
   einen ``match_score >= 0.85`` trägt UND mindestens 2 unabhängige
   Quellen vorliegen — sonst gedeckelt auf 0.89 → ``high``)
 * Zusätzlich: wenn alle match_scores < 0.55 → Deckel auf 0.64 (low/medium-Grenze)
+* Einzelquelle (nur 1 unabhängige Quelle): Deckel auf 0.59 (``low``) — außer
+  mindestens ein Item trägt ``match_score >= 0.85`` (``has_strong_match``),
+  dann Deckel auf 0.84 (``medium``). Issue #1301.
 
 MAI-14: Contradiction-Penalty.
 
@@ -242,8 +245,12 @@ def _compute_confidence_with_penalties(
 
     # Eine einzelne Quelle erzeugt höchstens ``low``; Contradiction-Penaltys
     # können sie weiter auf ``speculative`` senken. Der Claim bleibt sichtbar.
+    # Issue #1301: Ausnahme für einen stark gematchten Einzelbeleg
+    # (``match_score >= 0.85``, derselbe Schwellwert wie ``has_strong_match``
+    # unten) — der darf bis ``medium`` (0.84) reichen statt bei ``low``
+    # gedeckelt zu werden. Ein schwach gematchter Einzelbeleg bleibt bei 0.59.
     if unique_sources < 2:
-        score = min(score, 0.59)
+        score = min(score, 0.84 if has_strong_match else 0.59)
 
     # Task 08: Medium-Cap — kein Claim darf "high" sein, wenn alle
     # match_scores unter 0.55 liegen.
