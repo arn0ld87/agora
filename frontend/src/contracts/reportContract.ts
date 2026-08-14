@@ -29,6 +29,7 @@ export const EvidenceTypeSchema = z.enum([
   "agent_interview",
   "web_search_result",
   "web_fetch",
+  "seed_document",
   "model_generated_inference", // im audit_trail erlaubt, in evidence verboten
 ]);
 export type EvidenceType = z.infer<typeof EvidenceTypeSchema>;
@@ -102,6 +103,7 @@ const EvidenceSourceSchema = z.object({
   // Herkunft ist abgeleitet, nicht belegt. Spiegelt den Backend-Default.
   source_kind: EvidenceSourceKindSchema.default("inferred"),
   persona_stakeholder_group: z.string().min(1).max(200).optional().nullable(),
+  persona_role_family: z.string().min(1).max(120).optional().nullable(),
   // Slice 8 (2026-05-16) — Provider+Modell, das diese Evidence-Zeile
   // extrahiert hat. Pendant zu EvidenceItemModel.source_model. Format
   // "<provider>/<model_id>" (z. B. "ollama/qwen2.5:32b"). None bei

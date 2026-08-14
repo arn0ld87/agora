@@ -119,7 +119,7 @@ Pro Section läuft ein iterativer ReAct-Loop mit vier zentralen Tools. Jede Iter
 | `quick_search` | `query`, opt. `limit` | gezielte Einzelabfrage |
 | `interview_agents` | `interview_topic`, `max_agents` (3–5) | Tiefeninterview mit ausgewählten Personas |
 
-**Parallele Tool-Calls:** Der Report-Agent kann in einer einzigen Iteration mehrere Tools gleichzeitig aufrufen (beobachtet: `insight_forge` + `interview_agents` + `quick_search` in einem Turn). Die Ergebnisse aller parallelen Calls fließen gemeinsam in den nächsten LLM-Turn.
+**Tool-Call-Ausführung:** Pro Iteration wird genau ein Tool-Call ausgeführt (`tool_calls[0]`). Gibt das LLM mehrere Tool-Calls in einer Antwort zurück, werden die übrigen verworfen. Die beobachteten Sequenzen (z. B. `insight_forge` → `interview_agents` → `quick_search`) sind aufeinanderfolgende Iterationen, keine parallelen Calls innerhalb eines Turns.
 
 **Section-Retry:** Wenn eine Section-Generierung fehlschlägt oder die Qualitätsprüfung nicht besteht, wird sie erneut ausgelöst. Im Log erscheint dann derselbe Section-Titel ein zweites Mal.
 

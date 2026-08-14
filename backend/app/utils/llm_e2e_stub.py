@@ -417,8 +417,8 @@ def e2e_stub_chat_response(
     Kein I/O, kein Sleep, kein Random.
     """
     assistant_count = _count_assistant_messages(messages)
-    # MIN_TOOL_CALLS im Workflow = 3 — wir brauchen 3 Tool-Calls bevor Final Answer
-    if assistant_count < 3:
+    # min_tool_calls im Workflow = 1 — nach 1 Tool-Call kommt Final Answer
+    if assistant_count < 1:
         idx = assistant_count % len(_STUB_TOOL_CALL_SEQUENCE)
         return _STUB_TOOL_CALL_SEQUENCE[idx]
     return _STUB_FINAL_ANSWER_TEMPLATE
@@ -433,8 +433,8 @@ def e2e_stub_chat_with_tools_response(
     """Deterministischer Return für LLMClient.chat_with_tools() im Stub-Modus.
 
     Entscheidungslogik analog zu e2e_stub_chat_response:
-    - Weniger als 3 assistant-Nachrichten → gibt einen Tool-Call zurück.
-    - Ab 3 assistant-Nachrichten → Final-Answer-Content, tool_calls=[].
+    - Weniger als 1 assistant-Nachricht → gibt einen Tool-Call zurück.
+    - Ab 1 assistant-Nachricht → Final-Answer-Content, tool_calls=[].
 
     Der Tool-Name wird aus der tools-Liste genommen (erster Eintrag), falls vorhanden.
     Fallback: "panorama_search".
@@ -443,7 +443,7 @@ def e2e_stub_chat_with_tools_response(
 
     assistant_count = _count_assistant_messages(messages)
 
-    if assistant_count < 3:
+    if assistant_count < 1:
         # Tool-Namen aus übergebener tools-Liste holen
         tool_name = "panorama_search"
         if tools:
