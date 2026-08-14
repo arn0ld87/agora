@@ -14,7 +14,12 @@ from __future__ import annotations
 import re
 from unittest.mock import MagicMock
 
-from app.services.graph.graph_dtos import AgentInterview, InterviewResult, SearchResult
+from app.services.graph.graph_dtos import (
+    AgentInterview,
+    InsightForgeResult,
+    InterviewResult,
+    SearchResult,
+)
 from app.services.report_agent import ReportAgent
 from app.services.report_agent.evidence import init_evidence_map
 
@@ -599,3 +604,150 @@ def test_interview_quote_fallback_strips_platform_markers() -> None:
         f"Plattform-Marker darf nicht im quote landen: {record['quote']!r}"
     )
     assert "I think this policy is important." in record["quote"]
+
+
+# ---------------------------------------------------------------------------
+# Issue #1298: insight_forge Key Facts durften nicht bei Position 10 gekappt
+# werden — jeder Fakt darüber (inklusive solcher mit Dokument-Provenienz)
+# fiel bislang still aus dem evidence_index, bevor
+# build_seed_document_anchor/register_evidence_record ihn je sahen.
+# ---------------------------------------------------------------------------
+
+
+def _insight_forge_result(
+    semantic_facts,
+    semantic_facts_provenance,
+    query: str = "marktanalyse",
+) -> InsightForgeResult:
+    return InsightForgeResult(
+        query=query,
+        simulation_requirement="Test-Requirement",
+        sub_queries=["sub-query-1", "sub-query-2"],
+        semantic_facts=semantic_facts,
+        entity_insights=[],
+        relationship_chains=[],
+        total_facts=len(semantic_facts),
+        total_entities=0,
+        total_relationships=0,
+        semantic_facts_provenance=semantic_facts_provenance,
+    )
+
+
+def test_insight_forge_registers_all_38_document_backed_key_facts() -> None:
+    """Vorher: [:10]-Slicing kappte vor build_seed_document_anchor — 28 von 38
+    dokumentbasierten Key Facts fielen still aus dem evidence_index."""
+    agent = _make_agent()
+    facts = [f"Key Fact Nummer {i} über den Markt." for i in range(38)]
+    provenance = [{"document_id": f"doc_{i:04d}", "chunk_id": i} for i in range(38)]
+
+    agent._record_tool_evidence(
+        tool_name="insight_forge",
+        parameters={},
+        structured_result=_insight_forge_result(facts, provenance),
+        rendered_result="",
+        section_index=1,
+    )
+
+    records = _records(agent)
+    seed_document_records = [r for r in records if r["type"] == "seed_document"]
+    assert len(seed_document_records) == 38
+    for record in seed_document_records:
+        assert record["source_kind"] == "seed_corpus"
+        assert EVIDENCE_ID_RE.match(record["evidence_id"]), record["evidence_id"]
+
+
+def test_insight_forge_key_facts_are_idempotent_on_repeated_registration() -> None:
+    """Derselbe structured_result ein zweites Mal registriert -> keine
+    Duplikate im evidence_index (register_evidence_record dedupliziert über
+    den deterministischen producer_key)."""
+    agent = _make_agent()
+    facts = [f"Key Fact Nummer {i} über den Markt." for i in range(38)]
+    provenance = [{"document_id": f"doc_{i:04d}", "chunk_id": i} for i in range(38)]
+    result = _insight_forge_result(facts, provenance)
+
+    agent._record_tool_evidence(
+        tool_name="insight_forge",
+        parameters={},
+        structured_result=result,
+        rendered_result="",
+        section_index=1,
+    )
+    ids_after_first = {r["evidence_id"] for r in _records(agent)}
+    assert len(ids_after_first) == 38
+    for evidence_id in ids_after_first:
+        assert EVIDENCE_ID_RE.match(evidence_id), evidence_id
+
+    agent._record_tool_evidence(
+        tool_name="insight_forge",
+        parameters={},
+        structured_result=result,
+        rendered_result="",
+        section_index=2,
+    )
+    ids_after_second = {r["evidence_id"] for r in _records(agent)}
+
+    assert len(_records(agent)) == 38
+    assert ids_after_second == ids_after_first
+
+
+def test_insight_forge_empty_semantic_facts_registers_nothing() -> None:
+    agent = _make_agent()
+
+    agent._record_tool_evidence(
+        tool_name="insight_forge",
+        parameters={},
+        structured_result=_insight_forge_result([], []),
+        rendered_result="",
+        section_index=1,
+    )
+
+    assert _records(agent) == []
+
+
+def test_insight_forge_mixes_document_backed_and_graph_only_facts() -> None:
+    """Ein Fakt ohne Provenienz bleibt graph_fact/graph_relation, die anderen
+    werden seed_document — kein stiller Verlust in beide Richtungen."""
+    agent = _make_agent()
+    facts = ["Fakt ohne Herkunft.", "Fakt mit Herkunft."]
+    provenance = [None, {"document_id": "doc_a1b2c3d4", "chunk_id": 3}]
+
+    agent._record_tool_evidence(
+        tool_name="insight_forge",
+        parameters={},
+        structured_result=_insight_forge_result(facts, provenance),
+        rendered_result="",
+        section_index=1,
+    )
+
+    by_snippet = {record["snippet"]: record for record in _records(agent)}
+    assert len(by_snippet) == 2
+    assert by_snippet["Fakt ohne Herkunft."]["type"] == "graph_fact"
+    assert by_snippet["Fakt ohne Herkunft."]["source_kind"] == "graph_relation"
+    assert by_snippet["Fakt mit Herkunft."]["type"] == "seed_document"
+    assert by_snippet["Fakt mit Herkunft."]["source_kind"] == "seed_corpus"
+
+
+def test_insight_forge_registers_key_fact_beyond_truncation_length() -> None:
+    """Auch ein sehr langer Fakt-Satz (> normale Truncation-Grenze von
+    ``_truncate``) darf keinen Record verhindern — nur das Snippet wird
+    gekappt, der Record selbst muss entstehen."""
+    agent = _make_agent()
+    long_fact = "Ausführlicher Marktbefund. " * 50  # deutlich > 300 Zeichen
+    assert len(long_fact) > 300
+
+    agent._record_tool_evidence(
+        tool_name="insight_forge",
+        parameters={},
+        structured_result=_insight_forge_result(
+            [long_fact],
+            [{"document_id": "doc_long", "chunk_id": 1}],
+        ),
+        rendered_result="",
+        section_index=1,
+    )
+
+    records = _records(agent)
+    assert len(records) == 1
+    assert records[0]["type"] == "seed_document"
+    assert records[0]["source_kind"] == "seed_corpus"
+    assert len(records[0]["snippet"]) < len(long_fact)

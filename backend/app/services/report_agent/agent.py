@@ -423,7 +423,16 @@ class ReportAgent:
 
         items: List[Dict[str, Any]] = []
         if isinstance(structured_result, InsightForgeResult):
-            for position, fact in enumerate(structured_result.semantic_facts[:10]):
+            # Issue #1298: kein Slicing hier — insight_forge dedupliziert
+            # ``semantic_facts`` bereits selbst (mehrere Sub-Queries plus
+            # Hauptquery über ein ``seen_facts``-Set), daher waren realistische
+            # Läufe deutlich länger als 10 Einträge. Ein Cap an dieser Stelle
+            # kappte VOR ``_graph_fact_item``/``build_seed_document_anchor``
+            # und verwarf damit auch Fakten mit gültiger Dokument-Provenienz
+            # still, ohne Log. Der bewusste Cap für Interviews (10, siehe
+            # unten) bleibt unverändert — das ist ein anderer Tool-Zweig mit
+            # eigener Begründung.
+            for position, fact in enumerate(structured_result.semantic_facts):
                 item = _graph_fact_item(
                     fact,
                     "graph_fact",
