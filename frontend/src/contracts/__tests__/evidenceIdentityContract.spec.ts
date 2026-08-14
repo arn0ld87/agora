@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import * as reportContract from '../reportContract';
 import { ReportV3Schema } from '../reportV3Contract';
+import reportContractJson from '../../../../schemas/report-contract.schema.json';
 
 function exportedSchema(moduleValue: object, exportName: string): z.ZodType {
   const candidate: unknown = Reflect.get(moduleValue, exportName);
@@ -369,19 +370,9 @@ describe('EvidenceRecord — persona_role_family + seed_document Regression', ()
 });
 
 describe('EvidenceType enum completeness — Backend→Frontend drift guard', () => {
-  const BACKEND_EVIDENCE_TYPES: string[] = [
-    'graph_fact',
-    'graph_metric',
-    'graph_metric_status',
-    'relationship_chain',
-    'entity_summary',
-    'agent_action',
-    'agent_interview',
-    'web_search_result',
-    'web_fetch',
-    'seed_document',
-    'model_generated_inference',
-  ];
+  const BACKEND_EVIDENCE_TYPES: string[] =
+    (reportContractJson as { $defs: { EvidenceType: { enum: string[] } } })
+      .$defs.EvidenceType.enum;
 
   const EvidenceRecordSchema = exportedSchema(reportContract, 'EvidenceRecordSchema');
 
