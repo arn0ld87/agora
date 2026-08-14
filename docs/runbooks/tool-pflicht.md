@@ -5,13 +5,14 @@ Datei: `docs/runbooks/tool-pflicht.md` · Stand: 2026-08-14 · Gilt für: Claude
 ## Pipeline (nicht überspringbar)
 
 ```
-code-review-graph → [context7] → context-mode → Read/rg/Bash
+code-review-graph → [context7] → ctx_batch_execute → ctx_execute/ctx_execute_file → Read/rg/Bash
 ```
 
 Jeder Schritt ist ein Gate. Erst wenn das aktuelle Gate sinnvoll abgearbeitet ist, geht es
 zum nächsten. Die gesamte Pipeline muss VOR dem ersten Read/rg/Bash durchlaufen sein.
 
 `[context7]` ist optional — nur verfügbar wenn der MCP-Server in der Session verbunden ist.
+`context-mode` ist der Oberbegriff fuer `ctx_batch_execute`, `ctx_execute` und `ctx_execute_file`.
 
 ---
 

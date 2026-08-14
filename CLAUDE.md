@@ -17,7 +17,7 @@
 - `/agora-next-task`: ein Issue, ein Worker (`isolation: worktree`), ein lokaler Commit, dann PR.
 - `/agora-batch-issues`: maximal zwei unabhaengige Issues parallel, je eigener Worktree und PR.
 - Worker pushen nicht. Der Lead verifiziert Diff, Tests und Gate selbst.
-- **Review-Gate:** Regressionstest + gruenes `pre-push-gate.sh` genuegen. Kein RED/GREEN-Protokoll, keine Mutationstests, keine Bot-Kommentar-Einzelantworten.
+- **Review-Gate:** Regressionstest + gruenes `pre-push-gate.sh` genuegen fuer die lokale Schnellpruefung. CI-Smoke-Gates bleiben erforderlich; fuer lokale Vollverifikation `GATE_FULL=1` setzen. Kein RED/GREEN-Protokoll, keine Mutationstests, keine Bot-Kommentar-Einzelantworten.
 - **Reviewer-Subagent:** optional. Der Lead zieht einen hinzu wenn der Diff unklar ist (Schema-Migration, Rueckwaertskompatibilitaet). Ein ausbleibendes APPROVE blockiert nicht.
 - **Ist-Zustand:** `/agora-next-task` ruft `agora-opus-reviewer` auf. Beide Varianten (mit/ohne `-m3`) existieren parallel bis [#803](https://github.com/arn0ld87/agora/issues/803) konsolidiert.
 

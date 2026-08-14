@@ -85,7 +85,7 @@ Evidence-Hinweis: Vertragswidrige Evidenz → **422** mit `reason=contract_viola
 | `llm_active.py` | `GET /active-config`, `PUT /active-config` |
 | `llm_routing.py` | `GET /routing/defaults`, `PUT /routing/defaults`, `PUT /routing/defaults/global`, `PATCH /routing/defaults/stages/<id>` |
 | `llm.py` | `GET /model-stream` **(SSE)** |
-| `embedding_configurations.py` | `GET /embedding/configurations`, `GET /embedding/configurations/active`, `POST /embedding/configurations/sync-legacy`, plus per-config CRUD und test/activate |
+| `embedding_configurations.py` | `GET /embedding/configurations`, `GET /embedding/configurations/active`, `POST /embedding/configurations/sync-legacy`, `GET,PUT,DELETE /embedding/configurations/<id>`, `POST /embedding/configurations/<id>/test`, `POST /embedding/configurations/<id>/activate` |
 | `embedding_migrations.py` | `POST /embedding/migrations`, `GET /embedding/migrations`, `GET /embedding/migrations/<job_id>`, `POST /embedding/migrations/<job_id>/run`, `POST /embedding/migrations/<job_id>/cancel`, `POST /embedding/ollama/pull` |
 
 ### LLM-Profile — `/api/settings/llm-profiles` (`llm_profiles_bp`)
@@ -127,4 +127,5 @@ SSE-Verbindungen authentifizieren ueber signierte Tickets, nicht Bearer-Header i
 - Pydantic-Vertraege: [`../backend/app/contracts/`](../backend/app/contracts/)
 - Frontend-Spiegel: [`../frontend/src/contracts/`](../frontend/src/contracts/) + generierte Schemas
 - Schema-Drift-Gate: `uv run python -m app.contracts.dump_schemas --check`
+- Bei Schema-Drift: `dump_schemas` ohne `--check` ausfuehren und gerenderte Schemas in denselben Commit aufnehmen
 - Fehler-Envelope: [`api-contracts.md`](api-contracts.md)

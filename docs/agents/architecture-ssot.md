@@ -12,7 +12,8 @@
 | Strukturierte LLM-Calls | `backend/app/llm/client.py::LLMClient.chat_json` (Pydantic-Schema, strict-mode, Repair) |
 | Modellauswahl-UI | `frontend/src/components/v4/forms/AiModelPicker.vue` |
 | Modellreferenz | `AiModelRef` / `AiRoute` / `LlmRoute` |
-| Embedding-Config | `embedding_service.py` + `embedding_migration.py` |
+| Embedding-Config (Persistenz) | `backend/app/services/embedding_configuration_store.py` |
+| Embedding-Verarbeitung/Migration | `embedding_service.py` + `embedding_migration.py` |
 | Evidence-Gating | ADR-0002 Hartanker (siehe `CLAUDE.md`) |
 
 Chat-Routing und Embedding-Konfiguration sind strukturell getrennt.
