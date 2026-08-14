@@ -167,3 +167,46 @@ def test_prompt_evidence_id_literals_match_the_contract() -> None:
         f"EVIDENCE_ID_PATTERN ({EVIDENCE_ID_PATTERN}). Ein Modell, das sie "
         "nachahmt, erzeugt einen Anker, der nie in known_anchors steht."
     )
+
+
+def test_prompt_restricts_seed_doc_form_to_actual_document_passages() -> None:
+    """Issue #1300: seed_doc-Form nur für Zitate aus einer Dokumentpassage.
+
+    Der Referenzlauf zeigte Persona-O-Töne mit erfundenen Ankern wie
+    ``seed_doc:seed_aurora#chunk:0`` — Interview-Aussagen, die eine
+    Dokumentherkunft behaupten, die der Lauf nie produzierte. Der Prompt
+    muss die Form (b) ausdrücklich auf Zitate beschränken, die tatsächlich
+    aus einer Seed-Dokument-Passage stammen, und Interview-Aussagen der
+    ev_-Form (a) zuweisen — sonst kopiert das Modell genau die Kombination
+    aus dem Positivbeispiel (contracts-first, PR #1312 Revert-Notiz).
+    """
+    rendered = _rendered_section_prompt()
+
+    assert "ONLY when the quoted words actually come" in rendered, (
+        "Der Section-Prompt beschränkt die seed_doc:-Form nicht auf Zitate, "
+        "die tatsächlich aus der referenzierten Dokumentpassage stammen."
+    )
+    assert "simulation output, not document text" in rendered, (
+        "Der Section-Prompt weist Interview-Aussagen nicht eindeutig als "
+        "Simulations-Output aus — seed_doc:-Anker darauf sind erfundene "
+        "Quellen (Issue #1300)."
+    )
+
+
+def test_prompt_positive_example_is_not_an_interview_with_seed_doc_anchor() -> None:
+    """Issue #1300: Das Positivbeispiel darf Interview x seed_doc nicht zeigen.
+
+    Das Modell kopiert Beispiele. Ein ✅-Beispiel, das eine Persona-Aussage
+    mit seed_doc:-Anker zeigt, ist die Vorlage für genau die Fehlanbindung
+    aus #1300 — unabhängig davon, was die Regel dazu sagt.
+    """
+    rendered = _rendered_section_prompt()
+
+    example = re.search(
+        r"✅.*?</simulated_quote>", rendered, re.DOTALL
+    )
+    assert example is not None, "Kein Positivbeispiel (✅) im Prompt."
+    assert "seed_doc:" not in example.group(0), (
+        "Das Positivbeispiel zeigt weiterhin einen seed_doc:-Anker an einer "
+        "Persona-Aussage — die Kombination, die Issue #1300 verbietet."
+    )

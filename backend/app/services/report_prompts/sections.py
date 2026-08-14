@@ -191,19 +191,24 @@ FIX:   Set confidence_label="low" with source_kind="seed_corpus" and
    Attribute rules (BOTH attributes are REQUIRED — a quote without them is invalid):
    - persona_id: The ID of the simulated persona from the scenario plan (e.g. "persona_03").
      This MUST reference an actual persona that participates in the simulation.
-   - seed_anchor: A reference that MUST resolve to evidence collected during
-     this run. Two accepted forms:
-       a) An evidence identifier from the EvidenceMap: the literal prefix
-          "ev_" followed by exactly 32 hexadecimal characters. Use an
-          identifier that actually appeared in a tool result — never
-          construct one.
-       b) A seed document reference in the exact format
-          "seed_doc:DOCUMENT_ID#chunk:CHUNK_INDEX", where DOCUMENT_ID is the
-          document ID of a document from this run's seed data and
-          CHUNK_INDEX is the integer index of the passage inside that
-          document. Both parts are mandatory — an anchor without the
-          "#chunk:" part can never be resolved and is always treated as
-          unbound.
+    - seed_anchor: A reference that MUST resolve to evidence collected during
+      this run. Two accepted forms:
+        a) An evidence identifier from the EvidenceMap: the literal prefix
+           "ev_" followed by exactly 32 hexadecimal characters. Use an
+           identifier that actually appeared in a tool result — never
+           construct one.
+        b) A seed document reference in the exact format
+           "seed_doc:DOCUMENT_ID#chunk:CHUNK_INDEX", where DOCUMENT_ID is the
+           document ID of a document from this run's seed data and
+           CHUNK_INDEX is the integer index of the passage inside that
+           document. Both parts are mandatory — an anchor without the
+           "#chunk:" part can never be resolved and is always treated as
+           unbound. Use this form ONLY when the quoted words actually come
+           from that document passage. A statement a persona made in an
+           interview is simulation output, not document text: anchor it via
+           form (a) with the evidence ID of the interview result. Pointing
+           an interview statement at a seed_doc reference invents a source
+           the run never produced and is rejected.
      Words in CAPITALS are placeholders and must NOT be copied literally —
      substitute real values that occurred in this run. Never put "<" or ">"
      inside an attribute value: the parser cuts the tag at the first ">",
@@ -215,13 +220,19 @@ FIX:   Set confidence_label="low" with source_kind="seed_corpus" and
      Inventing a plausible-looking anchor does not create evidence — it only
      costs the section a retry that cannot succeed.
 
-   ✅ Correct shape (substitute real values from this run):
-   <simulated_quote persona_id="persona_03" seed_anchor="seed_doc:DOCUMENT_ID#chunk:CHUNK_INDEX">
-   Ich sehe keinen überzeugenden Mehrwert gegenüber bestehenden Angeboten.
-   </simulated_quote>
+    ✅ Correct shape — persona statement from an interview (substitute the
+    real evidence ID from the interview tool result):
+    <simulated_quote persona_id="persona_03" seed_anchor="EVIDENCE_ID_OF_INTERVIEW_ANSWER">
+    Ich sehe keinen überzeugenden Mehrwert gegenüber bestehenden Angeboten.
+    </simulated_quote>
 
-   ❌ Invalid — missing persona_id:
-   <simulated_quote seed_anchor="seed_doc:DOCUMENT_ID#chunk:CHUNK_INDEX">Text</simulated_quote>
+    ❌ Invalid — missing persona_id:
+    <simulated_quote seed_anchor="seed_doc:DOCUMENT_ID#chunk:CHUNK_INDEX">Text</simulated_quote>
+
+    ❌ Invalid — interview statement anchored to a seed document reference
+    (the persona said this in an interview; the words are not document text —
+    use the interview evidence ID instead):
+    <simulated_quote persona_id="persona_03" seed_anchor="seed_doc:DOCUMENT_ID#chunk:CHUNK_INDEX">Text</simulated_quote>
 
    ❌ Invalid — missing seed_anchor:
    <simulated_quote persona_id="persona_03">Text</simulated_quote>

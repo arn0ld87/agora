@@ -83,6 +83,13 @@ SIMULATION_SOURCE_KINDS: frozenset[EvidenceSourceKind] = frozenset({
     EvidenceSourceKind.agent_action,
 })
 
+#: Präfix des kanonischen Seed-Dokument-Ankers (ADR-0013). Issue #1300: Ein
+#: ``seed_doc:``-Anker behauptet eine überprüfbare Dokumentstelle — für
+#: Interview-Evidence (``agent_quote``) ist das eine erfundene Quelle.
+#: Bewusst nur der Präfix statt des vollen Formats: auch ein deformierter
+#: ``seed_doc:``-Anker auf einer Persona-Aussage darf nicht durchgehen.
+SEED_DOC_ANCHOR_PREFIX = "seed_doc:"
+
 
 class EntailmentVerdict(str, Enum):
     """Urteil der zweiten Binding-Stufe.
@@ -207,6 +214,24 @@ class EvidenceItemModel(BaseModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def agent_quote_rejects_seed_doc_anchor(self) -> "EvidenceItemModel":
+        # Issue #1300: Ein seed_doc:-Anker (ADR-0013) behauptet, der Inhalt
+        # stamme aus einer Seed-Dokument-Passage. Fuer eine simulierte
+        # Persona-Aussage aus einem Interview ist das eine erfundene Quelle —
+        # Referenz ist die ev_-Evidence-ID des Interview-Records.
+        if (
+            self.source_kind == EvidenceSourceKind.agent_quote
+            and self.source_id_anchor
+            and self.source_id_anchor.startswith(SEED_DOC_ANCHOR_PREFIX)
+        ):
+            raise ValueError(
+                "source_kind=agent_quote darf keinen seed_doc:-Anker tragen — "
+                "Interview-Evidence referenziert sich ueber ihre ev_-Evidence-ID, "
+                "nicht ueber eine Dokumentherkunft (Issue #1300)."
+            )
+        return self
+
 
 EVIDENCE_ID_PATTERN = r"^ev_[0-9a-f]{32}$"
 
@@ -252,6 +277,21 @@ class EvidenceRecordModel(BaseModel):
         if self.source_kind == EvidenceSourceKind.agent_quote and not self.persona_stakeholder_group:
             raise ValueError(
                 "source_kind=agent_quote verlangt persona_stakeholder_group."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def agent_quote_rejects_seed_doc_anchor(self) -> "EvidenceRecordModel":
+        # Issue #1300, Spiegel von EvidenceItemModel.agent_quote_rejects_seed_doc_anchor.
+        if (
+            self.source_kind == EvidenceSourceKind.agent_quote
+            and self.source_id_anchor
+            and self.source_id_anchor.startswith(SEED_DOC_ANCHOR_PREFIX)
+        ):
+            raise ValueError(
+                "source_kind=agent_quote darf keinen seed_doc:-Anker tragen — "
+                "Interview-Evidence referenziert sich ueber ihre ev_-Evidence-ID, "
+                "nicht ueber eine Dokumentherkunft (Issue #1300)."
             )
         return self
 
