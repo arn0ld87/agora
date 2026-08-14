@@ -1,7 +1,7 @@
 """
 Tests für Issue #1299 — Reportstatus an Contract-Validität koppeln.
 
-Deckt zwei Bausteine ab:
+Deckt vier Bausteine ab:
 
 1. ``apply_report_v3_validation_downgrade`` / ``apply_quote_validation_downgrade``
    (app.services.report_agent.output_contract) — reine Downgrade-Helper,
@@ -16,6 +16,15 @@ Deckt zwei Bausteine ab:
      Status aufgerufen (der erste Save lief bereits mit dem alten Status).
    - Der unauffällige Fall (gültige Quotes, gültiges ReportV3) bleibt
      COMPLETED — kein False-Positive-Downgrade.
+3. Review-Finding (Codex + CodeRabbit, PR #1312): ``ReportManager.save_report()``
+   faengt einen ``ValidationError`` beim ``build_report_v3()`` INTERN ab —
+   ohne persistiertes Artefakt lieferte ``get_report_v3()`` ``None`` und der
+   urspruengliche Validierungsblock griff nie. ``generate_report()`` baut den
+   ReportV3 deshalb jetzt VOR dem ersten Save selbst und stuft bei einem
+   Fehlschlag direkt ab.
+4. Review-Finding (Codex, PR #1312): ``_build_partial_report()`` (Cancel-Pfad)
+   setzte ``status=COMPLETED`` unbedingt, ohne bereits gesammelte
+   ``quote_validation_failed_section_indices`` zu beruecksichtigen.
 
 Strategie für die Workflow-Tests: identisch zu
 ``test_report_agent_workflow_quote_validation.py`` (M11.8e) — Agent und
@@ -26,12 +35,25 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from pydantic import ValidationError
+
+from app.contracts.report_v3 import ReportV3
 from app.models.report import ReportStatus
 from app.services.report_agent import ReportAgent
 from app.services.report_agent.output_contract import (
     apply_quote_validation_downgrade,
     apply_report_v3_validation_downgrade,
 )
+from app.services.report_agent.workflow import _build_partial_report
+
+
+def _make_report_v3_validation_error() -> ValidationError:
+    """Ein echter ``ValidationError`` (fehlende Pflichtfelder), kein Fake."""
+    try:
+        ReportV3.model_validate({"schema_version": 4})
+    except ValidationError as exc:
+        return exc
+    raise AssertionError("ReportV3.model_validate({'schema_version': 4}) sollte fehlschlagen")
 
 
 # ---------------------------------------------------------------------------
@@ -343,3 +365,101 @@ class TestNoFalsePositiveDowngrade:
             f"report.status={report.status!r} — ohne Contract-Verstoß darf "
             f"der neue Gate-Code nicht ungefragt abstufen."
         )
+
+
+# ---------------------------------------------------------------------------
+# 5. Review-Finding (Codex + CodeRabbit, PR #1312): fehlgeschlagener
+#    ReportV3-Build OHNE persistiertes Artefakt muss ebenfalls abstufen.
+# ---------------------------------------------------------------------------
+
+
+class TestReportV3BuildFailureWithoutPersistedArtifactDowngradesStatus:
+    def test_build_failure_downgrades_before_first_save_even_without_artifact(self):
+        """``ReportManager.save_report()`` faengt einen ValidationError beim
+        Aufbau intern ab (siehe manager.py) — ohne den Vorab-Check in
+        ``generate_report()`` bliebe ``get_report_v3()`` bei ``None`` und der
+        bestehende Validierungsblock wuerde nie greifen. Diese Situation
+        wird jetzt VOR dem ersten ``save_report``-Aufruf abgefangen."""
+        agent = _make_agent()
+        outline, section = _make_outline_with_section("Persona-Reaktionen")
+        valid_text = _valid_section_text()
+
+        with (
+            patch("app.services.report_agent.workflow.ReportManager") as mock_rm,
+            patch("app.services.report_agent.workflow.plan_outline_impl") as mock_plan,
+            patch("app.services.report_agent.workflow.generate_section_react") as mock_gsr,
+            patch("app.services.report_agent.workflow.generate_section_metadata") as mock_meta,
+            patch("app.services.report_agent.workflow.migrate_v1_to_v2") as mock_migrate,
+            patch("app.services.report_agent.workflow.validate_required_sections", return_value=[]),
+        ):
+            mock_plan.return_value = outline
+            mock_gsr.return_value = valid_text
+            mock_meta.return_value = {}
+            mock_migrate.return_value = _EVIDENCE_MAP_WITH_ANCHOR
+            mock_rm.get_evidence_map.return_value = _EVIDENCE_MAP_WITH_ANCHOR
+            _base_report_manager_mock(mock_rm, section_text=valid_text)
+            # build_report_v3() wirft — genau der Pfad, den save_report()
+            # intern abfängt und dabei kein Artefakt schreibt.
+            mock_rm.build_report_v3.side_effect = _make_report_v3_validation_error()
+            # Kein persistiertes Artefakt (Vorbedingung des Findings): ohne
+            # den Vorab-Check würde der bestehende Validierungsblock unten
+            # (``if report_v3_raw:``) übersprungen und die Abstufung nie
+            # erreicht.
+            mock_rm.get_report_v3.return_value = None
+
+            from app.services.report_agent.workflow import generate_report
+            report = generate_report(agent, report_id="report_gating_v3_no_artifact_01")
+
+        assert mock_rm.build_report_v3.called, (
+            "Vorbedingung: generate_report() muss den ReportV3-Build vor dem "
+            "ersten save_report()-Aufruf selbst versuchen."
+        )
+        assert report.status != ReportStatus.COMPLETED, (
+            f"report.status={report.status!r} — ein fehlgeschlagener "
+            f"ReportV3-Build ohne persistiertes Artefakt darf den Report "
+            f"nie COMPLETED belassen (#1299, Review-Finding PR #1312)."
+        )
+
+
+# ---------------------------------------------------------------------------
+# 6. Review-Finding (Codex, PR #1312): Cancel-Pfad (_build_partial_report)
+#    ignorierte bereits gesammelte quote_validation_failed_section_indices.
+# ---------------------------------------------------------------------------
+
+
+class TestBuildPartialReportCarriesQuoteValidationFailure:
+    def _call(self, quote_validation_failed_section_indices):
+        report = MagicMock()
+        report.report_id = "report_partial_01"
+        with patch("app.services.report_agent.workflow.ReportManager") as mock_rm:
+            mock_rm.assemble_full_report.return_value = "# Teil-Report\n\nInhalt."
+            mock_rm.save_report.return_value = None
+            mock_rm.update_progress.return_value = None
+            mock_rm._ensure_report_folder.return_value = "/tmp/report_partial_01"
+            mock_rm._write_json_atomic.return_value = None
+            agent = MagicMock()
+            agent.report_logger = None
+            agent.console_logger = None
+            return _build_partial_report(
+                report,
+                report_id="report_partial_01",
+                completed_section_titles=["Section 1"],
+                outline=MagicMock(),
+                agent=agent,
+                progress_callback=None,
+                quote_validation_failed_section_indices=quote_validation_failed_section_indices,
+            )
+
+    def test_quote_validation_failure_before_cancel_downgrades_partial_report(self):
+        result = self._call([1])
+        assert result.status != ReportStatus.COMPLETED, (
+            f"result.status={result.status!r} — eine bereits vor dem Cancel "
+            f"erfolglos gebliebene Zitatpruefung darf den Teil-Report nicht "
+            f"als COMPLETED ausweisen (#1299, Review-Finding PR #1312)."
+        )
+
+    def test_no_quote_validation_failure_stays_completed(self):
+        """Gegenprobe: ohne Zitat-Fehlschlag bleibt das bestehende
+        success-with-caveat-Verhalten (status=COMPLETED) unveraendert."""
+        result = self._call([])
+        assert result.status == ReportStatus.COMPLETED

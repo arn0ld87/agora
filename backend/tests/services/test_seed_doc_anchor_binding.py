@@ -28,15 +28,18 @@ als ``source_id_anchor`` bereits in ``known_anchors``.
 Ein real existierendes, aber aus technischen Gründen nicht indiziertes
 Dokument kostet damit Sichtbarkeit, keinen Inhalt.
 
-**Erweiterung (Issue #1300):** #1249 prüfte nur, ob ein Anker im Index
-*existiert* — nicht, wofür der zugehörige Evidence-Record steht. Ein
-``seed_doc:``-Anker, der real auf ein Dokument-Chunk (``source_kind=
-seed_corpus``) zeigt, bestand die reine Existenzprüfung genauso wie ein
-Interview-Zitat (``source_kind=agent_quote``). Der AURORA-Referenzlauf zeigte
-genau das: ein Persona-O-Ton zitierte einen real existierenden ``seed_doc:``-
-Anker, der zu einem Dokumentfakt gehörte, nicht zur Interviewantwort, die er
-belegen sollte. Dieselbe Politik gilt jetzt auch hier: fachlich falsch
-gebunden kostet Sichtbarkeit (``unbound_evidence_refs``), nicht Inhalt.
+**Zurückgestellter Versuch (Issue #1300):** Ein früherer Versuch dieses
+Slices prüfte zusätzlich, ob der ``source_kind`` des aufgelösten
+Evidence-Records zu ``agent_quote`` passt, und behandelte einen real
+existierenden ``seed_doc:``-Anker mit ``source_kind=seed_corpus`` als
+ungebunden. Codex-Review zu PR #1312 wies nach, dass ``seed_doc:
+DOCUMENT_ID#chunk:CHUNK_INDEX`` laut ``report_prompts/sections.py:194-220``
+eine von exakt zwei dokumentierten, gültigen ``seed_anchor``-Formen für
+``<simulated_quote>`` ist — unabhängig vom ``source_kind`` des referenzierten
+Records. Die ``source_kind``-Prüfung hätte also korrekt befolgte, contract-
+konforme Modellausgaben verworfen. Zurückgenommen; #1300 bleibt in diesem
+Punkt offen und braucht eine Contract-Entscheidung zuerst (AGENTS.md:
+Contracts-first), nicht einen Validierungs-Fix im Consumer.
 """
 
 from __future__ import annotations
@@ -52,32 +55,12 @@ _REAL_ANCHOR = "seed_doc:doc_a1b2c3#chunk:7"
 
 _BOUND_EV_ID = "ev_" + "0" * 32
 
-#: Objektform der EvidenceMap — ``_extract_known_anchor_source_kinds`` liest
-#: hier die ``source_id_anchor``-/``source_kind``-Attribute, ohne den
-#: Persistenz-Normalisierer zu durchlaufen. Der Prüfgegenstand ist die
-#: Ankerbindung, nicht das Ladeformat.
-#:
-#: Issue #1300: ``source_kind="agent_quote"`` ist hier bewusst explizit
-#: gesetzt — ein ``<simulated_quote>``-Tag behauptet per Definition eine
-#: simulierte Persona-Aussage. Der Record ist damit korrekt gebunden, auch
-#: wenn sein Anker das ``seed_doc:``-Präfix trägt (ADR-0013 regelt nur das
-#: Ankerformat, nicht die Quellengattung).
+#: Objektform der EvidenceMap — ``_extract_known_anchors`` liest hier die
+#: ``source_id_anchor``-Attribute, ohne den Persistenz-Normalisierer zu
+#: durchlaufen. Der Prüfgegenstand ist die Ankerbindung, nicht das Ladeformat.
 _EVIDENCE_MAP = SimpleNamespace(
     evidence_index={
-        _BOUND_EV_ID: SimpleNamespace(
-            source_id_anchor=_REAL_ANCHOR, source_kind="agent_quote"
-        ),
-    }
-)
-
-#: Derselbe reale Anker, aber an einen Dokumentfakt statt an eine
-#: Interview-Antwort gebunden — der Fall aus dem AURORA-Referenzlauf
-#: (Issue #1300).
-_EVIDENCE_MAP_SEED_CORPUS = SimpleNamespace(
-    evidence_index={
-        _BOUND_EV_ID: SimpleNamespace(
-            source_id_anchor=_REAL_ANCHOR, source_kind="seed_corpus"
-        ),
+        _BOUND_EV_ID: SimpleNamespace(source_id_anchor=_REAL_ANCHOR),
     }
 )
 
@@ -137,34 +120,13 @@ def test_individuell_erfundene_anker_werden_einzeln_sichtbar():
 
 
 def test_realer_seed_doc_anker_bleibt_gueltig():
-    """Gegenprobe: ein Anker, der im Index steht UND korrekt gebunden ist
-    (``source_kind=agent_quote``), ist gebunden."""
+    """Gegenprobe: ein Anker, der im Index steht, ist gebunden."""
     result = validate_quote_anchors(
         _section(("persona_01", _REAL_ANCHOR)), _EVIDENCE_MAP, _PERSONAS
     )
 
     assert result.unbound_evidence_refs == []
     assert result.valid is True
-
-
-def test_realer_anker_mit_falschem_source_kind_wird_als_ungebunden_gefuehrt():
-    """Issue #1300 — AURORA-Referenzlauf: ein real existierender ``seed_doc:``-
-    Anker, dessen Evidence-Record ``source_kind=seed_corpus`` (ein
-    Dokumentfakt) statt ``agent_quote`` (eine Interview-Antwort) trägt, ist
-    für ein ``<simulated_quote>``-Tag fachlich falsch gebunden.
-
-    Politik bleibt dieselbe wie bei #1249: nicht hart verwerfen, sondern
-    sichtbar als ``unbound_evidence_refs`` führen — ein real existierender,
-    aber falsch gebundener Anker kostet Sichtbarkeit, keinen Inhalt.
-    """
-    result = validate_quote_anchors(
-        _section(("persona_01", _REAL_ANCHOR)), _EVIDENCE_MAP_SEED_CORPUS, _PERSONAS
-    )
-
-    assert result.unbound_evidence_refs == [_REAL_ANCHOR]
-    assert result.valid is False
-    assert result.invalid_quotes == []
-    assert len(result.quotes) == 1
 
 
 def test_zitat_bleibt_gueltig_und_wird_nicht_verworfen():
