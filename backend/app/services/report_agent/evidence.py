@@ -431,28 +431,42 @@ class QuoteValidationResult:
     missing_evidence_refs: List[str] = field(default_factory=list)
 
 
-def _extract_known_anchors(evidence_map: Union[Dict[str, Any], Any]) -> set:
-    """Extrahiert alle bekannten source_id_anchor-Werte aus der EvidenceMap.
+def _extract_known_anchor_source_kinds(
+    evidence_map: Union[Dict[str, Any], Any],
+) -> Dict[str, Optional[str]]:
+    """Löst für jeden bekannten Anker/jede evidence_id den source_kind auf.
 
     Unterstützt sowohl rohe dicts (agent.evidence_map) als auch
-    EvidenceMapModel-Instanzen.
+    EvidenceMapModel-Instanzen. Die Menge der Keys entspricht den bisher von
+    ``_extract_known_anchors`` gelieferten "bekannten Ankern"; zusätzlich
+    liefert der Wert den ``source_kind`` des zugehörigen Evidence-Records
+    (``None`` wenn nicht gesetzt/auflösbar).
+
+    Issue #1300: Ob ein Anker im Index *existiert* sagt noch nichts darüber
+    aus, wofür der Record steht — ein ``seed_doc:``-Anker, der real auf ein
+    Dokument-Chunk (``source_kind=seed_corpus``) zeigt, besteht die reine
+    Existenzprüfung genauso wie ein Interview-Zitat (``source_kind=
+    agent_quote``). ``validate_quote_anchors`` muss beide Fragen getrennt
+    beantworten können.
     """
-    known: set = set()
+    resolved: Dict[str, Optional[str]] = {}
     if hasattr(evidence_map, "evidence_index"):
         # EvidenceMapModel-Instanz
         for evidence_id, item in evidence_map.evidence_index.items():
-            known.add(evidence_id)
+            source_kind = getattr(item, "source_kind", None)
+            resolved[evidence_id] = source_kind
             anchor = getattr(item, "source_id_anchor", None)
             if anchor:
-                known.add(anchor)
+                resolved[anchor] = source_kind
     elif isinstance(evidence_map, dict):
         evidence_map = normalize_persisted_evidence_map(evidence_map) or evidence_map
         for evidence_id, item in (evidence_map.get("evidence_index") or {}).items():
-            known.add(evidence_id)
+            source_kind = item.get("source_kind")
+            resolved[evidence_id] = source_kind
             anchor = item.get("source_id_anchor")
             if anchor:
-                known.add(anchor)
-    return known
+                resolved[anchor] = source_kind
+    return resolved
 
 
 def validate_quote_anchors(
@@ -473,9 +487,15 @@ def validate_quote_anchors(
         Ein vorhandener, aber nicht aufloesbarer Anker macht das Zitat nicht
         ungueltig, erscheint aber in ``unbound_evidence_refs`` — seit #1249
         unabhaengig davon, ob er ein ``ev_``- oder ein ``seed_doc:``-Anker ist.
+        Seit #1300 gilt dasselbe fuer einen Anker, der zwar im Index steht,
+        dessen Evidence-Record aber einen ``source_kind`` != ``agent_quote``
+        traegt (z. B. ``seed_corpus``) — ein real existierender, aber fachlich
+        falsch gebundener Anker kostet ebenfalls nur Sichtbarkeit, keinen
+        Inhalt.
         Sections ohne Quotes → valid=True.
     """
-    known_anchors = _extract_known_anchors(evidence_map)
+    anchor_source_kinds = _extract_known_anchor_source_kinds(evidence_map)
+    known_anchors = set(anchor_source_kinds)
     persona_id_set = set(persona_ids)
 
     valid_quotes: List[Dict[str, Any]] = []
@@ -526,6 +546,23 @@ def validate_quote_anchors(
             # real existierendes, aber aus technischen Gruenden nicht
             # indiziertes Dokument kostet damit Sichtbarkeit, keinen Inhalt.
             if not reasons:
+                unbound_refs.append(seed_anchor)
+        else:
+            # Issue #1300: Der Anker existiert im Index — aber ein
+            # ``<simulated_quote>``-Tag behauptet per Definition eine
+            # simulierte Persona-Aussage (``source_kind=agent_quote``). Zeigt
+            # der real existierende Anker stattdessen auf einen Dokumentfakt
+            # (``seed_corpus``), eine Graph-Ableitung oder einen Web-Treffer,
+            # ist er fachlich falsch gebunden: der AURORA-Referenzlauf
+            # zitierte so einen ``seed_doc:``-Anker, der zu einem Dokumentfakt
+            # gehoerte, nicht zur Interview-Antwort, die er belegen sollte.
+            #
+            # ``None`` (kein ``source_kind`` aufloesbar, z. B. Alt-Fixtures
+            # ohne das Feld) bleibt bewusst unbeanstandet — dieselbe Politik
+            # wie bei fehlender Aufloesung insgesamt: nicht sicher belegbar
+            # ist nicht dasselbe wie sicher falsch belegt.
+            resolved_kind = anchor_source_kinds.get(seed_anchor)
+            if resolved_kind is not None and resolved_kind != "agent_quote":
                 unbound_refs.append(seed_anchor)
 
         if reasons:
