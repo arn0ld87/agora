@@ -27,6 +27,19 @@ als ``source_id_anchor`` bereits in ``known_anchors``.
 — sichtbar als ``unbound_evidence_refs``, ohne das Zitat hart zu verwerfen.
 Ein real existierendes, aber aus technischen Gründen nicht indiziertes
 Dokument kostet damit Sichtbarkeit, keinen Inhalt.
+
+**Zurückgestellter Versuch (Issue #1300):** Ein früherer Versuch dieses
+Slices prüfte zusätzlich, ob der ``source_kind`` des aufgelösten
+Evidence-Records zu ``agent_quote`` passt, und behandelte einen real
+existierenden ``seed_doc:``-Anker mit ``source_kind=seed_corpus`` als
+ungebunden. Codex-Review zu PR #1312 wies nach, dass ``seed_doc:
+DOCUMENT_ID#chunk:CHUNK_INDEX`` laut ``report_prompts/sections.py:194-220``
+eine von exakt zwei dokumentierten, gültigen ``seed_anchor``-Formen für
+``<simulated_quote>`` ist — unabhängig vom ``source_kind`` des referenzierten
+Records. Die ``source_kind``-Prüfung hätte also korrekt befolgte, contract-
+konforme Modellausgaben verworfen. Zurückgenommen; #1300 bleibt in diesem
+Punkt offen und braucht eine Contract-Entscheidung zuerst (AGENTS.md:
+Contracts-first), nicht einen Validierungs-Fix im Consumer.
 """
 
 from __future__ import annotations

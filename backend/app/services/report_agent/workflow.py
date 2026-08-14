@@ -21,6 +21,8 @@ from .manager import ReportManager
 from .output_contract import (
     FinalContentRejected,
     apply_degradation_downgrade,
+    apply_quote_validation_downgrade,
+    apply_report_v3_validation_downgrade,
     is_fallback_content,
     resolve_report_status,
     sanitize_final_content,
@@ -898,6 +900,7 @@ def _build_partial_report(
     outline: Any,
     agent: Any,
     progress_callback: Optional[Callable[[str, int, str], None]],
+    quote_validation_failed_section_indices: Optional[List[int]] = None,
 ) -> "Report":
     """Finalisiert einen Teil-Report nach kooperativem Cancel.
 
@@ -912,6 +915,14 @@ def _build_partial_report(
     cancelled_at = datetime.now().isoformat()
     report.markdown_content = ReportManager.assemble_full_report(report_id, outline)
     report.status = ReportStatus.COMPLETED
+    # Issue #1299 (Review-Finding Codex): eine bereits vor dem Cancel
+    # erfolglos gebliebene Zitatpruefung (Repair-Retry ausgeschoepft) darf
+    # den Teil-Report nicht unbemerkt als COMPLETED ausweisen — sonst
+    # verschwindet das Signal beim naechsten Cancel genauso wie es der
+    # Normalpfad ohne diesen Aufruf vermeidet.
+    report.status = apply_quote_validation_downgrade(
+        report.status, quote_validation_failed_section_indices or []
+    )
     report.completed_at = cancelled_at
 
     ReportManager.save_report(report)
@@ -1096,6 +1107,9 @@ def generate_report(
         # P0-7: Abschnitte, deren Generierung fehlgeschlagen ist. Eine
         # fehlgeschlagene Pflichtsection macht den Report INCOMPLETE.
         failed_section_indices: List[int] = []
+        # Issue #1299: Abschnitte, deren Zitatprüfung (inkl. Repair-Retry)
+        # erfolglos blieb — macht den Report ebenfalls höchstens INCOMPLETE.
+        quote_validation_failed_section_indices: List[int] = []
         existing_sections = {item["section_index"]: item["content"] for item in ReportManager.get_generated_sections(report_id)}
         for section_info in ReportManager.get_generated_sections(report_id):
             title = outline.sections[section_info["section_index"] - 1].title if outline.sections and section_info["section_index"] <= len(outline.sections) else ""
@@ -1134,6 +1148,7 @@ def generate_report(
                     outline=outline,
                     agent=agent,
                     progress_callback=progress_callback,
+                    quote_validation_failed_section_indices=quote_validation_failed_section_indices,
                 )
             section_num = i + 1
             result: SectionResult = process_section(
@@ -1143,6 +1158,8 @@ def generate_report(
                 continue
             if result.failed:
                 failed_section_indices.append(section_num)
+            if result.quote_validation_failed:
+                quote_validation_failed_section_indices.append(section_num)
             generated_sections.append(result.markdown)
             completed_section_titles.append(result.title)
             if agent.report_logger:
@@ -1179,6 +1196,14 @@ def generate_report(
             report.status,
             (agent.evidence_map or {}).get("degradation_log") or [],
         )
+        # Issue #1299: eine Section mit erfolglos gebliebener Zitatprüfung
+        # (Repair-Retry ausgeschöpft) darf den Report nicht als COMPLETED
+        # ausweisen — die Zitate darin sind nicht gegen die Evidenzbasis
+        # verifiziert.
+        report.status = apply_quote_validation_downgrade(
+            report.status,
+            quote_validation_failed_section_indices,
+        )
         if failed_section_indices:
             failed_note = (
                 f"{total_sections - len(failed_section_indices)}/{total_sections} "
@@ -1191,6 +1216,36 @@ def generate_report(
         total_time_seconds = (datetime.now() - start_time).total_seconds()
         if agent.report_logger:
             agent.report_logger.log_report_complete(total_sections=total_sections, total_time_seconds=total_time_seconds)
+
+        # Issue #1299 (Review-Finding Codex/CodeRabbit): ``ReportManager.save_report()``
+        # baut ``report-v3.json`` nur wenn ``report.status == COMPLETED`` ist und faengt
+        # einen ``ValidationError`` dabei INTERN ab (kein Artefakt, aber auch kein Signal
+        # an den Aufrufer, siehe ``manager.py::save_report``). Ohne diesen Vorab-Check
+        # erreicht ein frisch fehlgeschlagener ReportV3-Build den Downgrade-Block unten
+        # nie: ``get_report_v3()`` liefert ``None`` (kein Artefakt geschrieben), die
+        # Truthiness-Pruefung dort ueberspringt den gesamten Validierungsblock, und
+        # ``report.status`` bleibt faelschlich ``COMPLETED``.
+        if report.status == ReportStatus.COMPLETED and agent.evidence_map:
+            try:
+                ReportManager.build_report_v3(report, agent.evidence_map, report_mode=report_mode)
+            except ValidationError as val_exc:
+                error_count = len(val_exc.errors())
+                logger.error(
+                    "generate_report: build_report_v3 hat report=%s vor der ersten "
+                    "Persistierung abgelehnt — %d Schema-Verletzung(en). Errors=%s",
+                    report_id,
+                    error_count,
+                    val_exc.errors()[:5],
+                )
+                if not getattr(report, "error", None):
+                    report.error = (
+                        f"Report enthält {error_count} unvollständige Section(s) — "
+                        "LLM-Calls sind fehlgeschlagen. Server-Logs zeigen die "
+                        "betroffenen Felder. Mit gültigem LLM-Profil neu starten."
+                    )
+                report.status = apply_report_v3_validation_downgrade(
+                    report.status, val_exc.errors()
+                )
         ReportManager.save_report(report)
 
         # ========== Red-Team-Review (Slice 5, Issue #497) — vor report_synthesis ==========
@@ -1219,6 +1274,19 @@ def generate_report(
                             "LLM-Calls sind fehlgeschlagen. Server-Logs zeigen die "
                             "betroffenen Felder. Mit gültigem LLM-Profil neu starten."
                         )
+                    # Issue #1299: ein ReportV3, das seinen eigenen Contract
+                    # nicht erfüllt, darf den Report nicht als COMPLETED
+                    # stehen lassen. Der ``save_report`` oben (Zeile ~1209)
+                    # hat bereits mit dem alten Status persistiert — bei einer
+                    # Abstufung hier muss deshalb erneut gespeichert werden,
+                    # sonst weichen persistierter Report und
+                    # terminal_stage/Progress-Message voneinander ab.
+                    previous_status = report.status
+                    report.status = apply_report_v3_validation_downgrade(
+                        report.status, val_exc.errors()
+                    )
+                    if report.status != previous_status:
+                        ReportManager.save_report(report)
                     # Pipeline weiter ohne red_team_review — Report bleibt nutzbar
                     # mit Fallback-Content in den betroffenen Sections.
                     report_v3_obj = None
