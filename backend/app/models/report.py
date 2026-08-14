@@ -147,6 +147,11 @@ class ReportClaim:
     confidence_label: str
     evidence: List[Dict[str, Any]]
     notes: str = ""
+    # Issue #1301: "empirical" (default) matches ClaimType.empirical in
+    # app.contracts.report_contract — kept as str here (not the enum) so
+    # this dataclass stays free of a contracts-layer import, same rationale
+    # as confidence_label.
+    claim_type: str = "empirical"
 
     def to_dict(self) -> Dict[str, Any]:
         score = round(max(0.0, min(1.0, self.confidence_score)), 2)
@@ -161,6 +166,7 @@ class ReportClaim:
             "evidence": self.evidence,
             "evidence_items": self.evidence,
             "notes": self.notes,
+            "claim_type": self.claim_type,
         }
 
 

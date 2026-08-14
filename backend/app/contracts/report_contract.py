@@ -33,6 +33,35 @@ class ConfidenceLabel(str, Enum):
     verified = "verified"
 
 
+class ClaimType(str, Enum):
+    """Issue #1301: unterscheidet, wogegen ein Claim ueberhaupt geprueft
+    werden darf.
+
+    Vorher behandelte die Confidence-Berechnung jeden Claim gleich —
+    Ueberschriften, Empfehlungen und analytische Uebergangssaetze wurden wie
+    empirische Tatsachenbehauptungen gegen den Evidence-Index geprueft und
+    bekamen unangemessen niedrige Confidence, weil sie naturgemaess keine
+    direkte Evidence haben. Default ``empirical`` haelt Bestandsberichte ohne
+    dieses Feld rueckwaertskompatibel (spiegelt ``EvidenceItemModel.
+    source_kind``, das denselben Bestandsschutz-Default-Ansatz nutzt).
+    """
+    empirical = "empirical"
+    analytical = "analytical"
+    recommendation = "recommendation"
+    structural = "structural"
+
+
+#: Claim-Typen, die KEINE direkte Evidence-Bindung brauchen — Ueberschriften,
+#: Uebergaenge und Empfehlungen sind naturgemaess nicht "belegbar" im Sinne
+#: von ADR-0002. Nur ``empirical`` bleibt an ``non_low_claims_need_evidence``
+#: gebunden.
+_CLAIM_TYPES_EXEMPT_FROM_EVIDENCE_CHECK: frozenset = frozenset({
+    ClaimType.analytical,
+    ClaimType.recommendation,
+    ClaimType.structural,
+})
+
+
 class EvidenceType(str, Enum):
     """Übernommen aus report_agent.py — bestehende Typen plus model_generated_inference."""
     graph_fact = "graph_fact"
@@ -392,6 +421,9 @@ class ReportClaimModel(BaseModel):
     evidence: list[EvidenceItemModel] = Field(default_factory=list, max_length=10)
     audit_trail: list[dict[str, Any]] = Field(default_factory=list)
     notes: Optional[str] = None
+    # Issue #1301: Default haelt Bestandsberichte ohne dieses Feld
+    # rueckwaertskompatibel (spiegelt EvidenceItemModel.source_kind).
+    claim_type: ClaimType = ClaimType.empirical
 
     @model_validator(mode="after")
     def non_low_claims_need_evidence(self) -> "ReportClaimModel":
@@ -399,6 +431,12 @@ class ReportClaimModel(BaseModel):
         # nachvollziehbaren Evidence-Anker. Low-Orphans bleiben fuer alte
         # Artefakte lesbar, werden beim Schreiben aber in hypotheses/data_gaps
         # geroutet.
+        # Issue #1301: nicht-empirische Claims (Ueberschriften, Empfehlungen,
+        # analytische Uebergaenge) sind naturgemaess nicht evidence-bindbar —
+        # sie werden von dieser Pruefung ausgenommen statt unbegruendet
+        # abgelehnt oder auf low gedeckelt zu werden.
+        if self.claim_type in _CLAIM_TYPES_EXEMPT_FROM_EVIDENCE_CHECK:
+            return self
         if self.confidence_label != ConfidenceLabel.low and not self.evidence:
             raise ValueError(
                 f"Label '{self.confidence_label.value}' verlangt mindestens "
@@ -534,7 +572,11 @@ class ReportClaimModel(BaseModel):
         # (Codex PR-Review #961 P2). Bisher passte ein seed_only-Claim mit Label
         # medium unbeanstandet — die Regel hing nur am Modellgehorsam. Der
         # Validator ist das Auffangnetz (ADR-0002 Risiko).
+        # Issue #1301: dieselbe Ausnahme wie in non_low_claims_need_evidence —
+        # nicht-empirische Claims sind naturgemaess nicht evidence-bindbar.
         if self.confidence_label != ConfidenceLabel.medium:
+            return self
+        if self.claim_type in _CLAIM_TYPES_EXEMPT_FROM_EVIDENCE_CHECK:
             return self
         has_agent_quote = any(
             e.source_kind == EvidenceSourceKind.agent_quote and e.quote
@@ -566,9 +608,18 @@ class IndexedReportClaimModel(BaseModel):
     evidence: list[ClaimEvidenceBindingModel] = Field(default_factory=list, max_length=10)
     audit_trail: list[dict[str, Any]] = Field(default_factory=list)
     notes: Optional[str] = None
+    # Issue #1301: Default haelt Bestandsberichte ohne dieses Feld
+    # rueckwaertskompatibel — Spiegel von ReportClaimModel.claim_type.
+    claim_type: ClaimType = ClaimType.empirical
 
     @model_validator(mode="after")
     def require_binding_for_non_low_claim(self) -> "IndexedReportClaimModel":
+        # Issue #1301: nicht-empirische Claims (Ueberschriften, Empfehlungen,
+        # analytische Uebergaenge) sind naturgemaess nicht evidence-bindbar —
+        # Spiegel der gleichnamigen Ausnahme in
+        # ReportClaimModel.non_low_claims_need_evidence.
+        if self.claim_type in _CLAIM_TYPES_EXEMPT_FROM_EVIDENCE_CHECK:
+            return self
         if self.confidence_label != ConfidenceLabel.low and not self.evidence:
             raise ValueError(
                 f"Label '{self.confidence_label.value}' verlangt mindestens ein Evidence-Binding."

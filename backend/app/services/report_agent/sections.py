@@ -74,6 +74,51 @@ def is_atomic_claim(text: str) -> bool:
     return any(hint in s.lower() for hint in CLAIM_VERB_HINTS)
 
 
+# Issue #1301: Heuristische Claim-Typ-Klassifikation. ``is_claim_candidate``
+# filtert Ueberschriften und alleinstehende Bold-Marker bereits VOR dem
+# Erreichen dieser Funktion aus — ``structural`` bleibt hier trotzdem als
+# Sicherheitsnetz erhalten, falls ein Chunk diesen Filter umgeht (z. B. ein
+# Markdown-Heading, das mittig in einem laengeren Abschnitt auftaucht statt
+# am Zeilenanfang eines eigenen Chunks). Empfehlungs- und Analyse-Cues sind
+# bewusst deutsch/DACH-Voice-konform gehalten (kein Forecast-/Prediction-
+# Vokabular, siehe docs/glossary.md).
+_RECOMMENDATION_HINTS = (
+    "empfehlen", "empfiehlt", "empfehlenswert", "sollte", "sollten",
+    "wird geraten", "ist ratsam", "raten wir", "rät ",
+)
+_ANALYTICAL_HINTS = (
+    "zusammenfassend", "insgesamt lässt sich", "insgesamt zeigt",
+    "daher lässt sich", "dies deutet darauf hin", "das deutet darauf hin",
+    "folglich", "im gesamtbild", "lässt sich ableiten", "zeigt sich damit",
+)
+
+
+def classify_claim_type(text: str) -> str:
+    """Ordnet einen Claim-Chunk einer :class:`ClaimType`-Kategorie zu.
+
+    Heuristik, keine LLM-Klassifikation (Issue #1301): eine Ueberschrift oder
+    ein reiner Empfehlungs-/Analyse-Satz ist naturgemaess nicht gegen den
+    Evidence-Index pruefbar. ``empirical`` bleibt der Default — nur explizite
+    Cues stufen auf die anderen drei Typen um. Gibt den Wert als ``str``
+    zurueck (nicht das ``ClaimType``-Enum), damit dieses Service-Modul nicht
+    von ``app.contracts`` abhaengt — dieselbe Konvention wie
+    ``confidence_label`` (str statt Enum) im ``ReportClaim``-Dataclass.
+    """
+    stripped = (text or "").strip()
+    lowered = stripped.lower()
+    if not stripped:
+        return "empirical"
+    if stripped.startswith("#") or (
+        stripped.startswith("**") and stripped.endswith("**") and stripped.count("**") == 2
+    ):
+        return "structural"
+    if any(hint in lowered for hint in _RECOMMENDATION_HINTS):
+        return "recommendation"
+    if any(hint in lowered for hint in _ANALYTICAL_HINTS):
+        return "analytical"
+    return "empirical"
+
+
 def is_claim_candidate(text: str) -> bool:
     stripped = (text or "").strip()
     if not stripped:

@@ -36,6 +36,7 @@ from .sections import (
     attach_provenance,
     atomize_claim_chunk,
     build_source_id_anchor,
+    classify_claim_type,
     is_atomic_claim,
     is_claim_candidate,
     sample_actions_timeseries,
@@ -783,6 +784,7 @@ class ReportAgent:
                 confidence_score=confidence_score,
                 confidence_label=confidence_label,
                 notes="Section-chunk level evidence mapping (schema_version 3).",
+                claim_type=classify_claim_type(chunk),
             ).to_dict()
             claim_dict["audit_trail"] = audit_trail
             claims.append(claim_dict)
