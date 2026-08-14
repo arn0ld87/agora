@@ -141,7 +141,7 @@ def test_expand_entities_empty_targets_returns_empty_list():
 
 
 def test_apply_persona_floor_to_entities_round_robin_to_contract_minimum():
-    """P1.2: Default-Pfad erzeugt mindestens 50 Profile aus kleinem Entity-Pool."""
+    """P1.2: Default-Pfad erzeugt mindestens MIN_PERSONA_TABLE_ROWS Profile aus kleinem Entity-Pool."""
     from app.services.prepare_service import _apply_persona_floor_to_entities
     from app.services.report_agent import MIN_PERSONA_TABLE_ROWS
 
@@ -157,7 +157,7 @@ def test_apply_persona_floor_to_entities_round_robin_to_contract_minimum():
 
 
 def test_apply_persona_floor_to_quota_plan_preserves_total_and_segments():
-    """P1.2: Kleine Quota-Pläne werden proportional auf 50 angehoben."""
+    """P1.2: Kleine Quota-Pläne werden proportional auf MIN_PERSONA_TABLE_ROWS angehoben."""
     from app.services.prepare_service import _apply_persona_floor_to_quota_plan
     from app.services.report_agent import MIN_PERSONA_TABLE_ROWS
 
@@ -168,4 +168,4 @@ def test_apply_persona_floor_to_quota_plan_preserves_total_and_segments():
     assert adjusted is not None
     assert adjusted.total == MIN_PERSONA_TABLE_ROWS
     assert sum(adjusted.targets.values()) == MIN_PERSONA_TABLE_ROWS
-    assert adjusted.targets == {"kmu": 33, "admin": 17}
+    assert adjusted.targets == {"kmu": 13, "admin": 7}

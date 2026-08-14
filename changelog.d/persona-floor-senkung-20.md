@@ -1,0 +1,3 @@
+### Changed (Persona-Floor 50 → 20 — 2026-08-12)
+
+- **`MIN_PERSONA_TABLE_ROWS` von 50 auf 20 gesenkt:** praktische Läufe mit kleineren DACH-Seed-Dokumenten erreichen nach typbasierter Vorfilterung, Dedup und LLM-seitiger Eignungsprüfung häufig nur ~40 elige Personas und scheiterten am harten 50er-Report-Gate (`Persona-Mindestanzahl nicht erreicht: 42/50`), obwohl der Report inhaltlich erstellbar war. 20 hält eine statistisch noch belastbare Untergrenze für die Persona-Tabelle, lässt dokumenttreue Runs aber durch. Der Eval-Snapshot-Pin (`test_min_persona_table_rows_pinned_to_*`) und der Block-Test (`12/20`) wurden mitgeändert; ein kleineres `max_agents` kann den Floor weiterhin nur senken (`min(floor, MIN_PERSONA_TABLE_ROWS)`), nie über den Contract heben.
