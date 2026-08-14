@@ -258,6 +258,51 @@ def _remap_and_merge_bindings(
     return list(merged.values())
 
 
+def strip_seed_doc_anchor_from_agent_quote_records(raw: Optional[dict]) -> Optional[dict]:
+    """Issue #1300 (Review-Finding Codex, P1): Bestandsschutz fuer die Producer-
+    Boundary-Bereinigung in ``report_agent.evidence.register_evidence_record``.
+
+    Diese entfernt einen erfundenen ``seed_doc:``-Anker auf Interview-Evidence
+    nur beim NEUEN Schreiben. Vor dieser Aenderung persistierte Reports mit der
+    Kombination ``source_kind=agent_quote`` + ``seed_doc:``-Anker liegen mit
+    genau dieser Kombination auf Platte — ``EvidenceRecordModel.
+    agent_quote_rejects_seed_doc_anchor`` lehnt sie beim naechsten Lesen mit
+    einem harten ``ValidationError`` ab. Ohne diese Migration wuerde
+    ``GET /api/report/<id>/evidence`` fuer jeden betroffenen Bestands-Report
+    mit HTTP 422 antworten und JSON/ZIP/CSV-Export die Evidence-Map stumm
+    auslassen (vgl. die Begruendung fuer ``demote_unanchored_seed_corpus_records``
+    oben — derselbe Fehlermodus, anderer Validator).
+
+    Im Unterschied zu ``demote_unanchored_seed_corpus_records`` bleibt
+    ``source_kind`` unveraendert (``agent_quote`` bleibt ``agent_quote``) —
+    ``build_evidence_id`` haengt nur an ``scope_id``, ``source_kind`` und
+    ``producer_key``, keiner davon aendert sich hier. Die ``evidence_id``
+    bleibt stabil, ein Re-Key wie dort ist nicht noetig.
+
+    Idempotent: ein Record ohne ``seed_doc:``-Anker bleibt unangetastet.
+    Mutiert das uebergebene Dict; gibt ``None`` zurueck, wenn ``raw`` None ist.
+    """
+    if raw is None:
+        return None
+
+    from ..contracts.report_contract import SEED_DOC_ANCHOR_PREFIX
+
+    evidence_index = raw.get("evidence_index")
+    if not isinstance(evidence_index, dict) or not evidence_index:
+        return raw
+
+    for record in evidence_index.values():
+        if not isinstance(record, dict):
+            continue
+        if (
+            record.get("source_kind") == "agent_quote"
+            and str(record.get("source_id_anchor") or "").startswith(SEED_DOC_ANCHOR_PREFIX)
+        ):
+            record.pop("source_id_anchor", None)
+
+    return raw
+
+
 def demote_unanchored_seed_corpus_records(
     raw: Optional[dict],
     *,
@@ -464,8 +509,15 @@ def normalize_persisted_evidence_map(
         # kann einen medium-Claim tragen, der danach nicht mehr agent-grounded
         # ist — der muss im selben Durchgang auf low fallen, sonst scheitert
         # das Laden am medium-Validator (HTTP 422 statt ehrlicher Abstufung).
+        # Issue #1300: der seed_doc-Anker-Strip auf agent_quote-Records ist von
+        # der Seed-Corpus-Abstufung unabhaengig (disjunkte source_kind-Werte,
+        # keine ID-Aenderung) — Reihenfolge relativ zu den beiden Schritten
+        # unten ist beliebig, muss aber vor der Contract-Validierung im
+        # Aufrufer liegen.
         return migrate_medium_seed_only_claims_to_low(
-            demote_unanchored_seed_corpus_records(raw, remap_out=remap_out)
+            demote_unanchored_seed_corpus_records(
+                strip_seed_doc_anchor_from_agent_quote_records(raw), remap_out=remap_out
+            )
         )
     legacy = migrate_medium_seed_only_claims_to_low(
         migrate_legacy_claims_to_anchored(migrate_v1_to_v2(raw))
@@ -475,7 +527,10 @@ def normalize_persisted_evidence_map(
     # medium-Prüfung sieht dann Records statt Legacy-Items.
     return migrate_medium_seed_only_claims_to_low(
         demote_unanchored_seed_corpus_records(
-            migrate_evidence_map_v2_to_v3(legacy), remap_out=remap_out
+            strip_seed_doc_anchor_from_agent_quote_records(
+                migrate_evidence_map_v2_to_v3(legacy)
+            ),
+            remap_out=remap_out,
         )
     )
 

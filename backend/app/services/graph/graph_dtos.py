@@ -399,8 +399,18 @@ class InterviewResult:
             "interviewed_count": self.interviewed_count
         }
 
-    def to_text(self) -> str:
-        """Convert to detailed text format for LLM understanding and report reference"""
+    def to_text(self, evidence_ids: Optional[Dict[int, str]] = None) -> str:
+        """Convert to detailed text format for LLM understanding and report reference
+
+        Args:
+            evidence_ids: optionale Zuordnung 0-basierter Index in
+                ``self.interviews`` -> bereits vergebene ``ev_``-Evidence-ID
+                (Issue #1300). Ohne die ID im gerenderten Text hat das Modell
+                keine Moeglichkeit, ein Interview-Zitat gueltig zu verankern —
+                die ID entsteht erst beim Registrieren, nach dem urspruenglichen
+                Rendern. Aufrufer, die bereits registriert haben, rendern
+                dadurch ein zweites Mal mit angereichertem Text.
+        """
         text_parts = [
             "## Deep Interview Report",
             f"**Interview Topic:** {self.interview_topic}",
@@ -415,6 +425,9 @@ class InterviewResult:
             for i, interview in enumerate(self.interviews, 1):
                 text_parts.append(f"\n#### Interview #{i}: {interview.agent_name}")
                 text_parts.append(interview.to_text())
+                evidence_id = (evidence_ids or {}).get(i - 1)
+                if evidence_id:
+                    text_parts.append(f"\n**Evidence ID:** `{evidence_id}`")
                 text_parts.append("\n---")
         else:
             text_parts.append("(No interview records)\n\n---")

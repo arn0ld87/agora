@@ -210,3 +210,13 @@ def test_prompt_positive_example_is_not_an_interview_with_seed_doc_anchor() -> N
         "Das Positivbeispiel zeigt weiterhin einen seed_doc:-Anker an einer "
         "Persona-Aussage — die Kombination, die Issue #1300 verbietet."
     )
+    # CodeRabbit-Finding (PR #1313): ein Platzhalter wie
+    # "EVIDENCE_ID_OF_INTERVIEW_ANSWER" besteht ``test_prompt_evidence_id_literals_
+    # match_the_contract`` nur, weil er nicht mit "ev_" beginnt — er zeigt dem
+    # Modell aber keine formgültige ID zum Nachahmen. Das Positivbeispiel muss
+    # selbst einen ``ev_``-Anker mit genau 32 Hex-Zeichen tragen.
+    assert re.search(r'seed_anchor="ev_[0-9a-f]{32}"', example.group(0)), (
+        "Das Positivbeispiel zeigt keinen formgültigen ev_-Anker "
+        "(ev_ + 32 Hex-Zeichen) — ein Modell, das den Platzhalter nachahmt, "
+        "erzeugt keine auflösbare Evidence-ID."
+    )

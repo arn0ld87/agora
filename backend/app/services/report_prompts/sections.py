@@ -208,7 +208,10 @@ FIX:   Set confidence_label="low" with source_kind="seed_corpus" and
            interview is simulation output, not document text: anchor it via
            form (a) with the evidence ID of the interview result. Pointing
            an interview statement at a seed_doc reference invents a source
-           the run never produced and is rejected.
+           the run never produced and is rejected. The interview_agents
+           tool result prints this ID directly beneath each answer as
+           "**Evidence ID:** `ev_…`" — copy that exact value, never
+           construct one.
      Words in CAPITALS are placeholders and must NOT be copied literally —
      substitute real values that occurred in this run. Never put "<" or ">"
      inside an attribute value: the parser cuts the tag at the first ">",
@@ -221,8 +224,9 @@ FIX:   Set confidence_label="low" with source_kind="seed_corpus" and
      costs the section a retry that cannot succeed.
 
     ✅ Correct shape — persona statement from an interview (substitute the
-    real evidence ID from the interview tool result):
-    <simulated_quote persona_id="persona_03" seed_anchor="EVIDENCE_ID_OF_INTERVIEW_ANSWER">
+    real "Evidence ID:" value printed beneath that answer in the
+    interview_agents tool result — never copy this example ID literally):
+    <simulated_quote persona_id="persona_03" seed_anchor="ev_4f9c2a7b1e6d3850a2c7f1b09e4d6a3c">
     Ich sehe keinen überzeugenden Mehrwert gegenüber bestehenden Angeboten.
     </simulated_quote>
 
