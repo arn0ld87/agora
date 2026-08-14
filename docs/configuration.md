@@ -1,6 +1,6 @@
 # Konfiguration — Umgebungsvariablen
 
-**Status:** Referenz zu Backend `0.9.4` (Stand 11.08.2026, Europe/Berlin). Konkrete Defaults und Beispiele liefert [`.env.example`](../.env.example) — bei Abweichung ist `.env.example` führend. Einstellungen werden über `pydantic-settings` geladen (ADR-0003). Geheimnisse 🔐 niemals committen, in Logs ausgeben oder in Doku schreiben — Secrets liegen im Vaultwarden bzw. im lokalen Secret Store.
+**Status:** Referenz zu Backend `0.9.5` (Stand 14.08.2026, Europe/Berlin). Konkrete Defaults und Beispiele liefert [`.env.example`](../.env.example) — bei Abweichung ist `.env.example` führend. Geheimnisse 🔐 niemals committen, in Logs ausgeben oder in Doku schreiben.
 
 Quelle für die Variablennamen ist der Code (Backend `os.getenv` / `pydantic-settings` `validation_alias`). Bei neuen Variablen: hier und in `.env.example` mit-pflegen.
 

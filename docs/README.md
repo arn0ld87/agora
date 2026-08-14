@@ -24,7 +24,7 @@ Weitere Einstiegspunkte:
 
 ## Architektur und Verträge
 
-- [`architecture.md`](architecture.md) — **Zielarchitektur** (verfasst 04/2026, Migrationspfad umgesetzt, zuletzt gegen den Code geprüft 11.08.2026). Kein Istzustandsbericht — dafür [`STATUS.md`](STATUS.md)
+- [`architecture.md`](architecture.md) — **Zielarchitektur** (verfasst 04/2026, Migrationspfad umgesetzt, zuletzt gegen den Code geprüft 14.08.2026). Kein Istzustandsbericht — dafür [`STATUS.md`](STATUS.md)
 - [`runbooks/architecture-layers.md`](runbooks/architecture-layers.md) — Schichtenkarte Layer 0–10
 - [`api.md`](api.md) — HTTP-Endpunkte nach Domänen (Übersicht)
 - [`api-contracts.md`](api-contracts.md) — Response-Envelopes, Fehlercodes, Schema-Tests

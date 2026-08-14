@@ -1,6 +1,6 @@
 # Agora Roadmap
 
-**Stand:** 11.08.2026  
+**Stand:** 14.08.2026  
 **Aktuelle Produktversion:** `0.9.5` Stability Beta
 
 Diese Datei beschreibt ausschließlich die strategische Reihenfolge der nächsten Releases. Konkrete Arbeitspakete, Akzeptanzkriterien und Fortschritt werden als GitHub Issues gepflegt.
@@ -101,7 +101,7 @@ Der Version-Cut auf `0.9.0` ist am 06.08.2026 erfolgt, nachdem Deep-Audit-Stabil
 
 ### Dokumentation
 
-- [x] README, STATUS, ROADMAP und Issues widersprechen sich nicht (zuletzt verifiziert 11.08.2026 — laufend bei jeder größeren Änderung neu zu prüfen)
+- [x] README, STATUS, ROADMAP und Issues widersprechen sich nicht (zuletzt verifiziert 14.08.2026 — laufend bei jeder größeren Änderung neu zu prüfen)
 - [ ] `docs/STATUS.md` wird automatisch erzeugt oder CI-geprüft — `scripts/sync-status.sh` regeneriert nur die markierten Versions-/Test-Blöcke, nicht die Fließtext-Abschnitte; die STATUS-Sync-Prüfung läuft ausschließlich lokal über `pre-push-gate.sh schemas`. Der CI-Job dafür wurde am 17.05.2026 entfernt (`.github/workflows/ci.yml`, Kommentar „2026-05-17 entfernt: status-sync (MAI-16)"), `docs/STATUS.md` bleibt laut diesem Kommentar bewusst manuell pflegbar
 - [ ] historische Pläne liegen ausschließlich im Archiv
 - [ ] Installations- und Betriebsanleitung sind gegen einen frischen Host geprüft

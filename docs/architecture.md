@@ -1,7 +1,7 @@
 # Agora — Zielarchitektur
 
 **Verfasst:** 2026-04-22 — abgeleitet aus dem Refactoring-Produkt-Audit und dem priorisierten Refactoring-Backlog jener Woche. Beide Quelldateien existieren nicht mehr im Repository; historische Planung liegt unter [`archive/planning/`](archive/planning/).  
-**Zuletzt gegen den Code geprüft:** 2026-08-11 (`b72a443b`, Produktversion `0.9.4`)
+**Zuletzt gegen den Code geprüft:** 2026-08-14 (`39b65297`, Produktversion `0.9.5`)
 
 > [!IMPORTANT]
 > **Dies ist ein Zielbild, kein Istzustandsbericht.** Es beschreibt, wohin die Architektur ab April 2026 entwickelt werden sollte, und dient weiterhin als Referenz für Modulgrenzen, Schnitt- und Vertragsentscheidungen.

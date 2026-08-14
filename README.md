@@ -269,8 +269,8 @@ bun run dev
 
 | Area | Status |
 |---|---|
-| Backend | more than 4,700 collected unit and contract tests |
-| Frontend | more than 180 test files |
+| Backend | more than 5,300 collected tests (`uv run pytest --co -q`) |
+| Frontend | 196 test files (`bun run test`) |
 | E2E | 20 green scenarios, including 6 mandatory core smokes |
 | Main branch | protected by 17 required status checks |
 | Product frontend | Vue-v4 routes are the only shipped UI |
