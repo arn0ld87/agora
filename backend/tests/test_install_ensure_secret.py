@@ -57,7 +57,7 @@ class TestEnsureSecret:
         """Key der ganz fehlt wird am Ende angehängt."""
         result = _run_ensure_secret("FOO=bar\nBAZ=qux\n")
         assert "TEST_SECRET=" in result
-        lines = [l for l in result.splitlines() if l.startswith("TEST_SECRET=")]
+        lines = [line for line in result.splitlines() if line.startswith("TEST_SECRET=")]
         assert len(lines) == 1
         assert len(lines[0].split("=", 1)[1].strip()) > 10
 
