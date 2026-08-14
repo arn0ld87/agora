@@ -54,18 +54,24 @@ Die Demo zeigt:
 
 ## Referenzlauf
 
-Der aktuelle, kritisch dokumentierte End-to-End-Lauf untersucht erneut die **Domainmigration `alexle135.de` → `alex-schneider.dev`** über **20 vollständig abgeschlossene Simulationsrunden** nach dem 0.9.x-Hardening von Evidence und Provenance.
+Die aktuelle Referenz ist **Referenzlauf 6: AURORA**, ein Entscheidungsbericht für den fiktiven Städtischen Klinikverbund Falkenbrück zum geplanten Rollout des KI-gestützten Triage- und Dokumentationssystems **Nexora Triage Assist**. Der Report wurde am **14.08.2026** als `report_3c594fcc7613` aus der bereits abgeschlossenen Simulation `sim_4245ff3d7b23` erzeugt.
 
-Der Report bindet **46 Claim-Zeilen** (22 eindeutige gerenderte IDs) und enthält **141 Hypothesen** sowie **133 Data Gaps**. Anders als in früheren Läufen ist die dominante Fehlerklasse nicht mehr fehlendes Evidence Binding. Der Lauf legt die nächste Trust-Grenze offen: Agora kann eine Aussage an ein reales Seed-Fragment binden und trotzdem verlieren, ob dieses Fragment selbst einen dokumentierten Fakt, eine unbelegte Behauptung, eine Hypothese, einen Widerspruch oder eine synthetische Aussage darstellt. Im adversarialen Seed wird dadurch eine ausdrücklich unbelegte SEO-Aussage zu einem validierten Welt-Claim hochgestuft, während eine andere Section dieselbe Aussage korrekt als unbelegt bezeichnet.
+Dieser Lauf ist besonders nützlich, weil **die Simulation unverändert blieb und nur die Report-Pipeline erneut ausgeführt wurde**. Er dient damit als Reporter-Referenz statt als Vergleich zweier unterschiedlicher stochastischer Simulationen. Die überarbeitete Pipeline verkürzte die End-to-End-Reportgenerierung von ungefähr **17:52 min auf 8:19 min** und nutzt gezielte `interview_agents`-Aufrufe über alle sechs Reportabschnitte hinweg.
 
-Derselbe Lauf macht außerdem eine Fremdrollen-Interviewantwort zum einzigen `medium`-Claim, rendert Seed-only-Claims als `Simulationskonsens` und lässt weiterhin einen Nicht-Stakeholder (`Fachblog`) in den Social-Trace. Gleichzeitig fängt der Gate mehrere unbelegte numerische Zielwerte korrekt ab und schwächt die Aussage, Option B sei die einzig tragfähige Strategie.
+Der Report empfiehlt einen **konditionierten, gestaffelten Rollout ab Falkenbrück-Mitte** und koppelt die Ausweitung an Sicherheits-, Schulungs-, Mitbestimmungs- und Fallback-Bedingungen. Im Evidence Inspector lassen sich Claims, Hypothesen, Confidence und die jeweils gebundenen Evidence Records direkt neben dem Report prüfen.
+
+![AURORA-Referenzreport — Sections, Claims und Hypothesen im Evidence Inspector](./docs/assets/screenshots/reference-runs/2026-08-14-aurora/01-evidence-inspector.webp)
+
+Die zweite Ansicht zeigt die Verbindung zwischen einem ausgewählten Claim und konkreten `agent_interview`-Evidence-Cards. Damit wird sichtbar, dass die simulierten Stakeholder während der Reportgenerierung erneut gezielt befragt werden und ihre Antworten als Evidence inspizierbar bleiben.
+
+![AURORA-Referenzreport — Agenteninterviews als Evidence](./docs/assets/screenshots/reference-runs/2026-08-14-aurora/02-agent-interviews.webp)
 
 > [!NOTE]
-> Dies ist die aktuelle **Trust-Pipeline-Referenz**, keine Hochglanz-Demo und kein Nachweis prädiktiver Validität. Der vorherige Lernassistenten-Lauf bleibt die reichhaltigere Referenz für Simulationsdynamik: 665 Aktionen und sechs Cluster gegenüber 109 Interaktionen und drei Clustern hier.
+> Dies ist bewusst ein **Referenzlauf und keine Hochglanz-Demo**. Der Lauf zeigt reale Fortschritte bei Laufzeit, Interviewintegration und Evidence Gating, bewahrt aber bekannte Trust-Grenzen als Regressionstestfälle: Der dokumentierte Seed-Fakt zu **38 Fällen mit abweichender Dringlichkeitseinstufung** wird in einzelnen Sections weiterhin fälschlich als nicht ausreichend zahlenbelegt herabgestuft; einige simulierte Zitate tragen noch `seed_doc:seed_aurora#chunk:0`; stark passende `SUPPORTED` Evidence kann `low` Confidence behalten; und ein ReportV3-Contractfehler kann auftreten, während der Gesamtauftrag dennoch `completed` erreicht. Der Lauf ist deshalb eine **beobachtbare Reporter-Referenz**, aber ohne die fehlenden Laufartefakte kein vollständig reproduzierbares Fresh-Checkout-Replay.
 
-**[→ Referenzlauf 5 lesen](./docs/reference-runs/2026-08-12-domain-migration-20-runden/README.de.md)** · **[English](./docs/reference-runs/2026-08-12-domain-migration-20-runden/README.md)**
+**[→ Vollständige Notizen zu Referenzlauf 6](./docs/reference-runs/2026-08-14-aurora-report/README.de.md)** · **[English](./docs/reference-runs/2026-08-14-aurora-report/README.md)**
 
-Frühere Läufe: [Referenzlauf 4](./docs/reference-runs/2026-08-11-ki-lernassistent-20-runden/README.de.md) (erster Evidence-Binding-at-Scale-Lauf; reichhaltigere Simulationsdynamik) · [Lauf 3](./docs/reference-runs/2026-08-11-ki-lernassistent/README.md) · [Lauf 2](./docs/reference-runs/2026-08-09-domain-migration-v2/README.md) · [Lauf 1](./docs/reference-runs/2026-08-09-domain-migration/README.md)
+Frühere Läufe: [Referenzlauf 5](./docs/reference-runs/2026-08-12-domain-migration-20-runden/README.de.md) (Trust-Pipeline-Referenz) · [Referenzlauf 4](./docs/reference-runs/2026-08-11-ki-lernassistent-20-runden/README.de.md) (Evidence Binding at Scale; reichhaltigere Simulationsdynamik) · [Lauf 3](./docs/reference-runs/2026-08-11-ki-lernassistent/README.md) · [Lauf 2](./docs/reference-runs/2026-08-09-domain-migration-v2/README.md) · [Lauf 1](./docs/reference-runs/2026-08-09-domain-migration/README.md)
 
 ---
 
