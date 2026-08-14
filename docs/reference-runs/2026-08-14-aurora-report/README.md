@@ -1,3 +1,7 @@
+<p align="center">
+  <strong>English</strong> · <a href="./README.de.md">Deutsch</a>
+</p>
+
 # Reference run 6 — AURORA rollout decision report
 
 **Date:** 2026-08-14  
@@ -23,15 +27,15 @@ The resulting recommendation is a **conditioned, staged rollout** beginning at F
 
 ## Evidence Inspector
 
-![AURORA report with Evidence Inspector, section list, claims and hypotheses](../../assets/screenshots/reference-runs/2026-08-14-aurora/01-evidence-inspector.jpg)
+![AURORA report with Evidence Inspector, section list, claims and hypotheses](../../assets/screenshots/reference-runs/2026-08-14-aurora/01-evidence-inspector.png)
 
-The inspector is intentionally shown in the reference material because the report is not only evaluated by its prose. Claims and hypotheses are inspectable alongside the evidence records used by the report pipeline.
+The screenshot is intentionally cropped to the inspector so claim text remains readable at normal GitHub README width. The report is not evaluated only by its prose: claims and hypotheses can be inspected alongside the evidence records used by the report pipeline.
 
 ## Agent interviews as evidence
 
-![AURORA report with simulated persona quote and agent interview evidence cards](../../assets/screenshots/reference-runs/2026-08-14-aurora/02-agent-interviews.jpg)
+![AURORA report with agent-interview evidence cards](../../assets/screenshots/reference-runs/2026-08-14-aurora/02-agent-interviews.png)
 
-The second screenshot shows the connection between generated report prose, a simulated persona statement and `agent_interview` evidence records. This is the part of the workflow that distinguishes the report from a document-only RAG summary.
+The second crop focuses on the selected claim and its `agent_interview` evidence records. This is the part of the workflow that distinguishes the report from a document-only RAG summary.
 
 ## Why this is a reference run, not a showcase
 
@@ -45,11 +49,11 @@ Known limitations visible in the artifact include:
 - the ReportV3 artifact can still fail validation while the overall report task reaches a completed state,
 - simulation-network metrics such as cluster/bridge structure are present in the evidence data but are underused in the final prose.
 
-Those failures are part of the reason this run is useful. It is a reproducible regression target for evidence binding, interview provenance, confidence calibration and report-completion semantics.
+Those failures are part of the reason this run is useful. It is an **observational reporter reference and regression case**, not a fresh-checkout replay fixture. The repository currently does **not** contain the complete AURORA simulation snapshot, report artifacts, model-response recording and invocation data required to reproduce this exact run from repository state alone.
 
 ## Recommended regression checks
 
-Future report-pipeline changes should be tested against this run and verify at least:
+When the original AURORA run artifacts are available, future report-pipeline changes should compare against this case and verify at least:
 
 1. the `38 cases` seed fact is bound as supported evidence wherever the claim does not overreach the source;
 2. simulated persona quotes point to concrete `agent_interview` evidence rather than a generic seed anchor;
