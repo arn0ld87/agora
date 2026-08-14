@@ -261,6 +261,13 @@ def test_generate_report_no_cancel_runs_all_sections(tmp_path):
         mock_rm.save_section.return_value = None
         mock_rm.assemble_full_report.return_value = "## Section 1\n## Section 2\n## Section 3"
         mock_rm._write_json_atomic.side_effect = lambda path, data: None
+        # Ohne diesen Mock liefert der unkonfigurierte MagicMock-Attribut-Zugriff
+        # ein truthy MagicMock-Objekt zurueck. #1312 fuegte einen Nachvalidierungs-
+        # block ein, der genau dieses Ergebnis an ReportV3.model_validate() reicht
+        # (workflow.py ~L1257) — das schlaegt fehl und stuft den Status faelschlich
+        # auf INCOMPLETE ab, obwohl kein Report-Artefakt existiert (kein reales
+        # ReportV3-Schema-Problem, nur ein unkonfigurierter Mock).
+        mock_rm.get_report_v3.return_value = None
 
         with patch("app.services.report_agent.workflow.EvidenceMapModel") as mock_em:
             mock_em.model_validate.return_value = MagicMock(

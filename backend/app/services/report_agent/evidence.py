@@ -8,6 +8,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from pydantic import ValidationError
 
 from ...contracts import EvidenceRecordModel
+from ...contracts.report_contract import SEED_DOC_ANCHOR_PREFIX
 from ..evidence_identity import build_evidence_id
 from ..evidence_migrations import normalize_persisted_evidence_map
 from .schemas import CURRENT_SCHEMA_VERSION, EvidenceMapModel
@@ -184,6 +185,19 @@ def register_evidence_record(
         "producer_key": producer_key,
         "source_kind": source_kind,
     })
+    # Issue #1300: Ein seed_doc:-Anker auf Interview-Evidence ist eine
+    # erfundene Dokumentherkunft — der Contract-Validator
+    # ``agent_quote_rejects_seed_doc_anchor`` lehnt sie hart ab. An dieser
+    # Producer-Boundary wird sie stattdessen entfernt: das Interview-Item
+    # behält seine ev_-Identität und persona_stakeholder_group, statt als
+    # ganzer Record verloren zu gehen (dieselbe Defensive-Linie wie
+    # ``_filter_placeholder_items``). Der Schreibpfad für echte
+    # Dokumentfakten (``_graph_fact_item`` -> seed_corpus) bleibt unberührt.
+    if (
+        source_kind == "agent_quote"
+        and str(payload.get("source_id_anchor") or "").startswith(SEED_DOC_ANCHOR_PREFIX)
+    ):
+        payload.pop("source_id_anchor", None)
     record = EvidenceRecordModel.model_validate(payload).model_dump(mode="json")
     evidence_index = evidence_map.setdefault("evidence_index", {})
     existing = evidence_index.get(record["evidence_id"])

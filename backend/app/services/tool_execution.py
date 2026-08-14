@@ -47,7 +47,7 @@ def execute_tool(
     graph_id: str,
     simulation_id: Optional[str],
     simulation_requirement: str,
-    record_evidence: Optional[Callable[[str, Dict[str, Any], Any, str, int], None]] = None,
+    record_evidence: Optional[Callable[[str, Dict[str, Any], Any, str, int], Optional[Dict[int, str]]]] = None,
     section_index: int = 0,
 ) -> str:
     """Dispatcht einen Tool-Aufruf und liefert das gerenderte Resultat als String.
@@ -63,7 +63,11 @@ def execute_tool(
         graph_id, simulation_id, simulation_requirement: aktive Run-Identifier.
         record_evidence: optionaler Callback, der nach erfolgreicher Ausführung
             ``(tool_name, parameters, structured_result, rendered_text, section_index)``
-            entgegennimmt. Bei ``None`` wird nichts geloggt.
+            entgegennimmt. Bei ``None`` wird nichts geloggt. Für
+            ``interview_agents`` liefert der Callback optional eine
+            ``{0-basierter Interview-Index: evidence_id}``-Zuordnung zurück
+            (Issue #1300) — die IDs entstehen erst beim Registrieren, danach
+            wird der Interview-Text damit angereichert neu gerendert.
         section_index: Index der aktuellen Report-Section, wird an den
             Evidence-Callback weitergereicht.
 
@@ -205,13 +209,21 @@ def execute_tool(
             )
 
         if record_evidence is not None:
-            record_evidence(
+            recorded_evidence_ids = record_evidence(
                 tool_name,
                 parameters,
                 structured_result,
                 rendered,
                 section_index,
             )
+            # Issue #1300 (Review-Finding Codex, P1): die ``ev_``-ID einer
+            # Interviewantwort entsteht erst beim Registrieren oben — der
+            # ReACT-Loop sieht sonst nur den zuvor gerenderten Text ohne ID
+            # und kann ein Zitat daraus nie gueltig verankern. Der zweite
+            # ``to_text()``-Aufruf reichert das bereits Registrierte nur mit
+            # der jetzt bekannten ID an, ohne erneut zu registrieren.
+            if tool_name == "interview_agents" and recorded_evidence_ids:
+                rendered = structured_result.to_text(evidence_ids=recorded_evidence_ids)
         return rendered
 
     except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally

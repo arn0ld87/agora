@@ -242,11 +242,11 @@ class ReportAgent:
     def _truncate(self, text: str, limit: int = 300) -> str:
         return truncate_text(text, limit)
 
-    def _record_evidence_item(self, item: Dict[str, Any]) -> None:
+    def _record_evidence_item(self, item: Dict[str, Any]) -> Optional[str]:
         enriched = attach_provenance(dict(item))
         if self.evidence_map is None:
             self._active_section_unresolved_evidence.append(enriched)
-            return
+            return None
         try:
             record = register_evidence_record(
                 self.evidence_map,
@@ -263,14 +263,15 @@ class ReportAgent:
                 enriched.get("type"), len(exc.errors()),
             )
             self._active_section_unresolved_evidence.append(enriched)
-            return
+            return None
         if record is None:
             self._active_section_unresolved_evidence.append(enriched)
-            return
+            return None
         self._active_section_evidence = record_evidence_item(
             self._active_section_evidence,
             record,
         )
+        return record.get("evidence_id")
 
     def _try_get_embedder(self) -> Optional[Callable[[str], List[float]]]:
         cached = getattr(self, "_embed_cache", "missing")
@@ -373,7 +374,7 @@ class ReportAgent:
         structured_result: Any,
         rendered_result: str,
         section_index: int,
-    ) -> None:
+    ) -> Optional[Dict[int, str]]:
         # Issue #1191: der einzige Ort, an dem das strukturierte Ergebnis
         # anfaellt — die ReACT-Schleife sieht nur den gerenderten Text. Ein
         # Leertreffer wird hier gemerkt, damit dieselbe Suche im selben
@@ -422,6 +423,15 @@ class ReportAgent:
             return item
 
         items: List[Dict[str, Any]] = []
+        # Issue #1300 (Review-Finding Codex, P1): der ReACT-Loop sieht nur den
+        # gerenderten Text — ohne die hier vergebene ``ev_``-ID im Observation-
+        # Text kann das Modell ein Interview-Zitat nie gueltig verankern, weil
+        # die ID erst mit dem Registrieren entsteht. Deshalb werden
+        # Interview-Items sofort (nicht erst im Sammel-Loop unten) registriert
+        # und ihre IDs per Original-Index zurueckgegeben, damit
+        # ``tool_execution.execute_tool`` den bereits gerenderten Text
+        # nachtraeglich mit den IDs anreichern kann.
+        interview_evidence_ids: Dict[int, str] = {}
         if isinstance(structured_result, InsightForgeResult):
             # Issue #1298: kein Slicing hier — insight_forge dedupliziert
             # ``semantic_facts`` bereits selbst (mehrere Sub-Queries plus
@@ -499,7 +509,7 @@ class ReportAgent:
             # agent_quote (simulierte Stakeholder-Stimme, ADR-0002) —
             # deshalb sind quote und persona_stakeholder_group Pflicht.
             topic = (structured_result.interview_topic or "").strip()
-            for interview in structured_result.interviews[:10]:
+            for original_index, interview in enumerate(structured_result.interviews[:10]):
                 response = (interview.response or "").strip()
                 # GraphToolsService liefert bei stummen Plattformen einen
                 # strukturierten Platzhalter-Text — der ist kein Interview
@@ -546,7 +556,13 @@ class ReportAgent:
                         response,
                     ),
                 }
-                items.append(item)
+                # Sofort registrieren statt ueber den Sammel-Loop unten: nur so
+                # steht die ID bereit, bevor ``execute_tool`` den bereits
+                # gerenderten Interview-Text nachtraeglich damit anreichert.
+                item.setdefault("source", "report_tool")
+                evidence_id = self._record_evidence_item(item)
+                if evidence_id:
+                    interview_evidence_ids[original_index] = evidence_id
         elif isinstance(structured_result, dict) and "results" in structured_result:
             for result in (structured_result.get("results") or [])[:8]:
                 item = {
@@ -586,6 +602,8 @@ class ReportAgent:
         for item in items:
             item.setdefault("source", "report_tool")
             self._record_evidence_item(item)
+
+        return interview_evidence_ids or None
 
     @staticmethod
     def _atomize_claim_chunk(chunk: str) -> List[str]:

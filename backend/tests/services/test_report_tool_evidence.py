@@ -751,3 +751,76 @@ def test_insight_forge_registers_key_fact_beyond_truncation_length() -> None:
     assert records[0]["type"] == "seed_document"
     assert records[0]["source_kind"] == "seed_corpus"
     assert len(records[0]["snippet"]) < len(long_fact)
+
+
+class TestRecordToolEvidenceReturnsInterviewEvidenceIds:
+    """Issue #1300 (Review-Finding Codex, P1): ohne diesen Rueckgabewert kann
+    ``tool_execution.execute_tool`` die vergebenen ``ev_``-IDs nicht in den
+    Interview-Text zurueckspielen, den das Modell als naechstes sieht — es
+    haette keine Moeglichkeit, einen Interview-Anker gueltig zu setzen."""
+
+    def test_returns_the_original_interview_index_mapped_to_its_evidence_id(self) -> None:
+        agent = _make_agent()
+        result = InterviewResult(
+            interview_topic="Produktakzeptanz",
+            interview_questions=["Was halten Sie davon?"],
+            interviews=[
+                _interview(agent_name="Agent A", response="Antwort von Agent A."),
+                _interview(agent_name="Agent B", response="Antwort von Agent B."),
+            ],
+        )
+
+        returned = agent._record_tool_evidence(
+            tool_name="interview_agents",
+            parameters={},
+            structured_result=result,
+            rendered_result="",
+            section_index=1,
+        )
+
+        records_by_snippet = {
+            r["snippet"]: r["evidence_id"] for r in _records(agent) if r["type"] == "agent_interview"
+        }
+        assert returned == {
+            0: records_by_snippet["Antwort von Agent A."],
+            1: records_by_snippet["Antwort von Agent B."],
+        }
+
+    def test_placeholder_only_answer_has_no_entry_in_the_mapping(self) -> None:
+        """Ein reiner Plattform-Platzhalter wird nicht registriert (siehe
+        ``test_placeholder_only_interview_is_skipped`` oben) — folglich darf
+        er auch keine ID im Rueckgabewert vortäuschen."""
+        agent = _make_agent()
+        result = InterviewResult(
+            interview_topic="Produktakzeptanz",
+            interview_questions=["Was halten Sie davon?"],
+            interviews=[
+                _interview(agent_name="Agent A", response=(
+                    "[Twitter Platform Response]\n(No response from this platform)"
+                )),
+                _interview(agent_name="Agent B", response="Echte Antwort von Agent B."),
+            ],
+        )
+
+        returned = agent._record_tool_evidence(
+            tool_name="interview_agents",
+            parameters={},
+            structured_result=result,
+            rendered_result="",
+            section_index=1,
+        )
+
+        assert list(returned.keys()) == [1]
+
+    def test_non_interview_result_returns_none(self) -> None:
+        agent = _make_agent()
+
+        returned = agent._record_tool_evidence(
+            tool_name="insight_forge",
+            parameters={},
+            structured_result=_insight_forge_result(["Ein Fakt."], [None]),
+            rendered_result="",
+            section_index=1,
+        )
+
+        assert returned is None
