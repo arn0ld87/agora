@@ -62,11 +62,11 @@ Der Report empfiehlt einen **konditionierten, gestaffelten Rollout beginnend in 
 
 ### Evidence Inspector: Claims und Hypothesen
 
-[![AURORA Referenzreport mit Sections, Claims und Hypothesen im Evidence Inspector](./docs/assets/screenshots/reference-runs/2026-08-14-aurora/01-evidence-inspector.jpg)](./docs/assets/screenshots/reference-runs/2026-08-14-aurora/01-evidence-inspector.jpg)
+[![AURORA Referenzreport mit Sections, Claims und Hypothesen im Evidence Inspector](./docs/assets/screenshots/reference-runs/2026-08-14-aurora/01-evidence-inspector.webp)](./docs/assets/screenshots/reference-runs/2026-08-14-aurora/01-evidence-inspector.webp)
 
 ### Agenteninterviews als Evidenz
 
-[![AURORA Referenzreport mit simuliertem Persona-O-Ton und Agenteninterview-Evidenz](./docs/assets/screenshots/reference-runs/2026-08-14-aurora/02-agent-interviews.jpg)](./docs/assets/screenshots/reference-runs/2026-08-14-aurora/02-agent-interviews.jpg)
+[![AURORA Referenzreport mit simuliertem Persona-O-Ton und Agenteninterview-Evidenz](./docs/assets/screenshots/reference-runs/2026-08-14-aurora/02-agent-interviews.webp)](./docs/assets/screenshots/reference-runs/2026-08-14-aurora/02-agent-interviews.webp)
 
 > [!NOTE]
 > Dies ist bewusst **ein Referenzlauf und keine Hochglanz-Demo**. Er zeigt Fortschritte bei Laufzeit, Interviewintegration und Evidence Gating, dokumentiert aber weiterhin bekannte Trust-Grenzen. Der Repository-Stand enthält außerdem nicht alle Artefakte und Replay-Daten für eine vollständige Reproduktion aus einem frischen Checkout; der Lauf ist deshalb eine beobachtbare Regressionreferenz und kein vollständig reproduzierbarer Golden Run.

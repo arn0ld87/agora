@@ -23,13 +23,13 @@ Die resultierende Empfehlung ist ein **konditionierter, gestaffelter Rollout** b
 
 ## Evidence Inspector
 
-[![AURORA Report mit Evidence Inspector, Sections, Claims und Hypothesen](../../assets/screenshots/reference-runs/2026-08-14-aurora/01-evidence-inspector.jpg)](../../assets/screenshots/reference-runs/2026-08-14-aurora/01-evidence-inspector.jpg)
+[![AURORA Report mit Evidence Inspector, Sections, Claims und Hypothesen](../../assets/screenshots/reference-runs/2026-08-14-aurora/01-evidence-inspector.webp)](../../assets/screenshots/reference-runs/2026-08-14-aurora/01-evidence-inspector.webp)
 
 Das Bild ist anklickbar und öffnet die Originalauflösung. Der Inspector ist Teil der Referenz, weil nicht nur der Reporttext bewertet wird: Claims und Hypothesen lassen sich gemeinsam mit den Evidence-Records untersuchen, die die Report-Pipeline gebunden hat.
 
 ## Agenteninterviews als Evidenz
 
-[![AURORA Report mit simuliertem Persona-O-Ton und Agenteninterview-Evidence-Cards](../../assets/screenshots/reference-runs/2026-08-14-aurora/02-agent-interviews.jpg)](../../assets/screenshots/reference-runs/2026-08-14-aurora/02-agent-interviews.jpg)
+[![AURORA Report mit simuliertem Persona-O-Ton und Agenteninterview-Evidence-Cards](../../assets/screenshots/reference-runs/2026-08-14-aurora/02-agent-interviews.webp)](../../assets/screenshots/reference-runs/2026-08-14-aurora/02-agent-interviews.webp)
 
 Diese Ansicht zeigt die Verbindung zwischen Reporttext, simuliertem Persona-O-Ton und `agent_interview`-Evidence-Records. Genau diese Schicht unterscheidet den Workflow von einer reinen Dokument-RAG-Zusammenfassung.
 

@@ -23,13 +23,13 @@ The resulting recommendation is a **conditioned, staged rollout** beginning at F
 
 ## Evidence Inspector
 
-[![AURORA report with Evidence Inspector, section list, claims and hypotheses](../../assets/screenshots/reference-runs/2026-08-14-aurora/01-evidence-inspector.jpg)](../../assets/screenshots/reference-runs/2026-08-14-aurora/01-evidence-inspector.jpg)
+[![AURORA report with Evidence Inspector, section list, claims and hypotheses](../../assets/screenshots/reference-runs/2026-08-14-aurora/01-evidence-inspector.webp)](../../assets/screenshots/reference-runs/2026-08-14-aurora/01-evidence-inspector.webp)
 
 The screenshot is clickable and opens the repository image directly. The inspector is intentionally shown because the report is not evaluated by prose alone: claims and hypotheses can be inspected alongside their bound evidence records.
 
 ## Agent interviews as evidence
 
-[![AURORA report with simulated persona quote and agent interview evidence cards](../../assets/screenshots/reference-runs/2026-08-14-aurora/02-agent-interviews.jpg)](../../assets/screenshots/reference-runs/2026-08-14-aurora/02-agent-interviews.jpg)
+[![AURORA report with simulated persona quote and agent interview evidence cards](../../assets/screenshots/reference-runs/2026-08-14-aurora/02-agent-interviews.webp)](../../assets/screenshots/reference-runs/2026-08-14-aurora/02-agent-interviews.webp)
 
 This view shows the connection between generated report prose, a simulated persona statement and `agent_interview` evidence records. This is the part of the workflow that distinguishes the report from a document-only RAG summary.
 

@@ -60,11 +60,11 @@ This run is especially useful because the **simulation stayed constant while onl
 
 The report recommends a **conditioned, staged rollout starting at Falkenbrück-Mitte** and ties expansion to safety, training, worker-representation and fallback conditions. The UI exposes the generated report next to an Evidence Inspector where claims, hypotheses, confidence and the evidence records behind individual statements can be inspected directly.
 
-![AURORA reference report — report sections, claims and hypotheses in the Evidence Inspector](./docs/assets/screenshots/reference-runs/2026-08-14-aurora/01-evidence-inspector.jpg)
+![AURORA reference report — report sections, claims and hypotheses in the Evidence Inspector](./docs/assets/screenshots/reference-runs/2026-08-14-aurora/01-evidence-inspector.webp)
 
 The second view shows the link between report prose, a simulated persona statement and concrete `agent_interview` evidence cards. This is the part of the workflow that goes beyond a document-only RAG summary: the simulated stakeholders are queried again during report generation and their answers can be inspected as evidence used by individual claims.
 
-![AURORA reference report — simulated persona quote and agent interview evidence](./docs/assets/screenshots/reference-runs/2026-08-14-aurora/02-agent-interviews.jpg)
+![AURORA reference report — simulated persona quote and agent interview evidence](./docs/assets/screenshots/reference-runs/2026-08-14-aurora/02-agent-interviews.webp)
 
 > [!NOTE]
 > This is deliberately a **reference run, not a polished showcase**. It demonstrates real progress in report speed, interview integration and evidence gating, but it also preserves known trust-boundary failures as regression targets. In this artifact, a documented seed fact about **38 cases with a different urgency suggestion** is still downgraded in some sections as if matching numerical evidence were missing; some simulated quotes still carry a generic `seed_doc:seed_aurora#chunk:0` anchor; strongly matching `SUPPORTED` evidence can remain `low` confidence; and the canonical ReportV3 artifact can fail validation while the overall task reaches a completed state.
