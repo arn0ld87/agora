@@ -1,29 +1,23 @@
 # Commands
 
-> **Progressive Disclosure** — ausgelagert aus [`AGENTS.md`](../../AGENTS.md). Bei Setup-/Build-/Prüfaufgaben laden.
+> Laden bei Setup-, Build- oder Pruefaufgaben.
 
 ```bash
-# Setup und Entwicklung
-bun run setup:all
-bun run dev
-bun run backend
-bun run frontend
+# Entwicklung
+bun run setup:all          # Ersteinrichtung
+bun run dev                # Backend + Frontend parallel
+bun run backend            # nur Backend
+bun run frontend           # nur Frontend
 
-# Gesamtprüfung
-bun run check
-bash scripts/pre-push-gate.sh
-
-# Backend
+# Pruefung
+bash scripts/pre-push-gate.sh [backend|frontend|schemas]
 cd backend && uv run pytest -x -q
 cd backend && uv run ruff check .
 cd backend && uv run mypy app
-cd backend && uv run python -m app.contracts.dump_schemas
+cd backend && uv run python -m app.contracts.dump_schemas --check
+cd frontend && bun run test && bun run check
 
-# Frontend
-cd frontend && bun run check
-cd frontend && bun run test
-
-# Produktionsnaher lokaler Stack
+# Produktionsnaher Stack
 docker compose -f docker-compose.yml -f docker-compose.prod.yml \
   -f deploy/compose/docker-compose.prod-with-proxy.yml up -d --build
 curl -fsS http://localhost/healthz

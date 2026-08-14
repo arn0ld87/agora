@@ -1,144 +1,63 @@
 # AGENTS.md
 
-Guidance für Codex, Claude Code und andere Agent-Runtimes in diesem Repository.
-
-> **Progressive Disclosure:** diese Datei enthält nur die immer verbindlichen Regeln. Detail-Referenzen sind unter [`docs/agents/`](docs/agents/) ausgelagert und bei Bedarf zu laden — siehe [Detaillierte Referenzen](#detaillierte-referenzen).
-
-## Dokumentationsquellen
-
-Agenten verwenden genau diese Reihenfolge:
-
-1. [`README.md`](README.md) — Produkt, Grenzen, Setup und Release-Linie
-2. [`docs/STATUS.md`](docs/STATUS.md) — verifizierter Istzustand
-3. [`ROADMAP.md`](ROADMAP.md) — strategische Release-Reihenfolge
-4. [GitHub Issues](https://github.com/arn0ld87/agora/issues) — ausführbare Tasks und Akzeptanzkriterien
-
-[`CONTEXT.md`](CONTEXT.md) — **wie Agora zur Laufzeit tatsächlich arbeitet**: vier Laufzeitphasen plus Run-Registry, Prepare-/Persona-Mechanik, Interview-Pfad, die vollständige Report-Pipeline (Planning → Section-ReAct mit parallelen Tool-Calls → Phase-Timing/Evidence-Binding), Evidence-Modell mit getrenntem Claim-Binding und Fließtextprüfung, Artefaktpfade, Sim-DB-Semantik sowie bekannte Signaturen mit explizitem Status (`expected`, `handled`, `fixed-code`, `known-bug`, `known-gap`). Wer einen Lauf beobachtet, auswertet oder debuggt, liest diese Datei zuerst. „Bekannt” bedeutet dabei nicht „korrekt” und unterdrückt keine neuen Manifestationen oder abweichenden Ursachen.
-
-[`VISION.md`](VISION.md) — nicht-bindender North-Star (das *Warum* und die Langzeitrichtung), keine Planungsdatei und keine konkurrierende Roadmap.
-
-ADRs, Architektur-, Security- und Runbook-Dateien sind verbindliche Referenzen, aber keine konkurrierenden Roadmaps. Historische Planung liegt unter [`docs/archive/planning/`](docs/archive/planning/).
+Verbindliche Regeln fuer Codex, Claude Code und jede andere Agent-Runtime in diesem Repository.
 
 ## Projekt
 
-Agora ist eine lokal oder kontrolliert hybrid betreibbare Multi-Agent-Analyseplattform für simulierte DACH-Zielgruppen-, Stakeholder- und Marktreaktionen.
+Agora: lokale Multi-Agent-Analyseplattform fuer simulierte DACH-Stakeholder-Reaktionen. Flask/Python 3.14, Pydantic v2, Vue 3/TypeScript, Neo4j, Redis. Single User, `0.9.5` Stability Beta, Ziel `1.0.0`.
 
-**Aktueller Reifegrad:** `0.9.5` Stability Beta.  
-**Ziel:** stabile Single-User-Version `1.0.0` gemäß [`ROADMAP.md`](ROADMAP.md).
+## Contracts-first
 
-**Stack:** Flask/Python 3.14, Pydantic v2, Vue 3, TypeScript, Vite, Pinia, Neo4j, Redis, OASIS/CAMEL und lokale oder OpenAI-kompatible Provider.
+Jede Aenderung beginnt beim Vertrag (`backend/app/contracts/`), nie beim Consumer. Kein Dataclass, kein Inline-Schema, kein handgeschriebenes Dict fuer API-Grenzen.
 
-**Betriebsmodell:** Single User, lokal oder kontrolliert hybrid. Kein öffentliches SaaS.
+## Arbeitsweise
 
-## Verbindliche Arbeitsweise
-
-1. Nie direkt auf `main` arbeiten. Eigener Branch und atomarer Pull Request.
-2. Tests sind die Spezifikation. Ein Verhaltensfix bringt einen Regressionstest mit, der den Defekt trifft — dass er vorher rot war, prüft man einmal beim Schreiben und dokumentiert es nirgends.
-3. Vor jedem Push das passende Gate ausführen:
-   - `bash scripts/pre-push-gate.sh backend`
-   - `bash scripts/pre-push-gate.sh frontend`
-   - `bash scripts/pre-push-gate.sh schemas`
-   - ohne Scope: vollständiges Gate
-4. Kein `--no-verify` ohne ausdrückliche Freigabe.
-5. Dokumentation im selben Slice synchronisieren:
-   - Istzustand → `docs/STATUS.md` (Test-Zähler ausgenommen — die aktualisiert
-     nur ein dedizierter Refresh-Lauf `bash scripts/sync-status.sh`, nicht jeder PR)
-   - strategische Release-Auswirkung → `ROADMAP.md`
-   - konkrete Folgearbeit → GitHub Issue
-   - ausgelieferte Änderung → **eine Fragment-Datei in [`changelog.d/`](changelog.d/README.md)**
-     (`<nr>-<slug>.md`); `CHANGELOG.md` selbst wird nur beim Release-Schnitt via
-     `scripts/collect-changelog.py` geschrieben, nie direkt im PR
-6. Keine abgeschwächten Assertions, globalen Skips oder pauschalen Retries, um rote Tests kosmetisch grün zu machen.
-7. Verträge zuerst, Consumer danach.
-8. Kein neuer großer Produktbereich, wenn er nicht in der aktuellen Release-Stufe der Roadmap vorgesehen ist.
-
-Runbooks:
-
-- [`docs/runbooks/pr-workflow.md`](docs/runbooks/pr-workflow.md)
-- [`docs/runbooks/pre-push-gate.md`](docs/runbooks/pre-push-gate.md)
-- [`docs/runbooks/worktree-strategy.md`](docs/runbooks/worktree-strategy.md)
-- [`docs/runbooks/subagent-routing.md`](docs/runbooks/subagent-routing.md)
-
-## Worktree-Pfad
-
-**Pflicht für manuell angelegte Worktrees:** Alle per `git worktree add` erzeugten Agora-Worktrees liegen unter `/Volumes/T7/Worktrees/agora/<slice-id>/`. `/private/tmp` ist verboten. T7-Mount vor dem Anlegen prüfen (`test -d /Volumes/T7`).
-
-**Ausnahme:** Harness-isolierte Subagenten (`isolation: worktree`) arbeiten in dem ihnen von der Runtime zugewiesenen Worktree unter `.claude/worktrees/agent-<id>/`. Das ist zulässig; ein Runtime-Hook sperrt für sie jeden anderen Pfad. Der Lead legt für solche Worker keinen T7-Worktree an.
-
-Volle Strategie in [`docs/runbooks/worktree-strategy.md`](docs/runbooks/worktree-strategy.md).
+1. Eigener Branch, atomarer PR. Nie direkt auf `main`.
+2. Jeder Verhaltensfix bringt einen Regressionstest mit.
+3. Vor Push: `bash scripts/pre-push-gate.sh [backend|frontend|schemas]`.
+4. Changelog-Fragment in `changelog.d/<nr>-<slug>.md` — nie `CHANGELOG.md` direkt.
+5. Istzustand in `docs/STATUS.md` synchronisieren (Test-Zaehler ausgenommen).
 
 ## Verboten
 
-- direkte Änderungen auf `main`
-- Dataclasses oder handgeschriebene Inline-Schemas für API-Verträge
-- lokale Provider-Detection-Heuristiken neben der Registry
-- neue produktive Legacy-Picker oder neue parallele Frontends
-- React-/Lovable-Rewrite ohne eigene Architekturentscheidung und Release-Scope
-- API-Keys oder Secrets in Code, Logs, Fixtures oder Dokumentation
-- neue Query-Tokens `?token=`; URL-Auth nur über signierte Tickets
-- `print()` in Produktivcode statt strukturiertem Logging
-- hartkodierte UI-Texte statt `vue-i18n`
-- neue CVE-Ausnahmen ohne Issue, Owner, Deadline und Hardstop
-- neue Planungsdateien neben README, STATUS, ROADMAP und Issues
-- `apt`; auf Debian/Ubuntu `nala` verwenden
+- Secrets in Code, Logs, Fixtures, Dokumentation
+- `--no-verify` ohne explizite Freigabe
+- Provider-Detection-Heuristiken neben `registry.py::detect_provider`
+- `print()` statt strukturiertem Logging
+- Abgeschwaechte Assertions / globale Skips um Tests gruen zu machen
+- Neue Produktbereiche ausserhalb der aktuellen Roadmap-Stufe
+- `apt` auf Debian/Ubuntu (verwende `nala`)
 
-## Detaillierte Referenzen
+## Dokumentationshierarchie
 
-Bei Bedarf laden (nicht verbindlich ständig im Kontext):
+| Prio | Datei | Inhalt |
+|------|-------|--------|
+| 1 | [`README.md`](README.md) | Produkt, Setup, Release-Linie |
+| 2 | [`docs/STATUS.md`](docs/STATUS.md) | verifizierter Istzustand |
+| 3 | [`ROADMAP.md`](ROADMAP.md) | Release-Reihenfolge und Freigabekriterien |
+| 4 | [GitHub Issues](https://github.com/arn0ld87/agora/issues) | ausfuehrbare Tasks |
 
-- [`docs/agents/tool-pipeline.md`](docs/agents/tool-pipeline.md) — Tool-Pipeline, Knowledge Graph, Token Efficiency
-- [`docs/agents/architecture-ssot.md`](docs/agents/architecture-ssot.md) — Architektur-Single-Sources-of-Truth
-- [`docs/agents/release-priority.md`](docs/agents/release-priority.md) — aktuelle Release-Priorität
-- [`docs/agents/commands.md`](docs/agents/commands.md) — Backend-/Frontend-/Docker-Commands
+Lade bei Bedarf (nicht staendig im Kontext):
 
-## Wichtige Referenzen
+- [`CONTEXT.md`](CONTEXT.md) — Laufzeit-Mechanik, Artefaktformen, Evidence-Modell. Laden bei: Run-Beobachtung, -Auswertung, -Debugging, Evidence-Arbeit.
+- [`docs/agents/architecture-ssot.md`](docs/agents/architecture-ssot.md) — Single-Sources-of-Truth fuer Vertraege, Provider, Routing. Laden bei: Architektur- oder Vertragsfragen.
+- [`docs/agents/commands.md`](docs/agents/commands.md) — Setup, Build, Pruefbefehle. Laden bei: Ersteinrichtung oder unbekanntem Befehl.
+- [`docs/agents/release-priority.md`](docs/agents/release-priority.md) — aktuelle Milestone-Prioritaet. Laden bei: Priorisierungsfragen.
+- [`docs/agents/tool-pipeline.md`](docs/agents/tool-pipeline.md) — Tool-Reihenfolge und Token-Effizienz. Laden bei: grossflaechiger Codebase-Analyse.
+- [`docs/decisions/`](docs/decisions/) — ADRs. Laden wenn eine Architekturentscheidung beruehrt wird.
+- [`docs/runbooks/`](docs/runbooks/) — Operative Anleitungen (PR-Workflow, Pre-Push-Gate, Worktree-Strategie, Subagent-Routing).
 
-- [`VISION.md`](VISION.md) — North-Star (nicht-bindend)
-- [`docs/architecture.md`](docs/architecture.md)
-- [`docs/api.md`](docs/api.md) — HTTP-Endpunkte nach Domänen
-- [`docs/configuration.md`](docs/configuration.md) — Umgebungsvariablen
-- [`docs/troubleshooting.md`](docs/troubleshooting.md) — bekannte Fehlerbilder
-- [`docs/decisions/`](docs/decisions/)
-- [`docs/dependency-risk-register.md`](docs/dependency-risk-register.md)
-- [`docs/runbooks/`](docs/runbooks/)
-- [`CHANGELOG.md`](CHANGELOG.md)
-- [`CLAUDE.md`](CLAUDE.md)
+## Code-Review-Graph (CRG)
 
-<!-- code-review-graph MCP tools -->
-## MCP Tools: code-review-graph
+Dieses Projekt hat einen persistenten Knowledge Graph. Graph-Tools VOR Grep/Glob/Read verwenden.
 
-**IMPORTANT: This project has a knowledge graph. ALWAYS use the
-code-review-graph MCP tools BEFORE using Grep/Glob/Read to explore
-the codebase.** The graph is faster, cheaper (fewer tokens), and gives
-you structural context (callers, dependents, test coverage) that file
-scanning cannot.
+| Aufgabe | Tool |
+|---------|------|
+| Code finden | `semantic_search_nodes` |
+| Aenderungs-Impact | `get_impact_radius` |
+| Code-Review | `detect_changes` + `get_review_context` |
+| Abhaengigkeiten | `query_graph` (callers_of/callees_of/imports_of/tests_for) |
+| Architektur | `get_architecture_overview` + `list_communities` |
+| Refactoring planen | `refactor_tool` |
 
-### When to use graph tools FIRST
-
-- **Exploring code**: `semantic_search_nodes` or `query_graph` instead of Grep
-- **Understanding impact**: `get_impact_radius` instead of manually tracing imports
-- **Code review**: `detect_changes` + `get_review_context` instead of reading entire files
-- **Finding relationships**: `query_graph` with callers_of/callees_of/imports_of/tests_for
-- **Architecture questions**: `get_architecture_overview` + `list_communities`
-
-Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
-
-### Key Tools
-
-| Tool | Use when |
-| ------ | ---------- |
-| `detect_changes` | Reviewing code changes — gives risk-scored analysis |
-| `get_review_context` | Need source snippets for review — token-efficient |
-| `get_impact_radius` | Understanding blast radius of a change |
-| `get_affected_flows` | Finding which execution paths are impacted |
-| `query_graph` | Tracing callers, callees, imports, tests, dependencies |
-| `semantic_search_nodes` | Finding functions/classes by name or keyword |
-| `get_architecture_overview` | Understanding high-level codebase structure |
-| `refactor_tool` | Planning renames, finding dead code |
-
-### Workflow
-
-1. The graph auto-updates on file changes (via hooks).
-2. Use `detect_changes` for code review.
-3. Use `get_affected_flows` to understand impact.
-4. Use `query_graph` pattern="tests_for" to check coverage.
+Grep/Glob/Read nur als Fallback wenn der Graph die Information nicht hat.

@@ -1,15 +1,17 @@
 # Tool-Pflicht: Verbindliche Reihenfolge
 
-Datei: `docs/runbooks/tool-pflicht.md` · Stand: 2026-05-17 · Gilt für: Claude Code, Codex, Gemini, pi
+Datei: `docs/runbooks/tool-pflicht.md` · Stand: 2026-08-14 · Gilt für: Claude Code, Codex, Gemini, pi
 
 ## Pipeline (nicht überspringbar)
 
 ```
-code-review-graph → context7 → sequential-thinking → context-mode → Read/rg/Bash
+code-review-graph → [context7] → context-mode → Read/rg/Bash
 ```
 
 Jeder Schritt ist ein Gate. Erst wenn das aktuelle Gate sinnvoll abgearbeitet ist, geht es
 zum nächsten. Die gesamte Pipeline muss VOR dem ersten Read/rg/Bash durchlaufen sein.
+
+`[context7]` ist optional — nur verfügbar wenn der MCP-Server in der Session verbunden ist.
 
 ---
 

@@ -1,7 +1,7 @@
 # Agora — Status
 
-**Stand:** 11.08.2026  
-**Geprüfte Main-Baseline:** `b72a443b`  
+**Stand:** 14.08.2026  
+**Geprüfte Main-Baseline:** `39b65297`  
 **Produktversion:** `0.9.5` Stability Beta
 
 Diese Datei beschreibt ausschließlich den verifizierten Istzustand. Strategische Release-Ziele stehen in [`ROADMAP.md`](../ROADMAP.md), konkrete Arbeitspakete in [GitHub Issues](https://github.com/arn0ld87/agora/issues), ausgelieferte Änderungen in [`CHANGELOG.md`](../CHANGELOG.md).
@@ -27,14 +27,14 @@ Die Produktreife wird ab diesem Dokumentationsumbau über [`VERSION`](../VERSION
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 5049 | `cd backend && uv run pytest --collect-only -q` |
-| Frontend Test-Files | 192 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
+| Backend Tests (collected) | 5302 | `cd backend && uv run pytest --collect-only -q` |
+| Frontend Test-Files | 196 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
 Hinweise:
 
 - Zwei Redis-Integrationstests skippen ohne `TEST_REDIS_URL` kontrolliert.
-- Die Backend-Zahl ist der Gesamtwert aus `pytest --collect-only`; im Messlauf vom 11.08.2026 waren davon 7 deselektiert (4947 ausgeführt).
+- Die Backend-Zahl ist der Gesamtwert aus `pytest --collect-only`; im Messlauf vom 14.08.2026 waren davon 8 deselektiert (5294 ausgeführt).
 - Die Frontend-Zahl zählt Testdateien, nicht einzelne Testfälle. Die acht Playwright-E2E-Specs unter `frontend/tests/e2e/` sind darin nicht enthalten.
 - Die Zahlen stammen aus dem letzten synchronisierten Status und müssen nach größeren Merges erneut erzeugt werden.
 - `scripts/sync-status.sh` legt seinen Zähler-Cache unter `backend/.cache/sync-status/` an. Gehört `backend/.cache` einem anderen Benutzer — etwa nach einem Container-Lauf als root —, bricht das Skript mit „Keine Berechtigung" ab; dann `sudo chown -R "$USER" backend/.cache` oder das Verzeichnis löschen.
