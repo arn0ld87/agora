@@ -27,13 +27,13 @@ The resulting recommendation is a **conditioned, staged rollout** beginning at F
 
 ## Evidence Inspector
 
-![AURORA report with Evidence Inspector, section list, claims and hypotheses](../../assets/screenshots/reference-runs/2026-08-14-aurora/01-evidence-inspector.png)
+![AURORA report with Evidence Inspector, section list, claims and hypotheses](../../assets/screenshots/reference-runs/2026-08-14-aurora/01-evidence-inspector.webp)
 
 The screenshot is intentionally cropped to the inspector so claim text remains readable at normal GitHub README width. The report is not evaluated only by its prose: claims and hypotheses can be inspected alongside the evidence records used by the report pipeline.
 
 ## Agent interviews as evidence
 
-![AURORA report with agent-interview evidence cards](../../assets/screenshots/reference-runs/2026-08-14-aurora/02-agent-interviews.png)
+![AURORA report with agent-interview evidence cards](../../assets/screenshots/reference-runs/2026-08-14-aurora/02-agent-interviews.webp)
 
 The second crop focuses on the selected claim and its `agent_interview` evidence records. This is the part of the workflow that distinguishes the report from a document-only RAG summary.
 
