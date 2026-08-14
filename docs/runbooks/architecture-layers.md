@@ -215,5 +215,6 @@ brechen den Run ab.
 
 ### Embedding-Dimension-Match
 
-`EMBEDDING_MODEL` und `VECTOR_DIM` müssen zusammenpassen. Backend prüft beim
-Start mit einer echten Embedding-Probe.
+`EMBEDDING_MODEL` und `VECTOR_DIM` muessen zusammenpassen. Backend prueft beim
+Start mit einer echten Embedding-Probe, sofern `AGORA_SKIP_EMBEDDING_PROBE`
+den Preflight nicht ueberspringt.
