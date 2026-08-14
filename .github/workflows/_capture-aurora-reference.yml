@@ -1,0 +1,75 @@
+name: Capture AURORA reference screenshots
+
+on:
+  push:
+    branches:
+      - docs/fix-aurora-reference-run-1305
+
+permissions:
+  contents: write
+
+jobs:
+  capture:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: docs/fix-aurora-reference-run-1305
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install browser and crop dependencies
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+          python -m pip install pillow
+
+      - name: Capture report views
+        run: |
+          mkdir -p docs/assets/screenshots/reference-runs/2026-08-14-aurora
+          cat > capture-aurora.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const browser = await chromium.launch({ headless: true });
+          const context = await browser.newContext({ viewport: { width: 1800, height: 1200 }, deviceScaleFactor: 1, ignoreHTTPSErrors: true });
+          const page = await context.newPage();
+          const url = 'https://agora.alexle135.de/v4/report/report_3c594fcc7613?runId=run_ec1f3756e521';
+          await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+          await page.waitForTimeout(8000);
+          await page.screenshot({ path: '/tmp/aurora-top.png', fullPage: false });
+          await page.evaluate(() => window.scrollTo(0, 620));
+          await page.waitForTimeout(1500);
+          await page.screenshot({ path: '/tmp/aurora-interviews.png', fullPage: false });
+          await browser.close();
+          EOF
+          node capture-aurora.mjs
+          rm capture-aurora.mjs
+
+      - name: Crop Evidence Inspector views
+        run: |
+          python - <<'PY'
+          from PIL import Image
+          from pathlib import Path
+          out = Path('docs/assets/screenshots/reference-runs/2026-08-14-aurora')
+          for src, dst in [
+              ('/tmp/aurora-top.png', out / '01-evidence-inspector.png'),
+              ('/tmp/aurora-interviews.png', out / '02-agent-interviews.png'),
+          ]:
+              im = Image.open(src).convert('RGB')
+              crop = im.crop((1170, 120, 1790, 1160))
+              crop.save(dst, 'PNG', optimize=True)
+          PY
+
+      - name: Commit screenshots
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/assets/screenshots/reference-runs/2026-08-14-aurora/*.png
+          if git diff --cached --quiet; then
+            echo 'No screenshot changes.'
+            exit 0
+          fi
+          git commit -m 'docs: replace AURORA screenshots with readable live crops'
+          git push origin HEAD:docs/fix-aurora-reference-run-1305
