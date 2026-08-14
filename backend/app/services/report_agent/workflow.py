@@ -23,12 +23,14 @@ from .output_contract import (
     apply_degradation_downgrade,
     apply_quote_validation_downgrade,
     apply_report_v3_validation_downgrade,
+    apply_requirement_check_downgrade,
     is_fallback_content,
     resolve_report_status,
     sanitize_final_content,
 )
 from .planning import plan_outline as plan_outline_impl
 from .postprocess_timing import PostprocessPhaseTracker
+from .requirement_checker import RequirementCheck, RequirementChecker
 from .section_pipeline import (
     SectionContext,
     SectionResult,
@@ -50,6 +52,17 @@ from .schemas import (
 from ..evidence_migrations import migrate_v1_to_v2, normalize_persisted_evidence_map
 
 logger = get_logger('agora.report_agent')
+
+# Issue #1302: Checkliste fuer den RequirementChecker (siehe
+# ``requirement_checker.py``-Moduldocstring fuer die vollstaendige
+# Begruendung). Bewusst LEER: die im Issue vorgegebenen 7 Punkte
+# (Stop-/Expand-Bedingungen, Fruehwarnindikatoren, ...) beschreiben eine
+# Szenario-/Konfliktanalyse-Reportform, die in keinem der fuenf bestehenden
+# Report-Typen (ReportMode/ReportIntent) existiert. Sie hier scharf zu
+# schalten wuerde jeden bestehenden Report unbegruendet auf INCOMPLETE
+# abstufen. ``ISSUE_1302_DEFAULT_CHECKLIST`` bleibt fuer einen kuenftigen
+# Report-Typ verfuegbar, der diese Konzepte tatsaechlich vorsieht.
+REQUIREMENT_CHECKLIST: tuple[RequirementCheck, ...] = ()
 
 # Die Abschnittsverarbeitung liegt seit Issue #1212 in ``section_pipeline``.
 # ``_section_expects_quotes`` bleibt hier als Name erreichbar, damit bestehende
@@ -1204,6 +1217,25 @@ def generate_report(
             report.status,
             quote_validation_failed_section_indices,
         )
+        # Issue #1302: fehlende Pflichtaspekte laut Requirement-Checkliste
+        # duerfen den Report nicht als COMPLETED ausweisen. Checkliste ist
+        # konfigurierbar (siehe ``REQUIREMENT_CHECKLIST`` oben) und aktuell
+        # bewusst leer, weil kein bestehender Report-Typ diese Aspekte
+        # vorsieht.
+        failed_requirement_checks = RequirementChecker.check(
+            report.markdown_content or "", REQUIREMENT_CHECKLIST
+        )
+        report.status = apply_requirement_check_downgrade(
+            report.status, failed_requirement_checks
+        )
+        if failed_requirement_checks:
+            requirement_note = (
+                "Fehlende Pflichtaspekte laut Requirement-Checkliste: "
+                + ", ".join(check.description for check in failed_requirement_checks)
+                + "."
+            )
+            logger.warning("report %s: %s", report_id, requirement_note)
+            report.error = requirement_note if not getattr(report, "error", None) else report.error
         if failed_section_indices:
             failed_note = (
                 f"{total_sections - len(failed_section_indices)}/{total_sections} "

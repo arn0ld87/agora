@@ -328,6 +328,28 @@ def apply_quote_validation_downgrade(
     return status
 
 
+def apply_requirement_check_downgrade(
+    status: "ReportStatus",
+    failed_checks: Iterable[Any],
+) -> "ReportStatus":
+    """Stuft COMPLETED auf INCOMPLETE ab, wenn Pflichtaspekte laut Checkliste fehlen.
+
+    Issue #1302: ein ``RequirementChecker`` (siehe ``requirement_checker.py``)
+    prüft den Report-Text gegen eine konfigurierbare Checkliste. Fehlt
+    mindestens ein geprüfter Pflichtaspekt, ist der Report inhaltlich nicht
+    das, was ``COMPLETED`` zusichert. Bereits ``INCOMPLETE``- oder
+    ``FAILED``-Status werden nicht aufgewertet — analog zu
+    :func:`apply_degradation_downgrade`.
+    """
+    from ...models.report import ReportStatus  # noqa: PLC0415 — zyklischer Import
+
+    if not list(failed_checks):
+        return status
+    if status == ReportStatus.COMPLETED:
+        return ReportStatus.INCOMPLETE
+    return status
+
+
 def is_deliverable_report_status(status: "ReportStatus") -> bool:
     """True, wenn der Report ausgeliefert werden kann statt als Fehlschlag zu gelten.
 
