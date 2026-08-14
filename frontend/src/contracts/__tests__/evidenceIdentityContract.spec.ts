@@ -307,3 +307,112 @@ describe('kanonische Evidence-Identität', () => {
     expect(ReportV3Schema.safeParse(legacyVersion).success).toBe(false);
   });
 });
+
+describe('EvidenceRecord — persona_role_family + seed_document Regression', () => {
+  const EvidenceRecordSchema = exportedSchema(reportContract, 'EvidenceRecordSchema');
+
+  it('accepts seed_document evidence', () => {
+    expect(
+      EvidenceRecordSchema.parse({
+        evidence_id: 'ev_02f4c454baa17f64c1a65f33595fbdbd',
+        producer_key: 'seed-doc:test',
+        type: 'seed_document',
+        source: 'report_tool',
+        snippet: 'Dokumentfakt',
+        source_kind: 'seed_corpus',
+        persona_role_family: null,
+      }),
+    ).toBeTruthy();
+  });
+
+  it('accepts persona_role_family on agent evidence', () => {
+    expect(
+      EvidenceRecordSchema.parse({
+        evidence_id: 'ev_1234567890abcdef1234567890abcdef',
+        producer_key: 'interview:test',
+        type: 'agent_interview',
+        source: 'report_tool',
+        snippet: 'Interview',
+        source_kind: 'agent_quote',
+        persona_stakeholder_group: 'Physician',
+        persona_role_family: 'Physician',
+      }),
+    ).toBeTruthy();
+  });
+
+  it('rejects persona_role_family exceeding 120 chars', () => {
+    const result = EvidenceRecordSchema.safeParse({
+      evidence_id: 'ev_1234567890abcdef1234567890abcdef',
+      producer_key: 'interview:test',
+      type: 'agent_interview',
+      source: 'report_tool',
+      snippet: 'Interview',
+      source_kind: 'agent_quote',
+      persona_stakeholder_group: 'Physician',
+      persona_role_family: 'x'.repeat(121),
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts persona_role_family as undefined (pre-migration data)', () => {
+    expect(
+      EvidenceRecordSchema.parse({
+        evidence_id: 'ev_aabbccdd00112233aabbccdd00112233',
+        producer_key: 'agent-log:99#post:100',
+        type: 'graph_fact',
+        source: 'graph_query',
+        snippet: 'Altdaten ohne role_family',
+        source_kind: 'graph_relation',
+      }),
+    ).toBeTruthy();
+  });
+});
+
+describe('EvidenceType enum completeness — Backend→Frontend drift guard', () => {
+  const BACKEND_EVIDENCE_TYPES: string[] = [
+    'graph_fact',
+    'graph_metric',
+    'graph_metric_status',
+    'relationship_chain',
+    'entity_summary',
+    'agent_action',
+    'agent_interview',
+    'web_search_result',
+    'web_fetch',
+    'seed_document',
+    'model_generated_inference',
+  ];
+
+  const EvidenceRecordSchema = exportedSchema(reportContract, 'EvidenceRecordSchema');
+
+  const BASE_RECORD = {
+    evidence_id: 'ev_deadbeefdeadbeefdeadbeefdeadbeef',
+    producer_key: 'drift-guard:enum-test',
+    source: 'test_tool',
+    snippet: 'Drift-Guard-Snippet',
+    source_kind: 'inferred' as const,
+  };
+
+  it.each(BACKEND_EVIDENCE_TYPES)(
+    'frontend Zod accepts EvidenceType "%s"',
+    (evidenceType) => {
+      const result = EvidenceRecordSchema.safeParse({
+        ...BASE_RECORD,
+        type: evidenceType,
+      });
+      if (evidenceType === 'model_generated_inference') {
+        expect(result.success).toBe(false);
+      } else {
+        expect(result.success).toBe(true);
+      }
+    },
+  );
+
+  it('rejects an EvidenceType not in the backend enum', () => {
+    const result = EvidenceRecordSchema.safeParse({
+      ...BASE_RECORD,
+      type: 'nonexistent_type',
+    });
+    expect(result.success).toBe(false);
+  });
+});
