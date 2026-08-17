@@ -3,6 +3,7 @@ Service for querying report generation status.
 """
 
 from ..services.report_agent import ReportManager, ReportStatus
+from ..services.report_export import ReportExportService
 from ..services.run_registry import RunRegistry
 from ..models.task import TaskManager
 from ..utils.logger import get_logger
@@ -12,24 +13,16 @@ run_registry = RunRegistry()
 
 
 class ReportStatusService:
-    @staticmethod
-    def map_outline_for_contract(outline: dict | None) -> dict | None:
-        """Map the dataclass outline shape onto the v2 contract shape."""
-        if not outline:
-            return None
-        sections: list[dict] = []
-        for raw in outline.get("sections") or []:
-            if not isinstance(raw, dict):
-                continue
-            sections.append({
-                "title": raw.get("title") or "Section",
-                "description": raw.get("description") or raw.get("content") or "—",
-            })
-        return {
-            "title": outline.get("title") or "Report",
-            "summary": outline.get("summary") or "—",
-            "sections": sections,
-        }
+    # Die Abbildung „Dataclass-Outline -> v2-Contract-Form" gehoert dem
+    # Export-Service; ``api/report.py`` bezieht sie ebenfalls von dort. Hier
+    # stand bis 17.08.2026 eine zweite, bis auf Typannotationen zeichengleiche
+    # Kopie — zwei Orte fuer dieselbe Mapping-Regel, von denen ein Fix nur
+    # einen erwischt haette.
+    # ``staticmethod(...)`` ist hier nicht kosmetisch: als blosses
+    # Klassenattribut wuerde die Funktion bei Zugriff ueber eine *Instanz*
+    # ``self`` als erstes Argument gebunden bekommen und das Outline-Dict
+    # verlieren.
+    map_outline_for_contract = staticmethod(ReportExportService.map_outline_for_contract)
 
     @classmethod
     def get_status(cls, task_id=None, simulation_id=None, report_id=None):
@@ -57,15 +50,6 @@ class ReportStatusService:
                     "sections": generated_sections,
                     "current_section_index": len(progress_state.get("completed_sections") or []),
                 }
-                # Issue #1277-2: Run-Registry ``completed`` heißt „Run beendet",
-                # nicht „Report vollständig". ``run_generate`` schreibt den
-                # Registry-Status auch bei INCOMPLETE auf ``completed``
-                # (Teilergebnis, kein Fehlschlag — siehe #1006). Der
-                # Polling-Consumer (``/api/report/generate/status`` ->
-                # ``useReportGeneration``) müsste sonst den completed-Branch
-                # nehmen und würde die Lücke verschweigen. Der Report-Status
-                # ist die fachliche Wahrheit; er gewinnt, wenn der Run
-                # terminal ist.
                 # Issue #1277-2: Run-Registry ``completed`` heißt „Run beendet",
                 # nicht „Report vollständig". ``run_generate`` schreibt den
                 # Registry-Status auch bei INCOMPLETE auf ``completed``
