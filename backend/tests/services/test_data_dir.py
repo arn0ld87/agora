@@ -13,19 +13,24 @@ from pathlib import Path
 import pytest
 
 from app.services.data_dir import DATA_DIR_ENV, resolve_data_dir
+from app.services.json_file_store import JsonFileStore
 
-# Die Stores, die ihre Auflösung aus ``data_dir`` beziehen. ``api_keys_store``
-# steht bewusst NICHT in dieser Liste: es führt ein gleichnamiges
-# ``_resolve_data_dir`` mit abweichender Signatur (``Optional[Path]``) und
-# eigener Semantik.
-_STORE_MODULES = [
+# Stores, die ``resolve_data_dir`` direkt als Modulfunktion beziehen.
+# ``api_keys_store`` steht bewusst NICHT in dieser Liste: es führt ein
+# gleichnamiges ``_resolve_data_dir`` mit abweichender Signatur
+# (``Optional[Path]``) und eigener Semantik.
+_MODULE_LEVEL_STORES = [
     "api_keys_persistence",
     "embedding_configuration_store",
     "llm_provider_secrets_store",
-    "onboarding_state_store",
     "provider_connection_store",
-    "user_profile_store",
-    "workspace_routing_store",
+]
+
+# Stores, die die Auflösung über ``JsonFileStore`` erben.
+_JSON_FILE_STORES = [
+    ("onboarding_state_store", "OnboardingStateStore", "onboarding_state.json"),
+    ("user_profile_store", "UserProfileStore", "user_profile.json"),
+    ("workspace_routing_store", "WorkspaceRoutingStore", "workspace_llm_routing.json"),
 ]
 
 
@@ -69,22 +74,53 @@ class TestResolveDataDir:
 
 
 class TestStoresShareOneResolution:
-    """Hält die sieben Stores an der gemeinsamen Auflösung."""
+    """Hält die sieben Stores an der gemeinsamen Auflösung.
 
-    @pytest.mark.parametrize("module_name", _STORE_MODULES)
-    def test_store_uses_shared_resolver(self, module_name):
+    Es gibt zwei Wege dorthin, und beide werden geprüft: vier Stores rufen
+    ``resolve_data_dir`` als Modulfunktion auf, drei erben sie über
+    ``JsonFileStore``. Geprüft wird deshalb das *Ergebnis* — welches
+    Verzeichnis am Ende benutzt wird — und nicht die Objektidentität der
+    Funktion: Letztere bricht bei jedem legitimen Umbau, ohne dass sich am
+    Verhalten etwas ändert.
+    """
+
+    @pytest.mark.parametrize("module_name", _MODULE_LEVEL_STORES)
+    def test_module_level_store_uses_shared_resolver(self, module_name, monkeypatch, tmp_path):
+        monkeypatch.setenv(DATA_DIR_ENV, str(tmp_path))
         module = importlib.import_module(f"app.services.{module_name}")
-        assert module._resolve_data_dir is resolve_data_dir, (
+
+        assert module._resolve_data_dir() == tmp_path.resolve(), (
             f"{module_name} löst das Datenverzeichnis wieder selbst auf — "
             "damit driften die Stores erneut auseinander."
         )
 
-    def test_all_stores_agree_on_the_directory(self, monkeypatch, tmp_path):
+    @pytest.mark.parametrize("module_name,class_name,filename", _JSON_FILE_STORES)
+    def test_json_file_store_inherits_resolution(
+        self, module_name, class_name, filename, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv(DATA_DIR_ENV, str(tmp_path))
+        store_cls = getattr(importlib.import_module(f"app.services.{module_name}"), class_name)
+
+        assert issubclass(store_cls, JsonFileStore), (
+            f"{class_name} erbt die Datei- und Sperrmechanik nicht mehr — "
+            "prüfen, ob dabei wieder eigene Kopien entstanden sind."
+        )
+        store = store_cls()
+        assert store._data_dir == tmp_path.resolve()
+        assert store._path == tmp_path.resolve() / filename
+
+    def test_all_seven_stores_agree_on_the_directory(self, monkeypatch, tmp_path):
         monkeypatch.setenv(DATA_DIR_ENV, str(tmp_path))
 
         resolved = {
             name: importlib.import_module(f"app.services.{name}")._resolve_data_dir()
-            for name in _STORE_MODULES
+            for name in _MODULE_LEVEL_STORES
         }
+        for module_name, class_name, _ in _JSON_FILE_STORES:
+            store_cls = getattr(
+                importlib.import_module(f"app.services.{module_name}"), class_name
+            )
+            resolved[module_name] = store_cls()._data_dir
 
+        assert len(resolved) == 7
         assert set(resolved.values()) == {tmp_path.resolve()}
