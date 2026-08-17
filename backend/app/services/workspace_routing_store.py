@@ -27,18 +27,11 @@ from typing import IO, Iterator, Optional
 from ..contracts.llm_routing_contract import StageId, StageLLMRoute
 from ..contracts.workspace_routing_contract import WorkspaceLlmRoutingDefaults
 from ..utils.logger import get_logger
+from .data_dir import resolve_data_dir as _resolve_data_dir
 
 logger = get_logger("agora.services.workspace_routing_store")
 
-_DATA_DIR_ENV = "AGORA_DATA_DIR"
 _STORE_FILENAME = "workspace_llm_routing.json"
-
-
-def _resolve_data_dir() -> Path:
-    raw = os.environ.get(_DATA_DIR_ENV)
-    if raw:
-        return Path(raw).expanduser().resolve()
-    return Path(__file__).resolve().parents[2] / "data"
 
 
 def _now() -> datetime:

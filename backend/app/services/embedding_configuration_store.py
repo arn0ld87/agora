@@ -28,6 +28,8 @@ from typing import Iterator, Optional
 
 import fcntl
 
+from app.services.data_dir import resolve_data_dir as _resolve_data_dir
+
 from app.contracts.embedding_contract import (
     EmbeddingConfiguration,
     EmbeddingConfigurationScope,
@@ -36,7 +38,6 @@ from app.contracts.embedding_contract import (
     EmbeddingProviderKind,
 )
 
-_DATA_DIR_ENV = "AGORA_DATA_DIR"
 _STORE_FILENAME = "embedding_configurations.json"
 _INDEX_FILENAME = "embedding_index_versions.json"
 _SCHEMA_VERSION = 1
@@ -44,13 +45,6 @@ _SCHEMA_VERSION = 1
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
-
-
-def _resolve_data_dir() -> Path:
-    raw = os.environ.get(_DATA_DIR_ENV)
-    if raw:
-        return Path(raw).expanduser().resolve()
-    return Path(__file__).resolve().parents[2] / "data"
 
 
 def _new_configuration_id() -> str:

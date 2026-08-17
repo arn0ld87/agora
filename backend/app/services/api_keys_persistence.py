@@ -31,6 +31,7 @@ from typing import Optional
 from cryptography.fernet import Fernet
 
 from ..utils.logger import get_logger
+from .data_dir import resolve_data_dir as _resolve_data_dir
 
 try:  # POSIX-only — auf Windows nicht verfügbar
     import fcntl as _fcntl
@@ -43,20 +44,11 @@ except ImportError:  # pragma: no cover - Plattform-spezifisch
 logger = get_logger("agora.services.api_keys_persistence")
 
 _FERNET_KEY_ENV = "AGORA_FERNET_KEY"
-_DATA_DIR_ENV = "AGORA_DATA_DIR"
 _STORE_FILENAME = "api_keys.json"
 
 # Lazy-cached Fernet-Instanz (verändert sich mit Env-Wechsel in Tests)
 _fernet_instance: Optional[Fernet] = None
 _fernet_key_raw: Optional[str] = None
-
-
-def _resolve_data_dir() -> Path:
-    raw = os.environ.get(_DATA_DIR_ENV)
-    if raw:
-        return Path(raw).expanduser().resolve()
-    # backend/app/services/api_keys_persistence.py → backend/data/
-    return Path(__file__).resolve().parents[2] / "data"
 
 
 def _load_fernet() -> Fernet:
