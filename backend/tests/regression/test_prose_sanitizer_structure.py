@@ -11,6 +11,7 @@ from typing import Any, Dict, List
 
 import pytest
 
+from app.services.evidence_entailment import extract_numeric_facts
 from app.services.report_agent.text_verification import (
     UNVERIFIED_MARKER,
     split_sentences,
@@ -60,6 +61,18 @@ UNRELATED_POOL: List[Dict[str, Any]] = [
         ),
         # Gewöhnliche Zweibuchstabenwörter dürfen kein Satzende verhindern.
         ("Das lehnten sie ab. Der Rest folgte.", ["Das lehnten sie ab.", "Der Rest folgte."]),
+        # Codex-Review PR #1360: eine Kardinalzahl am Satzende ist keine
+        # Ordinalzahl. Verschmölzen beide Sätze zu einer Prüfeinheit, risse ein
+        # widerlegter Fakt im zweiten den ersten mit heraus.
+        (
+            "Die Stichprobe umfasste 14. Danach waren 61 Prozent betroffen.",
+            ["Die Stichprobe umfasste 14.", "Danach waren 61 Prozent betroffen."],
+        ),
+        # Dieselbe Zahl vor einem Monatsnamen bleibt eine Ordinalzahl.
+        (
+            "Der Test lief bis zum 14. Juni und blieb ohne Befund.",
+            ["Der Test lief bis zum 14. Juni und blieb ohne Befund."],
+        ),
     ],
 )
 def test_sentence_split_keeps_ordinals_and_abbreviations_together(line, expected):
@@ -199,24 +212,66 @@ def test_a_single_colliding_item_does_not_sink_the_whole_sentence():
     assert "83 Prozent" in result.content
 
 
+def test_a_value_the_claim_itself_names_is_not_a_contradiction():
+    """Der 83/91-Satz aus section_01.md in seiner echten Wortstellung.
+
+    Steht die Bezugsgruppe vor der Zahl, läuft das Subjekt der ersten Zahl
+    bis zur zweiten Gruppe durch (#1357) — die Regel verglich dann 83 mit den
+    belegten 91 Prozent derselben Verwaltung und las einen Widerspruch, wo
+    die Quelle den Satz stützt. Ein Claim, der den belegten Wert selbst
+    nennt, widerspricht nicht; er ordnet nur unscharf zu.
+    """
+    pool = [
+        _seed_item(
+            "Die verpflichtende Basisschulung wurde zu 91 Prozent von der "
+            "Verwaltung abgeschlossen.",
+            "ev_admin",
+        ),
+    ]
+    prose = (
+        "Während die Basisschulung im Ärztlichen Dienst zu 83 Prozent und in der "
+        "Verwaltung zu 91 Prozent abgeschlossen wurde, liegt die Quote im "
+        "Pflegebereich bei lediglich 54 Prozent."
+    )
+    result = verify_prose(prose, pool)
+
+    assert not result.rejected
+    assert "83 Prozent" in result.content
+
+
+def test_a_genuinely_different_value_still_removes_the_sentence():
+    """Die Gegenprobe: nennt der Claim den belegten Wert nirgends, bleibt es
+    ein Widerspruch und der Satz verschwindet (Codex-Review PR #1360, P1)."""
+    pool = [
+        _seed_item(
+            "Die verpflichtende Basisschulung wurde zu 91 Prozent von der "
+            "Verwaltung abgeschlossen.",
+            "ev_admin",
+        ),
+    ]
+    prose = "Die Basisschulung wurde zu 42 Prozent von der Verwaltung abgeschlossen."
+    result = verify_prose(prose, pool)
+
+    assert result.rejected
+    assert "42 Prozent" not in result.content
+
+
 @pytest.mark.xfail(
     reason=(
         "Offene Lücke #1357: steht die Bezugsgruppe *vor* der Zahl ('in der "
-        "Ärzteschaft 83 Prozent'), greift die Extraktion daneben und ordnet "
-        "dem Fakt die nächstfolgende Gruppe zu. Am vollständigen Pool des "
-        "Referenzlaufs fällt das nicht auf, weil dort stets ein milderes "
-        "Urteil existiert; bei einem knappen Pool entscheidet die falsche "
-        "Bezugsgruppe. Braucht Vorfeld-Erkennung in _split_subject_predicate."
+        "Ärzteschaft 83 Prozent'), sucht _split_subject_predicate nur rechts "
+        "der Zahl und findet dort nichts oder die nächstfolgende Gruppe. Auf "
+        "das Gating schlägt das seit #1356 nicht mehr durch — eine fremde "
+        "Bezugsgruppe ergibt INSUFFICIENT statt CONTRADICTED und der Satz "
+        "bleibt stehen. Die Zuordnung selbst ist trotzdem falsch und trägt "
+        "die Begründung. Braucht Vorfeld-Erkennung in _split_subject_predicate."
     ),
     strict=True,
 )
 def test_leading_subject_is_assigned_to_the_right_number():
-    pool = [
-        _seed_item("83 Prozent der Auszubildenden nahmen teil.", "ev_other_group"),
-    ]
-    prose = "Die Basisschulung erreichte in der Ärzteschaft 83 Prozent."
-    result = verify_prose(prose, pool)
-    assert not result.rejected
+    facts = extract_numeric_facts("Die Basisschulung erreichte in der Ärzteschaft 83 Prozent.")
+    assert facts
+    assert "ärzteschaft" in facts[0].subject.lower()
 
 
 def test_marker_is_not_duplicated_on_repeated_runs():

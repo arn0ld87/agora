@@ -153,6 +153,14 @@ _ABBREVIATIONS = frozenset({
     "jan", "feb", "mrz", "apr", "jun", "jul", "aug", "sep", "okt", "nov", "dez",
 })
 
+#: Monatsnamen. Ein großgeschriebenes Wort hinter einer Zahl beendet den Satz
+#: normalerweise ("umfasste 14. Danach …"); ein Monat tut das nicht ("14. Juni").
+_MONTHS = frozenset({
+    "januar", "februar", "märz", "maerz", "april", "mai", "juni", "juli",
+    "august", "september", "oktober", "november", "dezember",
+    "jan", "feb", "mrz", "apr", "jun", "jul", "aug", "sep", "sept", "okt", "nov", "dez",
+})
+
 
 def is_markup_or_quote_line(stripped: str) -> bool:
     """Leere Zeile, Zitatblock-Präfix oder vollständig getaggte Zeile.
@@ -179,6 +187,34 @@ def _is_structural(line: str) -> bool:
     return bool(re.fullmatch(r"\*\*[^*]+\*\*:?", stripped))
 
 
+def _is_ordinal_boundary(text: str, dot_index: int, token_start: int) -> bool:
+    """Ist die Ziffernfolge vor dem Punkt eine Ordinalzahl statt eines Satzendes?
+
+    Eine Zahl allein entscheidet das nicht — ``Die Stichprobe umfasste 14.``
+    endet einen Satz, ``am 14. Juni`` nicht. Würde jede Ziffer die Satzgrenze
+    unterdrücken, verschmölzen zwei Sätze zu einer Prüfeinheit, und ein
+    widerlegter Fakt im zweiten risse den ersten mit heraus (Codex-Review
+    PR #1360, P2). Entschieden wird deshalb am Kontext:
+
+    * Ziffer am Zeilenanfang — ein Aufzählungsmarker ("1. Erfolgreicher …").
+    * Folgewort kleingeschrieben — Ordinalzahl ("3. bis 14. Juni").
+    * Folgewort ist ein Monatsname — Datum ("14. Juni").
+
+    Sonst ist der Punkt ein Satzende, auch nach einer Zahl.
+    """
+    if not text[:token_start].strip():
+        return True
+    following = re.match(r"\s*(\S+)", text[dot_index + 1:])
+    if not following:
+        return False
+    word = following.group(1).strip(",.;:()\"'„»")
+    if not word:
+        return False
+    if word[:1].islower():
+        return True
+    return word.lower().rstrip(".") in _MONTHS
+
+
 def _is_false_boundary(text: str, dot_index: int) -> bool:
     """Steht der Punkt an ``dot_index`` für eine Abkürzung statt ein Satzende?
 
@@ -197,7 +233,10 @@ def _is_false_boundary(text: str, dot_index: int) -> bool:
     if not token:
         return False
     if token.isdigit():
-        return True
+        # ``token_start`` zeigt hinter die abgestreiften Klammern — nur so
+        # erkennt die Zeilenanfangs-Prüfung einen echten Aufzählungsmarker.
+        token_start = match.end() - len(token)
+        return _is_ordinal_boundary(text, dot_index, token_start)
     # Nur *einzelne* Buchstaben sind Abkürzungspunkte ("z. B.", "u. a.").
     # Zwei Buchstaben deckt die Liste ab — "ab", "an", "zu" sind gewöhnliche
     # Wörter und dürfen ein Satzende nicht verhindern.
@@ -245,15 +284,36 @@ def _fact_probe(fact: NumericFact) -> str:
     return " ".join(part for part in (head, fact.subject, fact.predicate) if part).strip()
 
 
-#: Rangfolge der Urteile — je kleiner, desto besser für den Satz. Sie ersetzt
-#: die frühere Präferenz, die ``CONTRADICTED`` über ``INSUFFICIENT`` stellte
-#: und damit ein einzelnes zufällig kollidierendes Evidence-Item über einen
-#: ganzen Satz entscheiden ließ.
-_VERDICT_RANK = {
+#: Aussagekraft — welches Pool-Urteil entscheidet über einen Fakt?
+#:
+#: Ein Beleg schlägt alles. Danach kommt der Widerspruch: er trägt eine
+#: Information ("die Quelle sagt etwas anderes"), die ein ``INSUFFICIENT``
+#: nicht hat ("diese Quelle sagt dazu nichts"). Weil der Pool seit #1356 der
+#: vollständige ``evidence_index`` ist, liefert praktisch immer *irgendein*
+#: Item ein ``INSUFFICIENT`` — würde das gewinnen, wäre der Löschpfad tot
+#: und aktiv widerlegte Aussagen blieben stehen (Codex-Review PR #1360, P1).
+#:
+#: Dass dabei kein Zufallstreffer mehr durchschlägt, sichert nicht diese
+#: Rangfolge, sondern die Verdikte selbst: ``subject_mismatch`` — dieselbe
+#: Zahl bei fremder Bezugsgruppe — ist seit #1356 kein Widerspruch mehr.
+_DECISIVENESS = {
+    EntailmentVerdict.SUPPORTED: 0,
+    EntailmentVerdict.CONTRADICTED: 1,
+    EntailmentVerdict.RELATED_ONLY: 2,
+    EntailmentVerdict.INSUFFICIENT: 3,
+}
+
+#: Schweregrad — welcher Fakt entscheidet über den Satz?
+#:
+#: Bewusst eine andere Ordnung als :data:`_DECISIVENESS`. Für den einzelnen
+#: Fakt ist ein Widerspruch das *aussagekräftigere* Urteil, für den Satz das
+#: *schwerwiegendere*: ein einziger widerlegter Fakt entfernt ihn, ein
+#: unbelegbarer kennzeichnet ihn nur.
+_SEVERITY = {
     EntailmentVerdict.SUPPORTED: 0,
     EntailmentVerdict.RELATED_ONLY: 1,
-    EntailmentVerdict.INSUFFICIENT: 2,
-    EntailmentVerdict.CONTRADICTED: 3,
+    EntailmentVerdict.INSUFFICIENT: 1,
+    EntailmentVerdict.CONTRADICTED: 2,
 }
 
 
@@ -263,13 +323,13 @@ def _best_verdict(
     *,
     judge: Optional[EntailmentJudge] = None,
 ) -> EntailmentResult:
-    """Das günstigste Urteil, das irgendein Item des Pools hergibt."""
+    """Das aussagekräftigste Urteil, das irgendein Item des Pools hergibt."""
     best: Optional[EntailmentResult] = None
     for item in evidence_pool:
         result = classify_evidence(probe, item, judge=judge)
         if result.verdict is EntailmentVerdict.SUPPORTED:
             return result
-        if best is None or _VERDICT_RANK[result.verdict] < _VERDICT_RANK[best.verdict]:
+        if best is None or _DECISIVENESS[result.verdict] < _DECISIVENESS[best.verdict]:
             best = result
     return best or EntailmentResult(
         EntailmentVerdict.INSUFFICIENT, "keine Evidence geprüft"
@@ -433,7 +493,7 @@ def verify_prose(
                 result = _best_verdict(_fact_probe(fact), evidence_pool, judge=judge)
                 if result.verdict is EntailmentVerdict.SUPPORTED:
                     continue
-                if worst is None or _VERDICT_RANK[result.verdict] > _VERDICT_RANK[worst.verdict]:
+                if worst is None or _SEVERITY[result.verdict] > _SEVERITY[worst.verdict]:
                     worst = result
 
             if worst is None:
