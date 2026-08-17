@@ -520,8 +520,18 @@ def process_section(
 
     section.content = content
     ctx.report_manager.save_section(ctx.report_id, section_index, section)
+    # Issue #1316: Die Claim-Extraktion sah bislang exakt dasselbe ``content``
+    # wie ``save_section`` — nur reinigt ``save_section`` intern, die
+    # Extraktion nicht. Rohes <simulated_quote>-Markup landete damit in den
+    # Claim-Kandidaten. ``prepare_content_for_evidence`` rendert die Zitate,
+    # lässt Überschriften aber als ``#`` stehen: der Heading-Umbau zu
+    # Fettschrift ist eine Darstellungsfrage des Dateipfads und würde der
+    # Extraktion das Signal nehmen, an dem sie Überschriften erkennt.
     evidence = agent._save_evidence_section(
-        ctx.report_id, section_index, section.title, content
+        ctx.report_id,
+        section_index,
+        section.title,
+        ctx.report_manager.prepare_content_for_evidence(content),
     )
 
     return SectionResult(
