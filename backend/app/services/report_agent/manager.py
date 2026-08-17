@@ -507,11 +507,30 @@ class ReportManager:
         logger.info("Outline saved: %s", report_id)
 
     @classmethod
+    def prepare_content_for_evidence(cls, content: str) -> str:
+        """Bereitet Abschnittsinhalt für die Claim-Extraktion auf (#1316).
+
+        Bewusst **nicht** ``_clean_section_content``: von dessen drei
+        Schritten braucht die Evidence-Seite nur den ersten. Das Rendern der
+        ``<simulated_quote>``-Tags zu Blockquotes muss hier passieren — ohne
+        es liest die Claim-Extraktion rohes Tag-Markup und zerlegt es in
+        Claim-Kandidaten, für die es keine Evidenz geben kann.
+
+        Die beiden anderen Schritte sind Darstellungsfragen des Dateipfads
+        und für die Extraktion sogar schädlich: ``_clean_section_content``
+        wandelt jede Markdown-Überschrift in Fettschrift um. Damit verlöre
+        ``is_claim_candidate`` das ``#``-Signal, an dem es Überschriften
+        erkennt, und eine lange Zwischenüberschrift würde als Aussage
+        gebunden — der Bold-Filter greift nur unterhalb von acht Wörtern.
+        """
+        return _render_simulated_quote_blocks(content or "")
+
+    @classmethod
     def save_section(
         cls,
         report_id: str,
         section_index: int,
-        section: ReportSection
+        section: ReportSection,
     ) -> str:
         cls._ensure_report_folder(report_id)
         cleaned_content = cls._clean_section_content(section.content, section.title)

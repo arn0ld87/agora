@@ -822,7 +822,7 @@ def test_9_opinion_question_selects_compact_preset():
     assert detect_report_intent("Was denken die Leute?") is ReportIntent.OPINION
 
     sections = sections_for_intent(ReportIntent.OPINION)
-    assert len(sections) == 6
+    assert len(sections) == 7  # 6 + Handlungsempfehlung (#1322)
     assert len(sections) < len(sections_for_intent(ReportIntent.FULL))
     joined = " ".join(sections).lower()
     for absent in ("content-idee", "positionierung", "multiplikator"):
@@ -847,9 +847,12 @@ def test_9b_intent_detection_matrix(question, expected):
 # ---------------------------------------------------------------------------
 
 
-def test_10_full_report_preset_keeps_all_eleven_sections():
+def test_10_full_report_preset_keeps_all_twelve_sections():
     sections = sections_for_intent(ReportIntent.FULL)
-    assert len(sections) == 11
+    assert len(sections) == 12
+    # #1322: Der Bericht endet mit dem Beschlussvorschlag, nicht mit dem,
+    # was er nicht weiß.
+    assert sections[-1] == "Handlungsempfehlung"
 
 
 def test_10b_unspecific_question_defaults_to_full():

@@ -7,7 +7,10 @@
 
 from __future__ import annotations
 
-from app.services.confidence_calculator import compute_confidence
+from app.services.confidence_calculator import (
+    compute_claim_confidence,
+    compute_confidence,
+)
 from app.services.evidence_binder import detect_contradiction_penalty
 
 
@@ -189,6 +192,70 @@ def test_penalty_capped_at_max():
     )
     penalty = detect_contradiction_penalty(items)
     assert penalty <= 0.5
+
+
+_GEBUNDENER_WIDERSPRUCH = [
+    {"snippet": "NRW KIDM beschlossen", "match_score": 0.9,
+     "supports_claim": True, "entailment": "SUPPORTED"},
+    {"snippet": "NRW Curriculum verabschiedet", "match_score": 0.8,
+     "supports_claim": True, "entailment": "SUPPORTED"},
+    {"snippet": "NRW KIDM widerlegt", "match_score": 0.7,
+     "supports_claim": False, "contradicts_claim": True,
+     "entailment": "CONTRADICTED"},
+]
+
+
+def test_binder_belastet_gebundenen_widerspruch_nicht_ein_zweites_mal():
+    """#1327: der Binder darf einen CONTRADICTED-Beleg nicht selbst bestrafen.
+
+    ``bind_evidence_to_claim`` setzt ``contradicts_claim`` nur bei
+    CONTRADICTED, was ``supports_claim=False`` erzwingt. Dasselbe Item wird
+    von ``partition_by_entailment`` bereits als ``contradicting`` gezaehlt und
+    im Rechner mit 0.2 belastet. Wuerde ``detect_contradiction_penalty`` es
+    zusaetzlich mit 0.15 belasten, waere derselbe Widerspruch doppelt
+    bestraft — ``report_agent/agent.py`` reicht dieses Ergebnis als
+    ``contradiction_penalty`` in genau jenen Rechner.
+    """
+    assert detect_contradiction_penalty(_GEBUNDENER_WIDERSPRUCH) == 0.0
+
+
+def test_entailment_pfad_bestraft_den_gebundenen_widerspruch_tatsaechlich():
+    """Gegenstueck: die Strafe fehlt nicht, sie sitzt nur woanders.
+
+    Ohne diesen Test liesse sich der Test darueber auch dadurch erfuellen,
+    dass der Widerspruch gar keine Wirkung mehr haette.
+    """
+    ohne_widerspruch = _GEBUNDENER_WIDERSPRUCH[:2]
+
+    _score_mit, _label_mit, penalties_mit = compute_claim_confidence(
+        _GEBUNDENER_WIDERSPRUCH
+    )
+    score_ohne, _label_ohne, penalties_ohne = compute_claim_confidence(
+        ohne_widerspruch
+    )
+
+    assert "entailment_contradiction_penalty" in penalties_mit
+    assert "entailment_contradiction_penalty" not in penalties_ohne
+    assert _score_mit < score_ohne, (
+        "Der gebundene Widerspruch muss die Confidence senken — nur eben "
+        "ueber den Entailment-Pfad, nicht ueber den Binder"
+    )
+
+
+def test_stuetzendes_item_mit_fremdem_widerspruchs_flag_wird_bestraft():
+    """Was Regel 1 weiterhin abdeckt: ein Flag, das der Entailment-Pfad nicht kennt.
+
+    ``partition_by_entailment`` prueft nur ``entailment == CONTRADICTED`` und
+    ``contradicts_claim``. Ein stuetzendes Item, das aus einer anderen Quelle
+    ``is_contradiction`` traegt, bleibt damit Sache des Binders.
+    """
+    items = [
+        {"snippet": "NRW KIDM beschlossen", "match_score": 0.9,
+         "supports_claim": True},
+        {"snippet": "NRW Curriculum verabschiedet", "match_score": 0.8,
+         "supports_claim": True, "is_contradiction": True},
+    ]
+    assert detect_contradiction_penalty(items) > 0.0
 
 
 def test_contradiction_penalty_integrated_with_confidence():

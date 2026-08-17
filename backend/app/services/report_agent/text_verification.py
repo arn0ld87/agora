@@ -83,13 +83,27 @@ _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
 _QUOTE_PREFIXES = (">", "|")
 
 
-def _is_structural(line: str) -> bool:
-    stripped = line.strip()
+def is_markup_or_quote_line(stripped: str) -> bool:
+    """Leere Zeile, Zitatblock-Präfix oder vollständig getaggte Zeile.
+
+    Gemeinsame Teilprüfung für ``_is_structural`` (Fließtext-Validator, hier)
+    und ``is_claim_candidate`` (Claim-Extraktion in ``sections.py``,
+    Issue #1316) — beide verwerfen dieselben drei Zeilenformen, bevor sie
+    ihre je eigene Zusatzlogik anwenden. ``stripped`` erwartet bereits
+    getrimmten Text.
+    """
     if not stripped:
         return True
     if stripped.startswith(_QUOTE_PREFIXES):
         return True
     if stripped.startswith("<") and stripped.endswith(">"):
+        return True
+    return False
+
+
+def _is_structural(line: str) -> bool:
+    stripped = line.strip()
+    if is_markup_or_quote_line(stripped):
         return True
     return bool(re.fullmatch(r"\*\*[^*]+\*\*:?", stripped))
 

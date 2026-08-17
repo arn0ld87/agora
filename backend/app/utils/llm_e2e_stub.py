@@ -29,7 +29,7 @@ _stub_logger = logging.getLogger("agora.llm_e2e_stub")
 # Snapshot-Pfad — Single Source of Truth für Pflichtabschnitte.
 # Der prod-Container kopiert backend/app (ohne backend/tests), daher wird
 # der Pfad zu backend/tests/eval/snapshots/ dort nicht existieren.
-# _eleven_required_sections() fällt in diesem Fall auf den eingebetteten
+# _required_sections() fällt in diesem Fall auf den eingebetteten
 # Fallback zurück, anstatt ImportError zu werfen (CI-Root-Cause M11.4b-Followup-1).
 _SNAPSHOT_PATH = (
     pathlib.Path(__file__).parent.parent.parent
@@ -55,12 +55,13 @@ _FALLBACK_REQUIRED_SECTIONS: list[str] = [
     "Positionierung",
     "Content-Ideen",
     "Datenlücken",
+    "Handlungsempfehlung",
 ]
 
 
 # Einmalig beim Import geladen (Pure Python, kein I/O danach)
-def _eleven_required_sections() -> list[str]:
-    """Liest die 11 Pflichtabschnittsnamen aus dem Snapshot.
+def _required_sections() -> list[str]:
+    """Liest die Pflichtabschnittsnamen aus dem Snapshot.
 
     Primär: Snapshot-Datei backend/tests/eval/snapshots/output-contract-required-sections.txt.
     Fallback: eingebettete Liste _FALLBACK_REQUIRED_SECTIONS — aktiv wenn die Datei
@@ -88,7 +89,7 @@ def _eleven_required_sections() -> list[str]:
 
 
 # Geladen einmalig beim Modulimport
-_REQUIRED_SECTIONS: list[str] = _eleven_required_sections()
+_REQUIRED_SECTIONS: list[str] = _required_sections()
 
 _stub_logger.info(
     "llm_e2e_stub: Modul importiert. AGORA_E2E_LLM_MODE=%s, %d Pflichtabschnitte geladen. "
