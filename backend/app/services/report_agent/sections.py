@@ -88,6 +88,38 @@ def truncate_text(text: str, limit: int = 300) -> str:
     return text if len(text) <= limit else text[:limit] + "..."
 
 
+def action_content(action: Dict[str, Any]) -> str:
+    """Der Beitragstext einer Aktion — leer, wenn sie keinen traegt.
+
+    Issue #1304 (S2). ``like_post`` und ``repost`` sind Handlungen ohne
+    eigenen Text; ``create_post`` und ``create_comment`` tragen ihn unter
+    ``action_args.content``.
+    """
+    args = action.get("action_args")
+    if not isinstance(args, dict):
+        return ""
+    content = args.get("content")
+    return content.strip() if isinstance(content, str) else ""
+
+
+def _pick_from_bin(bucket: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Waehle den aussagekraeftigsten Eintrag eines Zeit-Bins.
+
+    Issue #1304 (S2): Bisher fiel die Wahl immer auf ``bucket[0]`` — rein
+    positional. Ein ``like_post`` an der Bin-Grenze schlug damit einen
+    ausformulierten Beitrag desselben Zeitraums, und die gezogene Evidence
+    konnte gar keine Aussage stuetzen, weil sie keinen Text hatte.
+
+    Bevorzugt wird deshalb der laengste Beitrag mit Text; hat kein Eintrag im
+    Bin einen, bleibt es beim ersten — ein Bin ohne Textbeitrag soll seinen
+    Platz behalten, damit die Zeitreihe nicht luecken bekommt.
+    """
+    with_text = [action for action in bucket if action_content(action)]
+    if not with_text:
+        return bucket[0]
+    return max(with_text, key=lambda action: len(action_content(action)))
+
+
 def sample_actions_timeseries(
     actions: List[Dict[str, Any]], k: int = 8
 ) -> List[Dict[str, Any]]:
@@ -113,11 +145,12 @@ def sample_actions_timeseries(
         end = ((bin_idx + 1) * n) // k
         if start >= end:
             continue
-        picked = dict(sorted_actions[start])
+        picked = dict(_pick_from_bin(sorted_actions[start:end]))
         raw_marker = picked.setdefault("_sampling", {})
         raw_marker["bin"] = bin_idx
         raw_marker["bin_total"] = k
         raw_marker["sampled_from_total"] = n
+        raw_marker["bin_size"] = end - start
         sampled.append(picked)
     return sampled
 
@@ -532,6 +565,7 @@ def section_dedup_check(
 
 
 __all__ = [
+    "action_content",
     "attach_provenance",
     "atomize_claim_chunk",
     "build_source_id_anchor",
