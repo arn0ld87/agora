@@ -268,8 +268,15 @@ class GraphToolsService:
         combined_prompt = "\n".join([f"{i+1}. {q}" for i, q in enumerate(result.interview_questions)])
 
         INTERVIEW_PROMPT_PREFIX = (
-            "You are being interviewed. Please combine your character profile, all past memories and actions, "
-            "and directly answer the following questions in plain text.\n"
+            # Issue #1304 (S1): Der Prompt versprach zuvor "all past memories
+            # and actions". Auf dem Direktpfad — dem Normalfall fuer
+            # abgeschlossene Simulationen — liefert der System-Prompt die
+            # eigenen Beitraege der Persona, aber keine fremden Erinnerungen.
+            # Ein Versprechen, das der Kontext nicht einloest, laedt das Modell
+            # zum Erfinden ein.
+            "You are being interviewed. Draw on your character profile and on whatever "
+            "of your own simulation activity is provided above, and directly answer the "
+            "following questions in plain text.\n"
             "Response requirements:\n"
             "1. Answer directly in natural language, do not call any tools\n"
             "2. Do not return JSON format or tool call format\n"
