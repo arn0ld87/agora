@@ -1,0 +1,5 @@
+### Fixed (Aktions-Sampling ist nicht mehr inhaltsblind — 2026-08-17)
+
+- **Ein `like_post` an der Bin-Grenze schlug einen ausformulierten Beitrag:** `sample_actions_timeseries` zog aus jedem Zeit-Bin das erste Element, rein positional. Von 355 Aktionen erreichten so acht die Evidence-Schicht — und welche acht, entschied die Sortierung, nicht der Inhalt (#1304, S2).
+- **Bevorzugt wird jetzt der längste Textbeitrag des Bins.** Trägt kein Eintrag eines Bins Text, bleibt es beim ersten: ein Bin ohne Textbeitrag soll seinen Platz behalten, damit die Zeitreihe keine Lücken bekommt. Die Bin-Struktur — der eigentliche Sinn der Funktion — bleibt unangetastet.
+- **Der größere Befund lag daneben: die gezogene Evidence trug gar keinen Text.** Der Snippet war reine Metabeschreibung — `Anna create_post on reddit in round 3`. Gegen so einen Text kann kein Entailment eine Aussage stützen, egal wie gut gesampelt wurde. Damit war jede Agentenaktion strukturell unfähig, einen Claim zu tragen — die eigentliche Erklärung für die 0 % aus der Kritik, die auch besseres Sampling allein nicht behoben hätte. Der Beitragstext steht jetzt im Snippet (auf 600 Zeichen gekürzt).

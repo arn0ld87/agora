@@ -33,6 +33,7 @@ from .search_dedup import (
 from .postprocess_timing import PostprocessPhaseTracker
 from .schemas import CURRENT_SCHEMA_VERSION, EvidenceMapModel, normalize_persisted_evidence_map
 from .sections import (
+    action_content as sections_action_content,
     attach_provenance,
     atomize_claim_chunk,
     build_source_id_anchor,
@@ -363,11 +364,20 @@ class ReportAgent:
                 agent = action.get("agent_name") or f"Agent {action.get('agent_id')}"
                 platform = action.get("platform") or "unknown"
                 round_num = action.get("round_num")
+                # Issue #1304 (S2): Der Snippet war reine Metabeschreibung —
+                # "Agent X create_post on reddit in round 3". Gegen so einen
+                # Text kann kein Entailment eine Aussage stuetzen, egal wie gut
+                # gesampelt wurde. Der Beitragstext selbst gehoert hinein; ohne
+                # ihn bleibt die Aktion Dekoration.
+                action_text = sections_action_content(action)
+                snippet = f"{agent} {action_type} on {platform} in round {round_num}"
+                if action_text:
+                    snippet = f"{snippet}: {self._truncate(action_text, 600)}"
                 items.append(EvidenceItem(
                     type="agent_action",
                     source="simulation_actions",
                     value=action_type,
-                    snippet=f"{agent} {action_type} on {platform} in round {round_num}",
+                    snippet=snippet,
                     raw=action,
                 ).to_dict())
                 action_identity = (
