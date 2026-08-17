@@ -375,6 +375,65 @@ def render_simulation_snapshot(report: ReportV3) -> str:
     )
 
 
+def render_simulation_contribution(report: ReportV3) -> str:
+    """Weist aus, wie viel die Simulation zu den validierten Aussagen beitraegt.
+
+    Issue #1304 (S3). Der Wert gehoert neben den Simulationsstand: 24 Runden
+    auszuweisen und zu verschweigen, dass keine einzige Aussage darauf beruht,
+    waere die halbe Wahrheit.
+    """
+    contribution = getattr(report, "simulation_contribution", None)
+    if contribution is None:
+        return (
+            "Simulationsbeitrag: `unbekannt` (vor Einfuehrung der Messung erzeugt)"
+        )
+    if not contribution.validated_claims:
+        return (
+            "Simulationsbeitrag: keine validierte Aussage im Artefakt — "
+            "es gibt nichts zu messen."
+        )
+
+    def _pct(share: float | None) -> str:
+        return "—" if share is None else f"{share * 100:.1f} %"
+
+    return "\n\n".join([
+        (
+            f"Simulationsbeitrag: {contribution.claims_with_action_evidence} von "
+            f"{contribution.validated_claims} validierten Aussagen stuetzen sich "
+            f"auf eine beobachtete Agentenaktion "
+            f"({_pct(contribution.action_share)}); bei "
+            f"{contribution.claims_requiring_action_evidence} ist sie der einzige "
+            f"stuetzende Beleg ({_pct(contribution.action_necessary_share)})."
+        ),
+        _table(
+            ["Kennzahl", "Aussagen", "Anteil"],
+            [
+                [
+                    "validiert (mit stuetzendem Beleg)",
+                    str(contribution.validated_claims),
+                    "100.0 %",
+                ],
+                [
+                    "davon mit Simulationsbeleg (Aktion oder Interview)",
+                    str(contribution.claims_with_simulation_evidence),
+                    _pct(contribution.simulation_share),
+                ],
+                [
+                    "davon mit Aktionsbeleg (Phase 3)",
+                    str(contribution.claims_with_action_evidence),
+                    _pct(contribution.action_share),
+                ],
+                [
+                    "davon ausschliesslich auf Aktionsbelegen",
+                    str(contribution.claims_requiring_action_evidence),
+                    _pct(contribution.action_necessary_share),
+                ],
+            ],
+            "Kein Simulationsbeitrag messbar.",
+        ),
+    ])
+
+
 def render_report_v3(report: ReportV3) -> str:
     mode = getattr(report, "report_mode", "balanced") or "balanced"
     banner = _MODE_BANNER.get(mode, _MODE_BANNER["balanced"])
@@ -383,6 +442,7 @@ def render_report_v3(report: ReportV3) -> str:
         f"Report-ID: `{_cell(report.report_id)}`",
         f"Generiert: `{report.generated_at.isoformat()}`",
         render_simulation_snapshot(report),
+        render_simulation_contribution(report),
         banner,
         render_evidence_status(report),
         "## Persona-Tabelle",
@@ -447,6 +507,7 @@ def render_report_v3(report: ReportV3) -> str:
 __all__ = [
     "render_claim_table",
     "render_data_gaps",
+    "render_simulation_contribution",
     "render_evidence_index",
     "render_evidence_status",
     "render_hypotheses_table",

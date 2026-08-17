@@ -308,6 +308,38 @@ class Hypothesis(BaseModel):
     confidence_score: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
+class SimulationContribution(BaseModel):
+    """Wie viel die Simulation zu den validierten Aussagen beiträgt (#1304, S3).
+
+    Die Kritik am Referenzlauf lautete: 24 Runden Simulation, keine einzige
+    validierte Aussage auf einer Agentenaktion. Ohne diese Zahl ist nach jedem
+    Eingriff an Sampling oder Interviewkontext unklar, ob er gewirkt hat.
+
+    Die drei Zähler sind ineinander geschachtelt und absichtlich getrennt
+    ausgewiesen: ``claims_with_action_evidence`` allein überschätzt den Beitrag
+    (ein zweiter Beleg trägt die Aussage womöglich ebenso),
+    ``claims_requiring_action_evidence`` allein unterschätzt ihn.
+
+    Die Anteile sind ``None``, solange es keine validierte Aussage gibt — eine
+    0.0 würde "kein Beitrag" behaupten, wo nichts gemessen wurde.
+    """
+
+    model_config = _STRICT
+
+    validated_claims: int = Field(default=0, ge=0)
+    #: Mindestens ein stützender Beleg aus der Simulation (``agent_quote`` oder
+    #: ``agent_action``) — Interviews eingeschlossen.
+    claims_with_simulation_evidence: int = Field(default=0, ge=0)
+    #: Mindestens ein stützender Beleg ist eine beobachtete Aktion aus Phase 3.
+    claims_with_action_evidence: int = Field(default=0, ge=0)
+    #: *Alle* stützenden Belege sind Aktionen — ohne die Simulationsrunden gäbe
+    #: es diese Aussage nicht.
+    claims_requiring_action_evidence: int = Field(default=0, ge=0)
+    simulation_share: float | None = Field(default=None, ge=0.0, le=1.0)
+    action_share: float | None = Field(default=None, ge=0.0, le=1.0)
+    action_necessary_share: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
 ModelAttributionStage = Literal[
     "ontology",
     "graph_extraction",
@@ -398,6 +430,13 @@ class ReportV3(BaseModel):
     simulation_snapshot: SimulationSnapshotModel | None = Field(
         default=None,
         description="Simulationsstand zum Startzeitpunkt des Reports.",
+    )
+    # Issue #1304 (S3): Wie viel die Simulation zu den validierten Aussagen
+    # beitraegt. Additiv, Default None — Bestandsreports ohne den Slot laden
+    # unveraendert.
+    simulation_contribution: SimulationContribution | None = Field(
+        default=None,
+        description="Anteil der validierten Aussagen, die die Simulation traegt.",
     )
     # Slice 5 (2026-05-17): Red-Team-Findings aus echo_chamber_review-Stage.
     # max_length=10 begrenzt die Anzahl der Befunde; leer = kein Echo-Problem erkannt.
