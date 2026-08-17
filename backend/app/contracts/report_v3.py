@@ -281,6 +281,13 @@ class DataGap(BaseModel):
     beschreibung: str = Field(min_length=1)
     severity: Literal["low", "medium", "high"]
     suggested_fixes: list[str] = Field(default_factory=list)
+    #: Issue #1319: Datenlücke und Hypothese entstehen im selben Zweig aus
+    #: demselben Claim. Die Beziehung gehört in den Vertrag, nicht als
+    #: ``[siehe …]``-Anhängsel in die Beschreibung — nur so kann ein Consumer
+    #: sie auflösen, und nur so faellt beim Rendern auf, wenn das Ziel fehlt.
+    #: Traegt die exportierte Hypothesen-ID (``H<n>_<i>`` / ``HA<n>_<i>``),
+    #: nicht die abschnittsinterne Rohform.
+    related_hypothesis_id: str | None = None
 
 
 class Hypothesis(BaseModel):

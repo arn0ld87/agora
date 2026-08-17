@@ -368,6 +368,32 @@ class ReportManager:
                         or single_source_text_confidence
                     ),
                 ))
+            # Slice 3 (Issue #495): stable Re-ID after Dedup.
+            # visible hypotheses get IDs H{section_idx}_{i:02d} (1-based),
+            # appendix hypotheses get IDs HA{section_idx}_{i:02d} (1-based).
+            _hypothesis_slots: list[tuple[str, list[dict[str, Any]]]] = [
+                ("H", list(section.get("hypotheses") or [])),
+                ("HA", list(section.get("hypotheses_appendix") or [])),
+            ]
+            # Issue #1319: Die Datenlücke verweist auf die abschnittsinterne
+            # Rohform (``hypothesis_01``); exportiert wird die Hypothese unter
+            # ``H<n>_<i>``. Ohne diese Abbildung zeigt der Verweis auf eine ID,
+            # die in der Hypothesentabelle nicht vorkommt. Dazwischen liegen
+            # ausserdem Dedup und Appendix-Cap: eine Hypothese kann ganz
+            # verschwinden. Was die Abbildung nicht kennt, hat kein Ziel — der
+            # Verweis entfaellt dann, statt ins Leere zu zeigen.
+            hypothesis_export_ids: dict[str, str] = {}
+            for _id_prefix, _slot in _hypothesis_slots:
+                for _h_slot_idx, _hypothesis in enumerate(_slot, start=1):
+                    if not isinstance(_hypothesis, dict):
+                        continue
+                    if not str(_hypothesis.get("hypothesis_text") or "").strip():
+                        continue
+                    _raw_id = str(_hypothesis.get("hypothesis_id") or "").strip()
+                    if _raw_id:
+                        hypothesis_export_ids[_raw_id] = (
+                            f"{_id_prefix}{section_index}_{_h_slot_idx:02d}"
+                        )
             for gap in section.get("data_gaps") or []:
                 if not isinstance(gap, dict):
                     continue
@@ -376,20 +402,28 @@ class ReportManager:
                 reason = str(gap.get("gap_reason") or "").strip()
                 description = claim_text if not reason else f"{claim_text} ({reason})"
                 description = description.strip() or "Datenluecke ohne Claim-Text."
+                # Issue #1319: Hypothese und Datenluecke tragen denselben
+                # Claim-Text — sie entstehen im selben Zweig. Der Verweis macht
+                # aus der stummen Doppelung eine erkennbare Beziehung, statt
+                # den Leser zweimal dasselbe lesen zu lassen ohne zu sagen,
+                # dass es dasselbe ist.
+                hypothesis_ref = hypothesis_export_ids.get(
+                    str(gap.get("hypothesis_id") or "").strip()
+                )
                 suggested_fix = gap.get("suggested_fix")
+                # Issue #1319: severity war hartkodiert "medium" — unabhaengig
+                # davon, ob ueberhaupt keine Quelle gebunden ist (schwerer) oder
+                # nur eine thematisch verwandte ohne Aussagebezug (leichter).
+                severity: Literal["low", "medium", "high"] = (
+                    "high" if reason == "no_evidence_bound" else "medium"
+                )
                 data_gaps.append(ReportV3DataGap(
                     id=gap_id,
                     beschreibung=description,
-                    severity="medium",
+                    severity=severity,
                     suggested_fixes=[str(suggested_fix)] if suggested_fix else [],
+                    related_hypothesis_id=hypothesis_ref,
                 ))
-            # Slice 3 (Issue #495): stable Re-ID after Dedup.
-            # visible hypotheses get IDs H{section_idx}_{i:02d} (1-based),
-            # appendix hypotheses get IDs HA{section_idx}_{i:02d} (1-based).
-            _hypothesis_slots: list[tuple[str, list[dict[str, Any]]]] = [
-                ("H", list(section.get("hypotheses") or [])),
-                ("HA", list(section.get("hypotheses_appendix") or [])),
-            ]
             for _id_prefix, _slot in _hypothesis_slots:
                 for _h_slot_idx, hypothesis in enumerate(_slot, start=1):
                     if not isinstance(hypothesis, dict):
