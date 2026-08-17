@@ -495,6 +495,104 @@ def _evidence_text(item: Dict[str, Any]) -> str:
     return " ".join(p for p in parts if p).strip()
 
 
+def _classify_matching_number(
+    claim_fact: NumericFact,
+    ev_fact: NumericFact,
+    predicate_overlap: float,
+    checks: List[str],
+) -> EntailmentResult:
+    """Urteil für den Fall, dass Zahl *und* Bezugsgruppe übereinstimmen.
+
+    Strittig ist dann nur noch die Aussage selbst. Ausgelagert aus
+    :func:`classify_evidence`, das mit diesem Block über die
+    Komplexitätsschwelle des radon-Gates lief.
+    """
+    if ev_fact.modality is FactModality.NORMATIVE and (
+        claim_fact.modality is FactModality.FACTUAL
+    ):
+        # Issue #1356: kein Widerspruch, sondern ein nicht entscheidbarer
+        # Fall. Die Modalität wird ohne Parser aus Markerlisten geraten;
+        # jede Lücke darin erklärte sonst eine belegte Aussage für widerlegt
+        # und löschte sie aus dem Fließtext. Zahl und Bezugsgruppe stimmen
+        # ja — strittig ist allein die Lesart.
+        return EntailmentResult(
+            EntailmentVerdict.INSUFFICIENT,
+            "Zahl und Bezugsgruppe passen; unklar, ob die Quelle "
+            "einen Ist-Wert oder eine Zielvorgabe nennt",
+            matched_fact=ev_fact,
+            claim_fact=claim_fact,
+            checks=checks + ["modality_mismatch"],
+        )
+    # Die Evidence muss die Aussage des Claims decken. Ein Claim, der die
+    # Zahl korrekt zitiert und ihr zusätzlich eine unbelegte Aussage
+    # anhängt, ist nicht gestützt.
+    coverage = coverage_ratio(claim_fact.predicate, ev_fact.predicate)
+    if (
+        predicate_overlap >= PREDICATE_MATCH_THRESHOLD
+        and coverage >= PREDICATE_COVERAGE_THRESHOLD
+    ):
+        return EntailmentResult(
+            EntailmentVerdict.SUPPORTED,
+            "Zahl, Bezugsgruppe und Aussage stimmen überein",
+            matched_fact=ev_fact,
+            claim_fact=claim_fact,
+            checks=checks + ["value_subject_predicate_match"],
+        )
+    # coverage == 0.0 heißt hier nicht "der Claim behauptet mehr als
+    # belegt" — ``coverage_ratio`` liefert dieselbe 0.0 auch, wenn Claim-
+    # oder Evidence-Prädikat nach dem Stopword-/Kurzwort-Filter
+    # (``_content_tokens``) leer bleibt, also gar keine Deckung *messbar*
+    # ist. Ein kurzes Prädikat ("sind da") darf deshalb nicht als
+    # Widerspruch gelten, sondern nur als nicht prüfbar (#1317).
+    if coverage == 0.0 and (
+        not _content_tokens(claim_fact.predicate)
+        or not _content_tokens(ev_fact.predicate)
+    ):
+        # Vorher die Polarität prüfen: "sind da" und "sind nicht da"
+        # reduzieren beide auf ein leeres Token-Set, weil ``nicht`` in
+        # ``_STOPWORDS`` steht. Ohne diesen Zweig würde ein echter
+        # Verneinungswiderspruch bei gleicher Zahl und Bezugsgruppe als
+        # "nicht prüfbar" durchgehen.
+        if _is_negated(claim_fact.predicate) != _is_negated(ev_fact.predicate):
+            return EntailmentResult(
+                EntailmentVerdict.CONTRADICTED,
+                "Zahl und Bezugsgruppe passen, die Aussagen "
+                "sind aber gegensätzlich verneint",
+                matched_fact=ev_fact,
+                claim_fact=claim_fact,
+                checks=checks + ["polarity_mismatch"],
+            )
+        return EntailmentResult(
+            EntailmentVerdict.INSUFFICIENT,
+            "Zahl und Bezugsgruppe passen, die Aussage ist zu "
+            "kurz, um gegen die Quelle geprüft zu werden",
+            matched_fact=ev_fact,
+            claim_fact=claim_fact,
+            checks=checks + ["predicate_not_measurable"],
+        )
+    if coverage < PREDICATE_COVERAGE_THRESHOLD:
+        # Issue #1356: eine unbelegte Zusatzaussage ist kein Widerspruch.
+        # Die Quelle sagt nichts Gegenteiliges, sie sagt nur weniger. Im
+        # Referenzlauf war dieser Zweig mit 14 von 28 Fällen der häufigste
+        # Grund, aus dem belegte Zahlen aus dem Fließtext verschwanden —
+        # jede Paraphrase kostet Deckung, und die Schwelle liegt bei 0.75.
+        return EntailmentResult(
+            EntailmentVerdict.INSUFFICIENT,
+            "Zahl und Bezugsgruppe passen, der Claim behauptet "
+            f"aber mehr als die Quelle deckt (Deckung {coverage:.2f})",
+            matched_fact=ev_fact,
+            claim_fact=claim_fact,
+            checks=checks + ["predicate_overreach"],
+        )
+    return EntailmentResult(
+        EntailmentVerdict.CONTRADICTED,
+        "Zahl und Bezugsgruppe passen, die Aussage dazu nicht",
+        matched_fact=ev_fact,
+        claim_fact=claim_fact,
+        checks=checks + ["predicate_mismatch"],
+    )
+
+
 def classify_evidence(
     claim_text: str,
     evidence_item: Dict[str, Any],
@@ -527,102 +625,21 @@ def classify_evidence(
                 predicate_overlap = _overlap_ratio(claim_fact.predicate, ev_fact.predicate)
 
                 if same_value and same_subject:
-                    if ev_fact.modality is FactModality.NORMATIVE and (
-                        claim_fact.modality is FactModality.FACTUAL
-                    ):
-                        # Issue #1356: kein Widerspruch, sondern ein nicht
-                        # entscheidbarer Fall. Die Modalität wird ohne Parser
-                        # aus Markerlisten geraten; jede Lücke darin erklärte
-                        # sonst eine belegte Aussage für widerlegt und löschte
-                        # sie aus dem Fließtext. Zahl und Bezugsgruppe stimmen
-                        # ja — strittig ist allein die Lesart.
-                        return EntailmentResult(
-                            EntailmentVerdict.INSUFFICIENT,
-                            "Zahl und Bezugsgruppe passen; unklar, ob die Quelle "
-                            "einen Ist-Wert oder eine Zielvorgabe nennt",
-                            matched_fact=ev_fact,
-                            claim_fact=claim_fact,
-                            checks=checks + ["modality_mismatch"],
-                        )
-                    # Die Evidence muss die Aussage des Claims decken. Ein
-                    # Claim, der die Zahl korrekt zitiert und ihr zusätzlich
-                    # eine unbelegte Aussage anhängt, ist nicht gestützt.
-                    coverage = coverage_ratio(claim_fact.predicate, ev_fact.predicate)
-                    if (
-                        predicate_overlap >= PREDICATE_MATCH_THRESHOLD
-                        and coverage >= PREDICATE_COVERAGE_THRESHOLD
-                    ):
-                        return EntailmentResult(
-                            EntailmentVerdict.SUPPORTED,
-                            "Zahl, Bezugsgruppe und Aussage stimmen überein",
-                            matched_fact=ev_fact,
-                            claim_fact=claim_fact,
-                            checks=checks + ["value_subject_predicate_match"],
-                        )
-                    # coverage == 0.0 heißt hier nicht "der Claim behauptet
-                    # mehr als belegt" — ``coverage_ratio`` liefert dieselbe
-                    # 0.0 auch, wenn Claim- oder Evidence-Prädikat nach dem
-                    # Stopword-/Kurzwort-Filter (``_content_tokens``) leer
-                    # bleibt, also gar keine Deckung *messbar* ist. Ein kurzes
-                    # Prädikat ("sind da") darf deshalb nicht als Widerspruch
-                    # gelten, sondern nur als nicht prüfbar (#1317).
-                    if coverage == 0.0 and (
-                        not _content_tokens(claim_fact.predicate)
-                        or not _content_tokens(ev_fact.predicate)
-                    ):
-                        # Vorher die Polarität prüfen: "sind da" und "sind
-                        # nicht da" reduzieren beide auf ein leeres Token-Set,
-                        # weil ``nicht`` in ``_STOPWORDS`` steht. Ohne diesen
-                        # Zweig würde ein echter Verneinungswiderspruch bei
-                        # gleicher Zahl und Bezugsgruppe als "nicht prüfbar"
-                        # durchgehen.
-                        if _is_negated(claim_fact.predicate) != _is_negated(
-                            ev_fact.predicate
-                        ):
-                            return EntailmentResult(
-                                EntailmentVerdict.CONTRADICTED,
-                                "Zahl und Bezugsgruppe passen, die Aussagen "
-                                "sind aber gegensätzlich verneint",
-                                matched_fact=ev_fact,
-                                claim_fact=claim_fact,
-                                checks=checks + ["polarity_mismatch"],
-                            )
-                        return EntailmentResult(
-                            EntailmentVerdict.INSUFFICIENT,
-                            "Zahl und Bezugsgruppe passen, die Aussage ist zu "
-                            "kurz, um gegen die Quelle geprüft zu werden",
-                            matched_fact=ev_fact,
-                            claim_fact=claim_fact,
-                            checks=checks + ["predicate_not_measurable"],
-                        )
-                    if coverage < PREDICATE_COVERAGE_THRESHOLD:
-                        # Issue #1356: eine unbelegte Zusatzaussage ist kein
-                        # Widerspruch. Die Quelle sagt nichts Gegenteiliges,
-                        # sie sagt nur weniger. Im Referenzlauf war dieser
-                        # Zweig mit 14 von 28 Fällen der häufigste Grund, aus
-                        # dem belegte Zahlen aus dem Fließtext verschwanden —
-                        # jede Paraphrase kostet Deckung, und die Schwelle
-                        # liegt bei 0.75.
-                        return EntailmentResult(
-                            EntailmentVerdict.INSUFFICIENT,
-                            "Zahl und Bezugsgruppe passen, der Claim behauptet "
-                            f"aber mehr als die Quelle deckt (Deckung {coverage:.2f})",
-                            matched_fact=ev_fact,
-                            claim_fact=claim_fact,
-                            checks=checks + ["predicate_overreach"],
-                        )
-                    return EntailmentResult(
-                        EntailmentVerdict.CONTRADICTED,
-                        "Zahl und Bezugsgruppe passen, die Aussage dazu nicht",
-                        matched_fact=ev_fact,
-                        claim_fact=claim_fact,
-                        checks=checks + ["predicate_mismatch"],
+                    return _classify_matching_number(
+                        claim_fact, ev_fact, predicate_overlap, checks
                     )
 
                 if same_value and not same_subject:
+                    # Issue #1356: kein Widerspruch. Dass eine Quelle denselben
+                    # Zahlenwert für eine *andere* Gruppe nennt, sagt über die
+                    # hier behauptete Gruppe nichts aus — zwei Gruppen dürfen
+                    # denselben Wert haben. Ein Widerspruch wäre erst ein
+                    # abweichender Wert für dieselbe Gruppe (``value_mismatch``).
+                    # Im Referenzlauf kostete diese Fehleinstufung vier belegte
+                    # Aussagen, darunter den Satz mit den drei Schulungsquoten.
                     return EntailmentResult(
-                        EntailmentVerdict.CONTRADICTED,
-                        "Zahl wird einer anderen Bezugsgruppe zugeschrieben",
+                        EntailmentVerdict.INSUFFICIENT,
+                        "Zahl belegt, aber für eine andere Bezugsgruppe",
                         matched_fact=ev_fact,
                         claim_fact=claim_fact,
                         checks=checks + ["subject_mismatch"],
@@ -633,6 +650,28 @@ def classify_evidence(
                     and not same_value
                     and predicate_overlap >= PREDICATE_MATCH_THRESHOLD
                 ):
+                    # Nennt der Claim den belegten Wert selbst — nur an einer
+                    # anderen Zahl festgemacht —, widerspricht er der Quelle
+                    # nicht, sondern die Zuordnung der Bezugsgruppe ist
+                    # unscharf. Der Referenzlauf zu #1356 hat genau einen
+                    # solchen Fall: "83 Prozent im Ärztlichen Dienst und 91
+                    # Prozent in der Verwaltung" gegen eine Quelle, die die
+                    # 91 Prozent der Verwaltung belegt. Weil das Subjekt der
+                    # ersten Zahl bis zur zweiten Gruppe durchläuft (#1357),
+                    # verglich die Regel 83 mit 91 und löschte einen Satz,
+                    # den dieselbe Quelle stützt.
+                    if any(
+                        abs(other.value - ev_fact.value) < 0.001 for other in claim_facts
+                    ):
+                        return EntailmentResult(
+                            EntailmentVerdict.INSUFFICIENT,
+                            "der Claim nennt den belegten Wert an anderer Stelle; "
+                            "welche Zahl zu welcher Bezugsgruppe gehört, ist nicht "
+                            "eindeutig zuzuordnen",
+                            matched_fact=ev_fact,
+                            claim_fact=claim_fact,
+                            checks=checks + ["value_mismatch_ambiguous_subject"],
+                        )
                     return EntailmentResult(
                         EntailmentVerdict.CONTRADICTED,
                         "gleiche Aussage über dieselbe Gruppe, abweichender Zahlenwert",
