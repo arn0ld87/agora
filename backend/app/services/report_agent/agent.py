@@ -11,6 +11,7 @@ from ..evidence_binder import bind_evidence_to_claim, detect_contradiction_penal
 from ..evidence_entailment import EntailmentJudge
 from ..evidence_identity import build_producer_key
 from ..llm_entailment_judge import build_llm_judge
+from ..run_budget import reraise_if_budget_exceeded
 from .evidence import (
     build_seed_document_anchor,
     degrade_sections_for_violations,
@@ -789,6 +790,7 @@ class ReportAgent:
                     )
                     embedder_ok = True
                 except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
+                    reraise_if_budget_exceeded(exc)
                     logger.warning(
                         f"EvidenceBinder failed, falling back to generic pool: {exc!r}"
                     )

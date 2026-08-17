@@ -25,6 +25,7 @@ ausschließlich numerische Sätze geprüft werden.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field
@@ -72,10 +73,15 @@ _JUDGE_SYSTEM_PROMPT = (
 )
 
 
-#: Die vier Urteilsnamen, längster zuerst. ``RELATED_ONLY`` enthält kein
-#: anderes Verdikt als Teilwort, aber die Reihenfolge hält die Suche auch
-#: dann eindeutig, wenn die Enum wächst.
-_VERDICT_NAMES = ("RELATED_ONLY", "CONTRADICTED", "INSUFFICIENT", "SUPPORTED")
+#: Die vier Urteilsnamen als eigenständige Wörter. Reine Teilwortsuche wäre
+#: gefährlich: "The claim is UNSUPPORTED" enthält ``SUPPORTED`` und ergäbe
+#: genau einen Treffer — ausgerechnet den gegenteiligen (Codex-Review
+#: PR #1361, P1). ``\b`` allein reicht dafür nicht, weil es zwischen ``N``
+#: und ``S`` keine Wortgrenze gibt; der Blick auf das Zeichen davor schon.
+_VERDICT_RE = {
+    name: re.compile(rf"(?<![A-Z_]){name}(?![A-Z_])")
+    for name in ("SUPPORTED", "CONTRADICTED", "RELATED_ONLY", "INSUFFICIENT")
+}
 
 
 def _verdict_from_prose(
@@ -103,6 +109,11 @@ def _verdict_from_prose(
     """
     response = client.chat(
         messages=messages,
+        # Dieselbe Stufe wie der strukturierte Weg: ``context`` ist die
+        # Invocation-Stage der Telemetrie, ohne sie landen Tokens, Kosten und
+        # Fehler des Fallbacks beim interaktiven Chat statt beim Report
+        # (Codex-Review PR #1361, P2).
+        context="report",
         temperature=0.0,
         # Großzügiger als der JSON-Weg: ein Reasoning-Modell verbraucht sein
         # Budget im Denkteil und liefert sonst eine leere Antwort, bevor das
@@ -112,7 +123,7 @@ def _verdict_from_prose(
         enforce_token_floor=False,
     )
     upper = str(response or "").upper()
-    found = [name for name in _VERDICT_NAMES if name in upper]
+    found = [name for name, pattern in _VERDICT_RE.items() if pattern.search(upper)]
     if len(found) != 1:
         raise ValueError(
             "Judge-Antwort ohne eindeutiges Urteil "
