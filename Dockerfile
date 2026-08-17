@@ -173,7 +173,22 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# apt-get upgrade fährt die Debian-Security-Updates ein, die im gepinnten
+# Basisimage-Digest noch fehlen (#1328). Hintergrund: Debian veröffentlicht
+# Paket-Fixes deutlich früher, als die Docker-Official-Images nachgebaut
+# werden. Konkreter Anlass war CVE-2026-53615 (util-linux, Integer-Overflow
+# in libblkid/src/partitions/dos.c): der Fix 2.41.5-0+deb13u1 lag am
+# 2026-08-17 im trixie-Repo, während sowohl der hier gepinnte Digest als
+# auch der zu dem Zeitpunkt aktuellste python:3.14-slim weiterhin 2.41-5
+# auslieferten. Der Trivy-Scan lief dadurch acht Läufe am Stück rot, ohne
+# dass ein Digest-Bump das behoben hätte.
+#
+# Die Zeile ist bewusst allgemein und nicht auf util-linux verengt: sonst
+# wiederholt sich derselbe Dauerrot-Zustand bei der nächsten Distro-CVE.
+# Der Digest-Pin oben bleibt die reproduzierbare Ausgangsbasis; die
+# Security-Patches darauf sind per Definition zeitabhängig.
 RUN apt-get update \
+  && apt-get upgrade -y \
   && apt-get install -y --no-install-recommends tzdata \
   && rm -rf /var/lib/apt/lists/* \
   && ln -snf /usr/share/zoneinfo/Europe/Berlin /etc/localtime \
