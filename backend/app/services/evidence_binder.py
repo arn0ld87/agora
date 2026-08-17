@@ -163,9 +163,15 @@ def detect_contradiction_penalty(
 
     penalty = 0.0
 
-    # Regel 1: Explizite Boolean-Contradiction-Flags
+    # Regel 1: Explizite Boolean-Contradiction-Flags. #1327: ueber die volle
+    # ``evidence``-Liste laufen, nicht ueber ``supporting`` — der Producer
+    # (bind_evidence_to_claim) setzt ``contradicts_claim`` ausschliesslich
+    # bei EntailmentVerdict.CONTRADICTED, und das erzwingt zwangslaeufig
+    # ``supports_claim=False``. Ein Item mit ``contradicts_claim=True`` liegt
+    # also nie in ``supporting`` — die Schleife war damit toter Code, der
+    # gebundene Widersprueche nie bestrafte.
     _bool_flags = ("contradicts_claim", "is_contradiction", "contradiction")
-    for item in supporting:
+    for item in evidence:
         if any(item.get(flag) for flag in _bool_flags):
             penalty += 0.15
 

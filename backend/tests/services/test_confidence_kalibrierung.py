@@ -191,6 +191,40 @@ def test_penalty_capped_at_max():
     assert penalty <= 0.5
 
 
+def test_contradicting_item_erreicht_die_penalty_trotz_supports_claim_false():
+    """#1327: der Producer setzt contradicts_claim nur bei
+    supports_claim=False (CONTRADICTED schliesst SUPPORTED aus). Vorher lief
+    die Boolean-Flag-Schleife nur ueber ``supporting`` und sah ein solches
+    Item nie — Regel 1 war toter Code. Zwei stuetzende Items + ein
+    gebundener Widerspruch muessen jetzt eine Penalty > 0 ergeben."""
+    items = [
+        {"snippet": "NRW KIDM beschlossen", "match_score": 0.9,
+         "supports_claim": True},
+        {"snippet": "NRW Curriculum verabschiedet", "match_score": 0.8,
+         "supports_claim": True},
+        {"snippet": "NRW KIDM widerlegt", "match_score": 0.7,
+         "supports_claim": False, "contradicts_claim": True},
+    ]
+    penalty = detect_contradiction_penalty(items)
+    assert penalty > 0.0, (
+        "Ein gebundener Widerspruch (contradicts_claim=True, "
+        "supports_claim=False) muss die Confidence-Penalty erreichen"
+    )
+
+
+def test_gegenprobe_ein_supporting_item_plus_widerspruch_bleibt_bei_null():
+    """Gegenprobe zu #1327: nur 1 stuetzendes Item + 1 widersprechendes Item
+    — der Fruehreturn ``len(supporting) < 2`` greift weiterhin unveraendert,
+    unabhaengig vom contradicts_claim-Fix."""
+    items = [
+        {"snippet": "NRW KIDM beschlossen", "match_score": 0.9,
+         "supports_claim": True},
+        {"snippet": "NRW KIDM widerlegt", "match_score": 0.7,
+         "supports_claim": False, "contradicts_claim": True},
+    ]
+    assert detect_contradiction_penalty(items) == 0.0
+
+
 def test_contradiction_penalty_integrated_with_confidence():
     """Penalty aus detect_contradiction fliesst in compute_confidence ein."""
     items = [
