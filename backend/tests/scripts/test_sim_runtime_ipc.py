@@ -93,6 +93,7 @@ def _make_handler(
     agent_graph: Any | None = None,
     redis_bridge: Any | None = None,
     db_filename: str = "twitter_simulation.db",
+    platform_key: str = "twitter",
 ) -> IPCHandler:
     return IPCHandler(
         str(tmp_path),
@@ -101,6 +102,7 @@ def _make_handler(
         db_filename=db_filename,
         interview_action_type=FakeActionType(),
         manual_action_cls=FakeManualAction,
+        platform_key=platform_key,
         redis_bridge=redis_bridge,
     )
 
@@ -229,8 +231,25 @@ async def test_handle_batch_interview_success(tmp_path: Path):
     resp = json.loads((tmp_path / IPC_RESPONSES_DIR / "cmd1.json").read_text(encoding="utf-8"))
     assert resp["status"] == "completed"
     assert resp["result"]["interviews_count"] == 2
-    # JSON serialisiert int-Keys zu Strings — das ist das Original-Verhalten.
-    assert set(resp["result"]["results"].keys()) == {"1", "2"}
+    # Issue #1320: Der Consumer sucht unter "<plattform>_<agent_id>". Vorher
+    # standen hier die blanken IDs ("1", "2"), und jeder Lookup ging ins Leere.
+    assert set(resp["result"]["results"].keys()) == {"twitter_1", "twitter_2"}
+    assert resp["result"]["results"]["twitter_1"]["platform"] == "twitter"
+
+
+@pytest.mark.asyncio
+async def test_handle_batch_interview_uses_the_configured_platform_key(tmp_path: Path):
+    """Issue #1320: Der Schlüsselraum folgt der Plattform des Runners."""
+    handler = _make_handler(
+        tmp_path,
+        agent_graph=FakeAgentGraph({7}),
+        db_filename="reddit_simulation.db",
+        platform_key="reddit",
+    )
+    ok = await handler.handle_batch_interview("cmd1", [{"agent_id": 7, "prompt": "a"}])
+    assert ok is True
+    resp = json.loads((tmp_path / IPC_RESPONSES_DIR / "cmd1.json").read_text(encoding="utf-8"))
+    assert set(resp["result"]["results"].keys()) == {"reddit_7"}
 
 
 @pytest.mark.asyncio
