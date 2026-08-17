@@ -94,6 +94,8 @@ def test_all_prompt_names_in_dunder_all():
     # Template constants from PROMPT_SPECS plus planning helpers (M11.8a)
     expected = {spec[0] for spec in PROMPT_SPECS} | {
         "DEFAULT_REPORT_SECTIONS",
+        "RECOMMENDATION_SECTION_DESCRIPTION",
+        "RECOMMENDATION_SECTION_TITLE",
         "format_required_sections",
     }
     assert set(report_prompts.__all__) == expected
@@ -305,14 +307,18 @@ class TestFormatCallability:
         assert "rc" in out
 
 
-def test_default_report_sections_has_eleven_entries():
-    """M11.8a: Default-Pflichtabschnitt-Liste muss 11 DACH-Report-Standardabschnitte enthalten."""
+def test_default_report_sections_has_twelve_entries():
+    """M11.8a: Default-Pflichtabschnitt-Liste muss die DACH-Report-Standardabschnitte enthalten.
+
+    11 bis #1322, seither zusätzlich die abschließende Handlungsempfehlung.
+    """
     sections = report_prompts.DEFAULT_REPORT_SECTIONS
-    assert len(sections) == 11
+    assert len(sections) == 12
     titles = [t for t, _ in sections]
     assert "Executive Summary" in titles
     assert "Persona-Tabelle" in titles
     assert "Datenlücken" in titles
+    assert titles[-1] == "Handlungsempfehlung"
     # Jede Entry muss Tuple[str, str] mit non-empty desc sein
     for title, desc in sections:
         assert isinstance(title, str) and len(title) > 0
