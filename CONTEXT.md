@@ -93,7 +93,20 @@ Engere Pruefung: erkennt numerische Faktenaussagen im Text und entfernt sie bei 
 
 ### Zitat-Anker
 
-`<simulated_quote persona_id="..." seed_anchor="seed_doc:<doc_id>#chunk:<chunk_id>">` — jeder Anker wird gegen `known_anchors` geprueft. Zitatquellen sind haeufig Interviews (Phase 4), nicht Simulationsposts (Phase 3).
+`<simulated_quote persona_id="..." seed_anchor="<anker>">` — jeder Anker wird gegen `known_anchors` geprueft, unabhaengig von seinem Praefix (#1249). `seed_anchor` ist ein Prompt-Attribut, kein Contract-Feld; das Vertragsfeld heisst `source_id_anchor`.
+
+Welche Form der Anker traegt, haengt an der Herkunft des Belegs:
+
+| Herkunft | `source_kind` | Ankerform |
+|---|---|---|
+| Interview-Aussage (Phase 4) | `agent_quote` | `ev_<id>` — die Evidence-ID, die der `interview_agents`-Ergebnistext unter jeder Antwort ausweist |
+| Dokumentstelle aus der Aufnahme | `seed_corpus` | `seed_doc:<doc_id>#chunk:<chunk_id>` (ADR-0013) |
+
+Andere Quellengattungen (`agent_action`, `graph_relation`, `web_source`) tragen die Kennung, die ihr Produzent vergibt; geprueft wird nur, ob sie in `known_anchors` steht.
+
+Seit #1300 verbieten die Validatoren `agent_quote_rejects_seed_doc_anchor` einen `seed_doc:`-Anker auf `agent_quote`-Evidence: eine Interview-Aussage steht in keinem Seed-Dokument, ein solcher Anker waere erfunden. Zitatquellen sind haeufig Interviews (Phase 4), nicht Simulationsposts (Phase 3) — die `ev_`-Form ist deshalb der Regelfall, nicht die Ausnahme.
+
+Zitiert ein Abschnitt einen Anker, der in keiner Bindung auftaucht, steht er seit #1324 als `unbound_evidence_refs` an der Section im persistierten Artefakt — vorher nur im Log.
 
 ### Cross-Stakeholder-Confidence
 

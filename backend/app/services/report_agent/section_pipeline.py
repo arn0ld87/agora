@@ -293,7 +293,7 @@ def _validate_quotes_with_repair(
     content: str,
     *,
     section_index: int,
-) -> tuple[str, bool]:
+) -> tuple[str, bool, List[str]]:
     """Prüft Persona-Zitate und versucht bei Verstoß genau einen Repair-Retry.
 
     M11.8e + P4.1 — nur für Abschnittstypen, die Zitate erwarten:
@@ -301,10 +301,14 @@ def _validate_quotes_with_repair(
     best-effort, ``strict`` protokolliert den gescheiterten Repair prominent.
     In keinem Modus wird der Abschnitt verworfen.
 
-    Liefert ``(Inhalt, quote_validation_failed)``.
+    Liefert ``(Inhalt, quote_validation_failed, ungebundene Evidence-Refs)``.
+
+    Issue #1324: Die ungebundenen Refs standen bisher nur im Log. Ein Leser
+    des Artefakts sah damit nicht, welcher Beleg zitiert, aber nie gebunden
+    wurde — genau die Information, die den ``incomplete``-Status erklärt.
     """
     if not _section_expects_quotes(section.title) or ctx.report_mode == "explorative":
-        return content, False
+        return content, False, []
 
     evidence_map_for_validation = agent.evidence_map or {}
     persona_ids_for_validation: List[str] = getattr(agent, "persona_ids", []) or []
@@ -314,7 +318,7 @@ def _validate_quotes_with_repair(
         persona_ids_for_validation,
     )
     if quote_result.valid:
-        return content, False
+        return content, False, []
 
     logger.warning(
         "quote_anchor_validation: section=%d title=%r mode=%s — "
@@ -345,7 +349,7 @@ def _validate_quotes_with_repair(
             "quote_anchor_validation: section=%d repair successful",
             section_index,
         )
-        return repair_content, False
+        return repair_content, False, []
 
     # Repair fehlgeschlagen — Section trotzdem weiter, Flag setzen
     log_fn = logger.error if ctx.report_mode == "strict" else logger.warning
@@ -358,7 +362,7 @@ def _validate_quotes_with_repair(
         repair_result.invalid_quotes,
         repair_result.unbound_evidence_refs,
     )
-    return repair_content, True
+    return repair_content, True, list(repair_result.unbound_evidence_refs)
 
 
 def _verify_prose_facts(
@@ -485,13 +489,22 @@ def process_section(
     content = _generate_content(
         agent, section, ctx, section_index=section_index, base_progress=base_progress
     )
-    content, quote_validation_failed = _validate_quotes_with_repair(
+    content, quote_validation_failed, unbound_refs = _validate_quotes_with_repair(
         agent, section, ctx, content, section_index=section_index
     )
     if quote_validation_failed:
         if not hasattr(section, "metadata") or section.metadata is None:
             section.metadata = {}
         section.metadata["quote_validation_failed"] = True
+    # Issue #1324: an den Agenten durchreichen — ``_save_evidence_section``
+    # baut das Section-Dict und ist die einzige Stelle, die in die
+    # Evidenzkarte schreibt. Derselbe Weg wie ``_pending_section_metadata``.
+    if unbound_refs:
+        pending = getattr(agent, "_pending_unbound_evidence_refs", None)
+        if pending is None:
+            pending = {}
+            agent._pending_unbound_evidence_refs = pending
+        pending[section_index] = unbound_refs
     content = _verify_prose_facts(
         agent, section, ctx, content, section_index=section_index
     )
