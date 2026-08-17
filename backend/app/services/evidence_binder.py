@@ -17,7 +17,7 @@ Fake einsetzen).
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Sequence, Tuple
 
 if TYPE_CHECKING:  # pragma: no cover - nur für Typprüfung
     from .evidence_entailment import EntailmentJudge
@@ -101,7 +101,7 @@ def bind_evidence_to_claim(
         return []
 
     claim_vec = embed(claim_text.strip())
-    scored: List[Dict[str, Any]] = []
+    scored: List[Tuple[Dict[str, Any], Dict[str, Any]]] = []
     for item in candidates:
         text = candidate_text(item)
         if not text:
@@ -122,17 +122,35 @@ def bind_evidence_to_claim(
         rounded = round(float(score), 3)
         bound["retrieval_score"] = rounded
         bound["match_score"] = rounded
+        scored.append((bound, item))
 
-        result = classify_evidence(claim_text, item, judge=judge)
+    # Erst kürzen, dann klassifizieren. Die Reihenfolge ist seit #1357 nicht
+    # mehr beliebig: der Entailment-Check kann in der Grauzone einen LLM-Judge
+    # befragen, und ein Claim mit zwanzig Kandidaten über der Retrieval-
+    # Schwelle würde sonst zwanzig Calls auslösen, von denen fünfzehn ohnehin
+    # verworfen werden. So ist das Judge-Budget durch ``top_k`` gedeckelt.
+    #
+    # Der Preis: ein widersprechendes Item mit schwachem Retrieval-Score fällt
+    # jetzt heraus, statt ``contradicts_claim`` zu setzen. Das ist vertretbar,
+    # weil eine Quelle, die dem Claim inhaltlich widerspricht, ihn thematisch
+    # trifft und damit oben landet.
+    scored.sort(key=lambda pair: pair[0]["retrieval_score"], reverse=True)
+
+    results: List[Dict[str, Any]] = []
+    for bound, item in scored[:top_k]:
+        result = classify_evidence(
+            claim_text,
+            item,
+            judge=judge,
+            retrieval_score=bound["retrieval_score"],
+        )
         bound["entailment"] = result.verdict.value
         bound["entailment_reason"] = result.reason
         bound["supports_claim"] = result.verdict is EntailmentVerdict.SUPPORTED
         if result.verdict is EntailmentVerdict.CONTRADICTED:
             bound["contradicts_claim"] = True
-        scored.append(bound)
-
-    scored.sort(key=lambda it: it["retrieval_score"], reverse=True)
-    return scored[:top_k]
+        results.append(bound)
+    return results
 
 
 def detect_contradiction_penalty(

@@ -8,7 +8,9 @@ from pydantic import ValidationError
 from ...utils.llm_client import LLMClient
 from ..confidence_calculator import compute_confidence
 from ..evidence_binder import bind_evidence_to_claim, detect_contradiction_penalty
+from ..evidence_entailment import EntailmentJudge
 from ..evidence_identity import build_producer_key
+from ..llm_entailment_judge import build_llm_judge
 from .evidence import (
     build_seed_document_anchor,
     degrade_sections_for_violations,
@@ -299,6 +301,25 @@ class ReportAgent:
         embed_fn = resolve_embedder(cached=cached, logger=logger)
         self._embed_cache = embed_fn
         return embed_fn
+
+    def _try_get_entailment_judge(self) -> Optional["EntailmentJudge"]:
+        """Der Judge für die Grauzone des qualitativen Entailments (#1357).
+
+        Er entscheidet nur, was die Regeln nicht entscheiden können, und nur
+        für die höchstbewerteten Retrieval-Kandidaten eines Claims — das
+        Budget ist damit durch ``top_k`` gedeckelt. Scheitert der Aufbau,
+        bleibt der Regelpfad gültig: die Grauzone endet dann bei
+        ``RELATED_ONLY``, was den Report vorsichtiger macht, nicht falscher.
+        """
+        if hasattr(self, "_judge_cache"):
+            return self._judge_cache
+        judge: Optional[EntailmentJudge] = None
+        try:
+            judge = build_llm_judge(self.llm, logger=logger)
+        except Exception as exc:  # noqa: BLE001 — Judge ist optional
+            logger.warning(f"Entailment-Judge nicht verfügbar: {exc!r}")
+        self._judge_cache = judge
+        return judge
 
     @staticmethod
     def _sample_actions_timeseries(
@@ -764,6 +785,7 @@ class ReportAgent:
                         pool.embed,
                         threshold=0.55,
                         top_k=5,
+                        judge=self._try_get_entailment_judge(),
                     )
                     embedder_ok = True
                 except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
