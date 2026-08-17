@@ -12,6 +12,7 @@ from ..evidence_entailment import EntailmentJudge
 from ..evidence_identity import build_producer_key
 from ..llm_entailment_judge import build_llm_judge
 from ..run_budget import reraise_if_budget_exceeded
+from .interview_consensus import build_consensus_item
 from .evidence import (
     build_seed_document_anchor,
     degrade_sections_for_violations,
@@ -303,6 +304,32 @@ class ReportAgent:
         self._embed_cache = embed_fn
         return embed_fn
 
+    def _record_interview_consensus(
+        self,
+        interviews: List[tuple[Dict[str, Any], str]],
+        *,
+        section_index: int,
+        topic: str,
+        tool_name: str,
+    ) -> None:
+        """Persistiert die Auszaehlung ueber die gefuehrten Interviews (#1357).
+
+        Sie belegt, was kein einzelnes Zitat belegen kann: eine Mengenaussage
+        ueber die Stakeholder. Auszaehlung, keine Stimme — die Begruendung fuer
+        die Quellengattung steht in ``interview_consensus``.
+        """
+        consensus = build_consensus_item(
+            [entry[0] for entry in interviews],
+            section_index=section_index,
+            topic=topic,
+            evidence_ids=[entry[1] for entry in interviews],
+            tool_name=tool_name,
+        )
+        if consensus is None:
+            return
+        consensus.setdefault("source", "report_tool")
+        self._record_evidence_item(consensus)
+
     def _try_get_entailment_judge(self) -> Optional["EntailmentJudge"]:
         """Der Judge für die Grauzone des qualitativen Entailments (#1357).
 
@@ -561,6 +588,7 @@ class ReportAgent:
             # agent_quote (simulierte Stakeholder-Stimme, ADR-0002) —
             # deshalb sind quote und persona_stakeholder_group Pflicht.
             topic = (structured_result.interview_topic or "").strip()
+            consensus_inputs: List[tuple[Dict[str, Any], str]] = []
             for original_index, interview in enumerate(structured_result.interviews[:10]):
                 response = (interview.response or "").strip()
                 # GraphToolsService liefert bei stummen Plattformen einen
@@ -615,6 +643,12 @@ class ReportAgent:
                 evidence_id = self._record_evidence_item(item)
                 if evidence_id:
                     interview_evidence_ids[original_index] = evidence_id
+                    consensus_inputs.append((item, evidence_id))
+
+            self._record_interview_consensus(
+                consensus_inputs, section_index=section_index, topic=topic,
+                tool_name=tool_name,
+            )
         elif isinstance(structured_result, dict) and "results" in structured_result:
             for result in (structured_result.get("results") or [])[:8]:
                 item = {

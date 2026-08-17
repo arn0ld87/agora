@@ -49,6 +49,12 @@ class EvidenceType(str, Enum):
     # bleibt unverändert (ADR-0002 Anker 3). Das Mapping nach ``seed_corpus``
     # existiert in ``report_agent/evidence.py::_TYPE_TO_SOURCE_KIND`` bereits.
     seed_document = "seed_document"
+    # Issue #1357: Auszaehlung ueber die gefuehrten Interviews einer Sektion.
+    # Additiv — ``EvidenceSourceKind`` bleibt unveraendert (ADR-0002 Anker 3).
+    # Das Mapping zeigt bewusst auf ``agent_action`` und nicht auf
+    # ``agent_quote``: eine Auszaehlung ist keine Stakeholder-Stimme und darf
+    # ``cross_stakeholder_for_high`` (Anker 4) nicht im Alleingang erfuellen.
+    agent_interview_consensus = "agent_interview_consensus"
     # NICHT als evidence verwenden, nur in audit_trail (siehe report_agent.py S5-Kommentar)
     model_generated_inference = "model_generated_inference"
 

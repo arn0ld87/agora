@@ -30,6 +30,10 @@ export const EvidenceTypeSchema = z.enum([
   "web_search_result",
   "web_fetch",
   "seed_document",
+  // Issue #1357: Auszählung über die geführten Interviews einer Sektion.
+  // Mappt backendseitig auf source_kind=agent_action, nicht agent_quote —
+  // eine Auszählung ist keine Stakeholder-Stimme.
+  "agent_interview_consensus",
   "model_generated_inference", // im audit_trail erlaubt, in evidence verboten
 ]);
 export type EvidenceType = z.infer<typeof EvidenceTypeSchema>;

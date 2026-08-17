@@ -101,6 +101,10 @@ _TYPE_TO_SOURCE_KIND: Dict[str, str] = {
     "agent_post": "agent_quote",
     "agent_quote": "agent_quote",
     "agent_interview": "agent_quote",
+    # Auszaehlung ueber Interviews, keine eigene Stimme (#1357). Bewusst nicht
+    # ``agent_quote``: sonst erfuellte ein einzelnes Aggregat-Item die
+    # Cross-Stakeholder-Regel aus ADR-0002 Anker 4 im Alleingang.
+    "agent_interview_consensus": "agent_action",
     "agent_action": "agent_action",
     "agent_behavior": "agent_action",
     "graph_fact": "graph_relation",
