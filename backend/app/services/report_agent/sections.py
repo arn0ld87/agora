@@ -337,54 +337,75 @@ def _hypothesis_text_for_markdown(value: Any) -> str:
     return escape(truncate_text(text, 1000), quote=False)
 
 
-def render_hypotheses_for_section(section: Optional[Dict[str, Any]]) -> str:
-    if not section:
-        return ""
-    hypotheses = section.get("hypotheses") or []
-    if not hypotheses:
-        return ""
+def _render_hypothesis_entry(hypothesis: Any) -> List[str]:
+    """Rendert eine einzelne Hypothese als Markdown-Zeilen.
 
-    lines = ["### Hypothesen ohne Evidence", ""]
-    for hypothesis in hypotheses:
-        if not isinstance(hypothesis, dict):
-            continue
-        hypothesis_id = _hypothesis_text_for_markdown(
-            hypothesis.get("hypothesis_id") or "hypothesis"
-        )
-        hypothesis_text = _hypothesis_text_for_markdown(
-            hypothesis.get("hypothesis_text")
-        )
-        rationale = _hypothesis_text_for_markdown(hypothesis.get("rationale"))
-        if not hypothesis_text:
-            continue
-        lines.append(f"- **{hypothesis_id}:** {hypothesis_text}")
-        if rationale:
-            lines.append(f"  - Rationale: {rationale}")
-        suggestions = [
-            _hypothesis_text_for_markdown(item)
-            for item in (hypothesis.get("suggested_evidence") or [])
-            if _hypothesis_text_for_markdown(item)
-        ]
-        if suggestions:
-            lines.append(f"  - Suggested Evidence: {', '.join(suggestions)}")
+    Eine leere Liste bedeutet: Eintrag ist unbrauchbar (kein Dict oder ohne
+    Hypothesentext) und wird uebersprungen.
+    """
+    if not isinstance(hypothesis, dict):
+        return []
+    hypothesis_text = _hypothesis_text_for_markdown(
+        hypothesis.get("hypothesis_text")
+    )
+    if not hypothesis_text:
+        return []
 
-    # #1315: Appendix-Hypothesen werden im Fließtext markiert (siehe
-    # mark_hypotheses_in_content), standen hier bisher aber nirgends — der
-    # Marker zeigte damit auf eine Liste, die den Satz nicht enthielt. Analog
-    # zu den Datenlücken wird die Restzahl ausgewiesen statt sie zu verschweigen.
+    hypothesis_id = _hypothesis_text_for_markdown(
+        hypothesis.get("hypothesis_id") or "hypothesis"
+    )
+    lines = [f"- **{hypothesis_id}:** {hypothesis_text}"]
+    rationale = _hypothesis_text_for_markdown(hypothesis.get("rationale"))
+    if rationale:
+        lines.append(f"  - Rationale: {rationale}")
+    suggestions = [
+        _hypothesis_text_for_markdown(item)
+        for item in (hypothesis.get("suggested_evidence") or [])
+        if _hypothesis_text_for_markdown(item)
+    ]
+    if suggestions:
+        lines.append(f"  - Suggested Evidence: {', '.join(suggestions)}")
+    return lines
+
+
+def _render_hypotheses_appendix_note(section: Dict[str, Any]) -> str:
+    """Weist die Restzahl der nur maschinenlesbaren Hypothesen aus (#1315).
+
+    Appendix-Hypothesen werden im Fließtext markiert (siehe
+    mark_hypotheses_in_content), standen hier bisher aber nirgends — der
+    Marker zeigte damit auf eine Liste, die den Satz nicht enthielt. Analog
+    zu den Datenlücken wird die Restzahl ausgewiesen statt sie zu verschweigen.
+    """
     appendix = [
         hypothesis
         for hypothesis in (section.get("hypotheses_appendix") or [])
         if isinstance(hypothesis, dict)
         and _hypothesis_text_for_markdown(hypothesis.get("hypothesis_text"))
     ]
-    if appendix and len(lines) > 2:
-        noun = "Hypothese" if len(appendix) == 1 else "Hypothesen"
-        lines.append(
-            f"- _{len(appendix)} weitere markierte {noun} stehen im "
-            "maschinenlesbaren Evidence-Export._"
-        )
-    return "\n".join(lines) if len(lines) > 2 else ""
+    if not appendix:
+        return ""
+    noun = "Hypothese" if len(appendix) == 1 else "Hypothesen"
+    return (
+        f"- _{len(appendix)} weitere markierte {noun} stehen im "
+        "maschinenlesbaren Evidence-Export._"
+    )
+
+
+def render_hypotheses_for_section(section: Optional[Dict[str, Any]]) -> str:
+    if not section:
+        return ""
+
+    entries: List[str] = []
+    for hypothesis in section.get("hypotheses") or []:
+        entries.extend(_render_hypothesis_entry(hypothesis))
+    if not entries:
+        return ""
+
+    lines = ["### Hypothesen ohne Evidence", "", *entries]
+    appendix_note = _render_hypotheses_appendix_note(section)
+    if appendix_note:
+        lines.append(appendix_note)
+    return "\n".join(lines)
 
 
 def mark_hypotheses_in_content(
