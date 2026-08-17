@@ -150,6 +150,27 @@ def _content_tokens(text: str) -> set[str]:
     return {t for t in _tokens(text) if len(t) > 3}
 
 
+#: Verneinungsmarker. Sie muessen vor ``_tokens`` geprueft werden — ``nicht``
+#: steht selbst in ``_STOPWORDS`` und faellt dort weg (#1317).
+_NEGATION_MARKERS = frozenset({
+    "nicht", "kein", "keine", "keiner", "keines", "keinem", "keinen",
+    "nie", "niemals", "ohne", "weder", "not", "no", "never", "without",
+})
+
+
+def _is_negated(text: str) -> bool:
+    """Traegt der Text einen Verneinungsmarker?
+
+    Bewusst grob: es geht nur darum, zwei sonst nicht messbare Praedikate
+    auseinanderzuhalten, nicht um eine Skopusanalyse der Negation.
+    """
+    return any(
+        token in _NEGATION_MARKERS
+        for token in re.split(r"\W+", (text or "").lower())
+        if token
+    )
+
+
 def _parse_number(raw: str) -> Optional[float]:
     cleaned = raw.strip()
     if re.fullmatch(r"\d{1,3}(?:\.\d{3})+", cleaned):  # 1.234.567
@@ -470,6 +491,42 @@ def classify_evidence(
                             matched_fact=ev_fact,
                             claim_fact=claim_fact,
                             checks=checks + ["value_subject_predicate_match"],
+                        )
+                    # coverage == 0.0 heißt hier nicht "der Claim behauptet
+                    # mehr als belegt" — ``coverage_ratio`` liefert dieselbe
+                    # 0.0 auch, wenn Claim- oder Evidence-Prädikat nach dem
+                    # Stopword-/Kurzwort-Filter (``_content_tokens``) leer
+                    # bleibt, also gar keine Deckung *messbar* ist. Ein kurzes
+                    # Prädikat ("sind da") darf deshalb nicht als Widerspruch
+                    # gelten, sondern nur als nicht prüfbar (#1317).
+                    if coverage == 0.0 and (
+                        not _content_tokens(claim_fact.predicate)
+                        or not _content_tokens(ev_fact.predicate)
+                    ):
+                        # Vorher die Polarität prüfen: "sind da" und "sind
+                        # nicht da" reduzieren beide auf ein leeres Token-Set,
+                        # weil ``nicht`` in ``_STOPWORDS`` steht. Ohne diesen
+                        # Zweig würde ein echter Verneinungswiderspruch bei
+                        # gleicher Zahl und Bezugsgruppe als "nicht prüfbar"
+                        # durchgehen.
+                        if _is_negated(claim_fact.predicate) != _is_negated(
+                            ev_fact.predicate
+                        ):
+                            return EntailmentResult(
+                                EntailmentVerdict.CONTRADICTED,
+                                "Zahl und Bezugsgruppe passen, die Aussagen "
+                                "sind aber gegensätzlich verneint",
+                                matched_fact=ev_fact,
+                                claim_fact=claim_fact,
+                                checks=checks + ["polarity_mismatch"],
+                            )
+                        return EntailmentResult(
+                            EntailmentVerdict.INSUFFICIENT,
+                            "Zahl und Bezugsgruppe passen, die Aussage ist zu "
+                            "kurz, um gegen die Quelle geprüft zu werden",
+                            matched_fact=ev_fact,
+                            claim_fact=claim_fact,
+                            checks=checks + ["predicate_not_measurable"],
                         )
                     if coverage < PREDICATE_COVERAGE_THRESHOLD:
                         return EntailmentResult(

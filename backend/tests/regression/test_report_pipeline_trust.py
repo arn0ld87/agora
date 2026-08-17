@@ -294,6 +294,91 @@ def test_1m_paraphrasierter_belegter_satz_bleibt_im_fliesstext(sentence):
     assert not result.rejected
 
 
+def test_1n_leeres_praedikat_ist_insufficient_nicht_contradicted():
+    """"Deckung 0.00" heißt "nicht messbar", nicht "widerlegt" (#1317).
+
+    ``coverage_ratio`` liefert 0.0 sowohl, wenn der Claim tatsächlich mehr
+    behauptet als die Quelle deckt, als auch, wenn das Prädikat nach dem
+    Stopword-/Kurzwort-Filter (``_content_tokens``) leer bleibt — dann ist
+    gar nichts gemessen worden. Ein kurzes Prädikat wie "sind da" darf den
+    Satz nicht als Widerspruch aus dem Fließtext werfen.
+    """
+    claim = "82 % der Eltern sind da."
+    evidence = "82 % der Eltern sind da, sagt die Studie."
+
+    result = classify_evidence(claim, {"snippet": evidence})
+
+    assert result.verdict is EntailmentVerdict.INSUFFICIENT, (
+        f"{result.verdict.value} ({result.reason}); checks={result.checks}"
+    )
+    assert "predicate_not_measurable" in result.checks
+
+
+@pytest.mark.parametrize(
+    "evidence",
+    [
+        "82 % der Eltern sind nicht da.",
+        "82 % der Eltern sind keine Teilnehmer.",
+    ],
+)
+def test_1n_verneinung_bleibt_widerspruch_trotz_kurzem_praedikat(evidence):
+    """Die Untergrenze aus #1317 darf keine Verneinung verschlucken.
+
+    ``nicht`` steht selbst in ``_STOPWORDS`` — "sind da" und "sind nicht da"
+    reduzieren beide auf ein leeres Content-Token-Set. Ohne Polaritaetspruefung
+    haette der neue ``predicate_not_measurable``-Zweig einen echten
+    Verneinungswiderspruch bei gleicher Zahl und Bezugsgruppe als "nicht
+    pruefbar" durchgewinkt.
+    """
+    claim = "82 % der Eltern sind da."
+
+    result = classify_evidence(claim, {"snippet": evidence})
+
+    assert result.verdict is EntailmentVerdict.CONTRADICTED, (
+        f"{result.verdict.value} ({result.reason}); checks={result.checks}"
+    )
+    assert "polarity_mismatch" in result.checks
+
+
+def test_1n_seam_nicht_messbarer_satz_wird_ehrlich_begruendet_verworfen():
+    """Seam-Regression zu #1317: der Satz faellt weiterhin, aber ehrlich.
+
+    Wichtig ist die Abgrenzung. ``verify_prose`` behaelt einen numerischen
+    Satz nur bei ``SUPPORTED`` (``text_verification.py``) — ein nicht
+    pruefbarer Satz wird also weiterhin entfernt, und das ist Absicht:
+    unbelegte Zahlen im Fliesstext stehen zu lassen waere eine Aufweichung
+    des Evidence-Gatings und damit eine ADR-0002-Entscheidung, kein Bugfix.
+
+    Was #1317 aendert, ist die *Begruendung*, mit der er faellt. Vorher
+    behauptete Agora einen Widerspruch ("Deckung 0.00") und setzte ueber
+    ``bind_evidence_to_claim`` zusaetzlich ``contradicts_claim=True``.
+    Nachher heisst es korrekt: nicht pruefbar. Diese Begruendung landet als
+    Rationale an der Hypothese, in die der Aufrufer den Satz routet.
+    """
+    from app.services.report_agent.text_verification import verify_prose
+
+    claim = "82 % der Eltern sind da."
+    evidence = "82 % der Eltern sind da, sagt die Studie."
+
+    result = verify_prose(claim, [_seed_item(evidence)])
+
+    assert result.rejected, "Ein nicht pruefbarer numerischer Satz bleibt gegated."
+    rejected = result.rejected[0]
+    assert rejected.verdict is EntailmentVerdict.INSUFFICIENT, (
+        f"{rejected.verdict.value}: {rejected.reason}"
+    )
+    assert "Deckung" not in rejected.reason
+
+    # Gegenprobe auf dem Binder-Pfad: kein Widerspruchs-Flag mehr.
+    def embed(text: str):  # identische Vektoren => cosine 1.0
+        return [1.0, 0.0, 0.0]
+
+    bound = bind_evidence_to_claim(claim, [_seed_item(evidence)], embed, threshold=0.5)
+    assert bound, "Kandidat sollte oberhalb des Thresholds gebunden werden."
+    assert bound[0]["entailment"] == EntailmentVerdict.INSUFFICIENT.value
+    assert "contradicts_claim" not in bound[0]
+
+
 # ---------------------------------------------------------------------------
 # Test 2 — kein Thought-/Tool-Leak im sichtbaren Content
 # ---------------------------------------------------------------------------
