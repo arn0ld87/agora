@@ -601,8 +601,11 @@ def test_migrate_v2_to_v3_minimal():
     assert evidence_ref in report_v3.evidence_index
     assert report_v3.evidence_index[evidence_ref].source_id_anchor == "kg:node:mobility-001"
     # DataGap aus Claim + DataGap aus Migration-Hinweis (keine Personas)
+    # Issue #1341: die Migration vergibt abschnittsqualifizierte IDs statt die
+    # abschnittslokale Rohform (``g01``) durchzureichen — sonst kollidieren
+    # mehrabschnittige Altreports miteinander.
     gap_ids = {dg.id for dg in report_v3.data_gaps}
-    assert "g01" in gap_ids
+    assert "G1_01" in gap_ids
     assert "dg-migration-personas" in gap_ids
 
 
@@ -1116,3 +1119,134 @@ def test_red_team_findings_ueberleben_den_rebuild_durch_save_report(tmp_path, mo
     assert restored.red_team_findings == befunde, (
         "Red-Team-Befunde wurden vom Neuaufbau ueberschrieben"
     )
+
+
+def test_legacy_migration_liefert_eindeutige_ids_ueber_abschnitte():
+    """Issue #1341, Codex-Review PR #1349: der zweite ReportV3-Producer.
+
+    ``migrate_v2_to_v3()`` sagt zu, ein ReportV3-valides Dict zu liefern. Es
+    uebernahm dieselbe abschnittslokale Rohform wie der Live-Pfad — mit der
+    Eindeutigkeit im Vertrag haette eine mehrabschnittige Legacy-Migration
+    damit ein Dokument erzeugt, das an der eigenen Zusage scheitert.
+    """
+    from app.services.evidence_migrations import migrate_v2_to_v3  # noqa: PLC0415
+
+    def _abschnitt(index: int, thema: str) -> dict:
+        return {
+            "section_index": index,
+            "section_title": f"Abschnitt {index}",
+            "claims": [
+                {
+                    "claim_id": "claim_01",
+                    "claim_text": f"{thema} ist im Korpus belegt.",
+                    "confidence_label": "medium",
+                    "evidence": [],
+                },
+                {
+                    "claim_id": "claim_02",
+                    "claim_text": f"{thema} wirkt auf die Adoption.",
+                    "confidence_label": "medium",
+                    "evidence": [],
+                },
+            ],
+            "data_gaps": [
+                {
+                    "gap_id": "gap_01",
+                    "claim_text": f"Zahlen zu {thema} fehlen.",
+                    "gap_reason": "no_evidence_bound",
+                },
+            ],
+        }
+
+    migrated = migrate_v2_to_v3({
+        "schema_version": 2,
+        "report_id": "report_legacy00001",
+        "simulation_id": "sim_legacy000001",
+        "global_evidence": [],
+        "sections": [_abschnitt(1, "Sicherheitsbedenken"), _abschnitt(2, "Preisdruck")],
+    })
+
+    claim_ids = [claim["id"] for claim in migrated.get("claims", [])]
+    gap_ids = [gap["id"] for gap in migrated.get("data_gaps", [])]
+    assert len(claim_ids) == len(set(claim_ids)), f"Claim-IDs kollidieren: {claim_ids}"
+    assert len(gap_ids) == len(set(gap_ids)), f"Gap-IDs kollidieren: {gap_ids}"
+    # Die Zusage des Migrationspfads: das Ergebnis ist ReportV3-valide.
+    ReportV3.model_validate(migrated)
+
+
+def test_geerbte_red_team_findings_werden_validiert(tmp_path, monkeypatch):
+    """Issue #1340, CodeRabbit PR #1349: kein str()-Zwang, kein Limit-Bruch.
+
+    Ein beschaedigtes Artefakt darf den Neuaufbau nicht sprengen — und aus
+    einem ``None`` im Artefakt darf nicht der Befund "None" werden.
+    """
+    from app.services.report_agent import Report, ReportManager, ReportStatus  # noqa: PLC0415
+    from app.contracts.report_v3 import RED_TEAM_FINDINGS_LIMIT  # noqa: PLC0415
+
+    monkeypatch.setattr(ReportManager, "REPORTS_DIR", str(tmp_path / "reports"))
+    report_id = "report_kaputt0001"
+    evidence_map = _zwei_abschnitte_mit_kollidierenden_rohids(report_id)
+    ReportManager.save_evidence_map(report_id, evidence_map)
+    report = Report(
+        report_id=report_id,
+        simulation_id="sim_kollision01",
+        graph_id="graph_kollision1",
+        simulation_requirement="Test",
+        status=ReportStatus.COMPLETED,
+    )
+    ReportManager._ensure_report_folder(report_id)
+    v3_pfad = tmp_path / "reports" / report_id / "report-v3.json"
+
+    basis = json.loads(ReportManager.build_report_v3(report, evidence_map).model_dump_json())
+
+    # Fall 1: Nicht-Strings werden nicht uebernommen, statt zu "None" zu werden.
+    basis["red_team_findings"] = ["echter Befund", None]
+    v3_pfad.write_text(json.dumps(basis), encoding="utf-8")
+    assert ReportManager.build_report_v3(report, evidence_map).red_team_findings == []
+
+    # Fall 2: Ueber dem Limit — das Erben darf den Aufbau nicht scheitern lassen.
+    basis["red_team_findings"] = [f"Befund {i}" for i in range(RED_TEAM_FINDINGS_LIMIT + 1)]
+    v3_pfad.write_text(json.dumps(basis), encoding="utf-8")
+    assert ReportManager.build_report_v3(report, evidence_map).red_team_findings == []
+
+    # Fall 3: genau am Limit, alles Strings — wird uebernommen.
+    genau_am_limit = [f"Befund {i}" for i in range(RED_TEAM_FINDINGS_LIMIT)]
+    basis["red_team_findings"] = genau_am_limit
+    v3_pfad.write_text(json.dumps(basis), encoding="utf-8")
+    assert ReportManager.build_report_v3(report, evidence_map).red_team_findings == genau_am_limit
+
+
+def test_reset_review_state_verwirft_den_stand_des_vorlaufs(tmp_path, monkeypatch):
+    """Issue #1340, Codex-Review PR #1349: kein Uebertrag zwischen Laeufen.
+
+    Bei ``force_regenerate`` laeuft die Generierung erneut auf derselben
+    ``report_id``. Ueberspringt ``_red_team_required`` die Stage im neuen Lauf,
+    blieben die alten Befunde ohne diesen Schnitt als stille Altlast stehen.
+    """
+    from app.services.report_agent import Report, ReportManager, ReportStatus  # noqa: PLC0415
+
+    monkeypatch.setattr(ReportManager, "REPORTS_DIR", str(tmp_path / "reports"))
+    report_id = "report_neulauf001"
+    evidence_map = _zwei_abschnitte_mit_kollidierenden_rohids(report_id)
+    ReportManager.save_evidence_map(report_id, evidence_map)
+    report = Report(
+        report_id=report_id,
+        simulation_id="sim_kollision01",
+        graph_id="graph_kollision1",
+        simulation_requirement="Test",
+        status=ReportStatus.COMPLETED,
+    )
+
+    vorlauf = ReportManager.build_report_v3(report, evidence_map).model_copy(
+        update={"red_team_findings": ["Befund aus dem Vorlauf"]}
+    )
+    ReportManager.save_report_v3(vorlauf)
+    # Ohne den Schnitt wuerde der Neuaufbau den fremden Stand uebernehmen.
+    assert ReportManager.build_report_v3(report, evidence_map).red_team_findings == [
+        "Befund aus dem Vorlauf"
+    ]
+
+    ReportManager.reset_review_state(report_id)
+
+    assert ReportManager.build_report_v3(report, evidence_map).red_team_findings == []
+    assert ReportManager.build_report_v3(report, evidence_map).model_attribution == []

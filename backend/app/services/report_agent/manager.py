@@ -11,7 +11,7 @@ from ...contracts.report_v3 import DEFAULT_REPORT_MODE, ReportMode, ReportV3
 from ...contracts.report_v3 import Claim as ReportV3Claim
 from ...contracts.report_v3 import DataGap as ReportV3DataGap
 from ...contracts.report_v3 import Hypothesis as ReportV3Hypothesis
-from ...contracts.report_v3 import ModelAttribution
+from ...contracts.report_v3 import RED_TEAM_FINDINGS_LIMIT, ModelAttribution
 from ...contracts.report_v3 import SimulationContribution
 from .metadata_merge import merge_section_metadata
 from .simulation_contribution import compute_simulation_contribution
@@ -300,6 +300,32 @@ class ReportManager:
             return None
 
     @classmethod
+    def reset_review_state(cls, report_id: str) -> None:
+        """Issue #1340: Verwirft den Review-Stand eines vorherigen Laufs.
+
+        Gegenstueck zu :meth:`_preserved_review_state`. Das Erben soll einen
+        spaeteren Neuaufbau innerhalb *eines* Laufs abdecken, nicht Befunde von
+        einem Lauf in den naechsten tragen: bei ``force_regenerate`` laeuft die
+        Generierung erneut auf derselben ``report_id``, und die alten Befunde
+        beschreiben dann ein Claim-Set, das es nicht mehr gibt.
+
+        Loescht bewusst nur die beiden Review-Felder und nicht das Artefakt:
+        bricht der neue Lauf ab, bleibt der uebrige Bestand lesbar.
+        """
+        raw = cls.get_report_v3(report_id)
+        if not isinstance(raw, dict):
+            return
+        if not raw.get("red_team_findings") and not raw.get("model_attribution"):
+            return
+        raw["red_team_findings"] = []
+        raw["model_attribution"] = []
+        cls._write_json_atomic(cls._get_report_v3_path(report_id), raw)
+        logger.info(
+            "Review-Stand des Vorlaufs fuer %s verworfen (neuer Generierungslauf)",
+            report_id,
+        )
+
+    @classmethod
     def _preserved_review_state(cls, report_id: str) -> Dict[str, Any]:
         """Issue #1340: Felder, die nur nachgelagerte Stages befuellen koennen.
 
@@ -319,7 +345,22 @@ class ReportManager:
 
         findings = raw.get("red_team_findings")
         if isinstance(findings, list) and findings:
-            preserved["red_team_findings"] = [str(item) for item in findings]
+            # Nicht per ``str()`` erzwingen: aus einem ``None`` im Artefakt
+            # wuerde sonst der Befund "None". Und mehr als zehn Eintraege
+            # verletzen ``max_length=10`` — das Erben wuerde den Neuaufbau
+            # sprengen, der ohne es funktioniert haette.
+            if len(findings) <= RED_TEAM_FINDINGS_LIMIT and all(
+                isinstance(item, str) for item in findings
+            ):
+                preserved["red_team_findings"] = list(findings)
+            else:
+                logger.warning(
+                    "red_team_findings aus report-v3.json fuer %s nicht uebernommen: "
+                    "%d Eintraege, Typen %s",
+                    report_id,
+                    len(findings),
+                    sorted({type(item).__name__ for item in findings}),
+                )
 
         attribution = raw.get("model_attribution")
         if isinstance(attribution, list) and attribution:

@@ -30,6 +30,16 @@ behalten ihre strengeren Provenance- und Confidence-Regeln.
 """
 
 
+RED_TEAM_FINDINGS_LIMIT: int = 10
+"""Obergrenze für ``ReportV3.red_team_findings``.
+
+Issue #1340: Das Limit steht hier und nicht als Zahl am Feld, weil
+``ReportManager._preserved_review_state()`` beim Übernehmen bestehender Befunde
+dagegen prüfen muss. Zwei Zahlen an zwei Stellen driften auseinander — und die
+Folge wäre, dass genau der Rebuild scheitert, den das Erben retten soll.
+"""
+
+
 ReportMode = Literal["strict", "balanced", "explorative"]
 """Vertrauensmodus für den Report-Output (PLAN.md §5.1, Slice P4.1).
 
@@ -439,11 +449,11 @@ class ReportV3(BaseModel):
         description="Anteil der validierten Aussagen, die die Simulation traegt.",
     )
     # Slice 5 (2026-05-17): Red-Team-Findings aus echo_chamber_review-Stage.
-    # max_length=10 begrenzt die Anzahl der Befunde; leer = kein Echo-Problem erkannt.
+    # RED_TEAM_FINDINGS_LIMIT begrenzt die Anzahl; leer = kein Echo-Problem erkannt.
     red_team_findings: list[str] = Field(
         default_factory=list,
-        max_length=10,
-        description="Befunde der Red-Team-Review-Stage (max. 10).",
+        max_length=RED_TEAM_FINDINGS_LIMIT,
+        description=f"Befunde der Red-Team-Review-Stage (max. {RED_TEAM_FINDINGS_LIMIT}).",
     )
 
     @model_validator(mode="after")

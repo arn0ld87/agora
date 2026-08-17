@@ -866,12 +866,32 @@ def migrate_v2_to_v3(
         is_friction_section = _section_title_matches(section_title, _FRICTION_KEYWORDS)
         is_trust_section = _section_title_matches(section_title, _TRUST_KEYWORDS)
 
+        # Issue #1341: Dieselbe Kollision wie im Live-Pfad
+        # (``ReportManager.build_report_v3``): die abschnittsinterne
+        # ``claim_id`` beginnt in jedem Abschnitt bei 1, der flache Output legt
+        # die Nummernraeume uebereinander. Da ``ReportV3`` doppelte Claim- und
+        # Gap-IDs jetzt ablehnt, wuerde eine mehrabschnittige Legacy-Migration
+        # sonst ein Dokument liefern, das der eigenen Zusage widerspricht,
+        # valide zu sein. Gleiches Schema wie dort, damit migrierte und frisch
+        # gebaute Artefakte denselben ID-Raum benutzen.
+        #
+        # Bewusst nur fuer die beiden vertraglich geprueften Collections:
+        # ``friction_points`` und ``trust_signals`` unten leiten ihre ID
+        # ebenfalls aus derselben ``claim_id`` ab, tragen aber ihren eigenen
+        # gewachsenen Namensraum. Sie umzustellen waere ein Eingriff, den
+        # dieser Fix nicht braucht — ihr latentes Kollisionsrisiko bleibt
+        # unveraendert bestehen und ist separat zu bewerten.
+        claim_slot = 0
+        gap_slot = 0
+
         for claim in section.get("claims") or []:
             if not isinstance(claim, dict):
                 continue
-            claim_id = str(
+            claim_slot += 1
+            raw_claim_id = str(
                 claim.get("claim_id") or f"claim_{len(claims) + 1:02d}"
             )
+            claim_id = f"C{section_index}_{claim_slot:02d}"
             evidence_refs, unresolved = _resolve_evidence_refs(
                 claim,
                 scope_id=scope_id,
@@ -910,7 +930,7 @@ def migrate_v2_to_v3(
                 # Severity aus Confidence ableiten
                 severity = confidence  # "low" | "medium" | "high"
                 friction_points.append({
-                    "id": claim_id,
+                    "id": raw_claim_id,
                     "beschreibung": statement,
                     "severity": severity,
                     "affected_persona_ids": list(claim.get("persona_ids") or []),
@@ -918,7 +938,7 @@ def migrate_v2_to_v3(
                 })
             elif is_trust_section:
                 trust_signals.append({
-                    "id": claim_id,
+                    "id": raw_claim_id,
                     "beschreibung": statement,
                     "signal_type": _DEFAULT_TRUST_SIGNAL_TYPE,
                     "evidence_refs": evidence_refs,
@@ -935,9 +955,8 @@ def migrate_v2_to_v3(
         for gap in section.get("data_gaps") or []:
             if not isinstance(gap, dict):
                 continue
-            gap_id = str(
-                gap.get("gap_id") or f"gap_{len(data_gaps) + 1:02d}"
-            )
+            gap_slot += 1
+            gap_id = f"G{section_index}_{gap_slot:02d}"
             claim_text = str(gap.get("claim_text") or "")
             reason = str(gap.get("gap_reason") or "").strip()
             description = claim_text
