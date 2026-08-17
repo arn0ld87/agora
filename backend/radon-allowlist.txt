@@ -114,7 +114,13 @@ app/services/oasis_profile_generator.py::OasisProfileGenerator.generate_profiles
 app/services/oasis_profile_generator.py::OasisProfileGenerator._build_entity_context  # cc<=26
 
 # --- Services: Report-Agent ---
-app/services/report_status.py::ReportStatusService  # cc<=27
+# radon misst die Klassen-Komplexitaet als Mittelwert ueber die Methoden, nicht
+# als Summe. Als am 17.08.2026 die duplizierte ``map_outline_for_contract``
+# (cc=10) aus der Klasse verschwand, blieb ``get_status`` (cc=41) als einzige
+# Methode uebrig und der Klassenwert stieg von 27 auf 42 — obwohl Code
+# *entfernt* wurde. Der Zuwachs ist ein Metrik-Artefakt, kein neuer Hotspot;
+# der Refactor-Auftrag steckt vollstaendig in get_status.
+app/services/report_status.py::ReportStatusService  # cc<=42
 app/services/report_status.py::ReportStatusService.get_status  # cc<=41
 app/services/report_agent/agent.py::ReportAgent._record_tool_evidence  # cc<=57
 app/services/report_agent/agent.py::ReportAgent._build_claims_for_section  # cc<=37
