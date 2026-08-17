@@ -163,7 +163,23 @@ def detect_contradiction_penalty(
 
     penalty = 0.0
 
-    # Regel 1: Explizite Boolean-Contradiction-Flags
+    # Regel 1: Explizite Boolean-Contradiction-Flags.
+    #
+    # #1327: Die Schleife laeuft bewusst ueber ``supporting`` und NICHT ueber
+    # die volle ``evidence``-Liste. Der Producer ``bind_evidence_to_claim``
+    # setzt ``contradicts_claim`` nur bei ``EntailmentVerdict.CONTRADICTED``,
+    # was zwangslaeufig ``supports_claim=False`` bedeutet — ein solches Item
+    # erreicht diese Schleife also nie. Das sieht nach totem Code aus, ist
+    # aber Absicht: ``confidence_calculator.partition_by_entailment`` zaehlt
+    # genau dieses Item bereits als ``contradicting`` und der Rechner zieht
+    # dafuer ``_CONTRADICTION_PENALTY_AMOUNT`` (0.2) ab. Wuerde diese Schleife
+    # es zusaetzlich mit 0.15 belasten, waere derselbe Widerspruch doppelt
+    # bestraft — ``report_agent/agent.py`` reicht das Ergebnis hier als
+    # ``contradiction_penalty`` in genau jenen Rechner hinein.
+    #
+    # Was hier bleibt, ist der Fall, den der Entailment-Pfad nicht kennt: ein
+    # stuetzendes Item, das ueber ``is_contradiction``/``contradiction`` aus
+    # einer anderen Quelle als widerspruechlich markiert wurde.
     _bool_flags = ("contradicts_claim", "is_contradiction", "contradiction")
     for item in supporting:
         if any(item.get(flag) for flag in _bool_flags):
