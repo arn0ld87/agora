@@ -58,6 +58,7 @@ class IPCHandler:
         db_filename: str,
         interview_action_type: Any,
         manual_action_cls: Any,
+        platform_key: str,
         redis_bridge: Any = None,
     ) -> None:
         self.simulation_dir = simulation_dir
@@ -76,6 +77,12 @@ class IPCHandler:
         self.db_filename = db_filename
         self.interview_action_type = interview_action_type
         self.manual_action_cls = manual_action_cls
+        # Issue #1320: Der Consumer (``GraphToolsService``) sucht die Ergebnisse
+        # unter ``<plattform>_<agent_id>``. Dieser Handler schrieb sie unter der
+        # blanken ``agent_id`` — jeder Lookup ging ins Leere, und zwar fuer
+        # beide Plattformen. Nur der Parallel-Runner erzeugte die erwarteten
+        # Schluessel.
+        self.platform_key = (platform_key or "").strip().lower()
 
         # Ensure directories exist
         os.makedirs(self.commands_dir, exist_ok=True)
@@ -215,7 +222,10 @@ class IPCHandler:
             results = {}
             for agent_id in agent_prompts.keys():
                 result = self._get_interview_result(agent_id)
-                results[agent_id] = result
+                # Issue #1320: Plattform-Praefix wie im Parallel-Runner, sonst
+                # findet der Consumer das Ergebnis nicht.
+                result["platform"] = self.platform_key
+                results[f"{self.platform_key}_{agent_id}"] = result
 
             await self.send_response(command_id, "completed", result={
                 "interviews_count": len(results),

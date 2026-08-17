@@ -462,6 +462,8 @@ class SinglePlatformRunner:
             db_filename=self.DB_FILENAME,
             interview_action_type=ActionType.INTERVIEW,
             manual_action_cls=ManualAction,
+            # Issue #1320: derselbe Schluesselraum wie im Parallel-Runner.
+            platform_key=self.PLATFORM_NAME.lower(),
         )
         self.ipc_handler.update_status("running")
 
