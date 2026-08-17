@@ -146,33 +146,53 @@ def _claim_text_for_markdown(claim: Dict[str, Any]) -> str:
     return escape(truncate_text(text, 1000), quote=False) or "Claim-Text nicht verfügbar."
 
 
-def render_claim_to_markdown(claim: Dict[str, Any]) -> str:
-    """Render sichtbare Confidence-Marker fuer Markdown-/Print-Export."""
+def render_claim_to_markdown(claim: Dict[str, Any], *, raw_html: bool = True) -> str:
+    """Render sichtbare Confidence-Marker fuer Markdown-/Print-Export.
+
+    Issue #1315: ``raw_html=True`` (Default, unveraendertes Verhalten) haengt
+    das CSS-geklasste ``<span class="conf-badge ...">`` an — das braucht der
+    HTML-/Print-Pfad (Rendering via ``marked`` + DOMPurify im Frontend,
+    CSS in ``frontend/src/composables/useReportExports.ts`` und
+    ``frontend/src/assets/styles/global.css``). Wird der Text stattdessen als
+    reines Markdown konsumiert (z. B. Copy-to-Clipboard, roher .md-Export ohne
+    HTML-Renderer), bleibt das Tag unrendert im Fliesstext sichtbar. Mit
+    ``raw_html=False`` wird eine Markdown-native Variante ohne Roh-HTML
+    geliefert (Fettung + Emoji statt Span). Kein bestehender Aufrufer wird
+    umgestellt — der einzige Callsite (``render_confidence_markers_for_section``
+    -> ``assemble_full_report``) behaelt den Default und damit exakt das
+    bisherige Verhalten.
+    """
     label = str(claim.get("confidence_label") or claim.get("confidence") or "").lower()
     score = _format_confidence_score(claim.get("confidence_score"))
     text = _claim_text_for_markdown(claim)
 
     if label == "low":
-        return (
-            '> <span class="conf-badge conf-low">'
-            f"⚠️ Low-Confidence-Hinweis (score={score})"
-            f"</span>: {text}"
-        )
+        if raw_html:
+            return (
+                '> <span class="conf-badge conf-low">'
+                f"⚠️ Low-Confidence-Hinweis (score={score})"
+                f"</span>: {text}"
+            )
+        return f"> **⚠️ Low-Confidence-Hinweis (score={score})**: {text}"
     if label == "medium":
-        return (
-            f'- {text} <span class="conf-badge conf-medium">'
-            f"medium-confidence (score={score})"
-            "</span>"
-        )
+        if raw_html:
+            return (
+                f'- {text} <span class="conf-badge conf-medium">'
+                f"medium-confidence (score={score})"
+                "</span>"
+            )
+        return f"- {text} **medium-confidence (score={score})**"
     return ""
 
 
-def render_confidence_markers_for_section(section: Optional[Dict[str, Any]]) -> str:
+def render_confidence_markers_for_section(
+    section: Optional[Dict[str, Any]], *, raw_html: bool = True
+) -> str:
     if not section:
         return ""
     rendered = [
         marker for claim in section.get("claims") or []
-        if (marker := render_claim_to_markdown(claim))
+        if (marker := render_claim_to_markdown(claim, raw_html=raw_html))
     ]
     if not rendered:
         return ""
@@ -215,6 +235,23 @@ def render_hypotheses_for_section(section: Optional[Dict[str, Any]]) -> str:
         ]
         if suggestions:
             lines.append(f"  - Suggested Evidence: {', '.join(suggestions)}")
+
+    # #1315: Appendix-Hypothesen werden im Fließtext markiert (siehe
+    # mark_hypotheses_in_content), standen hier bisher aber nirgends — der
+    # Marker zeigte damit auf eine Liste, die den Satz nicht enthielt. Analog
+    # zu den Datenlücken wird die Restzahl ausgewiesen statt sie zu verschweigen.
+    appendix = [
+        hypothesis
+        for hypothesis in (section.get("hypotheses_appendix") or [])
+        if isinstance(hypothesis, dict)
+        and _hypothesis_text_for_markdown(hypothesis.get("hypothesis_text"))
+    ]
+    if appendix and len(lines) > 2:
+        noun = "Hypothese" if len(appendix) == 1 else "Hypothesen"
+        lines.append(
+            f"- _{len(appendix)} weitere markierte {noun} stehen im "
+            "maschinenlesbaren Evidence-Export._"
+        )
     return "\n".join(lines) if len(lines) > 2 else ""
 
 
@@ -230,6 +267,19 @@ def mark_hypotheses_in_content(
     Zeichenfolge im Fließtext jedoch eine apodiktische Feststellung. Whitespace
     darf zwischen Atomisierung und Markdown-Persistenz variieren; deshalb wird
     er beim Abgleich flexibel behandelt.
+
+    Issue #1315 — zwei Korrekturen gegenueber der urspruenglichen Fassung:
+    - Nur der erste Treffer pro Hypothese wird markiert (vormals jedes
+      Vorkommen via ``re.sub`` ohne ``count``), sonst wiederholt sich derselbe
+      Marker bei wiederkehrenden Formulierungen im Fliesstext.
+    - Ist eine Hypothese Teilstring einer laengeren, bereits markierten
+      Hypothese, wird sie nicht erneut markiert (keine Marker-in-Marker-
+      Verschachtelung). Genau das erzeugte die beobachteten drei Marker im
+      selben Absatz.
+
+    Beide Slots bleiben bewusst markiert. ``hypotheses_appendix`` haelt die
+    Hypothesen jenseits des sichtbaren Caps — sie sind genauso unbelegt, und
+    sie im Fliesstext unmarkiert zu lassen waere ein Rueckfall hinter #1232.
     """
     if not content or not section:
         return content
@@ -242,18 +292,38 @@ def mark_hypotheses_in_content(
         if isinstance(hypothesis, dict)
         and str(hypothesis.get("hypothesis_text") or "").strip()
     }
-    rendered = content
+    if not hypothesis_texts:
+        return content
+
+    claimed_spans: List[tuple[int, int]] = []
     for hypothesis_text in sorted(hypothesis_texts, key=len, reverse=True):
         pattern = r"\s+".join(
             re.escape(part) for part in re.split(r"\s+", hypothesis_text)
         )
-        rendered = re.sub(
-            pattern,
-            lambda match: f"{marker} {match.group(0)}",
-            rendered,
-            flags=re.IGNORECASE,
+        match = re.search(pattern, content, flags=re.IGNORECASE)
+        if not match:
+            continue
+        start, end = match.span()
+        overlaps_existing = any(
+            start < claimed_end and end > claimed_start
+            for claimed_start, claimed_end in claimed_spans
         )
-    return rendered
+        if overlaps_existing:
+            continue
+        claimed_spans.append((start, end))
+
+    if not claimed_spans:
+        return content
+
+    claimed_spans.sort(key=lambda span: span[0])
+    pieces: List[str] = []
+    cursor = 0
+    for start, end in claimed_spans:
+        pieces.append(content[cursor:start])
+        pieces.append(f"{marker} {content[start:end]}")
+        cursor = end
+    pieces.append(content[cursor:])
+    return "".join(pieces)
 
 
 def render_data_gaps_for_section(section: Optional[Dict[str, Any]]) -> str:

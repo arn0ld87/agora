@@ -795,7 +795,11 @@ class ReportManager:
         # MAI-06: Kein full_report.md-Write mehr.
         # markdown_content bleibt in meta.json (für Frontend-getReport()).
         # Der Markdown-Export läuft über export-Endpoint → build_report_v3_markdown().
-        if report.status == ReportStatus.COMPLETED and evidence_map:
+        # Issue #1315: auch bei INCOMPLETE wird das v3-Artefakt geschrieben, sofern
+        # build_report_v3 valide durchlaeuft — sonst faellt der Export auf die
+        # annotierte Roh-Narrative zurueck (91x "Hypothese (unbelegt):" im
+        # Fliesstext). Der Statuswert selbst bleibt unberuehrt (#1299-Gating).
+        if report.status in (ReportStatus.COMPLETED, ReportStatus.INCOMPLETE) and evidence_map:
             try:
                 cls.save_report_v3(cls.build_report_v3(report, evidence_map, report_mode=report_mode))
             except ValidationError as exc:

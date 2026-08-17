@@ -407,7 +407,19 @@ def export_report(report_id: str):
         download_name = f"agora-report-{report_id}.md"
         md_text = ReportManager.build_report_v3_markdown(report_id)
         if md_text is None:
-            md_text = report.markdown_content or ""
+            # Issue #1315: kein report-v3.json vorhanden (Bestandsreport ohne
+            # v3-Artefakt) — die annotierte Roh-Narrative wird weiterhin
+            # ausgeliefert (Fallback-Text bleibt unveraendert), aber mit einem
+            # Hinweisblock versehen: ohne den ist fuer den Leser nicht
+            # erkennbar, dass es sich nicht um das validierte
+            # Contract-Artefakt handelt.
+            notice = (
+                "> **Hinweis:** Diese Fassung ist eine unvollstaendige "
+                "Narrative ohne validiertes Contract-Artefakt "
+                "(report-v3.json). Hypothesen- und Konfidenz-Markierungen "
+                "stehen direkt im Fliesstext statt in strukturierter Form.\n\n"
+            )
+            md_text = notice + (report.markdown_content or "")
         response = Response(md_text, mimetype='text/markdown; charset=utf-8')
         response.headers['Content-Disposition'] = f'attachment; filename="{download_name}"'
         return response
