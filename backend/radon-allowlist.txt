@@ -152,8 +152,12 @@ app/services/sim/monitor.py::monitor_simulation
 #   D cc=30  app/services/evidence_migrations.py::demote_unanchored_seed_corpus_records
 #   D cc=25  app/services/evidence_migrations.py::migrate_evidence_map_v2_to_v3
 #   D cc=21  app/services/report_agent/storage.py::_upgrade_report_v3_payload
+#
+# Nachgezogen 2026-08-17: demote_unanchored_seed_corpus_records misst
+# tatsaechlich cc=27, nicht 30. Obergrenze entsprechend abgesenkt, damit
+# weiteres Wachstum wieder anschlaegt.
 app/contracts/report_contract.py::EvidenceMapModel  # cc<=25
 app/contracts/report_contract.py::EvidenceMapModel.validate_evidence_cross_references  # cc<=24
-app/services/evidence_migrations.py::demote_unanchored_seed_corpus_records  # cc<=30
+app/services/evidence_migrations.py::demote_unanchored_seed_corpus_records  # cc<=27
 app/services/evidence_migrations.py::migrate_evidence_map_v2_to_v3  # cc<=25
 app/services/report_agent/storage.py::_upgrade_report_v3_payload  # cc<=21

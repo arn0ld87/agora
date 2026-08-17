@@ -649,6 +649,51 @@ def test_appendix_hypotheses_stay_marked_and_are_accounted_for() -> None:
     assert "1 weitere markierte Hypothese" in listing
 
 
+def test_hypotheses_listing_stays_empty_without_renderable_entries() -> None:
+    """Nagelt die Randfaelle der Hypothesen-Liste fest.
+
+    Die Funktion wurde in Sub-Renderer zerlegt (MAI-17-Komplexitaets-Gate).
+    Unbrauchbare Eintraege (kein Dict, kein Hypothesentext) duerfen weiterhin
+    weder eine Ueberschrift noch den Appendix-Hinweis erzeugen — der Hinweis
+    haengt an mindestens einer sichtbaren Hypothese.
+    """
+    from app.services.report_agent.sections import render_hypotheses_for_section
+
+    assert render_hypotheses_for_section(None) == ""
+    assert render_hypotheses_for_section({}) == ""
+    assert (
+        render_hypotheses_for_section(
+            {
+                "hypotheses": ["kein dict", {"hypothesis_text": "   "}],
+                "hypotheses_appendix": [{"hypothesis_text": "Rest im Export."}],
+            }
+        )
+        == ""
+    )
+
+    listing = render_hypotheses_for_section(
+        {
+            "hypotheses": [
+                {
+                    "hypothesis_id": "hypothesis_01",
+                    "hypothesis_text": "Sichtbar und unbelegt.",
+                    "rationale": "Keine Quelle gefunden.",
+                    "suggested_evidence": ["Interview", "  ", "Fachartikel"],
+                }
+            ],
+            "hypotheses_appendix": [
+                {"hypothesis_text": "Erste Restliche."},
+                {"hypothesis_text": "Zweite Restliche."},
+            ],
+        }
+    )
+    assert listing.startswith("### Hypothesen ohne Evidence")
+    assert "- **hypothesis_01:** Sichtbar und unbelegt." in listing
+    assert "  - Rationale: Keine Quelle gefunden." in listing
+    assert "  - Suggested Evidence: Interview, Fachartikel" in listing
+    assert "2 weitere markierte Hypothesen" in listing
+
+
 def test_confidence_marker_has_a_markdown_variant_without_raw_html() -> None:
     """#1315: das `<span class="conf-badge">` stand unrendert im .md-Export."""
     from app.services.report_agent.sections import render_claim_to_markdown
