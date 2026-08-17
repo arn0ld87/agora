@@ -683,6 +683,29 @@ class ReportSectionDataGapModel(BaseModel):
     )
 
 
+class ReportSectionUnverifiedStatementModel(BaseModel):
+    """Issue #1356: eine im Fließtext belassene, unbelegte Faktenaussage.
+
+    Bis #1356 wurde alles entfernt, was die Prüfung nicht bestand — auch das,
+    was sie mangels passender Quelle nur nicht *entscheiden* konnte. Ein
+    vollständiger Referenzlauf verlor so 28 Aussagen, die weit überwiegende
+    Mehrheit davon belegt. Seither bleibt der Satz stehen und trägt sichtbar
+    ``[Beleg fehlt]``; dieses Modell hält dieselbe Information maschinenlesbar,
+    damit Frontend und Audit nicht am Markerstring parsen müssen.
+
+    Abgrenzung zu ``ReportSectionHypothesisModel``: die Hypothese ist die
+    *herausgelöste* Behauptung samt Vorschlag, wie sie zu belegen wäre. Dieses
+    Modell beschreibt, was im gelesenen Text mit welcher Einschränkung
+    stehengeblieben ist. Beide Slots werden befüllt.
+    """
+
+    model_config = _STRICT
+
+    statement_text: str = Field(min_length=1, max_length=1000)
+    verdict: str = Field(min_length=1, max_length=32)
+    reason: str = Field(min_length=1, max_length=200)
+
+
 class ReportSectionModel(BaseModel):
     model_config = _STRICT
     section_index: int = Field(ge=1)
@@ -712,6 +735,13 @@ class ReportSectionModel(BaseModel):
     # genau das den Statuswechsel auf ``incomplete`` erklärt. max_length=200
     # deckelt fehlerhafte LLM-Outputs, wie bei ``hypotheses_appendix``.
     unbound_evidence_refs: list[str] = Field(default_factory=list, max_length=200)
+    # Issue #1356: Aussagen, die im Fließtext stehen geblieben sind, für die
+    # sich aber kein Beleg fand. Sie tragen dort den sichtbaren Marker; hier
+    # steht dieselbe Information strukturiert. max_length wie bei
+    # ``hypotheses_appendix`` als Deckel gegen fehlerhafte Outputs.
+    unverified_statements: list[ReportSectionUnverifiedStatementModel] = Field(
+        default_factory=list, max_length=200
+    )
 
 
 class ReportOutlineSectionModel(BaseModel):

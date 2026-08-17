@@ -79,15 +79,29 @@ def test_1c_training_target_is_not_approval():
     assert result.verdict is not EntailmentVerdict.SUPPORTED
 
 
-def test_1e_rendered_prose_must_not_carry_the_wrong_attribution():
-    """Der SICHTBARE Reporttext darf die Falschzuordnung nicht enthalten.
+def test_1e_rendered_prose_must_flag_the_wrong_attribution():
+    """Der SICHTBARE Reporttext muss die Falschzuordnung kenntlich machen.
 
     Der E2E-Lauf gegen sim_7058c126da03 zeigte: Das Entailment verwarf die
     Aussage korrekt (0 Claims, Routing zur Hypothese) — im gelesenen Report
     stand sie trotzdem, weil der Abschnitt die rohe LLM-Prosa ist. Dieser
     Test prüft deshalb den gerenderten Text, nicht ``claims[]``.
+
+    Issue #1356 — Wechsel von "entfernen" zu "kennzeichnen". Die Deckung
+    trennt diesen Fall nicht von einer korrekten Paraphrase:
+
+        "…forderten bereits im Vorfeld eine Verschiebung"   0.50  korrekt
+        "…bewerteten positiv und berichteten von …"         0.56  erfunden
+
+    Die erfundene Aussage liegt *höher*. Eine Schwelle, die sie fängt,
+    löscht die korrekte mit — im Referenzlauf kostete das 28 belegte
+    Aussagen. Bis ein semantisches Urteil zur Verfügung steht (Issue #1357),
+    bleibt die Aussage deshalb sichtbar und trägt ihre Einschränkung.
     """
-    from app.services.report_agent.text_verification import verify_prose
+    from app.services.report_agent.text_verification import (
+        UNVERIFIED_MARKER,
+        verify_prose,
+    )
 
     prose = (
         "Im Zentrum der Lehrkräfte-Reaktionen steht eine positive Bewertung. "
@@ -100,17 +114,20 @@ def test_1e_rendered_prose_must_not_carry_the_wrong_attribution():
 
     result = verify_prose(prose, pool)
 
-    lowered = result.content.lower()
-    assert not (
-        "61" in lowered and "lernhilfe positiv" in lowered
-    ), (
-        "Der gerenderte Report enthält weiterhin die Falschzuordnung "
-        f"'61 % → Lernhilfe positiv':\n{result.content}"
+    flagged_sentence = next(
+        (line for line in result.content.splitlines() if "61" in line), ""
     )
-    # Der korrekt belegte Seed-Fakt muss erhalten bleiben.
+    assert UNVERIFIED_MARKER in flagged_sentence, (
+        "Die Falschzuordnung '61 % → Lernhilfe positiv' steht ohne Kennzeichnung "
+        f"im gerenderten Report:\n{result.content}"
+    )
+    # Der korrekt belegte Seed-Fakt muss erhalten bleiben — und zwar ohne Marker.
     assert "72" in result.content
-    assert result.rejected, "Die verworfene Aussage muss als Hypothese geführt werden"
-    assert result.rejected[0].verdict is not EntailmentVerdict.SUPPORTED
+    assert result.unverified, "Die beanstandete Aussage muss auditierbar bleiben"
+    assert all(
+        statement.verdict is not EntailmentVerdict.SUPPORTED
+        for statement in result.unverified
+    )
 
 
 def test_1f_rejected_prose_statement_becomes_a_hypothesis():
@@ -122,10 +139,12 @@ def test_1f_rejected_prose_statement_becomes_a_hypothesis():
         "wöchentlichen Routineaufgabe."
     )
     result = verify_prose(prose, [_seed_item(s) for s in SEED_SENTENCES])
-    assert result.rejected
-    hypothesis = result.rejected[0].as_hypothesis(1)
+    # Issue #1356: beanstandet wird sie weiterhin — entfernt nur noch bei
+    # aktivem Widerspruch. Beide Ausgänge landen in ``flagged``.
+    assert result.flagged
+    hypothesis = result.flagged[0].as_hypothesis(1)
     assert hypothesis["hypothesis_text"]
-    assert "entfernt" in hypothesis["rationale"].lower()
+    assert "fließtext" in hypothesis["rationale"].lower()
 
 
 def test_1i_prose_hypothesis_ids_satisfy_the_contract():
@@ -144,9 +163,9 @@ def test_1i_prose_hypothesis_ids_satisfy_the_contract():
         "wöchentlichen Routineaufgabe."
     )
     result = verify_prose(prose, [_seed_item(s) for s in SEED_SENTENCES])
-    assert result.rejected
+    assert result.flagged
 
-    for position, statement in enumerate(result.rejected, start=1):
+    for position, statement in enumerate(result.flagged, start=1):
         ReportSectionHypothesisModel.model_validate(statement.as_hypothesis(position))
 
 
@@ -276,18 +295,15 @@ def test_1l_umgestellter_belegter_satz_bleibt_im_fliesstext(sentence):
     )
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Offene Lücke #1217: coverage_ratio vergleicht Prädikate lexikalisch. "
-        "Ein Verbwechsel ('stehen auf' → 'werden geführt') senkt die Deckung "
-        "unter PREDICATE_COVERAGE_THRESHOLD, obwohl die Evidence den Satz "
-        "vollständig trägt. Braucht Stemming oder den LLM-Judge im "
-        "numerischen Pfad — beides ist eine ADR-0002-Entscheidung."
-    ),
-    strict=True,
-)
 @pytest.mark.parametrize("sentence", _PARAPHRASE_VARIANTS)
 def test_1m_paraphrasierter_belegter_satz_bleibt_im_fliesstext(sentence):
+    # Issue #1356 schließt die als #1217 offengehaltene Lücke — allerdings
+    # nicht dadurch, dass die Deckung besser gemessen würde. Sie wird nach
+    # wie vor lexikalisch bestimmt und liegt bei einem Verbwechsel weiterhin
+    # unter der Schwelle. Geändert hat sich die Konsequenz: eine zu geringe
+    # Deckung ist kein Widerspruch mehr, sondern ein nicht entscheidbarer
+    # Fall, und der löscht nicht. Das eigentliche Messproblem bleibt offen
+    # und wird in #1357 mit einem semantischen Urteil angegangen.
     from app.services.report_agent.text_verification import verify_prose
 
     result = verify_prose(sentence, [_seed_item(_WORD_ORDER_EVIDENCE)])
@@ -340,34 +356,40 @@ def test_1n_verneinung_bleibt_widerspruch_trotz_kurzem_praedikat(evidence):
     assert "polarity_mismatch" in result.checks
 
 
-def test_1n_seam_nicht_messbarer_satz_wird_ehrlich_begruendet_verworfen():
-    """Seam-Regression zu #1317: der Satz faellt weiterhin, aber ehrlich.
+def test_1n_seam_nicht_messbarer_satz_wird_ehrlich_begruendet_markiert():
+    """Seam-Regression zu #1317: der Satz wird beanstandet, aber ehrlich.
 
-    Wichtig ist die Abgrenzung. ``verify_prose`` behaelt einen numerischen
-    Satz nur bei ``SUPPORTED`` (``text_verification.py``) — ein nicht
-    pruefbarer Satz wird also weiterhin entfernt, und das ist Absicht:
-    unbelegte Zahlen im Fliesstext stehen zu lassen waere eine Aufweichung
-    des Evidence-Gatings und damit eine ADR-0002-Entscheidung, kein Bugfix.
-
-    Was #1317 aendert, ist die *Begruendung*, mit der er faellt. Vorher
-    behauptete Agora einen Widerspruch ("Deckung 0.00") und setzte ueber
+    Was #1317 geaendert hat, ist die *Begruendung*. Vorher behauptete Agora
+    einen Widerspruch ("Deckung 0.00") und setzte ueber
     ``bind_evidence_to_claim`` zusaetzlich ``contradicts_claim=True``.
-    Nachher heisst es korrekt: nicht pruefbar. Diese Begruendung landet als
-    Rationale an der Hypothese, in die der Aufrufer den Satz routet.
+    Nachher heisst es korrekt: nicht pruefbar.
+
+    Was #1356 geaendert hat, ist die *Konsequenz*. Die frueher hier
+    dokumentierte Abgrenzung — ein nicht pruefbarer Satz wird entfernt, weil
+    ihn stehen zu lassen eine ADR-0002-Entscheidung waere — ist genau diese
+    Entscheidung, und sie ist getroffen: ein Referenzlauf verlor 28 Aussagen,
+    die weit ueberwiegende Mehrheit davon belegt. Der Satz bleibt jetzt
+    stehen und traegt seine Einschraenkung sichtbar. Gegated bleibt er
+    trotzdem: er zaehlt nicht als Beleg und wandert in die Hypothesen.
     """
-    from app.services.report_agent.text_verification import verify_prose
+    from app.services.report_agent.text_verification import (
+        UNVERIFIED_MARKER,
+        verify_prose,
+    )
 
     claim = "82 % der Eltern sind da."
     evidence = "82 % der Eltern sind da, sagt die Studie."
 
     result = verify_prose(claim, [_seed_item(evidence)])
 
-    assert result.rejected, "Ein nicht pruefbarer numerischer Satz bleibt gegated."
-    rejected = result.rejected[0]
-    assert rejected.verdict is EntailmentVerdict.INSUFFICIENT, (
-        f"{rejected.verdict.value}: {rejected.reason}"
+    assert not result.rejected, "Nicht pruefbar ist kein Widerspruch."
+    assert result.unverified, "Ein nicht pruefbarer numerischer Satz bleibt gegated."
+    flagged = result.unverified[0]
+    assert flagged.verdict is EntailmentVerdict.INSUFFICIENT, (
+        f"{flagged.verdict.value}: {flagged.reason}"
     )
-    assert "Deckung" not in rejected.reason
+    assert "Deckung" not in flagged.reason
+    assert UNVERIFIED_MARKER in result.content
 
     # Gegenprobe auf dem Binder-Pfad: kein Widerspruchs-Flag mehr.
     def embed(text: str):  # identische Vektoren => cosine 1.0

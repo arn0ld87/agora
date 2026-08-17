@@ -64,6 +64,7 @@ from .tools import (
     parse_tool_calls,
 )
 from .section_pipeline import SectionEvidenceOutcome
+from .text_verification import prose_gate_decisions
 from .workflow import chat as chat_impl, generate_report as generate_report_impl, generate_section_react as generate_section_react_impl
 from .prompts import (
     CHAT_OBSERVATION_SUFFIX,
@@ -1029,38 +1030,84 @@ class ReportAgent:
         """Evidence-Basis für die Fließtext-Faktenprüfung.
 
         Der Abschnitts-Pool zuerst — dort liegen die Treffer, die der Agent für
-        genau diesen Abschnitt geholt hat. Die globale Simulationsevidence
-        ergänzt ihn, damit ein Seed-Fakt auch dann als Beleg zählt, wenn er in
-        diesem Abschnitt nicht erneut abgefragt wurde.
+        genau diesen Abschnitt geholt hat. Danach der **vollständige**
+        ``evidence_index``.
+
+        Issue #1356: vorher ergänzten nur die ``global_evidence_refs``. Ein
+        Fakt, den der Agent in Abschnitt 4 erhoben hatte, war damit für die
+        Prüfung von Abschnitt 1 unsichtbar und dessen Satz galt als unbelegt,
+        obwohl der Beleg im selben Artefakt lag. Für die Frage "steht diese
+        Zahl in einer Quelle?" gibt es keinen Grund, Abschnittsgrenzen zu
+        respektieren — Evidence ist Evidence.
+
+        Dedupliziert wird nach ``evidence_id``: derselbe Beleg zweimal im Pool
+        kostet nur Rechenzeit, das Urteil ändert er nicht.
         """
         pool: List[Dict[str, Any]] = list(self._active_section_evidence or [])
+        seen = {
+            str(item.get("evidence_id"))
+            for item in pool
+            if isinstance(item, dict) and item.get("evidence_id")
+        }
         if self.evidence_map:
             evidence_index = self.evidence_map.get("evidence_index") or {}
-            pool.extend(
-                evidence_index[evidence_id]
-                for evidence_id in self.evidence_map.get("global_evidence_refs") or []
-                if evidence_id in evidence_index
-            )
+            for evidence_id, item in evidence_index.items():
+                if evidence_id in seen or not isinstance(item, dict):
+                    continue
+                seen.add(str(evidence_id))
+                pool.append(item)
         return pool
 
     def _record_prose_hypotheses(
         self,
         section_index: int,
-        rejected: List[Any],
+        flagged: List[Any],
     ) -> None:
-        """Merkt aus dem Fließtext entfernte Aussagen als Hypothesen vor.
+        """Merkt beanstandete Fließtext-Aussagen als Hypothesen vor.
 
         Sie werden in ``_save_evidence_section`` in den Hypothesen-Slot der
-        Section übernommen — entfernte Behauptungen verschwinden also nicht,
+        Section übernommen — beanstandete Behauptungen verschwinden also nicht,
         sie verlieren nur ihren Status als belegte Aussage.
+
+        Issue #1356: ``flagged`` enthält beide Ausgänge der Prüfung — die
+        wegen Widerspruchs entfernten *und* die im Text belassenen, als
+        unbelegt markierten. Das Statement wird neben seinem Hypothesen-Dict
+        aufbewahrt, weil das Gate-Log beide Fälle unterscheiden muss und die
+        Hypothese selbst dafür kein Feld hat (``extra="forbid"``).
         """
-        if not rejected:
+        if not flagged:
             return
         if not hasattr(self, "_pending_prose_hypotheses") or self._pending_prose_hypotheses is None:
             self._pending_prose_hypotheses = {}
         bucket = self._pending_prose_hypotheses.setdefault(section_index, [])
-        for offset, statement in enumerate(rejected, start=len(bucket) + 1):
-            bucket.append(statement.as_hypothesis(offset))
+        for offset, statement in enumerate(flagged, start=len(bucket) + 1):
+            bucket.append((statement.as_hypothesis(offset), statement))
+
+    def _record_unverified_statements(
+        self,
+        section_index: int,
+        unverified: List[Any],
+    ) -> None:
+        """Merkt die im Fließtext belassenen, unbelegten Aussagen vor.
+
+        Gegenstück zum sichtbaren ``[Beleg fehlt]``-Marker: der Abschnitt
+        trägt dieselbe Information maschinenlesbar, damit Frontend und Audit
+        nicht am Markerstring parsen müssen (Issue #1356).
+        """
+        if not unverified:
+            return
+        if (
+            not hasattr(self, "_pending_unverified_statements")
+            or self._pending_unverified_statements is None
+        ):
+            self._pending_unverified_statements = {}
+        bucket = self._pending_unverified_statements.setdefault(section_index, [])
+        for statement in unverified:
+            bucket.append({
+                "statement_text": str(statement.text)[:1000],
+                "verdict": str(getattr(statement.verdict, "value", statement.verdict)),
+                "reason": str(statement.reason)[:200],
+            })
 
     def _record_section_metadata(self, section_index: int, metadata: Dict[str, Any]) -> None:
         """Merkt die Struktur-Metadaten eines Abschnitts für ReportV3 vor.
@@ -1201,32 +1248,21 @@ class ReportAgent:
             # umgeschlüsselten Record würde die ganze Map ungültig machen.
             if id_remap:
                 claims = _remap_claim_bindings(claims, id_remap)
-        # Aus dem Fließtext entfernte Faktenaussagen sind Hypothesen, keine
-        # gelöschten Sätze — sie bleiben für den Leser nachvollziehbar.
-        prose_hypotheses = (
+        # Beanstandete Faktenaussagen sind Hypothesen, keine gelöschten Sätze —
+        # sie bleiben für den Leser nachvollziehbar. Issue #1356: der Puffer
+        # trägt Paare aus Hypothese und Statement, damit das Gate-Log den
+        # entfernten vom bloß markierten Fall unterscheiden kann.
+        prose_entries = (
             getattr(self, "_pending_prose_hypotheses", {}) or {}
         ).get(section_index, [])
+        prose_hypotheses = [entry[0] for entry in prose_entries]
         raw_hypotheses = list(raw_hypotheses) + prose_hypotheses
         # IDs zentral neu vergeben: Claim-Routing und Fließtext-Prüfung zählen
         # jeweils ab 1, zusammengeführt kollidieren sie sonst.
         for _position, _hypothesis in enumerate(raw_hypotheses, start=1):
             if isinstance(_hypothesis, dict):
                 _hypothesis["hypothesis_id"] = f"hypothesis_{_position:02d}"
-        # Slice 7 (Audit Trail): Gate-Routing und Fließtext-Entfernungen sind
-        # Degradation-Entscheidungen und werden auditierbar protokolliert —
-        # der leere degradation_log bei 17 entfernten Aussagen
-        # (report_06f654800817) war eine Erfassungslücke, keine Absicht.
-        for _prose_hypothesis in prose_hypotheses:
-            if not isinstance(_prose_hypothesis, dict):
-                continue
-            gate_decisions.append({
-                "claim_id": str(_prose_hypothesis.get("hypothesis_id") or "<no-id>"),
-                "violation": "prose_fact_unsupported",
-                "action": "moved_to_hypotheses",
-                "detail": self._truncate(
-                    str(_prose_hypothesis.get("hypothesis_text") or ""), 500
-                ) or "Fließtext-Aussage ohne deckende Evidence entfernt.",
-            })
+        gate_decisions.extend(prose_gate_decisions(prose_entries, self._truncate))
         if gate_decisions:
             # Getrennt vom degradation_log: reguläres Gate-Routing ist kein
             # Statusmangel und darf apply_degradation_downgrade nicht auslösen.
@@ -1258,6 +1294,12 @@ class ReportAgent:
             # nach dem gescheiterten Zitat-Repair hinterlegt.
             "unbound_evidence_refs": (
                 getattr(self, "_pending_unbound_evidence_refs", {}) or {}
+            ).get(section_index, []),
+            # Issue #1356: im Fließtext belassene, unbelegte Aussagen. Der
+            # Leser sieht sie am ``[Beleg fehlt]``-Marker, Auswertung und UI
+            # bekommen sie hier strukturiert.
+            "unverified_statements": (
+                getattr(self, "_pending_unverified_statements", {}) or {}
             ).get(section_index, []),
         }
         # Issue #1187: Persistenz-Phase startet hier explizit statt per

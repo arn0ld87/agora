@@ -373,11 +373,11 @@ def _verify_prose_facts(
     *,
     section_index: int,
 ) -> str:
-    """Entfernt ungedeckte Faktenaussagen aus dem sichtbaren Fließtext (P0).
+    """Prüft die Faktenaussagen des sichtbaren Fließtexts (P0).
 
-    Quantitative Aussagen ohne deckende Quelle werden entfernt und als
-    Hypothese geführt — sonst steht im gelesenen Report weiter, was das
-    Entailment längst verworfen hat.
+    Quantitative Aussagen, denen eine Quelle widerspricht, werden entfernt.
+    Aussagen ohne auffindbaren Beleg bleiben stehen und werden markiert —
+    beide wandern zusätzlich in die Hypothesen (Issue #1356).
     """
     if ctx.is_fallback(content):
         return content
@@ -385,13 +385,15 @@ def _verify_prose_facts(
     if not verified.changed:
         return content
     logger.warning(
-        "section %d (%r): %d ungedeckte Faktenaussage(n) aus dem "
-        "Fließtext entfernt und als Hypothese geführt.",
+        "section %d (%r): %d widersprochene Faktenaussage(n) entfernt, "
+        "%d unbelegte im Text markiert — beide als Hypothese geführt.",
         section_index,
         section.title,
         len(verified.rejected),
+        len(verified.unverified),
     )
-    agent._record_prose_hypotheses(section_index, verified.rejected)
+    agent._record_prose_hypotheses(section_index, verified.flagged)
+    agent._record_unverified_statements(section_index, verified.unverified)
     return verified.content
 
 
