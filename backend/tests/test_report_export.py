@@ -394,3 +394,40 @@ def test_export_md_fallback_is_marked_as_unvalidated(env):
     assert "**Hinweis:**" in body
     assert "report-v3.json" in body
     assert body.rstrip().endswith("Body"), "Der Fallback-Text selbst bleibt erhalten"
+
+
+def test_export_md_fallback_strips_raw_html_badges(env, monkeypatch):
+    """Der Fallback darf kein unrendertes `<span>` ausliefern.
+
+    Der Fall, in dem `build_report_v3` selbst am ValidationError scheitert,
+    ist genau das Token-Cap-Szenario aus #1321: leere `structured_metadata`
+    lassen die ReportV3-Validierung fehlschlagen, was den Downgrade auf
+    `incomplete` ueberhaupt erst ausloest. Dann hilft das Schreiben des
+    Artefakts nicht — es entsteht keines. Uebrig bleibt die Narrative, und
+    die darf den Leser nicht mit Maschinerie zuschuetten.
+    """
+    _persist_report(with_evidence=True, status=ReportStatus.INCOMPLETE)
+
+    narrative = (
+        "# Demo\n\n"
+        "Ein Satz mit Konfidenzhinweis. "
+        '> <span class="conf-badge conf-low">⚠️ Low-Confidence-Hinweis '
+        "(score=0.59)</span>: Eine unsichere Aussage.\n"
+    )
+    report = ReportManager.get_report(REPORT_ID)
+    report.markdown_content = narrative
+    ReportManager.save_report(report)
+
+    # v3-Bau scheitert — derselbe Effekt wie eine gescheiterte Validierung.
+    monkeypatch.setattr(
+        ReportManager, "build_report_v3_markdown", classmethod(lambda cls, _rid: None)
+    )
+
+    response = env.get(f"/api/report/{REPORT_ID}/export?format=md")
+
+    assert response.status_code == 200
+    body = response.data.decode("utf-8")
+    assert "**Hinweis:**" in body
+    assert "<span" not in body, "Roh-HTML darf ohne Renderer nicht ausgeliefert werden"
+    assert "**⚠️ Low-Confidence-Hinweis (score=0.59)**" in body
+    assert "Eine unsichere Aussage." in body

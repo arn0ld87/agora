@@ -185,6 +185,28 @@ def render_claim_to_markdown(claim: Dict[str, Any], *, raw_html: bool = True) ->
     return ""
 
 
+#: Erkennt die von ``render_claim_to_markdown`` erzeugten HTML-Badges.
+_CONF_BADGE_RE = re.compile(
+    r'<span class="conf-badge[^"]*">(.*?)</span>',
+    re.DOTALL,
+)
+
+
+def strip_raw_html_markers(content: str) -> str:
+    """Wandelt Roh-HTML-Badges in Markdown-Fettung (#1315).
+
+    ``markdown_content`` traegt die Badges bewusst als HTML — das Frontend
+    rendert sie ueber ``marked`` und faerbt sie per CSS ein. Wird derselbe
+    Text ohne HTML-Renderer ausgeliefert, etwa als Fallback des
+    ``.md``-Exports, bleibt das Tag unrendert im Fliesstext stehen. Diese
+    Funktion ist genau fuer diesen Fallback da und wird nicht auf den
+    gespeicherten Inhalt selbst angewandt.
+    """
+    return _CONF_BADGE_RE.sub(
+        lambda match: f"**{match.group(1).strip()}**", content or ""
+    )
+
+
 def render_confidence_markers_for_section(
     section: Optional[Dict[str, Any]], *, raw_html: bool = True
 ) -> str:
@@ -300,17 +322,22 @@ def mark_hypotheses_in_content(
         pattern = r"\s+".join(
             re.escape(part) for part in re.split(r"\s+", hypothesis_text)
         )
-        match = re.search(pattern, content, flags=re.IGNORECASE)
-        if not match:
-            continue
-        start, end = match.span()
-        overlaps_existing = any(
-            start < claimed_end and end > claimed_start
-            for claimed_start, claimed_end in claimed_spans
-        )
-        if overlaps_existing:
-            continue
-        claimed_spans.append((start, end))
+        # Ueber alle Treffer laufen, nicht nur den ersten: liegt das erste
+        # Vorkommen einer kurzen Hypothese innerhalb einer laengeren, bereits
+        # markierten, kommt sie spaeter im Abschnitt womoeglich eigenstaendig
+        # vor. Ein `re.search` haette sie dann ganz verworfen und den
+        # eigenstaendigen Satz unmarkiert stehen lassen. Beansprucht wird
+        # weiterhin hoechstens eine Fundstelle je Hypothese.
+        for match in re.finditer(pattern, content, flags=re.IGNORECASE):
+            start, end = match.span()
+            overlaps_existing = any(
+                start < claimed_end and end > claimed_start
+                for claimed_start, claimed_end in claimed_spans
+            )
+            if overlaps_existing:
+                continue
+            claimed_spans.append((start, end))
+            break
 
     if not claimed_spans:
         return content

@@ -468,6 +468,50 @@ def test_hypothesis_marker_does_not_nest_inside_a_longer_hypothesis() -> None:
     assert rendered == f"**Hypothese (unbelegt):** {long_hypothesis}"
 
 
+def test_hypothesis_marker_falls_back_to_a_later_independent_occurrence() -> None:
+    """#1315: ein ueberlappender Ersttreffer darf die Hypothese nicht verwerfen.
+
+    Kommt eine kurze Hypothese zuerst innerhalb einer laengeren, bereits
+    beanspruchten vor, spaeter aber eigenstaendig, muss der eigenstaendige
+    Satz markiert werden. Ein `re.search` haette nur den ueberlappenden
+    Treffer gesehen und die Hypothese ganz fallen lassen.
+    """
+    from app.services.report_agent.sections import mark_hypotheses_in_content
+
+    long_hypothesis = "Ein gestaffelter Start hält die Reaktionen am stabilsten."
+    short_hypothesis = "hält die Reaktionen am stabilsten"
+    content = f"{long_hypothesis} Danach folgt Prosa. Auch Variante B {short_hypothesis}."
+    section = {
+        "hypotheses": [
+            {"hypothesis_text": long_hypothesis},
+            {"hypothesis_text": short_hypothesis},
+        ]
+    }
+
+    rendered = mark_hypotheses_in_content(content, section)
+
+    assert rendered.count("**Hypothese (unbelegt):**") == 2
+    assert f"**Hypothese (unbelegt):** {long_hypothesis}" in rendered
+    assert f"Auch Variante B **Hypothese (unbelegt):** {short_hypothesis}" in rendered
+
+
+def test_strip_raw_html_markers_converts_badges_to_bold() -> None:
+    """#1315: Fallback-Sanitizer fuer den .md-Export ohne HTML-Renderer."""
+    from app.services.report_agent.sections import strip_raw_html_markers
+
+    content = (
+        'Text davor. > <span class="conf-badge conf-low">⚠️ Low (score=0.59)</span>: '
+        'Claim. Und <span class="conf-badge conf-medium">medium (score=0.7)</span>.'
+    )
+
+    stripped = strip_raw_html_markers(content)
+
+    assert "<span" not in stripped
+    assert "**⚠️ Low (score=0.59)**" in stripped
+    assert "**medium (score=0.7)**" in stripped
+    assert "Text davor." in stripped
+
+
 def test_appendix_hypotheses_stay_marked_and_are_accounted_for() -> None:
     """#1315 darf #1232 nicht aufweichen.
 
