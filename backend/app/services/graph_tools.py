@@ -328,21 +328,40 @@ class GraphToolsService:
                 agent_role_family = (agent.get("source_entity_type") or "").strip() or None
                 agent_bio = agent.get("bio", "")
 
-                twitter_result = results_dict.get(f"twitter_{agent_idx}", {})
-                reddit_result = results_dict.get(f"reddit_{agent_idx}", {})
+                # Issue #1320: Nur Plattformen rendern, die tatsaechlich
+                # geantwortet haben. Der Direktpfad (abgeschlossener Run) ist
+                # bewusst single-platform — er befragt jede Persona einmal statt
+                # dieselbe Frage doppelt zu stellen. Der Renderer zog das nie
+                # nach und schrieb fuer die stumme Plattform einen Block mit
+                # Platzhalter. Im Referenzlauf entstand so fuer 42 Interviews je
+                # ein leerer ``[Twitter Platform Response]``-Block, der wie eine
+                # gescheiterte Befragung aussah statt wie eine, die nie
+                # stattgefunden hat.
+                platform_answers: list[tuple[str, str]] = []
+                for platform_label, platform_key in (
+                    ("Twitter", "twitter"),
+                    ("Reddit", "reddit"),
+                ):
+                    raw_response = results_dict.get(
+                        f"{platform_key}_{agent_idx}", {}
+                    ).get("response", "")
+                    cleaned = self._clean_tool_call_response(raw_response)
+                    if cleaned and cleaned.strip():
+                        platform_answers.append((platform_label, cleaned))
 
-                twitter_response = twitter_result.get("response", "")
-                reddit_response = reddit_result.get("response", "")
-
-                twitter_response = self._clean_tool_call_response(twitter_response)
-                reddit_response = self._clean_tool_call_response(reddit_response)
-
-                twitter_text = twitter_response if twitter_response else "(No response from this platform)"
-                reddit_text = reddit_response if reddit_response else "(No response from this platform)"
-                response_text = f"[Twitter Platform Response]\n{twitter_text}\n\n[Reddit Platform Response]\n{reddit_text}"
+                if platform_answers:
+                    response_text = "\n\n".join(
+                        f"[{label} Platform Response]\n{text}"
+                        for label, text in platform_answers
+                    )
+                else:
+                    # Ein einzelner Platzhalter statt zweier: der Report-Agent
+                    # erkennt daran weiterhin das gescheiterte Interview und
+                    # verwirft es als Evidence.
+                    response_text = "(No response from this platform)"
 
                 import re
-                combined_responses = f"{twitter_response} {reddit_response}"
+                combined_responses = " ".join(text for _label, text in platform_answers)
 
                 clean_text = re.sub(r'#{1,6}\s+', '', combined_responses)
                 clean_text = re.sub(r'\{[^}]*tool_name[^}]*\}', '', clean_text)
