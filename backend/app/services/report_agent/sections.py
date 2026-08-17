@@ -5,6 +5,7 @@ from html import escape
 from typing import Any, Callable, Dict, List, Optional
 
 from ..evidence_binder import _cosine
+from .text_verification import is_markup_or_quote_line
 
 
 CLAIM_VERB_HINTS = (
@@ -14,6 +15,65 @@ CLAIM_VERB_HINTS = (
     " betont", " sagt", " warnt", " beschloss", " plant",
     " antwortete", " unterstützt",
 )
+
+#: Satzanfänge, die eine Gliederungsansage statt eine inhaltliche Aussage
+#: markieren (#1316). Bewusst eng an den Satzanfang gebunden: jedes Muster
+#: soll nur Metatext treffen ("Im Folgenden werden ... dargestellt."), nie
+#: eine echte Aussage, die zufällig ähnliche Wörter enthält. Lieber ein
+#: Metasatz durchgelassen als eine echte Aussage verworfen.
+_DISCOURSE_SENTENCE_STARTS = (
+    "im folgenden",
+    "im nachfolgenden",
+    "der folgende",
+    "die folgende",
+    "das folgende",
+    "dieser abschnitt",
+    "der vorliegende abschnitt",
+    "nachfolgend",
+    "zunächst wird",
+    "zunächst werden",
+    "abschließend wird",
+    "abschließend werden",
+)
+
+#: Zusätzlich, unabhängig von der Satzanfangsposition: Ankündigung einer
+#: Darstellung im weiteren Text ("... werden im Folgenden entlang zentraler
+#: Dimensionen beschrieben."). Beide Bedingungen müssen im selben Satz
+#: zutreffen — der Folgend/Nachfolgend-Verweis UND das passive
+#: Darstellungsverb. Reihenfolge egal: "werden im Folgenden … beschrieben"
+#: und "im Folgenden werden … beschrieben" sind dieselbe Ankündigung.
+#: Die Kopplung verhindert, dass eine reguläre Aussage wie "wird als
+#: skeptisch beschrieben" ohne Gliederungsverweis mitfällt.
+_DISCOURSE_ANNOUNCEMENT_MARKER = re.compile(
+    r"\b(?:im\s+folgenden|im\s+nachfolgenden|nachfolgend)\b",
+    re.IGNORECASE,
+)
+_DISCOURSE_ANNOUNCEMENT_VERB = re.compile(
+    r"\b(?:wird|werden)\b.*?\b(?:dargestellt|beschrieben|erläutert|betrachtet"
+    r"|dargelegt|vorgestellt|zusammengefasst)\b",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+#: Rest-Markup aus dem Section-Prompt. Der Regelpfad reinigt den Inhalt vor
+#: der Claim-Extraktion (``_clean_section_content``), aber ein Tag-Fragment,
+#: das die Reinigung nicht erwischt hat, darf trotzdem nicht als Aussage
+#: durchgehen. Deckt roh (``<tag``) und HTML-escapt (``&lt;tag``) ab.
+_RESIDUAL_MARKUP_RE = re.compile(
+    r"(?:<|&lt;)\s*/?\s*(?:simulated_quote|tool_call|evidence_gating|self_check)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_discourse_sentence(text: str) -> bool:
+    """Gliederungsansage statt Aussage — konservativ (#1316)."""
+    lowered = text.strip().lower()
+    if lowered.startswith(_DISCOURSE_SENTENCE_STARTS):
+        return True
+    return bool(
+        _DISCOURSE_ANNOUNCEMENT_MARKER.search(lowered)
+        and _DISCOURSE_ANNOUNCEMENT_VERB.search(lowered)
+    )
 
 
 def truncate_text(text: str, limit: int = 300) -> str:
@@ -69,6 +129,11 @@ def is_atomic_claim(text: str) -> bool:
     s = (text or "").strip()
     if len(s.split()) < 5:
         return False
+    # Issue #1316: Eine Gliederungsansage kuendigt an, was der Abschnitt zeigt
+    # — sie behauptet nichts. Als Claim gebunden erzeugt sie zwangslaeufig eine
+    # unbelegte Hypothese, weil keine Quelle sie stuetzen kann.
+    if _is_discourse_sentence(s):
+        return False
     if s.endswith((".", "!", "?")):
         return True
     return any(hint in s.lower() for hint in CLAIM_VERB_HINTS)
@@ -77,6 +142,13 @@ def is_atomic_claim(text: str) -> bool:
 def is_claim_candidate(text: str) -> bool:
     stripped = (text or "").strip()
     if not stripped:
+        return False
+    # Issue #1316: Zitatblock-Zeilen und vollstaendig getaggte Zeilen sind
+    # Markup, keine Aussagen. Dieselbe Teilpruefung, die der Fliesstext-
+    # Validator schon verwendet — ein Ort, eine Definition.
+    if is_markup_or_quote_line(stripped):
+        return False
+    if _RESIDUAL_MARKUP_RE.search(stripped):
         return False
     if stripped.startswith("#"):
         return False

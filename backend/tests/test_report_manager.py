@@ -105,6 +105,65 @@ def test_is_atomic_claim_filters_short_and_unverbose():
     assert is_atomic("") is False
 
 
+def test_is_claim_candidate_verwirft_markup_und_zitatzeilen():
+    """#1316: Zitatblöcke und Tag-Zeilen sind Markup, keine Aussagen."""
+    is_claim = ReportAgent._is_claim_candidate
+
+    # Zitatblock — das ist Evidenz, keine Behauptung des Berichts.
+    assert is_claim('> "Ich halte den Zeitplan für zu eng." — Persona 4') is False
+    assert is_claim("| Zitat aus der Simulation mit ausreichend vielen Wörtern") is False
+
+    # Vollständig getaggte Zeile.
+    assert is_claim('<simulated_quote persona_id="p4" seed_anchor="ev_1">') is False
+
+    # Rest-Markup, roh wie HTML-escapt, auch mitten in der Zeile.
+    assert is_claim(
+        "Die Personas äußerten sich wie folgt: <simulated_quote persona_id=\"p4\">"
+    ) is False
+    assert is_claim(
+        "Die Personas äußerten sich wie folgt: &lt;simulated_quote&gt;"
+    ) is False
+    assert is_claim("Der Abschnitt endet hier. &lt;/simulated_quote&gt;") is False
+
+    # Gegenprobe: eine gewöhnliche Aussage bleibt Kandidat.
+    assert is_claim("Das Land NRW beschloss am 22. Mai 2024 die Einführung.") is True
+    # Ein Kleiner-als-Zeichen allein macht noch kein Markup.
+    assert is_claim("Die Zustimmung lag bei < 40 Prozent der befragten Personas.") is True
+
+
+def test_is_atomic_claim_verwirft_gliederungsansagen():
+    """#1316: Eine Ankündigung behauptet nichts und kann nichts belegen."""
+    is_atomic = ReportAgent._is_atomic_claim
+
+    assert is_atomic("Im Folgenden werden die Reaktionsmuster dargestellt.") is False
+    assert is_atomic("Der folgende Vergleich ordnet die drei Varianten ein.") is False
+    assert is_atomic("Dieser Abschnitt fasst die Konfliktlinien zusammen.") is False
+    assert is_atomic("Nachfolgend wird die Segmentstruktur erläutert.") is False
+    assert is_atomic("Zunächst wird die Ausgangslage beschrieben.") is False
+    assert is_atomic("Abschließend werden die Restrisiken betrachtet.") is False
+    assert is_atomic(
+        "Die Positionen der Gruppen werden im Folgenden entlang zentraler "
+        "Dimensionen beschrieben."
+    ) is False
+
+
+def test_is_atomic_claim_behaelt_aussagen_mit_aehnlichem_wortlaut():
+    """#1316: Der Filter ist eng — echte Aussagen dürfen nicht mitfallen."""
+    is_atomic = ReportAgent._is_atomic_claim
+
+    # "wird beschrieben" ohne Folgend-Verweis ist eine Aussage über die Sache.
+    assert is_atomic(
+        "Die Personagruppe wird in den Interviews als skeptisch beschrieben."
+    ) is True
+    # "Folgen" als Substantiv, nicht als Gliederungsverweis.
+    assert is_atomic(
+        "Die Folgen des Beschlusses wurden von acht Personas benannt."
+    ) is True
+    assert is_atomic(
+        "Der folgende Tag brachte laut Simulation keine neue Reaktion."
+    ) is False  # bewusst in Kauf genommen: Satzanfang schlägt Bedeutung
+
+
 def test_build_claims_for_section_drops_headers():
     """S3a: Markdown-Header werden vor der Evidence-Bindung verworfen."""
     agent = ReportAgent.__new__(ReportAgent)

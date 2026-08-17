@@ -519,9 +519,19 @@ def process_section(
     _apply_metadata(agent, section, section_meta, section_index=section_index)
 
     section.content = content
-    ctx.report_manager.save_section(ctx.report_id, section_index, section)
+    # Issue #1316: Beide Persistenzpfade müssen denselben bereinigten Text
+    # sehen. Ungereinigt trägt ``content`` noch <simulated_quote>-Rohmarkup —
+    # das lief bislang nur auf dem Datei-Pfad durch ``save_section`` (über
+    # ``_clean_section_content``) und erreichte den Evidence-Pfad roh, womit
+    # Tag-Fragmente als Claim-Kandidaten extrahiert wurden. Einmal reinigen,
+    # Ergebnis an beide Aufrufe weiterreichen — ``save_section`` bekommt es
+    # explizit, damit die Reinigung nicht ein zweites Mal läuft.
+    cleaned_content = ctx.report_manager._clean_section_content(content, section.title)
+    ctx.report_manager.save_section(
+        ctx.report_id, section_index, section, cleaned_content=cleaned_content
+    )
     evidence = agent._save_evidence_section(
-        ctx.report_id, section_index, section.title, content
+        ctx.report_id, section_index, section.title, cleaned_content
     )
 
     return SectionResult(

@@ -73,14 +73,25 @@ class FakeReportManager:
     def __init__(self) -> None:
         self.progress_calls: List[Dict[str, Any]] = []
         self.saved_sections: List[tuple] = []
+        self.saved_cleaned: List[Any] = []
+        self.clean_calls: List[tuple] = []
 
     def update_progress(self, report_id: str, stage: str, progress: int, message: str, **kw: Any) -> None:
         self.progress_calls.append({"stage": stage, "progress": progress, "message": message, **kw})
 
-    def save_section(self, report_id: str, section_index: int, section: Any) -> None:
+    def save_section(
+        self,
+        report_id: str,
+        section_index: int,
+        section: Any,
+        *,
+        cleaned_content: str | None = None,
+    ) -> None:
         self.saved_sections.append((report_id, section_index, section.content))
+        self.saved_cleaned.append(cleaned_content)
 
     def _clean_section_content(self, content: str, section_title: str) -> str:
+        self.clean_calls.append((content, section_title))
         return content.strip()
 
 
@@ -216,6 +227,26 @@ def test_generated_section_reports_content_and_markdown():
     assert result.markdown == "## Section 1\n\nDer Abschnittstext."
     assert ctx.report_manager.saved_sections == [("report_test123", 1, "Der Abschnittstext.")]
     assert agent.saved_evidence_calls[0][1] == 1
+
+
+def test_evidence_pfad_bekommt_denselben_bereinigten_text_wie_die_datei():
+    """#1316: Datei- und Evidence-Pfad sahen unterschiedlichen Text.
+
+    ``save_section`` reinigte den Inhalt intern, ``_save_evidence_section``
+    bekam ihn roh — Rohmarkup landete damit in der Claim-Extraktion.
+    """
+    outline = _make_outline(3)
+    ctx = _make_ctx(outline=outline, generated_content="  Der Abschnittstext.  ")
+    agent = FakeAgent()
+
+    process_section(agent, outline.sections[0], ctx, section_index=1)
+
+    cleaned = ctx.report_manager.saved_cleaned[0]
+    assert cleaned == "Der Abschnittstext."
+    # Der Evidence-Pfad bekommt exakt denselben String.
+    assert agent.saved_evidence_calls[0][3] == cleaned
+    # Und die Reinigung laeuft genau einmal, nicht je Persistenzpfad.
+    assert len(ctx.report_manager.clean_calls) == 1
 
 
 def test_generated_section_reports_progress_before_generating():

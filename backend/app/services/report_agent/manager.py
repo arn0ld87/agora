@@ -477,10 +477,21 @@ class ReportManager:
         cls,
         report_id: str,
         section_index: int,
-        section: ReportSection
+        section: ReportSection,
+        *,
+        cleaned_content: Optional[str] = None,
     ) -> str:
+        """Persistiert einen Abschnitt als Markdown.
+
+        ``cleaned_content`` erlaubt Aufrufern, die ``_clean_section_content``
+        bereits selbst ausgeführt haben (z. B. um denselben bereinigten Text
+        auch für die Evidence-Extraktion zu verwenden, Issue #1316), das
+        Ergebnis wiederzuverwenden statt die Reinigung ein zweites Mal laufen
+        zu lassen. Ohne Angabe verhält sich die Methode wie zuvor.
+        """
         cls._ensure_report_folder(report_id)
-        cleaned_content = cls._clean_section_content(section.content, section.title)
+        if cleaned_content is None:
+            cleaned_content = cls._clean_section_content(section.content, section.title)
         file_suffix = f"section_{section_index:02d}.md"
         file_path = os.path.join(cls._get_report_folder(report_id), file_suffix)
         write_section_markdown(file_path, section.title, cleaned_content)
