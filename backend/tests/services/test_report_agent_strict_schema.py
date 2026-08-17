@@ -327,6 +327,83 @@ class TestGenerateSectionMetadata:
             f"context='report' erwartet, got: {call_kwargs.get('context')!r}"
         )
 
+    def test_passes_explicit_max_tokens_and_disables_generic_floor(self):
+        """Issue #1321: Extraktion setzt max_tokens explizit statt sich auf den
+        generischen chat_json-Boden (32768, für Fließtext-Sections gedacht) zu
+        verlassen — der lief bei gemini-2.0-flash (Ausgabelimit 8192) unbemerkt
+        in eine Truncation."""
+        from app.services.report_agent.workflow import (
+            METADATA_MAX_OUTPUT_TOKENS,
+            generate_section_metadata,
+        )
+
+        agent = _make_agent()
+        agent.llm.chat_json.return_value = {
+            "section_title": "Test",
+            "key_takeaways": [],
+            "data_gaps": [],
+        }
+
+        generate_section_metadata(
+            agent,
+            section_title="Test",
+            section_content="Inhalt.",
+            section_index=1,
+        )
+
+        call_kwargs = agent.llm.chat_json.call_args.kwargs
+        assert call_kwargs.get("max_tokens") == METADATA_MAX_OUTPUT_TOKENS
+        assert call_kwargs.get("enforce_token_floor") is False
+
+    def test_llm_output_truncated_error_appends_degradation_log_entry(self):
+        """Issue #1321: eine abgeschnittene Extraktion darf nicht stumm bleiben —
+        der spätere status=incomplete (#1299) braucht eine sichtbare Begründung
+        im degradation_log. Rückgabe bleibt {}, keine Exception (nicht blockierend)."""
+        from app.contracts.report_contract import EvidenceDegradationModel
+        from app.llm.errors import LLMOutputTruncatedError
+        from app.services.report_agent.workflow import generate_section_metadata
+
+        agent = _make_agent()
+        agent.evidence_map = {"degradation_log": []}
+        agent.llm.chat_json.side_effect = LLMOutputTruncatedError("truncated at cap")
+
+        result = generate_section_metadata(
+            agent,
+            section_title="Persona-Tabelle",
+            section_content="Persona Alpha ist 35-50 Jahre alt.",
+            section_index=4,
+        )
+
+        assert result == {}
+        log = agent.evidence_map["degradation_log"]
+        assert len(log) == 1
+        entry = log[0]
+        assert entry["section_index"] == 4
+        assert entry["violation"] == "metadata_extraction_truncated"
+        assert entry["action"] == "dropped"
+        # Contract-Konformität: der Eintrag muss gegen EvidenceDegradationModel
+        # validieren, sonst fällt EvidenceMapModel beim Persistieren durch.
+        EvidenceDegradationModel.model_validate(entry)
+
+    def test_llm_output_truncated_error_without_dict_evidence_map_is_safe(self):
+        """Wenn agent.evidence_map (noch) kein dict ist (z. B. None, früh in der
+        Section-Pipeline), darf der Truncation-Zweig nicht crashen — nur loggen."""
+        from app.llm.errors import LLMOutputTruncatedError
+        from app.services.report_agent.workflow import generate_section_metadata
+
+        agent = _make_agent()
+        assert agent.evidence_map is None
+        agent.llm.chat_json.side_effect = LLMOutputTruncatedError("truncated at cap")
+
+        result = generate_section_metadata(
+            agent,
+            section_title="Persona-Tabelle",
+            section_content="Persona Alpha ist 35-50 Jahre alt.",
+            section_index=5,
+        )
+
+        assert result == {}
+
 
 # ---------------------------------------------------------------------------
 # 5. Akzeptanz-Check: kein "json_object" im report_agent (außer Kommentare)

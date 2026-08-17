@@ -782,6 +782,71 @@ def generate_section_react(
 #: falschen "Abschnitt bricht ab"-Data-Gaps aus einem Preview entstehen.
 METADATA_MAX_CONTENT_CHARS = 24000
 
+#: Issue #1321: der frühere Aufruf setzte kein eigenes ``max_tokens`` und erbte
+#: damit ``chat_json``s generischen Report-Boden (32768, für volle Fließtext-
+#: Sections gedacht). Was tatsächlich galt, entschied dann das Modell: bei
+#: gemini-2.0-flash klemmt ``resolve_max_tokens`` auf 8192
+#: (``app/llm/tokens.py::_MODEL_OUTPUT_LIMITS``). Die Extraktion liefert
+#: kompaktes, strukturiertes JSON, keinen Fließtext — der Boden war hier von
+#: Anfang an das falsche Maß und band bei großzügigeren Providern Budget, das
+#: die Aufgabe nicht braucht.
+#:
+#: **Das behebt die Truncation nicht.** Im beobachteten Lauf lief die
+#: Extraktion in exakt dieses 8192er-Limit; ein expliziter Wert von 8192
+#: ändert für gemini-2.0-flash rechnerisch nichts. Was sich ändert, ist
+#: zweierlei: der Wert ist jetzt eine bewusste Entscheidung statt eines
+#: Nebenprodukts des Providers, und ein Anschlag bleibt nicht mehr stumm
+#: (siehe ``_record_metadata_truncation_degradation``). Die Eingangsseite —
+#: ``METADATA_MAX_CONTENT_CHARS`` bzw. die Schemagröße — ist der Hebel gegen
+#: die Truncation selbst und gehört in einen eigenen Slice.
+METADATA_MAX_OUTPUT_TOKENS = 8192
+
+
+def _record_metadata_truncation_degradation(
+    agent: Any,
+    *,
+    section_index: int,
+    schema_name: str,
+    exc: Exception,
+) -> None:
+    """Haengt einen Truncation-Eintrag an ``agent.evidence_map['degradation_log']``.
+
+    Feldform folgt ``EvidenceDegradationModel`` (``report_contract.py``) — das
+    Feld ist additiv und Teil des persistierten ``EvidenceMapModel``-Contracts,
+    daher keine freien Zusatzfelder. ``claim_id`` bleibt leer: die Extraktion
+    ist an dieser Stelle abgebrochen, bevor irgendein Claim entstand.
+
+    Defensiv: ``generate_section_metadata`` läuft früh in der Section-Pipeline;
+    ``agent.evidence_map`` kann dort noch ``None`` sein (siehe
+    ``ReportAgent.__init__``) oder in Tests ein ``MagicMock``. In beiden Fällen
+    wird nur geloggt, nicht geschrieben — der Aufrufer bleibt unblockiert.
+    """
+    evidence_map = getattr(agent, "evidence_map", None)
+    if not isinstance(evidence_map, dict):
+        logger.warning(
+            "generate_section_metadata: section=%d LLMOutputTruncatedError, aber "
+            "agent.evidence_map ist kein dict (%r) — degradation_log-Eintrag "
+            "übersprungen.",
+            section_index,
+            type(evidence_map),
+        )
+        return
+    entry = {
+        "section_index": section_index,
+        "claim_id": "",
+        "violation": "metadata_extraction_truncated",
+        "action": "dropped",
+        "detail": (
+            f"generate_section_metadata: LLM-Output für schema={schema_name} "
+            f"wurde am Token-Limit abgeschnitten ({exc}) — strukturierte "
+            f"Metadaten für Section {section_index} fehlen, Report-Status "
+            "kann dadurch auf 'incomplete' abgestuft werden."
+        ),
+    }
+    evidence_map["degradation_log"] = (
+        list(evidence_map.get("degradation_log") or []) + [entry]
+    )
+
 
 def generate_section_metadata(
     agent: Any,
@@ -853,6 +918,10 @@ def generate_section_metadata(
                 {"role": "user", "content": user_msg},
             ],
             temperature=0.2,
+            max_tokens=METADATA_MAX_OUTPUT_TOKENS,
+            # Kompakte Extraktion, kein Fließtext — der generische Report-Boden
+            # (siehe Kommentar an METADATA_MAX_OUTPUT_TOKENS) ist hier fehl am Platz.
+            enforce_token_floor=False,
             schema=schema_cls,
             schema_name=schema_name,
             context="report",
@@ -878,6 +947,20 @@ def generate_section_metadata(
             schema_cls.__name__,
             exc,
         )
+        # Issue #1321: Truncation lief bisher stumm in dieses generische
+        # except — status=incomplete (#1299) hatte danach keine sichtbare
+        # Begründung im console_log.txt. LLMOutputTruncatedError bekommt
+        # deshalb einen eigenen degradation_log-Eintrag; weiterhin nicht
+        # blockierend, ``return {}`` bleibt unten unverändert bestehen.
+        from ...llm.errors import LLMOutputTruncatedError
+
+        if isinstance(exc, LLMOutputTruncatedError):
+            _record_metadata_truncation_degradation(
+                agent,
+                section_index=section_index,
+                schema_name=schema_cls.__name__,
+                exc=exc,
+            )
         return {}
 
 
