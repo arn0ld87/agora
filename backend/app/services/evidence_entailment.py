@@ -471,6 +471,25 @@ def classify_evidence(
                             claim_fact=claim_fact,
                             checks=checks + ["value_subject_predicate_match"],
                         )
+                    # coverage == 0.0 heißt hier nicht "der Claim behauptet
+                    # mehr als belegt" — ``coverage_ratio`` liefert dieselbe
+                    # 0.0 auch, wenn Claim- oder Evidence-Prädikat nach dem
+                    # Stopword-/Kurzwort-Filter (``_content_tokens``) leer
+                    # bleibt, also gar keine Deckung *messbar* ist. Ein kurzes
+                    # Prädikat ("sind da") darf deshalb nicht als Widerspruch
+                    # gelten, sondern nur als nicht prüfbar (#1317).
+                    if coverage == 0.0 and (
+                        not _content_tokens(claim_fact.predicate)
+                        or not _content_tokens(ev_fact.predicate)
+                    ):
+                        return EntailmentResult(
+                            EntailmentVerdict.INSUFFICIENT,
+                            "Zahl und Bezugsgruppe passen, die Aussage ist zu "
+                            "kurz, um gegen die Quelle geprüft zu werden",
+                            matched_fact=ev_fact,
+                            claim_fact=claim_fact,
+                            checks=checks + ["predicate_not_measurable"],
+                        )
                     if coverage < PREDICATE_COVERAGE_THRESHOLD:
                         return EntailmentResult(
                             EntailmentVerdict.CONTRADICTED,

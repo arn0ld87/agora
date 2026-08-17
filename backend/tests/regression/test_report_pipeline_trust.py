@@ -294,6 +294,26 @@ def test_1m_paraphrasierter_belegter_satz_bleibt_im_fliesstext(sentence):
     assert not result.rejected
 
 
+def test_1n_leeres_praedikat_ist_insufficient_nicht_contradicted():
+    """"Deckung 0.00" heißt "nicht messbar", nicht "widerlegt" (#1317).
+
+    ``coverage_ratio`` liefert 0.0 sowohl, wenn der Claim tatsächlich mehr
+    behauptet als die Quelle deckt, als auch, wenn das Prädikat nach dem
+    Stopword-/Kurzwort-Filter (``_content_tokens``) leer bleibt — dann ist
+    gar nichts gemessen worden. Ein kurzes Prädikat wie "sind da" darf den
+    Satz nicht als Widerspruch aus dem Fließtext werfen.
+    """
+    claim = "82 % der Eltern sind da."
+    evidence = "82 % der Eltern sind da, sagt die Studie."
+
+    result = classify_evidence(claim, {"snippet": evidence})
+
+    assert result.verdict is EntailmentVerdict.INSUFFICIENT, (
+        f"{result.verdict.value} ({result.reason}); checks={result.checks}"
+    )
+    assert "predicate_not_measurable" in result.checks
+
+
 # ---------------------------------------------------------------------------
 # Test 2 — kein Thought-/Tool-Leak im sichtbaren Content
 # ---------------------------------------------------------------------------
