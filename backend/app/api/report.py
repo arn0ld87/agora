@@ -15,6 +15,7 @@ from ..contracts import (
     ReportMode,
 )
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
+from ..services.report_agent.sections import strip_raw_html_markers
 from ..services.simulation_manager import SimulationManager
 from ..models.project import ProjectManager
 from ..services.graph_tools import GraphToolsService
@@ -407,7 +408,22 @@ def export_report(report_id: str):
         download_name = f"agora-report-{report_id}.md"
         md_text = ReportManager.build_report_v3_markdown(report_id)
         if md_text is None:
-            md_text = report.markdown_content or ""
+            # Issue #1315: kein report-v3.json vorhanden. Zwei Faelle fallen
+            # hier zusammen — ein Bestandsreport ohne v3-Artefakt, und ein
+            # Report, dessen `build_report_v3` selbst am ValidationError
+            # scheitert (genau das Token-Cap-Szenario, das den Downgrade auf
+            # INCOMPLETE ausloest, #1321). In beiden Faellen bleibt nur die
+            # Narrative. Sie wird ausgeliefert, aber nicht roh: die
+            # HTML-Badges wuerden ohne Renderer unrendert im Fliesstext
+            # stehen, und ohne Hinweis waere fuer den Leser nicht erkennbar,
+            # dass dies nicht das validierte Contract-Artefakt ist.
+            notice = (
+                "> **Hinweis:** Diese Fassung ist eine unvollstaendige "
+                "Narrative ohne validiertes Contract-Artefakt "
+                "(report-v3.json). Hypothesen- und Konfidenz-Markierungen "
+                "stehen direkt im Fliesstext statt in strukturierter Form.\n\n"
+            )
+            md_text = notice + strip_raw_html_markers(report.markdown_content or "")
         response = Response(md_text, mimetype='text/markdown; charset=utf-8')
         response.headers['Content-Disposition'] = f'attachment; filename="{download_name}"'
         return response

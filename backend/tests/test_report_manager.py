@@ -427,6 +427,141 @@ def test_assemble_full_report_marks_hypotheses_and_renders_section_data_gaps(
     assert "Stakeholder-Interview nacherheben" in markdown
 
 
+def test_hypothesis_marker_is_set_once_per_hypothesis() -> None:
+    """#1315: `re.sub` ohne `count` markierte jedes Vorkommen.
+
+    Wiederholt der Fließtext dieselbe Formulierung — bei generierter Prosa der
+    Normalfall —, stand der Marker mehrfach im selben Abschnitt.
+    """
+    from app.services.report_agent.sections import mark_hypotheses_in_content
+
+    hypothesis = "Der Kipppunkt tritt ein, sobald die Akzeptanz sinkt."
+    content = f"{hypothesis} Anderer Satz. {hypothesis}"
+    section = {"hypotheses": [{"hypothesis_text": hypothesis}]}
+
+    rendered = mark_hypotheses_in_content(content, section)
+
+    assert rendered.count("**Hypothese (unbelegt):**") == 1
+
+
+def test_hypothesis_marker_does_not_nest_inside_a_longer_hypothesis() -> None:
+    """#1315: Teilstring-Hypothesen erzeugten Marker im Marker.
+
+    Die Sortierung nach Länge markierte zuerst die lange Hypothese; die kurze
+    traf danach dieselbe Stelle erneut. Das war die Quelle der beobachteten
+    drei Marker in einem Absatz.
+    """
+    from app.services.report_agent.sections import mark_hypotheses_in_content
+
+    long_hypothesis = "Ein gestaffelter Start hält die Reaktionen am stabilsten."
+    short_hypothesis = "hält die Reaktionen am stabilsten"
+    section = {
+        "hypotheses": [
+            {"hypothesis_text": long_hypothesis},
+            {"hypothesis_text": short_hypothesis},
+        ]
+    }
+
+    rendered = mark_hypotheses_in_content(long_hypothesis, section)
+
+    assert rendered.count("**Hypothese (unbelegt):**") == 1
+    assert rendered == f"**Hypothese (unbelegt):** {long_hypothesis}"
+
+
+def test_hypothesis_marker_falls_back_to_a_later_independent_occurrence() -> None:
+    """#1315: ein ueberlappender Ersttreffer darf die Hypothese nicht verwerfen.
+
+    Kommt eine kurze Hypothese zuerst innerhalb einer laengeren, bereits
+    beanspruchten vor, spaeter aber eigenstaendig, muss der eigenstaendige
+    Satz markiert werden. Ein `re.search` haette nur den ueberlappenden
+    Treffer gesehen und die Hypothese ganz fallen lassen.
+    """
+    from app.services.report_agent.sections import mark_hypotheses_in_content
+
+    long_hypothesis = "Ein gestaffelter Start hält die Reaktionen am stabilsten."
+    short_hypothesis = "hält die Reaktionen am stabilsten"
+    content = f"{long_hypothesis} Danach folgt Prosa. Auch Variante B {short_hypothesis}."
+    section = {
+        "hypotheses": [
+            {"hypothesis_text": long_hypothesis},
+            {"hypothesis_text": short_hypothesis},
+        ]
+    }
+
+    rendered = mark_hypotheses_in_content(content, section)
+
+    assert rendered.count("**Hypothese (unbelegt):**") == 2
+    assert f"**Hypothese (unbelegt):** {long_hypothesis}" in rendered
+    assert f"Auch Variante B **Hypothese (unbelegt):** {short_hypothesis}" in rendered
+
+
+def test_strip_raw_html_markers_converts_badges_to_bold() -> None:
+    """#1315: Fallback-Sanitizer fuer den .md-Export ohne HTML-Renderer."""
+    from app.services.report_agent.sections import strip_raw_html_markers
+
+    content = (
+        'Text davor. > <span class="conf-badge conf-low">⚠️ Low (score=0.59)</span>: '
+        'Claim. Und <span class="conf-badge conf-medium">medium (score=0.7)</span>.'
+    )
+
+    stripped = strip_raw_html_markers(content)
+
+    assert "<span" not in stripped
+    assert "**⚠️ Low (score=0.59)**" in stripped
+    assert "**medium (score=0.7)**" in stripped
+    assert "Text davor." in stripped
+
+
+def test_appendix_hypotheses_stay_marked_and_are_accounted_for() -> None:
+    """#1315 darf #1232 nicht aufweichen.
+
+    Appendix-Hypothesen sind genauso unbelegt wie die sichtbaren fünf und
+    bleiben deshalb im Fließtext markiert. Neu ist, dass die Liste darunter
+    ihre Zahl ausweist — vorher zeigte der Marker auf eine Aufzählung, die den
+    Satz nicht enthielt.
+    """
+    from app.services.report_agent.sections import (
+        mark_hypotheses_in_content,
+        render_hypotheses_for_section,
+    )
+
+    visible = "Die sichtbare Hypothese bleibt unbelegt."
+    appendix = "Die Appendix-Hypothese bleibt ebenfalls unbelegt."
+    section = {
+        "hypotheses": [{"hypothesis_id": "hypothesis_01", "hypothesis_text": visible}],
+        "hypotheses_appendix": [
+            {"hypothesis_id": "hypothesis_06", "hypothesis_text": appendix}
+        ],
+    }
+
+    rendered = mark_hypotheses_in_content(f"{visible}\n\n{appendix}", section)
+    assert f"**Hypothese (unbelegt):** {visible}" in rendered
+    assert f"**Hypothese (unbelegt):** {appendix}" in rendered
+
+    listing = render_hypotheses_for_section(section)
+    assert "hypothesis_01" in listing
+    assert "1 weitere markierte Hypothese" in listing
+
+
+def test_confidence_marker_has_a_markdown_variant_without_raw_html() -> None:
+    """#1315: das `<span class="conf-badge">` stand unrendert im .md-Export."""
+    from app.services.report_agent.sections import render_claim_to_markdown
+
+    claim = {
+        "claim_text": "Eine Aussage mit niedriger Konfidenz.",
+        "confidence_label": "low",
+        "confidence_score": 0.59,
+    }
+
+    html_variant = render_claim_to_markdown(claim)
+    markdown_variant = render_claim_to_markdown(claim, raw_html=False)
+
+    assert '<span class="conf-badge' in html_variant, "HTML-/Print-Pfad unverändert"
+    assert "<span" not in markdown_variant
+    assert "score=0.59" in markdown_variant
+    assert "Eine Aussage mit niedriger Konfidenz." in markdown_variant
+
+
 def test_section_data_gaps_are_capped_without_hiding_the_remainder_count() -> None:
     section = {
         "data_gaps": [
