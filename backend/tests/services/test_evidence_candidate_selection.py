@@ -231,6 +231,60 @@ def test_pool_embeds_each_text_once_across_claims() -> None:
     )
 
 
+def test_pool_dedupliziert_ueberlappende_direct_und_global_items() -> None:
+    """#1318: dieselbe evidence_id aus direct_items UND global_items darf
+    nur einmal im Pool landen, sonst zaehlt sie doppelt im Confidence-Mittel.
+
+    Reihenfolge bleibt stabil: das erste Vorkommen (aus direct_items)
+    gewinnt.
+    """
+    shared = _filler_item(1)
+    direct_items = [shared, _filler_item(2)]
+    global_items = [dict(shared), _filler_item(3)]
+
+    pool = EvidenceCandidatePool(direct_items + global_items, lambda text: [1.0, 0.0])
+
+    ids = [item["evidence_id"] for item, _text in pool._items]
+    assert ids == [
+        f"ev_{1:032x}",
+        f"ev_{2:032x}",
+        f"ev_{3:032x}",
+    ], f"Erwartet je evidence_id genau einmal in Erhebungsreihenfolge, bekam: {ids!r}"
+
+
+def test_pool_behaelt_items_ohne_evidence_id_alle() -> None:
+    """Items ohne evidence_id haben keine Identitaet zum Abgleichen und
+    duerfen deshalb nicht stillschweigend als Duplikate verworfen werden."""
+    without_id_a = {"snippet": "Ein Item ohne evidence_id, Variante A."}
+    without_id_b = {"snippet": "Ein Item ohne evidence_id, Variante B."}
+
+    pool = EvidenceCandidatePool(
+        [without_id_a, without_id_b], lambda text: [1.0, 0.0]
+    )
+
+    assert len(pool._items) == 2, (
+        f"Beide Items ohne evidence_id muessen erhalten bleiben, "
+        f"gezaehlt wurden {len(pool._items)}"
+    )
+
+
+def test_pool_behandelt_leere_evidence_id_nicht_als_identitaet() -> None:
+    """Ein leerer evidence_id-String ist keine Identitaet.
+
+    Wuerde der Dedup ihn wie eine ID behandeln, fielen alle Items mit
+    leerem Feld auf ein einziges zusammen — ein stiller Datenverlust, der
+    schwerer waere als das Duplikat, das #1318 beseitigt.
+    """
+    items = [
+        {"evidence_id": "", "snippet": "Erstes Item mit leerer evidence_id."},
+        {"evidence_id": "", "snippet": "Zweites Item mit leerer evidence_id."},
+    ]
+
+    pool = EvidenceCandidatePool(items, lambda text: [1.0, 0.0])
+
+    assert len(pool._items) == 2
+
+
 def test_failed_embedding_is_not_retried_per_claim() -> None:
     """Ein deterministisch scheiterndes Item kostet genau einen Versuch.
 

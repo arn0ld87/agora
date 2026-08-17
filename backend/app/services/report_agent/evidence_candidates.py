@@ -58,9 +58,29 @@ class EvidenceCandidatePool:
         self._embed_calls = 0
         # Items ohne Text koennen weder eingebettet noch klassifiziert
         # werden — sie fielen im Binder ohnehin durch ``continue``.
+        # #1318: der Caller reicht ``direct_items + global_items`` rein —
+        # beide Quellen sind nicht disjunkt, dieselbe ``evidence_id`` kann in
+        # beiden stehen. Ohne Dedup landet so ein Item doppelt im Pool, kann
+        # zweimal binden und zaehlt zweimal in
+        # ``confidence_calculator._component_relevance``. Dedupliziert wird
+        # ausschliesslich nach ``evidence_id`` und nur beim ersten Vorkommen
+        # (stabile Reihenfolge); Items ohne ``evidence_id`` haben keine
+        # Identitaet zum Abgleichen und bleiben deshalb alle erhalten. Die
+        # Pruefung geht ueber Wahrheitswert, nicht ueber ``is not None``:
+        # ein leerer String ist ebenso wenig eine Identitaet wie ``None``
+        # und darf verschiedene Items nicht zusammenfallen lassen.
+        seen_ids: set[Any] = set()
+        deduped: List[Dict[str, Any]] = []
+        for item in items:
+            evidence_id = item.get("evidence_id")
+            if evidence_id:
+                if evidence_id in seen_ids:
+                    continue
+                seen_ids.add(evidence_id)
+            deduped.append(item)
         self._items: List[tuple[Dict[str, Any], str]] = [
             (item, text)
-            for item in items
+            for item in deduped
             if (text := candidate_text(item))
         ]
 

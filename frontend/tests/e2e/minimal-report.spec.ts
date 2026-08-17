@@ -10,8 +10,8 @@
  *   4. 50 manuelle Stub-Personas via POST /api/simulation/<id>/profiles anlegen.
  *   5. POST /api/report/generate mit Bearer-Auth triggern.
  *   6. Status-Polling via POST /api/report/generate/status bis "completed" (kein setTimeout).
- *      Timeout: 5 min (Stub-Modus: 11 Sections × 4 ReACT-Runden, aber kein echter LLM-Call).
- *   7. UI-Assertion: alle 11 Section-Header aus output-contract-required-sections.txt
+ *      Timeout: 5 min (Stub-Modus: 12 Sections × 4 ReACT-Runden, aber kein echter LLM-Call).
+ *   7. UI-Assertion: alle 12 Section-Header aus output-contract-required-sections.txt
  *      sind als span.outline-title in ReportOutlinePanel sichtbar.
  *      Die Liste wird zur Laufzeit aus der Snapshot-Datei gelesen — keine Hardcoded-Liste.
  *   8. Persona-Tabelle: Abschnitt "Persona-Tabelle" ist als span.outline-title sichtbar.
@@ -19,7 +19,7 @@
  *   9. 0 Page-Errors während des gesamten Flows.
  *
  * Stub-Vertrag (AGORA_E2E_LLM_MODE=stub):
- *   - chat_json(schema=PlanResponse) → _stub_plan_response() → 11 Sections
+ *   - chat_json(schema=PlanResponse) → _stub_plan_response() → 12 Sections
  *     (llm_e2e_stub.py::_stub_plan_response, aktiviert durch _is_plan_response_schema).
  *   - chat() → e2e_stub_chat_response() → Tool-Call-Strings (3 Runden) dann "Final Answer:".
  *     (llm_e2e_stub.py::e2e_stub_chat_response + llm_client.py::chat Stub-Branch).
@@ -82,12 +82,16 @@ const REQUIRED_SECTION_HEADERS: string[] = fs
   .map((l) => l.trim())
   .filter(Boolean);
 
-// Sanity-Check zur Laufzeit: der Snapshot muss exakt 11 Einträge haben.
-// Falls nicht, schlägt der Test mit erklärender Message fehl, nicht still.
-if (REQUIRED_SECTION_HEADERS.length !== 11) {
+// Sanity-Check zur Laufzeit: der Snapshot muss exakt so viele Einträge haben
+// wie DEFAULT_REPORT_SECTIONS im Backend. Falls nicht, schlägt der Test mit
+// erklärender Message fehl, nicht still.
+// 11 bis Issue #1322, seither 12 (abschließende Handlungsempfehlung).
+const EXPECTED_REQUIRED_SECTION_COUNT = 12;
+
+if (REQUIRED_SECTION_HEADERS.length !== EXPECTED_REQUIRED_SECTION_COUNT) {
   throw new Error(
-    `Snapshot enthält ${REQUIRED_SECTION_HEADERS.length} Abschnitte, erwartet 11. ` +
-      `Snapshot-Datei prüfen: ${SNAPSHOT_PATH}`,
+    `Snapshot enthält ${REQUIRED_SECTION_HEADERS.length} Abschnitte, erwartet ` +
+      `${EXPECTED_REQUIRED_SECTION_COUNT}. Snapshot-Datei prüfen: ${SNAPSHOT_PATH}`,
   );
 }
 
@@ -167,10 +171,10 @@ async function seedPersonaFloor(
 
 test.describe('M11.4c · Minimalreport-Smoke', () => {
   test(
-    '1 · Graph-Setup → Report generieren → 11 Sections + Persona-Tabelle sichtbar',
+    '1 · Graph-Setup → Report generieren → 12 Sections + Persona-Tabelle sichtbar',
     async ({ page, context, baseURL }) => {
       // M11.4b-Followup-3: Test-Total-Timeout anheben.
-      // Report-Generation (11 Sections × 4 ReACT-Iterationen im Stub) plus
+      // Report-Generation (12 Sections × 4 ReACT-Iterationen im Stub) plus
       // Graph-Build-Vorlauf und Persona-Floor-Seeding dauern länger als
       // Playwright-Default (30 s).
       // test.setTimeout ist targeted (nur dieser Test), kein Global-Bump in playwright.config.ts.
@@ -266,7 +270,7 @@ test.describe('M11.4c · Minimalreport-Smoke', () => {
 
         // ===================================================================
         // Schritt 9: Report-Status pollen bis "completed"
-        // Timeout 300 s (5 min): 11 Sections × 4 ReACT-Iterationen im Stub.
+        // Timeout 300 s (5 min): 12 Sections × 4 ReACT-Iterationen im Stub.
         // Kein hardcoded setTimeout — expect.poll in pollReportReady.
         // ===================================================================
         await pollReportReady(apiCtx, report_id, baseURL!, headers, 300_000);
@@ -309,11 +313,11 @@ test.describe('M11.4c · Minimalreport-Smoke', () => {
         ).toBeVisible({ timeout: 30_000 });
 
         // ===================================================================
-        // Schritt 10: Alle 11 Section-Header aus dem Snapshot assertieren
+        // Schritt 10: Alle 12 Section-Header aus dem Snapshot assertieren
         //
         // ReportOutlinePanel.vue:72 — span.outline-title enthält den Section-Titel.
-        // Der Stub liefert exakt die 11 Snapshot-Titel via _stub_plan_response().
-        // Alle 11 Titel müssen als span.outline-title sichtbar sein.
+        // Der Stub liefert exakt die 12 Snapshot-Titel via _stub_plan_response().
+        // Alle 12 Titel müssen als span.outline-title sichtbar sein.
         // ===================================================================
         for (const header of REQUIRED_SECTION_HEADERS) {
           const titleLocator = page.locator('span.outline-title', { hasText: header });

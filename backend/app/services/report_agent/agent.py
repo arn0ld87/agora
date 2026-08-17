@@ -38,6 +38,7 @@ from .sections import (
     build_source_id_anchor,
     is_atomic_claim,
     is_claim_candidate,
+    is_discourse_sentence,
     sample_actions_timeseries,
     section_dedup_check,
     truncate_text,
@@ -618,6 +619,10 @@ class ReportAgent:
         return is_claim_candidate(text)
 
     @staticmethod
+    def _is_discourse_sentence(text: str) -> bool:
+        return is_discourse_sentence(text)
+
+    @staticmethod
     def _build_source_id_anchor(item: Dict[str, Any]) -> Optional[str]:
         return build_source_id_anchor(item)
 
@@ -650,7 +655,18 @@ class ReportAgent:
         atomic_chunks: List[str] = []
         for chunk in chunks:
             atoms = [a for a in self._atomize_claim_chunk(chunk) if self._is_atomic_claim(a)]
-            atomic_chunks.extend(atoms or [chunk])
+            if atoms:
+                atomic_chunks.extend(atoms)
+                continue
+            # #1316: Der Fallback existiert, damit eine legitime
+            # Single-Sentence-Section nicht verschwindet. Er darf aber nicht
+            # ausgerechnet das zurueckholen, was der Atom-Filter gerade
+            # verworfen hat: eine Gliederungsansage als eigener Absatz
+            # ("Im Folgenden werden die Reaktionsmuster dargestellt.") wird
+            # von ``_is_atomic_claim`` abgelehnt, ``atoms`` ist dann leer und
+            # ``atoms or [chunk]`` setzte den Satz unveraendert wieder ein.
+            if not self._is_discourse_sentence(chunk):
+                atomic_chunks.append(chunk)
         chunks = atomic_chunks
         claims = []
         evidence_index = (self.evidence_map or {}).get("evidence_index") or {}

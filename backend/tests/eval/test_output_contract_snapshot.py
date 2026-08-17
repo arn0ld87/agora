@@ -58,6 +58,9 @@ def test_min_persona_table_rows_pinned_to_twenty():
     assert MIN_PERSONA_TABLE_ROWS == 20
 
 
-def test_required_sections_count_is_eleven():
-    """Pflichtabschnitt-Liste muss genau 11 Einträge haben."""
-    assert len(DEFAULT_REPORT_SECTIONS) == 11
+def test_required_sections_count_is_twelve():
+    """Pflichtabschnitt-Liste muss genau 12 Einträge haben.
+
+    11 bis #1322, seither zusätzlich die abschließende Handlungsempfehlung.
+    """
+    assert len(DEFAULT_REPORT_SECTIONS) == 12
