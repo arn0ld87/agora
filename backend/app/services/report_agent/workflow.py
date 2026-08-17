@@ -1093,6 +1093,17 @@ def generate_report(
 
     try:
         ReportManager._ensure_report_folder(report_id)
+        # Issue #1340 (Codex-Review PR #1349): ``build_report_v3`` uebernimmt
+        # Red-Team-Befunde und deren Modell-Zuordnung aus dem bestehenden
+        # Artefakt, weil ein spaeterer ``save_report()`` sie sonst mit dem
+        # Feld-Default ueberschreibt. Bei ``force_regenerate`` laeuft die
+        # Generierung aber erneut auf derselben ``report_id`` — dann gehoeren
+        # die alten Befunde zu einem anderen Claim-Set. Laeuft die
+        # Red-Team-Stage im neuen Lauf durch, ueberschreibt sie sie ohnehin;
+        # ueberspringt ``_red_team_required`` sie, blieben sie ohne diesen
+        # Schnitt als stille Altlast stehen. Der Lauf beginnt deshalb ohne
+        # fremden Review-Stand — das Erben gilt nur innerhalb eines Laufs.
+        ReportManager.reset_review_state(report_id)
         legacy_evidence_map = migrate_v1_to_v2(
             ReportManager.get_evidence_map(report_id)
         )

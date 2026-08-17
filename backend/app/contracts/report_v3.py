@@ -30,6 +30,16 @@ behalten ihre strengeren Provenance- und Confidence-Regeln.
 """
 
 
+RED_TEAM_FINDINGS_LIMIT: int = 10
+"""Obergrenze für ``ReportV3.red_team_findings``.
+
+Issue #1340: Das Limit steht hier und nicht als Zahl am Feld, weil
+``ReportManager._preserved_review_state()`` beim Übernehmen bestehender Befunde
+dagegen prüfen muss. Zwei Zahlen an zwei Stellen driften auseinander — und die
+Folge wäre, dass genau der Rebuild scheitert, den das Erben retten soll.
+"""
+
+
 ReportMode = Literal["strict", "balanced", "explorative"]
 """Vertrauensmodus für den Report-Output (PLAN.md §5.1, Slice P4.1).
 
@@ -439,12 +449,42 @@ class ReportV3(BaseModel):
         description="Anteil der validierten Aussagen, die die Simulation traegt.",
     )
     # Slice 5 (2026-05-17): Red-Team-Findings aus echo_chamber_review-Stage.
-    # max_length=10 begrenzt die Anzahl der Befunde; leer = kein Echo-Problem erkannt.
+    # RED_TEAM_FINDINGS_LIMIT begrenzt die Anzahl; leer = kein Echo-Problem erkannt.
     red_team_findings: list[str] = Field(
         default_factory=list,
-        max_length=10,
-        description="Befunde der Red-Team-Review-Stage (max. 10).",
+        max_length=RED_TEAM_FINDINGS_LIMIT,
+        description=f"Befunde der Red-Team-Review-Stage (max. {RED_TEAM_FINDINGS_LIMIT}).",
     )
+
+    @model_validator(mode="after")
+    def validate_unique_export_ids(self) -> "ReportV3":
+        """Issue #1341/#1342: Claim- und Gap-IDs muessen global eindeutig sein.
+
+        Die IDs entstehen abschnittsweise und werden anschliessend zu einer
+        flachen Liste gemergt. Solange jeder Abschnitt bei 1 zu zaehlen
+        beginnt, legen sich die Nummernraeume uebereinander: im Referenzlauf
+        standen 10 Claims auf 8 IDs und 125 Datenluecken auf 22. Ein Consumer,
+        der eine ID aufloest, bekommt dann irgendeinen der Traeger.
+
+        Die Pruefung gehoert in den Vertrag und nicht in einen Test: ein
+        Artefakt mit kollidierenden IDs ist nicht "unschoen", es ist nicht
+        interpretierbar. Bestandsartefakte aus der Zeit vor der Umstellung
+        koennen daran scheitern — dann liefert
+        ``ReportManager.build_report_v3_markdown()`` ``None`` und protokolliert
+        den Grund, statt mehrdeutige IDs weiterzureichen.
+        """
+        for label, collection in (("Claim", self.claims), ("DataGap", self.data_gaps)):
+            seen: set[str] = set()
+            duplicates: set[str] = set()
+            for item in collection:
+                if item.id in seen:
+                    duplicates.add(item.id)
+                seen.add(item.id)
+            if duplicates:
+                raise ValueError(
+                    f"{label}-IDs sind nicht eindeutig: " + ", ".join(sorted(duplicates))
+                )
+        return self
 
     @model_validator(mode="after")
     def validate_evidence_cross_references(self) -> "ReportV3":

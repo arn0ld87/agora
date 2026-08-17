@@ -11,6 +11,7 @@ from ...contracts.report_v3 import DEFAULT_REPORT_MODE, ReportMode, ReportV3
 from ...contracts.report_v3 import Claim as ReportV3Claim
 from ...contracts.report_v3 import DataGap as ReportV3DataGap
 from ...contracts.report_v3 import Hypothesis as ReportV3Hypothesis
+from ...contracts.report_v3 import RED_TEAM_FINDINGS_LIMIT, ModelAttribution
 from ...contracts.report_v3 import SimulationContribution
 from .metadata_merge import merge_section_metadata
 from .simulation_contribution import compute_simulation_contribution
@@ -299,6 +300,83 @@ class ReportManager:
             return None
 
     @classmethod
+    def reset_review_state(cls, report_id: str) -> None:
+        """Issue #1340: Verwirft den Review-Stand eines vorherigen Laufs.
+
+        Gegenstueck zu :meth:`_preserved_review_state`. Das Erben soll einen
+        spaeteren Neuaufbau innerhalb *eines* Laufs abdecken, nicht Befunde von
+        einem Lauf in den naechsten tragen: bei ``force_regenerate`` laeuft die
+        Generierung erneut auf derselben ``report_id``, und die alten Befunde
+        beschreiben dann ein Claim-Set, das es nicht mehr gibt.
+
+        Loescht bewusst nur die beiden Review-Felder und nicht das Artefakt:
+        bricht der neue Lauf ab, bleibt der uebrige Bestand lesbar.
+        """
+        raw = cls.get_report_v3(report_id)
+        if not isinstance(raw, dict):
+            return
+        if not raw.get("red_team_findings") and not raw.get("model_attribution"):
+            return
+        raw["red_team_findings"] = []
+        raw["model_attribution"] = []
+        cls._write_json_atomic(cls._get_report_v3_path(report_id), raw)
+        logger.info(
+            "Review-Stand des Vorlaufs fuer %s verworfen (neuer Generierungslauf)",
+            report_id,
+        )
+
+    @classmethod
+    def _preserved_review_state(cls, report_id: str) -> Dict[str, Any]:
+        """Issue #1340: Felder, die nur nachgelagerte Stages befuellen koennen.
+
+        ``build_report_v3`` speist sich aus Report und Evidenzkarte. Was eine
+        spaetere Stage direkt auf dem ReportV3-Objekt ablegt, steht in keiner
+        der beiden Quellen und faellt beim Neuaufbau auf den Feld-Default
+        zurueck. Betroffen sind die Red-Team-Befunde und die Modell-Zuordnung
+        derselben Stage.
+
+        Fehlt das Artefakt oder ist es unlesbar, wird nichts uebernommen — der
+        Neuaufbau bleibt der Normalfall, das Erben ist die Ausnahme.
+        """
+        raw = cls.get_report_v3(report_id)
+        if not isinstance(raw, dict):
+            return {}
+        preserved: Dict[str, Any] = {}
+
+        findings = raw.get("red_team_findings")
+        if isinstance(findings, list) and findings:
+            # Nicht per ``str()`` erzwingen: aus einem ``None`` im Artefakt
+            # wuerde sonst der Befund "None". Und mehr als zehn Eintraege
+            # verletzen ``max_length=10`` — das Erben wuerde den Neuaufbau
+            # sprengen, der ohne es funktioniert haette.
+            if len(findings) <= RED_TEAM_FINDINGS_LIMIT and all(
+                isinstance(item, str) for item in findings
+            ):
+                preserved["red_team_findings"] = list(findings)
+            else:
+                logger.warning(
+                    "red_team_findings aus report-v3.json fuer %s nicht uebernommen: "
+                    "%d Eintraege, Typen %s",
+                    report_id,
+                    len(findings),
+                    sorted({type(item).__name__ for item in findings}),
+                )
+
+        attribution = raw.get("model_attribution")
+        if isinstance(attribution, list) and attribution:
+            try:
+                preserved["model_attribution"] = [
+                    ModelAttribution.model_validate(item) for item in attribution
+                ]
+            except ValidationError as exc:
+                logger.warning(
+                    "model_attribution aus report-v3.json fuer %s nicht uebernommen: %s",
+                    report_id,
+                    exc,
+                )
+        return preserved
+
+    @classmethod
     def build_report_v3(
         cls,
         report: Report,
@@ -314,10 +392,18 @@ class ReportManager:
             if not isinstance(section, dict):
                 continue
             section_index = int(section.get("section_index") or 0)
+            # Issue #1341: Die abschnittsinterne ``claim_id`` (``claim_01``) ist
+            # nur innerhalb ihres Abschnitts eindeutig. Beim Merge zu einer
+            # flachen Liste kollidieren die Nummernraeume. Exportiert wird
+            # deshalb eine abschnittsqualifizierte ID nach demselben Muster,
+            # das die Hypothesen weiter unten schon benutzen (``H<n>_<i>``).
+            # Der Zaehler laeuft ueber die *akzeptierten* Claims: er wird erst
+            # hochgezaehlt, wenn der Claim alle Filter passiert hat, damit die
+            # ID die finale Liste beschreibt und nicht die Rohextraktion.
+            claim_slot = 0
             for claim in section.get("claims") or []:
                 if not isinstance(claim, dict):
                     continue
-                claim_id = str(claim.get("claim_id") or f"claim_{len(claims) + 1:02d}")
                 evidence_refs = list(dict.fromkeys(
                     str(item.get("evidence_id"))
                     for item in claim.get("evidence") or []
@@ -354,8 +440,9 @@ class ReportManager:
                 # strict: speculative/low-confidence Claims werden gedroppt
                 if report_mode == "strict" and confidence in {"speculative", "low"}:
                     continue
+                claim_slot += 1
                 claims.append(ReportV3Claim(
-                    id=claim_id,
+                    id=f"C{section_index}_{claim_slot:02d}",
                     statement=statement,
                     evidence_refs=evidence_refs,
                     confidence=confidence,
@@ -396,10 +483,13 @@ class ReportManager:
                         hypothesis_export_ids[_raw_id] = (
                             f"{_id_prefix}{section_index}_{_h_slot_idx:02d}"
                         )
+            # Issue #1342: gleiche Kollision wie bei den Claims, nur deutlich
+            # sichtbarer — 125 Datenluecken standen im Referenzlauf auf 22 IDs.
+            gap_slot = 0
             for gap in section.get("data_gaps") or []:
                 if not isinstance(gap, dict):
                     continue
-                gap_id = str(gap.get("gap_id") or f"gap_{len(data_gaps) + 1:02d}")
+                gap_slot += 1
                 claim_text = str(gap.get("claim_text") or gap.get("gap_reason") or "")
                 reason = str(gap.get("gap_reason") or "").strip()
                 description = claim_text if not reason else f"{claim_text} ({reason})"
@@ -420,7 +510,7 @@ class ReportManager:
                     "high" if reason == "no_evidence_bound" else "medium"
                 )
                 data_gaps.append(ReportV3DataGap(
-                    id=gap_id,
+                    id=f"G{section_index}_{gap_slot:02d}",
                     beschreibung=description,
                     severity=severity,
                     suggested_fixes=[str(suggested_fix)] if suggested_fix else [],
@@ -488,6 +578,19 @@ class ReportManager:
                 else item
                 for item in items
             ]
+        # Issue #1340: ``build_report_v3`` baut das Artefakt aus Report und
+        # Evidenzkarte neu auf. Beides weiss nichts von der Red-Team-Stage, die
+        # ihr Ergebnis direkt auf dem ReportV3-Objekt ablegt
+        # (``workflow.py::_run_red_team_review``). Da ``save_report()`` nach dem
+        # Red-Team-Schritt noch einmal laeuft (workflow.py:1449 nach :1392),
+        # ueberschrieb der Neuaufbau die Befunde mit dem Feld-Default: der Log
+        # meldete ``findings=8``, im Artefakt stand ``[]``.
+        #
+        # Der Neuaufbau uebernimmt deshalb, was nur die Review-Stage kennt.
+        # Bewusst als Merge und nicht als Umbau der Aufrufreihenfolge: das
+        # Artefakt bleibt so unabhaengig davon korrekt, wie oft und an welcher
+        # Stelle gespeichert wird.
+        preserved = cls._preserved_review_state(report.report_id)
         return ReportV3(
             report_id=report.report_id,
             generated_at=datetime.now(timezone.utc),
@@ -496,6 +599,7 @@ class ReportManager:
             claims=claims,
             data_gaps=data_gaps,
             hypotheses=hypotheses,
+            **preserved,
             # Issue #1192: der Stand wandert unveraendert aus meta.json ins
             # v3-Artefakt, damit der Markdown-Export ihn ausweisen kann.
             simulation_snapshot=report.simulation_snapshot,

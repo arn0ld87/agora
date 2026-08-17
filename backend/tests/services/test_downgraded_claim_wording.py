@@ -140,9 +140,14 @@ def _evidence_index() -> dict:
     }
 
 
-def _claim(confidence: str, text_confidence: str | None) -> Claim:
+def _claim(
+    confidence: str, text_confidence: str | None, claim_id: str = "C1_01"
+) -> Claim:
+    # Issue #1341: ReportV3 lehnt kollidierende Claim-IDs ab. Wo ein Test
+    # mehrere Claims in denselben Report legt, muss er sie unterscheiden —
+    # vorher trugen sie unbemerkt alle dieselbe ID.
     return Claim(
-        id="claim_01",
+        id=claim_id,
         statement="Die Zielgruppe lehnt den Preis ab.",
         evidence_refs=[EVIDENCE_ID],
         confidence=confidence,  # type: ignore[arg-type]
@@ -176,7 +181,10 @@ class TestRendering:
             report_id="rep-1012",
             generated_at=datetime(2026, 8, 10, tzinfo=timezone.utc),
             evidence_index=_evidence_index(),
-            claims=[_claim("low", "high"), _claim("high", None)],
+            claims=[
+                _claim("low", "high", claim_id="C1_01"),
+                _claim("high", None, claim_id="C1_02"),
+            ],
         )
 
         status = render_evidence_status(report)
