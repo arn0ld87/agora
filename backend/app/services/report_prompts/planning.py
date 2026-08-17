@@ -5,6 +5,19 @@ Enthält:
 - PLAN_SYSTEM_PROMPT, PLAN_USER_PROMPT
 """
 
+#: Abschließender Beschlussvorschlag (#1322). Als Konstante definiert, damit
+#: die vier entscheidungsorientierten Presets in ``report_intent`` denselben
+#: Titel und dieselbe Beschreibung verwenden — ein abweichender Wortlaut
+#: würde ``matches_known_preset`` auseinanderlaufen lassen.
+RECOMMENDATION_SECTION_TITLE = "Handlungsempfehlung"
+RECOMMENDATION_SECTION_DESCRIPTION = (
+    "Abschließender Beschlussvorschlag: empfohlene Variante, Vorbedingungen, "
+    "Restrisiken, zustimmende und widerständige Akteure, mögliche "
+    "Positionswechsel, Frühwarnindikatoren. Nur aus dem stützen, was die "
+    "Simulation gezeigt hat."
+)
+
+
 # ── Default-Pflichtabschnitte für DACH-Reports ──────────────────────
 DEFAULT_REPORT_SECTIONS: list[tuple[str, str]] = [
     ("Executive Summary", "Maximal 12 Sätze, was die Simulation gezeigt hat."),
@@ -18,6 +31,10 @@ DEFAULT_REPORT_SECTIONS: list[tuple[str, str]] = [
     ("Positionierung", "Drei Positionierungsvarianten mit Trade-offs."),
     ("Content-Ideen", "Konkrete Themen-/Format-Vorschläge."),
     ("Datenlücken", "Was die Simulation nicht beantworten kann."),
+    # Issue #1322: Der Bericht endete bis hier mit dem, was er *nicht* weiß.
+    # Der Beschlussvorschlag steht bewusst dahinter — er ist das, wofür der
+    # Bericht geschrieben wird, und die Datenlücken sind sein Vorbehalt.
+    (RECOMMENDATION_SECTION_TITLE, RECOMMENDATION_SECTION_DESCRIPTION),
 ]
 
 

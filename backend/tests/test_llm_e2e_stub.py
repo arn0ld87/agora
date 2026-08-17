@@ -21,7 +21,7 @@ from app.contracts.report_contract import ReportOutlineModel
 from app.contracts.report_v3 import ReportV3
 from app.utils.llm_e2e_stub import (
     _REQUIRED_SECTIONS,
-    _eleven_required_sections,
+    _required_sections,
     _stub_plan_response,
     e2e_stub_response,
 )
@@ -43,14 +43,14 @@ def _minimal_messages() -> list[dict[str, Any]]:
 # Test 1: Alle 11 Pflichtabschnitte vorhanden
 # ---------------------------------------------------------------------------
 
-class TestStubReturnsAllElevenRequiredSections:
+class TestStubReturnsAllRequiredSections:
     """Stub-Antwort muss alle 11 Pflichtfelder des ReportV3-DTO liefern."""
 
-    def test_stub_returns_all_eleven_required_sections(self) -> None:
-        """Snapshot hat genau 11 Einträge; Stub-Antwort hat alle 11 ReportV3-Felder."""
-        sections = _eleven_required_sections()
-        assert len(sections) == 11, (
-            f"Snapshot enthält {len(sections)} Abschnitte, erwartet 11. "
+    def test_stub_returns_all_required_sections(self) -> None:
+        """Snapshot hat genau 12 Einträge; Stub-Antwort hat alle 11 ReportV3-Felder."""
+        sections = _required_sections()
+        assert len(sections) == 12, (
+            f"Snapshot enthält {len(sections)} Abschnitte, erwartet 12. "
             "Snapshot-Datei prüfen: tests/eval/snapshots/output-contract-required-sections.txt"
         )
 
@@ -68,9 +68,9 @@ class TestStubReturnsAllElevenRequiredSections:
 
     def test_snapshot_sections_count_matches_module_constant(self) -> None:
         """_REQUIRED_SECTIONS (Modulkonstante) stimmt mit frischem Lesen überein."""
-        fresh = _eleven_required_sections()
+        fresh = _required_sections()
         assert _REQUIRED_SECTIONS == fresh
-        assert len(_REQUIRED_SECTIONS) == 11
+        assert len(_REQUIRED_SECTIONS) == 12
 
 
 # ---------------------------------------------------------------------------
@@ -220,11 +220,11 @@ class TestStubPlanResponseValidatesAgainstReportOutlineModel:
     den LLM-Prompt-Cap entfernt, aber der Contract blieb inkonsistent).
     """
 
-    def test_stub_plan_response_has_eleven_sections(self) -> None:
-        """_stub_plan_response() liefert genau 11 Abschnitte (Snapshot-Pflicht)."""
+    def test_stub_plan_response_has_twelve_sections(self) -> None:
+        """_stub_plan_response() liefert genau 12 Abschnitte (Snapshot-Pflicht)."""
         raw = _stub_plan_response()
-        assert len(raw["sections"]) == 11, (
-            f"_stub_plan_response() muss 11 Abschnitte liefern, war {len(raw['sections'])}"
+        assert len(raw["sections"]) == 12, (
+            f"_stub_plan_response() muss 12 Abschnitte liefern, war {len(raw['sections'])}"
         )
 
     def test_stub_plan_response_validates_against_report_outline_model(self) -> None:
@@ -236,10 +236,10 @@ class TestStubPlanResponseValidatesAgainstReportOutlineModel:
         raw = _stub_plan_response()
         # Darf keine ValidationError werfen
         outline = ReportOutlineModel.model_validate(raw)
-        assert len(outline.sections) == 11
+        assert len(outline.sections) == 12
 
     def test_stub_plan_response_all_required_sections_present(self) -> None:
-        """Alle 11 Pflichtabschnittsnamen aus dem Snapshot sind im Stub vorhanden."""
+        """Alle Pflichtabschnittsnamen aus dem Snapshot sind im Stub vorhanden."""
         raw = _stub_plan_response()
         section_titles = {s["title"] for s in raw["sections"]}
         for required in _REQUIRED_SECTIONS:

@@ -190,7 +190,7 @@ COPY --chown=agora:agora backend/pyproject.toml backend/uv.lock backend/run.py b
 COPY --chown=agora:agora backend/app ./backend/app
 COPY --chown=agora:agora backend/scripts ./backend/scripts
 # E2E-Stub-Snapshot: llm_e2e_stub.py liest die Pflichtabschnitte aus dieser Datei.
-# Der Fallback in _eleven_required_sections() greift wenn die Datei fehlt, aber
+# Der Fallback in _required_sections() greift wenn die Datei fehlt, aber
 # die Primär-Quelle liegt hier — damit sind Snapshot-Drift-Tests (M11.8b) auch
 # im prod-Image möglich (z. B. via /api/status-Erweiterungen).
 COPY --chown=agora:agora backend/tests/eval/snapshots ./backend/tests/eval/snapshots

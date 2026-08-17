@@ -8,6 +8,8 @@ from .planning import (
     DEFAULT_REPORT_SECTIONS,
     PLAN_SYSTEM_PROMPT_TEMPLATE,
     PLAN_USER_PROMPT_TEMPLATE,
+    RECOMMENDATION_SECTION_DESCRIPTION,
+    RECOMMENDATION_SECTION_TITLE,
     format_required_sections,
 )
 from .sections import (
@@ -30,6 +32,8 @@ from .chat import (
 __all__ = [
     # Planning
     "DEFAULT_REPORT_SECTIONS",
+    "RECOMMENDATION_SECTION_DESCRIPTION",
+    "RECOMMENDATION_SECTION_TITLE",
     "PLAN_SYSTEM_PROMPT_TEMPLATE",
     "PLAN_USER_PROMPT_TEMPLATE",
     "format_required_sections",

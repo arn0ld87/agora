@@ -15,7 +15,11 @@ import re
 from enum import Enum
 from typing import Dict, List, Sequence, Tuple
 
-from .report_prompts import DEFAULT_REPORT_SECTIONS
+from .report_prompts import (
+    DEFAULT_REPORT_SECTIONS,
+    RECOMMENDATION_SECTION_DESCRIPTION,
+    RECOMMENDATION_SECTION_TITLE,
+)
 
 SectionSpec = Tuple[str, str]
 
@@ -40,6 +44,7 @@ OPINION_SECTIONS: tuple[SectionSpec, ...] = (
     ("Zentrale Kritikpunkte", "Worauf sich Kritik stützt, mit Quellenbezug."),
     ("Konfliktlinien", "Wo die Gruppen auseinandergehen und woran das liegt."),
     ("Unsicherheiten und Datenlücken", "Was die Simulation nicht beantworten kann."),
+    (RECOMMENDATION_SECTION_TITLE, RECOMMENDATION_SECTION_DESCRIPTION),
 )
 
 RISK_SECTIONS: tuple[SectionSpec, ...] = (
@@ -49,6 +54,7 @@ RISK_SECTIONS: tuple[SectionSpec, ...] = (
     ("Reibungspunkte und Eskalationspfade", "Wie sich Risiken in der Simulation zuspitzen."),
     ("Gegenmaßnahmen", "Konkrete Maßnahmen, priorisiert."),
     ("Unsicherheiten und Datenlücken", "Was die Simulation nicht beantworten kann."),
+    (RECOMMENDATION_SECTION_TITLE, RECOMMENDATION_SECTION_DESCRIPTION),
 )
 
 COMPARISON_SECTIONS: tuple[SectionSpec, ...] = (
@@ -58,8 +64,13 @@ COMPARISON_SECTIONS: tuple[SectionSpec, ...] = (
     ("Unterschiede in den Reaktionsmustern", "Wo sich die Varianten in den Reaktionen unterscheiden."),
     ("Abwägung", "Trade-offs zwischen den Varianten."),
     ("Unsicherheiten und Datenlücken", "Was die Simulation nicht beantworten kann."),
+    (RECOMMENDATION_SECTION_TITLE, RECOMMENDATION_SECTION_DESCRIPTION),
 )
 
+#: Bewusst OHNE Handlungsempfehlung (#1322): ein Explorationsbericht soll
+#: beschreiben, was auffällt, und offene Fragen offen lassen. Ein
+#: Beschlussvorschlag würde eine Entscheidungsreife behaupten, die die
+#: Fragestellung gar nicht verlangt hat.
 EXPLORATIVE_SECTIONS: tuple[SectionSpec, ...] = (
     ("Kurzfazit", "Maximal 8 Sätze: Was in der Simulation auffällt."),
     ("Beobachtete Reaktionsmuster", "Wiederkehrende Muster in den Agentenreaktionen."),
