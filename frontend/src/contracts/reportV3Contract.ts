@@ -324,6 +324,24 @@ export const SimulationSnapshotSchema = z
   .strict();
 export type SimulationSnapshot = z.infer<typeof SimulationSnapshotSchema>;
 
+/**
+ * Issue #1304 (S3): Anteil der validierten Aussagen, den die Simulation traegt.
+ * Anteile sind null, solange es keine validierte Aussage gibt — eine 0 wuerde
+ * "kein Beitrag" behaupten, wo nichts gemessen wurde.
+ */
+export const SimulationContributionSchema = z
+  .object({
+    validated_claims: z.number().int().nonnegative().default(0),
+    claims_with_simulation_evidence: z.number().int().nonnegative().default(0),
+    claims_with_action_evidence: z.number().int().nonnegative().default(0),
+    claims_requiring_action_evidence: z.number().int().nonnegative().default(0),
+    simulation_share: z.number().min(0).max(1).nullable().default(null),
+    action_share: z.number().min(0).max(1).nullable().default(null),
+    action_necessary_share: z.number().min(0).max(1).nullable().default(null),
+  })
+  .strict();
+export type SimulationContribution = z.infer<typeof SimulationContributionSchema>;
+
 // === ReportV3 Container ===
 export const ReportV3Schema = z
   .object({
@@ -352,6 +370,7 @@ export const ReportV3Schema = z
     // Issue #1192: Simulationsstand zum Startzeitpunkt des Reports. Nullable
     // mit Default — Bestandsreports ohne den Slot bleiben gueltig.
     simulation_snapshot: SimulationSnapshotSchema.nullable().default(null),
+    simulation_contribution: SimulationContributionSchema.nullable().default(null),
   })
   .strict()
   .superRefine((value, ctx) => {

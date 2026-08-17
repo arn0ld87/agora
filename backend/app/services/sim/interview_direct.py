@@ -166,22 +166,84 @@ def _persona_description(persona: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+_PERSONA_HISTORY_MAX_ENTRIES = 8
+_PERSONA_HISTORY_TEXT_MAX_CHARS = 240
+
+
+def _persona_history_entry_text(action: Dict[str, Any]) -> str:
+    """Extrahiere den Beitragstext aus einem Aktions-Dict.
+
+    Erwartet die Dict-Form von ``AgentAction.to_dict()`` (siehe
+    ``run_state_store.py``), wie sie ``action_log_reader.py`` liefert:
+    ``action_args`` traegt den eigentlichen Beitragstext unter ``content``
+    (so befuellt fuer ``CREATE_POST``/``CREATE_COMMENT``, siehe
+    ``graph_memory_updater.py::_describe_create_post``/``_describe_create_comment``).
+    """
+    action_args = action.get("action_args")
+    if not isinstance(action_args, dict):
+        return ""
+    content = action_args.get("content")
+    return content.strip() if isinstance(content, str) else ""
+
+
+def _render_persona_history_block(history: List[Dict[str, Any]]) -> str:
+    """Baue den System-Prompt-Block mit den eigenen Beitraegen der Persona.
+
+    Nimmt hoechstens die **letzten** ``_PERSONA_HISTORY_MAX_ENTRIES`` Eintraege
+    in ihrer urspruenglichen Reihenfolge: das Aktionslog ist chronologisch, und
+    wonach im Interview gefragt wird, ist die aktuelle Haltung der Persona —
+    nicht die aus Runde eins. Kuerzt jeden Text auf
+    ``_PERSONA_HISTORY_TEXT_MAX_CHARS`` Zeichen und ueberspringt Eintraege ohne
+    extrahierbaren Text. Liefert einen leeren String, wenn kein Eintrag einen
+    Text ergibt.
+    """
+    lines: List[str] = []
+    for action in history[-_PERSONA_HISTORY_MAX_ENTRIES:]:
+        text = _persona_history_entry_text(action)
+        if not text:
+            continue
+        if len(text) > _PERSONA_HISTORY_TEXT_MAX_CHARS:
+            text = text[:_PERSONA_HISTORY_TEXT_MAX_CHARS]
+        action_type = action.get("action_type") or "Beitrag"
+        lines.append(f"- ({action_type}) {text}")
+
+    if not lines:
+        return ""
+
+    return (
+        "Deine eigenen Beitraege aus dieser Simulation (du hast das selbst "
+        "gepostet oder kommentiert — beziehe dich in deiner Antwort darauf):\n"
+        + "\n".join(lines)
+    )
+
+
 def build_persona_messages(
     persona: Dict[str, Any],
     agent_id: Any,
     prompt: str,
     *,
     context: Dict[str, Any],
+    persona_history: Optional[List[Dict[str, Any]]] = None,
 ) -> List[Dict[str, str]]:
-    """Baue die chat_json-Messages für ein einzelnes Persona-Interview."""
+    """Baue die chat_json-Messages für ein einzelnes Persona-Interview.
+
+    ``persona_history`` ist optional und, wenn gesetzt und nicht leer, eine
+    Liste von Aktions-Dicts (Form von ``AgentAction.to_dict()``) der eigenen
+    Simulationsrunden dieser Persona. Ist sie ``None`` oder leer, bleibt der
+    Prompt byte-identisch zum Aufruf ohne diesen Parameter.
+    """
     label = _persona_label(persona, agent_id)
     language = "Deutsch" if str(context.get("language", "de")).startswith("de") else "Englisch"
     requirement = context.get("requirement") or "(keine Fragestellung hinterlegt)"
 
+    history_block = _render_persona_history_block(persona_history) if persona_history else ""
+    history_section = f"\n\n{history_block}" if history_block else ""
+
     system = (
         f"Du bist {label}, eine simulierte Persona aus einer Agora-Zielgruppensimulation.\n\n"
         f"Profil:\n{_persona_description(persona)}\n\n"
-        f"Fragestellung der Simulation:\n{requirement}\n\n"
+        f"Fragestellung der Simulation:\n{requirement}"
+        f"{history_section}\n\n"
         "Regeln:\n"
         "- Antworte durchgehend in der Ich-Form aus Sicht dieser Persona.\n"
         "- Bleibe bei dem, was aus Profil und Fragestellung plausibel ist.\n"

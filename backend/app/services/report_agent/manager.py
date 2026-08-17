@@ -11,7 +11,9 @@ from ...contracts.report_v3 import DEFAULT_REPORT_MODE, ReportMode, ReportV3
 from ...contracts.report_v3 import Claim as ReportV3Claim
 from ...contracts.report_v3 import DataGap as ReportV3DataGap
 from ...contracts.report_v3 import Hypothesis as ReportV3Hypothesis
+from ...contracts.report_v3 import SimulationContribution
 from .metadata_merge import merge_section_metadata
+from .simulation_contribution import compute_simulation_contribution
 from ...config import Config
 from ...models.report import Report, ReportOutline, ReportSection, ReportStatus
 from ...utils.logger import get_logger
@@ -497,6 +499,11 @@ class ReportManager:
             # Issue #1192: der Stand wandert unveraendert aus meta.json ins
             # v3-Artefakt, damit der Markdown-Export ihn ausweisen kann.
             simulation_snapshot=report.simulation_snapshot,
+            # Issue #1304 (S3): aus derselben Evidenzkarte gezaehlt, aus der die
+            # Claims oben entstehen — kein zweiter Datenpfad, der driften kann.
+            simulation_contribution=SimulationContribution.model_validate(
+                compute_simulation_contribution(evidence_map)
+            ),
             **metadata_kwargs,
         )
     
