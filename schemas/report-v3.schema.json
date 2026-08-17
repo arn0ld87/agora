@@ -1008,6 +1008,80 @@
       "title": "Segment",
       "type": "object"
     },
+    "SimulationContribution": {
+      "additionalProperties": false,
+      "description": "Wie viel die Simulation zu den validierten Aussagen beitr\u00e4gt (#1304, S3).\n\nDie Kritik am Referenzlauf lautete: 24 Runden Simulation, keine einzige\nvalidierte Aussage auf einer Agentenaktion. Ohne diese Zahl ist nach jedem\nEingriff an Sampling oder Interviewkontext unklar, ob er gewirkt hat.\n\nDie drei Z\u00e4hler sind ineinander geschachtelt und absichtlich getrennt\nausgewiesen: ``claims_with_action_evidence`` allein \u00fcbersch\u00e4tzt den Beitrag\n(ein zweiter Beleg tr\u00e4gt die Aussage wom\u00f6glich ebenso),\n``claims_requiring_action_evidence`` allein untersch\u00e4tzt ihn.\n\nDie Anteile sind ``None``, solange es keine validierte Aussage gibt \u2014 eine\n0.0 w\u00fcrde \"kein Beitrag\" behaupten, wo nichts gemessen wurde.",
+      "properties": {
+        "action_necessary_share": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Action Necessary Share"
+        },
+        "action_share": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Action Share"
+        },
+        "claims_requiring_action_evidence": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Claims Requiring Action Evidence",
+          "type": "integer"
+        },
+        "claims_with_action_evidence": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Claims With Action Evidence",
+          "type": "integer"
+        },
+        "claims_with_simulation_evidence": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Claims With Simulation Evidence",
+          "type": "integer"
+        },
+        "simulation_share": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Simulation Share"
+        },
+        "validated_claims": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Validated Claims",
+          "type": "integer"
+        }
+      },
+      "title": "SimulationContribution",
+      "type": "object"
+    },
     "SimulationSnapshotModel": {
       "additionalProperties": false,
       "description": "Stand der Simulation zum Startzeitpunkt der Reportgenerierung (Issue #1192).\n\nEin Report darf starten, w\u00e4hrend die zugrunde liegende Simulation noch\nl\u00e4uft \u2014 dann analysiert er aber einen Zwischenstand. Ohne diesen Snapshot\nist einem fertigen Report nicht anzusehen, ob er auf zehn abgeschlossenen\nRunden beruht oder auf vieren. Erfasst wird der Stand *beim Start*, nicht\nbeim Abschluss: das ist der Datenbestand, den der Agent tats\u00e4chlich\ngesehen hat.",
@@ -1302,6 +1376,18 @@
       },
       "title": "Segments",
       "type": "array"
+    },
+    "simulation_contribution": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SimulationContribution"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Anteil der validierten Aussagen, die die Simulation traegt."
     },
     "simulation_snapshot": {
       "anyOf": [
