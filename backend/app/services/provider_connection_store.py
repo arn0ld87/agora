@@ -16,21 +16,14 @@ from app.contracts.ai_provider_contract import (
     ProviderConnectionUpsertRequest,
     ProviderStatus,
 )
+from app.services.data_dir import resolve_data_dir as _resolve_data_dir
 from app.services.llm_provider_secrets_store import LlmProviderSecretsStore
 
-_DATA_DIR_ENV = "AGORA_DATA_DIR"
 _STORE_FILENAME = "provider_connections.json"
 
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
-
-
-def _resolve_data_dir() -> Path:
-    raw = os.environ.get(_DATA_DIR_ENV)
-    if raw:
-        return Path(raw).expanduser().resolve()
-    return Path(__file__).resolve().parents[2] / "data"
 
 
 class ProviderConnectionStore:

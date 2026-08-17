@@ -44,10 +44,10 @@ from cryptography.fernet import Fernet, InvalidToken
 
 from ..contracts.llm_provider_keys_contract import LlmProviderKeyEntry
 from ..utils.logger import get_logger
+from .data_dir import resolve_data_dir as _resolve_data_dir
 
 logger = get_logger("agora.services.llm_provider_secrets_store")
 
-_DATA_DIR_ENV = "AGORA_DATA_DIR"
 _SECRET_KEY_ENV = "AGORA_SECRET_KEY"
 _STORE_FILENAME = "llm_provider_secrets.json"
 
@@ -76,14 +76,6 @@ class SecretDecryptionError(RuntimeError):
     ``AGORA_SECRET_KEY``, unlesbare Store-Datei), die weiter als blankes
     ``RuntimeError`` fliegen und hart bleiben müssen.
     """
-
-
-def _resolve_data_dir() -> Path:
-    raw = os.environ.get(_DATA_DIR_ENV)
-    if raw:
-        return Path(raw).expanduser().resolve()
-    # backend/app/services/llm_provider_secrets_store.py → backend/data/
-    return Path(__file__).resolve().parents[2] / "data"
 
 
 def _load_fernet() -> Fernet:

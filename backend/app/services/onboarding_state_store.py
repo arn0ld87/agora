@@ -31,11 +31,11 @@ from ..contracts.user_profile_contract import (
 )
 from ..settings import get_settings
 from ..utils.logger import get_logger
+from .data_dir import resolve_data_dir as _resolve_data_dir
 from .user_profile_store import get_user_profile_store
 
 logger = get_logger("agora.services.onboarding_state_store")
 
-_DATA_DIR_ENV = "AGORA_DATA_DIR"
 _STORE_FILENAME = "onboarding_state.json"
 
 
@@ -47,13 +47,6 @@ class OnboardingIncompleteError(Exception):
         super().__init__(
             "onboarding cannot be completed, missing: " + ", ".join(missing)
         )
-
-
-def _resolve_data_dir() -> Path:
-    raw = os.environ.get(_DATA_DIR_ENV)
-    if raw:
-        return Path(raw).expanduser().resolve()
-    return Path(__file__).resolve().parents[2] / "data"
 
 
 def _now() -> datetime:

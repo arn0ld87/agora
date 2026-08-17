@@ -27,19 +27,12 @@ from typing import IO, Iterator, Optional
 
 from ..contracts.user_profile_contract import UserProfile, UserProfileUpdateRequest
 from ..utils.logger import get_logger
+from .data_dir import resolve_data_dir as _resolve_data_dir
 
 logger = get_logger("agora.services.user_profile_store")
 
-_DATA_DIR_ENV = "AGORA_DATA_DIR"
 _STORE_FILENAME = "user_profile.json"
 _AVATAR_DIRNAME = "avatars"
-
-
-def _resolve_data_dir() -> Path:
-    raw = os.environ.get(_DATA_DIR_ENV)
-    if raw:
-        return Path(raw).expanduser().resolve()
-    return Path(__file__).resolve().parents[2] / "data"
 
 
 def _now() -> datetime:
