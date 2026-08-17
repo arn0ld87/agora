@@ -22,6 +22,16 @@ from app.contracts.report_v3 import ReportV3
 # Shared Stub-Evidence-Map
 # ---------------------------------------------------------------------------
 
+# Issue #1341: ReportV3 exportiert abschnittsqualifizierte Claim-IDs
+# (``C<abschnitt>_<i>``), weil die abschnittsinterne ``claim_id`` beim Merge
+# kollidiert. Damit ist die Roh-ID kein Identifikator mehr — die Tests greifen
+# den Claim ueber seine Aussage, die den Filterpfad unveraendert ueberlebt.
+_CLAIM_HIGH_EV = "Sicherheitsbedenken hemmen die Adoption nachweislich."
+_CLAIM_LOW = "Niedrig-Konfidenz-Claim mit Evidence-Anker."
+_CLAIM_NO_EV = "Claim ganz ohne Evidence-Anker — kein Beleg vorhanden."
+_CLAIM_FLOOR = "Ein Claim mit variabler Evidence-Anzahl."
+
+
 def _make_evidence_map(
     *,
     include_low_confidence: bool = True,
@@ -156,9 +166,9 @@ class TestClaimFilteringByMode:
         evidence_map = _make_evidence_map(include_no_evidence=True, include_low_confidence=False)
         report = self._make_report()
         v3 = ReportManager.build_report_v3(report, evidence_map, report_mode="strict")
-        claim_ids = {c.id for c in v3.claims}
+        claim_statements = {c.statement for c in v3.claims}
         # claim_no_ev hat keine evidence → muss weg sein in strict
-        assert "claim_no_ev" not in claim_ids
+        assert _CLAIM_NO_EV not in claim_statements
 
     def test_strict_mode_drops_low_confidence_claims(self):
         """strict: Low-confidence Claims werden gedroppt."""
@@ -167,10 +177,10 @@ class TestClaimFilteringByMode:
         evidence_map = _make_evidence_map(include_no_evidence=False, include_low_confidence=True)
         report = self._make_report()
         v3 = ReportManager.build_report_v3(report, evidence_map, report_mode="strict")
-        claim_ids = {c.id for c in v3.claims}
-        assert "claim_low" not in claim_ids
+        claim_statements = {c.statement for c in v3.claims}
+        assert _CLAIM_LOW not in claim_statements
         # High-confidence Claim bleibt
-        assert "claim_high_ev" in claim_ids
+        assert _CLAIM_HIGH_EV in claim_statements
 
     def test_balanced_mode_keeps_high_confidence(self):
         """balanced: High-confidence Claims mit Evidence bleiben drin."""
@@ -179,8 +189,8 @@ class TestClaimFilteringByMode:
         evidence_map = _make_evidence_map(include_no_evidence=False, include_low_confidence=False)
         report = self._make_report()
         v3 = ReportManager.build_report_v3(report, evidence_map, report_mode="balanced")
-        claim_ids = {c.id for c in v3.claims}
-        assert "claim_high_ev" in claim_ids
+        claim_statements = {c.statement for c in v3.claims}
+        assert _CLAIM_HIGH_EV in claim_statements
 
     def test_explorative_mode_keeps_only_supported_claims(self):
         """explorative: Thematisch verwandte, nicht stützende Bindings zählen nicht."""
@@ -189,10 +199,10 @@ class TestClaimFilteringByMode:
         evidence_map = _make_evidence_map(include_no_evidence=False, include_low_confidence=True)
         report = self._make_report()
         v3 = ReportManager.build_report_v3(report, evidence_map, report_mode="explorative")
-        claim_ids = {c.id for c in v3.claims}
+        claim_statements = {c.statement for c in v3.claims}
         # claim_low hat nur ein nicht stützendes Binding und damit keinen Beleg.
-        assert "claim_low" not in claim_ids
-        assert "claim_high_ev" in claim_ids
+        assert _CLAIM_LOW not in claim_statements
+        assert _CLAIM_HIGH_EV in claim_statements
 
 
 # ---------------------------------------------------------------------------
@@ -305,9 +315,9 @@ class TestEvidenceFloorS1:
         evidence_map = _make_evidence_map_with_evidence_count(1)
         report = self._make_report()
         v3 = ReportManager.build_report_v3(report, evidence_map, report_mode="balanced")
-        claim_ids = {c.id for c in v3.claims}
-        assert "claim_floor_test" in claim_ids
-        claim = next(item for item in v3.claims if item.id == "claim_floor_test")
+        claim_statements = {c.statement for c in v3.claims}
+        assert _CLAIM_FLOOR in claim_statements
+        claim = next(item for item in v3.claims if item.statement == _CLAIM_FLOOR)
         assert claim.confidence == "low"
         assert len(claim.evidence_refs) == 1
         assert claim.evidence_refs[0].startswith("ev_")
@@ -320,5 +330,5 @@ class TestEvidenceFloorS1:
         evidence_map = _make_evidence_map_with_evidence_count(2)
         report = self._make_report()
         v3 = ReportManager.build_report_v3(report, evidence_map, report_mode="balanced")
-        claim_ids = {c.id for c in v3.claims}
-        assert "claim_floor_test" in claim_ids
+        claim_statements = {c.statement for c in v3.claims}
+        assert _CLAIM_FLOOR in claim_statements

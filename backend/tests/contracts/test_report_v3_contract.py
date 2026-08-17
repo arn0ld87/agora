@@ -312,7 +312,9 @@ def test_persisted_v3_validates(tmp_path, monkeypatch):
     assert not any(
         "Sicherheitsbedenken" in h.hypothesis_text for h in restored.hypotheses
     )
-    assert restored.data_gaps[0].id == "gap_01"
+    # Issue #1342: exportiert wird die abschnittsqualifizierte ID, nicht die
+    # abschnittsinterne Rohform ``gap_01``.
+    assert restored.data_gaps[0].id == "G1_01"
     assert "Preisbereitschaft ist im Seed-Korpus nicht belegt." in report_v3_markdown
 
 
@@ -466,8 +468,8 @@ def test_build_report_v3_severity_folgt_gap_reason():
     migrated = ReportManager.build_report_v3(report, evidence_map)
 
     gaps_by_id = {gap.id: gap for gap in migrated.data_gaps}
-    assert gaps_by_id["gap_01"].severity == "high"
-    assert gaps_by_id["gap_02"].severity == "medium"
+    assert gaps_by_id["G1_01"].severity == "high"
+    assert gaps_by_id["G1_02"].severity == "medium"
 
 
 def test_build_report_v3_gap_verweist_auf_exportierte_hypothesen_id():
@@ -541,10 +543,10 @@ def test_build_report_v3_gap_verweist_auf_exportierte_hypothesen_id():
 
     gaps_by_id = {gap.id: gap for gap in migrated.data_gaps}
     hypothesis_ids = {hypothesis.id for hypothesis in migrated.hypotheses}
-    assert gaps_by_id["gap_01"].related_hypothesis_id == "H1_01"
-    assert gaps_by_id["gap_02"].related_hypothesis_id == "HA1_01"
+    assert gaps_by_id["G1_01"].related_hypothesis_id == "H1_01"
+    assert gaps_by_id["G1_02"].related_hypothesis_id == "HA1_01"
     # Ziel existiert nicht mehr — kein Verweis ins Leere.
-    assert gaps_by_id["gap_03"].related_hypothesis_id is None
+    assert gaps_by_id["G1_03"].related_hypothesis_id is None
     assert {"H1_01", "HA1_01"} <= hypothesis_ids
     # Der Verweis lebt im Vertrag, nicht als Anhängsel im Fließtext.
     for gap in migrated.data_gaps:
@@ -920,3 +922,197 @@ def test_project_impact_verified_confidence_accepted():
         confidence="verified",
     )
     assert impact.confidence == "verified"
+
+
+# ---------------------------------------------------------------------------
+# Issue #1340/#1341/#1342 — Trust-Layer-Defekte aus dem AURORA-Referenzlauf
+# ---------------------------------------------------------------------------
+
+def _zwei_abschnitte_mit_kollidierenden_rohids(report_id: str) -> dict:
+    """Evidenzkarte, in der beide Abschnitte lokal bei 1 zu zaehlen beginnen.
+
+    Genau diese Form erzeugte im Referenzlauf 10 Claims auf 8 IDs und
+    125 Datenluecken auf 22.
+    """
+    def _abschnitt(index: int, thema: str) -> dict:
+        return {
+            "section_index": index,
+            "section_title": f"Abschnitt {index}",
+            "section_summary": thema,
+            "claims": [
+                {
+                    "claim_id": "claim_01",
+                    "claim_text": f"{thema} ist im Seed-Korpus belegt.",
+                    "confidence_label": "medium",
+                    "evidence": [
+                        {
+                            "type": "graph_metric",
+                            "source": "simulation_metrics",
+                            "snippet": f"{thema}: 0.5",
+                            "source_id_anchor": f"kg:metric:{thema.lower()}",
+                            "supports_claim": True,
+                        }
+                    ],
+                    "audit_trail": [],
+                },
+                {
+                    "claim_id": "claim_02",
+                    "claim_text": f"{thema} wirkt auf die Adoption nachweislich.",
+                    "confidence_label": "medium",
+                    "evidence": [
+                        {
+                            "type": "graph_metric",
+                            "source": "simulation_metrics",
+                            "snippet": f"{thema}_effect: 0.7",
+                            "source_id_anchor": f"kg:metric:{thema.lower()}_effect",
+                            "supports_claim": True,
+                        }
+                    ],
+                    "audit_trail": [],
+                },
+            ],
+            "data_gaps": [
+                {
+                    "gap_id": "gap_01",
+                    "claim_text": f"Zahlen zu {thema} fehlen.",
+                    "gap_reason": "no_evidence_bound",
+                    "suggested_fix": "Nacherheben.",
+                },
+                {
+                    "gap_id": "gap_02",
+                    "claim_text": f"Zeitreihe zu {thema} fehlt.",
+                    "gap_reason": "weak_binding",
+                    "suggested_fix": "Historie ergaenzen.",
+                },
+            ],
+        }
+
+    return {
+        "schema_version": 2,
+        "report_id": report_id,
+        "simulation_id": "sim_kollision01",
+        "global_evidence": [],
+        "sections": [_abschnitt(1, "Sicherheitsbedenken"), _abschnitt(2, "Preisdruck")],
+    }
+
+
+def test_claim_ids_sind_global_eindeutig_ueber_abschnitte(tmp_path, monkeypatch):
+    """Issue #1341: sektionslokale claim_ids duerfen beim Merge nicht kollidieren."""
+    from app.services.report_agent import Report, ReportManager, ReportStatus  # noqa: PLC0415
+
+    monkeypatch.setattr(ReportManager, "REPORTS_DIR", str(tmp_path / "reports"))
+    report_id = "report_kollision01"
+    evidence_map = _zwei_abschnitte_mit_kollidierenden_rohids(report_id)
+    report = Report(
+        report_id=report_id,
+        simulation_id="sim_kollision01",
+        graph_id="graph_kollision1",
+        simulation_requirement="Test",
+        status=ReportStatus.COMPLETED,
+    )
+
+    v3 = ReportManager.build_report_v3(report, evidence_map)
+
+    claim_ids = [claim.id for claim in v3.claims]
+    assert len(claim_ids) == 4, "beide Abschnitte muessen je zwei Claims beitragen"
+    assert len(claim_ids) == len(set(claim_ids)), f"Claim-IDs kollidieren: {claim_ids}"
+    assert set(claim_ids) == {"C1_01", "C1_02", "C2_01", "C2_02"}
+
+
+def test_gap_ids_sind_global_eindeutig_ueber_abschnitte(tmp_path, monkeypatch):
+    """Issue #1342: dieselbe Kollision bei den Datenluecken."""
+    from app.services.report_agent import Report, ReportManager, ReportStatus  # noqa: PLC0415
+
+    monkeypatch.setattr(ReportManager, "REPORTS_DIR", str(tmp_path / "reports"))
+    report_id = "report_kollision02"
+    evidence_map = _zwei_abschnitte_mit_kollidierenden_rohids(report_id)
+    report = Report(
+        report_id=report_id,
+        simulation_id="sim_kollision01",
+        graph_id="graph_kollision1",
+        simulation_requirement="Test",
+        status=ReportStatus.COMPLETED,
+    )
+
+    v3 = ReportManager.build_report_v3(report, evidence_map)
+
+    gap_ids = [gap.id for gap in v3.data_gaps]
+    assert len(gap_ids) == 4
+    assert len(gap_ids) == len(set(gap_ids)), f"Gap-IDs kollidieren: {gap_ids}"
+    assert set(gap_ids) == {"G1_01", "G1_02", "G2_01", "G2_02"}
+
+
+def test_contract_lehnt_doppelte_claim_ids_ab():
+    """Issue #1341: die Invariante gehoert in den Vertrag, nicht nur in den Test."""
+    doppelter_claim = Claim(
+        id="C1_01",
+        statement="Sicherheitsbedenken sind der primaere Hemmfaktor.",
+        evidence_refs=[EVIDENCE_ID],
+        confidence="medium",
+        aggregation_basis="persona",
+    )
+    with pytest.raises(ValidationError, match="Claim-IDs sind nicht eindeutig"):
+        ReportV3(
+            report_id="rep-dup-claim",
+            generated_at=datetime(2026, 8, 17, tzinfo=timezone.utc),
+            evidence_index=_evidence_index(),
+            claims=[doppelter_claim, doppelter_claim.model_copy()],
+        )
+
+
+def test_contract_lehnt_doppelte_gap_ids_ab():
+    """Issue #1342: gleiche Invariante fuer Datenluecken."""
+    doppelte_luecke = DataGap(
+        id="G1_01",
+        beschreibung="Preisbereitschaft ist nicht belegt.",
+        severity="medium",
+    )
+    with pytest.raises(ValidationError, match="DataGap-IDs sind nicht eindeutig"):
+        ReportV3(
+            report_id="rep-dup-gap",
+            generated_at=datetime(2026, 8, 17, tzinfo=timezone.utc),
+            evidence_index=_evidence_index(),
+            data_gaps=[doppelte_luecke, doppelte_luecke.model_copy()],
+        )
+
+
+def test_red_team_findings_ueberleben_den_rebuild_durch_save_report(tmp_path, monkeypatch):
+    """Issue #1340: der Log meldete findings=8, im Artefakt stand [].
+
+    ``save_report()`` laeuft im Workflow nach dem Red-Team-Schritt
+    (workflow.py:1449 nach :1392) und baut das v3-Artefakt neu auf. Weder
+    Report noch Evidenzkarte kennen die Befunde — ohne Uebernahme gewinnt der
+    Feld-Default.
+    """
+    from app.services.report_agent import Report, ReportManager, ReportStatus  # noqa: PLC0415
+
+    monkeypatch.setattr(ReportManager, "REPORTS_DIR", str(tmp_path / "reports"))
+    report_id = "report_redteam001"
+    evidence_map = _zwei_abschnitte_mit_kollidierenden_rohids(report_id)
+    ReportManager.save_evidence_map(report_id, evidence_map)
+    report = Report(
+        report_id=report_id,
+        simulation_id="sim_kollision01",
+        graph_id="graph_kollision1",
+        simulation_requirement="Test",
+        status=ReportStatus.COMPLETED,
+        markdown_content="# Demo",
+    )
+
+    # Stufe 1: der Red-Team-Schritt legt seine Befunde auf dem v3-Objekt ab.
+    befunde = ["Alle Personas argumentieren aus derselben Richtung.", "Gegenposition fehlt."]
+    zwischenstand = ReportManager.build_report_v3(report, evidence_map).model_copy(
+        update={"red_team_findings": befunde}
+    )
+    ReportManager.save_report_v3(zwischenstand)
+
+    # Stufe 2: der spaetere save_report()-Aufruf baut das Artefakt neu auf.
+    ReportManager.save_report(report)
+
+    raw = json.loads(
+        (tmp_path / "reports" / report_id / "report-v3.json").read_text(encoding="utf-8")
+    )
+    restored = ReportV3.model_validate(raw)
+    assert restored.red_team_findings == befunde, (
+        "Red-Team-Befunde wurden vom Neuaufbau ueberschrieben"
+    )

@@ -447,6 +447,36 @@ class ReportV3(BaseModel):
     )
 
     @model_validator(mode="after")
+    def validate_unique_export_ids(self) -> "ReportV3":
+        """Issue #1341/#1342: Claim- und Gap-IDs muessen global eindeutig sein.
+
+        Die IDs entstehen abschnittsweise und werden anschliessend zu einer
+        flachen Liste gemergt. Solange jeder Abschnitt bei 1 zu zaehlen
+        beginnt, legen sich die Nummernraeume uebereinander: im Referenzlauf
+        standen 10 Claims auf 8 IDs und 125 Datenluecken auf 22. Ein Consumer,
+        der eine ID aufloest, bekommt dann irgendeinen der Traeger.
+
+        Die Pruefung gehoert in den Vertrag und nicht in einen Test: ein
+        Artefakt mit kollidierenden IDs ist nicht "unschoen", es ist nicht
+        interpretierbar. Bestandsartefakte aus der Zeit vor der Umstellung
+        koennen daran scheitern — dann liefert
+        ``ReportManager.build_report_v3_markdown()`` ``None`` und protokolliert
+        den Grund, statt mehrdeutige IDs weiterzureichen.
+        """
+        for label, collection in (("Claim", self.claims), ("DataGap", self.data_gaps)):
+            seen: set[str] = set()
+            duplicates: set[str] = set()
+            for item in collection:
+                if item.id in seen:
+                    duplicates.add(item.id)
+                seen.add(item.id)
+            if duplicates:
+                raise ValueError(
+                    f"{label}-IDs sind nicht eindeutig: " + ", ".join(sorted(duplicates))
+                )
+        return self
+
+    @model_validator(mode="after")
     def validate_evidence_cross_references(self) -> "ReportV3":
         known_ids = set(self.evidence_index)
         mismatched = [
