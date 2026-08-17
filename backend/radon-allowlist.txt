@@ -60,7 +60,6 @@
 #     83b7488), echte Persona/Segment/FrictionPoint/TrustSignal-Aggregation.
 #     Eigener Refactor-Slice nach v1.0 (Aufgabenkatalog: Aggregations-Helper
 #     splitten, Persona-Mapper als eigenes Modul).
-#   - app/services/report_status.py: Extraktion von Stage-Branching.
 #   - app/services/sim/process_manager.py: start_simulation aufspalten (nach v1.0).
 #   - graph_build (API + Service): Ontology-/Build-Pfad teilen sich Validierung,
 #     Routen-Aufloesung und Fehlerbehandlung — Extraktion in gemeinsame Helper.
@@ -114,14 +113,12 @@ app/services/oasis_profile_generator.py::OasisProfileGenerator.generate_profiles
 app/services/oasis_profile_generator.py::OasisProfileGenerator._build_entity_context  # cc<=26
 
 # --- Services: Report-Agent ---
-# radon misst die Klassen-Komplexitaet als Mittelwert ueber die Methoden, nicht
-# als Summe. Als am 17.08.2026 die duplizierte ``map_outline_for_contract``
-# (cc=10) aus der Klasse verschwand, blieb ``get_status`` (cc=41) als einzige
-# Methode uebrig und der Klassenwert stieg von 27 auf 42 — obwohl Code
-# *entfernt* wurde. Der Zuwachs ist ein Metrik-Artefakt, kein neuer Hotspot;
-# der Refactor-Auftrag steckt vollstaendig in get_status.
-app/services/report_status.py::ReportStatusService  # cc<=42
-app/services/report_status.py::ReportStatusService.get_status  # cc<=41
+# app/services/report_status.py::ReportStatusService (cc<=42) und
+# ::get_status (cc<=41) sind am 17.08.2026 ersatzlos entfallen: get_status ist
+# in die Quellen-Kette zerlegt (Run-Registry -> persistierter Report -> Task ->
+# Simulation -> Acknowledge) und misst jetzt 7, die Klasse 8. Hoechster Wert
+# im Modul ist _status_from_run_registry mit 15 — unter der D-Schwelle, also
+# ohne Allowlist-Eintrag.
 app/services/report_agent/agent.py::ReportAgent._record_tool_evidence  # cc<=57
 app/services/report_agent/agent.py::ReportAgent._build_claims_for_section  # cc<=37
 app/services/report_agent/agent.py::ReportAgent._finalize_section_claims  # cc<=35
