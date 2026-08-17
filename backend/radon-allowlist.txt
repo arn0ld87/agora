@@ -1,100 +1,67 @@
 # Bestands-Hot-Spots cc >= 21 (Class D+), geduldet bis individuelle Refactor-Slices.
-# Neue Einträge nur nach Sub-Slice mit Architektur-Begründung im Arbeitsprotokoll.
-# Format: <rel-path>::<func>  (rel-path relativ zu backend/, func = radon-Ausgabe-Name)
 #
-# Gemessen: 2026-05-14, radon 6.0.1, radon cc --min C --no-assert -j app/
-# Anzahl Einträge bei dieser Messung: 30 (5 x Class F, 1 x Class E, 24 x Class D).
-# Seither entfallen, weil die Funktion zerlegt wurde:
-#   app/api/simulation_run.py::start_simulation (#1079)
-#   app/api/simulation_prepare.py::prepare_simulation (#1080)
+# REGEL (seit 2026-08-17): Jeder Eintrag traegt eine cc-Obergrenze `# cc<=<N>`.
+# Ein Eintrag ohne Obergrenze ist eine unbefristete Duldung in beliebiger Hoehe —
+# genau das hat jahrelang stilles Wachstum verdeckt (siehe Messung unten).
+# Neue Eintraege nur nach Sub-Slice mit Architektur-Begruendung im Arbeitsprotokoll
+# UND mit Obergrenze in Hoehe des gemessenen Ist-Werts.
 #
-# Top-5 nach Cyclomatic Complexity (Stand der Messung):
-#   F (cc=50)  app/services/evidence_migrations.py::migrate_v2_to_v3
-#   F (cc=44)  app/api/report.py::get_generate_status
-#   E (cc=38)  app/services/report_agent/workflow.py::generate_report
-#   E (cc=33)  app/api/simulation_run.py::start_simulation — zerlegt (#1079)
-#   E (cc=33)  app/services/oasis_profile_generator.py::OasisProfileGenerator.generate_profiles_from_entities
+# Format: <rel-path>::<func>  # cc<=<N>
+#   rel-path relativ zu backend/, func = radon-Ausgabe-Name
+#   (bei Methoden mit Klassen-Praefix: <Class>.<method>)
 #
-# Refactor-Kandidaten (eigene Sub-Slices nötig):
-#   - app/api/report.py (F/E): Kandidat für API-Envelope-Refactor (M11.6)
-#   - app/services/report_agent/workflow.py (E/D): Kandidat für Report-Agent-Refactor
-#   - app/api/simulation_run.py (E): erledigt (#1079) — start_simulation ist in
-#     Phasen zerlegt und aus der Allowlist entfernt.
-#   - app/services/oasis_profile_generator.py (E): Kandidat für OASIS-Profil-Refactor
-#   - app/services/evidence_migrations.py (F/D): aus P3.1-Followup (Commit 83b7488),
-#     echte Persona/Segment/FrictionPoint/TrustSignal-Aggregation. Eigener
-#     Refactor-Slice nach v1.0 (Aufgabenkatalog: Aggregations-Helper splitten,
-#     Persona-Mapper als eigenes Modul).
-
-app/config.py::Config
-app/config.py::Config.validate
-app/__init__.py::create_app
-app/utils/file_parser.py::FileParser._extract_from_pdf
-# llm_client.py wurde nach app/llm/ gesplittet (#582) — Hotspots unverändert,
-# nur Pfad neu. Refactoring der Funktionen selbst: #590.
-app/llm/client.py::LLMClient.chat_json
-app/api/simulation_profiles.py::add_simulation_profile
-app/api/runs.py::_build_run_summary
-app/api/report.py::get_generate_status
-app/services/branching_service.py::create_branch
-app/services/persona_demographics.py::classify_name_origin
-app/services/compare_service.py::CompareService._build_metrics
-app/services/oasis_profile_generator.py::OasisProfileGenerator.generate_profiles_from_entities
-app/services/oasis_profile_generator.py::OasisProfileGenerator._build_entity_context
-app/services/oasis_profile_generator.py::OasisProfileGenerator._generate_profile_with_llm
-app/services/run_registry.py::RunRegistry.list_runs
-app/services/run_registry.py::RunRegistry.update_run
-app/services/graph_tools.py::GraphToolsService.interview_agents
-app/services/tool_execution.py::execute_tool
-app/services/ontology_generator.py::OntologyGenerator._validate_and_process
-app/services/graph/insight_forge_tool.py::insight_forge
-app/services/report_agent/agent.py::ReportAgent._record_tool_evidence
-app/services/report_agent/agent.py::ReportAgent._build_claims_for_section
-app/services/report_agent/workflow.py::generate_report
-app/services/report_agent/workflow.py::generate_section_react
-app/services/report_agent/manager.py::ReportManager._post_process_report
-app/services/report_agent/manager.py::ReportManager.build_report_v3
-app/services/evidence_migrations.py::migrate_v2_to_v3
-app/services/evidence_migrations.py::_map_profile_to_persona
-
-# Drift zwischen Allowlist (2026-05-14) und HEAD — Observability-Welle
-# (PR #486, 2026-05-16) hat 6 zusätzliche D-Hotspots aufgedeckt, davon
-# 1 durch Slice 6 cancel-checks marginal erhöht, 5 pre-existing Drift.
-# Refactor-Slice nach v1.0 (Aufgabenkatalog: Stage-Boundary-Helper aus
-# workflow.chat extrahieren, planning.plan_outline aufteilen,
-# report.generate_report Validation-Block ausgliedern).
-app/services/report_agent/planning.py::plan_outline
-app/services/report_agent/workflow.py::chat
-app/api/report.py::generate_report
-app/api/graph.py::generate_ontology
-app/llm/client.py::LLMClient.__init__
-app/llm/client.py::LLMClient.chat
-
-# Drift zwischen Allowlist (2026-05-14) und HEAD — Report-Quality-Welle
-# (PR #495 "Hypothesen-Cap + Appendix", 2026-05-14) hat einen weiteren
-# D-Hotspot in _finalize_section_claims aufgedeckt. Pre-existing,
-# Touch durch HeroNewRun-Slice A2 (PR #504) nur indirekt sichtbar
-# gemacht. Refactor zusammen mit den anderen report_agent-Kandidaten.
-app/services/report_agent/agent.py::ReportAgent._finalize_section_claims
-
-# Drift durch report-status-Refactor und sim-process-manager-Auslagerung
-# (HEAD ~2026-06, pre-existing Komplexität aus bestehenden Service-Zusammenführungen).
-# Refactor-Kandidaten: report_status.py Extraktion von Stage-Branching,
-# process_manager.py start_simulation Aufspaltung nach v1.0.
-app/services/report_status.py::ReportStatusService
-app/services/report_status.py::ReportStatusService.get_status
-app/services/sim/process_manager.py::start_simulation
-
-# Gemessen: 2026-08-04, radon 6.0.1, `bash scripts/check_complexity.sh` auf 4db7016b.
+# Sinkt die gemessene Komplexitaet unter die Obergrenze, meldet das Gate einen
+# Hinweis (kein Fail) — die Obergrenze gehoert dann abgesenkt.
 #
-# Grund: Bestandskomplexitaet aus vorangegangenen Service-Zusammenfuehrungen.
-# Keine dieser zwoelf Funktionen ist in diesem Slice entstanden oder veraendert
-# worden; sie sind durch das Zusammenlegen frueher getrennter Module in den
-# D+-Bereich gerutscht und seitdem unbemerkt geblieben, weil das Gate rot war
-# und deshalb ohnehin ignoriert wurde. Der Eintrag macht das Gate wieder
-# aussagekraeftig: ab jetzt schlaegt es nur noch bei *neuer* Komplexitaet an.
+# ---------------------------------------------------------------------------
+# Neuvermessung 2026-08-17, radon 6.0.1, `radon cc app --min A --no-assert -j`
+# auf 4fed7839. Bis dahin hatten 49 von 55 Eintraegen keine Obergrenze.
 #
-# Refactor ist Folgearbeit, kein Teil dieses Slices. Aufgabenkatalog je Cluster:
+# Belegtes Wachstum seit der jeweiligen Aufnahme — vom Gate nie gemeldet,
+# weil die Eintraege keine Obergrenze trugen:
+#   ReportAgent._save_evidence_section     36 (04.08.) -> 52   (+16)
+#   degrade_sections_for_violations        34 (04.08.) -> 50   (+16)
+#   monitor_simulation                     23 (04.08.) -> 29   (+6)
+#   classify_evidence                      34 (04.08.) -> 38   (+4)
+#   generate_report                        47 (11.08., nach #1219) -> 55  (+8)
+#
+# Entfernt, weil die Duldung gegenstandslos geworden ist (gemessen 17.08.):
+#   app/api/graph.py::generate_ontology
+#       — Funktion existiert nicht mehr; der Pfad ist nach app/api/graph_build.py
+#         gewandert und dort separat gelistet.
+#   app/api/report.py::get_generate_status                      -> B (cc=9)
+#       — stand hier als "F (cc=44)", spaeter "F (cc=68)". Inzwischen zerlegt.
+#   app/api/report.py::generate_report                          -> C (cc=20)
+#   app/services/report_generation.py::ReportGenerationService.start_generation
+#                                                               -> C (cc=20)
+#   app/services/oasis_profile_generator.py::OasisProfileGenerator._generate_profile_with_llm
+#                                                               -> C (cc=13)
+#   Faellt eine dieser Funktionen kuenftig wieder auf D+, schlaegt das Gate an —
+#   das ist gewollt.
+#
+# Bestand nach dieser Bereinigung: 50 Eintraege = exakt die 50 gemessenen
+# D+-Hotspots. Keine ungedeckten Hotspots, keine Karteileichen.
+# ---------------------------------------------------------------------------
+#
+# Top-Hotspots und ihre Refactor-Zustaendigkeit:
+#   F (cc=69)  report_agent/manager.py::ReportManager.build_report_v3
+#   F (cc=68)  evidence_migrations.py::migrate_v2_to_v3
+#   F (cc=57)  report_agent/agent.py::ReportAgent._record_tool_evidence
+#   F (cc=55)  report_agent/workflow.py::generate_report
+#   F (cc=52)  report_agent/agent.py::ReportAgent._save_evidence_section
+#
+# Refactor-Kandidaten (eigene Sub-Slices noetig):
+#   - app/services/report_agent/*: Report-Agent-Refactor. generate_report ist
+#     nach #1219 (SectionPipeline) von 455 auf 322 Zeilen gefallen, die
+#     Komplexitaet aber wieder auf 55 gestiegen. Zweiter Schnitt offen:
+#     Init -> Status -> Budget-Reraise (#978).
+#   - app/services/oasis_profile_generator.py (E): OASIS-Profil-Refactor.
+#   - app/services/evidence_migrations.py (F/D): aus P3.1-Followup (Commit
+#     83b7488), echte Persona/Segment/FrictionPoint/TrustSignal-Aggregation.
+#     Eigener Refactor-Slice nach v1.0 (Aufgabenkatalog: Aggregations-Helper
+#     splitten, Persona-Mapper als eigenes Modul).
+#   - app/services/report_status.py: Extraktion von Stage-Branching.
+#   - app/services/sim/process_manager.py: start_simulation aufspalten (nach v1.0).
 #   - graph_build (API + Service): Ontology-/Build-Pfad teilen sich Validierung,
 #     Routen-Aufloesung und Fehlerbehandlung — Extraktion in gemeinsame Helper.
 #   - report_agent (agent/evidence/text_verification): Evidence-Degradation und
@@ -103,61 +70,74 @@ app/services/sim/process_manager.py::start_simulation
 #   - run_budget_preflight / confidence_calculator: Scoring-Regeln als Tabelle
 #     statt als Verzweigungsbaum.
 #   - sim/monitor + report_generation: Zustandsuebergaenge in eine FSM ziehen.
-#
-# Gemessene Werte zum Zeitpunkt der Aufnahme:
-#   D cc=27  app/api/graph_build.py::generate_ontology
-#   D cc=23  app/api/graph_build.py::build_graph
-#   D cc=21  app/api/runs.py::_build_run_detail
-#   D cc=23  app/services/confidence_calculator.py::_compute_confidence_with_penalties
-#   D cc=23  app/services/report_generation.py::ReportGenerationService.start_generation
-#   E cc=34  app/services/evidence_entailment.py::classify_evidence
-#   D cc=25  app/services/graph_build.py::GraphBuildService.build_graph
-#   D cc=28  app/services/run_budget_preflight.py::estimate_run
-#   E cc=36  app/services/report_agent/agent.py::ReportAgent._save_evidence_section
-#   E cc=34  app/services/report_agent/evidence.py::degrade_sections_for_violations
-#   D cc=24  app/services/report_agent/text_verification.py::verify_prose
-#   D cc=23  app/services/sim/monitor.py::monitor_simulation
-#
-# NICHT neu aufgenommen wurden die beiden Rang-F-Handler. Sie standen bereits
-# seit 2026-05-14 weiter oben in dieser Datei, damals mit E (cc=33) vermessen —
-# inzwischen F (cc=68) bzw. F (cc=65). Die Allowlist prueft nur, *ob* eine
-# Funktion geduldet ist, nicht *wie stark* sie gewachsen ist; dieser Zuwachs ist
-# deshalb nie aufgefallen. Refactor-Auftrag:
-#   app/api/simulation_run.py::start_simulation      → erledigt (#1079), Eintrag entfernt
-#   app/api/simulation_prepare.py::prepare_simulation → erledigt (#1080), Eintrag entfernt
-# Beide Issues schlagen dieselbe Zerlegung vor: Validierung, Routen-/Key-
-# Aufloesung, Budget-Preflight, Run-Registrierung, Prozessstart.
-app/api/graph_build.py::generate_ontology
-app/api/graph_build.py::build_graph
-app/api/runs.py::_build_run_detail
-app/services/confidence_calculator.py::_compute_confidence_with_penalties
-app/services/report_generation.py::ReportGenerationService.start_generation
-app/services/evidence_entailment.py::classify_evidence
-app/services/graph_build.py::GraphBuildService.build_graph
-app/services/run_budget_preflight.py::estimate_run
-app/services/report_agent/agent.py::ReportAgent._save_evidence_section
-app/services/report_agent/evidence.py::degrade_sections_for_violations
-app/services/report_agent/text_verification.py::verify_prose
-app/services/sim/monitor.py::monitor_simulation
 
-# Drift zwischen Allowlist (2026-08-04) und HEAD — kanonische Evidence-Identität
-# (#1147) und seed_corpus-Evidence (#1166) haben fuenf weitere D-Hotspots in den
-# Bestand gebracht, deren Allowlist-Nachzug ausgeblieben war. contract-gates
-# lief auf main deshalb seit mindestens acht Laeufen rot (#1213). Eintraege mit
-# cc-Obergrenze, damit weiteres Wachstum anschlaegt; Refactor ist Folgearbeit,
-# kein Teil dieses Slices.
-# Gemessene Werte zum Zeitpunkt der Aufnahme (radon 6.0.1, HEAD ea01acb2):
-#   D cc=25  app/contracts/report_contract.py::EvidenceMapModel
-#   D cc=24  app/contracts/report_contract.py::EvidenceMapModel.validate_evidence_cross_references
-#   D cc=30  app/services/evidence_migrations.py::demote_unanchored_seed_corpus_records
-#   D cc=25  app/services/evidence_migrations.py::migrate_evidence_map_v2_to_v3
-#   D cc=21  app/services/report_agent/storage.py::_upgrade_report_v3_payload
-#
-# Nachgezogen 2026-08-17: demote_unanchored_seed_corpus_records misst
-# tatsaechlich cc=27, nicht 30. Obergrenze entsprechend abgesenkt, damit
-# weiteres Wachstum wieder anschlaegt.
+# --- Kern-App und Konfiguration ---
+app/config.py::Config  # cc<=26
+app/config.py::Config.validate  # cc<=21
+app/__init__.py::create_app  # cc<=31
+app/utils/file_parser.py::FileParser._extract_from_pdf  # cc<=23
+
+# --- LLM-Client ---
+# llm_client.py wurde nach app/llm/ gesplittet (#582) — Hotspots unveraendert,
+# nur Pfad neu. Refactoring der Funktionen selbst: #590.
+app/llm/client.py::LLMClient.__init__  # cc<=34
+app/llm/client.py::LLMClient.chat  # cc<=24
+app/llm/client.py::LLMClient.chat_json  # cc<=32
+
+# --- API ---
+app/api/simulation_profiles.py::add_simulation_profile  # cc<=26
+app/api/runs.py::_build_run_summary  # cc<=27
+app/api/runs.py::_build_run_detail  # cc<=21
+app/api/graph_build.py::generate_ontology  # cc<=27
+app/api/graph_build.py::build_graph  # cc<=23
+
+# --- Services: Graph und Ontologie ---
+app/services/graph_build.py::GraphBuildService.build_graph  # cc<=25
+app/services/graph_tools.py::GraphToolsService.interview_agents  # cc<=29
+app/services/ontology_generator.py::OntologyGenerator._validate_and_process  # cc<=24
+app/services/graph/insight_forge_tool.py::insight_forge  # cc<=23
+app/services/tool_execution.py::execute_tool  # cc<=24
+
+# --- Services: Runs, Branching, Budget ---
+app/services/branching_service.py::create_branch  # cc<=29
+app/services/run_registry.py::RunRegistry.list_runs  # cc<=27
+app/services/run_registry.py::RunRegistry.update_run  # cc<=31
+app/services/run_budget_preflight.py::estimate_run  # cc<=28
+app/services/compare_service.py::CompareService._build_metrics  # cc<=22
+app/services/persona_demographics.py::classify_name_origin  # cc<=28
+app/services/confidence_calculator.py::_compute_confidence_with_penalties  # cc<=23
+
+# --- Services: Simulation ---
+app/services/sim/monitor.py::monitor_simulation  # cc<=29
+app/services/sim/process_manager.py::start_simulation  # cc<=21
+app/services/oasis_profile_generator.py::OasisProfileGenerator.generate_profiles_from_entities  # cc<=40
+app/services/oasis_profile_generator.py::OasisProfileGenerator._build_entity_context  # cc<=26
+
+# --- Services: Report-Agent ---
+app/services/report_status.py::ReportStatusService  # cc<=27
+app/services/report_status.py::ReportStatusService.get_status  # cc<=41
+app/services/report_agent/agent.py::ReportAgent._record_tool_evidence  # cc<=57
+app/services/report_agent/agent.py::ReportAgent._build_claims_for_section  # cc<=37
+app/services/report_agent/agent.py::ReportAgent._finalize_section_claims  # cc<=35
+app/services/report_agent/agent.py::ReportAgent._save_evidence_section  # cc<=52
+app/services/report_agent/workflow.py::generate_report  # cc<=55
+app/services/report_agent/workflow.py::generate_section_react  # cc<=41
+app/services/report_agent/workflow.py::chat  # cc<=25
+app/services/report_agent/manager.py::ReportManager.build_report_v3  # cc<=69
+app/services/report_agent/manager.py::ReportManager._post_process_report  # cc<=27
+app/services/report_agent/planning.py::plan_outline  # cc<=24
+app/services/report_agent/evidence.py::degrade_sections_for_violations  # cc<=50
+app/services/report_agent/text_verification.py::verify_prose  # cc<=24
+app/services/report_agent/storage.py::_upgrade_report_v3_payload  # cc<=21
+
+# --- Evidence: Migration, Entailment, Contract ---
+# Kanonische Evidence-Identitaet (#1147) und seed_corpus-Evidence (#1166) hatten
+# fuenf D-Hotspots in den Bestand gebracht, deren Allowlist-Nachzug ausgeblieben
+# war; contract-gates lief auf main deshalb ueber acht Laeufe rot (#1213).
+app/services/evidence_entailment.py::classify_evidence  # cc<=38
+app/services/evidence_migrations.py::migrate_v2_to_v3  # cc<=68
+app/services/evidence_migrations.py::migrate_evidence_map_v2_to_v3  # cc<=25
+app/services/evidence_migrations.py::demote_unanchored_seed_corpus_records  # cc<=27
+app/services/evidence_migrations.py::_map_profile_to_persona  # cc<=21
 app/contracts/report_contract.py::EvidenceMapModel  # cc<=25
 app/contracts/report_contract.py::EvidenceMapModel.validate_evidence_cross_references  # cc<=24
-app/services/evidence_migrations.py::demote_unanchored_seed_corpus_records  # cc<=27
-app/services/evidence_migrations.py::migrate_evidence_map_v2_to_v3  # cc<=25
-app/services/report_agent/storage.py::_upgrade_report_v3_payload  # cc<=21
