@@ -417,6 +417,142 @@ def test_build_report_v3_caps_legacy_single_source_claim_at_low():
     assert migrated.claims[0].text_confidence == "high"
 
 
+def test_build_report_v3_severity_folgt_gap_reason():
+    """Issue #1319: severity war hartkodiert 'medium' — jetzt aus gap_reason.
+
+    no_evidence_bound (keine Quelle gebunden) wiegt schwerer als
+    related_evidence_only (Quelle da, aber ohne Aussagebezug).
+    """
+    from app.models.report import Report, ReportStatus  # noqa: PLC0415
+    from app.services.report_agent.manager import ReportManager  # noqa: PLC0415
+
+    evidence_map = {
+        "schema_version": 3,
+        "report_id": "report_gap_severity",
+        "simulation_id": "sim_gap_severity",
+        "evidence_index": {},
+        "global_evidence_refs": [],
+        "sections": [
+            {
+                "section_index": 1,
+                "section_title": "Datenlücken",
+                "section_summary": "Zwei Lücken mit unterschiedlichem Grund.",
+                "claims": [],
+                "data_gaps": [
+                    {
+                        "gap_id": "gap_01",
+                        "claim_text": "Keine Quelle für diese Aussage gefunden.",
+                        "gap_reason": "no_evidence_bound",
+                        "suggested_fix": "Beleg gezielt recherchieren.",
+                    },
+                    {
+                        "gap_id": "gap_02",
+                        "claim_text": "Nur thematisch verwandte Quellen vorhanden.",
+                        "gap_reason": "related_evidence_only",
+                        "suggested_fix": "Quelle mit direktem Bezug suchen.",
+                    },
+                ],
+            }
+        ],
+    }
+    report = Report(
+        report_id="report_gap_severity",
+        simulation_id="sim_gap_severity",
+        graph_id="graph_gap_severity",
+        simulation_requirement="Test",
+        status=ReportStatus.COMPLETED,
+    )
+
+    migrated = ReportManager.build_report_v3(report, evidence_map)
+
+    gaps_by_id = {gap.id: gap for gap in migrated.data_gaps}
+    assert gaps_by_id["gap_01"].severity == "high"
+    assert gaps_by_id["gap_02"].severity == "medium"
+
+
+def test_build_report_v3_gap_verweist_auf_exportierte_hypothesen_id():
+    """Issue #1319 / Codex-Review PR #1332: der Verweis muss auflösbar sein.
+
+    Die Lücke trägt die abschnittsinterne Rohform ``hypothesis_01``; exportiert
+    wird die Hypothese als ``H1_01``. Ein Verweis auf eine Hypothese, die Dedup
+    oder Appendix-Cap entfernt haben, hat kein Ziel und entfällt.
+    """
+    from app.models.report import Report, ReportStatus  # noqa: PLC0415
+    from app.services.report_agent.manager import ReportManager  # noqa: PLC0415
+
+    evidence_map = {
+        "schema_version": 3,
+        "report_id": "report_gap_ref",
+        "simulation_id": "sim_gap_ref",
+        "evidence_index": {},
+        "global_evidence_refs": [],
+        "sections": [
+            {
+                "section_index": 1,
+                "section_title": "Datenlücken",
+                "section_summary": "Drei Lücken, zwei Hypothesen.",
+                "claims": [],
+                "data_gaps": [
+                    {
+                        "gap_id": "gap_01",
+                        "claim_text": "Sichtbare Hypothese als Gegenstück.",
+                        "gap_reason": "no_evidence_bound",
+                        "hypothesis_id": "hypothesis_01",
+                    },
+                    {
+                        "gap_id": "gap_02",
+                        "claim_text": "Hypothese liegt im Anhang.",
+                        "gap_reason": "related_evidence_only",
+                        "hypothesis_id": "hypothesis_09",
+                    },
+                    {
+                        "gap_id": "gap_03",
+                        "claim_text": "Hypothese wurde wegdedupliziert.",
+                        "gap_reason": "related_evidence_only",
+                        "hypothesis_id": "hypothesis_02",
+                    },
+                ],
+                "hypotheses": [
+                    {
+                        "hypothesis_id": "hypothesis_01",
+                        "hypothesis_text": "Sichtbare Hypothese als Gegenstück.",
+                        "rationale": "Keine stützende Evidence gebunden.",
+                    }
+                ],
+                "hypotheses_appendix": [
+                    {
+                        "hypothesis_id": "hypothesis_09",
+                        "hypothesis_text": "Hypothese liegt im Anhang.",
+                        "rationale": "Über dem Sichtbarkeits-Cap.",
+                    }
+                ],
+            }
+        ],
+    }
+    report = Report(
+        report_id="report_gap_ref",
+        simulation_id="sim_gap_ref",
+        graph_id="graph_gap_ref",
+        simulation_requirement="Test",
+        status=ReportStatus.COMPLETED,
+    )
+
+    migrated = ReportManager.build_report_v3(report, evidence_map)
+
+    gaps_by_id = {gap.id: gap for gap in migrated.data_gaps}
+    hypothesis_ids = {hypothesis.id for hypothesis in migrated.hypotheses}
+    assert gaps_by_id["gap_01"].related_hypothesis_id == "H1_01"
+    assert gaps_by_id["gap_02"].related_hypothesis_id == "HA1_01"
+    # Ziel existiert nicht mehr — kein Verweis ins Leere.
+    assert gaps_by_id["gap_03"].related_hypothesis_id is None
+    assert {"H1_01", "HA1_01"} <= hypothesis_ids
+    # Der Verweis lebt im Vertrag, nicht als Anhängsel im Fließtext.
+    for gap in migrated.data_gaps:
+        assert "[siehe" not in gap.beschreibung
+        if gap.related_hypothesis_id is not None:
+            assert gap.related_hypothesis_id in hypothesis_ids
+
+
 # ---- migrate_v2_to_v3 Unit-Tests ----
 
 def test_migrate_v2_to_v3_minimal():

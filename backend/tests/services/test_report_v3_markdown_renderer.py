@@ -84,7 +84,12 @@ def test_report_v3_renderer_outputs_tables_and_data_gaps() -> None:
     assert "## Hypothesen ohne Evidence" in markdown
     assert "| hyp_01 | Preisbereitschaft koennte segmentabhaengig sein. |" in markdown
     assert "## Data Gaps" in markdown
-    assert "| gap_01 | medium | Preisbereitschaft ist nicht belegt. | Interview nacherheben |" in markdown
+    # Issue #1319: die Hypothesenspalte bleibt leer, wenn die Luecke kein
+    # Gegenstueck in der Hypothesentabelle hat.
+    assert (
+        "| gap_01 | medium | Preisbereitschaft ist nicht belegt. |  | Interview nacherheben |"
+        in markdown
+    )
 
 
 def test_empty_tables_render_explicit_empty_state() -> None:

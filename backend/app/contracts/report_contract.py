@@ -669,6 +669,13 @@ class ReportSectionDataGapModel(BaseModel):
     claim_text: str = Field(min_length=8, max_length=1000)
     gap_reason: str = Field(min_length=1, max_length=200)
     suggested_fix: Optional[str] = Field(default=None, min_length=1, max_length=500)
+    # Issue #1319: verweist auf die Hypothese, aus der diese Datenluecke
+    # entstanden ist (``if not supporting_ids:``-Zweig in agent.py). Optional,
+    # weil der zweite Erzeuger (medium/high ohne Evidence, P2.1) keine
+    # begleitende Hypothese anlegt.
+    hypothesis_id: Optional[str] = Field(
+        default=None, pattern=r"^hypothesis_\d{2,}$"
+    )
 
     # Sub-Slice 05.7: Pre-Validator (gleiche Begründung wie Hypothesis).
     _coerce_claim_text = field_validator("claim_text", mode="before")(
