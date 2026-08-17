@@ -328,10 +328,9 @@ class TestGenerateSectionMetadata:
         )
 
     def test_passes_explicit_max_tokens_and_disables_generic_floor(self):
-        """Issue #1321: Extraktion setzt max_tokens explizit statt sich auf den
-        generischen chat_json-Boden (32768, für Fließtext-Sections gedacht) zu
-        verlassen — der lief bei gemini-2.0-flash (Ausgabelimit 8192) unbemerkt
-        in eine Truncation."""
+        """Issue #1321: Extraktion setzt max_tokens explizit statt LLM_MAX_TOKENS_FLOOR
+        zu erben — der Boden ist für Fließtext-Sections gedacht und soll nicht
+        mitwandern, wenn jemand ihn für die Prosa nachjustiert."""
         from app.services.report_agent.workflow import (
             METADATA_MAX_OUTPUT_TOKENS,
             generate_section_metadata,
@@ -354,6 +353,31 @@ class TestGenerateSectionMetadata:
         call_kwargs = agent.llm.chat_json.call_args.kwargs
         assert call_kwargs.get("max_tokens") == METADATA_MAX_OUTPUT_TOKENS
         assert call_kwargs.get("enforce_token_floor") is False
+
+    def test_metadata_max_tokens_liegt_ueber_dem_legacy_ausgabelimit(self):
+        """Issue #1321: der Wert darf nicht auf ein Legacy-Limit zusammenschrumpfen.
+
+        Im Referenzlauf lief die Extraktion in die 8192 von ``gemini-2.0-flash``.
+        Dieses Modell ist Legacy; aktuelle Gemini-Modelle greifen über den
+        ``gemini-3``-Präfix und lösen auf 65536 auf. Ein enger Deckel hier
+        würde ihnen das Legacy-Limit aufzwingen und genau die Truncation
+        herbeiführen, die dieses Issue sichtbar machen soll.
+        ``resolve_max_tokens`` deckelt ohnehin pro Modell — der Wert hier ist
+        eine Obergrenze, kein Zwang.
+        """
+        from app.llm.tokens import model_output_limit
+        from app.services.report_agent.workflow import METADATA_MAX_OUTPUT_TOKENS
+
+        legacy_limit = model_output_limit("gemini-2.0-flash")
+        assert legacy_limit == 8192, "Testannahme veraltet — Modelltabelle prüfen"
+        assert METADATA_MAX_OUTPUT_TOKENS > legacy_limit
+
+        # Gegenprobe: aktuelle Modelle haben deutlich mehr Spielraum, der
+        # Deckel hier schneidet ihn nicht auf Legacy-Niveau zurück.
+        for current in ("gemini-3.7-flash", "gemini-3.5-flash-lite"):
+            assert model_output_limit(current) == 65_536, (
+                f"{current} sollte über den gemini-3-Präfix auflösen"
+            )
 
     def test_llm_output_truncated_error_appends_degradation_log_entry(self):
         """Issue #1321: eine abgeschnittene Extraktion darf nicht stumm bleiben —

@@ -783,23 +783,29 @@ def generate_section_react(
 METADATA_MAX_CONTENT_CHARS = 24000
 
 #: Issue #1321: der frühere Aufruf setzte kein eigenes ``max_tokens`` und erbte
-#: damit ``chat_json``s generischen Report-Boden (32768, für volle Fließtext-
-#: Sections gedacht). Was tatsächlich galt, entschied dann das Modell: bei
-#: gemini-2.0-flash klemmt ``resolve_max_tokens`` auf 8192
-#: (``app/llm/tokens.py::_MODEL_OUTPUT_LIMITS``). Die Extraktion liefert
-#: kompaktes, strukturiertes JSON, keinen Fließtext — der Boden war hier von
-#: Anfang an das falsche Maß und band bei großzügigeren Providern Budget, das
-#: die Aufgabe nicht braucht.
+#: damit ``LLM_MAX_TOKENS_FLOOR`` — einen Boden, der für volle Fließtext-
+#: Sections gedacht ist. Die Metadaten-Extraktion ist eine andere Aufgabe und
+#: soll nicht mitwandern, wenn jemand den Prosa-Boden nachjustiert. Deshalb
+#: ein eigener Wert plus ``enforce_token_floor=False``.
 #:
-#: **Das behebt die Truncation nicht.** Im beobachteten Lauf lief die
-#: Extraktion in exakt dieses 8192er-Limit; ein expliziter Wert von 8192
-#: ändert für gemini-2.0-flash rechnerisch nichts. Was sich ändert, ist
-#: zweierlei: der Wert ist jetzt eine bewusste Entscheidung statt eines
-#: Nebenprodukts des Providers, und ein Anschlag bleibt nicht mehr stumm
-#: (siehe ``_record_metadata_truncation_degradation``). Die Eingangsseite —
-#: ``METADATA_MAX_CONTENT_CHARS`` bzw. die Schemagröße — ist der Hebel gegen
-#: die Truncation selbst und gehört in einen eigenen Slice.
-METADATA_MAX_OUTPUT_TOKENS = 8192
+#: **Bewusst nicht kleiner.** Naheliegend wäre ein enger Wert gewesen — die
+#: Extraktion liefert kompaktes JSON. Genau das wäre hier falsch: im
+#: beobachteten Lauf lief sie in das Ausgabelimit von ``gemini-2.0-flash``
+#: (8192, ``app/llm/tokens.py::_MODEL_OUTPUT_LIMITS``). Dieses Modell ist
+#: Legacy; aktuelle Gemini-Modelle greifen über den ``gemini-3``-Präfix und
+#: lösen auf 65536 auf. Ein Deckel von 8192 hätte ihnen das Legacy-Limit
+#: aufgezwungen — ausgerechnet den Wert, bei dem die Truncation auftrat.
+#:
+#: 32768 entspricht dem, was für Modelle mit ausreichendem Limit ohnehin galt.
+#: Der Wert ist damit heute verhaltensneutral; was sich ändert, ist die
+#: Entkopplung vom Prosa-Boden. ``resolve_max_tokens`` deckelt weiterhin auf
+#: das Modell-Limit, Legacy-Modelle bekommen also unverändert ihre 8192 — und
+#: ein Anschlag dort bleibt nicht mehr stumm (siehe
+#: ``_record_metadata_truncation_degradation``). Der Hebel gegen die
+#: Truncation selbst liegt auf der Eingangsseite
+#: (``METADATA_MAX_CONTENT_CHARS``, Schemagröße) und gehört in einen eigenen
+#: Slice.
+METADATA_MAX_OUTPUT_TOKENS = 32768
 
 
 def _record_metadata_truncation_degradation(
