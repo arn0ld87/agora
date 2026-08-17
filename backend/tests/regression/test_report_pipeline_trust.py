@@ -842,6 +842,38 @@ def test_9b_intent_detection_matrix(question, expected):
     assert detect_report_intent(question) is expected
 
 
+def test_9c_vor_1322_geplante_outline_bleibt_ein_bekanntes_preset():
+    """Codex-Review PR #1331: Bestandsreports dürfen beim Resume nicht brechen.
+
+    Die Handlungsempfehlung kam mit #1322 nachträglich in die Presets. Eine
+    Outline, die davor geplant und persistiert wurde, trägt sie nicht — ohne
+    Lockerung fällt sie beim Resume auf den Full-Report-Pflichtsatz zurück und
+    der Report endet als ``incomplete``, obwohl er zum Planungszeitpunkt
+    korrekt war.
+
+    Die Lockerung bleibt eng: sie gilt nur für die Empfehlung selbst, nicht
+    für beliebige Kurz-Outlines.
+    """
+    from app.services.report_agent.contract_validator import (  # noqa: PLC0415
+        matches_known_preset,
+    )
+    from app.services.report_prompts import (  # noqa: PLC0415
+        RECOMMENDATION_SECTION_TITLE,
+    )
+
+    aktuell = sections_for_intent(ReportIntent.OPINION)
+    legacy = [title for title in aktuell if title != RECOMMENDATION_SECTION_TITLE]
+    assert len(legacy) == len(aktuell) - 1
+
+    assert matches_known_preset(aktuell)
+    assert matches_known_preset(legacy)
+    # EXPLORATIVE hat bewusst keine Empfehlung — unverändert ein Treffer.
+    assert matches_known_preset(sections_for_intent(ReportIntent.EXPLORATIVE))
+    # Der Full-Report bleibt gegen versehentliche Verkürzung geschützt.
+    assert not matches_known_preset(["Kurzfazit", "Irgendwas"])
+    assert not matches_known_preset(legacy[:-1])
+
+
 # ---------------------------------------------------------------------------
 # Test 10 — Full-Report bleibt unverändert
 # ---------------------------------------------------------------------------

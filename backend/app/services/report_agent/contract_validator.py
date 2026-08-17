@@ -24,12 +24,26 @@ def matches_known_preset(outline_titles: list[str]) -> bool:
     Die Prüfung ist absichtlich streng: die Outline muss *alle* Titel genau
     eines Presets enthalten. Eine beliebige Kurz-Outline besteht sie nicht —
     der Full-Report bleibt damit gegen versehentliche Verkürzung geschützt.
+
+    Einzige Lockerung ist die abschließende Handlungsempfehlung (#1322): sie
+    kam nachträglich in die Presets, und Outlines, die davor geplant und
+    persistiert wurden, tragen sie nicht. Ohne diese Ausnahme scheitert so ein
+    Bestandsreport beim Resume am Full-Report-Pflichtsatz und endet als
+    ``incomplete``, obwohl seine Outline zum Planungszeitpunkt korrekt war.
     """
     from ..report_intent import INTENT_SECTION_PRESETS  # noqa: PLC0415 — zyklischer Import
+    from ..report_prompts import RECOMMENDATION_SECTION_TITLE  # noqa: PLC0415 — s. o.
 
     for preset in INTENT_SECTION_PRESETS.values():
         preset_titles = [title for title, _description in preset]
         if not validate_required_sections(outline_titles, preset_titles):
+            return True
+        legacy_titles = [
+            title for title in preset_titles if title != RECOMMENDATION_SECTION_TITLE
+        ]
+        if len(legacy_titles) == len(preset_titles):
+            continue  # Preset ohne Empfehlung — nichts zu lockern
+        if not validate_required_sections(outline_titles, legacy_titles):
             return True
     return False
 
