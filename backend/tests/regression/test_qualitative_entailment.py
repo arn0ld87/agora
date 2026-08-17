@@ -312,6 +312,96 @@ def test_an_empty_answer_is_not_a_verdict():
         build_llm_judge(_ProseOnlyClient(""))("Ein Claim.", "Eine Evidence.")  # type: ignore[arg-type]
 
 
+def test_a_prose_answer_saying_unsupported_is_not_read_as_supported():
+    """`UNSUPPORTED` enthält `SUPPORTED` (Codex-Review PR #1361).
+
+    Reine Teilwortsuche hätte hier genau einen Treffer gefunden —
+    ausgerechnet das gegenteilige Urteil — und eine ausdrücklich
+    zurückgewiesene Aussage als Beleg gewertet.
+    """
+    from app.services.llm_entailment_judge import build_llm_judge
+
+    client = _ProseOnlyClient("The claim is UNSUPPORTED by this evidence.")
+
+    with pytest.raises(ValueError):
+        build_llm_judge(client)("Ein Claim.", "Eine Evidence.")  # type: ignore[arg-type]
+
+
+def test_the_prose_fallback_is_billed_to_the_report_stage():
+    """Ohne `context="report"` landen Tokens und Kosten beim interaktiven Chat."""
+    from app.services.llm_entailment_judge import build_llm_judge
+
+    seen: Dict[str, Any] = {}
+
+    class _CapturingClient(_ProseOnlyClient):
+        def chat(self, **kwargs: Any) -> str:
+            seen.update(kwargs)
+            return "RELATED_ONLY"
+
+    build_llm_judge(_CapturingClient(""))("Ein Claim.", "Eine Evidence.")  # type: ignore[arg-type]
+    assert seen.get("context") == "report"
+
+
+# --- Das Run-Budget --------------------------------------------------------
+
+def test_a_budget_abort_is_not_swallowed_as_a_judge_failure():
+    """Ein erschöpftes Run-Budget ist kein Judge-Fehler (Codex-Review PR #1361).
+
+    Verschluckt als `judge_failed`, versuchten alle folgenden Kandidaten
+    weitere Calls und der Lauf käme als "completed" an, statt mit
+    `termination_reason=budget_*` zu stoppen.
+    """
+    from app.services.run_budget import BudgetExceededError
+
+    def judge(_claim: str, _evidence: str) -> str:
+        raise BudgetExceededError("tokens", 1_000_000, 500_000)
+
+    with pytest.raises(BudgetExceededError):
+        classify_evidence(
+            INTERVIEW_CLAIM, INTERVIEW_EVIDENCE, judge=judge, retrieval_score=0.72
+        )
+
+
+def test_the_binder_lets_a_budget_abort_through():
+    from app.services.run_budget import BudgetExceededError
+
+    def judge(_claim: str, _evidence: str) -> str:
+        raise BudgetExceededError("tokens", 1_000_000, 500_000)
+
+    with pytest.raises(BudgetExceededError):
+        bind_evidence_to_claim(
+            INTERVIEW_CLAIM,
+            [dict(INTERVIEW_EVIDENCE, evidence_id="ev_1")],
+            lambda _text: [1.0, 0.0],
+            threshold=0.5,
+            top_k=5,
+            judge=judge,
+        )
+
+
+# --- Polarität -------------------------------------------------------------
+
+def test_a_source_that_negates_the_claim_does_not_support_it():
+    """`nicht` steht in `_STOPWORDS` (Codex-Review PR #1361).
+
+    Claim und Quelle reduzieren deshalb auf dasselbe Token-Set und erreichen
+    Deckung 1.00 — ohne Polaritätsprüfung hätte eine Quelle, die den Claim
+    ausdrücklich verneint, ihn als belegt ausgewiesen und die Confidence
+    angehoben.
+    """
+    claim = "Die Betriebsvereinbarung zur Systemeinführung ist abgeschlossen."
+    evidence = {
+        "snippet": "Die Betriebsvereinbarung zur Systemeinführung ist nicht abgeschlossen.",
+        "source_kind": "seed_corpus",
+    }
+
+    assert coverage_ratio(claim, evidence["snippet"]) >= QUALITATIVE_SUPPORT_THRESHOLD
+
+    result = classify_evidence(claim, evidence)
+    assert result.verdict is EntailmentVerdict.CONTRADICTED
+    assert "qualitative_polarity_mismatch" in result.checks
+
+
 @pytest.mark.parametrize("verdict", ["SUPPORTED", "CONTRADICTED", "RELATED_ONLY"])
 def test_every_binding_carries_its_verdict_and_reason(verdict: str):
     claim = "Die Systemeinführung erzeugt Vorbehalte in mehreren Bereichen."

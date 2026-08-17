@@ -71,6 +71,20 @@ class BudgetExceededError(RuntimeError):
         return DIMENSION_TO_REASON.get(self.dimension, "error")  # type: ignore[return-value]
 
 
+def reraise_if_budget_exceeded(exc: BaseException) -> None:
+    """Lässt ein hartes Budget durch einen ``except Exception``-Block hindurch.
+
+    Ein erreichtes Budget ist kein Fehler mit Fallback, sondern das Ende des
+    Laufs: verschluckt von einem breiten Handler, versuchen alle folgenden
+    Schritte weiter Modellaufrufe, und der Lauf kommt als ``completed`` an
+    statt mit ``termination_reason=budget_*``. Als Aufruf statt als eigenem
+    ``except``-Zweig formuliert, damit ein breiter Handler die Ausnahme
+    durchlassen kann, ohne die Verzweigungszahl seiner Funktion zu erhöhen.
+    """
+    if isinstance(exc, BudgetExceededError):
+        raise exc
+
+
 def _warnings_path(run_id: str) -> str:
     return os.path.join(ArtifactLocator.run_dir(run_id), WARNINGS_FILENAME)
 

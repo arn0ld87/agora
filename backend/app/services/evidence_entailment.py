@@ -773,6 +773,20 @@ def classify_evidence(
     claim_coverage = coverage_ratio(claim, evidence_text)
 
     if claim_coverage >= QUALITATIVE_SUPPORT_THRESHOLD:
+        # Polarität zuerst — aus demselben Grund wie im numerischen Pfad
+        # (#1317): ``nicht`` steht in ``_STOPWORDS``, "die Betriebsvereinbarung
+        # ist abgeschlossen" und "… ist *nicht* abgeschlossen" reduzieren
+        # deshalb auf dasselbe Token-Set und erreichen Deckung 1.00. Ohne
+        # diese Prüfung würde eine Quelle, die den Claim ausdrücklich
+        # verneint, ihn als belegt ausweisen und die Confidence anheben
+        # (Codex-Review PR #1361, P1).
+        if _is_negated(claim) != _is_negated(evidence_text):
+            return EntailmentResult(
+                EntailmentVerdict.CONTRADICTED,
+                "die Quelle deckt den Claim wörtlich ab, verneint ihn aber "
+                f"gegenläufig (Deckung {claim_coverage:.2f})",
+                checks=checks + ["qualitative_polarity_mismatch"],
+            )
         return EntailmentResult(
             EntailmentVerdict.SUPPORTED,
             "die Quelle deckt den Claim weitgehend ab "
@@ -816,7 +830,13 @@ def classify_evidence(
                 return EntailmentResult(
                     judge_verdict, "strukturierter Judge", checks=checks + ["judge"]
                 )
-        except Exception:  # noqa: BLE001 — Judge ist optional; Regelpfad bleibt gültig
+        except Exception as exc:  # noqa: BLE001 — Judge ist optional; Regelpfad bleibt gültig
+            # Ein erschöpftes Run-Budget ist kein Judge-Fehler, sondern das
+            # Ende des Laufs (Codex-Review PR #1361, P1). Lokaler Import, weil
+            # ``run_budget`` diesen Modul-Baum sonst zirkulär zieht.
+            from .run_budget import reraise_if_budget_exceeded  # noqa: PLC0415
+
+            reraise_if_budget_exceeded(exc)
             checks.append("judge_failed")
 
     # Ohne Judge bleibt die Grauzone unentschieden — und unentschieden heißt
