@@ -98,6 +98,8 @@ Verifikation: `gh api repos/arn0ld87/agora/branches/main/protection`. Konfigurat
 | Backend Full Tests + Coverage | `push:main` oder Label |
 | Frontend Full Tests + Coverage | `push:main` oder Label |
 | Schemas und Contract-Spiegel | vorhanden |
+| Komplexitäts-Gate (radon, MAI-17) | `pull_request` und `push:main` — PR-Skip am 17.08.2026 entfernt, Bestand in `backend/radon-allowlist.txt` |
+| Voice-Lint (DACH-Voice + Anti-Forecast) | nur `push:main` — PR-Skip seit 17.05.2026 wegen False-Positives bei Code-Kommentaren |
 | E2E-Kernpipeline | `pull_request`-Trigger aktiv; **als Required Check erzwungen** (alle sechs Smokes, Stand 31.07.2026) |
 | Branch-Protection `main` | aktiv — 17 Required Status Checks, `strict: true`, `enforce_admins: true`, keine Force-Pushes, keine Löschung |
 

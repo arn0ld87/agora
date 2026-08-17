@@ -202,9 +202,15 @@ jobs:
     name: Komplexitaets-Gate (radon)
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # 2026-05-17: PR-Skip — Komplexitäts-Gate läuft nur auf push:main.
-    # Reaktivieren: if-Zeile entfernen.
-    if: github.event_name != 'pull_request'
+    # 2026-05-17 bis 2026-08-17 lief dieses Gate per `if` nur auf push:main.
+    # Ein PR konnte daran also nie scheitern: neue D+-Hotspots kamen ungehindert
+    # durch und schlugen erst nach dem Merge auf main auf — wo sie niemanden
+    # mehr blockierten, aber jeden lokalen `pre-push-gate.sh backend` rot
+    # faerbten, bis jemand aufraeumte. Genau so kam
+    # render_hypotheses_for_section (cc=21) in den Bestand. Das Gate prueft
+    # ausschliesslich Zahlen und kennt keine False-Positives; der Grund fuer
+    # den PR-Skip (siehe voice-lint) trifft hier nicht zu. Laeuft deshalb
+    # wieder auf pull_request.
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
