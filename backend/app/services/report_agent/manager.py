@@ -376,11 +376,25 @@ class ReportManager:
                 reason = str(gap.get("gap_reason") or "").strip()
                 description = claim_text if not reason else f"{claim_text} ({reason})"
                 description = description.strip() or "Datenluecke ohne Claim-Text."
+                # Issue #1319: Hypothese und Datenluecke tragen denselben
+                # Claim-Text — sie entstehen im selben Zweig. Der Verweis macht
+                # aus der stummen Doppelung eine erkennbare Beziehung, statt
+                # den Leser zweimal dasselbe lesen zu lassen ohne zu sagen,
+                # dass es dasselbe ist.
+                hypothesis_ref = str(gap.get("hypothesis_id") or "").strip()
+                if hypothesis_ref:
+                    description = f"{description} [siehe {hypothesis_ref}]"
                 suggested_fix = gap.get("suggested_fix")
+                # Issue #1319: severity war hartkodiert "medium" — unabhaengig
+                # davon, ob ueberhaupt keine Quelle gebunden ist (schwerer) oder
+                # nur eine thematisch verwandte ohne Aussagebezug (leichter).
+                severity: Literal["low", "medium", "high"] = (
+                    "high" if reason == "no_evidence_bound" else "medium"
+                )
                 data_gaps.append(ReportV3DataGap(
                     id=gap_id,
                     beschreibung=description,
-                    severity="medium",
+                    severity=severity,
                     suggested_fixes=[str(suggested_fix)] if suggested_fix else [],
                 ))
             # Slice 3 (Issue #495): stable Re-ID after Dedup.

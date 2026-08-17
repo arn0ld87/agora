@@ -417,6 +417,59 @@ def test_build_report_v3_caps_legacy_single_source_claim_at_low():
     assert migrated.claims[0].text_confidence == "high"
 
 
+def test_build_report_v3_severity_folgt_gap_reason():
+    """Issue #1319: severity war hartkodiert 'medium' — jetzt aus gap_reason.
+
+    no_evidence_bound (keine Quelle gebunden) wiegt schwerer als
+    related_evidence_only (Quelle da, aber ohne Aussagebezug).
+    """
+    from app.models.report import Report, ReportStatus  # noqa: PLC0415
+    from app.services.report_agent.manager import ReportManager  # noqa: PLC0415
+
+    evidence_map = {
+        "schema_version": 3,
+        "report_id": "report_gap_severity",
+        "simulation_id": "sim_gap_severity",
+        "evidence_index": {},
+        "global_evidence_refs": [],
+        "sections": [
+            {
+                "section_index": 1,
+                "section_title": "Datenlücken",
+                "section_summary": "Zwei Lücken mit unterschiedlichem Grund.",
+                "claims": [],
+                "data_gaps": [
+                    {
+                        "gap_id": "gap_01",
+                        "claim_text": "Keine Quelle für diese Aussage gefunden.",
+                        "gap_reason": "no_evidence_bound",
+                        "suggested_fix": "Beleg gezielt recherchieren.",
+                    },
+                    {
+                        "gap_id": "gap_02",
+                        "claim_text": "Nur thematisch verwandte Quellen vorhanden.",
+                        "gap_reason": "related_evidence_only",
+                        "suggested_fix": "Quelle mit direktem Bezug suchen.",
+                    },
+                ],
+            }
+        ],
+    }
+    report = Report(
+        report_id="report_gap_severity",
+        simulation_id="sim_gap_severity",
+        graph_id="graph_gap_severity",
+        simulation_requirement="Test",
+        status=ReportStatus.COMPLETED,
+    )
+
+    migrated = ReportManager.build_report_v3(report, evidence_map)
+
+    gaps_by_id = {gap.id: gap for gap in migrated.data_gaps}
+    assert gaps_by_id["gap_01"].severity == "high"
+    assert gaps_by_id["gap_02"].severity == "medium"
+
+
 # ---- migrate_v2_to_v3 Unit-Tests ----
 
 def test_migrate_v2_to_v3_minimal():

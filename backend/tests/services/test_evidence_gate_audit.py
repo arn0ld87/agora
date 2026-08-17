@@ -63,6 +63,83 @@ def test_single_supported_evidence_keeps_low_claim():
     assert decisions == []
 
 
+# ---------------------------------------------------------------------------
+# Issue #1319: data_gaps.suggested_fix war identisch mit dem Claim-Text
+# (suggestions[0] = Audit-Snippet des Claims selbst) — kein echter
+# Lösungsvorschlag. Jetzt wird der Text aus gap_reason abgeleitet, und der
+# data_gap verweist per hypothesis_id auf die begleitende Hypothese, statt
+# claim_text erneut zu tragen.
+# ---------------------------------------------------------------------------
+
+
+def test_no_evidence_bound_gap_hat_konkreten_hinweis_statt_claim_text():
+    agent = ReportAgent.__new__(ReportAgent)
+    claims = [{
+        "claim_id": "claim_01",
+        "claim_text": "Die Personas reagieren durchweg positiv auf das neue Feature.",
+        "evidence": [],
+        "confidence_score": 0.1,
+        "confidence_label": "low",
+    }]
+
+    _finalized, hypotheses, gaps, _decisions = agent._finalize_section_claims(claims)
+
+    assert len(gaps) == 1
+    gap = gaps[0]
+    assert gap["gap_reason"] == "no_evidence_bound"
+    assert gap["suggested_fix"] != gap["claim_text"]
+    assert "recherchieren" in gap["suggested_fix"]
+
+
+def test_related_evidence_only_gap_hat_anderen_hinweis_als_no_evidence_bound():
+    agent = ReportAgent.__new__(ReportAgent)
+    claims = [{
+        "claim_id": "claim_01",
+        "claim_text": "Die Personas reagieren durchweg positiv auf das neue Feature.",
+        "evidence": [{"evidence_id": _EV_ID, "supports_claim": False}],
+        "confidence_score": 0.1,
+        "confidence_label": "low",
+    }]
+
+    _finalized, _hypotheses, gaps, _decisions = agent._finalize_section_claims(claims)
+
+    assert len(gaps) == 1
+    gap = gaps[0]
+    assert gap["gap_reason"] == "related_evidence_only"
+    assert gap["suggested_fix"] != gap["claim_text"]
+    assert "direktem Aussagebezug" in gap["suggested_fix"]
+
+    # Beide Gap-Gründe erhalten unterschiedliche Lösungsvorschläge.
+    no_evidence_claims = [{
+        "claim_id": "claim_02",
+        "claim_text": "Ein völlig anderer, unbelegter Claim ohne jede Quelle.",
+        "evidence": [],
+        "confidence_score": 0.1,
+        "confidence_label": "low",
+    }]
+    _finalized2, _hyp2, gaps2, _dec2 = agent._finalize_section_claims(no_evidence_claims)
+    assert gaps2[0]["suggested_fix"] != gap["suggested_fix"]
+
+
+def test_data_gap_traegt_hypothesis_id_der_zugehoerigen_hypothese():
+    agent = ReportAgent.__new__(ReportAgent)
+    claims = [{
+        "claim_id": "claim_01",
+        "claim_text": "Die Personas reagieren durchweg positiv auf das neue Feature.",
+        "evidence": [],
+        "confidence_score": 0.1,
+        "confidence_label": "low",
+    }]
+
+    _finalized, hypotheses, gaps, _decisions = agent._finalize_section_claims(claims)
+
+    assert len(hypotheses) == 1
+    assert len(gaps) == 1
+    assert gaps[0]["hypothesis_id"] == hypotheses[0]["hypothesis_id"]
+    # claim_text bleibt erhalten — wird in manager.py für die Beschreibung gebraucht.
+    assert gaps[0]["claim_text"]
+
+
 def test_prose_removal_logged_in_degradation_log():
     stub = ReportAgent.__new__(ReportAgent)
     stub.evidence_map = {

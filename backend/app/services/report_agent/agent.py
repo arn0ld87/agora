@@ -154,6 +154,24 @@ def _remap_claim_bindings(
     return remapped
 
 
+#: Issue #1319: `suggested_fix` in ``data_gaps`` war identisch mit ``claim_text``
+#: (Kopie des ersten Audit-Snippets) — kein echter naechster Schritt. Der Text
+#: wird jetzt aus dem `gap_reason` abgeleitet.
+_GAP_SUGGESTED_FIX: Dict[str, str] = {
+    "no_evidence_bound": (
+        "Keine Quelle gebunden — Beleg gezielt recherchieren oder die "
+        "Aussage streichen."
+    ),
+    "related_evidence_only": (
+        "Evidence bindet thematisch, aber keine stützt die Aussage — "
+        "Quelle mit direktem Aussagebezug suchen."
+    ),
+}
+_GAP_SUGGESTED_FIX_DEFAULT = (
+    "Beleglage prüfen und passende Quelle nachreichen oder die Aussage streichen."
+)
+
+
 class ReportAgent:
     """Simulation report generation agent."""
     
@@ -878,19 +896,22 @@ class ReportAgent:
                         "Keine direkte Evidence gebunden; deshalb nicht als "
                         "validierter Claim persistiert."
                     )
+                hypothesis_id = f"hypothesis_{index:02d}"
                 hypotheses.append({
-                    "hypothesis_id": f"hypothesis_{index:02d}",
+                    "hypothesis_id": hypothesis_id,
                     "hypothesis_text": claim_text,
                     "rationale": rationale,
                     "suggested_evidence": suggestions,
                 })
+                gap_reason = "related_evidence_only" if related_only else "no_evidence_bound"
                 data_gaps.append({
                     "gap_id": f"gap_{index:02d}",
                     "claim_text": claim_text,
-                    "gap_reason": (
-                        "related_evidence_only" if related_only else "no_evidence_bound"
+                    "gap_reason": gap_reason,
+                    "suggested_fix": _GAP_SUGGESTED_FIX.get(
+                        gap_reason, _GAP_SUGGESTED_FIX_DEFAULT
                     ),
-                    "suggested_fix": suggestions[0],
+                    "hypothesis_id": hypothesis_id,
                 })
                 # Copilot-Review PR #1151: dieser Zweig fängt auch den Fall
                 # medium/high/verified ohne jede Evidence ab (der spätere

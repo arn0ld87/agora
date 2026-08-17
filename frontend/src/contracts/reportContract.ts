@@ -225,6 +225,11 @@ export const ReportSectionDataGapSchema = z.object({
   claim_text: z.string().min(8).max(1000),
   gap_reason: z.string().min(1).max(200),
   suggested_fix: z.string().min(1).max(500).optional().nullable(),
+  // Issue #1319: Verweis auf die Hypothese, aus der die Datenlücke entstand.
+  // Optional, weil der zweite Erzeuger (medium/high ohne Evidence) keine
+  // begleitende Hypothese anlegt. Das Schema ist `.strict()` — ohne diesen
+  // Eintrag würde der Spiegel das neue Backend-Feld zurückweisen.
+  hypothesis_id: z.string().regex(/^hypothesis_\d{2,}$/).optional().nullable(),
 }).strict();
 export type ReportSectionDataGap = z.infer<typeof ReportSectionDataGapSchema>;
 

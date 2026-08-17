@@ -768,6 +768,19 @@
           "title": "Gap Reason",
           "type": "string"
         },
+        "hypothesis_id": {
+          "anyOf": [
+            {
+              "pattern": "^hypothesis_\\d{2,}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hypothesis Id"
+        },
         "suggested_fix": {
           "anyOf": [
             {
