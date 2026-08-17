@@ -149,6 +149,39 @@ blockiert (sonst wären die übrigen Tests tautologisch), dass `import app` ihn 
 beiden realen Arbeitsverzeichnissen aufhebt, dass `unstructured.partition_text`
 danach durchläuft, und dass das Dockerfile den Opt-out in beiden Stages setzt.
 
+## CVE-2026-53615 (util-linux) — behoben 2026-08-17, keine Ausnahme
+
+**Status: erledigt durch echten Fix. Kein `.trivyignore`-Eintrag, kein Eintrag in
+`dependency-risk-exceptions.json`, keine Frist.** Der Vollständigkeit halber hier
+dokumentiert, weil der Befund `build-only` acht Läufe am Stück blockiert hat.
+
+| CVE | Quelle | Schweregrad | Owner | Status | Auflösung |
+|---|---|---|---|---|---|
+| CVE-2026-53615 | `util-linux` — OS-Layer des Prod-Basisimages (Debian 13 trixie), 9 Binärpakete: `bsdutils`, `libblkid1`, `liblastlog2-2`, `libmount1`, `libsmartcols1`, `libuuid1`, `login`, `mount`, `util-linux` | High | alex | resolved 2026-08-17 | `apt-get upgrade -y` in der `prod`-Stage des Dockerfiles zieht `2.41-5` → `2.41.5-0+deb13u1` (Issue [#1328](https://github.com/arn0ld87/agora/issues/1328)) |
+
+**Warum keine Ausnahme:** Bedingung 1 der Ausnahmeregel („Kein Upstream-Fix verfügbar") war
+nicht erfüllt. Debian hatte den Fix `2.41.5-0+deb13u1` zum Zeitpunkt des Dauerrots bereits im
+trixie-Repo. Damit gilt der Grundsatz aus diesem Dokument: sofort fixen, kein Register-Eintrag.
+
+**Warum ein Digest-Bump nicht gereicht hätte:** Am 2026-08-17 verifiziert — sowohl der gepinnte
+Digest `sha256:cea0e604…` als auch der zu dem Zeitpunkt aktuellste `python:3.14-slim`
+(`sha256:ce407646…`) lieferten weiterhin `util-linux 2.41-5` aus. Debian veröffentlicht
+Paket-Fixes früher, als die Docker-Official-Images nachgebaut werden. Ein reiner Digest-Bump
+hätte das Gate nicht entrotet und wäre beim nächsten Distro-Advisory erneut fällig gewesen.
+
+**Verifikation (2026-08-17, lokal, linux/arm64):** Prod-Basisimage auf dem gepinnten Digest plus
+`apt-get upgrade -y`, gescannt mit `trivy image --scanners vuln --severity CRITICAL,HIGH
+--ignore-unfixed` **ohne** `.trivyignore`. Ergebnis: CVE-2026-53615 nicht mehr vorhanden, alle
+neun Pakete auf `2.41.5-0+deb13u1`.
+
+**Prozess-Lehre:** Ein Basisimage mit Digest-Pin und ohne `apt-get upgrade` macht die
+CI-Rotphase von einem fremden Rebuild-Zyklus abhängig. Solange der Trivy-Scan
+merge-blockierend ist, gehören Distro-Security-Patches in den Build — sonst ist jedes künftige
+Debian-Advisory automatisch ein mehrtägiger Dauerrot-Zustand, in dem ein echter neuer Befund
+nicht vom Rauschen zu unterscheiden wäre.
+
+---
+
 ## Trivy Container Scan Baseline — aufgelöst 2026-07-31 (vormals Hardstop 2026-08-30)
 
 Trivy-Findings aus `.github/workflows/docker-image.yml` (`exit-code: "1"`, `ignore-unfixed: true`).
