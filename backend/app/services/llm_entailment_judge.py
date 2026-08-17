@@ -6,16 +6,20 @@ deterministischen Checks (Zahl, Bezugsgruppe, Mengenaussage) kein Urteil
 fällen konnten. Dieser Builder verdrahtet ``LLMClient.chat_json`` als
 Judge-Quelle, ohne einen neuen Provider-Pfad zu öffnen.
 
-ADR-0002-Anker (im Regelpfad von ``classify_evidence`` bereits erzwungen):
-Der Judge darf ein SUPPORTED nur **abschwächen**, nie erzeugen. ``chat_json``
-liefert strukturierte Verdicts; ``classify_evidence`` wandelt ein
-Judge-SUPPORTED in RELATED_ONLY um. Dieser Builder erzwingt das nicht erneut —
-die Verteidigungslinie liegt im Klassifikator, nicht im Judge.
+Seit #1357 darf der Judge in der Grauzone ein SUPPORTED **erzeugen**
+(``docs/decisions/0002-supersedes.md``). Der alte Deckel war sinnvoll, solange
+Regel 3 selbst großzügig SUPPORTED vergab; jetzt wäre er das Gegenteil — ohne
+den Judge bliebe die Grauzone dauerhaft bei RELATED_ONLY, und Persona-Interviews,
+deren lexikalische Deckung nie über 0.29 kommt, könnten nie binden.
 
-Bewusst optional und nicht in der Report-Pipeline voreingestellt: ein
-Judge-Call pro qualitativem Evidence-Item ist teuer. Die Verdrahtung ist ein
-Konfigurationsschritt, nicht Default (Issue #931-Kontext: Kosten-, Token- und
-Zeitbudgets stehen auf der 0.9→0.10-Roadmap).
+Der Judge ist damit die einzige Stelle des Systems, die inhaltlich statt
+lexikalisch urteilt — und deshalb bewusst konservativ instruiert. Die
+deterministischen Regeln 1 und 2 (Zahl, Bezugsgruppe, Mengenaussage) bleiben
+unberührt bindend; ein regelbasiertes CONTRADICTED erreicht den Judge nie.
+
+Gefragt wird er nur in der Grauzone und nur für die höchstbewerteten
+Retrieval-Kandidaten eines Claims — im Fließtext-Check gar nicht, weil dort
+ausschließlich numerische Sätze geprüft werden.
 """
 
 from __future__ import annotations
@@ -35,11 +39,7 @@ class EntailmentJudgeVerdict(BaseModel):
     """Strukturiertes Judge-Output-Schema für ``chat_json``."""
 
     verdict: EntailmentVerdict = Field(
-        description=(
-            "SUPPORTED, CONTRADICTED, RELATED_ONLY oder INSUFFICIENT. "
-            "SUPPORTED wird vom Klassifikator auf RELATED_ONLY abgeschwächt "
-            "(ADR-0002: Judge darf SUPPORTED nie erzeugen)."
-        )
+        description="SUPPORTED, CONTRADICTED, RELATED_ONLY oder INSUFFICIENT."
     )
     reason: str = Field(
         default="",
@@ -58,9 +58,68 @@ _JUDGE_SYSTEM_PROMPT = (
     "gegenläufige Richtung, andere Bezugsgruppe).\n"
     "- RELATED_ONLY: Gleiche Thema, aber kein Beleg.\n"
     "- INSUFFICIENT: Zu wenig Überschneidung für ein Urteil.\n\n"
-    "Sei konservativ: wenn die Evidence eine Zusatzbehauptung trägt, die der "
-    "Claim nicht abdeckt, wähle RELATED_ONLY oder CONTRADICTED — nie SUPPORTED."
+    "Du wirst nur in Zweifelsfällen gefragt: die Wortüberschneidung reicht "
+    "weder zum Beleg noch zum Ausschluss. Entscheide inhaltlich, nicht nach "
+    "Wortgleichheit.\n\n"
+    "Sei konservativ. SUPPORTED nur, wenn ein Leser die Aussage des Claims "
+    "allein aus diesem Evidence-Text ableiten könnte. Trägt der Claim eine "
+    "zusätzliche Behauptung, die im Text nicht steht — eine zweite Wirkung, "
+    "eine Bewertung, eine Verallgemeinerung über die genannte Gruppe hinaus —, "
+    "dann wähle RELATED_ONLY.\n\n"
+    "Eine einzelne geäußerte Sicht belegt, dass diese Sicht geäußert wurde, "
+    "nicht dass sie zutrifft. Behauptet der Claim eine Tatsache und nennt die "
+    "Evidence nur eine Einschätzung dazu, ist das RELATED_ONLY."
 )
+
+
+#: Die vier Urteilsnamen, längster zuerst. ``RELATED_ONLY`` enthält kein
+#: anderes Verdikt als Teilwort, aber die Reihenfolge hält die Suche auch
+#: dann eindeutig, wenn die Enum wächst.
+_VERDICT_NAMES = ("RELATED_ONLY", "CONTRADICTED", "INSUFFICIENT", "SUPPORTED")
+
+
+def _verdict_from_prose(
+    client: LLMClient,
+    messages: List[Dict[str, str]],
+    log: logging.Logger,
+) -> str:
+    """Zweiter Versuch als Freitext, wenn der Provider kein JSON liefert.
+
+    Nicht jedes Modell hält sich an ein json_schema, und mit
+    ``LLM_DISABLE_JSON_MODE`` fällt der erzwungene Modus ohnehin weg. Gemessen
+    an den fünf im Entwicklungssetup verfügbaren Ollama-Cloud-Modellen
+    antwortete genau eines strukturiert; die übrigen vier lieferten eine
+    saubere, aber prosaische Begründung ("**Urteil:** RELATED_ONLY — die
+    Evidence thematisiert zwar …"). Ohne diesen zweiten Versuch wäre der
+    Judge in vier von fünf Konfigurationen dauerhaft im ``judge_failed``-Pfad
+    und die Grauzone bliebe leer, obwohl das Modell inhaltlich korrekt
+    geurteilt hat.
+
+    Gelesen wird ausschließlich der Urteilsname. Die Begründung bleibt außen
+    vor: sie wäre nicht validierbar und der Klassifikator führt seine eigene.
+    Findet sich kein oder mehr als ein Name, wird nichts geraten — der
+    Aufrufer sieht dann denselben Fehler wie zuvor und fällt auf den
+    Regelpfad.
+    """
+    response = client.chat(
+        messages=messages,
+        temperature=0.0,
+        # Großzügiger als der JSON-Weg: ein Reasoning-Modell verbraucht sein
+        # Budget im Denkteil und liefert sonst eine leere Antwort, bevor das
+        # Urteil überhaupt fällt.
+        max_tokens=1024,
+        force_no_thinking=True,
+        enforce_token_floor=False,
+    )
+    upper = str(response or "").upper()
+    found = [name for name in _VERDICT_NAMES if name in upper]
+    if len(found) != 1:
+        raise ValueError(
+            "Judge-Antwort ohne eindeutiges Urteil "
+            f"({len(found)} Treffer in {len(upper)} Zeichen)"
+        )
+    log.debug("Entailment-Judge: Urteil aus Freitext gelesen")
+    return found[0]
 
 
 def build_llm_judge(
@@ -113,7 +172,7 @@ def build_llm_judge(
                 "Entailment-Judge: chat_json fehlgeschlagen (%s)",
                 type(exc).__name__,
             )
-            raise
+            return _verdict_from_prose(client, messages, log)
 
         # chat_json mit Pydantic-Schema liefert ein validiertes Dict. Je nach
         # Serialization-Mode kann verdict ein EntailmentVerdict-Enum (python)

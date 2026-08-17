@@ -937,12 +937,14 @@ def _qualitative_claim_and_evidence():
     return claim, evidence
 
 
-def test_11a_judge_supported_is_downgraded_to_related_only():
-    """ADR-0002: Der LLM-Judge darf SUPPORTED nie erzeugen.
+def test_11a_judge_may_create_supported_in_the_grey_zone():
+    """Seit #1357 darf der Judge in der Grauzone ein SUPPORTED erzeugen.
 
-    Im qualitativen Pfad gibt es kein regelbasiertes SUPPORTED. Ein
-    Judge-SUPPORTED wäre also ein ungedeckter Claim, der durch das Tor
-    geschlüpft wäre. Der Klassifikator muss es auf RELATED_ONLY abschwächen.
+    Der alte Deckel (ADR-0002, abgelöst durch `docs/decisions/0002-supersedes.md`)
+    war sinnvoll, solange Regel 3 selbst großzügig SUPPORTED vergab. Mit der
+    umgedrehten Deckungsrichtung ist er das Gegenteil: ohne ihn bliebe alles
+    zwischen den beiden Schwellen dauerhaft RELATED_ONLY, und Interviews mit
+    einer lexikalischen Deckung um 0.02 könnten nie binden.
     """
     claim, evidence = _qualitative_claim_and_evidence()
 
@@ -950,8 +952,8 @@ def test_11a_judge_supported_is_downgraded_to_related_only():
         return "SUPPORTED"
 
     result = classify_evidence(claim, evidence, judge=judge)
-    assert result.verdict is EntailmentVerdict.RELATED_ONLY
-    assert "judge_downgraded" in result.checks
+    assert result.verdict is EntailmentVerdict.SUPPORTED
+    assert "judge" in result.checks
 
 
 def test_11b_judge_contradicted_is_passed_through():
@@ -990,7 +992,7 @@ def test_11d_judge_invalid_verdict_is_ignored():
     result = classify_evidence(claim, evidence, judge=judge)
     # Kein judge-Check, weil der Verdict nicht in der Enum war.
     assert "judge" not in result.checks
-    assert "judge_downgraded" not in result.checks
+    assert result.verdict is not EntailmentVerdict.SUPPORTED
 
 
 def test_11e_build_llm_judge_uses_chat_json_with_verdict_schema():
@@ -1046,12 +1048,20 @@ def test_11e_build_llm_judge_uses_chat_json_with_verdict_schema():
     assert "SUPPORTED" in stub.last_messages[0]["content"]
 
 
-def test_11f_build_llm_judge_propagates_chat_json_errors():
-    """chat_json-Fehler propagieren — classify_evidence fängt sie als judge_failed."""
+def test_11f_build_llm_judge_propagates_errors_when_both_ways_fail():
+    """Ist auch der Freitext-Weg tot, propagiert der Fehler.
+
+    Seit #1357 folgt auf einen `chat_json`-Fehler ein zweiter Versuch als
+    Prosa — die meisten Provider halten sich nicht an das Schema. Scheitert
+    auch der, fängt `classify_evidence` die Exception als `judge_failed`.
+    """
     from app.services.llm_entailment_judge import build_llm_judge
 
     class _FailingClient:
         def chat_json(self, **_kwargs):
+            raise RuntimeError("provider down")
+
+        def chat(self, **_kwargs):
             raise RuntimeError("provider down")
 
     judge = build_llm_judge(_FailingClient())  # type: ignore[arg-type]

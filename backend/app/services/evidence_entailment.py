@@ -478,6 +478,29 @@ TOPIC_MATCH_THRESHOLD = 0.2
 #: Der Schwellwert trennt diese beiden Fälle mit Abstand nach beiden Seiten.
 PREDICATE_COVERAGE_THRESHOLD = 0.75
 
+#: Qualitativer Pfad (Regel 3): ab dieser Deckung trägt die Evidence den
+#: Claim ohne Rückfrage. Gemessen als ``coverage_ratio(claim, evidence)`` —
+#: wie viel von dem, was der Claim behauptet, steht in der Quelle.
+#:
+#: Bis #1357 entschied hier Containment (``_overlap_ratio``) und damit die
+#: umgekehrte Richtung: sobald die Evidence *Teilmenge* des Claims war, galt
+#: der Claim als belegt. Am Referenzlauf hatten alle 24 so entstandenen
+#: Bindungen Containment-Median 1.00 bei Deckungs-Median 0.21 — der Claim
+#: behauptete das Fünffache der Quelle. So band die Aussage "der ungestaffelte
+#: Vollstart birgt gravierende Risiken für Patientensicherheit" an das
+#: Projektankündigungs-Snippet.
+QUALITATIVE_SUPPORT_THRESHOLD = 0.60
+#: Darunter ist die Evidence bestenfalls thematisch verwandt. Zwischen beiden
+#: Schwellen liegt die Grauzone, in der ein lexikalisches Maß nicht mehr
+#: entscheiden kann und der Judge gefragt wird.
+QUALITATIVE_RELATED_THRESHOLD = 0.10
+
+#: Ab diesem Cosine-Ergebnis der Retrieval-Stufe gilt ein Kandidat als
+#: thematisch einschlägig, ohne dass der lexikalische Vorfilter ihn bestätigen
+#: muss. Bewusst über der Bindungsschwelle des Binders (0.55 im Report-Pfad):
+#: ein schwacher Treffer soll den Filter nicht aushebeln.
+RETRIEVAL_RELEVANCE_THRESHOLD = 0.60
+
 EntailmentJudge = Callable[[str, str], str]
 """Optionaler strukturierter Judge: (claim, evidence_text) -> Verdict-Name."""
 
@@ -598,12 +621,19 @@ def classify_evidence(
     evidence_item: Dict[str, Any],
     *,
     judge: Optional[EntailmentJudge] = None,
+    retrieval_score: Optional[float] = None,
 ) -> EntailmentResult:
     """Entscheidet, ob ``evidence_item`` den Claim tatsächlich stützt.
 
     Reihenfolge ist bewusst: numerische und Mengen-Checks laufen zuerst und
-    sind bindend. Der ``judge`` wird nur befragt, wenn die Regeln kein Urteil
-    fällen konnten, und darf ein SUPPORTED nur verhindern, nie erzeugen.
+    sind bindend. Der ``judge`` wird nur im qualitativen Pfad befragt, und
+    auch dort nur in der Grauzone zwischen den beiden Deckungsschwellen.
+
+    ``retrieval_score`` ist das Cosine-Ergebnis der ersten Bindungsstufe,
+    sofern der Aufrufer eine hatte. Liegt es über
+    :data:`RETRIEVAL_RELEVANCE_THRESHOLD`, entfällt der lexikalische
+    Themenvorfilter: die Frage „geht es überhaupt um dasselbe" hat die
+    Embedding-Stufe dann bereits besser beantwortet, als Wortzählung es kann.
     """
     claim = (claim_text or "").strip()
     evidence_text = _evidence_text(evidence_item)
@@ -716,46 +746,86 @@ def classify_evidence(
         )
 
     # --- Regel 3: rein qualitativer Claim ----------------------------------
-    if topic_overlap < TOPIC_MATCH_THRESHOLD:
+    # Der Themenvorfilter fragt nur, ob überhaupt vom Selben die Rede ist.
+    # Wortüberlappung ist dafür ein schlechtes Maß: ein Interviewzitat sagt
+    # dasselbe in völlig anderen Worten. Im Referenzlauf fielen 22 von 25
+    # Interview-Paaren hier heraus (Containment-Median 0.04), obwohl das
+    # Retrieval sie mit 0.65 bis 0.79 korrekt gefunden hatte — sie erreichten
+    # die inhaltliche Prüfung nie. Liegt ein Retrieval-Ergebnis vor, hat es
+    # diese Frage bereits beantwortet (#1357).
+    retrieved = (
+        retrieval_score is not None
+        and retrieval_score >= RETRIEVAL_RELEVANCE_THRESHOLD
+    )
+    if retrieved:
+        checks.append("retrieval_relevant")
+    elif topic_overlap < TOPIC_MATCH_THRESHOLD:
         return EntailmentResult(
             EntailmentVerdict.INSUFFICIENT,
             "zu geringe inhaltliche Überschneidung",
             checks=checks + ["low_overlap"],
         )
 
+    # Deckungsrichtung: wie viel von dem, was der Claim behauptet, steht in
+    # der Quelle. Nicht umgekehrt — Containment liefert 1.0, sobald die
+    # Evidence Teilmenge des Claims ist, und band deshalb jede thematisch
+    # passende Projektbeschreibung an jede weitreichende Behauptung (#1357).
+    claim_coverage = coverage_ratio(claim, evidence_text)
+
+    if claim_coverage >= QUALITATIVE_SUPPORT_THRESHOLD:
+        return EntailmentResult(
+            EntailmentVerdict.SUPPORTED,
+            "die Quelle deckt den Claim weitgehend ab "
+            f"(Deckung {claim_coverage:.2f})",
+            checks=checks + ["high_claim_coverage"],
+        )
+
+    if claim_coverage < QUALITATIVE_RELATED_THRESHOLD and not retrieved:
+        # Dieselbe Einschränkung wie beim Themenvorfilter, aus demselben
+        # Grund: eine niedrige *lexikalische* Deckung schließt einen Beleg
+        # nur aus, wenn es kein besseres Relevanzsignal gibt. Interviewzitate
+        # haben im Referenzlauf eine Deckung um 0.02 — sie sagen dasselbe in
+        # anderen Worten, nicht etwas anderes. Ohne diese Ausnahme wäre die
+        # untere Schwelle das neue Nadelöhr an der Stelle des alten.
+        return EntailmentResult(
+            EntailmentVerdict.RELATED_ONLY,
+            "thematisch verwandt, aber kein Beleg "
+            f"(Deckung {claim_coverage:.2f})",
+            checks=checks + ["low_claim_coverage"],
+        )
+
+    # Grauzone. Hier trennt kein lexikalisches Maß mehr: eine korrekte
+    # Paraphrase und eine erfundene Zusatzbehauptung liegen dicht beieinander
+    # (im Referenzlauf 0.50 gegen 0.56 — die erfundene sogar höher). Jede
+    # Schwelle, die die eine fängt, löscht die andere mit. Entschieden wird
+    # deshalb inhaltlich.
     if judge is not None:
         try:
             raw_verdict = str(judge(claim, evidence_text)).strip().upper()
             if raw_verdict in EntailmentVerdict.__members__:
                 judge_verdict = EntailmentVerdict[raw_verdict]
-                # ADR-0002: Der LLM-Judge darf ein regelbasiertes SUPPORTED
-                # nur abschwächen, nie erzeugen. Im qualitativen Pfad (Regel 3)
-                # gibt es kein regelbasiertes SUPPORTED — also wäre ein
-                # Judge-SUPPORTED ein ungedeckter Claim, der durch das Tor
-                # geschlüpft wäre. Downgraden auf RELATED_ONLY.
-                if judge_verdict is EntailmentVerdict.SUPPORTED:
-                    return EntailmentResult(
-                        EntailmentVerdict.RELATED_ONLY,
-                        "Judge-Bestätigung darf SUPPORTED nicht erzeugen (ADR-0002)",
-                        checks=checks + ["judge_downgraded"],
-                    )
+                # ADR-0002 wird an dieser Stelle abgelöst
+                # (docs/decisions/0002-supersedes.md): der Judge darf in der
+                # Grauzone ein SUPPORTED *erzeugen*. Der alte Deckel war
+                # sinnvoll, solange Regel 3 selbst großzügig SUPPORTED
+                # vergab — jetzt ist er das Gegenteil: ohne ihn bliebe die
+                # Grauzone für immer bei RELATED_ONLY, und Interviews, deren
+                # Deckung nie über 0.29 kommt, könnten nie binden. Regel 1
+                # und 2 bleiben unberührt bindend; ein regelbasiertes
+                # CONTRADICTED erreicht diesen Code nie.
                 return EntailmentResult(
                     judge_verdict, "strukturierter Judge", checks=checks + ["judge"]
                 )
         except Exception:  # noqa: BLE001 — Judge ist optional; Regelpfad bleibt gültig
             checks.append("judge_failed")
 
-    if topic_overlap >= PREDICATE_MATCH_THRESHOLD:
-        return EntailmentResult(
-            EntailmentVerdict.SUPPORTED,
-            "qualitative Aussage deckt sich weitgehend mit der Evidence",
-            checks=checks + ["high_lexical_overlap"],
-        )
-
+    # Ohne Judge bleibt die Grauzone unentschieden — und unentschieden heißt
+    # nicht belegt.
     return EntailmentResult(
         EntailmentVerdict.RELATED_ONLY,
-        "thematisch verwandt, aber kein Beleg",
-        checks=checks + ["topic_only"],
+        "thematisch verwandt, Beleggrad ohne inhaltliche Prüfung nicht "
+        f"entscheidbar (Deckung {claim_coverage:.2f})",
+        checks=checks + ["grey_zone_unjudged"],
     )
 
 
@@ -775,6 +845,9 @@ __all__ = [
     "FactModality",
     "NumericFact",
     "PREDICATE_MATCH_THRESHOLD",
+    "QUALITATIVE_RELATED_THRESHOLD",
+    "RETRIEVAL_RELEVANCE_THRESHOLD",
+    "QUALITATIVE_SUPPORT_THRESHOLD",
     "TOPIC_MATCH_THRESHOLD",
     "classify_evidence",
     "classify_many",
