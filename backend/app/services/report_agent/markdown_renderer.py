@@ -136,9 +136,18 @@ def render_top10_list(
 
 def render_data_gaps(gaps: list[DataGap]) -> str:
     return _table(
-        ["ID", "Severity", "Beschreibung", "Suggested Fixes"],
+        ["ID", "Severity", "Beschreibung", "Hypothese", "Suggested Fixes"],
         [
-            [gap.id, gap.severity, gap.beschreibung, _list_cell(gap.suggested_fixes)]
+            [
+                gap.id,
+                gap.severity,
+                gap.beschreibung,
+                # Issue #1319: leer, wenn die Luecke keine Hypothese als
+                # Gegenstueck hat — der Verweis zeigt nur auf IDs, die in der
+                # Hypothesentabelle desselben Artefakts stehen.
+                gap.related_hypothesis_id or "",
+                _list_cell(gap.suggested_fixes),
+            ]
             for gap in gaps
         ],
         "Keine Data Gaps im ReportV3-Artefakt.",

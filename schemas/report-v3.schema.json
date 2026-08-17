@@ -249,6 +249,18 @@
           "title": "Id",
           "type": "string"
         },
+        "related_hypothesis_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Related Hypothesis Id"
+        },
         "severity": {
           "enum": [
             "low",

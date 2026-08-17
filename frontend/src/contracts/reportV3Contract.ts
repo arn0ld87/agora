@@ -249,6 +249,9 @@ export const DataGapSchema = z
     beschreibung: z.string().min(1),
     severity: z.enum(["low", "medium", "high"]),
     suggested_fixes: z.array(z.string()).default([]),
+    // Issue #1319: exportierte Hypothesen-ID (H<n>_<i> / HA<n>_<i>), wenn die
+    // Luecke aus demselben Claim stammt wie eine Hypothese des Artefakts.
+    related_hypothesis_id: z.string().nullable().default(null),
   })
   .strict();
 export type DataGap = z.infer<typeof DataGapSchema>;
