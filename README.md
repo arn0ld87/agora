@@ -54,24 +54,29 @@ The demo shows:
 
 ## Reference run
 
-The current reference is **Reference run 6: AURORA**, a decision report for the fictional Städtischer Klinikverbund Falkenbrück about the planned rollout of the AI-assisted triage and documentation system **Nexora Triage Assist**. The report was generated on **2026-08-14** as `report_3c594fcc7613` from the already completed simulation `sim_4245ff3d7b23`.
+The current reference is **Reference run 7: AURORA with red-team review**, a decision report for the fictional Städtischer Klinikverbund Falkenbrück about the planned rollout of the AI-assisted triage and documentation system **Nexora Triage Assist**. The report was generated on **2026-08-17** as `report_b259e254ee3f` from the 24-round simulation `sim_c2108c7f543e`.
 
-This run is especially useful because the **simulation stayed constant while only the report pipeline changed**. It therefore acts as a reporter regression reference rather than a comparison between two different stochastic simulations. The revised reporter reduced end-to-end report generation from roughly **17:52 min to 8:19 min** while using targeted `interview_agents` calls throughout the six report sections instead of relying mostly on document retrieval and late-stage interviews.
+Two pipeline stages are new in this run. A **separate red-team review** runs after the report and returns 9 findings — unresolved tension between sections, unsupported effect claims, and missing counter-positions from individual stakeholder groups — alongside an echo index of 0.703 that quantifies how strongly the report repeats its input wording. And unsupported precision is no longer only softened: across five of seven sections, **10 factual statements were removed from the prose and carried forward as hypotheses**.
 
-The report recommends a **conditioned, staged rollout starting at Falkenbrück-Mitte** and ties expansion to safety, training, worker-representation and fallback conditions. The UI exposes the generated report next to an Evidence Inspector where claims, hypotheses, confidence and the evidence records behind individual statements can be inspected directly.
+The report assesses four rollout variants separately and recommends a **reversible pilot at Falkenbrück-Mitte only**, tied to seven named pieces of proof before approval, with a full delay of the go-live as the fallback.
 
-![AURORA reference report — report sections, claims and hypotheses in the Evidence Inspector](./docs/assets/screenshots/reference-runs/2026-08-14-aurora/01-evidence-inspector.webp)
-
-The second view shows the link between report prose, a simulated persona statement and concrete `agent_interview` evidence cards. This is the part of the workflow that goes beyond a document-only RAG summary: the simulated stakeholders are queried again during report generation and their answers can be inspected as evidence used by individual claims.
-
-![AURORA reference report — simulated persona quote and agent interview evidence](./docs/assets/screenshots/reference-runs/2026-08-14-aurora/02-agent-interviews.webp)
+| Metric | Value |
+|---|---|
+| Simulation | `sim_c2108c7f543e`, 24 of 24 rounds |
+| Report runtime | 16:46 min for 7 sections, plus 13 s red-team review |
+| Agent interviews | `interview_agents` in all 7 sections, 6–8 personas each, 49 responses |
+| Evidence records | 116 (49 interview responses, 31 seed documents, 28 graph relations, 8 simulation actions) |
+| Claims | 29, each with at least one evidence reference — all at `low` confidence |
+| Hypotheses / data gaps | 136 / 126 |
+| Red-team findings | 9, echo index 0.703 |
+| Export ids | section-qualified and collision-free (29/29 claims, 126/126 data gaps, 136/136 hypotheses) |
 
 > [!NOTE]
-> This is deliberately a **reference run, not a polished showcase**. It demonstrates real progress in report speed, interview integration and evidence gating, but it also preserves known trust-boundary failures as regression targets. In this artifact, a documented seed fact about **38 cases with a different urgency suggestion** is still downgraded in some sections as if matching numerical evidence were missing; some simulated quotes still carry a generic `seed_doc:seed_aurora#chunk:0` anchor; strongly matching `SUPPORTED` evidence can remain `low` confidence; and the canonical ReportV3 artifact can fail validation while the overall task reaches a completed state.
+> This is deliberately a **reference run, not a polished showcase**. It closes one regression expectation from run 6 — all 24 simulated persona quotes now resolve to a concrete `ev_` evidence id instead of a generic seed anchor — while documenting open trust boundaries as regression targets: all 29 claims stay at `low` confidence even where several stakeholder groups support the same statement; 92 of 116 evidence records are collected and displayed but bound to no claim; all 126 data gaps carry the same `medium` severity; and runtime rose against run 6 (16:46 min versus 8:19 min), which is not a like-for-like reporter comparison because the simulation differs. The repository does not contain every artifact and replay input needed to reproduce the run from a fresh checkout.
 
-**[→ Read the full Reference run 6 notes](./docs/reference-runs/2026-08-14-aurora-report/README.md)**
+**[→ Read the full Reference run 7 notes](./docs/reference-runs/2026-08-17-aurora-red-team/README.md)**
 
-Earlier runs: [reference run 5](./docs/reference-runs/2026-08-12-domain-migration-20-runden/README.md) (trust-pipeline reference) · [reference run 4](./docs/reference-runs/2026-08-11-ki-lernassistent-20-runden/README.md) (first evidence-binding-at-scale run; richer simulation dynamics) · [run 3](./docs/reference-runs/2026-08-11-ki-lernassistent/README.md) · [run 2](./docs/reference-runs/2026-08-09-domain-migration-v2/README.md) · [run 1](./docs/reference-runs/2026-08-09-domain-migration/README.md)
+Earlier runs: [reference run 6](./docs/reference-runs/2026-08-14-aurora-report/README.md) (same-simulation reporter regression) · [reference run 5](./docs/reference-runs/2026-08-12-domain-migration-20-runden/README.md) (trust-pipeline reference) · [reference run 4](./docs/reference-runs/2026-08-11-ki-lernassistent-20-runden/README.md) (first evidence-binding-at-scale run; richer simulation dynamics) · [run 3](./docs/reference-runs/2026-08-11-ki-lernassistent/README.md) · [run 2](./docs/reference-runs/2026-08-09-domain-migration-v2/README.md) · [run 1](./docs/reference-runs/2026-08-09-domain-migration/README.md)
 
 ---
 

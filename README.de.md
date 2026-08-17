@@ -54,26 +54,29 @@ Die Demo zeigt:
 
 ## Referenzlauf
 
-Die aktuelle Referenz ist **Referenzlauf 6: AURORA**. Der Lauf untersucht für den fiktiven Städtischen Klinikverbund Falkenbrück den geplanten Produktivstart des KI-gestützten Triage- und Dokumentationssystems **Nexora Triage Assist**. Der Report wurde am **14. August 2026** als `report_3c594fcc7613` aus der bereits abgeschlossenen Simulation `sim_4245ff3d7b23` erzeugt.
+Die aktuelle Referenz ist **Referenzlauf 7: AURORA mit Red-Team-Review**. Der Lauf untersucht für den fiktiven Städtischen Klinikverbund Falkenbrück den geplanten Produktivstart des KI-gestützten Triage- und Dokumentationssystems **Nexora Triage Assist**. Der Report wurde am **17. August 2026** als `report_b259e254ee3f` aus der 24-Runden-Simulation `sim_c2108c7f543e` erzeugt.
 
-Besonders nützlich ist dieser Lauf, weil **die Simulation unverändert blieb und nur die Report-Pipeline geändert wurde**. Dadurch ist er eine beobachtbare Reporter-Regression. Die Reportlaufzeit sank von ungefähr **17:52 Minuten auf 8:19 Minuten**, während `interview_agents` gezielt über alle sechs Reportabschnitte eingesetzt wurde.
+Neu sind in diesem Lauf zwei Pipeline-Stufen. Ein **eigenständiges Red-Team-Review** läuft nach dem Report und liefert 9 Befunde — unaufgelöste Spannungen zwischen Abschnitten, unbelegte Wirkungsbehauptungen und fehlende Gegenpositionen einzelner Stakeholdergruppen — dazu einen Echo-Index von 0,703, der misst, wie stark der Report die Eingabeformulierungen wiederholt. Und ungedeckte Präzision wird nicht mehr nur abgeschwächt: In fünf von sieben Abschnitten wurden **10 Faktenaussagen aus dem Fließtext entfernt und als Hypothese weitergeführt**.
 
-Der Report empfiehlt einen **konditionierten, gestaffelten Rollout beginnend in Falkenbrück-Mitte**. Der Evidence Inspector stellt Reporttext, Claims, Hypothesen, Confidence und gebundene Evidenz nebeneinander dar.
+Der Report bewertet vier Rollout-Varianten getrennt und empfiehlt einen **reversiblen Pilotbetrieb ausschließlich in Falkenbrück-Mitte**, gebunden an sieben benannte Nachweise vor der Freigabe, mit Verschiebung des gesamten Produktivstarts als Rückfalloption.
 
-### Evidence Inspector: Claims und Hypothesen
-
-[![AURORA Referenzreport mit Sections, Claims und Hypothesen im Evidence Inspector](./docs/assets/screenshots/reference-runs/2026-08-14-aurora/01-evidence-inspector.webp)](./docs/assets/screenshots/reference-runs/2026-08-14-aurora/01-evidence-inspector.webp)
-
-### Agenteninterviews als Evidenz
-
-[![AURORA Referenzreport mit simuliertem Persona-O-Ton und Agenteninterview-Evidenz](./docs/assets/screenshots/reference-runs/2026-08-14-aurora/02-agent-interviews.webp)](./docs/assets/screenshots/reference-runs/2026-08-14-aurora/02-agent-interviews.webp)
+| Kennzahl | Wert |
+|---|---|
+| Simulation | `sim_c2108c7f543e`, 24 von 24 Runden |
+| Reportlaufzeit | 16:46 min für 7 Abschnitte, zusätzlich 13 s Red-Team-Review |
+| Agenteninterviews | `interview_agents` in allen 7 Abschnitten, 6–8 Personas je Abschnitt, 49 Antworten |
+| Evidenzdatensätze | 116 (49 Interviewantworten, 31 Seed-Dokumente, 28 Graphrelationen, 8 Simulationsaktionen) |
+| Claims | 29, jeder mit mindestens einem Evidenzbezug — sämtlich `low` Confidence |
+| Hypothesen / Data Gaps | 136 / 126 |
+| Red-Team-Befunde | 9, Echo-Index 0,703 |
+| Export-IDs | abschnittsqualifiziert und kollisionsfrei (29/29 Claims, 126/126 Data Gaps, 136/136 Hypothesen) |
 
 > [!NOTE]
-> Dies ist bewusst **ein Referenzlauf und keine Hochglanz-Demo**. Er zeigt Fortschritte bei Laufzeit, Interviewintegration und Evidence Gating, dokumentiert aber weiterhin bekannte Trust-Grenzen. Der Repository-Stand enthält außerdem nicht alle Artefakte und Replay-Daten für eine vollständige Reproduktion aus einem frischen Checkout; der Lauf ist deshalb eine beobachtbare Regressionreferenz und kein vollständig reproduzierbarer Golden Run.
+> Dies ist bewusst **ein Referenzlauf und keine Hochglanz-Demo**. Er erfüllt eine Regressionserwartung aus Lauf 6 — alle 24 simulierten Persona-O-Töne verweisen jetzt auf eine konkrete `ev_`-Evidenz-ID statt auf einen generischen Seed-Anker — und dokumentiert die offenen Trust-Grenzen als Regressionsziele: Alle 29 Claims bleiben bei `low` Confidence, auch wenn mehrere Stakeholdergruppen dieselbe Aussage stützen; 92 von 116 Evidenzdatensätzen werden erhoben und angezeigt, tragen aber keinen Claim; alle 126 Data Gaps haben dieselbe Severity `medium`; und die Laufzeit stieg gegenüber Lauf 6 (16:46 min statt 8:19 min), was wegen der anderen Simulation kein direkter Reporter-Vergleich ist. Der Repository-Stand enthält nicht alle Artefakte und Replay-Daten für eine Reproduktion aus einem frischen Checkout.
 
-**[→ Vollständige Notizen zu Referenzlauf 6](./docs/reference-runs/2026-08-14-aurora-report/README.de.md)** · **[English](./docs/reference-runs/2026-08-14-aurora-report/README.md)**
+**[→ Vollständige Notizen zu Referenzlauf 7](./docs/reference-runs/2026-08-17-aurora-red-team/README.de.md)** · **[English](./docs/reference-runs/2026-08-17-aurora-red-team/README.md)**
 
-Frühere Läufe: [Referenzlauf 5](./docs/reference-runs/2026-08-12-domain-migration-20-runden/README.de.md) · [Referenzlauf 4](./docs/reference-runs/2026-08-11-ki-lernassistent-20-runden/README.de.md) · [Lauf 3](./docs/reference-runs/2026-08-11-ki-lernassistent/README.md) · [Lauf 2](./docs/reference-runs/2026-08-09-domain-migration-v2/README.md) · [Lauf 1](./docs/reference-runs/2026-08-09-domain-migration/README.md)
+Frühere Läufe: [Referenzlauf 6](./docs/reference-runs/2026-08-14-aurora-report/README.de.md) (Same-Simulation-Reporter-Regression) · [Referenzlauf 5](./docs/reference-runs/2026-08-12-domain-migration-20-runden/README.de.md) · [Referenzlauf 4](./docs/reference-runs/2026-08-11-ki-lernassistent-20-runden/README.de.md) · [Lauf 3](./docs/reference-runs/2026-08-11-ki-lernassistent/README.md) · [Lauf 2](./docs/reference-runs/2026-08-09-domain-migration-v2/README.md) · [Lauf 1](./docs/reference-runs/2026-08-09-domain-migration/README.md)
 
 ---
 
