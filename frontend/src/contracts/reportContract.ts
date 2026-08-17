@@ -248,6 +248,8 @@ export const ReportSectionSchema = z.object({
   structured_metadata: z.record(z.string(), z.unknown()).default({}),
   // P0-7: true, wenn dieser Abschnitt nur Fallback-/Fehlertext enthaelt.
   generation_failed: z.boolean().default(false),
+  // Issue #1324: zitierte, aber nie gebundene Evidence-Refs des Abschnitts.
+  unbound_evidence_refs: z.array(z.string()).default([]),
 }).strict();
 export type ReportSection = z.infer<typeof ReportSectionSchema>;
 

@@ -706,6 +706,12 @@ class ReportSectionModel(BaseModel):
     structured_metadata: dict[str, Any] = Field(default_factory=dict)
     # P0-7: True, wenn der Abschnitt nur Fallback-/Fehlertext enthält.
     generation_failed: bool = False
+    # Issue #1324: Evidence-Refs, die der Abschnitt zitiert, die aber in keiner
+    # Bindung auftauchen. Sie wurden bisher nur geloggt — im persistierten
+    # Artefakt war damit nicht nachvollziehbar, welcher Beleg fehlt, obwohl
+    # genau das den Statuswechsel auf ``incomplete`` erklärt. max_length=200
+    # deckelt fehlerhafte LLM-Outputs, wie bei ``hypotheses_appendix``.
+    unbound_evidence_refs: list[str] = Field(default_factory=list, max_length=200)
 
 
 class ReportOutlineSectionModel(BaseModel):

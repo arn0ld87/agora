@@ -47,6 +47,7 @@ const mockSection: ReportSection = {
   data_gaps: [],
   structured_metadata: {},
   generation_failed: false,
+  unbound_evidence_refs: [],
 }
 
 describe('ReportEvidencePanel — Hypothesen-Accordion', () => {

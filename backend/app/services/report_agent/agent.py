@@ -1241,6 +1241,14 @@ class ReportAgent:
                 getattr(self, "_pending_section_metadata", {}) or {}
             ).get(section_index, {}),
             "generation_failed": generation_failed,
+            # Issue #1324: Zitierte, aber nie gebundene Evidence-Refs. Sie
+            # standen bisher nur im Log — im Artefakt war nicht sichtbar,
+            # welcher Beleg fehlt, obwohl genau das den Statuswechsel auf
+            # ``incomplete`` erklaert. Der Wert wird in ``process_section``
+            # nach dem gescheiterten Zitat-Repair hinterlegt.
+            "unbound_evidence_refs": (
+                getattr(self, "_pending_unbound_evidence_refs", {}) or {}
+            ).get(section_index, []),
         }
         # Issue #1187: Persistenz-Phase startet hier explizit statt per
         # ``with``, damit der weit verschachtelte Validierungs-/Reparatur-

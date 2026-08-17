@@ -898,6 +898,14 @@
           "additionalProperties": true,
           "title": "Structured Metadata",
           "type": "object"
+        },
+        "unbound_evidence_refs": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 200,
+          "title": "Unbound Evidence Refs",
+          "type": "array"
         }
       },
       "required": [
