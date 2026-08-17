@@ -12,14 +12,12 @@ erfordert die Pflicht-Schritte).
 """
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 import threading
-from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import IO, Iterator, Optional
+from typing import Optional
 
 from ..contracts.user_profile_contract import (
     ONBOARDING_STEP_ORDER,
@@ -31,7 +29,7 @@ from ..contracts.user_profile_contract import (
 )
 from ..settings import get_settings
 from ..utils.logger import get_logger
-from .data_dir import resolve_data_dir as _resolve_data_dir
+from .json_file_store import JsonFileStore
 from .user_profile_store import get_user_profile_store
 
 logger = get_logger("agora.services.onboarding_state_store")
@@ -61,24 +59,14 @@ def _first_open_step(completed_steps: list[OnboardingStepId]) -> OnboardingStepI
     return "summary"
 
 
-class OnboardingStateStore:
-    """File-backed JSON-Store für den Onboarding-Wizard-Zustand."""
+class OnboardingStateStore(JsonFileStore):
+    """File-backed JSON-Store für den Onboarding-Wizard-Zustand.
+
+    Pfad, Prozess- und Dateisperre kommen aus ``JsonFileStore``.
+    """
 
     def __init__(self, *, data_dir: Optional[Path] = None) -> None:
-        self._lock = threading.Lock()
-        self._data_dir = data_dir or _resolve_data_dir()
-        self._path = self._data_dir / _STORE_FILENAME
-        self._lock_path = self._path.with_suffix(".lock")
-
-    @contextmanager
-    def _file_lock(self) -> Iterator[IO[str]]:
-        self._data_dir.mkdir(parents=True, exist_ok=True)
-        with open(self._lock_path, "w", encoding="utf-8") as lock_fh:
-            fcntl.flock(lock_fh, fcntl.LOCK_EX)
-            try:
-                yield lock_fh
-            finally:
-                fcntl.flock(lock_fh, fcntl.LOCK_UN)
+        super().__init__(_STORE_FILENAME, data_dir=data_dir)
 
     def load(self) -> OnboardingState:
         with self._lock:
@@ -204,12 +192,6 @@ class OnboardingStateStore:
             updated = current.model_copy(update={"status": "completed"})
             return self._save_unlocked(updated)
 
-    def reset_for_tests(self) -> None:
-        with self._lock:
-            if self._path.exists():
-                self._path.unlink()
-            if self._lock_path.exists():
-                self._lock_path.unlink()
 
 
 def compute_onboarding_requirements() -> OnboardingRequirements:

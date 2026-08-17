@@ -15,19 +15,17 @@ auf dem Host nicht lesbar sein).
 """
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 import threading
-from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import IO, Iterator, Optional
+from typing import Optional
 
 from ..contracts.llm_routing_contract import StageId, StageLLMRoute
 from ..contracts.workspace_routing_contract import WorkspaceLlmRoutingDefaults
 from ..utils.logger import get_logger
-from .data_dir import resolve_data_dir as _resolve_data_dir
+from .json_file_store import JsonFileStore
 
 logger = get_logger("agora.services.workspace_routing_store")
 
@@ -38,41 +36,21 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-class WorkspaceRoutingStore:
+class WorkspaceRoutingStore(JsonFileStore):
     """File-backed JSON-Store für Workspace-Routing-Defaults.
 
-    Schreib-Operationen sind sowohl innerhalb eines Prozesses
-    (``threading.Lock``) als auch zwischen Prozessen (``fcntl.flock`` auf
-    ``self._path.with_suffix(".lock")``) atomar. Read-modify-write-Sequenzen
-    in ``set_stage_override`` / ``set_global_default`` halten den File-Lock
-    über Load **und** Save — sonst können zwei parallele Worker das gleiche
-    Routing-Dokument überschreiben und Updates verlieren.
+    Pfad, Prozess- und Dateisperre kommen aus ``JsonFileStore``.
+
+    Read-modify-write-Sequenzen in ``set_stage_override`` /
+    ``set_global_default`` halten den File-Lock über Load **und** Save — sonst
+    können zwei parallele Worker das gleiche Routing-Dokument überschreiben
+    und Updates verlieren. Reine ``load()``-Aufrufe verzichten dagegen bewusst
+    auf den File-Lock: sie sind tolerant gegenüber einem zeitgleichen
+    ``os.replace``, da dieser POSIX-atomar ist.
     """
 
     def __init__(self, *, data_dir: Optional[Path] = None) -> None:
-        self._lock = threading.Lock()
-        self._data_dir = data_dir or _resolve_data_dir()
-        self._path = self._data_dir / _STORE_FILENAME
-        self._lock_path = self._path.with_suffix(".lock")
-
-    @contextmanager
-    def _file_lock(self) -> Iterator[IO[str]]:
-        """Hält einen exklusiven ``fcntl.flock`` für die Lebensdauer des Blocks.
-
-        Die Lock-Datei liegt im selben Verzeichnis wie der Store und wird beim
-        ersten Schreib-Versuch erstellt. Der Lock wird auch beim Lesen
-        verwendet, sobald die Operation Teil einer Read-modify-write-Kette ist
-        (``set_stage_override``, ``set_global_default``). Reine ``load()``-
-        Aufrufe verzichten auf den File-Lock — sie sind tolerant gegenüber
-        einem zeitgleichen ``os.replace``, da dieser POSIX-atomar ist.
-        """
-        self._data_dir.mkdir(parents=True, exist_ok=True)
-        with open(self._lock_path, "w", encoding="utf-8") as lock_fh:
-            fcntl.flock(lock_fh, fcntl.LOCK_EX)
-            try:
-                yield lock_fh
-            finally:
-                fcntl.flock(lock_fh, fcntl.LOCK_UN)
+        super().__init__(_STORE_FILENAME, data_dir=data_dir)
 
     def load(self) -> WorkspaceLlmRoutingDefaults:
         with self._lock:
@@ -163,12 +141,6 @@ class WorkspaceRoutingStore:
             updated = current.model_copy(update={"global_default": route})
             return self._save_unlocked(updated)
 
-    def reset_for_tests(self) -> None:
-        with self._lock:
-            if self._path.exists():
-                self._path.unlink()
-            if self._lock_path.exists():
-                self._lock_path.unlink()
 
 
 _store_singleton: Optional[WorkspaceRoutingStore] = None
