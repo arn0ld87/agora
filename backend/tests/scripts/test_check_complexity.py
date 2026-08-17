@@ -10,11 +10,13 @@ monkeypatchen subprocess.run für main(), um radon-Output zu simulieren.
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 _SCRIPT = _REPO_ROOT / "backend" / "scripts" / "check_complexity.py"
+_DEF_NODES = (ast.FunctionDef, ast.AsyncFunctionDef)
 
 
 def _load_script():
@@ -179,3 +181,73 @@ class TestMainWithAllowlistCeiling:
         out = capsys.readouterr().out
         assert "Hinweis" in out
         assert "cc<=33" in out
+
+
+# ---------------------------------------------------------------------------
+# Die ausgelieferte Allowlist selbst
+# ---------------------------------------------------------------------------
+
+
+class TestShippedAllowlist:
+    """Schuetzt die Allowlist gegen den Rueckfall in cap-lose Duldung.
+
+    Ein Eintrag ohne cc-Obergrenze duldet eine Funktion in *beliebiger* Hoehe.
+    Genau das hatte Wachstum verdeckt, das das Gate haette melden muessen:
+    ``_save_evidence_section`` 36 -> 52 und ``degrade_sections_for_violations``
+    34 -> 50 zwischen dem 04.08. und dem 17.08.2026, ohne einen einzigen
+    roten Lauf. Seit der Neuvermessung am 17.08.2026 traegt jeder Eintrag eine
+    Obergrenze; dieser Test haelt das so.
+    """
+
+    def test_every_entry_has_a_complexity_ceiling(self):
+        mod = _load_script()
+        entries = mod.load_allowlist()
+
+        assert entries, "Allowlist ist leer — Pfad oder Parsing kaputt"
+        uncapped = sorted(key for key, cap in entries.items() if cap is None)
+        assert uncapped == [], (
+            "Allowlist-Eintraege ohne cc-Obergrenze duldet das Gate in "
+            "beliebiger Hoehe; Wachstum bliebe unsichtbar. Ergaenze "
+            f"'# cc<=<Ist-Wert>': {uncapped}"
+        )
+
+    def test_no_entry_points_at_a_vanished_symbol(self):
+        """Faengt Karteileichen wie ``app/api/graph.py::generate_ontology``.
+
+        Der Eintrag ueberlebte den Umzug der Funktion nach
+        ``app/api/graph_build.py`` und blaehte den Schuldenstand auf. Ein
+        reiner Datei-Existenz-Check haette ihn *nicht* gefangen —
+        ``app/api/graph.py`` gibt es weiterhin, nur die Funktion darin nicht
+        mehr. Deshalb wird auf Symbol-Ebene geprueft, per AST statt per radon:
+        gleiche Aussage, ohne den Sub-Prozess.
+        """
+        mod = _load_script()
+        backend_root = _REPO_ROOT / "backend"
+
+        def symbols(path: Path) -> set[str]:
+            """Namen im radon-Schluesselformat: ``func`` bzw. ``Class.method``."""
+            found: set[str] = set()
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in tree.body:
+                if isinstance(node, ast.ClassDef):
+                    found.add(node.name)
+                    found.update(
+                        f"{node.name}.{child.name}"
+                        for child in node.body
+                        if isinstance(child, _DEF_NODES)
+                    )
+                elif isinstance(node, _DEF_NODES):
+                    found.add(node.name)
+            return found
+
+        stale: list[str] = []
+        for key in mod.load_allowlist():
+            rel_path, _, symbol = key.partition("::")
+            source = backend_root / rel_path
+            if not source.is_file() or symbol not in symbols(source):
+                stale.append(key)
+
+        assert sorted(stale) == [], (
+            "Allowlist duldet Symbole, die es nicht mehr gibt — das "
+            f"ueberzeichnet den Schuldenstand: {sorted(stale)}"
+        )
