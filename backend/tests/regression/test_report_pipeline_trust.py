@@ -314,6 +314,45 @@ def test_1n_leeres_praedikat_ist_insufficient_nicht_contradicted():
     assert "predicate_not_measurable" in result.checks
 
 
+def test_1n_seam_nicht_messbarer_satz_wird_ehrlich_begruendet_verworfen():
+    """Seam-Regression zu #1317: der Satz faellt weiterhin, aber ehrlich.
+
+    Wichtig ist die Abgrenzung. ``verify_prose`` behaelt einen numerischen
+    Satz nur bei ``SUPPORTED`` (``text_verification.py``) — ein nicht
+    pruefbarer Satz wird also weiterhin entfernt, und das ist Absicht:
+    unbelegte Zahlen im Fliesstext stehen zu lassen waere eine Aufweichung
+    des Evidence-Gatings und damit eine ADR-0002-Entscheidung, kein Bugfix.
+
+    Was #1317 aendert, ist die *Begruendung*, mit der er faellt. Vorher
+    behauptete Agora einen Widerspruch ("Deckung 0.00") und setzte ueber
+    ``bind_evidence_to_claim`` zusaetzlich ``contradicts_claim=True``.
+    Nachher heisst es korrekt: nicht pruefbar. Diese Begruendung landet als
+    Rationale an der Hypothese, in die der Aufrufer den Satz routet.
+    """
+    from app.services.report_agent.text_verification import verify_prose
+
+    claim = "82 % der Eltern sind da."
+    evidence = "82 % der Eltern sind da, sagt die Studie."
+
+    result = verify_prose(claim, [_seed_item(evidence)])
+
+    assert result.rejected, "Ein nicht pruefbarer numerischer Satz bleibt gegated."
+    rejected = result.rejected[0]
+    assert rejected.verdict is EntailmentVerdict.INSUFFICIENT, (
+        f"{rejected.verdict.value}: {rejected.reason}"
+    )
+    assert "Deckung" not in rejected.reason
+
+    # Gegenprobe auf dem Binder-Pfad: kein Widerspruchs-Flag mehr.
+    def embed(text: str):  # identische Vektoren => cosine 1.0
+        return [1.0, 0.0, 0.0]
+
+    bound = bind_evidence_to_claim(claim, [_seed_item(evidence)], embed, threshold=0.5)
+    assert bound, "Kandidat sollte oberhalb des Thresholds gebunden werden."
+    assert bound[0]["entailment"] == EntailmentVerdict.INSUFFICIENT.value
+    assert "contradicts_claim" not in bound[0]
+
+
 # ---------------------------------------------------------------------------
 # Test 2 — kein Thought-/Tool-Leak im sichtbaren Content
 # ---------------------------------------------------------------------------
