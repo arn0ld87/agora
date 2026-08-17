@@ -73,26 +73,27 @@ class FakeReportManager:
     def __init__(self) -> None:
         self.progress_calls: List[Dict[str, Any]] = []
         self.saved_sections: List[tuple] = []
-        self.saved_cleaned: List[Any] = []
         self.clean_calls: List[tuple] = []
+        self.evidence_prep_calls: List[str] = []
 
     def update_progress(self, report_id: str, stage: str, progress: int, message: str, **kw: Any) -> None:
         self.progress_calls.append({"stage": stage, "progress": progress, "message": message, **kw})
 
-    def save_section(
-        self,
-        report_id: str,
-        section_index: int,
-        section: Any,
-        *,
-        cleaned_content: str | None = None,
-    ) -> None:
+    def save_section(self, report_id: str, section_index: int, section: Any) -> None:
         self.saved_sections.append((report_id, section_index, section.content))
-        self.saved_cleaned.append(cleaned_content)
 
     def _clean_section_content(self, content: str, section_title: str) -> str:
         self.clean_calls.append((content, section_title))
         return content.strip()
+
+    def prepare_content_for_evidence(self, content: str) -> str:
+        """Spiegelt den Produktivpfad: Zitate rendern, Überschriften stehen lassen."""
+        self.evidence_prep_calls.append(content)
+        return (
+            (content or "")
+            .replace("<simulated_quote>", "> ")
+            .replace("</simulated_quote>", "")
+        )
 
 
 class FakePhaseTracker:
@@ -230,23 +231,45 @@ def test_generated_section_reports_content_and_markdown():
 
 
 def test_evidence_pfad_bekommt_denselben_bereinigten_text_wie_die_datei():
-    """#1316: Datei- und Evidence-Pfad sahen unterschiedlichen Text.
+    """#1316: die Claim-Extraktion bekam rohes <simulated_quote>-Markup.
 
     ``save_section`` reinigte den Inhalt intern, ``_save_evidence_section``
-    bekam ihn roh — Rohmarkup landete damit in der Claim-Extraktion.
+    bekam dieselbe ungereinigte Variable — Tag-Fragmente landeten damit in
+    den Claim-Kandidaten.
     """
     outline = _make_outline(3)
-    ctx = _make_ctx(outline=outline, generated_content="  Der Abschnittstext.  ")
+    ctx = _make_ctx(
+        outline=outline,
+        generated_content="<simulated_quote>Zu eng getaktet.</simulated_quote>",
+    )
     agent = FakeAgent()
 
     process_section(agent, outline.sections[0], ctx, section_index=1)
 
-    cleaned = ctx.report_manager.saved_cleaned[0]
-    assert cleaned == "Der Abschnittstext."
-    # Der Evidence-Pfad bekommt exakt denselben String.
-    assert agent.saved_evidence_calls[0][3] == cleaned
-    # Und die Reinigung laeuft genau einmal, nicht je Persistenzpfad.
-    assert len(ctx.report_manager.clean_calls) == 1
+    evidence_content = agent.saved_evidence_calls[0][3]
+    assert "<simulated_quote>" not in evidence_content
+    assert evidence_content.startswith("> ")
+    assert ctx.report_manager.evidence_prep_calls == [
+        "<simulated_quote>Zu eng getaktet.</simulated_quote>"
+    ]
+
+
+def test_evidence_pfad_behaelt_ueberschriften_als_markdown_heading():
+    """#1316: der Heading-Umbau des Dateipfads darf die Extraktion nicht erreichen.
+
+    ``_clean_section_content`` wandelt jede Überschrift in Fettschrift. Bekäme
+    die Claim-Extraktion dieses Ergebnis, verlöre sie das ``#``-Signal — eine
+    Zwischenüberschrift ab acht Wörtern würde als Aussage gebunden, weil der
+    Bold-Filter nur darunter greift.
+    """
+    outline = _make_outline(3)
+    heading = "### Reaktionen der Lehrkraefte auf den geplanten Zeitplan im Detail"
+    ctx = _make_ctx(outline=outline, generated_content=f"{heading}\n\nDer Text.")
+    agent = FakeAgent()
+
+    process_section(agent, outline.sections[0], ctx, section_index=1)
+
+    assert heading in agent.saved_evidence_calls[0][3]
 
 
 def test_generated_section_reports_progress_before_generating():

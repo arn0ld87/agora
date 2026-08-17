@@ -65,8 +65,13 @@ _RESIDUAL_MARKUP_RE = re.compile(
 )
 
 
-def _is_discourse_sentence(text: str) -> bool:
-    """Gliederungsansage statt Aussage — konservativ (#1316)."""
+def is_discourse_sentence(text: str) -> bool:
+    """Gliederungsansage statt Aussage — konservativ (#1316).
+
+    Oeffentlich, weil ``_build_claims_for_section`` sie zusaetzlich zu
+    ``is_atomic_claim`` braucht: dort entscheidet sie, ob der Chunk-Fallback
+    einen Absatz zurueckholen darf, den der Atom-Filter verworfen hat.
+    """
     lowered = text.strip().lower()
     if lowered.startswith(_DISCOURSE_SENTENCE_STARTS):
         return True
@@ -132,7 +137,7 @@ def is_atomic_claim(text: str) -> bool:
     # Issue #1316: Eine Gliederungsansage kuendigt an, was der Abschnitt zeigt
     # — sie behauptet nichts. Als Claim gebunden erzeugt sie zwangslaeufig eine
     # unbelegte Hypothese, weil keine Quelle sie stuetzen kann.
-    if _is_discourse_sentence(s):
+    if is_discourse_sentence(s):
         return False
     if s.endswith((".", "!", "?")):
         return True
@@ -532,6 +537,7 @@ __all__ = [
     "build_source_id_anchor",
     "is_atomic_claim",
     "is_claim_candidate",
+    "is_discourse_sentence",
     "mark_hypotheses_in_content",
     "render_claim_to_markdown",
     "render_confidence_markers_for_section",

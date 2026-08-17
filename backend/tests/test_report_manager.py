@@ -185,6 +185,53 @@ def test_build_claims_for_section_drops_headers():
     assert len(claims) == 2
 
 
+def test_build_claims_verwirft_gliederungsabsatz_auch_ueber_den_fallback():
+    """#1316: der Chunk-Fallback holte den verworfenen Metasatz zurueck.
+
+    ``_build_claims_for_section`` faellt auf den ganzen Chunk zurueck, wenn
+    kein Atom den Filter passiert — damit eine legitime Single-Sentence-
+    Section nicht verschwindet. Steht die Gliederungsansage als eigener
+    Absatz, war ``atoms`` genau deshalb leer, und ``atoms or [chunk]`` setzte
+    den Satz unveraendert wieder ein. Der Helfer-Test allein haette das nicht
+    gefangen.
+    """
+    agent = ReportAgent.__new__(ReportAgent)
+    agent._active_section_evidence = []
+    agent.evidence_map = {"global_evidence": []}
+
+    content = (
+        "Im Folgenden werden die Reaktionsmuster dargestellt.\n\n"
+        "Das Land NRW beschloss am 22. Mai 2024 die Einführung des Pflichtfachs."
+    )
+
+    claims = agent._build_claims_for_section(content)
+
+    texts = [c["claim_text"] for c in claims]
+    assert not any("Im Folgenden" in t for t in texts), (
+        f"Die Gliederungsansage darf kein Claim werden, war aber in: {texts!r}"
+    )
+    assert len(claims) == 1
+
+
+def test_build_claims_behaelt_einzelsatz_absatz_ohne_satzende():
+    """Gegenprobe: der Fallback muss weiterhin greifen.
+
+    Ein Absatz ohne Satzendezeichen und ohne Verb-Hint passiert
+    ``is_atomic_claim`` nicht — ohne Fallback ginge er verloren. Nur
+    Gliederungsansagen sind ausgenommen, nicht alles, was der Atom-Filter
+    ablehnt.
+    """
+    agent = ReportAgent.__new__(ReportAgent)
+    agent._active_section_evidence = []
+    agent.evidence_map = {"global_evidence": []}
+
+    claims = agent._build_claims_for_section("Drei Varianten im direkten Vergleich")
+
+    assert [c["claim_text"] for c in claims] == [
+        "Drei Varianten im direkten Vergleich"
+    ]
+
+
 def test_build_claims_uses_embedder_and_emits_match_score():
     """S4b: bei verfügbarem Embedder bekommt jeder Claim ein gerankt-
     gefiltertes Evidence-Set mit match_score."""
