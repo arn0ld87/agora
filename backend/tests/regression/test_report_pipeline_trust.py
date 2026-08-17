@@ -314,6 +314,32 @@ def test_1n_leeres_praedikat_ist_insufficient_nicht_contradicted():
     assert "predicate_not_measurable" in result.checks
 
 
+@pytest.mark.parametrize(
+    "evidence",
+    [
+        "82 % der Eltern sind nicht da.",
+        "82 % der Eltern sind keine Teilnehmer.",
+    ],
+)
+def test_1n_verneinung_bleibt_widerspruch_trotz_kurzem_praedikat(evidence):
+    """Die Untergrenze aus #1317 darf keine Verneinung verschlucken.
+
+    ``nicht`` steht selbst in ``_STOPWORDS`` — "sind da" und "sind nicht da"
+    reduzieren beide auf ein leeres Content-Token-Set. Ohne Polaritaetspruefung
+    haette der neue ``predicate_not_measurable``-Zweig einen echten
+    Verneinungswiderspruch bei gleicher Zahl und Bezugsgruppe als "nicht
+    pruefbar" durchgewinkt.
+    """
+    claim = "82 % der Eltern sind da."
+
+    result = classify_evidence(claim, {"snippet": evidence})
+
+    assert result.verdict is EntailmentVerdict.CONTRADICTED, (
+        f"{result.verdict.value} ({result.reason}); checks={result.checks}"
+    )
+    assert "polarity_mismatch" in result.checks
+
+
 def test_1n_seam_nicht_messbarer_satz_wird_ehrlich_begruendet_verworfen():
     """Seam-Regression zu #1317: der Satz faellt weiterhin, aber ehrlich.
 
