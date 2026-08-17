@@ -14,9 +14,11 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from app.services.evidence_entailment import EntailmentVerdict
 from app.services.report_agent import ReportAgent
 from app.services.report_agent.markdown_renderer import render_evidence_status
 from app.services.report_agent.schemas import SectionKeyTakeaway
+from app.services.report_agent.text_verification import RejectedStatement
 
 _EV_ID = "ev_" + "1" * 32
 
@@ -150,12 +152,21 @@ def test_prose_removal_logged_in_degradation_log():
         "global_evidence_refs": [],
         "sections": [],
     }
-    stub._pending_prose_hypotheses = {2: [{
-        "hypothesis_id": "hypothesis_99",
-        "hypothesis_text": "Der Traffic wächst derzeit um rund 20 Prozent pro Monat.",
-        "rationale": "Aus dem Fließtext entfernt: keine deckende Quelle gefunden.",
-        "suggested_evidence": [],
-    }]}
+    # Issue #1356: der Puffer traegt Paare aus Hypothese und Statement — das
+    # Gate-Log unterscheidet daran den entfernten vom markierten Fall.
+    stub._pending_prose_hypotheses = {2: [(
+        {
+            "hypothesis_id": "hypothesis_99",
+            "hypothesis_text": "Der Traffic wächst derzeit um rund 20 Prozent pro Monat.",
+            "rationale": "Aus dem Fließtext entfernt: keine deckende Quelle gefunden.",
+            "suggested_evidence": [],
+        },
+        RejectedStatement(
+            text="Der Traffic wächst derzeit um rund 20 Prozent pro Monat.",
+            verdict=EntailmentVerdict.CONTRADICTED,
+            reason="keine deckende Quelle gefunden",
+        ),
+    )]}
     stub._pending_section_metadata = {}
     # Issue #1187: die echte Signatur nimmt einen optionalen
     # ``heartbeat``-Callback entgegen; der Stub spiegelt sie.
@@ -170,7 +181,7 @@ def test_prose_removal_logged_in_degradation_log():
         )
 
     log = stub.evidence_map.get("gate_decision_log") or []
-    prose_entries = [e for e in log if e["violation"] == "prose_fact_unsupported"]
+    prose_entries = [e for e in log if e["violation"] == "prose_fact_contradicted"]
     assert len(prose_entries) == 1
     assert prose_entries[0]["section_index"] == 2
     assert prose_entries[0]["action"] == "moved_to_hypotheses"

@@ -906,6 +906,14 @@
           "maxItems": 200,
           "title": "Unbound Evidence Refs",
           "type": "array"
+        },
+        "unverified_statements": {
+          "items": {
+            "$ref": "#/$defs/ReportSectionUnverifiedStatementModel"
+          },
+          "maxItems": 200,
+          "title": "Unverified Statements",
+          "type": "array"
         }
       },
       "required": [
@@ -914,6 +922,37 @@
         "section_summary"
       ],
       "title": "ReportSectionModel",
+      "type": "object"
+    },
+    "ReportSectionUnverifiedStatementModel": {
+      "additionalProperties": false,
+      "description": "Issue #1356: eine im Flie\u00dftext belassene, unbelegte Faktenaussage.\n\nBis #1356 wurde alles entfernt, was die Pr\u00fcfung nicht bestand \u2014 auch das,\nwas sie mangels passender Quelle nur nicht *entscheiden* konnte. Ein\nvollst\u00e4ndiger Referenzlauf verlor so 28 Aussagen, die weit \u00fcberwiegende\nMehrheit davon belegt. Seither bleibt der Satz stehen und tr\u00e4gt sichtbar\n``[Beleg fehlt]``; dieses Modell h\u00e4lt dieselbe Information maschinenlesbar,\ndamit Frontend und Audit nicht am Markerstring parsen m\u00fcssen.\n\nAbgrenzung zu ``ReportSectionHypothesisModel``: die Hypothese ist die\n*herausgel\u00f6ste* Behauptung samt Vorschlag, wie sie zu belegen w\u00e4re. Dieses\nModell beschreibt, was im gelesenen Text mit welcher Einschr\u00e4nkung\nstehengeblieben ist. Beide Slots werden bef\u00fcllt.",
+      "properties": {
+        "reason": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "statement_text": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Statement Text",
+          "type": "string"
+        },
+        "verdict": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Verdict",
+          "type": "string"
+        }
+      },
+      "required": [
+        "statement_text",
+        "verdict",
+        "reason"
+      ],
+      "title": "ReportSectionUnverifiedStatementModel",
       "type": "object"
     },
     "ReportStatus": {

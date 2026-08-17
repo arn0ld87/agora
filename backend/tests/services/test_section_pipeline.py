@@ -50,14 +50,18 @@ class FakeAgent:
         self._pool = prose_pool or []
         self._evidence_outcome = evidence_outcome or SectionEvidenceOutcome()
         self.recorded_prose_hypotheses: List[tuple] = []
+        self.recorded_unverified: List[tuple] = []
         self.recorded_metadata: List[tuple] = []
         self.saved_evidence_calls: List[tuple] = []
 
     def _prose_evidence_pool(self) -> List[Dict[str, Any]]:
         return self._pool
 
-    def _record_prose_hypotheses(self, section_index: int, rejected: Any) -> None:
-        self.recorded_prose_hypotheses.append((section_index, rejected))
+    def _record_prose_hypotheses(self, section_index: int, flagged: Any) -> None:
+        self.recorded_prose_hypotheses.append((section_index, flagged))
+
+    def _record_unverified_statements(self, section_index: int, unverified: Any) -> None:
+        self.recorded_unverified.append((section_index, unverified))
 
     def _record_section_metadata(self, section_index: int, metadata: Dict[str, Any]) -> None:
         self.recorded_metadata.append((section_index, metadata))
@@ -121,10 +125,25 @@ class FakeQuoteResult:
 
 
 class FakeVerifiedProse:
-    def __init__(self, content: str, *, changed: bool = False, rejected: List[str] | None = None) -> None:
+    def __init__(
+        self,
+        content: str,
+        *,
+        changed: bool = False,
+        rejected: List[str] | None = None,
+        unverified: List[str] | None = None,
+    ) -> None:
         self.content = content
         self.changed = changed
+        # Issue #1356: ``rejected`` sind die wegen Widerspruchs entfernten,
+        # ``unverified`` die im Text belassenen und markierten Aussagen.
+        # ``flagged`` ist die Vereinigung — sie geht in die Hypothesen.
         self.rejected = rejected or []
+        self.unverified = unverified or []
+
+    @property
+    def flagged(self) -> List[str]:
+        return [*self.rejected, *self.unverified]
 
 
 # ---------------------------------------------------------------------------
@@ -442,7 +461,10 @@ def test_prose_verification_replaces_content_and_records_hypotheses():
         total_sections=1,
         generated_content="Roher Text mit 42 % Behauptung.",
         verify_prose_fn=lambda content, pool: FakeVerifiedProse(
-            "Bereinigter Text.", changed=True, rejected=["42 % Behauptung"]
+            "Bereinigter Text.",
+            changed=True,
+            rejected=["42 % Behauptung"],
+            unverified=["17 % Vermutung"],
         ),
     )
     agent = FakeAgent()
@@ -450,7 +472,12 @@ def test_prose_verification_replaces_content_and_records_hypotheses():
     result = process_section(agent, outline.sections[0], ctx, section_index=1)
 
     assert result.content == "Bereinigter Text."
-    assert agent.recorded_prose_hypotheses == [(1, ["42 % Behauptung"])]
+    # Issue #1356: in die Hypothesen gehen beide Ausgänge der Prüfung, das
+    # Section-Feld bekommt nur die im Text verbliebenen Markierungen.
+    assert agent.recorded_prose_hypotheses == [
+        (1, ["42 % Behauptung", "17 % Vermutung"])
+    ]
+    assert agent.recorded_unverified == [(1, ["17 % Vermutung"])]
 
 
 def test_prose_verification_is_skipped_for_fallback_content():

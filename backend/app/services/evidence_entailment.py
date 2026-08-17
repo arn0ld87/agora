@@ -114,6 +114,38 @@ _NORMATIVE_MARKERS = (
     "required",
 )
 
+#: Substantivische Zielmarker. Deutsch drückt eine Vorgabe häufig ohne Modalverb
+#: aus — "Schulungsziel von 80 Prozent in allen Schichten" ist eine Anforderung,
+#: trägt aber kein "soll". Ohne diese Liste las ``_modality_of`` den Satz als
+#: Ist-Wert, die normativ formulierte Quelle als Zielvorgabe, und das Ergebnis
+#: war ein ``modality_mismatch`` auf einer belegten Aussage (Issue #1356).
+#:
+#: Sie werden als Teilwort gesucht, nicht als eigenes Token: "Schulungsziel",
+#: "Zielmarke" und "Mindestquote" sind Komposita, in denen der Marker
+#: aufgeht. Der Preis dafür sind gelegentliche Falschtreffer ("Zielgruppe") —
+#: die kosten nach Issue #1356 aber nur noch einen Hinweis am Satz, keine
+#: Löschung mehr.
+_NORMATIVE_NOUN_MARKERS = (
+    "ziel",
+    "zielwert",
+    "zielmarke",
+    "zielquote",
+    "vorgabe",
+    "sollwert",
+    "sollquote",
+    "anforderung",
+    "schwellenwert",
+    "mindestens",
+    "mindest",
+    "maximal",
+    "höchstens",
+    "hoechstens",
+    "target",
+    "threshold",
+    "at least",
+    "at most",
+)
+
 _MAJORITY_MARKERS = (
     "mehrheitlich",
     "die mehrheit",
@@ -211,6 +243,13 @@ def _split_subject_predicate(tail: str) -> tuple[str, str]:
     idx = 0
     for idx, word in enumerate(words):
         bare = word.strip(",.;:()").lower()
+        # Issue #1356: Eine Bezugsgruppe enthält keine zweite Zahlenangabe.
+        # In "83 Prozent, in der Verwaltung 91 Prozent und in der Pflege 54
+        # Prozent" lief das Subjekt des ersten Fakts über die beiden anderen
+        # Zahlen hinweg — jeder Fakt bekam dieselbe unbrauchbare Bezugsgruppe
+        # und kollidierte anschließend mit fremden Quellen.
+        if any(char.isdigit() for char in word):
+            break
         if word[:1].isupper() or bare in _SUBJECT_CONNECTORS:
             # Ein Bindewort zählt nur mit, wenn danach wieder ein Nomen folgt.
             if bare in _SUBJECT_CONNECTORS and not subject_parts:
@@ -235,6 +274,13 @@ def _split_subject_predicate(tail: str) -> tuple[str, str]:
         end_idx = len(words)
         for en_idx, word in enumerate(words):
             bare = word.strip(",.;:()").lower()
+            # Issue #1356: dieselbe Grenze wie im deutschen Pfad. Ohne sie
+            # verschluckt der Fallback in einer Aufzählung ("83 Prozent, in
+            # der Verwaltung 91 Prozent …") den gesamten Rest des Satzes als
+            # Bezugsgruppe, sobald rechts der Zahl kein Nomen steht.
+            if any(char.isdigit() for char in word):
+                end_idx = en_idx
+                break
             if bare in _EN_SUBJECT_VERBS:
                 end_idx = en_idx
                 break
@@ -246,9 +292,23 @@ def _split_subject_predicate(tail: str) -> tuple[str, str]:
     return subject, predicate
 
 
-def _modality_of(predicate: str) -> FactModality:
+def _modality_of(predicate: str, context: str = "") -> FactModality:
+    """Ist-Wert oder Zielvorgabe?
+
+    ``context`` ist der ganze Satz. Modalität ist eine Satzeigenschaft, keine
+    Prädikatseigenschaft: in "Das Schulungsziel von 80 Prozent wurde in allen
+    Schichten verfehlt" steht der Marker im Vorfeld, während ``_full_predicate``
+    nur "in allen Schichten verfehlt" liefert. Wer bloß das Prädikat liest,
+    hält die Vorgabe für einen gemessenen Wert (Issue #1356).
+    """
     lowered = f" {predicate.lower()} "
-    if any(f" {marker} " in lowered or lowered.startswith(f" {marker} ") for marker in _NORMATIVE_MARKERS):
+    if any(
+        f" {marker} " in lowered or lowered.startswith(f" {marker} ")
+        for marker in _NORMATIVE_MARKERS
+    ):
+        return FactModality.NORMATIVE
+    haystack = f"{predicate} {context}".lower()
+    if any(marker in haystack for marker in _NORMATIVE_NOUN_MARKERS):
         return FactModality.NORMATIVE
     return FactModality.FACTUAL
 
@@ -310,7 +370,7 @@ def extract_numeric_facts(text: str) -> List[NumericFact]:
                     unit="percent",
                     subject=subject,
                     predicate=predicate,
-                    modality=_modality_of(predicate),
+                    modality=_modality_of(predicate, sentence),
                     raw=sentence.strip(),
                 )
             )
@@ -329,7 +389,7 @@ def extract_numeric_facts(text: str) -> List[NumericFact]:
                         unit="absolute",
                         subject=subject,
                         predicate=predicate,
-                        modality=_modality_of(predicate),
+                        modality=_modality_of(predicate, sentence),
                         raw=sentence.strip(),
                     )
                 )
@@ -470,9 +530,16 @@ def classify_evidence(
                     if ev_fact.modality is FactModality.NORMATIVE and (
                         claim_fact.modality is FactModality.FACTUAL
                     ):
+                        # Issue #1356: kein Widerspruch, sondern ein nicht
+                        # entscheidbarer Fall. Die Modalität wird ohne Parser
+                        # aus Markerlisten geraten; jede Lücke darin erklärte
+                        # sonst eine belegte Aussage für widerlegt und löschte
+                        # sie aus dem Fließtext. Zahl und Bezugsgruppe stimmen
+                        # ja — strittig ist allein die Lesart.
                         return EntailmentResult(
-                            EntailmentVerdict.CONTRADICTED,
-                            "Zielvorgabe wird als Ist-Wert wiedergegeben",
+                            EntailmentVerdict.INSUFFICIENT,
+                            "Zahl und Bezugsgruppe passen; unklar, ob die Quelle "
+                            "einen Ist-Wert oder eine Zielvorgabe nennt",
                             matched_fact=ev_fact,
                             claim_fact=claim_fact,
                             checks=checks + ["modality_mismatch"],
@@ -529,8 +596,15 @@ def classify_evidence(
                             checks=checks + ["predicate_not_measurable"],
                         )
                     if coverage < PREDICATE_COVERAGE_THRESHOLD:
+                        # Issue #1356: eine unbelegte Zusatzaussage ist kein
+                        # Widerspruch. Die Quelle sagt nichts Gegenteiliges,
+                        # sie sagt nur weniger. Im Referenzlauf war dieser
+                        # Zweig mit 14 von 28 Fällen der häufigste Grund, aus
+                        # dem belegte Zahlen aus dem Fließtext verschwanden —
+                        # jede Paraphrase kostet Deckung, und die Schwelle
+                        # liegt bei 0.75.
                         return EntailmentResult(
-                            EntailmentVerdict.CONTRADICTED,
+                            EntailmentVerdict.INSUFFICIENT,
                             "Zahl und Bezugsgruppe passen, der Claim behauptet "
                             f"aber mehr als die Quelle deckt (Deckung {coverage:.2f})",
                             matched_fact=ev_fact,

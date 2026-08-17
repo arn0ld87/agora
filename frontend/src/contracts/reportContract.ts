@@ -233,6 +233,20 @@ export const ReportSectionDataGapSchema = z.object({
 }).strict();
 export type ReportSectionDataGap = z.infer<typeof ReportSectionDataGapSchema>;
 
+// Issue #1356: eine im Fliesstext belassene, unbelegte Faktenaussage.
+// Spiegelt backend ReportSectionUnverifiedStatementModel. Abgrenzung zur
+// Hypothese: die Hypothese ist die herausgeloeste Behauptung samt Vorschlag,
+// wie sie zu belegen waere — dieses Objekt beschreibt, was im gelesenen Text
+// mit welcher Einschraenkung stehengeblieben ist.
+export const ReportSectionUnverifiedStatementSchema = z.object({
+  statement_text: z.string().min(1).max(1000),
+  verdict: z.string().min(1).max(32),
+  reason: z.string().min(1).max(200),
+}).strict();
+export type ReportSectionUnverifiedStatement = z.infer<
+  typeof ReportSectionUnverifiedStatementSchema
+>;
+
 export const ReportSectionSchema = z.object({
   section_index: z.number().int().min(1),
   section_title: z.string().min(3),
@@ -250,6 +264,11 @@ export const ReportSectionSchema = z.object({
   generation_failed: z.boolean().default(false),
   // Issue #1324: zitierte, aber nie gebundene Evidence-Refs des Abschnitts.
   unbound_evidence_refs: z.array(z.string()).default([]),
+  // Issue #1356: Aussagen, die im Fliesstext stehen geblieben sind, fuer die
+  // sich aber kein Beleg fand. Sie tragen dort den sichtbaren Marker
+  // "[Beleg fehlt]"; hier steht dieselbe Information strukturiert, damit die
+  // UI nicht am Markerstring parsen muss.
+  unverified_statements: z.array(ReportSectionUnverifiedStatementSchema).max(200).default([]),
 }).strict();
 export type ReportSection = z.infer<typeof ReportSectionSchema>;
 
