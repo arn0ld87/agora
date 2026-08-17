@@ -449,6 +449,42 @@ class _ThreadLocalClients:
         return client
 
 
+def _persona_history_for(
+    simulation_id: str,
+    agent_id: Any,
+    platform: str,
+    *,
+    run_state_dir: str,
+) -> List[Dict[str, Any]]:
+    """Lade die eigenen Aktionen einer Persona aus dem Aktionslog.
+
+    Issue #1304 (S1). Fehlt das Log oder liefert es nichts, ist das kein
+    Fehler: der Prompt bleibt dann exakt der bisherige. Ein Interview ohne
+    Historie ist schlechter, aber immer noch eines.
+    """
+    try:
+        index = int(agent_id)
+    except (TypeError, ValueError):
+        return []
+    try:
+        from .action_log_reader import get_all_actions  # noqa: PLC0415 — optionaler Pfad
+
+        actions = get_all_actions(
+            simulation_id, run_state_dir, platform=platform, agent_id=index
+        )
+    except Exception as exc:  # noqa: BLE001 — Historie ist Beiwerk, kein Interview-Fehler
+        logger.warning(
+            f"Aktionslog nicht lesbar ({simulation_id}/{platform}/{index}): {exc}"
+        )
+        return []
+    history: List[Dict[str, Any]] = []
+    for action in actions:
+        as_dict = action.to_dict() if hasattr(action, "to_dict") else action
+        if isinstance(as_dict, dict):
+            history.append(as_dict)
+    return history
+
+
 def _answer_one(
     clients: _ThreadLocalClients,
     persona: Dict[str, Any],
@@ -457,8 +493,11 @@ def _answer_one(
     *,
     context: Dict[str, Any],
     max_tokens: int,
+    persona_history: Optional[List[Dict[str, Any]]] = None,
 ) -> str:
-    messages = build_persona_messages(persona, agent_id, prompt, context=context)
+    messages = build_persona_messages(
+        persona, agent_id, prompt, context=context, persona_history=persona_history
+    )
     answer = clients.get().chat(
         messages=messages,
         temperature=0.7,
@@ -583,6 +622,15 @@ def interview_agents_batch_direct(
                 prompt,
                 context=context,
                 max_tokens=max_tokens,
+                # Issue #1304 (S1): die eigenen Simulationsrunden der Persona.
+                # Ohne sie antwortet sie plausibel, aber ohne alles zu wissen,
+                # was sie selbst getan hat.
+                persona_history=_persona_history_for(
+                    simulation_id,
+                    agent_id,
+                    item_platform,
+                    run_state_dir=run_state_dir,
+                ),
             )
         except Exception as exc:  # noqa: BLE001 — ein Fehler kippt nicht den Batch
             logger.warning(
