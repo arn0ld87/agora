@@ -458,6 +458,9 @@ def cancel_run(run_id: str):
     das Flag im Elternprozess und beendet den OASIS-Subprozess (SIGTERM,
     Grace-Period, dann SIGKILL); der Run endet als ``stopped`` mit
     ``termination_reason="user_cancel"``, Teilergebnisse bleiben erhalten.
+    Für ``simulation_prepare`` und ``graph_build`` prüfen die jeweiligen
+    Orchestratoren (``prepare_service.py``, ``graph_build.py``) das Flag an
+    mehreren Phasengrenzen (Issue B2).
 
     ``run_id`` akzeptiert auch eine ``simulation_id`` — Schritt 3 im Frontend
     kennt nur diese. Die Auflösung läuft über ``linked_ids.simulation_id``,
@@ -470,6 +473,9 @@ def cancel_run(run_id: str):
     Fehler:
     - 404 wenn run_id/simulation_id unbekannt
     - 400 wenn Run nicht im Status ``processing`` ist
+    - 409 wenn ``run_type == "simulation_run"`` und die Verknüpfung zur
+      simulation_id fehlt (einzige Stelle, an der sie fachlich gebraucht
+      wird — andere run_types brauchen nur die run_id)
     """
     run, error = _get_run_by_run_or_simulation_id(run_id)
     if error:
@@ -509,8 +515,23 @@ def cancel_run(run_id: str):
 
     # linked_ids kann ``None`` sein (nicht nur fehlend) — ``or {}`` schützt
     # vor AttributeError, wenn der Key explizit None ist (Gemini-Finding).
+    #
+    # Review-Finding (PR #1371, Befund 1): die simulation_id-Pflicht galt
+    # bisher fuer JEDEN run_type, obwohl nur der OASIS-Subprozesspfad
+    # (``sim/monitor.py::_cancel_supervision``, konsumiert im Monitor-Thread
+    # des Elternprozesses ueber dessen eigenen Simulationskontext — nicht ueber
+    # dieses Feld) sie braucht. ``graph_build``-Runs verknuepfen nie eine
+    # simulation_id (``services/graph_build.py`` setzt nur project_id/graph_id/
+    # task_id) und ``simulation_prepare``-Runs verknuepfen sie zwar, aber
+    # ebenfalls nicht als Voraussetzung fuers Flag-Setzen: ``_request_cancel``
+    # ist ausschliesslich an ``resolved_run_id`` gebunden. Vor diesem Fix
+    # scheiterte jeder Cancel-Versuch auf einen graph_build-Run mit 409, BEVOR
+    # ``_request_cancel`` ueberhaupt lief — der komplette kooperative
+    # Abbruchpfad in ``services/graph_build.py``/``graph_builder.py`` war
+    # ueber die API unerreichbar. Die Pruefung bleibt nur noch dort hart, wo
+    # sie fachlich etwas bedeutet: simulation_run.
     simulation_id = (run.get("linked_ids") or {}).get("simulation_id")
-    if not simulation_id:
+    if run.get("run_type") == "simulation_run" and not simulation_id:
         return json_error("Run is missing simulation_id linkage", status=409)
 
     _request_cancel(resolved_run_id)
@@ -522,8 +543,9 @@ def cancel_run(run_id: str):
     )
 
     logger.info(
-        "cancel_run: cancel flag set for run_id=%s simulation_id=%s",
+        "cancel_run: cancel flag set for run_id=%s run_type=%s simulation_id=%s",
         resolved_run_id,
+        run.get("run_type"),
         simulation_id,
     )
 
@@ -581,7 +603,92 @@ def _restart_graph_build(run: dict):
         project.graph_build_task_id = task_id
         ProjectManager.save_project(project)
 
+        def _finish_cancelled_restart(graph_id, episode_uuids, builder):
+            """Review-Finding PR #1371, Befund 4 (MITTEL): der Restart-Pfad
+
+            baute ``add_text_batches`` bisher ganz ohne ``run_id`` auf —
+            das Cancel-Flag konnte hier nie ankommen. Ein Nutzer, der einen
+            gerade erst neu gestarteten Graph-Build sofort wieder abbricht,
+            bekam 202 (Flag gesetzt), aber der Build lief unbeirrt zu Ende.
+            Diese Funktion spiegelt ``services/graph_build.py::_finish_cancelled_build``
+            so nah wie möglich (gleiche Endzustände, gleiches
+            Best-Effort-pro-Schritt-Muster nach Befund 3), bewusst nicht
+            importiert — sie hängt an einer anderen Closure (kein
+            ``degradations``-Collector, kein ``extraction_tally`` in diesem
+            schlankeren Restart-Pfad).
+            """
+            build_logger = logger
+            build_logger.info(
+                "Graph build restart cancelled by user [project_id=%s, run_id=%s, "
+                "graph_id=%s, episodes=%d]",
+                project_id, new_run["run_id"], graph_id, len(episode_uuids),
+            )
+            if builder is not None and graph_id is not None:
+                try:
+                    builder.mark_graph_incomplete(graph_id, reason="user_cancel")
+                except Exception as exc:  # noqa: BLE001 — best effort, siehe Befund 3
+                    build_logger.warning(
+                        "graph_build restart: mark_graph_incomplete fehlgeschlagen "
+                        "[project_id=%s, run_id=%s, graph_id=%s]: %r",
+                        project_id, new_run["run_id"], graph_id, exc,
+                    )
+            try:
+                project.graph_id = graph_id
+                project.status = ProjectStatus.GRAPH_INCOMPLETE
+                ProjectManager.save_project(project)
+            except Exception as exc:  # noqa: BLE001 — best effort, siehe Befund 3
+                build_logger.warning(
+                    "graph_build restart: save_project (GRAPH_INCOMPLETE) fehlgeschlagen "
+                    "[project_id=%s, run_id=%s]: %r",
+                    project_id, new_run["run_id"], exc,
+                )
+            try:
+                task_manager.complete_task(
+                    task_id,
+                    result={
+                        "project_id": project_id,
+                        "graph_id": graph_id,
+                        "episode_count": len(episode_uuids),
+                        "cancelled": True,
+                    },
+                )
+            except Exception as exc:  # noqa: BLE001 — best effort, siehe Befund 3
+                build_logger.warning(
+                    "graph_build restart: complete_task (cancel) fehlgeschlagen "
+                    "[project_id=%s, run_id=%s, task_id=%s]: %r",
+                    project_id, new_run["run_id"], task_id, exc,
+                )
+            try:
+                run_registry.update_run(
+                    new_run["run_id"],
+                    status="stopped",
+                    termination_reason="user_cancel",
+                    message=(
+                        "Vom Nutzer abgebrochen — bereits geschriebene Entitäten "
+                        "und Relationen bleiben im Graphen erhalten, der Graph "
+                        "gilt als unvollständig"
+                    ),
+                    artifacts=ArtifactLocator.existing_paths({"project_dir": ProjectManager._get_project_dir(project_id)}),
+                    resume_capability={"available": True, "action": "restart", "label": "Restart graph build"},
+                )
+            except Exception as exc:  # noqa: BLE001 — best effort, siehe Befund 3
+                build_logger.error(
+                    "graph_build restart: run_registry.update_run (cancel) fehlgeschlagen "
+                    "[project_id=%s, run_id=%s]: %r",
+                    project_id, new_run["run_id"], exc,
+                )
+            try:
+                from ..services.sim.cancel_flag import clear_cancel
+                clear_cancel(new_run["run_id"])
+            except Exception as exc:  # noqa: BLE001 — best effort, siehe Befund 3
+                build_logger.debug(
+                    "graph_build restart: clear_cancel fehlgeschlagen [run_id=%s]: %r",
+                    new_run["run_id"], exc,
+                )
+
         def build_task():
+            builder = None
+            graph_id = None
             try:
                 task_manager.update_task(task_id, status=TaskStatus.PROCESSING, message="Initializing graph build service...")
                 builder = container.graph_builder()
@@ -601,7 +708,26 @@ def _restart_graph_build(run: dict):
                     progress = 15 + int(progress_ratio * 40)
                     task_manager.update_task(task_id, message=msg, progress=progress)
 
-                episodes = builder.add_text_batches(graph_id, chunks, batch_size=3, progress_callback=add_progress_callback)
+                # Checkpoint (Issue B2, Review-Finding Befund 4): derselbe
+                # kooperative Abbruch wie im produktiven Build-Pfad
+                # (services/graph_build.py) — ohne run_id konnte das
+                # Cancel-Flag hier vorher nie ankommen.
+                from ..services.sim.cancel_flag import is_cancel_requested
+                if is_cancel_requested(new_run["run_id"]):
+                    _finish_cancelled_restart(graph_id, [], builder)
+                    return
+
+                from ..services.graph_builder import GraphBuildCancelled
+                try:
+                    episodes = builder.add_text_batches(
+                        graph_id, chunks, batch_size=3,
+                        progress_callback=add_progress_callback,
+                        run_id=new_run["run_id"],
+                    )
+                except GraphBuildCancelled as cancel_exc:
+                    _finish_cancelled_restart(graph_id, cancel_exc.episode_uuids, builder)
+                    return
+
                 task_manager.update_task(task_id, message="Retrieving graph data...", progress=95)
                 graph_data = builder.get_graph_data(graph_id)
                 project.status = ProjectStatus.GRAPH_COMPLETED
@@ -727,6 +853,11 @@ def _restart_simulation_prepare(run: dict):
         manager._save_simulation_state(state)
 
         def run_prepare():
+            # Review-Finding PR #1371, Befund 4 (MITTEL): ohne run_id konnte
+            # das Cancel-Flag hier nie ankommen — ein neu gestarteter Restart
+            # war trotz "Restart"-Angebot im Endzustand nicht abbrechbar.
+            from ..services.prepare_service import PrepareCancelledError
+
             try:
                 task_manager.update_task(task_id, status=TaskStatus.PROCESSING, progress=0, message="Start preparing simulation environment...")
 
@@ -764,6 +895,7 @@ def _restart_simulation_prepare(run: dict):
                     language=config.get("language"),
                     max_agents=config.get("max_agents"),
                     quota_plan=quota_plan,
+                    run_id=run_id,
                 )
                 task_manager.complete_task(task_id, result=result_state.to_simple_dict())
                 run_registry.update_run(
@@ -774,6 +906,24 @@ def _restart_simulation_prepare(run: dict):
                     artifacts=_simulation_artifacts(simulation_id),
                     resume_capability={"available": True, "action": "restart", "label": "Restart preparation"},
                 )
+            except PrepareCancelledError:
+                # Spiegelt api/simulation_prepare.py::_make_prepare_job — hier
+                # bewusst wiederverwendet statt neu gebaut, damit beide Pfade
+                # denselben Endzustand liefern (kein zweites Muster).
+                logger.info(
+                    "Simulation prepare restart cancelled by user (run_id=%s, simulation_id=%s)",
+                    new_run["run_id"], simulation_id,
+                )
+                task_manager.complete_task(
+                    task_id,
+                    result={
+                        "simulation_id": simulation_id,
+                        "status": "cancelled",
+                        "cancelled": True,
+                    },
+                )
+                from ..api.simulation_prepare import _finish_cancelled_prepare_run
+                _finish_cancelled_prepare_run(new_run["run_id"], simulation_id=simulation_id)
             except Exception as exc:  # noqa: BLE001 — exception reported to task/run registry
                 task_manager.fail_task(task_id, str(exc))
                 run_registry.update_run(new_run["run_id"], status="failed", message=str(exc), error=str(exc))

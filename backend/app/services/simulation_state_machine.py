@@ -8,8 +8,11 @@ und werden gegen :func:`assert_valid_transition` geprüft.
 Erlaubte Übergänge:
 
 - ``create_simulation`` → ``CREATED``
-- ``prepare_simulation`` → ``PREPARING``, dann ``READY`` (Erfolg) oder ``FAILED``
+- ``prepare_simulation`` → ``PREPARING``, dann ``READY`` (Erfolg), ``FAILED``
+  oder ``CANCELLED_PARTIAL`` (Nutzerabbruch, Issue B2)
 - Retry nach Fehler: ``FAILED`` → ``PREPARING`` (User triggert prepare nochmal)
+- Retry nach Abbruch: ``CANCELLED_PARTIAL`` → ``PREPARING`` (User triggert
+  prepare nochmal, gleiches Muster wie der FAILED-Retry)
 - Branching erzeugt einen READY-Branch in zwei Schritten: ``CREATED`` →
   ``PREPARING`` → ``READY`` (siehe ``branching_service.create_branch``)
 - ``start_simulation`` → ``RUNNING``
@@ -35,7 +38,16 @@ ALLOWED_TRANSITIONS: dict[SimulationStatus, frozenset[SimulationStatus]] = {
         {SimulationStatus.PREPARING, SimulationStatus.FAILED}
     ),
     SimulationStatus.PREPARING: frozenset(
-        {SimulationStatus.READY, SimulationStatus.FAILED}
+        {
+            SimulationStatus.READY,
+            SimulationStatus.FAILED,
+            # Issue B2 (PLAN.md „Abbrechen & Pause"): kooperativer Abbruch
+            # zwischen den drei Prepare-Phasen (prepare_service.py). Nutzt
+            # denselben "success-with-caveat"-Zustand wie ein abgebrochener
+            # simulation_run — Teilergebnisse (z. B. die bereits geschriebene
+            # Profildatei) bleiben erhalten, es ist kein FAILED.
+            SimulationStatus.CANCELLED_PARTIAL,
+        }
     ),
     # FAILED ist *fast* terminal: User darf einen fehlgeschlagenen Prepare
     # erneut anstoßen (Retry-Pattern). Andere Übergänge aus FAILED bleiben
@@ -65,9 +77,14 @@ ALLOWED_TRANSITIONS: dict[SimulationStatus, frozenset[SimulationStatus]] = {
         }
     ),
     SimulationStatus.STOPPED: frozenset({SimulationStatus.RUNNING}),
-    # CANCELLED_PARTIAL: cooperative cancel completed; only terminal follow-up
-    # is COMPLETED (Teil-Report wurde persistiert — kein weiterer Lauf nötig).
-    SimulationStatus.CANCELLED_PARTIAL: frozenset({SimulationStatus.COMPLETED}),
+    # CANCELLED_PARTIAL: cooperative cancel completed. Zwei erlaubte
+    # Folgezustände: COMPLETED (simulation_run — Teil-Report wurde
+    # persistiert, kein weiterer Lauf nötig) und PREPARING (Issue B2 —
+    # Retry-Pfad für eine abgebrochene Vorbereitung, symmetrisch zum
+    # bestehenden FAILED → PREPARING-Retry).
+    SimulationStatus.CANCELLED_PARTIAL: frozenset(
+        {SimulationStatus.COMPLETED, SimulationStatus.PREPARING}
+    ),
     SimulationStatus.COMPLETED: frozenset(),
     SimulationStatus.FAILED: frozenset({SimulationStatus.PREPARING}),
 }

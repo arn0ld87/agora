@@ -29,6 +29,7 @@ from ..utils.llm_latency import measure_llm_latency
 from ..utils.logger import get_logger
 from .entity_reader import EntityNode
 from ..storage import GraphStorage
+from .persona_domain_coherence import coherence_findings, is_collective_entity_type
 from .persona_demographics import (
     DACH_NAME_ORIGIN_QUOTAS,
     build_name_quota_prompt_block,
@@ -754,6 +755,16 @@ class OasisProfileGenerator:
             )
             profession = None
 
+        profession = self._profession_after_coherence_check(
+            entity_type=entity_type,
+            entity_name=name,
+            persona_kind=persona_kind,
+            profession=profession,
+            persona_text=persona_text,
+            entity_summary=entity.summary,
+            entity_context=context,
+        )
+
         # Segment = entity_type string for PersonaQuotaPlan validation.
         # entity_type is already resolved above (get_entity_type() or "Entity").
         segment = entity_type if entity_type != "Entity" else None
@@ -1018,13 +1029,77 @@ class OasisProfileGenerator:
             aligned = re.sub(rf"\b{re.escape(source)}\b", target, aligned)
         return aligned
 
+    @staticmethod
+    def _profession_after_coherence_check(
+        *,
+        entity_type: str,
+        entity_name: str,
+        persona_kind: str,
+        profession: Optional[str],
+        persona_text: str,
+        entity_summary: Optional[str],
+        entity_context: Optional[str],
+    ) -> Optional[str]:
+        """Prueft Domaenen-Kohaerenz und leert einen fachfremden Beruf.
+
+        Im Referenzlauf report_cc2ef45da5e9 wurde aus einer EmployeeGroup eines
+        Klinik-Rollouts eine "Sachbearbeiterin in der Fertigungsplanung" und aus
+        einem PatientAdvisoryCouncil ein "Schichtleiter Maschinenbau" —
+        plausible Vitae aus einem Fach, das in keiner Quelle vorkam.
+
+        Bereinigt wird nur der Beruf und nur bei eindeutigem Drift: dieselbe
+        Linie wie beim nicht ableitbaren Beruf (#1246) — lieber leer als
+        erfunden. Der Freitext bleibt stehen; ihn zu beschneiden wuerde mehr
+        zerstoeren als retten, und der Befund steht im Log.
+        """
+        source_text = " ".join(
+            part for part in (entity_summary or "", entity_context or "") if part
+        )
+        findings = coherence_findings(
+            entity_type=entity_type,
+            entity_name=entity_name,
+            persona_kind=persona_kind,
+            profession=profession or "",
+            persona_text=persona_text,
+            source_text=source_text,
+        )
+        if not findings:
+            return profession
+        # Der Entitaetsname bleibt draussen: er traegt einen Personen- oder
+        # Organisationsnamen, und Logs verlassen den Prozess (dieselbe Linie
+        # wie beim producer_key, CodeRabbit PR #1151). Typ und Befundart
+        # reichen zur Diagnose — sie sagen, *was* nicht stimmt, ohne zu sagen,
+        # *wer* betroffen ist.
+        logger.warning(
+            "persona coherence: type=%r befunde=%s",
+            entity_type,
+            "; ".join(finding["kind"] for finding in findings),
+        )
+        if profession and any(
+            finding["kind"] == "domain_drift" for finding in findings
+        ):
+            return None
+        return profession
+
     def _is_individual_entity(self, entity_type: str) -> bool:
         """Determine if entity is an individual type"""
         return entity_type.lower() in self.INDIVIDUAL_ENTITY_TYPES
 
     def _is_group_entity(self, entity_type: str) -> bool:
-        """Determine if entity is a group/institutional type"""
-        return entity_type.lower() in self.GROUP_ENTITY_TYPES
+        """Determine if entity is a group/institutional type.
+
+        Die Liste bleibt die erste Instanz — sie ist gepflegt und trennt Fälle,
+        die morphologisch nicht auffallen ("NGO"). Danach entscheidet das
+        Grundwort des Typs. Im Referenzlauf ``report_cc2ef45da5e9`` fielen
+        ``HospitalNetwork``, ``EmployeeGroup`` und ``PatientAdvisoryCouncil``
+        durch die Liste und wurden zu erfundenen Einzelpersonen mit Alter,
+        Geschlecht und Biografie. Eine Ontologie bringt solche Typen laufend
+        hervor; die Liste hinterherzupflegen ist kein Verfahren.
+        """
+        return (
+            entity_type.lower() in self.GROUP_ENTITY_TYPES
+            or is_collective_entity_type(entity_type)
+        )
 
     def _build_eligibility_prompt_block(self, entity_name: str, entity_type: str) -> str:
         """Erlaubt dem Modell, die Entitaet abzulehnen statt sie zu erfinden (#1247).
@@ -1999,6 +2074,101 @@ Important:
             ", ".join(f"{r.entity_name} ({r.entity_type})" for r in rejected[:10]),
         )
 
+    def _consume_gevent_results(
+        self, pool, worker_wrapper, entities, process_result, completed_count, total
+    ) -> bool:
+        """Issue B2: Gevent-Verbrauchsschleife, ausgelagert wegen radon-Gate.
+
+        Rueckgabe True, wenn der Nutzer abgebrochen hat. Gevent kennt keine
+        Trennung "nur Wartende abbrechen" wie
+        ThreadPoolExecutor.shutdown(cancel_futures=True) — pool.kill()
+        beendet auch bereits laufende Greenlets. Groeberer Schnitt als im
+        Thread-Pfad, aber der einzige verfuegbare Weg, neue LLM-Calls
+        sofort zu stoppen (best effort).
+        """
+        cancel_requested = False
+        # Consume results inside try/finally so the pool is joined on success
+        # and on exceptions — no orphaned greenlets outlive the loop.
+        try:
+            for result_idx, profile, error in pool.imap_unordered(worker_wrapper, enumerate(entities)):
+                process_result(result_idx, profile, error)
+                if self._cancel_checkpoint(completed_count[0], total, "gevent"):
+                    cancel_requested = True
+                    pool.kill()
+                    break
+        finally:
+            pool.join()
+        return cancel_requested
+
+    def _consume_thread_results(
+        self, generate_single_profile, entities, parallel_count, process_result, completed_count, total
+    ) -> bool:
+        """Issue B2: Thread-Verbrauchsschleife, ausgelagert wegen radon-Gate.
+
+        Rueckgabe True, wenn der Nutzer abgebrochen hat. Bereits laufende
+        Persona-Generierungen duerfen auslaufen — das ist akzeptiert.
+        shutdown(cancel_futures=True) verwirft nur Futures, die noch nicht
+        gestartet sind; angelaufene Worker schreiben ihr Ergebnis fertig
+        (der with-Block wartet beim Verlassen darauf, s.
+        ThreadPoolExecutor.__exit__ -> shutdown(wait=True)).
+
+        Consume as_completed futures *inside* the with block so the executor
+        is not shut down before results are processed — otherwise real-time
+        progress and incremental file writes regress to 0% until the slowest
+        persona completes.
+        """
+        import concurrent.futures
+
+        cancel_requested = False
+        with concurrent.futures.ThreadPoolExecutor(max_workers=parallel_count) as executor:
+            future_to_entity = {
+                executor.submit(generate_single_profile, idx, entity): (idx, entity)
+                for idx, entity in enumerate(entities)
+            }
+
+            for future in concurrent.futures.as_completed(future_to_entity):
+                idx, entity = future_to_entity[future]
+                entity_type = entity.get_entity_type() or "Entity"
+                try:
+                    result_idx, profile, error = future.result()
+                except Exception as e:  # noqa: BLE001
+                    logger.error(f"Thread execution failed unexpectedly for entity {entity.name}: {str(e)}")
+                    profile = OasisAgentProfile(
+                        user_id=idx,
+                        user_name=self._generate_username(entity.name),
+                        name=entity.name,
+                        bio=f"{entity_type}: {entity.name}",
+                        persona=entity.summary or "A participant in social discussions.",
+                        source_entity_uuid=entity.uuid,
+                        source_entity_type=entity_type,
+                    )
+                    result_idx, error = idx, str(e)
+                process_result(result_idx, profile, error)
+                if self._cancel_checkpoint(completed_count[0], total, "Thread-Pfad"):
+                    cancel_requested = True
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    break
+        return cancel_requested
+
+    def _cancel_checkpoint(self, completed: int, total: int, path: str) -> bool:
+        """Issue B2: prueft das kooperative Cancel-Flag und loggt den Abbruch.
+
+        Buendelt den identischen Check aus Gevent- und Thread-Pfad, damit
+        ``generate_profiles_from_entities`` unter der radon-Allowlist-
+        Obergrenze bleibt (cc<=40) — die Funktion ist ein Bestands-Hotspot,
+        der nicht weiter wachsen darf.
+        """
+        from .sim.cancel_flag import is_cancel_requested
+
+        if not (self.run_id and is_cancel_requested(self.run_id)):
+            return False
+        logger.info(
+            "Persona-Generierung kooperativ abgebrochen (%s): "
+            "run_id=%s, %d/%d Personas fertig",
+            path, self.run_id, completed, total,
+        )
+        return True
+
     def generate_profiles_from_entities(
         self,
         entities: List[EntityNode],
@@ -2033,8 +2203,8 @@ Important:
         Returns:
             List of Agent Profiles
         """
-        import concurrent.futures
         from threading import Lock
+
 
         if parallel_count is None:
             parallel_count = int(
@@ -2186,6 +2356,15 @@ Important:
             else:
                 logger.info(f"[{current}/{total}] Successfully generated persona: {entity.name} ({entity_type})")
 
+        # Issue B2 (PLAN.md „Abbrechen & Pause"): kooperativer Abbruch der
+        # Persona-Generierung. Bereits gestartete Persona-Generierungen
+        # dürfen auslaufen — das ist akzeptiert (kein hartes Kill der
+        # aktuell laufenden Anfrage). Nur das Nachlegen NEUER Arbeit stoppt
+        # sofort. ``cancel_requested`` gated unten die Nachbesetzungsrunde
+        # (``_backfill_rejected_slots``), die sonst weitere LLM-Calls
+        # auslösen würde, obwohl der Nutzer bereits abgebrochen hat.
+        cancel_requested = False
+
         if is_gevent:
             logger.info("Gevent detected: using native cooperative Pool for parallel persona generation")
             from gevent.pool import Pool
@@ -2214,51 +2393,24 @@ Important:
                     )
                     return idx, fallback_profile, str(e)
 
-            # Consume results inside try/finally so the pool is joined on success
-            # and on exceptions — no orphaned greenlets outlive add_text_batches.
-            try:
-                for result_idx, profile, error in pool.imap_unordered(worker_wrapper, enumerate(entities)):
-                    _process_result(result_idx, profile, error)
-            finally:
-                pool.join()
+            cancel_requested = self._consume_gevent_results(
+                pool, worker_wrapper, entities, _process_result, completed_count, total
+            )
         else:
-            # Use thread pool for parallel execution.
-            # Consume as_completed futures *inside* the `with` block so the
-            # executor is not shut down (shutdown(wait=True) blocks until all
-            # tasks finish) before results are processed — otherwise real-time
-            # progress and incremental file writes regress to 0% until the
-            # slowest persona completes.
-            with concurrent.futures.ThreadPoolExecutor(max_workers=parallel_count) as executor:
-                future_to_entity = {
-                    executor.submit(generate_single_profile, idx, entity): (idx, entity)
-                    for idx, entity in enumerate(entities)
-                }
-
-                for future in concurrent.futures.as_completed(future_to_entity):
-                    idx, entity = future_to_entity[future]
-                    entity_type = entity.get_entity_type() or "Entity"
-                    try:
-                        result_idx, profile, error = future.result()
-                    except Exception as e:  # noqa: BLE001
-                        logger.error(f"Thread execution failed unexpectedly for entity {entity.name}: {str(e)}")
-                        profile = OasisAgentProfile(
-                            user_id=idx,
-                            user_name=self._generate_username(entity.name),
-                            name=entity.name,
-                            bio=f"{entity_type}: {entity.name}",
-                            persona=entity.summary or "A participant in social discussions.",
-                            source_entity_uuid=entity.uuid,
-                            source_entity_type=entity_type,
-                        )
-                        result_idx, error = idx, str(e)
-                    _process_result(result_idx, profile, error)
+            cancel_requested = self._consume_thread_results(
+                generate_single_profile, entities, parallel_count,
+                _process_result, completed_count, total
+            )
 
         # Issue #1247: Abgelehnte Slots aus dem Reservepool nachbesetzen. Ohne
         # diesen Schritt unterschreitet jede Ablehnung den konfigurierten
         # max_agents-Wert — bei einem Cap von 30 (nach eigener Empfehlung der
         # Floor ohne Puffer) und einer beobachteten Ablehnungsquote von bis zu
         # 32 % waere das der Unterschied zwischen 30 und 20 Stimmen.
-        if rejected:
+        # Bei einem Nutzerabbruch (cancel_requested) bleibt die Nachbesetzung
+        # aus — sie würde weitere LLM-Calls auslösen, obwohl bereits
+        # abgebrochen wurde.
+        if rejected and not cancel_requested:
             self._backfill_rejected_slots(
                 profiles=profiles,
                 entities=entities,

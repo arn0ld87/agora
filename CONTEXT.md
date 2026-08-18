@@ -136,13 +136,49 @@ Jede Aussage im Bericht wird gegen zwei getrennte Pruefstellen geprueft:
 Claims werden extrahiert und gegen Evidence gebunden:
 - **Claim** — mit `entailment: SUPPORTED` gebunden
 - **Hypothese** — nicht ausreichend belegt
-- **Data Gap** — explizit benannte Informationsluecke
+- **Data Gap** — die Information liegt in *keiner* verfuegbaren Quelle vor
 
 Evidence-Typen: `agent_interview`, `seed_document`, `relationship_chain`, `agent_action`, `graph_metric`, `web_search_result`
+
+Die Kandidatensuche laeuft zweigleisig: embedding-basiert fuer Fliesstext und
+deterministisch fuer Zahlen (`numeric_evidence.py`). Eine Quelle, die dieselbe
+Zahl in derselben Einheit nennt, ist immer Kandidat — auch unterhalb der
+Cosine-Schwelle. Ob sie den Claim *belegt*, entscheidet unveraendert das
+Entailment.
+
+**Data Gap ist eine Aussage ueber die Quellenlage, nicht ueber den Matcher.**
+Scheitert die Bindung, obwohl die Information in den Quellen steht, ist das ein
+`binding_failure`: die Aussage wird als Hypothese gefuehrt, der Grund steht im
+`gate_decision_log`, ein Data Gap entsteht nicht. Nur
+`source_information_absent` wird als `DataGap` exportiert
+(`report_agent/data_gap.py`).
+
+**Coverage-Ledger.** Jeder quantitative Fakt aus einem Tool-Ergebnis traegt im
+`evidence_coverage_ledger` der Evidenzkarte entweder eine kanonische
+Evidence-ID oder einen Verwerfungsgrund (`duplicate`, `missing_producer_key`,
+`validation_error:…`). Ein Fakt darf verworfen werden — nur nicht wortlos.
 
 ### 2. Fliesstext-Verifikation (`verify_prose`)
 
 Engere Pruefung: erkennt numerische Faktenaussagen im Text und entfernt sie bei fehlender Deckung. Qualitative Saetze durchlaufen diesen Validator nicht — deshalb koennen Evidence-Map und ausgelieferte Prosa auseinanderdriften.
+
+Ein abweichender Zahlenwert allein ist kein Widerspruch. Vor einem
+`CONTRADICTED` prueft `facts_are_comparable`, ob beide Zahlen ueberhaupt
+denselben Sachverhalt betreffen: gleiche Einheit, gleiche Faktenart
+(Ist-Wert / Zielwert / Mindest- oder Hoechstgrenze) und gleiche
+Teilpopulation. Ein Ist-Wert einer Teilgruppe widerlegt keine
+Mindestanforderung an die Gesamtheit.
+
+Wird ein Satz entfernt, bleibt die Aufzaehlung, in der er stand, lueckenlos —
+fuer nummerierte Listen und fuer ausgeschriebene ("Erstens … Zweitens …").
+
+### 3. Zuschreibung (`attribution_guard`)
+
+Der Text darf die Simulation nur als Zeugen anrufen, wenn Simulations-Evidence
+vorliegt, und Interviews nur, wenn welche stattfanden. Fehlt die Grundlage,
+wird die Zeugenformel ersetzt ("Die Simulation zeigt" → "Die Quellenlage
+zeigt") — die Aussage selbst bleibt unangetastet. Konsenssprache
+("durchweg", "einhellig") wird gemeldet, aber nicht umgeschrieben.
 
 ### Zitat-Anker
 
@@ -245,4 +281,6 @@ Embeddings haben einen getrennten Konfigurationspfad (Env-Vars fuer Graph-Build,
 - Kein Nachweis des Simulationsbeitrags wenn der Seed die Antworten bereits enthaelt (#1240)
 - Noch kein reproduzierbares Experiment-System (Run-Manifest #763, Twitter-Recommender #1236)
 - Nicht jedes Zitat ist hart gebunden — unaufloesbare Anker werden als `unbound_evidence_refs` sichtbar gefuehrt
+- Claim-Dedup erkennt Umstellungen, keine Synonyme: "erreichte 54 %" und "liegt bei 54 %" bleiben zwei Claims. Eine Aussage faelschlich zu verschmelzen waere teurer als eine Dublette
+- Domaenen-Kohaerenz prueft gegen ein kleines Fachlexikon (Klinik, Fertigung, Bildung, Logistik, Finanzen); Branchen ausserhalb davon werden nicht erkannt
 - Single-User, kein Multi-Tenant vor 1.0.0

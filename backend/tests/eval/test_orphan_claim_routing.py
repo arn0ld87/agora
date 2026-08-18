@@ -20,7 +20,12 @@ def test_all_orphan_claims_route_to_hypotheses_and_data_gaps() -> None:
     assert claims == []
     assert len(hypotheses) == len(raw["claims"])
     assert len(data_gaps) == len(raw["claims"])
-    assert {gap["gap_reason"] for gap in data_gaps} == {"no_evidence_bound"}
+    # Der Evidence-Index dieses Agents ist leer — zu den Aussagen liegt
+    # tatsächlich nichts vor. Das ist die eine Konstellation, in der ein Data
+    # Gap zu Recht entsteht; ein bloß gescheitertes Binding erzeugt seit der
+    # Data-Gap-Semantik keinen mehr
+    # (siehe tests/regression/test_data_gap_semantics.py).
+    assert {gap["gap_reason"] for gap in data_gaps} == {"source_information_absent"}
 
     section = ReportSectionModel.model_validate(
         {

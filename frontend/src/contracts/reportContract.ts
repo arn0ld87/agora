@@ -307,9 +307,34 @@ export const SimulationSnapshotSchema = z.object({
   rounds_completed: z.number().int().min(0),
   total_rounds: z.number().int().min(0).default(0),
   simulation_running: z.boolean().default(false),
+  // Laufstatus der Simulation. Additiv, nullable — Snapshots von vor der
+  // Einführung tragen ihn nicht, und "unbekannt" ist ehrlicher als ein
+  // erfundener Wert.
+  simulation_status: z.string().optional().nullable(),
   captured_at: z.string().optional().nullable(),
 }).strict();
 export type SimulationSnapshot = z.infer<typeof SimulationSnapshotSchema>;
+
+/**
+ * Ein Qualitätsmangel des Report*laufs*, nicht eines einzelnen Claims.
+ *
+ * Spiegelt `RunDegradationModel`. Der Referenzlauf `report_cc2ef45da5e9` ging
+ * als "completed" hinaus, obwohl die Simulation gescheitert war und von acht
+ * Interview-Anforderungen keine ein Ergebnis brachte.
+ */
+export const RunDegradationSchema = z.object({
+  component: z.enum([
+    'simulation',
+    'interview_agents',
+    'section_generation',
+    'section_metadata',
+    'contract_export',
+  ]),
+  reason: z.string().min(1),
+  detail: z.string().default(''),
+  severity: z.enum(['warning', 'blocking']).default('warning'),
+}).strict();
+export type RunDegradation = z.infer<typeof RunDegradationSchema>;
 
 export const ReportSchema = z.object({
   schema_version: z.literal(2),
@@ -330,6 +355,9 @@ export const ReportSchema = z.object({
   // Issue #1192: Simulationsstand zum Startzeitpunkt des Reports. Nullable
   // mit Default — Bestandsreports ohne den Slot bleiben gültig.
   simulation_snapshot: SimulationSnapshotSchema.optional().nullable(),
+  // Qualitätsmängel des Laufs, auf dem der Bericht beruht. Additiv mit
+  // Default — Bestandsreports bleiben gültig.
+  run_degradations: z.array(RunDegradationSchema).default([]),
 }).strict();
 export type Report = z.infer<typeof ReportSchema>;
 
@@ -351,6 +379,51 @@ export const EvidenceDegradationSchema = z.object({
 }).strict();
 export type EvidenceDegradation = z.infer<typeof EvidenceDegradationSchema>;
 
+/**
+ * Verbleib eines quantitativen Tool-Fakts auf dem Weg in den Evidence-Index.
+ *
+ * Im Referenzlauf `report_cc2ef45da5e9` verschwanden sechs belegte Zahlenwerte
+ * zwischen Tool-Ergebnis und Index, ohne dass irgendwo stand warum. Ein Fakt
+ * darf verworfen werden — er trägt dann aber einen `reason`, sonst eine
+ * `canonical_evidence_id`.
+ */
+export const EvidenceCoverageEntrySchema = z.object({
+  source_result_id: z.string().min(1),
+  fact: z.string().min(1),
+  status: z.enum(['canonicalized', 'dropped']),
+  normalized_value: z.number().optional().nullable(),
+  unit: z.string().optional().nullable(),
+  canonical_evidence_id: EvidenceIdSchema.optional().nullable(),
+  reason: z.string().optional().nullable(),
+}).strict().superRefine((value, ctx) => {
+  // Genau eines von beiden: kanonisiert *oder* verworfen. Ein Eintrag mit ID
+  // und Grund beschreibt keinen Verbleib mehr.
+  if (value.status === 'dropped') {
+    if (!value.reason?.trim()) {
+      ctx.addIssue({ code: 'custom', path: ['reason'], message: "status='dropped' verlangt einen reason" });
+    }
+    if (value.canonical_evidence_id) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['canonical_evidence_id'],
+        message: "status='dropped' verträgt keine canonical_evidence_id",
+      });
+    }
+    return;
+  }
+  if (!value.canonical_evidence_id) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['canonical_evidence_id'],
+      message: "status='canonicalized' verlangt eine canonical_evidence_id",
+    });
+  }
+  if (value.reason?.trim()) {
+    ctx.addIssue({ code: 'custom', path: ['reason'], message: "status='canonicalized' verträgt keinen reason" });
+  }
+});
+export type EvidenceCoverageEntry = z.infer<typeof EvidenceCoverageEntrySchema>;
+
 export const EvidenceMapSchema = z.object({
   schema_version: z.literal(3),
   report_id: z.string().min(1),
@@ -365,8 +438,22 @@ export const EvidenceMapSchema = z.object({
   // fehlende Supporting-Evidence, Fließtext-Entfernungen). Getrennt vom
   // degradation_log, weil nur Letzterer den Report-Status abstuft.
   gate_decision_log: z.array(EvidenceDegradationSchema).default([]),
+  // Additiv mit Default, dieselbe Linie wie degradation_log: Maps aus Läufen
+  // vor der Coverage-Buchführung tragen das Feld nicht.
+  evidence_coverage_ledger: z.array(EvidenceCoverageEntrySchema).default([]),
 }).strict().superRefine((value, ctx) => {
   const knownIds = new Set(Object.keys(value.evidence_index));
+  // Eine kanonisierte Ledger-Zeile, die auf nichts zeigt, behauptet einen
+  // Verbleib, den es nicht gibt.
+  value.evidence_coverage_ledger.forEach((entry, index) => {
+    if (entry.canonical_evidence_id && !knownIds.has(entry.canonical_evidence_id)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['evidence_coverage_ledger', index, 'canonical_evidence_id'],
+        message: `Unbekannte Evidence-ID: ${entry.canonical_evidence_id}`,
+      });
+    }
+  });
   const checkRef = (evidenceId: string, path: PropertyKey[]) => {
     if (!knownIds.has(evidenceId)) {
       ctx.addIssue({

@@ -294,13 +294,15 @@ def test_add_progress_callback_sets_progress_detail_on_task_manager(monkeypatch)
         extraction_tally=None,
         document_ids=None,
         chunk_ids=None,
+        run_id=None,
     ):
         # Simulate two chunks completing. ``degradations`` und
         # ``extraction_tally`` wurden mit PR #1030 (Issue #1029), ``document_ids``
-        # und ``chunk_ids`` mit Issue #1152 Slice 1 Teil B an
-        # ``add_text_batches`` angefuegt; der Test akzeptiert sie explizit,
-        # damit eine kuenftige Signatur-Erweiterung hier wieder laut
-        # aufschlaegt statt unbemerkt durchzurutschen.
+        # und ``chunk_ids`` mit Issue #1152 Slice 1 Teil B, ``run_id`` mit
+        # Issue B2 (kooperativer Abbruch) an ``add_text_batches`` angefuegt;
+        # der Test akzeptiert sie explizit, damit eine kuenftige
+        # Signatur-Erweiterung hier wieder laut aufschlaegt statt unbemerkt
+        # durchzurutschen.
         if progress_callback:
             progress_callback("Processed 1/2 chunks...", 0.5, 1, 2)
             progress_callback("Processed 2/2 chunks...", 1.0, 2, 2)

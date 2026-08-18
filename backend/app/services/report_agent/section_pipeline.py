@@ -40,6 +40,11 @@ from .evidence import validate_quote_anchors
 from .manager import ReportManager
 from .output_contract import is_fallback_content
 from .postprocess_timing import PostprocessPhaseTracker
+from .attribution_guard import (
+    attribution_findings,
+    correct_attribution,
+    profile_from_evidence_index,
+)
 from .text_verification import verify_prose
 
 logger = get_logger('agora.report_agent')
@@ -365,6 +370,40 @@ def _validate_quotes_with_repair(
     return repair_content, True, list(repair_result.unbound_evidence_refs)
 
 
+def _correct_attribution(
+    agent: Any,
+    section: Any,
+    content: str,
+    *,
+    section_index: int,
+) -> str:
+    """Stellt Zuschreibungen richtig, für die es keine Belege gibt.
+
+    Im Referenzlauf ``report_cc2ef45da5e9`` trug einer von 13 validierten
+    Claims Simulations-Evidence, und der Text schrieb durchgehend "Die
+    Simulation zeigt …". Ersetzt wird nur die Zeugenformel, nie der Satz —
+    die Aussage bleibt, ihre Herkunft wird richtiggestellt.
+
+    Läuft **vor** der Faktenprüfung: der Sanitizer arbeitet dann auf dem Text,
+    der auch ausgeliefert wird, und seine Satzgrenzen stimmen mit denen des
+    Endergebnisses überein.
+    """
+    index = (getattr(agent, "evidence_map", None) or {}).get("evidence_index") or {}
+    profile = profile_from_evidence_index(index)
+    findings = attribution_findings(content, profile)
+    if not findings:
+        return content
+
+    logger.warning(
+        "section %d (%r): %d Zuschreibung(en) ohne Grundlage — %s",
+        section_index,
+        getattr(section, "title", ""),
+        len(findings),
+        "; ".join(finding["kind"] for finding in findings),
+    )
+    return correct_attribution(content, profile)
+
+
 def _verify_prose_facts(
     agent: Any,
     section: Any,
@@ -381,6 +420,7 @@ def _verify_prose_facts(
     """
     if ctx.is_fallback(content):
         return content
+    content = _correct_attribution(agent, section, content, section_index=section_index)
     verified = ctx.verify_prose_fn(content, agent._prose_evidence_pool())
     if not verified.changed:
         return content

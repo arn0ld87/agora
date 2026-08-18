@@ -194,3 +194,94 @@ def test_cancel_lehnt_einen_bereits_beendeten_run_weiterhin_ab(env):
 
     assert resp.status_code == 400
     assert resp.get_json()["code"] == "run_not_active"
+
+
+# ---------------------------------------------------------------------------
+# Review-Finding PR #1371, Befund 1 (BLOCKER): graph_build- und
+# simulation_prepare-Runs verknüpfen NIE eine simulation_id
+# (services/graph_build.py setzt project_id/graph_id/task_id; s. Docstring
+# von ``_get_run_by_run_or_simulation_id`` weiter oben). Vor dem Fix
+# scheiterte ``cancel_run`` für diese run_types unbedingt mit 409, BEVOR
+# ``_request_cancel`` überhaupt lief — der kooperative Abbruchpfad in
+# ``services/graph_build.py``/``graph_builder.py`` war über die API tot,
+# obwohl er unit-getestet war (die Unit-Tests riefen ``request_cancel``
+# direkt auf und liefen nie durch diese Route). Diese Tests fahren den
+# ECHTEN Endpunktpfad, nicht die Service-Funktion.
+# ---------------------------------------------------------------------------
+
+
+def _create_processing_graph_build_run(registry: RunRegistry) -> dict[str, Any]:
+    """Spiegelt ``services/graph_build.py``: linked_ids trägt project_id/graph_id/
+    task_id, NIE simulation_id."""
+    return registry.create_run(
+        run_type="graph_build",
+        entity_id="proj_test",
+        status="processing",
+        message="Graph build in progress",
+        linked_ids={"project_id": "proj_test", "graph_id": "graph_test", "task_id": "task_test"},
+        metadata={},
+    )
+
+
+def test_cancel_graph_build_run_ohne_simulation_id_setzt_flag(env):
+    """Der BLOCKER-Fix: graph_build-Run ohne simulation_id-Verknüpfung muss
+    über die echte Route abbrechbar sein — 202, nicht 409."""
+    run = _create_processing_graph_build_run(env["registry"])
+    clear_cancel(run["run_id"])
+
+    resp = env["client"].post(f"/api/runs/{run['run_id']}/cancel")
+
+    assert resp.status_code == 202, resp.get_json()
+    payload = resp.get_json()
+    assert payload["success"] is True
+    assert payload["status"] == "cancel_requested"
+    assert payload["run_id"] == run["run_id"]
+    assert is_cancel_requested(run["run_id"]) is True
+
+    clear_cancel(run["run_id"])
+
+
+def _create_processing_prepare_run(registry: RunRegistry, simulation_id: str) -> dict[str, Any]:
+    return registry.create_run(
+        run_type="simulation_prepare",
+        entity_id=simulation_id,
+        status="processing",
+        message="Simulation preparation in progress",
+        linked_ids={"simulation_id": simulation_id, "project_id": "proj_test"},
+        metadata={},
+    )
+
+
+def test_cancel_simulation_prepare_run_setzt_flag(env):
+    """simulation_prepare verknüpft zwar eine simulation_id, sie ist aber
+    nicht mehr Voraussetzung fürs Flag-Setzen (nur simulation_run erzwingt
+    sie jetzt noch) — Regressionsschutz gegen ein zu enges Redesign."""
+    simulation_id = _new_simulation_id()
+    run = _create_processing_prepare_run(env["registry"], simulation_id)
+    clear_cancel(run["run_id"])
+
+    resp = env["client"].post(f"/api/runs/{run['run_id']}/cancel")
+
+    assert resp.status_code == 202, resp.get_json()
+    assert is_cancel_requested(run["run_id"]) is True
+
+    clear_cancel(run["run_id"])
+
+
+def test_cancel_simulation_run_ohne_simulation_id_bleibt_409(env):
+    """Gegenprobe: für simulation_run bleibt die 409-Schranke bestehen —
+    dort braucht der OASIS-Subprozesspfad die Verknüpfung fachlich."""
+    run = env["registry"].create_run(
+        run_type="simulation_run",
+        entity_id="proj_test",
+        status="processing",
+        message="running",
+        linked_ids={"project_id": "proj_test"},  # deliberate: keine simulation_id
+        metadata={},
+    )
+
+    resp = env["client"].post(f"/api/runs/{run['run_id']}/cancel")
+
+    assert resp.status_code == 409
+    assert "missing simulation_id linkage" in resp.get_json().get("error", "")
+    assert is_cancel_requested(run["run_id"]) is False

@@ -31,6 +31,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
+from .claim_atomizer import split_compound_claim
+
 
 class EntailmentVerdict(str, Enum):
     """Urteil der zweiten Binding-Stufe."""
@@ -53,6 +55,21 @@ class FactModality(str, Enum):
     NORMATIVE = "normative"
 
 
+class BoundKind(str, Enum):
+    """Beschreibt die Zahl einen Punktwert oder eine Schranke?
+
+    "31 Prozent geschult" und "mindestens 80 Prozent geschult" sind nicht
+    derselbe Aussagetyp. Der erste Satz misst, der zweite fordert. Ohne diese
+    Unterscheidung las der Trust-Layer die Differenz 31 ≠ 80 als Widerspruch
+    und löschte den Satz aus dem Fließtext — obwohl beide Angaben gleichzeitig
+    zutreffen und der Satz genau diese Lücke benennt.
+    """
+
+    EXACT = "exact"
+    AT_LEAST = "at_least"
+    AT_MOST = "at_most"
+
+
 @dataclass(frozen=True)
 class NumericFact:
     """Eine Zahl zusammen mit ihrer Bezugsgruppe und ihrer Aussage."""
@@ -63,6 +80,18 @@ class NumericFact:
     predicate: str
     modality: FactModality = FactModality.FACTUAL
     raw: str = ""
+    bound: BoundKind = BoundKind.EXACT
+    #: Einschränkende Zusätze aus dem Vorfeld ("Pflege-Nachtschicht",
+    #: "erstes Quartal") in Originalschreibweise. Zwei Zahlen über dieselbe
+    #: Bezugsgruppe, aber verschiedene Teilpopulationen oder Zeiträume, sind
+    #: keine widersprüchlichen Angaben über denselben Sachverhalt.
+    #:
+    #: Bewusst ungestemmt: ``text_verification._fact_probe`` baut aus einem
+    #: Fakt wieder einen Prüftext, und der Scope muss dabei so wiederauftauchen,
+    #: dass ihn dieselbe Extraktion erneut findet. Aus Stämmen ließe sich das
+    #: nicht rekonstruieren, und der Scope-Schutz wäre im Fließtext-Pfad —
+    #: also genau dort, wo der Referenzlauf Sätze verlor — wirkungslos.
+    scope: frozenset[str] = frozenset()
 
 
 @dataclass
@@ -88,8 +117,15 @@ _PERCENT_RE = re.compile(
     re.IGNORECASE,
 )
 
+#: Absolutzahl mit ihrem Bezugsnomen. Zwischen beiden dürfen bis zu zwei
+#: kleingeschriebene Wörter stehen: "38 abweichende Dringlichkeitsfälle",
+#: "412 geprüfte Fälle", "38 der Empfehlungen". Ohne diese Lücke entstand für
+#: solche Sätze gar kein Fakt, und die Zahl war für den Trust-Layer nicht
+#: vorhanden — im Referenzlauf traf das die 38 abweichenden Dringlichkeitsfälle
+#: und die 412 geprüften Fälle.
 _ABSOLUTE_RE = re.compile(
     r"(?P<value>\d{1,3}(?:\.\d{3})+|\d+(?:[.,]\d+)?)\s+"
+    r"(?:[a-zäöüß]+\s+){0,2}"
     r"(?P<noun>[A-ZÄÖÜ][\wÄÖÜäöüß-]+)",
 )
 
@@ -108,10 +144,19 @@ _NORMATIVE_MARKERS = (
     "angestrebt",
     "ziel ist",
     "verpflichtend",
+    "fordert",
+    "fordern",
+    "verlangt",
+    "verlangen",
+    "schreibt vor",
+    "sieht vor",
+    "vorsieht",
     "should",
     "must",
     "planned",
     "required",
+    "requires",
+    "demands",
 )
 
 #: Substantivische Zielmarker. Deutsch drückt eine Vorgabe häufig ohne Modalverb
@@ -135,15 +180,71 @@ _NORMATIVE_NOUN_MARKERS = (
     "sollquote",
     "anforderung",
     "schwellenwert",
+    "target",
+    "threshold",
+)
+
+#: Bewusst *nicht* mehr in der Liste oben: "mindestens", "maximal",
+#: "höchstens", "at least", "at most". Diese Wörter beschreiben eine Schranke,
+#: keine Absicht — "der Fallback dauerte höchstens 15 Minuten" ist eine
+#: Messung, "das Ziel sind 80 Prozent" eine Vorgabe. Solange sie beides
+#: bedeuteten, galt jede Schranke automatisch als Zielvorgabe, jeder Vergleich
+#: mit einem gemessenen Wert als Modalitätskonflikt, und eine tatsächlich
+#: gerissene Grenze verschwand als "nicht vergleichbar". Die Schranke selbst
+#: erfasst jetzt :class:`BoundKind`, die Absicht die Marker oben.
+
+#: Marker für eine untere bzw. obere Schranke. Sie stehen im Deutschen
+#: unmittelbar links der Zahl ("mindestens 80 Prozent"), weshalb
+#: :func:`_bound_of` nur ein kurzes Fenster davor liest — ein "mindestens" aus
+#: einem anderen Satzteil darf einen gemessenen Wert nicht zur Forderung machen.
+_AT_LEAST_MARKERS = (
     "mindestens",
+    "wenigstens",
+    "nicht weniger als",
+    "minimum",
     "mindest",
+    "at least",
+    "no less than",
+)
+
+_AT_MOST_MARKERS = (
     "maximal",
     "höchstens",
     "hoechstens",
-    "target",
-    "threshold",
-    "at least",
+    "nicht mehr als",
+    "nicht länger als",
+    "nicht laenger als",
+    "bis zu",
+    "max.",
     "at most",
+    "no more than",
+    "up to",
+)
+
+#: Wie weit links der Zahl nach einem Schrankenmarker gesucht wird.
+_BOUND_WINDOW = 40
+
+#: Ausgeschriebene Aufzählungswörter. Sie stehen am Satzanfang und sind
+#: deshalb großgeschrieben — ohne diese Liste hielt :func:`_subject_from_prefix`
+#: das "Drittens" in "Drittens erreichte die Verwaltung 42 Prozent" für die
+#: Bezugsgruppe der Zahl. Die echte Gruppe rutschte in den Scope, der Fakt
+#: fand weder Beleg noch Widerspruch, und der Satz blieb ungeprüft stehen.
+#:
+#: ``text_verification`` verwendet dieselbe Liste, um eine aufgerissene
+#: Aufzählung wieder lückenlos zu zählen.
+ENUMERATION_WORDS: tuple[str, ...] = (
+    "erstens",
+    "zweitens",
+    "drittens",
+    "viertens",
+    "fünftens",
+    "fuenftens",
+    "sechstens",
+    "siebtens",
+    "siebentens",
+    "achtens",
+    "neuntens",
+    "zehntens",
 )
 
 _MAJORITY_MARKERS = (
@@ -301,16 +402,187 @@ def _modality_of(predicate: str, context: str = "") -> FactModality:
     nur "in allen Schichten verfehlt" liefert. Wer bloß das Prädikat liest,
     hält die Vorgabe für einen gemessenen Wert (Issue #1356).
     """
-    lowered = f" {predicate.lower()} "
-    if any(
-        f" {marker} " in lowered or lowered.startswith(f" {marker} ")
-        for marker in _NORMATIVE_MARKERS
-    ):
+    # Der ganze Satz, nicht nur das Prädikat: "Der Projektplan *fordert*
+    # mindestens 80 Prozent" trägt seinen Zielcharakter im Vorfeld, während
+    # ``_full_predicate`` nur den Teil rechts der Zahl liefert. Wer bloß dort
+    # sucht, liest die Vorgabe als gemessenen Wert — und vergleicht sie
+    # anschließend mit einem Ist-Wert, als wären beide dasselbe.
+    #
+    # Die Wortgrenzen bleiben: "muss" darf nicht in "Kompromissbereitschaft"
+    # anschlagen.
+    lowered = f" {predicate.lower()} {context.lower()} "
+    if any(f" {marker} " in lowered for marker in _NORMATIVE_MARKERS):
         return FactModality.NORMATIVE
-    haystack = f"{predicate} {context}".lower()
-    if any(marker in haystack for marker in _NORMATIVE_NOUN_MARKERS):
+    if any(marker in lowered for marker in _NORMATIVE_NOUN_MARKERS):
         return FactModality.NORMATIVE
     return FactModality.FACTUAL
+
+
+def _bound_of(prefix: str) -> BoundKind:
+    """Punktwert oder Schranke? Entschieden wird am Fenster links der Zahl.
+
+    "mindestens 80 Prozent" ist eine Untergrenze, "31 Prozent" ein gemessener
+    Wert. Ohne diese Unterscheidung verglich der Trust-Layer 31 mit 80 und
+    erklärte den Satz für widerlegt (Referenzlauf ``report_cc2ef45da5e9``).
+
+    Das Fenster ist bewusst kurz: in "… liegt bei 31 Prozent, während der
+    Projektplan mindestens 80 Prozent fordert" gehört das "mindestens" zur
+    zweiten Zahl, nicht zur ersten.
+    """
+    window = (prefix or "")[-_BOUND_WINDOW:].lower()
+    at_least = max(
+        (window.rfind(marker) for marker in _AT_LEAST_MARKERS), default=-1
+    )
+    at_most = max((window.rfind(marker) for marker in _AT_MOST_MARKERS), default=-1)
+    if at_least < 0 and at_most < 0:
+        return BoundKind.EXACT
+    return BoundKind.AT_LEAST if at_least > at_most else BoundKind.AT_MOST
+
+
+def _noun_phrases(text: str) -> List[List[str]]:
+    """Zusammenhängende großgeschriebene Nominalphrasen eines Textstücks.
+
+    Ohne Tagger reicht die deutsche Großschreibung. Artikel und Präpositionen
+    fallen über :data:`_STOPWORDS` und die Mindestlänge heraus — sonst zöge
+    jedes satzeinleitende "Die" eine Phrase auf.
+    """
+    groups: List[List[str]] = []
+    current: List[str] = []
+    for word in (text or "").split():
+        bare = word.strip(",.;:()\"'").lower()
+        if any(char.isdigit() for char in word):
+            if current:
+                groups.append(current)
+                current = []
+            continue
+        if (
+            word[:1].isupper()
+            and bare not in _STOPWORDS
+            and bare not in ENUMERATION_WORDS
+            and len(bare) > 3
+        ):
+            current.append(word.strip(",.;:()\"'"))
+            continue
+        if current:
+            groups.append(current)
+            current = []
+    if current:
+        groups.append(current)
+    return groups
+
+
+def _subject_from_prefix(prefix: str) -> str:
+    """Bezugsgruppe aus dem Vorfeld, wenn rechts der Zahl keine steht.
+
+    Deutsch stellt das Satzsubjekt regelmäßig vor das Verb: "Die Verwaltung
+    erreichte 91 Prozent." Rechts der Zahl steht dort nur der Satzpunkt, und
+    :func:`_split_subject_predicate` gab entsprechend nichts zurück — der Fakt
+    entstand nie. Damit war die Zahl für den Trust-Layer unsichtbar: weder
+    konnte sie einen Claim belegen (P1 „vorhandene Evidence wird nicht
+    gefunden") noch einen echten Widerspruch aufdecken.
+
+    Genommen wird die **letzte** Nominalphrase vor der Zahl, nicht die erste.
+    Sie steht der Zahl am nächsten und ist deshalb ihre Bezugsgruppe: in "Die
+    Basisschulung erreichte in der Ärzteschaft 83 Prozent" gehören die 83 zur
+    Ärzteschaft, nicht zur Basisschulung. Das war die als ``xfail`` geführte
+    Restlücke aus #1357.
+    """
+    groups = _noun_phrases(prefix)
+    if not groups:
+        return ""
+    return " ".join(groups[-1])
+
+
+def _stems(value: str) -> set[str]:
+    return {t[:6] for t in _tokens(value) if len(t) > 3}
+
+
+#: Präpositionen, die eine Teilpopulation oder einen Zeitraum einführen.
+#: Nur was hinter einer von ihnen steht, grenzt eine Aussage ein.
+#:
+#: Bewusst ohne Quellenangaben ("laut", "gemäß", "zufolge"): die benennen, wer
+#: etwas sagt, nicht worüber. Ließe man sie zu, wären "laut Betriebsrat 54 %"
+#: und "laut Personalrat 31 %" über dieselbe Gruppe plötzlich zwei
+#: verschiedene Sachverhalte — und ein echter Widerspruch verschwände.
+_SCOPE_PREPOSITIONS = frozenset({
+    "in", "im", "innerhalb", "bei", "beim", "unter", "für", "fuer",
+    "bis", "ab", "seit", "während", "waehrend", "an", "am", "auf",
+    "je", "pro", "zum", "zur",
+})
+
+#: Wie viele Wörter vor der Nominalphrase nach der Präposition abgesucht
+#: werden. Deckt Präposition + Artikel + Adjektiv ab.
+_SCOPE_PREPOSITION_WINDOW = 3
+
+
+def _preceded_by_scope_preposition(prefix: str, phrase: List[str]) -> bool:
+    """Führt eine eingrenzende Präposition diese Nominalphrase ein?"""
+    if not phrase:
+        return False
+    words = prefix.split()
+    head = phrase[0].strip(",.;:()\"'")
+    for index in range(len(words) - 1, -1, -1):
+        if words[index].strip(",.;:()\"'") != head:
+            continue
+        # Drei Wörter Fenster: Präposition, Artikel, Adjektiv — "im ersten
+        # Quartal", "in der großen Abteilung". Ein festes Fenster ist hier
+        # robuster als eine Wortartenprüfung, für die es keinen Tagger gibt.
+        window = words[max(0, index - _SCOPE_PREPOSITION_WINDOW) : index]
+        return any(
+            word.strip(",.;:()\"'").lower() in _SCOPE_PREPOSITIONS for word in window
+        )
+    return False
+
+
+def _scope_terms(prefix: str, subject: str) -> frozenset[str]:
+    """Einschränkende Zusätze links der Zahl, ohne die Bezugsgruppe selbst.
+
+    "In der Pflege-Nachtschicht sind 31 Prozent der Beschäftigten geschult"
+    und "In der Pflege sind 54 Prozent der Beschäftigten geschult" reden über
+    dieselbe Bezugsgruppe (Beschäftigte), aber über verschiedene
+    Teilpopulationen. Beide Werte können gleichzeitig stimmen.
+    """
+    subject_stems = _stems(subject)
+    groups = _noun_phrases(prefix)
+    if not groups:
+        return frozenset()
+    # Nur die *letzte* Nominalphrase vor der Zahl, und nur wenn eine
+    # eingrenzende Präposition sie einführt.
+    #
+    # Beides ist nötig. Ohne die Beschränkung auf die letzte Phrase zählt in
+    # "Laut Betriebsrat sind in der Pflege 54 Prozent" auch die Quellenangabe
+    # mit; ohne die Präposition wird in "Aktuell sind 31 Prozent geschult" das
+    # satzeinleitende Adverb zur Teilpopulation. In beiden Fällen wichen die
+    # Scopes zweier Sätze über *dieselbe* Gruppe voneinander ab, und ein
+    # echter Widerspruch verschwände als "nicht vergleichbar".
+    if not _preceded_by_scope_preposition(prefix, groups[-1]):
+        return frozenset()
+    return frozenset(
+        word for word in groups[-1] if not (_stems(word) & subject_stems)
+    )
+
+
+def _scope_stems(scope: frozenset[str]) -> set[str]:
+    """Normalisiert Scope-Wörter für den Vergleich; Komposita zählen einzeln."""
+    out: set[str] = set()
+    for word in scope:
+        for token in re.split(r"[-/]", word.lower()):
+            if len(token) > 3 and token not in _STOPWORDS:
+                out.add(token[:6])
+    return out
+
+
+def _scopes_diverge(left: frozenset[str], right: frozenset[str]) -> bool:
+    """Widersprechen sich die Teilpopulationen — oder schweigt eine Seite?
+
+    Eine Seite ohne erkennbaren Qualifier ist nicht *anders* abgegrenzt,
+    sondern unabgegrenzt. Sie darf einen echten Widerspruch nicht abwehren,
+    sonst wäre jede Aussage durch bloßes Weglassen des Kontexts immun.
+    """
+    a, b = _scope_stems(left), _scope_stems(right)
+    if not a or not b:
+        return False
+    return a != b
 
 
 def _sentences(text: str) -> List[str]:
@@ -360,10 +632,14 @@ def extract_numeric_facts(text: str) -> List[NumericFact]:
             value = _parse_number(match.group("value"))
             if value is None:
                 continue
+            prefix = sentence[: match.start()]
             subject, tail = _split_subject_predicate(sentence[match.end():])
             if not subject:
+                # Deutsches Vorfeld: "Die Verwaltung erreichte 91 Prozent."
+                subject = _subject_from_prefix(prefix)
+            if not subject:
                 continue
-            predicate = _full_predicate(sentence[: match.start()], tail)
+            predicate = _full_predicate(prefix, tail)
             facts.append(
                 NumericFact(
                     value=value,
@@ -372,6 +648,8 @@ def extract_numeric_facts(text: str) -> List[NumericFact]:
                     predicate=predicate,
                     modality=_modality_of(predicate, sentence),
                     raw=sentence.strip(),
+                    bound=_bound_of(prefix),
+                    scope=_scope_terms(prefix, subject),
                 )
             )
         if not any(f.raw == sentence.strip() for f in facts):
@@ -379,10 +657,13 @@ def extract_numeric_facts(text: str) -> List[NumericFact]:
                 value = _parse_number(match.group("value"))
                 if value is None:
                     continue
+                prefix = sentence[: match.start()]
                 subject, tail = _split_subject_predicate(sentence[match.start("noun"):])
                 if not subject:
+                    subject = _subject_from_prefix(prefix)
+                if not subject:
                     continue
-                predicate = _full_predicate(sentence[: match.start()], tail)
+                predicate = _full_predicate(prefix, tail)
                 facts.append(
                     NumericFact(
                         value=value,
@@ -391,6 +672,8 @@ def extract_numeric_facts(text: str) -> List[NumericFact]:
                         predicate=predicate,
                         modality=_modality_of(predicate, sentence),
                         raw=sentence.strip(),
+                        bound=_bound_of(prefix),
+                        scope=_scope_terms(prefix, subject),
                     )
                 )
     return facts
@@ -440,10 +723,7 @@ def subjects_match(left: str, right: str) -> bool:
     "Lehrkräfte" und "Lehrkraft" sind dieselbe Gruppe, "Lehrkräfte" und
     "Eltern" nicht.
     """
-    def stems(value: str) -> set[str]:
-        return {t[:6] for t in _tokens(value) if len(t) > 3}
-
-    a, b = stems(left), stems(right)
+    a, b = _stems(left), _stems(right)
     if not a or not b:
         return False
     return bool(a & b)
@@ -501,6 +781,15 @@ QUALITATIVE_RELATED_THRESHOLD = 0.10
 #: ein schwacher Treffer soll den Filter nicht aushebeln.
 RETRIEVAL_RELEVANCE_THRESHOLD = 0.60
 
+#: Menschenlesbare Begründung je Vergleichbarkeits-Dimension. Sie landet im
+#: Audit-Protokoll und muss ohne Codekenntnis verständlich sein.
+_DIVERGENCE_REASONS = {
+    "unit_mismatch": "verschiedene Einheiten",
+    "fact_type_mismatch": "Ist-Wert gegen Zielvorgabe",
+    "scope_mismatch": "verschiedene Teilpopulation oder Zeitraum",
+    "bound_satisfied": "der Wert hält die genannte Schranke ein",
+}
+
 EntailmentJudge = Callable[[str, str], str]
 """Optionaler strukturierter Judge: (claim, evidence_text) -> Verdict-Name."""
 
@@ -516,6 +805,76 @@ def _evidence_text(item: Dict[str, Any]) -> str:
     elif isinstance(raw, str):
         parts.append(raw)
     return " ".join(p for p in parts if p).strip()
+
+
+def facts_are_comparable(left: NumericFact, right: NumericFact) -> Optional[str]:
+    """Reden beide Zahlen über denselben Sachverhalt?
+
+    Gibt ``None`` zurück, wenn sie vergleichbar sind — sonst den Namen der
+    Dimension, in der sie auseinanderlaufen. Nur vergleichbare Fakten dürfen
+    einander widersprechen; ein abweichender Zahlenwert allein reicht nie.
+
+    Geprüft werden die Dimensionen, in denen der Referenzlauf
+    ``report_cc2ef45da5e9`` falsch lag:
+
+    ``unit``
+        Prozentwert gegen Absolutzahl.
+    ``fact_type``
+        Ist-Wert gegen Zielvorgabe (:class:`FactModality`) und Punktwert
+        gegen Schranke (:class:`BoundKind`). "31 Prozent geschult" widerlegt
+        keine Forderung nach "mindestens 80 Prozent" — der Satz benennt
+        genau diese Lücke.
+    ``scope``
+        Teilpopulation oder Zeitraum. "Pflege-Nachtschicht" und "Pflege"
+        sind nicht dieselbe Grundgesamtheit; beide Werte können zutreffen.
+
+    Die Bezugsgruppe selbst prüft :func:`subjects_match` und bleibt hier
+    außen vor.
+    """
+    if left.unit != right.unit:
+        return "unit_mismatch"
+    if left.modality is not right.modality:
+        return "fact_type_mismatch"
+    if _scopes_diverge(left.scope, right.scope):
+        return "scope_mismatch"
+    if left.bound is not right.bound and not _bound_is_violated(left, right):
+        return "bound_satisfied"
+    return None
+
+
+def _bound_is_violated(left: NumericFact, right: NumericFact) -> bool:
+    """Verletzt der gemessene Wert die behauptete Schranke?
+
+    Eine Schranke ist keine Zahl, sondern ein Bereich. "Höchstens 15 Minuten"
+    und "22 Minuten gemessen" schließen einander aus; "höchstens 15" und "9
+    gemessen" nicht. Ohne diese Prüfung galt jede Schranke gegen jeden
+    Punktwert als unvergleichbar, und ein tatsächlich gerissener Grenzwert
+    verschwand als ``INSUFFICIENT``.
+
+    Beide Angaben müssen dieselbe Modalität tragen; das prüft der Aufrufer.
+    Ein Ist-Wert unter einer *Forderung* ist keine Verletzung, sondern eine
+    unerfüllte Forderung — dafür ist der Bericht da, nicht der Trust-Layer.
+    """
+    # Zwei Schranken können einander ausschließen, ohne dass ein gemessener
+    # Wert im Spiel ist: "mindestens 80 Prozent" und "höchstens 70 Prozent"
+    # lassen für dieselbe Gruppe keinen gemeinsamen Wert zu.
+    lower = next(
+        (fact for fact in (left, right) if fact.bound is BoundKind.AT_LEAST), None
+    )
+    upper = next(
+        (fact for fact in (left, right) if fact.bound is BoundKind.AT_MOST), None
+    )
+    if lower is not None and upper is not None:
+        return lower.value > upper.value
+
+    for bound_fact, point in ((left, right), (right, left)):
+        if point.bound is not BoundKind.EXACT:
+            continue
+        if bound_fact.bound is BoundKind.AT_MOST and point.value > bound_fact.value:
+            return True
+        if bound_fact.bound is BoundKind.AT_LEAST and point.value < bound_fact.value:
+            return True
+    return False
 
 
 def _classify_matching_number(
@@ -647,112 +1006,184 @@ def classify_evidence(
 
     # --- Regel 1: Claim trägt eine Zahl ------------------------------------
     if claim_facts:
-        checks.append("numeric_claim")
-        for claim_fact in claim_facts:
-            for ev_fact in evidence_facts:
-                same_value = abs(claim_fact.value - ev_fact.value) < 0.001
-                same_subject = subjects_match(claim_fact.subject, ev_fact.subject)
-                predicate_overlap = _overlap_ratio(claim_fact.predicate, ev_fact.predicate)
-
-                if same_value and same_subject:
-                    return _classify_matching_number(
-                        claim_fact, ev_fact, predicate_overlap, checks
-                    )
-
-                if same_value and not same_subject:
-                    # Issue #1356: kein Widerspruch. Dass eine Quelle denselben
-                    # Zahlenwert für eine *andere* Gruppe nennt, sagt über die
-                    # hier behauptete Gruppe nichts aus — zwei Gruppen dürfen
-                    # denselben Wert haben. Ein Widerspruch wäre erst ein
-                    # abweichender Wert für dieselbe Gruppe (``value_mismatch``).
-                    # Im Referenzlauf kostete diese Fehleinstufung vier belegte
-                    # Aussagen, darunter den Satz mit den drei Schulungsquoten.
-                    return EntailmentResult(
-                        EntailmentVerdict.INSUFFICIENT,
-                        "Zahl belegt, aber für eine andere Bezugsgruppe",
-                        matched_fact=ev_fact,
-                        claim_fact=claim_fact,
-                        checks=checks + ["subject_mismatch"],
-                    )
-
-                if (
-                    same_subject
-                    and not same_value
-                    and predicate_overlap >= PREDICATE_MATCH_THRESHOLD
-                ):
-                    # Nennt der Claim den belegten Wert selbst — nur an einer
-                    # anderen Zahl festgemacht —, widerspricht er der Quelle
-                    # nicht, sondern die Zuordnung der Bezugsgruppe ist
-                    # unscharf. Der Referenzlauf zu #1356 hat genau einen
-                    # solchen Fall: "83 Prozent im Ärztlichen Dienst und 91
-                    # Prozent in der Verwaltung" gegen eine Quelle, die die
-                    # 91 Prozent der Verwaltung belegt. Weil das Subjekt der
-                    # ersten Zahl bis zur zweiten Gruppe durchläuft (#1357),
-                    # verglich die Regel 83 mit 91 und löschte einen Satz,
-                    # den dieselbe Quelle stützt.
-                    if any(
-                        abs(other.value - ev_fact.value) < 0.001 for other in claim_facts
-                    ):
-                        return EntailmentResult(
-                            EntailmentVerdict.INSUFFICIENT,
-                            "der Claim nennt den belegten Wert an anderer Stelle; "
-                            "welche Zahl zu welcher Bezugsgruppe gehört, ist nicht "
-                            "eindeutig zuzuordnen",
-                            matched_fact=ev_fact,
-                            claim_fact=claim_fact,
-                            checks=checks + ["value_mismatch_ambiguous_subject"],
-                        )
-                    return EntailmentResult(
-                        EntailmentVerdict.CONTRADICTED,
-                        "gleiche Aussage über dieselbe Gruppe, abweichender Zahlenwert",
-                        matched_fact=ev_fact,
-                        claim_fact=claim_fact,
-                        checks=checks + ["value_mismatch"],
-                    )
-
-        return EntailmentResult(
-            EntailmentVerdict.INSUFFICIENT,
-            "numerischer Claim ohne passenden Zahlenbeleg",
-            claim_fact=claim_facts[0],
-            checks=checks + ["no_matching_number"],
-        )
+        return _classify_numeric_claim(claim_facts, evidence_facts, checks)
 
     # --- Regel 2: Claim behauptet eine Mehrheit/Minderheit ------------------
     direction = _quantifier_direction(claim)
     if direction and evidence_facts:
-        checks.append("quantifier_claim")
-        for ev_fact in evidence_facts:
-            if ev_fact.unit != "percent" or not subjects_match(claim, ev_fact.subject):
-                continue
-            is_majority = ev_fact.value > 50.0
-            if direction == "majority" and not is_majority:
-                return EntailmentResult(
-                    EntailmentVerdict.CONTRADICTED,
-                    f"Mehrheitsaussage steht gegen einen Anteil von {ev_fact.value:g} %",
-                    matched_fact=ev_fact,
-                    checks=checks + ["majority_vs_minority"],
-                )
-            if direction == "minority" and is_majority:
-                return EntailmentResult(
-                    EntailmentVerdict.CONTRADICTED,
-                    f"Minderheitsaussage steht gegen einen Anteil von {ev_fact.value:g} %",
-                    matched_fact=ev_fact,
-                    checks=checks + ["minority_vs_majority"],
-                )
-        return EntailmentResult(
-            EntailmentVerdict.RELATED_ONLY,
-            "Mengenaussage ohne quantitativen Beleg",
-            checks=checks + ["quantifier_unbacked"],
-        )
+        return _classify_quantifier_claim(claim, direction, evidence_facts, checks)
 
-    # --- Regel 3: rein qualitativer Claim ----------------------------------
-    # Der Themenvorfilter fragt nur, ob überhaupt vom Selben die Rede ist.
-    # Wortüberlappung ist dafür ein schlechtes Maß: ein Interviewzitat sagt
-    # dasselbe in völlig anderen Worten. Im Referenzlauf fielen 22 von 25
-    # Interview-Paaren hier heraus (Containment-Median 0.04), obwohl das
-    # Retrieval sie mit 0.65 bis 0.79 korrekt gefunden hatte — sie erreichten
-    # die inhaltliche Prüfung nie. Liegt ein Retrieval-Ergebnis vor, hat es
-    # diese Frage bereits beantwortet (#1357).
+    return _classify_qualitative_claim(
+        claim,
+        evidence_text,
+        checks,
+        topic_overlap=topic_overlap,
+        retrieval_score=retrieval_score,
+        judge=judge,
+    )
+
+
+def _classify_numeric_claim(
+    claim_facts: List[NumericFact],
+    evidence_facts: List[NumericFact],
+    checks: List[str],
+) -> EntailmentResult:
+    """Regel 1 — der Claim trägt eine Zahl, und die entscheidet.
+
+    Aus :func:`classify_evidence` herausgelöst, damit beide Funktionen unter
+    der Komplexitätsschwelle des radon-Gates bleiben.
+    """
+    checks = checks + ["numeric_claim"]
+    for claim_fact in claim_facts:
+        for ev_fact in evidence_facts:
+            # Die Einheit gehört zum Wert. "15 Prozent der Beschäftigten"
+            # und "15 Beschäftigte" sind nicht dieselbe Zahl — ohne diese
+            # Bedingung lief der Fall in den Gleichheitszweig und galt als
+            # belegt, obwohl die Quelle etwas anderes misst. Bei ungleichem
+            # Wert prüft facts_are_comparable die Einheit ohnehin.
+            same_value = (
+                claim_fact.unit == ev_fact.unit
+                and abs(claim_fact.value - ev_fact.value) < 0.001
+            )
+            same_subject = subjects_match(claim_fact.subject, ev_fact.subject)
+            predicate_overlap = _overlap_ratio(claim_fact.predicate, ev_fact.predicate)
+
+            if same_value and same_subject:
+                return _classify_matching_number(
+                    claim_fact, ev_fact, predicate_overlap, checks
+                )
+
+            if same_value and not same_subject:
+                # Issue #1356: kein Widerspruch. Dass eine Quelle denselben
+                # Zahlenwert für eine *andere* Gruppe nennt, sagt über die
+                # hier behauptete Gruppe nichts aus — zwei Gruppen dürfen
+                # denselben Wert haben. Ein Widerspruch wäre erst ein
+                # abweichender Wert für dieselbe Gruppe (``value_mismatch``).
+                # Im Referenzlauf kostete diese Fehleinstufung vier belegte
+                # Aussagen, darunter den Satz mit den drei Schulungsquoten.
+                return EntailmentResult(
+                    EntailmentVerdict.INSUFFICIENT,
+                    "Zahl belegt, aber für eine andere Bezugsgruppe",
+                    matched_fact=ev_fact,
+                    claim_fact=claim_fact,
+                    checks=checks + ["subject_mismatch"],
+                )
+
+            if (
+                same_subject
+                and not same_value
+                and predicate_overlap >= PREDICATE_MATCH_THRESHOLD
+            ):
+                # Nennt der Claim den belegten Wert selbst — nur an einer
+                # anderen Zahl festgemacht —, widerspricht er der Quelle
+                # nicht, sondern die Zuordnung der Bezugsgruppe ist
+                # unscharf. Der Referenzlauf zu #1356 hat genau einen
+                # solchen Fall: "83 Prozent im Ärztlichen Dienst und 91
+                # Prozent in der Verwaltung" gegen eine Quelle, die die
+                # 91 Prozent der Verwaltung belegt. Weil das Subjekt der
+                # ersten Zahl bis zur zweiten Gruppe durchläuft (#1357),
+                # verglich die Regel 83 mit 91 und löschte einen Satz,
+                # den dieselbe Quelle stützt.
+                if any(
+                    abs(other.value - ev_fact.value) < 0.001 for other in claim_facts
+                ):
+                    return EntailmentResult(
+                        EntailmentVerdict.INSUFFICIENT,
+                        "der Claim nennt den belegten Wert an anderer Stelle; "
+                        "welche Zahl zu welcher Bezugsgruppe gehört, ist nicht "
+                        "eindeutig zuzuordnen",
+                        matched_fact=ev_fact,
+                        claim_fact=claim_fact,
+                        checks=checks + ["value_mismatch_ambiguous_subject"],
+                    )
+                # Ein abweichender Zahlenwert allein ist kein Widerspruch.
+                # Erst wenn beide Zahlen über denselben Sachverhalt reden —
+                # gleiche Einheit, gleiche Faktenart, gleiche
+                # Grundgesamtheit —, schließen sie einander aus. Im
+                # Referenzlauf fehlte diese Prüfung, und ein Ist-Wert einer
+                # Teilgruppe (31 % Pflege-Nachtschicht) galt als Widerlegung
+                # einer Mindestanforderung an die Gesamtbelegschaft (80 %);
+                # der Satz verschwand aus dem Fließtext und riss die
+                # Aufzählung auf, in der er stand.
+                divergence = facts_are_comparable(claim_fact, ev_fact)
+                if divergence is not None:
+                    return EntailmentResult(
+                        EntailmentVerdict.INSUFFICIENT,
+                        "abweichender Zahlenwert, aber die beiden Angaben "
+                        "sind nicht vergleichbar "
+                        f"({_DIVERGENCE_REASONS[divergence]})",
+                        matched_fact=ev_fact,
+                        claim_fact=claim_fact,
+                        checks=checks + [divergence],
+                    )
+                return EntailmentResult(
+                    EntailmentVerdict.CONTRADICTED,
+                    "gleiche Aussage über dieselbe Gruppe, abweichender Zahlenwert",
+                    matched_fact=ev_fact,
+                    claim_fact=claim_fact,
+                    checks=checks + ["value_mismatch"],
+                )
+
+    return EntailmentResult(
+        EntailmentVerdict.INSUFFICIENT,
+        "numerischer Claim ohne passenden Zahlenbeleg",
+        claim_fact=claim_facts[0],
+        checks=checks + ["no_matching_number"],
+    )
+
+
+def _classify_quantifier_claim(
+    claim: str,
+    direction: str,
+    evidence_facts: List[NumericFact],
+    checks: List[str],
+) -> EntailmentResult:
+    """Regel 2 — der Claim behauptet eine Mehrheit oder Minderheit."""
+    checks = checks + ["quantifier_claim"]
+    for ev_fact in evidence_facts:
+        if ev_fact.unit != "percent" or not subjects_match(claim, ev_fact.subject):
+            continue
+        is_majority = ev_fact.value > 50.0
+        if direction == "majority" and not is_majority:
+            return EntailmentResult(
+                EntailmentVerdict.CONTRADICTED,
+                f"Mehrheitsaussage steht gegen einen Anteil von {ev_fact.value:g} %",
+                matched_fact=ev_fact,
+                checks=checks + ["majority_vs_minority"],
+            )
+        if direction == "minority" and is_majority:
+            return EntailmentResult(
+                EntailmentVerdict.CONTRADICTED,
+                f"Minderheitsaussage steht gegen einen Anteil von {ev_fact.value:g} %",
+                matched_fact=ev_fact,
+                checks=checks + ["minority_vs_majority"],
+            )
+    return EntailmentResult(
+        EntailmentVerdict.RELATED_ONLY,
+        "Mengenaussage ohne quantitativen Beleg",
+        checks=checks + ["quantifier_unbacked"],
+    )
+
+
+def _classify_qualitative_claim(
+    claim: str,
+    evidence_text: str,
+    checks: List[str],
+    *,
+    topic_overlap: float,
+    retrieval_score: Optional[float],
+    judge: Optional[EntailmentJudge],
+) -> EntailmentResult:
+    """Regel 3 — der Claim trägt weder Zahl noch Mengenaussage.
+
+    Der Themenvorfilter fragt nur, ob überhaupt vom Selben die Rede ist.
+    Wortüberlappung ist dafür ein schlechtes Maß: ein Interviewzitat sagt
+    dasselbe in völlig anderen Worten. Im Referenzlauf fielen 22 von 25
+    Interview-Paaren hier heraus (Containment-Median 0.04), obwohl das
+    Retrieval sie mit 0.65 bis 0.79 korrekt gefunden hatte — sie erreichten
+    die inhaltliche Prüfung nie. Liegt ein Retrieval-Ergebnis vor, hat es
+    diese Frage bereits beantwortet (#1357).
+    """
     retrieved = (
         retrieval_score is not None
         and retrieval_score >= RETRIEVAL_RELEVANCE_THRESHOLD
@@ -773,6 +1204,29 @@ def classify_evidence(
     claim_coverage = coverage_ratio(claim, evidence_text)
 
     if claim_coverage >= QUALITATIVE_SUPPORT_THRESHOLD:
+        # Ein zusammengesetzter Claim ist nur belegt, wenn die Quelle jede
+        # seiner Teilaussagen berührt. Im Referenzlauf trugen einzelne Claims
+        # gleichzeitig einen Seed-Fakt, eine Stakeholder-Aussage und eine
+        # Ableitung; die Quelle deckte davon eine, und die Gesamtdeckung
+        # reichte trotzdem über die Schwelle. Verlangt wird hier bewusst nur
+        # thematische Präsenz je Teil — ein voller Deckungsnachweis pro
+        # Teilsatz scheiterte an Paraphrasen und nähme die belegten Aussagen
+        # mit, um die es gerade nicht geht.
+        atoms = split_compound_claim(claim)
+        if len(atoms) > 1:
+            uncovered = [
+                atom
+                for atom in atoms
+                if coverage_ratio(atom, evidence_text) < QUALITATIVE_RELATED_THRESHOLD
+            ]
+            if uncovered:
+                return EntailmentResult(
+                    EntailmentVerdict.INSUFFICIENT,
+                    "der Claim behauptet mehreres; zu "
+                    f"{len(uncovered)} von {len(atoms)} Teilaussagen sagt die "
+                    "Quelle nichts",
+                    checks=checks + ["compound_claim_partially_uncovered"],
+                )
         # Polarität zuerst — aus demselben Grund wie im numerischen Pfad
         # (#1317): ``nicht`` steht in ``_STOPWORDS``, "die Betriebsvereinbarung
         # ist abgeschlossen" und "… ist *nicht* abgeschlossen" reduzieren
@@ -859,6 +1313,8 @@ def classify_many(
 
 
 __all__ = [
+    "ENUMERATION_WORDS",
+    "BoundKind",
     "EntailmentJudge",
     "EntailmentResult",
     "EntailmentVerdict",
@@ -872,5 +1328,6 @@ __all__ = [
     "classify_evidence",
     "classify_many",
     "extract_numeric_facts",
+    "facts_are_comparable",
     "subjects_match",
 ]

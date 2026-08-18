@@ -751,6 +751,26 @@ def _validate_persona_quota(
     )
 
 
+class PrepareCancelledError(Exception):
+    """Signalisiert kooperativen Abbruch während ``prepare_simulation()``.
+
+    Issue B2 (PLAN.md „Abbrechen & Pause"): das Cancel-Flag wird an den
+    Phasengrenzen geprüft (analog ``report_agent/workflow.py::_is_cancel_requested``
+    an den Stage-Boundaries). Anders als ``BudgetExceededError`` ist ein
+    Nutzerabbruch kein Fehler — deshalb eine eigene Exception statt eines
+    ``ValueError``, damit der generische ``except Exception``-Zweig unten
+    (FSM → FAILED) sie nicht mit einem echten Fehlschlag verwechselt.
+
+    Trägt den zuletzt gespeicherten ``SimulationState``, damit der Aufrufer
+    (``api/simulation_prepare.py::_make_prepare_job``) den Abbruch-Endzustand
+    bauen kann, ohne die Simulation erneut zu laden.
+    """
+
+    def __init__(self, state: "SimulationState") -> None:
+        super().__init__(f"prepare_simulation cancelled for {state.simulation_id}")
+        self.state = state
+
+
 def prepare_simulation(
     manager: SimulationManager,
     simulation_id: str,
@@ -775,17 +795,31 @@ def prepare_simulation(
     Setzt FSM-Status PREPARING vor Phase 1, READY nach Phase 3, FAILED bei
     jeder Exception. ``state.error`` wird im Fehlerfall mit der Exception-
     Message gesetzt; die Exception wird nach State-Update weiter geworfen.
+
+    Zwischen den drei Phasen wird das Cancel-Flag geprüft (``run_id``,
+    ``services/sim/cancel_flag.py``) — kooperativer Abbruch analog
+    ``report_agent/workflow.py``. Bereits geschriebene Artefakte (Profildatei
+    aus Phase 2, Entity-Zählung aus Phase 1) bleiben unangetastet stehen;
+    nur der FSM-Status wechselt auf ``CANCELLED_PARTIAL`` statt ``READY``.
     """
     from .simulation_manager import SimulationStatus
+    from .sim.cancel_flag import is_cancel_requested
 
     state = manager._load_simulation_state(simulation_id)
     if not state:
         raise ValueError(f"Simulation does not exist: {simulation_id}")
 
+    def _raise_if_cancelled() -> None:
+        if run_id and is_cancel_requested(run_id):
+            manager._set_status(state, SimulationStatus.CANCELLED_PARTIAL)
+            raise PrepareCancelledError(state)
+
     try:
         manager._set_status(state, SimulationStatus.PREPARING)
 
         sim_dir = manager._get_simulation_dir(simulation_id)
+
+        _raise_if_cancelled()
 
         # Phase 1: Read & filter entities
         filtered = _phase_read_entities(
@@ -825,6 +859,8 @@ def prepare_simulation(
             quota_plan, minimum=persona_floor
         )
 
+        _raise_if_cancelled()
+
         # Phase 2: Generate Agent Profiles
         profiles, expanded_entities = _phase_generate_profiles(
             state,
@@ -843,6 +879,18 @@ def prepare_simulation(
             run_id=run_id,
             degradations=degradations,
         )
+
+        # Review-Finding (PR #1371, Befund 2): der Cancel-Check MUSS vor der
+        # Quota-Validierung laufen. Bricht die Persona-Generierung
+        # kooperativ mitten in der as_completed-Schleife ab
+        # (oasis_profile_generator.py), liefert sie eine gekürzte
+        # Profilliste zurück — bei gesetztem quota_plan (tolerance=0)
+        # scheitert ``_validate_persona_quota`` daran zwangsläufig mit
+        # ``ValidationError``. Lief die Prüfung zuerst, landete genau der
+        # Fall, für den dieses Feature existiert, im generischen
+        # except-Zweig unten und endete als FAILED statt als der
+        # kooperative Abbruch, den der Nutzer angefordert hat.
+        _raise_if_cancelled()
 
         # Optional quota check: ValidationError propagates → FAILED state.
         if quota_plan is not None:
@@ -878,6 +926,15 @@ def prepare_simulation(
 
         return state
 
+    except PrepareCancelledError:
+        # FSM steht bereits auf CANCELLED_PARTIAL (in _raise_if_cancelled
+        # gesetzt) — kein Fehlschlag, also nicht in den FAILED-Zweig unten.
+        logger.info(
+            "Simulation preparation cancelled by user: %s (run_id=%s)",
+            simulation_id,
+            run_id,
+        )
+        raise
     except Exception as exc:
         logger.error(
             f"Simulation preparation failed: {simulation_id}, error={exc}"
@@ -890,6 +947,7 @@ def prepare_simulation(
 
 __all__ = [
     "prepare_simulation",
+    "PrepareCancelledError",
     "compute_persona_target",
     "_apply_persona_floor_to_entities",
     "_apply_persona_floor_to_quota_plan",

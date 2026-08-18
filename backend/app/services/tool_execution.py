@@ -37,6 +37,45 @@ _RAW_JSON_TOOLS = frozenset({
 })
 
 
+def _run_interview_agents(
+    *,
+    graph_tools: Any,
+    parameters: Dict[str, Any],
+    simulation_id: Optional[str],
+    simulation_requirement: str,
+    tool_name: str,
+    on_terminal_failure: Optional[Callable[[str, str], None]],
+) -> tuple[Any, str]:
+    """Führt ``interview_agents`` aus und meldet einen terminalen Ausfall.
+
+    Der Hinweistext im Ergebnis blieb im Referenzlauf folgenlos: das Tool
+    wurde nach der Meldung noch sieben Mal aufgerufen. Der Aufrufer bekommt
+    die Auskunft deshalb als Signal und kann das Tool tatsächlich abschalten.
+    """
+    interview_topic = parameters.get(
+        "interview_topic",
+        parameters.get("query", ""),
+    )
+    max_agents = parameters.get("max_agents", 5)
+    if isinstance(max_agents, str):
+        max_agents = int(max_agents)
+    max_agents = min(max_agents, 10)
+    structured_result = graph_tools.interview_agents(
+        simulation_id=simulation_id,
+        interview_requirement=interview_topic,
+        simulation_requirement=simulation_requirement,
+        max_agents=max_agents,
+    )
+    if on_terminal_failure is not None and getattr(
+        structured_result, "terminal_failure", False
+    ):
+        on_terminal_failure(
+            tool_name,
+            str(getattr(structured_result, "terminal_reason", "")),
+        )
+    return structured_result, structured_result.to_text()
+
+
 def execute_tool(
     *,
     tool_name: str,
@@ -49,6 +88,7 @@ def execute_tool(
     simulation_requirement: str,
     record_evidence: Optional[Callable[[str, Dict[str, Any], Any, str, int], Optional[Dict[int, str]]]] = None,
     section_index: int = 0,
+    on_terminal_failure: Optional[Callable[[str, str], None]] = None,
 ) -> str:
     """Dispatcht einen Tool-Aufruf und liefert das gerenderte Resultat als String.
 
@@ -117,21 +157,14 @@ def execute_tool(
             rendered = structured_result.to_text()
 
         elif tool_name == "interview_agents":
-            interview_topic = parameters.get(
-                "interview_topic",
-                parameters.get("query", ""),
-            )
-            max_agents = parameters.get("max_agents", 5)
-            if isinstance(max_agents, str):
-                max_agents = int(max_agents)
-            max_agents = min(max_agents, 10)
-            structured_result = graph_tools.interview_agents(
+            structured_result, rendered = _run_interview_agents(
+                graph_tools=graph_tools,
+                parameters=parameters,
                 simulation_id=simulation_id,
-                interview_requirement=interview_topic,
                 simulation_requirement=simulation_requirement,
-                max_agents=max_agents,
+                tool_name=tool_name,
+                on_terminal_failure=on_terminal_failure,
             )
-            rendered = structured_result.to_text()
 
         elif tool_name == "web_search":
             query = parameters.get("query", "")

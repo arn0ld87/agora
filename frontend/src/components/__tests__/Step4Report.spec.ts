@@ -219,6 +219,7 @@ const VALID_REPORT: Report = {
   has_evidence: false,
   red_team_findings: [],
   evidence_sections: 0,
+  run_degradations: [],
 }
 
 // Valides EvidenceMap-Payload
@@ -234,6 +235,8 @@ const VALID_EVIDENCE: EvidenceMap = {
   degradation_log: [],
   // PR #1151: Audit-Trail regulärer Gate-Entscheidungen, gleiche Default-Logik.
   gate_decision_log: [],
+  // Verbleib der quantitativen Tool-Fakten, gleiche Default-Logik.
+  evidence_coverage_ledger: [],
 }
 
 // Hilfsfunktion zum Mounten

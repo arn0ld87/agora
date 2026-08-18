@@ -16,6 +16,7 @@ vom :class:`ReportAgent` über ``__init__`` instanziiert.
 
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
 import os
@@ -23,6 +24,44 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 from ..config import Config
+
+#: Der Report, zu dem die aktuell laufende Arbeit gehört.
+#:
+#: ``ReportConsoleLogger`` hängt seinen FileHandler an die *globalen* Logger
+#: ``agora.report_agent`` und ``agora.graph_tools``. Laufen zwei Reports
+#: gleichzeitig, hängen beide Handler an denselben Loggern, und jede Zeile
+#: landet in beiden ``console_log.txt``. Genau das zeigte der Referenzlauf: die
+#: Datei zu ``report_cc2ef45da5e9`` enthielt Einträge zu
+#: ``report_e5734b31241d``. Für eine Forensik ist ein Log, das fremde Läufe
+#: mitschreibt, schlechter als keins — man kann ihm nicht mehr trauen.
+_current_report_id: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "agora_current_report_id", default=""
+)
+
+
+def current_report_id() -> str:
+    """Der Report, dem die aktuelle Arbeit zugeordnet ist; leer wenn unbekannt."""
+    return _current_report_id.get()
+
+
+class ReportScopeFilter(logging.Filter):
+    """Lässt nur durch, was nicht nachweislich zu einem anderen Report gehört.
+
+    Die Regel ist bewusst asymmetrisch. Ein Record mit *fremder* Report-Zuordnung
+    wird verworfen — das ist der Schaden, um den es geht. Ein Record *ohne*
+    Zuordnung wird durchgelassen: ``ThreadPoolExecutor.submit`` kopiert den
+    Kontext nicht, und ein Worker-Thread ohne gesetzten Kontext würde sonst
+    still aus dem Log fallen. Ein unzugeordneter Eintrag ist unscharf, ein
+    fremder ist falsch.
+    """
+
+    def __init__(self, report_id: str) -> None:
+        super().__init__()
+        self.report_id = report_id
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        active = current_report_id()
+        return not active or active == self.report_id
 
 
 class ReportLogger:
@@ -343,6 +382,9 @@ class ReportConsoleLogger:
         )
         self._ensure_log_file()
         self._file_handler: Optional[logging.FileHandler] = None
+        # Der Kontext wird hier gesetzt und in ``close`` zurückgenommen: der
+        # Logger lebt genau so lange wie der Report-Lauf und im selben Thread.
+        self._scope_token = _current_report_id.set(report_id)
         self._setup_file_handler()
 
     def _ensure_log_file(self):
@@ -366,6 +408,7 @@ class ReportConsoleLogger:
             datefmt='%H:%M:%S'
         )
         self._file_handler.setFormatter(formatter)
+        self._file_handler.addFilter(ReportScopeFilter(self.report_id))
 
         # Add to report_agent related loggers
         loggers_to_attach = [
@@ -394,6 +437,21 @@ class ReportConsoleLogger:
 
             self._file_handler.close()
             self._file_handler = None
+
+        token = getattr(self, "_scope_token", None)
+        if token is not None:
+            try:
+                _current_report_id.reset(token)
+            except ValueError:
+                # Der Finalizer läuft in einem anderen Kontext als das Set —
+                # typischerweise, wenn der Garbage Collector einen alten Logger
+                # einsammelt, während ein anderer Report läuft. Den Scope hier
+                # zu leeren würde genau die Vermischung wiederherstellen, die
+                # dieser Filter verhindert: ein leerer Scope lässt jeden Record
+                # in *alle* offenen Logdateien. Fremder Zustand wird nicht
+                # angefasst.
+                pass
+            self._scope_token = None
 
     def __del__(self):
         """Ensure file handler is closed during destructor"""

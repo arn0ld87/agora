@@ -208,7 +208,11 @@ def test_save_evidence_section_routes_orphans_to_gaps(tmp_path):
     assert section.claims == []
     assert len(section.hypotheses) == 1
     assert len(section.data_gaps) == 1
-    assert section.data_gaps[0].gap_reason == "no_evidence_bound"
+    # Der Evidence-Index ist hier leer — zu dieser Aussage liegt tatsächlich
+    # nichts vor. Das ist die eine Konstellation, in der ein Data Gap zu Recht
+    # entsteht; ein bloß gescheitertes Binding erzeugt seit der Data-Gap-
+    # Semantik keinen mehr (siehe tests/regression/test_data_gap_semantics.py).
+    assert section.data_gaps[0].gap_reason == "source_information_absent"
 
 
 def test_duplicate_bindings_do_not_raise_single_source_confidence(tmp_path):

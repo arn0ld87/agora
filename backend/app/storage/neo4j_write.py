@@ -171,6 +171,32 @@ class Neo4jWriteMixin:
             self._call_with_retry(session.execute_write, _mark)
         logger.info("Graph %s marked as failed: %s", graph_id, reason)
 
+    def mark_graph_incomplete(self, graph_id: str, reason: Optional[str] = None) -> None:
+        """Set graph status to 'incomplete' after a cooperative cancel (Issue B2).
+
+        Anders als ``mark_graph_failed`` ist das kein Fehler — der Graph
+        trägt bereits committete Episoden/Entities/Relations und bleibt
+        auswertbar, nur unvollständig gegenüber dem Ursprungsdokument. Kein
+        Rollback der bereits einzeln committeten Transaktionen aus
+        ``_persist_episode`` (Zeile ~360 und ~438 in dieser Datei) — halb
+        geschriebene Episode-Knoten bleiben bewusst stehen.
+        """
+
+        def _mark(tx):
+            tx.run(
+                """
+                MATCH (g:Graph {graph_id: $gid})
+                SET g.status = 'incomplete',
+                    g.incomplete_reason = $reason
+                """,
+                gid=graph_id,
+                reason=reason,
+            )
+
+        with self._get_session() as session:
+            self._call_with_retry(session.execute_write, _mark)
+        logger.info("Graph %s marked as incomplete: %s", graph_id, reason)
+
     def delete_graph(self, graph_id: str) -> None:
         def _delete(tx):
             # Delete all entities and their relationships

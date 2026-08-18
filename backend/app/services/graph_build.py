@@ -425,6 +425,13 @@ class GraphBuildService:
                 """
                 build_logger = get_logger('agora.build')
                 graph_id = None
+                # Defensiv vorinitialisiert wie ``graph_id`` oben: falls eine
+                # Exception schon vor ``builder = container.graph_builder()``
+                # unten auftritt (z. B. im ersten ``task_manager.update_task``),
+                # greift der except-Zweig sonst auf eine ungebundene lokale
+                # Variable zu (statische Analyse, Review-Finding) — genau der
+                # Fall, in dem ein sauberer Fehlschlag am wichtigsten wäre.
+                builder = None
                 # Issue #1029: Dies ist der produktive Build-Pfad (Endpunkt
                 # ``/api/graph/build``). ``GraphBuilderService._build_graph_worker``
                 # trägt dieselbe Verdrahtung, wird von hier aber nicht benutzt —
@@ -432,6 +439,135 @@ class GraphBuildService:
                 # blind, wo es zählt.
                 degradations = DegradationCollector()
                 extraction_tally = ChunkExtractionTally()
+
+                def _finish_cancelled_build(cancelled_episode_uuids: "list[str]") -> None:
+                    """Issue B2: Endzustand eines per ``/cancel`` gestoppten Graph-Builds.
+
+                    Spiegelt bewusst ``services/report_generation.py::finish_cancelled_run``:
+                    ``stopped`` + ``termination_reason="user_cancel"``, Reihenfolge
+                    ``complete_task()`` zuerst (``sync_task`` würde sonst generisch
+                    "completed" setzen), dann der detaillierte Run-Update. Der Graph
+                    wird NICHT gelöscht und NICHT zurückgerollt — bereits committete
+                    Episoden/Entities/Relations bleiben stehen (Plan B2, bewusste
+                    Entscheidung); er gilt nur als unvollständig.
+
+                    Review-Finding (PR #1371, Befund 3): diese Funktion läuft
+                    INNERHALB des äußeren try-Blocks von ``build_task``. Ohne
+                    eigene Fehlerbehandlung würde ein Aussetzer hier selbst
+                    (Neo4j-Schreibfehler in ``mark_graph_incomplete``,
+                    ``ProjectManager.save_project``, ein Registry-Schreibfehler
+                    in ``run_registry.update_run``) ins äußere
+                    ``except Exception`` durchschlagen — und DAS löscht per
+                    ``builder.delete_graph(graph_id)`` genau den Teilgraphen,
+                    den dieser Cancel-Pfad ausdrücklich erhalten soll, während
+                    ``complete_task()`` bereits ``cancelled: True`` gemeldet
+                    hätte. Jeder Schritt läuft deshalb einzeln best-effort:
+                    ein Fehschlag wird geloggt, aber weder hier noch nach
+                    außen erneut geworfen. Der wichtigste Schritt — der
+                    Run-Registry-Update auf ``status="stopped"`` — läuft
+                    zuletzt und unabhängig davon, ob die vorherigen Schritte
+                    geglückt sind, damit der Nutzer den Abbruch so oder so
+                    sieht.
+                    """
+                    from ..services.sim.cancel_flag import clear_cancel
+
+                    build_logger.info(
+                        "Graph build cancelled by user [project_id=%s, run_id=%s, "
+                        "graph_id=%s, episodes=%d]",
+                        project_id, run_record["run_id"], graph_id, len(cancelled_episode_uuids),
+                    )
+
+                    # ``builder``/``graph_id`` sind zu diesem Zeitpunkt immer
+                    # gesetzt — beide Aufrufstellen liegen im try-Block nach
+                    # ``builder = container.graph_builder()`` und
+                    # ``graph_id = builder.create_graph(...)``. Die Prüfung
+                    # bleibt trotzdem stehen: eine geschlossene Funktion kann
+                    # ihre Closure-Variablen nicht flow-sensitiv typisieren,
+                    # und ein späteres Refactoring darf hier nicht auf ein
+                    # AttributeError statt eines sauberen Log-Eintrags laufen.
+                    if builder is not None and graph_id is not None:
+                        try:
+                            builder.mark_graph_incomplete(graph_id, reason="user_cancel")
+                        except Exception as exc:  # noqa: BLE001 — best effort; siehe Docstring
+                            build_logger.warning(
+                                "graph_build: mark_graph_incomplete fehlgeschlagen "
+                                "[project_id=%s, run_id=%s, graph_id=%s]: %r",
+                                project_id, run_record["run_id"], graph_id, exc,
+                            )
+                    else:
+                        build_logger.warning(
+                            "Graph build cancelled before builder/graph_id existed "
+                            "[project_id=%s, run_id=%s] — nichts zu markieren",
+                            project_id, run_record["run_id"],
+                        )
+
+                    try:
+                        project.graph_id = graph_id
+                        project.status = ProjectStatus.GRAPH_INCOMPLETE
+                        ProjectManager.save_project(project)
+                    except Exception as exc:  # noqa: BLE001 — best effort; siehe Docstring
+                        build_logger.warning(
+                            "graph_build: save_project (GRAPH_INCOMPLETE) fehlgeschlagen "
+                            "[project_id=%s, run_id=%s]: %r",
+                            project_id, run_record["run_id"], exc,
+                        )
+
+                    try:
+                        task_manager.complete_task(
+                            task_id,
+                            result={
+                                "project_id": project_id,
+                                "graph_id": graph_id,
+                                "episode_count": len(cancelled_episode_uuids),
+                                "cancelled": True,
+                                "degradations": degradations.report().model_dump(mode="json"),
+                            },
+                        )
+                    except Exception as exc:  # noqa: BLE001 — best effort; siehe Docstring
+                        build_logger.warning(
+                            "graph_build: complete_task (cancel) fehlgeschlagen "
+                            "[project_id=%s, run_id=%s, task_id=%s]: %r",
+                            project_id, run_record["run_id"], task_id, exc,
+                        )
+
+                    # Wichtigster Schritt — läuft unabhängig vom Erfolg der
+                    # vorherigen, sonst bliebe der Run für den Nutzer
+                    # unsichtbar auf "processing" hängen.
+                    try:
+                        run_registry.update_run(
+                            run_record["run_id"],
+                            status="stopped",
+                            termination_reason="user_cancel",
+                            message=(
+                                "Vom Nutzer abgebrochen — bereits geschriebene Entitäten "
+                                "und Relationen bleiben im Graphen erhalten, der Graph "
+                                "gilt als unvollständig"
+                            ),
+                            artifacts=ArtifactLocator.existing_paths({
+                                "project_dir": ProjectManager._get_project_dir(project_id),
+                            }),
+                            resume_capability={
+                                "available": True,
+                                "action": "restart",
+                                "label": "Restart graph build",
+                            },
+                        )
+                    except Exception as exc:  # noqa: BLE001 — best effort; siehe Docstring
+                        build_logger.error(
+                            "graph_build: run_registry.update_run (cancel) fehlgeschlagen "
+                            "[project_id=%s, run_id=%s] — Run bleibt evtl. auf 'processing' "
+                            "haengen: %r",
+                            project_id, run_record["run_id"], exc,
+                        )
+
+                    try:
+                        clear_cancel(run_record["run_id"])
+                    except Exception as exc:  # noqa: BLE001 — best effort; siehe Docstring
+                        build_logger.debug(
+                            "graph_build: clear_cancel fehlgeschlagen [run_id=%s]: %r",
+                            run_record["run_id"], exc,
+                        )
+
                 try:
                     task_manager.update_task(task_id, status=TaskStatus.PROCESSING, message="Initializing graph build service...")
                     builder = container.graph_builder()
@@ -476,15 +612,30 @@ class GraphBuildService:
                             progress_detail={"batch_count": completed, "total_batches": total, "batch_at": time.time()}
                         )
 
-                    builder.add_text_batches(
-                        graph_id, chunks, batch_size=3,
-                        progress_callback=add_progress_callback,
-                        ner_extractor=ner_override,
-                        degradations=degradations,
-                        extraction_tally=extraction_tally,
-                        document_ids=document_ids,
-                        chunk_ids=chunk_ids,
-                    )
+                    # Checkpoint (Issue B2): zwischen Ontologie-Setzen und dem
+                    # eigentlichen (potenziell langen) Chunk-Durchlauf. Noch
+                    # keine Episode geschrieben — der Cancel-Pfad bekommt eine
+                    # leere Liste.
+                    from ..services.sim.cancel_flag import is_cancel_requested
+                    if is_cancel_requested(run_record["run_id"]):
+                        _finish_cancelled_build([])
+                        return
+
+                    from .graph_builder import GraphBuildCancelled
+                    try:
+                        builder.add_text_batches(
+                            graph_id, chunks, batch_size=3,
+                            progress_callback=add_progress_callback,
+                            ner_extractor=ner_override,
+                            degradations=degradations,
+                            extraction_tally=extraction_tally,
+                            document_ids=document_ids,
+                            chunk_ids=chunk_ids,
+                            run_id=run_record["run_id"],
+                        )
+                    except GraphBuildCancelled as cancel_exc:
+                        _finish_cancelled_build(cancel_exc.episode_uuids)
+                        return
 
                     task_manager.update_task(task_id, message="Retrieving graph data...", progress=95)
                     graph_data = builder.get_graph_data(graph_id)
@@ -521,7 +672,11 @@ class GraphBuildService:
 
                 except Exception as exc:
                     build_logger.exception("Graph build failed [project_id=%s, run_id=%s]", project_id, run_record["run_id"])
-                    if graph_id is not None:
+                    # ``builder`` kann None sein, wenn die Exception vor
+                    # ``builder = container.graph_builder()`` auftrat (z. B.
+                    # im allerersten ``task_manager.update_task``) — dann gibt
+                    # es auch keinen ``graph_id`` und nichts aufzuräumen.
+                    if graph_id is not None and builder is not None:
                         try:
                             builder.delete_graph(graph_id)
                         except Exception:  # noqa: BLE001 — best-effort cleanup; primary exception already propagated
@@ -537,6 +692,28 @@ class GraphBuildService:
                     import traceback
                     task_manager.update_task(task_id, status=TaskStatus.FAILED, message=f"Build failed: {str(exc)}", error=traceback.format_exc())
                     run_registry.update_run(run_record["run_id"], status="failed", message=str(exc), error=str(exc))
+                finally:
+                    # Review-Finding (PR #1371, Befund 7): ohne diesen
+                    # finally-Block räumte nur der GraphBuildCancelled-Zweig
+                    # (über _finish_cancelled_build) das Flag auf. Kommt die
+                    # Cancel-Anfrage NACH dem letzten Checkpoint (z. B.
+                    # während der Qualitätsbewertung nach add_text_batches),
+                    # läuft der Build normal zu Ende und das
+                    # threading.Event bliebe für die restliche
+                    # Prozesslaufzeit im globalen Dict von cancel_flag.py
+                    # liegen. ``clear_cancel`` ist idempotent, ein zweiter
+                    # Aufruf im Cancel-Zweig oben ist folgenlos.
+                    from ..services.sim.cancel_flag import clear_cancel, is_cancel_requested
+
+                    if is_cancel_requested(run_record["run_id"]):
+                        build_logger.info(
+                            "Graph build: Cancel-Flag war gesetzt, aber der "
+                            "letzte Checkpoint war bereits passiert "
+                            "[project_id=%s, run_id=%s] — Abbruch kam zu "
+                            "spät, Endzustand bleibt wie oben bestimmt.",
+                            project_id, run_record["run_id"],
+                        )
+                    clear_cancel(run_record["run_id"])
 
             from ..jobs import enqueue
             enqueue("graph_build", build_task)

@@ -406,6 +406,16 @@ class InterviewResult:
     total_agents: int = 0
     interviewed_count: int = 0
 
+    #: Ist das Tool für diesen Lauf endgültig ausgefallen?
+    #:
+    #: Bis zum Referenzlauf ``report_cc2ef45da5e9`` stand diese Auskunft
+    #: ausschließlich als Satz in ``summary`` ("Do NOT call interview_agents
+    #: again"). Ein Satz im Prompt ist eine Bitte — das Tool wurde danach
+    #: sieben weitere Male aufgerufen. Als Feld ist die Auskunft auswertbar,
+    #: und der Aufrufer kann das Tool tatsächlich abschalten.
+    terminal_failure: bool = False
+    terminal_reason: str = ""
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "interview_topic": self.interview_topic,
@@ -415,7 +425,9 @@ class InterviewResult:
             "selection_reasoning": self.selection_reasoning,
             "summary": self.summary,
             "total_agents": self.total_agents,
-            "interviewed_count": self.interviewed_count
+            "interviewed_count": self.interviewed_count,
+            "terminal_failure": self.terminal_failure,
+            "terminal_reason": self.terminal_reason,
         }
 
     def to_text(self, evidence_ids: Optional[Dict[int, str]] = None) -> str:

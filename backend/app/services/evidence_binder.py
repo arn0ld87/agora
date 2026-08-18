@@ -96,22 +96,35 @@ def bind_evidence_to_claim(
     fallen lässt (ReportAgent fängt das in seinem Try-Block).
     """
     from .evidence_entailment import EntailmentVerdict, classify_evidence  # noqa: PLC0415
+    from .numeric_evidence import shares_numeric_fact  # noqa: PLC0415
 
     if not (claim_text or "").strip() or not candidates:
         return []
 
     claim_vec = embed(claim_text.strip())
-    scored: List[Tuple[Dict[str, Any], Dict[str, Any]]] = []
+    # Der numerische Treffer gehört in die Sortierung, nicht in die Bindung:
+    # ``ClaimEvidenceBindingModel`` ist ``extra="forbid"``, und ein
+    # zusätzliches Feld auf ``bound`` lässt die gesamte Section-Validierung
+    # scheitern — bis hin zum Reparaturlauf, der dann jeden Claim mit
+    # gebundener Evidence löscht.
+    scored: List[Tuple[Dict[str, Any], Dict[str, Any], bool]] = []
     for item in candidates:
         text = candidate_text(item)
         if not text:
             continue
+        # Deterministischer Vorabruf vor der Cosine-Schwelle. Eine Quelle, die
+        # dieselbe Zahl in derselben Einheit nennt, ist einschlägig, auch wenn
+        # sie es in ganz anderen Worten tut — und genau das war im
+        # Referenzlauf der Regelfall: acht belegte Zahlen galten als unbelegt,
+        # weil ihre Quellen die Retrieval-Schwelle nicht erreichten. Ob die
+        # Quelle den Claim *trägt*, entscheidet unverändert das Entailment.
+        numeric_hit = shares_numeric_fact(claim_text, text)
         try:
             cand_vec = embed(text)
         except Exception:  # pragma: no cover - safety net  # noqa: BLE001 — safety net; caller handles empty result
             continue
         score = _cosine(claim_vec, cand_vec)
-        if score < threshold:
+        if score < threshold and not numeric_hit:
             continue
 
         # Canonical Records werden nicht in jeden Claim kopiert. Der
@@ -122,7 +135,7 @@ def bind_evidence_to_claim(
         rounded = round(float(score), 3)
         bound["retrieval_score"] = rounded
         bound["match_score"] = rounded
-        scored.append((bound, item))
+        scored.append((bound, item, numeric_hit))
 
     # Erst kürzen, dann klassifizieren. Die Reihenfolge ist seit #1357 nicht
     # mehr beliebig: der Entailment-Check kann in der Grauzone einen LLM-Judge
@@ -134,10 +147,17 @@ def bind_evidence_to_claim(
     # jetzt heraus, statt ``contradicts_claim`` zu setzen. Das ist vertretbar,
     # weil eine Quelle, die dem Claim inhaltlich widerspricht, ihn thematisch
     # trifft und damit oben landet.
-    scored.sort(key=lambda pair: pair[0]["retrieval_score"], reverse=True)
+    # Numerische Treffer zuerst: sie sind deterministisch einschlägig, während
+    # der Retrieval-Score eine Schätzung ist. Ohne diesen Vorrang verdrängte
+    # ein thematisch naher Kandidat ohne Zahlen genau die Quelle, wegen der
+    # der Claim geprüft wird.
+    scored.sort(
+        key=lambda entry: (entry[2], entry[0]["retrieval_score"]),
+        reverse=True,
+    )
 
     results: List[Dict[str, Any]] = []
-    for bound, item in scored[:top_k]:
+    for bound, item, _numeric_hit in scored[:top_k]:
         result = classify_evidence(
             claim_text,
             item,

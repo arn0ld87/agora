@@ -13,7 +13,9 @@ from ...contracts.report_v3 import DataGap as ReportV3DataGap
 from ...contracts.report_v3 import Hypothesis as ReportV3Hypothesis
 from ...contracts.report_v3 import RED_TEAM_FINDINGS_LIMIT, ModelAttribution
 from ...contracts.report_v3 import SimulationContribution
+from .claim_dedup import dedup_claims, duplicate_report
 from .metadata_merge import merge_section_metadata
+from .threshold_provenance import bind_threshold_provenance, dedup_thresholds
 from .simulation_contribution import compute_simulation_contribution
 from ...config import Config
 from ...models.report import Report, ReportOutline, ReportSection, ReportStatus
@@ -111,6 +113,48 @@ def _text_confidence_for(
     if recorded not in {"speculative", "low", "medium", "high", "verified"}:
         return None
     return recorded  # type: ignore[return-value]
+
+
+def _dedup_claims_with_log(claims: list) -> list:
+    """Derselbe Befund aus mehreren Abschnitten ist ein Befund.
+
+    Über die sieben Abschnitte des Referenzlaufs ``report_cc2ef45da5e9``
+    verteilten sich mehrfach praktisch identische Aussagen — für den Leser
+    sieht das aus wie mehrfache Bestätigung, tatsächlich ist es dieselbe
+    Quelle, mehrfach zitiert. Zusammengeführt wird nur bei gleichen Zahlen,
+    gleicher Belegmenge und hoher Wortüberlappung; das Entfernte steht im Log.
+    """
+    duplicates = duplicate_report(claims)
+    if not duplicates:
+        return claims
+    logger.info(
+        "build_report_v3: %d Claim-Dublette(n) entfernt: %s",
+        len(duplicates),
+        "; ".join(
+            f"{entry['claim_id']}→{entry['duplicate_of']}"
+            for entry in duplicates[:5]
+        ),
+    )
+    return dedup_claims(claims)
+
+
+def _bind_and_dedup_thresholds(metadata_kwargs: dict, evidence_index: dict) -> None:
+    """Zwei Schritte, die kein anderer Metadaten-Slot braucht.
+
+    Eine Zahl, die wörtlich in einer Quelle steht, darf nicht als unbelegte
+    Heuristik enden, und dieselbe Zahl aus zwei Abschnitten ist ein
+    Schwellenwert, nicht zwei. Im Referenzlauf trugen alle 27 Thresholds
+    ``evidence_status="heuristic"`` bei leeren ``evidence_refs`` — auch die aus
+    dem Seed-Dokument — und mehrere Werte erschienen doppelt mit
+    widersprüchlicher Herkunftsangabe.
+    """
+    if not metadata_kwargs.get("thresholds"):
+        return
+    metadata_kwargs["thresholds"] = dedup_thresholds(
+        bind_threshold_provenance(
+            metadata_kwargs["thresholds"], list(evidence_index.values())
+        )
+    )
 
 
 class ReportManager:
@@ -563,6 +607,8 @@ class ReportManager:
                 else item
                 for item in items
             ]
+        claims = _dedup_claims_with_log(claims)
+        _bind_and_dedup_thresholds(metadata_kwargs, evidence_index)
         # Issue #1340: ``build_report_v3`` baut das Artefakt aus Report und
         # Evidenzkarte neu auf. Beides weiss nichts von der Red-Team-Stage, die
         # ihr Ergebnis direkt auf dem ReportV3-Objekt ablegt
@@ -763,6 +809,16 @@ class ReportManager:
             for section in (cls.get_evidence_map(report_id) or {}).get("sections", [])
             if section.get("section_index") is not None
         }
+        # Die Belegprüfung gehört gesammelt ans Ende, nicht hinter jeden
+        # Abschnitt. Im Referenzlauf report_cc2ef45da5e9 standen sieben
+        # Abschnitten mit zusammen ~48k Zeichen rund 111k Zeichen Export
+        # gegenüber: der Audit-Apparat überwuchs den Bericht, den er prüfen
+        # sollte. Gelöscht wird dabei nichts — dieselben Tabellen, an einer
+        # Stelle, wo sie ein Prüfer am Stück liest und ein Leser überspringt.
+        #
+        # Die Marker *im* Fließtext bleiben, wo sie sind: "[Beleg fehlt]" gilt
+        # für genau einen Satz, und diese Zuordnung ist der ganze Zweck.
+        audit_appendix: list[str] = []
         for section_info in sections:
             evidence_section = evidence_sections.get(int(section_info.get("section_index", 0)))
             md_content += mark_hypotheses_in_content(
@@ -777,10 +833,33 @@ class ReportManager:
                 item for item in (hypotheses, data_gaps, confidence_markers) if item
             ]
             if annotations:
-                md_content = md_content.rstrip() + "\n\n" + "\n\n".join(annotations) + "\n\n"
-        
+                # `get_generated_sections` liefert nur filename/section_index/
+                # content — kein `title`. Der Abschnittstitel steht in der
+                # Evidenzkarte; ohne ihn liefen alle Tabellen zu einem
+                # unbeschrifteten Block zusammen, und der Leser konnte einem
+                # "[Beleg fehlt]" keinen Abschnitt mehr zuordnen.
+                title = str(
+                    (evidence_section or {}).get("section_title") or ""
+                ).strip()
+                index = section_info.get("section_index")
+                heading = f"**{title}**" if title else f"**Abschnitt {index}**"
+                audit_appendix.append(
+                    "\n\n".join(part for part in (heading, *annotations) if part)
+                )
+
         # post-processing: clean up heading issues in the entire report
         md_content = cls._post_process_report(md_content, outline)
+
+        # Der Anhang wird erst nach der Überschriften-Bereinigung angehängt:
+        # die kennt nur die Abschnitte des Outlines und würde jede andere
+        # Überschrift entfernen — auch die des Anhangs selbst.
+        if audit_appendix:
+            md_content = (
+                md_content.rstrip()
+                + "\n\n---\n\n## Anhang: Belegprüfung\n\n"
+                + "\n\n".join(audit_appendix)
+                + "\n"
+            )
 
         # MAI-06: Nicht mehr auf Disk schreiben — nur zurückgeben.
         # Aufrufer ist save_report(), das setzt report.markdown_content.
@@ -1024,6 +1103,11 @@ class ReportManager:
             # Issue #1192: fehlt bei Reports, die vor der Einfuehrung
             # geschrieben wurden — dort bleibt der Stand unbekannt.
             simulation_snapshot=data.get('simulation_snapshot'),
+            # Ohne diese Zeile schreibt der Lauf seine Qualitaetsmaengel zwar
+            # in meta.json, aber jede API-Antwort baut den Report ohne sie neu:
+            # `GET /api/report/<id>` meldete `degraded: false` auch fuer den
+            # gescheiterten Lauf, fuer den dieser Slice existiert.
+            run_degradations=list(data.get('run_degradations') or []),
         )
     
     @classmethod

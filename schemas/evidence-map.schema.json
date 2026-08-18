@@ -145,6 +145,90 @@
       "title": "EntailmentVerdict",
       "type": "string"
     },
+    "EvidenceCoverageEntry": {
+      "additionalProperties": false,
+      "description": "Was aus einem quantitativen Tool-Fakt geworden ist.\n\nIm Referenzlauf ``report_cc2ef45da5e9`` lagen 31 %, 67 %, 83 %, 91 %, 6 %\nund \"sieben F\u00e4lle\" in den Tool-Ergebnissen vor und fehlten anschlie\u00dfend im\nkanonischen Evidence-Index. Kein Log, keine Meldung \u2014 die Zahlen waren\neinfach weg, und der Bericht f\u00fchrte sie folgerichtig als unbelegt.\n\nEin Fakt darf verworfen werden. Er darf nur nicht *still* verworfen werden:\njeder Eintrag hier tr\u00e4gt entweder eine kanonische Evidence-ID oder einen\nGrund, warum es keine gibt. Das macht den Unterschied zwischen einem\nDedup-Treffer und einem Extraktionsfehler nachtr\u00e4glich aufl\u00f6sbar.",
+      "properties": {
+        "canonical_evidence_id": {
+          "anyOf": [
+            {
+              "pattern": "^ev_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Die kanonische Evidence \u2014 Pflicht bei status='canonicalized'.",
+          "title": "Canonical Evidence Id"
+        },
+        "fact": {
+          "description": "Der Fakt im Wortlaut der Quelle.",
+          "minLength": 1,
+          "title": "Fact",
+          "type": "string"
+        },
+        "normalized_value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Normalized Value"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Warum verworfen \u2014 Pflicht bei status='dropped'.",
+          "title": "Reason"
+        },
+        "source_result_id": {
+          "description": "Tool-Ergebnis, aus dem der Fakt stammt (producer_key oder Tool-Name).",
+          "minLength": 1,
+          "title": "Source Result Id",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "canonicalized",
+            "dropped"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        }
+      },
+      "required": [
+        "source_result_id",
+        "fact",
+        "status"
+      ],
+      "title": "EvidenceCoverageEntry",
+      "type": "object"
+    },
     "EvidenceDegradationModel": {
       "additionalProperties": false,
       "description": "Maschinenlesbares Protokoll einer lokalen Claim-Degradierung (Issue #1006).\n\nEin einzelner ADR-0002-Verstoss kippte bisher den gesamten Report auf\nFAILED und vernichtete bereits fertige Sections. Statt den Validator zu\nlockern, wird der verletzende Claim lokal abgestuft und die Reparatur\nhier protokolliert.",
@@ -698,6 +782,13 @@
         "$ref": "#/$defs/EvidenceDegradationModel"
       },
       "title": "Degradation Log",
+      "type": "array"
+    },
+    "evidence_coverage_ledger": {
+      "items": {
+        "$ref": "#/$defs/EvidenceCoverageEntry"
+      },
+      "title": "Evidence Coverage Ledger",
       "type": "array"
     },
     "evidence_index": {
