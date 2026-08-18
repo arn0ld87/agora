@@ -235,13 +235,14 @@ class _FakeBuilder:
     bestehen.
     """
 
-    def __init__(self, *, cancel_effect=None, mark_incomplete_effect=None):
+    def __init__(self, *, cancel_effect=None, mark_incomplete_effect=None, late_cancel_run_id=None):
         self.completed_graph_ids: list[str] = []
         self.incomplete_calls: list[tuple] = []
         self.delete_calls: list[str] = []
         self.add_text_batches_called = False
         self._cancel_effect = cancel_effect
         self._mark_incomplete_effect = mark_incomplete_effect
+        self._late_cancel_run_id = late_cancel_run_id
 
     def create_graph(self, name: str) -> str:
         return "graph-cancel-1"
@@ -268,6 +269,10 @@ class _FakeBuilder:
         return ["ep1", "ep2"]
 
     def get_graph_data(self, graph_id):
+        if self._late_cancel_run_id is not None:
+            # Simuliert: das Flag wird erst NACH dem letzten Checkpoint
+            # (vor add_text_batches) gesetzt — der Build läuft normal durch.
+            request_cancel(self._late_cancel_run_id)
         return {"node_count": 10, "edge_count": 5}
 
     def assess_graph_quality_from_counts(self, **kwargs):
@@ -466,3 +471,28 @@ def test_build_task_no_cancel_completes_normally(monkeypatch, run_id):
     update = result["run_updates"][-1]
     assert update["status"] == "completed"
     assert "termination_reason" not in update
+
+
+def test_build_task_late_cancel_still_clears_flag(monkeypatch, run_id):
+    """Review-Finding PR #1371, Befund 7 (NIEDRIG): kommt der Cancel-Request
+    NACH dem letzten Checkpoint (add_text_batches ist schon durch), läuft der
+    Build normal durch — vorher blieb das threading.Event in cancel_flag.py
+    dann für die restliche Prozesslaufzeit im globalen Dict liegen. Der
+    finally-Block in build_task muss das Flag trotzdem räumen, auch auf dem
+    Erfolgspfad.
+    """
+    from app.services.sim.cancel_flag import is_cancel_requested
+
+    builder = _FakeBuilder(late_cancel_run_id=run_id)
+
+    result = _run_build(monkeypatch, builder, run_id=run_id)
+
+    # Erfolgspfad wurde genommen, kein Cancel-Endzustand.
+    assert result["project"].status == ProjectStatus.GRAPH_COMPLETED
+    assert result["run_updates"][-1]["status"] == "completed"
+
+    # Das Flag ist trotzdem weg.
+    assert is_cancel_requested(run_id) is False, (
+        "Ein zu spät angekommener Cancel darf das Flag nicht dauerhaft "
+        "im Prozessspeicher hinterlassen"
+    )

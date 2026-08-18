@@ -1001,6 +1001,29 @@ def _make_prepare_job(
             if failed_state:
                 failed_state.error = str(exc)
                 manager._set_status(failed_state, SimulationStatus.FAILED)
+        finally:
+            # Review-Finding (PR #1371, Befund 7): ohne diesen finally-Block
+            # räumte nur der PrepareCancelledError-Zweig das Flag über
+            # _finish_cancelled_prepare_run auf. Kommt die Cancel-Anfrage
+            # NACH dem letzten Checkpoint (z. B. während _phase_generate_config,
+            # die keinen eigenen Check hat), läuft der Job normal zu Ende —
+            # die Nachricht springt für den Nutzer von "Cancel requested —
+            # finishing current stage" auf "completed", und das
+            # threading.Event bliebe für die restliche Prozesslaufzeit im
+            # globalen Dict von cancel_flag.py liegen (kleines, aber echtes
+            # Leck über viele Läufe). ``clear_cancel`` ist idempotent, ein
+            # zweiter Aufruf im Cancel-Zweig oben ist folgenlos.
+            from ..services.sim.cancel_flag import clear_cancel, is_cancel_requested
+
+            if is_cancel_requested(run_record["run_id"]):
+                logger.info(
+                    "Simulation prepare: Cancel-Flag war gesetzt, aber der "
+                    "letzte Checkpoint war bereits passiert (run_id=%s, "
+                    "simulation_id=%s) — Abbruch kam zu spät, Endzustand "
+                    "bleibt wie oben bestimmt.",
+                    run_record["run_id"], simulation_id,
+                )
+            clear_cancel(run_record["run_id"])
 
     return run_prepare
 

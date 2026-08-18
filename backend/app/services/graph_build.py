@@ -692,6 +692,28 @@ class GraphBuildService:
                     import traceback
                     task_manager.update_task(task_id, status=TaskStatus.FAILED, message=f"Build failed: {str(exc)}", error=traceback.format_exc())
                     run_registry.update_run(run_record["run_id"], status="failed", message=str(exc), error=str(exc))
+                finally:
+                    # Review-Finding (PR #1371, Befund 7): ohne diesen
+                    # finally-Block räumte nur der GraphBuildCancelled-Zweig
+                    # (über _finish_cancelled_build) das Flag auf. Kommt die
+                    # Cancel-Anfrage NACH dem letzten Checkpoint (z. B.
+                    # während der Qualitätsbewertung nach add_text_batches),
+                    # läuft der Build normal zu Ende und das
+                    # threading.Event bliebe für die restliche
+                    # Prozesslaufzeit im globalen Dict von cancel_flag.py
+                    # liegen. ``clear_cancel`` ist idempotent, ein zweiter
+                    # Aufruf im Cancel-Zweig oben ist folgenlos.
+                    from ..services.sim.cancel_flag import clear_cancel, is_cancel_requested
+
+                    if is_cancel_requested(run_record["run_id"]):
+                        build_logger.info(
+                            "Graph build: Cancel-Flag war gesetzt, aber der "
+                            "letzte Checkpoint war bereits passiert "
+                            "[project_id=%s, run_id=%s] — Abbruch kam zu "
+                            "spät, Endzustand bleibt wie oben bestimmt.",
+                            project_id, run_record["run_id"],
+                        )
+                    clear_cancel(run_record["run_id"])
 
             from ..jobs import enqueue
             enqueue("graph_build", build_task)

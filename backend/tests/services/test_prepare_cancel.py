@@ -416,3 +416,79 @@ def test_run_prepare_cancel_branch_setzt_stopped_und_user_cancel(monkeypatch, tm
     from app.services.sim.cancel_flag import is_cancel_requested
 
     assert is_cancel_requested(run_id) is False
+
+
+def test_run_prepare_late_cancel_still_clears_flag(monkeypatch, tmp_path):
+    """Review-Finding PR #1371, Befund 7 (NIEDRIG): kommt der Cancel-Request
+    NACH dem letzten Checkpoint (kein Check in ``_phase_generate_config``),
+    läuft der Job normal durch ``prepare_simulation`` durch — vorher blieb
+    das ``threading.Event`` in ``cancel_flag.py`` dann für die restliche
+    Prozesslaufzeit im globalen Dict liegen. Der finally-Block in
+    ``run_prepare`` muss das Flag trotzdem räumen, auch wenn der Erfolgspfad
+    (nicht der Cancel-Zweig) genommen wurde.
+    """
+    from app.api import simulation_prepare as api_mod
+    from app.services.sim.cancel_flag import is_cancel_requested
+
+    run_id = _unique_run_id()
+    clear_cancel(run_id)
+
+    manager = MagicMock()
+
+    def _finish_normally_but_cancel_flag_is_set(**kwargs):
+        # Simuliert: das Flag wurde gesetzt, NACHDEM der letzte Checkpoint
+        # in prepare_simulation() schon passiert war — der Orchestrator hat
+        # es nie gesehen und lief bis READY durch.
+        request_cancel(run_id)
+        return SimpleNamespace(
+            to_simple_dict=lambda: {"simulation_id": "sim_late_cancel", "status": "ready"}
+        )
+
+    manager.prepare_simulation.side_effect = _finish_normally_but_cancel_flag_is_set
+
+    task_manager = MagicMock()
+    run_record = {"run_id": run_id}
+
+    captured_updates: list[dict] = []
+    monkeypatch.setattr(
+        api_mod.run_registry,
+        "update_run",
+        lambda rid, **kw: captured_updates.append({"run_id": rid, **kw}),
+    )
+
+    inputs = api_mod._PrepareInputs(
+        simulation_requirement="Req",
+        document_text="",
+        entity_types=None,
+        use_llm_for_profiles=True,
+        parallel_profile_count=None,
+        max_agents=None,
+        quota_plan=None,
+        agent_language_override=None,
+    )
+
+    run_prepare = api_mod._make_prepare_job(
+        manager=manager,
+        task_manager=task_manager,
+        task_id="task-late-cancel-1",
+        simulation_id="sim_late_cancel",
+        inputs=inputs,
+        storage=MagicMock(),
+        llm_model="test-model",
+        effective_llm_runtime=None,
+        run_record=run_record,
+    )
+
+    run_prepare()
+
+    # Erfolgspfad wurde genommen — kein Cancel-Endzustand, aber das Flag
+    # ist trotzdem weg.
+    task_manager.complete_task.assert_called_once()
+    assert captured_updates == [], (
+        "Der Erfolgspfad ruft run_registry.update_run in run_prepare selbst "
+        "nicht auf — das passiert eine Ebene höher"
+    )
+    assert is_cancel_requested(run_id) is False, (
+        "Ein zu spät angekommener Cancel darf das Flag nicht dauerhaft "
+        "im Prozessspeicher hinterlassen"
+    )
