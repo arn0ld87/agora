@@ -905,132 +905,176 @@ def classify_evidence(
 
     # --- Regel 1: Claim trägt eine Zahl ------------------------------------
     if claim_facts:
-        checks.append("numeric_claim")
-        for claim_fact in claim_facts:
-            for ev_fact in evidence_facts:
-                same_value = abs(claim_fact.value - ev_fact.value) < 0.001
-                same_subject = subjects_match(claim_fact.subject, ev_fact.subject)
-                predicate_overlap = _overlap_ratio(claim_fact.predicate, ev_fact.predicate)
-
-                if same_value and same_subject:
-                    return _classify_matching_number(
-                        claim_fact, ev_fact, predicate_overlap, checks
-                    )
-
-                if same_value and not same_subject:
-                    # Issue #1356: kein Widerspruch. Dass eine Quelle denselben
-                    # Zahlenwert für eine *andere* Gruppe nennt, sagt über die
-                    # hier behauptete Gruppe nichts aus — zwei Gruppen dürfen
-                    # denselben Wert haben. Ein Widerspruch wäre erst ein
-                    # abweichender Wert für dieselbe Gruppe (``value_mismatch``).
-                    # Im Referenzlauf kostete diese Fehleinstufung vier belegte
-                    # Aussagen, darunter den Satz mit den drei Schulungsquoten.
-                    return EntailmentResult(
-                        EntailmentVerdict.INSUFFICIENT,
-                        "Zahl belegt, aber für eine andere Bezugsgruppe",
-                        matched_fact=ev_fact,
-                        claim_fact=claim_fact,
-                        checks=checks + ["subject_mismatch"],
-                    )
-
-                if (
-                    same_subject
-                    and not same_value
-                    and predicate_overlap >= PREDICATE_MATCH_THRESHOLD
-                ):
-                    # Nennt der Claim den belegten Wert selbst — nur an einer
-                    # anderen Zahl festgemacht —, widerspricht er der Quelle
-                    # nicht, sondern die Zuordnung der Bezugsgruppe ist
-                    # unscharf. Der Referenzlauf zu #1356 hat genau einen
-                    # solchen Fall: "83 Prozent im Ärztlichen Dienst und 91
-                    # Prozent in der Verwaltung" gegen eine Quelle, die die
-                    # 91 Prozent der Verwaltung belegt. Weil das Subjekt der
-                    # ersten Zahl bis zur zweiten Gruppe durchläuft (#1357),
-                    # verglich die Regel 83 mit 91 und löschte einen Satz,
-                    # den dieselbe Quelle stützt.
-                    if any(
-                        abs(other.value - ev_fact.value) < 0.001 for other in claim_facts
-                    ):
-                        return EntailmentResult(
-                            EntailmentVerdict.INSUFFICIENT,
-                            "der Claim nennt den belegten Wert an anderer Stelle; "
-                            "welche Zahl zu welcher Bezugsgruppe gehört, ist nicht "
-                            "eindeutig zuzuordnen",
-                            matched_fact=ev_fact,
-                            claim_fact=claim_fact,
-                            checks=checks + ["value_mismatch_ambiguous_subject"],
-                        )
-                    # Ein abweichender Zahlenwert allein ist kein Widerspruch.
-                    # Erst wenn beide Zahlen über denselben Sachverhalt reden —
-                    # gleiche Einheit, gleiche Faktenart, gleiche
-                    # Grundgesamtheit —, schließen sie einander aus. Im
-                    # Referenzlauf fehlte diese Prüfung, und ein Ist-Wert einer
-                    # Teilgruppe (31 % Pflege-Nachtschicht) galt als Widerlegung
-                    # einer Mindestanforderung an die Gesamtbelegschaft (80 %);
-                    # der Satz verschwand aus dem Fließtext und riss die
-                    # Aufzählung auf, in der er stand.
-                    divergence = facts_are_comparable(claim_fact, ev_fact)
-                    if divergence is not None:
-                        return EntailmentResult(
-                            EntailmentVerdict.INSUFFICIENT,
-                            "abweichender Zahlenwert, aber die beiden Angaben "
-                            "sind nicht vergleichbar "
-                            f"({_DIVERGENCE_REASONS[divergence]})",
-                            matched_fact=ev_fact,
-                            claim_fact=claim_fact,
-                            checks=checks + [divergence],
-                        )
-                    return EntailmentResult(
-                        EntailmentVerdict.CONTRADICTED,
-                        "gleiche Aussage über dieselbe Gruppe, abweichender Zahlenwert",
-                        matched_fact=ev_fact,
-                        claim_fact=claim_fact,
-                        checks=checks + ["value_mismatch"],
-                    )
-
-        return EntailmentResult(
-            EntailmentVerdict.INSUFFICIENT,
-            "numerischer Claim ohne passenden Zahlenbeleg",
-            claim_fact=claim_facts[0],
-            checks=checks + ["no_matching_number"],
-        )
+        return _classify_numeric_claim(claim_facts, evidence_facts, checks)
 
     # --- Regel 2: Claim behauptet eine Mehrheit/Minderheit ------------------
     direction = _quantifier_direction(claim)
     if direction and evidence_facts:
-        checks.append("quantifier_claim")
-        for ev_fact in evidence_facts:
-            if ev_fact.unit != "percent" or not subjects_match(claim, ev_fact.subject):
-                continue
-            is_majority = ev_fact.value > 50.0
-            if direction == "majority" and not is_majority:
-                return EntailmentResult(
-                    EntailmentVerdict.CONTRADICTED,
-                    f"Mehrheitsaussage steht gegen einen Anteil von {ev_fact.value:g} %",
-                    matched_fact=ev_fact,
-                    checks=checks + ["majority_vs_minority"],
-                )
-            if direction == "minority" and is_majority:
-                return EntailmentResult(
-                    EntailmentVerdict.CONTRADICTED,
-                    f"Minderheitsaussage steht gegen einen Anteil von {ev_fact.value:g} %",
-                    matched_fact=ev_fact,
-                    checks=checks + ["minority_vs_majority"],
-                )
-        return EntailmentResult(
-            EntailmentVerdict.RELATED_ONLY,
-            "Mengenaussage ohne quantitativen Beleg",
-            checks=checks + ["quantifier_unbacked"],
-        )
+        return _classify_quantifier_claim(claim, direction, evidence_facts, checks)
 
-    # --- Regel 3: rein qualitativer Claim ----------------------------------
-    # Der Themenvorfilter fragt nur, ob überhaupt vom Selben die Rede ist.
-    # Wortüberlappung ist dafür ein schlechtes Maß: ein Interviewzitat sagt
-    # dasselbe in völlig anderen Worten. Im Referenzlauf fielen 22 von 25
-    # Interview-Paaren hier heraus (Containment-Median 0.04), obwohl das
-    # Retrieval sie mit 0.65 bis 0.79 korrekt gefunden hatte — sie erreichten
-    # die inhaltliche Prüfung nie. Liegt ein Retrieval-Ergebnis vor, hat es
-    # diese Frage bereits beantwortet (#1357).
+    return _classify_qualitative_claim(
+        claim,
+        evidence_text,
+        checks,
+        topic_overlap=topic_overlap,
+        retrieval_score=retrieval_score,
+        judge=judge,
+    )
+
+
+def _classify_numeric_claim(
+    claim_facts: List[NumericFact],
+    evidence_facts: List[NumericFact],
+    checks: List[str],
+) -> EntailmentResult:
+    """Regel 1 — der Claim trägt eine Zahl, und die entscheidet.
+
+    Aus :func:`classify_evidence` herausgelöst, damit beide Funktionen unter
+    der Komplexitätsschwelle des radon-Gates bleiben.
+    """
+    checks = checks + ["numeric_claim"]
+    for claim_fact in claim_facts:
+        for ev_fact in evidence_facts:
+            same_value = abs(claim_fact.value - ev_fact.value) < 0.001
+            same_subject = subjects_match(claim_fact.subject, ev_fact.subject)
+            predicate_overlap = _overlap_ratio(claim_fact.predicate, ev_fact.predicate)
+
+            if same_value and same_subject:
+                return _classify_matching_number(
+                    claim_fact, ev_fact, predicate_overlap, checks
+                )
+
+            if same_value and not same_subject:
+                # Issue #1356: kein Widerspruch. Dass eine Quelle denselben
+                # Zahlenwert für eine *andere* Gruppe nennt, sagt über die
+                # hier behauptete Gruppe nichts aus — zwei Gruppen dürfen
+                # denselben Wert haben. Ein Widerspruch wäre erst ein
+                # abweichender Wert für dieselbe Gruppe (``value_mismatch``).
+                # Im Referenzlauf kostete diese Fehleinstufung vier belegte
+                # Aussagen, darunter den Satz mit den drei Schulungsquoten.
+                return EntailmentResult(
+                    EntailmentVerdict.INSUFFICIENT,
+                    "Zahl belegt, aber für eine andere Bezugsgruppe",
+                    matched_fact=ev_fact,
+                    claim_fact=claim_fact,
+                    checks=checks + ["subject_mismatch"],
+                )
+
+            if (
+                same_subject
+                and not same_value
+                and predicate_overlap >= PREDICATE_MATCH_THRESHOLD
+            ):
+                # Nennt der Claim den belegten Wert selbst — nur an einer
+                # anderen Zahl festgemacht —, widerspricht er der Quelle
+                # nicht, sondern die Zuordnung der Bezugsgruppe ist
+                # unscharf. Der Referenzlauf zu #1356 hat genau einen
+                # solchen Fall: "83 Prozent im Ärztlichen Dienst und 91
+                # Prozent in der Verwaltung" gegen eine Quelle, die die
+                # 91 Prozent der Verwaltung belegt. Weil das Subjekt der
+                # ersten Zahl bis zur zweiten Gruppe durchläuft (#1357),
+                # verglich die Regel 83 mit 91 und löschte einen Satz,
+                # den dieselbe Quelle stützt.
+                if any(
+                    abs(other.value - ev_fact.value) < 0.001 for other in claim_facts
+                ):
+                    return EntailmentResult(
+                        EntailmentVerdict.INSUFFICIENT,
+                        "der Claim nennt den belegten Wert an anderer Stelle; "
+                        "welche Zahl zu welcher Bezugsgruppe gehört, ist nicht "
+                        "eindeutig zuzuordnen",
+                        matched_fact=ev_fact,
+                        claim_fact=claim_fact,
+                        checks=checks + ["value_mismatch_ambiguous_subject"],
+                    )
+                # Ein abweichender Zahlenwert allein ist kein Widerspruch.
+                # Erst wenn beide Zahlen über denselben Sachverhalt reden —
+                # gleiche Einheit, gleiche Faktenart, gleiche
+                # Grundgesamtheit —, schließen sie einander aus. Im
+                # Referenzlauf fehlte diese Prüfung, und ein Ist-Wert einer
+                # Teilgruppe (31 % Pflege-Nachtschicht) galt als Widerlegung
+                # einer Mindestanforderung an die Gesamtbelegschaft (80 %);
+                # der Satz verschwand aus dem Fließtext und riss die
+                # Aufzählung auf, in der er stand.
+                divergence = facts_are_comparable(claim_fact, ev_fact)
+                if divergence is not None:
+                    return EntailmentResult(
+                        EntailmentVerdict.INSUFFICIENT,
+                        "abweichender Zahlenwert, aber die beiden Angaben "
+                        "sind nicht vergleichbar "
+                        f"({_DIVERGENCE_REASONS[divergence]})",
+                        matched_fact=ev_fact,
+                        claim_fact=claim_fact,
+                        checks=checks + [divergence],
+                    )
+                return EntailmentResult(
+                    EntailmentVerdict.CONTRADICTED,
+                    "gleiche Aussage über dieselbe Gruppe, abweichender Zahlenwert",
+                    matched_fact=ev_fact,
+                    claim_fact=claim_fact,
+                    checks=checks + ["value_mismatch"],
+                )
+
+    return EntailmentResult(
+        EntailmentVerdict.INSUFFICIENT,
+        "numerischer Claim ohne passenden Zahlenbeleg",
+        claim_fact=claim_facts[0],
+        checks=checks + ["no_matching_number"],
+    )
+
+
+def _classify_quantifier_claim(
+    claim: str,
+    direction: str,
+    evidence_facts: List[NumericFact],
+    checks: List[str],
+) -> EntailmentResult:
+    """Regel 2 — der Claim behauptet eine Mehrheit oder Minderheit."""
+    checks = checks + ["quantifier_claim"]
+    for ev_fact in evidence_facts:
+        if ev_fact.unit != "percent" or not subjects_match(claim, ev_fact.subject):
+            continue
+        is_majority = ev_fact.value > 50.0
+        if direction == "majority" and not is_majority:
+            return EntailmentResult(
+                EntailmentVerdict.CONTRADICTED,
+                f"Mehrheitsaussage steht gegen einen Anteil von {ev_fact.value:g} %",
+                matched_fact=ev_fact,
+                checks=checks + ["majority_vs_minority"],
+            )
+        if direction == "minority" and is_majority:
+            return EntailmentResult(
+                EntailmentVerdict.CONTRADICTED,
+                f"Minderheitsaussage steht gegen einen Anteil von {ev_fact.value:g} %",
+                matched_fact=ev_fact,
+                checks=checks + ["minority_vs_majority"],
+            )
+    return EntailmentResult(
+        EntailmentVerdict.RELATED_ONLY,
+        "Mengenaussage ohne quantitativen Beleg",
+        checks=checks + ["quantifier_unbacked"],
+    )
+
+
+def _classify_qualitative_claim(
+    claim: str,
+    evidence_text: str,
+    checks: List[str],
+    *,
+    topic_overlap: float,
+    retrieval_score: Optional[float],
+    judge: Optional[EntailmentJudge],
+) -> EntailmentResult:
+    """Regel 3 — der Claim trägt weder Zahl noch Mengenaussage.
+
+    Der Themenvorfilter fragt nur, ob überhaupt vom Selben die Rede ist.
+    Wortüberlappung ist dafür ein schlechtes Maß: ein Interviewzitat sagt
+    dasselbe in völlig anderen Worten. Im Referenzlauf fielen 22 von 25
+    Interview-Paaren hier heraus (Containment-Median 0.04), obwohl das
+    Retrieval sie mit 0.65 bis 0.79 korrekt gefunden hatte — sie erreichten
+    die inhaltliche Prüfung nie. Liegt ein Retrieval-Ergebnis vor, hat es
+    diese Frage bereits beantwortet (#1357).
+    """
     retrieved = (
         retrieval_score is not None
         and retrieval_score >= RETRIEVAL_RELEVANCE_THRESHOLD

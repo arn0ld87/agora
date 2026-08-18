@@ -115,6 +115,48 @@ def _text_confidence_for(
     return recorded  # type: ignore[return-value]
 
 
+def _dedup_claims_with_log(claims: list) -> list:
+    """Derselbe Befund aus mehreren Abschnitten ist ein Befund.
+
+    Über die sieben Abschnitte des Referenzlaufs ``report_cc2ef45da5e9``
+    verteilten sich mehrfach praktisch identische Aussagen — für den Leser
+    sieht das aus wie mehrfache Bestätigung, tatsächlich ist es dieselbe
+    Quelle, mehrfach zitiert. Zusammengeführt wird nur bei gleichen Zahlen,
+    gleicher Belegmenge und hoher Wortüberlappung; das Entfernte steht im Log.
+    """
+    duplicates = duplicate_report(claims)
+    if not duplicates:
+        return claims
+    logger.info(
+        "build_report_v3: %d Claim-Dublette(n) entfernt: %s",
+        len(duplicates),
+        "; ".join(
+            f"{entry['claim_id']}→{entry['duplicate_of']}"
+            for entry in duplicates[:5]
+        ),
+    )
+    return dedup_claims(claims)
+
+
+def _bind_and_dedup_thresholds(metadata_kwargs: dict, evidence_index: dict) -> None:
+    """Zwei Schritte, die kein anderer Metadaten-Slot braucht.
+
+    Eine Zahl, die wörtlich in einer Quelle steht, darf nicht als unbelegte
+    Heuristik enden, und dieselbe Zahl aus zwei Abschnitten ist ein
+    Schwellenwert, nicht zwei. Im Referenzlauf trugen alle 27 Thresholds
+    ``evidence_status="heuristic"`` bei leeren ``evidence_refs`` — auch die aus
+    dem Seed-Dokument — und mehrere Werte erschienen doppelt mit
+    widersprüchlicher Herkunftsangabe.
+    """
+    if not metadata_kwargs.get("thresholds"):
+        return
+    metadata_kwargs["thresholds"] = dedup_thresholds(
+        bind_threshold_provenance(
+            metadata_kwargs["thresholds"], list(evidence_index.values())
+        )
+    )
+
+
 class ReportManager:
     """Persistence and retrieval facade for generated reports."""
     
@@ -565,37 +607,8 @@ class ReportManager:
                 else item
                 for item in items
             ]
-        # Derselbe Befund aus mehreren Abschnitten ist ein Befund. Über die
-        # sieben Abschnitte des Referenzlaufs verteilten sich mehrfach
-        # praktisch identische Aussagen — für den Leser sieht das aus wie
-        # mehrfache Bestätigung, tatsächlich ist es dieselbe Quelle, mehrfach
-        # zitiert. Zusammengeführt wird nur bei gleicher Aussage, gleichen
-        # Zahlen samt Bezugsgruppe *und* gleicher Belegmenge.
-        duplicates = duplicate_report(claims)
-        if duplicates:
-            logger.info(
-                "build_report_v3: %d Claim-Dublette(n) entfernt: %s",
-                len(duplicates),
-                "; ".join(
-                    f"{entry['claim_id']}→{entry['duplicate_of']}"
-                    for entry in duplicates[:5]
-                ),
-            )
-            claims = dedup_claims(claims)
-
-        # Schwellenwerte brauchen zwei Schritte, die kein anderer Slot braucht:
-        # eine Zahl, die wörtlich in einer Quelle steht, darf nicht als
-        # unbelegte Heuristik enden, und dieselbe Zahl aus zwei Abschnitten ist
-        # ein Schwellenwert, nicht zwei. Im Referenzlauf trugen alle 27
-        # Thresholds evidence_status="heuristic" bei leeren evidence_refs — auch
-        # die aus dem Seed-Dokument — und mehrere Werte erschienen doppelt mit
-        # widersprüchlicher Herkunftsangabe.
-        if metadata_kwargs.get("thresholds"):
-            metadata_kwargs["thresholds"] = dedup_thresholds(
-                bind_threshold_provenance(
-                    metadata_kwargs["thresholds"], list(evidence_index.values())
-                )
-            )
+        claims = _dedup_claims_with_log(claims)
+        _bind_and_dedup_thresholds(metadata_kwargs, evidence_index)
         # Issue #1340: ``build_report_v3`` baut das Artefakt aus Report und
         # Evidenzkarte neu auf. Beides weiss nichts von der Red-Team-Stage, die
         # ihr Ergebnis direkt auf dem ReportV3-Objekt ablegt

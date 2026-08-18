@@ -755,38 +755,15 @@ class OasisProfileGenerator:
             )
             profession = None
 
-        # Domänen-Kohärenz vor der Persistenz. Im Referenzlauf
-        # report_cc2ef45da5e9 wurde aus einer EmployeeGroup eines
-        # Klinik-Rollouts eine "Sachbearbeiterin in der Fertigungsplanung" und
-        # aus einem PatientAdvisoryCouncil ein "Schichtleiter Maschinenbau" —
-        # plausible Vitae aus einem Fach, das in keiner Quelle vorkam.
-        #
-        # Bereinigt wird nur der Beruf und nur bei eindeutigem Drift: dieselbe
-        # Linie wie beim nicht ableitbaren Beruf (#1246) — lieber leer als
-        # erfunden. Der Freitext bleibt stehen; ihn zu beschneiden würde mehr
-        # zerstören als retten, und der Befund steht im Log.
-        source_text = " ".join(
-            part for part in (entity.summary or "", context or "") if part
-        )
-        findings = coherence_findings(
+        profession = self._profession_after_coherence_check(
             entity_type=entity_type,
             entity_name=name,
             persona_kind=persona_kind,
-            profession=profession or "",
+            profession=profession,
             persona_text=persona_text,
-            source_text=source_text,
+            entity_summary=entity.summary,
+            entity_context=context,
         )
-        if findings:
-            logger.warning(
-                "persona coherence: entity=%r type=%r befunde=%s",
-                name,
-                entity_type,
-                "; ".join(finding["kind"] for finding in findings),
-            )
-        if profession and any(
-            finding["kind"] == "domain_drift" for finding in findings
-        ):
-            profession = None
 
         # Segment = entity_type string for PersonaQuotaPlan validation.
         # entity_type is already resolved above (get_entity_type() or "Entity").
@@ -1051,6 +1028,54 @@ class OasisProfileGenerator:
         for source, target in sorted(replacements, key=lambda p: -len(p[0])):
             aligned = re.sub(rf"\b{re.escape(source)}\b", target, aligned)
         return aligned
+
+    @staticmethod
+    def _profession_after_coherence_check(
+        *,
+        entity_type: str,
+        entity_name: str,
+        persona_kind: str,
+        profession: Optional[str],
+        persona_text: str,
+        entity_summary: Optional[str],
+        entity_context: Optional[str],
+    ) -> Optional[str]:
+        """Prueft Domaenen-Kohaerenz und leert einen fachfremden Beruf.
+
+        Im Referenzlauf report_cc2ef45da5e9 wurde aus einer EmployeeGroup eines
+        Klinik-Rollouts eine "Sachbearbeiterin in der Fertigungsplanung" und aus
+        einem PatientAdvisoryCouncil ein "Schichtleiter Maschinenbau" —
+        plausible Vitae aus einem Fach, das in keiner Quelle vorkam.
+
+        Bereinigt wird nur der Beruf und nur bei eindeutigem Drift: dieselbe
+        Linie wie beim nicht ableitbaren Beruf (#1246) — lieber leer als
+        erfunden. Der Freitext bleibt stehen; ihn zu beschneiden wuerde mehr
+        zerstoeren als retten, und der Befund steht im Log.
+        """
+        source_text = " ".join(
+            part for part in (entity_summary or "", entity_context or "") if part
+        )
+        findings = coherence_findings(
+            entity_type=entity_type,
+            entity_name=entity_name,
+            persona_kind=persona_kind,
+            profession=profession or "",
+            persona_text=persona_text,
+            source_text=source_text,
+        )
+        if not findings:
+            return profession
+        logger.warning(
+            "persona coherence: entity=%r type=%r befunde=%s",
+            entity_name,
+            entity_type,
+            "; ".join(finding["kind"] for finding in findings),
+        )
+        if profession and any(
+            finding["kind"] == "domain_drift" for finding in findings
+        ):
+            return None
+        return profession
 
     def _is_individual_entity(self, entity_type: str) -> bool:
         """Determine if entity is an individual type"""

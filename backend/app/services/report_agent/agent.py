@@ -897,6 +897,113 @@ class ReportAgent:
             ).to_dict())
         return claims
 
+    def _route_claim_to_hypothesis(
+        self,
+        claim: Dict[str, Any],
+        *,
+        related_only: int,
+        has_evidence: bool,
+        label: str,
+        hypotheses: List[Dict[str, Any]],
+        data_gaps: List[Dict[str, Any]],
+        gate_decisions: List[Dict[str, Any]],
+    ) -> None:
+        """Ohne eine einzige stützende Quelle ist die Aussage eine Hypothese.
+
+        P0-5: auch dann, wenn thematisch verwandte Evidence anhängt. Vorher
+        griff dieser Zweig nur bei komplett leerer Evidence-Liste und
+        niedrigem Score; Interpretationen mit dekorativer Evidence liefen als
+        Claims durch.
+        """
+        index = len(hypotheses) + 1
+        claim_text = self._truncate(
+            str(claim.get("claim_text") or claim.get("claim") or "").strip()
+            or "No evidence-bound claim text available.",
+            1000,
+        )
+        if related_only:
+            rationale = (
+                f"{related_only} Quelle(n) sind thematisch verwandt, "
+                "belegen die Aussage aber nicht (kein SUPPORTED-Urteil) "
+                "— deshalb als Hypothese geführt."
+            )
+        else:
+            rationale = (
+                "Keine direkte Evidence gebunden; deshalb nicht als "
+                "validierter Claim persistiert."
+            )
+        hypothesis_id = f"hypothesis_{index:02d}"
+        hypotheses.append({
+            "hypothesis_id": hypothesis_id,
+            "hypothesis_text": claim_text,
+            "rationale": rationale,
+            "suggested_evidence": self._suggested_evidence_from_claim_audit(claim),
+        })
+        gap_kind = self._append_data_gap_if_absent(
+            claim_text,
+            related_evidence_count=related_only,
+            gap_id=f"gap_{index:02d}",
+            hypothesis_id=hypothesis_id,
+            data_gaps=data_gaps,
+        )
+        # Copilot-Review PR #1151: dieser Zweig fängt auch den Fall
+        # medium/high/verified ohne jede Evidence ab (der spätere P2.1-Zweig
+        # ist dafür unerreichbar) — das Label macht die Verletzung im
+        # Audit-Trail unterscheidbar.
+        gate_decisions.append({
+            "claim_id": str(claim.get("claim_id") or "<no-id>"),
+            "violation": (
+                "confidence_label_without_evidence"
+                if not has_evidence and label in ("medium", "high", "verified")
+                else "no_supporting_evidence"
+            ),
+            "action": "moved_to_hypotheses",
+            "detail": f"[{gap_kind.value}] {rationale}"[:500],
+        })
+
+    def _append_data_gap_if_absent(
+        self,
+        claim_text: str,
+        *,
+        related_evidence_count: int,
+        gap_id: str,
+        hypothesis_id: Optional[str],
+        data_gaps: List[Dict[str, Any]],
+        suggested_fix: Optional[str] = None,
+    ) -> "ClaimGapKind":
+        """Trägt eine Datenlücke ein — aber nur, wenn wirklich eine vorliegt.
+
+        Eine Datenlücke ist eine Aussage über die Quellenlage, nicht über den
+        Matcher. Im Referenzlauf ``report_cc2ef45da5e9`` wurden 159 Data Gaps
+        exportiert, darunter Aussagen, die wörtlich im Seed standen — gemeldet
+        wurde dort nicht "Information fehlt", sondern "Bindung
+        fehlgeschlagen". Nur ein tatsächliches Fehlen in allen verfügbaren
+        Quellen gilt noch als Lücke; alles andere bleibt Hypothese und wird im
+        Gate-Log geführt.
+
+        Gibt die Einstufung zurück, damit der Aufrufer sie protokollieren kann.
+        """
+        gap_kind = classify_claim_gap(
+            claim_text,
+            related_evidence_count=related_evidence_count,
+            evidence_pool=self._evidence_pool_for_gap_check(),
+        )
+        if gap_kind is not ClaimGapKind.SOURCE_INFORMATION_ABSENT:
+            return gap_kind
+
+        gap_reason = "source_information_absent"
+        entry: Dict[str, Any] = {
+            "gap_id": gap_id,
+            "claim_text": claim_text,
+            "gap_reason": gap_reason,
+            "suggested_fix": suggested_fix
+            or _GAP_SUGGESTED_FIX.get(gap_reason, _GAP_SUGGESTED_FIX_DEFAULT),
+        }
+        if hypothesis_id is not None:
+            entry["hypothesis_id"] = hypothesis_id
+        data_gaps.append(entry)
+        return gap_kind
+
     def _evidence_pool_for_gap_check(self) -> List[Dict[str, Any]]:
         """Alle bisher kanonisierten Evidence-Records dieses Reports.
 
@@ -971,68 +1078,15 @@ class ReportAgent:
             # Evidence-Liste und niedrigem Score; Interpretationen mit
             # dekorativer Evidence liefen als Claims durch.
             if not supporting_ids:
-                index = len(hypotheses) + 1
-                claim_text = (
-                    str(claim.get("claim_text") or claim.get("claim") or "").strip()
-                    or "No evidence-bound claim text available."
+                self._route_claim_to_hypothesis(
+                    claim,
+                    related_only=related_only,
+                    has_evidence=bool(evidence),
+                    label=label,
+                    hypotheses=hypotheses,
+                    data_gaps=data_gaps,
+                    gate_decisions=gate_decisions,
                 )
-                claim_text = self._truncate(claim_text, 1000)
-                suggestions = self._suggested_evidence_from_claim_audit(claim)
-                if related_only:
-                    rationale = (
-                        f"{related_only} Quelle(n) sind thematisch verwandt, "
-                        "belegen die Aussage aber nicht (kein SUPPORTED-Urteil) "
-                        "— deshalb als Hypothese geführt."
-                    )
-                else:
-                    rationale = (
-                        "Keine direkte Evidence gebunden; deshalb nicht als "
-                        "validierter Claim persistiert."
-                    )
-                hypothesis_id = f"hypothesis_{index:02d}"
-                hypotheses.append({
-                    "hypothesis_id": hypothesis_id,
-                    "hypothesis_text": claim_text,
-                    "rationale": rationale,
-                    "suggested_evidence": suggestions,
-                })
-                # Eine Datenlücke ist eine Aussage über die Quellenlage, nicht
-                # über den Matcher. Im Referenzlauf wurden 159 Data Gaps
-                # exportiert, darunter Aussagen, die wörtlich im Seed standen —
-                # gemeldet wurde dort nicht "Information fehlt", sondern
-                # "Bindung fehlgeschlagen". Nur ein tatsächliches Fehlen in
-                # allen verfügbaren Quellen darf noch als Lücke gelten; alles
-                # andere bleibt Hypothese und wird im Gate-Log geführt.
-                gap_kind = classify_claim_gap(
-                    claim_text,
-                    related_evidence_count=related_only,
-                    evidence_pool=self._evidence_pool_for_gap_check(),
-                )
-                if gap_kind is ClaimGapKind.SOURCE_INFORMATION_ABSENT:
-                    gap_reason = "source_information_absent"
-                    data_gaps.append({
-                        "gap_id": f"gap_{index:02d}",
-                        "claim_text": claim_text,
-                        "gap_reason": gap_reason,
-                        "suggested_fix": _GAP_SUGGESTED_FIX.get(
-                            gap_reason, _GAP_SUGGESTED_FIX_DEFAULT
-                        ),
-                        "hypothesis_id": hypothesis_id,
-                    })
-                # Copilot-Review PR #1151: dieser Zweig fängt auch den Fall
-                # medium/high/verified ohne jede Evidence ab (der spätere
-                # P2.1-Zweig ist dafür unerreichbar) — das Label macht die
-                # Verletzung im Audit-Trail unterscheidbar.
-                gate_decisions.append({
-                    "claim_id": str(claim.get("claim_id") or "<no-id>"),
-                    "violation": (
-                        "confidence_label_without_evidence"
-                        if not evidence and label in ("medium", "high", "verified")
-                        else "no_supporting_evidence"
-                    ),
-                    "action": "moved_to_hypotheses",
-                    "detail": f"[{gap_kind.value}] {rationale}"[:500],
-                })
                 continue
             if not evidence and label in ("medium", "high", "verified"):
                 # P2.1: medium/high/verified ohne Evidence darf nicht in claims[]
@@ -1046,23 +1100,15 @@ class ReportAgent:
                 suggestions = self._suggested_evidence_from_claim_audit(claim)
                 # Auch hier gilt die Data-Gap-Semantik: dass ein Claim ohne
                 # Evidence dasteht, sagt nichts darüber, ob die Information
-                # existiert. Steht sie in den Quellen, ist das ein
-                # Bindungsfehler — der Claim wird trotzdem nicht persistiert,
-                # aber er erzeugt keine falsche Aussage über die Datenlage.
-                if (
-                    classify_claim_gap(
-                        claim_text,
-                        related_evidence_count=0,
-                        evidence_pool=self._evidence_pool_for_gap_check(),
-                    )
-                    is ClaimGapKind.SOURCE_INFORMATION_ABSENT
-                ):
-                    data_gaps.append({
-                        "gap_id": f"gap_{index:02d}",
-                        "claim_text": claim_text,
-                        "gap_reason": "source_information_absent",
-                        "suggested_fix": suggestions[0] if suggestions else None,
-                    })
+                # existiert.
+                self._append_data_gap_if_absent(
+                    claim_text,
+                    related_evidence_count=0,
+                    gap_id=f"gap_{index:02d}",
+                    hypothesis_id=None,
+                    data_gaps=data_gaps,
+                    suggested_fix=suggestions[0] if suggestions else None,
+                )
                 continue
 
             # ADR-0002 Stufe agent_grounded: `medium` verlangt mind. 1

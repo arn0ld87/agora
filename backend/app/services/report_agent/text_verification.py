@@ -437,6 +437,56 @@ def _renumber_block(lines: List[str], anchor: int, indent: str) -> None:
         counter += 1
 
 
+def _worst_fact_verdict(
+    sentence: str,
+    evidence_pool: Sequence[Dict[str, Any]],
+    *,
+    judge: Optional[EntailmentJudge] = None,
+) -> Optional[EntailmentResult]:
+    """Das schwerwiegendste Urteil über die Zahlenfakten eines Satzes.
+
+    ``None`` heißt: der Satz trägt keine prüfbare Zahl, oder jede seiner
+    Zahlen ist belegt. Geprüft wird pro Fakt, nicht pro Satz — ein Satz mit
+    drei Quoten darf nicht daran scheitern, dass eine Quelle eine davon einer
+    fremden Bezugsgruppe zuordnet.
+    """
+    worst: Optional[EntailmentResult] = None
+    for fact in extract_numeric_facts(sentence):
+        result = _best_verdict(_fact_probe(fact), evidence_pool, judge=judge)
+        if result.verdict is EntailmentVerdict.SUPPORTED:
+            continue
+        if worst is None or _SEVERITY[result.verdict] > _SEVERITY[worst.verdict]:
+            worst = result
+    return worst
+
+
+def _reject_sentence(
+    sentence: str,
+    result: EntailmentResult,
+    *,
+    block_index: int,
+    rejected: List["RejectedStatement"],
+    enumeration_anchors: List[tuple[int, int]],
+) -> None:
+    """Protokolliert einen entfernten Satz und merkt seine Zählposition.
+
+    Beginnt der Satz eine ausgeschriebene Aufzählung, muss der Rest des
+    Absatzes danach lückenlos weiterzählen — sonst bleibt ein sichtbarer
+    Sprung stehen ("Erstens … Zweitens … Viertens").
+    """
+    rejected.append(
+        RejectedStatement(
+            text=sentence.strip(),
+            verdict=result.verdict,
+            reason=result.reason,
+            block_index=block_index,
+        )
+    )
+    ordinal = _leading_ordinal(sentence)
+    if ordinal is not None:
+        enumeration_anchors.append((block_index, ordinal))
+
+
 def _leading_ordinal(sentence: str) -> Optional[int]:
     """Zählposition, falls der Satz mit einem Aufzählungswort beginnt."""
     match = re.match(r"\s*([A-Za-zÄÖÜäöüß]+)", sentence)
@@ -600,35 +650,19 @@ def verify_prose(
 
         kept: List[str] = []
         for sentence in sentences:
-            facts = extract_numeric_facts(sentence)
-            if not facts:
-                kept.append(sentence)
-                continue
-
-            worst: Optional[EntailmentResult] = None
-            for fact in facts:
-                result = _best_verdict(_fact_probe(fact), evidence_pool, judge=judge)
-                if result.verdict is EntailmentVerdict.SUPPORTED:
-                    continue
-                if worst is None or _SEVERITY[result.verdict] > _SEVERITY[worst.verdict]:
-                    worst = result
-
+            worst = _worst_fact_verdict(sentence, evidence_pool, judge=judge)
             if worst is None:
                 kept.append(sentence)
                 continue
 
             if worst.verdict is EntailmentVerdict.CONTRADICTED:
-                rejected.append(
-                    RejectedStatement(
-                        text=sentence.strip(),
-                        verdict=worst.verdict,
-                        reason=worst.reason,
-                        block_index=len(out_lines),
-                    )
+                _reject_sentence(
+                    sentence,
+                    worst,
+                    block_index=len(out_lines),
+                    rejected=rejected,
+                    enumeration_anchors=enumeration_anchors,
                 )
-                ordinal = _leading_ordinal(sentence)
-                if ordinal is not None:
-                    enumeration_anchors.append((len(out_lines), ordinal))
                 continue
 
             unverified.append(
