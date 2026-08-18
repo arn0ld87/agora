@@ -444,6 +444,20 @@
           "default": null,
           "title": "Tool Name"
         },
+        "topic_stance": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": -1.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Topic Stance"
+        },
         "type": {
           "$ref": "#/$defs/EvidenceType"
         },

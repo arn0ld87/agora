@@ -104,7 +104,7 @@ def _interview(response: str, stance: float | None) -> AgentInterview:
         question="Was halten Sie vom Vollstart?",
         response=response,
         key_quotes=[],
-        sentiment_score=stance,
+        topic_stance=stance,
     )
 
 
@@ -136,12 +136,12 @@ def test_the_stance_arrives_on_the_persisted_evidence_item():
     trug es kein einziges von 99 Items.
     """
     record = _record(_interview("Ich sehe erhebliche Risiken.", -0.7))
-    assert record["sentiment_score"] == pytest.approx(-0.7)
+    assert record["topic_stance"] == pytest.approx(-0.7)
 
 
 def test_an_interview_without_a_stance_keeps_the_field_empty():
     record = _record(_interview("Ich sehe erhebliche Risiken.", None))
-    assert record.get("sentiment_score") is None
+    assert record.get("topic_stance") is None
 
 
 def test_the_stance_never_leaks_into_the_persisted_text():
@@ -149,3 +149,39 @@ def test_the_stance_never_leaks_into_the_persisted_text():
     record = _record(_interview("Ich sehe erhebliche Risiken.", -0.7))
     assert not re.search(r"STANCE", record.get("quote") or "", re.IGNORECASE)
     assert not re.search(r"STANCE", record.get("snippet") or "", re.IGNORECASE)
+
+
+def test_the_stance_never_lands_in_the_snippet_sentiment_field():
+    """Die Themenhaltung darf die Widerspruchs-Penalty eines Claims nicht ausloesen.
+
+    ``sentiment_score`` beschreibt den Tenor des Snippets und geht in
+    ``_has_contradiction`` ein. Zwei Personas koennen denselben Claim stuetzen
+    — beide Snippets zustimmend — und dabei gegensaetzlich zum Thema stehen.
+    Fiele die Themenhaltung in dasselbe Feld, wuerde genau der Claim
+    abgewertet, ueber den sie einig sind.
+    """
+    record = _record(_interview("Schulung ist noetig.", -0.8))
+    assert record["topic_stance"] == pytest.approx(-0.8)
+    assert record.get("sentiment_score") is None
+
+
+def test_opposing_topic_stances_do_not_trigger_the_contradiction_penalty():
+    """Der Fall aus dem Review, durchgerechnet.
+
+    Zwei Belege, die denselben Claim stuetzen, mit entgegengesetzter Haltung
+    zum Rollout. ``_has_contradiction`` feuert bei ``min < -0.3 UND
+    max > +0.3`` — ueber ``sentiment_score``, das hier leer bleibt.
+    """
+    from app.services.confidence_calculator import (
+        _extract_sentiment_scores,
+        _has_contradiction,
+    )
+
+    evidence = [
+        {"topic_stance": -0.8, "supports_claim": True},
+        {"topic_stance": 0.7, "supports_claim": True},
+    ]
+    assert _extract_sentiment_scores(evidence) == []
+    assert _has_contradiction(_extract_sentiment_scores(evidence)) is False
+    # Gegenprobe: im alten Feld haette dieselbe Spanne die Penalty ausgeloest.
+    assert _has_contradiction([-0.8, 0.7]) is True

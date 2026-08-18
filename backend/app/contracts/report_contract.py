@@ -162,6 +162,29 @@ class EvidenceItemModel(BaseModel):
         le=1.0,
         description="Sentiment des Quellen-Snippets (-1 negativ, 0 neutral, +1 positiv).",
     )
+    # Issue #1363: Haltung der befragten Persona zum *Gegenstand der
+    # Interviewfragen*, von -1.0 (klar ablehnend) bis 1.0 (klar zustimmend).
+    #
+    # Bewusst getrennt von ``sentiment_score``: jenes beschreibt den Tenor des
+    # konkreten Snippets, dieses die Position der Person zum Thema. Der
+    # Unterschied ist nicht akademisch. ``_has_contradiction`` wertet die
+    # Sentiment-Spanne der Belege *eines Claims* aus; zwei Personas koennen
+    # beide "Schulung ist noetig" sagen — zustimmende Snippets — und dabei
+    # gegensaetzlich zum Rollout stehen. Fielde die Themenhaltung in
+    # ``sentiment_score``, wuerde genau der Claim abgewertet, ueber den sie
+    # einig sind.
+    #
+    # ``None`` heisst "nicht erhoben", nicht "neutral".
+    topic_stance: Optional[float] = Field(
+        default=None,
+        ge=-1.0,
+        le=1.0,
+        description=(
+            "Haltung der befragten Persona zum Gegenstand der Interviewfragen "
+            "(-1 ablehnend, 0 unentschieden, +1 zustimmend). Nicht der Tenor "
+            "des Snippets — dafuer steht sentiment_score."
+        ),
+    )
     # ADR-0002 Anker 3 (Sub-Slice M11.7b): Der Default war seed_corpus und hat
     # damit jedes Item ohne explizite Angabe zum Dokumentfakt erklärt —
     # inklusive Agentenaktionen und Web-Treffern. Der Default ist jetzt
@@ -254,6 +277,8 @@ class EvidenceRecordModel(BaseModel):
     quote: Optional[str] = Field(default=None, min_length=1, max_length=500)
     source_id_anchor: Optional[str] = Field(default=None, min_length=1, max_length=200)
     sentiment_score: Optional[float] = Field(default=None, ge=-1.0, le=1.0)
+    #: Issue #1363 — siehe EvidenceRecordModel.topic_stance.
+    topic_stance: Optional[float] = Field(default=None, ge=-1.0, le=1.0)
     source_kind: EvidenceSourceKind = EvidenceSourceKind.inferred
     source_model: Optional[str] = Field(default=None, max_length=200)
     persona_stakeholder_group: Optional[str] = Field(

@@ -369,7 +369,7 @@ class GraphToolsService:
                 # Issue #1363: Erst die Haltungszeile abtrennen, dann rendern
                 # und Zitate ziehen — sonst landet "STANCE: -0.6" im
                 # persistierten Zitat und im Berichtstext.
-                platform_answers, sentiment_score = split_platform_answers(
+                platform_answers, topic_stance = split_platform_answers(
                     platform_answers
                 )
 
@@ -416,7 +416,7 @@ class GraphToolsService:
                     question=combined_prompt,
                     response=response_text,
                     key_quotes=key_quotes[:5],
-                    sentiment_score=sentiment_score,
+                    topic_stance=topic_stance,
                 )
                 result.interviews.append(interview)
 
