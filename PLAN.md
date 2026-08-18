@@ -309,6 +309,29 @@ für die Zeilenaktionen. B4 setzt auf dem Objektmodell auf.
 
 ---
 
+## 5a. Stand (18.08.2026)
+
+| Block | Zustand | Wo |
+| --- | --- | --- |
+| B1 Fundament | **erledigt, auf main** | PR #1370 |
+| B2 Abbrechen | **erledigt, auf main** | PR #1371 |
+| B3 Objektmodell | **Ablage + Dossier stehen** | PR #1372 |
+| B4 Öffnung | offen | — |
+
+Was B3 noch fehlt: Bericht-Leseumgebung mit Belegrand, Graph-Objekt mit
+Rundenscrubber, Einstellungen als Overlay, Löschen der Altansichten
+(`Home.vue`, `RunsView.vue`, `RunDetailView.vue`, `RunsDashboard.vue`,
+`v4/shell/*`) und zuletzt das Entfernen des Flags.
+
+Drei Fehler, die beim Bauen von B3 auffielen und im PR mit erledigt sind:
+`listPersonaTemplates` gab die Envelope zurück, deklarierte aber ein Array —
+Personasätze wären in der Ablage nie erschienen. Die dynamisch gebildeten
+Statusschlüssel (`shelf.status.report_*`, `project_*`) existierten in keiner
+Locale, und das mitgegebene `{ fallback }` war wirkungslos. Und das Dossier
+behauptete ohne Auswahl „Noch keine Objekte", während die Ablage voll war.
+
+---
+
 ## 6. Offen / bewusst verschoben
 
 - `_persist_episode` auf eine Transaktion pro Chunk umbauen — eigene Aufgabe,

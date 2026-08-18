@@ -290,6 +290,10 @@ describe('Router – Struktur-Integrität', () => {
       'StepInteraction',
       'CompareV4',
       'HistoryV4',
+      // Block B3: die neue Huelle. Beide zeigen auf ShelfView; der
+      // Flag entscheidet nur, wohin '/' umleitet.
+      'Shelf',
+      'ShelfObject',
       'NotFound',
     ].sort()
 
