@@ -53,6 +53,7 @@ class _FakeBuilder:
         extraction_tally,
         document_ids,
         chunk_ids,
+        run_id,
     ):
         self.add_text_batches_calls.append(
             {
@@ -66,6 +67,9 @@ class _FakeBuilder:
         return {"node_count": 25, "edge_count": 40}
 
     def mark_graph_completed(self, graph_id) -> None:
+        return None
+
+    def mark_graph_incomplete(self, graph_id, reason=None) -> None:
         return None
 
 

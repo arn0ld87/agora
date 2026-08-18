@@ -46,6 +46,10 @@ ALL_STATUSES = list(SimulationStatus)
         # Cooperative Cancel-Pfad (Slice 7)
         (SimulationStatus.RUNNING, SimulationStatus.CANCELLED_PARTIAL),
         (SimulationStatus.CANCELLED_PARTIAL, SimulationStatus.COMPLETED),
+        # Cooperative Cancel-Pfad für simulation_prepare (Issue B2) + Retry,
+        # symmetrisch zum bestehenden FAILED → PREPARING-Retry
+        (SimulationStatus.PREPARING, SimulationStatus.CANCELLED_PARTIAL),
+        (SimulationStatus.CANCELLED_PARTIAL, SimulationStatus.PREPARING),
         # Idempotent re-prepare aus READY (Manager prüft Status nicht)
         (SimulationStatus.READY, SimulationStatus.PREPARING),
         # Retry aus FAILED — User triggert prepare nochmal (Issue #42)
@@ -93,9 +97,9 @@ def test_allowed_transitions(
         # Self-loops (kein No-op erlaubt)
         (SimulationStatus.RUNNING, SimulationStatus.RUNNING),
         (SimulationStatus.READY, SimulationStatus.READY),
-        # CANCELLED_PARTIAL darf nicht direkt nach PREPARING springen
+        # CANCELLED_PARTIAL darf nicht direkt nach RUNNING/FAILED springen
+        # (PREPARING ist seit Issue B2 erlaubt — s. Allowed-Liste oben)
         (SimulationStatus.CANCELLED_PARTIAL, SimulationStatus.RUNNING),
-        (SimulationStatus.CANCELLED_PARTIAL, SimulationStatus.PREPARING),
         (SimulationStatus.CANCELLED_PARTIAL, SimulationStatus.FAILED),
         # PAUSED → CANCELLED_PARTIAL verboten (nur aus RUNNING)
         (SimulationStatus.PAUSED, SimulationStatus.CANCELLED_PARTIAL),
@@ -216,9 +220,10 @@ def test_cancelled_partial_is_not_terminal() -> None:
     """CANCELLED_PARTIAL ist kein FAILED — success-with-caveat, kein Terminalzustand."""
     assert SimulationStatus.CANCELLED_PARTIAL not in TERMINAL_STATES
     assert SimulationStatus.CANCELLED_PARTIAL in PARTIAL_CANCEL_STATES
-    # Hat genau einen Ausgang: → COMPLETED
+    # Zwei Ausgänge: → COMPLETED (simulation_run — Teil-Report persistiert)
+    # und → PREPARING (Issue B2 — Retry einer abgebrochenen Vorbereitung)
     assert get_allowed_next(SimulationStatus.CANCELLED_PARTIAL) == frozenset(
-        {SimulationStatus.COMPLETED}
+        {SimulationStatus.COMPLETED, SimulationStatus.PREPARING}
     )
 
 
@@ -226,3 +231,11 @@ def test_running_to_cancelled_partial_is_allowed() -> None:
     """RUNNING → CANCELLED_PARTIAL: kooperativer Abbruch ist ein gültiger Übergang."""
     assert is_valid_transition(SimulationStatus.RUNNING, SimulationStatus.CANCELLED_PARTIAL)
     assert_valid_transition(SimulationStatus.RUNNING, SimulationStatus.CANCELLED_PARTIAL)
+
+
+def test_preparing_to_cancelled_partial_and_retry_is_allowed() -> None:
+    """Issue B2: PREPARING → CANCELLED_PARTIAL (Abbruch) und zurück (Retry)."""
+    assert is_valid_transition(SimulationStatus.PREPARING, SimulationStatus.CANCELLED_PARTIAL)
+    assert_valid_transition(SimulationStatus.PREPARING, SimulationStatus.CANCELLED_PARTIAL)
+    assert is_valid_transition(SimulationStatus.CANCELLED_PARTIAL, SimulationStatus.PREPARING)
+    assert_valid_transition(SimulationStatus.CANCELLED_PARTIAL, SimulationStatus.PREPARING)

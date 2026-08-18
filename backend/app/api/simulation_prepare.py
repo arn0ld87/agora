@@ -32,6 +32,7 @@ from ..services.stage_model_router import StageModelRouter
 from ..utils.validation import validate_simulation_id, validate_task_id
 from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_success, json_error
+from ..utils.artifact_locator import ArtifactLocator
 from .simulation_common import (
     get_artifact_store,
     get_simulation_storage,
@@ -846,6 +847,40 @@ def _build_progress_callback(task_manager, task_id: str) -> "Callable[..., None]
     return progress_callback
 
 
+def _finish_cancelled_prepare_run(run_id: str, *, simulation_id: str) -> None:
+    """Setzt den Abbruch-Endzustand eines per ``/cancel`` gestoppten Prepare-Laufs.
+
+    Issue B2. Spiegelt bewusst ``services/report_generation.py::finish_cancelled_run``:
+    ``stopped`` + ``termination_reason="user_cancel"``, Teilergebnisse bleiben
+    als Artefakt erhalten. Anders als beim Report gibt es hier kein separates
+    ``report_id`` — die einzigen Prepare-Artefakte hängen an ``simulation_id``
+    (u. a. die Profildatei, die ``_phase_generate_profiles`` laufend speichert,
+    nicht erst am Phasenende). Das Flag wird danach gelöscht, damit ein
+    erneuter Prepare-Versuch (neue ``run_id``) nicht sofort wieder abbricht.
+    """
+    from ..services.sim.cancel_flag import clear_cancel
+
+    run_registry.update_run(
+        run_id,
+        status="stopped",
+        termination_reason="user_cancel",
+        message=(
+            "Vom Nutzer abgebrochen — bereits generierte Personas bleiben "
+            "als Teilergebnis erhalten"
+        ),
+        event_type="user_cancel",
+        artifacts=ArtifactLocator.existing_paths({
+            "simulation": ArtifactLocator.simulation_artifacts(simulation_id),
+        }),
+        resume_capability={
+            "available": True,
+            "action": "restart",
+            "label": "Restart simulation preparation",
+        },
+    )
+    clear_cancel(run_id)
+
+
 def _make_prepare_job(
     *,
     manager,
@@ -860,6 +895,7 @@ def _make_prepare_job(
 ) -> "Callable[[], None]":
     """Phase 9 — den Hintergrund-Job bauen, der die Vorbereitung ausführt."""
     from ..models.task import TaskStatus
+    from ..services.prepare_service import PrepareCancelledError
     from ..services.run_budget import BudgetExceededError, mark_budget_abort
 
     def run_prepare() -> None:
@@ -906,6 +942,29 @@ def _make_prepare_job(
                 },
             )
 
+        except PrepareCancelledError:
+            # Issue B2: Nutzerabbruch über POST /api/runs/<id>/cancel.
+            # Reihenfolge bindend (gleiche Falle wie #978/#841): complete_task()
+            # zuerst — sync_task() setzt sonst generisch "completed" — dann der
+            # detaillierte Run-Update mit status="stopped" zuletzt, sonst
+            # überschreibt sync_task() ihn wieder.
+            logger.info(
+                "Simulation prepare cancelled by user (run_id=%s, simulation_id=%s)",
+                run_record["run_id"], simulation_id,
+            )
+            task_manager.complete_task(
+                task_id,
+                result={
+                    "simulation_id": simulation_id,
+                    "status": "cancelled",
+                    "cancelled": True,
+                    "degradations": degradations.report().model_dump(mode="json"),
+                },
+            )
+            _finish_cancelled_prepare_run(
+                run_record["run_id"],
+                simulation_id=simulation_id,
+            )
         except BudgetExceededError as exc:
             # Budgetabbruch (#984): Teilresultate bleiben erhalten, der Run
             # endet "stopped" + termination_reason statt technischem "failed".
@@ -942,6 +1001,29 @@ def _make_prepare_job(
             if failed_state:
                 failed_state.error = str(exc)
                 manager._set_status(failed_state, SimulationStatus.FAILED)
+        finally:
+            # Review-Finding (PR #1371, Befund 7): ohne diesen finally-Block
+            # räumte nur der PrepareCancelledError-Zweig das Flag über
+            # _finish_cancelled_prepare_run auf. Kommt die Cancel-Anfrage
+            # NACH dem letzten Checkpoint (z. B. während _phase_generate_config,
+            # die keinen eigenen Check hat), läuft der Job normal zu Ende —
+            # die Nachricht springt für den Nutzer von "Cancel requested —
+            # finishing current stage" auf "completed", und das
+            # threading.Event bliebe für die restliche Prozesslaufzeit im
+            # globalen Dict von cancel_flag.py liegen (kleines, aber echtes
+            # Leck über viele Läufe). ``clear_cancel`` ist idempotent, ein
+            # zweiter Aufruf im Cancel-Zweig oben ist folgenlos.
+            from ..services.sim.cancel_flag import clear_cancel, is_cancel_requested
+
+            if is_cancel_requested(run_record["run_id"]):
+                logger.info(
+                    "Simulation prepare: Cancel-Flag war gesetzt, aber der "
+                    "letzte Checkpoint war bereits passiert (run_id=%s, "
+                    "simulation_id=%s) — Abbruch kam zu spät, Endzustand "
+                    "bleibt wie oben bestimmt.",
+                    run_record["run_id"], simulation_id,
+                )
+            clear_cancel(run_record["run_id"])
 
     return run_prepare
 
