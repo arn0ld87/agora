@@ -42,6 +42,14 @@ from .storage import (
     write_outline,
     write_section_markdown,
 )
+from .claim_provenance import (
+    derive_aggregation_basis,
+    # Issue #1358: die Ableitung lebt jetzt neben der Traegerschafts-Ableitung,
+    # weil beide dieselbe Menge stuetzender Items auswerten. Der alte Name
+    # bleibt als Alias erhalten — er ist der Einstiegspunkt der bestehenden
+    # Vertragstests.
+    derive_confidence_scope as _derive_confidence_scope,
+)
 from .markdown_renderer import render_report_v3
 from .sections import (
     mark_hypotheses_in_content,
@@ -87,18 +95,6 @@ def _render_simulated_quote_blocks(content: str) -> str:
     return _SIMULATED_QUOTE_TAG_RE.sub(_replace, content)
 
 
-# ---------------------------------------------------------------------------
-# Issue #1160 A — Geltungsbereich der Confidence ableiten
-# ---------------------------------------------------------------------------
-
-# Quellengattungen, die den Claim an etwas ausserhalb der Simulation binden.
-# ``agent_quote`` und ``agent_action`` fehlen hier bewusst: beides sind
-# Aeusserungen bzw. Handlungen simulierter Agenten. Ein Claim, den nur sie
-# stuetzen, ist Simulationskonsens — unabhaengig davon, wie hoch sein Label
-# ausfaellt.
-_EVIDENCE_BOUND_SOURCE_KINDS = frozenset({"seed_corpus", "graph_relation", "web_source"})
-
-
 def _text_confidence_for(
     claim: dict[str, Any], current: str
 ) -> "Literal['speculative', 'low', 'medium', 'high', 'verified'] | None":
@@ -115,29 +111,6 @@ def _text_confidence_for(
     if recorded not in {"speculative", "low", "medium", "high", "verified"}:
         return None
     return recorded  # type: ignore[return-value]
-
-
-def _derive_confidence_scope(
-    evidence: Any,
-) -> Literal["simulation_consensus", "evidence", "empirical"]:
-    """Leitet den Geltungsbereich aus den stuetzenden Evidence-Items ab.
-
-    Gezaehlt wird nur ``supports_claim is True`` — dieselbe Menge, aus der
-    ``evidence_refs`` entsteht. Widersprechende oder nur thematisch verwandte
-    Items begruenden keine Quellenbindung.
-
-    ``empirical`` wird hier nie vergeben: der Wert bezeichnet reale empirische
-    Daten, die Agora nicht erhebt. Die Ableitung kennt daher nur die beiden
-    Faelle, die im Lauf tatsaechlich vorkommen.
-    """
-    if not isinstance(evidence, list):
-        return "simulation_consensus"
-    for item in evidence:
-        if not isinstance(item, dict) or item.get("supports_claim") is not True:
-            continue
-        if str(item.get("source_kind") or "") in _EVIDENCE_BOUND_SOURCE_KINDS:
-            return "evidence"
-    return "simulation_consensus"
 
 
 class ReportManager:
@@ -385,6 +358,10 @@ class ReportManager:
         report_mode: ReportMode = DEFAULT_REPORT_MODE,
     ) -> ReportV3:
         evidence_map = normalize_persisted_evidence_map(evidence_map) or evidence_map
+        # Issue #1358: Der Index wird vor der Sektionsschleife gebraucht. Die
+        # Evidence-Dicts am Claim tragen nur die Bindungsdaten; die
+        # Quellengattung steht ausschliesslich hier im vollen Datensatz.
+        evidence_index = dict(evidence_map.get("evidence_index") or {})
         claims: List[ReportV3Claim] = []
         data_gaps: List[ReportV3DataGap] = []
         hypotheses: List[ReportV3Hypothesis] = []
@@ -446,8 +423,17 @@ class ReportManager:
                     statement=statement,
                     evidence_refs=evidence_refs,
                     confidence=confidence,
-                    aggregation_basis="persona",
-                    confidence_scope=_derive_confidence_scope(claim.get("evidence")),
+                    # Issue #1358: beide Angaben stammen aus derselben Menge
+                    # stuetzender Items. Vorher stand hier der Literalwert
+                    # "persona" — jeder Claim behauptete damit Persona-
+                    # Traegerschaft, auch wenn er ausschliesslich aus dem
+                    # Seed-Dokument stammte.
+                    aggregation_basis=derive_aggregation_basis(
+                        claim.get("evidence"), evidence_index
+                    ),
+                    confidence_scope=_derive_confidence_scope(
+                        claim.get("evidence"), evidence_index
+                    ),
                     # Issue #1012: nur gesetzt, wenn der Claim nachtraeglich
                     # abgestuft wurde. Der Wortlaut stammt dann aus einer
                     # hoeheren Stufe und deckt mehr Sicherheit ab als das
@@ -565,7 +551,6 @@ class ReportManager:
                 len(merged.rejected),
                 "; ".join(merged.rejected[:5]),
             )
-        evidence_index = dict(evidence_map.get("evidence_index") or {})
         metadata_kwargs = merged.as_report_v3_kwargs()
         for slot, items in list(metadata_kwargs.items()):
             metadata_kwargs[slot] = [
