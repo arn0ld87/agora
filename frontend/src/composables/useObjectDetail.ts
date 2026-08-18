@@ -1,6 +1,7 @@
 import { ref, watch, type Ref } from 'vue'
 import { getReport } from '../api/report'
 import { getGraphData } from '../api/graph'
+import { listPersonaTemplates } from '../api/simulation'
 import type { ShelfObject } from '../types/shelf'
 
 type Translate = (key: string) => string
@@ -47,6 +48,28 @@ export function useObjectDetail(object: Ref<ShelfObject | null>, t: Translate) {
             summary: outline.summary,
             parts: outline.sections.map((s) => ({ title: s.title, description: s.description })),
           }
+        }
+      } else if (obj.kind === 'personasatz') {
+        // Die Bibliothek liefert alle Saetze auf einmal; einen Endpunkt
+        // fuer einen einzelnen gibt es nicht. Der Eintrag wird deshalb
+        // aus der Liste herausgesucht statt neu abgefragt.
+        const res = await listPersonaTemplates()
+        const all = res?.success ? (res.data?.templates ?? []) : []
+        const tpl = all.find(
+          (x) => x.template_id === obj.id || x.username === obj.id || x.name === obj.id,
+        )
+        if (tpl) {
+          const topics = Array.isArray(tpl.interested_topics)
+            ? (tpl.interested_topics as unknown[]).join(', ')
+            : typeof tpl.interested_topics === 'string'
+              ? tpl.interested_topics
+              : ''
+          const parts: DetailPart[] = []
+          if (tpl.profession) parts.push({ title: t('shelf.dossier.personaProfession'), description: String(tpl.profession) })
+          if (tpl.country) parts.push({ title: t('shelf.dossier.personaCountry'), description: String(tpl.country) })
+          if (topics) parts.push({ title: t('shelf.dossier.personaTopics'), description: topics })
+          if (tpl.bio) parts.push({ title: t('shelf.dossier.personaBio'), description: String(tpl.bio) })
+          detail.value = { summary: tpl.persona ? String(tpl.persona) : '', parts }
         }
       } else if (obj.kind === 'graph') {
         // Der Graph selbst haengt am graph_id des Projekts; die Ablage

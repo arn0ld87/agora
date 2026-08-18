@@ -631,8 +631,10 @@ async function createBranchFromReport(branchForm: {
     if (branchForm.llm_model.trim()) overrides.llm_model = branchForm.llm_model.trim()
     if (branchForm.language.trim()) overrides.language = branchForm.language.trim()
     if (branchForm.max_agents !== '') overrides.max_agents = Number(branchForm.max_agents)
-    const res = (await createSimulationBranch(simulationId, { branch_name: branchForm.branch_name.trim(), copy_profiles: true, copy_report_artifacts: false, overrides })) as ApiResult
-    if (res?.success && res.data?.simulation_id) router.push({ name: 'Simulation', params: { simulationId: res.data.simulation_id as string } })
+    // Kein Cast mehr noetig: createSimulationBranch deklariert die
+    // Envelope jetzt selbst (Block B4).
+    const res = await createSimulationBranch(simulationId, { branch_name: branchForm.branch_name.trim(), copy_profiles: true, copy_report_artifacts: false, overrides })
+    if (res?.success && res.data?.simulation_id) router.push({ name: 'Simulation', params: { simulationId: res.data.simulation_id } })
   } catch (e) { addLog((e as Error).message) }
   finally { branchBusy.value = false }
 }

@@ -1730,7 +1730,11 @@
       "emptyHint": "Nichts ausgewählt. Wähl links ein Objekt, um seine Übersicht zu sehen.",
       "graphEntities": "Entitäten",
       "graphRelations": "Beziehungen",
-      "idLabel": "ID"
+      "idLabel": "ID",
+      "personaBio": "Kurzbeschreibung",
+      "personaCountry": "Land",
+      "personaProfession": "Beruf",
+      "personaTopics": "Interessen"
     },
     "empty": "Noch keine Objekte. Leg eine Quelle ab, um zu starten.",
     "filter": {

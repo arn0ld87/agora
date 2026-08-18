@@ -133,10 +133,24 @@ export interface BranchData {
   [key: string]: unknown
 }
 
+/**
+ * Ein Branch IST eine Simulation — der Endpunkt gibt
+ * `SimulationState.to_dict()` zurueck (backend/app/api/simulation_profiles.py:65
+ * ueber `json_success`, Felder in `services/simulation_manager.py:94`).
+ * Die frueheren Felder `branch_id`/`parent_simulation_id` existierten dort
+ * nie; die Herkunft steht in `source_simulation_id`/`root_simulation_id`.
+ */
 export interface BranchRecord {
-  branch_id: string
-  branch_name: string
-  parent_simulation_id: string
+  simulation_id: string
+  project_id: string
+  graph_id: string
+  status: string
+  branch_name: string | null
+  source_simulation_id: string | null
+  root_simulation_id: string | null
+  profiles_count: number
+  created_at?: string
+  updated_at?: string
   [key: string]: unknown
 }
 
@@ -591,13 +605,21 @@ export const deletePersonaTemplate = (templateId: string): Promise<unknown> => {
   return service.delete(`/api/simulation/persona-library/${encodeURIComponent(templateId)}`)
 }
 
+/**
+ * POST /api/simulation/<id>/branch — Simulation aus einer bestehenden
+ * ableiten. Der Interceptor gibt die Envelope zurueck, nicht ihr `data`
+ * (siehe api/index.ts) — der Typ sagt das jetzt auch. Vorher stand hier
+ * `Promise<BranchRecord>`, und jeder Aufrufer musste das wegcasten.
+ */
 export const createSimulationBranch = (
   simulationId: string,
   data: BranchData
-): Promise<BranchRecord> => {
+): Promise<ApiEnvelope<BranchRecord>> => {
   return service.post(`/api/simulation/${simulationId}/branch`, data)
 }
 
-export const listSimulationBranches = (simulationId: string): Promise<BranchRecord[]> => {
+export const listSimulationBranches = (
+  simulationId: string
+): Promise<ApiEnvelope<BranchRecord[]>> => {
   return service.get(`/api/simulation/${simulationId}/branches`)
 }
