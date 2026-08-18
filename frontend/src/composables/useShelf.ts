@@ -40,6 +40,21 @@ export function endeavorKey(run: RunDetail): string {
   )
 }
 
+/**
+ * Uebersetzt einen dynamisch gebildeten Statusschluessel.
+ *
+ * vue-i18n gibt bei einem fehlenden Schluessel den SCHLUESSEL selbst
+ * zurueck — ein `{ fallback }`-Argument existiert nicht, es wuerde nur
+ * in eine gefundene Message interpoliert. Ohne diese Pruefung stuende
+ * bei einem Status, den die Locales (noch) nicht kennen, woertlich
+ * „shelf.status.report_xyz" in der Ablage. Backend-Enums wachsen
+ * schneller als Uebersetzungen, deshalb faellt der Rohwert durch.
+ */
+function statusText(t: Translate, key: string, raw: string): string {
+  const translated = t(key)
+  return translated === key ? raw : translated
+}
+
 const ACTIVE_STATUSES = new Set(['pending', 'processing', 'paused'])
 
 function newestFirst(a: { updatedAt: string }, b: { updatedAt: string }): number {
@@ -155,7 +170,7 @@ export function buildShelfObjects(
       statusLine:
         r.status === 'completed'
           ? t('shelf.status.reportSections', { n: sections })
-          : t(`shelf.status.report_${r.status}`, { fallback: r.status }),
+          : statusText(t, `shelf.status.report_${r.status}`, r.status),
       updatedAt: r.completed_at || r.created_at || '',
       metaId: r.report_id,
       nextAction: {
@@ -175,7 +190,7 @@ export function buildShelfObjects(
       kind: 'graph',
       id: p.project_id,
       title: p.project_name || p.project_id,
-      statusLine: t(`shelf.status.project_${p.status}`, { fallback: p.status ?? '' }),
+      statusLine: statusText(t, `shelf.status.project_${p.status}`, p.status ?? ''),
       updatedAt: (p as { updated_at?: string }).updated_at || (p as { created_at?: string }).created_at || '',
       metaId: p.project_id,
       nextAction: p.graph_id

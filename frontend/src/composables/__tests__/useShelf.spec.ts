@@ -312,6 +312,41 @@ describe('buildShelfObjects', () => {
 
 // === useShelf.reload =========================================================
 
+describe('dynamische Statusschluessel — Locale-Treffer vs. Rohwert', () => {
+  // t-Stub, der sich wie vue-i18n verhaelt: bekannte Schluessel werden
+  // uebersetzt, unbekannte kommen als Schluessel zurueck.
+  const dict: Record<string, string> = {
+    'shelf.status.report_generating': 'Bericht wird geschrieben',
+    'shelf.status.project_graph_incomplete': 'Graph unvollstaendig (abgebrochen)',
+  }
+  const tReal = (key: string): string => dict[key] ?? key
+
+  it('uebersetzt einen Berichtsstatus, den die Locales kennen', () => {
+    const objs = buildShelfObjects([], [makeReport({ status: 'generating' })], [], [], tReal)
+    expect(objs.find((o) => o.kind === 'bericht')?.statusLine).toBe('Bericht wird geschrieben')
+  })
+
+  it('uebersetzt einen Projektstatus, den die Locales kennen', () => {
+    const objs = buildShelfObjects([], [], [makeProject({ status: 'graph_incomplete' })], [], tReal)
+    expect(objs.find((o) => o.kind === 'graph')?.statusLine).toBe('Graph unvollstaendig (abgebrochen)')
+  })
+
+  it('zeigt den Rohstatus statt des Schluessels, wenn die Locales ihn nicht kennen', () => {
+    // Backend-Enums wachsen schneller als Uebersetzungen. Ein unbekannter
+    // Wert darf nie als „shelf.status.report_xyz" in der Ablage landen.
+    const objs = buildShelfObjects(
+      [],
+      [makeReport({ status: 'kuenftiger_status' as Report['status'] })],
+      [makeProject({ status: 'kuenftiger_projektstatus' })],
+      [],
+      tReal,
+    )
+    expect(objs.find((o) => o.kind === 'bericht')?.statusLine).toBe('kuenftiger_status')
+    expect(objs.find((o) => o.kind === 'graph')?.statusLine).toBe('kuenftiger_projektstatus')
+    expect(objs.some((o) => o.statusLine.startsWith('shelf.status.'))).toBe(false)
+  })
+})
+
 describe('useShelf.reload', () => {
   it('Promise.allSettled: eine Quelle rejected, die anderen drei liefern trotzdem Objekte; error enthaelt shelf.partialLoad', async () => {
     runsApi.listRuns.mockRejectedValue(new Error('Runs-Dienst nicht erreichbar'))
