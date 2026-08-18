@@ -402,14 +402,18 @@ def _modality_of(predicate: str, context: str = "") -> FactModality:
     nur "in allen Schichten verfehlt" liefert. Wer bloß das Prädikat liest,
     hält die Vorgabe für einen gemessenen Wert (Issue #1356).
     """
-    lowered = f" {predicate.lower()} "
-    if any(
-        f" {marker} " in lowered or lowered.startswith(f" {marker} ")
-        for marker in _NORMATIVE_MARKERS
-    ):
+    # Der ganze Satz, nicht nur das Prädikat: "Der Projektplan *fordert*
+    # mindestens 80 Prozent" trägt seinen Zielcharakter im Vorfeld, während
+    # ``_full_predicate`` nur den Teil rechts der Zahl liefert. Wer bloß dort
+    # sucht, liest die Vorgabe als gemessenen Wert — und vergleicht sie
+    # anschließend mit einem Ist-Wert, als wären beide dasselbe.
+    #
+    # Die Wortgrenzen bleiben: "muss" darf nicht in "Kompromissbereitschaft"
+    # anschlagen.
+    lowered = f" {predicate.lower()} {context.lower()} "
+    if any(f" {marker} " in lowered for marker in _NORMATIVE_MARKERS):
         return FactModality.NORMATIVE
-    haystack = f"{predicate} {context}".lower()
-    if any(marker in haystack for marker in _NORMATIVE_NOUN_MARKERS):
+    if any(marker in lowered for marker in _NORMATIVE_NOUN_MARKERS):
         return FactModality.NORMATIVE
     return FactModality.FACTUAL
 
@@ -493,6 +497,43 @@ def _stems(value: str) -> set[str]:
     return {t[:6] for t in _tokens(value) if len(t) > 3}
 
 
+#: Präpositionen, die eine Teilpopulation oder einen Zeitraum einführen.
+#: Nur was hinter einer von ihnen steht, grenzt eine Aussage ein.
+#:
+#: Bewusst ohne Quellenangaben ("laut", "gemäß", "zufolge"): die benennen, wer
+#: etwas sagt, nicht worüber. Ließe man sie zu, wären "laut Betriebsrat 54 %"
+#: und "laut Personalrat 31 %" über dieselbe Gruppe plötzlich zwei
+#: verschiedene Sachverhalte — und ein echter Widerspruch verschwände.
+_SCOPE_PREPOSITIONS = frozenset({
+    "in", "im", "innerhalb", "bei", "beim", "unter", "für", "fuer",
+    "bis", "ab", "seit", "während", "waehrend", "an", "am", "auf",
+    "je", "pro", "zum", "zur",
+})
+
+#: Wie viele Wörter vor der Nominalphrase nach der Präposition abgesucht
+#: werden. Deckt Präposition + Artikel + Adjektiv ab.
+_SCOPE_PREPOSITION_WINDOW = 3
+
+
+def _preceded_by_scope_preposition(prefix: str, phrase: List[str]) -> bool:
+    """Führt eine eingrenzende Präposition diese Nominalphrase ein?"""
+    if not phrase:
+        return False
+    words = prefix.split()
+    head = phrase[0].strip(",.;:()\"'")
+    for index in range(len(words) - 1, -1, -1):
+        if words[index].strip(",.;:()\"'") != head:
+            continue
+        # Drei Wörter Fenster: Präposition, Artikel, Adjektiv — "im ersten
+        # Quartal", "in der großen Abteilung". Ein festes Fenster ist hier
+        # robuster als eine Wortartenprüfung, für die es keinen Tagger gibt.
+        window = words[max(0, index - _SCOPE_PREPOSITION_WINDOW) : index]
+        return any(
+            word.strip(",.;:()\"'").lower() in _SCOPE_PREPOSITIONS for word in window
+        )
+    return False
+
+
 def _scope_terms(prefix: str, subject: str) -> frozenset[str]:
     """Einschränkende Zusätze links der Zahl, ohne die Bezugsgruppe selbst.
 
@@ -505,13 +546,17 @@ def _scope_terms(prefix: str, subject: str) -> frozenset[str]:
     groups = _noun_phrases(prefix)
     if not groups:
         return frozenset()
-    # Nur die *letzte* Nominalphrase vor der Zahl. Sie steht ihr am nächsten
-    # und trägt die Abgrenzung; alles davor ist Rahmensprache. In "Laut
-    # Betriebsrat sind in der Pflege 54 Prozent geschult" ist "Pflege" der
-    # Bezug und "Betriebsrat" die Quellenangabe — nähme man beide, wichen die
-    # Scopes zweier Sätze über *dieselbe* Gruppe schon deshalb voneinander ab,
-    # weil einer seine Quelle nennt. Ein echter Widerspruch wäre damit
-    # unterdrückt.
+    # Nur die *letzte* Nominalphrase vor der Zahl, und nur wenn eine
+    # eingrenzende Präposition sie einführt.
+    #
+    # Beides ist nötig. Ohne die Beschränkung auf die letzte Phrase zählt in
+    # "Laut Betriebsrat sind in der Pflege 54 Prozent" auch die Quellenangabe
+    # mit; ohne die Präposition wird in "Aktuell sind 31 Prozent geschult" das
+    # satzeinleitende Adverb zur Teilpopulation. In beiden Fällen wichen die
+    # Scopes zweier Sätze über *dieselbe* Gruppe voneinander ab, und ein
+    # echter Widerspruch verschwände als "nicht vergleichbar".
+    if not _preceded_by_scope_preposition(prefix, groups[-1]):
+        return frozenset()
     return frozenset(
         word for word in groups[-1] if not (_stems(word) & subject_stems)
     )

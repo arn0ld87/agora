@@ -209,6 +209,58 @@ def test_a_requirement_is_not_contradicted_by_a_measurement_below_it():
     assert "fact_type_mismatch" in result.checks
 
 
+def test_a_leading_adverb_is_not_a_subpopulation():
+    """"Aktuell" und "Insgesamt" grenzen nichts ein.
+
+    Sie stehen am Satzanfang und werden deshalb großgeschrieben — das allein
+    machte sie zur Teilpopulation, und zwei Sätze über dieselbe Gruppe galten
+    als unvergleichbar, nur weil beide ein Adverb voranstellten. Ein
+    Qualifier braucht eine Präposition: "in der Pflege", "bis zum
+    Produktivstart".
+    """
+    result = classify_evidence(
+        "Aktuell sind 31 Prozent der Beschäftigten geschult.",
+        _snippet("Insgesamt sind 54 Prozent der Beschäftigten geschult."),
+    )
+
+    assert result.verdict is EntailmentVerdict.CONTRADICTED
+
+
+def test_a_qualifier_behind_a_preposition_still_counts():
+    """Die Gegenprobe: mit Präposition bleibt die Abgrenzung erhalten."""
+    facts = extract_numeric_facts(
+        "In der Pflege-Nachtschicht sind 31 Prozent der Beschäftigten geschult."
+    )
+
+    assert facts
+    assert facts[0].scope
+
+
+def test_an_adjective_between_preposition_and_noun_is_tolerated():
+    """"Im ersten Quartal" — das Adjektiv darf die Präposition nicht verdecken."""
+    facts = extract_numeric_facts(
+        "Im ersten Quartal sollen 40 Prozent der Beschäftigten geschult sein."
+    )
+
+    assert facts
+    assert facts[0].scope
+
+
+def test_a_target_verb_in_the_vorfeld_is_recognised():
+    """"Der Projektplan *fordert* …" — die Absicht steht links der Zahl.
+
+    Modalität ist eine Satzeigenschaft. Wer nur das Prädikat rechts der Zahl
+    liest, hält die Vorgabe für einen gemessenen Wert und vergleicht sie
+    anschließend mit einem Ist-Wert, als wären beide dasselbe.
+    """
+    facts = extract_numeric_facts(
+        "Der Projektplan fordert mindestens 80 Prozent der Beschäftigten geschult."
+    )
+
+    assert facts
+    assert facts[0].modality is FactModality.NORMATIVE
+
+
 def test_a_source_that_names_its_origin_does_not_dodge_a_contradiction():
     """Eine Quellenangabe ist kein Populationsunterschied.
 
