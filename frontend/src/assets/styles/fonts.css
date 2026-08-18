@@ -1,9 +1,15 @@
 /* ============================================================
-   Agora — Local @font-face declarations
-   Alle produktiven Schriften werden lokal geladen; es gibt keinen
-   externen Font-Request mehr.
-   v3 (Apple Enterprise · Light) nutzt Geist Sans/Mono lokal —
-   die woff2 liegen in assets/fonts/ und sind hier registriert.
+   Agora — @font-face declarations
+   Geist Sans/Mono werden lokal geladen (woff2 in assets/fonts/,
+   hier registriert) und weiter fuer --font-mono gebraucht.
+
+   Slice D0 (18.08.2026): Archivo (UI) und Newsreader (Berichts-
+   Fliesstext) kommen bewusst per Google-Fonts-CDN dazu — siehe
+   frontend/index.html (preconnect + Stylesheet-Tags). Das ist eine
+   ausdrueckliche Abkehr von der bisherigen Nur-lokal-Regel: es gibt
+   damit wieder einen externen Font-Request. Diese Datei behauptete
+   vorher das Gegenteil; die Aussage war mit Slice D0 nicht mehr
+   korrekt und wurde deshalb korrigiert.
    ============================================================ */
 
 @font-face {
