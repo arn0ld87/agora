@@ -199,12 +199,13 @@ class _FakeBuilder:
     bestehen.
     """
 
-    def __init__(self, *, cancel_effect=None):
+    def __init__(self, *, cancel_effect=None, mark_incomplete_effect=None):
         self.completed_graph_ids: list[str] = []
         self.incomplete_calls: list[tuple] = []
         self.delete_calls: list[str] = []
         self.add_text_batches_called = False
         self._cancel_effect = cancel_effect
+        self._mark_incomplete_effect = mark_incomplete_effect
 
     def create_graph(self, name: str) -> str:
         return "graph-cancel-1"
@@ -241,6 +242,8 @@ class _FakeBuilder:
 
     def mark_graph_incomplete(self, graph_id, reason=None) -> None:
         self.incomplete_calls.append((graph_id, reason))
+        if self._mark_incomplete_effect is not None:
+            raise self._mark_incomplete_effect
 
     def delete_graph(self, graph_id) -> None:
         self.delete_calls.append(graph_id)
@@ -354,6 +357,39 @@ def test_build_task_cancel_before_add_text_batches(monkeypatch, run_id):
     assert update["status"] == "stopped"
     assert update["termination_reason"] == "user_cancel"
     assert update["resume_capability"]["action"] == "restart"
+
+
+def test_build_task_cancel_finalizer_failure_does_not_delete_graph(monkeypatch, run_id):
+    """Review-Finding PR #1371, Befund 3 (HOCH): ein Fehler INNERHALB des
+    Cancel-Finalisierers (hier: mark_graph_incomplete wirft) darf nicht ins
+    äußere ``except Exception`` von ``build_task`` durchschlagen — das würde
+    ``builder.delete_graph(graph_id)`` auslösen und genau den Teilgraphen
+    löschen, den der Cancel-Pfad ausdrücklich erhalten soll, obwohl
+    ``complete_task()`` bereits ``cancelled: True`` gemeldet hätte.
+    """
+    builder = _FakeBuilder(
+        cancel_effect=GraphBuildCancelled(["ep1"]),
+        mark_incomplete_effect=RuntimeError("neo4j hiccup"),
+    )
+
+    result = _run_build(monkeypatch, builder, run_id=run_id)
+
+    assert builder.delete_calls == [], (
+        "Ein Fehler im Cancel-Finalisierer darf den Teilgraphen nicht löschen"
+    )
+    assert result["project"].status != ProjectStatus.FAILED, (
+        "Der Cancel-Pfad darf trotz Finalisierer-Fehler nicht als FAILED enden"
+    )
+
+    # Der wichtigste Schritt — der Run-Status — muss trotzdem ankommen.
+    assert len(result["run_updates"]) == 2
+    update = result["run_updates"][-1]
+    assert update["status"] == "stopped"
+    assert update["termination_reason"] == "user_cancel"
+
+    # complete_task lief (cancelled:True), fail_task NICHT.
+    result["task_manager"].complete_task.assert_called_once()
+    result["task_manager"].fail_task.assert_not_called()
 
 
 def test_build_task_cancel_during_add_text_batches(monkeypatch, run_id):
