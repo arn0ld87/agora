@@ -19,15 +19,18 @@ from unittest.mock import patch
 from app.models.report import ReportOutline, ReportSection
 from app.services.report_agent.manager import ReportManager
 
+#: Genau die Felder, die ``storage.get_generated_sections`` liefert — kein
+#: ``title``. Ein großzügigeres Mock verdeckte, dass der Anhang seine
+#: Überschriften aus einer Quelle zog, die es nicht gibt.
 SECTIONS: List[Dict[str, Any]] = [
     {
+        "filename": "section_1.md",
         "section_index": 1,
-        "title": "Ausgangslage",
         "content": "## Ausgangslage\n\nDie Schulungsquote liegt bei 31 Prozent.",
     },
     {
+        "filename": "section_2.md",
         "section_index": 2,
-        "title": "Risiken",
         "content": "## Risiken\n\nDer ungestaffelte Vollstart ist riskant.",
     },
 ]
@@ -36,6 +39,7 @@ EVIDENCE_MAP: Dict[str, Any] = {
     "sections": [
         {
             "section_index": 1,
+            "section_title": "Ausgangslage",
             "hypotheses": [
                 {
                     "hypothesis_id": "hypothesis_01",
@@ -49,6 +53,7 @@ EVIDENCE_MAP: Dict[str, Any] = {
         },
         {
             "section_index": 2,
+            "section_title": "Risiken",
             "hypotheses": [
                 {
                     "hypothesis_id": "hypothesis_02",
@@ -114,11 +119,44 @@ def test_every_hypothesis_survives_the_move():
 
 
 def test_each_appendix_block_names_its_section():
+    """Ohne Zuordnung ist der Anhang ein unbeschrifteter Block.
+
+    Der Titel steht in der Evidenzkarte, nicht in den generierten Sections —
+    die tragen nur Dateiname, Index und Inhalt.
+    """
     markdown = _assemble()
     appendix = markdown[markdown.index("Anhang: Belegprüfung") :]
 
     assert "**Ausgangslage**" in appendix
     assert "**Risiken**" in appendix
+
+
+def test_a_section_without_a_stored_title_falls_back_to_its_index():
+    """Lieber eine Nummer als gar keine Zuordnung."""
+    evidence = {
+        "sections": [
+            {
+                "section_index": 1,
+                "hypotheses": [
+                    {
+                        "hypothesis_id": "hypothesis_01",
+                        "hypothesis_text": "Eine unbelegte Aussage.",
+                        "rationale": "Kein Beleg gebunden.",
+                        "suggested_evidence": [],
+                    }
+                ],
+                "data_gaps": [],
+                "claims": [],
+            }
+        ]
+    }
+    with (
+        patch.object(ReportManager, "get_generated_sections", return_value=SECTIONS),
+        patch.object(ReportManager, "get_evidence_map", return_value=evidence),
+    ):
+        markdown = ReportManager.assemble_full_report("report_test", OUTLINE)
+
+    assert "**Abschnitt 1**" in markdown
 
 
 def test_a_report_without_findings_gets_no_appendix():

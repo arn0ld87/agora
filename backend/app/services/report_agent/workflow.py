@@ -62,8 +62,14 @@ from .schemas import (
     _section_schema_for,
 )
 from ..evidence_migrations import migrate_v1_to_v2, normalize_persisted_evidence_map
-#: Quellengattung, unter der Interview-Antworten im Evidence-Index landen.
-_INTERVIEW_SOURCE_KIND = "agent_quote"
+#: Evidence-*Typ* einer Interview-Antwort.
+#:
+#: Nicht die Quellengattung: ``source_kind`` fasst Interview-Antwort und
+#: Simulationsbeitrag beide zu ``agent_quote`` zusammen (ADR-0002 Anker 3,
+#: bewusst). Wer danach zählt, hält jeden Post der Simulation für ein
+#: Interview — und findet ausgerechnet dann Interviews, wenn eine Simulation
+#: lief und keines zustande kam. Genau der Fall des Referenzlaufs.
+_INTERVIEW_EVIDENCE_TYPE = "agent_interview"
 
 
 def _count_interview_evidence(agent: Any) -> int:
@@ -79,7 +85,7 @@ def _count_interview_evidence(agent: Any) -> int:
         1
         for record in index.values()
         if isinstance(record, dict)
-        and record.get("source_kind") == _INTERVIEW_SOURCE_KIND
+        and record.get("type") == _INTERVIEW_EVIDENCE_TYPE
     )
 
 

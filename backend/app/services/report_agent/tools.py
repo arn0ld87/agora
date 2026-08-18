@@ -54,15 +54,6 @@ def define_tools(agent: Any) -> Dict[str, Dict[str, Any]]:
         },
     }
 
-    # Ein terminal ausgefallenes Tool verschwindet aus dem Angebot. Der
-    # Hinweistext im Tool-Ergebnis reichte nicht: er stand im Verlauf *einer*
-    # Section und war beim nächsten Abschnitt aus dem Kontext gefallen,
-    # während das Tool im Schema unverändert bereitstand (Referenzlauf
-    # report_cc2ef45da5e9: acht Aufrufe, null Interviews).
-    breaker = breaker_for(agent)
-    for disabled in breaker.disabled_tools:
-        tools.pop(disabled, None)
-
     if agent.web_tools.is_available():
         tools["web_search"] = {
             "name": "web_search",
@@ -86,6 +77,17 @@ def define_tools(agent: Any) -> Dict[str, Dict[str, Any]]:
                 "url": "Absolute URL starting with http(s)://",
             },
         }
+
+    # Zum Schluss, nachdem das Angebot vollständig steht: ein Filter weiter
+    # oben hätte die Web-Tools nach dem Entfernen wieder eingesetzt.
+    #
+    # Ein terminal ausgefallenes Tool verschwindet aus dem Angebot. Der
+    # Hinweistext im Tool-Ergebnis reichte nicht: er stand im Verlauf *einer*
+    # Section und war beim nächsten Abschnitt aus dem Kontext gefallen,
+    # während das Tool im Schema unverändert bereitstand (Referenzlauf
+    # report_cc2ef45da5e9: acht Aufrufe, null Interviews).
+    for disabled in breaker_for(agent).disabled_tools:
+        tools.pop(disabled, None)
     return tools
 
 

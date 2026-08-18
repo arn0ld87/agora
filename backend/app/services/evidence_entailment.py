@@ -144,10 +144,19 @@ _NORMATIVE_MARKERS = (
     "angestrebt",
     "ziel ist",
     "verpflichtend",
+    "fordert",
+    "fordern",
+    "verlangt",
+    "verlangen",
+    "schreibt vor",
+    "sieht vor",
+    "vorsieht",
     "should",
     "must",
     "planned",
     "required",
+    "requires",
+    "demands",
 )
 
 #: Substantivische Zielmarker. Deutsch drückt eine Vorgabe häufig ohne Modalverb
@@ -171,16 +180,18 @@ _NORMATIVE_NOUN_MARKERS = (
     "sollquote",
     "anforderung",
     "schwellenwert",
-    "mindestens",
-    "mindest",
-    "maximal",
-    "höchstens",
-    "hoechstens",
     "target",
     "threshold",
-    "at least",
-    "at most",
 )
+
+#: Bewusst *nicht* mehr in der Liste oben: "mindestens", "maximal",
+#: "höchstens", "at least", "at most". Diese Wörter beschreiben eine Schranke,
+#: keine Absicht — "der Fallback dauerte höchstens 15 Minuten" ist eine
+#: Messung, "das Ziel sind 80 Prozent" eine Vorgabe. Solange sie beides
+#: bedeuteten, galt jede Schranke automatisch als Zielvorgabe, jeder Vergleich
+#: mit einem gemessenen Wert als Modalitätskonflikt, und eine tatsächlich
+#: gerissene Grenze verschwand als "nicht vergleichbar". Die Schranke selbst
+#: erfasst jetzt :class:`BoundKind`, die Absicht die Marker oben.
 
 #: Marker für eine untere bzw. obere Schranke. Sie stehen im Deutschen
 #: unmittelbar links der Zahl ("mindestens 80 Prozent"), weshalb
@@ -491,11 +502,18 @@ def _scope_terms(prefix: str, subject: str) -> frozenset[str]:
     Teilpopulationen. Beide Werte können gleichzeitig stimmen.
     """
     subject_stems = _stems(subject)
+    groups = _noun_phrases(prefix)
+    if not groups:
+        return frozenset()
+    # Nur die *letzte* Nominalphrase vor der Zahl. Sie steht ihr am nächsten
+    # und trägt die Abgrenzung; alles davor ist Rahmensprache. In "Laut
+    # Betriebsrat sind in der Pflege 54 Prozent geschult" ist "Pflege" der
+    # Bezug und "Betriebsrat" die Quellenangabe — nähme man beide, wichen die
+    # Scopes zweier Sätze über *dieselbe* Gruppe schon deshalb voneinander ab,
+    # weil einer seine Quelle nennt. Ein echter Widerspruch wäre damit
+    # unterdrückt.
     return frozenset(
-        word
-        for group in _noun_phrases(prefix)
-        for word in group
-        if not (_stems(word) & subject_stems)
+        word for word in groups[-1] if not (_stems(word) & subject_stems)
     )
 
 
@@ -722,8 +740,9 @@ RETRIEVAL_RELEVANCE_THRESHOLD = 0.60
 #: Audit-Protokoll und muss ohne Codekenntnis verständlich sein.
 _DIVERGENCE_REASONS = {
     "unit_mismatch": "verschiedene Einheiten",
-    "fact_type_mismatch": "Ist-Wert gegen Zielvorgabe oder Schranke",
+    "fact_type_mismatch": "Ist-Wert gegen Zielvorgabe",
     "scope_mismatch": "verschiedene Teilpopulation oder Zeitraum",
+    "bound_satisfied": "der Wert hält die genannte Schranke ein",
 }
 
 EntailmentJudge = Callable[[str, str], str]
@@ -769,11 +788,36 @@ def facts_are_comparable(left: NumericFact, right: NumericFact) -> Optional[str]
     """
     if left.unit != right.unit:
         return "unit_mismatch"
-    if left.modality is not right.modality or left.bound is not right.bound:
+    if left.modality is not right.modality:
         return "fact_type_mismatch"
     if _scopes_diverge(left.scope, right.scope):
         return "scope_mismatch"
+    if left.bound is not right.bound and not _bound_is_violated(left, right):
+        return "bound_satisfied"
     return None
+
+
+def _bound_is_violated(left: NumericFact, right: NumericFact) -> bool:
+    """Verletzt der gemessene Wert die behauptete Schranke?
+
+    Eine Schranke ist keine Zahl, sondern ein Bereich. "Höchstens 15 Minuten"
+    und "22 Minuten gemessen" schließen einander aus; "höchstens 15" und "9
+    gemessen" nicht. Ohne diese Prüfung galt jede Schranke gegen jeden
+    Punktwert als unvergleichbar, und ein tatsächlich gerissener Grenzwert
+    verschwand als ``INSUFFICIENT``.
+
+    Beide Angaben müssen dieselbe Modalität tragen; das prüft der Aufrufer.
+    Ein Ist-Wert unter einer *Forderung* ist keine Verletzung, sondern eine
+    unerfüllte Forderung — dafür ist der Bericht da, nicht der Trust-Layer.
+    """
+    for bound_fact, point in ((left, right), (right, left)):
+        if point.bound is not BoundKind.EXACT:
+            continue
+        if bound_fact.bound is BoundKind.AT_MOST and point.value > bound_fact.value:
+            return True
+        if bound_fact.bound is BoundKind.AT_LEAST and point.value < bound_fact.value:
+            return True
+    return False
 
 
 def _classify_matching_number(

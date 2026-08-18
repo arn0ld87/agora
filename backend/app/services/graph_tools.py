@@ -36,6 +36,35 @@ from .graph.graph_dtos import InterviewResult as InterviewResult  # noqa: PLC041
 
 logger = get_logger('agora.graph_tools')
 
+#: Fehlertexte, die auf eine vorübergehende Störung hindeuten. Sie schalten
+#: das Interview-Tool nicht ab: der ``ToolCircuitBreaker`` ist für terminale
+#: Ausfälle gedacht, und ein Timeout unter Last ist keiner.
+_RETRYABLE_INTERVIEW_ERROR_MARKERS = (
+    "timeout",
+    "timed out",
+    "zeitüberschreitung",
+    "zeituberschreitung",
+    "temporarily",
+    "rate limit",
+    "too many requests",
+    "connection reset",
+    "try again",
+)
+
+
+def _is_terminal_interview_error(error_msg: object) -> bool:
+    """Ist der Interview-Ausfall endgültig oder nur dieser Versuch?
+
+    Endgültig heißt: aus dem Report-Kontext nicht wiederherstellbar — keine
+    laufende Simulationsumgebung, keine persistierten Personas. Alles, was
+    nach Last oder Netz klingt, darf erneut versucht werden.
+    """
+    lowered = str(error_msg or "").lower()
+    return not any(
+        marker in lowered for marker in _RETRYABLE_INTERVIEW_ERROR_MARKERS
+    )
+
+
 class GraphToolsService:
     """Graph Retrieval Tools Service (via GraphStorage / Neo4j).
 
@@ -332,7 +361,13 @@ class GraphToolsService:
                     f"(reason: {error_msg}). Do NOT call interview_agents again. "
                     "Use insight_forge, panorama_search, or quick_search instead."
                 )
-                result.terminal_failure = True
+                # Nur ein nicht wiederherstellbarer Ausfall schaltet das Tool
+                # ab. Ein Timeout ist keiner — der 180-Sekunden-Deckel greift
+                # bei Last, nicht bei Unerreichbarkeit, und ein einzelner
+                # langsamer Batch darf nicht den ganzen Bericht um seine
+                # Interviews bringen. Der Hinweistext oben bleibt in beiden
+                # Fällen bestehen; er kostet nichts und rät vom Wiederholen ab.
+                result.terminal_failure = _is_terminal_interview_error(error_msg)
                 result.terminal_reason = str(error_msg)
                 return result
 

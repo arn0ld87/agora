@@ -51,9 +51,13 @@ def test_orphan_claims_route_to_hypotheses_and_data_gaps() -> None:
     hypothesis_texts = [h["hypothesis_text"] for h in hypotheses]
     assert any(text.startswith("Datenschutzbedenken") for text in hypothesis_texts)
 
+    # Der Evidence-Index dieses Agents ist leer — zu den Aussagen liegt
+    # tatsächlich nichts vor, und genau dann ist ein Data Gap richtig. Ein
+    # bloß gescheitertes Binding erzeugt seit der Data-Gap-Semantik keinen
+    # mehr (siehe tests/regression/test_data_gap_semantics.py).
     assert len(data_gaps) == 3, f"Erwartet 3 data_gaps, erhalten: {len(data_gaps)}"
     gap_reasons = {gap["gap_reason"] for gap in data_gaps}
-    assert gap_reasons == {"no_evidence_bound"}
+    assert gap_reasons == {"source_information_absent"}
 
 
 def test_medium_high_orphan_section_validates() -> None:

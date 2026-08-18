@@ -15,6 +15,7 @@ from __future__ import annotations
 import pytest
 
 from app.services.persona_domain_coherence import (
+    _domains_in,
     coherence_findings,
     detect_domain_drift,
     is_collective_entity_type,
@@ -125,6 +126,24 @@ def test_a_source_without_a_domain_cannot_accuse_anyone():
 def test_a_network_in_the_source_is_not_read_as_manufacturing():
     """"Netzwerk" enthält "werk" — ein kurzer Marker hätte hier zugeschlagen."""
     assert detect_domain_drift("Betreuer im Klinik-Netzwerk", CLINIC_SOURCE) == []
+
+
+@pytest.mark.parametrize(
+    "text", ["Ladestation", "Arbeitsstation", "Bahnstation am Werkstor"]
+)
+def test_a_station_compound_is_not_read_as_healthcare(text: str):
+    """"station" steckt in Wörtern ohne jeden Klinikbezug.
+
+    Ein Fehlalarm hier ist teuer: war die falsche Domäne die einzige, die die
+    Quelle hergab, verliert eine korrekte Persona ihren Beruf.
+    """
+    assert "healthcare" not in _domains_in(text)
+
+
+def test_a_manufacturing_persona_keeps_its_profession_next_to_a_station():
+    source = "Rollout an den Ladestationen der Werkhalle, Fertigung betroffen."
+
+    assert detect_domain_drift("Anlagenführer in der Montage", source) == []
 
 
 # --- Zusammengefasste Befunde -----------------------------------------------

@@ -833,8 +833,16 @@ class ReportManager:
                 item for item in (hypotheses, data_gaps, confidence_markers) if item
             ]
             if annotations:
-                title = str(section_info.get("title") or "").strip()
-                heading = f"**{title}**" if title else ""
+                # `get_generated_sections` liefert nur filename/section_index/
+                # content — kein `title`. Der Abschnittstitel steht in der
+                # Evidenzkarte; ohne ihn liefen alle Tabellen zu einem
+                # unbeschrifteten Block zusammen, und der Leser konnte einem
+                # "[Beleg fehlt]" keinen Abschnitt mehr zuordnen.
+                title = str(
+                    (evidence_section or {}).get("section_title") or ""
+                ).strip()
+                index = section_info.get("section_index")
+                heading = f"**{title}**" if title else f"**Abschnitt {index}**"
                 audit_appendix.append(
                     "\n\n".join(part for part in (heading, *annotations) if part)
                 )
@@ -1095,6 +1103,11 @@ class ReportManager:
             # Issue #1192: fehlt bei Reports, die vor der Einfuehrung
             # geschrieben wurden — dort bleibt der Stand unbekannt.
             simulation_snapshot=data.get('simulation_snapshot'),
+            # Ohne diese Zeile schreibt der Lauf seine Qualitaetsmaengel zwar
+            # in meta.json, aber jede API-Antwort baut den Report ohne sie neu:
+            # `GET /api/report/<id>` meldete `degraded: false` auch fuer den
+            # gescheiterten Lauf, fuer den dieser Slice existiert.
+            run_degradations=list(data.get('run_degradations') or []),
         )
     
     @classmethod

@@ -76,8 +76,11 @@ DOMAIN_MARKERS: Dict[str, FrozenSet[str]] = {
         "klinik", "kliniken", "klinikum", "krankenhaus", "pflege", "pflegekraft",
         "patient", "patienten", "patientin", "ärztlich", "aerztlich", "arzt",
         "ärztin", "aerztin", "medizin", "medizinisch", "triage", "notaufnahme",
-        "station", "stationär", "stationaer", "diagnose", "therapie", "visite",
-        "gesundheitswesen", "hospital",
+        # "station" steckt in "Ladestation", "Arbeitsstation", "Bahnstation" —
+        # derselbe Fehlertyp wie "werk" in "Netzwerk". Die längeren Formen
+        # sind eindeutig.
+        "stationsleitung", "stationär", "stationaer", "bettenstation",
+        "diagnose", "therapie", "visite", "gesundheitswesen", "hospital",
     }),
     # Kurze Marker sind hier gefährlich: "werk" steckt in "Netzwerk", "bank"
     # in "Datenbank". Ein Fehlalarm beschädigt eine korrekte Persona, deshalb

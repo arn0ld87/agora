@@ -165,11 +165,63 @@ def test_a_real_value_mismatch_is_still_contradicted():
     assert "value_mismatch" in result.checks
 
 
-def test_an_actual_below_a_maximum_is_not_contradicted_but_above_it_is():
+def test_an_actual_below_a_maximum_is_not_contradicted():
     """Eine Obergrenze wird erst durch Überschreiten widerlegt."""
-    below = classify_evidence(
-        "Der manuelle Fallback dauerte 9 Minuten.",
-        _snippet("Der manuelle Fallback darf maximal 15 Minuten dauern."),
+    result = classify_evidence(
+        "Der manuelle Fallback dauerte höchstens 15 Minuten.",
+        _snippet("Im Test dauerte der manuelle Fallback 9 Minuten."),
     )
 
-    assert below.verdict is not EntailmentVerdict.CONTRADICTED
+    assert result.verdict is not EntailmentVerdict.CONTRADICTED
+    assert "bound_satisfied" in result.checks
+
+
+def test_a_measurement_above_the_stated_maximum_is_a_contradiction():
+    """Eine gerissene Grenze ist ein Widerspruch, kein Formatunterschied.
+
+    Solange "höchstens" zugleich als Zielmarker galt, war jede Schranke gegen
+    jeden gemessenen Wert "nicht vergleichbar" — und ein tatsächlich
+    überschrittener Grenzwert verschwand als ``INSUFFICIENT``.
+    """
+    result = classify_evidence(
+        "Der manuelle Fallback dauerte höchstens 15 Minuten.",
+        _snippet("Im Test dauerte der manuelle Fallback 22 Minuten."),
+    )
+
+    assert result.verdict is EntailmentVerdict.CONTRADICTED
+
+
+def test_a_requirement_is_not_contradicted_by_a_measurement_below_it():
+    """Eine unerfüllte Forderung ist keine widerlegte Behauptung.
+
+    Das ist der Unterschied, den :class:`FactModality` trägt: "der Projektplan
+    *fordert* mindestens 80 Prozent" behauptet nichts über die Wirklichkeit.
+    """
+    result = classify_evidence(
+        "Aktuell sind 31 Prozent der Beschäftigten geschult.",
+        _snippet(
+            "Der Projektplan fordert mindestens 80 Prozent der Beschäftigten "
+            "als geschult."
+        ),
+    )
+
+    assert result.verdict is not EntailmentVerdict.CONTRADICTED
+    assert "fact_type_mismatch" in result.checks
+
+
+def test_a_source_that_names_its_origin_does_not_dodge_a_contradiction():
+    """Eine Quellenangabe ist kein Populationsunterschied.
+
+    "Laut Betriebsrat" links der Zahl machte den Scope beider Sätze
+    verschieden — und damit einen echten 31-gegen-54-Widerspruch über
+    dieselbe Gruppe unsichtbar.
+    """
+    result = classify_evidence(
+        "In der Pflege sind 31 Prozent der Beschäftigten geschult.",
+        _snippet(
+            "Laut Betriebsrat sind in der Pflege 54 Prozent der Beschäftigten "
+            "geschult."
+        ),
+    )
+
+    assert result.verdict is EntailmentVerdict.CONTRADICTED

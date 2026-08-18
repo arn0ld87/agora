@@ -143,10 +143,22 @@ def dedup_thresholds(thresholds: Sequence[Threshold]) -> List[Threshold]:
     return list(merged.values())
 
 
+#: Quellengattungen, die einen Schwellenwert *belegen* können.
+#:
+#: ``inferred`` ist eine Modellableitung und ``web_source`` eine Fundstelle
+#: ohne Projektbezug — beide dürfen keinen Wert auf ``verified`` heben. Sonst
+#: entstünde die Kombination ``origin="model_proposal"`` mit
+#: ``evidence_status="verified"``: eine Zahl, die sich selbst als belegt
+#: ausweist, weil das Modell sie zweimal genannt hat.
+VERIFYING_SOURCE_KINDS = frozenset({"seed_corpus", "agent_quote", "graph_relation"})
+
+
 def _evidence_texts(evidence_pool: Sequence[Dict[str, Any]]) -> List[tuple[str, str]]:
     out: List[tuple[str, str]] = []
     for record in evidence_pool:
         if not isinstance(record, dict):
+            continue
+        if str(record.get("source_kind") or "") not in VERIFYING_SOURCE_KINDS:
             continue
         evidence_id = str(record.get("evidence_id") or "").strip()
         if not evidence_id:
@@ -225,6 +237,7 @@ def _text_carries_threshold(text: str, value: float, unit: str) -> bool:
 
 __all__ = [
     "LABEL_MATCH_THRESHOLD",
+    "VERIFYING_SOURCE_KINDS",
     "bind_threshold_provenance",
     "canonical_threshold_key",
     "dedup_thresholds",

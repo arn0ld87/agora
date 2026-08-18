@@ -179,16 +179,29 @@ def apply_run_degradation_downgrade(
     status: "Any",
     run_degradations: Iterable[Mapping[str, Any]],
 ) -> "Any":
-    """Stuft ``COMPLETED`` auf ``INCOMPLETE`` ab, wenn der Lauf Mängel hatte.
+    """Stuft ``COMPLETED`` auf ``INCOMPLETE`` ab — bei blockierenden Mängeln.
+
+    Der Schweregrad entscheidet, und das ist keine Feinheit: ein Bericht darf
+    ausdrücklich starten, während die Simulation noch läuft
+    (``simulation_running``). Das erzeugt zuverlässig einen ``warning``-Eintrag
+    über unvollständige Runden — würde der schon abstufen, wäre jeder Report
+    aus diesem unterstützten Ablauf dauerhaft ``INCOMPLETE``, und die
+    Abstufung sagte nichts mehr aus.
+
+    Warnungen bleiben trotzdem in ``run_degradations`` sichtbar: der Bericht
+    weist den Zwischenstand aus, er nennt sich nur nicht unvollständig.
 
     Dieselbe Linie wie :func:`apply_degradation_downgrade`: ein bereits
-    abgestufter Status wird nie wieder aufgewertet. Ein ``COMPLETED`` sagt dem
-    Leser zu, dass der Bericht auf dem beruht, was er zu beruhen vorgibt —
-    diese Zusage darf ein gescheiterter Simulationslauf nicht überleben.
+    abgestufter Status wird nie wieder aufgewertet.
     """
     from ...models.report import ReportStatus  # noqa: PLC0415 — zyklischer Import
 
-    if not list(run_degradations):
+    blocking = [
+        entry
+        for entry in run_degradations
+        if str(entry.get("severity") or "warning") == "blocking"
+    ]
+    if not blocking:
         return status
     if status == ReportStatus.COMPLETED:
         return ReportStatus.INCOMPLETE
@@ -225,7 +238,10 @@ def assert_run_invariants(
     if simulation_status.strip().lower() in _UNHEALTHY_SIMULATION_STATUSES and not degraded:
         violations.append("simulation_unhealthy_and_degradation_log_empty")
 
-    if degraded and status == "completed":
+    if status == "completed" and any(
+        str(entry.get("severity") or "warning") == "blocking"
+        for entry in run_degradations
+    ):
         violations.append("degraded_run_reported_as_completed")
 
     return violations

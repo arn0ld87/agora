@@ -442,8 +442,15 @@ class ReportConsoleLogger:
         if token is not None:
             try:
                 _current_report_id.reset(token)
-            except ValueError:  # pragma: no cover — anderer Kontext als beim Set
-                _current_report_id.set("")
+            except ValueError:
+                # Der Finalizer läuft in einem anderen Kontext als das Set —
+                # typischerweise, wenn der Garbage Collector einen alten Logger
+                # einsammelt, während ein anderer Report läuft. Den Scope hier
+                # zu leeren würde genau die Vermischung wiederherstellen, die
+                # dieser Filter verhindert: ein leerer Scope lässt jeden Record
+                # in *alle* offenen Logdateien. Fremder Zustand wird nicht
+                # angefasst.
+                pass
             self._scope_token = None
 
     def __del__(self):

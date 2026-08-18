@@ -31,7 +31,13 @@ def _agent(*, interview_requests: int = 0, interview_records: int = 0) -> Any:
     agent = MagicMock()
     agent.evidence_map = {
         "evidence_index": {
-            f"ev_{i}": {"evidence_id": f"ev_{i}", "source_kind": "agent_quote"}
+            f"ev_{i}": {
+                "evidence_id": f"ev_{i}",
+                "source_kind": "agent_quote",
+                # Der Typ entscheidet, nicht die Quellengattung: ``agent_post``
+                # und ``agent_interview`` fallen beide auf ``agent_quote``.
+                "type": "agent_interview",
+            }
             for i in range(interview_records)
         }
     }
@@ -88,7 +94,11 @@ def test_a_run_that_admits_its_degradation_is_not_flagged_twice():
             status=ReportStatus.INCOMPLETE,
             simulation_snapshot=REFERENCE_SNAPSHOT,
             run_degradations=[
-                {"component": "simulation", "reason": "simulation_failed"}
+                {
+                    "component": "simulation",
+                    "reason": "simulation_failed",
+                    "severity": "blocking",
+                }
             ],
         ),
     )
@@ -102,12 +112,38 @@ def test_a_degraded_run_calling_itself_completed_is_flagged():
         _report(
             status=ReportStatus.COMPLETED,
             run_degradations=[
-                {"component": "simulation", "reason": "simulation_failed"}
+                {
+                    "component": "simulation",
+                    "reason": "simulation_failed",
+                    "severity": "blocking",
+                }
             ],
         ),
     )
 
     assert any("gilt trotzdem als vollständig" in f for f in findings)
+
+
+def test_simulation_posts_do_not_count_as_interviews():
+    """Der Referenzlauf hatte Simulationsbeiträge und null Interviews.
+
+    Zählte man nach ``source_kind``, wäre die Interview-Invariante genau dann
+    still, wenn eine Simulation lief — also im Regelfall.
+    """
+    agent = _agent(interview_requests=8)
+    agent.evidence_map = {
+        "evidence_index": {
+            "ev_0": {
+                "evidence_id": "ev_0",
+                "source_kind": "agent_quote",
+                "type": "agent_post",
+            }
+        }
+    }
+
+    findings = _deterministic_red_team_findings(agent, _report())
+
+    assert any("Interviews waren Teil des Plans" in f for f in findings)
 
 
 def test_a_report_that_never_asked_for_interviews_is_not_flagged():

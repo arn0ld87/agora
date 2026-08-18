@@ -32,8 +32,15 @@ RICH_SIMULATION = EvidenceProfile(
 )
 
 
-def _record(source_kind: str, evidence_id: str) -> Dict[str, Any]:
-    return {"evidence_id": evidence_id, "source_kind": source_kind, "snippet": "x"}
+def _record(
+    source_kind: str, evidence_id: str, *, record_type: str = "agent_post"
+) -> Dict[str, Any]:
+    return {
+        "evidence_id": evidence_id,
+        "source_kind": source_kind,
+        "type": record_type,
+        "snippet": "x",
+    }
 
 
 # --- Das Evidenzprofil ------------------------------------------------------
@@ -41,14 +48,38 @@ def _record(source_kind: str, evidence_id: str) -> Dict[str, Any]:
 
 def test_the_profile_counts_source_kinds():
     profile = profile_from_evidence_index({
-        "ev_1": _record("seed_corpus", "ev_1"),
-        "ev_2": _record("agent_quote", "ev_2"),
-        "ev_3": _record("agent_action", "ev_3"),
+        "ev_1": _record("seed_corpus", "ev_1", record_type="seed_document"),
+        "ev_2": _record("agent_quote", "ev_2", record_type="agent_interview"),
+        "ev_3": _record("agent_action", "ev_3", record_type="agent_action"),
     })
 
     assert profile.seed_evidence == 1
     assert profile.simulation_evidence == 2
     assert profile.interview_evidence == 1
+
+
+def test_a_simulation_post_is_not_counted_as_an_interview():
+    """``source_kind`` trennt die beiden nicht — der Evidence-Typ tut es.
+
+    ``agent_post`` und ``agent_interview`` fallen beide auf ``agent_quote``
+    (ADR-0002 Anker 3, bewusst). Wer danach zählt, findet ausgerechnet dann
+    Interviews, wenn eine Simulation lief und keines zustande kam: der Fall
+    des Referenzlaufs.
+    """
+    profile = profile_from_evidence_index([
+        _record("agent_quote", "ev_1", record_type="agent_post")
+    ])
+
+    assert profile.has_simulation is True
+    assert profile.has_interviews is False
+
+
+def test_an_interview_record_is_counted_as_one():
+    profile = profile_from_evidence_index([
+        _record("agent_quote", "ev_1", record_type="agent_interview")
+    ])
+
+    assert profile.has_interviews is True
 
 
 def test_agent_actions_are_simulation_but_not_interviews():
@@ -57,7 +88,9 @@ def test_agent_actions_are_simulation_but_not_interviews():
     Ohne die Trennung würde jede Aktion die Formel "die interviewten Personas"
     decken — und genau die stand im Referenzlauf über null Interviews.
     """
-    profile = profile_from_evidence_index([_record("agent_action", "ev_1")])
+    profile = profile_from_evidence_index([
+        _record("agent_action", "ev_1", record_type="agent_action")
+    ])
 
     assert profile.has_simulation is True
     assert profile.has_interviews is False
@@ -71,7 +104,7 @@ def test_a_seed_only_run_supports_neither():
 
 
 def test_a_list_and_an_index_are_read_the_same_way():
-    records = [_record("agent_quote", "ev_1")]
+    records = [_record("agent_quote", "ev_1", record_type="agent_interview")]
 
     assert profile_from_evidence_index(records) == profile_from_evidence_index(
         {"ev_1": records[0]}

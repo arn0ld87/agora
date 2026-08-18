@@ -19,6 +19,7 @@ from typing import Any, Dict, List
 
 import pytest
 
+from app.contracts.report_contract import ClaimEvidenceBindingModel
 from app.services.evidence_binder import bind_evidence_to_claim
 from app.services.evidence_entailment import EntailmentVerdict, classify_evidence
 from app.services.numeric_evidence import (
@@ -142,7 +143,26 @@ def test_the_binder_keeps_a_numeric_hit_the_embedding_would_have_dropped():
     bound = bind_evidence_to_claim(claim, pool, _weak_embedder)
 
     assert [item["evidence_id"] for item in bound] == ["ev_care"]
-    assert bound[0]["numeric_candidate"] is True
+
+
+def test_a_binding_carries_no_field_the_contract_forbids():
+    """``ClaimEvidenceBindingModel`` ist ``extra="forbid"``.
+
+    Ein zusätzliches Feld auf der Bindung lässt die Section-Validierung
+    scheitern — und der dritte Reparaturlauf löscht daraufhin *jeden* Claim,
+    dessen Fehlerpfad genannt wird, also jeden mit gebundener Evidence. Der
+    Vorabruf-Treffer gehört deshalb in die Sortierung, nicht in die Bindung.
+    """
+    claim = "Claim: In der Pflege liegt die Quote bei 54 Prozent."
+    # Contract-konforme ID: das Muster ist Teil derselben Validierung.
+    evidence_id = "ev_" + "a1" * 16
+    pool = [_item("Die Pflege erreichte 54 Prozent.", evidence_id)]
+
+    bindings = bind_evidence_to_claim(claim, pool, _weak_embedder)
+
+    assert bindings
+    for binding in bindings:
+        ClaimEvidenceBindingModel.model_validate(binding)
 
 
 def test_a_numeric_hit_does_not_outrank_a_real_retrieval_hit():

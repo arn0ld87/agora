@@ -189,3 +189,32 @@ def test_a_percent_value_is_not_bound_to_an_absolute_one():
 
 def test_an_empty_pool_changes_nothing():
     assert bind_threshold_provenance([_threshold()], []) == [_threshold()]
+
+
+def test_an_inferred_record_cannot_verify_a_threshold():
+    """Eine Modellableitung belegt nichts.
+
+    Sonst entstünde ``origin="model_proposal"`` mit
+    ``evidence_status="verified"``: eine Zahl, die sich selbst als belegt
+    ausweist, weil das Modell sie zweimal genannt hat.
+    """
+    inferred = {
+        "evidence_id": "ev_inferred",
+        "source_kind": "inferred",
+        "snippet": "Vermutlich sind mindestens 80 Prozent Schulungsquote nötig.",
+    }
+
+    result = bind_threshold_provenance([_threshold()], [inferred])
+
+    assert result[0].evidence_refs == []
+    assert result[0].evidence_status == "heuristic"
+
+
+def test_a_web_source_cannot_verify_a_threshold():
+    web = {
+        "evidence_id": "ev_web",
+        "source_kind": "web_source",
+        "snippet": "Branchenblogs nennen 80 Prozent Schulungsquote als üblich.",
+    }
+
+    assert bind_threshold_provenance([_threshold()], [web])[0].evidence_refs == []

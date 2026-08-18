@@ -102,7 +102,12 @@ def bind_evidence_to_claim(
         return []
 
     claim_vec = embed(claim_text.strip())
-    scored: List[Tuple[Dict[str, Any], Dict[str, Any]]] = []
+    # Der numerische Treffer gehört in die Sortierung, nicht in die Bindung:
+    # ``ClaimEvidenceBindingModel`` ist ``extra="forbid"``, und ein
+    # zusätzliches Feld auf ``bound`` lässt die gesamte Section-Validierung
+    # scheitern — bis hin zum Reparaturlauf, der dann jeden Claim mit
+    # gebundener Evidence löscht.
+    scored: List[Tuple[Dict[str, Any], Dict[str, Any], bool]] = []
     for item in candidates:
         text = candidate_text(item)
         if not text:
@@ -130,8 +135,7 @@ def bind_evidence_to_claim(
         rounded = round(float(score), 3)
         bound["retrieval_score"] = rounded
         bound["match_score"] = rounded
-        bound["numeric_candidate"] = numeric_hit
-        scored.append((bound, item))
+        scored.append((bound, item, numeric_hit))
 
     # Erst kürzen, dann klassifizieren. Die Reihenfolge ist seit #1357 nicht
     # mehr beliebig: der Entailment-Check kann in der Grauzone einen LLM-Judge
@@ -148,12 +152,12 @@ def bind_evidence_to_claim(
     # ein thematisch naher Kandidat ohne Zahlen genau die Quelle, wegen der
     # der Claim geprüft wird.
     scored.sort(
-        key=lambda pair: (pair[0]["numeric_candidate"], pair[0]["retrieval_score"]),
+        key=lambda entry: (entry[2], entry[0]["retrieval_score"]),
         reverse=True,
     )
 
     results: List[Dict[str, Any]] = []
-    for bound, item in scored[:top_k]:
+    for bound, item, _numeric_hit in scored[:top_k]:
         result = classify_evidence(
             claim_text,
             item,

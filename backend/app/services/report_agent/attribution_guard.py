@@ -30,8 +30,14 @@ from typing import Any, Dict, List, Mapping, Sequence
 #: Quellengattungen, die eine Simulationsaussage tragen können.
 SIMULATION_SOURCE_KINDS = frozenset({"agent_quote", "agent_action"})
 
-#: Quellengattungen, die eine Interviewaussage tragen können.
-INTERVIEW_SOURCE_KINDS = frozenset({"agent_quote"})
+#: Evidence-*Typ* einer Interviewaussage.
+#:
+#: Nicht die Quellengattung: ``source_kind`` fasst Interview-Antwort und
+#: Simulationsbeitrag beide zu ``agent_quote`` zusammen (ADR-0002 Anker 3,
+#: bewusst). Wer danach fragt, hält jeden Post der Simulation für ein
+#: Interview — und lässt "die interviewten Personas" ausgerechnet dort
+#: durchgehen, wo eine Simulation lief und kein Interview zustande kam.
+INTERVIEW_EVIDENCE_TYPES = frozenset({"agent_interview"})
 
 #: Ab wie vielen Belegen eine Konsensaussage ("durchweg", "einhellig") gedeckt
 #: ist. Bewusst niedrig gewählt: der Wert soll die eklatanten Fälle fangen —
@@ -124,7 +130,7 @@ def profile_from_evidence_index(
         kind = str(record.get("source_kind") or "")
         if kind in SIMULATION_SOURCE_KINDS:
             simulation += 1
-        if kind in INTERVIEW_SOURCE_KINDS:
+        if str(record.get("type") or "") in INTERVIEW_EVIDENCE_TYPES:
             interview += 1
         if kind == "seed_corpus":
             seed += 1
@@ -229,6 +235,7 @@ def _match_case(original: str, replacement: str) -> str:
 
 __all__ = [
     "CONSENSUS_MIN_EVIDENCE",
+    "INTERVIEW_EVIDENCE_TYPES",
     "EvidenceProfile",
     "attribution_findings",
     "correct_attribution",

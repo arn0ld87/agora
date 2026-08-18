@@ -16,6 +16,7 @@ from typing import Any, Dict, List
 
 from app.contracts.report_contract import RunDegradationModel
 from app.models.report import Report, ReportStatus
+from app.services.report_agent.manager import ReportManager
 from app.services.report_agent.run_degradation import (
     apply_run_degradation_downgrade,
     assert_run_invariants,
@@ -152,6 +153,24 @@ def test_a_clean_run_keeps_its_status():
     )
 
 
+def test_a_warning_alone_does_not_downgrade():
+    """Sonst wäre jeder Bericht über eine laufende Simulation unvollständig."""
+    warning_only = collect_run_degradations(
+        simulation_snapshot={
+            "rounds_completed": 12,
+            "total_rounds": 48,
+            "simulation_running": True,
+            "simulation_status": "running",
+        }
+    )
+
+    assert [entry["severity"] for entry in warning_only] == ["warning"]
+    assert (
+        apply_run_degradation_downgrade(ReportStatus.COMPLETED, warning_only)
+        is ReportStatus.COMPLETED
+    )
+
+
 def test_a_failed_status_is_never_upgraded():
     found = collect_run_degradations(simulation_snapshot=REFERENCE_SNAPSHOT)
 
@@ -182,6 +201,34 @@ def test_the_report_exposes_its_degradation():
     # verbietet unbekannte Felder, und ein zusätzlicher Schlüssel ließ den
     # Export mit 400 antworten.
     assert "degraded" not in report.to_dict()
+
+
+def test_degradations_survive_a_save_and_load_round_trip(tmp_path, monkeypatch):
+    """Ohne Rücklesen meldet jede API-Antwort einen gesunden Lauf.
+
+    ``Report.to_dict()`` schrieb die Mängel in ``meta.json``, aber
+    ``get_report()`` baute den Report mit einer festen kwarg-Liste neu, die
+    dort aufhörte — ``GET /api/report/<id>`` lieferte auch für den
+    gescheiterten Lauf ``run_degradations: []``.
+    """
+    monkeypatch.setattr(ReportManager, "REPORTS_DIR", str(tmp_path))
+    report = Report(
+        report_id="report_roundtrip",
+        simulation_id="sim_x",
+        graph_id="graph_x",
+        simulation_requirement="Test",
+        status=ReportStatus.INCOMPLETE,
+        run_degradations=collect_run_degradations(
+            simulation_snapshot=REFERENCE_SNAPSHOT
+        ),
+    )
+    ReportManager.save_report(report)
+
+    loaded = ReportManager.get_report("report_roundtrip")
+
+    assert loaded is not None
+    assert loaded.degraded is True
+    assert _reasons(loaded.run_degradations) == ["simulation_failed", "45_of_48_rounds"]
 
 
 def test_a_report_without_degradations_is_not_degraded():
@@ -227,13 +274,36 @@ def test_the_reference_run_violates_every_invariant():
     assert "simulation_unhealthy_and_degradation_log_empty" in violations
 
 
-def test_a_degraded_run_may_not_call_itself_completed():
+def test_a_blocking_degradation_may_not_call_itself_completed():
     violations = assert_run_invariants(
         status="completed",
-        run_degradations=[{"component": "simulation", "reason": "simulation_failed"}],
+        run_degradations=[{
+            "component": "simulation",
+            "reason": "simulation_failed",
+            "severity": "blocking",
+        }],
     )
 
     assert "degraded_run_reported_as_completed" in violations
+
+
+def test_a_warning_alone_does_not_contradict_completed():
+    """Ein Bericht über einen laufenden Lauf ist nicht unvollständig.
+
+    Der Zwischenstand steht in ``run_degradations`` und wird ausgewiesen —
+    aber ein ausdrücklich unterstützter Ablauf darf nicht dauerhaft
+    ``incomplete`` erzeugen.
+    """
+    violations = assert_run_invariants(
+        status="completed",
+        run_degradations=[{
+            "component": "simulation",
+            "reason": "45_of_48_rounds",
+            "severity": "warning",
+        }],
+    )
+
+    assert violations == []
 
 
 def test_a_healthy_run_violates_nothing():

@@ -128,6 +128,29 @@ def test_the_other_tools_stay_available():
     assert {"insight_forge", "panorama_search", "quick_search"} <= set(offered)
 
 
+def _timeout_result() -> InterviewResult:
+    """Wie ``graph_tools`` einen Timeout meldet: ohne terminales Signal."""
+    result = InterviewResult(interview_topic="Stakeholder", interview_questions=[])
+    result.summary = "Interview tool TERMINALLY UNAVAILABLE (reason: request timed out)."
+    result.terminal_reason = "request timed out after 180s"
+    return result
+
+
+def test_a_timeout_does_not_disable_the_tool_for_the_whole_run():
+    """Der Breaker ist für terminale Ausfälle da, nicht für Last.
+
+    Der 180-Sekunden-Deckel greift bei Auslastung, nicht bei Unerreichbarkeit.
+    Ein einzelner langsamer Batch darf den Bericht nicht um alle weiteren
+    Interviews bringen — erst recht nicht mit einer blockierenden
+    Degradierung und einer Statusabstufung im Schlepptau.
+    """
+    agent = _Agent(_timeout_result())
+
+    execute_tool_call(agent, "interview_agents", {"interview_topic": "Sorgen"})
+
+    assert "interview_agents" in define_tools(agent)
+
+
 def test_a_successful_interview_leaves_the_tool_in_place():
     agent = _Agent(_healthy_result())
 
