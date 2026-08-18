@@ -86,6 +86,8 @@ Der Stand ist `0.9.5` Stability Beta; die innerhalb der `0.9.x`-Linie noch offen
 
 Die Erzwingung ist umgesetzt (Stand 31.07.2026): `main` ist branch-protected und führt **17 Required Status Checks**, darunter alle sechs E2E-Kern-Smokes sowie die beiden PR-Smoke-Gates. `strict: true` (Branch muss vor dem Merge aktuell sein), `enforce_admins: true`, Force-Pushes und Löschung deaktiviert, `required_approving_review_count: 0` (Single-User-Betrieb).
 
+Am 18.08.2026 sind zwei aufeinanderfolgende Pull Requests ([#1361](https://github.com/arn0ld87/agora/pull/1361), [#1364](https://github.com/arn0ld87/agora/pull/1364)) an den Playwright-Gates gescheitert — nicht an einem Test, sondern am Schritt davor: `playwright install --with-deps` erreichte `azure.archive.ubuntu.com` nicht und apt brach mit Exit 100 ab, jeweils nach gut einer Minute und bevor ein Test lief. Die oben genannte Flake-Freiheit bezieht sich auf die Testläufe selbst und bleibt davon unberührt; die Installationsstufe ist seit [#1366](https://github.com/arn0ld87/agora/pull/1366) gegen Mirror-Ausfälle abgesichert (`scripts/ci/install-playwright-chromium.sh`: drei Versuche mit wachsender Pause und Paketlisten-Aktualisierung dazwischen, Regressionstest in `backend/tests/scripts/test_install_playwright_chromium.py`).
+
 Verifikation: `gh api repos/arn0ld87/agora/branches/main/protection`. Konfiguration und Rollback in [`docs/runbooks/e2e-required-check.md`](runbooks/e2e-required-check.md).
 
 > Der frühere Text an dieser Stelle behauptete, `main` habe keine Branch-Protection (mit einem 404 als Beleg). Das war zum Zeitpunkt des CI-/E2E-Audits am 31.07.2026 nachweislich überholt — es bestanden bereits 15 Required Checks.

@@ -19,5 +19,10 @@ runs:
 
     - name: Install Playwright Chromium (browser + system deps)
       working-directory: frontend
-      run: npx playwright install --with-deps chromium
+      # Die Retry-Mechanik lebt als Skript, damit sie testbar ist:
+      # backend/tests/scripts/test_install_playwright_chromium.py fasst npx,
+      # sudo und sleep ueber PATH ab und prueft Versuchszahl, Backoff und
+      # Abbruchverhalten. Als Inline-``run:`` waere sie nur bei einem echten
+      # Mirror-Ausfall beobachtbar gewesen.
+      run: bash "${GITHUB_WORKSPACE}/scripts/ci/install-playwright-chromium.sh"
       shell: bash
