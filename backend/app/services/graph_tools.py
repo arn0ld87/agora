@@ -22,6 +22,10 @@ import app.services.graph.insight_forge_tool as _forge
 # Re-Export der Dataclasses aus dem ausgegliederten Submodul
 # (M11 Phase 5b PR 1 — siehe app/services/graph/graph_dtos.py)
 # Aliased imports satisfy mypy's no-implicit-reexport check (PEP 484 §re-exports).
+from .interview_stance import (
+    STANCE_PROMPT_REQUIREMENT,
+    split_platform_answers,
+)
 from .graph.graph_dtos import SearchResult as SearchResult  # noqa: PLC0414
 from .graph.graph_dtos import NodeInfo as NodeInfo  # noqa: PLC0414
 from .graph.graph_dtos import EdgeInfo as EdgeInfo  # noqa: PLC0414
@@ -283,7 +287,13 @@ class GraphToolsService:
             "3. Do not use Markdown headings (e.g., #, ##, ###)\n"
             "4. Answer the questions in order, with each answer starting with 'Question X:' (X is the question number)\n"
             "5. Separate each answer with a blank line\n"
-            "6. Provide substantive answers, at least 2-3 sentences per question\n\n"
+            "6. Provide substantive answers, at least 2-3 sentences per question\n"
+            # Issue #1363: Ohne eine Richtung laesst sich nichts auszaehlen.
+            # ``sentiment_score`` stand im Vertrag und war im Referenzlauf bei
+            # 0 von 99 Items gesetzt; damit war jede Mengenaussage ueber
+            # Stakeholder strukturell unbelegbar.
+            + STANCE_PROMPT_REQUIREMENT
+            + "\n"
         )
         optimized_prompt = f"{INTERVIEW_PROMPT_PREFIX}{combined_prompt}"
 
@@ -356,6 +366,13 @@ class GraphToolsService:
                     if cleaned and cleaned.strip():
                         platform_answers.append((platform_label, cleaned))
 
+                # Issue #1363: Erst die Haltungszeile abtrennen, dann rendern
+                # und Zitate ziehen — sonst landet "STANCE: -0.6" im
+                # persistierten Zitat und im Berichtstext.
+                platform_answers, topic_stance = split_platform_answers(
+                    platform_answers
+                )
+
                 if platform_answers:
                     response_text = "\n\n".join(
                         f"[{label} Platform Response]\n{text}"
@@ -398,7 +415,8 @@ class GraphToolsService:
                     agent_bio=agent_bio[:1000],
                     question=combined_prompt,
                     response=response_text,
-                    key_quotes=key_quotes[:5]
+                    key_quotes=key_quotes[:5],
+                    topic_stance=topic_stance,
                 )
                 result.interviews.append(interview)
 

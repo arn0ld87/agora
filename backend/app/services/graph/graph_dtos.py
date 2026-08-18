@@ -326,6 +326,24 @@ class AgentInterview:
     # dem Entitaetstyp ihrer Quellentitaet. ``agent_role`` bleibt der
     # Freitext-Jobtitel und damit Anzeigetext; gezaehlt wird dieses Feld.
     agent_role_family: Optional[str] = None
+    #: Issue #1363: Haltung der Persona zum Gegenstand der Fragen, von -1.0
+    #: (klar ablehnend) bis 1.0 (klar zustimmend). ``None`` heisst "nicht
+    #: erhoben", nicht "neutral" — eine Antwort ohne erkennbare Richtung darf
+    #: nicht als Enthaltung gezaehlt werden, die sie nicht ist.
+    #:
+    #: Bewusst nicht ``sentiment_score``: jenes beschreibt den Tenor eines
+    #: Snippets und geht in die Widerspruchs-Penalty eines Claims ein. Zwei
+    #: Personas koennen denselben Claim stuetzen und dabei gegensaetzlich zum
+    #: Thema stehen; der Claim wuerde sonst abgewertet, obwohl sie sich in ihm
+    #: einig sind.
+    #:
+    #: Die Persona nennt den Wert selbst am Ende ihrer Antwort. Das ist eine
+    #: bewusste Entscheidung gegen die beiden Alternativen: eine Markerliste
+    #: waere genau das lexikalische Raten, das #1357 im Entailment abgeschafft
+    #: hat, und ein eigener Judge-Call je Interview kostet im Referenzlauf 32
+    #: zusaetzliche Calls. Dass die Persona sich selbst einschaetzt, ist hier
+    #: kein Mangel: gefragt ist ihre Haltung, nicht ein Urteil ueber sie.
+    topic_stance: Optional[float] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -335,7 +353,8 @@ class AgentInterview:
             "agent_bio": self.agent_bio,
             "question": self.question,
             "response": self.response,
-            "key_quotes": self.key_quotes
+            "key_quotes": self.key_quotes,
+            "topic_stance": self.topic_stance,
         }
 
     def to_text(self) -> str:

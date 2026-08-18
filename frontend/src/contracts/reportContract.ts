@@ -97,6 +97,12 @@ const EvidenceSourceSchema = z.object({
   // confidence_calculator._has_contradiction nutzt es, um widersprüchliche
   // Sentiment-Vektoren zu erkennen. Pendant zu EvidenceItemModel.sentiment_score.
   sentiment_score: z.number().min(-1).max(1).optional().nullable(),
+  // Issue #1363: Haltung der befragten Persona zum Gegenstand der
+  // Interviewfragen. Bewusst getrennt von sentiment_score — jenes beschreibt
+  // den Tenor eines Snippets und geht in die Widerspruchs-Penalty eines Claims
+  // ein; zwei Personas koennen denselben Claim stuetzen und dabei
+  // gegensaetzlich zum Thema stehen. Pendant zu EvidenceItemModel.topic_stance.
+  topic_stance: z.number().min(-1).max(1).optional().nullable(),
   quote: z.string().min(1).max(500).optional().nullable(),
   source_id_anchor: z.string().min(1).max(200).optional().nullable(),
   // ADR-0002 Anker 3 (Sub-Slice M11.7b). Default "inferred": unbekannte

@@ -599,6 +599,18 @@ class ReportAgent:
                     "quote": quote_source[:500],
                     "persona_stakeholder_group": stakeholder_group[:200],
                     "persona_role_family": role_family[:120] if role_family else None,
+                    # Issue #1363: Die Haltung, die die Persona selbst genannt
+                    # hat. ``None`` bleibt ``None`` — eine Antwort ohne
+                    # erkennbare Richtung ist keine Enthaltung und darf nicht
+                    # als eine gezaehlt werden.
+                    #
+                    # Bewusst ``topic_stance`` und nicht ``sentiment_score``:
+                    # letzteres beschreibt den Tenor des Snippets und geht in
+                    # die Widerspruchs-Penalty eines Claims ein. Zwei Personas
+                    # koennen denselben Claim stuetzen und trotzdem
+                    # gegensaetzlich zum Thema stehen — der Claim wuerde sonst
+                    # abgewertet, obwohl sie sich in ihm einig sind.
+                    "topic_stance": getattr(interview, "topic_stance", None),
                     "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
                     "producer_key": build_producer_key(
                         f"interview:s{section_index}",
