@@ -525,7 +525,7 @@ onMounted(async () => {
   border-color: var(--accent-warm);
   background: var(--surface-glass-strong);
   box-shadow: var(--shadow-glass);
-  color: var(--accent-ink);
+  color: var(--text-primary); /* accent-ink ist dunkler Text fuer helle Akzentflaechen — auf dunklem Glas unlesbar */
 }
 
 .onboarding-steps__item--done {

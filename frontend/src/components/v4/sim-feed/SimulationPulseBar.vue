@@ -89,14 +89,14 @@ const noResonanceYet = computed(() => {
   flex-direction: column;
   gap: 6px;
   padding: 8px 12px;
-  background: var(--surface-subtle, #f9fafb);
+  background: var(--surface-inset);
   border-bottom: 1px solid var(--hairline);
 }
 .spb-bar {
   height: 4px;
   border-radius: 2px;
   overflow: hidden;
-  background: var(--surface-muted, #e5e7eb);
+  background: var(--gray-5);
   display: flex;
   gap: 1px;
 }

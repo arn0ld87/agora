@@ -52,10 +52,10 @@ const hasFindings = computed(() => props.findings.length > 0)
 <style scoped>
 .red-team-section {
   margin: var(--s-4, 16px) 0;
-  border: 1px solid var(--status-warn-border, #f59e0b);
+  border: 1px solid var(--status-orange);
   border-radius: var(--r-1, 6px);
   padding: var(--s-3, 12px) var(--s-4, 16px);
-  background: color-mix(in srgb, var(--status-warn, #f59e0b) 8%, var(--bg-elevated, #fff));
+  background: color-mix(in srgb, var(--status-orange) 8%, var(--bg-elevated, #fff));
 }
 
 .red-team-header {
@@ -71,7 +71,7 @@ const hasFindings = computed(() => props.findings.length > 0)
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--status-warn-fg, #92400e);
+  color: var(--status-orange);
   font-family: var(--ff-mono, monospace);
 }
 
@@ -82,8 +82,8 @@ const hasFindings = computed(() => props.findings.length > 0)
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  border: 1px solid var(--status-warn, #f59e0b);
-  color: var(--status-warn-fg, #92400e);
+  border: 1px solid var(--status-orange);
+  color: var(--status-orange);
   font-size: 10px;
   font-weight: 700;
   cursor: help;
@@ -104,15 +104,15 @@ const hasFindings = computed(() => props.findings.length > 0)
   align-items: flex-start;
   gap: var(--s-2, 8px);
   padding: var(--s-2, 8px) var(--s-3, 12px);
-  background: color-mix(in srgb, var(--status-warn, #f59e0b) 5%, var(--bg, #f8fafc));
-  border: 1px solid color-mix(in srgb, var(--status-warn, #f59e0b) 30%, transparent);
+  background: color-mix(in srgb, var(--status-orange) 5%, var(--bg, #f8fafc));
+  border: 1px solid color-mix(in srgb, var(--status-orange) 30%, transparent);
   border-radius: var(--r-1, 4px);
 }
 
 .red-team-icon {
   flex-shrink: 0;
   font-size: 14px;
-  color: var(--status-warn, #f59e0b);
+  color: var(--status-orange);
   line-height: 1.4;
 }
 

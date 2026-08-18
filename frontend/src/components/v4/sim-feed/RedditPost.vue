@@ -111,7 +111,7 @@ const scoreDisplay = computed(() => {
   color: var(--status-orange, #f97316);
 }
 .rp-score--negative {
-  color: var(--accent-blue, #2563eb);
+  color: var(--status-teal);
 }
 /* Body */
 .rp-body {
@@ -128,7 +128,7 @@ const scoreDisplay = computed(() => {
 .rp-user {
   font-weight: 600;
   font-size: 12px;
-  color: var(--accent-blue, #2563eb);
+  color: var(--status-teal);
 }
 .rp-time {
   font-size: 11px;

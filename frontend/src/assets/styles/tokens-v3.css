@@ -18,6 +18,13 @@
 /* ─── Native v4-Tokens (agora-v3.css :root) ─────────────── */
 
 :root, [data-theme="dark"] {
+  /* Block B1: sagt dem Browser, dass die UA-Defaults (buttonText,
+     Scrollbars, Formularelemente, input-Autofill) im Dark-Scheme zu
+     rendern sind. Ohne diese Zeile bekommt jeder Button ohne explizite
+     color-Angabe schwarzen UA-Text auf unserer dunklen Flaeche —
+     genau so fiel .llm-btn im Golden-Gate durch. */
+  color-scheme: dark;
+
   /* ─── Surfaces (dunkel-warm, Slice D0 · 18.08.2026) ────── */
   --surface-base:        #14110f;        /* page */
   --surface-canvas:      #0b0a09;        /* canvas / sunken — Grund */

@@ -193,7 +193,7 @@ function _buildStandaloneSvg() {
   clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink')
 
   const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style')
-  styleEl.textContent = `${_collectRootCssVariables()}\nsvg { background: var(--bg-canvas, #fff); }\ntext { font-family: var(--font-sans, sans-serif); }`
+  styleEl.textContent = `${_collectRootCssVariables()}\nsvg { background: var(--surface-canvas); }\ntext { font-family: var(--font-sans, sans-serif); }`
   clone.insertBefore(styleEl, clone.firstChild)
 
   const serializer = new XMLSerializer()

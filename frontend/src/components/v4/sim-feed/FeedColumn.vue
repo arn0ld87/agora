@@ -98,7 +98,7 @@ onBeforeUnmount(() => {
 .fc-header {
   padding: 10px 14px;
   border-bottom: 1px solid var(--hairline);
-  background: var(--surface-subtle, #f9fafb);
+  background: var(--surface-inset);
   flex-shrink: 0;
 }
 .fc-title-row {
