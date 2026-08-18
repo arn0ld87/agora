@@ -48,6 +48,8 @@ export interface ShelfObject {
   /** Meta-Zeile: Zeitpunkt + technische ID (Geist Mono). */
   updatedAt: string
   metaId: string
+  /** Nur bei kind='bericht': die Simulation, aus der er stammt — Grundlage fuers Ableiten. */
+  simulationId?: string | null
   /** Nur bei kind='graph': die Graph-ID des Projekts, fuer das Nachladen im Dossier. */
   graphId?: string | null
   nextAction: NextAction | null

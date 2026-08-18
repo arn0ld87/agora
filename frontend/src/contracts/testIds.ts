@@ -58,6 +58,12 @@ export const ShellTestId = {
   activityCancel: 'shell-activity-cancel',
   undoToast: 'shell-undo-toast',
   undoButton: 'shell-undo-button',
+  // Block B4 (Mobile 390px): ⌘K-Knopf verschwindet unter dem Schmal-
+  // Breakpoint ganz aus dem Markup (nicht nur CSS-versteckt) — braucht
+  // deshalb eine eigene testid, um das in Komponenten-Tests zu pruefen.
+  cmdkTrigger: 'shell-cmdk-trigger',
+  panelShelf: 'shell-panel-shelf',
+  panelDossier: 'shell-panel-dossier',
 } as const
 
 export const ShelfTestId = {
