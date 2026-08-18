@@ -36,6 +36,7 @@ from app.services.simulation_state_machine import (
     InvalidStatusTransition,
     assert_valid_transition,
 )
+from app.contracts import PersonaQuotaPlan
 from app.services.sim.cancel_flag import clear_cancel, request_cancel
 
 
@@ -206,6 +207,61 @@ def test_cancel_before_phase3_laesst_phase1_und_2_laufen(run_id, _patch_phases, 
 
     assert _patch_phases == ["phase1", "phase2"], "Phase 3 darf nicht mehr laufen"
     assert manager.state.status == SimulationStatus.CANCELLED_PARTIAL
+
+
+# ---------------------------------------------------------------------------
+# Szenario 3b (Review-Finding PR #1371, Befund 2): Cancel mitten in der
+# Persona-Generierung MIT gesetztem quota_plan darf nicht als FAILED enden.
+#
+# Vorher lief ``_validate_persona_quota`` (tolerance=0, exakter Soll/Ist-
+# Abgleich) VOR dem Cancel-Check nach Phase 2. Eine durch den Abbruch
+# gekürzte Profilliste erfüllt die Quota fast nie — die Validierung warf
+# eine pydantic ValidationError, die im generischen ``except Exception``
+# landete und den FSM auf FAILED setzte statt auf CANCELLED_PARTIAL. Genau
+# der Fall, für den das Feature existiert, wurde so zum harten Fehler.
+# ---------------------------------------------------------------------------
+
+
+def test_cancel_mid_persona_generation_mit_quota_plan_bleibt_cancelled_nicht_failed(
+    run_id, _patch_phases, monkeypatch
+):
+    simulation_id = "sim_cancel_quota"
+    manager = _FakeManager(_make_state(simulation_id))
+
+    # Plan verlangt 5 Personas im Segment "Person" — die gekürzte
+    # Rückgabe unten (2 Profile) würde die Quota-Validierung mit
+    # tolerance=0 zwangsläufig scheitern lassen, liefe sie noch.
+    quota_plan = PersonaQuotaPlan(targets={"Person": 5}, total=5)
+
+    def _phase2_partial_then_cancel(*args, **kwargs):
+        request_cancel(run_id)
+        # Abbruch mitten in der as_completed-Schleife: gekürzte Liste,
+        # keine Exception — spiegelt oasis_profile_generator.py.
+        partial_profiles = [
+            SimpleNamespace(segment="Person"),
+            SimpleNamespace(segment="Person"),
+        ]
+        return partial_profiles, []
+
+    monkeypatch.setattr(
+        prepare_service, "_phase_generate_profiles", _phase2_partial_then_cancel
+    )
+
+    with pytest.raises(PrepareCancelledError):
+        prepare_simulation(
+            manager,
+            simulation_id,
+            "Requirement text",
+            "document text",
+            storage=MagicMock(),
+            run_id=run_id,
+            quota_plan=quota_plan,
+        )
+
+    assert manager.state.status == SimulationStatus.CANCELLED_PARTIAL, (
+        "Ein Cancel mit gesetztem quota_plan darf nicht als FAILED enden — "
+        f"tatsächlicher Status: {manager.state.status}"
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -880,11 +880,21 @@ def prepare_simulation(
             degradations=degradations,
         )
 
+        # Review-Finding (PR #1371, Befund 2): der Cancel-Check MUSS vor der
+        # Quota-Validierung laufen. Bricht die Persona-Generierung
+        # kooperativ mitten in der as_completed-Schleife ab
+        # (oasis_profile_generator.py), liefert sie eine gekürzte
+        # Profilliste zurück — bei gesetztem quota_plan (tolerance=0)
+        # scheitert ``_validate_persona_quota`` daran zwangsläufig mit
+        # ``ValidationError``. Lief die Prüfung zuerst, landete genau der
+        # Fall, für den dieses Feature existiert, im generischen
+        # except-Zweig unten und endete als FAILED statt als der
+        # kooperative Abbruch, den der Nutzer angefordert hat.
+        _raise_if_cancelled()
+
         # Optional quota check: ValidationError propagates → FAILED state.
         if quota_plan is not None:
             _validate_persona_quota(quota_plan, profiles)
-
-        _raise_if_cancelled()
 
         # Phase 3: LLM-driven config generation
         _phase_generate_config(
