@@ -394,7 +394,7 @@ onBeforeUnmount(() => {
 }
 .llm-btn--primary {
   background: var(--accent);
-  color: #fff;
+  color: var(--text-on-accent);
   border-color: var(--accent);
 }
 .llm-btn--danger {

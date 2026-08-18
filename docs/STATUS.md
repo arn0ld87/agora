@@ -173,6 +173,13 @@ Im Messlauf schlugen 7 Tests fehl, keiner davon im Produktivcode:
 
 Chat-Routing und Embedding-Konfiguration bleiben getrennte Vertragswelten.
 
+## Design-Fundament (Block B1, 18.08.2026)
+
+- Das Frontend ist **dark-first**: `index.html` und `main.ts` setzen `data-theme="dark"` vor dem ersten Paint, `tokens-v3.css` trägt die dunkel-warme Palette (Grund `#0b0a09`, Fläche `#14110f`, Akzent Kupfer `#d08a52`) unter `:root, [data-theme="dark"]`. Ein leeres `[data-theme="light"]`-Gerüst markiert die Tür zurück; eine Light-Palette wird bewusst nicht gepflegt (Grilling-Festlegung Q28c vom 18.08.2026)
+- Schriftstapel: **Archivo Variable** (UI) und **Newsreader Variable** (Berichts-Fließtext, inkl. Italic) kommen self-hosted über `@fontsource-variable/*`-Pakete, **Geist Mono** (IDs, Zahlen) liegt weiter als woff2 im Repo. Es gibt keinen externen Font-Request; der Google-Fonts-CDN aus Slice D0 ist entfernt, ebenso `GeistSans-Variable.woff2`
+- Bestandskomponenten referenzieren Farben über Design-Tokens statt harter Werte; ausgenommen sind Dateien, die im Dossier-Umbau (Blöcke B3/B4, `PLAN.md`) entfallen oder neu entstehen
+- Verbindliches Vokabular in [`CONTEXT.md`](../CONTEXT.md) → Glossar: **Lauf** (das ganze Vorhaben, eine Ablage-Zeile) vs. **Job** (ein Einzelschritt, `RunRegistry`)
+
 ## Bekannte Konsolidierungsschuld
 
 - die fünf klassischen Prozess-Wrapper-Views sind entfernt; ihre benannten Deep-Links bleiben als v4-Redirects kompatibel. `/agora-2026` ist als Designreferenz unter `docs/design-reference/agora-2026/` archiviert und nicht produktiv geroutet; v4-Ballast-Views sind entfernt ([PR #877](https://github.com/arn0ld87/agora/pull/877)). Die Migration der v3-Inhaltskomponenten `Step2EnvSetup.vue`/`Step3Simulation.vue`/`Step4Report.vue` in v4-Wrapper ist abgeschlossen ([#922](https://github.com/arn0ld87/agora/issues/922), PR #938). Der `/home`-Redirect auf `/dashboard` ([#915](https://github.com/arn0ld87/agora/issues/915)) ist umgesetzt

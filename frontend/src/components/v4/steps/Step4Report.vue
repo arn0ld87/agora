@@ -823,7 +823,7 @@ onUnmounted(() => { stopPolling(); clearEvidenceRetry() })
 .card-head { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--rule); padding-bottom: var(--s-3); }
 .card-desc { color: var(--fg-body); margin: 0; }
 .meta { color: var(--fg-muted); font-family: var(--ff-mono); font-size: 11px; }
-.meta--warn { color: var(--status-warning); font-weight: 600; }
+.meta--warn { color: var(--status-orange); font-weight: 600; }
 .actions { display: flex; gap: var(--s-3); justify-content: flex-end; }
 .schema-error {
   background: color-mix(in srgb, var(--status-error) 10%, transparent);

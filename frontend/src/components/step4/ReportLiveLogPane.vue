@@ -122,7 +122,7 @@ const emit = defineEmits(['agent-scroll-to-bottom', 'console-scroll-to-bottom'])
 .agent-entry.action-tool_result .agent-title { color: var(--status-green, var(--status-success)); }
 .agent-entry.action-error .agent-title { color: var(--status-red, var(--status-error)); }
 .agent-entry.action-section_start .agent-title,
-.agent-entry.action-section_complete .agent-title { color: var(--status-orange, var(--status-warn)); }
+.agent-entry.action-section_complete .agent-title { color: var(--status-orange); }
 .agent-entry.action-llm_response .agent-title { color: var(--mono-400); }
 .agent-entry.is-highlighted { background: var(--accent-tint-bg, var(--accent-soft)); transition: background 0.4s ease-in-out; }
 .meta { font-family: var(--ff-mono); font-size: 11px; color: var(--fg-muted); }
