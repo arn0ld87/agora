@@ -143,12 +143,18 @@ export function usePersonaLibrary(deps: UsePersonaLibraryDeps) {
     isLoadingPersonaLibrary.value = true
     personaLibraryError.value = ''
     try {
-      const res = await listPersonaTemplates()
-      const envelope = res as unknown as { success?: boolean; data?: { templates?: unknown[] }; error?: string }
+      // Block B3: listPersonaTemplates deklariert die Envelope jetzt
+      // ehrlich — der frueher noetige Doppel-Cast entfaellt.
+      const envelope = await listPersonaTemplates()
       if (envelope?.success && Array.isArray(envelope.data?.templates)) {
         personaTemplates.value = envelope.data.templates
       } else {
-        personaLibraryError.value = envelope?.error || 'Bibliothek konnte nicht geladen werden.'
+        // Der Fehlertext existiert nur auf der Fehler-Variante der
+        // Envelope — die Union macht das jetzt sichtbar, statt es hinter
+        // einem Cast zu verstecken.
+        personaLibraryError.value =
+          (envelope && !envelope.success ? envelope.error : '') ||
+          'Bibliothek konnte nicht geladen werden.'
       }
     } catch (err) {
       personaLibraryError.value = (err as Error).message

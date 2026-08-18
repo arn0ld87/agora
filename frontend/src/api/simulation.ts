@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { LlmRuntimePayload } from './llmRuntime'
 import type { PersonaQuotaPlan } from '../contracts/personaQuotaContract'
 import type { AiModelRefPayload } from './report'
+import type { ApiEnvelope } from './envelope'
 import {
   PostCreatedEventSchema,
   type PostCreatedEvent,
@@ -560,8 +561,15 @@ export const getSimulationProfilesQuality = (
 
 /**
  * List reusable persona templates stored on the local backend.
+ *
+ * Der Response-Interceptor (api/index.ts) gibt die ENVELOPE zurueck, nicht
+ * deren `data`. Der frueher deklarierte Typ `PersonaTemplateRecord[]` war
+ * darum optimistisch — jeder Aufrufer musste ihn wegcasten, und wer das
+ * vergass, griff ins Leere (Block B3).
  */
-export const listPersonaTemplates = (): Promise<PersonaTemplateRecord[]> => {
+export const listPersonaTemplates = (): Promise<
+  ApiEnvelope<{ count: number; templates: PersonaTemplateRecord[] }>
+> => {
   return service.get('/api/simulation/persona-library')
 }
 

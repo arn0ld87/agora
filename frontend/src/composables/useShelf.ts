@@ -243,9 +243,11 @@ export function useShelf(t: Translate) {
       reportsRes.status === 'fulfilled' ? (((reportsRes.value as { data?: unknown }).data as Report[] | undefined) ?? []) : []
     const projects: ProjectResponse[] =
       projectsRes.status === 'fulfilled' ? (((projectsRes.value as { data?: unknown }).data as ProjectResponse[] | undefined) ?? []) : []
+    // Die Templates liegen in envelope.data.templates — NICHT direkt auf
+    // der Envelope. Der Interceptor gibt die Huelle zurueck, nicht ihr data.
     const templates: PersonaTemplateRecord[] =
-      templatesRes.status === 'fulfilled'
-        ? (((templatesRes.value as { templates?: PersonaTemplateRecord[] }).templates ?? (templatesRes.value as unknown as PersonaTemplateRecord[])) || [])
+      templatesRes.status === 'fulfilled' && templatesRes.value?.success
+        ? (templatesRes.value.data?.templates ?? [])
         : []
     const failures = [runsRes, reportsRes, projectsRes, templatesRes].filter((r) => r.status === 'rejected').length
     if (failures > 0) error.value = t('shelf.partialLoad', { n: failures })
