@@ -261,6 +261,30 @@ def test_a_target_verb_in_the_vorfeld_is_recognised():
     assert facts[0].modality is FactModality.NORMATIVE
 
 
+def test_a_percentage_is_not_backed_by_the_same_number_of_things():
+    """"15 Prozent der Beschäftigten" ist nicht "15 Beschäftigte".
+
+    Die Einheit gehört zum Wert. Ohne sie lief der Fall in den
+    Gleichheitszweig — gleiche Zahl, gleiche Gruppe, ähnliche Aussage — und
+    die Quelle galt als Beleg, obwohl sie etwas ganz anderes misst.
+    """
+    result = classify_evidence(
+        "15 Prozent der Beschäftigten sind geschult.",
+        _snippet("15 Beschäftigte sind geschult."),
+    )
+
+    assert result.verdict is not EntailmentVerdict.SUPPORTED
+
+
+def test_minutes_do_not_back_a_percentage():
+    result = classify_evidence(
+        "Die Fehlerquote liegt bei 15 Prozent.",
+        _snippet("Die Fehlerbehebung dauerte 15 Minuten."),
+    )
+
+    assert result.verdict is not EntailmentVerdict.SUPPORTED
+
+
 def test_a_source_that_names_its_origin_does_not_dodge_a_contradiction():
     """Eine Quellenangabe ist kein Populationsunterschied.
 

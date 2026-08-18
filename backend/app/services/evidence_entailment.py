@@ -1024,7 +1024,15 @@ def _classify_numeric_claim(
     checks = checks + ["numeric_claim"]
     for claim_fact in claim_facts:
         for ev_fact in evidence_facts:
-            same_value = abs(claim_fact.value - ev_fact.value) < 0.001
+            # Die Einheit gehört zum Wert. "15 Prozent der Beschäftigten"
+            # und "15 Beschäftigte" sind nicht dieselbe Zahl — ohne diese
+            # Bedingung lief der Fall in den Gleichheitszweig und galt als
+            # belegt, obwohl die Quelle etwas anderes misst. Bei ungleichem
+            # Wert prüft facts_are_comparable die Einheit ohnehin.
+            same_value = (
+                claim_fact.unit == ev_fact.unit
+                and abs(claim_fact.value - ev_fact.value) < 0.001
+            )
             same_subject = subjects_match(claim_fact.subject, ev_fact.subject)
             predicate_overlap = _overlap_ratio(claim_fact.predicate, ev_fact.predicate)
 

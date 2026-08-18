@@ -78,6 +78,23 @@ def test_a_topic_present_in_the_sources_is_never_a_data_gap():
     )
 
 
+def test_a_number_alone_is_enough_to_rule_out_a_data_gap():
+    """Der rein numerische Pfad, ohne lexikalische Rückendeckung.
+
+    Ohne diesen Fall wäre nicht geprüft, ob ``source_mentions_claim_numbers``
+    überhaupt etwas beiträgt — die Wortdeckung fängt die meisten Fälle mit ab
+    und verdeckte, dass der Zahlenpfad ungetestet war.
+    """
+    assert (
+        classify_claim_gap(
+            "Die Zielmarke liegt bei 80 Prozent.",
+            related_evidence_count=0,
+            evidence_pool=[_record(_SEED)],
+        )
+        is ClaimGapKind.BINDING_FAILURE
+    )
+
+
 def test_a_topic_absent_from_every_source_is_a_real_data_gap():
     """Die Gegenprobe — ohne sie wäre der Data Gap als Konzept abgeschafft."""
     assert (
