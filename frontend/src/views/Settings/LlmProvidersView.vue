@@ -383,6 +383,9 @@ onBeforeUnmount(() => {
 .llm-btn {
   border: 1px solid var(--hairline);
   background: var(--surface-elevated);
+  /* Ohne explizite Farbe faellt der Button auf die UA-buttonText-Farbe
+     (schwarz im Light-Scheme) zurueck — auf dunklem Grund unlesbar. */
+  color: var(--text-primary);
   padding: 6px 12px;
   border-radius: var(--r-4, 8px);
   font-size: 13px;

@@ -406,11 +406,11 @@ function deltaClass(n: number): string {
 }
 
 .delta-positive {
-  color: var(--green-600, #16a34a);
+  color: var(--status-green);
 }
 
 .delta-negative {
-  color: var(--red-600, #dc2626);
+  color: var(--status-red);
 }
 
 .delta-neutral {
@@ -436,9 +436,9 @@ function deltaClass(n: number): string {
 }
 
 .diff-error {
-  color: var(--red-600, #dc2626);
-  border-color: var(--red-300, #fca5a5);
-  background: var(--red-50, #fef2f2);
+  color: var(--status-red);
+  border-color: var(--status-red);
+  background: var(--status-red-bg);
 }
 
 .diff-spinner {
