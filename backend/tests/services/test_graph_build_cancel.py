@@ -116,12 +116,48 @@ def test_add_text_batches_cancel_mid_loop_raises_with_partial_uuids(monkeypatch,
         "Nach dem Cancel dürfen nicht mehr alle Chunks verarbeitet werden"
     )
     assert storage.calls[0] == "c1", "Der erste Chunk muss fertig committet worden sein"
-    # Die Exception wird geworfen, sobald die ``as_completed``-Schleife den
-    # ersten (gecancelten) Chunk verarbeitet hat — noch bevor ein eventuell
-    # im Hintergrund bereits gestarteter zweiter Chunk (Restrisiko des
-    # einzelnen Workers, s.o.) sein Ergebnis über ``future.result()``
-    # einreihen konnte. Deterministisch ist deshalb nur, dass genau der
-    # erste Chunk in der zurückgegebenen Liste steht.
+    # Review-Finding (PR #1371, Befund 5): der einzige Worker hat nach c1
+    # bereits c2 aus der Queue geholt (deshalb der Schlaf in _FakeStorage —
+    # gibt dem Hauptthread Zeit, den Cancel-Check zu erreichen, WÄHREND c2
+    # schon läuft). c2 ist damit kein "ausstehender", von
+    # ``cancel_futures=True`` verwerfbarer Chunk mehr, sondern ein bereits
+    # laufender — die Nachsammel-Schleife liest sein Ergebnis deshalb noch
+    # ein, statt es zu verwerfen. c3/c4 waren nie dequeued und fehlen daher
+    # zurecht.
+    assert excinfo.value.episode_uuids == ["episode-c1", "episode-c2"]
+
+
+def test_add_text_batches_nachsammeln_ignoriert_fehler_in_laufendem_chunk(monkeypatch, run_id):
+    """Review-Finding PR #1371, Befund 5 (Ergänzung): scheitert ein bereits
+    laufender Chunk beim Nachsammeln, darf das die Cancel-Meldung nicht
+    verdecken — der Fehler wird geloggt, nicht erneut geworfen."""
+    from app.config import Config
+
+    monkeypatch.setattr(Config, "GRAPH_PARALLEL_CHUNKS", 1)
+
+    class _FlakyStorage(_FakeStorage):
+        def add_text(self, graph_id, chunk, **kwargs):
+            self.calls.append(chunk)
+            if self._cancel_after == chunk:
+                request_cancel(self._run_id)
+                return f"episode-{chunk}"
+            import time
+            time.sleep(0.05)
+            if chunk == "c2":
+                raise RuntimeError("neo4j hiccup mid-chunk")
+            return f"episode-{chunk}"
+
+    storage = _FlakyStorage(cancel_after="c1")
+    storage._run_id = run_id
+    service = GraphBuilderService(storage=storage)
+
+    with pytest.raises(GraphBuildCancelled) as excinfo:
+        service.add_text_batches(
+            "graph-x", ["c1", "c2", "c3"], batch_size=3, run_id=run_id
+        )
+
+    # c1 lief durch, c2 (bereits laufend) scheiterte beim Nachsammeln —
+    # die Cancel-Exception trägt trotzdem nur das, was wirklich glückte.
     assert excinfo.value.episode_uuids == ["episode-c1"]
 
 

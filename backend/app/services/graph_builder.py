@@ -40,6 +40,16 @@ class GraphBuildCancelled(Exception):
     markieren. Bewusst keine Reparatur/kein Rollback: einzeln committete
     Episode-/Entity-/Relation-Transaktionen (``storage/neo4j_write.py``)
     bleiben stehen, wie sie sind.
+
+    ``episode_uuids`` schließt (Review-Finding PR #1371, Befund 5) auch
+    Chunks ein, die zum Abbruchzeitpunkt bereits liefen, aber noch nicht
+    über ``as_completed`` konsumiert waren — die Nachsammel-Schleife in
+    ``add_text_batches`` wartet auf sie, statt ihr Ergebnis zu verwerfen.
+    Chunks, die zu diesem Zeitpunkt noch unbearbeitet in der Warteschlange
+    standen, sind weiterhin nicht enthalten (echt storniert). Die Zahl ist
+    damit exakt, nicht nur eine Untergrenze — außer ein nachgesammelter
+    Chunk wirft selbst eine Exception; dann fehlt er (geloggt, nicht
+    erneut geworfen).
     """
 
     def __init__(self, episode_uuids: List[str]) -> None:
@@ -505,6 +515,42 @@ class GraphBuilderService:
                             run_id, completed, total_chunks,
                         )
                         pool.shutdown(wait=False, cancel_futures=True)
+
+                        # Review-Finding (PR #1371, Befund 5): Chunks, die
+                        # zum Zeitpunkt des Abbruchs schon aus der Queue
+                        # geholt waren (also bereits laufen), werden von
+                        # ``cancel_futures=True`` NICHT erfasst — das
+                        # storniert nur, was noch in der Warteschlange steht.
+                        # Diese laufenden Worker committen ihre Neo4j-
+                        # Transaktion trotzdem fertig, und der `with`-Block
+                        # wartet beim Verlassen ohnehin auf sie
+                        # (``ThreadPoolExecutor.__exit__`` →
+                        # ``shutdown(wait=True)``). Ohne dieses Nachsammeln
+                        # wären ihre Episode-UUIDs im Graphen vorhanden, aber
+                        # weder in der zurückgegebenen Liste noch im
+                        # ``episode_count`` des Cancel-Ergebnisses gezählt —
+                        # bei mehreren parallelen Workern eine stille
+                        # Untererfassung. ``future.cancelled()`` ist nach
+                        # ``shutdown(cancel_futures=True)`` deterministisch:
+                        # True nur für Futures, die noch in der Queue
+                        # standen; bereits laufende bleiben False und werden
+                        # hier eingesammelt (kein zusätzliches Warten — der
+                        # `with`-Block würde ohnehin auf sie warten, wir
+                        # lesen nur zusätzlich ihr Ergebnis).
+                        for other_future, other_idx in futures.items():
+                            if other_future is future or episode_uuids[other_idx] is not None:
+                                continue
+                            if other_future.cancelled():
+                                continue
+                            try:
+                                episode_uuids[other_idx] = other_future.result()
+                            except Exception as exc:  # noqa: BLE001 — best effort; Abbruch-Meldung geht vor
+                                logger.warning(
+                                    "[graph_build] Chunk %d konnte nach dem Abbruch "
+                                    "nicht nachträglich eingesammelt werden: %r",
+                                    other_idx + 1, exc,
+                                )
+
                         raise GraphBuildCancelled(
                             [uuid for uuid in episode_uuids if uuid is not None]
                         )
