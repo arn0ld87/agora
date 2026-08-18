@@ -256,19 +256,106 @@ def test_a_genuinely_different_value_still_removes_the_sentence():
     assert "42 Prozent" not in result.content
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Offene Lücke #1357: steht die Bezugsgruppe *vor* der Zahl ('in der "
-        "Ärzteschaft 83 Prozent'), sucht _split_subject_predicate nur rechts "
-        "der Zahl und findet dort nichts oder die nächstfolgende Gruppe. Auf "
-        "das Gating schlägt das seit #1356 nicht mehr durch — eine fremde "
-        "Bezugsgruppe ergibt INSUFFICIENT statt CONTRADICTED und der Satz "
-        "bleibt stehen. Die Zuordnung selbst ist trotzdem falsch und trägt "
-        "die Begründung. Braucht Vorfeld-Erkennung in _split_subject_predicate."
-    ),
-    strict=True,
+# ---------------------------------------------------------------------------
+# Textuelle Aufzählungen
+# ---------------------------------------------------------------------------
+
+
+ENUMERATION_POOL: List[Dict[str, Any]] = [
+    _seed_item("Die Verwaltung erreichte 91 Prozent.", "ev_admin_share"),
+]
+
+#: Der Absatz aus dem Referenzlauf: vier durchgezählte Punkte, von denen der
+#: dritte eine widerlegte Zahl trägt.
+ENUMERATION_PROSE = (
+    "Erstens bleibt die Personaldecke der Nachtschicht dünn. "
+    "Zweitens fehlt eine dokumentierte Rückfallebene. "
+    "Drittens erreichte die Verwaltung 42 Prozent. "
+    "Viertens fehlt ein belastbarer Zeitplan."
 )
+
+
+def test_textual_enumeration_remains_consistent_after_sanitizing():
+    """Der sichtbare Schaden aus ``report_cc2ef45da5e9``.
+
+    Der Trust-Layer entfernte den dritten Punkt und hinterließ "Erstens …
+    Zweitens … Viertens". Der Leser sieht dort einen Fehler im Bericht, nicht
+    eine vorsichtige Prüfung — und kann nicht wissen, dass etwas fehlt.
+    Nummerierte Listen sind seit #1356 geschützt; ausgeschriebene Aufzählungen
+    waren es nie.
+    """
+    result = verify_prose(ENUMERATION_PROSE, ENUMERATION_POOL)
+
+    assert result.rejected, "Der widerlegte dritte Punkt muss entfernt werden"
+    assert "42 Prozent" not in result.content
+    assert "Viertens" not in result.content
+    assert "Erstens" in result.content
+    assert "Zweitens" in result.content
+    assert "Drittens" in result.content
+
+
+def test_an_intact_enumeration_is_left_alone():
+    """Ohne Entfernung wird nicht umgezählt.
+
+    Ein Absatz, der bewusst mit "Zweitens" einsetzt, weil der erste Punkt im
+    vorigen Absatz steht, darf nicht stillschweigend zu "Erstens" werden.
+    """
+    prose = "Zweitens fehlt eine Rückfallebene. Drittens fehlt ein Zeitplan."
+    result = verify_prose(prose, ENUMERATION_POOL)
+
+    assert result.content == prose
+
+
+def test_an_unverified_enumeration_item_keeps_its_position():
+    """Nur Entferntes verschiebt die Zählung — Markiertes bleibt stehen."""
+    prose = (
+        "Erstens bleibt die Lage angespannt. "
+        "Zweitens erreichte die Notaufnahme 37 Prozent. "
+        "Drittens fehlt ein Zeitplan."
+    )
+    result = verify_prose(prose, ENUMERATION_POOL)
+
+    assert not result.rejected
+    assert "Zweitens" in result.content
+    assert "Drittens" in result.content
+
+
+def test_enumerations_are_renumbered_per_paragraph():
+    """Zwei Absätze sind zwei Aufzählungen; die zweite bleibt unberührt."""
+    prose = (
+        "Erstens bleibt die Personaldecke dünn. "
+        "Zweitens erreichte die Verwaltung 42 Prozent. "
+        "Drittens fehlt ein Zeitplan.\n"
+        "\n"
+        "Zweitens gilt das auch für den Rollout."
+    )
+    result = verify_prose(prose, ENUMERATION_POOL)
+
+    assert result.rejected
+    assert result.content.splitlines()[-1] == "Zweitens gilt das auch für den Rollout."
+
+
+def test_an_ordinal_adverb_is_not_mistaken_for_a_reference_group():
+    """"Drittens" zählt einen Punkt, es benennt keine Personengruppe.
+
+    Ohne diese Abgrenzung wurde das Aufzählungswort zur Bezugsgruppe der Zahl,
+    die echte Gruppe rutschte in den Scope, und der Satz fand seinen Beleg
+    (oder seinen Widerspruch) nie.
+    """
+    facts = extract_numeric_facts("Drittens erreichte die Verwaltung 42 Prozent.")
+
+    assert facts
+    assert "verwaltung" in facts[0].subject.lower()
+
+
 def test_leading_subject_is_assigned_to_the_right_number():
+    """Die als ``xfail`` geführte Restlücke aus #1357, jetzt geschlossen.
+
+    Steht die Bezugsgruppe vor der Zahl, fand ``_split_subject_predicate``
+    rechts davon nichts — der Fakt entstand entweder gar nicht oder trug die
+    nächstfolgende Gruppe. Beides machte die Zahl unprüfbar. Maßgeblich ist
+    jetzt die Nominalphrase unmittelbar links der Zahl.
+    """
     facts = extract_numeric_facts("Die Basisschulung erreichte in der Ärzteschaft 83 Prozent.")
     assert facts
     assert "ärzteschaft" in facts[0].subject.lower()

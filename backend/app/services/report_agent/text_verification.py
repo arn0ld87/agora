@@ -54,6 +54,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from ..evidence_entailment import (
+    ENUMERATION_WORDS,
     EntailmentJudge,
     EntailmentResult,
     EntailmentVerdict,
@@ -141,6 +142,45 @@ _LIST_PREFIX = re.compile(r"^(\s*(?:[-*+]|\d+[.)])\s+)(.*)$")
 
 #: Nummerierte Listenzeile, für den Renummerierungs-Nachlauf.
 _ORDERED_ITEM = re.compile(r"^(?P<indent>\s*)(?P<number>\d+)(?P<sep>[.)])(?P<space>\s+)(?P<rest>.*)$")
+
+#: Kanonische Schreibweise der ausgeschriebenen Aufzählung, in Zählreihenfolge.
+#: Aus dieser Sequenz wird nach einer Entfernung neu gesetzt.
+_ENUMERATION_SEQUENCE = (
+    "Erstens",
+    "Zweitens",
+    "Drittens",
+    "Viertens",
+    "Fünftens",
+    "Sechstens",
+    "Siebtens",
+    "Achtens",
+    "Neuntens",
+    "Zehntens",
+)
+
+#: Wort → Position, inklusive der Schreibvarianten aus ``ENUMERATION_WORDS``.
+#: Die Sequenz oben ist die Ausgabeform, diese Tabelle die Lesart.
+_ENUMERATION_ORDINALS = {
+    "erstens": 0,
+    "zweitens": 1,
+    "drittens": 2,
+    "viertens": 3,
+    "fünftens": 4,
+    "fuenftens": 4,
+    "sechstens": 5,
+    "siebtens": 6,
+    "siebentens": 6,
+    "achtens": 7,
+    "neuntens": 8,
+    "zehntens": 9,
+}
+
+#: Ein Aufzählungswort am Satzanfang — am Zeilenanfang oder hinter einem
+#: Satzzeichen. Gruppe 1 ist der Vorlauf und bleibt unverändert stehen.
+_ENUMERATION_AT_SENTENCE_START = re.compile(
+    r"(^|[.!?]['\"\)\]]?\s+)(" + "|".join(sorted(ENUMERATION_WORDS, key=len, reverse=True)) + r")\b",
+    re.IGNORECASE,
+)
 
 #: Code-Fence. Innerhalb eines Blocks wird nichts geprüft und nichts entfernt.
 _FENCE = re.compile(r"^\s*(```|~~~)")
@@ -281,7 +321,15 @@ def _fact_probe(fact: NumericFact) -> str:
         head = f"{fact.value:g} Prozent"
     else:
         head = f"{fact.value:g}"
-    return " ".join(part for part in (head, fact.subject, fact.predicate) if part).strip()
+    # Der Scope gehört vor die Zahl: dort steht er im Original, und nur dort
+    # findet ihn die Extraktion wieder. Ohne ihn verliert die Claim-Seite ihre
+    # Teilpopulation, während die Evidence-Seite ihre behält — der
+    # Vergleichbarkeitstest liefe dann systematisch schief und der Schutz vor
+    # falschen Widersprüchen wäre ausgerechnet im Fließtext-Pfad wirkungslos.
+    scope = " ".join(sorted(fact.scope))
+    return " ".join(
+        part for part in (scope, head, fact.subject, fact.predicate) if part
+    ).strip()
 
 
 #: Aussagekraft — welches Pool-Urteil entscheidet über einen Fakt?
@@ -389,6 +437,73 @@ def _renumber_block(lines: List[str], anchor: int, indent: str) -> None:
         counter += 1
 
 
+def _leading_ordinal(sentence: str) -> Optional[int]:
+    """Zählposition, falls der Satz mit einem Aufzählungswort beginnt."""
+    match = re.match(r"\s*([A-Za-zÄÖÜäöüß]+)", sentence)
+    if not match:
+        return None
+    return _ENUMERATION_ORDINALS.get(match.group(1).lower())
+
+
+def _paragraph_bounds(lines: List[str], anchor: int) -> tuple[int, int]:
+    """Grenzen des Absatzes um ``anchor``; Leerzeilen trennen.
+
+    Eine Aufzählung endet am Absatzende. Zwei durch eine Leerzeile getrennte
+    Blöcke sind zwei Aufzählungen — der zweite darf nicht umgezählt werden,
+    nur weil im ersten etwas fehlte.
+    """
+    start = min(anchor, len(lines))
+    while start > 0 and lines[start - 1].strip():
+        start -= 1
+    end = min(anchor, len(lines) - 1) if lines else 0
+    while end + 1 < len(lines) and lines[end + 1].strip():
+        end += 1
+    return start, min(end + 1, len(lines))
+
+
+def _renumber_enumeration(lines: List[str], anchor: int, removed_ordinal: int) -> None:
+    """Zählt die ausgeschriebene Aufzählung des Absatzes lückenlos neu.
+
+    Der Referenzlauf ``report_cc2ef45da5e9`` hinterließ "Erstens … Zweitens …
+    Viertens": der dritte Punkt war als widerlegt entfernt worden, die Zählung
+    blieb stehen. Für den Leser ist das ein Fehler im Bericht — er kann nicht
+    wissen, dass dort etwas geprüft und verworfen wurde. Nummerierte Listen
+    schützt :func:`_renumber_block` seit #1356 genauso.
+
+    Der Startwert ist bewusst nicht fest 1: ein Absatz, der bei "Zweitens"
+    einsetzt, weil der erste Punkt darüber steht, soll dort bleiben. Gezählt
+    wird ab dem kleinsten Wert, der im Absatz vorkam — das entfernte Element
+    eingeschlossen, sonst rutschte die Aufzählung nach oben, wenn ausgerechnet
+    ihr erster Punkt wegfiel.
+    """
+    start, end = _paragraph_bounds(lines, anchor)
+    positions: List[tuple[int, re.Match[str]]] = [
+        (index, match)
+        for index in range(start, end)
+        for match in _ENUMERATION_AT_SENTENCE_START.finditer(lines[index])
+    ]
+    if not positions:
+        return
+
+    found = [
+        _ENUMERATION_ORDINALS[match.group(2).lower()] for _, match in positions
+    ]
+    counter = min(min(found), removed_ordinal)
+    if counter + len(positions) > len(_ENUMERATION_SEQUENCE):
+        # Mehr Punkte, als die Sequenz Wörter kennt. Lieber die vorhandene
+        # Zählung stehen lassen als sie mit einem IndexError abzubrechen.
+        return
+
+    for index in range(start, end):
+        def _replace(match: re.Match[str]) -> str:
+            nonlocal counter
+            word = _ENUMERATION_SEQUENCE[counter]
+            counter += 1
+            return f"{match.group(1)}{word}"
+
+        lines[index] = _ENUMERATION_AT_SENTENCE_START.sub(_replace, lines[index])
+
+
 def prose_gate_decisions(
     prose_entries: Sequence[Any],
     truncate: Callable[[str, int], str],
@@ -457,6 +572,8 @@ def verify_prose(
     unverified: List[UnverifiedStatement] = []
     out_lines: List[str] = []
     renumber_anchors: List[tuple[int, str]] = []
+    #: Zeilenindex und Zählposition jedes entfernten Aufzählungspunkts.
+    enumeration_anchors: List[tuple[int, int]] = []
     in_fence = False
 
     for line in content.splitlines():
@@ -509,6 +626,9 @@ def verify_prose(
                         block_index=len(out_lines),
                     )
                 )
+                ordinal = _leading_ordinal(sentence)
+                if ordinal is not None:
+                    enumeration_anchors.append((len(out_lines), ordinal))
                 continue
 
             unverified.append(
@@ -536,6 +656,9 @@ def verify_prose(
 
     for anchor, indent in renumber_anchors:
         _renumber_block(out_lines, anchor, indent)
+
+    for anchor, removed_ordinal in enumeration_anchors:
+        _renumber_enumeration(out_lines, anchor, removed_ordinal)
 
     cleaned = re.sub(r"\n{3,}", "\n\n", "\n".join(out_lines)).strip()
     return VerifiedProse(content=cleaned, rejected=rejected, unverified=unverified)
