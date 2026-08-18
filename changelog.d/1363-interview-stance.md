@@ -1,0 +1,10 @@
+### Added (Interviewantworten tragen eine Richtung — 2026-08-18)
+
+- **`sentiment_score` war ein Feld, das niemand schrieb.** Es steht in `EvidenceRecordModel`, wird von `confidence_calculator._extract_sentiment_scores` gelesen — und war im 7-Sektionen-Referenzlauf bei **0 von 99 Items** gesetzt. Damit war jede Mengenaussage über Stakeholder („die Mehrheit lehnt den ungestaffelten Vollstart ab") strukturell unbelegbar: Regel 2 in `evidence_entailment` prüft solche Aussagen gegen einen Prozentwert, und ohne Richtung gibt es nichts auszuzählen. Die Persona nennt ihre Haltung jetzt selbst als letzte Zeile ihrer Antwort (`STANCE: <-1.0…1.0>`).
+- **Warum die Persona sich selbst einschätzt.** Eine Markerliste wäre genau das lexikalische Raten, das [#1357](https://github.com/arn0ld87/agora/issues/1357) im Entailment gerade abgeschafft hat; ein eigener Judge-Call je Interview kostet im Referenzlauf 32 zusätzliche Calls. Gefragt ist hier die Haltung der Persona, nicht ein Urteil über sie — die Selbstauskunft ist die Sache selbst, nicht ihre Schätzung.
+- **Fehlt die Zeile, bleibt der Wert leer.** Nicht `0.0`: eine Antwort ohne erkennbare Richtung ist keine Enthaltung, und sie als eine zu zählen füllte die Grundgesamtheit mit Stimmen, die niemand abgegeben hat. Werte außerhalb der Skala werden auf `[-1, 1]` gekappt statt das Item zu verwerfen; wiederholt das Modell die Zeile, zählt die letzte — dort, wo der Prompt sie verlangt hat, während frühere Vorkommen Echos der Anweisung sind.
+- **Die Marke verlässt den Text nicht.** Die Zeile wird abgetrennt, bevor der Antworttext gerendert, gekürzt oder auf Zitate durchsucht wird — sonst stünde `STANCE: -0.6` im persistierten `quote`, im `snippet` und am Ende im Berichtstext.
+
+### Changed
+
+- **Die Widerspruchs-Penalty im `confidence_calculator` wird zum ersten Mal wirksam.** Die Regel `std(sentiment_scores) > 0.6 → -0.2` lief seit ihrer Einführung leer, weil ihre Eingabe nie befüllt war. Sie greift ab jetzt: stark auseinanderfallende Haltungen in einer Belegmenge senken die Confidence, wie ursprünglich vorgesehen.
