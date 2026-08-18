@@ -87,6 +87,15 @@ class Report:
     # Issue #1192: Stand der Simulation beim Start dieser Reportgenerierung.
     # None bei Reports, die vor der Einführung geschrieben wurden.
     simulation_snapshot: Optional[Dict[str, Any]] = None
+    #: Qualitätsmängel des Laufs (Simulation, Interviews, Sections). Ein
+    #: Report, der auf 45 von 48 Runden und null Interviews beruht, ist nicht
+    #: dasselbe wie einer auf vollständiger Datenlage — der Statuswert allein
+    #: sagt das nicht.
+    run_degradations: List[Dict[str, Any]] = field(default_factory=list)
+
+    @property
+    def degraded(self) -> bool:
+        return bool(self.run_degradations)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -104,6 +113,8 @@ class Report:
             "has_evidence": self.has_evidence,
             "evidence_sections": self.evidence_sections,
             "simulation_snapshot": self.simulation_snapshot,
+            "run_degradations": list(self.run_degradations),
+            "degraded": self.degraded,
         }
 
 

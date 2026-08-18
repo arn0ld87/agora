@@ -826,6 +826,38 @@ class ReportStatus(str, Enum):
     failed = "failed"
 
 
+class RunDegradationModel(BaseModel):
+    """Ein Qualitätsmangel des Report*laufs*, nicht eines einzelnen Claims.
+
+    Der Referenzlauf ``report_cc2ef45da5e9`` ging als ``completed`` hinaus,
+    obwohl die Simulation ``failed`` war, nur 45 von 48 Runden vorlagen und
+    von acht angeforderten Interviews keines zustande kam. Der
+    ``degradation_log`` blieb leer — er kennt nur Claim-Degradierungen, und
+    für den Zustand des Laufs war schlicht niemand zuständig.
+
+    Abgrenzung: ``EvidenceDegradationModel`` protokolliert die Abstufung eines
+    Claims, ``PipelineDegradationModel`` den Ausfall eines Vorverarbeitungs-
+    schritts. Dieses Modell steht dazwischen — es beschreibt, worauf der
+    fertige Bericht beruht.
+    """
+
+    model_config = _STRICT
+
+    component: Literal[
+        "simulation",
+        "interview_agents",
+        "section_generation",
+        "section_metadata",
+        "contract_export",
+    ]
+    reason: str = Field(
+        min_length=1,
+        description="Maschinenlesbarer Kurzgrund, z. B. '45_of_48_rounds'.",
+    )
+    detail: str = Field(default="", description="Menschenlesbare Erläuterung.")
+    severity: Literal["warning", "blocking"] = "warning"
+
+
 class SimulationSnapshotModel(BaseModel):
     """Stand der Simulation zum Startzeitpunkt der Reportgenerierung (Issue #1192).
 
@@ -844,6 +876,10 @@ class SimulationSnapshotModel(BaseModel):
     total_rounds: int = Field(default=0, ge=0)
     #: Lief die Simulation beim Start der Reportgenerierung noch?
     simulation_running: bool = False
+    #: Laufstatus der Simulation ("completed", "failed", "running", …).
+    #: Additiv, Default ``None`` — Snapshots von vor der Einführung tragen ihn
+    #: nicht, und "unbekannt" ist ehrlicher als ein erfundener Wert.
+    simulation_status: Optional[str] = None
     #: ISO-8601-Zeitpunkt der Erfassung.
     captured_at: Optional[str] = None
 
@@ -869,6 +905,19 @@ class ReportModel(BaseModel):
     # Issue #1192: additiv, Default None — vor dieser Änderung persistierte
     # Reports kennen das Feld nicht und müssen weiter validieren.
     simulation_snapshot: Optional[SimulationSnapshotModel] = None
+    #: Qualitätsmängel des Laufs, auf dem dieser Bericht beruht. Additiv mit
+    #: Default leer — Bestandsreports bleiben gültig.
+    run_degradations: list[RunDegradationModel] = Field(default_factory=list)
+
+    @property
+    def degraded(self) -> bool:
+        """Ist der Bericht auf einem beeinträchtigten Lauf entstanden?
+
+        Der Statuswert allein beantwortet das nicht: ``INCOMPLETE`` sagt, dass
+        etwas fehlt, aber nicht was. Diese Eigenschaft ist die Frage, die ein
+        Leser tatsächlich stellt.
+        """
+        return bool(self.run_degradations)
 
 
 class EvidenceDegradationModel(BaseModel):

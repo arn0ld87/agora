@@ -307,9 +307,34 @@ export const SimulationSnapshotSchema = z.object({
   rounds_completed: z.number().int().min(0),
   total_rounds: z.number().int().min(0).default(0),
   simulation_running: z.boolean().default(false),
+  // Laufstatus der Simulation. Additiv, nullable — Snapshots von vor der
+  // Einführung tragen ihn nicht, und "unbekannt" ist ehrlicher als ein
+  // erfundener Wert.
+  simulation_status: z.string().optional().nullable(),
   captured_at: z.string().optional().nullable(),
 }).strict();
 export type SimulationSnapshot = z.infer<typeof SimulationSnapshotSchema>;
+
+/**
+ * Ein Qualitätsmangel des Report*laufs*, nicht eines einzelnen Claims.
+ *
+ * Spiegelt `RunDegradationModel`. Der Referenzlauf `report_cc2ef45da5e9` ging
+ * als "completed" hinaus, obwohl die Simulation gescheitert war und von acht
+ * Interview-Anforderungen keine ein Ergebnis brachte.
+ */
+export const RunDegradationSchema = z.object({
+  component: z.enum([
+    'simulation',
+    'interview_agents',
+    'section_generation',
+    'section_metadata',
+    'contract_export',
+  ]),
+  reason: z.string().min(1),
+  detail: z.string().default(''),
+  severity: z.enum(['warning', 'blocking']).default('warning'),
+}).strict();
+export type RunDegradation = z.infer<typeof RunDegradationSchema>;
 
 export const ReportSchema = z.object({
   schema_version: z.literal(2),
@@ -330,6 +355,9 @@ export const ReportSchema = z.object({
   // Issue #1192: Simulationsstand zum Startzeitpunkt des Reports. Nullable
   // mit Default — Bestandsreports ohne den Slot bleiben gültig.
   simulation_snapshot: SimulationSnapshotSchema.optional().nullable(),
+  // Qualitätsmängel des Laufs, auf dem der Bericht beruht. Additiv mit
+  // Default — Bestandsreports bleiben gültig.
+  run_degradations: z.array(RunDegradationSchema).default([]),
 }).strict();
 export type Report = z.infer<typeof ReportSchema>;
 

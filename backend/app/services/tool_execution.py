@@ -49,6 +49,7 @@ def execute_tool(
     simulation_requirement: str,
     record_evidence: Optional[Callable[[str, Dict[str, Any], Any, str, int], Optional[Dict[int, str]]]] = None,
     section_index: int = 0,
+    on_terminal_failure: Optional[Callable[[str, str], None]] = None,
 ) -> str:
     """Dispatcht einen Tool-Aufruf und liefert das gerenderte Resultat als String.
 
@@ -132,6 +133,18 @@ def execute_tool(
                 max_agents=max_agents,
             )
             rendered = structured_result.to_text()
+            # Ein terminaler Ausfall wird gemeldet, nicht bloß erzählt. Der
+            # Hinweistext im Ergebnis blieb im Referenzlauf folgenlos: das Tool
+            # wurde nach der Meldung noch sieben Mal aufgerufen. Der Aufrufer
+            # bekommt die Auskunft jetzt als Signal und kann das Tool
+            # tatsächlich abschalten.
+            if on_terminal_failure is not None and getattr(
+                structured_result, "terminal_failure", False
+            ):
+                on_terminal_failure(
+                    tool_name,
+                    str(getattr(structured_result, "terminal_reason", "")),
+                )
 
         elif tool_name == "web_search":
             query = parameters.get("query", "")

@@ -219,6 +219,7 @@ const VALID_REPORT: Report = {
   has_evidence: false,
   red_team_findings: [],
   evidence_sections: 0,
+  run_degradations: [],
 }
 
 // Valides EvidenceMap-Payload

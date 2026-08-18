@@ -15,6 +15,9 @@ from ..tool_validation import (
 )
 
 
+from .tool_circuit_breaker import breaker_for
+
+
 def define_tools(agent: Any) -> Dict[str, Dict[str, Any]]:
     tools: Dict[str, Dict[str, Any]] = {
         "insight_forge": {
@@ -51,6 +54,15 @@ def define_tools(agent: Any) -> Dict[str, Dict[str, Any]]:
         },
     }
 
+    # Ein terminal ausgefallenes Tool verschwindet aus dem Angebot. Der
+    # Hinweistext im Tool-Ergebnis reichte nicht: er stand im Verlauf *einer*
+    # Section und war beim nächsten Abschnitt aus dem Kontext gefallen,
+    # während das Tool im Schema unverändert bereitstand (Referenzlauf
+    # report_cc2ef45da5e9: acht Aufrufe, null Interviews).
+    breaker = breaker_for(agent)
+    for disabled in breaker.disabled_tools:
+        tools.pop(disabled, None)
+
     if agent.web_tools.is_available():
         tools["web_search"] = {
             "name": "web_search",
@@ -78,6 +90,19 @@ def define_tools(agent: Any) -> Dict[str, Dict[str, Any]]:
 
 
 def execute_tool_call(agent: Any, tool_name: str, parameters: Dict[str, Any], report_context: str = "") -> str:
+    breaker = breaker_for(agent)
+    # Gezählt wird die Anforderung, nicht der Durchlauf: ein abgewiesener
+    # Aufruf bezeugt genauso, dass der Bericht das Werkzeug vorsah.
+    breaker.record_request(tool_name)
+    if breaker.is_disabled(tool_name):
+        # Zweite Verteidigungslinie hinter dem Schema-Filter. Das Modell kann
+        # einen Tool-Namen auch dann nennen, wenn er nicht angeboten wurde —
+        # im XML-Modus ist der Name freier Text.
+        return (
+            f"Tool '{tool_name}' ist für diesen Report-Lauf nicht verfügbar "
+            f"({breaker.reason_for(tool_name)}). Der Aufruf wurde nicht "
+            "ausgeführt. Nutze die verbleibenden Werkzeuge."
+        )
     return execute_tool(
         tool_name=tool_name,
         parameters=parameters,
@@ -89,6 +114,7 @@ def execute_tool_call(agent: Any, tool_name: str, parameters: Dict[str, Any], re
         simulation_requirement=agent.simulation_requirement,
         record_evidence=agent._record_tool_evidence,
         section_index=agent._current_section_index or 0,
+        on_terminal_failure=breaker.trip,
     )
 
 

@@ -66,6 +66,50 @@
       "title": "ReportStatus",
       "type": "string"
     },
+    "RunDegradationModel": {
+      "additionalProperties": false,
+      "description": "Ein Qualit\u00e4tsmangel des Report*laufs*, nicht eines einzelnen Claims.\n\nDer Referenzlauf ``report_cc2ef45da5e9`` ging als ``completed`` hinaus,\nobwohl die Simulation ``failed`` war, nur 45 von 48 Runden vorlagen und\nvon acht angeforderten Interviews keines zustande kam. Der\n``degradation_log`` blieb leer \u2014 er kennt nur Claim-Degradierungen, und\nf\u00fcr den Zustand des Laufs war schlicht niemand zust\u00e4ndig.\n\nAbgrenzung: ``EvidenceDegradationModel`` protokolliert die Abstufung eines\nClaims, ``PipelineDegradationModel`` den Ausfall eines Vorverarbeitungs-\nschritts. Dieses Modell steht dazwischen \u2014 es beschreibt, worauf der\nfertige Bericht beruht.",
+      "properties": {
+        "component": {
+          "enum": [
+            "simulation",
+            "interview_agents",
+            "section_generation",
+            "section_metadata",
+            "contract_export"
+          ],
+          "title": "Component",
+          "type": "string"
+        },
+        "detail": {
+          "default": "",
+          "description": "Menschenlesbare Erl\u00e4uterung.",
+          "title": "Detail",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Maschinenlesbarer Kurzgrund, z. B. '45_of_48_rounds'.",
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "severity": {
+          "default": "warning",
+          "enum": [
+            "warning",
+            "blocking"
+          ],
+          "title": "Severity",
+          "type": "string"
+        }
+      },
+      "required": [
+        "component",
+        "reason"
+      ],
+      "title": "RunDegradationModel",
+      "type": "object"
+    },
     "SimulationSnapshotModel": {
       "additionalProperties": false,
       "description": "Stand der Simulation zum Startzeitpunkt der Reportgenerierung (Issue #1192).\n\nEin Report darf starten, w\u00e4hrend die zugrunde liegende Simulation noch\nl\u00e4uft \u2014 dann analysiert er aber einen Zwischenstand. Ohne diesen Snapshot\nist einem fertigen Report nicht anzusehen, ob er auf zehn abgeschlossenen\nRunden beruht oder auf vieren. Erfasst wird der Stand *beim Start*, nicht\nbeim Abschluss: das ist der Datenbestand, den der Agent tats\u00e4chlich\ngesehen hat.",
@@ -91,6 +135,18 @@
           "default": false,
           "title": "Simulation Running",
           "type": "boolean"
+        },
+        "simulation_status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Simulation Status"
         },
         "total_rounds": {
           "default": 0,
@@ -198,6 +254,13 @@
       "minLength": 1,
       "title": "Report Id",
       "type": "string"
+    },
+    "run_degradations": {
+      "items": {
+        "$ref": "#/$defs/RunDegradationModel"
+      },
+      "title": "Run Degradations",
+      "type": "array"
     },
     "schema_version": {
       "const": 2,

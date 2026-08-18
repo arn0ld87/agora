@@ -1122,6 +1122,18 @@
           "title": "Simulation Running",
           "type": "boolean"
         },
+        "simulation_status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Simulation Status"
+        },
         "total_rounds": {
           "default": 0,
           "minimum": 0,

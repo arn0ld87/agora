@@ -28,6 +28,12 @@ from .output_contract import (
     resolve_report_status,
     sanitize_final_content,
 )
+from .run_degradation import (
+    apply_run_degradation_downgrade,
+    collect_run_degradations,
+)
+from .tool_circuit_breaker import breaker_for
+
 from .planning import plan_outline as plan_outline_impl
 from .postprocess_timing import PostprocessPhaseTracker
 from .section_pipeline import (
@@ -49,6 +55,26 @@ from .schemas import (
     _section_schema_for,
 )
 from ..evidence_migrations import migrate_v1_to_v2, normalize_persisted_evidence_map
+#: Quellengattung, unter der Interview-Antworten im Evidence-Index landen.
+_INTERVIEW_SOURCE_KIND = "agent_quote"
+
+
+def _count_interview_evidence(agent: Any) -> int:
+    """Wie viele Interviews tatsächlich Evidence hinterlassen haben.
+
+    Bewusst aus dem Index abgeleitet statt separat mitgezählt: der Index ist
+    das, was der Bericht am Ende benutzt. Ein Interview, das dort nichts
+    hinterlässt, hat für den Bericht nicht stattgefunden — egal was der
+    Tool-Aufruf gemeldet hat.
+    """
+    index = (getattr(agent, "evidence_map", None) or {}).get("evidence_index") or {}
+    return sum(
+        1
+        for record in index.values()
+        if isinstance(record, dict)
+        and record.get("source_kind") == _INTERVIEW_SOURCE_KIND
+    )
+
 
 logger = get_logger('agora.report_agent')
 
@@ -1372,6 +1398,21 @@ def generate_report(
         report.status = apply_quote_validation_downgrade(
             report.status,
             quote_validation_failed_section_indices,
+        )
+        # Der Bericht muss über die Qualität seiner eigenen Grundlage Auskunft
+        # geben. Im Referenzlauf report_cc2ef45da5e9 stand "completed" über
+        # einer gescheiterten Simulation mit 45 von 48 Runden und null
+        # zustande gekommenen Interviews — jede Komponente tat, was sie sollte,
+        # nur zog niemand die Summe.
+        report.run_degradations = collect_run_degradations(
+            simulation_snapshot=report.simulation_snapshot,
+            interviews_requested=breaker_for(agent).request_count("interview_agents"),
+            interviews_succeeded=_count_interview_evidence(agent),
+            interview_disabled_reason=breaker_for(agent).reason_for("interview_agents"),
+            failed_section_indices=failed_section_indices,
+        )
+        report.status = apply_run_degradation_downgrade(
+            report.status, report.run_degradations
         )
         if failed_section_indices:
             failed_note = (

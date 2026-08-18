@@ -55,6 +55,12 @@ def capture_simulation_snapshot(simulation_id: str) -> Optional[Dict[str, Any]]:
         "rounds_completed": int(getattr(run_state, "current_round", 0) or 0),
         "total_rounds": int(getattr(run_state, "total_rounds", 0) or 0),
         "simulation_running": status_value == "running",
+        # Der Status wurde bisher gelesen und weggeworfen — nur die Frage "läuft
+        # sie noch?" überlebte. Damit war einem Report nicht anzusehen, ob die
+        # Simulation abgeschlossen oder gescheitert war: im Referenzlauf
+        # report_cc2ef45da5e9 stand "failed" bei 45 von 48 Runden, und der
+        # Bericht ging als "completed" hinaus.
+        "simulation_status": str(status_value) if status_value is not None else None,
         "captured_at": datetime.now().isoformat(),
     }
 

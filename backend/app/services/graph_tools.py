@@ -235,6 +235,11 @@ class GraphToolsService:
                 "again. Use insight_forge, panorama_search, or quick_search to "
                 "derive stakeholder perspectives from the graph instead."
             )
+            result.terminal_failure = True
+            result.terminal_reason = (
+                "weder ein laufender Simulationsworker noch persistierte "
+                "Agent-Personas vorhanden"
+            )
             return result
 
         # Step 1: Read agent profile files
@@ -327,6 +332,8 @@ class GraphToolsService:
                     f"(reason: {error_msg}). Do NOT call interview_agents again. "
                     "Use insight_forge, panorama_search, or quick_search instead."
                 )
+                result.terminal_failure = True
+                result.terminal_reason = str(error_msg)
                 return result
 
             # Step 5: Parse API response
@@ -431,6 +438,8 @@ class GraphToolsService:
                 f"(reason: {str(e)}). Do NOT call interview_agents again. "
                 "Use insight_forge, panorama_search, or quick_search instead."
             )
+            result.terminal_failure = True
+            result.terminal_reason = str(e)
             return result
         except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.error(f"Interview API call exception: {e}")
