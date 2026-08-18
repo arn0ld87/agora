@@ -114,6 +114,39 @@ class Claim(BaseModel):
     # Label ausweist. ``None`` heisst "nicht abgestuft", nicht "unbekannt".
     text_confidence: Literal["speculative", "low", "medium", "high", "verified"] | None = None
 
+    @model_validator(mode="after")
+    def provenance_must_not_contradict_itself(self) -> "Claim":
+        """Issue #1358: Traegerschaft und Geltungsbereich beschreiben dieselbe Menge.
+
+        Beide werden aus den stuetzenden Evidence-Items abgeleitet, also koennen
+        sie nicht beliebig kombiniert werden. Vor #1358 stand in
+        ``aggregation_basis`` der Literalwert ``"persona"`` — der Vertrag nahm
+        jede Kombination an und der Fehler blieb sechzehn Claims lang
+        unbemerkt. Diese Pruefung faengt genau die Faelle ab, die sich
+        gegenseitig ausschliessen.
+        """
+        # ``seed_corpus`` ist eine quellengebundene Gattung. Ueberwiegt sie,
+        # kann der Claim nicht ausschliesslich auf Simulationskonsens beruhen.
+        if self.aggregation_basis == "seed" and self.confidence_scope == "simulation_consensus":
+            raise ValueError(
+                "aggregation_basis='seed' und confidence_scope='simulation_consensus' "
+                "schliessen sich aus: eine Seed-getragene Aussage ist quellengebunden."
+            )
+        if self.aggregation_basis == "datenluecke":
+            # Keine Traegerschaft heisst: kein Beleg, keine Quellenbindung und
+            # erst recht kein hohes Label.
+            if self.confidence_scope in {"evidence", "empirical"}:
+                raise ValueError(
+                    "aggregation_basis='datenluecke' vertraegt kein quellengebundenes "
+                    f"confidence_scope (hier: {self.confidence_scope!r})."
+                )
+            if self.confidence in {"high", "verified"}:
+                raise ValueError(
+                    "aggregation_basis='datenluecke' vertraegt kein "
+                    f"confidence={self.confidence!r}: eine Luecke traegt keinen Befund."
+                )
+        return self
+
 
 class Multiplier(BaseModel):
     """Wachstums- oder Wirkungshebel entlang der Customer-Journey-Stufen."""
