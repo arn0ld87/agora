@@ -36,7 +36,7 @@
           <tr v-for="job in props.shelf.jobs.value" :key="job.runId">
             <td class="shelf__jobs-id">{{ job.runId }}</td>
             <td>{{ job.runType }}</td>
-            <td>{{ job.message || t(`shelf.status.${job.status}`, { fallback: job.status }) }}</td>
+            <td>{{ job.message || statusText(t, `shelf.status.${job.status}`, job.status) }}</td>
             <td class="shelf__jobs-time">{{ formatUpdatedAt(job.updatedAt) }}</td>
           </tr>
         </tbody>
@@ -125,7 +125,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { ShelfTestId } from '../../contracts/testIds'
 import { SHELF_KIND_TAG, type ShelfFilter, type ShelfObject } from '../../types/shelf'
-import type { useShelf } from '../../composables/useShelf'
+import { statusText, type useShelf } from '../../composables/useShelf'
 import { useCancelAction } from './useCancelAction'
 
 /**

@@ -40,7 +40,7 @@
     <!-- Topbar — inert waehrend Drawer offen: sperrt Fokus + Klicks (Slice 7.3.2 a11y) -->
     <div class="app-shell__topbar" :inert="shellStore.mobileNavOpen ? true : undefined">
       <slot name="topbar">
-        <Topbar :breadcrumbs="breadcrumbs" :notification-badge="notificationBadge" />
+        <Topbar :breadcrumbs="breadcrumbs" />
       </slot>
     </div>
 
@@ -78,11 +78,9 @@ const CommandPalette = defineAsyncComponent(() => import('./CommandPalette.vue')
 const props = withDefaults(
   defineProps<{
     breadcrumbs?: BreadcrumbItem[]
-    notificationBadge?: number
   }>(),
   {
     breadcrumbs: () => [],
-    notificationBadge: 0,
   },
 )
 

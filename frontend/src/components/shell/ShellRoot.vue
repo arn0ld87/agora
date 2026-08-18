@@ -23,16 +23,8 @@
         &#8984;K
       </button>
 
-      <div class="shell-root__user" :data-testid="ShellTestId.userMenu">
-        <button
-          type="button"
-          class="shell-root__user-btn"
-          :data-testid="ShellTestId.userMenuButton"
-          :aria-label="t('sidebar.settings.profile')"
-          aria-haspopup="true"
-        >
-          AS
-        </button>
+      <div class="shell-root__user">
+        <UserMenu />
       </div>
     </header>
 
@@ -74,6 +66,7 @@
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ShellTestId } from '../../contracts/testIds'
+import UserMenu from './UserMenu.vue'
 import type { ShelfObject, ShelfObjectKind } from '../../types/shelf'
 import { useCommandPalette } from '../../composables/useCommandPalette'
 import Stack from './Stack.vue'
@@ -208,32 +201,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
   outline-offset: 2px;
 }
 
-.shell-root__user-btn {
-  width: 25px;
-  height: 25px;
-  border-radius: 50%;
-  border: 0;
-  background: var(--accent-tint-bg);
-  color: var(--accent);
-  font-size: 10px;
-  font-weight: 600;
-  font-family: var(--font-mono);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.shell-root__user-btn:hover {
-  background: var(--accent-tint-bg-strong);
-}
-
-.shell-root__user-btn:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
 .shell-root__main {
   flex: 1;
   min-height: 0;
@@ -312,7 +279,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
 
 @media (prefers-reduced-motion: reduce) {
   .shell-root__cmdk,
-  .shell-root__user-btn,
   .shell-root__toast-btn {
     transition: none;
   }

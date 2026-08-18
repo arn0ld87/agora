@@ -1,0 +1,125 @@
+/**
+ * Dossier — Komponenten-Tests (Block B3).
+ *
+ * Prueft:
+ * 1. Ohne Objekt erscheint der Leer-Hinweis (shelf.dossier.emptyHint).
+ * 2. Mit Objekt: Titel, Zusammenfassung und KPIs (metaId) werden angezeigt.
+ * 3. Abbrechen-Knopf nur bei aktivem Objekt.
+ * 4. Pause-Knopf nur bei pausierbarer aktiver Simulation, ruft pauseSimulation.
+ * 5. Abbrechen ruft useCancelAction.cancel() mit der richtigen runId auf.
+ * 6. Weiter-Knopf (Weiter-Aktion) nur bei vorhandener nextAction, navigiert dorthin.
+ *
+ * Selektoren ausschliesslich ueber DossierTestId (src/contracts/testIds.ts).
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mount, flushPromises } from '@vue/test-utils'
+import { createRouter, createMemoryHistory } from 'vue-router'
+import { createI18n } from 'vue-i18n'
+import de from '@/i18n/locales/de.json'
+import en from '@/i18n/locales/en.json'
+import { DossierTestId } from '../../../contracts/testIds'
+import type { ShelfObject } from '../../../types/shelf'
+
+vi.mock('../../../api/runs', () => ({
+  cancelRun: vi.fn().mockResolvedValue({ success: true }),
+}))
+vi.mock('../../../api/simulation', () => ({
+  pauseSimulation: vi.fn().mockResolvedValue({}),
+  resumeSimulation: vi.fn().mockResolvedValue({}),
+}))
+
+import { pauseSimulation, resumeSimulation } from '../../../api/simulation'
+import { useCancelAction } from '../useCancelAction'
+import Dossier from '../Dossier.vue'
+
+const i18n = createI18n({ legacy: false, locale: 'de', fallbackLocale: 'en', messages: { de, en } })
+
+const router = createRouter({
+  history: createMemoryHistory(),
+  routes: [{ path: '/runs/:id', name: 'RunDetail', component: { template: '<div/>' } }],
+})
+
+function makeObject(overrides: Partial<ShelfObject> = {}): ShelfObject {
+  return {
+    kind: 'lauf',
+    id: 'sim_1',
+    title: 'Testlauf eins',
+    statusLine: 'Laeuft',
+    updatedAt: '2026-08-18T10:00:00Z',
+    metaId: 'sim_1',
+    nextAction: null,
+    active: null,
+    ...overrides,
+  }
+}
+
+function mountDossier(object: ShelfObject | null) {
+  return mount(Dossier, {
+    props: { object },
+    global: { plugins: [i18n, router] },
+  })
+}
+
+describe('Dossier', () => {
+  beforeEach(() => {
+    useCancelAction().undo()
+  })
+
+  it('ohne Objekt erscheint der Leer-Hinweis', () => {
+    const wrapper = mountDossier(null)
+    expect(wrapper.find(`[data-testid="${DossierTestId.root}"]`).text()).toContain(
+      'Nichts ausgewählt. Wähl links ein Objekt, um seine Übersicht zu sehen.',
+    )
+    expect(wrapper.find(`[data-testid="${DossierTestId.title}"]`).exists()).toBe(false)
+  })
+
+  it('mit Objekt zeigt Titel, Zusammenfassung und Meta-ID in den KPIs', () => {
+    const obj = makeObject({ title: 'Mein Lauf', statusLine: 'Simulation pausiert · Runde 12/20', metaId: 'sim_xyz' })
+    const wrapper = mountDossier(obj)
+
+    expect(wrapper.find(`[data-testid="${DossierTestId.title}"]`).text()).toBe('Mein Lauf')
+    expect(wrapper.find(`[data-testid="${DossierTestId.summary}"]`).text()).toBe('Simulation pausiert · Runde 12/20')
+    expect(wrapper.find(`[data-testid="${DossierTestId.kpis}"]`).text()).toContain('sim_xyz')
+  })
+
+  it('Abbrechen-Knopf nur bei aktivem Objekt', () => {
+    const active = makeObject({ active: { runId: 'run_a', status: 'processing', pausable: false, simulationId: null } })
+    const inactive = makeObject({ active: null })
+
+    expect(mountDossier(active).find(`[data-testid="${DossierTestId.cancel}"]`).exists()).toBe(true)
+    expect(mountDossier(inactive).find(`[data-testid="${DossierTestId.cancel}"]`).exists()).toBe(false)
+  })
+
+  it('Pause-Knopf nur bei pausierbarer aktiver Simulation, ruft pauseSimulation', async () => {
+    const obj = makeObject({ active: { runId: 'run_a', status: 'processing', pausable: true, simulationId: 'sim_a' } })
+    const wrapper = mountDossier(obj)
+
+    await wrapper.find(`[data-testid="${DossierTestId.pause}"]`).trigger('click')
+    expect(pauseSimulation).toHaveBeenCalledWith('sim_a')
+    expect(resumeSimulation).not.toHaveBeenCalled()
+  })
+
+  it('Abbrechen ruft useCancelAction.cancel() mit der richtigen runId auf', async () => {
+    const obj = makeObject({ active: { runId: 'run_xyz', status: 'processing', pausable: false, simulationId: null } })
+    const wrapper = mountDossier(obj)
+    const cancelAction = useCancelAction()
+
+    await wrapper.find(`[data-testid="${DossierTestId.cancel}"]`).trigger('click')
+
+    expect(cancelAction.pending.value?.runId).toBe('run_xyz')
+  })
+
+  it('Weiter-Knopf nur bei vorhandener Weiter-Aktion, navigiert zum Routenziel', async () => {
+    const withAction = makeObject({ nextAction: { label: 'Weiter', to: { name: 'RunDetail', params: { id: 'run_1' } }, kind: 'accent' } })
+    const withoutAction = makeObject({ nextAction: null })
+
+    expect(mountDossier(withoutAction).find(`[data-testid="${DossierTestId.openFull}"]`).exists()).toBe(false)
+
+    const wrapper = mountDossier(withAction)
+    await wrapper.find(`[data-testid="${DossierTestId.openFull}"]`).trigger('click')
+    await flushPromises()
+
+    expect(router.currentRoute.value.name).toBe('RunDetail')
+    expect(router.currentRoute.value.params.id).toBe('run_1')
+  })
+})

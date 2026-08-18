@@ -50,7 +50,7 @@ export function endeavorKey(run: RunDetail): string {
  * „shelf.status.report_xyz" in der Ablage. Backend-Enums wachsen
  * schneller als Uebersetzungen, deshalb faellt der Rohwert durch.
  */
-function statusText(t: Translate, key: string, raw: string): string {
+export function statusText(t: Translate, key: string, raw: string): string {
   const translated = t(key)
   return translated === key ? raw : translated
 }

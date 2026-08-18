@@ -110,11 +110,9 @@ describe('locale-coverage', () => {
     expect(enKeys).toContain('sidebar.settings.usersTeams')
   })
 
-  it('topbar.search und topbar.notifications existieren in beiden Locales', () => {
+  it('topbar.search existiert in beiden Locales', () => {
     expect(deKeys).toContain('topbar.search')
-    expect(deKeys).toContain('topbar.notifications')
     expect(enKeys).toContain('topbar.search')
-    expect(enKeys).toContain('topbar.notifications')
   })
 
   // Issue #1023 (Befund B-11): SimulationPulseBar.vue nutzt t('feed.resonanceBar')

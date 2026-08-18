@@ -803,8 +803,13 @@
   },
   "topbar": {
     "search": "Suche",
-    "notifications": "Benachrichtigungen",
-    "openNavigation": "Navigation öffnen"
+    "openNavigation": "Navigation öffnen",
+    "userMenu": {
+      "trigger": "Nutzermenü, angemeldet als {name}",
+      "triggerUnknown": "Nutzermenü öffnen",
+      "profile": "Profil",
+      "settings": "Einstellungen"
+    }
   },
   "logs": {
     "drawer": {
