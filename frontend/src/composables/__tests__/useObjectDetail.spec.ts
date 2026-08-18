@@ -9,6 +9,9 @@ import { getReport } from '../../api/report'
 import { getGraphData } from '../../api/graph'
 import { useObjectDetail } from '../useObjectDetail'
 
+// t-Stub: gibt den Schluessel zurueck, Assertions laufen ueber Schluessel.
+const t = (key: string): string => key
+
 function makeObject(over: Partial<ShelfObject> = {}): ShelfObject {
   return {
     kind: 'bericht',
@@ -39,7 +42,7 @@ describe('useObjectDetail', () => {
     } as never)
 
     const obj = ref<ShelfObject | null>(makeObject())
-    const { detail } = useObjectDetail(obj)
+    const { detail } = useObjectDetail(obj, t)
     await nextTick(); await Promise.resolve(); await Promise.resolve()
 
     expect(detail.value?.summary).toBe('Kurzfassung des Berichts')
@@ -53,16 +56,19 @@ describe('useObjectDetail', () => {
     } as never)
 
     const obj = ref<ShelfObject | null>(makeObject({ kind: 'graph', id: 'proj_1', graphId: 'graph_1' }))
-    const { detail } = useObjectDetail(obj)
+    const { detail } = useObjectDetail(obj, t)
     await nextTick(); await Promise.resolve(); await Promise.resolve()
 
     expect(getGraphData).toHaveBeenCalledWith('graph_1')
-    expect(detail.value?.parts.map((p) => p.description)).toEqual(['3', '1'])
+    expect(detail.value?.parts).toEqual([
+      { title: 'shelf.dossier.graphEntities', description: '3' },
+      { title: 'shelf.dossier.graphRelations', description: '1' },
+    ])
   })
 
   it('laedt nichts fuer Sorten ohne Detail-Endpunkt', async () => {
     const obj = ref<ShelfObject | null>(makeObject({ kind: 'lauf', id: 'sim_1' }))
-    const { detail } = useObjectDetail(obj)
+    const { detail } = useObjectDetail(obj, t)
     await nextTick(); await Promise.resolve()
 
     expect(getReport).not.toHaveBeenCalled()
@@ -74,7 +80,7 @@ describe('useObjectDetail', () => {
     vi.mocked(getReport).mockRejectedValue(new Error('kaputt'))
 
     const obj = ref<ShelfObject | null>(makeObject())
-    const { detail } = useObjectDetail(obj)
+    const { detail } = useObjectDetail(obj, t)
     await nextTick(); await Promise.resolve(); await Promise.resolve()
 
     expect(detail.value).toBeNull()
@@ -87,7 +93,7 @@ describe('useObjectDetail', () => {
     } as never)
 
     const obj = ref<ShelfObject | null>(makeObject())
-    const { detail } = useObjectDetail(obj)
+    const { detail } = useObjectDetail(obj, t)
     await nextTick(); await Promise.resolve(); await Promise.resolve()
     expect(detail.value).not.toBeNull()
 

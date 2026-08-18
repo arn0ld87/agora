@@ -202,6 +202,51 @@ describe('nextActionFor — Tabellen-Test ueber run_type x status', () => {
 
 // === buildShelfObjects =======================================================
 
+describe('Gruppierung ueber die ganze Pipeline', () => {
+  it('fasst graph_build (nur project_id) und simulation_prepare (beide IDs) zu EINEM Lauf zusammen', () => {
+    // graph_build kennt nur die project_id, das folgende
+    // simulation_prepare kennt beide. Ohne transitive Aufloesung
+    // zerfaellt ein Lauf hier in zwei Zeilen.
+    const build = makeRun({
+      run_id: 'run_build',
+      run_type: 'graph_build',
+      linked_ids: { project_id: 'proj_1' },
+      updated_at: '2026-01-01T00:00:00Z',
+    })
+    const prepare = makeRun({
+      run_id: 'run_prep',
+      run_type: 'simulation_prepare',
+      linked_ids: { project_id: 'proj_1', simulation_id: 'sim_1' },
+      updated_at: '2026-01-02T00:00:00Z',
+    })
+
+    const objs = buildShelfObjects([build, prepare], [], [], [], t)
+    const laufObjs = objs.filter((o) => o.kind === 'lauf')
+
+    expect(laufObjs.length).toBe(1)
+    expect(laufObjs[0].id).toBe('sim_1')
+    expect(laufObjs[0].statusLine).toContain('"n":2')
+  })
+
+  it('haelt zwei Vorhaben ohne gemeinsame ID getrennt', () => {
+    const a = makeRun({ run_id: 'run_a', linked_ids: { project_id: 'proj_a' } })
+    const b = makeRun({ run_id: 'run_b', linked_ids: { project_id: 'proj_b' } })
+
+    const laufObjs = buildShelfObjects([a, b], [], [], [], t).filter((o) => o.kind === 'lauf')
+    expect(laufObjs.length).toBe(2)
+  })
+
+  it('verkettet auch ueber mehrere Glieder (build -> prepare -> run)', () => {
+    const build = makeRun({ run_id: 'r1', run_type: 'graph_build', linked_ids: { project_id: 'p' }, updated_at: '2026-01-01T00:00:00Z' })
+    const prep = makeRun({ run_id: 'r2', run_type: 'simulation_prepare', linked_ids: { project_id: 'p', simulation_id: 's' }, updated_at: '2026-01-02T00:00:00Z' })
+    const run = makeRun({ run_id: 'r3', run_type: 'simulation_run', linked_ids: { simulation_id: 's' }, updated_at: '2026-01-03T00:00:00Z' })
+
+    const laufObjs = buildShelfObjects([build, prep, run], [], [], [], t).filter((o) => o.kind === 'lauf')
+    expect(laufObjs.length).toBe(1)
+    expect(laufObjs[0].statusLine).toContain('"n":3')
+  })
+})
+
 describe('buildShelfObjects', () => {
   it('zwei Jobs mit derselben simulation_id ergeben eine Lauf-Zeile mit Status des juengsten Jobs und Job-Zaehler', () => {
     const older = makeRun({

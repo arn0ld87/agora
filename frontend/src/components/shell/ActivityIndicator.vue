@@ -2,6 +2,7 @@
   <div v-if="props.objects.length > 0" class="activity">
     <button
       type="button"
+      ref="triggerEl"
       class="activity__trigger"
       :data-testid="ShellTestId.activityIndicator"
       :aria-expanded="open"
@@ -35,7 +36,7 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ShellTestId } from '../../contracts/testIds'
 import { SHELF_KIND_TAG, type ShelfObject, type ShelfObjectKind } from '../../types/shelf'
@@ -57,6 +58,7 @@ const { t } = useI18n()
 const cancelAction = useCancelAction()
 const open = ref(false)
 const panelEl = ref<HTMLElement | null>(null)
+const triggerEl = ref<HTMLButtonElement | null>(null)
 
 function toggle(): void {
   open.value = !open.value
@@ -81,7 +83,12 @@ function onDocClick(e: MouseEvent): void {
 
 function onKeydown(e: KeyboardEvent): void {
   if (e.key === 'Escape' && open.value) {
+    // Das Panel verschwindet aus dem DOM. Laege der Fokus darin, fiele
+    // er auf den Dokumentkoerper — wer per Tastatur arbeitet, muesste
+    // sich von vorn durch die Seite hangeln. Also zurueck zum Ausloeser.
+    const trigger = triggerEl.value
     open.value = false
+    void nextTick(() => trigger?.focus())
   }
 }
 

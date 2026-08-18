@@ -3,6 +3,8 @@ import { getReport } from '../api/report'
 import { getGraphData } from '../api/graph'
 import type { ShelfObject } from '../types/shelf'
 
+type Translate = (key: string) => string
+
 /**
  * Nachladen der Objektdetails fuer das Dossier (Block B3).
  *
@@ -28,7 +30,7 @@ export interface ObjectDetail {
   parts: DetailPart[]
 }
 
-export function useObjectDetail(object: Ref<ShelfObject | null>) {
+export function useObjectDetail(object: Ref<ShelfObject | null>, t: Translate) {
   const detail = ref<ObjectDetail | null>(null)
   const loading = ref(false)
 
@@ -57,8 +59,8 @@ export function useObjectDetail(object: Ref<ShelfObject | null>) {
             detail.value = {
               summary: '',
               parts: [
-                { title: 'Entitäten', description: String(data.nodes?.length ?? 0) },
-                { title: 'Beziehungen', description: String(data.edges?.length ?? 0) },
+                { title: t('shelf.dossier.graphEntities'), description: String(data.nodes?.length ?? 0) },
+                { title: t('shelf.dossier.graphRelations'), description: String(data.edges?.length ?? 0) },
               ],
             }
           }

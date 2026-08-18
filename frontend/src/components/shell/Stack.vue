@@ -84,7 +84,22 @@ function hydrate(): StackEntry[] {
     const raw = sessionStorage.getItem(STORAGE_KEY)
     if (!raw) return []
     const parsed = JSON.parse(raw) as unknown
-    return Array.isArray(parsed) ? (parsed as StackEntry[]) : []
+    if (!Array.isArray(parsed)) return []
+    // Der Wert stammt aus dem sessionStorage und kann von einer
+    // aelteren Fassung stammen oder beschaedigt sein. Ein Eintrag ohne
+    // kind/id wuerde eine Pille erzeugen, deren Klick ins Leere
+    // navigiert — deshalb hier pruefen statt blind zu casten.
+    return parsed
+      .filter(
+        (e): e is StackEntry =>
+          typeof e === 'object' &&
+          e !== null &&
+          typeof (e as StackEntry).kind === 'string' &&
+          typeof (e as StackEntry).id === 'string' &&
+          (e as StackEntry).kind.length > 0 &&
+          (e as StackEntry).id.length > 0,
+      )
+      .slice(-RING_MAX)
   } catch {
     return []
   }

@@ -49,11 +49,30 @@ function clearTimer(): void {
   }
 }
 
+/** Fuehrt den Abbruch aus und zeigt kurz die Bestaetigung. */
+function executeCancel(runId: string): void {
+  void cancelRun(runId).then(() => {
+    confirmed.value = runId
+    if (confirmTimeoutId) clearTimeout(confirmTimeoutId)
+    confirmTimeoutId = setTimeout(() => {
+      confirmed.value = null
+      confirmTimeoutId = null
+    }, CONFIRM_DISPLAY_MS)
+  })
+}
+
 export function useCancelAction() {
   function cancel(runId: string): void {
-    // Ein neuer Cancel ersetzt einen evtl. noch laufenden — es gibt nur
-    // einen Toast; der vorherige Timer wird verworfen (kein API-Call fuer ihn).
+    // Es gibt nur EINEN Toast. Bricht der Nutzer einen zweiten Lauf ab,
+    // waehrend der erste noch im Undo-Fenster steht, wird der erste
+    // SOFORT ausgefuehrt — nicht verworfen. Wer „Abbrechen" gedrueckt
+    // hat, erwartet einen Abbruch; ihn wegen eines Klicks auf eine
+    // andere Zeile stillschweigend fallenzulassen, waere ein
+    // Datenverlust, den niemand bemerkt.
+    const previous = pending.value
     clearTimer()
+    if (previous && previous.runId !== runId) executeCancel(previous.runId)
+
     pending.value = { runId, secondsLeft: Math.ceil(UNDO_WINDOW_MS / 1000) }
 
     const startedAt = Date.now()
@@ -67,14 +86,7 @@ export function useCancelAction() {
     timeoutId = setTimeout(() => {
       clearTimer()
       pending.value = null
-      void cancelRun(runId).then(() => {
-        confirmed.value = runId
-        if (confirmTimeoutId) clearTimeout(confirmTimeoutId)
-        confirmTimeoutId = setTimeout(() => {
-          confirmed.value = null
-          confirmTimeoutId = null
-        }, CONFIRM_DISPLAY_MS)
-      })
+      executeCancel(runId)
     }, UNDO_WINDOW_MS)
   }
 

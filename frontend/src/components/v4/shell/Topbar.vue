@@ -35,6 +35,13 @@
         <!-- User slot -->
         <div class="topbar__user">
           <slot name="user">
+            <!-- Dichte-Umschalter bleibt, solange die klassische Huelle
+                 der Standard ist: die neue Shell steht hinter einem Flag,
+                 und ohne dieses Bedienelement gaebe es fuer klassische
+                 Nutzer keinen Weg mehr zwischen kompakt und komfortabel.
+                 Faellt mit der Huelle. -->
+            <DensityToggle />
+
             <UserMenu />
           </slot>
         </div>
@@ -49,6 +56,7 @@ import { useI18n } from 'vue-i18n'
 import Breadcrumbs from './Breadcrumbs.vue'
 import type { BreadcrumbItem } from './Breadcrumbs.vue'
 import Icon from './Icon.vue'
+import DensityToggle from './DensityToggle.vue'
 import UserMenu from '@/components/shell/UserMenu.vue'
 import { useCommandPalette } from '@/composables/useCommandPalette'
 import { useShellStore } from '@/stores/shell'
@@ -96,8 +104,8 @@ withDefaults(
 }
 
 .topbar__icon-btn {
-  width: 36px;
-  height: 36px;
+  width: var(--ctl-h-lg);
+  height: var(--ctl-h-lg);
   border-radius: 8px;
   background: transparent;
   border: 0;
@@ -123,8 +131,8 @@ withDefaults(
 /* Hamburger: standardmaessig versteckt, nur auf Mobile sichtbar */
 .topbar__hamburger {
   display: none;
-  width: 36px;
-  height: 36px;
+  width: var(--ctl-h-lg);
+  height: var(--ctl-h-lg);
   border-radius: 8px;
   background: transparent;
   border: 0;

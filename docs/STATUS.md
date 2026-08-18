@@ -190,6 +190,16 @@ Chat-Routing und Embedding-Konfiguration bleiben getrennte Vertragswelten.
 - Bestandskomponenten referenzieren Farben über Design-Tokens statt harter Werte; ausgenommen sind Dateien, die im Dossier-Umbau (Blöcke B3/B4, `PLAN.md`) entfallen oder neu entstehen
 - Verbindliches Vokabular in [`CONTEXT.md`](../CONTEXT.md) → Glossar: **Lauf** (das ganze Vorhaben, eine Ablage-Zeile) vs. **Job** (ein Einzelschritt, `RunRegistry`)
 
+## Ablage und Dossier (Block B3, 18.08.2026)
+
+- Die neue Hülle liegt unter `/ablage` (Route `Shelf`) und `/ablage/:kind/:objectId` (Route `ShelfObject`), beide auf `views/shell/ShelfView.vue`. Sie steht hinter dem Flag `agora.shell` (localStorage → `VITE_AGORA_SHELL` → `classic`); ausgewertet wird es **ausschließlich im Router**, nie in Komponenten. Ohne Flag ändert sich für Bestandsnutzer nichts
+- `composables/useShelf.ts` aggregiert vier bestehende Quellen zu Ablage-Objekten — RunRegistry, `GET /api/report/list`, `GET /api/graph/project/list`, persona-library — über `Promise.allSettled`: eine kaputte Quelle lässt die anderen drei stehen. Es gibt **keine neuen Endpunkte**
+- Jobs werden **transitiv** zu Läufen gruppiert (`groupJobsByEndeavor`, Union-Find über `linked_ids`). Ein Schlüssel je Job genügt nicht: `graph_build` trägt nur `project_id`, das folgende `simulation_prepare` beide IDs — je Job stur `simulation_id` zu bevorzugen zerlegt einen Lauf in zwei Zeilen, entgegen dem Glossar in `CONTEXT.md`
+- Abbrechen und Pause hängen an der Zeile und am Dossier-Kopf; abgebrochen wird ohne Rückfragedialog, mit 5-Sekunden-Fenster zum Rückgängigmachen (`useCancelAction`, ein Toast für die ganze Hülle)
+- Das Nutzermenü oben rechts ist echt (`components/shell/UserMenu.vue`, Initialen aus `store/userProfile`, Einträge Profil und Einstellungen) und wird von **beiden** Hüllen benutzt. Die Attrappen (`AD` in der klassischen Kopfzeile, `AS` in der neuen) und die funktionslose Glocke sind entfernt
+- Testid-Kontrakt in `contracts/testIds.ts` (`ShellTestId`, `ShelfTestId`, `DossierTestId`) — vor den Komponenten angelegt; Specs selektieren ausschließlich darüber, nie über CSS-Klassen. `/ablage` läuft im Golden-Gate-Accessibility-Smoke mit
+- Offen in B3: Bericht-Leseumgebung mit Belegrand, Graph-Objekt mit Rundenscrubber, Einstellungen als Overlay, Löschen der Altansichten und zuletzt das Entfernen des Flags
+
 ## Bekannte Konsolidierungsschuld
 
 - die fünf klassischen Prozess-Wrapper-Views sind entfernt; ihre benannten Deep-Links bleiben als v4-Redirects kompatibel. `/agora-2026` ist als Designreferenz unter `docs/design-reference/agora-2026/` archiviert und nicht produktiv geroutet; v4-Ballast-Views sind entfernt ([PR #877](https://github.com/arn0ld87/agora/pull/877)). Die Migration der v3-Inhaltskomponenten `Step2EnvSetup.vue`/`Step3Simulation.vue`/`Step4Report.vue` in v4-Wrapper ist abgeschlossen ([#922](https://github.com/arn0ld87/agora/issues/922), PR #938). Der `/home`-Redirect auf `/dashboard` ([#915](https://github.com/arn0ld87/agora/issues/915)) ist umgesetzt

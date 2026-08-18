@@ -52,8 +52,7 @@
         </div>
         <div class="dossier__kpi">
           <div class="dossier__kpi-value dossier__kpi-value--mono">{{ props.object.metaId }}</div>
-          <!-- "ID" ist ein technisches Kuerzel ohne shelf.*-Entsprechung (siehe Bericht) -->
-          <div class="dossier__kpi-label">ID</div>
+          <div class="dossier__kpi-label">{{ t('shelf.dossier.idLabel') }}</div>
         </div>
       </div>
 
@@ -95,12 +94,15 @@ import { useObjectDetail } from '../../composables/useObjectDetail'
 
 const props = defineProps<{ object: ShelfObject | null }>()
 
-// Details werden erst beim Auswaehlen geholt, nicht fuer jede Zeile.
-const { detail } = useObjectDetail(computed(() => props.object))
-
 const { t, locale } = useI18n()
 const router = useRouter()
 const cancelAction = useCancelAction()
+
+// Details werden erst beim Auswaehlen geholt, nicht fuer jede Zeile.
+const { detail } = useObjectDetail(
+  computed(() => props.object),
+  t,
+)
 
 function openFull(): void {
   if (!props.object?.nextAction) return

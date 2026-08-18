@@ -41,6 +41,81 @@ export function endeavorKey(run: RunDetail): string {
 }
 
 /**
+ * Gruppiert Jobs transitiv zu Vorhaben.
+ *
+ * Ein Schluessel je Job reicht NICHT: `graph_build` traegt nur eine
+ * project_id, das nachfolgende `simulation_prepare` traegt project_id
+ * UND simulation_id. Wuerde man je Job stur die simulation_id
+ * bevorzugen, fielen genau diese beiden Jobs in verschiedene Gruppen —
+ * ein und derselbe Lauf staende zweimal in der Ablage, einmal als
+ * Projekt- und einmal als Simulationszeile. Das widerspricht dem
+ * Glossar (CONTEXT.md): ein Lauf ist das ganze Vorhaben, eine Zeile.
+ *
+ * Deshalb verbinden wir alle IDs eines Jobs miteinander (Union-Find)
+ * und lesen die Gruppe erst danach ab.
+ */
+export function groupJobsByEndeavor(runs: RunDetail[]): Map<string, RunDetail[]> {
+  const parent = new Map<string, string>()
+
+  function find(x: string): string {
+    let root = x
+    while (parent.get(root) !== undefined && parent.get(root) !== root) {
+      root = parent.get(root) as string
+    }
+    // Pfadverkuerzung
+    let cur = x
+    while (parent.get(cur) !== undefined && parent.get(cur) !== root) {
+      const next = parent.get(cur) as string
+      parent.set(cur, root)
+      cur = next
+    }
+    return root
+  }
+
+  function union(a: string, b: string): void {
+    if (!parent.has(a)) parent.set(a, a)
+    if (!parent.has(b)) parent.set(b, b)
+    const ra = find(a)
+    const rb = find(b)
+    if (ra !== rb) parent.set(rb, ra)
+  }
+
+  // 1. Alle IDs eines Jobs gehoeren zusammen.
+  for (const run of runs) {
+    const ids = [
+      linkedString(run, 'simulation_id'),
+      linkedString(run, 'project_id'),
+      run.run_id,
+    ].filter((v): v is string => v !== null)
+    if (!parent.has(ids[0])) parent.set(ids[0], ids[0])
+    for (let i = 1; i < ids.length; i += 1) union(ids[0], ids[i])
+  }
+
+  // 2. Jobs ihrer Wurzel zuordnen. Als Gruppenschluessel dient die
+  //    fachlich sprechendste ID des juengsten Jobs, nicht die zufaellige
+  //    Union-Wurzel — sonst haengt die URL an einer Interna.
+  const byRoot = new Map<string, RunDetail[]>()
+  for (const run of runs) {
+    const root = find(endeavorKey(run))
+    const list = byRoot.get(root)
+    if (list) list.push(run)
+    else byRoot.set(root, [run])
+  }
+
+  const result = new Map<string, RunDetail[]>()
+  for (const jobs of byRoot.values()) {
+    const sorted = [...jobs].sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+    const latest = sorted[0]
+    const key =
+      linkedString(latest, 'simulation_id') ??
+      linkedString(latest, 'project_id') ??
+      latest.run_id
+    result.set(key, sorted)
+  }
+  return result
+}
+
+/**
  * Uebersetzt einen dynamisch gebildeten Statusschluessel.
  *
  * vue-i18n gibt bei einem fehlenden Schluessel den SCHLUESSEL selbst
@@ -124,17 +199,10 @@ export function buildShelfObjects(
 ): ShelfObject[] {
   const objects: ShelfObject[] = []
 
-  // 1. Läufe — Jobs nach Vorhaben gruppieren, juengster Job traegt die Zeile.
-  const groups = new Map<string, RunDetail[]>()
-  for (const run of runs) {
-    const key = endeavorKey(run)
-    const list = groups.get(key)
-    if (list) list.push(run)
-    else groups.set(key, [run])
-  }
+  // 1. Läufe — Jobs transitiv zu Vorhaben gruppieren, juengster traegt die Zeile.
+  const groups = groupJobsByEndeavor(runs)
   const claimedProjects = new Set<string>()
   for (const [key, jobs] of groups) {
-    jobs.sort((a, b) => b.updated_at.localeCompare(a.updated_at))
     const latest = jobs[0]
     for (const j of jobs) {
       const p = linkedString(j, 'project_id')

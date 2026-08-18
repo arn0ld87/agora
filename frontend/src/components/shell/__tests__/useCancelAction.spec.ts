@@ -76,17 +76,37 @@ describe('useCancelAction', () => {
     expect(cancelRun).not.toHaveBeenCalled()
   })
 
-  it('ein neuer cancel() ersetzt einen laufenden — kein API-Aufruf fuer den verworfenen', async () => {
+  it('ein cancel() fuer einen ZWEITEN Lauf fuehrt den ersten sofort aus, statt ihn zu verwerfen', async () => {
+    // Es gibt nur einen Undo-Toast. Der erste Abbruch darf dadurch
+    // nicht verlorengehen: der Nutzer hat ihn ausgeloest und wuerde
+    // nie erfahren, dass er nie passiert ist.
     const cancelAction = await freshCancelAction()
     cancelAction.cancel('run_a')
     vi.advanceTimersByTime(2000)
 
     cancelAction.cancel('run_b')
+    await Promise.resolve()
+
     expect(cancelAction.pending.value?.runId).toBe('run_b')
+    expect(cancelRun).toHaveBeenCalledWith('run_a')
+
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(cancelRun).toHaveBeenCalledWith('run_b')
+    expect(cancelRun).toHaveBeenCalledTimes(2)
+  })
+
+  it('ein erneutes cancel() fuer DENSELBEN Lauf verlaengert nur das Fenster', async () => {
+    const cancelAction = await freshCancelAction()
+    cancelAction.cancel('run_a')
+    vi.advanceTimersByTime(2000)
+    cancelAction.cancel('run_a')
+    await Promise.resolve()
+
+    expect(cancelRun).not.toHaveBeenCalled()
 
     await vi.advanceTimersByTimeAsync(5000)
     expect(cancelRun).toHaveBeenCalledTimes(1)
-    expect(cancelRun).toHaveBeenCalledWith('run_b')
+    expect(cancelRun).toHaveBeenCalledWith('run_a')
   })
 
   it('pause()/resume() rufen die Simulation-API sofort auf, ohne Undo-Fenster zu starten', async () => {

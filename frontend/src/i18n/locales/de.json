@@ -1727,7 +1727,10 @@
     "cancel": "Abbrechen",
     "cancelRequested": "Abbruch angefordert — die laufende Stufe wird noch beendet.",
     "dossier": {
-      "emptyHint": "Nichts ausgewählt. Wähl links ein Objekt, um seine Übersicht zu sehen."
+      "emptyHint": "Nichts ausgewählt. Wähl links ein Objekt, um seine Übersicht zu sehen.",
+      "graphEntities": "Entitäten",
+      "graphRelations": "Beziehungen",
+      "idLabel": "ID"
     },
     "empty": "Noch keine Objekte. Leg eine Quelle ab, um zu starten.",
     "filter": {

@@ -212,7 +212,9 @@ const activeSubRoute = computed<string>(() => {
   height: 100%;
   display: grid;
   grid-template-columns: auto 1fr;
-  grid-template-rows: 64px 1fr;
+  /* An --topbar-h gekoppelt: der Token schrumpft unter `pointer: coarse`
+     auf 56px. Eine feste Zeile liesse dort einen leeren Streifen stehen. */
+  grid-template-rows: var(--topbar-h, 64px) 1fr;
   background: var(--surface-canvas, #f5f5f7);
   overflow: hidden;
 }

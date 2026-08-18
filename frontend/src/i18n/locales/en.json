@@ -1727,7 +1727,10 @@
     "cancel": "Cancel",
     "cancelRequested": "Cancel requested — finishing the current stage.",
     "dossier": {
-      "emptyHint": "Nothing selected. Pick an object on the left to see its overview."
+      "emptyHint": "Nothing selected. Pick an object on the left to see its overview.",
+      "graphEntities": "Entities",
+      "graphRelations": "Relations",
+      "idLabel": "ID"
     },
     "empty": "No objects yet. Drop a source to get started.",
     "filter": {

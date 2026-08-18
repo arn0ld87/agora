@@ -328,7 +328,7 @@ Drei Fehler, die beim Bauen von B3 auffielen und im PR mit erledigt sind:
 Personasätze wären in der Ablage nie erschienen. Die dynamisch gebildeten
 Statusschlüssel (`shelf.status.report_*`, `project_*`) existierten in keiner
 Locale, und das mitgegebene `{ fallback }` war wirkungslos. Und das Dossier
-behauptete ohne Auswahl „Noch keine Objekte", während die Ablage voll war.
+behauptete ohne Auswahl „Noch keine Objekte“, während die Ablage voll war.
 
 ---
 
