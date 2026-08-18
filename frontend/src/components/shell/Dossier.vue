@@ -56,16 +56,32 @@
           <div class="dossier__kpi-label">ID</div>
         </div>
       </div>
+
+      <!-- Bestandteile: erst beim Auswaehlen nachgeladen. Ein Bericht
+           zeigt seine Abschnitte, ein Graph seine Kennzahlen. Sorten
+           ohne Detail-Endpunkt zeigen hier nichts, statt ein leeres
+           Geruest zu behaupten. -->
+      <section v-if="detail" class="dossier__parts" :data-testid="DossierTestId.parts">
+        <p v-if="detail.summary" class="dossier__detail-summary">{{ detail.summary }}</p>
+        <ul v-if="detail.parts.length" class="dossier__part-list">
+          <li v-for="part in detail.parts" :key="part.title" class="dossier__part" :data-testid="DossierTestId.part">
+            <span class="dossier__part-title">{{ part.title }}</span>
+            <span class="dossier__part-desc">{{ part.description }}</span>
+          </li>
+        </ul>
+      </section>
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { DossierTestId } from '../../contracts/testIds'
 import { SHELF_KIND_TAG, type ShelfObject } from '../../types/shelf'
 import { useCancelAction } from './useCancelAction'
+import { useObjectDetail } from '../../composables/useObjectDetail'
 
 /**
  * Dossier.vue — rechte Spalte (Block B3).
@@ -78,6 +94,9 @@ import { useCancelAction } from './useCancelAction'
  */
 
 const props = defineProps<{ object: ShelfObject | null }>()
+
+// Details werden erst beim Auswaehlen geholt, nicht fuer jede Zeile.
+const { detail } = useObjectDetail(computed(() => props.object))
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -258,5 +277,46 @@ function formatUpdatedAt(iso: string): string {
   .dossier__btn {
     transition: none;
   }
+}
+
+.dossier__parts {
+  margin-top: var(--sp-6);
+  border-top: 1px solid var(--hairline);
+  padding-top: var(--sp-5);
+}
+
+.dossier__detail-summary {
+  font-family: var(--font-serif);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--text-secondary);
+  margin: 0 0 var(--sp-4);
+}
+
+.dossier__part-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.dossier__part {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.dossier__part-title {
+  font-size: var(--fs-subhead);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.dossier__part-desc {
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+  color: var(--text-tertiary);
 }
 </style>

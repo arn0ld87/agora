@@ -193,6 +193,7 @@ export function buildShelfObjects(
       statusLine: statusText(t, `shelf.status.project_${p.status}`, p.status ?? ''),
       updatedAt: (p as { updated_at?: string }).updated_at || (p as { created_at?: string }).created_at || '',
       metaId: p.project_id,
+      graphId: p.graph_id ?? null,
       nextAction: p.graph_id
         ? { label: t('shelf.action.viewGraph'), to: { name: 'StepGraphBuild', params: { projectId: p.project_id } }, kind: 'neutral' }
         : null,
