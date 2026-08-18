@@ -21,6 +21,11 @@ class ProjectStatus(str, Enum):
     ONTOLOGY_GENERATED = "ontology_generated"  # Ontology generated
     GRAPH_BUILDING = "graph_building"    # Graph building in progress
     GRAPH_COMPLETED = "graph_completed"  # Graph build completed
+    # Issue B2 (PLAN.md „Abbrechen & Pause"): kooperativer Abbruch eines
+    # graph_build. Kein FAILED — der Graph trägt bereits committete
+    # Episoden/Entities/Relations und bleibt auswertbar, nur unvollständig
+    # gegenüber dem Ursprungsdokument.
+    GRAPH_INCOMPLETE = "graph_incomplete"
     FAILED = "failed"                # Failed
 
 

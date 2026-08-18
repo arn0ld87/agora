@@ -2111,6 +2111,8 @@ Important:
         import concurrent.futures
         from threading import Lock
 
+        from .sim.cancel_flag import is_cancel_requested
+
         if parallel_count is None:
             parallel_count = int(
                 _get_settings().effective_value('AGORA_PARALLEL_PERSONA_COUNT')
@@ -2261,6 +2263,15 @@ Important:
             else:
                 logger.info(f"[{current}/{total}] Successfully generated persona: {entity.name} ({entity_type})")
 
+        # Issue B2 (PLAN.md „Abbrechen & Pause"): kooperativer Abbruch der
+        # Persona-Generierung. Bereits gestartete Persona-Generierungen
+        # dürfen auslaufen — das ist akzeptiert (kein hartes Kill der
+        # aktuell laufenden Anfrage). Nur das Nachlegen NEUER Arbeit stoppt
+        # sofort. ``cancel_requested`` gated unten die Nachbesetzungsrunde
+        # (``_backfill_rejected_slots``), die sonst weitere LLM-Calls
+        # auslösen würde, obwohl der Nutzer bereits abgebrochen hat.
+        cancel_requested = False
+
         if is_gevent:
             logger.info("Gevent detected: using native cooperative Pool for parallel persona generation")
             from gevent.pool import Pool
@@ -2294,6 +2305,21 @@ Important:
             try:
                 for result_idx, profile, error in pool.imap_unordered(worker_wrapper, enumerate(entities)):
                     _process_result(result_idx, profile, error)
+                    if self.run_id and is_cancel_requested(self.run_id):
+                        # Gevent kennt keine Trennung "nur Wartende abbrechen"
+                        # wie ThreadPoolExecutor.shutdown(cancel_futures=True)
+                        # — pool.kill() beendet auch bereits laufende
+                        # Greenlets. Gröberer Schnitt als im Thread-Pfad
+                        # unten, aber der einzige verfügbare Weg, neue
+                        # LLM-Calls sofort zu stoppen (best effort).
+                        logger.info(
+                            "Persona-Generierung kooperativ abgebrochen (gevent): "
+                            "run_id=%s, %d/%d Personas fertig",
+                            self.run_id, completed_count[0], total,
+                        )
+                        cancel_requested = True
+                        pool.kill()
+                        break
             finally:
                 pool.join()
         else:
@@ -2327,13 +2353,32 @@ Important:
                         )
                         result_idx, error = idx, str(e)
                     _process_result(result_idx, profile, error)
+                    if self.run_id and is_cancel_requested(self.run_id):
+                        # Bereits laufende Persona-Generierungen dürfen
+                        # auslaufen — das ist akzeptiert.
+                        # shutdown(cancel_futures=True) verwirft nur Futures,
+                        # die noch nicht gestartet sind; bereits angelaufene
+                        # Worker schreiben ihr Ergebnis noch fertig (der
+                        # `with`-Block wartet beim Verlassen darauf, s.
+                        # ThreadPoolExecutor.__exit__ → shutdown(wait=True)).
+                        logger.info(
+                            "Persona-Generierung kooperativ abgebrochen (Thread-Pfad): "
+                            "run_id=%s, %d/%d Personas fertig",
+                            self.run_id, completed_count[0], total,
+                        )
+                        cancel_requested = True
+                        executor.shutdown(wait=False, cancel_futures=True)
+                        break
 
         # Issue #1247: Abgelehnte Slots aus dem Reservepool nachbesetzen. Ohne
         # diesen Schritt unterschreitet jede Ablehnung den konfigurierten
         # max_agents-Wert — bei einem Cap von 30 (nach eigener Empfehlung der
         # Floor ohne Puffer) und einer beobachteten Ablehnungsquote von bis zu
         # 32 % waere das der Unterschied zwischen 30 und 20 Stimmen.
-        if rejected:
+        # Bei einem Nutzerabbruch (cancel_requested) bleibt die Nachbesetzung
+        # aus — sie würde weitere LLM-Calls auslösen, obwohl bereits
+        # abgebrochen wurde.
+        if rejected and not cancel_requested:
             self._backfill_rejected_slots(
                 profiles=profiles,
                 entities=entities,

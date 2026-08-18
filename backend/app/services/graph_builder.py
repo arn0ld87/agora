@@ -30,6 +30,25 @@ if TYPE_CHECKING:
 logger = logging.getLogger('agora.graph_builder')
 
 
+class GraphBuildCancelled(Exception):
+    """Signalisiert kooperativen Abbruch während ``add_text_batches()``.
+
+    Issue B2 (PLAN.md „Abbrechen & Pause"). Trägt die bereits fertig
+    geschriebenen Episode-UUIDs (dieselbe Liste, die die Funktion im
+    Erfolgsfall zurückgäbe) — ``services/graph_build.py::build_task`` nutzt
+    sie, um den Graphen als unvollständig statt als abgeschlossen zu
+    markieren. Bewusst keine Reparatur/kein Rollback: einzeln committete
+    Episode-/Entity-/Relation-Transaktionen (``storage/neo4j_write.py``)
+    bleiben stehen, wie sie sind.
+    """
+
+    def __init__(self, episode_uuids: List[str]) -> None:
+        super().__init__(
+            f"add_text_batches cancelled after {len(episode_uuids)} chunk(s)"
+        )
+        self.episode_uuids = episode_uuids
+
+
 @dataclass
 class GraphInfo:
     """Graph information"""
@@ -324,6 +343,18 @@ class GraphBuilderService:
         """Delegate to storage: set graph status to 'failed' with optional reason."""
         self.storage.mark_graph_failed(graph_id, reason=reason)
 
+    def mark_graph_incomplete(self, graph_id: str, reason: Optional[str] = None) -> None:
+        """Delegate to storage: set graph status to 'incomplete' with optional reason.
+
+        Issue B2 — kooperativer Abbruch eines ``graph_build``. Anders als
+        :meth:`mark_graph_failed` ist das kein Fehler: der Graph trägt
+        bereits committete Episoden/Entities/Relations und bleibt nutzbar,
+        nur unvollständig gegenüber dem Ursprungsdokument. Kein Rollback,
+        kein ``delete_graph`` — die einzeln committeten Neo4j-Transaktionen
+        (``storage/neo4j_write.py::_persist_episode``) bleiben stehen.
+        """
+        self.storage.mark_graph_incomplete(graph_id, reason=reason)
+
     def set_ontology(self, graph_id: str, ontology: Dict[str, Any]):
         """
         SetGraphOntology
@@ -345,6 +376,7 @@ class GraphBuilderService:
         extraction_tally: Optional[ChunkExtractionTally] = None,
         document_ids: Optional[List[Optional[str]]] = None,
         chunk_ids: Optional[List[Optional[int]]] = None,
+        run_id: Optional[str] = None,
     ) -> List[str]:
         """Add text chunks to graph in parallel, return uuid list of all episodes.
 
@@ -379,6 +411,17 @@ class GraphBuilderService:
         und dort optional auf den Episode-Knoten geschrieben. Bleiben beide
         Parameter ``None`` (Default), ändert sich nichts am bisherigen
         Verhalten.
+
+        ``run_id`` (Issue B2): wenn gesetzt, wird das Cancel-Flag
+        (``services/sim/cancel_flag.py``) in der ``as_completed``-Schleife
+        nach jedem fertigen Chunk geprüft. Bei einem Abbruch werden
+        ausstehende, noch nicht gestartete Chunks verworfen
+        (``pool.shutdown(wait=False, cancel_futures=True)``); bereits
+        laufende Chunks dürfen fertig committen — das ist akzeptiert, nicht
+        repariert. Die Funktion wirft dann :class:`GraphBuildCancelled` mit
+        den bis dahin fertigen Episode-UUIDs statt normal zurückzukehren.
+        Bleibt ``run_id`` ``None`` (Default), ändert sich nichts am
+        bisherigen Verhalten.
         """
         total_chunks = len(chunks)
         if total_chunks == 0:
@@ -444,6 +487,27 @@ class GraphBuilderService:
                         completed,
                         total_chunks,
                     )
+                if run_id:
+                    from .sim.cancel_flag import is_cancel_requested
+
+                    if is_cancel_requested(run_id):
+                        # Issue B2: nur ausstehende, noch nicht gestartete
+                        # Chunks werden verworfen. Bereits laufende Worker
+                        # committen ihre Neo4j-Transaktion (Episode + Entities
+                        # + Relations, jeweils einzeln — s. neo4j_write.py)
+                        # noch fertig; der `with`-Block wartet beim Verlassen
+                        # darauf (ThreadPoolExecutor.__exit__ →
+                        # shutdown(wait=True)). Das ist akzeptiert, nicht
+                        # repariert — kein Rollback, kein delete_graph.
+                        logger.info(
+                            "[graph_build] Abgebrochen (run_id=%s): "
+                            "%d/%d Chunks fertig committet",
+                            run_id, completed, total_chunks,
+                        )
+                        pool.shutdown(wait=False, cancel_futures=True)
+                        raise GraphBuildCancelled(
+                            [uuid for uuid in episode_uuids if uuid is not None]
+                        )
 
         logger.info(f"[graph_build] All {total_chunks} chunks processed successfully")
         return [uuid for uuid in episode_uuids if uuid is not None]

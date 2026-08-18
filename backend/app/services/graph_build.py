@@ -425,6 +425,13 @@ class GraphBuildService:
                 """
                 build_logger = get_logger('agora.build')
                 graph_id = None
+                # Defensiv vorinitialisiert wie ``graph_id`` oben: falls eine
+                # Exception schon vor ``builder = container.graph_builder()``
+                # unten auftritt (z. B. im ersten ``task_manager.update_task``),
+                # greift der except-Zweig sonst auf eine ungebundene lokale
+                # Variable zu (statische Analyse, Review-Finding) — genau der
+                # Fall, in dem ein sauberer Fehlschlag am wichtigsten wäre.
+                builder = None
                 # Issue #1029: Dies ist der produktive Build-Pfad (Endpunkt
                 # ``/api/graph/build``). ``GraphBuilderService._build_graph_worker``
                 # trägt dieselbe Verdrahtung, wird von hier aber nicht benutzt —
@@ -432,6 +439,75 @@ class GraphBuildService:
                 # blind, wo es zählt.
                 degradations = DegradationCollector()
                 extraction_tally = ChunkExtractionTally()
+
+                def _finish_cancelled_build(cancelled_episode_uuids: "list[str]") -> None:
+                    """Issue B2: Endzustand eines per ``/cancel`` gestoppten Graph-Builds.
+
+                    Spiegelt bewusst ``services/report_generation.py::finish_cancelled_run``:
+                    ``stopped`` + ``termination_reason="user_cancel"``, Reihenfolge
+                    ``complete_task()`` zuerst (``sync_task`` würde sonst generisch
+                    "completed" setzen), dann der detaillierte Run-Update. Der Graph
+                    wird NICHT gelöscht und NICHT zurückgerollt — bereits committete
+                    Episoden/Entities/Relations bleiben stehen (Plan B2, bewusste
+                    Entscheidung); er gilt nur als unvollständig.
+                    """
+                    from ..services.sim.cancel_flag import clear_cancel
+
+                    build_logger.info(
+                        "Graph build cancelled by user [project_id=%s, run_id=%s, "
+                        "graph_id=%s, episodes=%d]",
+                        project_id, run_record["run_id"], graph_id, len(cancelled_episode_uuids),
+                    )
+                    # ``builder``/``graph_id`` sind zu diesem Zeitpunkt immer
+                    # gesetzt — beide Aufrufstellen liegen im try-Block nach
+                    # ``builder = container.graph_builder()`` und
+                    # ``graph_id = builder.create_graph(...)``. Die Prüfung
+                    # bleibt trotzdem stehen: eine geschlossene Funktion kann
+                    # ihre Closure-Variablen nicht flow-sensitiv typisieren,
+                    # und ein späteres Refactoring darf hier nicht auf ein
+                    # AttributeError statt eines sauberen Log-Eintrags laufen.
+                    if builder is not None and graph_id is not None:
+                        builder.mark_graph_incomplete(graph_id, reason="user_cancel")
+                    else:
+                        build_logger.warning(
+                            "Graph build cancelled before builder/graph_id existed "
+                            "[project_id=%s, run_id=%s] — nichts zu markieren",
+                            project_id, run_record["run_id"],
+                        )
+                    project.graph_id = graph_id
+                    project.status = ProjectStatus.GRAPH_INCOMPLETE
+                    ProjectManager.save_project(project)
+
+                    task_manager.complete_task(
+                        task_id,
+                        result={
+                            "project_id": project_id,
+                            "graph_id": graph_id,
+                            "episode_count": len(cancelled_episode_uuids),
+                            "cancelled": True,
+                            "degradations": degradations.report().model_dump(mode="json"),
+                        },
+                    )
+                    run_registry.update_run(
+                        run_record["run_id"],
+                        status="stopped",
+                        termination_reason="user_cancel",
+                        message=(
+                            "Vom Nutzer abgebrochen — bereits geschriebene Entitäten "
+                            "und Relationen bleiben im Graphen erhalten, der Graph "
+                            "gilt als unvollständig"
+                        ),
+                        artifacts=ArtifactLocator.existing_paths({
+                            "project_dir": ProjectManager._get_project_dir(project_id),
+                        }),
+                        resume_capability={
+                            "available": True,
+                            "action": "restart",
+                            "label": "Restart graph build",
+                        },
+                    )
+                    clear_cancel(run_record["run_id"])
+
                 try:
                     task_manager.update_task(task_id, status=TaskStatus.PROCESSING, message="Initializing graph build service...")
                     builder = container.graph_builder()
@@ -476,15 +552,30 @@ class GraphBuildService:
                             progress_detail={"batch_count": completed, "total_batches": total, "batch_at": time.time()}
                         )
 
-                    builder.add_text_batches(
-                        graph_id, chunks, batch_size=3,
-                        progress_callback=add_progress_callback,
-                        ner_extractor=ner_override,
-                        degradations=degradations,
-                        extraction_tally=extraction_tally,
-                        document_ids=document_ids,
-                        chunk_ids=chunk_ids,
-                    )
+                    # Checkpoint (Issue B2): zwischen Ontologie-Setzen und dem
+                    # eigentlichen (potenziell langen) Chunk-Durchlauf. Noch
+                    # keine Episode geschrieben — der Cancel-Pfad bekommt eine
+                    # leere Liste.
+                    from ..services.sim.cancel_flag import is_cancel_requested
+                    if is_cancel_requested(run_record["run_id"]):
+                        _finish_cancelled_build([])
+                        return
+
+                    from .graph_builder import GraphBuildCancelled
+                    try:
+                        builder.add_text_batches(
+                            graph_id, chunks, batch_size=3,
+                            progress_callback=add_progress_callback,
+                            ner_extractor=ner_override,
+                            degradations=degradations,
+                            extraction_tally=extraction_tally,
+                            document_ids=document_ids,
+                            chunk_ids=chunk_ids,
+                            run_id=run_record["run_id"],
+                        )
+                    except GraphBuildCancelled as cancel_exc:
+                        _finish_cancelled_build(cancel_exc.episode_uuids)
+                        return
 
                     task_manager.update_task(task_id, message="Retrieving graph data...", progress=95)
                     graph_data = builder.get_graph_data(graph_id)
@@ -521,7 +612,11 @@ class GraphBuildService:
 
                 except Exception as exc:
                     build_logger.exception("Graph build failed [project_id=%s, run_id=%s]", project_id, run_record["run_id"])
-                    if graph_id is not None:
+                    # ``builder`` kann None sein, wenn die Exception vor
+                    # ``builder = container.graph_builder()`` auftrat (z. B.
+                    # im allerersten ``task_manager.update_task``) — dann gibt
+                    # es auch keinen ``graph_id`` und nichts aufzuräumen.
+                    if graph_id is not None and builder is not None:
                         try:
                             builder.delete_graph(graph_id)
                         except Exception:  # noqa: BLE001 — best-effort cleanup; primary exception already propagated

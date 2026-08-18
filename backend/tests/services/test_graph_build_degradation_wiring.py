@@ -71,6 +71,7 @@ class _FakeBuilder:
         extraction_tally,
         document_ids,
         chunk_ids,
+        run_id,
     ):
         if self._batch_effect is not None:
             self._batch_effect(degradations, extraction_tally)
@@ -80,6 +81,9 @@ class _FakeBuilder:
 
     def mark_graph_completed(self, graph_id) -> None:
         self.completed_graph_ids.append(graph_id)
+
+    def mark_graph_incomplete(self, graph_id, reason=None) -> None:
+        pass
 
 
 class _Router:
