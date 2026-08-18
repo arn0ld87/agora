@@ -13,6 +13,7 @@ from ...contracts.report_v3 import DataGap as ReportV3DataGap
 from ...contracts.report_v3 import Hypothesis as ReportV3Hypothesis
 from ...contracts.report_v3 import RED_TEAM_FINDINGS_LIMIT, ModelAttribution
 from ...contracts.report_v3 import SimulationContribution
+from .claim_dedup import dedup_claims, duplicate_report
 from .metadata_merge import merge_section_metadata
 from .threshold_provenance import bind_threshold_provenance, dedup_thresholds
 from .simulation_contribution import compute_simulation_contribution
@@ -564,6 +565,24 @@ class ReportManager:
                 else item
                 for item in items
             ]
+        # Derselbe Befund aus mehreren Abschnitten ist ein Befund. Über die
+        # sieben Abschnitte des Referenzlaufs verteilten sich mehrfach
+        # praktisch identische Aussagen — für den Leser sieht das aus wie
+        # mehrfache Bestätigung, tatsächlich ist es dieselbe Quelle, mehrfach
+        # zitiert. Zusammengeführt wird nur bei gleicher Aussage, gleichen
+        # Zahlen samt Bezugsgruppe *und* gleicher Belegmenge.
+        duplicates = duplicate_report(claims)
+        if duplicates:
+            logger.info(
+                "build_report_v3: %d Claim-Dublette(n) entfernt: %s",
+                len(duplicates),
+                "; ".join(
+                    f"{entry['claim_id']}→{entry['duplicate_of']}"
+                    for entry in duplicates[:5]
+                ),
+            )
+            claims = dedup_claims(claims)
+
         # Schwellenwerte brauchen zwei Schritte, die kein anderer Slot braucht:
         # eine Zahl, die wörtlich in einer Quelle steht, darf nicht als
         # unbelegte Heuristik enden, und dieselbe Zahl aus zwei Abschnitten ist
@@ -777,6 +796,16 @@ class ReportManager:
             for section in (cls.get_evidence_map(report_id) or {}).get("sections", [])
             if section.get("section_index") is not None
         }
+        # Die Belegprüfung gehört gesammelt ans Ende, nicht hinter jeden
+        # Abschnitt. Im Referenzlauf report_cc2ef45da5e9 standen sieben
+        # Abschnitten mit zusammen ~48k Zeichen rund 111k Zeichen Export
+        # gegenüber: der Audit-Apparat überwuchs den Bericht, den er prüfen
+        # sollte. Gelöscht wird dabei nichts — dieselben Tabellen, an einer
+        # Stelle, wo sie ein Prüfer am Stück liest und ein Leser überspringt.
+        #
+        # Die Marker *im* Fließtext bleiben, wo sie sind: "[Beleg fehlt]" gilt
+        # für genau einen Satz, und diese Zuordnung ist der ganze Zweck.
+        audit_appendix: list[str] = []
         for section_info in sections:
             evidence_section = evidence_sections.get(int(section_info.get("section_index", 0)))
             md_content += mark_hypotheses_in_content(
@@ -791,10 +820,25 @@ class ReportManager:
                 item for item in (hypotheses, data_gaps, confidence_markers) if item
             ]
             if annotations:
-                md_content = md_content.rstrip() + "\n\n" + "\n\n".join(annotations) + "\n\n"
-        
+                title = str(section_info.get("title") or "").strip()
+                heading = f"**{title}**" if title else ""
+                audit_appendix.append(
+                    "\n\n".join(part for part in (heading, *annotations) if part)
+                )
+
         # post-processing: clean up heading issues in the entire report
         md_content = cls._post_process_report(md_content, outline)
+
+        # Der Anhang wird erst nach der Überschriften-Bereinigung angehängt:
+        # die kennt nur die Abschnitte des Outlines und würde jede andere
+        # Überschrift entfernen — auch die des Anhangs selbst.
+        if audit_appendix:
+            md_content = (
+                md_content.rstrip()
+                + "\n\n---\n\n## Anhang: Belegprüfung\n\n"
+                + "\n\n".join(audit_appendix)
+                + "\n"
+            )
 
         # MAI-06: Nicht mehr auf Disk schreiben — nur zurückgeben.
         # Aufrufer ist save_report(), das setzt report.markdown_content.

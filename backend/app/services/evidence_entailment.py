@@ -31,6 +31,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
+from .claim_atomizer import split_compound_claim
+
 
 class EntailmentVerdict(str, Enum):
     """Urteil der zweiten Binding-Stufe."""
@@ -1049,6 +1051,29 @@ def classify_evidence(
     claim_coverage = coverage_ratio(claim, evidence_text)
 
     if claim_coverage >= QUALITATIVE_SUPPORT_THRESHOLD:
+        # Ein zusammengesetzter Claim ist nur belegt, wenn die Quelle jede
+        # seiner Teilaussagen berührt. Im Referenzlauf trugen einzelne Claims
+        # gleichzeitig einen Seed-Fakt, eine Stakeholder-Aussage und eine
+        # Ableitung; die Quelle deckte davon eine, und die Gesamtdeckung
+        # reichte trotzdem über die Schwelle. Verlangt wird hier bewusst nur
+        # thematische Präsenz je Teil — ein voller Deckungsnachweis pro
+        # Teilsatz scheiterte an Paraphrasen und nähme die belegten Aussagen
+        # mit, um die es gerade nicht geht.
+        atoms = split_compound_claim(claim)
+        if len(atoms) > 1:
+            uncovered = [
+                atom
+                for atom in atoms
+                if coverage_ratio(atom, evidence_text) < QUALITATIVE_RELATED_THRESHOLD
+            ]
+            if uncovered:
+                return EntailmentResult(
+                    EntailmentVerdict.INSUFFICIENT,
+                    "der Claim behauptet mehreres; zu "
+                    f"{len(uncovered)} von {len(atoms)} Teilaussagen sagt die "
+                    "Quelle nichts",
+                    checks=checks + ["compound_claim_partially_uncovered"],
+                )
         # Polarität zuerst — aus demselben Grund wie im numerischen Pfad
         # (#1317): ``nicht`` steht in ``_STOPWORDS``, "die Betriebsvereinbarung
         # ist abgeschlossen" und "… ist *nicht* abgeschlossen" reduzieren

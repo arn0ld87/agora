@@ -114,7 +114,10 @@ class Report:
             "evidence_sections": self.evidence_sections,
             "simulation_snapshot": self.simulation_snapshot,
             "run_degradations": list(self.run_degradations),
-            "degraded": self.degraded,
+            # ``degraded`` bewusst nicht im Payload: der Wert ist aus
+            # ``run_degradations`` ableitbar, und ``ReportModel`` verbietet
+            # unbekannte Felder. Ein zusätzlicher Schlüssel hier ließ den
+            # Export mit 400 antworten.
         }
 
 

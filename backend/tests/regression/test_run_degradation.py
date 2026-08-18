@@ -177,8 +177,11 @@ def test_the_report_exposes_its_degradation():
     )
 
     assert report.degraded is True
-    assert report.to_dict()["degraded"] is True
     assert len(report.to_dict()["run_degradations"]) == 2
+    # ``degraded`` ist ableitbar und gehört nicht in den Payload: ReportModel
+    # verbietet unbekannte Felder, und ein zusätzlicher Schlüssel ließ den
+    # Export mit 400 antworten.
+    assert "degraded" not in report.to_dict()
 
 
 def test_a_report_without_degradations_is_not_degraded():
