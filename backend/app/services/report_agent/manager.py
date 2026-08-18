@@ -51,6 +51,7 @@ from .claim_provenance import (
     derive_confidence_scope as _derive_confidence_scope,
 )
 from .markdown_renderer import render_report_v3
+from .threshold_provenance import apply_threshold_provenance
 from .sections import (
     mark_hypotheses_in_content,
     render_confidence_markers_for_section,
@@ -111,6 +112,40 @@ def _text_confidence_for(
     if recorded not in {"speculative", "low", "medium", "high", "verified"}:
         return None
     return recorded  # type: ignore[return-value]
+
+
+def _finalize_metadata(
+    metadata_kwargs: dict[str, Any],
+    evidence_index: dict[str, Any],
+) -> dict[str, Any]:
+    """Bringt die zusammengefuehrten Abschnittsmetadaten in Endform.
+
+    Zwei Schritte, in dieser Reihenfolge:
+
+    1. Belegverweise, die im Index nicht vorkommen, fallen weg. Ein Verweis
+       auf nichts ist schlimmer als kein Verweis: der Leser haelt ihn fuer
+       einen Beleg.
+    2. Issue #1359 A: Schwellen wurden nie an Evidence gebunden — das Modell
+       lieferte Herkunft und Beleglage mit, und beides war geraten. Die
+       Bindung laeuft ueber den Zahlenwert selbst und steht deshalb *nach*
+       Schritt 1: sie ergaenzt Verweise, die im Index existieren, statt sich
+       auf welche zu verlassen, die es nicht tun.
+    """
+    for slot, items in list(metadata_kwargs.items()):
+        metadata_kwargs[slot] = [
+            item.model_copy(update={
+                "evidence_refs": [
+                    ref for ref in item.evidence_refs if ref in evidence_index
+                ]
+            })
+            if hasattr(item, "evidence_refs")
+            else item
+            for item in items
+        ]
+    metadata_kwargs["thresholds"] = apply_threshold_provenance(
+        metadata_kwargs.get("thresholds") or [], evidence_index
+    )
+    return metadata_kwargs
 
 
 class ReportManager:
@@ -551,18 +586,9 @@ class ReportManager:
                 len(merged.rejected),
                 "; ".join(merged.rejected[:5]),
             )
-        metadata_kwargs = merged.as_report_v3_kwargs()
-        for slot, items in list(metadata_kwargs.items()):
-            metadata_kwargs[slot] = [
-                item.model_copy(update={
-                    "evidence_refs": [
-                        ref for ref in item.evidence_refs if ref in evidence_index
-                    ]
-                })
-                if hasattr(item, "evidence_refs")
-                else item
-                for item in items
-            ]
+        metadata_kwargs = _finalize_metadata(
+            merged.as_report_v3_kwargs(), evidence_index
+        )
         # Issue #1340: ``build_report_v3`` baut das Artefakt aus Report und
         # Evidenzkarte neu auf. Beides weiss nichts von der Red-Team-Stage, die
         # ihr Ergebnis direkt auf dem ReportV3-Objekt ablegt
