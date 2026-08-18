@@ -60,6 +60,14 @@ test.describe('Slice 7.2 · Golden-Gate Accessibility Gates', () => {
     test('Runs passes accessibility gates', async ({ page }) => {
       await checkAccessibilityGate(page, '/runs');
     });
+
+    // Block B3 — die neue Huelle. Die Route existiert unabhaengig vom
+    // Shell-Flag; nur der '/'-Redirect haengt daran. Geprueft wird der
+    // Leerzustand (ohne Backend-Daten) — fuer die Gates reicht das:
+    // sie messen Struktur, Fokus und Kontrast, nicht Inhalt.
+    test('Ablage passes accessibility gates', async ({ page }) => {
+      await checkAccessibilityGate(page, '/ablage');
+    });
   });
 
   test.describe('Settings', () => {
