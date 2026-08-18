@@ -29,6 +29,7 @@ from ..utils.llm_latency import measure_llm_latency
 from ..utils.logger import get_logger
 from .entity_reader import EntityNode
 from ..storage import GraphStorage
+from .persona_domain_coherence import coherence_findings, is_collective_entity_type
 from .persona_demographics import (
     DACH_NAME_ORIGIN_QUOTAS,
     build_name_quota_prompt_block,
@@ -754,6 +755,39 @@ class OasisProfileGenerator:
             )
             profession = None
 
+        # Domänen-Kohärenz vor der Persistenz. Im Referenzlauf
+        # report_cc2ef45da5e9 wurde aus einer EmployeeGroup eines
+        # Klinik-Rollouts eine "Sachbearbeiterin in der Fertigungsplanung" und
+        # aus einem PatientAdvisoryCouncil ein "Schichtleiter Maschinenbau" —
+        # plausible Vitae aus einem Fach, das in keiner Quelle vorkam.
+        #
+        # Bereinigt wird nur der Beruf und nur bei eindeutigem Drift: dieselbe
+        # Linie wie beim nicht ableitbaren Beruf (#1246) — lieber leer als
+        # erfunden. Der Freitext bleibt stehen; ihn zu beschneiden würde mehr
+        # zerstören als retten, und der Befund steht im Log.
+        source_text = " ".join(
+            part for part in (entity.summary or "", context or "") if part
+        )
+        findings = coherence_findings(
+            entity_type=entity_type,
+            entity_name=name,
+            persona_kind=persona_kind,
+            profession=profession or "",
+            persona_text=persona_text,
+            source_text=source_text,
+        )
+        if findings:
+            logger.warning(
+                "persona coherence: entity=%r type=%r befunde=%s",
+                name,
+                entity_type,
+                "; ".join(finding["kind"] for finding in findings),
+            )
+        if profession and any(
+            finding["kind"] == "domain_drift" for finding in findings
+        ):
+            profession = None
+
         # Segment = entity_type string for PersonaQuotaPlan validation.
         # entity_type is already resolved above (get_entity_type() or "Entity").
         segment = entity_type if entity_type != "Entity" else None
@@ -1023,8 +1057,20 @@ class OasisProfileGenerator:
         return entity_type.lower() in self.INDIVIDUAL_ENTITY_TYPES
 
     def _is_group_entity(self, entity_type: str) -> bool:
-        """Determine if entity is a group/institutional type"""
-        return entity_type.lower() in self.GROUP_ENTITY_TYPES
+        """Determine if entity is a group/institutional type.
+
+        Die Liste bleibt die erste Instanz — sie ist gepflegt und trennt Fälle,
+        die morphologisch nicht auffallen ("NGO"). Danach entscheidet das
+        Grundwort des Typs. Im Referenzlauf ``report_cc2ef45da5e9`` fielen
+        ``HospitalNetwork``, ``EmployeeGroup`` und ``PatientAdvisoryCouncil``
+        durch die Liste und wurden zu erfundenen Einzelpersonen mit Alter,
+        Geschlecht und Biografie. Eine Ontologie bringt solche Typen laufend
+        hervor; die Liste hinterherzupflegen ist kein Verfahren.
+        """
+        return (
+            entity_type.lower() in self.GROUP_ENTITY_TYPES
+            or is_collective_entity_type(entity_type)
+        )
 
     def _build_eligibility_prompt_block(self, entity_name: str, entity_type: str) -> str:
         """Erlaubt dem Modell, die Entitaet abzulehnen statt sie zu erfinden (#1247).
