@@ -175,6 +175,52 @@ def collect_run_degradations(
     return found
 
 
+class RunEventLog:
+    """Was während des Laufs auffiel, aber erst am Ende zählbar wird.
+
+    Beide Ereignisse hier waren im Referenzlauf ``report_cc2ef45da5e9``
+    vorhanden und nur geloggt: mehrere Abschnitte entstanden erst nach
+    erzwungener Endgenerierung, bei anderen scheiterte die Metadaten-
+    Extraktion. Eine Logzeile erreicht den Bericht nicht — der Leser sah einen
+    Abschnitt, dem er nicht ansehen konnte, dass er unter Abbruchbedingungen
+    entstanden ist.
+
+    Bewusst nur zwei Mengen und keine Ereignisliste: gefragt ist am Ende
+    "welche Abschnitte", nicht "was ist wann passiert". Letzteres steht im Log.
+    """
+
+    def __init__(self) -> None:
+        self.forced_final_sections: set[int] = set()
+        self.metadata_failed_sections: set[int] = set()
+
+
+def events_for(agent: Any) -> RunEventLog:
+    """Das Ereignisregister dieses Laufs, bei Bedarf angelegt.
+
+    Freie Funktion aus demselben Grund wie bei Ledger und Breaker: mehrere
+    Aufrufer reichen ein fremdes Objekt als ``self`` in die Agent-Funktionen.
+    """
+    events = getattr(agent, "_run_event_log", None)
+    if isinstance(events, RunEventLog):
+        return events
+    events = RunEventLog()
+    try:
+        agent._run_event_log = events
+    except AttributeError:  # pragma: no cover — __slots__-Objekte
+        pass
+    return events
+
+
+def mark_forced_final(agent: Any, section_index: int) -> None:
+    """Der Abschnitt entstand erst, nachdem die Iterationen erschöpft waren."""
+    events_for(agent).forced_final_sections.add(int(section_index))
+
+
+def mark_metadata_failure(agent: Any, section_index: int) -> None:
+    """Die strukturierte Metadaten-Extraktion lieferte für den Abschnitt nichts."""
+    events_for(agent).metadata_failed_sections.add(int(section_index))
+
+
 def apply_run_degradation_downgrade(
     status: "Any",
     run_degradations: Iterable[Mapping[str, Any]],
@@ -248,7 +294,11 @@ def assert_run_invariants(
 
 
 __all__ = [
+    "RunEventLog",
     "apply_run_degradation_downgrade",
     "assert_run_invariants",
     "collect_run_degradations",
+    "events_for",
+    "mark_forced_final",
+    "mark_metadata_failure",
 ]

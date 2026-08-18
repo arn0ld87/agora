@@ -38,6 +38,9 @@ from .run_degradation import (
     apply_run_degradation_downgrade,
     assert_run_invariants,
     collect_run_degradations,
+    events_for,
+    mark_forced_final,
+    mark_metadata_failure,
 )
 from .tool_circuit_breaker import breaker_for
 
@@ -913,6 +916,10 @@ def generate_section_react(
         "Section %s reached the maximum iteration count, forcing final generation",
         section.title,
     )
+    # Der Abschnitt entsteht unter Abbruchbedingungen. Bis hierher stand das
+    # nur im Log — der Leser sah einen Abschnitt, dem er nicht ansehen konnte,
+    # dass dem Agenten die Schritte ausgegangen waren.
+    mark_forced_final(agent, section_index)
     messages.append({"role": "user", "content": agent.REACT_FORCE_FINAL_MSG})
     if _toolcall_mode == "native":
         force_result = agent.llm.chat_with_tools(
@@ -1135,6 +1142,11 @@ def generate_section_metadata(
                 schema_name=schema_cls.__name__,
                 exc=exc,
             )
+        # Unabhängig von der Ursache: für diesen Abschnitt gibt es keine
+        # strukturierten Metadaten. Personas, Schwellenwerte und
+        # Reibungspunkte daraus fehlen im Artefakt, und das gehört in die
+        # Qualitätsbilanz des Laufs — nicht nur ins Log.
+        mark_metadata_failure(agent, section_index)
         return {}
 
 
@@ -1483,6 +1495,8 @@ def generate_report(
             interviews_succeeded=_count_interview_evidence(agent),
             interview_disabled_reason=breaker_for(agent).reason_for("interview_agents"),
             failed_section_indices=failed_section_indices,
+            forced_final_section_indices=events_for(agent).forced_final_sections,
+            metadata_failed_section_indices=events_for(agent).metadata_failed_sections,
         )
         report.status = apply_run_degradation_downgrade(
             report.status, report.run_degradations

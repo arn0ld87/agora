@@ -13,14 +13,21 @@ hier sind deterministisch abzählbar; das LLM-Red-Team des Referenzlaufs
 from __future__ import annotations
 
 from typing import Any, Dict, List
+from unittest.mock import MagicMock
+
+import pytest
 
 from app.contracts.report_contract import RunDegradationModel
 from app.models.report import Report, ReportStatus
 from app.services.report_agent.manager import ReportManager
+from app.services.report_agent.workflow import generate_section_metadata
 from app.services.report_agent.run_degradation import (
     apply_run_degradation_downgrade,
     assert_run_invariants,
     collect_run_degradations,
+    events_for,
+    mark_forced_final,
+    mark_metadata_failure,
 )
 
 #: Der Simulationsstand aus dem Referenzlauf.
@@ -132,6 +139,121 @@ def test_contract_validation_errors_are_blocking():
 
     assert found[0]["component"] == "contract_export"
     assert found[0]["severity"] == "blocking"
+
+
+# --- Ereignisse aus dem laufenden Bericht -----------------------------------
+
+
+def test_forced_final_and_metadata_failures_are_collected_per_agent():
+    """Beide Ereignisse standen im Referenzlauf nur im Log.
+
+    Ein Abschnitt, der erst nach erzwungener Endgenerierung entstand, sieht im
+    Bericht aus wie jeder andere — dem Agenten waren die Schritte ausgegangen,
+    und niemand erfuhr es.
+    """
+    class _Agent:
+        pass
+
+    agent = _Agent()
+    mark_forced_final(agent, 3)
+    mark_forced_final(agent, 3)
+    mark_metadata_failure(agent, 5)
+
+    events = events_for(agent)
+    assert events.forced_final_sections == {3}
+    assert events.metadata_failed_sections == {5}
+
+
+def test_the_event_log_is_shared_across_lookups():
+    class _Agent:
+        pass
+
+    agent = _Agent()
+
+    assert events_for(agent) is events_for(agent)
+
+
+def test_a_clean_run_records_no_events():
+    class _Agent:
+        pass
+
+    events = events_for(_Agent())
+
+    assert events.forced_final_sections == set()
+    assert events.metadata_failed_sections == set()
+
+
+def test_collected_events_reach_the_degradation_list():
+    class _Agent:
+        pass
+
+    agent = _Agent()
+    mark_forced_final(agent, 2)
+    mark_metadata_failure(agent, 4)
+
+    found = collect_run_degradations(
+        forced_final_section_indices=events_for(agent).forced_final_sections,
+        metadata_failed_section_indices=events_for(agent).metadata_failed_sections,
+    )
+
+    assert _reasons(found) == [
+        "1_sections_forced_final",
+        "1_sections_without_metadata",
+    ]
+    # Beides sind Warnungen: der Abschnitt existiert, er ist nur schwächer
+    # zustande gekommen. Ein Statusabstieg wäre hier unverhältnismäßig.
+    assert {entry["severity"] for entry in found} == {"warning"}
+
+
+def test_a_failed_metadata_extraction_marks_its_section():
+    """Der Vermerk entsteht dort, wo der Fehlschlag passiert.
+
+    Ohne diesen Test wäre nur belegt, dass das Register funktioniert — nicht,
+    dass es jemand befüllt. Genau diese Lücke hatte der Referenzlauf: das
+    Ereignis war da, die Meldung fehlte.
+    """
+    agent = MagicMock()
+    agent.llm.chat_json.side_effect = RuntimeError("Extraktion gescheitert")
+
+    result = generate_section_metadata(
+        agent,
+        section_title="Ausgangslage",
+        section_content="Ein Abschnitt mit Inhalt.",
+        section_index=4,
+    )
+
+    assert result == {}
+    assert events_for(agent).metadata_failed_sections == {4}
+
+
+def test_a_successful_metadata_extraction_marks_nothing():
+    agent = MagicMock()
+    agent.llm.chat_json.return_value = {}
+
+    generate_section_metadata(
+        agent,
+        section_title="Ausgangslage",
+        section_content="Ein Abschnitt mit Inhalt.",
+        section_index=4,
+    )
+
+    assert events_for(agent).metadata_failed_sections == set()
+
+
+def test_a_budget_abort_is_not_swallowed_as_a_metadata_failure():
+    """Ein erschöpftes Budget beendet den Lauf, es degradiert ihn nicht."""
+    from app.services.run_budget import BudgetExceededError
+
+    agent = MagicMock()
+    agent.llm.chat_json.side_effect = BudgetExceededError("tokens", 1000, 500)
+
+    with pytest.raises(BudgetExceededError):
+        generate_section_metadata(
+            agent,
+            section_title="Ausgangslage",
+            section_content="Ein Abschnitt mit Inhalt.",
+            section_index=4,
+        )
 
 
 # --- Statusabstufung --------------------------------------------------------
