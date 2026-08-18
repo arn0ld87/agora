@@ -41,10 +41,40 @@ def test_the_same_statement_reworded_counts_as_a_duplicate():
     )
 
 
-def test_a_single_filler_word_does_not_break_the_match():
+def test_a_filler_word_in_a_long_claim_does_not_break_the_match():
+    """Ein zusätzliches, bedeutungsneutrales Wort kippt die Ähnlichkeit nicht."""
     assert claims_are_duplicates(
+        _Claim(
+            "C1",
+            "Die verpflichtende Basisschulung der Pflegekräfte ist im "
+            "Projektplan verankert und vor Produktivstart abzuschließen.",
+            ["ev_a"],
+        ),
+        _Claim(
+            "C2",
+            "Die verpflichtende Basisschulung der Pflegekräfte ist im "
+            "Projektplan verankert und zwingend vor Produktivstart "
+            "abzuschließen.",
+            ["ev_a"],
+        ),
+    )
+
+
+def test_a_filler_word_in_a_short_claim_does_break_the_match():
+    """Die dokumentierte Kehrseite der hohen Schwelle.
+
+    Bei vier Inhaltswörtern senkt ein fünftes die Überlappung auf 0.80 — unter
+    die Schwelle. Die Dublette bleibt dann stehen. Das ist der bewusste
+    Tausch: eine hohe Schwelle lässt eher eine Dublette durch, eine niedrige
+    verschmilzt eher zwei verschiedene Aussagen und löscht eine davon.
+    """
+    assert not claims_are_duplicates(
         _Claim("C1", "Die Schulungsquote der Pflege liegt bei 54 Prozent.", ["ev_a"]),
-        _Claim("C2", "Die Schulungsquote der Pflege liegt bei 54 Prozent.", ["ev_a"]),
+        _Claim(
+            "C2",
+            "Die Schulungsquote der Pflege liegt aktuell bei 54 Prozent.",
+            ["ev_a"],
+        ),
     )
 
 

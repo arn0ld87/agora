@@ -446,7 +446,8 @@ def test_a_degraded_run_marked_incomplete_violates_nothing():
         assert_run_invariants(
             status="incomplete",
             run_degradations=[
-                {"component": "simulation", "reason": "simulation_failed"}
+                {"component": "simulation", "reason": "simulation_failed"},
+                {"component": "interview_agents", "reason": "0_successful_interviews"},
             ],
             simulation_status="failed",
             interviews_requested=8,

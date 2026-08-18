@@ -177,9 +177,27 @@ _ENUMERATION_ORDINALS = {
 
 #: Ein Aufzählungswort am Satzanfang — am Zeilenanfang oder hinter einem
 #: Satzzeichen. Gruppe 1 ist der Vorlauf und bleibt unverändert stehen.
+#:
+#: Die Alternativen kommen aus :data:`_ENUMERATION_ORDINALS`, nicht aus
+#: ``ENUMERATION_WORDS``: nur wofür eine Zählposition bekannt ist, darf hier
+#: treffen. Sonst fände die Regex ein Wort, das der Lookup unten nicht kennt,
+#: und ``_renumber_enumeration`` risse mit einem ``KeyError`` mitten in der
+#: Abschnittsverarbeitung ab.
 _ENUMERATION_AT_SENTENCE_START = re.compile(
-    r"(^|[.!?]['\"\)\]]?\s+)(" + "|".join(sorted(ENUMERATION_WORDS, key=len, reverse=True)) + r")\b",
+    r"(^|[.!?]['\"\)\]]?\s+)("
+    + "|".join(sorted(_ENUMERATION_ORDINALS, key=len, reverse=True))
+    + r")\b",
     re.IGNORECASE,
+)
+
+#: Beide Mengen müssen deckungsgleich bleiben. ``ENUMERATION_WORDS`` steuert,
+#: was ``evidence_entailment`` als Aufzählungswort aus der Bezugsgruppe
+#: heraushält; ``_ENUMERATION_ORDINALS`` steuert die Zählung hier. Läuft eine
+#: der beiden Listen der anderen davon, zählt der Sanitizer entweder falsch
+#: oder gar nicht.
+assert set(_ENUMERATION_ORDINALS) == set(ENUMERATION_WORDS), (
+    "ENUMERATION_WORDS und _ENUMERATION_ORDINALS sind auseinandergelaufen: "
+    f"{set(ENUMERATION_WORDS) ^ set(_ENUMERATION_ORDINALS)}"
 )
 
 #: Code-Fence. Innerhalb eines Blocks wird nichts geprüft und nichts entfernt.

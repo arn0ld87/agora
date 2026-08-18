@@ -78,9 +78,17 @@ def normalize_unit(unit: str) -> str:
     return _UNIT_ALIASES.get(lowered, lowered)
 
 
+#: Präfixlänge für den Label-Vergleich. Sechs Zeichen legten
+#: "Fallbackdauer" und "Fallbackzeit" auf denselben Schlüssel — zwei fachlich
+#: verschiedene Schwellenwerte wären zu einem verschmolzen, und der verworfene
+#: erschiene nirgends mehr. Zehn behält die Robustheit gegen Beugungsformen
+#: ("Schulungsquote"/"Schulungsquoten") und trennt die Komposita.
+_LABEL_TOKEN_PREFIX = 10
+
+
 def _label_tokens(label: str) -> frozenset[str]:
     return frozenset(
-        token[:6]
+        token[:_LABEL_TOKEN_PREFIX]
         for token in _TOKEN_RE.split((label or "").lower())
         if len(token) > 3
     )
@@ -216,20 +224,43 @@ def bind_threshold_provenance(
     return bound
 
 
+#: Wortformen je Contract-Einheit. Die Faktenextraktion unterscheidet nur
+#: ``percent`` von ``absolute`` — welche Absoluteinheit gemeint ist, steht im
+#: Text daneben. Ohne diese Zuordnung belegte "15 Minuten" einen Schwellenwert
+#: von "15 Tagen", solange das Label überlappte: eine operative Empfehlung mit
+#: erfundener Herkunft.
+_UNIT_WORD_FORMS = {
+    "minutes": ("minute", "minuten", "min."),
+    "hours": ("stunde", "stunden", "std."),
+    "days": ("tag", "tage", "tagen"),
+    "weeks": ("woche", "wochen"),
+    "months": ("monat", "monate", "monaten"),
+    "eur": ("euro", "eur", "€"),
+    "count": ("fall", "fälle", "faelle", "stück", "stueck", "anzahl"),
+}
+
+
 def _text_carries_threshold(text: str, value: float, unit: str) -> bool:
     """Nennt der Quelltext genau diesen Wert in dieser Einheit?
 
-    Die Einheiten der Faktenextraktion sind gröber als die des Contracts
-    (``percent`` gegen ``absolute``). Für alles Nicht-Prozentuale zählt
-    deshalb der Wert allein — dass "15" in einem Satz über den manuellen
-    Fallback steht, sichert bereits die Label-Prüfung ab.
+    Für Prozentwerte entscheidet die Extraktion selbst. Für alles andere
+    muss die Einheit im Text auftauchen — ihr Fehlen heißt nicht "passt
+    schon", sondern "nicht nachweisbar". Eine Einheit, für die es keine
+    Wortformen gibt, bleibt beim Wertvergleich; sie kann nicht schärfer
+    geprüft werden, als der Contract sie beschreibt.
     """
+    lowered = (text or "").lower()
+    forms = _UNIT_WORD_FORMS.get(unit)
     for fact in extract_numeric_facts(text):
         if abs(fact.value - value) >= 0.001:
             continue
-        if unit == "percent" and fact.unit != "percent":
+        if unit == "percent":
+            if fact.unit != "percent":
+                continue
+            return True
+        if fact.unit == "percent":
             continue
-        if unit != "percent" and fact.unit == "percent":
+        if forms and not any(form in lowered for form in forms):
             continue
         return True
     return False

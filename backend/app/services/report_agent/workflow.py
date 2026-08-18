@@ -1543,6 +1543,17 @@ def generate_report(
                 report.status = apply_report_v3_validation_downgrade(
                     report.status, val_exc.errors()
                 )
+                # Die Bilanz wurde oben gezogen, bevor dieser Fehler auftrat.
+                # Ohne den Nachtrag stufte der Status zwar ab, aber
+                # ``run_degradations`` bliebe leer — die API meldete einen
+                # unvollständigen Contract-Export ohne einen einzigen Grund,
+                # und die Red-Team-Invariante "degradiert, aber completed"
+                # liefe ins Leere.
+                report.run_degradations = list(report.run_degradations) + (
+                    collect_run_degradations(
+                        contract_validation_errors=val_exc.errors()
+                    )
+                )
         ReportManager.save_report(report)
 
         # ========== Red-Team-Review (Slice 5, Issue #497) — vor report_synthesis ==========

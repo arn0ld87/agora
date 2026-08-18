@@ -1013,7 +1013,18 @@ class ReportAgent:
         gerade nicht aus, denn ihr Fehlen ist ja der zu erklärende Befund.
         """
         index = (getattr(self, "evidence_map", None) or {}).get("evidence_index") or {}
-        return [record for record in index.values() if isinstance(record, dict)]
+        pool = [record for record in index.values() if isinstance(record, dict)]
+        # Auch was an der Producer-Grenze scheiterte, zählt: ein Fakt ohne
+        # producer_key ist nicht kanonisiert, aber er *lag vor*. Ihn hier
+        # wegzulassen hieße, einen Registrierungsfehler als fehlende
+        # Information auszuweisen — dieselbe Verwechslung, die dieser Slice
+        # sonst behebt, nur eine Ebene tiefer.
+        pool.extend(
+            record
+            for record in getattr(self, "_active_section_unresolved_evidence", None) or []
+            if isinstance(record, dict)
+        )
+        return pool
 
     @staticmethod
     def _suggested_evidence_from_claim_audit(claim: Dict[str, Any]) -> List[str]:

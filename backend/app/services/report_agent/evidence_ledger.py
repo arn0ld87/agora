@@ -19,6 +19,7 @@ der Tool-Antwort in den Index, lange davor.
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Optional
 
 from ...contracts.report_contract import EvidenceCoverageEntry
@@ -108,6 +109,24 @@ def _item_text(item: Dict[str, Any]) -> str:
     return " ".join(part for part in parts if part).strip()
 
 
+#: Schema + Host bleiben stehen, Pfad und Query fallen weg. Genau dort stehen
+#: bei Web-Tools die Zugangsdaten (``?api_key=…``), und das Ledger wird in der
+#: Evidence-Map persistiert und über die API ausgeliefert.
+_URL_IN_KEY = re.compile(r"(https?://[^/\s?#]+)[^\s]*")
+
+
+def _redact(value: str) -> str:
+    """Nimmt einer Provenance-Angabe die Geheimnisse.
+
+    ``producer_key`` trägt bei Web-Items die volle Tool-URL (``web:<url>``),
+    und eine URL trägt ihre Query. Ein Token daraus hätte über das
+    persistierte Ledger den Weg in Report-Artefakte und API-Antworten
+    gefunden — dieselbe Linie wie bei ``describe_exception`` im
+    Degradation-Collector.
+    """
+    return _URL_IN_KEY.sub(r"\1/…", value)
+
+
 def _source_result_id(item: Dict[str, Any]) -> str:
     """Woher der Fakt kam.
 
@@ -118,7 +137,7 @@ def _source_result_id(item: Dict[str, Any]) -> str:
     for key in ("producer_key", "source_id_anchor", "type", "source_kind"):
         value = str(item.get(key) or "").strip()
         if value:
-            return value[:200]
+            return _redact(value)[:200]
     return "unknown"
 
 

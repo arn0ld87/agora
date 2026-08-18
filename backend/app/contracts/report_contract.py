@@ -937,6 +937,30 @@ class EvidenceDegradationModel(BaseModel):
     detail: str  # menschenlesbare Begründung
 
 
+def _reject_dangling_ledger_refs(
+    ledger: "list[EvidenceCoverageEntry]", known_ids: set[str]
+) -> None:
+    """Jede kanonisierte Ledger-Zeile muss auf vorhandene Evidence zeigen.
+
+    Eine Zeile, die ins Leere verweist, behauptet einen Verbleib, den es nicht
+    gibt — sie wäre schlimmer als ein ehrliches ``dropped``, weil sie den
+    Fakt als gesichert ausweist.
+    """
+    dangling = sorted(
+        {
+            entry.canonical_evidence_id
+            for entry in ledger
+            if entry.canonical_evidence_id
+            and entry.canonical_evidence_id not in known_ids
+        }
+    )
+    if dangling:
+        raise ValueError(
+            "evidence_coverage_ledger verweist auf unbekannte Evidence: "
+            + ", ".join(dangling)
+        )
+
+
 class EvidenceCoverageEntry(BaseModel):
     """Was aus einem quantitativen Tool-Fakt geworden ist.
 
@@ -961,7 +985,11 @@ class EvidenceCoverageEntry(BaseModel):
     status: Literal["canonicalized", "dropped"]
     normalized_value: float | None = None
     unit: str | None = None
-    canonical_evidence_id: str | None = None
+    canonical_evidence_id: str | None = Field(
+        default=None,
+        pattern=EVIDENCE_ID_PATTERN,
+        description="Die kanonische Evidence — Pflicht bei status='canonicalized'.",
+    )
     reason: str | None = Field(
         default=None,
         description="Warum verworfen — Pflicht bei status='dropped'.",
@@ -969,10 +997,23 @@ class EvidenceCoverageEntry(BaseModel):
 
     @model_validator(mode="after")
     def validate_status_consistency(self) -> "EvidenceCoverageEntry":
-        if self.status == "dropped" and not (self.reason or "").strip():
-            raise ValueError("status='dropped' verlangt einen reason")
-        if self.status == "canonicalized" and not (self.canonical_evidence_id or "").strip():
+        """Genau eines von beiden — der Status ist keine Geschmacksfrage.
+
+        Ein Eintrag mit ID *und* Grund wäre nicht mehr lesbar: kanonisiert
+        oder verworfen, beides zugleich beschreibt keinen Verbleib.
+        """
+        if self.status == "dropped":
+            if not (self.reason or "").strip():
+                raise ValueError("status='dropped' verlangt einen reason")
+            if self.canonical_evidence_id:
+                raise ValueError(
+                    "status='dropped' verträgt keine canonical_evidence_id"
+                )
+            return self
+        if not (self.canonical_evidence_id or "").strip():
             raise ValueError("status='canonicalized' verlangt eine canonical_evidence_id")
+        if (self.reason or "").strip():
+            raise ValueError("status='canonicalized' verträgt keinen reason")
         return self
 
 
@@ -1014,6 +1055,8 @@ class EvidenceMapModel(BaseModel):
                 "evidence_index-Key stimmt nicht mit evidence_id ueberein: "
                 + ", ".join(sorted(mismatched))
             )
+
+        _reject_dangling_ledger_refs(self.evidence_coverage_ledger, known_ids)
 
         unknown_global = sorted(set(self.global_evidence_refs) - known_ids)
         if unknown_global:

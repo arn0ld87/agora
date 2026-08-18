@@ -20,8 +20,13 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
-#: Simulationsstatus, bei denen die Datenlage des Berichts unvollständig ist.
-#: ``running`` gehört bewusst dazu: der Bericht sieht dann einen Zwischenstand.
+#: Simulationsstatus, bei denen die Simulation nicht regulär endete.
+#:
+#: ``running`` gehört bewusst **nicht** dazu. Ein Bericht darf über eine
+#: laufende Simulation entstehen; das ist ein unterstützter Ablauf und kein
+#: Mangel. Der Zwischenstand wird über die Rundenzahl als Warnung ausgewiesen,
+#: nicht über den Status als blockierender Ausfall — sonst wäre jeder solche
+#: Bericht dauerhaft ``INCOMPLETE``.
 _UNHEALTHY_SIMULATION_STATUSES = frozenset({"failed", "error", "stopped", "aborted"})
 
 
@@ -272,16 +277,31 @@ def assert_run_invariants(
     Gibt die Namen der verletzten Invarianten zurück; leer heißt sauber.
     """
     violations: List[str] = []
-    degraded = bool(run_degradations)
+
+    def reported(component: str) -> bool:
+        """Meldet der Lauf einen Mangel *dieser* Komponente?
+
+        Bewusst komponentenscharf und nicht ``bool(run_degradations)``: ein
+        unbezogener Eintrag — etwa fehlende Abschnitts-Metadaten — hätte sonst
+        die Invariante über nicht zustande gekommene Interviews unterdrückt.
+        Das Sicherheitsnetz griffe dann gerade dort nicht, wo der Lauf schon
+        andere Mängel meldet.
+        """
+        return any(
+            str(entry.get("component") or "") == component
+            for entry in run_degradations
+        )
 
     if (
         interviews_requested > 0
         and interviews_succeeded == 0
-        and not degraded
+        and not reported("interview_agents")
     ):
         violations.append("interviews_requested_but_none_succeeded_and_not_degraded")
 
-    if simulation_status.strip().lower() in _UNHEALTHY_SIMULATION_STATUSES and not degraded:
+    if simulation_status.strip().lower() in _UNHEALTHY_SIMULATION_STATUSES and not reported(
+        "simulation"
+    ):
         violations.append("simulation_unhealthy_and_degradation_log_empty")
 
     if status == "completed" and any(

@@ -1065,9 +1065,13 @@ class OasisProfileGenerator:
         )
         if not findings:
             return profession
+        # Der Entitaetsname bleibt draussen: er traegt einen Personen- oder
+        # Organisationsnamen, und Logs verlassen den Prozess (dieselbe Linie
+        # wie beim producer_key, CodeRabbit PR #1151). Typ und Befundart
+        # reichen zur Diagnose — sie sagen, *was* nicht stimmt, ohne zu sagen,
+        # *wer* betroffen ist.
         logger.warning(
-            "persona coherence: entity=%r type=%r befunde=%s",
-            entity_name,
+            "persona coherence: type=%r befunde=%s",
             entity_type,
             "; ".join(finding["kind"] for finding in findings),
         )

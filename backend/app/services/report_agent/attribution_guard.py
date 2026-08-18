@@ -128,10 +128,16 @@ def profile_from_evidence_index(
         if not isinstance(record, dict):
             continue
         kind = str(record.get("source_kind") or "")
-        if kind in SIMULATION_SOURCE_KINDS:
-            simulation += 1
-        if str(record.get("type") or "") in INTERVIEW_EVIDENCE_TYPES:
+        is_interview = str(record.get("type") or "") in INTERVIEW_EVIDENCE_TYPES
+        if is_interview:
             interview += 1
+        elif kind in SIMULATION_SOURCE_KINDS:
+            # Ausschließend: ein Interview trägt ``agent_quote`` wie ein
+            # Simulationsbeitrag. Zählte es beidseitig, deckte ein reiner
+            # Interview-Lauf die Formel "Die Simulation zeigt" ab, obwohl
+            # keine Simulation als Zeuge auftreten kann — die Gegenrichtung
+            # des Problems, das INTERVIEW_EVIDENCE_TYPES für Interviews löst.
+            simulation += 1
         if kind == "seed_corpus":
             seed += 1
     return EvidenceProfile(

@@ -93,17 +93,47 @@ def test_a_run_that_admits_its_degradation_is_not_flagged_twice():
         _report(
             status=ReportStatus.INCOMPLETE,
             simulation_snapshot=REFERENCE_SNAPSHOT,
+            # Beide Komponenten, weil beide Mängel vorliegen: die Invarianten
+            # prüfen komponentenscharf, damit ein unbezogener Eintrag keine
+            # fremde Prüfung stillstellt.
             run_degradations=[
                 {
                     "component": "simulation",
                     "reason": "simulation_failed",
                     "severity": "blocking",
-                }
+                },
+                {
+                    "component": "interview_agents",
+                    "reason": "0_successful_interviews",
+                    "severity": "blocking",
+                },
             ],
         ),
     )
 
     assert findings == []
+
+
+def test_an_unrelated_degradation_does_not_silence_the_interview_check():
+    """Ein Mangel woanders darf keine fremde Invariante stillstellen.
+
+    Mit ``bool(run_degradations)`` als Kriterium hätte ein Eintrag über
+    fehlende Abschnitts-Metadaten die Interview-Prüfung unterdrückt — das
+    Sicherheitsnetz griffe gerade dort nicht, wo der Lauf schon andere Mängel
+    meldet.
+    """
+    findings = _deterministic_red_team_findings(
+        _agent(interview_requests=8, interview_records=0),
+        _report(
+            run_degradations=[{
+                "component": "section_metadata",
+                "reason": "1_sections_without_metadata",
+                "severity": "warning",
+            }],
+        ),
+    )
+
+    assert any("Interviews waren Teil des Plans" in f for f in findings)
 
 
 def test_a_degraded_run_calling_itself_completed_is_flagged():

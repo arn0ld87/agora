@@ -152,6 +152,7 @@
         "canonical_evidence_id": {
           "anyOf": [
             {
+              "pattern": "^ev_[0-9a-f]{32}$",
               "type": "string"
             },
             {
@@ -159,6 +160,7 @@
             }
           ],
           "default": null,
+          "description": "Die kanonische Evidence \u2014 Pflicht bei status='canonicalized'.",
           "title": "Canonical Evidence Id"
         },
         "fact": {

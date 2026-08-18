@@ -855,6 +855,18 @@ def _bound_is_violated(left: NumericFact, right: NumericFact) -> bool:
     Ein Ist-Wert unter einer *Forderung* ist keine Verletzung, sondern eine
     unerfüllte Forderung — dafür ist der Bericht da, nicht der Trust-Layer.
     """
+    # Zwei Schranken können einander ausschließen, ohne dass ein gemessener
+    # Wert im Spiel ist: "mindestens 80 Prozent" und "höchstens 70 Prozent"
+    # lassen für dieselbe Gruppe keinen gemeinsamen Wert zu.
+    lower = next(
+        (fact for fact in (left, right) if fact.bound is BoundKind.AT_LEAST), None
+    )
+    upper = next(
+        (fact for fact in (left, right) if fact.bound is BoundKind.AT_MOST), None
+    )
+    if lower is not None and upper is not None:
+        return lower.value > upper.value
+
     for bound_fact, point in ((left, right), (right, left)):
         if point.bound is not BoundKind.EXACT:
             continue

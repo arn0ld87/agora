@@ -54,8 +54,26 @@ def test_the_profile_counts_source_kinds():
     })
 
     assert profile.seed_evidence == 1
-    assert profile.simulation_evidence == 2
+    # Ausschließend gezählt: das Interview zählt nicht zusätzlich als
+    # Simulationsbeitrag, sonst deckte ein reiner Interview-Lauf die Formel
+    # "Die Simulation zeigt" ab.
+    assert profile.simulation_evidence == 1
     assert profile.interview_evidence == 1
+
+
+def test_an_interview_alone_does_not_back_a_simulation_attribution():
+    """Die Gegenrichtung: nur Interviews, keine Simulationsbeiträge.
+
+    Beide tragen ``agent_quote``. Zählte ein Interview beidseitig, bliebe
+    "Die Simulation zeigt" stehen, obwohl keine Simulation als Zeuge
+    auftreten kann.
+    """
+    profile = profile_from_evidence_index([
+        _record("agent_quote", "ev_1", record_type="agent_interview")
+    ])
+
+    assert profile.has_interviews is True
+    assert profile.has_simulation is False
 
 
 def test_a_simulation_post_is_not_counted_as_an_interview():

@@ -393,9 +393,35 @@ export const EvidenceCoverageEntrySchema = z.object({
   status: z.enum(['canonicalized', 'dropped']),
   normalized_value: z.number().optional().nullable(),
   unit: z.string().optional().nullable(),
-  canonical_evidence_id: z.string().optional().nullable(),
+  canonical_evidence_id: EvidenceIdSchema.optional().nullable(),
   reason: z.string().optional().nullable(),
-}).strict();
+}).strict().superRefine((value, ctx) => {
+  // Genau eines von beiden: kanonisiert *oder* verworfen. Ein Eintrag mit ID
+  // und Grund beschreibt keinen Verbleib mehr.
+  if (value.status === 'dropped') {
+    if (!value.reason?.trim()) {
+      ctx.addIssue({ code: 'custom', path: ['reason'], message: "status='dropped' verlangt einen reason" });
+    }
+    if (value.canonical_evidence_id) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['canonical_evidence_id'],
+        message: "status='dropped' verträgt keine canonical_evidence_id",
+      });
+    }
+    return;
+  }
+  if (!value.canonical_evidence_id) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['canonical_evidence_id'],
+      message: "status='canonicalized' verlangt eine canonical_evidence_id",
+    });
+  }
+  if (value.reason?.trim()) {
+    ctx.addIssue({ code: 'custom', path: ['reason'], message: "status='canonicalized' verträgt keinen reason" });
+  }
+});
 export type EvidenceCoverageEntry = z.infer<typeof EvidenceCoverageEntrySchema>;
 
 export const EvidenceMapSchema = z.object({
@@ -417,6 +443,17 @@ export const EvidenceMapSchema = z.object({
   evidence_coverage_ledger: z.array(EvidenceCoverageEntrySchema).default([]),
 }).strict().superRefine((value, ctx) => {
   const knownIds = new Set(Object.keys(value.evidence_index));
+  // Eine kanonisierte Ledger-Zeile, die auf nichts zeigt, behauptet einen
+  // Verbleib, den es nicht gibt.
+  value.evidence_coverage_ledger.forEach((entry, index) => {
+    if (entry.canonical_evidence_id && !knownIds.has(entry.canonical_evidence_id)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['evidence_coverage_ledger', index, 'canonical_evidence_id'],
+        message: `Unbekannte Evidence-ID: ${entry.canonical_evidence_id}`,
+      });
+    }
+  });
   const checkRef = (evidenceId: string, path: PropertyKey[]) => {
     if (!knownIds.has(evidenceId)) {
       ctx.addIssue({

@@ -71,9 +71,18 @@ class ToolCircuitBreaker:
         return self._requests.get((tool_name or "").strip(), 0)
 
     def trip(self, tool_name: str, reason: str, *, retryable: bool = False) -> None:
-        """Schaltet ein Tool ab. Ein erneuter Ausfall überschreibt den Grund nicht."""
+        """Schaltet ein Tool ab. Ein erneuter Ausfall überschreibt den Grund nicht.
+
+        Ausnahme ist die Eskalation: ein zuerst als wiederholbar vermerkter
+        Ausfall darf einen späteren terminalen nicht blockieren. Sonst bliebe
+        ``is_disabled`` dauerhaft ``False``, und der Breaker schaltete das Tool
+        nie ab — genau das Verhalten, das dieses Modul beheben soll.
+        """
         name = (tool_name or "").strip()
-        if not name or name in self._states:
+        if not name:
+            return
+        existing = self._states.get(name)
+        if existing is not None and (existing.terminal_failure or retryable):
             return
         self._states[name] = ToolExecutionState(
             tool_name=name,
