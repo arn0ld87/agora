@@ -19,32 +19,10 @@ runs:
 
     - name: Install Playwright Chromium (browser + system deps)
       working-directory: frontend
-      # Der apt-Teil von --with-deps zieht Font-Pakete von den Ubuntu-Mirrors.
-      # Faellt ein Mirror aus, bricht apt mit Exit 100 ab — nicht in einen
-      # Timeout, sondern sofort. Am 2026-08-18 hat das zwei PRs nacheinander
-      # rot gemacht ("Could not connect to azure.archive.ubuntu.com:80,
-      # connection timed out"), jeweils nach gut einer Minute und bevor ein
-      # einziger Test lief. Ein grosszuegigeres Step-Timeout hilft dagegen
-      # nicht; das war der Fix fuer #1070 und adressiert einen anderen Fall.
-      #
-      # Drei Versuche mit wachsender Pause. ``apt-get update`` dazwischen,
-      # damit ein zwischenzeitlich rotierter Mirror auch benutzt wird — ohne
-      # ihn wiederholt apt denselben unerreichbaren Host. Der
-      # Browser-Download ist idempotent und liegt beim zweiten Versuch
-      # ohnehin im Cache, ein Retry kostet also fast nichts.
-      run: |
-        set -u
-        for attempt in 1 2 3; do
-          if npx playwright install --with-deps chromium; then
-            exit 0
-          fi
-          if [ "$attempt" -eq 3 ]; then
-            echo "::error::Playwright-Installation nach 3 Versuchen fehlgeschlagen."
-            exit 1
-          fi
-          delay=$((attempt * 20))
-          echo "::warning::Playwright-Installation fehlgeschlagen (Versuch ${attempt}/3) — neuer Versuch in ${delay}s."
-          sudo apt-get update || true
-          sleep "$delay"
-        done
+      # Die Retry-Mechanik lebt als Skript, damit sie testbar ist:
+      # backend/tests/scripts/test_install_playwright_chromium.py fasst npx,
+      # sudo und sleep ueber PATH ab und prueft Versuchszahl, Backoff und
+      # Abbruchverhalten. Als Inline-``run:`` waere sie nur bei einem echten
+      # Mirror-Ausfall beobachtbar gewesen.
+      run: bash "${GITHUB_WORKSPACE}/scripts/ci/install-playwright-chromium.sh"
       shell: bash
