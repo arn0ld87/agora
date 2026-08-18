@@ -40,7 +40,6 @@ import pytest
 
 from app.contracts.llm_routing_contract import ResolvedRoute
 from app.models.project import ProjectStatus
-from app.models.task import TaskStatus
 from app.services.graph_build import GraphBuildService
 from app.services.graph_builder import GraphBuildCancelled, GraphBuilderService
 from app.services.sim.cancel_flag import clear_cancel, request_cancel

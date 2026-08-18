@@ -333,7 +333,6 @@ def test_run_prepare_cancel_branch_setzt_stopped_und_user_cancel(monkeypatch, tm
     ``report_generation.py``.
     """
     from app.api import simulation_prepare as api_mod
-    from app.services.degradation_collector import DegradationCollector
 
     run_id = _unique_run_id()
     clear_cancel(run_id)
