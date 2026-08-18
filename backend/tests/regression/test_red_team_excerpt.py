@@ -17,6 +17,7 @@ from typing import List
 from app.contracts.report_v3 import Claim, Hypothesis, ReportV3, Threshold
 from app.services.report_agent.workflow import (
     _RED_TEAM_EXCERPT_BUDGET,
+    _RED_TEAM_MAX_TOKENS,
     _RED_TEAM_USER_TEMPLATE,
     _build_red_team_excerpt,
 )
@@ -129,6 +130,39 @@ def test_the_prompt_asks_for_contradictory_numbers_and_explains_the_ids():
     assert "operative Zahlen" in _RED_TEAM_USER_TEMPLATE
     assert "C3_02" in _RED_TEAM_USER_TEMPLATE
     assert "gekürzt" not in _RED_TEAM_USER_TEMPLATE.split("{report_excerpt}")[0]
+
+
+def test_the_thresholds_survive_an_unbounded_claim_list():
+    """Der Fall, in dem die Stage sonst genau ihren Zweck verfehlt.
+
+    Die Claim-Liste ist unbegrenzt (gemessen: 372 Stueck). Stuenden die
+    Schwellen dahinter, verbrauchten gerade die grossen Berichte das Budget
+    vor der ersten Schwelle — die Zahlen fielen dort weg, wo ein Widerspruch
+    am ehesten unbemerkt bleibt.
+    """
+    long_statement = "Ein ausfuehrlich formulierter Befund. " * 40
+    claims = [_claim(1, i, long_statement) for i in range(1, 200)]
+    excerpt = _build_red_team_excerpt(_report(
+        claims=claims,
+        thresholds=[_threshold("pilot_dauer_mitte", 4.0)],
+    ))
+
+    assert "[gekürzt:" in excerpt
+    assert "pilot_dauer_mitte" in excerpt
+    assert excerpt.splitlines()[0].startswith("- [pilot_dauer_mitte]")
+
+
+def test_the_budget_leaves_room_for_the_prompt_headroom():
+    """Prompt und Ausgabe teilen sich bei Ollama ein Fenster.
+
+    Ein Entwurf, der ``PROMPT_HEADROOM_TOKENS`` sprengt, wird still
+    abgeschnitten — und der ``except``-Zweig der Stage schriebe leere
+    findings, ohne dass jemand es merkt.
+    """
+    from app.llm.tokens import PROMPT_HEADROOM_TOKENS
+
+    assert _RED_TEAM_EXCERPT_BUDGET < PROMPT_HEADROOM_TOKENS * 3
+    assert _RED_TEAM_MAX_TOKENS <= 2_000
 
 
 def test_hypotheses_stay_in_the_draft():

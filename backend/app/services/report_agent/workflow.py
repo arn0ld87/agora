@@ -8,6 +8,7 @@ from typing import Any, Callable, Dict, List, Optional
 from pydantic import ValidationError
 
 from ...config import Config
+from ...llm.tokens import PROMPT_HEADROOM_TOKENS
 from ...contracts.report_v3 import DEFAULT_REPORT_MODE, ModelAttribution, ReportMode, ReportV3
 from ...models.report import Report, ReportStatus
 from ...utils.logger import get_logger
@@ -205,11 +206,22 @@ _RED_TEAM_USER_TEMPLATE = (
     "Kein Markdown, reines JSON."
 )
 
-#: Zeichenbudget für den Berichtsentwurf im Red-Team-Call. Sieben Abschnitte
-#: liegen in der Größenordnung 20-30k Token; 60k Zeichen (~20k Token) tragen
-#: das mit Reserve. Der Wert ist eine Kostenbremse gegen entartete Läufe
-#: (gemessen: bis 372 Claims in einem Artefakt), keine inhaltliche Auswahl.
-_RED_TEAM_EXCERPT_BUDGET = 60_000
+#: Obergrenze für die Antwort: zehn Befunde als Strings. Ausdrücklich gesetzt,
+#: weil bei Ollama Prompt und Ausgabe ein Fenster teilen — eine großzügige
+#: Ausgabe-Erlaubnis nimmt dem Entwurf den Platz weg
+#: (``resolve_num_ctx_for_output``), und der Fehler käme still: der
+#: ``except``-Zweig unten schriebe leere findings.
+_RED_TEAM_MAX_TOKENS = 1_500
+
+#: Zeichenbudget für den Berichtsentwurf, abgeleitet aus dem Platz, den der
+#: Prompt bei Ollama sicher hat (``PROMPT_HEADROOM_TOKENS``). Gerechnet wird
+#: mit knapp drei Zeichen je Token — deutscher Fachtext liegt eher darüber,
+#: die Schätzung ist also die vorsichtige Richtung. Vom Ergebnis bleiben
+#: 4000 Zeichen für System-Prompt und Rahmentext reserviert.
+#:
+#: Der Wert ist eine Kostenbremse gegen entartete Läufe (gemessen: bis 372
+#: Claims in einem Artefakt), keine inhaltliche Auswahl.
+_RED_TEAM_EXCERPT_BUDGET = PROMPT_HEADROOM_TOKENS * 3 - 4_000
 
 
 def _build_red_team_excerpt(report_v3: ReportV3) -> str:
@@ -230,15 +242,21 @@ def _build_red_team_excerpt(report_v3: ReportV3) -> str:
     Gekürzt wird nur noch am Zeilenende und mit sichtbarer Marke, damit eine
     Kürzung als Kürzung erkennbar bleibt.
     """
+    # Die Schwellen stehen zuerst, und das ist keine Frage der Lesbarkeit: die
+    # Claim-Liste ist unbegrenzt (gemessen: 372 Stück). Stünden die Schwellen
+    # dahinter, verbrauchten gerade die grossen Berichte — also die, bei denen
+    # ein Widerspruch am ehesten unbemerkt bleibt — das Budget vor der ersten
+    # Schwelle. Die Zahlen, wegen derer diese Stage existiert, fielen dann
+    # genau dort weg, wo sie am nötigsten sind.
     lines: List[str] = []
-    for claim in report_v3.claims or []:
-        lines.append(f"- [{claim.id}] [{claim.confidence}] {claim.statement}")
     for threshold in report_v3.thresholds or []:
         lines.append(
             f"- [{threshold.id}] [schwelle: {threshold.purpose}] {threshold.label}: "
             f"{threshold.value:g} {threshold.unit} "
             f"(Herkunft: {threshold.origin}, Beleglage: {threshold.evidence_status})"
         )
+    for claim in report_v3.claims or []:
+        lines.append(f"- [{claim.id}] [{claim.confidence}] {claim.statement}")
     for hypothesis in report_v3.hypotheses or []:
         lines.append(f"- [{hypothesis.id}] [hypothese] {hypothesis.hypothesis_text}")
 
@@ -303,6 +321,7 @@ def _run_red_team_review(
             ],
             temperature=0.3,
             context="report",
+            max_tokens=_RED_TEAM_MAX_TOKENS,
         )
         findings_raw = raw.get("findings") if isinstance(raw, dict) else None
         if isinstance(findings_raw, list):
