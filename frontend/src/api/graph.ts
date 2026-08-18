@@ -184,3 +184,14 @@ export function exportGraphMl(graphId: string): Promise<Blob> {
     responseType: 'blob'
   })
 }
+
+// --- Block B3: Ablage ------------------------------------------------------
+
+/**
+ * GET /api/graph/project/list — alle Graph-Projekte.
+ * "Projekt" ist Implementierungsdetail (CONTEXT.md → Glossar): die
+ * Ablage zeigt daraus Graph-Objekte, nie das Wort Projekt.
+ */
+export function listProjects(params: { limit?: number } = {}): Promise<ApiResponse<ProjectResponse[]>> {
+  return service.get('/api/graph/project/list', { params })
+}

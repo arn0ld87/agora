@@ -1704,5 +1704,52 @@
     "colStage": "Stage",
     "colProvider": "Provider",
     "colModel": "Model"
+  },
+  "shelf": {
+    "title": "Shelf",
+    "subtitle": "{n} objects · most recently touched first",
+    "partialLoad": "{n} of 4 sources unavailable — list incomplete.",
+    "empty": "No objects yet. Drop a source to get started.",
+    "newObject": "New object: drop a source",
+    "newObjectHint": "PDF, Markdown, text, web page",
+    "filter": {
+      "alle": "All",
+      "lauf": "Runs",
+      "bericht": "Reports",
+      "personasatz": "Personas",
+      "graph": "Graphs",
+      "jobs": "All jobs"
+    },
+    "action": {
+      "watch": "Watch",
+      "resume": "Resume",
+      "inspectFailure": "Inspect failure",
+      "inspectStopped": "View partial result",
+      "preparePersonas": "Generate personas",
+      "reviewPersonas": "Approve personas",
+      "readReport": "Read report",
+      "createReport": "Create report",
+      "viewGraph": "View graph"
+    },
+    "status": {
+      "pending": "Waiting",
+      "processing": "Running",
+      "paused": "Paused",
+      "completed": "Done",
+      "failed": "Failed",
+      "stopped": "Cancelled",
+      "jobs": "{n} jobs",
+      "reportSections": "{n} sections",
+      "personaTemplate": "Reusable persona set"
+    },
+    "cancel": "Cancel",
+    "pause": "Pause",
+    "resume": "Resume",
+    "cancelRequested": "Cancel requested — finishing the current stage.",
+    "undo": "Undo",
+    "undoHint": "Cancelling in {s} s",
+    "activity": "{n} active",
+    "stack": "Stack",
+    "back": "Back"
   }
 }

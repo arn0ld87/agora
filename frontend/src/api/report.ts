@@ -232,3 +232,14 @@ export const fetchReportBundle = (reportId: string): Promise<Blob> => {
 export const chatWithReport = (data: ChatWithReportData): Promise<ApiEnvelope<ChatData>> => {
   return requestWithRetry(() => service.post('/api/report/chat', data), 3, 1000)
 }
+
+// --- Block B3: Ablage ------------------------------------------------------
+
+/**
+ * GET /api/report/list — alle Berichte, optional je Simulation.
+ * Erster Aufrufer ueberhaupt (PLAN.md Abschnitt 0): der Endpoint
+ * existierte seit jeher ohne Frontend-Tuer; die Ablage ist sie.
+ */
+export function listReports(params: { simulation_id?: string; limit?: number } = {}) {
+  return service.get<ApiEnvelope<Report[]>>('/api/report/list', { params })
+}

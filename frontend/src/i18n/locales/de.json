@@ -1704,5 +1704,52 @@
     "colStage": "Stage",
     "colProvider": "Provider",
     "colModel": "Modell"
+  },
+  "shelf": {
+    "title": "Ablage",
+    "subtitle": "{n} Objekte · zuletzt angefasst zuerst",
+    "partialLoad": "{n} von 4 Quellen nicht erreichbar — Liste unvollständig.",
+    "empty": "Noch keine Objekte. Leg eine Quelle ab, um zu starten.",
+    "newObject": "Neues Objekt: Quelle ablegen",
+    "newObjectHint": "PDF, Markdown, Text, Webseite",
+    "filter": {
+      "alle": "Alle",
+      "lauf": "Läufe",
+      "bericht": "Berichte",
+      "personasatz": "Personas",
+      "graph": "Graphen",
+      "jobs": "Alle Jobs"
+    },
+    "action": {
+      "watch": "Zusehen",
+      "resume": "Fortsetzen",
+      "inspectFailure": "Ursache ansehen",
+      "inspectStopped": "Teilergebnis ansehen",
+      "preparePersonas": "Personas erzeugen",
+      "reviewPersonas": "Personas freigeben",
+      "readReport": "Bericht lesen",
+      "createReport": "Bericht erzeugen",
+      "viewGraph": "Graph ansehen"
+    },
+    "status": {
+      "pending": "Wartet",
+      "processing": "Läuft",
+      "paused": "Pausiert",
+      "completed": "Fertig",
+      "failed": "Gescheitert",
+      "stopped": "Abgebrochen",
+      "jobs": "{n} Jobs",
+      "reportSections": "{n} Abschnitte",
+      "personaTemplate": "Wiederverwendbarer Personasatz"
+    },
+    "cancel": "Abbrechen",
+    "pause": "Pausieren",
+    "resume": "Fortsetzen",
+    "cancelRequested": "Abbruch angefordert — die laufende Stufe wird noch beendet.",
+    "undo": "Rückgängig",
+    "undoHint": "Wird in {s} s abgebrochen",
+    "activity": "{n} aktiv",
+    "stack": "Stapel",
+    "back": "Zurück"
   }
 }
