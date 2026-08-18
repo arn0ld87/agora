@@ -411,9 +411,9 @@ onMounted(async () => {
 <style scoped>
 .step-panel {
   height: 100%;
-  background: var(--surface-canvas));
-  color: var(--text-primary));
-  font-family: var(--font-sans));
+  background: var(--surface-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -421,15 +421,15 @@ onMounted(async () => {
 .scroll {
   flex: 1;
   overflow-y: auto;
-  padding: var(--sp-6));
+  padding: var(--sp-6);
   display: flex;
   flex-direction: column;
-  gap: var(--sp-5));
+  gap: var(--sp-5);
 }
 .card {
-  background: var(--surface-elevated));
-  border: 1px solid var(--hairline));
-  border-radius: var(--r-7));
+  background: var(--surface-elevated);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-7);
   padding: var(--s-5);
   display: flex;
   flex-direction: column;
@@ -444,18 +444,18 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid var(--separator));
+  border-bottom: 1px solid var(--separator);
   padding-bottom: var(--s-3);
 }
 .card-desc { color: var(--fg-body); margin: 0; }
 .hint {
-  font-family: var(--font-sans));
+  font-family: var(--font-sans);
   font-size: 11px;
-  color: var(--text-secondary));
+  color: var(--text-secondary);
   margin: 0;
 }
 .hint--warn { color: var(--warn); }
-.meta { color: var(--text-secondary)); font-family: var(--font-sans)); }
+.meta { color: var(--text-secondary); font-family: var(--font-sans); }
 .actions {
   display: flex;
   gap: var(--s-3);
@@ -467,37 +467,37 @@ onMounted(async () => {
   display: flex;
   gap: var(--s-3);
   justify-content: flex-end;
-  border-top: 1px solid var(--separator));
+  border-top: 1px solid var(--separator);
   padding-top: var(--s-3);
 }
 .persona-search {
   display: flex;
   align-items: center;
   gap: var(--s-3);
-  border-top: 1px solid var(--separator));
+  border-top: 1px solid var(--separator);
   padding-top: var(--s-3);
 }
 .persona-search-input {
   flex: 1;
-  background: var(--surface-elevated));
-  border: 1px solid var(--hairline));
-  border-radius: var(--r-5));
+  background: var(--surface-elevated);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-5);
   padding: 7px 10px;
-  font-family: var(--font-sans));
+  font-family: var(--font-sans);
   font-size: var(--fs-16);
-  color: var(--text-primary));
+  color: var(--text-primary);
   outline: none;
 }
 .persona-search-input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--focus-ring));
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 .persona-more-btn {
   background: var(--surface-elevated);
-  border: 1px solid var(--hairline));
-  border-radius: var(--r-5));
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-5);
   padding: var(--s-3);
-  font-family: var(--font-sans));
+  font-family: var(--font-sans);
   font-size: 11px;
   color: var(--fg-muted);
   cursor: pointer;
