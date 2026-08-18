@@ -1706,20 +1706,6 @@
     "colModel": "Model"
   },
   "shelf": {
-    "title": "Shelf",
-    "subtitle": "{n} objects · most recently touched first",
-    "partialLoad": "{n} of 4 sources unavailable — list incomplete.",
-    "empty": "No objects yet. Drop a source to get started.",
-    "newObject": "New object: drop a source",
-    "newObjectHint": "PDF, Markdown, text, web page",
-    "filter": {
-      "alle": "All",
-      "lauf": "Runs",
-      "bericht": "Reports",
-      "personasatz": "Personas",
-      "graph": "Graphs",
-      "jobs": "All jobs"
-    },
     "action": {
       "watch": "Watch",
       "resume": "Resume",
@@ -1731,6 +1717,28 @@
       "createReport": "Create report",
       "viewGraph": "View graph"
     },
+    "activity": "{n} active",
+    "back": "Back",
+    "cancel": "Cancel",
+    "cancelRequested": "Cancel requested — finishing the current stage.",
+    "dossier": {
+      "emptyHint": "Nothing selected. Pick an object on the left to see its overview."
+    },
+    "empty": "No objects yet. Drop a source to get started.",
+    "filter": {
+      "alle": "All",
+      "lauf": "Runs",
+      "bericht": "Reports",
+      "personasatz": "Personas",
+      "graph": "Graphs",
+      "jobs": "All jobs"
+    },
+    "newObject": "New object: drop a source",
+    "newObjectHint": "PDF, Markdown, text, web page",
+    "partialLoad": "{n} of 4 sources unavailable — list incomplete.",
+    "pause": "Pause",
+    "resume": "Resume",
+    "stack": "Stack",
     "status": {
       "completed": "Done",
       "failed": "Failed",
@@ -1754,14 +1762,9 @@
       "report_planning": "Outlining",
       "stopped": "Cancelled"
     },
-    "cancel": "Cancel",
-    "pause": "Pause",
-    "resume": "Resume",
-    "cancelRequested": "Cancel requested — finishing the current stage.",
+    "subtitle": "{n} objects · most recently touched first",
+    "title": "Shelf",
     "undo": "Undo",
-    "undoHint": "Cancelling in {s} s",
-    "activity": "{n} active",
-    "stack": "Stack",
-    "back": "Back"
+    "undoHint": "Cancelling in {s} s"
   }
 }

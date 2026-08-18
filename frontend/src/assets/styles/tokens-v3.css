@@ -175,6 +175,38 @@
 }
 
 /* ============================================================
+   Touch-Anpassung (Block B4 „Mobile")
+   ============================================================
+   Die Control-Hoehen oben (28/32/40px) sind Maus-Maße. Auf einem
+   Touchscreen ist alles darunter zu klein: WCAG 2.2 SC 2.5.8 fordert
+   mindestens 24x24 CSS-Pixel, die Plattform-Richtlinien empfehlen
+   44px (Apple) bzw. 48px (Material).
+
+   Angehaengt wird an `pointer: coarse`, NICHT an eine Breite. Ein
+   Breakpoint wuerde das Falsche messen — ein 1280px-Tablet bedient
+   sich mit dem Finger, ein 800px-Browserfenster auf dem Desktop mit
+   der Maus. Weil die Werte Tokens sind, erbt jede Komponente die
+   Vergroesserung, ohne selbst eine Media Query zu tragen.
+
+   Die Schriftgroessen bleiben unangetastet: hier waechst die
+   Trefferflaeche, nicht die Typografie. */
+@media (pointer: coarse) {
+  :root {
+    --ctl-h-sm: 36px;
+    --ctl-h-md: 44px;
+    --ctl-h-lg: 48px;
+
+    --topbar-h: 56px;
+
+    --sidebar-item-py: 12px;
+    --sidebar-group-trigger-py: 12px;
+    --sidebar-group-gap: 4px;
+
+    --table-cell-py: 14px;
+  }
+}
+
+/* ============================================================
    Compat-Layer (v1/v2 → v3/v4)
    Mappt jeden in v1/v2 verwendeten Token-Namen auf das v4-Pendant.
    Damit rendern bestehende Komponenten unverändert gegen v4,

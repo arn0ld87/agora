@@ -1706,20 +1706,6 @@
     "colModel": "Modell"
   },
   "shelf": {
-    "title": "Ablage",
-    "subtitle": "{n} Objekte · zuletzt angefasst zuerst",
-    "partialLoad": "{n} von 4 Quellen nicht erreichbar — Liste unvollständig.",
-    "empty": "Noch keine Objekte. Leg eine Quelle ab, um zu starten.",
-    "newObject": "Neues Objekt: Quelle ablegen",
-    "newObjectHint": "PDF, Markdown, Text, Webseite",
-    "filter": {
-      "alle": "Alle",
-      "lauf": "Läufe",
-      "bericht": "Berichte",
-      "personasatz": "Personas",
-      "graph": "Graphen",
-      "jobs": "Alle Jobs"
-    },
     "action": {
       "watch": "Zusehen",
       "resume": "Fortsetzen",
@@ -1731,6 +1717,28 @@
       "createReport": "Bericht erzeugen",
       "viewGraph": "Graph ansehen"
     },
+    "activity": "{n} aktiv",
+    "back": "Zurück",
+    "cancel": "Abbrechen",
+    "cancelRequested": "Abbruch angefordert — die laufende Stufe wird noch beendet.",
+    "dossier": {
+      "emptyHint": "Nichts ausgewählt. Wähl links ein Objekt, um seine Übersicht zu sehen."
+    },
+    "empty": "Noch keine Objekte. Leg eine Quelle ab, um zu starten.",
+    "filter": {
+      "alle": "Alle",
+      "lauf": "Läufe",
+      "bericht": "Berichte",
+      "personasatz": "Personas",
+      "graph": "Graphen",
+      "jobs": "Alle Jobs"
+    },
+    "newObject": "Neues Objekt: Quelle ablegen",
+    "newObjectHint": "PDF, Markdown, Text, Webseite",
+    "partialLoad": "{n} von 4 Quellen nicht erreichbar — Liste unvollständig.",
+    "pause": "Pausieren",
+    "resume": "Fortsetzen",
+    "stack": "Stapel",
     "status": {
       "completed": "Fertig",
       "failed": "Gescheitert",
@@ -1754,14 +1762,9 @@
       "report_planning": "Gliederung entsteht",
       "stopped": "Abgebrochen"
     },
-    "cancel": "Abbrechen",
-    "pause": "Pausieren",
-    "resume": "Fortsetzen",
-    "cancelRequested": "Abbruch angefordert — die laufende Stufe wird noch beendet.",
+    "subtitle": "{n} Objekte · zuletzt angefasst zuerst",
+    "title": "Ablage",
     "undo": "Rückgängig",
-    "undoHint": "Wird in {s} s abgebrochen",
-    "activity": "{n} aktiv",
-    "stack": "Stapel",
-    "back": "Zurück"
+    "undoHint": "Wird in {s} s abgebrochen"
   }
 }
