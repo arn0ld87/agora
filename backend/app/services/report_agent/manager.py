@@ -14,6 +14,7 @@ from ...contracts.report_v3 import Hypothesis as ReportV3Hypothesis
 from ...contracts.report_v3 import RED_TEAM_FINDINGS_LIMIT, ModelAttribution
 from ...contracts.report_v3 import SimulationContribution
 from .metadata_merge import merge_section_metadata
+from .threshold_provenance import bind_threshold_provenance, dedup_thresholds
 from .simulation_contribution import compute_simulation_contribution
 from ...config import Config
 from ...models.report import Report, ReportOutline, ReportSection, ReportStatus
@@ -563,6 +564,19 @@ class ReportManager:
                 else item
                 for item in items
             ]
+        # Schwellenwerte brauchen zwei Schritte, die kein anderer Slot braucht:
+        # eine Zahl, die wörtlich in einer Quelle steht, darf nicht als
+        # unbelegte Heuristik enden, und dieselbe Zahl aus zwei Abschnitten ist
+        # ein Schwellenwert, nicht zwei. Im Referenzlauf trugen alle 27
+        # Thresholds evidence_status="heuristic" bei leeren evidence_refs — auch
+        # die aus dem Seed-Dokument — und mehrere Werte erschienen doppelt mit
+        # widersprüchlicher Herkunftsangabe.
+        if metadata_kwargs.get("thresholds"):
+            metadata_kwargs["thresholds"] = dedup_thresholds(
+                bind_threshold_provenance(
+                    metadata_kwargs["thresholds"], list(evidence_index.values())
+                )
+            )
         # Issue #1340: ``build_report_v3`` baut das Artefakt aus Report und
         # Evidenzkarte neu auf. Beides weiss nichts von der Red-Team-Stage, die
         # ihr Ergebnis direkt auf dem ReportV3-Objekt ablegt
