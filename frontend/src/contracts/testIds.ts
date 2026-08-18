@@ -90,6 +90,7 @@ export const DossierTestId = {
   parts: 'dossier-parts',
   part: 'dossier-part',
   openFull: 'dossier-open-full',
+  derive: 'dossier-derive',
   cancel: 'dossier-cancel',
   pause: 'dossier-pause',
 } as const

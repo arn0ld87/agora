@@ -1727,6 +1727,9 @@
     "cancel": "Abbrechen",
     "cancelRequested": "Abbruch angefordert — die laufende Stufe wird noch beendet.",
     "dossier": {
+      "derive": "Neuen Lauf ableiten",
+      "deriveFailed": "Ableiten fehlgeschlagen.",
+      "deriveName": "Abgeleitet von {title}",
       "emptyHint": "Nichts ausgewählt. Wähl links ein Objekt, um seine Übersicht zu sehen.",
       "graphEntities": "Entitäten",
       "graphRelations": "Beziehungen",

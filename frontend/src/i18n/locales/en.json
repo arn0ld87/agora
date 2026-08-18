@@ -1727,6 +1727,9 @@
     "cancel": "Cancel",
     "cancelRequested": "Cancel requested — finishing the current stage.",
     "dossier": {
+      "derive": "Derive new run",
+      "deriveFailed": "Could not derive a run.",
+      "deriveName": "Derived from {title}",
       "emptyHint": "Nothing selected. Pick an object on the left to see its overview.",
       "graphEntities": "Entities",
       "graphRelations": "Relations",
