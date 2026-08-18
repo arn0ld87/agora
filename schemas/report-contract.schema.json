@@ -145,6 +145,90 @@
       "title": "EntailmentVerdict",
       "type": "string"
     },
+    "EvidenceCoverageEntry": {
+      "additionalProperties": false,
+      "description": "Was aus einem quantitativen Tool-Fakt geworden ist.\n\nIm Referenzlauf ``report_cc2ef45da5e9`` lagen 31 %, 67 %, 83 %, 91 %, 6 %\nund \"sieben F\u00e4lle\" in den Tool-Ergebnissen vor und fehlten anschlie\u00dfend im\nkanonischen Evidence-Index. Kein Log, keine Meldung \u2014 die Zahlen waren\neinfach weg, und der Bericht f\u00fchrte sie folgerichtig als unbelegt.\n\nEin Fakt darf verworfen werden. Er darf nur nicht *still* verworfen werden:\njeder Eintrag hier tr\u00e4gt entweder eine kanonische Evidence-ID oder einen\nGrund, warum es keine gibt. Das macht den Unterschied zwischen einem\nDedup-Treffer und einem Extraktionsfehler nachtr\u00e4glich aufl\u00f6sbar.",
+      "properties": {
+        "canonical_evidence_id": {
+          "anyOf": [
+            {
+              "pattern": "^ev_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Die kanonische Evidence \u2014 Pflicht bei status='canonicalized'.",
+          "title": "Canonical Evidence Id"
+        },
+        "fact": {
+          "description": "Der Fakt im Wortlaut der Quelle.",
+          "minLength": 1,
+          "title": "Fact",
+          "type": "string"
+        },
+        "normalized_value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Normalized Value"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Warum verworfen \u2014 Pflicht bei status='dropped'.",
+          "title": "Reason"
+        },
+        "source_result_id": {
+          "description": "Tool-Ergebnis, aus dem der Fakt stammt (producer_key oder Tool-Name).",
+          "minLength": 1,
+          "title": "Source Result Id",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "canonicalized",
+            "dropped"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        }
+      },
+      "required": [
+        "source_result_id",
+        "fact",
+        "status"
+      ],
+      "title": "EvidenceCoverageEntry",
+      "type": "object"
+    },
     "EvidenceDegradationModel": {
       "additionalProperties": false,
       "description": "Maschinenlesbares Protokoll einer lokalen Claim-Degradierung (Issue #1006).\n\nEin einzelner ADR-0002-Verstoss kippte bisher den gesamten Report auf\nFAILED und vernichtete bereits fertige Sections. Statt den Validator zu\nlockern, wird der verletzende Claim lokal abgestuft und die Reparatur\nhier protokolliert.",
@@ -189,6 +273,13 @@
             "$ref": "#/$defs/EvidenceDegradationModel"
           },
           "title": "Degradation Log",
+          "type": "array"
+        },
+        "evidence_coverage_ledger": {
+          "items": {
+            "$ref": "#/$defs/EvidenceCoverageEntry"
+          },
+          "title": "Evidence Coverage Ledger",
           "type": "array"
         },
         "evidence_index": {
@@ -667,6 +758,13 @@
           "title": "Report Id",
           "type": "string"
         },
+        "run_degradations": {
+          "items": {
+            "$ref": "#/$defs/RunDegradationModel"
+          },
+          "title": "Run Degradations",
+          "type": "array"
+        },
         "schema_version": {
           "const": 2,
           "default": 2,
@@ -982,6 +1080,50 @@
       "title": "ReportStatus",
       "type": "string"
     },
+    "RunDegradationModel": {
+      "additionalProperties": false,
+      "description": "Ein Qualit\u00e4tsmangel des Report*laufs*, nicht eines einzelnen Claims.\n\nDer Referenzlauf ``report_cc2ef45da5e9`` ging als ``completed`` hinaus,\nobwohl die Simulation ``failed`` war, nur 45 von 48 Runden vorlagen und\nvon acht angeforderten Interviews keines zustande kam. Der\n``degradation_log`` blieb leer \u2014 er kennt nur Claim-Degradierungen, und\nf\u00fcr den Zustand des Laufs war schlicht niemand zust\u00e4ndig.\n\nAbgrenzung: ``EvidenceDegradationModel`` protokolliert die Abstufung eines\nClaims, ``PipelineDegradationModel`` den Ausfall eines Vorverarbeitungs-\nschritts. Dieses Modell steht dazwischen \u2014 es beschreibt, worauf der\nfertige Bericht beruht.",
+      "properties": {
+        "component": {
+          "enum": [
+            "simulation",
+            "interview_agents",
+            "section_generation",
+            "section_metadata",
+            "contract_export"
+          ],
+          "title": "Component",
+          "type": "string"
+        },
+        "detail": {
+          "default": "",
+          "description": "Menschenlesbare Erl\u00e4uterung.",
+          "title": "Detail",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Maschinenlesbarer Kurzgrund, z. B. '45_of_48_rounds'.",
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "severity": {
+          "default": "warning",
+          "enum": [
+            "warning",
+            "blocking"
+          ],
+          "title": "Severity",
+          "type": "string"
+        }
+      },
+      "required": [
+        "component",
+        "reason"
+      ],
+      "title": "RunDegradationModel",
+      "type": "object"
+    },
     "SimulationSnapshotModel": {
       "additionalProperties": false,
       "description": "Stand der Simulation zum Startzeitpunkt der Reportgenerierung (Issue #1192).\n\nEin Report darf starten, w\u00e4hrend die zugrunde liegende Simulation noch\nl\u00e4uft \u2014 dann analysiert er aber einen Zwischenstand. Ohne diesen Snapshot\nist einem fertigen Report nicht anzusehen, ob er auf zehn abgeschlossenen\nRunden beruht oder auf vieren. Erfasst wird der Stand *beim Start*, nicht\nbeim Abschluss: das ist der Datenbestand, den der Agent tats\u00e4chlich\ngesehen hat.",
@@ -1007,6 +1149,18 @@
           "default": false,
           "title": "Simulation Running",
           "type": "boolean"
+        },
+        "simulation_status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Simulation Status"
         },
         "total_rounds": {
           "default": 0,

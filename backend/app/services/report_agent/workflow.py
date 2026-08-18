@@ -3,13 +3,19 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from pydantic import ValidationError
 
 from ...config import Config
 from ...llm.tokens import PROMPT_HEADROOM_TOKENS
-from ...contracts.report_v3 import DEFAULT_REPORT_MODE, ModelAttribution, ReportMode, ReportV3
+from ...contracts.report_v3 import (
+    DEFAULT_REPORT_MODE,
+    RED_TEAM_FINDINGS_LIMIT,
+    ModelAttribution,
+    ReportMode,
+    ReportV3,
+)
 from ...models.report import Report, ReportStatus
 from ...utils.logger import get_logger
 from ..artifact_store import resolve_default_store
@@ -28,6 +34,16 @@ from .output_contract import (
     resolve_report_status,
     sanitize_final_content,
 )
+from .run_degradation import (
+    apply_run_degradation_downgrade,
+    assert_run_invariants,
+    collect_run_degradations,
+    events_for,
+    mark_forced_final,
+    mark_metadata_failure,
+)
+from .tool_circuit_breaker import breaker_for
+
 from .planning import plan_outline as plan_outline_impl
 from .postprocess_timing import PostprocessPhaseTracker
 from .section_pipeline import (
@@ -49,6 +65,32 @@ from .schemas import (
     _section_schema_for,
 )
 from ..evidence_migrations import migrate_v1_to_v2, normalize_persisted_evidence_map
+#: Evidence-*Typ* einer Interview-Antwort.
+#:
+#: Nicht die Quellengattung: ``source_kind`` fasst Interview-Antwort und
+#: Simulationsbeitrag beide zu ``agent_quote`` zusammen (ADR-0002 Anker 3,
+#: bewusst). Wer danach zählt, hält jeden Post der Simulation für ein
+#: Interview — und findet ausgerechnet dann Interviews, wenn eine Simulation
+#: lief und keines zustande kam. Genau der Fall des Referenzlaufs.
+_INTERVIEW_EVIDENCE_TYPE = "agent_interview"
+
+
+def _count_interview_evidence(agent: Any) -> int:
+    """Wie viele Interviews tatsächlich Evidence hinterlassen haben.
+
+    Bewusst aus dem Index abgeleitet statt separat mitgezählt: der Index ist
+    das, was der Bericht am Ende benutzt. Ein Interview, das dort nichts
+    hinterlässt, hat für den Bericht nicht stattgefunden — egal was der
+    Tool-Aufruf gemeldet hat.
+    """
+    index = (getattr(agent, "evidence_map", None) or {}).get("evidence_index") or {}
+    return sum(
+        1
+        for record in index.values()
+        if isinstance(record, dict)
+        and record.get("type") == _INTERVIEW_EVIDENCE_TYPE
+    )
+
 
 logger = get_logger('agora.report_agent')
 
@@ -277,12 +319,60 @@ def _build_red_team_excerpt(report_v3: ReportV3) -> str:
     return "\n".join(kept)
 
 
+def _merge_findings(first: Sequence[str], second: Sequence[str]) -> List[str]:
+    """Führt zwei Befundlisten ohne Dubletten zusammen und hält das Limit ein."""
+    merged = list(dict.fromkeys([*first, *second]))
+    return merged[:RED_TEAM_FINDINGS_LIMIT]
+
+
+#: Menschenlesbarer Wortlaut je Invariantenverletzung. Er steht im Bericht
+#: neben den LLM-Befunden und muss ohne Codekenntnis verständlich sein.
+_INVARIANT_FINDINGS = {
+    "interviews_requested_but_none_succeeded_and_not_degraded": (
+        "Interviews waren Teil des Plans, es kam keines zustande — der Bericht "
+        "weist das nicht als Einschränkung aus."
+    ),
+    "simulation_unhealthy_and_degradation_log_empty": (
+        "Die Simulation endete nicht regulär, der Bericht führt dazu keine "
+        "Einschränkung."
+    ),
+    "degraded_run_reported_as_completed": (
+        "Der Lauf trägt Qualitätsmängel und gilt trotzdem als vollständig."
+    ),
+}
+
+
+def _deterministic_red_team_findings(agent: Any, report: Any) -> List[str]:
+    """Abzählbare Befunde über den Lauf — ohne LLM.
+
+    Das Red Team des Referenzlaufs ``report_cc2ef45da5e9`` übersah null
+    erfolgreiche Interviews, eine gescheiterte Simulation und einen leeren
+    Degradation-Log. Alle drei lassen sich abzählen, und Abzählbares gehört
+    nicht in einen Prompt: ein Sprachmodell kann sie übersehen, eine
+    Invariante nicht.
+
+    Läuft deshalb auch dann, wenn das LLM-Red-Team übersprungen wird.
+    """
+    snapshot = getattr(report, "simulation_snapshot", None) or {}
+    violations = assert_run_invariants(
+        status=str(getattr(getattr(report, "status", None), "value", "")),
+        run_degradations=list(getattr(report, "run_degradations", []) or []),
+        simulation_status=str(snapshot.get("simulation_status") or ""),
+        interviews_requested=breaker_for(agent).request_count("interview_agents"),
+        interviews_succeeded=_count_interview_evidence(agent),
+    )
+    return [
+        _INVARIANT_FINDINGS.get(violation, violation) for violation in violations
+    ]
+
+
 def _run_red_team_review(
     agent: Any,
     report_v3: ReportV3,
     echo_index: float,
     *,
     intent: ReportIntent,
+    deterministic_findings: Sequence[str] = (),
 ) -> ReportV3:
     """Führt die Red-Team-Review-Stage aus und schreibt Findings in report_v3.
 
@@ -298,6 +388,8 @@ def _run_red_team_review(
 
     Slice 5 (Issue #497), Intent-Gate aus dem Evidence-Chain-Audit (#1160).
     """
+    # Die deterministischen Befunde hängen nicht am Intent-Gate: sie kosten
+    # keinen LLM-Call und gelten für jeden Lauf.
     if not _red_team_required(intent, echo_index):
         logger.info(
             "_run_red_team_review: intent=%s, echo_index=%.3f <= %.1f — kein LLM-Call "
@@ -306,6 +398,14 @@ def _run_red_team_review(
             echo_index,
             _RED_TEAM_ECHO_THRESHOLD,
         )
+        if deterministic_findings:
+            return report_v3.model_copy(
+                update={
+                    "red_team_findings": _merge_findings(
+                        deterministic_findings, report_v3.red_team_findings
+                    )
+                }
+            )
         return report_v3
 
     user_msg = _RED_TEAM_USER_TEMPLATE.format(
@@ -355,7 +455,9 @@ def _run_red_team_review(
 
     report_v3 = report_v3.model_copy(
         update={
-            "red_team_findings": findings,
+            # Die abzählbaren Befunde zuerst: sie sind sicher, die des Modells
+            # sind Einschätzungen.
+            "red_team_findings": _merge_findings(deterministic_findings, findings),
             "model_attribution": updated_attribution,
         }
     )
@@ -814,6 +916,10 @@ def generate_section_react(
         "Section %s reached the maximum iteration count, forcing final generation",
         section.title,
     )
+    # Der Abschnitt entsteht unter Abbruchbedingungen. Bis hierher stand das
+    # nur im Log — der Leser sah einen Abschnitt, dem er nicht ansehen konnte,
+    # dass dem Agenten die Schritte ausgegangen waren.
+    mark_forced_final(agent, section_index)
     messages.append({"role": "user", "content": agent.REACT_FORCE_FINAL_MSG})
     if _toolcall_mode == "native":
         force_result = agent.llm.chat_with_tools(
@@ -1036,6 +1142,11 @@ def generate_section_metadata(
                 schema_name=schema_cls.__name__,
                 exc=exc,
             )
+        # Unabhängig von der Ursache: für diesen Abschnitt gibt es keine
+        # strukturierten Metadaten. Personas, Schwellenwerte und
+        # Reibungspunkte daraus fehlen im Artefakt, und das gehört in die
+        # Qualitätsbilanz des Laufs — nicht nur ins Log.
+        mark_metadata_failure(agent, section_index)
         return {}
 
 
@@ -1373,6 +1484,23 @@ def generate_report(
             report.status,
             quote_validation_failed_section_indices,
         )
+        # Der Bericht muss über die Qualität seiner eigenen Grundlage Auskunft
+        # geben. Im Referenzlauf report_cc2ef45da5e9 stand "completed" über
+        # einer gescheiterten Simulation mit 45 von 48 Runden und null
+        # zustande gekommenen Interviews — jede Komponente tat, was sie sollte,
+        # nur zog niemand die Summe.
+        report.run_degradations = collect_run_degradations(
+            simulation_snapshot=report.simulation_snapshot,
+            interviews_requested=breaker_for(agent).request_count("interview_agents"),
+            interviews_succeeded=_count_interview_evidence(agent),
+            interview_disabled_reason=breaker_for(agent).reason_for("interview_agents"),
+            failed_section_indices=failed_section_indices,
+            forced_final_section_indices=events_for(agent).forced_final_sections,
+            metadata_failed_section_indices=events_for(agent).metadata_failed_sections,
+        )
+        report.status = apply_run_degradation_downgrade(
+            report.status, report.run_degradations
+        )
         if failed_section_indices:
             failed_note = (
                 f"{total_sections - len(failed_section_indices)}/{total_sections} "
@@ -1414,6 +1542,17 @@ def generate_report(
                     )
                 report.status = apply_report_v3_validation_downgrade(
                     report.status, val_exc.errors()
+                )
+                # Die Bilanz wurde oben gezogen, bevor dieser Fehler auftrat.
+                # Ohne den Nachtrag stufte der Status zwar ab, aber
+                # ``run_degradations`` bliebe leer — die API meldete einen
+                # unvollständigen Contract-Export ohne einen einzigen Grund,
+                # und die Red-Team-Invariante "degradiert, aber completed"
+                # liefe ins Leere.
+                report.run_degradations = list(report.run_degradations) + (
+                    collect_run_degradations(
+                        contract_validation_errors=val_exc.errors()
+                    )
                 )
         ReportManager.save_report(report)
 
@@ -1467,7 +1606,13 @@ def generate_report(
                         getattr(agent, "simulation_requirement", "") or ""
                     )
                     report_v3_obj = _run_red_team_review(
-                        agent, report_v3_obj, echo_index, intent=intent
+                        agent,
+                        report_v3_obj,
+                        echo_index,
+                        intent=intent,
+                        deterministic_findings=_deterministic_red_team_findings(
+                            agent, report
+                        ),
                     )
                     ReportManager.save_report_v3(report_v3_obj)
                     logger.info(

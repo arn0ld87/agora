@@ -29,6 +29,7 @@ from ..utils.llm_latency import measure_llm_latency
 from ..utils.logger import get_logger
 from .entity_reader import EntityNode
 from ..storage import GraphStorage
+from .persona_domain_coherence import coherence_findings, is_collective_entity_type
 from .persona_demographics import (
     DACH_NAME_ORIGIN_QUOTAS,
     build_name_quota_prompt_block,
@@ -754,6 +755,16 @@ class OasisProfileGenerator:
             )
             profession = None
 
+        profession = self._profession_after_coherence_check(
+            entity_type=entity_type,
+            entity_name=name,
+            persona_kind=persona_kind,
+            profession=profession,
+            persona_text=persona_text,
+            entity_summary=entity.summary,
+            entity_context=context,
+        )
+
         # Segment = entity_type string for PersonaQuotaPlan validation.
         # entity_type is already resolved above (get_entity_type() or "Entity").
         segment = entity_type if entity_type != "Entity" else None
@@ -1018,13 +1029,77 @@ class OasisProfileGenerator:
             aligned = re.sub(rf"\b{re.escape(source)}\b", target, aligned)
         return aligned
 
+    @staticmethod
+    def _profession_after_coherence_check(
+        *,
+        entity_type: str,
+        entity_name: str,
+        persona_kind: str,
+        profession: Optional[str],
+        persona_text: str,
+        entity_summary: Optional[str],
+        entity_context: Optional[str],
+    ) -> Optional[str]:
+        """Prueft Domaenen-Kohaerenz und leert einen fachfremden Beruf.
+
+        Im Referenzlauf report_cc2ef45da5e9 wurde aus einer EmployeeGroup eines
+        Klinik-Rollouts eine "Sachbearbeiterin in der Fertigungsplanung" und aus
+        einem PatientAdvisoryCouncil ein "Schichtleiter Maschinenbau" —
+        plausible Vitae aus einem Fach, das in keiner Quelle vorkam.
+
+        Bereinigt wird nur der Beruf und nur bei eindeutigem Drift: dieselbe
+        Linie wie beim nicht ableitbaren Beruf (#1246) — lieber leer als
+        erfunden. Der Freitext bleibt stehen; ihn zu beschneiden wuerde mehr
+        zerstoeren als retten, und der Befund steht im Log.
+        """
+        source_text = " ".join(
+            part for part in (entity_summary or "", entity_context or "") if part
+        )
+        findings = coherence_findings(
+            entity_type=entity_type,
+            entity_name=entity_name,
+            persona_kind=persona_kind,
+            profession=profession or "",
+            persona_text=persona_text,
+            source_text=source_text,
+        )
+        if not findings:
+            return profession
+        # Der Entitaetsname bleibt draussen: er traegt einen Personen- oder
+        # Organisationsnamen, und Logs verlassen den Prozess (dieselbe Linie
+        # wie beim producer_key, CodeRabbit PR #1151). Typ und Befundart
+        # reichen zur Diagnose — sie sagen, *was* nicht stimmt, ohne zu sagen,
+        # *wer* betroffen ist.
+        logger.warning(
+            "persona coherence: type=%r befunde=%s",
+            entity_type,
+            "; ".join(finding["kind"] for finding in findings),
+        )
+        if profession and any(
+            finding["kind"] == "domain_drift" for finding in findings
+        ):
+            return None
+        return profession
+
     def _is_individual_entity(self, entity_type: str) -> bool:
         """Determine if entity is an individual type"""
         return entity_type.lower() in self.INDIVIDUAL_ENTITY_TYPES
 
     def _is_group_entity(self, entity_type: str) -> bool:
-        """Determine if entity is a group/institutional type"""
-        return entity_type.lower() in self.GROUP_ENTITY_TYPES
+        """Determine if entity is a group/institutional type.
+
+        Die Liste bleibt die erste Instanz — sie ist gepflegt und trennt Fälle,
+        die morphologisch nicht auffallen ("NGO"). Danach entscheidet das
+        Grundwort des Typs. Im Referenzlauf ``report_cc2ef45da5e9`` fielen
+        ``HospitalNetwork``, ``EmployeeGroup`` und ``PatientAdvisoryCouncil``
+        durch die Liste und wurden zu erfundenen Einzelpersonen mit Alter,
+        Geschlecht und Biografie. Eine Ontologie bringt solche Typen laufend
+        hervor; die Liste hinterherzupflegen ist kein Verfahren.
+        """
+        return (
+            entity_type.lower() in self.GROUP_ENTITY_TYPES
+            or is_collective_entity_type(entity_type)
+        )
 
     def _build_eligibility_prompt_block(self, entity_name: str, entity_type: str) -> str:
         """Erlaubt dem Modell, die Entitaet abzulehnen statt sie zu erfinden (#1247).

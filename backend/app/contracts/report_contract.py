@@ -826,6 +826,38 @@ class ReportStatus(str, Enum):
     failed = "failed"
 
 
+class RunDegradationModel(BaseModel):
+    """Ein Qualitätsmangel des Report*laufs*, nicht eines einzelnen Claims.
+
+    Der Referenzlauf ``report_cc2ef45da5e9`` ging als ``completed`` hinaus,
+    obwohl die Simulation ``failed`` war, nur 45 von 48 Runden vorlagen und
+    von acht angeforderten Interviews keines zustande kam. Der
+    ``degradation_log`` blieb leer — er kennt nur Claim-Degradierungen, und
+    für den Zustand des Laufs war schlicht niemand zuständig.
+
+    Abgrenzung: ``EvidenceDegradationModel`` protokolliert die Abstufung eines
+    Claims, ``PipelineDegradationModel`` den Ausfall eines Vorverarbeitungs-
+    schritts. Dieses Modell steht dazwischen — es beschreibt, worauf der
+    fertige Bericht beruht.
+    """
+
+    model_config = _STRICT
+
+    component: Literal[
+        "simulation",
+        "interview_agents",
+        "section_generation",
+        "section_metadata",
+        "contract_export",
+    ]
+    reason: str = Field(
+        min_length=1,
+        description="Maschinenlesbarer Kurzgrund, z. B. '45_of_48_rounds'.",
+    )
+    detail: str = Field(default="", description="Menschenlesbare Erläuterung.")
+    severity: Literal["warning", "blocking"] = "warning"
+
+
 class SimulationSnapshotModel(BaseModel):
     """Stand der Simulation zum Startzeitpunkt der Reportgenerierung (Issue #1192).
 
@@ -844,6 +876,10 @@ class SimulationSnapshotModel(BaseModel):
     total_rounds: int = Field(default=0, ge=0)
     #: Lief die Simulation beim Start der Reportgenerierung noch?
     simulation_running: bool = False
+    #: Laufstatus der Simulation ("completed", "failed", "running", …).
+    #: Additiv, Default ``None`` — Snapshots von vor der Einführung tragen ihn
+    #: nicht, und "unbekannt" ist ehrlicher als ein erfundener Wert.
+    simulation_status: Optional[str] = None
     #: ISO-8601-Zeitpunkt der Erfassung.
     captured_at: Optional[str] = None
 
@@ -869,6 +905,19 @@ class ReportModel(BaseModel):
     # Issue #1192: additiv, Default None — vor dieser Änderung persistierte
     # Reports kennen das Feld nicht und müssen weiter validieren.
     simulation_snapshot: Optional[SimulationSnapshotModel] = None
+    #: Qualitätsmängel des Laufs, auf dem dieser Bericht beruht. Additiv mit
+    #: Default leer — Bestandsreports bleiben gültig.
+    run_degradations: list[RunDegradationModel] = Field(default_factory=list)
+
+    @property
+    def degraded(self) -> bool:
+        """Ist der Bericht auf einem beeinträchtigten Lauf entstanden?
+
+        Der Statuswert allein beantwortet das nicht: ``INCOMPLETE`` sagt, dass
+        etwas fehlt, aber nicht was. Diese Eigenschaft ist die Frage, die ein
+        Leser tatsächlich stellt.
+        """
+        return bool(self.run_degradations)
 
 
 class EvidenceDegradationModel(BaseModel):
@@ -886,6 +935,86 @@ class EvidenceDegradationModel(BaseModel):
     violation: str  # Kurzbezeichner der verletzten Regel bzw. Pydantic-Fehlertyp
     action: str  # "downgraded_to_low" | "moved_to_hypotheses" | "dropped"
     detail: str  # menschenlesbare Begründung
+
+
+def _reject_dangling_ledger_refs(
+    ledger: "list[EvidenceCoverageEntry]", known_ids: set[str]
+) -> None:
+    """Jede kanonisierte Ledger-Zeile muss auf vorhandene Evidence zeigen.
+
+    Eine Zeile, die ins Leere verweist, behauptet einen Verbleib, den es nicht
+    gibt — sie wäre schlimmer als ein ehrliches ``dropped``, weil sie den
+    Fakt als gesichert ausweist.
+    """
+    dangling = sorted(
+        {
+            entry.canonical_evidence_id
+            for entry in ledger
+            if entry.canonical_evidence_id
+            and entry.canonical_evidence_id not in known_ids
+        }
+    )
+    if dangling:
+        raise ValueError(
+            "evidence_coverage_ledger verweist auf unbekannte Evidence: "
+            + ", ".join(dangling)
+        )
+
+
+class EvidenceCoverageEntry(BaseModel):
+    """Was aus einem quantitativen Tool-Fakt geworden ist.
+
+    Im Referenzlauf ``report_cc2ef45da5e9`` lagen 31 %, 67 %, 83 %, 91 %, 6 %
+    und "sieben Fälle" in den Tool-Ergebnissen vor und fehlten anschließend im
+    kanonischen Evidence-Index. Kein Log, keine Meldung — die Zahlen waren
+    einfach weg, und der Bericht führte sie folgerichtig als unbelegt.
+
+    Ein Fakt darf verworfen werden. Er darf nur nicht *still* verworfen werden:
+    jeder Eintrag hier trägt entweder eine kanonische Evidence-ID oder einen
+    Grund, warum es keine gibt. Das macht den Unterschied zwischen einem
+    Dedup-Treffer und einem Extraktionsfehler nachträglich auflösbar.
+    """
+
+    model_config = _STRICT
+
+    source_result_id: str = Field(
+        min_length=1,
+        description="Tool-Ergebnis, aus dem der Fakt stammt (producer_key oder Tool-Name).",
+    )
+    fact: str = Field(min_length=1, description="Der Fakt im Wortlaut der Quelle.")
+    status: Literal["canonicalized", "dropped"]
+    normalized_value: float | None = None
+    unit: str | None = None
+    canonical_evidence_id: str | None = Field(
+        default=None,
+        pattern=EVIDENCE_ID_PATTERN,
+        description="Die kanonische Evidence — Pflicht bei status='canonicalized'.",
+    )
+    reason: str | None = Field(
+        default=None,
+        description="Warum verworfen — Pflicht bei status='dropped'.",
+    )
+
+    @model_validator(mode="after")
+    def validate_status_consistency(self) -> "EvidenceCoverageEntry":
+        """Genau eines von beiden — der Status ist keine Geschmacksfrage.
+
+        Ein Eintrag mit ID *und* Grund wäre nicht mehr lesbar: kanonisiert
+        oder verworfen, beides zugleich beschreibt keinen Verbleib.
+        """
+        if self.status == "dropped":
+            if not (self.reason or "").strip():
+                raise ValueError("status='dropped' verlangt einen reason")
+            if self.canonical_evidence_id:
+                raise ValueError(
+                    "status='dropped' verträgt keine canonical_evidence_id"
+                )
+            return self
+        if not (self.canonical_evidence_id or "").strip():
+            raise ValueError("status='canonicalized' verlangt eine canonical_evidence_id")
+        if (self.reason or "").strip():
+            raise ValueError("status='canonicalized' verträgt keinen reason")
+        return self
 
 
 class EvidenceMapModel(BaseModel):
@@ -907,6 +1036,11 @@ class EvidenceMapModel(BaseModel):
     #: INCOMPLETE ab — ein erwartetes Hypothesen-Routing im Balanced-Modus
     #: ist dagegen kein Statusmangel (Codex-Review PR #1151, P1).
     gate_decision_log: list[EvidenceDegradationModel] = Field(default_factory=list)
+    #: Verbleib jedes quantitativen Tool-Fakts auf dem Weg in den
+    #: ``evidence_index``. Additiv, Default leer — bestehende persistierte
+    #: EvidenceMaps ohne dieses Feld validieren unverändert weiter (dieselbe
+    #: Linie wie ``degradation_log``, Issue #1006).
+    evidence_coverage_ledger: list[EvidenceCoverageEntry] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_evidence_cross_references(self) -> "EvidenceMapModel":
@@ -921,6 +1055,8 @@ class EvidenceMapModel(BaseModel):
                 "evidence_index-Key stimmt nicht mit evidence_id ueberein: "
                 + ", ".join(sorted(mismatched))
             )
+
+        _reject_dangling_ledger_refs(self.evidence_coverage_ledger, known_ids)
 
         unknown_global = sorted(set(self.global_evidence_refs) - known_ids)
         if unknown_global:

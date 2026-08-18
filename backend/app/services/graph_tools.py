@@ -36,6 +36,69 @@ from .graph.graph_dtos import InterviewResult as InterviewResult  # noqa: PLC041
 
 logger = get_logger('agora.graph_tools')
 
+#: Fehlertexte, die einen aus dem Report-Kontext **nicht wiederherstellbaren**
+#: Zustand benennen: keine laufende Simulationsumgebung, keine persistierten
+#: Personas, keine Simulation unter dieser ID.
+#:
+#: Die Liste ist bewusst positiv formuliert. Eine Negativliste ("alles außer
+#: Timeouts ist terminal") stuft jeden unbekannten Fehler als endgültig ein —
+#: ``503 Service Unavailable`` und ``connection refused`` hätten damit das
+#: Interview-Tool für den Rest des Laufs abgeschaltet, obwohl beide beim
+#: nächsten Versuch weg sein können. Im Zweifel wiederholbar: ein Aufruf zu
+#: viel kostet Zeit, ein zu Unrecht abgeschaltetes Tool kostet den Bericht
+#: seine Stakeholder-Stimmen.
+_TERMINAL_INTERVIEW_ERROR_MARKERS = (
+    "not running",
+    "no simulation",
+    "simulation not found",
+    "no agent profiles",
+    "no personas",
+    "keine personas",
+    "environment not found",
+    "environment not running",
+    "no environment",
+    "not initialized",
+)
+
+
+def _apply_interview_failure(result: Any, error_msg: object) -> None:
+    """Setzt Ausfallsignal und Hinweistext aus derselben Einschätzung.
+
+    Nur ein nicht wiederherstellbarer Ausfall schaltet das Tool ab. Ein
+    Timeout oder ein 503 ist keiner — beide können beim nächsten Versuch weg
+    sein, und ein einzelner langsamer Batch darf den Bericht nicht um seine
+    Stakeholder-Stimmen bringen.
+
+    Der Hinweistext folgt demselben Wert: ein "TERMINALLY UNAVAILABLE" über
+    einem wiederholbaren Fehler hielte das Modell auch dann vom zweiten
+    Versuch ab, wenn der Breaker ihn ausdrücklich erlaubt.
+    """
+    result.terminal_failure = _is_terminal_interview_error(error_msg)
+    result.terminal_reason = str(error_msg)
+    if result.terminal_failure:
+        result.summary = (
+            f"Interview tool TERMINALLY UNAVAILABLE for this report run "
+            f"(reason: {error_msg}). Do NOT call interview_agents again. "
+            "Use insight_forge, panorama_search, or quick_search instead."
+        )
+    else:
+        result.summary = (
+            f"Interview tool temporarily unavailable (reason: {error_msg}). "
+            "A later attempt may succeed; consider insight_forge, "
+            "panorama_search, or quick_search in the meantime."
+        )
+
+
+def _is_terminal_interview_error(error_msg: object) -> bool:
+    """Ist der Interview-Ausfall endgültig oder nur dieser Versuch?
+
+    Endgültig heißt: aus dem Report-Kontext nicht wiederherstellbar. Alles
+    andere — Last, Netz, unbekannte Ursache — darf erneut versucht werden.
+    """
+    lowered = str(error_msg or "").lower()
+    return any(marker in lowered for marker in _TERMINAL_INTERVIEW_ERROR_MARKERS)
+
+
 class GraphToolsService:
     """Graph Retrieval Tools Service (via GraphStorage / Neo4j).
 
@@ -235,6 +298,11 @@ class GraphToolsService:
                 "again. Use insight_forge, panorama_search, or quick_search to "
                 "derive stakeholder perspectives from the graph instead."
             )
+            result.terminal_failure = True
+            result.terminal_reason = (
+                "weder ein laufender Simulationsworker noch persistierte "
+                "Agent-Personas vorhanden"
+            )
             return result
 
         # Step 1: Read agent profile files
@@ -322,11 +390,7 @@ class GraphToolsService:
                 logger.warning(f"Interview API call failed: {error_msg}")
                 # Sub-Slice 05.6 — Terminal-Hint statt Retry-Aufforderung.
                 # Sim-Reachability ist nicht aus dem Report-Context wiederherstellbar.
-                result.summary = (
-                    f"Interview tool TERMINALLY UNAVAILABLE for this report run "
-                    f"(reason: {error_msg}). Do NOT call interview_agents again. "
-                    "Use insight_forge, panorama_search, or quick_search instead."
-                )
+                _apply_interview_failure(result, error_msg)
                 return result
 
             # Step 5: Parse API response
@@ -431,6 +495,8 @@ class GraphToolsService:
                 f"(reason: {str(e)}). Do NOT call interview_agents again. "
                 "Use insight_forge, panorama_search, or quick_search instead."
             )
+            result.terminal_failure = True
+            result.terminal_reason = str(e)
             return result
         except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.error(f"Interview API call exception: {e}")

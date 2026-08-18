@@ -23,6 +23,8 @@ from .evidence import (
     register_evidence_record,
     resolve_embedder,
 )
+from .data_gap import ClaimGapKind, classify_claim_gap
+from .evidence_ledger import ledger_for
 from .evidence_candidates import EvidenceCandidatePool
 from .manager import ReportManager
 from .planning import plan_outline as plan_outline_impl
@@ -172,6 +174,10 @@ _GAP_SUGGESTED_FIX: Dict[str, str] = {
         "Evidence bindet thematisch, aber keine stützt die Aussage — "
         "Quelle mit direktem Aussagebezug suchen."
     ),
+    "source_information_absent": (
+        "Zu dieser Aussage liegt in keiner verfügbaren Quelle etwas vor — "
+        "Quelle beschaffen oder die Aussage streichen."
+    ),
 }
 _GAP_SUGGESTED_FIX_DEFAULT = (
     "Beleglage prüfen und passende Quelle nachreichen oder die Aussage streichen."
@@ -269,6 +275,7 @@ class ReportAgent:
     def _record_evidence_item(self, item: Dict[str, Any]) -> Optional[str]:
         enriched = attach_provenance(dict(item))
         if self.evidence_map is None:
+            ledger_for(self).dropped(enriched, "no_evidence_map")
             self._active_section_unresolved_evidence.append(enriched)
             return None
         try:
@@ -276,6 +283,7 @@ class ReportAgent:
                 self.evidence_map,
                 enriched,
                 scope_id=self.simulation_id,
+                ledger=ledger_for(self),
             )
         except ValidationError as exc:
             # Ein einzelnes defektes Tool-Item darf die Section nicht abbrechen;
@@ -285,6 +293,9 @@ class ReportAgent:
             logger.warning(
                 "register_evidence_record: Item verworfen (type=%r, %d Validierungsfehler)",
                 enriched.get("type"), len(exc.errors()),
+            )
+            ledger_for(self).dropped(
+                enriched, f"validation_error:{len(exc.errors())}_fields"
             )
             self._active_section_unresolved_evidence.append(enriched)
             return None
@@ -448,6 +459,14 @@ class ReportAgent:
         ) -> Optional[Dict[str, Any]]:
             snippet = self._truncate(fact)
             if not snippet:
+                # Der Fakt verschwindet, bevor er je ein Item wird. Genau
+                # dieser Pfad hatte im Referenzlauf kein Log: die Zahl war
+                # in der Tool-Antwort, im Index war sie nicht, und dazwischen
+                # stand nichts.
+                ledger_for(self).dropped(
+                    {"snippet": fact, "type": item_type, "producer_key": key_prefix},
+                    "empty_after_truncate",
+                )
                 return None
             item = {
                 "type": item_type,
@@ -878,6 +897,135 @@ class ReportAgent:
             ).to_dict())
         return claims
 
+    def _route_claim_to_hypothesis(
+        self,
+        claim: Dict[str, Any],
+        *,
+        related_only: int,
+        has_evidence: bool,
+        label: str,
+        hypotheses: List[Dict[str, Any]],
+        data_gaps: List[Dict[str, Any]],
+        gate_decisions: List[Dict[str, Any]],
+    ) -> None:
+        """Ohne eine einzige stützende Quelle ist die Aussage eine Hypothese.
+
+        P0-5: auch dann, wenn thematisch verwandte Evidence anhängt. Vorher
+        griff dieser Zweig nur bei komplett leerer Evidence-Liste und
+        niedrigem Score; Interpretationen mit dekorativer Evidence liefen als
+        Claims durch.
+        """
+        index = len(hypotheses) + 1
+        claim_text = self._truncate(
+            str(claim.get("claim_text") or claim.get("claim") or "").strip()
+            or "No evidence-bound claim text available.",
+            1000,
+        )
+        if related_only:
+            rationale = (
+                f"{related_only} Quelle(n) sind thematisch verwandt, "
+                "belegen die Aussage aber nicht (kein SUPPORTED-Urteil) "
+                "— deshalb als Hypothese geführt."
+            )
+        else:
+            rationale = (
+                "Keine direkte Evidence gebunden; deshalb nicht als "
+                "validierter Claim persistiert."
+            )
+        hypothesis_id = f"hypothesis_{index:02d}"
+        hypotheses.append({
+            "hypothesis_id": hypothesis_id,
+            "hypothesis_text": claim_text,
+            "rationale": rationale,
+            "suggested_evidence": self._suggested_evidence_from_claim_audit(claim),
+        })
+        gap_kind = self._append_data_gap_if_absent(
+            claim_text,
+            related_evidence_count=related_only,
+            gap_id=f"gap_{index:02d}",
+            hypothesis_id=hypothesis_id,
+            data_gaps=data_gaps,
+        )
+        # Copilot-Review PR #1151: dieser Zweig fängt auch den Fall
+        # medium/high/verified ohne jede Evidence ab (der spätere P2.1-Zweig
+        # ist dafür unerreichbar) — das Label macht die Verletzung im
+        # Audit-Trail unterscheidbar.
+        gate_decisions.append({
+            "claim_id": str(claim.get("claim_id") or "<no-id>"),
+            "violation": (
+                "confidence_label_without_evidence"
+                if not has_evidence and label in ("medium", "high", "verified")
+                else "no_supporting_evidence"
+            ),
+            "action": "moved_to_hypotheses",
+            "detail": f"[{gap_kind.value}] {rationale}"[:500],
+        })
+
+    def _append_data_gap_if_absent(
+        self,
+        claim_text: str,
+        *,
+        related_evidence_count: int,
+        gap_id: str,
+        hypothesis_id: Optional[str],
+        data_gaps: List[Dict[str, Any]],
+        suggested_fix: Optional[str] = None,
+    ) -> "ClaimGapKind":
+        """Trägt eine Datenlücke ein — aber nur, wenn wirklich eine vorliegt.
+
+        Eine Datenlücke ist eine Aussage über die Quellenlage, nicht über den
+        Matcher. Im Referenzlauf ``report_cc2ef45da5e9`` wurden 159 Data Gaps
+        exportiert, darunter Aussagen, die wörtlich im Seed standen — gemeldet
+        wurde dort nicht "Information fehlt", sondern "Bindung
+        fehlgeschlagen". Nur ein tatsächliches Fehlen in allen verfügbaren
+        Quellen gilt noch als Lücke; alles andere bleibt Hypothese und wird im
+        Gate-Log geführt.
+
+        Gibt die Einstufung zurück, damit der Aufrufer sie protokollieren kann.
+        """
+        gap_kind = classify_claim_gap(
+            claim_text,
+            related_evidence_count=related_evidence_count,
+            evidence_pool=self._evidence_pool_for_gap_check(),
+        )
+        if gap_kind is not ClaimGapKind.SOURCE_INFORMATION_ABSENT:
+            return gap_kind
+
+        gap_reason = "source_information_absent"
+        entry: Dict[str, Any] = {
+            "gap_id": gap_id,
+            "claim_text": claim_text,
+            "gap_reason": gap_reason,
+            "suggested_fix": suggested_fix
+            or _GAP_SUGGESTED_FIX.get(gap_reason, _GAP_SUGGESTED_FIX_DEFAULT),
+        }
+        if hypothesis_id is not None:
+            entry["hypothesis_id"] = hypothesis_id
+        data_gaps.append(entry)
+        return gap_kind
+
+    def _evidence_pool_for_gap_check(self) -> List[Dict[str, Any]]:
+        """Alle bisher kanonisierten Evidence-Records dieses Reports.
+
+        Grundlage für :func:`classify_claim_gap`. Der Index ist die einzige
+        Stelle, an der sich "die Information liegt uns vor" überhaupt
+        feststellen lässt — die an den Claim gebundene Evidence sagt das
+        gerade nicht aus, denn ihr Fehlen ist ja der zu erklärende Befund.
+        """
+        index = (getattr(self, "evidence_map", None) or {}).get("evidence_index") or {}
+        pool = [record for record in index.values() if isinstance(record, dict)]
+        # Auch was an der Producer-Grenze scheiterte, zählt: ein Fakt ohne
+        # producer_key ist nicht kanonisiert, aber er *lag vor*. Ihn hier
+        # wegzulassen hieße, einen Registrierungsfehler als fehlende
+        # Information auszuweisen — dieselbe Verwechslung, die dieser Slice
+        # sonst behebt, nur eine Ebene tiefer.
+        pool.extend(
+            record
+            for record in getattr(self, "_active_section_unresolved_evidence", None) or []
+            if isinstance(record, dict)
+        )
+        return pool
+
     @staticmethod
     def _suggested_evidence_from_claim_audit(claim: Dict[str, Any]) -> List[str]:
         suggestions: List[str] = []
@@ -941,55 +1089,15 @@ class ReportAgent:
             # Evidence-Liste und niedrigem Score; Interpretationen mit
             # dekorativer Evidence liefen als Claims durch.
             if not supporting_ids:
-                index = len(hypotheses) + 1
-                claim_text = (
-                    str(claim.get("claim_text") or claim.get("claim") or "").strip()
-                    or "No evidence-bound claim text available."
+                self._route_claim_to_hypothesis(
+                    claim,
+                    related_only=related_only,
+                    has_evidence=bool(evidence),
+                    label=label,
+                    hypotheses=hypotheses,
+                    data_gaps=data_gaps,
+                    gate_decisions=gate_decisions,
                 )
-                claim_text = self._truncate(claim_text, 1000)
-                suggestions = self._suggested_evidence_from_claim_audit(claim)
-                if related_only:
-                    rationale = (
-                        f"{related_only} Quelle(n) sind thematisch verwandt, "
-                        "belegen die Aussage aber nicht (kein SUPPORTED-Urteil) "
-                        "— deshalb als Hypothese geführt."
-                    )
-                else:
-                    rationale = (
-                        "Keine direkte Evidence gebunden; deshalb nicht als "
-                        "validierter Claim persistiert."
-                    )
-                hypothesis_id = f"hypothesis_{index:02d}"
-                hypotheses.append({
-                    "hypothesis_id": hypothesis_id,
-                    "hypothesis_text": claim_text,
-                    "rationale": rationale,
-                    "suggested_evidence": suggestions,
-                })
-                gap_reason = "related_evidence_only" if related_only else "no_evidence_bound"
-                data_gaps.append({
-                    "gap_id": f"gap_{index:02d}",
-                    "claim_text": claim_text,
-                    "gap_reason": gap_reason,
-                    "suggested_fix": _GAP_SUGGESTED_FIX.get(
-                        gap_reason, _GAP_SUGGESTED_FIX_DEFAULT
-                    ),
-                    "hypothesis_id": hypothesis_id,
-                })
-                # Copilot-Review PR #1151: dieser Zweig fängt auch den Fall
-                # medium/high/verified ohne jede Evidence ab (der spätere
-                # P2.1-Zweig ist dafür unerreichbar) — das Label macht die
-                # Verletzung im Audit-Trail unterscheidbar.
-                gate_decisions.append({
-                    "claim_id": str(claim.get("claim_id") or "<no-id>"),
-                    "violation": (
-                        "confidence_label_without_evidence"
-                        if not evidence and label in ("medium", "high", "verified")
-                        else "no_supporting_evidence"
-                    ),
-                    "action": "moved_to_hypotheses",
-                    "detail": rationale[:500],
-                })
                 continue
             if not evidence and label in ("medium", "high", "verified"):
                 # P2.1: medium/high/verified ohne Evidence darf nicht in claims[]
@@ -1001,12 +1109,17 @@ class ReportAgent:
                 )
                 claim_text = self._truncate(claim_text, 1000)
                 suggestions = self._suggested_evidence_from_claim_audit(claim)
-                data_gaps.append({
-                    "gap_id": f"gap_{index:02d}",
-                    "claim_text": claim_text,
-                    "gap_reason": "no_evidence_bound",
-                    "suggested_fix": suggestions[0] if suggestions else None,
-                })
+                # Auch hier gilt die Data-Gap-Semantik: dass ein Claim ohne
+                # Evidence dasteht, sagt nichts darüber, ob die Information
+                # existiert.
+                self._append_data_gap_if_absent(
+                    claim_text,
+                    related_evidence_count=0,
+                    gap_id=f"gap_{index:02d}",
+                    hypothesis_id=None,
+                    data_gaps=data_gaps,
+                    suggested_fix=suggestions[0] if suggestions else None,
+                )
                 continue
 
             # ADR-0002 Stufe agent_grounded: `medium` verlangt mind. 1
@@ -1308,6 +1421,13 @@ class ReportAgent:
                 {**decision, "section_index": section_index}
                 for decision in gate_decisions
             ]
+        # Der Verbleib der Tool-Fakten gehört in die persistierte Map, nicht in
+        # ein Log, das mit dem Prozess endet. Nur dort ist er nachträglich
+        # prüfbar — und nur dann lässt sich ein "die Zahl stand doch in der
+        # Quelle" überhaupt beantworten.
+        coverage_ledger = ledger_for(self)
+        if coverage_ledger:
+            self.evidence_map["evidence_coverage_ledger"] = coverage_ledger.as_payload()
         # Slice 3 (Issue #495): Dedup + Cap per Section.
         from .hypothesis_cap import dedup_and_cap_hypotheses  # noqa: PLC0415
         hypotheses_visible, hypotheses_appendix = dedup_and_cap_hypotheses(raw_hypotheses)

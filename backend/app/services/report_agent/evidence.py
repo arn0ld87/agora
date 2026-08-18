@@ -3,7 +3,10 @@ from __future__ import annotations
 import copy
 import re
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
+
+if TYPE_CHECKING:  # pragma: no cover — nur fuer die Typannotation
+    from .evidence_ledger import EvidenceCoverageLedger
 
 from pydantic import ValidationError
 
@@ -168,11 +171,20 @@ def register_evidence_record(
     item: Dict[str, Any],
     *,
     scope_id: str,
+    ledger: Optional["EvidenceCoverageLedger"] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Validiert und registriert ein Producer-Item mit explizitem Schluessel."""
+    """Validiert und registriert ein Producer-Item mit explizitem Schluessel.
+
+    ``ledger`` protokolliert den Verbleib quantitativer Fakten. Ohne es
+    verschwanden im Referenzlauf sechs belegte Zahlenwerte zwischen
+    Tool-Ergebnis und Index, ohne dass irgendwo stand, warum — die Rueckgabe
+    ``None`` und ein Dedup-Treffer sahen fuer den Aufrufer gleich aus.
+    """
 
     producer_key = str(item.get("producer_key") or "").strip()
     if not producer_key:
+        if ledger is not None:
+            ledger.dropped(item, "missing_producer_key")
         return None
     source_kind = normalize_source_kind(item)
     payload = {
@@ -202,8 +214,15 @@ def register_evidence_record(
     evidence_index = evidence_map.setdefault("evidence_index", {})
     existing = evidence_index.get(record["evidence_id"])
     if existing is not None:
+        # Gewollt: zwei Suchen liefern denselben Fakt. Fuer die Buchfuehrung
+        # ist das trotzdem kein Verschwinden — der Fakt ist unter der
+        # bestehenden ID im Index und bleibt auffindbar.
+        if ledger is not None:
+            ledger.canonicalized(item, str(existing.get("evidence_id") or ""))
         return existing
     evidence_index[record["evidence_id"]] = record
+    if ledger is not None:
+        ledger.canonicalized(item, str(record["evidence_id"]))
     return record
 
 

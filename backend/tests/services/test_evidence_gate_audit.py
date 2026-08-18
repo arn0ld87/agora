@@ -74,7 +74,13 @@ def test_single_supported_evidence_keeps_low_claim():
 # ---------------------------------------------------------------------------
 
 
-def test_no_evidence_bound_gap_hat_konkreten_hinweis_statt_claim_text():
+def test_gap_hinweis_ist_ein_naechster_schritt_kein_claim_text():
+    """Issue #1319: ``suggested_fix`` war eine Kopie des Claim-Texts.
+
+    Der Gap-Grund heißt seit der Data-Gap-Semantik ``source_information_absent``:
+    ein leerer Evidence-Index belegt tatsächlich, dass zu der Aussage nichts
+    vorliegt. Was der Test sichert, ist unverändert der Hinweistext.
+    """
     agent = ReportAgent.__new__(ReportAgent)
     claims = [{
         "claim_id": "claim_01",
@@ -88,12 +94,19 @@ def test_no_evidence_bound_gap_hat_konkreten_hinweis_statt_claim_text():
 
     assert len(gaps) == 1
     gap = gaps[0]
-    assert gap["gap_reason"] == "no_evidence_bound"
+    assert gap["gap_reason"] == "source_information_absent"
     assert gap["suggested_fix"] != gap["claim_text"]
-    assert "recherchieren" in gap["suggested_fix"]
+    assert "Quelle" in gap["suggested_fix"]
 
 
-def test_related_evidence_only_gap_hat_anderen_hinweis_als_no_evidence_bound():
+def test_related_evidence_only_erzeugt_keinen_data_gap_mehr():
+    """Thematisch gebundene Evidence beweist, dass die Quelle das Thema kennt.
+
+    Bis zum Referenzlauf ``report_cc2ef45da5e9`` erzeugte dieser Zweig einen
+    Data Gap mit Grund ``related_evidence_only`` — 52 Stück allein in jenem
+    Lauf. Das ist eine Aussage über das Binding, keine über die Quellenlage.
+    Die Aussage bleibt als Hypothese geführt, der Grund steht im Gate-Log.
+    """
     agent = ReportAgent.__new__(ReportAgent)
     claims = [{
         "claim_id": "claim_01",
@@ -103,24 +116,11 @@ def test_related_evidence_only_gap_hat_anderen_hinweis_als_no_evidence_bound():
         "confidence_label": "low",
     }]
 
-    _finalized, _hypotheses, gaps, _decisions = agent._finalize_section_claims(claims)
+    _finalized, hypotheses, gaps, decisions = agent._finalize_section_claims(claims)
 
-    assert len(gaps) == 1
-    gap = gaps[0]
-    assert gap["gap_reason"] == "related_evidence_only"
-    assert gap["suggested_fix"] != gap["claim_text"]
-    assert "direktem Aussagebezug" in gap["suggested_fix"]
-
-    # Beide Gap-Gründe erhalten unterschiedliche Lösungsvorschläge.
-    no_evidence_claims = [{
-        "claim_id": "claim_02",
-        "claim_text": "Ein völlig anderer, unbelegter Claim ohne jede Quelle.",
-        "evidence": [],
-        "confidence_score": 0.1,
-        "confidence_label": "low",
-    }]
-    _finalized2, _hyp2, gaps2, _dec2 = agent._finalize_section_claims(no_evidence_claims)
-    assert gaps2[0]["suggested_fix"] != gap["suggested_fix"]
+    assert gaps == []
+    assert len(hypotheses) == 1
+    assert "binding_failure" in decisions[0]["detail"]
 
 
 def test_data_gap_traegt_hypothesis_id_der_zugehoerigen_hypothese():
