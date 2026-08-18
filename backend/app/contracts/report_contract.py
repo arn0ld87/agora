@@ -888,6 +888,45 @@ class EvidenceDegradationModel(BaseModel):
     detail: str  # menschenlesbare Begründung
 
 
+class EvidenceCoverageEntry(BaseModel):
+    """Was aus einem quantitativen Tool-Fakt geworden ist.
+
+    Im Referenzlauf ``report_cc2ef45da5e9`` lagen 31 %, 67 %, 83 %, 91 %, 6 %
+    und "sieben Fälle" in den Tool-Ergebnissen vor und fehlten anschließend im
+    kanonischen Evidence-Index. Kein Log, keine Meldung — die Zahlen waren
+    einfach weg, und der Bericht führte sie folgerichtig als unbelegt.
+
+    Ein Fakt darf verworfen werden. Er darf nur nicht *still* verworfen werden:
+    jeder Eintrag hier trägt entweder eine kanonische Evidence-ID oder einen
+    Grund, warum es keine gibt. Das macht den Unterschied zwischen einem
+    Dedup-Treffer und einem Extraktionsfehler nachträglich auflösbar.
+    """
+
+    model_config = _STRICT
+
+    source_result_id: str = Field(
+        min_length=1,
+        description="Tool-Ergebnis, aus dem der Fakt stammt (producer_key oder Tool-Name).",
+    )
+    fact: str = Field(min_length=1, description="Der Fakt im Wortlaut der Quelle.")
+    status: Literal["canonicalized", "dropped"]
+    normalized_value: float | None = None
+    unit: str | None = None
+    canonical_evidence_id: str | None = None
+    reason: str | None = Field(
+        default=None,
+        description="Warum verworfen — Pflicht bei status='dropped'.",
+    )
+
+    @model_validator(mode="after")
+    def validate_status_consistency(self) -> "EvidenceCoverageEntry":
+        if self.status == "dropped" and not (self.reason or "").strip():
+            raise ValueError("status='dropped' verlangt einen reason")
+        if self.status == "canonicalized" and not (self.canonical_evidence_id or "").strip():
+            raise ValueError("status='canonicalized' verlangt eine canonical_evidence_id")
+        return self
+
+
 class EvidenceMapModel(BaseModel):
     """Persistierte Evidence-Map. Ablöse für die rohen Dicts in report_agent.py."""
     model_config = _STRICT
@@ -907,6 +946,11 @@ class EvidenceMapModel(BaseModel):
     #: INCOMPLETE ab — ein erwartetes Hypothesen-Routing im Balanced-Modus
     #: ist dagegen kein Statusmangel (Codex-Review PR #1151, P1).
     gate_decision_log: list[EvidenceDegradationModel] = Field(default_factory=list)
+    #: Verbleib jedes quantitativen Tool-Fakts auf dem Weg in den
+    #: ``evidence_index``. Additiv, Default leer — bestehende persistierte
+    #: EvidenceMaps ohne dieses Feld validieren unverändert weiter (dieselbe
+    #: Linie wie ``degradation_log``, Issue #1006).
+    evidence_coverage_ledger: list[EvidenceCoverageEntry] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_evidence_cross_references(self) -> "EvidenceMapModel":

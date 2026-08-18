@@ -351,6 +351,25 @@ export const EvidenceDegradationSchema = z.object({
 }).strict();
 export type EvidenceDegradation = z.infer<typeof EvidenceDegradationSchema>;
 
+/**
+ * Verbleib eines quantitativen Tool-Fakts auf dem Weg in den Evidence-Index.
+ *
+ * Im Referenzlauf `report_cc2ef45da5e9` verschwanden sechs belegte Zahlenwerte
+ * zwischen Tool-Ergebnis und Index, ohne dass irgendwo stand warum. Ein Fakt
+ * darf verworfen werden — er trägt dann aber einen `reason`, sonst eine
+ * `canonical_evidence_id`.
+ */
+export const EvidenceCoverageEntrySchema = z.object({
+  source_result_id: z.string().min(1),
+  fact: z.string().min(1),
+  status: z.enum(['canonicalized', 'dropped']),
+  normalized_value: z.number().optional().nullable(),
+  unit: z.string().optional().nullable(),
+  canonical_evidence_id: z.string().optional().nullable(),
+  reason: z.string().optional().nullable(),
+}).strict();
+export type EvidenceCoverageEntry = z.infer<typeof EvidenceCoverageEntrySchema>;
+
 export const EvidenceMapSchema = z.object({
   schema_version: z.literal(3),
   report_id: z.string().min(1),
@@ -365,6 +384,9 @@ export const EvidenceMapSchema = z.object({
   // fehlende Supporting-Evidence, Fließtext-Entfernungen). Getrennt vom
   // degradation_log, weil nur Letzterer den Report-Status abstuft.
   gate_decision_log: z.array(EvidenceDegradationSchema).default([]),
+  // Additiv mit Default, dieselbe Linie wie degradation_log: Maps aus Läufen
+  // vor der Coverage-Buchführung tragen das Feld nicht.
+  evidence_coverage_ledger: z.array(EvidenceCoverageEntrySchema).default([]),
 }).strict().superRefine((value, ctx) => {
   const knownIds = new Set(Object.keys(value.evidence_index));
   const checkRef = (evidenceId: string, path: PropertyKey[]) => {

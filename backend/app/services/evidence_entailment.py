@@ -115,8 +115,15 @@ _PERCENT_RE = re.compile(
     re.IGNORECASE,
 )
 
+#: Absolutzahl mit ihrem Bezugsnomen. Zwischen beiden dürfen bis zu zwei
+#: kleingeschriebene Wörter stehen: "38 abweichende Dringlichkeitsfälle",
+#: "412 geprüfte Fälle", "38 der Empfehlungen". Ohne diese Lücke entstand für
+#: solche Sätze gar kein Fakt, und die Zahl war für den Trust-Layer nicht
+#: vorhanden — im Referenzlauf traf das die 38 abweichenden Dringlichkeitsfälle
+#: und die 412 geprüften Fälle.
 _ABSOLUTE_RE = re.compile(
     r"(?P<value>\d{1,3}(?:\.\d{3})+|\d+(?:[.,]\d+)?)\s+"
+    r"(?:[a-zäöüß]+\s+){0,2}"
     r"(?P<noun>[A-ZÄÖÜ][\wÄÖÜäöüß-]+)",
 )
 

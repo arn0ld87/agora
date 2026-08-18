@@ -234,6 +234,8 @@ const VALID_EVIDENCE: EvidenceMap = {
   degradation_log: [],
   // PR #1151: Audit-Trail regulärer Gate-Entscheidungen, gleiche Default-Logik.
   gate_decision_log: [],
+  // Verbleib der quantitativen Tool-Fakten, gleiche Default-Logik.
+  evidence_coverage_ledger: [],
 }
 
 // Hilfsfunktion zum Mounten
