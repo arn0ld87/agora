@@ -52,11 +52,21 @@ ist der Schluessel, unter dem ein Graph-Build seine Artefakte ablegt. Wer in der
 Oberflaeche „Projekt" schreibt, meint einen Graphen oder einen Lauf und sollte
 das passende Wort nehmen.
 
-**Abgebrochen** — ein Job, den ein Mensch gestoppt hat. Es gibt dafuer genau
-einen Zustand: `status="stopped"` mit `termination_reason="user_cancel"`.
-Ob ein nutzbares Teilergebnis vorliegt, steht in `resume_capability` und den
-Artefakten, nicht in einem zweiten Zustand. Ein frueher dokumentierter Zustand
-`CANCELLED_PARTIAL` existiert im Contract nicht und ist entfallen.
+**Abgebrochen** — ein Mensch hat gestoppt. Achtung, zwei Ebenen mit zwei
+getrennten Zustandsmodellen:
+
+- Auf **Job**-Ebene (`RunStatus` in `contracts/runs_contract.py`):
+  `status="stopped"` plus `termination_reason="user_cancel"`. Ob ein nutzbares
+  Teilergebnis vorliegt, steht in `resume_capability` und den Artefakten —
+  es gibt hier keinen eigenen Zustand dafuer.
+- Auf **Simulations**-Ebene (`SimulationStatus` in
+  `services/simulation_state_machine.py`): `CANCELLED_PARTIAL`. Das ist
+  ausdruecklich kein `FAILED`, sondern ein „success-with-caveat" — der
+  Uebergang nach `COMPLETED` bleibt erlaubt, damit ein Teil-Report noch
+  finalisiert werden kann. Ein Retry geht nach `PREPARING` zurueck.
+
+Die beiden Modelle laufen nebeneinander und beschreiben verschiedene Dinge.
+Wer „abgebrochen" sagt, muss wissen, welche Ebene gemeint ist.
 
 **Vorgang** — nicht verwenden. Synonym fuer Lauf, das nur Verwirrung stiftet.
 
@@ -200,6 +210,7 @@ CREATED → PREPARING → READY → RUNNING → COMPLETED
               FAILED    FAILED   PAUSED → RUNNING
                 ↑                   ↓
                 └── (retry) ───────┘    STOPPED → RUNNING
+                                        CANCELLED_PARTIAL → COMPLETED
 ```
 
 Terminal: `COMPLETED`, `FAILED`. Doppelter Prepare bei aktivem Task = HTTP 409.
