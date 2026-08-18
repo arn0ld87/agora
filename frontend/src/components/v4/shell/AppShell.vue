@@ -40,7 +40,7 @@
     <!-- Topbar — inert waehrend Drawer offen: sperrt Fokus + Klicks (Slice 7.3.2 a11y) -->
     <div class="app-shell__topbar" :inert="shellStore.mobileNavOpen ? true : undefined">
       <slot name="topbar">
-        <Topbar :breadcrumbs="breadcrumbs" :notification-badge="notificationBadge" />
+        <Topbar :breadcrumbs="breadcrumbs" />
       </slot>
     </div>
 
@@ -78,11 +78,9 @@ const CommandPalette = defineAsyncComponent(() => import('./CommandPalette.vue')
 const props = withDefaults(
   defineProps<{
     breadcrumbs?: BreadcrumbItem[]
-    notificationBadge?: number
   }>(),
   {
     breadcrumbs: () => [],
-    notificationBadge: 0,
   },
 )
 
@@ -214,7 +212,9 @@ const activeSubRoute = computed<string>(() => {
   height: 100%;
   display: grid;
   grid-template-columns: auto 1fr;
-  grid-template-rows: 64px 1fr;
+  /* An --topbar-h gekoppelt: der Token schrumpft unter `pointer: coarse`
+     auf 56px. Eine feste Zeile liesse dort einen leeren Streifen stehen. */
+  grid-template-rows: var(--topbar-h, 64px) 1fr;
   background: var(--surface-canvas, #f5f5f7);
   overflow: hidden;
 }

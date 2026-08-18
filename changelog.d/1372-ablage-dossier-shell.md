@@ -1,0 +1,18 @@
+### Added (Ablage und Dossier — eine Liste für alle Objekte, 2026-08-18)
+
+- **Die neue Hülle `/ablage` zeigt Läufe, Berichte, Graphen und Personasätze in EINER Liste.** Bisher lag jede Sorte in einer eigenen Ansicht mit eigener Navigation, und ein Lauf war nur als Kette einzelner Jobs sichtbar — die erstellten Graphen ließen sich nirgends überblicken. Steht hinter dem Flag `agora.shell=dossier` (localStorage) bzw. `VITE_AGORA_SHELL`; ohne Flag ändert sich nichts. Ausgewertet wird das Flag ausschließlich im Router, nie in Komponenten.
+- **Jede Zeile trägt eine Weiter-Aktion und, bei laufender Arbeit, Abbrechen und Pause.** Ein Abbruchknopf existierte zuvor nirgends in der Oberfläche. Abgebrochen wird ohne Rückfragedialog, dafür mit einem 5-Sekunden-Fenster zum Rückgängigmachen.
+- **Ein Lauf ist eine Zeile, auch wenn er aus mehreren Jobs besteht.** Die Zusammenfassung läuft transitiv über `linked_ids`: `graph_build` trägt nur eine `project_id`, das folgende `simulation_prepare` trägt beide IDs. Wer je Job stur die `simulation_id` bevorzugt, zerlegt genau diesen Lauf in zwei Zeilen — einmal als Projekt-, einmal als Simulationszeile. Die Rohebene bleibt über den Filter „Alle Jobs" erreichbar.
+- **Das Dossier lädt die Bestandteile eines Objekts erst beim Auswählen.** Ein Bericht zeigt seine Zusammenfassung und die Abschnitte seiner Gliederung, ein Graph seine Entitäten- und Beziehungszahl. Sorten ohne Detail-Endpunkt zeigen bewusst nichts, statt ein leeres Gerüst zu behaupten; ein fehlgeschlagener Abruf lässt die Ablage unberührt.
+- **Das Fake-Profil oben rechts ist weg.** Es gab zwei davon: ein `<div aria-hidden>AD</div>` in der klassischen Kopfzeile — nicht einmal fokussierbar — und ein nachgebautes `AS` in der neuen Hülle. Beide ersetzt durch ein echtes Menü mit Initialen aus dem Profil-Store (ohne Profil ein neutrales `?`) und den Einträgen Profil und Einstellungen. Die Glocke daneben war ein `<button>` ganz ohne Handler, dessen Badge-Wert nirgends je gesetzt wurde, und ist ersatzlos entfernt.
+
+### Fixed
+
+- **`listPersonaTemplates` deklarierte `Promise<PersonaTemplateRecord[]>`, obwohl der Axios-Interceptor grundsätzlich die Envelope zurückgibt.** Personasätze wären in der Ablage nie erschienen. Nach dem Ehrlichmachen des Typs deckte der Compiler prompt eine zweite Stelle auf, die im Erfolgszweig auf ein `error`-Feld zugriff, das dort nicht existiert.
+- **Dynamisch gebildete Statusschlüssel (`shelf.status.report_*`, `project_*`) existierten in keiner Locale**, und das mitgegebene `{ fallback }` war wirkungslos: vue-i18n interpoliert benannte Werte nur *in* eine gefundene Message und gibt bei einem Fehltreffer den Schlüssel selbst zurück. In der Ablage hätte wörtlich `shelf.status.report_generating` gestanden. Alle zwölf Enum-Werte ergänzt, plus Rückfall auf den Rohstatus für künftige Backend-Werte.
+- **Ein zweiter Abbruch innerhalb des Undo-Fensters verwarf den ersten stillschweigend** — der erste Lauf erreichte `cancelRun` nie, ohne dass es jemand bemerkt hätte. Er wird jetzt sofort ausgeführt, statt verschluckt zu werden.
+- **Escape schloss das Aktivitäts-Panel, ohne den Fokus zurückzugeben**; er fiel auf den Dokumentkörper. Und der Stapel übernahm jeden Wert aus dem `sessionStorage` ungeprüft — ein beschädigter Eintrag erzeugte Pillen, deren Klick ins Leere navigierte.
+
+### Changed
+
+- **Control-Höhen wachsen unter `pointer: coarse` auf 36/44/48px.** Angehängt an die Eingabeart, nicht an eine Breite: ein 1280px-Tablet wird mit dem Finger bedient, ein schmales Desktop-Fenster mit der Maus. Die Icon-Knöpfe der Kopfzeile und die Grid-Zeile der AppShell hängen jetzt an diesen Tokens statt an festen Pixelwerten.

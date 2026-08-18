@@ -803,8 +803,13 @@
   },
   "topbar": {
     "search": "Suche",
-    "notifications": "Benachrichtigungen",
-    "openNavigation": "Navigation öffnen"
+    "openNavigation": "Navigation öffnen",
+    "userMenu": {
+      "trigger": "Nutzermenü, angemeldet als {name}",
+      "triggerUnknown": "Nutzermenü öffnen",
+      "profile": "Profil",
+      "settings": "Einstellungen"
+    }
   },
   "logs": {
     "drawer": {
@@ -1704,5 +1709,73 @@
     "colStage": "Stage",
     "colProvider": "Provider",
     "colModel": "Modell"
+  },
+  "shelf": {
+    "action": {
+      "watch": "Zusehen",
+      "resume": "Fortsetzen",
+      "inspectFailure": "Ursache ansehen",
+      "inspectStopped": "Teilergebnis ansehen",
+      "preparePersonas": "Personas erzeugen",
+      "reviewPersonas": "Personas freigeben",
+      "readReport": "Bericht lesen",
+      "createReport": "Bericht erzeugen",
+      "viewGraph": "Graph ansehen"
+    },
+    "activity": "{n} aktiv",
+    "back": "Zurück",
+    "cancel": "Abbrechen",
+    "cancelRequested": "Abbruch angefordert — die laufende Stufe wird noch beendet.",
+    "dossier": {
+      "emptyHint": "Nichts ausgewählt. Wähl links ein Objekt, um seine Übersicht zu sehen.",
+      "graphEntities": "Entitäten",
+      "graphRelations": "Beziehungen",
+      "idLabel": "ID"
+    },
+    "empty": "Noch keine Objekte. Leg eine Quelle ab, um zu starten.",
+    "filter": {
+      "alle": "Alle",
+      "lauf": "Läufe",
+      "bericht": "Berichte",
+      "personasatz": "Personas",
+      "graph": "Graphen",
+      "jobs": "Alle Jobs"
+    },
+    "newObject": "Neues Objekt: Quelle ablegen",
+    "newObjectHint": "PDF, Markdown, Text, Webseite",
+    "partialLoad": "{n} von 4 Quellen nicht erreichbar — Liste unvollständig.",
+    "pause": "Pausieren",
+    "resume": "Fortsetzen",
+    "stack": "Stapel",
+    "status": {
+      "completed": "Fertig",
+      "failed": "Gescheitert",
+      "jobs": "{n} Jobs",
+      "paused": "Pausiert",
+      "pending": "Wartet",
+      "personaTemplate": "Wiederverwendbarer Personasatz",
+      "processing": "Läuft",
+      "project_created": "Angelegt, noch kein Graph",
+      "project_failed": "Graphbau fehlgeschlagen",
+      "project_graph_building": "Graph wird gebaut",
+      "project_graph_completed": "Graph fertig",
+      "project_graph_incomplete": "Graph unvollständig (abgebrochen)",
+      "project_ontology_generated": "Ontologie steht",
+      "reportSections": "{n} Abschnitte",
+      "report_completed": "Bericht fertig",
+      "report_failed": "Bericht fehlgeschlagen",
+      "report_generating": "Bericht wird geschrieben",
+      "report_incomplete": "Bericht unvollständig",
+      "report_pending": "Bericht wartet",
+      "report_planning": "Gliederung entsteht",
+      "stopped": "Abgebrochen"
+    },
+    "subtitle": "{n} Objekte · zuletzt angefasst zuerst",
+    "title": "Ablage",
+    "undo": "Rückgängig",
+    "undoHint": "Wird in {s} s abgebrochen"
+  },
+  "stepper": {
+    "stepAria": "Schritt {n}: {label}"
   }
 }

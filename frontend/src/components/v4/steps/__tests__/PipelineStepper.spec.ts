@@ -10,22 +10,28 @@
  */
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { createI18n } from 'vue-i18n'
 import PipelineStepper from '../PipelineStepper.vue'
+import de from '../../../../i18n/locales/de.json'
+
+// Der Stepper uebersetzt sein aria-label — ohne i18n-Plugin wirft useI18n.
+const i18n = createI18n({ legacy: false, locale: 'de', messages: { de } })
+const mountOpts = { global: { plugins: [i18n] } }
 
 describe('PipelineStepper', () => {
   it('mountet ohne Crash', () => {
-    const wrapper = mount(PipelineStepper, { props: { currentStep: 1 } })
+    const wrapper = mount(PipelineStepper, { props: { currentStep: 1 }, ...mountOpts })
     expect(wrapper.exists()).toBe(true)
   })
 
   it('rendert alle 5 Step-Labels', () => {
-    const wrapper = mount(PipelineStepper, { props: { currentStep: 1 } })
+    const wrapper = mount(PipelineStepper, { props: { currentStep: 1 }, ...mountOpts })
     const labels = wrapper.findAll('.pipeline-stepper__label').map((el) => el.text())
     expect(labels).toEqual(['Upload', 'Personas', 'Simulation', 'Report', 'Interaktion'])
   })
 
   it('currentStep=1: erster Schritt ist aktiv, restliche future', () => {
-    const wrapper = mount(PipelineStepper, { props: { currentStep: 1 } })
+    const wrapper = mount(PipelineStepper, { props: { currentStep: 1 }, ...mountOpts })
     const steps = wrapper.findAll('.pipeline-stepper__step')
     expect(steps[0].classes()).toContain('pipeline-stepper__step--active')
     expect(steps[1].classes()).toContain('pipeline-stepper__step--future')
@@ -33,7 +39,7 @@ describe('PipelineStepper', () => {
   })
 
   it('currentStep=3: Schritte 1+2 done, Schritt 3 aktiv, 4+5 future', () => {
-    const wrapper = mount(PipelineStepper, { props: { currentStep: 3 } })
+    const wrapper = mount(PipelineStepper, { props: { currentStep: 3 }, ...mountOpts })
     const steps = wrapper.findAll('.pipeline-stepper__step')
     expect(steps[0].classes()).toContain('pipeline-stepper__step--done')
     expect(steps[1].classes()).toContain('pipeline-stepper__step--done')
@@ -43,7 +49,7 @@ describe('PipelineStepper', () => {
   })
 
   it('currentStep=5: Schritte 1-4 done, Schritt 5 aktiv', () => {
-    const wrapper = mount(PipelineStepper, { props: { currentStep: 5 } })
+    const wrapper = mount(PipelineStepper, { props: { currentStep: 5 }, ...mountOpts })
     const steps = wrapper.findAll('.pipeline-stepper__step')
     expect(steps[0].classes()).toContain('pipeline-stepper__step--done')
     expect(steps[3].classes()).toContain('pipeline-stepper__step--done')
@@ -51,7 +57,7 @@ describe('PipelineStepper', () => {
   })
 
   it('aria-current="step" ist nur auf dem aktiven Schritt gesetzt', () => {
-    const wrapper = mount(PipelineStepper, { props: { currentStep: 2 } })
+    const wrapper = mount(PipelineStepper, { props: { currentStep: 2 }, ...mountOpts })
     const steps = wrapper.findAll('.pipeline-stepper__step')
     expect(steps[1].attributes('aria-current')).toBe('step')
     expect(steps[0].attributes('aria-current')).toBeUndefined()

@@ -39,3 +39,51 @@ export const LlmRoutingTestId = {
 } as const
 
 export type LlmRoutingTestId = (typeof LlmRoutingTestId)[keyof typeof LlmRoutingTestId]
+
+/**
+ * Block B3 — Neuhuelle „Richtung B · Dossier".
+ *
+ * Testid-Kontrakt VOR den Komponenten angelegt (PLAN.md, B3): der alte
+ * Shell-Bereich hatte keinen — Tests hingen an CSS-Klassen wie
+ * `.topbar__hamburger` und brachen bei jeder Umbenennung. Die neuen
+ * Komponenten und ihre Specs greifen beide auf DIESE Konstanten zu.
+ */
+export const ShellTestId = {
+  root: 'shell-root',
+  stack: 'shell-stack',
+  stackBack: 'shell-stack-back',
+  userMenu: 'shell-user-menu',
+  userMenuButton: 'shell-user-menu-button',
+  activityIndicator: 'shell-activity-indicator',
+  activityCancel: 'shell-activity-cancel',
+  undoToast: 'shell-undo-toast',
+  undoButton: 'shell-undo-button',
+} as const
+
+export const ShelfTestId = {
+  root: 'shelf-root',
+  filter: 'shelf-filter',
+  filterPill: 'shelf-filter-pill',
+  row: 'shelf-row',
+  rowTag: 'shelf-row-tag',
+  rowTitle: 'shelf-row-title',
+  rowStatus: 'shelf-row-status',
+  rowNextAction: 'shelf-row-next-action',
+  rowCancel: 'shelf-row-cancel',
+  rowPause: 'shelf-row-pause',
+  jobsTable: 'shelf-jobs-table',
+  empty: 'shelf-empty',
+  newObject: 'shelf-new-object',
+} as const
+
+export const DossierTestId = {
+  root: 'dossier-root',
+  title: 'dossier-title',
+  summary: 'dossier-summary',
+  kpis: 'dossier-kpis',
+  parts: 'dossier-parts',
+  part: 'dossier-part',
+  openFull: 'dossier-open-full',
+  cancel: 'dossier-cancel',
+  pause: 'dossier-pause',
+} as const

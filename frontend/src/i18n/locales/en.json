@@ -803,8 +803,13 @@
   },
   "topbar": {
     "search": "Search",
-    "notifications": "Notifications",
-    "openNavigation": "Open navigation"
+    "openNavigation": "Open navigation",
+    "userMenu": {
+      "trigger": "User menu, signed in as {name}",
+      "triggerUnknown": "Open user menu",
+      "profile": "Profile",
+      "settings": "Settings"
+    }
   },
   "logs": {
     "drawer": {
@@ -1704,5 +1709,73 @@
     "colStage": "Stage",
     "colProvider": "Provider",
     "colModel": "Model"
+  },
+  "shelf": {
+    "action": {
+      "watch": "Watch",
+      "resume": "Resume",
+      "inspectFailure": "Inspect failure",
+      "inspectStopped": "View partial result",
+      "preparePersonas": "Generate personas",
+      "reviewPersonas": "Approve personas",
+      "readReport": "Read report",
+      "createReport": "Create report",
+      "viewGraph": "View graph"
+    },
+    "activity": "{n} active",
+    "back": "Back",
+    "cancel": "Cancel",
+    "cancelRequested": "Cancel requested — finishing the current stage.",
+    "dossier": {
+      "emptyHint": "Nothing selected. Pick an object on the left to see its overview.",
+      "graphEntities": "Entities",
+      "graphRelations": "Relations",
+      "idLabel": "ID"
+    },
+    "empty": "No objects yet. Drop a source to get started.",
+    "filter": {
+      "alle": "All",
+      "lauf": "Runs",
+      "bericht": "Reports",
+      "personasatz": "Personas",
+      "graph": "Graphs",
+      "jobs": "All jobs"
+    },
+    "newObject": "New object: drop a source",
+    "newObjectHint": "PDF, Markdown, text, web page",
+    "partialLoad": "{n} of 4 sources unavailable — list incomplete.",
+    "pause": "Pause",
+    "resume": "Resume",
+    "stack": "Stack",
+    "status": {
+      "completed": "Done",
+      "failed": "Failed",
+      "jobs": "{n} jobs",
+      "paused": "Paused",
+      "pending": "Waiting",
+      "personaTemplate": "Reusable persona set",
+      "processing": "Running",
+      "project_created": "Created, no graph yet",
+      "project_failed": "Graph build failed",
+      "project_graph_building": "Building graph",
+      "project_graph_completed": "Graph complete",
+      "project_graph_incomplete": "Graph incomplete (cancelled)",
+      "project_ontology_generated": "Ontology ready",
+      "reportSections": "{n} sections",
+      "report_completed": "Report complete",
+      "report_failed": "Report failed",
+      "report_generating": "Writing report",
+      "report_incomplete": "Report incomplete",
+      "report_pending": "Report queued",
+      "report_planning": "Outlining",
+      "stopped": "Cancelled"
+    },
+    "subtitle": "{n} objects · most recently touched first",
+    "title": "Shelf",
+    "undo": "Undo",
+    "undoHint": "Cancelling in {s} s"
+  },
+  "stepper": {
+    "stepAria": "Step {n}: {label}"
   }
 }

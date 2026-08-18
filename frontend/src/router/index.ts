@@ -2,12 +2,17 @@ import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { getAgoraToken } from '../api/index'
 import { onboardingGuard } from './onboardingGuard'
+import { useShellVariant } from '../composables/useShellVariant'
 
 const routes: RouteRecordRaw[] = [
-  // Root → Dashboard (v4-AppShell ist Default-Einstieg)
+  // Root → Dashboard (classic) bzw. Ablage (dossier).
+  // Block B3: die EINZIGE Auswertung des Shell-Flags neben /ablage selbst.
   {
     path: '/',
-    redirect: { name: 'Dashboard' },
+    redirect: () =>
+      useShellVariant().variant.value === 'dossier'
+        ? { name: 'Shelf' }
+        : { name: 'Dashboard' },
   },
 
   // ADR-0010: /home → /dashboard (Entfernungsrelease 1.0.0; Home.vue bleibt bis dahin physisch erhalten).
@@ -197,6 +202,22 @@ const routes: RouteRecordRaw[] = [
     path: '/v4/history',
     name: 'HistoryV4',
     component: () => import('../views/v4/HistoryView.vue'),
+  },
+
+  // Block B3 — Neuhuelle „Richtung B · Dossier" (PLAN.md).
+  // /ablage ist der Einstieg der neuen Shell. Der Feature-Flag
+  // (useShellVariant) wird NUR hier und im Dashboard-Redirect unten
+  // ausgewertet — nie tief in Komponenten.
+  {
+    path: '/ablage',
+    name: 'Shelf',
+    component: () => import('../views/shell/ShelfView.vue'),
+  },
+  {
+    path: '/ablage/:kind(lauf|bericht|personasatz|graph)/:objectId',
+    name: 'ShelfObject',
+    component: () => import('../views/shell/ShelfView.vue'),
+    props: true,
   },
 
   // Catch-all: unbekannte Pfade landen auf der NotFound-View statt leerer Shell.

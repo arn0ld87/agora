@@ -145,4 +145,10 @@ watch(hasActiveChild, (active) => {
   font-weight: 600;
   border-left-color: var(--accent);
 }
+
+/* Der Gruppen-Auslöser ist ein <button> ohne jede Fokusregel gewesen. */
+.sidebar-group__trigger:focus-visible {
+  outline: var(--v4-state-focus-ring-width) solid var(--v4-state-focus-ring);
+  outline-offset: var(--v4-state-focus-ring-offset);
+}
 </style>
