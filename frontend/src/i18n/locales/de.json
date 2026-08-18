@@ -1774,5 +1774,8 @@
     "title": "Ablage",
     "undo": "Rückgängig",
     "undoHint": "Wird in {s} s abgebrochen"
+  },
+  "stepper": {
+    "stepAria": "Schritt {n}: {label}"
   }
 }

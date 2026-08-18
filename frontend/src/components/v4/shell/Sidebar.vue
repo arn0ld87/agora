@@ -208,6 +208,13 @@ const navSettings: NavSettingsItem[] = [
   color: var(--text-primary);
 }
 
+/* Die Unterpunkte der Einstellungen-Gruppe hatten keinen Fokusring —
+   mit der Tastatur war nicht sichtbar, wo man steht. */
+.sidebar-sub-item:focus-visible {
+  outline: var(--v4-state-focus-ring-width) solid var(--v4-state-focus-ring);
+  outline-offset: var(--v4-state-focus-ring-offset);
+}
+
 .sidebar__footer:focus-visible {
   outline: 2px solid var(--accent, #2563eb);
   outline-offset: -2px;

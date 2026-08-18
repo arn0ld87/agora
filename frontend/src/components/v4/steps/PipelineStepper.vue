@@ -22,7 +22,7 @@
           'pipeline-stepper__step--future': currentStep < step.id,
         }"
         :aria-current="currentStep === step.id ? 'step' : undefined"
-        :aria-label="`Schritt ${step.id}: ${step.label}`"
+        :aria-label="t('stepper.stepAria', { n: step.id, label: step.label })"
         :disabled="currentStep < step.id"
         @click="currentStep > step.id ? emit('navigate', step.id) : undefined"
       >
@@ -43,6 +43,9 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 const STEPS = [
   { id: 1, label: 'Upload' },
   { id: 2, label: 'Personas' },
@@ -133,6 +136,12 @@ const emit = defineEmits<{
   background: transparent;
   border: 1.5px solid var(--text-quaternary);
   color: var(--text-quaternary);
+}
+
+.pipeline-stepper__step:focus-visible {
+  outline: var(--v4-state-focus-ring-width) solid var(--v4-state-focus-ring);
+  outline-offset: var(--v4-state-focus-ring-offset);
+  border-radius: var(--radius-sm, 4px);
 }
 
 .pipeline-stepper__step--active .pipeline-stepper__icon {

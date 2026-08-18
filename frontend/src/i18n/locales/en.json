@@ -1774,5 +1774,8 @@
     "title": "Shelf",
     "undo": "Undo",
     "undoHint": "Cancelling in {s} s"
+  },
+  "stepper": {
+    "stepAria": "Step {n}: {label}"
   }
 }
