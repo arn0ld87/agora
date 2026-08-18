@@ -289,6 +289,7 @@ def test_resume_report_generate_returns_422_when_llm_client_unavailable(env):
 
 import threading as _threading  # noqa: E402
 from unittest.mock import MagicMock  # noqa: E402
+from types import SimpleNamespace  # noqa: E402
 
 from app.contracts.llm_routing_contract import ResolvedRoute  # noqa: E402
 from app.services.llm_runtime import RuntimeLlmConfig  # noqa: E402
@@ -657,3 +658,140 @@ def test_resume_simulation_prepare_raises_internal_error_when_run_update_raises(
         assert "disk full" not in str(exc_info.value)
         assert not MockMgr.return_value.prepare_simulation.called
         assert not MockTaskMgr.return_value.create_task.called
+
+
+# ---------------------------------------------------------------------------
+# Review-Finding PR #1371, Befund 4 (MITTEL): der Restart-Pfad übergab
+# manager.prepare_simulation(...) bisher ohne run_id — das Cancel-Flag
+# konnte einen neu gestarteten Restart nie erreichen. "Abbrechen → Restart →
+# nochmal abbrechen" quittierte 202, passierte aber nichts.
+# ---------------------------------------------------------------------------
+
+
+def test_restart_simulation_prepare_passes_run_id(env):
+    """manager.prepare_simulation muss die neue run_id des Restarts tragen —
+    sonst kann is_cancel_requested() sie nie finden."""
+    run = _create_run(
+        env["registry"],
+        run_type="simulation_prepare",
+        entity_id="sim_test",
+        simulation_id="sim_test",
+        status="failed",
+    )
+
+    fake_state = MagicMock()
+    fake_state.project_id = "proj_test"
+    fake_state.graph_id = "graph_test"
+    fake_state.branch_name = "main"
+
+    fake_project = MagicMock()
+    fake_project.simulation_requirement = "Test requirement"
+
+    resolved_route = ResolvedRoute(
+        stage="persona_generation",
+        provider_id="openai",
+        model="gpt-4o",
+        base_url_sanitized="https://api.openai.com/v1",
+        routing_version=1,
+    )
+
+    with (
+        patch("app.api.runs.SimulationManager") as MockMgr,
+        patch("app.api.runs.ProjectManager") as MockProjMgr,
+        patch("app.api.runs.TaskManager") as MockTaskMgr,
+        patch("app.api.runs.run_registry") as mock_registry,
+        patch("app.api.runs.seed_run_stage_routing"),
+        patch("app.api.runs.StageModelRouter") as MockRouter,
+        patch("app.api.runs.resolve_route_api_key", return_value="store-resolved-key"),
+    ):
+        MockMgr.return_value.get_simulation.return_value = fake_state
+        MockMgr.return_value.get_simulation_config.return_value = {"llm_model": "gpt-4o"}
+        MockProjMgr.get_project.return_value = fake_project
+        MockTaskMgr.return_value.create_task.return_value = "task_001"
+        mock_registry.create_run.return_value = {"run_id": "run_new_cancel_1"}
+        mock_registry.update_run.return_value = None
+
+        router_instance = MockRouter.return_value
+        router_instance.resolve.return_value = resolved_route
+        router_instance.lock_stage.return_value = resolved_route
+
+        env["app"].extensions["neo4j_storage"] = MagicMock(name="Neo4jStorage")
+
+        with env["app"].app_context():
+            _run_restart_prepare_sync(run)
+
+        call_kwargs = MockMgr.return_value.prepare_simulation.call_args.kwargs
+
+    assert call_kwargs.get("run_id") == "run_new_cancel_1", (
+        "Ohne run_id kann der Restart nie kooperativ abgebrochen werden"
+    )
+
+
+def test_restart_simulation_prepare_cancelled_ends_stopped(env):
+    """Bricht der Restart per PrepareCancelledError ab, muss der NEUE Run
+    (nicht der alte) als stopped/user_cancel enden — geprüft gegen die echte
+    RunRegistry, weil _finish_cancelled_prepare_run über
+    app.api.simulation_prepare.run_registry schreibt, nicht über das in
+    app.api.runs gemockte Objekt."""
+    from app.services.prepare_service import PrepareCancelledError
+
+    run = _create_run(
+        env["registry"],
+        run_type="simulation_prepare",
+        entity_id="sim_test",
+        simulation_id="sim_test",
+        status="failed",
+    )
+
+    fake_state = MagicMock()
+    fake_state.project_id = "proj_test"
+    fake_state.graph_id = "graph_test"
+    fake_state.branch_name = "main"
+    fake_project = MagicMock()
+    fake_project.simulation_requirement = "Test requirement"
+
+    resolved_route = ResolvedRoute(
+        stage="persona_generation",
+        provider_id="openai",
+        model="gpt-4o",
+        base_url_sanitized="https://api.openai.com/v1",
+        routing_version=1,
+    )
+
+    with (
+        patch("app.api.runs.SimulationManager") as MockMgr,
+        patch("app.api.runs.ProjectManager") as MockProjMgr,
+        patch("app.api.runs.TaskManager") as MockTaskMgr,
+        # run_registry bewusst NICHT gemockt — der Test prüft den echten
+        # Endzustand in der RunRegistry.
+        patch("app.api.runs.seed_run_stage_routing"),
+        patch("app.api.runs.StageModelRouter") as MockRouter,
+        patch("app.api.runs.resolve_route_api_key", return_value="store-resolved-key"),
+    ):
+        MockMgr.return_value.get_simulation.return_value = fake_state
+        MockMgr.return_value.get_simulation_config.return_value = {"llm_model": "gpt-4o"}
+        MockProjMgr.get_project.return_value = fake_project
+        MockTaskMgr.return_value.create_task.return_value = "task_001"
+
+        def _raise_cancel(**kwargs):
+            raise PrepareCancelledError(SimpleNamespace(simulation_id="sim_test"))
+
+        MockMgr.return_value.prepare_simulation.side_effect = _raise_cancel
+
+        router_instance = MockRouter.return_value
+        router_instance.resolve.return_value = resolved_route
+        router_instance.lock_stage.return_value = resolved_route
+
+        env["app"].extensions["neo4j_storage"] = MagicMock(name="Neo4jStorage")
+
+        with env["app"].app_context():
+            _run_restart_prepare_sync(run)
+
+    new_runs = [
+        r for r in env["registry"].list_runs()
+        if r["run_id"] != run["run_id"] and r.get("run_type") == "simulation_prepare"
+    ]
+    assert len(new_runs) == 1, f"Erwartet genau einen neuen Restart-Run, gefunden: {new_runs}"
+    new_run = new_runs[0]
+    assert new_run["status"] == "stopped"
+    assert new_run["termination_reason"] == "user_cancel"
