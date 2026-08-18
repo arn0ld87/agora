@@ -189,15 +189,74 @@ _RED_TEAM_SYSTEM_PROMPT = (
 )
 
 _RED_TEAM_USER_TEMPLATE = (
-    "Berichtsentwurf (gekürzt):\n\n{report_excerpt}\n\n"
+    "Berichtsentwurf:\n\n{report_excerpt}\n\n"
+    "Die Kennung vor jedem Eintrag nennt den Abschnitt: C3_02 ist der zweite "
+    "Claim aus Abschnitt 3. Widersprüche zwischen weit auseinanderliegenden "
+    "Abschnitten sind besonders zu prüfen — dort fallen sie beim Lesen am "
+    "wenigsten auf.\n\n"
     "Identifiziere:\n"
     "(a) Widersprüche zwischen den Claims\n"
-    "(b) Verfrühten Konsens (Claims, die ohne ausreichende Cross-Segment-Reaktionen "
+    "(b) Widersprüchliche operative Zahlen (zwei Schwellen für dieselbe Größe "
+    "mit unterschiedlichen Werten)\n"
+    "(c) Verfrühten Konsens (Claims, die ohne ausreichende Cross-Segment-Reaktionen "
     "als hoch-konfident markiert sind)\n"
-    "(c) Fehlende Cross-Segment-Reaktionen\n\n"
+    "(d) Fehlende Cross-Segment-Reaktionen\n\n"
     "Liefere maximal 10 Befunde als JSON-Objekt mit Feld 'findings' (Liste von Strings). "
     "Kein Markdown, reines JSON."
 )
+
+#: Zeichenbudget für den Berichtsentwurf im Red-Team-Call. Sieben Abschnitte
+#: liegen in der Größenordnung 20-30k Token; 60k Zeichen (~20k Token) tragen
+#: das mit Reserve. Der Wert ist eine Kostenbremse gegen entartete Läufe
+#: (gemessen: bis 372 Claims in einem Artefakt), keine inhaltliche Auswahl.
+_RED_TEAM_EXCERPT_BUDGET = 60_000
+
+
+def _build_red_team_excerpt(report_v3: ReportV3) -> str:
+    """Baut den Berichtsentwurf für die Red-Team-Review (Issue #1359 B).
+
+    Vorher sah der Reviewer ``claims[:20]``, ``hypotheses[:10]`` und davon die
+    ersten 4000 Zeichen. Gemessen an acht Artefakten griff die Zeichengrenze in
+    fünf Fällen — mitten im Satz. Im Referenzlauf hat der Reviewer daraus einen
+    Befund erzeugt, der Bericht breche ab; das war der Schnitt des Excerpts,
+    nicht des Berichts. Ein Reviewer, der einen Abbruch meldet, den es nicht
+    gibt, ist schlimmer als keiner: er verbraucht Aufmerksamkeit für ein
+    Artefakt des Werkzeugs.
+
+    Die **Schwellen fehlten vollständig**. Genau darin lag der Widerspruch, den
+    zu finden die Aufgabe der Stage ist: vier Wochen Pilotbetrieb in Abschnitt
+    1, mindestens acht in Abschnitt 7. Der Reviewer konnte ihn nicht sehen.
+
+    Gekürzt wird nur noch am Zeilenende und mit sichtbarer Marke, damit eine
+    Kürzung als Kürzung erkennbar bleibt.
+    """
+    lines: List[str] = []
+    for claim in report_v3.claims or []:
+        lines.append(f"- [{claim.id}] [{claim.confidence}] {claim.statement}")
+    for threshold in report_v3.thresholds or []:
+        lines.append(
+            f"- [{threshold.id}] [schwelle: {threshold.purpose}] {threshold.label}: "
+            f"{threshold.value:g} {threshold.unit} "
+            f"(Herkunft: {threshold.origin}, Beleglage: {threshold.evidence_status})"
+        )
+    for hypothesis in report_v3.hypotheses or []:
+        lines.append(f"- [{hypothesis.id}] [hypothese] {hypothesis.hypothesis_text}")
+
+    if not lines:
+        return "(kein Inhalt)"
+
+    kept: List[str] = []
+    used = 0
+    for index, line in enumerate(lines):
+        if used + len(line) + 1 > _RED_TEAM_EXCERPT_BUDGET and kept:
+            kept.append(
+                f"[gekürzt: {len(lines) - index} weitere Einträge ausgelassen — "
+                "der Bericht ist vollständig, dieser Auszug nicht]"
+            )
+            break
+        kept.append(line)
+        used += len(line) + 1
+    return "\n".join(kept)
 
 
 def _run_red_team_review(
@@ -231,18 +290,9 @@ def _run_red_team_review(
         )
         return report_v3
 
-    # Berichtsentwurf-Excerpt aufbauen (Claims + Hypotheses als Kontext)
-    claim_lines = [
-        f"- [{c.confidence}] {c.statement}"
-        for c in (report_v3.claims or [])[:20]
-    ]
-    hyp_lines = [
-        f"- [hypothesis] {h.hypothesis_text}"
-        for h in (report_v3.hypotheses or [])[:10]
-    ]
-    report_excerpt = "\n".join(claim_lines + hyp_lines) or "(kein Inhalt)"
-
-    user_msg = _RED_TEAM_USER_TEMPLATE.format(report_excerpt=report_excerpt[:4000])
+    user_msg = _RED_TEAM_USER_TEMPLATE.format(
+        report_excerpt=_build_red_team_excerpt(report_v3)
+    )
 
     started_at = datetime.now(timezone.utc)
     try:
