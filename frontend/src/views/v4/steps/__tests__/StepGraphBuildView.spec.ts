@@ -6,6 +6,7 @@ const pipeline = vi.hoisted(() => ({
   refreshGraph: vi.fn(),
   // Issue #1029: pro Test setzbar, damit die Verdrahtung des
   // Degradierungs-Hinweises prüfbar bleibt und nicht nur der Leerfall.
+  graphIncomplete: false,
   degradations: { schema_version: 1, events: [] } as {
     schema_version: number
     events: Array<Record<string, unknown>>
@@ -27,6 +28,7 @@ vi.mock('@/composables/useGraphBuildPipeline', async () => {
       error: ref('Graph build failed'),
       currentRunId: ref(null),
       degradations: ref(pipeline.degradations),
+      graphIncomplete: ref(pipeline.graphIncomplete),
       initialize: pipeline.initialize,
       refreshGraph: pipeline.refreshGraph,
     }),
@@ -50,6 +52,7 @@ describe('StepGraphBuildView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     pipeline.degradations = { schema_version: 1, events: [] }
+    pipeline.graphIncomplete = false
     route.query = {}
   })
 
@@ -292,6 +295,15 @@ describe('StepGraphBuildView', () => {
           },
         ],
       }
+
+      const step = mountView().getComponent({ name: 'Step1GraphBuild' })
+      expect(step.props('qualityBlocked')).toBe(true)
+    })
+
+    it('blockiert den Folgeschritt bei abgebrochenem Build (graph_incomplete)', () => {
+      // PR #1371: Ein per Nutzerabbruch behaltener Teilgraph erzeugt keine
+      // Degradation — die Liste ist leer, blockiert wird trotzdem.
+      pipeline.graphIncomplete = true
 
       const step = mountView().getComponent({ name: 'Step1GraphBuild' })
       expect(step.props('qualityBlocked')).toBe(true)

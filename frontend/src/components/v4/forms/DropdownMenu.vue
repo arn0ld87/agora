@@ -102,10 +102,10 @@ defineSlots<{
 .dm-panel {
   min-width: 180px;
   padding: 4px;
-  background: var(--surface-elevated, #fff);
+  background: var(--surface-elevated);
   border: 1px solid var(--hairline);
   border-radius: var(--r-3, 6px);
-  box-shadow: var(--shadow-2, 0 8px 24px rgba(0, 0, 0, 0.12));
+  box-shadow: var(--shadow-2);
   z-index: 50;
   display: flex;
   flex-direction: column;

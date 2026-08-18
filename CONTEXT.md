@@ -19,7 +19,60 @@ Agora nimmt ein Quelldokument (Strategiepapier, Entscheidungsvorlage, Produktkon
 
 ---
 
-## Die Pipeline: vier Phasen
+## Glossar
+
+Festgelegt 2026-08-18. Diese Woerter sind verbindlich — in der Oberflaeche,
+in Commit-Messages und in Gespraechen ueber Agora.
+
+**Lauf** — ein vollstaendiges Vorhaben von der Quelle bis zum Bericht. Das ist
+die Einheit, in der Menschen ueber Agora denken („mein Lauf zum Klinikrollout")
+und eine Zeile in der Ablage. Ein Lauf umfasst Graph, Personas, Simulation,
+Bericht und Interviews. Frueher hiess das an manchen Stellen „Run" — dasselbe
+Wort bezeichnete aber auch den technischen Einzelschritt, was zwei
+verschiedene Dinge unter einen Namen zwang.
+
+**Job** — ein einzelner ausfuehrbarer Schritt innerhalb eines Laufs, verwaltet
+von der `RunRegistry`. Fuenf Sorten: Graph-Build, Ontologie-Generierung,
+Prepare, Simulation, Bericht. Ein Lauf erzeugt mehrere Jobs. Nur ein Job hat
+einen Status, kann laufen, pausieren oder abgebrochen werden — ein Lauf hat
+Zustand nur abgeleitet aus seinen Jobs. Im Code heisst das weiterhin `run_id` /
+`run_type`; die Oberflaeche sagt Job.
+
+**Bericht** — das Leseergebnis eines Laufs. Eigenes Objekt in der Ablage, weil
+Berichte unabhaengig vom Lauf gelesen, exportiert und befragt werden.
+
+**Personasatz** — eine wiederverwendbare Sammlung von Personas. Eigenes Objekt,
+weil ein Personasatz mehrere Laeufe ueberdauert.
+
+**Graph** — das Quellenumfeld eines Laufs: Entitaeten und Relationen aus dem
+Quelldokument in Neo4j. Eigenes Objekt in der Ablage.
+
+**Projekt** — Implementierungsdetail, kein Begriff der Oberflaeche. `project_id`
+ist der Schluessel, unter dem ein Graph-Build seine Artefakte ablegt. Wer in der
+Oberflaeche „Projekt" schreibt, meint einen Graphen oder einen Lauf und sollte
+das passende Wort nehmen.
+
+**Abgebrochen** — ein Mensch hat gestoppt. Achtung, zwei Ebenen mit zwei
+getrennten Zustandsmodellen:
+
+- Auf **Job**-Ebene (`RunStatus` in `contracts/runs_contract.py`):
+  `status="stopped"` plus `termination_reason="user_cancel"`. Ob ein nutzbares
+  Teilergebnis vorliegt, steht in `resume_capability` und den Artefakten —
+  es gibt hier keinen eigenen Zustand dafuer.
+- Auf **Simulations**-Ebene (`SimulationStatus` in
+  `services/simulation_state_machine.py`): `CANCELLED_PARTIAL`. Das ist
+  ausdruecklich kein `FAILED`, sondern ein „success-with-caveat" — der
+  Uebergang nach `COMPLETED` bleibt erlaubt, damit ein Teil-Report noch
+  finalisiert werden kann. Ein Retry geht nach `PREPARING` zurueck.
+
+Die beiden Modelle laufen nebeneinander und beschreiben verschiedene Dinge.
+Wer „abgebrochen" sagt, muss wissen, welche Ebene gemeint ist.
+
+**Vorgang** — nicht verwenden. Synonym fuer Lauf, das nur Verwirrung stiftet.
+
+---
+
+## Die Pipeline: vier Phasen, fuenf Job-Sorten
 
 ```
 Quelldokument → [1 Graph] → [2 Prepare] → [3 Simulation] → [4 Report]
@@ -150,7 +203,7 @@ Hohe Confidence erfordert Diversitaet: verschiedene `persona_role_family`-Werte 
 
 ---
 
-## Was ein Run produziert
+## Was ein Lauf produziert
 
 ```
 uploads/simulations/<sim_id>/

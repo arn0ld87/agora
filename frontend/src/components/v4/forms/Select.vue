@@ -65,7 +65,7 @@ defineEmits<{
   padding: 0 36px 0 12px;
   border-radius: var(--r-4, 8px);
   border: 1px solid var(--hairline);
-  background: var(--surface-elevated, #fff);
+  background: var(--surface-elevated);
   font-family: var(--font-sans);
   font-size: var(--fs-callout, 14px);
   color: var(--text-primary);

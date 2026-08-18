@@ -86,11 +86,18 @@ export function useGraphBuildPipeline({
   }, 2000, { pauseWhenHidden: false })
   const graphPolling = usePolling(fetchGraphData, 10000, { pauseWhenHidden: false })
 
+  // PR #1371: true, wenn das Projekt einen per Nutzerabbruch behaltenen
+  // Teilgraphen traegt (status='graph_incomplete'). Getrennt von den
+  // Degradationen, weil ein sauberer Abbruch keine Degradation erzeugt —
+  // der Graph ist trotzdem unvollstaendig.
+  const graphIncomplete = ref(false)
+
   function messageFor(errorValue: unknown): string {
     return errorValue instanceof Error ? errorValue.message : String(errorValue)
   }
 
   function updatePhaseByStatus(status?: string): void {
+    graphIncomplete.value = status === 'graph_incomplete'
     switch (status) {
       case 'created':
       case 'ontology_generated':
@@ -101,6 +108,15 @@ export function useGraphBuildPipeline({
         break
       case 'graph_completed':
       case 'completed':
+        currentPhase.value = 2
+        break
+      // PR #1371: Ein abgebrochener Build hinterlässt einen bewusst
+      // behaltenen Teilgraphen (status='graph_incomplete', graph_id gesetzt).
+      // Ohne diesen Fall bliebe currentPhase=-1 — kein Fehler, kein Graph,
+      // kein Weg nach vorn. Phase 2 macht den Graphen ansehbar; den
+      // Weiter-Knopf blockiert graphIncomplete ueber qualityBlocked in
+      // StepGraphBuildView.
+      case 'graph_incomplete':
         currentPhase.value = 2
         break
       case 'failed':
@@ -123,6 +139,7 @@ export function useGraphBuildPipeline({
       currentPhase.value = -1
       currentRunId.value = null
       degradations.value = EMPTY_DEGRADATION_REPORT
+      graphIncomplete.value = false
     }
     addLog(t('common.starting'))
     if (currentProjectId.value === 'new') {
@@ -221,6 +238,15 @@ export function useGraphBuildPipeline({
         await restoreDegradations(response.data.graph_build_task_id, generation)
         currentPhase.value = 2
         await loadGraph(response.data.graph_id, generation)
+      } else if (response.data.status === 'graph_incomplete' && response.data.graph_id) {
+        // PR #1371: Abgebrochener Build, Teilgraph bewusst behalten (Q34).
+        // Ansehen ja, weiterarbeiten nein — graphIncomplete blockiert den
+        // Weiter-Knopf in StepGraphBuildView, unabhaengig von den
+        // Degradationen (die bei sauberem Abbruch leer sein koennen).
+        await restoreDegradations(response.data.graph_build_task_id, generation)
+        currentPhase.value = 2
+        await loadGraph(response.data.graph_id, generation)
+        addLog(t('step1.graphIncomplete'))
       }
     } catch (caughtError) {
       if (!isCurrent(generation)) return
@@ -388,6 +414,7 @@ export function useGraphBuildPipeline({
     // Issue #1029: stille Teilausfälle des Builds. Leer heißt „nichts
     // ausgefallen", nicht „nicht geprüft".
     degradations,
+    graphIncomplete,
     initialize,
     // Issue #1023 (Befund B-08): GraphPanel/GraphToolbar emittieren
     // "refresh" seit jeher, StepGraphBuildView hatte dafuer nie einen

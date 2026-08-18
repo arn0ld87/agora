@@ -187,21 +187,21 @@ function close(): void {
   font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--text-secondary, #888);
+  color: var(--text-secondary);
 }
 
 .field-hint {
   margin: 0;
   font-size: 12px;
-  color: var(--text-secondary, #888);
+  color: var(--text-secondary);
 }
 
 .replay-error {
   margin: 0;
   padding: 8px 12px;
-  background: #fee2e2;
-  border: 1px solid #f87171;
-  color: #7f1d1d;
+  background: var(--status-red-bg);
+  border: 1px solid var(--status-red);
+  color: var(--status-red);
   font-size: 13px;
 }
 </style>

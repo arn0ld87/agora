@@ -301,6 +301,6 @@ watch(() => props.runs, (runs) => {
 /* Stop-Button in der Actions-Spalte — darf den Row-Klick nicht triggern. */
 .ar-stop {
   /* kleines Target, aber über v4-state-interactive voll fokussierbar */
-  --v4-state-hover-bg: var(--danger-tint-bg, rgba(220, 38, 38, 0.12));
+  --v4-state-hover-bg: var(--status-red-bg);
 }
 </style>

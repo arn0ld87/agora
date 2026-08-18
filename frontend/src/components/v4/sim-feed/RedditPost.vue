@@ -79,7 +79,7 @@ const scoreDisplay = computed(() => {
   top: 0;
   bottom: 0;
   width: 2px;
-  background: var(--hairline, #e5e7eb);
+  background: var(--hairline);
   border-radius: 1px;
 }
 .rp-root[data-depth='0'] .rp-rail {
@@ -92,26 +92,26 @@ const scoreDisplay = computed(() => {
   align-items: center;
   gap: 2px;
   min-width: 36px;
-  color: var(--text-tertiary, #6b7280);
+  color: var(--text-tertiary);
   font-size: 11px;
   font-weight: 600;
   flex-shrink: 0;
 }
 .rp-arrow {
-  color: var(--text-tertiary, #6b7280);
+  color: var(--text-tertiary);
   opacity: 0.6;
 }
 .rp-score {
   font-size: 11px;
   font-weight: 600;
-  color: var(--text-tertiary, #6b7280);
+  color: var(--text-tertiary);
   line-height: 1;
 }
 .rp-score--positive {
   color: var(--status-orange, #f97316);
 }
 .rp-score--negative {
-  color: var(--accent-blue, #2563eb);
+  color: var(--status-teal);
 }
 /* Body */
 .rp-body {
@@ -128,11 +128,11 @@ const scoreDisplay = computed(() => {
 .rp-user {
   font-weight: 600;
   font-size: 12px;
-  color: var(--accent-blue, #2563eb);
+  color: var(--status-teal);
 }
 .rp-time {
   font-size: 11px;
-  color: var(--text-secondary, #6b7280);
+  color: var(--text-secondary);
   margin-left: auto;
 }
 .rp-content {
@@ -141,6 +141,6 @@ const scoreDisplay = computed(() => {
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
-  color: var(--text-primary, #111827);
+  color: var(--text-primary);
 }
 </style>

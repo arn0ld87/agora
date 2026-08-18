@@ -258,13 +258,13 @@ defineExpose({
   gap: 2rem;
 }
 .card {
-  border: 1px solid #ddd;
+  border: 1px solid var(--hairline);
   padding: 1rem;
   margin-bottom: 1rem;
   border-radius: 4px;
 }
 .locked {
-  background-color: #f5f5f5;
+  background-color: var(--surface-hover);
   opacity: 0.8;
 }
 .locked-badge {
@@ -278,23 +278,23 @@ defineExpose({
 .snapshot-card .snap-header {
   display: flex;
   justify-content: space-between;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--separator);
   padding-bottom: 0.5rem;
   margin-bottom: 0.5rem;
 }
 .version {
-  background: #eee;
+  background: var(--surface-hover);
   padding: 2px 6px;
   border-radius: 10px;
   font-size: 0.7rem;
 }
 .version--ok {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--status-green-bg);
+  color: var(--status-green);
 }
 .version--error {
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--status-red-bg);
+  color: var(--status-red);
 }
 .timestamp {
   font-size: 0.7rem;

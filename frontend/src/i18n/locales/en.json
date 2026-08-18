@@ -253,7 +253,8 @@
     },
     "next": "Next: environment →",
     "breadcrumbRuns": "Runs",
-    "breadcrumbTitle": "Graph Build"
+    "breadcrumbTitle": "Graph Build",
+    "graphIncomplete": "Build cancelled — the graph is incomplete. You can inspect or delete it, but it is not a valid basis for the next steps."
   },
   "step2": {
     "kicker": "№ 02 — ENVIRONMENT",

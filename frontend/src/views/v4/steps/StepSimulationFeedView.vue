@@ -141,7 +141,7 @@ onBeforeUnmount(() => {
   padding: 24px 12px;
   text-align: center;
   font-size: 13px;
-  color: var(--text-secondary, #6b7280);
+  color: var(--text-secondary);
   margin: 0;
 }
 

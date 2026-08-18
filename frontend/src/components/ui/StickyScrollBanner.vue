@@ -43,7 +43,7 @@ defineEmits(['jump'])
   box-shadow:
     0 1px 0 0 color-mix(in oklch, white 35%, transparent) inset,
     0 8px 24px -6px var(--accent-glow),
-    0 1px 2px 0 rgba(0, 0, 0, 0.2);
+    var(--shadow-1);
   transition: transform 120ms cubic-bezier(.2,.8,.2,1),
               box-shadow 160ms ease;
 }
@@ -53,7 +53,7 @@ defineEmits(['jump'])
   box-shadow:
     0 1px 0 0 color-mix(in oklch, white 40%, transparent) inset,
     0 14px 32px -6px var(--accent-glow),
-    0 2px 4px 0 rgba(0, 0, 0, 0.22);
+    var(--shadow-2);
 }
 
 .arrow {

@@ -1,0 +1,52 @@
+<section style="width:1440px;display:flex;flex-direction:column;gap:22px;padding-top:10px;border-top:1px solid rgba(255,246,235,0.12)">
+  <h2 style="margin:0;font-size:22px;font-weight:600;letter-spacing:-0.02em">Systemregeln des Entwurfs</h2>
+  <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0">
+    <div style="padding:0 24px 0 0">
+      <div style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:10px">Bewegung</div>
+      <ul style="margin:0;padding-left:18px;font-size:13.5px;line-height:1.65;color:#cfc7bc">
+        <li>Objekt öffnen: Inhalt wächst von der gewählten Zeile nach rechts, 180 ms, kein Seitenwechsel.</li>
+        <li>Ganzflächig: Chrome schrumpft auf 46 px, Stapel bleibt stehen.</li>
+        <li>Overlay (⌘K, Einstellungen): 120 ms Einblenden, Hintergrund nur abgedunkelt, nie ersetzt.</li>
+        <li>Live-Daten: neue Feed-Zeilen erscheinen ohne Verschieben des Gelesenen.</li>
+        <li><span style="font-family:'Geist Mono',monospace;font-size:12px">prefers-reduced-motion</span>: alle vier Bewegungen fallen auf reines Umschalten zurück.</li>
+      </ul>
+    </div>
+    <div style="padding:0 24px;border-left:1px solid rgba(255,246,235,0.12)">
+      <div style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:10px">Zugänglichkeit</div>
+      <ul style="margin:0;padding-left:18px;font-size:13.5px;line-height:1.65;color:#cfc7bc">
+        <li>Fokusring: 2 px Kupfer, 2 px Abstand, auf jeder Fläche sichtbar.</li>
+        <li>Ablage ist eine Liste, das Dossier eine Region — Tab springt zwischen beiden, nicht durch 40 Zeilen.</li>
+        <li>Overlays sind <span style="font-family:'Geist Mono',monospace;font-size:12px">role="dialog"</span> mit Fokusfalle und Rückgabe an den Auslöser.</li>
+        <li>Zustände nennen Text, nicht nur Farbe: „9 Befunde offen“, nicht nur ein roter Punkt.</li>
+        <li>Text auf Grund: ≥ 4.5:1 (#f2ece4 auf #14110f), Sekundärtext ≥ 4.6:1.</li>
+      </ul>
+    </div>
+    <div style="padding:0 0 0 24px;border-left:1px solid rgba(255,246,235,0.12)">
+      <div style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:10px">Schmalere Bildschirme</div>
+      <ul style="margin:0;padding-left:18px;font-size:13.5px;line-height:1.65;color:#cfc7bc">
+        <li>Unter 1100 px: Ablage und Dossier werden zwei Ansichten statt zwei Spalten — der Stapel ist der Rückweg.</li>
+        <li>Simulation: die vier Bahnen werden Reiter (Akteure · Reddit · Twitter · System), die Rundenachse bleibt oben.</li>
+        <li>Bericht: Belegrand klappt unter den Absatz, an dem er hängt.</li>
+        <li>Kein Hamburger — es gibt kein Menü, das sich verstecken ließe.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div style="margin-top:6px">
+    <div style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:12px">Abbildung auf den Bestand — Produktentscheidung links, Umsetzung rechts</div>
+    <div style="display:grid;grid-template-columns:210px 240px minmax(0,1fr);gap:16px;padding:0 2px 8px;font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.09em;text-transform:uppercase;color:#5c5449;border-bottom:1px solid rgba(255,246,235,0.12)"><span>Screen</span><span>Route bleibt</span><span>Was sich ändert</span></div>
+    <div style="display:grid;grid-template-columns:210px 240px minmax(0,1fr);gap:16px;padding:10px 2px;border-bottom:1px solid rgba(255,246,235,0.07);font-size:12.5px;color:#cfc7bc"><span style="color:#f2ece4">Ablage</span><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#a89f94">/dashboard</span><span>Kennzahlenreihe und Hero-Formular entfallen; Ablage liest <span style="font-family:'Geist Mono',monospace;font-size:11px">listRuns</span> chronologisch statt gefiltert nach Status.</span></div>
+    <div style="display:grid;grid-template-columns:210px 240px minmax(0,1fr);gap:16px;padding:10px 2px;border-bottom:1px solid rgba(255,246,235,0.07);font-size:12.5px;color:#cfc7bc"><span style="color:#f2ece4">Läufe</span><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#a89f94">/runs</span><span>Gleiche Datenquelle, neue Spalten aus <span style="font-family:'Geist Mono',monospace;font-size:11px">evidence_map</span>; Mehrfachauswahl führt in den bestehenden Vergleich.</span></div>
+    <div style="display:grid;grid-template-columns:210px 240px minmax(0,1fr);gap:16px;padding:10px 2px;border-bottom:1px solid rgba(255,246,235,0.07);font-size:12.5px;color:#cfc7bc"><span style="color:#f2ece4">Simulation live</span><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#a89f94">/v4/simulation/:id</span><span>Feed-Spalten und Puls-Leiste bleiben; neu sind Rundenachse, Themenspur und die Zusammenlegung von Systemwerten und Budget.</span></div>
+    <div style="display:grid;grid-template-columns:210px 240px minmax(0,1fr);gap:16px;padding:10px 2px;border-bottom:1px solid rgba(255,246,235,0.07);font-size:12.5px;color:#cfc7bc"><span style="color:#f2ece4">Akteure</span><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#a89f94">/v4/env-setup/:id</span><span>Kartenraster wird Prüftabelle; verworfene Kandidaten und Filtergrund werden sichtbar.</span></div>
+    <div style="display:grid;grid-template-columns:210px 240px minmax(0,1fr);gap:16px;padding:10px 2px;border-bottom:1px solid rgba(255,246,235,0.07);font-size:12.5px;color:#cfc7bc"><span style="color:#f2ece4">Quellenumfeld</span><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#a89f94">/v4/graph-build/:id</span><span>Canvas und Inspektor unverändert; Herkunft trennt <span style="font-family:'Geist Mono',monospace;font-size:11px">seed_corpus</span> von Relation ohne Anker.</span></div>
+    <div style="display:grid;grid-template-columns:210px 240px minmax(0,1fr);gap:16px;padding:10px 2px;border-bottom:1px solid rgba(255,246,235,0.07);font-size:12.5px;color:#cfc7bc"><span style="color:#f2ece4">Bericht</span><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#a89f94">/v4/report/:id</span><span>Card entfällt, Leseumgebung übernimmt; Belegrand rendert dieselbe normalisierte Evidenzsicht wie der Export.</span></div>
+    <div style="display:grid;grid-template-columns:210px 240px minmax(0,1fr);gap:16px;padding:10px 2px;border-bottom:1px solid rgba(255,246,235,0.07);font-size:12.5px;color:#cfc7bc"><span style="color:#f2ece4">Einstellungen</span><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#a89f94">/settings/*</span><span>Views bleiben, werden aber in einem Overlay über der aktuellen Route gemountet statt als Vollseite.</span></div>
+  </div>
+
+  <p style="margin:0;font-family:'Newsreader',serif;font-size:18px;line-height:1.55;color:#cfc7bc;max-width:80ch">Was der Entwurf nicht anfasst: Verträge, Routen, Polling, Stores. Die Hülle ändert sich, die Datenwege bleiben — Ablage und Läufe lesen dieselben Endpunkte wie heute.</p>
+</section>
+</div>
+</x-dc>
+</body>
+</html>

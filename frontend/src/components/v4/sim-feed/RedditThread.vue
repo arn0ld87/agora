@@ -39,7 +39,7 @@ const { t } = useI18n()
   margin-top: 4px;
   margin-left: 40px;
   font-size: 12px;
-  color: var(--accent-blue, #2563eb);
+  color: var(--status-teal);
   background: none;
   border: none;
   padding: 2px 4px;
@@ -47,6 +47,6 @@ const { t } = useI18n()
   text-decoration: underline;
 }
 .rt-show-more:hover {
-  color: var(--accent-blue-dark, #1d4ed8);
+  color: var(--status-teal);
 }
 </style>

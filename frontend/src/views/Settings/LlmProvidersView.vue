@@ -357,7 +357,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  background: var(--surface-muted, rgba(0, 0, 0, 0.03));
+  background: var(--surface-inset);
   padding: 8px 10px;
   border-radius: var(--r-4, 8px);
 }
@@ -382,7 +382,10 @@ onBeforeUnmount(() => {
 }
 .llm-btn {
   border: 1px solid var(--hairline);
-  background: var(--surface-elevated, #fff);
+  background: var(--surface-elevated);
+  /* Ohne explizite Farbe faellt der Button auf die UA-buttonText-Farbe
+     (schwarz im Light-Scheme) zurueck — auf dunklem Grund unlesbar. */
+  color: var(--text-primary);
   padding: 6px 12px;
   border-radius: var(--r-4, 8px);
   font-size: 13px;
@@ -393,22 +396,22 @@ onBeforeUnmount(() => {
   cursor: not-allowed;
 }
 .llm-btn--primary {
-  background: var(--accent, #0a84ff);
-  color: #fff;
-  border-color: var(--accent, #0a84ff);
+  background: var(--accent);
+  color: var(--text-on-accent);
+  border-color: var(--accent);
 }
 .llm-btn--danger {
-  color: var(--danger, #d33);
-  border-color: var(--danger, #d33);
+  color: var(--status-red);
+  border-color: var(--status-red);
 }
 .llm-test-result {
   font-size: 13px;
   padding: 6px 10px;
   border-radius: var(--r-4, 8px);
-  background: var(--surface-muted, rgba(0, 0, 0, 0.04));
+  background: var(--surface-hover);
 }
-.llm-test-result--ok { color: var(--success, #176f3a); }
-.llm-test-result--fail { color: var(--danger, #d33); }
+.llm-test-result--ok { color: var(--status-green); }
+.llm-test-result--fail { color: var(--status-red); }
 .llm-model-list ul {
   margin: 4px 0 0;
   padding-left: 18px;

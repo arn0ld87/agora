@@ -234,7 +234,7 @@ defineSlots<{
 
 .al-root--info {
   background: var(--accent-tint-bg);
-  border-color: rgba(0, 102, 204, 0.2);
+  border-color: color-mix(in srgb, var(--accent) 20%, transparent);
 }
 .al-root--info .al-icon {
   color: var(--accent);
@@ -245,7 +245,7 @@ defineSlots<{
 
 .al-root--success {
   background: var(--status-green-bg);
-  border-color: rgba(36, 138, 61, 0.2);
+  border-color: color-mix(in srgb, var(--status-green) 20%, transparent);
 }
 .al-root--success .al-icon {
   color: var(--status-green);
@@ -256,7 +256,7 @@ defineSlots<{
 
 .al-root--warning {
   background: var(--status-orange-bg);
-  border-color: rgba(178, 80, 0, 0.2);
+  border-color: color-mix(in srgb, var(--status-orange) 20%, transparent);
 }
 .al-root--warning .al-icon {
   color: var(--status-orange);
@@ -267,7 +267,7 @@ defineSlots<{
 
 .al-root--danger {
   background: var(--status-red-bg);
-  border-color: rgba(197, 41, 42, 0.2);
+  border-color: color-mix(in srgb, var(--status-red) 20%, transparent);
 }
 .al-root--danger .al-icon {
   color: var(--status-red);

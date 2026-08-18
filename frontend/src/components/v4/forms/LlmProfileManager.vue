@@ -567,7 +567,7 @@ onMounted(() => {
   padding: 12px 14px;
   border: 1px solid var(--hairline);
   border-radius: var(--r-4, 8px);
-  background: var(--surface-elevated, #fff);
+  background: var(--surface-elevated);
 }
 
 .pm-item--editing {
@@ -596,7 +596,7 @@ onMounted(() => {
   border-radius: var(--r-5, 10px);
   border: 1px solid var(--hairline);
   color: var(--text-secondary);
-  background: var(--surface-elevated, #fff);
+  background: var(--surface-elevated);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -613,7 +613,7 @@ onMounted(() => {
   font-weight: 600;
   padding: 2px 8px;
   border-radius: var(--r-5, 10px);
-  background: var(--accent-subtle, #f0f5ff);
+  background: var(--accent-tint-bg);
   color: var(--accent);
   border: 1px solid var(--accent);
 }
@@ -633,8 +633,8 @@ onMounted(() => {
   border-radius: var(--r-4, 8px);
   color: var(--text-secondary);
   /* Override: eigener BG-Token für Rest-State */
-  --v4-state-rest-bg: var(--surface-elevated, #fff);
-  --v4-state-hover-bg: var(--surface-elevated, #fff);
+  --v4-state-rest-bg: var(--surface-elevated);
+  --v4-state-hover-bg: var(--surface-elevated);
 }
 /* Hover-Farbe: text-primary statt default */
 .pm-action-btn:hover:not(:disabled):not([data-disabled]) { color: var(--text-primary); }
@@ -642,8 +642,8 @@ onMounted(() => {
 .pm-action-btn:disabled { opacity: 0.4; }
 /* Danger-Variante: Danger-Farbe override */
 .pm-action-btn--danger:hover:not(:disabled):not([data-disabled]) {
-  border-color: var(--status-red, #c0392b);
-  color: var(--status-red, #c0392b);
+  border-color: var(--status-red);
+  color: var(--status-red);
 }
 
 /* Inline-Form */
@@ -651,7 +651,7 @@ onMounted(() => {
   border: 1px solid var(--hairline);
   border-radius: var(--r-4, 8px);
   padding: 16px;
-  background: var(--surface-elevated, #fff);
+  background: var(--surface-elevated);
   margin-bottom: 16px;
 }
 
@@ -695,9 +695,9 @@ onMounted(() => {
 .pm-error {
   font-family: var(--font-sans);
   font-size: 13px;
-  color: var(--status-red, #c0392b);
+  color: var(--status-red);
   padding: 8px 12px;
-  border: 1px solid var(--status-red, #c0392b);
+  border: 1px solid var(--status-red);
   border-radius: var(--r-4, 8px);
   margin-bottom: 12px;
 }
@@ -718,14 +718,14 @@ onMounted(() => {
   border-radius: var(--r-5, 10px);
   /* v4-state-interactive liefert border/background/transition/hover/focus-ring/cursor */
   color: var(--text-secondary);
-  --v4-state-rest-bg: var(--surface-elevated, #fff);
-  --v4-state-hover-bg: var(--surface-elevated, #fff);
+  --v4-state-rest-bg: var(--surface-elevated);
+  --v4-state-hover-bg: var(--surface-elevated);
 }
 .llm-preset:hover:not(.llm-preset--active) { color: var(--text-primary); }
 .llm-preset--active {
   border-color: var(--accent);
   color: var(--accent);
-  background: var(--accent-subtle, #f0f5ff);
+  background: var(--accent-tint-bg);
 }
 
 .llm-fields { display: flex; flex-direction: column; gap: 16px; }
@@ -744,7 +744,7 @@ onMounted(() => {
   padding: 9px 12px;
   border: 1px solid var(--hairline);
   border-radius: var(--r-4, 8px);
-  background: var(--surface-elevated, #fff);
+  background: var(--surface-elevated);
   color: var(--text-primary);
 }
 .llm-input--mono { font-family: var(--font-mono); }

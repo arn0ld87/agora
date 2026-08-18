@@ -253,7 +253,8 @@
     },
     "next": "Weiter zur Umgebung →",
     "breadcrumbRuns": "Runs",
-    "breadcrumbTitle": "Graph Build"
+    "breadcrumbTitle": "Graph Build",
+    "graphIncomplete": "Build abgebrochen — der Graph ist unvollständig. Ansehen und löschen ist möglich, als Grundlage für die nächsten Schritte taugt er nicht."
   },
   "step2": {
     "kicker": "№ 02 — UMGEBUNG",

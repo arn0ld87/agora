@@ -698,7 +698,7 @@ function errorMessage(err: unknown): string {
   margin-bottom: 0.5rem;
 }
 .config-meta {
-  color: var(--text-muted, #6b7280);
+  color: var(--text-secondary);
   font-size: 0.875rem;
 }
 .config-actions {
@@ -710,7 +710,7 @@ function errorMessage(err: unknown): string {
 .migration-section {
   margin-top: 1rem;
   padding-top: 1rem;
-  border-top: 1px solid var(--border-default, #e5e7eb);
+  border-top: 1px solid var(--hairline);
 }
 .migration-row {
   display: flex;
@@ -721,19 +721,19 @@ function errorMessage(err: unknown): string {
 .job-id {
   font-family: monospace;
   font-size: 0.875rem;
-  color: var(--text-muted, #6b7280);
+  color: var(--text-secondary);
 }
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--surface-backdrop);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 50;
 }
 .modal {
-  background: var(--bg-elevated, #fff);
+  background: var(--surface-elevated);
   border-radius: 0.5rem;
   padding: 1.5rem;
   width: min(32rem, 90vw);
@@ -748,9 +748,9 @@ function errorMessage(err: unknown): string {
   margin-top: 0.5rem;
 }
 .text-warn {
-  color: var(--status-orange, #b25000);
+  color: var(--status-orange);
 }
 .text-muted {
-  color: var(--text-muted, #6b7280);
+  color: var(--text-secondary);
 }
 </style>

@@ -94,7 +94,7 @@
 
   /* Focus-Kontrast: mindestens 2px sichtbarer Indikator */
   --v4-state-focus-ring-strong-width: 2px;
-  --v4-state-focus-ring-strong: var(--focus-ring-strong, rgba(0, 102, 204, 0.6));
+  --v4-state-focus-ring-strong: var(--focus-ring-strong, rgba(208, 138, 82, 0.6));
 }
 
 @media (prefers-reduced-motion: reduce) {

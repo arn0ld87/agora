@@ -93,6 +93,7 @@ const {
   error,
   currentRunId,
   degradations,
+  graphIncomplete,
   initialize,
   refreshGraph,
 } = useGraphBuildPipeline({
@@ -111,7 +112,10 @@ const isGraphMaximized = ref(false)
 // Issue #1029: Ein Graph unterhalb der Qualitätsschwelle hat den Build
 // zwar überstanden, taugt aber nicht als Grundlage für die folgenden
 // Schritte. „Bereit" bleibt deshalb aus, und der Weiter-Knopf ebenso.
-const qualityBlocked = computed(() => hasBlockingDegradation(degradations.value))
+// PR #1371: graphIncomplete blockiert genau wie ein Qualitaetsbefund —
+// ein per Abbruch behaltener Teilgraph ist ansehbar, aber keine Grundlage
+// fuer die folgenden Schritte.
+const qualityBlocked = computed(() => hasBlockingDegradation(degradations.value) || graphIncomplete.value)
 
 const crumbs = computed<BreadcrumbItem[]>(() => [
   { label: t('step1.breadcrumbRuns'), path: '/runs' },
@@ -145,7 +149,7 @@ watch(
   position: relative;
   width: 100%;
   height: clamp(360px, 55vh, 640px);
-  border: 1px solid var(--hairline, var(--mono-700));
+  border: 1px solid var(--hairline);
   border-radius: 8px;
   overflow: hidden;
 }

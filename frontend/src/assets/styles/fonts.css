@@ -1,19 +1,23 @@
 /* ============================================================
-   Agora — Local @font-face declarations
-   Alle produktiven Schriften werden lokal geladen; es gibt keinen
-   externen Font-Request mehr.
-   v3 (Apple Enterprise · Light) nutzt Geist Sans/Mono lokal —
-   die woff2 liegen in assets/fonts/ und sind hier registriert.
-   ============================================================ */
+   Agora — @font-face declarations
 
-@font-face {
-  font-family: "Geist Sans";
-  src: url("../fonts/GeistSans-Variable.woff2") format("woff2-variations"),
-       url("../fonts/GeistSans-Variable.woff2") format("woff2");
-  font-weight: 100 900;
-  font-style: normal;
-  font-display: swap;
-}
+   Alle Schriften sind self-hosted, es gibt keinen externen
+   Font-Request. Agora laeuft ueber Tailscale — ein Aufruf an
+   fonts.googleapis.com waere dort sowohl ein Datenschutz- als auch
+   ein Verfuegbarkeitsproblem.
+
+   Block B1 (18.08.2026) hat den Google-Fonts-CDN aus Slice D0 wieder
+   entfernt und durch npm-Pakete ersetzt:
+     - Archivo     (UI)                    @fontsource-variable/archivo
+     - Newsreader  (Berichts-Fliesstext)   @fontsource-variable/newsreader
+   Beide werden in src/main.ts importiert, nicht hier. Sie heissen im
+   CSS "Archivo Variable" bzw. "Newsreader Variable" — siehe
+   --font-sans / --font-serif in tokens-v3.css.
+
+   Hier verbleibt nur Geist Mono (IDs, Zahlen, Logausgaben), das als
+   woff2 direkt im Repo liegt. Geist Sans ist mit dem Wechsel auf
+   Archivo entfallen.
+   ============================================================ */
 
 @font-face {
   font-family: "Geist Mono";

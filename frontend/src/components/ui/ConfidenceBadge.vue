@@ -110,9 +110,9 @@ const ariaLabel = computed(() => `Konfidenz: ${BUCKET_LABELS[bucket.value] ?? bu
 }
 
 .is-verified {
-  background: color-mix(in oklch, #1d6fa4 12%, transparent);
-  color: #1d6fa4;
-  border-color: color-mix(in oklch, #1d6fa4 40%, transparent);
+  background: color-mix(in oklch, var(--status-teal) 12%, transparent);
+  color: var(--status-teal);
+  border-color: color-mix(in oklch, var(--status-teal) 40%, transparent);
 }
 
 .is-high {
@@ -134,9 +134,9 @@ const ariaLabel = computed(() => `Konfidenz: ${BUCKET_LABELS[bucket.value] ?? bu
 }
 
 .is-speculative {
-  background: color-mix(in oklch, #7c6f9e 10%, transparent);
-  color: #7c6f9e;
-  border-color: color-mix(in oklch, #7c6f9e 35%, transparent);
+  background: color-mix(in oklch, var(--status-purple) 10%, transparent);
+  color: var(--status-purple);
+  border-color: color-mix(in oklch, var(--status-purple) 35%, transparent);
 }
 
 .audit-popover {
@@ -146,11 +146,11 @@ const ariaLabel = computed(() => `Konfidenz: ${BUCKET_LABELS[bucket.value] ?? bu
   z-index: 100;
   min-width: 240px;
   max-width: 340px;
-  background: var(--bg-elevated, #fff);
+  background: var(--bg-elevated);
   border: 1px solid var(--rule);
   border-radius: var(--r-1, 4px);
   padding: var(--s-3, 8px);
-  box-shadow: 0 4px 16px color-mix(in srgb, var(--fg, #000) 12%, transparent);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--fg) 12%, transparent);
 }
 
 .audit-popover-head {

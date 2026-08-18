@@ -188,17 +188,17 @@ async function selectRoute(aiRef: AiModelRef | null): Promise<void> {
   padding: 4px 10px;
   border-radius: 999px;
   border: 1px solid var(--hairline);
-  background: var(--surface-elevated, #fff);
+  background: var(--surface-elevated);
   font-size: 12px;
   cursor: pointer;
   font-family: var(--font-sans);
 }
 .step-model-chip:hover:not(:disabled) {
-  border-color: var(--accent, #0a84ff);
+  border-color: var(--accent);
 }
 .step-model-chip--override {
-  border-color: var(--accent, #0a84ff);
-  background: rgba(10, 132, 255, 0.06);
+  border-color: var(--accent);
+  background: var(--accent-tint-bg);
 }
 .step-model-chip--locked {
   opacity: 0.7;
@@ -222,7 +222,7 @@ async function selectRoute(aiRef: AiModelRef | null): Promise<void> {
 }
 .step-model-chip__badge {
   font-size: 10px;
-  color: var(--accent, #0a84ff);
+  color: var(--accent);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -233,10 +233,10 @@ async function selectRoute(aiRef: AiModelRef | null): Promise<void> {
   right: 0;
   min-width: 280px;
   padding: 12px;
-  background: var(--surface-elevated, #fff);
+  background: var(--surface-elevated);
   border: 1px solid var(--hairline);
   border-radius: var(--r-4, 8px);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-popover);
   display: flex;
   flex-direction: column;
   gap: 10px;

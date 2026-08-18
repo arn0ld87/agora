@@ -404,7 +404,7 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel, loadi
   padding-inline: 8px;
   border: 1px solid var(--hairline);
   border-radius: var(--r-5, 10px);
-  background: var(--surface-elevated, #fff);
+  background: var(--surface-elevated);
   box-shadow: var(--shadow-control);
   transition:
     border-color var(--v4-state-motion-duration-fast) var(--v4-state-motion-ease),
@@ -467,7 +467,7 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel, loadi
   inline-size: var(--reka-combobox-trigger-width, min(360px, calc(100vw - 16px)));
   min-inline-size: min(300px, calc(100vw - 16px));
   max-inline-size: calc(100vw - 16px);
-  background: var(--surface-elevated, #fff);
+  background: var(--surface-elevated);
   border: 1px solid var(--hairline);
   border-radius: var(--r-6, 12px);
   box-shadow: var(--shadow-popover, var(--shadow-3));

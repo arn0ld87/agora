@@ -47,7 +47,7 @@ defineProps<{
 }
 
 .stats-cell {
-  background: var(--surface-elevated, #fff);
+  background: var(--surface-elevated);
   padding: 18px 20px;
   display: flex;
   flex-direction: column;

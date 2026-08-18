@@ -645,7 +645,7 @@ onMounted(() => {
   border: 1px dashed var(--hairline-strong);
   border-radius: var(--r-5, 10px);
   padding: 22px;
-  background: var(--surface-inset, #f2f2f7);
+  background: var(--surface-inset);
   color: var(--text-secondary);
   cursor: pointer;
   transition: background 80ms ease, border-color 80ms ease;
@@ -767,7 +767,7 @@ onMounted(() => {
   padding: 9px 12px;
   border: 1px solid var(--hairline);
   border-radius: var(--r-4, 8px);
-  background: var(--surface-elevated, #fff);
+  background: var(--surface-elevated);
   color: var(--text-primary);
   appearance: none;
   background-image: linear-gradient(45deg, transparent 50%, var(--text-tertiary) 50%),
@@ -822,7 +822,7 @@ onMounted(() => {
 }
 
 .hero-cta:disabled {
-  background: var(--gray-4, #d1d1d6);
+  background: var(--gray-4);
   color: var(--text-quaternary);
   cursor: not-allowed;
 }
@@ -866,7 +866,7 @@ onMounted(() => {
 .hero-budget {
   border: 1px solid var(--hairline);
   border-radius: var(--r-4, 8px);
-  background: var(--surface-inset, #f2f2f7);
+  background: var(--surface-inset);
   padding: 10px 12px;
 }
 
@@ -933,10 +933,10 @@ onMounted(() => {
   display: inline-block;
   margin-left: 8px;
   padding: 1px 6px;
-  border: 1px solid #f97316;
+  border: 1px solid var(--status-orange);
   border-radius: 999px;
-  background: #fff7ed;
-  color: #c2410c;
+  background: var(--status-orange-bg);
+  color: var(--status-orange);
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 600;
@@ -951,10 +951,10 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
-  border: 1px solid #f97316;
+  border: 1px solid var(--status-orange);
   border-radius: var(--r-4, 8px);
-  background: #fff7ed;
-  color: #c2410c;
+  background: var(--status-orange-bg);
+  color: var(--status-orange);
   font-family: var(--font-sans);
   font-size: 12px;
   font-weight: 500;
@@ -967,7 +967,7 @@ onMounted(() => {
 }
 
 .hero-required {
-  color: var(--status-red, #c0392b);
+  color: var(--status-red);
   margin-left: 2px;
 }
 .hero-textarea {
@@ -976,7 +976,7 @@ onMounted(() => {
   padding: 9px 12px;
   border: 1px solid var(--hairline);
   border-radius: var(--r-4, 8px);
-  background: var(--surface-elevated, #fff);
+  background: var(--surface-elevated);
   color: var(--text-primary);
   resize: vertical;
   min-height: 72px;

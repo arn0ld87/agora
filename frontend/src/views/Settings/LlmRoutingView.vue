@@ -150,7 +150,7 @@ onMounted(() => {
 
 .llmr-error {
   margin: 12px 0 0;
-  color: var(--danger, #d92d20);
+  color: var(--status-red);
   font-family: var(--font-sans);
   font-size: 13px;
 }
@@ -176,13 +176,13 @@ onMounted(() => {
 }
 
 .llmr-btn--secondary {
-  background: var(--surface-elevated, #fff);
+  background: var(--surface-elevated);
   color: var(--text-primary);
   border-color: var(--hairline);
 }
 
 .llmr-btn--secondary:hover:not(:disabled) {
-  background: var(--surface-inset, #f2f2f7);
+  background: var(--surface-inset);
 }
 
 @media (max-width: 820px) {

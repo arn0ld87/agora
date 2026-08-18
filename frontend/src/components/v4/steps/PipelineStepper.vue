@@ -78,16 +78,16 @@ const emit = defineEmits<{
   min-width: 16px;
   max-width: 48px;
   height: 2px;
-  background: var(--hairline, #e5e5ea);
+  background: var(--hairline);
   transition: background 0.2s;
 }
 
 .pipeline-stepper__connector--done {
-  background: var(--accent, #0071e3);
+  background: var(--accent);
 }
 
 .pipeline-stepper__connector--active {
-  background: linear-gradient(to right, var(--accent, #0071e3) 50%, var(--hairline, #e5e5ea) 50%);
+  background: linear-gradient(to right, var(--accent) 50%, var(--hairline) 50%);
 }
 
 /* Schritt-Button */
@@ -111,7 +111,7 @@ const emit = defineEmits<{
 }
 
 .pipeline-stepper__step--done:hover {
-  background: var(--surface-hover, rgba(0, 0, 0, 0.04));
+  background: var(--surface-hover);
 }
 
 /* Schritt-Icon-Kreis */
@@ -131,20 +131,20 @@ const emit = defineEmits<{
 
 .pipeline-stepper__step--future .pipeline-stepper__icon {
   background: transparent;
-  border: 1.5px solid var(--text-quaternary, #c7c7cc);
-  color: var(--text-quaternary, #c7c7cc);
+  border: 1.5px solid var(--text-quaternary);
+  color: var(--text-quaternary);
 }
 
 .pipeline-stepper__step--active .pipeline-stepper__icon {
-  background: var(--accent, #0071e3);
+  background: var(--accent);
   border: none;
-  color: #fff;
+  color: var(--text-on-accent);
 }
 
 .pipeline-stepper__step--done .pipeline-stepper__icon {
-  background: var(--accent, #0071e3);
+  background: var(--accent);
   border: none;
-  color: #fff;
+  color: var(--text-on-accent);
 }
 
 /* Label */
@@ -156,15 +156,15 @@ const emit = defineEmits<{
 }
 
 .pipeline-stepper__step--future .pipeline-stepper__label {
-  color: var(--text-tertiary, #8e8e93);
+  color: var(--text-tertiary);
 }
 
 .pipeline-stepper__step--active .pipeline-stepper__label {
-  color: var(--text-primary, #1d1d1f);
+  color: var(--text-primary);
   font-weight: 600;
 }
 
 .pipeline-stepper__step--done .pipeline-stepper__label {
-  color: var(--text-secondary, #3c3c43);
+  color: var(--text-secondary);
 }
 </style>

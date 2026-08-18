@@ -261,7 +261,7 @@ const stateLabel = (state: HealthRow['state']) => {
 .sh-disk__bar {
   height: 4px;
   border-radius: var(--r-pill, 999px);
-  background: var(--gray-5, #e5e5ea);
+  background: var(--gray-5);
   overflow: hidden;
   display: block;
 }

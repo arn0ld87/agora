@@ -104,11 +104,11 @@ const emit = defineEmits(['update:useAgentCap', 'update:maxAgents'])
   margin: 0;
 }
 .hint--warn {
-  color: var(--warn, #c89020);
+  color: var(--warn);
 }
 .meta {
-  color: var(--text-secondary, var(--fg-muted));
-  font-family: var(--font-sans, var(--ff-sans));
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
   letter-spacing: 0;
   text-transform: none;
 }

@@ -136,7 +136,7 @@ const emit = defineEmits(['set-density', 'toggle-tool-panel'])
 .feed-grid[data-density="comfort"] {
   --feed-post-padding: var(--s-3);
   --feed-post-gap: var(--s-2);
-  --feed-post-fs: var(--fs-13, 13px);
+  --feed-post-fs: var(--fs-13);
   --feed-post-lh: 1.6;
 }
 .feed-grid[data-density="compact"] {
@@ -159,7 +159,7 @@ const emit = defineEmits(['set-density', 'toggle-tool-panel'])
   background: transparent;
   border: 0;
   padding: 4px 10px;
-  font-family: var(--font-sans, var(--ff-mono));
+  font-family: var(--font-sans);
   font-size: 11px;
   letter-spacing: var(--ls-mono);
   text-transform: uppercase;
@@ -175,19 +175,19 @@ const emit = defineEmits(['set-density', 'toggle-tool-panel'])
   align-items: center;
   gap: var(--s-2);
   background: transparent;
-  border: 1px solid var(--hairline, var(--rule));
-  border-radius: var(--r-5, var(--r-1));
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-5);
   padding: 4px 10px;
-  font-family: var(--font-sans, var(--ff-sans));
+  font-family: var(--font-sans);
   font-size: 11px;
   color: var(--fg-muted);
   cursor: pointer;
   transition: border-color 120ms ease, color 120ms ease;
-  background: var(--surface-elevated, transparent);
-  box-shadow: var(--shadow-control, none);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-control);
 }
 .tool-panel-toggle:hover {
-  background: var(--surface-hover, transparent);
+  background: var(--surface-hover);
   color: var(--accent);
   border-color: var(--accent);
 }
@@ -200,8 +200,8 @@ const emit = defineEmits(['set-density', 'toggle-tool-panel'])
   height: 18px;
   padding: 0 6px;
   border-radius: 9px;
-  background: var(--status-red, var(--status-error, #c53030));
-  color: var(--text-on-accent, var(--bg));
+  background: var(--status-red);
+  color: var(--text-on-accent);
   font-size: 10px;
   font-weight: 700;
 }

@@ -157,7 +157,7 @@ function handleDownloadEvidence() {
   margin: 0 auto;
   font-family: var(--ff-sans);
   color: var(--fg);
-  font-size: var(--fs-18, 17px);
+  font-size: var(--fs-18);
   line-height: 1.75;
   padding: var(--s-4) 0;
 }

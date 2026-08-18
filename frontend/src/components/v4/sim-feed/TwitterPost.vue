@@ -29,11 +29,11 @@ defineProps<{ post: PostCreatedEvent }>()
   display: flex;
   gap: 10px;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--hairline, #e5e7eb);
+  border-bottom: 1px solid var(--hairline);
   transition: background 150ms;
 }
 .tw-root:hover {
-  background: var(--surface-hover, #f9fafb);
+  background: var(--surface-hover);
 }
 .tw-body {
   flex: 1;
@@ -49,11 +49,11 @@ defineProps<{ post: PostCreatedEvent }>()
 .tw-handle {
   font-weight: 600;
   font-size: 13px;
-  color: var(--text-primary, #111827);
+  color: var(--text-primary);
 }
 .tw-time {
   font-size: 11px;
-  color: var(--text-secondary, #6b7280);
+  color: var(--text-secondary);
   margin-left: auto;
 }
 .tw-content {
@@ -62,6 +62,6 @@ defineProps<{ post: PostCreatedEvent }>()
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
-  color: var(--text-primary, #111827);
+  color: var(--text-primary);
 }
 </style>

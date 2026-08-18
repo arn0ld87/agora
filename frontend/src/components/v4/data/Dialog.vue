@@ -199,7 +199,7 @@ onBeforeUnmount(() => {
 .dlg-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--surface-backdrop);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -208,9 +208,9 @@ onBeforeUnmount(() => {
 }
 
 .dlg-panel {
-  background: var(--surface-elevated, #fff);
+  background: var(--surface-elevated);
   border-radius: var(--r-4, 10px);
-  box-shadow: var(--shadow-3, 0 24px 60px rgba(0, 0, 0, 0.2));
+  box-shadow: var(--shadow-3);
   width: 100%;
   max-width: 520px;
   max-height: calc(100vh - 32px);

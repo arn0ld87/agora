@@ -66,8 +66,11 @@ describe('main.ts Bootstrap', () => {
     await import('../main')
   })
 
-  it('setzt data-theme="light" auf <html>', () => {
-    expect(document.documentElement.getAttribute('data-theme')).toBe('light')
+  // Block B1 (18.08.2026): Agora ist dark-first. Der Wert wird zweimal
+  // gesetzt — einmal inline in index.html vor dem ersten Paint, damit der
+  // Grund nicht hell aufblitzt, und einmal hier. Beide muessen "dark" sagen.
+  it('setzt data-theme="dark" auf <html>', () => {
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
   })
 
   it('setzt data-ui-version auf <html> (nicht null)', () => {

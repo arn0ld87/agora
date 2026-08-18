@@ -67,8 +67,8 @@ onMounted(async () => {
 <style scoped>
 .compare-view-error {
   padding: 16px;
-  color: var(--text-danger, #c0392b);
-  background: var(--surface-error, #fdf2f2);
+  color: var(--status-red);
+  background: var(--status-red-bg);
   border-radius: 8px;
 }
 

@@ -181,22 +181,22 @@ function templateBio(template: Template): string {
 .persona-handle,
 .kicker-mono,
 .meta {
-  font-family: var(--font-sans, var(--ff-sans));
+  font-family: var(--font-sans);
   letter-spacing: 0;
   text-transform: none;
 }
 .persona-more-btn {
   border-style: solid;
-  border-color: var(--hairline, var(--rule-strong));
-  border-radius: var(--r-5, var(--r-1));
-  background: var(--surface-elevated, transparent);
+  border-color: var(--hairline);
+  border-radius: var(--r-5);
+  background: var(--surface-elevated);
 }
 .persona-more-btn:hover,
 .persona-template-actions button:hover {
-  background: var(--surface-hover, transparent);
+  background: var(--surface-hover);
 }
 .persona-handle,
 .meta {
-  color: var(--text-secondary, var(--fg-muted));
+  color: var(--text-secondary);
 }
 </style>

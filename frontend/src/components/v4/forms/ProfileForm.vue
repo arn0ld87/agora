@@ -288,7 +288,7 @@ defineExpose({ canSave, handleSubmit })
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--surface-inset, #f2f2f7);
+  background: var(--surface-inset);
   border: 1px solid var(--hairline);
   flex-shrink: 0;
 }
@@ -339,7 +339,7 @@ defineExpose({ canSave, handleSubmit })
 .profile-form__error {
   font-family: var(--font-sans);
   font-size: 12.5px;
-  color: var(--status-red, #c0392b);
+  color: var(--status-red);
 }
 
 .profile-form__footer {

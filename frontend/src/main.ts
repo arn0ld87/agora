@@ -7,6 +7,13 @@ import { registerI18n } from './i18n/translate'
 import { initFrontendTracing } from './observability/tracing'
 import { useDensity } from './composables/useDensity'
 
+// Self-hosted Webfonts (Block B1): Archivo traegt die Oberflaeche,
+// Newsreader den Berichts-Fliesstext inkl. kursiver Zitate.
+// Geist Mono bleibt lokal in fonts.css registriert.
+import '@fontsource-variable/archivo/wght.css'
+import '@fontsource-variable/newsreader/wght.css'
+import '@fontsource-variable/newsreader/wght-italic.css'
+
 import './assets/styles/fonts.css'
 import './assets/styles/tokens-v3.css'
 import './assets/styles/global.css'
@@ -15,7 +22,7 @@ import './assets/styles/states.css'
 // Observability: initialise before Vue so the first fetch spans are captured.
 initFrontendTracing()
 
-document.documentElement.setAttribute('data-theme', 'light')
+document.documentElement.setAttribute('data-theme', 'dark')
 
 // Density: data-density auf <html> setzen bevor Vue mountet → kein FOUC.
 // Slice FE-Redesign-6 · 2026-05-15

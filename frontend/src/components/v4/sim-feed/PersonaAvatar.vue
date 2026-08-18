@@ -15,10 +15,10 @@ const initials = computed(() =>
 )
 
 const registerColor: Record<VoiceRegister, string> = {
-  'formal-de': 'var(--accent-blue, #2563eb)',
-  'neutral-de': 'var(--accent-green, #10b981)',
-  'technical-de': 'var(--accent-amber, #d97706)',
-  'skeptisch-de': 'var(--accent-purple, #a855f7)',
+  'formal-de': 'var(--status-teal)',
+  'neutral-de': 'var(--status-green)',
+  'technical-de': 'var(--status-orange)',
+  'skeptisch-de': 'var(--status-purple)',
 }
 </script>
 
@@ -42,14 +42,14 @@ const registerColor: Record<VoiceRegister, string> = {
   width: 100%;
   height: 100%;
   border-radius: 50%;
-  background: var(--surface-muted, #f3f4f6);
+  background: var(--surface-inset);
   border: 2px solid var(--ring);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 11px;
   font-weight: 600;
-  color: var(--text-primary, #111827);
+  color: var(--text-primary);
   user-select: none;
 }
 .pa-register {

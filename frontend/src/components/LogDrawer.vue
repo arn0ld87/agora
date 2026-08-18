@@ -222,7 +222,7 @@ onUnmounted(stopStream)
   position: fixed;
   bottom: 0; left: 0; right: 0;
   height: min(50vh, 480px);
-  background: var(--bg-elevated, #111);
+  background: var(--bg-elevated);
   border-top: 1px solid var(--rule);
   z-index: 90;
   display: flex;
@@ -279,7 +279,7 @@ onUnmounted(stopStream)
   cursor: pointer;
 }
 .close-btn:hover { color: var(--fg); border-color: var(--accent); }
-.reconnect-btn { width: auto; padding: 0 10px; color: var(--status-error, #f56565); border-color: var(--status-error, #f56565); }
+.reconnect-btn { width: auto; padding: 0 10px; color: var(--status-error); border-color: var(--status-error); }
 .reconnect-btn:hover { color: var(--fg); border-color: var(--accent); }
 
 .drawer-body-wrap {
@@ -299,6 +299,6 @@ onUnmounted(stopStream)
   word-wrap: break-word;
 }
 .log-line { padding: 1px 0; }
-.log-line.is-error { color: var(--status-error, #f56565); }
+.log-line.is-error { color: var(--status-error); }
 .meta { color: var(--fg-muted); }
 </style>

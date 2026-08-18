@@ -279,9 +279,9 @@ const intervalSeconds = computed(() => Math.round(props.pollIntervalMs / 1000))
 .pill:hover { background: var(--bg-elevated, #f5f5f5); }
 .pill:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: 2px; }
 .pill--active {
-  background: var(--accent, #2563eb);
-  border-color: var(--accent, #2563eb);
-  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-on-accent);
 }
 
 /* Search */
