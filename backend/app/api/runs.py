@@ -458,6 +458,9 @@ def cancel_run(run_id: str):
     das Flag im Elternprozess und beendet den OASIS-Subprozess (SIGTERM,
     Grace-Period, dann SIGKILL); der Run endet als ``stopped`` mit
     ``termination_reason="user_cancel"``, Teilergebnisse bleiben erhalten.
+    Für ``simulation_prepare`` und ``graph_build`` prüfen die jeweiligen
+    Orchestratoren (``prepare_service.py``, ``graph_build.py``) das Flag an
+    mehreren Phasengrenzen (Issue B2).
 
     ``run_id`` akzeptiert auch eine ``simulation_id`` — Schritt 3 im Frontend
     kennt nur diese. Die Auflösung läuft über ``linked_ids.simulation_id``,
@@ -470,6 +473,9 @@ def cancel_run(run_id: str):
     Fehler:
     - 404 wenn run_id/simulation_id unbekannt
     - 400 wenn Run nicht im Status ``processing`` ist
+    - 409 wenn ``run_type == "simulation_run"`` und die Verknüpfung zur
+      simulation_id fehlt (einzige Stelle, an der sie fachlich gebraucht
+      wird — andere run_types brauchen nur die run_id)
     """
     run, error = _get_run_by_run_or_simulation_id(run_id)
     if error:
@@ -509,8 +515,23 @@ def cancel_run(run_id: str):
 
     # linked_ids kann ``None`` sein (nicht nur fehlend) — ``or {}`` schützt
     # vor AttributeError, wenn der Key explizit None ist (Gemini-Finding).
+    #
+    # Review-Finding (PR #1371, Befund 1): die simulation_id-Pflicht galt
+    # bisher fuer JEDEN run_type, obwohl nur der OASIS-Subprozesspfad
+    # (``sim/monitor.py::_cancel_supervision``, konsumiert im Monitor-Thread
+    # des Elternprozesses ueber dessen eigenen Simulationskontext — nicht ueber
+    # dieses Feld) sie braucht. ``graph_build``-Runs verknuepfen nie eine
+    # simulation_id (``services/graph_build.py`` setzt nur project_id/graph_id/
+    # task_id) und ``simulation_prepare``-Runs verknuepfen sie zwar, aber
+    # ebenfalls nicht als Voraussetzung fuers Flag-Setzen: ``_request_cancel``
+    # ist ausschliesslich an ``resolved_run_id`` gebunden. Vor diesem Fix
+    # scheiterte jeder Cancel-Versuch auf einen graph_build-Run mit 409, BEVOR
+    # ``_request_cancel`` ueberhaupt lief — der komplette kooperative
+    # Abbruchpfad in ``services/graph_build.py``/``graph_builder.py`` war
+    # ueber die API unerreichbar. Die Pruefung bleibt nur noch dort hart, wo
+    # sie fachlich etwas bedeutet: simulation_run.
     simulation_id = (run.get("linked_ids") or {}).get("simulation_id")
-    if not simulation_id:
+    if run.get("run_type") == "simulation_run" and not simulation_id:
         return json_error("Run is missing simulation_id linkage", status=409)
 
     _request_cancel(resolved_run_id)
@@ -522,8 +543,9 @@ def cancel_run(run_id: str):
     )
 
     logger.info(
-        "cancel_run: cancel flag set for run_id=%s simulation_id=%s",
+        "cancel_run: cancel flag set for run_id=%s run_type=%s simulation_id=%s",
         resolved_run_id,
+        run.get("run_type"),
         simulation_id,
     )
 
