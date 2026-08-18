@@ -316,7 +316,7 @@ onMounted(() => void loadRun())
   word-break: break-all;
 }
 
-.detail-error { color: #991b1b; }
+.detail-error { color: var(--status-red); }
 
 .status-badge {
   display: inline-block;
