@@ -47,7 +47,7 @@ const TILES: Tile[] = [
   column-gap: 12px;
   padding: 16px 18px;
   /* v4-state-selectable liefert background/transition/cursor/hover/focus-ring */
-  background: var(--surface-elevated, #fff);
+  background: var(--surface-elevated);
   border-radius: var(--r-6, 12px);
   box-shadow: 0 0 0 1px var(--hairline);
   text-decoration: none;

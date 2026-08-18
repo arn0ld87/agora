@@ -368,8 +368,8 @@ function setDraftValue(key: string, value: unknown) {
   font-size: 13px;
 }
 .v4-banner--error {
-  background: var(--status-red-bg, #fee);
-  color: var(--status-red, #c00);
+  background: var(--status-red-bg);
+  color: var(--status-red);
 }
 .v4-banner--muted {
   background: var(--surface-inset);
@@ -485,7 +485,7 @@ function setDraftValue(key: string, value: unknown) {
 .v4-hint {
   margin: 6px 0 0;
   font-size: 12px;
-  color: var(--status-red, #c00);
+  color: var(--status-red);
 }
 
 .v4-actions {
@@ -500,7 +500,7 @@ function setDraftValue(key: string, value: unknown) {
   color: var(--text-secondary);
 }
 .v4-flash--error {
-  color: var(--status-red, #c00);
+  color: var(--status-red);
 }
 .v4-flash--muted {
   color: var(--text-tertiary);
@@ -509,7 +509,7 @@ function setDraftValue(key: string, value: unknown) {
 .v4-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--surface-backdrop);
   display: flex;
   align-items: center;
   justify-content: center;

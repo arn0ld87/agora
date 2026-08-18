@@ -349,8 +349,8 @@ onMounted(() => {
 .api-keys__error-banner {
   margin-bottom: 16px;
   padding: 12px 16px;
-  background: var(--status-red-bg, #fff1f0);
-  color: var(--status-red, #c0392b);
+  background: var(--status-red-bg);
+  color: var(--status-red);
   border-radius: var(--r-4, 8px);
   font-size: 14px;
 }
@@ -397,14 +397,14 @@ onMounted(() => {
   padding: 8px 12px;
   font-weight: 500;
   color: var(--text-secondary);
-  border-bottom: 1px solid var(--separator, #e5e5ea);
+  border-bottom: 1px solid var(--separator);
   white-space: nowrap;
 }
 
 .api-keys__table td {
   padding: 10px 12px;
   vertical-align: middle;
-  border-bottom: 1px solid var(--hairline, #f2f2f7);
+  border-bottom: 1px solid var(--hairline);
 }
 
 .api-keys__table tbody tr:last-child td {
@@ -414,7 +414,7 @@ onMounted(() => {
 .api-keys__prefix {
   font-family: var(--font-mono, monospace);
   font-size: 12px;
-  background: var(--surface-inset, #f2f2f7);
+  background: var(--surface-inset);
   padding: 2px 6px;
   border-radius: 4px;
   color: var(--text-secondary);
@@ -434,7 +434,7 @@ onMounted(() => {
 .v4-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--surface-backdrop);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -443,12 +443,12 @@ onMounted(() => {
 }
 
 .v4-modal {
-  background: var(--surface-elevated, #fff);
+  background: var(--surface-elevated);
   border-radius: 16px;
   padding: 28px;
   width: 100%;
   max-width: 480px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--shadow-modal);
 }
 
 .v4-modal--narrow {
@@ -470,8 +470,8 @@ onMounted(() => {
 }
 
 .v4-modal__warning {
-  color: var(--status-red, #c0392b);
-  background: var(--status-red-bg, #fff1f0);
+  color: var(--status-red);
+  background: var(--status-red-bg);
   padding: 10px 12px;
   border-radius: 8px;
 }
@@ -524,8 +524,8 @@ onMounted(() => {
 
 .api-keys__form-error {
   padding: 10px 12px;
-  background: var(--status-red-bg, #fff1f0);
-  color: var(--status-red, #c0392b);
+  background: var(--status-red-bg);
+  color: var(--status-red);
   border-radius: 8px;
   font-size: 13px;
   margin-bottom: 8px;
@@ -562,21 +562,21 @@ onMounted(() => {
 }
 
 .v4-btn--primary {
-  background: var(--accent, #0071e3);
-  color: #fff;
+  background: var(--accent);
+  color: var(--text-on-accent);
 }
 
 .v4-btn--primary:hover:not(:disabled) {
-  background: var(--accent-hover, #0077ed);
+  background: var(--accent-hover);
 }
 
 .v4-btn--secondary {
-  background: var(--surface-inset, #f2f2f7);
+  background: var(--surface-inset);
   color: var(--text-primary);
 }
 
 .v4-btn--secondary:hover:not(:disabled) {
-  background: var(--gray-5, #e5e5ea);
+  background: var(--surface-hover);
 }
 
 .v4-btn--ghost {
@@ -585,24 +585,24 @@ onMounted(() => {
 }
 
 .v4-btn--ghost:hover:not(:disabled) {
-  background: var(--surface-inset, #f2f2f7);
+  background: var(--surface-inset);
 }
 
 .v4-btn--danger {
-  background: var(--status-red, #c0392b);
-  color: #fff;
+  background: var(--status-red);
+  color: var(--text-on-accent);
 }
 
 .v4-btn--danger:hover:not(:disabled) {
-  background: var(--status-red-hover, #a93226);
+  background: color-mix(in oklch, var(--status-red) 85%, black);
 }
 
 .v4-btn--ghost.v4-btn--danger {
   background: transparent;
-  color: var(--status-red, #c0392b);
+  color: var(--status-red);
 }
 
 .v4-btn--ghost.v4-btn--danger:hover:not(:disabled) {
-  background: var(--status-red-bg, #fff1f0);
+  background: var(--status-red-bg);
 }
 </style>

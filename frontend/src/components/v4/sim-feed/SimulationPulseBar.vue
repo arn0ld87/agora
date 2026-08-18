@@ -90,7 +90,7 @@ const noResonanceYet = computed(() => {
   gap: 6px;
   padding: 8px 12px;
   background: var(--surface-subtle, #f9fafb);
-  border-bottom: 1px solid var(--hairline, #e5e7eb);
+  border-bottom: 1px solid var(--hairline);
 }
 .spb-bar {
   height: 4px;
@@ -104,7 +104,7 @@ const noResonanceYet = computed(() => {
 .spb-fill {
   height: 100%;
   width: 100%;
-  background: var(--accent, #2563eb);
+  background: var(--accent);
   opacity: 0.6;
   border-radius: 2px;
 }
@@ -116,13 +116,13 @@ const noResonanceYet = computed(() => {
   transition: background-color 0.3s ease;
 }
 .spb-pulse.score-negative {
-  background: var(--status-red, #dc2626);
+  background: var(--status-red);
 }
 .spb-pulse.score-neutral {
-  background: var(--text-tertiary, #6b7280);
+  background: var(--text-tertiary);
 }
 .spb-pulse.score-positive {
-  background: var(--status-green, #10b981);
+  background: var(--status-green);
 }
 /* Noch keine Resonanz → Pulse-Animation als visueller Hinweis */
 .spb-pulse--dim {
@@ -142,14 +142,14 @@ const noResonanceYet = computed(() => {
   align-items: center;
   gap: 6px;
   font-size: 11px;
-  color: var(--text-secondary, #6b7280);
+  color: var(--text-secondary);
   flex-wrap: wrap;
 }
 .spb-live-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--status-green, #10b981);
+  background: var(--status-green);
   animation: pulse 1.5s ease-in-out infinite;
   flex-shrink: 0;
 }
@@ -164,15 +164,15 @@ const noResonanceYet = computed(() => {
 }
 .spb-label {
   font-weight: 600;
-  color: var(--status-green, #10b981);
+  color: var(--status-green);
 }
 .spb-divider {
-  color: var(--hairline, #d1d5db);
+  color: var(--hairline);
 }
 .spb-rate,
 .spb-count,
 .spb-reddit,
 .spb-twitter {
-  color: var(--text-secondary, #6b7280);
+  color: var(--text-secondary);
 }
 </style>

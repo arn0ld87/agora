@@ -82,9 +82,9 @@ withDefaults(
   display: inline-block;
   background: linear-gradient(
     90deg,
-    var(--surface-inset, #f2f2f7) 0%,
-    var(--surface-hover, rgba(0, 0, 0, 0.06)) 50%,
-    var(--surface-inset, #f2f2f7) 100%
+    var(--surface-inset) 0%,
+    var(--surface-hover) 50%,
+    var(--surface-inset) 100%
   );
   background-size: 200% 100%;
   animation: sk-shimmer 1.4s ease-in-out infinite;
@@ -138,7 +138,7 @@ withDefaults(
 @media (prefers-reduced-motion: reduce) {
   .sk {
     animation: none;
-    background: var(--surface-inset, #f2f2f7);
+    background: var(--surface-inset);
   }
 }
 </style>

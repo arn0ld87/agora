@@ -48,7 +48,7 @@ function onSelect(value: string): void {
 <style scoped>
 .v4-segmented {
   display: inline-flex;
-  background: var(--surface-inset, var(--gray-6, #f2f2f7));
+  background: var(--surface-inset);
   padding: 2px;
   border-radius: var(--r-pill, 999px);
   gap: 0;
@@ -77,8 +77,8 @@ function onSelect(value: string): void {
 }
 
 .v4-segmented__seg--active {
-  background: #fff;
-  box-shadow: var(--shadow-control, 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.04));
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-control);
   color: var(--text-primary);
 }
 

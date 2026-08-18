@@ -1,25 +1,23 @@
 /* ============================================================
    Agora — @font-face declarations
-   Geist Sans/Mono werden lokal geladen (woff2 in assets/fonts/,
-   hier registriert) und weiter fuer --font-mono gebraucht.
 
-   Slice D0 (18.08.2026): Archivo (UI) und Newsreader (Berichts-
-   Fliesstext) kommen bewusst per Google-Fonts-CDN dazu — siehe
-   frontend/index.html (preconnect + Stylesheet-Tags). Das ist eine
-   ausdrueckliche Abkehr von der bisherigen Nur-lokal-Regel: es gibt
-   damit wieder einen externen Font-Request. Diese Datei behauptete
-   vorher das Gegenteil; die Aussage war mit Slice D0 nicht mehr
-   korrekt und wurde deshalb korrigiert.
+   Alle Schriften sind self-hosted, es gibt keinen externen
+   Font-Request. Agora laeuft ueber Tailscale — ein Aufruf an
+   fonts.googleapis.com waere dort sowohl ein Datenschutz- als auch
+   ein Verfuegbarkeitsproblem.
+
+   Block B1 (18.08.2026) hat den Google-Fonts-CDN aus Slice D0 wieder
+   entfernt und durch npm-Pakete ersetzt:
+     - Archivo     (UI)                    @fontsource-variable/archivo
+     - Newsreader  (Berichts-Fliesstext)   @fontsource-variable/newsreader
+   Beide werden in src/main.ts importiert, nicht hier. Sie heissen im
+   CSS "Archivo Variable" bzw. "Newsreader Variable" — siehe
+   --font-sans / --font-serif in tokens-v3.css.
+
+   Hier verbleibt nur Geist Mono (IDs, Zahlen, Logausgaben), das als
+   woff2 direkt im Repo liegt. Geist Sans ist mit dem Wechsel auf
+   Archivo entfallen.
    ============================================================ */
-
-@font-face {
-  font-family: "Geist Sans";
-  src: url("../fonts/GeistSans-Variable.woff2") format("woff2-variations"),
-       url("../fonts/GeistSans-Variable.woff2") format("woff2");
-  font-weight: 100 900;
-  font-style: normal;
-  font-display: swap;
-}
 
 @font-face {
   font-family: "Geist Mono";

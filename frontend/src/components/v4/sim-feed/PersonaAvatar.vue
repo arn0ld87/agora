@@ -49,7 +49,7 @@ const registerColor: Record<VoiceRegister, string> = {
   justify-content: center;
   font-size: 11px;
   font-weight: 600;
-  color: var(--text-primary, #111827);
+  color: var(--text-primary);
   user-select: none;
 }
 .pa-register {

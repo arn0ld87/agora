@@ -292,27 +292,27 @@ function updateGender(event: Event) {
 
 /* Design v3 form polish. */
 .form-row {
-  font-family: var(--font-sans, var(--ff-sans));
+  font-family: var(--font-sans);
   letter-spacing: 0;
   text-transform: none;
-  color: var(--text-secondary, var(--fg-muted));
+  color: var(--text-secondary);
   font-weight: 590;
 }
 .form-row input,
 .form-row select,
 .form-row textarea {
-  background: var(--surface-elevated, var(--bg-elevated));
-  border-color: var(--hairline, var(--rule));
-  border-radius: var(--r-5, var(--r-1));
-  color: var(--text-primary, var(--fg));
-  font-family: var(--font-sans, var(--ff-sans));
+  background: var(--surface-elevated);
+  border-color: var(--hairline);
+  border-radius: var(--r-5);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
 }
 .form-row textarea {
-  font-family: var(--font-sans, var(--ff-sans));
+  font-family: var(--font-sans);
 }
 .form-row input:focus,
 .form-row select:focus,
 .form-row textarea:focus {
-  box-shadow: 0 0 0 3px var(--focus-ring, var(--accent-soft));
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 </style>

@@ -7,18 +7,15 @@
     <meta name="description" content="Agora — Multi-Agent Schwarmintelligenz-Simulator. Lokal. Privat. Entwickelt von Alexander Schneider (alexle135.de)." />
     <meta name="author" content="Alexander Schneider — alexle135.de" />
     <title>Agora — Schwarmintelligenz</title>
-    <!-- Slice D0 (18.08.2026): Archivo (UI) + Newsreader (Berichts-Fliesstext)
-         bewusst per Google-Fonts-CDN — siehe assets/styles/fonts.css. -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=Newsreader:ital,wght@0,400;0,500;1,400&display=swap"
-      rel="stylesheet"
-    />
+    <!-- Block B1 (18.08.2026): Archivo (UI) + Newsreader (Berichts-Fliesstext)
+         kommen self-hosted via @fontsource-variable — siehe main.ts. Der
+         Google-Fonts-CDN aus Slice D0 ist entfallen: Agora laeuft ueber
+         Tailscale, ein externer Font-Request gehoert dort nicht hin. -->
     <script>
-      // Design v3 ist light-only; setze das Attribut vor dem ersten Paint.
+      // Dark ist das Hauptgesicht (Q2/Q28). Vor dem ersten Paint setzen,
+      // sonst blitzt der ungestylte Grund auf.
       (function () {
-        document.documentElement.setAttribute('data-theme', 'light');
+        document.documentElement.setAttribute('data-theme', 'dark');
       })();
     </script>
   </head>

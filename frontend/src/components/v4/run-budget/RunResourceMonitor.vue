@@ -385,7 +385,7 @@ onUnmounted(() => {
 .rb-monitor__bar {
   height: 6px;
   border-radius: var(--r-pill, 999px);
-  background: var(--surface-inset, #f2f2f7);
+  background: var(--surface-inset);
   overflow: hidden;
 }
 

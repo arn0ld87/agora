@@ -1,0 +1,80 @@
+<section style="display:flex;flex-direction:column;gap:14px">
+  <div style="display:flex;align-items:baseline;gap:12px">
+    <span style="font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#d08a52">Screen 08</span>
+    <h2 style="margin:0;font-size:19px;font-weight:600;letter-spacing:-0.015em">Einstellungen — Overlay über der Arbeit</h2>
+    <span style="font-size:13px;color:#7c736a"><span style="font-family:'Geist Mono',monospace;font-size:12px">/settings/*</span> bleibt adressierbar, verlässt aber den Arbeitsraum nicht mehr</span>
+  </div>
+
+  <div style="width:1440px;height:680px;background:#14110f;border:1px solid rgba(255,246,235,0.12);overflow:hidden;position:relative;font-size:14px;line-height:1.5">
+    <div style="position:absolute;inset:0;opacity:0.3;display:flex;flex-direction:column">
+      <div style="height:46px;border-bottom:1px solid rgba(255,246,235,0.09)"></div>
+      <div style="flex:1;display:grid;grid-template-columns:400px minmax(0,1fr)">
+        <div style="border-right:1px solid rgba(255,246,235,0.09);padding:20px"><div style="height:14px;width:120px;background:rgba(255,246,235,0.12)"></div><div style="height:10px;width:200px;background:rgba(255,246,235,0.07);margin-top:16px"></div><div style="height:10px;width:170px;background:rgba(255,246,235,0.07);margin-top:20px"></div></div>
+        <div style="padding:24px 30px"><div style="height:20px;width:420px;background:rgba(255,246,235,0.1)"></div><div style="height:60px;margin-top:22px;border-top:1px solid rgba(255,246,235,0.09);border-bottom:1px solid rgba(255,246,235,0.09)"></div></div>
+      </div>
+    </div>
+    <div style="position:absolute;inset:0;background:rgba(9,8,7,0.6)"></div>
+
+    <div style="position:absolute;right:0;top:0;bottom:0;width:840px;background:#1b1815;border-left:1px solid rgba(255,246,235,0.16);box-shadow:-24px 0 64px rgba(0,0,0,0.5);display:flex;flex-direction:column">
+      <div style="height:52px;display:flex;align-items:center;gap:14px;padding:0 22px;border-bottom:1px solid rgba(255,246,235,0.09)">
+        <span style="font-size:15px;font-weight:600;letter-spacing:-0.01em">Einstellungen</span>
+        <span style="flex:1"></span>
+        <span style="font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a">esc schließt · die Arbeit bleibt darunter stehen</span>
+      </div>
+      <div style="flex:1;display:grid;grid-template-columns:220px minmax(0,1fr);min-height:0">
+        <nav aria-label="Einstellungsbereiche" style="border-right:1px solid rgba(255,246,235,0.09);padding:14px 0">
+          <a href="#" style="display:block;padding:7px 18px;font-size:13px;color:#a89f94">Allgemein</a>
+          <a href="#" style="display:block;padding:7px 18px;font-size:13px;color:#a89f94">Integrationen</a>
+          <a href="#" style="display:block;padding:7px 18px;font-size:13px;color:#a89f94">Profil</a>
+          <a href="#" style="display:block;padding:7px 18px;font-size:13px;color:#a89f94">API-Schlüssel</a>
+          <a href="#" style="display:block;padding:7px 16px;font-size:13px;color:#f2ece4;font-weight:600;background:rgba(208,138,82,0.1);border-left:2px solid #d08a52">LLM-Anbieter</a>
+          <a href="#" style="display:block;padding:7px 18px;font-size:13px;color:#a89f94">Embedding-Konfiguration</a>
+          <div style="margin:14px 18px 0;padding-top:12px;border-top:1px solid rgba(255,246,235,0.09);font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a;line-height:1.6">LLM-Routing und Audit-Log bleiben per Deep-Link erreichbar, ohne in der Liste zu stehen.</div>
+        </nav>
+        <div style="padding:20px 24px;min-width:0;overflow:hidden">
+          <h3 style="margin:0;font-size:18px;font-weight:600;letter-spacing:-0.015em">LLM-Anbieter</h3>
+          <p style="margin:5px 0 0;font-size:12.5px;color:#a89f94;max-width:70ch">Verbindungen anlegen, testen und verfügbare Modelle entdecken. Chat- und Embedding-Konfiguration bleiben getrennte Vertragswelten.</p>
+
+          <div style="margin-top:18px;display:flex;flex-direction:column">
+            <div style="display:grid;grid-template-columns:132px 96px minmax(0,1fr) 96px;gap:14px;padding:0 2px 8px;font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.09em;text-transform:uppercase;color:#5c5449;border-bottom:1px solid rgba(255,246,235,0.12)"><span>Verbindung</span><span>Provider</span><span>Endpunkt</span><span>Status</span></div>
+            <div style="display:grid;grid-template-columns:132px 96px minmax(0,1fr) 96px;gap:14px;align-items:center;padding:11px 2px;border-bottom:1px solid rgba(255,246,235,0.07)">
+              <span style="font-size:13px;font-weight:500">MiniMax Cloud</span>
+              <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#a89f94">minimax</span>
+              <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#7c736a;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">https://api.minimax.io/v1</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border-radius:3px;background:rgba(127,168,106,0.14);color:#8cbd83;font-size:11px;width:fit-content"><span style="width:5px;height:5px;border-radius:50%;background:currentColor"></span>aktiv</span>
+            </div>
+            <div style="display:grid;grid-template-columns:132px 96px minmax(0,1fr) 96px;gap:14px;align-items:center;padding:11px 2px;border-bottom:1px solid rgba(255,246,235,0.07)">
+              <span style="font-size:13px;font-weight:500">Ollama lokal</span>
+              <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#a89f94">ollama</span>
+              <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#7c736a;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">http://localhost:11434</span>
+              <span style="display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:3px;background:rgba(255,246,235,0.07);color:#a89f94;font-size:11px;width:fit-content">14 Modelle</span>
+            </div>
+            <div style="display:grid;grid-template-columns:132px 96px minmax(0,1fr) 96px;gap:14px;align-items:center;padding:11px 2px;border-bottom:1px solid rgba(255,246,235,0.07)">
+              <span style="font-size:13px;font-weight:500">Gemini</span>
+              <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#a89f94">google</span>
+              <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#7c736a;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">generativelanguage.googleapis.com</span>
+              <span style="display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:3px;background:rgba(208,154,60,0.14);color:#d09a3c;font-size:11px;width:fit-content">Key prüfen</span>
+            </div>
+          </div>
+
+          <div style="margin-top:20px;padding:16px 18px;background:rgba(255,246,235,0.03);border:1px solid rgba(255,246,235,0.09)">
+            <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:10px">Route je Stufe</div>
+            <div style="display:flex;flex-direction:column;gap:8px;font-size:12.5px">
+              <div style="display:grid;grid-template-columns:132px minmax(0,1fr);gap:12px"><span style="color:#a89f94">NER / Graph</span><span style="font-family:'Geist Mono',monospace;font-size:11.5px;color:#cfc7bc">ollama · qwen3:14b</span></div>
+              <div style="display:grid;grid-template-columns:132px minmax(0,1fr);gap:12px"><span style="color:#a89f94">Personas</span><span style="font-family:'Geist Mono',monospace;font-size:11.5px;color:#cfc7bc">minimax · MiniMax-M2</span></div>
+              <div style="display:grid;grid-template-columns:132px minmax(0,1fr);gap:12px"><span style="color:#a89f94">Report</span><span style="font-family:'Geist Mono',monospace;font-size:11.5px;color:#cfc7bc">minimax · MiniMax-M2</span></div>
+              <div style="display:grid;grid-template-columns:132px minmax(0,1fr);gap:12px"><span style="color:#a89f94">Entailment-Judge</span><span style="font-family:'Geist Mono',monospace;font-size:11.5px;color:#cfc7bc">google · gemini-3-pro</span></div>
+            </div>
+          </div>
+
+          <div style="margin-top:18px;display:flex;gap:8px">
+            <button style="height:32px;padding:0 14px;background:#d08a52;border:0;border-radius:5px;color:#17120e;font-family:'Archivo',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer">Verbindung hinzufügen</button>
+            <button style="height:32px;padding:0 14px;background:transparent;border:1px solid rgba(255,246,235,0.16);border-radius:5px;color:#f2ece4;font-family:'Archivo',sans-serif;font-size:12.5px;cursor:pointer">Alle testen</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p style="margin:0;font-size:13px;color:#7c736a;max-width:110ch">Einstellungen sind kein Ort, an den man navigiert, sondern eine Schublade über dem, was man gerade tut. Nach <span style="font-family:'Geist Mono',monospace;font-size:12px">esc</span> steht der Lauf unverändert da — kein Rückweg über die Ablage nötig.</p>
+</section>
+

@@ -483,63 +483,63 @@ function updateEditGender(event: Event) {
 
 /* Design v3 modal and form polish. */
 .modal {
-  background: color-mix(in srgb, var(--surface-base, var(--bg)) 72%, transparent);
+  background: color-mix(in srgb, var(--surface-base) 72%, transparent);
 }
 .modal-card {
-  background: var(--surface-elevated, var(--bg));
-  border-color: var(--hairline, var(--rule-strong));
-  border-radius: var(--r-8, var(--r-1));
-  box-shadow: var(--shadow-4, var(--shadow-modal));
-  font-family: var(--font-sans, var(--ff-sans));
+  background: var(--surface-elevated);
+  border-color: var(--hairline);
+  border-radius: var(--r-8);
+  box-shadow: var(--shadow-4);
+  font-family: var(--font-sans);
 }
 .modal-head,
 .review-bar,
 .modal-marginalia {
-  border-color: var(--separator, var(--rule));
+  border-color: var(--separator);
 }
 .kicker-mono,
 .meta,
 .form-row,
 .chip {
-  font-family: var(--font-sans, var(--ff-sans));
+  font-family: var(--font-sans);
   letter-spacing: 0;
   text-transform: none;
 }
 .modal-handle,
 .modal-bio,
 .form-row textarea {
-  font-family: var(--font-sans, var(--ff-sans));
+  font-family: var(--font-sans);
 }
 .modal-handle {
-  color: var(--text-primary, var(--fg));
+  color: var(--text-primary);
 }
 .modal-bio,
 .modal-persona {
-  color: var(--text-secondary, var(--fg-body));
+  color: var(--text-secondary);
 }
 .form-row {
-  color: var(--text-secondary, var(--fg-muted));
+  color: var(--text-secondary);
   font-weight: 590;
 }
 .form-row input,
 .form-row select,
 .form-row textarea,
 .regenerate-hint-input {
-  background: var(--surface-elevated, var(--bg-elevated));
-  border-color: var(--hairline, var(--rule));
-  border-radius: var(--r-5, var(--r-1));
-  color: var(--text-primary, var(--fg));
-  font-family: var(--font-sans, var(--ff-sans));
+  background: var(--surface-elevated);
+  border-color: var(--hairline);
+  border-radius: var(--r-5);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
 }
 .form-row input:focus,
 .form-row select:focus,
 .form-row textarea:focus,
 .regenerate-hint-input:focus {
-  box-shadow: 0 0 0 3px var(--focus-ring, var(--accent-soft));
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 .chip {
-  background: var(--surface-inset, transparent);
-  border-color: var(--hairline, var(--rule-strong));
-  color: var(--text-secondary, var(--fg));
+  background: var(--surface-inset);
+  border-color: var(--hairline);
+  color: var(--text-secondary);
 }
 </style>

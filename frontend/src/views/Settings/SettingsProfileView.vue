@@ -125,12 +125,12 @@ onMounted(() => {
 }
 
 .settings-profile__banner--error {
-  color: var(--status-red, #c0392b);
-  border: 1px solid var(--status-red, #c0392b);
+  color: var(--status-red);
+  border: 1px solid var(--status-red);
 }
 
 .settings-profile__banner--success {
-  color: var(--status-green, #2e7d32);
-  border: 1px solid var(--status-green, #2e7d32);
+  color: var(--status-green);
+  border: 1px solid var(--status-green);
 }
 </style>

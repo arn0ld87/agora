@@ -205,7 +205,7 @@ const durationRange = computed(() =>
   padding: 12px;
   border: 1px dashed var(--hairline);
   border-radius: var(--r-4, 8px);
-  background: var(--surface-inset, #f2f2f7);
+  background: var(--surface-inset);
 }
 
 .rb-preflight__empty-text {
@@ -273,7 +273,7 @@ const durationRange = computed(() =>
   gap: 10px;
   padding: 6px 8px;
   border-radius: var(--r-4, 8px);
-  background: var(--surface-inset, #f2f2f7);
+  background: var(--surface-inset);
   font-family: var(--font-sans);
   font-size: 13px;
 }

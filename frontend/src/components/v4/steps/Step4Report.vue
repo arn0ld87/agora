@@ -823,19 +823,19 @@ onUnmounted(() => { stopPolling(); clearEvidenceRetry() })
 .card-head { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--rule); padding-bottom: var(--s-3); }
 .card-desc { color: var(--fg-body); margin: 0; }
 .meta { color: var(--fg-muted); font-family: var(--ff-mono); font-size: 11px; }
-.meta--warn { color: var(--status-warning, #b87a00); font-weight: 600; }
+.meta--warn { color: var(--status-warning); font-weight: 600; }
 .actions { display: flex; gap: var(--s-3); justify-content: flex-end; }
 .schema-error {
-  background: color-mix(in srgb, var(--status-error, #c0392b) 10%, transparent);
-  border: 1px solid var(--status-red, var(--status-error, #c0392b));
-  border-radius: var(--r-6, var(--r-1));
+  background: color-mix(in srgb, var(--status-error) 10%, transparent);
+  border: 1px solid var(--status-red);
+  border-radius: var(--r-6);
   padding: var(--s-4);
   margin: var(--s-4) var(--s-6) 0;
-  color: var(--text-primary, var(--fg));
-  font-family: var(--font-sans, var(--ff-sans));
-  font-size: var(--fs-14, 13px);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--fs-14);
 }
-.schema-error strong { display: block; margin-bottom: var(--s-2); color: var(--status-red, var(--status-error, #c0392b)); }
+.schema-error strong { display: block; margin-bottom: var(--s-2); color: var(--status-red); }
 .schema-error ul { margin: 0; padding-left: var(--s-4); }
 .schema-error li { line-height: 1.6; }
 .report-confirm-block { display: flex; flex-direction: column; gap: var(--s-3); background: var(--bg-elevated); border: 1px solid var(--accent); border-radius: var(--r-1); padding: var(--s-4); }
@@ -845,5 +845,5 @@ onUnmounted(() => { stopPolling(); clearEvidenceRetry() })
 .card-head-actions { display: flex; align-items: center; gap: var(--s-3); }
 .stop-btn-wrap { display: inline-flex; }
 .stop-btn { color: var(--fg-muted); }
-.stop-btn--active { color: var(--status-red, var(--status-error)); }
+.stop-btn--active { color: var(--status-red); }
 </style>

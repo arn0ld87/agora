@@ -32,7 +32,7 @@ defineProps({
 }
 .card--glass {
   background: var(--surface-translucent, var(--bg-glass));
-  border-color: rgba(255,255,255,0.6);
+  border-color: var(--hairline-strong);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   box-shadow: var(--shadow-2, var(--shadow-glass));
@@ -42,7 +42,7 @@ defineProps({
   color: var(--surface-base, var(--fg-on-inverse));
   border-color: var(--text-primary, var(--bg-inverse));
 }
-.card--dark .card-label { color: rgba(255,255,255,0.66); }
+.card--dark .card-label { color: var(--fg-on-dark-muted); }
 .card-label {
   font-family: var(--font-sans, var(--ff-sans));
   font-size: var(--fs-caption-1, 11px);

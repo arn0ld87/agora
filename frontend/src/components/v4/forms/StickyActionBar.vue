@@ -32,7 +32,7 @@ withDefaults(defineProps<{
   justify-content: space-between;
   gap: 12px;
   padding: 16px 24px;
-  background: var(--surface-translucent, rgba(255, 255, 255, 0.82));
+  background: var(--surface-translucent);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-top: 1px solid var(--separator);

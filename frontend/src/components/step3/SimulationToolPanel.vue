@@ -117,36 +117,36 @@ async function copyLine(line: unknown) {
 }
 .filter-toggle {
   display: inline-flex;
-  border: 1px solid var(--hairline, var(--rule));
-  border-radius: var(--r-5, var(--r-1));
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-5);
   overflow: hidden;
-  background: var(--surface-elevated, transparent);
+  background: var(--surface-elevated);
 }
 .filter-btn {
   background: transparent;
   border: 0;
   padding: 4px 10px;
-  font-family: var(--font-sans, var(--ff-sans));
+  font-family: var(--font-sans);
   font-size: 11px;
-  color: var(--text-secondary, var(--fg-muted));
+  color: var(--text-secondary);
   cursor: pointer;
 }
-.filter-btn + .filter-btn { border-left: 1px solid var(--separator, var(--rule)); }
-.filter-btn:hover { background: var(--surface-hover, transparent); color: var(--text-primary, var(--fg)); }
-.filter-btn.active { background: var(--accent); color: var(--text-on-accent, var(--bg)); }
+.filter-btn + .filter-btn { border-left: 1px solid var(--separator); }
+.filter-btn:hover { background: var(--surface-hover); color: var(--text-primary); }
+.filter-btn.active { background: var(--accent); color: var(--text-on-accent); }
 .console-line {
   display: flex;
   gap: var(--s-2);
   align-items: flex-start;
-  font-family: var(--font-sans, var(--ff-sans));
+  font-family: var(--font-sans);
   font-size: 11px;
-  color: var(--text-secondary, var(--mono-100));
+  color: var(--text-secondary);
   word-wrap: break-word;
   white-space: pre-wrap;
   margin-bottom: 2px;
   line-height: 1.5;
 }
-.console-line.is-error { color: var(--status-red, var(--status-error, #f56565)); }
+.console-line.is-error { color: var(--status-red); }
 .copy-btn {
   background: transparent;
   border: 0;

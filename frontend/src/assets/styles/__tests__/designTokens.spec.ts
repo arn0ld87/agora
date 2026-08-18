@@ -142,15 +142,22 @@ describe('Slice 7.1 — Dark-Readiness-Klausel (tokens-v3.css)', () => {
   it.each(mustOverrideInDark)(
     'wenn [data-theme="dark"] existiert, muss %s darin redefiniert sein',
     (name) => {
-      const darkBlock = tokens.match(/\[data-theme="dark"\][^{]*\{[\s\S]*?(?=\n\}|\n\[data-theme)/)
-      if (!darkBlock) {
+      // Block B1: tokens-v3.css hat MEHRERE Selektoren mit
+      // [data-theme="dark"] (Basis, Kompat-Layer, Slice-7.1-Additive).
+      // Die Klausel gilt über alle zusammen — ein Token darf in jedem
+      // von ihnen definiert sein, nur eben nicht ausschliesslich in
+      // einem Light-Block.
+      const darkBlocks = [
+        ...tokens.matchAll(/\[data-theme="dark"\][^{]*\{([\s\S]*?)\n\}/g),
+      ].map((m) => m[1])
+      if (darkBlocks.length === 0) {
         // Kein Dark-Block → Klausel trivial erfüllt, kein Fail.
         return
       }
       const re = new RegExp(name.replace(/-/g, '\\-') + '\\s*:')
       expect(
-        darkBlock[0].match(re),
-        `${name} ist nicht im [data-theme="dark"]-Block redefiniert`,
+        darkBlocks.join('\n').match(re),
+        `${name} ist in keinem [data-theme="dark"]-Block redefiniert`,
       ).not.toBeNull()
     },
   )

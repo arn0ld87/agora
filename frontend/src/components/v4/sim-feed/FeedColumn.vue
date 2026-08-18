@@ -88,16 +88,16 @@ onBeforeUnmount(() => {
 .fc-root {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--hairline, #e5e7eb);
+  border: 1px solid var(--hairline);
   border-radius: 8px;
   overflow: hidden;
-  background: var(--surface, #ffffff);
+  background: var(--surface-base);
   min-height: 0;
   position: relative;
 }
 .fc-header {
   padding: 10px 14px;
-  border-bottom: 1px solid var(--hairline, #e5e7eb);
+  border-bottom: 1px solid var(--hairline);
   background: var(--surface-subtle, #f9fafb);
   flex-shrink: 0;
 }
@@ -109,14 +109,14 @@ onBeforeUnmount(() => {
 .fc-title {
   font-weight: 700;
   font-size: 13px;
-  color: var(--text-primary, #111827);
+  color: var(--text-primary);
   letter-spacing: 0.02em;
 }
 .fc-live-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--status-green, #10b981);
+  background: var(--status-green);
   animation: live-pulse 1.5s ease-in-out infinite;
 }
 @keyframes live-pulse {
@@ -143,20 +143,20 @@ onBeforeUnmount(() => {
   bottom: 12px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--surface, #fff);
-  border: 1px solid var(--hairline, #e5e7eb);
+  background: var(--surface-base);
+  border: 1px solid var(--hairline);
   border-radius: 20px;
   padding: 5px 14px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--text-secondary, #6b7280);
+  color: var(--text-secondary);
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(0,0,0,0.1);
   white-space: nowrap;
   z-index: 10;
 }
 .fc-pause-chip:hover {
-  background: var(--surface-hover, #f9fafb);
+  background: var(--surface-hover);
 }
 .fc-pin-enter-active,
 .fc-pin-leave-active {

@@ -145,7 +145,7 @@ watch(
   position: relative;
   width: 100%;
   height: clamp(360px, 55vh, 640px);
-  border: 1px solid var(--hairline, var(--mono-700));
+  border: 1px solid var(--hairline);
   border-radius: 8px;
   overflow: hidden;
 }

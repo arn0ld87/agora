@@ -5,19 +5,19 @@
    Slice A: Token-Port (Slice B–J folgen)
    ============================================================
    Aufbau dieser Datei:
-   1. @font-face  (Geist Sans / Mono Variable)
+   1. @font-face  (Geist Mono Variable; Archivo/Newsreader via npm)
    2. :root — native v4-Tokens aus agora-v3.css
    3. Compat-Layer (v1/v2 → v3/v4) — Aliase erhalten für bestehende
       Komponenten bis Cleanup-Slice J
    ============================================================ */
 
 /* ─── @font-face via fonts.css (importiert vor dieser Datei in main.ts) ────
-   Geist Sans / Mono: siehe frontend/src/assets/styles/fonts.css
+   Geist Mono: siehe frontend/src/assets/styles/fonts.css
    ─────────────────────────────────────────────────────────────────────────── */
 
 /* ─── Native v4-Tokens (agora-v3.css :root) ─────────────── */
 
-:root, [data-theme="light"] {
+:root, [data-theme="dark"] {
   /* ─── Surfaces (dunkel-warm, Slice D0 · 18.08.2026) ────── */
   --surface-base:        #14110f;        /* page */
   --surface-canvas:      #0b0a09;        /* canvas / sunken — Grund */
@@ -36,15 +36,19 @@
 
   /* ─── Text ─────────────────────────────────────────────── */
   --text-primary:        #f2ece4;
-  /* --text-secondary: Nutzerentscheidung 18.08.2026 — Farbtreue vor Kontrast.
-     #7c736a ist der Vorlagenwert unveraendert. Gemessen (WCAG-2-Formel):
-     4.26:1 auf --surface-canvas (#0b0a09), 4.04:1 auf --surface-base (#14110f),
-     3.80:1 auf --surface-elevated (#1b1815) — die Systemregel der Vorlage
-     ("Sekundaertext >= 4.6:1") ist mit der Vorlagenfarbe selbst nicht
-     erreichbar. Ein aufgehellter Kandidat (#867c72, 4.84/4.60/4.35) haette
-     die Schwelle knapp gehalten; bewusst NICHT uebernommen. Siehe Bericht an
-     den Lead vom 18.08.2026. */
-  --text-secondary:      #7c736a;
+  /* Textstufen, Block B1 (18.08.2026) — Korrektur zu D0.
+     D0 setzte --text-secondary UND --text-tertiary auf denselben Wert
+     #7c736a: die Stufe existierte damit gar nicht, und Fliesstext lag mit
+     4.04:1 auf --surface-base unter der eigenen Systemregel (>= 4.6:1).
+     Die Vorlage selbst kennt beide Toene — #a89f94 fuer lesbaren
+     Sekundaertext, #7c736a fuer Labels und Metazeilen. D0 hatte nur den
+     zweiten uebernommen und damit den ersten verloren.
+     Gemessen gegen canvas/base/elevated (#0b0a09 / #14110f / #1b1815):
+       --text-secondary #a89f94 → 7.6:1 / 7.3:1 / 6.8:1   Fliesstext
+       --text-tertiary  #7c736a → 4.3:1 / 4.0:1 / 3.8:1   Labels, Metazeilen,
+                                  Grossbuchstaben-Kapitaelchen — kein Fliesstext
+     Farbtreue bleibt gewahrt: beide Werte stammen aus der Vorlage. */
+  --text-secondary:      #a89f94;
   --text-tertiary:       #7c736a;
   --text-quaternary:     #524d47;        /* 2.37:1 / 2.25:1 / 2.11:1 — dekorativ, kein Fliesstext */
   --text-on-accent:      #1b120a;        /* dunkel: Akzent ist hell (L≈57%), Weiß fiele auf 2.82:1 */
@@ -80,8 +84,11 @@
   --gray-6: #272320;
 
   /* ─── Type ─────────────────────────────────────────────── */
-  --font-sans: "Archivo", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  --font-serif: "Newsreader", Georgia, "Times New Roman", serif;
+  /* "… Variable" sind die Familiennamen, die @fontsource-variable
+     registriert (Block B1). Der jeweils zweite Eintrag faengt eine
+     lokal installierte statische Variante ab. */
+  --font-sans: "Archivo Variable", "Archivo", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-serif: "Newsreader Variable", "Newsreader", Georgia, "Times New Roman", serif;
   --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
   --fs-largeTitle: 34px;   --lh-largeTitle: 41px;   --tr-largeTitle: -0.022em;
@@ -112,12 +119,17 @@
   --r-pill: 9999px;
 
   /* ─── Shadows ──────────────────────────────────────────── */
-  --shadow-1: 0 1px 1px rgba(0,0,0,0.02), 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-2: 0 1px 1px rgba(0,0,0,0.03), 0 4px 12px rgba(0,0,0,0.06);
-  --shadow-3: 0 2px 4px rgba(0,0,0,0.04), 0 12px 28px rgba(0,0,0,0.08);
-  --shadow-4: 0 8px 24px rgba(0,0,0,0.10), 0 24px 64px rgba(0,0,0,0.12);
-  --shadow-control: 0 1px 0 rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.05);
-  --shadow-inset:   inset 0 0 0 1px rgba(0,0,0,0.06);
+  /* Block B1: Die Alphawerte stammten aus der Light-Palette (0.02–0.12)
+     und waren auf --surface-canvas (#0b0a09) faktisch unsichtbar —
+     Schatten auf dunklem Grund brauchen deutlich mehr Schwarz, sonst
+     traegt nichts Tiefe. Der Innenrand wird hell statt schwarz: auf
+     dunklem Grund hebt Licht die Kante, nicht Schatten. */
+  --shadow-1: 0 1px 2px rgba(0,0,0,0.30);
+  --shadow-2: 0 1px 2px rgba(0,0,0,0.26), 0 4px 12px rgba(0,0,0,0.34);
+  --shadow-3: 0 2px 4px rgba(0,0,0,0.30), 0 12px 28px rgba(0,0,0,0.42);
+  --shadow-4: 0 8px 24px rgba(0,0,0,0.40), 0 24px 64px rgba(0,0,0,0.52);
+  --shadow-control: 0 1px 2px rgba(0,0,0,0.28);
+  --shadow-inset:   inset 0 0 0 1px rgba(242,236,228,0.06);
 
   /* ─── Spacing ──────────────────────────────────────────── */
   --sp-1:  4px;   --sp-2:  8px;   --sp-3: 12px;   --sp-4: 16px;
@@ -157,7 +169,7 @@
    Cleanup-Slice J reduziert diesen Layer schrittweise.
    siehe Epic-Doku: docu/2026-05-11-design-v4-app-shell-epic.md
    ============================================================ */
-:root, [data-theme="light"] {
+:root, [data-theme="dark"] {
   /* Brand axis — v4 hat nur einen Akzent */
   --brand-aurora: var(--accent);
   --brand-iris:   var(--accent);
@@ -247,7 +259,7 @@
   /* Type families — v2-Namen */
   --ff-sans:  var(--font-sans);
   --ff-mono:  var(--font-mono);
-  --ff-serif: var(--font-sans);  /* v4 hat keine Serif */
+  --ff-serif: var(--font-serif);  /* Block B1: Newsreader traegt Berichts-Fliesstext */
 
   /* Type sizes — v2-Namen --fs-11..--fs-120 (absolute px-Werte) */
   --fs-11: 11px; --fs-12: 12px; --fs-13: 13px; --fs-14: 14px; --fs-15: 15px;
@@ -494,15 +506,15 @@ body {
    farben. Kein neuer Namespace-Präfix — Erweiterung bestehender
    Token-Familien.
 
-   Dark-Theme-Disziplin: Die Repo hat aktuell keinen
-   [data-theme="dark"]-Block. Sobald einer ergänzt wird, müssen die
-   vier theme-starken Farbwerte unten (--accent-warm-hover,
-   --status-coral, --status-coral-bg, --focus-ring-strong) im
-   Dark-Block redefiniert werden — siehe
-   designTokens.spec.ts -> "Dark-Readiness-Klausel". Bis dahin sind
-   sie nur in Light aktiv (Selektor :root, [data-theme="light"]).
+   Dark-Theme-Disziplin (Block B1, 18.08.2026): Agora ist dark-first.
+   Dieser Block traegt selbst [data-theme="dark"], damit die vier
+   theme-starken Farbwerte unten (--accent-warm-hover, --status-coral,
+   --status-coral-bg, --focus-ring-strong) die Dark-Readiness-Klausel
+   in designTokens.spec.ts erfuellen. Wer sie aendert, aendert sie
+   hier — es gibt keinen zweiten Ort mehr, an dem sie im Dark-Modus
+   auf Light-Werte driften koennten.
    ============================================================ */
-:root, [data-theme="light"] {
+:root, [data-theme="dark"] {
   /* Glass-Surfaces (abgeleitet, erbt Light/Dark via --bg-glass*) */
   --surface-glass: var(--bg-glass);
   --surface-glass-strong: var(--bg-glass-hi);
@@ -524,4 +536,21 @@ body {
      --focus-ring im Dark-Block überschrieben UND dieser Wert mit
      angepasst werden (siehe Block-Kommentar oben). */
   --focus-ring-strong: rgba(208, 138, 82, 0.6);
+}
+
+/* ============================================================
+   Light-Geruest (Block B1, 18.08.2026)
+   Agora ist ab hier dark-first: die Werte oben gelten ueber :root
+   und sind zusaetzlich unter [data-theme="dark"] adressierbar.
+   Eine Light-Palette wird bewusst NICHT gepflegt (Grilling Q28c) —
+   sie ueber 88 Komponenten zweigleisig zu halten war der Preis, den
+   die Umstellung nicht wert ist.
+   Dieser Block bleibt leer stehen und markiert die Tuer: wer Light
+   zurueckholen will, redefiniert hier dieselben Token-Namen wie im
+   Dark-Block oben. Solange er leer ist, faellt [data-theme="light"]
+   auf die :root-Werte zurueck und sieht aus wie Dark — das ist
+   gewollt und besser als eine halb gepflegte zweite Palette.
+   ============================================================ */
+[data-theme="light"] {
+  /* absichtlich leer — siehe Kommentar oben */
 }

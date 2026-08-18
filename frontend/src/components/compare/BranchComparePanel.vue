@@ -454,8 +454,8 @@ function formatDate(iso: string): string {
   gap: var(--s-5, 20px);
   flex-wrap: wrap;
   padding: var(--s-3, 12px) var(--s-4, 16px);
-  background: var(--bg, #fff);
-  border: 1px solid var(--rule, #e5e7eb);
+  background: var(--surface-elevated);
+  border: 1px solid var(--hairline);
   border-radius: var(--r-md, 8px);
 }
 
@@ -477,13 +477,13 @@ function formatDate(iso: string): string {
   font-size: 10px;
   letter-spacing: var(--ls-mono, 0.04em);
   text-transform: uppercase;
-  color: var(--fg-muted, #6b7280);
+  color: var(--text-secondary);
 }
 
 .compare-sim-id {
   font-family: var(--ff-mono, monospace);
   font-size: 12px;
-  color: var(--fg, #111);
+  color: var(--text-primary);
 }
 
 .compare-selector-label {
@@ -494,22 +494,22 @@ function formatDate(iso: string): string {
   font-size: 11px;
   letter-spacing: var(--ls-mono, 0.04em);
   text-transform: uppercase;
-  color: var(--fg-muted, #6b7280);
+  color: var(--text-secondary);
 }
 
 .compare-select {
   padding: 4px 8px;
-  border: 1px solid var(--rule, #e5e7eb);
+  border: 1px solid var(--hairline);
   border-radius: var(--r-sm, 4px);
-  background: var(--bg, #fff);
-  color: var(--fg, #111);
+  background: var(--surface-inset);
+  color: var(--text-primary);
   font-size: 13px;
   cursor: pointer;
 }
 
 .compare-arrow {
   font-size: 16px;
-  color: var(--fg-muted, #6b7280);
+  color: var(--text-secondary);
   margin-top: 16px;
 }
 
@@ -525,23 +525,23 @@ function formatDate(iso: string): string {
   text-align: center;
   font-family: var(--ff-mono, monospace);
   font-size: 13px;
-  color: var(--fg-muted, #6b7280);
-  border: 1px dashed var(--rule, #e5e7eb);
+  color: var(--text-secondary);
+  border: 1px dashed var(--hairline);
   border-radius: var(--r-md, 8px);
   padding: var(--s-6, 24px);
 }
 
 .compare-error {
-  color: var(--red-600, #dc2626);
-  border-color: var(--red-300, #fca5a5);
-  background: var(--red-50, #fef2f2);
+  color: var(--status-red);
+  border-color: color-mix(in srgb, var(--status-red) 35%, transparent);
+  background: var(--status-red-bg);
 }
 
 .compare-spinner {
   width: 28px;
   height: 28px;
-  border: 2px solid var(--rule, #e5e7eb);
-  border-top-color: var(--accent, #6366f1);
+  border: 2px solid var(--hairline);
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   margin-bottom: var(--s-3, 12px);
@@ -565,8 +565,8 @@ function formatDate(iso: string): string {
   gap: var(--s-3, 12px);
   flex-wrap: wrap;
   padding: var(--s-3, 12px) var(--s-4, 16px);
-  background: var(--bg-inverse, #f9fafb);
-  border: 1px solid var(--rule, #e5e7eb);
+  background: var(--surface-inset);
+  border: 1px solid var(--hairline);
   border-radius: var(--r-md, 8px);
 }
 
@@ -583,7 +583,7 @@ function formatDate(iso: string): string {
   font-size: 10px;
   letter-spacing: var(--ls-mono, 0.04em);
   text-transform: uppercase;
-  color: var(--fg-muted, #6b7280);
+  color: var(--text-secondary);
   text-align: center;
 }
 
@@ -594,15 +594,15 @@ function formatDate(iso: string): string {
 }
 
 .delta-positive {
-  color: var(--color-success-fg, #1f7a1f);
+  color: var(--status-green);
 }
 
 .delta-negative {
-  color: var(--red-600, #dc2626);
+  color: var(--status-red);
 }
 
 .delta-zero {
-  color: var(--fg-muted, #6b7280);
+  color: var(--text-secondary);
 }
 
 /* Branch-Karten */
@@ -622,7 +622,7 @@ function formatDate(iso: string): string {
   display: flex;
   flex-direction: column;
   gap: var(--s-3, 12px);
-  border: 1px solid var(--rule, #e5e7eb);
+  border: 1px solid var(--hairline);
   border-radius: var(--r-md, 8px);
   overflow: hidden;
 }
@@ -632,21 +632,21 @@ function formatDate(iso: string): string {
   flex-direction: column;
   gap: 2px;
   padding: var(--s-2, 8px) var(--s-3, 12px);
-  background: var(--bg-inverse, #f9fafb);
-  border-bottom: 1px solid var(--rule, #e5e7eb);
+  background: var(--surface-inset);
+  border-bottom: 1px solid var(--hairline);
 }
 
 .branch-card-id {
   font-family: var(--ff-mono, monospace);
   font-size: 12px;
   font-weight: 600;
-  color: var(--fg, #111);
+  color: var(--text-primary);
 }
 
 .branch-card-completed {
   font-family: var(--ff-mono, monospace);
   font-size: 10px;
-  color: var(--fg-muted, #6b7280);
+  color: var(--text-secondary);
 }
 
 /* KPI-Block */
@@ -662,8 +662,8 @@ function formatDate(iso: string): string {
   flex-direction: column;
   gap: 2px;
   padding: var(--s-2, 8px);
-  background: var(--bg-inverse, #f9fafb);
-  border: 1px solid var(--rule, #e5e7eb);
+  background: var(--surface-inset);
+  border: 1px solid var(--hairline);
   border-radius: var(--r-sm, 4px);
 }
 
@@ -672,14 +672,14 @@ function formatDate(iso: string): string {
   font-size: 9px;
   letter-spacing: var(--ls-mono, 0.04em);
   text-transform: uppercase;
-  color: var(--fg-muted, #6b7280);
+  color: var(--text-secondary);
 }
 
 .kpi-value {
   font-family: var(--ff-mono, monospace);
   font-size: 14px;
   font-weight: 600;
-  color: var(--fg, #111);
+  color: var(--text-primary);
 }
 
 /* Confidence Distribution */
@@ -694,7 +694,7 @@ function formatDate(iso: string): string {
   font-size: 10px;
   letter-spacing: var(--ls-mono, 0.04em);
   text-transform: uppercase;
-  color: var(--fg-muted, #6b7280);
+  color: var(--text-secondary);
   margin-bottom: var(--s-2, 8px);
 }
 
@@ -714,13 +714,13 @@ function formatDate(iso: string): string {
 }
 
 .confidence-bar-label {
-  color: var(--fg-muted, #6b7280);
+  color: var(--text-secondary);
   text-transform: capitalize;
 }
 
 .confidence-bar-count {
   font-weight: 600;
-  color: var(--fg, #111);
+  color: var(--text-primary);
 }
 
 /* Persona Reach */
@@ -747,7 +747,7 @@ function formatDate(iso: string): string {
 }
 
 .persona-reach-segment {
-  color: var(--fg, #111);
+  color: var(--text-primary);
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -755,13 +755,13 @@ function formatDate(iso: string): string {
 }
 
 .persona-reach-counts {
-  color: var(--fg-muted, #6b7280);
+  color: var(--text-secondary);
   white-space: nowrap;
 }
 
 .persona-reach-ratio {
   font-weight: 600;
-  color: var(--fg, #111);
+  color: var(--text-primary);
   white-space: nowrap;
 }
 
@@ -776,7 +776,7 @@ function formatDate(iso: string): string {
 }
 
 .dominant-cluster-label {
-  color: var(--fg, #111);
+  color: var(--text-primary);
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -784,7 +784,7 @@ function formatDate(iso: string): string {
 }
 
 .dominant-cluster-size {
-  color: var(--fg-muted, #6b7280);
+  color: var(--text-secondary);
   white-space: nowrap;
 }
 
@@ -796,7 +796,7 @@ function formatDate(iso: string): string {
 }
 
 .compare-cluster-group {
-  border: 1px solid var(--rule, #e5e7eb);
+  border: 1px solid var(--hairline);
   border-radius: var(--r-md, 8px);
   padding: var(--s-3, 12px);
 }
@@ -807,7 +807,7 @@ function formatDate(iso: string): string {
   font-family: var(--ff-mono, monospace);
   text-transform: uppercase;
   letter-spacing: var(--ls-mono, 0.04em);
-  color: var(--fg-muted, #6b7280);
+  color: var(--text-secondary);
   margin: 0 0 var(--s-2, 8px);
 }
 
@@ -832,23 +832,6 @@ function formatDate(iso: string): string {
   font-family: var(--ff-mono, monospace);
 }
 
-.cluster-only-a {
-  background: #fee2e2;
-  color: #b91c1c;
-  border: 1px solid #fca5a5;
-}
-
-.cluster-only-b {
-  background: #dcfce7;
-  color: #15803d;
-  border: 1px solid #86efac;
-}
-
-.cluster-changed {
-  background: #dbeafe;
-  color: #1d4ed8;
-  border: 1px solid #93c5fd;
-}
 
 .cluster-item-id {
   font-size: 10px;
@@ -882,18 +865,18 @@ function formatDate(iso: string): string {
   letter-spacing: 0;
 }
 .cluster-only-a {
-  background: var(--status-red-bg, #fee2e2);
-  color: var(--status-red, #b91c1c);
-  border-color: color-mix(in srgb, var(--status-red, #b91c1c) 35%, transparent);
+  background: var(--status-red-bg);
+  color: var(--status-red);
+  border-color: color-mix(in srgb, var(--status-red) 35%, transparent);
 }
 .cluster-only-b {
-  background: var(--status-green-bg, #dcfce7);
-  color: var(--status-green, #15803d);
-  border-color: color-mix(in srgb, var(--status-green, #15803d) 35%, transparent);
+  background: var(--status-green-bg);
+  color: var(--status-green);
+  border-color: color-mix(in srgb, var(--status-green) 35%, transparent);
 }
 .cluster-changed {
-  background: var(--accent-tint-bg, #dbeafe);
-  color: var(--accent-tint-text, #1d4ed8);
-  border-color: color-mix(in srgb, var(--accent, #1d4ed8) 35%, transparent);
+  background: var(--accent-tint-bg);
+  color: var(--accent-tint-text);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
 }
 </style>

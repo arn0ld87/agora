@@ -1,0 +1,52 @@
+<section style="width:1440px;display:flex;flex-direction:column;gap:26px">
+  <div style="display:flex;align-items:baseline;gap:14px">
+    <span style="font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#7c736a">Agora 0.9.5 · Frontend-Neuentwurf · Richtung B „Dossier“</span>
+  </div>
+  <h1 style="margin:0;font-size:44px;font-weight:600;letter-spacing:-0.03em;line-height:1.08;max-width:26ch">Objekte statt Seiten.</h1>
+  <p style="margin:0;font-family:'Newsreader',serif;font-size:20px;line-height:1.5;color:#cfc7bc;max-width:76ch">Agora hat keine Seiten, es hat Gegenstände: einen Graphen, einen Personasatz, einen Lauf, einen Bericht. Der Entwurf ersetzt die permanente Seitennavigation durch eine Ablage aller Objekte und einen Stapel, der zeigt, was du geöffnet hast. Ein Lauf ist dann kein Menüpunkt mehr, sondern ein Raum, den du betreten und wieder verlassen kannst.</p>
+
+  <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border-top:1px solid rgba(255,246,235,0.12);border-bottom:1px solid rgba(255,246,235,0.12)">
+    <div style="padding:20px 24px 20px 0">
+      <div style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:10px">Befund im Bestand</div>
+      <ul style="margin:0;padding-left:18px;font-size:13.5px;line-height:1.65;color:#cfc7bc">
+        <li>Die Sidebar führt zwei Ziele und eine Einstellungsgruppe — 220 px permanenter Rahmen für zwei Links.</li>
+        <li>Der Lauf lebt in fünf getrennten Routen (<span style="font-family:'Geist Mono',monospace;font-size:12px">/v4/graph-build</span> … <span style="font-family:'Geist Mono',monospace;font-size:12px">/v4/interaction</span>); die Klammer existiert nur im Kopf des Nutzers.</li>
+        <li>Das Dashboard beantwortet Kennzahlen, nicht die Frage „wo war ich?“.</li>
+        <li>Der Bericht steckt in einer Card innerhalb der App-Chrome, statt Leseumgebung zu sein.</li>
+      </ul>
+    </div>
+    <div style="padding:20px 24px;border-left:1px solid rgba(255,246,235,0.12)">
+      <div style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:10px">Navigationsmodell</div>
+      <ul style="margin:0;padding-left:18px;font-size:13.5px;line-height:1.65;color:#cfc7bc">
+        <li><strong style="font-weight:600;color:#f2ece4">Ablage</strong> — chronologische Liste aller Objekte, zuletzt angefasst zuerst.</li>
+        <li><strong style="font-weight:600;color:#f2ece4">Dossier</strong> — rechts die Vorschau des gewählten Objekts mit betretbaren Bestandteilen.</li>
+        <li><strong style="font-weight:600;color:#f2ece4">Stapel</strong> — die Kopfzeile führt, was offen ist; zurück heißt: eine Ebene ablegen.</li>
+        <li><strong style="font-weight:600;color:#f2ece4">Ganzflächig</strong> — Simulation, Graph und Bericht übernehmen den Bildschirm, Chrome schrumpft auf 46 px.</li>
+        <li><strong style="font-weight:600;color:#f2ece4">⌘K</strong> — springt zu Objekten, nicht zu Seiten. Einstellungen sind ein Overlay, keine Route im Sichtfeld.</li>
+      </ul>
+    </div>
+    <div style="padding:20px 0 20px 24px;border-left:1px solid rgba(255,246,235,0.12)">
+      <div style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:10px">Bleibt erhalten</div>
+      <ul style="margin:0;padding-left:18px;font-size:13.5px;line-height:1.65;color:#cfc7bc">
+        <li>Pipeline-Vokabular Graph → Prepare → Simulation → Report → Interaktion</li>
+        <li>Confidence-Stufen und die Trennung Aussage (Claim) / Hypothese / Datenlücke (Data Gap)</li>
+        <li>Kommandopalette ⌘K, Log-Drawer ⌃⇧L</li>
+        <li>Doppelspalte Reddit / Twitter im Live-Feed</li>
+        <li>Graph-Canvas mit Relationsinspektor</li>
+        <li>Alle Routen bleiben adressierbar — der Entwurf ändert die Hülle, nicht die API</li>
+      </ul>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:30px;flex-wrap:wrap;align-items:center;padding-top:4px">
+    <div style="display:flex;align-items:center;gap:9px"><span style="width:26px;height:26px;background:#14110f;border:1px solid rgba(255,246,235,0.14)"></span><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#a89f94">#14110f Grund</span></div>
+    <div style="display:flex;align-items:center;gap:9px"><span style="width:26px;height:26px;background:#1b1815;border:1px solid rgba(255,246,235,0.14)"></span><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#a89f94">#1b1815 Fläche</span></div>
+    <div style="display:flex;align-items:center;gap:9px"><span style="width:26px;height:26px;background:#d08a52"></span><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#a89f94">#d08a52 Aktion</span></div>
+    <div style="display:flex;align-items:center;gap:9px"><span style="width:26px;height:26px;background:#5fb6c9"></span><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#a89f94">#5fb6c9 Live / System</span></div>
+    <div style="display:flex;align-items:center;gap:9px"><span style="width:26px;height:26px;background:#7fa86a"></span><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#a89f94">#7fa86a belegt</span></div>
+    <div style="display:flex;align-items:center;gap:9px"><span style="width:26px;height:26px;background:#d09a3c"></span><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#a89f94">#d09a3c offen</span></div>
+    <div style="display:flex;align-items:center;gap:9px"><span style="width:26px;height:26px;background:#d2604f"></span><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#a89f94">#d2604f Widerspruch</span></div>
+    <span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#7c736a">Archivo · Newsreader (Berichtstext) · Geist Mono (IDs, Zahlen)</span>
+  </div>
+</section>
+

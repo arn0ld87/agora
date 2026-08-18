@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+html, body { margin:0; padding:0; background:#0b0a09; }
+a { color:#d08a52; text-decoration:none; }
+a:hover { color:#e6a878; }
+::selection { background:rgba(208,138,82,0.3); }
+</style>
+</helmet>
+<template id="__bundler_thumbnail"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#14110f"></rect><circle cx="50" cy="50" r="19" fill="none" stroke="#d08a52" stroke-width="3"></circle><rect x="30" y="48.5" width="40" height="3" fill="#5fb6c9"></rect></svg></template>
+<div style="background:#0b0a09;color:#f2ece4;font-family:'Archivo',system-ui,sans-serif;padding:56px 56px 120px;display:flex;flex-direction:column;gap:56px;align-items:flex-start">
+
+<section style="width:1440px;display:flex;flex-direction:column;gap:26px">
+  <div style="display:flex;align-items:baseline;gap:14px">
+    <span style="font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#7c736a">Agora 0.9.5 · Frontend-Neuentwurf · Richtung B „Dossier“</span>
+  </div>
+  <h1 style="margin:0;font-size:44px;font-weight:600;letter-spacing:-0.03em;line-height:1.08;max-width:26ch">Objekte statt Seiten.</h1>
+  <p style="margin:0;font-family:'Newsreader',serif;font-size:20px;line-height:1.5;color:#cfc7bc;max-width:76ch">Agora hat keine Seiten, es hat Gegenstände: einen Graphen, einen Personasatz, einen Lauf, einen Bericht. Der Entwurf ersetzt die permanente Seitennavigation durch eine Ablage aller Objekte und einen Stapel, der zeigt, was du geöffnet hast. Ein Lauf ist dann kein Menüpunkt mehr, sondern ein Raum, den du betreten und wieder verlassen kannst.</p>
+
+  <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border-top:1px solid rgba(255,246,235,0.12);border-bottom:1px solid rgba(255,246,235,0.12)">
+    <div style="padding:20px 24px 20px 0">
+      <div style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:10px">Befund im Bestand</div>
+      <ul style="margin:0;padding-left:18px;font-size:13.5px;line-height:1.65;color:#cfc7bc">
+        <li>Die Sidebar führt zwei Ziele und eine Einstellungsgruppe — 220 px permanenter Rahmen für zwei Links.</li>
+        <li>Der Lauf lebt in fünf getrennten Routen (<span style="font-family:'Geist Mono',monospace;font-size:12px">/v4/graph-build</span> … <span style="font-family:'Geist Mono',monospace;font-size:12px">/v4/interaction</span>); die Klammer existiert nur im Kopf des Nutzers.</li>
+        <li>Das Dashboard beantwortet Kennzahlen, nicht die Frage „wo war ich?“.</li>
+        <li>Der Bericht steckt in einer Card innerhalb der App-Chrome, statt Leseumgebung zu sein.</li>
+      </ul>
+    </div>
+    <div style="padding:20px 24px;border-left:1px solid rgba(255,246,235,0.12)">
+      <div style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:10px">Navigationsmodell</div>
+      <ul style="margin:0;padding-left:18px;font-size:13.5px;line-height:1.65;color:#cfc7bc">
+        <li><strong style="font-weight:600;color:#f2ece4">Ablage</strong> — chronologische Liste aller Objekte, zuletzt angefasst zuerst.</li>
+        <li><strong style="font-weight:600;color:#f2ece4">Dossier</strong> — rechts die Vorschau des gewählten Objekts mit betretbaren Bestandteilen.</li>
+        <li><strong style="font-weight:600;color:#f2ece4">Stapel</strong> — die Kopfzeile führt, was offen ist; zurück heißt: eine Ebene ablegen.</li>
+        <li><strong style="font-weight:600;color:#f2ece4">Ganzflächig</strong> — Simulation, Graph und Bericht übernehmen den Bildschirm, Chrome schrumpft auf 46 px.</li>
+        <li><strong style="font-weight:600;color:#f2ece4">⌘K</strong> — springt zu Objekten, nicht zu Seiten. Einstellungen sind ein Overlay, keine Route im Sichtfeld.</li>
+      </ul>
+    </div>
+    <div style="padding:20px 0 20px 24px;border-left:1px solid rgba(255,246,235,0.12)">
+      <div style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:10px">Bleibt erhalten</div>
+      <ul style="margin:0;padding-left:18px;font-size:13.5px;line-height:1.65;color:#cfc7bc">
+        <li>Pipeline-Vokabular Graph → Prepare → Simulation → Report → Interaktion</li>
+        <li>Confidence-Stufen und die Trennung Aussage (Claim) / Hypothese / Datenlücke (Data Gap)</li>
+        <li>Kommandopalette ⌘K, Log-Drawer ⌃⇧L</li>
+        <li>Doppelspalte Reddit / Twitter im Live-Feed</li>
+        <li>Graph-Canvas mit Relationsinspektor</li>
+        <li>Alle Routen bleiben adressierbar — der Entwurf ändert die Hülle, nicht die API</li>
+      </ul>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:30px;flex-wrap:wrap;align-items:center;padding-top:4px">
+    <div style="display:flex;align-items:center;gap:9px"><span style="width:26px;height:26px;background:#14110f;border:1px solid rgba(255,246,235,0.14)"></span><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#a89f94">#14110f Grund</span></div>
+    <div style="display:flex;align-items:center;gap:9px"><span style="width:26px;height:26px;background:#1b1815;border:1px solid rgba(255,246,235,0.14)"></span><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#a89f94">#1b1815 Fläche</span></div>
+    <div style="display:flex;align-items:center;gap:9px"><span style="width:26px;height:26px;background:#d08a52"></span><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#a89f94">#d08a52 Aktion</span></div>
+    <div style="display:flex;align-items:center;gap:9px"><span style="width:26px;height:26px;background:#5fb6c9"></span><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#a89f94">#5fb6c9 Live / System</span></div>
+    <div style="display:flex;align-items:center;gap:9px"><span style="width:26px;height:26px;background:#7fa86a"></span><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#a89f94">#7fa86a belegt</span></div>
+    <div style="display:flex;align-items:center;gap:9px"><span style="width:26px;height:26px;background:#d09a3c"></span><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#a89f94">#d09a3c offen</span></div>
+    <div style="display:flex;align-items:center;gap:9px"><span style="width:26px;height:26px;background:#d2604f"></span><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#a89f94">#d2604f Widerspruch</span></div>
+    <span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#7c736a">Archivo · Newsreader (Berichtstext) · Geist Mono (IDs, Zahlen)</span>
+  </div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:14px">
+  <div style="display:flex;align-items:baseline;gap:12px">
+    <span style="font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#d08a52">Screen 01</span>
+    <h2 style="margin:0;font-size:19px;font-weight:600;letter-spacing:-0.015em">Ablage — Einstieg und Weiterarbeit</h2>
+    <span style="font-size:13px;color:#7c736a">ersetzt <span style="font-family:'Geist Mono',monospace;font-size:12px">/dashboard</span></span>
+  </div>
+
+  <div style="width:1440px;height:900px;background:#14110f;border:1px solid rgba(255,246,235,0.12);overflow:hidden;display:flex;flex-direction:column;font-size:14px;line-height:1.5">
+    <div style="height:46px;display:flex;align-items:center;gap:16px;padding:0 20px;border-bottom:1px solid rgba(255,246,235,0.09);flex-shrink:0">
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0"><span style="width:13px;height:13px;border:1.5px solid #d08a52;border-radius:50%"></span><span style="font-size:14px;font-weight:600;letter-spacing:-0.01em">Agora</span></div>
+      <span style="width:1px;height:18px;background:rgba(255,246,235,0.12)"></span>
+      <nav aria-label="Stapel" style="display:flex;align-items:center;gap:6px;min-width:0">
+        <span style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:#5c5449;margin-right:4px">Stapel</span>
+        <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:4px;background:rgba(208,138,82,0.16);color:#e6a878;font-size:12px;font-weight:500">Ablage</span>
+      </nav>
+      <span style="flex:1"></span>
+      <span style="display:flex;align-items:center;gap:14px;font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.07em;color:#7c736a;text-transform:uppercase">
+        <span style="display:flex;align-items:center;gap:5px"><span style="width:5px;height:5px;border-radius:50%;background:#7fa86a"></span>Neo4j</span>
+        <span style="display:flex;align-items:center;gap:5px"><span style="width:5px;height:5px;border-radius:50%;background:#7fa86a"></span>Redis</span>
+        <span style="display:flex;align-items:center;gap:5px"><span style="width:5px;height:5px;border-radius:50%;background:#5fb6c9"></span>MiniMax</span>
+      </span>
+      <span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#5c5449;border:1px solid rgba(255,246,235,0.12);border-radius:3px;padding:2px 6px">⌘K Objekt öffnen</span>
+      <span style="width:25px;height:25px;border-radius:50%;background:rgba(208,138,82,0.16);color:#d08a52;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;font-family:'Geist Mono',monospace">AS</span>
+    </div>
+
+    <div style="flex:1;display:grid;grid-template-columns:400px minmax(0,1fr);min-height:0">
+      <div style="border-right:1px solid rgba(255,246,235,0.09);display:flex;flex-direction:column;min-height:0">
+        <div style="padding:20px 20px 12px">
+          <h3 style="margin:0 0 3px;font-size:18px;font-weight:600;letter-spacing:-0.015em">Ablage</h3>
+          <p style="margin:0;font-size:12.5px;color:#a89f94">24 Objekte · zuletzt angefasst zuerst</p>
+        </div>
+        <div style="display:flex;gap:14px;padding:0 20px 10px;font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.08em;text-transform:uppercase">
+          <span style="color:#f2ece4;border-bottom:1.5px solid #d08a52;padding-bottom:4px">Alle</span>
+          <span style="color:#7c736a;padding-bottom:4px">Läufe 9</span>
+          <span style="color:#7c736a;padding-bottom:4px">Berichte 7</span>
+          <span style="color:#7c736a;padding-bottom:4px">Personas 5</span>
+          <span style="color:#7c736a;padding-bottom:4px">Graphen 3</span>
+        </div>
+        <div style="flex:1;overflow:hidden;display:flex;flex-direction:column">
+          <div style="display:grid;grid-template-columns:36px minmax(0,1fr);gap:11px;background:rgba(208,138,82,0.09);border-top:1px solid rgba(255,246,235,0.09);border-left:2px solid #d08a52;padding:13px 20px 13px 18px">
+            <span style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.06em;color:#d08a52;border:1px solid rgba(208,138,82,0.4);border-radius:2px;height:17px;display:flex;align-items:center;justify-content:center">LAUF</span>
+            <span style="min-width:0">
+              <span style="display:block;font-size:14px;font-weight:600;letter-spacing:-0.01em">Nexora Triage Assist</span>
+              <span style="display:block;font-size:12px;color:#a89f94;margin-top:2px">Bericht fertig · 9 Red-Team-Befunde offen</span>
+              <span style="display:block;font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a;margin-top:3px">14:22 · sim_c2108c7f543e</span>
+            </span>
+          </div>
+          <div style="display:grid;grid-template-columns:36px minmax(0,1fr);gap:11px;border-top:1px solid rgba(255,246,235,0.09);border-left:2px solid transparent;padding:13px 20px 13px 18px">
+            <span style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.06em;color:#7c736a;border:1px solid rgba(255,246,235,0.16);border-radius:2px;height:17px;display:flex;align-items:center;justify-content:center">PERS</span>
+            <span style="min-width:0">
+              <span style="display:block;font-size:14px;font-weight:600;letter-spacing:-0.01em">SchulKI · 28 Personas</span>
+              <span style="display:block;font-size:12px;color:#a89f94;margin-top:2px">Ungeprüft — Simulation blockiert</span>
+              <span style="display:block;font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a;margin-top:3px">11:07 · proj_c12f138aa04e</span>
+            </span>
+          </div>
+          <div style="display:grid;grid-template-columns:36px minmax(0,1fr);gap:11px;border-top:1px solid rgba(255,246,235,0.09);border-left:2px solid transparent;padding:13px 20px 13px 18px;background:rgba(95,182,201,0.05)">
+            <span style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.06em;color:#5fb6c9;border:1px solid rgba(95,182,201,0.4);border-radius:2px;height:17px;display:flex;align-items:center;justify-content:center">LAUF</span>
+            <span style="min-width:0">
+              <span style="display:block;font-size:14px;font-weight:600;letter-spacing:-0.01em">Domain-Migration v2</span>
+              <span style="display:block;font-size:12px;color:#5fb6c9;margin-top:2px">Simulation pausiert · Runde 12/20 · Budget 78 %</span>
+              <span style="display:block;font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a;margin-top:3px">läuft · sim_4f1ab77c9d02</span>
+            </span>
+          </div>
+          <div style="display:grid;grid-template-columns:36px minmax(0,1fr);gap:11px;border-top:1px solid rgba(255,246,235,0.09);border-left:2px solid transparent;padding:13px 20px 13px 18px">
+            <span style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.06em;color:#7c736a;border:1px solid rgba(255,246,235,0.16);border-radius:2px;height:17px;display:flex;align-items:center;justify-content:center">BER</span>
+            <span style="min-width:0">
+              <span style="display:block;font-size:14px;font-weight:600;letter-spacing:-0.01em">KI-Klinikrollout</span>
+              <span style="display:block;font-size:12px;color:#a89f94;margin-top:2px">6 Abschnitte · 3 Gespräche geplant, keines geführt</span>
+              <span style="display:block;font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a;margin-top:3px">Gestern · report_3c594fcc7613</span>
+            </span>
+          </div>
+          <div style="display:grid;grid-template-columns:36px minmax(0,1fr);gap:11px;border-top:1px solid rgba(255,246,235,0.09);border-left:2px solid transparent;padding:13px 20px 13px 18px">
+            <span style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.06em;color:#7c736a;border:1px solid rgba(255,246,235,0.16);border-radius:2px;height:17px;display:flex;align-items:center;justify-content:center">GRPH</span>
+            <span style="min-width:0">
+              <span style="display:block;font-size:14px;font-weight:600;letter-spacing:-0.01em">Triage-Vorstudie</span>
+              <span style="display:block;font-size:12px;color:#a89f94;margin-top:2px">412 Entitäten, 1 108 Relationen · keine Personas</span>
+              <span style="display:block;font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a;margin-top:3px">Gestern · proj_88ce1204af7b</span>
+            </span>
+          </div>
+          <div style="display:grid;grid-template-columns:36px minmax(0,1fr);gap:11px;border-top:1px solid rgba(255,246,235,0.09);border-left:2px solid transparent;padding:13px 20px 13px 18px">
+            <span style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.06em;color:#e08471;border:1px solid rgba(210,96,79,0.4);border-radius:2px;height:17px;display:flex;align-items:center;justify-content:center">LAUF</span>
+            <span style="min-width:0">
+              <span style="display:block;font-size:14px;font-weight:600;letter-spacing:-0.01em">Pflegekammer-Varianten</span>
+              <span style="display:block;font-size:12px;color:#e08471;margin-top:2px">Gescheitert · Ursache ungeklärt</span>
+              <span style="display:block;font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a;margin-top:3px">15.08. · run_a0d4c7e91f33</span>
+            </span>
+          </div>
+          <div style="display:grid;grid-template-columns:36px minmax(0,1fr);gap:11px;border-top:1px solid rgba(255,246,235,0.09);border-left:2px solid transparent;padding:13px 20px 13px 18px">
+            <span style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.06em;color:#7c736a;border:1px solid rgba(255,246,235,0.16);border-radius:2px;height:17px;display:flex;align-items:center;justify-content:center">LAUF</span>
+            <span style="min-width:0">
+              <span style="display:block;font-size:14px;font-weight:600;letter-spacing:-0.01em">Domain-Migration — 20 Runden</span>
+              <span style="display:block;font-size:12px;color:#a89f94;margin-top:2px">Simulation fertig · Bericht nie erzeugt</span>
+              <span style="display:block;font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a;margin-top:3px">12.08. · sim_7b30d5c48ea1</span>
+            </span>
+          </div>
+          <div style="border-top:1px solid rgba(255,246,235,0.09);padding:14px 20px;display:flex;align-items:center;gap:10px">
+            <button style="height:30px;padding:0 12px;background:#d08a52;border:0;border-radius:5px;color:#17120e;font-family:'Archivo',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer">Neues Objekt: Quelle ablegen</button>
+            <span style="font-size:12px;color:#7c736a">PDF, Markdown, Text, Webseite</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="padding:24px 30px;min-width:0;overflow:hidden">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px">
+          <div style="min-width:0">
+            <div style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:6px">Lauf · Dossier</div>
+            <h3 style="margin:0;font-size:24px;font-weight:600;letter-spacing:-0.02em">Nexora Triage Assist — Rollout Falkenbrück</h3>
+            <p style="margin:6px 0 0;font-size:13px;color:#a89f94;max-width:76ch">24 von 24 Runden simuliert. Bericht in 16:46 min über 7 Abschnitte erzeugt; in fünf Abschnitten wurden 10 Faktenaussagen aus der Prosa entfernt und als Hypothese weitergeführt.</p>
+          </div>
+          <button style="height:32px;padding:0 14px;background:transparent;border:1px solid rgba(255,246,235,0.16);border-radius:5px;color:#f2ece4;font-family:'Archivo',sans-serif;font-size:12.5px;font-weight:500;cursor:pointer;flex-shrink:0">Ganzflächig öffnen ⏎</button>
+        </div>
+
+        <div style="display:flex;margin:20px 0 0;border-top:1px solid rgba(255,246,235,0.09);border-bottom:1px solid rgba(255,246,235,0.09)">
+          <div style="flex:1;padding:12px 16px 12px 0">
+            <div style="font-family:'Geist Mono',monospace;font-size:18px">24<span style="color:#7c736a;font-size:12px">/24</span></div>
+            <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.09em;text-transform:uppercase;color:#7c736a;margin-top:3px">Runden</div>
+          </div>
+          <div style="flex:1;padding:12px 16px;border-left:1px solid rgba(255,246,235,0.09)">
+            <div style="font-family:'Geist Mono',monospace;font-size:18px">116</div>
+            <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.09em;text-transform:uppercase;color:#7c736a;margin-top:3px">Belege</div>
+          </div>
+          <div style="flex:1;padding:12px 16px;border-left:1px solid rgba(255,246,235,0.09)">
+            <div style="font-family:'Geist Mono',monospace;font-size:18px">29</div>
+            <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.09em;text-transform:uppercase;color:#7c736a;margin-top:3px">Aussagen · alle low</div>
+          </div>
+          <div style="flex:1;padding:12px 16px;border-left:1px solid rgba(255,246,235,0.09)">
+            <div style="font-family:'Geist Mono',monospace;font-size:18px">0.703</div>
+            <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.09em;text-transform:uppercase;color:#7c736a;margin-top:3px">Echo-Index</div>
+          </div>
+          <div style="flex:1;padding:12px 0 12px 16px;border-left:1px solid rgba(255,246,235,0.09)">
+            <div style="font-family:'Geist Mono',monospace;font-size:18px;color:#e08471">9</div>
+            <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.09em;text-transform:uppercase;color:#7c736a;margin-top:3px">Red-Team-Befunde</div>
+          </div>
+        </div>
+
+        <h4 style="margin:24px 0 2px;font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;font-weight:500">Bestandteile</h4>
+        <p style="margin:0 0 10px;font-size:12.5px;color:#7c736a">Räume dieses Laufs, keine Menüpunkte.</p>
+        <div style="display:flex;flex-direction:column">
+          <a href="#" style="display:grid;grid-template-columns:158px minmax(0,1fr) auto;gap:18px;align-items:baseline;padding:12px 4px;border-top:1px solid rgba(255,246,235,0.09);color:#f2ece4">
+            <span style="font-size:13.5px;font-weight:600">Quellenumfeld</span>
+            <span style="font-size:12.5px;color:#a89f94">31 Seed-Dokumente · 674 Entitäten · Relationsinspektor</span>
+            <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#7c736a">→</span>
+          </a>
+          <a href="#" style="display:grid;grid-template-columns:158px minmax(0,1fr) auto;gap:18px;align-items:baseline;padding:12px 4px;border-top:1px solid rgba(255,246,235,0.09);color:#f2ece4">
+            <span style="font-size:13.5px;font-weight:600">Akteure</span>
+            <span style="font-size:12.5px;color:#a89f94">7 Personas · 6–8 je Abschnitt befragt · 49 Interviewantworten</span>
+            <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#7c736a">→</span>
+          </a>
+          <a href="#" style="display:grid;grid-template-columns:158px minmax(0,1fr) auto;gap:18px;align-items:baseline;padding:12px 4px;border-top:1px solid rgba(255,246,235,0.09);color:#f2ece4">
+            <span style="font-size:13.5px;font-weight:600">Verlauf</span>
+            <span style="font-size:12.5px;color:#a89f94">24 Runden auf Reddit und Twitter · 8 Aktionen als Beleg gebunden</span>
+            <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#7c736a">→</span>
+          </a>
+          <a href="#" style="display:grid;grid-template-columns:158px minmax(0,1fr) auto;gap:18px;align-items:baseline;padding:12px 4px;border-top:1px solid rgba(255,246,235,0.09);color:#f2ece4">
+            <span style="font-size:13.5px;font-weight:600">Belege</span>
+            <span style="font-size:12.5px;color:#a89f94">116 Einträge · 92 erhoben, aber an keine Aussage gebunden</span>
+            <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#d09a3c">Prüfen →</span>
+          </a>
+          <a href="#" style="display:grid;grid-template-columns:158px minmax(0,1fr) auto;gap:18px;align-items:baseline;padding:12px 4px;border-top:1px solid rgba(255,246,235,0.09);border-bottom:1px solid rgba(255,246,235,0.09);color:#f2ece4">
+            <span style="font-size:13.5px;font-weight:600">Ausgabe</span>
+            <span style="font-size:12.5px;color:#a89f94">report_b259e254ee3f · 7 Abschnitte · JSON, Markdown, CSV, ZIP</span>
+            <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#7c736a">→</span>
+          </a>
+        </div>
+
+        <div style="margin-top:22px;padding:18px 20px;background:#1b1815;border-left:2px solid #d2604f">
+          <div style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:#e08471;margin-bottom:8px">Red-Team-Review · Befund 1 von 9</div>
+          <p style="margin:0 0 10px;font-family:'Newsreader',serif;font-size:16px;line-height:1.5;color:#e8e1d7">Zwischen Abschnitt 3 und Abschnitt 6 steht eine ungelöste Spannung: die Entlastungswirkung wird einmal als belegt, einmal als offen geführt. Gegenpositionen der Pflegekräfte fehlen in beiden.</p>
+          <div style="display:flex;gap:16px;font-family:'Geist Mono',monospace;font-size:10.5px;color:#7c736a">
+            <a href="#">Alle Befunde</a>
+            <a href="#">Abschnitt 3 öffnen</a>
+            <a href="#">Echo-Index 0.703 erklären</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p style="margin:0;font-size:13px;color:#7c736a;max-width:110ch">Die Ablage sortiert rein chronologisch — der Zustand steht in der Zeile, nicht in einer Sortierregel. Der Zustandssatz („Ungeprüft — Simulation blockiert“) nennt immer die Konsequenz, nicht nur die Phase.</p>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:14px">
+  <div style="display:flex;align-items:baseline;gap:12px">
+    <span style="font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#d08a52">Screen 02</span>
+    <h2 style="margin:0;font-size:19px;font-weight:600;letter-spacing:-0.015em">⌘K — Objekte statt Seitenziele</h2>
+    <span style="font-size:13px;color:#7c736a">bestehende Kommandopalette, neues Vokabular</span>
+  </div>
+
+  <div style="width:1440px;height:620px;background:#14110f;border:1px solid rgba(255,246,235,0.12);overflow:hidden;position:relative;font-size:14px">
+    <div style="position:absolute;inset:0;opacity:0.32;display:flex;flex-direction:column">
+      <div style="height:46px;border-bottom:1px solid rgba(255,246,235,0.09)"></div>
+      <div style="flex:1;display:grid;grid-template-columns:400px minmax(0,1fr)">
+        <div style="border-right:1px solid rgba(255,246,235,0.09);padding:20px">
+          <div style="height:14px;width:120px;background:rgba(255,246,235,0.12)"></div>
+          <div style="height:10px;width:200px;background:rgba(255,246,235,0.07);margin-top:12px"></div>
+          <div style="height:10px;width:180px;background:rgba(255,246,235,0.07);margin-top:22px"></div>
+          <div style="height:10px;width:220px;background:rgba(255,246,235,0.07);margin-top:22px"></div>
+          <div style="height:10px;width:160px;background:rgba(255,246,235,0.07);margin-top:22px"></div>
+        </div>
+        <div style="padding:24px 30px">
+          <div style="height:20px;width:420px;background:rgba(255,246,235,0.1)"></div>
+          <div style="height:10px;width:560px;background:rgba(255,246,235,0.06);margin-top:14px"></div>
+          <div style="height:70px;margin-top:24px;border-top:1px solid rgba(255,246,235,0.09);border-bottom:1px solid rgba(255,246,235,0.09)"></div>
+        </div>
+      </div>
+    </div>
+    <div style="position:absolute;inset:0;background:rgba(9,8,7,0.62)"></div>
+
+    <div style="position:absolute;left:50%;top:70px;transform:translateX(-50%);width:660px;background:#1b1815;border:1px solid rgba(255,246,235,0.16);box-shadow:0 24px 64px rgba(0,0,0,0.6);overflow:hidden">
+      <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid rgba(255,246,235,0.09)">
+        <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#d08a52">›</span>
+        <span style="font-size:16px;color:#f2ece4">falkenbr</span><span style="width:1px;height:18px;background:#d08a52"></span>
+        <span style="flex:1"></span>
+        <span style="font-family:'Geist Mono',monospace;font-size:10px;color:#5c5449">esc schließt</span>
+      </div>
+      <div style="padding:8px 0">
+        <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;padding:8px 18px 6px">Objekte</div>
+        <div style="display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 18px;background:rgba(208,138,82,0.12);border-left:2px solid #d08a52">
+          <span style="font-family:'Geist Mono',monospace;font-size:9.5px;color:#d08a52;border:1px solid rgba(208,138,82,0.4);border-radius:2px;height:17px;display:flex;align-items:center;justify-content:center">LAUF</span>
+          <span><span style="font-size:13.5px;font-weight:500">Nexora Triage Assist — Rollout <mark style="background:rgba(208,138,82,0.3);color:#f2ece4">Falkenbr</mark>ück</span><span style="display:block;font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a">sim_c2108c7f543e · 9 Befunde offen</span></span>
+          <span style="font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a">⏎ öffnen</span>
+        </div>
+        <div style="display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 18px;border-left:2px solid transparent">
+          <span style="font-family:'Geist Mono',monospace;font-size:9.5px;color:#7c736a;border:1px solid rgba(255,246,235,0.16);border-radius:2px;height:17px;display:flex;align-items:center;justify-content:center">BER</span>
+          <span><span style="font-size:13.5px">Klinikverbund <mark style="background:rgba(208,138,82,0.3);color:#f2ece4">Falkenbr</mark>ück — Entscheidungsbericht</span><span style="display:block;font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a">report_b259e254ee3f · 7 Abschnitte</span></span>
+          <span></span>
+        </div>
+        <div style="display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 18px;border-left:2px solid transparent">
+          <span style="font-family:'Geist Mono',monospace;font-size:9.5px;color:#7c736a;border:1px solid rgba(255,246,235,0.16);border-radius:2px;height:17px;display:flex;align-items:center;justify-content:center">PERS</span>
+          <span><span style="font-size:13.5px">Betriebsrat <mark style="background:rgba(208,138,82,0.3);color:#f2ece4">Falkenbr</mark>ück-Mitte</span><span style="display:block;font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a">Persona · 11 Interviewantworten</span></span>
+          <span></span>
+        </div>
+        <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;padding:14px 18px 6px;border-top:1px solid rgba(255,246,235,0.07)">Stellen im Bericht</div>
+        <div style="display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 18px;border-left:2px solid transparent">
+          <span style="font-family:'Geist Mono',monospace;font-size:9.5px;color:#7c736a;border:1px solid rgba(255,246,235,0.16);border-radius:2px;height:17px;display:flex;align-items:center;justify-content:center">A7</span>
+          <span><span style="font-family:'Newsreader',serif;font-size:14px">„Reversibler Pilot nur an <mark style="background:rgba(208,138,82,0.3);color:#f2ece4">Falkenbr</mark>ück-Mitte“</span><span style="display:block;font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a">Handlungsempfehlung · 4 Aussagen</span></span>
+          <span></span>
+        </div>
+        <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;padding:14px 18px 6px;border-top:1px solid rgba(255,246,235,0.07)">Aktionen</div>
+        <div style="display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 18px 12px;border-left:2px solid transparent">
+          <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#7c736a;height:17px;display:flex;align-items:center;justify-content:center">⌃⇧L</span>
+          <span style="font-size:13.5px">Log-Drawer öffnen</span>
+          <span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p style="margin:0;font-size:13px;color:#7c736a;max-width:110ch">Die Palette findet Objekte, Stellen im Bericht und Aktionen — nicht Seitentitel. Damit trägt sie den Teil der Navigation, für den es früher eine permanente Sidebar gab.</p>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:14px">
+  <div style="display:flex;align-items:baseline;gap:12px">
+    <span style="font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#d08a52">Screen 03</span>
+    <h2 style="margin:0;font-size:19px;font-weight:600;letter-spacing:-0.015em">Läufe — dieselbe Ablage, ein Filter</h2>
+    <span style="font-size:13px;color:#7c736a">ersetzt <span style="font-family:'Geist Mono',monospace;font-size:12px">/runs</span> · Auswahl führt in den Vergleich</span>
+  </div>
+
+  <div style="width:1440px;height:760px;background:#14110f;border:1px solid rgba(255,246,235,0.12);overflow:hidden;display:flex;flex-direction:column;font-size:14px;line-height:1.5">
+    <div style="height:46px;display:flex;align-items:center;gap:16px;padding:0 20px;border-bottom:1px solid rgba(255,246,235,0.09);flex-shrink:0">
+      <div style="display:flex;align-items:center;gap:8px"><span style="width:13px;height:13px;border:1.5px solid #d08a52;border-radius:50%"></span><span style="font-size:14px;font-weight:600;letter-spacing:-0.01em">Agora</span></div>
+      <span style="width:1px;height:18px;background:rgba(255,246,235,0.12)"></span>
+      <nav aria-label="Stapel" style="display:flex;align-items:center;gap:6px">
+        <span style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:#5c5449;margin-right:4px">Stapel</span>
+        <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:4px;background:rgba(255,246,235,0.06);color:#a89f94;font-size:12px">Ablage</span>
+        <span style="color:#5c5449;font-size:11px">›</span>
+        <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:4px;background:rgba(208,138,82,0.16);color:#e6a878;font-size:12px;font-weight:500">Läufe</span>
+      </nav>
+      <span style="flex:1"></span>
+      <span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#5c5449;border:1px solid rgba(255,246,235,0.12);border-radius:3px;padding:2px 6px">⌘K</span>
+      <span style="width:25px;height:25px;border-radius:50%;background:rgba(208,138,82,0.16);color:#d08a52;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;font-family:'Geist Mono',monospace">AS</span>
+    </div>
+
+    <div style="padding:22px 28px 12px;display:flex;align-items:flex-end;justify-content:space-between;gap:20px">
+      <div>
+        <h3 style="margin:0;font-size:20px;font-weight:600;letter-spacing:-0.018em">Läufe</h3>
+        <p style="margin:4px 0 0;font-size:12.5px;color:#a89f94">9 Objekte · zwei ausgewählt</p>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#7c736a">Auswahl: sim_c2108c7f · sim_7b30d5c4</span>
+        <button style="height:30px;padding:0 12px;background:#d08a52;border:0;border-radius:5px;color:#17120e;font-family:'Archivo',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer">Zwei Läufe vergleichen</button>
+      </div>
+    </div>
+
+    <div style="padding:0 28px;flex:1;overflow:hidden">
+      <div style="display:grid;grid-template-columns:30px 250px 88px 150px 96px 96px 88px 104px minmax(0,1fr);gap:14px;padding:0 4px 8px;font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.09em;text-transform:uppercase;color:#5c5449;border-bottom:1px solid rgba(255,246,235,0.12)">
+        <span></span><span>Lauf</span><span>Runden</span><span>Zustand</span><span>Aussagen</span><span>Belege</span><span>Lücken</span><span>Angefasst</span><span>Nächster Schritt</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:30px 250px 88px 150px 96px 96px 88px 104px minmax(0,1fr);gap:14px;align-items:center;padding:12px 4px;border-bottom:1px solid rgba(255,246,235,0.07);background:rgba(208,138,82,0.07)">
+        <span style="width:14px;height:14px;border:1px solid #d08a52;background:#d08a52;color:#17120e;font-size:10px;display:flex;align-items:center;justify-content:center;font-family:'Geist Mono',monospace">✓</span>
+        <span style="min-width:0"><span style="display:block;font-size:13.5px;font-weight:600">Nexora Triage Assist</span><span style="display:block;font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a">sim_c2108c7f543e</span></span>
+        <span style="font-family:'Geist Mono',monospace;font-size:12.5px">24/24</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border-radius:3px;background:rgba(210,96,79,0.14);color:#e08471;font-size:11px;font-weight:500;width:fit-content">9 Befunde</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:12.5px">29</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:12.5px">116<span style="color:#d09a3c"> ·92</span></span>
+        <span style="font-family:'Geist Mono',monospace;font-size:12.5px">126</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#a89f94">14:22</span>
+        <a href="#" style="font-size:12.5px;color:#e08471">Red-Team-Befunde prüfen</a>
+      </div>
+
+      <div style="display:grid;grid-template-columns:30px 250px 88px 150px 96px 96px 88px 104px minmax(0,1fr);gap:14px;align-items:center;padding:12px 4px;border-bottom:1px solid rgba(255,246,235,0.07);background:rgba(95,182,201,0.05)">
+        <span style="width:14px;height:14px;border:1px solid rgba(255,246,235,0.2)"></span>
+        <span style="min-width:0"><span style="display:block;font-size:13.5px;font-weight:600">Domain-Migration v2</span><span style="display:block;font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a">sim_4f1ab77c9d02</span></span>
+        <span style="font-family:'Geist Mono',monospace;font-size:12.5px;color:#5fb6c9">12/20</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border-radius:3px;background:rgba(95,182,201,0.14);color:#5fb6c9;font-size:11px;font-weight:500;width:fit-content"><span style="width:5px;height:5px;border-radius:50%;background:currentColor"></span>pausiert</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:12.5px;color:#5c5449">—</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:12.5px;color:#5c5449">—</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:12.5px;color:#5c5449">—</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#5fb6c9">jetzt</span>
+        <a href="#" style="font-size:12.5px;color:#5fb6c9">In den Lauf · Budget 78 %</a>
+      </div>
+
+      <div style="display:grid;grid-template-columns:30px 250px 88px 150px 96px 96px 88px 104px minmax(0,1fr);gap:14px;align-items:center;padding:12px 4px;border-bottom:1px solid rgba(255,246,235,0.07)">
+        <span style="width:14px;height:14px;border:1px solid rgba(255,246,235,0.2)"></span>
+        <span style="min-width:0"><span style="display:block;font-size:13.5px;font-weight:600">KI-Klinikrollout</span><span style="display:block;font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a">sim_2ad9f0c771be</span></span>
+        <span style="font-family:'Geist Mono',monospace;font-size:12.5px">20/20</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border-radius:3px;background:rgba(255,246,235,0.07);color:#a89f94;font-size:11px;font-weight:500;width:fit-content">Interaktion offen</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:12.5px">31</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:12.5px">98</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:12.5px">84</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#a89f94">Gestern</span>
+        <a href="#" style="font-size:12.5px">3 Gespräche führen</a>
+      </div>
+
+      <div style="display:grid;grid-template-columns:30px 250px 88px 150px 96px 96px 88px 104px minmax(0,1fr);gap:14px;align-items:center;padding:12px 4px;border-bottom:1px solid rgba(255,246,235,0.07);background:rgba(208,138,82,0.07)">
+        <span style="width:14px;height:14px;border:1px solid #d08a52;background:#d08a52;color:#17120e;font-size:10px;display:flex;align-items:center;justify-content:center;font-family:'Geist Mono',monospace">✓</span>
+        <span style="min-width:0"><span style="display:block;font-size:13.5px;font-weight:600">Domain-Migration — 20 Runden</span><span style="display:block;font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a">sim_7b30d5c48ea1</span></span>
+        <span style="font-family:'Geist Mono',monospace;font-size:12.5px">20/20</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border-radius:3px;background:rgba(255,246,235,0.07);color:#a89f94;font-size:11px;font-weight:500;width:fit-content">Kein Bericht</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:12.5px;color:#5c5449">—</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:12.5px">74</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:12.5px;color:#5c5449">—</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#a89f94">12.08.</span>
+        <a href="#" style="font-size:12.5px">Bericht erzeugen</a>
+      </div>
+
+      <div style="display:grid;grid-template-columns:30px 250px 88px 150px 96px 96px 88px 104px minmax(0,1fr);gap:14px;align-items:center;padding:12px 4px;border-bottom:1px solid rgba(255,246,235,0.07)">
+        <span style="width:14px;height:14px;border:1px solid rgba(255,246,235,0.2)"></span>
+        <span style="min-width:0"><span style="display:block;font-size:13.5px;font-weight:600">Pflegekammer-Varianten</span><span style="display:block;font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a">run_a0d4c7e91f33</span></span>
+        <span style="font-family:'Geist Mono',monospace;font-size:12.5px">18/18</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border-radius:3px;background:rgba(210,96,79,0.14);color:#e08471;font-size:11px;font-weight:500;width:fit-content">gescheitert</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:12.5px;color:#5c5449">—</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:12.5px">63</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:12.5px;color:#5c5449">—</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#a89f94">15.08.</span>
+        <a href="#" style="font-size:12.5px;color:#e08471">Agent-Log ab Abschnitt 4</a>
+      </div>
+
+      <div style="display:grid;grid-template-columns:30px 250px 88px 150px 96px 96px 88px 104px minmax(0,1fr);gap:14px;align-items:center;padding:12px 4px;border-bottom:1px solid rgba(255,246,235,0.07)">
+        <span style="width:14px;height:14px;border:1px solid rgba(255,246,235,0.2)"></span>
+        <span style="min-width:0"><span style="display:block;font-size:13.5px;font-weight:600">LernKompass 2027</span><span style="display:block;font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a">proj_c12f138aa04e</span></span>
+        <span style="font-family:'Geist Mono',monospace;font-size:12.5px;color:#5c5449">0/12</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border-radius:3px;background:rgba(208,138,82,0.14);color:#d08a52;font-size:11px;font-weight:500;width:fit-content">Personas ungeprüft</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:12.5px;color:#5c5449">—</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:12.5px;color:#5c5449">—</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:12.5px;color:#5c5449">—</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#a89f94">11:07</span>
+        <a href="#" style="font-size:12.5px">28 Personas durchsehen</a>
+      </div>
+
+      <div style="display:grid;grid-template-columns:30px 250px 88px 150px 96px 96px 88px 104px minmax(0,1fr);gap:14px;align-items:center;padding:12px 4px;border-bottom:1px solid rgba(255,246,235,0.07)">
+        <span style="width:14px;height:14px;border:1px solid rgba(255,246,235,0.2)"></span>
+        <span style="min-width:0"><span style="display:block;font-size:13.5px;font-weight:600">Triage-Vorstudie</span><span style="display:block;font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a">proj_88ce1204af7b</span></span>
+        <span style="font-family:'Geist Mono',monospace;font-size:12.5px;color:#5c5449">—</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border-radius:3px;background:rgba(208,138,82,0.14);color:#d08a52;font-size:11px;font-weight:500;width:fit-content">Graph gebaut</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:12.5px;color:#5c5449">—</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:12.5px;color:#5c5449">—</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:12.5px;color:#5c5449">—</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#a89f94">Gestern</span>
+        <a href="#" style="font-size:12.5px">Personas ableiten</a>
+      </div>
+    </div>
+  </div>
+  <p style="margin:0;font-size:13px;color:#7c736a;max-width:110ch">Die Spalten sind die Prüfgrößen des Produkts: Aussagen, Belege mit ungebundenem Anteil, Datenlücken. Kein Fortschrittsbalken ohne Aussage — die letzte Spalte nennt immer die konkrete nächste Handlung.</p>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:14px">
+  <div style="display:flex;align-items:baseline;gap:12px">
+    <span style="font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#5fb6c9">Screen 04</span>
+    <h2 style="margin:0;font-size:19px;font-weight:600;letter-spacing:-0.015em">Simulation live — Instrument, keine Kachelwand</h2>
+    <span style="font-size:13px;color:#7c736a">ersetzt <span style="font-family:'Geist Mono',monospace;font-size:12px">/v4/simulation/:id</span> · ganzflächig</span>
+  </div>
+
+  <div style="width:1440px;height:900px;background:#14110f;border:1px solid rgba(255,246,235,0.12);overflow:hidden;display:flex;flex-direction:column;font-size:14px;line-height:1.5">
+    <div style="height:46px;display:flex;align-items:center;gap:14px;padding:0 20px;border-bottom:1px solid rgba(95,182,201,0.28);background:rgba(95,182,201,0.06);flex-shrink:0">
+      <span style="width:13px;height:13px;border:1.5px solid #d08a52;border-radius:50%"></span>
+      <nav aria-label="Stapel" style="display:flex;align-items:center;gap:6px">
+        <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:4px;background:rgba(255,246,235,0.06);color:#a89f94;font-size:12px">Ablage</span>
+        <span style="color:#5c5449;font-size:11px">›</span>
+        <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:4px;background:rgba(255,246,235,0.06);color:#a89f94;font-size:12px">Domain-Migration v2</span>
+        <span style="color:#5c5449;font-size:11px">›</span>
+        <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:4px;background:rgba(95,182,201,0.18);color:#8fd3de;font-size:12px;font-weight:500">Verlauf · live</span>
+      </nav>
+      <span style="flex:1"></span>
+      <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#8fd3de">Runde 12/20 · 04:18 vergangen · ⌀ 21 s/Runde</span>
+      <span style="width:1px;height:18px;background:rgba(255,246,235,0.12)"></span>
+      <button style="height:26px;padding:0 10px;background:transparent;border:1px solid rgba(255,246,235,0.18);border-radius:4px;color:#f2ece4;font-family:'Archivo',sans-serif;font-size:12px;cursor:pointer">Fortsetzen</button>
+      <button style="height:26px;padding:0 10px;background:transparent;border:1px solid rgba(210,96,79,0.4);border-radius:4px;color:#e08471;font-family:'Archivo',sans-serif;font-size:12px;cursor:pointer">Abbrechen</button>
+    </div>
+
+    <div style="padding:14px 22px 12px;border-bottom:1px solid rgba(255,246,235,0.09)">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:9px">
+        <span style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a">Rundenachse</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#a89f94">Höhe = Beiträge je Runde · Farbe = Anteil zitierender Reaktionen</span>
+      </div>
+      <div style="display:flex;align-items:flex-end;gap:5px;height:52px">
+        <span style="flex:1;height:24%;background:#4a423a"></span><span style="flex:1;height:38%;background:#4a423a"></span><span style="flex:1;height:52%;background:#5c5449"></span><span style="flex:1;height:44%;background:#4a423a"></span><span style="flex:1;height:66%;background:#6b6157"></span><span style="flex:1;height:80%;background:#7c736a"></span><span style="flex:1;height:58%;background:#6b6157"></span><span style="flex:1;height:72%;background:#7c736a"></span><span style="flex:1;height:90%;background:#a89f94"></span><span style="flex:1;height:76%;background:#7c736a"></span><span style="flex:1;height:84%;background:#8fd3de"></span><span style="flex:1;height:100%;background:#5fb6c9;box-shadow:0 0 0 1px rgba(95,182,201,0.5)"></span>
+        <span style="flex:1;height:100%;border:1px dashed rgba(255,246,235,0.12);border-bottom:0"></span><span style="flex:1;height:100%;border:1px dashed rgba(255,246,235,0.12);border-bottom:0"></span><span style="flex:1;height:100%;border:1px dashed rgba(255,246,235,0.12);border-bottom:0"></span><span style="flex:1;height:100%;border:1px dashed rgba(255,246,235,0.12);border-bottom:0"></span><span style="flex:1;height:100%;border:1px dashed rgba(255,246,235,0.12);border-bottom:0"></span><span style="flex:1;height:100%;border:1px dashed rgba(255,246,235,0.12);border-bottom:0"></span><span style="flex:1;height:100%;border:1px dashed rgba(255,246,235,0.12);border-bottom:0"></span><span style="flex:1;height:100%;border:1px dashed rgba(255,246,235,0.12);border-bottom:0"></span>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:6px;font-family:'Geist Mono',monospace;font-size:9.5px;color:#5c5449">
+        <span>Runde 1</span><span style="color:#5fb6c9">12 · jetzt</span><span>20 geplant</span>
+      </div>
+    </div>
+
+    <div style="flex:1;display:grid;grid-template-columns:232px minmax(0,1fr) minmax(0,1fr) 300px;min-height:0">
+      <div style="border-right:1px solid rgba(255,246,235,0.09);display:flex;flex-direction:column;min-height:0;overflow:hidden">
+        <div style="padding:14px 16px 10px;font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a">Akteure · 18 aktiv</div>
+        <div style="display:flex;flex-direction:column">
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) 42px;gap:8px;align-items:center;padding:8px 16px;border-top:1px solid rgba(255,246,235,0.07);background:rgba(208,138,82,0.08)">
+            <span style="min-width:0"><span style="display:block;font-size:12.5px;font-weight:500">Dr. Marit Sölden</span><span style="display:block;font-family:'Geist Mono',monospace;font-size:9.5px;color:#7c736a">IT-Leitung · individual</span></span>
+            <span style="font-family:'Geist Mono',monospace;font-size:11px;text-align:right;color:#d08a52">14</span>
+          </div>
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) 42px;gap:8px;align-items:center;padding:8px 16px;border-top:1px solid rgba(255,246,235,0.07)">
+            <span style="min-width:0"><span style="display:block;font-size:12.5px;font-weight:500">Betriebsrat</span><span style="display:block;font-family:'Geist Mono',monospace;font-size:9.5px;color:#7c736a">Gremium · collective</span></span>
+            <span style="font-family:'Geist Mono',monospace;font-size:11px;text-align:right;color:#a89f94">12</span>
+          </div>
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) 42px;gap:8px;align-items:center;padding:8px 16px;border-top:1px solid rgba(255,246,235,0.07)">
+            <span style="min-width:0"><span style="display:block;font-size:12.5px;font-weight:500">Pflegeteam Station 3</span><span style="display:block;font-family:'Geist Mono',monospace;font-size:9.5px;color:#7c736a">Pflege · collective</span></span>
+            <span style="font-family:'Geist Mono',monospace;font-size:11px;text-align:right;color:#a89f94">11</span>
+          </div>
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) 42px;gap:8px;align-items:center;padding:8px 16px;border-top:1px solid rgba(255,246,235,0.07)">
+            <span style="min-width:0"><span style="display:block;font-size:12.5px;font-weight:500">Marko Petrović</span><span style="display:block;font-family:'Geist Mono',monospace;font-size:9.5px;color:#7c736a">Qualitätsmgmt. · individual</span></span>
+            <span style="font-family:'Geist Mono',monospace;font-size:11px;text-align:right;color:#a89f94">9</span>
+          </div>
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) 42px;gap:8px;align-items:center;padding:8px 16px;border-top:1px solid rgba(255,246,235,0.07)">
+            <span style="min-width:0"><span style="display:block;font-size:12.5px;font-weight:500">Datenschutzbeauftragte</span><span style="display:block;font-family:'Geist Mono',monospace;font-size:9.5px;color:#7c736a">Recht · individual</span></span>
+            <span style="font-family:'Geist Mono',monospace;font-size:11px;text-align:right;color:#a89f94">7</span>
+          </div>
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) 42px;gap:8px;align-items:center;padding:8px 16px;border-top:1px solid rgba(255,246,235,0.07)">
+            <span style="min-width:0"><span style="display:block;font-size:12.5px;font-weight:500">Assistenzärzte</span><span style="display:block;font-family:'Geist Mono',monospace;font-size:9.5px;color:#7c736a">Ärztlich · collective</span></span>
+            <span style="font-family:'Geist Mono',monospace;font-size:11px;text-align:right;color:#a89f94">6</span>
+          </div>
+          <div style="padding:10px 16px;border-top:1px solid rgba(255,246,235,0.07)"><a href="#" style="font-family:'Geist Mono',monospace;font-size:10.5px">alle 18 zeigen</a></div>
+        </div>
+        <div style="margin-top:auto;padding:14px 16px;border-top:1px solid rgba(255,246,235,0.09)">
+          <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:8px">Eingriff</div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <button style="height:28px;background:transparent;border:1px solid rgba(255,246,235,0.16);border-radius:4px;color:#f2ece4;font-family:'Archivo',sans-serif;font-size:12px;cursor:pointer;text-align:left;padding:0 10px">Runde anhalten nach 12</button>
+            <button style="height:28px;background:transparent;border:1px solid rgba(255,246,235,0.16);border-radius:4px;color:#f2ece4;font-family:'Archivo',sans-serif;font-size:12px;cursor:pointer;text-align:left;padding:0 10px">Ereignis einspeisen</button>
+            <button style="height:28px;background:transparent;border:1px solid rgba(255,246,235,0.16);border-radius:4px;color:#f2ece4;font-family:'Archivo',sans-serif;font-size:12px;cursor:pointer;text-align:left;padding:0 10px">Budget anheben</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="border-right:1px solid rgba(255,246,235,0.09);display:flex;flex-direction:column;min-height:0;overflow:hidden">
+        <div style="padding:12px 16px 10px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,246,235,0.07)">
+          <span style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#a89f94">Reddit</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a">214 Beiträge · 96 Kommentare</span>
+        </div>
+        <div style="padding:14px 16px;border-bottom:1px solid rgba(255,246,235,0.07)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <span style="width:20px;height:20px;border-radius:50%;background:rgba(208,138,82,0.18);color:#d08a52;font-family:'Geist Mono',monospace;font-size:9px;display:flex;align-items:center;justify-content:center">MS</span>
+            <span style="font-size:12.5px;font-weight:500">Dr. Marit Sölden</span>
+            <span style="font-family:'Geist Mono',monospace;font-size:9.5px;color:#5c5449">R12 · create_post</span>
+          </div>
+          <p style="margin:0;font-size:13px;color:#e8e1d7;line-height:1.55">Wenn die Triage-Vorschläge nicht revidierbar dokumentiert werden, verlagern wir Verantwortung an ein System, das im Streitfall niemand vertritt.</p>
+          <div style="display:flex;gap:12px;margin-top:7px;font-family:'Geist Mono',monospace;font-size:9.5px;color:#7c736a"><span>▲ 14</span><span>▼ 2</span><span>3 Kommentare</span><span style="color:#d09a3c">als Beleg gebunden</span></div>
+        </div>
+        <div style="padding:14px 16px;border-bottom:1px solid rgba(255,246,235,0.07);padding-left:34px;border-left:2px solid rgba(255,246,235,0.09);margin-left:14px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <span style="width:20px;height:20px;border-radius:50%;background:rgba(255,246,235,0.08);color:#a89f94;font-family:'Geist Mono',monospace;font-size:9px;display:flex;align-items:center;justify-content:center">BR</span>
+            <span style="font-size:12.5px;font-weight:500">Betriebsrat</span>
+            <span style="font-family:'Geist Mono',monospace;font-size:9.5px;color:#5c5449">R12 · create_comment</span>
+          </div>
+          <p style="margin:0;font-size:13px;color:#cfc7bc;line-height:1.55">Genau deshalb fordern wir die Mitbestimmung vor dem Pilotbetrieb, nicht danach. Eine Nachdokumentation ersetzt keine Vereinbarung.</p>
+        </div>
+        <div style="padding:14px 16px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <span style="width:20px;height:20px;border-radius:50%;background:rgba(255,246,235,0.08);color:#a89f94;font-family:'Geist Mono',monospace;font-size:9px;display:flex;align-items:center;justify-content:center">PT</span>
+            <span style="font-size:12.5px;font-weight:500">Pflegeteam Station 3</span>
+            <span style="font-family:'Geist Mono',monospace;font-size:9.5px;color:#5c5449">R11 · create_post</span>
+          </div>
+          <p style="margin:0;font-size:13px;color:#cfc7bc;line-height:1.55">Die versprochene Zeitersparnis ist für uns bisher eine Zahl aus der Präsentation, kein Ergebnis aus dem Schichtbetrieb.</p>
+          <div style="display:flex;gap:12px;margin-top:7px;font-family:'Geist Mono',monospace;font-size:9.5px;color:#7c736a"><span>▲ 9</span><span>1 Kommentar</span></div>
+        </div>
+      </div>
+
+      <div style="border-right:1px solid rgba(255,246,235,0.09);display:flex;flex-direction:column;min-height:0;overflow:hidden">
+        <div style="padding:12px 16px 10px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,246,235,0.07)">
+          <span style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#a89f94">Twitter</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a">96 Zitat-Posts · 0 Kommentare</span>
+        </div>
+        <div style="padding:14px 16px;border-bottom:1px solid rgba(255,246,235,0.07)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <span style="width:20px;height:20px;border-radius:50%;background:rgba(255,246,235,0.08);color:#a89f94;font-family:'Geist Mono',monospace;font-size:9px;display:flex;align-items:center;justify-content:center">MP</span>
+            <span style="font-size:12.5px;font-weight:500">Marko Petrović</span>
+            <span style="font-family:'Geist Mono',monospace;font-size:9.5px;color:#5c5449">R12 · quote_post</span>
+          </div>
+          <div style="border-left:2px solid rgba(255,246,235,0.12);padding-left:10px;margin-bottom:7px">
+            <p style="margin:0;font-size:12px;color:#a89f94;line-height:1.5">„… verlagern wir Verantwortung an ein System, das im Streitfall niemand vertritt.“</p>
+          </div>
+          <p style="margin:0;font-size:13px;color:#e8e1d7;line-height:1.55">Revisionssicherheit ist messbar. Wir sollten sie als Freigabekriterium festschreiben, nicht als Zielbild.</p>
+          <div style="display:flex;gap:12px;margin-top:7px;font-family:'Geist Mono',monospace;font-size:9.5px;color:#7c736a"><span>♥ 21</span><span>↻ 6</span></div>
+        </div>
+        <div style="padding:14px 16px;border-bottom:1px solid rgba(255,246,235,0.07)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <span style="width:20px;height:20px;border-radius:50%;background:rgba(255,246,235,0.08);color:#a89f94;font-family:'Geist Mono',monospace;font-size:9px;display:flex;align-items:center;justify-content:center">DS</span>
+            <span style="font-size:12.5px;font-weight:500">Datenschutzbeauftragte</span>
+            <span style="font-family:'Geist Mono',monospace;font-size:9.5px;color:#5c5449">R11 · create_post</span>
+          </div>
+          <p style="margin:0;font-size:13px;color:#cfc7bc;line-height:1.55">Für die Zweckbindung fehlt bisher eine schriftliche Festlegung, welche Felder das System überhaupt lesen darf.</p>
+          <div style="display:flex;gap:12px;margin-top:7px;font-family:'Geist Mono',monospace;font-size:9.5px;color:#7c736a"><span>♥ 8</span><span>↻ 3</span></div>
+        </div>
+        <div style="padding:14px 16px;display:flex;align-items:center;gap:8px">
+          <span style="width:5px;height:5px;border-radius:50%;background:#5fb6c9"></span>
+          <span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#8fd3de">Runde 12 läuft — 7 von 18 Agenten haben gehandelt</span>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;min-height:0;overflow:hidden">
+        <div style="padding:14px 16px 10px">
+          <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:9px">Aufkommende Themen</div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px"><span>Revisionssicherheit</span><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#a89f94">31</span></div>
+              <div style="height:2px;background:rgba(255,246,235,0.09)"><div style="height:2px;width:78%;background:#a89f94"></div></div>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px"><span>Mitbestimmung</span><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#a89f94">24</span></div>
+              <div style="height:2px;background:rgba(255,246,235,0.09)"><div style="height:2px;width:60%;background:#a89f94"></div></div>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px"><span>Zeitersparnis unbelegt</span><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#d09a3c">19</span></div>
+              <div style="height:2px;background:rgba(255,246,235,0.09)"><div style="height:2px;width:48%;background:#d09a3c"></div></div>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px"><span>Zweckbindung</span><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#a89f94">12</span></div>
+              <div style="height:2px;background:rgba(255,246,235,0.09)"><div style="height:2px;width:30%;background:#a89f94"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding:14px 16px;border-top:1px solid rgba(255,246,235,0.09)">
+          <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:9px">Systemaktivität</div>
+          <div style="display:flex;flex-direction:column;gap:7px;font-family:'Geist Mono',monospace;font-size:10.5px;color:#a89f94">
+            <div style="display:flex;justify-content:space-between"><span>Redis Events/s</span><span style="color:#f2ece4">34</span></div>
+            <div style="display:flex;justify-content:space-between"><span>Neo4j Schreibvorgänge</span><span style="color:#f2ece4">1 284</span></div>
+            <div style="display:flex;justify-content:space-between"><span>LLM-Calls (Runde)</span><span style="color:#f2ece4">18</span></div>
+            <div style="display:flex;justify-content:space-between"><span>Tokens gesamt</span><span style="color:#f2ece4">2.41 M</span></div>
+            <div style="display:flex;justify-content:space-between"><span>Budget verbraucht</span><span style="color:#d09a3c">78 %</span></div>
+          </div>
+          <div style="height:3px;background:rgba(255,246,235,0.09);margin-top:9px"><div style="height:3px;width:78%;background:#d09a3c"></div></div>
+          <p style="margin:8px 0 0;font-size:11.5px;color:#7c736a;line-height:1.5">Weiche Grenze bei 80 % — der Lauf hält an, statt still weiterzulaufen.</p>
+        </div>
+
+        <div style="padding:14px 16px;border-top:1px solid rgba(255,246,235,0.09);flex:1;min-height:0">
+          <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:9px">Ereignisse</div>
+          <div style="display:flex;flex-direction:column;gap:8px;font-size:11.5px">
+            <div style="display:grid;grid-template-columns:34px minmax(0,1fr);gap:8px"><span style="font-family:'Geist Mono',monospace;color:#5c5449">R12</span><span style="color:#d09a3c">Budget-Warnschwelle erreicht, Lauf pausiert</span></div>
+            <div style="display:grid;grid-template-columns:34px minmax(0,1fr);gap:8px"><span style="font-family:'Geist Mono',monospace;color:#5c5449">R11</span><span style="color:#cfc7bc">Ereignis eingespeist: Pressemitteilung Aufsichtsrat</span></div>
+            <div style="display:grid;grid-template-columns:34px minmax(0,1fr);gap:8px"><span style="font-family:'Geist Mono',monospace;color:#5c5449">R09</span><span style="color:#cfc7bc">Neo4j-Socket kurz getrennt, Reconnect erfolgreich</span></div>
+            <div style="display:grid;grid-template-columns:34px minmax(0,1fr);gap:8px"><span style="font-family:'Geist Mono',monospace;color:#5c5449">R06</span><span style="color:#cfc7bc">Seed: <span style="font-family:'Geist Mono',monospace;font-size:10.5px">random_seed 4711</span> protokolliert</span></div>
+          </div>
+          <a href="#" style="display:inline-block;margin-top:12px;font-family:'Geist Mono',monospace;font-size:10.5px">Log-Drawer ⌃⇧L</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p style="margin:0;font-size:13px;color:#7c736a;max-width:110ch">Vier Bahnen statt sechs Kacheln: wer handelt, was auf beiden Plattformen entsteht, was daraus als Thema wächst, und was das System dabei tut. Der Zitatbezug bleibt sichtbar — ein <span style="font-family:'Geist Mono',monospace;font-size:12px">quote_post</span> zeigt den zitierten Beitrag, weil Twitter keine Kommentare kennt.</p>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:14px">
+  <div style="display:flex;align-items:baseline;gap:12px">
+    <span style="font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#d08a52">Screen 05</span>
+    <h2 style="margin:0;font-size:19px;font-weight:600;letter-spacing:-0.015em">Akteure — Prüfen statt Kacheln zählen</h2>
+    <span style="font-size:13px;color:#7c736a">ersetzt <span style="font-family:'Geist Mono',monospace;font-size:12px">/v4/env-setup/:id</span></span>
+  </div>
+
+  <div style="width:1440px;height:820px;background:#14110f;border:1px solid rgba(255,246,235,0.12);overflow:hidden;display:flex;flex-direction:column;font-size:14px;line-height:1.5">
+    <div style="height:46px;display:flex;align-items:center;gap:14px;padding:0 20px;border-bottom:1px solid rgba(255,246,235,0.09);flex-shrink:0">
+      <span style="width:13px;height:13px;border:1.5px solid #d08a52;border-radius:50%"></span>
+      <nav aria-label="Stapel" style="display:flex;align-items:center;gap:6px">
+        <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:4px;background:rgba(255,246,235,0.06);color:#a89f94;font-size:12px">Ablage</span>
+        <span style="color:#5c5449;font-size:11px">›</span>
+        <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:4px;background:rgba(255,246,235,0.06);color:#a89f94;font-size:12px">LernKompass 2027</span>
+        <span style="color:#5c5449;font-size:11px">›</span>
+        <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:4px;background:rgba(208,138,82,0.16);color:#e6a878;font-size:12px;font-weight:500">Akteure</span>
+      </nav>
+      <span style="flex:1"></span>
+      <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#d09a3c">28 erzeugt · 0 geprüft · Simulation blockiert</span>
+      <button style="height:26px;padding:0 10px;background:#d08a52;border:0;border-radius:4px;color:#17120e;font-family:'Archivo',sans-serif;font-size:12px;font-weight:600;cursor:pointer">Alle geprüften freigeben</button>
+    </div>
+
+    <div style="flex:1;display:grid;grid-template-columns:minmax(0,1fr) 400px;min-height:0">
+      <div style="border-right:1px solid rgba(255,246,235,0.09);display:flex;flex-direction:column;min-height:0;overflow:hidden">
+        <div style="padding:16px 22px 10px;display:flex;align-items:center;gap:14px">
+          <span style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#f2ece4;border-bottom:1.5px solid #d08a52;padding-bottom:4px">Ungeprüft 28</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a">Freigegeben 0</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a">Verworfen 2</span>
+          <span style="flex:1"></span>
+          <span style="font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a">Rollenfamilie · Typ · Herkunft</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:186px 150px 118px minmax(0,1fr) 96px;gap:14px;padding:0 22px 8px;font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.09em;text-transform:uppercase;color:#5c5449;border-bottom:1px solid rgba(255,246,235,0.12)">
+          <span>Persona</span><span>Rollenfamilie</span><span>Art</span><span>Position im Kern</span><span>Prüfung</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:186px 150px 118px minmax(0,1fr) 96px;gap:14px;align-items:center;padding:12px 22px;border-bottom:1px solid rgba(255,246,235,0.07);background:rgba(208,138,82,0.07)">
+          <span style="min-width:0"><span style="display:block;font-size:13.5px;font-weight:600">Frau Yildiz</span><span style="display:block;font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a">Elternvertretung</span></span>
+          <span style="font-size:12.5px;color:#cfc7bc">Erziehungsberechtigte</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#a89f94">individual</span>
+          <span style="font-size:12.5px;color:#cfc7bc">Fordert Nachweis, dass Lernstände nicht an Dritte gehen</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#d08a52">offen</span>
+        </div>
+        <div style="display:grid;grid-template-columns:186px 150px 118px minmax(0,1fr) 96px;gap:14px;align-items:center;padding:12px 22px;border-bottom:1px solid rgba(255,246,235,0.07)">
+          <span style="min-width:0"><span style="display:block;font-size:13.5px;font-weight:600">Kollegium Jahrgang 7</span><span style="display:block;font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a">Lehrkräfte</span></span>
+          <span style="font-size:12.5px;color:#cfc7bc">Lehrkräfte</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#a89f94">collective</span>
+          <span style="font-size:12.5px;color:#cfc7bc">Zweifelt am Zeitgewinn bei paralleler Dokumentationspflicht</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#d08a52">offen</span>
+        </div>
+        <div style="display:grid;grid-template-columns:186px 150px 118px minmax(0,1fr) 96px;gap:14px;align-items:center;padding:12px 22px;border-bottom:1px solid rgba(255,246,235,0.07)">
+          <span style="min-width:0"><span style="display:block;font-size:13.5px;font-weight:600">Schulleitung</span><span style="display:block;font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a">Leitung</span></span>
+          <span style="font-size:12.5px;color:#cfc7bc">Schulleitung</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#a89f94">individual</span>
+          <span style="font-size:12.5px;color:#cfc7bc">Will Einführung, aber ohne zusätzliche Fortbildungstage</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#d08a52">offen</span>
+        </div>
+        <div style="display:grid;grid-template-columns:186px 150px 118px minmax(0,1fr) 96px;gap:14px;align-items:center;padding:12px 22px;border-bottom:1px solid rgba(255,246,235,0.07)">
+          <span style="min-width:0"><span style="display:block;font-size:13.5px;font-weight:600">Schülerrat</span><span style="display:block;font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a">Lernende</span></span>
+          <span style="font-size:12.5px;color:#cfc7bc">Lernende</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#a89f94">collective</span>
+          <span style="font-size:12.5px;color:#cfc7bc">Fragt, wer die Empfehlungen des Assistenten korrigieren darf</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#d08a52">offen</span>
+        </div>
+        <div style="display:grid;grid-template-columns:186px 150px 118px minmax(0,1fr) 96px;gap:14px;align-items:center;padding:12px 22px;border-bottom:1px solid rgba(255,246,235,0.07);opacity:0.55">
+          <span style="min-width:0"><span style="display:block;font-size:13.5px;font-weight:600">Stadt Falkenbrück</span><span style="display:block;font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a">Typfilter greift</span></span>
+          <span style="font-size:12.5px;color:#cfc7bc">—</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#a89f94">nicht personenfähig</span>
+          <span style="font-size:12.5px;color:#cfc7bc">Vom Typfilter als Ort erkannt, keine Persona</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#7c736a">verworfen</span>
+        </div>
+        <div style="display:grid;grid-template-columns:186px 150px 118px minmax(0,1fr) 96px;gap:14px;align-items:center;padding:12px 22px;border-bottom:1px solid rgba(255,246,235,0.07)">
+          <span style="min-width:0"><span style="display:block;font-size:13.5px;font-weight:600">Datenschutzbeauftragter</span><span style="display:block;font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a">Landkreis</span></span>
+          <span style="font-size:12.5px;color:#cfc7bc">Recht</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#a89f94">individual</span>
+          <span style="font-size:12.5px;color:#cfc7bc">Verlangt Zweckbindung je Datenfeld vor Freigabe</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#d08a52">offen</span>
+        </div>
+        <div style="padding:12px 22px;display:flex;align-items:center;gap:16px">
+          <a href="#" style="font-family:'Geist Mono',monospace;font-size:10.5px">weitere 22 zeigen</a>
+          <span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#7c736a">Typbewusster Cap verteilt über 6 Rollenfamilien</span>
+        </div>
+
+        <div style="margin-top:auto;padding:14px 22px;border-top:1px solid rgba(255,246,235,0.09);display:flex;align-items:center;gap:12px">
+          <span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#7c736a">Erzeugung: MiniMax-M2 · Sprache Deutsch · max. 30 Agenten</span>
+          <span style="flex:1"></span>
+          <button style="height:28px;padding:0 12px;background:transparent;border:1px solid rgba(255,246,235,0.16);border-radius:4px;color:#f2ece4;font-family:'Archivo',sans-serif;font-size:12px;cursor:pointer">Persona ergänzen</button>
+          <button style="height:28px;padding:0 12px;background:transparent;border:1px solid rgba(255,246,235,0.16);border-radius:4px;color:#f2ece4;font-family:'Archivo',sans-serif;font-size:12px;cursor:pointer">Neu erzeugen</button>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;min-height:0;overflow:hidden">
+        <div style="padding:18px 20px;border-bottom:1px solid rgba(255,246,235,0.09)">
+          <div style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:8px">Akteur · Inspektor</div>
+          <h3 style="margin:0;font-size:19px;font-weight:600;letter-spacing:-0.015em">Frau Yildiz</h3>
+          <p style="margin:4px 0 0;font-size:12.5px;color:#a89f94">Elternvertretung Jahrgang 7 · individual · abgeleitet aus 4 Graphknoten</p>
+        </div>
+        <div style="padding:16px 20px;border-bottom:1px solid rgba(255,246,235,0.09)">
+          <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:8px">Interessen</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            <span style="font-size:11.5px;padding:3px 8px;background:rgba(255,246,235,0.07);color:#cfc7bc">Datenschutz</span>
+            <span style="font-size:11.5px;padding:3px 8px;background:rgba(255,246,235,0.07);color:#cfc7bc">Chancengleichheit</span>
+            <span style="font-size:11.5px;padding:3px 8px;background:rgba(255,246,235,0.07);color:#cfc7bc">Transparenz der Bewertung</span>
+            <span style="font-size:11.5px;padding:3px 8px;background:rgba(255,246,235,0.07);color:#cfc7bc">Elternmitwirkung</span>
+          </div>
+        </div>
+        <div style="padding:16px 20px;border-bottom:1px solid rgba(255,246,235,0.09)">
+          <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:8px">Vita</div>
+          <p style="margin:0;font-family:'Newsreader',serif;font-size:15px;line-height:1.6;color:#e8e1d7">Verwaltungsangestellte, zwei Kinder an der Schule, seit drei Jahren im Elternrat. Erlebt Digitalprojekte als etwas, das angekündigt und später leise eingestellt wird.</p>
+        </div>
+        <div style="padding:16px 20px;border-bottom:1px solid rgba(255,246,235,0.09)">
+          <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:8px">Herkunft im Graph</div>
+          <div style="display:flex;flex-direction:column;gap:7px;font-size:12px">
+            <div style="display:flex;justify-content:space-between;gap:10px"><span style="color:#cfc7bc">Elternrat (Organisation)</span><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#7c736a">3 Relationen</span></div>
+            <div style="display:flex;justify-content:space-between;gap:10px"><span style="color:#cfc7bc">Einwilligungserklärung (Dokument)</span><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#7c736a">seed_doc:d41#chunk:12</span></div>
+            <div style="display:flex;justify-content:space-between;gap:10px"><span style="color:#cfc7bc">Lernstandsdaten (Konzept)</span><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#7c736a">2 Relationen</span></div>
+          </div>
+        </div>
+        <div style="margin-top:auto;padding:16px 20px;display:flex;gap:8px">
+          <button style="flex:1;height:32px;background:#d08a52;border:0;border-radius:5px;color:#17120e;font-family:'Archivo',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer">Freigeben</button>
+          <button style="height:32px;padding:0 12px;background:transparent;border:1px solid rgba(255,246,235,0.16);border-radius:5px;color:#f2ece4;font-family:'Archivo',sans-serif;font-size:12.5px;cursor:pointer">Bearbeiten</button>
+          <button style="height:32px;padding:0 12px;background:transparent;border:1px solid rgba(210,96,79,0.35);border-radius:5px;color:#e08471;font-family:'Archivo',sans-serif;font-size:12.5px;cursor:pointer">Verwerfen</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p style="margin:0;font-size:13px;color:#7c736a;max-width:110ch">Personas sind hier keine Porträtkarten, sondern Prüffälle: Rollenfamilie, Art, Position und Herkunft stehen in einer Zeile, weil genau daran die Freigabe hängt. Verworfene Kandidaten bleiben sichtbar — der Typfilter wird nachvollziehbar statt stillschweigend.</p>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:14px">
+  <div style="display:flex;align-items:baseline;gap:12px">
+    <span style="font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#d08a52">Screen 06</span>
+    <h2 style="margin:0;font-size:19px;font-weight:600;letter-spacing:-0.015em">Quellenumfeld — Graph mit Relationsinspektor</h2>
+    <span style="font-size:13px;color:#7c736a">ersetzt <span style="font-family:'Geist Mono',monospace;font-size:12px">/v4/graph-build/:id</span> · ganzflächig</span>
+  </div>
+
+  <div style="width:1440px;height:760px;background:#14110f;border:1px solid rgba(255,246,235,0.12);overflow:hidden;display:flex;flex-direction:column;font-size:14px;line-height:1.5">
+    <div style="height:46px;display:flex;align-items:center;gap:14px;padding:0 20px;border-bottom:1px solid rgba(255,246,235,0.09);flex-shrink:0">
+      <span style="width:13px;height:13px;border:1.5px solid #d08a52;border-radius:50%"></span>
+      <nav aria-label="Stapel" style="display:flex;align-items:center;gap:6px">
+        <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:4px;background:rgba(255,246,235,0.06);color:#a89f94;font-size:12px">Ablage</span>
+        <span style="color:#5c5449;font-size:11px">›</span>
+        <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:4px;background:rgba(255,246,235,0.06);color:#a89f94;font-size:12px">Nexora Triage Assist</span>
+        <span style="color:#5c5449;font-size:11px">›</span>
+        <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:4px;background:rgba(208,138,82,0.16);color:#e6a878;font-size:12px;font-weight:500">Quellenumfeld</span>
+      </nav>
+      <span style="flex:1"></span>
+      <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#a89f94">674 Entitäten · 1 842 Relationen · 31 Seed-Dokumente</span>
+      <span style="width:1px;height:18px;background:rgba(255,246,235,0.12)"></span>
+      <span style="display:flex;gap:6px;font-family:'Geist Mono',monospace;font-size:10.5px;color:#7c736a">
+        <span style="border:1px solid rgba(255,246,235,0.14);padding:2px 6px">Kantenlabels</span>
+        <span style="border:1px solid rgba(255,246,235,0.14);padding:2px 6px">Runde 24</span>
+        <span style="border:1px solid rgba(255,246,235,0.14);padding:2px 6px">Export</span>
+      </span>
+    </div>
+
+    <div style="flex:1;display:grid;grid-template-columns:minmax(0,1fr) 372px;min-height:0">
+      <div style="position:relative;min-width:0;background:repeating-linear-gradient(135deg, #17130f 0px, #17130f 9px, #14110f 9px, #14110f 18px);display:flex;align-items:center;justify-content:center">
+        <div style="text-align:center">
+          <div style="font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#7c736a">Graph-Canvas</div>
+          <div style="font-family:'Geist Mono',monospace;font-size:11px;color:#5c5449;margin-top:8px">bestehendes d3-force-Rendering (useGraphRender) · Zoom, Pin-Layout, Minimap unverändert</div>
+        </div>
+        <div style="position:absolute;left:16px;top:16px;background:rgba(20,17,15,0.86);border:1px solid rgba(255,246,235,0.12);padding:10px 12px">
+          <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:8px">Legende</div>
+          <div style="display:flex;flex-direction:column;gap:6px;font-size:11.5px;color:#cfc7bc">
+            <span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:50%;background:#d08a52"></span>Person / Rolle</span>
+            <span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:50%;background:#5fb6c9"></span>Organisation</span>
+            <span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:50%;background:#a89f94"></span>Konzept</span>
+            <span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:50%;background:#7fa86a"></span>Dokumentstelle</span>
+          </div>
+        </div>
+        <div style="position:absolute;left:16px;bottom:16px;font-family:'Geist Mono',monospace;font-size:10px;color:#5c5449;background:rgba(20,17,15,0.86);border:1px solid rgba(255,246,235,0.1);padding:6px 9px">entity_type ist nicht ontologiegebunden — Typen können zwischen Läufen abweichen</div>
+      </div>
+
+      <div style="border-left:1px solid rgba(255,246,235,0.09);display:flex;flex-direction:column;min-height:0;overflow:hidden">
+        <div style="padding:18px 20px;border-bottom:1px solid rgba(255,246,235,0.09)">
+          <div style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:8px">Relation · Inspektor</div>
+          <h3 style="margin:0;font-size:18px;font-weight:600;letter-spacing:-0.015em">Nexora Triage Assist</h3>
+          <p style="margin:4px 0 0;font-size:12.5px;color:#a89f94">Software · 34 ausgehende, 12 eingehende Relationen</p>
+        </div>
+        <div style="padding:14px 20px;border-bottom:1px solid rgba(255,246,235,0.09)">
+          <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:9px">Ausgehend</div>
+          <div style="display:flex;flex-direction:column;gap:9px;font-size:12.5px">
+            <div style="display:grid;grid-template-columns:104px minmax(0,1fr);gap:10px"><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#d08a52">verarbeitet</span><span style="color:#cfc7bc">Patientenstammdaten</span></div>
+            <div style="display:grid;grid-template-columns:104px minmax(0,1fr);gap:10px"><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#d08a52">entlastet</span><span style="color:#cfc7bc">Pflegeteam Station 3</span></div>
+            <div style="display:grid;grid-template-columns:104px minmax(0,1fr);gap:10px"><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#d08a52">erfordert</span><span style="color:#cfc7bc">Zweckbindungsvereinbarung</span></div>
+            <div style="display:grid;grid-template-columns:104px minmax(0,1fr);gap:10px"><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#d08a52">pilotiert_in</span><span style="color:#cfc7bc">Falkenbrück-Mitte</span></div>
+          </div>
+        </div>
+        <div style="padding:14px 20px;border-bottom:1px solid rgba(255,246,235,0.09)">
+          <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:9px">Selbstbezug</div>
+          <p style="margin:0;font-size:12.5px;color:#cfc7bc">2 Relationen verweisen auf denselben Knoten (Versionsbezug v1.4 → v2.0).</p>
+        </div>
+        <div style="padding:14px 20px;border-bottom:1px solid rgba(255,246,235,0.09)">
+          <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:9px">Herkunft</div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;align-items:baseline;gap:8px"><span style="width:6px;height:6px;border-radius:50%;background:#7fa86a;flex-shrink:0"></span><span style="font-size:12px;color:#cfc7bc">Rollout-Konzept.pdf, S. 4 <span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#7c736a">seed_doc:d17#chunk:3</span></span></div>
+            <div style="display:flex;align-items:baseline;gap:8px"><span style="width:6px;height:6px;border-radius:50%;background:#7fa86a;flex-shrink:0"></span><span style="font-size:12px;color:#cfc7bc">Betriebsvereinbarung.md <span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#7c736a">seed_doc:d09#chunk:11</span></span></div>
+            <div style="display:flex;align-items:baseline;gap:8px"><span style="width:6px;height:6px;border-radius:50%;background:#5c5449;flex-shrink:0"></span><span style="font-size:12px;color:#a89f94">14 Relationen ohne belegte Dokumentstelle — bleiben Graph-Relation, erhalten keinen Anker</span></div>
+          </div>
+        </div>
+        <div style="margin-top:auto;padding:14px 20px;display:flex;gap:8px">
+          <button style="flex:1;height:30px;background:transparent;border:1px solid rgba(255,246,235,0.16);border-radius:4px;color:#f2ece4;font-family:'Archivo',sans-serif;font-size:12px;cursor:pointer">Im Bericht zitiert (7)</button>
+          <button style="flex:1;height:30px;background:transparent;border:1px solid rgba(255,246,235,0.16);border-radius:4px;color:#f2ece4;font-family:'Archivo',sans-serif;font-size:12px;cursor:pointer">Nachbarschaft isolieren</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p style="margin:0;font-size:13px;color:#7c736a;max-width:110ch">Der Canvas bleibt technisch der bestehende; neu ist der Rahmen: die Herkunftsspalte trennt belegte Dokumentstellen von Relationen ohne Provenienz, statt beide gleich aussehen zu lassen.</p>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:14px">
+  <div style="display:flex;align-items:baseline;gap:12px">
+    <span style="font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#d08a52">Screen 07</span>
+    <h2 style="margin:0;font-size:19px;font-weight:600;letter-spacing:-0.015em">Bericht — Leseumgebung mit Belegrand</h2>
+    <span style="font-size:13px;color:#7c736a">ersetzt <span style="font-family:'Geist Mono',monospace;font-size:12px">/v4/report/:id</span></span>
+  </div>
+
+  <div style="width:1440px;height:960px;background:#14110f;border:1px solid rgba(255,246,235,0.12);overflow:hidden;display:flex;flex-direction:column;font-size:14px;line-height:1.5">
+    <div style="height:46px;display:flex;align-items:center;gap:14px;padding:0 20px;border-bottom:1px solid rgba(255,246,235,0.09);flex-shrink:0">
+      <span style="width:13px;height:13px;border:1.5px solid #d08a52;border-radius:50%"></span>
+      <nav aria-label="Stapel" style="display:flex;align-items:center;gap:6px">
+        <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:4px;background:rgba(255,246,235,0.06);color:#a89f94;font-size:12px">Ablage</span>
+        <span style="color:#5c5449;font-size:11px">›</span>
+        <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:4px;background:rgba(255,246,235,0.06);color:#a89f94;font-size:12px">Nexora Triage Assist</span>
+        <span style="color:#5c5449;font-size:11px">›</span>
+        <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:4px;background:rgba(208,138,82,0.16);color:#e6a878;font-size:12px;font-weight:500">Bericht</span>
+      </nav>
+      <span style="flex:1"></span>
+      <span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#7c736a">report_b259e254ee3f</span>
+      <span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#7c736a;border:1px solid rgba(255,246,235,0.14);padding:2px 6px">Belegrand ein</span>
+      <span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#7c736a;border:1px solid rgba(255,246,235,0.14);padding:2px 6px">Export</span>
+    </div>
+
+    <div style="flex:1;display:grid;grid-template-columns:236px minmax(0,1fr) 336px;min-height:0">
+      <nav aria-label="Abschnitte" style="border-right:1px solid rgba(255,246,235,0.09);padding:20px 0;overflow:hidden">
+        <div style="padding:0 18px 12px;font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a">7 Abschnitte</div>
+        <a href="#" style="display:grid;grid-template-columns:18px minmax(0,1fr);gap:9px;padding:8px 18px;color:#a89f94;font-size:12.5px"><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#5c5449">1</span><span>Ausgangslage und Auftrag</span></a>
+        <a href="#" style="display:grid;grid-template-columns:18px minmax(0,1fr);gap:9px;padding:8px 18px;color:#a89f94;font-size:12.5px"><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#5c5449">2</span><span>Stakeholder und Interessen</span></a>
+        <a href="#" style="display:grid;grid-template-columns:18px minmax(0,1fr);gap:9px;padding:8px 16px;color:#f2ece4;font-size:12.5px;font-weight:600;background:rgba(208,138,82,0.1);border-left:2px solid #d08a52"><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#d08a52">3</span><span>Entlastungswirkung im Betrieb</span></a>
+        <a href="#" style="display:grid;grid-template-columns:18px minmax(0,1fr);gap:9px;padding:8px 18px;color:#a89f94;font-size:12.5px"><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#5c5449">4</span><span>Konfliktlinien</span></a>
+        <a href="#" style="display:grid;grid-template-columns:18px minmax(0,1fr);gap:9px;padding:8px 18px;color:#a89f94;font-size:12.5px"><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#5c5449">5</span><span>Rechtliche Voraussetzungen</span></a>
+        <a href="#" style="display:grid;grid-template-columns:18px minmax(0,1fr);gap:9px;padding:8px 18px;color:#a89f94;font-size:12.5px"><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#5c5449">6</span><span>Rollout-Varianten im Vergleich</span></a>
+        <a href="#" style="display:grid;grid-template-columns:18px minmax(0,1fr);gap:9px;padding:8px 18px;color:#a89f94;font-size:12.5px"><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#5c5449">7</span><span>Handlungsempfehlung</span></a>
+        <div style="margin:16px 18px 0;padding-top:14px;border-top:1px solid rgba(255,246,235,0.09)">
+          <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:9px">Anhang</div>
+          <a href="#" style="display:block;font-size:12.5px;color:#a89f94;padding:4px 0">136 Hypothesen</a>
+          <a href="#" style="display:block;font-size:12.5px;color:#a89f94;padding:4px 0">126 Datenlücken</a>
+          <a href="#" style="display:block;font-size:12.5px;color:#a89f94;padding:4px 0">116 Belege</a>
+          <a href="#" style="display:block;font-size:12.5px;color:#e08471;padding:4px 0">9 Red-Team-Befunde</a>
+        </div>
+      </nav>
+
+      <div style="min-width:0;overflow:hidden;padding:26px 44px">
+        <div style="display:flex;flex-wrap:wrap;gap:12px;padding-bottom:16px;border-bottom:1px solid rgba(255,246,235,0.09);font-family:'Geist Mono',monospace;font-size:10.5px;color:#7c736a">
+          <span>Simulationsstand: 24 von 24 Runden, Simulation beendet</span><span>·</span><span>Simulationsbeitrag: 24 von 29 Aussagen</span><span>·</span><span>Laufzeit 16:46 min</span>
+        </div>
+
+        <div style="margin:22px 0 0;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#d08a52">Abschnitt 3</div>
+        <h3 style="margin:8px 0 0;font-size:30px;font-weight:600;letter-spacing:-0.025em;line-height:1.15;max-width:34ch">Entlastungswirkung im Betrieb</h3>
+
+        <p style="margin:20px 0 0;font-family:'Newsreader',serif;font-size:19px;line-height:1.62;color:#e8e1d7;max-width:62ch;text-wrap:pretty">Die befragten Stakeholdergruppen erwarten Entlastung vor allem in der Dokumentation, nicht in der medizinischen Entscheidung selbst. Vier der sechs befragten Gruppen nennen dieselbe Bedingung: die Vorschläge müssen revidierbar und nachvollziehbar protokolliert sein.</p>
+
+        <p style="margin:18px 0 0;font-family:'Newsreader',serif;font-size:19px;line-height:1.62;color:#e8e1d7;max-width:62ch;text-wrap:pretty">Eine belastbare Zahl zur eingesparten Zeit liegt nicht vor. <span style="background:rgba(208,154,60,0.14);border-bottom:1px solid rgba(208,154,60,0.5);padding:1px 2px">Die im Rollout-Konzept genannte Entlastung von zwölf Minuten pro Schicht bleibt unbelegt</span> <span style="font-family:'Geist Mono',monospace;font-size:12px;color:#d09a3c;white-space:nowrap">[Beleg fehlt]</span> — die Angabe stammt aus der Herstellerunterlage und wurde von keiner Gruppe bestätigt.</p>
+
+        <blockquote style="margin:22px 0 0;padding:0 0 0 18px;border-left:2px solid #d08a52;max-width:60ch">
+          <p style="margin:0;font-family:'Newsreader',serif;font-style:italic;font-size:19px;line-height:1.55;color:#f2ece4">„Die versprochene Zeitersparnis ist für uns bisher eine Zahl aus der Präsentation, kein Ergebnis aus dem Schichtbetrieb.“</p>
+          <div style="margin-top:8px;font-family:'Geist Mono',monospace;font-size:10.5px;color:#7c736a">Pflegeteam Station 3 · Interview Abschnitt 3 · <span style="color:#d08a52">ev_7d41c9b0</span></div>
+        </blockquote>
+
+        <p style="margin:22px 0 0;font-family:'Newsreader',serif;font-size:19px;line-height:1.62;color:#e8e1d7;max-width:62ch;text-wrap:pretty">Die IT-Leitung verbindet die Entlastung mit einer Bedingung an die Protokollierung; das Qualitätsmanagement schlägt vor, Revisionssicherheit als Freigabekriterium festzuschreiben. Beide Positionen stützen dieselbe Aussage, bleiben aber auf <span style="font-family:'Geist Mono',monospace;font-size:15px;color:#d09a3c">low</span>, weil keine Dokumentstelle sie deckt.</p>
+
+        <div style="margin-top:24px;border-top:1px solid rgba(255,246,235,0.09);padding-top:14px">
+          <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:10px">Datenlücken in diesem Abschnitt · 3 von 18</div>
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <div style="display:grid;grid-template-columns:78px minmax(0,1fr);gap:12px;align-items:baseline"><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#d09a3c">medium</span><span style="font-size:13px;color:#cfc7bc">Keine Zeitmessung aus dem Schichtbetrieb — nächster Schritt: Vorher-Messung über zwei Wochen an einer Station</span></div>
+            <div style="display:grid;grid-template-columns:78px minmax(0,1fr);gap:12px;align-items:baseline"><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#d09a3c">medium</span><span style="font-size:13px;color:#cfc7bc">Protokollformat für revidierte Vorschläge nicht spezifiziert — nächster Schritt: Festlegung mit IT-Leitung einholen</span></div>
+            <div style="display:grid;grid-template-columns:78px minmax(0,1fr);gap:12px;align-items:baseline"><span style="font-family:'Geist Mono',monospace;font-size:10.5px;color:#d09a3c">medium</span><span style="font-size:13px;color:#cfc7bc">Gegenposition der Assistenzärzte fehlt vollständig — nächster Schritt: Interview nachziehen</span></div>
+          </div>
+        </div>
+      </div>
+
+      <aside style="border-left:1px solid rgba(255,246,235,0.09);display:flex;flex-direction:column;min-height:0;overflow:hidden">
+        <div style="padding:18px 18px 14px;border-bottom:1px solid rgba(255,246,235,0.09)">
+          <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:10px">Aussagen (Claims) dieses Abschnitts</div>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div>
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+                <span style="display:inline-flex;align-items:center;height:19px;padding:0 7px;border-radius:3px;background:rgba(208,154,60,0.14);color:#d09a3c;font-family:'Geist Mono',monospace;font-size:10px">low</span>
+                <span style="font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a">C3_1 · 3 Belege</span>
+              </div>
+              <p style="margin:0;font-size:12.5px;color:#cfc7bc;line-height:1.5">Entlastung wird in der Dokumentation erwartet, nicht in der medizinischen Entscheidung.</p>
+              <div style="margin-top:5px;font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a">Bindung: Simulationskonsens, keine Quellendeckung</div>
+            </div>
+            <div style="border-top:1px solid rgba(255,246,235,0.07);padding-top:12px">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+                <span style="display:inline-flex;align-items:center;height:19px;padding:0 7px;border-radius:3px;background:rgba(208,154,60,0.14);color:#d09a3c;font-family:'Geist Mono',monospace;font-size:10px">low</span>
+                <span style="font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a">C3_2 · 4 Belege</span>
+              </div>
+              <p style="margin:0;font-size:12.5px;color:#cfc7bc;line-height:1.5">Revidierbarkeit der Vorschläge ist Bedingung für Akzeptanz in vier von sechs Gruppen.</p>
+              <div style="margin-top:5px;font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a">Formuliert unter: low · nicht abgestuft</div>
+            </div>
+            <div style="border-top:1px solid rgba(255,246,235,0.07);padding-top:12px">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+                <span style="display:inline-flex;align-items:center;height:19px;padding:0 7px;border-radius:3px;background:rgba(255,246,235,0.07);color:#a89f94;font-family:'Geist Mono',monospace;font-size:10px">Hypothese</span>
+                <span style="font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a">H3_4</span>
+              </div>
+              <p style="margin:0;font-size:12.5px;color:#cfc7bc;line-height:1.5">Zwölf Minuten Zeitersparnis pro Schicht.</p>
+              <div style="margin-top:5px;font-family:'Geist Mono',monospace;font-size:10px;color:#d09a3c">aus der Prosa entfernt · Datenlücke DG3_1</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding:16px 18px;border-bottom:1px solid rgba(255,246,235,0.09)">
+          <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:10px">Belege an dieser Stelle</div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="display:grid;grid-template-columns:76px minmax(0,1fr);gap:10px;align-items:baseline"><span style="font-family:'Geist Mono',monospace;font-size:10px;color:#d08a52">agent_quote</span><span style="font-size:12px;color:#cfc7bc">Pflegeteam Station 3 · <span style="font-family:'Geist Mono',monospace;font-size:10.5px">ev_7d41c9b0</span></span></div>
+            <div style="display:grid;grid-template-columns:76px minmax(0,1fr);gap:10px;align-items:baseline"><span style="font-family:'Geist Mono',monospace;font-size:10px;color:#d08a52">agent_quote</span><span style="font-size:12px;color:#cfc7bc">IT-Leitung · <span style="font-family:'Geist Mono',monospace;font-size:10.5px">ev_2b90f14a</span></span></div>
+            <div style="display:grid;grid-template-columns:76px minmax(0,1fr);gap:10px;align-items:baseline"><span style="font-family:'Geist Mono',monospace;font-size:10px;color:#8cbd83">seed_corpus</span><span style="font-size:12px;color:#cfc7bc">Betriebsvereinbarung.md · <span style="font-family:'Geist Mono',monospace;font-size:10.5px">seed_doc:d09#chunk:11</span></span></div>
+            <div style="display:grid;grid-template-columns:76px minmax(0,1fr);gap:10px;align-items:baseline"><span style="font-family:'Geist Mono',monospace;font-size:10px;color:#a89f94">agent_action</span><span style="font-size:12px;color:#cfc7bc">quote_post R12, Twitter</span></div>
+          </div>
+        </div>
+
+        <div style="padding:16px 18px;background:rgba(210,96,79,0.06);border-left:2px solid #d2604f">
+          <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#e08471;margin-bottom:8px">Red-Team zu Abschnitt 3</div>
+          <p style="margin:0;font-size:12.5px;color:#e8e1d7;line-height:1.55">Ungelöste Spannung zu Abschnitt 6: dort gilt die Entlastungswirkung als belegt. Die Gegenposition der Pflegekräfte fehlt in beiden Abschnitten.</p>
+          <div style="margin-top:9px;display:flex;gap:14px;font-family:'Geist Mono',monospace;font-size:10px"><a href="#">Abschnitt 6 daneben legen</a><a href="#">Befund 1/9</a></div>
+        </div>
+
+        <div style="margin-top:auto;padding:16px 18px;border-top:1px solid rgba(255,246,235,0.09)">
+          <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:9px">Nachfragen</div>
+          <p style="margin:0 0 10px;font-size:12px;color:#a89f94;line-height:1.5">Die Lücke „Gegenposition Assistenzärzte“ lässt sich direkt als Interview stellen.</p>
+          <button style="width:100%;height:32px;background:#d08a52;border:0;border-radius:5px;color:#17120e;font-family:'Archivo',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer">Assistenzärzte befragen</button>
+        </div>
+      </aside>
+    </div>
+  </div>
+  <p style="margin:0;font-size:13px;color:#7c736a;max-width:110ch">Der Bericht ist die Umgebung, nicht der Inhalt einer Karte: Serif-Satzspalte auf 62 Zeichen, Belegrand rechts, Abschnittsnavigation links. Confidence, Hypothese und „formuliert unter“ bleiben die Begriffe aus dem Vertrag — nur lesbar platziert. Der Unbelegt-Marker steht im Satz, nicht in einer Fußnote.</p>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:14px">
+  <div style="display:flex;align-items:baseline;gap:12px">
+    <span style="font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#d08a52">Screen 08</span>
+    <h2 style="margin:0;font-size:19px;font-weight:600;letter-spacing:-0.015em">Einstellungen — Overlay über der Arbeit</h2>
+    <span style="font-size:13px;color:#7c736a"><span style="font-family:'Geist Mono',monospace;font-size:12px">/settings/*</span> bleibt adressierbar, verlässt aber den Arbeitsraum nicht mehr</span>
+  </div>
+
+  <div style="width:1440px;height:680px;background:#14110f;border:1px solid rgba(255,246,235,0.12);overflow:hidden;position:relative;font-size:14px;line-height:1.5">
+    <div style="position:absolute;inset:0;opacity:0.3;display:flex;flex-direction:column">
+      <div style="height:46px;border-bottom:1px solid rgba(255,246,235,0.09)"></div>
+      <div style="flex:1;display:grid;grid-template-columns:400px minmax(0,1fr)">
+        <div style="border-right:1px solid rgba(255,246,235,0.09);padding:20px"><div style="height:14px;width:120px;background:rgba(255,246,235,0.12)"></div><div style="height:10px;width:200px;background:rgba(255,246,235,0.07);margin-top:16px"></div><div style="height:10px;width:170px;background:rgba(255,246,235,0.07);margin-top:20px"></div></div>
+        <div style="padding:24px 30px"><div style="height:20px;width:420px;background:rgba(255,246,235,0.1)"></div><div style="height:60px;margin-top:22px;border-top:1px solid rgba(255,246,235,0.09);border-bottom:1px solid rgba(255,246,235,0.09)"></div></div>
+      </div>
+    </div>
+    <div style="position:absolute;inset:0;background:rgba(9,8,7,0.6)"></div>
+
+    <div style="position:absolute;right:0;top:0;bottom:0;width:840px;background:#1b1815;border-left:1px solid rgba(255,246,235,0.16);box-shadow:-24px 0 64px rgba(0,0,0,0.5);display:flex;flex-direction:column">
+      <div style="height:52px;display:flex;align-items:center;gap:14px;padding:0 22px;border-bottom:1px solid rgba(255,246,235,0.09)">
+        <span style="font-size:15px;font-weight:600;letter-spacing:-0.01em">Einstellungen</span>
+        <span style="flex:1"></span>
+        <span style="font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a">esc schließt · die Arbeit bleibt darunter stehen</span>
+      </div>
+      <div style="flex:1;display:grid;grid-template-columns:220px minmax(0,1fr);min-height:0">
+        <nav aria-label="Einstellungsbereiche" style="border-right:1px solid rgba(255,246,235,0.09);padding:14px 0">
+          <a href="#" style="display:block;padding:7px 18px;font-size:13px;color:#a89f94">Allgemein</a>
+          <a href="#" style="display:block;padding:7px 18px;font-size:13px;color:#a89f94">Integrationen</a>
+          <a href="#" style="display:block;padding:7px 18px;font-size:13px;color:#a89f94">Profil</a>
+          <a href="#" style="display:block;padding:7px 18px;font-size:13px;color:#a89f94">API-Schlüssel</a>
+          <a href="#" style="display:block;padding:7px 16px;font-size:13px;color:#f2ece4;font-weight:600;background:rgba(208,138,82,0.1);border-left:2px solid #d08a52">LLM-Anbieter</a>
+          <a href="#" style="display:block;padding:7px 18px;font-size:13px;color:#a89f94">Embedding-Konfiguration</a>
+          <div style="margin:14px 18px 0;padding-top:12px;border-top:1px solid rgba(255,246,235,0.09);font-family:'Geist Mono',monospace;font-size:10px;color:#7c736a;line-height:1.6">LLM-Routing und Audit-Log bleiben per Deep-Link erreichbar, ohne in der Liste zu stehen.</div>
+        </nav>
+        <div style="padding:20px 24px;min-width:0;overflow:hidden">
+          <h3 style="margin:0;font-size:18px;font-weight:600;letter-spacing:-0.015em">LLM-Anbieter</h3>
+          <p style="margin:5px 0 0;font-size:12.5px;color:#a89f94;max-width:70ch">Verbindungen anlegen, testen und verfügbare Modelle entdecken. Chat- und Embedding-Konfiguration bleiben getrennte Vertragswelten.</p>
+
+          <div style="margin-top:18px;display:flex;flex-direction:column">
+            <div style="display:grid;grid-template-columns:132px 96px minmax(0,1fr) 96px;gap:14px;padding:0 2px 8px;font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.09em;text-transform:uppercase;color:#5c5449;border-bottom:1px solid rgba(255,246,235,0.12)"><span>Verbindung</span><span>Provider</span><span>Endpunkt</span><span>Status</span></div>
+            <div style="display:grid;grid-template-columns:132px 96px minmax(0,1fr) 96px;gap:14px;align-items:center;padding:11px 2px;border-bottom:1px solid rgba(255,246,235,0.07)">
+              <span style="font-size:13px;font-weight:500">MiniMax Cloud</span>
+              <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#a89f94">minimax</span>
+              <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#7c736a;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">https://api.minimax.io/v1</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border-radius:3px;background:rgba(127,168,106,0.14);color:#8cbd83;font-size:11px;width:fit-content"><span style="width:5px;height:5px;border-radius:50%;background:currentColor"></span>aktiv</span>
+            </div>
+            <div style="display:grid;grid-template-columns:132px 96px minmax(0,1fr) 96px;gap:14px;align-items:center;padding:11px 2px;border-bottom:1px solid rgba(255,246,235,0.07)">
+              <span style="font-size:13px;font-weight:500">Ollama lokal</span>
+              <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#a89f94">ollama</span>
+              <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#7c736a;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">http://localhost:11434</span>
+              <span style="display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:3px;background:rgba(255,246,235,0.07);color:#a89f94;font-size:11px;width:fit-content">14 Modelle</span>
+            </div>
+            <div style="display:grid;grid-template-columns:132px 96px minmax(0,1fr) 96px;gap:14px;align-items:center;padding:11px 2px;border-bottom:1px solid rgba(255,246,235,0.07)">
+              <span style="font-size:13px;font-weight:500">Gemini</span>
+              <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#a89f94">google</span>
+              <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#7c736a;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">generativelanguage.googleapis.com</span>
+              <span style="display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:3px;background:rgba(208,154,60,0.14);color:#d09a3c;font-size:11px;width:fit-content">Key prüfen</span>
+            </div>
+          </div>
+
+          <div style="margin-top:20px;padding:16px 18px;background:rgba(255,246,235,0.03);border:1px solid rgba(255,246,235,0.09)">
+            <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:10px">Route je Stufe</div>
+            <div style="display:flex;flex-direction:column;gap:8px;font-size:12.5px">
+              <div style="display:grid;grid-template-columns:132px minmax(0,1fr);gap:12px"><span style="color:#a89f94">NER / Graph</span><span style="font-family:'Geist Mono',monospace;font-size:11.5px;color:#cfc7bc">ollama · qwen3:14b</span></div>
+              <div style="display:grid;grid-template-columns:132px minmax(0,1fr);gap:12px"><span style="color:#a89f94">Personas</span><span style="font-family:'Geist Mono',monospace;font-size:11.5px;color:#cfc7bc">minimax · MiniMax-M2</span></div>
+              <div style="display:grid;grid-template-columns:132px minmax(0,1fr);gap:12px"><span style="color:#a89f94">Report</span><span style="font-family:'Geist Mono',monospace;font-size:11.5px;color:#cfc7bc">minimax · MiniMax-M2</span></div>
+              <div style="display:grid;grid-template-columns:132px minmax(0,1fr);gap:12px"><span style="color:#a89f94">Entailment-Judge</span><span style="font-family:'Geist Mono',monospace;font-size:11.5px;color:#cfc7bc">google · gemini-3-pro</span></div>
+            </div>
+          </div>
+
+          <div style="margin-top:18px;display:flex;gap:8px">
+            <button style="height:32px;padding:0 14px;background:#d08a52;border:0;border-radius:5px;color:#17120e;font-family:'Archivo',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer">Verbindung hinzufügen</button>
+            <button style="height:32px;padding:0 14px;background:transparent;border:1px solid rgba(255,246,235,0.16);border-radius:5px;color:#f2ece4;font-family:'Archivo',sans-serif;font-size:12.5px;cursor:pointer">Alle testen</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p style="margin:0;font-size:13px;color:#7c736a;max-width:110ch">Einstellungen sind kein Ort, an den man navigiert, sondern eine Schublade über dem, was man gerade tut. Nach <span style="font-family:'Geist Mono',monospace;font-size:12px">esc</span> steht der Lauf unverändert da — kein Rückweg über die Ablage nötig.</p>
+</section>
+
+<section style="width:1440px;display:flex;flex-direction:column;gap:22px;padding-top:10px;border-top:1px solid rgba(255,246,235,0.12)">
+  <h2 style="margin:0;font-size:22px;font-weight:600;letter-spacing:-0.02em">Systemregeln des Entwurfs</h2>
+  <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0">
+    <div style="padding:0 24px 0 0">
+      <div style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:10px">Bewegung</div>
+      <ul style="margin:0;padding-left:18px;font-size:13.5px;line-height:1.65;color:#cfc7bc">
+        <li>Objekt öffnen: Inhalt wächst von der gewählten Zeile nach rechts, 180 ms, kein Seitenwechsel.</li>
+        <li>Ganzflächig: Chrome schrumpft auf 46 px, Stapel bleibt stehen.</li>
+        <li>Overlay (⌘K, Einstellungen): 120 ms Einblenden, Hintergrund nur abgedunkelt, nie ersetzt.</li>
+        <li>Live-Daten: neue Feed-Zeilen erscheinen ohne Verschieben des Gelesenen.</li>
+        <li><span style="font-family:'Geist Mono',monospace;font-size:12px">prefers-reduced-motion</span>: alle vier Bewegungen fallen auf reines Umschalten zurück.</li>
+      </ul>
+    </div>
+    <div style="padding:0 24px;border-left:1px solid rgba(255,246,235,0.12)">
+      <div style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:10px">Zugänglichkeit</div>
+      <ul style="margin:0;padding-left:18px;font-size:13.5px;line-height:1.65;color:#cfc7bc">
+        <li>Fokusring: 2 px Kupfer, 2 px Abstand, auf jeder Fläche sichtbar.</li>
+        <li>Ablage ist eine Liste, das Dossier eine Region — Tab springt zwischen beiden, nicht durch 40 Zeilen.</li>
+        <li>Overlays sind <span style="font-family:'Geist Mono',monospace;font-size:12px">role="dialog"</span> mit Fokusfalle und Rückgabe an den Auslöser.</li>
+        <li>Zustände nennen Text, nicht nur Farbe: „9 Befunde offen“, nicht nur ein roter Punkt.</li>
+        <li>Text auf Grund: ≥ 4.5:1 (#f2ece4 auf #14110f), Sekundärtext ≥ 4.6:1.</li>
+      </ul>
+    </div>
+    <div style="padding:0 0 0 24px;border-left:1px solid rgba(255,246,235,0.12)">
+      <div style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:10px">Schmalere Bildschirme</div>
+      <ul style="margin:0;padding-left:18px;font-size:13.5px;line-height:1.65;color:#cfc7bc">
+        <li>Unter 1100 px: Ablage und Dossier werden zwei Ansichten statt zwei Spalten — der Stapel ist der Rückweg.</li>
+        <li>Simulation: die vier Bahnen werden Reiter (Akteure · Reddit · Twitter · System), die Rundenachse bleibt oben.</li>
+        <li>Bericht: Belegrand klappt unter den Absatz, an dem er hängt.</li>
+        <li>Kein Hamburger — es gibt kein Menü, das sich verstecken ließe.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div style="margin-top:6px">
+    <div style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#7c736a;margin-bottom:12px">Abbildung auf den Bestand — Produktentscheidung links, Umsetzung rechts</div>
+    <div style="display:grid;grid-template-columns:210px 240px minmax(0,1fr);gap:16px;padding:0 2px 8px;font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:0.09em;text-transform:uppercase;color:#5c5449;border-bottom:1px solid rgba(255,246,235,0.12)"><span>Screen</span><span>Route bleibt</span><span>Was sich ändert</span></div>
+    <div style="display:grid;grid-template-columns:210px 240px minmax(0,1fr);gap:16px;padding:10px 2px;border-bottom:1px solid rgba(255,246,235,0.07);font-size:12.5px;color:#cfc7bc"><span style="color:#f2ece4">Ablage</span><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#a89f94">/dashboard</span><span>Kennzahlenreihe und Hero-Formular entfallen; Ablage liest <span style="font-family:'Geist Mono',monospace;font-size:11px">listRuns</span> chronologisch statt gefiltert nach Status.</span></div>
+    <div style="display:grid;grid-template-columns:210px 240px minmax(0,1fr);gap:16px;padding:10px 2px;border-bottom:1px solid rgba(255,246,235,0.07);font-size:12.5px;color:#cfc7bc"><span style="color:#f2ece4">Läufe</span><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#a89f94">/runs</span><span>Gleiche Datenquelle, neue Spalten aus <span style="font-family:'Geist Mono',monospace;font-size:11px">evidence_map</span>; Mehrfachauswahl führt in den bestehenden Vergleich.</span></div>
+    <div style="display:grid;grid-template-columns:210px 240px minmax(0,1fr);gap:16px;padding:10px 2px;border-bottom:1px solid rgba(255,246,235,0.07);font-size:12.5px;color:#cfc7bc"><span style="color:#f2ece4">Simulation live</span><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#a89f94">/v4/simulation/:id</span><span>Feed-Spalten und Puls-Leiste bleiben; neu sind Rundenachse, Themenspur und die Zusammenlegung von Systemwerten und Budget.</span></div>
+    <div style="display:grid;grid-template-columns:210px 240px minmax(0,1fr);gap:16px;padding:10px 2px;border-bottom:1px solid rgba(255,246,235,0.07);font-size:12.5px;color:#cfc7bc"><span style="color:#f2ece4">Akteure</span><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#a89f94">/v4/env-setup/:id</span><span>Kartenraster wird Prüftabelle; verworfene Kandidaten und Filtergrund werden sichtbar.</span></div>
+    <div style="display:grid;grid-template-columns:210px 240px minmax(0,1fr);gap:16px;padding:10px 2px;border-bottom:1px solid rgba(255,246,235,0.07);font-size:12.5px;color:#cfc7bc"><span style="color:#f2ece4">Quellenumfeld</span><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#a89f94">/v4/graph-build/:id</span><span>Canvas und Inspektor unverändert; Herkunft trennt <span style="font-family:'Geist Mono',monospace;font-size:11px">seed_corpus</span> von Relation ohne Anker.</span></div>
+    <div style="display:grid;grid-template-columns:210px 240px minmax(0,1fr);gap:16px;padding:10px 2px;border-bottom:1px solid rgba(255,246,235,0.07);font-size:12.5px;color:#cfc7bc"><span style="color:#f2ece4">Bericht</span><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#a89f94">/v4/report/:id</span><span>Card entfällt, Leseumgebung übernimmt; Belegrand rendert dieselbe normalisierte Evidenzsicht wie der Export.</span></div>
+    <div style="display:grid;grid-template-columns:210px 240px minmax(0,1fr);gap:16px;padding:10px 2px;border-bottom:1px solid rgba(255,246,235,0.07);font-size:12.5px;color:#cfc7bc"><span style="color:#f2ece4">Einstellungen</span><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#a89f94">/settings/*</span><span>Views bleiben, werden aber in einem Overlay über der aktuellen Route gemountet statt als Vollseite.</span></div>
+  </div>
+
+  <p style="margin:0;font-family:'Newsreader',serif;font-size:18px;line-height:1.55;color:#cfc7bc;max-width:80ch">Was der Entwurf nicht anfasst: Verträge, Routen, Polling, Stores. Die Hülle ändert sich, die Datenwege bleiben — Ablage und Läufe lesen dieselben Endpunkte wie heute.</p>
+</section>
+</div>
+</x-dc>
+</body>
+</html>

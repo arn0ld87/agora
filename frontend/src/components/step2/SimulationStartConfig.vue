@@ -162,40 +162,40 @@ const emit = defineEmits([
   margin: 0;
 }
 .hint--warn {
-  color: var(--warn, #c89020);
+  color: var(--warn);
 }
 
 .meta {
-  color: var(--text-secondary, var(--fg-muted));
-  font-family: var(--font-sans, var(--ff-sans));
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
   letter-spacing: 0;
   text-transform: none;
 }
 .card {
-  background: var(--surface-elevated, var(--bg));
-  border-color: var(--hairline, var(--rule));
-  border-radius: var(--r-7, var(--r-1));
+  background: var(--surface-elevated);
+  border-color: var(--hairline);
+  border-radius: var(--r-7);
   box-shadow: var(--shadow-1);
 }
 .card.is-active {
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent-tint-bg, var(--accent-soft)), var(--shadow-1);
+  box-shadow: 0 0 0 1px var(--accent-tint-bg), var(--shadow-1);
 }
 .card-head,
 .rounds {
-  border-color: var(--separator, var(--rule));
+  border-color: var(--separator);
 }
 .rounds-input {
-  background: var(--surface-elevated, var(--bg-elevated));
-  border: 1px solid var(--hairline, var(--rule-strong));
-  border-radius: var(--r-5, var(--r-1));
-  color: var(--text-primary, var(--fg));
-  font-family: var(--font-sans, var(--ff-sans));
+  background: var(--surface-elevated);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-5);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
   letter-spacing: 0;
   padding: 7px 10px;
 }
 .rounds-input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--focus-ring, var(--accent-soft));
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 </style>

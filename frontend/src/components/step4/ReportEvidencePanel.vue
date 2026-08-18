@@ -292,7 +292,7 @@ function sectionHypothesesAppendix(section: ReportSection | null | undefined) {
   flex-direction: column;
   gap: 6px;
   padding: 10px 12px;
-  background: color-mix(in srgb, var(--status-warn, #b7791f) 8%, var(--bg-elevated));
+  background: color-mix(in srgb, var(--status-warn) 8%, var(--bg-elevated));
   border: 1px solid var(--rule);
 }
 .hypothesis-card p {
@@ -347,7 +347,7 @@ details[open] .hypothesis-appendix-summary::before {
   flex-direction: column;
   gap: 4px;
   padding: 8px 10px;
-  background: color-mix(in srgb, var(--status-warn, #b7791f) 5%, var(--bg-elevated));
+  background: color-mix(in srgb, var(--status-warn) 5%, var(--bg-elevated));
   border: 1px solid var(--rule);
 }
 .hypothesis-appendix-item p {

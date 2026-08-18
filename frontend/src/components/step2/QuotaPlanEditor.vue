@@ -264,7 +264,7 @@ function onToggleChange(event: Event): void {
 }
 
 .quota-error {
-  color: var(--color-err, #d73a49);
+  color: var(--color-err);
 }
 
 .meta {
@@ -281,31 +281,31 @@ function onToggleChange(event: Event): void {
 .quota-count,
 .hint,
 .meta {
-  font-family: var(--font-sans, var(--ff-sans));
+  font-family: var(--font-sans);
   letter-spacing: 0;
   text-transform: none;
 }
 .quota-toggle {
-  color: var(--text-primary, var(--fg));
+  color: var(--text-primary);
 }
 .quota-segment,
 .quota-count {
-  background: var(--surface-elevated, transparent);
-  border: 1px solid var(--hairline, var(--rule-strong));
-  border-radius: var(--r-5, var(--r-1));
-  color: var(--text-primary, var(--fg));
+  background: var(--surface-elevated);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-5);
+  color: var(--text-primary);
   padding: 7px 10px;
 }
 .quota-segment:focus,
 .quota-count:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--focus-ring, var(--accent-soft));
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 .hint,
 .meta {
-  color: var(--text-secondary, var(--fg-muted));
+  color: var(--text-secondary);
 }
 .quota-error {
-  color: var(--status-red, var(--color-err, #d73a49));
+  color: var(--status-red);
 }
 </style>

@@ -40,8 +40,8 @@ withDefaults(defineProps<{
 
 /* Tone-Varianten */
 .v4-badge--gray {
-  background: var(--gray-6, #f2f2f7);
-  color: var(--text-secondary, #6e6e73);
+  background: var(--gray-6);
+  color: var(--text-secondary);
 }
 
 .v4-badge--green {
