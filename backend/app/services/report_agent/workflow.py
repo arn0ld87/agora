@@ -3,13 +3,19 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from pydantic import ValidationError
 
 from ...config import Config
 from ...llm.tokens import PROMPT_HEADROOM_TOKENS
-from ...contracts.report_v3 import DEFAULT_REPORT_MODE, ModelAttribution, ReportMode, ReportV3
+from ...contracts.report_v3 import (
+    DEFAULT_REPORT_MODE,
+    RED_TEAM_FINDINGS_LIMIT,
+    ModelAttribution,
+    ReportMode,
+    ReportV3,
+)
 from ...models.report import Report, ReportStatus
 from ...utils.logger import get_logger
 from ..artifact_store import resolve_default_store
@@ -30,6 +36,7 @@ from .output_contract import (
 )
 from .run_degradation import (
     apply_run_degradation_downgrade,
+    assert_run_invariants,
     collect_run_degradations,
 )
 from .tool_circuit_breaker import breaker_for
@@ -303,12 +310,60 @@ def _build_red_team_excerpt(report_v3: ReportV3) -> str:
     return "\n".join(kept)
 
 
+def _merge_findings(first: Sequence[str], second: Sequence[str]) -> List[str]:
+    """Führt zwei Befundlisten ohne Dubletten zusammen und hält das Limit ein."""
+    merged = list(dict.fromkeys([*first, *second]))
+    return merged[:RED_TEAM_FINDINGS_LIMIT]
+
+
+#: Menschenlesbarer Wortlaut je Invariantenverletzung. Er steht im Bericht
+#: neben den LLM-Befunden und muss ohne Codekenntnis verständlich sein.
+_INVARIANT_FINDINGS = {
+    "interviews_requested_but_none_succeeded_and_not_degraded": (
+        "Interviews waren Teil des Plans, es kam keines zustande — der Bericht "
+        "weist das nicht als Einschränkung aus."
+    ),
+    "simulation_unhealthy_and_degradation_log_empty": (
+        "Die Simulation endete nicht regulär, der Bericht führt dazu keine "
+        "Einschränkung."
+    ),
+    "degraded_run_reported_as_completed": (
+        "Der Lauf trägt Qualitätsmängel und gilt trotzdem als vollständig."
+    ),
+}
+
+
+def _deterministic_red_team_findings(agent: Any, report: Any) -> List[str]:
+    """Abzählbare Befunde über den Lauf — ohne LLM.
+
+    Das Red Team des Referenzlaufs ``report_cc2ef45da5e9`` übersah null
+    erfolgreiche Interviews, eine gescheiterte Simulation und einen leeren
+    Degradation-Log. Alle drei lassen sich abzählen, und Abzählbares gehört
+    nicht in einen Prompt: ein Sprachmodell kann sie übersehen, eine
+    Invariante nicht.
+
+    Läuft deshalb auch dann, wenn das LLM-Red-Team übersprungen wird.
+    """
+    snapshot = getattr(report, "simulation_snapshot", None) or {}
+    violations = assert_run_invariants(
+        status=str(getattr(getattr(report, "status", None), "value", "")),
+        run_degradations=list(getattr(report, "run_degradations", []) or []),
+        simulation_status=str(snapshot.get("simulation_status") or ""),
+        interviews_requested=breaker_for(agent).request_count("interview_agents"),
+        interviews_succeeded=_count_interview_evidence(agent),
+    )
+    return [
+        _INVARIANT_FINDINGS.get(violation, violation) for violation in violations
+    ]
+
+
 def _run_red_team_review(
     agent: Any,
     report_v3: ReportV3,
     echo_index: float,
     *,
     intent: ReportIntent,
+    deterministic_findings: Sequence[str] = (),
 ) -> ReportV3:
     """Führt die Red-Team-Review-Stage aus und schreibt Findings in report_v3.
 
@@ -324,6 +379,8 @@ def _run_red_team_review(
 
     Slice 5 (Issue #497), Intent-Gate aus dem Evidence-Chain-Audit (#1160).
     """
+    # Die deterministischen Befunde hängen nicht am Intent-Gate: sie kosten
+    # keinen LLM-Call und gelten für jeden Lauf.
     if not _red_team_required(intent, echo_index):
         logger.info(
             "_run_red_team_review: intent=%s, echo_index=%.3f <= %.1f — kein LLM-Call "
@@ -332,6 +389,14 @@ def _run_red_team_review(
             echo_index,
             _RED_TEAM_ECHO_THRESHOLD,
         )
+        if deterministic_findings:
+            return report_v3.model_copy(
+                update={
+                    "red_team_findings": _merge_findings(
+                        deterministic_findings, report_v3.red_team_findings
+                    )
+                }
+            )
         return report_v3
 
     user_msg = _RED_TEAM_USER_TEMPLATE.format(
@@ -381,7 +446,9 @@ def _run_red_team_review(
 
     report_v3 = report_v3.model_copy(
         update={
-            "red_team_findings": findings,
+            # Die abzählbaren Befunde zuerst: sie sind sicher, die des Modells
+            # sind Einschätzungen.
+            "red_team_findings": _merge_findings(deterministic_findings, findings),
             "model_attribution": updated_attribution,
         }
     )
@@ -1508,7 +1575,13 @@ def generate_report(
                         getattr(agent, "simulation_requirement", "") or ""
                     )
                     report_v3_obj = _run_red_team_review(
-                        agent, report_v3_obj, echo_index, intent=intent
+                        agent,
+                        report_v3_obj,
+                        echo_index,
+                        intent=intent,
+                        deterministic_findings=_deterministic_red_team_findings(
+                            agent, report
+                        ),
                     )
                     ReportManager.save_report_v3(report_v3_obj)
                     logger.info(
