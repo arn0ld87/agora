@@ -136,20 +136,10 @@ export function useEnvForm({ t, onError }: UseEnvFormOptions): UseEnvFormReturn 
   async function loadModels(): Promise<void> {
     loadingModels.value = true
     try {
-      // reason: service interceptor returns raw envelope body at runtime
-      const res = (await getAvailableModels()) as unknown as {
-        success?: boolean
-        data?: {
-          ollama?: ModelPreset[]
-          presets?: ModelPreset[]
-          current_default?: string
-          default_provider?: 'ollama' | 'cloud' | 'openai' | 'unknown'
-          ollama_reachable?: boolean
-          agent_tools_enabled?: boolean
-          max_tool_calls_per_action?: number
-          default_language?: string
-        }
-      }
+      // Kein Cast mehr noetig: getAvailableModels deklariert die Envelope
+      // und AvailableModelsResponse die Felder, die der Endpunkt wirklich
+      // liefert.
+      const res = await getAvailableModels()
       if (res?.success) {
         ollamaModels.value = res.data?.ollama || []
         presetModels.value = res.data?.presets || []

@@ -34,6 +34,7 @@ import {
   getSimulationProfilesQuality,
   type ProfileRecord,
 } from '../../api/simulation'
+import type { ApiEnvelope } from '../../api/envelope'
 import { usePersonaReview } from '../usePersonaReview'
 
 const mockRegenerateSimulationProfile = vi.mocked(regenerateSimulationProfile)
@@ -41,10 +42,7 @@ const mockApproveSimulationProfile = vi.mocked(approveSimulationProfile)
 const mockRejectSimulationProfile = vi.mocked(rejectSimulationProfile)
 const mockGetQuality = vi.mocked(getSimulationProfilesQuality)
 
-// reason: the service interceptor returns raw envelope body at runtime;
-// the function types claim the unwrapped type but tests cast via `unknown`
-// to match the actual runtime shape (envelope with success + data).
-function makeProfileEnvelope(overrides: Partial<ProfileRecord> = {}): unknown {
+function makeProfileEnvelope(overrides: Partial<ProfileRecord> = {}): ApiEnvelope<ProfileRecord> {
   return {
     success: true,
     data: {
@@ -57,7 +55,7 @@ function makeProfileEnvelope(overrides: Partial<ProfileRecord> = {}): unknown {
   }
 }
 
-function makeErrorEnvelope(error = 'Server-Fehler'): unknown {
+function makeErrorEnvelope(error = 'Server-Fehler'): ApiEnvelope<ProfileRecord> {
   return {
     success: false,
     error,
@@ -67,16 +65,17 @@ function makeErrorEnvelope(error = 'Server-Fehler'): unknown {
 beforeEach(() => {
   vi.clearAllMocks()
   // Default: quality fetch returns empty success
-  // reason: runtime shape is an envelope; typed as ProfileQualityResponse but the
-  // interceptor actually returns { success, data } — cast via unknown
-  mockGetQuality.mockResolvedValue({ success: true, data: { personas: [] } } as unknown as import('../../api/simulation').ProfileQualityResponse)
+  mockGetQuality.mockResolvedValue({
+    success: true,
+    data: { simulation_id: 'sim-001', profiles: [], personas: [] },
+  })
 })
 
 describe('usePersonaReview', () => {
   describe('regenerate', () => {
     it('Erfolgsfall: API liefert ProfileRecord mit review_status regenerating, Composable returned das Profile', async () => {
       mockRegenerateSimulationProfile.mockResolvedValue(
-        makeProfileEnvelope({ review_status: 'regenerating' }) as ProfileRecord
+        makeProfileEnvelope({ review_status: 'regenerating' })
       )
 
       const composable = usePersonaReview()
@@ -90,7 +89,7 @@ describe('usePersonaReview', () => {
 
     it('Mit Hint: regenerate ruft API mit korrektem Body-Hint', async () => {
       mockRegenerateSimulationProfile.mockResolvedValue(
-        makeProfileEnvelope({ review_status: 'regenerating' }) as ProfileRecord
+        makeProfileEnvelope({ review_status: 'regenerating' })
       )
 
       const composable = usePersonaReview()
@@ -105,7 +104,7 @@ describe('usePersonaReview', () => {
 
     it('Ohne Hint: regenerate ruft API mit undefined als drittes Argument', async () => {
       mockRegenerateSimulationProfile.mockResolvedValue(
-        makeProfileEnvelope({ review_status: 'regenerating' }) as ProfileRecord
+        makeProfileEnvelope({ review_status: 'regenerating' })
       )
 
       const composable = usePersonaReview()
@@ -116,7 +115,7 @@ describe('usePersonaReview', () => {
 
     it('Idempotenz: zweiter Aufruf bei regenerating-Status wird toleriert (200)', async () => {
       mockRegenerateSimulationProfile.mockResolvedValue(
-        makeProfileEnvelope({ review_status: 'regenerating' }) as ProfileRecord
+        makeProfileEnvelope({ review_status: 'regenerating' })
       )
 
       const composable = usePersonaReview()
@@ -130,7 +129,7 @@ describe('usePersonaReview', () => {
 
     it('Fehler-Pfad: API liefert success=false, Composable wirft mit der Backend-Fehlermeldung', async () => {
       mockRegenerateSimulationProfile.mockResolvedValue(
-        makeErrorEnvelope('Persona nicht gefunden.') as ProfileRecord
+        makeErrorEnvelope('Persona nicht gefunden.')
       )
 
       const composable = usePersonaReview()
@@ -141,7 +140,7 @@ describe('usePersonaReview', () => {
     })
 
     it('Fehler-Pfad: API liefert success=false ohne error-Feld, Composable wirft Fallback-Message', async () => {
-      mockRegenerateSimulationProfile.mockResolvedValue({ success: false } as unknown as ProfileRecord)
+      mockRegenerateSimulationProfile.mockResolvedValue({ success: false })
 
       const composable = usePersonaReview()
 
@@ -170,7 +169,7 @@ describe('usePersonaReview', () => {
   describe('approve (Baseline-Regression nach Sub-Slice 33)', () => {
     it('approve ruft approveSimulationProfile korrekt auf', async () => {
       mockApproveSimulationProfile.mockResolvedValue(
-        makeProfileEnvelope({ review_status: 'approved' }) as ProfileRecord
+        makeProfileEnvelope({ review_status: 'approved' })
       )
 
       const composable = usePersonaReview()
@@ -184,7 +183,7 @@ describe('usePersonaReview', () => {
   describe('reject (Baseline-Regression nach Sub-Slice 33)', () => {
     it('reject ruft rejectSimulationProfile korrekt auf', async () => {
       mockRejectSimulationProfile.mockResolvedValue(
-        makeProfileEnvelope({ review_status: 'rejected' }) as ProfileRecord
+        makeProfileEnvelope({ review_status: 'rejected' })
       )
 
       const composable = usePersonaReview()

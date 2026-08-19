@@ -18,28 +18,10 @@ import {
   getSimulationProfilesQuality,
   rejectSimulationProfile,
   regenerateSimulationProfile,
+  type ProfileQualityResponse,
+  type ProfileQualitySummary,
   type ProfileRecord,
 } from '../api/simulation'
-
-// reason: the service interceptor returns the raw envelope body at runtime;
-// the API type declarations claim the unwrapped type but the composable checks
-// `res?.success` — we cast via `unknown` to the actual runtime shape.
-interface QualityEnvelope {
-  success?: boolean
-  error?: string
-  data?: {
-    summary?: string | null
-    global_issues?: IssueSeverityEntry[]
-    review_enabled?: boolean
-    personas?: Array<{ username: string; issues?: IssueSeverityEntry[] }>
-  }
-}
-
-interface ProfileEnvelope {
-  success?: boolean
-  error?: string
-  data?: ProfileRecord
-}
 
 export type IssueSeverity = 'error' | 'warning' | 'info'
 
@@ -51,7 +33,7 @@ export interface IssueSeverityEntry {
 
 export interface UsePersonaReviewReturn {
   reviewEnabled: Ref<boolean>
-  summary: Ref<string | null>
+  summary: Ref<ProfileQualitySummary | null>
   globalIssues: Ref<IssueSeverityEntry[]>
   hasGlobalIssues: ComputedRef<boolean>
   issuesByUsername: Map<string, IssueSeverityEntry[]>
@@ -59,7 +41,7 @@ export interface UsePersonaReviewReturn {
   error: Ref<string | null>
   getIssuesFor: (username: string) => IssueSeverityEntry[]
   highestSeverityFor: (username: string) => IssueSeverity | null
-  refreshQuality: (simulationId: string) => Promise<QualityEnvelope['data'] | null>
+  refreshQuality: (simulationId: string) => Promise<ProfileQualityResponse | null>
   approve: (simulationId: string, username: string, notes?: string) => Promise<ProfileRecord | undefined>
   reject: (simulationId: string, username: string, reason?: string) => Promise<ProfileRecord | undefined>
   regenerate: (simulationId: string, username: string, hint?: string) => Promise<ProfileRecord | undefined>
@@ -70,7 +52,7 @@ const SEVERITY_RANK: Record<IssueSeverity, number> = { error: 3, warning: 2, inf
 
 export function usePersonaReview(): UsePersonaReviewReturn {
   const reviewEnabled = ref(false)
-  const summary = ref<string | null>(null)
+  const summary = ref<ProfileQualitySummary | null>(null)
   const globalIssues = ref<IssueSeverityEntry[]>([])
   const issuesByUsername = reactive(new Map<string, IssueSeverityEntry[]>())
   const isLoading = ref(false)
@@ -91,30 +73,43 @@ export function usePersonaReview(): UsePersonaReviewReturn {
     return highest
   }
 
-  function applyReport(payload: QualityEnvelope['data']): void {
-    summary.value = payload?.summary || null
-    globalIssues.value = payload?.global_issues || []
-    reviewEnabled.value = !!payload?.review_enabled
+  // reason: ProfileQualityResponse (src/api/simulation.ts) only declares
+  // `simulation_id`/`profiles` explicitly and falls back to an index signature
+  // of `unknown` for everything else — it does not describe the
+  // summary/global_issues/review_enabled/personas shape the backend actually
+  // sends here (verified against no other typed consumer of these fields).
+  // That's a pre-existing gap in the (out-of-scope) API type, not something
+  // this composable should paper over with a cast — so the fields are read
+  // through explicit runtime narrowing instead.
+  function applyReport(payload: ProfileQualityResponse): void {
+    // summary ist ein OBJEKT mit Zaehlern (total/approved/pending/…),
+    // kein Text — siehe persona_quality_service.py::_build_summary. Der
+    // frueher hier deklarierte `string` war eine Typluege, die nur
+    // niemandem aufgefallen ist, weil bisher keine Ansicht den Wert liest.
+    summary.value = payload.summary ?? null
+    globalIssues.value = (payload.global_issues ?? []) as IssueSeverityEntry[]
+    reviewEnabled.value = !!payload.review_enabled
     issuesByUsername.clear()
-    for (const entry of payload?.personas || []) {
-      issuesByUsername.set(entry.username, entry.issues || [])
+    const personas = Array.isArray(payload.personas) ? payload.personas : []
+    for (const entry of personas) {
+      const username = typeof entry.username === 'string' ? entry.username : ''
+      if (!username) continue
+      issuesByUsername.set(username, (entry.issues ?? []) as IssueSeverityEntry[])
     }
   }
 
-  async function refreshQuality(simulationId: string): Promise<QualityEnvelope['data'] | null> {
+  async function refreshQuality(simulationId: string): Promise<ProfileQualityResponse | null> {
     if (!simulationId) return null
     isLoading.value = true
     error.value = null
     try {
-      // reason: service interceptor returns raw envelope body at runtime;
-      // getSimulationProfilesQuality is typed as the unwrapped type in api/simulation.ts
-      const res = (await getSimulationProfilesQuality(simulationId)) as unknown as QualityEnvelope
-      if (res?.success) {
-        applyReport(res.data)
-        return res.data ?? null
+      const res = await getSimulationProfilesQuality(simulationId)
+      if (!res.success) {
+        error.value = res.error || 'Quality-Report konnte nicht geladen werden.'
+        return null
       }
-      error.value = res?.error || 'Quality-Report konnte nicht geladen werden.'
-      return null
+      applyReport(res.data)
+      return res.data
     } catch (err) {
       const e = err as { message?: string }
       error.value = e?.message || 'Quality-Report konnte nicht geladen werden.'
@@ -129,10 +124,9 @@ export function usePersonaReview(): UsePersonaReviewReturn {
     username: string,
     notes?: string
   ): Promise<ProfileRecord | undefined> {
-    // reason: service interceptor returns raw envelope body at runtime
-    const res = (await approveSimulationProfile(simulationId, username, notes)) as unknown as ProfileEnvelope
-    if (!res?.success) {
-      throw new Error(res?.error || 'Approve fehlgeschlagen.')
+    const res = await approveSimulationProfile(simulationId, username, notes)
+    if (!res.success) {
+      throw new Error(res.error || 'Approve fehlgeschlagen.')
     }
     return res.data
   }
@@ -142,10 +136,9 @@ export function usePersonaReview(): UsePersonaReviewReturn {
     username: string,
     reason?: string
   ): Promise<ProfileRecord | undefined> {
-    // reason: service interceptor returns raw envelope body at runtime
-    const res = (await rejectSimulationProfile(simulationId, username, reason)) as unknown as ProfileEnvelope
-    if (!res?.success) {
-      throw new Error(res?.error || 'Reject fehlgeschlagen.')
+    const res = await rejectSimulationProfile(simulationId, username, reason)
+    if (!res.success) {
+      throw new Error(res.error || 'Reject fehlgeschlagen.')
     }
     return res.data
   }
@@ -155,10 +148,9 @@ export function usePersonaReview(): UsePersonaReviewReturn {
     username: string,
     hint?: string
   ): Promise<ProfileRecord | undefined> {
-    // reason: service interceptor returns raw envelope body at runtime
-    const res = (await regenerateSimulationProfile(simulationId, username, hint)) as unknown as ProfileEnvelope
-    if (!res?.success) {
-      throw new Error(res?.error || 'Regenerate fehlgeschlagen.')
+    const res = await regenerateSimulationProfile(simulationId, username, hint)
+    if (!res.success) {
+      throw new Error(res.error || 'Regenerate fehlgeschlagen.')
     }
     return res.data
   }
@@ -168,10 +160,9 @@ export function usePersonaReview(): UsePersonaReviewReturn {
     username: string,
     data: Partial<ProfileRecord>
   ): Promise<ProfileRecord | undefined> {
-    // reason: service interceptor returns raw envelope body at runtime
-    const res = (await editSimulationProfile(simulationId, username, data)) as unknown as ProfileEnvelope
-    if (!res?.success) {
-      throw new Error(res?.error || 'Edit fehlgeschlagen.')
+    const res = await editSimulationProfile(simulationId, username, data)
+    if (!res.success) {
+      throw new Error(res.error || 'Edit fehlgeschlagen.')
     }
     return res.data
   }
