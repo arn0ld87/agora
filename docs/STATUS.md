@@ -198,7 +198,10 @@ Chat-Routing und Embedding-Konfiguration bleiben getrennte Vertragswelten.
 - Abbrechen und Pause hängen an der Zeile und am Dossier-Kopf; abgebrochen wird ohne Rückfragedialog, mit 5-Sekunden-Fenster zum Rückgängigmachen (`useCancelAction`, ein Toast für die ganze Hülle)
 - Das Nutzermenü oben rechts ist echt (`components/shell/UserMenu.vue`, Initialen aus `store/userProfile`, Einträge Profil und Einstellungen) und wird von **beiden** Hüllen benutzt. Die Attrappen (`AD` in der klassischen Kopfzeile, `AS` in der neuen) und die funktionslose Glocke sind entfernt
 - Testid-Kontrakt in `contracts/testIds.ts` (`ShellTestId`, `ShelfTestId`, `DossierTestId`) — vor den Komponenten angelegt; Specs selektieren ausschließlich darüber, nie über CSS-Klassen. `/ablage` läuft im Golden-Gate-Accessibility-Smoke mit
-- Offen in B3: Bericht-Leseumgebung mit Belegrand, Graph-Objekt mit Rundenscrubber, Einstellungen als Overlay, Löschen der Altansichten und zuletzt das Entfernen des Flags
+- **Der Shell-Standard ist `dossier`**: `/` führt in die Ablage. `agora.shell=classic` im localStorage bleibt als Rückweg, bis die alten Ansichten gelöscht sind — dann fällt der Flag ganz. `views/Home.vue` ist entfernt (niemand hat sie mehr eingebunden); `RunsView`/`RunDetailView`/`RunsDashboard` leben weiter in den v4-Wrappern und werden von den Weiter-Aktionen der Ablage angesteuert
+- Läufe allein aus Personas: `POST /api/simulation/create-from-personas` + `prepare_from_personas` (`CREATED → PREPARING → READY` ohne Graph, Vorbild `branching_service.create_branch`). Im Dossier eines Personasatzes startbar. **Grenze:** ohne `graph_id` ist keine Berichtserzeugung möglich — die drei Prüfpunkte sagen das jetzt im Klartext, statt „Missing graph ID"; ein Platzhalter-Graph wurde bewusst nicht eingesetzt, weil der Bericht sonst ohne Evidenz durchliefe und wie ein normaler aussähe
+- Die harte Untergrenze von 30 Personas (`_validate_persona_quota`, Issue #496) ist entfallen, ebenso `AGORA_ALLOW_SMALL_SIM` und das gespiegelte `allow_small_sim` in `/api/status`. 30 bleibt Vorschlagswert im Dashboard
+- Offen in B3: Bericht-Leseumgebung mit Belegrand, Graph-Objekt mit Rundenscrubber, Einstellungen als Overlay, Löschen der v4-Hülle und zuletzt das Entfernen des Flags
 
 ## Bekannte Konsolidierungsschuld
 

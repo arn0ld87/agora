@@ -11,7 +11,12 @@ import { ref } from 'vue'
  * Aufloesungsreihenfolge:
  *   1. localStorage["agora.shell"]  — Laufzeit-Override im Browser
  *   2. VITE_AGORA_SHELL             — Build-Default
- *   3. "classic"                    — bis die Dossier-Huelle traegt
+ *   3. "dossier"                    — seit die Huelle traegt (B3/B4)
+ *
+ * Der Standard ist auf "dossier" gewechselt: Ablage und Dossier sind
+ * gebaut, das Abbrechen haengt an der Zeile, Personasaetze und Berichte
+ * sind Startpunkte. "classic" bleibt als Rueckweg erreichbar, bis die
+ * alten Ansichten geloescht sind — dann faellt der Flag ganz.
  */
 export type ShellVariant = 'classic' | 'dossier'
 
@@ -26,7 +31,7 @@ function resolveVariant(): ShellVariant {
   }
   const env = (import.meta.env.VITE_AGORA_SHELL as string | undefined) ?? ''
   if (env === 'dossier' || env === 'classic') return env
-  return 'classic'
+  return 'dossier'
 }
 
 const variant = ref<ShellVariant>(resolveVariant())
