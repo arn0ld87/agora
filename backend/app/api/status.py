@@ -53,19 +53,14 @@ def _get_auth_mode():
 def _get_backend_status():
     """Get backend health, version, and active auth mode.
 
-    ``allow_small_sim`` mirrors the ``AGORA_ALLOW_SMALL_SIM`` env-var so the
-    frontend can adjust the persona-slider lower bound dynamically instead of
-    letting the user submit a run that the simulation_config_generator's
-    persona-quota validator rejects with a hard 422.
+    ``allow_small_sim`` ist entfallen: die harte Untergrenze von 30
+    Personas gibt es nicht mehr, damit auch keinen Schalter, der sie
+    aufhebt (Block B4).
     """
     return {
         "ok": True,
         "version": __version__,
         "auth_mode": _get_auth_mode(),
-        # Exakter Vergleich gegen "1" — kein .strip() — damit die UI das
-        # gleiche Bit sieht wie der Validator in simulation_config_generator
-        # (_validate_persona_quota nutzt ebenfalls `!= "1"` ohne strip).
-        "allow_small_sim": os.environ.get("AGORA_ALLOW_SMALL_SIM") == "1",
     }
 
 

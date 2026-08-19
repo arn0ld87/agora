@@ -11,6 +11,8 @@ from . import simulation_bp
 from ..config import Config
 from ..llm.providers.registry import detect_provider, resolve_ollama_tags_url
 from ..models.project import ProjectManager
+from ..services.persona_library import PersonaLibrary
+from ..services.persona_prepare_service import prepare_from_personas
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_error, json_success
@@ -229,3 +231,75 @@ def list_simulations():
         [simulation.to_dict() for simulation in simulations],
         count=len(simulations),
     )
+
+
+@simulation_bp.route('/create-from-personas', methods=['POST'])
+@handle_api_errors(logger=logger, log_prefix="Failed to create simulation from personas")
+def create_simulation_from_personas():
+    """Legt einen Lauf allein aus gespeicherten Personas an (Block B4).
+
+    Bewusst ein EIGENER Endpunkt statt eines Sonderfalls in ``/create``:
+    dort ist eine ``graph_id`` Pflicht, und das soll sie auch bleiben —
+    der regulaere Weg ueber Dokument und Graph darf nicht aufweichen.
+    Hier gibt es keinen Graphen, also traegt die Simulation auch keine
+    ``graph_id``; erfunden wird keine.
+
+    Erwartet ``simulation_requirement`` und entweder ``template_ids``
+    (Verweise in die Persona-Bibliothek) oder ``personas`` (Inline).
+    """
+    data = request.get_json() or {}
+
+    requirement = (data.get('simulation_requirement') or '').strip()
+    if not requirement:
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            message="Please provide simulation_requirement",
+        )
+
+    personas = _resolve_personas(data)
+    if isinstance(personas, tuple):  # (Fehlerantwort,)
+        return personas[0]
+
+    project = ProjectManager.create_project(name=requirement[:60])
+    manager = SimulationManager()
+    # graph_id bleibt leer: es gibt keinen Graphen. Der Lauf selbst
+    # braucht ihn nicht — nur die spaetere Berichtserzeugung verlangt
+    # einen, und das ist eine bewusst offene Stelle (PLAN.md, B4).
+    state = manager.create_simulation(project_id=project.project_id, graph_id="")
+
+    prepare_from_personas(manager, state.simulation_id, personas)
+
+    return json_success({
+        "simulation_id": state.simulation_id,
+        "project_id": project.project_id,
+        "persona_count": len(personas),
+    }, status=201)
+
+
+def _resolve_personas(data):
+    """Personas aus ``template_ids`` oder ``personas`` gewinnen.
+
+    Gibt bei einem Fehler ein 1-Tupel mit der fertigen Fehlerantwort
+    zurueck, sonst die Liste.
+    """
+    inline = data.get('personas')
+    if isinstance(inline, list) and inline:
+        return [p for p in inline if isinstance(p, dict)]
+
+    template_ids = data.get('template_ids')
+    if not isinstance(template_ids, list) or not template_ids:
+        return (json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            message="Please provide template_ids or personas",
+        ),)
+
+    wanted = {str(t) for t in template_ids}
+    available = PersonaLibrary().list_templates()
+    picked = [t for t in available if str(t.get('template_id')) in wanted]
+    if not picked:
+        return (json_error(
+            ApiErrorCode.NOT_FOUND,
+            status=404,
+            message="None of the given template_ids exist in the persona library",
+        ),)
+    return picked

@@ -127,20 +127,16 @@ const hasExplicitPick = ref(false)
 const language = ref<string>(readLocal(STORAGE_LANG) || 'de')
 const simulationRequirement = ref('')
 
-// Persona-Floor synchron mit Backend (simulation_config_generator._validate_persona_quota).
-// Hard-Floor=30, optional override via AGORA_ALLOW_SMALL_SIM=1. Wert wird beim
-// Mount per /api/status (backend.allow_small_sim) gezogen — bis dahin pessimistisch
-// auf den harten Floor klemmen, damit der User keine Run-Konfig zusammenklicken kann
-// die das Backend dann mit 422 ablehnt.
-const NUM_AGENTS_HARD_FLOOR = 30
-const NUM_AGENTS_OVERRIDE_FLOOR = 10
-const NUM_AGENTS_DEFAULT = NUM_AGENTS_HARD_FLOOR
+// Die harte Untergrenze von 30 Personas ist entfallen (Block B4): sie
+// stand kleinen, gezielten Laeufen im Weg — etwa einem Gremium aus acht
+// Leuten. 30 bleibt der Vorschlag, ist aber keine Schranke mehr.
+const NUM_AGENTS_MIN = 1
+const NUM_AGENTS_DEFAULT = 30
 const NUM_AGENTS_MAX = 100
 const NUM_ROUNDS_MIN = 3
 const NUM_ROUNDS_DEFAULT = 10
 const NUM_ROUNDS_MAX = 30
 
-const allowSmallSim = ref<boolean>(false)
 const numAgents = ref<number>(NUM_AGENTS_DEFAULT)
 const numRounds = ref<number>(NUM_ROUNDS_DEFAULT)
 
@@ -187,13 +183,11 @@ async function refreshEstimate() {
   }
 }
 
-const numAgentsMin = computed<number>(
-  () => (allowSmallSim.value ? NUM_AGENTS_OVERRIDE_FLOOR : NUM_AGENTS_HARD_FLOOR),
-)
+const numAgentsMin = computed<number>(() => NUM_AGENTS_MIN)
 
-const showAgentsWarning = computed<boolean>(
-  () => allowSmallSim.value && numAgents.value >= NUM_AGENTS_OVERRIDE_FLOOR && numAgents.value < NUM_AGENTS_HARD_FLOOR,
-)
+// Unter 30 Personas wird die Aussagekraft duenn — das ist ein Hinweis,
+// keine Sperre.
+const showAgentsWarning = computed<boolean>(() => numAgents.value < 30)
 
 const profileOptions = computed(() => {
   return llmProfiles.value.map(p => ({
@@ -385,19 +379,6 @@ onMounted(() => {
       discardPersistedProfile()
     })
     .finally(() => { profilesSettled.value = true })
-  // backend.allow_small_sim aus /api/status spiegelt AGORA_ALLOW_SMALL_SIM
-  // wider. Default-pessimistisch bei Fetch-Fehler: harter 30er-Floor bleibt.
-  getSystemStatus()
-    .then(envelope => {
-      const backend = (envelope?.data?.backend ?? envelope?.backend) as { allow_small_sim?: boolean } | undefined
-      allowSmallSim.value = !!backend?.allow_small_sim
-      // Wenn der Override nach Mount inaktiv ist, klemmen wir einen ggf. aus
-      // dem letzten Override-Run persistenten Slider-Wert wieder hoch.
-      if (!allowSmallSim.value && numAgents.value < NUM_AGENTS_HARD_FLOOR) {
-        numAgents.value = NUM_AGENTS_HARD_FLOOR
-      }
-    })
-    .catch(() => { /* Fail-safe: allowSmallSim bleibt false → 30er-Floor aktiv */ })
   // Service-Readiness + Backend-Default-Language (Parität zu Home.vue, #915).
   // Liefert default_provider/ollama_reachable/neo4j_reachable/default_language
   // aus /api/simulation/available-models. Bei Fetch-Fehler bleiben die Refs
@@ -511,7 +492,7 @@ onMounted(() => {
           <label class="hero-label" for="hero-num-agents">
             {{ $t('dashboard.hero.numAgentsLabel') }}
             <span class="hero-slider-value">{{ numAgents }}</span>
-            <span v-if="allowSmallSim" class="hero-small-sim-badge" :title="$t('dashboard.hero.smallSimActiveTooltip')">
+            <span v-if="showAgentsWarning" class="hero-small-sim-badge" :title="$t('dashboard.hero.smallSimActiveTooltip')">
               {{ $t('dashboard.hero.smallSimBadge') }}
             </span>
           </label>
