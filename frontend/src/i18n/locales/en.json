@@ -1737,7 +1737,10 @@
       "personaBio": "Bio",
       "personaCountry": "Country",
       "personaProfession": "Profession",
-      "personaTopics": "Interests"
+      "personaTopics": "Interests",
+      "startFailed": "Could not create the run.",
+      "startFromPersona": "Run with these personas",
+      "startName": "Run with {title}"
     },
     "empty": "No objects yet. Drop a source to get started.",
     "filter": {

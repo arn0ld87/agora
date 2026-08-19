@@ -1737,7 +1737,10 @@
       "personaBio": "Kurzbeschreibung",
       "personaCountry": "Land",
       "personaProfession": "Beruf",
-      "personaTopics": "Interessen"
+      "personaTopics": "Interessen",
+      "startFailed": "Lauf konnte nicht angelegt werden.",
+      "startFromPersona": "Lauf mit diesen Personas",
+      "startName": "Lauf mit {title}"
     },
     "empty": "Noch keine Objekte. Leg eine Quelle ab, um zu starten.",
     "filter": {

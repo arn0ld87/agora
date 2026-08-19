@@ -33,6 +33,19 @@
                Personas des Vorlaufs bleiben, die Auswertung wird neu.
                Der Weg existierte laengst, lag aber im vierten Schritt
                der alten Prozesskette und war praktisch unauffindbar. -->
+          <!-- Ein Personasatz ist damit nicht nur Archivgut: aus ihm
+               laesst sich direkt ein Lauf starten — ohne Dokument,
+               ohne Graph (Block B4). -->
+          <button
+            v-if="props.object.kind === 'personasatz'"
+            type="button"
+            class="dossier__btn dossier__btn--primary"
+            :data-testid="DossierTestId.startFromPersona"
+            :disabled="startBusy"
+            @click="onStartFromPersona"
+          >
+            {{ t('shelf.dossier.startFromPersona') }}
+          </button>
           <button
             v-if="canDerive"
             type="button"
@@ -98,6 +111,7 @@ import { SHELF_KIND_TAG, type ShelfObject } from '../../types/shelf'
 import { useCancelAction } from './useCancelAction'
 import { useObjectDetail } from '../../composables/useObjectDetail'
 import { useDeriveSimulation } from '../../composables/useDeriveSimulation'
+import { createSimulationFromPersonas } from '../../api/simulation'
 
 /**
  * Dossier.vue — rechte Spalte (Block B3).
@@ -122,12 +136,33 @@ const { detail } = useObjectDetail(
 )
 
 const { busy: deriveBusy, derive } = useDeriveSimulation()
+const startBusy = ref(false)
 const deriveError = ref('')
 
 /** Ableiten gibt es nur beim Bericht, und nur wenn seine Simulation bekannt ist. */
 const canDerive = computed(
   () => props.object?.kind === 'bericht' && Boolean(props.object.simulationId),
 )
+
+async function onStartFromPersona(): Promise<void> {
+  const obj = props.object
+  if (!obj || obj.kind !== 'personasatz') return
+  deriveError.value = ''
+  startBusy.value = true
+  try {
+    const res = await createSimulationFromPersonas({
+      simulation_requirement: t('shelf.dossier.startName', { title: obj.title }),
+      template_ids: [obj.id],
+    })
+    const simId = res?.success ? res.data?.simulation_id : undefined
+    if (simId) router.push({ name: 'StepEnvSetup', params: { projectId: simId } })
+    else deriveError.value = t('shelf.dossier.startFailed')
+  } catch (err) {
+    deriveError.value = (err as Error).message || t('shelf.dossier.startFailed')
+  } finally {
+    startBusy.value = false
+  }
+}
 
 async function onDerive(): Promise<void> {
   const obj = props.object

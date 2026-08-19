@@ -611,6 +611,18 @@ export const deletePersonaTemplate = (templateId: string): Promise<unknown> => {
  * (siehe api/index.ts) — der Typ sagt das jetzt auch. Vorher stand hier
  * `Promise<BranchRecord>`, und jeder Aufrufer musste das wegcasten.
  */
+/**
+ * POST /api/simulation/create-from-personas — Lauf allein aus
+ * gespeicherten Personas (Block B4). Kein Dokument, kein Graph.
+ */
+export const createSimulationFromPersonas = (data: {
+  simulation_requirement: string
+  template_ids?: string[]
+  personas?: Record<string, unknown>[]
+}): Promise<ApiEnvelope<{ simulation_id: string; project_id: string; persona_count: number }>> => {
+  return service.post('/api/simulation/create-from-personas', data)
+}
+
 export const createSimulationBranch = (
   simulationId: string,
   data: BranchData

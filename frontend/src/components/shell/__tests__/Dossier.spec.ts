@@ -27,10 +27,11 @@ vi.mock('../../../api/simulation', () => ({
   pauseSimulation: vi.fn().mockResolvedValue({}),
   resumeSimulation: vi.fn().mockResolvedValue({}),
   createSimulationBranch: vi.fn(),
+  createSimulationFromPersonas: vi.fn(),
   listPersonaTemplates: vi.fn().mockResolvedValue({ success: true, data: { count: 0, templates: [] } }),
 }))
 
-import { pauseSimulation, resumeSimulation, createSimulationBranch } from '../../../api/simulation'
+import { pauseSimulation, resumeSimulation, createSimulationBranch, createSimulationFromPersonas } from '../../../api/simulation'
 import { useCancelAction } from '../useCancelAction'
 import Dossier from '../Dossier.vue'
 
@@ -164,6 +165,43 @@ describe('Dossier — Lauf aus einem Bericht ableiten (Block B4)', () => {
 
     const w = mountDossier(makeObject({ kind: 'bericht', simulationId: 'sim_alt' }))
     await w.find(`[data-testid="${DossierTestId.derive}"]`).trigger('click')
+    await flushPromises()
+
+    expect(w.find('[role="alert"]').exists()).toBe(true)
+  })
+})
+
+describe('Dossier — Lauf aus einem Personasatz starten (Block B4)', () => {
+  it('bietet den Start nur beim Personasatz an', () => {
+    const bericht = mountDossier(makeObject({ kind: 'bericht', simulationId: 'sim_1' }))
+    expect(bericht.find(`[data-testid="${DossierTestId.startFromPersona}"]`).exists()).toBe(false)
+
+    const satz = mountDossier(makeObject({ kind: 'personasatz', id: 'tpl_1' }))
+    expect(satz.find(`[data-testid="${DossierTestId.startFromPersona}"]`).exists()).toBe(true)
+  })
+
+  it('legt den Lauf mit genau diesem Satz an und fuehrt hin', async () => {
+    vi.mocked(createSimulationFromPersonas).mockResolvedValue({
+      success: true,
+      data: { simulation_id: 'sim_neu', project_id: 'proj_neu', persona_count: 1 },
+    } as never)
+
+    const w = mountDossier(makeObject({ kind: 'personasatz', id: 'tpl_1', title: 'Sachbearbeiterin' }))
+    await w.find(`[data-testid="${DossierTestId.startFromPersona}"]`).trigger('click')
+    await flushPromises()
+
+    expect(createSimulationFromPersonas).toHaveBeenCalledWith(
+      expect.objectContaining({ template_ids: ['tpl_1'] }),
+    )
+    expect(router.currentRoute.value.name).toBe('StepEnvSetup')
+    expect(router.currentRoute.value.params.projectId).toBe('sim_neu')
+  })
+
+  it('meldet einen Fehlschlag sichtbar', async () => {
+    vi.mocked(createSimulationFromPersonas).mockRejectedValue(new Error('kaputt'))
+
+    const w = mountDossier(makeObject({ kind: 'personasatz', id: 'tpl_1' }))
+    await w.find(`[data-testid="${DossierTestId.startFromPersona}"]`).trigger('click')
     await flushPromises()
 
     expect(w.find('[role="alert"]').exists()).toBe(true)
