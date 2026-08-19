@@ -23,33 +23,14 @@ from app.api.status import (
 class TestStatusFunctions:
     """Test suite for status helper functions"""
 
-    def test_get_backend_status(self, monkeypatch):
+    def test_get_backend_status(self):
         """Test backend status returns correct version and ok=true."""
-        # ENV-Drift aus dem lokalen .env-File abklemmen, damit die Assertion
-        # gegen den Default deterministisch bleibt.
-        monkeypatch.delenv("AGORA_ALLOW_SMALL_SIM", raising=False)
         result = _get_backend_status()
         assert result['ok'] is True
         assert result['version'] == __version__
-        # Slice "small-sim-floor-frontend-sync": default ohne ENV-Override ist
-        # der 30-Personas-Floor scharf, also allow_small_sim=False.
-        assert result['allow_small_sim'] is False
-
-    def test_get_backend_status_reflects_allow_small_sim_env(self, monkeypatch):
-        """Backend exponiert AGORA_ALLOW_SMALL_SIM=1 als allow_small_sim=True."""
-        monkeypatch.setenv("AGORA_ALLOW_SMALL_SIM", "1")
-        assert _get_backend_status()['allow_small_sim'] is True
-
-        # Andere Werte (z. B. "0", "true", leer, gepaddetes "1") zaehlen NICHT
-        # als aktiviert — Backend-Validator (simulation_config_generator.
-        # _validate_persona_quota) vergleicht ebenfalls strict gegen "1" ohne
-        # strip, der Status-Endpoint muss exakt das gleiche Bit liefern.
-        monkeypatch.setenv("AGORA_ALLOW_SMALL_SIM", "true")
-        assert _get_backend_status()['allow_small_sim'] is False
-        monkeypatch.setenv("AGORA_ALLOW_SMALL_SIM", "0")
-        assert _get_backend_status()['allow_small_sim'] is False
-        monkeypatch.setenv("AGORA_ALLOW_SMALL_SIM", " 1 ")
-        assert _get_backend_status()['allow_small_sim'] is False
+        # allow_small_sim ist entfallen: es gibt keine harte Untergrenze
+        # von 30 Personas mehr, die ein Schalter aufheben muesste (B4).
+        assert 'allow_small_sim' not in result
 
     def test_get_e2e_status_defaults_to_inactive(self, monkeypatch):
         """Ohne AGORA_E2E_LLM_MODE ist der Stub aus — Normalfall in Produktion."""

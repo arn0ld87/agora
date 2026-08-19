@@ -4,9 +4,11 @@ import type { ShelfObject } from '../../types/shelf'
 
 vi.mock('../../api/report', () => ({ getReport: vi.fn() }))
 vi.mock('../../api/graph', () => ({ getGraphData: vi.fn() }))
+vi.mock('../../api/simulation', () => ({ listPersonaTemplates: vi.fn() }))
 
 import { getReport } from '../../api/report'
 import { getGraphData } from '../../api/graph'
+import { listPersonaTemplates } from '../../api/simulation'
 import { useObjectDetail } from '../useObjectDetail'
 
 // t-Stub: gibt den Schluessel zurueck, Assertions laufen ueber Schluessel.
@@ -66,6 +68,55 @@ describe('useObjectDetail', () => {
     ])
   })
 
+  it('zeigt fuer einen Personasatz Beruf, Land, Interessen und Kurzbeschreibung', async () => {
+    vi.mocked(listPersonaTemplates).mockResolvedValue({
+      success: true,
+      data: {
+        count: 2,
+        templates: [
+          { template_id: 'other', name: 'Falsch' },
+          {
+            template_id: 'tpl_1',
+            name: 'Sachbearbeiterin',
+            persona: 'Skeptisch gegenüber Reformen.',
+            profession: 'Verwaltung',
+            country: 'DE',
+            interested_topics: ['Rente', 'Wohnen'],
+            bio: 'Seit 12 Jahren im Amt.',
+          },
+        ],
+      },
+    } as never)
+
+    const obj = ref<ShelfObject | null>(makeObject({ kind: 'personasatz', id: 'tpl_1' }))
+    const { detail } = useObjectDetail(obj, t)
+    await nextTick(); await Promise.resolve(); await Promise.resolve()
+
+    expect(detail.value?.summary).toBe('Skeptisch gegenüber Reformen.')
+    expect(detail.value?.parts).toEqual([
+      { title: 'shelf.dossier.personaProfession', description: 'Verwaltung' },
+      { title: 'shelf.dossier.personaCountry', description: 'DE' },
+      { title: 'shelf.dossier.personaTopics', description: 'Rente, Wohnen' },
+      { title: 'shelf.dossier.personaBio', description: 'Seit 12 Jahren im Amt.' },
+    ])
+  })
+
+  it('laesst leere Felder eines Personasatzes weg, statt sie leer anzuzeigen', async () => {
+    vi.mocked(listPersonaTemplates).mockResolvedValue({
+      success: true,
+      data: { count: 1, templates: [{ template_id: 'tpl_2', name: 'Knapp', profession: 'Pflege' }] },
+    } as never)
+
+    const obj = ref<ShelfObject | null>(makeObject({ kind: 'personasatz', id: 'tpl_2' }))
+    const { detail } = useObjectDetail(obj, t)
+    await nextTick(); await Promise.resolve(); await Promise.resolve()
+
+    expect(detail.value?.parts).toEqual([
+      { title: 'shelf.dossier.personaProfession', description: 'Pflege' },
+    ])
+    expect(detail.value?.summary).toBe('')
+  })
+
   it('laedt nichts fuer Sorten ohne Detail-Endpunkt', async () => {
     const obj = ref<ShelfObject | null>(makeObject({ kind: 'lauf', id: 'sim_1' }))
     const { detail } = useObjectDetail(obj, t)
@@ -73,6 +124,7 @@ describe('useObjectDetail', () => {
 
     expect(getReport).not.toHaveBeenCalled()
     expect(getGraphData).not.toHaveBeenCalled()
+    expect(listPersonaTemplates).not.toHaveBeenCalled()
     expect(detail.value).toBeNull()
   })
 

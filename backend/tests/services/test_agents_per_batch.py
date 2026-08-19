@@ -131,8 +131,6 @@ class TestBatchingMath:
         Produktionsschleife gekoppelt, nicht an eine lokale Kopie der Formel.
         """
         monkeypatch.setenv("AGORA_AGENTS_PER_BATCH", "5")
-        # Floor-Check (>=30 Personas) ist hier nicht relevant — wir patchen ihn
-        # auf einen No-op, statt ``AGORA_ALLOW_SMALL_SIM`` global zu setzen.
         captured: list[list[EntityNode]] = []
 
         def fake_batch(self, context, entities, start_idx, simulation_requirement):  # type: ignore[no-untyped-def]  # noqa: ARG001
@@ -165,11 +163,6 @@ class TestBatchingMath:
                 "_generate_agent_configs_batch",
                 autospec=True,
                 side_effect=fake_batch,
-            ),
-            patch.object(
-                SimulationConfigGenerator,
-                "_validate_persona_quota",
-                staticmethod(lambda personas: None),
             ),
             patch.object(
                 SimulationConfigGenerator,

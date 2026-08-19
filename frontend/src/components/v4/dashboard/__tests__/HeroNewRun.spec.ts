@@ -185,7 +185,7 @@ vi.mock('@/composables/useEffectiveModelSelection', () => {
 
 // Initial-Defaults (werden in mountHero() vor jedem Test neu gesetzt).
 fetchLlmProfilesMock.mockResolvedValue([])
-getSystemStatusMock.mockResolvedValue({ data: { backend: { allow_small_sim: false } } })
+getSystemStatusMock.mockResolvedValue({ data: { backend: { ok: true } } })
 // Service-Readiness (Parität zu Home.vue, #915): Default liefert neo4j_reachable=true
 // und default_provider='openai' → servicesReady=true → canSubmit nicht blockiert.
 getAvailableModelsMock.mockResolvedValue({ success: true, data: { default_provider: 'openai', ollama_reachable: true, neo4j_reachable: true, default_language: 'de' } })
@@ -269,7 +269,7 @@ async function mountHero(seed: Record<string, string> = {}) {
   setRunModelOverrideMock.mockClear()
   clearRunModelOverrideMock.mockClear()
   getSystemStatusMock.mockClear()
-  getSystemStatusMock.mockResolvedValue({ data: { backend: { allow_small_sim: false } } })
+  getSystemStatusMock.mockResolvedValue({ data: { backend: { ok: true } } })
   // Kanon-Stub: ensureLoaded muss resolven, damit die Komponente beim Mount
   // selectedModel aus effectiveRef initialisiert.
   ensureLoadedMock.mockReset()

@@ -23,7 +23,8 @@
 
     <div class="shelf__body">
       <!-- Filter „Alle Jobs" (Q19c): schlichte Mono-Tabelle aus der Rohebene. -->
-      <table v-if="props.shelf.filter.value === 'jobs'" class="shelf__jobs-table" :data-testid="ShelfTestId.jobsTable">
+      <div v-if="props.shelf.filter.value === 'jobs'" class="shelf__jobs-scroll">
+      <table class="shelf__jobs-table" :data-testid="ShelfTestId.jobsTable">
         <thead>
           <tr>
             <th>{{ t('shelf.filter.jobs') }}</th>
@@ -41,6 +42,7 @@
           </tr>
         </tbody>
       </table>
+      </div>
 
       <template v-else>
         <p v-if="props.shelf.loading.value && visibleRows.length === 0" class="shelf__loading">{{ t('common.loading') }}</p>
@@ -512,8 +514,17 @@ function onRowKeydown(e: KeyboardEvent, index: number): void {
   outline-offset: 2px;
 }
 
+/* Die Rohebene ist breiter als ein Telefon. Sie scrollt in ihrem
+   eigenen Kasten — das Dokument selbst darf nie horizontal scrollen
+   (harte Vorgabe des Accessibility-Gates bei 320px). */
+.shelf__jobs-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
 .shelf__jobs-table {
   width: 100%;
+  min-width: 480px;
   border-collapse: collapse;
   font-family: var(--font-mono);
   font-size: 11px;

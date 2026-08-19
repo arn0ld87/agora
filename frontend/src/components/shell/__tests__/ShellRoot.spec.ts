@@ -144,3 +144,57 @@ describe('ShellRoot', () => {
     expect(cancelRun).not.toHaveBeenCalled()
   })
 })
+
+describe('ShellRoot auf schmalen Geraeten (Block B4)', () => {
+  function setViewport(schmal: boolean) {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: vi.fn().mockReturnValue({
+        matches: schmal,
+        media: '',
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }),
+    })
+  }
+
+  afterEach(() => {
+    Object.defineProperty(window, 'matchMedia', { writable: true, configurable: true, value: undefined })
+  })
+
+  it('zeigt den Tastenkuerzel-Knopf auf breiten Geraeten', () => {
+    setViewport(false)
+    const w = mountShell()
+    expect(w.find(`[data-testid="${ShellTestId.cmdkTrigger}"]`).exists()).toBe(true)
+  })
+
+  it('nimmt ihn auf dem Telefon ganz aus dem Markup, nicht nur aus der Sicht', () => {
+    // Nur zu verstecken reicht nicht: ein display:none-Knopf bliebe ein
+    // Tab-Stop und wuerde vorgelesen, obwohl er dort nichts ausloest.
+    setViewport(true)
+    const w = mountShell()
+    expect(w.find(`[data-testid="${ShellTestId.cmdkTrigger}"]`).exists()).toBe(false)
+  })
+
+  it('blendet ohne Auswahl das Dossier aus und zeigt die Ablage', () => {
+    setViewport(true)
+    const w = mountShell({ current: null })
+    expect(w.find(`[data-testid="${ShellTestId.panelShelf}"]`).attributes('data-hidden-narrow')).toBe('false')
+    expect(w.find(`[data-testid="${ShellTestId.panelDossier}"]`).attributes('data-hidden-narrow')).toBe('true')
+  })
+
+  it('dreht das mit einer Auswahl um — dann traegt das Dossier die Flaeche', () => {
+    setViewport(true)
+    const w = mountShell({ current: makeObject() })
+    expect(w.find(`[data-testid="${ShellTestId.panelShelf}"]`).attributes('data-hidden-narrow')).toBe('true')
+    expect(w.find(`[data-testid="${ShellTestId.panelDossier}"]`).attributes('data-hidden-narrow')).toBe('false')
+  })
+
+  it('laesst den Rueckweg ueber den Stapel bestehen, auch auf schmal', async () => {
+    setViewport(true)
+    const w = mountShell({ current: makeObject() })
+    await w.find(`[data-testid="${ShellTestId.stackBack}"]`).trigger('click')
+    expect(w.emitted('select')?.[0]).toEqual([null])
+  })
+})

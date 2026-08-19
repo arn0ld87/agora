@@ -404,9 +404,6 @@ class SimulationConfigGenerator:
 
         reasoning_parts.append(f"Agent config: Successfully generated {len(all_agent_configs)}")
 
-        # ========== Simulation-Floor-Check (Slice 4, Issue #496) ==========
-        self._validate_persona_quota(all_agent_configs)
-
         # ========== Skeptiker-Quote ≥20 % (Slice 5, Issue #497) ==========
         all_agent_configs = self._ensure_skeptic_quota(all_agent_configs)
 
@@ -1104,21 +1101,6 @@ Return JSON format (no markdown):
             configs.append(config)
 
         return configs
-
-    @staticmethod
-    def _validate_persona_quota(personas: List[Any]) -> None:
-        """Enforce Simulation-Floor: mindestens 30 Personas pro Run.
-
-        Override via Umgebungsvariable ``AGORA_ALLOW_SMALL_SIM=1`` für
-        Entwicklungs- und Test-Szenarien. Im Produktivbetrieb muss die
-        Mindestanzahl eingehalten werden, um statistisch belastbare
-        Simulationsergebnisse zu gewährleisten (Slice 4, Issue #496).
-        """
-        if len(personas) < 30 and os.getenv("AGORA_ALLOW_SMALL_SIM") != "1":
-            raise ValueError(
-                "Simulation-Floor: mindestens 30 Personas erforderlich "
-                "(Override via AGORA_ALLOW_SMALL_SIM=1)."
-            )
 
     @staticmethod
     def _ensure_skeptic_quota(

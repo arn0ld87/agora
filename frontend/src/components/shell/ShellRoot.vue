@@ -13,9 +13,14 @@
 
       <ActivityIndicator :objects="props.activeObjects" @select="(target) => emit('select', target)" />
 
+      <!-- Auf dem Telefon gibt es keine Tastenkombination auszuloesen.
+           Der Knopf verschwindet deshalb aus dem Markup, statt nur
+           unsichtbar zu sein — sonst bliebe er ein Tab-Stop ins Leere. -->
       <button
+        v-if="!isMobile"
         type="button"
         class="shell-root__cmdk"
+        :data-testid="ShellTestId.cmdkTrigger"
         :aria-label="t('cmd.trigger')"
         :title="t('cmd.trigger')"
         @click="openPalette"
@@ -29,10 +34,18 @@
     </header>
 
     <main class="shell-root__main">
-      <div class="shell-root__panel shell-root__panel--shelf" :data-hidden-narrow="hasSelection ? 'true' : 'false'">
+      <div
+        class="shell-root__panel shell-root__panel--shelf"
+        :data-testid="ShellTestId.panelShelf"
+        :data-hidden-narrow="hasSelection ? 'true' : 'false'"
+      >
         <slot name="shelf" />
       </div>
-      <div class="shell-root__panel shell-root__panel--dossier" :data-hidden-narrow="hasSelection ? 'false' : 'true'">
+      <div
+        class="shell-root__panel shell-root__panel--dossier"
+        :data-testid="ShellTestId.panelDossier"
+        :data-hidden-narrow="hasSelection ? 'false' : 'true'"
+      >
         <slot name="dossier" />
       </div>
     </main>
@@ -67,6 +80,7 @@ import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch 
 import { useI18n } from 'vue-i18n'
 import { ShellTestId } from '../../contracts/testIds'
 import UserMenu from './UserMenu.vue'
+import { useIsMobile } from '../../composables/useIsMobile'
 import type { ShelfObject, ShelfObjectKind } from '../../types/shelf'
 import { useCommandPalette } from '../../composables/useCommandPalette'
 import Stack from './Stack.vue'
@@ -102,6 +116,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const cancelAction = useCancelAction()
+const { isMobile } = useIsMobile()
 const { isOpen: isPaletteOpen, open: openPalette } = useCommandPalette()
 const wasPaletteOpened = ref(false)
 
@@ -138,6 +153,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
 }
 
 .shell-root__topbar {
+  /* 46px ist ein Maus-Mass. Auf Touch waechst die Leiste mit, sonst
+     stehen 44px-Ziele in einer 46px-Zeile ohne Luft. */
   height: 46px;
   flex-shrink: 0;
   display: flex;
@@ -274,6 +291,34 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
   }
   .shell-root__panel--shelf {
     border-right: 0;
+  }
+}
+
+@media (pointer: coarse) {
+  .shell-root__topbar {
+    height: 56px;
+  }
+}
+
+/* Telefon (< 768px, SSoT constants/breakpoints.ts): die Kopfzeile
+   traegt nur noch, was dort auch etwas tut. Die Wortmarke schrumpft auf
+   ihren Punkt — der Name kostet Platz, den Stapel und Aktivitaet
+   dringender brauchen; der ⌘K-Knopf ist bereits aus dem Markup. */
+@media (max-width: 767px) {
+  .shell-root__topbar {
+    padding-left: var(--sp-3);
+    padding-right: var(--sp-3);
+    gap: var(--sp-2);
+  }
+  .shell-root__brand-name,
+  .shell-root__divider {
+    display: none;
+  }
+  .shell-root__toast {
+    left: var(--sp-3);
+    right: var(--sp-3);
+    transform: none;
+    justify-content: space-between;
   }
 }
 

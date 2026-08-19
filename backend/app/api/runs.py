@@ -1006,7 +1006,10 @@ def _resume_report_generate(run: dict):
         raise ValueError(f"Project does not exist: {state.project_id}")
     graph_id = state.graph_id or project.graph_id
     if not graph_id:
-        raise ValueError("Missing graph ID")
+        # Reiner Persona-Lauf ohne Graphen (Block B4).
+        raise ValueError(
+            "Dieser Lauf hat keinen Wissensgraphen — Berichte stuetzen sich auf Belege aus dem Graphen und sind fuer reine Persona-Laeufe deshalb noch nicht moeglich. Die Simulation selbst laeuft und ist auswertbar."
+        )
     storage = current_app.extensions.get("neo4j_storage")
     if not storage:
         raise ValueError("GraphStorage not initialized")

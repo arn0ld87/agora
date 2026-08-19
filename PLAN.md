@@ -315,8 +315,8 @@ für die Zeilenaktionen. B4 setzt auf dem Objektmodell auf.
 | --- | --- | --- |
 | B1 Fundament | **erledigt, auf main** | PR #1370 |
 | B2 Abbrechen | **erledigt, auf main** | PR #1371 |
-| B3 Objektmodell | **Ablage + Dossier stehen** | PR #1372 |
-| B4 Öffnung | offen | — |
+| B3 Objektmodell | **erledigt, auf main** | PR #1372 |
+| B4 Öffnung | **in Arbeit** | `feat/b4-oeffnung` |
 
 Was B3 noch fehlt: Bericht-Leseumgebung mit Belegrand, Graph-Objekt mit
 Rundenscrubber, Einstellungen als Overlay, Löschen der Altansichten
@@ -329,6 +329,23 @@ Personasätze wären in der Ablage nie erschienen. Die dynamisch gebildeten
 Statusschlüssel (`shelf.status.report_*`, `project_*`) existierten in keiner
 Locale, und das mitgegebene `{ fallback }` war wirkungslos. Und das Dossier
 behauptete ohne Auswahl „Noch keine Objekte“, während die Ablage voll war.
+
+### B4 im Einzelnen
+
+| Teil | Zustand |
+| --- | --- |
+| Mobile (390px) | erledigt — ⌘K raus aus dem Markup, Jobs-Tabelle scrollt im eigenen Kasten, Kopfzeile gibt auf schmal Wortmarke und Trenner frei |
+| Aus Bericht ableiten | erledigt — im Dossier des Berichts, mit Übernahme der Personas |
+| Personasätze als Objekt | erledigt — in der Ablage, mit Beruf/Land/Interessen im Dossier |
+| Start nur aus Personas | Backend-Service in Arbeit; Endpunkt und Einstieg in der Ablage folgen |
+
+Zum letzten Punkt: Der OASIS-Lauf braucht den Graphen **zur Laufzeit nicht**
+— `branching_service.create_branch` beweist, dass `CREATED → PREPARING → READY`
+ohne die Entity-Phase geht, und `add_simulation_profile` schreibt Personas
+bereits im richtigen Format. Die harte Bindung an eine `graph_id` sitzt in der
+**Report**-Erzeugung (drei Stellen). Der ehrliche Vorbehalt: Berichte aus einem
+reinen Persona-Lauf laufen technisch durch, aber ohne Graph-Belege — das ist
+ein Qualitätsproblem, kein technisches, und gehört dem Nutzer vorher gesagt.
 
 ---
 

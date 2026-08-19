@@ -1727,10 +1727,20 @@
     "cancel": "Cancel",
     "cancelRequested": "Cancel requested — finishing the current stage.",
     "dossier": {
+      "derive": "Derive new run",
+      "deriveFailed": "Could not derive a run.",
+      "deriveName": "Derived from {title}",
       "emptyHint": "Nothing selected. Pick an object on the left to see its overview.",
       "graphEntities": "Entities",
       "graphRelations": "Relations",
-      "idLabel": "ID"
+      "idLabel": "ID",
+      "personaBio": "Bio",
+      "personaCountry": "Country",
+      "personaProfession": "Profession",
+      "personaTopics": "Interests",
+      "startFailed": "Could not create the run.",
+      "startFromPersona": "Run with these personas",
+      "startName": "Run with {title}"
     },
     "empty": "No objects yet. Drop a source to get started.",
     "filter": {

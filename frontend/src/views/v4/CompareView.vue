@@ -47,12 +47,17 @@ const loadError = ref<string | null>(null)
 
 onMounted(async () => {
   try {
-    const raw = await listSimulationBranches(props.simulationId)
-    branches.value = raw.map((b) => {
+    // Der Interceptor liefert die Envelope, nicht das Array — ein
+    // direktes .map() darauf warf und landete im catch: die Liste zeigte
+    // immer „Fehler beim Laden der Branches". Ein Branch ist ausserdem
+    // eine Simulation, seine ID heisst simulation_id (branch_id gab es nie).
+    const envelope = await listSimulationBranches(props.simulationId)
+    const list = envelope?.success ? (envelope.data ?? []) : []
+    branches.value = list.map((b) => {
       const completedAt = typeof b['completed_at'] === 'string' ? b['completed_at'] : undefined
       return {
-        id: b.branch_id,
-        label: b.branch_name || b.branch_id,
+        id: b.simulation_id,
+        label: b.branch_name || b.simulation_id,
         completed_at: completedAt,
       }
     })

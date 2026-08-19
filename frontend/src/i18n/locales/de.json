@@ -1727,10 +1727,20 @@
     "cancel": "Abbrechen",
     "cancelRequested": "Abbruch angefordert — die laufende Stufe wird noch beendet.",
     "dossier": {
+      "derive": "Neuen Lauf ableiten",
+      "deriveFailed": "Ableiten fehlgeschlagen.",
+      "deriveName": "Abgeleitet von {title}",
       "emptyHint": "Nichts ausgewählt. Wähl links ein Objekt, um seine Übersicht zu sehen.",
       "graphEntities": "Entitäten",
       "graphRelations": "Beziehungen",
-      "idLabel": "ID"
+      "idLabel": "ID",
+      "personaBio": "Kurzbeschreibung",
+      "personaCountry": "Land",
+      "personaProfession": "Beruf",
+      "personaTopics": "Interessen",
+      "startFailed": "Lauf konnte nicht angelegt werden.",
+      "startFromPersona": "Lauf mit diesen Personas",
+      "startName": "Lauf mit {title}"
     },
     "empty": "Noch keine Objekte. Leg eine Quelle ab, um zu starten.",
     "filter": {

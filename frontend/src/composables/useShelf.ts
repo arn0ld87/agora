@@ -241,6 +241,7 @@ export function buildShelfObjects(
           : statusText(t, `shelf.status.report_${r.status}`, r.status),
       updatedAt: r.completed_at || r.created_at || '',
       metaId: r.report_id,
+      simulationId: r.simulation_id || null,
       nextAction: {
         label: t('shelf.action.readReport'),
         to: { name: 'StepReport', params: { reportId: r.report_id } },
