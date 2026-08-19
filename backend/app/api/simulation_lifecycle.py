@@ -256,9 +256,18 @@ def create_simulation_from_personas():
             message="Please provide simulation_requirement",
         )
 
-    personas = _resolve_personas(data)
-    if isinstance(personas, tuple):  # (Fehlerantwort,)
-        return personas[0]
+    personas, problem = _resolve_personas(data)
+    if problem == "missing":
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            message="Please provide template_ids or personas",
+        )
+    if problem == "unknown_templates":
+        return json_error(
+            ApiErrorCode.NOT_FOUND,
+            status=404,
+            message="None of the given template_ids exist in the persona library",
+        )
 
     project = ProjectManager.create_project(name=requirement[:60])
     manager = SimulationManager()
@@ -279,27 +288,23 @@ def create_simulation_from_personas():
 def _resolve_personas(data):
     """Personas aus ``template_ids`` oder ``personas`` gewinnen.
 
-    Gibt bei einem Fehler ein 1-Tupel mit der fertigen Fehlerantwort
-    zurueck, sonst die Liste.
+    Gibt ``(personas, problem)`` zurueck; ``problem`` ist ``None`` oder
+    ein Schluessel, den der Aufrufer in eine Antwort uebersetzt. Die
+    Funktion baut BEWUSST keine Response: sonst flösse die Anfrage
+    sichtbar in die Antwort, was schwer zu lesen ist und von der
+    Sicherheitsanalyse zurecht als Datenfluss gewertet wird.
     """
     inline = data.get('personas')
     if isinstance(inline, list) and inline:
-        return [p for p in inline if isinstance(p, dict)]
+        return [p for p in inline if isinstance(p, dict)], None
 
     template_ids = data.get('template_ids')
     if not isinstance(template_ids, list) or not template_ids:
-        return (json_error(
-            ApiErrorCode.VALIDATION_FAILED,
-            message="Please provide template_ids or personas",
-        ),)
+        return [], "missing"
 
     wanted = {str(t) for t in template_ids}
     available = PersonaLibrary().list_templates()
     picked = [t for t in available if str(t.get('template_id')) in wanted]
     if not picked:
-        return (json_error(
-            ApiErrorCode.NOT_FOUND,
-            status=404,
-            message="None of the given template_ids exist in the persona library",
-        ),)
-    return picked
+        return [], "unknown_templates"
+    return picked, None
