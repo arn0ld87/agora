@@ -35,6 +35,8 @@ import {
   type TaskStatusData,
   type ProfileRecord,
 } from '../../api/simulation'
+import type { ProfilesRealtimeResponse, ConfigRealtimeResponse } from '../../api/simulation'
+import type { ApiEnvelope } from '../../api/envelope'
 import { useSimulationPrepare } from '../useSimulationPrepare'
 
 const mockPrepare = vi.mocked(prepareSimulation)
@@ -63,13 +65,20 @@ function makeErrorEnvelope(error = 'Serverfehler'): unknown {
   return { success: false, error }
 }
 
-function makeProfilesEnvelope(profiles: ProfileRecord[] = []): unknown {
-  return { success: true, data: { profiles } }
+// Befund: `getSimulationProfilesRealtime` liefert laut api/simulation.ts
+// `ApiEnvelope<ProfileRecord[]>` — `data` ist das Array direkt, kein
+// `{profiles: [...]}`-Wrapper (den die alten Mocks hier vorgaukelten und den
+// der Composable-Code ungeprüft annahm — siehe Bericht).
+function makeProfilesEnvelope(profiles: ProfileRecord[] = []): ApiEnvelope<ProfilesRealtimeResponse> {
+  // Der Endpunkt liefert ein Objekt MIT profiles-Feld
+  // (backend/app/api/simulation_profiles.py:206).
+  return { success: true, data: { simulation_id: 'sim_1', platform: 'reddit', count: profiles.length, profiles } }
 }
 
-function makeConfigEnvelope(config: Record<string, unknown> | null = null): unknown {
+function makeConfigEnvelope(config: Record<string, unknown> | null = null): ApiEnvelope<ConfigRealtimeResponse> {
   if (!config) return { success: false }
-  return { success: true, data: { config } }
+  // Die Konfiguration liegt im Feld `config` (simulation_profiles.py:598).
+  return { success: true, data: { simulation_id: 'sim_1', config } }
 }
 
 function makeStatusEnvelope(status: string, progress = 100): unknown {
@@ -88,9 +97,9 @@ beforeEach(() => {
   vi.clearAllMocks()
 
   // Safe defaults so polling ticks don't crash
-  mockGetStatus.mockResolvedValue(makeStatusEnvelope('running', 50) as TaskStatusData)
-  mockGetProfiles.mockResolvedValue(makeProfilesEnvelope() as ProfileRecord[])
-  mockGetConfig.mockResolvedValue(makeConfigEnvelope() as Record<string, unknown>)
+  mockGetStatus.mockResolvedValue(makeStatusEnvelope('running', 50) as ApiEnvelope<TaskStatusData>)
+  mockGetProfiles.mockResolvedValue(makeProfilesEnvelope())
+  mockGetConfig.mockResolvedValue(makeConfigEnvelope())
 })
 
 afterEach(() => {
@@ -104,7 +113,7 @@ afterEach(() => {
 describe('useSimulationPrepare', () => {
   describe('Case 1 — Erfolgsfall: startPrepare ruft API korrekt auf und setzt State', () => {
     it('ruft prepareSimulation mit korrektem Body, gibt true zurück, setzt isPreparing=true', async () => {
-      mockPrepare.mockResolvedValue(makePrepareEnvelope() as TaskStatusData)
+      mockPrepare.mockResolvedValue(makePrepareEnvelope() as ApiEnvelope<TaskStatusData>)
 
       const composable = useSimulationPrepare()
       const onLog = vi.fn()
@@ -140,7 +149,7 @@ describe('useSimulationPrepare', () => {
           floor_applied: true,
           floor: 50,
         },
-      }) as TaskStatusData)
+      }) as ApiEnvelope<TaskStatusData>)
 
       const composable = useSimulationPrepare()
 
@@ -163,7 +172,7 @@ describe('useSimulationPrepare', () => {
           floor_applied: false,
           floor: 50,
         },
-      }) as TaskStatusData)
+      }) as ApiEnvelope<TaskStatusData>)
 
       const composable = useSimulationPrepare()
 
@@ -181,7 +190,7 @@ describe('useSimulationPrepare', () => {
       mockPrepare.mockResolvedValue(makePrepareEnvelope({
         expected_entities_count: 12,
         persona_target: { kaputt: true },
-      }) as TaskStatusData)
+      }) as ApiEnvelope<TaskStatusData>)
 
       const composable = useSimulationPrepare()
 
@@ -201,7 +210,7 @@ describe('useSimulationPrepare', () => {
     it('isPreparing=true wird synchron gesetzt bevor das API-Promise resolves', async () => {
       let resolvePromise: (v: unknown) => void
       const deferred = new Promise<unknown>((res) => { resolvePromise = res })
-      mockPrepare.mockReturnValue(deferred as Promise<TaskStatusData>)
+      mockPrepare.mockReturnValue(deferred as Promise<ApiEnvelope<TaskStatusData>>)
 
       const composable = useSimulationPrepare()
       const callPromise = composable.startPrepare({
@@ -224,7 +233,7 @@ describe('useSimulationPrepare', () => {
 
   describe('Case 3 — Fehler-Pfad: API liefert success=false', () => {
     it('setzt error.value und ruft onStatusChange("error") ohne zu werfen', async () => {
-      mockPrepare.mockResolvedValue(makeErrorEnvelope('Keine Entitäten gefunden.') as TaskStatusData)
+      mockPrepare.mockResolvedValue(makeErrorEnvelope('Keine Entitäten gefunden.') as ApiEnvelope<TaskStatusData>)
 
       const composable = useSimulationPrepare()
       const onLog = vi.fn()
@@ -266,7 +275,7 @@ describe('useSimulationPrepare', () => {
     it('zweiter startPrepare-Aufruf gibt false zurück und ruft API nur einmal', async () => {
       let resolveFirst: (v: unknown) => void
       const firstDeferred = new Promise<unknown>((res) => { resolveFirst = res })
-      mockPrepare.mockReturnValueOnce(firstDeferred as Promise<TaskStatusData>)
+      mockPrepare.mockReturnValueOnce(firstDeferred as Promise<ApiEnvelope<TaskStatusData>>)
 
       const composable = useSimulationPrepare()
       const opts = {
@@ -295,8 +304,8 @@ describe('useSimulationPrepare', () => {
   describe('Case 5 — already_prepared: probeAlreadyPrepared hydratiert State korrekt', () => {
     it('setzt phase=3 und simulationConfig wenn Config vorhanden', async () => {
       const fakeConfig = { time_config: { total_simulation_hours: 24, minutes_per_round: 60 } }
-      mockGetConfig.mockResolvedValue(makeConfigEnvelope(fakeConfig) as Record<string, unknown>)
-      mockGetProfiles.mockResolvedValue(makeProfilesEnvelope([{ username: 'u1' } as ProfileRecord]) as ProfileRecord[])
+      mockGetConfig.mockResolvedValue(makeConfigEnvelope(fakeConfig))
+      mockGetProfiles.mockResolvedValue(makeProfilesEnvelope([{ username: 'u1' } as ProfileRecord]))
 
       const composable = useSimulationPrepare()
       const onLog = vi.fn()
@@ -310,7 +319,7 @@ describe('useSimulationPrepare', () => {
     })
 
     it('kein State-Change wenn Config-Endpunkt kein Config zurückgibt', async () => {
-      mockGetConfig.mockResolvedValue(makeConfigEnvelope(null) as Record<string, unknown>)
+      mockGetConfig.mockResolvedValue(makeConfigEnvelope(null))
 
       const composable = useSimulationPrepare()
       await composable.probeAlreadyPrepared('sim-007', { onLog: vi.fn(), onStatusChange: vi.fn() })
@@ -346,7 +355,7 @@ describe('useSimulationPrepare', () => {
 
     it('fetchProfilesRealtime() aktualisiert profiles.value wenn API Erfolg liefert', async () => {
       const fakeProfiles = [{ username: 'tester' } as ProfileRecord]
-      mockGetProfiles.mockResolvedValue(makeProfilesEnvelope(fakeProfiles) as ProfileRecord[])
+      mockGetProfiles.mockResolvedValue(makeProfilesEnvelope(fakeProfiles))
 
       const composable = useSimulationPrepare()
       // Set a simulationId so the guard passes
@@ -361,7 +370,7 @@ describe('useSimulationPrepare', () => {
 
   describe('Case 7 — reset: setzt alle State-Werte zurück auf Initialwerte', () => {
     it('reset() nach erfolgreichem Start liefert initialen State', async () => {
-      mockPrepare.mockResolvedValue(makePrepareEnvelope() as TaskStatusData)
+      mockPrepare.mockResolvedValue(makePrepareEnvelope() as ApiEnvelope<TaskStatusData>)
 
       const composable = useSimulationPrepare()
       await composable.startPrepare({

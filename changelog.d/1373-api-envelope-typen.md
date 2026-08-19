@@ -1,0 +1,11 @@
+### Fixed (API-Funktionen deklarieren, was sie wirklich liefern — #1373, 2026-08-19)
+
+- **38 Funktionen in `frontend/src/api/*.ts` gaben den ausgepackten Nutzdatentyp vor, obwohl der Response-Interceptor grundsätzlich die Envelope zurückgibt** (`{success, data, …}`, siehe `api/index.ts`). Der deklarierte Typ beschrieb also nicht, was zur Laufzeit ankam — und weil er log, konnte der Compiler keinen Aufrufer mehr warnen. Jede Funktion wurde einzeln gegen ihren Endpunkt geprüft: die Zuordnung stammt aus Flasks eigener `url_map` (182 Routen), nicht aus einer Namensheuristik, und für jede Route wurde nachgesehen, ob sie `json_success` nutzt oder flach antwortet. `cancelRun` und `replayRun` antworten tatsächlich flach und bleiben unverändert; `closeSimulationEnv` baut seine Envelope von Hand (`jsonify({"success", "data"})`) und zählt deshalb dazu.
+- **`AvailableModelsResponse` beschrieb ein Feld `models`, das der Endpunkt nie geliefert hat.** `get_available_models` gibt `ollama`, `presets`, `current_default` und weitere zurück. Nur die Index-Signatur `[key: string]: unknown` hat verhindert, dass das auffiel — der Aufrufer griff seit jeher auf Felder zu, die im Typ nicht standen.
+- **Die `as unknown as …`-Casts in den Aufrufern sind entfallen.** Sie waren nie Absicht, sondern Notwehr gegen die falschen Signaturen, und haben die Diskrepanz versteckt statt behoben.
+
+### Added
+
+- **Guard `frontend/src/api/__tests__/envelopeContract.spec.ts`.** Er liest die Quelltexte und meldet jede exportierte Funktion, die ein `service.*`-Ergebnis direkt durchreicht, ohne einen Envelope-Typ zu deklarieren. Ausnahmen brauchen einen Eintrag samt Backend-Beleg (`datei.py::funktion`) — wer etwas einträgt, muss die Route nachgesehen haben. Funktionen, die die Envelope selbst auspacken und bewusst etwas anderes zurückgeben (etwa `getSimulationFeedSnapshot`), bleiben unbehelligt: ihr Typ beschreibt korrekt die eigene Rückgabe.
+
+Hintergrund: In PR #1372 hat genau dieser Typfehler zwei echte Defekte verursacht — die Personasätze wären in der Ablage nie erschienen, und die Vergleichsansicht konnte noch nie Branches laden. Beide Male war der zugehörige Test grün, weil er dieselbe falsche Annahme mockte.

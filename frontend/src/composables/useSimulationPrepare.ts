@@ -72,50 +72,6 @@ export interface UseSimulationPrepareReturn extends SimulationPrepareState {
 }
 
 // -------------------------------------------------------------------------
-// Private helpers
-// -------------------------------------------------------------------------
-
-interface PrepareTaskStatus {
-  status?: string
-  progress?: number
-  message?: string
-  error?: string | null
-  progress_detail?: {
-    current_stage?: string
-  }
-}
-
-interface PrepareEnvelope {
-  success?: boolean
-  error?: string
-  data?: {
-    already_prepared?: boolean
-    task_id?: string
-    expected_entities_count?: number
-    persona_target?: unknown
-  }
-}
-
-interface ProfilesEnvelope {
-  success?: boolean
-  data?: {
-    profiles?: ProfileRecord[]
-  }
-}
-
-interface ConfigEnvelope {
-  success?: boolean
-  data?: {
-    config?: Record<string, unknown>
-  }
-}
-
-interface StatusEnvelope {
-  success?: boolean
-  data?: PrepareTaskStatus
-}
-
-// -------------------------------------------------------------------------
 // Composable
 // -------------------------------------------------------------------------
 
@@ -168,8 +124,11 @@ export function useSimulationPrepare(): UseSimulationPrepareReturn {
   async function fetchProfilesRealtime(): Promise<void> {
     if (!_simulationId) return
     try {
-      // reason: service interceptor returns raw envelope body at runtime
-      const res = (await getSimulationProfilesRealtime(_simulationId, 'reddit')) as unknown as ProfilesEnvelope
+      const res = await getSimulationProfilesRealtime(_simulationId, 'reddit')
+      // Der Endpunkt liefert ein Objekt MIT `profiles`-Feld
+      // (backend/app/api/simulation_profiles.py:206) — der Generic in
+      // api/simulation.ts sagt das jetzt auch. Der Zugriff hier war immer
+      // richtig; falsch war nur die Typangabe an der Quelle.
       if (res?.success && Array.isArray(res.data?.profiles)) {
         profiles.value = res.data.profiles
       }
@@ -181,8 +140,9 @@ export function useSimulationPrepare(): UseSimulationPrepareReturn {
   async function _fetchConfigRealtime(): Promise<void> {
     if (!_simulationId) return
     try {
-      // reason: service interceptor returns raw envelope body at runtime
-      const res = (await getSimulationConfigRealtime(_simulationId)) as unknown as ConfigEnvelope
+      const res = await getSimulationConfigRealtime(_simulationId)
+      // Analog: die Konfiguration liegt im Feld `config`
+      // (simulation_profiles.py:598), nicht direkt in `data`.
       if (res?.success && res.data?.config) {
         simulationConfig.value = res.data.config
       }
@@ -202,9 +162,7 @@ export function useSimulationPrepare(): UseSimulationPrepareReturn {
   async function _pollPrepareStatus(): Promise<void> {
     if (!_taskId) return
     try {
-      // reason: service interceptor returns raw envelope body at runtime;
-      // getPrepareStatus is typed as TaskStatusData but returns the envelope
-      const res = (await getPrepareStatus({ task_id: _taskId } as TaskStatusData)) as unknown as StatusEnvelope
+      const res = await getPrepareStatus({ task_id: _taskId })
       if (res?.success && res.data) {
         const st = res.data
         prepareProgress.value = st.progress || 0
@@ -287,8 +245,7 @@ export function useSimulationPrepare(): UseSimulationPrepareReturn {
     onLog('Vorbereitung startet…')
 
     try {
-      // reason: service interceptor returns raw envelope body at runtime
-      const res = (await prepareSimulation(payload)) as unknown as PrepareEnvelope
+      const res = await prepareSimulation(payload)
 
       if (res?.success && res.data) {
         if (res.data.already_prepared) {
@@ -330,7 +287,14 @@ export function useSimulationPrepare(): UseSimulationPrepareReturn {
         return true
       }
 
-      const msg = res?.error || 'Vorbereitung fehlgeschlagen (unbekannter Fehler).'
+      // Befund: `res?.error` griff bislang auf ein Feld zu, das nur der
+      // Fehlerzweig (`ApiErrorEnvelope`) hat — `ApiSuccessEnvelope` kennt
+      // kein `error`. Hierher gelangt der Code entweder bei success:false
+      // (echter Fehler) oder bei success:true ohne `data` (Backend verletzt
+      // seinen eigenen Contract). Statt eines neuen Casts wird die
+      // Unterscheidung explizit gemacht; Fallback-Meldung bleibt in beiden
+      // Fällen identisch zum bisherigen Verhalten.
+      const msg = (res.success ? undefined : res.error) || 'Vorbereitung fehlgeschlagen (unbekannter Fehler).'
       onLog(msg)
       error.value = msg
       onStatusChange('error')

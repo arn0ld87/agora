@@ -4,6 +4,7 @@
 // gemeinsame Axios-Instanz mit Auth-Header und Envelope-Handling, die
 // auch alle anderen API-Module nutzen.
 
+import type { ApiEnvelope } from './envelope'
 import service, { getAgoraToken } from './index'
 import { useApiAuth } from '../composables/useApiAuth'
 
@@ -26,17 +27,17 @@ export interface SettingsStreamHandlers {
   error?: (event: Event) => void
 }
 
-export function fetchSettings(): Promise<SettingsResponse> {
+export function fetchSettings(): Promise<ApiEnvelope<SettingsResponse>> {
   return service.get('/api/settings')
 }
 
-export function fetchSettingsSchema(): Promise<SettingsSchemaResponse> {
+export function fetchSettingsSchema(): Promise<ApiEnvelope<SettingsSchemaResponse>> {
   return service.get('/api/settings/schema')
 }
 
 export function putSettings(
   payload: Record<string, unknown>
-): Promise<SettingsResponse> {
+): Promise<ApiEnvelope<SettingsResponse>> {
   // ``payload`` = flaches { KEY: value }-Objekt. Backend lehnt
   // Secrets hier mit ``code: secret_not_allowed`` ab — die View
   // separiert sie deshalb vorher.
@@ -45,7 +46,7 @@ export function putSettings(
 
 export function putSecrets(
   secretsPayload: SecretsPayload | null | undefined
-): Promise<SettingsResponse> {
+): Promise<ApiEnvelope<SettingsResponse>> {
   // Erwartet ``{ confirm: true, fields: { KEY: value, ... } }``.
   // Backend lehnt non-secret Keys symmetrisch ab.
   return service.put('/api/settings/secrets', {

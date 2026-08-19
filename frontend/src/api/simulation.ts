@@ -33,6 +33,17 @@ export interface PrepareSimulationData {
   max_agents?: number
 }
 
+/**
+ * Gemeinsame Antwortform von `/prepare` und `/prepare/status`.
+ *
+ * Die unteren Felder liefert das Backend seit laengerem mit, sie fehlten
+ * hier aber: `already_prepared` (simulation_prepare.py:554),
+ * `expected_entities_count` (ebd. 1068), `persona_target`
+ * (contracts/persona_target_contract.py, Issue #1034) und
+ * `progress_detail.current_stage` (simulation_prepare.py:822). Ohne sie
+ * musste der Aufrufer den Typ lokal erweitern — eine Ergaenzung, die in
+ * einem Composable niemand findet.
+ */
 export interface TaskStatusData {
   task_id?: string
   simulation_id?: string
@@ -40,6 +51,14 @@ export interface TaskStatusData {
   progress?: number
   message?: string
   error?: string | null
+  already_prepared?: boolean
+  expected_entities_count?: number
+  persona_target?: unknown
+  progress_detail?: {
+    current_stage?: string
+    [key: string]: unknown
+  }
+  [key: string]: unknown
 }
 
 export interface StartSimulationData {
@@ -83,13 +102,70 @@ export interface ProfileRecord {
   [key: string]: unknown
 }
 
+/**
+ * Felder aus `backend/app/services/persona_quality_service.py::evaluate`
+ * (ueber `api/simulation_profiles.py::get_simulation_profiles_quality`).
+ *
+ * Frueher stand hier ein `profiles`-Array — ein Feld, das der Endpunkt
+ * nie geliefert hat; es heisst `personas`. Nur die Index-Signatur hat
+ * das durchgehen lassen, weshalb der Aufrufer seit jeher Felder las,
+ * die im Typ nicht standen.
+ */
+/**
+ * `GET /<id>/profiles/realtime` — die Profile liegen im Feld `profiles`,
+ * NICHT direkt in `data` (backend/app/api/simulation_profiles.py:206).
+ */
+export interface ProfilesRealtimeResponse {
+  simulation_id: string
+  platform: string
+  count: number
+  total_expected?: number
+  is_generating?: boolean
+  file_exists?: boolean
+  file_modified_at?: string | null
+  profiles: ProfileRecord[]
+  [key: string]: unknown
+}
+
+/**
+ * `GET /<id>/config/realtime` — die Konfiguration liegt im Feld `config`
+ * (backend/app/api/simulation_profiles.py:598).
+ */
+export interface ConfigRealtimeResponse {
+  simulation_id: string
+  file_exists?: boolean
+  file_modified_at?: string | null
+  is_generating?: boolean
+  generation_stage?: string | null
+  config_generated?: boolean
+  config: Record<string, unknown> | null
+  summary?: Record<string, unknown>
+  [key: string]: unknown
+}
+
+export interface ProfileQualitySummary {
+  total: number
+  approved: number
+  pending: number
+  rejected: number
+  role_diversity: number
+  mbti_diversity: number
+  distinct_roles: string[]
+  [key: string]: unknown
+}
+
+export interface ProfileQualityIssue {
+  code: string
+  severity: string
+  detail?: Record<string, unknown>
+  [key: string]: unknown
+}
+
 export interface ProfileQualityResponse {
   simulation_id: string
-  profiles: Array<{
-    username: string
-    quality_score: number
-    issues: string[]
-  }>
+  summary?: ProfileQualitySummary
+  global_issues?: ProfileQualityIssue[]
+  personas?: Array<Record<string, unknown>>
   [key: string]: unknown
 }
 
@@ -123,8 +199,24 @@ export interface ModelPreset {
   [key: string]: unknown
 }
 
+/**
+ * Felder aus `backend/app/api/simulation_lifecycle.py::get_available_models`.
+ * Frueher stand hier ein `models: ModelPreset[]` — ein Feld, das der
+ * Endpunkt nie geliefert hat; nur die Index-Signatur liess das
+ * durchgehen.
+ */
 export interface AvailableModelsResponse {
-  models: ModelPreset[]
+  ollama?: ModelPreset[]
+  presets?: ModelPreset[]
+  current_default?: string
+  default_provider?: 'ollama' | 'cloud' | 'openai' | 'unknown'
+  ollama_base_url?: string
+  ollama_reachable?: boolean
+  ollama_error?: string | null
+  ollama_skipped?: boolean
+  agent_tools_enabled?: boolean
+  max_tool_calls_per_action?: number
+  default_language?: string
   [key: string]: unknown
 }
 
@@ -191,7 +283,7 @@ export interface AgentStatsResponse {
  * Create simulation
  * @param data - { project_id, graph_id?, enable_twitter?, enable_reddit? }
  */
-export const createSimulation = (data: CreateSimulationData): Promise<SimulationRecord> => {
+export const createSimulation = (data: CreateSimulationData): Promise<ApiEnvelope<SimulationRecord>> => {
   return service.post('/api/simulation/create', data)
 }
 
@@ -199,7 +291,7 @@ export const createSimulation = (data: CreateSimulationData): Promise<Simulation
  * Prepare simulation environment (async task)
  * @param data - { simulation_id, entity_types?, use_llm_for_profiles?, parallel_profile_count?, force_regenerate? }
  */
-export const prepareSimulation = (data: PrepareSimulationData): Promise<TaskStatusData> => {
+export const prepareSimulation = (data: PrepareSimulationData): Promise<ApiEnvelope<TaskStatusData>> => {
   return service.post('/api/simulation/prepare', data)
 }
 
@@ -207,7 +299,7 @@ export const prepareSimulation = (data: PrepareSimulationData): Promise<TaskStat
  * Query prepare task progress
  * @param data - { task_id?, simulation_id? }
  */
-export const getPrepareStatus = (data: TaskStatusData): Promise<TaskStatusData> => {
+export const getPrepareStatus = (data: TaskStatusData): Promise<ApiEnvelope<TaskStatusData>> => {
   return service.post('/api/simulation/prepare/status', data)
 }
 
@@ -215,7 +307,7 @@ export const getPrepareStatus = (data: TaskStatusData): Promise<TaskStatusData> 
  * Get simulation status
  * @param simulationId
  */
-export const getSimulation = (simulationId: string): Promise<SimulationRecord> => {
+export const getSimulation = (simulationId: string): Promise<ApiEnvelope<SimulationRecord>> => {
   return service.get(`/api/simulation/${simulationId}`)
 }
 
@@ -227,7 +319,7 @@ export const getSimulation = (simulationId: string): Promise<SimulationRecord> =
 export const getSimulationProfiles = (
   simulationId: string,
   platform: SimulationPlatform = 'reddit'
-): Promise<ProfileRecord[]> => {
+): Promise<ApiEnvelope<ProfileRecord[]>> => {
   return service.get(`/api/simulation/${simulationId}/profiles`, { params: { platform } })
 }
 
@@ -239,7 +331,7 @@ export const getSimulationProfiles = (
 export const getSimulationProfilesRealtime = (
   simulationId: string,
   platform: SimulationPlatform = 'reddit'
-): Promise<ProfileRecord[]> => {
+): Promise<ApiEnvelope<ProfilesRealtimeResponse>> => {
   return service.get(`/api/simulation/${simulationId}/profiles/realtime`, { params: { platform } })
 }
 
@@ -247,7 +339,7 @@ export const getSimulationProfilesRealtime = (
  * Get simulation configuration
  * @param simulationId
  */
-export const getSimulationConfig = (simulationId: string): Promise<Record<string, unknown>> => {
+export const getSimulationConfig = (simulationId: string): Promise<ApiEnvelope<Record<string, unknown>>> => {
   return service.get(`/api/simulation/${simulationId}/config`)
 }
 
@@ -258,7 +350,7 @@ export const getSimulationConfig = (simulationId: string): Promise<Record<string
  */
 export const getSimulationConfigRealtime = (
   simulationId: string
-): Promise<Record<string, unknown>> => {
+): Promise<ApiEnvelope<ConfigRealtimeResponse>> => {
   return service.get(`/api/simulation/${simulationId}/config/realtime`)
 }
 
@@ -266,7 +358,7 @@ export const getSimulationConfigRealtime = (
  * List all simulations
  * @param projectId - Optional, filter by project ID
  */
-export const listSimulations = (projectId?: string): Promise<SimulationRecord[]> => {
+export const listSimulations = (projectId?: string): Promise<ApiEnvelope<SimulationRecord[]>> => {
   const params = projectId ? { project_id: projectId } : {}
   return service.get('/api/simulation/list', { params })
 }
@@ -275,7 +367,7 @@ export const listSimulations = (projectId?: string): Promise<SimulationRecord[]>
  * Start simulation
  * @param data - { simulation_id, platform?, max_rounds?, simulation_days?, enable_graph_memory_update? }
  */
-export const startSimulation = (data: StartSimulationData): Promise<RunStatusResponse> => {
+export const startSimulation = (data: StartSimulationData): Promise<ApiEnvelope<RunStatusResponse>> => {
   return service.post('/api/simulation/start', data)
 }
 
@@ -283,7 +375,7 @@ export const startSimulation = (data: StartSimulationData): Promise<RunStatusRes
  * Stop simulation
  * @param data - { simulation_id }
  */
-export const stopSimulation = (data: StopSimulationData): Promise<RunStatusResponse> => {
+export const stopSimulation = (data: StopSimulationData): Promise<ApiEnvelope<RunStatusResponse>> => {
   return service.post('/api/simulation/stop', data)
 }
 
@@ -291,7 +383,7 @@ export const stopSimulation = (data: StopSimulationData): Promise<RunStatusRespo
  * Get simulation real-time run status
  * @param simulationId
  */
-export const getRunStatus = (simulationId: string): Promise<RunStatusResponse> => {
+export const getRunStatus = (simulationId: string): Promise<ApiEnvelope<RunStatusResponse>> => {
   return service.get(`/api/simulation/${simulationId}/run-status`)
 }
 
@@ -299,7 +391,7 @@ export const getRunStatus = (simulationId: string): Promise<RunStatusResponse> =
  * Get simulation detailed run status (including recent actions)
  * @param simulationId
  */
-export const getRunStatusDetail = (simulationId: string): Promise<RunStatusResponse> => {
+export const getRunStatusDetail = (simulationId: string): Promise<ApiEnvelope<RunStatusResponse>> => {
   return service.get(`/api/simulation/${simulationId}/run-status/detail`)
 }
 
@@ -315,7 +407,7 @@ export const getSimulationPosts = (
   platform: SimulationPlatform = 'reddit',
   limit = 50,
   offset = 0
-): Promise<unknown[]> => {
+): Promise<ApiEnvelope<unknown[]>> => {
   return service.get(`/api/simulation/${simulationId}/posts`, {
     params: { platform, limit, offset }
   })
@@ -367,7 +459,7 @@ export const getSimulationTimeline = (
   simulationId: string,
   startRound = 0,
   endRound: number | null = null
-): Promise<TimelineResponse> => {
+): Promise<ApiEnvelope<TimelineResponse>> => {
   const params: Record<string, unknown> = { start_round: startRound }
   if (endRound !== null) {
     params['end_round'] = endRound
@@ -379,7 +471,7 @@ export const getSimulationTimeline = (
  * Get Agent statistics
  * @param simulationId
  */
-export const getAgentStats = (simulationId: string): Promise<AgentStatsResponse> => {
+export const getAgentStats = (simulationId: string): Promise<ApiEnvelope<AgentStatsResponse>> => {
   return service.get(`/api/simulation/${simulationId}/agent-stats`)
 }
 
@@ -391,7 +483,7 @@ export const getAgentStats = (simulationId: string): Promise<AgentStatsResponse>
 export const getSimulationActions = (
   simulationId: string,
   params: SimulationActionsParams = {}
-): Promise<unknown[]> => {
+): Promise<ApiEnvelope<unknown[]>> => {
   return service.get(`/api/simulation/${simulationId}/actions`, { params })
 }
 
@@ -399,7 +491,7 @@ export const getSimulationActions = (
  * Close simulation environment (graceful shutdown)
  * @param data - { simulation_id, timeout? }
  */
-export const closeSimulationEnv = (data: CloseEnvData): Promise<unknown> => {
+export const closeSimulationEnv = (data: CloseEnvData): Promise<ApiEnvelope<unknown>> => {
   return service.post('/api/simulation/close-env', data)
 }
 
@@ -407,7 +499,7 @@ export const closeSimulationEnv = (data: CloseEnvData): Promise<unknown> => {
  * Get simulation environment status
  * @param data - { simulation_id }
  */
-export const getEnvStatus = (data: EnvStatusData): Promise<unknown> => {
+export const getEnvStatus = (data: EnvStatusData): Promise<ApiEnvelope<unknown>> => {
   return service.post('/api/simulation/env-status', data)
 }
 
@@ -415,7 +507,7 @@ export const getEnvStatus = (data: EnvStatusData): Promise<unknown> => {
  * Batch interview Agents
  * @param data - { simulation_id, interviews: [{ agent_id, prompt }] }
  */
-export const interviewAgents = (data: InterviewAgentsData): Promise<unknown> => {
+export const interviewAgents = (data: InterviewAgentsData): Promise<ApiEnvelope<unknown>> => {
   return service.post('/api/simulation/interview/batch', data)
 }
 
@@ -424,28 +516,28 @@ export const interviewAgents = (data: InterviewAgentsData): Promise<unknown> => 
  * Used to display historical projects on home page
  * @param limit - Return count limit
  */
-export const getSimulationHistory = (limit = 20): Promise<SimulationRecord[]> => {
+export const getSimulationHistory = (limit = 20): Promise<ApiEnvelope<SimulationRecord[]>> => {
   return service.get('/api/simulation/history', { params: { limit } })
 }
 
 /**
  * List installed Ollama + curated LLM model presets for the model dropdown.
  */
-export const getAvailableModels = (): Promise<AvailableModelsResponse> => {
+export const getAvailableModels = (): Promise<ApiEnvelope<AvailableModelsResponse>> => {
   return service.get('/api/simulation/available-models')
 }
 
 /**
  * Pause a running simulation between rounds.
  */
-export const pauseSimulation = (simulationId: string): Promise<RunStatusResponse> => {
+export const pauseSimulation = (simulationId: string): Promise<ApiEnvelope<RunStatusResponse>> => {
   return service.post(`/api/simulation/${simulationId}/pause`)
 }
 
 /**
  * Resume a paused simulation.
  */
-export const resumeSimulation = (simulationId: string): Promise<RunStatusResponse> => {
+export const resumeSimulation = (simulationId: string): Promise<ApiEnvelope<RunStatusResponse>> => {
   return service.post(`/api/simulation/${simulationId}/resume`)
 }
 
@@ -457,7 +549,7 @@ export const resumeSimulation = (simulationId: string): Promise<RunStatusRespons
 export const getSimulationConsoleLog = (
   simulationId: string,
   fromLine = 0
-): Promise<{ lines: string[]; from_line: number; total_lines: number }> => {
+): Promise<ApiEnvelope<{ lines: string[]; from_line: number; total_lines: number }>> => {
   return service.get(`/api/simulation/${simulationId}/console-log`, {
     params: { from_line: fromLine }
   })
@@ -471,7 +563,7 @@ export const getSimulationConsoleLog = (
 export const addSimulationProfile = (
   simulationId: string,
   data: Omit<ProfileRecord, 'review_status'>
-): Promise<ProfileRecord> => {
+): Promise<ApiEnvelope<ProfileRecord>> => {
   return service.post(`/api/simulation/${simulationId}/profiles`, data)
 }
 
@@ -485,7 +577,7 @@ export const deleteSimulationProfile = (
   simulationId: string,
   username: string,
   platform: SimulationPlatform = 'reddit'
-): Promise<unknown> => {
+): Promise<ApiEnvelope<unknown>> => {
   return service.delete(
     `/api/simulation/${simulationId}/profiles/${encodeURIComponent(username)}`,
     { params: { platform } }
@@ -503,7 +595,7 @@ export const editSimulationProfile = (
   simulationId: string,
   username: string,
   data: Partial<ProfileRecord>
-): Promise<ProfileRecord> => {
+): Promise<ApiEnvelope<ProfileRecord>> => {
   return service.patch(
     `/api/simulation/${simulationId}/profiles/${encodeURIComponent(username)}`,
     data
@@ -520,7 +612,7 @@ export const approveSimulationProfile = (
   simulationId: string,
   username: string,
   notes?: string
-): Promise<ProfileRecord> => {
+): Promise<ApiEnvelope<ProfileRecord>> => {
   return service.post(
     `/api/simulation/${simulationId}/profiles/${encodeURIComponent(username)}/approve`,
     notes ? { notes } : {}
@@ -537,7 +629,7 @@ export const rejectSimulationProfile = (
   simulationId: string,
   username: string,
   reason?: string
-): Promise<ProfileRecord> => {
+): Promise<ApiEnvelope<ProfileRecord>> => {
   return service.post(
     `/api/simulation/${simulationId}/profiles/${encodeURIComponent(username)}/reject`,
     reason ? { reason } : {}
@@ -556,7 +648,7 @@ export const regenerateSimulationProfile = (
   simulationId: string,
   username: string,
   hint?: string
-): Promise<ProfileRecord> => {
+): Promise<ApiEnvelope<ProfileRecord>> => {
   return service.post(
     `/api/simulation/${simulationId}/profiles/${encodeURIComponent(username)}/regenerate`,
     hint ? { hint } : {}
@@ -569,7 +661,7 @@ export const regenerateSimulationProfile = (
  */
 export const getSimulationProfilesQuality = (
   simulationId: string
-): Promise<ProfileQualityResponse> => {
+): Promise<ApiEnvelope<ProfileQualityResponse>> => {
   return service.get(`/api/simulation/${simulationId}/profiles/quality`)
 }
 
@@ -593,7 +685,7 @@ export const listPersonaTemplates = (): Promise<
  */
 export const savePersonaTemplate = (
   data: PersonaTemplateRecord
-): Promise<PersonaTemplateRecord> => {
+): Promise<ApiEnvelope<PersonaTemplateRecord>> => {
   return service.post('/api/simulation/persona-library', data)
 }
 
@@ -601,7 +693,7 @@ export const savePersonaTemplate = (
  * Delete a reusable persona template.
  * @param templateId
  */
-export const deletePersonaTemplate = (templateId: string): Promise<unknown> => {
+export const deletePersonaTemplate = (templateId: string): Promise<ApiEnvelope<unknown>> => {
   return service.delete(`/api/simulation/persona-library/${encodeURIComponent(templateId)}`)
 }
 

@@ -44,7 +44,9 @@ import {
   editSimulationProfile,
   getSimulationProfilesQuality,
   type ProfileRecord,
+  type ProfileQualityResponse,
 } from '../../api/simulation'
+import type { ApiEnvelope } from '../../api/envelope'
 
 import { usePersonaActions } from '../usePersonaActions'
 
@@ -58,7 +60,7 @@ const mockGetQuality = vi.mocked(getSimulationProfilesQuality)
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeProfileEnvelope(overrides: Partial<ProfileRecord> = {}): unknown {
+function makeProfileEnvelope(overrides: Partial<ProfileRecord> = {}): ApiEnvelope<ProfileRecord> {
   return {
     success: true,
     data: {
@@ -71,12 +73,8 @@ function makeProfileEnvelope(overrides: Partial<ProfileRecord> = {}): unknown {
   }
 }
 
-function makeErrorEnvelope(error = 'Server-Fehler'): unknown {
-  return { success: false, error }
-}
-
-function makeQualitySuccess(): unknown {
-  return { success: true, data: { personas: [] } }
+function makeQualitySuccess(): ApiEnvelope<ProfileQualityResponse> {
+  return { success: true, data: { simulation_id: 'sim-001', profiles: [], personas: [] } }
 }
 
 function buildDeps(overrides: {
@@ -99,7 +97,7 @@ function buildDeps(overrides: {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mockGetQuality.mockResolvedValue(makeQualitySuccess() as import('../../api/simulation').ProfileQualityResponse)
+  mockGetQuality.mockResolvedValue(makeQualitySuccess())
 })
 
 // ---------------------------------------------------------------------------
@@ -262,7 +260,7 @@ describe('usePersonaActions', () => {
       const profileBefore: ProfileRecord = { username: 'user1', review_status: 'pending' }
       const profileAfter: ProfileRecord = { username: 'user1', review_status: 'approved' }
 
-      mockApprove.mockResolvedValue(makeProfileEnvelope({ review_status: 'approved' }) as ProfileRecord)
+      mockApprove.mockResolvedValue(makeProfileEnvelope({ review_status: 'approved' }))
 
       const profiles = ref<ProfileRecord[]>([profileBefore])
       const selectedProfile = ref<ProfileRecord | null>(profileBefore)
@@ -283,7 +281,7 @@ describe('usePersonaActions', () => {
       let pendingDuring = false
       mockApprove.mockImplementation(async () => {
         pendingDuring = true
-        return makeProfileEnvelope() as ProfileRecord
+        return makeProfileEnvelope()
       })
 
       const selectedProfile = ref<ProfileRecord | null>({ username: 'user1' })
@@ -334,7 +332,7 @@ describe('usePersonaActions', () => {
 
   describe('Case 5 — rejectSelected', () => {
     it('Happy-Path: ruft reject, patcht profiles, ruft addLog + refreshQuality', async () => {
-      mockReject.mockResolvedValue(makeProfileEnvelope({ review_status: 'rejected' }) as ProfileRecord)
+      mockReject.mockResolvedValue(makeProfileEnvelope({ review_status: 'rejected' }))
 
       const profiles = ref<ProfileRecord[]>([{ username: 'user1', review_status: 'pending' }])
       const selectedProfile = ref<ProfileRecord | null>({ username: 'user1', review_status: 'pending' })
@@ -368,7 +366,7 @@ describe('usePersonaActions', () => {
 
   describe('Case 6 — regenerateSelected', () => {
     it('übergibt getrimten Hint an regenerate', async () => {
-      mockRegenerate.mockResolvedValue(makeProfileEnvelope({ review_status: 'regenerating' }) as ProfileRecord)
+      mockRegenerate.mockResolvedValue(makeProfileEnvelope({ review_status: 'regenerating' }))
 
       const selectedProfile = ref<ProfileRecord | null>({ username: 'user1' })
       const deps = { ...buildDeps(), selectedProfile }
@@ -381,7 +379,7 @@ describe('usePersonaActions', () => {
     })
 
     it('übergibt undefined wenn Hint nach trim leer ist', async () => {
-      mockRegenerate.mockResolvedValue(makeProfileEnvelope({ review_status: 'regenerating' }) as ProfileRecord)
+      mockRegenerate.mockResolvedValue(makeProfileEnvelope({ review_status: 'regenerating' }))
 
       const selectedProfile = ref<ProfileRecord | null>({ username: 'user1' })
       const deps = { ...buildDeps(), selectedProfile }
@@ -394,7 +392,7 @@ describe('usePersonaActions', () => {
     })
 
     it('leert regenerateHint nach Erfolg', async () => {
-      mockRegenerate.mockResolvedValue(makeProfileEnvelope({ review_status: 'regenerating' }) as ProfileRecord)
+      mockRegenerate.mockResolvedValue(makeProfileEnvelope({ review_status: 'regenerating' }))
 
       const selectedProfile = ref<ProfileRecord | null>({ username: 'user1' })
       const deps = { ...buildDeps(), selectedProfile }
@@ -477,7 +475,7 @@ describe('usePersonaActions', () => {
 
   describe('Case 8 — saveEditingProfile', () => {
     it('Happy-Path: sendet payload ohne username, splittet topics, ruft editProfile', async () => {
-      mockEditProfile.mockResolvedValue(makeProfileEnvelope({ review_status: 'pending' }) as ProfileRecord)
+      mockEditProfile.mockResolvedValue(makeProfileEnvelope({ review_status: 'pending' }))
 
       const selectedProfile = ref<ProfileRecord | null>({ username: 'user1' })
       const profiles = ref<ProfileRecord[]>([{ username: 'user1', review_status: 'pending' }])
@@ -513,7 +511,7 @@ describe('usePersonaActions', () => {
     })
 
     it('entfernt leeres age aus payload', async () => {
-      mockEditProfile.mockResolvedValue(makeProfileEnvelope() as ProfileRecord)
+      mockEditProfile.mockResolvedValue(makeProfileEnvelope())
 
       const selectedProfile = ref<ProfileRecord | null>({ username: 'user1' })
       const deps = { ...buildDeps(), selectedProfile }
@@ -539,7 +537,7 @@ describe('usePersonaActions', () => {
     })
 
     it('setzt editingProfile = null nach Erfolg', async () => {
-      mockEditProfile.mockResolvedValue(makeProfileEnvelope() as ProfileRecord)
+      mockEditProfile.mockResolvedValue(makeProfileEnvelope())
 
       const selectedProfile = ref<ProfileRecord | null>({ username: 'user1' })
       const deps = { ...buildDeps(), selectedProfile }
