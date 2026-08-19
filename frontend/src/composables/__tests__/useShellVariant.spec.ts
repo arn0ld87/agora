@@ -7,10 +7,10 @@
  *
  * 5 Tests:
  * 1. localStorage['agora.shell']='dossier' -> dossier
- * 2. ungueltiger localStorage-Wert -> Fallback auf classic (kein env gesetzt)
+ * 2. ungueltiger localStorage-Wert -> Fallback auf dossier (kein env gesetzt)
  * 3. ungueltiger localStorage-Wert + VITE_AGORA_SHELL='dossier' -> Fallback auf env
  * 4. setVariant schreibt localStorage und aktualisiert das Ref
- * 5. localStorage wirft (Object.defineProperty-Mock) -> kein Crash, Default classic
+ * 5. localStorage wirft (Object.defineProperty-Mock) -> kein Crash, Default dossier
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
@@ -47,14 +47,14 @@ describe('useShellVariant', () => {
     expect(variant.value).toBe('dossier')
   })
 
-  it('ein ungueltiger localStorage-Wert faellt auf classic zurueck (kein Build-Default gesetzt)', async () => {
+  it('ein ungueltiger localStorage-Wert faellt auf dossier zurueck (kein Build-Default gesetzt)', async () => {
     installLocalStorageMock({ 'agora.shell': 'not-a-real-variant' })
     vi.stubEnv('VITE_AGORA_SHELL', '')
 
     const { useShellVariant } = await import('../useShellVariant')
     const { variant } = useShellVariant()
 
-    expect(variant.value).toBe('classic')
+    expect(variant.value).toBe('dossier')
   })
 
   it('ein ungueltiger localStorage-Wert faellt auf den Build-Default VITE_AGORA_SHELL zurueck', async () => {
@@ -73,14 +73,14 @@ describe('useShellVariant', () => {
     const { useShellVariant } = await import('../useShellVariant')
     const { variant, setVariant } = useShellVariant()
 
-    expect(variant.value).toBe('classic')
+    expect(variant.value).toBe('dossier')
     setVariant('dossier')
 
     expect(variant.value).toBe('dossier')
     expect(store['agora.shell']).toBe('dossier')
   })
 
-  it('localStorage wirft (z.B. Privacy-Mode) -> kein Crash, Default bleibt classic', async () => {
+  it('localStorage wirft (z.B. Privacy-Mode) -> kein Crash, Default bleibt dossier', async () => {
     Object.defineProperty(globalThis, 'localStorage', {
       get() {
         throw new Error('SecurityError: localStorage ist blockiert')
@@ -91,7 +91,7 @@ describe('useShellVariant', () => {
     const { useShellVariant } = await import('../useShellVariant')
     const { variant, setVariant } = useShellVariant()
 
-    expect(variant.value).toBe('classic')
+    expect(variant.value).toBe('dossier')
     expect(() => setVariant('dossier')).not.toThrow()
     // setVariant aktualisiert das Ref trotzdem — nur die Persistenz schlaegt fehl.
     expect(variant.value).toBe('dossier')

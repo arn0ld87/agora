@@ -161,7 +161,10 @@ describe('Router – Redirects', () => {
   })
 
   it.each([
-    ['/', 'Dashboard'],
+    // Die Wurzel fuehrt jetzt in die Ablage: der Shell-Standard ist
+    // seit B3/B4 „dossier". /home und /v4/dashboard bleiben auf dem
+    // Dashboard, solange die klassische Huelle existiert.
+    ['/', 'Shelf'],
     ['/v4/dashboard', 'Dashboard'],
     ['/home', 'Dashboard'],
     ['/settings', 'SettingsGeneral'],

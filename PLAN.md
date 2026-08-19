@@ -316,7 +316,7 @@ für die Zeilenaktionen. B4 setzt auf dem Objektmodell auf.
 | B1 Fundament | **erledigt, auf main** | PR #1370 |
 | B2 Abbrechen | **erledigt, auf main** | PR #1371 |
 | B3 Objektmodell | **erledigt, auf main** | PR #1372 |
-| B4 Öffnung | **in Arbeit** | `feat/b4-oeffnung` |
+| B4 Öffnung | **erledigt, auf main** | PR #1374 |
 
 Was B3 noch fehlt: Bericht-Leseumgebung mit Belegrand, Graph-Objekt mit
 Rundenscrubber, Einstellungen als Overlay, Löschen der Altansichten
@@ -337,7 +337,7 @@ behauptete ohne Auswahl „Noch keine Objekte“, während die Ablage voll war.
 | Mobile (390px) | erledigt — ⌘K raus aus dem Markup, Jobs-Tabelle scrollt im eigenen Kasten, Kopfzeile gibt auf schmal Wortmarke und Trenner frei |
 | Aus Bericht ableiten | erledigt — im Dossier des Berichts, mit Übernahme der Personas |
 | Personasätze als Objekt | erledigt — in der Ablage, mit Beruf/Land/Interessen im Dossier |
-| Start nur aus Personas | Backend-Service in Arbeit; Endpunkt und Einstieg in der Ablage folgen |
+| Start nur aus Personas | erledigt — Service, Endpunkt, Einstieg im Dossier; die harte 30er-Untergrenze ist entfallen |
 
 Zum letzten Punkt: Der OASIS-Lauf braucht den Graphen **zur Laufzeit nicht**
 — `branching_service.create_branch` beweist, dass `CREATED → PREPARING → READY`
