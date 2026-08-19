@@ -15,11 +15,10 @@ vi.mock('../../forms/AiModelPicker.vue', () => ({
 
 // Slice "small-sim-floor-frontend-sync": HeroNewRun fragt beim Mount /api/status
 // ab. In den Profile-Tests interessiert uns nur das Profil-Verhalten — minimaler
-// Status-Mock mit allow_small_sim=false (Default-Pfad).
 vi.mock('../../../../api/status', () => ({
   getSystemStatus: vi.fn().mockResolvedValue({
     success: true,
-    backend: { ok: true, version: '1.0.0', auth_mode: 'open', allow_small_sim: false },
+    backend: { ok: true, version: '1.0.0', auth_mode: 'open' },
     neo4j: { reachable: true },
     ollama: { reachable: false, models_available: [] },
     disk: { uploads: { path: '/tmp', total_bytes: 0, free_bytes: 0, used_pct: 0 } },

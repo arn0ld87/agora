@@ -1,15 +1,18 @@
 """
-Slice 4 — Simulation-Floor-Tests (Issue #496).
+Argparse-Defaults der Simulations-Skripte (urspruenglich Issue #496).
 
-Kein Subprocess-Spawn. Argparse-Defaults werden via Regex aus den
-Script-Source-Dateien verifiziert; _validate_persona_quota wird direkt
-als Unit-Test aufgerufen.
+Kein Subprocess-Spawn: die Defaults werden per Regex aus den
+Script-Quelldateien gelesen.
+
+Die Unit-Tests zu ``_validate_persona_quota`` sind mit der Methode
+entfallen (Block B4): die harte Untergrenze von 30 Personas gibt es
+nicht mehr. ``--num-agents=30`` bleibt als VORSCHLAGSWERT bestehen —
+ein Default ist keine Schranke, und genau das pruefen die Tests hier.
 """
 
 import re
 from pathlib import Path
 
-import pytest
 
 # ---------------------------------------------------------------------------
 # Pfade
@@ -112,47 +115,3 @@ class TestArgparseDefaults:
         )
         val = _extract_default_from_sim_common("--num-rounds")
         assert val == 10
-
-
-# ---------------------------------------------------------------------------
-# Tests: _validate_persona_quota
-# ---------------------------------------------------------------------------
-
-
-class TestValidatePersonaQuota:
-    """Unit-Tests für SimulationConfigGenerator._validate_persona_quota."""
-
-    @pytest.fixture(autouse=True)
-    def _import_validator(self):
-        from app.services.simulation_config_generator import SimulationConfigGenerator  # noqa: PLC0415
-        self.validate = SimulationConfigGenerator._validate_persona_quota
-
-    def test_raises_for_25_personas_without_env_override(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.delenv("AGORA_ALLOW_SMALL_SIM", raising=False)
-        personas = list(range(25))
-        with pytest.raises(ValueError, match="Simulation-Floor"):
-            self.validate(personas)
-
-    def test_passes_for_25_personas_with_env_override(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("AGORA_ALLOW_SMALL_SIM", "1")
-        personas = list(range(25))
-        # Darf keine Exception werfen.
-        self.validate(personas)
-
-    def test_passes_for_exactly_30_personas(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.delenv("AGORA_ALLOW_SMALL_SIM", raising=False)
-        personas = list(range(30))
-        self.validate(personas)  # kein Raise erwartet
-
-    def test_passes_for_more_than_30_personas(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.delenv("AGORA_ALLOW_SMALL_SIM", raising=False)
-        personas = list(range(50))
-        self.validate(personas)  # kein Raise erwartet
