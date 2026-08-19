@@ -511,7 +511,12 @@ def chat_with_report_agent():
 
     graph_id = state.graph_id or project.graph_id
     if not graph_id:
-        return json_error("Missing graph ID", status=400)
+        # Reiner Persona-Lauf ohne Graphen (Block B4) — siehe
+        # services/report_generation.py fuer die Begruendung.
+        return json_error(
+            "Dieser Lauf hat keinen Wissensgraphen — Berichte stuetzen sich auf Belege aus dem Graphen und sind fuer reine Persona-Laeufe deshalb noch nicht moeglich. Die Simulation selbst laeuft und ist auswertbar.",
+            status=400,
+        )
 
     simulation_requirement = project.simulation_requirement or ""
 

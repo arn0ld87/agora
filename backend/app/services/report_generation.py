@@ -161,7 +161,15 @@ class ReportGenerationService:
 
         graph_id = state.graph_id or project.graph_id
         if not graph_id:
-            raise ValueError("Missing graph ID, please ensure graph is built")
+            # Ein Persona-Lauf (Block B4) hat bewusst keine graph_id. Der
+            # Bericht bricht deshalb ab — aber mit einem Satz, der sagt,
+            # WAS fehlt und dass der Lauf selbst in Ordnung ist. Die
+            # Alternative waere ein Bericht ohne jede Graph-Evidenz, der
+            # aussieht wie ein normaler; das waere schlechter als ein
+            # klarer Abbruch.
+            raise ValueError(
+                "Dieser Lauf hat keinen Wissensgraphen — Berichte stuetzen sich auf Belege aus dem Graphen und sind fuer reine Persona-Laeufe deshalb noch nicht moeglich. Die Simulation selbst laeuft und ist auswertbar."
+            )
 
         simulation_requirement = project.simulation_requirement
         if not simulation_requirement:
