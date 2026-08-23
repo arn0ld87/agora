@@ -33,6 +33,7 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence
 
+from ...config import Config
 from .run_degradation import _entry
 
 if TYPE_CHECKING:  # pragma: no cover — nur für Typprüfung
@@ -44,6 +45,36 @@ if TYPE_CHECKING:  # pragma: no cover — nur für Typprüfung
 #: Generierungs-Mangel unterscheidbar bleibt.
 COMPONENT = "requirement_checker"
 
+#: Sprachschluessel der Musterauswahl. ``REPORT_LANGUAGE`` ist eine
+#: persistierte Nutzereinstellung (``settings_schema.py``,
+#: ``settings.py``) und steuert bereits die Generierung. Ein englisch
+#: erzeugter Report gegen deutsche Muster zu pruefen, meldet alle Aspekte
+#: gleichzeitig als fehlend und macht den Bericht dauerhaft ``incomplete`` —
+#: fuer ein Feature, das Vertrauen in den Abschlussstatus schaffen soll, die
+#: schlechteste Ausfallrichtung.
+LANG_DE = "de"
+LANG_EN = "en"
+
+#: Unbekannte Sprachwerte fallen konservativ auf Deutsch: das ist der
+#: Projekt-Default (``Config.REPORT_LANGUAGE = 'German'``) und die Sprache
+#: der Referenzlaeufe.
+_DEFAULT_LANG = LANG_DE
+
+
+def resolve_language(raw: Optional[str] = None) -> str:
+    """Sprachschluessel aus ``REPORT_LANGUAGE`` — Deutsch als Rueckfallebene.
+
+    Bewusst tolerant gegen Schreibweisen (``English``/``english``/``en``),
+    weil der Wert aus einer freien Nutzereinstellung stammt und ein Tippfehler
+    keinen Report unpruefbar machen darf.
+    """
+    value = str(raw if raw is not None else Config.REPORT_LANGUAGE or "").strip().lower()
+    if value.startswith("en"):
+        return LANG_EN
+    if value.startswith("de") or value.startswith("ger"):
+        return LANG_DE
+    return _DEFAULT_LANG
+
 
 @dataclass(frozen=True)
 class Requirement:
@@ -52,17 +83,32 @@ class Requirement:
     ``patterns`` sind reguläre Ausdrücke (case-insensitive angewandt). Ein
     Aspekt gilt als behandelt, sobald *ein* Muster im Berichtstext trifft —
     die Checkliste stellt Vollständigkeit fest, keine Formulierungstreue.
+
+    ``patterns`` sind die Muster der Berichtssprache Deutsch;
+    ``patterns_en`` die englischen Entsprechungen. Die Auswahl **ersetzt**
+    die Musterliste, sie ergaenzt sie nicht: sonst wuerde ein deutscher
+    Bericht durch englische Treffer als vollstaendig gelten und die
+    Checkliste verlaere ihre Aussage.
     """
 
     id: str
     title: str
     description: str
     patterns: tuple[str, ...]
+    patterns_en: tuple[str, ...] = ()
 
-    def satisfied_by(self, text: str) -> bool:
+    def patterns_for(self, language: str) -> tuple[str, ...]:
+        """Muster der gewaehlten Sprache; ohne englische Muster bleibt Deutsch."""
+        if language == LANG_EN and self.patterns_en:
+            return self.patterns_en
+        return self.patterns
+
+    def satisfied_by(self, text: str, language: Optional[str] = None) -> bool:
         lowered = text or ""
+        active = language or resolve_language()
         return any(
-            re.search(pattern, lowered, re.IGNORECASE) for pattern in self.patterns
+            re.search(pattern, lowered, re.IGNORECASE)
+            for pattern in self.patterns_for(active)
         )
 
 
@@ -88,6 +134,12 @@ DEFAULT_REQUIREMENT_CHECKLIST: tuple[Requirement, ...] = (
             r"kontroversen?",
             r"uneinig",
         ),
+        patterns_en=(
+            r"contradict",
+            r"conflict(ing|\s+lines?)",
+            r"controvers",
+            r"disagree",
+        ),
     ),
     Requirement(
         id="fruehwarnindikatoren",
@@ -98,6 +150,11 @@ DEFAULT_REQUIREMENT_CHECKLIST: tuple[Requirement, ...] = (
             r"fr[üu]hindikator",
             r"warnsignale?\b",
         ),
+        patterns_en=(
+            r"early[- ]warning",
+            r"leading indicator",
+            r"warning signals?\b",
+        ),
     ),
     Requirement(
         id="stop_bedingungen",
@@ -107,10 +164,21 @@ DEFAULT_REQUIREMENT_CHECKLIST: tuple[Requirement, ...] = (
             "ausgeweitet wird."
         ),
         patterns=(
-            r"stop ?-?(bedingung|kriterium)",
-            r"stopp ?-?(bedingung|kriterium)",
-            r"abbruch(s)? ?-?(bedingung|kriterium)",
+            # Codex-P1 auf PR #1387: Die frueheren Muster akzeptierten nur den
+            # Singular direkt hinter dem Praefix. Damit fiel ausgerechnet
+            # "Stop-/Expand-Kriterien" durch — die Schreibweise, die der
+            # Modul-Docstring oben als Regressionserwartung Nr. 5 zitiert.
+            # ``[-/ ]*`` deckt die Schraegstrich-Kombiform ab, in der
+            # "Expand-" zwischen Praefix und Nomen steht.
+            r"stopp?[-/ ]*(?:expand[-/ ]*)?(bedingung|kriteri)",
+            r"abbruch(?:s)?[-/ ]*(bedingung|kriteri)",
             r"nicht ausgeweitet wird",
+        ),
+        patterns_en=(
+            r"stop[- ]*(?:/[- ]*expand[- ]*)?criteri",
+            r"stop conditions?\b",
+            r"abort criteri",
+            r"when to abort",
         ),
     ),
     Requirement(
@@ -118,10 +186,17 @@ DEFAULT_REQUIREMENT_CHECKLIST: tuple[Requirement, ...] = (
         title="Expand-Bedingungen definiert",
         description="Der Bericht legt fest, unter welcher Voraussetzung ausgeweitet wird.",
         patterns=(
-            r"expand(ier|ations?|-)",
-            r"ausweitungs? ?-?(bedingung|kriterium)",
+            r"expand(ier|ations?|[-/ ])",
+            r"expansions?[-/ ]*(bedingung|kriteri)",
+            r"ausweitungs?[-/ ]*(bedingung|kriteri)",
             r"vor einer ausweitung",
             r"nach erfolgreichem pilot",
+        ),
+        patterns_en=(
+            r"expand[- ]*criteri",
+            r"expansion (criteri|conditions?)",
+            r"scale[- ]up (criteri|conditions?)",
+            r"when to (expand|scale up)",
         ),
     ),
     Requirement(
@@ -136,6 +211,11 @@ DEFAULT_REQUIREMENT_CHECKLIST: tuple[Requirement, ...] = (
             r"positionsänderung",
             r"position(en)?\s+(ge)?ändert",
         ),
+        patterns_en=(
+            r"position shift",
+            r"change[ds]? (its|their|his|her) position",
+            r"shifted position",
+        ),
     ),
     Requirement(
         id="koalitionen",
@@ -145,6 +225,11 @@ DEFAULT_REQUIREMENT_CHECKLIST: tuple[Requirement, ...] = (
             r"koalition(en)?\b",
             r"b[üu]ndnis(s(es)?|se)?\b",
             r"allianzen?\b",
+        ),
+        patterns_en=(
+            r"coalitions?\b",
+            r"alliances?\b",
+            r"blocs?\b",
         ),
     ),
 )
@@ -171,14 +256,22 @@ def checklist_for_intent(
 def find_missing_requirements(
     texts: Sequence[Optional[str]],
     checklist: Sequence[Requirement] = DEFAULT_REQUIREMENT_CHECKLIST,
+    language: Optional[str] = None,
 ) -> List[Requirement]:
     """Alle Requirements, die in keinem der Texte erfüllt sind.
 
     Die Texte werden vor der Prüfung vereinigt — ein Aspekt gilt als
     behandelt, egal in welchem Abschnitt er steht.
+
+    ``language`` ueberschreibt die Berichtssprache; ohne Angabe entscheidet
+    ``Config.REPORT_LANGUAGE``. Die Sprache wird einmal aufgeloest und an
+    alle Requirements durchgereicht, damit eine Konfigurationsaenderung
+    waehrend der Pruefung nicht zu einer halb deutschen, halb englischen
+    Bewertung fuehrt.
     """
     combined = "\n".join(text for text in texts if text)
-    return [req for req in checklist if not req.satisfied_by(combined)]
+    active = resolve_language(language)
+    return [req for req in checklist if not req.satisfied_by(combined, active)]
 
 
 def collect_requirement_degradations(
@@ -204,8 +297,11 @@ def collect_requirement_degradations(
 __all__ = [
     "COMPONENT",
     "DEFAULT_REQUIREMENT_CHECKLIST",
+    "LANG_DE",
+    "LANG_EN",
     "Requirement",
     "checklist_for_intent",
     "collect_requirement_degradations",
     "find_missing_requirements",
+    "resolve_language",
 ]

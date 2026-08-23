@@ -16,6 +16,7 @@ import re
 
 import pytest
 
+from app.config import Config
 from app.services.report_intent import ReportIntent
 from app.services.report_agent.requirement_checker import (
     DEFAULT_REQUIREMENT_CHECKLIST,
@@ -194,3 +195,74 @@ class TestCollectRequirementDegradations:
             apply_run_degradation_downgrade(ReportStatus.COMPLETED, entries)
             == ReportStatus.INCOMPLETE
         )
+
+
+# ---------------------------------------------------------------------------
+# Codex-P1 auf PR #1387 — Sprachabhaengigkeit und Plural-Schreibweisen
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "wording",
+    [
+        "Stop-/Expand-Kriterien",   # woertlich die Regressionserwartung Nr. 5
+        "Stopkriterien",
+        "Stoppkriterien",
+        "Abbruchkriterien",
+        "Stop-Kriterium",
+        "Stopbedingung",
+        "Abbruchbedingungen",
+    ],
+)
+def test_stop_criteria_accept_documented_and_plural_wording(wording):
+    """Der Checker muss die Schreibweise erkennen, die der eigene
+    Modul-Docstring als Sollzustand zitiert — vorher fiel genau sie durch."""
+    missing = find_missing_requirements([f"Als Leitplanke gelten die {wording}."])
+    missing_ids = {req.id for req in missing}
+    assert "stop_bedingungen" not in missing_ids, (
+        f"{wording!r} beschreibt Stop-Bedingungen, wurde aber als fehlend gewertet"
+    )
+
+
+@pytest.mark.parametrize(
+    "wording",
+    ["Expand-Kriterien", "Ausweitungskriterien", "Expansionsbedingungen"],
+)
+def test_expand_criteria_accept_plural_wording(wording):
+    missing_ids = {r.id for r in find_missing_requirements([f"Es gelten die {wording}."])}
+    assert "expand_bedingungen" not in missing_ids
+
+
+ENGLISH_REPORT = """
+The stakeholders show clear contradictions and conflicting positions.
+Early-warning indicators are listed for each milestone.
+Stop criteria and expand criteria define when to abort or scale up.
+Several actors show position shifts over the course of the simulation.
+Two coalitions formed around the pricing question.
+"""
+
+
+def test_english_report_is_complete_under_english_language(monkeypatch):
+    """Codex-P1: REPORT_LANGUAGE=English ist eine persistierte Einstellung.
+    Ein valider englischer Report darf nicht dauerhaft INCOMPLETE sein."""
+    monkeypatch.setattr(Config, "REPORT_LANGUAGE", "English")
+    missing = find_missing_requirements([ENGLISH_REPORT])
+    assert missing == [], (
+        f"Englischer Report unter REPORT_LANGUAGE=English als unvollstaendig "
+        f"gewertet, fehlend: {[r.id for r in missing]}"
+    )
+
+
+def test_english_report_stays_incomplete_under_german_language(monkeypatch):
+    """Gegenprobe: die Sprachauswahl ersetzt die Muster, sie ergaenzt sie nicht.
+    Sonst akzeptierte ein deutscher Report englische Treffer und die
+    Checkliste verlaere ihre Aussage."""
+    monkeypatch.setattr(Config, "REPORT_LANGUAGE", "German")
+    missing = find_missing_requirements([ENGLISH_REPORT])
+    assert missing, "Unter German duerfen englische Formulierungen nicht zaehlen"
+
+
+def test_unknown_language_falls_back_to_german(monkeypatch):
+    monkeypatch.setattr(Config, "REPORT_LANGUAGE", "Klingon")
+    german = "Widersprüche, Frühwarnindikatoren, Stopkriterien, Ausweitungskriterien, Positionswechsel, Koalitionen."
+    assert find_missing_requirements([german]) == []
