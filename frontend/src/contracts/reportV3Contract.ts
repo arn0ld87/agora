@@ -205,16 +205,89 @@ export const ContentIdeaSchema = z
   .strict();
 export type ContentIdea = z.infer<typeof ContentIdeaSchema>;
 
-// === Threshold (Issue #1160 E) ===
+// === Threshold (Issue #1160 E, erweitert um #1343) ===
 // Operative Zahlen tragen ihre Herkunft mit. `origin` ist eine eigene
 // Dimension neben EvidenceSourceKind — die Quellengattung beschreibt, woher
 // ein Beleg kommt, `origin` beschreibt, wie eine Zahl zustande kam.
+//
+// Issue #1343: `kind` trennt operative Mengen ("quantity") von Datumsangaben
+// ("date"). Aus „15. Oktober 2026" entstand sonst der sinnlose Eintrag
+// value=15.0 / unit="October". Das Feld ist optional/nullable, weil
+// Bestandsartefakte es nicht tragen — „nicht erfasst" ist nicht dasselbe wie
+// eine erfasste quantity (Muster: Claim.confidence_scope).
+// Issue #1343: Ein Monatsname ist keine Maßeinheit. Steht er als unit in einem
+// numerischen Threshold, war der Ursprung eine Datumsangabe, deren Tag und Monat
+// die Extraktion auseinandergerissen hat — ohne Jahr nicht rekonstruierbar.
+const THRESHOLD_MONTH_NAMES = new Set([
+  "januar",
+  "january",
+  "februar",
+  "february",
+  "märz",
+  "maerz",
+  "march",
+  "april",
+  "mai",
+  "may",
+  "juni",
+  "june",
+  "juli",
+  "july",
+  "august",
+  "september",
+  "oktober",
+  "october",
+  "november",
+  "dezember",
+  "december",
+]);
+
+// Issue #1343-Follow-up (Review PR #1379): Vor #1343 war `value` ein reines
+// Zahlenfeld — numerische Strings wie "90" wurden zu 90.0 konvertiert. Der
+// String-Zweig der Union übernimmt exakte Strings unverändert und die
+// Shape-Prüfung würde sie verwerfen; die Coercion stellt das frühere
+// Verhalten her (Spiegel des Before-Validators im Backend). Echte
+// Datumsstrings und Fließtext bleiben Strings.
+const THRESHOLD_NUMERIC_STRING_RE = /^-?\d+(?:[.,]\d+)?$/;
+
+function coerceThresholdValue(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const text = value.trim();
+  if (!THRESHOLD_NUMERIC_STRING_RE.test(text)) return value;
+  return Number(text.replace(",", "."));
+}
+
+// Review PR #1379, Blocker 1: Das YYYY-MM-DD-Muster allein lässt „2026-02-30“
+// durch. Jahr/Monat/Tag werden ausgelesen, über UTC erzeugt und alle drei
+// Komponenten zurückverglichen; dazu dieselbe Plausibilitätsgrenze wie im
+// Backend-Parser (_MIN_YEAR/_MAX_YEAR): Projektplanung spielt sich in der
+// Gegenwart ab.
+const THRESHOLD_ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const THRESHOLD_MIN_YEAR = 1900;
+const THRESHOLD_MAX_YEAR = 2100;
+
+function isValidCalendarDate(iso: string): boolean {
+  const match = iso.match(THRESHOLD_ISO_DATE_RE);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (year < THRESHOLD_MIN_YEAR || year > THRESHOLD_MAX_YEAR) return false;
+  const utc = new Date(Date.UTC(year, month - 1, day));
+  return (
+    utc.getUTCFullYear() === year &&
+    utc.getUTCMonth() === month - 1 &&
+    utc.getUTCDate() === day
+  );
+}
+
 export const ThresholdSchema = z
   .object({
     id: z.string().min(1),
     label: z.string().min(1),
-    value: z.number(),
-    unit: z.string().min(1),
+    kind: z.enum(["quantity", "date"]).nullable().default(null),
+    value: z.preprocess(coerceThresholdValue, z.union([z.number(), z.string()])),
+    unit: z.string().min(1).nullable().optional(),
     purpose: z.enum(["alert", "target", "limit", "baseline"]),
     origin: z.enum([
       "document_requirement",
@@ -238,6 +311,56 @@ export const ThresholdSchema = z
         path: ["evidence_refs"],
         message: "evidence_status='verified' verlangt mindestens eine evidence_ref.",
       });
+    }
+
+    // Spiegelt Threshold.kind_matches_value_shape (#1343): ein Datum trägt
+    // keine Einheit und nur einen ISO-Wert, der ein echtes Kalenderdatum
+    // ergibt; eine Menge ist eine echte Zahl mit Einheit — ein Monatsname
+    // ist keine Einheit.
+    if (value.kind === "date") {
+      if (typeof value.value !== "string" || !THRESHOLD_ISO_DATE_RE.test(value.value)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["value"],
+          message:
+            "kind='date' verlangt einen ISO-Datumswert ('YYYY-MM-DD').",
+        });
+      } else if (!isValidCalendarDate(value.value)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["value"],
+          message: `'${value.value}' ist kein gültiges Kalenderdatum (ISO 'YYYY-MM-DD', Jahr 1900–2100).`,
+        });
+      }
+      if (value.unit != null) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["unit"],
+          message: "kind='date' trägt keine Einheit — ein Datum ist keine Menge.",
+        });
+      }
+    } else {
+      if (typeof value.value === "string") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["value"],
+          message:
+            "Nur kind='date' darf einen Textwert tragen; operative Schwellwerte sind Zahlen.",
+        });
+      }
+      if (!value.unit || !value.unit.trim()) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["unit"],
+          message: "Eine operative Zahl braucht eine Einheit (unit).",
+        });
+      } else if (THRESHOLD_MONTH_NAMES.has(value.unit.trim().toLowerCase())) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["unit"],
+          message: `'${value.unit}' ist ein Monatsname, keine Einheit.`,
+        });
+      }
     }
   });
 export type Threshold = z.infer<typeof ThresholdSchema>;
