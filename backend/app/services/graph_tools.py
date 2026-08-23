@@ -357,6 +357,11 @@ class GraphToolsService:
             selection_reasoning=selection_reasoning,
         )
         result.selection_reasoning = selection_reasoning
+        # Issue #1382: Das Feld existierte seit jeher im DTO, hatte aber keinen
+        # Produzenten — jeder Consumer sah eine leere Liste und konnte nicht
+        # unterscheiden, ob niemand ausgewaehlt wurde oder nur niemand
+        # geschrieben hat. Die Auswahl gehoert neben ihre Begruendung.
+        result.selected_agents = selected_agents
         logger.info(f"Selected {len(selected_agents)} Agents for interview: {selected_indices}")
 
         # Step 3: Generate interview questions
@@ -395,6 +400,14 @@ class GraphToolsService:
             + "\n"
         )
         optimized_prompt = f"{INTERVIEW_PROMPT_PREFIX}{combined_prompt}"
+
+        # Issue #1382: Der Panel-Tracker darf nur verbuchen, was auch eine
+        # Stimme gebracht hat. Bis hierher wurde die volle Auswahl gebucht —
+        # eine stumme Persona verbrannte damit ein Diversitaetskontingent,
+        # ohne je geantwortet zu haben. Die Liste waechst additiv neben
+        # ``selected_indices``, dessen Positionskopplung zu
+        # ``selected_agents`` unangetastet bleibt.
+        responded_indices: List[int] = []
 
         # Step 4: Call the real interview API
         try:
@@ -473,6 +486,7 @@ class GraphToolsService:
                         f"[{label} Platform Response]\n{text}"
                         for label, text in platform_answers
                     )
+                    responded_indices.append(agent_idx)
                 else:
                     # Ein einzelner Platzhalter statt zweier: der Report-Agent
                     # erkennt daran weiterhin das gescheiterte Interview und
@@ -543,7 +557,7 @@ class GraphToolsService:
             # Diversitaetskonto nicht belasten.
             self._record_interviewed_panel(
                 profiles=profiles,
-                indices=selected_indices,
+                indices=responded_indices,
                 requirement=interview_requirement,
             )
             result.summary = self._generate_interview_summary(

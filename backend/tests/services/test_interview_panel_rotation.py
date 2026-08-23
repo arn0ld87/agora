@@ -400,3 +400,114 @@ def test_wiring_prompt_carries_usage_hints(monkeypatch: pytest.MonkeyPatch):
     assert '"times_interviewed": 1' in user_prompt
     assert "times_interviewed" in system_prompt
     assert "clearly different aspect" in system_prompt
+
+
+# ---------------------------------------------------------------------------
+# Issue #1382 — Regressionen aus #1380
+# ---------------------------------------------------------------------------
+
+
+def _run_partial(svc: GraphToolsService, requirement: str, responding: list[int]):
+    """Teilerfolgs-Batch: nur ``responding`` liefert eine Plattformantwort.
+
+    Der semantisch wichtige Mittelfall zwischen 'alles gruen' und 'Batch
+    gescheitert' — im Referenzlauf der Normalfall, in der Suite bis #1382
+    ungetestet.
+    """
+    api_result = _api({f"reddit_{i}": {"response": f"Antwort {i}."} for i in responding})
+    store = MagicMock()
+    store.read_json.side_effect = lambda simulation_id, name, default=None: (
+        SIX_PROFILES if name == "reddit_profiles" else default
+    )
+    from app.services.sim import interview_direct
+
+    with patch(
+        "app.services.simulation_runner.SimulationRunner.check_env_alive",
+        return_value=False,
+    ), patch(
+        "app.services.sim.interview_client.check_env_alive",
+        return_value=False,
+    ), patch.object(
+        interview_direct, "_store", return_value=store
+    ), patch(
+        "app.services.simulation_runner.SimulationRunner.interview_agents_batch",
+        return_value=api_result,
+    ):
+        return svc.interview_agents(
+            simulation_id="sim_1382",
+            interview_requirement=requirement,
+            simulation_requirement="Kontext",
+            max_agents=3,
+        )
+
+
+def test_regression_1382_selected_agents_is_populated():
+    """Bug 1: ``InterviewResult.selected_agents`` blieb leer, obwohl Interviews
+    stattfanden — serialisierte Ergebnisse verloren das befragte Panel."""
+    svc = _make_service(max_per_persona=None)
+    with patch.object(Config, "REPORT_INTERVIEW_MAX_PER_PERSONA", 2):
+        result = _run(svc, "Abschnitt Eins: Preisbewertung")
+
+    assert result.selected_agents, "Das befragte Panel muss im Ergebnis stehen"
+    assert [a["username"] for a in result.selected_agents] == [
+        "persona_0",
+        "persona_1",
+        "persona_2",
+    ]
+    assert result.to_dict()["selected_agents"] == result.selected_agents
+
+
+def test_regression_1382_silent_persona_is_not_booked():
+    """Bug 2: Personas ohne Plattformantwort wurden trotzdem als befragt
+    verbucht und dadurch faelschlich aus spaeteren Panels gedraengt."""
+    svc = _make_service(max_per_persona=None)
+    with patch.object(Config, "REPORT_INTERVIEW_MAX_PER_PERSONA", 1):
+        first = _run_partial(svc, "Abschnitt Eins: Preisbewertung", responding=[0])
+
+        # Direkt nach dem Teilerfolg gemessen: nur wer geantwortet hat, ist
+        # gebucht. Nach dem zweiten Abschnitt waere die Aussage wertlos —
+        # dort werden 1 und 2 regulaer befragt und stehen dann zu Recht auf 1.
+        assert svc.panel_tracker.usage("persona_0") == 1
+        assert svc.panel_tracker.usage("persona_1") == 0, (
+            "Persona 1 hat nicht geantwortet und darf das Diversitaetskonto "
+            "nicht belasten"
+        )
+        assert svc.panel_tracker.usage("persona_2") == 0
+
+        second = _run(svc, "Abschnitt Zwei: Lieferkettenrisiken")
+
+    # Der Platzhalter-Eintrag fuer die stumme Persona bleibt bewusst stehen
+    # (#1320): der Report-Agent erkennt daran das gescheiterte Interview und
+    # verwirft es als Evidence. Nur die Buchung darf er nicht ausloesen.
+    silent = [i for i in first.interviews if i.agent_name != "Persona 0"]
+    assert all(i.response == "(No response from this platform)" for i in silent)
+
+    # Persona 0 ist am Limit und faellt raus; 1 und 2 sind noch frisch und
+    # ruecken vor die unbefragten 3–5 gar nicht erst zurueck — unter der alten
+    # Fehlbuchung lieferte derselbe Lauf {Persona 3, 4, 5}.
+    names_second = {i.agent_name for i in second.interviews}
+    assert "Persona 1" in names_second and "Persona 2" in names_second, (
+        f"Die stummen Personas muessen weiter waehlbar sein, Panel war {names_second}"
+    )
+    assert "Persona 0" not in names_second
+
+
+def test_regression_1382_fallback_prefers_different_aspect():
+    """Bug 3: Im Ausschoepfungs-Fallback trugen 'anderer Aspekt' und
+    'gleicher Aspekt' denselben Rang — die dokumentierte Bevorzugung eines
+    anderen Kontexts war im Code nicht umgesetzt."""
+    tracker = InterviewPanelTracker(max_interviews_per_persona=1)
+    tracker.record(TWO_PROFILES, [0], "Preisbewertung durch Konsumenten")
+    tracker.record(TWO_PROFILES, [1], "Lieferkettenrisiken im Handel")
+
+    indices, note = tracker.apply_selection(
+        profiles=TWO_PROFILES,
+        selected_indices=[0],
+        requirement="Preisbewertung durch Konsumenten",
+    )
+
+    assert indices == [1], (
+        f"Persona 1 traegt einen anderen frueheren Aspekt und geht Persona 0 "
+        f"(identischer Aspekt) vor, Panel war {indices}"
+    )
+    assert note
