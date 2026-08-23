@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import re
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, Iterable, List, Literal, Optional
 
 from pydantic import ValidationError
 
@@ -36,6 +36,7 @@ from .storage import (
     get_report_path,
     get_report_v3_path,
     get_report_v3_markdown_path,
+    get_run_events_path as storage_get_run_events_path,
     get_section_path,
     read_agent_log,
     read_console_log,
@@ -227,6 +228,10 @@ class ReportManager:
     def _get_evidence_map_path(cls, report_id: str) -> str:
         """Get evidence map path"""
         return get_evidence_map_path(cls.REPORTS_DIR, report_id)
+
+    @classmethod
+    def _get_run_events_path(cls, report_id: str) -> str:
+        return storage_get_run_events_path(cls.REPORTS_DIR, report_id)
 
     @classmethod
     def _write_json_atomic(cls, path: str, payload: Dict[str, Any]) -> None:
@@ -789,6 +794,37 @@ class ReportManager:
     @classmethod
     def get_generated_sections(cls, report_id: str) -> List[Dict[str, Any]]:
         return storage_get_generated_sections(cls.REPORTS_DIR, report_id)
+
+    @classmethod
+    def save_work_trace_removed_sections(
+        cls, report_id: str, section_indices: Iterable[int]
+    ) -> None:
+        """Persistiert, aus welchen Abschnitten Arbeitsspur-Segmente entfernt
+        wurden.
+
+        Issue #1321 (Review-Finding PR #1378): der Marker lebte nur im
+        flüchtigen RunEventLog des aktuellen Agenten — ein Cancel vor der
+        Degradations-Aggregation und ein Resume mit neuem Agenten verloren
+        ihn endgültig. Das Artefakt ist bewusst backend-intern (dieselbe
+        Kategorie wie progress.json), kein API-Contract.
+        """
+        cls._write_json_atomic(
+            cls._get_run_events_path(report_id),
+            {
+                "work_trace_removed_sections": sorted(
+                    {int(index) for index in section_indices}
+                )
+            },
+        )
+
+    @classmethod
+    def load_work_trace_removed_sections(cls, report_id: str) -> set:
+        """Liest den persistierten Marker-Zustand; leer wenn nicht vorhanden."""
+        data = cls._read_json_safe(cls._get_run_events_path(report_id)) or {}
+        return {
+            int(index)
+            for index in (data.get("work_trace_removed_sections") or [])
+        }
 
     @classmethod
     def assemble_full_report(cls, report_id: str, outline: ReportOutline) -> str:

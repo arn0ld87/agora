@@ -283,3 +283,271 @@ def test_generate_report_no_cancel_runs_all_sections(tmp_path):
 
     assert section_call_count[0] == 3, f"Alle 3 Sections erwartet, erhalten: {section_call_count[0]}"
     assert result.status == ReportStatus.COMPLETED
+
+
+# ---------------------------------------------------------------------------
+# Issue #1321 (Review-Finding PR #1378): Cancel und Resume dürfen den
+# Sanitization-Marker nicht verlieren
+#
+# Der Marker lebte nur im flüchtigen RunEventLog des aktuellen Agenten. Beim
+# kooperativen Abbruch wurde _build_partial_report vor der einzigen
+# Degradations-Aggregation erreicht; beim Resume entstand ein neuer Agent,
+# und bereits persistierte Sections liefen nicht erneut durch
+# _finalize_content. In beiden Fällen blieb N_sections_sanitized verloren.
+# ---------------------------------------------------------------------------
+
+
+def _make_generation_agent() -> MagicMock:
+    agent = MagicMock()
+    agent.simulation_id = "sim_test"
+    agent.graph_id = "graph_test"
+    agent.simulation_requirement = "Test requirement"
+    agent.report_logger = MagicMock()
+    agent.console_logger = MagicMock()
+    agent.evidence_map = {}
+    agent.ReportLogger = MagicMock(return_value=MagicMock())
+    agent.ReportConsoleLogger = MagicMock(return_value=MagicMock())
+    agent._collect_simulation_evidence_items = MagicMock(return_value=[])
+    agent.persona_ids = ["p1", "p2", "p3", "p4", "p5"]
+    return agent
+
+
+def _wire_real_run_event_storage(mock_rm, report_folder: str) -> None:
+    """Bindet save/load_work_trace_removed_sections an echte Dateien im
+    Report-Ordner — derselbe ReportManager-Mock bleibt für alles andere
+    stumm, aber der Persistenzweg des Markers ist echt."""
+
+    def save(report_id_arg: str, indices) -> None:
+        path = os.path.join(report_folder, "run_events.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump({"work_trace_removed_sections": sorted(indices)}, fh)
+
+    def load(report_id_arg: str) -> set:
+        path = os.path.join(report_folder, "run_events.json")
+        if not os.path.exists(path):
+            return set()
+        with open(path, encoding="utf-8") as fh:
+            return {
+                int(i) for i in json.load(fh).get("work_trace_removed_sections") or []
+            }
+
+    mock_rm.save_work_trace_removed_sections.side_effect = save
+    mock_rm.load_work_trace_removed_sections.side_effect = load
+
+
+def _patch_generation_stack(mock_rm, outline, section_react):
+    """Die gemeinsamen Patches eines generate_report-Durchlaufs."""
+    from contextlib import ExitStack
+
+    stack = ExitStack()
+    for p in (
+        patch("app.services.report_agent.workflow.generate_section_react", side_effect=section_react),
+        patch("app.services.report_agent.workflow.generate_section_metadata", return_value={}),
+        patch("app.services.report_agent.workflow.ReportManager", mock_rm),
+        patch("app.services.report_agent.workflow.plan_outline_impl", return_value=outline),
+        patch("app.services.report_agent.workflow.validate_required_sections", return_value=[]),
+        patch("app.services.report_agent.workflow._load_persona_count", return_value=100),
+        patch("app.services.report_agent.workflow.MIN_PERSONA_TABLE_ROWS", 0),
+        patch("app.services.report_agent.workflow.validate_quote_anchors", return_value=MagicMock(valid=True)),
+        patch("app.services.report_agent.workflow.migrate_v1_to_v2", return_value=None),
+    ):
+        stack.enter_context(p)
+    return stack
+
+
+def _configure_manager_mock(mock_rm, report_folder: str) -> None:
+    mock_rm._ensure_report_folder.return_value = report_folder
+    mock_rm.get_evidence_map.return_value = None
+    mock_rm.get_report.return_value = None
+    mock_rm.get_generated_sections.return_value = []
+    mock_rm.update_progress.return_value = None
+    mock_rm.save_report.return_value = None
+    mock_rm.save_outline.return_value = None
+    mock_rm.save_section.return_value = None
+    mock_rm.assemble_full_report.return_value = "## Section 1\n## Section 2\n"
+    mock_rm._write_json_atomic.side_effect = lambda path, data: None
+    mock_rm.get_report_v3.return_value = None
+
+
+def _section_react_with_work_traces(state: Dict[str, Any]):
+    """generate_section_react-Ersatz: der Output läuft für Abschnitte in
+    ``state['sanitize_indices']`` durch die echte ``_finalize_content``-
+    Sanitization (Thought-Zeile wird entfernt und am Agenten markiert).
+    Bei ``state['cancel_at_index']`` wird vorher das Cancel-Flag gesetzt."""
+    from app.services.report_agent.workflow import _finalize_content
+
+    def fake(
+        ag,
+        section=None,
+        outline=None,
+        previous_sections=None,
+        progress_callback=None,
+        section_index=0,
+        **kw,
+    ):
+        if section_index == state.get("cancel_at_index"):
+            request_cancel(state["cancel_run_id"])
+        if section_index in state["sanitize_indices"]:
+            response = (
+                "Thought: Ich sollte zuerst die Personas zusammenstellen.\n"
+                f"## {section.title}\n\n"
+                + "Der Markt für Arbeitsplanung verändert sich spürbar. " * 5
+            )
+        else:
+            response = (
+                f"## {section.title}\n\n"
+                + "Der Markt für Arbeitsplanung verändert sich spürbar. " * 5
+            )
+        return _finalize_content(
+            response,
+            section_title=section.title,
+            section_index=section_index,
+            agent=ag,
+        )
+
+    return fake
+
+
+def test_cancel_after_sanitization_keeps_the_warning_in_the_partial_report(tmp_path):
+    """Pfad 1 des Review-Befunds: Sanitization → Cancel. Der Teil-Report
+    erreichte die einzige Aggregation am normalen Laufende nie — der
+    N_sections_sanitized-Eintrag musste verloren gehen."""
+    from app.services.report_agent.workflow import generate_report
+
+    cancel_run_id = _unique_id()
+    report_id = f"report_{uuid.uuid4().hex[:12]}"
+    clear_cancel(cancel_run_id)
+
+    state = {
+        "sanitize_indices": {1},
+        "cancel_at_index": 2,
+        "cancel_run_id": cancel_run_id,
+    }
+    agent = _make_generation_agent()
+    outline = _make_outline(4)
+
+    report_folder = str(tmp_path / report_id)
+    os.makedirs(report_folder, exist_ok=True)
+
+    with patch("app.services.report_agent.workflow.EvidenceMapModel") as mock_em:
+        mock_em.model_validate.return_value = MagicMock(
+            model_dump=MagicMock(return_value={"schema_version": 2, "report_id": report_id, "simulation_id": "sim_test", "global_evidence": [], "sections": []})
+        )
+        mock_rm = MagicMock()
+        _configure_manager_mock(mock_rm, report_folder)
+        _wire_real_run_event_storage(mock_rm, report_folder)
+        with _patch_generation_stack(mock_rm, outline, _section_react_with_work_traces(state)):
+            result = generate_report(
+                agent,
+                progress_callback=None,
+                report_id=report_id,
+                cancel_run_id=cancel_run_id,
+            )
+
+    reasons = [entry["reason"] for entry in result.run_degradations]
+    assert reasons == ["1_sections_sanitized"], (
+        f"Partial Report muss den Sanitization-Hinweis tragen, erhalten: {reasons}"
+    )
+    assert result.status == ReportStatus.COMPLETED
+    # Der Zustand muss über den Prozess hinaus bestellbar sein — Grundlage
+    # für den Resume-Pfad.
+    assert os.path.exists(os.path.join(report_folder, "run_events.json"))
+    clear_cancel(cancel_run_id)
+
+
+def test_resume_restores_the_sanitization_warning_exactly_once(tmp_path):
+    """Pfad 2 des Review-Befunds: Sanitization → Cancel → Resume. Der neue
+    Agent sieht die persistierte Section nur noch als Restore — sie läuft
+    nicht erneut durch _finalize_content. Die Warnung muss aus dem
+    persistierten Zustand wiederhergestellt werden und genau einmal im
+    Final Report stehen."""
+    from app.services.report_agent.workflow import generate_report
+
+    cancel_run_id = _unique_id()
+    report_id = f"report_{uuid.uuid4().hex[:12]}"
+    clear_cancel(cancel_run_id)
+
+    outline = _make_outline(4)
+    report_folder = str(tmp_path / report_id)
+    os.makedirs(report_folder, exist_ok=True)
+
+    # Phase A: Section 1 bereinigt, dann Cancel bei Section 2.
+    state_a = {
+        "sanitize_indices": {1},
+        "cancel_at_index": 2,
+        "cancel_run_id": cancel_run_id,
+    }
+    with patch("app.services.report_agent.workflow.EvidenceMapModel") as mock_em:
+        mock_em.model_validate.return_value = MagicMock(
+            model_dump=MagicMock(return_value={"schema_version": 2, "report_id": report_id, "simulation_id": "sim_test", "global_evidence": [], "sections": []})
+        )
+        mock_rm = MagicMock()
+        _configure_manager_mock(mock_rm, report_folder)
+        _wire_real_run_event_storage(mock_rm, report_folder)
+        with _patch_generation_stack(mock_rm, outline, _section_react_with_work_traces(state_a)):
+            result_a = generate_report(
+                _make_generation_agent(),
+                progress_callback=None,
+                report_id=report_id,
+                cancel_run_id=cancel_run_id,
+            )
+
+    assert [e["reason"] for e in result_a.run_degradations] == ["1_sections_sanitized"]
+
+    # Phase B: neuer Agent, Cancel aufgehoben, Section 1 liegt persistiert
+    # vor und wird nur noch restoriert — nichts wird neu markiert.
+    clear_cancel(cancel_run_id)
+    state_b = {
+        "sanitize_indices": set(),
+        "cancel_at_index": None,
+        "cancel_run_id": cancel_run_id,
+    }
+    with patch("app.services.report_agent.workflow.EvidenceMapModel") as mock_em:
+        mock_em.model_validate.return_value = MagicMock(
+            model_dump=MagicMock(return_value={"schema_version": 2, "report_id": report_id, "simulation_id": "sim_test", "global_evidence": [], "sections": []})
+        )
+        mock_rm = MagicMock()
+        _configure_manager_mock(mock_rm, report_folder)
+        _wire_real_run_event_storage(mock_rm, report_folder)
+        mock_rm.get_generated_sections.return_value = [
+            {
+                "filename": "section_01.md",
+                "section_index": 1,
+                "content": "## Section 1\n\nDer Markt für Arbeitsplanung verändert sich spürbar.",
+            }
+        ]
+        with _patch_generation_stack(mock_rm, outline, _section_react_with_work_traces(state_b)):
+            result_b = generate_report(
+                _make_generation_agent(),
+                progress_callback=None,
+                report_id=report_id,
+                cancel_run_id=cancel_run_id,
+            )
+
+    sanitized = [
+        entry
+        for entry in result_b.run_degradations
+        if entry["reason"].endswith("_sections_sanitized")
+    ]
+    assert len(sanitized) == 1, (
+        "Nach dem Resume darf die Warnung genau einmal auftauchen, "
+        f"erhalten: {result_b.run_degradations}"
+    )
+    assert sanitized[0]["reason"] == "1_sections_sanitized"
+    assert "1" in sanitized[0]["detail"]
+    clear_cancel(cancel_run_id)
+
+
+def test_run_event_state_roundtrip(tmp_path, monkeypatch):
+    """Der persistierte Marker-Zustand überlebt einen Manager-Wechsel:
+    schreiben, neu laden, dieselbe Menge — dedupliziert und index-basiert."""
+    from app.services.report_agent.manager import ReportManager
+
+    monkeypatch.setattr(ReportManager, "REPORTS_DIR", str(tmp_path))
+    report_id = f"report_{uuid.uuid4().hex[:12]}"
+
+    assert ReportManager.load_work_trace_removed_sections(report_id) == set()
+
+    ReportManager.save_work_trace_removed_sections(report_id, [3, 7, 7])
+
+    assert ReportManager.load_work_trace_removed_sections(report_id) == {3, 7}

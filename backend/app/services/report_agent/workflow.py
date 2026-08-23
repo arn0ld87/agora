@@ -1180,6 +1180,26 @@ def _is_cancel_requested(run_id: Optional[str]) -> bool:
         return False
 
 
+def _restore_work_trace_markers(agent: Any, report_id: str) -> None:
+    """Issue #1321 (Review-Finding PR #1378): Resume baut einen neuen
+    Agenten; bereits persistierte Sections laufen nicht erneut durch
+    _finalize_content, ihr Sanitization-Marker wäre also endgültig
+    verloren. Der Zustand wird pro Lauf persistiert und hier — vor der
+    ersten Cancel-Grenze — wiederhergestellt."""
+    for index in sorted(ReportManager.load_work_trace_removed_sections(report_id)):
+        mark_work_traces_removed(agent, index)
+
+
+def _persist_work_trace_markers(agent: Any, report_id: str) -> None:
+    """Issue #1321 (Review-Finding PR #1378): der Marker muss den Lauf
+    überleben — Crash, Budgetabbruch und kooperativer Cancel dürfen ihn
+    nicht mit dem Prozess vergessen. Deshalb pro Section fortschreiben,
+    nicht erst am Laufende."""
+    markers = events_for(agent).work_trace_removed_sections
+    if markers:
+        ReportManager.save_work_trace_removed_sections(report_id, markers)
+
+
 def _build_partial_report(
     report: "Report",
     *,
@@ -1212,6 +1232,21 @@ def _build_partial_report(
         report.status, quote_validation_failed_section_indices or []
     )
     report.completed_at = cancelled_at
+
+    # Issue #1321 (Review-Finding PR #1378): der Teil-Report erreichte die
+    # einzige Degradations-Aggregation am normalen Laufende nie — eine vor
+    # dem Cancel still bereinigte Section war damit auch im Partial Report
+    # von einer unangetasteten nicht zu unterscheiden. Im flüchtigen
+    # RunEventLog ist die Menge zu diesem Zeitpunkt vollständig; hier wird
+    # die Summe gezogen, statt sie beim Abbruch zu verlieren.
+    report.run_degradations = collect_run_degradations(
+        work_trace_removed_section_indices=sorted(
+            events_for(agent).work_trace_removed_sections
+        ),
+    )
+    report.status = apply_run_degradation_downgrade(
+        report.status, report.run_degradations
+    )
 
     ReportManager.save_report(report)
 
@@ -1312,6 +1347,8 @@ def generate_report(
             agent.evidence_map = EvidenceMapModel.model_validate(
                 agent.evidence_map
             ).model_dump(mode="json")
+
+        _restore_work_trace_markers(agent, report_id)
 
         agent.report_logger = agent.ReportLogger(report_id)
         agent.report_logger.log_start(
@@ -1461,6 +1498,7 @@ def generate_report(
                 quote_validation_failed_section_indices.append(section_num)
             generated_sections.append(result.markdown)
             completed_section_titles.append(result.title)
+            _persist_work_trace_markers(agent, report_id)
             if agent.report_logger:
                 agent.report_logger.log_section_full_complete(
                     section_title=result.title,
