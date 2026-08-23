@@ -946,9 +946,11 @@ class LLMClient:
             max_tokens=max_tokens,
             extra_body=thinking_extra_body(
                 ollama=self._is_ollama(),
-                # MiniMax wird auf dem Vision-Pfad bewusst nicht behandelt —
-                # das ist der Ist-Zustand, kein Versehen dieses Refactorings.
-                minimax=False,
+                # MiniMax-M3 ist vision-faehig (image_url-Content-Parts) und
+                # schaltet Reasoning AN, wenn das thinking-Feld fehlt (#1229)
+                # — genau das Rauschen, das dieser Pfad vermeiden will.
+                # disabled ist bei M3 wirksam; M2.x akzeptiert es ohne Wirkung.
+                minimax=self._is_minimax(),
                 # Vision-Boden: ein Bild belegt das Kontextfenster spürbar,
                 # deshalb hier mehr als das, was max_tokens allein verlangt.
                 num_ctx=max(
