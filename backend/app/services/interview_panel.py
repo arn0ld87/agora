@@ -14,8 +14,9 @@ Prioritaetsklassen zu:
 2. **wiederverwendbar** — unter dem Diversitaetslimit UND der neue Aspekt
    unterscheidet sich signifikant von allen frueheren Aspekten dieser Persona.
 3. **Ausschoepfungs-Fallback** — nur wenn die Klassen 1 und 2 das gewuenschte
-   Panel nicht fuellen: Wiederverwendung trotz Limit, mit anderem Aspekt
-   bevorzugt, gleicher Aspekt als letzter Ausweg.
+   Panel nicht fuellen: Wiederverwendung trotz Limit — Klasse 3 traegt einen
+   signifikant anderen Aspekt, Klasse 4 wiederholt denselben und ist der
+   letzte Ausweg.
 
 Interpretation von "signifikant anderer Kontext/Aspekt" (#1303): zwei
 Anforderungstexte gelten als unterschiedlich, wenn ihre Inhaltswoerter
@@ -118,6 +119,10 @@ class InterviewPanelTracker:
         """Klasse 2: unter dem Limit UND jeder fruehere Aspekt deutlich anders."""
         if self.usage(persona_key) >= self.max_interviews_per_persona:
             return False
+        return self._aspect_is_new(persona_key, requirement)
+
+    def _aspect_is_new(self, persona_key: str, requirement: str) -> bool:
+        """Traegt die Anforderung gegenueber allen frueheren einen neuen Aspekt?"""
         return all(
             aspects_differ(requirement, previous)
             for previous in self._contexts.get(persona_key, [])
@@ -137,7 +142,8 @@ class InterviewPanelTracker:
 
         Die Relevanz-Rangfolge des LLM gilt innerhalb jeder Klasse weiter;
         Klassen schlagen Rangfolge: frisch > regelkonforme Wiederverwendung >
-        Ausschoepfungs-Fallback.
+        Ausschoepfungs-Fallback mit anderem Aspekt > Ausschoepfung mit
+        gleichem Aspekt.
         """
         ordered: list[int] = []
         seen: set[int] = set()
@@ -161,7 +167,14 @@ class InterviewPanelTracker:
                 return 0
             if self._is_reusable(keys[idx], requirement):
                 return 1
-            return 2
+            # Issue #1382: Im Ausschoepfungs-Fallback ist "anderer Aspekt"
+            # nicht dasselbe wie "gleicher Aspekt nochmal". Ohne diese
+            # Trennung war die im Modulkopf dokumentierte Bevorzugung eines
+            # anderen Kontexts blosse Prosa — beide bekamen Rang 2 und die
+            # LLM-Reihenfolge entschied.
+            if self._aspect_is_new(keys[idx], requirement):
+                return 2
+            return 3
 
         def sort_key(idx: int) -> tuple[int, int]:
             # Innerhalb einer Klasse gilt weiter: vom LLM Genaannte vor
@@ -182,7 +195,7 @@ class InterviewPanelTracker:
                 f"noch nicht befragter bzw. regelkonform wiederverwendbarer "
                 f"Personas ersetzt"
             )
-        elif any(class_rank(i) == 2 for i in final):
+        elif any(class_rank(i) >= 2 for i in final):
             exhausted = any(self.usage(keys[i]) >= self.max_interviews_per_persona for i in final)
             if exhausted:
                 notes.append(
