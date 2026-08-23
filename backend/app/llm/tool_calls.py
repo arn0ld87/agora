@@ -16,28 +16,15 @@ from typing import Any, Dict, List, Literal, TypedDict
 from ..utils.logger import get_logger
 from ..utils.retry import llm_call_with_retry
 from .request_plan import (
+    TEMPERATURE_QUIRK,
     TOKEN_KEY_QUIRK,
-    RequestOptions,
+    DEFAULT_REQUEST_OPTIONS,
     build_request,
     execute,
     thinking_extra_body,
 )
 
 logger = get_logger("agora.llm_client")
-
-
-def _never_omits_temperature(model: str) -> bool:
-    """Der Tools-Pfad setzt ``temperature`` bedingungslos.
-
-    Der ``temperature``-Quirk aus #1096 (GPT-5-/o-Reasoning-Familie akzeptiert
-    nur den Default) ist hier nie nachgezogen worden. Ihn jetzt zu aktivieren
-    wäre ein Verhaltensfix, kein Refactor — deshalb steht die Abweichung als
-    sichtbarer Seam da statt als eigene Kopie des Request-Shapings.
-    """
-    return False
-
-
-_TOOLS_REQUEST_OPTIONS = RequestOptions(omits_temperature=_never_omits_temperature)
 
 
 class ToolCallItem(TypedDict):
@@ -239,7 +226,7 @@ def _chat_with_tools(
         ),
         stream=force_stream,
         extra={"tools": tools, "tool_choice": tool_choice},
-        options=_TOOLS_REQUEST_OPTIONS,
+        options=DEFAULT_REQUEST_OPTIONS,
     )
 
     def _create(call_kwargs: Dict[str, Any]) -> Any:
@@ -252,7 +239,12 @@ def _chat_with_tools(
         )
 
     def _create_with_fallback() -> Any:
-        return execute(plan, _create, quirks=(TOKEN_KEY_QUIRK,), label="tools")
+        return execute(
+            plan,
+            _create,
+            quirks=(TOKEN_KEY_QUIRK, TEMPERATURE_QUIRK),
+            label="tools",
+        )
 
     content: str = ""
     tool_calls: List[ToolCallItem] = []
