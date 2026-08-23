@@ -66,6 +66,10 @@ def get_evidence_map_path(reports_dir: str, report_id: str) -> str:
     return os.path.join(get_report_folder(reports_dir, report_id), "evidence_map.json")
 
 
+def get_run_events_path(reports_dir: str, report_id: str) -> str:
+    return os.path.join(get_report_folder(reports_dir, report_id), "run_events.json")
+
+
 def write_json_atomic(path: str, payload: Dict[str, Any]) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     fd, tmp_path = tempfile.mkstemp(prefix='.tmp-report-', suffix='.json', dir=os.path.dirname(path))
@@ -159,6 +163,7 @@ __all__ = [
     "get_report_path",
     "get_report_v3_path",
     "get_report_v3_markdown_path",
+    "get_run_events_path",
     "get_section_path",
     "read_agent_log",
     "read_console_log",

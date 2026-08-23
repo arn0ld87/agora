@@ -113,6 +113,7 @@ def collect_run_degradations(
     interview_disabled_reason: str = "",
     failed_section_indices: Iterable[int] = (),
     forced_final_section_indices: Iterable[int] = (),
+    work_trace_removed_section_indices: Iterable[int] = (),
     metadata_failed_section_indices: Iterable[int] = (),
     contract_validation_errors: Sequence[Any] = (),
 ) -> List[Dict[str, Any]]:
@@ -154,6 +155,19 @@ def collect_run_degradations(
             )
         )
 
+    sanitized = sorted(set(work_trace_removed_section_indices))
+    if sanitized:
+        found.append(
+            _entry(
+                "section_generation",
+                f"{len(sanitized)}_sections_sanitized",
+                (
+                    "Abschnitte, aus denen interne Arbeitsspur-Segmente "
+                    "entfernt wurden: " + ", ".join(str(i) for i in sanitized)
+                ),
+            )
+        )
+
     metadata_failed = sorted(set(metadata_failed_section_indices))
     if metadata_failed:
         found.append(
@@ -183,19 +197,21 @@ def collect_run_degradations(
 class RunEventLog:
     """Was während des Laufs auffiel, aber erst am Ende zählbar wird.
 
-    Beide Ereignisse hier waren im Referenzlauf ``report_cc2ef45da5e9``
+    Alle drei Ereignisse hier waren im Referenzlauf ``report_cc2ef45da5e9``
     vorhanden und nur geloggt: mehrere Abschnitte entstanden erst nach
     erzwungener Endgenerierung, bei anderen scheiterte die Metadaten-
-    Extraktion. Eine Logzeile erreicht den Bericht nicht — der Leser sah einen
-    Abschnitt, dem er nicht ansehen konnte, dass er unter Abbruchbedingungen
-    entstanden ist.
+    Extraktion, und aus wieder anderen waren Arbeitsspur-Segmente still
+    herausgeschnitten worden. Eine Logzeile erreicht den Bericht nicht — der
+    Leser sah einen Abschnitt, dem er nicht ansehen konnte, dass er unter
+    Abbruchbedingungen entstanden ist.
 
-    Bewusst nur zwei Mengen und keine Ereignisliste: gefragt ist am Ende
+    Bewusst nur Mengen und keine Ereignisliste: gefragt ist am Ende
     "welche Abschnitte", nicht "was ist wann passiert". Letzteres steht im Log.
     """
 
     def __init__(self) -> None:
         self.forced_final_sections: set[int] = set()
+        self.work_trace_removed_sections: set[int] = set()
         self.metadata_failed_sections: set[int] = set()
 
 
@@ -224,6 +240,16 @@ def mark_forced_final(agent: Any, section_index: int) -> None:
 def mark_metadata_failure(agent: Any, section_index: int) -> None:
     """Die strukturierte Metadaten-Extraktion lieferte für den Abschnitt nichts."""
     events_for(agent).metadata_failed_sections.add(int(section_index))
+
+
+def mark_work_traces_removed(agent: Any, section_index: int) -> None:
+    """Aus dem Abschnittsinhalt wurden interne Arbeitsspur-Segmente entfernt.
+
+    Der Inhalt blieb nutzbar — deshalb eine Warnung, kein Statusabstieg. Aber
+    der Abschnitt ist nicht das, was das Modell geliefert hat, und der Leser
+    soll das nachvollziehen können.
+    """
+    events_for(agent).work_trace_removed_sections.add(int(section_index))
 
 
 def apply_run_degradation_downgrade(
@@ -321,4 +347,5 @@ __all__ = [
     "events_for",
     "mark_forced_final",
     "mark_metadata_failure",
+    "mark_work_traces_removed",
 ]

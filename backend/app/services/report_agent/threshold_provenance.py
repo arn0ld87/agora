@@ -101,11 +101,23 @@ def canonical_threshold_key(threshold: Threshold) -> tuple[Any, ...]:
     nicht. Gemeinsam normalisiert sind sie trotzdem trennscharf genug: "80 %
     Schulungsquote vor Produktivstart" und "Schulungsquote 80 % (Zielwert)"
     fallen zusammen, "80 % Schulungsquote" und "80 % Verfügbarkeit" nicht.
+
+    Issue #1343: ein Datum ist keine Zahl — sein Schlüssel trägt den
+    ISO-Wert direkt. Zwei Nennungen desselben Datums deduplizieren damit
+    ebenso zuverlässig, aber ein Datum verschmilzt niemals mit einer Menge,
+    nur weil das Label übereinstimmt.
     """
+    if threshold.kind == "date":
+        return (
+            frozenset(_label_tokens(threshold.label)),
+            "date",
+            threshold.value,
+            threshold.purpose,
+        )
     return (
         frozenset(_label_tokens(threshold.label)),
         round(float(threshold.value), 6),
-        normalize_unit(threshold.unit),
+        normalize_unit(threshold.unit or ""),
         threshold.purpose,
     )
 
@@ -201,7 +213,12 @@ def bind_threshold_provenance(
 
     bound: List[Threshold] = []
     for threshold in thresholds:
-        if threshold.evidence_refs:
+        # Issue #1343: Datumsangaben nehmen an der numerischen Fact-Suche
+        # nicht teil — sie vergleicht float-Werte und würde an einem ISO-
+        # String crashen. Ein Datum zu belegen bräuchte Datumserkennung im
+        # Quelltext; bis dahin bleibt es ehrlich heuristic, außer das Modell
+        # nennt selbst Belege.
+        if threshold.evidence_refs or threshold.kind == "date":
             bound.append(threshold)
             continue
 

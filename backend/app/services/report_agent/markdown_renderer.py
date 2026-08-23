@@ -212,9 +212,8 @@ def render_threshold_table(thresholds: list[Threshold]) -> str:
                 threshold.label,
                 # Ganze Zahlen ohne Nachkommastelle: "80 percent" statt
                 # "80.0 percent" — der Wert wird gelesen, nicht gerechnet.
-                (
-                    f"{threshold.value:g} {threshold.unit}"
-                ),
+                # Datumsangaben (#1343) erscheinen als ISO-Wert ohne Einheit.
+                threshold.display_value,
                 _THRESHOLD_PURPOSE_LABELS.get(threshold.purpose, threshold.purpose),
                 _THRESHOLD_ORIGIN_LABELS.get(threshold.origin, threshold.origin),
                 _THRESHOLD_EVIDENCE_STATUS_LABELS.get(
