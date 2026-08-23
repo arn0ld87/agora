@@ -224,6 +224,14 @@ class Config:
     REPORT_AGENT_MAX_TOOL_CALLS = int(os.environ.get('REPORT_AGENT_MAX_TOOL_CALLS', '5'))
     REPORT_AGENT_MAX_REFLECTION_ROUNDS = int(os.environ.get('REPORT_AGENT_MAX_REFLECTION_ROUNDS', '2'))
     REPORT_AGENT_TEMPERATURE = float(os.environ.get('REPORT_AGENT_TEMPERATURE', '0.5'))
+    # Issue #1303 — Panel-Rotation fuer Abschnitts-Interviews: eine Persona
+    # wird pro Report-Lauf maximal so oft interviewt; neue Abschnitte ziehen
+    # bevorzugt noch nicht befragte Personas, Wiederverwendung braucht einen
+    # signifikant anderen Aspekt (siehe services/interview_panel.py).
+    # 0 oder negativ schaltet die Rotation ab.
+    REPORT_INTERVIEW_MAX_PER_PERSONA = int(
+        os.environ.get('REPORT_INTERVIEW_MAX_PER_PERSONA', '2')
+    )
     # Output language for generated reports (plan, sections, chat answers).
     REPORT_LANGUAGE = os.environ.get('REPORT_LANGUAGE', 'German')
 

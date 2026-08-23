@@ -33,6 +33,7 @@ from .graph.graph_dtos import InsightForgeResult as InsightForgeResult  # noqa: 
 from .graph.graph_dtos import PanoramaResult as PanoramaResult  # noqa: PLC0414
 from .graph.graph_dtos import AgentInterview as AgentInterview  # noqa: PLC0414
 from .graph.graph_dtos import InterviewResult as InterviewResult  # noqa: PLC0414
+from .interview_panel import InterviewPanelTracker
 
 logger = get_logger('agora.graph_tools')
 
@@ -111,9 +112,28 @@ class GraphToolsService:
         insight_forge, panorama_search, quick_search, interview_agents.
     """
 
-    def __init__(self, storage: GraphStorage, llm_client: Optional[LLMClient] = None):
+    # Issue #1303 — Run-scoped Panel-Rotation. Klassen-Default None: Instanzen,
+    # die Tests per __new__ ohne __init__ bauen, bleiben funktionsfaehig und
+    # verhalten sich wie bisher (Rotation deaktiviert).
+    panel_tracker: Optional[InterviewPanelTracker] = None
+
+    def __init__(self, storage: GraphStorage, llm_client: Optional[LLMClient] = None,
+                 max_interviews_per_persona: Optional[int] = None):
         self.storage = storage
         self._llm_client = llm_client
+        # Issue #1303 — Panel-Rotation: Eine GraphToolsService-Instanz lebt
+        # genau einen Report-Lauf lang (report_generation.py / runs.py bauen
+        # sie pro Lauf), damit ist der Tracker automatisch run-scoped und
+        # vergisst zwischen zwei Berichten. Wert <= 0 schaltet die Rotation
+        # bewusst ab (Notbremse fuer A/B-Vergleiche).
+        if max_interviews_per_persona is None:
+            from ..config import Config
+
+            max_interviews_per_persona = Config.REPORT_INTERVIEW_MAX_PER_PERSONA
+        if max_interviews_per_persona and max_interviews_per_persona > 0:
+            self.panel_tracker = InterviewPanelTracker(
+                max_interviews_per_persona=max_interviews_per_persona,
+            )
         logger.info("GraphToolsService initialization complete")
 
     @property
@@ -321,10 +341,21 @@ class GraphToolsService:
             profiles=profiles,
             interview_requirement=interview_requirement,
             simulation_requirement=simulation_requirement,
-            max_agents=max_agents
+            max_agents=max_agents,
+            panel_tracker=self.panel_tracker,
         )
 
-        result.selected_agents = selected_agents
+        # Issue #1303 — Panel-Rotation: Die LLM-Auswahl ist ein Vorschlag;
+        # _apply_panel_rotation haertet sie gegen die Diversitaetsregeln
+        # (frisch zuerst, Limit N je Persona, Wiederverwendung nur mit
+        # anderem Aspekt) und dokumentiert Eingriffe im Reasoning.
+        selected_indices, selected_agents, selection_reasoning = self._apply_panel_rotation(
+            profiles=profiles,
+            selected_indices=selected_indices,
+            interview_requirement=interview_requirement,
+            selected_agents=selected_agents,
+            selection_reasoning=selection_reasoning,
+        )
         result.selection_reasoning = selection_reasoning
         logger.info(f"Selected {len(selected_agents)} Agents for interview: {selected_indices}")
 
@@ -507,6 +538,14 @@ class GraphToolsService:
 
         # Step 6: Generate interview summary
         if result.interviews:
+            # Issue #1303: Erst der gelieferte Zaehlbar verbucht sich — ein
+            # gescheitertes Interview hat keine Stimme gebracht und darf das
+            # Diversitaetskonto nicht belasten.
+            self._record_interviewed_panel(
+                profiles=profiles,
+                indices=selected_indices,
+                requirement=interview_requirement,
+            )
             result.summary = self._generate_interview_summary(
                 interviews=result.interviews,
                 interview_requirement=interview_requirement
@@ -580,12 +619,62 @@ class GraphToolsService:
 
         return profiles
 
+    def _apply_panel_rotation(
+        self,
+        profiles: List[Dict[str, Any]],
+        selected_indices: List[int],
+        interview_requirement: str,
+        selected_agents: List[Dict[str, Any]],
+        selection_reasoning: str,
+    ) -> tuple[List[int], List[Dict[str, Any]], str]:
+        """Haertet die LLM-Auswahl gegen die Diversitaetsregeln (#1303).
+
+        Der Tracker ordnet Kandidaten drei Prioritaetsklassen zu (frisch >
+        regelkonforme Wiederverwendung > Ausschoepfungs-Fallback) und ersetzt
+        verstoessende Auswahlpositionen. Eingriffe gehen mit Begruendung ins
+        Reasoning ein und bleiben damit im Berichts-Trace nachvollziehbar.
+        Ohne Tracker (Rotation deaktiviert) bleibt alles unveraendert.
+        """
+        if self.panel_tracker is None:
+            return selected_indices, selected_agents, selection_reasoning
+
+        rotation_note = ""
+        selected_indices, rotation_note = self.panel_tracker.apply_selection(
+            profiles=profiles,
+            selected_indices=selected_indices,
+            requirement=interview_requirement,
+        )
+        selected_agents = [profiles[i] for i in selected_indices]
+        if rotation_note:
+            selection_reasoning = f"{selection_reasoning} [{rotation_note}]"
+        return selected_indices, selected_agents, selection_reasoning
+
+    def _record_interviewed_panel(
+        self,
+        profiles: List[Dict[str, Any]],
+        indices: List[int],
+        requirement: str,
+    ) -> None:
+        """Verbucht tatsaechlich gelieferte Interviews im Panel-Tracker (#1303).
+
+        Nur der Zaehlbar zaehlt: ein gescheitertes Interview hat keine Stimme
+        gebracht und darf das Diversitaetskonto nicht belasten.
+        """
+        if self.panel_tracker is None:
+            return
+        self.panel_tracker.record(
+            profiles=profiles,
+            indices=indices,
+            requirement=requirement,
+        )
+
     def _select_agents_for_interview(
         self,
         profiles: List[Dict[str, Any]],
         interview_requirement: str,
         simulation_requirement: str,
-        max_agents: int
+        max_agents: int,
+        panel_tracker: Optional[InterviewPanelTracker] = None
     ) -> tuple:
         """Use LLM to select Agents for interview"""
 
@@ -598,7 +687,24 @@ class GraphToolsService:
                 "bio": profile.get("bio", "")[:200],
                 "interested_topics": profile.get("interested_topics", [])
             }
+            # Issue #1303: Nutzungszahlen sichtbar machen, damit das Modell
+            # die Rotation beim Ranking mitdenkt. Der harte Filter im
+            # InterviewPanelTracker bleibt die Garantie — der Hinweis
+            # verbessert nur die Relevanzordnung innerhalb der Klassen.
+            if panel_tracker is not None:
+                summary["times_interviewed"] = panel_tracker.usage(
+                    panel_tracker.persona_key(profile)
+                )
             agent_summaries.append(summary)
+
+        rotation_rule = (
+            "\n5. Diversify across report sections: agents with "
+            "\"times_interviewed\": 0 have NOT yet been interviewed in this "
+            "report run and must be strongly preferred. Reuse an already "
+            "interviewed agent only for a clearly different aspect."
+            if panel_tracker is not None
+            else ""
+        )
 
         system_prompt = """You are a professional interview planning expert. Your task is to select the most suitable Agents for interview from the simulated Agent list based on the interview requirements.
 
@@ -606,7 +712,7 @@ Selection Criteria:
 1. Agent's identity/profession is relevant to the interview topic
 2. Agent may hold unique or valuable perspectives
 3. Select diverse perspectives (e.g., supporters, opposers, neutral, experts, etc.)
-4. Prioritize roles directly related to the event
+4. Prioritize roles directly related to the event""" + rotation_rule + """
 
 Return JSON format:
 {
