@@ -198,7 +198,18 @@ def _base_report_manager_mock(mock_rm: MagicMock, *, section_text: str) -> None:
     """Setzt die für generate_report() nötigen ReportManager-Stubs."""
     mock_rm.get_report.return_value = None
     mock_rm.get_generated_sections.return_value = []
-    mock_rm.assemble_full_report.return_value = "# Test-Report\n\nInhalt."
+    # Issue #1302: der Requirement-Checker prüft den fertigen Berichtstext
+    # gegen die Default-Checkliste. Der Stub enthält alle geforderten
+    # Aspekte, damit diese Tests ausschließlich das Contract-Gating (#1299)
+    # isolieren und nicht am Vollständigkeits-Gate hängen.
+    mock_rm.assemble_full_report.return_value = (
+        "# Test-Report\n\nInhalt.\n\n"
+        "Widersprüche zwischen Stakeholdern sind benannt. Als "
+        "Frühwarnindikator dient die Rücklaufquote. Die Stop-Bedingung "
+        "greift bei sinkender Akzeptanz; die Expand-Bedingung sieht eine "
+        "stufenweise Ausweitung vor. Ein Positionswechsel ist möglich. "
+        "Betriebsrat und Jugendrat bilden eine Koalition."
+    )
     mock_rm._ensure_report_folder.return_value = None
     mock_rm.save_report.return_value = None
     mock_rm.save_outline.return_value = None
