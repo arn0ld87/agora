@@ -458,6 +458,52 @@ class FileParser:
         return merged_text, DocumentManifest(documents=documents)
 
 
+#: Issue #1347: Rückblick für den Zeilen-Snap des Folgechunk-Starts.
+#: Bewusst fest und bescheiden: Die Ausrichtung soll benachbarte Zeilen
+#: einer Aussage (Bedingung + Folgepunkt) im Folgechunk zusammenhalten.
+#: Ein mit dem Overlap skalierender Rückblick würde bei großem ``overlap``
+#: spürbar mehr, dafür kürzere Chunks erzeugen (mehr Extraktionsaufrufe beim
+#: Graph-Build), ohne dort ein zusätzliches Problem zu lösen — große Fenster
+#: absorbieren Listenblöcke ohnehin ganz.
+_LINE_SNAP_MIN_LOOKBACK = 100
+
+
+def _snap_to_line_start(
+    text: str,
+    pos: int,
+    *,
+    lookback_limit: int,
+    lower_bound: int,
+) -> Optional[int]:
+    """Schiebt ``pos`` auf den Anfang seiner Zeile — innerhalb ``lookback_limit``.
+
+    Issue #1347: Der Wort-Snap allein lässt die Fenstergrenze mitten durch
+    mehrzeilige Aussagen (Pfeil-Listen, Aufzählungen) laufen; der Folgechunk
+    beginnt dann beim letzten Fragment und verliert die tragende Bedingung an
+    den Vorchunk. Die Ausrichtung auf den Zeilenanfang hält solche Einheiten
+    im Folgechunk zusammen.
+
+    Bewusst **rückwärts** und **begrenzt**: gesucht wird nur in
+    ``[pos - lookback_limit, pos)``. Liegt dort keine Zeilengrenze (typischer
+    Fließtextabsatz als eine lange Zeile) oder läge ihr Anfang vor
+    ``lower_bound``, wird ``None`` zurückgegeben und der Aufrufer fällt auf
+    :func:`_snap_to_word_start` zurück. Der Rückwärtsschritt ist verlustfrei
+    (der Start wandert nur rückwärts, es wird nichts übersprungen); das
+    Ergebnis ist garantiert ``>= lower_bound`` und strikt progressiv für den
+    Aufrufer, solange dieser ``lower_bound = start + 1`` setzt.
+
+    Returns:
+        Zeilenanfangsindex (Position hinter dem ``\\n``) oder ``None``.
+    """
+    search_from = max(pos - lookback_limit, lower_bound)
+    if search_from >= pos:
+        return None
+    newline_pos = text.rfind("\n", search_from, pos)
+    if newline_pos == -1:
+        return None
+    return newline_pos + 1
+
+
 def _snap_to_word_start(text: str, pos: int, *, lower_bound: int, upper_bound: int) -> int:
     """Schiebt ``pos`` auf einen Wortanfang, ohne Textinhalt zu überspringen.
 
@@ -532,6 +578,17 @@ def _chunk_windows(text: str, chunk_size: int, overlap: int) -> List[Tuple[int, 
     das Stripping selbst bleibt Sache des jeweiligen Aufrufers. Gilt nur für
     den Fall ``len(text) > chunk_size``; den Kurztext-Sonderfall behandelt
     jeder Aufrufer selbst.
+
+    Issue #1347: Der Folgechunk-Start wird vor dem Wort-Snap an den Anfang
+    seiner Zeile ausgerichtet, wenn diese Zeilengrenze innerhalb eines
+    festen, begrenzten Rückblicks (``_LINE_SNAP_MIN_LOOKBACK``) liegt. Sonst
+    zerschneidet die Fenstergrenze mehrzeilige Aussagen (Pfeil-Listen,
+    Aufzählungen): Der Folgechunk enthält dann nur noch das letzte Fragment —
+    die tragende Bedingung blieb im Vorchunk und die Faktenextraktion des
+    Fragments erzeugt Evidence-False-Negatives. Der Zeilen-Snap ist
+    verlustfrei (der Start wandert nur rückwärts) und auf die Rückblickweite
+    begrenzt, damit Fließtextabsätze als eine lange Zeile nicht die
+    Chunkgröße sprengen.
     """
     windows: List[Tuple[int, int]] = []
     start = 0
@@ -569,12 +626,24 @@ def _chunk_windows(text: str, chunk_size: int, overlap: int) -> List[Tuple[int, 
         # fast identischer Chunks statt einer sinnvollen Aufteilung.
         min_progress = max(1, (end - start) // 2)
         next_start = max(end - overlap, start + min_progress)
-        start = _snap_to_word_start(
+
+        # Issue #1347: erst Zeilenalignment versuchen; scheitert es (keine
+        # Zeilengrenze im Rückblick), greift der bisherige Wort-Snap.
+        line_start = _snap_to_line_start(
             text,
             next_start,
+            lookback_limit=_LINE_SNAP_MIN_LOOKBACK,
             lower_bound=start + 1,
-            upper_bound=end,
         )
+        if line_start is not None:
+            start = line_start
+        else:
+            start = _snap_to_word_start(
+                text,
+                next_start,
+                lower_bound=start + 1,
+                upper_bound=end,
+            )
 
     return windows
 
@@ -593,9 +662,13 @@ def split_text_into_chunks(
     ``end - overlap``-Position und wird von dort rückwärts auf einen
     Wortanfang gesnappt, damit kein Chunk mitten in einem Wort beginnt
     (verhindert Defekt-Truncation in Embedding-/GraphRAG-Pipelines, in denen
-    solche Fragmente unsinnige Embeddings produzieren). Der Rückwärts-Snap
-    ist verlustfrei — siehe :func:`_snap_to_word_start`. Einzige Ausnahme:
-    ein Wort, das länger als ``chunk_size`` ist, muss zwangsläufig
+    solche Fragmente unsinnige Embeddings produzieren). Liegt eine
+    Zeilengrenze im begrenzten Rückblick (Issue #1347), startet der
+    Folgechunk stattdessen am Anfang seiner Zeile — mehrzeilige Aussagen
+    (Pfeil-Listen, Aufzählungen) bleiben so im Folgechunk zusammen, statt als
+    kontextloses Fragment zu enden. Beide Snaps sind verlustfrei — siehe
+    :func:`_snap_to_word_start` und :func:`_snap_to_line_start`. Einzige
+    Ausnahme: ein Wort, das länger als ``chunk_size`` ist, muss zwangsläufig
     aufgetrennt werden.
 
     Args:
