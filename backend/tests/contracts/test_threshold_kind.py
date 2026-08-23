@@ -26,6 +26,8 @@ generischen Number+Unit-Coercion, nicht danach.
 
 from __future__ import annotations
 
+import copy
+
 import pytest
 from pydantic import ValidationError
 
@@ -163,6 +165,125 @@ class TestDateStructure:
                     "origin": "document_requirement",
                 }
             )
+
+
+class TestContractPathRejectsImpossibleDates:
+    """Review PR #1379, Blocker 1: Am Contract-Pfad (``Threshold.model_validate``
+    mit explizitem ``kind='date'``) muss dieselbe Kalenderprüfung greifen wie im
+    Parser — das YYYY-MM-DD-Muster allein lässt „2026-02-30“ durch. Die
+    Jahresgrenzen folgen der Parser-Plausibilität (1900–2100): Projektplanung
+    spielt sich in der Gegenwart ab, „1899-12-31“ und „2101-01-01“ sind
+    Tippfehler, keine Termine."""
+
+    @pytest.mark.parametrize(
+        "iso",
+        ["2026-02-30", "2026-13-01", "2026-02-29"],
+    )
+    def test_unmoegliches_kalenderdatum_wird_am_contract_abgelehnt(
+        self, iso: str
+    ) -> None:
+        with pytest.raises(ValidationError, match="Kalenderdatum"):
+            Threshold.model_validate(
+                {
+                    "id": "production_start",
+                    "label": "Produktivstart",
+                    "value": iso,
+                    "kind": "date",
+                    "purpose": "target",
+                    "origin": "document_requirement",
+                }
+            )
+
+    @pytest.mark.parametrize("iso", ["1899-12-31", "2101-01-01"])
+    def test_jahreswert_ausserhalb_der_grenzen_wird_abgelehnt(self, iso: str) -> None:
+        with pytest.raises(ValidationError, match="Kalenderdatum"):
+            Threshold.model_validate(
+                {
+                    "id": "production_start",
+                    "label": "Produktivstart",
+                    "value": iso,
+                    "kind": "date",
+                    "purpose": "target",
+                    "origin": "document_requirement",
+                }
+            )
+
+    def test_echter_schalttag_bleibt_gueltig(self) -> None:
+        """Die Kalenderprüfung darf nicht über das Ziel hinausschießen."""
+        threshold = Threshold.model_validate(
+            {
+                "id": "production_start",
+                "label": "Produktivstart",
+                "value": "2028-02-29",
+                "kind": "date",
+                "purpose": "target",
+                "origin": "document_requirement",
+            }
+        )
+
+        assert threshold.value == "2028-02-29"
+
+
+class TestNumericStringCoercion:
+    """Review PR #1379, Blocker 2: Vor #1343 war ``value: float`` — Pydantic
+    konvertierte numerische Strings wie ``"90"`` zu ``90.0``. Mit
+    ``float | str`` wählt Smart Union für den exakten String den Textzweig;
+    ohne Coercion würde ein älterer bzw. providerseitig leicht abweichender
+    Payload plötzlich abgelehnt. Die Coercion stellt das frühere Verhalten
+    her — echte Datumsstrings bleiben Strings."""
+
+    @pytest.mark.parametrize(
+        ("rohtext", "erwartet"),
+        [("90", 90.0), ("-3", -3.0), ("12.5", 12.5), ("90,5", 90.5)],
+    )
+    def test_numerischer_string_wird_zu_float_wie_vor_1343(
+        self, rohtext: str, erwartet: float
+    ) -> None:
+        threshold = _threshold(value=rohtext)
+
+        assert isinstance(threshold.value, float)
+        assert threshold.value == erwartet
+        assert threshold.unit == "percent"
+
+    def test_datumsstring_bliebt_string_und_wird_zu_date(self) -> None:
+        threshold = Threshold.model_validate(
+            {
+                "id": "production_start",
+                "label": "Produktivstart",
+                "value": "2026-10-15",
+                "purpose": "target",
+                "origin": "document_requirement",
+            }
+        )
+
+        assert isinstance(threshold.value, str)
+        assert threshold.value == "2026-10-15"
+        assert threshold.kind == "date"
+
+    def test_nicht_numerischer_text_bliebt_abgelehnt(self) -> None:
+        with pytest.raises(ValidationError):
+            _threshold(value="42 Prozent")
+
+
+class TestBeforeValidatorWithoutSideEffects:
+    """Review PR #1379, Qualität A: Validierung darf das Eingabe-Dict nicht
+    verändern — der Aufrufer behält seine Daten, auch wenn der Vertrag sie
+    intern normalisiert."""
+
+    def test_input_dict_bleibt_unveraendert(self) -> None:
+        payload = {
+            "id": "production_start",
+            "label": "Produktivstart",
+            "value": "15. Oktober 2026",
+            "unit": "days",
+            "purpose": "target",
+            "origin": "document_requirement",
+        }
+        snapshot = copy.deepcopy(payload)
+
+        Threshold.model_validate(payload)
+
+        assert payload == snapshot
 
 
 class TestQuantityStaysNumeric:

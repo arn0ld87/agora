@@ -300,6 +300,86 @@ describe("ReportV3Schema (Zod-Spiegel)", () => {
     ).toBe(false);
   });
 
+  // Review PR #1379, Blocker 1: Das Muster allein lässt unmögliche Daten
+  // durch — der Spiegel liest Jahr/Monat/Tag, erzeugt über UTC und
+  // vergleicht alle drei Komponenten zurück; dazu dieselbe
+  // Plausibilitätsgrenze (1900–2100) wie der Backend-Parser.
+  it("weist unmögliche Kalenderdaten ab", () => {
+    for (const value of ["2026-02-30", "2026-13-01", "2026-02-29"]) {
+      expect(
+        ThresholdSchema.safeParse({
+          id: "production_start",
+          label: "Produktivstart",
+          kind: "date",
+          value,
+          purpose: "target",
+          origin: "document_requirement",
+        }).success,
+      ).toBe(false);
+    }
+  });
+
+  it("akzeptiert einen echten Schalttag als Kalenderdatum", () => {
+    expect(
+      ThresholdSchema.safeParse({
+        id: "production_start",
+        label: "Produktivstart",
+        kind: "date",
+        value: "2028-02-29",
+        purpose: "target",
+        origin: "document_requirement",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("weist Jahreswerte außerhalb der Plausibilitätsgrenze ab", () => {
+    for (const value of ["1899-12-31", "2101-01-01"]) {
+      expect(
+        ThresholdSchema.safeParse({
+          id: "production_start",
+          label: "Produktivstart",
+          kind: "date",
+          value,
+          purpose: "target",
+          origin: "document_requirement",
+        }).success,
+      ).toBe(false);
+    }
+  });
+
+  // Review PR #1379, Blocker 2: numerische Strings werden wie vor #1343 zu
+  // Zahlen umgewandelt — echte Datumsstrings bleiben Strings.
+  it("wandelt numerische Strings wie das Backend in Zahlen um", () => {
+    const parsed = ThresholdSchema.safeParse({
+      id: "thr_01",
+      label: "Traffic-Baseline",
+      value: "90",
+      unit: "percent",
+      purpose: "baseline",
+      origin: "document_requirement",
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.value).toBe(90);
+      expect(typeof parsed.data.value).toBe("number");
+    }
+  });
+
+  it("lässt Datumsstrings als Strings", () => {
+    const parsed = ThresholdSchema.safeParse({
+      id: "production_start",
+      label: "Produktivstart",
+      kind: "date",
+      value: "2026-10-15",
+      purpose: "target",
+      origin: "document_requirement",
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.value).toBe("2026-10-15");
+    }
+  });
+
   it("rejects Claim with invalid confidence value", () => {
     const badClaim = {
       id: "c1",

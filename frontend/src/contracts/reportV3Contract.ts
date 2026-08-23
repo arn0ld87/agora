@@ -242,12 +242,51 @@ const THRESHOLD_MONTH_NAMES = new Set([
   "december",
 ]);
 
+// Issue #1343-Follow-up (Review PR #1379): Vor #1343 war `value` ein reines
+// Zahlenfeld — numerische Strings wie "90" wurden zu 90.0 konvertiert. Der
+// String-Zweig der Union übernimmt exakte Strings unverändert und die
+// Shape-Prüfung würde sie verwerfen; die Coercion stellt das frühere
+// Verhalten her (Spiegel des Before-Validators im Backend). Echte
+// Datumsstrings und Fließtext bleiben Strings.
+const THRESHOLD_NUMERIC_STRING_RE = /^-?\d+(?:[.,]\d+)?$/;
+
+function coerceThresholdValue(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const text = value.trim();
+  if (!THRESHOLD_NUMERIC_STRING_RE.test(text)) return value;
+  return Number(text.replace(",", "."));
+}
+
+// Review PR #1379, Blocker 1: Das YYYY-MM-DD-Muster allein lässt „2026-02-30“
+// durch. Jahr/Monat/Tag werden ausgelesen, über UTC erzeugt und alle drei
+// Komponenten zurückverglichen; dazu dieselbe Plausibilitätsgrenze wie im
+// Backend-Parser (_MIN_YEAR/_MAX_YEAR): Projektplanung spielt sich in der
+// Gegenwart ab.
+const THRESHOLD_ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const THRESHOLD_MIN_YEAR = 1900;
+const THRESHOLD_MAX_YEAR = 2100;
+
+function isValidCalendarDate(iso: string): boolean {
+  const match = iso.match(THRESHOLD_ISO_DATE_RE);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (year < THRESHOLD_MIN_YEAR || year > THRESHOLD_MAX_YEAR) return false;
+  const utc = new Date(Date.UTC(year, month - 1, day));
+  return (
+    utc.getUTCFullYear() === year &&
+    utc.getUTCMonth() === month - 1 &&
+    utc.getUTCDate() === day
+  );
+}
+
 export const ThresholdSchema = z
   .object({
     id: z.string().min(1),
     label: z.string().min(1),
     kind: z.enum(["quantity", "date"]).nullable().default(null),
-    value: z.union([z.number(), z.string()]),
+    value: z.preprocess(coerceThresholdValue, z.union([z.number(), z.string()])),
     unit: z.string().min(1).nullable().optional(),
     purpose: z.enum(["alert", "target", "limit", "baseline"]),
     origin: z.enum([
@@ -275,15 +314,22 @@ export const ThresholdSchema = z
     }
 
     // Spiegelt Threshold.kind_matches_value_shape (#1343): ein Datum trägt
-    // keine Einheit und nur einen ISO-Wert; eine Menge ist eine echte Zahl
-    // mit Einheit — ein Monatsname ist keine Einheit.
+    // keine Einheit und nur einen ISO-Wert, der ein echtes Kalenderdatum
+    // ergibt; eine Menge ist eine echte Zahl mit Einheit — ein Monatsname
+    // ist keine Einheit.
     if (value.kind === "date") {
-      if (typeof value.value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value.value)) {
+      if (typeof value.value !== "string" || !THRESHOLD_ISO_DATE_RE.test(value.value)) {
         ctx.addIssue({
           code: "custom",
           path: ["value"],
           message:
             "kind='date' verlangt einen ISO-Datumswert ('YYYY-MM-DD').",
+        });
+      } else if (!isValidCalendarDate(value.value)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["value"],
+          message: `'${value.value}' ist kein gültiges Kalenderdatum (ISO 'YYYY-MM-DD', Jahr 1900–2100).`,
         });
       }
       if (value.unit != null) {

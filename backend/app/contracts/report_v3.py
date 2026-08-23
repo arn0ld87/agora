@@ -328,6 +328,29 @@ def parse_date_value(raw: str) -> str | None:
     return f"{year:04d}-{month:02d}-{day:02d}"
 
 
+#: Rein numerische Strings — auch im deutschsprachigen Kommaformat. Sie sind
+#: keine Daten und kein Text, sondern genau das, was ``value`` als ``float``
+#: vor #1343 war.
+_NUMERIC_STRING_RE = re.compile(r"^-?\d+(?:[.,]\d+)?$")
+
+
+def _numeric_string_to_float(raw: str) -> float | None:
+    """Wandelt rein numerische Strings zu float, sonst None (Review PR #1379).
+
+    Vor #1343 war ``value`` ein reines ``float``-Feld: Pydantic konvertierte
+    einen numerischen String wie ``"90"`` zu ``90.0``. Mit der #1343-Erweiterung
+    auf ``float | str`` wählt Smart Union für den exakten String den Textzweig,
+    und die Shape-Prüfung würde denselben Payload verwerfen, den frühere
+    Versionen akzeptierten. Diese Coercion stellt das frühere Verhalten her;
+    alles, was nicht rein numerisch ist (echte Datumsstrings, Fließtext),
+    bleibt unverändert stehen.
+    """
+    text = raw.strip()
+    if not _NUMERIC_STRING_RE.match(text):
+        return None
+    return float(text.replace(",", "."))
+
+
 class Threshold(BaseModel):
     """Operative Zahl oder Datum mit ausgewiesener Herkunft (Issue #1160 E).
 
@@ -432,9 +455,16 @@ class Threshold(BaseModel):
         ``kind='date'`` festgelegt — auch gegen ein fälschlich gesetztes
         ``kind='quantity'``. Ein Datum kann so strukturell nie als Menge mit
         Monatsnamen als Einheit landen.
+
+        Review PR #1379: Trifft der String kein Datum, aber das rein
+        numerische Muster (``"90"``, ``"90,5"``), wird er zu float umgewandelt
+        — so akzeptierte es ``value: float`` vor #1343 ebenfalls. Und die
+        Normalisierung arbeitet auf einer flachen Kopie: Validierung ist
+        beobachtungsfrei, das Eingabe-Dict bleibt unangetastet.
         """
         if not isinstance(data, dict):
             return data
+        data = dict(data)
         raw_value = data.get("value")
         if isinstance(raw_value, str):
             iso = parse_date_value(raw_value)
@@ -449,6 +479,10 @@ class Threshold(BaseModel):
                     # mitbringt, widerspricht sich — das bleibt ein Fehler.
                     data["kind"] = "date"
                     data.pop("unit", None)
+            else:
+                coerced = _numeric_string_to_float(raw_value)
+                if coerced is not None:
+                    data["value"] = coerced
         return data
 
     @model_validator(mode="after")
@@ -481,6 +515,17 @@ class Threshold(BaseModel):
             if not isinstance(self.value, str) or not _DATE_ISO_RE.match(self.value):
                 raise ValueError(
                     "kind='date' verlangt einen ISO-Datumswert ('YYYY-MM-DD')."
+                )
+            # Review PR #1379: Das Muster allein lässt „2026-02-30“ durch.
+            # Der Vergleich gegen den Parser übernimmt dessen komplette
+            # Kalender- und Jahresprüfung (1900–2100) — eine zweite,
+            # abweichende Datumslogik an dieser Stelle würde garantiert
+            # driften. Da der Wert ISO-geformt ist, gilt Gleichheit genau
+            # dann, wenn Parser und Contract dasselbe gültige Datum sehen.
+            if parse_date_value(self.value) != self.value:
+                raise ValueError(
+                    f"'{self.value}' ist kein gültiges Kalenderdatum "
+                    f"(ISO 'YYYY-MM-DD', Jahr {_MIN_YEAR}–{_MAX_YEAR})."
                 )
             if self.unit is not None:
                 raise ValueError(
