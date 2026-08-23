@@ -41,6 +41,7 @@ from .run_degradation import (
     events_for,
     mark_forced_final,
     mark_metadata_failure,
+    mark_work_traces_removed,
 )
 from .tool_circuit_breaker import breaker_for
 
@@ -292,9 +293,12 @@ def _build_red_team_excerpt(report_v3: ReportV3) -> str:
     # genau dort weg, wo sie am nötigsten sind.
     lines: List[str] = []
     for threshold in report_v3.thresholds or []:
+        # display_value statt f"{value:g} {unit}" (#1343): ein Datum trägt
+        # keine Einheit, und ':g' an einem ISO-String würde den Entwurf
+        # mitten in der Review-Vorbereitung sprengen.
         lines.append(
             f"- [{threshold.id}] [schwelle: {threshold.purpose}] {threshold.label}: "
-            f"{threshold.value:g} {threshold.unit} "
+            f"{threshold.display_value} "
             f"(Herkunft: {threshold.origin}, Beleglage: {threshold.evidence_status})"
         )
     for claim in report_v3.claims or []:
@@ -491,7 +495,13 @@ SECTION_UNUSABLE_OUTPUT_BODY = (
 )
 
 
-def _finalize_content(response: str, *, section_title: str, section_index: int) -> str:
+def _finalize_content(
+    response: str,
+    *,
+    section_title: str,
+    section_index: int,
+    agent: Any = None,
+) -> str:
     """Wendet den Final-Content-Contract auf einen Modelloutput an.
 
     Ersetzt das frühere ``response.strip()``: interne Arbeitsschritte werden
@@ -499,6 +509,13 @@ def _finalize_content(response: str, *, section_title: str, section_index: int) 
     Funktion einen als solchen erkennbaren Fehlertext statt Modelloutput.
     Dieser Text wird von :func:`is_fallback_content` erkannt und weder zu
     Claims noch zu Evidence verarbeitet.
+
+    Mit ``agent`` trägt eine Bereinigung mit erhaltenem Inhalt das Ereignis
+    in ``RunEventLog.work_trace_removed_sections`` ein — Issue #1321: vorher
+    stand sie nur im Server-Log, und der Bericht wies den Abschnitt aus wie
+    jeden unangetasteten. Ohne ``agent`` bleibt es beim Log; der
+    FinalContentRejected-Fall wird hier bewusst nicht markiert, er ist über
+    ``generation_failed`` bzw. ``failed_section_indices`` bereits sichtbar.
     """
     try:
         sanitized = sanitize_final_content(response)
@@ -520,6 +537,8 @@ def _finalize_content(response: str, *, section_title: str, section_index: int) 
             section_title,
             len(sanitized.removed_segments),
         )
+        if agent is not None:
+            mark_work_traces_removed(agent, section_index)
     return sanitized.content
 
 
@@ -783,6 +802,7 @@ def generate_section_react(
                 response,
                 section_title=section.title,
                 section_index=section_index,
+                agent=agent,
             )
             logger.info(
                 "Section %s generation completed (tool calls: %s)",
@@ -895,6 +915,7 @@ def generate_section_react(
             response,
             section_title=section.title,
             section_index=section_index,
+            agent=agent,
         )
         logger.info(
             "Section %s: no 'Final Answer:' prefix detected, using the sanitized LLM "
@@ -940,6 +961,7 @@ def generate_section_react(
             response,
             section_title=section.title,
             section_index=section_index,
+            agent=agent,
         )
     if agent.report_logger:
         agent.report_logger.log_section_content(
@@ -1161,6 +1183,26 @@ def _is_cancel_requested(run_id: Optional[str]) -> bool:
         return False
 
 
+def _restore_work_trace_markers(agent: Any, report_id: str) -> None:
+    """Issue #1321 (Review-Finding PR #1378): Resume baut einen neuen
+    Agenten; bereits persistierte Sections laufen nicht erneut durch
+    _finalize_content, ihr Sanitization-Marker wäre also endgültig
+    verloren. Der Zustand wird pro Lauf persistiert und hier — vor der
+    ersten Cancel-Grenze — wiederhergestellt."""
+    for index in sorted(ReportManager.load_work_trace_removed_sections(report_id)):
+        mark_work_traces_removed(agent, index)
+
+
+def _persist_work_trace_markers(agent: Any, report_id: str) -> None:
+    """Issue #1321 (Review-Finding PR #1378): der Marker muss den Lauf
+    überleben — Crash, Budgetabbruch und kooperativer Cancel dürfen ihn
+    nicht mit dem Prozess vergessen. Deshalb pro Section fortschreiben,
+    nicht erst am Laufende."""
+    markers = events_for(agent).work_trace_removed_sections
+    if markers:
+        ReportManager.save_work_trace_removed_sections(report_id, markers)
+
+
 def _build_partial_report(
     report: "Report",
     *,
@@ -1193,6 +1235,21 @@ def _build_partial_report(
         report.status, quote_validation_failed_section_indices or []
     )
     report.completed_at = cancelled_at
+
+    # Issue #1321 (Review-Finding PR #1378): der Teil-Report erreichte die
+    # einzige Degradations-Aggregation am normalen Laufende nie — eine vor
+    # dem Cancel still bereinigte Section war damit auch im Partial Report
+    # von einer unangetasteten nicht zu unterscheiden. Im flüchtigen
+    # RunEventLog ist die Menge zu diesem Zeitpunkt vollständig; hier wird
+    # die Summe gezogen, statt sie beim Abbruch zu verlieren.
+    report.run_degradations = collect_run_degradations(
+        work_trace_removed_section_indices=sorted(
+            events_for(agent).work_trace_removed_sections
+        ),
+    )
+    report.status = apply_run_degradation_downgrade(
+        report.status, report.run_degradations
+    )
 
     ReportManager.save_report(report)
 
@@ -1293,6 +1350,8 @@ def generate_report(
             agent.evidence_map = EvidenceMapModel.model_validate(
                 agent.evidence_map
             ).model_dump(mode="json")
+
+        _restore_work_trace_markers(agent, report_id)
 
         agent.report_logger = agent.ReportLogger(report_id)
         agent.report_logger.log_start(
@@ -1442,6 +1501,7 @@ def generate_report(
                 quote_validation_failed_section_indices.append(section_num)
             generated_sections.append(result.markdown)
             completed_section_titles.append(result.title)
+            _persist_work_trace_markers(agent, report_id)
             if agent.report_logger:
                 agent.report_logger.log_section_full_complete(
                     section_title=result.title,
@@ -1496,6 +1556,9 @@ def generate_report(
             interview_disabled_reason=breaker_for(agent).reason_for("interview_agents"),
             failed_section_indices=failed_section_indices,
             forced_final_section_indices=events_for(agent).forced_final_sections,
+            work_trace_removed_section_indices=events_for(
+                agent
+            ).work_trace_removed_sections,
             metadata_failed_section_indices=events_for(agent).metadata_failed_sections,
         )
         report.status = apply_run_degradation_downgrade(
