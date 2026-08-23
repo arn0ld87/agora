@@ -215,6 +215,91 @@ describe("ReportV3Schema (Zod-Spiegel)", () => {
     ).toBe(false);
   });
 
+  // Issue #1343: kind trennt operative Mengen von Datumsangaben. Aus
+  // „15. Oktober 2026" entstand sonst value=15.0 / unit="October".
+  it("akzeptiert ein Bestandsartefakt ohne kind als numerische Menge", () => {
+    const parsed = ThresholdSchema.safeParse({
+      id: "thr_01",
+      label: "Traffic-Baseline",
+      value: 90,
+      unit: "percent",
+      purpose: "baseline",
+      origin: "document_requirement",
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      // „Nicht erfasst" bleibt null — kein stillschweigendes quantity.
+      expect(parsed.data.kind).toBe(null);
+    }
+  });
+
+  it("akzeptiert eine Datumsangabe nur mit ISO-Wert und ohne Einheit", () => {
+    const parsed = ThresholdSchema.safeParse({
+      id: "production_start",
+      label: "Produktivstart",
+      kind: "date",
+      value: "2026-10-15",
+      purpose: "target",
+      origin: "document_requirement",
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("weist kind=date mit Nicht-ISO-Wert ab", () => {
+    expect(
+      ThresholdSchema.safeParse({
+        id: "production_start",
+        label: "Produktivstart",
+        kind: "date",
+        value: "15. Oktober 2026",
+        purpose: "target",
+        origin: "document_requirement",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("weist kind=date mit Einheit ab — ein Datum ist keine Menge", () => {
+    expect(
+      ThresholdSchema.safeParse({
+        id: "production_start",
+        label: "Produktivstart",
+        kind: "date",
+        value: "2026-10-15",
+        unit: "days",
+        purpose: "target",
+        origin: "document_requirement",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("weist einen Monatsnamen als Einheit ab (#1343)", () => {
+    for (const unit of ["October", "Oktober"]) {
+      expect(
+        ThresholdSchema.safeParse({
+          id: "planungsmeilenstein_15_oktober",
+          label: "Planungsmeilenstein",
+          value: 15,
+          unit,
+          purpose: "target",
+          origin: "simulation_proposal",
+        }).success,
+      ).toBe(false);
+    }
+  });
+
+  it("weist einen Textwert ohne Datumform bei numerischem Threshold ab", () => {
+    expect(
+      ThresholdSchema.safeParse({
+        id: "thr_01",
+        label: "Traffic-Baseline",
+        value: "42 Prozent",
+        unit: "percent",
+        purpose: "baseline",
+        origin: "document_requirement",
+      }).success,
+    ).toBe(false);
+  });
+
   it("rejects Claim with invalid confidence value", () => {
     const badClaim = {
       id: "c1",
@@ -276,6 +361,7 @@ describe("ReportV3Schema (Zod-Spiegel)", () => {
     expect(shapeKeys(PersonaV3Schema)).toEqual(propertyKeys(reportV3Json.$defs.Persona));
     expect(shapeKeys(ClaimSchema)).toEqual(propertyKeys(reportV3Json.$defs.Claim));
     expect(shapeKeys(HypothesisSchema)).toEqual(propertyKeys(reportV3Json.$defs.Hypothesis));
+    expect(shapeKeys(ThresholdSchema)).toEqual(propertyKeys(reportV3Json.$defs.Threshold));
   });
 
   it("report_mode defaults to 'balanced' when absent", () => {

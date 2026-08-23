@@ -205,16 +205,50 @@ export const ContentIdeaSchema = z
   .strict();
 export type ContentIdea = z.infer<typeof ContentIdeaSchema>;
 
-// === Threshold (Issue #1160 E) ===
+// === Threshold (Issue #1160 E, erweitert um #1343) ===
 // Operative Zahlen tragen ihre Herkunft mit. `origin` ist eine eigene
 // Dimension neben EvidenceSourceKind — die Quellengattung beschreibt, woher
 // ein Beleg kommt, `origin` beschreibt, wie eine Zahl zustande kam.
+//
+// Issue #1343: `kind` trennt operative Mengen ("quantity") von Datumsangaben
+// ("date"). Aus „15. Oktober 2026" entstand sonst der sinnlose Eintrag
+// value=15.0 / unit="October". Das Feld ist optional/nullable, weil
+// Bestandsartefakte es nicht tragen — „nicht erfasst" ist nicht dasselbe wie
+// eine erfasste quantity (Muster: Claim.confidence_scope).
+// Issue #1343: Ein Monatsname ist keine Maßeinheit. Steht er als unit in einem
+// numerischen Threshold, war der Ursprung eine Datumsangabe, deren Tag und Monat
+// die Extraktion auseinandergerissen hat — ohne Jahr nicht rekonstruierbar.
+const THRESHOLD_MONTH_NAMES = new Set([
+  "januar",
+  "january",
+  "februar",
+  "february",
+  "märz",
+  "maerz",
+  "march",
+  "april",
+  "mai",
+  "may",
+  "juni",
+  "june",
+  "juli",
+  "july",
+  "august",
+  "september",
+  "oktober",
+  "october",
+  "november",
+  "dezember",
+  "december",
+]);
+
 export const ThresholdSchema = z
   .object({
     id: z.string().min(1),
     label: z.string().min(1),
-    value: z.number(),
-    unit: z.string().min(1),
+    kind: z.enum(["quantity", "date"]).nullable().default(null),
+    value: z.union([z.number(), z.string()]),
+    unit: z.string().min(1).nullable().optional(),
     purpose: z.enum(["alert", "target", "limit", "baseline"]),
     origin: z.enum([
       "document_requirement",
@@ -238,6 +272,49 @@ export const ThresholdSchema = z
         path: ["evidence_refs"],
         message: "evidence_status='verified' verlangt mindestens eine evidence_ref.",
       });
+    }
+
+    // Spiegelt Threshold.kind_matches_value_shape (#1343): ein Datum trägt
+    // keine Einheit und nur einen ISO-Wert; eine Menge ist eine echte Zahl
+    // mit Einheit — ein Monatsname ist keine Einheit.
+    if (value.kind === "date") {
+      if (typeof value.value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value.value)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["value"],
+          message:
+            "kind='date' verlangt einen ISO-Datumswert ('YYYY-MM-DD').",
+        });
+      }
+      if (value.unit != null) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["unit"],
+          message: "kind='date' trägt keine Einheit — ein Datum ist keine Menge.",
+        });
+      }
+    } else {
+      if (typeof value.value === "string") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["value"],
+          message:
+            "Nur kind='date' darf einen Textwert tragen; operative Schwellwerte sind Zahlen.",
+        });
+      }
+      if (!value.unit || !value.unit.trim()) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["unit"],
+          message: "Eine operative Zahl braucht eine Einheit (unit).",
+        });
+      } else if (THRESHOLD_MONTH_NAMES.has(value.unit.trim().toLowerCase())) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["unit"],
+          message: `'${value.unit}' ist ein Monatsname, keine Einheit.`,
+        });
+      }
     }
   });
 export type Threshold = z.infer<typeof ThresholdSchema>;

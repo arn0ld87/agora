@@ -292,9 +292,12 @@ def _build_red_team_excerpt(report_v3: ReportV3) -> str:
     # genau dort weg, wo sie am nötigsten sind.
     lines: List[str] = []
     for threshold in report_v3.thresholds or []:
+        # display_value statt f"{value:g} {unit}" (#1343): ein Datum trägt
+        # keine Einheit, und ':g' an einem ISO-String würde den Entwurf
+        # mitten in der Review-Vorbereitung sprengen.
         lines.append(
             f"- [{threshold.id}] [schwelle: {threshold.purpose}] {threshold.label}: "
-            f"{threshold.value:g} {threshold.unit} "
+            f"{threshold.display_value} "
             f"(Herkunft: {threshold.origin}, Beleglage: {threshold.evidence_status})"
         )
     for claim in report_v3.claims or []:

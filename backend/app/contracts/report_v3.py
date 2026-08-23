@@ -10,7 +10,8 @@ Wording-Glossar v1 (docs/glossary.md):
 """
 from __future__ import annotations
 
-from datetime import datetime
+import re
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -239,8 +240,96 @@ class ContentIdea(BaseModel):
     evidence_refs: list[str] = Field(default_factory=list)
 
 
+#: Issue #1343 — Datumerkennung für Threshold-Werte.
+#:
+#: Der AURORA-Referenzlauf las „15. Oktober 2026" als ``value=15.0,
+#: unit="October"`` in den Bericht rutschen. Diese Muster erkennen die im
+#: Seed-Material vorkommenden Schreibweisen, bevor die Number-Coercion sie
+#: auseinanderreißt. Bewusst eng: nur vollständige Daten mit Jahr — ein
+#: „15. Oktober" ohne Jahr ist kein operativer Wert, sondern eine Lücke.
+_DATE_ISO_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
+_DATE_DOT_RE = re.compile(r"^(\d{1,2})\.(\d{1,2})\.(\d{4})$")
+_DATE_PROSE_RE = re.compile(r"^(\d{1,2})\.?\s+([A-Za-zäöüÄÖÜ]+)\.?\s+(\d{4})$")
+
+_MONTH_NUMBERS = {
+    "januar": 1,
+    "january": 1,
+    "februar": 2,
+    "february": 2,
+    "märz": 3,
+    "maerz": 3,
+    "march": 3,
+    "april": 4,
+    "mai": 5,
+    "may": 5,
+    "juni": 6,
+    "june": 6,
+    "juli": 7,
+    "july": 7,
+    "august": 8,
+    "september": 9,
+    "oktober": 10,
+    "october": 10,
+    "november": 11,
+    "dezember": 12,
+    "december": 12,
+}
+
+#: Ein Monatsname ist keine Maßeinheit. Steht er als ``unit`` in einem
+#: numerischen Threshold, war das Ursprungsdatum eine Datumsangabe, deren
+#: Tag und Monat die Extraktion auseinandergerissen hat — ohne Jahr nicht
+#: rekonstruierbar, also wird der Eintrag verworfen statt geraten.
+_MONTH_NAMES = frozenset(_MONTH_NUMBERS)
+
+#: Plausibilitätsgrenze für Jahreszahlen: Projektplanung spielt sich in der
+#: Gegenwart ab; „0026-10-15“ oder „15202-01-01“ sind Tippfehler, keine Termine.
+_MIN_YEAR = 1900
+_MAX_YEAR = 2100
+
+
+def parse_date_value(raw: str) -> str | None:
+    """Erkennt Datumsschreibweisen und liefert ISO ``YYYY-MM-DD``, sonst None.
+
+    Erkannt werden „15. Oktober 2026“, „15 October 2026“, „2026-10-15“ und
+    „15.10.2026“ (Tag zuerst — deutschsprachiges Material). Ein String, der
+    kein gültiges Kalenderdatum ergibt, liefert None und fällt der
+    Number-Prüfung zu; so kann „42 Prozent“ niemals als Datum durchrutschen.
+    """
+    text = (raw or "").strip()
+    if not text:
+        return None
+
+    year: int
+    month: int
+    day: int
+
+    iso_match = _DATE_ISO_RE.match(text)
+    dot_match = _DATE_DOT_RE.match(text)
+    prose_match = _DATE_PROSE_RE.match(text)
+    if iso_match:
+        year, month, day = (int(part) for part in iso_match.groups())
+    elif dot_match:
+        day, month, year = (int(part) for part in dot_match.groups())
+    elif prose_match:
+        day, year = int(prose_match.group(1)), int(prose_match.group(3))
+        month_number = _MONTH_NUMBERS.get(prose_match.group(2).lower())
+        if month_number is None:
+            return None
+        month = month_number
+    else:
+        return None
+
+    if not (_MIN_YEAR <= year <= _MAX_YEAR):
+        return None
+    try:
+        date(year, month, day)
+    except ValueError:
+        return None
+    return f"{year:04d}-{month:02d}-{day:02d}"
+
+
 class Threshold(BaseModel):
-    """Operative Zahl mit ausgewiesener Herkunft (Issue #1160 E).
+    """Operative Zahl oder Datum mit ausgewiesener Herkunft (Issue #1160 E).
 
     Zahlen wie „>90 % Traffic-Baseline" oder „14-Tage-Rankinggrenze" sehen im
     Fließtext alle gleich aus — egal ob sie aus dem Auftragsdokument stammen,
@@ -252,6 +341,17 @@ class Threshold(BaseModel):
     wird ausdrücklich nicht mit ihr vermischt: die Quellengattung beschreibt,
     woher ein *Beleg* kommt, ``origin`` beschreibt, wie eine *Zahl* zustande
     kam. Eine Vermischung würde ADR-0002 Anker 3 verwässern.
+
+    Issue #1343: ``kind`` trennt operative Mengen (``quantity``) von
+    Datumsangaben (``date``). Aus „15. Oktober 2026" entstand sonst der
+    sinnlose Eintrag ``value=15.0, unit="October"`` — ein Datum ist keine
+    Menge, es trägt keine Einheit und ist in keinem Schwellwertvergleich
+    verwendbar. ``kind`` ist optional mit Default ``None`` (Bestandsartefakte
+    vor #1343 laden weiter; „nicht erfasst" ist nicht dasselbe wie eine
+    erfasste quantity — Muster: ``Claim.confidence_scope``). Bewusst kein
+    Pydantic-Discriminated-Union: das Schema erreicht über
+    ``model_json_schema()`` auch Fallback-Provider im json_object-Modus,
+    wo anyOf-Unions mit zwei Objektformen unzuverlässig sind.
     """
 
     model_config = _STRICT
@@ -261,10 +361,31 @@ class Threshold(BaseModel):
         min_length=1,
         description="Wofür die Zahl gilt, z. B. 'Traffic-Baseline' oder 'Rankinggrenze'",
     )
-    value: float = Field(description="Der Zahlenwert selbst")
-    unit: str = Field(
-        min_length=1,
-        description="Einheit, z. B. 'percent', 'days', 'eur', 'count'",
+    #: Issue #1343: Art des Werts. quantity = operative Zahl mit Einheit,
+    #: date = Kalenderdatum als ISO-Wert ('YYYY-MM-DD'). None = Altbestand
+    #: vor #1343 — strukturell immer eine Zahl.
+    kind: Literal["quantity", "date"] | None = Field(
+        default=None,
+        description=(
+            "Art des Werts: quantity (operative Zahl mit unit) | date "
+            "(Kalenderdatum). Datumsangaben wie '15. Oktober 2026' sind KEINE "
+            "operativen Zahlen: immer kind='date' mit ISO-Wert angeben, nie "
+            "als Zahl mit Monatsnamen als Einheit."
+        ),
+    )
+    value: float | str = Field(
+        description=(
+            "Für quantity: der Zahlenwert selbst. Für date: das Kalenderdatum "
+            "im Format 'YYYY-MM-DD' (z. B. '2026-10-15')."
+        ),
+    )
+    unit: str | None = Field(
+        default=None,
+        description=(
+            "Einheit der Menge, z. B. 'percent', 'days', 'eur', 'count'. "
+            "Pflicht für quantity, verboten für date — ein Datum trägt keine "
+            "Einheit."
+        ),
     )
     purpose: Literal["alert", "target", "limit", "baseline"] = Field(
         description=(
@@ -300,6 +421,36 @@ class Threshold(BaseModel):
     )
     evidence_refs: list[str] = Field(default_factory=list)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _dates_before_numbers(cls, data: object) -> object:
+        """Issue #1343: Datumsparser VOR der generischen Number-Coercion.
+
+        Läuft, bevor Pydantic ``value`` anfasst: ein String, der eines der
+        erkannten Datummuster trifft („15. Oktober 2026", „15 October 2026",
+        „2026-10-15", „15.10.2026"), wird zu ISO normalisiert und auf
+        ``kind='date'`` festgelegt — auch gegen ein fälschlich gesetztes
+        ``kind='quantity'``. Ein Datum kann so strukturell nie als Menge mit
+        Monatsnamen als Einheit landen.
+        """
+        if not isinstance(data, dict):
+            return data
+        raw_value = data.get("value")
+        if isinstance(raw_value, str):
+            iso = parse_date_value(raw_value)
+            if iso is not None:
+                data["value"] = iso
+                if data.get("kind") != "date":
+                    # Reparatur einer zerrissenen Mengenlesart: das Datum
+                    # gewinnt gegen einen fälschlichen quantity-Anspruch,
+                    # die mitgelieferte Einheit gehört zur Fehllesart und
+                    # überlebt die Korrektur nicht. Wer dagegen ausdrücklich
+                    # kind='date' deklariert und trotzdem eine Einheit
+                    # mitbringt, widerspricht sich — das bleibt ein Fehler.
+                    data["kind"] = "date"
+                    data.pop("unit", None)
+        return data
+
     @model_validator(mode="after")
     def verified_needs_an_evidence_ref(self) -> "Threshold":
         """``verified`` ohne Beleg wäre genau die Behauptung, die #1160 E adressiert.
@@ -313,6 +464,49 @@ class Threshold(BaseModel):
                 "evidence_status='verified' verlangt mindestens eine evidence_ref."
             )
         return self
+
+    @model_validator(mode="after")
+    def kind_matches_value_shape(self) -> "Threshold":
+        """Issue #1343: ``kind``, Wertform und Einheit müssen zusammenpassen.
+
+        - ``date``: ISO-Kalenderdatum, keine Einheit.
+        - ``quantity`` (oder Altbestand ohne kind): echte Zahl mit Einheit;
+          ein Monatsname ist keine Einheit — der verstümmelte AURORA-Eintrag
+          ``{value: 15.0, unit: "October"}`` wird hier verworfen, statt ins
+          Artefakt zu rutschen.
+        - Textwerte trägt ausschließlich ``date``; alles andere wäre eine
+          Menge mit erfundener Form.
+        """
+        if self.kind == "date":
+            if not isinstance(self.value, str) or not _DATE_ISO_RE.match(self.value):
+                raise ValueError(
+                    "kind='date' verlangt einen ISO-Datumswert ('YYYY-MM-DD')."
+                )
+            if self.unit is not None:
+                raise ValueError(
+                    "kind='date' trägt keine Einheit — ein Datum ist keine Menge."
+                )
+            return self
+        if isinstance(self.value, str):
+            raise ValueError(
+                "Nur kind='date' darf einen Textwert tragen; operative "
+                "Schwellwerte sind Zahlen."
+            )
+        if not self.unit or not self.unit.strip():
+            raise ValueError("Eine operative Zahl braucht eine Einheit (unit).")
+        if self.unit.strip().lower() in _MONTH_NAMES:
+            raise ValueError(
+                f"'{self.unit}' ist ein Monatsname, keine Einheit — ein Datum "
+                "gehört als kind='date' mit ISO-Wert ('YYYY-MM-DD') ins Feld."
+            )
+        return self
+
+    @property
+    def display_value(self) -> str:
+        """Menschlesbare Form: „90 percent" bzw. das ISO-Datum ohne Einheit."""
+        if self.kind == "date":
+            return str(self.value)
+        return f"{float(self.value):g} {self.unit}"
 
 
 class DataGap(BaseModel):
