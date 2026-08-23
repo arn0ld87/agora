@@ -41,6 +41,7 @@ from .run_degradation import (
     events_for,
     mark_forced_final,
     mark_metadata_failure,
+    mark_work_traces_removed,
 )
 from .tool_circuit_breaker import breaker_for
 
@@ -491,7 +492,13 @@ SECTION_UNUSABLE_OUTPUT_BODY = (
 )
 
 
-def _finalize_content(response: str, *, section_title: str, section_index: int) -> str:
+def _finalize_content(
+    response: str,
+    *,
+    section_title: str,
+    section_index: int,
+    agent: Any = None,
+) -> str:
     """Wendet den Final-Content-Contract auf einen Modelloutput an.
 
     Ersetzt das frühere ``response.strip()``: interne Arbeitsschritte werden
@@ -499,6 +506,13 @@ def _finalize_content(response: str, *, section_title: str, section_index: int) 
     Funktion einen als solchen erkennbaren Fehlertext statt Modelloutput.
     Dieser Text wird von :func:`is_fallback_content` erkannt und weder zu
     Claims noch zu Evidence verarbeitet.
+
+    Mit ``agent`` trägt eine Bereinigung mit erhaltenem Inhalt das Ereignis
+    in ``RunEventLog.work_trace_removed_sections`` ein — Issue #1321: vorher
+    stand sie nur im Server-Log, und der Bericht wies den Abschnitt aus wie
+    jeden unangetasteten. Ohne ``agent`` bleibt es beim Log; der
+    FinalContentRejected-Fall wird hier bewusst nicht markiert, er ist über
+    ``generation_failed`` bzw. ``failed_section_indices`` bereits sichtbar.
     """
     try:
         sanitized = sanitize_final_content(response)
@@ -520,6 +534,8 @@ def _finalize_content(response: str, *, section_title: str, section_index: int) 
             section_title,
             len(sanitized.removed_segments),
         )
+        if agent is not None:
+            mark_work_traces_removed(agent, section_index)
     return sanitized.content
 
 
@@ -783,6 +799,7 @@ def generate_section_react(
                 response,
                 section_title=section.title,
                 section_index=section_index,
+                agent=agent,
             )
             logger.info(
                 "Section %s generation completed (tool calls: %s)",
@@ -895,6 +912,7 @@ def generate_section_react(
             response,
             section_title=section.title,
             section_index=section_index,
+            agent=agent,
         )
         logger.info(
             "Section %s: no 'Final Answer:' prefix detected, using the sanitized LLM "
@@ -940,6 +958,7 @@ def generate_section_react(
             response,
             section_title=section.title,
             section_index=section_index,
+            agent=agent,
         )
     if agent.report_logger:
         agent.report_logger.log_section_content(
@@ -1496,6 +1515,9 @@ def generate_report(
             interview_disabled_reason=breaker_for(agent).reason_for("interview_agents"),
             failed_section_indices=failed_section_indices,
             forced_final_section_indices=events_for(agent).forced_final_sections,
+            work_trace_removed_section_indices=events_for(
+                agent
+            ).work_trace_removed_sections,
             metadata_failed_section_indices=events_for(agent).metadata_failed_sections,
         )
         report.status = apply_run_degradation_downgrade(
