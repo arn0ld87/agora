@@ -136,14 +136,20 @@ class SectionMetadata(BaseModel):
     # Feld-Beschreibungen von ``Threshold`` gehen ueber
     # ``model_json_schema()`` an das Modell — der Prompt-Block in
     # ``report_prompts/sections.py`` (ADR-0002 Anker 1) bleibt unberuehrt.
+    # Issue #1343: Datumsangaben sind keine operativen Zahlen — die
+    # kind-Diskriminante im Vertrag erzwingt fuer sie ISO-Wert statt
+    # Zahl-plus-Monatsname.
     thresholds: list[Threshold] = Field(
         default_factory=list,
         description=(
             "Operative Zahlen aus dem Abschnitt (Schwellen, Grenzwerte, "
             "Zielwerte, Baselines) mit ausgewiesener Herkunft. Nur Zahlen "
             "aufnehmen, die im Abschnittstext tatsaechlich vorkommen — keine "
-            "erfinden, um die Liste zu fuellen. Leere Liste ist ein "
-            "gueltiges Ergebnis."
+            "erfinden, um die Liste zu fuellen. Datumsangaben (z. B. '15. "
+            "Oktober 2026') sind KEINE operativen Zahlen: nur mit "
+            "kind='date' und ISO-Wert ('2026-10-15') aufnehmen, niemals als "
+            "Zahl mit Monatsnamen als unit. Leere Liste ist ein gueltiges "
+            "Ergebnis."
         ),
     )
 

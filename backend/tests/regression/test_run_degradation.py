@@ -28,6 +28,7 @@ from app.services.report_agent.run_degradation import (
     events_for,
     mark_forced_final,
     mark_metadata_failure,
+    mark_work_traces_removed,
 )
 
 #: Der Simulationsstand aus dem Referenzlauf.
@@ -131,6 +132,17 @@ def test_forced_final_generation_is_recorded_as_a_warning():
     found = collect_run_degradations(forced_final_section_indices=[3])
 
     assert _reasons(found) == ["1_sections_forced_final"]
+    assert found[0]["severity"] == "warning"
+
+
+def test_removed_work_traces_are_recorded_as_a_warning():
+    """Issue #1321: eine still bereinigte Section ist im Bericht nicht von einer
+    unangetasteten zu unterscheiden. Die Entfernung wird zur Warnung — ohne
+    Statusabstieg, der Abschnittsinhalt selbst ist ja erhalten."""
+    found = collect_run_degradations(work_trace_removed_section_indices=[7])
+
+    assert _reasons(found) == ["1_sections_sanitized"]
+    assert "7" in found[0]["detail"]
     assert found[0]["severity"] == "warning"
 
 
@@ -238,6 +250,97 @@ def test_a_successful_metadata_extraction_marks_nothing():
     )
 
     assert events_for(agent).metadata_failed_sections == set()
+
+
+def test_marking_work_trace_removal_reaches_the_degradation_list():
+    class _Agent:
+        pass
+
+    agent = _Agent()
+    mark_work_traces_removed(agent, 7)
+    mark_work_traces_removed(agent, 7)
+
+    assert events_for(agent).work_trace_removed_sections == {7}
+
+    found = collect_run_degradations(
+        work_trace_removed_section_indices=events_for(
+            agent
+        ).work_trace_removed_sections,
+    )
+
+    assert _reasons(found) == ["1_sections_sanitized"]
+
+
+def test_finalize_content_records_removed_work_traces_on_the_agent():
+    """Issue #1321: `_finalize_content` entfernte Arbeitsspur-Segmente bisher
+    nur ins Server-Log — im Bericht sah der Abschnitt aus wie jeder andere.
+    Mit ``agent`` trägt der Lauf das Ereignis in sein Ereignisregister."""
+    from app.services.report_agent.workflow import _finalize_content
+
+    class _Agent:
+        pass
+
+    agent = _Agent()
+    body = "Der Markt für Arbeitsplanung verändert sich spürbar. " * 5
+    response = f"Thought: Ich sollte jetzt die Personas zusammenstellen.\n## Ausgangslage\n{body}"
+
+    content = _finalize_content(
+        response,
+        section_title="Ausgangslage",
+        section_index=3,
+        agent=agent,
+    )
+
+    assert events_for(agent).work_trace_removed_sections == {3}
+    assert "Thought:" not in content
+    assert content.startswith("## Ausgangslage")
+
+
+def test_finalize_content_without_agent_stays_quiet():
+    """Ohne ``agent`` (alter Aufrufpfad, Tests) verhält sich der Sanitizer
+    unverändert — kein Crash, kein Marker."""
+    from app.services.report_agent.workflow import _finalize_content
+
+    class _Agent:
+        pass
+
+    agent = _Agent()
+    body = "Der Markt für Arbeitsplanung verändert sich spürbar. " * 5
+    response = f"Thought: Ich sollte jetzt die Personas zusammenstellen.\n## Ausgangslage\n{body}"
+
+    content = _finalize_content(
+        response,
+        section_title="Ausgangslage",
+        section_index=3,
+    )
+
+    assert "Thought:" not in content
+    assert events_for(agent).work_trace_removed_sections == set()
+
+
+def test_a_fully_rejected_output_is_not_double_marked():
+    """Wirft der Final-Content-Contract den ganzen Output weg, endet der
+    Abschnitt im Fallback-Text — und der ist über ``generation_failed``
+    bzw. ``failed_section_indices`` sichtbar. Der Sanitization-Marker bleibt
+    dem Pfad mit erhaltenem Inhalt vorbehalten, sonst zählt derselbe
+    Abschnitt doppelt."""
+    from app.services.report_agent.workflow import _finalize_content
+    from app.services.report_agent.output_contract import is_fallback_content
+
+    class _Agent:
+        pass
+
+    agent = _Agent()
+
+    result = _finalize_content(
+        "Thought: Ich sollte zuerst das Graph-Werkzeug fragen.",
+        section_title="Ausgangslage",
+        section_index=2,
+        agent=agent,
+    )
+
+    assert is_fallback_content(result)
+    assert events_for(agent).work_trace_removed_sections == set()
 
 
 def test_a_budget_abort_is_not_swallowed_as_a_metadata_failure():
@@ -372,6 +475,7 @@ def test_every_collected_entry_validates_against_the_contract():
         interviews_succeeded=0,
         failed_section_indices=[2],
         forced_final_section_indices=[3],
+        work_trace_removed_section_indices=[6],
         metadata_failed_section_indices=[4],
         contract_validation_errors=["boom"],
     )
