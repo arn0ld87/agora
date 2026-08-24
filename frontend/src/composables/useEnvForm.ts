@@ -26,6 +26,7 @@
 
 import { ref, computed, watch, type Ref, type ComputedRef } from 'vue'
 import { getAvailableModels } from '../api/simulation'
+import { resolvePresetLabel } from '../i18n/modelPresetLabel'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -39,7 +40,15 @@ export const STORAGE_LANG = 'agora.agentLanguage'
 
 export interface ModelPreset {
   name: string
+  /**
+   * Legacy-Anzeigetext. Der Backend-Vertrag liefert ihn fuer Presets seit
+   * Issue #1290 nicht mehr; die Ollama-Tags-Liste setzt ihn weiterhin auf den
+   * Modellnamen. Bleibt als Fallback fuer den Mischbetrieb mit aelteren
+   * Backends erhalten.
+   */
   label?: string
+  /** Stabiler i18n-Schluessel (`llm.preset.<kind>.<slug>`), Issue #1290. */
+  label_key?: string
 }
 
 export interface ModelOption {
@@ -50,6 +59,12 @@ export interface ModelOption {
 export interface UseEnvFormOptions {
   /** vue-i18n t() injected so tests don't need a provider. */
   t: (key: string, params?: Record<string, unknown>) => string
+  /**
+   * Optionale vue-i18n te() — verhindert "not found"-Warnungen, wenn ein
+   * Backend einen Preset-Schluessel liefert, den der Katalog nicht kennt
+   * (Issue #1290). Ohne sie greift der Key-Gleichheits-Fallback.
+   */
+  te?: (key: string) => boolean
   /** Called when loadModels() encounters a network/API error. */
   onError?: (msg: string) => void
 }
@@ -88,7 +103,7 @@ function _loadStoredLang(): string {
 // Composable
 // ---------------------------------------------------------------------------
 
-export function useEnvForm({ t, onError }: UseEnvFormOptions): UseEnvFormReturn {
+export function useEnvForm({ t, te, onError }: UseEnvFormOptions): UseEnvFormReturn {
   // --- State ---
 
   const ollamaModels = ref<ModelPreset[]>([])
@@ -113,11 +128,14 @@ export function useEnvForm({ t, onError }: UseEnvFormOptions): UseEnvFormReturn 
       label: `${t('step2.model.default')} — ${defaultModel.value || '?'}`,
     })
     for (const p of presetModels.value) {
-      opts.push({ value: p.name, label: p.label || p.name })
+      opts.push({ value: p.name, label: resolvePresetLabel(p, t, te) })
     }
     for (const m of ollamaModels.value) {
       if (presetModels.value.some((p) => p.name === m.name)) continue
-      opts.push({ value: m.name, label: `${m.label || m.name} (Ollama)` })
+      opts.push({
+        value: m.name,
+        label: t('step2.model.ollamaOption', { model: resolvePresetLabel(m, t, te) }),
+      })
     }
     opts.push({ value: 'custom', label: t('step2.model.customGroup') })
     return opts

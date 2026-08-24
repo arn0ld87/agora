@@ -192,10 +192,24 @@ export interface InterviewAgentsData {
   interviews: Array<{ agent_id: string; prompt: string }>
 }
 
+/**
+ * Ein Eintrag aus `presets[]` bzw. `ollama[]` von
+ * `backend/app/api/simulation_lifecycle.py::get_available_models`.
+ *
+ * Issue #1290: `label` traegt fuer Presets keinen Text mehr — der Endpunkt
+ * liefert stattdessen `label_key`, einen stabilen i18n-Schluessel
+ * (`llm.preset.<kind>.<slug>`), den `i18n/modelPresetLabel.ts` aufloest.
+ * Die Ollama-Tags-Liste setzt `label` weiterhin auf den Modellnamen.
+ *
+ * `id`/`provider` standen hier als Pflichtfelder, obwohl der Endpunkt sie nie
+ * geliefert hat — dieselbe Klasse Vertragsluege wie das entfernte `models`
+ * weiter unten. Nur die Index-Signatur liess das durchgehen.
+ */
 export interface ModelPreset {
-  id: string
   name: string
-  provider: string
+  kind?: string
+  label?: string
+  label_key?: string
   [key: string]: unknown
 }
 
