@@ -155,6 +155,30 @@ def _component_consistency(evidence: List[Dict]) -> float:
     return 0.0
 
 
+def _apply_single_source_cap(
+    score: float, *, unique_sources: int, has_strong_match: bool
+) -> float:
+    """Deckelt Ein-Quellen-Claims auf höchstens ``low`` — außer bei starkem Match.
+
+    ``has_strong_match`` verwendet dieselbe 0.85-Schwelle wie die Verified-
+    Schranke in ``_compute_confidence_with_penalties``. Contradiction-
+    Penaltys können den Score danach noch weiter auf ``speculative`` senken;
+    der Claim selbst bleibt in jedem Fall sichtbar.
+
+    #1301: der vorher bedingungslose Deckel war ein Attraktor, kein
+    Grenzfall-Schutz — er zog auch sehr gut belegte Ein-Quellen-Fakten
+    (match_score > 0.9) unter die medium-Schwelle (0.65) und ließ praktisch
+    alle Ein-Quellen-Claims exakt bei 0.59 konvergieren, egal wie viel besser
+    die Evidence war. Ab ``has_strong_match`` greift der Deckel nicht mehr;
+    die Verified-Schranke (:277-279) bleibt trotzdem der harte Riegel — ein
+    Ein-Quellen-Claim erreicht dadurch höchstens 0.89 ("high"), nie
+    "verified" (das verlangt weiterhin >= 2 unabhängige Quellen).
+    """
+    if unique_sources < 2 and not has_strong_match:
+        return min(score, 0.59)
+    return score
+
+
 def partition_by_entailment(evidence: List[Dict]) -> Tuple[List[Dict], List[Dict], List[Dict]]:
     """Teilt Evidence in (stützend, widersprechend, nur verwandt).
 
@@ -240,10 +264,9 @@ def _compute_confidence_with_penalties(
     )
     unique_sources = len({(e.get("type"), e.get("source")) for e in evidence})
 
-    # Eine einzelne Quelle erzeugt höchstens ``low``; Contradiction-Penaltys
-    # können sie weiter auf ``speculative`` senken. Der Claim bleibt sichtbar.
-    if unique_sources < 2:
-        score = min(score, 0.59)
+    score = _apply_single_source_cap(
+        score, unique_sources=unique_sources, has_strong_match=has_strong_match
+    )
 
     # Task 08: Medium-Cap — kein Claim darf "high" sein, wenn alle
     # match_scores unter 0.55 liegen.
