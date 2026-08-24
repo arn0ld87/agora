@@ -69,11 +69,11 @@ HTTP_CASES = [
     # gitleaks:allow — der folgende Eintrag ist ein AWS-Service-Hostname als
     # Test-Fixture, kein Secret (siehe .gitleaksignore-Konvention).
     ("https://bedrock-mantle.eu-central-1.api.aws", "anthropic.claude-opus-4-8", "bedrock"),  # gitleaks:allow
-    # Kein False Positive: Drittanbieter-Host mit „bedrock-mantle" im Pfad —
+    # Kein False Positive: Drittanbieter-Host mit „bedrock-mantle“ im Pfad —
     # die Detection prueft den Hostnamen, nicht den Pfad (CodeQL #750-Stil).
     ("https://example.com/bedrock-mantle/v1", "foo", "unknown"),
-    # Kein Praefix-False-Positive: Drittanbieter-Host, der mit „bedrock-mantle."
-    # bzw. „bedrock-runtime." beginnt, aber nicht auf .api.aws /.amazonaws.com
+    # Kein Praefix-False-Positive: Drittanbieter-Host, der mit „bedrock-mantle.“
+    # bzw. „bedrock-runtime.“ beginnt, aber nicht auf .api.aws /.amazonaws.com
     # endet — darf NICHT als bedrock erkannt werden (sonst Leak des Bearer-
     # Tokens an einen Nicht-AWS-Host). Suffix-Pruefung wie der MiniMax-Zweig.
     ("https://bedrock-mantle.attacker.example/v1", "anthropic.claude-sonnet-5", "unknown"),

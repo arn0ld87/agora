@@ -121,7 +121,7 @@ const sysServices: { name: string; meta: string; status: 'ok' | 'warn' | 'err'; 
             <div class="field">
               <span class="field-label">Fragestellung *</span>
               <div class="field-area placeholder">
-                z. B. „Welche politischen Reaktionen sind in der DACH-Region zu erwarten?"
+                z. B. „Welche politischen Reaktionen sind in der DACH-Region zu erwarten?“
               </div>
             </div>
           </div>

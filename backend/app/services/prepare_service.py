@@ -337,7 +337,7 @@ def _phase_generate_profiles(
     # Issue #1034: Der Nenner des Fortschrittszählers kommt aus derselben
     # Funktion, die auch die Preview-Antwort füllt. Vorher stand hier
     # ``len(entities)`` — richtig, aber eben nur hier: die UI bekam den
-    # Vor-Floor-Wert aus einer zweiten Berechnung und zeigte „22 / 7".
+    # Vor-Floor-Wert aus einer zweiten Berechnung und zeigte „22 / 7“.
     total_entities = compute_persona_target(
         len(filtered.entities),
         max_agents=max_agents,
@@ -754,7 +754,7 @@ def _validate_persona_quota(
 class PrepareCancelledError(Exception):
     """Signalisiert kooperativen Abbruch während ``prepare_simulation()``.
 
-    Issue B2 (PLAN.md „Abbrechen & Pause"): das Cancel-Flag wird an den
+    Issue B2 (PLAN.md „Abbrechen & Pause“): das Cancel-Flag wird an den
     Phasengrenzen geprüft (analog ``report_agent/workflow.py::_is_cancel_requested``
     an den Stage-Boundaries). Anders als ``BudgetExceededError`` ist ein
     Nutzerabbruch kein Fehler — deshalb eine eigene Exception statt eines

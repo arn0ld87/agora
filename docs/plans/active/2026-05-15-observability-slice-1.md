@@ -206,7 +206,7 @@ docker run --rm --network host ghcr.io/open-telemetry/opentelemetry-collector-co
     traces --otlp-insecure --otlp-endpoint=localhost:4317 --traces=1 --duration=1s
 ```
 
-Expected: SigNoz-UI (http://localhost:3301) zeigt unter „Services" einen Service `telemetrygen` mit einem Trace.
+Expected: SigNoz-UI (http://localhost:3301) zeigt unter „Services“ einen Service `telemetrygen` mit einem Trace.
 
 - [x] **Step 6: Commit** *(pending — kommt nach Gesamtslice)*
 
@@ -720,7 +720,7 @@ git commit -m "feat(observability): Trace-Propagation über Redis-pub/sub Bus-Ev
 
 ## Task 5 (Sub-Slice 1e): Frontend-Korrelation — SSE-Event trägt trace_id
 
-**Ziel:** Jedes SSE-Event enthält das aktuelle `trace_id`-Feld. Das Frontend liest es, loggt es in `console.debug`, sendet eigene Browser-Spans über OTLP-HTTP an den Collector und zeigt im SimDetail-Panel einen Deep-Link `http://localhost:3301/trace/<id>` als „Trace anzeigen"-Button.
+**Ziel:** Jedes SSE-Event enthält das aktuelle `trace_id`-Feld. Das Frontend liest es, loggt es in `console.debug`, sendet eigene Browser-Spans über OTLP-HTTP an den Collector und zeigt im SimDetail-Panel einen Deep-Link `http://localhost:3301/trace/<id>` als „Trace anzeigen“-Button.
 
 **Files:**
 - Modify: `backend/app/api/simulation_stream.py`
@@ -858,7 +858,7 @@ if (frame.trace_id) {
 
 Der genaue Hook hängt vom existierenden Composable ab — sicherstellen, dass der Reactive-State um `lastTraceId: Ref<string | null>` erweitert wird, return-merge.
 
-- [x] **Step 7: SimDetail-Panel — „Trace anzeigen"-Button**
+- [x] **Step 7: SimDetail-Panel — „Trace anzeigen“-Button**
 
 In der Vue-Komponente, die den aktuellen Sim-Stream rendert (vermutlich unter `frontend/src/components/Step*.vue` — via Grep: `rg -l "useEventStream" frontend/src/`):
 
@@ -916,7 +916,7 @@ Compose + Backend + Frontend hochziehen, Sim starten wie in Task 3 Step 5, im Br
 
 Expected:
 - DevTools-Console zeigt `console.debug` mit der `trace_id` zu jedem SSE-Frame.
-- SimDetail-Panel zeigt „Trace anzeigen ({prefix}…)"-Link.
+- SimDetail-Panel zeigt „Trace anzeigen ({prefix}…)“-Link.
 - Klick auf Link öffnet SigNoz-UI mit dem End-to-End-Trace: 5+ Services in einer Kette (`agora-frontend → agora-backend (POST) → agora-backend (spawn) → agora-oasis-runner → agora-backend (bus.event.consume) → agora-backend (sse.stream)`).
 
 - [ ] **Step 10: Commit**
@@ -1025,7 +1025,7 @@ gh api repos/arn0ld87/agora/pulls/<NR>/comments --jq '.[] | {path, line, body}'
 
 1. `OTEL_ENABLED=false` — Agora-Backend + Frontend starten ohne Crash, **keine** OTel-Spans werden exportiert. Default ist `false`.
 2. `OTEL_ENABLED=true` — eine Simulation produziert genau **einen** zusammenhängenden Trace mit Spans aus drei Services: `agora-frontend`, `agora-backend`, `agora-oasis-runner`.
-3. Alle drei Service-Namen sind in der SigNoz-UI unter „Services" sichtbar.
+3. Alle drei Service-Namen sind in der SigNoz-UI unter „Services“ sichtbar.
 4. Frontend-SimDetail-Panel rendert den SigNoz-Deep-Link mit der aktuellen `trace_id`.
 5. Test-Suite: `pytest tests/observability/` (mindestens 4 Tests) + `bun run test -- tests/observability/` (mindestens 3 Tests) grün.
 6. Gemini-Code-Assist-Findings (Default-Workflow nach `gh pr create`) sind gesichtet und HIGH-Findings adressiert.
@@ -1036,7 +1036,7 @@ gh api repos/arn0ld87/agora/pulls/<NR>/comments --jq '.[] | {path, line, body}'
 
 - **Metrics (Slice 2):** Prometheus-style Counters/Histograms, Sim-Latenz-Histogramm.
 - **Logs-Korrelation (Slice 3):** `trace_id` in Python-Loggern, SigNoz-Logs-Ansicht.
-- **SLOs + Burn-Rate-Alerts (Slice 4):** „Sim-Run p95 < X s", Alertmanager-Regeln.
+- **SLOs + Burn-Rate-Alerts (Slice 4):** „Sim-Run p95 < X s“, Alertmanager-Regeln.
 - **Production-Stack-Härtung:** OTel im `prod`-Image, Layer-9-Gates erneut durchlaufen.
 
 ---

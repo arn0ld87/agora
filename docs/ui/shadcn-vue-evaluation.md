@@ -105,7 +105,7 @@ Das sind ~5 Komponenten — keine 50. Plus `Button`/`Kicker`-Ports macht 7 Kompo
 ## Was eine Migration in Wahrheit bringen würde
 
 - **Optik-Variation**: andere Default-Looks. Wer Agora-v4-Designs als zu nüchtern
-  empfindet, würde durch shadcn-vue „mehr Bewegung" sehen. Das ist Geschmack,
+  empfindet, würde durch shadcn-vue „mehr Bewegung“ sehen. Das ist Geschmack,
   kein Engineering-Argument.
 - **Externe Bekanntheit**: shadcn-vue ist ein bekanntes Pattern, neue
   Mitarbeiter finden schneller rein. **Aber**: Agora hat kein Team außer Alex.

@@ -22,7 +22,7 @@
     </div>
 
     <div class="shelf__body">
-      <!-- Filter „Alle Jobs" (Q19c): schlichte Mono-Tabelle aus der Rohebene. -->
+      <!-- Filter „Alle Jobs“ (Q19c): schlichte Mono-Tabelle aus der Rohebene. -->
       <div v-if="props.shelf.filter.value === 'jobs'" class="shelf__jobs-scroll">
       <table class="shelf__jobs-table" :data-testid="ShelfTestId.jobsTable">
         <thead>

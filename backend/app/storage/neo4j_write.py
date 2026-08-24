@@ -253,7 +253,7 @@ class Neo4jWriteMixin:
         absent); ``0`` means "present since the initial ingest"; any positive
         value means the edge was learned during that OASIS round.
 
-        ``ner_extractor`` (Sub-Slice „build-respects-frontend-model"): wenn
+        ``ner_extractor`` (Sub-Slice „build-respects-frontend-model“): wenn
         gesetzt, wird **dieser** Extractor statt der Storage-Default-Instanz
         (``self._ner``) für Phase 1 verwendet. Damit kann der Build-Pfad
         einen pro-Request gebauten Extractor mit Frontend-LLM-Override

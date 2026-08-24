@@ -108,7 +108,7 @@ def _coerce_string(spec: FieldSpec, raw: Any) -> tuple[str | None, str | None]:
         return None, f'{spec.key}: erwarte string, bool erhalten'
     if raw is None:
         # Leerstring ist legitim (z. B. AGORA_AUTH_TOKEN unset);
-        # ``None`` interpretieren wir als „nicht gesetzt". Da
+        # ``None`` interpretieren wir als „nicht gesetzt“. Da
         # ``apply_payload`` ein Merge-Update macht, lässt das Weglassen
         # eines Keys den bestehenden Override stehen — ein Reset auf
         # Default braucht einen separaten Reset-Pfad und ist nicht
@@ -289,7 +289,7 @@ def split_payload_by_secret(
     Wird intern vom Settings-Layer verwendet, wenn der Aufrufer beide
     Pfade gemischt geliefert hat — der Validator selbst lehnt das
     bereits ab, aber der Helper ist nützlich für Tests und für eine
-    künftige Optimierung „atomic write of file (non-secret only)".
+    künftige Optimierung „atomic write of file (non-secret only)“.
     """
     secrets: dict[str, Any] = {}
     nonsecret: dict[str, Any] = {}

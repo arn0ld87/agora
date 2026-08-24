@@ -18,7 +18,7 @@ Sechs E2E-Smoke-Specs sind in `.github/workflows/e2e-smokes.yml` verdrahtet. Dav
 ist nur `health.spec.ts` grün, fünf sind **pre-existing kaputt** (broken before
 und unabhängig von diesem Epic). Dieses Epic macht alle fünf Smoke-Specs wieder
 grün, ohne die Spec-Semantik zu verwässern — die Specs bleiben die Spec
-(`AGENTS.md`: „Tests sind die Spec").
+(`AGENTS.md`: „Tests sind die Spec“).
 
 Nicht-Ziel: Re-Add des `pull_request`-Triggers für die Smoke-Workflows. Der
 Trigger wurde bewusst entfernt (siehe Commit `4a4fb0d0` „Revert ci(e2e): run
@@ -168,8 +168,8 @@ Status-File-Race zwischen den Modi.
 1. Container-Logs aus dem `report-modes-smoke`-Job ziehen — finalen
    Report-Status (`failed`/`error`/`processing`) identifizieren.
 2. `pollReportReady`-Helper um Debug-Output des letzten Status-Bodys
-   erweitern (temporär), um zwischen „terminiert nicht-`completed`" und
-   „hängt in `processing`" zu unterscheiden.
+   erweitern (temporär), um zwischen „terminiert nicht-`completed`“ und
+   „hängt in `processing`“ zu unterscheiden.
 3. Backend: `api/report.py::_resolve_report_mode` (`:83`) +
    `force_regenerate`-Pfad prüfen — ob `?mode=` korrekt an
    `report_agent` durchgereicht wird und der Stub pro Modus deterministisch

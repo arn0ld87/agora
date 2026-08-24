@@ -216,7 +216,7 @@ describe("ReportV3Schema (Zod-Spiegel)", () => {
   });
 
   // Issue #1343: kind trennt operative Mengen von Datumsangaben. Aus
-  // „15. Oktober 2026" entstand sonst value=15.0 / unit="October".
+  // „15. Oktober 2026“ entstand sonst value=15.0 / unit="October".
   it("akzeptiert ein Bestandsartefakt ohne kind als numerische Menge", () => {
     const parsed = ThresholdSchema.safeParse({
       id: "thr_01",
@@ -228,7 +228,7 @@ describe("ReportV3Schema (Zod-Spiegel)", () => {
     });
     expect(parsed.success).toBe(true);
     if (parsed.success) {
-      // „Nicht erfasst" bleibt null — kein stillschweigendes quantity.
+      // „Nicht erfasst“ bleibt null — kein stillschweigendes quantity.
       expect(parsed.data.kind).toBe(null);
     }
   });

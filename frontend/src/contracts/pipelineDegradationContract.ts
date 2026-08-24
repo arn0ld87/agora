@@ -27,7 +27,7 @@ export const DegradationKindSchema = z.enum(DEGRADATION_KINDS);
 export type DegradationKind = z.infer<typeof DegradationKindSchema>;
 
 /**
- * `blocking` heißt: Der Schritt darf den Zustand „bereit" nicht erreichen,
+ * `blocking` heißt: Der Schritt darf den Zustand „bereit“ nicht erreichen,
  * auch wenn technisch kein Fehler aufgetreten ist.
  */
 export const DegradationSeveritySchema = z.enum(['warning', 'blocking']);

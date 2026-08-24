@@ -200,7 +200,7 @@ _THRESHOLD_EVIDENCE_STATUS_LABELS = {
 def render_threshold_table(thresholds: list[Threshold]) -> str:
     """Operative Zahlen mit ihrer Herkunft — Issue #1160 E.
 
-    Zahlen wie „>90 % Traffic-Baseline" sehen im Fliesstext alle gleich aus,
+    Zahlen wie „>90 % Traffic-Baseline“ sehen im Fliesstext alle gleich aus,
     unabhaengig davon, ob sie aus dem Auftragsdokument, aus gemessenen Daten
     oder aus einem Modellvorschlag stammen. Diese Tabelle macht den
     Unterschied lesbar; der Fliesstext bleibt unangetastet.

@@ -61,7 +61,7 @@ export function useStickyScroll(containerRef: Ref<HTMLElement | null>): UseStick
   function markAppended(delta = 1): void {
     const el = containerRef.value
     if (!el) {
-      // Container noch nicht gemountet → Append zählt nicht als „verloren";
+      // Container noch nicht gemountet → Append zählt nicht als „verloren“;
       // beim Mount springt die Eval auf isAtBottom=true und alles ist gut.
       return
     }

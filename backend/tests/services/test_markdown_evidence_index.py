@@ -83,7 +83,7 @@ def test_die_quellengattung_steht_im_klartext() -> None:
 
 def test_ein_unbekannter_gattungswert_wird_unveraendert_gezeigt() -> None:
     """Kommt eine Gattung hinzu, ohne dass die Beschriftung nachgezogen wird,
-    steht der Rohwert da — nicht eine leere Zelle, die wie „keine Quelle"
+    steht der Rohwert da — nicht eine leere Zelle, die wie „keine Quelle“
     aussieht."""
     table = render_evidence_index(
         _report(

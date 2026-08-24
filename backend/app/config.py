@@ -385,7 +385,7 @@ class Config:
 
         # Auth-Policy: außerhalb FLASK_DEBUG verlangen wir entweder einen
         # Token oder eine bewusste Opt-out-Entscheidung. Verhindert offene
-        # /api/*-Deployments durch reines „Token vergessen".
+        # /api/*-Deployments durch reines „Token vergessen“.
         if not cls.DEBUG:
             auth_token = os.environ.get('AGORA_AUTH_TOKEN', '').strip()
             allow_anon = (

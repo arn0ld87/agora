@@ -6,7 +6,7 @@
  * Suite mountet Step3Simulation gegen einen minimalen Stub und prüft, dass
  * kein ReferenceError fliegt.
  *
- * Phase-Promotion-Tests (#209): Sichert ab, dass der „Weiter zum Bericht"-
+ * Phase-Promotion-Tests (#209): Sichert ab, dass der „Weiter zum Bericht“-
  * Button auch dann erscheint, wenn
  * - der letzte SSE-Frame verloren geht (HTTP-Detail-Polling muss phase=2 setzen),
  * - ein SSE-completed-Event synchron eintrifft,
@@ -197,7 +197,7 @@ describe('Step3Simulation — mount smoketest (Aktion 7, PR #207-Followup)', () 
 /**
  * Phase-Promotion-Tests (Sub-Slice A, Issue #209).
  *
- * Sichert ab, dass `phase` auf 2 springt und der „Weiter zum Bericht"-Button
+ * Sichert ab, dass `phase` auf 2 springt und der „Weiter zum Bericht“-Button
  * erscheint, unabhängig davon, ob die Phase-Promotion via SSE oder via
  * HTTP-Detail-Polling erfolgt.
  */
@@ -252,7 +252,7 @@ describe('Step3Simulation — phase promotion (Sub-Slice A, #209)', () => {
     await wrapper.vm.$nextTick()
 
     // Im Template: `v-else` (weder phase===0 noch phase===1) rendert den goReport-Btn.
-    // Wir suchen nach einem Button, der NICHT „Start" heisst und nicht disabled ist.
+    // Wir suchen nach einem Button, der NICHT „Start“ heisst und nicht disabled ist.
     const buttons = wrapper.findAll('button')
     // Der goReport-Btn hat :loading=isGeneratingReport und @click=goReport.
     // Im Stub rendert Btn als <button>; der Start-Button ist bei phase===2 nicht da,

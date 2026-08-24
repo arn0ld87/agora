@@ -86,7 +86,7 @@ describe('Slice 7.1 — Motion- & Focus-Vertrag (states.css)', () => {
       const num = Number(m![1])
       const unit = m![2] || 'ms'
       // Etablierte Reduce-Motion-Konvention: 0.01ms (oder 0s / 0 ohne Einheit).
-      // Wir akzeptieren alles ≤ 0.01ms als „effektiv aus".
+      // Wir akzeptieren alles ≤ 0.01ms als „effektiv aus“.
       const ms = unit === 's' ? num * 1000 : num
       expect(ms, `Reduce-Wert für ${v} (${ms}ms) ist nicht effektiv 0`).toBeLessThanOrEqual(0.01)
     }

@@ -4,11 +4,11 @@ import { createI18n } from 'vue-i18n'
 import de from '@/i18n/locales/de.json'
 
 /**
- * Issue #1029, Befund B-24 — „bereit" ist eine Aussage über das Ergebnis,
+ * Issue #1029, Befund B-24 — „bereit“ ist eine Aussage über das Ergebnis,
  * nicht über den Programmablauf.
  *
  * Ein Graph mit 3 Entitäten und 0 Beziehungen hat den Build überstanden.
- * Bis hierher meldete Karte 3 trotzdem „Bereit" und gab den Weiter-Knopf
+ * Bis hierher meldete Karte 3 trotzdem „Bereit“ und gab den Weiter-Knopf
  * frei; der Report scheiterte Minuten später an fehlender Evidenz.
  */
 
@@ -41,7 +41,7 @@ function mountStep(qualityBlocked: boolean, currentPhase = 2) {
   })
 }
 
-/** Karte 3 ist die „Weiter"-Karte; ihr Button führt in den Folgeschritt. */
+/** Karte 3 ist die „Weiter“-Karte; ihr Button führt in den Folgeschritt. */
 function nextButton(wrapper: ReturnType<typeof mountStep>) {
   const buttons = wrapper.findAll('button')
   return buttons[buttons.length - 1]
@@ -64,7 +64,7 @@ describe('Step1GraphBuild — Qualitätsgate', () => {
     expect(nextButton(mountStep(true)).attributes('disabled')).toBeDefined()
   })
 
-  it('nennt den Grund statt „Graph fertig."', () => {
+  it('nennt den Grund statt „Graph fertig.“', () => {
     const wrapper = mountStep(true)
     expect(wrapper.text()).toContain('erfüllt die Qualitätsschwelle nicht')
     expect(wrapper.text()).not.toContain('Graph fertig.')

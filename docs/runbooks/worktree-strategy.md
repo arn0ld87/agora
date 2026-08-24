@@ -112,7 +112,7 @@ lokalen Änderungen: kein automatisches `--force` oder `branch -D`.
 ## Multi-Slice-Epic
 
 Bei Epics, die mehrere parallele Slices umfassen (z.B. Observability),
-werden Worktrees pro Slice angelegt. Kein „Sammel-Worktree" für mehrere
+werden Worktrees pro Slice angelegt. Kein „Sammel-Worktree“ für mehrere
 Slices — jeder Slice hat seinen eigenen.
 
 ---

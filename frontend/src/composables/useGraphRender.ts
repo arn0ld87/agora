@@ -15,7 +15,7 @@
  *               wird vom Composable verdrahtet; Erst-Render in `onMounted`.
  *  - Selection: `selectedItem`-Ref wird vom Composable zurückgegeben; D3-Click-
  *               Handler schreiben hinein, der Aufrufer kann sie auch von außen
- *               leeren (z.B. bei „Detail schließen").
+ *               leeren (z.B. bei „Detail schließen“).
  */
 
 import { onMounted, onUnmounted, onScopeDispose, ref, toValue, watch, nextTick, type MaybeRefOrGetter, type Ref } from 'vue'

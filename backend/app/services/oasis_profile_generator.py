@@ -1122,17 +1122,17 @@ class OasisProfileGenerator:
         if self.language == "de":
             return f"""### Eignungsprüfung (vor allem anderen zu beantworten)
 
-Prüfe zuerst, ob „{entity_name}" überhaupt einen menschlichen Träger haben kann — also ob es Menschen gibt, die für diese Entität sprechen und im Szenario eine eigene Interessenlage vertreten.
+Prüfe zuerst, ob „{entity_name}“ überhaupt einen menschlichen Träger haben kann — also ob es Menschen gibt, die für diese Entität sprechen und im Szenario eine eigene Interessenlage vertreten.
 
-Setze `ineligible: true` und begründe knapp in `ineligible_reason`, wenn „{entity_name}" eines der folgenden ist:
-- eine Software, ein Modell, ein Werkzeug oder ein technisches System (auch wenn der Typ „{entity_type}" etwas anderes nahelegt)
+Setze `ineligible: true` und begründe knapp in `ineligible_reason`, wenn „{entity_name}“ eines der folgenden ist:
+- eine Software, ein Modell, ein Werkzeug oder ein technisches System (auch wenn der Typ „{entity_type}“ etwas anderes nahelegt)
 - ein Ort, eine Stadt, ein Bundesland oder eine Region
 - ein Datum, ein Termin, ein Zeitraum oder ein Meilenstein
 - ein Dokument, ein Abschnitt, eine Zulassung, ein Verfahren oder ein Regelwerk
 - ein Gerät, eine Infrastruktur oder eine Systemkomponente
 - ein abstrakter Begriff, ein Sammelbegriff oder das Analysewerkzeug selbst
 
-Der Entitätstyp ist dabei nur ein Hinweis, keine Antwort — er trägt in der Praxis häufig „Organization", auch wenn die Entität eine Software oder eine Stadt ist. Entscheide nach dem Namen und dem Kontext.
+Der Entitätstyp ist dabei nur ein Hinweis, keine Antwort — er trägt in der Praxis häufig „Organization“, auch wenn die Entität eine Software oder eine Stadt ist. Entscheide nach dem Namen und dem Kontext.
 
 Bei `ineligible: true` sind alle übrigen Felder bedeutungslos, müssen aber weiterhin schemagültig sein — sonst wird die Antwort verworfen, drei Versuche scheitern und die Entität landet über den regelbasierten Pfad doch als Persona im Lauf. Verwende genau: display_name und handle je ein Minuszeichen, age 30, gender other, mbti ISTJ, country DE, voice_register neutral-de, leere Strings für bio, persona und profession, leere Liste für interested_topics. Erfinde in diesem Fall KEINE Persona.
 
@@ -2356,7 +2356,7 @@ Important:
             else:
                 logger.info(f"[{current}/{total}] Successfully generated persona: {entity.name} ({entity_type})")
 
-        # Issue B2 (PLAN.md „Abbrechen & Pause"): kooperativer Abbruch der
+        # Issue B2 (PLAN.md „Abbrechen & Pause“): kooperativer Abbruch der
         # Persona-Generierung. Bereits gestartete Persona-Generierungen
         # dürfen auslaufen — das ist akzeptiert (kein hartes Kill der
         # aktuell laufenden Anfrage). Nur das Nachlegen NEUER Arbeit stoppt

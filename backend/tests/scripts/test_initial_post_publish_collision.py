@@ -18,8 +18,8 @@ bauen: auch nach deren Fix kann eine Entität legitim mehrfach als Sprecher
 auftreten.
 
 Zusätzlich geprüft: die Logzeile gab ``len(initial_actions)`` aus — die Zahl
-distinkter Poster-Agenten — und nannte sie „initial posts". Bei neun
-kollabierten Posts meldete sie „1", bei neun verteilten „9". Sie war damit
+distinkter Poster-Agenten — und nannte sie „initial posts“. Bei neun
+kollabierten Posts meldete sie „1“, bei neun verteilten „9“. Sie war damit
 die ganze Zeit ein direkter Indikator für den Kollaps, nur als solcher nicht
 lesbar.
 """

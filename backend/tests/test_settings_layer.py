@@ -3,7 +3,7 @@
 Pinnt die Lade-Reihenfolge ``Defaults → env → file → override`` und das
 Source-Tracking. Der Pin-Test gegen ``Config`` fängt Drift zwischen
 Schema-Defaults und Code-Defaults ab — das war ausdrücklich Akzeptanz-
-Kriterium des Issues („gleiche Validatoren wie Startup").
+Kriterium des Issues („gleiche Validatoren wie Startup“).
 """
 
 from __future__ import annotations

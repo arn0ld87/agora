@@ -25,7 +25,7 @@ Quelle für die Variablennamen ist der Code (Backend `os.getenv` / `pydantic-set
 | `SECRET_KEY` 🔐 | Flask-Session-Signing |
 | `AGORA_FERNET_KEY` 🔐 | symmetrische Verschlüsselung (Secrets-at-rest) — siehe [`secret-key-lifecycle.md`](secret-key-lifecycle.md) |
 | `AGORA_MAX_UPLOAD_SIZE_MB` | Upload-Limit |
-| `NLTK_DISABLE_IMPORT_SECURITY` | schaltet den Import-Hook von nltk ≥ 3.10 ab; nötig, weil die venv unter dem Arbeitsverzeichnis liegt (Container und `cd backend`). `backend/app/__init__.py`, das Dockerfile und die Testsuite setzen `1` bereits — siehe [`dependency-risk-register.md`](dependency-risk-register.md), Abschnitt „nltk-Baseline" |
+| `NLTK_DISABLE_IMPORT_SECURITY` | schaltet den Import-Hook von nltk ≥ 3.10 ab; nötig, weil die venv unter dem Arbeitsverzeichnis liegt (Container und `cd backend`). `backend/app/__init__.py`, das Dockerfile und die Testsuite setzen `1` bereits — siehe [`dependency-risk-register.md`](dependency-risk-register.md), Abschnitt „nltk-Baseline“ |
 
 ## Auth & Tickets
 
@@ -101,7 +101,7 @@ Embedding-Konfiguration wird vom [`EmbeddingConfigurationStore`](../backend/app/
 | `GRAPH_CHUNK_SIZE` / `GRAPH_CHUNK_OVERLAP` | Chunking beim Graph-Build |
 | `GRAPH_PARALLEL_CHUNKS` | Parallelität beim Build |
 | `GRAPH_MIN_ENTITIES` | Qualitätsschwelle: Entitäten im fertigen Graphen (Default `3`). Darunter eine Warnung |
-| `GRAPH_MIN_RELATIONS` | Qualitätsschwelle: Beziehungen (Default `1`). Darunter **blockierend** — der Schritt erreicht „bereit" nicht |
+| `GRAPH_MIN_RELATIONS` | Qualitätsschwelle: Beziehungen (Default `1`). Darunter **blockierend** — der Schritt erreicht „bereit“ nicht |
 | `GRAPH_MIN_CHUNK_SUCCESS_RATIO` | Anteil der Chunks, die Entitäten oder Beziehungen liefern müssen (Default `0.5`; `0.0` schaltet die Prüfung ab) |
 | `GRAPH_MEMORY_PUT_TIMEOUT` / `GRAPH_MEMORY_QUEUE_MAX` | Graph-Memory-Backpressure |
 | `ONTOLOGY_MAX_ENTITY_TYPES` / `_MAX_EDGE_TYPES` / `_MIN_ENTITY_TYPES` | Ontologie-Grenzen |

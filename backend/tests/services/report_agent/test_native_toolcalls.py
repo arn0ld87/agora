@@ -573,7 +573,7 @@ class TestReactLoopNativeToolCalls:
         """Issue #1277-1: ``content: None`` + leere ``tool_calls`` auf dem nativen
         Pfad darf keinen TypeError werfen, der den Section dauerhaft auf
         ``generation_failed`` setzt. Der bestehende None-Guard (Retry mit
-        „Response empty") muss stattdessen greifen — ein folgender Versuch darf
+        „Response empty“) muss stattdessen greifen — ein folgender Versuch darf
         die Section noch erfolgreich abschließen.
         """
         from app.services.report_agent.workflow import generate_section_react

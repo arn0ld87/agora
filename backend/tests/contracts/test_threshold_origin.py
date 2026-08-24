@@ -1,6 +1,6 @@
 """Issue #1160 E — operative Zahlen tragen ihre Herkunft mit.
 
-Zahlen wie „>90 % Traffic-Baseline" oder „14-Tage-Rankinggrenze" sahen im
+Zahlen wie „>90 % Traffic-Baseline“ oder „14-Tage-Rankinggrenze“ sahen im
 Fließtext alle gleich aus, egal ob sie aus dem Auftragsdokument stammten, aus
 gemessenen Daten, aus einer Norm, aus einer Betreiberentscheidung oder daraus,
 dass ein Sprachmodell sie plausibel fand. Der Leser konnte sie nicht

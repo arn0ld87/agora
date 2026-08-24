@@ -2,7 +2,7 @@
 
 Nach drei fehlgeschlagenen LLM-Versuchen wird die Persona nicht verworfen,
 sondern regelbasiert erzeugt („Kaufmännische Sachbearbeitung
-(AdministrativeEmployee)", Themen „Allgemein · Gesellschaft"). Diese
+(AdministrativeEmployee)", Themen „Allgemein · Gesellschaft“). Diese
 Profile nehmen regulär an der Simulation teil, und ihre Beiträge waren im
 Report nicht von echten Personas zu unterscheiden — `OasisAgentProfile`
 besaß kein Feld für Herkunft oder Qualität.

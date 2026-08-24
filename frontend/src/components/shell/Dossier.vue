@@ -116,7 +116,7 @@ import { createSimulationFromPersonas } from '../../api/simulation'
 /**
  * Dossier.vue — rechte Spalte (Block B3).
  *
- * Zeigt das gewaehlte ShelfObject. Die „Bestandteile"-Liste und der
+ * Zeigt das gewaehlte ShelfObject. Die „Bestandteile“-Liste und der
  * Red-Team-Kasten aus der Design-Vorlage (01-ablage.html) fehlen hier
  * bewusst: ShelfObject (types/shelf.ts) traegt dafuer keine Felder,
  * und useShelf.ts liefert keine solche Daten — sie liessen sich nur
