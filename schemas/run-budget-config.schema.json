@@ -2,7 +2,7 @@
   "$id": "https://alexle135.de/schemas/run-budget-config.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Vom Nutzer gesetzte Budget-Limits f\u00fcr einen Run.\n\nAlle Limits optional; None bedeutet \u201ekein Limit\". `enforcement` gilt\nf\u00fcr alle gesetzten Limits gemeinsam: soft = warnen und weiterlaufen,\nhard = weitere planbare Modellaufrufe deterministisch verhindern.",
+  "description": "Vom Nutzer gesetzte Budget-Limits f\u00fcr einen Run.\n\nAlle Limits optional; None bedeutet \u201ekein Limit\u201c. `enforcement` gilt\nf\u00fcr alle gesetzten Limits gemeinsam: soft = warnen und weiterlaufen,\nhard = weitere planbare Modellaufrufe deterministisch verhindern.",
   "properties": {
     "currency": {
       "default": "USD",

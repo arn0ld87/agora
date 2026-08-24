@@ -65,7 +65,7 @@ _MODEL_OUTPUT_LIMITS: tuple[tuple[str, int], ...] = (
 def model_output_limit(model: Optional[str]) -> Optional[int]:
     """Bekanntes Ausgabelimit für *model*, sonst ``None`` (kein Deckel).
 
-    ``None`` heißt „unbekannt", nicht „unbegrenzt". Für lokale Modelle über
+    ``None`` heißt „unbekannt“, nicht „unbegrenzt“. Für lokale Modelle über
     Ollama ist das der Normalfall — dort begrenzt ``num_ctx``, nicht ein
     serverseitiges Ausgabelimit.
     """

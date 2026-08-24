@@ -410,7 +410,7 @@ class EmbeddingService:
 def _is_transient_http_error(exc: requests.exceptions.HTTPError) -> bool:
     """True, wenn die Antwort einen Provider-Ausfall statt Fehlkonfiguration meldet.
 
-    Die Trennlinie ist „hilft ein Retry oder ein Warten?":
+    Die Trennlinie ist „hilft ein Retry oder ein Warten?“:
 
     * ``5xx`` — Serverfehler auf Providerseite, transient.
     * ``429`` — Quota bzw. Rate Limit erschoepft (u. a. Googles Spend Cap). Die

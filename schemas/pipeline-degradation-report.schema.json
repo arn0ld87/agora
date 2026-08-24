@@ -11,7 +11,7 @@
       "type": "string"
     },
     "DegradationSeverity": {
-      "description": "Wie schwer der Ausfall wiegt.\n\nDer Unterschied ist nicht kosmetisch: ``BLOCKING`` hei\u00dft, dass der\nSchritt den Zustand \u201ebereit\" nicht erreichen darf, auch wenn technisch\nkein Fehler aufgetreten ist.",
+      "description": "Wie schwer der Ausfall wiegt.\n\nDer Unterschied ist nicht kosmetisch: ``BLOCKING`` hei\u00dft, dass der\nSchritt den Zustand \u201ebereit\u201c nicht erreichen darf, auch wenn technisch\nkein Fehler aufgetreten ist.",
       "enum": [
         "warning",
         "blocking"

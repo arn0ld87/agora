@@ -1700,7 +1700,7 @@ def generate_report(
         # Issue #1277-2: Stage und Message folgen dem tatsächlichen Report-Status.
         # ``resolve_report_status``/``apply_degradation_downgrade`` können den
         # Report auf INCOMPLETE setzen (fehlgeschlagene Pflichtsection, lokale
-        # Claim-Degradierung). Ein unbedingtes „completed" bei 100 % würde
+        # Claim-Degradierung). Ein unbedingtes „completed“ bei 100 % würde
         # Consumern (WebSocket, Polling-Client, Streaming-UI) Erfolg vorgaukeln,
         # den die Pipeline selbst nicht einlöst — genau die Fehldarstellung, die
         # #1006 / P0-7 beseitigen sollte.

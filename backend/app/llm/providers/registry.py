@@ -130,7 +130,7 @@ def _detect_http(base_url: Optional[str], model: Optional[str]) -> HttpDetectedP
         return "google"
     # Issue #1282 — Amazon Bedrock OpenAI-kompatibler mantle-Pfad. Hostname-
     # basiert (wie der MiniMax-Zweig, CodeQL #750), kein raw substring: ein
-    # Drittanbieter-Host mit „bedrock" im Pfad darf NICHT matchen. Erkennt
+    # Drittanbieter-Host mit „bedrock“ im Pfad darf NICHT matchen. Erkennt
     # bedrock-mantle.<region>.api.aws (empfohlener mantle-Endpunkt) und
     # bedrock-runtime.<region>.amazonaws.com (Fallback, falls jemand den
     # Runtime-Host einträgt — ebenfalls OpenAI-Compat via mantle). Beide
