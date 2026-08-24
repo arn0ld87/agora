@@ -78,6 +78,45 @@ def test_an_empty_statement_yields_nothing():
     assert split_compound_claim("") == []
 
 
+def test_a_colon_introduced_bullet_list_splits_into_one_claim_per_item():
+    """#1346: Aufzaehlungsform aus dem Issue-Beispiel.
+
+    ``Rollout nur wenn:`` gefolgt von Bindestrich-Bullets ist ein
+    Sammelclaim mit so vielen Teilaussagen wie Bullets. Jeder Teil traegt
+    die Einleitung vor dem Doppelpunkt weiter — sonst waere z.B.
+    "S-17 behoben" ohne Bezug zu "Rollout" und faellt unter
+    ``MIN_ATOM_TOKENS``.
+    """
+    parts = split_compound_claim(
+        "Rollout nur wenn folgende Bedingungen erfuellt sind:\n"
+        "- die Datenschutzfolgenabschaetzung abgeschlossen ist\n"
+        "- die Betriebsvereinbarung unterschrieben ist\n"
+        "- die Schulungsquote erreicht ist"
+    )
+
+    assert len(parts) == 3
+    assert all(p.startswith("Rollout nur wenn folgende Bedingungen erfuellt sind") for p in parts)
+    assert any("Datenschutzfolgenabschaetzung" in p for p in parts)
+    assert any("Betriebsvereinbarung" in p for p in parts)
+    assert any("Schulungsquote" in p for p in parts)
+
+
+def test_a_bullet_list_without_colon_intro_is_not_split():
+    """Konservative Grenze: nur Doppelpunkt+Liste loest die Zerlegung aus.
+
+    Ohne Doppelpunkt am Zeilenende vor der Aufzaehlung ist nicht sicher,
+    dass die folgenden Zeilen eigenstaendige Teilaussagen sind statt z.B.
+    einer Fortsetzung eines Fliesstext-Absatzes mit Gedankenstrichen.
+    """
+    text = (
+        "Rollout nur wenn folgende Bedingungen erfuellt sind\n"
+        "- die Datenschutzfolgenabschaetzung abgeschlossen ist\n"
+        "- die Betriebsvereinbarung unterschrieben ist"
+    )
+
+    assert split_compound_claim(text) == [text]
+
+
 # --- Wirkung auf das Urteil --------------------------------------------------
 
 
