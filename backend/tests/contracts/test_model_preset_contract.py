@@ -83,3 +83,44 @@ def test_available_models_response_top_level_none_stays_explicit():
 def test_response_rejects_unknown_top_level_field():
     with pytest.raises(ValidationError):
         AvailableModelsResponse(unexpected_field=True)
+
+
+def test_explicit_null_in_serialization_is_intentional():
+    """Issue #1395, CodeRabbit-Followup (offen): ein CodeRabbit-Review auf
+    PR #1397 hat angemerkt, dass das JSON-Schema fuer die optionalen
+    ModelPreset-Felder ``null`` als Wert erlaubt. Pydantic v2 exportiert
+    ``anyOf: [{type: ...}, {type: null}]`` sobald ein Feld als ``T | None``
+    annotiert ist — ``json_schema_extra={"nullable": False}`` wird ignoriert.
+    Ein sauberer Fix wuerde entweder eigene ``field_validator`` einfuehren,
+    die ``None`` ablehnen (verbunden mit Konvention fuer Default-Setzung),
+    oder auf den Generator ``core_schema`` zurueckgreifen. Beide sind echte
+    Architekturentscheidungen und nicht im Scope dieses Issues.
+
+    Dieser Test dokumentiert das aktuelle Verhalten und bewacht es gegen
+    ungewollte Drift: Pydantic *kann* explizites null aktuell akzeptieren,
+    der Serializer ``_serialize_presets`` filtert es auf der Ausgabe weg.
+    Wer den Finding schliesst, dreht die Assertion um.
+    """
+    preset = ModelPreset(name="qwen2.5:32b", size=None)
+    # Aktuelles (bewusstes) Verhalten: Pydantic erlaubt explicit null am Rand.
+    assert preset.size is None
+    # Aber der Serializer filtert es auf dem Draht:
+    response = AvailableModelsResponse(presets=[preset])
+    dumped = response.model_dump(mode="json")
+    assert "size" not in dumped["presets"][0]
+
+
+def test_unset_preset_fields_omit_explicit_null_in_schema_known_todo():
+    """Bewacht den Schema-Stand vor ungewollter Drift; der zugehoerige
+    Fix braucht eine eigene Issue (siehe ``test_explicit_null_in_serialization_is_intentional``).
+    Bis dahin weiss das Schema explizites null zu — der Schutz liegt im
+    Serializer, nicht im Schema."""
+    schema = ModelPreset.model_json_schema()
+    nullable_field = next(
+        f for f in ("kind", "label", "size")
+        if f in schema["properties"]
+        and any(
+            sub == {"type": "null"} for sub in schema["properties"][f].get("anyOf", [])
+        )
+    )
+    assert nullable_field in {"kind", "label", "size", "label_key", "family", "parameter_size"}

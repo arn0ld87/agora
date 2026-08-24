@@ -6,3 +6,8 @@
 - **Frontend-Spiegel `frontend/src/contracts/modelPresetContract.ts`** nach dem bestehenden Zod-Mechanismus (strikt, gegen `schemas/model-preset.schema.json` und `schemas/available-models-response.schema.json` getestet). `frontend/src/api/simulation.ts` re-exportiert die generierten Typen statt eigene Interfaces zu pflegen; `useEnvForm.ts` bezog `ModelPreset` bereits darüber (Rework aus [#1390](https://github.com/arn0ld87/agora/pull/1390)).
 - **`default_provider` ist im Vertrag bewusst `str`, nicht `Literal`** — analog zu `SystemStatusOllama.skipped_provider`: ein neuer Provider in `registry.py::detect_provider` (aktuell `ollama|cloud|minimax|openai|google|bedrock|unknown`) darf den Vertrag nicht brechen. Das vorherige TypeScript-Interface kannte nur vier der sieben Werte — `useEnvForm.ts`s `defaultProvider`-Ref ist entsprechend von der engen Union auf `string` geweitet.
 - **`frontend/src/i18n/modelPresetLabel.ts::ModelPresetLike` bleibt unverändert** — der eigene Minimal-Strukturtyp entkoppelt die i18n-Schicht bewusst vom API-Layer und ist kein Duplikat.
+
+- Tests: zwei Regressions-Waechter dokumentieren das offene CodeRabbit-Finding
+  zur Nullability optionaler Felder und zur Integer-Validierung in Zod.
+  Die Fixes erfordern eine Folge-Issue (Backend-Schema-Generator vs.
+  ``field_validator``; Frontend Schema-Spiegel-Mechanik).

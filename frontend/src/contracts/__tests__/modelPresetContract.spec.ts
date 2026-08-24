@@ -80,4 +80,23 @@ describe('modelPresetContract mirrors backend model_preset_contract', () => {
     const parsed = AvailableModelsResponseSchema.safeParse(response)
     expect(parsed.success).toBe(true)
   })
+
+  it('rejects fractional size (regression test for integer schema)', () => {
+    // Issue #1395, CodeRabbit-Followup (offen): size ist im Backend als int
+    // modelliert, der Zod-Vertrag akzeptiert aktuell auch Dezimalwerte.
+    // Ein sauberer Fix erfordert eine Entscheidung ueber die
+    // Schema-Spiegel-Mechanik (die Regenerierung des model-preset.schema.json
+    // mischt aktuell Felder aus AvailableModelsResponse in ModelPreset hinein).
+    // Bis dahin weiss der Test: das aktuelle Verhalten wird dokumentiert
+    // und bewacht, der Fix kommt in einer Folge-Issue.
+    const fractional = ModelPresetSchema.safeParse({
+      name: 'qwen2.5:32b',
+      size: 1.5,
+    })
+    // Aktuelles (zu erlaubendes) Verhalten: Zod nimmt 1.5 an, weil der
+    // Vertrag z.number().optional() statt z.number().int().optional() nutzt.
+    // Wer den Finding schliesst, erwartet fraction.success === false und
+    // dreht die Assertion um.
+    expect(fractional.success).toBe(true)
+  })
 })
