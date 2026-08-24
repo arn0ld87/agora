@@ -25,8 +25,13 @@
  */
 
 import { ref, computed, watch, type Ref, type ComputedRef } from 'vue'
-import { getAvailableModels } from '../api/simulation'
+import { getAvailableModels, type ModelPreset } from '../api/simulation'
 import { resolvePresetLabel } from '../i18n/modelPresetLabel'
+
+// Der Preset-Typ gehoert dem API-Vertrag; hier stand bis zum Review von
+// PR #1390 eine zweite, driftfaehige Kopie. Re-Export, weil `ModelPreset`
+// Teil der oeffentlichen Signatur von `UseEnvFormReturn` ist.
+export type { ModelPreset }
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -37,19 +42,6 @@ export const STORAGE_LANG = 'agora.agentLanguage'
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-export interface ModelPreset {
-  name: string
-  /**
-   * Legacy-Anzeigetext. Der Backend-Vertrag liefert ihn fuer Presets seit
-   * Issue #1290 nicht mehr; die Ollama-Tags-Liste setzt ihn weiterhin auf den
-   * Modellnamen. Bleibt als Fallback fuer den Mischbetrieb mit aelteren
-   * Backends erhalten.
-   */
-  label?: string
-  /** Stabiler i18n-Schluessel (`llm.preset.<kind>.<slug>`), Issue #1290. */
-  label_key?: string
-}
 
 export interface ModelOption {
   value: string
