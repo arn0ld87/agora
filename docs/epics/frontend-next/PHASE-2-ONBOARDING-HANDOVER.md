@@ -51,7 +51,7 @@ Falls bei A geblieben wird, sind diese Verbesserungen denkbar:
 1. **`Step-Status-Granularität verbessern`** — Aktuell nur `chat_model_configured` ja/nein. Wäre `providers` (alle konfiguriert) vs. `chat_model` (genau eins gewählt) vs. `embeddings` getrennt aussagekräftiger? Aktuell sind `providers` und `chat_model` redundant (beide prüfen `chat_model_configured`).
 2. **Embedding-Legacy-Hint bereinigen** — sobald `embedding_service.py` final Gemini-Re-Embedding unterstützt (Phase-F-Restpunkt).
 3. **Wizard-Progress-Bar mit echten Prozenten** statt nur 7-Step-Liste.
-4. **„Skip"-Button** auf Statusschritten ausblenden, wenn der Step noch nicht `configured` ist (sonst irreführend).
+4. **„Skip“-Button** auf Statusschritten ausblenden, wenn der Step noch nicht `configured` ist (sonst irreführend).
 
 ### 3.3 Phase-1-Berührung im Onboarding (optional)
 Wenn gewünscht, könnte der Welcome-Step den aktuellen Default via `useEffectiveModelSelection().effectiveRef` anzeigen (rein informativ, kein Write). Mini-Migration, isoliert.

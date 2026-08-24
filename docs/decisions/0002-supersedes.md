@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Datum:** 2026-08-17
-**Löst ab:** die Judge-Klausel aus [ADR-0002](0002-evidence-gating.md), präzisiert in [ADR-0011](0011-evidence-entailment-and-provenance.md) §„Zwei Stufen"
+**Löst ab:** die Judge-Klausel aus [ADR-0002](0002-evidence-gating.md), präzisiert in [ADR-0011](0011-evidence-entailment-and-provenance.md) §„Zwei Stufen“
 **Bezug:** [#1357](https://github.com/arn0ld87/agora/issues/1357), [`backend/app/services/evidence_entailment.py`](../../backend/app/services/evidence_entailment.py), [`backend/app/services/llm_entailment_judge.py`](../../backend/app/services/llm_entailment_judge.py)
 **Sign-off:** arn0ld87
 

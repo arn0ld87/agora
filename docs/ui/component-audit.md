@@ -90,7 +90,7 @@ sie mehr importiert. Erst dann retire.
 | Komponente | Zweck | Empfehlung |
 |---|---|---|
 | `ActiveRunsCard.vue` | Live-Liste laufender Simulationen | keep |
-| `HeroNewRun.vue` | Großer „Neue Simulation"-CTA | keep |
+| `HeroNewRun.vue` | Großer „Neue Simulation“-CTA | keep |
 | `QuickActionsRow.vue` | Schnellaktionen-Reihe | keep |
 | `RecentReportsCard.vue` | Letzte abgeschlossene Reports | keep |
 | `StatsRow.vue` | KPI-Karten-Reihe (Personas/Entitäten/Relationen) | keep — **deckt Anleitung-Phase-11 (MetricCard) vollständig ab** |

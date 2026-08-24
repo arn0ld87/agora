@@ -1,11 +1,11 @@
 # Wording-Glossar v1 — Agora
 
-**Status:** verbindlich seit 2026-05-02 (Slice „Wording-Glossar v1", Issue #175).
+**Status:** verbindlich seit 2026-05-02 (Slice „Wording-Glossar v1“, Issue #175).
 **Geltungsbereich:** README, `docs/`, alle Backend-Strings, die im Report sichtbar werden, und alle LLM-Prompts in `backend/app/services/`.
 
 ## Motivation
 
-Agora ist ein **Persona-basierter Resonanz-Simulator**, kein Orakel. „Prediction"-, „Rehearsal"- und „God's-Eye"-Vokabular suggeriert Vorhersagekraft, die das System nicht hat, und passt nicht zur sachlichen DACH-Außendarstellung. Das Glossar fixiert die Begriffe, mit denen wir intern und extern über das Produkt sprechen.
+Agora ist ein **Persona-basierter Resonanz-Simulator**, kein Orakel. „Prediction“-, „Rehearsal“- und „God's-Eye“-Vokabular suggeriert Vorhersagekraft, die das System nicht hat, und passt nicht zur sachlichen DACH-Außendarstellung. Das Glossar fixiert die Begriffe, mit denen wir intern und extern über das Produkt sprechen.
 
 ## Glossar
 

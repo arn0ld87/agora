@@ -233,10 +233,10 @@ uv run --project backend python scripts/llm-secrets-doctor.py verify
 
 | Symptom | Mögliche Ursache | Erster Schritt |
 |---|---|---|
-| `/api/status` 503, „Secret store unavailable" | `AGORA_SECRET_KEY` fehlt oder ist invalid in `.env` | `llm-secrets-doctor.py status` |
+| `/api/status` 503, „Secret store unavailable“ | `AGORA_SECRET_KEY` fehlt oder ist invalid in `.env` | `llm-secrets-doctor.py status` |
 | Provider-Maske nach Restart leer | `backend/data` nicht persistent gemountet | `docker compose config | grep backend/data` |
 | `LLMClient: LLM_API_KEY not configured` | `.env` fehlt im Repo-Root oder Var nicht gesetzt | `cat .env | grep LLM_API_KEY` |
-| `/api/status` „Neo4j offline — NoneType" | Fork-Reset im Storage; behoben in #443. Falls trotzdem auf älterer Version: Backend restarten | `docker compose restart agora` |
+| `/api/status` „Neo4j offline — NoneType“ | Fork-Reset im Storage; behoben in #443. Falls trotzdem auf älterer Version: Backend restarten | `docker compose restart agora` |
 | Run-Status hängt bei `persona_generation` | OASIS-Subprozess hat keinen Kontext, Memory-Floor nicht aktiv | Logs prüfen, ggf. `LLM_CONTEXT_LIMIT` setzen |
 | Frontend-Bundle leer / 404 | `docker compose up` ohne `--build` nach Code-Update | `docker compose up -d --build` |
 

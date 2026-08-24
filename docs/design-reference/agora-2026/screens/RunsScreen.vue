@@ -101,7 +101,7 @@ function statusDot(s: Row['status']): string {
             <td>
               <div class="src">
                 <div class="nm">{{ r.file }}</div>
-                <div class="q">„{{ r.q }}"</div>
+                <div class="q">„{{ r.q }}“</div>
               </div>
             </td>
             <td>
