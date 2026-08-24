@@ -65,7 +65,9 @@ export interface UseEnvFormReturn {
   ollamaModels: Ref<ModelPreset[]>
   presetModels: Ref<ModelPreset[]>
   defaultModel: Ref<string>
-  defaultProvider: Ref<'ollama' | 'cloud' | 'openai' | 'unknown'>
+  /** Vokabular deckungsgleich mit HttpDetectedProvider (registry.py); bewusst
+   * `string` statt Enum, siehe contracts/modelPresetContract.ts. */
+  defaultProvider: Ref<string>
   serverDefaultRequiresOllama: ComputedRef<boolean>
   ollamaReachable: Ref<boolean>
   agentToolsEnabled: Ref<boolean>
@@ -101,7 +103,7 @@ export function useEnvForm({ t, te, onError }: UseEnvFormOptions): UseEnvFormRet
   const ollamaModels = ref<ModelPreset[]>([])
   const presetModels = ref<ModelPreset[]>([])
   const defaultModel = ref<string>('')
-  const defaultProvider = ref<'ollama' | 'cloud' | 'openai' | 'unknown'>('unknown')
+  const defaultProvider = ref<string>('unknown')
   const serverDefaultRequiresOllama = computed<boolean>(() => defaultProvider.value === 'ollama')
   const ollamaReachable = ref<boolean>(false)
   const agentToolsEnabled = ref<boolean>(false)
