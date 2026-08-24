@@ -1,0 +1,3 @@
+### Fixed (406+ deutsche Zitate schlossen mit ASCII-Quote statt „…“ — 2026-08-24)
+
+- **Repo-weite Korrektur des Zitat-Schlusszeichens:** 515 Stellen in `backend/app/`, `backend/tests/`, `backend/scripts/`, `frontend/src/`, `docs/` und `changelog.d/` öffneten ein deutsches Zitat mit `„` und schlossen es mit dem ASCII-`"` statt mit `“`. Getrennte Commits pro Bereich, reiner Zeichenersatz ohne inhaltliche Änderung. Zwei Treffer in `report_agent/text_verification.py` sind bewusst ausgenommen — dort ist der ASCII-Quote das Delimiter-Zeichen einer `str.strip()`-Zeichenklasse, kein Zitat. Schema-Drift aus den betroffenen Contract-Docstrings (Pydantic `Field`-Description) wurde mitgerendert. (#1269)
