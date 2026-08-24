@@ -259,7 +259,18 @@ def test_generate_report_no_cancel_runs_all_sections(tmp_path):
         mock_rm.save_report.return_value = None
         mock_rm.save_outline.return_value = None
         mock_rm.save_section.return_value = None
-        mock_rm.assemble_full_report.return_value = "## Section 1\n## Section 2\n## Section 3"
+        # Issue #1302: der Requirement-Checker prüft den fertigen
+        # Berichtstext gegen die Default-Checkliste. Der Stub enthält alle
+        # geforderten Aspekte, damit dieser Test ausschließlich den
+        # Cancel-Pfad testet und nicht am Vollständigkeits-Gate hängt.
+        mock_rm.assemble_full_report.return_value = (
+            "## Section 1\n## Section 2\n## Section 3\n\n"
+            "Widersprüche zwischen Stakeholdern sind benannt. Als "
+            "Frühwarnindikator dient die Rücklaufquote. Die Stop-Bedingung "
+            "greift bei sinkender Akzeptanz; die Expand-Bedingung sieht eine "
+            "stufenweise Ausweitung vor. Ein Positionswechsel ist möglich. "
+            "Betriebsrat und Jugendrat bilden eine Koalition."
+        )
         mock_rm._write_json_atomic.side_effect = lambda path, data: None
         # Ohne diesen Mock liefert der unkonfigurierte MagicMock-Attribut-Zugriff
         # ein truthy MagicMock-Objekt zurueck. #1312 fuegte einen Nachvalidierungs-

@@ -34,6 +34,11 @@ from .output_contract import (
     resolve_report_status,
     sanitize_final_content,
 )
+from .requirement_checker import (
+    checklist_for_intent,
+    collect_requirement_degradations,
+    find_missing_requirements,
+)
 from .run_degradation import (
     apply_run_degradation_downgrade,
     assert_run_invariants,
@@ -1300,6 +1305,57 @@ def _build_partial_report(
     return report
 
 
+def _apply_requirement_check(report: Report, agent: Any, report_id: str) -> None:
+    """Issue #1302: maschinelle Vollständigkeitprüfung vor dem Abschluss.
+
+    Der Reporter setzte ``completed``, ohne zu prüfen, ob die geforderten
+    Analyseaspekte (Widersprüche, Frühwarnindikatoren, Stop-/Expand-
+    Bedingungen, Positionswechsel, Koalitionen) im Bericht stehen. Fehlende
+    Aspekte hängen als ``requirement_checker``-Degradationen an
+    ``run_degradations`` und werden über dieselbe Mechanik abgestuft wie
+    #1006/#1299 — keine zweite Statuslogik.
+
+    Der Aufruf liegt NACH dem ReportV3-Build: der Contract-Export entscheidet
+    über den Status bis dahin noch mit COMPLETED — würde dieser Check früher
+    abstuften, würde ``build_report_v3`` übersprungen und das Artefakt
+    fehlte. Erst danach stuft dieser Check ab und ein einziger ``save_report``
+    persistiert Status + Fehlerliste zusammen.
+    """
+    if not Config.REPORT_REQUIREMENT_CHECKER_ENABLED:
+        return
+    requirement_intent = detect_report_intent(
+        getattr(agent, "simulation_requirement", "") or ""
+    )
+    missing_requirements = find_missing_requirements(
+        [report.markdown_content],
+        checklist=checklist_for_intent(requirement_intent),
+    )
+    if not missing_requirements:
+        return
+    report.run_degradations = list(report.run_degradations) + (
+        collect_requirement_degradations(missing_requirements)
+    )
+    report.status = apply_run_degradation_downgrade(
+        report.status,
+        [
+            entry
+            for entry in report.run_degradations
+            if entry.get("component") == "requirement_checker"
+        ],
+    )
+    logger.warning(
+        "generate_report: report=%s verfehlt %d Pflichtaspekt(e): %s",
+        report_id,
+        len(missing_requirements),
+        ", ".join(req.id for req in missing_requirements),
+    )
+    if not getattr(report, "error", None):
+        report.error = (
+            "Inhaltliche Vollständigkeit unzureichend — fehlende Aspekte: "
+            + ", ".join(req.id for req in missing_requirements)
+        )
+
+
 def generate_report(
     agent: Any,
     progress_callback: Optional[Callable[[str, int, str], None]] = None,
@@ -1617,6 +1673,8 @@ def generate_report(
                         contract_validation_errors=val_exc.errors()
                     )
                 )
+        # Issue #1302: siehe _apply_requirement_check.
+        _apply_requirement_check(report, agent, report_id)
         ReportManager.save_report(report)
 
         # ========== Red-Team-Review (Slice 5, Issue #497) — vor report_synthesis ==========

@@ -232,6 +232,14 @@ class Config:
     REPORT_INTERVIEW_MAX_PER_PERSONA = int(
         os.environ.get('REPORT_INTERVIEW_MAX_PER_PERSONA', '2')
     )
+    # Issue #1302 — maschinelle Vollständigkeitprüfung vor dem Report-
+    # Abschluss: der Requirement-Checker (services/report_agent/
+    # requirement_checker.py) prüft den fertigen Berichtstext gegen eine
+    # konfigurierbare Checkliste und stuft fehlende Aspekte über die
+    # bestehende run_degradations-Mechanik auf INCOMPLETE ab.
+    REPORT_REQUIREMENT_CHECKER_ENABLED = os.environ.get(
+        'REPORT_REQUIREMENT_CHECKER_ENABLED', 'true'
+    ).strip().lower() in ('1', 'true', 'yes', 'on')
     # Output language for generated reports (plan, sections, chat answers).
     REPORT_LANGUAGE = os.environ.get('REPORT_LANGUAGE', 'German')
 
