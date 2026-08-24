@@ -204,7 +204,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('../views/v4/HistoryView.vue'),
   },
 
-  // Block B3 — Neuhuelle „Richtung B · Dossier" (PLAN.md).
+  // Block B3 — Neuhuelle „Richtung B · Dossier“ (PLAN.md).
   // /ablage ist der Einstieg der neuen Shell. Der Feature-Flag
   // (useShellVariant) wird NUR hier und im Dashboard-Redirect unten
   // ausgewertet — nie tief in Komponenten.

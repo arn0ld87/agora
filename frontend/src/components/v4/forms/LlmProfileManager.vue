@@ -304,7 +304,7 @@ async function submit(): Promise<void> {
     api_key:    resolvedApiKey.value,
     // Edit: bestehenden is_default beibehalten — sonst verliert das aktuelle
     // Default-Profil beim Bearbeiten seinen Status. Create: immer false; der
-    // User setzt den Default explizit über den „Als Standard"-Button.
+    // User setzt den Default explizit über den „Als Standard“-Button.
     is_default: formMode.value === 'edit' ? editingIsDefault.value : false,
   }
 

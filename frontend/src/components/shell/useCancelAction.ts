@@ -65,7 +65,7 @@ export function useCancelAction() {
   function cancel(runId: string): void {
     // Es gibt nur EINEN Toast. Bricht der Nutzer einen zweiten Lauf ab,
     // waehrend der erste noch im Undo-Fenster steht, wird der erste
-    // SOFORT ausgefuehrt — nicht verworfen. Wer „Abbrechen" gedrueckt
+    // SOFORT ausgefuehrt — nicht verworfen. Wer „Abbrechen“ gedrueckt
     // hat, erwartet einen Abbruch; ihn wegen eines Klicks auf eine
     // andere Zeile stillschweigend fallenzulassen, waere ein
     // Datenverlust, den niemand bemerkt.
