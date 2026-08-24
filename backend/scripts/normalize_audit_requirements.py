@@ -9,7 +9,7 @@ gegen PyPI auf und meldet für ``2.13.0+cpu``::
     ERROR:pip_audit._cli:torch: Dependency not found on PyPI and could not be
     audited: torch (2.13.0+cpu)
 
-Unter ``--strict`` ist „konnte nicht auditiert werden" ein Fehler, der Step
+Unter ``--strict`` ist „konnte nicht auditiert werden“ ein Fehler, der Step
 endet mit Exit 1. Lokal auf macOS fällt das nicht auf: ``uv export`` schreibt
 beide Marker-Varianten (``sys_platform != 'linux'`` → ``2.13.0``,
 ``sys_platform == 'linux'`` → ``2.13.0+cpu``), und nur auf Linux greift die
