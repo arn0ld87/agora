@@ -108,6 +108,8 @@ Verifikation: `gh api repos/arn0ld87/agora/branches/main/protection`. Konfigurat
 
 > Der frühere Text an dieser Stelle behauptete, `main` habe keine Branch-Protection (mit einem 404 als Beleg). Das war zum Zeitpunkt des CI-/E2E-Audits am 31.07.2026 nachweislich überholt — es bestanden bereits 15 Required Checks.
 
+Der mit [#1302](https://github.com/arn0ld87/agora/issues/1302) eingeführte `requirement_checker` prüft `report.markdown_content` gegen sechs Pflichtaspekte, aber `llm_e2e_stub.py` kannte den neuen Vertrag nicht: Alle zwölf Sections lieferten denselben generischen Platzhaltertext, der kein Muster trifft, sodass jeder Stub-Report bedingungslos `COMPLETED → INCOMPLETE` abgestuft wurde und `pollReportReady` (das nur `"completed"` akzeptierte) 300 s in den Timeout lief — `minimal-report.spec.ts` und `report-modes.spec.ts` schlugen fehl. Fix ([#1387](https://github.com/arn0ld87/agora/pull/1387)): `_STUB_FINAL_ANSWER_TEMPLATE` deckt jetzt alle sechs Aspekte deterministisch ab (analog zum bereits bedienten Persona-Floor-Gate), und `pollReportReady` bricht bei einem terminalen Nicht-Erfolgsstatus (`"incomplete"`, `"failed"`) sofort mit Status/Fehlermeldung ab statt bis zum Timeout zu warten — `"incomplete"` gilt weiterhin nicht als Erfolg, der Poller ist nur nicht mehr blind dafür. Der Checker selbst (`REPORT_REQUIREMENT_CHECKER_ENABLED`, `severity="blocking"`) blieb unverändert.
+
 ## Quality Gates
 
 | Gate | Status |

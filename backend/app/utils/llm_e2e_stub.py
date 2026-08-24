@@ -391,12 +391,25 @@ _STUB_TOOL_CALL_SEQUENCE: list[str] = [
     '<tool_call>{"name": "insight_forge", "parameters": {"query": "E2E-Smoke-Stub-Insight"}}</tool_call>',
 ]
 
-# Deterministischer Final-Answer-Text — enthält den Section-Titel als Platzhalter.
+# Deterministischer Final-Answer-Text.
 # Kein Persona-Zitat: Cite-Validation schlägt im Stub-Modus nicht an,
 # weil persona_ids_for_validation leer ist (kein echter Graph in CI).
+#
+# Deckt bewusst alle sechs Pflichtaspekte der Requirement-Checkliste
+# (requirement_checker.py::DEFAULT_REQUIREMENT_CHECKLIST) mit je einem
+# Satz ab — sonst stuft der mit #1302 eingeführte Requirement-Checker
+# jeden Stub-Report als COMPLETED → INCOMPLETE ab (#1387), weil der
+# alte Platzhaltertext keines der sechs Muster trifft. Analog zum
+# Persona-Floor-Gate, das im E2E bereits explizit bedient wird
+# (minimal-report.spec.ts::seedPersonaFloor).
 _STUB_FINAL_ANSWER_TEMPLATE = (
     "Final Answer: Stub-Abschnitt für E2E-Smoke-Tests. "
     "Dieser Text wurde deterministisch durch den llm_e2e_stub erzeugt. "
+    "Zwischen den Stakeholdern bestehen Widersprüche entlang klarer Konfliktlinien. "
+    "Als Frühwarnindikatoren gelten sinkende Zustimmungswerte. "
+    "Die Stop-/Expand-Kriterien legen fest, wann abgebrochen oder ausgeweitet wird. "
+    "Ein Positionswechsel einzelner Akteure ist im Verlauf erkennbar. "
+    "Erkennbare Koalitionen bündeln die Zustimmung. "
     "Keine echten LLM-Daten in diesem Lauf."
 )
 
