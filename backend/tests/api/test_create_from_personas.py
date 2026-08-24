@@ -117,7 +117,7 @@ def test_nimmt_auch_inline_personas_ohne_bibliothek():
 def test_persona_lauf_sagt_beim_bericht_klar_was_fehlt():
     """Ein Lauf ohne Graphen kann keinen Bericht erzeugen — das muss er sagen.
 
-    Vorher stand dort „Missing graph ID", was einem Nutzer nichts sagt,
+    Vorher stand dort „Missing graph ID“, was einem Nutzer nichts sagt,
     der nie einen Graphen bauen wollte. Ein Bericht ohne Graph-Belege
     waere die schlechtere Alternative: er saehe aus wie ein normaler.
     """

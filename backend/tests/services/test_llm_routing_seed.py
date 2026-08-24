@@ -700,7 +700,7 @@ def test_build_runtime_llm_config_maps_resolved_route_for_legacy_callers():
 # ---------------------------------------------------------------------------
 # OASIS-Sim-Start: eine ausgewählte MiniMax-ProviderConnection muss Modell,
 # Base-URL und gebundenen Key als zusammengehörige Einheit bis in den
-# Subprozess-Env durchreichen (Root Cause „404 model MiniMax-M3 not found").
+# Subprozess-Env durchreichen (Root Cause „404 model MiniMax-M3 not found“).
 # ---------------------------------------------------------------------------
 
 

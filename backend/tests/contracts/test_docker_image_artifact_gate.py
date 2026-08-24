@@ -10,7 +10,7 @@ ebenfalls geskippt: Der Upload hatte dort schlicht keinen Konsumenten.
 Folgenlos war das nicht. Das Prod-Image traegt die volle Backend-venv
 inklusive der CUDA-Kette; der Tar liegt im Gigabyte-Bereich. Im Lauf
 30825988931 (PR #1045) starb der Runner nach 1,64 GB hochgeladener Bytes
-mit „The runner has received a shutdown signal", nachdem der Job zuvor
+mit „The runner has received a shutdown signal“, nachdem der Job zuvor
 bereits 10 Minuten in Build, Trivy und SBOM verbracht hatte. Genau diese
 Kombination aus Tar, Daemon-Layern und Cache-Export hatte in #994 schon
 einmal ohne Fehlermeldung abgebrochen.
