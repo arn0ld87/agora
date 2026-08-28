@@ -216,7 +216,19 @@ def test_save_evidence_section_routes_orphans_to_gaps(tmp_path):
 
 
 def test_duplicate_bindings_do_not_raise_single_source_confidence(tmp_path):
-    """Doppelte Bindings machen aus einem low Claim keinen Mehrquellen-Claim."""
+    """Doppelte Bindings machen aus einem Claim keinen Mehrquellen-Claim.
+
+    #1301: Seit der Deckel-Kalibrierung darf ``compute_confidence`` einem
+    Single-Source-Claim mit starkem Match (>= 0.85) mehr als 0.59 zugestehen
+    -- hier 0.89/"high" (Verified-Schranke greift weiterhin, da nur eine
+    Quelle vorliegt, siehe ``confidence_calculator.py:271-273``). Die
+    eigentliche Dedup-Invariante ("zwei Bindings derselben Evidence-ID
+    ergeben keine zweite Quelle") zeigt sich deshalb nicht mehr am rohen
+    Score, sondern daran, dass ``_finalize_section_claims`` das Label über
+    ``auto_downgrade_unsupported_high_claims`` (ADR-0002 Anker 4,
+    Cross-Stakeholder-Pflicht für "high") auf "low" zurückstuft, weil hinter
+    der duplizierten Quelle keine zweite Stakeholder-Gruppe steht.
+    """
     from app.services.confidence_calculator import compute_confidence  # noqa: PLC0415
 
     agent = _make_agent(tmp_path)
@@ -243,7 +255,8 @@ def test_duplicate_bindings_do_not_raise_single_source_confidence(tmp_path):
     finalized, hypotheses, _, _decisions = agent._finalize_section_claims([claim])
 
     assert len(finalized) == 1
-    assert confidence_score <= 0.59
+    assert confidence_score <= 0.89
+    assert confidence_label != "verified"
     assert finalized[0]["confidence_label"] == "low"
     assert {item["evidence_id"] for item in finalized[0]["evidence"]} == {evidence_id}
     assert hypotheses == []
