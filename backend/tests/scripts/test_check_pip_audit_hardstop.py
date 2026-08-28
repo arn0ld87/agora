@@ -50,8 +50,16 @@ def test_after_hardcutoff_with_ignore_list_fails_with_exit_2() -> None:
 
 def test_on_hardcutoff_day_list_must_already_be_empty() -> None:
     # Inklusiv-Semantik: am Cutoff-Tag selbst ist die Liste nicht mehr erlaubt.
+    #
+    # #1203: ``date.today()`` liefert das Datum der LOKALEN Zeitzone, das
+    # Skript bildet sein "heute" aber mit ``date -u`` (UTC, Zeile 26). In
+    # Europe/Berlin (UTC+1/+2) sind das zwischen Mitternacht und 01:00 bzw.
+    # 02:00 zwei verschiedene Tage: der Test setzt den Cutoff dann auf den
+    # Folgetag aus Sicht des Skripts, das nimmt korrekt den
+    # "vor dem Hardcutoff"-Zweig und liefert Exit 0 statt 2.
+    # Beide Seiten muessen dieselbe Zeitzone verwenden.
     import datetime
 
-    today = datetime.date.today().isoformat()
+    today = datetime.datetime.now(datetime.UTC).date().isoformat()
     result = _run(today, "--ignore-vuln GHSA-xxxx")
     assert result.returncode == 2
