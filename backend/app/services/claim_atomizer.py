@@ -21,7 +21,7 @@ gerade nicht geht.
 from __future__ import annotations
 
 import re
-from typing import List
+from typing import List, Optional
 
 #: Konjunktionen, an denen ein Satz in eigenständige Behauptungen zerfällt.
 #: "sowie", "und zugleich", "während" verbinden Aussagen, die je für sich wahr
@@ -32,6 +32,10 @@ _SPLIT_PATTERN = re.compile(
 )
 
 _SENTENCE_PATTERN = re.compile(r"(?<=[.!?])\s+")
+
+#: Bindestrich-/Sternchen-/Nummern-Aufzaehlung (#1346). Eine Zeile wie
+#: "- S-17 behoben" oder "1. S-17 behoben".
+_LIST_ITEM_PATTERN = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+(.+)$")
 
 #: Ab wie vielen Inhaltswörtern ein Teil als eigenständige Behauptung zählt.
 #: Darunter ist er ein Fragment ("und dann", "aber auch") und trägt nichts,
@@ -47,13 +51,60 @@ def _content_tokens(text: str) -> List[str]:
     ]
 
 
+def _split_list_block(text: str) -> Optional[List[str]]:
+    """Doppelpunkt-Einleitung + Bullet-Aufzaehlung → eine Teilaussage je Zeile.
+
+    Nur ausgeloest, wenn die Zeile(n) vor der Aufzaehlung mit ``:`` enden —
+    das ist das konservative Signal, dass die folgenden Zeilen tatsaechlich
+    Teilaussagen derselben Einleitung sind ("Rollout nur wenn: ..."), nicht
+    ein Fliesstext-Absatz, der zufaellig mit einem Gedankenstrich weitergeht.
+    Jede Teilaussage traegt die Einleitung weiter — ein blosses "S-17
+    behoben" ist ohne den Bezug weder ein vollstaendiger Claim noch lang
+    genug fuer :data:`MIN_ATOM_TOKENS`.
+
+    Kein Treffer (keine Bullet-Zeile, oder Einleitung ohne ``:``) → ``None``,
+    der Aufrufer faellt auf die gewoehnliche Satz-/Konjunktionszerlegung
+    zurueck.
+    """
+    lines = text.splitlines()
+    item_indices = [i for i, line in enumerate(lines) if _LIST_ITEM_PATTERN.match(line)]
+    if not item_indices:
+        return None
+
+    intro = " ".join(line.strip() for line in lines[: item_indices[0]] if line.strip())
+    if not intro.rstrip().endswith(":"):
+        return None
+    intro = intro.rstrip(":").strip()
+
+    items: List[str] = []
+    for index in item_indices:
+        match = _LIST_ITEM_PATTERN.match(lines[index])
+        item_text = match.group(1).strip() if match else ""
+        if not item_text:
+            continue
+        items.append(f"{intro} {item_text}".strip() if intro else item_text)
+
+    return items or None
+
+
+def _split_prose(text: str) -> List[str]:
+    parts: List[str] = []
+    for sentence in _SENTENCE_PATTERN.split(text):
+        for piece in _SPLIT_PATTERN.split(sentence):
+            cleaned = piece.strip(" ,;:-–—")
+            if cleaned and len(_content_tokens(cleaned)) >= MIN_ATOM_TOKENS:
+                parts.append(cleaned)
+    return parts
+
+
 def split_compound_claim(statement: str) -> List[str]:
     """Zerlegt eine zusammengesetzte Behauptung in ihre Teilaussagen.
 
-    Zerlegt wird an Satzgrenzen und an Konjunktionen, die eigenständige
-    Aussagen verbinden. Fragmente unterhalb :data:`MIN_ATOM_TOKENS` fallen
-    weg — sie tragen nichts Belegbares und würden jede Prüfung an einem
-    "und dann" scheitern lassen.
+    Zerlegt wird an Bullet-Aufzaehlungen mit Doppelpunkt-Einleitung
+    (:func:`_split_list_block`, #1346), sonst an Satzgrenzen und an
+    Konjunktionen, die eigenständige Aussagen verbinden. Fragmente
+    unterhalb :data:`MIN_ATOM_TOKENS` fallen weg — sie tragen nichts
+    Belegbares und würden jede Prüfung an einem "und dann" scheitern lassen.
 
     Ein Claim, der sich nicht zerlegen lässt, kommt als einelementige Liste
     zurück; die Aufrufer brauchen keinen Sonderfall.
@@ -62,14 +113,14 @@ def split_compound_claim(statement: str) -> List[str]:
     if not text:
         return []
 
-    parts: List[str] = []
-    for sentence in _SENTENCE_PATTERN.split(text):
-        for piece in _SPLIT_PATTERN.split(sentence):
-            cleaned = piece.strip(" ,;:-–—")
-            if cleaned and len(_content_tokens(cleaned)) >= MIN_ATOM_TOKENS:
-                parts.append(cleaned)
+    list_items = _split_list_block(text)
+    if list_items is not None:
+        parts: List[str] = []
+        for item in list_items:
+            parts.extend(_split_prose(item))
+        return parts or [text]
 
-    return parts or [text]
+    return _split_prose(text) or [text]
 
 
 def is_compound(statement: str) -> bool:
@@ -77,4 +128,15 @@ def is_compound(statement: str) -> bool:
     return len(split_compound_claim(statement)) > 1
 
 
-__all__ = ["MIN_ATOM_TOKENS", "is_compound", "split_compound_claim"]
+def split_claim_chunks(chunks: List[str]) -> List[str]:
+    """``split_compound_claim`` auf jeden Chunk angewandt, Ergebnis geflacht.
+
+    Eigene Funktion statt einer Inline-Comprehension am Aufrufer (#1346):
+    ``_build_claims_for_section`` liegt bereits am Komplexitäts-Deckel
+    (radon-allowlist.txt), eine verschachtelte Comprehension dort hätte ihn
+    gerissen.
+    """
+    return [atom for chunk in chunks for atom in split_compound_claim(chunk)]
+
+
+__all__ = ["MIN_ATOM_TOKENS", "is_compound", "split_claim_chunks", "split_compound_claim"]
