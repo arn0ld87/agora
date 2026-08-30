@@ -51,6 +51,24 @@ def codex_cli_timeout_seconds() -> float:
         return float(DEFAULT_CODEX_CLI_TIMEOUT_SECONDS)
 
 
+CODEX_CLI_DEFAULT_MODEL_ID = "codex-cli-default"
+"""Sentinel-Modell-ID statt eines geratenen echten Modellnamens.
+
+Issue #1405 Follow-up (Codex-Review-Finding): ``_verify_selected_model``
+(``app/services/llm_routing_seed.py``) akzeptiert nur Modelle, die der
+Provider-Probe zurueckgibt — ohne einen Eintrag hier kann codex_cli zwar als
+Connection verbunden, aber nie als Modell ausgewaehlt werden. Ein erfundener
+"echter" Codex-Modellname waere veraltungsanfaellig und koennte an der
+tatsaechlichen CLI vorbeizeigen. Der Sentinel bedeutet stattdessen explizit
+"nutze das von der lokalen `codex`-CLI/-Konfiguration selbst aufgeloeste
+Default-Modell" — ``_run_codex_cli`` laesst dafuer ``--model`` bewusst weg.
+"""
+
+
+def codex_cli_fallback_models() -> tuple[str, ...]:
+    return (CODEX_CLI_DEFAULT_MODEL_ID,)
+
+
 def is_codex_cli_available() -> bool:
     """True wenn das ``codex``-Binary im PATH auffindbar ist.
 
@@ -88,7 +106,10 @@ def _run_codex_cli(prompt: str, *, model: Optional[str]) -> str:
             "Installation + `codex login` pruefen."
         )
     cmd = [codex_cli_binary(), "exec", "--skip-git-repo-check", "--sandbox", "read-only"]
-    if model:
+    # Sentinel weglassen statt als (nicht existentes) --model an die CLI zu
+    # reichen — dann entscheidet die lokale codex-Konfiguration/-Session
+    # selbst, welches Modell sie faehrt.
+    if model and model != CODEX_CLI_DEFAULT_MODEL_ID:
         cmd += ["--model", model]
     cmd.append(prompt)
     timeout = codex_cli_timeout_seconds()

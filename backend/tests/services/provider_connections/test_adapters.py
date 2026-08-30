@@ -114,7 +114,13 @@ def _codex_cli_connection() -> ProviderConnection:
     )
 
 
-def test_codex_cli_probe_reports_available_without_transport_call(monkeypatch) -> None:
+def test_codex_cli_probe_reports_available_with_fallback_model_without_transport_call(
+    monkeypatch,
+) -> None:
+    """Regression fuer das Codex-Review-Finding: ohne Modelle in der Probe
+    kann codex_cli zwar verbunden, aber nie als Modell ausgewaehlt werden
+    (``_verify_selected_model`` prueft ausschliesslich ``result.models``)."""
+
     def unexpected_call(_url: str, *, headers: dict[str, str]) -> CatalogHttpResponse:
         raise AssertionError("codex_cli must not use HTTP discovery")
 
@@ -126,7 +132,9 @@ def test_codex_cli_probe_reports_available_without_transport_call(monkeypatch) -
         _codex_cli_connection(), None
     )
 
-    assert result == ProviderProbeResult(status="available", status_message=None)
+    assert result.status == "available"
+    assert result.status_message is None
+    assert [m.model_id for m in result.models] == ["codex-cli-default"]
 
 
 def test_codex_cli_probe_reports_unavailable_when_binary_missing(monkeypatch) -> None:

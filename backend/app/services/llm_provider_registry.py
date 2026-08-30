@@ -28,6 +28,13 @@ def _copilot_models() -> tuple[str, ...]:
     return GITHUB_COPILOT_MODELS
 
 
+def _codex_cli_models() -> tuple[str, ...]:
+    # Lazy import keeps the historical import boundary cycle-free.
+    from ..llm.providers.codex_cli import codex_cli_fallback_models
+
+    return codex_cli_fallback_models()
+
+
 @dataclass(frozen=True)
 class ProviderConnectionDefinition:
     """Die einzige Matrix fuer Lifecycle-, Discovery- und Legacy-Metadaten."""
@@ -143,6 +150,7 @@ _CONNECTION_DEFINITIONS: tuple[ProviderConnectionDefinition, ...] = (
     ProviderConnectionDefinition(
         PROVIDER_CODEX_CLI, "Codex CLI (ChatGPT-Abo)", "cli", "session",
         None, "codex_cli", None,
+        fallback_models=_codex_cli_models(),
     ),
     ProviderConnectionDefinition(
         PROVIDER_BEDROCK, "Amazon Bedrock", "http", "api_key",

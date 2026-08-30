@@ -899,3 +899,57 @@ class TestLlmClientCodexCliConstruction:
     def test_codex_cli_is_ollama_false_despite_ollama_like_base_url(self, monkeypatch):
         client = self._make_codex_cli_client(monkeypatch)
         assert client._is_ollama() is False
+
+
+class TestLlmClientFromRouteCodexCli:
+    """Regression fuer Codex-Review-Finding (#1405): ``from_route`` loggte den
+    Provider-Typ der Route (``p_type``) bisher nur fuer die api_key-Aufloesung
+    mit, gab ihn aber nie an ``LLMClient.__init__`` weiter. Eine explizit auf
+    codex_cli geroutete Stage/Run-Connection blieb dadurch vom GLOBALEN
+    Active-Config-Provider abhaengig — hier bewusst auf ``openai`` gesetzt,
+    um zu beweisen, dass die Route (nicht die Active-Config) entscheidet."""
+
+    def _route(self):
+        from app.contracts.llm_routing_contract import ResolvedRoute
+
+        return ResolvedRoute(
+            stage="graph_build",
+            provider_id="codex_cli",
+            model="codex-cli-default",
+            routing_version=1,
+            provider_options={},
+        )
+
+    def _codex_cli_registry_stub(self, monkeypatch):
+        from unittest.mock import MagicMock
+
+        descriptor = MagicMock()
+        descriptor.id = "codex_cli"
+        descriptor.type = "codex_cli"
+        descriptor.base_url = None
+        registry = MagicMock()
+        registry.get_providers.return_value = [descriptor]
+        monkeypatch.setattr(
+            "app.services.llm_provider_registry.LlmProviderRegistry",
+            lambda: registry,
+        )
+
+    def test_from_route_activates_codex_cli_even_when_active_config_differs(
+        self, monkeypatch
+    ):
+        from unittest.mock import MagicMock
+
+        monkeypatch.setattr("app.llm.client.OpenAI", lambda **_kw: MagicMock())
+        self._codex_cli_registry_stub(monkeypatch)
+        # Globale Active-Config zeigt bewusst auf einen ANDEREN Provider —
+        # die Route muss trotzdem gewinnen.
+        monkeypatch.setattr(
+            "app.llm.client._read_active_config_safely",
+            lambda: {"provider_id": "openai", "model": "gpt-4o"},
+        )
+
+        client = LLMClient.from_route(self._route())
+
+        assert client._codex_cli_active is True
+        assert type(client.client).__name__ == "CodexCliClient"
+        assert client.base_url is None

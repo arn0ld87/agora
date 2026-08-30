@@ -90,6 +90,7 @@ class LLMClient:
         use_active_config: bool = True,
         api_key_source: Optional[str] = None,
         allow_api_key_fallback: bool = True,
+        provider_type: Optional[str] = None,
     ):
         # When no explicit model is set, fall back to the user's active
         # provider/model selection (Settings → LLM-Auswahl). Falls back to
@@ -105,9 +106,13 @@ class LLMClient:
         # Ollama/Minimax-URL-Heuristiken und der OpenAI-SDK-Client-Bau
         # muessen dafuer explizit kurzgeschlossen werden statt sich auf
         # Zufallstreffer eines (u.U. Ollama-artigen) Config.LLM_BASE_URL zu
-        # verlassen. Wird unten gesetzt, sobald die aktive Provider-Config
-        # als codex_cli aufgeloest wurde.
-        resolved_provider_type: Optional[str] = None
+        # verlassen. Seed aus dem expliziten ``provider_type``-Parameter
+        # (z. B. von ``from_route()`` aus der geroutet Stage/Run-Connection
+        # abgeleitet) — Codex-Review-Finding: vorher wurde dieser Wert nur
+        # aus der GLOBALEN Active-Config gelesen, wodurch eine explizit
+        # geroutete codex_cli-Connection ignoriert wurde, sobald sie nicht
+        # zugleich der globale Default war.
+        resolved_provider_type: Optional[str] = provider_type
         # Issue #1101: Active-Config-Lookup ist Fallback für fehlende Werte,
         # nicht an ``model is None`` gekoppelt. Wurde das Modell vom Caller
         # explizit übergeben (Normalfall im Prepare/Run-Pfad:
@@ -145,7 +150,8 @@ class LLMClient:
                             None,
                         )
                         if descriptor is not None:
-                            resolved_provider_type = descriptor.type
+                            if resolved_provider_type is None:
+                                resolved_provider_type = descriptor.type
                             if not base_url:
                                 base_url = descriptor.base_url
                             resolver = SecretResolver()
@@ -314,6 +320,21 @@ class LLMClient:
         """
         base_url = route.base_url_sanitized
         connection_only = route.provider_options.get("connection_only") is True
+
+        # Issue #1405 Codex-Review-Finding: der Provider-Typ der Route wurde
+        # zwar hier nachgeschlagen (fuer die api_key-Aufloesung unten), aber
+        # nie an ``cls(...)`` durchgereicht — eine explizit geroutete
+        # codex_cli-Connection blieb dadurch von der globalen Active-Config
+        # abhaengig statt von der tatsaechlichen Route. Reiner Metadaten-
+        # Lookup, kein Secret — deshalb unabhaengig von ``secret_resolver``/
+        # ``connection_only`` immer ausgefuehrt.
+        from ..services.llm_provider_registry import LlmProviderRegistry
+        _route_registry = LlmProviderRegistry()
+        _route_descriptor = next(
+            (p for p in _route_registry.get_providers() if p.id == route.provider_id),
+            None,
+        )
+        provider_type = _route_descriptor.type if _route_descriptor else None
         if connection_only:
             from ..services.secret_resolver import get_bound_store_api_key
 
@@ -332,21 +353,16 @@ class LLMClient:
         # This prevents leaking them into ResolvedRoute but allows LLMClient
         # to use them.
         if secret_resolver and not connection_only:
-            # We need to know the provider type to resolve the key correctly.
-            # ResolvedRoute only has provider_id.
-            # In a full implementation, we'd look up the provider descriptor.
-            # For now, we use the fallback logic in SecretResolver.
-            from ..services.llm_provider_registry import LlmProviderRegistry
-            registry = LlmProviderRegistry()
-            descriptor = next((p for p in registry.get_providers() if p.id == route.provider_id), None)
-
-            p_type = descriptor.type if descriptor else "unknown"
+            # Provider-Typ kommt aus dem Lookup oben (``_route_descriptor``) —
+            # ResolvedRoute traegt selbst nur provider_id.
             if not api_key:
-                api_key = secret_resolver.get_api_key(route.provider_id, p_type)
+                api_key = secret_resolver.get_api_key(route.provider_id, provider_type or "unknown")
                 api_key_source = getattr(secret_resolver, "last_source", None)
 
             # Use real base_url from provider_options if present, otherwise from descriptor
-            real_base = route.provider_options.get("base_url") or (descriptor.base_url if descriptor else None)
+            real_base = route.provider_options.get("base_url") or (
+                _route_descriptor.base_url if _route_descriptor else None
+            )
             if real_base:
                 base_url = real_base
 
@@ -361,6 +377,7 @@ class LLMClient:
             routing_version=route.routing_version,
             route_stage=route.stage,
             route_provider_id=route.provider_id,
+            provider_type=provider_type,
             api_key_source=api_key_source,
             use_active_config=not connection_only,
             allow_api_key_fallback=not connection_only,
