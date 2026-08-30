@@ -93,6 +93,7 @@
         "github_copilot",
         "bedrock",
         "cloud",
+        "codex_cli",
         "unknown"
       ],
       "title": "Provider Kind",
@@ -137,7 +138,8 @@
     "transport": {
       "enum": [
         "http",
-        "local"
+        "local",
+        "cli"
       ],
       "title": "Transport",
       "type": "string"

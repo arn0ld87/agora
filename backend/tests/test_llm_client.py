@@ -850,3 +850,52 @@ class TestLlmClientInitUsesResolveNumCtx:
         monkeypatch.setenv("OLLAMA_NUM_CTX", "16384")
         client = self._make(monkeypatch, model="custom:fancy")
         assert client._num_ctx == 16384
+
+
+class TestLlmClientCodexCliConstruction:
+    """Issue #1405 Regressionsschutz: codex_cli-Init darf weder den
+    OpenAI-SDK-Client bauen noch den Ollama/Minimax-Kurzschluss verpassen,
+    auch wenn ``Config.LLM_BASE_URL`` zufaellig Ollama-artig ist (genau der
+    Bug, der beim manuellen Testen zuerst auftrat)."""
+
+    def _make_codex_cli_client(self, monkeypatch):
+        from unittest.mock import MagicMock
+
+        monkeypatch.setattr("app.llm.client.OpenAI", lambda **_kw: MagicMock())
+        # Absichtlich KEIN OPENAI_API_KEY / Config.LLM_API_KEY gesetzt — der
+        # codex_cli-Pfad darf trotzdem nicht mit "LLM_API_KEY not
+        # configured" scheitern.
+        monkeypatch.setattr("app.utils.llm_client.Config.LLM_API_KEY", None)
+        # Bewusst Ollama-artige Base-URL: reproduziert den urspruenglichen
+        # Bug, bei dem _is_ollama() trotz codex_cli auf True auflief.
+        monkeypatch.setattr(
+            "app.utils.llm_client.Config.LLM_BASE_URL", "http://localhost:11434/v1"
+        )
+        monkeypatch.setattr("app.utils.llm_client.Config.LLM_MODEL_NAME", "fallback-model")
+        monkeypatch.setattr(
+            "app.llm.client._read_active_config_safely",
+            lambda: {"provider_id": "codex_cli", "model": "gpt-5-codex"},
+        )
+        return LLMClient()
+
+    def test_codex_cli_active_flag_set(self, monkeypatch):
+        client = self._make_codex_cli_client(monkeypatch)
+        assert client._codex_cli_active is True
+
+    def test_codex_cli_client_type_is_shim(self, monkeypatch):
+        client = self._make_codex_cli_client(monkeypatch)
+        assert type(client.client).__name__ == "CodexCliClient"
+
+    def test_codex_cli_base_url_is_none(self, monkeypatch):
+        client = self._make_codex_cli_client(monkeypatch)
+        assert client.base_url is None
+
+    def test_codex_cli_does_not_require_api_key(self, monkeypatch):
+        # Muss KEIN ValueError("LLM_API_KEY not configured") werfen, obwohl
+        # weder OPENAI_API_KEY noch Config.LLM_API_KEY gesetzt sind.
+        client = self._make_codex_cli_client(monkeypatch)
+        assert client.api_key
+
+    def test_codex_cli_is_ollama_false_despite_ollama_like_base_url(self, monkeypatch):
+        client = self._make_codex_cli_client(monkeypatch)
+        assert client._is_ollama() is False

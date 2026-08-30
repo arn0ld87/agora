@@ -137,6 +137,28 @@ class _UnsupportedAdapter:
         )
 
 
+class _CodexCliProbeAdapter:
+    """Probe fuer Issue #1405: kein HTTP-Discovery-Endpunkt, keine Modelliste.
+
+    "unsupported" waere hier irrefuehrend — der Provider ist unterstuetzt,
+    hat nur keine per HTTP abfragbare Modell-Discovery. Der Probe prueft
+    stattdessen, ob das lokale ``codex``-Binary ueberhaupt auffindbar ist
+    (nicht den Login-Status — der zeigt sich erst beim echten Aufruf).
+    """
+
+    def probe(
+        self, connection: ProviderConnection, api_key: str | None
+    ) -> ProviderProbeResult:
+        from app.llm.providers.codex_cli import is_codex_cli_available
+
+        if is_codex_cli_available():
+            return ProviderProbeResult(status="available", status_message=None)
+        return ProviderProbeResult(
+            status="unavailable",
+            status_message="codex-CLI nicht im PATH gefunden — Installation + `codex login` pruefen.",
+        )
+
+
 def adapter_for_connection(
     provider_kind: str,
     *,
@@ -150,6 +172,8 @@ def adapter_for_connection(
     definition = LlmProviderRegistry.connection_definition(provider_kind)
     if definition is None or definition.adapter_kind == "unsupported":
         return _UnsupportedAdapter()
+    if definition.adapter_kind == "codex_cli":
+        return _CodexCliProbeAdapter()
     protocol = _PROTOCOLS.get(definition.adapter_kind)
     if protocol is None:
         return _UnsupportedAdapter()

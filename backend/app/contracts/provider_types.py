@@ -13,6 +13,13 @@ PROVIDER_GITHUB_COPILOT = "github_copilot"
 PROVIDER_BEDROCK = "bedrock"
 PROVIDER_CLOUD = "cloud"
 PROVIDER_UNKNOWN = "unknown"
+# Issue #1405: Subprozess-Bridge zur lokal eingeloggten Codex-CLI (ChatGPT-
+# Abo). Anders als OpenCode Go (rein HTTP, nur ohne dokumentierten Header-
+# Vertrag) spricht dieser Provider gar kein HTTP — ``transport="cli"`` in
+# ``ProviderConnectionDefinition``/``ProviderTransport``. Deshalb bewusst
+# NICHT vom ``_reject_unsupported_connection_provider``-Guard in
+# ``ai_provider_contract.py`` erfasst.
+PROVIDER_CODEX_CLI = "codex_cli"
 
 # Legacy alias
 LEGACY_GEMINI = "gemini"
@@ -30,11 +37,13 @@ ProviderType = Literal[
     "github_copilot",
     "bedrock",
     "cloud",
+    "codex_cli",
     "unknown",
 ]
 
-# Connection lifecycle is HTTP/local only in this slice. OpenCode Go remains a
-# CLI bridge and must not be exposed as a provider connection.
+# Connection lifecycle ist HTTP/local/cli. OpenCode Go bleibt ausgeschlossen
+# (kein dokumentierter Request-Vertrag). ``codex_cli`` ist der erste
+# ``transport="cli"``-Provider (#1405).
 ProviderConnectionKind = Literal[
     "ollama",
     "openai",
@@ -47,6 +56,7 @@ ProviderConnectionKind = Literal[
     "github_copilot",
     "bedrock",
     "cloud",
+    "codex_cli",
     "unknown",
 ]
 
@@ -86,5 +96,6 @@ ALL_PROVIDER_TYPES: tuple[str, ...] = (
     PROVIDER_GITHUB_COPILOT,
     PROVIDER_BEDROCK,
     PROVIDER_CLOUD,
+    PROVIDER_CODEX_CLI,
     PROVIDER_UNKNOWN,
 )

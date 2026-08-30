@@ -151,6 +151,7 @@
         "github_copilot",
         "bedrock",
         "cloud",
+        "codex_cli",
         "unknown"
       ],
       "title": "Provider",
