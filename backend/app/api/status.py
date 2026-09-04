@@ -13,6 +13,7 @@ from . import status_bp
 from .. import __version__
 from ..config import Config
 from ..contracts.system_status_contract import SystemStatusE2E, SystemStatusOllama
+from ..llm.json_mode import _read_active_config_safely
 from ..llm.providers.registry import detect_provider, resolve_ollama_tags_url
 from ..utils.gpu_probe import detect_gpu
 from ..utils.logger import get_logger
@@ -139,10 +140,23 @@ def _get_ollama_status():
     Rückgabe folgt dem Contract ``SystemStatusOllama``; ``reachable`` ist
     dreiwertig (True/False/None). ``None`` heißt "übersprungen", nicht
     "offline".
+
+    Folgebefund zu #1418: sowohl die Probe-Entscheidung als auch der
+    angezeigte Provider stammten ausschliesslich aus ``Config.LLM_*``, also
+    aus der ``.env`` des Containers. Damit meldete das Dashboard dauerhaft
+    den ``.env``-Provider, unabhaengig davon, welche Verbindung unter
+    Einstellungen → LLM-Anbieter aktiviert war — beobachtet als "aktiver
+    Provider ist MiniMax", waehrend die aktive Auswahl codex_cli war. Die
+    aktive Konfiguration hat jetzt Vorrang, die ``.env`` bleibt Fallback
+    fuer Installationen, die nie eine Verbindung aktiviert haben.
     """
+    active = _read_active_config_safely() or {}
+    effective_base_url = active.get("base_url") or Config.LLM_BASE_URL
+    effective_model = active.get("model") or Config.LLM_MODEL_NAME
+
     base = resolve_ollama_tags_url(
-        Config.LLM_BASE_URL,
-        Config.LLM_MODEL_NAME,
+        effective_base_url,
+        effective_model,
         explicit_base_url=os.environ.get('OLLAMA_BASE_URL'),
     )
 
@@ -151,8 +165,13 @@ def _get_ollama_status():
         # ``skipped_provider`` ist der maschinenlesbare Schlüssel für den
         # i18n-Lookup im Frontend; ``reason`` bleibt reines Debug-Feld und
         # darf nicht in der UI gerendert werden.
-        provider = detect_provider(
-            Config.LLM_BASE_URL, Config.LLM_MODEL_NAME, mode="http"
+        #
+        # Die ``provider_id`` der aktiven Auswahl schlaegt die URL-Heuristik:
+        # sie benennt die tatsaechlich aktivierte Verbindung, waehrend
+        # ``detect_provider`` nur aus der Base-URL raten kann — und fuer
+        # Provider ohne HTTP-Endpunkt (codex_cli, #1405) gar nichts hat.
+        provider = active.get("provider_id") or detect_provider(
+            effective_base_url, effective_model, mode="http"
         )
         return SystemStatusOllama(
             reachable=None,
@@ -161,7 +180,7 @@ def _get_ollama_status():
             reason=f"Active provider is {provider}",
             base_url=None,
             models_available=[],
-            default_model=Config.LLM_MODEL_NAME,
+            default_model=effective_model,
             error=None,
         ).model_dump(mode="json")
 
@@ -169,7 +188,7 @@ def _get_ollama_status():
         reachable=False,
         skipped=False,
         base_url=base,
-        default_model=Config.LLM_MODEL_NAME,
+        default_model=effective_model,
     )
 
     try:
