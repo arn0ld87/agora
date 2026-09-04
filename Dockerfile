@@ -163,7 +163,7 @@ RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
 # — es liefert nur pip aus (CPython-Build mit --with-ensurepip), weshalb die
 # beiden #772-CVEs nie aus dieser Schicht stammten. Siehe
 # docs/2026-07-31-issue-772-cve-basisimage-research.md.
-FROM python:3.14-slim@sha256:cea0e6040540fb2b965b6e7fb5ffa00871e632eef63719f0ea54bca189ce14a6 AS prod
+FROM python:3.14-slim@sha256:cad9a2c871761c413caa6fdd6441c783451e740a48aaeba60ae62a8b53525ef6 AS prod
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -187,6 +187,17 @@ WORKDIR /app
 # wiederholt sich derselbe Dauerrot-Zustand bei der nächsten Distro-CVE.
 # Der Digest-Pin oben bleibt die reproduzierbare Ausgangsbasis; die
 # Security-Patches darauf sind per Definition zeitabhängig.
+#
+# Ergaenzung 2026-09-04 (CVE-2026-14456, openssl/libssl3t64/
+# openssl-provider-legacy 3.5.6-1~deb13u2 -> 3.5.7-1~deb13u2): Dass diese
+# RUN-Zeile existiert, genuegt nicht — der Build-Job zieht `cache-from:
+# type=gha`, und solange FROM-Digest und Instruktion unveraendert bleiben,
+# serviert BuildKit den *alten* apt-Layer. `apt-get upgrade` laeuft dann gar
+# nicht neu und der Scan bleibt rot, obwohl der Fix laengst im trixie-Repo
+# liegt. Der Digest-Bump oben ist deshalb hier kein Ersatz fuer den Upgrade,
+# sondern sein Ausloeser: neuer FROM-Digest = invalidierter Layer = frischer
+# apt-Lauf. Bei der naechsten Distro-CVE ist der Digest-Bump wieder das
+# Mittel, um diese Zeile erneut scharf zu stellen.
 RUN apt-get update \
   && apt-get upgrade -y \
   && apt-get install -y --no-install-recommends tzdata \
