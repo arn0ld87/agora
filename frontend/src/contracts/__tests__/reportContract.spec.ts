@@ -18,6 +18,7 @@ import {
   ReportSectionSchema,
   ReportSectionDataGapSchema,
   ReportSectionHypothesisSchema,
+  RunDegradationSchema,
 } from '../reportContract';
 import reportContractJson from '../../../../schemas/report-contract.schema.json';
 
@@ -463,5 +464,56 @@ describe('ReportOutlineSchema (Drift-Guard max-sections)', () => {
       sections: [],
     };
     expect(ReportOutlineSchema.safeParse(outline).success).toBe(false);
+  });
+});
+
+/**
+ * Issue #1419: Ein Lauf, dessen Personas saemtlich regelbasierte Platzhalter
+ * waren, meldete sich als vollstaendig. Der Bericht traegt den Mangel jetzt
+ * als eigene Komponente — der Zod-Spiegel muss sie kennen, sonst faellt die
+ * Antwort beim Parsen aus dem Vertrag.
+ */
+describe('RunDegradationSchema — Persona-Komponente (#1419)', () => {
+  it('akzeptiert persona_generation als blockierenden Mangel', () => {
+    const parsed = RunDegradationSchema.parse({
+      component: 'persona_generation',
+      reason: '20_of_20_personas_rule_based',
+      detail: 'Keine einzige Persona dieses Laufs kam vom Modell.',
+      severity: 'blocking',
+    });
+
+    expect(parsed.component).toBe('persona_generation');
+    expect(parsed.severity).toBe('blocking');
+  });
+
+  it('spiegelt genau die Komponenten des Backend-Vertrags', () => {
+    expect(RunDegradationSchema.shape.component.options).toEqual([
+      'simulation',
+      'persona_generation',
+      'interview_agents',
+      'section_generation',
+      'section_metadata',
+      'requirement_checker',
+      'contract_export',
+    ]);
+  });
+
+  it('parst den requirement_checker-Eintrag, den das Backend seit #1302 schreibt', () => {
+    // Vorbefund: der Wert wurde geschrieben, aber nie gespiegelt — jede
+    // Report-Antwort mit einem fehlenden Analyseaspekt scheiterte am Parsen.
+    expect(() =>
+      RunDegradationSchema.parse({
+        component: 'requirement_checker',
+        reason: 'missing_aspect_recommendation',
+        detail: 'Aspekt fehlt.',
+        severity: 'warning',
+      }),
+    ).not.toThrow();
+  });
+
+  it('weist eine unbekannte Komponente ab', () => {
+    expect(() =>
+      RunDegradationSchema.parse({ component: 'persona', reason: 'x' }),
+    ).toThrow();
   });
 });

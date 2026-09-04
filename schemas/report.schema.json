@@ -73,9 +73,11 @@
         "component": {
           "enum": [
             "simulation",
+            "persona_generation",
             "interview_agents",
             "section_generation",
             "section_metadata",
+            "requirement_checker",
             "contract_export"
           ],
           "title": "Component",

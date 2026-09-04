@@ -79,6 +79,43 @@ def _simulation_degradations(
     return found
 
 
+def _persona_degradations(
+    fallback_count: int,
+    total: int,
+) -> List[Dict[str, Any]]:
+    """Personas, die nicht vom Modell kamen (Issue #1419).
+
+    Regelbasierte Platzhalter nehmen regulaer an der Simulation teil und
+    ihre Beitraege stehen im Bericht wie echte Stimmen. Fiel *jede* Persona
+    aus, beruht der ganze Bericht auf Attrappen — das ist blockierend, wie
+    eine gescheiterte Simulation. Bei einer Teilquote bleiben echte Stimmen
+    uebrig; der Bericht ist verwertbar und weist den Anteil aus.
+
+    Abgrenzung: die bewusste Wahl ``use_llm_for_profiles=False`` erzeugt
+    ebenfalls regelbasierte Profile, zaehlt hier aber nicht mit — der Zaehler
+    kommt aus ``generation_error``, nicht aus ``generation_source``.
+    """
+    if fallback_count <= 0 or total <= 0:
+        return []
+
+    blocking = fallback_count >= total
+    detail = (
+        f"{fallback_count} von {total} Personas konnten nicht vom Modell "
+        "erzeugt werden und sind regelbasierte Platzhalter. Ihre Beitraege "
+        "tragen keine belastbaren Aussagen."
+    )
+    if blocking:
+        detail = f"{detail} Keine einzige Persona dieses Laufs kam vom Modell."
+    return [
+        _entry(
+            "persona_generation",
+            f"{fallback_count}_of_{total}_personas_rule_based",
+            detail,
+            severity="blocking" if blocking else "warning",
+        )
+    ]
+
+
 def _interview_degradations(
     *, requested: int, succeeded: int, disabled_reason: str = ""
 ) -> List[Dict[str, Any]]:
@@ -108,6 +145,8 @@ def _interview_degradations(
 def collect_run_degradations(
     *,
     simulation_snapshot: Optional[Mapping[str, Any]] = None,
+    persona_fallback_count: int = 0,
+    persona_total: int = 0,
     interviews_requested: int = 0,
     interviews_succeeded: int = 0,
     interview_disabled_reason: str = "",
@@ -123,6 +162,10 @@ def collect_run_degradations(
     inhaltlich beruht, steht vor dem, was beim Erzeugen schiefging.
     """
     found: List[Dict[str, Any]] = _simulation_degradations(simulation_snapshot)
+    # Reihenfolge nach Schwere fuer den Leser: worauf der Bericht beruht,
+    # steht vor dem, was beim Erzeugen schiefging. Die Personas sind die
+    # Stimmen des Berichts — sie gehoeren direkt hinter die Simulation.
+    found.extend(_persona_degradations(persona_fallback_count, persona_total))
     found.extend(
         _interview_degradations(
             requested=interviews_requested,
