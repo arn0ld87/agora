@@ -70,7 +70,13 @@ RUN useradd -m -u 1000 agora \
 #
 # Eigene Stage statt zweier Installationen, weil ``prod`` nicht von ``base``
 # erbt: beide Ziel-Stages holen sich dasselbe verifizierte Binary per COPY,
-# und der ~90-MB-Download passiert im Build genau einmal.
+# und der Download passiert im Build genau einmal.
+#
+# Groesse ehrlich benannt: ~86 MB als tar.gz, **222 MB entpackt** — das
+# Laufzeit-Image waechst entsprechend. Das ist der Preis dafuer, das
+# ChatGPT-Abo ueberhaupt aus dem Container heraus nutzen zu koennen; wer den
+# codex_cli-Provider nicht braucht, kann die COPY-Zeilen in dev/prod
+# entfernen, ohne sonst etwas anzufassen.
 #
 # codex ist seit dem Rust-Rewrite ein statisch gelinktes musl-Binary — kein
 # Node, keine Laufzeitabhaengigkeiten, laeuft unveraendert im slim-Image.
@@ -83,15 +89,31 @@ FROM base AS codex-cli
 ARG CODEX_VERSION=rust-v0.153.2
 ARG CODEX_SHA256_AMD64=e8cd1160071f725d2a10cab81073dd6818fc8b096372125d27ef6e66fdf0979e
 ARG CODEX_SHA256_ARM64=878693f9b370320ea21793f99ea1f5687b7d9aa1f2c733de693d9ec0baa4e62a
-# Von BuildKit gesetzt (amd64 in CI, arm64 auf dem armserver und auf Apple
-# Silicon). Der Default deckt einen Build ohne BuildKit-Plattformkontext ab.
-ARG TARGETARCH=amd64
+# TARGETARCH befuellt BuildKit nur im Multi-Platform-Kontext; ein schlichtes
+# `docker compose build` laesst die Variable LEER. Ein Default darauf waere
+# eine Falle: mit `=amd64` zog ein aarch64-Server das x86_64-Binary und der
+# Build brach erst am abschliessenden `codex --version` mit exit 126 ab
+# ("cannot execute"), nachdem Download und Hash-Pruefung sauber durchliefen.
+#
+# `uname -m` ist die verlaessliche Quelle: Der Build laeuft nativ auf der
+# Zielarchitektur, und unter QEMU-Emulation (buildx --platform) meldet uname
+# ebenfalls die Ziel- und nicht die Hostarchitektur. TARGETARCH bleibt als
+# Override vorne, falls BuildKit es doch setzt — bewusst ohne Default.
+ARG TARGETARCH
 
 RUN set -eux; \
-    case "${TARGETARCH}" in \
-      amd64) _arch=x86_64;  _sha="${CODEX_SHA256_AMD64}" ;; \
-      arm64) _arch=aarch64; _sha="${CODEX_SHA256_ARM64}" ;; \
-      *) echo "codex: nicht unterstuetzte Architektur '${TARGETARCH}'" >&2; exit 1 ;; \
+    case "${TARGETARCH:-}" in \
+      amd64) _arch=x86_64 ;; \
+      arm64) _arch=aarch64 ;; \
+      *) case "$(uname -m)" in \
+           x86_64)        _arch=x86_64 ;; \
+           aarch64|arm64) _arch=aarch64 ;; \
+           *) echo "codex: nicht unterstuetzte Architektur '$(uname -m)'" >&2; exit 1 ;; \
+         esac ;; \
+    esac; \
+    case "${_arch}" in \
+      x86_64)  _sha="${CODEX_SHA256_AMD64}" ;; \
+      aarch64) _sha="${CODEX_SHA256_ARM64}" ;; \
     esac; \
     _url="https://github.com/openai/codex/releases/download/${CODEX_VERSION}/codex-${_arch}-unknown-linux-musl.tar.gz"; \
     curl -fsSL --retry 3 --retry-delay 2 -o /tmp/codex.tar.gz "${_url}"; \
