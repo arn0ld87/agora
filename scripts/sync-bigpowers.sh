@@ -3,9 +3,9 @@
 # node_modules/bigpowers. AGORA-eigene Dateien werden nie ueberschrieben.
 #
 # Die Symlinks sind maschinenlokale Build-Artefakte und gehoeren nicht ins
-# Repo. Sie werden deshalb in .git/info/exclude eingetragen (lokal, nicht
-# versioniert) statt in .gitignore. Auf jedem Klon stellt dieses Skript
-# Overlay und Ausschluss gemeinsam her.
+# Repo. Sie werden deshalb in der Ausschlussliste des Git-Verzeichnisses
+# eingetragen (info/exclude, nicht versioniert) statt in .gitignore. Auf
+# jedem Klon stellt dieses Skript Overlay und Ausschluss gemeinsam her.
 #
 #   bun run bigpowers:sync         # Overlay + Ausschlussliste
 #   bash scripts/sync-bigpowers.sh --exclude-only
@@ -14,13 +14,54 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEP="$ROOT/node_modules/bigpowers"
-EXCLUDE="$ROOT/.git/info/exclude"
 
 BEGIN='# >>> BIGPOWERS-OVERLAY BEGIN (generiert von scripts/sync-bigpowers.sh) >>>'
 END='# <<< BIGPOWERS-OVERLAY END <<<'
 
+# In einem linked worktree ist ``.git`` eine Datei, kein Verzeichnis — ein
+# hartkodiertes "$ROOT/.git/info/exclude" scheitert dort an ``mkdir`` mit
+# "Not a directory". Das Repo arbeitet ausgiebig mit Worktrees
+# (docs/runbooks/worktree-strategy.md), also fragt das Skript Git nach dem
+# gemeinsamen Git-Verzeichnis. ``--git-common-dir`` ist richtig und nicht
+# ``--git-dir``: info/exclude teilen sich alle Worktrees eines Repos.
+resolve_exclude_path() {
+    local git_dir
+    if ! git_dir="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"; then
+        echo "FEHLER: $ROOT ist kein Git-Repository." >&2
+        return 1
+    fi
+    printf '%s/info/exclude\n' "$git_dir"
+}
+
 relpath() {
     python3 -c 'import os,sys; print(os.path.relpath(sys.argv[1], os.path.dirname(sys.argv[2])))' "$1" "$2"
+}
+
+# Alle Links, die das Overlay herstellen SOLL: "<ziel>\t<quelle>" je Zeile,
+# abgeleitet aus der Dependency. Bewusst nicht aus dem Dateisystem des Repos
+# — sonst kann der Check nicht bemerken, dass das Overlay ganz fehlt.
+expected_links() {
+    if [[ -d "$DEP/scripts" ]]; then
+        find "$DEP/scripts" -type f -print0 | while IFS= read -r -d '' src; do
+            printf '%s\t%s\n' "$ROOT/scripts/${src#"$DEP/scripts/"}" "$src"
+        done
+    fi
+    if [[ -d "$DEP/skills" ]]; then
+        find "$DEP/skills" -mindepth 1 -maxdepth 1 -type d -print0 | while IFS= read -r -d '' src; do
+            printf '%s\t%s\n' "$ROOT/.claude/skills/$(basename "$src")" "$src"
+        done
+    fi
+}
+
+# Alle Links, die das Overlay TATSAECHLICH hergestellt hat.
+actual_links() {
+    ( cd "$ROOT" && find scripts .claude/skills -type l 2>/dev/null \
+        -exec sh -c 'readlink "$1" | grep -q node_modules/bigpowers && printf "%s\n" "$1"' _ {} \; )
+}
+
+# Repo-relative Ausschlussmuster, aus den erwarteten Links abgeleitet.
+overlay_patterns() {
+    expected_links | cut -f1 | sed "s|^$ROOT/|/|" | LC_ALL=C sort
 }
 
 link_one() {
@@ -30,33 +71,40 @@ link_one() {
         return 0
     fi
     [[ -L "$dst" ]] && rm "$dst"
+    mkdir -p "$(dirname "$dst")"
     ln -s "$(relpath "$src" "$dst")" "$dst"
 }
 
-# link_tree <quelle> <ziel> <files|dirs>
-link_tree() {
-    local src="$1" dst="$2" mode="$3" entry rel
-    [[ -d "$src" ]] || { echo "  uebersprungen (fehlt): ${src#"$ROOT"/}"; return 0; }
+# Links, die frueher zum Overlay gehoerten und in der aktuellen Dependency
+# nicht mehr vorkommen. Ein Bigpowers-Upgrade, das ein Skript entfernt oder
+# umbenennt, liess den alten Link sonst als kaputten Rest stehen: --check
+# meldete Drift und empfahl genau den Sync, der ihn nicht anfassen konnte.
+prune_stale_links() {
+    local expected_file removed=0 link
+    expected_file="$(mktemp)"
+    expected_links | cut -f1 | LC_ALL=C sort > "$expected_file"
 
-    if [[ "$mode" == files ]]; then
-        while IFS= read -r -d '' entry; do
-            rel="${entry#"$src"/}"
-            mkdir -p "$dst/$(dirname "$rel")"
-            link_one "$entry" "$dst/$rel" "$rel"
-        done < <(find "$src" -type f -print0)
-    else
-        while IFS= read -r -d '' entry; do
-            rel="$(basename "$entry")"
-            link_one "$entry" "$dst/$rel" "$rel"
-        done < <(find "$src" -mindepth 1 -maxdepth 1 -type d -print0)
-    fi
+    while IFS= read -r link; do
+        [[ -n "$link" ]] || continue
+        if ! grep -qxF "$ROOT/$link" "$expected_file"; then
+            rm -f "$ROOT/$link"
+            echo "  ENTFERNT (nicht mehr in der Dependency): $link"
+            removed=$((removed + 1))
+        fi
+    done < <(actual_links)
+
+    rm -f "$expected_file"
+    [[ "$removed" -gt 0 ]] && echo "  $removed veraltete(r) Link(s) entfernt."
+    return 0
 }
 
-# Alle Pfade, die auf node_modules/bigpowers zeigen, repo-relativ mit fuehrendem /.
-overlay_paths() {
-    ( cd "$ROOT" && find scripts .claude/skills -type l \
-        -exec sh -c 'readlink "$1" | grep -q node_modules/bigpowers && printf "/%s\n" "$1"' _ {} \; \
-        | LC_ALL=C sort )
+sync_links() {
+    local dst src rel
+    while IFS=$'\t' read -r dst src; do
+        [[ -n "$dst" ]] || continue
+        rel="${dst#"$ROOT"/}"
+        link_one "$src" "$dst" "$rel"
+    done < <(expected_links)
 }
 
 render_exclude_section() {
@@ -67,7 +115,7 @@ render_exclude_section() {
 # AGORA-eigene Dateien in scripts/ und .claude/skills/ stehen hier NICHT
 # und bleiben normal versionierbar.
 HEAD
-    overlay_paths
+    overlay_patterns
     cat <<'TAIL'
 # Bigpowers-Lifecycle-Cockpit: ungenutzt. AGORA steuert ueber PLAN.md,
 # docs/STATUS.md, ROADMAP.md und GitHub Issues (siehe AGENTS.md).
@@ -79,17 +127,18 @@ TAIL
 }
 
 write_exclude() {
-    mkdir -p "$(dirname "$EXCLUDE")"
-    touch "$EXCLUDE"
+    local exclude patterns_file
+    exclude="$(resolve_exclude_path)"
+    mkdir -p "$(dirname "$exclude")"
+    touch "$exclude"
 
-    # Alte Marker-Sektion und unmarkierte Alt-Eintraege derselben Pfade entfernen.
-    # Es werden ausschliesslich Zeilen geloescht, die exakt einem aktuellen
-    # Overlay-Pfad entsprechen - Fremdeintraege bleiben unberuehrt.
-    local paths_file
-    paths_file="$(mktemp)"
-    { overlay_paths; printf '/specs/\n/scripts.backup-before-bigpowers/\n'; } > "$paths_file"
+    # Alte Marker-Sektion und unmarkierte Alt-Eintraege derselben Pfade
+    # entfernen. Geloescht werden ausschliesslich Zeilen, die exakt einem
+    # verwalteten Muster entsprechen — Fremdeintraege bleiben unberuehrt.
+    patterns_file="$(mktemp)"
+    { overlay_patterns; printf '/specs/\n/scripts.backup-before-bigpowers/\n'; } > "$patterns_file"
 
-    python3 - "$EXCLUDE" "$paths_file" <<'PY'
+    python3 - "$exclude" "$patterns_file" <<'PY'
 import pathlib, re, sys
 
 target = pathlib.Path(sys.argv[1])
@@ -106,33 +155,87 @@ kept = [line for line in text.splitlines() if line.strip() not in managed]
 target.write_text("\n".join(kept).rstrip("\n") + "\n")
 PY
 
-    { printf '\n'; render_exclude_section; } >> "$EXCLUDE"
-    rm -f "$paths_file"
-    echo "  .git/info/exclude: $(overlay_paths | wc -l | tr -d ' ') Symlinks ausgeschlossen"
+    { printf '\n'; render_exclude_section; } >> "$exclude"
+    rm -f "$patterns_file"
+    echo "  ${exclude/#"$HOME"/\~}: $(overlay_patterns | wc -l | tr -d ' ') Symlinks ausgeschlossen"
 }
 
+# Prueft gegen die ERWARTETEN Links, nicht gegen die vorhandenen. Ein
+# fehlendes Overlay ist damit ein Befund und kein leerer Durchlauf.
 check_drift() {
-    local missing=0 broken
-    broken="$( cd "$ROOT" && find scripts .claude/skills -type l ! -exec test -e {} \; -print | wc -l | tr -d ' ' )"
-    if [[ "$broken" != 0 ]]; then
-        echo "DRIFT: $broken kaputte Symlinks."
-        missing=1
+    local expected=0 missing=0 broken=0 conflicts=0 stale=0 unignored=0
+    local dst src rel ignore_file expected_file link
+
+    if [[ ! -d "$DEP" ]]; then
+        echo "DRIFT: Bigpowers ist nicht installiert ($DEP fehlt)."
+        echo "Behebung: bun install && bun run bigpowers:sync"
+        return 1
     fi
-    while IFS= read -r p; do
-        if ! ( cd "$ROOT" && git check-ignore -q "${p#/}" ); then
-            echo "DRIFT: nicht ausgeschlossen: $p"
-            missing=1
+
+    ignore_file="$(mktemp)"
+    expected_file="$(mktemp)"
+
+    while IFS=$'\t' read -r dst src; do
+        [[ -n "$dst" ]] || continue
+        expected=$((expected + 1))
+        rel="${dst#"$ROOT"/}"
+        printf '%s\n' "$dst" >> "$expected_file"
+
+        if [[ -e "$dst" && ! -L "$dst" ]]; then
+            # Bewusst uebersprungen: eine echte AGORA-Datei gleichen Namens.
+            conflicts=$((conflicts + 1))
+            continue
         fi
-    done < <(overlay_paths)
-    if [[ "$missing" == 0 ]]; then
-        echo "Overlay konsistent: $(overlay_paths | wc -l | tr -d ' ') Symlinks, alle ausgeschlossen."
-    else
-        echo "Behebung: bun run bigpowers:sync"
+        if [[ ! -L "$dst" ]]; then
+            echo "DRIFT: Link fehlt: $rel"
+            missing=$((missing + 1))
+            continue
+        fi
+        if [[ ! -e "$dst" ]]; then
+            echo "DRIFT: Link zeigt ins Leere: $rel"
+            broken=$((broken + 1))
+            continue
+        fi
+        printf '%s\n' "$rel" >> "$ignore_file"
+    done < <(expected_links)
+
+    # Verwaiste Links: zeigen auf die Dependency, sind aber nicht erwartet.
+    LC_ALL=C sort -o "$expected_file" "$expected_file"
+    while IFS= read -r link; do
+        [[ -n "$link" ]] || continue
+        if ! grep -qxF "$ROOT/$link" "$expected_file"; then
+            echo "DRIFT: veralteter Link aus einer frueheren Version: $link"
+            stale=$((stale + 1))
+        fi
+    done < <(actual_links)
+
+    # Ein Aufruf statt einer je Pfad — 300 Prozessstarts sind spuerbar.
+    if [[ -s "$ignore_file" ]]; then
+        unignored=$(
+            cd "$ROOT" \
+                && git check-ignore --stdin --non-matching --verbose < "$ignore_file" 2>/dev/null \
+                | grep -c '^::' || true
+        )
+        if [[ "$unignored" -gt 0 ]]; then
+            echo "DRIFT: $unignored Link(s) sind nicht ausgeschlossen."
+        fi
     fi
-    return "$missing"
+
+    rm -f "$ignore_file" "$expected_file"
+
+    if (( missing + broken + stale + unignored == 0 )); then
+        echo "Overlay konsistent: $expected erwartete Links, davon $conflicts AGORA-eigen (uebersprungen)."
+        return 0
+    fi
+    echo "Behebung: bun run bigpowers:sync"
+    return 1
 }
 
 if [[ ! -d "$DEP" ]]; then
+    if [[ "${1:-}" == "--check" ]]; then
+        check_drift
+        exit $?
+    fi
     echo "FEHLER: Bigpowers nicht installiert. Ausfuehren: bun install"
     exit 1
 fi
@@ -145,11 +248,12 @@ case "${1:-}" in
 esac
 
 echo "Synchronisiere Bigpowers-Overlay (v$(node -p "require('$DEP/package.json').version"))..."
-echo "scripts/:"
-link_tree "$DEP/scripts" "$ROOT/scripts" files
-echo ".claude/skills/:"
-link_tree "$DEP/skills" "$ROOT/.claude/skills" dirs
+echo "Veraltete Links:"
+prune_stale_links
+echo "Links:"
+sync_links
 echo "Ausschlussliste:"
 write_exclude
+
 echo
 echo "Overlay aktualisiert."
