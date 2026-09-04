@@ -50,16 +50,23 @@ services:
       - ./backend/.cache/huggingface:/home/agora/.cache/huggingface
       # Anmeldung fuer den codex_cli-Provider (ChatGPT-Abo, #1405/#1406).
       # Das Binary steckt im Image, die Anmeldung ausdruecklich nicht: `codex
-      # login` legt sie auf dem Host unter ${CODEX_HOME:-~/.codex} ab und sie
-      # wird hier read-only hereingereicht. Ein Abo-Token gehoert weder in
-      # eine Image-Schicht noch ins Repo.
+      # login` legt sie auf dem Host unter ${CODEX_HOME:-~/.codex} ab und wird
+      # hier hereingereicht. Ein Abo-Token gehoert weder in eine Image-Schicht
+      # noch ins Repo.
+      #
+      # Bewusst *nicht* read-only: `codex exec` startet einen In-Process-
+      # App-Server, legt Session-State und PATH-Aliase unter CODEX_HOME ab und
+      # bricht auf einem read-only Mount mit "failed to initialize in-process
+      # app-server client: Read-only file system (os error 30)" ab. Der
+      # Container kann damit auch den Refresh-Token zurueckschreiben — was
+      # noetig ist, sobald das Abo-Token ablaeuft.
       #
       # Existiert das Host-Verzeichnis nicht, legt Docker es als root an und
       # der Container-User (uid=1000) kann nicht darauf zugreifen — die Probe
       # meldet dann zwar "available" (Binary da), der erste echte Aufruf
       # scheitert aber am fehlenden Login. Deshalb vorher auf dem Host einmal
       # `codex login` ausfuehren.
-      - ${CODEX_HOME:-${HOME}/.codex}:/home/agora/.codex:ro
+      - ${CODEX_HOME:-${HOME}/.codex}:/home/agora/.codex
     extra_hosts:
       - "host.docker.internal:host-gateway"
     # Optional: GPU acceleration via NVIDIA Container Toolkit
