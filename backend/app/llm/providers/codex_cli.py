@@ -21,6 +21,8 @@ zurueck (wie bei jedem anderen Provider ohne strict-Schema-Support).
 """
 from __future__ import annotations
 
+import json
+import logging
 import os
 import shutil
 import subprocess
@@ -31,10 +33,13 @@ from typing import Any, Dict, List, Optional
 from ..errors import LlmProviderError
 from ...contracts.llm_request import NormalizedLlmError
 
+logger = logging.getLogger(__name__)
+
 CODEX_CLI_BINARY_ENV = "AGORA_CODEX_CLI_BIN"
 CODEX_CLI_TIMEOUT_ENV = "AGORA_CODEX_CLI_TIMEOUT_SECONDS"
 DEFAULT_CODEX_CLI_BINARY = "codex"
 DEFAULT_CODEX_CLI_TIMEOUT_SECONDS = 180
+DEFAULT_CODEX_CLI_CATALOG_TIMEOUT_SECONDS = 30
 
 
 def codex_cli_binary() -> str:
@@ -67,6 +72,70 @@ Default-Modell" — ``_run_codex_cli`` laesst dafuer ``--model`` bewusst weg.
 
 def codex_cli_fallback_models() -> tuple[str, ...]:
     return (CODEX_CLI_DEFAULT_MODEL_ID,)
+
+
+def discover_codex_cli_models() -> tuple[str, ...]:
+    """Auswaehlbare Modell-Slugs aus ``codex debug models``.
+
+    Der Katalog ist account- und planabhaengig: Das Binary kennt intern mehr
+    Slugs, als ein konkretes Abo freischaltet (verifiziert — ``gpt-5.6`` und
+    ``gpt-5.6-pro`` stehen im Binary, fehlen aber im Katalog eines
+    Plus-Accounts). Eine im Repo gepflegte Liste waere damit nicht nur
+    veraltungsanfaellig, sondern fuer jeden zweiten Nutzer schlicht falsch —
+    deshalb wird der Katalog zur Laufzeit abgefragt statt fest verdrahtet.
+
+    ``visibility == "list"`` ist der Filter, den die CLI selbst fuer ihr
+    ``/model``-Menue verwendet; ``hide`` markiert interne Eintraege
+    (``gpt-reserve``, ``codex-auto-review``), die keine Nutzerauswahl sind.
+
+    Gibt bei jedem Fehlschlag ein leeres Tupel zurueck — der Aufrufer faellt
+    dann auf den Sentinel zurueck. Discovery ist eine Komfortfunktion; sie
+    darf eine funktionierende Verbindung nie kaputtmachen.
+    """
+    if not is_codex_cli_available():
+        return ()
+    cmd = [codex_cli_binary(), "debug", "models"]
+    with tempfile.TemporaryDirectory(prefix="agora-codex-catalog-") as scratch_dir:
+        try:
+            result = subprocess.run(  # noqa: S603 — Binary aus Config, Argumente sind kein Shell-String
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=DEFAULT_CODEX_CLI_CATALOG_TIMEOUT_SECONDS,
+                cwd=scratch_dir,
+                check=False,
+            )
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            logger.warning("codex debug models nicht ausfuehrbar: %s", exc)
+            return ()
+    if result.returncode != 0:
+        logger.warning(
+            "codex debug models fehlgeschlagen (exit=%s): %s",
+            result.returncode,
+            (result.stderr or "").strip()[-200:],
+        )
+        return ()
+    payload: object
+    try:
+        payload = json.loads(result.stdout or "")
+    except ValueError as exc:
+        logger.warning("codex debug models lieferte kein gueltiges JSON: %s", exc)
+        return ()
+    if not isinstance(payload, dict):
+        logger.warning("codex debug models: unerwartete Katalogform")
+        return ()
+    entries: object = payload.get("models")
+    if not isinstance(entries, list):
+        logger.warning("codex debug models: unerwartete Katalogform")
+        return ()
+    slugs: list[str] = []
+    for entry in entries:
+        if not isinstance(entry, dict) or entry.get("visibility") != "list":
+            continue
+        slug: object = entry.get("slug")
+        if isinstance(slug, str) and slug:
+            slugs.append(slug)
+    return tuple(dict.fromkeys(slugs))
 
 
 def is_codex_cli_available() -> bool:
