@@ -9,6 +9,7 @@
 | Frontend-Spiegel | `frontend/src/contracts/` + generierte `schemas/` |
 | Provider-Detection | `backend/app/llm/providers/registry.py::detect_provider` |
 | Provider-Verbindung | `ProviderConnection` |
+| Provider mit `transport="cli"` (Subprozess statt HTTP) | `backend/app/llm/providers/codex_cli.py` (erster Vertreter, #1405) |
 | Strukturierte LLM-Calls | `backend/app/llm/client.py::LLMClient.chat_json` (Pydantic-Schema, strict-mode, Repair) |
 | Modellauswahl-UI | `frontend/src/components/v4/forms/AiModelPicker.vue` |
 | Modellreferenz | `AiModelRef` / `AiRoute` / `LlmRoute` |
