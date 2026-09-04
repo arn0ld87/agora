@@ -156,7 +156,10 @@ class _CodexCliProbeAdapter:
     def probe(
         self, connection: ProviderConnection, api_key: str | None
     ) -> ProviderProbeResult:
-        from app.llm.providers.codex_cli import is_codex_cli_available
+        from app.llm.providers.codex_cli import (
+            discover_codex_cli_models,
+            is_codex_cli_available,
+        )
         from app.services.llm_provider_registry import LlmProviderRegistry
 
         if not is_codex_cli_available():
@@ -166,10 +169,17 @@ class _CodexCliProbeAdapter:
             )
         definition = LlmProviderRegistry.connection_definition(connection.provider_kind)
         fallback_models = definition.fallback_models if definition else ()
+        # Der Sentinel bleibt hinter den echten Slugs stehen, statt von ihnen
+        # ersetzt zu werden: Eine bereits gespeicherte Routing-Auswahl auf
+        # ``codex-cli-default`` wuerde sonst von ``_verify_selected_model``
+        # verworfen, sobald die Discovery zum ersten Mal greift. Ausserdem
+        # bleibt "nimm, was `/model` in der CLI eingestellt hat" eine bewusst
+        # waehlbare Option.
+        model_ids = tuple(dict.fromkeys(discover_codex_cli_models() + fallback_models))
         return ProviderProbeResult(
             status="available",
             status_message=None,
-            models=tuple(_ai_model(connection, model_id) for model_id in fallback_models),
+            models=tuple(_ai_model(connection, model_id) for model_id in model_ids),
         )
 
 

@@ -5,6 +5,7 @@ invoked, even if it happens to be installed on the test machine.
 """
 from __future__ import annotations
 
+import json
 import subprocess
 from typing import Any, Dict, List
 from unittest.mock import MagicMock
@@ -16,6 +17,7 @@ from app.llm.providers import codex_cli as codex_cli_mod
 from app.llm.providers.codex_cli import (
     CodexCliClient,
     _flatten_messages,
+    discover_codex_cli_models,
     is_codex_cli_available,
 )
 
@@ -165,3 +167,104 @@ def test_subprocess_timeout_default_is_180_and_overridable_via_env(monkeypatch):
     client.chat.completions.create(model=None, messages=[{"role": "user", "content": "hi"}])
     _args, kwargs = mock_run.call_args
     assert kwargs["timeout"] == pytest.approx(45.0)
+
+
+# ---------------------------------------------------------------------------
+# discover_codex_cli_models() — Modellkatalog statt Sentinel-Einzelmodell
+# ---------------------------------------------------------------------------
+
+_CATALOG_JSON = json.dumps(
+    {
+        "models": [
+            {"slug": "gpt-reserve", "visibility": "hide"},
+            {"slug": "gpt-5.6-sol", "visibility": "list"},
+            {"slug": "gpt-5.6-terra", "visibility": "list"},
+            {"slug": "gpt-5.5", "visibility": "list"},
+            {"slug": "codex-auto-review", "visibility": "hide"},
+        ]
+    }
+)
+
+
+def test_discover_models_returns_only_listed_slugs_in_catalog_order(monkeypatch):
+    _mock_available(monkeypatch)
+    run_result = MagicMock(returncode=0, stdout=_CATALOG_JSON, stderr="")
+    mock_run = MagicMock(return_value=run_result)
+    monkeypatch.setattr(codex_cli_mod.subprocess, "run", mock_run)
+
+    assert discover_codex_cli_models() == ("gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.5")
+
+    cmd = mock_run.call_args[0][0]
+    assert cmd[1:] == ["debug", "models"]
+
+
+def test_discover_models_skips_hidden_and_malformed_entries(monkeypatch):
+    _mock_available(monkeypatch)
+    payload = json.dumps(
+        {
+            "models": [
+                "nicht-mal-ein-objekt",
+                {"visibility": "list"},
+                {"slug": "", "visibility": "list"},
+                {"slug": "gpt-5.4", "visibility": "list"},
+                {"slug": "gpt-5.4", "visibility": "list"},
+            ]
+        }
+    )
+    monkeypatch.setattr(
+        codex_cli_mod.subprocess,
+        "run",
+        MagicMock(return_value=MagicMock(returncode=0, stdout=payload, stderr="")),
+    )
+
+    assert discover_codex_cli_models() == ("gpt-5.4",)
+
+
+@pytest.mark.parametrize(
+    "run_result",
+    [
+        MagicMock(returncode=1, stdout="", stderr="boom"),
+        MagicMock(returncode=0, stdout="kein json", stderr=""),
+        MagicMock(returncode=0, stdout='["liste statt objekt"]', stderr=""),
+        MagicMock(returncode=0, stdout='{"models": "kein array"}', stderr=""),
+    ],
+)
+def test_discover_models_returns_empty_on_any_failure(monkeypatch, run_result):
+    """Discovery ist Komfort — sie darf eine funktionierende Verbindung nie kippen."""
+    _mock_available(monkeypatch)
+    monkeypatch.setattr(codex_cli_mod.subprocess, "run", MagicMock(return_value=run_result))
+
+    assert discover_codex_cli_models() == ()
+
+
+def test_discover_models_returns_empty_on_timeout_without_raising(monkeypatch):
+    _mock_available(monkeypatch)
+    monkeypatch.setattr(
+        codex_cli_mod.subprocess,
+        "run",
+        MagicMock(side_effect=subprocess.TimeoutExpired(cmd="codex", timeout=30)),
+    )
+
+    assert discover_codex_cli_models() == ()
+
+
+def test_discover_models_does_not_spawn_subprocess_when_binary_missing(monkeypatch):
+    monkeypatch.setattr(codex_cli_mod.shutil, "which", lambda _binary: None)
+    mock_run = MagicMock()
+    monkeypatch.setattr(codex_cli_mod.subprocess, "run", mock_run)
+
+    assert discover_codex_cli_models() == ()
+    mock_run.assert_not_called()
+
+
+def test_discover_models_runs_in_isolated_cwd(monkeypatch):
+    """Wie jeder codex-Aufruf: nie im CWD des Backend-Prozesses (= dieses Repo)."""
+    _mock_available(monkeypatch)
+    mock_run = MagicMock(return_value=MagicMock(returncode=0, stdout=_CATALOG_JSON, stderr=""))
+    monkeypatch.setattr(codex_cli_mod.subprocess, "run", mock_run)
+
+    discover_codex_cli_models()
+
+    cwd = mock_run.call_args.kwargs["cwd"]
+    assert cwd is not None
+    assert "agora-codex-catalog-" in cwd

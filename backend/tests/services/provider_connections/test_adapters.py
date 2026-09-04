@@ -114,27 +114,60 @@ def _codex_cli_connection() -> ProviderConnection:
     )
 
 
-def test_codex_cli_probe_reports_available_with_fallback_model_without_transport_call(
+def _no_http(_url: str, *, headers: dict[str, str]) -> CatalogHttpResponse:
+    raise AssertionError("codex_cli must not use HTTP discovery")
+
+
+def test_codex_cli_probe_falls_back_to_sentinel_when_catalog_unavailable(
     monkeypatch,
 ) -> None:
     """Regression fuer das Codex-Review-Finding: ohne Modelle in der Probe
     kann codex_cli zwar verbunden, aber nie als Modell ausgewaehlt werden
-    (``_verify_selected_model`` prueft ausschliesslich ``result.models``)."""
+    (``_verify_selected_model`` prueft ausschliesslich ``result.models``).
 
-    def unexpected_call(_url: str, *, headers: dict[str, str]) -> CatalogHttpResponse:
-        raise AssertionError("codex_cli must not use HTTP discovery")
-
+    Die Discovery wird bewusst gemockt: Der Test darf nicht davon abhaengen,
+    ob auf der Maschine eine echte ``codex``-CLI installiert ist.
+    """
     monkeypatch.setattr(
         "app.llm.providers.codex_cli.is_codex_cli_available", lambda: True
     )
+    monkeypatch.setattr(
+        "app.llm.providers.codex_cli.discover_codex_cli_models", lambda: ()
+    )
 
-    result = adapter_for_connection("codex_cli", get_json=unexpected_call).probe(
+    result = adapter_for_connection("codex_cli", get_json=_no_http).probe(
         _codex_cli_connection(), None
     )
 
     assert result.status == "available"
     assert result.status_message is None
     assert [m.model_id for m in result.models] == ["codex-cli-default"]
+
+
+def test_codex_cli_probe_lists_discovered_models_and_keeps_sentinel_last(
+    monkeypatch,
+) -> None:
+    """Der Sentinel darf nicht verschwinden, sobald die Discovery greift —
+    eine gespeicherte Routing-Auswahl auf ``codex-cli-default`` wuerde sonst
+    von ``_verify_selected_model`` verworfen."""
+    monkeypatch.setattr(
+        "app.llm.providers.codex_cli.is_codex_cli_available", lambda: True
+    )
+    monkeypatch.setattr(
+        "app.llm.providers.codex_cli.discover_codex_cli_models",
+        lambda: ("gpt-5.6-sol", "gpt-5.5"),
+    )
+
+    result = adapter_for_connection("codex_cli", get_json=_no_http).probe(
+        _codex_cli_connection(), None
+    )
+
+    assert result.status == "available"
+    assert [m.model_id for m in result.models] == [
+        "gpt-5.6-sol",
+        "gpt-5.5",
+        "codex-cli-default",
+    ]
 
 
 def test_codex_cli_probe_reports_unavailable_when_binary_missing(monkeypatch) -> None:
