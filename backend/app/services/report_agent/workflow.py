@@ -1283,7 +1283,15 @@ def _build_partial_report(
     # von einer unangetasteten nicht zu unterscheiden. Im flüchtigen
     # RunEventLog ist die Menge zu diesem Zeitpunkt vollständig; hier wird
     # die Summe gezogen, statt sie beim Abbruch zu verlieren.
+    # Issue #1419 (Codex-Review PR #1420): auch der Teil-Report muss sagen,
+    # worauf er beruht. Ohne die Persona-Zahlen ging ein nach dem Abbruch
+    # finalisierter Bericht als COMPLETED hinaus, obwohl saemtliche Stimmen
+    # darin regelbasierte Platzhalter waren — genau die Luecke, die der
+    # Normalpfad seit diesem Issue schliesst.
+    persona_fallbacks, persona_total = _load_persona_fallback_stats(agent)
     report.run_degradations = collect_run_degradations(
+        persona_fallback_count=persona_fallbacks,
+        persona_total=persona_total,
         work_trace_removed_section_indices=sorted(
             events_for(agent).work_trace_removed_sections
         ),
