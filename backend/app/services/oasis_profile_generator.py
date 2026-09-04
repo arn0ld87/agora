@@ -1743,9 +1743,20 @@ Important:
             return
 
         first_error = failed[0].generation_error or "unbekannt"
+        # Issue #1419: Faellt jede einzelne Persona aus, gibt es keine echte
+        # Stimme mehr — die Runde koennte nur noch Platzhalter befragen. Das
+        # ist kein Qualitaetsverlust, das ist ein leerer Lauf, und er darf
+        # ``bereit`` nicht erreichen. Solange eine echte Persona dabei ist,
+        # bleibt der Lauf verwertbar: die Platzhalter sind einzeln
+        # gekennzeichnet, der Leser kann sie gewichten.
+        severity = (
+            DegradationSeverity.BLOCKING
+            if len(failed) == len(present)
+            else DegradationSeverity.WARNING
+        )
         degradations.record(
             kind=DegradationKind.PERSONA_RULE_BASED_FALLBACK,
-            severity=DegradationSeverity.WARNING,
+            severity=severity,
             detail=(
                 f"{len(failed)} von {len(present)} Personas konnten nicht vom "
                 "Modell erzeugt werden und sind regelbasierte Platzhalter. "

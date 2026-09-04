@@ -917,6 +917,29 @@ def prepare_simulation(
         # simulation directory. When starting simulation, simulation_runner
         # runs scripts from scripts/ directory.
 
+        # Issue #1419: ``BLOCKING`` heisst laut
+        # ``pipeline_degradation_contract`` woertlich, dass der Schritt den
+        # Zustand "bereit" nicht erreichen darf, auch wenn technisch kein
+        # Fehler aufgetreten ist. Ohne dieses Gate war das eine
+        # Absichtserklaerung: eine Vorbereitung, in der keine einzige Persona
+        # vom Modell kam, ging als READY hinaus und war regulaer startbar.
+        # Der Collector bleibt im Task-Ergebnis erhalten — dort steht die
+        # Begruendung, die die Oberflaeche anzeigt.
+        blocking = (
+            [event for event in degradations.report().events if event.is_blocking]
+            if degradations is not None
+            else []
+        )
+        if blocking:
+            state.error = " ".join(event.detail for event in blocking)
+            manager._set_status(state, SimulationStatus.FAILED)
+            logger.error(
+                "Simulation preparation blocked by degradation: %s, kinds=%s",
+                simulation_id,
+                ", ".join(event.kind.value for event in blocking),
+            )
+            return state
+
         manager._set_status(state, SimulationStatus.READY)
 
         logger.info(
