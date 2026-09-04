@@ -23,6 +23,20 @@ dependencies = [
     "camel-oasis==0.2.5",
     "camel-ai==0.2.78",
 
+    # nltk stand bis #1410 nur im Override-Block und kam transitiv ueber
+    # unstructured herein. Mit dem Bump auf unstructured 0.27.5 (spacy statt
+    # nltk) fiel es aus uv.lock heraus — und damit brach die gesamte
+    # nltk-Import-Guard-Infrastruktur weg: fuenf Tests in
+    # tests/test_nltk_import_guard.py, NLTK_DISABLE_IMPORT_SECURITY im
+    # Dockerfile und der Abschnitt "nltk-Baseline" in
+    # docs/dependency-risk-register.md haengen daran.
+    #
+    # Statt diesen Mechanismus abzureissen oder die SSoT-Tests aufzuweichen,
+    # bleibt nltk hier eine explizite Dependency auf der gefixten Version.
+    # 3.10.3 schliesst CVE-2026-79675 (critical), CVE-2026-78680 und
+    # CVE-2026-71513; der Guard behaelt seinen Gegenstand.
+    "nltk==3.10.3",
+
     # Der Produktionspfad unter `app/` importiert torch nicht — es kommt dort
     # transitiv ueber camel-oasis -> sentence-transformers. Ausserhalb von
     # `app/` wird es sehr wohl importiert: `tests/conftest.py` laedt es
@@ -312,12 +326,9 @@ override-dependencies = [
     # 3.10.0 faellt das Paket aus dem affected-Set, pip-audit meldet die
     # Advisory dann nicht mehr, ohne dass ein echter Fix vorliegt (#661).
     # CVE-2026-79675 (critical), CVE-2026-78680 und CVE-2026-71513 treffen
-    # nltk <= 3.10.1; gefixt in 3.10.3 (#1410). Der Override laeuft seit dem
-    # unstructured-Bump auf 0.27.5 aber ins Leere: unstructured zieht kein nltk
-    # mehr (es nutzt jetzt spacy), nltk ist damit aus uv.lock verschwunden und
-    # Agora importiert es an keiner Stelle selbst. Die Zeile bleibt als Riegel
-    # stehen, falls eine kuenftige Transitive nltk zurueckholt — sie darf dann
-    # nicht unterhalb von 3.10.3 landen.
+    # nltk <= 3.10.1; gefixt in 3.10.3 (#1410). Der Override deckt seit dem
+    # unstructured-Bump nur noch Transitive ab — die verbindliche Quelle ist
+    # der gleichnamige Eintrag in project.dependencies (Begruendung dort).
     "nltk==3.10.3",
 ]
 

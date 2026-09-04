@@ -24,12 +24,21 @@
      unloesbar und die CRITICAL bliebe offen. `camel` 0.2.78 importiert
      gegen psutil 7.2.2 sauber, das Backend-Gate ist gruen.
 
-  3. **nltk (CVE-2026-79675 CRITICAL, CVE-2026-78680, CVE-2026-71513)** loest
-     sich mit 2. von selbst auf: unstructured 0.27.5 nutzt spacy statt nltk,
-     nltk faellt aus `uv.lock` heraus und Agora importiert es an keiner Stelle
-     selbst. Der Pin `nltk==3.10.3` bleibt als Riegel fuer den Fall stehen,
-     dass eine kuenftige Transitive nltk zurueckholt. `NLTK_DISABLE_IMPORT_
-     SECURITY=1` im Dockerfile bleibt aus demselben Grund unangetastet.
+  3. **nltk (CVE-2026-79675 CRITICAL, CVE-2026-78680, CVE-2026-71513)**:
+     `3.10.1` → `3.10.3`. nltk stand bis hierher nur im Override-Block und kam
+     transitiv ueber unstructured herein — mit 2. (unstructured nutzt jetzt
+     spacy statt nltk) fiel es komplett aus `uv.lock`. Das haette nicht nur
+     den Pin wirkungslos gemacht, sondern die gesamte
+     nltk-Import-Guard-Infrastruktur entkernt: fuenf Tests in
+     `tests/test_nltk_import_guard.py` brachen, dazu haengen
+     `NLTK_DISABLE_IMPORT_SECURITY=1` im Dockerfile und der Abschnitt
+     "nltk-Baseline" in `docs/dependency-risk-register.md` daran. Statt diesen
+     Mechanismus abzureissen oder den SSoT-Test
+     (`test_pyproject_and_uv_lock_nltk_pin_match`) aufzuweichen, ist nltk
+     jetzt eine **explizite** Dependency auf der gefixten 3.10.3. Der Guard
+     behaelt seinen Gegenstand; ein Guard-Test skippt sich seit 3.10.3 selbst,
+     weil der Import-Hook upstream entfernt wurde — dieser Fall war im Test
+     bereits vorgesehen.
 
   4. **msgpack (GHSA-6v7p-g79w-8964) und setuptools (CVE-2025-47273)**, beide
      HIGH, waren ueber `uv.lock` gar nicht erreichbar: Die venv fuehrt
