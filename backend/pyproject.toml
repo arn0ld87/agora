@@ -282,7 +282,18 @@ override-dependencies = [
     # GHSA-Override: unstructured < 0.18.18 hat Path Traversal via MSG-
     # Attachment (critical, Arbitrary File Write) plus < 0.14.3 XXE.
     # camel-oasis 0.2.5 pinned 0.13.7 — Override zieht 0.18.18 trotzdem hoch.
-    "unstructured>=0.18.18",
+    # CVE-2026-71428 (critical) trifft unstructured < 0.24.0. Der Sprung von
+    # 0.18.32 ist bewusst kein Patch-Bump: 0.24.0 ist die erste Version mit
+    # dem Fix, ein kleinerer Schritt existiert nicht (#1410).
+    "unstructured>=0.24.0",
+    # Folgekonflikt aus dem unstructured-Bump: unstructured 0.24.0 verlangt
+    # psutil>=7.2.2, waehrend camel-ai psutil<6 pinnt — auch in der aktuellsten
+    # Version 0.2.90, es gibt also keine camel-ai, die beides erfuellt. Ohne
+    # diesen Override ist die Resolution unloesbar und CVE-2026-71428 bliebe
+    # offen. psutil wird von camel-ai nur fuer Prozess- und Speicherauskuenfte
+    # benutzt; der 5.x->7.x-Sprung ist damit das kleinere Risiko gegenueber
+    # einer offenen critical-CVE (#1410).
+    "psutil>=7.2.2",
     # CVE-2025-71176: pytest 8.2.0 (pinned by camel-oasis 0.2.5) has a
     # vulnerability. Upgrading to >=9.0.3.
     "pytest>=9.0.3",
@@ -300,7 +311,14 @@ override-dependencies = [
     # dafuer kein offizielles "fixed"-Event, aber last_affected: 3.9.4 — ab
     # 3.10.0 faellt das Paket aus dem affected-Set, pip-audit meldet die
     # Advisory dann nicht mehr, ohne dass ein echter Fix vorliegt (#661).
-    "nltk==3.10.1",
+    # CVE-2026-79675 (critical), CVE-2026-78680 und CVE-2026-71513 treffen
+    # nltk <= 3.10.1; gefixt in 3.10.3 (#1410). Der Override laeuft seit dem
+    # unstructured-Bump auf 0.27.5 aber ins Leere: unstructured zieht kein nltk
+    # mehr (es nutzt jetzt spacy), nltk ist damit aus uv.lock verschwunden und
+    # Agora importiert es an keiner Stelle selbst. Die Zeile bleibt als Riegel
+    # stehen, falls eine kuenftige Transitive nltk zurueckholt — sie darf dann
+    # nicht unterhalb von 3.10.3 landen.
+    "nltk==3.10.3",
 ]
 
 # ---------------------------------------------------------------------------

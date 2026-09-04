@@ -205,6 +205,23 @@ RUN apt-get update \
   && ln -snf /usr/share/zoneinfo/Europe/Berlin /etc/localtime \
   && echo "Europe/Berlin" > /etc/timezone
 
+# pip aus dem Runtime-Image entfernen (#1410). pip 26.2.1 bringt in
+# site-packages/pip/_vendor laut vendor.txt msgpack==1.1.2 und
+# setuptools==70.3.0 mit; Trivy meldet beide als HIGH (GHSA-6v7p-g79w-8964
+# bzw. CVE-2025-47273) und blockiert damit build-only. Ueber uv.lock sind sie
+# nicht erreichbar — die venv fuehrt setuptools 83.0.0 und gar kein msgpack.
+#
+# Das prod-Image braucht pip zur Laufzeit nicht: die venv wird fertig aus
+# backend-build kopiert und enthaelt selbst kein pip, gunicorn startet aus
+# /app/backend/.venv/bin, und der HEALTHCHECK nutzt urllib. Die einzigen
+# pip-Vorkommen im Backend sind Texte in Fehlermeldungen, keine Aufrufe.
+# Entfernen statt .trivyignore, weil das die Funde beseitigt statt sie zu
+# unterdruecken — und nebenbei Angriffsflaeche und Imagegroesse reduziert.
+# Die dev-Stage bleibt unberuehrt und behaelt pip.
+RUN rm -rf /usr/local/lib/python3.14/site-packages/pip \
+           /usr/local/lib/python3.14/site-packages/pip-*.dist-info \
+           /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.14
+
 ENV TZ=Europe/Berlin
 
 RUN useradd -m -u 1000 -s /usr/sbin/nologin agora \
