@@ -23,19 +23,19 @@ dependencies = [
     "camel-oasis==0.2.5",
     "camel-ai==0.2.78",
 
-    # nltk stand bis #1410 nur im Override-Block und kam transitiv ueber
-    # unstructured herein. Mit dem Bump auf unstructured 0.27.5 (spacy statt
-    # nltk) fiel es aus uv.lock heraus — und damit brach die gesamte
-    # nltk-Import-Guard-Infrastruktur weg: fuenf Tests in
-    # tests/test_nltk_import_guard.py, NLTK_DISABLE_IMPORT_SECURITY im
-    # Dockerfile und der Abschnitt "nltk-Baseline" in
-    # docs/dependency-risk-register.md haengen daran.
+    # nltk ist bewusst KEINE Dependency mehr (#1410). Zwischenzeitlich stand es
+    # hier auf 3.10.3, um die Import-Guard-Tests am Leben zu halten — das war
+    # falsch: GHSA-8mgp-746c-j5xp (high, "Model-artifact APIs bypass pathsec")
+    # trifft nltk <= 3.10.3 und hat laut GitHub Advisory KEINE gefixte Version
+    # (first_patched_version: null); 3.10.3 ist zugleich die neueste Release.
+    # Es gibt also keine sichere nltk-Version.
     #
-    # Statt diesen Mechanismus abzureissen oder die SSoT-Tests aufzuweichen,
-    # bleibt nltk hier eine explizite Dependency auf der gefixten Version.
-    # 3.10.3 schliesst CVE-2026-79675 (critical), CVE-2026-78680 und
-    # CVE-2026-71513; der Guard behaelt seinen Gegenstand.
-    "nltk==3.10.3",
+    # Seit dem Bump auf unstructured 0.27.5 (spacy statt nltk) braucht kein
+    # Pfad mehr nltk, und Agora importiert es an keiner Stelle selbst. Es
+    # fernzuhalten beseitigt GHSA-8mgp-746c-j5xp, CVE-2026-79675 (critical),
+    # CVE-2026-78680 und CVE-2026-71513 in einem Zug — staerker, als jeder Pin
+    # es koennte. tests/dependencies/test_dependency_ssot.py haelt diesen
+    # Zustand fest; ein Wiedereinzug muss diese Advisory-Lage neu bewerten.
 
     # Der Produktionspfad unter `app/` importiert torch nicht — es kommt dort
     # transitiv ueber camel-oasis -> sentence-transformers. Ausserhalb von
@@ -325,10 +325,13 @@ override-dependencies = [
     # dafuer kein offizielles "fixed"-Event, aber last_affected: 3.9.4 — ab
     # 3.10.0 faellt das Paket aus dem affected-Set, pip-audit meldet die
     # Advisory dann nicht mehr, ohne dass ein echter Fix vorliegt (#661).
-    # CVE-2026-79675 (critical), CVE-2026-78680 und CVE-2026-71513 treffen
-    # nltk <= 3.10.1; gefixt in 3.10.3 (#1410). Der Override deckt seit dem
-    # unstructured-Bump nur noch Transitive ab — die verbindliche Quelle ist
-    # der gleichnamige Eintrag in project.dependencies (Begruendung dort).
+    # nltk ist seit #1410 kein Bestandteil des Lock mehr (Begruendung bei
+    # project.dependencies: GHSA-8mgp-746c-j5xp trifft <= 3.10.3 ohne Fix).
+    # Dieser Override wirkt deshalb aktuell auf nichts. Er bleibt als Riegel
+    # stehen: holt eine kuenftige Transitive nltk zurueck, landet es wenigstens
+    # auf der hoechsten verfuegbaren Version statt auf einer aelteren, die
+    # zusaetzlich CVE-2026-79675 (critical), CVE-2026-78680 und CVE-2026-71513
+    # traegt. Der Wiedereinzug selbst bleibt begruendungspflichtig.
     "nltk==3.10.3",
 ]
 

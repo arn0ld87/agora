@@ -70,12 +70,17 @@ def _nltk_pin_from_pyproject() -> str:
     raise AssertionError("nltk-Pin nicht in backend/pyproject.toml gefunden")
 
 
-def _nltk_pin_from_uv_lock() -> str:
+def _nltk_pin_from_uv_lock() -> str | None:
+    """nltk-Version aus dem Lock, oder ``None`` wenn es dort nicht vorkommt.
+
+    Die Abwesenheit ist seit #1410 der Sollzustand und deshalb kein Fehler
+    mehr — siehe ``test_nltk_is_absent_from_uv_lock``.
+    """
     data = tomllib.loads(UV_LOCK.read_text(encoding="utf-8"))
     for package in data.get("package", []):
         if package.get("name") == "nltk":
             return package["version"]
-    raise AssertionError("nltk-Paket nicht in backend/uv.lock gefunden")
+    return None
 
 
 def test_requirements_txt_is_not_manually_maintained() -> None:
@@ -128,10 +133,46 @@ def test_pyproject_and_uv_lock_nltk_pin_match() -> None:
     """
     pyproject_pin = _nltk_pin_from_pyproject()
     lock_pin = _nltk_pin_from_uv_lock()
+    if lock_pin is None:
+        pytest.skip(
+            "nltk kommt in backend/uv.lock nicht vor — seit #1410 der "
+            "Sollzustand. Der Drift-Vergleich hat dann keinen Gegenstand; "
+            "test_nltk_is_absent_from_uv_lock sichert diesen Zustand ab."
+        )
     assert lock_pin == pyproject_pin, (
         f"backend/uv.lock pinnt nltk=={lock_pin}, "
         f"backend/pyproject.toml pinnt nltk=={pyproject_pin}. "
         "Beide SSoT-Dateien müssen denselben Pin tragen (Issue #762)."
+    )
+
+
+def test_nltk_is_absent_from_uv_lock() -> None:
+    """nltk darf nicht ins Lock zurückkehren, solange es keinen Fix gibt.
+
+    Bis #1410 kam nltk transitiv über ``unstructured`` herein und wurde per
+    Override auf eine möglichst hohe Version gehoben. Mit ``unstructured``
+    0.27.5 (spacy statt nltk) fällt es ganz heraus — und das ist der sicherere
+    Zustand, nicht bloß ein Nebeneffekt:
+
+    ``GHSA-8mgp-746c-j5xp`` (high, "Model-artifact APIs bypass pathsec and
+    touch files outside allowed roots") trifft nltk ``<= 3.10.3`` und trägt im
+    GitHub-Advisory-Datensatz ``first_patched_version: null``. 3.10.3 ist
+    zugleich die neueste Release — es gibt also keine nltk-Version ohne diese
+    Advisory. Jeder Wiedereinzug bringt sie zurück und lässt ``Dependency
+    Review`` (``fail-on-severity: high``) rot laufen.
+
+    Dieser Test ist damit die schärfere Nachfolge des reinen Pin-Vergleichs:
+    Statt zu prüfen, dass eine verwundbare Version einheitlich gepinnt ist,
+    hält er fest, dass sie gar nicht erst installiert wird. Schlägt er fehl,
+    ist die Advisory-Lage neu zu bewerten — nicht der Test zu lockern.
+    """
+    lock_pin = _nltk_pin_from_uv_lock()
+    assert lock_pin is None, (
+        f"nltk ist mit Version {lock_pin} nach backend/uv.lock zurückgekehrt. "
+        "GHSA-8mgp-746c-j5xp trifft nltk <= 3.10.3 und hat keine gefixte "
+        "Version; Dependency Review (fail-on-severity: high) blockiert damit "
+        "jeden PR. Prüfe, welche Dependency nltk hereinzieht, und ob es "
+        "inzwischen eine gefixte Release gibt (Issue #1410)."
     )
 
 

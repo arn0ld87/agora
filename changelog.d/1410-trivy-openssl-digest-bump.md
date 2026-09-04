@@ -24,21 +24,33 @@
      unloesbar und die CRITICAL bliebe offen. `camel` 0.2.78 importiert
      gegen psutil 7.2.2 sauber, das Backend-Gate ist gruen.
 
-  3. **nltk (CVE-2026-79675 CRITICAL, CVE-2026-78680, CVE-2026-71513)**:
-     `3.10.1` → `3.10.3`. nltk stand bis hierher nur im Override-Block und kam
-     transitiv ueber unstructured herein — mit 2. (unstructured nutzt jetzt
-     spacy statt nltk) fiel es komplett aus `uv.lock`. Das haette nicht nur
-     den Pin wirkungslos gemacht, sondern die gesamte
-     nltk-Import-Guard-Infrastruktur entkernt: fuenf Tests in
-     `tests/test_nltk_import_guard.py` brachen, dazu haengen
-     `NLTK_DISABLE_IMPORT_SECURITY=1` im Dockerfile und der Abschnitt
-     "nltk-Baseline" in `docs/dependency-risk-register.md` daran. Statt diesen
-     Mechanismus abzureissen oder den SSoT-Test
-     (`test_pyproject_and_uv_lock_nltk_pin_match`) aufzuweichen, ist nltk
-     jetzt eine **explizite** Dependency auf der gefixten 3.10.3. Der Guard
-     behaelt seinen Gegenstand; ein Guard-Test skippt sich seit 3.10.3 selbst,
-     weil der Import-Hook upstream entfernt wurde — dieser Fall war im Test
-     bereits vorgesehen.
+  3. **nltk faellt ganz weg** und nimmt CVE-2026-79675 (CRITICAL),
+     CVE-2026-78680, CVE-2026-71513 sowie GHSA-8mgp-746c-j5xp (HIGH) mit.
+     nltk stand bis hierher nur im Override-Block und kam transitiv ueber
+     unstructured herein; mit 2. (spacy statt nltk) faellt es aus `uv.lock`.
+
+     Der naheliegende Reflex — nltk explizit auf die gefixte 3.10.3 pinnen, um
+     die Import-Guard-Tests am Leben zu halten — war nachweislich falsch und
+     wurde wieder zurueckgenommen: `GHSA-8mgp-746c-j5xp` ("Model-artifact APIs
+     bypass pathsec") trifft nltk `<= 3.10.3` und traegt im
+     GitHub-Advisory-Datensatz `first_patched_version: null`, waehrend 3.10.3
+     zugleich die neueste Release ist. Es gibt **keine** sichere
+     nltk-Version; der Pin holte die Advisory nur zurueck und liess
+     `Dependency Review` (`fail-on-severity: high`) rot laufen. nltk
+     fernzuhalten ist die staerkere Loesung, nicht der Nebeneffekt.
+
+     Die Guard-Infrastruktur wurde entsprechend zurueckgebaut, ohne
+     Assertions aufzuweichen: Die vier nltk-abhaengigen Tests in
+     `tests/test_nltk_import_guard.py` tragen jetzt ein `requires_nltk`-skipif
+     (ohne nltk pruefen sie nichts mehr — `import nltk` scheitert am
+     ImportError statt am Guard) und bleiben stehen, damit sie bei einem
+     Wiedereinzug sofort wieder greifen. Der Dockerfile-Test laeuft
+     unabhaengig weiter. `test_pyproject_and_uv_lock_nltk_pin_match` skippt
+     bei Abwesenheit statt zu scheitern; an seine Stelle tritt der schaerfere
+     `test_nltk_is_absent_from_uv_lock`, der den Abwesenheitszustand aktiv
+     festhaelt. `NLTK_DISABLE_IMPORT_SECURITY=1` und der Override-Eintrag
+     bleiben als Riegel fuer den Fall stehen, dass eine kuenftige Transitive
+     nltk zurueckholt.
 
   4. **msgpack (GHSA-6v7p-g79w-8964) und setuptools (CVE-2025-47273)**, beide
      HIGH, waren ueber `uv.lock` gar nicht erreichbar: Die venv fuehrt
