@@ -12,6 +12,7 @@ from typing import Optional
 
 from ..contracts.ai_provider_contract import AiModelRef, ProviderConnection
 from ..contracts.llm_routing_contract import ResolvedRoute, RuntimeLlmRouting, StageId, StageLLMRoute
+from ..contracts.provider_types import PROVIDER_CODEX_CLI
 from ..llm.providers.registry import detect_provider
 from .llm_provider_registry import LlmProviderRegistry
 from .llm_provider_secrets_store import get_llm_provider_secrets_store
@@ -41,6 +42,16 @@ _ROUTE_TO_RUNTIME_PROVIDER = {
     "openai_compatible": "custom_openai",
     "ollama_cloud": "custom_openai",
     "github_copilot": "custom_openai",
+    # Issue #1418: alle anderen Provider fallen auf den generischen
+    # "custom_openai"-Bucket — unschaedlich, weil ``base_url`` als String
+    # genug Information fuer die spaetere Provider-Erkennung traegt
+    # (``detect_provider`` mustert auf URL-Muster). codex_cli hat aber gar
+    # keine ``base_url`` (transport="cli", #1405) — ohne eigenen Eintrag
+    # verschwindet in ``build_runtime_llm_config`` die einzige Information,
+    # die ``_resolve_llm_connection`` braeuchte, um ein fehlendes
+    # ``base_url`` als Normalfall statt als Ausloeser fuer den
+    # ``.env``-Fallback zu erkennen.
+    PROVIDER_CODEX_CLI: PROVIDER_CODEX_CLI,
 }
 
 

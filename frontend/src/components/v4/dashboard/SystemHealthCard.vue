@@ -44,6 +44,15 @@ const PROVIDER_LABELS: Record<string, string> = {
   google: 'Google',
   ollama: 'Ollama',
   cloud: 'Ollama Cloud',
+  // Seit dem #1418-Folgefix liefert das Backend bevorzugt die provider_id
+  // der aktiven Verbindung statt eines aus der Base-URL geratenen Kinds.
+  // Damit erreichen hier auch Connection-IDs die Anzeige.
+  codex_cli: 'Codex CLI',
+  ollama_cloud: 'Ollama Cloud',
+  openai_compatible: 'OpenAI-kompatibel',
+  github_copilot: 'GitHub Copilot',
+  anthropic: 'Anthropic',
+  bedrock: 'Amazon Bedrock',
 }
 
 function providerLabel(kind: string | null | undefined): string {

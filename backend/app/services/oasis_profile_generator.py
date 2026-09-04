@@ -24,6 +24,7 @@ from ..contracts.pipeline_degradation_contract import (
     DegradationKind,
     DegradationSeverity,
 )
+from ..contracts.provider_types import PROVIDER_CODEX_CLI
 from .settings_layer import get_default_service as _get_settings
 from ..utils.llm_latency import measure_llm_latency
 from ..utils.logger import get_logger
@@ -602,6 +603,7 @@ class OasisProfileGenerator:
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         model_name: Optional[str] = None,
+        provider_type: Optional[str] = None,
         storage: Optional[GraphStorage] = None,
         graph_id: Optional[str] = None,
         language: Optional[str] = None,
@@ -611,13 +613,22 @@ class OasisProfileGenerator:
         # Budget-Enforcement (#984): die run_id des Prepare-Runs bindet jeden
         # LLM-Call dieser Generierung an den Budget-Enforcer des Runs.
         self.run_id = run_id
-        self.base_url = base_url or Config.LLM_BASE_URL
-        # Key und Base-URL muessen aus derselben Quelle stammen (#778). Loest der
-        # Aufrufer einen Provider-Endpoint auf, darf der .env-Key NICHT einspringen —
-        # sonst geht der lokale Ollama-Key an einen Fremd-Provider (404/401).
-        self.api_key = api_key or (
-            Config.LLM_API_KEY if self.base_url == Config.LLM_BASE_URL else None
-        )
+        self.provider_type = provider_type
+        if provider_type == PROVIDER_CODEX_CLI:
+            # Issue #1418: codex_cli (transport="cli", #1405) hat weder
+            # base_url noch api_key — der .env-Fallback unten wuerde das
+            # Modell aus der Route an einen fremden HTTP-Provider schicken
+            # (beobachtet: gpt-5.6-luna an https://api.minimax.io/v1 → 400).
+            self.base_url = None
+            self.api_key = api_key or "codex-cli-local-session"
+        else:
+            self.base_url = base_url or Config.LLM_BASE_URL
+            # Key und Base-URL muessen aus derselben Quelle stammen (#778). Loest der
+            # Aufrufer einen Provider-Endpoint auf, darf der .env-Key NICHT einspringen —
+            # sonst geht der lokale Ollama-Key an einen Fremd-Provider (404/401).
+            self.api_key = api_key or (
+                Config.LLM_API_KEY if self.base_url == Config.LLM_BASE_URL else None
+            )
         self.model_name = model_name or Config.LLM_MODEL_NAME
         # Language for generated personas ("de" or "en"); affects prompts and bio language.
         self.language = (language or Config.AGENT_LANGUAGE or "de").lower()
@@ -1232,6 +1243,9 @@ When `ineligible: false`, answer the task above as described."""
             # Budget-Enforcement (#984): ohne run_id gibt es keinen Enforcer —
             # Persona-Generierung liefe am harten Run-Budget vorbei.
             run_id=self.run_id,
+            # Issue #1418: ohne provider_type erkennt LLMClient codex_cli
+            # nicht als Subprozess-Provider und versucht einen HTTP-Call.
+            provider_type=self.provider_type,
         )
         messages = [
             {"role": "system", "content": self._get_system_prompt(is_individual)},
