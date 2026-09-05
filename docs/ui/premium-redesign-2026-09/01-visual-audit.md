@@ -152,6 +152,7 @@ Was **gestrichen** wird: `--bg-grid`, Mesh-Tokens, `--r-pill` als Default, v1-Al
 - Vorlagen gerendert (alle zehn `docs/design/screens/*.html`, inkl. Kommandopalette, Akteure, Quellenumfeld, Einstellungen, Systemregeln): `docs/ui/premium-redesign-2026-09/shots/design/{00-vorspann,01-ablage,02-kommandopalette,03-laeufe,04-simulation,05-akteure,06-quellenumfeld,07-bericht,08-einstellungen,09-systemregeln}.png`
 - Zielbilder dieses Audits (HTML auf `targets/tokens.css`, dem Referenz-Stylesheet für PR 1): `docs/ui/premium-redesign-2026-09/targets/{ablage-uebersicht,simulation-live,bericht-lesen}.html`
 - Zielbilder gerendert: `docs/ui/premium-redesign-2026-09/shots/targets/{desktop,small}--{ablage,simulation,bericht}.png`
+- Vorher/Nachher-Vergleich PR 1 (`ui(tokens)`, #1427, Commit `06bbb37c`): `docs/ui/premium-redesign-2026-09/shots/vergleich-pr1/` und [`02-screenshot-vergleich-pr1.md`](02-screenshot-vergleich-pr1.md)
 
 ### Was die Zielbilder gegenüber den Vorlagen aus `docs/design/screens` ändern
 
