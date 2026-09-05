@@ -89,7 +89,7 @@ describe('ActivityIndicator', () => {
   })
 
   it('Abbrechen-Knopf ist deaktiviert ohne active und aktiv mit active', async () => {
-    const withActive = makeObject({ active: { runId: 'run_a', status: 'processing', pausable: false, simulationId: null } })
+    const withActive = makeObject({ active: { runId: 'run_a', status: 'processing', pausable: false, simulationId: null, progress: null } })
     const withoutActive = makeObject({ id: 'b', active: null })
     const wrapper = mountIndicator([withActive, withoutActive])
 
@@ -102,7 +102,7 @@ describe('ActivityIndicator', () => {
   })
 
   it('Abbrechen ruft useCancelAction.cancel() mit der richtigen runId auf', async () => {
-    const obj = makeObject({ active: { runId: 'run_xyz', status: 'processing', pausable: false, simulationId: null } })
+    const obj = makeObject({ active: { runId: 'run_xyz', status: 'processing', pausable: false, simulationId: null, progress: null } })
     const wrapper = mountIndicator([obj])
     const cancelAction = useCancelAction()
 

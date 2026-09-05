@@ -19,7 +19,7 @@
  *   1. Promise.allSettled: eine Quelle rejected, andere drei liefern trotzdem; error = shelf.partialLoad
  *   2. counts je kind, filtered filtert, activeObjects nur mit active
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import type { RunDetail } from '../../contracts/runsContract'
 import type { Report } from '../../contracts/reportContract'
 import type { ProjectResponse } from '../../api/graph'
@@ -36,7 +36,7 @@ vi.mock('../../api/report', () => reportApi)
 vi.mock('../../api/graph', () => graphApi)
 vi.mock('../../api/simulation', () => simulationApi)
 
-import { endeavorKey, nextActionFor, buildShelfObjects, useShelf } from '../useShelf'
+import { endeavorKey, nextActionFor, buildShelfObjects, formatShelfDate, useShelf } from '../useShelf'
 
 // --- t-Stub: gibt Schluessel (+ JSON der Values) zurueck, Assertions laufen ueber Schluessel ---
 const t = (key: string, values?: Record<string, unknown>): string =>
@@ -200,6 +200,39 @@ describe('nextActionFor — Tabellen-Test ueber run_type x status', () => {
   })
 })
 
+// === formatShelfDate (Redesign PR 3: „Datum bei aelteren Objekten") ========
+
+describe('formatShelfDate', () => {
+  beforeEach(() => {
+    vi.setSystemTime(new Date('2026-08-20T15:00:00Z'))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('zeigt heute nur die Uhrzeit', () => {
+    expect(formatShelfDate('2026-08-20T09:30:00Z', 'de', t)).toBe(
+      new Date('2026-08-20T09:30:00Z').toLocaleTimeString('de', { hour: '2-digit', minute: '2-digit' }),
+    )
+  })
+
+  it('zeigt gestern das Wort "Gestern" statt eines Datums', () => {
+    expect(formatShelfDate('2026-08-19T09:30:00Z', 'de', t)).toBe('views.shelf.dateYesterday')
+  })
+
+  it('zeigt vor gestern tt.mm.', () => {
+    expect(formatShelfDate('2026-08-15T09:30:00Z', 'de', t)).toBe(
+      new Date('2026-08-15T09:30:00Z').toLocaleDateString('de', { day: '2-digit', month: '2-digit' }),
+    )
+  })
+
+  it('leerer String bleibt leer, ein kaputtes Datum kommt roh zurueck', () => {
+    expect(formatShelfDate('', 'de', t)).toBe('')
+    expect(formatShelfDate('kein-datum', 'de', t)).toBe('kein-datum')
+  })
+})
+
 // === buildShelfObjects =======================================================
 
 describe('Gruppierung ueber die ganze Pipeline', () => {
@@ -291,6 +324,57 @@ describe('buildShelfObjects', () => {
     const run = makeRun({ status: 'paused', linked_ids: { simulation_id: 'sim_3' } })
     const [obj] = buildShelfObjects([run], [], [], [], t)
     expect(obj.active?.status).toBe('paused')
+  })
+
+  it('active.progress spiegelt RunDetail.progress (Redesign PR 3: Uebersicht mit Fortschritt)', () => {
+    const run = makeRun({ status: 'processing', progress: 42, linked_ids: { simulation_id: 'sim_progress' } })
+    const [obj] = buildShelfObjects([run], [], [], [], t)
+    expect(obj.active?.progress).toBe(42)
+  })
+
+  it('personaCount sucht ueber alle Jobs der Gruppe, nicht nur den juengsten (Redesign PR 4)', () => {
+    // simulation_prepare traegt den persona_count, das nachfolgende
+    // simulation_run (der juengste Job) nicht mehr.
+    const prep = makeRun({
+      run_id: 'run_prep',
+      run_type: 'simulation_prepare',
+      linked_ids: { simulation_id: 'sim_1' },
+      updated_at: '2026-01-01T00:00:00Z',
+      summary: { persona_count: 30 },
+    })
+    const run = makeRun({
+      run_id: 'run_run',
+      run_type: 'simulation_run',
+      linked_ids: { simulation_id: 'sim_1' },
+      updated_at: '2026-01-02T00:00:00Z',
+      summary: null,
+    })
+    const [obj] = buildShelfObjects([prep, run], [], [], [], t)
+    expect(obj.personaCount).toBe(30)
+  })
+
+  it('personaCount bleibt null, wenn kein Job der Gruppe ihn traegt (Redesign PR 4)', () => {
+    const run = makeRun({ linked_ids: { simulation_id: 'sim_1' }, summary: null })
+    const [obj] = buildShelfObjects([run], [], [], [], t)
+    expect(obj.personaCount).toBeNull()
+  })
+
+  it('jobs traegt alle Jobs der Gruppe mit linkedIds, neuestes zuerst (Redesign PR 4: Jobs-Zeitleiste)', () => {
+    const older = makeRun({
+      run_id: 'run_old',
+      run_type: 'graph_build',
+      linked_ids: { project_id: 'proj_1' },
+      updated_at: '2026-01-01T00:00:00Z',
+    })
+    const newer = makeRun({
+      run_id: 'run_new',
+      run_type: 'simulation_prepare',
+      linked_ids: { project_id: 'proj_1', simulation_id: 'sim_1', report_id: 'rep_1' },
+      updated_at: '2026-01-02T00:00:00Z',
+    })
+    const [obj] = buildShelfObjects([older, newer], [], [], [], t)
+    expect(obj.jobs?.map((j) => j.runId)).toEqual(['run_new', 'run_old'])
+    expect(obj.jobs?.[0].linkedIds).toEqual({ project_id: 'proj_1', simulation_id: 'sim_1', report_id: 'rep_1' })
   })
 
   it('Projekt, dessen project_id von einem Job beansprucht ist, bekommt kein eigenes Graph-Objekt; unbeanspruchtes Projekt schon', () => {

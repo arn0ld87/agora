@@ -1662,6 +1662,50 @@
     "stepSimulationFeed": {
       "title": "Live feed",
       "subtitle": "Follow Reddit and Twitter activity of the running simulation"
+    },
+    "shelf": {
+      "dateYesterday": "Yesterday",
+      "overview": {
+        "ariaLabel": "Overview",
+        "subtitle": "Pick an object on the left to open its dossier.",
+        "newSource": "Drop a source",
+        "headingIdle": "Nothing needs you right now.",
+        "headingLive": "{live} runs active.",
+        "headingAttention": "{attn} items need you.",
+        "headingBoth": "{live} runs active, {attn} items need you.",
+        "attentionTitle": "Needs you",
+        "attentionCount": "{n} open",
+        "attentionEmpty": "Nothing is waiting on a decision.",
+        "liveTitle": "Running now",
+        "liveEmpty": "No run active.",
+        "recentTitle": "Recently done",
+        "recentEmpty": "Nothing finished yet.",
+        "openSettings": "Open settings"
+      }
+    },
+    "dossier": {
+      "kpiPersonas": "Personas",
+      "kpiJobs": "Jobs",
+      "kpiSections": "Sections",
+      "kpiEvidence": "Evidence",
+      "kpiClaims": "Claims",
+      "partsOpen": "Open",
+      "parts": {
+        "actors": "Actors",
+        "actorsDesc": "{n} personas",
+        "output": "Output",
+        "outputDesc": "{n} evidence items"
+      },
+      "jobsTimelineTitle": "History",
+      "confidenceTitle": "Confidence distribution",
+      "confidence": {
+        "speculative": "speculative",
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "verified": "verified"
+      },
+      "redTeamTitle": "Red team findings"
     }
   },
   "runBudget": {

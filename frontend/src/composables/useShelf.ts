@@ -130,6 +130,24 @@ export function statusText(t: Translate, key: string, raw: string): string {
   return translated === key ? raw : translated
 }
 
+/**
+ * Meta-Datum einer Zeile (Block B3, Redesign PR 3: „Datum bei aelteren
+ * Objekten"). Heute → Uhrzeit, gestern → das Wort „Gestern"/„Yesterday",
+ * sonst tt.mm. — sonst verschwimmen mehrtaegige Ablagen zu reiner
+ * Uhrzeit ohne erkennbares Datum (Audit-Befund #6).
+ */
+export function formatShelfDate(iso: string, locale: string, t: Translate): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  const now = new Date()
+  const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+  const diffDays = Math.round((startOfDay(now) - startOfDay(d)) / 86_400_000)
+  if (diffDays === 0) return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
+  if (diffDays === 1) return t('views.shelf.dateYesterday')
+  return d.toLocaleDateString(locale, { day: '2-digit', month: '2-digit' })
+}
+
 const ACTIVE_STATUSES = new Set(['pending', 'processing', 'paused'])
 
 function newestFirst(a: { updatedAt: string }, b: { updatedAt: string }): number {
@@ -214,6 +232,7 @@ export function buildShelfObjects(
           status: latest.status as 'pending' | 'processing' | 'paused',
           pausable: latest.run_type === 'simulation_run',
           simulationId: linkedString(latest, 'simulation_id'),
+          progress: typeof latest.progress === 'number' ? latest.progress : null,
         }
       : null
     objects.push({
@@ -225,6 +244,20 @@ export function buildShelfObjects(
       metaId: key,
       nextAction: nextActionFor(latest, t),
       active,
+      // Redesign PR 4 (Kennzahlstreifen + Jobs-Zeitleiste): persona_count
+      // steht nur auf dem Job, der die Personas erzeugt hat — das kann ein
+      // aelterer Job der Gruppe sein als `latest` (z. B. simulation_run
+      // traegt selbst keinen persona_count mehr). Deshalb ueber alle Jobs
+      // suchen, nicht nur `latest.summary`.
+      personaCount: jobs.map((j) => j.summary?.persona_count).find((n) => typeof n === 'number') ?? null,
+      jobs: jobs.map((j) => ({
+        runId: j.run_id,
+        runType: j.run_type,
+        status: j.status,
+        message: j.message,
+        updatedAt: j.updated_at,
+        linkedIds: j.linked_ids as Record<string, unknown>,
+      })),
     })
   }
 

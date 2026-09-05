@@ -38,6 +38,9 @@ vi.mock('../../../api/simulation', () => ({
   pauseSimulation: vi.fn().mockResolvedValue({}),
   resumeSimulation: vi.fn().mockResolvedValue({}),
 }))
+vi.mock('../../../api/status', () => ({
+  getSystemStatus: vi.fn().mockResolvedValue({ success: true }),
+}))
 
 import { listRuns } from '../../../api/runs'
 import { useCancelAction } from '../../../components/shell/useCancelAction'
@@ -103,7 +106,7 @@ describe('ShelfView', () => {
     expect(wrapper.find(`[data-testid="${DossierTestId.title}"]`).text()).toBe('Erster Testlauf')
   })
 
-  it('ein unbekannter Routen-Parameter fuehrt zu selected=null (Leer-Hinweis im Dossier)', async () => {
+  it('ein unbekannter Routen-Parameter fuehrt zu selected=null (Uebersichtszustand im Dossier, Redesign PR 3)', async () => {
     vi.mocked(listRuns).mockResolvedValue({
       data: { runs: [makeRun()], total: 1, aggregation: null },
     } as never)
@@ -113,8 +116,9 @@ describe('ShelfView', () => {
     await flushPromises()
 
     expect(wrapper.find(`[data-testid="${DossierTestId.title}"]`).exists()).toBe(false)
+    expect(wrapper.find(`[data-testid="${DossierTestId.overview}"]`).exists()).toBe(true)
     expect(wrapper.find(`[data-testid="${DossierTestId.root}"]`).text()).toContain(
-      'Nichts ausgewählt. Wähl links ein Objekt, um seine Übersicht zu sehen.',
+      'Wähle links ein Objekt, um sein Dossier zu öffnen.',
     )
   })
 
