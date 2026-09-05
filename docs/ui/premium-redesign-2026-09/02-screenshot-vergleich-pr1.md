@@ -54,6 +54,20 @@ gelandet, der Vergleich wurde nachgezogen.
   eine Karte, ein Button/Control, ein Feldlabel). Details und Ausnahme beim
   Logo-Fill siehe Abschnitt 3.
 
+### Abdeckung
+
+Die fünf Routen sind eine Stichprobe, kein vollständiger Abgleich aller 23
+Routen aus dem Audit. Ausgewählt wurden die drei Zielbild-Routen (Ablage,
+Simulation, Bericht) plus die zwei Routen mit der dichtesten Nutzung der
+geänderten Shared-Rules (`/runs`: `.table thead th`, `.meta`;
+`/settings/llm-providers`: Karten-Raster, Controls). Die Token-Änderungen
+wirken global und identisch (Body-Typografie, Logo), die Messwerte waren bei
+1440 und 1024 pixelgleich; weitere Routen liefern dieselben Differenzen.
+Nicht aufgenommen: `/v4/env-setup`, `/v4/simulation/:id/feed`, übrige
+Settings-Seiten. Funktionale Regressionen dort fangen die sechs
+Playwright-Smokes ab; ein visueller Abgleich dieser Routen folgt mit den PRs,
+die ihre komponenteneigenen Regeln anfassen (Audit §7, PR 2 ff.).
+
 ## 2. Einschränkung: Simulation-Route ist nicht "live"
 
 Die Route `/v4/simulation/:simulationId` wurde im **Ready-Zustand** (Phase 0,
