@@ -1,0 +1,138 @@
+/* ============================================================
+   Agora — Kompatibilitäts-Aliase (v1/v2 → v4)
+   ============================================================
+   Diese Datei enthält KEINE eigenen Designwerte. Jeder Eintrag ist ein
+   Alias auf einen Token aus tokens-v3.css oder ein alter Größenname, der
+   noch in Komponenten steht. Neue Komponenten benutzen ausschließlich die
+   Namen aus tokens-v3.css; diese Datei schrumpft mit jedem Umbau-PR und
+   verschwindet mit dem letzten Legacy-View (Redesign-PR 10).
+
+   Regel: Wer hier einen Alias braucht, der noch nicht existiert, hat den
+   falschen Token gewählt — nicht die Datei erweitern.
+
+   Erzeugt aus dem alten Compat-Layer von tokens-v3.css; nur Aliase mit
+   mindestens einer Referenz in src/ (oder deren Abhängigkeiten) blieben.
+   ============================================================ */
+:root, [data-theme="dark"] {
+  /* brand */
+  --brand-aurora: var(--accent);
+  --brand-iris: var(--accent);
+  --brand-mint: var(--status-teal);
+  --brand-violet: var(--status-purple);
+  /* ink */
+  --ink-800: #a89e94;
+  --ink-900: #d9d2c9;
+  /* bg */
+  --bg: var(--surface-base);
+  --bg-sunken: var(--surface-canvas);
+  --bg-glass: var(--surface-translucent);
+  --bg-glass-hi: rgba(27,24,21,0.85);
+  --bg-panel: var(--surface-tint);
+  --bg-panel-2: var(--surface-elevated);
+  --bg-inverse: var(--text-primary);
+  /* fg */
+  --fg: var(--text-primary);
+  --fg-body: var(--text-primary);
+  --fg-muted: var(--text-secondary);
+  --fg-meta: var(--text-tertiary);
+  --fg-on-inverse: var(--surface-base);
+  --fg-on-dark-muted: var(--gray-3);
+  /* rule */
+  --rule: var(--hairline);
+  --rule-strong: var(--hairline-strong);
+  --rule-soft: var(--separator);
+  /* accent */
+  --accent-ink: var(--text-on-accent);
+  --accent-glow: var(--accent-tint-bg-strong);
+  /* info */
+  --info: var(--accent);
+  --info-soft: var(--accent-tint-bg);
+  /* ok */
+  --ok: var(--status-green);
+  --ok-soft: var(--status-green-bg);
+  /* warn */
+  --warn: var(--status-orange);
+  --warn-soft: var(--status-orange-bg);
+  /* err */
+  --err: var(--status-red);
+  --err-soft: var(--status-red-bg);
+  /* shadow */
+  --shadow-glass: var(--shadow-2);
+  --shadow-popover: var(--shadow-3);
+  --shadow-modal: var(--shadow-4);
+  --shadow-hairline: 0 0 0 1px var(--hairline);
+  /* glow */
+  --glow-accent: var(--shadow-2);
+  --glow-plasma: var(--shadow-2);
+  /* ff */
+  --ff-sans: var(--font-sans);
+  --ff-mono: var(--font-mono);
+  /* fs */
+  --fs-11: 11px;
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-14: 14px;
+  --fs-15: 15px;
+  --fs-16: 16px;
+  --fs-18: 18px;
+  --fs-20: 20px;
+  --fs-32: 32px;
+  --fs-title-1: 28px;
+  --fs-title-2: 22px;
+  --fs-title-3: 20px;
+  --fs-headline: 17px;
+  --fs-callout: 14px;
+  --fs-subhead: 13px;
+  --fs-footnote: 12px;
+  --fs-caption-1: 11px;
+  /* ls */
+  --ls-mono: 0.06em;
+  --ls-mono-tight: 0.03em;
+  --ls-mono-wide: 0.18em;
+  /* s */
+  --s-1: var(--sp-1);
+  --s-2: var(--sp-2);
+  --s-3: var(--sp-3);
+  --s-4: var(--sp-4);
+  --s-5: var(--sp-6);
+  --s-6: var(--sp-7);
+  --s-7: var(--sp-8);
+  --s-9: var(--sp-10);
+  /* ctl */
+  --ctl-pad-x: 16px;
+  /* grid */
+  --grid-max: 1280px;
+  /* mono */
+  --mono-50: var(--text-primary);
+  --mono-100: var(--ink-900);
+  --mono-200: var(--ink-800);
+  --mono-300: var(--text-secondary);
+  --mono-400: var(--gray-3);
+  --mono-600: var(--gray-5);
+  --mono-700: var(--gray-6);
+  --mono-800: var(--surface-inset);
+  --mono-900: var(--surface-canvas);
+  /* neon */
+  --neon-orange-soft: var(--accent-tint-bg);
+  /* plasma */
+  --plasma-200: var(--accent-tint-bg-strong);
+  --plasma-400: var(--accent);
+  --plasma-500: var(--accent);
+  --plasma-600: var(--accent-hover);
+  --plasma-soft: var(--accent-tint-bg);
+  /* tr */
+  --tr-title-1: -0.018em;
+  --tr-title-3: -0.008em;
+  /* lh */
+  --lh-title-2: 28px;
+  --lh-headline: 22px;
+  --lh-subhead: 18px;
+  --lh-footnote: 16px;
+  --lh-caption-1: 13px;
+  /* Radius-Nummern außerhalb der Skala → nächste Stufe (0/4/6/10/pill) */
+  --r-1: var(--r-3);
+  --r-4: var(--r-3);
+  --r-6: var(--r-5);
+  --r-7: var(--r-5);
+  --r-8: var(--r-5);
+}

@@ -22,9 +22,9 @@ Dark-Mode vorbereitet via `[data-theme]`).
   typisiert, Slot-Props sind typesafe.
 - **Slot-driven Composition**: Komponenten wie `AppShell`, `DataTable`,
   `EmptyState` nutzen named Slots statt verschachtelter Props.
-- **Compat-Layer**: `tokens-v3.css` exportiert v1/v2-Aliase parallel zu den
-  v4-Tokens, damit Legacy-Komponenten in `components/ui/` weiter funktionieren,
-  bis Cleanup-Slice J (Design-v4-Epic) sie ersetzt.
+- **Compat-Layer**: `tokens-compat.css` exportiert v1/v2-Aliase parallel zu den
+  v4-Tokens aus `tokens-v3.css`, damit Legacy-Komponenten in `components/ui/`
+  weiter funktionieren, bis Cleanup-Slice J (Design-v4-Epic) sie ersetzt.
 
 ## Stack-Realität
 
@@ -98,13 +98,15 @@ Faustregel:
 
 ## CSS-Architektur
 
-Drei Globals, geladen in dieser Reihenfolge in `main.ts`:
+Vier Globals, geladen in dieser Reihenfolge in `main.ts`:
 
 1. **`assets/styles/fonts.css`** — `@font-face` für Geist Sans + Geist Mono Variable.
-2. **`assets/styles/tokens-v3.css`** (430 LOC) — Design-Tokens als CSS-Variablen,
+2. **`assets/styles/tokens-v3.css`** — Design-Tokens als CSS-Variablen,
    Light- + Dark-Theme-Definitionen über `:root, [data-theme="light"]` bzw.
-   `[data-theme="dark"]`, plus v1/v2-Aliase im Compat-Layer.
-3. **`assets/styles/global.css`** (1180 LOC) — Reset, Typo-Basis, Utility-Klassen.
+   `[data-theme="dark"]`; seit PR #1427 ohne Legacy-Aliase.
+3. **`assets/styles/tokens-compat.css`** — v1/v2-Aliase als Übergangsschicht,
+   schrumpft mit jedem Folge-PR des Redesigns.
+4. **`assets/styles/global.css`** — Reset, Typo-Basis, Utility-Klassen.
 
 Theme-Switch passiert via `document.documentElement.setAttribute('data-theme', '…')`.
 Pro Komponente: `<style scoped>` mit `var(--token-name, fallback)`.

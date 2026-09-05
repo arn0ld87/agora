@@ -1,0 +1,179 @@
+<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./tokens.css">
+<title>Zielversion · Simulation live</title>
+<style>
+.strip { display: flex; align-items: stretch; border-bottom: 1px solid var(--border-default); }
+.strip > div { padding: var(--sp-3) var(--sp-6); border-right: 1px solid var(--border-default); min-width: 0; }
+.strip > div:last-child { border-right: 0; flex: 1; padding: 0; }
+.strip .t-label { margin-top: 2px; }
+.axis { padding: var(--sp-3) var(--sp-6) var(--sp-3); border-bottom: 1px solid var(--border-default); }
+.bars { display: flex; align-items: flex-end; gap: 4px; height: 44px; margin-top: 8px; }
+.bars span { flex: 1; background: var(--text-faint); }
+.bars span.hi { background: var(--text-muted); }
+.bars span.now { background: var(--accent-live); }
+.bars span.todo { background: transparent; border: 1px dashed var(--border-strong); border-bottom: 0; height: 100%; }
+.bars span.deg { background: var(--status-warning); opacity: .7; }
+.lanes { flex: 1; display: grid; grid-template-columns: 232px minmax(0,1fr) minmax(0,1fr) 300px; min-height: 0; }
+.lane { border-right: 1px solid var(--border-default); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.lane:last-child { border-right: 0; }
+.lane-head { display: flex; align-items: center; justify-content: space-between; padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--border-subtle); }
+.actor { display: grid; grid-template-columns: minmax(0,1fr) 40px; gap: 8px; align-items: center; padding: 8px var(--sp-4); border-top: 1px solid var(--border-subtle); }
+.actor.is-on { background: var(--accent-soft); }
+.actor .n { display: block; font-size: var(--fs-small); font-weight: 500; }
+.actor .r { display: block; font-size: 11px; color: var(--text-muted); }
+.actor .c { text-align: right; font-family: var(--font-mono); font-size: var(--fs-mono); color: var(--text-secondary); }
+.post { padding: var(--sp-4); border-bottom: 1px solid var(--border-subtle); }
+.post.reply { margin-left: var(--sp-4); padding-left: 20px; border-left: 2px solid var(--border-default); }
+.post .who { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.post .av { width: 20px; height: 20px; border-radius: 50%; background: rgba(255,246,235,.08); color: var(--text-secondary); font-family: var(--font-mono); font-size: 9px; display: flex; align-items: center; justify-content: center; }
+.post .av.me { background: var(--accent-soft); color: var(--accent-primary); }
+.post .txt { font-size: 13px; line-height: 1.55; color: var(--text-prose); }
+.post .txt.dim { color: #cfc7bc; }
+.post .foot { display: flex; gap: 12px; margin-top: 7px; font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); }
+.tool { display: flex; align-items: baseline; gap: 8px; margin: 6px 0 8px; padding: 6px 8px; background: var(--bg-inset); border-radius: var(--r-2); font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); }
+.tool b { color: var(--accent-live-text); font-weight: 500; }
+.quote { border-left: 2px solid var(--border-strong); padding-left: 10px; margin-bottom: 7px; font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+.side { padding: var(--sp-4); border-top: 1px solid var(--border-default); }
+.side:first-child { border-top: 0; }
+.kv { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-secondary); padding: 3px 0; }
+.kv b { color: var(--text-primary); font-weight: 400; }
+.ev { display: grid; grid-template-columns: 34px minmax(0,1fr); gap: 8px; font-size: 12px; padding: 4px 0; }
+.ev .r { font-family: var(--font-mono); color: var(--text-faint); font-size: 11px; }
+.topic { margin-bottom: 8px; }
+.topic .l { display: flex; justify-content: space-between; font-size: var(--fs-small); margin-bottom: 3px; }
+.feed-tabs { display: none; gap: 12px; }
+.feed-tabs span { padding-bottom: 2px; border-bottom: 1.5px solid transparent; color: var(--text-muted); }
+.feed-tabs span.is-on { color: var(--text-secondary); border-bottom-color: var(--accent-primary); }
+@media (max-width: 1279px) {
+  .lanes { grid-template-columns: 200px minmax(0,1fr) 280px; }
+  .lane-twitter, .topbar .t-mono { display: none; }
+  .feed-tabs { display: flex; }
+  .lane-reddit .lane-head > .t-label:not(.feed-tabs) { display: none; }
+}
+</style></head><body>
+<div class="shell">
+  <header class="topbar is-live">
+    <div class="brand"><span class="brand-glyph"></span></div>
+    <nav class="stack" aria-label="Stapel">
+      <button class="crumb">Ablage</button><span class="sep">›</span>
+      <button class="crumb">Domain-Migration v2</button><span class="sep">›</span>
+      <button class="crumb is-live">Verlauf · live</button>
+    </nav>
+    <span class="spacer"></span>
+    <span class="t-mono c-live"><i class="dot is-live" style="display:inline-block;margin-right:6px;vertical-align:middle"></i>Runde 12 läuft · 7 von 18 Agenten haben gehandelt</span>
+    <span class="vsep"></span>
+    <button class="btn btn-secondary btn-sm">Anhalten nach Runde 12</button>
+    <button class="btn btn-danger btn-sm">Abbrechen</button>
+  </header>
+
+  <div class="strip" role="status" aria-label="Laufzustand">
+    <div><div class="t-mono-lg">12<span class="t-mono c-muted">/20</span></div><div class="t-label">Runde</div></div>
+    <div><div class="t-mono-lg">04:18</div><div class="t-label">vergangen · ⌀ 21 s je Runde · Ende ≈ 07:10</div></div>
+    <div><div class="t-mono-lg">18</div><div class="t-label">Agenten aktiv · 2 pausiert</div></div>
+    <div><div class="t-mono-lg">143</div><div class="t-label">Tool-Calls · 41 Graph · 102 Web</div></div>
+    <div><div class="t-mono-lg c-warn">78 %</div><div class="t-label">Budget · 2,41 M Tokens</div></div>
+    <div><div class="t-mono-lg c-err">1</div><div class="t-label">Fehler · Runde 9, behoben</div></div>
+    <div></div>
+  </div>
+  <div class="notice" style="border-bottom:1px solid var(--border-default);padding:10px 24px"><span style="flex:1"><span style="flex:1"><b>Degradiert seit Runde 11:</b> MiniMax M2 antwortet nicht mehr innerhalb von 30 s. Die Runden 11 und 12 laufen über den Fallback <span class="t-mono">ollama · qwen2.5:7b</span>. Antworten werden im Bericht als „Fallback“ markiert.</span><a href="#" class="t-small" style="white-space:nowrap">Provider prüfen</a></div>
+
+  <div class="axis">
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <span class="t-label">Rundenachse · Höhe = Beiträge je Runde · Gelb = Fallback-Provider</span>
+      <span class="t-small c-secondary">Phase: Simulation · Plattformen Reddit, Twitter · Seed 4711</span>
+    </div>
+    <div class="bars" aria-hidden="true">
+      <span style="height:24%"></span><span style="height:38%"></span><span style="height:52%"></span><span style="height:44%"></span><span class="hi" style="height:66%"></span><span class="hi" style="height:80%"></span><span class="hi" style="height:58%"></span><span class="hi" style="height:72%"></span><span class="hi" style="height:90%;background:var(--status-error);opacity:.6"></span><span class="hi" style="height:76%"></span><span class="deg" style="height:84%"></span><span class="now" style="height:100%"></span>
+      <span class="todo"></span><span class="todo"></span><span class="todo"></span><span class="todo"></span><span class="todo"></span><span class="todo"></span><span class="todo"></span><span class="todo"></span>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:5px" class="t-mono c-faint"><span>1</span><span class="c-err">9 · Neo4j-Reconnect</span><span class="c-live">12 · jetzt</span><span>20 geplant</span></div>
+  </div>
+
+  <div class="lanes">
+    <section class="lane" aria-label="Akteure">
+      <div class="lane-head"><span class="t-label" style="color:var(--text-secondary)">Akteure</span><span class="t-mono c-muted">18 aktiv</span></div>
+      <div class="actor is-on"><span><span class="n">Dr. Marit Sölden</span><span class="r">IT-Leitung · Einzelperson</span></span><span class="c" style="color:var(--accent-primary)">14</span></div>
+      <div class="actor"><span><span class="n">Betriebsrat</span><span class="r">Gremium · Kollektiv</span></span><span class="c">12</span></div>
+      <div class="actor"><span><span class="n">Pflegeteam Station 3</span><span class="r">Pflege · Kollektiv</span></span><span class="c">11</span></div>
+      <div class="actor"><span><span class="n">Marko Petrović</span><span class="r">Qualitätsmanagement</span></span><span class="c">9</span></div>
+      <div class="actor"><span><span class="n">Datenschutzbeauftragte</span><span class="r">Recht · Einzelperson</span></span><span class="c">7</span></div>
+      <div class="actor"><span><span class="n">Assistenzärzte</span><span class="r">Ärztlich · Kollektiv</span></span><span class="c">6</span></div>
+      <div class="actor" style="opacity:.6"><span><span class="n">Aufsichtsrat</span><span class="r">pausiert seit Runde 10</span></span><span class="c">3</span></div>
+      <div style="padding:10px 16px;border-top:1px solid var(--border-subtle)"><a class="t-small" href="#">Alle 18 zeigen</a></div>
+      <div class="side" style="margin-top:auto">
+        <div class="t-label" style="margin-bottom:8px">Eingreifen</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <button class="btn btn-secondary btn-sm" style="justify-content:flex-start">Ereignis einspeisen</button>
+          <button class="btn btn-secondary btn-sm" style="justify-content:flex-start">Budget anheben</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="lane lane-reddit" aria-label="Reddit">
+      <div class="lane-head"><span class="t-label" style="color:var(--text-secondary)">Reddit</span><span class="feed-tabs t-label"><span class="is-on">Reddit</span><span>Twitter · 96</span></span><span class="t-mono c-muted">214 Beiträge · 96 Kommentare</span></div>
+      <div class="post">
+        <div class="who"><span class="av me">MS</span><span class="t-small" style="font-weight:500">Dr. Marit Sölden</span><span class="t-mono c-faint">R12 · Beitrag</span><span class="spacer"></span><span class="badge is-warn">Fallback</span></div>
+        <div class="tool"><b>search_graph</b><span>„Revisionssicherheit Triage“ → 3 Entitäten, 1 Relation</span></div>
+        <p class="txt">Wenn die Triage-Vorschläge nicht revidierbar dokumentiert werden, verlagern wir Verantwortung an ein System, das im Streitfall niemand vertritt.</p>
+        <div class="foot"><span>▲ 14</span><span>▼ 2</span><span>3 Kommentare</span><span class="c-warn">als Beleg gebunden</span></div>
+      </div>
+      <div class="post reply">
+        <div class="who"><span class="av">BR</span><span class="t-small" style="font-weight:500">Betriebsrat</span><span class="t-mono c-faint">R12 · Kommentar</span></div>
+        <p class="txt dim">Genau deshalb fordern wir die Mitbestimmung vor dem Pilotbetrieb, nicht danach. Eine Nachdokumentation ersetzt keine Vereinbarung.</p>
+      </div>
+      <div class="post">
+        <div class="who"><span class="av">PT</span><span class="t-small" style="font-weight:500">Pflegeteam Station 3</span><span class="t-mono c-faint">R11 · Beitrag</span></div>
+        <div class="tool"><b>web_search</b><span>„Zeitersparnis KI Triage Schichtbetrieb“ → 0 belastbare Treffer</span></div>
+        <p class="txt dim">Die versprochene Zeitersparnis ist für uns bisher eine Zahl aus der Präsentation, kein Ergebnis aus dem Schichtbetrieb.</p>
+        <div class="foot"><span>▲ 9</span><span>1 Kommentar</span></div>
+      </div>
+    </section>
+
+    <section class="lane lane-twitter" aria-label="Twitter">
+      <div class="lane-head"><span class="t-label" style="color:var(--text-secondary)">Twitter</span><span class="t-mono c-muted">96 Zitat-Posts</span></div>
+      <div class="post">
+        <div class="who"><span class="av">MP</span><span class="t-small" style="font-weight:500">Marko Petrović</span><span class="t-mono c-faint">R12 · Zitat</span></div>
+        <div class="quote">„… verlagern wir Verantwortung an ein System, das im Streitfall niemand vertritt.“</div>
+        <p class="txt">Revisionssicherheit ist messbar. Wir sollten sie als Freigabekriterium festschreiben, nicht als Zielbild.</p>
+        <div class="foot"><span>♥ 21</span><span>↻ 6</span></div>
+      </div>
+      <div class="post">
+        <div class="who"><span class="av">DS</span><span class="t-small" style="font-weight:500">Datenschutzbeauftragte</span><span class="t-mono c-faint">R11 · Beitrag</span></div>
+        <p class="txt dim">Für die Zweckbindung fehlt bisher eine schriftliche Festlegung, welche Felder das System überhaupt lesen darf.</p>
+        <div class="foot"><span>♥ 8</span><span>↻ 3</span></div>
+      </div>
+      <div class="post" style="border-bottom:0;display:flex;align-items:center;gap:8px"><i class="dot is-live"></i><span class="t-mono c-live">Runde 12: 11 Agenten warten auf den Fallback-Provider (⌀ 38 s)</span></div>
+    </section>
+
+    <aside class="lane" aria-label="Themen, System, Ereignisse">
+      <div class="side">
+        <div class="t-label" style="margin-bottom:8px">Aufkommende Themen</div>
+        <div class="topic"><div class="l"><span>Revisionssicherheit</span><span class="t-mono c-secondary">31</span></div><div class="bar"><i style="width:78%"></i></div></div>
+        <div class="topic"><div class="l"><span>Mitbestimmung</span><span class="t-mono c-secondary">24</span></div><div class="bar"><i style="width:60%"></i></div></div>
+        <div class="topic"><div class="l"><span>Zeitersparnis unbelegt</span><span class="t-mono c-warn">19</span></div><div class="bar is-warn"><i style="width:48%"></i></div></div>
+        <div class="topic"><div class="l"><span>Zweckbindung</span><span class="t-mono c-secondary">12</span></div><div class="bar"><i style="width:30%"></i></div></div>
+      </div>
+      <div class="side">
+        <div class="t-label" style="margin-bottom:6px">Provider und System</div>
+        <div class="kv"><span>Modell (Runde 12)</span><b class="c-warn">ollama · qwen2.5:7b</b></div>
+        <div class="kv"><span>Konfiguriert</span><b>minimax · M2</b></div>
+        <div class="kv"><span>LLM-Calls je Runde</span><b>18</b></div>
+        <div class="kv"><span>Tokens gesamt</span><b>2,41 M</b></div>
+        <div class="kv"><span>Redis Events/s</span><b>34</b></div>
+        <div class="kv"><span>Neo4j Schreibvorgänge</span><b>1 284</b></div>
+      </div>
+      <div class="side" style="flex:1">
+        <div class="t-label" style="margin-bottom:6px">Ereignisse</div>
+        <div class="ev"><span class="r">R12</span><span class="c-warn">Fallback aktiv: MiniMax nach 3 Timeouts abgelöst</span></div>
+        <div class="ev"><span class="r">R11</span><span>Ereignis eingespeist: Pressemitteilung Aufsichtsrat</span></div>
+        <div class="ev"><span class="r">R10</span><span>Aufsichtsrat pausiert (Budgetregel Akteur)</span></div>
+        <div class="ev"><span class="r c-err">R09</span><span class="c-err">Neo4j-Verbindung getrennt · Reconnect nach 4 s, Runde wiederholt</span></div>
+        <div class="ev"><span class="r">R06</span><span>Seed <span class="t-mono">4711</span> protokolliert</span></div>
+        <a class="t-small" href="#" style="display:inline-block;margin-top:10px">Vollständiges Protokoll</a>
+      </div>
+    </aside>
+  </div>
+</div>
+</body></html>

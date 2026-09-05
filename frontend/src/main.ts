@@ -16,6 +16,7 @@ import '@fontsource-variable/newsreader/wght-italic.css'
 
 import './assets/styles/fonts.css'
 import './assets/styles/tokens-v3.css'
+import './assets/styles/tokens-compat.css'
 import './assets/styles/global.css'
 import './assets/styles/states.css'
 
