@@ -2,7 +2,7 @@
   <aside class="sidebar" :class="{ 'sidebar--collapsed': collapsed }">
     <!-- Brand header -->
     <div class="sidebar__brand">
-      <AgoraBrand mode="glyph" :height="28" alt="Agora" />
+      <AgoraBrand mode="ring" alt="Agora" />
       <span v-if="!collapsed" class="sidebar__wordmark">Agora</span>
     </div>
 

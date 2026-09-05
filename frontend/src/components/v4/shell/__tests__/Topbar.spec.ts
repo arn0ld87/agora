@@ -6,7 +6,11 @@
  * 2. Breadcrumbs werden via Standard-Slot gerendert.
  * 3. Custom-Crumbs-Slot ueberschreibt Default.
  * 4. Nutzermenue: oeffnet auf Klick, schliesst per Escape, zeigt Profil +
- *    Einstellungen, zeigt Initialen aus dem Profil-Store.
+ *    Einstellungen + Hilfe, zeigt Initialen aus dem Profil-Store
+ *    (Fallback: Benutzername-Initiale, dann Personen-Symbol — nie "?",
+ *    Redesign PR 2).
+ * 5. Redesign PR 2: Protokoll-Icon vorhanden, togglet useLogDrawer(); der
+ *    ⌘K-Chip zeigt Text + .kbd einheitlich mit ShellRoot.vue.
  *
  * Hinweis: @vue/test-utils 2.4.x + Vue 3.5+ produziert "WeakMap keys must be
  * objects or non-registered symbols" wenn Child-Komponenten mit Symbol.for()-Keys
@@ -14,7 +18,7 @@
  * gestubbt, DropdownMenu/DropdownMenuItem (reka-ui) werden NICHT gestubbt, damit
  * das echte Open/Close/Escape-Verhalten testbar bleibt.
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, type MountingOptions } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { createI18n } from 'vue-i18n'
@@ -23,6 +27,7 @@ import de from '@/i18n/locales/de.json'
 import en from '@/i18n/locales/en.json'
 import { ShellTestId } from '@/contracts/testIds'
 import { useUserProfileStore } from '@/store/userProfile'
+import { useLogDrawer } from '@/composables/useLogDrawer'
 import { makeTestRouter } from './testRouter'
 
 // localStorage-Mock — Topbar braucht jetzt Pinia (shellStore)
@@ -107,6 +112,30 @@ describe('Topbar', () => {
     expect(wrapper.find('.custom-crumbs').exists()).toBe(true)
   })
 
+  it('Redesign PR 2: Protokoll-Icon togglet useLogDrawer()', async () => {
+    useLogDrawer().close()
+    await router.push('/')
+    const wrapper = mount(Topbar, { global: makeGlobal() })
+    const trigger = wrapper.find(`[data-testid="${ShellTestId.logsTrigger}"]`)
+    expect(trigger.exists()).toBe(true)
+
+    const { isOpen } = useLogDrawer()
+    expect(isOpen.value).toBe(false)
+    await trigger.trigger('click')
+    expect(isOpen.value).toBe(true)
+  })
+
+  it('Redesign PR 2: ⌘K-Chip zeigt "Suchen" + .kbd (einheitlich mit ShellRoot.vue)', async () => {
+    await router.push('/')
+    const wrapper = mount(Topbar, { global: makeGlobal() })
+    const trigger = wrapper.find(`[data-testid="${ShellTestId.cmdkTrigger}"]`)
+    expect(trigger.exists()).toBe(true)
+    expect(trigger.text()).toContain('Suche')
+    const kbd = trigger.find('.kbd')
+    expect(kbd.exists()).toBe(true)
+    expect(kbd.text()).toBe('⌘K')
+  })
+
   describe('Nutzermenue', () => {
     it('zeigt Initialen aus dem Profil-Store am Trigger', async () => {
       await router.push('/')
@@ -137,16 +166,46 @@ describe('Topbar', () => {
       expect(trigger.text()).toBe('AL')
     })
 
-    it('zeigt "?" als Initiale ohne geladenes Profil', async () => {
+    it('zeigt NIE "?" als Fallback ohne geladenes Profil — stattdessen ein Personen-Symbol (Redesign PR 2)', async () => {
       await router.push('/')
       const wrapper = mount(Topbar, {
         global: makeGlobal(),
       })
       const trigger = wrapper.find(`[data-testid="${ShellTestId.userMenuButton}"]`)
-      expect(trigger.text()).toBe('?')
+      expect(trigger.text()).not.toBe('?')
+      expect(trigger.text()).toBe('')
+      expect(trigger.find('svg.user-menu__glyph').exists()).toBe(true)
     })
 
-    it('oeffnet das Menue per Klick und zeigt Profil + Einstellungen', async () => {
+    it('faellt ohne display_name auf den ersten Buchstaben des Benutzernamens zurueck (Redesign PR 2)', async () => {
+      await router.push('/')
+      const pinia = createPinia()
+      setActivePinia(pinia)
+      const profileStore = useUserProfileStore()
+      profileStore.profile = {
+        avatar_ref: null,
+        display_name: '',
+        username: 'grace',
+        role: null,
+        organisation: null,
+        language: 'de',
+        timezone: 'Europe/Berlin',
+        report_language: 'de',
+        theme: 'system',
+        privacy_mode: 'standard',
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z',
+      }
+
+      const wrapper = mount(Topbar, {
+        global: makeGlobal({ plugins: [router, pinia, i18n] }),
+      })
+
+      const trigger = wrapper.find(`[data-testid="${ShellTestId.userMenuButton}"]`)
+      expect(trigger.text()).toBe('G')
+    })
+
+    it('oeffnet das Menue per Klick und zeigt Profil + Einstellungen + Hilfe', async () => {
       await router.push('/')
       const wrapper = mount(Topbar, {
         attachTo: document.body,
@@ -164,10 +223,38 @@ describe('Topbar', () => {
       expect(menu).not.toBeNull()
 
       const items = document.querySelectorAll('[role="menuitem"]')
-      expect(items.length).toBe(2)
+      expect(items.length).toBe(3)
       const labels = Array.from(items).map((el) => el.textContent?.trim())
-      expect(labels).toEqual(['Profil', 'Einstellungen'])
+      expect(labels).toEqual(['Profil', 'Einstellungen', 'Hilfe'])
 
+      wrapper.unmount()
+    })
+
+    it('"Hilfe" oeffnet den README-Anker in einem neuen, opener-losen Tab', async () => {
+      const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+      await router.push('/')
+      const wrapper = mount(Topbar, {
+        attachTo: document.body,
+        global: makeGlobal(),
+      })
+
+      const trigger = wrapper.find(`[data-testid="${ShellTestId.userMenuButton}"]`)
+      await trigger.trigger('click')
+      await nextTick()
+
+      const items = document.querySelectorAll('[role="menuitem"]')
+      const helpItem = Array.from(items).find((el) => el.textContent?.trim() === 'Hilfe')
+      expect(helpItem).toBeDefined()
+      helpItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await nextTick()
+
+      expect(openSpy).toHaveBeenCalledWith(
+        'https://github.com/arn0ld87/agora#readme',
+        '_blank',
+        'noopener,noreferrer',
+      )
+
+      openSpy.mockRestore()
       wrapper.unmount()
     })
 

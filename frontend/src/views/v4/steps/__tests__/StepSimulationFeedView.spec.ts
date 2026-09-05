@@ -132,11 +132,21 @@ const i18n = createI18n({
         empty: 'Noch keine Aktivität.',
       },
       common: { scrollToBottom: 'Zum aktuellen Beitrag springen' },
+      // Redesign PR 2: PageHeader-Titel der neuen AppShell-Huelle.
+      views: {
+        stepSimulationFeed: {
+          title: 'Live-Feed',
+          subtitle: 'Reddit- und Twitter-Aktivität der laufenden Simulation verfolgen',
+        },
+      },
     },
   },
 })
 
 // ---- Router ----
+// Redesign PR 2: die View aufloest jetzt intern router.resolve({ name:
+// 'StepSimulation', ... }) fuer den Rueckweg-Breadcrumb — die Route muss
+// im Test-Router existieren, auch wenn sie hier nicht besucht wird.
 const router = createRouter({
   history: createMemoryHistory(),
   routes: [
@@ -145,8 +155,27 @@ const router = createRouter({
       name: 'StepSimulationFeed',
       component: StepSimulationFeedView,
     },
+    {
+      path: '/v4/simulation/:simulationId',
+      name: 'StepSimulation',
+      component: { template: '<div />' },
+    },
   ],
 })
+
+// AppShell/PageHeader gestubbt (Redesign PR 2: View ist jetzt AppShell-
+// gewrappt, analog StepEnvSetupView.spec.ts) — Fokus dieser Suite bleibt
+// der Feed/Stream-Datenfluss, nicht die Shell selbst.
+const SHELL_STUBS = {
+  AppShell: { template: '<main><slot /></main>' },
+  PageHeader: { template: '<header><slot /><slot name="right" /></header>' },
+}
+
+function mountFeed() {
+  return mount(StepSimulationFeedView, {
+    global: { plugins: [i18n, router], stubs: SHELL_STUBS },
+  })
+}
 
 // ---- Helpers ----
 function mkPost(overrides: Partial<PostCreatedEvent> = {}): PostCreatedEvent {
@@ -179,17 +208,13 @@ describe('StepSimulationFeedView', () => {
   })
 
   it('mountet ohne Crash und stellt Stream auf', async () => {
-    const wrapper = mount(StepSimulationFeedView, {
-      global: { plugins: [i18n, router] },
-    })
+    const wrapper = mountFeed()
     await flushPromises()
     expect(wrapper.exists()).toBe(true)
   })
 
   it('#1009: holt Feed-Snapshot für reddit und twitter beim Mount', async () => {
-    mount(StepSimulationFeedView, {
-      global: { plugins: [i18n, router] },
-    })
+    mountFeed()
     await flushPromises()
     const platforms = snapshotFetchCalls.map((c) => c.platform).sort()
     expect(platforms).toEqual(['reddit', 'twitter'])
@@ -201,9 +226,7 @@ describe('StepSimulationFeedView', () => {
     // stream.start() geschrieben wird, fehlt im Snapshot UND vor start() gibt
     // es keinen Listener. Also muss start() zuerst kommen; die seen-Dedup
     // fängt den Overlap ab. Vor dem Fix stand stream.start() NACH dem Fetch.
-    mount(StepSimulationFeedView, {
-      global: { plugins: [i18n, router] },
-    })
+    mountFeed()
     await flushPromises()
     expect(streamStartOrder).toBeGreaterThanOrEqual(0)
     expect(snapshotFirstFetchOrder).toBeGreaterThanOrEqual(0)
@@ -218,9 +241,7 @@ describe('StepSimulationFeedView', () => {
       mkPost({ platform: 'twitter', post_id: 'snap-t-1' }),
     ]
 
-    const wrapper = mount(StepSimulationFeedView, {
-      global: { plugins: [i18n, router] },
-    })
+    const wrapper = mountFeed()
     await flushPromises()
 
     const pulseBar = wrapper.find('.pulse-bar')
@@ -229,9 +250,7 @@ describe('StepSimulationFeedView', () => {
   })
 
   it('Reddit-Count: 5 Reddit-Posts kommen in RedditThread-Stubs an', async () => {
-    const wrapper = mount(StepSimulationFeedView, {
-      global: { plugins: [i18n, router] },
-    })
+    const wrapper = mountFeed()
     await flushPromises()
 
     // 5 Reddit-Posts injizieren
@@ -246,9 +265,7 @@ describe('StepSimulationFeedView', () => {
   })
 
   it('Twitter-Count: 3 Twitter-Posts kommen in TwitterPost-Stubs an', async () => {
-    const wrapper = mount(StepSimulationFeedView, {
-      global: { plugins: [i18n, router] },
-    })
+    const wrapper = mountFeed()
     await flushPromises()
 
     for (let i = 0; i < 3; i++) {
@@ -266,9 +283,7 @@ describe('StepSimulationFeedView', () => {
   // in der echten Anwendung nie. Dieser Test deckt den Produktionspfad ab, nicht
   // den Component-Test mit handgereichten Props.
   it('#1209: die View reicht recentPosts an die Resonanz-Leiste durch', async () => {
-    const wrapper = mount(StepSimulationFeedView, {
-      global: { plugins: [i18n, router] },
-    })
+    const wrapper = mountFeed()
     await flushPromises()
 
     expect(Number(wrapper.find('.pulse-bar').attributes('data-recent'))).toBe(0)
@@ -283,9 +298,7 @@ describe('StepSimulationFeedView', () => {
 
   // Slice 9 · #1007 — kein clearSimFeed mehr in onBeforeUnmount.
   it('Unmount/Remount: Bestand bleibt erhalten (vor dem Fix wurde er beim Unmount geleert)', async () => {
-    const wrapper1 = mount(StepSimulationFeedView, {
-      global: { plugins: [i18n, router] },
-    })
+    const wrapper1 = mountFeed()
     await flushPromises()
 
     for (let i = 0; i < 4; i++) {
@@ -297,9 +310,7 @@ describe('StepSimulationFeedView', () => {
 
     wrapper1.unmount()
 
-    const wrapper2 = mount(StepSimulationFeedView, {
-      global: { plugins: [i18n, router] },
-    })
+    const wrapper2 = mountFeed()
     await flushPromises()
 
     expect(Number(wrapper2.find('.pulse-bar').attributes('data-reddit'))).toBe(4)

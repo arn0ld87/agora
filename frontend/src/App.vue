@@ -1,25 +1,16 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { onMounted, onUnmounted } from 'vue'
 import LogDrawer from './components/LogDrawer.vue'
+import { useLogDrawer } from './composables/useLogDrawer'
 
 // Muss zu den .fade-*-Regeln in assets/styles/global.css passen.
 const TRANSITION_DURATION = { enter: 400, leave: 160 }
 
-const STORAGE_KEY = 'agora.ui.logDrawer.open'
-function loadOpen() {
-  try { return localStorage.getItem(STORAGE_KEY) === 'true' } catch { return false }
-}
-const logDrawerOpen = ref(loadOpen())
-function persistOpen() {
-  try { localStorage.setItem(STORAGE_KEY, String(logDrawerOpen.value)) } catch { /* ignore */ }
-}
-function handleHotkey(e) {
-  if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'L' || e.key === 'l')) {
-    e.preventDefault()
-    logDrawerOpen.value = !logDrawerOpen.value
-    persistOpen()
-  }
-}
+// Issue #132 / Redesign PR 2 — Zustand + Hotkey-Handler leben jetzt in
+// useLogDrawer.ts (single source of truth). Die frueher hier gerenderte
+// FAB ist raus; die Kopfzeilen-Icons in Topbar.vue/ShellRoot.vue toggeln
+// denselben Composable-State.
+const { isOpen: logDrawerOpen, close: closeLogDrawer, handleHotkey } = useLogDrawer()
 onMounted(() => window.addEventListener('keydown', handleHotkey))
 onUnmounted(() => window.removeEventListener('keydown', handleHotkey))
 </script>
@@ -36,14 +27,10 @@ onUnmounted(() => window.removeEventListener('keydown', handleHotkey))
     </transition>
   </router-view>
 
-  <!-- Issue #132 — Globaler Log-Drawer; Toggle per Hotkey Ctrl+Shift+L. -->
-  <button
-    class="log-drawer-fab"
-    :class="{ active: logDrawerOpen }"
-    :title="$t('logs.drawer.toggle')"
-    @click="logDrawerOpen = !logDrawerOpen"
-  >▤ logs</button>
-  <LogDrawer :open="logDrawerOpen" @close="logDrawerOpen = false" />
+  <!-- Issue #132 — Globaler Log-Drawer; Toggle per Hotkey Ctrl+Shift+L oder
+       das Kopfzeilen-Icon "Protokoll" (Topbar.vue/ShellRoot.vue). Die frueher
+       hier gerenderte FAB (Redesign-Audit §14 "Chrome-Rauschen") ist raus. -->
+  <LogDrawer :open="logDrawerOpen" @close="closeLogDrawer" />
 </template>
 
 <style>
@@ -77,25 +64,4 @@ onUnmounted(() => window.removeEventListener('keydown', handleHotkey))
 ::-webkit-scrollbar-thumb:hover {
   background: var(--fg-muted);
 }
-
-.log-drawer-fab {
-  position: fixed;
-  bottom: 12px;
-  right: 12px;
-  z-index: 95;
-  background: var(--surface-elevated);
-  color: var(--text-secondary);
-  border: 1px solid var(--hairline);
-  border-radius: var(--r-pill);
-  padding: 6px 14px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: var(--ls-mono);
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
-}
-.log-drawer-fab:hover { background: var(--surface-hover); color: var(--text-primary); border-color: var(--hairline-strong); }
-.log-drawer-fab.active { color: var(--accent); border-color: var(--accent); background: var(--accent-tint-bg); }
-.log-drawer-fab:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 </style>

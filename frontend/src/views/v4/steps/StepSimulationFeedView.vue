@@ -6,20 +6,35 @@
  *
  * useEventStream-API: handlers werden im Constructor übergeben, nicht via .on().
  * post_created-Handler routet direkt in useSimFeed.ingest().
+ *
+ * Redesign PR 2 (Chrome bereinigen): AppShell/PageHeader ergaenzt — die
+ * Route war shell-los und ohne Rueckweg (Audit §2 Nr. 3, §14). Analog
+ * StepReportView.vue; Rueckweg-Breadcrumb fuehrt zur Pipeline-Ansicht
+ * (StepSimulation), von der aus der Feed-Tab hierher navigiert.
  */
-import { onMounted, onBeforeUnmount } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onMounted, onBeforeUnmount } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useEventStream } from '@/composables/useEventStream'
 import { useSimFeed } from '@/composables/useSimFeed'
 import { getSimulationFeedSnapshot } from '@/api/simulation'
+import AppShell from '@/components/v4/shell/AppShell.vue'
+import PageHeader from '@/components/v4/shell/PageHeader.vue'
 import FeedColumn from '@/components/v4/sim-feed/FeedColumn.vue'
 import RedditThread from '@/components/v4/sim-feed/RedditThread.vue'
 import TwitterPost from '@/components/v4/sim-feed/TwitterPost.vue'
 import SimulationPulseBar from '@/components/v4/sim-feed/SimulationPulseBar.vue'
+import type { BreadcrumbItem } from '@/components/v4/shell/Breadcrumbs.vue'
 
 const route = useRoute()
+const router = useRouter()
 const simulationId = String(route.params.simulationId)
 const feed = useSimFeed(simulationId)
+
+const crumbs = computed<BreadcrumbItem[]>(() => [
+  { label: 'Runs', path: '/runs' },
+  { label: simulationId, path: router.resolve({ name: 'StepSimulation', params: { simulationId } }).path },
+  { label: 'Feed' },
+])
 
 // useEventStream nimmt handlers im Constructor — kein .on()-API.
 // post_created ist bereits Zod-geparst durch openSimulationStream (Slice 5-pre).
@@ -72,49 +87,55 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="sf-root">
-    <SimulationPulseBar
-      :activity-rate="feed.activityRate.value"
-      :reddit-count="feed.redditPosts.value.length"
-      :twitter-count="feed.twitterPosts.value.length"
-      :recent-posts="feed.recentPosts.value"
+  <AppShell :breadcrumbs="crumbs">
+    <PageHeader
+      :title="$t('views.stepSimulationFeed.title')"
+      :subtitle="$t('views.stepSimulationFeed.subtitle')"
     />
-    <div class="sf-columns">
-      <FeedColumn
-        :title="$t('feed.reddit')"
-        channel="reddit"
-        :has-items="feed.redditPosts.value.length > 0"
-      >
-        <TransitionGroup name="slide-in" tag="div" class="sf-thread-list">
-          <RedditThread
-            v-for="node in feed.redditTree.value"
-            :key="node.post_id"
-            :node="node"
-          />
-        </TransitionGroup>
-        <p v-if="feed.redditPosts.value.length === 0" class="sf-empty">
-          {{ $t('feed.empty') }}
-        </p>
-      </FeedColumn>
+    <div class="sf-root">
+      <SimulationPulseBar
+        :activity-rate="feed.activityRate.value"
+        :reddit-count="feed.redditPosts.value.length"
+        :twitter-count="feed.twitterPosts.value.length"
+        :recent-posts="feed.recentPosts.value"
+      />
+      <div class="sf-columns">
+        <FeedColumn
+          :title="$t('feed.reddit')"
+          channel="reddit"
+          :has-items="feed.redditPosts.value.length > 0"
+        >
+          <TransitionGroup name="slide-in" tag="div" class="sf-thread-list">
+            <RedditThread
+              v-for="node in feed.redditTree.value"
+              :key="node.post_id"
+              :node="node"
+            />
+          </TransitionGroup>
+          <p v-if="feed.redditPosts.value.length === 0" class="sf-empty">
+            {{ $t('feed.empty') }}
+          </p>
+        </FeedColumn>
 
-      <FeedColumn
-        :title="$t('feed.twitter')"
-        channel="twitter"
-        :has-items="feed.twitterPosts.value.length > 0"
-      >
-        <TransitionGroup name="slide-in" tag="div" class="sf-post-list">
-          <TwitterPost
-            v-for="post in feed.twitterPosts.value"
-            :key="post.post_id"
-            :post="post"
-          />
-        </TransitionGroup>
-        <p v-if="feed.twitterPosts.value.length === 0" class="sf-empty">
-          {{ $t('feed.empty') }}
-        </p>
-      </FeedColumn>
+        <FeedColumn
+          :title="$t('feed.twitter')"
+          channel="twitter"
+          :has-items="feed.twitterPosts.value.length > 0"
+        >
+          <TransitionGroup name="slide-in" tag="div" class="sf-post-list">
+            <TwitterPost
+              v-for="post in feed.twitterPosts.value"
+              :key="post.post_id"
+              :post="post"
+            />
+          </TransitionGroup>
+          <p v-if="feed.twitterPosts.value.length === 0" class="sf-empty">
+            {{ $t('feed.empty') }}
+          </p>
+        </FeedColumn>
+      </div>
     </div>
-  </div>
+  </AppShell>
 </template>
 
 <style scoped>

@@ -7,6 +7,8 @@
  * 3. Der Stapel-Zurueck-Knopf emittiert select(null).
  * 4. Abbrechen aus dem Aktivitaets-Indikator zeigt den globalen Undo-Toast.
  * 5. Der Undo-Knopf im Toast bricht den Abbruch ab, ohne die API zu rufen.
+ * 6. Redesign PR 2: Protokoll-Icon vorhanden, togglet useLogDrawer(); der
+ *    ⌘K-Chip zeigt Text + .kbd einheitlich mit Topbar.vue.
  *
  * Selektoren ausschliesslich ueber ShellTestId (src/contracts/testIds.ts).
  */
@@ -31,6 +33,7 @@ vi.mock('../../../api/simulation', () => ({
 import { cancelRun } from '../../../api/runs'
 import { useCancelAction } from '../useCancelAction'
 import { useCommandPalette } from '../../../composables/useCommandPalette'
+import { useLogDrawer } from '../../../composables/useLogDrawer'
 import ShellRoot from '../ShellRoot.vue'
 
 // localStorage-Mock — useCommandPalette (via ShellRoot) liest/schreibt "recent".
@@ -82,6 +85,7 @@ describe('ShellRoot', () => {
     lsMock.clear()
     useCancelAction().undo()
     useCommandPalette().close()
+    useLogDrawer().close()
   })
 
   afterEach(() => {
@@ -93,6 +97,27 @@ describe('ShellRoot', () => {
     expect(wrapper.find(`[data-testid="${ShellTestId.root}"]`).exists()).toBe(true)
     expect(wrapper.find('[data-testid="shelf-slot-marker"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="dossier-slot-marker"]').exists()).toBe(true)
+  })
+
+  it('Redesign PR 2: Protokoll-Icon togglet useLogDrawer()', async () => {
+    const wrapper = mountShell()
+    const trigger = wrapper.find(`[data-testid="${ShellTestId.logsTrigger}"]`)
+    expect(trigger.exists()).toBe(true)
+
+    const { isOpen } = useLogDrawer()
+    expect(isOpen.value).toBe(false)
+    await trigger.trigger('click')
+    expect(isOpen.value).toBe(true)
+  })
+
+  it('Redesign PR 2: ⌘K-Chip zeigt "Suchen" + .kbd (einheitlich mit Topbar.vue)', () => {
+    const wrapper = mountShell()
+    const trigger = wrapper.find(`[data-testid="${ShellTestId.cmdkTrigger}"]`)
+    expect(trigger.exists()).toBe(true)
+    expect(trigger.text()).toContain('Suche')
+    const kbd = trigger.find('.kbd')
+    expect(kbd.exists()).toBe(true)
+    expect(kbd.text()).toBe('⌘K')
   })
 
   it('Strg+K oeffnet die Command-Palette (erst nach dem ersten Oeffnen gemountet)', async () => {
