@@ -13,6 +13,7 @@ from typing import Optional
 from ..contracts.ai_provider_contract import AiModelRef, ProviderConnection
 from ..contracts.llm_routing_contract import ResolvedRoute, RuntimeLlmRouting, StageId, StageLLMRoute
 from ..contracts.provider_types import PROVIDER_CODEX_CLI
+from ..llm.providers.codex_cli import CLI_TRANSPORT_VALUE, TRANSPORT_ENV_KEY
 from ..llm.providers.registry import detect_provider
 from .llm_provider_registry import LlmProviderRegistry
 from .llm_provider_secrets_store import get_llm_provider_secrets_store
@@ -584,7 +585,18 @@ def build_route_subprocess_env(
         or store_base_url_for_provider(route.provider_id)
         or (provider.base_url if provider else None)
     )
-    if not base_url and route.provider_id:
+    definition = LlmProviderRegistry.connection_definition(route.provider_id)
+    is_cli_transport = definition is not None and definition.transport == "cli"
+    if is_cli_transport:
+        # Issue #1423: für einen CLI-Provider ist die fehlende ``base_url``
+        # der Normalfall, kein ungelöster Zustand. Der Subprozess darf das
+        # ``LLM_BASE_URL`` des Backends NICHT erben — genau daran ging das
+        # geroutete Modell an den ``.env``-Endpunkt (beobachtet:
+        # ``gpt-5.6-luna`` an ``api.minimax.io`` → HTTP 400 (2013)).
+        # ``process_manager`` entfernt das geerbte Feld, wenn dieses Signal
+        # gesetzt ist; die Runner wählen daran den ``CodexCliModel``-Transport.
+        env[TRANSPORT_ENV_KEY] = CLI_TRANSPORT_VALUE
+    elif not base_url and route.provider_id:
         # Weder Route noch Registry kennen einen Endpoint: der Subprozess wird
         # das Parent-``LLM_BASE_URL`` erben (Alt-Verhalten, Standalone-/
         # Dev-Pfad). Sichtbar machen statt still driften.
