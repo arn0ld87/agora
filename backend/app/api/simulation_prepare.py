@@ -17,6 +17,7 @@ from ..contracts import PersonaQuotaPlan
 from ..models.project import ProjectManager
 from ..services.degradation_collector import DegradationCollector
 from ..services.entity_reader import EntityReader
+from ..services.llm_provider_registry import LlmProviderRegistry
 from ..services.llm_routing_seed import (
     build_runtime_llm_config,
     resolve_route_api_key,
@@ -756,6 +757,11 @@ def _resolve_prepare_route(run_record: "dict[str, Any]", llm_runtime):
     route_router = StageModelRouter(run_record["run_id"])
     resolved_route = route_router.resolve("persona_generation")
     route_router.lock_stage("persona_generation", resolved_route)
+    definition = LlmProviderRegistry.connection_definition(resolved_route.provider_id)
+    if definition is not None and definition.transport == "cli":
+        # CLI-Provider nutzen ihre lokale Anmeldung, keinen HTTP-API-Key.
+        # Die Registry entscheidet; eine fehlende URL allein ist keine Freigabe.
+        return resolved_route, None
     resolved_api_key = resolve_route_api_key(resolved_route, llm_runtime)
 
     if resolved_api_key is None and not is_local_endpoint(resolved_route.base_url_sanitized):

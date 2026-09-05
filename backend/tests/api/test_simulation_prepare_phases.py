@@ -559,6 +559,43 @@ def test_resolve_prepare_route_guards_missing_key_with_422(app_ctx, monkeypatch)
     registry.update_run.assert_not_called()
 
 
+def test_resolve_prepare_route_accepts_cli_session_without_http_key(app_ctx, monkeypatch):
+    route = ResolvedRoute(
+        stage="persona_generation", provider_id="codex_cli", model="selected-cli-model",
+        base_url_sanitized=None, routing_version=3,
+    )
+    router = _patch_router(monkeypatch, route)
+    key_resolver = MagicMock(side_effect=AssertionError("CLI must not resolve HTTP keys"))
+    monkeypatch.setattr(mod, "resolve_route_api_key", key_resolver)
+
+    resolved, api_key = mod._resolve_prepare_route({"run_id": "run-cli"}, RuntimeLlmConfig())
+
+    assert resolved is route
+    assert api_key is None
+    router.lock_stage.assert_called_once_with("persona_generation", route)
+    key_resolver.assert_not_called()
+    runtime = mod.build_runtime_llm_config(resolved, api_key)
+    assert runtime.provider == "codex_cli"
+    assert runtime.enabled
+    assert runtime.api_key is None
+    assert runtime.base_url is None
+
+
+@pytest.mark.parametrize("provider_id", ["openai", "unknown-provider"])
+def test_resolve_prepare_route_missing_url_does_not_imply_cli(app_ctx, monkeypatch, provider_id):
+    route = ResolvedRoute(
+        stage="persona_generation", provider_id=provider_id, model="selected-model",
+        base_url_sanitized=None, routing_version=3,
+    )
+    _patch_router(monkeypatch, route)
+    monkeypatch.setattr(mod, "resolve_route_api_key", lambda *_args: None)
+
+    with pytest.raises(mod._PrepareRejected) as excinfo:
+        mod._resolve_prepare_route({"run_id": "run-http"}, RuntimeLlmConfig())
+
+    assert _status(excinfo) == 422
+
+
 def test_resolve_prepare_route_uses_placeholder_for_local_endpoint(app_ctx, monkeypatch):
     _patch_router(monkeypatch, _resolved_route(base_url="http://localhost:11434/v1"))
     monkeypatch.setattr(mod, "resolve_route_api_key", lambda _route, _runtime: None)
