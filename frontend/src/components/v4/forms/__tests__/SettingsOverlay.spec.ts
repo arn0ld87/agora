@@ -4,11 +4,13 @@
  * Ersetzt die pro-Seite-Breadcrumbs aller `/settings/*`-Routen durch eine
  * gemeinsame Sektionsliste. Coverage:
  *  1. mountet ohne Crash, zeigt Titel + Slot-Inhalt
- *  2. Sektionsliste zeigt alle sechs Nav-Items
+ *  2. Sektionsliste zeigt alle acht Nav-Items (Review PR #1439: LLM-Routing
+ *     und Audit-Log gehoeren dazu, sonst hat keine View auf diesen Routen
+ *     eine aktive Sektion)
  *  3. markiert die aktuelle Route mit aria-current="page"
- *  4. LLM-Routing / Audit-Log stehen NICHT in der Liste (nur Deep-Link)
- *  5. Deep-Link-Hinweistext ist sichtbar
- *  6. "Zurück"-Button ruft router.back() auf
+ *  4. LLM-Routing UND Audit-Log stehen in der Liste und werden als aktiv
+ *     markiert, wenn ihre Route aktiv ist
+ *  5. "Zurück"-Button ruft router.back() auf
  */
 import { describe, it, expect, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -48,10 +50,10 @@ describe('SettingsOverlay', () => {
     expect(wrapper.find('.slot-probe').exists()).toBe(true)
   })
 
-  it('zeigt alle sechs Sektionen der Nav-Liste', async () => {
+  it('zeigt alle acht Sektionen der Nav-Liste', async () => {
     const { wrapper } = await mountOverlay('/settings/general')
     const links = wrapper.findAll('nav a')
-    expect(links).toHaveLength(6)
+    expect(links).toHaveLength(8)
     const labels = links.map((l) => l.text())
     expect(labels).toEqual([
       'Allgemein',
@@ -60,6 +62,8 @@ describe('SettingsOverlay', () => {
       'API-Schlüssel',
       'LLM-Anbieter',
       'Embedding-Konfiguration',
+      'LLM-Routing',
+      'Audit-Logs',
     ])
   })
 
@@ -70,18 +74,14 @@ describe('SettingsOverlay', () => {
     expect(active.text()).toBe('Integrationen')
   })
 
-  it('LLM-Routing und Audit-Log stehen nicht in der Liste', async () => {
+  it('LLM-Routing und Audit-Log stehen in der Liste und werden als aktiv markiert (Review PR #1439)', async () => {
     const { wrapper } = await mountOverlay('/settings/llm-routing')
     const labels = wrapper.findAll('nav a').map((l) => l.text())
-    expect(labels).not.toContain('LLM Routing')
-    expect(labels).not.toContain('Audit Logs')
-    // Keine der sechs Sektionen ist aktiv, weil diese Route nicht gelistet ist.
-    expect(wrapper.find('a[aria-current="page"]').exists()).toBe(false)
-  })
-
-  it('zeigt den Deep-Link-Hinweistext', async () => {
-    const { wrapper } = await mountOverlay('/settings/general')
-    expect(wrapper.text()).toContain('LLM-Routing und Audit-Log bleiben per Deep-Link erreichbar')
+    expect(labels).toContain('LLM-Routing')
+    expect(labels).toContain('Audit-Logs')
+    const active = wrapper.find('a[aria-current="page"]')
+    expect(active.exists()).toBe(true)
+    expect(active.text()).toBe('LLM-Routing')
   })
 
   it('"Zurück"-Button ruft router.back() auf', async () => {

@@ -129,11 +129,22 @@ function testStatusLabel(status: ProviderProbeStatus, modelsFound: number): stri
   return t(`settings.v4.llmProviders.test.${status}`)
 }
 
+// Review PR #1439: `connectionBusy[id]` ist ein einzelnes Bool fuer alle vier
+// Aktionen eines Providers — genuegt fuer `disabled` (waehrend IRGENDeine
+// Aktion laeuft duerfen alle vier nicht klickbar sein), aber nicht fuer den
+// Spinner: der sollte nur am tatsaechlich laufenden Button haengen, sonst
+// "spinnen" auch Testen/Trennen waehrend nur Speichern laeuft. Der Store
+// traegt dafuer keine Aktion — lokal statt Contract-Aenderung, da nur diese
+// View das Detail braucht.
+type BusyAction = 'save' | 'test' | 'models' | 'disconnect'
+const busyAction = reactive<Record<string, BusyAction | undefined>>({})
+
 async function save(p: ProviderDescriptor): Promise<void> {
   if (isUnsupported(p)) return
   const draft = ensureDraft(p)
   const baseUrl = draft.baseUrl.trim()
   const apiKey = draft.apiKey.trim()
+  busyAction[p.id] = 'save'
   try {
     await providersStore.upsertConnection(p.id, {
       display_name: p.label,
@@ -146,30 +157,43 @@ async function save(p: ProviderDescriptor): Promise<void> {
   } catch {
     // Fehlertext liegt strukturiert in providersStore.connectionError[p.id]
     // und wird im Template angezeigt — kein stiller Fallback.
+  } finally {
+    if (busyAction[p.id] === 'save') delete busyAction[p.id]
   }
 }
 
 async function runTest(p: ProviderDescriptor): Promise<void> {
   if (isUnsupported(p) || !isConfigured(p)) return
+  busyAction[p.id] = 'test'
   try {
     await providersStore.testConnection(p.id)
   } catch {
     // s.o. — Fehler liegt in providersStore.connectionError[p.id].
+  } finally {
+    if (busyAction[p.id] === 'test') delete busyAction[p.id]
   }
 }
 
 async function loadModels(p: ProviderDescriptor): Promise<void> {
   if (isUnsupported(p) || !isConfigured(p)) return
+  busyAction[p.id] = 'models'
   try {
     await providersStore.fetchConnectionModels(p.id)
   } catch {
     // s.o.
+  } finally {
+    if (busyAction[p.id] === 'models') delete busyAction[p.id]
   }
 }
 
 async function disconnect(p: ProviderDescriptor): Promise<void> {
-  await providersStore.removeConnection(p.id)
-  delete drafts[p.id]
+  busyAction[p.id] = 'disconnect'
+  try {
+    await providersStore.removeConnection(p.id)
+    delete drafts[p.id]
+  } finally {
+    if (busyAction[p.id] === 'disconnect') delete busyAction[p.id]
+  }
 }
 
 // Redesign PR 9: genau ein Provider steht im Formularzustand. Ohne
@@ -247,17 +271,16 @@ onBeforeUnmount(() => {
       <div class="llm-providers-layout">
         <ul
           class="llm-provider-list"
-          role="listbox"
+          role="list"
           :aria-label="t('settings.v4.llmProviders.list.ariaLabel', 'Provider')"
           :data-testid="LlmProviderListTestId.list"
         >
           <li v-for="provider in providersStore.providers" :key="provider.id">
             <button
               type="button"
-              role="option"
               class="llm-provider-list__row"
               :class="{ 'is-selected': selectedProvider?.id === provider.id }"
-              :aria-selected="selectedProvider?.id === provider.id"
+              :aria-current="selectedProvider?.id === provider.id ? 'true' : undefined"
               :data-testid="LlmProviderListTestId.row"
               :data-provider-id="provider.id"
               @click="selectProvider(provider.id)"
@@ -311,7 +334,8 @@ onBeforeUnmount(() => {
             <div class="llm-actions">
               <Button
                 variant="primary"
-                :loading="providersStore.connectionBusy[selectedProvider.id]"
+                :disabled="providersStore.connectionBusy[selectedProvider.id]"
+                :loading="busyAction[selectedProvider.id] === 'save'"
                 :data-testid="LlmProviderListTestId.saveButton"
                 @click="save(selectedProvider)"
               >
@@ -319,8 +343,8 @@ onBeforeUnmount(() => {
               </Button>
               <Button
                 variant="secondary"
-                :disabled="!isConfigured(selectedProvider)"
-                :loading="providersStore.connectionBusy[selectedProvider.id]"
+                :disabled="!isConfigured(selectedProvider) || providersStore.connectionBusy[selectedProvider.id]"
+                :loading="busyAction[selectedProvider.id] === 'test'"
                 :data-testid="LlmProviderListTestId.testButton"
                 @click="runTest(selectedProvider)"
               >
@@ -328,8 +352,8 @@ onBeforeUnmount(() => {
               </Button>
               <Button
                 variant="secondary"
-                :disabled="!isConfigured(selectedProvider)"
-                :loading="providersStore.connectionBusy[selectedProvider.id]"
+                :disabled="!isConfigured(selectedProvider) || providersStore.connectionBusy[selectedProvider.id]"
+                :loading="busyAction[selectedProvider.id] === 'models'"
                 :data-testid="LlmProviderListTestId.refreshModelsButton"
                 @click="loadModels(selectedProvider)"
               >
@@ -338,7 +362,8 @@ onBeforeUnmount(() => {
               <Button
                 v-if="isConfigured(selectedProvider)"
                 variant="danger"
-                :loading="providersStore.connectionBusy[selectedProvider.id]"
+                :disabled="providersStore.connectionBusy[selectedProvider.id]"
+                :loading="busyAction[selectedProvider.id] === 'disconnect'"
                 :data-testid="LlmProviderListTestId.disconnectButton"
                 @click="disconnect(selectedProvider)"
               >
@@ -448,6 +473,12 @@ onBeforeUnmount(() => {
   font-family: var(--font-mono);
   font-size: var(--fs-mono);
   color: var(--text-tertiary);
+}
+
+/* CI-Befund PR #1439 (axe color-contrast): --text-tertiary faellt auf dem
+   Kupfer-Tint der Auswahl unter WCAG-AA — hier reicht --text-secondary. */
+.llm-provider-list__row.is-selected .llm-provider-list__type {
+  color: var(--text-secondary);
 }
 
 .llm-provider-detail {

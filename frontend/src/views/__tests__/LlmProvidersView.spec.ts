@@ -22,6 +22,8 @@
  * 14. save() ruft upsertConnection mit korrekten Args (apiKey, baseUrl)
  * 15. runTest() ruft testConnection wenn konfiguriert
  * 16. disconnect() ruft removeConnection und loescht draft
+ * 17. Busy-State ist pro Aktion: nur der aktive Button zeigt aria-busy,
+ *     die anderen bleiben nur disabled (Review PR #1439)
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -405,5 +407,41 @@ describe('LlmProvidersView (Redesign PR 9, Liste + Detail)', () => {
     expect(disconnectBtn.exists()).toBe(true)
     await disconnectBtn.trigger('click')
     expect(providersStoreMock.removeConnection).toHaveBeenCalledWith('openai')
+  })
+
+  it('Busy-State ist pro Aktion: nur der aktive Button zeigt aria-busy (Review PR #1439)', async () => {
+    const w = await mountView({
+      connections: { openai: { id: 'openai', provider_kind: 'openai', status: 'connected' } },
+    })
+    await selectRow(w, 'openai')
+
+    // `connectionBusy` ist im echten Store waehrend JEDER der vier Aktionen
+    // true (ein Bool pro Provider, keine Aktion) — hier von Hand nachgestellt,
+    // weil upsertConnection im Test gemockt ist und das sonst nicht setzt.
+    let resolveUpsert: () => void = () => {}
+    providersStoreMock.upsertConnection.mockImplementation(() => {
+      connectionBusyObj.openai = true
+      return new Promise<void>((resolve) => {
+        resolveUpsert = () => {
+          connectionBusyObj.openai = false
+          resolve()
+        }
+      })
+    })
+
+    const saveBtn = w.find(`[data-testid="${LlmProviderListTestId.saveButton}"]`)
+    const testBtn = w.find(`[data-testid="${LlmProviderListTestId.testButton}"]`)
+
+    await saveBtn.trigger('click')
+    // Waehrend upsertConnection() noch offen ist: nur Speichern ist "loading",
+    // Testen ist lediglich disabled — kein gemeinsames Spinnen mehr.
+    expect(saveBtn.attributes('aria-busy')).toBe('true')
+    expect(testBtn.attributes('aria-busy')).toBeUndefined()
+    expect(testBtn.attributes('disabled')).toBeDefined()
+
+    resolveUpsert()
+    await flushPromises()
+    expect(saveBtn.attributes('aria-busy')).toBeUndefined()
+    expect(testBtn.attributes('disabled')).toBeUndefined()
   })
 })

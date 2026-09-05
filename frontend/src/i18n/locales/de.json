@@ -937,7 +937,7 @@
         "title": "Einstellungen",
         "back": "Zurück",
         "navLabel": "Einstellungsbereiche",
-        "deepLinkHint": "LLM-Routing und Audit-Log bleiben per Deep-Link erreichbar, ohne in der Liste zu stehen."
+        "llmRouting": "LLM-Routing"
       },
       "general": {
         "title": "Allgemein",

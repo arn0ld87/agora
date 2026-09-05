@@ -29,6 +29,8 @@
  * 13. AiModelPicker-Update mit null: keine setGlobalSelection-Aktion
  * 14. AiModelPicker hat eindeutige ID ('settings-general-model-picker')
  * 15. SettingsSectionPanel sichtbar
+ * 16. setzt keine breadcrumbs-Prop mehr auf AppShell (Regressionsschutz,
+ *     CodeRabbit-Befund PR #1439)
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -77,6 +79,11 @@ const aiPickerStub = {
 
 const appShellStub = {
   name: 'AppShell',
+  // `breadcrumbs` bleibt hier deklariert (nicht entfernt), damit ein
+  // versehentliches Zurueckbringen der Pro-Seite-Breadcrumbs (Redesign
+  // PR 9 hat sie durch SettingsOverlay ersetzt) als gesetzte Prop sichtbar
+  // waere und der Regressionstest unten greift.
+  props: ['breadcrumbs'],
   template: '<div data-testid="app-shell"><slot /></div>',
 }
 const settingsOverlayStub = {
@@ -187,6 +194,12 @@ describe('SettingsGeneralView (Phase-1, Kanon-First via useEffectiveModelSelecti
   it('bettet SettingsOverlay ein (Redesign PR 9)', async () => {
     const w = await mountSettingsGeneral()
     expect(w.find('[data-testid="settings-overlay"]').exists()).toBe(true)
+  })
+
+  it('setzt keine breadcrumbs-Prop mehr auf AppShell (Regressionsschutz, CodeRabbit PR #1439)', async () => {
+    const w = await mountSettingsGeneral()
+    const shell = w.findComponent(appShellStub)
+    expect(shell.props('breadcrumbs')).toBeUndefined()
   })
 
   it('zeigt PageHeader mit title + subtitle', async () => {

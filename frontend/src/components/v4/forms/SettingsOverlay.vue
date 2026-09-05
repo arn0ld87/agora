@@ -28,11 +28,14 @@ const route = useRoute()
 const router = useRouter()
 
 /**
- * Reihenfolge folgt der Vorlage `docs/design/screens/08-einstellungen.html`.
- * `LlmRoutingView`/`SettingsAuditLogsView` bleiben bewusst aussen vor — sie
- * sind per Deep-Link erreichbar, stehen aber nicht in der Liste. `labelKey`
- * referenziert die bestehenden `sidebar.settings.*`-Strings, damit kein
- * zweites Label-Set fuer denselben Bereich entsteht.
+ * Reihenfolge folgt zunaechst der Vorlage `docs/design/screens/08-
+ * einstellungen.html`; `SettingsLlmRouting`/`SettingsAuditLogs` haengen
+ * dahinter (Review PR #1439): jede View, die SettingsOverlay einbindet,
+ * muss eine aktive Sektion zeigen koennen, sonst haette der Nutzer auf
+ * diesen beiden Routen keinen sichtbaren Ort in der Liste. `labelKey`
+ * referenziert bestehende Strings (`sidebar.settings.*`, `settings.v4.
+ * auditLogs.title`), damit kein zweites Label-Set fuer denselben Bereich
+ * entsteht.
  */
 const NAV_ITEMS: ReadonlyArray<{ routeName: string; labelKey: string }> = [
   { routeName: 'SettingsGeneral', labelKey: 'sidebar.settings.general' },
@@ -41,6 +44,8 @@ const NAV_ITEMS: ReadonlyArray<{ routeName: string; labelKey: string }> = [
   { routeName: 'SettingsApiKeys', labelKey: 'sidebar.settings.apiKeys' },
   { routeName: 'SettingsLlmProviders', labelKey: 'sidebar.settings.llmProviders' },
   { routeName: 'SettingsEmbedding', labelKey: 'sidebar.settings.embedding' },
+  { routeName: 'SettingsLlmRouting', labelKey: 'settings.v4.overlay.llmRouting' },
+  { routeName: 'SettingsAuditLogs', labelKey: 'settings.v4.auditLogs.title' },
 ]
 
 function isActive(routeName: string): boolean {
@@ -85,7 +90,6 @@ function goBack(): void {
             </router-link>
           </li>
         </ul>
-        <p class="settings-overlay__nav-hint">{{ t('settings.v4.overlay.deepLinkHint') }}</p>
       </nav>
 
       <section class="settings-overlay__content">
@@ -165,16 +169,6 @@ function goBack(): void {
   outline-offset: 2px;
 }
 
-.settings-overlay__nav-hint {
-  margin: var(--sp-4) 0 0;
-  padding-top: var(--sp-3);
-  border-top: 1px solid var(--hairline);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  line-height: 1.5;
-  color: var(--text-tertiary);
-}
-
 .settings-overlay__content {
   min-width: 0;
 }
@@ -187,10 +181,6 @@ function goBack(): void {
   .settings-overlay__nav ul {
     flex-direction: row;
     flex-wrap: wrap;
-  }
-
-  .settings-overlay__nav-hint {
-    display: none;
   }
 }
 </style>
