@@ -1,0 +1,173 @@
+<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./tokens.css">
+<title>Zielversion · Ablage mit Übersicht</title>
+<style>
+.layout-shelf { flex: 1; display: grid; grid-template-columns: var(--shell-shelf) minmax(0, 1fr); min-height: 0; }
+.shelf { border-right: 1px solid var(--border-default); display: flex; flex-direction: column; min-height: 0; }
+.shelf-head { padding: var(--sp-6) var(--sp-6) var(--sp-3); }
+.filters { display: flex; gap: var(--sp-4); padding: 0 var(--sp-6) var(--sp-3); font-size: var(--fs-small); }
+.filters button { background: none; border: 0; padding: 0 0 5px; color: var(--text-muted); border-bottom: 1.5px solid transparent; }
+.filters button.is-on { color: var(--text-primary); border-bottom-color: var(--accent-primary); }
+.filters button b { font-family: var(--font-mono); font-weight: 400; font-size: 11px; color: var(--text-faint); margin-left: 3px; }
+.shelf-list { flex: 1; overflow: auto; }
+.shelf-foot { border-top: 1px solid var(--border-default); padding: var(--sp-3) var(--sp-6); font-size: var(--fs-small); color: var(--text-muted); display: flex; justify-content: space-between; }
+.dossier { padding: var(--sp-6) var(--sp-8) var(--sp-8); min-width: 0; overflow: auto; }
+.ov-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-6); }
+.ov-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--sp-8); margin-top: var(--sp-6); }
+.attn { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: var(--sp-3); align-items: center; padding: var(--sp-3) 4px; border-top: 1px solid var(--border-default); }
+.attn:last-child { border-bottom: 1px solid var(--border-default); }
+.attn .sig { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 10.5px; }
+.attn .sig.warn { background: var(--status-warning-soft); color: var(--status-warning); }
+.attn .sig.err { background: var(--status-error-soft); color: var(--status-error-text); }
+.attn .sig.live { background: var(--accent-live-soft); color: var(--accent-live); }
+.live-card { border: 1px solid rgba(95,182,201,0.28); border-radius: var(--r-3); padding: var(--sp-4); background: rgba(95,182,201,0.04); }
+.live-card .figs { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-3); margin-top: var(--sp-3); }
+.recent { margin-top: var(--sp-8); }
+.drop { margin-top: var(--sp-6); border: 1px dashed var(--border-strong); border-radius: var(--r-3); padding: var(--sp-4); display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); color: var(--text-secondary); font-size: var(--fs-small); }
+@media (max-width: 1279px) {
+  .ov-grid { grid-template-columns: minmax(0,1fr); gap: var(--sp-6); }
+  .list > a, .list > div { grid-template-columns: 120px minmax(0,1fr) auto; }
+  .drop { flex-direction: column; align-items: flex-start; }
+}
+</style></head><body>
+<div class="shell">
+  <header class="topbar">
+    <div class="brand"><span class="brand-glyph"></span>Agora</div>
+    <span class="vsep"></span>
+    <nav class="stack" aria-label="Stapel"><button class="crumb is-current">Ablage</button></nav>
+    <span class="spacer"></span>
+    <div class="syshealth" title="Systemzustand"><span><i class="dot"></i>Neo4j</span><span><i class="dot"></i>Redis</span><span><i class="dot is-live"></i>MiniMax · M2</span></div>
+    <button class="btn btn-ghost btn-sm">Protokoll</button>
+    <button class="btn btn-ghost btn-sm">Suchen <span class="kbd">⌘K</span></button>
+    <span class="avatar">AS</span>
+  </header>
+
+  <div class="layout-shelf">
+    <aside class="shelf">
+      <div class="shelf-head">
+        <h1 class="t-heading">Ablage</h1>
+        <p class="t-small c-secondary" style="margin-top:2px">24 Objekte · zuletzt angefasst zuerst</p>
+      </div>
+      <div class="filters" role="tablist">
+        <button class="is-on" role="tab">Alle<b>24</b></button>
+        <button role="tab">Läufe<b>9</b></button>
+        <button role="tab">Berichte<b>7</b></button>
+        <button role="tab">Personas<b>5</b></button>
+        <button role="tab">Graphen<b>3</b></button>
+      </div>
+      <div class="shelf-list">
+        <a class="row is-live" href="#">
+          <span class="badge is-live">Lauf</span>
+          <span><span class="title">Domain-Migration v2</span><span class="state c-live">Runde 12 von 20 · Budget 78 %</span><span class="meta id">läuft · sim_4f1ab77c9d02</span></span>
+          <button class="btn btn-secondary btn-sm act">Beobachten</button>
+        </a>
+        <a class="row" href="#">
+          <span class="badge is-accent">Lauf</span>
+          <span><span class="title">Nexora Triage Assist</span><span class="state">Bericht fertig · 9 Befunde offen</span><span class="meta id">14:22 · sim_c2108c7f543e</span></span>
+          <button class="btn btn-secondary btn-sm act">Öffnen</button>
+        </a>
+        <a class="row" href="#">
+          <span class="badge">Pers.</span>
+          <span><span class="title">SchulKI · 28 Personas</span><span class="state c-warn">Ungeprüft – Simulation wartet</span><span class="meta id">11:07 · proj_c12f138aa04e</span></span>
+          <button class="btn btn-secondary btn-sm act">Prüfen</button>
+        </a>
+        <a class="row" href="#">
+          <span class="badge">Bericht</span>
+          <span><span class="title">KI-Klinikrollout</span><span class="state">6 Abschnitte · 3 Gespräche geplant, keines geführt</span><span class="meta id">Gestern · report_3c594fcc7613</span></span>
+          <button class="btn btn-secondary btn-sm act">Lesen</button>
+        </a>
+        <a class="row" href="#">
+          <span class="badge">Graph</span>
+          <span><span class="title">Triage-Vorstudie</span><span class="state">412 Entitäten · 1 108 Relationen · keine Personas</span><span class="meta id">Gestern · proj_88ce1204af7b</span></span>
+          <button class="btn btn-secondary btn-sm act">Öffnen</button>
+        </a>
+        <a class="row" href="#">
+          <span class="badge is-err">Lauf</span>
+          <span><span class="title">Pflegekammer-Varianten</span><span class="state c-err">Gescheitert in Runde 3 · Provider antwortete nicht</span><span class="meta id">15.08. · run_a0d4c7e91f33</span></span>
+          <button class="btn btn-secondary btn-sm act">Ursache</button>
+        </a>
+        <a class="row" href="#">
+          <span class="badge">Lauf</span>
+          <span><span class="title">Domain-Migration – 20 Runden</span><span class="state">Simulation fertig · Bericht nie erzeugt</span><span class="meta id">12.08. · sim_7b30d5c48ea1</span></span>
+          <button class="btn btn-secondary btn-sm act">Bericht erzeugen</button>
+        </a>
+        <a class="row" href="#">
+          <span class="badge">Bericht</span>
+          <span><span class="title">Wie reagieren Ausbildungsbetriebe, Berufsschulen, Azubis und die IHK Dortmund auf KI-Azubi-Match?</span><span class="state">12 Abschnitte · 24 Aussagen · 116 Belege</span><span class="meta id">04.09. · report_f5e440a94153</span></span>
+          <button class="btn btn-secondary btn-sm act">Lesen</button>
+        </a>
+      </div>
+      <div class="shelf-foot"><span>8 von 24 sichtbar</span><a href="#">Alle Jobs (4)</a></div>
+    </aside>
+
+    <main class="dossier">
+      <div class="ov-head">
+        <div style="min-width:0">
+          <p class="t-label">Freitag, 5. September</p>
+          <h2 class="t-display" style="margin-top:4px">Ein Lauf läuft, zwei Dinge warten auf dich.</h2>
+          <p class="t-body c-secondary" style="margin-top:8px;max-width:62ch">Die Übersicht zeigt, was gerade Aufmerksamkeit braucht. Wähle links ein Objekt, um sein Dossier zu öffnen.</p>
+        </div>
+        <button class="btn btn-primary btn-lg">Quelle ablegen</button>
+      </div>
+
+      <div class="ov-grid">
+        <div>
+          <div class="section-head"><h3 class="t-heading">Braucht dich</h3><span class="t-small c-muted">2 offen</span></div>
+          <div>
+            <div class="attn">
+              <span class="sig warn">!</span>
+              <span><span class="t-body">28 Personas für <b>SchulKI</b> sind ungeprüft</span><span class="t-small c-secondary" style="display:block">Die Simulation startet erst nach deiner Freigabe.</span></span>
+              <button class="btn btn-secondary btn-sm">Personas prüfen</button>
+            </div>
+            <div class="attn">
+              <span class="sig err">×</span>
+              <span><span class="t-body"><b>Pflegekammer-Varianten</b> ist in Runde 3 gescheitert</span><span class="t-small c-secondary" style="display:block">Provider MiniMax antwortete 3× nicht. Neu starten übernimmt Personas und Graph.</span></span>
+              <button class="btn btn-secondary btn-sm">Ursache ansehen</button>
+            </div>
+          </div>
+
+          <div class="recent">
+            <div class="section-head"><h3 class="t-heading">Zuletzt fertig</h3><a class="t-small" href="#">Alle Berichte</a></div>
+            <div class="list">
+              <a href="#"><span class="k">Nexora Triage Assist</span><span class="v">Bericht, 7 Abschnitte · 29 Aussagen, alle low · 9 Red-Team-Befunde</span><span class="t-mono c-muted">14:22</span></a>
+              <a href="#"><span class="k">KI-Klinikrollout</span><span class="v">Bericht, 6 Abschnitte · 3 Gespräche vorgeschlagen</span><span class="t-mono c-muted">Gestern</span></a>
+              <a href="#"><span class="k">Triage-Vorstudie</span><span class="v">Graph, 412 Entitäten · noch keine Personas abgeleitet</span><span class="t-mono c-muted">Gestern</span></a>
+            </div>
+          </div>
+
+          <div class="drop">
+            <span>PDF, Markdown, Text oder Webseite hierher ziehen – daraus entsteht ein neues Objekt mit Graph.</span>
+            <button class="btn btn-secondary btn-sm">Datei wählen</button>
+          </div>
+        </div>
+
+        <div>
+          <div class="section-head"><h3 class="t-heading">Läuft gerade</h3><span class="t-small c-live">1 aktiv</span></div>
+          <div class="live-card">
+            <div style="display:flex;align-items:center;gap:8px"><i class="dot is-live"></i><span class="t-body" style="font-weight:600">Domain-Migration v2</span></div>
+            <p class="t-small c-secondary" style="margin-top:4px">Simulation auf Reddit und Twitter · MiniMax M2</p>
+            <div class="bar is-live" style="margin-top:12px"><i style="width:60%"></i></div>
+            <div class="figs">
+              <div><div class="t-mono-lg">12<span class="t-mono c-muted">/20</span></div><div class="t-label">Runden</div></div>
+              <div><div class="t-mono-lg">04:18</div><div class="t-label">vergangen</div></div>
+              <div><div class="t-mono-lg c-warn">78 %</div><div class="t-label">Budget</div></div>
+            </div>
+            <p class="t-small c-secondary" style="margin-top:12px">Weiche Grenze bei 80 %: der Lauf hält an, statt still weiterzulaufen.</p>
+            <div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-secondary btn-sm">Live beobachten</button><button class="btn btn-ghost btn-sm">Budget anheben</button></div>
+          </div>
+
+          <div class="section-head" style="margin-top:32px"><h3 class="t-heading">System</h3></div>
+          <div class="list" style="--k:110px">
+            <div style="grid-template-columns:110px minmax(0,1fr) auto"><span class="k" style="font-weight:500">Provider</span><span class="v">MiniMax M2 · Fallback Ollama qwen2.5:7b</span><i class="dot is-live"></i></div>
+            <div style="grid-template-columns:110px minmax(0,1fr) auto"><span class="k" style="font-weight:500">Embedding</span><span class="v">gemini-embedding-001 · 3072 dim</span><i class="dot"></i></div>
+            <div style="grid-template-columns:110px minmax(0,1fr) auto"><span class="k" style="font-weight:500">Speicher</span><span class="v">Neo4j 5.26 · Redis 7</span><i class="dot"></i></div>
+          </div>
+          <a class="t-small" href="#" style="display:inline-block;margin-top:12px">Einstellungen öffnen</a>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+</body></html>
