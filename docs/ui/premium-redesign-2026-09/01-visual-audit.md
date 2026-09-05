@@ -125,7 +125,7 @@ focus.ring       2px accent.primary, offset 2px
 
 **Spacing:** 4 / 8 / 12 / 16 / 24 / 32 / 48 (sp-1…sp-7). **Radius:** 0 / 4 (Chip) / 6 (Control) / 10 (Card/Dialog) / 999 (Punkt). **Shadows:** nur `shadow.overlay` (Dialog/Toast) und `shadow.popover`. **Borders:** 1px, nie 1.5px außer Brand-Ring. **Icons:** 16px in Zeilen, 20px im Kopf, Strichstärke 1.5. **Motion:** 120ms ease-out für Hover/Fokus, 200ms für Panel/Tab, 320ms für Overlay; Fortschritt und Live-Punkt sind die einzigen Daueranimationen; `prefers-reduced-motion` schaltet Transitions ab und lässt Fortschritt als Sprung.
 
-Was **gestrichen** wird: `--bg-grid`, Mesh-Tokens, `--r-pill` als Default, v1-Aliase (`--mono-*`, `--plasma-*`, `--neon-orange*`, `--paper-*`, `--ink-*`), `--accent-glow`, `--surface-glass*`.
+Was **gestrichen** wird: `--bg-grid`, Mesh-Tokens, `--r-pill` als Default, v1-Aliase (`--mono-*`, `--plasma-*`, `--neon-orange*`, `--paper-*`, `--ink-*`), `--accent-glow`, `--surface-glass*` — die Glas-/Glow-Tokens sind aus `tokens-v3.css` entfernt und überleben nur noch als Aliase in `tokens-compat.css`, bis die konsumierenden Regeln in `global.css` migriert sind.
 
 ## 5. Seitenplan
 
@@ -147,8 +147,9 @@ Was **gestrichen** wird: `--bg-grid`, Mesh-Tokens, `--r-pill` als Default, v1-Al
 
 ## 6. Screenshots / visuelle Referenz
 
-- Ist: `docs/ui/premium-redesign-2026-09/shots/ist/{desktop,laptop,small,phone}--*.png`
+- Ist: `docs/ui/premium-redesign-2026-09/shots/ist/{desktop,small,phone}--*.png`
 - Vorlage (Aug 2026): `docs/design/screens/01-ablage.html`, `04-simulation.html`, `07-bericht.html`, `03-laeufe.html`
+- Vorlagen gerendert (alle zehn `docs/design/screens/*.html`, inkl. Kommandopalette, Akteure, Quellenumfeld, Einstellungen, Systemregeln): `docs/ui/premium-redesign-2026-09/shots/design/{00-vorspann,01-ablage,02-kommandopalette,03-laeufe,04-simulation,05-akteure,06-quellenumfeld,07-bericht,08-einstellungen,09-systemregeln}.png`
 - Zielbilder dieses Audits (HTML auf `targets/tokens.css`, dem Referenz-Stylesheet für PR 1): `docs/ui/premium-redesign-2026-09/targets/{ablage-uebersicht,simulation-live,bericht-lesen}.html`
 - Zielbilder gerendert: `docs/ui/premium-redesign-2026-09/shots/targets/{desktop,small}--{ablage,simulation,bericht}.png`
 

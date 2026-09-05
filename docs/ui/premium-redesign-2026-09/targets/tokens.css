@@ -60,7 +60,7 @@
 
   /* Raster */
   --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-6: 24px; --sp-8: 32px; --sp-12: 48px;
-  --r-0: 0; --r-1: 4px; --r-2: 6px; --r-3: 10px; --r-pill: 999px;
+  --r-0: 0; --r-2: 4px; --r-3: 6px; --r-5: 10px; --r-pill: 9999px;
 
   --dur-fast: 120ms; --dur-base: 200ms; --dur-slow: 320ms;
   --ease: cubic-bezier(0.2, 0, 0, 1);
@@ -80,7 +80,7 @@ body { font-family: var(--font-ui); font-size: var(--fs-body); line-height: var(
 a { color: var(--accent-primary); text-decoration: none; }
 a:hover { color: var(--accent-hover); }
 ::selection { background: rgba(208, 138, 82, 0.3); }
-:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--r-1); }
+:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--r-2); }
 button { font: inherit; color: inherit; cursor: pointer; }
 h1, h2, h3, h4, p { margin: 0; }
 
@@ -111,7 +111,7 @@ h1, h2, h3, h4, p { margin: 0; }
 .brand-glyph { width: 13px; height: 13px; border: 1.5px solid var(--accent-primary); border-radius: 50%; }
 .vsep { width: 1px; height: 18px; background: var(--border-strong); }
 .stack { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; }
-.stack .crumb { display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border-radius: var(--r-1); font-size: var(--fs-small); color: var(--text-secondary); background: transparent; border: 0; }
+.stack .crumb { display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border-radius: var(--r-2); font-size: var(--fs-small); color: var(--text-secondary); background: transparent; border: 0; }
 .stack .crumb:hover { background: var(--bg-hover); color: var(--text-primary); }
 .stack .crumb.is-current { background: var(--accent-soft); color: var(--accent-hover); font-weight: 500; }
 .stack .crumb.is-live { background: rgba(95, 182, 201, 0.18); color: var(--accent-live-text); font-weight: 500; }
@@ -128,7 +128,7 @@ h1, h2, h3, h4, p { margin: 0; }
 .avatar { width: 24px; height: 24px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-primary); font-size: 10px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; }
 
 /* ---------- Buttons: genau drei Gewichte ---------- */
-.btn { display: inline-flex; align-items: center; gap: var(--sp-2); height: 30px; padding: 0 var(--sp-3); border-radius: var(--r-2); font-size: var(--fs-small); font-weight: 500; border: 1px solid transparent; transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease); white-space: nowrap; }
+.btn { display: inline-flex; align-items: center; gap: var(--sp-2); height: 30px; padding: 0 var(--sp-3); border-radius: var(--r-3); font-size: var(--fs-small); font-weight: 500; border: 1px solid transparent; transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease); white-space: nowrap; }
 .btn-primary { background: var(--accent-primary); color: var(--text-on-accent); font-weight: 600; }
 .btn-primary:hover { background: var(--accent-hover); }
 .btn-secondary { background: transparent; border-color: var(--border-strong); color: var(--text-primary); }

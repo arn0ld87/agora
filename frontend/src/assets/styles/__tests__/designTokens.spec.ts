@@ -177,6 +177,24 @@ describe('Redesign PR 1 — Typo- und Radius-Skala (tokens-v3.css)', () => {
     expect(tokens).toMatch(/--fs-display\s*:\s*clamp\(/)
   })
 
+  it('--fs-body ist exakt 14px', () => {
+    const m = tokens.match(/--fs-body\s*:\s*([^;]+);/)
+    expect(m, '--fs-body fehlt').not.toBeNull()
+    expect(m![1].trim()).toBe('14px')
+  })
+
+  it('--lh-body ist exakt 1.5', () => {
+    const m = tokens.match(/--lh-body\s*:\s*([^;]+);/)
+    expect(m, '--lh-body fehlt').not.toBeNull()
+    expect(m![1].trim()).toBe('1.5')
+  })
+
+  it('--fs-label ist exakt 11.5px', () => {
+    const m = tokens.match(/--fs-label\s*:\s*([^;]+);/)
+    expect(m, '--fs-label fehlt').not.toBeNull()
+    expect(m![1].trim()).toBe('11.5px')
+  })
+
   it('Radius-Skala hat genau die Stufen 4 / 6 / 10 / pill', () => {
     const native = tokens.match(/--r-[a-z0-9]+\s*:\s*[^;]+;/g) ?? []
     const values = native.map((d) => d.replace(/^[^:]+:\s*/, '').replace(/;$/, '').trim())
