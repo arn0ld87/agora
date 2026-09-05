@@ -279,7 +279,8 @@
       "loadingModels": "Loading available models…",
       "noOllama": "No connection to Ollama. Configure a provider in /settings/llm-providers or start Ollama.",
       "openAiDefault": "OpenAI default model active.",
-      "default": "Default from .env"
+      "default": "Default from .env",
+      "ollamaOption": "{model} (Ollama)"
     },
     "runtimeProvider": {
       "toggle": "Provider options",
@@ -421,6 +422,25 @@
     "next": "Next: simulation →"
   },
   "llm": {
+    "preset": {
+      "cloud": {
+        "qwen3_coder_next": "Qwen3 Coder (cloud) — recommended"
+      },
+      "ollama": {
+        "qwen2_5_32b": "Qwen 2.5 32B (local)",
+        "qwen2_5_14b": "Qwen 2.5 14B (local, low VRAM)",
+        "llama3_1_8b": "Llama 3.1 8B (local, fast)",
+        "gpt_oss_20b": "GPT-OSS 20B (local)"
+      },
+      "bedrock": {
+        "gpt_oss_120b": "GPT-OSS 120B (Bedrock)",
+        "qwen3_235b_a22b_2507": "Qwen3 235B A22B (Bedrock)",
+        "minimax_m2_5": "MiniMax M2.5 (Bedrock)",
+        "devstral_2_123b": "Devstral 2 123B (Bedrock)",
+        "nemotron_super_3_120b": "Nemotron Super 3 120B (Bedrock)",
+        "glm_4_7_flash": "GLM-4.7 Flash (Bedrock)"
+      }
+    },
     "provider": "Provider",
     "model": "Model",
     "reasoning_effort": "Reasoning Effort",

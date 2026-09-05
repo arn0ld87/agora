@@ -84,7 +84,7 @@ Entfernte Faktenaussagen pro Section: **1, 7, 2, 3, 1** (Section 3 ohne Meldung)
 
 Der Kipppunkt ist erstmals als konkretes Ereignis benannt statt als Thema:
 
-> Die Akzeptanz kippt nicht an einer technischen Hürde, sondern genau in dem Moment, in dem eine Honorarkraft eine vom KI-System erzeugte Übungsaufgabe vor der Klasse als fachlich falsch abtut. Wenn der Dozent den Teilnehmenden explizit rät: „Vergesst, was der Assistent euch ausgibt, lernt lieber nach meinen Folien", verlieren die Umschüler augenblicklich das Vertrauen.
+> Die Akzeptanz kippt nicht an einer technischen Hürde, sondern genau in dem Moment, in dem eine Honorarkraft eine vom KI-System erzeugte Übungsaufgabe vor der Klasse als fachlich falsch abtut. Wenn der Dozent den Teilnehmenden explizit rät: „Vergesst, was der Assistent euch ausgibt, lernt lieber nach meinen Folien“, verlieren die Umschüler augenblicklich das Vertrauen.
 
 Dazu eine Kausalkette, die kein früherer Lauf gefunden hat: Das System fängt Einstiegs- und Routinefragen ab → im Präsenzunterricht verbleiben nur verdichtete Problemfälle → unkompensierte Arbeitsverdichtung.
 
@@ -100,7 +100,7 @@ seed_doc:interview_clara_meyer
 seed_doc:interview_luca_greco
 ```
 
-**Keiner davon kommt in irgendeinem `tool_result` vor.** Im Graphen existiert genau eine Entität mit „interview" im Namen: `Stakeholder-Interviews`. Das Modell konstruiert die Anker nach dem Schema `interview_<personenname>`, und nichts prüft sie, weil der `seed_doc:`-Präfix die Bindungsprüfung in `backend/app/services/report_agent/evidence.py` vollständig umgeht.
+**Keiner davon kommt in irgendeinem `tool_result` vor.** Im Graphen existiert genau eine Entität mit „interview“ im Namen: `Stakeholder-Interviews`. Das Modell konstruiert die Anker nach dem Schema `interview_<personenname>`, und nichts prüft sie, weil der `seed_doc:`-Präfix die Bindungsprüfung in `backend/app/services/report_agent/evidence.py` vollständig umgeht.
 
 Das ist eine **Verschärfung** gegenüber den Vorgängern, keine Verbesserung. Dort trugen alle Zitate denselben Wert — offensichtlich falsch und sofort erkennbar. Hier sieht jedes Zitat einzeln belegt aus und verweist auf Dokumente, die es nicht gibt. Für einen Leser ist die zweite Variante gefährlicher.
 
@@ -124,9 +124,9 @@ URTEIL  : SUPPORTED  ("qualitative Aussage deckt sich weitgehend mit der Evidenc
 "22 festangestellte" vorher 1 → nachher 1   behalten
 ```
 
-Beide entfernten Aussagen sind im Evidence-Pool desselben Reports wörtlich vorhanden. Der strukturgleiche Satz mit „22 festangestellte Dozenten" überlebt.
+Beide entfernten Aussagen sind im Evidence-Pool desselben Reports wörtlich vorhanden. Der strukturgleiche Satz mit „22 festangestellte Dozenten“ überlebt.
 
-Der Judge kann Paraphrase also — er tut es nur nicht zuverlässig. Das ist eine andere Diagnose als „er hängt an Oberflächenähnlichkeit" und verschiebt die Suche auf Konsistenz und Schwellenwerte.
+Der Judge kann Paraphrase also — er tut es nur nicht zuverlässig. Das ist eine andere Diagnose als „er hängt an Oberflächenähnlichkeit“ und verschiebt die Suche auf Konsistenz und Schwellenwerte.
 
 ## Kritischer Befund 3: Alle 39 Claims stehen auf `low`
 
@@ -141,7 +141,7 @@ Zudem sind **22 der 39 reine `<simulated_quote>`-Tags** — Bindungen eines Zita
 
 ## Kritischer Befund 4: Der Datenlücken-Abschnitt kennt die eigenen Lücken nicht
 
-Section 6 behandelt ausführlich die Datenlücken **des Bildungsträgers** — fehlende Pilotdaten, unbelegte Nutzenbehauptungen, unklare Validität der Lernstandserfassung. Sie erwähnt „Hypothesen" zweimal, beide Male im Sinne von „optimistische Hypothesen der Führungsebene".
+Section 6 behandelt ausführlich die Datenlücken **des Bildungsträgers** — fehlende Pilotdaten, unbelegte Nutzenbehauptungen, unklare Validität der Lernstandserfassung. Sie erwähnt „Hypothesen“ zweimal, beide Male im Sinne von „optimistische Hypothesen der Führungsebene“.
 
 Über die **141 Hypothesen und 131 Datenlücken des Berichts selbst** steht kein Wort. Das ist derselbe blinde Fleck wie im dritten Referenzlauf, hier bei achtmal so vielen gebundenen Claims.
 
@@ -153,7 +153,7 @@ Die `meta.json` meldet `status: incomplete`, obwohl alle sechs Sections erzeugt 
 
 ### Eine Worthalluzination in belegtem Kontext
 
-Der Bericht schreibt „nach den Erfahrungen der **Zeiterforderung** aus dem Jahr 2023". Das Wort existiert nicht. Die Evidence sagt korrekt „digitale **Zeiterfassung** im Jahr 2023" — Jahreszahl und Sachverhalt sind richtig übernommen, das Substantiv ist verballhornt.
+Der Bericht schreibt „nach den Erfahrungen der **Zeiterforderung** aus dem Jahr 2023“. Das Wort existiert nicht. Die Evidence sagt korrekt „digitale **Zeiterfassung** im Jahr 2023“ — Jahreszahl und Sachverhalt sind richtig übernommen, das Substantiv ist verballhornt.
 
 ### Kein negatives Feedback, auch über 20 Runden
 

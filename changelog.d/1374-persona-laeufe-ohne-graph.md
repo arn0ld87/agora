@@ -9,4 +9,4 @@
 
 ### Fixed
 
-- **Berichte sagen jetzt, was einem Persona-Lauf fehlt.** Die drei Prüfpunkte (`report_generation.py`, `report.py`, `runs.py`) antworteten mit „Missing graph ID" — einem Satz, der jemandem nichts sagt, der nie einen Graphen bauen wollte. Sie nennen jetzt den Grund und halten fest, dass die Simulation selbst in Ordnung ist. Bewusst **kein** Platzhalter-Graph: ein formal gültiger Fake würde die Prüfungen passieren lassen, und der Bericht liefe ohne jede Graph-Evidenz durch — er sähe aus wie ein normaler. Ein klarer Abbruch ist ehrlicher.
+- **Berichte sagen jetzt, was einem Persona-Lauf fehlt.** Die drei Prüfpunkte (`report_generation.py`, `report.py`, `runs.py`) antworteten mit „Missing graph ID“ — einem Satz, der jemandem nichts sagt, der nie einen Graphen bauen wollte. Sie nennen jetzt den Grund und halten fest, dass die Simulation selbst in Ordnung ist. Bewusst **kein** Platzhalter-Graph: ein formal gültiger Fake würde die Prüfungen passieren lassen, und der Bericht liefe ohne jede Graph-Evidenz durch — er sähe aus wie ein normaler. Ein klarer Abbruch ist ehrlicher.

@@ -41,7 +41,7 @@ ALLOWED_TRANSITIONS: dict[SimulationStatus, frozenset[SimulationStatus]] = {
         {
             SimulationStatus.READY,
             SimulationStatus.FAILED,
-            # Issue B2 (PLAN.md „Abbrechen & Pause"): kooperativer Abbruch
+            # Issue B2 (PLAN.md „Abbrechen & Pause“): kooperativer Abbruch
             # zwischen den drei Prepare-Phasen (prepare_service.py). Nutzt
             # denselben "success-with-caveat"-Zustand wie ein abgebrochener
             # simulation_run — Teilergebnisse (z. B. die bereits geschriebene

@@ -3,7 +3,7 @@
 Im Lauf ``report_b76cf7078229`` verbrauchte der Abschnitt „Unsicherheiten und
 Datenlücken" fünf statt vier Tool-Calls und lief in den Iterationsanschlag.
 Drei davon waren ergebnislose Suchen nach derselben Stakeholdergruppe
-(„aufnehmende Betriebe") — einmal ``panorama_search``, zweimal
+(„aufnehmende Betriebe“) — einmal ``panorama_search``, zweimal
 ``quick_search``. Die Gruppe konnte im Datenbestand gar nicht vorkommen.
 
 Die Tests decken die drei getroffenen Festlegungen ab: normalisierte Query,

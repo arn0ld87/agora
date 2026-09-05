@@ -66,7 +66,7 @@ in `backend/tests/`, davon 95 in `services/`, 59 in `api/`, 36 in `contracts/`, 
    `source_id_anchor` ist optional. Für ein Provenance-Audit ist das ein Rotton: die
    Contract-Ebene erlaubt Evidence ohne verfolgbaren Ursprung.
 
-7. **Provenance-Bruch-Tests prüfen nur „keine Evidence", nicht „verlorene IDs".**
+7. **Provenance-Bruch-Tests prüfen nur „keine Evidence“, nicht „verlorene IDs“.**
    `test_evidence_routing.py` und `test_orphan_claim_routing.py` testen Claims OHNE
    Evidence → Routing zu `hypotheses`/`data_gaps`. `test_report_agent_quote_anchors.py`
    testet `unbound_evidence_refs` (seed_anchor nicht in EvidenceMap). Aber kein Test
@@ -76,7 +76,7 @@ in `backend/tests/`, davon 95 in `services/`, 59 in `api/`, 36 in `contracts/`, 
 8. **`test_evidence_identity_contract.py` sichert Determinismus der `evidence_id`,
    nicht Report-Reproduzierbarkeit.** `build_evidence_id` ist run-local +
    content-independent deterministisch — stark für ID-Stabilität, aber kein Test, der
-   „selber Seed → selbes Report-JSON" verifiziert.
+   „selber Seed → selbes Report-JSON“ verifiziert.
 
 9. **`test_report_pipeline_trust.py` ist der einzige echte Referenzlauf-Test.** Er
    leitet 11 Invarianten aus dem realen Lauf `report_d9023bd1f55a` / `sim_7058c126da03`
@@ -94,7 +94,7 @@ in `backend/tests/`, davon 95 in `services/`, 59 in `api/`, 36 in `contracts/`, 
     Agora-vs-Einzel-Prompt.
 
 12. **`test_evidence_migrations_aggregation.py::test_persona_evidence_exports_only_minimal_provenance`
-    akzeptiert „minimale Provenance" für Persona-Evidence.** Auch hier: Contract-Ebene
+    akzeptiert „minimale Provenance“ für Persona-Evidence.** Auch hier: Contract-Ebene
     erlaubt eine Dünn-Provenance, die für ein Traceability-Audit nicht ausreicht.
 
 ## Stufen-Test-Matrix (Stufe → Testdateien → Abdeckung stark/mittel/keine)
@@ -115,23 +115,23 @@ in `backend/tests/`, davon 95 in `services/`, 59 in `api/`, 36 in `contracts/`, 
 
 Ja, aber nur für zwei Bruch-Klassen:
 
-- **„keine Evidence gebunden"**: `test_evidence_routing.py` (11 Tests),
+- **„keine Evidence gebunden“**: `test_evidence_routing.py` (11 Tests),
   `test_orphan_claim_routing.py` (1 Test) — Claims ohne Evidence →
   `hypotheses` + `data_gaps` mit `gap_reason="no_evidence_bound"`.
-- **„seed_anchor nicht in EvidenceMap"**: `test_report_agent_quote_anchors.py`
+- **„seed_anchor nicht in EvidenceMap“**: `test_report_agent_quote_anchors.py`
   (`TestUnboundSeedAnchor`) — Quote referenziert `ev_999`, nicht in Map →
   `unbound_evidence_refs`, `valid=False`.
 
 **Nicht abgedeckte Bruch-Klassen:**
 
-- **„verlorene doc_id/chunk_id"**: Kein Test konstruiert den Fall, dass ein
+- **„verlorene doc_id/chunk_id“**: Kein Test konstruiert den Fall, dass ein
   `source_id_anchor="seed_doc:docX#chunk:5"` auf ein Dokument/Chunk verweist, der im
   Dokument-Manifest nicht existiert. Gerade ADR-0013 führt diese Anchor-Form ein —
   die Validate-Funktion dafür fehlt in den Tests.
-- **„Provenance nach Migration verloren"**: `test_evidence_migrations_aggregation.py`
-  prüft, dass Persona-Evidence „nur minimale Provenance" exportiert — das ist eine
+- **„Provenance nach Migration verloren“**: `test_evidence_migrations_aggregation.py`
+  prüft, dass Persona-Evidence „nur minimale Provenance“ exportiert — das ist eine
   Akzeptanz, kein Bruch-Schutz.
-- **„Contract erlaubt Evidence ohne Provenance"**:
+- **„Contract erlaubt Evidence ohne Provenance“**:
   `test_report_contract.py::test_evidence_without_provenance_still_valid` sichert
   bewusst, dass `source_id_anchor` optional ist. Das ist kein Bruch-Test, sondern ein
   Bruch-Akzeptanz-Test.
@@ -173,8 +173,8 @@ Ja, aber nur für zwei Bruch-Klassen:
    in der finalen EvidenceMap auf einen existierenden Eintrag im Dokument-Manifest
    verweist. ADR-0013 Slice 1 Teil A führte das Manifest ein, aber die
    Kreuzvalidierung Anchor↔Manifest ist nicht test-gesichert.
-3. **Provenance-Bruch bei partieller Evidence**: Tests decken „keine Evidence" und
-   „unbound seed_anchor" ab, aber nicht „Evidence mit kaputtem/halbem Anchor".
+3. **Provenance-Bruch bei partieller Evidence**: Tests decken „keine Evidence“ und
+   „unbound seed_anchor“ ab, aber nicht „Evidence mit kaputtem/halbem Anchor“.
 4. **Reproduzierbarkeit**: Kein Same-Seed-Same-Report-Test.
 5. **Baseline-Vergleich**: Kein Agora-vs-Single-Prompt-Test.
 6. **Golden-Report-Snapshot**: Kein committeter Real-LLM-Report, gegen den ein
@@ -191,7 +191,7 @@ Ja, aber nur für zwei Bruch-Klassen:
   Die schwächste Stelle für ein Traceability-Audit. Solange dieser Test grün ist,
   ist die Contract-Ebene nicht in der Lage, Provenance-Brüche auf Evidence-Ebene
   abzulehnen.
-- **„minimal provenance" als akzeptierter Zustand** (`test_persona_evidence_exports_only_minimal_provenance`):
+- **„minimal provenance“ als akzeptierter Zustand** (`test_persona_evidence_exports_only_minimal_provenance`):
   Persona-Evidence darf mit reduziertem Provenance-Footprint exportiert werden —
   das ist für eine Traceability-Analyse ein struktureller Data-Loss.
 - **ADR-0013 ist Slice 1 Teil A** (Manifest + Parser), die Slice-1-Teil-B-Tests

@@ -226,3 +226,48 @@ def test_partial_os_write_aborts_before_replacing_store(
 
     monkeypatch.setattr(provider_connection_store.os, "replace", original_replace)
     assert store.list_connections() == [original]
+
+
+def test_upsert_codex_cli_uses_registry_transport_and_auth_mode(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression fuer Codex-Review-Finding (#1405): transport/auth_mode
+    kamen bisher aus einer Ollama-Spezialbehandlung statt der kanonischen
+    ``LlmProviderRegistry``-Definition — codex_cli landete faelschlich als
+    ``transport="http"``."""
+    store, _ = _store(tmp_path, monkeypatch)
+    connection = store.upsert_connection(
+        _request(
+            display_name="Codex CLI (ChatGPT-Abo)",
+            provider_kind="codex_cli",
+            base_url=None,
+            api_key=None,
+        )
+    )
+
+    assert connection.transport == "cli"
+    assert connection.auth_mode == "session"
+    assert connection.secret_ref is None
+
+
+def test_upsert_codex_cli_ignores_submitted_api_key(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """codex_cli kennt keinen API-Key (auth_mode="session") — ein versehentlich
+    eingegebener Key darf weder als Secret persistiert noch als
+    ``auth_mode="api_key"`` fehlinterpretiert werden."""
+    store, _ = _store(tmp_path, monkeypatch)
+    connection = store.upsert_connection(
+        _request(
+            display_name="Codex CLI (ChatGPT-Abo)",
+            provider_kind="codex_cli",
+            base_url=None,
+            api_key="should-be-ignored",
+        )
+    )
+
+    assert connection.auth_mode == "session"
+    assert connection.secret_ref is None
+    assert store._secrets_store.get_plaintext("codex_cli") is None

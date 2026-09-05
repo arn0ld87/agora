@@ -65,7 +65,7 @@ Reihenfolge nach Aufwand × Sicherheit (steigend):
 Hinweise:
 
 - Der Key **nicht** versionieren. Auch nicht in einem privaten Repo. Auch
-  nicht für „nur Dev-Stuff" — Dev-Keys leaken regelmäßig in Stack-Traces.
+  nicht für „nur Dev-Stuff“ — Dev-Keys leaken regelmäßig in Stack-Traces.
 - Wenn `.env` auf einen anderen Host kopiert wird (Restore-Drill, Migration),
   immer mit `scp -i`, niemals per Slack.
 

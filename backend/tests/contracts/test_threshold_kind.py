@@ -1,6 +1,6 @@
 """Issue #1343 — Datumswerte sind keine operativen Schwellwerte.
 
-Der AURORA-Referenzlauf extrahierte aus „15. Oktober 2026" den Threshold
+Der AURORA-Referenzlauf extrahierte aus „15. Oktober 2026“ den Threshold
 ``{"value": 15.0, "unit": "October", "evidence_status": "heuristic"}`` —
 der Tag als Zahl, der Monatsname als Einheit. Beides ist in keinem
 Vergleich verwendbar: ein Datum ist kein operativer Wert, es hat keine

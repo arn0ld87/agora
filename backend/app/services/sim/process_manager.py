@@ -40,6 +40,7 @@ from typing import Any, Callable, Dict, List, Optional
 from opentelemetry import trace
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
+from ...llm.providers.codex_cli import CLI_TRANSPORT_VALUE, TRANSPORT_ENV_KEY
 from ...observability import sim_active_gauge, sim_counter
 from ...utils.logger import get_logger
 from .run_state_store import RunnerStatus, SimulationRunState
@@ -83,6 +84,11 @@ def _resolve_child_path(base_dir: str, child_name: str, *, kind: str) -> Path:
 #   Models (z.B. ``Twitter/twhin-bert-base`` ist zwar public, aber
 #   Custom-Mirrors koennen Auth verlangen). Public Models funktionieren
 #   ohne Token.
+# - ``AGORA_CODEX_CLI_BIN`` / ``AGORA_CODEX_CLI_TIMEOUT_SECONDS``: Pfad und
+#   Timeout der Codex-CLI (Issue #1423). Kein Secret — die CLI
+#   authentifiziert ueber die lokale ``codex login``-Session, nicht ueber
+#   einen Key. Ohne diese Keys faellt der Subprozess auf ``codex`` im PATH
+#   und 180 s zurueck, was fuer den Regelfall stimmt.
 SAFE_ENV_KEYS: frozenset[str] = frozenset(
     {
         "PATH",
@@ -96,8 +102,42 @@ SAFE_ENV_KEYS: frozenset[str] = frozenset(
         "OLLAMA_THINKING",
         "REDIS_URL",
         "HF_TOKEN",
+        "AGORA_CODEX_CLI_BIN",
+        "AGORA_CODEX_CLI_TIMEOUT_SECONDS",
     }
 )
+
+def _build_subprocess_env(
+    runtime_env: Optional[Dict[str, str]], sim_dir: Any
+) -> Dict[str, str]:
+    """Env für den OASIS-Subprozess — Whitelist-only (Code-Review 2026-05-17 §1.6).
+
+    Nur explizit erlaubte Keys aus ``os.environ``; Secrets wie SECRET_KEY,
+    AGORA_AUTH_TOKEN oder NEO4J_PASSWORD werden bewusst NICHT vererbt.
+    ``runtime_env``-Werte kommen immer mit und überschreiben Whitelist-Werte
+    (enthält u. a. LLM_API_KEY und OPENAI_API_KEY für den Subprozess).
+
+    Aus ``start_simulation`` extrahiert, als der CLI-Sonderfall unten die
+    Funktion über das radon-Gate (MAI-17) gehoben hätte.
+    """
+    env = {k: v for k, v in os.environ.items() if k in SAFE_ENV_KEYS}
+    env["PYTHONUTF8"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8"
+    if runtime_env:
+        env.update({k: v for k, v in runtime_env.items() if v})
+    # Issue #1423: Bei CLI-Transport (codex_cli) darf das aus der Whitelist
+    # geerbte ``LLM_BASE_URL`` NICHT stehen bleiben. Der Provider hat keinen
+    # HTTP-Endpunkt; das geerbte Feld ist die ``.env``-URL des Backends, und
+    # der Subprozess schickte das geroutete Modell genau dorthin (beobachtet:
+    # ``gpt-5.6-luna`` an ``api.minimax.io`` → HTTP 400 (2013)). Das Signal
+    # setzt ``build_route_subprocess_env`` anhand von
+    # ``ProviderConnectionDefinition.transport``.
+    if env.get(TRANSPORT_ENV_KEY, "").strip().lower() == CLI_TRANSPORT_VALUE:
+        env.pop("LLM_BASE_URL", None)
+    # Sub-Slice 21: OASIS-DB pro Sim ins schreibbare uploads/-Volume
+    _inject_oasis_db_env(env, str(sim_dir))
+    return env
+
 
 # Flag whether cleanup function is registered
 _cleanup_registered = False
@@ -334,18 +374,7 @@ def start_simulation(
         main_log_path = sim_dir / "simulation.log"
         main_log_file = open(main_log_path, "w", encoding="utf-8")
 
-        # Build subprocess environment — Whitelist-only (Code-Review 2026-05-17 §1.6).
-        # Nur explizit erlaubte Keys aus os.environ; Secrets wie SECRET_KEY,
-        # AGORA_AUTH_TOKEN, NEO4J_PASSWORD etc. werden bewusst NICHT vererbt.
-        # runtime_env-Werte kommen immer mit und überschreiben Whitelist-Werte
-        # (enthält u. a. LLM_API_KEY und OPENAI_API_KEY für den OASIS-Subprozess).
-        env = {k: v for k, v in os.environ.items() if k in SAFE_ENV_KEYS}
-        env["PYTHONUTF8"] = "1"
-        env["PYTHONIOENCODING"] = "utf-8"
-        if runtime_env:
-            env.update({k: v for k, v in runtime_env.items() if v})
-        # Sub-Slice 21: OASIS-DB pro Sim ins schreibbare uploads/-Volume
-        _inject_oasis_db_env(env, str(sim_dir))
+        env = _build_subprocess_env(runtime_env, sim_dir)
 
         # Slice 1c: Trace-Context via W3C-traceparent in den Subprozess propagieren.
         with _tracer.start_as_current_span("agora.subprocess.spawn") as span:

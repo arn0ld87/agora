@@ -10,7 +10,7 @@ Besonders betroffen sind die Branchen Gastgewerbe (412 unbesetzte Plätze), Einz
 meisten unversorgten Jugendlichen auf die kaufmännischen Berufe (487) und die
 Lagerlogistik (312).
 
-Die Stadt Dortmund fördert seit 2023 das Programm „Ausbildungsoffensive 2025" mit einem
+Die Stadt Dortmund fördert seit 2023 das Programm „Ausbildungsoffensive 2025“ mit einem
 jährlichen Budget von **1,8 Mio. EUR**. Zusätzlich stellt das Land NRW **450.000 EUR**
 für Digitalisierungsprojekte in der Berufsorientierung bereit.
 
@@ -50,10 +50,10 @@ weil schwächer gematchte Bewerber früher aufgaben.
 
 Dr. Kling argumentiert mit **Effizienzgewinnen**:
 
-- „Ein Algorithmus kann in Sekunden das, wofür ein Berufsberater 45 Minuten braucht."
+- „Ein Algorithmus kann in Sekunden das, wofür ein Berufsberater 45 Minuten braucht.“
 - Verweist auf das **österreichische AMS-Algorithmus-Projekt** (2019–2023), das zwar
   wegen Diskriminierungskritik eingestellt wurde, aber technisch valide Ergebnisse lieferte
-- Schlägt externes **Bias-Audit** durch das „Algorithmenethik-Lab" der TU Dortmund vor
+- Schlägt externes **Bias-Audit** durch das „Algorithmenethik-Lab“ der TU Dortmund vor
 - Betont die **Skalierbarkeit**: Das System könne nach erfolgreichem Pilot auf ganz NRW
   übertragen werden
 

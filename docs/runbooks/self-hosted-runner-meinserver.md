@@ -19,7 +19,7 @@ ERROR: failed to initialize builder …: Cannot connect to the Docker daemon
 at unix:///var/run/docker.sock. Is the docker daemon running?
 ```
 
-Sein einziger dokumentierter Zweck war „native arm64-Docker-Builds ohne QEMU" —
+Sein einziger dokumentierter Zweck war „native arm64-Docker-Builds ohne QEMU“ —
 also genau das, was ohne Docker-Zugriff unmöglich ist. Praktische Folge: Seit
 Einrichtung schlug **jeder** `push`-auf-`main`-Lauf des Docker-Workflows fehl,
 und es gelangte kein Image mehr nach GHCR. Aufgefallen ist das nicht, weil der

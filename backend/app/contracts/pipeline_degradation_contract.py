@@ -54,7 +54,7 @@ class DegradationSeverity(str, Enum):
     """Wie schwer der Ausfall wiegt.
 
     Der Unterschied ist nicht kosmetisch: ``BLOCKING`` heißt, dass der
-    Schritt den Zustand „bereit" nicht erreichen darf, auch wenn technisch
+    Schritt den Zustand „bereit“ nicht erreichen darf, auch wenn technisch
     kein Fehler aufgetreten ist.
     """
 
@@ -62,7 +62,7 @@ class DegradationSeverity(str, Enum):
     """Ergebnis bleibt nutzbar, die Qualität ist nachweislich reduziert."""
 
     BLOCKING = "blocking"
-    """Ergebnis darf nicht als „bereit" gelten — Weiterarbeit lohnt nicht."""
+    """Ergebnis darf nicht als „bereit“ gelten — Weiterarbeit lohnt nicht."""
 
 
 class PipelineDegradationModel(BaseModel):

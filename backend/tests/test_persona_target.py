@@ -2,7 +2,7 @@
 
 Issue #1034 (Teilpunkt 2) · 2026-08-03
 
-Die Anzeige zeigte „Erzeugt 22 / 7 Personas…": der Zähler lief über
+Die Anzeige zeigte „Erzeugt 22 / 7 Personas…“: der Zähler lief über
 seinen eigenen Nenner. Der Nenner kam aus ``expected_entities_count``
 (Entitätenzahl), der Zähler aus der Persona-Generierung, deren Menge erst
 durch Quota-Plan oder Persona-Floor entsteht. Sieben Entitäten wurden zu
@@ -71,7 +71,7 @@ def test_quota_plan_below_floor_reports_floor_applied_despite_large_pool():
     """Mit Plan zählt der Plan, nicht die Entitätenzahl.
 
     80 Entitäten mit einer Quota von 6 werden auf den Floor angehoben. Ein
-    Vergleich `target > entity_count` läse das als „kein Floor" — und der
+    Vergleich `target > entity_count` läse das als „kein Floor“ — und der
     Hinweis in Schritt 2, der genau diese Anhebung erklärt, bliebe aus.
     """
     plan = PersonaQuotaPlan(targets={"Person": 6}, total=6)

@@ -22,13 +22,13 @@ Agora ist seit der Fork-Linie (MiroFish-Offline → Agora) als **lokal-first**-S
 **Was fehlt für v1.0:**
 
 - Kein User-Konzept — der Shared Token ist nicht an eine Identität gebunden.
-- Kein Logout (außer „Token aus dem Frontend-Storage löschen").
+- Kein Logout (außer „Token aus dem Frontend-Storage löschen“).
 - Keine Token-Rotation außer Container-Neubau mit neuem `AGORA_AUTH_TOKEN`.
 - Kein Audit-Trail wer wann was getan hat.
 - Kein Rollen- oder Berechtigungskonzept.
 - Keine Multi-User-Tenancy.
 
-**Auslöser für diesen ADR:** PLAN.md führt M10.4 als „Auth-Zielbild-ADR" als kritischen Hardening-Block. ROADMAP-v1.0-Eintrag „AuthN/AuthZ — beyond the current optional `AGORA_AUTH_TOKEN`" verlangt eine Entscheidung. Issue #106 (Reverse-Proxy) ist faktisch durch M9.6 closeable, aber die Auth-Frage bleibt offen.
+**Auslöser für diesen ADR:** PLAN.md führt M10.4 als „Auth-Zielbild-ADR“ als kritischen Hardening-Block. ROADMAP-v1.0-Eintrag „AuthN/AuthZ — beyond the current optional `AGORA_AUTH_TOKEN`“ verlangt eine Entscheidung. Issue #106 (Reverse-Proxy) ist faktisch durch M9.6 closeable, aber die Auth-Frage bleibt offen.
 
 ---
 
@@ -36,12 +36,12 @@ Agora ist seit der Fork-Linie (MiroFish-Offline → Agora) als **lokal-first**-S
 
 ### Option A — Single-User-only-v1 (formalisieren)
 
-**Was:** Status quo mit expliziter Single-User-Garantie. README/SECURITY/`/api/status` deklarieren: „Agora v1.0 ist ein lokaler/Tailnet-Single-User-Simulator. Multi-User ist Out-of-Scope."
+**Was:** Status quo mit expliziter Single-User-Garantie. README/SECURITY/`/api/status` deklarieren: „Agora v1.0 ist ein lokaler/Tailnet-Single-User-Simulator. Multi-User ist Out-of-Scope.“
 
 **Implementation:**
 
 - Keine Code-Änderung am Auth-Pfad.
-- README + `docs/security-hardening.md` ergänzen explizite Warnung: „Public-Internet-Deployment nicht supported. Für Mehrbenutzer-Betrieb ist v2 in Planung."
+- README + `docs/security-hardening.md` ergänzen explizite Warnung: „Public-Internet-Deployment nicht supported. Für Mehrbenutzer-Betrieb ist v2 in Planung.“
 - `/api/status` liefert `auth_mode: "single_user_token"`.
 - Token-Rotation: dokumentiert als Container-Neubau-Prozedur in `docs/security-hardening.md`.
 
@@ -136,12 +136,12 @@ Agora ist seit der Fork-Linie (MiroFish-Offline → Agora) als **lokal-first**-S
 
 ### Aus der Entscheidung folgt
 
-- **README + `docs/security-hardening.md`** bekommen einen klaren Block: „Agora v1.0 ist Single-User-Only. Public-Internet-Deployment ist nicht supported. Für Mehrbenutzer-Betrieb v2 abwarten oder eigenes Auth-Frontend zwischen Proxy und Backend setzen."
+- **README + `docs/security-hardening.md`** bekommen einen klaren Block: „Agora v1.0 ist Single-User-Only. Public-Internet-Deployment ist nicht supported. Für Mehrbenutzer-Betrieb v2 abwarten oder eigenes Auth-Frontend zwischen Proxy und Backend setzen.“
 - **`/api/status`** liefert `auth_mode: "single_user_token"` (kleines Code-Update in `backend/app/api/status.py`).
 - **`/api/version`** (M13.1) liefert zusätzlich `auth_model: "single_user_v1"` für Operator-Transparenz.
 - **Token-Rotation-Prozedur** wird in `docs/security-hardening.md` dokumentiert: Stop-Container, neuer `AGORA_AUTH_TOKEN` in `.env`, Container-Rebuild, Frontend setzt neuen Token zur Laufzeit. Kein File-System-State-Verlust.
 - **Rate-Limits** (M10.5) bleiben Pflicht — Single-User schützt nicht vor Brute-Force auf gestohlenen Token oder Abuse über offene Endpunkte.
-- **Issue #106** (Reverse-Proxy) bleibt aktiv-relevant: Tailnet-Deploys brauchen Proxy-Termination (Tailscale Funnel, Cloudflare Tunnel) — Single-User-only heißt nicht „auf Internet exponieren".
+- **Issue #106** (Reverse-Proxy) bleibt aktiv-relevant: Tailnet-Deploys brauchen Proxy-Termination (Tailscale Funnel, Cloudflare Tunnel) — Single-User-only heißt nicht „auf Internet exponieren“.
 
 ### Aus der Entscheidung folgt **nicht**
 
@@ -153,7 +153,7 @@ Agora ist seit der Fork-Linie (MiroFish-Offline → Agora) als **lokal-first**-S
 ### Hardstops für v1.0
 
 - **Keine Public-Internet-Werbung** für Agora bis v2 mit echtem Auth-Modell.
-- **Keine Marketing-Aussagen wie „Multi-User-Simulator"** — Agora ist Single-User-Local-First.
+- **Keine Marketing-Aussagen wie „Multi-User-Simulator“** — Agora ist Single-User-Local-First.
 - **Keine `?token=`-Reaktivierung** in Prod (Hardstop ist code-verifiziert in `backend/app/utils/auth.py::_extract_token`).
 
 ### Trigger für v2-ADR (= ADR-0001 wird durch v2-ADR ersetzt)
@@ -195,8 +195,8 @@ Diese ADR braucht **keine Code-Änderung im Auth-Pfad**. Was nachgezogen werden 
 
 Diese ADR ist **proposed**, nicht **accepted**. Sign-off-Optionen für den User:
 
-- **(A) Akzeptieren wie vorgeschlagen** — Status auf „Accepted" setzen, Umsetzungs-Slices 1+2 als Followups planen.
-- **(B) Andere Option wählen** — Status bleibt „Proposed", neue ADR-Version mit Option B oder C als Entscheidung.
-- **(C) Vertagen** — Status auf „Deferred" setzen, M10.4 bleibt offen, User entscheidet später.
+- **(A) Akzeptieren wie vorgeschlagen** — Status auf „Accepted“ setzen, Umsetzungs-Slices 1+2 als Followups planen.
+- **(B) Andere Option wählen** — Status bleibt „Proposed“, neue ADR-Version mit Option B oder C als Entscheidung.
+- **(C) Vertagen** — Status auf „Deferred“ setzen, M10.4 bleibt offen, User entscheidet später.
 
 Default bei Schweigen: (A) — passt zum Local-first-Kernprinzip und dem v1.0-Zeitplan.

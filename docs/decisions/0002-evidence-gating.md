@@ -11,12 +11,12 @@
 
 ## Kontext
 
-Der Report-Output von Agora hat bisher kein systematisches Provenance-Modell. Das LLM kann Claims als Fakten formulieren, ohne dass Evidence sie stützt — oder mit einer einzigen Stakeholder-Stimme als „high-confidence"-Aussage durchgehen. Konkrete Symptome aus früheren Test-Runs:
+Der Report-Output von Agora hat bisher kein systematisches Provenance-Modell. Das LLM kann Claims als Fakten formulieren, ohne dass Evidence sie stützt — oder mit einer einzigen Stakeholder-Stimme als „high-confidence“-Aussage durchgehen. Konkrete Symptome aus früheren Test-Runs:
 
-- Generika wie „Mitarbeiter werden die Maßnahme begrüßen" ohne jegliche Quote-Bindung.
+- Generika wie „Mitarbeiter werden die Maßnahme begrüßen“ ohne jegliche Quote-Bindung.
 - `confidence_label="high"` mit nur einer Persona-Gruppe als Quelle (Echo-Kammer).
 - Konkurrenz-Quotes (strategische Gegenposition) als Konsens fehlinterpretiert.
-- Vermischung von „im Korpus belegt" und „LLM-geschlussfolgert" in derselben Evidence-Liste.
+- Vermischung von „im Korpus belegt“ und „LLM-geschlussfolgert“ in derselben Evidence-Liste.
 
 **Was bereits existiert** (Stand vor M11.7):
 - `ConfidenceLabel`-Enum (`low`/`medium`/`high`/`verified`)

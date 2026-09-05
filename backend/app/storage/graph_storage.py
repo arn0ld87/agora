@@ -53,7 +53,7 @@ class GraphStorage(ABC):
         and the current OASIS round for live simulation updates; leave
         ``None`` for legacy callers where temporal tracking is not needed.
 
-        ``ner_extractor`` (Sub-Slice „build-respects-frontend-model"):
+        ``ner_extractor`` (Sub-Slice „build-respects-frontend-model“):
         optionaler NER-Override pro Aufruf. Erlaubt dem Build-Pfad, einen
         frontend-LLM-gesteuerten Extractor durchzureichen, ohne den
         Storage-Singleton-Default zu mutieren. ``None`` greift den

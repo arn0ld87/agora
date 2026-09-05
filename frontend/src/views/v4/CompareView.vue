@@ -49,7 +49,7 @@ onMounted(async () => {
   try {
     // Der Interceptor liefert die Envelope, nicht das Array — ein
     // direktes .map() darauf warf und landete im catch: die Liste zeigte
-    // immer „Fehler beim Laden der Branches". Ein Branch ist ausserdem
+    // immer „Fehler beim Laden der Branches“. Ein Branch ist ausserdem
     // eine Simulation, seine ID heisst simulation_id (branch_id gab es nie).
     const envelope = await listSimulationBranches(props.simulationId)
     const list = envelope?.success ? (envelope.data ?? []) : []

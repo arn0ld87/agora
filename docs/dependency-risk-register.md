@@ -20,7 +20,7 @@ Automation: [.github/workflows/cve-monitor.yml](../.github/workflows/cve-monitor
 > nicht mehr, ohne dass die Schwachstelle behoben wäre. Tracking bleibt offen in
 > [#661](https://github.com/arn0ld87/agora/issues/661); [#672](https://github.com/arn0ld87/agora/issues/672)
 > war die ursprüngliche Konsolidierungs-Referenz und ist seit 2026-07-27 geschlossen.
-> Details unten unter „nltk-Baseline".
+> Details unten unter „nltk-Baseline“.
 Supply-Chain-Baseline: [.github/workflows/scorecard.yml](../.github/workflows/scorecard.yml) läuft wöchentlich Mo 04:30 UTC und auf `push` nach `main`. SARIF-Ergebnisse werden ins Code-Scanning-Dashboard hochgeladen; der erste Remote-Run nach Merge ist die Scorecard-Baseline.
 
 Dieses Dokument trackt bewusst ignorierte `pip-audit`-Findings und Trivy-Container-Scans.
@@ -58,7 +58,7 @@ Ohne erfüllte Bedingungen gilt: sofort fixen, kein Register-Eintrag.
 ## Aktive Baseline
 
 Aktuell keine aktiven pip-audit-Ausnahmen. Die bisher einzigen Einträge betrafen
-`nltk` (Hardstop 2026-09-28) und sind am 2026-08-02 aufgelöst — siehe „nltk-Baseline"
+`nltk` (Hardstop 2026-09-28) und sind am 2026-08-02 aufgelöst — siehe „nltk-Baseline“
 unten.
 
 ## nltk-Baseline — aufgelöst 2026-08-02 (vormals Hardstop 2026-09-28)
@@ -99,7 +99,7 @@ einer früheren Lücke geführt. Es ist deshalb plausibel, dass der Upstream-Fix
 Sekundärquellen behaupten teilweise einen Fix in 3.10.0 und übertragen dabei den
 Fix der *anderen* Advisory (GHSA-p4gq-832x-fm9v / CVE-2026-54293) auf diese; ein
 automatisierter Review von PR #1024 ist genau darauf hereingefallen. Solange die
-Advisory-DB kein `fixed`-Event führt, bleibt die Aussage „behoben" unbelegt —
+Advisory-DB kein `fixed`-Event führt, bleibt die Aussage „behoben“ unbelegt —
 #661 bleibt offen und wird geschlossen, sobald OSV nachzieht.
 
 ### Nebenwirkung des Bumps: `NLTK_DISABLE_IMPORT_SECURITY=1`
@@ -113,7 +113,7 @@ das ist bei Agora der Regelfall:
 * Container: `WORKDIR /app`, venv unter `/app/backend/.venv`
 * lokal: `cd backend && uv run …`, venv unter `backend/.venv`
 
-In beiden Fällen gilt *jedes* venv-Paket als „aus dem CWD". Sobald `unstructured`
+In beiden Fällen gilt *jedes* venv-Paket als „aus dem CWD“. Sobald `unstructured`
 beim Parsen nltk lädt, fliegen `regex` und `defusedxml` mit einem `ImportError`
 heraus — der Ingestion-Pfad bricht zur Laufzeit, nicht beim Build.
 
@@ -159,7 +159,7 @@ dokumentiert, weil der Befund `build-only` acht Läufe am Stück blockiert hat.
 |---|---|---|---|---|---|
 | CVE-2026-53615 | `util-linux` — OS-Layer des Prod-Basisimages (Debian 13 trixie), 9 Binärpakete: `bsdutils`, `libblkid1`, `liblastlog2-2`, `libmount1`, `libsmartcols1`, `libuuid1`, `login`, `mount`, `util-linux` | High | alex | resolved 2026-08-17 | `apt-get upgrade -y` in der `prod`-Stage des Dockerfiles zieht `2.41-5` → `2.41.5-0+deb13u1` (Issue [#1328](https://github.com/arn0ld87/agora/issues/1328)) |
 
-**Warum keine Ausnahme:** Bedingung 1 der Ausnahmeregel („Kein Upstream-Fix verfügbar") war
+**Warum keine Ausnahme:** Bedingung 1 der Ausnahmeregel („Kein Upstream-Fix verfügbar“) war
 nicht erfüllt. Debian hatte den Fix `2.41.5-0+deb13u1` zum Zeitpunkt des Dauerrots bereits im
 trixie-Repo. Damit gilt der Grundsatz aus diesem Dokument: sofort fixen, kein Register-Eintrag.
 
@@ -193,11 +193,11 @@ Trivy-Findings aus `.github/workflows/docker-image.yml` (`exit-code: "1"`, `igno
 | CVE-2026-24049 | `wheel` — **nicht OS-Layer**, sondern `setuptools/_vendor/wheel` in der Backend-`.venv` | High | alex | resolved 2026-07-31 | `setuptools 80.9.0 → 83.0.0` (`33b3f310`, PR #828) hebt vendored `wheel` auf 0.46.3 (fixed ≥ 0.46.2) |
 | CVE-2026-23949 | `jaraco.context` — **nicht OS-Layer**, sondern `setuptools/_vendor/jaraco` in der Backend-`.venv` | High | alex | resolved 2026-07-31 | derselbe Bump hebt vendored `jaraco.context` auf 6.1.0 (fixed ≥ 6.1.0) |
 
-**Ursachenkorrektur:** Die ursprüngliche Begründung „Basis-Image-Update erforderlich" (Eintrag vom
+**Ursachenkorrektur:** Die ursprüngliche Begründung „Basis-Image-Update erforderlich“ (Eintrag vom
 2026-07-05, `63e923db`) war eine Fehldiagnose. `python:3.14-slim` liefert nur `pip` aus — der
 CPython-Build nutzt `--with-ensurepip`, und `ensurepip` bündelt seit Python 3.12 weder `setuptools`
 noch `wheel`. Beide Pakete kamen ausschließlich über `setuptools/_vendor/` in die `.venv`. Sachlich
-richtig gewesen wäre „setuptools-Bump erforderlich"; ein Basis-Image-Update hätte die Findings nie
+richtig gewesen wäre „setuptools-Bump erforderlich“; ein Basis-Image-Update hätte die Findings nie
 beheben können. Verifiziert am real gebauten Prod-Image (siehe unten).
 
 **Verifikation (2026-07-31, lokal, linux/arm64):** Vollständiger Build der Prod-Stage, Scan mit
@@ -240,19 +240,19 @@ Fließtext. Künftig gehört **jede** `.trivyignore`-Zeile auch in die JSON.
 ## Eskalationspfad (Hardstop 2026-09-28)
 
 **Hinweis 2026-08-02:** Die Baseline, auf die sich dieser Pfad ursprünglich bezog
-(PYSEC-2026-597, GHSA-p4gq-832x-fm9v), ist aufgelöst — siehe „nltk-Baseline" oben.
+(PYSEC-2026-597, GHSA-p4gq-832x-fm9v), ist aufgelöst — siehe „nltk-Baseline“ oben.
 Der Abschnitt bleibt als Prozess-Vorlage für künftige Baseline-Einträge stehen.
 
 Wenn am 2026-09-28 noch CVEs in der aktiven Baseline offen sind, greift einer dieser Pfade:
 
-1. **Upstream released bis dahin** — `--ignore-vuln`-Flags aus [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) entfernen, Issue schließen, Eintrag nach „Abgeschlossen" verschieben.
+1. **Upstream released bis dahin** — `--ignore-vuln`-Flags aus [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) entfernen, Issue schließen, Eintrag nach „Abgeschlossen“ verschieben.
 2. **ADR [docs/decisions/0004-cve-upstream-escalation.md](decisions/0004-cve-upstream-escalation.md)** (Accepted 2026-07-06) entscheidet zwischen:
    - **Vendoring** der betroffenen Subkomponenten,
    - **Soft-Fork** mit Patch-Ringen,
    - **Replacement** durch andere Pakete (z.B. `langgraph` statt `camel-oasis`).
 3. **Risikoakzeptanz-PR** mit expliziter Verlängerung der `--ignore-vuln`-Flags um maximal 60 Tage und neuem Hardstop-Datum. Erfordert User-Sign-off.
    → **2026-07-06 gewählt (ALE-20):** Hardstop von 2026-07-30 auf 2026-09-28 verlängert (+60 Tage),
-   weil Upstream weiterhin keinen Fix released hat und Option „Replacement/Vendoring" für nur
+   weil Upstream weiterhin keinen Fix released hat und Option „Replacement/Vendoring“ für nur
    transitiv genutztes, nicht erreichbares nltk unverhältnismäßig wäre. Details in ADR-0004.
 
 Der CVE-Monitor-Workflow erzwingt die Entscheidung: ab Hardstop-Datum schlägt er bei jedem Run fehl, bis eine der drei Optionen umgesetzt ist.

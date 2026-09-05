@@ -209,7 +209,7 @@ das Read-Only-Flag.
 Verzeichnis an, gehört `backend/.cache` auf dem Host anschließend `root` — und
 Host-Werkzeuge, die darunter schreiben wollen, brechen ab. Betroffen ist unter
 anderem `scripts/sync-status.sh`, das seinen Zähler-Cache in
-`backend/.cache/sync-status/` ablegt und dann mit „Keine Berechtigung"
+`backend/.cache/sync-status/` ablegt und dann mit „Keine Berechtigung“
 aussteigt.
 
 ```bash
@@ -234,7 +234,7 @@ localStorage.setItem('agora_token', '<derselbe_wert>')
 ```
 
 Prod-Empfehlung ist Memory-Mode (`VITE_AGORA_TOKEN_STORAGE=memory`) statt
-`localStorage` — siehe [`auth.md`](auth.md), Abschnitt „Frontend-Token-Storage".
+`localStorage` — siehe [`auth.md`](auth.md), Abschnitt „Frontend-Token-Storage“.
 
 ---
 
@@ -256,7 +256,7 @@ Prod-Empfehlung ist Memory-Mode (`VITE_AGORA_TOKEN_STORAGE=memory`) statt
   ausweichen lassen, oder `AGORA_EXTRA_ORIGINS` setzen.
 - **Read-Only-Rootfs + neuer Schreibpfad:** Dev-Setups, die plötzlich `EROFS`
   liefern, brauchen einen tmpfs- oder Volume-Mount im Compose. Siehe
-  Abschnitt „Volumes".
+  Abschnitt „Volumes“.
 
 ---
 

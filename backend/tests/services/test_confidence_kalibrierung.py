@@ -3,9 +3,12 @@
 - match_score < 0.55 → Deckel auf medium (0.69)
 - verified braucht >= 2 unabhaengige Quellen
 - detect_contradiction_penalty: strukturierte Felder, keine Textanalyse
+- #1301: Single-Source-Deckel differenziert ab match_score >= 0.85
 """
 
 from __future__ import annotations
+
+import pytest
 
 from app.services.confidence_calculator import (
     compute_claim_confidence,
@@ -43,6 +46,70 @@ def test_single_strong_match_but_only_one_source_no_verified():
     score, label = compute_confidence(items)
     assert score <= 0.89
     assert label != "verified"
+
+
+def test_single_source_strong_match_reaches_at_least_medium():
+    """#1301: ein SUPPORTED-Fakt mit match_score > 0.9 aus nur einer Quelle
+    erreicht mindestens ``medium`` (Score >= 0.65).
+
+    Vorher zog der bedingungslose 0.59-Deckel jeden Ein-Quellen-Claim auf
+    "low", unabhaengig von der Belegqualitaet -- ein Attraktor statt eines
+    Grenzfall-Schutzes. Im AURORA-Referenzlauf landeten so 27 von 28 Claims
+    exakt bei 0.59.
+    """
+    items = [
+        {"type": "graph_fact", "source": "panorama_search",
+         "snippet": "x", "match_score": 0.946},
+    ]
+    score, label = compute_confidence(items)
+    assert score >= 0.65
+    assert label not in ("speculative", "low")
+
+
+def test_single_source_never_reaches_verified_even_with_perfect_match():
+    """Leitplanke #1301: ein Ein-Quellen-Claim darf trotz Lockerung nie
+    ``verified`` erreichen -- die Verified-Schranke (unique_sources >= 2)
+    bleibt unangetastet, auch bei match_score == 1.0."""
+    items = [
+        {"type": "graph_fact", "source": "panorama_search",
+         "snippet": "x", "match_score": 1.0},
+    ]
+    score, label = compute_confidence(items)
+    assert label != "verified"
+    assert score <= 0.89
+
+
+@pytest.mark.parametrize(
+    "match_score, n_sources, expected_labels, score_bound, bound_is_max",
+    [
+        # Unterhalb der Strong-Match-Schwelle (0.85): Deckel greift weiterhin.
+        (0.78, 1, ("low",), 0.59, True),
+        (0.84, 1, ("low",), 0.59, True),
+        # Ab 0.85 (Verified-Schranken-Schwelle, wiederverwendet statt einer
+        # neuen Skala) hebt sich der Deckel -- Rohscore zaehlt wieder.
+        (0.85, 1, ("medium", "high"), 0.59, False),
+        (0.946, 1, ("medium", "high"), 0.65, False),
+        # Zwei unabhaengige Quellen: Deckel betrifft das gar nicht erst,
+        # unveraendertes Bestandsverhalten.
+        (0.946, 2, ("verified",), 0.90, False),
+    ],
+)
+def test_match_score_and_source_count_bands(
+    match_score, n_sources, expected_labels, score_bound, bound_is_max
+):
+    """#1301: Matrix aus Match-Score x Quellenzahl -> erwartete Confidence-Baender,
+    insbesondere die neue 0.85-Grenze des Single-Source-Deckels."""
+    items = [
+        {"type": "graph_fact", "source": f"source_{i}",
+         "snippet": f"x{i}", "match_score": match_score}
+        for i in range(n_sources)
+    ]
+    score, label = compute_confidence(items)
+    assert label in expected_labels
+    if bound_is_max:
+        assert score <= score_bound
+    else:
+        assert score >= score_bound
 
 
 def test_two_sources_plus_strong_match_unlocks_verified():

@@ -47,6 +47,7 @@ class _CapturingLLMClient:
     def __init__(self, *args, **kwargs):
         _CapturingLLMClient.last_instance = self
         self.captured_kwargs = None
+        self.init_kwargs = kwargs
 
     def chat(self, *args, **kwargs):  # pragma: no cover - not called
         raise AssertionError("chat() must not be called by _generate_profile_with_llm")
@@ -416,6 +417,51 @@ def test_issue_882_resolve_persona_detail_level_called_once_group(mock_llm_clien
             entity_attributes={},
             context="Context"
         )
-        
+
         # Verify it was called exactly once
         assert mock_resolve_level.call_count == 1
+
+
+def test_constructor_does_not_env_fallback_for_codex_cli(monkeypatch):
+    """Regression for Issue #1418.
+
+    ``codex_cli`` (transport="cli", #1405) hat weder base_url noch api_key —
+    das ist der Normalfall, kein unaufgeloester Zustand. Ohne
+    ``provider_type`` fuellte der Konstruktor ``self.base_url`` mit
+    ``Config.LLM_BASE_URL`` auf (beobachtet: das aus der codex_cli-Route
+    geroutete Modell ``gpt-5.6-luna`` ging an ``https://api.minimax.io/v1``
+    → HTTP 400 "unknown model").
+    """
+    from app.config import Config
+
+    monkeypatch.setattr(Config, "LLM_BASE_URL", "https://api.minimax.io/v1")
+    monkeypatch.setattr(Config, "LLM_API_KEY", "env-minimax-key")
+
+    gen = OasisProfileGenerator(provider_type="codex_cli", model_name="gpt-5.6-luna")
+
+    assert gen.base_url is None
+    assert gen.api_key != "env-minimax-key"
+
+
+def test_generate_profile_with_llm_passes_provider_type_for_codex_cli(monkeypatch):
+    """Regression for Issue #1418: ohne ``provider_type`` an ``_LLMClient``
+    weitergereicht erkennt ``LLMClient`` codex_cli nicht als
+    Subprozess-Provider (``_codex_cli_active``) und versucht einen HTTP-Call
+    gegen ``self.base_url`` — der dann aus dem generischen Fallback stammt.
+    """
+    import app.llm.client as _client_mod
+    monkeypatch.setattr(_client_mod, "LLMClient", _CapturingLLMClient)
+
+    gen = OasisProfileGenerator(provider_type="codex_cli", model_name="gpt-5.6-luna")
+    gen._generate_profile_with_llm(
+        entity_name="ADFC Muenchen",
+        entity_type="CyclingAdvocate",
+        entity_summary="Cycling advocacy group.",
+        entity_attributes={},
+        context="Radweg-Konflikt München",
+    )
+
+    assert _CapturingLLMClient.last_instance is not None
+    init_kwargs = _CapturingLLMClient.last_instance.init_kwargs
+    assert init_kwargs["provider_type"] == "codex_cli"
+    assert init_kwargs["base_url"] is None

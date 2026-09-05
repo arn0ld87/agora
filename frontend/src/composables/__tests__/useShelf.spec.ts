@@ -378,7 +378,7 @@ describe('dynamische Statusschluessel — Locale-Treffer vs. Rohwert', () => {
 
   it('zeigt den Rohstatus statt des Schluessels, wenn die Locales ihn nicht kennen', () => {
     // Backend-Enums wachsen schneller als Uebersetzungen. Ein unbekannter
-    // Wert darf nie als „shelf.status.report_xyz" in der Ablage landen.
+    // Wert darf nie als „shelf.status.report_xyz“ in der Ablage landen.
     const objs = buildShelfObjects(
       [],
       [makeReport({ status: 'kuenftiger_status' as Report['status'] })],

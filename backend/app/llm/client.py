@@ -18,6 +18,7 @@ from openai import OpenAI
 from pydantic import BaseModel
 
 from ..config import Config
+from ..contracts.provider_types import PROVIDER_CODEX_CLI
 from ..contracts.llm_routing_contract import ResolvedRoute, ReasoningEffort
 from ..utils.logger import get_logger
 from ..utils.retry import llm_call_with_retry
@@ -42,6 +43,7 @@ from .json_mode import (
 from .providers import base as _provider_base
 from .providers import ollama as _provider_ollama
 from .providers import openai as _provider_openai
+from .providers.codex_cli import CodexCliClient
 from .providers.registry import openai_compat_base_url
 from .request_plan import (
     TEMPERATURE_QUIRK,
@@ -66,6 +68,13 @@ def get_llm_provider_secrets_store() -> Any:
 class LLMClient:
     """LLM Client"""
 
+    # Klassen-Default (nicht nur Instanz-Attribut aus __init__): mehrere
+    # bestehende Tests bauen Instanzen ueber ``LLMClient.__new__(LLMClient)``
+    # und ueberspringen damit __init__ komplett. Ohne diesen Default wuerde
+    # jeder Aufruf von _is_ollama()/_is_minimax()/_detect_provider() auf
+    # solchen Instanzen mit AttributeError crashen.
+    _codex_cli_active: bool = False
+
     def __init__(
         self,
         api_key: Optional[str] = None,
@@ -81,6 +90,7 @@ class LLMClient:
         use_active_config: bool = True,
         api_key_source: Optional[str] = None,
         allow_api_key_fallback: bool = True,
+        provider_type: Optional[str] = None,
     ):
         # When no explicit model is set, fall back to the user's active
         # provider/model selection (Settings → LLM-Auswahl). Falls back to
@@ -92,6 +102,17 @@ class LLMClient:
         # (Caller hat den Key direkt übergeben), statt auf "unknown" durchzufallen.
         resolved_source: Optional[str] = (api_key_source or "passed_in") if api_key else None
         active_provider_id: Optional[str] = None
+        # Issue #1405: codex_cli hat weder base_url noch api_key — die
+        # Ollama/Minimax-URL-Heuristiken und der OpenAI-SDK-Client-Bau
+        # muessen dafuer explizit kurzgeschlossen werden statt sich auf
+        # Zufallstreffer eines (u.U. Ollama-artigen) Config.LLM_BASE_URL zu
+        # verlassen. Seed aus dem expliziten ``provider_type``-Parameter
+        # (z. B. von ``from_route()`` aus der geroutet Stage/Run-Connection
+        # abgeleitet) — Codex-Review-Finding: vorher wurde dieser Wert nur
+        # aus der GLOBALEN Active-Config gelesen, wodurch eine explizit
+        # geroutete codex_cli-Connection ignoriert wurde, sobald sie nicht
+        # zugleich der globale Default war.
+        resolved_provider_type: Optional[str] = provider_type
         # Issue #1101: Active-Config-Lookup ist Fallback für fehlende Werte,
         # nicht an ``model is None`` gekoppelt. Wurde das Modell vom Caller
         # explizit übergeben (Normalfall im Prepare/Run-Pfad:
@@ -129,6 +150,8 @@ class LLMClient:
                             None,
                         )
                         if descriptor is not None:
+                            if resolved_provider_type is None:
+                                resolved_provider_type = descriptor.type
                             if not base_url:
                                 base_url = descriptor.base_url
                             resolver = SecretResolver()
@@ -144,16 +167,6 @@ class LLMClient:
                 if active_pid and active_used:
                     active_provider_id = active_pid
 
-        if api_key:
-            self.api_key = api_key
-            # resolved_source bleibt erhalten (passed_in oder vom Resolver)
-        elif allow_api_key_fallback:
-            self.api_key = Config.LLM_API_KEY
-            if self.api_key:
-                resolved_source = "config_fallback"
-        else:
-            self.api_key = None
-        self.base_url = base_url or Config.LLM_BASE_URL
         self.model = model or Config.LLM_MODEL_NAME
         self.reasoning_effort = reasoning_effort or "none"
         self.provider_options = provider_options or {}
@@ -162,14 +175,19 @@ class LLMClient:
         self.route_stage = route_stage
         self.route_provider_id = route_provider_id
 
-        if not self.api_key:
-            raise ValueError("LLM_API_KEY not configured")
-
-        # Issue #1103 (CWE-319): credential-behaftete Requests duerfen nicht
-        # unverschluesselt an oeffentliche Hosts gehen. Muss vor dem
-        # OpenAI(...)-Client-Bau laufen, sonst geht der erste Request schon
-        # unverschluesselt raus.
-        ensure_credentialed_transport_security(self.base_url, self.api_key)
+        # Issue #1405: setzt self.api_key/self.base_url/self.client/
+        # self._codex_cli_active und baut den Transport auf (OpenAI-SDK oder
+        # CodexCliClient-Shim). Ausgelagert aus __init__ (radon MAI-17-Gate) —
+        # die codex_cli-Fallunterscheidung braucht mehrere Branches, die in
+        # __init__ selbst die Komplexitäts-Obergrenze gerissen haetten.
+        resolved_source = self._resolve_transport(
+            api_key=api_key,
+            base_url=base_url,
+            timeout=timeout,
+            resolved_provider_type=resolved_provider_type,
+            resolved_source=resolved_source,
+            allow_api_key_fallback=allow_api_key_fallback,
+        )
 
         # Track 1c Audit-Log: einmalig pro LLMClient-Init. Niemals den Key-Wert
         # selbst loggen — nur die Quelle (session/store/env:NAME/config_fallback/
@@ -187,18 +205,6 @@ class LLMClient:
             self.model,
             _UrlSanitizer().sanitize_url(self.base_url) if self.base_url else None,
             self._api_key_source,
-        )
-
-        # Issue #1072: ``self.base_url`` bleibt bewusst roh — Provider-Detection
-        # (``_detect_provider``), das Invocation-Log und der native Ollama-Pfad
-        # (``/api/chat``) haengen daran. Nur der OpenAI-SDK-Client bekommt die
-        # auf den Compat-Pfad kanonisierte Form: Ollama-Connections fuehren eine
-        # Base-URL ohne ``/v1``, ueber die ``POST /chat/completions`` mit
-        # Plaintext ``404 page not found`` beantwortet wird.
-        self.client = OpenAI(
-            api_key=self.api_key,
-            base_url=openai_compat_base_url(self.base_url, self.model),
-            timeout=timeout,
         )
 
         # Ollama context window size — prevents prompt truncation.
@@ -228,6 +234,76 @@ class LLMClient:
         self._retry_initial_delay = float(os.environ.get('LLM_RETRY_INITIAL_DELAY', '1.0'))
         self._retry_max_delay = float(os.environ.get('LLM_RETRY_MAX_DELAY', '30.0'))
 
+    def _resolve_transport(
+        self,
+        *,
+        api_key: Optional[str],
+        base_url: Optional[str],
+        timeout: float,
+        resolved_provider_type: Optional[str],
+        resolved_source: Optional[str],
+        allow_api_key_fallback: bool,
+    ) -> Optional[str]:
+        """Setzt api_key/base_url/client/``_codex_cli_active`` (Issue #1405).
+
+        codex_cli hat weder base_url noch api_key — beides ist fuer diesen
+        Provider architektonisch bedeutungslos (Subprozess statt HTTP, lokale
+        CLI-Login-Session statt Secret). Ausgelagert aus ``__init__``, damit
+        die codex_cli-Fallunterscheidung nicht dessen radon-Komplexitäts-
+        Budget sprengt (MAI-17-Gate).
+
+        Gibt die ggf. aktualisierte ``api_key_source`` fuer das Audit-Log
+        in ``__init__`` zurueck.
+        """
+        self._codex_cli_active = resolved_provider_type == PROVIDER_CODEX_CLI
+
+        if api_key:
+            self.api_key = api_key
+            # resolved_source bleibt erhalten (passed_in oder vom Resolver)
+        elif self._codex_cli_active:
+            # Kein Secret vorgesehen — der Platzhalter geht nirgendwo hin,
+            # er erfuellt nur die "ist ein Key gesetzt"-Invariante unten.
+            self.api_key = "codex-cli-local-session"
+            resolved_source = "local_cli_session"
+        elif allow_api_key_fallback:
+            self.api_key = Config.LLM_API_KEY
+            if self.api_key:
+                resolved_source = "config_fallback"
+        else:
+            self.api_key = None
+        self.base_url = None if self._codex_cli_active else (base_url or Config.LLM_BASE_URL)
+
+        if not self.api_key:
+            raise ValueError("LLM_API_KEY not configured")
+
+        if self._codex_cli_active:
+            # Issue #1405: kein OpenAI-SDK-Client — ``CodexCliClient`` ist ein
+            # Duck-Type-Shim, der nur ``.chat.completions.create(**kwargs)``
+            # nachbildet (die einzige Oberflaeche, die ``_provider_attempt``
+            # tatsaechlich ruft) und intern ``codex exec`` als Subprozess
+            # startet.
+            self.client = CodexCliClient()
+            return resolved_source
+
+        # Issue #1103 (CWE-319): credential-behaftete Requests duerfen nicht
+        # unverschluesselt an oeffentliche Hosts gehen. Muss vor dem
+        # OpenAI(...)-Client-Bau laufen, sonst geht der erste Request schon
+        # unverschluesselt raus.
+        ensure_credentialed_transport_security(self.base_url, self.api_key)
+        # Issue #1072: ``self.base_url`` bleibt bewusst roh — Provider-
+        # Detection (``_detect_provider``), das Invocation-Log und der native
+        # Ollama-Pfad (``/api/chat``) haengen daran. Nur der OpenAI-SDK-Client
+        # bekommt die auf den Compat-Pfad kanonisierte Form: Ollama-
+        # Connections fuehren eine Base-URL ohne ``/v1``, ueber die
+        # ``POST /chat/completions`` mit Plaintext ``404 page not found``
+        # beantwortet wird.
+        self.client = OpenAI(
+            api_key=self.api_key,
+            base_url=openai_compat_base_url(self.base_url, self.model),
+            timeout=timeout,
+        )
+        return resolved_source
+
     @classmethod
     def from_route(
         cls,
@@ -244,6 +320,21 @@ class LLMClient:
         """
         base_url = route.base_url_sanitized
         connection_only = route.provider_options.get("connection_only") is True
+
+        # Issue #1405 Codex-Review-Finding: der Provider-Typ der Route wurde
+        # zwar hier nachgeschlagen (fuer die api_key-Aufloesung unten), aber
+        # nie an ``cls(...)`` durchgereicht — eine explizit geroutete
+        # codex_cli-Connection blieb dadurch von der globalen Active-Config
+        # abhaengig statt von der tatsaechlichen Route. Reiner Metadaten-
+        # Lookup, kein Secret — deshalb unabhaengig von ``secret_resolver``/
+        # ``connection_only`` immer ausgefuehrt.
+        from ..services.llm_provider_registry import LlmProviderRegistry
+        _route_registry = LlmProviderRegistry()
+        _route_descriptor = next(
+            (p for p in _route_registry.get_providers() if p.id == route.provider_id),
+            None,
+        )
+        provider_type = _route_descriptor.type if _route_descriptor else None
         if connection_only:
             from ..services.secret_resolver import get_bound_store_api_key
 
@@ -262,21 +353,16 @@ class LLMClient:
         # This prevents leaking them into ResolvedRoute but allows LLMClient
         # to use them.
         if secret_resolver and not connection_only:
-            # We need to know the provider type to resolve the key correctly.
-            # ResolvedRoute only has provider_id.
-            # In a full implementation, we'd look up the provider descriptor.
-            # For now, we use the fallback logic in SecretResolver.
-            from ..services.llm_provider_registry import LlmProviderRegistry
-            registry = LlmProviderRegistry()
-            descriptor = next((p for p in registry.get_providers() if p.id == route.provider_id), None)
-
-            p_type = descriptor.type if descriptor else "unknown"
+            # Provider-Typ kommt aus dem Lookup oben (``_route_descriptor``) —
+            # ResolvedRoute traegt selbst nur provider_id.
             if not api_key:
-                api_key = secret_resolver.get_api_key(route.provider_id, p_type)
+                api_key = secret_resolver.get_api_key(route.provider_id, provider_type or "unknown")
                 api_key_source = getattr(secret_resolver, "last_source", None)
 
             # Use real base_url from provider_options if present, otherwise from descriptor
-            real_base = route.provider_options.get("base_url") or (descriptor.base_url if descriptor else None)
+            real_base = route.provider_options.get("base_url") or (
+                _route_descriptor.base_url if _route_descriptor else None
+            )
             if real_base:
                 base_url = real_base
 
@@ -291,6 +377,7 @@ class LLMClient:
             routing_version=route.routing_version,
             route_stage=route.stage,
             route_provider_id=route.provider_id,
+            provider_type=provider_type,
             api_key_source=api_key_source,
             use_active_config=not connection_only,
             allow_api_key_fallback=not connection_only,
@@ -298,18 +385,27 @@ class LLMClient:
 
     def _is_ollama(self) -> bool:
         """Determine whether the configured endpoint is an Ollama server.
-        
+
         Returns:
             `true` if the configured base URL identifies an Ollama server, `false` otherwise.
         """
+        # Issue #1405: codex_cli hat kein base_url — ohne diesen Kurzschluss
+        # wuerde ein zufaellig Ollama-artiger ``Config.LLM_BASE_URL`` (den
+        # ``self.base_url`` fuer codex_cli NICHT uebernimmt, aber diese
+        # Methode wird trotzdem robust gehalten) den Force-Stream-Pfad in
+        # ``chat()`` ausloesen, den der Codex-CLI-Shim nicht unterstuetzt.
+        if self._codex_cli_active:
+            return False
         return _provider_base.is_ollama(self.base_url)
 
     def _is_minimax(self) -> bool:
         """Determine whether the configured endpoint is a MiniMax service.
-        
+
         Returns:
             bool: `true` if the endpoint uses MiniMax, `false` otherwise.
         """
+        if self._codex_cli_active:
+            return False
         return self._detect_provider() == "minimax"
 
     def _minimax_thinking_extra_body(
@@ -417,11 +513,17 @@ class LLMClient:
     def _detect_provider(self) -> Literal["ollama", "cloud", "minimax", "openai", "google", "unknown"]:
         """
         Identify the LLM provider associated with the configured endpoint and model.
-        
+
         Returns:
             str: The provider name: ``"ollama"``, ``"cloud"``, ``"minimax"``,
                 ``"openai"``, ``"google"``, or ``"unknown"``.
         """
+        # codex_cli wird nie aus einer base_url erraten (verboten laut
+        # AGENTS.md: keine Detection-Heuristik neben registry.py::
+        # detect_provider) — es ist immer eine explizite Auswahl. "unknown"
+        # ist das korrekte Label fuer dieses Vokabular, nicht ein neuer Wert.
+        if self._codex_cli_active:
+            return "unknown"
         return _provider_base.detect_provider(self.base_url, self.model)
 
     def _publish_model_active(

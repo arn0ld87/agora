@@ -33,6 +33,7 @@ produktive Konfiguration je zu prüfen.
 """
 from __future__ import annotations
 
+import importlib.util
 import os
 import subprocess
 import sys
@@ -42,6 +43,29 @@ import pytest
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = BACKEND_DIR.parent
+
+# Seit #1410 ist nltk nicht mehr installiert: ``unstructured`` 0.27.5 nutzt
+# spacy statt nltk, und ein Wiedereinzug scheidet aus, weil
+# GHSA-8mgp-746c-j5xp (high) nltk <= 3.10.3 ohne gefixte Version trifft.
+# Ohne nltk hat der hier geprüfte Import-Guard schlicht keinen Gegenstand —
+# ``import nltk`` scheitert dann am ImportError statt am Guard, was die Tests
+# nicht schwächer, sondern gegenstandslos macht.
+#
+# Die Tests bleiben stehen, statt gelöscht zu werden: Sollte nltk je
+# zurückkehren, greifen sie sofort wieder und prüfen den Guard erneut. Der
+# Dockerfile-Test unten braucht nltk nicht und läuft unabhängig davon weiter.
+# ``tests/dependencies/test_dependency_ssot.py::test_nltk_is_absent_from_uv_lock``
+# hält den Abwesenheitszustand aktiv fest.
+_NLTK_INSTALLED = importlib.util.find_spec("nltk") is not None
+
+requires_nltk = pytest.mark.skipif(
+    not _NLTK_INSTALLED,
+    reason=(
+        "nltk ist nicht installiert (seit #1410 der Sollzustand, "
+        "GHSA-8mgp-746c-j5xp ohne Fix) — der Import-Guard hat keinen "
+        "Gegenstand. Siehe test_nltk_is_absent_from_uv_lock."
+    ),
+)
 
 
 def _run_without_optout(code: str, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -67,6 +91,7 @@ def _run_without_optout(code: str, cwd: Path) -> subprocess.CompletedProcess[str
     )
 
 
+@requires_nltk
 def test_guard_is_actually_active_without_optout() -> None:
     """Vorbedingung: ohne Opt-out blockiert nltk den Import wirklich.
 
@@ -86,6 +111,7 @@ def test_guard_is_actually_active_without_optout() -> None:
     )
 
 
+@requires_nltk
 @pytest.mark.parametrize(
     "cwd",
     [
@@ -109,6 +135,7 @@ def test_importing_app_unblocks_nltk(cwd: Path) -> None:
     )
 
 
+@requires_nltk
 def test_ingestion_entrypoint_unblocks_lazy_nltk_import() -> None:
     """Der reale Bruchpfad: ``unstructured`` lädt nltk lazy nach.
 

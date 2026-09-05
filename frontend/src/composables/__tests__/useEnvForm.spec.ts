@@ -8,6 +8,8 @@
  *   4. loadModels() Fehler: setzt ollamaReachable=false, loadingModels=false, ruft onError auf.
  *   5. localStorage-Persistence Sprache: beim Mount geladen, Änderung schreibt zurück.
  *   6. localStorage-Persistence Modellauswahl: überlebt Mount-Cycle.
+ *   7. #1290: Preset-Labels laufen über vue-i18n (label_key), nicht über den
+ *      Backend-Klartext.
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
@@ -25,7 +27,8 @@ const STORAGE_CUSTOM_MODEL = 'agora.lastCustomModel'
 // Mock t() — identity function; tests check key suffixes, not translated text
 // ---------------------------------------------------------------------------
 
-const t = (key: string): string => key
+const t = (key: string, params?: Record<string, unknown>): string =>
+  params ? `${key}(${Object.values(params).join(',')})` : key
 
 // ---------------------------------------------------------------------------
 // Mock API module
@@ -137,10 +140,12 @@ describe('useEnvForm', () => {
       expect(gemma).toBeTruthy()
       expect(gemma!.label).toBe('Gemma 3')
 
-      // Ollama-only (not in presets) entry
+      // Ollama-only (not in presets) entry — #1290: der "(Ollama)"-Zusatz ist
+      // kein hartkodierter String mehr, sondern step2.model.ollamaOption.
       const llama = opts.find((o) => o.value === 'llama3')
       expect(llama).toBeTruthy()
-      expect(llama!.label).toContain('Ollama')
+      expect(llama!.label).toContain('step2.model.ollamaOption')
+      expect(llama!.label).toContain('Llama 3')
 
       // Gemma3 appears only once (preset wins, Ollama-duplicate skipped)
       expect(opts.filter((o) => o.value === 'gemma3')).toHaveLength(1)
@@ -393,6 +398,78 @@ describe('useEnvForm', () => {
       await nextTick()
 
       expect(localStorageStub.getItem(STORAGE_CUSTOM_MODEL)).toBeNull()
+    })
+  })
+  // -------------------------------------------------------------------------
+  // Case 7 — Preset-Labels über vue-i18n (Issue #1290)
+  //
+  // Vor dem Fix rendert modelOptions `p.label || p.name` — der vom Backend
+  // gelieferte Klartext. Diese Tests sind ohne den Fix rot.
+  // -------------------------------------------------------------------------
+
+  describe('Case 7 — Preset-Labels laufen über vue-i18n (#1290)', () => {
+    const CATALOG: Record<string, string> = {
+      'llm.preset.ollama.qwen2_5_14b': 'Qwen 2.5 14B (local, low VRAM)',
+      'llm.preset.bedrock.glm_4_7_flash': 'GLM-4.7 Flash (Bedrock)',
+    }
+    const i18nT = (key: string, params?: Record<string, unknown>): string => {
+      const hit = CATALOG[key]
+      if (hit) return hit
+      return params ? `${key}(${Object.values(params).join(',')})` : key
+    }
+    const i18nTe = (key: string): boolean => key in CATALOG
+
+    it('übersetzt Presets über label_key statt den Backend-Klartext zu rendern', () => {
+      const f = useEnvForm({ t: i18nT, te: i18nTe })
+      f.presetModels.value = [
+        { name: 'qwen2.5:14b', label_key: 'llm.preset.ollama.qwen2_5_14b' },
+        { name: 'zai.glm-4.7-flash', label_key: 'llm.preset.bedrock.glm_4_7_flash' },
+      ]
+
+      const opts = f.modelOptions.value
+      expect(opts.find((o) => o.value === 'qwen2.5:14b')!.label).toBe(
+        'Qwen 2.5 14B (local, low VRAM)',
+      )
+      expect(opts.find((o) => o.value === 'zai.glm-4.7-flash')!.label).toBe(
+        'GLM-4.7 Flash (Bedrock)',
+      )
+    })
+
+    it('label_key schlägt einen mitgelieferten Legacy-label-Klartext', () => {
+      const f = useEnvForm({ t: i18nT, te: i18nTe })
+      f.presetModels.value = [
+        {
+          name: 'qwen2.5:14b',
+          label: 'Qwen 2.5 14B (lokal, GPU-arm)',
+          label_key: 'llm.preset.ollama.qwen2_5_14b',
+        },
+      ]
+
+      const label = f.modelOptions.value.find((o) => o.value === 'qwen2.5:14b')!.label
+      expect(label).toBe('Qwen 2.5 14B (local, low VRAM)')
+      expect(label).not.toBe('Qwen 2.5 14B (lokal, GPU-arm)')
+    })
+
+    it('unbekannter label_key fällt auf label, sonst auf name zurück', () => {
+      const f = useEnvForm({ t: i18nT, te: i18nTe })
+      f.presetModels.value = [
+        { name: 'alt:1b', label: 'Alt 1B', label_key: 'llm.preset.ollama.gibtsnicht' },
+        { name: 'roh:2b', label_key: 'llm.preset.ollama.auchnicht' },
+      ]
+
+      const opts = f.modelOptions.value
+      expect(opts.find((o) => o.value === 'alt:1b')!.label).toBe('Alt 1B')
+      expect(opts.find((o) => o.value === 'roh:2b')!.label).toBe('roh:2b')
+    })
+
+    it('Ollama-Zusatz kommt aus step2.model.ollamaOption, nicht aus einem String-Literal', () => {
+      const f = useEnvForm({ t: i18nT, te: i18nTe })
+      f.presetModels.value = []
+      f.ollamaModels.value = [{ name: 'llama3', label: 'llama3' }]
+
+      const label = f.modelOptions.value.find((o) => o.value === 'llama3')!.label
+      expect(label).toBe('step2.model.ollamaOption(llama3)')
+      expect(label).not.toBe('llama3 (Ollama)')
     })
   })
 })

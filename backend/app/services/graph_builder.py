@@ -33,7 +33,7 @@ logger = logging.getLogger('agora.graph_builder')
 class GraphBuildCancelled(Exception):
     """Signalisiert kooperativen Abbruch während ``add_text_batches()``.
 
-    Issue B2 (PLAN.md „Abbrechen & Pause"). Trägt die bereits fertig
+    Issue B2 (PLAN.md „Abbrechen & Pause“). Trägt die bereits fertig
     geschriebenen Episode-UUIDs (dieselbe Liste, die die Funktion im
     Erfolgsfall zurückgäbe) — ``services/graph_build.py::build_task`` nutzt
     sie, um den Graphen als unvollständig statt als abgeschlossen zu
@@ -107,7 +107,7 @@ class GraphBuilderService:
             chunk_overlap: Chunk overlap size
             batch_size: Number of chunks to send per batch
             ner_extractor: optionaler NER-Override pro Build-Run (Sub-Slice
-                „build-respects-frontend-model"). Wenn gesetzt, wird er an
+                „build-respects-frontend-model“). Wenn gesetzt, wird er an
                 ``storage.add_text`` durchgereicht — der Storage-Singleton-NER
                 bleibt unverändert für andere Pfade.
 
@@ -226,7 +226,7 @@ class GraphBuilderService:
                 "graph_info": graph_info.to_dict(),
                 "chunks_processed": total_chunks,
                 # Issue #1029: leere Liste ist der Normalfall und heißt
-                # „nichts ist still ausgefallen".
+                # „nichts ist still ausgefallen“.
                 "degradations": degradations.report().model_dump(mode="json"),
             })
 
@@ -268,7 +268,7 @@ class GraphBuilderService:
         Bis dahin rief ``_build_graph_worker`` ``complete_task``
         unbedingt, sobald alle Chunks durch waren — ohne ``node_count``,
         ``edge_count`` oder die Chunk-Erfolgsquote auch nur anzusehen. Ein
-        Graph mit 3 Entitäten und 0 Beziehungen meldete „Graph fertig",
+        Graph mit 3 Entitäten und 0 Beziehungen meldete „Graph fertig“,
         und der Report scheiterte Minuten später an fehlender Evidenz.
 
         Fehlende Beziehungen blockieren: Ein Graph ohne eine einzige Kante

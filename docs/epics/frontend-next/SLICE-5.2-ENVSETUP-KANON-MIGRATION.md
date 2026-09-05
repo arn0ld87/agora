@@ -105,7 +105,7 @@
   `grep -rn "STORAGE_MODEL\|storedEffectiveModel\|effectiveModel\b" frontend/src`
 
 ### (f) Kompatibilität/Hygiene
-- `LlmProfilePicker` ist bereits `@deprecated` (Slice 5.5, „keine neuen Importeure");
+- `LlmProfilePicker` ist bereits `@deprecated` (Slice 5.5, „keine neuen Importeure“);
   Entfernung ist der dokumentierte Folge-Schritt.
 - `AiModelPicker` ist der kanonische Picker laut AGENTS.md.
 - Zod-Spiegel `AiModelRefSchema` (`frontend/src/contracts/aiModelRef.ts`) validiert
@@ -165,7 +165,7 @@ nicht umgesetzt worden. Begründung, am Code belegt:
 
 - `useEffectiveModelSelection.effectiveRef` ist `computed(() => adapter.toAiModelRef(defaultsStore.globalDefault))`
   und damit vom globalen Workspace-Default abgeleitet. Es ist nie `null`, sobald ein globaler
-  Default existiert. „Nutzer hat nichts gewählt" wäre dadurch nicht ausdrückbar, Step 2 würde
+  Default existiert. „Nutzer hat nichts gewählt“ wäre dadurch nicht ausdrückbar, Step 2 würde
   immer ein `ai_model_ref` senden, und die Projektprofil-Präzedenz des Backends
   (`llm_routing_seed.py`) käme nie zum Zug. Das Akzeptanzkriterium „Projektprofil, explizite
   Auswahl und Default besitzen getestete Präzedenz" wäre unerfüllbar.
@@ -179,7 +179,7 @@ Default. `useEffectiveModelSelection` wird von Step 2 nicht verwendet.
 
 ### Abweichung 2 — `modelOption`/`customModel` bleiben in `useEnvForm`
 
-§2 („was entfällt") sah die vollständige Entfernung vor. Entfernt wurde nur die Persistenz:
+§2 („was entfällt“) sah die vollständige Entfernung vor. Entfernt wurde nur die Persistenz:
 `STORAGE_MODEL`, `STORAGE_CUSTOM_MODEL`, `storedEffectiveModel()` sowie sämtliche Restore- und
 Writer-Logik. `modelOption`, `customModel`, `modelOptions` und `effectiveModel()` bleiben, weil
 sie den Runtime-Provider-Pfad bedienen.

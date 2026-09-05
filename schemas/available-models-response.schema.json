@@ -1,0 +1,226 @@
+{
+  "$defs": {
+    "ModelPreset": {
+      "additionalProperties": false,
+      "description": "Ein Eintrag aus ``presets[]`` bzw. ``ollama[]``.",
+      "properties": {
+        "family": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Family"
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Kind"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "label_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label Key"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "parameter_size": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parameter Size"
+        },
+        "size": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Size"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ModelPreset",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/available-models-response.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Response von ``GET /api/simulation/available-models``.",
+  "properties": {
+    "agent_tools_enabled": {
+      "default": false,
+      "title": "Agent Tools Enabled",
+      "type": "boolean"
+    },
+    "current_default": {
+      "default": "",
+      "title": "Current Default",
+      "type": "string"
+    },
+    "default_language": {
+      "default": "de",
+      "title": "Default Language",
+      "type": "string"
+    },
+    "default_provider": {
+      "default": "unknown",
+      "title": "Default Provider",
+      "type": "string"
+    },
+    "max_tool_calls_per_action": {
+      "default": 2,
+      "title": "Max Tool Calls Per Action",
+      "type": "integer"
+    },
+    "neo4j_error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Neo4J Error"
+    },
+    "neo4j_reachable": {
+      "default": false,
+      "title": "Neo4J Reachable",
+      "type": "boolean"
+    },
+    "neo4j_uri": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Neo4J Uri"
+    },
+    "ollama": {
+      "items": {
+        "$ref": "#/$defs/ModelPreset"
+      },
+      "title": "Ollama",
+      "type": "array"
+    },
+    "ollama_base_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ollama Base Url"
+    },
+    "ollama_error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ollama Error"
+    },
+    "ollama_reachable": {
+      "default": false,
+      "title": "Ollama Reachable",
+      "type": "boolean"
+    },
+    "ollama_skip_reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ollama Skip Reason"
+    },
+    "ollama_skipped": {
+      "default": false,
+      "title": "Ollama Skipped",
+      "type": "boolean"
+    },
+    "ollama_skipped_provider": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ollama Skipped Provider"
+    },
+    "presets": {
+      "items": {
+        "$ref": "#/$defs/ModelPreset"
+      },
+      "title": "Presets",
+      "type": "array"
+    }
+  },
+  "title": "AvailableModelsResponse",
+  "type": "object"
+}

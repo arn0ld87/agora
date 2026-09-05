@@ -216,7 +216,7 @@ class TestBuildWorkerPublishesDegradations:
     def test_embedding_failure_appears_in_the_task_result(self):
         """Der Beweis, auf den es ankommt: Der Ausfall verlässt die Pipeline.
 
-        Ohne diesen Weg meldete der Graph-Build „Abgeschlossen", und
+        Ohne diesen Weg meldete der Graph-Build „Abgeschlossen“, und
         niemand außerhalb des Logs erfuhr, dass die semantische Suche auf
         Leer-Vektoren arbeitet.
         """

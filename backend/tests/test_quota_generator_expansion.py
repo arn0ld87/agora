@@ -1,7 +1,7 @@
 """Sub-Slice 20b — Generator-Erzwingung für PersonaQuotaPlan.
 
 20a hat die API-Boundary geöffnet, 22 die Persistenz gefixt — aber der
-Generator macht weiterhin „1 Persona pro Entity". Bei Quota=50 + nur 16
+Generator macht weiterhin „1 Persona pro Entity“. Bei Quota=50 + nur 16
 Entities im Pool failt der Run im post-generation _validate_persona_quota
 (Sub-Slice 06) als Drift-Marker. 20b füllt aktiv auf bis zur Quote: pro
 Segment werden so viele Personas erzeugt wie ``plan.targets[segment]``

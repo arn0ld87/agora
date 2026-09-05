@@ -208,7 +208,7 @@ def put_settings_secrets():
 
     # Doppelter Schutz: jeder Key MUSS ein Secret-Feld sein. Der
     # Validator akzeptiert mit ``allow_secrets=True`` alles; die
-    # Pflicht „nur Secrets hier" enforce-n wir einen Schritt früher,
+    # Pflicht „nur Secrets hier“ enforce-n wir einen Schritt früher,
     # damit eine versehentliche Vermischung lautstark scheitert.
     not_secret = [
         key for key in fields

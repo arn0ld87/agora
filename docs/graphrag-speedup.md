@@ -1,6 +1,6 @@
 # Agora GraphRAG Build Speedup
 
-Konkrete Schritte, um die GraphRAG-Build-Phase von „mehrere Minuten pro Dokument" auf „unter einer Minute" zu bringen. Getestet gegen Ollama Cloud.
+Konkrete Schritte, um die GraphRAG-Build-Phase von „mehrere Minuten pro Dokument“ auf „unter einer Minute“ zu bringen. Getestet gegen Ollama Cloud.
 
 Ziel-Repo: `nikmcfly/Agora`-Fork (oder kompatibel).
 

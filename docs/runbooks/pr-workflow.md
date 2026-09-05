@@ -145,6 +145,44 @@ Merge erst wenn:
 gh pr merge --squash
 ```
 
+### Branch-Protection: offene Review-Threads blockieren den Merge
+
+Seit 24.08.2026 ist auf `main` `required_conversation_resolution` aktiv (#1384).
+Ein **ungelöster Review-Thread blockiert den Merge technisch**, nicht nur sozial —
+der Merge-Button ist nicht klickbar, solange ein Thread offen ist.
+
+Anlass: PR #1380 wurde mit drei vom Review korrekt erkannten, unbehobenen
+Fehlern gemergt. Die CI war vollständig grün; die 17 Statusprüfungen griffen,
+der Review-Befund griff nicht.
+
+```bash
+# Ist-Zustand pruefen
+gh api repos/arn0ld87/agora/branches/main/protection \
+  -q '.required_conversation_resolution.enabled'   # -> true
+
+# Offene Threads eines PR zaehlen (CI-gruen heisst nicht thread-frei!)
+gh api graphql -f query='
+{ repository(owner:"arn0ld87", name:"agora") {
+    pullRequest(number:<N>) {
+      reviewThreads(first:50) { nodes { isResolved } } } } }' \
+  -q '[.data.repository.pullRequest.reviewThreads.nodes[]
+       | select(.isResolved==false)] | length'
+```
+
+Ein Thread wird über „Resolve conversation" geschlossen. Das ist eine bewusste
+Handlung: entweder ist der Befund behoben, oder er ist im Thread begründet
+zurückgewiesen. Beides ist zulässig, stilles Übergehen nicht mehr.
+
+**`strict` (Branch muss aktuell sein) bleibt bewusst deaktiviert.** Bei mehreren
+parallelen PRs würde jeder Merge auf `main` die 17 Checks aller übrigen PRs neu
+auslösen. Der Schutz vor semantischen Merge-Konflikten wiegt das bei kleinen,
+atomaren Slices nicht auf. Bei größeren Umbauten den PR vor dem Merge manuell
+rebasen.
+
+**Dependabot** ist davon nicht dauerhaft betroffen: Dependabot-PRs erhalten in
+der Regel keine Review-Threads. Bleibt ein Bot-Thread offen (z. B. von
+CodeRabbit), gilt derselbe Weg — auflösen oder begründet zurückweisen.
+
 ## 10. Cleanup
 
 ```bash

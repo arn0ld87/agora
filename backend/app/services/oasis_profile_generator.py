@@ -24,6 +24,7 @@ from ..contracts.pipeline_degradation_contract import (
     DegradationKind,
     DegradationSeverity,
 )
+from ..contracts.provider_types import PROVIDER_CODEX_CLI
 from .settings_layer import get_default_service as _get_settings
 from ..utils.llm_latency import measure_llm_latency
 from ..utils.logger import get_logger
@@ -602,6 +603,7 @@ class OasisProfileGenerator:
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         model_name: Optional[str] = None,
+        provider_type: Optional[str] = None,
         storage: Optional[GraphStorage] = None,
         graph_id: Optional[str] = None,
         language: Optional[str] = None,
@@ -611,13 +613,22 @@ class OasisProfileGenerator:
         # Budget-Enforcement (#984): die run_id des Prepare-Runs bindet jeden
         # LLM-Call dieser Generierung an den Budget-Enforcer des Runs.
         self.run_id = run_id
-        self.base_url = base_url or Config.LLM_BASE_URL
-        # Key und Base-URL muessen aus derselben Quelle stammen (#778). Loest der
-        # Aufrufer einen Provider-Endpoint auf, darf der .env-Key NICHT einspringen —
-        # sonst geht der lokale Ollama-Key an einen Fremd-Provider (404/401).
-        self.api_key = api_key or (
-            Config.LLM_API_KEY if self.base_url == Config.LLM_BASE_URL else None
-        )
+        self.provider_type = provider_type
+        if provider_type == PROVIDER_CODEX_CLI:
+            # Issue #1418: codex_cli (transport="cli", #1405) hat weder
+            # base_url noch api_key — der .env-Fallback unten wuerde das
+            # Modell aus der Route an einen fremden HTTP-Provider schicken
+            # (beobachtet: gpt-5.6-luna an https://api.minimax.io/v1 → 400).
+            self.base_url = None
+            self.api_key = api_key or "codex-cli-local-session"
+        else:
+            self.base_url = base_url or Config.LLM_BASE_URL
+            # Key und Base-URL muessen aus derselben Quelle stammen (#778). Loest der
+            # Aufrufer einen Provider-Endpoint auf, darf der .env-Key NICHT einspringen —
+            # sonst geht der lokale Ollama-Key an einen Fremd-Provider (404/401).
+            self.api_key = api_key or (
+                Config.LLM_API_KEY if self.base_url == Config.LLM_BASE_URL else None
+            )
         self.model_name = model_name or Config.LLM_MODEL_NAME
         # Language for generated personas ("de" or "en"); affects prompts and bio language.
         self.language = (language or Config.AGENT_LANGUAGE or "de").lower()
@@ -1122,17 +1133,17 @@ class OasisProfileGenerator:
         if self.language == "de":
             return f"""### Eignungsprüfung (vor allem anderen zu beantworten)
 
-Prüfe zuerst, ob „{entity_name}" überhaupt einen menschlichen Träger haben kann — also ob es Menschen gibt, die für diese Entität sprechen und im Szenario eine eigene Interessenlage vertreten.
+Prüfe zuerst, ob „{entity_name}“ überhaupt einen menschlichen Träger haben kann — also ob es Menschen gibt, die für diese Entität sprechen und im Szenario eine eigene Interessenlage vertreten.
 
-Setze `ineligible: true` und begründe knapp in `ineligible_reason`, wenn „{entity_name}" eines der folgenden ist:
-- eine Software, ein Modell, ein Werkzeug oder ein technisches System (auch wenn der Typ „{entity_type}" etwas anderes nahelegt)
+Setze `ineligible: true` und begründe knapp in `ineligible_reason`, wenn „{entity_name}“ eines der folgenden ist:
+- eine Software, ein Modell, ein Werkzeug oder ein technisches System (auch wenn der Typ „{entity_type}“ etwas anderes nahelegt)
 - ein Ort, eine Stadt, ein Bundesland oder eine Region
 - ein Datum, ein Termin, ein Zeitraum oder ein Meilenstein
 - ein Dokument, ein Abschnitt, eine Zulassung, ein Verfahren oder ein Regelwerk
 - ein Gerät, eine Infrastruktur oder eine Systemkomponente
 - ein abstrakter Begriff, ein Sammelbegriff oder das Analysewerkzeug selbst
 
-Der Entitätstyp ist dabei nur ein Hinweis, keine Antwort — er trägt in der Praxis häufig „Organization", auch wenn die Entität eine Software oder eine Stadt ist. Entscheide nach dem Namen und dem Kontext.
+Der Entitätstyp ist dabei nur ein Hinweis, keine Antwort — er trägt in der Praxis häufig „Organization“, auch wenn die Entität eine Software oder eine Stadt ist. Entscheide nach dem Namen und dem Kontext.
 
 Bei `ineligible: true` sind alle übrigen Felder bedeutungslos, müssen aber weiterhin schemagültig sein — sonst wird die Antwort verworfen, drei Versuche scheitern und die Entität landet über den regelbasierten Pfad doch als Persona im Lauf. Verwende genau: display_name und handle je ein Minuszeichen, age 30, gender other, mbti ISTJ, country DE, voice_register neutral-de, leere Strings für bio, persona und profession, leere Liste für interested_topics. Erfinde in diesem Fall KEINE Persona.
 
@@ -1232,6 +1243,9 @@ When `ineligible: false`, answer the task above as described."""
             # Budget-Enforcement (#984): ohne run_id gibt es keinen Enforcer —
             # Persona-Generierung liefe am harten Run-Budget vorbei.
             run_id=self.run_id,
+            # Issue #1418: ohne provider_type erkennt LLMClient codex_cli
+            # nicht als Subprozess-Provider und versucht einen HTTP-Call.
+            provider_type=self.provider_type,
         )
         messages = [
             {"role": "system", "content": self._get_system_prompt(is_individual)},
@@ -1743,9 +1757,20 @@ Important:
             return
 
         first_error = failed[0].generation_error or "unbekannt"
+        # Issue #1419: Faellt jede einzelne Persona aus, gibt es keine echte
+        # Stimme mehr — die Runde koennte nur noch Platzhalter befragen. Das
+        # ist kein Qualitaetsverlust, das ist ein leerer Lauf, und er darf
+        # ``bereit`` nicht erreichen. Solange eine echte Persona dabei ist,
+        # bleibt der Lauf verwertbar: die Platzhalter sind einzeln
+        # gekennzeichnet, der Leser kann sie gewichten.
+        severity = (
+            DegradationSeverity.BLOCKING
+            if len(failed) == len(present)
+            else DegradationSeverity.WARNING
+        )
         degradations.record(
             kind=DegradationKind.PERSONA_RULE_BASED_FALLBACK,
-            severity=DegradationSeverity.WARNING,
+            severity=severity,
             detail=(
                 f"{len(failed)} von {len(present)} Personas konnten nicht vom "
                 "Modell erzeugt werden und sind regelbasierte Platzhalter. "
@@ -2356,7 +2381,7 @@ Important:
             else:
                 logger.info(f"[{current}/{total}] Successfully generated persona: {entity.name} ({entity_type})")
 
-        # Issue B2 (PLAN.md „Abbrechen & Pause"): kooperativer Abbruch der
+        # Issue B2 (PLAN.md „Abbrechen & Pause“): kooperativer Abbruch der
         # Persona-Generierung. Bereits gestartete Persona-Generierungen
         # dürfen auslaufen — das ist akzeptiert (kein hartes Kill der
         # aktuell laufenden Anfrage). Nur das Nachlegen NEUER Arbeit stoppt

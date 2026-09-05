@@ -73,6 +73,7 @@ describe('canonical AI provider contracts', () => {
       'github_copilot',
       'bedrock',
       'cloud',
+      'codex_cli',
       'unknown',
     ])
     expect(providerConnectionJsonSchema.properties.base_url.anyOf).toContainEqual({ type: 'null' })

@@ -7,6 +7,7 @@ from typing import Literal, Optional
 from ..contracts import (
     PROVIDER_ANTHROPIC,
     PROVIDER_BEDROCK,
+    PROVIDER_CODEX_CLI,
     PROVIDER_GITHUB_COPILOT,
     PROVIDER_GOOGLE,
     PROVIDER_MINIMAX,
@@ -27,14 +28,21 @@ def _copilot_models() -> tuple[str, ...]:
     return GITHUB_COPILOT_MODELS
 
 
+def _codex_cli_models() -> tuple[str, ...]:
+    # Lazy import keeps the historical import boundary cycle-free.
+    from ..llm.providers.codex_cli import codex_cli_fallback_models
+
+    return codex_cli_fallback_models()
+
+
 @dataclass(frozen=True)
 class ProviderConnectionDefinition:
     """Die einzige Matrix fuer Lifecycle-, Discovery- und Legacy-Metadaten."""
 
     provider_kind: ProviderType
     display_name: str
-    transport: Literal["http", "local"]
-    auth_mode: Literal["none", "api_key"]
+    transport: Literal["http", "local", "cli"]
+    auth_mode: Literal["none", "api_key", "session"]
     default_base_url: str | None
     adapter_kind: str
     api_key_ref: str | None
@@ -132,6 +140,18 @@ _CONNECTION_DEFINITIONS: tuple[ProviderConnectionDefinition, ...] = (
     # Chat-Client spricht ``…/v1/chat/completions``. Damit unterscheidet sich
     # Bedrock von Ollama (dessen Default bewusst OHNE ``/v1`` steht, weil
     # ``/api/tags`` an der Wurzel haengt) und gleicht dem OpenAI-Default.
+    # Issue #1405: kein HTTP-Endpunkt, kein API-Key — spricht den lokal
+    # eingeloggten `codex`-CLI-Prozess (ChatGPT-Abo) per Subprozess an.
+    # ``auth_mode="session"`` heisst: die Authentifizierung lebt in der
+    # lokalen CLI-Login-Session (``codex login``), nicht in einem hier
+    # verwalteten Secret. ``transport="cli"`` weicht bewusst von "local"
+    # ab — "local" heisst im Rest dieser Matrix "lokaler HTTP-Server"
+    # (Ollama), nicht "kein HTTP". Siehe ``llm/providers/codex_cli.py``.
+    ProviderConnectionDefinition(
+        PROVIDER_CODEX_CLI, "Codex CLI (ChatGPT-Abo)", "cli", "session",
+        None, "codex_cli", None,
+        fallback_models=_codex_cli_models(),
+    ),
     ProviderConnectionDefinition(
         PROVIDER_BEDROCK, "Amazon Bedrock", "http", "api_key",
         "https://bedrock-mantle.eu-central-1.api.aws/v1",

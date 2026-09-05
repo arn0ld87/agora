@@ -24,10 +24,10 @@ const totalCount = computed(() => props.redditCount + props.twitterCount)
  * Mappt den Voting-Score eines Posts auf einen CSS-Klassen-Namen.
  *
  * #1209 5b: Die Leiste zeigte zuvor `sentiment` — ein Feld, das nie einen Wert
- * trug, also garantiert immer im „nicht erhoben"-Zweig landete und trotzdem wie
+ * trug, also garantiert immer im „nicht erhoben“-Zweig landete und trotzdem wie
  * eine Messung aussah. Sie zeigt jetzt `score` (num_likes - num_dislikes aus der
- * Simulations-DB), einen tatsächlich erhobenen Wert. 0 heißt „keine Votes", nicht
- * „nicht gemessen".
+ * Simulations-DB), einen tatsächlich erhobenen Wert. 0 heißt „keine Votes“, nicht
+ * „nicht gemessen“.
  *
  * score < 0 → negative (Widerspruch), 0 → neutral, > 0 → positive (Zustimmung)
  */
@@ -45,7 +45,7 @@ const heatbarPulses = computed(() => {
 })
 
 /** true wenn kein Post Resonanz erfahren hat — die Leiste wird gedimmt, damit
- * „alle neutral" nicht wie ein ausgewogenes Meinungsbild aussieht. */
+ * „alle neutral“ nicht wie ein ausgewogenes Meinungsbild aussieht. */
 const noResonanceYet = computed(() => {
   const posts = props.recentPosts ?? []
   return posts.length > 0 && posts.every((p) => (p.score ?? 0) === 0)

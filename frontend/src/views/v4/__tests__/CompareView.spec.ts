@@ -37,7 +37,7 @@ vi.mock('@/components/compare/BranchComparePanel.vue', () => ({
 // WICHTIG: in der Envelope-Form, die der Interceptor tatsaechlich
 // liefert. Der frueher hier gemockte nackte Array liess den Test gruen
 // laufen, waehrend die Ansicht in Wahrheit bei jedem Aufruf in den
-// catch-Zweig fiel und „Fehler beim Laden der Branches" zeigte.
+// catch-Zweig fiel und „Fehler beim Laden der Branches“ zeigte.
 vi.mock('@/api/simulation', () => ({
   listSimulationBranches: vi.fn().mockResolvedValue({ success: true, data: [] }),
 }))

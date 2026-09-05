@@ -198,7 +198,7 @@ describe('Shelf', () => {
   it('zeigt in der Jobs-Tabelle bei unbekanntem Status den Rohwert, nicht den i18n-Schluessel', async () => {
     // vue-i18n gibt bei einem fehlenden Schluessel den Schluessel selbst
     // zurueck. Ein Backend-Status, den die Locales noch nicht kennen,
-    // darf nicht als „shelf.status.xyz" in der Tabelle stehen.
+    // darf nicht als „shelf.status.xyz“ in der Tabelle stehen.
     const job: ShelfJobRow = {
       runId: 'run_1',
       runType: 'simulation_run',

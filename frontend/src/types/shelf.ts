@@ -1,10 +1,10 @@
 /**
- * Objektmodell der Ablage (Block B3, „Richtung B · Dossier").
+ * Objektmodell der Ablage (Block B3, „Richtung B · Dossier“).
  *
  * Vokabular verbindlich aus CONTEXT.md → Glossar:
  *   Lauf        — das ganze Vorhaben, eine Zeile in der Ablage
  *   Job         — ein Einzelschritt (RunRegistry, run_type) — nur im
- *                 Filter „Alle Jobs" sichtbar, nie Standardansicht
+ *                 Filter „Alle Jobs“ sichtbar, nie Standardansicht
  *   Bericht     — Leseergebnis, eigenes Objekt
  *   Personasatz — wiederverwendbare Personasammlung, eigenes Objekt
  *   Graph       — Quellenumfeld, eigenes Objekt
@@ -24,8 +24,8 @@ export const SHELF_KIND_TAG: Record<ShelfObjectKind, string> = {
 
 /**
  * Die Weiter-Aktion (aus Richtung C): jede Zeile sagt, was als
- * Naechstes zu tun ist — „9 Befunde pruefen", „Personas freigeben",
- * „Zusehen". `to` ist ein Router-Ziel; `kind` steuert die Betonung
+ * Naechstes zu tun ist — „9 Befunde pruefen“, „Personas freigeben“,
+ * „Zusehen“. `to` ist ein Router-Ziel; `kind` steuert die Betonung
  * (accent = normale Fortsetzung, warn = blockiert/Handlung noetig).
  */
 export interface NextAction {
@@ -42,7 +42,7 @@ export interface ShelfObject {
   /**
    * Statuszeile unter dem Titel — nennt Zustand ALS TEXT, nicht nur
    * als Farbe (Systemregel des Entwurfs): „Simulation pausiert ·
-   * Runde 12/20", „9 Red-Team-Befunde offen".
+   * Runde 12/20", „9 Red-Team-Befunde offen“.
    */
   statusLine: string
   /** Meta-Zeile: Zeitpunkt + technische ID (Geist Mono). */
@@ -73,7 +73,7 @@ export interface ShelfObject {
 export type ShelfFilter = 'alle' | ShelfObjectKind | 'jobs'
 
 /**
- * Rohebene fuer den Filter „Alle Jobs" (Q19c): ein Registry-Eintrag,
+ * Rohebene fuer den Filter „Alle Jobs“ (Q19c): ein Registry-Eintrag,
  * unaggregiert. Bewusst schmal — die Detailansicht ist das Dossier
  * des zugehoerigen Laufs, nicht eine eigene Job-Seite.
  */

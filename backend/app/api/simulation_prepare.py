@@ -84,9 +84,9 @@ def _parse_quota_plan(data: dict) -> Optional[PersonaQuotaPlan]:
 
     Sub-Slice 20a — API-Boundary für Persona-Quoten. Backwards-Compat:
     fehlendes oder ``None``-Feld → ``None`` (Service verhält sich wie
-    bisher). Leerer Dict ``{}`` zählt ebenfalls als „nicht gesetzt", weil
+    bisher). Leerer Dict ``{}`` zählt ebenfalls als „nicht gesetzt“, weil
     ein leerer Plan keinerlei Aussagekraft hat und sonst eine
-    ``ValidationError`` für „targets darf nicht leer sein" werfen würde —
+    ``ValidationError`` für „targets darf nicht leer sein“ werfen würde —
     Frontend kann den Eintrag dann mit `{}` defaulten ohne 400.
 
     Bei strukturell vorhandenem, aber inkonsistentem Plan
@@ -937,7 +937,7 @@ def _make_prepare_job(
                 task_id,
                 result={
                     **result_state.to_simple_dict(),
-                    # Leere Liste heißt „nichts ist still ausgefallen".
+                    # Leere Liste heißt „nichts ist still ausgefallen“.
                     "degradations": degradations.report().model_dump(mode="json"),
                 },
             )

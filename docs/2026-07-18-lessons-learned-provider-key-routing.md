@@ -11,7 +11,7 @@ fest.
 
 1. **Der `models/`-Prefix war NICHT die Ursache.** Der Gemini-OpenAI-Compat-
    Endpoint akzeptiert `gemini-2.5-flash-lite` **und** `models/gemini-2.5-flash-lite`
-   (beide HTTP 200, live verifiziert). Der 404 „model not found" war ein
+   (beide HTTP 200, live verifiziert). Der 404 „model not found“ war ein
    **Key-/Access-Problem**, kein Namensformat-Problem. → Der spekulative
    Prefix-Strip-Fix wurde wieder zurückgenommen.
 2. **Der eigentliche, wiederkehrende Blocker ist Key-Routing-Divergenz.** Die
@@ -21,12 +21,12 @@ fest.
    → Eigenes Follow-up-Issue.
 3. **MiniMax-Thinking lässt sich nur mit `MiniMax-M3` abschalten** (`thinking:
    {"type":"disabled"}`). Die `-highspeed`-Modelle (M2.x) ignorieren das Flag.
-4. **Der „Runde-1-Hänger" war ein einmaliger HF-Modell-Download**
+4. **Der „Runde-1-Hänger“ war ein einmaliger HF-Modell-Download**
    (`Twitter/twhin-bert-base`, ~1,1 GB, unauthenticated → rate-limited).
 
 ## Verifizierte Befunde
 
-### 1. 404 „model not found" = Key/Access, nicht Modellname
+### 1. 404 „model not found“ = Key/Access, nicht Modellname
 
 Live-Probe gegen den Gemini-Endpoint mit dem Store-Key (beide Formen):
 
@@ -69,7 +69,7 @@ Fallback"-Divergenz.
 
 **Konsequenz:** Der Backend-`LLMClient` (Report/Chat) funktioniert, weil er
 `active_llm_config` + Store nutzt; die **Sim-Prep** nicht. Deshalb wirken Sims
-„stumm", obwohl Provider und Key eigentlich korrekt hinterlegt sind.
+„stumm“, obwohl Provider und Key eigentlich korrekt hinterlegt sind.
 
 ### 3. MiniMax-Thinking (per OpenAI-Compat-Spec)
 
@@ -84,7 +84,7 @@ Live verifiziert: `MiniMax-M3` + `disabled` → `Hey!` (kein `<think>`);
 Thinking" ist also **M3** die einzige korrekte Wahl. Zusatznutzen: ohne
 `<think>`-Präfix zerschießen die Antworten die JSON-Config-/Report-Parser nicht.
 
-### 4. „Runde-1-Hänger" = HF-Cold-Download
+### 4. „Runde-1-Hänger“ = HF-Cold-Download
 
 Der OASIS-Subprozess lädt beim ersten Lauf `Twitter/twhin-bert-base` (~1,1 GB)
 von HuggingFace. Unauthenticated ist der Download rate-limited und blockiert die

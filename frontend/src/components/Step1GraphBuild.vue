@@ -200,7 +200,7 @@ function phaseVariant(phase) {
         <header class="card-head">
           <Kicker num="03" accent>{{ t('step1.next') }}</Kicker>
           <!--
-            Issue #1029: „Bereit" ist eine Aussage über das Ergebnis, nicht
+            Issue #1029: „Bereit“ ist eine Aussage über das Ergebnis, nicht
             über den Programmablauf. Ein Graph ohne Beziehungen hat den
             Build zwar überstanden, taugt aber nicht als Grundlage.
           -->

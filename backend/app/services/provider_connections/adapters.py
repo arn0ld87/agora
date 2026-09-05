@@ -137,6 +137,52 @@ class _UnsupportedAdapter:
         )
 
 
+class _CodexCliProbeAdapter:
+    """Probe fuer Issue #1405: kein HTTP-Discovery-Endpunkt, keine Live-Modelliste.
+
+    "unsupported" waere hier irrefuehrend — der Provider ist unterstuetzt,
+    hat nur keine per HTTP abfragbare Modell-Discovery. Der Probe prueft
+    stattdessen, ob das lokale ``codex``-Binary ueberhaupt auffindbar ist
+    (nicht den Login-Status — der zeigt sich erst beim echten Aufruf).
+
+    Codex-Review-Finding (#1405-Follow-up): ohne ``models`` im Ergebnis
+    weist ``_verify_selected_model`` (``app/services/llm_routing_seed.py``)
+    JEDE Modellauswahl fuer diese Connection zurueck — verbunden, aber nie
+    auswaehlbar. Der Fallback-Sentinel aus der Registry-Definition schliesst
+    diese Luecke, ohne einen moeglicherweise veralteten echten Modellnamen
+    zu erfinden.
+    """
+
+    def probe(
+        self, connection: ProviderConnection, api_key: str | None
+    ) -> ProviderProbeResult:
+        from app.llm.providers.codex_cli import (
+            discover_codex_cli_models,
+            is_codex_cli_available,
+        )
+        from app.services.llm_provider_registry import LlmProviderRegistry
+
+        if not is_codex_cli_available():
+            return ProviderProbeResult(
+                status="unavailable",
+                status_message="codex-CLI nicht im PATH gefunden — Installation + `codex login` pruefen.",
+            )
+        definition = LlmProviderRegistry.connection_definition(connection.provider_kind)
+        fallback_models = definition.fallback_models if definition else ()
+        # Der Sentinel bleibt hinter den echten Slugs stehen, statt von ihnen
+        # ersetzt zu werden: Eine bereits gespeicherte Routing-Auswahl auf
+        # ``codex-cli-default`` wuerde sonst von ``_verify_selected_model``
+        # verworfen, sobald die Discovery zum ersten Mal greift. Ausserdem
+        # bleibt "nimm, was `/model` in der CLI eingestellt hat" eine bewusst
+        # waehlbare Option.
+        model_ids = tuple(dict.fromkeys(discover_codex_cli_models() + fallback_models))
+        return ProviderProbeResult(
+            status="available",
+            status_message=None,
+            models=tuple(_ai_model(connection, model_id) for model_id in model_ids),
+        )
+
+
 def adapter_for_connection(
     provider_kind: str,
     *,
@@ -150,6 +196,8 @@ def adapter_for_connection(
     definition = LlmProviderRegistry.connection_definition(provider_kind)
     if definition is None or definition.adapter_kind == "unsupported":
         return _UnsupportedAdapter()
+    if definition.adapter_kind == "codex_cli":
+        return _CodexCliProbeAdapter()
     protocol = _PROTOCOLS.get(definition.adapter_kind)
     if protocol is None:
         return _UnsupportedAdapter()

@@ -23,7 +23,7 @@ type Translate = (key: string, values?: Record<string, unknown>) => string
  * werden ueber linked_ids.simulation_id (bevorzugt) bzw.
  * linked_ids.project_id zu einem Lauf zusammengefasst; die Zeile
  * zeigt den Zustand des juengsten Jobs. Die Rohebene bleibt ueber
- * den Filter „Alle Jobs" erreichbar.
+ * den Filter „Alle Jobs“ erreichbar.
  */
 
 function linkedString(run: RunDetail, key: string): string | null {
@@ -122,7 +122,7 @@ export function groupJobsByEndeavor(runs: RunDetail[]): Map<string, RunDetail[]>
  * zurueck — ein `{ fallback }`-Argument existiert nicht, es wuerde nur
  * in eine gefundene Message interpoliert. Ohne diese Pruefung stuende
  * bei einem Status, den die Locales (noch) nicht kennen, woertlich
- * „shelf.status.report_xyz" in der Ablage. Backend-Enums wachsen
+ * „shelf.status.report_xyz“ in der Ablage. Backend-Enums wachsen
  * schneller als Uebersetzungen, deshalb faellt der Rohwert durch.
  */
 export function statusText(t: Translate, key: string, raw: string): string {

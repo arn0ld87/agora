@@ -7,7 +7,7 @@
  * drei `agora.*.aiModelRef`-localStorage-Keys, Legacy-Profile). Zwei Runtime-
  * Pfade lasen verschiedene Quellen: `llm/client.py` (use_active_config) →
  * `active-config`, `stage_model_router.py` → `routing/defaults.global_default`.
- * Das war die Ursache der gemeldeten „inkonsistenten Modellauswahl".
+ * Das war die Ursache der gemeldeten „inkonsistenten Modellauswahl“.
  *
  * Kanon (AGENTS.md): `routing/defaults.global_default`, repräsentiert als
  * {@link AiModelRef} über {@link useAiModelRefAdapter}. `active-config` wird
