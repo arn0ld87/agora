@@ -828,7 +828,8 @@
       "trigger": "User menu, signed in as {name}",
       "triggerUnknown": "Open user menu",
       "profile": "Profile",
-      "settings": "Settings"
+      "settings": "Settings",
+      "help": "Help"
     }
   },
   "logs": {
@@ -1648,6 +1649,10 @@
     "stepSimulation": {
       "title": "Simulation",
       "subtitle": "Start and observe multi-agent simulation run"
+    },
+    "stepSimulationFeed": {
+      "title": "Live feed",
+      "subtitle": "Follow Reddit and Twitter activity of the running simulation"
     }
   },
   "runBudget": {

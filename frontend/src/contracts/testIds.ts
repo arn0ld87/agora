@@ -62,6 +62,9 @@ export const ShellTestId = {
   // Breakpoint ganz aus dem Markup (nicht nur CSS-versteckt) — braucht
   // deshalb eine eigene testid, um das in Komponenten-Tests zu pruefen.
   cmdkTrigger: 'shell-cmdk-trigger',
+  // Redesign PR 2 (Chrome bereinigen): Log-Drawer wandert von der globalen
+  // FAB (App.vue) in ein Kopfzeilen-Icon — in BEIDEN Huellen unter dieser ID.
+  logsTrigger: 'shell-logs-trigger',
   panelShelf: 'shell-panel-shelf',
   panelDossier: 'shell-panel-dossier',
 } as const
