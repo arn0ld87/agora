@@ -21,6 +21,7 @@ import pytest
 from app.contracts.llm_routing_contract import ResolvedRoute
 from app.llm.providers.codex_cli import (
     CLI_TRANSPORT_VALUE,
+    CODEX_CLI_BINARY_ENV,
     TRANSPORT_ENV_KEY,
     build_shim_message,
     build_tool_prompt,
@@ -367,7 +368,7 @@ class TestCodexCliModel:
         assert [c.choices[0].message.content for c in completions] == ["ok"] * 3
         assert elapsed < 0.7, f"Aufrufe liefen seriell ({elapsed:.2f}s statt ~0.3s)"
 
-    def test_cancellation_kills_the_child_process(self, model):
+    def test_cancellation_kills_the_child_process(self, model, monkeypatch):
         """CodeRabbit-Finding zu #1423: ein Thread laesst sich nicht abbrechen.
 
         Wird ein Agent-Task gecancelt (Simulation gestoppt, Runden-Timeout),
@@ -376,6 +377,11 @@ class TestCodexCliModel:
         ein langlaufendes ``sleep`` und prueft, dass der Abbruch es beendet.
         """
         import asyncio
+
+        # ``build_codex_cli_command`` prueft das Binary im PATH, bevor der
+        # Spy unten ueberhaupt greift. Auf CI-Runnern ist ``codex`` nicht
+        # installiert — ``sleep`` ist es ueberall und erfuellt dasselbe Gate.
+        monkeypatch.setenv(CODEX_CLI_BINARY_ENV, "sleep")
 
         async def _drive():
             # ``sleep 60`` als Platzhalter fuer einen haengenden codex-Aufruf.
@@ -390,7 +396,15 @@ class TestCodexCliModel:
             asyncio.create_subprocess_exec = _spy  # type: ignore[assignment]
             try:
                 task = asyncio.ensure_future(model._ainvoke("prompt"))
-                await asyncio.sleep(0.3)  # Prozess sicher gestartet
+                # Aktiv auf den Start warten statt fix zu schlafen: unter
+                # CI-Last reichte eine feste Wartezeit nicht und der Test
+                # cancelte, bevor es ueberhaupt einen Kindprozess gab.
+                deadline = asyncio.get_running_loop().time() + 10.0
+                while "proc" not in proc_holder:
+                    assert asyncio.get_running_loop().time() < deadline, (
+                        "Kindprozess wurde nicht gestartet"
+                    )
+                    await asyncio.sleep(0.02)
                 task.cancel()
                 with pytest.raises(asyncio.CancelledError):
                     await task
