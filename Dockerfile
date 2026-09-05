@@ -359,7 +359,7 @@ CMD ["/app/backend/.venv/bin/gunicorn", \
      "wsgi:app"]
 
 # ---------- proxy (nginx-Sidecar mit eingebackenem Frontend-Bundle) ----------
-FROM nginx:alpine@sha256:4a73073bd557c65b759505da037898b61f1be6cbcc3c2c3aeac22d2a470c1752 AS proxy
+FROM nginx:alpine@sha256:72ba65eb42c10344912a84ff42408db7d34f2feb642204570ab8fc5ffd29f1d3 AS proxy
 # Alpine-Pakete auf Repo-Stand heben, solange das Base-Image hinterherhinkt:
 # CVE-2026-33630 (c-ares < 1.34.8-r0), CVE-2026-56407/-56408/-56131
 # (libexpat < 2.8.2-r0) — Trivy-Gate scannt HIGH/CRITICAL mit exit-code 1.
