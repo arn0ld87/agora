@@ -74,6 +74,9 @@ def test_repro_bug_b_oasis_profile_generator_thinking_tokens_parsing():
     generator.base_url = "https://llm.invalid/v1"
     generator.api_key = "test-key"
     generator.language = "de"
+    # Issue #1418: _generate_profile_with_llm reicht den gerouteten
+    # Provider-Typ an LLMClient durch; hier ist der HTTP-Normalfall gemeint.
+    generator.provider_type = None
     generator._industry_quota_plan = MagicMock()
 
     mock_response = MagicMock()
@@ -130,6 +133,9 @@ def test_repro_bug_b_oasis_profile_generator_handles_none_or_empty_content():
     generator.base_url = "https://llm.invalid/v1"
     generator.api_key = "test-key"
     generator.language = "de"
+    # Issue #1418: _generate_profile_with_llm reicht den gerouteten
+    # Provider-Typ an LLMClient durch; hier ist der HTTP-Normalfall gemeint.
+    generator.provider_type = None
     generator._industry_quota_plan = MagicMock()
 
     mock_response = MagicMock()

@@ -129,6 +129,42 @@ def _load_persona_count(agent: Any) -> int:
     return len(profiles) if isinstance(profiles, list) else 0
 
 
+def _load_persona_fallback_stats(agent: Any) -> tuple[int, int]:
+    """(Platzhalter, gesamt) fuer die Degradierungssumme des Laufs (#1419).
+
+    Gezaehlt wird ``generation_error``, nicht ``generation_source``: die
+    bewusste Wahl ``use_llm_for_profiles=False`` erzeugt ebenfalls
+    regelbasierte Profile und ist keine Degradierung. Nur der Ausfall nach
+    gescheiterten LLM-Versuchen zaehlt.
+
+    Wie beim Persona-Floor gilt: das Gate darf am Store nicht scheitern.
+    Ohne lesbare Profile wird nichts behauptet.
+    """
+    try:
+        profiles = resolve_default_store().read_json(
+            agent.simulation_id,
+            "reddit_profiles",
+            default=[],
+        )
+    except Exception as exc:  # noqa: BLE001 — Gate darf am Store nicht scheitern
+        logger.warning(
+            "persona-fallback check: failed to read profiles for simulation %s: %r",
+            getattr(agent, "simulation_id", "<unknown>"),
+            exc,
+        )
+        return (0, 0)
+
+    if not isinstance(profiles, list):
+        return (0, 0)
+
+    failed = sum(
+        1
+        for profile in profiles
+        if isinstance(profile, dict) and profile.get("generation_error")
+    )
+    return (failed, len(profiles))
+
+
 def _load_persona_floor(agent: Any) -> int:
     """Effektiver Persona-Floor für das Report-Contract-Gate.
 
@@ -1247,7 +1283,15 @@ def _build_partial_report(
     # von einer unangetasteten nicht zu unterscheiden. Im flüchtigen
     # RunEventLog ist die Menge zu diesem Zeitpunkt vollständig; hier wird
     # die Summe gezogen, statt sie beim Abbruch zu verlieren.
+    # Issue #1419 (Codex-Review PR #1420): auch der Teil-Report muss sagen,
+    # worauf er beruht. Ohne die Persona-Zahlen ging ein nach dem Abbruch
+    # finalisierter Bericht als COMPLETED hinaus, obwohl saemtliche Stimmen
+    # darin regelbasierte Platzhalter waren — genau die Luecke, die der
+    # Normalpfad seit diesem Issue schliesst.
+    persona_fallbacks, persona_total = _load_persona_fallback_stats(agent)
     report.run_degradations = collect_run_degradations(
+        persona_fallback_count=persona_fallbacks,
+        persona_total=persona_total,
         work_trace_removed_section_indices=sorted(
             events_for(agent).work_trace_removed_sections
         ),
@@ -1605,8 +1649,15 @@ def generate_report(
         # einer gescheiterten Simulation mit 45 von 48 Runden und null
         # zustande gekommenen Interviews — jede Komponente tat, was sie sollte,
         # nur zog niemand die Summe.
+        persona_fallbacks, persona_total = _load_persona_fallback_stats(agent)
         report.run_degradations = collect_run_degradations(
             simulation_snapshot=report.simulation_snapshot,
+            # Issue #1419: Ein Lauf, dessen Personas saemtlich Platzhalter
+            # waren, meldete sich bis hierher als vollstaendig. Die
+            # Vorbereitung erfasst den Ausfall bereits — nur zog ihn niemand
+            # in den Bericht, der am Ende weitergegeben wird.
+            persona_fallback_count=persona_fallbacks,
+            persona_total=persona_total,
             interviews_requested=breaker_for(agent).request_count("interview_agents"),
             interviews_succeeded=_count_interview_evidence(agent),
             interview_disabled_reason=breaker_for(agent).reason_for("interview_agents"),

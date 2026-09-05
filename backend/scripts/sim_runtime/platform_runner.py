@@ -54,6 +54,17 @@ except ImportError:  # direct script execution
         seed_simulation_rng,
     )
 
+# Issue #1423: CLI-Transport (codex_cli). Der Fallback zeigt auf
+# ``sim_runtime.codex_cli_model``, NICHT auf ``codex_cli_model``: bei direkter
+# Skriptausfuehrung liegt ``scripts/`` im ``sys.path``, nicht
+# ``scripts/sim_runtime/``. Ein nackter Modulname schlaegt dort mit
+# ``ModuleNotFoundError`` fehl — anders als bei ``_sim_common``, das eine Ebene
+# hoeher liegt. Dieselbe Form nutzt der ``sim_runtime.ipc``-Import unten.
+try:
+    from .codex_cli_model import CodexCliModel, cli_transport_active
+except ImportError:  # direct script execution
+    from sim_runtime.codex_cli_model import CodexCliModel, cli_transport_active
+
 # IPC layer (CommandType, constants, IPCHandler) — zentral in sim_runtime.ipc.
 try:
     from .sim_runtime.ipc import IPCHandler
@@ -183,6 +194,16 @@ class SinglePlatformRunner:
         # If not in .env, use config as fallback
         if not llm_model:
             llm_model = self.config.get("llm_model", "qwen3-coder-next:cloud")
+
+        # Issue #1423: CLI-Transport (codex_cli) hat weder base_url noch
+        # api_key — die URL-basierte Plattform-Erkennung darunter hat nichts
+        # zu mustern und liefe in den OPENAI-Zweig, der das geroutete Modell
+        # an das geerbte LLM_BASE_URL schickt. Das Signal kommt aus
+        # ``build_route_subprocess_env`` und ist damit an der Registry
+        # entschieden, nicht an einer zweiten Heuristik.
+        if cli_transport_active():
+            print(f"LLM configuration: model={llm_model}, transport=cli (codex)", flush=True)
+            return CodexCliModel(model_type=llm_model)
 
         platform = detect_oasis_platform(llm_model, llm_base_url)
         think_on = os.environ.get("OLLAMA_THINKING", "false").lower() in ("1", "true", "yes")

@@ -126,6 +126,101 @@ def test_build_partial_report_writes_metadata(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# Test 6: Persona-Degradierung erreicht auch den Teil-Report (Issue #1419)
+# ---------------------------------------------------------------------------
+
+
+def test_build_partial_report_carries_the_persona_degradation(tmp_path):
+    """Ein Abbruch darf den Persona-Ausfall nicht verschlucken.
+
+    Der Normalpfad zieht die Summe am Laufende; ein nach Stage 2
+    abgebrochener Report lief daran vorbei und ging als COMPLETED hinaus,
+    obwohl er auf 20 von 20 Platzhalter-Personas beruhte.
+    """
+    report_id = f"report_{uuid.uuid4().hex[:12]}"
+    report = _make_report(report_id)
+    outline = _make_outline(3)
+    agent = _make_agent(report_id)
+
+    store = MagicMock()
+    store.read_json.return_value = [
+        {"generation_source": "rule_based", "generation_error": "LLM tot"}
+        for _ in range(20)
+    ]
+
+    with (
+        patch("app.services.report_agent.workflow.ReportManager") as mock_rm,
+        patch(
+            "app.services.report_agent.workflow.resolve_default_store",
+            return_value=store,
+        ),
+    ):
+        report_folder = str(tmp_path / report_id)
+        os.makedirs(report_folder, exist_ok=True)
+        mock_rm.assemble_full_report.return_value = "## Section 1"
+        mock_rm._ensure_report_folder.return_value = report_folder
+        mock_rm._write_json_atomic.side_effect = lambda path, data: None
+
+        result = _build_partial_report(
+            report,
+            report_id=report_id,
+            completed_section_titles=["Section 1"],
+            outline=outline,
+            agent=agent,
+            progress_callback=None,
+        )
+
+    persona_entries = [
+        entry
+        for entry in result.run_degradations
+        if entry["component"] == "persona_generation"
+    ]
+    assert len(persona_entries) == 1
+    assert persona_entries[0]["reason"] == "20_of_20_personas_rule_based"
+    assert persona_entries[0]["severity"] == "blocking"
+    assert result.status == ReportStatus.INCOMPLETE
+
+
+def test_build_partial_report_stays_quiet_without_a_persona_fallback(tmp_path):
+    """Baseline: echte Personas aendern am bisherigen Teil-Report nichts."""
+    report_id = f"report_{uuid.uuid4().hex[:12]}"
+    report = _make_report(report_id)
+    agent = _make_agent(report_id)
+
+    store = MagicMock()
+    store.read_json.return_value = [{"generation_source": "llm"} for _ in range(20)]
+
+    with (
+        patch("app.services.report_agent.workflow.ReportManager") as mock_rm,
+        patch(
+            "app.services.report_agent.workflow.resolve_default_store",
+            return_value=store,
+        ),
+    ):
+        report_folder = str(tmp_path / report_id)
+        os.makedirs(report_folder, exist_ok=True)
+        mock_rm.assemble_full_report.return_value = "## Section 1"
+        mock_rm._ensure_report_folder.return_value = report_folder
+        mock_rm._write_json_atomic.side_effect = lambda path, data: None
+
+        result = _build_partial_report(
+            report,
+            report_id=report_id,
+            completed_section_titles=["Section 1"],
+            outline=_make_outline(3),
+            agent=agent,
+            progress_callback=None,
+        )
+
+    assert not [
+        entry
+        for entry in result.run_degradations
+        if entry["component"] == "persona_generation"
+    ]
+    assert result.status == ReportStatus.COMPLETED
+
+
+# ---------------------------------------------------------------------------
 # Test 1: generate_report bricht nach Stage 2 ab und liefert Teilreport
 # ---------------------------------------------------------------------------
 

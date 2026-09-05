@@ -138,6 +138,17 @@ def test_registry_provider_route_reaches_provider_endpoint_not_stale_env(
         def get_providers(self) -> list[_Descriptor]:
             return [_Descriptor()]
 
+        @staticmethod
+        def connection_definition(provider_kind: str):
+            """Issue #1423: ``build_route_subprocess_env`` fragt die Registry,
+            ob der Provider ueber die CLI statt ueber HTTP spricht.
+
+            ``stub-prov`` steht in keiner Verbindungsmatrix — die echte
+            Registry lieferte hier ebenfalls ``None`` (HTTP-Pfad).
+            """
+            del provider_kind
+            return None
+
     monkeypatch.setattr(
         "app.services.llm_routing_seed.LlmProviderRegistry", _Registry
     )

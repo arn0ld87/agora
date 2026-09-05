@@ -226,13 +226,13 @@ class TestPrepareRequiresResolvedRoute:
         """``use_llm_for_profiles=False`` ist ein legitimer Wunsch nach
         regelbasierter Generierung und darf nicht als Fehlkonfiguration gelten.
         """
-        assert _resolve_llm_connection(None, require=False) == (None, None)
+        assert _resolve_llm_connection(None, require=False) == (None, None, None)
 
     def test_resolved_route_passes_through(self) -> None:
         """Der Normalfall bleibt unveraendert: Route liefert Key und Endpoint."""
         route = _route("ollama_cloud", base_url="https://ollama.com/v1")
 
-        _, base_url = _resolve_llm_connection(route)
+        _, base_url, _ = _resolve_llm_connection(route)
 
         assert base_url == "https://ollama.com/v1"
 
@@ -254,6 +254,54 @@ class TestPrepareRequiresResolvedRoute:
         """``require=False`` bleibt wie bisher: kein Abbruch, nur kein Endpoint."""
         route = _route("openai", base_url=None)
 
-        _, base_url = _resolve_llm_connection(route, require=False)
+        _, base_url, _ = _resolve_llm_connection(route, require=False)
 
         assert base_url is None
+
+
+class TestResolveLlmConnectionCliTransport:
+    """Defekt D (Issue #1418): ``codex_cli`` (transport="cli", #1405) hat by
+    design weder ``base_url`` noch ``api_key`` — der #1104-Guard oben durfte
+    das nie als "nicht aufgeloest" lesen, sonst greift exakt derselbe
+    ``.env``-Fallback wie bei Defekt C, nur fuer einen Provider ohne
+    HTTP-Endpoint (beobachtet: ``gpt-5.6-luna`` an ``https://api.minimax.io/v1``
+    → HTTP 400 statt an den lokal eingeloggten ``codex``-Subprozess).
+    """
+
+    def test_resolved_route_cli_transport_without_base_url_does_not_raise(
+        self,
+    ) -> None:
+        route = _route("codex_cli", base_url=None)
+
+        api_key, base_url, provider_type = _resolve_llm_connection(route)
+
+        assert base_url is None
+        assert provider_type == "codex_cli"
+
+    def test_resolved_route_http_transport_without_base_url_still_raises(
+        self,
+    ) -> None:
+        """Gegenprobe: ein HTTP-Provider ohne base_url bleibt ein Fehler —
+        die CLI-Ausnahme darf nicht versehentlich auf alle Provider zutreffen.
+        """
+        route = _route("openai", base_url=None)
+
+        with pytest.raises(ValueError, match="kein Endpoint"):
+            _resolve_llm_connection(route)
+
+    def test_bridged_runtime_config_for_codex_cli_carries_provider_type(self) -> None:
+        """Der Restart-/Legacy-Pfad bridged eine ``ResolvedRoute`` vorher in
+        ``RuntimeLlmConfig`` (``build_runtime_llm_config``). Ohne einen
+        eigenen ``_ROUTE_TO_RUNTIME_PROVIDER``-Eintrag fuer codex_cli landete
+        die Route im generischen "custom_openai"-Bucket und der
+        Provider-Typ ging in genau diesem Zweig verloren.
+        """
+        from app.services.llm_routing_seed import build_runtime_llm_config
+
+        route = _route("codex_cli", base_url=None)
+        runtime = build_runtime_llm_config(route, api_key=None)
+
+        api_key, base_url, provider_type = _resolve_llm_connection(runtime)
+
+        assert base_url is None
+        assert provider_type == "codex_cli"

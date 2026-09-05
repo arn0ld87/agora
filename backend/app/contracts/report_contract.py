@@ -845,9 +845,19 @@ class RunDegradationModel(BaseModel):
 
     component: Literal[
         "simulation",
+        # Issue #1419: Personas, die nach gescheiterten LLM-Versuchen als
+        # regelbasierte Platzhalter in die Simulation gingen. Ihre Beitraege
+        # stehen im Bericht wie echte Stimmen — additiv ergaenzt, damit ein
+        # Report darueber Auskunft geben kann.
+        "persona_generation",
         "interview_agents",
         "section_generation",
         "section_metadata",
+        # Fehlende Analyseaspekte im fertigen Berichtstext (Issue #1302).
+        # Der ``requirement_checker`` schrieb diesen Wert seit seiner
+        # Einfuehrung, der Vertrag kannte ihn nicht — der Zod-Spiegel wies
+        # jede Antwort mit einem solchen Eintrag ab.
+        "requirement_checker",
         "contract_export",
     ]
     reason: str = Field(

@@ -23,9 +23,11 @@
     "dev:rebuild": "bash scripts/dev-rebuild.sh quick",
     "dev:rebuild:deps": "bash scripts/dev-rebuild.sh deps",
     "dev:rebuild:full": "bash scripts/dev-rebuild.sh full",
-    "dev:verify": "bash scripts/verify-deploy.sh"
+    "dev:verify": "bash scripts/verify-deploy.sh",
+    "bigpowers:sync": "bash scripts/sync-bigpowers.sh"
   },
   "devDependencies": {
+    "bigpowers": "^2.88.0",
     "concurrently": "^9.1.2"
   },
   "engines": {
