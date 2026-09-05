@@ -23,6 +23,7 @@ from app.llm.providers.codex_cli import (
     CLI_TRANSPORT_VALUE,
     CODEX_CLI_BINARY_ENV,
     TRANSPORT_ENV_KEY,
+    build_codex_cli_command,
     build_shim_message,
     build_tool_prompt,
     parse_tool_calls,
@@ -288,6 +289,83 @@ class TestFlattenMessages:
 
         assert "search_posts" in flat
         assert "<tool_call>" in flat
+
+
+class TestPromptGoesThroughStdin:
+    """Prod-Regression armserver 2026-09-05: ``OSError: [Errno 7] Argument
+    list too long`` — 12 Agenten-Turns einer Runde starben, weil der
+    Runden-Prompt (Persona + Historie + Werkzeugschemata) als einzelnes
+    argv-Element Linux' MAX_ARG_STRLEN von 128 KiB riss."""
+
+    def test_command_reads_instructions_from_stdin(self, monkeypatch):
+        """Die Kommandozeile nimmt keinen Prompt mehr entgegen — das
+        abschliessende ``-`` schickt ``codex exec`` an stdin. Damit ist sie
+        konstruktionsbedingt unabhaengig von der Promptlaenge."""
+        monkeypatch.setenv(CODEX_CLI_BINARY_ENV, "sleep")
+        cmd = build_codex_cli_command(model=None)
+
+        assert cmd[-1] == "-", "codex exec muss die Instruktionen von stdin lesen"
+
+    def test_sync_path_pipes_the_prompt(self, monkeypatch):
+        """Der synchrone Provider-Pfad muss den Prompt an stdin uebergeben."""
+        from app.llm.providers import codex_cli as codex_module
+
+        seen: dict = {}
+
+        class _Result:
+            returncode = 0
+            stdout = "geantwortet"
+            stderr = ""
+
+        def _fake_run(cmd, **kwargs):
+            seen["cmd"] = cmd
+            seen["input"] = kwargs.get("input")
+            return _Result()
+
+        monkeypatch.setenv(CODEX_CLI_BINARY_ENV, "sleep")
+        monkeypatch.setattr(codex_module.subprocess, "run", _fake_run)
+
+        codex_module._run_codex_cli("ein sehr langer Prompt", model=None)
+
+        assert seen["input"] == "ein sehr langer Prompt"
+        assert seen["cmd"][-1] == "-"
+
+    def test_async_path_pipes_the_prompt(self, monkeypatch):
+        """Der abbrechbare async-Pfad (OASIS-Subprozess) muss den Prompt
+        genauso an stdin uebergeben wie der synchrone — nicht als argv-Element,
+        sonst reisst er dieselbe MAX_ARG_STRLEN-Grenze."""
+        import asyncio
+
+        from sim_runtime.codex_cli_model import CodexCliModel
+
+        monkeypatch.setenv(CODEX_CLI_BINARY_ENV, "sleep")
+        model = CodexCliModel(model_type="gpt-5.6-luna")
+
+        seen: dict = {}
+
+        class _FakeProc:
+            returncode = 0
+
+            async def communicate(self, input_bytes):
+                seen["communicate_input"] = input_bytes
+                return b"geantwortet", b""
+
+        async def _fake_create_subprocess_exec(*cmd, **kwargs):
+            seen["cmd"] = cmd
+            seen["kwargs"] = kwargs
+            return _FakeProc()
+
+        monkeypatch.setattr(
+            asyncio, "create_subprocess_exec", _fake_create_subprocess_exec
+        )
+
+        prompt = "ein sehr langer geheimer Prompt"
+        result = asyncio.run(model._ainvoke(prompt))
+
+        assert result == "geantwortet"
+        assert seen["kwargs"]["stdin"] == asyncio.subprocess.PIPE
+        assert seen["communicate_input"] == prompt.encode("utf-8")
+        assert all(prompt not in part for part in seen["cmd"])
 
 
 class TestCodexCliModel:

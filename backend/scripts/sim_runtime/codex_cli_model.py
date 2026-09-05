@@ -248,7 +248,7 @@ class CodexCliModel(BaseModelBackend):
         Nebeneffekt: der Event-Loop bleibt ohnehin frei, die parallele
         Ausfuehrung der Runde bleibt also erhalten.
         """
-        cmd = build_codex_cli_command(prompt, model=self._model_slug or None)
+        cmd = build_codex_cli_command(model=self._model_slug or None)
         timeout = codex_cli_timeout_seconds()
         with tempfile.TemporaryDirectory(prefix=codex_cli_scratch_dir_prefix()) as scratch:
             # Isoliertes CWD wie im synchronen Pfad: ``codex exec`` liest
@@ -257,6 +257,7 @@ class CodexCliModel(BaseModelBackend):
             try:
                 proc = await asyncio.create_subprocess_exec(
                     *cmd,
+                    stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                     cwd=scratch,
@@ -266,7 +267,13 @@ class CodexCliModel(BaseModelBackend):
                     f"codex exec konnte nicht gestartet werden: {exc}"
                 ) from exc
             try:
-                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout)
+                # Prompt ueber stdin, nicht als Argument: ein Runden-Prompt
+                # traegt Persona, Historie und Werkzeugschemata und riss als
+                # einzelnes argv-Element Linux' MAX_ARG_STRLEN von 128 KiB
+                # (Errno 7).
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(prompt.encode("utf-8")), timeout
+                )
             except asyncio.TimeoutError as exc:
                 await _terminate(proc)
                 raise CodexCliUnavailableError(
