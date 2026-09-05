@@ -1,0 +1,13 @@
+### Changed (LLM-Modell-Presets sind jetzt ein Pydantic-Vertrag statt einer Dict-Liste — 2026-08-24)
+
+- **`Config.LLM_MODEL_PRESETS` und die Response von `/api/simulation/available-models` liefen bisher außerhalb der Schema-Generierung.** Der Endpunkt reichte rohe Dicts unvalidiert durch, das Frontend spiegelte sie in einem handgeschriebenen TypeScript-Interface — ein CodeRabbit-P1-Finding auf [#1390](https://github.com/arn0ld87/agora/pull/1390), entgegen der Contracts-first-Regel aus AGENTS.md.
+- **`ModelPreset`/`AvailableModelsResponse` sind jetzt Pydantic-Modelle** (`backend/app/contracts/model_preset_contract.py`). Der Endpunkt konstruiert die Response darüber und validiert sie beim `model_dump`, statt Dicts durchzureichen.
+- **`label` bleibt bewusst ein optionales Legacy-Feld** (Bestandsschutz aus [#1290](https://github.com/arn0ld87/agora/issues/1290)): Ollama-Tag-Einträge setzen es weiterhin auf den rohen Modellnamen, ältere Backends im Mischbetrieb können es für kuratierte Presets noch liefern. Ein `field_serializer` lässt ungesetzte Preset-Felder aus der Serialisierung weg statt sie als `null` zu senden — kuratierte Presets ohne `label` bekommen kein `"label": null` untergeschoben, sonst würde `test_no_preset_carries_hardcoded_label_text` durch die neue Validierung wieder scharf.
+- **Frontend-Spiegel `frontend/src/contracts/modelPresetContract.ts`** nach dem bestehenden Zod-Mechanismus (strikt, gegen `schemas/model-preset.schema.json` und `schemas/available-models-response.schema.json` getestet). `frontend/src/api/simulation.ts` re-exportiert die generierten Typen statt eigene Interfaces zu pflegen; `useEnvForm.ts` bezog `ModelPreset` bereits darüber (Rework aus [#1390](https://github.com/arn0ld87/agora/pull/1390)).
+- **`default_provider` ist im Vertrag bewusst `str`, nicht `Literal`** — analog zu `SystemStatusOllama.skipped_provider`: ein neuer Provider in `registry.py::detect_provider` (aktuell `ollama|cloud|minimax|openai|google|bedrock|unknown`) darf den Vertrag nicht brechen. Das vorherige TypeScript-Interface kannte nur vier der sieben Werte — `useEnvForm.ts`s `defaultProvider`-Ref ist entsprechend von der engen Union auf `string` geweitet.
+- **`frontend/src/i18n/modelPresetLabel.ts::ModelPresetLike` bleibt unverändert** — der eigene Minimal-Strukturtyp entkoppelt die i18n-Schicht bewusst vom API-Layer und ist kein Duplikat.
+
+- Tests: zwei Regressions-Waechter dokumentieren das offene CodeRabbit-Finding
+  zur Nullability optionaler Felder und zur Integer-Validierung in Zod.
+  Die Fixes erfordern eine Folge-Issue (Backend-Schema-Generator vs.
+  ``field_validator``; Frontend Schema-Spiegel-Mechanik).

@@ -269,6 +269,135 @@ def test_build_claims_uses_embedder_and_emits_match_score():
     assert not any("Bayern" in (e.get("snippet") or "") for e in matches)
 
 
+def test_build_claims_zerlegt_sammelclaim_und_bewertet_teile_einzeln():
+    """#1346: ein Sammelclaim mit 5 Voraussetzungen wird zu 5 Claims.
+
+    Belege existieren nur fuer 2 der 5 Bedingungen. Vor der Atomisierung an
+    der Extraktionsstufe waere das ein einziger Claim mit Teil-Evidence
+    gewesen (Adjudication-Gate stuft ihn dann als INSUFFICIENT ab, statt
+    ihn in 2 belegte + 3 unbelegte Einzelclaims zu zerlegen). Erwartet wird
+    hier die Granularitaet aus dem Issue: 5 eigenstaendige Claims, 2 davon
+    mit gebundener Evidence, 3 ohne (Anti-Dekorations-Guard →
+    confidence_label == "speculative").
+    """
+    agent = ReportAgent.__new__(ReportAgent)
+    # Die Snippets sind Obermengen der jeweils zugehoerigen Teilclaims (samt
+    # der geteilten Einleitung) — nur so erreicht die reale
+    # Wort-Deckungspruefung in ``classify_evidence`` (nicht der Fake-
+    # Embedder oben) die 0.60-Schwelle fuer SUPPORTED. Ein Snippet, das nur
+    # das Stichwort traegt, waere fuer den Retrieval-Schritt (Cosine)
+    # genug, aber die inhaltliche Deckung des ganzen Teilclaims priefte
+    # dann gegen eine Einleitung, die die Quelle gar nicht erwaehnt.
+    ev_datenschutz = {
+        "evidence_id": "ev_datenschutz",
+        "type": "graph_fact",
+        "source": "report_tool",
+        "snippet": (
+            "Der Rollout beginnt nur wenn folgende Bedingungen erfuellt "
+            "sind die Datenschutzfolgenabschaetzung ist abgeschlossen und "
+            "archiviert."
+        ),
+    }
+    ev_betriebsvereinbarung = {
+        "evidence_id": "ev_betriebsvereinbarung",
+        "type": "graph_fact",
+        "source": "report_tool",
+        "snippet": (
+            "Der Rollout beginnt nur wenn folgende Bedingungen erfuellt "
+            "sind die Betriebsvereinbarung ist unterschrieben und an alle "
+            "Teams verteilt."
+        ),
+    }
+    agent._active_section_evidence = [ev_datenschutz, ev_betriebsvereinbarung]
+    agent.evidence_map = {
+        "schema_version": 2,
+        "global_evidence": [],
+        # Real erhobene Evidence traegt eine evidence_id und steht im
+        # evidence_index (evidence.py::_record_evidence_item) — sonst
+        # findet ``resolved_evidence`` in _build_claims_for_section den
+        # Datensatz nicht und der Anti-Dekorations-Guard stuft jeden Claim
+        # unabhaengig von der Bindung auf "speculative" ab.
+        "evidence_index": {
+            "ev_datenschutz": ev_datenschutz,
+            "ev_betriebsvereinbarung": ev_betriebsvereinbarung,
+        },
+    }
+
+    # Deterministischer Fake-Embedder: eine Themen-Indikatordimension je
+    # Bedingung. Reales Bag-of-Words-Embedding wuerde hier die lange
+    # gemeinsame Einleitung ("Rollout beginnt nur wenn ...") in jedem
+    # Teilclaim mitzaehlen und die Cosine-Aehnlichkeit verwaessern — das
+    # Themensignal selbst ist der Testgegenstand, nicht das Embedding.
+    topics = [
+        "datenschutzfolgenabschaetzung",
+        "betriebsvereinbarung",
+        "penetrationstestprotokoll",
+        "lastverteilung",
+        "schulungsquote",
+    ]
+
+    def embed(text):
+        lowered = (text or "").lower()
+        return [1.0 if topic in lowered else 0.0 for topic in topics]
+
+    agent._embed_cache = embed
+
+    content = (
+        "Der Rollout beginnt nur wenn folgende Bedingungen erfuellt sind:\n"
+        "- die Datenschutzfolgenabschaetzung ist abgeschlossen\n"
+        "- die Betriebsvereinbarung ist unterschrieben\n"
+        "- das Penetrationstestprotokoll liegt vor\n"
+        "- die Lastverteilung ist dokumentiert\n"
+        "- die Schulungsquote von hundert Prozent ist erreicht"
+    )
+
+    claims = agent._build_claims_for_section(content)
+
+    assert len(claims) == 5
+    assert len({c["claim_id"] for c in claims}) == 5
+
+    texts = [c["claim_text"] for c in claims]
+    assert any("Datenschutzfolgenabschaetzung" in t for t in texts)
+    assert any("Betriebsvereinbarung" in t for t in texts)
+    assert any("Penetrationstestprotokoll" in t for t in texts)
+    assert any("Lastverteilung" in t for t in texts)
+    assert any("Schulungsquote" in t for t in texts)
+
+    belegt = [c for c in claims if c["confidence_label"] != "speculative"]
+    unbelegt = [c for c in claims if c["confidence_label"] == "speculative"]
+    assert len(belegt) == 2, f"erwarte 2 belegte Claims, war: {claims!r}"
+    assert len(unbelegt) == 3
+
+
+def test_build_claims_zerlegung_laesst_1316_filter_unberuehrt():
+    """#1346: die neue Zerlegung darf keine Gliederungsansage zurueckholen.
+
+    Ein Absatz mit Gliederungsankuendigung (#1316) direkt gefolgt von einem
+    Doppelpunkt-Listen-Sammelclaim: die Ankuendigung muss weiterhin
+    verworfen werden, nur der Sammelclaim wird zerlegt.
+    """
+    agent = ReportAgent.__new__(ReportAgent)
+    agent._active_section_evidence = []
+    agent.evidence_map = {"global_evidence": []}
+
+    content = (
+        "Im Folgenden werden die Voraussetzungen dargestellt.\n\n"
+        "Der Rollout beginnt nur wenn folgende Bedingungen erfuellt sind:\n"
+        "- die Datenschutzfolgenabschaetzung ist abgeschlossen\n"
+        "- die Betriebsvereinbarung ist unterschrieben"
+    )
+
+    claims = agent._build_claims_for_section(content)
+    texts = [c["claim_text"] for c in claims]
+
+    assert not any("Im Folgenden" in t for t in texts), (
+        f"Die Gliederungsansage darf kein Claim werden, war aber in: {texts!r}"
+    )
+    assert len(claims) == 2
+    assert any("Datenschutzfolgenabschaetzung" in t for t in texts)
+    assert any("Betriebsvereinbarung" in t for t in texts)
+
+
 def test_init_evidence_map_sets_schema_version_3(monkeypatch):
     """Kanonische Evidence-Maps tragen den ID-Vertrag schema_version=3."""
     agent = ReportAgent.__new__(ReportAgent)

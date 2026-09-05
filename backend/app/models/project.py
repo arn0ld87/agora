@@ -21,7 +21,7 @@ class ProjectStatus(str, Enum):
     ONTOLOGY_GENERATED = "ontology_generated"  # Ontology generated
     GRAPH_BUILDING = "graph_building"    # Graph building in progress
     GRAPH_COMPLETED = "graph_completed"  # Graph build completed
-    # Issue B2 (PLAN.md „Abbrechen & Pause"): kooperativer Abbruch eines
+    # Issue B2 (PLAN.md „Abbrechen & Pause“): kooperativer Abbruch eines
     # graph_build. Kein FAILED — der Graph trägt bereits committete
     # Episoden/Entities/Relations und bleibt auswertbar, nur unvollständig
     # gegenüber dem Ursprungsdokument.
@@ -56,7 +56,7 @@ class Project:
     chunk_overlap: int = 50
 
     # LLM-Auswahl, die der Benutzer im Frontend für diesen Projekt-Run
-    # gewählt hat (Sub-Slice „ontology-respects-frontend-model"). Wird beim
+    # gewählt hat (Sub-Slice „ontology-respects-frontend-model“). Wird beim
     # Ontology-Generate aus dem Request persistiert und kann von späteren
     # Stufen (Build/Persona/Report) als Default herangezogen werden, ohne
     # dass das Frontend bei jedem Folge-Request denselben Wert erneut

@@ -4,7 +4,7 @@
 
 **AS_OF:** 2026-08-09 · **Repo-HEAD:** `7e42ae34` (Branch `feat/1152-document-chunk-provenance`, inzwischen als `a1df2fae` auf `main` gemergt — PR #1155) · **Version:** 0.9.3 Stability Beta · **Modus:** Code-Audit, keine Web-Recherche. Alle Code-Aussagen am Branch-Stand verifiziert, nicht an README-Behauptungen.
 
-> **Korrektur vom 2026-08-09 (nach Lead-Gegenprüfung):** Der ursprüngliche Befund C56 („`supports_claim` wird im Interview-Item nicht gesetzt" → Teil-Defekt, P0-Maßnahme) ist **zurückgezogen**. Er beruhte auf einer Fehldeutung der zweistufigen Binding-Architektur. Details in §13 „Zurückgezogener Befund". Betroffene Stellen in §0, §1, §5, §7, §9, §11 und §13 sind entsprechend korrigiert.
+> **Korrektur vom 2026-08-09 (nach Lead-Gegenprüfung):** Der ursprüngliche Befund C56 („`supports_claim` wird im Interview-Item nicht gesetzt“ → Teil-Defekt, P0-Maßnahme) ist **zurückgezogen**. Er beruhte auf einer Fehldeutung der zweistufigen Binding-Architektur. Details in §13 „Zurückgezogener Befund“. Betroffene Stellen in §0, §1, §5, §7, §9, §11 und §13 sind entsprechend korrigiert.
 
 **Zitier-Schema:** `C<n>` Code-Beleg · `A<n>` ADR · `I<n>` Issue · `R<n>` Referenzlauf · `L<n>` Literatur. Vollständige Registry: `docs/paper/research-notes/citation-registry.md`.
 
@@ -110,11 +110,11 @@ Pro `EvidenceSourceKind` (6 Werte, [C2]): Provenance-Status, Auditierbarkeit, R�
 | **agent_action** (Simulation) | teilweise — sim_action_log (platform:round:agent:action:ts) | ja (syntaktisch) | ja bis Sim-Action, aber rein synthetisch | [C22] |
 | **graph_relation** (Graph-Fakt) | nur syntaktisch referenzierbar | ja (evidence_id) | **nein** — List[str] ohne doc_id/chunk_id, Fakt ohne Dokumentbezug | [C19, C20, C21] |
 | **web_source** | teilweise — URL im Anker | ja (URL) | ja bis URL, aber Fetch-Echtzeit, ggf. verfallen | [C22] |
-| **inferred** (Default) | LLM-abgeleitet — bewusst „nicht belegt" | ja (producer_key) | nein — per Definition abgeleitet | [C3, C7] |
+| **inferred** (Default) | LLM-abgeleitet — bewusst „nicht belegt“ | ja (producer_key) | nein — per Definition abgeleitet | [C3, C7] |
 
 **Zentrale Beobachtung:** Nur `agent_quote`, `agent_action` und `web_source` haben eine syntaktisch funktionsfähige Provenance — und alle drei sind entweder LLM-generiert (Persona) oder rein synthetisch (Simulation). Der einzige Evidence-Typ, der eine **echte externe Quelle** repräsentiert (`seed_corpus`), ist aktuell nicht auditierbar. Das ist genau der Befund, den ADR-0013 anprangert und den Teil B beheben soll [A4].
 
-**Counter-Claim:** „Der opake `seed_doc:`-Anker ist immerhin besser als gar kein Anker." ADR-0013 §Verworfene Alternativen widerlegt das direkt: *„Ein Anker, den niemand auflöst, belegt nichts. Er verleiht der Selbstauskunft des Modells nur die Form eines Belegs — das ist schlechter als gar kein Anker, weil es Prüfbarkeit vortäuscht."* [A4]
+**Counter-Claim:** „Der opake `seed_doc:`-Anker ist immerhin besser als gar kein Anker.“ ADR-0013 §Verworfene Alternativen widerlegt das direkt: *„Ein Anker, den niemand auflöst, belegt nichts. Er verleiht der Selbstauskunft des Modells nur die Form eines Belegs — das ist schlechter als gar kein Anker, weil es Prüfbarkeit vortäuscht.“* [A4]
 
 ---
 
@@ -126,19 +126,19 @@ Pro Agora-Mechanismus: hätte ein einzelner starker LLM-Prompt das auch? Bewertu
 |---|---|---|---|
 | Echo-Chamber-Index + `apply_echo_cap` (Cap bei >0.75) | ✗ | [C26, C28, C29] | Messung synthetischer Homogenität + Confidence-Drosselung — strukturell, nicht prompt-basierbar |
 | Wording-Glossar / Anti-Prediction | ◐ | [C30] | Per System-Prompt erreichbar, aber Agora pinnt es als Volltext-Snapshot + Red-Team-Enforcement |
-| Zweistufiges Binding (retrieval_score vs match_score) | ✗ | [C24, C25] | Cosine „gleiches Thema?" vs regelbasiertes Entailment „ist es ein Beleg?" — zwei verschiedene Fragen |
-| Deterministische Checks vor Embedding (Zahl/Bezugsgruppe/Modalität) | ✗ | [C25] | Verhindert „61 % Zeitersparnis → 61 % bewerten positiv" (ADR-0011 Defekt) [A3] |
+| Zweistufiges Binding (retrieval_score vs match_score) | ✗ | [C24, C25] | Cosine „gleiches Thema?“ vs regelbasiertes Entailment „ist es ein Beleg?“ — zwei verschiedene Fragen |
+| Deterministische Checks vor Embedding (Zahl/Bezugsgruppe/Modalität) | ✗ | [C25] | Verhindert „61 % Zeitersparnis → 61 % bewerten positiv“ (ADR-0011 Defekt) [A3] |
 | source_kind-Trennung (6 Stufen) | ✗ | [C2, C7] | Trennt Seed/Simulation/Recherche/Abgeleitet im Datentyp |
 | Kanonische evidence_id (SHA-256, content-unabhängig) | ✗ | [C23] | Reproduzierbare, kollisionsfreie Identität |
 | Red-Team-Review (LLM-Judge post-Assembly) | ◐ | [C32] | Self-critique per Prompt möglich, aber Agora koppelt es an echo_index |
-| Default `inferred` (unbekannte Herkunft = abgeleitet) | ✗ | [C3, A3] | Verhindert „jedes Item wird zum Dokumentfakt" (ADR-0011 Defekt) [A3] |
+| Default `inferred` (unbekannte Herkunft = abgeleitet) | ✗ | [C3, A3] | Verhindert „jedes Item wird zum Dokumentfakt“ (ADR-0011 Defekt) [A3] |
 | Mode-Routing (strict dropt, balanced überspringt) | ◐ | [C35] | Per Instruktion approximierbar, aber Agora macht es im Contract-Validator |
 | Graceful Degradation (gate_decision_log vs degradation_log) | ✗ | [I6, C31] | COMPLETED→INCOMPLETE bei Validator-Reparatur, getrenntes Audit-Log |
 | Multi-Agent-Simulation (OASIS/CAMEL ~5500 LOC) | ✗ | [C41] | Aber: Mehrwert ungeprüft, keine Sim-Validity-Metrik [L10, L11] |
 | Downgrade als Identitätswechsel (source_kind im Hash) | ✗ | [C23, A4] | Erzwingt atomare Umschlüsselung, verhindert stilles Label-Update |
 | ADR-0002 Hartanker (5, unantastbar) | ✗ | [A1] | Prozessuale Garantie, kein Prompt-Feature |
 
-**Counter-Claim:** „Ein stärkerer System-Prompt erreicht dasselbe billiger." Das gilt für Wording-Glossar und Red-Team (◐), **nicht** für Echo-Cap, evidence_id, zweistufiges Binding, Determinismus-vor-Embedding und source_kind-Trennung. Diese sind strukturell, nicht prompt-basierbar [A3, C26, C25]. Aber: ihre **Wirkung** im laufenden System ist aktuell null validierte Claims (R2) — die Mechanismen existieren, greifen aber ins Leere, weil der Upstream keine kanonische Evidence liefert [R2].
+**Counter-Claim:** „Ein stärkerer System-Prompt erreicht dasselbe billiger.“ Das gilt für Wording-Glossar und Red-Team (◐), **nicht** für Echo-Cap, evidence_id, zweistufiges Binding, Determinismus-vor-Embedding und source_kind-Trennung. Diese sind strukturell, nicht prompt-basierbar [A3, C26, C25]. Aber: ihre **Wirkung** im laufenden System ist aktuell null validierte Claims (R2) — die Mechanismen existieren, greifen aber ins Leere, weil der Upstream keine kanonische Evidence liefert [R2].
 
 ---
 
@@ -159,7 +159,7 @@ Level-Definition: L0 = Standard-LLM-Prompt; L1 = strukturierte Output-Felder; L2
 | Downgrade als Identitätswechsel (source_kind im Hash) | L4 | [C23, A4] | Erzwingt atomare Umschlüsselung statt Label-Update — ungewöhnlich streng |
 | `simulation_consensus` vs `evidence` vs `empirical` Trennung (Konzept) | L3 (Konzept) | [A3, C27] | Konzept in ADR-0011; Umsetzung laut R2 inkonsistent (key_takeaways high bei claims:[]) |
 
-**Counter-Claim:** „Echo-Cap ist nicht neu — Polarization/Echo-Chamber-Detection existiert in der Forschung." Richtig; die Einzelkomponenten sind bekannt [L1]. Agoras **Kombination** aus (a) Echo-Index-Messung auf OASIS-Actions, (b) Confidence-Cap bei >0.75, (c) Downgrade von high/verified→medium, (d) Red-Team-Trigger bei hohem Echo — diese Kopplung an die Evidence-Confidence-Pipeline ist der novel-Anteil [C26, C30]. Caveat: Schwellen hartkodiert, nicht kalibriert/evaluiert [C26].
+**Counter-Claim:** „Echo-Cap ist nicht neu — Polarization/Echo-Chamber-Detection existiert in der Forschung.“ Richtig; die Einzelkomponenten sind bekannt [L1]. Agoras **Kombination** aus (a) Echo-Index-Messung auf OASIS-Actions, (b) Confidence-Cap bei >0.75, (c) Downgrade von high/verified→medium, (d) Red-Team-Trigger bei hohem Echo — diese Kopplung an die Evidence-Confidence-Pipeline ist der novel-Anteil [C26, C30]. Caveat: Schwellen hartkodiert, nicht kalibriert/evaluiert [C26].
 
 ---
 
@@ -170,7 +170,7 @@ Level-Definition: L0 = Standard-LLM-Prompt; L1 = strukturierte Output-Felder; L2
 | # | Failure-Mode | Severity | Code-Beleg | Gegenmaßnahme (Ziel) |
 |---|---|---|---|---|
 | F1 | Seed-Provenance end-to-end gebrochen (Teil B fehlt) | **Critical** | [C11, A4] | ADR-0013 Teil B umsetzen |
-| F2 | Interview→Evidence-Binding-Defekt — **Fix in HEAD (`d7d9f0a4`), E2E-Re-Run offen** | **Medium** (war Critical) | [R2, C50, C55] | E2E-Re-Run gegen aktuellen Stand. **Nicht** `supports_claim` im Erfassungszweig setzen — siehe §13 „Zurückgezogener Befund" |
+| F2 | Interview→Evidence-Binding-Defekt — **Fix in HEAD (`d7d9f0a4`), E2E-Re-Run offen** | **Medium** (war Critical) | [R2, C50, C55] | E2E-Re-Run gegen aktuellen Stand. **Nicht** `supports_claim` im Erfassungszweig setzen — siehe §13 „Zurückgezogener Befund“ |
 | F3 | Opaker `seed_doc:`-Anker (LLM nennt eigene Quelle, niemand prüft nach) | **Critical** | [C9, C10, A4] | Lookup gegen Sidecar/Retrieval statt opak |
 | F4 | Gate zu streng für eigenen Throughput → 0 validierte Claims | **High** | [R2] | Folge von F1 (+ F2 Pre-Fix); Gate ist korrekt, Upstream defekt |
 | F5 | Graph-Fakten ohne Dokumentidentität (List[str]) | **High** | [C19, C20, C21] | DTOs mit doc_id/chunk_id, Retrieval-Query erweitern |
@@ -186,33 +186,33 @@ Level-Definition: L0 = Standard-LLM-Prompt; L1 = strukturierte Output-Felder; L2
 | F15 | CAMEL http/oasis-Divergenz (Wartungslast, 2 Verhaltenspfade) | **Low** | [C40] | Konsolidieren oder mit OASIS ersetzen |
 | F16 | `simulated_hours` in `run_state.json`, aber nicht in API/Frontend exponiert (Issue #1018) | **Low** | [C57] | Status-Endpoint + Frontend lesen den Wert |
 
-**Counter-Claim:** „Einige FM sind bewusst konservativ, nicht Defekte." Gilt für F4/F6 (Gate ist korrekt — weigert Claims ohne kanonische Evidence). Aber der Upstream liefert keine kanonische Evidence → das ist systemisches Versagen, nicht ein Feature. ADR-0013 §Konsequenzen bestätigt: *„Unmittelbar nach der Umsetzung werden Reports schlechter aussehen als heute"* — das ist der Zweck [A4]. F1/F3/F5 sind echte Defekte, F4/F6 ihre Symptome. **F2 ist gelöst, aber unbestätigt** — der Pre-Fix-Binding-Defekt ist in HEAD behoben; ohne E2E-Re-Run bleibt offen, wie viele Claims dadurch tatsächlich validierbar werden.
+**Counter-Claim:** „Einige FM sind bewusst konservativ, nicht Defekte.“ Gilt für F4/F6 (Gate ist korrekt — weigert Claims ohne kanonische Evidence). Aber der Upstream liefert keine kanonische Evidence → das ist systemisches Versagen, nicht ein Feature. ADR-0013 §Konsequenzen bestätigt: *„Unmittelbar nach der Umsetzung werden Reports schlechter aussehen als heute“* — das ist der Zweck [A4]. F1/F3/F5 sind echte Defekte, F4/F6 ihre Symptome. **F2 ist gelöst, aber unbestätigt** — der Pre-Fix-Binding-Defekt ist in HEAD behoben; ohne E2E-Re-Run bleibt offen, wie viele Claims dadurch tatsächlich validierbar werden.
 
 ---
 
 ## 6. Anti-Self-Confirmation-Analyse
 
-**Forschungs-Literatur-Grundlage:** Multi-Agent-Debate sättigt bei großen Modellen aus [L5], Konsistenz korreliert nur bedingt mit Korrektheit [L7], Kollektivreasoning versagt am Hidden-Profile-Problem (30,1 % vs. 80,7 % für Einzelagent mit voller Info) [L11], synthetische Daten unterliegen Model-Collapse [L8], analytische Flexibilität bedroht Reproduzierbarkeit [L12], und Inline-Zitationen sind häufig „cited but not verified" [L9].
+**Forschungs-Literatur-Grundlage:** Multi-Agent-Debate sättigt bei großen Modellen aus [L5], Konsistenz korreliert nur bedingt mit Korrektheit [L7], Kollektivreasoning versagt am Hidden-Profile-Problem (30,1 % vs. 80,7 % für Einzelagent mit voller Info) [L11], synthetische Daten unterliegen Model-Collapse [L8], analytische Flexibilität bedroht Reproduzierbarkeit [L12], und Inline-Zitationen sind häufig „cited but not verified“ [L9].
 
 **Agoras Anti-Self-Confirmation-Mechanismen (code-verifiziert):**
 
 | Mechanismus | Code-Beleg | Wirkung | Caveat |
 |---|---|---|---|
 | Echo-Chamber-Index (intra-cluster/total) | [C28, C45] | Misst synthetische Homogenität | Misst nicht reale Populationsvalidität; `louvain(seed=42)` einzige Determinismus-Insel [C47] |
-| DACH-Quoten-Kalibrierung (Branchen + Namens-/Migrationsanteil) | [C52, C53] | Verhindert willkürliche Persona-Population; IT-Anteil hard-gecappt ≤12 % (Issue #215) | Kalibrierung als **Konstanten**, kein Fit gegen Mikrodaten; LLM-Echtverteilungstest CI-excluded (`-m "not llm"`); „Ground Truth" = im Code codierte Annahme |
+| DACH-Quoten-Kalibrierung (Branchen + Namens-/Migrationsanteil) | [C52, C53] | Verhindert willkürliche Persona-Population; IT-Anteil hard-gecappt ≤12 % (Issue #215) | Kalibrierung als **Konstanten**, kein Fit gegen Mikrodaten; LLM-Echtverteilungstest CI-excluded (`-m "not llm"`); „Ground Truth“ = im Code codierte Annahme |
 | `apply_echo_cap` (echo_index>0.75 ∧ cross_stakeholder → max 0.84/medium) | [C26] | Drosselt polarisierte Echo-Kammern | Greift NUR bei cross_stakeholder; Schwellen hartkodiert, nicht kalibriert |
 | Red-Team-Review (LLM-Judge post-Assembly) | [C32] | Prüft Claims auf Schwächen | LLM-Judge selbst kann Confirmation-Bias haben; BudgetExceededError durchgereicht (Issue #978) [I9] |
 | Wording-Glossar (verbietet Vorhersage) | [C30] | Positioniert als Szenarienanalyse, nicht Vorhersage | Red-Team-Trigger an echo_index gekoppelt, nicht an Claim-Falschheit |
-| Default `inferred` (unbekannt = abgeleitet, nicht belegt) | [C3, A3] | Verhindert „jedes Item = Dokumentfakt" | inferred-Gewicht 0.0 in confidence [C27] — Claims darauf enden als Hypothese |
+| Default `inferred` (unbekannt = abgeleitet, nicht belegt) | [C3, A3] | Verhindert „jedes Item = Dokumentfakt“ | inferred-Gewicht 0.0 in confidence [C27] — Claims darauf enden als Hypothese |
 | source_kind-Trennung (6 Stufen) | [C2, C7] | Trennt Seed/Simulation/Recherche/Abgeleitet | Aktuell dominiert vermutlich graph_relation/inferred (keine Usage-Metrik) [Task-E Gap 10] |
-| Zweistufiges Binding (Cosine ≠ Beweis) | [C24, C25] | Verhindert „Cosine-only supports_claim=True" (ADR-0011 Defekt) [A3] | Schwaches Embedding-Modell → niedrige Scores → Claim wird Hypothese |
+| Zweistufiges Binding (Cosine ≠ Beweis) | [C24, C25] | Verhindert „Cosine-only supports_claim=True“ (ADR-0011 Defekt) [A3] | Schwaches Embedding-Modell → niedrige Scores → Claim wird Hypothese |
 | Deterministische Checks vor Embedding | [C25] | Verhindert Zahlenwanderung, Modalitätsverwechslung | Nur für numerische/mengen/qualitative Pfade; Edgecases möglich |
 | `model_generated_inference`-Gewicht 0.0 | [C27] | LLM-abgeleitete Evidence trägt nicht zu Confidence bei | — |
 | ADR-0011 Selbstkritik (report_d9023bd1f55a) | [A3, R4] | Dokumentiert eigenen inhaltlich nicht vertrauenswürdigen Report | Dokumentation ersetzt keinen bewiesenen Mehrwert |
 
-**Bewertung:** Agora hat **konkrete, code-level Anti-Self-Confirmation-Mechanismen**, die ein Single-Prompt nicht besitzt. Das ist der stärkste Teil der Architektur. Aber: (a) Echo-Cap greift nur bei cross_stakeholder — Echo-Kammern innerhalb einer Stakeholder-Gruppe werden nicht separat bestraft [C26]; (b) echo_index misst synthetische Homogenität, keine reale Populationsvalidität [C28]; (c) Schwellen sind hartkodiert (`_ECHO_CAP_THRESHOLD=0.75`, `_ECHO_CAP_MAX_SCORE=0.84`), nicht kalibriert/evaluiert [C26]; (d) die Mechanismen greifen ins Leere, weil der Upstream (F1–F3) keine kanonische Evidence liefert → 0 validierte Claims (R2); (e) die DACH-Quoten-Kalibrierung [C52, C53] ist ein echtes positives Signal gegen willkürliche Persona-Populationen, ersetzt aber keinen Fit gegen Mikrodaten — die „Ground Truth" ist die im Code codierte Annahme, nicht ein externer Datensatz, und der LLM-Echtverteilungstest ist CI-excluded.
+**Bewertung:** Agora hat **konkrete, code-level Anti-Self-Confirmation-Mechanismen**, die ein Single-Prompt nicht besitzt. Das ist der stärkste Teil der Architektur. Aber: (a) Echo-Cap greift nur bei cross_stakeholder — Echo-Kammern innerhalb einer Stakeholder-Gruppe werden nicht separat bestraft [C26]; (b) echo_index misst synthetische Homogenität, keine reale Populationsvalidität [C28]; (c) Schwellen sind hartkodiert (`_ECHO_CAP_THRESHOLD=0.75`, `_ECHO_CAP_MAX_SCORE=0.84`), nicht kalibriert/evaluiert [C26]; (d) die Mechanismen greifen ins Leere, weil der Upstream (F1–F3) keine kanonische Evidence liefert → 0 validierte Claims (R2); (e) die DACH-Quoten-Kalibrierung [C52, C53] ist ein echtes positives Signal gegen willkürliche Persona-Populationen, ersetzt aber keinen Fit gegen Mikrodaten — die „Ground Truth“ ist die im Code codierte Annahme, nicht ein externer Datensatz, und der LLM-Echtverteilungstest ist CI-excluded.
 
-**Counter-Claim:** „Anti-Self-Confirmation-Mechanismen könnten selbst Confirmation-Bias erzeugen — das System vertraut seinem eigenen Gate." Das Gate ist deterministisch und auditierbar (`gate_decision_log`, `degradation_log` [I6, C31]), aber ohne externe Ground-Truth bleibt es ein Selbsttest [Task-G, L10]. Die Eval-Baselines (`test_eval_baselines.py`) sichern interne Verträge (`evidence_coverage`, `orphan_claim_rate`), belegen aber nicht, dass die Architektur einen besseren Report liefert als ein simplerer Ansatz [Task-G].
+**Counter-Claim:** „Anti-Self-Confirmation-Mechanismen könnten selbst Confirmation-Bias erzeugen — das System vertraut seinem eigenen Gate.“ Das Gate ist deterministisch und auditierbar (`gate_decision_log`, `degradation_log` [I6, C31]), aber ohne externe Ground-Truth bleibt es ein Selbsttest [Task-G, L10]. Die Eval-Baselines (`test_eval_baselines.py`) sichern interne Verträge (`evidence_coverage`, `orphan_claim_rate`), belegen aber nicht, dass die Architektur einen besseren Report liefert als ein simplerer Ansatz [Task-G].
 
 ---
 
@@ -232,7 +232,7 @@ Level-Definition: L0 = Standard-LLM-Prompt; L1 = strukturierte Output-Felder; L2
 | G10 | Retrieval-Provenance: Entity-Reader/Neo4j-Tests ohne Provenance-Assertion | **Medium** | [Task-G] | Folge von F5 |
 | G11 | `simulated_hours` in `run_state.json`, aber nicht in API/Frontend exponiert (Issue #1018) | **Low** | [C57] | — |
 
-**Counter-Claim:** „Die 0.10.0-Freigabekriterien decken die Gaps." ROADMAP listet Reproduzierbarkeit und Produktnachweis [Task-E], aber sie sind nicht operationalisiert — es gibt keine Metrik, keinen Test, kein Protokoll. G3 (Baseline) steht gar nicht auf der Roadmap. Das ist die größte Lücke: **die Frage „liefert Agora einen messbaren Mehrwert?" ist nirgendwo als Aufgabe definiert** [Task-G].
+**Counter-Claim:** „Die 0.10.0-Freigabekriterien decken die Gaps.“ ROADMAP listet Reproduzierbarkeit und Produktnachweis [Task-E], aber sie sind nicht operationalisiert — es gibt keine Metrik, keinen Test, kein Protokoll. G3 (Baseline) steht gar nicht auf der Roadmap. Das ist die größte Lücke: **die Frage „liefert Agora einen messbaren Mehrwert?“ ist nirgendwo als Aufgabe definiert** [Task-G].
 
 ---
 
@@ -277,7 +277,7 @@ Abgeleitet aus den Failure-Modes und Gaps — keine Wünsche, sondern die minima
    │  contract_violation → Hardstop statt stummem Fallen
 ```
 
-**Counter-Claim:** „Teil B macht Reports schlechter (ADR-0013 §Konsequenzen)." Ja, bewusst. ADR-0013: *„Unmittelbar nach der Umsetzung werden Reports schlechter aussehen als heute: Seed-gestützte Claims aus Altgraphen fallen auf low, und ein bisher stillschweigend als Seed durchgewinkter Anker zählt nicht mehr. Das ist der Zweck."* [A4]. Der kurzfristige Qualitätsverlust ist der Preis für überprüfbare Provenance — und der Vorbote des echten Mehrwerts.
+**Counter-Claim:** „Teil B macht Reports schlechter (ADR-0013 §Konsequenzen).“ Ja, bewusst. ADR-0013: *„Unmittelbar nach der Umsetzung werden Reports schlechter aussehen als heute: Seed-gestützte Claims aus Altgraphen fallen auf low, und ein bisher stillschweigend als Seed durchgewinkter Anker zählt nicht mehr. Das ist der Zweck."* [A4]. Der kurzfristige Qualitätsverlust ist der Preis für überprüfbare Provenance — und der Vorbote des echten Mehrwerts.
 
 ---
 
@@ -288,7 +288,7 @@ Abgeleitet aus den Failure-Modes und Gaps — keine Wünsche, sondern die minima
 | **P0** | ADR-0013 Teil B umsetzen (document_id/chunk_id durch Graph bis Anker) | F1, F3, F5, F6 | [A4, C11] | Blocker für 1.0 — ohne Seed-Provenance ist medium unerreichbar |
 | **P1** | Interview→Evidence-Binding: **Fix in HEAD (`d7d9f0a4`)** — E2E-Re-Run zur Wirkungsbestätigung | F2, G9 | [R2, C50, C55] | Fix liegt vor, Wirkung nicht bestätigt. Kein Code-Eingriff nötig — nur ein Lauf |
 | **P0** | Confidence-Konzepte trennen (simulation/evidence/empirical) | F8 | [R2, A3] | Blocker — key_takeaways high bei claims:[] ist inakzeptabel |
-| **P1** | Baseline-Runner Agora-vs-Single-Prompt | G3 | [Task-G] | Blocker für messbaren Mehrwert — sonst ist „Mehrwert" Behauptung |
+| **P1** | Baseline-Runner Agora-vs-Single-Prompt | G3 | [Task-G] | Blocker für messbaren Mehrwert — sonst ist „Mehrwert“ Behauptung |
 | **P1** | Sim-Validity-Metrik gegen Ground-Truth | G1 | [C41, L10] | Blocker für Produktnachweis (ROADMAP 0.10) |
 | **P1** | Reproduzierbarkeit (seed/determinism) | G2 | [C42] | ROADMAP 0.10-Ziel |
 | **P2** | Markdown-Export mit Producer-Auflösung | F12 | [C39] | Qualität |
@@ -300,7 +300,7 @@ Abgeleitet aus den Failure-Modes und Gaps — keine Wünsche, sondern die minima
 | **P3** | Redis optional markieren (File-IPC für Single-User) | — | [Task-E] | Komplexitätsökonomie |
 | **P3** | Usage-Metrik über EvidenceSourceKind-Häufigkeit | G7 | [Task-E] | Validierung der Provenance-Wirksamkeit |
 
-**Counter-Claim:** „P0 zu ambitioniert für 1.0." Ohne P0 bleibt der Kernmehrwert unbewiesen: 0 validierte Claims (R2) sind kein Release-Zustand. P0 ist nicht „neues Feature", sondern das Einlösen bereits akzeptierter ADRs (0011, 0013) [A3, A4].
+**Counter-Claim:** „P0 zu ambitioniert für 1.0.“ Ohne P0 bleibt der Kernmehrwert unbewiesen: 0 validierte Claims (R2) sind kein Release-Zustand. P0 ist nicht „neues Feature“, sondern das Einlösen bereits akzeptierter ADRs (0011, 0013) [A3, A4].
 
 ---
 
@@ -331,11 +331,11 @@ Abgeleitet aus den Failure-Modes und Gaps — keine Wünsche, sondern die minima
 
 **Interpretation:**
 - **Engineering Score 7.0**: Agora ist solide konstruiert. Die ADRs sind ehrlich, die Contracts sind typisiert, das Gating ist prozessual verankert, die Anti-Self-Confirmation-Mechanismen sind konkret. Die Evidence-Pipeline ist durch eine echte Fehleranalyse motiviert, nicht spekulativ. Schwächen: Umsetzung hinter Konzept (Teil B), Reproduzierbarkeit fehlt, Komplexitätsökonomie bei OASIS/Neo4j.
-- **Evidence-Research Score 3.5**: Agora liefert aktuell **keinen nachweisbaren Erkenntnisgewinn** über einen Single-Prompt. 0 validierte Claims (R2), keine Baseline, keine Sim-Validity, Provenance gebrochen. Der Beta-Status erklärt das, entwertet aber nicht die Befunde — die Forschungsfrage ist mit „aktuell nein" beantwortet. **Nuance nach Sim-Verifikation:** R2 ist ein Pre-Fix-Referenzlauf; der Interview-Binding-Fix (`d7d9f0a4`) liegt in HEAD [C50, C55]. Der Score bleibt bei 3.5, weil (a) der E2E-Re-Run aussteht und (b) die Seed-Provenance (F1) als Critical-Defekt weiter besteht — 0 validierte Claims sind somit auch im aktuellen Stand strukturell erklärbar, nicht nur ein Historie-Befund. Nach Rücknahme von C56 ruht der Score allerdings auf einer Säule weniger; ein E2E-Re-Run könnte ihn stärker anheben als hier veranschlagt.
+- **Evidence-Research Score 3.5**: Agora liefert aktuell **keinen nachweisbaren Erkenntnisgewinn** über einen Single-Prompt. 0 validierte Claims (R2), keine Baseline, keine Sim-Validity, Provenance gebrochen. Der Beta-Status erklärt das, entwertet aber nicht die Befunde — die Forschungsfrage ist mit „aktuell nein“ beantwortet. **Nuance nach Sim-Verifikation:** R2 ist ein Pre-Fix-Referenzlauf; der Interview-Binding-Fix (`d7d9f0a4`) liegt in HEAD [C50, C55]. Der Score bleibt bei 3.5, weil (a) der E2E-Re-Run aussteht und (b) die Seed-Provenance (F1) als Critical-Defekt weiter besteht — 0 validierte Claims sind somit auch im aktuellen Stand strukturell erklärbar, nicht nur ein Historie-Befund. Nach Rücknahme von C56 ruht der Score allerdings auf einer Säule weniger; ein E2E-Re-Run könnte ihn stärker anheben als hier veranschlagt.
 
 **Abschließendes Urteil:** Agora ist ein **ehrliches, konzeptionell überlegtes, aber empirisch unbewiesenes System**. Der Differenzierer gegenüber einem Standard-Agent-Framework ist real und code-verifiziert (Evidence-Pipeline, Echo-Cap, Wording-Gate, evidence_id), entfaltet aber aktuell keine Wirkung, weil der Upstream keine kanonische Evidence liefert. Der Mehrwert ist **potenziell**, nicht **aktual**. Er wird erst entstehen, wenn P0 (Teil B + Interview-Fix + Confidence-Trennung) und P1 (Baseline + Sim-Validity) umgesetzt sind. Bis dahin ist Agora eine sorgfältig gebaute Maschine, die beweist, dass sie nichts beweisen kann — und das ist, paradoxerweise, genau die Ehrlichkeit, die der Forschung fehlt [L9, L10].
 
-**Counter-Claim (gesamt):** „Score zu hart — Agora ist Beta 0.9.3." Richtig: der Score misst den Ist-Zustand, nicht das Potenzial. Aber die Forschungsfrage verlangt den Nachweis eines überprüfbaren Erkenntnisgewinns, und der ist aktuell nicht erbracht. Ein Beta, das 0 validierte Claims liefert, ist ein ehrliches Beta — aber kein Beweis für den Mehrwert der Methode.
+**Counter-Claim (gesamt):** „Score zu hart — Agora ist Beta 0.9.3.“ Richtig: der Score misst den Ist-Zustand, nicht das Potenzial. Aber die Forschungsfrage verlangt den Nachweis eines überprüfbaren Erkenntnisgewinns, und der ist aktuell nicht erbracht. Ein Beta, das 0 validierte Claims liefert, ist ein ehrliches Beta — aber kein Beweis für den Mehrwert der Methode.
 
 ---
 
@@ -353,11 +353,11 @@ Abgeleitet aus den Failure-Modes und Gaps — keine Wünsche, sondern die minima
 
 **Pipeline:** Lead + 7 parallele Code-Exploration-Subagenten (Tasks A–G) schreiben strukturierte Notes nach `docs/paper/research-notes/`; Lead baut Citation Registry, Outline, Draft, Counter-Review, Verify. Subagenten-Raw-Results blieben in ihren Kontexten, Lead sieht nur distillierte Notes (~60–70 % Kontext-Ersparnis).
 
-**Verifikationsmethode:** Jede Code-Aussage am Branch-Stand `7e42ae34` über `code-review-graph` + `ctx_execute`/`ctx_execute_file` geprüft. Keine Aussage allein aus README oder `docs/architecture.md`. Geschlossene Issues (#987, #978, #1083, #1006, #1036) wurden **am Code verifiziert**, nicht als „gelöst" angenommen. Referenzläufe (R1, R2) als Output-Artefakte inspiziert, nicht als Beschreibungen.
+**Verifikationsmethode:** Jede Code-Aussage am Branch-Stand `7e42ae34` über `code-review-graph` + `ctx_execute`/`ctx_execute_file` geprüft. Keine Aussage allein aus README oder `docs/architecture.md`. Geschlossene Issues (#987, #978, #1083, #1006, #1036) wurden **am Code verifiziert**, nicht als „gelöst“ angenommen. Referenzläufe (R1, R2) als Output-Artefakte inspiziert, nicht als Beschreibungen.
 
 **Counter-Review (P6, ≥3 Issues):**
-1. **Could the conclusion be wrong?** Die These „0 validierte Claims = kein Mehrwert" könnte falsch sein, wenn R2 ein Einzelfall ist. Gegenevidence: R1 (historisch) zeigt dasselbe Muster (100% inferred), ADR-0011 bestätigt strukturell. → These hält. **Einschränkung nach Sim-Verifikation:** R2 dokumentiert den **Pre-Fix-Stand** des Interview-Binding-Defekts; der Fix liegt in HEAD (`d7d9f0a4` [C50, C55]). Ein E2E-Re-Run könnte die Claim-Zahl erhöhen — aber die offene Seed-Provenance (F1) lässt „aktuell nein" bestehen. These ist weniger robust, bis ein Re-Run vorliegt. Nach Rücknahme von C56 (siehe „Zurückgezogener Befund") ist sie nochmals schwächer abgestützt.
-2. **Single-source dependency?** These D (OASIS-Mehrwert ungeprüft) ruht auf Task-E allein (keine Code-Quelle für „ungeprüft" — Negativbeweis). Abgestützt durch L10, L11. → hält, aber als Negativbeweis markiert.
+1. **Could the conclusion be wrong?** Die These „0 validierte Claims = kein Mehrwert“ könnte falsch sein, wenn R2 ein Einzelfall ist. Gegenevidence: R1 (historisch) zeigt dasselbe Muster (100% inferred), ADR-0011 bestätigt strukturell. → These hält. **Einschränkung nach Sim-Verifikation:** R2 dokumentiert den **Pre-Fix-Stand** des Interview-Binding-Defekts; der Fix liegt in HEAD (`d7d9f0a4` [C50, C55]). Ein E2E-Re-Run könnte die Claim-Zahl erhöhen — aber die offene Seed-Provenance (F1) lässt „aktuell nein“ bestehen. These ist weniger robust, bis ein Re-Run vorliegt. Nach Rücknahme von C56 (siehe „Zurückgezogener Befund“) ist sie nochmals schwächer abgestützt.
+2. **Single-source dependency?** These D (OASIS-Mehrwert ungeprüft) ruht auf Task-E allein (keine Code-Quelle für „ungeprüft“ — Negativbeweis). Abgestützt durch L10, L11. → hält, aber als Negativbeweis markiert.
 3. **Lack of official/academic backing?** Die Evidence-Pipeline-Bewertung ruht auf Code + ADRs, nicht auf Literatur. Literatur (L5, L7, L9, L10, L11) stützt die **Kritik**, nicht die **Bewertung der Pipeline**. → konsistent.
 4. **Stale sources?** Alle Code-Belege AS_OF 2026-08-09. ADR-0011 (13 Tage alt) noch gültig. → keine stale-Quellen.
 5. **≥3 issues found:** 5 Counter-Claims geprüft, alle gehalten oder als Negativbeweis markiert.
@@ -376,12 +376,12 @@ Keine resurrected dropped sources (keine verworfen). Keine Quelle >25 % der Auss
 
 **Zurückgezogener Befund (C56) — Korrektur vom 2026-08-09:**
 
-Der Bericht führte ursprünglich als bleibenden Teil-Defekt: *„`supports_claim` wird im Interview-Item nicht gesetzt → Interviews können `high` möglicherweise nicht rechtfertigen"*, mit der P0-Maßnahme *„`supports_claim` im Interview-Zweig setzen"*.
+Der Bericht führte ursprünglich als bleibenden Teil-Defekt: *„`supports_claim` wird im Interview-Item nicht gesetzt → Interviews können `high` möglicherweise nicht rechtfertigen“*, mit der P0-Maßnahme *„`supports_claim` im Interview-Zweig setzen“*.
 
 **Die Beobachtung stimmt, die Schlussfolgerung nicht.** `_record_tool_evidence` setzt tatsächlich kein `supports_claim` — das ist aber die vorgeschriebene Architektur, kein Defekt:
 
 - `supports_claim` wird an genau einer Stelle gesetzt: `evidence_binder.py:123` — `bound["supports_claim"] = result.verdict is EntailmentVerdict.SUPPORTED`.
-- `evidence_entailment.py:11` hält fest: *„Nur hier darf `supports_claim=True`"*. `agent.py:649` verweist im Kommentar ausdrücklich auf die Entailment-Stufe als setzende Instanz.
+- `evidence_entailment.py:11` hält fest: *„Nur hier darf `supports_claim=True`“*. `agent.py:649` verweist im Kommentar ausdrücklich auf die Entailment-Stufe als setzende Instanz.
 - Sachlich zwingend: Ein Evidence-Item ohne Claim-Bezug kann nicht beantworten, ob es *einen* Claim stützt. Die Frage entsteht erst beim Binding. `_record_tool_evidence` erzeugt Items, bevor ein Claim existiert.
 
 **Die vorgeschlagene Maßnahme wäre eine Regression.** Sie stellte Defekt 3 aus ADR-0011 wieder her — dort war `supports_claim = True` allein aus Cosine-Similarity gesetzt worden, was der Anlass für die Einführung des zweistufigen Bindings war. Zusätzlich unterliefe sie ADR-0002 Anker 5, weil jedes Interview-Item automatisch als stützend zählte und damit `high` über `cross_stakeholder_for_high` erreichbar würde, ohne dass je ein Entailment geprüft wurde.
@@ -395,8 +395,8 @@ Citation C56 ist damit **als Beleg für einen `supports_claim`-Defekt** ungülti
 **Methodische Lehre:** Der Fehler entstand durch Prüfung einer einzelnen Fundstelle (fehlendes Feld im Erfassungszweig) ohne Gegenprobe, wo das Feld sonst gesetzt wird. Ein `grep` über den Schreibpfad hätte ihn verhindert. Das ist dieselbe Fehlerklasse, die der Bericht an anderer Stelle kritisiert: eine Beobachtung wird zur Ursachenaussage, ohne den Rest der Kette zu prüfen.
 
 **Einschränkungen:**
-- Task B (Simulation-Subagent) war im ersten Lauf lückenhaft; drei fokussierte Mini-Worker (B1 Personas/Quoten, B2 OASIS-Actions/Echo-Index, B3 Interview-Binding) wurden als Nachzug dispatcht. Deren Notes (`task-b1`, `task-b2`, `task-b3` unter `docs/paper/research-notes/`) flossen in Sections 1, 5, 6, 7 ein und korrigierten drei Befunde: (a) Interview-Binding-Defekt ist in HEAD (`d7d9f0a4`) gefixt — R2 dokumentiert den Pre-Fix-Stand; (b) DACH-Quoten sind gegen Destatis kalibriert — nicht „alle US-Datensätze"; (c) Simulation ist code-verifiziert nicht deterministisch (`random.*` ohne `random.seed()`).
-- Die Untersuchung ist ein Code-Audit, kein empirischer Nachweis. „0 validierte Claims" (R2) ist ein Output-Befund eines Pre-Fix-Referenzlaufs, kein Urteil über die Methode.
+- Task B (Simulation-Subagent) war im ersten Lauf lückenhaft; drei fokussierte Mini-Worker (B1 Personas/Quoten, B2 OASIS-Actions/Echo-Index, B3 Interview-Binding) wurden als Nachzug dispatcht. Deren Notes (`task-b1`, `task-b2`, `task-b3` unter `docs/paper/research-notes/`) flossen in Sections 1, 5, 6, 7 ein und korrigierten drei Befunde: (a) Interview-Binding-Defekt ist in HEAD (`d7d9f0a4`) gefixt — R2 dokumentiert den Pre-Fix-Stand; (b) DACH-Quoten sind gegen Destatis kalibriert — nicht „alle US-Datensätze“; (c) Simulation ist code-verifiziert nicht deterministisch (`random.*` ohne `random.seed()`).
+- Die Untersuchung ist ein Code-Audit, kein empirischer Nachweis. „0 validierte Claims“ (R2) ist ein Output-Befund eines Pre-Fix-Referenzlaufs, kein Urteil über die Methode.
 - DACH-spezifische Persona-Validität: Quoten sind kalibriert [C52, C53], aber Sim-Validity (Fit gegen Mikrodaten, LLM-Echtverteilungstest außerhalb CI) bleibt offene empirische Frage (L13) — nicht Gegenstand dieses Audits.
 
 ---

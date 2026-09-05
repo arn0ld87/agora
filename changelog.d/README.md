@@ -38,5 +38,5 @@ Fragment-Dateien im selben Commit.
 - `CHANGELOG.md` selbst wird nur noch von `collect-changelog.py` und beim
   Release-Cut angefasst.
 - Review-Bots: Ein Fragment in `changelog.d/` erfüllt die
-  AGENTS.md-Pflicht „ausgelieferte Änderung → CHANGELOG.md" — die Übernahme
+  AGENTS.md-Pflicht „ausgelieferte Änderung → CHANGELOG.md“ — die Übernahme
   in die Datei passiert gesammelt beim Release-Schnitt.

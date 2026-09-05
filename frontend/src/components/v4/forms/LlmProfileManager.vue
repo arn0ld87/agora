@@ -30,7 +30,7 @@ const providersStore = useLlmProvidersStore()
 type ProviderConnectionKind = ProviderConnection['provider_kind']
 
 // LlmProvider → AiProviderKind|null. Provider ohne Connection-Äquivalent
-// (custom, github_copilot, cloud, unknown) mappen auf null → kein
+// (custom, github_copilot, cloud, codex_cli, unknown) mappen auf null → kein
 // Connection-Match möglich → unknownConnection.
 const LLM_PROVIDER_TO_AI_KIND: Record<LlmProvider, AiProviderKind | null> = {
   ollama: 'ollama',
@@ -46,6 +46,7 @@ const LLM_PROVIDER_TO_AI_KIND: Record<LlmProvider, AiProviderKind | null> = {
   github_copilot: null,
   bedrock: null,
   cloud: null,
+  codex_cli: null,
   unknown: null,
 }
 
@@ -62,6 +63,7 @@ const CONNECTION_KIND_TO_AI_KIND: Record<ProviderConnectionKind, AiProviderKind 
   github_copilot: null,
   bedrock: null,
   cloud: null,
+  codex_cli: null,
   unknown: null,
 }
 
@@ -79,6 +81,7 @@ const CONNECTION_KIND_TO_LLM_PROVIDER: Record<ProviderConnectionKind, LlmProvide
   github_copilot: 'github_copilot',
   bedrock: 'custom',
   cloud: 'cloud',
+  codex_cli: 'codex_cli',
   unknown: 'unknown',
 }
 
@@ -204,7 +207,7 @@ const pickerError = computed<boolean>(() => {
   if (explicitPickerError.value) return true
   if (!formModel.value) return false
   const targetAiKind = LLM_PROVIDER_TO_AI_KIND[formProvider.value]
-  // Hybrid: Provider ohne Connection-Äquivalent (custom/cloud/github_copilot/
+  // Hybrid: Provider ohne Connection-Äquivalent (custom/cloud/github_copilot/codex_cli/
   // unknown) nutzen Preset + Freitext-URL + manuelle Modellauswahl — kein
   // unknown-connection-Fehler.
   if (!targetAiKind) return false
@@ -304,7 +307,7 @@ async function submit(): Promise<void> {
     api_key:    resolvedApiKey.value,
     // Edit: bestehenden is_default beibehalten — sonst verliert das aktuelle
     // Default-Profil beim Bearbeiten seinen Status. Create: immer false; der
-    // User setzt den Default explizit über den „Als Standard"-Button.
+    // User setzt den Default explizit über den „Als Standard“-Button.
     is_default: formMode.value === 'edit' ? editingIsDefault.value : false,
   }
 

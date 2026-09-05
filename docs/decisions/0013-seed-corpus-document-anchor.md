@@ -37,7 +37,7 @@ System nicht erreichbar, und der Anker, auf den sie sich stützt, ist nicht
    Selbstauskunft des Modells: Das LLM benennt seine eigene Quelle, und niemand
    prüft nach.
 
-Damit hängt die Trennung „belegter Dokumentfakt" gegen „abgeleitete Aussage"
+Damit hängt die Trennung „belegter Dokumentfakt“ gegen „abgeleitete Aussage“
 — der Kern von ADR-0002 — an Modellgehorsam. Genau diese Abhängigkeit hat
 ADR-0011 an anderer Stelle bereits als untragbar verworfen.
 
@@ -57,7 +57,7 @@ bleibt `graph_relation`. Geraten wird nicht.
 Dokument **und** Chunk. Die Chunk-Ebene kostet fast nichts zusätzlich, sobald
 die Dokumentidentität überhaupt durch den Chunker gereicht wird — die
 Reihenfolge der Chunks liegt dort ohnehin vor. Sie ist aber der Unterschied
-zwischen „steht irgendwo in einem 80-seitigen Dokument" und einer nachprüfbaren
+zwischen „steht irgendwo in einem 80-seitigen Dokument“ und einer nachprüfbaren
 Stelle.
 
 `document_id` ist eine kanonische, pro Upload eindeutige Kennung. Autorengegebene

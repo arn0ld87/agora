@@ -18,6 +18,7 @@ export const LlmProviderSchema = z.enum([
   "github_copilot",
   "bedrock",
   "cloud",
+  "codex_cli",
   "unknown",
 ]);
 export type LlmProvider = z.infer<typeof LlmProviderSchema>;

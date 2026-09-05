@@ -24,7 +24,7 @@ Survey über 134 Arbeiten mit 300 Evaluationsmetriken in sieben Dimensionen. Dec
 
 **Das ist die wichtigste Quelle der ganzen Liste.** Wer sie gelesen hat, weiß, ob der Neuheitsanspruch trägt. Bis dahin ist jede Aussage über Neuheit vorläufig.
 
-Zusätzlich relevant: **Michael Färber ist seit April 2024 W3-Professor bei ScaDS.AI Dresden/Leipzig** und leitet dort „Scalable Software Architectures for Data Analytics". Sein Schwerpunkt ist vertrauenswürdige KI an der Schnittstelle von LLMs, Knowledge Graphs und strukturierter Wissensrepräsentation. Das ist Agoras exakte Kombination. Siehe Abschnitt D.
+Zusätzlich relevant: **Michael Färber ist seit April 2024 W3-Professor bei ScaDS.AI Dresden/Leipzig** und leitet dort „Scalable Software Architectures for Data Analytics“. Sein Schwerpunkt ist vertrauenswürdige KI an der Schnittstelle von LLMs, Knowledge Graphs und strukturierter Wissensrepräsentation. Das ist Agoras exakte Kombination. Siehe Abschnitt D.
 
 ---
 
@@ -65,7 +65,7 @@ Wichtig für die Abgrenzung: Dort geht es um Übereinstimmung *zwischen Modellen
 
 Erster Benchmark für automatische Zitationsbewertung, mit Metriken für Zitationsqualität (Recall/Precision), Korrektheit und Flüssigkeit. Datensätze ASQA, ELI5, QAMPARI.
 
-Standardreferenz für „wie misst man Attribution". Über den Survey A1 auffindbar; exakte Zitation von dort übernehmen.
+Standardreferenz für „wie misst man Attribution“. Über den Survey A1 auffindbar; exakte Zitation von dort übernehmen.
 
 ### C2. RARR — Retrofit Attribution using Research and Revision `[treffer]`
 

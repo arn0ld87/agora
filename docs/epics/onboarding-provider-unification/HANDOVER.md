@@ -12,7 +12,7 @@
 
 Die in Slice 4.3.4 (PR #694) eingeführte `Neo4jReEmbedder`-Engine
 re-embedded bisher **nur** `(n:Entity).entity_embedding`.
-`RELATION.fact_embedding` war ein dokumentiertes „Bewusstes Nicht-Ziel"
+`RELATION.fact_embedding` war ein dokumentiertes „Bewusstes Nicht-Ziel“
 und blieb beim Embedding-Modellwechsel stale → Search-Correctness-Lücke
 für die Relations-Suche. Slice 4.4 zieht `fact_embedding` gleich: ein
 zweiter, Resume-fähiger Re-Embed-Loop über die `:RELATION`-Kanten,
@@ -54,7 +54,7 @@ nur im Speicher (`model_copy`), ohne `checkpoint()` aufzurufen. Erst
 `_drain(fact)` schreibt den ersten Fact-Checkpoint mit dem frisch
 gezählten Fact-Bestand. Begründung: ein separater Checkpoint am
 Phasenübergang hätte den Entity-Endstand (`total=3`) als irreführenden
-„Fact-Start" persistiert. Crash-Sicherheit bleibt erhalten — beim
+„Fact-Start“ persistiert. Crash-Sicherheit bleibt erhalten — beim
 Resume läuft die (leere) Entity-Phase idempotent durch (kein Träger mit
 `uuid > cursor` → kein Write, kein Doppel-Write) und wechselt dann zur
 Fact-Phase.
@@ -131,11 +131,11 @@ einführen; das ist hier nicht vorgetäuscht.
 | Dokument | Status | Anmerkung |
 |---|---|---|
 | README.md | geprüft-nicht-betroffen | keine User-Facing-Feature-Doku; Zahlen via STATUS zentralisiert |
-| AGENTS.md | aktualisiert | Stack-Map-Zeile `embedding_reembedder.py` um Fact-Phase ergänzt; Aktive-Epics-Liste („Slices 1–4.3.4 gemerged") wird nach Merge via sync-status auf 4.4 gehoben |
+| AGENTS.md | aktualisiert | Stack-Map-Zeile `embedding_reembedder.py` um Fact-Phase ergänzt; Aktive-Epics-Liste („Slices 1–4.3.4 gemerged“) wird nach Merge via sync-status auf 4.4 gehoben |
 | CLAUDE.md | geprüft-nicht-betroffen | keine Fact-spezifische Claude-Regel; ADR-0007-Referenz unverändert gültig |
-| PLAN.md | aktualisiert | „Offen im Slice-4-Umfeld"-Liste: Fact-Embedding-Re-Embed entfernt (umgesetzt), Slice-4.4-Fact-Phase im Fließtext ergänzt |
+| PLAN.md | aktualisiert | „Offen im Slice-4-Umfeld“-Liste: Fact-Embedding-Re-Embed entfernt (umgesetzt), Slice-4.4-Fact-Phase im Fließtext ergänzt |
 | docs/STATUS.md | aktualisiert | Aktualisierungs-Protokoll-Eintrag für Slice 4.4; Test-Counts via `sync-status.sh` |
-| CHANGELOG.md | aktualisiert | neuer `Added (embedding-reembedder-fact)`-Eintrag; „Bewusst offen: fact_embedding"-Vermerk im 4.3.4-Eintrag aufgelöst |
+| CHANGELOG.md | aktualisiert | neuer `Added (embedding-reembedder-fact)`-Eintrag; „Bewusst offen: fact_embedding“-Vermerk im 4.3.4-Eintrag aufgelöst |
 | HANDOVER.md | aktualisiert | dieser Abschnitt |
 
 ---
@@ -332,7 +332,7 @@ CI-Workflow: `.github/workflows/check-legacy-model-picker.yml`
 (triggert auf `pull_request` mit `paths: frontend/src/**`).
 Lokaler Aufruf: `python3 .github/scripts/check_legacy_model_picker.py`
 (Spiegel siehe `docs/runbooks/pre-push-gate.md`, Abschnitt
-„Legacy-Picker-Check").
+„Legacy-Picker-Check“).
 ---
 
 # Handover — Onboarding/Provider-Unification Slice 5.5 (final)
@@ -351,7 +351,7 @@ Zwei Spec-Widersprüche vor Umsetzung geklärt und bestätigt:
 
 1. **`useRuntimeLlmOptions` ist kein Model-Picker**, sondern ein
    Per-Run-Credential-Override (Provider + API-Key + Base-URL). Bleibt als
-   `@deprecated` Read-Adapter erhalten statt „auf AiModelPicker migriert"
+   `@deprecated` Read-Adapter erhalten statt „auf AiModelPicker migriert“
    (das hätte die Ad-hoc-Key-Eingabe entfernt).
 2. **v3-Picker als Read-Adapter deprecaten, nicht datenmodell-migrieren.**
    `LlmProfilePicker` ist profilbasiert, `AiModelPicker` connection-basiert —

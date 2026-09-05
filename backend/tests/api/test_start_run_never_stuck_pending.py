@@ -3,7 +3,7 @@
 `POST /api/simulation/start` legt in Phase 5 (`_register_start_run`) einen
 Run-Record mit `status="pending"` an. Bricht der Handler danach ab, ohne den
 Record auf einen Endzustand zu bringen, entsteht ein Phantom-Run: er steht
-dauerhaft in der Run-Liste, das Frontend zeigt weiter „Bereit", und
+dauerhaft in der Run-Liste, das Frontend zeigt weiter „Bereit“, und
 `POST /api/runs/<id>/cancel` greift bei ihm nicht — die Route ließ nur
 `processing` zu. Im gemeldeten Fall hatten sich neun solcher Runs angesammelt.
 

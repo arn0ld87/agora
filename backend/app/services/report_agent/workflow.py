@@ -34,6 +34,11 @@ from .output_contract import (
     resolve_report_status,
     sanitize_final_content,
 )
+from .requirement_checker import (
+    checklist_for_intent,
+    collect_requirement_degradations,
+    find_missing_requirements,
+)
 from .run_degradation import (
     apply_run_degradation_downgrade,
     assert_run_invariants,
@@ -122,6 +127,42 @@ def _load_persona_count(agent: Any) -> int:
         )
         return 0
     return len(profiles) if isinstance(profiles, list) else 0
+
+
+def _load_persona_fallback_stats(agent: Any) -> tuple[int, int]:
+    """(Platzhalter, gesamt) fuer die Degradierungssumme des Laufs (#1419).
+
+    Gezaehlt wird ``generation_error``, nicht ``generation_source``: die
+    bewusste Wahl ``use_llm_for_profiles=False`` erzeugt ebenfalls
+    regelbasierte Profile und ist keine Degradierung. Nur der Ausfall nach
+    gescheiterten LLM-Versuchen zaehlt.
+
+    Wie beim Persona-Floor gilt: das Gate darf am Store nicht scheitern.
+    Ohne lesbare Profile wird nichts behauptet.
+    """
+    try:
+        profiles = resolve_default_store().read_json(
+            agent.simulation_id,
+            "reddit_profiles",
+            default=[],
+        )
+    except Exception as exc:  # noqa: BLE001 — Gate darf am Store nicht scheitern
+        logger.warning(
+            "persona-fallback check: failed to read profiles for simulation %s: %r",
+            getattr(agent, "simulation_id", "<unknown>"),
+            exc,
+        )
+        return (0, 0)
+
+    if not isinstance(profiles, list):
+        return (0, 0)
+
+    failed = sum(
+        1
+        for profile in profiles
+        if isinstance(profile, dict) and profile.get("generation_error")
+    )
+    return (failed, len(profiles))
 
 
 def _load_persona_floor(agent: Any) -> int:
@@ -1242,7 +1283,15 @@ def _build_partial_report(
     # von einer unangetasteten nicht zu unterscheiden. Im flüchtigen
     # RunEventLog ist die Menge zu diesem Zeitpunkt vollständig; hier wird
     # die Summe gezogen, statt sie beim Abbruch zu verlieren.
+    # Issue #1419 (Codex-Review PR #1420): auch der Teil-Report muss sagen,
+    # worauf er beruht. Ohne die Persona-Zahlen ging ein nach dem Abbruch
+    # finalisierter Bericht als COMPLETED hinaus, obwohl saemtliche Stimmen
+    # darin regelbasierte Platzhalter waren — genau die Luecke, die der
+    # Normalpfad seit diesem Issue schliesst.
+    persona_fallbacks, persona_total = _load_persona_fallback_stats(agent)
     report.run_degradations = collect_run_degradations(
+        persona_fallback_count=persona_fallbacks,
+        persona_total=persona_total,
         work_trace_removed_section_indices=sorted(
             events_for(agent).work_trace_removed_sections
         ),
@@ -1298,6 +1347,57 @@ def _build_partial_report(
         len(completed_section_titles),
     )
     return report
+
+
+def _apply_requirement_check(report: Report, agent: Any, report_id: str) -> None:
+    """Issue #1302: maschinelle Vollständigkeitprüfung vor dem Abschluss.
+
+    Der Reporter setzte ``completed``, ohne zu prüfen, ob die geforderten
+    Analyseaspekte (Widersprüche, Frühwarnindikatoren, Stop-/Expand-
+    Bedingungen, Positionswechsel, Koalitionen) im Bericht stehen. Fehlende
+    Aspekte hängen als ``requirement_checker``-Degradationen an
+    ``run_degradations`` und werden über dieselbe Mechanik abgestuft wie
+    #1006/#1299 — keine zweite Statuslogik.
+
+    Der Aufruf liegt NACH dem ReportV3-Build: der Contract-Export entscheidet
+    über den Status bis dahin noch mit COMPLETED — würde dieser Check früher
+    abstuften, würde ``build_report_v3`` übersprungen und das Artefakt
+    fehlte. Erst danach stuft dieser Check ab und ein einziger ``save_report``
+    persistiert Status + Fehlerliste zusammen.
+    """
+    if not Config.REPORT_REQUIREMENT_CHECKER_ENABLED:
+        return
+    requirement_intent = detect_report_intent(
+        getattr(agent, "simulation_requirement", "") or ""
+    )
+    missing_requirements = find_missing_requirements(
+        [report.markdown_content],
+        checklist=checklist_for_intent(requirement_intent),
+    )
+    if not missing_requirements:
+        return
+    report.run_degradations = list(report.run_degradations) + (
+        collect_requirement_degradations(missing_requirements)
+    )
+    report.status = apply_run_degradation_downgrade(
+        report.status,
+        [
+            entry
+            for entry in report.run_degradations
+            if entry.get("component") == "requirement_checker"
+        ],
+    )
+    logger.warning(
+        "generate_report: report=%s verfehlt %d Pflichtaspekt(e): %s",
+        report_id,
+        len(missing_requirements),
+        ", ".join(req.id for req in missing_requirements),
+    )
+    if not getattr(report, "error", None):
+        report.error = (
+            "Inhaltliche Vollständigkeit unzureichend — fehlende Aspekte: "
+            + ", ".join(req.id for req in missing_requirements)
+        )
 
 
 def generate_report(
@@ -1549,8 +1649,15 @@ def generate_report(
         # einer gescheiterten Simulation mit 45 von 48 Runden und null
         # zustande gekommenen Interviews — jede Komponente tat, was sie sollte,
         # nur zog niemand die Summe.
+        persona_fallbacks, persona_total = _load_persona_fallback_stats(agent)
         report.run_degradations = collect_run_degradations(
             simulation_snapshot=report.simulation_snapshot,
+            # Issue #1419: Ein Lauf, dessen Personas saemtlich Platzhalter
+            # waren, meldete sich bis hierher als vollstaendig. Die
+            # Vorbereitung erfasst den Ausfall bereits — nur zog ihn niemand
+            # in den Bericht, der am Ende weitergegeben wird.
+            persona_fallback_count=persona_fallbacks,
+            persona_total=persona_total,
             interviews_requested=breaker_for(agent).request_count("interview_agents"),
             interviews_succeeded=_count_interview_evidence(agent),
             interview_disabled_reason=breaker_for(agent).reason_for("interview_agents"),
@@ -1617,6 +1724,8 @@ def generate_report(
                         contract_validation_errors=val_exc.errors()
                     )
                 )
+        # Issue #1302: siehe _apply_requirement_check.
+        _apply_requirement_check(report, agent, report_id)
         ReportManager.save_report(report)
 
         # ========== Red-Team-Review (Slice 5, Issue #497) — vor report_synthesis ==========
@@ -1700,7 +1809,7 @@ def generate_report(
         # Issue #1277-2: Stage und Message folgen dem tatsächlichen Report-Status.
         # ``resolve_report_status``/``apply_degradation_downgrade`` können den
         # Report auf INCOMPLETE setzen (fehlgeschlagene Pflichtsection, lokale
-        # Claim-Degradierung). Ein unbedingtes „completed" bei 100 % würde
+        # Claim-Degradierung). Ein unbedingtes „completed“ bei 100 % würde
         # Consumern (WebSocket, Polling-Client, Streaming-UI) Erfolg vorgaukeln,
         # den die Pipeline selbst nicht einlöst — genau die Fehldarstellung, die
         # #1006 / P0-7 beseitigen sollte.

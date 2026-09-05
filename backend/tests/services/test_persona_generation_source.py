@@ -2,7 +2,7 @@
 
 Nach drei fehlgeschlagenen LLM-Versuchen wird die Persona nicht verworfen,
 sondern regelbasiert erzeugt („Kaufmännische Sachbearbeitung
-(AdministrativeEmployee)", Themen „Allgemein · Gesellschaft"). Diese
+(AdministrativeEmployee)", Themen „Allgemein · Gesellschaft“). Diese
 Profile nehmen regulär an der Simulation teil, und ihre Beiträge waren im
 Report nicht von echten Personas zu unterscheiden — `OasisAgentProfile`
 besaß kein Feld für Herkunft oder Qualität.
@@ -221,6 +221,37 @@ class TestDegradationReporting:
         assert events[0].severity is DegradationSeverity.WARNING
         assert events[0].context["fallback_personas"] == 4
         assert events[0].context["total_personas"] == 10
+
+    def test_a_total_fallback_blocks_the_step(self):
+        """Kam keine einzige Persona vom Modell, ist der Lauf wertlos (#1419).
+
+        ``BLOCKING`` heisst laut Vertrag, dass der Schritt "bereit" nicht
+        erreichen darf. Genau das ist hier richtig: es gibt keine echte
+        Stimme, die etwas beitragen koennte, und jede Runde darauf
+        produziert garantiert Ausschuss.
+        """
+        collector = DegradationCollector()
+
+        _generator()._report_persona_degradation(self._profiles(20, 20), collector)
+
+        events = collector.report().events
+        assert len(events) == 1
+        assert events[0].severity is DegradationSeverity.BLOCKING
+        assert events[0].context["fallback_personas"] == 20
+        assert events[0].context["total_personas"] == 20
+
+    def test_a_partial_fallback_stays_a_warning(self):
+        """Eine einzige echte Stimme haelt den Lauf verwertbar (#1419).
+
+        Die Grenze liegt bei vollstaendigem Ausfall, nicht bei einer
+        gesetzten Quote: solange echte Personas dabei sind, traegt der Lauf
+        Aussagen, und die Platzhalter sind einzeln gekennzeichnet.
+        """
+        collector = DegradationCollector()
+
+        _generator()._report_persona_degradation(self._profiles(19, 20), collector)
+
+        assert collector.report().events[0].severity is DegradationSeverity.WARNING
 
     def test_clean_run_reports_nothing(self):
         collector = DegradationCollector()

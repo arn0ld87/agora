@@ -125,4 +125,25 @@ describe('locale-coverage', () => {
     expect(deKeys).toContain('feed.resonanceBar')
     expect(enKeys).toContain('feed.resonanceBar')
   })
+
+  // Issue #1290: die Preset-Labels aus Config.LLM_MODEL_PRESETS liefen als
+  // fertige Backend-Strings am Katalog vorbei. Sie kommen jetzt als
+  // `label_key` (llm.preset.<kind>.<slug>) und muessen hier aufloesbar sein.
+  // Der Abgleich gegen die Backend-Liste selbst sitzt in
+  // backend/tests/api/test_model_preset_label_keys.py.
+  it('llm.preset.* existiert in beiden Locales und deckt alle drei kinds ab (#1290)', () => {
+    const dePresets = deKeys.filter((k) => k.startsWith('llm.preset.'))
+    expect(dePresets.length).toBeGreaterThan(0)
+    for (const kind of ['cloud', 'ollama', 'bedrock']) {
+      expect(dePresets.some((k) => k.startsWith(`llm.preset.${kind}.`))).toBe(true)
+    }
+    // Paritaet deckt en.json bereits ab; explizit, weil der Endpunkt beide
+    // Locales gleichermassen bedient.
+    expect(enKeys.filter((k) => k.startsWith('llm.preset.'))).toEqual(dePresets)
+  })
+
+  it('step2.model.ollamaOption existiert in beiden Locales (#1290)', () => {
+    expect(deKeys).toContain('step2.model.ollamaOption')
+    expect(enKeys).toContain('step2.model.ollamaOption')
+  })
 })

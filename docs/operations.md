@@ -142,7 +142,7 @@ GPU-Probe:
 ### Neo4j down
 
 **Symptom:** `/api/status.neo4j.reachable: false`. Ingestion bricht mit
-`ServiceUnavailable`. Frontend zeigt Toast „Service nicht erreichbar".
+`ServiceUnavailable`. Frontend zeigt Toast „Service nicht erreichbar“.
 
 **Diagnose:**
 

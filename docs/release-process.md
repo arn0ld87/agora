@@ -96,7 +96,7 @@ Changelog:
   Doku-Sweeps, Dependency-Updates ohne API-Wirkung.
 
 Pre-1.0-Realität: Minor-Bumps können trotzdem Verhalten brechen — der
-[CHANGELOG](../CHANGELOG.md) ist die ehrliche Wahrheit. Status „alpha"
+[CHANGELOG](../CHANGELOG.md) ist die ehrliche Wahrheit. Status „alpha“
 in der Frontend-Badge bleibt gesetzt, solange wir <1.0 sind.
 
 ---
@@ -122,7 +122,7 @@ Erst danach den Block umbenennen:
 -## [Unreleased]
 +## [0.10.0] — 2026-06-01
 +
-+Milestone „<Name>" abgeschlossen — N/N Issues geschlossen, M Tests grün.
++Milestone „<Name>“ abgeschlossen — N/N Issues geschlossen, M Tests grün.
 +<Kurz-Synopsis>.
 ```
 
@@ -255,7 +255,7 @@ git push origin ":refs/tags/v$BAD"
 ```
 
 Sonst: neuer PATCH-Bump (`+1`) und alten Tag im Release als
-„yanked" kennzeichnen (`gh release edit "v$BAD" --notes "Yanked, see
+„yanked“ kennzeichnen (`gh release edit "v$BAD" --notes "Yanked, see
 v$NEXT."`).
 
 ---
@@ -270,7 +270,7 @@ v$NEXT."`).
   Version-Cut selbst ist mit `check_version_drift.py --write` bereits
   automatisiert; offen sind Changelog-Fold, Tag und GitHub-Release.
 
-Der frühere Followup „Versions-Sync-Slice" ist erledigt: alle
+Der frühere Followup „Versions-Sync-Slice“ ist erledigt: alle
 Versionsquellen laufen über `VERSION` und werden von CI und Pre-Push-Gate
 gegen Drift geprüft.
 

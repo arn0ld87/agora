@@ -88,7 +88,7 @@ import ActivityIndicator from './ActivityIndicator.vue'
 import { useCancelAction } from './useCancelAction'
 
 /**
- * ShellRoot.vue — Grundgeruest der Neuhuelle „Richtung B · Dossier"
+ * ShellRoot.vue — Grundgeruest der Neuhuelle „Richtung B · Dossier“
  * (Block B3).
  *
  * Schmale Kopfzeile + darunter zweispaltig Shelf (Slot #shelf) und

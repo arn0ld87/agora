@@ -49,7 +49,7 @@ TerminationReason = Literal[
 class RunBudgetConfig(BaseModel):
     """Vom Nutzer gesetzte Budget-Limits für einen Run.
 
-    Alle Limits optional; None bedeutet „kein Limit". `enforcement` gilt
+    Alle Limits optional; None bedeutet „kein Limit“. `enforcement` gilt
     für alle gesetzten Limits gemeinsam: soft = warnen und weiterlaufen,
     hard = weitere planbare Modellaufrufe deterministisch verhindern.
     """

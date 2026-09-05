@@ -60,8 +60,82 @@ RUN useradd -m -u 1000 agora \
   && mkdir -p /app/backend/uploads /app/backend/logs \
   && chown -R agora:agora /app
 
+# ---------- codex-cli (Binary-Bezug, landet per COPY in dev und prod) ----------
+# Der codex_cli-Provider (#1405/#1406) ruft das ``codex``-Binary als Subprozess
+# auf; ``is_codex_cli_available()`` macht ein ``shutil.which("codex")`` **im
+# Container**. Eine Installation auf dem Host hilft also nicht — ohne diese
+# Stage meldet die Provider-Probe dauerhaft "codex-CLI nicht im PATH gefunden"
+# und das ChatGPT-Abo bleibt unbenutzbar, obwohl der Provider vollstaendig
+# implementiert ist.
+#
+# Eigene Stage statt zweier Installationen, weil ``prod`` nicht von ``base``
+# erbt: beide Ziel-Stages holen sich dasselbe verifizierte Binary per COPY,
+# und der Download passiert im Build genau einmal.
+#
+# Groesse ehrlich benannt: ~86 MB als tar.gz, **222 MB entpackt** — das
+# Laufzeit-Image waechst entsprechend. Das ist der Preis dafuer, das
+# ChatGPT-Abo ueberhaupt aus dem Container heraus nutzen zu koennen; wer den
+# codex_cli-Provider nicht braucht, kann die COPY-Zeilen in dev/prod
+# entfernen, ohne sonst etwas anzufassen.
+#
+# codex ist seit dem Rust-Rewrite ein statisch gelinktes musl-Binary — kein
+# Node, keine Laufzeitabhaengigkeiten, laeuft unveraendert im slim-Image.
+FROM base AS codex-cli
+
+# Version und Hashes bewusst gepinnt (dasselbe Muster wie die FROM-Digests):
+# ein ungeprueftes Binary aus dem Netz gehoert nicht ins Laufzeit-Image.
+# Die Hashes stammen aus dem ``digest``-Feld der GitHub-Releases-API und
+# muessen bei einem Versionsbump beide mitgezogen werden.
+ARG CODEX_VERSION=rust-v0.153.2
+ARG CODEX_SHA256_AMD64=e8cd1160071f725d2a10cab81073dd6818fc8b096372125d27ef6e66fdf0979e
+ARG CODEX_SHA256_ARM64=878693f9b370320ea21793f99ea1f5687b7d9aa1f2c733de693d9ec0baa4e62a
+# TARGETARCH befuellt BuildKit nur im Multi-Platform-Kontext; ein schlichtes
+# `docker compose build` laesst die Variable LEER. Ein Default darauf waere
+# eine Falle: mit `=amd64` zog ein aarch64-Server das x86_64-Binary und der
+# Build brach erst am abschliessenden `codex --version` mit exit 126 ab
+# ("cannot execute"), nachdem Download und Hash-Pruefung sauber durchliefen.
+#
+# `uname -m` ist die verlaessliche Quelle: Der Build laeuft nativ auf der
+# Zielarchitektur, und unter QEMU-Emulation (buildx --platform) meldet uname
+# ebenfalls die Ziel- und nicht die Hostarchitektur. TARGETARCH bleibt als
+# Override vorne, falls BuildKit es doch setzt — bewusst ohne Default.
+ARG TARGETARCH
+
+RUN set -eux; \
+    case "${TARGETARCH:-}" in \
+      amd64) _arch=x86_64 ;; \
+      arm64) _arch=aarch64 ;; \
+      *) case "$(uname -m)" in \
+           x86_64)        _arch=x86_64 ;; \
+           aarch64|arm64) _arch=aarch64 ;; \
+           *) echo "codex: nicht unterstuetzte Architektur '$(uname -m)'" >&2; exit 1 ;; \
+         esac ;; \
+    esac; \
+    case "${_arch}" in \
+      x86_64)  _sha="${CODEX_SHA256_AMD64}" ;; \
+      aarch64) _sha="${CODEX_SHA256_ARM64}" ;; \
+    esac; \
+    _url="https://github.com/openai/codex/releases/download/${CODEX_VERSION}/codex-${_arch}-unknown-linux-musl.tar.gz"; \
+    curl -fsSL --retry 3 --retry-delay 2 -o /tmp/codex.tar.gz "${_url}"; \
+    echo "${_sha}  /tmp/codex.tar.gz" | sha256sum -c -; \
+    mkdir -p /tmp/codex-extract; \
+    tar -xzf /tmp/codex.tar.gz -C /tmp/codex-extract; \
+    # Der Tarball traegt das Binary unter wechselndem Namen (mit/ohne
+    # Target-Triple); der Fund per find bleibt ueber Releases hinweg stabil.
+    _bin="$(find /tmp/codex-extract -type f -name 'codex*' | head -n1)"; \
+    test -n "${_bin}"; \
+    install -m 0755 "${_bin}" /usr/local/bin/codex; \
+    rm -rf /tmp/codex.tar.gz /tmp/codex-extract; \
+    codex --version
+
 # ---------- dev (default) ----------
 FROM base AS dev
+
+# ``codex`` fuer den codex_cli-Provider. Die Anmeldung selbst liegt NICHT im
+# Image: ``codex login`` legt sie unter ``$CODEX_HOME`` (Default ``~/.codex``)
+# ab, und die wird zur Laufzeit als read-only Volume hereingereicht — siehe
+# docker-compose.yml. Ein Abo-Token gehoert in keine Image-Schicht.
+COPY --from=codex-cli /usr/local/bin/codex /usr/local/bin/codex
 
 COPY --chown=agora:agora package.json bun.lock ./
 COPY --chown=agora:agora frontend/package.json frontend/bun.lock ./frontend/
@@ -86,7 +160,15 @@ ENV FLASK_HOST=0.0.0.0
 
 EXPOSE 5173 5001
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+# start-period deckt den kompletten Kaltstart ab: in dieser Stage bootet
+# zusaetzlich der Vite-Dev-Server, gemessen ~60 s bis /readyz antwortet
+# (armserver, 2026-08-30). Mit den vorherigen 5 s zaehlte Docker die
+# Startup-Fehlschlaege schon als echte Fehler — der Container kippte fuer
+# ~20 s auf `unhealthy`, bevor er healthy wurde. Das ist kein kosmetisches
+# Problem: `depends_on: condition: service_healthy` und jedes Monitoring,
+# das auf den Status schaut, sehen darin einen Ausfall. Fehlschlaege
+# innerhalb der start-period lassen den Status auf `starting` stehen.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
   CMD curl -f http://localhost:5001/readyz || exit 1
 
 CMD ["bun", "run", "dev"]
@@ -163,7 +245,7 @@ RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
 # — es liefert nur pip aus (CPython-Build mit --with-ensurepip), weshalb die
 # beiden #772-CVEs nie aus dieser Schicht stammten. Siehe
 # docs/2026-07-31-issue-772-cve-basisimage-research.md.
-FROM python:3.14-slim@sha256:cea0e6040540fb2b965b6e7fb5ffa00871e632eef63719f0ea54bca189ce14a6 AS prod
+FROM python:3.14-slim@sha256:cad9a2c871761c413caa6fdd6441c783451e740a48aaeba60ae62a8b53525ef6 AS prod
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -187,12 +269,40 @@ WORKDIR /app
 # wiederholt sich derselbe Dauerrot-Zustand bei der nächsten Distro-CVE.
 # Der Digest-Pin oben bleibt die reproduzierbare Ausgangsbasis; die
 # Security-Patches darauf sind per Definition zeitabhängig.
+#
+# Ergaenzung 2026-09-04 (CVE-2026-14456, openssl/libssl3t64/
+# openssl-provider-legacy 3.5.6-1~deb13u2 -> 3.5.7-1~deb13u2): Dass diese
+# RUN-Zeile existiert, genuegt nicht — der Build-Job zieht `cache-from:
+# type=gha`, und solange FROM-Digest und Instruktion unveraendert bleiben,
+# serviert BuildKit den *alten* apt-Layer. `apt-get upgrade` laeuft dann gar
+# nicht neu und der Scan bleibt rot, obwohl der Fix laengst im trixie-Repo
+# liegt. Der Digest-Bump oben ist deshalb hier kein Ersatz fuer den Upgrade,
+# sondern sein Ausloeser: neuer FROM-Digest = invalidierter Layer = frischer
+# apt-Lauf. Bei der naechsten Distro-CVE ist der Digest-Bump wieder das
+# Mittel, um diese Zeile erneut scharf zu stellen.
 RUN apt-get update \
   && apt-get upgrade -y \
   && apt-get install -y --no-install-recommends tzdata \
   && rm -rf /var/lib/apt/lists/* \
   && ln -snf /usr/share/zoneinfo/Europe/Berlin /etc/localtime \
   && echo "Europe/Berlin" > /etc/timezone
+
+# pip aus dem Runtime-Image entfernen (#1410). pip 26.2.1 bringt in
+# site-packages/pip/_vendor laut vendor.txt msgpack==1.1.2 und
+# setuptools==70.3.0 mit; Trivy meldet beide als HIGH (GHSA-6v7p-g79w-8964
+# bzw. CVE-2025-47273) und blockiert damit build-only. Ueber uv.lock sind sie
+# nicht erreichbar — die venv fuehrt setuptools 83.0.0 und gar kein msgpack.
+#
+# Das prod-Image braucht pip zur Laufzeit nicht: die venv wird fertig aus
+# backend-build kopiert und enthaelt selbst kein pip, gunicorn startet aus
+# /app/backend/.venv/bin, und der HEALTHCHECK nutzt urllib. Die einzigen
+# pip-Vorkommen im Backend sind Texte in Fehlermeldungen, keine Aufrufe.
+# Entfernen statt .trivyignore, weil das die Funde beseitigt statt sie zu
+# unterdruecken — und nebenbei Angriffsflaeche und Imagegroesse reduziert.
+# Die dev-Stage bleibt unberuehrt und behaelt pip.
+RUN rm -rf /usr/local/lib/python3.14/site-packages/pip \
+           /usr/local/lib/python3.14/site-packages/pip-*.dist-info \
+           /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.14
 
 ENV TZ=Europe/Berlin
 
@@ -211,11 +321,19 @@ COPY --chown=agora:agora backend/scripts ./backend/scripts
 COPY --chown=agora:agora backend/tests/eval/snapshots ./backend/tests/eval/snapshots
 COPY --chown=agora:agora --from=frontend-build /app/frontend/dist ./frontend/dist
 
+# ``codex`` fuer den codex_cli-Provider — siehe Kommentar an der
+# codex-cli-Stage. Bewusst root:root und 0755: das Binary ist Laufzeitcode,
+# kein Nutzdatum, und ``agora`` braucht darauf nur Ausfuehrungsrecht.
+# Die Anmeldung kommt zur Laufzeit per read-only Volume, nie aus dem Image.
+COPY --from=codex-cli /usr/local/bin/codex /usr/local/bin/codex
+
 USER agora
 
 EXPOSE 5001
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+# Kuerzer als in der dev-Stage — hier faellt der Vite-Boot weg, gunicorn
+# und die Python-Imports brauchen aber ebenfalls deutlich mehr als 5 s.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD ["python", "-c", "import sys; from urllib.request import urlopen; sys.exit(0 if urlopen('http://localhost:5001/readyz', timeout=5).status == 200 else 1)"]
 
 # Gunicorn vor Flask mit gevent-Worker (non-blocking SSE).
@@ -241,7 +359,7 @@ CMD ["/app/backend/.venv/bin/gunicorn", \
      "wsgi:app"]
 
 # ---------- proxy (nginx-Sidecar mit eingebackenem Frontend-Bundle) ----------
-FROM nginx:alpine@sha256:4a73073bd557c65b759505da037898b61f1be6cbcc3c2c3aeac22d2a470c1752 AS proxy
+FROM nginx:alpine@sha256:72ba65eb42c10344912a84ff42408db7d34f2feb642204570ab8fc5ffd29f1d3 AS proxy
 # Alpine-Pakete auf Repo-Stand heben, solange das Base-Image hinterherhinkt:
 # CVE-2026-33630 (c-ares < 1.34.8-r0), CVE-2026-56407/-56408/-56131
 # (libexpat < 2.8.2-r0) — Trivy-Gate scannt HIGH/CRITICAL mit exit-code 1.

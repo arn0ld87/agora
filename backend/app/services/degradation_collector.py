@@ -190,7 +190,7 @@ class ChunkExtractionTally:
     def success_ratio(self) -> float:
         """Anteil produktiver Chunks. Ohne Chunks per Definition 1.0.
 
-        Der Leerfall ist bewusst „alles in Ordnung" und nicht 0.0 — ein
+        Der Leerfall ist bewusst „alles in Ordnung“ und nicht 0.0 — ein
         Build ohne Chunks hat kein Extraktionsproblem, sondern kein
         Dokument, und das ist ein anderer Fehler an einer anderen Stelle.
         """

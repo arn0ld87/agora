@@ -49,7 +49,7 @@ zu setzen, sondern als Erwartungsrahmen für die Auswertung.
 
 ### Auftrag
 
-Erstelle eine Stakeholder-Analyse zur Einführung des „KI-Azubi-Match Dortmund",
+Erstelle eine Stakeholder-Analyse zur Einführung des „KI-Azubi-Match Dortmund“,
 einem KI-gestützten Matching-Portal für Ausbildungsplätze. Das Seed-Dokument
 beschreibt die Ausgangslage, 6 Stakeholder-Gruppen, rechtliche Rahmenbedingungen
 und internationale Erfahrungen.
@@ -69,8 +69,8 @@ und internationale Erfahrungen.
 - Leite aus den Stakeholder-Positionen kontroverse Fragethemen ab
 - Wähle bis zu 8 Personas aus, die möglichst unterschiedliche Positionen vertreten
 - Stelle 4–5 neutrale Fragen, die Konfliktlinien sichtbar machen
-- Gute Themen: „Automation Bias", „Diskriminierung durch Algorithmen",
-  „Kosten-Nutzen-Abwägung", „Datenschutzbedenken"
+- Gute Themen: „Automation Bias“, „Diskriminierung durch Algorithmen“,
+  „Kosten-Nutzen-Abwägung“, „Datenschutzbedenken“
 - Achte auf Rollenklarheit — prüfe ob Antworten zur Persona-Rolle passen
 
 ### Evidence-Regeln (gemäß ADR-0002)
@@ -95,7 +95,7 @@ und internationale Erfahrungen.
 - Vermeide Frage-Echo: Wenn alle Personas gleich klingen, hast du die
   Fragen suggestiv formuliert
 - Prüfe Rollenübernahme: Antwortet ein Rechenzentrums-Techniker als
-  „Betriebsrat", ist das ein bekanntes Phänomen — dokumentiere es
+  „Betriebsrat“, ist das ein bekanntes Phänomen — dokumentiere es
 
 ## Erwartete Herausforderungen (aus CONTEXT.md)
 

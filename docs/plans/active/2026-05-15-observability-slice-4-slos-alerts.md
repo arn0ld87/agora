@@ -36,7 +36,7 @@
 
 ### Modify
 - `docker-compose.observability.yml` — Alert-Rules-Volume-Mount in `signoz-alertmanager`.
-- `deploy/observability/README.md` — Abschnitt „Alerts und SLOs", Webhook-Setup-Hinweis.
+- `deploy/observability/README.md` — Abschnitt „Alerts und SLOs“, Webhook-Setup-Hinweis.
 
 ---
 

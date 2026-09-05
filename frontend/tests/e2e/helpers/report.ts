@@ -52,16 +52,44 @@ export async function triggerReport(
 }
 
 /**
- * Pollt POST /api/report/generate/status bis status "completed" oder "failed".
+ * Terminale Statuswerte, die kein Erfolg sind (backend/app/models/report.py::
+ * ReportStatus, backend/app/services/report_status.py:96-108). "incomplete"
+ * ist seit #1277-2 ein bewusster dritter Endzustand — Backend, Zod-Contract
+ * (reportContract.ts), useReportGeneration.ts und Step4Report.vue tragen ihn
+ * alle mit. Ein Report, der hier landet, wird nie mehr "completed".
+ */
+const TERMINAL_FAILURE_STATUSES = new Set(['incomplete', 'failed']);
+
+function describeTerminalFailure(reportId: string, body: Record<string, unknown>): string {
+  const parts = [`Report ${reportId} hat einen terminalen Status erreicht, der kein Erfolg ist: "${String(body.status)}".`];
+  if (body.error) parts.push(`error: ${String(body.error)}`);
+  if (Array.isArray(body.run_degradations) && body.run_degradations.length > 0) {
+    parts.push(`run_degradations: ${JSON.stringify(body.run_degradations)}`);
+  }
+  if (Array.isArray(body.missing_sections) && body.missing_sections.length > 0) {
+    parts.push(`missing_sections: ${JSON.stringify(body.missing_sections)}`);
+  }
+  return parts.join(' ');
+}
+
+/**
+ * Pollt POST /api/report/generate/status bis status "completed" ist.
  *
  * Verifiziert gegen backend/app/api/report.py::get_generate_status (Zeile 226).
  * Erwartet: { report_id } im JSON-Body.
  *
- * Verwendet expect.poll() — kein hardcoded setTimeout/waitForTimeout.
- * Timeout über Playwright-Default konfigurierbar via pollTimeout-Param.
+ * Verwendet expect.poll() — kein hardcoded setTimeout/waitForTimeout. Wirft
+ * bei einem terminalen Nicht-Erfolgsstatus (s. TERMINAL_FAILURE_STATUSES)
+ * sofort statt bis zum Timeout zu warten: ein solcher Status ändert sich
+ * nicht mehr, jede weitere Sekunde Polling ist verschwendete Wartezeit, kein
+ * zusätzliches Signal (#1387). Das macht den Test strenger, nicht toleranter
+ * — "incomplete" gilt weiterhin nicht als Erfolg, der Test schlägt fehl,
+ * nur schneller und mit einer Begründung statt eines bloßen Timeouts.
+ * expect.poll() propagiert einen im Generator geworfenen Fehler sofort nach
+ * oben, statt ihn als "noch kein Treffer" zu werten und weiterzupollen.
  *
  * Statuswerte (backend/app/services/report_agent/manager.py::ReportStatus):
- *   "pending" | "planning" | "generating" | "completed" | "failed"
+ *   "pending" | "planning" | "generating" | "completed" | "incomplete" | "failed"
  *
  * Im Stub-Modus dauert der Report-Build ca. 30–90 s (11 Sections × 4 ReACT-Runden).
  * Daher Timeout 300 s (5 min) als Standard — analog der Aufgabenstellung.
@@ -85,7 +113,11 @@ export async function pollReportReady(
         if (!res.ok()) return 'http_error';
         const json = await res.json();
         lastBody = (json?.data ?? {}) as Record<string, unknown>;
-        return lastBody.status;
+        const status = lastBody.status;
+        if (typeof status === 'string' && TERMINAL_FAILURE_STATUSES.has(status)) {
+          throw new Error(describeTerminalFailure(reportId, lastBody));
+        }
+        return status;
       },
       {
         message: `Report ${reportId} hat "completed" nicht innerhalb des Timeouts erreicht`,

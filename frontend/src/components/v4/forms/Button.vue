@@ -36,7 +36,7 @@ const props = withDefaults(
     loading?: boolean
     /** Icon-Only-Modus — Komponente nimmt nur Slot, runder Padding */
     icon?: boolean
-    /** Pfeil-Glyph rechts (z. B. „Weiter →") */
+    /** Pfeil-Glyph rechts (z. B. „Weiter →“) */
     arrow?: boolean
     /** Pflicht im icon-Modus für a11y; siehe Dev-Warn unten */
     ariaLabel?: string

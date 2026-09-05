@@ -412,7 +412,7 @@ export function useGraphBuildPipeline({
     currentRunId,
     systemLogs,
     // Issue #1029: stille Teilausfälle des Builds. Leer heißt „nichts
-    // ausgefallen", nicht „nicht geprüft".
+    // ausgefallen", nicht „nicht geprüft“.
     degradations,
     graphIncomplete,
     initialize,

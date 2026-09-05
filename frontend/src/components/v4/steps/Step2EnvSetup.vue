@@ -23,7 +23,7 @@ import {
 } from '../../../contracts/personaQuotaContract'
 import { useEffectiveModelSelection } from '@/composables/useEffectiveModelSelection'
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 
 const props = defineProps({
   simulationId: String,
@@ -63,7 +63,7 @@ const {
   loadingModels,
   language,
   loadModels,
-} = useEnvForm({ t, onError: (msg) => addLog(msg) })
+} = useEnvForm({ t, te, onError: (msg) => addLog(msg) })
 
 // ----- Prepare flow (useSimulationPrepare) -----
 const {

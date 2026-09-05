@@ -7,7 +7,7 @@
  * und sendet sie als autoritatives ``ai_model_ref``. Damit behält ein
  * Dashboard-Pick seine Connection-Bindung (Base-URL + Secret derselben
  * ProviderConnection), ohne den persistenten Kanon zu berühren — die
- * Phase-1-Konsolidierung („eine persistente Modell-Senke") bleibt intakt.
+ * Phase-1-Konsolidierung („eine persistente Modell-Senke“) bleibt intakt.
  *
  * Bewusst sessionStorage: tab-scoped, überlebt den mehrstufigen Flow
  * (Dashboard → Graph-Build → Env-Setup → Simulation) inklusive Reload und

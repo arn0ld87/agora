@@ -14,7 +14,7 @@ Phase 1+2 — er ersetzt nicht den Plan, er verifiziert/korrigiert seine Annahme
 ## Entschluss vorab (richtet alle folgenden Schritte aus)
 
 Das React-Lovable-Dashboard (`agora-runs-dashboard`) wird **nicht weiterverfolgt** —
-das produktive Vue-3-Frontend (`agora/frontend/`) deckt die 5 „Weiter sinnvoll"-Punkte
+das produktive Vue-3-Frontend (`agora/frontend/`) deckt die 5 „Weiter sinnvoll“-Punkte
 der alten Übergabe bereits ab. Das React-Repo dient **nur noch als Vorlage** für zwei
 Dinge: (a) die Onboarding-Step-Struktur, (b) das Provider-Connection-Modell für die
 Modellwahl. Portiert wird **nach Vue**, gegen dieselben, bereits verifizierten
@@ -48,7 +48,7 @@ Phase 1+2 ist der Kernschmerz und reasoning-intensiv — deshalb Opus-Lead.
 `git log main..feat/frontend-next` →
 `674f698a docs(frontend-next): Frontend-Next-Brief`, `67ad63da feat(registry):
 detect MiniMax provider via api.minimax.io base URL`. Strikt voran, kein Merge
-nötig. Plan-Option „von main" vs „von feat/frontend-next (WIP mitnehmen)" —
+nötig. Plan-Option „von main“ vs „von feat/frontend-next (WIP mitnehmen)“ —
 
 ### 2. Uncommitteter WIP ist Accessibility-Polish, NICHT Modellwahl
 
@@ -61,7 +61,7 @@ nötig. Plan-Option „von main" vs „von feat/frontend-next (WIP mitnehmen)" �
 | `components/v4/forms/SettingsSectionPanel.vue` | 4× `:aria-label="field.key"` | a11y |
 | `tests/e2e/golden-gate-accessibility.spec.ts` | 2 Zeilen | a11y-Test |
 
-Der Plan interpretierte dies als „unfertiger Modellwahl-WIP" — **falsch**. Es ist ein
+Der Plan interpretierte dies als „unfertiger Modellwahl-WIP“ — **falsch**. Es ist ein
 a11y-Fix. Alt-`HANDOVER.md` Zeile 100–104 bestätigt: WIP stammt aus *anderer* laufender
 Arbeit, nicht anfassen/committen.
 
@@ -78,7 +78,7 @@ mit Phase-1-Code vermischen. `frontend/test-results/` und `graphify-out/` gehör
   `llm_active.py`, `llm_providers.py`, `llm_routing.py`, `llm_profiles.py`,
   `user_profile.py`.
 
-Plan sagte „Vue hat vermutlich älteren/anderen Flow — Ist-Stand gegenchecken". Ist
+Plan sagte „Vue hat vermutlich älteren/anderen Flow — Ist-Stand gegenchecken“. Ist
 bestätigt: der Port **darf nicht blind ersetzen**. Erst `OnboardingView.vue` lesen,
 vergleichen mit React-`contracts/onboarding.ts`-Step-Reihenfolge
 (`welcome→profile→providers→chat_model→embeddings→privacy→summary`), dann
@@ -240,7 +240,7 @@ geschwächt werden.
   Struktur stark abweicht — Ist-Stand vor Port genau lesen (Punkt 3).
 - `llm_profiles.py` vs Provider-Connection-Modell: Profile obsolet oder koexistieren?
   Sonst nächste Parallel-Quelle.
-- AiModelPicker-„Mock"-These evtl. obsolet — Ist-Stand mit `deriveSource`/`onUpdate`
+- AiModelPicker-„Mock“-These evtl. obsolet — Ist-Stand mit `deriveSource`/`onUpdate`
   zuerst lesen (Punkt 4).
 - Uncommitteter a11y-WIP nicht mit Phase-1-Code vermischen (Punkt 2).
 

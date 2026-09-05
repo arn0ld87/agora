@@ -3,7 +3,7 @@
 Regression für den seit 2026-08-03 reproduzierbar roten Step
 ``Run Python dependency audit`` im Job ``Security scans``: ``uv export``
 schreibt ``torch==2.13.0+cpu`` für Linux, und ``pip-audit --strict`` bricht
-mit „Dependency not found on PyPI and could not be audited" ab, weil PyPI
+mit „Dependency not found on PyPI and could not be audited“ ab, weil PyPI
 keine Local-Version-Labels führt.
 
 Aufrufe via subprocess.run — wir testen den CLI-Vertrag, nicht Internals.

@@ -91,7 +91,7 @@ def _chat_probe(base_url: str, api_key: str, model: str, *, attempts: int = 2) -
       wiederholen; ein Retry wuerde den Testlauf nur verlangsamen.
     * **Transiente Serverantworten** (``429`` Throttling, ``5xx``) — hier laufen
       sechs Probes gleichzeitig, Throttling ist realistisch. Wiederholen: sonst
-      meldet der Test ein gedrosseltes Modell als „nicht chat-faehig" und
+      meldet der Test ein gedrosseltes Modell als „nicht chat-faehig“ und
       erzeugt exakt den falschen Befund, den er verhindern soll.
     * **Transport-Timeouts** — meist Cold-Start des Modells auf mantle.
       Wiederholen, damit der Test nicht an Anlaufzeit scheitert statt an einem

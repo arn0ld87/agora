@@ -193,7 +193,7 @@ describe('useApiAuth', () => {
     const scope = 'sse:sim_parallel'
 
     // mockPost resolved nur einmal — wenn ein zweiter POST käme, würde er undefined zurückgeben
-    // und fetchTicket mit „no ticket"-Fehler abbrechen.
+    // und fetchTicket mit „no ticket“-Fehler abbrechen.
     mockPost.mockResolvedValueOnce(makeTicketResponse('v1.shared'))
 
     const [t1, t2] = await Promise.all([

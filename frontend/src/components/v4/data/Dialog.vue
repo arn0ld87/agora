@@ -29,7 +29,7 @@ const props = withDefaults(
     description?: string
     /** ARIA-Label, falls kein sichtbarer Titel */
     ariaLabel?: string
-    /** Erlaubt ESC + Backdrop-Click? (Confirms „nicht wegklickbar" → false) */
+    /** Erlaubt ESC + Backdrop-Click? (Confirms „nicht wegklickbar“ → false) */
     dismissible?: boolean
     /** Größenpresets */
     size?: 'sm' | 'md' | 'lg'

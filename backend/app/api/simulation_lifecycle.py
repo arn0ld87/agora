@@ -9,6 +9,7 @@ from opentelemetry import trace
 
 from . import simulation_bp
 from ..config import Config
+from ..contracts.model_preset_contract import AvailableModelsResponse, ModelPreset
 from ..llm.providers.registry import detect_provider, resolve_ollama_tags_url
 from ..models.project import ProjectManager
 from ..services.persona_library import PersonaLibrary
@@ -116,24 +117,25 @@ def get_available_models():
             "Neo4j storage not initialised — check NEO4J_URI / NEO4J_PASSWORD and that Neo4j is running."
         )
 
-    return json_success({
-        "ollama": ollama_models,
-        "presets": presets,
-        "current_default": Config.LLM_MODEL_NAME,
-        "default_provider": _detect_default_provider(),
-        "ollama_base_url": base,
-        "ollama_reachable": ollama_error is None and not ollama_skipped,
-        "ollama_error": ollama_error,
-        "ollama_skipped": ollama_skipped,
-        "ollama_skipped_provider": ollama_skipped_provider,
-        "ollama_skip_reason": ollama_skip_reason,
-        "neo4j_reachable": neo4j_reachable,
-        "neo4j_error": neo4j_error,
-        "neo4j_uri": Config.NEO4J_URI,
-        "default_language": Config.AGENT_LANGUAGE,
-        "agent_tools_enabled": Config.ENABLE_AGENT_TOOLS,
-        "max_tool_calls_per_action": Config.MAX_TOOL_CALLS_PER_ACTION,
-    })
+    response = AvailableModelsResponse(
+        ollama=[ModelPreset(**m) for m in ollama_models],
+        presets=[ModelPreset(**p) for p in presets],
+        current_default=Config.LLM_MODEL_NAME,
+        default_provider=_detect_default_provider(),
+        ollama_base_url=base,
+        ollama_reachable=ollama_error is None and not ollama_skipped,
+        ollama_error=ollama_error,
+        ollama_skipped=ollama_skipped,
+        ollama_skipped_provider=ollama_skipped_provider,
+        ollama_skip_reason=ollama_skip_reason,
+        neo4j_reachable=neo4j_reachable,
+        neo4j_error=neo4j_error,
+        neo4j_uri=Config.NEO4J_URI,
+        default_language=Config.AGENT_LANGUAGE,
+        agent_tools_enabled=Config.ENABLE_AGENT_TOOLS,
+        max_tool_calls_per_action=Config.MAX_TOOL_CALLS_PER_ACTION,
+    )
+    return json_success(response.model_dump(mode="json"))
 
 
 @simulation_bp.route('/create', methods=['POST'])
