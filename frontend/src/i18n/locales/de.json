@@ -1332,6 +1332,8 @@
       "languageEn": "English",
       "startCta": "Starten",
       "disabledHint": "Erst Datei und Fragestellung eingeben, dann starten.",
+      "servicesUnavailableHint": "Neo4j-Bereitschaft noch nicht bestätigt. Systemstatus prüfen und erneut laden.",
+      "profilesLoadingHint": "Modellprofile werden geladen. Bitte kurz warten.",
       "requirementLabel": "Fragestellung / Anforderung",
       "requirementPlaceholder": "z. B. 'Welche politischen Reaktionen sind in der DACH-Region zu erwarten?'",
       "profileDefault": "Standard",

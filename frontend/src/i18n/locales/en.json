@@ -1332,6 +1332,8 @@
       "languageEn": "English",
       "startCta": "Start",
       "disabledHint": "Select a file and enter a requirement first.",
+      "servicesUnavailableHint": "Neo4j readiness has not been confirmed. Check system status and reload.",
+      "profilesLoadingHint": "Loading model profiles. Please wait.",
       "requirementLabel": "Research question / requirement",
       "requirementPlaceholder": "e.g. \"What political reactions are expected in the DACH region?\"",
       "profileDefault": "Default",

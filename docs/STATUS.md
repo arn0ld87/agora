@@ -24,6 +24,8 @@ Die Produktreife wird ab diesem Dokumentationsumbau über [`VERSION`](../VERSION
 
 ## Tests
 
+Dashboard-Start: Die globale Ollama-Erreichbarkeit ist informativ und sperrt keine Runs mit unabhängigen Modellrouten. Neo4j-Bereitschaft und abgeschlossener Profilabruf bleiben Voraussetzungen; die Oberfläche unterscheidet fehlende Eingaben von diesen Sperrgründen.
+
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
