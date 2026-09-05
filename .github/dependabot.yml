@@ -37,8 +37,12 @@ updates:
           - "minor"
           - "patch"
 
-  # --- Frontend (npm) ---
-  - package-ecosystem: "npm"
+  # --- Frontend (bun) ---
+  # Das npm-Ökosystem aktualisierte nur package.json und ließ bun.lock stehen;
+  # der Frontend-Smoke-Gate (bun install --frozen-lockfile) brach dann mit
+  # "lockfile had changes, but lockfile is frozen" ab (PRs #1314, #1170).
+  # Das bun-Ökosystem pflegt die textbasierte bun.lock mit.
+  - package-ecosystem: "bun"
     directory: "/frontend"
     schedule:
       interval: "weekly"

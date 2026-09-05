@@ -124,6 +124,10 @@ jobs:
         env:
           PIP_AUDIT_FLAGS: ${{ vars.PIP_AUDIT_FLAGS || '' }}
         run: |
+          # PIP_AUDIT_FLAGS bleibt absichtlich unquotiert: leer muss es zu
+          # keinem Argument expandieren, mehrere Flags muessen per Word-
+          # Splitting getrennt werden. Quotiert wuerde "" als Argument landen.
+          # shellcheck disable=SC2086
           uvx pip-audit --strict --no-deps --disable-pip \
             $PIP_AUDIT_FLAGS \
             -r /tmp/agora-backend-requirements.txt

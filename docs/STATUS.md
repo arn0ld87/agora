@@ -125,6 +125,8 @@ Der mit [#1302](https://github.com/arn0ld87/agora/issues/1302) eingeführte `req
 | Voice-Lint (DACH-Voice + Anti-Forecast) | nur `push:main` — PR-Skip seit 17.05.2026 wegen False-Positives bei Code-Kommentaren |
 | E2E-Kernpipeline | `pull_request`-Trigger aktiv; **als Required Check erzwungen** (alle sechs Smokes, Stand 31.07.2026) |
 | Branch-Protection `main` | aktiv — 17 Required Status Checks, `strict: true`, `enforce_admins: true`, keine Force-Pushes, keine Löschung |
+| Dependabot Frontend | seit [#1428](https://github.com/arn0ld87/agora/pull/1428) `package-ecosystem: bun` — das npm-Ökosystem ließ `bun.lock` stehen und jeder Frontend-Bump scheiterte am Frozen-Lockfile (#1314, #1170). Wächter: `backend/tests/config/test_dependabot_config.py` |
+| actionlint/reviewdog | `github-pr-review`, `level: error`; meldet alle Befunde einer geänderten Workflow-Datei, nicht nur geänderte Zeilen. Bewusste Ausnahmen stehen als `# shellcheck disable=…` mit Begründung im Skript (SC2086 bei `$PIP_AUDIT_FLAGS`, #1428) |
 
 Lokale Befehle:
 
