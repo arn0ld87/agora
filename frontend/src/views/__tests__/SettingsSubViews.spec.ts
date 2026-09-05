@@ -163,11 +163,11 @@ describe('SettingsGeneralView (Slice G1, real)', () => {
     expect(w.exists()).toBe(true)
   })
 
-  it('rendert Breadcrumb "General"', async () => {
+  it('markiert "Allgemein" als aktiven Eintrag der Sektionsliste (SettingsOverlay)', async () => {
     const w = await mountView(SettingsGeneralView, '/settings/general')
-    const shell = w.findComponent({ name: 'AppShell' })
-    const crumbs = shell.props('breadcrumbs') as Array<{ label: string }>
-    expect(crumbs.map((c) => c.label)).toContain('General')
+    const active = w.find('a[aria-current="page"]')
+    expect(active.exists()).toBe(true)
+    expect(active.text()).toBe('Allgemein')
   })
 
   it('rendert PageHeader mit lokalisiertem Titel', async () => {
@@ -197,14 +197,13 @@ describe('SettingsIntegrationsView (Slice G1, real)', () => {
     expect(w.exists()).toBe(true)
   })
 
-  it('rendert Breadcrumb "Integrations"', async () => {
+  it('markiert "Integrationen" als aktiven Eintrag der Sektionsliste (SettingsOverlay)', async () => {
     const w = await mountView(SettingsIntegrationsView, '/settings/integrations')
-    const shell = w.findComponent({ name: 'AppShell' })
-    const crumbs = shell.props('breadcrumbs') as Array<{ label: string }>
+    const active = w.find('a[aria-current="page"]')
+    expect(active.exists()).toBe(true)
     // Locale-agnostisch: deutscher "Integrationen"-String und englischer
     // "Integrations"-String sind beide gueltige Lokalisierungen.
-    const labels = crumbs.map((c) => c.label)
-    expect(labels.some((l) => /^Integration(en|s)?$/.test(l))).toBe(true)
+    expect(/^Integration(en|s)?$/.test(active.text())).toBe(true)
   })
 
   it('reicht Integrations-Sektionen an SettingsSectionPanel', async () => {
@@ -221,11 +220,11 @@ describe('SettingsIntegrationsView (Slice G1, real)', () => {
 describe('SettingsApiKeysView (Slice G2, real)', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('rendert Breadcrumb "API Keys"', async () => {
+  it('markiert "API-Schlüssel" als aktiven Eintrag der Sektionsliste (SettingsOverlay)', async () => {
     const w = await mountView(SettingsApiKeysView, '/settings/api-keys')
-    const shell = w.findComponent({ name: 'AppShell' })
-    const crumbs = shell.props('breadcrumbs') as Array<{ label: string }>
-    expect(crumbs.map((c) => c.label)).toContain('API Keys')
+    const active = w.find('a[aria-current="page"]')
+    expect(active.exists()).toBe(true)
+    expect(active.text()).toBe('API-Schlüssel')
   })
 
   it('rendert keine ComingSoonCard mehr (View ist real)', async () => {

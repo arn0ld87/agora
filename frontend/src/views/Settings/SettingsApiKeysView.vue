@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
+import SettingsOverlay from '@/components/v4/forms/SettingsOverlay.vue'
 import Card from '@/components/v4/forms/Card.vue'
 import Badge from '@/components/v4/forms/Badge.vue'
 import Input from '@/components/v4/forms/Input.vue'
@@ -11,11 +12,6 @@ import type { ApiKeyModel, ApiKeyScope } from '@/contracts/apiKeysContract'
 
 const { t, locale } = useI18n()
 const store = useApiKeysStore()
-
-const BREADCRUMBS = [
-  { label: 'Settings', to: { name: 'SettingsGeneral' } },
-  { label: 'API Keys' },
-]
 
 // --- Create-Modal-State ---
 const createModalOpen = ref(false)
@@ -125,7 +121,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <AppShell :breadcrumbs="BREADCRUMBS">
+  <AppShell>
+    <SettingsOverlay>
     <PageHeader
       :title="t('settings.v4.apiKeys.title')"
       :subtitle="t('settings.v4.apiKeys.subtitle')"
@@ -341,6 +338,7 @@ onMounted(() => {
         </div>
       </div>
     </Teleport>
+    </SettingsOverlay>
   </AppShell>
 </template>
 

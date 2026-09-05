@@ -138,6 +138,11 @@ async function mountView(initial: { connections?: unknown[] } = {}) {
         // seinen Default-Slot durch, damit die Header-Buttons sichtbar
         // bleiben.
         AppShell: { name: 'AppShell', template: '<div><slot /></div>' },
+        // SettingsOverlay (Redesign PR 9) rendert eine Sektionsliste mit
+        // router-links auf alle sechs Settings-Routen — dieser schlanke
+        // Test-Router kennt nur zwei. Slot-Stub reicht, die Suite prueft
+        // das Anlege-Formular, nicht das Settings-Chrome.
+        SettingsOverlay: { name: 'SettingsOverlay', template: '<div><slot /></div>' },
         PageHeader: {
           name: 'PageHeader',
           props: ['breadcrumbs', 'title'],

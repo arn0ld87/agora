@@ -1,25 +1,24 @@
 /**
- * LlmProvidersView — Spec-Tests fuer Slice 5.4 Migration auf AiModelPicker.
+ * LlmProvidersView — Spec-Tests fuer Slice 5.4 Migration auf AiModelPicker
+ * und Redesign PR 9 (Liste + Detail-Formular statt Card-Grid).
  *
- * Die View rendert eine Workspace-Default-Card und Provider-Cards.
- * Migration-Fokus: Workspace-Default-Card nutzt jetzt AiModelPicker
- * (SSoT) statt ModelPicker. Die Provider-Cards bleiben unveraendert,
- * sind aber durch smoke tests mit abgedeckt.
+ * Die View rendert eine Workspace-Default-Card, eine Provider-Liste und
+ * genau EIN Detail-Formular fuer den ausgewaehlten Provider.
  *
  * Coverage:
  *  1. mountet ohne Crash
- *  2. zeigt BREADCRUMBS
- *  3. zeigt PageHeader mit title + subtitle
- *  4. Workspace-Default-Card sichtbar
- *  5. AiModelPicker in der Default-Card
- *  6. defaultRoute computed zeigt aktuelle Route (Provider-ID + Model)
- *  7. AiModelPicker-Update mit AiModelRef → effectiveModel.setGlobalSelection (setGlobalDefault + setActiveLlmConfig-Gleichschritt)
- *  8. AiModelPicker-Update mit null → kein setGlobalSelection (kein Schreibpfad)
- *  9. onMounted: loadProviders + loadConnections + defaultsStore.load
- * 10. onBeforeUnmount: loescht alle drafts
+ *  2. zeigt PageHeader mit title + subtitle
+ *  3. Workspace-Default-Card sichtbar
+ *  4. AiModelPicker in der Default-Card
+ *  5. defaultRoute computed zeigt aktuelle Route (Provider-ID + Model)
+ *  6. AiModelPicker-Update mit AiModelRef → effectiveModel.setGlobalSelection (setGlobalDefault + setActiveLlmConfig-Gleichschritt)
+ *  7. AiModelPicker-Update mit null → kein setGlobalSelection (kein Schreibpfad)
+ *  8. onMounted: loadProviders + loadConnections + defaultsStore.load
+ *  9. onBeforeUnmount: loescht alle drafts
+ * 10. Provider-Liste: listet alle Provider mit Status-Badge auf
  * 11. statusTone: connected → 'green', error → 'red', unsupported → 'gray'
  * 12. statusLabel: connected → 'Verbunden', undefined → 'Nicht konfiguriert'
- * 13. provider-card: Listet alle Provider auf
+ * 13. Auswahl einer Zeile wechselt das Detail-Formular auf den Provider
  * 14. save() ruft upsertConnection mit korrekten Args (apiKey, baseUrl)
  * 15. runTest() ruft testConnection wenn konfiguriert
  * 16. disconnect() ruft removeConnection und loescht draft
@@ -29,6 +28,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { createPinia, setActivePinia } from 'pinia'
 import { computed, reactive, ref } from 'vue'
+import { LlmProviderListTestId } from '@/contracts/testIds'
 import LlmProvidersView from '../Settings/LlmProvidersView.vue'
 
 // AiModelPicker mocken — Glue-Code, nicht Picker-Logik
@@ -47,12 +47,15 @@ const legacyModelPickerStub = {
   template: '<select data-testid="legacy-model-picker-stub" disabled></select>',
 }
 
-// AppShell / PageHeader / Card / Input / Badge stubben (zu vieler Komponenten
-// Mounting, wir testen Glue-Code, nicht die Sub-Components)
+// AppShell / SettingsOverlay / PageHeader / Card / Input / Badge stubben (zu
+// vieler Komponenten Mounting, wir testen Glue-Code, nicht die Sub-Components).
+// Button bleibt echt: die view-eigenen data-testid-Attribute landen dank
+// Vue-Attribute-Fallthrough direkt auf dem gerenderten <button>.
 const appShellStub = { name: 'AppShell', template: '<div><slot /></div>' }
+const settingsOverlayStub = { name: 'SettingsOverlay', template: '<div><slot /></div>' }
 const pageHeaderStub = {
   name: 'PageHeader',
-  props: ['title', 'subtitle', 'breadcrumbs'],
+  props: ['title', 'subtitle'],
   template: '<div data-testid="page-header" :data-title="title" :data-subtitle="subtitle"><slot /></div>',
 }
 const cardStub = {
@@ -181,6 +184,7 @@ function makeI18n() {
                 refreshModels: 'Modelle laden',
                 disconnect: 'Verbindung trennen',
               },
+              list: { ariaLabel: 'Provider' },
             },
           },
         },
@@ -234,6 +238,7 @@ async function mountView(initial: {
         AiModelPicker: aiPickerStub,
         ModelPicker: legacyModelPickerStub,
         AppShell: appShellStub,
+        SettingsOverlay: settingsOverlayStub,
         PageHeader: pageHeaderStub,
         Card: cardStub,
         Input: inputStub,
@@ -245,7 +250,13 @@ async function mountView(initial: {
   return wrapper
 }
 
-describe('LlmProvidersView (Slice 5.4, AiModelPicker-Migration)', () => {
+/** Waehlt eine Provider-Zeile ueber ihre data-provider-id aus. */
+async function selectRow(wrapper: ReturnType<typeof mount>, providerId: string) {
+  const row = wrapper.find(`[data-testid="${LlmProviderListTestId.row}"][data-provider-id="${providerId}"]`)
+  await row.trigger('click')
+}
+
+describe('LlmProvidersView (Redesign PR 9, Liste + Detail)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -253,15 +264,6 @@ describe('LlmProvidersView (Slice 5.4, AiModelPicker-Migration)', () => {
   it('mountet ohne Crash', async () => {
     const w = await mountView()
     expect(w.exists()).toBe(true)
-  })
-
-  it('zeigt BREADCRUMBS via PageHeader', async () => {
-    const w = await mountView()
-    const ph = w.findComponent(pageHeaderStub)
-    expect(ph.exists()).toBe(true)
-    const crumbs = ph.props('breadcrumbs') as Array<{ label: string }>
-    expect(crumbs.length).toBeGreaterThanOrEqual(2)
-    expect(crumbs[0].label).toBe('Settings')
   })
 
   it('zeigt PageHeader mit title + subtitle', async () => {
@@ -335,6 +337,12 @@ describe('LlmProvidersView (Slice 5.4, AiModelPicker-Migration)', () => {
     expect(() => w.vm).not.toThrow()
   })
 
+  it('Provider-Liste: listet alle Provider mit Status-Badge auf', async () => {
+    const w = await mountView()
+    const rows = w.findAll(`[data-testid="${LlmProviderListTestId.row}"]`)
+    expect(rows.length).toBe(3)
+  })
+
   it('statusTone: connected → green, error → red, unsupported → gray', async () => {
     const w = await mountView({
       connections: { openai: { id: 'openai', provider_kind: 'openai', status: 'connected' } },
@@ -355,20 +363,21 @@ describe('LlmProvidersView (Slice 5.4, AiModelPicker-Migration)', () => {
     expect(ollamaBadge).toBeDefined()
   })
 
-  it('provider-card: Listet alle Provider auf', async () => {
+  it('Auswahl einer Zeile wechselt das Detail-Formular auf den Provider', async () => {
     const w = await mountView()
-    const cards = w.findAllComponents(cardStub)
-    // 1 Workspace-Default-Card + 3 Provider-Cards = 4
-    expect(cards.length).toBe(4)
+    // Ohne Auswahl faellt das Detail-Formular auf den ersten Provider zurueck.
+    let detail = w.find(`[data-testid="${LlmProviderListTestId.detail}"]`)
+    expect(detail.attributes('data-provider-id')).toBe('ollama')
+
+    await selectRow(w, 'openai')
+    detail = w.find(`[data-testid="${LlmProviderListTestId.detail}"]`)
+    expect(detail.attributes('data-provider-id')).toBe('openai')
   })
 
   it('save() ruft upsertConnection mit korrekten Args (apiKey, baseUrl)', async () => {
     const w = await mountView()
-    const cards = w.findAllComponents(cardStub)
-    const openaiCard = cards.find((c) => c.props('title') === 'OpenAI')
-    expect(openaiCard).toBeDefined()
-    // Save-Button hat data-action="save" (siehe Original-Template)
-    const saveBtn = openaiCard!.find('button.llm-btn--primary')
+    await selectRow(w, 'openai')
+    const saveBtn = w.find(`[data-testid="${LlmProviderListTestId.saveButton}"]`)
     expect(saveBtn.exists()).toBe(true)
     await saveBtn.trigger('click')
     expect(providersStoreMock.upsertConnection).toHaveBeenCalled()
@@ -380,11 +389,10 @@ describe('LlmProvidersView (Slice 5.4, AiModelPicker-Migration)', () => {
     const w = await mountView({
       connections: { openai: { id: 'openai', provider_kind: 'openai', status: 'connected' } },
     })
-    const cards = w.findAllComponents(cardStub)
-    const openaiCard = cards.find((c) => c.props('title') === 'OpenAI')
-    const testBtn = openaiCard!.findAll('button.llm-btn').find((b) => b.text().includes('testen'))
-    expect(testBtn).toBeDefined()
-    await testBtn!.trigger('click')
+    await selectRow(w, 'openai')
+    const testBtn = w.find(`[data-testid="${LlmProviderListTestId.testButton}"]`)
+    expect(testBtn.exists()).toBe(true)
+    await testBtn.trigger('click')
     expect(providersStoreMock.testConnection).toHaveBeenCalledWith('openai')
   })
 
@@ -392,11 +400,10 @@ describe('LlmProvidersView (Slice 5.4, AiModelPicker-Migration)', () => {
     const w = await mountView({
       connections: { openai: { id: 'openai', provider_kind: 'openai', status: 'connected' } },
     })
-    const cards = w.findAllComponents(cardStub)
-    const openaiCard = cards.find((c) => c.props('title') === 'OpenAI')
-    const disconnectBtn = openaiCard!.findAll('button.llm-btn').find((b) => b.text().includes('trennen'))
-    expect(disconnectBtn).toBeDefined()
-    await disconnectBtn!.trigger('click')
+    await selectRow(w, 'openai')
+    const disconnectBtn = w.find(`[data-testid="${LlmProviderListTestId.disconnectButton}"]`)
+    expect(disconnectBtn.exists()).toBe(true)
+    await disconnectBtn.trigger('click')
     expect(providersStoreMock.removeConnection).toHaveBeenCalledWith('openai')
   })
 })

@@ -85,6 +85,34 @@ export const ShelfTestId = {
   newObject: 'shelf-new-object',
 } as const
 
+/**
+ * Redesign PR 9 (`ui(settings)`): Einstellungen-Overlay + Provider-Liste.
+ *
+ * `SettingsOverlay` ersetzt die Pro-Seite-Breadcrumbs durch eine gemeinsame
+ * Sektionsliste; `LlmProviderList*` ersetzt die Card-pro-Provider-Grid aus
+ * `LlmProvidersView` durch Liste + Detail-Formular.
+ */
+export const SettingsOverlayTestId = {
+  root: 'settings-overlay',
+  nav: 'settings-overlay-nav',
+  navItem: 'settings-overlay-nav-item',
+  back: 'settings-overlay-back',
+} as const
+
+export type SettingsOverlayTestId = (typeof SettingsOverlayTestId)[keyof typeof SettingsOverlayTestId]
+
+export const LlmProviderListTestId = {
+  list: 'llm-provider-list',
+  row: 'llm-provider-list-row',
+  detail: 'llm-provider-detail',
+  saveButton: 'llm-provider-save',
+  testButton: 'llm-provider-test',
+  refreshModelsButton: 'llm-provider-refresh-models',
+  disconnectButton: 'llm-provider-disconnect',
+} as const
+
+export type LlmProviderListTestId = (typeof LlmProviderListTestId)[keyof typeof LlmProviderListTestId]
+
 export const DossierTestId = {
   root: 'dossier-root',
   title: 'dossier-title',

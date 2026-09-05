@@ -15,7 +15,7 @@
  *  1. mountet ohne Crash
  *  2. ensureLoaded wird onMount aufgerufen; View mountet auch bei
  *     ensureLoaded-reject ohne Crash (selectedModel bleibt null)
- *  3. zeigt BREADCRUMBS
+ *  3. bettet SettingsOverlay ein (Redesign PR 9)
  *  4. zeigt PageHeader mit title + subtitle
  *  5. LlmProfileManager sichtbar
  *  6. AiModelPicker sichtbar
@@ -77,8 +77,11 @@ const aiPickerStub = {
 
 const appShellStub = {
   name: 'AppShell',
-  props: ['breadcrumbs'],
-  template: '<div data-testid="app-shell" :data-crumbs-len="(breadcrumbs || []).length"><slot /></div>',
+  template: '<div data-testid="app-shell"><slot /></div>',
+}
+const settingsOverlayStub = {
+  name: 'SettingsOverlay',
+  template: '<div data-testid="settings-overlay"><slot /></div>',
 }
 const pageHeaderStub = {
   name: 'PageHeader',
@@ -149,6 +152,7 @@ async function mountSettingsGeneral(initial: { effectiveRef?: AiModelRef | null 
       stubs: {
         AiModelPicker: aiPickerStub,
         AppShell: appShellStub,
+        SettingsOverlay: settingsOverlayStub,
         PageHeader: pageHeaderStub,
         LlmProfileManager: llmProfileManagerStub,
         SettingsSectionPanel: settingsSectionPanelStub,
@@ -180,13 +184,9 @@ describe('SettingsGeneralView (Phase-1, Kanon-First via useEffectiveModelSelecti
     expect(picker.props('modelValue')).toBeNull()
   })
 
-  it('zeigt BREADCRUMBS via AppShell', async () => {
+  it('bettet SettingsOverlay ein (Redesign PR 9)', async () => {
     const w = await mountSettingsGeneral()
-    const shell = w.findComponent(appShellStub)
-    expect(shell.exists()).toBe(true)
-    const crumbs = shell.props('breadcrumbs') as Array<{ label: string }>
-    expect(crumbs.length).toBeGreaterThanOrEqual(2)
-    expect(crumbs[0].label).toBe('Settings')
+    expect(w.find('[data-testid="settings-overlay"]').exists()).toBe(true)
   })
 
   it('zeigt PageHeader mit title + subtitle', async () => {
