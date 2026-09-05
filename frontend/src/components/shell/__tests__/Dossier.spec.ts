@@ -35,8 +35,13 @@ vi.mock('../../../api/simulation', () => ({
 vi.mock('../../../api/status', () => ({
   getSystemStatus: vi.fn().mockResolvedValue({ success: true }),
 }))
+vi.mock('../../../api/report', () => ({
+  getReport: vi.fn().mockResolvedValue({ success: false }),
+  getReportEvidence: vi.fn().mockResolvedValue({ success: false }),
+}))
 
 import { pauseSimulation, resumeSimulation, createSimulationBranch, createSimulationFromPersonas } from '../../../api/simulation'
+import { getReport, getReportEvidence } from '../../../api/report'
 import { useCancelAction } from '../useCancelAction'
 import Dossier from '../Dossier.vue'
 
@@ -47,6 +52,7 @@ const router = createRouter({
   routes: [
     { path: '/runs/:id', name: 'RunDetail', component: { template: '<div/>' } },
     { path: '/v4/env-setup/:projectId', name: 'StepEnvSetup', component: { template: '<div/>' } },
+    { path: '/v4/report/:reportId', name: 'StepReport', component: { template: '<div/>' } },
     { path: '/ablage/:kind/:objectId', name: 'ShelfObject', component: { template: '<div/>' } },
     { path: '/dashboard', name: 'Dashboard', component: { template: '<div/>' } },
     { path: '/settings', name: 'SettingsGeneral', component: { template: '<div/>' } },
@@ -299,5 +305,126 @@ describe('Dossier — Uebersichtszustand (Redesign PR 3)', () => {
     await flushPromises()
 
     expect(router.currentRoute.value.name).toBe('Dashboard')
+  })
+})
+
+describe('Dossier — Lauf-Anreicherung (Redesign PR 4)', () => {
+  it('Kennzahlstreifen zeigt Personas und Jobs, wenn bekannt', () => {
+    const obj = makeObject({
+      kind: 'lauf',
+      personaCount: 12,
+      jobs: [
+        { runId: 'run_1', runType: 'simulation_run', status: 'completed', message: '', updatedAt: '2026-08-18T10:00:00Z', linkedIds: {} },
+        { runId: 'run_0', runType: 'graph_build', status: 'completed', message: '', updatedAt: '2026-08-17T10:00:00Z', linkedIds: {} },
+      ],
+    })
+    const wrapper = mountDossier(obj)
+
+    const kpis = wrapper.find(`[data-testid="${DossierTestId.kpis}"]`).text()
+    expect(kpis).toContain('12')
+    expect(kpis).toContain('2')
+  })
+
+  it('Bestandteile Akteure/Ausgabe zeigen Zahl + Link, der Link navigiert', async () => {
+    vi.mocked(getReport).mockResolvedValue({ success: true, data: { evidence_sections: 7 } } as never)
+    const obj = makeObject({
+      kind: 'lauf',
+      personaCount: 8,
+      jobs: [{ runId: 'run_1', runType: 'simulation_run', status: 'completed', message: '', updatedAt: '2026-08-18T10:00:00Z', linkedIds: { simulation_id: 'sim_1', report_id: 'rep_9' } }],
+    })
+    const wrapper = mountDossier(obj)
+    await flushPromises()
+
+    const parts = wrapper.findAll(`[data-testid="${DossierTestId.part}"]`)
+    expect(parts).toHaveLength(2)
+    expect(parts[0].text()).toContain('8')
+    expect(parts[1].text()).toContain('7')
+
+    await parts[1].find('button').trigger('click')
+    await flushPromises()
+
+    expect(router.currentRoute.value.name).toBe('StepReport')
+    expect(router.currentRoute.value.params.reportId).toBe('rep_9')
+  })
+
+  it('Jobs-Zeitleiste zeigt alle Jobs des Laufs', () => {
+    const obj = makeObject({
+      kind: 'lauf',
+      jobs: [
+        { runId: 'run_new', runType: 'simulation_run', status: 'completed', message: '', updatedAt: '2026-08-18T10:00:00Z', linkedIds: {} },
+        { runId: 'run_old', runType: 'graph_build', status: 'completed', message: '', updatedAt: '2026-08-17T10:00:00Z', linkedIds: {} },
+      ],
+    })
+    const wrapper = mountDossier(obj)
+
+    const timeline = wrapper.find(`[data-testid="${DossierTestId.jobsTimeline}"]`)
+    expect(timeline.exists()).toBe(true)
+    expect(timeline.findAll('li')).toHaveLength(2)
+  })
+
+  it('Jobs-Zeitleiste fehlt, wenn der Lauf keine Jobs traegt', () => {
+    const obj = makeObject({ kind: 'lauf', jobs: [] })
+    const wrapper = mountDossier(obj)
+
+    expect(wrapper.find(`[data-testid="${DossierTestId.jobsTimeline}"]`).exists()).toBe(false)
+  })
+})
+
+describe('Dossier — Bericht-Anreicherung (Redesign PR 4)', () => {
+  it('zeigt Confidence-Verteilung und Red-Team-Befunde aus dem Report-Contract', async () => {
+    vi.mocked(getReport).mockResolvedValue({
+      success: true,
+      data: {
+        outline: { title: 'T', summary: 'S', sections: [{ title: 'Lage', description: 'D' }] },
+        evidence_sections: 4,
+        red_team_findings: ['Ein Befund'],
+      },
+    } as never)
+    vi.mocked(getReportEvidence).mockResolvedValue({
+      success: true,
+      data: {
+        sections: [
+          {
+            claims: [
+              { confidence_label: 'high' },
+              { confidence_label: 'low' },
+              { confidence_label: 'low' },
+            ],
+            data_gaps: [],
+          },
+        ],
+      },
+    } as never)
+
+    const obj = makeObject({ kind: 'bericht', id: 'rep_1' })
+    const wrapper = mountDossier(obj)
+    await flushPromises()
+
+    const confidence = wrapper.find(`[data-testid="${DossierTestId.confidenceDistribution}"]`)
+    expect(confidence.exists()).toBe(true)
+    expect(confidence.text()).toContain('2')
+    expect(confidence.text()).toContain('1')
+
+    const redTeam = wrapper.find(`[data-testid="${DossierTestId.redTeamFindings}"]`)
+    expect(redTeam.exists()).toBe(true)
+    expect(redTeam.text()).toContain('Ein Befund')
+
+    const kpis = wrapper.find(`[data-testid="${DossierTestId.kpis}"]`).text()
+    expect(kpis).toContain('4')
+  })
+
+  it('Confidence-Verteilung und Red-Team-Befunde fehlen ohne Claims/Befunde', async () => {
+    vi.mocked(getReport).mockResolvedValue({
+      success: true,
+      data: { outline: { title: 'T', summary: 'S', sections: [] }, evidence_sections: 0, red_team_findings: [] },
+    } as never)
+    vi.mocked(getReportEvidence).mockResolvedValue({ success: true, data: { sections: [] } } as never)
+
+    const obj = makeObject({ kind: 'bericht', id: 'rep_2' })
+    const wrapper = mountDossier(obj)
+    await flushPromises()
+
+    expect(wrapper.find(`[data-testid="${DossierTestId.confidenceDistribution}"]`).exists()).toBe(false)
+    expect(wrapper.find(`[data-testid="${DossierTestId.redTeamFindings}"]`).exists()).toBe(false)
   })
 })
