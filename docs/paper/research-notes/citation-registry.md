@@ -2,7 +2,7 @@
 
 AS_OF: 2026-08-09. Repo-HEAD: `7e42ae34` (Branch `feat/1152-document-chunk-provenance`).
 
-Diese Untersuchung ist ein **Code-Audit eines einzelnen Repos**, keine Web-Recherche. Die Source-Governance der Deep-Research-Pipeline (≥30 % official, max Single-Source ≤25 %, ≥5 unique Domains) ist daher sinngemäß anzuwenden: die Quellen sind Code-Belege, ADRs, GitHub-Issues, Referenzlauf-Artefakte und wissenschaftliche Literatur. Der „official"-Anteil ist per Konstruktion sehr hoch (Code + ADRs + Referenzläufe des Repos selbst), da die Untersuchung die Frage beantwortet, ob der Code das tut, was er behauptet — externe Quellen dienen dem übergeordneten Kontext (Forschungsstand), nicht der Verifikation von Code-Aussagen.
+Diese Untersuchung ist ein **Code-Audit eines einzelnen Repos**, keine Web-Recherche. Die Source-Governance der Deep-Research-Pipeline (≥30 % official, max Single-Source ≤25 %, ≥5 unique Domains) ist daher sinngemäß anzuwenden: die Quellen sind Code-Belege, ADRs, GitHub-Issues, Referenzlauf-Artefakte und wissenschaftliche Literatur. Der „official“-Anteil ist per Konstruktion sehr hoch (Code + ADRs + Referenzläufe des Repos selbst), da die Untersuchung die Frage beantwortet, ob der Code das tut, was er behauptet — externe Quellen dienen dem übergeordneten Kontext (Forschungsstand), nicht der Verifikation von Code-Aussagen.
 
 **Zitier-Schema:** Präfix-IDs statt bloßer [n], weil Quellentypen heterogen sind und der Leser den Typ sofort erkennen soll.
 - `C<n>` — Code-Beleg (`file:line`), Source-Type: official, Authority 10 (das Repo selbst ist Gegenstand der Untersuchung)
@@ -81,8 +81,8 @@ Alle Code-Belege wurden am Branch-Stand `7e42ae34` verifiziert, nicht an README-
 |---|---|---|---|
 | A1 | `docs/decisions/0002-evidence-gating.md` | akzeptiert | 5 Hartanker: hard-Prompt-Block, Hedge-Words-Snapshot, Enum `EvidenceSourceKind`, `cross_stakeholder_for_high`, `reject_inferred_in_high_confidence` — unantastbar ohne `0002-supersedes.md` + User-Signoff |
 | A2 | `docs/decisions/0007-embedding-configuration-and-index-migration.md` | akzeptiert | Embedding-Config in JSON-Datei (nicht Neo4j); Migrations-Lifecycle pending→running→validating→completed/failed/rolled_back |
-| A3 | `docs/decisions/0011-evidence-entailment-and-provenance.md` | akzeptiert (2026-07-27) | Default source_kind=inferred (ersetzt seed_corpus); zweistufiges Binding; Referenzlauf report_d9023bd1f55a (sim_7058c126da03), „formal valide, inhaltlich nicht vertrauenswürdig"; 7 code-belegte Ursachen |
-| A4 | `docs/decisions/0013-seed-corpus-document-anchor.md` | akzeptiert (2026-08-09) | `seed_doc:<document_id>#chunk:<chunk_id>` Anker verpflichtend für seed_corpus; Teil A (Sidecar) umgesetzt, Teil B (Neo4j-Persistenz+Retrieval) offen; „Das LLM benennt seine eigene Quelle, niemand prüft nach" |
+| A3 | `docs/decisions/0011-evidence-entailment-and-provenance.md` | akzeptiert (2026-07-27) | Default source_kind=inferred (ersetzt seed_corpus); zweistufiges Binding; Referenzlauf report_d9023bd1f55a (sim_7058c126da03), „formal valide, inhaltlich nicht vertrauenswürdig“; 7 code-belegte Ursachen |
+| A4 | `docs/decisions/0013-seed-corpus-document-anchor.md` | akzeptiert (2026-08-09) | `seed_doc:<document_id>#chunk:<chunk_id>` Anker verpflichtend für seed_corpus; Teil A (Sidecar) umgesetzt, Teil B (Neo4j-Persistenz+Retrieval) offen; „Das LLM benennt seine eigene Quelle, niemand prüft nach“ |
 | A5 | `docs/decisions/0012-run-budgets.md` | akzeptiert | Run-Budgets, BudgetExceededError |
 
 ## Issues (I)
@@ -109,7 +109,7 @@ Alle Code-Belege wurden am Branch-Stand `7e42ae34` verifiziert, nicht an README-
 | R1 | `backend/uploads/reports/report_e2e_trust01/evidence_map.json` + `report-v3.json` | historisch | 25 Claims alle medium, 125 Evidence 100% inferred, 0 source_id_anchor — Vor-Fix-Zustand ADR-0011 |
 | R2 | `docs/reference-runs/2026-08-09-domain-migration-v2/` | 2026-08-09 | 0 validierte Claims, 30 Hypothesen, 12 Evidence-Items (8 agent_action, 4 graph_metric), Interview→Evidence-Binding-Defekt, validated_claims_total:0 |
 | R3 | `docs/reference-runs/2026-08-09-domain-migration/` | 2026-08-09 | Vorgängerlauf v1 |
-| R4 | ADR-0011 Referenzlauf `report_d9023bd1f55a` (sim_7058c126da03) | 2026-07-27 | 30 Agents, 315 Interaktionen, 5 Cluster, Echo-Index 0.4317, „formal valide, inhaltlich nicht vertrauenswürdig" — Ursprung der Evidence-Pipeline |
+| R4 | ADR-0011 Referenzlauf `report_d9023bd1f55a` (sim_7058c126da03) | 2026-07-27 | 30 Agents, 315 Interaktionen, 5 Cluster, Echo-Index 0.4317, „formal valide, inhaltlich nicht vertrauenswürdig“ — Ursprung der Evidence-Pipeline |
 
 ## Literatur (L)
 
@@ -139,7 +139,7 @@ Vollständige Tabelle in `task-f-literature.md`. Kern-Quellen für diese Untersu
 - **Academic-Anteil:** 14/92 ≈ 15 % — Kontext, nicht Code-Verifikation.
 - **Community (Issues):** 12/92 ≈ 13 % — alle mit Code verifiziert.
 - **Single-Source-Max:** kein einzelner Code-Beleg trägt >25 % der Aussagen; jede Kernaussage ruht auf ≥2 Belegen (Cross-Validierung im Code).
-- **Unique Domains:** github.com (Issues), arxiv.org/PMC (Literatur), lokales Repo (Code/ADRs/Referenzläufe) — 3 Domänen, aber Code-Audit-Charakter macht die Domain-Schwelle hier nicht anwendbar (die „Domains" sind Dateipfade im Repo).
+- **Unique Domains:** github.com (Issues), arxiv.org/PMC (Literatur), lokales Repo (Code/ADRs/Referenzläufe) — 3 Domänen, aber Code-Audit-Charakter macht die Domain-Schwelle hier nicht anwendbar (die „Domains“ sind Dateipfade im Repo).
 - **Nachzug Simulations-Verifikation:** C45–C57 (13 Belege) aus drei Mini-Workern (B1 Personas/Quoten, B2 OASIS-Actions/Echo-Index, B3 Interview-Binding); korrigierten drei Befunde (Interview-Fix in HEAD, DACH-Quoten kalibriert, Nicht-Determinismus code-belegt).
 
 ## Dropped Sources

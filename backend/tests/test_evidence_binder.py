@@ -1,7 +1,7 @@
 """S4a — Tests für claim-spezifisches Evidence-Binding.
 
 Verwenden einen deterministischen Fake-Embedder, der jedem Wort eine
-feste Achse im Vektor zuordnet. Damit hat „NRW Pflichtfach" hohe
+feste Achse im Vektor zuordnet. Damit hat „NRW Pflichtfach“ hohe
 Cosine-Ähnlichkeit zu Items, die dieselben Wörter enthalten, und 0
 zu komplett anderen Texten. Reicht aus, um die Filter-/Sortier-
 Semantik zu testen, ohne Ollama oder ein echtes Embedding-Modell.

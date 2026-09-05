@@ -27,7 +27,7 @@ const props = defineProps<{
   active?: boolean
   /** Deaktiviert den Item: kein Router-Push, aria-disabled="true", gedimmtes Styling. */
   disabled?: boolean
-  /** Tooltip-Text (z. B. „Bald verfügbar"). */
+  /** Tooltip-Text (z. B. „Bald verfügbar“). */
   tooltip?: string
 }>()
 

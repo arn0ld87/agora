@@ -165,6 +165,14 @@ if __name__ == '__main__' and any(arg in sys.argv for arg in ('-h', '--help')):
 
 from app.config import Config
 
+# Issue #1423: CLI-Transport (codex_cli). Erst hier importierbar — das Modul
+# zieht ``app.llm.providers.codex_cli``, und der ``app``-Pfad steht erst nach
+# ``install_script_paths`` oben.
+try:
+    from .sim_runtime.codex_cli_model import CodexCliModel, cli_transport_active
+except ImportError:  # direct script execution
+    from sim_runtime.codex_cli_model import CodexCliModel, cli_transport_active
+
 
 def _create_gemini_model(
     *,
@@ -1392,6 +1400,16 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
         llm_model = "qwen3-coder-next:cloud"
     
     runtime_settings = resolve_model_runtime_settings(llm_model)
+
+    # Issue #1423: CLI-Transport (codex_cli) hat weder base_url noch api_key.
+    # Die URL-basierte Erkennung darunter hat nichts zu mustern und liefe in
+    # den OPENAI-Zweig, der das geroutete Modell an das geerbte LLM_BASE_URL
+    # schickt — genau der beobachtete HTTP 400. Das Signal setzt
+    # ``build_route_subprocess_env`` anhand der Registry.
+    if cli_transport_active():
+        print(f"{config_label} model={llm_model}, transport=cli (codex)", flush=True)
+        return CodexCliModel(model_type=llm_model)
+
     platform = detect_oasis_platform(llm_model, llm_base_url)
     think_on = os.environ.get("OLLAMA_THINKING", "false").lower() in ("1", "true", "yes")
 

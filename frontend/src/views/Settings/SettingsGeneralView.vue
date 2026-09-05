@@ -5,7 +5,7 @@
  * Phase-1 Konsolidierung (frontend-next): EIN Modell-Picker als einzige
  * Selektions-UI. Die Auswahl geht durch `useEffectiveModelSelection`, das
  * `routing/defaults.global` UND `active-config` im Gleichschritt schreibt
- * (Kanon: PHASE-1-DIVERGENZ.md). Die frühere separate „Active LLM Config"-
+ * (Kanon: PHASE-1-DIVERGENZ.md). Die frühere separate „Active LLM Config“-
  * Sektion (eigene Provider/Modell-Dropdowns → active-config) wurde entfernt —
  * sie war die zweite, divergierende Server-Senke.
  *

@@ -158,7 +158,7 @@ def test_terminal_set_consistency() -> None:
     """Jeder Status in ``TERMINAL_STATES`` darf höchstens den Retry-Pfad haben.
 
     COMPLETED hat 0 outgoing, FAILED nur ``{PREPARING}`` (Retry). Beide gelten
-    aus Lifecycle-Sicht als „abgeschlossen", weshalb sie in TERMINAL_STATES
+    aus Lifecycle-Sicht als „abgeschlossen“, weshalb sie in TERMINAL_STATES
     stehen.
     """
     for terminal in TERMINAL_STATES:

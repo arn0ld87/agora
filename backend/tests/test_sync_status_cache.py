@@ -11,7 +11,7 @@ schlicht nie wieder stattfinden. Diese Tests nageln beide Richtungen fest.
 
 Sie kommen ohne den teuren Collect aus: mit einem PATH ohne ``uv`` kann das
 Skript gar nicht messen und meldet im ``--check``-Modus Exit-Code 2
-(„Messfehler"). Ein Cache-Treffer liefert dagegen 0 oder 1. Der Exit-Code
+(„Messfehler“). Ein Cache-Treffer liefert dagegen 0 oder 1. Der Exit-Code
 verrät damit, welchen Zweig das Skript genommen hat.
 """
 
@@ -40,7 +40,7 @@ def _run_check_without_uv(
     """``--check`` mit einem PATH ohne ``uv``.
 
     Ohne ``uv`` ist eine Messung unmöglich. Exit 2 heißt deshalb „der Cache hat
-    nicht getragen", jeder andere Code „die Zahl kam aus dem Cache" (oder die
+    nicht getragen", jeder andere Code „die Zahl kam aus dem Cache“ (oder die
     Messung wurde per ``--skip-backend-count`` erst gar nicht versucht).
     """
     env = dict(os.environ)

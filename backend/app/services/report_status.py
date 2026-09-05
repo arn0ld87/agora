@@ -1,6 +1,6 @@
 """Service for querying report generation status.
 
-``get_status`` beantwortet dieselbe Frage — „wie steht es um diesen Report?" —
+``get_status`` beantwortet dieselbe Frage — „wie steht es um diesen Report?“ —
 aus vier verschiedenen Quellen, je nachdem, welche IDs der Aufrufer kennt und
 was davon noch existiert. Die Quellen sind nach Verlässlichkeit geordnet und
 werden der Reihe nach befragt:
@@ -93,8 +93,8 @@ def _status_from_run_registry(query: _StatusQuery) -> Optional[dict[str, Any]]:
         "current_section_index": len(progress_state.get("completed_sections") or []),
     }
 
-    # Issue #1277-2: Run-Registry ``completed`` heißt „Run beendet", nicht
-    # „Report vollständig". ``run_generate`` schreibt den Registry-Status auch
+    # Issue #1277-2: Run-Registry ``completed`` heißt „Run beendet“, nicht
+    # „Report vollständig“. ``run_generate`` schreibt den Registry-Status auch
     # bei INCOMPLETE auf ``completed`` (Teilergebnis, kein Fehlschlag — siehe
     # #1006). Der Polling-Consumer (``/api/report/generate/status`` ->
     # ``useReportGeneration``) müsste sonst den completed-Branch nehmen und
@@ -239,7 +239,7 @@ def _acknowledge_polling(query: _StatusQuery) -> Optional[dict[str, Any]]:
 
 
 class ReportStatusService:
-    # Die Abbildung „Dataclass-Outline -> v2-Contract-Form" gehoert dem
+    # Die Abbildung „Dataclass-Outline -> v2-Contract-Form“ gehoert dem
     # Export-Service; ``api/report.py`` bezieht sie ebenfalls von dort. Hier
     # stand bis 17.08.2026 eine zweite, bis auf Typannotationen zeichengleiche
     # Kopie — zwei Orte fuer dieselbe Mapping-Regel, von denen ein Fix nur

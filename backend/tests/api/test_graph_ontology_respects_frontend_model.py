@@ -1,6 +1,6 @@
 """POST /api/graph/ontology/generate respektiert die Frontend-Modellauswahl.
 
-Sub-Slice „ontology-respects-frontend-model" — Frontend hängt
+Sub-Slice „ontology-respects-frontend-model“ — Frontend hängt
 ``llm_model`` (String) und ``llm_provider`` (JSON-String) ans FormData;
 Backend muss daraus den ``LLMClient`` parametrieren, statt blind auf
 ``Config.LLM_MODEL_NAME`` zu fallen.

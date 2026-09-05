@@ -8,6 +8,10 @@ import {
   PostCreatedEventSchema,
   type PostCreatedEvent,
 } from '../contracts/postEventContract'
+import type {
+  AvailableModelsResponse as AvailableModelsResponseContract,
+  ModelPreset as ModelPresetContract,
+} from '../contracts/modelPresetContract'
 
 // --- Local types --------------------------------------------------------
 
@@ -192,33 +196,27 @@ export interface InterviewAgentsData {
   interviews: Array<{ agent_id: string; prompt: string }>
 }
 
-export interface ModelPreset {
-  id: string
-  name: string
-  provider: string
-  [key: string]: unknown
-}
+/**
+ * Ein Eintrag aus `presets[]` bzw. `ollama[]` von
+ * `backend/app/api/simulation_lifecycle.py::get_available_models`.
+ *
+ * Issue #1395: Re-Export des generierten Zod-Spiegels
+ * (`contracts/modelPresetContract.ts`) statt eines handgeschriebenen
+ * Interfaces — der Backend-Vertrag lebt in
+ * `backend/app/contracts/model_preset_contract.py`.
+ *
+ * Issue #1290: `label` traegt fuer kuratierte Presets keinen Text mehr — der
+ * Endpunkt liefert stattdessen `label_key`, einen stabilen i18n-Schluessel
+ * (`llm.preset.<kind>.<slug>`), den `i18n/modelPresetLabel.ts` aufloest.
+ * Die Ollama-Tags-Liste setzt `label` weiterhin auf den Modellnamen.
+ */
+export type ModelPreset = ModelPresetContract
 
 /**
  * Felder aus `backend/app/api/simulation_lifecycle.py::get_available_models`.
- * Frueher stand hier ein `models: ModelPreset[]` — ein Feld, das der
- * Endpunkt nie geliefert hat; nur die Index-Signatur liess das
- * durchgehen.
+ * Re-Export des generierten Zod-Spiegels (Issue #1395).
  */
-export interface AvailableModelsResponse {
-  ollama?: ModelPreset[]
-  presets?: ModelPreset[]
-  current_default?: string
-  default_provider?: 'ollama' | 'cloud' | 'openai' | 'unknown'
-  ollama_base_url?: string
-  ollama_reachable?: boolean
-  ollama_error?: string | null
-  ollama_skipped?: boolean
-  agent_tools_enabled?: boolean
-  max_tool_calls_per_action?: number
-  default_language?: string
-  [key: string]: unknown
-}
+export type AvailableModelsResponse = AvailableModelsResponseContract
 
 export interface BranchData {
   branch_name?: string

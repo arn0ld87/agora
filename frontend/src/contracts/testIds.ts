@@ -41,7 +41,7 @@ export const LlmRoutingTestId = {
 export type LlmRoutingTestId = (typeof LlmRoutingTestId)[keyof typeof LlmRoutingTestId]
 
 /**
- * Block B3 — Neuhuelle „Richtung B · Dossier".
+ * Block B3 — Neuhuelle „Richtung B · Dossier“.
  *
  * Testid-Kontrakt VOR den Komponenten angelegt (PLAN.md, B3): der alte
  * Shell-Bereich hatte keinen — Tests hingen an CSS-Klassen wie

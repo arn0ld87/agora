@@ -40,7 +40,7 @@ erwarteten** Entitäten gelistet, nicht die Typbezeichnungen.
 ### Erwartung Persona-Eligibility-Log (CONTEXT.md §1, §2)
 - 6 Personen-Entitäten sollten als Persona-Kandidaten erkannt werden
 - Organisationen können auftauchen, wenn die NER sie als Personen klassifiziert
-  (häufig bei „IHK Dortmund" als `Organization`)
+  (häufig bei „IHK Dortmund“ als `Organization`)
 - Unbekannte entity_types werden konservativ zugelassen → Log-Meldung
   `ausserhalb der bekannten Liste und werden konservativ zugelassen`
 
@@ -86,7 +86,7 @@ oder im Recruiting vor.
 
 **Prüfhinweis:** Seed-Dokument enthält 4 Tabellenzeilen mit konkreten Zahlen
 (Internationale Erfahrungen) — diese sollten zu `verify_prose`-Prüfungen führen
-(CONTEXT.md §3: „nur Sätze mit einer Zahl").
+(CONTEXT.md §3: „nur Sätze mit einer Zahl“).
 
 ## 4. Spezifische Risiken und Fallstricke (aus CONTEXT.md)
 
@@ -98,11 +98,11 @@ im Antwort-String. Das ist kein Defekt, aber ein Qualitätsmerkmal der Rohdaten.
 Frage-Wiederholungen durchsuchen.
 
 ### 4.2 Rollenübernahme (§2)
-Erwartet: Jessica Nowak (DGB) könnte als „Betriebsrätin" antworten, obwohl sie
-Gewerkschaftssekretärin ist. Thomas Bergmann könnte als „IHK-Präsident" statt
+Erwartet: Jessica Nowak (DGB) könnte als „Betriebsrätin“ antworten, obwohl sie
+Gewerkschaftssekretärin ist. Thomas Bergmann könnte als „IHK-Präsident“ statt
 Hauptgeschäftsführer auftreten.
 
-**Prüfung:** Gibt es Antwort-Präfixe wie „Als Betriebsrat…" oder „Als Vorstand…"?
+**Prüfung:** Gibt es Antwort-Präfixe wie „Als Betriebsrat…“ oder „Als Vorstand…“?
 Das wäre ein Hinweis auf das bekannte Rollenübernahme-Phänomen.
 
 ### 4.3 Zitat ≠ Simulationsäußerung (§2)

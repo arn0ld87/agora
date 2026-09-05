@@ -29,7 +29,8 @@ export const ModelCapabilitiesSchema = z.object({
 export type ModelCapabilities = z.infer<typeof ModelCapabilitiesSchema>
 
 // OpenCode Go remains a CLI bridge and is unsupported for provider connections
-// in this slice.
+// in this slice. Codex CLI (#1405) is the first supported CLI-transport
+// provider: `transport: "cli"`, `auth_mode: "session"`, no `base_url`.
 const ProviderConnectionKindSchema = z.enum([
   'ollama',
   'openai',
@@ -42,6 +43,7 @@ const ProviderConnectionKindSchema = z.enum([
   'github_copilot',
   'bedrock',
   'cloud',
+  'codex_cli',
   'unknown',
 ])
 
@@ -111,7 +113,7 @@ export const ProviderConnectionBaseSchema = z.object({
   id: z.string().min(1),
   provider_kind: ProviderConnectionKindSchema,
   display_name: z.string().min(1),
-  transport: z.enum(['http', 'local']),
+  transport: z.enum(['http', 'local', 'cli']),
   auth_mode: z.enum(['none', 'api_key', 'oauth', 'session']),
   base_url: z.union([PublicBaseUrlSchema, LocalOllamaBaseUrlSchema]).nullable().default(null),
   enabled: z.boolean().default(true),

@@ -211,9 +211,9 @@ export type ContentIdea = z.infer<typeof ContentIdeaSchema>;
 // ein Beleg kommt, `origin` beschreibt, wie eine Zahl zustande kam.
 //
 // Issue #1343: `kind` trennt operative Mengen ("quantity") von Datumsangaben
-// ("date"). Aus „15. Oktober 2026" entstand sonst der sinnlose Eintrag
+// ("date"). Aus „15. Oktober 2026“ entstand sonst der sinnlose Eintrag
 // value=15.0 / unit="October". Das Feld ist optional/nullable, weil
-// Bestandsartefakte es nicht tragen — „nicht erfasst" ist nicht dasselbe wie
+// Bestandsartefakte es nicht tragen — „nicht erfasst“ ist nicht dasselbe wie
 // eine erfasste quantity (Muster: Claim.confidence_scope).
 // Issue #1343: Ein Monatsname ist keine Maßeinheit. Steht er als unit in einem
 // numerischen Threshold, war der Ursprung eine Datumsangabe, deren Tag und Monat

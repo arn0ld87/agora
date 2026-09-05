@@ -2,8 +2,8 @@
 
 `gemini-3.5-flash-lite` lieferte für dasselbe 1-KB-Dokument 3 Entitäten
 und **0 Beziehungen**; zwei von vier Chunks meldeten `NER done: 0
-entities, 0 relations`. Der Schritt meldete trotzdem „Abgeschlossen",
-„Graph fertig." und „Weiter zur Umgebung → Bereit". Erst mehrere Schritte
+entities, 0 relations`. Der Schritt meldete trotzdem „Abgeschlossen“,
+„Graph fertig.“ und „Weiter zur Umgebung → Bereit“. Erst mehrere Schritte
 später scheiterte der Report an fehlender Evidenz — an einem Symptom,
 dessen Ursache hier liegt.
 
@@ -47,7 +47,7 @@ def _tally(productive: int, total: int) -> ChunkExtractionTally:
 
 class TestRelationThreshold:
     def test_graph_without_relations_blocks(self):
-        """Der Fall aus B-24: 3 Entitäten, 0 Beziehungen, trotzdem „bereit"."""
+        """Der Fall aus B-24: 3 Entitäten, 0 Beziehungen, trotzdem „bereit“."""
         degradations = DegradationCollector()
 
         _service()._assess_graph_quality(_graph_info(3, 0), _tally(4, 4), degradations)

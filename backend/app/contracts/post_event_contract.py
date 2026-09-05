@@ -108,7 +108,7 @@ class PostCreatedEvent(BaseModel):
     @classmethod
     def sim_time_tz_aware(cls, v: datetime | None) -> datetime | None:
         # Layer-0 erzwingt tz-aware Timestamps für sim_time. Naive datetimes
-        # würden im Frontend zu „local time"-Drift führen, sobald der Container
+        # würden im Frontend zu „local time“-Drift führen, sobald der Container
         # eine andere TZ als der Browser hat.
         if v is not None and v.tzinfo is None:
             raise ValueError("sim_time muss tz-aware sein (UTC + Offset)")

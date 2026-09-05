@@ -292,7 +292,7 @@ F2.2 Sub-Slice 47 für das Hard-Disable des Query-Fallbacks).
 ## Offene Punkte (nach Phase 3 abgearbeitet)
 
 - Der frühere Upstream-Review-Status (`SECURITY_REVIEW_SUMMARY.md`) liegt nicht mehr im Repository; er war durch diese Phasen ohnehin überholt. Aktive CVE-Baseline und Ausnahmeprozess stehen in [`dependency-risk-register.md`](dependency-risk-register.md).
-- ~~Langfristig: echte Session-/Login-Auth statt Static-Token.~~ Durch [ADR-0001](decisions/0001-auth-model.md) (2026-05-04, Accepted) beantwortet: v1.0 bleibt **bewusst Single-User-only**, ein echtes Session-/Login-Modell ist v2-Material. Siehe Sektion „Auth-Modell v1.0" am Ende dieses Dokuments.
+- ~~Langfristig: echte Session-/Login-Auth statt Static-Token.~~ Durch [ADR-0001](decisions/0001-auth-model.md) (2026-05-04, Accepted) beantwortet: v1.0 bleibt **bewusst Single-User-only**, ein echtes Session-/Login-Modell ist v2-Material. Siehe Sektion „Auth-Modell v1.0“ am Ende dieses Dokuments.
 
 ---
 
@@ -349,7 +349,7 @@ uvx pip-audit --strict --no-deps --disable-pip \
 Der Normalisierungsschritt ist auf Linux nicht optional: `uv export` pinnt Torch
 marker-getrennt (`torch==2.13.0+cpu ; sys_platform == 'linux'`), und PyPI führt
 keine PEP-440-Local-Version-Labels. Ohne den Schritt bricht `pip-audit --strict`
-mit „Dependency not found on PyPI and could not be audited" ab — kein Vuln-Fund,
+mit „Dependency not found on PyPI and could not be audited“ ab — kein Vuln-Fund,
 sondern eine nicht auflösbare Zeile. Auf macOS greift der andere Marker, deshalb
 ist der Fehler lokal unsichtbar. Details und Regressionstests:
 [`backend/scripts/normalize_audit_requirements.py`](../backend/scripts/normalize_audit_requirements.py).
@@ -424,7 +424,7 @@ Agora v1.0 ist **Single-User-only**. Ein einziger gemeinsamer Bearer-Token (`AGO
 
 - kein User-Konzept,
 - keine Login-Page,
-- keinen Logout (außer „Token aus dem Frontend-Storage löschen"),
+- keinen Logout (außer „Token aus dem Frontend-Storage löschen“),
 - keine Token-Rotation ohne Container-Neustart,
 - keinen Audit-Trail wer wann was getan hat,
 - keine Rollen oder Berechtigungen,
@@ -498,6 +498,6 @@ Default-Migrationspfad (laut ADR-0001 § Optionen): **Option B — HttpOnly-Sess
 ### Hardstops für v1.0
 
 - Keine Public-Internet-Werbung für Agora bis zu einem v2-ADR mit echtem Auth-Modell.
-- Keine Marketing-Aussagen wie „Multi-User-Simulator".
+- Keine Marketing-Aussagen wie „Multi-User-Simulator“.
 - Keine Reaktivierung von `?token=` in Prod (Hardstop ist code-verifiziert in `backend/app/utils/auth.py::_extract_token`).
 - Keine Erweiterung des Tokens auf User-Identität ohne neuen ADR.

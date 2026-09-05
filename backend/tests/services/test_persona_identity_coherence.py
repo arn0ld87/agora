@@ -10,7 +10,7 @@ beschreiben verschiedene Menschen, häufig mit abweichendem Geschlecht:
     username=katharina_schäfer_846   persona: "Sabine Krüger …"
     username=felix_krause_452        persona: "Klaus Weber …"
 
-Der Interview-Systemprompt setzt beides zusammen — „Du bist <label>" und
+Der Interview-Systemprompt setzt beides zusammen — „Du bist <label>“ und
 direkt darunter ein Profil, in dem jemand anders beschrieben wird. Die Persona
 bekommt zwei Identitäten in derselben Nachricht. Das ist die plausibelste
 Erklärung für die beobachtete Rollenübernahme (eine Technikerin antwortet „Als
@@ -19,7 +19,7 @@ Betriebsrat hätte ich…").
 **P2 — Organisationen werden Einzelpersonen.** Aus `Nordharz Bildungswerk gGmbH`
 (`source_entity_type: Organization`) wurde `juergen_hartmann_nhb_832` mit
 `profession: "Dozent für IT-Umschulungen und Betriebsratsmitglied"`. Weder
-„Dozent" noch „Betriebsratsmitglied" ist aus einem Bildungsträger ableitbar.
+„Dozent“ noch „Betriebsratsmitglied“ ist aus einem Bildungsträger ableitbar.
 Die Ursache ist strukturell: Eine gGmbH hat kein Alter, kein Geschlecht, keinen
 MBTI-Typ und keine Berufsbezeichnung — der Generator musste all das erfinden.
 

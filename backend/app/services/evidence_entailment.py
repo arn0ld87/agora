@@ -991,7 +991,7 @@ def classify_evidence(
     ``retrieval_score`` ist das Cosine-Ergebnis der ersten Bindungsstufe,
     sofern der Aufrufer eine hatte. Liegt es über
     :data:`RETRIEVAL_RELEVANCE_THRESHOLD`, entfällt der lexikalische
-    Themenvorfilter: die Frage „geht es überhaupt um dasselbe" hat die
+    Themenvorfilter: die Frage „geht es überhaupt um dasselbe“ hat die
     Embedding-Stufe dann bereits besser beantwortet, als Wortzählung es kann.
     """
     claim = (claim_text or "").strip()

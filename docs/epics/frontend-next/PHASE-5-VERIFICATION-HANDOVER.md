@@ -90,7 +90,7 @@ stoppen, nicht aus dem Wizard** → Graph: Node verschieben → Reload → Posit
 → Mini-Map nutzen.
 
 **Achtung:** der Onboarding-Teil und die Modellwahl-Konsistenz sind Phase 1+2 (Opus).
-Falls Phase 1+2 noch nicht ausgeliefert ist, ist Punkt „dieselbe Modellwahl überall" noch
+Falls Phase 1+2 noch nicht ausgeliefert ist, ist Punkt „dieselbe Modellwahl überall“ noch
 nicht verifizierbar — dann auf den Opus-Merge warten oder diesen Teilschritt überspringen
 und nur Phase-3/4-Punkte verifizieren.
 

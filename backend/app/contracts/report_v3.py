@@ -242,11 +242,11 @@ class ContentIdea(BaseModel):
 
 #: Issue #1343 — Datumerkennung für Threshold-Werte.
 #:
-#: Der AURORA-Referenzlauf las „15. Oktober 2026" als ``value=15.0,
+#: Der AURORA-Referenzlauf las „15. Oktober 2026“ als ``value=15.0,
 #: unit="October"`` in den Bericht rutschen. Diese Muster erkennen die im
 #: Seed-Material vorkommenden Schreibweisen, bevor die Number-Coercion sie
 #: auseinanderreißt. Bewusst eng: nur vollständige Daten mit Jahr — ein
-#: „15. Oktober" ohne Jahr ist kein operativer Wert, sondern eine Lücke.
+#: „15. Oktober“ ohne Jahr ist kein operativer Wert, sondern eine Lücke.
 _DATE_ISO_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
 _DATE_DOT_RE = re.compile(r"^(\d{1,2})\.(\d{1,2})\.(\d{4})$")
 _DATE_PROSE_RE = re.compile(r"^(\d{1,2})\.?\s+([A-Za-zäöüÄÖÜ]+)\.?\s+(\d{4})$")
@@ -354,7 +354,7 @@ def _numeric_string_to_float(raw: str) -> float | None:
 class Threshold(BaseModel):
     """Operative Zahl oder Datum mit ausgewiesener Herkunft (Issue #1160 E).
 
-    Zahlen wie „>90 % Traffic-Baseline" oder „14-Tage-Rankinggrenze" sehen im
+    Zahlen wie „>90 % Traffic-Baseline“ oder „14-Tage-Rankinggrenze“ sehen im
     Fließtext alle gleich aus — egal ob sie aus dem Auftragsdokument stammen,
     aus gemessenen Daten, aus einer Norm, aus einer Betreiberentscheidung oder
     daraus, dass ein Sprachmodell sie plausibel fand. Der Leser kann sie nicht
@@ -366,11 +366,11 @@ class Threshold(BaseModel):
     kam. Eine Vermischung würde ADR-0002 Anker 3 verwässern.
 
     Issue #1343: ``kind`` trennt operative Mengen (``quantity``) von
-    Datumsangaben (``date``). Aus „15. Oktober 2026" entstand sonst der
+    Datumsangaben (``date``). Aus „15. Oktober 2026“ entstand sonst der
     sinnlose Eintrag ``value=15.0, unit="October"`` — ein Datum ist keine
     Menge, es trägt keine Einheit und ist in keinem Schwellwertvergleich
     verwendbar. ``kind`` ist optional mit Default ``None`` (Bestandsartefakte
-    vor #1343 laden weiter; „nicht erfasst" ist nicht dasselbe wie eine
+    vor #1343 laden weiter; „nicht erfasst“ ist nicht dasselbe wie eine
     erfasste quantity — Muster: ``Claim.confidence_scope``). Bewusst kein
     Pydantic-Discriminated-Union: das Schema erreicht über
     ``model_json_schema()`` auch Fallback-Provider im json_object-Modus,
@@ -450,8 +450,8 @@ class Threshold(BaseModel):
         """Issue #1343: Datumsparser VOR der generischen Number-Coercion.
 
         Läuft, bevor Pydantic ``value`` anfasst: ein String, der eines der
-        erkannten Datummuster trifft („15. Oktober 2026", „15 October 2026",
-        „2026-10-15", „15.10.2026"), wird zu ISO normalisiert und auf
+        erkannten Datummuster trifft („15. Oktober 2026“, „15 October 2026“,
+        „2026-10-15“, „15.10.2026“), wird zu ISO normalisiert und auf
         ``kind='date'`` festgelegt — auch gegen ein fälschlich gesetztes
         ``kind='quantity'``. Ein Datum kann so strukturell nie als Menge mit
         Monatsnamen als Einheit landen.
@@ -548,7 +548,7 @@ class Threshold(BaseModel):
 
     @property
     def display_value(self) -> str:
-        """Menschlesbare Form: „90 percent" bzw. das ISO-Datum ohne Einheit."""
+        """Menschlesbare Form: „90 percent“ bzw. das ISO-Datum ohne Einheit."""
         if self.kind == "date":
             return str(self.value)
         return f"{float(self.value):g} {self.unit}"

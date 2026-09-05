@@ -8,7 +8,7 @@
 
   Die Komponente rendert nichts, solange nichts ausgefallen ist — der
   Normalfall bleibt ruhig. `blocking` bedeutet, dass der Schritt den
-  Zustand „bereit" nicht erreicht; `warning` heißt, das Ergebnis ist
+  Zustand „bereit“ nicht erreicht; `warning` heißt, das Ergebnis ist
   nutzbar, aber nachweislich schlechter als es aussieht.
 -->
 <template>

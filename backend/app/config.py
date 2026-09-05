@@ -232,6 +232,14 @@ class Config:
     REPORT_INTERVIEW_MAX_PER_PERSONA = int(
         os.environ.get('REPORT_INTERVIEW_MAX_PER_PERSONA', '2')
     )
+    # Issue #1302 — maschinelle Vollständigkeitprüfung vor dem Report-
+    # Abschluss: der Requirement-Checker (services/report_agent/
+    # requirement_checker.py) prüft den fertigen Berichtstext gegen eine
+    # konfigurierbare Checkliste und stuft fehlende Aspekte über die
+    # bestehende run_degradations-Mechanik auf INCOMPLETE ab.
+    REPORT_REQUIREMENT_CHECKER_ENABLED = os.environ.get(
+        'REPORT_REQUIREMENT_CHECKER_ENABLED', 'true'
+    ).strip().lower() in ('1', 'true', 'yes', 'on')
     # Output language for generated reports (plan, sections, chat answers).
     REPORT_LANGUAGE = os.environ.get('REPORT_LANGUAGE', 'German')
 
@@ -302,12 +310,25 @@ class Config:
     EVENT_BUS_BACKEND = os.environ.get('EVENT_BUS_BACKEND', 'auto').lower()
 
     # Curated LLM model presets shown in the UI dropdown alongside locally installed Ollama models.
+    #
+    # Issue #1290: die Eintraege tragen KEIN ``label`` mehr. Ein hier
+    # hinterlegter Anzeigetext liefe am ``vue-i18n``-Katalog vorbei — das
+    # Frontend koennte ihn weder uebersetzen noch an die aktive Locale
+    # anpassen. Stattdessen liefert der Vertrag mit ``label_key`` einen
+    # stabilen, sprachneutralen i18n-Schluessel; der Anzeigetext lebt in
+    # ``frontend/src/i18n/locales/{de,en}.json`` unter ``llm.preset.*``.
+    # ``name`` bleibt der Fallback, wenn ein Schluessel fehlt.
+    #
+    # Schluessel-Schema: ``llm.preset.<kind>.<slug>`` — ``slug`` ist der
+    # Modellname ohne Vendor-Praefix, kleingeschrieben, jede Nicht-Alphanumerik
+    # zu ``_``. ``tests/api/test_model_preset_label_keys.py`` haelt Schema,
+    # Eindeutigkeit und die Deckung in beiden Locale-Dateien fest.
     LLM_MODEL_PRESETS = [
-        {"name": "qwen3-coder-next:cloud", "label": "Qwen3 Coder (Cloud) — empfohlen", "kind": "cloud"},
-        {"name": "qwen2.5:32b", "label": "Qwen 2.5 32B (lokal)", "kind": "ollama"},
-        {"name": "qwen2.5:14b", "label": "Qwen 2.5 14B (lokal, GPU-arm)", "kind": "ollama"},
-        {"name": "llama3.1:8b", "label": "Llama 3.1 8B (lokal, schnell)", "kind": "ollama"},
-        {"name": "gpt-oss:20b", "label": "GPT-OSS 20B (lokal)", "kind": "ollama"},
+        {"name": "qwen3-coder-next:cloud", "label_key": "llm.preset.cloud.qwen3_coder_next", "kind": "cloud"},
+        {"name": "qwen2.5:32b", "label_key": "llm.preset.ollama.qwen2_5_32b", "kind": "ollama"},
+        {"name": "qwen2.5:14b", "label_key": "llm.preset.ollama.qwen2_5_14b", "kind": "ollama"},
+        {"name": "llama3.1:8b", "label_key": "llm.preset.ollama.llama3_1_8b", "kind": "ollama"},
+        {"name": "gpt-oss:20b", "label_key": "llm.preset.ollama.gpt_oss_20b", "kind": "ollama"},
         # Issue #1282 — Amazon Bedrock via OpenAI-kompatibler mantle-Pfad.
         # Auth via AWS_BEARER_TOKEN_BEDROCK, kein boto3/SigV4.
         # REGIONSGEBUNDEN und CHAT-VERIFIZIERT: jede ID ist am 2026-08-13 mit
@@ -319,12 +340,12 @@ class Config:
         # und die ``fallback_models`` in ``llm_provider_registry.py`` werden
         # gemeinsam gepflegt; ``tests/llm/test_bedrock_model_catalog.py``
         # haelt sie deckungsgleich und probt sie gegen den Live-Endpunkt.
-        {"name": "openai.gpt-oss-120b", "label": "GPT-OSS 120B (Bedrock)", "kind": "bedrock"},
-        {"name": "qwen.qwen3-235b-a22b-2507", "label": "Qwen3 235B A22B (Bedrock)", "kind": "bedrock"},
-        {"name": "minimax.minimax-m2.5", "label": "MiniMax M2.5 (Bedrock)", "kind": "bedrock"},
-        {"name": "mistral.devstral-2-123b", "label": "Devstral 2 123B (Bedrock)", "kind": "bedrock"},
-        {"name": "nvidia.nemotron-super-3-120b", "label": "Nemotron Super 3 120B (Bedrock)", "kind": "bedrock"},
-        {"name": "zai.glm-4.7-flash", "label": "GLM-4.7 Flash (Bedrock)", "kind": "bedrock"},
+        {"name": "openai.gpt-oss-120b", "label_key": "llm.preset.bedrock.gpt_oss_120b", "kind": "bedrock"},
+        {"name": "qwen.qwen3-235b-a22b-2507", "label_key": "llm.preset.bedrock.qwen3_235b_a22b_2507", "kind": "bedrock"},
+        {"name": "minimax.minimax-m2.5", "label_key": "llm.preset.bedrock.minimax_m2_5", "kind": "bedrock"},
+        {"name": "mistral.devstral-2-123b", "label_key": "llm.preset.bedrock.devstral_2_123b", "kind": "bedrock"},
+        {"name": "nvidia.nemotron-super-3-120b", "label_key": "llm.preset.bedrock.nemotron_super_3_120b", "kind": "bedrock"},
+        {"name": "zai.glm-4.7-flash", "label_key": "llm.preset.bedrock.glm_4_7_flash", "kind": "bedrock"},
     ]
 
     @classmethod
@@ -372,7 +393,7 @@ class Config:
 
         # Auth-Policy: außerhalb FLASK_DEBUG verlangen wir entweder einen
         # Token oder eine bewusste Opt-out-Entscheidung. Verhindert offene
-        # /api/*-Deployments durch reines „Token vergessen".
+        # /api/*-Deployments durch reines „Token vergessen“.
         if not cls.DEBUG:
             auth_token = os.environ.get('AGORA_AUTH_TOKEN', '').strip()
             allow_anon = (

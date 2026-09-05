@@ -6,6 +6,7 @@ from typing import Any, Callable, Dict, List, Optional
 from pydantic import ValidationError
 
 from ...utils.llm_client import LLMClient
+from ..claim_atomizer import split_claim_chunks
 from ..confidence_calculator import compute_confidence
 from ..evidence_binder import bind_evidence_to_claim, detect_contradiction_penalty
 from ..evidence_entailment import EntailmentJudge
@@ -749,7 +750,18 @@ class ReportAgent:
             # ``atoms or [chunk]`` setzte den Satz unveraendert wieder ein.
             if not self._is_discourse_sentence(chunk):
                 atomic_chunks.append(chunk)
-        chunks = atomic_chunks
+        # S3c (#1346): ein Sammelclaim, der mehrere eigenstaendige
+        # Teilaussagen buendelt (Konjunktionen, Doppelpunkt-Aufzaehlungen),
+        # wird hier in seine Teile zerlegt — jedes Sub-Atom durchlaeuft
+        # danach Roh-ID-Vergabe, Evidence-Binding und Confidence-Berechnung
+        # einzeln. Vorher lief dieselbe Zerlegung (``claim_atomizer``) nur
+        # innerhalb der Entailment-Stufe und konnte einen Claim mit
+        # teilweiser Deckung nur komplett auf INSUFFICIENT abstufen, statt
+        # ihn in belegte und unbelegte Einzelclaims aufzuteilen. Laeuft
+        # bewusst nach den #1316-Filtern (oben): vorher wuerden Markup-
+        # Fragmente oder Gliederungssatz-Teile entstehen, die die Filter nie
+        # zu sehen bekommen, weil sie nur einmal laufen.
+        chunks = split_claim_chunks(atomic_chunks)
         claims = []
         evidence_index = (self.evidence_map or {}).get("evidence_index") or {}
         global_items = [

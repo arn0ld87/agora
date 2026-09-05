@@ -139,7 +139,7 @@ describe('useSimulationPrepare', () => {
 
     // Issue #1034: Der Nenner zählt Personas, nicht Entitäten. Ohne
     // `persona_target` blieb er bei der Entitätenzahl stehen und der
-    // Zähler lief darüber hinaus — „Erzeugt 22 / 7 Personas…".
+    // Zähler lief darüber hinaus — „Erzeugt 22 / 7 Personas…“.
     it('nimmt persona_target_count als Nenner, nicht expected_entities_count', async () => {
       mockPrepare.mockResolvedValue(makePrepareEnvelope({
         expected_entities_count: 7,

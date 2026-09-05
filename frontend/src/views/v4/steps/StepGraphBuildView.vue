@@ -111,7 +111,7 @@ const isGraphMaximized = ref(false)
 
 // Issue #1029: Ein Graph unterhalb der Qualitätsschwelle hat den Build
 // zwar überstanden, taugt aber nicht als Grundlage für die folgenden
-// Schritte. „Bereit" bleibt deshalb aus, und der Weiter-Knopf ebenso.
+// Schritte. „Bereit“ bleibt deshalb aus, und der Weiter-Knopf ebenso.
 // PR #1371: graphIncomplete blockiert genau wie ein Qualitaetsbefund —
 // ein per Abbruch behaltener Teilgraph ist ansehbar, aber keine Grundlage
 // fuer die folgenden Schritte.

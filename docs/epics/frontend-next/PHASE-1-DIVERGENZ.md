@@ -1,7 +1,7 @@
 # Phase 1 — Divergenz-Tabelle Modellauswahl (verifiziert)
 
 Erstellt in der Opus-Phase-1+2-Session via CRG + gezieltem Read. Belegt die
-gemeldete „inkonsistente Modellauswahl" als Divergenz über **fünf unabhängige,
+gemeldete „inkonsistente Modellauswahl“ als Divergenz über **fünf unabhängige,
 nicht gespiegelte Quellen**.
 
 ## Kernbefund
@@ -33,7 +33,7 @@ sondern in den **Eltern-Flächen**, die jede in eine andere Senke schreiben/lese
   erzwingt das.
 - **Drei client-seitige localStorage-Keys (#3/#4/#5):** Run-Start/Home/Report
   halten je eine eigene Auswahl, komplett vom Server entkoppelt. HeroNewRun liest
-  beim Init **nie** den Server-Default → „gleiche Auswahl überall" bricht hier.
+  beim Init **nie** den Server-Default → „gleiche Auswahl überall“ bricht hier.
 - **Legacy-Profil-Pfad (L):** parallele sechste Selektionswelt in step2.
 
 ## Kanonische-Quelle-Frage (offen, Entscheidung erforderlich)

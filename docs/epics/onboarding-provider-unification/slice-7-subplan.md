@@ -345,7 +345,7 @@ Run-Payloads oder Slice-6-Testwerte nicht verändern.
 **Hinweis zur Umwidmung:** Der Verbesserungsplan (Stand 2026-07-14,
 `/Volumes/T7/Offload/Downloads/agora-verbesserungsplan-aktueller-stand.md`,
 PR 9) und der vorherige Sub-Plan-Eintrag haben 7.6c als
-„`LlmProfileManager` migrieren und v4-Legacy-Picker löschen" geführt.
+„`LlmProfileManager` migrieren und v4-Legacy-Picker löschen“ geführt.
 Dieser Eintrag ersetzt ihn — der LlmProfileManager-Scope wandert nach 7.6d.
 Der harte Schnitt für die v3-Route-Brücke ist die Voraussetzung, dass 7.7
 und 7.8 sauber ziehen können.

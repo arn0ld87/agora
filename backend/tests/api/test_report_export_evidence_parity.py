@@ -259,7 +259,7 @@ class TestResidualContractViolationIsVisible:
         """Eine vorhandene, aber leere evidence-map.json ist kein fehlendes Artefakt.
 
         Mit einer Truthiness-Pruefung (``if raw_evidence_map``) war ``{}``
-        von „kein Artefakt" nicht zu unterscheiden: Migration und Validierung
+        von „kein Artefakt“ nicht zu unterscheiden: Migration und Validierung
         wurden uebersprungen, der Envelope trug ``evidence: null`` **und**
         ``evidence_omitted: null``. Genau der stille Verlust, den dieser Slice
         behebt — eine Ebene tiefer.

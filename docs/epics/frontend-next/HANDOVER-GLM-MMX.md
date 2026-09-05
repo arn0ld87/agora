@@ -88,7 +88,7 @@ onMounted(async () => {
 | `SettingsView.vue` (classic) | `saveLlmActive` → `effectiveModel.setGlobalSelection(...)`. |
 | `LlmProvidersView.vue` | `setDefault` → `effectiveModel.setGlobalSelection(aiRef)`. |
 | `HeroNewRun.vue` | `onPickModel` = transienter Run-Override (nur STORAGE_MODEL-Spiegel). Kanon-First-Init onMounted. |
-| `Home.vue` | **WICHTIG:** führte `modelOverridden`-Flag ein. Home nutzte `selectedModel !== null` als Proxy für „User hat explizit gewählt" im Ollama-Reachability-Gate. Kanon-Vorbelegung würde das brechen → `servicesReady` nutzt jetzt `modelOverridden.value`. Template-Hinweise `!selectedModel` → `!modelOverridden`. |
+| `Home.vue` | **WICHTIG:** führte `modelOverridden`-Flag ein. Home nutzte `selectedModel !== null` als Proxy für „User hat explizit gewählt“ im Ollama-Reachability-Gate. Kanon-Vorbelegung würde das brechen → `servicesReady` nutzt jetzt `modelOverridden.value`. Template-Hinweise `!selectedModel` → `!modelOverridden`. |
 | `Step4Report.vue` | Kanon-First-Init. Entfernte STORAGE_REPORT_AI_REF, resolveInitialReportRoute, reportRoute-watch-Persistenz. `llmProfileId`/STORAGE_REPORT_PROFILE_ID (Preset) bleibt. |
 
 ### Bewusst NICHT geändert
@@ -113,7 +113,7 @@ onMounted(async () => {
   - `ReportModelControls.spec.ts` (bzw. Step4Report-zugehörige)
 - `bash scripts/pre-push-gate.sh frontend` — finales Gate.
 
-**Memory-Regel beachten:** „Subagent pre-existing failures verifizieren" — Refactor-induzierte Test-Brüche tarnen sich gerne als Pre-Existing. Wenn Specs rot sind: prüfen, ob der Bruch durch den Phase-1-Refactor kam oder schon vorher rot war (`git stash` + Spec-Run auf HEAD zur Unterscheidung).
+**Memory-Regel beachten:** „Subagent pre-existing failures verifizieren“ — Refactor-induzierte Test-Brüche tarnen sich gerne als Pre-Existing. Wenn Specs rot sind: prüfen, ob der Bruch durch den Phase-1-Refactor kam oder schon vorher rot war (`git stash` + Spec-Run auf HEAD zur Unterscheidung).
 
 ---
 
@@ -126,13 +126,13 @@ onMounted(async () => {
 4. `bash scripts/pre-push-gate.sh frontend`
 
 ### 5.2 EnvSetupModelPanel / step2-Legacy-Profil-Pfad konsolidieren
-Q3-Entscheidung (Alex): „Auf AiModelRef umstellen." EnvSetupModelPanel ist reine Präsentationskomponente — Eltern-Container (useEnvForm/STORAGE_MODEL/Parent) muss gefunden und migriert werden. Profile → optionale Presets, keine eigene aktive Selektionsquelle. **Größter verbleibender Schritt.** CRG nutzen, um Parent zu finden: `query_graph pattern="callers_of" target="EnvSetupModelPanel"`.
+Q3-Entscheidung (Alex): „Auf AiModelRef umstellen.“ EnvSetupModelPanel ist reine Präsentationskomponente — Eltern-Container (useEnvForm/STORAGE_MODEL/Parent) muss gefunden und migriert werden. Profile → optionale Presets, keine eigene aktive Selektionsquelle. **Größter verbleibender Schritt.** CRG nutzen, um Parent zu finden: `query_graph pattern="callers_of" target="EnvSetupModelPanel"`.
 
 ### 5.3 PR erstellen (nach Gates)
 PR + 90 s warten + Gemini-Findings sichten, dann mergen (Memory: `feedback_pr_gemini_workflow`). Niemals direkt FF-pushen.
 
 ### 5.4 Phase 2 — Onboarding React→Vue portieren
-**Design-Konflikt klären mit Alex, NICHT autonom portieren:** Vue-Onboarding nutzt bewusst „Statusschritte" (verlinken in Settings) statt React-Inline-Flow. Ein Port würde diese Designentscheidung überschreiben. Jede Modellwahl im Onboarding muss den Phase-1-Composable nutzen. Siehe `PHASE-1-2-OPUS-HANDOVER.md` für Details.
+**Design-Konflikt klären mit Alex, NICHT autonom portieren:** Vue-Onboarding nutzt bewusst „Statusschritte“ (verlinken in Settings) statt React-Inline-Flow. Ein Port würde diese Designentscheidung überschreiben. Jede Modellwahl im Onboarding muss den Phase-1-Composable nutzen. Siehe `PHASE-1-2-OPUS-HANDOVER.md` für Details.
 
 ---
 

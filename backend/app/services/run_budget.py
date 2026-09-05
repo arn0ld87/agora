@@ -156,7 +156,7 @@ def mark_budget_abort(run_id: str, dimension: str, observed: int, threshold: int
 
     Wird von den Orchestrierungsstellen aufgerufen, die
     :class:`BudgetExceededError` fangen. Teilresultate bleiben erhalten —
-    der Status ist „stopped", nicht „failed".
+    der Status ist „stopped“, nicht „failed“.
     """
     from app.services.run_registry import RunRegistry
 

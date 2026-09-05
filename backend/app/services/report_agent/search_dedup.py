@@ -48,8 +48,8 @@ def normalize_query(query: str) -> str:
     """Kanonische Form einer Suchanfrage.
 
     Kleinschreibung, Satzzeichen entfernt, Whitespace zusammengefasst. Damit
-    gelten „aufnehmende Betriebe", „Aufnehmende Betriebe!" und
-    „aufnehmende   betriebe" als dieselbe Suche.
+    gelten „aufnehmende Betriebe“, „Aufnehmende Betriebe!“ und
+    „aufnehmende   betriebe“ als dieselbe Suche.
     """
     if not query:
         return ""

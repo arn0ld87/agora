@@ -664,7 +664,7 @@ class GraphBuildService:
                             "graph_id": graph_id,
                             "node_count": graph_data.get("node_count", 0),
                             "edge_count": graph_data.get("edge_count", 0),
-                            # Leere Liste heißt „nichts ist still ausgefallen".
+                            # Leere Liste heißt „nichts ist still ausgefallen“.
                             "degradations": degradation_payload,
                         }
                     )

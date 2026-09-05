@@ -571,3 +571,80 @@ def test_split_text_into_chunks_word_longer_than_chunk_is_lossless():
     joined = "".join(chunks)
     assert long_word in joined
     assert "Nachspann mit etwas Text danach." in joined
+
+
+# ---------------------------------------------------------------------------
+# Issue #1347: Mehrzeilige Aussagen (Pfeil-Listen) dürfen nicht in einen
+# kontextlosen Folgechunk zerschnitten werden.
+# ---------------------------------------------------------------------------
+
+
+def _falkenbrueck_corpus(paras_before: int = 9, paras_after: int = 6) -> str:
+    """AURORA-Fall (#1347): Fließtext, in dem ein Pfeil-Listen-Block liegt.
+
+    Die Füllmenge davor ist so gewählt, dass die Fenstergrenze (500 Zeichen)
+    mitten in den Block fällt — genau die beobachtete Konstellation.
+    """
+    arrow_block = (
+        "Falkenbrueck-Mitte\n"
+        "→ vier Wochen stabiler Betrieb\n"
+        "→ danach Entscheidung ueber Falkenbrueck-Nord"
+    )
+    filler_a = "Der Stadtrat beraet das Mobilitaetskonzept. " * paras_before
+    filler_b = (
+        "Die Verwaltung legt den Zeitplan dar. "
+        "Weitere Anhoerungen folgen im Herbst. " * paras_after
+    )
+    return filler_a + "\n\n" + arrow_block + "\n\n" + filler_b
+
+
+CONDITION = "vier Wochen stabiler Betrieb"
+DECISION = "danach Entscheidung ueber Falkenbrueck-Nord"
+
+
+def test_split_text_into_chunks_falkenbrueck_condition_stays_with_decision():
+    """Issue #1347: Jeder Chunk, der die Entscheidung trägt, trägt die Bedingung.
+
+    Vor dem Fix begann der Folgechunk bei ``Betrieb\\n→ danach …`` — die
+    Bedingung „vier Wochen stabiler Betrieb“ lag nur im VORCHUNK und war für
+    die Faktenextraktion des Fragment-Chunks verloren (Evidence-False-Negative).
+    """
+    text = _falkenbrueck_corpus()
+    chunks = split_text_into_chunks(text, chunk_size=500, overlap=50)
+
+    carriers = [c for c in chunks if DECISION in c]
+    assert carriers, "Entscheidung fehlt vollständig in allen Chunks"
+    for i, chunk in enumerate(carriers):
+        assert CONDITION in chunk, (
+            f"Chunk {i} ist ein isoliertes Minimalfragment ohne Bedingung: "
+            f"{chunk[:80]!r}"
+        )
+
+
+def test_split_text_into_chunks_with_documents_falkenbrueck_condition_stays_with_decision():
+    """Dokument-verankerte Chunking-Pfad (graph_build mit Manifest): dieselbe Garantie."""
+    from app.utils.file_parser import split_text_into_chunks_with_documents
+
+    text = _falkenbrueck_corpus()
+    manifest = DocumentManifest(
+        documents=[
+            DocumentManifestEntry(
+                document_id="doc1",
+                filename="aurora.md",
+                start_offset=0,
+                end_offset=len(text),
+            ),
+        ]
+    )
+
+    anchored = split_text_into_chunks_with_documents(
+        text, manifest, chunk_size=500, overlap=50
+    )
+
+    carriers = [c for c in anchored if DECISION in c.text]
+    assert carriers, "Entscheidung fehlt vollständig in allen Chunks"
+    for i, chunk in enumerate(carriers):
+        assert CONDITION in chunk.text, (
+            f"Anker-Chunk {i} ist ein isoliertes Minimalfragment ohne Bedingung: "
+            f"{chunk.text[:80]!r}"
+        )

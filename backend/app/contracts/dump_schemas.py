@@ -51,6 +51,7 @@ from app.contracts.llm_profile_contract import (
     LlmProfileListResponse,
     LlmProfileCreateRequest,
 )
+from app.contracts.model_preset_contract import AvailableModelsResponse, ModelPreset
 from app.contracts.llm_provider_keys_contract import (
     LlmProviderKeyCreateRequest,
     LlmProviderKeyEntry,
@@ -133,6 +134,9 @@ CONTRACTS: dict[str, type] = {
     "llm-profile.schema.json": LlmProfile,
     "llm-profile-list-response.schema.json": LlmProfileListResponse,
     "llm-profile-create-request.schema.json": LlmProfileCreateRequest,
+    # Modell-Presets fuer /api/simulation/available-models (Issue #1395)
+    "model-preset.schema.json": ModelPreset,
+    "available-models-response.schema.json": AvailableModelsResponse,
     "llm-provider-key-entry.schema.json": LlmProviderKeyEntry,
     "llm-provider-key-create-request.schema.json": LlmProviderKeyCreateRequest,
     "llm-provider-keys-list-response.schema.json": LlmProviderKeysListResponse,

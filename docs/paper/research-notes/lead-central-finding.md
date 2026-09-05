@@ -8,9 +8,9 @@ Datei: `backend/uploads/reports/report_e2e_trust01/evidence_map.json` (schema_ve
 - global_evidence: 12 Items, alle `inferred`; erstes Item = graph_metric echo_chamber_index=0.4317 (identisch mit ADR-0011-Referenz)
 - report-v3.json: 25 Claims, claim0 `evidence_ids: []`, `confidence: None` (ReportV3-Feld leer)
 
-**Interpretation:** Das ist der **Vor-Fix-Zustand**, den ADR-0011 (2026-07-27) anprangerte. Dass alle Items heute als `inferred` geladen werden, stammt aus ADR-0011 §2 (Default `seed_corpus` → `inferred`) + `normalize_persisted_evidence_map`-Downgrade beim Lesen. Die `medium`-Labels sind **historische Alt-Labels**, die beim Downgrade der source_kind nicht neu berechnet wurden — denn ein Downgrade ist ein Identitätswechsel (ADR-0013 §4), und die Label-Neuberechnung ist genau der Defekt #1012 (ungehedgter Wortlaut nach Downgrade). Das bestätkt ADR-0013 §Konsequenzen: „Ein herabgestufter Claim behält vorerst seinen ungehedgten Wortlaut."
+**Interpretation:** Das ist der **Vor-Fix-Zustand**, den ADR-0011 (2026-07-27) anprangerte. Dass alle Items heute als `inferred` geladen werden, stammt aus ADR-0011 §2 (Default `seed_corpus` → `inferred`) + `normalize_persisted_evidence_map`-Downgrade beim Lesen. Die `medium`-Labels sind **historische Alt-Labels**, die beim Downgrade der source_kind nicht neu berechnet wurden — denn ein Downgrade ist ein Identitätswechsel (ADR-0013 §4), und die Label-Neuberechnung ist genau der Defekt #1012 (ungehedgter Wortlaut nach Downgrade). Das bestätkt ADR-0013 §Konsequenzen: „Ein herabgestufter Claim behält vorerst seinen ungehedgten Wortlaut.“
 
-**Bedeutung:** Zeigt die Gefahr, die ADR-0011 beseitigen wollte: Confidence-Labels (`medium`) auf reiner `inferred`-Evidence = „Schein-Evidenz". Heute durch ADR-0011/0013 strukturell erschwert, aber der Alt-Stand belegt, dass das System früher genau hier versagte.
+**Bedeutung:** Zeigt die Gefahr, die ADR-0011 beseitigen wollte: Confidence-Labels (`medium`) auf reiner `inferred`-Evidence = „Schein-Evidenz“. Heute durch ADR-0011/0013 strukturell erschwert, aber der Alt-Stand belegt, dass das System früher genau hier versagte.
 
 ## C2 — Aktueller Referenzlauf Domain-Migration v2 (2026-08-09, commit a611b50a)
 Datei: `docs/reference-runs/2026-08-09-domain-migration-v2/README.md`
@@ -30,7 +30,7 @@ Datei: `docs/reference-runs/2026-08-09-domain-migration-v2/README.md`
 **Aktuell: Nein.**
 1. **Keine validierten Claims:** Der aktuelle Referenzlauf erzeugt 0 validierte Claims. Alles ist Hypothese. Ein Single-Prompt erzeugt dasselbe Inhaltsvolumen als direkte Aussagen — schneller, billiger, ohne Binding-Defekt.
 2. **Provenance gebrochen:** Seed-Dokument-Provenance ist end-to-end nicht vorhanden (Teil B fehlt, seed_doc: opak). Interview-Provenance bricht am Binding-Defekt. Graph-Fakten tragen keine Dokumentidentität.
-3. **Evidence-Gate zu streng für eigenen Throughput:** Das Gate ist korrekt (weigertClaims ohne kanonische Evidence), aber der Upstream liefert keine kanonische Evidence → 0 Claims. Das System „erstickt" an seiner eigenen Strenge.
+3. **Evidence-Gate zu streng für eigenen Throughput:** Das Gate ist korrekt (weigertClaims ohne kanonische Evidence), aber der Upstream liefert keine kanonische Evidence → 0 Claims. Das System „erstickt“ an seiner eigenen Strenge.
 4. **Aber: Konzept ist ehrlich und teilweise über Prompt-Level:**
    - Echo-Chamber-Index + `apply_echo_cap` (Cap bei >0.75) — ein Single-Prompt hat das nicht.
    - Wording-Glossar verbietet Vorhersagesprache.

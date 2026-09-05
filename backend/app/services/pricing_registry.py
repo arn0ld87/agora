@@ -102,7 +102,7 @@ class PricingRegistry:
         """Preis für (provider, model) auflösen.
 
         Lokale Modelle (Loopback-URL oder lokaler Provider-Hinweis mit
-        Loopback) sind „free". Unbekannte Preise sind „unknown".
+        Loopback) sind „free“. Unbekannte Preise sind „unknown“.
         """
         provider = (provider_id or "").lower()
         model_name = (model or "").lower()

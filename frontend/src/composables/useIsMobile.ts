@@ -2,7 +2,7 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { MOBILE_MEDIA_QUERY } from '../constants/breakpoints'
 
 /**
- * Reaktives „ist das ein schmales Geraet" (Block B4).
+ * Reaktives „ist das ein schmales Geraet“ (Block B4).
  *
  * Nutzt die vorhandene SSoT aus `constants/breakpoints.ts` statt eines
  * zweiten Breakpoints. Die neue Huelle braucht das nicht nur in CSS:

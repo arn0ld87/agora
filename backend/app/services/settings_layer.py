@@ -297,7 +297,7 @@ class SettingsService:
         ``payload`` muss bereits durch
         :func:`settings_validator.validate_payload` gegangen sein —
         diese Methode validiert nicht, sondern persistiert. So bleibt
-        ein klarer „validate first, write second"-Vertrag und der
+        ein klarer „validate first, write second“-Vertrag und der
         Service hat keine Doppel-Validation.
 
         Wenn ``persist=True``, wird ``instance/settings.json`` atomar

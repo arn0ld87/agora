@@ -2,8 +2,8 @@
 
 Pinnt die Wording-Bereinigung in `backend/app/services/report_prompts.py`
 und `backend/app/services/graph_tools.py`. Verstösse machen die ganze
-Slice rückgängig — daher rote Tests, sobald jemand „prediction"-/
-„rehearsal"-/„god's eye"-Vokabular ins Prompt-Layer wieder einbaut.
+Slice rückgängig — daher rote Tests, sobald jemand „prediction“-/
+„rehearsal“-/„god's eye“-Vokabular ins Prompt-Layer wieder einbaut.
 
 Geltungsbereich (siehe `docs/glossary.md`):
 - alles im Modul `report_prompts` (System-/User-/ReACT-/Chat-Prompts)
@@ -19,7 +19,7 @@ import pytest
 from app.services import graph_tools, report_prompts
 
 # Verbotene Token gemäss Glossar v1. Case-insensitive geprüft.
-# „simulation_requirement" und „prediction" als Substring-Match wären zu
+# „simulation_requirement“ und „prediction“ als Substring-Match wären zu
 # scharf (Variablennamen sind erlaubt) — wir prüfen Wortgrenzen.
 FORBIDDEN_PATTERNS = [
     r"\bfuture prediction\b",

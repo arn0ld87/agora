@@ -72,7 +72,7 @@ Genutzt wird der **OpenAI-kompatible** Gemini-Endpunkt (`…/v1beta/openai` + `/
 | häufigster Alterswert | 4 % |
 | Name-/Gender-Inkonsistenzen | 0 |
 
-Die Rohausgabe des Generierungslogs zeigt noch den bekannten Modus-Kollaps (6× „Sabine", 4× „Lena", ~12× „Weber", eine Persona mit weiblichem Namen und `gender=male`). Der Dedup-Schritt repariert das vollständig. Für die Bewertung zählt die finale `reddit_profiles.json`, nicht das Log.
+Die Rohausgabe des Generierungslogs zeigt noch den bekannten Modus-Kollaps (6× „Sabine“, 4× „Lena“, ~12× „Weber“, eine Persona mit weiblichem Namen und `gender=male`). Der Dedup-Schritt repariert das vollständig. Für die Bewertung zählt die finale `reddit_profiles.json`, nicht das Log.
 
 ### Adaptive Reportplanung und Tool-Nutzung
 
@@ -93,7 +93,7 @@ Keine Section lief ins Iterationslimit.
 
 Der Bericht befolgt die Vorgaben aus dem Requirement nachweisbar: Er behandelt die Geschäftsführungsaussagen durchgehend als unbelegte Behauptung, benennt ausbleibende erwartete Effekte statt sie zu relativieren, und liefert kein ausgewogenes Bild, sondern eine Zuspitzung.
 
-Der Abschnitt „Unsicherheiten und Datenlücken" ist inhaltlich der stärkste: Er benennt vier konkrete Lücken des Vorhabens und arbeitet heraus, dass alle befragten Gruppen unabhängig voneinander dieselbe Schließung fordern — eine Pilotphase, die nicht eingeplant ist.
+Der Abschnitt „Unsicherheiten und Datenlücken“ ist inhaltlich der stärkste: Er benennt vier konkrete Lücken des Vorhabens und arbeitet heraus, dass alle befragten Gruppen unabhängig voneinander dieselbe Schließung fordern — eine Pilotphase, die nicht eingeplant ist.
 
 ## Kritischer Befund 1: Der Testfall enthält seine eigenen Antworten
 
@@ -103,13 +103,13 @@ Belegte Beispiele, jeweils im Report als Befund vorgetragen:
 
 | Im Report als Ergebnis präsentiert | Tatsächliche Herkunft |
 |---|---|
-| „Der Fall ist so gebaut, dass Honorarkräfte und Geschäftsführung nicht auf einen Nenner kommen können." | Graph-Fakt aus dem Seed-Dokument |
-| „Die IHK sieht generierte Übungsaufgaben unkritisch." | Graph-Fakt aus dem Seed-Dokument |
-| „Der Kostenträger ist gleichgültig, solange der Unterrichtsumfang formal unverändert bleibt." | Graph-Fakt aus dem Seed-Dokument |
-| „Der Betriebsrat blockiert nicht die Einführung, sondern die Auswertungsfunktion." | Graph-Fakt aus dem Seed-Dokument |
-| „Honorarkräfte lehnen stärker ab als Festangestellte, weil sie keinen Anteil an der Entlastung haben." | Graph-Fakt aus dem Seed-Dokument |
+| „Der Fall ist so gebaut, dass Honorarkräfte und Geschäftsführung nicht auf einen Nenner kommen können.“ | Graph-Fakt aus dem Seed-Dokument |
+| „Die IHK sieht generierte Übungsaufgaben unkritisch.“ | Graph-Fakt aus dem Seed-Dokument |
+| „Der Kostenträger ist gleichgültig, solange der Unterrichtsumfang formal unverändert bleibt.“ | Graph-Fakt aus dem Seed-Dokument |
+| „Der Betriebsrat blockiert nicht die Einführung, sondern die Auswertungsfunktion.“ | Graph-Fakt aus dem Seed-Dokument |
+| „Honorarkräfte lehnen stärker ab als Festangestellte, weil sie keinen Anteil an der Entlastung haben.“ | Graph-Fakt aus dem Seed-Dokument |
 
-Der Report leitet daraus seine Höhepunkte ab. Die IHK wird „die **überraschendste** Gruppe" genannt, der Kostenträger „ein **erwarteter Effekt, der nicht eintritt**" — beide auf Basis von Sätzen, die wörtlich im Eingabedokument stehen.
+Der Report leitet daraus seine Höhepunkte ab. Die IHK wird „die **überraschendste** Gruppe“ genannt, der Kostenträger „ein **erwarteter Effekt, der nicht eintritt**“ — beide auf Basis von Sätzen, die wörtlich im Eingabedokument stehen.
 
 Das erklärt auch, warum die Reports über verschiedene Modelle hinweg dieselben Kernaussagen liefern: Sie lesen denselben Lösungsschlüssel.
 
@@ -134,9 +134,9 @@ Evidence-Zusammensetzung: 40 `agent_interview`, 22 `seed_document`, 11 `relation
 
 Gate-Entscheidungen: `no_supporting_evidence` 111, `reviewer_floor_insufficient_evidence` 12, `prose_fact_unsupported` 6, `medium_without_agent_grounded_evidence` 1.
 
-Damit ist das erste Akzeptanzkriterium aus [#1209](https://github.com/arn0ld87/agora/issues/1209) — „mindestens ein Claim mit gebundener Evidence" — knapp erfüllt. Interessanter ist, **warum ausgerechnet dieser** bindet.
+Damit ist das erste Akzeptanzkriterium aus [#1209](https://github.com/arn0ld87/agora/issues/1209) — „mindestens ein Claim mit gebundener Evidence“ — knapp erfüllt. Interessanter ist, **warum ausgerechnet dieser** bindet.
 
-`claim_20`, Section „Konfliktlinien", `confidence_label: low`, `confidence_score: 0.71`, drei Evidence-Items mit `entailment: SUPPORTED`. Die Begründung lautet bei allen dreien identisch:
+`claim_20`, Section „Konfliktlinien“, `confidence_label: low`, `confidence_score: 0.71`, drei Evidence-Items mit `entailment: SUPPORTED`. Die Begründung lautet bei allen dreien identisch:
 
 ```
 "entailment_reason": "qualitative Aussage deckt sich weitgehend mit der Evidence"
@@ -144,7 +144,7 @@ Damit ist das erste Akzeptanzkriterium aus [#1209](https://github.com/arn0ld87/a
 
 Der Claim-Text enthält seine Evidence als wörtliches Zitat:
 
-> **Ein erwarteter Konflikt tritt in der Simulation nicht auf.** Trotz der institutionellen Spannung zwischen Betriebsrat und Geschäftsführung hält die Simulation fest: „Der Betriebsrat wird zustimmen, weil keine Dozentendaten erhoben werden." Diese Aussage steht in direktem Widerspruch zur Blockade der Auswertungsfunktion — ein Widerspruch, den die Simulation nicht auflöst, sondern nebeneinander stehen lässt.
+> **Ein erwarteter Konflikt tritt in der Simulation nicht auf.** Trotz der institutionellen Spannung zwischen Betriebsrat und Geschäftsführung hält die Simulation fest: „Der Betriebsrat wird zustimmen, weil keine Dozentendaten erhoben werden.“ Diese Aussage steht in direktem Widerspruch zur Blockade der Auswertungsfunktion — ein Widerspruch, den die Simulation nicht auflöst, sondern nebeneinander stehen lässt.
 
 Die Entailment-Prüfung vergleicht damit einen Satz mit sich selbst. **Der einzige Claim, der bindet, ist der, der seine eigene Evidence zitiert.**
 
@@ -167,7 +167,7 @@ def _has_factual_claim(sentence: str) -> bool:
 
 Der Fließtext-Gate prüft ausschließlich Sätze mit einer Zahl. Alles Qualitative läuft ungeprüft durch. Pro Section enthält der Text typischerweise genau einen quantitativen Satz — daher sechsmal in Folge exakt eine Entfernung.
 
-Damit ist die Divergenz zwischen Text und Belegschicht mechanisch erklärt: **129 Aussagen sind in der Maschinenschicht zu Hypothesen degradiert, sichtbar entfernt wurden sechs Sätze.** Sätze wie „Die Simulation zeigt ein klares Ergebnis" oder „Der Kipppunkt liegt bei den festangestellten Dozenten" enthalten keine Zahl, werden nicht geprüft und nicht gekennzeichnet.
+Damit ist die Divergenz zwischen Text und Belegschicht mechanisch erklärt: **129 Aussagen sind in der Maschinenschicht zu Hypothesen degradiert, sichtbar entfernt wurden sechs Sätze.** Sätze wie „Die Simulation zeigt ein klares Ergebnis“ oder „Der Kipppunkt liegt bei den festangestellten Dozenten“ enthalten keine Zahl, werden nicht geprüft und nicht gekennzeichnet.
 
 Das ist die mechanische Ursache für das dritte, weiterhin unerfüllte Akzeptanzkriterium von #1209 Befund 6.
 
@@ -175,17 +175,17 @@ Das ist die mechanische Ursache für das dritte, weiterhin unerfüllte Akzeptanz
 
 Das Gate entfernt den beanstandeten Satz, führt aber die umgebende Struktur nicht mit. In zwei von sechs Sections ist der Schaden im ausgelieferten Text sichtbar.
 
-**Section 1 „Kurzfazit"** — `section_content` im Log 4486 Bytes, `section_01.md` auf Platte 4379 Bytes:
+**Section 1 „Kurzfazit“** — `section_content` im Log 4486 Bytes, `section_01.md` auf Platte 4379 Bytes:
 
-> „**Zwei Dinge** müssen vor dem Kursstart entschieden sein … **Erstens** eine verbindliche Betriebsvereinbarung … Ohne **diese beiden** Vorentscheidungen kippt die Akzeptanz."
+> „**Zwei Dinge** müssen vor dem Kursstart entschieden sein … **Erstens** eine verbindliche Betriebsvereinbarung … Ohne **diese beiden** Vorentscheidungen kippt die Akzeptanz.“
 
 Der zweite Punkt wurde entfernt. Die Ankündigung und der Rückverweis bleiben stehen.
 
-**Section 6 „Unsicherheiten und Datenlücken"** — 218 Bytes entfernt, darunter diese Zwischenüberschrift:
+**Section 6 „Unsicherheiten und Datenlücken“** — 218 Bytes entfernt, darunter diese Zwischenüberschrift:
 
 > **Die zweite Datenlücke: Die 6–9 Stunden unbezahlter Nacharbeit sind eine interne Schätzung, keine Messung.**
 
-Die Aufzählung im ausgelieferten Text lautet danach: `Die zentrale Datenlücke` → `Die dritte Datenlücke` → `Die vierte Datenlücke`. Zusätzlich verweist ein späterer Satz auf „**diese Zahl**", deren Bezug in der entfernten Überschrift stand.
+Die Aufzählung im ausgelieferten Text lautet danach: `Die zentrale Datenlücke` → `Die dritte Datenlücke` → `Die vierte Datenlücke`. Zusätzlich verweist ein späterer Satz auf „**diese Zahl**“, deren Bezug in der entfernten Überschrift stand.
 
 Das Muster ist systematisch: Der Gate entfernt den einzigen Satz mit einer Zahl, und Zahlen stehen bevorzugt in Überschriften und Aufzählungsköpfen — also genau dort, wo der umgebende Text sich darauf bezieht.
 
@@ -193,21 +193,21 @@ Das Muster ist systematisch: Der Gate entfernt den einzigen Satz mit einer Zahl,
 
 ### Personas sprechen in fremden Rollen
 
-Die Interviewfragen sind neutral formuliert („Welcher Moment lässt Sie am stärksten an der KI zweifeln?"). Die Personas präfixieren ihre Antworten dennoch mit einer Rolle, die nicht ihre ist, und der Report übernimmt die Zuschreibung:
+Die Interviewfragen sind neutral formuliert („Welcher Moment lässt Sie am stärksten an der KI zweifeln?“). Die Personas präfixieren ihre Antworten dennoch mit einer Rolle, die nicht ihre ist, und der Report übernimmt die Zuschreibung:
 
 | Persona | tatsächliche Identität | antwortet als | im Report geführt als |
 |---|---|---|---|
-| `kim_novak_rzmd_903` | Technikerin, Rechenzentrum Magdeburg | „Als Betriebsrat…" | Position des Betriebsrats |
-| `lisa_hofmann_989` | Geschäftsführerin | „Als Dozent…" | Geschäftsführung über Dozenten |
-| `sabine_krueger_ba_157` | Agentur für Arbeit | „Als Kostenträger…" | „AZAV-Zulassungsteamleiterin" |
+| `kim_novak_rzmd_903` | Technikerin, Rechenzentrum Magdeburg | „Als Betriebsrat…“ | Position des Betriebsrats |
+| `lisa_hofmann_989` | Geschäftsführerin | „Als Dozent…“ | Geschäftsführung über Dozenten |
+| `sabine_krueger_ba_157` | Agentur für Arbeit | „Als Kostenträger…“ | „AZAV-Zulassungsteamleiterin“ |
 
-Im Live-Feed zeigt sich dasselbe: `u/Jüngere Teilnehmende Anfang 20` schreibt „Ich habe Migrationshintergrund", `u/Festangestellte Fachdozenten` schreibt „Ich bin kurz vor der Rente".
+Im Live-Feed zeigt sich dasselbe: `u/Jüngere Teilnehmende Anfang 20` schreibt „Ich habe Migrationshintergrund“, `u/Festangestellte Fachdozenten` schreibt „Ich bin kurz vor der Rente“.
 
 ### Nicht-Stakeholder als Personas und als Kronzeugen
 
 Von den generierten Personas entfallen rund 13 auf Entitäten, die keine Stakeholder sind: `Moodle`, `GPU-Server`, `AZAV`, `Kursstart Februar 2027`, `Mitbestimmungsverfahren`, `Bildungsgutschein`, `Rechenzentrum`, `IT-Umschulungen`, `Agora`, `KI-Lernassistent`. Ein Datum, ein Verwaltungsverfahren, ein Zertifizierungsstandard und ein Stück Hardware nehmen als Personen an der Diskussion teil.
 
-Im Feed ist das sichtbar: `u/Kursstart Februar 2027` schreibt „Ich erlebe es seit Jahrzehnten". Im Report tritt `AZAV` als „AZAV-Zulassungsteamleiterin Sabine Krüger" als bestätigende Quelle auf.
+Im Feed ist das sichtbar: `u/Kursstart Februar 2027` schreibt „Ich erlebe es seit Jahrzehnten“. Im Report tritt `AZAV` als „AZAV-Zulassungsteamleiterin Sabine Krüger“ als bestätigende Quelle auf.
 
 Gleichzeitig sind die verbleibenden Personas stark redundant: neunmal `Retrainee` in unterschiedlicher Benennung. Der Report verdichtet 50 Personas zu acht Meinungsgruppen und macht die Redundanz damit rückwirkend sichtbar.
 

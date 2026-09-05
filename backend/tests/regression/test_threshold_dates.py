@@ -1,6 +1,6 @@
 """Issue #1343 — Datumsangaben dürfen nicht als Mengen-Thresholds landen.
 
-Der AURORA-Referenzlauf produzierte aus „15. Oktober 2026" den Eintrag
+Der AURORA-Referenzlauf produzierte aus „15. Oktober 2026“ den Eintrag
 ``planungsmeilenstein_15_oktober`` mit ``value=15.0`` und ``unit="October"``.
 Diese Tests sichern das Verhalten über die ganze Pipeline: der verstümmelte
 Eintrag wird verworfen, ein korrekt gemeldetes Datum überlebt Merge, Dedup,

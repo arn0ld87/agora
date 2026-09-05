@@ -24,8 +24,8 @@ Referenzlauf: `docs/reference-runs/2026-08-09-domain-migration-v2/` (R2, `report
 | `backend/tests/services/test_graph_tools_interview_soft_fail.py` | official | Soft-Fail-Pfad (tote Sim + kein Direktpfad → leere `interviews`) |
 | `backend/tests/services/test_graph_tools_interview_uses_direct_path.py` | official | Direktpfad-Test (persistierte Personas) |
 | `docs/reference-runs/2026-08-09-domain-migration-v2/artifacts/evidence-extract.json:120-154` | official | `evidence_index_summary: {agent_action: 8, graph_metric: 4}`, `interview_evidence_items_detected_in_index: 0` |
-| `docs/reference-runs/2026-08-09-domain-migration-v2/artifacts/README.md:29-39` | official | „keine im Evidence Index erkannte kanonische Interview-Evidence … Root Cause muss im Produktcode reproduziert werden" |
-| `git log d7d9f0a4` (2026-08-09 07:24) | official | PR #1151 „Evidence-Provenance-Pipeline — Interviews/Fakten kanonisch persistieren" — enthält den Fix im Interview-Zweig |
+| `docs/reference-runs/2026-08-09-domain-migration-v2/artifacts/README.md:29-39` | official | „keine im Evidence Index erkannte kanonische Interview-Evidence … Root Cause muss im Produktcode reproduziert werden“ |
+| `git log d7d9f0a4` (2026-08-09 07:24) | official | PR #1151 „Evidence-Provenance-Pipeline — Interviews/Fakten kanonisch persistieren“ — enthält den Fix im Interview-Zweig |
 
 ## Findings
 
@@ -43,7 +43,7 @@ Referenzlauf: `docs/reference-runs/2026-08-09-domain-migration-v2/` (R2, `report
 
 7. **`source_kind`-Mapping für Interviews ist kanonisch.** `agent_interview` → `agent_quote` ist in `_TYPE_TO_SOURCE_KIND` ([evidence.py:49](backend/app/services/report_agent/evidence.py:49)) fest verdrahtet. `normalize_source_kind` ([evidence.py:74-88](backend/app/services/report_agent/evidence.py:74)) zieht ein explizites `source_kind` vor, fällt sonst auf den Typ zurück. `agent_quote` ist Teil von `_VALID_SOURCE_KINDS` ([evidence.py:69-71](backend/app/services/report_agent/evidence.py:69)).
 
-8. **Soft-Fail-Pfad erzeugt keine Evidence (by Design).** `GraphToolsService.interview_agents` ([graph_tools.py](backend/app/services/graph_tools.py)) liefert bei toter IPC-UMgebung + fehlendem Direktpfad ein `InterviewResult` mit leerer `interviews`-Liste und terminaler `summary` („Do NOT call interview_agents again"). Der leere `interviews`-Iterator erzeugt keine Items → `evidence_index` bleibt leer. Test-Coverage: `test_graph_tools_interview_soft_fail.py` (Soft-Fail), `test_graph_tools_interview_uses_direct_path.py` (Direktpfad mit persistierten Personas).
+8. **Soft-Fail-Pfad erzeugt keine Evidence (by Design).** `GraphToolsService.interview_agents` ([graph_tools.py](backend/app/services/graph_tools.py)) liefert bei toter IPC-UMgebung + fehlendem Direktpfad ein `InterviewResult` mit leerer `interviews`-Liste und terminaler `summary` („Do NOT call interview_agents again“). Der leere `interviews`-Iterator erzeugt keine Items → `evidence_index` bleibt leer. Test-Coverage: `test_graph_tools_interview_soft_fail.py` (Soft-Fail), `test_graph_tools_interview_uses_direct_path.py` (Direktpfad mit persistierten Personas).
 
 9. **API-Endpunkte persistieren keine Evidence.** `/interview`, `/interview/batch`, `/interview/all` ([simulation_interviews.py](backend/app/api/simulation_interviews.py)) antworten via `InterviewEnvelope` ([interview_envelope_contract.py:33-49](backend/app/contracts/interview_envelope_contract.py:33)) — HTTP 200 + `data: dict[str, Any]` mit dem rohen Runner-Result. Kanonische Evidence entsteht **ausschließlich** im ReportAgent-Tool-Pfad (`tool_execution.py` → `_record_tool_evidence`), nicht in der Interview-API.
 

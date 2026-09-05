@@ -41,7 +41,7 @@
 
 - [ ] Alle bestehenden `print(...)`-Stellen in Prod-Code auf `logger.info|warning|error` umstellen (siehe CLAUDE.md-Verbot von `print`). Falls Stellen außerhalb des Sim-Pfads betroffen sind: aus dem Scope nehmen und als TODO in Worklog.
 - [ ] Runner-Scripts `run_*_simulation.py` bekommen `init_runner_logging("agora-oasis-runner")` direkt nach `init_runner_tracing`.
-- [ ] SigNoz-Dashboard-Panel: „Logs für aktuellen Trace" als Deep-Link aus dem SimDetail-Panel (Slice 1e) wiederverwendet (`http://localhost:3301/logs?traceID=<id>`).
+- [ ] SigNoz-Dashboard-Panel: „Logs für aktuellen Trace“ als Deep-Link aus dem SimDetail-Panel (Slice 1e) wiederverwendet (`http://localhost:3301/logs?traceID=<id>`).
 - [ ] Worklog + STATUS.md + `sync-status.sh` + Single PR.
 
 ---
@@ -49,7 +49,7 @@
 ## Akzeptanzkriterien
 
 1. `OTEL_LOGS_ENABLED=false`: Logs gehen weiter an stdout im bisherigen Format (kein Bruch).
-2. `OTEL_LOGS_ENABLED=true`: Logs sind JSON, enthalten `trace_id`/`span_id` und sind in SigNoz unter „Logs" suchbar.
+2. `OTEL_LOGS_ENABLED=true`: Logs sind JSON, enthalten `trace_id`/`span_id` und sind in SigNoz unter „Logs“ suchbar.
 3. SimDetail-Panel-Trace-Link zeigt auf Wunsch auch die Logs für diesen Trace.
 4. Kein `print()` mehr im Prod-Code-Pfad, der vom Sim-Lifecycle berührt wird.
 
