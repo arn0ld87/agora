@@ -2,7 +2,10 @@ import { describe, expect, it, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
+import { createI18n } from 'vue-i18n'
 import { LlmRoutingTestId } from '@/contracts/testIds'
+import de from '@/i18n/locales/de.json'
+import en from '@/i18n/locales/en.json'
 
 const mocks = vi.hoisted(() => ({
   listRuns: vi.fn(),
@@ -48,7 +51,7 @@ vi.mock('@/components/v4/forms/Card.vue', () => ({
   default: {
     name: 'Card',
     props: ['title', 'subtitle'],
-    template: '<section class="card-stub"><h2>{{ title }}</h2><slot /></section>',
+    template: '<section class="card-stub"><h2>{{ title }}</h2><p>{{ subtitle }}</p><slot /></section>',
   },
 }))
 vi.mock('@/components/v4/forms/Field.vue', () => ({
@@ -132,15 +135,21 @@ function makeRouter() {
   })
 }
 
-async function mountView() {
+async function mountView(locale: 'de' | 'en' = 'de') {
   const router = makeRouter()
   const pinia = createPinia()
+  const i18n = createI18n({
+    legacy: false,
+    locale,
+    fallbackLocale: 'de',
+    messages: { de, en },
+  })
   setActivePinia(pinia)
   await router.push('/settings/llm-routing')
   await router.isReady()
   const wrapper = mount(LlmRoutingView, {
     global: {
-      plugins: [router, pinia],
+      plugins: [router, pinia, i18n],
     },
   })
   await flushPromises()
@@ -196,5 +205,34 @@ describe('LlmRoutingView', () => {
     const header = wrapper.find('.page-header-stub')
     expect(header.find('h1').text()).toBe('LLM Routing')
     expect(header.find('p').text()).toContain('Run')
+  })
+
+  it('rendert die Run-Auswahl und den Leerzustand vollstaendig auf Englisch', async () => {
+    mocks.listRuns.mockResolvedValue({
+      success: true,
+      data: { runs: [], total: 0, aggregation: null },
+    })
+
+    const wrapper = await mountView('en')
+
+    expect(wrapper.text()).toContain('Configure run-specific providers, model selection, and stage routing.')
+    expect(wrapper.text()).toContain('Run selection')
+    expect(wrapper.text()).toContain('The LLM routing configuration is stored per run.')
+    expect(wrapper.text()).toContain('Current runs')
+    expect(wrapper.text()).toContain('Run ID')
+    expect(wrapper.find('select').attributes('placeholder')).toBe('Select a run')
+    expect(wrapper.text()).toContain('Refresh')
+    expect(wrapper.text()).toContain('No run selected')
+    expect(wrapper.text()).toContain('Select a run or enter a specific run ID.')
+    expect(wrapper.text()).not.toContain('Run-spezifische Provider')
+    expect(wrapper.text()).not.toContain('Kein Run ausgewählt')
+  })
+
+  it('rendert den Fallback-Ladefehler auf Englisch', async () => {
+    mocks.listRuns.mockRejectedValue('offline')
+
+    const wrapper = await mountView('en')
+
+    expect(wrapper.find('.llmr-error').text()).toBe('Runs could not be loaded')
   })
 })

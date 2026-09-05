@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
 import SettingsOverlay from '@/components/v4/forms/SettingsOverlay.vue'
@@ -15,6 +16,7 @@ import type { RunDetail } from '@/contracts/runsContract'
 
 // Settings is only an entrypoint; routing persistence remains bound to real run IDs.
 const SELECTED_RUN_STORAGE_KEY = 'agora.llmRouting.selectedRunId'
+const { t } = useI18n()
 
 // Issue #580: listRuns now returns RunsListResponse; use RunDetail for the item type.
 const runs = ref<RunDetail[]>([])
@@ -54,7 +56,7 @@ async function loadRuns(): Promise<void> {
       selectedRunId.value = runs.value[0].run_id
     }
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Runs konnten nicht geladen werden'
+    error.value = err instanceof Error ? err.message : t('settings.v4.llmRouting.errors.loadRuns')
   } finally {
     loadingRuns.value = false
   }
@@ -73,25 +75,25 @@ onMounted(() => {
   <AppShell>
     <SettingsOverlay>
       <PageHeader
-        title="LLM Routing"
-        subtitle="Run-spezifische Provider, Modellwahl und Stage-Routing konfigurieren."
+        :title="t('settings.v4.llmRouting.title')"
+        :subtitle="t('settings.v4.llmRouting.subtitle')"
       />
 
       <Card
-        title="Run-Auswahl"
-        subtitle="Die LLM-Routing-Konfiguration wird pro Run gespeichert."
+        :title="t('settings.v4.llmRouting.runSelectionTitle')"
+        :subtitle="t('settings.v4.llmRouting.runSelectionSubtitle')"
       >
         <div class="run-picker">
-          <Field label="Aktuelle Runs">
+          <Field :label="t('settings.v4.llmRouting.currentRunsLabel')">
             <Select
               v-model="selectedRunId"
               :options="runOptions"
               :disabled="loadingRuns || runOptions.length === 0"
-              placeholder="Run auswählen"
+              :placeholder="t('settings.v4.llmRouting.runSelectPlaceholder')"
             />
           </Field>
 
-          <Field label="Run-ID">
+          <Field :label="t('settings.v4.llmRouting.runIdLabel')">
             <Input
               v-model="selectedRunId"
               mono
@@ -106,7 +108,7 @@ onMounted(() => {
             :disabled="loadingRuns"
             @click="loadRuns"
           >
-            Aktualisieren
+            {{ t('settings.v4.llmRouting.refresh') }}
           </button>
         </div>
 
@@ -123,8 +125,8 @@ onMounted(() => {
       <Card
         v-else
         class="routing-empty"
-        title="Kein Run ausgewählt"
-        subtitle="Wähle einen Run aus oder trage eine konkrete Run-ID ein."
+        :title="t('settings.v4.llmRouting.emptyTitle')"
+        :subtitle="t('settings.v4.llmRouting.emptySubtitle')"
       />
     </SettingsOverlay>
   </AppShell>
