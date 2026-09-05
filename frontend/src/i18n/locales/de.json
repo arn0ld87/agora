@@ -1673,6 +1673,30 @@
         "recentEmpty": "Noch nichts abgeschlossen.",
         "openSettings": "Einstellungen öffnen"
       }
+    },
+    "dossier": {
+      "kpiPersonas": "Personas",
+      "kpiJobs": "Jobs",
+      "kpiSections": "Abschnitte",
+      "kpiEvidence": "Belege",
+      "kpiClaims": "Aussagen",
+      "partsOpen": "Öffnen",
+      "parts": {
+        "actors": "Akteure",
+        "actorsDesc": "{n} Personas",
+        "output": "Ausgabe",
+        "outputDesc": "{n} Belege"
+      },
+      "jobsTimelineTitle": "Verlauf",
+      "confidenceTitle": "Vertrauensverteilung",
+      "confidence": {
+        "speculative": "spekulativ",
+        "low": "niedrig",
+        "medium": "mittel",
+        "high": "hoch",
+        "verified": "verifiziert"
+      },
+      "redTeamTitle": "Red-Team-Befunde"
     }
   },
   "runBudget": {

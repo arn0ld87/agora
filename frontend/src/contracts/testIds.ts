@@ -104,4 +104,7 @@ export const DossierTestId = {
   overviewLiveItem: 'dossier-overview-live-item',
   overviewRecentItem: 'dossier-overview-recent-item',
   overviewSystemRow: 'dossier-overview-system-row',
+  jobsTimeline: 'dossier-jobs-timeline',
+  confidenceDistribution: 'dossier-confidence-distribution',
+  redTeamFindings: 'dossier-red-team-findings',
 } as const

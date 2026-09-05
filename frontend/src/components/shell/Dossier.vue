@@ -180,32 +180,110 @@
 
       <p v-if="deriveError" class="dossier__error" role="alert">{{ deriveError }}</p>
 
-      <div class="dossier__kpis" :data-testid="DossierTestId.kpis">
+      <!-- Kennzahlstreifen: Status/Zeit/ID gelten fuer jede Sorte, der
+           Rest ist kind-spezifisch und nur sichtbar wenn der Wert bekannt
+           ist (Redesign PR 4, "was kein Feld hat, weglassen"). `dl` statt
+           Divs: Label/Wert sind semantisch Begriff/Beschreibung. -->
+      <dl class="dossier__kpis" :data-testid="DossierTestId.kpis">
         <div class="dossier__kpi">
-          <div class="dossier__kpi-value dossier__kpi-value--text">{{ props.object.statusLine }}</div>
-          <div class="dossier__kpi-label">{{ t('common.status') }}</div>
+          <dt class="dossier__kpi-label">{{ t('common.status') }}</dt>
+          <dd class="dossier__kpi-value dossier__kpi-value--text">{{ props.object.statusLine }}</dd>
         </div>
         <div class="dossier__kpi">
-          <div class="dossier__kpi-value">{{ formatUpdatedAt(props.object.updatedAt) }}</div>
-          <div class="dossier__kpi-label">{{ t('common.time') }}</div>
+          <dt class="dossier__kpi-label">{{ t('common.time') }}</dt>
+          <dd class="dossier__kpi-value">{{ formatUpdatedAt(props.object.updatedAt) }}</dd>
         </div>
         <div class="dossier__kpi">
-          <div class="dossier__kpi-value dossier__kpi-value--mono">{{ props.object.metaId }}</div>
-          <div class="dossier__kpi-label">{{ t('shelf.dossier.idLabel') }}</div>
+          <dt class="dossier__kpi-label">{{ t('shelf.dossier.idLabel') }}</dt>
+          <dd class="dossier__kpi-value dossier__kpi-value--mono">{{ props.object.metaId }}</dd>
         </div>
-      </div>
+        <div v-if="props.object.kind === 'lauf' && props.object.personaCount != null" class="dossier__kpi">
+          <dt class="dossier__kpi-label">{{ t('views.dossier.kpiPersonas') }}</dt>
+          <dd class="dossier__kpi-value">{{ props.object.personaCount }}</dd>
+        </div>
+        <div v-if="props.object.kind === 'lauf' && (props.object.jobs?.length ?? 0) > 0" class="dossier__kpi">
+          <dt class="dossier__kpi-label">{{ t('views.dossier.kpiJobs') }}</dt>
+          <dd class="dossier__kpi-value">{{ props.object.jobs!.length }}</dd>
+        </div>
+        <div v-if="props.object.kind === 'bericht' && detail?.parts.length" class="dossier__kpi">
+          <dt class="dossier__kpi-label">{{ t('views.dossier.kpiSections') }}</dt>
+          <dd class="dossier__kpi-value">{{ detail!.parts.length }}</dd>
+        </div>
+        <div v-if="props.object.kind === 'bericht' && detail?.evidenceSections != null" class="dossier__kpi">
+          <dt class="dossier__kpi-label">{{ t('views.dossier.kpiEvidence') }}</dt>
+          <dd class="dossier__kpi-value">{{ detail!.evidenceSections }}</dd>
+        </div>
+        <div v-if="props.object.kind === 'bericht' && detail?.claimsCount != null" class="dossier__kpi">
+          <dt class="dossier__kpi-label">{{ t('views.dossier.kpiClaims') }}</dt>
+          <dd class="dossier__kpi-value">{{ detail!.claimsCount }}</dd>
+        </div>
+      </dl>
 
       <!-- Bestandteile: erst beim Auswaehlen nachgeladen. Ein Bericht
-           zeigt seine Abschnitte, ein Graph seine Kennzahlen. Sorten
-           ohne Detail-Endpunkt zeigen hier nichts, statt ein leeres
-           Geruest zu behaupten. -->
+           zeigt seine Abschnitte, ein Graph seine Kennzahlen, ein Lauf
+           seine Akteure/Ausgabe mit Zahl + Weiter-Link (Redesign PR 4).
+           Sorten ohne Detail-Endpunkt zeigen hier nichts, statt ein
+           leeres Geruest zu behaupten. -->
       <section v-if="detail" class="dossier__parts" :data-testid="DossierTestId.parts">
         <p v-if="detail.summary" class="dossier__detail-summary">{{ detail.summary }}</p>
         <ul v-if="detail.parts.length" class="dossier__part-list">
           <li v-for="part in detail.parts" :key="part.title" class="dossier__part" :data-testid="DossierTestId.part">
-            <span class="dossier__part-title">{{ part.title }}</span>
-            <span class="dossier__part-desc">{{ part.description }}</span>
+            <span class="dossier__part-main">
+              <span class="dossier__part-title">{{ part.title }}</span>
+              <span class="dossier__part-desc">{{ part.description }}</span>
+            </span>
+            <span v-if="part.count !== undefined" class="dossier__part-count">{{ part.count }}</span>
+            <button v-if="part.to" type="button" class="dossier__btn dossier__btn--ghost" @click="goTo(part.to)">
+              {{ t('views.dossier.partsOpen') }}
+            </button>
           </li>
+        </ul>
+      </section>
+
+      <!-- Jobs-Zeitleiste (nur Lauf, Redesign PR 4): alle Jobs des
+           Vorhabens, neuestes zuerst — kommt direkt aus obj.jobs, kein
+           Nachladen. -->
+      <section
+        v-if="props.object.kind === 'lauf' && (props.object.jobs?.length ?? 0) > 0"
+        class="dossier__timeline"
+        :data-testid="DossierTestId.jobsTimeline"
+      >
+        <h3 class="dossier__section-title">{{ t('views.dossier.jobsTimelineTitle') }}</h3>
+        <ol class="dossier__timeline-list">
+          <li v-for="job in props.object.jobs" :key="job.runId" class="dossier__timeline-item">
+            <time class="dossier__timeline-time" :datetime="job.updatedAt">{{ formatUpdatedAt(job.updatedAt) }}</time>
+            <span class="dossier__timeline-type">{{ job.runType }}</span>
+            <span class="dossier__timeline-status">{{ job.message || statusText(t, `shelf.status.${job.status}`, job.status) }}</span>
+          </li>
+        </ol>
+      </section>
+
+      <!-- Vertrauensverteilung (nur Bericht, Redesign PR 4): Anzahl Claims
+           je Confidence-Label aus der Evidence-Map. -->
+      <section
+        v-if="props.object.kind === 'bericht' && confidenceEntries.length > 0"
+        class="dossier__confidence"
+        :data-testid="DossierTestId.confidenceDistribution"
+      >
+        <h3 class="dossier__section-title">{{ t('views.dossier.confidenceTitle') }}</h3>
+        <dl class="dossier__confidence-list">
+          <div v-for="entry in confidenceEntries" :key="entry.label" class="dossier__confidence-row">
+            <dt>{{ t(`views.dossier.confidence.${entry.label}`) }}</dt>
+            <dd>{{ entry.count }}</dd>
+          </div>
+        </dl>
+      </section>
+
+      <!-- Red-Team-Befunde (nur Bericht, Redesign PR 4): direkt aus dem
+           Report-Contract, keine Herleitung. -->
+      <section
+        v-if="props.object.kind === 'bericht' && (detail?.redTeamFindings?.length ?? 0) > 0"
+        class="dossier__redteam"
+        :data-testid="DossierTestId.redTeamFindings"
+      >
+        <h3 class="dossier__section-title">{{ t('views.dossier.redTeamTitle') }}</h3>
+        <ul class="dossier__redteam-list">
+          <li v-for="(finding, i) in detail!.redTeamFindings" :key="i">{{ finding }}</li>
         </ul>
       </section>
     </template>
@@ -223,7 +301,8 @@ import { useObjectDetail } from '../../composables/useObjectDetail'
 import { useDeriveSimulation } from '../../composables/useDeriveSimulation'
 import { useStartFromPersona } from '../../composables/useStartFromPersona'
 import { useSystemStatus } from '../../composables/useSystemStatus'
-import { formatShelfDate, type useShelf } from '../../composables/useShelf'
+import { formatShelfDate, statusText, type useShelf } from '../../composables/useShelf'
+import type { ConfidenceLabel } from '../../contracts/reportContract'
 
 /**
  * Dossier.vue — rechte Spalte (Block B3).
@@ -307,6 +386,14 @@ function goToNewObject(): void {
 const canDerive = computed(
   () => props.object?.kind === 'bericht' && Boolean(props.object.simulationId),
 )
+
+// ── Vertrauensverteilung (nur Bericht, Redesign PR 4) ──────────────
+const CONFIDENCE_ORDER: ConfidenceLabel[] = ['speculative', 'low', 'medium', 'high', 'verified']
+const confidenceEntries = computed(() => {
+  const dist = detail.value?.confidenceDistribution
+  if (!dist) return []
+  return CONFIDENCE_ORDER.filter((label) => (dist[label] ?? 0) > 0).map((label) => ({ label, count: dist[label] ?? 0 }))
+})
 
 async function onStartFromPersona(): Promise<void> {
   const obj = props.object
@@ -444,14 +531,20 @@ function formatUpdatedAt(iso: string): string {
 
 .dossier__kpis {
   display: flex;
+  flex-wrap: wrap;
   margin: var(--sp-5) 0 0;
   border-top: 1px solid var(--hairline);
   border-bottom: 1px solid var(--hairline);
 }
 
 .dossier__kpi {
+  /* dt (Label) steht im Markup vor dd (Wert) — semantisch korrekt fuer
+     dl, aber die Vorlage zeigt den Wert oben. column-reverse dreht nur
+     die Darstellung, nicht die DOM-/Vorlesereihenfolge. */
+  display: flex;
+  flex-direction: column-reverse;
   flex: 1;
-  min-width: 0;
+  min-width: 96px;
   padding: 12px 16px;
   border-left: 1px solid var(--hairline);
 }
@@ -459,6 +552,11 @@ function formatUpdatedAt(iso: string): string {
 .dossier__kpi:first-child {
   border-left: 0;
   padding-left: 0;
+}
+
+.dossier__kpi > dt,
+.dossier__kpi > dd {
+  margin: 0;
 }
 
 .dossier__kpi-value {
@@ -485,7 +583,7 @@ function formatUpdatedAt(iso: string): string {
   letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--text-tertiary);
-  margin-top: 3px;
+  margin-bottom: 3px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -519,6 +617,14 @@ function formatUpdatedAt(iso: string): string {
 
 .dossier__part {
   display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.dossier__part-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
   flex-direction: column;
   gap: var(--sp-1);
 }
@@ -533,6 +639,100 @@ function formatUpdatedAt(iso: string): string {
   font-size: var(--fs-footnote);
   line-height: var(--lh-footnote);
   color: var(--text-tertiary);
+}
+
+.dossier__part-count {
+  font-family: var(--font-mono);
+  font-size: var(--fs-title-3);
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.dossier__section-title {
+  margin: 0 0 var(--sp-3);
+  font-family: var(--font-sans);
+  font-size: var(--fs-subhead);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.dossier__timeline,
+.dossier__confidence,
+.dossier__redteam {
+  margin-top: var(--sp-6);
+  border-top: 1px solid var(--hairline);
+  padding-top: var(--sp-5);
+}
+
+.dossier__timeline-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dossier__timeline-item {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 140px) minmax(0, 1fr);
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-top: 1px solid var(--hairline);
+  font-size: var(--fs-footnote);
+}
+
+.dossier__timeline-list > .dossier__timeline-item:first-child {
+  border-top: 0;
+}
+
+.dossier__timeline-time {
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
+}
+
+.dossier__timeline-type {
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+
+.dossier__timeline-status {
+  color: var(--text-secondary);
+}
+
+.dossier__confidence-list {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.dossier__confidence-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  font-size: var(--fs-footnote);
+}
+
+.dossier__confidence-row dt {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.dossier__confidence-row dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+.dossier__redteam-list {
+  margin: 0;
+  padding-left: 1.1em;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  font-size: var(--fs-footnote);
+  color: var(--text-secondary);
 }
 
 .dossier__error {

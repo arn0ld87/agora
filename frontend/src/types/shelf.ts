@@ -52,6 +52,18 @@ export interface ShelfObject {
   simulationId?: string | null
   /** Nur bei kind='graph': die Graph-ID des Projekts, fuer das Nachladen im Dossier. */
   graphId?: string | null
+  /**
+   * Nur bei kind='lauf': Personenzahl aus RunSummaryContract.persona_count
+   * (Redesign PR 4, Kennzahlstreifen). `undefined`/`null` wenn der juengste
+   * Job dieses Laufs kein `summary.persona_count` traegt.
+   */
+  personaCount?: number | null
+  /**
+   * Nur bei kind='lauf': alle Jobs des Vorhabens, neuestes zuerst (Redesign
+   * PR 4, Jobs-Zeitleiste + Bestandteile-Verlinkung). Kommt 1:1 aus der
+   * bereits geladenen Job-Gruppe (`groupJobsByEndeavor`) — kein Zusatz-Fetch.
+   */
+  jobs?: ShelfLaufJob[]
   nextAction: NextAction | null
   /**
    * Laufende Aktivitaet: traegt die Zeilenaktionen Abbrechen/Pause
@@ -69,6 +81,21 @@ export interface ShelfObject {
     /** Fortschritt 0-100 aus dem Contract (RunDetail.progress), fuer die Uebersicht (Block B3). */
     progress: number | null
   } | null
+}
+
+/**
+ * Ein Job innerhalb eines Laufs, fuer die Jobs-Zeitleiste im Dossier
+ * (Redesign PR 4). Schmaler als `RunDetail`: nur was die Zeitleiste und
+ * die Bestandteile-Verlinkung brauchen.
+ */
+export interface ShelfLaufJob {
+  runId: string
+  runType: string
+  status: string
+  message: string
+  updatedAt: string
+  /** Fuer die Bestandteile-Verlinkung (project_id/simulation_id/report_id). */
+  linkedIds: Record<string, unknown>
 }
 
 /** Filterleiste der Ablage (Entwurf: Alle 24 · Laeufe 9 · …). */

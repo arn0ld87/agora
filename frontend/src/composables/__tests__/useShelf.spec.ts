@@ -332,6 +332,51 @@ describe('buildShelfObjects', () => {
     expect(obj.active?.progress).toBe(42)
   })
 
+  it('personaCount sucht ueber alle Jobs der Gruppe, nicht nur den juengsten (Redesign PR 4)', () => {
+    // simulation_prepare traegt den persona_count, das nachfolgende
+    // simulation_run (der juengste Job) nicht mehr.
+    const prep = makeRun({
+      run_id: 'run_prep',
+      run_type: 'simulation_prepare',
+      linked_ids: { simulation_id: 'sim_1' },
+      updated_at: '2026-01-01T00:00:00Z',
+      summary: { persona_count: 30 },
+    })
+    const run = makeRun({
+      run_id: 'run_run',
+      run_type: 'simulation_run',
+      linked_ids: { simulation_id: 'sim_1' },
+      updated_at: '2026-01-02T00:00:00Z',
+      summary: null,
+    })
+    const [obj] = buildShelfObjects([prep, run], [], [], [], t)
+    expect(obj.personaCount).toBe(30)
+  })
+
+  it('personaCount bleibt null, wenn kein Job der Gruppe ihn traegt (Redesign PR 4)', () => {
+    const run = makeRun({ linked_ids: { simulation_id: 'sim_1' }, summary: null })
+    const [obj] = buildShelfObjects([run], [], [], [], t)
+    expect(obj.personaCount).toBeNull()
+  })
+
+  it('jobs traegt alle Jobs der Gruppe mit linkedIds, neuestes zuerst (Redesign PR 4: Jobs-Zeitleiste)', () => {
+    const older = makeRun({
+      run_id: 'run_old',
+      run_type: 'graph_build',
+      linked_ids: { project_id: 'proj_1' },
+      updated_at: '2026-01-01T00:00:00Z',
+    })
+    const newer = makeRun({
+      run_id: 'run_new',
+      run_type: 'simulation_prepare',
+      linked_ids: { project_id: 'proj_1', simulation_id: 'sim_1', report_id: 'rep_1' },
+      updated_at: '2026-01-02T00:00:00Z',
+    })
+    const [obj] = buildShelfObjects([older, newer], [], [], [], t)
+    expect(obj.jobs?.map((j) => j.runId)).toEqual(['run_new', 'run_old'])
+    expect(obj.jobs?.[0].linkedIds).toEqual({ project_id: 'proj_1', simulation_id: 'sim_1', report_id: 'rep_1' })
+  })
+
   it('Projekt, dessen project_id von einem Job beansprucht ist, bekommt kein eigenes Graph-Objekt; unbeanspruchtes Projekt schon', () => {
     const run = makeRun({ linked_ids: { project_id: 'proj_claimed' } })
     const projects = [

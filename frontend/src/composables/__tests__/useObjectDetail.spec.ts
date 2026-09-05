@@ -2,17 +2,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref, nextTick } from 'vue'
 import type { ShelfObject } from '../../types/shelf'
 
-vi.mock('../../api/report', () => ({ getReport: vi.fn() }))
+vi.mock('../../api/report', () => ({ getReport: vi.fn(), getReportEvidence: vi.fn() }))
 vi.mock('../../api/graph', () => ({ getGraphData: vi.fn() }))
 vi.mock('../../api/simulation', () => ({ listPersonaTemplates: vi.fn() }))
 
-import { getReport } from '../../api/report'
+import { getReport, getReportEvidence } from '../../api/report'
 import { getGraphData } from '../../api/graph'
 import { listPersonaTemplates } from '../../api/simulation'
 import { useObjectDetail } from '../useObjectDetail'
 
-// t-Stub: gibt den Schluessel zurueck, Assertions laufen ueber Schluessel.
-const t = (key: string): string => key
+// t-Stub: gibt den Schluessel zurueck (+ JSON der Values), Assertions laufen ueber Schluessel.
+const t = (key: string, values?: Record<string, unknown>): string => (values ? `${key}:${JSON.stringify(values)}` : key)
 
 function makeObject(over: Partial<ShelfObject> = {}): ShelfObject {
   return {
@@ -28,8 +28,14 @@ function makeObject(over: Partial<ShelfObject> = {}): ShelfObject {
   }
 }
 
+/** Leere Evidence-Map — Default fuer Tests, die die Confidence-Verteilung nicht pruefen. */
+const EMPTY_EVIDENCE_MAP = { schema_version: 3, report_id: 'report_1', simulation_id: 'sim_1', evidence_index: {}, global_evidence_refs: [], sections: [] }
+
 describe('useObjectDetail', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getReportEvidence).mockResolvedValue({ success: true, data: EMPTY_EVIDENCE_MAP } as never)
+  })
 
   it('laedt fuer einen Bericht die Gliederung als Bestandteile', async () => {
     vi.mocked(getReport).mockResolvedValue({
@@ -117,8 +123,8 @@ describe('useObjectDetail', () => {
     expect(detail.value?.summary).toBe('')
   })
 
-  it('laedt nichts fuer Sorten ohne Detail-Endpunkt', async () => {
-    const obj = ref<ShelfObject | null>(makeObject({ kind: 'lauf', id: 'sim_1' }))
+  it('laedt nichts fuer einen Lauf ohne Personas und ohne verknuepften Bericht', async () => {
+    const obj = ref<ShelfObject | null>(makeObject({ kind: 'lauf', id: 'sim_1', jobs: [] }))
     const { detail } = useObjectDetail(obj, t)
     await nextTick(); await Promise.resolve()
 
@@ -126,6 +132,91 @@ describe('useObjectDetail', () => {
     expect(getGraphData).not.toHaveBeenCalled()
     expect(listPersonaTemplates).not.toHaveBeenCalled()
     expect(detail.value).toBeNull()
+  })
+
+  it('Lauf mit Personas und verknuepftem Bericht bekommt Bestandteile Akteure + Ausgabe mit Zahl + Link', async () => {
+    vi.mocked(getReport).mockResolvedValue({
+      success: true,
+      data: { evidence_sections: 5 },
+    } as never)
+
+    const obj = ref<ShelfObject | null>(
+      makeObject({
+        kind: 'lauf',
+        id: 'sim_1',
+        personaCount: 12,
+        jobs: [
+          {
+            runId: 'run_2',
+            runType: 'simulation_run',
+            status: 'completed',
+            message: '',
+            updatedAt: '2026-08-18T11:00:00Z',
+            linkedIds: { simulation_id: 'sim_1', report_id: 'report_9' },
+          },
+        ],
+      }),
+    )
+    const { detail } = useObjectDetail(obj, t)
+    await nextTick(); await Promise.resolve(); await Promise.resolve()
+
+    expect(getReport).toHaveBeenCalledWith('report_9')
+    expect(detail.value?.parts).toEqual([
+      {
+        title: 'views.dossier.parts.actors',
+        description: 'views.dossier.parts.actorsDesc:{"n":12}',
+        count: 12,
+        to: { name: 'StepEnvSetup', params: { projectId: 'sim_1' } },
+      },
+      {
+        title: 'views.dossier.parts.output',
+        description: 'views.dossier.parts.outputDesc:{"n":5}',
+        count: 5,
+        to: { name: 'StepReport', params: { reportId: 'report_9' } },
+      },
+    ])
+  })
+
+  it('Bericht bekommt Confidence-Verteilung, Aussagen- und Luecken-Zahl aus der Evidence-Map', async () => {
+    vi.mocked(getReport).mockResolvedValue({
+      success: true,
+      data: { outline: { title: 'T', summary: 'S', sections: [] }, evidence_sections: 3, red_team_findings: ['Befund A'] },
+    } as never)
+    vi.mocked(getReportEvidence).mockResolvedValue({
+      success: true,
+      data: {
+        ...EMPTY_EVIDENCE_MAP,
+        sections: [
+          {
+            section_index: 1,
+            section_title: 'Lage',
+            section_summary: 'x',
+            claims: [
+              { claim_id: 'claim_01', confidence_label: 'high' },
+              { claim_id: 'claim_02', confidence_label: 'high' },
+              { claim_id: 'claim_03', confidence_label: 'low' },
+            ],
+            hypotheses: [],
+            hypotheses_appendix: [],
+            data_gaps: [{ gap_id: 'gap_01' }],
+            structured_metadata: {},
+            generation_failed: false,
+            unbound_evidence_refs: [],
+            unverified_statements: [],
+          },
+        ],
+      },
+    } as never)
+
+    const obj = ref<ShelfObject | null>(makeObject({ id: 'report_9' }))
+    const { detail } = useObjectDetail(obj, t)
+    await nextTick(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+
+    expect(detail.value?.confidenceDistribution).toEqual({ high: 2, low: 1 })
+    expect(detail.value?.claimsCount).toBe(3)
+    expect(detail.value?.gapsCount).toBe(1)
+    expect(detail.value?.evidenceSections).toBe(3)
+    expect(detail.value?.redTeamFindings).toEqual(['Befund A'])
   })
 
   it('haelt einen fehlgeschlagenen Abruf von der Ablage fern', async () => {

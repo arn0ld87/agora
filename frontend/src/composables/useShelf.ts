@@ -244,6 +244,20 @@ export function buildShelfObjects(
       metaId: key,
       nextAction: nextActionFor(latest, t),
       active,
+      // Redesign PR 4 (Kennzahlstreifen + Jobs-Zeitleiste): persona_count
+      // steht nur auf dem Job, der die Personas erzeugt hat — das kann ein
+      // aelterer Job der Gruppe sein als `latest` (z. B. simulation_run
+      // traegt selbst keinen persona_count mehr). Deshalb ueber alle Jobs
+      // suchen, nicht nur `latest.summary`.
+      personaCount: jobs.map((j) => j.summary?.persona_count).find((n) => typeof n === 'number') ?? null,
+      jobs: jobs.map((j) => ({
+        runId: j.run_id,
+        runType: j.run_type,
+        status: j.status,
+        message: j.message,
+        updatedAt: j.updated_at,
+        linkedIds: j.linked_ids as Record<string, unknown>,
+      })),
     })
   }
 
