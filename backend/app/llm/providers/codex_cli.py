@@ -312,8 +312,20 @@ def strip_tool_calls(text: str) -> str:
     return TOOL_CALL_RE.sub("", text or "").strip()
 
 
-def build_codex_cli_command(prompt: str, *, model: Optional[str]) -> list[str]:
+def build_codex_cli_command(*, model: Optional[str]) -> list[str]:
     """Argumentliste fuer einen ``codex exec``-Aufruf.
+
+    Der Prompt steht bewusst NICHT in der Argumentliste, sondern geht ueber
+    stdin — das abschliessende ``-`` sagt ``codex exec``, dass es die
+    Instruktionen von dort liest.
+
+    Als Argument riss ein Runden-Prompt Linux' ``MAX_ARG_STRLEN``: ein
+    *einzelnes* argv-Element darf 128 KiB (32 Seiten) nicht ueberschreiten,
+    unabhaengig vom deutlich hoeheren ``ARG_MAX`` fuer die Summe. Ein
+    Runden-Prompt traegt Persona, Historie und Werkzeugschemata und liegt
+    darueber; auf armserver starben dadurch 12 Agenten-Turns einer Runde mit
+    ``OSError: [Errno 7] Argument list too long``. stdin kennt diese Grenze
+    nicht.
 
     Ausgelagert, damit der synchrone Pfad hier und der abbrechbare
     async-Pfad im OASIS-Subprozess (``scripts/sim_runtime/codex_cli_model.py``,
@@ -334,7 +346,7 @@ def build_codex_cli_command(prompt: str, *, model: Optional[str]) -> list[str]:
     # selbst, welches Modell sie faehrt.
     if model and model != CODEX_CLI_DEFAULT_MODEL_ID:
         cmd += ["--model", model]
-    cmd.append(prompt)
+    cmd.append("-")
     return cmd
 
 
@@ -344,7 +356,7 @@ def codex_cli_scratch_dir_prefix() -> str:
 
 
 def _run_codex_cli(prompt: str, *, model: Optional[str]) -> str:
-    cmd = build_codex_cli_command(prompt, model=model)
+    cmd = build_codex_cli_command(model=model)
     timeout = codex_cli_timeout_seconds()
     # Isoliertes CWD: `codex exec` liest/interpretiert Repo-Kontext aus dem
     # Arbeitsverzeichnis. Das Backend-Prozess-CWD ist das Agora-Repo selbst —
@@ -353,6 +365,7 @@ def _run_codex_cli(prompt: str, *, model: Optional[str]) -> str:
         try:
             result = subprocess.run(  # noqa: S603 — Binary kommt aus Config, Argumente sind kein Shell-String
                 cmd,
+                input=prompt,
                 capture_output=True,
                 text=True,
                 timeout=timeout,

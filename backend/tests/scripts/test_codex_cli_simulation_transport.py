@@ -23,6 +23,7 @@ from app.llm.providers.codex_cli import (
     CLI_TRANSPORT_VALUE,
     CODEX_CLI_BINARY_ENV,
     TRANSPORT_ENV_KEY,
+    build_codex_cli_command,
     build_shim_message,
     build_tool_prompt,
     parse_tool_calls,
@@ -288,6 +289,47 @@ class TestFlattenMessages:
 
         assert "search_posts" in flat
         assert "<tool_call>" in flat
+
+
+class TestPromptGoesThroughStdin:
+    """Prod-Regression armserver 2026-09-05: ``OSError: [Errno 7] Argument
+    list too long`` — 12 Agenten-Turns einer Runde starben, weil der
+    Runden-Prompt (Persona + Historie + Werkzeugschemata) als einzelnes
+    argv-Element Linux' MAX_ARG_STRLEN von 128 KiB riss."""
+
+    def test_command_reads_instructions_from_stdin(self, monkeypatch):
+        """Die Kommandozeile nimmt keinen Prompt mehr entgegen — das
+        abschliessende ``-`` schickt ``codex exec`` an stdin. Damit ist sie
+        konstruktionsbedingt unabhaengig von der Promptlaenge."""
+        monkeypatch.setenv(CODEX_CLI_BINARY_ENV, "sleep")
+        cmd = build_codex_cli_command(model=None)
+
+        assert cmd[-1] == "-", "codex exec muss die Instruktionen von stdin lesen"
+        assert sum(len(part) for part in cmd) < 200
+
+    def test_sync_path_pipes_the_prompt(self, monkeypatch):
+        """Der synchrone Provider-Pfad muss den Prompt an stdin uebergeben."""
+        from app.llm.providers import codex_cli as codex_module
+
+        seen: dict = {}
+
+        class _Result:
+            returncode = 0
+            stdout = "geantwortet"
+            stderr = ""
+
+        def _fake_run(cmd, **kwargs):
+            seen["cmd"] = cmd
+            seen["input"] = kwargs.get("input")
+            return _Result()
+
+        monkeypatch.setenv(CODEX_CLI_BINARY_ENV, "sleep")
+        monkeypatch.setattr(codex_module.subprocess, "run", _fake_run)
+
+        codex_module._run_codex_cli("ein sehr langer Prompt", model=None)
+
+        assert seen["input"] == "ein sehr langer Prompt"
+        assert seen["cmd"][-1] == "-"
 
 
 class TestCodexCliModel:
