@@ -4,7 +4,7 @@
  * Prüft:
  *  1. View mountet ohne Crash.
  *  2. PageHeader erhält lokalisierten Titel.
- *  3. Breadcrumb enthält "API Keys".
+ *  3. Sektionsliste (SettingsOverlay) markiert "API-Schlüssel" als aktiv.
  *  4. "Schlüssel anlegen"-Button ist sichtbar.
  *  5. i18n-Keys lösen auf (kein "settings.v4.apiKeys.*"-Rohdot im DOM).
  */
@@ -92,11 +92,11 @@ describe('SettingsApiKeysView (Slice G2)', () => {
     expect(header.props('title')).toBe('API-Schlüssel')
   })
 
-  it('Test 3: Breadcrumb enthält "API Keys"', async () => {
+  it('Test 3: Sektionsliste (SettingsOverlay) markiert "API-Schlüssel" als aktiv', async () => {
     const w = await mountView()
-    const shell = w.findComponent({ name: 'AppShell' })
-    const crumbs = shell.props('breadcrumbs') as Array<{ label: string }>
-    expect(crumbs.map((c) => c.label)).toContain('API Keys')
+    const active = w.find('a[aria-current="page"]')
+    expect(active.exists()).toBe(true)
+    expect(active.text()).toBe('API-Schlüssel')
   })
 
   it('Test 4: "Schlüssel anlegen"-Button ist sichtbar', async () => {

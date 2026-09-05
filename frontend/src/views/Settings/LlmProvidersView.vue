@@ -2,10 +2,15 @@
 /**
  * LlmProvidersView — Workspace-weite LLM-Provider-Konfiguration.
  *
+ * Redesign PR 9 (Audit-Punkt 9 „Card-Kit statt Struktur“, §7 Zeile 5
+ * „Settings-Provider als Liste“): die fruehere Card-pro-Provider-Grid
+ * (bis zu drei Karten mit je vier Buttons gleichzeitig sichtbar) wird
+ * durch Liste + Detail-Formular ersetzt — genau EIN Provider ist zur
+ * Zeit im Formularzustand, alle anderen stehen nur als Zeile da.
+ *
  * Pro Katalog-Provider (statische Registry-Metadaten aus GET /api/llm/providers)
- * eine Karte mit dem kanonischen Connection-Lifecycle
- * (GET/PUT/DELETE/test/models unter /api/llm/provider-connections, Onboarding
- * Slice 3 Task 5):
+ * der kanonische Connection-Lifecycle (GET/PUT/DELETE/test/models unter
+ * /api/llm/provider-connections, Onboarding Slice 3 Task 5):
  *   - Status-Badge: nicht konfiguriert / konfiguriert / verbunden / eingeschränkt
  *     / Fehler / getrennt — oder ehrlich "nicht unterstützt" für
  *     Subscription-/CLI-Bridges (409 provider_unsupported), NIE als verbunden
@@ -20,17 +25,20 @@
  * und werden nie im Pinia-State oder localStorage gehalten (siehe
  * store/aiModels.ts).
  */
-import { computed, onMounted, reactive, onBeforeUnmount } from 'vue'
+import { computed, onMounted, reactive, ref, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
+import SettingsOverlay from '@/components/v4/forms/SettingsOverlay.vue'
 import Card from '@/components/v4/forms/Card.vue'
 import Badge from '@/components/v4/forms/Badge.vue'
 import Input from '@/components/v4/forms/Input.vue'
+import Button from '@/components/v4/forms/Button.vue'
 import AiModelPicker from '@/components/v4/forms/AiModelPicker.vue'
 import { useLlmProvidersStore, useLlmRoutingDefaultsStore } from '@/store/aiModels'
 import { useAiModelRefAdapter } from '@/composables/useAiModelRefAdapter'
 import { useEffectiveModelSelection } from '@/composables/useEffectiveModelSelection'
+import { LlmProviderListTestId } from '@/contracts/testIds'
 import type { ProviderDescriptor } from '@/contracts/llmRoutingContract'
 import type { LlmRoute } from '@/contracts/llmRoute'
 import type { ProviderProbeStatus } from '@/contracts/aiProviderContract'
@@ -42,11 +50,6 @@ const providersStore = useLlmProvidersStore()
 const defaultsStore = useLlmRoutingDefaultsStore()
 const adapter = useAiModelRefAdapter()
 const effectiveModel = useEffectiveModelSelection()
-
-const BREADCRUMBS = [
-  { label: 'Settings', to: { name: 'SettingsGeneral' } },
-  { label: t('settings.v4.llmProviders.title', 'LLM-Provider') },
-]
 
 interface DraftState {
   apiKey: string
@@ -126,11 +129,22 @@ function testStatusLabel(status: ProviderProbeStatus, modelsFound: number): stri
   return t(`settings.v4.llmProviders.test.${status}`)
 }
 
+// Review PR #1439: `connectionBusy[id]` ist ein einzelnes Bool fuer alle vier
+// Aktionen eines Providers — genuegt fuer `disabled` (waehrend IRGENDeine
+// Aktion laeuft duerfen alle vier nicht klickbar sein), aber nicht fuer den
+// Spinner: der sollte nur am tatsaechlich laufenden Button haengen, sonst
+// "spinnen" auch Testen/Trennen waehrend nur Speichern laeuft. Der Store
+// traegt dafuer keine Aktion — lokal statt Contract-Aenderung, da nur diese
+// View das Detail braucht.
+type BusyAction = 'save' | 'test' | 'models' | 'disconnect'
+const busyAction = reactive<Record<string, BusyAction | undefined>>({})
+
 async function save(p: ProviderDescriptor): Promise<void> {
   if (isUnsupported(p)) return
   const draft = ensureDraft(p)
   const baseUrl = draft.baseUrl.trim()
   const apiKey = draft.apiKey.trim()
+  busyAction[p.id] = 'save'
   try {
     await providersStore.upsertConnection(p.id, {
       display_name: p.label,
@@ -143,30 +157,55 @@ async function save(p: ProviderDescriptor): Promise<void> {
   } catch {
     // Fehlertext liegt strukturiert in providersStore.connectionError[p.id]
     // und wird im Template angezeigt — kein stiller Fallback.
+  } finally {
+    if (busyAction[p.id] === 'save') delete busyAction[p.id]
   }
 }
 
 async function runTest(p: ProviderDescriptor): Promise<void> {
   if (isUnsupported(p) || !isConfigured(p)) return
+  busyAction[p.id] = 'test'
   try {
     await providersStore.testConnection(p.id)
   } catch {
     // s.o. — Fehler liegt in providersStore.connectionError[p.id].
+  } finally {
+    if (busyAction[p.id] === 'test') delete busyAction[p.id]
   }
 }
 
 async function loadModels(p: ProviderDescriptor): Promise<void> {
   if (isUnsupported(p) || !isConfigured(p)) return
+  busyAction[p.id] = 'models'
   try {
     await providersStore.fetchConnectionModels(p.id)
   } catch {
     // s.o.
+  } finally {
+    if (busyAction[p.id] === 'models') delete busyAction[p.id]
   }
 }
 
 async function disconnect(p: ProviderDescriptor): Promise<void> {
-  await providersStore.removeConnection(p.id)
-  delete drafts[p.id]
+  busyAction[p.id] = 'disconnect'
+  try {
+    await providersStore.removeConnection(p.id)
+    delete drafts[p.id]
+  } finally {
+    if (busyAction[p.id] === 'disconnect') delete busyAction[p.id]
+  }
+}
+
+// Redesign PR 9: genau ein Provider steht im Formularzustand. Ohne
+// Auswahl faellt die Liste auf den ersten Katalog-Eintrag zurueck, statt
+// eine leere Detailflaeche zu zeigen.
+const selectedProviderId = ref<string | null>(null)
+const selectedProvider = computed<ProviderDescriptor | null>(
+  () => providersStore.providers.find((p) => p.id === selectedProviderId.value) ?? providersStore.providers[0] ?? null,
+)
+
+function selectProvider(id: string): void {
+  selectedProviderId.value = id
 }
 
 const defaultRoute = computed<LlmRoute | null>(() => {
@@ -207,13 +246,12 @@ onBeforeUnmount(() => {
 
 <template>
   <AppShell>
-    <PageHeader
-      :title="t('settings.v4.llmProviders.title', 'LLM-Provider')"
-      :subtitle="t('settings.v4.llmProviders.subtitle', 'Hinterlege API-Schlüssel, ziehe Modelle und wähle pro Schritt das passende Modell aus.')"
-      :breadcrumbs="BREADCRUMBS"
-    />
+    <SettingsOverlay>
+      <PageHeader
+        :title="t('settings.v4.llmProviders.title', 'LLM-Provider')"
+        :subtitle="t('settings.v4.llmProviders.subtitle', 'Hinterlege API-Schlüssel, ziehe Modelle und wähle pro Schritt das passende Modell aus.')"
+      />
 
-    <div class="llm-providers-grid">
       <Card
         :title="t('settings.v4.llmProviders.defaults.title', 'Workspace-Default')"
         :subtitle="t('settings.v4.llmProviders.defaults.subtitle', 'Wird automatisch beim Start eines neuen Runs für alle Schritte übernommen.')"
@@ -230,184 +268,265 @@ onBeforeUnmount(() => {
         </div>
       </Card>
 
-      <Card
-        v-for="provider in providersStore.providers"
-        :key="provider.id"
-        :title="provider.label"
-        :subtitle="provider.base_url || ''"
-        data-testid="provider-card"
-        :data-provider-id="provider.id"
-      >
-        <template #right>
-          <Badge :tone="statusTone(provider)" data-testid="provider-status-badge">
-            {{ statusLabel(provider) }}
-          </Badge>
-        </template>
+      <div class="llm-providers-layout">
+        <ul
+          class="llm-provider-list"
+          role="list"
+          :aria-label="t('settings.v4.llmProviders.list.ariaLabel', 'Provider')"
+          :data-testid="LlmProviderListTestId.list"
+        >
+          <li v-for="provider in providersStore.providers" :key="provider.id">
+            <button
+              type="button"
+              class="llm-provider-list__row"
+              :class="{ 'is-selected': selectedProvider?.id === provider.id }"
+              :aria-current="selectedProvider?.id === provider.id ? 'true' : undefined"
+              :data-testid="LlmProviderListTestId.row"
+              :data-provider-id="provider.id"
+              @click="selectProvider(provider.id)"
+            >
+              <span class="llm-provider-list__label">{{ provider.label }}</span>
+              <span class="llm-provider-list__type">{{ provider.type }}</span>
+              <Badge :tone="statusTone(provider)" data-testid="provider-status-badge">
+                {{ statusLabel(provider) }}
+              </Badge>
+            </button>
+          </li>
+        </ul>
 
-        <div class="llm-card-body">
-          <p v-if="isUnsupported(provider)" class="llm-unsupported-notice" data-testid="provider-unsupported-notice">
+        <div
+          v-if="selectedProvider"
+          class="llm-provider-detail"
+          :data-testid="LlmProviderListTestId.detail"
+          :data-provider-id="selectedProvider.id"
+        >
+          <div class="llm-provider-detail__head">
+            <h3 class="llm-provider-detail__title">{{ selectedProvider.label }}</h3>
+            <p v-if="selectedProvider.base_url" class="llm-provider-detail__subtitle">{{ selectedProvider.base_url }}</p>
+          </div>
+
+          <p
+            v-if="isUnsupported(selectedProvider)"
+            class="llm-unsupported-notice"
+            data-testid="provider-unsupported-notice"
+          >
             {{ t('settings.v4.llmProviders.unsupportedNotice', 'Dieser Anbieter ist eine Subscription-/CLI-Bridge und wird für Provider-Verbindungen nicht unterstützt.') }}
           </p>
 
           <template v-else>
             <div class="llm-key-form">
               <Input
-                v-if="!isOllama(provider)"
-                v-model="ensureDraft(provider).apiKey"
+                v-if="!isOllama(selectedProvider)"
+                v-model="ensureDraft(selectedProvider).apiKey"
                 type="password"
                 autocomplete="off"
                 spellcheck="false"
                 :placeholder="t('settings.v4.llmProviders.keyPlaceholder', 'Neuen API-Key einfügen …')"
               />
               <Input
-                v-model="ensureDraft(provider).baseUrl"
-                :placeholder="isOllama(provider)
+                v-model="ensureDraft(selectedProvider).baseUrl"
+                :placeholder="isOllama(selectedProvider)
                   ? t('settings.v4.llmProviders.localBaseUrlPlaceholder', 'http://localhost:11434')
                   : t('settings.v4.llmProviders.baseUrlPlaceholder', 'https://api.example.com/v1')"
               />
             </div>
 
             <div class="llm-actions">
-              <button
-                type="button"
-                class="llm-btn llm-btn--primary"
-                :disabled="providersStore.connectionBusy[provider.id]"
-                @click="save(provider)"
+              <Button
+                variant="primary"
+                :disabled="providersStore.connectionBusy[selectedProvider.id]"
+                :loading="busyAction[selectedProvider.id] === 'save'"
+                :data-testid="LlmProviderListTestId.saveButton"
+                @click="save(selectedProvider)"
               >
                 {{ t('settings.v4.llmProviders.actions.save', 'Verbindung speichern') }}
-              </button>
-              <button
-                type="button"
-                class="llm-btn"
-                :disabled="!isConfigured(provider) || providersStore.connectionBusy[provider.id]"
-                @click="runTest(provider)"
+              </Button>
+              <Button
+                variant="secondary"
+                :disabled="!isConfigured(selectedProvider) || providersStore.connectionBusy[selectedProvider.id]"
+                :loading="busyAction[selectedProvider.id] === 'test'"
+                :data-testid="LlmProviderListTestId.testButton"
+                @click="runTest(selectedProvider)"
               >
                 {{ t('settings.v4.llmProviders.actions.test', 'Verbindung testen') }}
-              </button>
-              <button
-                type="button"
-                class="llm-btn"
-                :disabled="!isConfigured(provider) || providersStore.connectionBusy[provider.id]"
-                @click="loadModels(provider)"
+              </Button>
+              <Button
+                variant="secondary"
+                :disabled="!isConfigured(selectedProvider) || providersStore.connectionBusy[selectedProvider.id]"
+                :loading="busyAction[selectedProvider.id] === 'models'"
+                :data-testid="LlmProviderListTestId.refreshModelsButton"
+                @click="loadModels(selectedProvider)"
               >
                 {{ t('settings.v4.llmProviders.actions.refreshModels', 'Modelle laden') }}
-              </button>
-              <button
-                v-if="isConfigured(provider)"
-                type="button"
-                class="llm-btn llm-btn--danger"
-                :disabled="providersStore.connectionBusy[provider.id]"
-                @click="disconnect(provider)"
+              </Button>
+              <Button
+                v-if="isConfigured(selectedProvider)"
+                variant="danger"
+                :disabled="providersStore.connectionBusy[selectedProvider.id]"
+                :loading="busyAction[selectedProvider.id] === 'disconnect'"
+                :data-testid="LlmProviderListTestId.disconnectButton"
+                @click="disconnect(selectedProvider)"
               >
                 {{ t('settings.v4.llmProviders.actions.disconnect', 'Verbindung trennen') }}
-              </button>
+              </Button>
             </div>
 
             <div
-              v-if="providersStore.connectionError[provider.id]"
+              v-if="providersStore.connectionError[selectedProvider.id]"
               class="llm-test-result llm-test-result--fail"
               data-testid="provider-error"
             >
-              {{ providersStore.connectionError[provider.id] }}
+              {{ providersStore.connectionError[selectedProvider.id] }}
             </div>
 
             <div
-              v-else-if="providersStore.connectionTestResults[provider.id]"
+              v-else-if="providersStore.connectionTestResults[selectedProvider.id]"
               class="llm-test-result"
-              :class="{ 'llm-test-result--ok': providersStore.connectionTestResults[provider.id].status === 'available' }"
+              :class="{ 'llm-test-result--ok': providersStore.connectionTestResults[selectedProvider.id].status === 'available' }"
               data-testid="provider-test-result"
             >
               {{ testStatusLabel(
-                providersStore.connectionTestResults[provider.id].status,
-                providersStore.connectionTestResults[provider.id].models_found,
+                providersStore.connectionTestResults[selectedProvider.id].status,
+                providersStore.connectionTestResults[selectedProvider.id].models_found,
               ) }}
             </div>
 
-            <div v-if="(providersStore.connectionModels[provider.id]?.length ?? 0) > 0" class="llm-model-list">
+            <div v-if="(providersStore.connectionModels[selectedProvider.id]?.length ?? 0) > 0" class="llm-model-list">
               <span class="llm-model-list__title">
                 {{ t('settings.v4.llmProviders.models.title', 'Entdeckte Modelle') }}
-                <small>({{ providersStore.connectionModels[provider.id][0].source }})</small>
+                <small>({{ providersStore.connectionModels[selectedProvider.id][0].source }})</small>
               </span>
               <ul>
-                <li v-for="model in providersStore.connectionModels[provider.id]" :key="model.model_id">
+                <li v-for="model in providersStore.connectionModels[selectedProvider.id]" :key="model.model_id">
                   {{ model.model_id }}
                 </li>
               </ul>
             </div>
           </template>
         </div>
-      </Card>
-    </div>
+      </div>
+    </SettingsOverlay>
   </AppShell>
 </template>
 
 <style scoped>
-.llm-providers-grid {
+.llm-providers-layout {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
-  gap: 16px;
-  padding: 16px;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: var(--sp-6);
+  align-items: start;
+  margin-top: var(--sp-5);
 }
-.llm-card-body {
+
+.llm-provider-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-5);
+  overflow: hidden;
+}
+
+.llm-provider-list__row {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: var(--sp-3) var(--sp-4);
+  border: 0;
+  border-bottom: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--fs-small);
+  text-align: left;
+  cursor: pointer;
 }
-.llm-key-line {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  background: var(--surface-inset);
-  padding: 8px 10px;
-  border-radius: var(--r-4, 8px);
+
+.llm-provider-list li:last-child .llm-provider-list__row {
+  border-bottom: 0;
 }
-.llm-key-line__label {
-  font-size: 12px;
+
+.llm-provider-list__row:hover {
+  background: var(--surface-hover);
+}
+
+.llm-provider-list__row.is-selected {
+  background: var(--accent-tint-bg);
+}
+
+.llm-provider-list__row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.llm-provider-list__label {
+  flex: 1;
+  min-width: 0;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.llm-provider-list__type {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono);
+  color: var(--text-tertiary);
+}
+
+/* CI-Befund PR #1439 (axe color-contrast): --text-tertiary faellt auf dem
+   Kupfer-Tint der Auswahl unter WCAG-AA — hier reicht --text-secondary. */
+.llm-provider-list__row.is-selected .llm-provider-list__type {
   color: var(--text-secondary);
 }
-.llm-key-line__value {
-  font-family: var(--font-mono, monospace);
-  font-size: 13px;
+
+.llm-provider-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-5);
+  background: var(--surface-elevated);
+}
+
+.llm-provider-detail__title {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-heading);
   color: var(--text-primary);
 }
+
+.llm-provider-detail__subtitle {
+  margin: 4px 0 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono);
+  color: var(--text-tertiary);
+}
+
+.llm-unsupported-notice {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+}
+
 .llm-key-form {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--sp-2);
 }
+
 .llm-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--sp-2);
 }
-.llm-btn {
-  border: 1px solid var(--hairline);
-  background: var(--surface-elevated);
-  /* Ohne explizite Farbe faellt der Button auf die UA-buttonText-Farbe
-     (schwarz im Light-Scheme) zurueck — auf dunklem Grund unlesbar. */
-  color: var(--text-primary);
-  padding: 6px 12px;
-  border-radius: var(--r-4, 8px);
-  font-size: 13px;
-  cursor: pointer;
-}
-.llm-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.llm-btn--primary {
-  background: var(--accent);
-  color: var(--text-on-accent);
-  border-color: var(--accent);
-}
-.llm-btn--danger {
-  color: var(--status-red);
-  border-color: var(--status-red);
-}
+
 .llm-test-result {
-  font-size: 13px;
-  padding: 6px 10px;
-  border-radius: var(--r-4, 8px);
+  font-size: var(--fs-small);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-3);
   background: var(--surface-hover);
 }
 .llm-test-result--ok { color: var(--status-green); }
@@ -415,16 +534,15 @@ onBeforeUnmount(() => {
 .llm-model-list ul {
   margin: 4px 0 0;
   padding-left: 18px;
-  font-size: 13px;
+  font-size: var(--fs-small);
   color: var(--text-secondary);
   max-height: 140px;
   overflow-y: auto;
 }
 .llm-model-list__title {
-  font-size: 12px;
+  font-size: var(--fs-label);
   color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
 }
 .llm-default-row {
   display: flex;
@@ -433,8 +551,14 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
 }
 .llm-default-current {
-  font-family: var(--font-mono, monospace);
-  font-size: 13px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
   color: var(--text-secondary);
+}
+
+@media (max-width: 900px) {
+  .llm-providers-layout {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

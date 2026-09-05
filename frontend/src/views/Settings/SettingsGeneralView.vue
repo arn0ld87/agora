@@ -16,6 +16,7 @@ import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
+import SettingsOverlay from '@/components/v4/forms/SettingsOverlay.vue'
 import AiModelPicker from '@/components/v4/forms/AiModelPicker.vue'
 import SettingsSectionPanel from '@/components/v4/forms/SettingsSectionPanel.vue'
 import LlmProfileManager from '@/components/v4/forms/LlmProfileManager.vue'
@@ -24,11 +25,6 @@ import type { AiModelRef } from '@/contracts/aiModelRef'
 import { GENERAL_SETTINGS_SECTIONS } from './settingsSections'
 
 const { t } = useI18n()
-
-const BREADCRUMBS = [
-  { label: 'Settings', to: { name: 'SettingsGeneral' } },
-  { label: 'General' },
-]
 
 const effectiveModel = useEffectiveModelSelection()
 
@@ -52,25 +48,27 @@ async function setWorkspaceDefault(aiRef: AiModelRef | null): Promise<void> {
 </script>
 
 <template>
-  <AppShell :breadcrumbs="BREADCRUMBS">
-    <PageHeader
-      :title="t('settings.v4.general.title')"
-      :subtitle="t('settings.v4.general.subtitle')"
-    />
-
-    <LlmProfileManager style="margin-bottom: 16px;" />
-    <section class="settings-general__model-picker">
-      <label for="settings-general-model-picker">{{ t('settings.v4.general.workspaceDefaultModel') }}</label>
-      <AiModelPicker
-        id="settings-general-model-picker"
-        v-model="selectedModel"
-        mode="chat"
-        :allow-workspace-default="true"
-        @update:model-value="setWorkspaceDefault"
+  <AppShell>
+    <SettingsOverlay>
+      <PageHeader
+        :title="t('settings.v4.general.title')"
+        :subtitle="t('settings.v4.general.subtitle')"
       />
-    </section>
 
-    <SettingsSectionPanel :allowed-sections="GENERAL_SETTINGS_SECTIONS" />
+      <LlmProfileManager style="margin-bottom: 16px;" />
+      <section class="settings-general__model-picker">
+        <label for="settings-general-model-picker">{{ t('settings.v4.general.workspaceDefaultModel') }}</label>
+        <AiModelPicker
+          id="settings-general-model-picker"
+          v-model="selectedModel"
+          mode="chat"
+          :allow-workspace-default="true"
+          @update:model-value="setWorkspaceDefault"
+        />
+      </section>
+
+      <SettingsSectionPanel :allowed-sections="GENERAL_SETTINGS_SECTIONS" />
+    </SettingsOverlay>
   </AppShell>
 </template>
 
