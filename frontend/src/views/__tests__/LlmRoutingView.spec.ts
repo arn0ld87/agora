@@ -34,6 +34,16 @@ vi.mock('@/components/v4/shell/PageHeader.vue', () => ({
     template: '<div class="page-header-stub"><h1>{{ title }}</h1><p>{{ subtitle }}</p></div>',
   },
 }))
+// Redesign PR 9: SettingsOverlay ersetzt die Breadcrumbs, braucht aber i18n +
+// eine vollstaendige Sektions-Router-Landschaft — beides fehlt in diesem
+// schlanken Router-only-Setup. Diese Suite prueft die Run-Picker-Glue-Logik,
+// nicht das Settings-Chrome, daher genuegt ein reiner Slot-Stub.
+vi.mock('@/components/v4/forms/SettingsOverlay.vue', () => ({
+  default: {
+    name: 'SettingsOverlay',
+    template: '<div class="settings-overlay-stub"><slot /></div>',
+  },
+}))
 vi.mock('@/components/v4/forms/Card.vue', () => ({
   default: {
     name: 'Card',
@@ -152,11 +162,9 @@ describe('LlmRoutingView', () => {
     })
   })
 
-  it('gibt Breadcrumbs "Settings / LLM Routing" an AppShell weiter', async () => {
+  it('bettet SettingsOverlay ein statt eigener Breadcrumbs (Redesign PR 9)', async () => {
     const wrapper = await mountView()
-    const shell = wrapper.findComponent({ name: 'AppShell' })
-    const crumbs = shell.props('breadcrumbs') as Array<{ label: string }>
-    expect(crumbs.map((c) => c.label)).toEqual(['Settings', 'LLM Routing'])
+    expect(wrapper.find('.settings-overlay-stub').exists()).toBe(true)
   })
 
   it('laedt Runs und rendert das echte LLM-Routing-Panel fuer den ersten Run', async () => {

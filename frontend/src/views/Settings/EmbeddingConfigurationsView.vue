@@ -19,6 +19,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
+import SettingsOverlay from '@/components/v4/forms/SettingsOverlay.vue'
 import Card from '@/components/v4/forms/Card.vue'
 import Badge from '@/components/v4/forms/Badge.vue'
 import { useEmbeddingConfigurationsStore } from '@/store/embeddingConfigurations'
@@ -33,11 +34,6 @@ import type {
 const { t } = useI18n()
 
 const store = useEmbeddingConfigurationsStore()
-
-const BREADCRUMBS = computed(() => [
-  { label: t('common.settings'), to: { name: 'SettingsGeneral' } },
-  { label: t('settings.v4.embedding.title', 'Embedding-Konfiguration') },
-])
 
 const STATUS_TONE: Record<string, 'gray' | 'green' | 'orange' | 'red' | 'blue' | 'teal'> = {
   proposed: 'gray',
@@ -338,7 +334,8 @@ function errorMessage(err: unknown): string {
 
 <template>
   <AppShell>
-    <PageHeader :breadcrumbs="BREADCRUMBS" :title="$t('settings.v4.embedding.title', 'Embedding-Konfiguration')">
+    <SettingsOverlay>
+    <PageHeader :title="$t('settings.v4.embedding.title', 'Embedding-Konfiguration')">
       <!-- PageHeader rendert ausschliesslich den benannten Slot "right";
            Default-Slot-Inhalt wird verworfen. -->
       <template #right>
@@ -687,6 +684,7 @@ function errorMessage(err: unknown): string {
         </template>
       </div>
     </div>
+    </SettingsOverlay>
   </AppShell>
 </template>
 
