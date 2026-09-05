@@ -74,6 +74,18 @@ describe('Sidebar', () => {
     expect(wrapper.text()).toContain('Agora')
   })
 
+  it('rendert den Brand-Ring statt des blau-violetten Glyphen (Redesign PR 2)', async () => {
+    await router.push('/')
+    const wrapper = mount(Sidebar, {
+      global: { plugins: [router, i18n] },
+    })
+    // Kein <img>-Glyph mehr ...
+    expect(wrapper.find('img[src*="agora-logo-glyph"]').exists()).toBe(false)
+    // ... stattdessen der reine CSS-Ring aus AgoraBrand mode="ring".
+    expect(wrapper.find('.agora-brand--ring').exists()).toBe(true)
+    expect(wrapper.find('img').exists()).toBe(false)
+  })
+
   it('rendert Workspace-Nav-Items (Dashboard, Runs vorhanden)', async () => {
     await router.push('/')
     const wrapper = mount(Sidebar, {

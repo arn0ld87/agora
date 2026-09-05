@@ -1,6 +1,8 @@
 <template>
   <span class="agora-brand" :class="[`agora-brand--${mode}`, { 'agora-brand--inline': inline }]" :style="sizeStyle">
+    <span v-if="mode === 'ring'" class="agora-brand__ring" role="img" :aria-label="alt"></span>
     <img
+      v-else
       :src="src"
       :alt="alt"
       :width="width"
@@ -14,13 +16,16 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-type BrandMode = 'glyph' | 'full-animated' | 'full-static'
+// Redesign PR 2 (Chrome bereinigen): "ring" ersetzt den blau-violetten
+// SVG-Glyph durch den Kupfer-Ring (reine CSS-Form, kein Asset) — siehe
+// targets/tokens.css .brand-glyph (13px, 1.5px Border, --accent).
+type BrandMode = 'glyph' | 'full-animated' | 'full-static' | 'ring'
 
 const props = withDefaults(
   defineProps<{
-    /** glyph: kompaktes Emblem ohne Wortmarke. full-animated: vollständig + Animation. full-static: vollständig ohne Animation. */
+    /** glyph: kompaktes Emblem ohne Wortmarke. full-animated: vollständig + Animation. full-static: vollständig ohne Animation. ring: reine CSS-Form (Kupfer-Ring), ignoriert `height`. */
     mode?: BrandMode
-    /** Höhe in px. Width skaliert proportional aus dem viewBox. */
+    /** Höhe in px. Width skaliert proportional aus dem viewBox. Ohne Wirkung bei mode="ring". */
     height?: number
     /** Aria-Label (Bild-Alt). */
     alt?: string
@@ -37,10 +42,13 @@ const props = withDefaults(
 
 // Assets liegen unter /brand/ (frontend/public/brand/*) — kein Vite-Import,
 // damit sie unabhängig vom Bundling als statische Files ausliefert werden.
+// "ring" braucht kein Asset (reines CSS) — Eintrag hier nur, damit der
+// Record<BrandMode, ...> exhaustiv bleibt; wird bei mode="ring" nie gelesen.
 const ASSETS: Record<BrandMode, string> = {
   glyph: '/brand/agora-logo-glyph.svg',
   'full-animated': '/brand/agora-logo-animated.svg',
   'full-static': '/brand/agora-logo.png',
+  ring: '',
 }
 
 const ASPECT_RATIO: Record<BrandMode, number> = {
@@ -49,6 +57,7 @@ const ASPECT_RATIO: Record<BrandMode, number> = {
   // full-animated/full-static: viewBox 960x320 => 3:1
   'full-animated': 3,
   'full-static': 3,
+  ring: 1,
 }
 
 const src = computed(() => ASSETS[props.mode])
@@ -75,5 +84,12 @@ const sizeStyle = computed(() => ({
   width: auto;
   max-width: 100%;
   user-select: none;
+}
+.agora-brand__ring {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  border: 1.5px solid var(--accent);
+  border-radius: 50%;
 }
 </style>

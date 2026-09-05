@@ -13,6 +13,18 @@
 
       <ActivityIndicator :objects="props.activeObjects" @select="(target) => emit('select', target)" />
 
+      <!-- Protokoll → oeffnet den Log-Drawer (Redesign PR 2: ex-FAB in App.vue) -->
+      <button
+        type="button"
+        class="shell-root__icon-btn"
+        :data-testid="ShellTestId.logsTrigger"
+        :aria-label="t('logs.drawer.toggle')"
+        :title="t('logs.drawer.toggle')"
+        @click="toggleLogDrawer"
+      >
+        <IconLogs :size="20" :stroke="1.6" />
+      </button>
+
       <!-- Auf dem Telefon gibt es keine Tastenkombination auszuloesen.
            Der Knopf verschwindet deshalb aus dem Markup, statt nur
            unsichtbar zu sein — sonst bliebe er ein Tab-Stop ins Leere. -->
@@ -25,7 +37,8 @@
         :title="t('cmd.trigger')"
         @click="openPalette"
       >
-        &#8984;K
+        {{ t('topbar.search') }}
+        <span class="kbd">&#8984;K</span>
       </button>
 
       <div class="shell-root__user">
@@ -83,8 +96,10 @@ import UserMenu from './UserMenu.vue'
 import { useIsMobile } from '../../composables/useIsMobile'
 import type { ShelfObject, ShelfObjectKind } from '../../types/shelf'
 import { useCommandPalette } from '../../composables/useCommandPalette'
+import { useLogDrawer } from '../../composables/useLogDrawer'
 import Stack from './Stack.vue'
 import ActivityIndicator from './ActivityIndicator.vue'
+import IconLogs from '../v4/shell/icons/IconLogs.vue'
 import { useCancelAction } from './useCancelAction'
 
 /**
@@ -103,6 +118,10 @@ import { useCancelAction } from './useCancelAction'
  * Aktivitaets-Indikator, Nutzermenue-Platzhalter) — Systemstatus ist
  * nicht darunter, und useSystemStatus anzubinden waere eine zweite,
  * hier nicht beauftragte Datenquelle. Siehe Bericht.
+ *
+ * Redesign PR 2 (Chrome bereinigen): Protokoll-Icon ergaenzt (ex-FAB aus
+ * App.vue, ueber useLogDrawer.ts), ⌘K-Chip auf "Suchen ⌘K" vereinheitlicht
+ * (identisches Markup/Styling wie Topbar.vue).
  */
 
 const props = defineProps<{
@@ -118,6 +137,7 @@ const { t } = useI18n()
 const cancelAction = useCancelAction()
 const { isMobile } = useIsMobile()
 const { isOpen: isPaletteOpen, open: openPalette } = useCommandPalette()
+const { toggle: toggleLogDrawer } = useLogDrawer()
 const wasPaletteOpened = ref(false)
 
 const CommandPalette = defineAsyncComponent(() => import('../v4/shell/CommandPalette.vue'))
@@ -196,26 +216,66 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
   flex: 1;
 }
 
+/* Protokoll-Icon — 20px, analog Topbar.vue .topbar__icon-btn */
+.shell-root__icon-btn {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-3, 6px);
+  background: transparent;
+  border: 0;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.shell-root__icon-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.shell-root__icon-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ⌘K-Chip — Markup/Styling einheitlich mit Topbar.vue .topbar__cmdk */
 .shell-root__cmdk {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--text-tertiary);
-  border: 1px solid var(--hairline);
-  border-radius: 3px;
-  padding: 2px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-sans);
+  font-size: var(--fs-small, 12.5px);
+  color: var(--text-secondary);
+  border: 0;
+  border-radius: var(--r-3, 6px);
+  padding: 0 var(--sp-3, 12px);
+  height: 28px;
   background: transparent;
   cursor: pointer;
   flex-shrink: 0;
 }
 
 .shell-root__cmdk:hover {
+  background: var(--surface-hover);
   color: var(--text-primary);
-  border-color: var(--hairline-strong);
 }
 
 .shell-root__cmdk:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+.kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  padding: 1px 5px;
 }
 
 .shell-root__main {
@@ -323,6 +383,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .shell-root__icon-btn,
   .shell-root__cmdk,
   .shell-root__toast-btn {
     transition: none;

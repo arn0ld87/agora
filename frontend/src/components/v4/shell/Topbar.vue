@@ -21,15 +21,29 @@
     <!-- Actions (right) -->
     <div class="topbar__actions">
       <slot name="actions">
-        <!-- Search → oeffnet Command-Palette -->
+        <!-- Protokoll → oeffnet den Log-Drawer (Redesign PR 2: ex-FAB in App.vue) -->
         <button
           class="topbar__icon-btn"
           type="button"
+          :aria-label="t('logs.drawer.toggle')"
+          :title="t('logs.drawer.toggle')"
+          :data-testid="ShellTestId.logsTrigger"
+          @click="toggleLogDrawer"
+        >
+          <Icon name="logs" :size="20" :stroke="1.6" />
+        </button>
+
+        <!-- Search → oeffnet Command-Palette; ⌘K-Chip einheitlich mit ShellRoot.vue -->
+        <button
+          class="topbar__icon-btn topbar__cmdk"
+          type="button"
           :aria-label="t('topbar.search')"
           :title="t('cmd.trigger')"
+          :data-testid="ShellTestId.cmdkTrigger"
           @click="openPalette"
         >
-          <Icon name="search" :size="18" :stroke="1.6" />
+          {{ t('topbar.search') }}
+          <span class="kbd">⌘K</span>
         </button>
 
         <!-- User slot -->
@@ -59,10 +73,13 @@ import Icon from './Icon.vue'
 import DensityToggle from './DensityToggle.vue'
 import UserMenu from '@/components/shell/UserMenu.vue'
 import { useCommandPalette } from '@/composables/useCommandPalette'
+import { useLogDrawer } from '@/composables/useLogDrawer'
 import { useShellStore } from '@/stores/shell'
+import { ShellTestId } from '@/contracts/testIds'
 
 const { t } = useI18n()
 const { open: openPalette } = useCommandPalette()
+const { toggle: toggleLogDrawer } = useLogDrawer()
 const shellStore = useShellStore()
 
 withDefaults(
@@ -122,6 +139,25 @@ withDefaults(
 .topbar__icon-btn:hover {
   background: var(--surface-hover, rgba(0, 0, 0, 0.04));
   color: var(--text-primary);
+}
+
+/* ⌘K-Chip: Variante von .topbar__icon-btn mit Text+Kbd statt fixem
+   Icon-Quadrat — Markup/Styling einheitlich mit ShellRoot.vue. */
+.topbar__cmdk {
+  width: auto;
+  padding: 0 var(--sp-3, 10px);
+  gap: 6px;
+  font-family: var(--font-sans);
+  font-size: var(--fs-small);
+}
+
+.kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  padding: 1px 5px;
 }
 
 .topbar__user {
