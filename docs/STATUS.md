@@ -24,6 +24,8 @@ Die Produktreife wird ab diesem Dokumentationsumbau über [`VERSION`](../VERSION
 
 ## Tests
 
+Dashboard-Start: Die globale Ollama-Erreichbarkeit ist informativ und sperrt keine Runs mit unabhängigen Modellrouten. Neo4j-Bereitschaft und abgeschlossener Profilabruf bleiben Voraussetzungen; die Oberfläche unterscheidet fehlende Eingaben von diesen Sperrgründen.
+
 Persona-Vorbereitung: Registry-Provider mit CLI-Transport benötigen keinen HTTP-API-Key. Die lokale CLI-Anmeldung bleibt für den eigentlichen Modellaufruf erforderlich; fehlende Schlüssel bei HTTP-Providern bleiben ein Startfehler.
 
 <!-- BEGIN_AUTOGEN_TESTS -->

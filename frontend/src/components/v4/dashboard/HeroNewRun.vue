@@ -51,14 +51,8 @@ const llmProfiles = ref<LlmProfile[]>([])
 // "LLM-Profil ... nicht gefunden" ab.
 const profilesSettled = ref(false)
 
-// ---- Service-Readiness (Parität zu Home.vue, Portierung aus #915) ----
-// Liefert die Werte, die Home.vue aus /api/simulation/available-models zieht,
-// damit der Dashboard-Start denselben Service-Readiness-Gate besitzt wie der
-// klassische /home-Flow: Neo4j muss erreichbar sein; Ollama nur, wenn es der
-// Default-Provider ist — außer der User hat explizit ein anderes Modell
-// gewählt (hasExplicitPick), dann übernimmt der gewählte Provider.
-const defaultProvider = ref<string>('unknown')
-const ollamaReachable = ref<boolean>(false)
+// Neo4j ist eine gemeinsame Run-Abhängigkeit. Die globale Ollama-Probe
+// beschreibt dagegen weder das Profil noch die gewählte Provider-Connection.
 const neo4jReachable = ref<boolean>(false)
 
 function readLocal(key: string): string | null {
@@ -196,17 +190,10 @@ const profileOptions = computed(() => {
   }))
 })
 
-const serverDefaultRequiresOllama = computed(() => defaultProvider.value === 'ollama')
-
-// Service-Readiness-Gate (Parität zu Home.vue, #915): blockt den Start, wenn
-// Neo4j nicht erreichbar ist oder der Default-Provider Ollama ist und Ollama
-// nicht erreichbar ist — außer der User hat explizit ein anderes Modell
-// gewählt (hasExplicitPick), dann übernimmt der gewählte Provider.
-const servicesReady = computed(
-  () =>
-    neo4jReachable.value &&
-    (!serverDefaultRequiresOllama.value || ollamaReachable.value || hasExplicitPick.value),
-)
+// Modellrouten werden beim Ausführen im Backend aufgelöst. Ein veralteter
+// Server-Default darf Cloud-Profile, Kanon-Defaults oder andere Ollama-
+// Connections nicht sperren; die globale Probe bleibt reine Statusinformation.
+const servicesReady = computed(() => neo4jReachable.value)
 
 const canSubmit = computed(
   () =>
@@ -215,6 +202,12 @@ const canSubmit = computed(
     servicesReady.value &&
     profilesSettled.value,
 )
+
+const disabledHint = computed(() => {
+  if (!files.value.length || !simulationRequirement.value.trim()) return t('dashboard.hero.disabledHint')
+  if (!servicesReady.value) return t('dashboard.hero.servicesUnavailableHint')
+  return t('dashboard.hero.profilesLoadingHint')
+})
 
 function discardPersistedProfile() {
   selectedProfileId.value = null
@@ -379,21 +372,15 @@ onMounted(() => {
       discardPersistedProfile()
     })
     .finally(() => { profilesSettled.value = true })
-  // Service-Readiness + Backend-Default-Language (Parität zu Home.vue, #915).
-  // Liefert default_provider/ollama_reachable/neo4j_reachable/default_language
-  // aus /api/simulation/available-models. Bei Fetch-Fehler bleiben die Refs
-  // pessimistisch auf false → servicesReady blockt den Start (wie Home.vue).
+  // Neo4j-Readiness + Backend-Default-Language. Bei Fetch-Fehler bleibt
+  // Neo4j pessimistisch auf false, bis die Bereitschaft bestätigt ist.
   getAvailableModels()
     .then(res => {
       const data = (res?.data ?? {}) as {
-        default_provider?: string
-        ollama_reachable?: boolean
         neo4j_reachable?: boolean
         default_language?: string
       }
       if (!res?.success) return
-      defaultProvider.value = data.default_provider || 'unknown'
-      ollamaReachable.value = !!data.ollama_reachable
       neo4jReachable.value = !!data.neo4j_reachable
       if (data.default_language && !readLocal(STORAGE_LANG)) {
         language.value = data.default_language
@@ -583,7 +570,7 @@ onMounted(() => {
           {{ $t('dashboard.hero.startCta') }}
         </button>
         <p v-if="!canSubmit" class="hero-hint">
-          {{ $t('dashboard.hero.disabledHint') }}
+          {{ disabledHint }}
         </p>
         <p v-if="errorMsg" class="hero-error">{{ errorMsg }}</p>
       </div>

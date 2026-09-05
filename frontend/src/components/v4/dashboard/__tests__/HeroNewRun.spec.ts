@@ -240,6 +240,8 @@ function makeI18n() {
             requirementPlaceholder: 'Beschreibe was simuliert werden soll',
             startCta: 'Starten',
             disabledHint: 'Dateien und Anforderung benoetigt',
+            servicesUnavailableHint: 'Neo4j-Bereitschaft noch nicht bestätigt',
+            profilesLoadingHint: 'Modellprofile werden geladen',
             smallSimBadge: 'SMALL',
             smallSimActiveTooltip: 'Override aktiv',
             numAgentsWarning: 'Weniger Personas als der harte Floor',
@@ -437,6 +439,66 @@ describe('HeroNewRun (Phase-1, Kanon-First Migration)', () => {
     const cta = w.find('.hero-cta')
     expect((cta.element as HTMLButtonElement).disabled).toBe(true)
   })
+
+  it.each(['canonical', 'profile', 'explicit', 'server-default'])(
+    'startet mit %s trotz offline Ollama-Probe des alten Server-Defaults',
+    async selection => {
+      getAvailableModelsMock.mockResolvedValueOnce({
+        success: true,
+        data: { default_provider: 'ollama', ollama_reachable: false, neo4j_reachable: true },
+      })
+      const model: AiModelRef = {
+        provider_connection_id: 'conn-openai-1', model_id: 'gpt-4o', source: 'workspace-default',
+      }
+      if (selection === 'canonical') setEffectiveRef(model)
+      if (selection === 'profile') {
+        fetchLlmProfilesMock.mockResolvedValueOnce([
+          { id: 'cloud-profile', name: 'Cloud', provider: 'openai', model_name: 'gpt-4o' },
+        ])
+      }
+      const w = await mountHero(selection === 'profile' ? { 'agora.hero.profileId': 'cloud-profile' } : {})
+      if (selection === 'explicit') await w.findComponent(aiPickerStub).trigger('click')
+      const file = new File(['Briefing'], 'briefing.md', { type: 'text/markdown' })
+      const input = w.find<HTMLInputElement>('input[type=file]')
+      Object.defineProperty(input.element, 'files', { value: [file] })
+      await input.trigger('change')
+      await w.find('#hero-requirement').setValue('Welche Reaktionen sind zu erwarten?')
+      await flushPromises()
+      expect((w.find('.hero-cta').element as HTMLButtonElement).disabled).toBe(false)
+      await w.find('.hero-cta').trigger('click')
+      expect(setPendingUploadMock).toHaveBeenCalledWith(
+        [file], 'Welche Reaktionen sind zu erwarten?',
+        selection === 'profile' ? 'cloud-profile' : null, 30, 10,
+      )
+      expect(routerPushMock).toHaveBeenCalled()
+      w.unmount()
+    },
+  )
+
+  it.each(['neo4j-offline', 'status-error', 'profiles-loading'])(
+    'sperrt bei %s weiterhin und zeigt den zutreffenden Hinweis',
+    async reason => {
+      if (reason === 'neo4j-offline') {
+        getAvailableModelsMock.mockResolvedValueOnce({
+          success: true, data: { default_provider: 'openai', neo4j_reachable: false },
+        })
+      } else if (reason === 'status-error') {
+        getAvailableModelsMock.mockRejectedValueOnce(new Error('Status unavailable'))
+      } else {
+        fetchLlmProfilesMock.mockReturnValueOnce(new Promise(() => {}))
+      }
+      const w = await mountHero()
+      const input = w.find<HTMLInputElement>('input[type=file]')
+      Object.defineProperty(input.element, 'files', { value: [new File(['x'], 'briefing.md')] })
+      await input.trigger('change')
+      await w.find('#hero-requirement').setValue('Frage?')
+      expect((w.find('.hero-cta').element as HTMLButtonElement).disabled).toBe(true)
+      expect(w.find('.hero-hint').text()).toBe(reason === 'profiles-loading'
+        ? 'Modellprofile werden geladen' : 'Neo4j-Bereitschaft noch nicht bestätigt')
+      expect(setPendingUploadMock).not.toHaveBeenCalled()
+      w.unmount()
+    },
+  )
 
   it('canSubmit: false ohne Requirement', async () => {
     const w = await mountHero()
