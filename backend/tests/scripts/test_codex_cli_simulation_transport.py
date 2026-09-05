@@ -160,6 +160,72 @@ class TestToolCallEmulation:
         assert message.content == "Einfach nur Text."
 
 
+class TestInProcessToolRouting:
+    """CodeRabbit-Finding zu #1423: die Emulation muss auch in-process greifen.
+
+    ``LLMClient._detect_provider()`` meldet für codex_cli bewusst ``"unknown"``
+    (es wird nie aus einer base_url erraten). Der Unknown-Short-Circuit in
+    ``chat_with_tools`` fiel deshalb auf ``chat()`` ohne ``tools`` zurück —
+    die Werkzeuge erreichten ``_CodexCliCompletions.create`` nie, und der
+    Report-Agent blieb dauerhaft im XML-Fallback.
+    """
+
+    def test_codex_cli_reaches_the_tool_capable_path(self, monkeypatch):
+        from app.contracts.provider_types import PROVIDER_CODEX_CLI
+        from app.llm.client import LLMClient
+
+        client = LLMClient(
+            model="gpt-5.6-luna",
+            provider_type=PROVIDER_CODEX_CLI,
+            use_active_config=False,
+        )
+        # Vorbedingung des Findings: der Provider meldet sich als "unknown".
+        assert client._detect_provider() == "unknown"
+
+        seen: dict = {}
+
+        class _Completions:
+            def create(self, **kwargs):
+                seen.update(kwargs)
+                from app.llm.providers.codex_cli import build_shim_message
+
+                return type(
+                    "R",
+                    (),
+                    {
+                        "choices": [
+                            type(
+                                "C",
+                                (),
+                                {
+                                    "message": build_shim_message(
+                                        '<tool_call>{"name": "trend", "parameters": {}}</tool_call>'
+                                    ),
+                                    "finish_reason": "stop",
+                                },
+                            )()
+                        ],
+                        "usage": None,
+                    },
+                )()
+
+        client.client = type("Cl", (), {"chat": type("Ch", (), {"completions": _Completions()})()})()
+        client.model = "gpt-5.6-luna"
+        client.base_url = None
+        client.api_key = "codex-cli-local-session"
+
+        tools = [{"type": "function", "function": {"name": "trend", "parameters": {}}}]
+        result = client.chat_with_tools(
+            messages=[{"role": "user", "content": "was ist trending?"}], tools=tools
+        )
+
+        # Kern: tools sind beim Shim angekommen, nicht im chat()-Fallback verschwunden.
+        assert seen.get("tools") == tools
+        # ``ToolCallResponse`` ist ein TypedDict, seine Eintraege sind flache
+        # ``ToolCallItem``-Dicts (id/name/arguments) — kein OpenAI-function-Wrapper.
+        assert [tc["name"] for tc in result["tool_calls"]] == ["trend"]
+
+
 class TestFlattenMessages:
     """Die CLI kennt keine Chat-Turn-Struktur — die Zuordnung muss im Text bleiben."""
 
@@ -170,6 +236,32 @@ class TestFlattenMessages:
 
         assert "tool_call_id=call_codex_0" in flat
         assert "42" in flat
+
+    def test_tool_call_survives_alongside_assistant_prose(self):
+        """CodeRabbit-Finding zu #1423: eine CLI-Antwort darf Prosa UND einen
+        Aufruf enthalten, und ``build_shim_message`` behaelt die Prosa als
+        ``content``. Eine Bedingung ``if not content`` haette den Aufruf in
+        genau diesem — dem haeufigen — Fall verschluckt; der naechste Prompt
+        haette nur die synthetische ID gezeigt und das Modell haette dasselbe
+        Werkzeug erneut aufgerufen."""
+        flat = _flatten_messages(
+            [
+                {
+                    "role": "assistant",
+                    "content": "Ich schaue kurz nach.",
+                    "tool_calls": [
+                        {
+                            "id": "call_codex_0",
+                            "function": {"name": "trend", "arguments": "{}"},
+                        }
+                    ],
+                }
+            ]
+        )
+
+        assert "Ich schaue kurz nach." in flat
+        assert "trend" in flat
+        assert "<tool_call>" in flat
 
     def test_prior_assistant_tool_call_is_reconstructed(self):
         """Ein Assistant-Turn mit ``tool_calls`` traegt seinen Inhalt nicht in
@@ -246,31 +338,70 @@ class TestCodexCliModel:
 
         assert completion.usage.total_tokens == 0
 
-    def test_arun_does_not_block_the_event_loop(self, model, monkeypatch):
+    def test_arun_runs_calls_concurrently(self, model, monkeypatch):
         """Tragend fuer die Laufzeit: OASIS treibt alle Agenten einer Runde
-        nebenlaeufig. Liefe ``codex exec`` direkt im Event-Loop, fiele die
+        nebenlaeufig. Blockierte ein Aufruf den Event-Loop, fiele die
         Simulation von paralleler auf serielle Ausfuehrung zurueck — bei
         ~8-40 s pro Aufruf der Unterschied zwischen Minuten und Stunden.
+
+        Gemessen statt behauptet: drei Aufrufe mit je 0,3 s muessen zusammen
+        deutlich unter der seriellen Summe von 0,9 s bleiben.
         """
         import asyncio
-        import threading
+        import time
 
-        calling_threads: list[int] = []
-
-        def _fake_invoke(_prompt: str) -> str:
-            calling_threads.append(threading.get_ident())
+        async def _slow(_prompt: str) -> str:
+            await asyncio.sleep(0.3)
             return "ok"
 
-        monkeypatch.setattr(model, "_invoke", _fake_invoke)
+        monkeypatch.setattr(model, "_ainvoke", _slow)
 
         async def _drive():
-            return await model._arun([{"role": "user", "content": "ping"}])
+            msgs = [{"role": "user", "content": "ping"}]
+            return await asyncio.gather(*(model._arun(msgs) for _ in range(3)))
 
-        completion = asyncio.run(_drive())
+        t0 = time.monotonic()
+        completions = asyncio.run(_drive())
+        elapsed = time.monotonic() - t0
 
-        assert completion.choices[0].message.content == "ok"
-        # Der CLI-Aufruf lief NICHT im Loop-Thread.
-        assert calling_threads and calling_threads[0] != threading.get_ident()
+        assert [c.choices[0].message.content for c in completions] == ["ok"] * 3
+        assert elapsed < 0.7, f"Aufrufe liefen seriell ({elapsed:.2f}s statt ~0.3s)"
+
+    def test_cancellation_kills_the_child_process(self, model):
+        """CodeRabbit-Finding zu #1423: ein Thread laesst sich nicht abbrechen.
+
+        Wird ein Agent-Task gecancelt (Simulation gestoppt, Runden-Timeout),
+        liefe der CLI-Prozess sonst bis zum 180-s-Timeout weiter und bliebe
+        an Worker und Kindprozess haengen. Der Test startet statt ``codex``
+        ein langlaufendes ``sleep`` und prueft, dass der Abbruch es beendet.
+        """
+        import asyncio
+
+        async def _drive():
+            # ``sleep 60`` als Platzhalter fuer einen haengenden codex-Aufruf.
+            proc_holder = {}
+            original = asyncio.create_subprocess_exec
+
+            async def _spy(*_cmd, **kwargs):
+                proc = await original("sleep", "60", **kwargs)
+                proc_holder["proc"] = proc
+                return proc
+
+            asyncio.create_subprocess_exec = _spy  # type: ignore[assignment]
+            try:
+                task = asyncio.ensure_future(model._ainvoke("prompt"))
+                await asyncio.sleep(0.3)  # Prozess sicher gestartet
+                task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await task
+                return proc_holder["proc"]
+            finally:
+                asyncio.create_subprocess_exec = original  # type: ignore[assignment]
+
+        proc = asyncio.run(_drive())
+
+        # Der Kindprozess hat den abgebrochenen Task nicht ueberlebt.
+        assert proc.returncode is not None
 
     def test_cli_failure_becomes_runtime_error(self, model, monkeypatch):
         """OASIS faengt Modellfehler pro Agent ab. Ein durchgereichter

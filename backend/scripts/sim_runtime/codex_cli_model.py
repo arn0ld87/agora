@@ -32,9 +32,11 @@ Zwei Eigenheiten der CLI bestimmen den Aufbau:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
+import tempfile
 import time
 import uuid
 from typing import Any, Dict, List, Optional, Type
@@ -58,12 +60,31 @@ from app.llm.providers.codex_cli import (
     CodexCliUnavailableError,
     _flatten_messages,
     _run_codex_cli,
+    build_codex_cli_command,
     build_tool_prompt,
+    codex_cli_scratch_dir_prefix,
+    codex_cli_timeout_seconds,
+    interpret_codex_cli_result,
     parse_tool_calls,
     strip_tool_calls,
 )
 
 logger = logging.getLogger(__name__)
+
+
+async def _terminate(proc: "asyncio.subprocess.Process") -> None:
+    """Kindprozess beenden und einsammeln, ohne den Abbruchpfad zu stoeren.
+
+    ``kill`` statt ``terminate``: ``codex exec`` startet selbst Kindprozesse,
+    und ein sauberes Herunterfahren ist beim Abbruch weder noetig noch
+    abwartbar. Fehler werden geschluckt — der Prozess kann zwischen Timeout
+    und Kill von selbst geendet sein, und im Abbruchpfad darf nichts
+    Zusaetzliches fliegen.
+    """
+    with contextlib.suppress(ProcessLookupError, OSError):
+        proc.kill()
+    with contextlib.suppress(Exception):  # noqa: BLE001 — Aufraeumpfad
+        await proc.wait()
 
 
 def cli_transport_active() -> bool:
@@ -213,6 +234,55 @@ class CodexCliModel(BaseModelBackend):
         prompt = self._build_prompt(messages, tools, response_format)
         return self._to_completion(self._invoke(prompt))
 
+    async def _ainvoke(self, prompt: str) -> str:
+        """``codex exec`` als nativer async-Subprozess — abbrechbar.
+
+        Bewusst ``create_subprocess_exec`` statt ``asyncio.to_thread``: ein
+        Thread laesst sich nicht abbrechen. Wird ein Agent-Task gecancelt
+        (Simulation gestoppt, Runden-Timeout), liefe der CLI-Prozess sonst bis
+        zum Timeout von 180 s weiter und haette Worker und Kindprozess
+        gebunden — bei 20 Agenten pro Runde blockiert das ein sauberes
+        Herunterfahren spuerbar. Hier wird der Kindprozess bei Abbruch und bei
+        Zeitueberschreitung terminiert.
+
+        Nebeneffekt: der Event-Loop bleibt ohnehin frei, die parallele
+        Ausfuehrung der Runde bleibt also erhalten.
+        """
+        cmd = build_codex_cli_command(prompt, model=self._model_slug or None)
+        timeout = codex_cli_timeout_seconds()
+        with tempfile.TemporaryDirectory(prefix=codex_cli_scratch_dir_prefix()) as scratch:
+            # Isoliertes CWD wie im synchronen Pfad: ``codex exec`` liest
+            # Repo-Kontext aus dem Arbeitsverzeichnis, und das des Runners ist
+            # das Agora-Repo.
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=scratch,
+                )
+            except OSError as exc:
+                raise CodexCliUnavailableError(
+                    f"codex exec konnte nicht gestartet werden: {exc}"
+                ) from exc
+            try:
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout)
+            except asyncio.TimeoutError as exc:
+                await _terminate(proc)
+                raise CodexCliUnavailableError(
+                    f"codex exec Timeout nach {timeout:.0f}s"
+                ) from exc
+            except asyncio.CancelledError:
+                # Abbruch weiterreichen, aber nicht ohne den Kindprozess zu
+                # beenden — sonst ueberlebt er den Task, der ihn gestartet hat.
+                await _terminate(proc)
+                raise
+        return interpret_codex_cli_result(
+            proc.returncode or 0,
+            stdout.decode("utf-8", errors="replace"),
+            stderr.decode("utf-8", errors="replace"),
+        )
+
     async def _arun(
         self,
         messages: List[Any],
@@ -221,14 +291,18 @@ class CodexCliModel(BaseModelBackend):
     ) -> ChatCompletion:
         """Async-Pfad — der einzige, den OASIS im Rundenbetrieb nutzt.
 
-        ``asyncio.to_thread`` ist hier tragend, nicht kosmetisch: OASIS treibt
-        alle Agenten einer Runde nebenlaeufig. Liefe ``codex exec`` direkt im
-        Event-Loop, wuerde jede Anfrage alle anderen Agenten blockieren und
-        die Simulation von paralleler auf serielle Ausfuehrung fallen — bei
-        ~8-40 s pro Aufruf der Unterschied zwischen Minuten und Stunden.
+        Der nicht-blockierende Aufruf ist hier tragend, nicht kosmetisch:
+        OASIS treibt alle Agenten einer Runde nebenlaeufig. Liefe
+        ``codex exec`` direkt im Event-Loop, wuerde jede Anfrage alle anderen
+        Agenten blockieren und die Simulation von paralleler auf serielle
+        Ausfuehrung fallen — bei ~8-40 s pro Aufruf der Unterschied zwischen
+        Minuten und Stunden.
         """
         prompt = self._build_prompt(messages, tools, response_format)
-        text = await asyncio.to_thread(self._invoke, prompt)
+        try:
+            text = await self._ainvoke(prompt)
+        except CodexCliUnavailableError as exc:
+            raise RuntimeError(f"codex_cli: {exc}") from exc
         return self._to_completion(text)
 
     @property

@@ -54,12 +54,16 @@ except ImportError:  # direct script execution
         seed_simulation_rng,
     )
 
-# Issue #1423: CLI-Transport (codex_cli). Dieselbe Doppel-Import-Form wie oben,
-# weil dieses Modul sowohl als Paket-Member als auch direkt ausgefuehrt wird.
+# Issue #1423: CLI-Transport (codex_cli). Der Fallback zeigt auf
+# ``sim_runtime.codex_cli_model``, NICHT auf ``codex_cli_model``: bei direkter
+# Skriptausfuehrung liegt ``scripts/`` im ``sys.path``, nicht
+# ``scripts/sim_runtime/``. Ein nackter Modulname schlaegt dort mit
+# ``ModuleNotFoundError`` fehl — anders als bei ``_sim_common``, das eine Ebene
+# hoeher liegt. Dieselbe Form nutzt der ``sim_runtime.ipc``-Import unten.
 try:
     from .codex_cli_model import CodexCliModel, cli_transport_active
 except ImportError:  # direct script execution
-    from codex_cli_model import CodexCliModel, cli_transport_active
+    from sim_runtime.codex_cli_model import CodexCliModel, cli_transport_active
 
 # IPC layer (CommandType, constants, IPCHandler) — zentral in sim_runtime.ipc.
 try:

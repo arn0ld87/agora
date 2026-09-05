@@ -189,13 +189,21 @@ def _flatten_messages(messages: List[Dict[str, Any]]) -> str:
             content = str(content)
         call_id = message.get("tool_call_id")
         marker = f"[{role} tool_call_id={call_id}]" if call_id else f"[{role}]"
-        # Ein Assistant-Turn, der selbst Werkzeuge aufgerufen hat, traegt seinen
-        # Inhalt in ``tool_calls`` statt in ``content``. Ohne diese Rekonstruktion
-        # sieht das Modell im naechsten Durchgang eine leere Assistant-Nachricht
-        # und ruft dasselbe Werkzeug erneut auf.
+        # Ein Assistant-Turn, der Werkzeuge aufgerufen hat, traegt diesen Teil
+        # seines Inhalts in ``tool_calls`` statt in ``content``. Ohne die
+        # Rekonstruktion sieht das Modell im naechsten Durchgang nur den
+        # ``tool``-Turn mit einer synthetischen ID, aber weder Werkzeugnamen
+        # noch Argumente — und ruft dasselbe Werkzeug erneut auf.
+        #
+        # Angehaengt statt nur bei leerem ``content``: eine CLI-Antwort darf
+        # Prosa UND einen Aufruf enthalten, und ``build_shim_message`` behaelt
+        # die Prosa als ``content``. Die frueher gewaehlte Bedingung
+        # ``if not content`` hat den Aufruf in genau diesem — dem haeufigen —
+        # Fall verschluckt.
         tool_calls = message.get("tool_calls")
-        if not content and isinstance(tool_calls, list) and tool_calls:
-            content = _render_prior_tool_calls(tool_calls)
+        if isinstance(tool_calls, list) and tool_calls:
+            rendered = _render_prior_tool_calls(tool_calls)
+            content = f"{content}\n{rendered}" if content else rendered
         parts.append(f"{marker}\n{content}")
     return "\n\n".join(parts)
 
@@ -304,7 +312,17 @@ def strip_tool_calls(text: str) -> str:
     return TOOL_CALL_RE.sub("", text or "").strip()
 
 
-def _run_codex_cli(prompt: str, *, model: Optional[str]) -> str:
+def build_codex_cli_command(prompt: str, *, model: Optional[str]) -> list[str]:
+    """Argumentliste fuer einen ``codex exec``-Aufruf.
+
+    Ausgelagert, damit der synchrone Pfad hier und der abbrechbare
+    async-Pfad im OASIS-Subprozess (``scripts/sim_runtime/codex_cli_model.py``,
+    Issue #1423) dieselbe Kommandozeile bauen — inklusive der
+    Sandbox-Flags, die nicht auseinanderlaufen duerfen.
+
+    Raises:
+        CodexCliUnavailableError: wenn das Binary nicht im PATH liegt.
+    """
     if not is_codex_cli_available():
         raise CodexCliUnavailableError(
             f"codex-CLI nicht gefunden (PATH, Binary={codex_cli_binary()!r}). "
@@ -317,6 +335,16 @@ def _run_codex_cli(prompt: str, *, model: Optional[str]) -> str:
     if model and model != CODEX_CLI_DEFAULT_MODEL_ID:
         cmd += ["--model", model]
     cmd.append(prompt)
+    return cmd
+
+
+def codex_cli_scratch_dir_prefix() -> str:
+    """Prefix des isolierten Arbeitsverzeichnisses — von beiden Pfaden genutzt."""
+    return "agora-codex-cli-"
+
+
+def _run_codex_cli(prompt: str, *, model: Optional[str]) -> str:
+    cmd = build_codex_cli_command(prompt, model=model)
     timeout = codex_cli_timeout_seconds()
     # Isoliertes CWD: `codex exec` liest/interpretiert Repo-Kontext aus dem
     # Arbeitsverzeichnis. Das Backend-Prozess-CWD ist das Agora-Repo selbst —
@@ -337,12 +365,24 @@ def _run_codex_cli(prompt: str, *, model: Optional[str]) -> str:
             ) from exc
         except OSError as exc:
             raise CodexCliUnavailableError(f"codex exec konnte nicht gestartet werden: {exc}") from exc
-    if result.returncode != 0:
-        stderr_tail = (result.stderr or "").strip()[-500:]
+    return interpret_codex_cli_result(result.returncode, result.stdout, result.stderr)
+
+
+def interpret_codex_cli_result(
+    returncode: int, stdout: Optional[str], stderr: Optional[str]
+) -> str:
+    """Exit-Code und Streams eines ``codex exec``-Laufs auswerten.
+
+    Ausgelagert wie ``build_codex_cli_command``, damit der abbrechbare
+    async-Pfad im OASIS-Subprozess (Issue #1423) exakt dieselbe
+    Fehlerbehandlung nutzt statt einer nachgebauten.
+    """
+    if returncode != 0:
+        stderr_tail = (stderr or "").strip()[-500:]
         raise CodexCliUnavailableError(
-            f"codex exec fehlgeschlagen (exit={result.returncode}): {stderr_tail}"
+            f"codex exec fehlgeschlagen (exit={returncode}): {stderr_tail}"
         )
-    text = (result.stdout or "").strip()
+    text = (stdout or "").strip()
     if not text:
         raise CodexCliUnavailableError("codex exec lieferte leere Ausgabe")
     return text
