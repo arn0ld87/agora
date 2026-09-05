@@ -1,84 +1,83 @@
 /* ============================================================
-   Agora Design Language v4 — ported from design/v3-source/agora-v3.css
-   Datum: 2026-05-11
-   Epic-Doku: docu/2026-05-11-design-v4-app-shell-epic.md
-   Slice A: Token-Port (Slice B–J folgen)
+   Agora Design-Tokens (v4, dunkel-warm) — Stand 2026-09-05
    ============================================================
-   Aufbau dieser Datei:
-   1. @font-face  (Geist Mono Variable; Archivo/Newsreader via npm)
-   2. :root — native v4-Tokens aus agora-v3.css
-   3. Compat-Layer (v1/v2 → v3/v4) — Aliase erhalten für bestehende
-      Komponenten bis Cleanup-Slice J
+   Aufbau:
+   1. :root — Flächen, Linien, Text, Akzent, Status (Rohwerte)
+   2. Semantische Namen (bg / border / text / accent / status), die neue
+      Komponenten benutzen. Rohwerte bleiben für bestehende Komponenten.
+   3. Typo-Skala (acht Größen), Raster, Radius-Skala, Schatten, Motion
+   4. Basis-Styles und die .t-*-Klassen als Vokabular der Skala
+   Alte Aliase (v1/v2, Apple-Typo-Namen) liegen in tokens-compat.css.
+
+   Regeln (docs/ui/premium-redesign-2026-09/01-visual-audit.md, §4):
+   - Vier Flächenebenen, kein Glow, kein Glas, keine Verläufe.
+   - Kupfer ist die einzige Handlungsfarbe, Türkis das einzige „lebt gerade“.
+   - Labels sind Satzschrift 11.5px/500 in Satzschreibung; Mono nur für
+     IDs, Zahlen und Zeitstempel.
+   - Radius-Skala 0 / 4 / 6 / 10 / pill — mehr Stufen gibt es nicht.
    ============================================================ */
 
-/* ─── @font-face via fonts.css (importiert vor dieser Datei in main.ts) ────
-   Geist Mono: siehe frontend/src/assets/styles/fonts.css
-   ─────────────────────────────────────────────────────────────────────────── */
-
-/* ─── Native v4-Tokens (agora-v3.css :root) ─────────────── */
-
 :root, [data-theme="dark"] {
-  /* Block B1: sagt dem Browser, dass die UA-Defaults (buttonText,
-     Scrollbars, Formularelemente, input-Autofill) im Dark-Scheme zu
-     rendern sind. Ohne diese Zeile bekommt jeder Button ohne explizite
-     color-Angabe schwarzen UA-Text auf unserer dunklen Flaeche —
-     genau so fiel .llm-btn im Golden-Gate durch. */
+  /* Sagt dem Browser, dass UA-Defaults (buttonText, Scrollbars, Formular-
+     elemente, Autofill) im Dark-Scheme rendern. Ohne diese Zeile bekommt
+     jeder Button ohne explizite color schwarzen UA-Text. */
   color-scheme: dark;
 
-  /* ─── Surfaces (dunkel-warm, Slice D0 · 18.08.2026) ────── */
-  --surface-base:        #14110f;        /* page */
-  --surface-canvas:      #0b0a09;        /* canvas / sunken — Grund */
-  --surface-elevated:    #1b1815;        /* cards on canvas — Fläche erhöht */
+  /* ─── Flächen ─────────────────────────────────────────── */
+  --surface-canvas:      #0b0a09;        /* Grund hinter allem */
+  --surface-base:        #14110f;        /* Seite */
+  --surface-elevated:    #1b1815;        /* Fläche auf der Seite */
+  --surface-inset:       #0d0c0a;        /* Eingaben, gruppierte Listen */
+  --surface-tint:        #100e0c;        /* Chrome (Sidebar, Kopfzeile) */
   --surface-translucent: rgba(20,17,15,0.72);
-  --surface-tint:        #100e0c;        /* sidebar / chrome */
-  --surface-inset:       #0d0c0a;        /* grouped list bg, inputs */
   --surface-hover:       rgba(242,236,228,0.06);
   --surface-pressed:     rgba(242,236,228,0.10);
 
-  /* ─── Borders / hairlines ──────────────────────────────── */
+  --bg-canvas:    var(--surface-canvas);
+  --bg-base:      var(--surface-base);
+  --bg-elevated:  var(--surface-elevated);
+  --bg-inset:     var(--surface-inset);
+  --bg-hover:     var(--surface-hover);
+  --bg-selected:  rgba(208,138,82,0.10);
+
+  /* ─── Linien ──────────────────────────────────────────── */
+  --separator:           rgba(242,236,228,0.08);
   --hairline:            rgba(242,236,228,0.12);
   --hairline-strong:     rgba(242,236,228,0.22);
-  --separator:           rgba(242,236,228,0.08);
-  --focus-ring:          rgba(208,138,82,0.35);
+  --border-subtle:       var(--separator);
+  --border-default:      var(--hairline);
+  --border-strong:       var(--hairline-strong);
 
-  /* ─── Text ─────────────────────────────────────────────── */
+  /* ─── Text ────────────────────────────────────────────── */
+  /* Kontraste auf --surface-base: primary 15.2:1, secondary 7.3:1,
+     tertiary 5.1:1 (Labels, Metazeilen), quaternary 2.3:1 — nur für
+     dekorative Zeichen, nie für Text im WCAG-Sinn. #7c736a aus der
+     Vorlage fiel als Textfarbe im axe-Gate durch (4.0:1). */
   --text-primary:        #f2ece4;
-  /* Textstufen, Block B1 (18.08.2026) — Korrektur zu D0.
-     D0 setzte --text-secondary UND --text-tertiary auf denselben Wert
-     #7c736a: die Stufe existierte damit gar nicht, und Fliesstext lag mit
-     4.04:1 auf --surface-base unter der eigenen Systemregel (>= 4.6:1).
-     --text-secondary #a89f94 stammt aus der Vorlage (7.3:1, Fliesstext).
-     --text-tertiary war als Vorlagenwert #7c736a geplant (4.0:1) —
-     das Golden-Gate-CI (axe, WCAG 2 AA) lehnt ihn als Textfarbe ab,
-     weil Labels und Tabellen-Header ueberall im Produkt daran haengen.
-     #8d8378 ist der naechstgelegene Ton derselben warmen Achse, der auf
-     allen vier Flaechen besteht:
-       --text-secondary #a89f94 → 7.6 / 7.3 / 6.8 / 7.5   Fliesstext
-       --text-tertiary  #8d8378 → 5.3 / 5.1 / 4.8 / 5.3   Labels, Metazeilen
-     Wer reine Deko-Zeichen braucht (kein Text im WCAG-Sinn), nimmt
-     --text-quaternary. */
   --text-secondary:      #a89f94;
   --text-tertiary:       #8d8378;
-  --text-quaternary:     #524d47;        /* 2.37:1 / 2.25:1 / 2.11:1 — dekorativ, kein Fliesstext */
-  --text-on-accent:      #1b120a;        /* dunkel: Akzent ist hell (L≈57%), Weiß fiele auf 2.82:1 */
+  --text-quaternary:     #524d47;
+  --text-prose:          #e8e1d7;
+  --text-on-accent:      #1b120a;
+  --text-muted:          var(--text-tertiary);
 
-  /* ─── Accent (Kupfer, Fokusring) ───────────────────────── */
+  /* ─── Akzent ──────────────────────────────────────────── */
   --accent:              #d08a52;
   --accent-hover:        #d89d6f;
   --accent-pressed:      #c17334;
   --accent-tint-bg:      rgba(208,138,82,0.14);
   --accent-tint-bg-strong: rgba(208,138,82,0.22);
   --accent-tint-text:    #e6b289;
+  --accent-primary:      var(--accent);
+  --accent-soft:         var(--accent-tint-bg);
 
-  /* ─── Status ────────────────────────────────────────────── */
+  /* ─── Status ──────────────────────────────────────────── */
   --status-green:        #7fa86a;
   --status-green-bg:     rgba(127,168,106,0.14);
   --status-orange:       #d09a3c;
   --status-orange-bg:    rgba(208,154,60,0.14);
-  /* status-red: #d66351 fiel im Golden-Gate durch, sobald der Ton als
-     TEXT auf seiner eigenen Tint-Flaeche steht (Badge "rot": 4.1:1 auf
-     --status-red-bg ueber --surface-elevated). #e07a68 haelt 4.9:1 auf
-     der Tint-Flaeche und 6.4:1 auf --surface-base. */
+  /* #d66351 fiel als TEXT auf der eigenen Tint-Fläche durch (4.1:1);
+     #e07a68 hält 4.9:1 auf der Tint-Fläche und 6.4:1 auf --surface-base. */
   --status-red:          #e07a68;
   --status-red-bg:       rgba(224,122,104,0.14);
   --status-purple:       #9e81cf;
@@ -88,326 +87,119 @@
   --status-gray:         #958c83;
   --status-gray-bg:      rgba(149,140,131,0.14);
 
-  /* ─── System grays (warme Grauskala, gray-1 kontrastreichste) */
-  --gray-1: #766a60;
-  --gray-2: #5f564e;
+  --status-success:      var(--status-green);
+  --status-success-soft: var(--status-green-bg);
+  --status-warning:      var(--status-orange);
+  --status-warning-soft: var(--status-orange-bg);
+  --status-error:        var(--status-red);
+  --status-error-soft:   var(--status-red-bg);
+  /* „lebt gerade“: laufende Simulation, aktiver Provider — sonst nichts */
+  --accent-live:         var(--status-teal);
+  --accent-live-soft:    var(--status-teal-bg);
+  --accent-live-text:    #8fd3de;
+
+  /* ─── Warme Grauskala (nur Legacy-Aliase hängen daran) ── */
   --gray-3: #4f4740;
   --gray-4: #413a35;
   --gray-5: #322e29;
   --gray-6: #272320;
 
-  /* ─── Type ─────────────────────────────────────────────── */
-  /* "… Variable" sind die Familiennamen, die @fontsource-variable
-     registriert (Block B1). Der jeweils zweite Eintrag faengt eine
-     lokal installierte statische Variante ab. */
+  /* ─── Fokus ───────────────────────────────────────────── */
+  --focus-ring:          rgba(208,138,82,0.35);
+
+  /* ─── Schrift ─────────────────────────────────────────── */
+  /* „… Variable" sind die Familiennamen aus @fontsource-variable; der
+     zweite Eintrag fängt eine lokal installierte statische Variante ab. */
   --font-sans: "Archivo Variable", "Archivo", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --font-serif: "Newsreader Variable", "Newsreader", Georgia, "Times New Roman", serif;
   --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
-  --fs-largeTitle: 34px;   --lh-largeTitle: 41px;   --tr-largeTitle: -0.022em;
-  --fs-title-1:    28px;   --lh-title-1:    34px;   --tr-title-1:    -0.018em;
-  --fs-title-2:    22px;   --lh-title-2:    28px;   --tr-title-2:    -0.012em;
-  --fs-title-3:    20px;   --lh-title-3:    25px;   --tr-title-3:    -0.008em;
-  --fs-headline:   17px;   --lh-headline:   22px;   --tr-headline:   -0.004em;
-  --fs-body:       15px;   --lh-body:       20px;   --tr-body:       -0.001em;
-  --fs-callout:    14px;   --lh-callout:    19px;
-  --fs-subhead:    13px;   --lh-subhead:    18px;
-  --fs-footnote:   12px;   --lh-footnote:   16px;
-  --fs-caption-1:  11px;   --lh-caption-1:  13px;
-  --fs-caption-2:  10px;   --lh-caption-2:  13px;
+  /* Typo-Skala: acht Rollen, keine weiteren Größen in Komponenten.
+     display  Seitentitel im Dossier / Bericht (fluid, bricht nie Wort für Wort)
+     title    Objekttitel, Dialogtitel
+     heading  Abschnittsüberschrift
+     body     Fließtext UI
+     small    Zustandssätze, Hilfetexte, Metazeilen
+     label    Feld- und Spaltenlabels — Satzschrift, keine Versalien
+     prose    Berichts-Fließtext (Newsreader)
+     mono     IDs, Zeitstempel, Zähler; mono-lg für Kennzahlen */
+  --fs-display: clamp(22px, 2.2vw, 28px); --lh-display: 1.15; --tr-display: -0.02em;
+  --fs-title:   20px;   --lh-title:   1.25; --tr-title:   -0.015em;
+  --fs-heading: 16px;   --lh-heading: 1.35; --tr-heading: -0.01em;
+  --fs-body:    14px;   --lh-body:    1.5;
+  --fs-small:   12.5px; --lh-small:   1.45;
+  --fs-label:   11.5px; --lh-label:   1.3;
+  --fs-prose:   17px;   --lh-prose:   1.6;
+  --fs-mono:    12px;   --lh-mono:    1.4;
+  --fs-mono-lg: 22px;
 
-  /* Hero / display (for landing-style content only) */
-  --fs-hero:       64px;   --lh-hero:       66px;   --tr-hero:       -0.028em;
-  --fs-display:    48px;   --lh-display:    52px;   --tr-display:    -0.024em;
-
-  /* ─── Radii ────────────────────────────────────────────── */
-  --r-2:  4px;    /* tag / chip */
-  --r-3:  6px;    /* small control */
-  --r-4:  8px;    /* control */
-  --r-5: 10px;    /* input */
-  --r-6: 12px;    /* card */
-  --r-7: 14px;    /* card grouped */
-  --r-8: 18px;    /* large card */
-  --r-9: 22px;    /* hero card */
+  /* ─── Radius-Skala ────────────────────────────────────── */
+  /* Genau vier Stufen plus Pill. Die Nummern sind historisch; die Werte
+     sind die Skala. --r-1/--r-4/--r-6/--r-7/--r-8 sind in tokens-compat.css
+     auf diese Stufen gelegt. */
+  --r-2:    4px;   /* Chip, Tag, Tastenkürzel */
+  --r-3:    6px;   /* Button, Eingabe, Zeile */
+  --r-5:   10px;   /* Karte, Overlay, Dialog */
   --r-pill: 9999px;
 
-  /* ─── Shadows ──────────────────────────────────────────── */
-  /* Block B1: Die Alphawerte stammten aus der Light-Palette (0.02–0.12)
-     und waren auf --surface-canvas (#0b0a09) faktisch unsichtbar —
-     Schatten auf dunklem Grund brauchen deutlich mehr Schwarz, sonst
-     traegt nichts Tiefe. Der Innenrand wird hell statt schwarz: auf
-     dunklem Grund hebt Licht die Kante, nicht Schatten. */
+  /* ─── Schatten ────────────────────────────────────────── */
+  /* Auf dunklem Grund trägt Schwarz die Tiefe; die Innenkante wird hell. */
   --shadow-1: 0 1px 2px rgba(0,0,0,0.30);
   --shadow-2: 0 1px 2px rgba(0,0,0,0.26), 0 4px 12px rgba(0,0,0,0.34);
   --shadow-3: 0 2px 4px rgba(0,0,0,0.30), 0 12px 28px rgba(0,0,0,0.42);
   --shadow-4: 0 8px 24px rgba(0,0,0,0.40), 0 24px 64px rgba(0,0,0,0.52);
   --shadow-control: 0 1px 2px rgba(0,0,0,0.28);
-  --shadow-inset:   inset 0 0 0 1px rgba(242,236,228,0.06);
 
-  /* ─── Spacing ──────────────────────────────────────────── */
+  /* ─── Raster ──────────────────────────────────────────── */
   --sp-1:  4px;   --sp-2:  8px;   --sp-3: 12px;   --sp-4: 16px;
   --sp-5: 20px;   --sp-6: 24px;   --sp-7: 32px;   --sp-8: 40px;
   --sp-9: 56px;   --sp-10: 72px;
 
-  /* ─── Control heights ──────────────────────────────────── */
+  /* ─── Motion ──────────────────────────────────────────── */
+  /* Nur für Zustandswechsel, die eine Handlung beantworten. */
+  --dur-fast: 120ms; --dur-base: 200ms; --dur-slow: 320ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Bedienhöhen ─────────────────────────────────────── */
   --ctl-h-sm: 28px;
   --ctl-h-md: 32px;
   --ctl-h-lg: 40px;
 
-  /* ─── Shell-Chrome Density-Tokens (Slice FE-Redesign-6) ── */
-  /* Topbar */
+  /* ─── Shell-Chrome ────────────────────────────────────── */
   --topbar-h:  64px;
   --topbar-px: 24px;
-
-  /* Sidebar-Items */
   --sidebar-item-py: 6px;
   --sidebar-item-px: 12px;
   --sidebar-group-trigger-py: 6px;
   --sidebar-group-gap: 2px;
-
-  /* DataTable */
   --table-cell-py: 10px;
   --table-cell-px: 16px;
+}
 
-  /* Body-Text-Scale */
-  --text-body-fs: var(--fs-body);   /* 15px */
-  --text-body-lh: var(--lh-body);   /* 1.55 */
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-fast: 0ms; --dur-base: 0ms; --dur-slow: 0ms; }
 }
 
 /* ============================================================
-   Touch-Anpassung (Block B4 „Mobile")
-   ============================================================
-   Die Control-Hoehen oben (28/32/40px) sind Maus-Maße. Auf einem
-   Touchscreen ist alles darunter zu klein: WCAG 2.2 SC 2.5.8 fordert
-   mindestens 24x24 CSS-Pixel, die Plattform-Richtlinien empfehlen
-   44px (Apple) bzw. 48px (Material).
-
-   Angehaengt wird an `pointer: coarse`, NICHT an eine Breite. Ein
-   Breakpoint wuerde das Falsche messen — ein 1280px-Tablet bedient
-   sich mit dem Finger, ein 800px-Browserfenster auf dem Desktop mit
-   der Maus. Weil die Werte Tokens sind, erbt jede Komponente die
-   Vergroesserung, ohne selbst eine Media Query zu tragen.
-
-   Die Schriftgroessen bleiben unangetastet: hier waechst die
-   Trefferflaeche, nicht die Typografie. */
+   Touch (pointer: coarse) — Trefferflächen wachsen, Typo nicht.
+   WCAG 2.2 SC 2.5.8 fordert 24px, die Plattformen empfehlen 44/48px.
+   An den Eingabetyp gebunden, nicht an eine Breite: ein 1280px-Tablet
+   bedient sich mit dem Finger, ein 800px-Fenster mit der Maus.
+   ============================================================ */
 @media (pointer: coarse) {
   :root {
     --ctl-h-sm: 36px;
     --ctl-h-md: 44px;
     --ctl-h-lg: 48px;
-
     --topbar-h: 56px;
-
     --sidebar-item-py: 12px;
     --sidebar-group-trigger-py: 12px;
     --sidebar-group-gap: 4px;
-
     --table-cell-py: 14px;
   }
 }
 
-/* ============================================================
-   Compat-Layer (v1/v2 → v3/v4)
-   Mappt jeden in v1/v2 verwendeten Token-Namen auf das v4-Pendant.
-   Damit rendern bestehende Komponenten unverändert gegen v4,
-   solange Phasen B–J die Patterns sukzessive umstellen.
-   Cleanup-Slice J reduziert diesen Layer schrittweise.
-   siehe Epic-Doku: docu/2026-05-11-design-v4-app-shell-epic.md
-   ============================================================ */
-:root, [data-theme="dark"] {
-  /* Brand axis — v4 hat nur einen Akzent */
-  --brand-aurora: var(--accent);
-  --brand-iris:   var(--accent);
-  --brand-mint:   var(--status-teal);
-  --brand-violet: var(--status-purple);
-
-  /* Neutral scale — v2 nutzte ink-0..ink-1000 (oklch).
-     In v4 mappen wir light-only auf System-Grays + Text-Skala. */
-  --ink-0:    var(--surface-base);
-  --ink-50:   var(--surface-canvas);
-  --ink-100:  var(--surface-inset);
-  --ink-200:  var(--gray-6);
-  --ink-300:  var(--gray-5);
-  --ink-400:  var(--gray-4);
-  --ink-500:  var(--gray-3);
-  --ink-600:  var(--text-tertiary);
-  --ink-700:  var(--text-secondary);
-  --ink-800:  #a89e94;
-  --ink-900:  #d9d2c9;
-  --ink-1000: var(--text-primary);
-
-  /* Surfaces */
-  --bg:           var(--surface-base);
-  --bg-elevated:  var(--surface-elevated);
-  --bg-sunken:    var(--surface-canvas);
-  --bg-glass:     var(--surface-translucent);
-  --bg-glass-hi:  rgba(27,24,21,0.85);
-  --bg-panel:     var(--surface-tint);
-  --bg-panel-2:   var(--surface-elevated);
-  --bg-inverse:   var(--text-primary);
-
-  /* Foreground */
-  --fg:        var(--text-primary);
-  --fg-body:   var(--text-primary);
-  --fg-muted:  var(--text-secondary);
-  --fg-meta:   var(--text-tertiary);
-  --fg-on-inverse: var(--surface-base);
-
-  /* Lines */
-  --rule:        var(--hairline);
-  --rule-strong: var(--hairline-strong);
-  --rule-soft:   var(--separator);
-
-  /* Mesh — in v4 deaktiviert (Apple-Look ohne Aurora-Mesh) */
-  --mesh-1: transparent;
-  --mesh-2: transparent;
-  --mesh-3: transparent;
-  --mesh-4: transparent;
-  --mesh-alpha: 0;
-
-  /* Accent variants */
-  --accent-ink:    var(--text-on-accent);
-  --accent-soft:   var(--accent-tint-bg);
-  --accent-glow:   var(--accent-tint-bg-strong);
-
-  --info:        var(--accent);
-  --info-soft:   var(--accent-tint-bg);
-
-  /* Status (v2-Namen → v4-Werte) */
-  --ok:    var(--status-green);
-  --warn:  var(--status-orange);
-  --err:   var(--status-red);
-  --ok-soft:   var(--status-green-bg);
-  --warn-soft: var(--status-orange-bg);
-  --err-soft:  var(--status-red-bg);
-
-  /* Status-Long-Form-Aliase fuer noch nicht bereinigte Legacy-Klassen */
-  --status-success:      var(--status-green);
-  --status-success-soft: var(--status-green-bg);
-  --status-warn-soft:    var(--status-orange-bg);
-  --status-error:        var(--status-red);
-  --status-error-soft:   var(--status-red-bg);
-  --status-info:         var(--accent);
-  --status-info-soft:    var(--accent-tint-bg);
-
-  /* Shadows / Glows */
-  --shadow-glass:    var(--shadow-2);
-  --shadow-popover:  var(--shadow-3);
-  --shadow-modal:    var(--shadow-4);
-  --shadow-editorial: var(--shadow-3);
-  --shadow-hairline: 0 0 0 1px var(--hairline);
-
-  --glow-accent:  var(--shadow-2);
-  --glow-info:    var(--shadow-2);
-  --glow-plasma:  var(--shadow-2);
-
-  /* Type families — v2-Namen */
-  --ff-sans:  var(--font-sans);
-  --ff-mono:  var(--font-mono);
-  --ff-serif: var(--font-serif);  /* Block B1: Newsreader traegt Berichts-Fliesstext */
-
-  /* Type sizes — v2-Namen --fs-11..--fs-120 (absolute px-Werte) */
-  --fs-11: 11px; --fs-12: 12px; --fs-13: 13px; --fs-14: 14px; --fs-15: 15px;
-  --fs-16: 16px; --fs-18: 18px; --fs-20: 20px; --fs-22: 22px; --fs-24: 24px;
-  --fs-28: 28px; --fs-32: 32px; --fs-40: 40px; --fs-44: 44px; --fs-52: 52px;
-  --fs-60: 60px; --fs-72: 72px; --fs-84: 84px; --fs-96: 96px; --fs-120: 120px;
-
-  /* Line heights / letter-spacing — v2-Namen (ratio-Werte, überschreiben bewusst
-     die px-Werte aus dem nativen v4-Block, da Komponenten diese als Ratios erwarten) */
-  --lh-tight:   1.02;
-  --lh-display: 1.08;
-  --lh-heading: 1.18;
-  --lh-body:    1.55;
-  --lh-mono:    1.4;
-
-  --ls-tight:      -0.02em;
-  --ls-display:    -0.035em;
-  --ls-mono:       0.06em;
-  --ls-mono-tight: 0.03em;
-  --ls-mono-wide:  0.18em;
-  --ls-caps:       0.08em;
-
-  /* Spacing — v2-Namen --s-1..--s-10 */
-  --s-1: var(--sp-1);
-  --s-2: var(--sp-2);
-  --s-3: var(--sp-3);
-  --s-4: var(--sp-4);
-  --s-5: var(--sp-6);   /* v2 --s-5=24px ↔ v4 --sp-6=24px */
-  --s-6: var(--sp-7);   /* v2 --s-6=32px ↔ v4 --sp-7=32px */
-  --s-7: var(--sp-8);   /* v2 --s-7=48px → 40 px in v4 (closest); approx */
-  --s-8: var(--sp-9);   /* v2 --s-8=64px → 56 px; approx */
-  --s-9: var(--sp-10);  /* v2 --s-9=96px → 72 px; approx */
-  --s-10: 128px;
-
-  /* Radii — v2-Namen --r-0..--r-5 */
-  --r-0: 0;
-  --r-1: var(--r-3);   /* v2 6px → v4 6px */
-  /* --r-2 already defined in v4 (4px). v2 --r-2=10px aber selten → bewusster Drift */
-  /* --r-3 already defined in v4 (6px) — v2 --r-3=14px → bewusster Drift, Apple-Tightness */
-  /* --r-4 already defined in v4 (8px) — v2 --r-4=20px */
-  /* --r-5 already defined in v4 (10px) — v2 --r-5=28px */
-
-  /* Controls — v2 ctl-h-sm/md/lg waren 30/38/48; v4 sind 28/32/40.
-     Wir behalten v4-Werte, da Apple-Density Teil des v4-Brand-Kerns ist. */
-  --ctl-pad-x: 16px;
-
-  /* Grid */
-  --grid-max:    1280px;
-  --grid-gutter: 24px;
-  --grid-cols:   12;
-
-  /* Background grid / page */
-  --bg-grid:
-    linear-gradient(rgba(242,236,228,0.04) 1px, transparent 1px) 0 0/32px 32px,
-    linear-gradient(90deg, rgba(242,236,228,0.04) 1px, transparent 1px) 0 0/32px 32px;
-  --bg-page: var(--surface-canvas);
-
-  /* Legacy v1-Aliase (mono-50..mono-950, plasma, neon-orange, paper, ink-1..5) */
-  --mono-50:  var(--text-primary);
-  --mono-100: var(--ink-900);
-  --mono-200: var(--ink-800);
-  --mono-300: var(--text-secondary);
-  --mono-400: var(--gray-3);
-  --mono-500: var(--gray-4);
-  --mono-600: var(--gray-5);
-  --mono-700: var(--gray-6);
-  --mono-800: var(--surface-inset);
-  --mono-900: var(--surface-canvas);
-  --mono-950: var(--surface-base);
-
-  --neon-orange:      var(--accent);
-  --neon-orange-ink:  var(--text-on-accent);
-  --neon-orange-soft: var(--accent-tint-bg);
-
-  --plasma-50:  var(--accent-tint-bg);
-  --plasma-200: var(--accent-tint-bg-strong);
-  --plasma-400: var(--accent);
-  --plasma-500: var(--accent);
-  --plasma-600: var(--accent-hover);
-  --plasma-ink: var(--text-on-accent);
-  --plasma-soft: var(--accent-tint-bg);
-
-  --paper-0: var(--surface-base);
-  --paper-1: var(--surface-elevated);
-  --paper-2: var(--surface-canvas);
-  --paper-3: var(--surface-inset);
-
-  --ink-1: var(--ink-900);
-  --ink-2: var(--ink-300);
-  --ink-3: var(--ink-700);
-  --ink-4: var(--ink-500);
-  --ink-5: var(--ink-400);
-
-  --bg-dark:           var(--text-primary);
-  --fg-on-dark:        var(--surface-base);
-  --fg-on-dark-muted:  var(--gray-3);
-  /* --bg-dark ist "invertiert zur Seite" — die Seite ist jetzt dunkel, also
-     wird --bg-dark ueber var(--text-primary) automatisch hell. Die Trennlinie
-     folgt: dunkler Ton (--surface-canvas-RGB) statt Weiss. */
-  --rule-on-dark:      rgba(11,10,9,0.18);
-}
-
-/* ─── Base — light-only ──────────────────────────────────── */
+/* ─── Basis ───────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 
 html { -webkit-text-size-adjust: 100%; }
@@ -427,174 +219,98 @@ body {
 
 ::selection { background: var(--accent); color: var(--text-on-accent); }
 
-/* ─── Type roles — kompatibel zu v2-Klassen ─────────────── */
+/* ─── Typo-Rollen als Klassen ─────────────────────────────── */
+/* Das Vokabular der Skala. Komponenten setzen entweder diese Klassen oder
+   dieselben Token-Paare — nie eigene Pixelwerte. */
 .t-display {
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: clamp(48px, 8vw, var(--fs-display));
-  line-height: var(--lh-display);
-  letter-spacing: var(--tr-display);
-  color: var(--text-primary);
-}
-.t-headline {
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: var(--fs-headline);
-  line-height: var(--lh-headline);
-  letter-spacing: var(--tr-headline);
-  color: var(--text-primary);
+  font-family: var(--font-sans); font-weight: 600;
+  font-size: var(--fs-display); line-height: var(--lh-display); letter-spacing: var(--tr-display);
+  color: var(--text-primary); text-wrap: balance;
 }
 .t-title {
-  font-family: var(--font-sans);
-  font-weight: 700;
-  font-size: var(--fs-title-1);
-  line-height: var(--lh-title-1);
-  letter-spacing: var(--tr-title-1);
+  font-family: var(--font-sans); font-weight: 600;
+  font-size: var(--fs-title); line-height: var(--lh-title); letter-spacing: var(--tr-title);
   color: var(--text-primary);
 }
-.t-subtitle {
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: var(--fs-title-3);
-  line-height: var(--lh-title-3);
-  letter-spacing: var(--tr-title-3);
+.t-heading {
+  font-family: var(--font-sans); font-weight: 600;
+  font-size: var(--fs-heading); line-height: var(--lh-heading); letter-spacing: var(--tr-heading);
   color: var(--text-primary);
 }
 .t-body {
-  font-family: var(--font-sans);
-  font-weight: 400;
-  font-size: var(--fs-body);
-  line-height: var(--lh-body);
+  font-family: var(--font-sans); font-weight: 400;
+  font-size: var(--fs-body); line-height: var(--lh-body);
   color: var(--text-primary);
 }
-.t-body-sm {
-  font-family: var(--font-sans);
-  font-weight: 400;
-  font-size: var(--fs-callout);
-  line-height: var(--lh-callout);
-  color: var(--text-primary);
-}
-.t-meta {
-  font-family: var(--font-sans);
-  font-weight: 400;
-  font-size: var(--fs-subhead);
-  line-height: var(--lh-subhead);
+.t-small {
+  font-family: var(--font-sans); font-weight: 400;
+  font-size: var(--fs-small); line-height: var(--lh-small);
   color: var(--text-secondary);
 }
-.t-kicker {
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: var(--fs-caption-1);
-  line-height: var(--lh-caption-1);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-secondary);
+.t-label {
+  font-family: var(--font-sans); font-weight: 500;
+  font-size: var(--fs-label); line-height: var(--lh-label); letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
 }
-.t-kicker--accent { color: var(--accent-tint-text); }
-.t-kicker--plasma,
-.t-kicker--info   { color: var(--accent-tint-text); }
-
-.t-numeral {
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: clamp(56px, 10vw, 120px);
-  line-height: 1;
-  letter-spacing: var(--tr-display);
+.t-prose {
+  font-family: var(--font-serif); font-weight: 400;
+  font-size: var(--fs-prose); line-height: var(--lh-prose);
+  color: var(--text-prose); max-width: 62ch; text-wrap: pretty;
+}
+.t-mono {
+  font-family: var(--font-mono); font-weight: 400;
+  font-size: var(--fs-mono); line-height: var(--lh-mono); letter-spacing: 0;
   font-variant-numeric: tabular-nums;
-  color: var(--text-primary);
 }
-.t-numeral--outline {
-  -webkit-text-stroke: 1px var(--gray-3);
-  color: transparent;
-}
-.t-quote {
-  font-family: var(--font-sans);
-  font-style: italic;
-  font-weight: 500;
-  font-size: var(--fs-title-2);
-  line-height: var(--lh-title-2);
+.t-mono-lg {
+  font-family: var(--font-mono); font-weight: 400;
+  font-size: var(--fs-mono-lg); line-height: 1.1; letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
   color: var(--text-primary);
 }
 .t-num { font-variant-numeric: tabular-nums; }
 
 /* ============================================================
-   Density: compact — Slice FE-Redesign-6 · 2026-05-15
-   Greift NUR auf Shell-Chrome-Spacing/Typo, NICHT auf
-   Touch-Targets (Buttons bleiben ≥40px für a11y).
+   Density: compact — nur Shell-Chrome-Abstände, keine Touch-Targets
    ============================================================ */
-
 [data-density="compact"] {
-  /* Sidebar-Items */
   --sidebar-item-py: 4px;
   --sidebar-item-px: 10px;
   --sidebar-group-trigger-py: 4px;
   --sidebar-group-gap: 0px;
-
-  /* Topbar */
   --topbar-h:  44px;
   --topbar-px: 12px;
-
-  /* DataTable */
   --table-cell-py: 6px;
   --table-cell-px: 10px;
-
-  /* Body-Text-Scale leicht runter */
-  --text-body-fs: 12px;
-  --text-body-lh: 1.45;
 }
 
 /* ============================================================
-   Slice 7.1 — Golden-Gate additive semantic tokens
-   Rein additiv: bestehende Tokenwerte bleiben unverändert.
-   Neue Tokens leiten von bestehenden themefähigen Tokens ab (erben
-   damit automatisch Light/Dark) oder sind theme-neutrale Akzent-
-   farben. Kein neuer Namespace-Präfix — Erweiterung bestehender
-   Token-Familien.
-
-   Dark-Theme-Disziplin (Block B1, 18.08.2026): Agora ist dark-first.
-   Dieser Block traegt selbst [data-theme="dark"], damit die vier
-   theme-starken Farbwerte unten (--accent-warm-hover, --status-coral,
-   --status-coral-bg, --focus-ring-strong) die Dark-Readiness-Klausel
-   in designTokens.spec.ts erfuellen. Wer sie aendert, aendert sie
-   hier — es gibt keinen zweiten Ort mehr, an dem sie im Dark-Modus
-   auf Light-Werte driften koennten.
+   Slice 7.1 — Golden-Gate-Tokens (Vertrag in designTokens.spec.ts)
+   Dark-first: dieser Block trägt selbst [data-theme="dark"], damit die
+   theme-starken Werte (--accent-warm-hover, --status-coral, --status-coral-bg,
+   --focus-ring-strong) die Dark-Readiness-Klausel erfüllen.
    ============================================================ */
 :root, [data-theme="dark"] {
-  /* Glass-Surfaces (abgeleitet, erbt Light/Dark via --bg-glass*) */
-  --surface-glass: var(--bg-glass);
-  --surface-glass-strong: var(--bg-glass-hi);
-  /* Backdrop hinter Overlays/Dialogen (theme-neutral: 50 % schwarz) */
+  --surface-glass: var(--surface-translucent);
+  --surface-glass-strong: rgba(27,24,21,0.85);
   --surface-backdrop: rgba(0, 0, 0, 0.5);
 
-  /* Warmer Akzent (abgeleitet via --status-orange) */
   --accent-warm: var(--status-orange);
-  /* Theme-starker Hover-Ton — siehe Block-Kommentar oben.
-     Slice D0: dunklere Stufe des neuen --status-orange (#d09a3c). */
   --accent-warm-hover: #a47728;
 
-  /* Korall-Statusakzent — theme-neutrale Akzentfarbe. */
   --status-coral: #e2603f;
   --status-coral-bg: rgba(226, 96, 63, 0.14);
 
-  /* Focus-Kontrast: stärkerer Ring (Alpha 0.6 vs. 0.35 in --focus-ring).
-     Selber Farbton wie --focus-ring; bei zukünftigem Dark-Theme muss
-     --focus-ring im Dark-Block überschrieben UND dieser Wert mit
-     angepasst werden (siehe Block-Kommentar oben). */
+  /* Fokus-Kontrast: Alpha 0.6 gegenüber 0.35 in --focus-ring. */
   --focus-ring-strong: rgba(208, 138, 82, 0.6);
 }
 
 /* ============================================================
-   Light-Geruest (Block B1, 18.08.2026)
-   Agora ist ab hier dark-first: die Werte oben gelten ueber :root
-   und sind zusaetzlich unter [data-theme="dark"] adressierbar.
-   Eine Light-Palette wird bewusst NICHT gepflegt (Grilling Q28c) —
-   sie ueber 88 Komponenten zweigleisig zu halten war der Preis, den
-   die Umstellung nicht wert ist.
-   Dieser Block bleibt leer stehen und markiert die Tuer: wer Light
-   zurueckholen will, redefiniert hier dieselben Token-Namen wie im
-   Dark-Block oben. Solange er leer ist, faellt [data-theme="light"]
-   auf die :root-Werte zurueck und sieht aus wie Dark — das ist
-   gewollt und besser als eine halb gepflegte zweite Palette.
+   Light-Gerüst
+   Agora ist dark-first; eine Light-Palette wird bewusst nicht gepflegt
+   (Grilling Q28c, 18.08.2026). Der leere Block markiert die Tür: wer Light
+   zurückholen will, redefiniert hier dieselben Token-Namen wie oben.
    ============================================================ */
 [data-theme="light"] {
   /* absichtlich leer — siehe Kommentar oben */

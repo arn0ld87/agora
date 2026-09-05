@@ -254,9 +254,9 @@ button { font: inherit; cursor: pointer; }
 .tag {
   display: inline-flex; align-items: center; gap: 6px;
   height: 22px; padding: 0 8px;
-  font-family: var(--ff-mono); font-size: var(--fs-11);
-  letter-spacing: var(--ls-mono-tight); text-transform: uppercase;
-  color: var(--fg-meta);
+  font-family: var(--font-mono); font-size: var(--fs-11);
+  letter-spacing: 0.02em; text-transform: none;
+  color: var(--text-muted);
   border: 1px solid var(--rule); border-radius: var(--r-pill);
   background: var(--bg-glass);
   backdrop-filter: blur(8px);
@@ -268,14 +268,14 @@ button { font: inherit; cursor: pointer; }
    ============================================================ */
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field-label {
-  font-family: var(--font-sans, var(--ff-sans)); font-size: var(--fs-footnote, var(--fs-12));
+  font-family: var(--font-sans); font-size: var(--fs-label); line-height: var(--lh-label);
   letter-spacing: 0; text-transform: none;
-  color: var(--text-secondary, var(--fg-muted));
-  font-weight: 590;
+  color: var(--text-secondary);
+  font-weight: 500;
 }
 .field-hint {
-  font-family: var(--font-sans, var(--ff-sans)); font-size: var(--fs-footnote, var(--fs-12));
-  color: var(--text-tertiary, var(--fg-meta));
+  font-family: var(--font-sans); font-size: var(--fs-small); line-height: var(--lh-small);
+  color: var(--text-muted);
   letter-spacing: 0; text-transform: none;
 }
 
@@ -489,9 +489,9 @@ button { font: inherit; cursor: pointer; }
    ============================================================ */
 .table { width: 100%; border-collapse: collapse; font-family: var(--ff-sans); font-size: var(--fs-13); }
 .table thead th {
-  font-family: var(--ff-mono); font-size: var(--fs-11); font-weight: 500;
-  letter-spacing: var(--ls-mono-wide); text-transform: uppercase;
-  color: var(--fg-muted);
+  font-family: var(--font-sans); font-size: var(--fs-label); font-weight: 500;
+  letter-spacing: 0; text-transform: none;
+  color: var(--text-muted);
   text-align: left; padding: 12px var(--s-4);
   border-bottom: 1px solid var(--rule-strong);
   background: var(--bg-sunken);
@@ -565,9 +565,9 @@ button { font: inherit; cursor: pointer; }
 
 .menu { padding: 6px 0; }
 .menu-section-label {
-  font-family: var(--ff-mono); font-size: var(--fs-11);
-  letter-spacing: var(--ls-mono); text-transform: uppercase;
-  color: var(--fg-meta);
+  font-family: var(--font-sans); font-size: var(--fs-label); font-weight: 500;
+  letter-spacing: 0; text-transform: none;
+  color: var(--text-muted);
   padding: 8px 14px 4px;
 }
 .menu-item {
@@ -664,9 +664,9 @@ button { font: inherit; cursor: pointer; }
   display: flex; flex-direction: column; gap: 6px;
 }
 .kpi .label {
-  font-family: var(--ff-mono); font-size: var(--fs-11); font-weight: 500;
-  letter-spacing: var(--ls-mono-wide); text-transform: uppercase;
-  color: var(--fg-muted);
+  font-family: var(--font-sans); font-size: var(--fs-label); font-weight: 500;
+  letter-spacing: 0; text-transform: none;
+  color: var(--text-muted);
 }
 .kpi .value {
   font-family: var(--ff-sans); font-weight: 600; font-size: 40px;
@@ -1004,10 +1004,11 @@ button { font: inherit; cursor: pointer; }
   color: var(--fg);
 }
 .section-head .k {
-  font-family: var(--ff-mono);
-  font-size: var(--fs-12);
-  letter-spacing: var(--ls-mono);
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--accent);
 }
 .section-head h2 {
@@ -1037,11 +1038,12 @@ button { font: inherit; cursor: pointer; }
 }
 .marginalia dl { margin: 0; display: flex; flex-direction: column; gap: var(--s-3); }
 .marginalia dt {
-  font-family: var(--ff-mono);
-  font-size: var(--fs-11);
-  letter-spacing: var(--ls-mono);
-  text-transform: uppercase;
-  color: var(--fg-muted);
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
   margin-bottom: 2px;
 }
 .marginalia dd {
@@ -1057,10 +1059,11 @@ button { font: inherit; cursor: pointer; }
   padding: var(--s-9) 0;
 }
 .bleed .k {
-  font-family: var(--ff-mono);
-  font-size: var(--fs-12);
-  letter-spacing: var(--ls-mono);
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--accent);
 }
 
@@ -1152,8 +1155,8 @@ button { font: inherit; cursor: pointer; }
 .container { max-width: var(--grid-max); margin: 0 auto; padding: 0 var(--s-6); }
 
 .muted { color: var(--fg-muted); }
-.meta { font-family: var(--ff-mono); font-size: var(--fs-12); letter-spacing: var(--ls-mono); text-transform: uppercase; color: var(--fg-muted); }
-.meta-mono { font-family: var(--ff-mono); font-size: var(--fs-11); letter-spacing: var(--ls-mono-tight); text-transform: uppercase; color: var(--fg-meta); }
+.meta { font-family: var(--font-sans); font-size: var(--fs-small); letter-spacing: 0; text-transform: none; color: var(--text-secondary); }
+.meta-mono { font-family: var(--font-mono); font-size: var(--fs-mono); letter-spacing: 0; text-transform: none; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .serif { font-family: var(--ff-sans); }
 .mono  { font-family: var(--ff-mono); }
 

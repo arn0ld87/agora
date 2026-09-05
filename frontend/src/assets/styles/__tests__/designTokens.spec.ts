@@ -162,3 +162,48 @@ describe('Slice 7.1 — Dark-Readiness-Klausel (tokens-v3.css)', () => {
     },
   )
 })
+
+// Redesign 2026-09, PR 1 — Typo-Skala, Radius-Skala, Label-Stil, Compat-Split.
+// Vertrag: docs/ui/premium-redesign-2026-09/01-visual-audit.md, §4.
+describe('Redesign PR 1 — Typo- und Radius-Skala (tokens-v3.css)', () => {
+  const compat = readFileSync(resolve(here, '../tokens-compat.css'), 'utf8')
+  const scale = ['display', 'title', 'heading', 'body', 'small', 'label', 'prose', 'mono', 'mono-lg']
+
+  it.each(scale)('definiert --fs-%s', (role) => {
+    expect(tokens).toMatch(def(`--fs-${role}`))
+  })
+
+  it('--fs-display ist fluid (clamp) und bricht Titel nicht Wort für Wort', () => {
+    expect(tokens).toMatch(/--fs-display\s*:\s*clamp\(/)
+  })
+
+  it('Radius-Skala hat genau die Stufen 4 / 6 / 10 / pill', () => {
+    const native = tokens.match(/--r-[a-z0-9]+\s*:\s*[^;]+;/g) ?? []
+    const values = native.map((d) => d.replace(/^[^:]+:\s*/, '').replace(/;$/, '').trim())
+    expect(new Set(values)).toEqual(new Set(['4px', '6px', '10px', '9999px']))
+  })
+
+  it('Compat-Radien zeigen nur auf Skalenstufen', () => {
+    for (const m of compat.matchAll(/--r-\d+\s*:\s*([^;]+);/g)) {
+      expect(m[1].trim()).toMatch(/^var\(--r-(2|3|5)\)$/)
+    }
+  })
+
+  it('.t-label ist Satzschrift ohne Versalien', () => {
+    const block = tokens.match(/\.t-label\s*\{([\s\S]*?)\}/)
+    expect(block).not.toBeNull()
+    expect(block![1]).toMatch(/text-transform:\s*none/)
+    expect(block![1]).toMatch(/var\(--font-sans\)/)
+  })
+
+  it('tokens-compat.css trägt nur Aliase und alte Größennamen, keine neuen Farbwerte', () => {
+    const hexes = compat.match(/#[0-9a-fA-F]{3,8}\b/g) ?? []
+    // --ink-800/--ink-900 sind die einzigen Rohwerte, die noch aus v2 stammen.
+    expect(hexes.length).toBeLessThanOrEqual(2)
+    expect(compat).not.toMatch(/--(golden|a26|mesh|glow-info)-/)
+  })
+
+  it('tokens-v3.css trägt keine Mesh-, Grid- oder Glow-Tokens mehr', () => {
+    expect(tokens).not.toMatch(/--mesh-|--bg-grid|--grid-cols|--glow-/)
+  })
+})
