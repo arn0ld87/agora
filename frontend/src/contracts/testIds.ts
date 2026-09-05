@@ -80,6 +80,7 @@ export const ShelfTestId = {
   rowNextAction: 'shelf-row-next-action',
   rowCancel: 'shelf-row-cancel',
   rowPause: 'shelf-row-pause',
+  rowPersonaError: 'shelf-row-persona-error',
   jobsTable: 'shelf-jobs-table',
   empty: 'shelf-empty',
   newObject: 'shelf-new-object',
@@ -97,4 +98,10 @@ export const DossierTestId = {
   startFromPersona: 'dossier-start-from-persona',
   cancel: 'dossier-cancel',
   pause: 'dossier-pause',
+  overview: 'dossier-overview',
+  overviewNewSource: 'dossier-overview-new-source',
+  overviewAttentionItem: 'dossier-overview-attention-item',
+  overviewLiveItem: 'dossier-overview-live-item',
+  overviewRecentItem: 'dossier-overview-recent-item',
+  overviewSystemRow: 'dossier-overview-system-row',
 } as const

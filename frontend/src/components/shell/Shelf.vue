@@ -6,14 +6,15 @@
       <p v-if="props.shelf.error.value" class="shelf__error">{{ props.shelf.error.value }}</p>
     </div>
 
-    <div class="shelf__filter" role="group" :aria-label="t('shelf.title')" :data-testid="ShelfTestId.filter">
+    <div class="shelf__filter" role="tablist" :aria-label="t('shelf.title')" :data-testid="ShelfTestId.filter">
       <button
         v-for="pill in filterPills"
         :key="pill.key"
         type="button"
+        role="tab"
         class="shelf__filter-pill"
         :class="{ 'shelf__filter-pill--active': props.shelf.filter.value === pill.key }"
-        :aria-pressed="props.shelf.filter.value === pill.key"
+        :aria-selected="props.shelf.filter.value === pill.key"
         :data-testid="ShelfTestId.filterPill"
         @click="emit('filterChange', pill.key)"
       >
@@ -73,6 +74,9 @@
               <span class="shelf__row-title" :data-testid="ShelfTestId.rowTitle">{{ obj.title }}</span>
               <span class="shelf__row-status" :data-testid="ShelfTestId.rowStatus">{{ obj.statusLine }}</span>
               <span class="shelf__row-meta">{{ formatUpdatedAt(obj.updatedAt) }} · {{ obj.metaId }}</span>
+              <span v-if="personaStartErrorId === obj.id" class="shelf__row-error" role="alert" :data-testid="ShelfTestId.rowPersonaError">
+                {{ t('shelf.dossier.startFailed') }}
+              </span>
             </span>
             <span class="shelf__row-actions">
               <button
@@ -106,6 +110,21 @@
               >
                 {{ obj.nextAction.label }}
               </button>
+              <!-- Personasatz hat keine routbare Weiter-Aktion (kein
+                   Projekt/keine Simulation existiert vor dem Start) —
+                   die Zeile startet den Lauf direkt (Block B4, geteilt
+                   mit Dossier.vue ueber useStartFromPersona). -->
+              <button
+                v-else-if="obj.kind === 'personasatz'"
+                type="button"
+                class="shelf__row-btn shelf__row-btn--accent"
+                :data-testid="ShelfTestId.rowNextAction"
+                :disabled="startFromPersonaAction.busy.value"
+                :tabindex="index === activeIndex ? 0 : -1"
+                @click.stop="startPersonaRun(obj)"
+              >
+                {{ t('shelf.dossier.startFromPersona') }}
+              </button>
             </span>
           </li>
         </ul>
@@ -127,8 +146,9 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { ShelfTestId } from '../../contracts/testIds'
 import { SHELF_KIND_TAG, type ShelfFilter, type ShelfObject } from '../../types/shelf'
-import { statusText, type useShelf } from '../../composables/useShelf'
+import { formatShelfDate, statusText, type useShelf } from '../../composables/useShelf'
 import { useCancelAction } from './useCancelAction'
+import { useStartFromPersona } from '../../composables/useStartFromPersona'
 
 /**
  * Shelf.vue — die Ablage-Liste (Block B3).
@@ -160,6 +180,8 @@ const emit = defineEmits<{ select: [obj: ShelfObject]; filterChange: [filter: Sh
 const { t, locale } = useI18n()
 const router = useRouter()
 const cancelAction = useCancelAction()
+const startFromPersonaAction = useStartFromPersona()
+const personaStartErrorId = ref<string | null>(null)
 
 const FILTER_ORDER: ShelfFilter[] = ['alle', 'lauf', 'bericht', 'personasatz', 'graph', 'jobs']
 
@@ -200,14 +222,15 @@ function togglePause(active: NonNullable<ShelfObject['active']>): void {
   else void cancelAction.pause(active.simulationId)
 }
 
+async function startPersonaRun(obj: ShelfObject): Promise<void> {
+  personaStartErrorId.value = null
+  const res = await startFromPersonaAction.start(obj.id, t('shelf.dossier.startName', { title: obj.title }))
+  if (res) void router.push({ name: 'StepEnvSetup', params: { projectId: res.simulationId } })
+  else personaStartErrorId.value = obj.id
+}
+
 function formatUpdatedAt(iso: string): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
-  const sameDay = d.toDateString() === new Date().toDateString()
-  return sameDay
-    ? d.toLocaleTimeString(locale.value, { hour: '2-digit', minute: '2-digit' })
-    : d.toLocaleDateString(locale.value, { day: '2-digit', month: '2-digit' })
+  return formatShelfDate(iso, locale.value, t)
 }
 
 // ── Roving tabindex ─────────────────────────────────────────────
@@ -307,10 +330,8 @@ function onRowKeydown(e: KeyboardEvent, index: number): void {
   border-bottom: 1.5px solid transparent;
   background: transparent;
   color: var(--text-tertiary);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption-1);
   padding-bottom: 4px;
   cursor: pointer;
 }
@@ -330,6 +351,7 @@ function onRowKeydown(e: KeyboardEvent, index: number): void {
 }
 
 .shelf__filter-count {
+  font-family: var(--font-mono);
   color: var(--text-tertiary);
 }
 
@@ -447,6 +469,13 @@ function onRowKeydown(e: KeyboardEvent, index: number): void {
   font-size: 10px;
   color: var(--text-tertiary);
   margin-top: 3px;
+}
+
+.shelf__row-error {
+  display: block;
+  margin-top: 3px;
+  font-size: var(--fs-caption-1);
+  color: var(--status-red);
 }
 
 .shelf__row-actions {

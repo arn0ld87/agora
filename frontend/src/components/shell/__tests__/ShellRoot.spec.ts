@@ -61,7 +61,7 @@ function makeObject(overrides: Partial<ShelfObject> = {}): ShelfObject {
     updatedAt: '2026-08-18T10:00:00Z',
     metaId: 'sim_1',
     nextAction: null,
-    active: { runId: 'run_1', status: 'processing', pausable: true, simulationId: 'sim_1' },
+    active: { runId: 'run_1', status: 'processing', pausable: true, simulationId: 'sim_1', progress: null },
     ...overrides,
   }
 }

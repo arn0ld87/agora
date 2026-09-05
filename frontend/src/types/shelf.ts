@@ -66,6 +66,8 @@ export interface ShelfObject {
     /** Pause/Resume gibt es nur fuer laufende Simulationen (Q21). */
     pausable: boolean
     simulationId: string | null
+    /** Fortschritt 0-100 aus dem Contract (RunDetail.progress), fuer die Uebersicht (Block B3). */
+    progress: number | null
   } | null
 }
 

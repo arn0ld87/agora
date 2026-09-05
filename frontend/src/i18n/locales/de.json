@@ -1653,6 +1653,26 @@
     "stepSimulationFeed": {
       "title": "Live-Feed",
       "subtitle": "Reddit- und Twitter-Aktivität der laufenden Simulation verfolgen"
+    },
+    "shelf": {
+      "dateYesterday": "Gestern",
+      "overview": {
+        "ariaLabel": "Übersicht",
+        "subtitle": "Wähle links ein Objekt, um sein Dossier zu öffnen.",
+        "newSource": "Quelle ablegen",
+        "headingIdle": "Nichts wartet gerade auf dich.",
+        "headingLive": "{live} Läufe aktiv.",
+        "headingAttention": "{attn} Punkte warten auf dich.",
+        "headingBoth": "{live} Läufe aktiv, {attn} Punkte warten auf dich.",
+        "attentionTitle": "Braucht dich",
+        "attentionCount": "{n} offen",
+        "attentionEmpty": "Nichts wartet gerade auf eine Entscheidung.",
+        "liveTitle": "Läuft gerade",
+        "liveEmpty": "Kein Lauf aktiv.",
+        "recentTitle": "Zuletzt fertig",
+        "recentEmpty": "Noch nichts abgeschlossen.",
+        "openSettings": "Einstellungen öffnen"
+      }
     }
   },
   "runBudget": {

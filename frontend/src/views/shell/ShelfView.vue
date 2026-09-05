@@ -4,7 +4,7 @@
       <Shelf :shelf="shelf" :selected="selected" @select="onSelectObject" @filter-change="shelf.filter.value = $event" />
     </template>
     <template #dossier>
-      <Dossier :object="selected" />
+      <Dossier :object="selected" :shelf="shelf" />
     </template>
   </ShellRoot>
 </template>

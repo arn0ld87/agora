@@ -11,6 +11,8 @@
  * 7. Weiter-Aktion einer Zeile navigiert zum hinterlegten Routenziel.
  * 8. Filter "jobs" rendert die Rohebene als Tabelle statt der Zeilenliste.
  * 9. "Neues Objekt" navigiert zum Dashboard.
+ * 10. Personasatz-Zeile ohne nextAction zeigt die Start-Aktion und navigiert zu StepEnvSetup;
+ *     ein Fehlschlag zeigt eine sichtbare Meldung an der Zeile (Redesign PR 3).
  *
  * Selektoren ausschliesslich ueber ShelfTestId (src/contracts/testIds.ts).
  */
@@ -31,9 +33,10 @@ vi.mock('../../../api/runs', () => ({
 vi.mock('../../../api/simulation', () => ({
   pauseSimulation: vi.fn().mockResolvedValue({}),
   resumeSimulation: vi.fn().mockResolvedValue({}),
+  createSimulationFromPersonas: vi.fn(),
 }))
 
-import { pauseSimulation, resumeSimulation } from '../../../api/simulation'
+import { pauseSimulation, resumeSimulation, createSimulationFromPersonas } from '../../../api/simulation'
 import { useCancelAction } from '../useCancelAction'
 import Shelf from '../Shelf.vue'
 
@@ -44,6 +47,7 @@ const router = createRouter({
   routes: [
     { path: '/dashboard', name: 'Dashboard', component: { template: '<div/>' } },
     { path: '/runs/:id', name: 'RunDetail', component: { template: '<div/>' } },
+    { path: '/v4/env-setup/:projectId', name: 'StepEnvSetup', component: { template: '<div/>' } },
   ],
 })
 
@@ -122,7 +126,7 @@ describe('Shelf', () => {
   })
 
   it('Zeile mit active zeigt den Abbrechen-Knopf, Zeile ohne active nicht', () => {
-    const active = makeObject({ id: 'a', active: { runId: 'run_a', status: 'processing', pausable: false, simulationId: null } })
+    const active = makeObject({ id: 'a', active: { runId: 'run_a', status: 'processing', pausable: false, simulationId: null, progress: null } })
     const inactive = makeObject({ id: 'b', active: null })
     const { wrapper } = mountShelf([active, inactive])
 
@@ -156,11 +160,11 @@ describe('Shelf', () => {
   it('Pause-Knopf ist nur bei pausierbarer aktiver Zeile sichtbar und ruft pauseSimulation', async () => {
     const pausable = makeObject({
       id: 'a',
-      active: { runId: 'run_a', status: 'processing', pausable: true, simulationId: 'sim_a' },
+      active: { runId: 'run_a', status: 'processing', pausable: true, simulationId: 'sim_a', progress: null },
     })
     const notPausable = makeObject({
       id: 'b',
-      active: { runId: 'run_b', status: 'processing', pausable: false, simulationId: null },
+      active: { runId: 'run_b', status: 'processing', pausable: false, simulationId: null, progress: null },
     })
     const { wrapper } = mountShelf([pausable, notPausable])
     const rows = wrapper.findAll(`[data-testid="${ShelfTestId.row}"]`)
@@ -222,5 +226,32 @@ describe('Shelf', () => {
     await flushPromises()
 
     expect(router.currentRoute.value.name).toBe('Dashboard')
+  })
+
+  it('Personasatz ohne nextAction zeigt die Start-Aktion und navigiert zu StepEnvSetup (Redesign PR 3)', async () => {
+    vi.mocked(createSimulationFromPersonas).mockResolvedValue({
+      success: true,
+      data: { simulation_id: 'sim_neu', project_id: 'proj_neu', persona_count: 1 },
+    } as never)
+    const obj = makeObject({ kind: 'personasatz', id: 'tpl_1', title: 'SchulKI', nextAction: null })
+    const { wrapper } = mountShelf([obj])
+
+    await wrapper.find(`[data-testid="${ShelfTestId.rowNextAction}"]`).trigger('click')
+    await flushPromises()
+
+    expect(createSimulationFromPersonas).toHaveBeenCalledWith(expect.objectContaining({ template_ids: ['tpl_1'] }))
+    expect(router.currentRoute.value.name).toBe('StepEnvSetup')
+    expect(router.currentRoute.value.params.projectId).toBe('sim_neu')
+  })
+
+  it('Fehlschlag beim Start aus Personasatz zeigt eine sichtbare Meldung an der Zeile', async () => {
+    vi.mocked(createSimulationFromPersonas).mockRejectedValue(new Error('kaputt'))
+    const obj = makeObject({ kind: 'personasatz', id: 'tpl_1', nextAction: null })
+    const { wrapper } = mountShelf([obj])
+
+    await wrapper.find(`[data-testid="${ShelfTestId.rowNextAction}"]`).trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find(`[data-testid="${ShelfTestId.rowPersonaError}"]`).exists()).toBe(true)
   })
 })

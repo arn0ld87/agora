@@ -13,12 +13,14 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { computed, ref } from 'vue'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createI18n } from 'vue-i18n'
 import de from '@/i18n/locales/de.json'
 import en from '@/i18n/locales/en.json'
 import { DossierTestId } from '../../../contracts/testIds'
-import type { ShelfObject } from '../../../types/shelf'
+import type { ShelfFilter, ShelfJobRow, ShelfObject } from '../../../types/shelf'
+import type { useShelf } from '../../../composables/useShelf'
 
 vi.mock('../../../api/runs', () => ({
   cancelRun: vi.fn().mockResolvedValue({ success: true }),
@@ -29,6 +31,9 @@ vi.mock('../../../api/simulation', () => ({
   createSimulationBranch: vi.fn(),
   createSimulationFromPersonas: vi.fn(),
   listPersonaTemplates: vi.fn().mockResolvedValue({ success: true, data: { count: 0, templates: [] } }),
+}))
+vi.mock('../../../api/status', () => ({
+  getSystemStatus: vi.fn().mockResolvedValue({ success: true }),
 }))
 
 import { pauseSimulation, resumeSimulation, createSimulationBranch, createSimulationFromPersonas } from '../../../api/simulation'
@@ -42,6 +47,9 @@ const router = createRouter({
   routes: [
     { path: '/runs/:id', name: 'RunDetail', component: { template: '<div/>' } },
     { path: '/v4/env-setup/:projectId', name: 'StepEnvSetup', component: { template: '<div/>' } },
+    { path: '/ablage/:kind/:objectId', name: 'ShelfObject', component: { template: '<div/>' } },
+    { path: '/dashboard', name: 'Dashboard', component: { template: '<div/>' } },
+    { path: '/settings', name: 'SettingsGeneral', component: { template: '<div/>' } },
   ],
 })
 
@@ -59,9 +67,37 @@ function makeObject(overrides: Partial<ShelfObject> = {}): ShelfObject {
   }
 }
 
-function mountDossier(object: ShelfObject | null) {
+/** Baut ein Objekt, das dieselbe Form wie ReturnType<typeof useShelf> hat, ohne die echten API-Aufrufe zu machen. */
+function makeShelf(objects: ShelfObject[] = []): ReturnType<typeof useShelf> {
+  const objectsRef = ref<ShelfObject[]>(objects)
+  const filter = ref<ShelfFilter>('alle')
+  const loading = ref(false)
+  const error = ref('')
+  const filtered = computed(() =>
+    filter.value === 'alle' || filter.value === 'jobs' ? objectsRef.value : objectsRef.value.filter((o) => o.kind === filter.value),
+  )
+  const counts = computed(() => {
+    const c: Record<string, number> = { alle: objectsRef.value.length, lauf: 0, bericht: 0, personasatz: 0, graph: 0 }
+    for (const o of objectsRef.value) c[o.kind] += 1
+    return c
+  })
+  const activeObjects = computed(() => objectsRef.value.filter((o) => o.active !== null))
+  return {
+    objects: objectsRef,
+    jobs: ref<ShelfJobRow[]>([]),
+    filter,
+    filtered,
+    counts,
+    activeObjects,
+    loading,
+    error,
+    reload: vi.fn().mockResolvedValue(undefined),
+  }
+}
+
+function mountDossier(object: ShelfObject | null, shelfObjects: ShelfObject[] = object ? [object] : []) {
   return mount(Dossier, {
-    props: { object },
+    props: { object, shelf: makeShelf(shelfObjects) },
     global: { plugins: [i18n, router] },
   })
 }
@@ -71,10 +107,11 @@ describe('Dossier', () => {
     useCancelAction().undo()
   })
 
-  it('ohne Objekt erscheint der Leer-Hinweis', () => {
-    const wrapper = mountDossier(null)
+  it('ohne Objekt erscheint die Uebersicht (Redesign PR 3)', () => {
+    const wrapper = mountDossier(null, [])
+    expect(wrapper.find(`[data-testid="${DossierTestId.overview}"]`).exists()).toBe(true)
     expect(wrapper.find(`[data-testid="${DossierTestId.root}"]`).text()).toContain(
-      'Nichts ausgewählt. Wähl links ein Objekt, um seine Übersicht zu sehen.',
+      'Wähle links ein Objekt, um sein Dossier zu öffnen.',
     )
     expect(wrapper.find(`[data-testid="${DossierTestId.title}"]`).exists()).toBe(false)
   })
@@ -89,7 +126,7 @@ describe('Dossier', () => {
   })
 
   it('Abbrechen-Knopf nur bei aktivem Objekt', () => {
-    const active = makeObject({ active: { runId: 'run_a', status: 'processing', pausable: false, simulationId: null } })
+    const active = makeObject({ active: { runId: 'run_a', status: 'processing', pausable: false, simulationId: null, progress: null } })
     const inactive = makeObject({ active: null })
 
     expect(mountDossier(active).find(`[data-testid="${DossierTestId.cancel}"]`).exists()).toBe(true)
@@ -97,7 +134,7 @@ describe('Dossier', () => {
   })
 
   it('Pause-Knopf nur bei pausierbarer aktiver Simulation, ruft pauseSimulation', async () => {
-    const obj = makeObject({ active: { runId: 'run_a', status: 'processing', pausable: true, simulationId: 'sim_a' } })
+    const obj = makeObject({ active: { runId: 'run_a', status: 'processing', pausable: true, simulationId: 'sim_a', progress: null } })
     const wrapper = mountDossier(obj)
 
     await wrapper.find(`[data-testid="${DossierTestId.pause}"]`).trigger('click')
@@ -106,7 +143,7 @@ describe('Dossier', () => {
   })
 
   it('Abbrechen ruft useCancelAction.cancel() mit der richtigen runId auf', async () => {
-    const obj = makeObject({ active: { runId: 'run_xyz', status: 'processing', pausable: false, simulationId: null } })
+    const obj = makeObject({ active: { runId: 'run_xyz', status: 'processing', pausable: false, simulationId: null, progress: null } })
     const wrapper = mountDossier(obj)
     const cancelAction = useCancelAction()
 
@@ -205,5 +242,62 @@ describe('Dossier — Lauf aus einem Personasatz starten (Block B4)', () => {
     await flushPromises()
 
     expect(w.find('[role="alert"]').exists()).toBe(true)
+  })
+})
+
+describe('Dossier — Uebersichtszustand (Redesign PR 3)', () => {
+  it('zeigt ein Objekt mit nextAction.kind=warn unter "Braucht dich" und navigiert ueber dessen Weiter-Aktion', async () => {
+    const warnObj = makeObject({
+      kind: 'personasatz',
+      id: 'tpl_warn',
+      title: 'SchulKI',
+      statusLine: 'Ungeprueft',
+      nextAction: { label: 'Personas freigeben', to: { name: 'StepEnvSetup', params: { projectId: 'proj_1' } }, kind: 'warn' },
+    })
+    const wrapper = mountDossier(null, [warnObj])
+
+    const item = wrapper.find(`[data-testid="${DossierTestId.overviewAttentionItem}"]`)
+    expect(item.exists()).toBe(true)
+    expect(item.text()).toContain('SchulKI')
+
+    await item.find('button').trigger('click')
+    await flushPromises()
+
+    expect(router.currentRoute.value.name).toBe('StepEnvSetup')
+    expect(router.currentRoute.value.params.projectId).toBe('proj_1')
+  })
+
+  it('zeigt ein aktives Objekt unter "Laeuft gerade" mit Fortschrittsbalken und Abbrechen-Knopf', () => {
+    const liveObj = makeObject({
+      id: 'sim_live',
+      title: 'Domain-Migration',
+      active: { runId: 'run_live', status: 'processing', pausable: true, simulationId: 'sim_live', progress: 60 },
+    })
+    const wrapper = mountDossier(null, [liveObj])
+
+    const card = wrapper.find(`[data-testid="${DossierTestId.overviewLiveItem}"]`)
+    expect(card.exists()).toBe(true)
+    expect(card.text()).toContain('Domain-Migration')
+    expect(card.find('.dossier__ov-bar i').attributes('style')).toContain('60%')
+  })
+
+  it('"Zuletzt fertig"-Zeile navigiert zur ShelfObject-Route des Objekts', async () => {
+    const doneObj = makeObject({ kind: 'bericht', id: 'rep_1', title: 'Fertiger Bericht', nextAction: null })
+    const wrapper = mountDossier(null, [doneObj])
+
+    await wrapper.find(`[data-testid="${DossierTestId.overviewRecentItem}"]`).trigger('click')
+    await flushPromises()
+
+    expect(router.currentRoute.value.name).toBe('ShelfObject')
+    expect(router.currentRoute.value.params).toEqual({ kind: 'bericht', objectId: 'rep_1' })
+  })
+
+  it('"Quelle ablegen" navigiert zum Dashboard', async () => {
+    const wrapper = mountDossier(null, [])
+
+    await wrapper.find(`[data-testid="${DossierTestId.overviewNewSource}"]`).trigger('click')
+    await flushPromises()
+
+    expect(router.currentRoute.value.name).toBe('Dashboard')
   })
 })
