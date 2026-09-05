@@ -850,3 +850,106 @@ class TestLlmClientInitUsesResolveNumCtx:
         monkeypatch.setenv("OLLAMA_NUM_CTX", "16384")
         client = self._make(monkeypatch, model="custom:fancy")
         assert client._num_ctx == 16384
+
+
+class TestLlmClientCodexCliConstruction:
+    """Issue #1405 Regressionsschutz: codex_cli-Init darf weder den
+    OpenAI-SDK-Client bauen noch den Ollama/Minimax-Kurzschluss verpassen,
+    auch wenn ``Config.LLM_BASE_URL`` zufaellig Ollama-artig ist (genau der
+    Bug, der beim manuellen Testen zuerst auftrat)."""
+
+    def _make_codex_cli_client(self, monkeypatch):
+        from unittest.mock import MagicMock
+
+        monkeypatch.setattr("app.llm.client.OpenAI", lambda **_kw: MagicMock())
+        # Absichtlich KEIN OPENAI_API_KEY / Config.LLM_API_KEY gesetzt — der
+        # codex_cli-Pfad darf trotzdem nicht mit "LLM_API_KEY not
+        # configured" scheitern.
+        monkeypatch.setattr("app.utils.llm_client.Config.LLM_API_KEY", None)
+        # Bewusst Ollama-artige Base-URL: reproduziert den urspruenglichen
+        # Bug, bei dem _is_ollama() trotz codex_cli auf True auflief.
+        monkeypatch.setattr(
+            "app.utils.llm_client.Config.LLM_BASE_URL", "http://localhost:11434/v1"
+        )
+        monkeypatch.setattr("app.utils.llm_client.Config.LLM_MODEL_NAME", "fallback-model")
+        monkeypatch.setattr(
+            "app.llm.client._read_active_config_safely",
+            lambda: {"provider_id": "codex_cli", "model": "gpt-5-codex"},
+        )
+        return LLMClient()
+
+    def test_codex_cli_active_flag_set(self, monkeypatch):
+        client = self._make_codex_cli_client(monkeypatch)
+        assert client._codex_cli_active is True
+
+    def test_codex_cli_client_type_is_shim(self, monkeypatch):
+        client = self._make_codex_cli_client(monkeypatch)
+        assert type(client.client).__name__ == "CodexCliClient"
+
+    def test_codex_cli_base_url_is_none(self, monkeypatch):
+        client = self._make_codex_cli_client(monkeypatch)
+        assert client.base_url is None
+
+    def test_codex_cli_does_not_require_api_key(self, monkeypatch):
+        # Muss KEIN ValueError("LLM_API_KEY not configured") werfen, obwohl
+        # weder OPENAI_API_KEY noch Config.LLM_API_KEY gesetzt sind.
+        client = self._make_codex_cli_client(monkeypatch)
+        assert client.api_key
+
+    def test_codex_cli_is_ollama_false_despite_ollama_like_base_url(self, monkeypatch):
+        client = self._make_codex_cli_client(monkeypatch)
+        assert client._is_ollama() is False
+
+
+class TestLlmClientFromRouteCodexCli:
+    """Regression fuer Codex-Review-Finding (#1405): ``from_route`` loggte den
+    Provider-Typ der Route (``p_type``) bisher nur fuer die api_key-Aufloesung
+    mit, gab ihn aber nie an ``LLMClient.__init__`` weiter. Eine explizit auf
+    codex_cli geroutete Stage/Run-Connection blieb dadurch vom GLOBALEN
+    Active-Config-Provider abhaengig — hier bewusst auf ``openai`` gesetzt,
+    um zu beweisen, dass die Route (nicht die Active-Config) entscheidet."""
+
+    def _route(self):
+        from app.contracts.llm_routing_contract import ResolvedRoute
+
+        return ResolvedRoute(
+            stage="graph_build",
+            provider_id="codex_cli",
+            model="codex-cli-default",
+            routing_version=1,
+            provider_options={},
+        )
+
+    def _codex_cli_registry_stub(self, monkeypatch):
+        from unittest.mock import MagicMock
+
+        descriptor = MagicMock()
+        descriptor.id = "codex_cli"
+        descriptor.type = "codex_cli"
+        descriptor.base_url = None
+        registry = MagicMock()
+        registry.get_providers.return_value = [descriptor]
+        monkeypatch.setattr(
+            "app.services.llm_provider_registry.LlmProviderRegistry",
+            lambda: registry,
+        )
+
+    def test_from_route_activates_codex_cli_even_when_active_config_differs(
+        self, monkeypatch
+    ):
+        from unittest.mock import MagicMock
+
+        monkeypatch.setattr("app.llm.client.OpenAI", lambda **_kw: MagicMock())
+        self._codex_cli_registry_stub(monkeypatch)
+        # Globale Active-Config zeigt bewusst auf einen ANDEREN Provider —
+        # die Route muss trotzdem gewinnen.
+        monkeypatch.setattr(
+            "app.llm.client._read_active_config_safely",
+            lambda: {"provider_id": "openai", "model": "gpt-4o"},
+        )
+
+        client = LLMClient.from_route(self._route())
+
+        assert client._codex_cli_active is True
+        assert type(client.client).__name__ == "CodexCliClient"
+        assert client.base_url is None

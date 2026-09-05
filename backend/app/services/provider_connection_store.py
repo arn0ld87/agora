@@ -17,6 +17,7 @@ from app.contracts.ai_provider_contract import (
     ProviderStatus,
 )
 from app.services.data_dir import resolve_data_dir as _resolve_data_dir
+from app.services.llm_provider_registry import LlmProviderRegistry
 from app.services.llm_provider_secrets_store import LlmProviderSecretsStore
 
 _STORE_FILENAME = "provider_connections.json"
@@ -55,9 +56,27 @@ class ProviderConnectionStore:
     ) -> ProviderConnection:
         connection_id = request.provider_kind
         now = _now()
-        api_key = (
+        submitted_api_key = (
             request.api_key.get_secret_value() if request.api_key is not None else None
         )
+
+        # Issue #1405 Codex-Review-Finding: transport/auth_mode kamen bisher
+        # aus einer Ollama-Spezialbehandlung + "hat ein Key vorgelegen?" statt
+        # aus der kanonischen Registry-Definition (Single Source of Truth,
+        # siehe ``LlmProviderRegistry``). Fuer codex_cli (auth_mode="session")
+        # hiess das: transport landete faelschlich als "http", und ein
+        # versehentlich eingegebener Key wurde stillschweigend als echtes
+        # Secret uebernommen, obwohl dieser Provider gar keinen API-Key kennt.
+        # Definition fehlt -> konservativer Fallback auf das alte Verhalten
+        # (deckt unbekannte/Legacy-Provider-Kinds ab).
+        definition = LlmProviderRegistry.connection_definition(request.provider_kind)
+        transport = (
+            definition.transport
+            if definition
+            else ("local" if request.provider_kind == "ollama" else "http")
+        )
+        accepts_api_key = definition is None or definition.auth_mode == "api_key"
+        api_key = submitted_api_key if accepts_api_key else None
 
         with self._lock, self._process_lock():
             raw = self._read_raw()
@@ -68,12 +87,17 @@ class ProviderConnectionStore:
                 else None
             )
             secret_ref = connection_id if api_key else (existing.secret_ref if existing else None)
+            auth_mode = (
+                definition.auth_mode
+                if definition
+                else ("api_key" if secret_ref else "none")
+            )
             connection = ProviderConnection(
                 id=connection_id,
                 provider_kind=request.provider_kind,
                 display_name=request.display_name,
-                transport="local" if request.provider_kind == "ollama" else "http",
-                auth_mode="api_key" if secret_ref else "none",
+                transport=transport,
+                auth_mode=auth_mode,
                 base_url=request.base_url,
                 enabled=request.enabled,
                 status=existing.status if existing else "unknown",

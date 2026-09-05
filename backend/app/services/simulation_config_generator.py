@@ -20,6 +20,7 @@ from datetime import datetime
 from pydantic import BaseModel, ValidationError as PydanticValidationError
 
 from ..config import Config
+from ..contracts.provider_types import PROVIDER_CODEX_CLI
 from ..utils.logger import get_logger
 from .entity_reader import EntityNode
 from ..utils.llm_client import LLMClient
@@ -254,9 +255,15 @@ class SimulationConfigGenerator:
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         model_name: Optional[str] = None,
+        provider_type: Optional[str] = None,
         language: Optional[str] = None,
         run_id: Optional[str] = None,
     ):
+        self.provider_type = provider_type
+        # ``self.base_url``/``self.api_key`` bleiben absichtlich beim
+        # ``.env``-Fallback-Schema (#778) — ``generate_config`` schreibt sie
+        # weiter unten in ``SimulationParameters.llm_base_url`` fuer die
+        # Simulations-Runden, ein Pfad, den Issue #1418 nicht anfasst.
         self.base_url = base_url or Config.LLM_BASE_URL
         # Key und Base-URL muessen aus derselben Quelle stammen (#778). Loest der
         # Aufrufer einen Provider-Endpoint auf, darf der .env-Key NICHT einspringen —
@@ -273,13 +280,27 @@ class SimulationConfigGenerator:
         if not self.api_key:
             raise ValueError("LLM_API_KEY not configured")
 
+        # Issue #1418: codex_cli (transport="cli", #1405) hat weder base_url
+        # noch api_key — der eigene LLMClient dieses Generators (fuer die
+        # Config-Generierung) darf nicht mit dem obigen .env-Fallback gebaut
+        # werden, sonst geht das Modell aus der Route an einen fremden
+        # HTTP-Provider (beobachtet: gpt-5.6-luna an minimax.io → 400).
+        is_cli_provider = provider_type == PROVIDER_CODEX_CLI
+        client_base_url = None if is_cli_provider else self.base_url
+        client_api_key = (
+            (api_key or "codex-cli-local-session") if is_cli_provider else self.api_key
+        )
+
         self.llm_client = LLMClient(
-            api_key=self.api_key,
-            base_url=self.base_url,
+            api_key=client_api_key,
+            base_url=client_base_url,
             model=self.model_name,
             # Budget-Enforcement (#984): ohne run_id gibt es keinen Enforcer —
             # Config-Generierung liefe am harten Run-Budget vorbei.
             run_id=run_id,
+            # Ohne provider_type erkennt LLMClient codex_cli nicht als
+            # Subprozess-Provider und versucht einen HTTP-Call.
+            provider_type=self.provider_type,
         )
 
     @staticmethod

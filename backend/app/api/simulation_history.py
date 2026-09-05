@@ -142,6 +142,59 @@ def get_simulation_history():
     return json_success(enriched_simulations, count=len(enriched_simulations))
 
 
+class _ProfileConnectionRejected(Exception):
+    """Traegt die fertige 422-Antwort aus der Verbindungsaufloesung heraus."""
+
+    def __init__(self, response):
+        super().__init__("profile connection rejected")
+        self.response = response
+
+
+def _resolve_profile_connection(resolved_route, llm_runtime):
+    """Key, Endpoint und Provider-Typ für die Persona-Generierung bestimmen.
+
+    Aus ``generate_profiles`` extrahiert (radon-Gate, MAI-17), als der
+    CLI-Sonderfall die Funktion über die Komplexitätsgrenze hob.
+
+    Issue #1423: Dieser zweite ``OasisProfileGenerator``-Aufrufer wurde beim
+    Fix zu #1418 übersehen — ohne ``provider_type`` füllt der Generator die
+    ``base_url`` aus der ``.env`` auf und schickt das geroutete Modell an
+    einen fremden Endpunkt. Der 422-Guard darunter hätte ``codex_cli`` zudem
+    abgelehnt, bevor es überhaupt dazu kommt: der Provider hat per Definition
+    keinen Key, und ``is_local_endpoint(None)`` ist ``False``.
+
+    Raises:
+        _ProfileConnectionRejected: wenn ein HTTP-Provider ohne Key dasteht.
+    """
+    from ..services.llm_provider_registry import LlmProviderRegistry
+
+    api_key = resolve_route_api_key(resolved_route, llm_runtime)
+    base_url = resolved_route.base_url_sanitized
+    definition = LlmProviderRegistry.connection_definition(resolved_route.provider_id)
+    provider_type = definition.provider_kind if definition else None
+    is_cli_transport = definition is not None and definition.transport == "cli"
+
+    if api_key is None and not is_cli_transport and not is_local_endpoint(base_url):
+        raise _ProfileConnectionRejected(
+            json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=422,
+                message=(
+                    "kein api_key im Payload und kein Key in der Settings-DB "
+                    f"für Provider '{resolved_route.provider_id}'. "
+                    "Bitte in Einstellungen → LLM-Anbieter einen Schlüssel speichern "
+                    "oder im Sitzungsfeld eingeben."
+                ),
+            )
+        )
+    if api_key is None and is_local_endpoint(base_url):
+        # Lokaler Endpoint ohne Key ist zulaessig (#778) — Platzhalter statt
+        # `None`, damit der Generator-Vertrag "Key + Base-URL aus derselben
+        # Quelle" hier nicht faelschlich einen ValueError wirft.
+        api_key = LOCAL_NO_AUTH_API_KEY
+    return api_key, base_url, provider_type
+
+
 @simulation_bp.route('/generate-profiles', methods=['POST'])
 @handle_api_errors(logger=logger, log_prefix="GenerateProfileFailed")
 def generate_profiles():
@@ -213,26 +266,15 @@ def generate_profiles():
             message=str(exc),
         )
 
-    api_key = resolve_route_api_key(resolved_route, llm_runtime)
-    base_url = resolved_route.base_url_sanitized
-    if api_key is None and not is_local_endpoint(base_url):
-        return json_error(
-            ApiErrorCode.VALIDATION_FAILED,
-            status=422,
-            message=(
-                "kein api_key im Payload und kein Key in der Settings-DB "
-                f"für Provider '{resolved_route.provider_id}'. "
-                "Bitte in Einstellungen → LLM-Anbieter einen Schlüssel speichern "
-                "oder im Sitzungsfeld eingeben."
-            ),
+    try:
+        api_key, base_url, provider_type = _resolve_profile_connection(
+            resolved_route, llm_runtime
         )
-    if api_key is None and is_local_endpoint(base_url):
-        # Lokaler Endpoint ohne Key ist zulaessig (#778) — Platzhalter statt
-        # `None`, damit der Generator-Vertrag "Key + Base-URL aus derselben
-        # Quelle" hier nicht faelschlich einen ValueError wirft.
-        api_key = LOCAL_NO_AUTH_API_KEY
+    except _ProfileConnectionRejected as rejected:
+        return rejected.response
     generator = OasisProfileGenerator(
         model_name=llm_model_override,
+        provider_type=provider_type,
         storage=storage,
         graph_id=graph_id,
         api_key=api_key,

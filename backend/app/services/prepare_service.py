@@ -31,6 +31,7 @@ from ..contracts import (
     PersonaTargetContract,
 )
 from ..contracts.llm_routing_contract import ResolvedRoute
+from ..contracts.provider_types import PROVIDER_CODEX_CLI
 from ..utils.logger import get_logger
 from .degradation_collector import DegradationCollector
 from .entity_reader import EntityReader
@@ -56,8 +57,8 @@ def _resolve_llm_connection(
     llm_runtime: Optional[LlmRuntimeInput],
     *,
     require: bool = True,
-) -> tuple[Optional[str], Optional[str]]:
-    """Loest Key und Endpoint aus der Route — oder bricht ab.
+) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """Loest Key, Endpoint und Provider-Typ aus der Route — oder bricht ab.
 
     Fruehere Fassung gab bei nicht aufloesbarer Route ``(None, None)`` zurueck.
     Das sah harmlos aus, war aber der Ausloeser einer stillen Provider-
@@ -75,6 +76,14 @@ def _resolve_llm_connection(
     einspringt. Wird gar keine URL uebergeben, sind beide aus der ``.env`` —
     formal "dieselbe Quelle", sachlich die falsche.
 
+    Issue #1418: ``codex_cli`` (transport="cli", #1405) hat by design weder
+    ``base_url`` noch ``api_key`` — die dritte Rueckgabe traegt den
+    Provider-Typ deshalb explizit weiter, statt ihn wie bisher stillschweigend
+    zu verlieren. Ohne sie las ``OasisProfileGenerator`` ein fehlendes
+    ``base_url`` als "nicht aufgeloest" und fuellte ``Config.LLM_BASE_URL``
+    auf — das Modell aus der codex_cli-Route ging an den .env-HTTP-Endpoint
+    (beobachtet: ``gpt-5.6-luna`` an ``https://api.minimax.io/v1`` → HTTP 400).
+
     Args:
         llm_runtime: Aufgeloeste Route oder Legacy-Runtime-Override.
         require: Wenn ``True`` (Default), ist eine nicht aufloesbare Route ein
@@ -86,13 +95,19 @@ def _resolve_llm_connection(
         ValueError: ``require`` ist gesetzt und weder eine ``ResolvedRoute``
             noch ein aktiver Runtime-Override liegt vor, oder die
             ``ResolvedRoute`` selbst keine aufloesbare ``base_url_sanitized``
-            traegt (#1104: zweite Verteidigungslinie gegen die Halb-Uebergabe,
-            falls der Store-Lookup in ``StageModelRouter`` keine Base-URL
-            findet — z. B. eine deaktivierte oder geloeschte Connection).
+            traegt und ihr Provider keinen CLI-Transport nutzt (#1104: zweite
+            Verteidigungslinie gegen die Halb-Uebergabe, falls der
+            Store-Lookup in ``StageModelRouter`` keine Base-URL findet — z. B.
+            eine deaktivierte oder geloeschte Connection).
     """
     if isinstance(llm_runtime, ResolvedRoute):
         base_url = llm_runtime.base_url_sanitized
-        if require and not base_url:
+        from .llm_provider_registry import LlmProviderRegistry
+
+        definition = LlmProviderRegistry.connection_definition(llm_runtime.provider_id)
+        provider_type = definition.provider_kind if definition else None
+        is_cli_transport = definition is not None and definition.transport == "cli"
+        if require and not base_url and not is_cli_transport:
             raise ValueError(
                 f"kein Endpoint für Provider '{llm_runtime.provider_id}' aufgelöst: die "
                 "Route nennt Modell und Provider, aber keine Basis-URL. Ohne Endpoint "
@@ -101,9 +116,10 @@ def _resolve_llm_connection(
                 "diese Mischung erreicht den falschen Provider. Bitte unter Einstellungen "
                 f"→ LLM-Anbieter die Verbindung '{llm_runtime.provider_id}' prüfen."
             )
-        return resolve_route_api_key(llm_runtime), base_url
+        return resolve_route_api_key(llm_runtime), base_url, provider_type
     if llm_runtime and llm_runtime.enabled:
-        return llm_runtime.api_key, llm_runtime.base_url
+        provider_type = PROVIDER_CODEX_CLI if llm_runtime.provider == PROVIDER_CODEX_CLI else None
+        return llm_runtime.api_key, llm_runtime.base_url, provider_type
     if require:
         raise ValueError(
             "kein LLM-Provider aufgelöst: die Vorbereitung erwartet eine "
@@ -113,7 +129,7 @@ def _resolve_llm_connection(
             "Provider. Bitte unter Einstellungen → LLM-Anbieter eine aktive "
             "Verbindung wählen."
         )
-    return None, None
+    return None, None, None
 
 
 def _entity_identity_key(entity: "EntityNode") -> tuple[str, str]:
@@ -362,13 +378,14 @@ def _phase_generate_profiles(
     # ``require`` folgt dem expliziten Nutzerwunsch: nur wenn LLM-Personas
     # verlangt sind, ist eine fehlende Route ein Fehler. Bei
     # ``use_llm_for_profiles=False`` ist regelbasiert das gewollte Ergebnis.
-    api_key, base_url = _resolve_llm_connection(
+    api_key, base_url, provider_type = _resolve_llm_connection(
         llm_runtime, require=use_llm_for_profiles
     )
 
     generator = OasisProfileGenerator(
         api_key=api_key,
         base_url=base_url,
+        provider_type=provider_type,
         storage=storage,
         graph_id=state.graph_id,
         model_name=llm_model,
@@ -490,11 +507,12 @@ def _phase_generate_config(
             total=3,
         )
 
-    api_key, base_url = _resolve_llm_connection(llm_runtime, require=use_llm)
+    api_key, base_url, provider_type = _resolve_llm_connection(llm_runtime, require=use_llm)
 
     config_generator = SimulationConfigGenerator(
         api_key=api_key,
         base_url=base_url,
+        provider_type=provider_type,
         model_name=llm_model,
         language=language,
         # Budget-Enforcement (#984): run-gebundene LLM-Calls statt budgetfrei.
@@ -916,6 +934,29 @@ def prepare_simulation(
         # Run scripts remain in backend/scripts/ directory, no longer copy to
         # simulation directory. When starting simulation, simulation_runner
         # runs scripts from scripts/ directory.
+
+        # Issue #1419: ``BLOCKING`` heisst laut
+        # ``pipeline_degradation_contract`` woertlich, dass der Schritt den
+        # Zustand "bereit" nicht erreichen darf, auch wenn technisch kein
+        # Fehler aufgetreten ist. Ohne dieses Gate war das eine
+        # Absichtserklaerung: eine Vorbereitung, in der keine einzige Persona
+        # vom Modell kam, ging als READY hinaus und war regulaer startbar.
+        # Der Collector bleibt im Task-Ergebnis erhalten — dort steht die
+        # Begruendung, die die Oberflaeche anzeigt.
+        blocking = (
+            [event for event in degradations.report().events if event.is_blocking]
+            if degradations is not None
+            else []
+        )
+        if blocking:
+            state.error = " ".join(event.detail for event in blocking)
+            manager._set_status(state, SimulationStatus.FAILED)
+            logger.error(
+                "Simulation preparation blocked by degradation: %s, kinds=%s",
+                simulation_id,
+                ", ".join(event.kind.value for event in blocking),
+            )
+            return state
 
         manager._set_status(state, SimulationStatus.READY)
 

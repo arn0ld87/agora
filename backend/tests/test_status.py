@@ -20,6 +20,20 @@ from app.api.status import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _no_active_llm_config(monkeypatch):
+    """Isoliert ``_get_ollama_status`` von ``backend/instance/active_llm_config.json``.
+
+    Seit dem #1418-Folgefix hat die aktive Verbindung Vorrang vor
+    ``Config.LLM_*``. Die Datei liegt im Repo-``instance``-Verzeichnis und
+    existiert auf Entwicklerrechnern, in CI aber nicht — ohne diese Isolation
+    haengt jeder Provider-Gating-Test unten daran, welche Verbindung der
+    Entwickler zuletzt aktiviert hat. Tests, die die Vorrang-Regel selbst
+    pruefen, patchen den Reader explizit erneut.
+    """
+    monkeypatch.setattr("app.api.status._read_active_config_safely", lambda: None)
+
+
 class TestStatusFunctions:
     """Test suite for status helper functions"""
 
@@ -471,6 +485,74 @@ class TestOllamaStatusContractShape:
         mock_get.assert_not_called()
         assert result['skipped'] is True
         assert result['reachable'] is None
+
+    def test_active_config_wins_over_env_for_displayed_provider(self, monkeypatch):
+        """Folgebefund zu #1418: die aktive Auswahl schlaegt die ``.env``.
+
+        Beobachtet auf dem armserver: das System-Panel meldete dauerhaft
+        "aktiver Provider ist MiniMax", weil ``_get_ollama_status`` allein
+        ``Config.LLM_BASE_URL`` las — also die ``.env`` des Containers. Die
+        unter Einstellungen → LLM-Anbieter aktivierte Verbindung (hier
+        ``codex_cli``) kam in der Anzeige nie an.
+        """
+        self._set_provider(monkeypatch, "https://api.minimax.io/v1", "MiniMax-M3")
+        monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+        monkeypatch.setattr(
+            "app.api.status._read_active_config_safely",
+            lambda: {"provider_id": "codex_cli", "model": "gpt-5.6-luna"},
+        )
+
+        with patch('app.api.status.requests.get') as mock_get:
+            result = _get_ollama_status()
+
+        mock_get.assert_not_called()
+        assert result['skipped_provider'] == "codex_cli"
+        assert result['default_model'] == "gpt-5.6-luna"
+        # ``codex_cli`` (transport="cli", #1405) hat keine base_url — die
+        # URL-Heuristik haette hier nichts zu mustern gehabt.
+        assert result['base_url'] is None
+
+    def test_active_ollama_config_is_probed_although_env_says_minimax(self, monkeypatch):
+        """Gegenrichtung: aktiv ist Ollama, die ``.env`` zeigt auf MiniMax.
+
+        Vor dem Fix wurde die Probe uebersprungen, obwohl der aktive
+        Provider genau der ist, der ``/api/tags`` bedient.
+        """
+        self._set_provider(monkeypatch, "https://api.minimax.io/v1", "MiniMax-M3")
+        monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+        monkeypatch.setattr(
+            "app.api.status._read_active_config_safely",
+            lambda: {
+                "provider_id": "ollama-local",
+                "model": "qwen3:8b",
+                "base_url": "http://localhost:11434/v1",
+            },
+        )
+
+        with patch('app.api.status.requests.get') as mock_get:
+            mock_resp = Mock()
+            mock_resp.json.return_value = {"models": [{"name": "qwen3:8b"}]}
+            mock_resp.raise_for_status = Mock()
+            mock_get.return_value = mock_resp
+            result = _get_ollama_status()
+
+        assert result['skipped'] is False
+        assert result['reachable'] is True
+        assert result['default_model'] == "qwen3:8b"
+        assert mock_get.call_args[0][0] == "http://localhost:11434/api/tags"
+
+    def test_env_stays_fallback_without_active_config(self, monkeypatch):
+        """Ohne je aktivierte Verbindung bleibt ``Config.LLM_*`` massgeblich."""
+        self._set_provider(monkeypatch, "https://api.minimax.io/v1", "MiniMax-M3")
+        monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+        monkeypatch.setattr("app.api.status._read_active_config_safely", lambda: None)
+
+        with patch('app.api.status.requests.get') as mock_get:
+            result = _get_ollama_status()
+
+        mock_get.assert_not_called()
+        assert result['skipped_provider'] == "minimax"
+        assert result['default_model'] == "MiniMax-M3"
 
     def test_explicit_env_with_v1_suffix_does_not_hit_v1_api_tags(self, monkeypatch):
         """CodeRabbit-Finding: ``/v1/api/tags`` wäre wieder ein 404."""
