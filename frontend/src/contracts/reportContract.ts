@@ -325,9 +325,14 @@ export type SimulationSnapshot = z.infer<typeof SimulationSnapshotSchema>;
 export const RunDegradationSchema = z.object({
   component: z.enum([
     'simulation',
+    // Issue #1419: Personas, die nach gescheiterten LLM-Versuchen als
+    // regelbasierte Platzhalter in die Simulation gingen.
+    'persona_generation',
     'interview_agents',
     'section_generation',
     'section_metadata',
+    // Fehlende Analyseaspekte im fertigen Berichtstext (Issue #1302).
+    'requirement_checker',
     'contract_export',
   ]),
   reason: z.string().min(1),

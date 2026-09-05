@@ -515,7 +515,21 @@ def _resolve_start_route(run_id: str, llm_runtime: RuntimeLlmConfig):
     route_router.lock_stage("simulation_rounds", resolved_route)
     resolved_api_key = resolve_route_api_key(resolved_route, llm_runtime)
 
-    if resolved_api_key is None and not is_local_endpoint(resolved_route.base_url_sanitized):
+    # Issue #1423: Ein CLI-Provider (codex_cli, transport="cli") hat per
+    # Definition keinen api_key — er authentifiziert über die lokale
+    # ``codex login``-Session. ``is_local_endpoint(None)`` ist ``False``,
+    # deshalb hätte der Guard darunter jeden codex_cli-Start mit 422
+    # abgelehnt, bevor der Subprozess überhaupt startet.
+    from ..services.llm_provider_registry import LlmProviderRegistry
+
+    definition = LlmProviderRegistry.connection_definition(resolved_route.provider_id)
+    is_cli_transport = definition is not None and definition.transport == "cli"
+
+    if (
+        resolved_api_key is None
+        and not is_cli_transport
+        and not is_local_endpoint(resolved_route.base_url_sanitized)
+    ):
         # Fallback-422 für Workspace-Default-Fälle (kein Frontend-Override).
         # Issue #1176: Die Markierung als ``failed`` steht nicht mehr hier,
         # sondern im Netz um den gesamten Startabschnitt — sonst gäbe es zwei

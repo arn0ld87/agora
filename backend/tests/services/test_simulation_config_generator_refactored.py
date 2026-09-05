@@ -214,3 +214,43 @@ class TestSimulationConfigGeneratorRefactored:
         assert result["total_simulation_hours"] == 48
         assert result["minutes_per_round"] == 30
         assert result["reasoning"] == "Parsed after fallback"
+
+
+class TestSimulationConfigGeneratorCodexCliProviderType:
+    """Regression for Issue #1418.
+
+    ``codex_cli`` (transport="cli", #1405) hat weder base_url noch api_key —
+    das ist der Normalfall, kein unaufgeloester Zustand. Ohne
+    ``provider_type`` fuellte der eigene ``LLMClient`` dieses Generators
+    ``.env``-Werte auf (beobachtet: das aus der Route gerouteten Modell ging
+    an ``https://api.minimax.io/v1`` → HTTP 400 "unknown model").
+    """
+
+    @patch("app.services.simulation_config_generator.LLMClient")
+    def test_llm_client_receives_provider_type_and_no_base_url(self, mock_llm_client_cls, monkeypatch):
+        from app.config import Config
+
+        monkeypatch.setattr(Config, "LLM_BASE_URL", "https://api.minimax.io/v1")
+        monkeypatch.setattr(Config, "LLM_API_KEY", "env-minimax-key")
+
+        SimulationConfigGenerator(provider_type="codex_cli", model_name="gpt-5.6-luna")
+
+        assert mock_llm_client_cls.call_args.kwargs["provider_type"] == "codex_cli"
+        assert mock_llm_client_cls.call_args.kwargs["base_url"] is None
+        assert mock_llm_client_cls.call_args.kwargs["api_key"] != "env-minimax-key"
+
+    @patch("app.services.simulation_config_generator.LLMClient")
+    def test_self_base_url_stays_env_fallback_for_rounds_config(self, mock_llm_client_cls, monkeypatch):
+        """``self.base_url`` bleibt unveraendert (auch fuer codex_cli): es
+        speist ``SimulationParameters.llm_base_url`` fuer die Simulations-
+        Runden — ein Pfad, den Issue #1418 nicht anfasst. Nur der eigene
+        ``LLMClient`` dieses Generators (Config-Generierung) darf nicht mit
+        dem Fallback gebaut werden (siehe Test oben).
+        """
+        from app.config import Config
+
+        monkeypatch.setattr(Config, "LLM_BASE_URL", "https://api.minimax.io/v1")
+
+        generator = SimulationConfigGenerator(provider_type="codex_cli", model_name="gpt-5.6-luna")
+
+        assert generator.base_url == "https://api.minimax.io/v1"

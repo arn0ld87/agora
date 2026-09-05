@@ -121,6 +121,116 @@ def test_a_report_that_never_asked_for_interviews_is_not_degraded_by_it():
 # --- Abschnitte und Export --------------------------------------------------
 
 
+# --- Personas ---------------------------------------------------------------
+
+
+def test_persona_fallback_stats_count_only_real_failures(monkeypatch):
+    """Nur ``generation_error`` zaehlt, nicht ``generation_source`` (#1419).
+
+    ``use_llm_for_profiles=False`` erzeugt ebenfalls regelbasierte Profile.
+    Wuerde der Zaehler daran haengen, waere die bewusste Wahl dauerhaft eine
+    Degradierung.
+    """
+    from app.services.report_agent import workflow as workflow_module
+
+    store = MagicMock()
+    store.read_json.return_value = [
+        {"generation_source": "llm"},
+        {"generation_source": "rule_based", "generation_error": "LLM tot"},
+        {"generation_source": "rule_based"},
+    ]
+    monkeypatch.setattr(workflow_module, "resolve_default_store", lambda: store)
+
+    agent = MagicMock()
+    agent.simulation_id = "sim_1"
+
+    assert workflow_module._load_persona_fallback_stats(agent) == (1, 3)
+
+
+def test_persona_fallback_stats_survive_an_unreadable_store(monkeypatch):
+    """Das Gate darf am Store nicht scheitern — gleiche Linie wie der Floor-Check."""
+    from app.services.report_agent import workflow as workflow_module
+
+    store = MagicMock()
+    store.read_json.side_effect = OSError("weg")
+    monkeypatch.setattr(workflow_module, "resolve_default_store", lambda: store)
+
+    agent = MagicMock()
+    agent.simulation_id = "sim_1"
+
+    assert workflow_module._load_persona_fallback_stats(agent) == (0, 0)
+
+
+
+def test_a_total_persona_fallback_is_blocking():
+    """Ein Bericht auf lauter Platzhaltern darf sich nicht vollstaendig nennen.
+
+    Issue #1419: 20 von 20 Personas kamen als regelbasierte Attrappen in die
+    Simulation. Ihre Beitraege stehen im Report wie echte Stimmen — der
+    Leser muss erfahren, dass keine einzige davon belastbar ist.
+    """
+    found = collect_run_degradations(persona_fallback_count=20, persona_total=20)
+
+    assert "20_of_20_personas_rule_based" in _reasons(found)
+    assert all(
+        entry["severity"] == "blocking"
+        for entry in found
+        if entry["component"] == "persona_generation"
+    )
+
+
+def test_a_partial_persona_fallback_is_a_warning():
+    """Echte Stimmen dabei — der Bericht bleibt vollstaendig, weist es aber aus."""
+    found = collect_run_degradations(persona_fallback_count=3, persona_total=20)
+
+    entries = [e for e in found if e["component"] == "persona_generation"]
+    assert len(entries) == 1
+    assert entries[0]["reason"] == "3_of_20_personas_rule_based"
+    assert entries[0]["severity"] == "warning"
+
+
+def test_personas_without_a_fallback_produce_nothing():
+    assert collect_run_degradations(persona_fallback_count=0, persona_total=20) == []
+
+
+def test_an_unknown_persona_count_is_not_treated_as_a_fallback():
+    """Ohne Zahlen wird nichts behauptet — dieselbe Linie wie beim Snapshot."""
+    assert collect_run_degradations(persona_fallback_count=0, persona_total=0) == []
+
+
+def test_a_blocking_persona_fallback_downgrades_the_report():
+    """Der Durchstich bis zum Status, nicht nur bis zur Liste (#1419)."""
+    found = collect_run_degradations(persona_fallback_count=5, persona_total=5)
+
+    assert (
+        apply_run_degradation_downgrade(ReportStatus.COMPLETED, found)
+        == ReportStatus.INCOMPLETE
+    )
+
+
+def test_the_contract_accepts_the_requirement_checker_component():
+    """Vorbefund aus #1302: der Wert wurde geschrieben, aber nie deklariert.
+
+    ``report.run_degradations`` ist zur Laufzeit eine Dict-Liste und wird
+    nirgends gegen ``RunDegradationModel`` validiert — der Zod-Spiegel im
+    Frontend schon, und der wies jede Antwort mit einem solchen Eintrag ab.
+    """
+    RunDegradationModel(
+        component="requirement_checker",
+        reason="missing_aspect_recommendation",
+        detail="Aspekt fehlt.",
+    )
+
+
+def test_the_contract_accepts_the_persona_component():
+    RunDegradationModel(
+        component="persona_generation",
+        reason="20_of_20_personas_rule_based",
+        detail="Alle Personas sind regelbasierte Platzhalter.",
+        severity="blocking",
+    )
+
+
 def test_failed_sections_are_named():
     found = collect_run_degradations(failed_section_indices=[2, 5])
 

@@ -185,8 +185,17 @@ def _chat_with_tools(
     # provozieren, fallen wir auf einen ``chat()``-Call ohne Tools zurück und liefern
     # ``tool_calls=[]`` — der Caller (workflow.generate_section_react) erkennt das
     # und nutzt den XML-Fallback-Parser. So bleibt das ReACT-Loop-Verhalten stabil.
+    #
+    # Issue #1423: ``codex_cli`` meldet hier bewusst ``"unknown"`` — es wird nie
+    # aus einer base_url erraten (AGENTS.md: keine Detection-Heuristik neben
+    # ``registry.py``). Der Grund des Short-Circuits trifft aber nicht zu: bei
+    # diesem Provider *wissen* wir, was das Backend versteht, weil wir es selbst
+    # sind. ``_CodexCliCompletions.create`` nimmt ``tools`` entgegen, schreibt
+    # die Schemas in den Prompt und übersetzt die Antwort zurück in
+    # ``tool_calls``. Ohne diese Ausnahme erreichten die Werkzeuge den Shim nie
+    # und der Report-Agent bliebe dauerhaft im XML-Fallback.
     provider = self._detect_provider()
-    if provider == "unknown":
+    if provider == "unknown" and not getattr(self, "_codex_cli_active", False):
         logger.info(
             "LLMClient.chat_with_tools: provider=unknown (model=%s, base=%s) — "
             "skipping tools= and falling back to chat() for XML-tool-call parsing",
