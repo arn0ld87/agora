@@ -164,6 +164,45 @@ class LLMClient:
                             active_pid,
                             exc,
                         )
+                if (
+                    active_pid
+                    and active_used
+                    and resolved_provider_type is None
+                ):
+                    # Codex-Review zu PR #1457: Der Descriptor-Lookup oben
+                    # haengt unter ``not api_key``, weil er dort primaer den
+                    # Key aufloest. Traegt die Active-Config nur ``model``
+                    # oder ``base_url`` bei und bringt der Caller den Key
+                    # selbst mit, ist der Provider damit zwar bekannt
+                    # (``active_provider_id`` wird unten gesetzt), sein Typ
+                    # aber nicht — die Audit-Zeile las sich dann als
+                    # ``provider_id=openai provider_type=unknown``.
+                    #
+                    # Der Typ kommt hier ausschliesslich aus der Registry,
+                    # also aus derselben Quelle wie im Zweig oben. Keine
+                    # Ableitung aus base_url oder Modellname: das waere eine
+                    # zweite Detection-Heuristik neben
+                    # ``registry.py::detect_provider`` und damit laut
+                    # AGENTS.md unzulaessig.
+                    try:
+                        from ..services.llm_provider_registry import LlmProviderRegistry
+
+                        descriptor = next(
+                            (
+                                p
+                                for p in LlmProviderRegistry().get_providers()
+                                if p.id == active_pid
+                            ),
+                            None,
+                        )
+                        if descriptor is not None:
+                            resolved_provider_type = descriptor.type
+                    except Exception as exc:  # noqa: BLE001 — Log-Annotation darf nie den Init brechen
+                        logger.warning(
+                            "Failed to resolve provider type for active config (provider=%s): %s",
+                            active_pid,
+                            exc,
+                        )
                 if active_pid and active_used:
                     active_provider_id = active_pid
 

@@ -437,3 +437,103 @@ class TestInitLogsProviderType:
         records = _init_log_records(caplog)
         assert len(records) == 1
         assert "provider_type=unknown" in records[0].getMessage()
+
+
+# ---------------------------------------------------------------------------
+# provider_type aus der Active-Config, wenn der Caller den Key mitbringt.
+# Codex-Review zu PR #1457: der Descriptor-Lookup haengt unter ``not api_key``,
+# weil er dort den Key aufloest. Traegt die Active-Config nur model/base_url
+# bei, ist ``active_provider_id`` gesetzt, der Typ aber nicht — die Zeile las
+# sich als ``provider_id=openai provider_type=unknown``.
+# ---------------------------------------------------------------------------
+
+
+class _StubDescriptor:
+    def __init__(self, provider_id: str, provider_type: str) -> None:
+        self.id = provider_id
+        self.type = provider_type
+        self.base_url = "https://api.openai.com/v1"
+
+
+def _stub_registry(monkeypatch: pytest.MonkeyPatch, *descriptors) -> None:
+    """Ersetzt die Provider-Registry; der Import ist funktionslokal, deshalb
+    wird das Modulattribut gepatcht."""
+
+    class _Registry:
+        def get_providers(self):
+            return list(descriptors)
+
+    monkeypatch.setattr(
+        "app.services.llm_provider_registry.LlmProviderRegistry", _Registry
+    )
+
+
+class TestInitActiveConfigProviderType:
+    _ACTIVE = {
+        "provider_id": "openai",
+        "model": "active-config-model",
+        "base_url": "https://api.openai.com/v1",
+    }
+
+    def test_provider_type_resolved_when_caller_supplies_key(self, caplog, monkeypatch):
+        """Genau der Pfad aus dem Review: Modell explizit, Key vom Caller,
+        base_url aus der Active-Config."""
+        _patch_openai(monkeypatch)
+        monkeypatch.setattr(
+            "app.llm.client._read_active_config_safely", lambda: dict(self._ACTIVE)
+        )
+        _stub_registry(monkeypatch, _StubDescriptor("openai", "openai"))
+        with caplog.at_level(logging.INFO, logger=_INIT_LOGGER):
+            LLMClient(model="gpt-5.6-luna", api_key="sk-test")
+        records = _init_log_records(caplog)
+        assert len(records) == 1
+        msg = records[0].getMessage()
+        assert "provider_id=openai" in msg
+        assert "provider_type=openai" in msg
+
+    def test_explicit_provider_type_wins_over_registry(self, caplog, monkeypatch):
+        """Ein explizit uebergebener Typ darf nicht ueberschrieben werden —
+        sonst verliert eine geroutete codex_cli-Connection ihre Identitaet."""
+        monkeypatch.setattr("app.llm.client.CodexCliClient", lambda *_a, **_kw: MagicMock())
+        monkeypatch.setattr(
+            "app.llm.client._read_active_config_safely", lambda: dict(self._ACTIVE)
+        )
+        _stub_registry(monkeypatch, _StubDescriptor("openai", "openai"))
+        with caplog.at_level(logging.INFO, logger=_INIT_LOGGER):
+            LLMClient(
+                model="gpt-5.6-terra",
+                api_key="codex-cli-local-session",
+                provider_type="codex_cli",
+            )
+        assert "provider_type=codex_cli" in _init_log_records(caplog)[0].getMessage()
+
+    def test_unknown_provider_id_stays_unknown(self, caplog, monkeypatch):
+        """Kennt die Registry den Provider nicht, bleibt "unknown" die
+        ehrliche Annotation — nicht geraten."""
+        _patch_openai(monkeypatch)
+        monkeypatch.setattr(
+            "app.llm.client._read_active_config_safely", lambda: dict(self._ACTIVE)
+        )
+        _stub_registry(monkeypatch)  # leere Registry
+        with caplog.at_level(logging.INFO, logger=_INIT_LOGGER):
+            LLMClient(model="gpt-5.6-luna", api_key="sk-test")
+        assert "provider_type=unknown" in _init_log_records(caplog)[0].getMessage()
+
+    def test_registry_failure_does_not_break_init(self, caplog, monkeypatch):
+        """Die Log-Annotation darf den Konstruktor nie zum Absturz bringen."""
+        _patch_openai(monkeypatch)
+        monkeypatch.setattr(
+            "app.llm.client._read_active_config_safely", lambda: dict(self._ACTIVE)
+        )
+
+        class _BrokenRegistry:
+            def __init__(self) -> None:
+                raise RuntimeError("registry kaputt")
+
+        monkeypatch.setattr(
+            "app.services.llm_provider_registry.LlmProviderRegistry", _BrokenRegistry
+        )
+        with caplog.at_level(logging.INFO, logger=_INIT_LOGGER):
+            client = LLMClient(model="gpt-5.6-luna", api_key="sk-test")
+        assert client.model == "gpt-5.6-luna"
+        assert "provider_type=unknown" in _init_log_records(caplog)[0].getMessage()

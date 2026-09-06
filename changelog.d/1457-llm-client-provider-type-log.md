@@ -7,3 +7,6 @@
   im Log aber nicht von einem fehlkonfigurierten Client zu unterscheiden. Die
   Provider-Erkennung selbst bleibt unveraendert; `provider_type` stammt aus
   derselben Aufloesung, aus der sich auch der Transport ergibt.
+  Der Typ wird auch dann aufgeloest, wenn der Aufrufer den Schluessel
+  selbst mitbringt und die aktive Konfiguration nur Modell oder Basis-URL
+  beisteuert (Review-Nachbesserung).
