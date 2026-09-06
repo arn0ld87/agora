@@ -83,3 +83,21 @@ export function useSystemStatus(
     refresh: polling.tick,
   }
 }
+
+/**
+ * Uebersetzt einen strukturierten Probe-Fehler aus /api/status in einen
+ * i18n-Schluessel.
+ *
+ * Das Backend liefert seit #1458 `{ code }` statt eines rohen Exception-Texts.
+ * Ein unbekannter Code faellt bewusst auf `unexpected` zurueck, damit ein neu
+ * eingefuehrter Backend-Code die Anzeige nicht leer laesst.
+ */
+const KNOWN_STATUS_ERROR_CODES = ['unreachable', 'timeout', 'auth', 'unexpected'] as const
+
+export function statusErrorKey(error: { code: string } | null | undefined): string {
+  if (!error) return ''
+  const code = (KNOWN_STATUS_ERROR_CODES as readonly string[]).includes(error.code)
+    ? error.code
+    : 'unexpected'
+  return `dashboard.system.error.${code}`
+}

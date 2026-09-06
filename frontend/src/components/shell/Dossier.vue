@@ -300,7 +300,7 @@ import { useCancelAction } from './useCancelAction'
 import { useObjectDetail } from '../../composables/useObjectDetail'
 import { useDeriveSimulation } from '../../composables/useDeriveSimulation'
 import { useStartFromPersona } from '../../composables/useStartFromPersona'
-import { useSystemStatus } from '../../composables/useSystemStatus'
+import { useSystemStatus, statusErrorKey } from '../../composables/useSystemStatus'
 import { formatShelfDate, statusText, type useShelf } from '../../composables/useShelf'
 import type { ConfidenceLabel } from '../../contracts/reportContract'
 
@@ -362,10 +362,10 @@ const systemRows = computed(() => {
   const s = systemStatus.status.value
   if (!s) return []
   const rows: { key: string; label: string; ok: boolean; hint: string }[] = [
-    { key: 'neo4j', label: t('dashboard.system.neo4j'), ok: s.neo4j.reachable, hint: s.neo4j.reachable ? '' : (s.neo4j.error ?? '') },
+    { key: 'neo4j', label: t('dashboard.system.neo4j'), ok: s.neo4j.reachable, hint: s.neo4j.reachable ? '' : (s.neo4j.error ? t(statusErrorKey(s.neo4j.error)) : '') },
   ]
   if (s.ollama.reachable !== null) {
-    rows.push({ key: 'ollama', label: t('dashboard.system.ollama'), ok: s.ollama.reachable, hint: s.ollama.reachable ? '' : (s.ollama.error ?? '') })
+    rows.push({ key: 'ollama', label: t('dashboard.system.ollama'), ok: s.ollama.reachable, hint: s.ollama.reachable ? '' : (s.ollama.error ? t(statusErrorKey(s.ollama.error)) : '') })
   }
   return rows
 })
