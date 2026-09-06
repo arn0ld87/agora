@@ -178,6 +178,15 @@ const routes: RouteRecordRaw[] = [
     component: () => import('../views/v4/steps/StepSimulationFeedView.vue'),
     props: true,
   },
+  // Redesign PR 7 (Audit §5 "Simulation live"): Vollbild-Instrument einer
+  // laufenden Simulation — Kopfzeile, Rundenachse, vier Bahnen. Ergaenzt,
+  // ersetzt aber (noch) nicht StepSimulationFeed.
+  {
+    path: '/v4/simulation/:simulationId/live',
+    name: 'SimulationLive',
+    component: () => import('../views/shell/SimulationLiveView.vue'),
+    props: true,
+  },
   {
     path: '/v4/report/:reportId',
     name: 'StepReport',
