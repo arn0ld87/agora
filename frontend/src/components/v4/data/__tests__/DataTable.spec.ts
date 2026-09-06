@@ -167,4 +167,55 @@ describe('DataTable', () => {
     expect(rightBlock![0]).toMatch(/font-variant-numeric:\s*tabular-nums/)
     expect(sfc).toMatch(/\.dt-td--mono\s*\{[^}]*font-family:\s*var\(--font-mono\)/)
   })
+
+  // ---- Regression aus dem Review zu Redesign PR 8 ----
+
+  it('Regression: anklickbare Zeilen sind per Tastatur bedienbar', async () => {
+    // `rowClick` haengte nur an @click. Eine <tr> ist nicht fokussierbar, also
+    // war die Zeilenauswahl fuer Tastaturnutzer nicht erreichbar — in der
+    // Ablage, in ActiveRunsCard und in RecentReportsCard gleichermassen.
+    const onRowClick = vi.fn()
+    const wrapper = mount(DataTable, {
+      props: {
+        columns: [{ key: 'name', label: 'Name' }],
+        rows: [{ id: 'a', name: 'Zeile A' }],
+        rowClick: onRowClick,
+      },
+    })
+
+    const row = wrapper.find('tbody tr')
+    expect(row.attributes('tabindex')).toBe('0')
+
+    await row.trigger('keydown', { key: 'Enter' })
+    expect(onRowClick).toHaveBeenCalledTimes(1)
+
+    await row.trigger('keydown', { key: ' ' })
+    expect(onRowClick).toHaveBeenCalledTimes(2)
+
+    // Andere Tasten loesen nichts aus.
+    await row.trigger('keydown', { key: 'a' })
+    expect(onRowClick).toHaveBeenCalledTimes(2)
+  })
+
+  it('Regression: ohne rowClick bleibt die Zeile nicht fokussierbar', () => {
+    const wrapper = mount(DataTable, {
+      props: {
+        columns: [{ key: 'name', label: 'Name' }],
+        rows: [{ id: 'a', name: 'Zeile A' }],
+      },
+    })
+    expect(wrapper.find('tbody tr').attributes('tabindex')).toBeUndefined()
+  })
+
+  it('Regression: der Fokusring der Zeile traegt keine Transition', () => {
+    // Fallstrick aus PR 5: der Playwright-Fokuscheck misst nach einem einzigen
+    // requestAnimationFrame; unter einer Transition stuende der Ring dann noch
+    // nicht und der Accessibility-Smoke wuerde rot.
+    const source = readFileSync(resolve(here, '../DataTable.vue'), 'utf8')
+    const rule = source.match(/\.dt-body-row--clickable:focus-visible \{([^}]*)\}/)
+    expect(rule).not.toBeNull()
+    expect(rule?.[1]).toMatch(/outline: 2px solid var\(--accent\)/)
+    expect(rule?.[1]).not.toMatch(/transition/)
+  })
 })
+

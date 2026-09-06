@@ -368,7 +368,7 @@ const laufTableRows = computed<LaufTableRow[]>(() =>
     id: `${obj.kind}:${obj.id}`,
     title: obj.title,
     statusLine: obj.statusLine,
-    progress: obj.active?.progress ?? null,
+    progress: obj.progress ?? obj.active?.progress ?? null,
     personaCount: obj.personaCount ?? null,
     updatedAt: formatUpdatedAt(obj.updatedAt),
     simulationId: simulationIdForLauf(obj),

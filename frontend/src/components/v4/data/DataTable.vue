@@ -65,6 +65,27 @@ function cellSlotName(key: string): string {
   return `cell-${key}`
 }
 
+/**
+ * Tastaturbedienung fuer anklickbare Zeilen.
+ *
+ * `rowClick` haengte bislang nur an `@click` — eine `<tr>` ist nicht
+ * fokussierbar, also war die Zeilenauswahl fuer Tastaturnutzer schlicht nicht
+ * erreichbar (Befund am Redesign-PR 8, betraf alle drei Verbraucher: Ablage,
+ * ActiveRunsCard, RecentReportsCard). Mit `rowClick` bekommt die Zeile
+ * `tabindex="0"` und reagiert zusaetzlich auf Enter und Leertaste.
+ *
+ * Bewusst KEIN `role="button"` auf der `<tr>`: das nimmt der Zeile ihre
+ * Tabellensemantik, und der Screenreader verliert Zeilen-/Spaltenbezug. Die
+ * Zeile bleibt eine Zeile und wird lediglich fokussierbar.
+ */
+function onRowKeydown(event: KeyboardEvent, row: TRow): void {
+  if (!props.rowClick) return
+  if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar') return
+  // Leertaste scrollt sonst die Seite, waehrend die Zeile ausgewaehlt wird.
+  event.preventDefault()
+  props.rowClick(row)
+}
+
 function alignClass(align?: 'left' | 'right' | 'center'): string {
   if (align === 'right') return 'dt-cell--right'
   if (align === 'center') return 'dt-cell--center'
@@ -114,7 +135,9 @@ const hasActions = computed(() => !!useSlots()['actions'])
               'dt-body-row--selected': !!rowSelected && rowSelected(row),
             }"
             :aria-current="rowSelected && rowSelected(row) ? 'true' : undefined"
+            :tabindex="rowClick ? 0 : undefined"
             @click="rowClick ? rowClick(row) : undefined"
+            @keydown="onRowKeydown($event, row)"
           >
             <td
               v-for="col in columns"
@@ -214,6 +237,16 @@ const hasActions = computed(() => !!useSlots()['actions'])
 
 .dt-body-row--clickable {
   cursor: pointer;
+}
+
+/* Die anklickbare Zeile ist fokussierbar (tabindex) und braucht deshalb einen
+   sichtbaren Ring. Bewusst ohne `transition`: der Playwright-Fokuscheck misst
+   nach einem einzigen requestAnimationFrame, unter einer Transition stuende
+   der Ring dann noch nicht. `outline-offset` negativ, damit der Ring innerhalb
+   der Zeile bleibt und die Hairline der Nachbarzeile nicht ueberdeckt. */
+.dt-body-row--clickable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 /* Selected: Accent-Tint + 2px Kupfer-Kante links (Audit §Komponentenstil). */
