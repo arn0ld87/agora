@@ -12,6 +12,7 @@ import { useI18n } from 'vue-i18n'
 import { renderMarkdown } from '../../../utils/markdown'
 import { getAgentLog, getConsoleLog, getReportEvidence } from '../../../api/report'
 import type { GenerateReportData } from '../../../api/report'
+import { isApiError } from '../../../api/envelope'
 import { createSimulationBranch } from '../../../api/simulation'
 import { getRun } from '../../../api/runs'
 import { getRunLlmRouting } from '../../../api/llmRouting'
@@ -620,9 +621,32 @@ function scheduleEvidenceRetry(): void {
 
 async function loadEvidence() {
   if (!props.reportId) return
+  let res: ApiResult
   try {
-    const res = (await getReportEvidence(props.reportId)) as ApiResult
-    if (!res?.success) { scheduleEvidenceRetry(); return }
+    res = (await getReportEvidence(props.reportId)) as ApiResult
+  } catch (err) {
+    // HTTP-/Transport-Fehler (z.B. 404, solange die Evidenzkarte noch nicht
+    // geschrieben ist): der Interceptor in api/index.ts wirft dafuer eine
+    // ApiError, kein Schema-Mismatch. Das gehoert in den bestehenden Retry
+    // (Budget/Terminal-Semantik siehe Kommentarblock oben), nicht in
+    // recordSchemaError — sonst zeigt die UI faelschlich "Schema-Mismatch"
+    // fuer einen erwartbaren transienten Zustand.
+    //
+    // Codex-Review PR #1456: HTTP 422 ist keine Transienz wie 404, sondern
+    // der dokumentierte contract_violation-Fall (backend/app/api/report.py:
+    // GET .../evidence validiert die persistierte Map und liefert 422, wenn
+    // sie auch nach Migration nicht vertragskonform ist). Ein Retry wuerde
+    // dasselbe dauerhaft ungueltige Artefakt zehn Minuten lang erneut
+    // anfordern und den Verstoss am Ende still verschwinden lassen. Deshalb
+    // wie einen Zod-Schema-Mismatch behandeln: sichtbar in der roten Box,
+    // kein Retry. Unterscheidung ausschliesslich ueber ApiError.status
+    // (structured field), kein Textvergleich auf der Fehlermeldung.
+    if (isApiError(err) && err.status !== 422) { scheduleEvidenceRetry(); return }
+    recordSchemaError('evidence', err)
+    return
+  }
+  if (!res?.success) { scheduleEvidenceRetry(); return }
+  try {
     const parsed = EvidenceMapSchema.parse(res.data)
     evidenceMap.value = parsed
     resetEvidenceRetryState()
