@@ -15,6 +15,7 @@ import type { GenerateReportData } from '../../../api/report'
 import { createSimulationBranch } from '../../../api/simulation'
 import { getRun } from '../../../api/runs'
 import { getRunLlmRouting } from '../../../api/llmRouting'
+import { buildReportReaderView } from '@/composables/useReportReaderView'
 import { useAiModelRefAdapter } from '@/composables/useAiModelRefAdapter'
 import {
   RunBudgetStatusSchema,
@@ -32,7 +33,7 @@ import ReportModelControls from '../../step4/ReportModelControls.vue'
 import ReportModeControls from '../../step4/ReportModeControls.vue'
 import ReportOutlinePanel from '../../step4/ReportOutlinePanel.vue'
 import ReportLiveLogPane from '../../step4/ReportLiveLogPane.vue'
-import ReportFinalView from '../../step4/ReportFinalView.vue'
+import ReportReader from '../../step4/ReportReader.vue'
 import RunUsageBreakdown from '@/components/v4/run-budget/RunUsageBreakdown.vue'
 import { useReportExports } from '../../../composables/useReportExports'
 import type { AiModelRef } from '../../../contracts/aiModelRef'
@@ -44,6 +45,7 @@ import {
   EvidenceMapSchema,
   type EvidenceMap,
   type EvidenceOmission,
+  type ReportOutline as ReportOutlineData,
 } from '../../../contracts/reportContract'
 import {
   ReportModeSchema,
@@ -517,6 +519,31 @@ const sectionHtml = computed((): Record<string, string> => {
 const evidenceSections = computed(() => evidenceMap.value?.sections || [])
 const evidenceIndex = computed(() => evidenceMap.value?.evidence_index || {})
 
+// PR 6 (ReportReader): reportOutline kommt aus dem Status-/Report-Payload
+// (`report.outline` bzw. Status-Poll) und ist nicht in jedem Report-Pfad
+// gesetzt (z. B. Legacy-Reports ohne Outline-Feld). ReportReader braucht
+// aber immer eine Outline mit mindestens einem Abschnitt, um die
+// Dreispalten-Leseumgebung aufzuspannen — ohne Fallback wuerde der
+// abgeschlossene Bericht ersatzlos verschwinden.
+//
+// Die Auswahl liegt in `buildReportReaderView`, weil Outline und Abschnitts-
+// HTML zusammengehoeren: getrennt gewaehlt ergaben sie bei persistierten
+// Berichten eine N-Abschnitte-Outline neben einem einzigen HTML-Block, also
+// N-1 leere Abschnitte. Begruendung im Detail dort.
+const readerView = computed(() =>
+  buildReportReaderView({
+    outline: reportOutline.value,
+    sectionHtml: sectionHtml.value,
+    reportHtml: reportHtml.value,
+    evidenceSections: evidenceSections.value,
+    fallbackTitle: t('step4.title'),
+    fullReportLabel: t('step4.reader.outlineFullReport'),
+  }),
+)
+
+const readerOutline = computed((): ReportOutlineData => readerView.value.outline)
+const readerSectionHtml = computed((): Record<string, string> => readerView.value.sectionHtml)
+
 function navigateToAnchor(anchor: string | null | undefined) {
   const parsed = parseSourceAnchor(anchor)
   if (!parsed) return
@@ -738,21 +765,21 @@ onUnmounted(() => { stopPolling(); clearEvidenceRetry() })
         </div>
 
         <ReportModelControls
-          v-if="resolvedSimulationId || simulationId"
+          v-if="(resolvedSimulationId || simulationId) && !(phase === 2 && reportHtml)"
           :model-value="reportRoute"
           :is-regenerating="isRegenerating"
           @update:model-value="onReportRoutePicked"
           @regenerate="regenerateWithModel"
         />
         <ReportModeControls
-          v-if="resolvedSimulationId || simulationId"
+          v-if="(resolvedSimulationId || simulationId) && !(phase === 2 && reportHtml)"
           v-model="reportMode"
           :disabled="isRegenerating || phase === 1"
         />
       </article>
 
       <ReportOutlinePanel
-        v-if="reportOutline"
+        v-if="reportOutline && !(phase === 2 && reportHtml)"
         :outline="reportOutline"
         :generated-sections="generatedSections"
         :section-html="sectionHtml"
@@ -773,19 +800,26 @@ onUnmounted(() => { stopPolling(); clearEvidenceRetry() })
         @console-scroll-to-bottom="consoleSticky.scrollToBottom"
       />
 
-      <!-- Final report + conversation hand-off (extracted to ReportFinalView) -->
-      <ReportFinalView
+      <!-- Leseumgebung fuer den abgeschlossenen Bericht (PR 6: ReportReader
+           ersetzt die vormalige ReportFinalView — Dreispalten-Layout statt
+           Formular-Stack, siehe docs/ui/premium-redesign-2026-09). -->
+      <ReportReader
         v-if="phase === 2 && reportHtml"
-        :report-html="reportHtml"
-        :red-team-findings="redTeamFindings"
+        :outline="readerOutline"
+        :section-html="readerSectionHtml"
         :evidence-sections="evidenceSections"
         :evidence-index="evidenceIndex"
+        :red-team-findings="redTeamFindings"
         :evidence-unavailable="evidenceUnavailable"
-        :selected-evidence-section="selectedEvidenceSection"
+        :report-route="reportRoute"
+        :report-mode="reportMode"
+        :is-regenerating="isRegenerating"
         :resolved-simulation-id="resolvedSimulationId"
         :simulation-id="simulationId"
         :branch-busy="branchBusy"
-        @update:selected-evidence-section="selectedEvidenceSection = $event"
+        @update:report-route="onReportRoutePicked"
+        @update:report-mode="reportMode = $event"
+        @regenerate="regenerateWithModel"
         @navigate="navigateToAnchor"
         @create-branch="createBranchFromReport"
         @go-conversation="goConversation"

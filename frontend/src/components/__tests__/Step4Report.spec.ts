@@ -172,6 +172,36 @@ const i18n = createI18n({
       'step4.reportConfirm.startButton': 'Report starten',
       'step4.reportConfirm.stopButton': 'Abbrechen',
       'step4.reportConfirm.stopDisabledTip': 'Abbruch verfügbar nach Backend-Slice 6',
+      'step4.view.printPdf': 'Als PDF drucken (Browser)',
+      'step4.view.evidenceJson': 'Evidence JSON',
+      'step4.export.evidencePending': 'Evidenzkarte wird noch erzeugt.',
+      'step4.export.evidenceUnavailable': 'Evidenzkarte nicht verfügbar.',
+      'step4.reader.outlineTitle': 'Bericht',
+      'step4.reader.outlineSectionsCount': '{count} Abschnitte',
+      'step4.reader.outlineSummary': 'Zusammenfassung',
+      'step4.reader.outlineSection': 'Abschnitt {num}',
+      'step4.reader.appendixTitle': 'Anhang',
+      'step4.reader.appendixHypotheses': '{count} Hypothesen',
+      'step4.reader.appendixDataGaps': '{count} Datenlücken',
+      'step4.reader.appendixEvidence': '{count} Belege',
+      'step4.reader.appendixRedTeam': '{count} Red-Team-Befunde',
+      'step4.reader.railTitle': 'Aussagen in Abschnitt {num}',
+      'step4.reader.railEvidenceTitle': 'Belege an dieser Stelle',
+      'step4.reader.railGapsTitle': 'Datenlücken in diesem Abschnitt',
+      'step4.reader.railRedTeamTitle': 'Red-Team zu Abschnitt {num}',
+      'step4.reader.railEmpty': 'Keine Aussagen für diesen Abschnitt erfasst.',
+      'step4.reader.railToggleHide': 'Belegrand ausblenden',
+      'step4.reader.railToggleShow': 'Belegrand einblenden',
+      'step4.reader.confidence.speculative': 'spekulativ',
+      'step4.reader.confidence.low': 'niedrig',
+      'step4.reader.confidence.medium': 'mittel',
+      'step4.reader.confidence.high': 'hoch',
+      'step4.reader.confidence.verified': 'verifiziert',
+      'step4.reader.regenerate.openButton': 'Neu generieren',
+      'step4.reader.regenerate.title': 'Bericht neu generieren',
+      'step4.reader.regenerate.description': 'Modell und Modus wählen.',
+      'step4.reader.regenerate.confirmButton': 'Regenerieren',
+      'step4.reader.regenerate.cancelButton': 'Abbrechen',
     },
   },
 })
@@ -196,12 +226,12 @@ const globalStubs = {
   ReportBranchControls: true,
 }
 
-// Issue #987: ReportFinalView traegt den `.json`-Knopf. Als echte Komponente
-// zieht sie halbe Report-Ansicht mit; als Stub mit Emit-Deklaration laesst
-// sie sich gezielt ausloesen, ohne den Produktionspfad zu umgehen — der
-// Handler in Step4Report ist derselbe.
+// Issue #987: ReportReader (PR 6, vormals ReportFinalView) traegt den
+// `.json`-Knopf. Als echte Komponente zieht sie halbe Report-Ansicht mit;
+// als Stub mit Emit-Deklaration laesst sie sich gezielt ausloesen, ohne den
+// Produktionspfad zu umgehen — der Handler in Step4Report ist derselbe.
 const REPORT_FINAL_VIEW_STUB = {
-  name: 'ReportFinalView',
+  name: 'ReportReader',
   template: '<div data-testid="report-final-view" />',
   emits: ['download-json'],
 }
@@ -271,7 +301,7 @@ describe('Step4Report — Evidence-Auslassung im JSON-Export (Issue #987)', () =
       props: { reportId: 'report_test01' },
       global: {
         plugins: [router, realI18n],
-        stubs: { ...globalStubs, ReportFinalView: REPORT_FINAL_VIEW_STUB },
+        stubs: { ...globalStubs, ReportReader: REPORT_FINAL_VIEW_STUB },
       },
     })
   }
@@ -951,6 +981,14 @@ describe('Step4Report — ConfidenceBadge-Integration (Sub-Slice 16a)', () => {
         report_id: 'report_test01',
         simulation_id: 'sim_test01',
         outline: VALID_OUTLINE_2SECTIONS,
+        // Ein frisch generierter Bericht liefert Abschnittsinhalte mit; nur so
+        // kann ReportReader mehr als einen Abschnitt aufspannen. Der
+        // persistierte Pfad ohne `sections` wird eigens weiter unten geprueft.
+        sections: {
+          1: { content: 'Inhalt Abschnitt 1' },
+          2: { content: 'Inhalt Abschnitt 2' },
+          3: { content: 'Inhalt Abschnitt 3' },
+        },
       },
     })
     ;(getReport as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -963,14 +1001,68 @@ describe('Step4Report — ConfidenceBadge-Integration (Sub-Slice 16a)', () => {
     })
   })
 
-  it('rendert 2 ConfidenceBadge-Instanzen für 2 Sections mit Evidence', async () => {
+  // PR 6 (Premium-Redesign, "Bericht lesen"): der abgeschlossene Bericht
+  // rendert nicht mehr ueber ReportOutlinePanel/ConfidenceBadge (Audit-Kritik:
+  // "Confidence als '0% · spekulativ'-Chip ohne Erklaerung"), sondern ueber
+  // ReportReader → ReportEvidenceRail, die pro Claim ein Confidence-WORT statt
+  // einer nackten Prozentzahl zeigt. Dieser Test belegt die neue Kette statt
+  // der alten Komponente.
+  it('zeigt fuer Claims in beiden Sections ein Confidence-Wort im Belegrand statt einer Prozentzahl-Badge', async () => {
     const wrapper = mountComponent()
     await wrapper.vm.$nextTick()
     await new Promise((r) => setTimeout(r, 80))
     await wrapper.vm.$nextTick()
 
-    const badges = wrapper.findAllComponents({ name: 'ConfidenceBadge' })
-    expect(badges.length).toBeGreaterThanOrEqual(2)
+    // ConfidenceBadge (Prozentzahl-Pattern) ist in der Leseumgebung nicht
+    // mehr vorhanden.
+    expect(wrapper.findAllComponents({ name: 'ConfidenceBadge' })).toHaveLength(0)
+
+    // Section 1 ist per Default aktiv (erste Evidence-Section) und zeigt das
+    // Confidence-Wort "mittel" fuer claim_01.
+    expect(wrapper.text()).toContain('mittel')
+    expect(wrapper.text()).toContain('claim_01')
+
+    // Outline-Klick auf Abschnitt 2 schaltet den Belegrand um und zeigt
+    // claim_02 mit demselben Wort-Pattern.
+    const outlineItems = wrapper.findAll('[data-testid="report-reader-outline-item"]')
+    const section2Tab = outlineItems.find((item) => item.text().includes('Abschnitt 2'))
+    expect(section2Tab).toBeDefined()
+    await section2Tab!.trigger('click')
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.text()).toContain('claim_02')
+  })
+
+  // Regression aus dem PR-6-Review (Codex): ein aus der Persistenz geladener
+  // Bericht (`_status_from_persisted_report`) liefert weder `sections` noch
+  // Abschnittsinhalte — nur `markdown_content` als Ganzes. Frueher waehlten
+  // Outline und Abschnitts-HTML ihren Fallback unabhaengig voneinander: die
+  // Outline behielt ihre drei Abschnitte, das HTML bestand aus einem Block,
+  // und Abschnitt 2 und 3 oeffneten leer.
+  it('persistierter Bericht ohne Abschnittsinhalte: ein Sammelabschnitt statt leerer Abschnitte', async () => {
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: {
+        status: 'completed',
+        report_id: 'report_test01',
+        simulation_id: 'sim_test01',
+        outline: VALID_OUTLINE_2SECTIONS,
+      },
+    })
+
+    const wrapper = mountComponent()
+    await wrapper.vm.$nextTick()
+    await new Promise((r) => setTimeout(r, 80))
+    await wrapper.vm.$nextTick()
+
+    const sections = wrapper.findAll('[data-testid="report-reader-section"]')
+    expect(sections).toHaveLength(1)
+    // Der komplette Bericht steht darin — nichts geht verloren.
+    expect(sections[0].text()).toContain('Testbericht')
+    expect(sections[0].text()).toContain('Inhalt.')
+    // Kein leerer Abschnitt 2/3 mehr in der Lesespalte.
+    const outlineItems = wrapper.findAll('[data-testid="report-reader-outline-item"]')
+    expect(outlineItems.some((item) => item.text().includes('Abschnitt 2'))).toBe(false)
   })
 })
 
