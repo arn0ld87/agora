@@ -80,4 +80,31 @@ describe('Select', () => {
     expect(w.find('select').attributes('aria-label')).toBeUndefined()
     expect(w.find('.v4-select-label').exists()).toBe(false)
   })
+
+  it('verknüpft das sichtbare Label über for/id mit dem select', () => {
+    // Ein Klick auf das Label soll das Steuerelement fokussieren — dafür reicht
+    // aria-label nicht, es braucht die for/id-Verknüpfung.
+    const w = mount(Select, {
+      props: { modelValue: 'de', options: OPTIONS, label: 'Land' },
+    })
+    const selectId = w.find('select').attributes('id')
+
+    expect(selectId).toBeTruthy()
+    expect(w.find('label').attributes('for')).toBe(selectId)
+  })
+
+  it('required setzt die native Validierungs-Constraint am select', () => {
+    // Der Sternchen-Marker allein verhindert kein Absenden ohne Auswahl.
+    const w = mount(Select, {
+      props: { modelValue: '', options: OPTIONS, label: 'Land', required: true, placeholder: 'Bitte wählen' },
+    })
+    expect((w.find('select').element as HTMLSelectElement).required).toBe(true)
+  })
+
+  it('ohne required bleibt das select ohne Validierungs-Constraint', () => {
+    const w = mount(Select, {
+      props: { modelValue: 'de', options: OPTIONS, label: 'Land' },
+    })
+    expect((w.find('select').element as HTMLSelectElement).required).toBe(false)
+  })
 })

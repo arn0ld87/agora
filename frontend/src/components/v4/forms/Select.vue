@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useId } from 'vue'
+
 withDefaults(defineProps<{
   modelValue: string
   options: Array<{ value: string; label: string }>
@@ -18,18 +20,26 @@ withDefaults(defineProps<{
 defineEmits<{
   'update:modelValue': [value: string]
 }>()
+
+// Verknuepft sichtbares <label> und <select>, damit ein Klick auf das Label das
+// Steuerelement fokussiert. Das aria-label bleibt zusaetzlich stehen: es ist der
+// Namensgeber fuer Aufrufer, die die Komponente ohne sichtbares Label einsetzen
+// (axe-core select-name, Issue #838).
+const selectId = useId()
 </script>
 
 <template>
   <div class="v4-select-field">
-    <label v-if="label" class="v4-select-label">
+    <label v-if="label" :for="selectId" class="v4-select-label">
       {{ label }}<span v-if="required" class="v4-select-required">*</span>
     </label>
     <div class="v4-select-wrap" :class="{ 'v4-select-wrap--disabled': disabled }">
       <select
+        :id="selectId"
         class="v4-select v4-state-interactive"
         :value="modelValue"
         :disabled="disabled"
+        :required="required"
         :aria-label="label"
         @change="$emit('update:modelValue', ($event.target as HTMLSelectElement).value)"
       >

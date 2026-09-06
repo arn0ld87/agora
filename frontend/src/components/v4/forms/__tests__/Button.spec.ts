@@ -5,7 +5,12 @@
 
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, resolve } from 'node:path'
 import Button, { type ButtonVariant } from '../Button.vue'
+
+const here = dirname(fileURLToPath(import.meta.url))
 
 describe('Button', () => {
   it('Test 1: Default-Mount nutzt primary + md (kein --md-Suffix in Klassenliste)', () => {
@@ -111,5 +116,15 @@ describe('Button', () => {
       const wrapper = mount(Button, { props: { variant }, slots: { default: 'X' } })
       expect(wrapper.find('button').classes()).toContain(`btn--${variant}`)
     }
+
+    // Die Liste oben belegt nur, dass die vier Varianten funktionieren — sie
+    // würde eine fünfte nicht bemerken. Der Union-Typ ist die eigentliche
+    // Quelle der Wahrheit, also wird er direkt geprüft: eine wieder eingeführte
+    // Variante (tinted/accent/info/plasma/glass) fällt hier auf.
+    const sfc = readFileSync(resolve(here, '../Button.vue'), 'utf8')
+    const union = sfc.match(/export type ButtonVariant =([\s\S]*?)\n\nexport/)
+    expect(union).not.toBeNull()
+    const deklarierte = [...union![1].matchAll(/'([a-z]+)'/g)].map((m) => m[1])
+    expect(deklarierte.sort()).toEqual([...erlaubteVarianten].sort())
   })
 })
