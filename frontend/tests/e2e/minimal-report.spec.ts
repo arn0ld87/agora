@@ -56,6 +56,7 @@ import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { test, expect, request, type APIRequestContext } from '@playwright/test';
 import { injectAuthToken, authHeader } from './helpers/auth';
+import { ReportReaderTestId } from './helpers/testIds';
 import { assertStubModeActive } from './helpers/diagnostics';
 import { uploadMarkdown } from './helpers/upload';
 import { triggerGraphBuild, pollGraphReady } from './helpers/graph';
@@ -303,27 +304,33 @@ test.describe('M11.4c · Minimalreport-Smoke', () => {
         // Nachfolgende expect(outlineList).toBeVisible() ist der Mount-Indikator via Auto-Wait.
         await page.goto(`/report/${report_id}`, { waitUntil: 'domcontentloaded' });
 
-        // Outline-Panel muss sichtbar sein
-        // ReportOutlinePanel.vue:50 — article.card mit ol.outline
-        // Wird in Step4Report angezeigt wenn reportOutline !== null (Step4Report.vue:438).
-        const outlineList = page.locator('ol.outline');
+        // Outline muss sichtbar sein.
+        // Seit Redesign-PR 6 rendert die abgeschlossene Leseansicht
+        // ReportOutline.vue (nav[role=tablist] mit Buttons) statt des
+        // vormaligen ReportOutlinePanel (ol > li > span.outline-title).
+        // Selektiert wird deshalb über den Testid-Kontrakt statt über
+        // CSS-Klassen — so, wie es die Repo-Konvention ohnehin vorsieht und
+        // wie es einen Markup-Wechsel unbeschadet übersteht.
+        const outlineList = page.getByTestId(ReportReaderTestId.outline);
         await expect(
           outlineList,
-          'ol.outline muss sichtbar sein (ReportOutlinePanel geladen)',
+          `[data-testid=${ReportReaderTestId.outline}] muss sichtbar sein (ReportOutline geladen)`,
         ).toBeVisible({ timeout: 30_000 });
 
         // ===================================================================
         // Schritt 10: Alle 12 Section-Header aus dem Snapshot assertieren
         //
-        // ReportOutlinePanel.vue:72 — span.outline-title enthält den Section-Titel.
         // Der Stub liefert exakt die 12 Snapshot-Titel via _stub_plan_response().
-        // Alle 12 Titel müssen als span.outline-title sichtbar sein.
+        // Jeder Titel muss als Outline-Eintrag sichtbar sein — unverändert
+        // dieselbe Zusicherung wie zuvor, nur über den Testid adressiert.
         // ===================================================================
         for (const header of REQUIRED_SECTION_HEADERS) {
-          const titleLocator = page.locator('span.outline-title', { hasText: header });
+          const titleLocator = page
+            .getByTestId(ReportReaderTestId.outlineItem)
+            .filter({ hasText: header });
           await expect(
             titleLocator,
-            `Section-Header "${header}" muss als span.outline-title sichtbar sein`,
+            `Section-Header "${header}" muss als Outline-Eintrag sichtbar sein`,
           ).toBeVisible({ timeout: 10_000 });
         }
 
