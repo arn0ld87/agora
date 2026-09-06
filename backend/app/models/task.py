@@ -32,7 +32,12 @@ class Task:
     created_at: datetime
     updated_at: datetime
     progress: int = 0              # Overall progress percentage 0-100
-    message: str = ""              # Status message
+    message: str = ""              # Status message — human-readable fallback (may be English)
+    # Maschinenlesbarer i18n-Schluessel fuer ``message``. Backend liefert nur
+    # den Schluessel, die Uebersetzung gehoert ins Frontend (Issue #1458).
+    # ``message`` bleibt daneben als Fallback erhalten, damit aeltere
+    # Consumer, die ``message_key`` nicht kennen, nicht leer laufen.
+    message_key: Optional[str] = None
     result: Optional[Dict] = None  # Task result
     error: Optional[str] = None    # Error message
     metadata: Dict = field(default_factory=dict)  # Additional metadata
@@ -48,6 +53,7 @@ class Task:
             "updated_at": self.updated_at.isoformat(),
             "progress": self.progress,
             "message": self.message,
+            "message_key": self.message_key,
             "progress_detail": self.progress_detail,
             "result": self.result,
             "error": self.error,
@@ -187,6 +193,7 @@ class TaskManager:
         status: Optional[TaskStatus] = None,
         progress: Optional[int] = None,
         message: Optional[str] = None,
+        message_key: Optional[str] = None,
         result: Optional[Dict] = None,
         error: Optional[str] = None,
         progress_detail: Optional[Dict] = None
@@ -198,7 +205,8 @@ class TaskManager:
             task_id: Task ID
             status: New status
             progress: Progress
-            message: Message
+            message: Message (human-readable fallback)
+            message_key: Maschinenlesbarer i18n-Schluessel fuer ``message``
             result: Result
             error: Error message
             progress_detail: Detailed progress information
@@ -213,6 +221,8 @@ class TaskManager:
                     task.progress = progress
                 if message is not None:
                     task.message = message
+                if message_key is not None:
+                    task.message_key = message_key
                 if result is not None:
                     task.result = result
                 if error is not None:
@@ -232,6 +242,7 @@ class TaskManager:
             status=TaskStatus.COMPLETED,
             progress=100,
             message="Task completed",
+            message_key="task.completed",
             result=result
         )
 
@@ -241,6 +252,7 @@ class TaskManager:
             task_id,
             status=TaskStatus.FAILED,
             message="Task failed",
+            message_key="task.failed",
             error=error
         )
 

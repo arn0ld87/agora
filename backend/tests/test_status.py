@@ -12,12 +12,14 @@ import requests
 from app import __version__
 from app.config import Config
 from app.api.status import (
+    _classify_status_error,
     _get_backend_status,
     _get_e2e_status,
     _get_neo4j_status,
     _get_ollama_status,
     _get_disk_status,
 )
+from app.contracts.system_status_contract import StatusCheckError, StatusErrorCode
 
 
 @pytest.fixture(autouse=True)
@@ -105,6 +107,22 @@ class TestStatusFunctions:
         assert 'total_bytes' in result['uploads']
         assert 'free_bytes' in result['uploads']
         assert 'used_pct' in result['uploads']
+
+    def test_get_disk_status_error_is_structured(self, monkeypatch):
+        """#1458: ``shutil.disk_usage``-Fehler liefert einen Code, keinen Rohtext.
+
+        Vorher landete ``str(e)`` (kann Dateipfade enthalten) direkt in der
+        Antwort — ein Informationsleck und für ein Frontend nicht darstellbar.
+        """
+        def _raise(_path):
+            raise PermissionError("[Errno 13] Permission denied: '/some/secret/path'")
+
+        monkeypatch.setattr('app.api.status.shutil.disk_usage', _raise)
+
+        result = _get_disk_status()
+
+        assert result['uploads']['error'] == {"code": StatusErrorCode.AUTH.value}
+        assert 'secret' not in str(result)
 
     def test_get_ollama_status_reachable(self):
         """Test Ollama status when service is reachable."""
@@ -248,14 +266,18 @@ class TestStatusFunctions:
             result = _get_neo4j_status()
 
         assert result['reachable'] is False
-        assert result['error'] is not None
-        # Der konkrete NoneType-AttributeError darf nicht durchschlagen —
-        # er ist ein internes Symptom, nicht der echte Connectivity-Fehler.
-        assert "'NoneType'" not in result['error'], (
-            f"NoneType-AttributeError leakt durch: {result['error']!r}"
+        # Der konkrete NoneType-AttributeError darf nicht durchschlagen — seit
+        # #1458 steht ohnehin kein Rohtext mehr in der Antwort, nur noch ein
+        # geschlossener Code. Die Wächter-Assertion prüft die gesamte
+        # Serialisierung, damit ein künftiges Feld den Leak nicht wieder
+        # einschleppen kann.
+        assert result['error'] == {"code": StatusErrorCode.UNREACHABLE.value}
+        serialized = str(result)
+        assert "'NoneType'" not in serialized, (
+            f"NoneType-AttributeError leakt durch: {serialized!r}"
         )
-        assert "verify_connectivity'" not in result['error'], (
-            f"NoneType-AttributeError leakt durch: {result['error']!r}"
+        assert "verify_connectivity'" not in serialized, (
+            f"NoneType-AttributeError leakt durch: {serialized!r}"
         )
 
 
@@ -330,7 +352,9 @@ class TestOllamaStatusProviderGating:
             result = _get_ollama_status()
         assert result['reachable'] is False
         assert result['skipped'] is False
-        assert 'boom' in result['error']
+        # Seit #1458: kein Rohtext mehr in der Antwort (Informationsleck),
+        # nur noch ein geschlossener Code — "boom" bleibt nur im Log.
+        assert result['error'] == {"code": StatusErrorCode.UNEXPECTED.value}
         assert result['models_available'] == []
 
     def test_ollama_env_url_preferred_over_llm_base_url(self, monkeypatch):
@@ -570,3 +594,84 @@ class TestOllamaStatusContractShape:
         assert called == "http://localhost:11434/api/tags"
         assert "/v1/api/tags" not in called
         assert result['base_url'] == "http://localhost:11434"
+
+
+class TestClassifyStatusError:
+    """#1458: geschlossene Fehlerklassifikation statt ``str(exc)``.
+
+    Deckt die Zuordnung ab, die ``_get_neo4j_status``/``_get_ollama_status``/
+    ``_get_disk_status`` gemeinsam nutzen. Eine falsche Zuordnung hier wuerde
+    sich in allen drei Endpunkten fortpflanzen.
+    """
+
+    def test_timeout_error_maps_to_timeout(self):
+        assert _classify_status_error(TimeoutError("timed out")) == StatusErrorCode.TIMEOUT
+
+    def test_requests_timeout_maps_to_timeout(self):
+        assert _classify_status_error(requests.exceptions.Timeout("timed out")) == StatusErrorCode.TIMEOUT
+
+    def test_permission_error_maps_to_auth(self):
+        assert _classify_status_error(PermissionError("denied")) == StatusErrorCode.AUTH
+
+    def test_neo4j_auth_error_maps_to_auth(self):
+        from neo4j.exceptions import AuthError
+        assert _classify_status_error(AuthError("unauthorized")) == StatusErrorCode.AUTH
+
+    def test_http_401_maps_to_auth(self):
+        response = Mock()
+        response.status_code = 401
+        exc = requests.exceptions.HTTPError("unauthorized")
+        exc.response = response
+        assert _classify_status_error(exc) == StatusErrorCode.AUTH
+
+    def test_http_500_maps_to_unexpected(self):
+        response = Mock()
+        response.status_code = 500
+        exc = requests.exceptions.HTTPError("server error")
+        exc.response = response
+        assert _classify_status_error(exc) == StatusErrorCode.UNEXPECTED
+
+    def test_connection_error_maps_to_unreachable(self):
+        assert _classify_status_error(ConnectionError("refused")) == StatusErrorCode.UNREACHABLE
+
+    def test_requests_connection_error_maps_to_unreachable(self):
+        assert (
+            _classify_status_error(requests.exceptions.ConnectionError("refused"))
+            == StatusErrorCode.UNREACHABLE
+        )
+
+    def test_file_not_found_maps_to_unreachable(self):
+        assert _classify_status_error(FileNotFoundError("missing")) == StatusErrorCode.UNREACHABLE
+
+    def test_neo4j_service_unavailable_maps_to_unreachable(self):
+        from neo4j.exceptions import ServiceUnavailable
+        assert (
+            _classify_status_error(ServiceUnavailable("down"))
+            == StatusErrorCode.UNREACHABLE
+        )
+
+    def test_generic_exception_maps_to_unexpected(self):
+        assert _classify_status_error(ValueError("boom")) == StatusErrorCode.UNEXPECTED
+
+
+class TestOllamaStatusErrorShape:
+    """#1458: der Ollama-Fehlerzweig liefert das neue ``StatusCheckError``-Shape."""
+
+    def _set_provider(self, monkeypatch, base_url, model=""):
+        monkeypatch.setattr(Config, "LLM_BASE_URL", base_url)
+        monkeypatch.setattr(Config, "LLM_MODEL_NAME", model)
+
+    def test_error_payload_validates_against_pydantic_contract(self, monkeypatch):
+        from app.contracts.system_status_contract import SystemStatusOllama
+
+        self._set_provider(monkeypatch, "http://localhost:11434/v1", "qwen3:8b")
+        monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+
+        with patch('app.api.status.requests.get', side_effect=requests.exceptions.ConnectionError("refused")):
+            result = _get_ollama_status()
+
+        validated = SystemStatusOllama.model_validate(result)
+        assert validated.reachable is False
+        assert validated.error == StatusCheckError(code=StatusErrorCode.UNREACHABLE)
+        # Kein Rohtext ("refused") mehr in der serialisierten Antwort.
+        assert 'refused' not in str(result)

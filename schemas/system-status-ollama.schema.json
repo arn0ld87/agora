@@ -1,4 +1,31 @@
 {
+  "$defs": {
+    "StatusCheckError": {
+      "additionalProperties": false,
+      "description": "Strukturierter Fehler-Shape f\u00fcr Probe-Fehler in ``/api/status``.\n\nErsetzt den rohen ``str(exc)``, der bislang an drei Stellen (neo4j,\nollama, disk) direkt in die HTTP-Antwort floss.",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/StatusErrorCode"
+        }
+      },
+      "required": [
+        "code"
+      ],
+      "title": "StatusCheckError",
+      "type": "object"
+    },
+    "StatusErrorCode": {
+      "description": "Geschlossene Fehlerklassifikation f\u00fcr Probe-Fehler in ``/api/status``.\n\nDer rohe Exception-Text (Dateipfade, Hostnamen, Treiberdetails) ist ein\nInformationsleck und f\u00fcr ein Frontend nicht darstellbar (Python-\nTraceback-Prosa) \u2014 er bleibt im strukturierten Log. Hier wandert nur ein\nCode, den das Frontend in einen lesbaren Satz \u00fcbersetzt.\n\nBewusst nicht ein Code je Exception-Klasse, sondern eine Klassifikation\ndanach, wie ein Nutzer reagieren w\u00fcrde:\n\n* ``unreachable`` \u2014 Ziel (Host, Pfad) ist nicht erreichbar/vorhanden.\n* ``timeout`` \u2014 Probe hat das Zeitbudget \u00fcberschritten.\n* ``auth`` \u2014 Authentifizierung/Berechtigung fehlgeschlagen.\n* ``unexpected`` \u2014 alles andere; Catch-all, damit ein neuer,\n  unklassifizierter Fehler nicht crasht.",
+      "enum": [
+        "unreachable",
+        "timeout",
+        "auth",
+        "unexpected"
+      ],
+      "title": "StatusErrorCode",
+      "type": "string"
+    }
+  },
   "$id": "https://alexle135.de/schemas/system-status-ollama.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
@@ -31,14 +58,13 @@
     "error": {
       "anyOf": [
         {
-          "type": "string"
+          "$ref": "#/$defs/StatusCheckError"
         },
         {
           "type": "null"
         }
       ],
-      "default": null,
-      "title": "Error"
+      "default": null
     },
     "models_available": {
       "items": {
