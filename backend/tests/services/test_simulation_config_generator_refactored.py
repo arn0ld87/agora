@@ -14,6 +14,11 @@ class TestSimulationConfigGeneratorRefactored:
         # 1. Mock the LLMClient instance
         mock_client = MagicMock()
         mock_llm_client_cls.return_value = mock_client
+        # Kein hartes Aufrufbudget in diesem Test: ohne diese Vorgabe liefert
+        # der MagicMock ein weiteres MagicMock statt ``None`` und der
+        # Poolgroessen-Deckel in ``_generate_agent_configs_parallel``
+        # vergleicht es mit einem int (#1452).
+        mock_client.remaining_hard_call_budget.return_value = None
 
         time_data = {
             "total_simulation_hours": 72,
@@ -179,6 +184,11 @@ class TestSimulationConfigGeneratorRefactored:
         # and applying regex-based JSON repair.
         mock_client = MagicMock()
         mock_llm_client_cls.return_value = mock_client
+        # Kein hartes Aufrufbudget in diesem Test: ohne diese Vorgabe liefert
+        # der MagicMock ein weiteres MagicMock statt ``None`` und der
+        # Poolgroessen-Deckel in ``_generate_agent_configs_parallel``
+        # vergleicht es mit einem int (#1452).
+        mock_client.remaining_hard_call_budget.return_value = None
 
         # chat_json fails
         mock_client.chat_json.side_effect = ValueError("Strict Schema Violation or parsing failed")
