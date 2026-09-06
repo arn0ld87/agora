@@ -294,13 +294,20 @@ select {
   font-family: var(--font-sans, var(--ff-sans));
   font-size: var(--fs-body, var(--fs-14));
   cursor: pointer;
-  outline: none;
-  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+  transition: border-color 150ms ease, background-color 150ms ease;
 }
 select:hover:not(:disabled) { border-color: var(--hairline-strong, var(--rule-strong)); }
+/* Fokusring als `outline` nach Audit §4 (2px accent, offset 2px) — bewusst
+   nicht als `box-shadow` und bewusst ohne Transition: der Ring muss im selben
+   Frame stehen, in dem der Fokus ankommt. Eine Transition darauf macht den
+   Fokus-Sichtbarkeitstest (`checkFocusVisible`, misst nach einem rAF)
+   zeitabhaengig. Aus demselben Grund setzt die Basisregel kein
+   `outline: none`: bei programmatischem Fokus, wo `:focus-visible` ausbleibt,
+   bliebe das Element sonst ohne jede sichtbare Markierung. */
 select:focus-visible {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--focus-ring, var(--accent-soft));
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 select:disabled { opacity: 0.5; cursor: not-allowed; }
 
