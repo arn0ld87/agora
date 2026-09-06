@@ -5,7 +5,12 @@
 
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
-import Button from '../Button.vue'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, resolve } from 'node:path'
+import Button, { type ButtonVariant } from '../Button.vue'
+
+const here = dirname(fileURLToPath(import.meta.url))
 
 describe('Button', () => {
   it('Test 1: Default-Mount nutzt primary + md (kein --md-Suffix in Klassenliste)', () => {
@@ -100,5 +105,26 @@ describe('Button', () => {
     })
 
     expect(wrapper.find('button').attributes('type')).toBe('submit')
+  })
+
+  it('Test 10: nur noch vier Varianten sind zulässig (primary/secondary/ghost/danger)', () => {
+    // Regressionstest zu PR 5 (Control-Primitives): tinted/accent/info/plasma/glass
+    // sind per Audit gestrichen. Der Typecheck (`bun run check`) schlägt fehl,
+    // sobald jemand eine der gestrichenen Varianten erneut zulässt.
+    const erlaubteVarianten: ButtonVariant[] = ['primary', 'secondary', 'ghost', 'danger']
+    for (const variant of erlaubteVarianten) {
+      const wrapper = mount(Button, { props: { variant }, slots: { default: 'X' } })
+      expect(wrapper.find('button').classes()).toContain(`btn--${variant}`)
+    }
+
+    // Die Liste oben belegt nur, dass die vier Varianten funktionieren — sie
+    // würde eine fünfte nicht bemerken. Der Union-Typ ist die eigentliche
+    // Quelle der Wahrheit, also wird er direkt geprüft: eine wieder eingeführte
+    // Variante (tinted/accent/info/plasma/glass) fällt hier auf.
+    const sfc = readFileSync(resolve(here, '../Button.vue'), 'utf8')
+    const union = sfc.match(/export type ButtonVariant =([\s\S]*?)\n\nexport/)
+    expect(union).not.toBeNull()
+    const deklarierte = [...union![1].matchAll(/'([a-z]+)'/g)].map((m) => m[1])
+    expect(deklarierte.sort()).toEqual([...erlaubteVarianten].sort())
   })
 })

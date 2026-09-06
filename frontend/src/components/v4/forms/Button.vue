@@ -18,11 +18,6 @@ export type ButtonVariant =
   | 'primary'
   | 'secondary'
   | 'ghost'
-  | 'tinted'
-  | 'accent'
-  | 'info'
-  | 'plasma'
-  | 'glass'
   | 'danger'
 
 export type ButtonSize = 'sm' | 'md' | 'lg'

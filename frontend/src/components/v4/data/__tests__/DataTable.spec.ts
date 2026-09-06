@@ -7,12 +7,19 @@
  * Test 3: Empty-Slot greift wenn rows=[]
  * Test 4: rowClick wird mit Row-Object aufgerufen
  * Test 5: Custom-Cell-Slot überschreibt Default-Renderer
+ * Test 6-9 (PR 5, Control-Primitives): label-Typo im Spaltenkopf, Selected-
+ * Zustand über aria-current, Mono-Familie an col.mono statt an Ausrichtung.
  */
 
 import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, resolve } from 'node:path'
 import DataTable from '../DataTable.vue'
 import type { DataTableColumn } from '../DataTable.vue'
+
+const here = dirname(fileURLToPath(import.meta.url))
 
 const columns: DataTableColumn[] = [
   { key: 'stage', label: 'Stage', mono: true },
@@ -116,5 +123,48 @@ describe('DataTable', () => {
     expect(customCells).toHaveLength(2)
     expect(customCells[0].text()).toBe('STATUS:Completed')
     expect(customCells[1].text()).toBe('STATUS:Running')
+  })
+
+  it('Test 6: Spaltenkopf trägt kein text-transform:uppercase mehr (Audit §Typografie)', () => {
+    // Regressionstest zu PR 5: .dt-th nutzt die label-Typo-Rolle (Satzschrift,
+    // kein Uppercase). Geprüft wird der SFC-Quelltext, nicht getComputedStyle —
+    // jsdom wendet scoped SFC-Styles nicht an, ein Stilvergleich am gemounteten
+    // Element würde immer bestehen und nichts absichern.
+    const sfc = readFileSync(resolve(here, '../DataTable.vue'), 'utf8')
+    const thBlock = sfc.match(/\.dt-th\s*\{[^}]*\}/)
+    expect(thBlock).not.toBeNull()
+    expect(thBlock![0]).not.toMatch(/text-transform:\s*uppercase/)
+  })
+
+  it('Test 7: rowSelected markiert die Zeile mit Marker-Klasse und aria-current', () => {
+    // aria-current statt aria-selected: aria-selected ist auf <tr> nur in einem
+    // role="grid"/"treegrid" zulässig, diese Tabelle ist eine schlichte
+    // role="table" — axe-core aria-allowed-attr würde das rügen.
+    const wrapper = mount(DataTable, {
+      props: { columns, rows, rowSelected: (row: Record<string, unknown>) => row.id === '1' },
+    })
+    const bodyRows = wrapper.findAll('tbody tr')
+
+    expect(bodyRows[0].classes()).toContain('dt-body-row--selected')
+    expect(bodyRows[0].attributes('aria-current')).toBe('true')
+    expect(bodyRows[1].classes()).not.toContain('dt-body-row--selected')
+    expect(bodyRows[1].attributes('aria-current')).toBeUndefined()
+  })
+
+  it('Test 8: ohne rowSelected-Prop bleibt aria-current unbesetzt', () => {
+    const wrapper = mount(DataTable, { props: { columns, rows } })
+    const firstRow = wrapper.findAll('tbody tr')[0]
+    expect(firstRow.attributes('aria-current')).toBeUndefined()
+  })
+
+  it('Test 9: die Mono-Familie hängt an col.mono, nicht an rechtsbündiger Ausrichtung', () => {
+    // Rechtsbündig heißt nicht zwangsläufig numerisch (z. B. eine rechts
+    // ausgerichtete Textspalte), und der Spaltenkopf bleibt in der label-Typo.
+    const sfc = readFileSync(resolve(here, '../DataTable.vue'), 'utf8')
+    const rightBlock = sfc.match(/\.dt-cell--right\s*\{[^}]*\}/)
+    expect(rightBlock).not.toBeNull()
+    expect(rightBlock![0]).not.toMatch(/font-family/)
+    expect(rightBlock![0]).toMatch(/font-variant-numeric:\s*tabular-nums/)
+    expect(sfc).toMatch(/\.dt-td--mono\s*\{[^}]*font-family:\s*var\(--font-mono\)/)
   })
 })

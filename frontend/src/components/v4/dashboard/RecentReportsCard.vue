@@ -59,7 +59,7 @@ const columns: DataTableColumn[] = [
   { key: 'project', label: t('dashboard.reports.columns.project'), secondary: true },
   { key: 'personas', label: t('dashboard.reports.columns.personas'), mono: true, align: 'right', width: '100px' },
   { key: 'confidence', label: t('dashboard.reports.columns.confidence'), align: 'right', width: '120px' },
-  { key: 'date', label: t('dashboard.reports.columns.date'), secondary: true, align: 'right', width: '120px' },
+  { key: 'date', label: t('dashboard.reports.columns.date'), secondary: true, mono: true, align: 'right', width: '120px' },
 ]
 
 interface ReportRow extends Record<string, unknown> {

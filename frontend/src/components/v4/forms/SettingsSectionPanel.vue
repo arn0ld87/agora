@@ -327,7 +327,7 @@ function setDraftValue(key: string, value: unknown) {
           {{ t('settings.discard') }}
         </Button>
         <Button
-          variant="accent"
+          variant="primary"
           :loading="settingsStore.saving"
           :disabled="totalDirty === 0 || settingsStore.saving"
           @click="handleSave"
@@ -346,7 +346,7 @@ function setDraftValue(key: string, value: unknown) {
         </i18n-t>
         <div class="v4-modal__actions">
           <Button variant="ghost" @click="cancelSecretSave">{{ t('settings.modal.cancel') }}</Button>
-          <Button variant="accent" @click="confirmSecretSave">{{ t('settings.modal.confirm') }}</Button>
+          <Button variant="primary" @click="confirmSecretSave">{{ t('settings.modal.confirm') }}</Button>
         </div>
       </div>
     </div>
