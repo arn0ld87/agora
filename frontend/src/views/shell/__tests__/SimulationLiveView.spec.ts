@@ -17,7 +17,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { resetSimFeedStore } from '@/composables/useSimFeed'
-import { clearSimClock } from '@/composables/useSimClock'
 import { SimulationLiveTestId } from '@/contracts/testIds'
 import type { PostCreatedEvent } from '@/contracts/postEventContract'
 
@@ -30,9 +29,25 @@ let capturedPostHandler: ((data: PostCreatedEvent) => void) | undefined
 const pauseSimulationMock = vi.fn(async () => ({ success: true, data: {} }))
 const resumeSimulationMock = vi.fn(async () => ({ success: true, data: {} }))
 const cancelRunMock = vi.fn(async () => ({ success: true }))
+// Der Status-Detail-Payload spiegelt `SimulationRunState.to_dict()` — und der
+// fuehrt bewusst KEIN `run_id`. Ein hier erfundenes Feld wuerde genau den Fehler
+// verdecken, den die View frueher hatte (Registry-ID aus dem Status gelesen,
+// in Produktion immer null, System-Bahn dauerhaft leer).
+const RUN_STARTED_AT = '2026-09-06T12:00:00Z'
 const getRunStatusDetailMock = vi.fn(async () => ({
   success: true,
-  data: { simulation_id: SIM_ID, status: 'running', current_round: 3, total_rounds: 5, paused: false, run_id: 'run-1' },
+  data: {
+    simulation_id: SIM_ID,
+    status: 'running',
+    current_round: 3,
+    total_rounds: 5,
+    paused: false,
+    started_at: RUN_STARTED_AT,
+  },
+}))
+const listRunsMock = vi.fn(async () => ({
+  success: true,
+  data: { runs: [{ run_id: 'run-1' }], total: 1, aggregation: null },
 }))
 const getRunEventsMock = vi.fn(async () => ({
   success: true,
@@ -60,6 +75,7 @@ vi.mock('@/api/simulation', () => ({
 vi.mock('@/api/runs', () => ({
   cancelRun: (...args: unknown[]) => cancelRunMock(...(args as [])),
   getRunEvents: (...args: unknown[]) => getRunEventsMock(...(args as [])),
+  listRuns: (...args: unknown[]) => listRunsMock(...(args as [])),
 }))
 
 vi.mock('@/api/budget', () => ({
@@ -165,7 +181,6 @@ function mkPost(overrides: Partial<PostCreatedEvent> = {}): PostCreatedEvent {
 describe('SimulationLiveView', () => {
   beforeEach(() => {
     resetSimFeedStore(SIM_ID)
-    clearSimClock(SIM_ID)
     capturedStateHandler = undefined
     capturedPostHandler = undefined
     pauseSimulationMock.mockClear()
@@ -174,6 +189,18 @@ describe('SimulationLiveView', () => {
     getRunStatusDetailMock.mockClear()
     getRunEventsMock.mockClear()
     getRunUsageMock.mockClear()
+    listRunsMock.mockClear()
+    getRunStatusDetailMock.mockImplementation(async () => ({
+      success: true,
+      data: {
+        simulation_id: SIM_ID,
+        status: 'running',
+        current_round: 3,
+        total_rounds: 5,
+        paused: false,
+        started_at: RUN_STARTED_AT,
+      },
+    }))
   })
 
   it('zeigt Runde x/y in der Kopfzeile nach dem initialen Status-Poll', async () => {
@@ -238,6 +265,87 @@ describe('SimulationLiveView', () => {
     await wrapper.find(`[data-testid="${SimulationLiveTestId.headerCancel}"]`).trigger('click')
     await flushPromises()
     expect(cancelRunMock).toHaveBeenCalledWith(SIM_ID)
+  })
+
+  // ---- Regressionen aus dem PR-7-Review (Codex) ----
+
+  it('Regression: loest die Registry-Lauf-ID ueber GET /api/runs?simulation_id auf', async () => {
+    // Frueher las die View `run_id` aus dem Status-Detail-Payload. Das Feld
+    // existiert dort nicht (`SimulationRunState.to_dict()` fuehrt es nicht),
+    // also blieb die ID null und die System-Bahn dauerhaft leer.
+    const wrapper = mountView()
+    await flushPromises()
+    expect(listRunsMock).toHaveBeenCalledWith({ simulation_id: SIM_ID, limit: 1 })
+    expect(getRunEventsMock).toHaveBeenCalledWith('run-1')
+    expect(getRunUsageMock).toHaveBeenCalledWith('run-1')
+    expect(wrapper.find(`[data-testid="${SimulationLiveTestId.laneSystem}"]`).text()).toContain(
+      'Runde 3 gestartet',
+    )
+  })
+
+  it('Regression: ohne aufloesbare Lauf-ID bleibt die System-Bahn leer statt zu werfen', async () => {
+    listRunsMock.mockResolvedValueOnce({ success: true, data: { runs: [], total: 0, aggregation: null } })
+    const wrapper = mountView()
+    await flushPromises()
+    expect(getRunEventsMock).not.toHaveBeenCalled()
+    expect(wrapper.findAll(`[data-testid="${SimulationLiveTestId.eventRow}"]`).length).toBe(0)
+  })
+
+  it('Regression: vergangene Zeit kommt aus started_at/completed_at, nicht aus dem Post-Strom', async () => {
+    // Ein pausierter oder ruhiger Lauf sendet keine Beitraege. Die alte
+    // Sim-Uhr zeigte deshalb 00:00, obwohl der Lauf seit Minuten laeuft.
+    getRunStatusDetailMock.mockImplementation(async () => ({
+      success: true,
+      data: {
+        simulation_id: SIM_ID,
+        status: 'paused',
+        current_round: 3,
+        total_rounds: 5,
+        paused: true,
+        started_at: RUN_STARTED_AT,
+        completed_at: '2026-09-06T12:02:05Z',
+      },
+    }))
+    const wrapper = mountView()
+    await flushPromises()
+    // Kein einziger Post ingestiert — die Anzeige haengt allein am Laufzustand.
+    expect(wrapper.find(`[data-testid="${SimulationLiveTestId.headerElapsed}"]`).text()).toContain('02:05')
+    // s/Runde = 125 s / 3 Runden, in echten Sekunden gerechnet.
+    expect(wrapper.find(`[data-testid="${SimulationLiveTestId.headerSecPerRound}"]`).text()).toContain('41.7')
+  })
+
+  it('Regression: das Aktiv-Fenster der Akteure folgt der Chronologie, nicht der Plattform', async () => {
+    // `redditPosts` ist aufsteigend, `twitterPosts` absteigend sortiert. Eine
+    // blosse Verkettung liess `buildActorStats` die AELTESTEN Tweets als
+    // juengstes Fenster lesen und markierte die falschen Akteure als aktiv.
+    const wrapper = mountView()
+    await flushPromises()
+    // 10 alte Tweets (Fenstergroesse von buildActorStats), danach ein neuer
+    // Reddit-Beitrag. Aktiv sein darf nur, wer zuletzt geschrieben hat.
+    for (let i = 0; i < 10; i += 1) {
+      capturedPostHandler?.(
+        mkPost({
+          platform: 'twitter',
+          post_id: `t-old-${i}`,
+          persona_id: 'oldtimer',
+          persona_name: 'Oldtimer',
+          timestamp: `2026-09-06T10:0${i}:00Z`,
+        }),
+      )
+    }
+    capturedPostHandler?.(
+      mkPost({
+        platform: 'reddit',
+        post_id: 'r-new',
+        persona_id: 'neuling',
+        persona_name: 'Neuling',
+        timestamp: '2026-09-06T13:00:00Z',
+      }),
+    )
+    await flushPromises()
+    const rows = wrapper.findAll(`[data-testid="${SimulationLiveTestId.actorRow}"]`)
+    const neuling = rows.find((r) => r.text().includes('Neuling'))
+    expect(neuling?.classes()).toContain('sl-actor-row--active')
   })
 
   // Kein getComputedStyle auf scoped Styles (jsdom wendet sie nicht an) —

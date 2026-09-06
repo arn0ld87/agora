@@ -179,6 +179,14 @@ export interface RunStatusResponse {
   current_round?: number
   max_rounds?: number
   paused?: boolean
+  /**
+   * ISO-Zeitstempel des Laufs aus `SimulationRunState.to_dict()`
+   * (backend/app/services/sim/run_state_store.py). Explizit deklariert, damit
+   * Verbraucher nicht auf die Index-Signatur ausweichen muessen — die laesst
+   * jeden Feldnamen durch, auch einen, den es serverseitig gar nicht gibt.
+   */
+  started_at?: string | null
+  completed_at?: string | null
   [key: string]: unknown
 }
 

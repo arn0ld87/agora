@@ -111,6 +111,12 @@ export interface CancelRunResponse {
 
 export interface ListRunsParams {
   limit?: number
+  /**
+   * Filtert auf die Laeufe einer Simulation. Backend-Gegenstueck:
+   * `RunsFilterQuery.simulation_id` (backend/app/contracts/runs_contract.py) —
+   * der Parameter existierte serverseitig laenger als dieser Spiegel.
+   */
+  simulation_id?: string
   entity_id?: string
   run_type?: RunType
   status?: RunStatus

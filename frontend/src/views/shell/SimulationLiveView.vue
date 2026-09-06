@@ -12,12 +12,21 @@
  * - Runde x/y, Pause-Status: `getRunStatusDetail` (bestehender
  *   Simulation-Status-Endpunkt, api/simulation.ts) — dieselbe Quelle wie
  *   Step3Simulation.vue.
- * - vergangene Zeit: `useSimClock` (Sim-Uhr aus `PostCreatedEvent.sim_time`).
+ * - vergangene Zeit und s/Runde: Wanduhr gegen `started_at`/`completed_at` aus
+ *   dem Status-Detail-Payload. Bewusst NICHT die Sim-Uhr (`useSimClock`,
+ *   abgeleitet aus `PostCreatedEvent.sim_time`): die zaehlt erst ab dem ersten
+ *   Beitrag, den diese Sitzung selbst empfaengt, und zeigt nach einem Reload
+ *   oder bei einem pausierten/ruhigen Lauf 00:00. Ausserdem ist "s/Runde" eine
+ *   Durchsatzangabe — sie muss in echten Sekunden rechnen, nicht in simulierter
+ *   Zeit.
  * - Akteure/Reddit/Twitter: `useSimFeed` + `useEventStream` (Zod-validierter
  *   PostCreatedEvent-Strom), wie StepSimulationFeedView.vue.
  * - System/Ereignisse: `getRunEvents` (`/api/runs/<id>/events`) und
- *   `getRunUsage` (`/api/runs/<id>/usage`) — nur wenn eine RunRegistry-ID
- *   bekannt ist (kommt aus dem Status-Detail-Payload, `run_id`-Feld).
+ *   `getRunUsage` (`/api/runs/<id>/usage`). Die dafuer noetige RunRegistry-ID
+ *   steht NICHT im Status-Detail-Payload — `SimulationRunState.to_dict()`
+ *   (backend/app/services/sim/run_state_store.py) fuehrt kein `run_id`. Sie
+ *   wird ueber `GET /api/runs?simulation_id=<id>` aufgeloest, den einzigen
+ *   Vertrag, der diese Zuordnung tatsaechlich liefert.
  *
  * Bewusst weggelassen (siehe useDeriveSimulation.ts-Kommentar und PR-7-
  * Bericht): Rundenachse ohne Aktivitätshöhe pro Runde (PostCreatedEvent
@@ -34,13 +43,12 @@ import {
   getSimulationFeedSnapshot,
   type RunStatusResponse,
 } from '@/api/simulation'
-import { cancelRun, getRunEvents } from '@/api/runs'
+import { cancelRun, getRunEvents, listRuns } from '@/api/runs'
 import { getRunUsage } from '@/api/budget'
 import type { RunEvent } from '@/types/run'
 import type { RunUsage } from '@/contracts/runBudgetContract'
 import { useEventStream } from '@/composables/useEventStream'
 import { useSimFeed, clearSimFeed } from '@/composables/useSimFeed'
-import { useSimClock, clearSimClock } from '@/composables/useSimClock'
 import { usePolling } from '@/composables/usePolling'
 import {
   buildRoundTicks,
@@ -62,7 +70,6 @@ const route = useRoute()
 const simulationId = String(route.params.simulationId)
 
 const feed = useSimFeed(simulationId)
-const clock = useSimClock(simulationId)
 
 const runStatus = ref<RunStatusResponse>({ simulation_id: simulationId, status: 'unknown' })
 const runId = ref<string | null>(null)
@@ -70,18 +77,50 @@ const isPausing = ref(false)
 const isCancelling = ref(false)
 const events = ref<RunEvent[]>([])
 const usage = ref<RunUsage | null>(null)
+// Wanduhr-Anker: sekuendlich fortgeschrieben, damit `elapsedSeconds` bei einem
+// laufenden Lauf weiterzaehlt, ohne dass ein Ereignis eintreffen muss.
+const now = ref(Date.now())
+let nowTimer: ReturnType<typeof setInterval> | null = null
 
 const currentRound = computed(() => Number(runStatus.value.current_round ?? 0))
 const totalRounds = computed(() => Number(runStatus.value.total_rounds ?? runStatus.value.max_rounds ?? 0))
 const isPaused = computed(() => Boolean(runStatus.value.paused))
 
 const roundTicks = computed(() => buildRoundTicks(currentRound.value, totalRounds.value))
-const elapsedDisplay = computed(() => formatElapsed(clock.elapsed.value))
+
+function parseIsoMs(value: unknown): number | null {
+  if (typeof value !== 'string' || value.length === 0) return null
+  const ms = Date.parse(value)
+  return Number.isNaN(ms) ? null : ms
+}
+
+/**
+ * Vergangene Zeit des Laufs in echten Sekunden. Anker ist `started_at` aus dem
+ * persistierten Laufzustand, Endpunkt `completed_at` (abgeschlossener Lauf)
+ * oder die Wanduhr (laufender Lauf). Damit stimmt die Anzeige auch nach einem
+ * Reload und bei einem pausierten Lauf, der gerade keine Beitraege erzeugt.
+ */
+const elapsedSeconds = computed<number>(() => {
+  const started = parseIsoMs(runStatus.value.started_at)
+  if (started === null) return 0
+  const ended = parseIsoMs(runStatus.value.completed_at) ?? now.value
+  return Math.max(0, (ended - started) / 1000)
+})
+
+const elapsedDisplay = computed(() => formatElapsed(elapsedSeconds.value))
 const secPerRoundDisplay = computed(() =>
-  formatSecondsPerRound(secondsPerRound(clock.elapsed.value, currentRound.value)),
+  formatSecondsPerRound(secondsPerRound(elapsedSeconds.value, currentRound.value)),
 )
 
-const allPosts = computed(() => [...feed.redditPosts.value, ...feed.twitterPosts.value])
+// Chronologisch, nicht plattformweise: `twitterPosts` ist absteigend sortiert
+// und `redditPosts` aufsteigend — eine blosse Verkettung ergaebe ein
+// Reihenfolge-Kraut, und `buildActorStats` liest das Ende der Liste als
+// juengstes Fenster.
+const allPosts = computed(() =>
+  [...feed.redditPosts.value, ...feed.twitterPosts.value].sort(
+    (a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp),
+  ),
+)
 const actorStats = computed(() => buildActorStats(allPosts.value))
 
 const stream = useEventStream(simulationId, {
@@ -94,15 +133,12 @@ const stream = useEventStream(simulationId, {
   post_created: (data) => {
     if (!data) return
     feed.ingest(data)
-    clock.ingest(data)
   },
 })
 
 function applyStatus(data: Partial<RunStatusResponse> | undefined): void {
   if (!data || typeof data !== 'object') return
   runStatus.value = { ...runStatus.value, ...data }
-  const nextRunId = typeof data.run_id === 'string' && data.run_id.length > 0 ? data.run_id : null
-  if (nextRunId) runId.value = nextRunId
 }
 
 async function pollStatus(): Promise<void> {
@@ -116,8 +152,29 @@ async function pollStatus(): Promise<void> {
 
 const statusPolling = usePolling(pollStatus, 2500)
 
+/**
+ * Loest die RunRegistry-ID zu dieser Simulation auf und merkt sie sich.
+ *
+ * `GET /api/runs?simulation_id=<id>` ist der einzige Vertrag, der die Zuordnung
+ * Simulation → Lauf liefert; die Liste ist absteigend nach `updated_at`
+ * sortiert (run_registry.list_runs), der erste Treffer ist also der aktuelle
+ * Lauf. Solange noch kein Lauf registriert ist, bleibt der Rueckgabewert `null`
+ * und der naechste Tick versucht es erneut.
+ */
+async function resolveRunId(): Promise<string | null> {
+  if (runId.value) return runId.value
+  try {
+    const res = await listRuns({ simulation_id: simulationId, limit: 1 })
+    const first = res?.data?.runs?.[0]
+    if (first?.run_id) runId.value = first.run_id
+  } catch {
+    // Ohne Registry-ID bleibt nur die System-Bahn leer; das Instrument laeuft weiter.
+  }
+  return runId.value
+}
+
 async function pollSystemLane(): Promise<void> {
-  const id = runId.value
+  const id = await resolveRunId()
   if (!id) return
   try {
     const [eventsRes, usageRes] = await Promise.all([
@@ -155,12 +212,13 @@ async function doCancel(): Promise<void> {
 }
 
 onMounted(async () => {
+  nowTimer = setInterval(() => {
+    now.value = Date.now()
+  }, 1000)
   await stream.start()
-  // Erster Status-Poll wird bewusst abgewartet, bevor die System-Bahn
-  // startet: sie braucht `runId.value` (aus dem Status-Payload), das die
-  // Live-SSE u. U. erst mit Verzoegerung liefert. Ohne den Await liefe der
-  // erste System-Tick leer und wartet 5s auf den naechsten (usePolling-
-  // Intervall) statt sofort Ereignisse/Usage zu zeigen.
+  // Erster Status-Poll wird bewusst abgewartet: die Kopfzeile (Runde, vergangene
+  // Zeit) haengt vollstaendig an ihm, und ohne den Await stuende sie bis zum
+  // ersten Intervall-Tick auf Nullwerten.
   await pollStatus()
   void statusPolling.start({ immediate: false })
   void systemPolling.start({ immediate: true })
@@ -181,8 +239,11 @@ onBeforeUnmount(() => {
   stream.stop()
   statusPolling.stop()
   systemPolling.stop()
+  if (nowTimer !== null) {
+    clearInterval(nowTimer)
+    nowTimer = null
+  }
   clearSimFeed(simulationId)
-  clearSimClock(simulationId)
 })
 </script>
 
