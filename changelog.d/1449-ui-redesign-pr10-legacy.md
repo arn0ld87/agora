@@ -1,0 +1,9 @@
+### Removed (UI-Redesign 2026-09, PR 10 Legacy-Abbau — 2026-09-06)
+
+- **Zweite Hülle entfernt:** das Shell-Flag `useShellVariant` ist entfallen. Es hielt neben der Ablage eine zweite Navigationswelt („classic") am Leben — genau die zwei Navigationsmodelle nebeneinander sind der erste Befund des Audits. Der Default stand seit Block B3 ohnehin auf „dossier"; `/` leitet jetzt statisch auf `/ablage`. `/dashboard` bleibt als eigene Route erreichbar, nur nicht mehr als alternativer Einstieg. (#1449)
+- **Unerreichbare Views gelöscht:** `RunsAppShellView.vue`, `RunsView.vue`, `RunsDashboard.vue` und `HistoryView.vue` samt ihrer Specs. Seit PR 8 leiten `/runs` und `/v4/history` auf die Ablage um; die Views waren danach von keiner Route mehr erreichbar. Mit ihnen entfallen die dadurch verwaisten `HistoryDatabase.vue`, `AppFooter.vue` (der im Audit gerügte Website-Footer in der Shell) und `AgoraGlyph.vue`. Die Redirects selbst bleiben als Deep-Link-Kompatibilität. (#1449)
+
+### Offen aus PR 10 (bewusst nicht in diesem PR)
+
+- `/runs/:id` zeigt weiterhin auf `RunDetailAppShellView`/`RunDetailView`, weil `usage-totals` (Verbrauchsanalyse) und `budget-exceeded-banner` nur dort existieren. Der Umstieg ist eine Feature-Migration, keine Löschung: erst muss der Kennzahlstreifen des Dossiers beide Blöcke tragen. Zusätzlich ist dabei die Schlüsselauflösung zu lösen — `groupJobsByEndeavor` schlüsselt Läufe über `simulation_id`/`project_id`, nicht über die Registry-ID, ein Deep-Link mit `run_…` fände sein Objekt sonst nicht.
+- `StepSimulationFeedView.vue` bleibt, weil der Feed ein **Tab** innerhalb von `StepSimulationView` ist. Ihn auf die Vollbild-Live-Ansicht aus PR 7 umzubiegen hiesse, den Tab-Rahmen zu verlassen — auch das eine Verhaltensänderung, die eine eigene Entscheidung braucht statt in einen Lösch-PR mitgenommen zu werden.

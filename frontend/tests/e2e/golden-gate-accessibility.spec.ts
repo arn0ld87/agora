@@ -57,7 +57,7 @@ test.describe('Slice 7.2 · Golden-Gate Accessibility Gates', () => {
       await checkAccessibilityGate(page, '/dashboard');
     });
 
-    test('Runs passes accessibility gates', async ({ page }) => {
+    test('Runs (Redirect auf die Ablage) passes accessibility gates', async ({ page }) => {
       await checkAccessibilityGate(page, '/runs');
     });
 
@@ -145,7 +145,7 @@ test.describe('Slice 7.2 · Golden-Gate Accessibility Gates', () => {
       await checkAccessibilityGate(page, '/settings/audit-logs');
     });
 
-    test('History (v4) passes accessibility gates', async ({ page }) => {
+    test('History (v4, Redirect auf die Ablage) passes accessibility gates', async ({ page }) => {
       await checkAccessibilityGate(page, '/v4/history');
     });
 

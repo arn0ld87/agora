@@ -1,6 +1,12 @@
 /**
- * AppShellWrappers — Smoke-Tests fuer RunsAppShellView, RunDetailAppShellView
- * (Slice F, Design-v4).
+ * AppShellWrappers — Smoke-Tests fuer RunDetailAppShellView (Slice F,
+ * Design-v4).
+ *
+ * RunsAppShellView ist mit dem Legacy-Abbau (Redesign PR 10) entfallen: /runs
+ * leitet seit PR 8 auf die Ablage um, die Wrapper-View war danach von keiner
+ * Route mehr erreichbar. RunDetailAppShellView bleibt, solange
+ * `usage-totals` und `budget-exceeded-banner` nur in RunDetailView.vue
+ * existieren.
  *
  * Prueft: mountet ohne Crash, AppShell wird gerendert.
  *
@@ -35,13 +41,7 @@ vi.mock('@/components/v4/forms/Card.vue', () => ({
   },
 }))
 
-// RunsView und RunDetailView stubben — isolierte Unit-Tests
-vi.mock('@/views/RunsView.vue', () => ({
-  default: {
-    name: 'RunsView',
-    template: '<div class="runs-view-stub">RunsView</div>',
-  },
-}))
+// RunDetailView stubben — isolierter Unit-Test
 vi.mock('@/views/RunDetailView.vue', () => ({
   default: {
     name: 'RunDetailView',
@@ -49,7 +49,6 @@ vi.mock('@/views/RunDetailView.vue', () => ({
   },
 }))
 
-import RunsAppShellView from '../v4/RunsAppShellView.vue'
 import RunDetailAppShellView from '../v4/RunDetailAppShellView.vue'
 
 async function mountView(component: object, path: string) {
@@ -64,32 +63,6 @@ async function mountView(component: object, path: string) {
   await flushPromises()
   return wrapper
 }
-
-describe('RunsAppShellView', () => {
-  beforeEach(() => vi.clearAllMocks())
-
-  it('mountet ohne Crash', async () => {
-    const w = await mountView(RunsAppShellView, '/runs')
-    expect(w.exists()).toBe(true)
-  })
-
-  it('rendert AppShell', async () => {
-    const w = await mountView(RunsAppShellView, '/runs')
-    expect(w.find('.app-shell-stub').exists()).toBe(true)
-  })
-
-  it('bettet RunsView ein', async () => {
-    const w = await mountView(RunsAppShellView, '/runs')
-    expect(w.find('.runs-view-stub').exists()).toBe(true)
-  })
-
-  it('uebergibt Breadcrumb "Runs"', async () => {
-    const w = await mountView(RunsAppShellView, '/runs')
-    const shell = w.findComponent({ name: 'AppShell' })
-    const crumbs = shell.props('breadcrumbs') as Array<{ label: string }>
-    expect(crumbs.map((c) => c.label)).toContain('Runs')
-  })
-})
 
 describe('RunDetailAppShellView', () => {
   beforeEach(() => vi.clearAllMocks())
