@@ -48,7 +48,6 @@ const VIEW_STUB = vi.hoisted(() => ({
   default: { name: 'ViewStub', render: () => null },
 }))
 vi.mock('../../views/v4/DashboardView.vue', () => VIEW_STUB)
-vi.mock('../../views/v4/RunsAppShellView.vue', () => VIEW_STUB)
 vi.mock('../../views/v4/CompareView.vue', () => VIEW_STUB)
 vi.mock('../../views/v4/steps/StepGraphBuildView.vue', () => VIEW_STUB)
 vi.mock('../../views/v4/steps/StepEnvSetupView.vue', () => VIEW_STUB)
@@ -63,12 +62,17 @@ vi.mock('../../views/Settings/SettingsAuditLogsView.vue', () => VIEW_STUB)
 vi.mock('../../views/Settings/LlmRoutingView.vue', () => VIEW_STUB)
 vi.mock('../../views/Settings/LlmProvidersView.vue', () => VIEW_STUB)
 // Issue #838 — Lücken aus der Routen-Konsolidierung (ADR-0010) schließen.
-vi.mock('../../views/v4/RunDetailAppShellView.vue', () => VIEW_STUB)
 vi.mock('../../views/onboarding/OnboardingView.vue', () => VIEW_STUB)
 vi.mock('../../views/Settings/SettingsProfileView.vue', () => VIEW_STUB)
 vi.mock('../../views/Settings/EmbeddingConfigurationsView.vue', () => VIEW_STUB)
 vi.mock('../../views/v4/steps/StepSimulationFeedView.vue', () => VIEW_STUB)
-vi.mock('../../views/v4/HistoryView.vue', () => VIEW_STUB)
+vi.mock('../../views/shell/ShelfView.vue', () => VIEW_STUB)
+// Redesign PR 8: /runs und /v4/history sind reine Redirects auf die Ablage
+// (ShelfView) — RunsAppShellView.vue und HistoryView.vue werden vom Router
+// nicht mehr importiert (Löschung der Dateien selbst ist PR 10), deshalb dafür
+// keine vi.mock()-Eintraege mehr. /runs/:id bleibt eine echte Route und
+// braucht seinen Stub weiterhin.
+vi.mock('../../views/v4/RunDetailAppShellView.vue', () => VIEW_STUB)
 
 import router from '../index'
 import { getAgoraToken } from '../../api/index'
@@ -91,7 +95,6 @@ describe('Router – Routen-Resolution', () => {
 
   it.each([
     ['/dashboard', 'Dashboard'],
-    ['/runs', 'Runs'],
     ['/settings/general', 'SettingsGeneral'],
     ['/settings/integrations', 'SettingsIntegrations'],
     ['/onboarding', 'Onboarding'],
@@ -100,7 +103,6 @@ describe('Router – Routen-Resolution', () => {
     ['/settings/llm-routing', 'SettingsLlmRouting'],
     ['/settings/llm-providers', 'SettingsLlmProviders'],
     ['/settings/embedding', 'SettingsEmbedding'],
-    ['/v4/history', 'HistoryV4'],
   ])('löst %s → %s auf', async (path, name) => {
     await pushAndSettle(path)
     expect(router.currentRoute.value.name).toBe(name)
@@ -110,12 +112,6 @@ describe('Router – Routen-Resolution', () => {
     await pushAndSettle('/v4/compare/sim_abc')
     expect(router.currentRoute.value.name).toBe('CompareV4')
     expect(router.currentRoute.value.params.simulationId).toBe('sim_abc')
-  })
-
-  it('löst /runs/:id mit param auf', async () => {
-    await pushAndSettle('/runs/run_abc')
-    expect(router.currentRoute.value.name).toBe('RunDetail')
-    expect(router.currentRoute.value.params.id).toBe('run_abc')
   })
 
   it('löst /v4/graph-build/:projectId mit param auf', async () => {
@@ -162,7 +158,7 @@ describe('Router – Redirects', () => {
 
   it.each([
     // Die Wurzel fuehrt jetzt in die Ablage: der Shell-Standard ist
-    // seit B3/B4 „dossier“. /home und /v4/dashboard bleiben auf dem
+    // seit B3/B4 „dossier”. /home und /v4/dashboard bleiben auf dem
     // Dashboard, solange die klassische Huelle existiert.
     ['/', 'Shelf'],
     ['/v4/dashboard', 'Dashboard'],
@@ -170,9 +166,40 @@ describe('Router – Redirects', () => {
     ['/settings', 'SettingsGeneral'],
     ['/settings-classic', 'SettingsGeneral'],
     ['/settings/users-teams', 'SettingsProfile'],
+    // Redesign PR 8 (Audit §7 “Läufe (/runs)”): Legacy-Registry und
+    // History entfallen zugunsten der Ablage mit Filter „lauf”/„jobs”.
+    ['/runs', 'Shelf'],
+    ['/v4/history', 'Shelf'],
   ])('%s → %s', async (from, to) => {
     await pushAndSettle(from)
     expect(router.currentRoute.value.name).toBe(to)
+  })
+
+  // Redesign PR 8: /runs → Ablage mit Filter „lauf” vorselektiert (Audit
+  // Zeile 137: „/runs → Redirect /ablage?filter=lauf”).
+  it('/runs → Shelf mit query.filter=lauf', async () => {
+    await pushAndSettle('/runs')
+    expect(router.currentRoute.value.name).toBe('Shelf')
+    expect(router.currentRoute.value.query.filter).toBe('lauf')
+  })
+
+  // Redesign PR 8: /v4/history → Ablage mit Filter „jobs” (Audit Zeile 146:
+  // „History entfällt (Ablage-Filter ‚Alle Jobs')”).
+  it('/v4/history → Shelf mit query.filter=jobs', async () => {
+    await pushAndSettle('/v4/history')
+    expect(router.currentRoute.value.name).toBe('Shelf')
+    expect(router.currentRoute.value.query.filter).toBe('jobs')
+  })
+
+  // Redesign PR 8: /runs/:id wird bewusst NICHT umgebogen. `usage-totals` und
+  // `budget-exceeded-banner` gibt es nur in RunDetailView.vue; das Dossier
+  // traegt beides nicht. Ein Redirect haette Verbrauch und Budgetabbruch eines
+  // Laufs unzugaenglich gemacht. Der Umstieg ist PR 10 und setzt voraus, dass
+  // der Kennzahlstreifen des Dossiers die beiden Bloecke vorher uebernimmt.
+  it('/runs/:id bleibt die Detailansicht und wird nicht in die Ablage umgeleitet', async () => {
+    await pushAndSettle('/runs/run_abc')
+    expect(router.currentRoute.value.name).toBe('RunDetail')
+    expect(router.currentRoute.value.params).toEqual({ id: 'run_abc' })
   })
 
   it('hält /settings-classic nur als expliziten benannten Redirect', () => {
@@ -274,12 +301,11 @@ describe('Router – Struktur-Integrität', () => {
   it('produktive Route-Namen entsprechen exakt der gepflegten SOLL-Liste', () => {
     const SOLL_PRODUKTIVE_ROUTEN = [
       'Dashboard',
-      'Runs',
-      'RunDetail',
       'Onboarding',
       'SettingsGeneral',
       'SettingsIntegrations',
       'SettingsProfile',
+      'RunDetail',
       'SettingsApiKeys',
       'SettingsAuditLogs',
       'SettingsLlmRouting',
@@ -294,7 +320,6 @@ describe('Router – Struktur-Integrität', () => {
       'StepReport',
       'StepInteraction',
       'CompareV4',
-      'HistoryV4',
       // Block B3: die neue Huelle. Beide zeigen auf ShelfView; der
       // Flag entscheidet nur, wohin '/' umleitet.
       'Shelf',

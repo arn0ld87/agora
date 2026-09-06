@@ -33,12 +33,26 @@ const routes: RouteRecordRaw[] = [
     redirect: { name: 'Dashboard' },
   },
 
-  // Runs — AppShell-Wrapper ersetzt direkte RunsView (Slice F)
+  // Redesign PR 8 (Audit §7 "Läufe (/runs)"): /runs zieht in die Ablage um —
+  // Tabellenmodus in Shelf.vue mit Filter „lauf". RunsAppShellView.vue bleibt
+  // physisch erhalten (Löschung ist PR 10), nur die Route zeigt nicht mehr
+  // darauf.
   {
     path: '/runs',
     name: 'Runs',
-    component: () => import('../views/v4/RunsAppShellView.vue'),
+    redirect: { name: 'Shelf', query: { filter: 'lauf' } },
   },
+  // Redesign PR 8: /runs/:id bleibt bewusst auf der Detailansicht.
+  //
+  // Der Audit verlangt in §7 nur den Umzug der LISTE (`/runs` → Ablage) und
+  // den History-Redirect; die Detailroute nennt er nicht. Sie umzubiegen waere
+  // auch verfrueht: `usage-totals` (Verbrauchsanalyse) und
+  // `budget-exceeded-banner` leben ausschliesslich in RunDetailView.vue, das
+  // Dossier traegt beides nicht. Ein Redirect auf `/ablage/lauf/:id` wuerde
+  // den Verbrauch und den Budgetabbruch eines Laufs also ersatzlos
+  // unzugaenglich machen — kein Umzug, ein Verlust. Der Umstieg gehoert in
+  // PR 10 und setzt voraus, dass der Kennzahlstreifen des Dossiers die beiden
+  // Bloecke vorher uebernimmt.
   {
     path: '/runs/:id',
     name: 'RunDetail',
@@ -207,10 +221,13 @@ const routes: RouteRecordRaw[] = [
     component: () => import('../views/v4/CompareView.vue'),
     props: true,
   },
+  // Redesign PR 8 (Audit §7): History entfällt zugunsten des Ablage-Filters
+  // „Alle Jobs" (Zeile 146 des Audits). HistoryView.vue bleibt physisch
+  // erhalten (Löschung ist PR 10), nur die Route zeigt nicht mehr darauf.
   {
     path: '/v4/history',
     name: 'HistoryV4',
-    component: () => import('../views/v4/HistoryView.vue'),
+    redirect: { name: 'Shelf', query: { filter: 'jobs' } },
   },
 
   // Block B3 — Neuhuelle „Richtung B · Dossier“ (PLAN.md).

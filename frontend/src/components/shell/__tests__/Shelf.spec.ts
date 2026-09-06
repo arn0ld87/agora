@@ -23,7 +23,7 @@ import { createRouter, createMemoryHistory } from 'vue-router'
 import { createI18n } from 'vue-i18n'
 import de from '@/i18n/locales/de.json'
 import en from '@/i18n/locales/en.json'
-import { ShelfTestId } from '../../../contracts/testIds'
+import { ShelfTableTestId, ShelfTestId } from '../../../contracts/testIds'
 import type { ShelfFilter, ShelfJobRow, ShelfObject } from '../../../types/shelf'
 import type { useShelf } from '../../../composables/useShelf'
 
@@ -253,5 +253,106 @@ describe('Shelf', () => {
     await flushPromises()
 
     expect(wrapper.find(`[data-testid="${ShelfTestId.rowPersonaError}"]`).exists()).toBe(true)
+  })
+
+  // ── Tabellenmodus (Redesign PR 8) ────────────────────────────────────
+  describe('Tabellenmodus', () => {
+    // Repo-Muster fuer localStorage im Test (Vorbild: useDensity.spec.ts):
+    // ein eigener Stub per vi.stubGlobal, nicht window.localStorage — das ist
+    // in dieser Testumgebung nicht belegt.
+    let storageStub: Storage
+
+    beforeEach(() => {
+      const store: Record<string, string> = {}
+      storageStub = {
+        getItem: (k: string) => store[k] ?? null,
+        setItem: (k: string, v: string) => { store[k] = v },
+        removeItem: (k: string) => { delete store[k] },
+        clear: () => { Object.keys(store).forEach((k) => delete store[k]) },
+        get length() { return Object.keys(store).length },
+        key: (i: number) => Object.keys(store)[i] ?? null,
+      }
+      vi.stubGlobal('localStorage', storageStub)
+    })
+
+    it('rendert die Läufe-Spalten, Zeitspalte als Mono, Zahlen rechtsbündig', async () => {
+      const obj = makeObject({
+        id: 'sim_1',
+        title: 'Testlauf eins',
+        statusLine: 'Läuft',
+        personaCount: 12,
+        active: { runId: 'run_1', status: 'processing', pausable: false, simulationId: null, progress: 62 },
+      })
+      const { wrapper, shelf } = mountShelf([obj])
+      shelf.filter.value = 'lauf'
+      await wrapper.vm.$nextTick()
+      await wrapper.find(`[data-testid="${ShelfTableTestId.toggleTable}"]`).trigger('click')
+      await wrapper.vm.$nextTick()
+
+      const root = wrapper.find(`[data-testid="${ShelfTableTestId.root}"]`)
+      expect(root.exists()).toBe(true)
+
+      const headers = root.findAll('th').map((th) => th.text())
+      expect(headers).toContain('Vorhaben')
+      expect(headers).toContain('Zustand')
+      expect(headers).toContain('Fortschritt')
+      expect(headers).toContain('Personas')
+      expect(headers).toContain('Angefasst')
+      expect(headers).toContain('Nächster Schritt')
+
+      const cells = root.find('tbody tr').findAll('td')
+      expect(cells[0].text()).toBe('Testlauf eins')
+      expect(cells[1].text()).toBe('Läuft')
+      // Fortschritt: Zahl, rechtsbündig + Mono (Audit §Typografie).
+      expect(cells[2].text()).toBe('62')
+      expect(cells[2].classes()).toContain('dt-cell--right')
+      expect(cells[2].classes()).toContain('dt-td--mono')
+      // Personas: ebenfalls Zahl, rechtsbündig + Mono.
+      expect(cells[3].text()).toBe('12')
+      expect(cells[3].classes()).toContain('dt-cell--right')
+      // Angefasst: Zeitwert ist Mono, aber NICHT rechtsbündig.
+      expect(cells[4].classes()).toContain('dt-td--mono')
+      expect(cells[4].classes()).not.toContain('dt-cell--right')
+    })
+
+    it('Zeilenklick in der Tabelle emittiert select, rowSelected markiert die aktive Zeile', async () => {
+      const obj = makeObject({ id: 'sim_9' })
+      const { wrapper, shelf } = mountShelf([obj], [], obj)
+      shelf.filter.value = 'lauf'
+      await wrapper.vm.$nextTick()
+      await wrapper.find(`[data-testid="${ShelfTableTestId.toggleTable}"]`).trigger('click')
+      await wrapper.vm.$nextTick()
+
+      const row = wrapper.find(`[data-testid="${ShelfTableTestId.root}"] tbody tr`)
+      expect(row.classes()).toContain('dt-body-row--selected')
+
+      await row.trigger('click')
+      expect(wrapper.emitted('select')).toEqual([[obj]])
+    })
+
+    it('merkt die Umschalter-Wahl in localStorage und liest sie beim nächsten Mount', async () => {
+      const obj = makeObject({ id: 'sim_1' })
+      const { wrapper, shelf } = mountShelf([obj])
+      shelf.filter.value = 'lauf'
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.find(`[data-testid="${ShelfTableTestId.root}"]`).exists()).toBe(false)
+      await wrapper.find(`[data-testid="${ShelfTableTestId.toggleTable}"]`).trigger('click')
+      expect(storageStub.getItem('agora.shelf.viewMode')).toBe('table')
+
+      const { wrapper: wrapper2, shelf: shelf2 } = mountShelf([obj])
+      shelf2.filter.value = 'lauf'
+      await wrapper2.vm.$nextTick()
+      expect(wrapper2.find(`[data-testid="${ShelfTableTestId.root}"]`).exists()).toBe(true)
+    })
+
+    it('Umschalter erscheint nicht bei Filtern ausser „lauf"/„jobs"', async () => {
+      const obj = makeObject({ id: 'sim_1' })
+      const { wrapper, shelf } = mountShelf([obj])
+      shelf.filter.value = 'bericht'
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.find(`[data-testid="${ShelfTableTestId.toggle}"]`).exists()).toBe(false)
+    })
   })
 })

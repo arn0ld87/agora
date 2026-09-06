@@ -1934,6 +1934,20 @@
       "stopped": "Cancelled"
     },
     "subtitle": "{n} objects · most recently touched first",
+    "table": {
+      "toggleList": "List",
+      "toggleTable": "Table",
+      "toggleAria": "Choose view",
+      "colTitle": "Endeavor",
+      "colStatus": "State",
+      "colProgress": "Progress",
+      "colPersonas": "Personas",
+      "colUpdatedAt": "Touched",
+      "colNextAction": "Next step",
+      "colType": "Type",
+      "colMessage": "Message",
+      "compare": "Compare"
+    },
     "title": "Shelf",
     "undo": "Undo",
     "undoHint": "Cancelling in {s} s"

@@ -140,4 +140,31 @@ describe('ShelfView', () => {
     expect(router.currentRoute.value.params).toEqual({ kind: 'lauf', objectId: 'sim_1' })
     expect(wrapper.find(`[data-testid="${DossierTestId.title}"]`).text()).toBe('Erster Testlauf')
   })
+
+  // Redesign PR 8: /ablage?filter=lauf uebernimmt den Filter aus der Query
+  // (Audit Zeile 137: „/runs → Redirect /ablage?filter=lauf").
+  it('uebernimmt einen gueltigen ?filter= aus der Query', async () => {
+    vi.mocked(listRuns).mockResolvedValue({ data: { runs: [], total: 0, aggregation: null } } as never)
+    const router = makeRouter()
+    await router.push('/ablage?filter=lauf')
+    const wrapper = mount(ShelfView, { global: { plugins: [router, i18n, createPinia()] } })
+    await flushPromises()
+
+    expect(wrapper.find(`[data-testid="${ShelfTestId.filterPill}"]`).exists()).toBe(true)
+    const activePill = wrapper.findAll(`[data-testid="${ShelfTestId.filterPill}"]`).find((p) => p.attributes('aria-selected') === 'true')
+    expect(activePill?.text()).toContain('Läufe')
+  })
+
+  it('ignoriert einen ungueltigen ?filter= statt zu werfen', async () => {
+    vi.mocked(listRuns).mockResolvedValue({ data: { runs: [], total: 0, aggregation: null } } as never)
+    const router = makeRouter()
+    await router.push('/ablage?filter=unbekannt')
+
+    expect(async () => {
+      const wrapper = mount(ShelfView, { global: { plugins: [router, i18n, createPinia()] } })
+      await flushPromises()
+      const activePill = wrapper.findAll(`[data-testid="${ShelfTestId.filterPill}"]`).find((p) => p.attributes('aria-selected') === 'true')
+      expect(activePill?.text()).toContain('Alle')
+    }).not.toThrow()
+  })
 })

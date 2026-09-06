@@ -1934,6 +1934,20 @@
       "stopped": "Abgebrochen"
     },
     "subtitle": "{n} Objekte · zuletzt angefasst zuerst",
+    "table": {
+      "toggleList": "Liste",
+      "toggleTable": "Tabelle",
+      "toggleAria": "Ansicht wählen",
+      "colTitle": "Vorhaben",
+      "colStatus": "Zustand",
+      "colProgress": "Fortschritt",
+      "colPersonas": "Personas",
+      "colUpdatedAt": "Angefasst",
+      "colNextAction": "Nächster Schritt",
+      "colType": "Typ",
+      "colMessage": "Meldung",
+      "compare": "Vergleichen"
+    },
     "title": "Ablage",
     "undo": "Rückgängig",
     "undoHint": "Wird in {s} s abgebrochen"

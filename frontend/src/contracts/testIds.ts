@@ -187,3 +187,20 @@ export const SimulationLiveTestId = {
 } as const
 
 export type SimulationLiveTestId = (typeof SimulationLiveTestId)[keyof typeof SimulationLiveTestId]
+
+/**
+ * ShelfTableTestId — Tabellenmodus der Ablage (Redesign PR 8, Audit §7
+ * "Läufe (/runs)"). Ergaenzt `ShelfTestId` um den Umschalter Liste⇄Tabelle
+ * und die DataTable-Instanz fuer die Filter „lauf"/„jobs". Die Tabelle
+ * selbst (Kopf/Zeilen/Zellen) nutzt `DataTable.vue` — hier stehen nur die
+ * Shelf-eigenen Selektoren (Umschalter, Wrapper, Vergleichen-Aktion).
+ */
+export const ShelfTableTestId = {
+  toggle: 'shelf-table-toggle',
+  toggleList: 'shelf-table-toggle-list',
+  toggleTable: 'shelf-table-toggle-table',
+  root: 'shelf-table-root',
+  compareAction: 'shelf-table-compare-action',
+} as const
+
+export type ShelfTableTestId = (typeof ShelfTableTestId)[keyof typeof ShelfTableTestId]
