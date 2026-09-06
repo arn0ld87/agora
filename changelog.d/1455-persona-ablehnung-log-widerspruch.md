@@ -1,0 +1,3 @@
+### Fixed
+
+Die Persona-Generierung protokollierte abgelehnte Kandidaten widersprüchlich: Auf die Zeile „Entitaet abgelehnt name=… reason=…" folgte in der nächsten Zeile trotzdem „Successfully generated persona“ für dieselbe Entität, weil die Fortschrittsmeldung nur zwischen Notprofil (Fehlerfall) und Erfolg unterschied, nicht aber danach, ob überhaupt ein Profil entstanden war. Die Meldung nennt für abgelehnte Kandidaten jetzt wahrheitsgemäß Name und Ablehnungsgrund statt eines falschen Erfolgs, und am Ende der Generierung steht zusätzlich eine Summenzeile mit der Bilanz aus angetretenen Kandidaten, Ablehnungen und tatsächlich erzeugten Personas, damit eine Lücke wie „15/20 Personas“ nicht mehr aus dem Nichts kommt.
