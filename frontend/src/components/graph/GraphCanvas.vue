@@ -415,7 +415,7 @@ defineExpose({
   right: 0;
   bottom: 0;
   background-color: var(--rule-strong);
-  border-radius: var(--r-3);
+  border-radius: var(--r-pill);
   transition: 0.3s;
 }
 
