@@ -132,20 +132,88 @@ def _resolve_llm_connection(
     return None, None, None
 
 
+# Bestimmte und unbestimmte Artikel, die einer Entitaetsbezeichnung
+# voranstehen koennen ("der digitale Zwilling", "die Lernplattform"). Nur das
+# erste Token wird geprueft — Artikel mitten im Namen ("KI-Version der
+# Lehrkraft") sind Teil der Bezeichnung und werden nicht angetastet.
+_LEADING_ARTICLES = frozenset(
+    {
+        "der", "die", "das", "den", "dem", "des",
+        "ein", "eine", "einen", "einem", "einer", "eines",
+    }
+)
+
+# Schwache/starke Adjektivendungen, absteigend nach Laenge geprueft, damit
+# "digitalen" auf "en" statt versehentlich auf ein kuerzeres Suffix trifft.
+_ADJECTIVE_SUFFIXES = ("er", "es", "em", "en", "e")
+
+# Mindestlaenge des verbleibenden Stamms nach Endungs-Abzug. Bewusst auf 4
+# gesetzt statt z. B. 3: bei 3 wuerde "ohne" (Praeposition, kein Adjektiv) zu
+# "ohn" verstuemmelt. Ein zu kurzer Stamm ist ein Indiz, dass das Wort gar
+# kein flektiertes Adjektiv ist — dann lieber nicht anfassen.
+_MIN_ADJECTIVE_STEM_LENGTH = 4
+
+
+def _strip_leading_article(tokens: list[str]) -> list[str]:
+    """Entfernt fuehrende Artikel, falls danach noch ein Namensrest bleibt."""
+    while len(tokens) > 1 and tokens[0].casefold() in _LEADING_ARTICLES:
+        tokens = tokens[1:]
+    return tokens
+
+
+def _normalize_adjective_endings(tokens: list[str]) -> list[str]:
+    """Gleicht einfache Adjektivflexion an ("digitaler"/"digitale"/"digitalen"
+    -> "digital").
+
+    Bewusst konservativ in zwei Punkten:
+
+    1. Nur nicht-letzte Tokens werden angefasst. In deutschen Nominalphrasen
+       steht das attributive Adjektiv vor dem Kopf-Nomen; das letzte Token
+       einer Bezeichnung ist damit fast immer das Nomen selbst und wird nie
+       gestemmt. Das schuetzt Paare wie "Lehrkraft" vs.
+       "Lehrkraeftevertretung" oder "Lernplattform" vs. "Lernender" — das
+       sind einwortige Namen, bei denen das einzige Token immer das letzte
+       ist und daher unveraendert bleibt.
+    2. Der verbleibende Stamm muss mindestens
+       ``_MIN_ADJECTIVE_STEM_LENGTH`` Zeichen lang sein, sonst wird nicht
+       gestrippt (siehe Kommentar dort).
+
+    Kein Nomen-Stemmer, kein Fremdbibliotheks-Ansatz — nur eine kleine feste
+    Endungsliste auf Wortebene.
+    """
+    if len(tokens) < 2:
+        return tokens
+    normalized = list(tokens)
+    for index in range(len(normalized) - 1):
+        lower = normalized[index].casefold()
+        for suffix in _ADJECTIVE_SUFFIXES:
+            stem_length = len(lower) - len(suffix)
+            if lower.endswith(suffix) and stem_length >= _MIN_ADJECTIVE_STEM_LENGTH:
+                normalized[index] = lower[: -len(suffix)]
+                break
+    return normalized
+
+
 def _entity_identity_key(entity: "EntityNode") -> tuple[str, str]:
-    """Vergleichsschluessel fuer Persona-Kandidaten (Issue #1177).
+    """Vergleichsschluessel fuer Persona-Kandidaten (Issue #1177, #1177-Folge).
 
     Normalisiert wie ``report_contract._stakeholder_group_key``: casefold plus
     Whitespace-Kollaps. Die Ontologie liefert denselben Stakeholder mehrfach in
     leicht abweichender Schreibweise; roh verglichen zaehlt jede Variante als
-    eigene Gruppe.
+    eigene Gruppe. Zusaetzlich werden fuehrende Artikel entfernt und einfache
+    Adjektivendungen angeglichen (siehe ``_strip_leading_article`` und
+    ``_normalize_adjective_endings``), damit z. B. "digitaler Zwilling", "der
+    digitale Zwilling" und "digitale Zwilling" als eine Gruppe zaehlen.
 
     Der Typ gehoert in den Schluessel: derselbe Name unter zwei Typen ist
     fachlich nicht dasselbe — der Bildungstraeger als ``Traeger`` und als
     ``Kostentraeger`` sind zwei Rollen, auch wenn der Typfehler selbst
     (zweiter Befund in #1177) hier nicht behoben wird.
     """
-    name = " ".join((entity.name or "").split()).casefold()
+    tokens = (entity.name or "").split()
+    tokens = _strip_leading_article(tokens)
+    tokens = _normalize_adjective_endings(tokens)
+    name = " ".join(tokens).casefold()
     entity_type = " ".join((entity.get_entity_type() or "Entity").split()).casefold()
     return name, entity_type
 
