@@ -258,6 +258,7 @@ Chat-Routing und Embedding-Konfiguration bleiben getrennte Vertragswelten.
 - API-Auth über `AGORA_AUTH_TOKEN`
 - SSE und Downloads über signierte Tickets
 - Secrets werden nicht in Report-/Simulation-Artefakte serialisiert
+- die Audit-Zeile beim `LLMClient`-Init nennt neben `provider_id` auch `provider_type`; der Typ stammt aus der Provider-Registry beziehungsweise aus dem explizit übergebenen Wert, nie aus einer URL- oder Modell-Ableitung. `provider_id=unknown` bleibt für `codex_cli` korrekt, weil dieser Provider bewusst nicht erraten wird ([PR #1457](https://github.com/arn0ld87/agora/pull/1457))
 - Credential-behaftete LLM-Requests erzwingen HTTPS; `http://` ist nur für lokale/private Hosts zulässig, dokumentierte Ausnahme über `AGORA_LLM_ALLOW_INSECURE_HTTP` (Issue #1103)
 - Readiness prüft Neo4j, Redis, Upload-Verzeichnis und Embedding-Konfiguration
 - Dependency-Ausnahmen werden im [`dependency-risk-register.md`](dependency-risk-register.md) geführt
