@@ -16,4 +16,8 @@
  * Const-Wert als auch den同名 type — daher KEIN zusaetzliches
  * `export type { ... }` (wuerde TS2300 Duplicate identifier werfen).
  */
-export { AiModelPickerTestId, LlmRoutingTestId } from '../../../src/contracts/testIds'
+export {
+  AiModelPickerTestId,
+  LlmRoutingTestId,
+  ReportReaderTestId,
+} from '../../../src/contracts/testIds'

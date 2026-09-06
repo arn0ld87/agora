@@ -621,6 +621,39 @@
       },
       "evidencePending": "Evidenzkarte wird noch erzeugt — der Export steht zur Verfügung, sobald sie fertig ist.",
       "evidenceUnavailable": "Evidenzkarte für diesen Report nicht verfügbar."
+    },
+    "reader": {
+      "outlineTitle": "Bericht",
+      "outlineSectionsCount": "{count} Abschnitte",
+      "outlineSummary": "Zusammenfassung",
+      "outlineFullReport": "Vollständiger Bericht",
+      "outlineSection": "Abschnitt {num}",
+      "appendixTitle": "Anhang",
+      "appendixHypotheses": "{count} Hypothesen",
+      "appendixDataGaps": "{count} Datenlücken",
+      "appendixEvidence": "{count} Belege",
+      "appendixRedTeam": "{count} Red-Team-Befunde",
+      "railTitle": "Aussagen in Abschnitt {num}",
+      "railEvidenceTitle": "Belege an dieser Stelle",
+      "railGapsTitle": "Datenlücken in diesem Abschnitt",
+      "railRedTeamTitle": "Red-Team zu Abschnitt {num}",
+      "railEmpty": "Keine Aussagen für diesen Abschnitt erfasst.",
+      "railToggleHide": "Belegrand ausblenden",
+      "railToggleShow": "Belegrand einblenden",
+      "confidence": {
+        "speculative": "spekulativ",
+        "low": "niedrig",
+        "medium": "mittel",
+        "high": "hoch",
+        "verified": "verifiziert"
+      },
+      "regenerate": {
+        "openButton": "Neu generieren",
+        "title": "Bericht neu generieren",
+        "description": "Modell und Modus für diesen Regenerierungslauf wählen.",
+        "confirmButton": "Regenerieren",
+        "cancelButton": "Abbrechen"
+      }
     }
   },
   "report": {
