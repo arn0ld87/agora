@@ -2513,14 +2513,21 @@ Important:
         # Summenzeile: die einzelnen "[i/n]"-Meldungen oben genuegen nicht als
         # Bilanz, ohne sie nachzuzaehlen — genau daran ist heute eine
         # Fehlersuche vorbeigelaufen (23x "Successfully generated" im Log,
-        # aber am Ende nur 15 Personas). ``total`` ist die Anzahl der primaer
-        # angetretenen Kandidaten, ``rejected`` zaehlt jede Ablehnung
-        # inklusive der beim Nachbesetzen aus dem Reservepool verbrauchten.
+        # aber am Ende nur 15 Personas). ``rejected`` zaehlt jede Ablehnung
+        # inklusive der beim Nachbesetzen aus dem Reservepool verbrauchten,
+        # also darf "angetreten" nicht der primaere ``total`` allein sein —
+        # sonst kann die Zeile eine rechnerisch unmoegliche Bilanz zeigen
+        # (mehr Ablehnungen als Angetretene), sobald ein Reserve-Kandidat
+        # selbst abgelehnt wird, bevor ein anderer den Slot fuellt. Aus
+        # ``generated_count + len(rejected)`` folgt die Gleichung
+        # angetreten = abgelehnt + erzeugt per Konstruktion und ist damit in
+        # jeder Konstellation stimmig.
         generated_count = len([p for p in profiles if p])
+        attempted_count = generated_count + len(rejected)
         logger.info(
             "Persona generation complete: %d Kandidat(en) angetreten, %d abgelehnt, "
             "%d Personas erzeugt.",
-            total,
+            attempted_count,
             len(rejected),
             generated_count,
         )

@@ -24,6 +24,7 @@ ontology-generator fix in PR #858.
 from __future__ import annotations
 
 import logging
+import re
 
 import pytest
 
@@ -636,3 +637,61 @@ def test_persona_generation_summary_line_counts_without_rejections(monkeypatch, 
     assert "2 Kandidat(en) angetreten" in summary[0]
     assert "0 abgelehnt" in summary[0]
     assert "2 Personas erzeugt" in summary[0]
+
+
+def test_persona_generation_summary_line_stays_consistent_with_reserve_backfill(
+    monkeypatch, caplog
+):
+    """Codex-Finding auf PR #1455: ``_backfill_rejected_slots`` haengt
+    Ablehnungen aus dem Reserve-Backfill an ``rejected`` an, waehrend die
+    Summenzeile zuvor nur die primaer angetretenen Kandidaten zaehlte. Fuer
+    genau diese Folge — ein abgelehnter Primaerkandidat, ein abgelehnter
+    Reservekandidat, ein erfolgreicher Reservekandidat — ergab das eine
+    rechnerisch unmoegliche Bilanz (mehr Ablehnungen als Angetretene).
+    """
+    caplog.set_level(logging.INFO, logger="agora.oasis_profile")
+
+    gen = _make_generator()
+    monkeypatch.setattr(
+        OasisProfileGenerator,
+        "generate_profile_from_entity",
+        _stub_generate_profile_from_entity({"Primär GmbH", "Reserve A"}),
+    )
+
+    entities = [_entity("Primär GmbH", "Organization")]
+    reserve_entities = [
+        _entity("Reserve A", "Organization"),
+        _entity("Reserve B", "Organization"),
+    ]
+
+    profiles = gen.generate_profiles_from_entities(
+        entities,
+        use_llm=False,
+        parallel_count=1,
+        reserve_entities=reserve_entities,
+    )
+
+    # Der Slot wird aus der Reserve nachbesetzt.
+    assert [p.name for p in profiles] == ["Reserve B"]
+
+    summary = [
+        r.getMessage()
+        for r in caplog.records
+        if r.name == "agora.oasis_profile" and "Persona generation complete" in r.getMessage()
+    ]
+    assert len(summary) == 1
+
+    # Die Bilanz muss immer aufgehen: angetreten == abgelehnt + erzeugt.
+    match = re.search(
+        r"(\d+) Kandidat\(en\) angetreten, (\d+) abgelehnt, (\d+) Personas erzeugt",
+        summary[0],
+    )
+    assert match is not None, summary[0]
+    attempted, rejected_count, generated = (int(g) for g in match.groups())
+    assert attempted == rejected_count + generated
+
+    # Konkret fuer diese Konstellation: 1 Primaer- + 1 Reserve-Ablehnung,
+    # 1 erfolgreicher Nachruecker, also 3 Angetretene.
+    assert attempted == 3
+    assert rejected_count == 2
+    assert generated == 1
