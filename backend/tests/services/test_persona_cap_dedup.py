@@ -85,10 +85,92 @@ class TestDedupe:
 
     def test_der_schluessel_beruecksichtigt_fehlende_angaben(self) -> None:
         """Ein Knoten ohne eigenen Typ darf nicht crashen — er fällt auf
-        ``entity`` zurück."""
+        ``entity`` zurück. Zugleich Regressionsschutz fuer die
+        Mindest-Stammlaenge: "Ohne" endet auf "e", darf aber nicht
+        faelschlich als Adjektiv zu "Ohn" verstuemmelt werden."""
         node = EntityNode(uuid="u", name="Ohne Typ", labels=["Entity"], summary="", attributes={})
 
         assert _entity_identity_key(node) == ("ohne typ", "entity")
+
+
+class TestDedupeDeutscheOberflaechenvarianten:
+    """Produktionsbeleg: 24 extrahierte Entitaeten, von denen acht im Kern
+    zwei Konzepte sind ("digitaler Zwilling" und "Lernplattform"), aber nur
+    eine Dublette erkannt wurde. Grund: Artikel, Gross-/Kleinschreibung und
+    Adjektivflexion wurden nicht normalisiert."""
+
+    def test_acht_produktionsnamen_kollabieren_auf_fuenf_konzepte(self) -> None:
+        entities = [
+            _entity("digitaler Zwilling", "Organization"),
+            _entity("der digitale Zwilling", "Organization"),
+            _entity("digitale Zwilling", "Organization"),
+            _entity("digitale Lehrkraft-Zwillinge", "Organization"),
+            _entity("KI-Version der Lehrkraft", "AIServiceProvider"),
+            _entity("KI-Assistent", "Organization"),
+            _entity("Lernplattform", "Organization"),
+            _entity("die Lernplattform", "Organization"),
+        ]
+
+        unique, removed = _dedupe_entities(entities)
+
+        # Erste Nennung gewinnt je Gruppe: "digitaler Zwilling" (Index 0) und
+        # "Lernplattform" (Index 6) ueberleben deterministisch, weil sie in
+        # der Quellliste zuerst auftauchen.
+        assert [e.name for e in unique] == [
+            "digitaler Zwilling",
+            "digitale Lehrkraft-Zwillinge",
+            "KI-Version der Lehrkraft",
+            "KI-Assistent",
+            "Lernplattform",
+        ]
+        assert removed == 3
+        assert len(entities) - removed == len(unique) == 5
+
+    @pytest.mark.parametrize(
+        ("first", "second"),
+        [
+            ("digitaler Zwilling", "der digitale Zwilling"),
+            ("digitaler Zwilling", "digitale Zwilling"),
+            ("Lernplattform", "die Lernplattform"),
+        ],
+    )
+    def test_artikel_und_adjektivflexion_zaehlen_als_eine_gruppe(
+        self, first: str, second: str
+    ) -> None:
+        unique, removed = _dedupe_entities([_entity(first), _entity(second)])
+
+        assert [e.name for e in unique] == [first], "erste Nennung soll gewinnen"
+        assert removed == 1
+
+    @pytest.mark.parametrize(
+        ("first", "second"),
+        [
+            ("Lehrkraft", "Lehrkräftevertretung"),
+            ("Teilnehmervertretung", "Lehrkräftevertretung"),
+            ("Lernplattform", "Lernender"),
+            # Codex-Review-Finding auf PR #1453: "Unternehmen" und
+            # "Unternehmer" sind zwei verschiedene Nomen, keine Adjektivform
+            # desselben Worts. Die alte Normalisierung stemmte beide
+            # faelschlich auf "unternehm", weil sie zufaellig auf
+            # Adjektivendungen ("-en"/"-er") enden.
+            ("Unternehmen der Region", "Unternehmer der Region"),
+            # Weiterer Nomen-Kollisionsfall derselben Bauart: "Lehrer"
+            # (Person) und "Lehre" (Ausbildung/Lehrgang) sind fachlich
+            # unterschiedliche Stakeholder, kollabieren aber auf denselben
+            # Stamm ("Lehr"), wenn man Adjektivendungen blind abschneidet.
+            ("Lehrer der Klasse", "Lehre der Klasse"),
+        ],
+    )
+    def test_aehnliche_aber_verschiedene_stakeholder_bleiben_getrennt(
+        self, first: str, second: str
+    ) -> None:
+        """Der gefaehrliche Fehler waere Uebergeneralisierung: diese Paare
+        teilen einen Wortstamm, sind aber fachlich unterschiedliche
+        Stakeholder und duerfen nicht verschmolzen werden."""
+        unique, removed = _dedupe_entities([_entity(first), _entity(second)])
+
+        assert len(unique) == 2
+        assert removed == 0
 
 
 class TestCapAcrossTypes:

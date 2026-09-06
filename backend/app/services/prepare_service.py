@@ -132,20 +132,112 @@ def _resolve_llm_connection(
     return None, None, None
 
 
+# Bestimmte und unbestimmte Artikel, die einer Entitaetsbezeichnung
+# voranstehen koennen ("der digitale Zwilling", "die Lernplattform"). Nur das
+# erste Token wird geprueft — Artikel mitten im Namen ("KI-Version der
+# Lehrkraft") sind Teil der Bezeichnung und werden nicht angetastet.
+_LEADING_ARTICLES = frozenset(
+    {
+        "der", "die", "das", "den", "dem", "des",
+        "ein", "eine", "einen", "einem", "einer", "eines",
+    }
+)
+
+# Schwache/starke Adjektivendungen, absteigend nach Laenge geprueft, damit
+# "digitalen" auf "en" statt versehentlich auf ein kuerzeres Suffix trifft.
+_ADJECTIVE_SUFFIXES = ("er", "es", "em", "en", "e")
+
+# Mindestlaenge des verbleibenden Stamms nach Endungs-Abzug. Bewusst auf 4
+# gesetzt statt z. B. 3: bei 3 wuerde "ohne" (Praeposition, kein Adjektiv) zu
+# "ohn" verstuemmelt. Ein zu kurzer Stamm ist ein Indiz, dass das Wort gar
+# kein flektiertes Adjektiv ist — dann lieber nicht anfassen.
+_MIN_ADJECTIVE_STEM_LENGTH = 4
+
+
+def _strip_leading_article(tokens: list[str]) -> list[str]:
+    """Entfernt fuehrende Artikel, falls danach noch ein Namensrest bleibt."""
+    while len(tokens) > 1 and tokens[0].casefold() in _LEADING_ARTICLES:
+        tokens = tokens[1:]
+    return tokens
+
+
+def _normalize_adjective_endings(tokens: list[str]) -> list[str]:
+    """Gleicht einfache Adjektivflexion an ("digitaler"/"digitale"/"digitalen"
+    -> "digital").
+
+    Bewusst konservativ in drei Punkten:
+
+    1. Nur das Token unmittelbar vor dem letzten (dem Kopf-Nomen) kommt
+       ueberhaupt infrage. In deutschen Nominalphrasen steht das attributive
+       Adjektiv direkt vor seinem Kopf-Nomen, ohne trennendes Wort dazwischen
+       ("digitaler Zwilling", "junge Familien"). Ein Token, das *nicht*
+       unmittelbar vor dem letzten steht, ist damit strukturell kein
+       attributives Adjektiv des Kopf-Nomens, selbst wenn es zufaellig auf
+       eine Adjektivendung endet. Das ist bewusst enger als "irgendein
+       nicht-letztes Token": geprueft an einer Grossschreibungs-Heuristik
+       ("Nomen werden grossgeschrieben") zeigte sich, dass sie am
+       Phrasenanfang nicht traegt — "Junge Familien" (bestehender Testfall)
+       braucht die Normalisierung genau am ersten, grossgeschriebenen Token,
+       weil dort auch attributive Adjektive phrasenanfangs grossgeschrieben
+       auftreten. Grossschreibung allein trennt Nomen und Adjektiv also
+       nicht zuverlaessig; die Wortstellung tut es. Sie schuetzt zugleich
+       "Unternehmen der Region" vs. "Unternehmer der Region" (Codex-Finding
+       auf PR #1453): "Unternehmen"/"Unternehmer" stehen dort nicht
+       unmittelbar vor dem Kopf-Nomen "Region" — dazwischen steht "der" —,
+       werden also nie angefasst, obwohl beide Nomen zufaellig auf eine
+       Adjektivendung ("-en"/"-er") enden. Einwortige Namen ("Lehrkraft",
+       "Lernplattform") sind ueberhaupt nie betroffen, weil ihr einziges
+       Token immer das letzte ist.
+    2. Der verbleibende Stamm muss mindestens
+       ``_MIN_ADJECTIVE_STEM_LENGTH`` Zeichen lang sein, sonst wird nicht
+       gestrippt (siehe Kommentar dort). Das schuetzt z. B. "der" in
+       "Unternehmen der Region" zusaetzlich, falls die Phrase kuerzer waere.
+    3. Trifft keine der beiden Bedingungen zu, bleibt das Token unveraendert
+       stehen. Im Zweifel wird nicht gestemmt — ein verpasster Treffer ist
+       billig, eine falsche Fusion verfaelscht die Persona-Menge.
+
+    Grenze: bei mehreren attributiven Adjektiven vor dem Kopf-Nomen ("die
+    grosse digitale Lernplattform") wird nur das unmittelbar vorangehende
+    Adjektiv normalisiert; weiter vorne stehende Adjektive bleiben
+    unveraendert. Das ist ein verpasster Treffer, keine falsche Fusion, und
+    damit im Sinne des Auftrags die sicherere Seite.
+
+    Kein Nomen-Stemmer, kein Fremdbibliotheks-Ansatz — nur eine kleine feste
+    Endungsliste auf Wortebene.
+    """
+    if len(tokens) < 2:
+        return tokens
+    normalized = list(tokens)
+    index = len(normalized) - 2
+    lower = normalized[index].casefold()
+    for suffix in _ADJECTIVE_SUFFIXES:
+        stem_length = len(lower) - len(suffix)
+        if lower.endswith(suffix) and stem_length >= _MIN_ADJECTIVE_STEM_LENGTH:
+            normalized[index] = lower[: -len(suffix)]
+            break
+    return normalized
+
+
 def _entity_identity_key(entity: "EntityNode") -> tuple[str, str]:
-    """Vergleichsschluessel fuer Persona-Kandidaten (Issue #1177).
+    """Vergleichsschluessel fuer Persona-Kandidaten (Issue #1177, #1177-Folge).
 
     Normalisiert wie ``report_contract._stakeholder_group_key``: casefold plus
     Whitespace-Kollaps. Die Ontologie liefert denselben Stakeholder mehrfach in
     leicht abweichender Schreibweise; roh verglichen zaehlt jede Variante als
-    eigene Gruppe.
+    eigene Gruppe. Zusaetzlich werden fuehrende Artikel entfernt und einfache
+    Adjektivendungen angeglichen (siehe ``_strip_leading_article`` und
+    ``_normalize_adjective_endings``), damit z. B. "digitaler Zwilling", "der
+    digitale Zwilling" und "digitale Zwilling" als eine Gruppe zaehlen.
 
     Der Typ gehoert in den Schluessel: derselbe Name unter zwei Typen ist
     fachlich nicht dasselbe — der Bildungstraeger als ``Traeger`` und als
     ``Kostentraeger`` sind zwei Rollen, auch wenn der Typfehler selbst
     (zweiter Befund in #1177) hier nicht behoben wird.
     """
-    name = " ".join((entity.name or "").split()).casefold()
+    tokens = (entity.name or "").split()
+    tokens = _strip_leading_article(tokens)
+    tokens = _normalize_adjective_endings(tokens)
+    name = " ".join(tokens).casefold()
     entity_type = " ".join((entity.get_entity_type() or "Entity").split()).casefold()
     return name, entity_type
 
