@@ -11,6 +11,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createI18n } from 'vue-i18n'
 import type { Report, EvidenceMap } from '../../contracts/reportContract'
+import { ApiError } from '../../api/envelope'
 
 // localStorage muss vor allen Modul-Imports gemockt sein,
 // da i18n/index.js bei Import-Zeit localStorage.getItem aufruft.
@@ -437,6 +438,116 @@ describe('Step4Report — strict-Zod-Parse (Sub-Slice 15)', () => {
 
     expect(wrapper.find('.schema-error').exists()).toBe(true)
     expect(wrapper.find('.schema-error').text()).toContain('evidence')
+  })
+})
+
+// Regression: loadEvidence() darf einen HTTP-/Transport-Fehler (z.B. 404,
+// solange die Evidenzkarte serverseitig noch nicht existiert) nicht als
+// Schema-Mismatch melden. Der Axios-Interceptor wirft dafuer eine ApiError,
+// kein Zod-Fehler — die beiden Fehlerklassen muessen unterschiedlich
+// behandelt werden (Retry vs. schemaError).
+describe('Step4Report — Evidence-Fehlerklassifizierung: HTTP-Fehler vs. Schema-Mismatch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.useFakeTimers()
+    resetMockSelection()
+    ;(getReport as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: VALID_REPORT,
+    })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('plant bei einer geworfenen 404-ApiError einen Retry statt schemaError zu setzen', async () => {
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: { status: 'completed', report_id: 'report_test01', simulation_id: 'sim_test01' },
+    })
+    ;(getReportEvidence as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new ApiError({
+        code: 'not_found',
+        status: 404,
+        message: 'No evidence map available for report: report_test01',
+      })
+    )
+
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    // Kein Schema-Mismatch-Banner fuer einen erwartbaren transienten 404.
+    expect(wrapper.find('.schema-error').exists()).toBe(false)
+
+    const callsBefore = (getReportEvidence as ReturnType<typeof vi.fn>).mock.calls.length
+    expect(callsBefore).toBeGreaterThan(0)
+
+    // Backoff startet bei 3s — nach Ablauf muss ein weiterer Versuch folgen.
+    await vi.advanceTimersByTimeAsync(3000)
+    await flushPromises()
+
+    expect((getReportEvidence as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(
+      callsBefore
+    )
+    expect(wrapper.find('.schema-error').exists()).toBe(false)
+  })
+
+  it('meldet einen echten Zod-Parse-Fehler weiterhin als schemaError und plant keinen Retry', async () => {
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: { status: 'completed', report_id: 'report_test01', simulation_id: 'sim_test01' },
+    })
+    // success:true, aber Pflichtfeld fehlt — echter Schema-Mismatch, kein HTTP-Fehler.
+    ;(getReportEvidence as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: {
+        schema_version: 3,
+        report_id: 'report_test01',
+        evidence_index: {},
+        global_evidence_refs: [],
+        sections: [],
+      },
+    })
+
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    expect(wrapper.find('.schema-error').exists()).toBe(true)
+
+    const callsBefore = (getReportEvidence as ReturnType<typeof vi.fn>).mock.calls.length
+    await vi.advanceTimersByTimeAsync(3000)
+    await flushPromises()
+
+    // Kein Retry bei einem echten Schema-Mismatch.
+    expect((getReportEvidence as ReturnType<typeof vi.fn>).mock.calls.length).toBe(callsBefore)
+  })
+
+  it('haelt die Budget-Semantik ein: bei terminalem Status zaehlt der 404-Retry gegen das Budget', async () => {
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: { status: 'completed', report_id: 'report_test01', simulation_id: 'sim_test01' },
+    })
+    ;(getReportEvidence as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new ApiError({
+        code: 'not_found',
+        status: 404,
+        message: 'No evidence map available for report: report_test01',
+      })
+    )
+
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    // Budget: 10 Minuten. Genug Zeit vorspulen, damit das Budget ausgeschoepft ist.
+    await vi.advanceTimersByTimeAsync(11 * 60 * 1000)
+    await flushPromises()
+
+    const vm = wrapper.vm as unknown as { evidenceUnavailable: boolean }
+    expect(vm.evidenceUnavailable).toBe(true)
+    // Weiterhin kein Schema-Mismatch — der terminale "Karte fehlt dauerhaft"-
+    // Zustand ist kein Zod-Fehler.
+    expect(wrapper.find('.schema-error').exists()).toBe(false)
   })
 })
 
