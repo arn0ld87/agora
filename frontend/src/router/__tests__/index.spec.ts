@@ -67,10 +67,12 @@ vi.mock('../../views/Settings/SettingsProfileView.vue', () => VIEW_STUB)
 vi.mock('../../views/Settings/EmbeddingConfigurationsView.vue', () => VIEW_STUB)
 vi.mock('../../views/v4/steps/StepSimulationFeedView.vue', () => VIEW_STUB)
 vi.mock('../../views/shell/ShelfView.vue', () => VIEW_STUB)
-// Redesign PR 8: /runs, /runs/:id, /v4/history sind ab hier reine Redirects
-// auf die Ablage (ShelfView) — RunsAppShellView.vue, RunDetailAppShellView.vue
-// und HistoryView.vue werden vom Router nicht mehr importiert (Löschung der
-// Dateien selbst ist PR 10), deshalb hier keine vi.mock()-Eintraege mehr.
+// Redesign PR 8: /runs und /v4/history sind reine Redirects auf die Ablage
+// (ShelfView) — RunsAppShellView.vue und HistoryView.vue werden vom Router
+// nicht mehr importiert (Löschung der Dateien selbst ist PR 10), deshalb dafür
+// keine vi.mock()-Eintraege mehr. /runs/:id bleibt eine echte Route und
+// braucht seinen Stub weiterhin.
+vi.mock('../../views/v4/RunDetailAppShellView.vue', () => VIEW_STUB)
 
 import router from '../index'
 import { getAgoraToken } from '../../api/index'
@@ -189,12 +191,15 @@ describe('Router – Redirects', () => {
     expect(router.currentRoute.value.query.filter).toBe('jobs')
   })
 
-  // Redesign PR 8: /runs/:id → Dossier des Laufs (ShelfObject, kind=lauf).
-  // Der Legacy-Pfadparameter “:id” landet unverändert als “objectId”.
-  it('/runs/:id → ShelfObject mit kind=lauf und uebernommener ID', async () => {
+  // Redesign PR 8: /runs/:id wird bewusst NICHT umgebogen. `usage-totals` und
+  // `budget-exceeded-banner` gibt es nur in RunDetailView.vue; das Dossier
+  // traegt beides nicht. Ein Redirect haette Verbrauch und Budgetabbruch eines
+  // Laufs unzugaenglich gemacht. Der Umstieg ist PR 10 und setzt voraus, dass
+  // der Kennzahlstreifen des Dossiers die beiden Bloecke vorher uebernimmt.
+  it('/runs/:id bleibt die Detailansicht und wird nicht in die Ablage umgeleitet', async () => {
     await pushAndSettle('/runs/run_abc')
-    expect(router.currentRoute.value.name).toBe('ShelfObject')
-    expect(router.currentRoute.value.params).toEqual({ kind: 'lauf', objectId: 'run_abc' })
+    expect(router.currentRoute.value.name).toBe('RunDetail')
+    expect(router.currentRoute.value.params).toEqual({ id: 'run_abc' })
   })
 
   it('hält /settings-classic nur als expliziten benannten Redirect', () => {
@@ -300,6 +305,7 @@ describe('Router – Struktur-Integrität', () => {
       'SettingsGeneral',
       'SettingsIntegrations',
       'SettingsProfile',
+      'RunDetail',
       'SettingsApiKeys',
       'SettingsAuditLogs',
       'SettingsLlmRouting',

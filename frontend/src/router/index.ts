@@ -42,14 +42,22 @@ const routes: RouteRecordRaw[] = [
     name: 'Runs',
     redirect: { name: 'Shelf', query: { filter: 'lauf' } },
   },
-  // Redesign PR 8: /runs/:id → Dossier des Laufs. Der Legacy-Pfadparameter
-  // ":id" ist eine run_id/sim_id — ShelfObject erwartet dieselbe ID unter
-  // "objectId" mit kind="lauf" (das Kind ist bei /runs/:id immer ein Lauf,
-  // nie Bericht/Personasatz/Graph).
+  // Redesign PR 8: /runs/:id bleibt bewusst auf der Detailansicht.
+  //
+  // Der Audit verlangt in §7 nur den Umzug der LISTE (`/runs` → Ablage) und
+  // den History-Redirect; die Detailroute nennt er nicht. Sie umzubiegen waere
+  // auch verfrueht: `usage-totals` (Verbrauchsanalyse) und
+  // `budget-exceeded-banner` leben ausschliesslich in RunDetailView.vue, das
+  // Dossier traegt beides nicht. Ein Redirect auf `/ablage/lauf/:id` wuerde
+  // den Verbrauch und den Budgetabbruch eines Laufs also ersatzlos
+  // unzugaenglich machen — kein Umzug, ein Verlust. Der Umstieg gehoert in
+  // PR 10 und setzt voraus, dass der Kennzahlstreifen des Dossiers die beiden
+  // Bloecke vorher uebernimmt.
   {
     path: '/runs/:id',
     name: 'RunDetail',
-    redirect: (to) => ({ name: 'ShelfObject', params: { kind: 'lauf', objectId: String(to.params.id) } }),
+    component: () => import('../views/v4/RunDetailAppShellView.vue'),
+    props: true,
   },
 
   // Onboarding — resumierbarer Erst-Einrichtungs-Wizard (Onboarding Slice 2)

@@ -99,8 +99,20 @@
         </DataTable>
       </div>
 
-      <!-- Filter „Alle Jobs“ (Q19c), Listenmodus: schlichte Mono-Tabelle aus der Rohebene. -->
-      <div v-else-if="props.shelf.filter.value === 'jobs'" class="shelf__jobs-scroll">
+      <!-- Filter „Alle Jobs“ (Q19c), Listenmodus: schlichte Mono-Tabelle aus der Rohebene.
+           `tabindex="0"` + `role="region"` + Name: der Kasten scrollt horizontal,
+           und ein scrollbarer Bereich ohne Fokus ist per Tastatur nicht
+           erreichbar (axe `scrollable-region-focusable`, serious). Der Befund
+           lag hier schon vorher, wurde aber von keinem Gate beruehrt, solange
+           keine geprüfte Route auf diesen Filter zeigte — der /v4/history-
+           Redirect (PR 8) tut das jetzt. -->
+      <div
+        v-else-if="props.shelf.filter.value === 'jobs'"
+        class="shelf__jobs-scroll"
+        role="region"
+        tabindex="0"
+        :aria-label="t('shelf.filter.jobs')"
+      >
       <table class="shelf__jobs-table" :data-testid="ShelfTestId.jobsTable">
         <thead>
           <tr>
@@ -788,6 +800,14 @@ function onRowKeydown(e: KeyboardEvent, index: number): void {
 .shelf__jobs-scroll {
   overflow-x: auto;
   max-width: 100%;
+}
+
+/* Der Kasten ist fokussierbar (siehe Template) und braucht deshalb einen
+   sichtbaren Ring. Bewusst ohne `transition` — der Playwright-Fokuscheck misst
+   nach einem einzigen requestAnimationFrame. */
+.shelf__jobs-scroll:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .shelf__jobs-table {
