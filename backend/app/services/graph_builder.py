@@ -495,9 +495,14 @@ class GraphBuilderService:
         # write data to connection" / "defunct connection", 1–2s
         # Retry-Backoff pro Chunk. ``oasis_profile_generator.py`` löst
         # dasselbe Problem für die Persona-Generierung bereits über
-        # ``gevent.pool.Pool`` statt ``ThreadPoolExecutor`` — hier dasselbe
-        # Muster. ``monkey.is_patched()`` (ohne Argument) liefert seit
-        # gevent 23.x keinen "socket"-Status mehr; die öffentliche API ist
+        # gevent-Greenlets statt ThreadPoolExecutor — hier dasselbe
+        # Grundmuster, aber mit manuellem Scheduling statt
+        # ``gevent.pool.Pool.imap_unordered``: nach Verlassen von
+        # ``imap_unordered`` gibt es keinen Zugriff mehr auf bereits
+        # gestartete, aber noch laufende Greenlets — für das Nachsammeln im
+        # Cancel-Pfad unten reicht das nicht (s. Kommentar dort).
+        # ``monkey.is_patched()`` (ohne Argument) liefert seit gevent 23.x
+        # keinen "socket"-Status mehr; die öffentliche API ist
         # ``monkey.is_module_patched(name)``.
         try:
             from gevent import monkey
@@ -509,53 +514,94 @@ class GraphBuilderService:
         if is_gevent:
             logger.info(
                 "[graph_build] Gevent detected: using native cooperative "
-                "Pool for parallel graph build"
+                "greenlets for parallel graph build"
             )
-            from gevent.pool import Pool
+            import gevent
 
-            pool = Pool(max_workers)
+            # Sliding-Window-Scheduling in Handarbeit statt
+            # ``gevent.pool.Pool``: ``pending`` hält Chunks, die noch NIE
+            # gestartet wurden; ``in_flight`` bildet gestartete Greenlets
+            # auf ihren Chunk-Index ab — exaktes Gegenstück zum
+            # ``{future: idx}``-Dict im Thread-Pfad unten. Der Unterschied
+            # zählt beim Abbruch: nur was in ``pending`` steht, ist wirklich
+            # "noch nicht gestartet" und darf verworfen werden.
+            pending: List[tuple] = list(enumerate(chunks))
+            in_flight: Dict[Any, int] = {}
 
-            def _process_indexed(item):
-                idx, chunk = item
-                return idx, _process(idx, chunk)
+            def _fill_window() -> None:
+                while pending and len(in_flight) < max_workers:
+                    idx, chunk = pending.pop(0)
+                    in_flight[gevent.spawn(_process, idx, chunk)] = idx
 
+            _fill_window()
             try:
-                for idx, episode_id in pool.imap_unordered(
-                    _process_indexed, enumerate(chunks)
-                ):
-                    episode_uuids[idx] = episode_id  # raises on first failed chunk
-                    completed += 1
-                    if progress_callback:
-                        progress_callback(
-                            f"Processed {completed}/{total_chunks} chunks...",
-                            completed / total_chunks,
-                            completed,
-                            total_chunks,
-                        )
-                    if run_id:
-                        from .sim.cancel_flag import is_cancel_requested
+                while in_flight:
+                    for greenlet in gevent.wait(list(in_flight.keys()), count=1):
+                        idx = in_flight.pop(greenlet, None)
+                        if idx is None:
+                            continue
+                        episode_uuids[idx] = greenlet.get()  # raises on first failed chunk
+                        completed += 1
+                        if progress_callback:
+                            progress_callback(
+                                f"Processed {completed}/{total_chunks} chunks...",
+                                completed / total_chunks,
+                                completed,
+                                total_chunks,
+                            )
+                        if run_id:
+                            from .sim.cancel_flag import is_cancel_requested
 
-                        if is_cancel_requested(run_id):
-                            # Gevent kennt keine Trennung "nur Wartende
-                            # abbrechen" wie ThreadPoolExecutor.shutdown(
-                            # cancel_futures=True) — pool.kill() beendet
-                            # auch bereits laufende Greenlets. Gröberer
-                            # Schnitt als im Thread-Pfad unten (s. auch
-                            # oasis_profile_generator.py::
-                            # _consume_gevent_results), aber der einzige
-                            # verfügbare Weg, neue Neo4j-Writes sofort zu
-                            # stoppen.
-                            logger.info(
-                                "[graph_build] Abgebrochen (run_id=%s): "
-                                "%d/%d Chunks fertig committet",
-                                run_id, completed, total_chunks,
-                            )
-                            pool.kill()
-                            raise GraphBuildCancelled(
-                                [uuid for uuid in episode_uuids if uuid is not None]
-                            )
+                            if is_cancel_requested(run_id):
+                                # Wie im Thread-Pfad unten: nur ausstehende,
+                                # noch nicht gestartete Chunks werden
+                                # verworfen — ``pending`` bleibt hier
+                                # einfach ungenutzt liegen, ``_fill_window()``
+                                # wird nicht mehr aufgerufen. Bereits
+                                # laufende Greenlets in ``in_flight`` dürfen
+                                # ihre Neo4j-Transaktion fertig committen:
+                                # neo4j_write.py schreibt Episode, Entities
+                                # und Relations jeweils einzeln — ein hartes
+                                # Kill mittendrin (``Greenlet.kill()`` /
+                                # ``pool.kill()``) hinterließe eine Episode
+                                # ohne ihre Entities/Relations, also einen
+                                # inkonsistenten Graphen. ``gevent.joinall``
+                                # wartet stattdessen auf ihr reguläres Ende,
+                                # bevor ihre UUIDs best effort nachgesammelt
+                                # werden (Fehler geloggt statt geworfen — die
+                                # Abbruch-Meldung hat Vorrang), exakt analog
+                                # zum Nachsammel-Block im Thread-Pfad.
+                                logger.info(
+                                    "[graph_build] Abgebrochen (run_id=%s): "
+                                    "%d/%d Chunks fertig committet, %d "
+                                    "bereits laufende Chunks committen noch",
+                                    run_id, completed, total_chunks, len(in_flight),
+                                )
+                                gevent.joinall(list(in_flight.keys()))
+                                for other_greenlet, other_idx in list(in_flight.items()):
+                                    if episode_uuids[other_idx] is not None:
+                                        continue
+                                    try:
+                                        episode_uuids[other_idx] = other_greenlet.get()
+                                    except Exception as exc:  # noqa: BLE001 — best effort; Abbruch-Meldung geht vor
+                                        logger.warning(
+                                            "[graph_build] Chunk %d konnte nach dem Abbruch "
+                                            "nicht nachträglich eingesammelt werden: %r",
+                                            other_idx + 1, exc,
+                                        )
+                                raise GraphBuildCancelled(
+                                    [uuid for uuid in episode_uuids if uuid is not None]
+                                )
+                    _fill_window()
             finally:
-                pool.join()
+                # Sicherheitsnetz für den Nicht-Cancel-Fehlerfall: schlägt
+                # ein Chunk mit einer echten Exception fehl (kein Cancel),
+                # sollen bereits laufende Geschwister-Chunks trotzdem fertig
+                # committen dürfen, bevor die Exception weiterläuft — analog
+                # zu ThreadPoolExecutor.__exit__(), das per Default
+                # shutdown(wait=True) fährt statt Futures zu canceln.
+                if in_flight:
+                    gevent.joinall(list(in_flight.keys()))
         else:
             with ThreadPoolExecutor(max_workers=max_workers) as pool:
                 futures = {pool.submit(_process, idx, chunk): idx for idx, chunk in enumerate(chunks)}
