@@ -65,6 +65,59 @@ def get_llm_provider_secrets_store() -> Any:
     return get_store()
 
 
+def _lookup_provider_descriptor(provider_id: str) -> Any:
+    """Sucht den Provider-Descriptor zu ``provider_id`` in der Registry.
+
+    Einzige Typ-Quelle fuer die Init-Audit-Zeile. Bewusst keine Ableitung
+    aus ``base_url`` oder Modellnamen: das waere eine zweite
+    Detection-Heuristik neben ``registry.py::detect_provider`` und laut
+    AGENTS.md unzulaessig.
+
+    Ein Registry-Fehler darf den Konstruktor nie brechen — er wird
+    geloggt, der Aufrufer faellt auf ``None`` zurueck.
+    """
+    try:
+        from ..services.llm_provider_registry import LlmProviderRegistry
+
+        return next(
+            (p for p in LlmProviderRegistry().get_providers() if p.id == provider_id),
+            None,
+        )
+    except Exception as exc:  # noqa: BLE001 — Provider-Aufloesung darf den Init nicht brechen
+        logger.warning(
+            "Failed to resolve provider descriptor (provider=%s): %s",
+            provider_id,
+            exc,
+        )
+        return None
+
+
+def _resolve_active_api_key(
+    provider_id: str, provider_type: str, current_source: Optional[str]
+) -> tuple[Optional[str], Optional[str]]:
+    """Loest den API-Key der Active-Config auf.
+
+    Liefert ``(api_key, api_key_source)``. Schlaegt die Aufloesung fehl,
+    bleibt der Key ``None`` und die bisherige Quelle erhalten — der
+    Konstruktor faellt dann auf die ``Config``-Defaults zurueck.
+    """
+    try:
+        from ..services.secret_resolver import SecretResolver
+
+        resolver = SecretResolver()
+        api_key = resolver.get_api_key(provider_id, provider_type)
+        if api_key:
+            return api_key, resolver.last_source
+        return api_key, current_source
+    except Exception as exc:  # noqa: BLE001 — fall back to Config defaults
+        logger.warning(
+            "Failed to resolve active LLM config (provider=%s): %s",
+            provider_id,
+            exc,
+        )
+        return None, current_source
+
+
 class LLMClient:
     """LLM Client"""
 
@@ -141,34 +194,16 @@ class LLMClient:
                     active_used = True
                 if active_pid and not api_key:
                     active_used = True
-                    try:
-                        from ..services.llm_provider_registry import LlmProviderRegistry
-                        from ..services.secret_resolver import SecretResolver
-                        registry = LlmProviderRegistry()
-                        descriptor = next(
-                            (p for p in registry.get_providers() if p.id == active_pid),
-                            None,
+                    descriptor = _lookup_provider_descriptor(active_pid)
+                    if descriptor is not None:
+                        if resolved_provider_type is None:
+                            resolved_provider_type = descriptor.type
+                        if not base_url:
+                            base_url = descriptor.base_url
+                        api_key, resolved_source = _resolve_active_api_key(
+                            active_pid, descriptor.type, resolved_source
                         )
-                        if descriptor is not None:
-                            if resolved_provider_type is None:
-                                resolved_provider_type = descriptor.type
-                            if not base_url:
-                                base_url = descriptor.base_url
-                            resolver = SecretResolver()
-                            api_key = resolver.get_api_key(active_pid, descriptor.type)
-                            if api_key:
-                                resolved_source = resolver.last_source
-                    except Exception as exc:  # noqa: BLE001 — fall back to Config defaults
-                        logger.warning(
-                            "Failed to resolve active LLM config (provider=%s): %s",
-                            active_pid,
-                            exc,
-                        )
-                if (
-                    active_pid
-                    and active_used
-                    and resolved_provider_type is None
-                ):
+                if active_pid and active_used and resolved_provider_type is None:
                     # Codex-Review zu PR #1457: Der Descriptor-Lookup oben
                     # haengt unter ``not api_key``, weil er dort primaer den
                     # Key aufloest. Traegt die Active-Config nur ``model``
@@ -177,32 +212,9 @@ class LLMClient:
                     # (``active_provider_id`` wird unten gesetzt), sein Typ
                     # aber nicht — die Audit-Zeile las sich dann als
                     # ``provider_id=openai provider_type=unknown``.
-                    #
-                    # Der Typ kommt hier ausschliesslich aus der Registry,
-                    # also aus derselben Quelle wie im Zweig oben. Keine
-                    # Ableitung aus base_url oder Modellname: das waere eine
-                    # zweite Detection-Heuristik neben
-                    # ``registry.py::detect_provider`` und damit laut
-                    # AGENTS.md unzulaessig.
-                    try:
-                        from ..services.llm_provider_registry import LlmProviderRegistry
-
-                        descriptor = next(
-                            (
-                                p
-                                for p in LlmProviderRegistry().get_providers()
-                                if p.id == active_pid
-                            ),
-                            None,
-                        )
-                        if descriptor is not None:
-                            resolved_provider_type = descriptor.type
-                    except Exception as exc:  # noqa: BLE001 — Log-Annotation darf nie den Init brechen
-                        logger.warning(
-                            "Failed to resolve provider type for active config (provider=%s): %s",
-                            active_pid,
-                            exc,
-                        )
+                    descriptor = _lookup_provider_descriptor(active_pid)
+                    if descriptor is not None:
+                        resolved_provider_type = descriptor.type
                 if active_pid and active_used:
                     active_provider_id = active_pid
 

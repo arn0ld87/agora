@@ -10,3 +10,8 @@
   Der Typ wird auch dann aufgeloest, wenn der Aufrufer den Schluessel
   selbst mitbringt und die aktive Konfiguration nur Modell oder Basis-URL
   beisteuert (Review-Nachbesserung).
+
+Der Registry-Lookup und die Key-Aufloesung der Active-Config liegen dafuer jetzt
+als Modul-Helfer neben `LLMClient` statt inline im Konstruktor — sonst haette der
+zweite Lookup `__init__` ueber die Radon-Obergrenze aus `radon-allowlist.txt`
+getrieben (gemessen 38, erlaubt 34; jetzt 31).
