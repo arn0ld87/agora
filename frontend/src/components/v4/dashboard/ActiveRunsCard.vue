@@ -52,7 +52,7 @@ const columns: DataTableColumn[] = [
   { key: 'project', label: t('dashboard.active.columns.project'), secondary: true },
   { key: 'phase', label: t('dashboard.active.columns.phase'), width: '180px' },
   { key: 'progress', label: t('dashboard.active.columns.progress'), align: 'right', width: '90px' },
-  { key: 'started', label: t('dashboard.active.columns.started'), secondary: true, align: 'right', width: '120px' },
+  { key: 'started', label: t('dashboard.active.columns.started'), secondary: true, mono: true, align: 'right', width: '120px' },
 ]
 
 const PHASE_TONE: Record<string, 'teal' | 'purple' | 'blue' | 'orange' | 'gray'> = {
