@@ -136,3 +136,29 @@ export const DossierTestId = {
   confidenceDistribution: 'dossier-confidence-distribution',
   redTeamFindings: 'dossier-red-team-findings',
 } as const
+
+/**
+ * ReportReaderTestId — PR 6 (Premium-Redesign, "Bericht lesen").
+ *
+ * Deckt die Dreispalten-Leseumgebung ab (ReportReader.vue + ReportOutline.vue
+ * + ReportEvidenceRail.vue): Outline links, Serif-Lesespalte, Belegrand
+ * rechts, Overlay "Neu generieren" fuer Modell/Modus.
+ */
+export const ReportReaderTestId = {
+  root: 'report-reader-root',
+  outline: 'report-reader-outline',
+  outlineItem: 'report-reader-outline-item',
+  body: 'report-reader-body',
+  section: 'report-reader-section',
+  rail: 'report-reader-evidence-rail',
+  railToggle: 'report-reader-rail-toggle',
+  claim: 'report-reader-claim',
+  gap: 'report-reader-gap',
+  redTeam: 'report-reader-red-team',
+  regenerateOpen: 'report-reader-regenerate-open',
+  regenerateOverlay: 'report-reader-regenerate-overlay',
+  regenerateClose: 'report-reader-regenerate-close',
+  regenerateConfirm: 'report-reader-regenerate-confirm',
+} as const
+
+export type ReportReaderTestId = (typeof ReportReaderTestId)[keyof typeof ReportReaderTestId]

@@ -621,6 +621,38 @@
       },
       "evidencePending": "Evidence map is still being generated — the export will be available once it is ready.",
       "evidenceUnavailable": "Evidence map is not available for this report."
+    },
+    "reader": {
+      "outlineTitle": "Report",
+      "outlineSectionsCount": "{count} sections",
+      "outlineSummary": "Summary",
+      "outlineSection": "Section {num}",
+      "appendixTitle": "Appendix",
+      "appendixHypotheses": "{count} hypotheses",
+      "appendixDataGaps": "{count} data gaps",
+      "appendixEvidence": "{count} evidence items",
+      "appendixRedTeam": "{count} red-team findings",
+      "railTitle": "Claims in section {num}",
+      "railEvidenceTitle": "Evidence at this point",
+      "railGapsTitle": "Data gaps in this section",
+      "railRedTeamTitle": "Red team on section {num}",
+      "railEmpty": "No claims recorded for this section.",
+      "railToggleHide": "Hide evidence rail",
+      "railToggleShow": "Show evidence rail",
+      "confidence": {
+        "speculative": "speculative",
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "verified": "verified"
+      },
+      "regenerate": {
+        "openButton": "Regenerate",
+        "title": "Regenerate report",
+        "description": "Choose model and mode for this regeneration run.",
+        "confirmButton": "Regenerate",
+        "cancelButton": "Cancel"
+      }
     }
   },
   "report": {
