@@ -23,13 +23,18 @@ ontology-generator fix in PR #858.
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from app.services import oasis_profile_generator as _mod
 from unittest.mock import patch, MagicMock
 
+from app.services.entity_reader import EntityNode
 from app.services.oasis_profile_generator import (
+    OasisAgentProfile,
     OasisProfileGenerator,
+    PersonaIneligible,
     PersonaProfileSchema,
 )
 
@@ -465,3 +470,169 @@ def test_generate_profile_with_llm_passes_provider_type_for_codex_cli(monkeypatc
     init_kwargs = _CapturingLLMClient.last_instance.init_kwargs
     assert init_kwargs["provider_type"] == "codex_cli"
     assert init_kwargs["base_url"] is None
+
+
+# ---------------------------------------------------------------------------
+# Regression: eine abgelehnte Entitaet darf nie als "Successfully generated"
+# geloggt werden (Produktionsbeleg: 8 von 23 Kandidaten wurden abgelehnt und
+# tauchten trotzdem als Erfolgsmeldung im Log auf; der spaetere
+# Reportabbruch "15/20 Personas" kam dadurch scheinbar aus dem Nichts).
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def _enable_oasis_log_propagation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``setup_logger`` setzt ``propagate=False`` (app/utils/logger.py:226).
+
+    Wie in ``tests/llm/test_init_logging.py``: Parent ``agora`` UND der
+    Ziel-Logger ``agora.oasis_profile`` muessen beide auf ``propagate=True``
+    gesetzt werden, sonst sieht ``caplog`` keine Records.
+    """
+    parent = logging.getLogger("agora")
+    target = logging.getLogger("agora.oasis_profile")
+    monkeypatch.setattr(parent, "propagate", True)
+    monkeypatch.setattr(target, "propagate", True)
+
+
+def _entity(name: str, entity_type: str) -> EntityNode:
+    return EntityNode(
+        uuid=f"uuid-{name}",
+        name=name,
+        labels=["Entity", entity_type],
+        summary="",
+        attributes={},
+    )
+
+
+def _stub_generate_profile_from_entity(rejected_names: set[str]):
+    """Ersetzt ``generate_profile_from_entity``: abgelehnte Namen werfen
+    ``PersonaIneligible``, alle anderen liefern ein minimales gueltiges
+    Profil. Kein LLM-Call, kein Netzwerk.
+    """
+
+    def _fake(self, *, entity, user_id, use_llm, demographic_slot=None, **_kw):
+        entity_type = entity.get_entity_type() or "Entity"
+        if entity.name in rejected_names:
+            raise PersonaIneligible(
+                entity.name, entity_type, "technisches Artefakt ohne eigene Interessenlage"
+            )
+        return OasisAgentProfile(
+            user_id=user_id,
+            user_name=f"user_{user_id}",
+            name=entity.name,
+            bio=f"{entity_type}: {entity.name}",
+            persona="Eine Beispielperson.",
+            source_entity_uuid=entity.uuid,
+            source_entity_type=entity_type,
+        )
+
+    return _fake
+
+
+def test_rejected_entity_is_not_logged_as_successfully_generated(monkeypatch, caplog):
+    """Kernregression: die widerspruechliche Log-Sequenz aus dem Produktions-
+    beleg (erst "Entitaet abgelehnt", dann trotzdem "Successfully generated
+    persona" fuer dieselbe Entitaet) darf nicht mehr auftreten.
+    """
+    caplog.set_level(logging.INFO, logger="agora.oasis_profile")
+
+    gen = _make_generator()
+    monkeypatch.setattr(
+        OasisProfileGenerator,
+        "generate_profile_from_entity",
+        _stub_generate_profile_from_entity({"digitaler Zwilling"}),
+    )
+
+    entities = [
+        _entity("digitaler Zwilling", "Organization"),
+        _entity("Max Mustermann", "Person"),
+    ]
+
+    profiles = gen.generate_profiles_from_entities(
+        entities, use_llm=False, parallel_count=1
+    )
+
+    messages = [r.getMessage() for r in caplog.records if r.name == "agora.oasis_profile"]
+
+    # Keine Erfolgsmeldung fuer die abgelehnte Entitaet.
+    assert not any(
+        "Successfully generated persona" in m and "digitaler Zwilling" in m
+        for m in messages
+    )
+    # Die tatsaechliche Persona wird weiterhin korrekt als Erfolg gemeldet.
+    assert any(
+        "Successfully generated persona" in m and "Max Mustermann" in m
+        for m in messages
+    )
+    # Die Ablehnungsmeldung nennt Name und Grund wahrheitsgemaess.
+    assert any(
+        "digitaler Zwilling" in m
+        and "abgelehnt" in m
+        and "technisches Artefakt ohne eigene Interessenlage" in m
+        for m in messages
+    )
+    # Ohne Reservepool bleibt der Slot leer -- nur die echte Persona kommt zurueck.
+    assert [p.name for p in profiles] == ["Max Mustermann"]
+
+
+def test_persona_generation_summary_line_counts_with_rejections(monkeypatch, caplog):
+    """Die Summenzeile am Ende muss Kandidaten, Ablehnungen und erzeugte
+    Personas korrekt bilanzieren, ohne dass man die Einzelmeldungen zaehlen
+    muss.
+    """
+    caplog.set_level(logging.INFO, logger="agora.oasis_profile")
+
+    gen = _make_generator()
+    monkeypatch.setattr(
+        OasisProfileGenerator,
+        "generate_profile_from_entity",
+        _stub_generate_profile_from_entity({"digitaler Zwilling", "KI-Assistent"}),
+    )
+
+    entities = [
+        _entity("digitaler Zwilling", "Organization"),
+        _entity("KI-Assistent", "Product"),
+        _entity("Max Mustermann", "Person"),
+    ]
+
+    gen.generate_profiles_from_entities(entities, use_llm=False, parallel_count=1)
+
+    summary = [
+        r.getMessage()
+        for r in caplog.records
+        if r.name == "agora.oasis_profile" and "Persona generation complete" in r.getMessage()
+    ]
+    assert len(summary) == 1
+    assert "3 Kandidat(en) angetreten" in summary[0]
+    assert "2 abgelehnt" in summary[0]
+    assert "1 Personas erzeugt" in summary[0]
+
+
+def test_persona_generation_summary_line_counts_without_rejections(monkeypatch, caplog):
+    """Gegenprobe: ohne Ablehnungen muss die Bilanz 0 Ablehnungen und
+    Kandidaten == erzeugte Personas ausweisen.
+    """
+    caplog.set_level(logging.INFO, logger="agora.oasis_profile")
+
+    gen = _make_generator()
+    monkeypatch.setattr(
+        OasisProfileGenerator,
+        "generate_profile_from_entity",
+        _stub_generate_profile_from_entity(set()),
+    )
+
+    entities = [
+        _entity("Max Mustermann", "Person"),
+        _entity("Beispiel GmbH", "Company"),
+    ]
+
+    gen.generate_profiles_from_entities(entities, use_llm=False, parallel_count=1)
+
+    summary = [
+        r.getMessage()
+        for r in caplog.records
+        if r.name == "agora.oasis_profile" and "Persona generation complete" in r.getMessage()
+    ]
+    assert len(summary) == 1
+    assert "2 Kandidat(en) angetreten" in summary[0]
+    assert "0 abgelehnt" in summary[0]
+    assert "2 Personas erzeugt" in summary[0]

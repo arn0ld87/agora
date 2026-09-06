@@ -2314,9 +2314,14 @@ Important:
                 # leer und wird aus dem Reservepool nachbesetzt — vor diesem
                 # Slice bekam jede Entitaet, die den Generator erreichte, eine
                 # Persona, auch "Moodle" und "Kursstart Februar 2027".
+                #
+                # Der Ablehnungsgrund wandert im dritten Tupelfeld mit, damit
+                # ``_process_result`` unten eine wahrheitsgemaesse Meldung
+                # loggen kann, statt "Successfully generated persona" fuer
+                # eine Entitaet auszugeben, die gar kein Profil bekommen hat.
                 with lock:
                     rejected.append(rejection)
-                return idx, None, None
+                return idx, None, rejection.reason
 
             except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
                 logger.error(f"Failed to generate persona for entity {entity.name}: {str(e)}")
@@ -2376,7 +2381,22 @@ Important:
                     f"Completed {current}/{total}: {entity.name} ({entity_type})"
                 )
 
-            if error:
+            if profile is None:
+                # Issue: das Log widersprach sich selbst — eine als
+                # "Persona-Eligibility (LLM): Entitaet abgelehnt" verworfene
+                # Entitaet erschien in der naechsten Zeile trotzdem als
+                # "Successfully generated persona", weil hier nur auf
+                # ``error`` (Notprofil-Fall) unterschieden wurde, nicht
+                # darauf, ob ueberhaupt ein Profil entstanden ist. Kein
+                # Profil in dieser Liste heisst: der Slot bleibt vorerst
+                # leer und wird — falls moeglich — aus dem Reservepool
+                # nachbesetzt (``_backfill_rejected_slots``).
+                reason = error or "kein Ablehnungsgrund protokolliert"
+                logger.info(
+                    f"[{current}/{total}] {entity.name} ({entity_type}) abgelehnt, "
+                    f"kein Profil erzeugt: {reason}"
+                )
+            elif error:
                 logger.warning(f"[{current}/{total}] {entity.name} using fallback persona: {error}")
             else:
                 logger.info(f"[{current}/{total}] Successfully generated persona: {entity.name} ({entity_type})")
@@ -2490,9 +2510,19 @@ Important:
                 p.user_name = self._generate_username(base)
             seen_handles.add((p.user_name or "").strip().lower())
 
+        # Summenzeile: die einzelnen "[i/n]"-Meldungen oben genuegen nicht als
+        # Bilanz, ohne sie nachzuzaehlen — genau daran ist heute eine
+        # Fehlersuche vorbeigelaufen (23x "Successfully generated" im Log,
+        # aber am Ende nur 15 Personas). ``total`` ist die Anzahl der primaer
+        # angetretenen Kandidaten, ``rejected`` zaehlt jede Ablehnung
+        # inklusive der beim Nachbesetzen aus dem Reservepool verbrauchten.
+        generated_count = len([p for p in profiles if p])
         logger.info(
-            "Persona generation complete — %d agents generated.",
-            len([p for p in profiles if p]),
+            "Persona generation complete: %d Kandidat(en) angetreten, %d abgelehnt, "
+            "%d Personas erzeugt.",
+            total,
+            len(rejected),
+            generated_count,
         )
 
         if degradations is not None:
