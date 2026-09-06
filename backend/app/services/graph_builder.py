@@ -484,76 +484,149 @@ class GraphBuilderService:
                 raise
 
         completed = 0
-        with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            futures = {pool.submit(_process, idx, chunk): idx for idx, chunk in enumerate(chunks)}
-            for future in as_completed(futures):
-                idx = futures[future]
-                episode_uuids[idx] = future.result()  # raises on first failed chunk
-                completed += 1
-                if progress_callback:
-                    progress_callback(
-                        f"Processed {completed}/{total_chunks} chunks...",
-                        completed / total_chunks,
-                        completed,
-                        total_chunks,
-                    )
-                if run_id:
-                    from .sim.cancel_flag import is_cancel_requested
 
-                    if is_cancel_requested(run_id):
-                        # Issue B2: nur ausstehende, noch nicht gestartete
-                        # Chunks werden verworfen. Bereits laufende Worker
-                        # committen ihre Neo4j-Transaktion (Episode + Entities
-                        # + Relations, jeweils einzeln — s. neo4j_write.py)
-                        # noch fertig; der `with`-Block wartet beim Verlassen
-                        # darauf (ThreadPoolExecutor.__exit__ →
-                        # shutdown(wait=True)). Das ist akzeptiert, nicht
-                        # repariert — kein Rollback, kein delete_graph.
-                        logger.info(
-                            "[graph_build] Abgebrochen (run_id=%s): "
-                            "%d/%d Chunks fertig committet",
-                            run_id, completed, total_chunks,
+        # Issue: backend/wsgi.py ruft gevent.monkey.patch_all() auf — jeder
+        # Socket im Prozess ist damit ein kooperativer gevent-Socket,
+        # gebunden an den Hub des Threads, der ihn erzeugt hat.
+        # ThreadPoolExecutor verteilt die Chunks unten aber auf echte
+        # OS-Threads, jeder mit eigenem gevent-Hub, während die Neo4j-
+        # Connections aus dem prozessweiten Driver-Pool stammen und damit
+        # potenziell einem fremden Hub gehören. Produktionsfolge: "Failed to
+        # write data to connection" / "defunct connection", 1–2s
+        # Retry-Backoff pro Chunk. ``oasis_profile_generator.py`` löst
+        # dasselbe Problem für die Persona-Generierung bereits über
+        # ``gevent.pool.Pool`` statt ``ThreadPoolExecutor`` — hier dasselbe
+        # Muster. ``monkey.is_patched()`` (ohne Argument) liefert seit
+        # gevent 23.x keinen "socket"-Status mehr; die öffentliche API ist
+        # ``monkey.is_module_patched(name)``.
+        try:
+            from gevent import monkey
+        except ImportError:
+            is_gevent = False
+        else:
+            is_gevent = monkey.is_module_patched("socket")
+
+        if is_gevent:
+            logger.info(
+                "[graph_build] Gevent detected: using native cooperative "
+                "Pool for parallel graph build"
+            )
+            from gevent.pool import Pool
+
+            pool = Pool(max_workers)
+
+            def _process_indexed(item):
+                idx, chunk = item
+                return idx, _process(idx, chunk)
+
+            try:
+                for idx, episode_id in pool.imap_unordered(
+                    _process_indexed, enumerate(chunks)
+                ):
+                    episode_uuids[idx] = episode_id  # raises on first failed chunk
+                    completed += 1
+                    if progress_callback:
+                        progress_callback(
+                            f"Processed {completed}/{total_chunks} chunks...",
+                            completed / total_chunks,
+                            completed,
+                            total_chunks,
                         )
-                        pool.shutdown(wait=False, cancel_futures=True)
+                    if run_id:
+                        from .sim.cancel_flag import is_cancel_requested
 
-                        # Review-Finding (PR #1371, Befund 5): Chunks, die
-                        # zum Zeitpunkt des Abbruchs schon aus der Queue
-                        # geholt waren (also bereits laufen), werden von
-                        # ``cancel_futures=True`` NICHT erfasst — das
-                        # storniert nur, was noch in der Warteschlange steht.
-                        # Diese laufenden Worker committen ihre Neo4j-
-                        # Transaktion trotzdem fertig, und der `with`-Block
-                        # wartet beim Verlassen ohnehin auf sie
-                        # (``ThreadPoolExecutor.__exit__`` →
-                        # ``shutdown(wait=True)``). Ohne dieses Nachsammeln
-                        # wären ihre Episode-UUIDs im Graphen vorhanden, aber
-                        # weder in der zurückgegebenen Liste noch im
-                        # ``episode_count`` des Cancel-Ergebnisses gezählt —
-                        # bei mehreren parallelen Workern eine stille
-                        # Untererfassung. ``future.cancelled()`` ist nach
-                        # ``shutdown(cancel_futures=True)`` deterministisch:
-                        # True nur für Futures, die noch in der Queue
-                        # standen; bereits laufende bleiben False und werden
-                        # hier eingesammelt (kein zusätzliches Warten — der
-                        # `with`-Block würde ohnehin auf sie warten, wir
-                        # lesen nur zusätzlich ihr Ergebnis).
-                        for other_future, other_idx in futures.items():
-                            if other_future is future or episode_uuids[other_idx] is not None:
-                                continue
-                            if other_future.cancelled():
-                                continue
-                            try:
-                                episode_uuids[other_idx] = other_future.result()
-                            except Exception as exc:  # noqa: BLE001 — best effort; Abbruch-Meldung geht vor
-                                logger.warning(
-                                    "[graph_build] Chunk %d konnte nach dem Abbruch "
-                                    "nicht nachträglich eingesammelt werden: %r",
-                                    other_idx + 1, exc,
-                                )
-
-                        raise GraphBuildCancelled(
-                            [uuid for uuid in episode_uuids if uuid is not None]
+                        if is_cancel_requested(run_id):
+                            # Gevent kennt keine Trennung "nur Wartende
+                            # abbrechen" wie ThreadPoolExecutor.shutdown(
+                            # cancel_futures=True) — pool.kill() beendet
+                            # auch bereits laufende Greenlets. Gröberer
+                            # Schnitt als im Thread-Pfad unten (s. auch
+                            # oasis_profile_generator.py::
+                            # _consume_gevent_results), aber der einzige
+                            # verfügbare Weg, neue Neo4j-Writes sofort zu
+                            # stoppen.
+                            logger.info(
+                                "[graph_build] Abgebrochen (run_id=%s): "
+                                "%d/%d Chunks fertig committet",
+                                run_id, completed, total_chunks,
+                            )
+                            pool.kill()
+                            raise GraphBuildCancelled(
+                                [uuid for uuid in episode_uuids if uuid is not None]
+                            )
+            finally:
+                pool.join()
+        else:
+            with ThreadPoolExecutor(max_workers=max_workers) as pool:
+                futures = {pool.submit(_process, idx, chunk): idx for idx, chunk in enumerate(chunks)}
+                for future in as_completed(futures):
+                    idx = futures[future]
+                    episode_uuids[idx] = future.result()  # raises on first failed chunk
+                    completed += 1
+                    if progress_callback:
+                        progress_callback(
+                            f"Processed {completed}/{total_chunks} chunks...",
+                            completed / total_chunks,
+                            completed,
+                            total_chunks,
                         )
+                    if run_id:
+                        from .sim.cancel_flag import is_cancel_requested
+
+                        if is_cancel_requested(run_id):
+                            # Issue B2: nur ausstehende, noch nicht gestartete
+                            # Chunks werden verworfen. Bereits laufende Worker
+                            # committen ihre Neo4j-Transaktion (Episode + Entities
+                            # + Relations, jeweils einzeln — s. neo4j_write.py)
+                            # noch fertig; der `with`-Block wartet beim Verlassen
+                            # darauf (ThreadPoolExecutor.__exit__ →
+                            # shutdown(wait=True)). Das ist akzeptiert, nicht
+                            # repariert — kein Rollback, kein delete_graph.
+                            logger.info(
+                                "[graph_build] Abgebrochen (run_id=%s): "
+                                "%d/%d Chunks fertig committet",
+                                run_id, completed, total_chunks,
+                            )
+                            pool.shutdown(wait=False, cancel_futures=True)
+
+                            # Review-Finding (PR #1371, Befund 5): Chunks, die
+                            # zum Zeitpunkt des Abbruchs schon aus der Queue
+                            # geholt waren (also bereits laufen), werden von
+                            # ``cancel_futures=True`` NICHT erfasst — das
+                            # storniert nur, was noch in der Warteschlange steht.
+                            # Diese laufenden Worker committen ihre Neo4j-
+                            # Transaktion trotzdem fertig, und der `with`-Block
+                            # wartet beim Verlassen ohnehin auf sie
+                            # (``ThreadPoolExecutor.__exit__`` →
+                            # ``shutdown(wait=True)``). Ohne dieses Nachsammeln
+                            # wären ihre Episode-UUIDs im Graphen vorhanden, aber
+                            # weder in der zurückgegebenen Liste noch im
+                            # ``episode_count`` des Cancel-Ergebnisses gezählt —
+                            # bei mehreren parallelen Workern eine stille
+                            # Untererfassung. ``future.cancelled()`` ist nach
+                            # ``shutdown(cancel_futures=True)`` deterministisch:
+                            # True nur für Futures, die noch in der Queue
+                            # standen; bereits laufende bleiben False und werden
+                            # hier eingesammelt (kein zusätzliches Warten — der
+                            # `with`-Block würde ohnehin auf sie warten, wir
+                            # lesen nur zusätzlich ihr Ergebnis).
+                            for other_future, other_idx in futures.items():
+                                if other_future is future or episode_uuids[other_idx] is not None:
+                                    continue
+                                if other_future.cancelled():
+                                    continue
+                                try:
+                                    episode_uuids[other_idx] = other_future.result()
+                                except Exception as exc:  # noqa: BLE001 — best effort; Abbruch-Meldung geht vor
+                                    logger.warning(
+                                        "[graph_build] Chunk %d konnte nach dem Abbruch "
+                                        "nicht nachträglich eingesammelt werden: %r",
+                                        other_idx + 1, exc,
+                                    )
+
+                            raise GraphBuildCancelled(
+                                [uuid for uuid in episode_uuids if uuid is not None]
+                            )
 
         logger.info(f"[graph_build] All {total_chunks} chunks processed successfully")
         return [uuid for uuid in episode_uuids if uuid is not None]
