@@ -37,7 +37,7 @@ withDefaults(defineProps<{
 <style scoped>
 .v4-card {
   background: var(--surface-elevated);
-  border-radius: 14px;
+  border-radius: var(--r-5);
   box-shadow: 0 0 0 1px var(--hairline), 0 1px 1px rgba(0, 0, 0, 0.02);
 }
 

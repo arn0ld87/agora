@@ -89,7 +89,7 @@ function handleClick(event: MouseEvent) {
   gap: 10px;
   height: 36px;
   padding: var(--sidebar-item-py, 6px) var(--sidebar-item-px, 10px);
-  border-radius: 8px;
+  border-radius: var(--r-3);
   font-size: 14px;
   font-weight: 500;
   color: var(--text-primary);
@@ -132,7 +132,7 @@ function handleClick(event: MouseEvent) {
 .sidebar-item__badge {
   min-width: 18px;
   height: 18px;
-  border-radius: 9px;
+  border-radius: var(--r-2);
   background: var(--accent);
   color: #fff;
   font-size: 10px;

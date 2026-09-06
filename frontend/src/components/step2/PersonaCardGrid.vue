@@ -181,7 +181,7 @@ const { t } = useI18n()
   margin-left: 6px;
   padding: 1px 6px;
   font-size: 9px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--accent);
   color: var(--accent-ink);
   letter-spacing: var(--ls-mono);

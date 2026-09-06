@@ -103,7 +103,7 @@ const emit = defineEmits<{
   border: none;
   background: none;
   cursor: default;
-  border-radius: 18px;
+  border-radius: var(--r-3);
   transition: background 0.15s;
   white-space: nowrap;
   flex-shrink: 0;

@@ -902,7 +902,7 @@ onMounted(() => {
   margin-left: 8px;
   padding: 1px 6px;
   border: 1px solid var(--status-orange);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--status-orange-bg);
   color: var(--status-orange);
   font-family: var(--font-mono);

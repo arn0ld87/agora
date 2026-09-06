@@ -58,7 +58,7 @@ function goHome(): void {
   border: 1px solid currentColor;
   background: transparent;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: var(--r-3);
   font: inherit;
 }
 .not-found__cta:hover {

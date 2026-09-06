@@ -463,7 +463,7 @@ onBeforeUnmount(() => {
 .sl-tick {
   flex: 1;
   height: 12px;
-  border-radius: 2px;
+  border-radius: var(--r-2);
   background: var(--hairline);
 }
 .sl-tick--done {
