@@ -193,12 +193,45 @@ def _load_persona_floor(agent: Any) -> int:
     return MIN_PERSONA_TABLE_ROWS
 
 
+def _load_persona_candidate_count(agent: Any) -> Optional[int]:
+    """Kandidatenzahl vor der Profilgenerierung, fuer die Gate-Fehlermeldung (#1420).
+
+    ``state.entities_count`` wird in ``prepare_service.py::_phase_read_entities``
+    nach Dedup und Cap, aber vor dem Aufruf des Persona-Generators persistiert
+    (``state.entities_count = filtered.filtered_count``) — das deckt sich mit
+    dem Log ``Simulation preparation completed: entities=N, profiles=M``. Diese
+    Zahl ist die Kandidatenmenge, die der Generator sieht.
+
+    ``None`` wenn der Wert (noch) nicht vorliegt — der Aufrufer degradiert dann
+    auf die knappe Fehlermeldung ohne Ablehnungszahl.
+    """
+    try:
+        data = resolve_default_store().read_json(
+            agent.simulation_id,
+            "state",
+            default=None,
+        )
+    except Exception as exc:  # noqa: BLE001 — Gate darf am Store nicht scheitern
+        logger.warning(
+            "persona-floor check: failed to read entities_count for simulation %s: %r",
+            getattr(agent, "simulation_id", "<unknown>"),
+            exc,
+        )
+        return None
+
+    if not isinstance(data, dict):
+        return None
+    count = data.get("entities_count")
+    return count if isinstance(count, int) and count > 0 else None
+
+
 def _mark_incomplete_for_persona_floor(
     report: Report,
     *,
     report_id: str,
     persona_count: int,
     floor: int = MIN_PERSONA_TABLE_ROWS,
+    candidate_count: Optional[int] = None,
     progress_callback: Optional[Callable[[str, int, str], None]] = None,
 ) -> Report:
     report.status = ReportStatus.INCOMPLETE
@@ -206,6 +239,32 @@ def _mark_incomplete_for_persona_floor(
         "Persona-Mindestanzahl nicht erreicht: "
         f"{persona_count}/{floor} Personas vorhanden."
     )
+    # Issue #1420 / Review-Nachbesserung (PR #1454): ohne diesen Zusatz sieht
+    # die Meldung wie ein reiner Unterlauf aus, obwohl 15/20 durchaus aus 23
+    # Kandidaten entstanden sein koennen. Die Differenz aber dem Eignungs-Gate
+    # zuzuschreiben waere unbelegt: ``candidate_count`` (state.entities_count)
+    # wird bei Branches unveraendert von der Quelle kopiert
+    # (``branching_service.py::create_branch``), waehrend
+    # ``_apply_persona_overrides`` und die manuelle Persona-Loeschroute
+    # (``simulation_profiles.py``) nur ``reddit_profiles`` mutieren, nicht
+    # diesen Zaehler. 20 kopierte Kandidaten mit einer absichtlich entfernten
+    # Persona saehen dann wie eine Gate-Ablehnung aus, obwohl keine
+    # stattgefunden hat. Reserve-Backfills koennen die Differenz ebenfalls von
+    # der tatsaechlichen Ablehnungszahl des Generators abweichen lassen. Die
+    # Meldung benennt die Differenz deshalb als Defizit, nicht als Ablehnung;
+    # die tatsaechliche Ablehnungszahl kennt nur
+    # ``OasisProfileGenerator.generate_profiles_from_entities`` (lokal,
+    # aktuell nicht persistiert — Folgearbeit).
+    if candidate_count is not None and candidate_count >= persona_count:
+        deficit_count = candidate_count - persona_count
+        message += (
+            f" Von {candidate_count} Persona-Kandidaten sind nur {persona_count} "
+            f"als Personas vorhanden — ein Defizit von {deficit_count}. Moegliche "
+            "Ursachen sind das Eignungs-Gate (Ablehnung technischer Artefakte "
+            "ohne eigene Interessenlage) oder eine nachtraegliche Entfernung "
+            "(z. B. in einem Branch); aus dieser Zahl allein laesst sich das "
+            "nicht unterscheiden."
+        )
     report.missing_sections = [message]
     report.error = message
     ReportManager.update_progress(
@@ -1533,6 +1592,7 @@ def generate_report(
                 report_id=report_id,
                 persona_count=persona_count,
                 floor=persona_floor,
+                candidate_count=_load_persona_candidate_count(agent),
                 progress_callback=progress_callback,
             )
             if agent.console_logger:
