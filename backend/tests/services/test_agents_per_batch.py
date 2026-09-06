@@ -9,6 +9,7 @@ unverändert — nur die Konstante/der Default ändert sich.
 from __future__ import annotations
 
 import math
+import threading
 from typing import Any
 from unittest.mock import patch
 
@@ -129,12 +130,20 @@ class TestBatchingMath:
         ``len=12, AGENTS_PER_BATCH=5`` exakt ``[0:5]``, ``[5:10]`` und
         ``[10:12]`` weiterreicht. Damit ist das Slicing an die
         Produktionsschleife gekoppelt, nicht an eine lokale Kopie der Formel.
+
+        Perf-Fix (Agent-Config-Batches laufen parallel): die Batches können
+        in beliebiger Reihenfolge bei ``_generate_agent_configs_batch``
+        ankommen — der Aufruf wird deshalb thread-sicher nach ``start_idx``
+        indiziert statt in einer schlichten Liste in Aufrufreihenfolge
+        gesammelt, bevor sortiert verglichen wird.
         """
         monkeypatch.setenv("AGORA_AGENTS_PER_BATCH", "5")
-        captured: list[list[EntityNode]] = []
+        captured: dict[int, list[EntityNode]] = {}
+        capture_lock = threading.Lock()
 
         def fake_batch(self, context, entities, start_idx, simulation_requirement):  # type: ignore[no-untyped-def]  # noqa: ARG001
-            captured.append(list(entities))
+            with capture_lock:
+                captured[start_idx] = list(entities)
             return []
 
         fake_time = TimeSimulationConfig()
@@ -197,8 +206,10 @@ class TestBatchingMath:
                 entities=entities,
             )
 
-        # Drei Batches: [0:5], [5:10], [10:12]
-        assert [len(b) for b in captured] == [5, 5, 2]
+        # Drei Batches: [0:5], [5:10], [10:12] — keyed nach start_idx, damit
+        # die Reihenfolge der (parallelen) Aufrufe egal ist.
+        assert sorted(captured.keys()) == [0, 5, 10]
+        assert [len(b) for _, b in sorted(captured.items())] == [5, 5, 2]
         assert [e.name for e in captured[0]] == [f"Entity {i}" for i in range(0, 5)]
-        assert [e.name for e in captured[1]] == [f"Entity {i}" for i in range(5, 10)]
-        assert [e.name for e in captured[2]] == [f"Entity {i}" for i in range(10, 12)]
+        assert [e.name for e in captured[5]] == [f"Entity {i}" for i in range(5, 10)]
+        assert [e.name for e in captured[10]] == [f"Entity {i}" for i in range(10, 12)]

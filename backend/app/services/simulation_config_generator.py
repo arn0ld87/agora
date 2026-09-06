@@ -243,6 +243,14 @@ class SimulationConfigGenerator:
     # aktuellen LLM-Workloads (hohe Latenz, Memory-Peak).
     AGENTS_PER_BATCH = 8
 
+    # Obergrenze für gleichzeitig laufende Agent-Config-Batches (Perf-Fix,
+    # Produktionsmessung: 3 Batches sequentiell 81s statt ~28s parallel).
+    # Batches sind disjunkte Entity-Bereiche und lesen nur aus dem
+    # unveränderlichen ``context`` — beliebig parallelisierbar. Der Deckel
+    # verhindert bei sehr vielen Entities unbegrenzt viele gleichzeitige
+    # LLM-Requests; 8 spiegelt den AGENTS_PER_BATCH-Default.
+    MAX_PARALLEL_AGENT_BATCHES = 8
+
     # Context truncation length for each step (characters)
     TIME_CONFIG_CONTEXT_LENGTH = 10000  # Time configuration
     EVENT_CONFIG_CONTEXT_LENGTH = 8000  # Event configuration
@@ -404,24 +412,38 @@ class SimulationConfigGenerator:
         reasoning_parts.append(f"Event config: {event_config_result.get('reasoning', 'Success')}")
 
         # ========== Step 3-N: Generate agent configurations in batches ==========
-        all_agent_configs = []
-        for batch_idx in range(num_batches):
-            start_idx = batch_idx * self.AGENTS_PER_BATCH
-            end_idx = min(start_idx + self.AGENTS_PER_BATCH, len(entities))
-            batch_entities = entities[start_idx:end_idx]
+        # Perf-Fix: Batches sind disjunkte Entity-Bereiche, lesen nur aus dem
+        # unveränderlichen ``context`` und schreiben in keine gemeinsame
+        # Struktur — sie sind voneinander unabhängig und laufen parallel
+        # (siehe ``_generate_agent_configs_parallel``). Produktionsmessung:
+        # 3 Batches sequentiell ~81s, parallel ~28s.
+        all_agent_configs: List[AgentActivityConfig] = []
+        if num_batches:
+            batch_ranges = [
+                (
+                    batch_idx * self.AGENTS_PER_BATCH,
+                    min((batch_idx + 1) * self.AGENTS_PER_BATCH, len(entities)),
+                )
+                for batch_idx in range(num_batches)
+            ]
 
             report_progress(
-                3 + batch_idx,
-                f"Generating agent configuration ({start_idx + 1}-{end_idx}/{len(entities)})...",
+                3,
+                f"Generating agent configuration in {num_batches} parallel "
+                f"batch(es) (1-{len(entities)}/{len(entities)})...",
             )
 
-            batch_configs = self._generate_agent_configs_batch(
+            all_agent_configs = self._generate_agent_configs_parallel(
                 context=context,
-                entities=batch_entities,
-                start_idx=start_idx,
+                entities=entities,
+                batch_ranges=batch_ranges,
                 simulation_requirement=simulation_requirement,
             )
-            all_agent_configs.extend(batch_configs)
+
+            report_progress(
+                2 + num_batches,
+                f"Agent configuration batches complete ({len(all_agent_configs)}/{len(entities)})...",
+            )
 
         reasoning_parts.append(f"Agent config: Successfully generated {len(all_agent_configs)}")
 
@@ -1028,6 +1050,96 @@ Return JSON format (no markdown):
 
         event_config.initial_posts = updated_posts
         return event_config
+
+    def _generate_agent_configs_parallel(
+        self,
+        context: str,
+        entities: List[EntityNode],
+        batch_ranges: List[tuple[int, int]],
+        simulation_requirement: str,
+    ) -> List[AgentActivityConfig]:
+        """Führt die Agent-Config-Batches parallel statt sequentiell aus.
+
+        Perf-Fix: ``batch_ranges`` sind disjunkte, vorab berechnete
+        ``[start_idx, end_idx)``-Fenster über ``entities``. Jeder Batch liest
+        nur aus dem gemeinsamen, unveränderlichen ``context`` und seinem
+        eigenen Entity-Ausschnitt — keine geteilte veränderliche Struktur,
+        daher sicher parallelisierbar. Reihenfolge und Entity-Zuordnung
+        bleiben identisch zur sequentiellen Variante, weil ``map`` die
+        Ergebnisse in Eingabereihenfolge liefert, unabhängig von der
+        tatsächlichen Fertigstellungsreihenfolge der Batches.
+
+        gevent-Kompatibilität: Produktionsserver läuft unter
+        ``gunicorn -k gevent`` (``backend/wsgi.py`` patcht alle Sockets).
+        ``ThreadPoolExecutor`` auf gevent-gepatchten Sockets reißt
+        Verbindungen ab, weil OS-Threads nicht den gevent-Hub des
+        aufrufenden Greenlets teilen — genau das Muster aus
+        ``oasis_profile_generator.generate_profiles_from_entities``. Unter
+        gevent daher der kooperative ``gevent.pool.Pool``, sonst
+        ``ThreadPoolExecutor``.
+        """
+        if len(batch_ranges) == 1:
+            # Kein Parallelitätsgewinn bei genau einem Batch — Pool-Overhead
+            # sparen und direkt sequentiell aufrufen.
+            start_idx, end_idx = batch_ranges[0]
+            return self._generate_agent_configs_batch(
+                context=context,
+                entities=entities[start_idx:end_idx],
+                start_idx=start_idx,
+                simulation_requirement=simulation_requirement,
+            )
+
+        def run_batch(batch_range: tuple[int, int]) -> List[AgentActivityConfig]:
+            start_idx, end_idx = batch_range
+            return self._generate_agent_configs_batch(
+                context=context,
+                entities=entities[start_idx:end_idx],
+                start_idx=start_idx,
+                simulation_requirement=simulation_requirement,
+            )
+
+        # Gevent-Erkennung: ``monkey.is_patched()`` (ohne Argument) liefert
+        # seit gevent 23.x keinen "socket"-Status mehr — die öffentliche API
+        # ist ``monkey.is_module_patched(name)``.
+        try:
+            from gevent import monkey
+        except ImportError:
+            is_gevent = False
+        else:
+            is_gevent = monkey.is_module_patched("socket")
+
+        pool_size = min(len(batch_ranges), self.MAX_PARALLEL_AGENT_BATCHES)
+
+        if is_gevent:
+            logger.info(
+                "Gevent detected: using cooperative Pool for %d parallel agent-config batches",
+                len(batch_ranges),
+            )
+            from gevent.pool import Pool
+
+            pool = Pool(pool_size)
+            try:
+                # Pool.map wahrt die Eingabereihenfolge der Ergebnisse und
+                # reicht eine Exception aus einem fehlgeschlagenen Batch beim
+                # Iterieren nach außen durch — kein stilles Verschlucken.
+                batch_results = list(pool.map(run_batch, batch_ranges))
+            finally:
+                pool.join()
+        else:
+            from concurrent.futures import ThreadPoolExecutor
+
+            logger.info(
+                "No gevent monkey-patching detected: using ThreadPoolExecutor "
+                "for %d parallel agent-config batches",
+                len(batch_ranges),
+            )
+            with ThreadPoolExecutor(max_workers=pool_size) as executor:
+                batch_results = list(executor.map(run_batch, batch_ranges))
+
+        all_agent_configs: List[AgentActivityConfig] = []
+        for batch_configs in batch_results:
+            all_agent_configs.extend(batch_configs)
+        return all_agent_configs
 
     def _generate_agent_configs_batch(
         self, context: str, entities: List[EntityNode], start_idx: int, simulation_requirement: str
