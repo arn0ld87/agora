@@ -22,9 +22,85 @@
       </button>
     </div>
 
+    <!-- Umschalter Liste ⇄ Tabelle (Redesign PR 8): nur fuer die Filter
+         „lauf“/„jobs“ — die anderen Filter sind keine dichten Datensaetze. -->
+    <div
+      v-if="tableAllowed"
+      class="shelf__view-toggle"
+      role="group"
+      :aria-label="t('shelf.table.toggleAria')"
+      :data-testid="ShelfTableTestId.toggle"
+    >
+      <button
+        type="button"
+        class="shelf__view-toggle-btn"
+        :class="{ 'shelf__view-toggle-btn--active': effectiveViewMode === 'list' }"
+        :aria-pressed="effectiveViewMode === 'list'"
+        :data-testid="ShelfTableTestId.toggleList"
+        @click="setViewMode('list')"
+      >
+        {{ t('shelf.table.toggleList') }}
+      </button>
+      <button
+        type="button"
+        class="shelf__view-toggle-btn"
+        :class="{ 'shelf__view-toggle-btn--active': effectiveViewMode === 'table' }"
+        :aria-pressed="effectiveViewMode === 'table'"
+        :data-testid="ShelfTableTestId.toggleTable"
+        @click="setViewMode('table')"
+      >
+        {{ t('shelf.table.toggleTable') }}
+      </button>
+    </div>
+
     <div class="shelf__body">
-      <!-- Filter „Alle Jobs“ (Q19c): schlichte Mono-Tabelle aus der Rohebene. -->
-      <div v-if="props.shelf.filter.value === 'jobs'" class="shelf__jobs-scroll">
+      <!-- Tabellenmodus „lauf“ (Redesign PR 8): DataTable statt Zeilenliste. -->
+      <div v-if="props.shelf.filter.value === 'lauf' && effectiveViewMode === 'table'" :data-testid="ShelfTableTestId.root">
+        <DataTable :columns="laufColumns" :rows="laufTableRows" :row-click="(row) => selectRow((row as LaufTableRow).raw)" :row-selected="(row) => isSelected((row as LaufTableRow).raw)">
+          <template #cell-nextAction="{ row }">
+            <span class="shelf__table-actions">
+              <button
+                v-if="(row as LaufTableRow).raw.nextAction"
+                type="button"
+                class="shelf__row-btn"
+                :class="nextActionClass((row as LaufTableRow).raw.nextAction!.kind)"
+                :data-testid="ShelfTestId.rowNextAction"
+                @click.stop="goToNextAction((row as LaufTableRow).raw)"
+              >
+                {{ (row as LaufTableRow).raw.nextAction!.label }}
+              </button>
+              <button
+                v-if="(row as LaufTableRow).simulationId"
+                type="button"
+                class="shelf__row-btn shelf__row-btn--ghost"
+                :data-testid="ShelfTableTestId.compareAction"
+                @click.stop="goToCompare((row as LaufTableRow).simulationId as string)"
+              >
+                {{ t('shelf.table.compare') }}
+              </button>
+            </span>
+          </template>
+          <template #empty>
+            <span :data-testid="ShelfTestId.empty">{{ t('shelf.empty') }}</span>
+          </template>
+        </DataTable>
+      </div>
+
+      <!-- Tabellenmodus „jobs“ (Redesign PR 8): dieselbe DataTable-Komponente
+           wie „lauf“, statt der eigenen Mono-Tabelle unten. -->
+      <div
+        v-else-if="props.shelf.filter.value === 'jobs' && effectiveViewMode === 'table'"
+        :data-testid="ShelfTableTestId.root"
+      >
+        <DataTable :columns="jobColumns" :rows="jobTableRows">
+          <template #empty>
+            <span :data-testid="ShelfTestId.empty">{{ t('shelf.empty') }}</span>
+          </template>
+        </DataTable>
+      </div>
+
+      <!-- Filter „Alle Jobs“ (Q19c), Listenmodus: schlichte Mono-Tabelle aus der Rohebene. -->
+      <div v-else-if="props.shelf.filter.value === 'jobs'" class="shelf__jobs-scroll">
       <table class="shelf__jobs-table" :data-testid="ShelfTestId.jobsTable">
         <thead>
           <tr>
@@ -144,7 +220,8 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { ShelfTestId } from '../../contracts/testIds'
+import DataTable, { type DataTableColumn } from '../v4/data/DataTable.vue'
+import { ShelfTableTestId, ShelfTestId } from '../../contracts/testIds'
 import { SHELF_KIND_TAG, type ShelfFilter, type ShelfObject } from '../../types/shelf'
 import { formatShelfDate, statusText, type useShelf } from '../../composables/useShelf'
 import { useCancelAction } from './useCancelAction'
@@ -194,6 +271,130 @@ const filterPills = computed(() =>
 )
 
 const visibleRows = computed(() => props.shelf.filtered.value)
+
+// ── Tabellenmodus (Redesign PR 8, Audit §7 "Läufe (/runs)") ──────────
+//
+// Umschalter Liste ⇄ Tabelle. Nur die Filter „lauf" und „jobs" bieten den
+// Tabellenmodus an — die anderen Filter (Berichte/Personas/Graphen) sind
+// keine dichten, spaltenartigen Datensaetze; der Umschalter verschwindet
+// dort ganz statt deaktiviert dazustehen (weniger UI-Rauschen als ein
+// Knopf, der ohnehin nie greift). Die Wahl wird pro Benutzer gemerkt.
+const VIEW_MODE_STORAGE_KEY = 'agora.shelf.viewMode'
+type ShelfViewMode = 'list' | 'table'
+
+function loadViewMode(): ShelfViewMode {
+  try {
+    return localStorage.getItem(VIEW_MODE_STORAGE_KEY) === 'table' ? 'table' : 'list'
+  } catch {
+    return 'list'
+  }
+}
+
+const viewMode = ref<ShelfViewMode>(loadViewMode())
+
+function setViewMode(mode: ShelfViewMode): void {
+  viewMode.value = mode
+  try {
+    localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode)
+  } catch {
+    // localStorage kann in privaten Tabs/über Quota fehlschlagen — die Wahl
+    // gilt dann nur fuer diese Sitzung, die Ablage bleibt bedienbar.
+  }
+}
+
+const tableAllowed = computed(() => props.shelf.filter.value === 'lauf' || props.shelf.filter.value === 'jobs')
+const effectiveViewMode = computed<ShelfViewMode>(() => (tableAllowed.value ? viewMode.value : 'list'))
+
+/**
+ * Aussagen/Belege/Lücken sind bewusst KEINE Spalten dieser Tabelle (Audit
+ * Zeile 137 nennt sie als Sollzustand). Sie kommen aus
+ * getReportEvidence(reportId) (useObjectDetail.ts) — ein Fetch PRO BERICHT.
+ * Eine Läufe-Tabelle mit N Zeilen bräuchte N Evidence-Fetches; die ganze
+ * Redesign-Serie kommt ohne neue Backend-Endpunkte aus, und ein N+1 im
+ * Listen-Pfad ist keine Option. Die drei Kennzahlen bleiben im
+ * Kennzahlstreifen des Dossiers (Redesign PR 4).
+ *
+ * „Vergleichen" ersetzt die im Audit vorgesehene Zwei-Läufe-Auswahl:
+ * CompareView.vue (Route CompareV4, /v4/compare/:simulationId) vergleicht
+ * BRANCHES EINER Simulation über listSimulationBranches(simulationId) —
+ * nicht zwei beliebige Läufe. Eine Mehrfachauswahl aus dieser Tabelle hätte
+ * keinen Endpunkt, der sie einlöst. Stattdessen: eine Zeilenaktion
+ * „Vergleichen" pro Lauf, die zu CompareV4 führt, wenn eine simulationId
+ * ermittelbar ist — keine erfundene Compare-API.
+ */
+interface LaufTableRow extends Record<string, unknown> {
+  id: string
+  title: string
+  statusLine: string
+  progress: number | null
+  personaCount: number | null
+  updatedAt: string
+  simulationId: string | null
+  raw: ShelfObject
+}
+
+function simulationIdForLauf(obj: ShelfObject): string | null {
+  if (obj.active?.simulationId) return obj.active.simulationId
+  for (const job of obj.jobs ?? []) {
+    const sid = job.linkedIds?.simulation_id
+    if (typeof sid === 'string' && sid) return sid
+  }
+  return null
+}
+
+const laufColumns = computed<DataTableColumn[]>(() => [
+  { key: 'title', label: t('shelf.table.colTitle') },
+  { key: 'statusLine', label: t('shelf.table.colStatus') },
+  { key: 'progress', label: t('shelf.table.colProgress'), align: 'right', mono: true, width: '90px' },
+  { key: 'personaCount', label: t('shelf.table.colPersonas'), align: 'right', mono: true, width: '90px' },
+  { key: 'updatedAt', label: t('shelf.table.colUpdatedAt'), mono: true, width: '120px' },
+  { key: 'nextAction', label: t('shelf.table.colNextAction') },
+])
+
+const laufTableRows = computed<LaufTableRow[]>(() =>
+  visibleRows.value.map((obj) => ({
+    id: `${obj.kind}:${obj.id}`,
+    title: obj.title,
+    statusLine: obj.statusLine,
+    progress: obj.active?.progress ?? null,
+    personaCount: obj.personaCount ?? null,
+    updatedAt: formatUpdatedAt(obj.updatedAt),
+    simulationId: simulationIdForLauf(obj),
+    raw: obj,
+  })),
+)
+
+interface JobTableRow extends Record<string, unknown> {
+  id: string
+  runType: string
+  status: string
+  message: string
+  progress: number
+  updatedAt: string
+}
+
+const jobColumns = computed<DataTableColumn[]>(() => [
+  { key: 'runType', label: t('shelf.table.colType') },
+  { key: 'status', label: t('shelf.table.colStatus') },
+  { key: 'message', label: t('shelf.table.colMessage'), secondary: true },
+  { key: 'progress', label: t('shelf.table.colProgress'), align: 'right', mono: true, width: '90px' },
+  { key: 'updatedAt', label: t('shelf.table.colUpdatedAt'), mono: true, width: '120px' },
+])
+
+const jobTableRows = computed<JobTableRow[]>(() =>
+  props.shelf.jobs.value.map((job) => ({
+    id: job.runId,
+    runType: job.runType,
+    status: statusText(t, `shelf.status.${job.status}`, job.status),
+    message: job.message,
+    progress: job.progress,
+    updatedAt: formatUpdatedAt(job.updatedAt),
+  })),
+)
+
+function goToCompare(simulationId: string): void {
+  void router.push({ name: 'CompareV4', params: { simulationId } })
+}
 
 function isSelected(obj: ShelfObject): boolean {
   return props.selected !== null && props.selected.kind === obj.kind && props.selected.id === obj.id
@@ -357,6 +558,44 @@ function onRowKeydown(e: KeyboardEvent, index: number): void {
 
 .shelf__filter-pill--active .shelf__filter-count {
   color: var(--text-secondary);
+}
+
+.shelf__view-toggle {
+  display: inline-flex;
+  gap: 2px;
+  margin: 0 var(--sp-5) var(--sp-2);
+  padding: 2px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-3);
+  width: fit-content;
+}
+
+.shelf__view-toggle-btn {
+  border: 0;
+  background: transparent;
+  border-radius: var(--r-2);
+  padding: 3px 10px;
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.shelf__view-toggle-btn--active {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.shelf__view-toggle-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.shelf__table-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .shelf__body {

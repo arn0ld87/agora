@@ -33,17 +33,23 @@ const routes: RouteRecordRaw[] = [
     redirect: { name: 'Dashboard' },
   },
 
-  // Runs — AppShell-Wrapper ersetzt direkte RunsView (Slice F)
+  // Redesign PR 8 (Audit §7 "Läufe (/runs)"): /runs zieht in die Ablage um —
+  // Tabellenmodus in Shelf.vue mit Filter „lauf". RunsAppShellView.vue bleibt
+  // physisch erhalten (Löschung ist PR 10), nur die Route zeigt nicht mehr
+  // darauf.
   {
     path: '/runs',
     name: 'Runs',
-    component: () => import('../views/v4/RunsAppShellView.vue'),
+    redirect: { name: 'Shelf', query: { filter: 'lauf' } },
   },
+  // Redesign PR 8: /runs/:id → Dossier des Laufs. Der Legacy-Pfadparameter
+  // ":id" ist eine run_id/sim_id — ShelfObject erwartet dieselbe ID unter
+  // "objectId" mit kind="lauf" (das Kind ist bei /runs/:id immer ein Lauf,
+  // nie Bericht/Personasatz/Graph).
   {
     path: '/runs/:id',
     name: 'RunDetail',
-    component: () => import('../views/v4/RunDetailAppShellView.vue'),
-    props: true,
+    redirect: (to) => ({ name: 'ShelfObject', params: { kind: 'lauf', objectId: String(to.params.id) } }),
   },
 
   // Onboarding — resumierbarer Erst-Einrichtungs-Wizard (Onboarding Slice 2)
@@ -207,10 +213,13 @@ const routes: RouteRecordRaw[] = [
     component: () => import('../views/v4/CompareView.vue'),
     props: true,
   },
+  // Redesign PR 8 (Audit §7): History entfällt zugunsten des Ablage-Filters
+  // „Alle Jobs" (Zeile 146 des Audits). HistoryView.vue bleibt physisch
+  // erhalten (Löschung ist PR 10), nur die Route zeigt nicht mehr darauf.
   {
     path: '/v4/history',
     name: 'HistoryV4',
-    component: () => import('../views/v4/HistoryView.vue'),
+    redirect: { name: 'Shelf', query: { filter: 'jobs' } },
   },
 
   // Block B3 — Neuhuelle „Richtung B · Dossier“ (PLAN.md).
