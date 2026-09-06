@@ -1469,7 +1469,13 @@
       "oasisHint": "Wird beim Start eines Runs aktiv.",
       "ollamaHint": "{n} Modelle verfügbar",
       "ollamaSkippedHint": "Prüfung übersprungen — aktiver Provider ist {provider}",
-      "providerUnknown": "ein anderer Anbieter"
+      "providerUnknown": "ein anderer Anbieter",
+      "error": {
+        "unreachable": "nicht erreichbar",
+        "timeout": "Zeitüberschreitung bei der Prüfung",
+        "auth": "Anmeldung fehlgeschlagen",
+        "unexpected": "unerwarteter Fehler"
+      }
     },
     "reports": {
       "title": "Letzte Reports",

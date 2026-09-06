@@ -1,0 +1,4 @@
+### Changed (Radius-Skala durchgesetzt, Ablage-Titel nicht mehr hart gekuerzt — 2026-09-06)
+
+- **56 hartkodierte `border-radius`-Werte im Frontend wurden auf die `--r-2`/`--r-3`/`--r-5`/`--r-pill`-Skala aus `tokens-v3.css` umgestellt**, je nach Semantik des gerundeten Elements (Chip/Tag/Badge/Kbd → `--r-2`, Button/Eingabe/Zeile → `--r-3`, Karte/Panel/Dialog/Drawer → `--r-5`, `999px`/`9999px` → `--r-pill`), nicht nach Pixelnaehe zum alten Wert. `50%`-Kreise und bewusste `0`-Werte blieben unangetastet. Drei Werte in `useReportExports.ts` (Standalone-HTML-Export ohne Zugriff auf `tokens-v3.css`) bleiben mit Begruendung hartkodiert.
+- **Der Ablage-Titel in `useShelf.ts` wird nicht mehr bei 80 Zeichen mitten im Wort abgeschnitten.** Der volle `simulation_requirement`-Text landet im Datenmodell; Shelf-Zeile und Dossier-Ueberschrift kuerzen jetzt visuell per CSS (`text-overflow: ellipsis`) und tragen den vollen Text als `title`-Attribut fuer den Hover-Tooltip.

@@ -8,11 +8,24 @@ import shutil
 from datetime import datetime, timezone
 from flask import current_app
 import requests
+from neo4j.exceptions import (
+    AuthConfigurationError,
+    AuthError,
+    DatabaseUnavailable,
+    RoutingServiceUnavailable,
+    ServiceUnavailable,
+    SessionExpired,
+)
 
 from . import status_bp
 from .. import __version__
 from ..config import Config
-from ..contracts.system_status_contract import SystemStatusE2E, SystemStatusOllama
+from ..contracts.system_status_contract import (
+    StatusCheckError,
+    StatusErrorCode,
+    SystemStatusE2E,
+    SystemStatusOllama,
+)
 from ..llm.json_mode import _read_active_config_safely
 from ..llm.providers.registry import detect_provider, resolve_ollama_tags_url
 from ..utils.gpu_probe import detect_gpu
@@ -20,6 +33,43 @@ from ..utils.logger import get_logger
 from ..utils.api_responses import handle_api_errors, json_success
 
 logger = get_logger('agora.api.status')
+
+# Neo4j-Ausnahmen, die auf einen nicht erreichbaren Server hindeuten
+# (Routing-/Cluster-Ausfall, Session verloren) statt auf eine
+# Authentifizierungs- oder Programmierfehler-Klasse.
+_NEO4J_UNREACHABLE_EXCEPTIONS = (
+    ServiceUnavailable,
+    SessionExpired,
+    RoutingServiceUnavailable,
+    DatabaseUnavailable,
+)
+_NEO4J_AUTH_EXCEPTIONS = (AuthError, AuthConfigurationError)
+
+
+def _classify_status_error(exc: BaseException) -> StatusErrorCode:
+    """Ordnet eine gefangene Probe-Exception einem geschlossenen Fehlercode zu.
+
+    Gemeinsam genutzt von ``_get_neo4j_status``, ``_get_ollama_status`` und
+    ``_get_disk_status`` — die drei Stellen, die bislang ``str(exc)`` roh in
+    die Antwort schrieben (#1458). Der Rohtext selbst gehört nur ins
+    strukturierte Log, nicht in diese Klassifikation.
+    """
+    if isinstance(exc, (TimeoutError, requests.exceptions.Timeout)):
+        return StatusErrorCode.TIMEOUT
+    if isinstance(exc, (PermissionError,) + _NEO4J_AUTH_EXCEPTIONS):
+        return StatusErrorCode.AUTH
+    if isinstance(exc, requests.exceptions.HTTPError):
+        response = getattr(exc, "response", None)
+        if response is not None and getattr(response, "status_code", None) in (401, 403):
+            return StatusErrorCode.AUTH
+        return StatusErrorCode.UNEXPECTED
+    if isinstance(
+        exc,
+        (ConnectionError, FileNotFoundError, requests.exceptions.ConnectionError)
+        + _NEO4J_UNREACHABLE_EXCEPTIONS,
+    ):
+        return StatusErrorCode.UNREACHABLE
+    return StatusErrorCode.UNEXPECTED
 
 
 def _get_auth_mode():
@@ -119,9 +169,15 @@ def _get_neo4j_status():
         }
     except Exception as e:  # noqa: BLE001 — probe result; exc used in status dict
         last_error = getattr(storage, 'last_error', None) or e
+        logger.warning(
+            "Neo4j connectivity probe failed",
+            extra={"neo4j_uri": Config.NEO4J_URI, "error": str(last_error)},
+        )
         return {
             "reachable": False,
-            "error": str(last_error),
+            "error": StatusCheckError(
+                code=_classify_status_error(last_error)
+            ).model_dump(mode="json"),
             "uri": Config.NEO4J_URI,
             "is_connected": getattr(storage, 'is_connected', False),
             "last_success_ts": (storage.last_success_ts.isoformat()
@@ -205,7 +261,7 @@ def _get_ollama_status():
         status.reachable = True
         status.models_available = models
     except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
-        status.error = str(e)
+        status.error = StatusCheckError(code=_classify_status_error(e))
         logger.debug(
             "Could not reach Ollama",
             extra={"ollama_base_url": base, "error": str(e)},
@@ -230,14 +286,19 @@ def _get_disk_status():
             }
         }
     except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
-        logger.warning(f"Could not check disk usage: {e}")
+        logger.warning(
+            "Could not check disk usage",
+            extra={"uploads_path": uploads_path, "error": str(e)},
+        )
         return {
             "uploads": {
                 "path": uploads_path,
                 "total_bytes": None,
                 "free_bytes": None,
                 "used_pct": None,
-                "error": str(e),
+                "error": StatusCheckError(
+                    code=_classify_status_error(e)
+                ).model_dump(mode="json"),
             }
         }
 

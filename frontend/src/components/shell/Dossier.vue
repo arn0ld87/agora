@@ -28,7 +28,7 @@
               <li v-for="item in attentionItems" :key="`${item.kind}:${item.id}`" class="dossier__ov-attn" :data-testid="DossierTestId.overviewAttentionItem">
                 <span class="dossier__ov-attn-sig" aria-hidden="true">!</span>
                 <span class="dossier__ov-attn-main">
-                  <span class="dossier__ov-attn-title">{{ item.title }}</span>
+                  <span class="dossier__ov-attn-title" :title="item.title">{{ item.title }}</span>
                   <span class="dossier__ov-attn-status">{{ item.statusLine }}</span>
                 </span>
                 <button v-if="item.nextAction" type="button" class="dossier__btn dossier__btn--ghost" @click="goTo(item.nextAction.to)">
@@ -51,7 +51,7 @@
                   :data-testid="DossierTestId.overviewRecentItem"
                   @click="openObject(item)"
                 >
-                  <span class="dossier__ov-list-title">{{ item.title }}</span>
+                  <span class="dossier__ov-list-title" :title="item.title">{{ item.title }}</span>
                   <span class="dossier__ov-list-status">{{ item.statusLine }}</span>
                   <span class="dossier__ov-list-time">{{ formatUpdatedAt(item.updatedAt) }}</span>
                 </button>
@@ -69,7 +69,7 @@
             </div>
             <div v-if="liveItems.length" class="dossier__ov-live-list">
               <div v-for="item in liveItems" :key="`${item.kind}:${item.id}`" class="dossier__ov-live-card" :data-testid="DossierTestId.overviewLiveItem">
-                <div class="dossier__ov-live-head"><i class="dossier__ov-dot dossier__ov-dot--live" aria-hidden="true"></i><span class="dossier__ov-live-title">{{ item.title }}</span></div>
+                <div class="dossier__ov-live-head"><i class="dossier__ov-dot dossier__ov-dot--live" aria-hidden="true"></i><span class="dossier__ov-live-title" :title="item.title">{{ item.title }}</span></div>
                 <p class="dossier__ov-live-status">{{ item.statusLine }}</p>
                 <div v-if="item.active && item.active.progress !== null" class="dossier__ov-bar">
                   <i :style="{ width: `${item.active.progress}%` }"></i>
@@ -116,7 +116,7 @@
       <div class="dossier__head">
         <div class="dossier__head-main">
           <div class="dossier__kicker">{{ SHELF_KIND_TAG[props.object.kind] }}</div>
-          <h2 id="dossier-title" class="dossier__title" :data-testid="DossierTestId.title">{{ props.object.title }}</h2>
+          <h2 id="dossier-title" class="dossier__title" :title="props.object.title" :data-testid="DossierTestId.title">{{ props.object.title }}</h2>
           <p class="dossier__summary" :data-testid="DossierTestId.summary">{{ props.object.statusLine }}</p>
         </div>
         <div class="dossier__head-actions">
@@ -300,7 +300,7 @@ import { useCancelAction } from './useCancelAction'
 import { useObjectDetail } from '../../composables/useObjectDetail'
 import { useDeriveSimulation } from '../../composables/useDeriveSimulation'
 import { useStartFromPersona } from '../../composables/useStartFromPersona'
-import { useSystemStatus } from '../../composables/useSystemStatus'
+import { useSystemStatus, statusErrorKey } from '../../composables/useSystemStatus'
 import { formatShelfDate, statusText, type useShelf } from '../../composables/useShelf'
 import type { ConfidenceLabel } from '../../contracts/reportContract'
 
@@ -362,10 +362,10 @@ const systemRows = computed(() => {
   const s = systemStatus.status.value
   if (!s) return []
   const rows: { key: string; label: string; ok: boolean; hint: string }[] = [
-    { key: 'neo4j', label: t('dashboard.system.neo4j'), ok: s.neo4j.reachable, hint: s.neo4j.reachable ? '' : (s.neo4j.error ?? '') },
+    { key: 'neo4j', label: t('dashboard.system.neo4j'), ok: s.neo4j.reachable, hint: s.neo4j.reachable ? '' : (s.neo4j.error ? t(statusErrorKey(s.neo4j.error)) : '') },
   ]
   if (s.ollama.reachable !== null) {
-    rows.push({ key: 'ollama', label: t('dashboard.system.ollama'), ok: s.ollama.reachable, hint: s.ollama.reachable ? '' : (s.ollama.error ?? '') })
+    rows.push({ key: 'ollama', label: t('dashboard.system.ollama'), ok: s.ollama.reachable, hint: s.ollama.reachable ? '' : (s.ollama.error ? t(statusErrorKey(s.ollama.error)) : '') })
   }
   return rows
 })
@@ -858,9 +858,14 @@ function formatUpdatedAt(iso: string): string {
 }
 
 .dossier__ov-attn-title {
+  display: block;
+  min-width: 0;
   font-size: var(--fs-callout);
   color: var(--text-primary);
   font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dossier__ov-attn-status {
@@ -893,9 +898,13 @@ function formatUpdatedAt(iso: string): string {
 }
 
 .dossier__ov-list-title {
+  min-width: 0;
   font-size: var(--fs-callout);
   color: var(--text-primary);
   font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dossier__ov-list-status {
@@ -940,12 +949,18 @@ function formatUpdatedAt(iso: string): string {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
+  min-width: 0;
 }
 
 .dossier__ov-live-title {
+  flex: 1;
+  min-width: 0;
   font-size: var(--fs-callout);
   font-weight: 600;
   color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dossier__ov-live-status {
@@ -957,7 +972,7 @@ function formatUpdatedAt(iso: string): string {
 .dossier__ov-bar {
   margin-top: var(--sp-3);
   height: 4px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--hairline);
   overflow: hidden;
 }

@@ -78,7 +78,7 @@ watch(hasActiveChild, (active) => {
   gap: 10px;
   height: 36px;
   padding: var(--sidebar-group-trigger-py, 6px) var(--sidebar-item-px, 10px);
-  border-radius: 8px;
+  border-radius: var(--r-3);
   font-size: 14px;
   font-weight: 500;
   color: var(--text-primary);
@@ -123,7 +123,7 @@ watch(hasActiveChild, (active) => {
   align-items: center;
   height: 32px;
   padding: 0 10px 0 38px;
-  border-radius: 8px;
+  border-radius: var(--r-3);
   font-size: 13.5px;
   font-weight: 500;
   color: var(--text-primary);

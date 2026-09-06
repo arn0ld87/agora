@@ -186,7 +186,7 @@ async function selectRoute(aiRef: AiModelRef | null): Promise<void> {
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 1px solid var(--hairline);
   background: var(--surface-elevated);
   font-size: 12px;

@@ -89,7 +89,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--hairline);
-  border-radius: 8px;
+  border-radius: var(--r-5);
   overflow: hidden;
   background: var(--surface-base);
   min-height: 0;
@@ -145,7 +145,7 @@ onBeforeUnmount(() => {
   transform: translateX(-50%);
   background: var(--surface-base);
   border: 1px solid var(--hairline);
-  border-radius: 20px;
+  border-radius: var(--r-2);
   padding: 5px 14px;
   font-size: 12px;
   font-weight: 600;

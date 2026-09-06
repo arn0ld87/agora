@@ -203,7 +203,7 @@ onBeforeUnmount(() => {
   letter-spacing: 0.06em;
   color: var(--text-tertiary);
   border: 1px solid var(--hairline);
-  border-radius: 2px;
+  border-radius: var(--r-2);
   padding: 1px 4px;
   flex-shrink: 0;
 }

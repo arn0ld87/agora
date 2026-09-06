@@ -17,7 +17,7 @@ const label = te('feed.simBadge') ? t('feed.simBadge') : 'SIM'
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.06em;
-  border-radius: 3px;
+  border-radius: var(--r-2);
   background: var(--status-orange-bg);
   color: var(--status-orange);
   text-transform: uppercase;

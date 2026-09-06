@@ -94,7 +94,7 @@ const noResonanceYet = computed(() => {
 }
 .spb-bar {
   height: 4px;
-  border-radius: 2px;
+  border-radius: var(--r-2);
   overflow: hidden;
   background: var(--gray-5);
   display: flex;
@@ -106,13 +106,13 @@ const noResonanceYet = computed(() => {
   width: 100%;
   background: var(--accent);
   opacity: 0.6;
-  border-radius: 2px;
+  border-radius: var(--r-2);
 }
 /* Resonanz-Segmente, eingefärbt nach Voting-Score */
 .spb-pulse {
   flex: 1;
   height: 100%;
-  border-radius: 1px;
+  border-radius: var(--r-2);
   transition: background-color 0.3s ease;
 }
 .spb-pulse.score-negative {

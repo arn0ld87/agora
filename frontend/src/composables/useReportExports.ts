@@ -33,6 +33,9 @@ function triggerDownload(blob: Blob, filename: string) {
 }
 
 export function buildStandaloneHtml(title: string, bodyHtml: string) {
+  // Issue #1458: dieses HTML wird standalone heruntergeladen und hat keinen
+  // Zugriff auf tokens-v3.css — --r-2/--r-3/--r-5 sind hier nicht definiert.
+  // Die border-radius-Werte bleiben deshalb bewusst hartkodiert.
   return `<!doctype html>
 <html lang="de"><head><meta charset="utf-8" />
 <title>${title}</title>

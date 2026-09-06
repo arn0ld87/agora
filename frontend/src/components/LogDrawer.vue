@@ -237,7 +237,7 @@ onUnmounted(stopStream)
   color: var(--fg-muted);
   padding: 2px 8px;
   border: 1px solid var(--rule);
-  border-radius: 4px;
+  border-radius: var(--r-2);
   opacity: 0.7;
   animation: reconnect-pulse 1.6s ease-in-out infinite;
 }

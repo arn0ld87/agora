@@ -59,7 +59,7 @@ const overallSeverity = computed(() =>
 <style scoped>
 .degradation-notice {
   border: 1px solid var(--warn, var(--status-orange));
-  border-radius: 8px;
+  border-radius: var(--r-5);
   padding: 12px 16px;
   background: var(--warn-soft, var(--status-orange-bg));
 }

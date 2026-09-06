@@ -7,6 +7,24 @@
  */
 import { z } from 'zod'
 
+/**
+ * Spiegel von `backend/app/contracts/system_status_contract.py::StatusCheckError`.
+ *
+ * Ersetzt seit #1458 den rohen `str(exc)`, der zuvor an drei Stellen
+ * (neo4j, ollama, disk) direkt in die Antwort floss — ein Informationsleck
+ * (Pfade, Hostnamen, Treiberdetails) und für die UI unrenderbarer
+ * Traceback-Text. `code` ist bewusst `z.string()` statt eines Enums: ein
+ * neuer Backend-Code darf den Zod-Parse nicht invalidieren, das Frontend
+ * übersetzt ihn mit Fallback für unbekannte Werte
+ * (`unreachable` | `timeout` | `auth` | `unexpected` sind die bekannten
+ * Werte, siehe `StatusErrorCode` im Backend-Contract).
+ */
+export const StatusCheckErrorSchema = z
+  .object({
+    code: z.string(),
+  })
+  .passthrough()
+
 export const SystemStatusBackendSchema = z
   .object({
     ok: z.boolean(),
@@ -18,7 +36,7 @@ export const SystemStatusBackendSchema = z
 export const SystemStatusNeo4jSchema = z
   .object({
     reachable: z.boolean(),
-    error: z.string().nullable().optional(),
+    error: StatusCheckErrorSchema.nullable().optional(),
     uri: z.string().optional(),
     is_connected: z.boolean().optional(),
     last_success_ts: z.string().nullable().optional(),
@@ -44,7 +62,8 @@ export const SystemStatusOllamaSchema = z
     base_url: z.string().nullable().optional(),
     models_available: z.array(z.string()).default(() => []),
     default_model: z.string().nullable().optional(),
-    error: z.string().nullable().optional(),
+    // Strukturiert seit #1458 — vorher `z.string()` mit rohem Exception-Text.
+    error: StatusCheckErrorSchema.nullable().optional(),
   })
   .passthrough()
 
@@ -71,7 +90,8 @@ export const SystemStatusDiskSchema = z
         total_bytes: z.number().nullable().optional(),
         free_bytes: z.number().nullable().optional(),
         used_pct: z.number().nullable().optional(),
-        error: z.string().optional(),
+        // Strukturiert seit #1458 — vorher `z.string()` mit rohem Exception-Text.
+        error: StatusCheckErrorSchema.optional(),
       })
       .passthrough(),
   })

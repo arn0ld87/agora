@@ -732,7 +732,7 @@ function errorMessage(err: unknown): string {
 }
 .modal {
   background: var(--surface-elevated);
-  border-radius: 0.5rem;
+  border-radius: var(--r-5);
   padding: 1.5rem;
   width: min(32rem, 90vw);
   display: flex;

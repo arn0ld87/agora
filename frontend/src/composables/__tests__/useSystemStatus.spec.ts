@@ -8,7 +8,7 @@ vi.mock('../../api/status', () => ({
 }))
 
 import { getSystemStatus } from '../../api/status'
-import { useSystemStatus, type UseSystemStatusReturn } from '../useSystemStatus'
+import { useSystemStatus, statusErrorKey, type UseSystemStatusReturn } from '../useSystemStatus'
 
 const i18n = createI18n({
   legacy: false,
@@ -84,5 +84,22 @@ describe('useSystemStatus', () => {
 
     expect(s.error.value).toContain('Schema-Drift')
     expect(s.status.value?.timestamp).toBe('2026-05-14T10:00:00Z')
+  })
+})
+
+describe('statusErrorKey', () => {
+  it('bildet bekannte Fehlercodes auf ihren i18n-Schluessel ab', () => {
+    expect(statusErrorKey({ code: 'unreachable' })).toBe('dashboard.system.error.unreachable')
+    expect(statusErrorKey({ code: 'timeout' })).toBe('dashboard.system.error.timeout')
+    expect(statusErrorKey({ code: 'auth' })).toBe('dashboard.system.error.auth')
+  })
+
+  it('faellt bei unbekanntem Code auf unexpected zurueck, statt leer zu bleiben', () => {
+    expect(statusErrorKey({ code: 'quantum_flux' })).toBe('dashboard.system.error.unexpected')
+  })
+
+  it('liefert einen leeren Schluessel, wenn kein Fehler anliegt', () => {
+    expect(statusErrorKey(null)).toBe('')
+    expect(statusErrorKey(undefined)).toBe('')
   })
 })
