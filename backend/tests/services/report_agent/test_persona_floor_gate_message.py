@@ -1,19 +1,28 @@
-"""Regressionstest #1420 — Persona-Floor-Gate-Meldung mit Kandidaten-/Ablehnungszahl.
+"""Regressionstest #1420 — Persona-Floor-Gate-Meldung mit Kandidaten-/Defizitzahl.
 
 Produktionsbeleg: ein Lauf mit 23 Persona-Kandidaten (nach Dedup), 8 davon
 durch das Eignungs-Gate als technische Artefakte abgelehnt (kein Nachrücker
 verfügbar), 15 zugelassenen Personas scheiterte am Mindestanzahl-Gate
 (Floor 20) mit der nichtssagenden Meldung "15/20 Personas vorhanden." — ohne
 Hinweis darauf, dass ein anderes, korrekt arbeitendes Qualitätsgate den Pool
-verkleinert hat.
+verkleinert haben könnte.
 
-Die Ablehnungszahl selbst wird an dieser Stelle nicht persistiert (sie lebt
-nur lokal in ``OasisProfileGenerator.generate_profiles_from_entities`` und
-wird nur geloggt). Sie lässt sich aber verlustfrei aus zwei bereits
-persistierten Werten ableiten: ``state.entities_count`` (Kandidatenzahl vor
-der Generierung, gesetzt in ``prepare_service.py::_phase_read_entities``) und
-der tatsächlichen Personazahl — jede Ablehnung ohne Nachrücker lässt exakt
-einen Profilslot leer.
+Review-Nachbesserung (PR #1454, Codex-Finding): die Differenz aus
+``candidate_count`` und ``persona_count`` ist *keine* verlässliche
+Ablehnungszahl des Eignungs-Gates. ``state.entities_count`` wird bei Branches
+unverändert von der Quelle kopiert (``branching_service.py::create_branch``),
+während ``_apply_persona_overrides`` (Branch-Overrides) und die manuelle
+Persona-Löschroute (``simulation_profiles.py``) nur ``reddit_profiles``
+mutieren, nicht diesen Zähler. Ein Branch mit 20 kopierten Kandidaten und
+einer absichtlich entfernten Persona hätte mit der alten Formulierung als
+"1 vom Eignungs-Gate abgelehnt" gegolten, obwohl keine Ablehnung
+stattgefunden hat. Die Meldung benennt die Differenz deshalb als Defizit mit
+mehreren möglichen Ursachen, nicht als Gate-Ablehnung.
+
+Die tatsächliche Ablehnungszahl des Generators wird an dieser Stelle nicht
+persistiert (sie lebt nur lokal in
+``OasisProfileGenerator.generate_profiles_from_entities`` und wird nur
+geloggt) — das Persistieren dieses Zählers ist Folgearbeit.
 """
 from __future__ import annotations
 
@@ -37,8 +46,9 @@ def _make_report() -> Report:
 
 
 class TestMarkIncompleteForPersonaFloorMessage:
-    def test_message_includes_candidate_rejection_and_result_counts(self):
-        """Kernauftrag: Kandidatenzahl, Ablehnungszahl, Ergebniszahl in der Meldung."""
+    def test_message_includes_candidate_deficit_and_result_counts(self):
+        """Kernauftrag: Kandidatenzahl, Defizitzahl, Ergebniszahl in der Meldung —
+        ohne die Differenz dem Eignungs-Gate als alleinige Ursache zuzuschreiben."""
         report = _make_report()
         with patch(
             "app.services.report_agent.workflow.ReportManager"
@@ -55,11 +65,45 @@ class TestMarkIncompleteForPersonaFloorMessage:
 
         assert result.status == ReportStatus.INCOMPLETE
         assert result.error is not None
-        # Kandidatenzahl (23), Ablehnungszahl (8 = 23-15), Ergebniszahl (15).
+        # Kandidatenzahl (23), Defizitzahl (8 = 23-15), Ergebniszahl (15).
         assert "23" in result.error
         assert "8" in result.error
         assert "15" in result.error
         assert "20" in result.error  # Floor bleibt in der Meldung sichtbar.
+        # Codex-Finding (PR #1454): die Differenz darf nicht als feststehende
+        # Tatsachenbehauptung ("wurden ... aussortiert") formuliert sein.
+        assert "wurden" not in result.error
+        assert "Defizit" in result.error
+
+    def test_message_does_not_attribute_deficit_to_eligibility_gate_for_branch(self):
+        """Codex-Finding (PR #1454): Branch-Fall.
+
+        ``entities_count`` wird bei einem Branch unveraendert von der Quelle
+        kopiert (``branching_service.py::create_branch``), waehrend
+        ``persona_removals`` (``_apply_persona_overrides``) nur
+        ``reddit_profiles`` mutiert. Ein Branch mit 20 kopierten Kandidaten und
+        einer absichtlich entfernten Persona (19 verbleibende Personas) darf
+        nicht als Eignungs-Gate-Ablehnung gemeldet werden — es fand keine
+        Ablehnung statt, nur eine gezielte Entfernung.
+        """
+        report = _make_report()
+        with patch("app.services.report_agent.workflow.ReportManager"):
+            result = _mark_incomplete_for_persona_floor(
+                report,
+                report_id="report_1420",
+                persona_count=19,
+                floor=20,
+                candidate_count=20,  # von der Quelle kopiert, nicht neu gefiltert
+            )
+        assert result.status == ReportStatus.INCOMPLETE
+        assert result.error is not None
+        assert "20" in result.error
+        assert "19" in result.error
+        assert "1" in result.error
+        # Die Meldung darf die Ablehnung nicht als Tatsache behaupten.
+        assert "wurden 1 durch das Eignungs-Gate aussortiert" not in result.error
+        assert "1 vom Eignungs-Gate abgelehnt" not in result.error
+        assert "Defizit" in result.error
 
     def test_message_falls_back_without_candidate_count(self):
         """Ohne verfuegbare Kandidatenzahl bleibt die knappe Kurzform bestehen —

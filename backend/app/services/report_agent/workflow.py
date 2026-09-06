@@ -239,21 +239,31 @@ def _mark_incomplete_for_persona_floor(
         "Persona-Mindestanzahl nicht erreicht: "
         f"{persona_count}/{floor} Personas vorhanden."
     )
-    # Issue #1420: ohne diesen Zusatz sieht die Meldung wie ein reiner
-    # Unterlauf aus. Tatsaechlich kann ein korrekt arbeitendes
-    # Eignungs-Gate (Ablehnung technischer Artefakte als Personas) den
-    # Kandidatenpool unter den Floor druecken — das ist kein Fehlschlag
-    # dieses Gates, sondern das erwartete Zusammenspiel zweier
-    # Qualitaetsgates. Die Ablehnungszahl ergibt sich, weil jede
-    # generierte (auch fehlgeschlagene Fallback-)Persona einen Slot
-    # fuellt und nur eine nicht nachbesetzte Ablehnung den Slot leer
-    # laesst (siehe ``OasisProfileGenerator.generate_profiles_from_entities``).
+    # Issue #1420 / Review-Nachbesserung (PR #1454): ohne diesen Zusatz sieht
+    # die Meldung wie ein reiner Unterlauf aus, obwohl 15/20 durchaus aus 23
+    # Kandidaten entstanden sein koennen. Die Differenz aber dem Eignungs-Gate
+    # zuzuschreiben waere unbelegt: ``candidate_count`` (state.entities_count)
+    # wird bei Branches unveraendert von der Quelle kopiert
+    # (``branching_service.py::create_branch``), waehrend
+    # ``_apply_persona_overrides`` und die manuelle Persona-Loeschroute
+    # (``simulation_profiles.py``) nur ``reddit_profiles`` mutieren, nicht
+    # diesen Zaehler. 20 kopierte Kandidaten mit einer absichtlich entfernten
+    # Persona saehen dann wie eine Gate-Ablehnung aus, obwohl keine
+    # stattgefunden hat. Reserve-Backfills koennen die Differenz ebenfalls von
+    # der tatsaechlichen Ablehnungszahl des Generators abweichen lassen. Die
+    # Meldung benennt die Differenz deshalb als Defizit, nicht als Ablehnung;
+    # die tatsaechliche Ablehnungszahl kennt nur
+    # ``OasisProfileGenerator.generate_profiles_from_entities`` (lokal,
+    # aktuell nicht persistiert — Folgearbeit).
     if candidate_count is not None and candidate_count >= persona_count:
-        rejected_count = candidate_count - persona_count
+        deficit_count = candidate_count - persona_count
         message += (
-            f" Von {candidate_count} Persona-Kandidaten wurden {rejected_count} "
-            "durch das Eignungs-Gate aussortiert (z. B. technische Artefakte "
-            f"ohne eigene Interessenlage), {persona_count} blieben zugelassen."
+            f" Von {candidate_count} Persona-Kandidaten sind nur {persona_count} "
+            f"als Personas vorhanden — ein Defizit von {deficit_count}. Moegliche "
+            "Ursachen sind das Eignungs-Gate (Ablehnung technischer Artefakte "
+            "ohne eigene Interessenlage) oder eine nachtraegliche Entfernung "
+            "(z. B. in einem Branch); aus dieser Zahl allein laesst sich das "
+            "nicht unterscheiden."
         )
     report.missing_sections = [message]
     report.error = message
