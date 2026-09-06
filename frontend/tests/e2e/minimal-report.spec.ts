@@ -12,9 +12,9 @@
  *   6. Status-Polling via POST /api/report/generate/status bis "completed" (kein setTimeout).
  *      Timeout: 5 min (Stub-Modus: 12 Sections × 4 ReACT-Runden, aber kein echter LLM-Call).
  *   7. UI-Assertion: alle 12 Section-Header aus output-contract-required-sections.txt
- *      sind als span.outline-title in ReportOutlinePanel sichtbar.
+ *      sind als Outline-Eintraege des ReportReader sichtbar.
  *      Die Liste wird zur Laufzeit aus der Snapshot-Datei gelesen — keine Hardcoded-Liste.
- *   8. Persona-Tabelle: Abschnitt "Persona-Tabelle" ist als span.outline-title sichtbar.
+ *   8. Persona-Tabelle: Abschnitt "Persona-Tabelle" ist als Outline-Eintrag sichtbar.
  *      Der Backend-Persona-Floor bleibt auch im Stub-Modus aktiv.
  *   9. 0 Page-Errors während des gesamten Flows.
  *
@@ -34,11 +34,13 @@
  *   (backend/app/api/report.py:107). Ohne graph_id → 400 "Missing graph ID".
  *   Daher wird der Upload+Graph-Vorlauf aus M11.4b wiederverwendet.
  *
- * DOM-Selektoren abgeleitet aus:
- *   - frontend/src/components/step4/ReportOutlinePanel.vue:72 — span.outline-title
- *     (Section-Titel, einer pro Abschnitt in ol.outline > li)
- *   - frontend/src/components/Step4Report.vue:521 — div.report-body.markdown-body
- *     (gerenderter Markdown des Finalberichts, v-html="reportHtml")
+ * DOM-Selektoren: ausschliesslich ueber den Testid-Kontrakt
+ * (`ReportReaderTestId` aus src/contracts/testIds.ts), nie ueber CSS-Klassen.
+ * Bis Redesign-PR 6 hing dieser Smoke an span.outline-title und
+ * div.report-body.markdown-body und brach deshalb, als die Leseansicht auf
+ * ReportOutline/ReportReader umgestellt wurde.
+ *   - ReportReaderTestId.outline / .outlineItem — Outline und ihre Eintraege
+ *   - ReportReaderTestId.body / .section — Lesespalte und einzelne Abschnitte
  *   - frontend/src/views/ReportView.vue:130 — Step4Report mit :reportId="currentReportId"
  *     (Route: /report/:reportId — router/index.ts:55)
  *
@@ -342,16 +344,18 @@ test.describe('M11.4c · Minimalreport-Smoke', () => {
         // MIN_PERSONA_TABLE_ROWS = 0: Stub erzeugt Freitext, keine Markdown-Tabelle.
         // Im echten Betrieb (nicht Stub): MIN_PERSONA_TABLE_ROWS = 50 (§6.1).
         // ===================================================================
-        const personaHeader = page.locator('span.outline-title', { hasText: 'Persona-Tabelle' });
+        const personaHeader = page
+          .getByTestId(ReportReaderTestId.outlineItem)
+          .filter({ hasText: 'Persona-Tabelle' });
         await expect(
           personaHeader,
-          '"Persona-Tabelle"-Section muss als span.outline-title sichtbar sein',
+          '"Persona-Tabelle"-Section muss als Outline-Eintrag sichtbar sein',
         ).toBeVisible({ timeout: 10_000 });
 
         // Wenn table-Zeilen vorhanden sind (im Stub: 0), muss die Mindestanzahl eingehalten werden.
         // Trivialer Stub-Check: MIN_PERSONA_TABLE_ROWS = 0 → Assertion immer true.
         // Bleibt als explizite Konstante für spätere Anhebung auf echte LLM-Werte.
-        const personaSection = page.locator('.section-content').filter({
+        const personaSection = page.getByTestId(ReportReaderTestId.section).filter({
           has: page.locator('table'),
         });
         const personaSectionCount = await personaSection.count();
@@ -367,14 +371,15 @@ test.describe('M11.4c · Minimalreport-Smoke', () => {
         // ===================================================================
         // Schritt 12: Report-Body mit gerendertem Markdown sichtbar
         //
-        // Step4Report.vue:508 — article.card v-if="phase === 2 && reportHtml"
-        // Step4Report.vue:521 — div.report-body.markdown-body (v-html="reportHtml")
-        // Sichtbar wenn fullReport.value gesetzt ist (phase === 2 + reportHtml !== '').
+        // Seit Redesign-PR 6 traegt die Lesespalte des ReportReader den
+        // gerenderten Markdown (vormals div.report-body.markdown-body in
+        // Step4Report). Sichtbar wenn fullReport.value gesetzt ist
+        // (phase === 2 + reportHtml !== '').
         // ===================================================================
-        const reportBody = page.locator('div.report-body.markdown-body');
+        const reportBody = page.getByTestId(ReportReaderTestId.body);
         await expect(
           reportBody,
-          'div.report-body.markdown-body muss sichtbar sein (gerenderter Finalbericht)',
+          `[data-testid=${ReportReaderTestId.body}] muss sichtbar sein (gerenderter Finalbericht)`,
         ).toBeVisible({ timeout: 30_000 });
 
         // Report-Body darf nicht leer sein
