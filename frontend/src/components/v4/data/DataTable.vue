@@ -30,12 +30,15 @@ const props = withDefaults(
     sticky?: boolean
     /** Engerer Padding-Modus */
     compact?: boolean
+    /** Markiert eine Zeile als ausgewählt (Accent-Tint + Kupfer-Kante links). */
+    rowSelected?: (row: TRow) => boolean
   }>(),
   {
     keyField: 'id',
     hover: true,
     sticky: true,
     compact: false,
+    rowSelected: undefined,
   },
 )
 
@@ -108,7 +111,9 @@ const hasActions = computed(() => !!useSlots()['actions'])
               'dt-body-row--hover': hover,
               'dt-body-row--clickable': !!rowClick,
               'dt-body-row--compact': compact,
+              'dt-body-row--selected': !!rowSelected && rowSelected(row),
             }"
+            :aria-current="rowSelected && rowSelected(row) ? 'true' : undefined"
             @click="rowClick ? rowClick(row) : undefined"
           >
             <td
@@ -165,11 +170,12 @@ const hasActions = computed(() => !!useSlots()['actions'])
   color: var(--text-secondary);
 }
 
+/* label-Typo-Rolle (Audit §Typografie): Satzschrift, kein Uppercase. */
 .dt-th {
   font-size: 11.5px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0.02em;
   padding: var(--table-cell-py, 10px) var(--table-cell-px, 16px);
   color: var(--text-secondary);
   white-space: nowrap;
@@ -190,30 +196,43 @@ const hasActions = computed(() => !!useSlots()['actions'])
 
 /* ── Body ───────────────────────────────────────────────────── */
 
+/* 36px-Zeilen, Hairline unten (Audit §Komponentenstil). compact fällt auf
+   28px, siehe .dt-body-row--compact. */
 .dt-body-row {
-  border-top: 1px solid var(--separator);
+  height: 36px;
+  border-bottom: 1px solid var(--separator);
   transition: background 80ms ease;
 }
 
+.dt-body-row--compact {
+  height: 28px;
+}
+
 .dt-body-row--hover:hover {
-  background: var(--surface-hover);
+  background: var(--bg-hover, var(--surface-hover));
 }
 
 .dt-body-row--clickable {
   cursor: pointer;
 }
 
-.dt-td {
-  padding: var(--table-cell-py, 10px) var(--table-cell-px, 16px);
-  vertical-align: middle;
+/* Selected: Accent-Tint + 2px Kupfer-Kante links (Audit §Komponentenstil). */
+.dt-body-row--selected {
+  background: var(--bg-selected, var(--accent-tint-bg));
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
-/* compact-Prop: hartkodierter Override bleibt, da der compact-Modus explizit
-   enger ist als das Default-Density-Token und kein data-density="compact"-
-   Attribut voraussetzt. */
-.dt-td--compact,
-.dt-body-row--compact .dt-td {
-  padding: calc(var(--table-cell-py, 10px) * 0.6) var(--table-cell-px, 16px);
+.dt-body-row--selected.dt-body-row--hover:hover {
+  background: var(--bg-selected, var(--accent-tint-bg));
+}
+
+/* Vertikales Padding ist 0, weil die Zeilenhöhe (36px / compact 28px) auf
+   .dt-body-row liegt — Padding oben addierte sich sonst darauf und die Zeile
+   wäre höher als die Dichte-Spec erlaubt. vertical-align zentriert den Inhalt
+   in der Zeilenhöhe. */
+.dt-td {
+  padding: 0 var(--table-cell-px, 16px);
+  vertical-align: middle;
 }
 
 .dt-td--mono {
@@ -233,7 +252,14 @@ const hasActions = computed(() => !!useSlots()['actions'])
 /* ── Alignment ──────────────────────────────────────────────── */
 
 .dt-cell--left  { text-align: left; }
-.dt-cell--right { text-align: right; }
+/* Tabellarische Ziffern für rechtsbündige Spalten, damit Zahlen stellenweise
+   untereinander stehen. Die Mono-Familie hängt bewusst an col.mono
+   (.dt-td--mono), nicht an der Ausrichtung: rechtsbündig heißt nicht
+   zwangsläufig numerisch, und der Spaltenkopf bleibt in der label-Typo. */
+.dt-cell--right {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 .dt-cell--center { text-align: center; }
 
 /* ── Empty State ────────────────────────────────────────────── */

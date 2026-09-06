@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
-import Button from '../Button.vue'
+import Button, { type ButtonVariant } from '../Button.vue'
 
 describe('Button', () => {
   it('Test 1: Default-Mount nutzt primary + md (kein --md-Suffix in Klassenliste)', () => {
@@ -100,5 +100,16 @@ describe('Button', () => {
     })
 
     expect(wrapper.find('button').attributes('type')).toBe('submit')
+  })
+
+  it('Test 10: nur noch vier Varianten sind zulässig (primary/secondary/ghost/danger)', () => {
+    // Regressionstest zu PR 5 (Control-Primitives): tinted/accent/info/plasma/glass
+    // sind per Audit gestrichen. Der Typecheck (`bun run check`) schlägt fehl,
+    // sobald jemand eine der gestrichenen Varianten erneut zulässt.
+    const erlaubteVarianten: ButtonVariant[] = ['primary', 'secondary', 'ghost', 'danger']
+    for (const variant of erlaubteVarianten) {
+      const wrapper = mount(Button, { props: { variant }, slots: { default: 'X' } })
+      expect(wrapper.find('button').classes()).toContain(`btn--${variant}`)
+    }
   })
 })

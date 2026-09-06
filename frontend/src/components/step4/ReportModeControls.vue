@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Select from '../ui/Select.vue'
+import Select from '../v4/forms/Select.vue'
 import { DEFAULT_REPORT_MODE, type ReportMode } from '../../contracts/reportV3Contract'
 
 interface Props {

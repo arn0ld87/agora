@@ -3,7 +3,7 @@
  * EnvSetupModelPanel — Modell-/Sprach-Auswahl (Step 2).
  */
 import { useI18n } from 'vue-i18n'
-import Select from '../ui/Select.vue'
+import Select from '../v4/forms/Select.vue'
 import AiModelPicker from '../v4/forms/AiModelPicker.vue'
 import type { AiModelRef } from '@/contracts/aiModelRef'
 

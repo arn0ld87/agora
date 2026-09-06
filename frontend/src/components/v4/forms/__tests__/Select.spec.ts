@@ -46,4 +46,38 @@ describe('Select', () => {
     })
     expect(w.find('.v4-select-wrap').classes()).toContain('v4-select-wrap--disabled')
   })
+
+  it('rendert Label im label-Typo-Stil, wenn label gesetzt ist', () => {
+    const w = mount(Select, {
+      props: { modelValue: 'de', options: OPTIONS, label: 'Land' },
+    })
+    const label = w.find('.v4-select-label')
+    expect(label.exists()).toBe(true)
+    expect(label.text()).toBe('Land')
+  })
+
+  it('rendert Pflichtfeld-Sternchen, wenn required gesetzt ist', () => {
+    const w = mount(Select, {
+      props: { modelValue: 'de', options: OPTIONS, label: 'Land', required: true },
+    })
+    expect(w.find('.v4-select-required').exists()).toBe(true)
+  })
+
+  it('Regression #838: select behält den accessible name über aria-label, wenn label gesetzt ist', () => {
+    // axe-core select-name (critical): das sichtbare <label> ist nicht per
+    // for/id mit dem <select> verknüpft — aria-label spiegelt den Labeltext,
+    // damit Screenreader trotzdem einen Namen bekommen.
+    const w = mount(Select, {
+      props: { modelValue: 'de', options: OPTIONS, label: 'Land' },
+    })
+    expect(w.find('select').attributes('aria-label')).toBe('Land')
+  })
+
+  it('ohne label bleibt aria-label unbesetzt', () => {
+    const w = mount(Select, {
+      props: { modelValue: 'de', options: OPTIONS },
+    })
+    expect(w.find('select').attributes('aria-label')).toBeUndefined()
+    expect(w.find('.v4-select-label').exists()).toBe(false)
+  })
 })
