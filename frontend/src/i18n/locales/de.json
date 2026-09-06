@@ -939,6 +939,21 @@
         "navLabel": "Einstellungsbereiche",
         "llmRouting": "LLM-Routing"
       },
+      "llmRouting": {
+        "title": "LLM Routing",
+        "subtitle": "Run-spezifische Provider, Modellwahl und Stage-Routing konfigurieren.",
+        "runSelectionTitle": "Run-Auswahl",
+        "runSelectionSubtitle": "Die LLM-Routing-Konfiguration wird pro Run gespeichert.",
+        "currentRunsLabel": "Aktuelle Runs",
+        "runIdLabel": "Run-ID",
+        "runSelectPlaceholder": "Run auswählen",
+        "refresh": "Aktualisieren",
+        "emptyTitle": "Kein Run ausgewählt",
+        "emptySubtitle": "Wähle einen Run aus oder trage eine konkrete Run-ID ein.",
+        "errors": {
+          "loadRuns": "Runs konnten nicht geladen werden"
+        }
+      },
       "general": {
         "title": "Allgemein",
         "subtitle": "Laufzeit-Verhalten des Workspaces: LLM, Logging, Locale, UI, Event-Bus, Secrets.",
