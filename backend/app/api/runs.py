@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import json
 import os
-import threading
 import traceback
 from collections.abc import Mapping
 from typing import Any, Optional
@@ -23,6 +22,7 @@ from ..contracts.runs_contract import (
     RunsFilterQuery,
     RunsListResponse,
 )
+from ..jobs import spawn_background
 from ..models.project import ProjectManager, ProjectStatus
 from ..models.task import TaskManager, TaskStatus
 from ..container import get_container
@@ -765,7 +765,7 @@ def _restart_graph_build(run: dict):
                 )
                 run_registry.update_run(new_run["run_id"], status="failed", message=str(exc), error=str(exc))
 
-        threading.Thread(target=build_task, daemon=True).start()
+        spawn_background(build_task)
 
     return {"run_id": new_run["run_id"], "task_id": task_id, "status": "processing"}
 
@@ -928,7 +928,7 @@ def _restart_simulation_prepare(run: dict):
                 task_manager.fail_task(task_id, str(exc))
                 run_registry.update_run(new_run["run_id"], status="failed", message=str(exc), error=str(exc))
 
-        threading.Thread(target=run_prepare, daemon=True).start()
+        spawn_background(run_prepare)
 
     return {"run_id": new_run["run_id"], "task_id": task_id, "status": "processing"}
 
@@ -1121,7 +1121,7 @@ def _resume_report_generate(run: dict):
             task_manager.fail_task(task_id, str(exc))
 
     run_registry.update_run(run["run_id"], status="processing", progress=0, message="Report generation resumed")
-    threading.Thread(target=run_generate, daemon=True).start()
+    spawn_background(run_generate)
     return {"run_id": run["run_id"], "task_id": task_id, "status": "processing"}
 
 
