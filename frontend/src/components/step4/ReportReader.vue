@@ -100,6 +100,15 @@ const outlineItems = computed<ReportOutlineItem[]>(() => [
   })),
 ])
 
+// Der Anhangszaehler muss den Ueberhang mitzaehlen: `hypotheses` ist auf fuenf
+// gedeckelt, der Rest steht in `hypotheses_appendix` (ReportSectionModel).
+const hypothesesCount = computed(() =>
+  props.evidenceSections.reduce(
+    (total, section) => total + section.hypotheses.length + (section.hypotheses_appendix?.length ?? 0),
+    0,
+  ),
+)
+
 const evidenceReady = computed(() => (props.evidenceSections?.length ?? 0) > 0)
 const evidencePendingDescKey = computed(() =>
   props.evidenceUnavailable ? 'step4.export.evidenceUnavailable' : 'step4.export.evidencePending',
@@ -215,7 +224,7 @@ watch(
         :items="outlineItems"
         :active-id="activeId"
         :sections-count="outline.sections.length"
-        :hypotheses-count="evidenceSections.reduce((n, s) => n + s.hypotheses.length, 0)"
+        :hypotheses-count="hypothesesCount"
         :data-gaps-count="evidenceSections.reduce((n, s) => n + s.data_gaps.length, 0)"
         :evidence-count="Object.keys(evidenceIndex).length"
         :red-team-count="redTeamFindings.length"

@@ -40,7 +40,14 @@ const testIds = ReportReaderTestId
 
 const claims = computed<ReportClaim[]>(() => props.section?.claims ?? [])
 const gaps = computed(() => props.section?.data_gaps ?? [])
-const hypotheses = computed<ReportSectionHypothesis[]>(() => props.section?.hypotheses ?? [])
+// `hypotheses` ist serverseitig auf fuenf Eintraege gedeckelt; alles darueber
+// landet in `hypotheses_appendix` (bis 50, ReportSectionModel im
+// report_contract). Beide Listen sind derselbe Typ und dieselbe Sache — wer
+// nur die erste liest, blendet den Ueberhang aus und zaehlt zu wenig.
+const hypotheses = computed<ReportSectionHypothesis[]>(() => [
+  ...(props.section?.hypotheses ?? []),
+  ...(props.section?.hypotheses_appendix ?? []),
+])
 
 // Hypothesen sind Behauptungen ohne (ausreichende) Evidence — das Audit
 // verlangt, dass Claims und Hypothesen unterscheidbar bleiben. Statt einer
@@ -142,7 +149,11 @@ function confidenceWord(claim: ReportClaim): string {
         <span class="evrow-kind">{{ item.type }}</span>
         <span class="evrow-body">
           <span>{{ item.source }}</span>
+          <!-- `quote` ist optional, `snippet` Pflichtfeld (min_length=1,
+               EvidenceRecordModel). Ohne Rueckfall auf snippet zeigte eine
+               Evidence ohne Zitat nur ihren Quellennamen und sonst nichts. -->
           <blockquote v-if="item.quote" class="evrow-quote evidence-quote">{{ item.quote }}</blockquote>
+          <p v-else-if="item.snippet" class="evrow-snippet">{{ item.snippet }}</p>
           <button
             v-if="item.source_id_anchor"
             type="button"
@@ -278,6 +289,13 @@ function confidenceWord(claim: ReportClaim): string {
   padding: 2px 0 2px 8px;
   font-family: var(--font-serif, var(--font-sans));
   color: var(--text-prose);
+}
+/* Der Snippet-Rueckfall ist ein Quellenauszug, kein Zitat — deshalb ohne
+   Zitatbalken und in der Fliesstext-Familie, damit die beiden im Belegrand
+   auf einen Blick unterscheidbar bleiben. */
+.evrow-snippet {
+  margin: 4px 0;
+  color: var(--text-secondary);
 }
 .evrow-anchor {
   appearance: none;

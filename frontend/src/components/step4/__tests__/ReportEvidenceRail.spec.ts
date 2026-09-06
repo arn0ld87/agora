@@ -82,9 +82,18 @@ const section: ReportSection = {
   unverified_statements: [],
 }
 
-function mountRail(redTeamFindings: string[] = []) {
+function mountRail(
+  redTeamFindings: string[] = [],
+  overrides: Partial<ReportSection> = {},
+  index: EvidenceIndex = evidenceIndex,
+) {
   return mount(ReportEvidenceRail, {
-    props: { section, sectionNum: 3, evidenceIndex, redTeamFindings },
+    props: {
+      section: { ...section, ...overrides },
+      sectionNum: 3,
+      evidenceIndex: index,
+      redTeamFindings,
+    },
     global: { plugins: [i18n] },
   })
 }
@@ -125,4 +134,44 @@ describe('ReportEvidenceRail', () => {
     const wrapper = mountRail([])
     expect(wrapper.find(`[data-testid="${ReportReaderTestId.redTeam}"]`).exists()).toBe(false)
   })
+
+  // ---- Regressionen aus dem PR-6-Review (Codex) ----
+
+  it('Regression: Evidence ohne quote zeigt den Pflicht-snippet statt nur den Quellennamen', () => {
+    // `quote` ist optional, `snippet` Pflichtfeld (EvidenceRecordModel,
+    // min_length=1). Der Belegrand zeigte ohne Zitat nur die Quelle — der Beleg
+    // stand damit ohne jeden Inhalt da.
+    const ohneZitat: EvidenceIndex = {
+      ev_1: { ...evidenceIndex.ev_1, quote: undefined } as EvidenceIndex[string],
+    }
+    const wrapper = mountRail([], {}, ohneZitat)
+    const rail = wrapper.find(`[data-testid="${ReportReaderTestId.rail}"]`)
+    expect(rail.text()).toContain('Zeitersparnis ist eine Zahl aus der Präsentation.')
+    expect(wrapper.find('.evrow-snippet').exists()).toBe(true)
+  })
+
+  it('Regression: Hypothesen aus dem Anhang zaehlen und erscheinen mit', async () => {
+    // `hypotheses` ist auf fuenf gedeckelt, der Ueberhang steht in
+    // `hypotheses_appendix`. Wer nur die erste Liste liest, blendet ihn aus.
+    const mkHypo = (id: string, text: string) =>
+      ({
+        hypothesis_id: id,
+        hypothesis_text: text,
+        rationale: 'Begruendung',
+        suggested_evidence: [],
+      }) as unknown as ReportSection['hypotheses'][number]
+
+    const wrapper = mountRail([], {
+      hypotheses: [mkHypo('h_1', 'Gedeckelte Hypothese')],
+      hypotheses_appendix: [mkHypo('h_2', 'Hypothese aus dem Anhang')],
+    })
+
+    const tab = wrapper.find('[data-testid="hypotheses-tab"]')
+    expect(tab.text()).toContain('2')
+    await tab.trigger('click')
+    const rail = wrapper.find(`[data-testid="${ReportReaderTestId.rail}"]`)
+    expect(rail.text()).toContain('Gedeckelte Hypothese')
+    expect(rail.text()).toContain('Hypothese aus dem Anhang')
+  })
 })
+

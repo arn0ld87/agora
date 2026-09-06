@@ -12,7 +12,7 @@ import { createI18n } from 'vue-i18n'
 import ReportReader from '../ReportReader.vue'
 import ReportEvidenceRail from '../ReportEvidenceRail.vue'
 import { ReportReaderTestId } from '../../../contracts/testIds'
-import type { ReportOutline } from '../../../contracts/reportContract'
+import type { ReportOutline, ReportSection } from '../../../contracts/reportContract'
 
 const i18n = createI18n({
   legacy: false,
@@ -131,4 +131,58 @@ describe('ReportReader', () => {
     expect(wrapper.emitted('regenerate')).toHaveLength(1)
     expect(wrapper.find(`[data-testid="${ReportReaderTestId.regenerateOverlay}"]`).exists()).toBe(false)
   })
+
+  // ---- Regression aus dem PR-6-Review (Codex) ----
+
+  it('Regression: der Hypothesen-Zaehler der Outline zaehlt den Anhang mit', () => {
+    // `hypotheses` ist auf fuenf gedeckelt, der Ueberhang steht in
+    // `hypotheses_appendix` (bis 50). Der Zaehler las nur die erste Liste und
+    // meldete damit systematisch zu wenig.
+    const mkHypo = (id: string) => ({
+      hypothesis_id: id,
+      hypothesis_text: 't',
+      rationale: 'r',
+      suggested_evidence: [],
+    })
+    const evidenceSections = [
+      {
+        section_index: 1,
+        section_title: 'Ausgangslage',
+        section_summary: 's',
+        claims: [],
+        hypotheses: [mkHypo('h1'), mkHypo('h2')],
+        hypotheses_appendix: [mkHypo('h3'), mkHypo('h4'), mkHypo('h5')],
+        data_gaps: [],
+        structured_metadata: {},
+        generation_failed: false,
+        unbound_evidence_refs: [],
+        unverified_statements: [],
+      },
+    ] as unknown as ReportSection[]
+
+    const wrapper = mount(ReportReader, {
+      props: {
+        outline,
+        sectionHtml: { 1: '<p>Abschnitt eins</p>' },
+        evidenceSections,
+        evidenceIndex: {},
+        redTeamFindings: [],
+        reportRoute: null,
+        reportMode: 'balanced',
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          ...STUBS,
+          ReportOutline: {
+            props: ['hypothesesCount'],
+            template: '<nav data-testid="outline-probe">{{ hypothesesCount }}</nav>',
+          },
+        },
+      },
+    })
+
+    expect(wrapper.find('[data-testid="outline-probe"]').text()).toBe('5')
+  })
 })
+

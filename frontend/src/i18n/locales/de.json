@@ -626,6 +626,7 @@
       "outlineTitle": "Bericht",
       "outlineSectionsCount": "{count} Abschnitte",
       "outlineSummary": "Zusammenfassung",
+      "outlineFullReport": "Vollständiger Bericht",
       "outlineSection": "Abschnitt {num}",
       "appendixTitle": "Anhang",
       "appendixHypotheses": "{count} Hypothesen",

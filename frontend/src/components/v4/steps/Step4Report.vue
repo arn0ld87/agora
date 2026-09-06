@@ -15,6 +15,7 @@ import type { GenerateReportData } from '../../../api/report'
 import { createSimulationBranch } from '../../../api/simulation'
 import { getRun } from '../../../api/runs'
 import { getRunLlmRouting } from '../../../api/llmRouting'
+import { buildReportReaderView } from '@/composables/useReportReaderView'
 import { useAiModelRefAdapter } from '@/composables/useAiModelRefAdapter'
 import {
   RunBudgetStatusSchema,
@@ -523,32 +524,25 @@ const evidenceIndex = computed(() => evidenceMap.value?.evidence_index || {})
 // gesetzt (z. B. Legacy-Reports ohne Outline-Feld). ReportReader braucht
 // aber immer eine Outline mit mindestens einem Abschnitt, um die
 // Dreispalten-Leseumgebung aufzuspannen — ohne Fallback wuerde der
-// abgeschlossene Bericht ersatzlos verschwinden. Reihenfolge: echte Outline
-// > aus der Evidence-Map abgeleitete Abschnitte > ein einzelner
-// Pseudo-Abschnitt, der den kompletten reportHtml traegt.
-const readerOutline = computed((): ReportOutlineData => {
-  if (reportOutline.value) return reportOutline.value
-  if (evidenceSections.value.length) {
-    return {
-      title: t('step4.title'),
-      summary: '',
-      sections: evidenceSections.value.map((section) => ({
-        title: section.section_title,
-        description: section.section_summary || section.section_title,
-      })),
-    }
-  }
-  return {
-    title: t('step4.title'),
-    summary: '',
-    sections: [{ title: t('step4.reader.outlineSummary'), description: '' }],
-  }
-})
+// abgeschlossene Bericht ersatzlos verschwinden.
+//
+// Die Auswahl liegt in `buildReportReaderView`, weil Outline und Abschnitts-
+// HTML zusammengehoeren: getrennt gewaehlt ergaben sie bei persistierten
+// Berichten eine N-Abschnitte-Outline neben einem einzigen HTML-Block, also
+// N-1 leere Abschnitte. Begruendung im Detail dort.
+const readerView = computed(() =>
+  buildReportReaderView({
+    outline: reportOutline.value,
+    sectionHtml: sectionHtml.value,
+    reportHtml: reportHtml.value,
+    evidenceSections: evidenceSections.value,
+    fallbackTitle: t('step4.title'),
+    fullReportLabel: t('step4.reader.outlineFullReport'),
+  }),
+)
 
-const readerSectionHtml = computed((): Record<string, string> => {
-  if (Object.keys(sectionHtml.value).length) return sectionHtml.value
-  return { 1: reportHtml.value }
-})
+const readerOutline = computed((): ReportOutlineData => readerView.value.outline)
+const readerSectionHtml = computed((): Record<string, string> => readerView.value.sectionHtml)
 
 function navigateToAnchor(anchor: string | null | undefined) {
   const parsed = parseSourceAnchor(anchor)

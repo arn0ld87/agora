@@ -626,6 +626,7 @@
       "outlineTitle": "Report",
       "outlineSectionsCount": "{count} sections",
       "outlineSummary": "Summary",
+      "outlineFullReport": "Full report",
       "outlineSection": "Section {num}",
       "appendixTitle": "Appendix",
       "appendixHypotheses": "{count} hypotheses",

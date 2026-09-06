@@ -981,6 +981,14 @@ describe('Step4Report — ConfidenceBadge-Integration (Sub-Slice 16a)', () => {
         report_id: 'report_test01',
         simulation_id: 'sim_test01',
         outline: VALID_OUTLINE_2SECTIONS,
+        // Ein frisch generierter Bericht liefert Abschnittsinhalte mit; nur so
+        // kann ReportReader mehr als einen Abschnitt aufspannen. Der
+        // persistierte Pfad ohne `sections` wird eigens weiter unten geprueft.
+        sections: {
+          1: { content: 'Inhalt Abschnitt 1' },
+          2: { content: 'Inhalt Abschnitt 2' },
+          3: { content: 'Inhalt Abschnitt 3' },
+        },
       },
     })
     ;(getReport as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -1023,6 +1031,38 @@ describe('Step4Report — ConfidenceBadge-Integration (Sub-Slice 16a)', () => {
     await wrapper.vm.$nextTick()
 
     expect(wrapper.text()).toContain('claim_02')
+  })
+
+  // Regression aus dem PR-6-Review (Codex): ein aus der Persistenz geladener
+  // Bericht (`_status_from_persisted_report`) liefert weder `sections` noch
+  // Abschnittsinhalte — nur `markdown_content` als Ganzes. Frueher waehlten
+  // Outline und Abschnitts-HTML ihren Fallback unabhaengig voneinander: die
+  // Outline behielt ihre drei Abschnitte, das HTML bestand aus einem Block,
+  // und Abschnitt 2 und 3 oeffneten leer.
+  it('persistierter Bericht ohne Abschnittsinhalte: ein Sammelabschnitt statt leerer Abschnitte', async () => {
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: {
+        status: 'completed',
+        report_id: 'report_test01',
+        simulation_id: 'sim_test01',
+        outline: VALID_OUTLINE_2SECTIONS,
+      },
+    })
+
+    const wrapper = mountComponent()
+    await wrapper.vm.$nextTick()
+    await new Promise((r) => setTimeout(r, 80))
+    await wrapper.vm.$nextTick()
+
+    const sections = wrapper.findAll('[data-testid="report-reader-section"]')
+    expect(sections).toHaveLength(1)
+    // Der komplette Bericht steht darin — nichts geht verloren.
+    expect(sections[0].text()).toContain('Testbericht')
+    expect(sections[0].text()).toContain('Inhalt.')
+    // Kein leerer Abschnitt 2/3 mehr in der Lesespalte.
+    const outlineItems = wrapper.findAll('[data-testid="report-reader-outline-item"]')
+    expect(outlineItems.some((item) => item.text().includes('Abschnitt 2'))).toBe(false)
   })
 })
 
