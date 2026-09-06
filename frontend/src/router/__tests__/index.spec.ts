@@ -289,6 +289,8 @@ describe('Router – Struktur-Integrität', () => {
       'StepEnvSetup',
       'StepSimulation',
       'StepSimulationFeed',
+      // Redesign PR 7 (Audit §5 "Simulation live"): Vollbild-Instrument.
+      'SimulationLive',
       'StepReport',
       'StepInteraction',
       'CompareV4',

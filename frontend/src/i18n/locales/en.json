@@ -535,7 +535,32 @@
       "empty": "Waiting for output…",
       "noErrors": "No errors in log."
     },
-    "next": "Next: report →"
+    "next": "Next: report →",
+    "live": {
+      "title": "Simulation live",
+      "round": "Round",
+      "elapsed": "elapsed",
+      "secPerRound": "s/round",
+      "roundAxis": "Round axis",
+      "roundAxisHint": "Round status: done, running, planned",
+      "now": "now",
+      "lanes": {
+        "actors": "Actors",
+        "reddit": "Reddit",
+        "twitter": "Twitter",
+        "system": "System and events"
+      },
+      "actorsActive": "{count} active",
+      "usage": {
+        "llmCalls": "LLM calls",
+        "tokens": "Total tokens"
+      },
+      "events": {
+        "title": "Events",
+        "empty": "No events yet."
+      },
+      "empty": "No activity yet."
+    }
   },
   "reportMode": {
     "label": "Report mode",

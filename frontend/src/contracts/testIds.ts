@@ -136,3 +136,28 @@ export const DossierTestId = {
   confidenceDistribution: 'dossier-confidence-distribution',
   redTeamFindings: 'dossier-red-team-findings',
 } as const
+
+/**
+ * SimulationLiveTestId — Selektoren fuer die Simulation-live-Instrument-
+ * Ansicht (Redesign PR 7, Audit §5 "Simulation live"). Kopfzeile,
+ * Rundenachse, die vier Bahnen (Akteure/Reddit/Twitter/System) und die
+ * Eingriffs-Aktionen (Pause/Fortsetzen, Abbrechen).
+ */
+export const SimulationLiveTestId = {
+  root: 'sim-live-root',
+  headerRound: 'sim-live-header-round',
+  headerElapsed: 'sim-live-header-elapsed',
+  headerSecPerRound: 'sim-live-header-sec-per-round',
+  headerPauseResume: 'sim-live-header-pause-resume',
+  headerCancel: 'sim-live-header-cancel',
+  roundAxis: 'sim-live-round-axis',
+  roundTick: 'sim-live-round-tick',
+  laneActors: 'sim-live-lane-actors',
+  actorRow: 'sim-live-actor-row',
+  laneReddit: 'sim-live-lane-reddit',
+  laneTwitter: 'sim-live-lane-twitter',
+  laneSystem: 'sim-live-lane-system',
+  eventRow: 'sim-live-event-row',
+} as const
+
+export type SimulationLiveTestId = (typeof SimulationLiveTestId)[keyof typeof SimulationLiveTestId]
