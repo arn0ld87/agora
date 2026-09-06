@@ -250,6 +250,9 @@ export function buildShelfObjects(
       // traegt selbst keinen persona_count mehr). Deshalb ueber alle Jobs
       // suchen, nicht nur `latest.summary`.
       personaCount: jobs.map((j) => j.summary?.persona_count).find((n) => typeof n === 'number') ?? null,
+      // Aus `latest`, nicht aus `active`: `active` ist bei terminalen Laeufen
+      // null, `RunDetail.progress` dagegen immer gesetzt (Contract: ge=0, le=100).
+      progress: typeof latest.progress === 'number' ? latest.progress : null,
       jobs: jobs.map((j) => ({
         runId: j.run_id,
         runType: j.run_type,

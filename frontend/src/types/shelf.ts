@@ -59,6 +59,14 @@ export interface ShelfObject {
    */
   personaCount?: number | null
   /**
+   * Nur bei kind='lauf': Fortschritt 0-100 des juengsten Jobs. Bewusst getrennt
+   * von `active.progress`: `active` ist bei abgeschlossenen, gescheiterten und
+   * gestoppten Laeufen `null`, obwohl jeder `RunDetail` ein `progress` traegt.
+   * Wer den Fortschritt aus `active` liest, bekommt fuer genau die Zeilen nichts,
+   * die in einer Laeufe-Tabelle die Mehrheit stellen.
+   */
+  progress?: number | null
+  /**
    * Nur bei kind='lauf': alle Jobs des Vorhabens, neuestes zuerst (Redesign
    * PR 4, Jobs-Zeitleiste + Bestandteile-Verlinkung). Kommt 1:1 aus der
    * bereits geladenen Job-Gruppe (`groupJobsByEndeavor`) — kein Zusatz-Fetch.

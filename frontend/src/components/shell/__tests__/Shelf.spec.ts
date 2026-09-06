@@ -355,4 +355,32 @@ describe('Shelf', () => {
       expect(wrapper.find(`[data-testid="${ShelfTableTestId.toggle}"]`).exists()).toBe(false)
     })
   })
+
+  // ---- Regression aus dem Review zu Redesign PR 8 ----
+
+  it('Regression: abgeschlossene Läufe zeigen ihren Fortschritt, nicht nichts', async () => {
+    // `active` ist bei abgeschlossenen, gescheiterten und gestoppten Läufen
+    // null. Wer den Fortschritt daraus liest, lässt die Spalte für genau die
+    // Zeilen leer, die in einer Läufe-Tabelle die Mehrheit stellen.
+    const store: Record<string, string> = {}
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = v },
+      removeItem: (k: string) => { delete store[k] },
+      clear: () => { Object.keys(store).forEach((k) => delete store[k]) },
+      get length() { return Object.keys(store).length },
+      key: (i: number) => Object.keys(store)[i] ?? null,
+    } as Storage)
+
+    const obj = makeObject({ id: 'sim_done', active: null, progress: 100 })
+    const { wrapper, shelf } = mountShelf([obj])
+    shelf.filter.value = 'lauf'
+    await wrapper.vm.$nextTick()
+    await wrapper.find(`[data-testid="${ShelfTableTestId.toggleTable}"]`).trigger('click')
+    await wrapper.vm.$nextTick()
+
+    const cells = wrapper.find(`[data-testid="${ShelfTableTestId.root}"] tbody tr`).findAll('td')
+    expect(cells[2].text()).toBe('100')
+  })
 })
+

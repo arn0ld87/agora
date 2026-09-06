@@ -160,11 +160,14 @@ describe('ShelfView', () => {
     const router = makeRouter()
     await router.push('/ablage?filter=unbekannt')
 
-    expect(async () => {
-      const wrapper = mount(ShelfView, { global: { plugins: [router, i18n, createPinia()] } })
-      await flushPromises()
-      const activePill = wrapper.findAll(`[data-testid="${ShelfTestId.filterPill}"]`).find((p) => p.attributes('aria-selected') === 'true')
-      expect(activePill?.text()).toContain('Alle')
-    }).not.toThrow()
+    // Direkt awaiten statt in expect(async () => …).not.toThrow() zu wickeln:
+    // toThrow ist synchron, ruft die Funktion auf, sieht ein Promise statt
+    // eines Wurfs und ist zufrieden — die Zusicherung im Rumpf waere nie
+    // ausgewertet worden und ein Fehlschlag nur eine unbehandelte Rejection.
+    const wrapper = mount(ShelfView, { global: { plugins: [router, i18n, createPinia()] } })
+    await flushPromises()
+
+    const activePill = wrapper.findAll(`[data-testid="${ShelfTestId.filterPill}"]`).find((p) => p.attributes('aria-selected') === 'true')
+    expect(activePill?.text()).toContain('Alle')
   })
 })
