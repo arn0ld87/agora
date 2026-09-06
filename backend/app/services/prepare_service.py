@@ -165,18 +165,42 @@ def _normalize_adjective_endings(tokens: list[str]) -> list[str]:
     """Gleicht einfache Adjektivflexion an ("digitaler"/"digitale"/"digitalen"
     -> "digital").
 
-    Bewusst konservativ in zwei Punkten:
+    Bewusst konservativ in drei Punkten:
 
-    1. Nur nicht-letzte Tokens werden angefasst. In deutschen Nominalphrasen
-       steht das attributive Adjektiv vor dem Kopf-Nomen; das letzte Token
-       einer Bezeichnung ist damit fast immer das Nomen selbst und wird nie
-       gestemmt. Das schuetzt Paare wie "Lehrkraft" vs.
-       "Lehrkraeftevertretung" oder "Lernplattform" vs. "Lernender" — das
-       sind einwortige Namen, bei denen das einzige Token immer das letzte
-       ist und daher unveraendert bleibt.
+    1. Nur das Token unmittelbar vor dem letzten (dem Kopf-Nomen) kommt
+       ueberhaupt infrage. In deutschen Nominalphrasen steht das attributive
+       Adjektiv direkt vor seinem Kopf-Nomen, ohne trennendes Wort dazwischen
+       ("digitaler Zwilling", "junge Familien"). Ein Token, das *nicht*
+       unmittelbar vor dem letzten steht, ist damit strukturell kein
+       attributives Adjektiv des Kopf-Nomens, selbst wenn es zufaellig auf
+       eine Adjektivendung endet. Das ist bewusst enger als "irgendein
+       nicht-letztes Token": geprueft an einer Grossschreibungs-Heuristik
+       ("Nomen werden grossgeschrieben") zeigte sich, dass sie am
+       Phrasenanfang nicht traegt — "Junge Familien" (bestehender Testfall)
+       braucht die Normalisierung genau am ersten, grossgeschriebenen Token,
+       weil dort auch attributive Adjektive phrasenanfangs grossgeschrieben
+       auftreten. Grossschreibung allein trennt Nomen und Adjektiv also
+       nicht zuverlaessig; die Wortstellung tut es. Sie schuetzt zugleich
+       "Unternehmen der Region" vs. "Unternehmer der Region" (Codex-Finding
+       auf PR #1453): "Unternehmen"/"Unternehmer" stehen dort nicht
+       unmittelbar vor dem Kopf-Nomen "Region" — dazwischen steht "der" —,
+       werden also nie angefasst, obwohl beide Nomen zufaellig auf eine
+       Adjektivendung ("-en"/"-er") enden. Einwortige Namen ("Lehrkraft",
+       "Lernplattform") sind ueberhaupt nie betroffen, weil ihr einziges
+       Token immer das letzte ist.
     2. Der verbleibende Stamm muss mindestens
        ``_MIN_ADJECTIVE_STEM_LENGTH`` Zeichen lang sein, sonst wird nicht
-       gestrippt (siehe Kommentar dort).
+       gestrippt (siehe Kommentar dort). Das schuetzt z. B. "der" in
+       "Unternehmen der Region" zusaetzlich, falls die Phrase kuerzer waere.
+    3. Trifft keine der beiden Bedingungen zu, bleibt das Token unveraendert
+       stehen. Im Zweifel wird nicht gestemmt — ein verpasster Treffer ist
+       billig, eine falsche Fusion verfaelscht die Persona-Menge.
+
+    Grenze: bei mehreren attributiven Adjektiven vor dem Kopf-Nomen ("die
+    grosse digitale Lernplattform") wird nur das unmittelbar vorangehende
+    Adjektiv normalisiert; weiter vorne stehende Adjektive bleiben
+    unveraendert. Das ist ein verpasster Treffer, keine falsche Fusion, und
+    damit im Sinne des Auftrags die sicherere Seite.
 
     Kein Nomen-Stemmer, kein Fremdbibliotheks-Ansatz — nur eine kleine feste
     Endungsliste auf Wortebene.
@@ -184,13 +208,13 @@ def _normalize_adjective_endings(tokens: list[str]) -> list[str]:
     if len(tokens) < 2:
         return tokens
     normalized = list(tokens)
-    for index in range(len(normalized) - 1):
-        lower = normalized[index].casefold()
-        for suffix in _ADJECTIVE_SUFFIXES:
-            stem_length = len(lower) - len(suffix)
-            if lower.endswith(suffix) and stem_length >= _MIN_ADJECTIVE_STEM_LENGTH:
-                normalized[index] = lower[: -len(suffix)]
-                break
+    index = len(normalized) - 2
+    lower = normalized[index].casefold()
+    for suffix in _ADJECTIVE_SUFFIXES:
+        stem_length = len(lower) - len(suffix)
+        if lower.endswith(suffix) and stem_length >= _MIN_ADJECTIVE_STEM_LENGTH:
+            normalized[index] = lower[: -len(suffix)]
+            break
     return normalized
 
 

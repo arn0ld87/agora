@@ -148,6 +148,17 @@ class TestDedupeDeutscheOberflaechenvarianten:
             ("Lehrkraft", "Lehrkräftevertretung"),
             ("Teilnehmervertretung", "Lehrkräftevertretung"),
             ("Lernplattform", "Lernender"),
+            # Codex-Review-Finding auf PR #1453: "Unternehmen" und
+            # "Unternehmer" sind zwei verschiedene Nomen, keine Adjektivform
+            # desselben Worts. Die alte Normalisierung stemmte beide
+            # faelschlich auf "unternehm", weil sie zufaellig auf
+            # Adjektivendungen ("-en"/"-er") enden.
+            ("Unternehmen der Region", "Unternehmer der Region"),
+            # Weiterer Nomen-Kollisionsfall derselben Bauart: "Lehrer"
+            # (Person) und "Lehre" (Ausbildung/Lehrgang) sind fachlich
+            # unterschiedliche Stakeholder, kollabieren aber auf denselben
+            # Stamm ("Lehr"), wenn man Adjektivendungen blind abschneidet.
+            ("Lehrer der Klasse", "Lehre der Klasse"),
         ],
     )
     def test_aehnliche_aber_verschiedene_stakeholder_bleiben_getrennt(
