@@ -306,6 +306,110 @@ class TestResultOrderMatchesSequentialVariant:
         assert len(result) == 4
 
 
+class TestHardBudgetCapsConcurrentDispatch:
+    """Codex-Finding auf PR #1452 (P1).
+
+    Ohne Deckelung prüfen alle Greenlets/Threads
+    ``LLMClient._budget_check()`` gegen denselben Vor-Aufruf-Stand, bevor
+    irgendeine Antwort ihre Nutzung verbucht — bei einem harten
+    ``max_llm_calls``-Budget mit weniger verbleibenden Calls als parallelen
+    Batches kann ``Pool.map``/``ThreadPoolExecutor.map`` dadurch mehr
+    Requests starten, als das Budget erlaubt. Der Fix deckelt die Anzahl
+    gleichzeitig gestarteter Batches auf
+    ``LLMClient.remaining_hard_call_budget()`` (hier gemockt) — diese Tests
+    belegen per Concurrency-Probe, dass nie mehr Batches gleichzeitig aktiv
+    sind als das gemockte Restbudget zulässt.
+    """
+
+    def _concurrency_probe_with_budget(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        is_gevent: bool,
+        remaining_budget: int,
+    ) -> int:
+        gen = _make_generator(monkeypatch)
+        entities = _make_entities(25)  # AGENTS_PER_BATCH=5 -> 5 Batches
+        batch_ranges = [(0, 5), (5, 10), (10, 15), (15, 20), (20, 25)]
+
+        active = 0
+        max_active = 0
+        lock = threading.Lock()
+
+        def fake_batch(self, context, entities, start_idx, simulation_requirement):  # noqa: ARG001
+            nonlocal active, max_active
+            with lock:
+                active += 1
+                max_active = max(max_active, active)
+            if is_gevent:
+                import gevent
+
+                gevent.sleep(0.05)
+            else:
+                time.sleep(0.05)
+            with lock:
+                active -= 1
+            return []
+
+        with (
+            patch("gevent.monkey.is_module_patched", return_value=is_gevent),
+            patch.object(
+                gen.llm_client,
+                "remaining_hard_call_budget",
+                return_value=remaining_budget,
+            ),
+            patch.object(
+                SimulationConfigGenerator,
+                "_generate_agent_configs_batch",
+                side_effect=fake_batch,
+                autospec=True,
+            ),
+        ):
+            gen._generate_agent_configs_parallel(
+                context="ctx",
+                entities=entities,
+                batch_ranges=batch_ranges,
+                simulation_requirement="req",
+            )
+
+        return max_active
+
+    def test_thread_pool_never_exceeds_remaining_hard_budget(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        max_active = self._concurrency_probe_with_budget(
+            monkeypatch, is_gevent=False, remaining_budget=2
+        )
+        assert max_active <= 2, (
+            "Mehr Batches liefen gleichzeitig als das harte Restbudget erlaubte "
+            f"(max. gleichzeitig aktiv: {max_active}, Budget: 2)"
+        )
+
+    def test_gevent_pool_never_exceeds_remaining_hard_budget(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        max_active = self._concurrency_probe_with_budget(
+            monkeypatch, is_gevent=True, remaining_budget=2
+        )
+        assert max_active <= 2, (
+            "Mehr Batches liefen unter gevent gleichzeitig als das harte "
+            f"Restbudget erlaubte (max. gleichzeitig aktiv: {max_active}, Budget: 2)"
+        )
+
+    def test_exhausted_budget_still_dispatches_one_batch(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Restbudget 0 darf den Lauf nicht stillschweigend leer durchlaufen lassen.
+
+        Ein Batch muss weiterhin starten, damit ``BudgetExceededError`` beim
+        nächsten ``_budget_check()`` regulär durchschlägt statt durch eine
+        Pool-Größe 0 verschluckt zu werden.
+        """
+        max_active = self._concurrency_probe_with_budget(
+            monkeypatch, is_gevent=False, remaining_budget=0
+        )
+        assert max_active == 1
+
+
 class TestBatchFailurePropagates:
     """Ein Fehler in einem Batch darf nicht still verschluckt werden."""
 

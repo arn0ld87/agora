@@ -1110,6 +1110,21 @@ Return JSON format (no markdown):
 
         pool_size = min(len(batch_ranges), self.MAX_PARALLEL_AGENT_BATCHES)
 
+        # Codex-Finding PR #1452 (P1): Ein hartes ``max_llm_calls``-Budget mit
+        # weniger verbleibenden Calls als parallelen Batches führt sonst dazu,
+        # dass alle Greenlets/Threads ``LLMClient._budget_check()`` gegen
+        # denselben Vor-Aufruf-Stand prüfen, bevor irgendeine Antwort ihre
+        # Nutzung verbucht hat — das harte Limit kann dadurch überschritten
+        # werden. Dispatch daher nie mit mehr gleichzeitig gestarteten
+        # Batches, als noch Calls frei sind. ``max(1, ...)`` erhält das
+        # bestehende Verhalten, wenn das Budget bereits erschöpft ist: genau
+        # ein Batch startet, trifft sofort auf ``BudgetExceededError`` und
+        # bricht sauber ab, statt dass der Lauf durch einen Pool-Größe-0
+        # unbemerkt leer durchläuft.
+        remaining_budget = self.llm_client.remaining_hard_call_budget()
+        if remaining_budget is not None:
+            pool_size = min(pool_size, max(1, remaining_budget))
+
         if is_gevent:
             logger.info(
                 "Gevent detected: using cooperative Pool for %d parallel agent-config batches",
