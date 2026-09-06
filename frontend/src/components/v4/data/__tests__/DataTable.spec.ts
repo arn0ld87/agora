@@ -217,5 +217,34 @@ describe('DataTable', () => {
     expect(rule?.[1]).toMatch(/outline: 2px solid var\(--accent\)/)
     expect(rule?.[1]).not.toMatch(/transition/)
   })
+
+  it('Regression: Tastendruck auf einem Knopf IN der Zeile waehlt die Zeile nicht mit aus', async () => {
+    // Liegt der Fokus auf einem Aktionsknopf der Zeile, blubbert dessen keydown
+    // bis zur <tr>. Ohne Zielpruefung fuehrte Enter dort beides aus: die Aktion
+    // des Knopfes UND die Zeilenauswahl. `@click.stop` am Knopf haelt nur den
+    // spaeteren Klick auf, nicht den keydown.
+    const onRowClick = vi.fn()
+    const onAction = vi.fn()
+    const wrapper = mount(DataTable, {
+      props: {
+        columns: [{ key: 'name', label: 'Name' }],
+        rows: [{ id: 'a', name: 'Zeile A' }],
+        rowClick: onRowClick,
+      },
+      slots: {
+        'cell-name': '<button type="button" data-testid="row-action" @click.stop="onAction">Aktion</button>',
+      },
+      global: { mocks: { onAction } },
+    })
+
+    const button = wrapper.find('[data-testid="row-action"]')
+    expect(button.exists()).toBe(true)
+    await button.trigger('keydown', { key: 'Enter' })
+    expect(onRowClick).not.toHaveBeenCalled()
+
+    // Die Zeile selbst reagiert weiterhin.
+    await wrapper.find('tbody tr').trigger('keydown', { key: 'Enter' })
+    expect(onRowClick).toHaveBeenCalledTimes(1)
+  })
 })
 

@@ -80,6 +80,13 @@ function cellSlotName(key: string): string {
  */
 function onRowKeydown(event: KeyboardEvent, row: TRow): void {
   if (!props.rowClick) return
+  // Nur Tastendruecke, die auf der Zeile SELBST entstehen. Liegt der Fokus auf
+  // einem Bedienelement in der Zeile (Aktionsknopf wie „Vergleichen" oder
+  // „Naechster Schritt", der Stopp-Knopf in ActiveRunsCard), blubbert dessen
+  // keydown bis hierher und wuerde die Zeile mitauswaehlen, BEVOR der native
+  // Klick des Knopfes laeuft. `@click.stop` an den Knoepfen haelt nur den
+  // spaeteren Klick auf, nicht diesen keydown.
+  if (event.target !== event.currentTarget) return
   if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar') return
   // Leertaste scrollt sonst die Seite, waehrend die Zeile ausgewaehlt wird.
   event.preventDefault()
