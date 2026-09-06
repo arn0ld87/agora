@@ -371,3 +371,69 @@ class TestFromRouteNoKey:
         # config_fallback ist die legitime Annotation, wenn Config.LLM_API_KEY greift
         assert "api_key_source=config_fallback" in msg
         assert "provider_id=openai" in msg
+
+
+# ---------------------------------------------------------------------------
+# provider_type im Init-Log: ``provider_id`` allein benennt den laufenden
+# Provider nicht immer. Aufrufer, die Key und base_url selbst aufloesen und
+# direkt durchreichen (simulation_config_generator), betreten den
+# Active-Config-Zweig nicht — weder ``active_provider_id`` noch
+# ``route_provider_id`` ist dann gesetzt. Bei codex_cli kommt hinzu, dass
+# ``_detect_provider`` bewusst "unknown" liefert (keine Heuristik neben
+# ``registry.py::detect_provider``) und ``base_url`` architektonisch None ist.
+# Ohne ``provider_type`` las sich die Zeile als kaputter Client.
+# ---------------------------------------------------------------------------
+
+
+class TestInitLogsProviderType:
+    """``provider_type`` muss den tatsaechlich aufgeloesten Provider benennen."""
+
+    def test_codex_cli_logs_provider_type_despite_unknown_provider_id(
+        self, caplog, monkeypatch
+    ):
+        """Produktionsfall: codex_cli-Run loggte ``provider_id=unknown
+        base_url=None`` — beides korrekt, aber ununterscheidbar von einem
+        fehlkonfigurierten Client."""
+        monkeypatch.setattr("app.llm.client.CodexCliClient", lambda *_a, **_kw: MagicMock())
+        with caplog.at_level(logging.INFO, logger=_INIT_LOGGER):
+            LLMClient(
+                api_key="codex-cli-local-session",
+                base_url=None,
+                model="gpt-5.6-luna",
+                use_active_config=False,
+                provider_type="codex_cli",
+            )
+        records = _init_log_records(caplog)
+        assert len(records) == 1
+        msg = records[0].getMessage()
+        assert "provider_type=codex_cli" in msg
+        # provider_id bleibt legitim unbekannt — codex_cli wird nie geraten.
+        assert "provider_id=unknown" in msg
+
+    def test_explicit_provider_type_is_logged(self, caplog, monkeypatch):
+        _patch_openai(monkeypatch)
+        with caplog.at_level(logging.INFO, logger=_INIT_LOGGER):
+            LLMClient(
+                api_key="sk-direct",
+                base_url="https://api.openai.com/v1",
+                model="gpt-4o",
+                use_active_config=False,
+                provider_type="openai",
+            )
+        records = _init_log_records(caplog)
+        assert len(records) == 1
+        assert "provider_type=openai" in records[0].getMessage()
+
+    def test_without_provider_type_falls_back_to_unknown(self, caplog, monkeypatch):
+        """Kein Provider ableitbar → "unknown" bleibt die ehrliche Annotation."""
+        _patch_openai(monkeypatch)
+        with caplog.at_level(logging.INFO, logger=_INIT_LOGGER):
+            LLMClient(
+                api_key="sk-direct",
+                base_url="https://api.openai.com/v1",
+                model="gpt-4o",
+                use_active_config=False,
+            )
+        records = _init_log_records(caplog)
+        assert len(records) == 1
+        assert "provider_type=unknown" in records[0].getMessage()

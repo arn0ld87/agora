@@ -193,6 +193,19 @@ class LLMClient:
         # selbst loggen — nur die Quelle (session/store/env:NAME/config_fallback/
         # passed_in/unknown). Provider-Erkennung priorisiert ``active_provider_id``
         # vor ``route_provider_id``, damit die laufende Session-Auswahl Vorrang hat.
+        #
+        # ``provider_type`` steht daneben, weil ``provider_id`` allein den
+        # laufenden Provider nicht immer benennen kann: Aufrufer, die Key und
+        # base_url selbst aufloesen und direkt durchreichen (z. B.
+        # simulation_config_generator), betreten den Active-Config-Zweig nicht,
+        # so dass weder ``active_provider_id`` noch ``route_provider_id`` gesetzt
+        # ist. Die Zeile las sich dann als ``provider_id=unknown base_url=None``
+        # — bei codex_cli beides korrekt (kein HTTP-Transport, und
+        # ``_detect_provider`` gibt fuer codex_cli bewusst "unknown" zurueck,
+        # siehe dort), aber vom Log her ununterscheidbar von einem kaputten
+        # Client. ``resolved_provider_type`` traegt den tatsaechlichen Typ und
+        # stammt aus derselben Aufloesung wie ``_codex_cli_active`` — es ist
+        # keine zweite Detection-Heuristik neben ``registry.py::detect_provider``.
         self._api_key_source = resolved_source or "unknown"
         # Gemini-Review (security-medium) zu PR #559: ``base_url`` kann in
         # Edge-Cases (Azure-OpenAI-Query-Param, Userinfo) Secret-Material
@@ -200,8 +213,10 @@ class LLMClient:
         # vor dem Log, ohne den Hostname zu maskieren.
         from ..services.secret_resolver import SecretResolver as _UrlSanitizer
         logger.info(
-            "LLMClient initialized provider_id=%s model=%s base_url=%s api_key_source=%s",
+            "LLMClient initialized provider_id=%s provider_type=%s model=%s "
+            "base_url=%s api_key_source=%s",
             active_provider_id or route_provider_id or "unknown",
+            resolved_provider_type or "unknown",
             self.model,
             _UrlSanitizer().sanitize_url(self.base_url) if self.base_url else None,
             self._api_key_source,
