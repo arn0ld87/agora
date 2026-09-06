@@ -2,20 +2,21 @@ import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { getAgoraToken } from '../api/index'
 import { onboardingGuard } from './onboardingGuard'
-import { useShellVariant } from '../composables/useShellVariant'
 
 const routes: RouteRecordRaw[] = [
-  // Root → Dashboard (classic) bzw. Ablage (dossier).
-  // Block B3: die EINZIGE Auswertung des Shell-Flags neben /ablage selbst.
+  // Root → Ablage. Redesign PR 10 (Legacy-Abbau): das Shell-Flag
+  // `useShellVariant` ist entfallen — es hielt eine zweite Huelle („classic")
+  // am Leben, und genau die zwei Navigationsmodelle nebeneinander sind der
+  // erste Befund des Audits (§Befunde 1, „Eine Shell"). Der Default stand seit
+  // Block B3 ohnehin auf „dossier"; `/dashboard` bleibt als eigene Route
+  // erreichbar, nur nicht mehr als alternativer Einstieg.
   {
     path: '/',
-    redirect: () =>
-      useShellVariant().variant.value === 'dossier'
-        ? { name: 'Shelf' }
-        : { name: 'Dashboard' },
+    redirect: { name: 'Shelf' },
   },
 
-  // ADR-0010: /home → /dashboard (Entfernungsrelease 1.0.0; Home.vue bleibt bis dahin physisch erhalten).
+  // ADR-0010: /home → /dashboard (Entfernungsrelease 1.0.0). Home.vue selbst
+  // existiert nicht mehr im Baum; der Deep-Link-Redirect bleibt bis 1.0.0.
   {
     path: '/home',
     redirect: { name: 'Dashboard' },
@@ -34,9 +35,9 @@ const routes: RouteRecordRaw[] = [
   },
 
   // Redesign PR 8 (Audit §7 "Läufe (/runs)"): /runs zieht in die Ablage um —
-  // Tabellenmodus in Shelf.vue mit Filter „lauf". RunsAppShellView.vue bleibt
-  // physisch erhalten (Löschung ist PR 10), nur die Route zeigt nicht mehr
-  // darauf.
+  // Tabellenmodus in Shelf.vue mit Filter „lauf". Die abgeloeste
+  // RunsAppShellView.vue ist mit PR 10 geloescht; der Redirect bleibt als
+  // Deep-Link-Kompatibilitaet.
   {
     path: '/runs',
     name: 'Runs',
@@ -222,8 +223,8 @@ const routes: RouteRecordRaw[] = [
     props: true,
   },
   // Redesign PR 8 (Audit §7): History entfällt zugunsten des Ablage-Filters
-  // „Alle Jobs" (Zeile 146 des Audits). HistoryView.vue bleibt physisch
-  // erhalten (Löschung ist PR 10), nur die Route zeigt nicht mehr darauf.
+  // „Alle Jobs" (Zeile 146 des Audits). Die abgeloeste HistoryView.vue ist mit
+  // PR 10 geloescht; der Redirect bleibt als Deep-Link-Kompatibilitaet.
   {
     path: '/v4/history',
     name: 'HistoryV4',
@@ -231,9 +232,8 @@ const routes: RouteRecordRaw[] = [
   },
 
   // Block B3 — Neuhuelle „Richtung B · Dossier“ (PLAN.md).
-  // /ablage ist der Einstieg der neuen Shell. Der Feature-Flag
-  // (useShellVariant) wird NUR hier und im Dashboard-Redirect unten
-  // ausgewertet — nie tief in Komponenten.
+  // /ablage ist der Einstieg der Anwendung. Seit dem Legacy-Abbau (PR 10)
+  // ohne Feature-Flag: es gibt nur noch diese eine Huelle.
   {
     path: '/ablage',
     name: 'Shelf',

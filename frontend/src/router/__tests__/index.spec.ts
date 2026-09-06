@@ -68,10 +68,9 @@ vi.mock('../../views/Settings/EmbeddingConfigurationsView.vue', () => VIEW_STUB)
 vi.mock('../../views/v4/steps/StepSimulationFeedView.vue', () => VIEW_STUB)
 vi.mock('../../views/shell/ShelfView.vue', () => VIEW_STUB)
 // Redesign PR 8: /runs und /v4/history sind reine Redirects auf die Ablage
-// (ShelfView) — RunsAppShellView.vue und HistoryView.vue werden vom Router
-// nicht mehr importiert (Löschung der Dateien selbst ist PR 10), deshalb dafür
-// keine vi.mock()-Eintraege mehr. /runs/:id bleibt eine echte Route und
-// braucht seinen Stub weiterhin.
+// (ShelfView); die abgeloesten RunsAppShellView.vue und HistoryView.vue sind
+// mit PR 10 geloescht, deshalb dafür keine vi.mock()-Eintraege. /runs/:id
+// bleibt eine echte Route und braucht seinen Stub weiterhin.
 vi.mock('../../views/v4/RunDetailAppShellView.vue', () => VIEW_STUB)
 
 import router from '../index'
@@ -200,6 +199,19 @@ describe('Router – Redirects', () => {
     await pushAndSettle('/runs/run_abc')
     expect(router.currentRoute.value.name).toBe('RunDetail')
     expect(router.currentRoute.value.params).toEqual({ id: 'run_abc' })
+  })
+
+  // Redesign PR 10 (Legacy-Abbau): die Wurzel haengt nicht mehr an einem
+  // Shell-Flag. `useShellVariant` hielt eine zweite Huelle („classic") am
+  // Leben — genau die zwei Navigationsmodelle nebeneinander sind der erste
+  // Befund des Audits. Der Redirect ist jetzt ein statisches Ziel; eine
+  // Funktion hier waere das Anzeichen, dass die Verzweigung zurueck ist.
+  it('/ ist ein statischer Redirect auf die Ablage, ohne Shell-Flag', () => {
+    const root = router.getRoutes().find((route) => route.path === '/')
+
+    expect(root?.redirect).toEqual({ name: 'Shelf' })
+    expect(typeof root?.redirect).not.toBe('function')
+    expect(root?.components).toBeUndefined()
   })
 
   it('hält /settings-classic nur als expliziten benannten Redirect', () => {
