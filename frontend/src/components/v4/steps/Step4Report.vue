@@ -631,7 +631,17 @@ async function loadEvidence() {
     // (Budget/Terminal-Semantik siehe Kommentarblock oben), nicht in
     // recordSchemaError — sonst zeigt die UI faelschlich "Schema-Mismatch"
     // fuer einen erwartbaren transienten Zustand.
-    if (isApiError(err)) { scheduleEvidenceRetry(); return }
+    //
+    // Codex-Review PR #1456: HTTP 422 ist keine Transienz wie 404, sondern
+    // der dokumentierte contract_violation-Fall (backend/app/api/report.py:
+    // GET .../evidence validiert die persistierte Map und liefert 422, wenn
+    // sie auch nach Migration nicht vertragskonform ist). Ein Retry wuerde
+    // dasselbe dauerhaft ungueltige Artefakt zehn Minuten lang erneut
+    // anfordern und den Verstoss am Ende still verschwinden lassen. Deshalb
+    // wie einen Zod-Schema-Mismatch behandeln: sichtbar in der roten Box,
+    // kein Retry. Unterscheidung ausschliesslich ueber ApiError.status
+    // (structured field), kein Textvergleich auf der Fehlermeldung.
+    if (isApiError(err) && err.status !== 422) { scheduleEvidenceRetry(); return }
     recordSchemaError('evidence', err)
     return
   }

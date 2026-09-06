@@ -493,6 +493,40 @@ describe('Step4Report — Evidence-Fehlerklassifizierung: HTTP-Fehler vs. Schema
     expect(wrapper.find('.schema-error').exists()).toBe(false)
   })
 
+  // Codex-Review PR #1456: Ein HTTP 422 mit Code `contract_violation`
+  // (backend/app/api/report.py: die persistierte Evidence-Map ist auch nach
+  // Migration nicht vertragskonform) ist dauerhaft, nicht transient wie ein
+  // 404. Ein Retry wuerde denselben Vertragsverstoss zehn Minuten lang
+  // verschweigen — er muss sichtbar werden, ohne Retry.
+  it('zeigt bei einer 422-contract_violation-ApiError den Fehler an und plant keinen Retry', async () => {
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: { status: 'completed', report_id: 'report_test01', simulation_id: 'sim_test01' },
+    })
+    ;(getReportEvidence as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new ApiError({
+        code: 'contract_violation',
+        status: 422,
+        message: 'Evidence map is not contract-compliant even after migration',
+      })
+    )
+
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    // Vertragsverstoss muss sichtbar werden — dieselbe rote Box wie bei
+    // einem Zod-Parse-Fehler.
+    expect(wrapper.find('.schema-error').exists()).toBe(true)
+
+    const callsBefore = (getReportEvidence as ReturnType<typeof vi.fn>).mock.calls.length
+    await vi.advanceTimersByTimeAsync(3000)
+    await flushPromises()
+
+    // Kein Retry — sonst wuerde dasselbe ungueltige Artefakt zehn Minuten
+    // lang immer wieder angefordert.
+    expect((getReportEvidence as ReturnType<typeof vi.fn>).mock.calls.length).toBe(callsBefore)
+  })
+
   it('meldet einen echten Zod-Parse-Fehler weiterhin als schemaError und plant keinen Retry', async () => {
     ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
       success: true,
