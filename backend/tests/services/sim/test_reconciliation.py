@@ -168,6 +168,67 @@ class TestReconcileStaleRuns:
 
         assert result == ReconciliationResult(reconciled_run_ids=[], skipped_run_ids=["run_5"])
 
+    def test_dead_pid_with_completed_run_state_is_propagated_not_overwritten(
+        self, monkeypatch
+    ):
+        """Finding B (Codex-Review 2026-09-08, PR #1476): ``run_state.json``
+        wurde bereits erfolgreich als COMPLETED persistiert, aber die
+        anschließende RunRegistry-Synchronisation kam nie an (Prozess starb
+        dazwischen) — die Registry steht noch auf ``processing``, die PID
+        ist tot. Der autoritative Endzustand (COMPLETED) muss propagiert
+        werden, NICHT mit ``failed``/``process_restart`` überschrieben."""
+        run = _make_run("run_6", status="processing", simulation_id="sim_6")
+        registry = _FakeRegistry([run])
+
+        state = SimulationRunState(
+            simulation_id="sim_6",
+            runner_status=RunnerStatus.COMPLETED,
+            process_pid=_dead_pid(),
+        )
+        save_mock = MagicMock()
+        monkeypatch.setattr(reconciliation_module, "load_run_state", lambda sim_id, base: state)
+        monkeypatch.setattr(reconciliation_module, "save_run_state", save_mock)
+
+        result = reconcile_stale_runs(registry, "/fake/run-state-dir")
+
+        assert result == ReconciliationResult(
+            reconciled_run_ids=[], skipped_run_ids=[], synced_terminal_run_ids=["run_6"]
+        )
+        assert registry._runs["run_6"]["status"] == "completed"
+        assert registry._runs["run_6"].get("termination_reason") is None
+        assert "termination_reason" not in registry.updates[0]
+        # run_state.json ist bereits terminal -- kein erneuter Write nötig.
+        save_mock.assert_not_called()
+
+    def test_dead_pid_with_stopped_run_state_preserves_existing_termination_reason(
+        self, monkeypatch
+    ):
+        """Analog zu oben, aber STOPPED mit bereits gesetztem
+        ``termination_reason`` (z. B. ``user_stop``, seit Slice 1) auf der
+        Registry -- dieser Grund darf nicht durch ``process_restart``
+        ersetzt werden."""
+        run = _make_run("run_7", status="processing", simulation_id="sim_7")
+        run["termination_reason"] = "user_stop"
+        registry = _FakeRegistry([run])
+
+        state = SimulationRunState(
+            simulation_id="sim_7",
+            runner_status=RunnerStatus.STOPPED,
+            process_pid=_dead_pid(),
+        )
+        save_mock = MagicMock()
+        monkeypatch.setattr(reconciliation_module, "load_run_state", lambda sim_id, base: state)
+        monkeypatch.setattr(reconciliation_module, "save_run_state", save_mock)
+
+        result = reconcile_stale_runs(registry, "/fake/run-state-dir")
+
+        assert result == ReconciliationResult(
+            reconciled_run_ids=[], skipped_run_ids=[], synced_terminal_run_ids=["run_7"]
+        )
+        assert registry._runs["run_7"]["status"] == "stopped"
+        assert registry._runs["run_7"]["termination_reason"] == "user_stop"
+        save_mock.assert_not_called()
+
     def test_other_run_types_are_not_touched(self, monkeypatch):
         """Nur ``simulation_run`` hat eine verifizierbare Prozess-PID —
         andere Run-Typen bleiben außerhalb dieses Slices unangetastet."""

@@ -12,6 +12,19 @@ persona-generation greenlets surface as "extremely slow".
 monkey-patches ``os.fork``; gunicorn's own ``post_fork`` runs
 deterministically in the child after every fork and is the canonical
 place to reset pool state.
+
+Codex-Review Finding A (2026-09-08, PR #1476): the same hook is also the
+canonical place for the ``simulation_run`` Startup-Reconciliation
+(``app.services.sim.reconciliation.run_startup_reconciliation``). With
+``preload_app = True`` and ``workers = 1``, ``create_app()`` runs exactly
+once in the master process before the first fork. If the single worker is
+replaced later (timeout, crash, manual restart) without a master restart,
+``create_app()`` never runs again — but ``post_fork`` fires for every
+worker start, including that replacement. Reconciliation must therefore
+run here to actually cover the failure mode it was built for; the
+`create_app()` call stays in place for entrypoints that never go through
+gunicorn (dev server, tests) and the resulting double run on cold boot is
+a harmless no-op (see ``reconciliation.py`` module docstring).
 """
 from __future__ import annotations
 
@@ -40,11 +53,17 @@ pidfile = "/home/agora/.gunicorn/gunicorn.pid"
 
 
 def post_fork(server, worker) -> None:  # noqa: ARG001 — gunicorn signature
-    """Reset pool fds inherited from the preload master.
+    """Reset pool fds inherited from the preload master, then reconcile.
 
     Runs in the child process right after the fork, before any request is
     served. Resetting here is deterministic — gevent's ``os.fork`` patch
     does not interfere with gunicorn's hook dispatch.
+
+    Also the canonical trigger for the ``simulation_run`` Startup-
+    Reconciliation (Finding A, see module docstring): fires on every
+    worker start, including replacements of the single ``workers = 1``
+    worker that ``create_app()`` (run once, pre-fork, in the master) never
+    sees.
     """
     logger = logging.getLogger("agora.gunicorn")
     try:
@@ -54,3 +73,14 @@ def post_fork(server, worker) -> None:  # noqa: ARG001 — gunicorn signature
         logger.info("post_fork: pools reset in worker pid=%s", worker.pid)
     except Exception as exc:  # noqa: BLE001 — never crash a worker on hook failure
         logger.warning("post_fork pool reset failed (worker pid=%s): %s", worker.pid, exc)
+
+    try:
+        from app.config import Config
+        from app.services.sim.reconciliation import run_startup_reconciliation
+
+        run_startup_reconciliation(enabled=Config.AGORA_STARTUP_RECONCILIATION)
+        logger.info("post_fork: startup reconciliation ran in worker pid=%s", worker.pid)
+    except Exception as exc:  # noqa: BLE001 — never crash a worker on hook failure
+        logger.warning(
+            "post_fork startup reconciliation failed (worker pid=%s): %s", worker.pid, exc
+        )
