@@ -286,21 +286,26 @@ def get_report_evidence(report_id: str):
         # Issue #1160 G: Vorher lief diese Validierung ohne ``try`` — eine
         # vertragswidrige Map wurde zum 500er, und der Aufrufer konnte nicht
         # unterscheiden, ob Agora kaputt ist oder die Daten. Der JSON-Export
-        # meldet denselben Fall seit #987 strukturiert; dieser Endpoint tut es
-        # jetzt auch, mit demselben ``reason``-Schluessel.
+        # meldet denselben Fall seit #987 strukturiert.
+        #
+        # Review B7 (2026-09-08): dieser Pfad wich vom JSON-Export ab, indem
+        # er einen 422 warf statt zu degradieren. Das wurde durch die
+        # Rollenfamilien-Verschaerfung von
+        # ``EvidenceMapModel.validate_evidence_cross_references`` akut — ein
+        # Altartefakt mit zwei Schreibweisen derselben Rollenfamilie
+        # ("Buerger"/"buerger ") validierte vor dieser Verschaerfung noch,
+        # scheitert jetzt zurecht am Anker, und keine Migration kann den
+        # Rohtext nachtraeglich vereinheitlichen. Der Lese-Pfad degradiert
+        # jetzt wie der JSON-Export: 200 mit ``evidence_omitted`` statt 422 —
+        # derselbe Befund, ohne den Report-Rumpf mitzureissen.
         omission = build_evidence_omission(exc)
         logger.warning(
             "Evidence map for report %s is not contract-compliant even after "
-            "migration; refused with 422. First errors: %s",
+            "migration; degraded like the JSON export. First errors: %s",
             report_id,
             omission.validation_errors[:3],
         )
-        return json_error(
-            omission.detail,
-            status=422,
-            code=omission.reason,
-            extra={"evidence_omitted": omission.model_dump(mode="json")},
-        )
+        return json_success(None, evidence_omitted=omission.model_dump(mode="json"))
     return json_success(validated.model_dump(mode="json"))
 
 

@@ -1092,8 +1092,18 @@ class EvidenceMapModel(BaseModel):
                     for binding in claim.evidence
                 ]
                 if claim.confidence_label in (ConfidenceLabel.high, ConfidenceLabel.verified):
+                    # Issue #1248 Folgefehler (Review B7): dieser Validator
+                    # zaehlte bisher den rohen persona_stakeholder_group-Wert,
+                    # waehrend Schreibpfad (auto_downgrade_unsupported_high_claims)
+                    # und der Hartanker cross_stakeholder_for_high ueber
+                    # _role_family_key normalisieren. Persistierte Altbestaende
+                    # umgehen den Schreibpfad, sodass "Buerger" und "buerger "
+                    # hier als zwei Gruppen zaehlten, obwohl sie eine Rolle
+                    # sind. Verschaerfung von ADR-0002 Anker 4, keine
+                    # Schwaechung: die Zahl unterscheidbarer Gruppen kann
+                    # dadurch nur sinken.
                     groups = {
-                        record.persona_stakeholder_group
+                        _role_family_key(record)
                         for binding, record in resolved
                         if binding.supports_claim
                         and record.source_kind == EvidenceSourceKind.agent_quote

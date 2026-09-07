@@ -43,6 +43,7 @@ Vier Provenance-Stufen werden als **harte** Architektur-Regel etabliert. Sie sin
    - `EvidenceItemModel.persona_stakeholder_group` als Pflicht für `agent_quote`
    - Validator `cross_stakeholder_for_high` — `high`/`verified` verlangt agent_quote-Evidence aus ≥ 2 Stakeholder-Gruppen
    - Validator `reject_inferred_in_high_confidence` — `inferred`-Evidence darf `high`/`verified` nicht stützen
+   - Die Gruppenzählung ist doppelt verankert: primär im Schreibpfad (`report_agent/evidence.py::auto_downgrade_unsupported_high_claims`, das vor der Persistenz normalisiert) und sekundär, für bereits gespeicherte Altbestände, im Validator `EvidenceMapModel.validate_evidence_cross_references` (Review B7, 2026-09-08) — beide zählen die normalisierte Rollenfamilie (`_role_family_key`), nicht den rohen Berufstitel.
 3. **Tests**: Snapshot-Pin auf Hedge-Wort-Liste, Drift-Guards auf Enum-Werte und Validator-Verhalten.
 
 ### Die vier Stufen
