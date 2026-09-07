@@ -7,10 +7,11 @@ Backfill. Diese Datei prüft deshalb beide Richtungen an der echten
 Cypher-Konstruktion selbst):
 
 1. Ist eine Dokument-Provenance bekannt, landet sie als Property auf dem
-   ``CREATE (ep:Episode {...})``-Aufruf.
+   ``MERGE (ep:Episode {uuid}) ON CREATE SET ...``-Aufruf.
 2. Ist sie unbekannt (Altprojekt ohne Manifest-Sidecar), bleiben die
-   Parameter ``None`` — Neo4j legt für ``null``-wertige Map-Properties in
-   ``CREATE`` keine Property an, der Knoten bleibt also wie bisher.
+   Parameter ``None`` — Neo4j legt weder für ``null``-wertige
+   Map-Properties noch für eine ``SET``-Zuweisung von ``null`` eine
+   Property an, der Knoten bleibt also wie bisher.
 3. ``Neo4jWriteMixin.add_text`` reicht ``document_id``/``chunk_id``
    unverändert an ``_persist_episode`` durch.
 """
@@ -41,7 +42,10 @@ class _CypherCapture:
 
     @property
     def episode_creates(self):
-        return [(q, p) for q, p in self.calls if "CREATE (ep:Episode" in q]
+        # Seit dem Retry-Idempotenz-Fix lautet das Statement
+        # ``MERGE (ep:Episode {uuid}) ON CREATE SET ...`` statt ``CREATE``.
+        # Gematcht wird deshalb auf den Knoten, nicht auf das Verb.
+        return [(q, p) for q, p in self.calls if "(ep:Episode" in q]
 
 
 def _capture_persist_episode_cypher(*, document_id=None, chunk_id=None) -> _CypherCapture:
@@ -101,7 +105,7 @@ class TestEpisodeDocumentProvenance:
         capture = _capture_persist_episode_cypher(document_id="report", chunk_id=3)
 
         creates = capture.episode_creates
-        assert len(creates) == 1, "Genau ein CREATE (ep:Episode ...)-Aufruf erwartet"
+        assert len(creates) == 1, "Genau ein (ep:Episode ...)-Aufruf erwartet"
         _, params = creates[0]
 
         assert params["document_id"] == "report"
@@ -110,8 +114,8 @@ class TestEpisodeDocumentProvenance:
     def test_chunk_without_manifest_writes_episode_without_provenance_properties(self):
         """Ohne Manifest (Altprojekt) bleiben die Parameter None — kein Fehler.
 
-        Neo4j legt für null-wertige Map-Properties in CREATE keine Property
-        an; der gemockte Cypher-Call selbst darf trotzdem ohne Exception
+        Neo4j legt für eine ``SET``-Zuweisung von null keine Property an;
+        der gemockte Cypher-Call selbst darf trotzdem ohne Exception
         durchlaufen und muss die Parameter explizit als None tragen.
         """
         capture = _capture_persist_episode_cypher(document_id=None, chunk_id=None)

@@ -346,17 +346,29 @@ class Neo4jWriteMixin:
         with self._get_session() as session:
             # Create episode node
             def _create_episode(tx):
+                # MERGE statt CREATE: ``_call_with_retry`` und der
+                # treibereigene ``execute_write``-Retry fuehren diese
+                # Funktion erneut aus, wenn die Bestaetigung einer bereits
+                # committeten Transaktion verloren geht (Produktionsbefund
+                # 2026-09-07: serverseitig ``Response write failure`` /
+                # ``StacklessClosedChannelException``). ``episode_id``
+                # entsteht ausserhalb des Retries, ein zweites ``CREATE``
+                # lief deshalb in den ``episode_uuid``-Unique-Constraint und
+                # riss den gesamten Build ab. ``ON CREATE SET`` haelt die
+                # null-Semantik aus dem Docstring: eine Zuweisung von
+                # ``null`` legt die Property nicht an, Altprojekte ohne
+                # Manifest tragen weiterhin weder ``document_id`` noch
+                # ``chunk_id``.
                 tx.run(
                     """
-                    CREATE (ep:Episode {
-                        uuid: $uuid,
-                        graph_id: $graph_id,
-                        data: $data,
-                        processed: true,
-                        created_at: $created_at,
-                        document_id: $document_id,
-                        chunk_id: $chunk_id
-                    })
+                    MERGE (ep:Episode {uuid: $uuid})
+                    ON CREATE SET
+                        ep.graph_id = $graph_id,
+                        ep.data = $data,
+                        ep.processed = true,
+                        ep.created_at = $created_at,
+                        ep.document_id = $document_id,
+                        ep.chunk_id = $chunk_id
                     """,
                     uuid=episode_id,
                     graph_id=graph_id,
@@ -480,6 +492,12 @@ class Neo4jWriteMixin:
                 fact_embedding = relation_embeddings[idx] if idx < len(relation_embeddings) else []
                 r_uuid = str(uuid.uuid4())
 
+                # MERGE statt CREATE, gleicher Grund wie beim Episode-Knoten:
+                # ``_r_uuid`` entsteht ausserhalb des Retries. Auf RELATION
+                # liegt kein Unique-Constraint, ein zweiter Durchlauf haette
+                # deshalb nicht abgebrochen, sondern still eine identische
+                # Kante ein zweites Mal angelegt. Da beide Endknoten gebunden
+                # sind, sieht der MERGE nur die Kanten zwischen ihnen an.
                 def _create_relation(tx, _r_uuid=r_uuid, _source_uuid=source_uuid,
                                      _target_uuid=target_uuid, _rtype=rtype,
                                      _fact=fact, _fact_emb=fact_embedding,
@@ -489,22 +507,21 @@ class Neo4jWriteMixin:
                         """
                         MATCH (src:Entity {uuid: $src_uuid})
                         MATCH (tgt:Entity {uuid: $tgt_uuid})
-                        CREATE (src)-[r:RELATION {
-                            uuid: $uuid,
-                            graph_id: $gid,
-                            name: $name,
-                            fact: $fact,
-                            fact_embedding: $fact_embedding,
-                            attributes_json: '{}',
-                            episode_ids: [$episode_id],
-                            created_at: $now,
-                            valid_at: null,
-                            invalid_at: null,
-                            expired_at: null,
-                            valid_from_round: $round,
-                            valid_to_round: null,
-                            reinforced_count: 1
-                        }]->(tgt)
+                        MERGE (src)-[r:RELATION {uuid: $uuid}]->(tgt)
+                        ON CREATE SET
+                            r.graph_id = $gid,
+                            r.name = $name,
+                            r.fact = $fact,
+                            r.fact_embedding = $fact_embedding,
+                            r.attributes_json = '{}',
+                            r.episode_ids = [$episode_id],
+                            r.created_at = $now,
+                            r.valid_at = null,
+                            r.invalid_at = null,
+                            r.expired_at = null,
+                            r.valid_from_round = $round,
+                            r.valid_to_round = null,
+                            r.reinforced_count = 1
                         """,
                         src_uuid=_source_uuid,
                         tgt_uuid=_target_uuid,
