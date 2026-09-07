@@ -396,6 +396,11 @@ class TestCompoundOntologyTypes:
         ("Weniger als 10 % Fehler", "SuccessCriterion", "criterion"),
         ("Teilnehmerverwaltung", "Lernsystem", "system"),
         ("Engagement-Wert", "Engagement-Score", "score"),
+        # Review-Befund auf PR #1473: Koepfe, deren Standalone-Form bereits
+        # in ``INELIGIBLE_ENTITY_TYPES`` steht, fehlten als Kompositum-Kopf.
+        ("ERP-Software", "SoftwareProduct", "product"),
+        ("Datenschutz-Grundverordnung", "LegalFramework", "framework"),
+        ("KI-Regulierung", "DiscussionTopic", "topic"),
     ]
 
     ZUGELASSEN = [
@@ -408,6 +413,13 @@ class TestCompoundOntologyTypes:
         # ``service`` ist als Kopfnomen mehrdeutig und steht deshalb nicht in
         # der Menge — eine Kundendienst-Abteilung hat menschliche Traeger.
         ("Kundendienst", "CustomerService"),
+        # ``model`` bleibt bewusst aus der Menge: ``RoleModel`` ist ein
+        # Mensch, keine Software. ``provider``/``representative`` bleiben
+        # mehrdeutige Koepfe (siehe Modul-Docstring).
+        ("Nelson Mandela", "RoleModel"),
+        ("Deutsche Telekom", "ServiceProvider"),
+        ("Microsoft", "TechnologyProvider"),
+        ("Herr Fischer", "EmployeeRepresentative"),
     ]
 
     def test_zusammengesetzte_technikbegriffe_werden_blockiert(self):

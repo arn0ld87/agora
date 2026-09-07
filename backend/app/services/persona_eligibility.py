@@ -174,6 +174,29 @@ INELIGIBLE_TYPE_HEADS: frozenset[str] = frozenset(
         "lizenz",
         "regulation",
         "verordnung",
+        # Domaenen- und Geschaeftsbegriffe. Abgeglichen gegen jeden Eintrag
+        # von ``INELIGIBLE_ENTITY_TYPES``: ``product``, ``topic``/``theme``
+        # und ``framework`` sind dort exakt gelistet, aber ``SoftwareProduct``,
+        # ``DiscussionTopic`` und ``LegalFramework`` liefen als "unbekannter
+        # Typ" durch die Stufe-1-Pruefung, weil der Vergleich nur exakt
+        # matchte (Issue #1473, Review-Befund). ``event`` ist als Kopf
+        # ebenfalls unproblematisch. Bewusst **nicht** aufgenommen: ``model``
+        # (``RoleModel`` ist ein Mensch), ``law`` (``Outlaw`` ist ein
+        # Mensch), sowie die geografischen Koepfe ``country``/``nation``/
+        # ``state``/``region``/``city``/``location``/``place`` — ``nation``
+        # kann ein Kollektiv mit menschlichem Traeger sein (``FirstNation``),
+        # ``state`` kollidiert mit ``HeadOfState``; die uebrigen sind vom
+        # gemeldeten Produktionsbefund nicht betroffen und bleiben aussen
+        # vor, um die Aenderung eng am Befund zu halten.
+        "product",
+        "produkt",
+        "topic",
+        "theme",
+        "thema",
+        "framework",
+        "rahmenwerk",
+        "event",
+        "ereignis",
     }
 )
 
