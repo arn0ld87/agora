@@ -20,7 +20,9 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
+import time as _time
 from datetime import datetime
 from typing import Any, Optional
 
@@ -175,6 +177,58 @@ def mark_budget_abort(run_id: str, dimension: str, observed: int, threshold: int
     )
 
 
+# ---------------------------------------------------------------------------
+# Reservierung laufender Calls (Codex-Finding P1 auf PR #1461)
+# ---------------------------------------------------------------------------
+#
+# ``check_before_call()`` las bis dahin nur den Ledger. Zwischen Pruefung und
+# Verbuchung liegt aber der Call selbst: pruefen mehrere Greenlets oder
+# Threads in diesem Fenster, sehen alle denselben Vor-Aufruf-Stand und ein
+# hartes ``max_llm_calls`` wird ueberschritten. Eine Deckelung der
+# Gleichzeitigkeit allein behebt das nicht — sobald ein Worker fertig ist,
+# startet der naechste, waehrend andere noch fliegen.
+#
+# Ein bestandener Check reserviert deshalb einen Slot, und die Reservierung
+# zaehlt wie ein verbrauchter Call, bis ``record_after_call()`` sie freigibt.
+# Die Registry ist prozessweit und nach ``run_id`` geschluesselt, weil
+# ``RunBudgetEnforcer.for_run()`` pro Aufruf eine neue Instanz baut — ein
+# Instanz-Zaehler waere wirkungslos.
+#
+# Reichweite: der Simulationslauf faehrt in einem eigenen Prozess, dort
+# greift weiterhin nur der Ledger. Innerhalb eines Prozesses ist die Zaehlung
+# ab jetzt exakt.
+#
+# ``_RESERVATION_TTL_SECONDS`` ist das Sicherheitsnetz gegen ein Leck: bliebe
+# eine Reservierung nach einem Abbruch zwischen Check und Record stehen,
+# waere das Budget dauerhaft zu klein. Sie ist bewusst weit ueber jeder
+# realistischen Call-Dauer.
+_RESERVATION_TTL_SECONDS = 900.0
+_reservation_lock = threading.Lock()
+_reservations: dict[str, list[float]] = {}
+
+
+def _prune_reservations_locked(run_id: str, now: float) -> list[float]:
+    """Abgelaufene Reservierungen verwerfen. Aufrufer haelt ``_reservation_lock``."""
+    slots = [deadline for deadline in _reservations.get(run_id, ()) if deadline > now]
+    if slots:
+        _reservations[run_id] = slots
+    else:
+        _reservations.pop(run_id, None)
+    return slots
+
+
+def reset_call_reservations(run_id: Optional[str] = None) -> None:
+    """Reservierungen verwerfen — fuer Tests und nach einem Fork.
+
+    Ohne ``run_id`` wird die gesamte Registry geleert.
+    """
+    with _reservation_lock:
+        if run_id is None:
+            _reservations.clear()
+        else:
+            _reservations.pop(run_id, None)
+
+
 class RunBudgetEnforcer:
     """Prüft und verbucht Budgets für einen Run."""
 
@@ -210,6 +264,37 @@ class RunBudgetEnforcer:
         events = load_call_events_cached(self.run_id)
         return aggregate_usage(self.run_id, events=events).totals
 
+    def remaining_hard_calls(self) -> Optional[int]:
+        """Verbleibende Calls unter einem harten ``max_llm_calls``-Budget.
+
+        ``None`` heisst: kein hartes Aufrufbudget aktiv (weiche Durchsetzung
+        oder Limit ohne Aufrufgrenze) — Aufrufer duerfen dann uneingeschraenkt
+        parallelisieren.
+
+        Race-Hinweis (Codex-Finding PR #1452): der Rueckgabewert ist ein
+        Snapshot zum Aufrufzeitpunkt, kein reserviertes Kontingent.
+        ``check_before_call()`` bleibt racy, wenn mehrere Greenlets oder
+        Threads gleichzeitig pruefen, bevor eine Antwort ihre Nutzung
+        verbucht hat. Wer mehrere LLM-Calls parallel dispatcht, deckelt
+        deshalb die Anzahl **gleichzeitig gestarteter** Calls auf diesen
+        Wert, statt alle auf einmal loszuschicken.
+        """
+        if self.config.enforcement != "hard":
+            return None
+        max_calls = self.config.max_llm_calls
+        if max_calls is None:
+            return None
+        try:
+            consumed_calls = self.consumed().llm_calls or 0
+        except Exception as exc:  # noqa: BLE001 — Budget ist Zusatz, kein Hotpath-Risiko
+            logger.warning(
+                "remaining_hard_calls: Verbrauch konnte nicht gelesen werden: %s", exc
+            )
+            return None
+        with _reservation_lock:
+            in_flight = len(_prune_reservations_locked(self.run_id, _time.monotonic()))
+        return max(0, max_calls - consumed_calls - in_flight)
+
     def _elapsed_seconds(self) -> Optional[float]:
         if self._started_at_epoch is None:
             return None
@@ -242,18 +327,56 @@ class RunBudgetEnforcer:
         """
         if self.config.enforcement != "hard":
             return
-        consumed = self.consumed()
-        observed = self._observed(consumed)
-        for dimension, limit in self._limits().items():
-            if limit is None:
-                continue
-            value = observed[dimension]
-            if value is not None and value >= limit:
-                self._record_warning(dimension, "hard", threshold=limit, observed=value)
-                raise BudgetExceededError(dimension, observed=value, threshold=limit)
+
+        # Pruefung und Reservierung muessen unter demselben Lock liegen,
+        # sonst bleibt genau das Fenster offen, das die Reservierung
+        # schliessen soll. ``consumed()`` liest dabei mit — der Ledger-Zugriff
+        # ist gecacht, und ein Lesen ausserhalb des Locks koennte einen
+        # bereits verbuchten Call uebersehen, dessen Reservierung schon
+        # freigegeben wurde.
+        now = _time.monotonic()
+        breach: Optional[tuple[str, int, int]] = None
+        with _reservation_lock:
+            in_flight = len(_prune_reservations_locked(self.run_id, now))
+            observed = self._observed(self.consumed())
+            if observed.get("calls") is not None:
+                observed["calls"] = observed["calls"] + in_flight
+            for dimension, limit in self._limits().items():
+                if limit is None:
+                    continue
+                value = observed[dimension]
+                if value is not None and value >= limit:
+                    breach = (dimension, value, limit)
+                    break
+            if breach is None:
+                _reservations.setdefault(self.run_id, []).append(
+                    now + _RESERVATION_TTL_SECONDS
+                )
+
+        # Auditierung und Exception bewusst ausserhalb des Locks: das
+        # Warn-Event schreibt auf die Platte, das gehoert nicht in den
+        # kritischen Abschnitt.
+        if breach is not None:
+            dimension, value, limit = breach
+            self._record_warning(dimension, "hard", threshold=limit, observed=value)
+            raise BudgetExceededError(dimension, observed=value, threshold=limit)
 
     def record_after_call(self) -> None:
-        """Weiche Limits nach einem abgeschlossenen Call prüfen + auditieren."""
+        """Weiche Limits nach einem abgeschlossenen Call prüfen + auditieren.
+
+        Gibt zugleich die Reservierung aus :meth:`check_before_call` frei —
+        der Call ist ab jetzt im Ledger verbucht und braucht keinen
+        Platzhalter mehr. Der Aufruf ist auch im Fehlerpfad des Providers
+        gepaart (``LLMClient._provider_attempt``), ein Leck ist damit die
+        Ausnahme und wird zusaetzlich per TTL abgefangen.
+        """
+        with _reservation_lock:
+            slots = _prune_reservations_locked(self.run_id, _time.monotonic())
+            if slots:
+                slots.pop(0)
+                if not slots:
+                    _reservations.pop(self.run_id, None)
+
         consumed = self.consumed()
         observed = self._observed(consumed)
         severity = self.config.enforcement

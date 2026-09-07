@@ -25,6 +25,8 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
+import time
 
 import pytest
 
@@ -695,3 +697,199 @@ def test_persona_generation_summary_line_stays_consistent_with_reserve_backfill(
     assert attempted == 3
     assert rejected_count == 2
     assert generated == 1
+
+
+class TestHardBudgetCapsConcurrentPersonaDispatch:
+    """Folgearbeit aus PR #1452 (Codex-Finding P1) / Commit bae1806f.
+
+    Dieselbe Budget-Race wie bei den parallelen Agent-Config-Batches
+    (``SimulationConfigGenerator``) betraf unveraendert die parallele
+    Persona-Generierung: alle Greenlets/Threads pruefen
+    ``LLMClient._budget_check()`` gegen denselben Vor-Aufruf-Stand, bevor
+    irgendeine Antwort ihre Nutzung verbucht — bei einem harten
+    ``max_llm_calls``-Budget mit weniger verbleibenden Calls als
+    ``parallel_count`` kann ``ThreadPoolExecutor``/``gevent.pool.Pool``
+    dadurch mehr Requests starten, als das Budget erlaubt. Der Fix deckelt
+    die Anzahl gleichzeitig gestarteter Worker auf
+    ``RunBudgetEnforcer.remaining_hard_calls()`` (hier gemockt) — diese Tests
+    belegen per Concurrency-Probe, dass nie mehr Worker gleichzeitig aktiv
+    sind als das gemockte Restbudget zulaesst.
+    """
+
+    def _concurrency_probe_with_budget(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        is_gevent: bool,
+        remaining_budget: int,
+        entity_count: int = 6,
+    ) -> int:
+        gen = _make_generator()
+        # Ohne run_id gibt es keinen Enforcer und damit keinen Deckel.
+        gen.run_id = "run-budget-probe"
+        entities = [_entity(f"Kandidat {i}", "Person") for i in range(entity_count)]
+
+        active = 0
+        max_active = 0
+        lock = threading.Lock()
+
+        def fake_generate_profile(self, *, entity, user_id, use_llm, demographic_slot=None, **_kw):
+            nonlocal active, max_active
+            with lock:
+                active += 1
+                max_active = max(max_active, active)
+            if is_gevent:
+                import gevent
+
+                gevent.sleep(0.05)
+            else:
+                time.sleep(0.05)
+            with lock:
+                active -= 1
+            return OasisAgentProfile(
+                user_id=user_id,
+                user_name=f"user_{user_id}",
+                name=entity.name,
+                bio="bio",
+                persona="persona",
+            )
+
+        class _StubEnforcer:
+            def remaining_hard_calls(self):
+                return remaining_budget
+
+        import app.services.run_budget as _budget_mod
+
+        with (
+            patch("gevent.monkey.is_module_patched", return_value=is_gevent),
+            patch.object(
+                _budget_mod.RunBudgetEnforcer,
+                "for_run",
+                classmethod(lambda cls, run_id: _StubEnforcer()),
+            ),
+            patch.object(
+                OasisProfileGenerator,
+                "generate_profile_from_entity",
+                fake_generate_profile,
+            ),
+        ):
+            gen.generate_profiles_from_entities(
+                entities,
+                use_llm=False,
+                parallel_count=entity_count,
+            )
+
+        return max_active
+
+    def test_thread_pool_never_exceeds_remaining_hard_budget(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        max_active = self._concurrency_probe_with_budget(
+            monkeypatch, is_gevent=False, remaining_budget=2
+        )
+        assert max_active <= 2, (
+            "Mehr Personas liefen gleichzeitig als das harte Restbudget erlaubte "
+            f"(max. gleichzeitig aktiv: {max_active}, Budget: 2)"
+        )
+
+    def test_gevent_pool_never_exceeds_remaining_hard_budget(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        max_active = self._concurrency_probe_with_budget(
+            monkeypatch, is_gevent=True, remaining_budget=2
+        )
+        assert max_active <= 2, (
+            "Mehr Personas liefen unter gevent gleichzeitig als das harte "
+            f"Restbudget erlaubte (max. gleichzeitig aktiv: {max_active}, Budget: 2)"
+        )
+
+    def test_exhausted_budget_still_dispatches_one_worker(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Restbudget 0 darf den Lauf nicht stillschweigend leer durchlaufen lassen.
+
+        Ein Worker muss weiterhin starten, damit ``BudgetExceededError`` beim
+        naechsten ``_budget_check()`` regulaer durchschlaegt statt durch eine
+        Pool-Groesse 0 verschluckt zu werden.
+        """
+        max_active = self._concurrency_probe_with_budget(
+            monkeypatch, is_gevent=False, remaining_budget=0
+        )
+        assert max_active == 1
+
+
+class TestHardBudgetAbortPropagates:
+    """Codex-Finding P2 auf PR #1461.
+
+    ``max(1, remaining)`` allein bricht bei erschoepftem Budget nichts ab: der
+    breite ``except Exception`` in ``_generate_profile_with_llm`` fing
+    ``BudgetExceededError`` mit, schlief drei Versuche lang und lieferte ein
+    regelbasiertes Profil. Eine 30-Personen-Vorbereitung haette so rund 180
+    Sekunden mit garantiert abgelehnten Calls verbracht und die Stufe ohne
+    Budget-Abbruch verlassen. Diese Tests halten fest, dass der Abbruch
+    stattdessen durchschlaegt.
+    """
+
+    @staticmethod
+    def _budget_error():
+        from app.services.run_budget import BudgetExceededError
+
+        return BudgetExceededError("calls", observed=2, threshold=2)
+
+    def test_retry_loop_does_not_swallow_budget_abort(self) -> None:
+        """Kein Retry, kein Schlafen, kein regelbasiertes Ersatzprofil."""
+        from app.services.run_budget import BudgetExceededError
+
+        gen = _make_generator()
+        gen.run_id = "run-budget-abort"
+        attempts = 0
+
+        class _ExhaustedClient:
+            def __init__(self, *_a, **_kw):
+                pass
+
+            def chat_json(self, *_a, **_kw):
+                nonlocal attempts
+                attempts += 1
+                raise TestHardBudgetAbortPropagates._budget_error()
+
+        # ``_generate_profile_with_llm`` importiert den Client lokal
+        # (``from ..llm.client import LLMClient as _LLMClient``), das
+        # Patch-Ziel ist deshalb das Herkunftsmodul.
+        with patch("app.llm.client.LLMClient", _ExhaustedClient):
+            with pytest.raises(BudgetExceededError):
+                gen._generate_profile_with_llm(
+                    entity_name="Alex",
+                    entity_type="Person",
+                    entity_summary="Eine Person.",
+                    entity_attributes={},
+                    context="Kontext",
+                )
+
+        assert attempts == 1, (
+            f"Der Budget-Abbruch wurde {attempts}-mal wiederholt statt "
+            "durchgereicht"
+        )
+
+    def test_dispatch_propagates_budget_abort_instead_of_fallback_profiles(
+        self,
+    ) -> None:
+        """Der Abbruch verlaesst auch die parallele Erzeugung, statt Platzhalter zu liefern."""
+        from app.services.run_budget import BudgetExceededError
+
+        gen = _make_generator()
+        gen.run_id = "run-budget-abort"
+        entities = [_entity(f"Kandidat {i}", "Person") for i in range(4)]
+
+        def _raise(*_a, **_kw):
+            raise TestHardBudgetAbortPropagates._budget_error()
+
+        with (
+            patch("gevent.monkey.is_module_patched", return_value=False),
+            patch.object(
+                OasisProfileGenerator, "generate_profile_from_entity", _raise
+            ),
+        ):
+            with pytest.raises(BudgetExceededError):
+                gen.generate_profiles_from_entities(
+                    entities, use_llm=True, parallel_count=2
+                )

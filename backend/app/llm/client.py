@@ -676,35 +676,20 @@ class LLMClient:
     def remaining_hard_call_budget(self) -> Optional[int]:
         """Verbleibende Calls unter einem harten ``max_llm_calls``-Budget.
 
-        Liefert ``None``, wenn kein hartes Aufrufbudget aktiv ist (kein Run,
-        kein Budget, weiche Durchsetzung oder Limit ohne Aufrufgrenze) —
-        Aufrufer dürfen dann uneingeschränkt parallelisieren.
+        Duenne Weiterreichung an
+        :meth:`RunBudgetEnforcer.remaining_hard_calls` — die Rechnung liegt
+        beim Enforcer, damit Aufrufer ohne LLMClient (etwa die
+        Persona-Generierung, die ihre Clients pro Persona baut) dieselbe
+        Quelle nutzen koennen, statt eine Wegwerf-Instanz nur zum Auslesen
+        zu konstruieren.
 
-        Race-Hinweis (Codex-Finding PR #1452): der Rückgabewert ist ein
-        Snapshot zum Aufrufzeitpunkt, kein reserviertes Kontingent.
-        ``check_before_call()`` selbst bleibt racy, wenn mehrere
-        Greenlets/Threads gleichzeitig prüfen, bevor eine Antwort ihre
-        Nutzung verbucht hat. Aufrufer, die mehrere LLM-Calls parallel
-        dispatchen, sollten die Anzahl **gleichzeitig gestarteter** Calls auf
-        diesen Wert deckeln (statt alle Calls gleichzeitig loszuschicken) —
-        so prüfen nie mehr als die tatsächlich noch freien Calls gegen
-        denselben Vor-Aufruf-Stand.
+        ``None`` heisst: kein hartes Aufrufbudget aktiv (kein Run, kein
+        Budget, weiche Durchsetzung oder Limit ohne Aufrufgrenze).
         """
         enforcer = self._budget_enforcer()
-        if enforcer is None or enforcer.config.enforcement != "hard":
+        if enforcer is None:
             return None
-        max_calls = enforcer.config.max_llm_calls
-        if max_calls is None:
-            return None
-        try:
-            consumed_calls = enforcer.consumed().llm_calls or 0
-        except Exception as exc:  # noqa: BLE001 — Budget ist Zusatz, kein Hotpath-Risiko
-            logger.warning(
-                "remaining_hard_call_budget: Verbrauch konnte nicht gelesen werden: %s",
-                exc,
-            )
-            return None
-        return max(0, max_calls - consumed_calls)
+        return enforcer.remaining_hard_calls()
 
     def _budget_record(self) -> None:
         """Weiche-Limit-Prüfung NACH dem Call.

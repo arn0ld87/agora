@@ -29,6 +29,7 @@ from .settings_layer import get_default_service as _get_settings
 from ..utils.llm_latency import measure_llm_latency
 from ..utils.logger import get_logger
 from .entity_reader import EntityNode
+from .run_budget import BudgetExceededError
 from ..storage import GraphStorage
 from .persona_domain_coherence import coherence_findings, is_collective_entity_type
 from .persona_demographics import (
@@ -1305,6 +1306,15 @@ When `ineligible: false`, answer the task above as described."""
 
                 return result
 
+            except BudgetExceededError:
+                # Codex-Finding P2 auf PR #1461: ein hartes Budget muss
+                # durchschlagen. Ohne diese Klausel faengt der breite Handler
+                # darunter ``BudgetExceededError`` ab, schlaeft drei Versuche
+                # lang und liefert am Ende ein regelbasiertes Profil.
+                # Bei erschoepftem Budget haette eine 30-Personen-Vorbereitung
+                # so rund 180 Sekunden mit garantiert abgelehnten Calls
+                # verbracht und die Stufe ohne Budget-Abbruch verlassen.
+                raise
             except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
                 logger.warning(f"LLM call failed (attempt {attempt+1}): {str(e)[:80]}")
                 last_error = e
@@ -2072,6 +2082,10 @@ Important:
                 except PersonaIneligible as rejection:
                     rejected.append(rejection)
                     continue
+                except BudgetExceededError:
+                    # Ausnahme von "Nachruecker duerfen den Lauf nicht kippen":
+                    # ein erschoepftes Hartbudget soll ihn genau das.
+                    raise
                 except Exception as exc:  # noqa: BLE001 — Nachrücker duerfen den Lauf nicht kippen
                     logger.warning(
                         "Nachbesetzung fuer Slot %d fehlgeschlagen (%s): %r",
@@ -2156,6 +2170,8 @@ Important:
                 entity_type = entity.get_entity_type() or "Entity"
                 try:
                     result_idx, profile, error = future.result()
+                except BudgetExceededError:
+                    raise
                 except Exception as e:  # noqa: BLE001
                     logger.error(f"Thread execution failed unexpectedly for entity {entity.name}: {str(e)}")
                     profile = OasisAgentProfile(
@@ -2323,6 +2339,12 @@ Important:
                     rejected.append(rejection)
                 return idx, None, rejection.reason
 
+            except BudgetExceededError:
+                # Kein Fallback-Profil bei erschoepftem Budget — der Abbruch
+                # gehoert nach oben, sonst entstehen Platzhalterprofile fuer
+                # Calls, die nie stattfinden durften (Codex-Finding P2 auf
+                # PR #1461).
+                raise
             except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
                 logger.error(f"Failed to generate persona for entity {entity.name}: {str(e)}")
                 # Create a fallback profile
@@ -2410,6 +2432,41 @@ Important:
         # auslösen würde, obwohl der Nutzer bereits abgebrochen hat.
         cancel_requested = False
 
+        # Codex-Finding PR #1452 (P1), Folgearbeit: dieselbe Budget-Race
+        # trifft die parallele Persona-Generierung. Ohne Deckelung pruefen
+        # alle Greenlets/Threads ``LLMClient._budget_check()`` gegen
+        # denselben Vor-Aufruf-Stand, bevor eine Antwort ihre Nutzung
+        # verbucht hat — ein hartes ``max_llm_calls``-Budget mit weniger
+        # verbleibenden Calls als ``parallel_count`` kann dadurch
+        # ueberschritten werden. Dispatch daher nie mit mehr gleichzeitig
+        # gestarteten Workern, als noch Calls frei sind. ``max(1, ...)``
+        # haelt die Poolgroesse bei erschoepftem Budget auf eins statt auf
+        # null: der eine Worker laeuft in ``BudgetExceededError``, und weil
+        # der jetzt bis nach oben durchschlaegt statt im breiten Handler zu
+        # landen, bricht die Stufe ab, statt still leer durchzulaufen.
+        #
+        # Anders als ``SimulationConfigGenerator`` haelt diese Klasse keinen
+        # ``LLMClient`` — ``generate_single_profile`` baut ihn pro Persona.
+        # Der Enforcer wird deshalb direkt befragt; eine Wegwerf-Instanz nur
+        # zum Auslesen wuerde Secret-Aufloesung, Client-Bau und eine
+        # zusaetzliche Audit-Zeile ausloesen und ohne API-Key scheitern,
+        # womit der Deckel ausgerechnet dann ausfiele, wenn er greifen soll.
+        remaining_budget: Optional[int] = None
+        if self.run_id:
+            try:
+                from .run_budget import RunBudgetEnforcer
+
+                enforcer = RunBudgetEnforcer.for_run(self.run_id)
+                if enforcer is not None:
+                    remaining_budget = enforcer.remaining_hard_calls()
+            except Exception as exc:  # noqa: BLE001 — Budget ist Zusatz, kein Hotpath-Risiko
+                logger.warning(
+                    "Persona-Generierung: verbleibendes Hartbudget nicht "
+                    "ermittelbar, Parallelitaet bleibt ungedeckelt: %s", exc
+                )
+        if remaining_budget is not None:
+            parallel_count = min(parallel_count, max(1, remaining_budget))
+
         if is_gevent:
             logger.info("Gevent detected: using native cooperative Pool for parallel persona generation")
             from gevent.pool import Pool
@@ -2419,6 +2476,8 @@ Important:
                 idx, entity = args
                 try:
                     return generate_single_profile(idx, entity)
+                except BudgetExceededError:
+                    raise
                 except Exception as e:  # noqa: BLE001
                     logger.error(f"Cooperative greenlet failed unexpectedly for entity {entity.name}: {str(e)}")
                     entity_type = entity.get_entity_type() or "Entity"
