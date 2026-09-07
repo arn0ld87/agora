@@ -424,7 +424,12 @@ class GraphToolsService:
                 simulation_id=simulation_id,
                 interviews=interviews_request,
                 platform=None,
-                timeout=180.0
+                timeout=180.0,
+                # Slice B4: die echte Lauf-run_id durchreichen, damit der
+                # Direktpfad (interview_direct._default_client_factory) den
+                # LLMClient mit run_id baut — Budget-Guard und Ledger sehen
+                # sonst keine Interview-Calls (#Slice-B4).
+                run_id=getattr(self._llm_client, "run_id", None),
             )
 
             logger.info(f"Interview API returned: {api_result.get('interviews_count', 0)} results, success={api_result.get('success')}")

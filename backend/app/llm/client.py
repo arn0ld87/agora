@@ -1157,9 +1157,29 @@ class LLMClient:
                 **call_kwargs,
             )
 
-        response = execute(
-            plan, _create_vision, quirks=(TOKEN_KEY_QUIRK,), label="vision"
-        )
+        # Budget-Guard VOR dem Provider-Call (analog zu ``_provider_attempt``
+        # im Textpfad): ``BudgetExceededError`` wird bewusst ungefangen
+        # durchgereicht — der Call ist noch nicht gestartet, es gibt also
+        # nichts zu loggen/zu recorden.
+        self._budget_check()
+        _vision_started = _time_mod.monotonic()
+        try:
+            response = execute(
+                plan, _create_vision, quirks=(TOKEN_KEY_QUIRK,), label="vision"
+            )
+        except Exception as exc:  # noqa: BLE001 — Failure-Telemetrie, weiterreichen
+            latency_ms = (_time_mod.monotonic() - _vision_started) * 1000.0
+            self._log_invocation_event(
+                stage="vision",
+                latency_ms=latency_ms,
+                success=False,
+                error_type=type(exc).__name__,
+                http_status=getattr(exc, "status_code", None),
+            )
+            self._budget_record()
+            raise
+        latency_ms = (_time_mod.monotonic() - _vision_started) * 1000.0
+        self._record_provider_success(response, latency_ms, context="vision")
         content = response.choices[0].message.content or ""
         content = re.sub(r'<think>[\s\S]*?</think>', '', content, flags=re.IGNORECASE).strip()
         return content

@@ -487,7 +487,7 @@ class TestClientFactory:
             interview_direct._default_client_factory(60.0, context)()
 
         assert len(attempts) == 2
-        assert attempts[1] == {"timeout": 60.0}
+        assert attempts[1] == {"timeout": 60.0, "run_id": None}
 
     def test_falls_back_and_logs_named_degradation_when_no_connection_resolves(
         self, monkeypatch
@@ -608,7 +608,7 @@ class TestClientFactory:
             interview_direct._default_client_factory(60.0, context)()
 
         assert len(captured) == 1
-        assert captured[0] == {"timeout": 60.0}
+        assert captured[0] == {"timeout": 60.0, "run_id": None}
         assert any("haelt kein nutzbares Secret" in w for w in warnings), warnings
 
     def test_falls_back_completely_when_base_url_points_elsewhere(
@@ -657,7 +657,7 @@ class TestClientFactory:
             interview_direct._default_client_factory(60.0, context)()
 
         assert len(captured) == 1
-        assert captured[0] == {"timeout": 60.0}
+        assert captured[0] == {"timeout": 60.0, "run_id": None}
         assert any(
             "zeigt nicht auf den globalen Endpunkt" in w for w in warnings
         ), warnings

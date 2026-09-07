@@ -122,11 +122,16 @@ def interview_agent(
     timeout: float = 60.0,
     *,
     run_state_dir: str,
+    run_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Interview a single agent.
 
     Uses IPC while an OASIS worker is polling; falls back to the in-process
     direct path (:mod:`interview_direct`) once the environment is closed.
+
+    ``run_id`` wird additiv an den Direktpfad durchgereicht (Budget-Guard/
+    Ledger, #Slice-B4) — der IPC-Pfad trackt sein Budget separat im
+    Worker-Prozess.
 
     Raises:
         ValueError: Simulation does not exist, or neither IPC nor persisted
@@ -145,6 +150,7 @@ def interview_agent(
             platform=platform,
             timeout=timeout,
             run_state_dir=run_state_dir,
+            run_id=run_id,
         )
 
     if not check_env_alive(simulation_id, run_state_dir=run_state_dir):
@@ -190,11 +196,16 @@ def interview_agents_batch(
     timeout: float = 120.0,
     *,
     run_state_dir: str,
+    run_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Batch-interview multiple agents.
 
     Uses IPC while an OASIS worker is polling; falls back to the in-process
     direct path (:mod:`interview_direct`) once the environment is closed.
+
+    ``run_id`` wird additiv an den Direktpfad durchgereicht (Budget-Guard/
+    Ledger, #Slice-B4) — der IPC-Pfad trackt sein Budget separat im
+    Worker-Prozess.
 
     Raises:
         ValueError: Simulation does not exist, or neither IPC nor persisted
@@ -212,6 +223,7 @@ def interview_agents_batch(
             platform,
             timeout,
             run_state_dir=run_state_dir,
+            run_id=run_id,
         )
 
     if not check_env_alive(simulation_id, run_state_dir=run_state_dir):

@@ -255,6 +255,12 @@ def _chat_with_tools(
             label="tools",
         )
 
+    # Budget-Guard VOR dem Provider-Call (analog zu ``_provider_attempt`` im
+    # Textpfad): ``BudgetExceededError`` wird bewusst ungefangen durchgereicht
+    # — der Call ist noch nicht gestartet, es gibt also nichts zu loggen/zu
+    # recorden (siehe Kommentar in ``_provider_attempt``).
+    self._budget_check()
+
     content: str = ""
     tool_calls: List[ToolCallItem] = []
     finish_reason: str = "stop"
