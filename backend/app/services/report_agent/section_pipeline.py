@@ -31,6 +31,7 @@ läuft ``agent`` → ``workflow`` → ``section_pipeline``.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
@@ -239,6 +240,43 @@ def _restore_persisted_section(
         content=section.content,
         restored=True,
     )
+
+
+def _remove_orphan_markdown(
+    ctx: SectionContext, *, section_index: int, title: str
+) -> None:
+    """Entfernt eine verwaiste Markdown-Datei, bevor die Sektion neu generiert wird.
+
+    Codex-Review PR #1475, Finding 1: ``process_section`` schreibt bei einer
+    Regeneration zuerst neue Evidence, dann neues Markdown (Commit-Marker).
+    Bliebe die alte, evidence-lose Markdown-Datei bis dahin liegen, sähe ein
+    Absturz zwischen beiden Schritten sowohl die neue Evidence als auch das
+    ALTE Markdown auf der Platte — ein nächster Resume würde das alte Markdown
+    gegen die neue Evidence restaurieren, obwohl beide aus unterschiedlichem
+    Inhalt stammen.
+    Einfachste Lösung statt einer Bindung beider Artefakte über einen
+    Generations-Identifier: die Waise sofort entfernen. Ohne Evidence-Eintrag
+    darf ohnehin niemand dem alten Inhalt vertrauen, ein Identifier-Abgleich
+    wäre hier reiner Mehraufwand für dasselbe Ergebnis.
+    """
+    stale_path = ctx.report_manager._get_section_path(ctx.report_id, section_index)
+    try:
+        if os.path.exists(stale_path):
+            os.remove(stale_path)
+            logger.info(
+                "section %d (%r): verwaiste Markdown-Datei entfernt (%s)",
+                section_index,
+                title,
+                stale_path,
+            )
+    except OSError as exc:
+        logger.warning(
+            "section %d (%r): verwaiste Markdown-Datei konnte nicht entfernt "
+            "werden: %s",
+            section_index,
+            title,
+            exc,
+        )
 
 
 def _generate_content(
@@ -532,6 +570,10 @@ def process_section(
             section_index,
             section.title,
         )
+        # Finding 1 (Codex-Review PR #1475): die Waise muss weg, BEVOR unten
+        # neue Evidence geschrieben wird — sonst überlebt sie einen Absturz
+        # zwischen Evidence- und Markdown-Schreiben als stille Inkonsistenz.
+        _remove_orphan_markdown(ctx, section_index=section_index, title=section.title)
 
     base_progress = ctx.base_progress_for(section_index)
     content = _generate_content(

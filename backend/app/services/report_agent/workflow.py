@@ -1610,7 +1610,19 @@ def generate_report(
         # erfolglos blieb — macht den Report ebenfalls höchstens INCOMPLETE.
         quote_validation_failed_section_indices: List[int] = []
         existing_sections = {item["section_index"]: item["content"] for item in ReportManager.get_generated_sections(report_id)}
+        # Issue Codex-Review PR #1475, Finding 2: Markdown ohne zugehörigen
+        # Evidence-Eintrag ist eine Waise (siehe process_section) — sie wird
+        # gleich neu generiert. Ungefiltert würde sie hier trotzdem in den
+        # Prompt-Kontext (previous_sections) und die Fortschrittsmeldung
+        # (completed_section_titles) einfließen und nach der Regeneration ein
+        # zweites Mal angehängt werden.
+        persisted_evidence_section_indices = {
+            s.get("section_index")
+            for s in (agent.evidence_map or {}).get("sections") or []
+        }
         for section_info in ReportManager.get_generated_sections(report_id):
+            if section_info["section_index"] not in persisted_evidence_section_indices:
+                continue
             title = outline.sections[section_info["section_index"] - 1].title if outline.sections and section_info["section_index"] <= len(outline.sections) else ""
             completed_section_titles.append(title)
             generated_sections.append(section_info["content"])
