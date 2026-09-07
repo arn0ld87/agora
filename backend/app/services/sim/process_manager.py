@@ -33,6 +33,7 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 from datetime import datetime
 from queue import Queue
 from typing import Any, Callable, Dict, List, Optional
@@ -65,6 +66,46 @@ def _resolve_child_path(base_dir: str, child_name: str, *, kind: str) -> Path:
     except ValueError as exc:
         raise ValueError(f"Invalid {kind} path") from exc
     return child
+
+
+CANCEL_ABORT_FILENAME = "cancel_abort.json"
+
+
+def _read_cancel_abort(sim_dir: str) -> Optional[Dict[str, Any]]:
+    """cancel_abort.json lesen (vom Monitor bei konsumiertem Cancel-Flag oder von
+    stop_simulation bei einem Nutzer-Stop geschrieben).
+
+    Beheimatet in process_manager.py statt monitor.py (Review-Fix B2,
+    2026-09-07): monitor.py importiert bereits lazy aus process_manager
+    (``terminate_run`` in ``_cancel_supervision``) — ein Re-Import in
+    Gegenrichtung haette einen Modul-Zyklus erzeugt.
+    """
+    import json
+
+    path = os.path.join(sim_dir, CANCEL_ABORT_FILENAME)
+    try:
+        with open(path, encoding="utf-8") as handle:
+            data = json.load(handle)
+        return data if isinstance(data, dict) else None
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return None
+
+
+def _write_cancel_abort(sim_dir: str, abort_info: Dict[str, Any]) -> None:
+    """First-writer-wins — analog zu ``_write_budget_abort`` in monitor.py."""
+    import json
+
+    path = os.path.join(sim_dir, CANCEL_ABORT_FILENAME)
+    if os.path.exists(path):
+        return
+    try:
+        tmp_path = f"{path}.tmp"
+        with open(tmp_path, "w", encoding="utf-8") as handle:
+            json.dump(abort_info, handle)
+            handle.write("\n")
+        os.replace(tmp_path, path)
+    except OSError as exc:
+        logger.warning("cancel abort marker write failed: %s", exc)
 
 # ---------------------------------------------------------------------------
 # Subprozess-Env-Whitelist (Code-Review 2026-05-17 §1.6)
@@ -429,6 +470,7 @@ def start_simulation(
 def stop_simulation(
     simulation_id: str,
     *,
+    run_state_dir: str,
     processes: Dict[str, subprocess.Popen],  # type: ignore[type-arg]
     graph_memory_enabled: Dict[str, bool],
     get_run_state: Callable[[str], Optional[SimulationRunState]],
@@ -439,6 +481,7 @@ def stop_simulation(
 
     Args:
         simulation_id:              Simulation ID.
+        run_state_dir:              ``SimulationRunner.RUN_STATE_DIR``.
         processes:                  ``SimulationRunner._processes``.
         graph_memory_enabled:       ``SimulationRunner._graph_memory_enabled``.
         get_run_state:              Callable to load current run state.
@@ -459,6 +502,13 @@ def stop_simulation(
 
     state.runner_status = RunnerStatus.STOPPING
     save_state(state)
+
+    # Nutzer-Stop-Marker (B2, Issue-Review 2026-09-07): VOR dem Terminieren
+    # schreiben, damit monitor_simulation den SIGTERM-Exit (returncode -15)
+    # nicht faelschlich als FAILED klassifiziert, sondern als STOPPED mit
+    # termination_reason="user_stop" erkennt.
+    sim_dir = _resolve_child_path(run_state_dir, simulation_id, kind="simulation")
+    _write_cancel_abort(str(sim_dir), {"source": "user_stop", "ts": time.time()})
 
     # Terminate process
     process = processes.get(simulation_id)

@@ -57,6 +57,7 @@ Agora besitzt eine vollständige fachliche Grundpipeline:
 - Compare-, Graph-Diff- und Observability-Grundlagen
 - fortsetzbare Embedding-Migration für Entity- und Fact-Vektoren
 - Kosten-, Token- und Zeitbudgets für Runs ([#764](https://github.com/arn0ld87/agora/issues/764), ADR-0012): Preflight-Schätzung mit ehrlichen Bereichen, weiche/harte Limits pro Run, Live-Verbrauchsmonitor, Abschlussanalyse nach Stage/Provider/Modell, Budgetabbruch über `termination_reason` von Fehler/Nutzerabbruch unterscheidbar, Verbrauch im Report-Export. Die harte Durchsetzung im Report-Pfad ist seit [#978](https://github.com/arn0ld87/agora/issues/978) (31.07.2026) korrekt — ein Budgetabbruch endet auf `stopped`, nicht mehr auf `completed`
+- **Nutzer-Stop und Force-Restart enden im korrekten Laufzustand** (Issue-Review 07.09.2026): Ein per Stop beendeter Lauf trägt `stopped` mit `termination_reason="user_stop"` statt fälschlich `failed`/`error` — `stop_simulation` schreibt den Marker vor dem SIGTERM, der Monitor wertet dessen `source`-Feld aus (`backend-monitor`-Marker bleiben `user_cancel`). Ein Force-Restart derselben `simulation_id` erzeugt keine Orphan-Finalisierung mehr: Monitore tragen einen Generation-Token, veraltete überspringen Finalisierung und den `processes.pop` (Identitätscheck), und `stop_simulation` joint den Monitor-Thread mit Timeout.
 
 Nach dem `0.9.4`-Schnitt (09.08.2026) bis zum `0.9.5`-Schnitt (11.08.2026) kam hinzu:
 

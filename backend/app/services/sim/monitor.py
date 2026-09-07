@@ -25,6 +25,7 @@ from ...observability import sim_active_gauge, sim_counter, sim_duration_histogr
 from ...utils.logger import get_logger
 from .action_log_reader import get_actions as _get_actions
 from .action_log_reader import read_action_log_chunk
+from .process_manager import _read_cancel_abort, _write_cancel_abort
 from .run_state_store import RunnerStatus, SimulationRunState
 
 logger = get_logger("agora.monitor")
@@ -169,40 +170,9 @@ def _write_budget_abort(sim_dir: str, abort_info: Dict[str, Any]) -> None:
         logger.warning("budget abort marker write failed: %s", exc)
 
 
-CANCEL_ABORT_FILENAME = "cancel_abort.json"
 # Sekunden zwischen SIGTERM und SIGKILL beim Cancel eines laufenden
 # OASIS-Subprozesses (Issue #1082).
 CANCEL_GRACE_SECONDS = 10.0
-
-
-def _read_cancel_abort(sim_dir: str) -> Optional[Dict[str, Any]]:
-    """cancel_abort.json lesen (vom Monitor bei konsumiertem Cancel-Flag geschrieben)."""
-    import json
-
-    path = os.path.join(sim_dir, CANCEL_ABORT_FILENAME)
-    try:
-        with open(path, encoding="utf-8") as handle:
-            data = json.load(handle)
-        return data if isinstance(data, dict) else None
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return None
-
-
-def _write_cancel_abort(sim_dir: str, abort_info: Dict[str, Any]) -> None:
-    """First-writer-wins — analog zu ``_write_budget_abort``."""
-    import json
-
-    path = os.path.join(sim_dir, CANCEL_ABORT_FILENAME)
-    if os.path.exists(path):
-        return
-    try:
-        tmp_path = f"{path}.tmp"
-        with open(tmp_path, "w", encoding="utf-8") as handle:
-            json.dump(abort_info, handle)
-            handle.write("\n")
-        os.replace(tmp_path, path)
-    except OSError as exc:
-        logger.warning("cancel abort marker write failed: %s", exc)
 
 
 def _cancel_supervision(
@@ -339,12 +309,23 @@ def monitor_simulation(
     stderr_files: Dict[str, Any],
     get_run_state: Callable[[str], Optional[SimulationRunState]],
     save_state: Callable[[SimulationRunState], None],
+    generation: int = 0,
+    is_current_generation: Optional[Callable[[str, int], bool]] = None,
 ) -> None:
     """Daemon-thread target that tails action logs and updates run state.
 
     All ``cls.*`` references from ``SimulationRunner._monitor_simulation`` are
     replaced by explicit keyword parameters; ``save_state`` avoids a circular
     import.
+
+    ``generation`` / ``is_current_generation`` (B3, Issue-Review 2026-09-07):
+    a force-restart (``stop_simulation`` immediately followed by
+    ``start_simulation`` for the same ``simulation_id``) spawns a second
+    monitor thread while the first one may still be finishing up. Without a
+    generation guard the stale first monitor can, after the new run has
+    already registered its process, overwrite ``run_state.json`` and the
+    registry with its own (outdated) terminal state. Callers that don't pass
+    these (e.g. existing direct-call tests) keep the old unguarded behaviour.
     """
     sim_dir = os.path.join(run_state_dir, simulation_id)
 
@@ -415,6 +396,27 @@ def monitor_simulation(
 
         # Process ended
         exit_code = process.returncode
+
+        # Generation-Guard (B3, Issue-Review 2026-09-07): ein Force-Restart
+        # (stop_simulation direkt gefolgt von start_simulation fuer dieselbe
+        # simulation_id) startet einen zweiten Monitor-Thread, waehrend dieser
+        # (aeltere) hier gerade erst sein eigenes Prozessende verarbeitet. Ist
+        # unsere Generation nicht mehr aktuell, gehoert der neue Lauf bereits
+        # einem anderen Monitor — kein save_state/RunRegistry/Manifest-Write
+        # mehr, sonst ueberschreiben wir den neuen Run mit unserem veralteten
+        # Endzustand. Der ``finally``-Block laeuft trotzdem (Cleanup), aber
+        # ``processes.pop`` ist dort zusaetzlich per Identitaetscheck geschuetzt.
+        if is_current_generation is not None and not is_current_generation(
+            simulation_id, generation
+        ):
+            logger.warning(
+                "Monitor-Generation veraltet, ueberspringe Finalisierung: "
+                "simulation_id=%s, generation=%s",
+                simulation_id,
+                generation,
+            )
+            return
+
         elapsed_seconds = _compute_elapsed_seconds(state.started_at)
         # Issue #763 (Ticket 9): STOPPED ist mehrdeutig (Nutzer-Cancel vs.
         # Budget-Abort) — dieser Zweig trägt den genauen Grund für die
@@ -431,9 +433,21 @@ def monitor_simulation(
         # aber kein "completed". Budgetabbruch ≠ technischer Fehler.
         budget_abort = _read_budget_abort(sim_dir)
         if cancel_abort is not None:
+            # B2 (Issue-Review 2026-09-07): ``source`` unterscheidet einen
+            # expliziten Nutzer-Stop (process_manager.stop_simulation) von
+            # einem konsumierten Cancel-Flag (_cancel_supervision,
+            # source="backend-monitor"). Fehlt ``source`` oder ist er weder
+            # "user_stop" noch bekannt, bleibt das bisherige Verhalten
+            # "user_cancel" erhalten (Rueckwaertskompatibilitaet mit
+            # vorhandenen Markern und mit source="backend-monitor").
+            cancel_source = cancel_abort.get("source")
+            cancel_termination_reason = (
+                "user_stop" if cancel_source == "user_stop" else "user_cancel"
+            )
             state.runner_status = RunnerStatus.STOPPED
             state.completed_at = datetime.now().isoformat()
             state.error = None
+            manifest_termination_reason = cancel_termination_reason
             sim_active_gauge().add(-1)
             sim_counter().add(1, {"status": "cancelled"})
             sim_duration_histogram().record(elapsed_seconds, {"status": "cancelled"})
@@ -455,12 +469,12 @@ def monitor_simulation(
                     RunRegistry().update_run(
                         run_id,
                         status="stopped",
-                        termination_reason="user_cancel",
+                        termination_reason=cancel_termination_reason,
                         message=(
                             "Cancel bestätigt — OASIS-Subprozess beendet, "
                             "Teilergebnisse bleiben erhalten"
                         ),
-                        event_type="user_cancel",
+                        event_type=cancel_termination_reason,
                         event_details={"exit_code": exit_code},
                     )
                     clear_cancel(run_id)
@@ -585,7 +599,13 @@ def monitor_simulation(
             graph_memory_enabled.pop(simulation_id, None)
 
         # Clean up process resources
-        processes.pop(simulation_id, None)
+        # B3 (Issue-Review 2026-09-07): nur das eigene Popen-Objekt entfernen —
+        # ein Force-Restart kann processes[simulation_id] laengst durch den
+        # Prozess eines neuen (zweiten) Monitor-Threads ersetzt haben. Ohne
+        # diesen Identitaetscheck riss der alte (stale) Monitor hier den
+        # frisch gestarteten Prozess aus der Registry.
+        if processes.get(simulation_id) is process:
+            processes.pop(simulation_id, None)
         action_queues.pop(simulation_id, None)
 
         # Close log file handles
