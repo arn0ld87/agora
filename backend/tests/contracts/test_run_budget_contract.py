@@ -15,8 +15,10 @@ from app.contracts.run_budget_contract import (
     RunBudgetConfig,
     RunBudgetStatus,
     RunUsage,
+    TerminationReason,
     UsageMetrics,
 )
+from app.contracts.runs_contract import RunDetail
 
 
 def _config(**overrides) -> dict:
@@ -206,3 +208,32 @@ class TestPreflightEstimate:
             data_quality="low",
         )
         assert e.models[0].cost_status == "free"
+
+
+class TestTerminationReasonProcessRestart:
+    """Tech-Review 2026-09-07 Slice B1: additiver Wert für die
+    Startup-Reconciliation verwaister Runs (kein neuer RunStatus)."""
+
+    def _run_detail(self, **overrides) -> RunDetail:
+        base = dict(
+            run_id="run_1",
+            run_type="simulation_run",
+            entity_id="sim_1",
+            status="failed",
+            progress=0,
+            started_at="2026-09-08T00:00:00",
+            updated_at="2026-09-08T00:00:00",
+        )
+        base.update(overrides)
+        return RunDetail(**base)
+
+    def test_process_restart_is_a_valid_literal_value(self):
+        assert "process_restart" in TerminationReason.__args__
+
+    def test_run_detail_accepts_process_restart(self):
+        detail = self._run_detail(termination_reason="process_restart")
+        assert detail.termination_reason == "process_restart"
+
+    def test_run_detail_rejects_unknown_termination_reason(self):
+        with pytest.raises(ValidationError):
+            self._run_detail(termination_reason="not_a_real_reason")

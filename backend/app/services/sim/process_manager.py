@@ -58,6 +58,32 @@ def _validate_simulation_id(simulation_id: str) -> None:
         raise ValueError("Invalid simulation_id")
 
 
+def is_process_alive(pid: Optional[int]) -> bool:
+    """True wenn ``pid`` einen (noch) existierenden Prozess bezeichnet.
+
+    Liveness-Muster wie ``SimulationIPCClient.check_env_alive``
+    (``simulation_ipc.py``): ``os.kill(pid, 0)`` sendet kein Signal, prüft
+    nur Existenz/Berechtigung.
+
+    ``pid`` fehlend/``None``/``<= 0`` → tot (konservativ: kein PID heißt kein
+    verifizierbarer laufender Prozess). ``ProcessLookupError`` → tot.
+    ``PermissionError`` → Prozess existiert, gehört aber jemand anderem —
+    im Container unwahrscheinlich, wird konservativ als lebend behandelt
+    (Tech-Review 2026-09-07 Slice B1, Fix-Punkt 1/3).
+    """
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
 def _resolve_child_path(base_dir: str, child_name: str, *, kind: str) -> Path:
     base = Path(base_dir).expanduser().resolve()
     child = (base / child_name).resolve()
@@ -356,10 +382,22 @@ def start_simulation(
     """
     _validate_simulation_id(simulation_id)
 
-    # Check if already running
+    # Check if already running. Ein persistierter RUNNING/STARTING-Status
+    # allein ist kein Beweis: nach einem Container-Restart existiert der
+    # Subprozess nicht mehr, aber run_state.json wurde nie aktualisiert
+    # (Tech-Review 2026-09-07 Slice B1). Deshalb per PID-Liveness prüfen,
+    # bevor der Start verweigert wird.
     existing = get_run_state(simulation_id)
     if existing and existing.runner_status in [RunnerStatus.RUNNING, RunnerStatus.STARTING]:
-        raise ValueError(f"Simulation already running: {simulation_id}")
+        if is_process_alive(existing.process_pid):
+            raise ValueError(f"Simulation already running: {simulation_id}")
+        logger.warning(
+            "Stale %s state for %s: process_pid=%s is not alive — correcting state and allowing restart",
+            existing.runner_status.value, simulation_id, existing.process_pid,
+        )
+        existing.runner_status = RunnerStatus.FAILED
+        existing.error = "Prozess-Neustart während des Runs"
+        save_state(existing)
 
     if not config_exists(simulation_id):
         raise ValueError("Simulation config does not exist, call /prepare endpoint first")

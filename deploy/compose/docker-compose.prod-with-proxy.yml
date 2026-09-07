@@ -21,6 +21,10 @@
 
 services:
   agora:
+    # Siehe docker-compose.yml: gunicorn graceful_timeout=30, Docker-Default
+    # (10s) reicht dafuer nicht.
+    stop_grace_period: 45s
+    init: true
     # Backend-Port wird nicht mehr auf den Host veroeffentlicht.
     # Der Sidecar erreicht agora ueber das Compose-interne Netzwerk (agora:5001).
     ports: !reset []

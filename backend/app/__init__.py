@@ -315,6 +315,31 @@ def create_app(config_class=Config):
     if should_log_startup:
         logger.info("Simulation process cleanup function registered")
 
+    # Startup-Reconciliation (Tech-Review 2026-09-07 Slice B1): nach einem
+    # Container-/Prozess-Neustart bleiben Runs sonst für immer als
+    # "laufend" markiert, weil kein Subprozess mehr existiert, der ihren
+    # Zustand je wieder aktualisieren würde. Ein Fehler hier darf den
+    # App-Start nicht verhindern — best effort, geloggt.
+    if app.config.get("AGORA_STARTUP_RECONCILIATION", True):
+        try:
+            from .services.run_registry import RunRegistry
+            from .services.sim.reconciliation import reconcile_stale_runs
+
+            reconciliation_result = reconcile_stale_runs(
+                RunRegistry(), SimulationRunner.RUN_STATE_DIR
+            )
+            if should_log_startup:
+                logger.info(
+                    "Startup-Reconciliation: %d Run(s) als process_restart markiert, %d unveraendert",
+                    len(reconciliation_result.reconciled_run_ids),
+                    len(reconciliation_result.skipped_run_ids),
+                )
+        except Exception:  # noqa: BLE001 — App-Start darf nie an der Reconciliation scheitern
+            logger.error(
+                "Startup-Reconciliation fehlgeschlagen — App-Start läuft trotzdem weiter",
+                exc_info=True,
+            )
+
     # Request-ID middleware + request/response logging
     req_logger = get_logger('agora.request')
 
