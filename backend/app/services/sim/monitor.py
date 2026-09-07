@@ -298,6 +298,23 @@ def _compute_elapsed_seconds(started_at: Optional[str]) -> float:
         return 0.0
 
 
+def _generation_is_stale(
+    simulation_id: str,
+    generation: int,
+    is_current_generation: Optional[Callable[[str, int], bool]],
+) -> bool:
+    """True, wenn ein Force-Restart diese Monitor-Generation ueberholt hat.
+
+    Zentraler Guard-Helper (Codex-Review PR #1474): ohne ``is_current_generation``
+    (bestehende Direktaufrufe von ``monitor_simulation`` ohne den Hook) gilt eine
+    Generation nie als veraltet — Rueckwaertskompatibilitaet mit vorhandenen
+    Tests bleibt zwingend erhalten.
+    """
+    return is_current_generation is not None and not is_current_generation(
+        simulation_id, generation
+    )
+
+
 def monitor_simulation(
     simulation_id: str,
     *,
@@ -339,6 +356,15 @@ def monitor_simulation(
     if not process or not state:
         return
 
+    # Identitaets-Anker fuer den finally-Block (Codex-Review PR #1474): ein
+    # ueberholter Monitor, der den Join-Timeout nach einem Force-Restart
+    # ueberlebt, darf nur die Ressourcen abraeumen, die ER selbst beim Start
+    # vorgefunden hat — nicht die, die der NEUE Lauf inzwischen eingetragen
+    # hat.
+    own_action_queue = action_queues.get(simulation_id)
+    own_stdout = stdout_files.get(simulation_id)
+    own_stderr = stderr_files.get(simulation_id)
+
     twitter_position = 0
     reddit_position = 0
 
@@ -371,6 +397,21 @@ def monitor_simulation(
             # Cancel-Supervision (Issue #1082): Cancel-Flag konsumieren und
             # den OASIS-Subprozess beenden — poll() beendet danach die Schleife.
             _cancel_supervision(simulation_id, sim_dir, processes=processes)
+
+            # Generation-Guard (Codex-Review PR #1474): laeuft der alte
+            # Monitor nach einem Force-Restart noch eine Schleifeniteration,
+            # wuerde ``save_state`` hier den State des NEUEN Laufs mit dem
+            # (veralteten) Snapshot dieses Threads ueberschreiben. Schleife
+            # verlassen (``return`` innerhalb des ``try``), der ``finally``-
+            # Block raeumt trotzdem auf.
+            if _generation_is_stale(simulation_id, generation, is_current_generation):
+                logger.warning(
+                    "Monitor-Generation veraltet, ueberspringe Schleifen-Write: "
+                    "simulation_id=%s, generation=%s",
+                    simulation_id,
+                    generation,
+                )
+                return
 
             # Update status
             save_state(state)
@@ -406,9 +447,7 @@ def monitor_simulation(
         # mehr, sonst ueberschreiben wir den neuen Run mit unserem veralteten
         # Endzustand. Der ``finally``-Block laeuft trotzdem (Cleanup), aber
         # ``processes.pop`` ist dort zusaetzlich per Identitaetscheck geschuetzt.
-        if is_current_generation is not None and not is_current_generation(
-            simulation_id, generation
-        ):
+        if _generation_is_stale(simulation_id, generation, is_current_generation):
             logger.warning(
                 "Monitor-Generation veraltet, ueberspringe Finalisierung: "
                 "simulation_id=%s, generation=%s",
@@ -568,6 +607,21 @@ def monitor_simulation(
 
     except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.error(f"Monitor thread exception: {simulation_id}, error={str(e)}")
+
+        # Generation-Guard (Codex-Review PR #1474): ein Crash in diesem
+        # (veralteten) Monitor-Thread darf den NEUEN Lauf nicht als failed
+        # markieren — weder Metrik-Mutation noch save_state noch
+        # Manifest-Write gehoeren noch zu diesem Prozess, wenn ein
+        # Force-Restart die Generation laengst weitergezaehlt hat.
+        if _generation_is_stale(simulation_id, generation, is_current_generation):
+            logger.warning(
+                "Monitor-Generation veraltet, ueberspringe Exception-Finalisierung: "
+                "simulation_id=%s, generation=%s",
+                simulation_id,
+                generation,
+            )
+            return
+
         elapsed_seconds = _compute_elapsed_seconds(state.started_at)
         # Slice 2b: Sim-Lifecycle-Metric — RUNNING → FAILED (Exception-Pfad)
         sim_active_gauge().add(-1)
@@ -586,17 +640,28 @@ def monitor_simulation(
 
     finally:
         # Stop graph memory updater
+        # Generation-Guard (Codex-Review PR #1474): ein ueberholter Monitor
+        # darf den Graph-Memory-Updater des NEUEN Laufs nicht stoppen — sonst
+        # verliert der aktuelle Lauf seine laufende Graph-Memory-Aktualisierung.
         if graph_memory_enabled.get(simulation_id, False):
-            try:
-                # Lazy import to avoid hard cycle — GraphMemoryManager imports nothing
-                # from this module.
-                from ..graph_memory_updater import GraphMemoryManager  # noqa: PLC0415
+            if _generation_is_stale(simulation_id, generation, is_current_generation):
+                logger.info(
+                    "Monitor-Generation veraltet, ueberspringe Graph-Memory-Cleanup: "
+                    "simulation_id=%s, generation=%s",
+                    simulation_id,
+                    generation,
+                )
+            else:
+                try:
+                    # Lazy import to avoid hard cycle — GraphMemoryManager imports nothing
+                    # from this module.
+                    from ..graph_memory_updater import GraphMemoryManager  # noqa: PLC0415
 
-                GraphMemoryManager.stop_updater(simulation_id)
-                logger.info(f"Graph memory update stopped: simulation_id={simulation_id}")
-            except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
-                logger.error(f"Failed to stop graph memory updater: {e}")
-            graph_memory_enabled.pop(simulation_id, None)
+                    GraphMemoryManager.stop_updater(simulation_id)
+                    logger.info(f"Graph memory update stopped: simulation_id={simulation_id}")
+                except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
+                    logger.error(f"Failed to stop graph memory updater: {e}")
+                graph_memory_enabled.pop(simulation_id, None)
 
         # Clean up process resources
         # B3 (Issue-Review 2026-09-07): nur das eigene Popen-Objekt entfernen —
@@ -606,18 +671,26 @@ def monitor_simulation(
         # frisch gestarteten Prozess aus der Registry.
         if processes.get(simulation_id) is process:
             processes.pop(simulation_id, None)
-        action_queues.pop(simulation_id, None)
+
+        # Identitaetscheck fuer alle uebrigen per-simulation_id-Ressourcen
+        # (Codex-Review PR #1474): dieselbe Ueberholt-Race wie bei
+        # ``processes`` gilt fuer action_queues/stdout_files/stderr_files —
+        # ein ueberholter Monitor darf nur die Eintraege abraeumen, die er
+        # selbst beim Start vorgefunden hat (``own_*``), nicht die bereits
+        # vom NEUEN Lauf eingetragenen.
+        if own_action_queue is not None and action_queues.get(simulation_id) is own_action_queue:
+            action_queues.pop(simulation_id, None)
 
         # Close log file handles
-        if simulation_id in stdout_files:
+        if own_stdout is not None and stdout_files.get(simulation_id) is own_stdout:
             try:
-                stdout_files[simulation_id].close()
+                own_stdout.close()
             except Exception as exc:  # noqa: BLE001 — close file handle on cleanup; exc discarded
                 logger.debug("monitor: file handle close failed, ignoring: %s", exc)
             stdout_files.pop(simulation_id, None)
-        if simulation_id in stderr_files and stderr_files[simulation_id]:
+        if own_stderr is not None and stderr_files.get(simulation_id) is own_stderr:
             try:
-                stderr_files[simulation_id].close()
+                own_stderr.close()
             except Exception as exc:  # noqa: BLE001 — close file handle on cleanup; exc discarded
                 logger.debug("monitor: file handle close failed, ignoring: %s", exc)
             stderr_files.pop(simulation_id, None)

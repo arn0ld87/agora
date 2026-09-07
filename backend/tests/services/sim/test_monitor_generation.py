@@ -95,6 +95,23 @@ class _FinishedProcess:
         return self.returncode
 
 
+class _AlwaysRunningProcess:
+    """Prozess, der nie beendet — treibt die while-Schleife beliebig oft an."""
+
+    def poll(self):
+        return None
+
+
+class _FakeFile:
+    """Minimaler Datei-Stub für stdout_files/stderr_files-Cleanup-Tests."""
+
+    def __init__(self):
+        self.closed = False
+
+    def close(self):
+        self.closed = True
+
+
 class TestStaleMonitorAfterForceRestart:
     def test_stale_monitor_neither_finalizes_new_run_nor_pops_new_process(
         self, env
@@ -264,4 +281,249 @@ class TestBackwardCompatibleDefaults:
 
         assert state.runner_status == RunnerStatus.COMPLETED
         assert saved_states[-1] is state
+        assert _read_manifest_status(tmp_path, run_id) == "final"
+
+
+class TestStaleGenerationSkipsLoopWrite:
+    """Codex-Review PR #1474, Finding 1: Generation vor JEDEM Write prüfen —
+    nicht nur im Terminal-Pfad, sondern auch vor ``save_state`` innerhalb der
+    while-Schleife."""
+
+    def test_stale_after_first_iteration_stops_save_state_and_terminal_path(
+        self, env, monkeypatch
+    ):
+        """Wird die Generation MITTEN in der Schleife veraltet (Force-Restart
+        während der alte Monitor noch eine Iteration läuft), darf
+        ``save_state`` danach nicht mehr aufgerufen werden — und der
+        Terminal-Pfad (Exit-Code-Auswertung, Manifest-Finalisierung) darf gar
+        nicht erst laufen."""
+        tmp_path = env
+        run_id = _create_run_with_draft(tmp_path)
+        run_state_dir = str(tmp_path / "sims")
+        (tmp_path / "sims" / SIM_ID).mkdir(parents=True)
+
+        # Kein echtes Sleep in Tests — die Schleife soll ohne Wartezeit
+        # mehrfach durchlaufen.
+        monkeypatch.setattr("app.services.sim.monitor.time.sleep", lambda _s: None)
+
+        state = SimulationRunState(
+            simulation_id=SIM_ID,
+            runner_status=RunnerStatus.RUNNING,
+            started_at=datetime.now().isoformat(),
+        )
+        saved_states = []
+        calls = {"n": 0}
+
+        def is_current_generation(sim_id, generation):
+            calls["n"] += 1
+            return calls["n"] == 1  # nur die erste Iteration gilt noch als aktuell
+
+        monitor_simulation(
+            SIM_ID,
+            run_state_dir=run_state_dir,
+            processes={SIM_ID: _AlwaysRunningProcess()},
+            graph_memory_enabled={},
+            action_queues={},
+            stdout_files={},
+            stderr_files={},
+            get_run_state=lambda sim_id: state,
+            save_state=lambda s: saved_states.append(s),
+            generation=1,
+            is_current_generation=is_current_generation,
+        )
+
+        assert len(saved_states) == 1
+        assert state.runner_status == RunnerStatus.RUNNING
+        assert state.completed_at is None
+        assert _read_manifest_status(tmp_path, run_id) == "draft"
+
+
+class TestStaleGenerationSkipsExceptionFinalization:
+    """Codex-Review PR #1474, Finding 1: der except-Handler darf bei
+    veralteter Generation weder Metriken mutieren noch ``save_state`` noch
+    ``_finalize_manifest_for_simulation`` aufrufen."""
+
+    def test_stale_generation_exception_path_skips_failed_write(
+        self, env, monkeypatch
+    ):
+        tmp_path = env
+        run_id = _create_run_with_draft(tmp_path)
+        run_state_dir = str(tmp_path / "sims")
+        sim_dir = tmp_path / "sims" / SIM_ID
+        (sim_dir / "twitter").mkdir(parents=True)
+        (sim_dir / "twitter" / "actions.jsonl").write_text("{}\n", encoding="utf-8")
+
+        def _boom(*args, **kwargs):
+            raise RuntimeError("boom in loop body")
+
+        monkeypatch.setattr("app.services.sim.monitor.read_action_log_chunk", _boom)
+
+        finalize_calls = []
+        monkeypatch.setattr(
+            "app.services.sim.monitor._finalize_manifest_for_simulation",
+            lambda *a, **kw: finalize_calls.append((a, kw)),
+        )
+
+        state = SimulationRunState(
+            simulation_id=SIM_ID,
+            runner_status=RunnerStatus.RUNNING,
+            started_at=datetime.now().isoformat(),
+        )
+        saved_states = []
+
+        monitor_simulation(
+            SIM_ID,
+            run_state_dir=run_state_dir,
+            processes={SIM_ID: _AlwaysRunningProcess()},
+            graph_memory_enabled={},
+            action_queues={},
+            stdout_files={},
+            stderr_files={},
+            get_run_state=lambda sim_id: state,
+            save_state=lambda s: saved_states.append(s),
+            generation=1,
+            is_current_generation=lambda sid, gen: False,
+        )
+
+        assert not saved_states
+        assert state.runner_status == RunnerStatus.RUNNING
+        assert not finalize_calls
+        assert _read_manifest_status(tmp_path, run_id) == "draft"
+
+
+class TestStaleGenerationDoesNotCleanUpForeignResources:
+    """Codex-Review PR #1474, Finding 2: Cleanup im finally-Block nur für die
+    eigenen Ressourcen, die der ueberholte Monitor selbst vorgefunden hat —
+    nicht fuer die vom NEUEN Lauf inzwischen eingetragenen."""
+
+    def test_stale_monitor_leaves_new_action_queue_and_files_and_graph_memory_untouched(
+        self, env, monkeypatch
+    ):
+        tmp_path = env
+        _create_run_with_draft(tmp_path)
+        run_state_dir = str(tmp_path / "sims")
+        (tmp_path / "sims" / SIM_ID).mkdir(parents=True)
+
+        old_action_queue = object()
+        old_stdout = _FakeFile()
+        old_stderr = _FakeFile()
+        new_action_queue = object()
+        new_stdout = _FakeFile()
+        new_stderr = _FakeFile()
+
+        action_queues = {SIM_ID: old_action_queue}
+        stdout_files = {SIM_ID: old_stdout}
+        stderr_files = {SIM_ID: old_stderr}
+        graph_memory_enabled = {SIM_ID: True}
+
+        def swap_in_new_run(*args, **kwargs):
+            """Simuliert einen Force-Restart waehrend der alte Monitor noch
+            seine erste Schleifeniteration ausfuehrt — der neue Lauf ersetzt
+            seine eigenen Eintraege, waehrend der alte Monitor noch laeuft."""
+            action_queues[SIM_ID] = new_action_queue
+            stdout_files[SIM_ID] = new_stdout
+            stderr_files[SIM_ID] = new_stderr
+            return None
+
+        monkeypatch.setattr(
+            "app.services.sim.monitor._budget_supervision", swap_in_new_run
+        )
+        stop_updater_calls = []
+        monkeypatch.setattr(
+            "app.services.graph_memory_updater.GraphMemoryManager.stop_updater",
+            lambda sim_id: stop_updater_calls.append(sim_id),
+        )
+
+        state = SimulationRunState(
+            simulation_id=SIM_ID,
+            runner_status=RunnerStatus.RUNNING,
+            started_at=datetime.now().isoformat(),
+        )
+
+        monitor_simulation(
+            SIM_ID,
+            run_state_dir=run_state_dir,
+            processes={SIM_ID: _AlwaysRunningProcess()},
+            graph_memory_enabled=graph_memory_enabled,
+            action_queues=action_queues,
+            stdout_files=stdout_files,
+            stderr_files=stderr_files,
+            get_run_state=lambda sim_id: state,
+            save_state=lambda s: None,
+            generation=1,
+            is_current_generation=lambda sid, gen: False,
+        )
+
+        # Die neuen Eintraege des NEUEN Laufs bleiben unangetastet.
+        assert action_queues[SIM_ID] is new_action_queue
+        assert stdout_files[SIM_ID] is new_stdout
+        assert stderr_files[SIM_ID] is new_stderr
+        assert not new_stdout.closed
+        assert not new_stderr.closed
+
+        # Der alte Monitor schliesst auch sein EIGENES Handle nicht mehr
+        # selbst (es gehoert nicht mehr zum aktuellen Dict-Eintrag) — der
+        # Identitaetscheck ist bewusst rein additiv (kein zusaetzliches
+        # Schliessen fremder/verwaister Handles im Scope dieses Fixes).
+        assert not old_stdout.closed
+
+        # Graph-Memory-Updater des NEUEN Laufs bleibt am Leben.
+        assert not stop_updater_calls
+        assert graph_memory_enabled[SIM_ID] is True
+
+
+class TestNonStaleGenerationStillCleansUpFully:
+    """Positivfall (Codex-Review PR #1474): ohne Ueberholung muss der
+    Cleanup unveraendert vollstaendig laufen — die Guards duerfen normale
+    Laeufe nicht ausbremsen."""
+
+    def test_non_stale_monitor_pops_and_closes_own_resources(self, env, monkeypatch):
+        tmp_path = env
+        run_id = _create_run_with_draft(tmp_path)
+        run_state_dir = str(tmp_path / "sims")
+        (tmp_path / "sims" / SIM_ID).mkdir(parents=True)
+
+        own_action_queue = object()
+        own_stdout = _FakeFile()
+        own_stderr = _FakeFile()
+
+        action_queues = {SIM_ID: own_action_queue}
+        stdout_files = {SIM_ID: own_stdout}
+        stderr_files = {SIM_ID: own_stderr}
+        graph_memory_enabled = {SIM_ID: True}
+
+        stop_updater_calls = []
+        monkeypatch.setattr(
+            "app.services.graph_memory_updater.GraphMemoryManager.stop_updater",
+            lambda sim_id: stop_updater_calls.append(sim_id),
+        )
+
+        state = SimulationRunState(
+            simulation_id=SIM_ID,
+            runner_status=RunnerStatus.RUNNING,
+            started_at=datetime.now().isoformat(),
+        )
+
+        monitor_simulation(
+            SIM_ID,
+            run_state_dir=run_state_dir,
+            processes={SIM_ID: _FinishedProcess(returncode=0)},
+            graph_memory_enabled=graph_memory_enabled,
+            action_queues=action_queues,
+            stdout_files=stdout_files,
+            stderr_files=stderr_files,
+            get_run_state=lambda sim_id: state,
+            save_state=lambda s: None,
+            generation=1,
+            is_current_generation=lambda sid, gen: True,
+        )
+
+        assert stop_updater_calls == [SIM_ID]
+        assert SIM_ID not in action_queues
+        assert SIM_ID not in stdout_files
+        assert SIM_ID not in stderr_files
+        assert SIM_ID not in graph_memory_enabled
+        assert own_stdout.closed
+        assert own_stderr.closed
+        assert state.runner_status == RunnerStatus.COMPLETED
         assert _read_manifest_status(tmp_path, run_id) == "final"
