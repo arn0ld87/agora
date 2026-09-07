@@ -21,6 +21,8 @@ import logging
 import types
 from unittest.mock import MagicMock
 
+import pytest
+
 from app.services.degradation_collector import DegradationCollector
 from app.services.entity_reader import EntityNode, FilteredEntities
 from app.services.persona_eligibility import (
@@ -373,3 +375,126 @@ def test_phase_generate_profiles_passes_collector_to_generator(monkeypatch, tmp_
     )
 
     assert captured.get("degradations") is collector
+
+
+class TestCompoundOntologyTypes:
+    """Zusammengesetzte Typen aus generierten Ontologien (Produktionsbefund 07.09.2026).
+
+    Die Blockliste vergleicht exakt, die Ontologie generiert ihre Typen aber
+    frei und zusammengesetzt. ``LearningTechnology`` traf ``technology`` nie,
+    ``SuccessCriterion`` nie ``metric`` — 82 von 118 Entitaeten liefen als
+    "unbekannter Typ" ins Gate und kosteten dort je einen vollstaendigen
+    Generierungs-Call, nur um erwartbar abgelehnt zu werden.
+
+    Geprueft wird auf das **Kopfnomen** als Suffix, nicht auf Teilstrings.
+    Der Unterschied ist der Kern dieser Tests: ``AIServiceProvider`` enthaelt
+    ``service``, ist aber ein Unternehmen und muss durchkommen.
+    """
+
+    BLOCKIERT = [
+        ("Lernsystem der Schule", "LearningTechnology", "technology"),
+        ("Weniger als 10 % Fehler", "SuccessCriterion", "criterion"),
+        ("Teilnehmerverwaltung", "Lernsystem", "system"),
+        ("Engagement-Wert", "Engagement-Score", "score"),
+        # Review-Befund auf PR #1473: Koepfe, deren Standalone-Form bereits
+        # in ``INELIGIBLE_ENTITY_TYPES`` steht, fehlten als Kompositum-Kopf.
+        ("ERP-Software", "SoftwareProduct", "product"),
+        ("Datenschutz-Grundverordnung", "LegalFramework", "framework"),
+        ("KI-Regulierung", "DiscussionTopic", "topic"),
+    ]
+
+    ZUGELASSEN = [
+        ("OpenAI", "AIServiceProvider"),
+        ("Betriebsrat", "ParticipantRepresentative"),
+        ("Kostenträger Nord", "CostPayerOrganization"),
+        ("BFW Hamburg", "VocationalRehabilitationCenter"),
+        ("Frau Krause", "DataProtectionOfficer"),
+        ("Herr Weber", "ITLeader"),
+        # ``service`` ist als Kopfnomen mehrdeutig und steht deshalb nicht in
+        # der Menge — eine Kundendienst-Abteilung hat menschliche Traeger.
+        ("Kundendienst", "CustomerService"),
+        # ``model`` bleibt bewusst aus der Menge: ``RoleModel`` ist ein
+        # Mensch, keine Software. ``provider``/``representative`` bleiben
+        # mehrdeutige Koepfe (siehe Modul-Docstring).
+        ("Nelson Mandela", "RoleModel"),
+        ("Deutsche Telekom", "ServiceProvider"),
+        ("Microsoft", "TechnologyProvider"),
+        ("Herr Fischer", "EmployeeRepresentative"),
+    ]
+
+    def test_zusammengesetzte_technikbegriffe_werden_blockiert(self):
+        entities = [_entity(name, typ) for name, typ, _head in self.BLOCKIERT]
+
+        result = filter_eligible_entities(entities)
+
+        assert result.eligible == [], (
+            "Diese Typen koennen keinen menschlichen Traeger haben und duerfen "
+            f"das Gate nicht erreichen: {[e.name for e in result.eligible]}"
+        )
+        assert result.excluded_count == len(self.BLOCKIERT)
+
+    def test_kopfnomen_steht_im_ausschlussgrund(self):
+        """Der Grund muss nachvollziehbar sein — Stufe 1 schliesst hart aus."""
+        for name, typ, head in self.BLOCKIERT:
+            result = filter_eligible_entities([_entity(name, typ)])
+
+            assert result.excluded_count == 1
+            assert head in result.exclusions[0].reason, (
+                f"Kopfnomen '{head}' fehlt im Grund: {result.exclusions[0].reason}"
+            )
+
+    def test_menschliche_und_organisatorische_typen_bleiben(self):
+        """Kein Teilstring-Vergleich: ``AIServiceProvider`` traegt eine Persona.
+
+        Der Kopf ist ``provider``, nicht ``service``. Ein Teilstring-Vergleich
+        wuerde hier eine legitime Persona ohne Rueckfrage verlieren.
+        """
+        entities = [_entity(name, typ) for name, typ in self.ZUGELASSEN]
+
+        result = filter_eligible_entities(entities)
+
+        assert [e.name for e in result.eligible] == [n for n, _ in self.ZUGELASSEN]
+        assert result.excluded_count == 0
+
+    def test_technology_provider_bleibt_zugelassen(self):
+        """``TechnologyProvider`` endet auf ``provider``, nicht auf einen der
+        Kopfnomen — ein Unternehmen (z. B. ein LLM-Anbieter) traegt eine
+        Persona. Produktionsbefund 07.09.2026 zeigte ChatGPT/Claude/Gemini
+        unter diesem Typ; diese bleiben in Stufe 1 zugelassen und werden erst
+        von der nachgelagerten LLM-Pruefung bewertet.
+        """
+        entities = [
+            _entity("ChatGPT", "TechnologyProvider"),
+            _entity("Claude", "TechnologyProvider"),
+            _entity("Gemini", "TechnologyProvider"),
+        ]
+
+        result = filter_eligible_entities(entities)
+
+        assert [e.name for e in result.eligible] == ["ChatGPT", "Claude", "Gemini"]
+        assert result.excluded_count == 0
+
+
+@pytest.mark.parametrize(
+    "entity_type",
+    [
+        "Person",
+        "Student",
+        "Teacher",
+        "Executive",
+        "Employee",
+        "Parent",
+        "CostPayerOrganization",
+    ],
+)
+def test_menschliche_und_kollektive_typen_bleiben_zugelassen(entity_type):
+    """Menschliche Traeger und Kollektive (Gruppen-Personas) duerfen das
+
+    Kopfnomen-Gate niemals treffen — Kollektive wie ``CostPayerOrganization``
+    werden an anderer Stelle als Gruppen-Personas behandelt und muessen hier
+    durchkommen.
+    """
+    result = filter_eligible_entities([_entity("Beispiel", entity_type)])
+
+    assert result.excluded_count == 0
+    assert [e.name for e in result.eligible] == ["Beispiel"]
