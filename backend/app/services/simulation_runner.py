@@ -195,6 +195,67 @@ class SimulationRunner:
         cls._run_states[state.simulation_id] = state
 
     @classmethod
+    def _correct_stale_run_state(cls, state: SimulationRunState) -> None:
+        """Persist a stale-run correction (Finding B, Codex-Review 2026-09-08,
+        PR #1476) — passed as ``correct_stale_run`` to
+        ``process_manager.start_simulation``.
+
+        Unlike ``_save_run_state``'s generic ``_registry_sync`` (which syncs
+        the "latest" ``simulation_run`` manifest linked to this
+        simulation_id), this targets the run-registry entry that is
+        genuinely orphaned. On the resume/restart path,
+        ``_resume_or_restart_simulation_run`` already created a fresh
+        replacement manifest via ``RunLifecycle.begin`` (status="pending")
+        BEFORE calling ``start_simulation`` — "latest" would hit that
+        replacement instead of the orphan, which is why the plain
+        ``_save_run_state`` must not be used here.
+
+        ``RunLifecycle.begin`` always creates new manifests with
+        status="pending" and only transitions to "processing" via
+        ``succeed()`` AFTER ``start_simulation`` returns (see
+        ``run_lifecycle.py``) — so at this exact call site, any registry
+        entry for this simulation_id that already carries status
+        "processing" can only be a previous, no-longer-current run, never
+        the in-flight replacement. That is the targeting criterion below.
+        """
+        def _publish(data: Dict[str, Any]) -> None:
+            bus = resolve_default_event_bus()
+            bus.publish(
+                CHANNEL_STATE,
+                SimulationEvent(
+                    type="state.update",
+                    simulation_id=state.simulation_id,
+                    payload=data,
+                    ts=data.get("updated_at", datetime.now().isoformat()),
+                ),
+            )
+
+        def _sync_orphaned_registry_run(simulation_id: str, data: Dict[str, Any]) -> None:
+            registry = RunRegistry()
+            candidates = registry.list_runs(
+                run_type="simulation_run",
+                simulation_id=simulation_id,
+                status="processing",
+                limit=1000,
+            )
+            if candidates:
+                registry.update_run(
+                    candidates[0]["run_id"],
+                    status=state.runner_status.value,
+                    message=f"Runner status: {state.runner_status.value}",
+                    error=state.error,
+                    termination_reason="process_restart",
+                )
+
+        _save_run_state_fn(
+            state,
+            cls.RUN_STATE_DIR,
+            event_bus_publish=_publish,
+            run_registry_sync=_sync_orphaned_registry_run,
+        )
+        cls._run_states[state.simulation_id] = state
+
+    @classmethod
     def _setup_graph_memory(
         cls, sim_id: str, enable: bool, graph_id: Optional[str], storage: Any
     ) -> None:
@@ -267,6 +328,7 @@ class SimulationRunner:
             ),
             max_rounds=max_rounds,
             runtime_env=runtime_env,
+            correct_stale_run=cls._correct_stale_run_state,
         )
 
     @classmethod
