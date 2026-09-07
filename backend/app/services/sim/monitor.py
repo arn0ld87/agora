@@ -315,6 +315,204 @@ def _generation_is_stale(
     )
 
 
+def _handle_cancel_termination(
+    simulation_id: str,
+    state: SimulationRunState,
+    cancel_abort: Dict[str, Any],
+    exit_code: Optional[int],
+    elapsed_seconds: float,
+) -> str:
+    """Nutzer-Cancel (Issue #1082) auf ``state`` anwenden und Grund zurueckgeben.
+
+    Hat Vorrang vor Budget- und exit-code-Auswertung — SIGTERM/SIGKILL erzeugt
+    non-zero exit, der Abbruch ist aber gewollt, kein technischer Fehler.
+    """
+    # B2 (Issue-Review 2026-09-07): ``source`` unterscheidet einen
+    # expliziten Nutzer-Stop (process_manager.stop_simulation) von
+    # einem konsumierten Cancel-Flag (_cancel_supervision,
+    # source="backend-monitor"). Fehlt ``source`` oder ist er weder
+    # "user_stop" noch bekannt, bleibt das bisherige Verhalten
+    # "user_cancel" erhalten (Rueckwaertskompatibilitaet mit
+    # vorhandenen Markern und mit source="backend-monitor").
+    cancel_source = cancel_abort.get("source")
+    cancel_termination_reason = (
+        "user_stop" if cancel_source == "user_stop" else "user_cancel"
+    )
+    state.runner_status = RunnerStatus.STOPPED
+    state.completed_at = datetime.now().isoformat()
+    state.error = None
+    sim_active_gauge().add(-1)
+    sim_counter().add(1, {"status": "cancelled"})
+    sim_duration_histogram().record(elapsed_seconds, {"status": "cancelled"})
+    logger.info(
+        f"Simulation cancelled by user: {simulation_id}",
+        extra={"simulation_id": simulation_id},
+    )
+    try:
+        from ..run_registry import RunRegistry
+        from .cancel_flag import clear_cancel
+
+        run_id = cancel_abort.get("run_id")
+        if not run_id:
+            run = RunRegistry().get_latest_by_linked_id(
+                "simulation_id", simulation_id, run_type="simulation_run"
+            )
+            run_id = run["run_id"] if run else None
+        if run_id:
+            RunRegistry().update_run(
+                run_id,
+                status="stopped",
+                termination_reason=cancel_termination_reason,
+                message=(
+                    "Cancel bestätigt — OASIS-Subprozess beendet, "
+                    "Teilergebnisse bleiben erhalten"
+                ),
+                event_type=cancel_termination_reason,
+                event_details={"exit_code": exit_code},
+            )
+            clear_cancel(run_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("cancel registry update failed: %s", exc)
+    return cancel_termination_reason
+
+
+def _handle_budget_termination(
+    simulation_id: str,
+    state: SimulationRunState,
+    budget_abort: Dict[str, Any],
+    exit_code: Optional[int],
+    elapsed_seconds: float,
+) -> str:
+    """Budgetabbruch (Issue #764) auf ``state`` anwenden und Grund zurueckgeben.
+
+    Hat Vorrang vor der exit-code-Auswertung — der Subprozess endet bei
+    kooperativem Budget-Stop mit exit 0, ist aber kein "completed".
+    Budgetabbruch ist kein technischer Fehler.
+    """
+    state.runner_status = RunnerStatus.STOPPED
+    state.completed_at = datetime.now().isoformat()
+    dimension = budget_abort.get("dimension", "unknown")
+    # Issue #764 (Codex P1): wenn der Subprozess beim Budget-Stop
+    # trotzdem mit non-zero exit endet (Bug im Guard, race, oder
+    # doppelter Marker), bleibt der RunnerStatus STOPPED und der
+    # termination_reason "budget_*" korrekt — aber wir wollen den
+    # exit_code sichtbar machen, damit die Diagnose nicht verloren
+    # geht. Bei exit 0 verhaelt sich der Pfad exakt wie vorher.
+    if exit_code != 0:
+        state.error = f"budget_abort (exit_code={exit_code}): {dimension}"
+        logger.warning(
+            f"Simulation budget-aborted with non-zero exit: "
+            f"{simulation_id}, dimension={dimension}, exit_code={exit_code}",
+            extra={"simulation_id": simulation_id},
+        )
+    else:
+        state.error = None
+    sim_active_gauge().add(-1)
+    sim_counter().add(1, {"status": "budget_abort"})
+    sim_duration_histogram().record(elapsed_seconds, {"status": "budget_abort"})
+    logger.info(
+        f"Simulation budget-aborted: {simulation_id}, dimension={dimension}",
+        extra={"simulation_id": simulation_id},
+    )
+    try:
+        from ..run_budget import mark_budget_abort
+        from ..run_registry import RunRegistry
+
+        run = RunRegistry().get_latest_by_linked_id(
+            "simulation_id", simulation_id, run_type="simulation_run"
+        )
+        if run:
+            mark_budget_abort(
+                run["run_id"],
+                str(dimension),
+                int(budget_abort.get("observed", 0)),
+                int(budget_abort.get("threshold", 0)),
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("budget abort registry update failed: %s", exc)
+    return f"budget_{dimension}"
+
+
+def _handle_completed_termination(
+    simulation_id: str,
+    state: SimulationRunState,
+    elapsed_seconds: float,
+) -> None:
+    """Regulaeres Prozessende (exit 0) auf ``state`` anwenden."""
+    state.runner_status = RunnerStatus.COMPLETED
+    state.completed_at = datetime.now().isoformat()
+    # Slice 2b: Sim-Lifecycle-Metric — RUNNING → COMPLETED
+    sim_active_gauge().add(-1)
+    sim_counter().add(1, {"status": "done"})
+    sim_duration_histogram().record(elapsed_seconds, {"status": "done"})
+    logger.info(
+        f"Simulation completed: {simulation_id}",
+        extra={"simulation_id": simulation_id},
+    )
+
+
+def _handle_failed_termination(
+    simulation_id: str,
+    state: SimulationRunState,
+    sim_dir: str,
+    exit_code: Optional[int],
+    elapsed_seconds: float,
+) -> None:
+    """Technischen Fehlschlag (non-zero exit ohne Marker) auf ``state`` anwenden."""
+    state.runner_status = RunnerStatus.FAILED
+    # Read error info from main log file
+    main_log_path = os.path.join(sim_dir, "simulation.log")
+    error_info = ""
+    try:
+        if os.path.exists(main_log_path):
+            with open(main_log_path, "r", encoding="utf-8") as f:
+                error_info = f.read()[-2000:]  # Take last 2000 characters
+    except Exception as exc:  # noqa: BLE001 — close file handle on cleanup; exc discarded
+        logger.debug("monitor: failed to read error log, continuing: %s", exc)
+    state.error = f"Process exit code: {exit_code}, error: {error_info}"
+    # Slice 2b: Sim-Lifecycle-Metric — RUNNING → FAILED
+    sim_active_gauge().add(-1)
+    sim_counter().add(1, {"status": "failed"})
+    sim_duration_histogram().record(elapsed_seconds, {"status": "failed"})
+    logger.error(
+        f"Simulation failed: {simulation_id}, error={state.error}",
+        extra={"simulation_id": simulation_id},
+    )
+
+
+def _apply_terminal_state(
+    simulation_id: str,
+    state: SimulationRunState,
+    *,
+    sim_dir: str,
+    exit_code: Optional[int],
+    elapsed_seconds: float,
+) -> Optional[str]:
+    """Terminalen Runner-Status setzen und ``termination_reason`` liefern.
+
+    Reihenfolge ist bindend: Nutzer-Cancel (Issue #1082) vor Budgetabbruch
+    (Issue #764) vor exit-code-Auswertung. Extrahiert aus
+    ``monitor_simulation`` (Komplexitaets-Gate MAI-17), Verhalten unveraendert.
+    """
+    cancel_abort = _read_cancel_abort(sim_dir)
+    budget_abort = _read_budget_abort(sim_dir)
+    if cancel_abort is not None:
+        return _handle_cancel_termination(
+            simulation_id, state, cancel_abort, exit_code, elapsed_seconds
+        )
+    if budget_abort is not None:
+        return _handle_budget_termination(
+            simulation_id, state, budget_abort, exit_code, elapsed_seconds
+        )
+    if exit_code == 0:
+        _handle_completed_termination(simulation_id, state, elapsed_seconds)
+        return None
+    _handle_failed_termination(
+        simulation_id, state, sim_dir, exit_code, elapsed_seconds
+    )
+    return None
+
+
 def monitor_simulation(
     simulation_id: str,
     *,
@@ -458,143 +656,16 @@ def monitor_simulation(
 
         elapsed_seconds = _compute_elapsed_seconds(state.started_at)
         # Issue #763 (Ticket 9): STOPPED ist mehrdeutig (Nutzer-Cancel vs.
-        # Budget-Abort) — dieser Zweig trägt den genauen Grund für die
+        # Budget-Abort) — der Dispatcher traegt den genauen Grund fuer die
         # Manifest-Finalisierung, damit sie ihn nicht pauschal als
         # user_cancel ausweist.
-        manifest_termination_reason: Optional[str] = None
-
-        # Nutzer-Cancel (Issue #1082): hat Vorrang vor Budget- und
-        # exit-code-Auswertung — SIGTERM/SIGKILL erzeugt non-zero exit,
-        # der Abbruch ist aber gewollt, kein technischer Fehler.
-        cancel_abort = _read_cancel_abort(sim_dir)
-        # Budgetabbruch (Issue #764): hat Vorrang vor exit-code-Auswertung —
-        # der Subprozess endet bei kooperativem Budget-Stop mit exit 0, ist
-        # aber kein "completed". Budgetabbruch ≠ technischer Fehler.
-        budget_abort = _read_budget_abort(sim_dir)
-        if cancel_abort is not None:
-            # B2 (Issue-Review 2026-09-07): ``source`` unterscheidet einen
-            # expliziten Nutzer-Stop (process_manager.stop_simulation) von
-            # einem konsumierten Cancel-Flag (_cancel_supervision,
-            # source="backend-monitor"). Fehlt ``source`` oder ist er weder
-            # "user_stop" noch bekannt, bleibt das bisherige Verhalten
-            # "user_cancel" erhalten (Rueckwaertskompatibilitaet mit
-            # vorhandenen Markern und mit source="backend-monitor").
-            cancel_source = cancel_abort.get("source")
-            cancel_termination_reason = (
-                "user_stop" if cancel_source == "user_stop" else "user_cancel"
-            )
-            state.runner_status = RunnerStatus.STOPPED
-            state.completed_at = datetime.now().isoformat()
-            state.error = None
-            manifest_termination_reason = cancel_termination_reason
-            sim_active_gauge().add(-1)
-            sim_counter().add(1, {"status": "cancelled"})
-            sim_duration_histogram().record(elapsed_seconds, {"status": "cancelled"})
-            logger.info(
-                f"Simulation cancelled by user: {simulation_id}",
-                extra={"simulation_id": simulation_id},
-            )
-            try:
-                from ..run_registry import RunRegistry
-                from .cancel_flag import clear_cancel
-
-                run_id = cancel_abort.get("run_id")
-                if not run_id:
-                    run = RunRegistry().get_latest_by_linked_id(
-                        "simulation_id", simulation_id, run_type="simulation_run"
-                    )
-                    run_id = run["run_id"] if run else None
-                if run_id:
-                    RunRegistry().update_run(
-                        run_id,
-                        status="stopped",
-                        termination_reason=cancel_termination_reason,
-                        message=(
-                            "Cancel bestätigt — OASIS-Subprozess beendet, "
-                            "Teilergebnisse bleiben erhalten"
-                        ),
-                        event_type=cancel_termination_reason,
-                        event_details={"exit_code": exit_code},
-                    )
-                    clear_cancel(run_id)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("cancel registry update failed: %s", exc)
-        elif budget_abort is not None:
-            state.runner_status = RunnerStatus.STOPPED
-            state.completed_at = datetime.now().isoformat()
-            dimension = budget_abort.get("dimension", "unknown")
-            manifest_termination_reason = f"budget_{dimension}"
-            # Issue #764 (Codex P1): wenn der Subprozess beim Budget-Stop
-            # trotzdem mit non-zero exit endet (Bug im Guard, race, oder
-            # doppelter Marker), bleibt der RunnerStatus STOPPED und der
-            # termination_reason "budget_*" korrekt — aber wir wollen den
-            # exit_code sichtbar machen, damit die Diagnose nicht verloren
-            # geht. Bei exit 0 verhaelt sich der Pfad exakt wie vorher.
-            if exit_code != 0:
-                state.error = (
-                    f"budget_abort (exit_code={exit_code}): {dimension}"
-                )
-                logger.warning(
-                    f"Simulation budget-aborted with non-zero exit: "
-                    f"{simulation_id}, dimension={dimension}, exit_code={exit_code}",
-                    extra={"simulation_id": simulation_id},
-                )
-            else:
-                state.error = None
-            sim_active_gauge().add(-1)
-            sim_counter().add(1, {"status": "budget_abort"})
-            sim_duration_histogram().record(elapsed_seconds, {"status": "budget_abort"})
-            logger.info(
-                f"Simulation budget-aborted: {simulation_id}, dimension={dimension}",
-                extra={"simulation_id": simulation_id},
-            )
-            try:
-                from ..run_budget import mark_budget_abort
-                from ..run_registry import RunRegistry
-
-                run = RunRegistry().get_latest_by_linked_id(
-                    "simulation_id", simulation_id, run_type="simulation_run"
-                )
-                if run:
-                    mark_budget_abort(
-                        run["run_id"],
-                        str(dimension),
-                        int(budget_abort.get("observed", 0)),
-                        int(budget_abort.get("threshold", 0)),
-                    )
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("budget abort registry update failed: %s", exc)
-        elif exit_code == 0:
-            state.runner_status = RunnerStatus.COMPLETED
-            state.completed_at = datetime.now().isoformat()
-            # Slice 2b: Sim-Lifecycle-Metric — RUNNING → COMPLETED
-            sim_active_gauge().add(-1)
-            sim_counter().add(1, {"status": "done"})
-            sim_duration_histogram().record(elapsed_seconds, {"status": "done"})
-            logger.info(
-                f"Simulation completed: {simulation_id}",
-                extra={"simulation_id": simulation_id},
-            )
-        else:
-            state.runner_status = RunnerStatus.FAILED
-            # Read error info from main log file
-            main_log_path = os.path.join(sim_dir, "simulation.log")
-            error_info = ""
-            try:
-                if os.path.exists(main_log_path):
-                    with open(main_log_path, "r", encoding="utf-8") as f:
-                        error_info = f.read()[-2000:]  # Take last 2000 characters
-            except Exception as exc:  # noqa: BLE001 — close file handle on cleanup; exc discarded
-                logger.debug("monitor: failed to read error log, continuing: %s", exc)
-            state.error = f"Process exit code: {exit_code}, error: {error_info}"
-            # Slice 2b: Sim-Lifecycle-Metric — RUNNING → FAILED
-            sim_active_gauge().add(-1)
-            sim_counter().add(1, {"status": "failed"})
-            sim_duration_histogram().record(elapsed_seconds, {"status": "failed"})
-            logger.error(
-                f"Simulation failed: {simulation_id}, error={state.error}",
-                extra={"simulation_id": simulation_id},
-            )
+        manifest_termination_reason = _apply_terminal_state(
+            simulation_id,
+            state,
+            sim_dir=sim_dir,
+            exit_code=exit_code,
+            elapsed_seconds=elapsed_seconds,
+        )
 
         state.twitter_running = False
         state.reddit_running = False
