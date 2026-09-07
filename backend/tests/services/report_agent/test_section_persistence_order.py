@@ -269,6 +269,130 @@ class TestSectionPersistenceOrder:
         # Die alte Markdown-Datei bleibt unverändert liegen.
         assert "OLD STALE CONTENT" in section_path.read_text(encoding='utf-8')
 
+    def test_process_section_raises_when_orphan_removal_fails(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Codex-Review PR #1475, Runde 2, Finding 1: Ein ``OSError`` beim
+        Entfernen der verwaisten Markdown-Datei propagiert, BEVOR neue
+        Evidence geschrieben wird. Der zuvor geschluckte Fehler hätte die
+        Waise liegen lassen, während trotzdem neue Evidence persistiert
+        worden wäre — genau die Inkonsistenz, die dieser Slice beseitigt.
+        """
+        (
+            agent,
+            section,
+            ctx,
+            fake_manager,
+            section_path,
+            generate_section,
+            evidence_calls,
+        ) = _build_process_section_harness(
+            tmp_path,
+            evidence_sections=[],  # keine Evidence für section_index 1
+            generated_content="NEW GENERATED CONTENT",
+        )
+
+        def _failing_remove(_path: str) -> None:
+            raise OSError("Permission denied (simulated)")
+
+        monkeypatch.setattr(
+            "app.services.report_agent.section_pipeline.os.remove",
+            _failing_remove,
+        )
+
+        with pytest.raises(OSError):
+            process_section(agent, section, ctx, section_index=1)
+
+        # Weder neue Inhaltsgenerierung noch neue Evidence noch neues
+        # Markdown — der Fehler bricht ab, bevor irgendein Folgeschritt läuft.
+        generate_section.assert_not_called()
+        assert evidence_calls == []
+        assert fake_manager.save_section_calls == 0
+        # Die Waise liegt weiterhin unverändert auf der Platte.
+        assert section_path.exists()
+        assert "OLD STALE CONTENT" in section_path.read_text(encoding='utf-8')
+
+
+class TestParentDirectoryFsync:
+    """CodeRabbit-Review PR #1475, Runde 2, Finding 3: nach ``os.replace``
+    wird das Elternverzeichnis gefsynct, damit der Rename einen Stromausfall
+    übersteht — ohne dabei auf Plattformen ohne Verzeichnis-fsync zu werfen.
+    """
+
+    def test_write_json_atomic_fsyncs_parent_directory(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        target = tmp_path / "evidence_map.json"
+        fsync_calls: list[int] = []
+        original_fsync = os.fsync
+
+        def _tracking_fsync(fd: int) -> None:
+            fsync_calls.append(fd)
+            original_fsync(fd)
+
+        monkeypatch.setattr(
+            "app.services.report_agent.storage.os.fsync", _tracking_fsync
+        )
+
+        write_json_atomic(str(target), {"a": 1})
+
+        assert target.exists()
+        # Ein fsync für die Temp-Datei, ein weiterer für das Verzeichnis.
+        assert len(fsync_calls) == 2
+
+    def test_write_section_markdown_fsyncs_parent_directory(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        target = tmp_path / "section_01.md"
+        fsync_calls: list[int] = []
+        original_fsync = os.fsync
+
+        def _tracking_fsync(fd: int) -> None:
+            fsync_calls.append(fd)
+            original_fsync(fd)
+
+        monkeypatch.setattr(
+            "app.services.report_agent.storage.os.fsync", _tracking_fsync
+        )
+
+        write_section_markdown(str(target), "Title", "Content")
+
+        assert target.exists()
+        assert len(fsync_calls) == 2
+
+    def test_write_json_atomic_degrades_when_directory_fsync_unsupported(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Ein Verzeichnis-``fsync``, das ``OSError`` wirft (z. B. auf
+        Plattformen ohne Unterstützung), darf den erfolgreichen Schreib-
+        vorgang nicht nachträglich als Fehler melden."""
+        target = tmp_path / "evidence_map.json"
+        original_fsync = os.fsync
+
+        def _failing_dir_fsync(fd: int) -> None:
+            # Die Temp-Datei bekommt echtes fsync, das Verzeichnis-fsync
+            # (danach, gleicher fd-Namespace) schlägt fehl.
+            try:
+                st = os.fstat(fd)
+            except OSError:
+                original_fsync(fd)
+                return
+            import stat as stat_module
+
+            if stat_module.S_ISDIR(st.st_mode):
+                raise OSError("Verzeichnis-fsync nicht unterstützt (simuliert)")
+            original_fsync(fd)
+
+        monkeypatch.setattr(
+            "app.services.report_agent.storage.os.fsync", _failing_dir_fsync
+        )
+
+        write_json_atomic(str(target), {"a": 1})  # darf nicht werfen
+
+        assert target.exists()
+        with open(target, encoding="utf-8") as fh:
+            assert json.load(fh) == {"a": 1}
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

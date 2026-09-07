@@ -392,6 +392,136 @@ def test_generate_report_no_cancel_runs_all_sections(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# Codex-Review PR #1475, Runde 2, Finding 2: eine Markdown-only-Waise (auf
+# Platte vorhanden, aber ohne Evidence-Eintrag) darf weder in
+# ``previous_sections`` noch in ``completed_section_titles`` einfließen,
+# bevor sie regeneriert wurde — sonst sieht der Prompt-Kontext den alten
+# Waiseninhalt, und der Fortschritt zählt die Section nach der Regeneration
+# ein zweites Mal.
+# ---------------------------------------------------------------------------
+
+
+def test_generate_report_filters_markdown_only_orphan_from_context(tmp_path):
+    """Eine gültig persistierte Section fließt in Kontext und Fortschritt ein,
+    eine Markdown-only-Waise (kein Evidence-Eintrag) NICHT — bis sie
+    regeneriert wurde."""
+    from app.services.report_agent.workflow import generate_report
+
+    report_id = f"report_{uuid.uuid4().hex[:12]}"
+    agent = MagicMock()
+    agent.simulation_id = "sim_test"
+    agent.graph_id = "graph_test"
+    agent.simulation_requirement = "Test requirement"
+    agent.report_logger = MagicMock()
+    agent.console_logger = MagicMock()
+    agent.evidence_map = {}
+    agent.ReportLogger = MagicMock(return_value=MagicMock())
+    agent.ReportConsoleLogger = MagicMock(return_value=MagicMock())
+    agent._collect_simulation_evidence_items = MagicMock(return_value=[])
+    agent.persona_ids = ["p1", "p2", "p3", "p4", "p5"]
+
+    outline = _make_outline(2)  # "Section 1", "Section 2"
+
+    section_calls: list[Dict[str, Any]] = []
+
+    def fake_section(ag, section=None, outline=None, previous_sections=None, progress_callback=None, section_index=0, **kw):
+        section_calls.append(
+            {
+                "section_index": section_index,
+                "previous_sections": list(previous_sections or []),
+            }
+        )
+        return f"Content for {section.title}"
+
+    progress_snapshots: list[list] = []
+
+    def fake_update_progress(*args: Any, **kwargs: Any) -> None:
+        progress_snapshots.append(list(kwargs.get("completed_sections") or []))
+
+    report_folder = str(tmp_path / report_id)
+    os.makedirs(report_folder, exist_ok=True)
+
+    persisted_evidence_map = {
+        "schema_version": 2,
+        "sections": [{"section_index": 1, "claims": []}],
+    }
+
+    with (
+        patch("app.services.report_agent.workflow.generate_section_react", side_effect=fake_section),
+        patch("app.services.report_agent.workflow.generate_section_metadata", return_value={}),
+        patch("app.services.report_agent.workflow.ReportManager") as mock_rm,
+        patch("app.services.report_agent.workflow.plan_outline_impl", return_value=outline),
+        patch("app.services.report_agent.workflow.validate_required_sections", return_value=[]),
+        patch("app.services.report_agent.workflow._load_persona_count", return_value=100),
+        patch("app.services.report_agent.workflow.MIN_PERSONA_TABLE_ROWS", 0),
+        patch("app.services.report_agent.workflow.validate_quote_anchors", return_value=MagicMock(valid=True)),
+        # Evidence-Map kommt bereits normalisiert zurück — kein Init-Zweig,
+        # kein Pydantic-Roundtrip nötig, um section_index=1 als "hat Evidence"
+        # auszuweisen.
+        patch("app.services.report_agent.workflow.migrate_v1_to_v2", return_value=persisted_evidence_map),
+        patch("app.services.report_agent.workflow.normalize_persisted_evidence_map", side_effect=lambda raw: raw),
+    ):
+        mock_rm._ensure_report_folder.return_value = report_folder
+        mock_rm.get_evidence_map.return_value = persisted_evidence_map
+        mock_rm.get_report.return_value = None
+        # Section 1: valide persistiert (Evidence vorhanden) — Section 2:
+        # Markdown liegt auf Platte, aber kein Evidence-Eintrag (Waise).
+        mock_rm.get_generated_sections.return_value = [
+            {
+                "filename": "section_01.md",
+                "section_index": 1,
+                "content": "OLD VALID CONTENT",
+            },
+            {
+                "filename": "section_02.md",
+                "section_index": 2,
+                "content": "OLD ORPHAN CONTENT",
+            },
+        ]
+        mock_rm._clean_section_content.side_effect = lambda content, _title: content
+        # Kein reales File-Handling nötig: die Waisen-Entfernung greift nur,
+        # wenn unter diesem Pfad tatsächlich etwas liegt.
+        mock_rm._get_section_path.return_value = str(tmp_path / "does-not-exist.md")
+        mock_rm.update_progress.side_effect = fake_update_progress
+        mock_rm.save_report.return_value = None
+        mock_rm.save_outline.return_value = None
+        mock_rm.save_section.return_value = None
+        mock_rm.assemble_full_report.return_value = "## Section 1\n## Section 2\n"
+        mock_rm._write_json_atomic.side_effect = lambda path, data: None
+        mock_rm.get_report_v3.return_value = None
+
+        result = generate_report(
+            agent,
+            progress_callback=None,
+            report_id=report_id,
+            cancel_run_id=None,
+        )
+
+    # Section 1 (Evidence vorhanden) wird restauriert, nicht neu generiert.
+    generated_indices = [c["section_index"] for c in section_calls]
+    assert generated_indices == [2], (
+        f"Nur die Waise (Section 2) darf neu generiert werden, erhalten: {generated_indices}"
+    )
+
+    # Der Prompt-Kontext für die Regeneration von Section 2 sieht ausschließlich
+    # den validen Inhalt von Section 1 — nicht den alten Waiseninhalt.
+    orphan_call = section_calls[0]
+    assert orphan_call["previous_sections"] == ["OLD VALID CONTENT"], (
+        "previous_sections darf beim Regenerieren der Waise weder ihren "
+        f"eigenen alten Inhalt noch Duplikate enthalten, erhalten: {orphan_call['previous_sections']}"
+    )
+
+    # Kein Fortschritts-Snapshot enthält "Section 2" doppelt — die Waise wird
+    # erst nach erfolgreicher Regeneration genau einmal als abgeschlossen geführt.
+    for snapshot in progress_snapshots:
+        assert snapshot.count("Section 2") <= 1, (
+            f"Section 2 taucht in einem Fortschritts-Snapshot doppelt auf: {snapshot}"
+        )
+
+    assert result is not None
+
+
+# ---------------------------------------------------------------------------
 # Issue #1321 (Review-Finding PR #1378): Cancel und Resume dürfen den
 # Sanitization-Marker nicht verlieren
 #
@@ -473,6 +603,17 @@ def _configure_manager_mock(mock_rm, report_folder: str) -> None:
     mock_rm.assemble_full_report.return_value = "## Section 1\n## Section 2\n"
     mock_rm._write_json_atomic.side_effect = lambda path, data: None
     mock_rm.get_report_v3.return_value = None
+    # Codex-Review PR #1475, Runde 2, Finding 1: ein unkonfigurierter
+    # ``_get_section_path``-Mock liefert per Default einen synthetischen
+    # ``__fspath__``-Wert, der in dieser Umgebung als "existierend" gilt —
+    # ``_remove_orphan_markdown`` würde dann versuchen, ihn zu entfernen, und
+    # jetzt (statt den Fehler stillschweigend zu schlucken) mit ``OSError``
+    # abbrechen. Ein echter, garantiert nicht existierender Pfad unter dem
+    # Test-Report-Ordner hält den Mock realistisch, ohne diesen Fehlschlag
+    # künstlich zu provozieren.
+    mock_rm._get_section_path.side_effect = (
+        lambda _report_id, idx: os.path.join(report_folder, f"section_{idx:02d}.md")
+    )
 
 
 def _section_react_with_work_traces(state: Dict[str, Any]):

@@ -258,25 +258,26 @@ def _remove_orphan_markdown(
     Generations-Identifier: die Waise sofort entfernen. Ohne Evidence-Eintrag
     darf ohnehin niemand dem alten Inhalt vertrauen, ein Identifier-Abgleich
     wäre hier reiner Mehraufwand für dasselbe Ergebnis.
+
+    Codex-Review PR #1475, Runde 2, Finding 1: ein ``OSError`` beim Entfernen
+    wird NICHT mehr geschluckt — er propagiert an ``process_section`` und
+    damit VOR dem Schreiben neuer Evidence. Ein geschluckter Fehler ließe die
+    Waise liegen, während ``_save_evidence_section`` trotzdem neue Evidence
+    persistiert — exakt die Inkonsistenz, die dieser Slice beseitigen soll
+    (das nachfolgende ``os.replace`` scheitert unter denselben
+    Rechteproblemen typischerweise ebenfalls). Die Sektion scheitert damit
+    sauber, statt stillschweigend inkonsistent zu werden.
     """
     stale_path = ctx.report_manager._get_section_path(ctx.report_id, section_index)
-    try:
-        if os.path.exists(stale_path):
-            os.remove(stale_path)
-            logger.info(
-                "section %d (%r): verwaiste Markdown-Datei entfernt (%s)",
-                section_index,
-                title,
-                stale_path,
-            )
-    except OSError as exc:
-        logger.warning(
-            "section %d (%r): verwaiste Markdown-Datei konnte nicht entfernt "
-            "werden: %s",
-            section_index,
-            title,
-            exc,
-        )
+    if not os.path.exists(stale_path):
+        return
+    os.remove(stale_path)
+    logger.info(
+        "section %d (%r): verwaiste Markdown-Datei entfernt (%s)",
+        section_index,
+        title,
+        stale_path,
+    )
 
 
 def _generate_content(

@@ -70,15 +70,46 @@ def get_run_events_path(reports_dir: str, report_id: str) -> str:
     return os.path.join(get_report_folder(reports_dir, report_id), "run_events.json")
 
 
+def _fsync_directory(dir_path: str) -> None:
+    """Synchronisiert das Elternverzeichnis nach einem ``os.replace``.
+
+    CodeRabbit-Review PR #1475, Runde 2, Finding 3: ``os.fsync`` auf der
+    Temp-Datei stellt nur sicher, dass ihr Inhalt persistiert ist — der
+    Verzeichniseintrag, den ``os.replace`` umbiegt, liegt auf manchen
+    Dateisystemen bis zum nächsten Verzeichnis-fsync nur im Seitencache.
+    Nach einem Stromausfall könnte der Rename dann verloren gehen, obwohl der
+    Aufruf bereits erfolgreich zurückgekehrt ist — für ``evidence_map.json``
+    und ``section_XX.md`` bricht das genau die Commit-Marker-Invariante
+    dieses Slices.
+
+    Manche Plattformen/Dateisysteme unterstützen kein Verzeichnis-``fsync``
+    (z. B. Windows, einige Netzwerk-Dateisysteme). Das degradiert hier
+    bewusst still: ein bereits erfolgreicher Schreibvorgang darf dadurch
+    nicht nachträglich als Fehler gemeldet werden.
+    """
+    try:
+        dir_fd = os.open(dir_path, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(dir_fd)
+    except OSError:
+        pass
+    finally:
+        os.close(dir_fd)
+
+
 def write_json_atomic(path: str, payload: Dict[str, Any]) -> None:
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(prefix='.tmp-report-', suffix='.json', dir=os.path.dirname(path))
+    dir_path = os.path.dirname(path)
+    os.makedirs(dir_path, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(prefix='.tmp-report-', suffix='.json', dir=dir_path)
     try:
         with os.fdopen(fd, 'w', encoding='utf-8') as handle:
             json.dump(payload, handle, ensure_ascii=False, indent=2)
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(tmp_path, path)
+        _fsync_directory(dir_path)
     finally:
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
@@ -336,13 +367,14 @@ def write_section_markdown(path: str, title: str, cleaned_content: str) -> str:
     die zugehörige Evidence-Datei. Bei Crashes zwischen Evidence und Markdown
     hinterlässt ein atomarer Write keine halbe Datei.
     """
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    dir_path = os.path.dirname(path)
+    os.makedirs(dir_path, exist_ok=True)
     md_content = f"## {title}\n\n"
     if cleaned_content:
         md_content += f"{cleaned_content}\n\n"
 
     fd, tmp_path = tempfile.mkstemp(
-        prefix='.tmp-section-', suffix='.md', dir=os.path.dirname(path)
+        prefix='.tmp-section-', suffix='.md', dir=dir_path
     )
     try:
         with os.fdopen(fd, 'w', encoding='utf-8') as handle:
@@ -350,6 +382,7 @@ def write_section_markdown(path: str, title: str, cleaned_content: str) -> str:
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(tmp_path, path)
+        _fsync_directory(dir_path)
     finally:
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
