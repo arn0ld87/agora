@@ -226,20 +226,13 @@ def _restore_persisted_section(
     *,
     section_index: int,
 ) -> SectionResult:
-    """Übernimmt einen bereits persistierten Abschnitt unverändert."""
+    """Übernimmt einen bereits persistierten Abschnitt unverändert.
+
+    Der Aufrufer prüft vorher, ob Evidence vorhanden ist. Siehe process_section().
+    """
     section.content = ctx.report_manager._clean_section_content(
         ctx.persisted_section_contents[section_index], section.title
     )
-    persisted_sections = (agent.evidence_map or {}).get("sections") or []
-    has_persisted_evidence = any(
-        s.get("section_index") == section_index for s in persisted_sections
-    )
-    if not has_persisted_evidence:
-        logger.warning(
-            "Section %s already exists on disk without persisted evidence; "
-            "preserving markdown and leaving evidence unchanged",
-            section_index,
-        )
     return SectionResult(
         section_index=section_index,
         title=section.title,
@@ -523,8 +516,21 @@ def process_section(
     Cancel-Prüfung, Akkumulation und Statusableitung des Gesamtreports.
     """
     if section_index in ctx.persisted_section_contents:
-        return _restore_persisted_section(
-            agent, section, ctx, section_index=section_index
+        # Prüfe ob Evidence vorhanden ist — Markdown ohne Evidence wird
+        # als unvollständig behandelt und neu generiert (verhindert Orphans).
+        persisted_sections = (agent.evidence_map or {}).get("sections") or []
+        has_persisted_evidence = any(
+            s.get("section_index") == section_index for s in persisted_sections
+        )
+        if has_persisted_evidence:
+            return _restore_persisted_section(
+                agent, section, ctx, section_index=section_index
+            )
+        logger.warning(
+            "section %d (%r): Markdown auf Platte, aber Evidence fehlt — "
+            "Sektion wird neu generiert",
+            section_index,
+            section.title,
         )
 
     base_progress = ctx.base_progress_for(section_index)
@@ -574,7 +580,9 @@ def process_section(
     _apply_metadata(agent, section, section_meta, section_index=section_index)
 
     section.content = content
-    ctx.report_manager.save_section(ctx.report_id, section_index, section)
+    # Reihenfolge: Evidence ZUERST, dann Markdown.
+    # Die Markdown-Datei ist der Commit-Marker — existiert sie, existiert auch
+    # die Evidence. Bei Crashes dazwischen wird keine Orphan-Datei hinterlassen.
     # Issue #1316: Die Claim-Extraktion sah bislang exakt dasselbe ``content``
     # wie ``save_section`` — nur reinigt ``save_section`` intern, die
     # Extraktion nicht. Rohes <simulated_quote>-Markup landete damit in den
@@ -588,6 +596,8 @@ def process_section(
         section.title,
         ctx.report_manager.prepare_content_for_evidence(content),
     )
+    # Markdown wird erst NACH Evidence geschrieben — das ist das Commit-Signal
+    ctx.report_manager.save_section(ctx.report_id, section_index, section)
 
     return SectionResult(
         section_index=section_index,

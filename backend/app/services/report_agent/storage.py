@@ -330,9 +330,27 @@ def write_outline(path: str, outline: Dict[str, Any]) -> None:
 
 
 def write_section_markdown(path: str, title: str, cleaned_content: str) -> str:
+    """Schreibt Sektions-Markdown atomar (tmp-Datei + os.replace).
+
+    Die Markdown-Datei ist der Commit-Marker: existiert sie, existiert auch
+    die zugehörige Evidence-Datei. Bei Crashes zwischen Evidence und Markdown
+    hinterlässt ein atomarer Write keine halbe Datei.
+    """
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     md_content = f"## {title}\n\n"
     if cleaned_content:
         md_content += f"{cleaned_content}\n\n"
-    with open(path, 'w', encoding='utf-8') as handle:
-        handle.write(md_content)
+
+    fd, tmp_path = tempfile.mkstemp(
+        prefix='.tmp-section-', suffix='.md', dir=os.path.dirname(path)
+    )
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as handle:
+            handle.write(md_content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_path, path)
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
     return path
