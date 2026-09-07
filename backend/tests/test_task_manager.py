@@ -63,6 +63,32 @@ def test_new_task_has_no_message_key_by_default():
     assert task.to_dict()["message_key"] is None
 
 
+def test_task_from_run_manifest_restores_message_key():
+    """Rehydration nach Cache-Miss/Neustart darf ``message_key`` nicht verlieren.
+
+    Regression test for a CodeRabbit finding on PR #1459:
+    ``_task_from_run_manifest`` übernahm ``message`` und ``error`` aus dem
+    RunRegistry-Manifest, aber nicht ``message_key`` — betroffene Tasks
+    fielen nach einem Cache-Miss auf den englischen Fallback-Text zurück.
+    """
+    manifest = {
+        "run_id": "run_1",
+        "status": "processing",
+        "started_at": "2026-09-07T06:00:00",
+        "updated_at": "2026-09-07T06:05:00",
+        "progress": 42,
+        "message": "Chunking text...",
+        "message_key": "task.chunking",
+        "linked_ids": {"task_id": "task_from_manifest"},
+        "metadata": {"task_type": "graph_build"},
+    }
+
+    task = TaskManager()._task_from_run_manifest(manifest)
+
+    assert task.message == "Chunking text..."
+    assert task.message_key == "task.chunking"
+
+
 def test_update_task_can_set_message_key_explicitly():
     """``update_task`` erlaubt beliebige Aufrufer, einen eigenen Schlüssel zu setzen."""
     task_id = TaskManager().create_task("graph_build")

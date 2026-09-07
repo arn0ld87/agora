@@ -185,6 +185,8 @@ class RunRegistry:
                 manifest["progress"] = int(updates["progress"])
             if "message" in updates and updates["message"] is not None:
                 manifest["message"] = updates["message"]
+            if "message_key" in updates:
+                manifest["message_key"] = updates["message_key"]
             if "error" in updates:
                 manifest["error"] = updates["error"]
             if "entity_id" in updates and updates["entity_id"]:
@@ -399,6 +401,7 @@ class RunRegistry:
             status=getattr(task, "status", None).value if getattr(task, "status", None) else None,
             progress=getattr(task, "progress", None),
             message=getattr(task, "message", None),
+            message_key=getattr(task, "message_key", None),
             error=getattr(task, "error", None),
             linked_ids={"task_id": getattr(task, "task_id", None)},
             metadata={"task_type": getattr(task, "task_type", None)},

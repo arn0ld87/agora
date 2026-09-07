@@ -147,9 +147,15 @@ def _get_neo4j_status():
     storage = current_app.extensions.get('neo4j_storage')
 
     if storage is None:
+        init_error = current_app.extensions.get('neo4j_storage_error')
+        if init_error:
+            logger.warning(
+                "Neo4j storage unavailable at status check",
+                extra={"neo4j_uri": Config.NEO4J_URI, "error": init_error},
+            )
         return {
             "reachable": False,
-            "error": current_app.extensions.get('neo4j_storage_error') or "Storage not initialized",
+            "error": StatusCheckError(code=StatusErrorCode.UNREACHABLE).model_dump(mode="json"),
             "uri": Config.NEO4J_URI,
         }
 

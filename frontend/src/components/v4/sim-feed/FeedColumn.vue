@@ -145,7 +145,7 @@ onBeforeUnmount(() => {
   transform: translateX(-50%);
   background: var(--surface-base);
   border: 1px solid var(--hairline);
-  border-radius: var(--r-2);
+  border-radius: var(--r-pill);
   padding: 5px 14px;
   font-size: 12px;
   font-weight: 600;

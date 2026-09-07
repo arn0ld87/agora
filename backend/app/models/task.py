@@ -165,6 +165,7 @@ class TaskManager:
             updated_at=updated_at,
             progress=run.get("progress") or 0,
             message=run.get("message") or "",
+            message_key=run.get("message_key"),
             error=error,
             metadata=run.get("metadata", {}),
         )

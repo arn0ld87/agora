@@ -132,7 +132,7 @@ function handleClick(event: MouseEvent) {
 .sidebar-item__badge {
   min-width: 18px;
   height: 18px;
-  border-radius: var(--r-2);
+  border-radius: var(--r-pill);
   background: var(--accent);
   color: #fff;
   font-size: 10px;

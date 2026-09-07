@@ -173,8 +173,13 @@ class TestStatusFunctions:
             assert result['error'] is not None
             assert 'uri' in result
 
-    def test_get_neo4j_status_uses_startup_error_when_available(self):
-        """Surface the original startup error instead of a generic placeholder."""
+    def test_get_neo4j_status_no_raw_startup_error_leak(self):
+        """The raw startup exception text must never reach the HTTP response.
+
+        Regression test for a CodeRabbit finding on PR #1459: this branch
+        still returned ``neo4j_storage_error`` verbatim while the exception
+        branch below it already used ``StatusCheckError`` (#1458).
+        """
         from flask import Flask
         app = Flask(__name__)
 
@@ -186,7 +191,8 @@ class TestStatusFunctions:
             result = _get_neo4j_status()
 
             assert result['reachable'] is False
-            assert result['error'] == 'AuthError: unauthorized'
+            assert result['error'] == {'code': 'unreachable'}
+            assert 'unauthorized' not in str(result['error'])
 
     def test_get_neo4j_status_reachable(self):
         """Test Neo4j status when service is reachable."""

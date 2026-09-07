@@ -112,6 +112,38 @@ def test_sync_task_updates_existing_run(tmp_path, monkeypatch):
     assert updated["linked_ids"]["task_id"] == "task_1"
 
 
+def test_sync_task_persists_message_key(tmp_path, monkeypatch):
+    """``message_key`` (#1458) must survive the RunRegistry roundtrip.
+
+    Regression test for a CodeRabbit finding on PR #1459: ``sync_task``
+    dropped ``message_key`` silently, so a rehydrated task after a cache
+    miss or process restart fell back to the English ``message`` text.
+    """
+    registry = _reset_registry(tmp_path, monkeypatch)
+
+    run = registry.create_run(
+        run_type="report_generate",
+        entity_id="report_123",
+        linked_ids={"report_id": "report_123"},
+    )
+
+    task = SimpleNamespace(
+        metadata={"run_id": run["run_id"]},
+        task_id="task_1",
+        task_type="report_generate",
+        status=SimpleNamespace(value="processing"),
+        progress=65,
+        message="Chunking text...",
+        message_key="task.chunking",
+        error=None,
+    )
+
+    updated = registry.sync_task(task)
+
+    assert updated is not None
+    assert updated["message_key"] == "task.chunking"
+
+
 def test_list_runs_skips_corrupt_manifest(tmp_path, monkeypatch):
     registry = _reset_registry(tmp_path, monkeypatch)
 
