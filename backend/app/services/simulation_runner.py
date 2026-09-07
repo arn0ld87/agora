@@ -94,11 +94,22 @@ class SimulationRunner:
     RUN_STATE_DIR = os.path.join(os.path.dirname(__file__), '../../uploads/simulations')
     SCRIPTS_DIR = os.path.join(os.path.dirname(__file__), '../../scripts')
 
+    # Sekunden, die stop_simulation nach dem Prozessende auf den zugehoerigen
+    # Monitor-Thread wartet (B3, Issue-Review 2026-09-07) — terminate_process
+    # nutzt intern einen SIGTERM-Timeout von 10s, +2s Puffer, mindestens 5s.
+    _MONITOR_JOIN_TIMEOUT_SECONDS = max(10 + 2, 5)
+
     # In-memory run state (class-level dicts; passed by reference to submodules)
     _run_states: Dict[str, SimulationRunState] = {}
     _processes: Dict[str, subprocess.Popen] = {}
     _action_queues: Dict[str, Queue] = {}
     _monitor_threads: Dict[str, threading.Thread] = {}
+    # simulation_id -> Generation-Zaehler (B3, Issue-Review 2026-09-07): jeder
+    # start_simulation-Aufruf inkrementiert die Generation seiner simulation_id;
+    # der zugehoerige Monitor-Thread prueft vor jedem Schreibzugriff, ob seine
+    # Generation noch die aktuelle ist, damit ein stale Monitor nach einem
+    # Force-Restart keinen neueren Lauf ueberschreibt.
+    _monitor_generations: Dict[str, int] = {}
     _stdout_files: Dict[str, Any] = {}
     _stderr_files: Dict[str, Any] = {}
     _graph_memory_enabled: Dict[str, bool] = {}  # simulation_id -> enabled
@@ -226,7 +237,11 @@ class SimulationRunner:
         store = _store()
 
         def _on_monitor_start(sim_id: str) -> None:
-            t = threading.Thread(target=cls._monitor_simulation, args=(sim_id,), daemon=True)
+            generation = cls._monitor_generations.get(sim_id, 0) + 1
+            cls._monitor_generations[sim_id] = generation
+            t = threading.Thread(
+                target=cls._monitor_simulation, args=(sim_id, generation), daemon=True
+            )
             t.start()
             cls._monitor_threads[sim_id] = t
 
@@ -255,8 +270,13 @@ class SimulationRunner:
         )
 
     @classmethod
-    def _monitor_simulation(cls, simulation_id: str) -> None:
-        """Delegate to monitor.monitor_simulation (PR 3, Thread-target Monkeypatch-compat)."""
+    def _monitor_simulation(cls, simulation_id: str, generation: int = 0) -> None:
+        """Delegate to monitor.monitor_simulation (PR 3, Thread-target Monkeypatch-compat).
+
+        ``generation`` (B3, Issue-Review 2026-09-07): identifies which
+        start_simulation call spawned this thread, so a stale monitor left
+        over from a force-restart can detect it is no longer current.
+        """
         _monitor_simulation_fn(
             simulation_id,
             run_state_dir=cls.RUN_STATE_DIR,
@@ -267,6 +287,8 @@ class SimulationRunner:
             stderr_files=cls._stderr_files,
             get_run_state=cls.get_run_state,
             save_state=cls._save_run_state,
+            generation=generation,
+            is_current_generation=lambda sid, gen: cls._monitor_generations.get(sid) == gen,
         )
 
     @classmethod
@@ -291,15 +313,35 @@ class SimulationRunner:
 
     @classmethod
     def stop_simulation(cls, simulation_id: str) -> SimulationRunState:
-        """Stop simulation — delegates to process_manager.stop_simulation (PR 5)."""
-        return _stop_simulation_fn(
+        """Stop simulation — delegates to process_manager.stop_simulation (PR 5).
+
+        Joins the simulation's monitor thread afterwards (B3, Issue-Review
+        2026-09-07): without this, an immediate start_simulation right after
+        stop_simulation (force-restart) could spawn a second monitor thread
+        while the first one is still finishing — the generation guard in
+        monitor.monitor_simulation covers the remaining race, this join just
+        shrinks the window and surfaces a slow-shutdown warning.
+        """
+        state = _stop_simulation_fn(
             simulation_id,
+            run_state_dir=cls.RUN_STATE_DIR,
             processes=cls._processes,
             graph_memory_enabled=cls._graph_memory_enabled,
             get_run_state=cls.get_run_state,
             save_state=cls._save_run_state,
             stop_graph_memory_updater=GraphMemoryManager.stop_updater,
         )
+        monitor_thread = cls._monitor_threads.get(simulation_id)
+        if monitor_thread is not None and monitor_thread.is_alive():
+            monitor_thread.join(timeout=cls._MONITOR_JOIN_TIMEOUT_SECONDS)
+            if monitor_thread.is_alive():
+                logger.warning(
+                    "Monitor-Thread nach stop_simulation nicht innerhalb von %ss "
+                    "beendet: simulation_id=%s",
+                    cls._MONITOR_JOIN_TIMEOUT_SECONDS,
+                    simulation_id,
+                )
+        return state
 
     @classmethod
     def _read_actions_from_file(
