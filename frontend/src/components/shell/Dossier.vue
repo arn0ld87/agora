@@ -467,6 +467,9 @@ function formatUpdatedAt(iso: string): string {
   font-weight: 600;
   letter-spacing: var(--tr-title-1);
   color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dossier__summary {
