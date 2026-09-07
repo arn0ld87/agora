@@ -86,6 +86,112 @@ INELIGIBLE_ENTITY_TYPES: frozenset[str] = frozenset(
 )
 
 
+# Kopfnomen, die einen Typ unabhaengig von seinen Bestimmungswoertern als
+# nicht-menschlich ausweisen. Geprueft wird als **Suffix**, nicht als
+# Teilstring — im Deutschen wie im Englischen steht der Kopf einer
+# Nominalkomposition hinten: ``LearningTechnology`` -> ``technology``,
+# ``Lernsystem`` -> ``system``.
+#
+# Der Unterschied ist tragend. Ein Teilstring-Vergleich wuerde
+# ``AIServiceProvider`` ueber ``service`` blocken, obwohl das ein
+# Unternehmen ist und sehr wohl eine Persona traegt; als Suffix greift dort
+# ``provider``, das bewusst **nicht** in dieser Menge steht. Aus demselben
+# Grund fehlen hier ``organization``, ``group``, ``team``, ``board``,
+# ``committee``, ``association``, ``agency``, ``authority``, ``department``,
+# ``office``, ``center``, ``representative`` und ``provider``: alles Koepfe,
+# die auf einen menschlichen Traeger zeigen.
+#
+# Stufe 1 schliesst hart aus, ein Fehlurteil hier kostet eine legitime
+# Persona ohne Rueckfrage. Deshalb stehen hier nur Koepfe, die in keiner
+# plausiblen Lesart einen Menschen oder eine Personengruppe bezeichnen.
+#
+# Aus demselben Grund fehlt ``service``: ``AIService`` waere zwar richtig
+# geblockt, ``CustomerService`` ist aber eine Abteilung mit Menschen. Solche
+# mehrdeutigen Koepfe bleiben Stufe 2 ueberlassen.
+INELIGIBLE_TYPE_HEADS: frozenset[str] = frozenset(
+    {
+        # Technik und Artefakte
+        "technology",
+        "technologie",
+        "system",
+        "software",
+        "platform",
+        "plattform",
+        "application",
+        "anwendung",
+        "tool",
+        "werkzeug",
+        "interface",
+        "schnittstelle",
+        "component",
+        "komponente",
+        "module",
+        "modul",
+        "infrastructure",
+        "infrastruktur",
+        "architecture",
+        "architektur",
+        "pipeline",
+        "algorithm",
+        "algorithmus",
+        "database",
+        "datenbank",
+        "dataset",
+        "datensatz",
+        # Mess- und Bewertungsgroessen
+        "criterion",
+        "kriterium",
+        "metric",
+        "metrik",
+        "kennzahl",
+        "score",
+        "indicator",
+        "indikator",
+        # Verfahren und Abstrakta
+        "method",
+        "methode",
+        "methodology",
+        "verfahren",
+        "process",
+        "prozess",
+        "workflow",
+        "concept",
+        "konzept",
+        "category",
+        "kategorie",
+        "requirement",
+        "anforderung",
+        # Dokumente und Regelwerke
+        "document",
+        "dokument",
+        "report",
+        "bericht",
+        "protocol",
+        "protokoll",
+        "standard",
+        "format",
+        "license",
+        "lizenz",
+        "regulation",
+        "verordnung",
+    }
+)
+
+
+def _ineligible_head(normalized_type: str) -> Optional[str]:
+    """Liefert das blockierende Kopfnomen eines Typs, sonst ``None``.
+
+    Der laengste Treffer gewinnt, damit ein spezifischer Kopf einen
+    kuerzeren, zufaellig ebenfalls passenden verdraengt.
+    """
+    matches = [
+        head for head in INELIGIBLE_TYPE_HEADS if normalized_type.endswith(head)
+    ]
+    if not matches:
+        return None
+    return max(matches, key=len)
+
+
 def _known_entity_types() -> frozenset[str]:
     """``INDIVIDUAL_ENTITY_TYPES``/``GROUP_ENTITY_TYPES`` — Single Source
     of Truth im Generator, hier nur für die Stufe-2-Klassifikation
@@ -155,11 +261,18 @@ def filter_eligible_entities(
         entity_type = entity.get_entity_type() or "Entity"
         normalized = entity_type.strip().lower()
 
-        if normalized in INELIGIBLE_ENTITY_TYPES:
-            reason = (
-                f"entity_type '{entity_type}' hat keinen menschlichen Träger "
-                "(Blockliste, Issue #1034)"
-            )
+        blocking_head = None if normalized in INELIGIBLE_ENTITY_TYPES else _ineligible_head(normalized)
+        if normalized in INELIGIBLE_ENTITY_TYPES or blocking_head is not None:
+            if blocking_head is None:
+                reason = (
+                    f"entity_type '{entity_type}' hat keinen menschlichen Träger "
+                    "(Blockliste, Issue #1034)"
+                )
+            else:
+                reason = (
+                    f"entity_type '{entity_type}' hat keinen menschlichen Träger "
+                    f"— Kopfnomen '{blocking_head}' (Blockliste, Issue #1034)"
+                )
             exclusions.append(
                 EligibilityExclusion(
                     entity_name=entity.name,
