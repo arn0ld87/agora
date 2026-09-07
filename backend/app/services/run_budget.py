@@ -210,6 +210,35 @@ class RunBudgetEnforcer:
         events = load_call_events_cached(self.run_id)
         return aggregate_usage(self.run_id, events=events).totals
 
+    def remaining_hard_calls(self) -> Optional[int]:
+        """Verbleibende Calls unter einem harten ``max_llm_calls``-Budget.
+
+        ``None`` heisst: kein hartes Aufrufbudget aktiv (weiche Durchsetzung
+        oder Limit ohne Aufrufgrenze) — Aufrufer duerfen dann uneingeschraenkt
+        parallelisieren.
+
+        Race-Hinweis (Codex-Finding PR #1452): der Rueckgabewert ist ein
+        Snapshot zum Aufrufzeitpunkt, kein reserviertes Kontingent.
+        ``check_before_call()`` bleibt racy, wenn mehrere Greenlets oder
+        Threads gleichzeitig pruefen, bevor eine Antwort ihre Nutzung
+        verbucht hat. Wer mehrere LLM-Calls parallel dispatcht, deckelt
+        deshalb die Anzahl **gleichzeitig gestarteter** Calls auf diesen
+        Wert, statt alle auf einmal loszuschicken.
+        """
+        if self.config.enforcement != "hard":
+            return None
+        max_calls = self.config.max_llm_calls
+        if max_calls is None:
+            return None
+        try:
+            consumed_calls = self.consumed().llm_calls or 0
+        except Exception as exc:  # noqa: BLE001 — Budget ist Zusatz, kein Hotpath-Risiko
+            logger.warning(
+                "remaining_hard_calls: Verbrauch konnte nicht gelesen werden: %s", exc
+            )
+            return None
+        return max(0, max_calls - consumed_calls)
+
     def _elapsed_seconds(self) -> Optional[float]:
         if self._started_at_epoch is None:
             return None

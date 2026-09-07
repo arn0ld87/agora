@@ -2410,6 +2410,41 @@ Important:
         # auslösen würde, obwohl der Nutzer bereits abgebrochen hat.
         cancel_requested = False
 
+        # Codex-Finding PR #1452 (P1), Folgearbeit: dieselbe Budget-Race
+        # trifft die parallele Persona-Generierung. Ohne Deckelung pruefen
+        # alle Greenlets/Threads ``LLMClient._budget_check()`` gegen
+        # denselben Vor-Aufruf-Stand, bevor eine Antwort ihre Nutzung
+        # verbucht hat — ein hartes ``max_llm_calls``-Budget mit weniger
+        # verbleibenden Calls als ``parallel_count`` kann dadurch
+        # ueberschritten werden. Dispatch daher nie mit mehr gleichzeitig
+        # gestarteten Workern, als noch Calls frei sind. ``max(1, ...)``
+        # erhaelt das bestehende Verhalten bei erschoepftem Budget: genau
+        # ein Worker startet, trifft sofort auf ``BudgetExceededError`` und
+        # bricht sauber ab, statt dass eine Pool-Groesse 0 den Lauf
+        # unbemerkt leer durchlaufen laesst.
+        #
+        # Anders als ``SimulationConfigGenerator`` haelt diese Klasse keinen
+        # ``LLMClient`` — ``generate_single_profile`` baut ihn pro Persona.
+        # Der Enforcer wird deshalb direkt befragt; eine Wegwerf-Instanz nur
+        # zum Auslesen wuerde Secret-Aufloesung, Client-Bau und eine
+        # zusaetzliche Audit-Zeile ausloesen und ohne API-Key scheitern,
+        # womit der Deckel ausgerechnet dann ausfiele, wenn er greifen soll.
+        remaining_budget: Optional[int] = None
+        if self.run_id:
+            try:
+                from .run_budget import RunBudgetEnforcer
+
+                enforcer = RunBudgetEnforcer.for_run(self.run_id)
+                if enforcer is not None:
+                    remaining_budget = enforcer.remaining_hard_calls()
+            except Exception as exc:  # noqa: BLE001 — Budget ist Zusatz, kein Hotpath-Risiko
+                logger.warning(
+                    "Persona-Generierung: verbleibendes Hartbudget nicht "
+                    "ermittelbar, Parallelitaet bleibt ungedeckelt: %s", exc
+                )
+        if remaining_budget is not None:
+            parallel_count = min(parallel_count, max(1, remaining_budget))
+
         if is_gevent:
             logger.info("Gevent detected: using native cooperative Pool for parallel persona generation")
             from gevent.pool import Pool
