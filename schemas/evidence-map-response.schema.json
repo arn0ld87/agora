@@ -1,0 +1,914 @@
+{
+  "$defs": {
+    "AgentLogRef": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "title": "Action",
+          "type": "string"
+        },
+        "section_index": {
+          "minimum": 0,
+          "title": "Section Index",
+          "type": "integer"
+        },
+        "tool_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tool Name"
+        }
+      },
+      "required": [
+        "section_index",
+        "action"
+      ],
+      "title": "AgentLogRef",
+      "type": "object"
+    },
+    "ClaimEvidenceBindingModel": {
+      "additionalProperties": false,
+      "description": "Claim-relative Bewertung einer Referenz auf ``EvidenceRecordModel``.",
+      "properties": {
+        "contradicts_claim": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Contradicts Claim"
+        },
+        "entailment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EntailmentVerdict"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "entailment_reason": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Entailment Reason"
+        },
+        "evidence_id": {
+          "pattern": "^ev_[0-9a-f]{32}$",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "match_score": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Match Score"
+        },
+        "retrieval_score": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retrieval Score"
+        },
+        "supports_claim": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Supports Claim"
+        }
+      },
+      "required": [
+        "evidence_id"
+      ],
+      "title": "ClaimEvidenceBindingModel",
+      "type": "object"
+    },
+    "ConfidenceLabel": {
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "verified"
+      ],
+      "title": "ConfidenceLabel",
+      "type": "string"
+    },
+    "EntailmentVerdict": {
+      "description": "Urteil der zweiten Binding-Stufe.\n\nSpiegelt ``app.services.evidence_entailment.EntailmentVerdict``. Nur\n``SUPPORTED`` rechtfertigt ``supports_claim=True``; ``RELATED_ONLY`` und\n``INSUFFICIENT`` erh\u00f6hen die Confidence nie.",
+      "enum": [
+        "SUPPORTED",
+        "CONTRADICTED",
+        "RELATED_ONLY",
+        "INSUFFICIENT"
+      ],
+      "title": "EntailmentVerdict",
+      "type": "string"
+    },
+    "EvidenceCoverageEntry": {
+      "additionalProperties": false,
+      "description": "Was aus einem quantitativen Tool-Fakt geworden ist.\n\nIm Referenzlauf ``report_cc2ef45da5e9`` lagen 31 %, 67 %, 83 %, 91 %, 6 %\nund \"sieben F\u00e4lle\" in den Tool-Ergebnissen vor und fehlten anschlie\u00dfend im\nkanonischen Evidence-Index. Kein Log, keine Meldung \u2014 die Zahlen waren\neinfach weg, und der Bericht f\u00fchrte sie folgerichtig als unbelegt.\n\nEin Fakt darf verworfen werden. Er darf nur nicht *still* verworfen werden:\njeder Eintrag hier tr\u00e4gt entweder eine kanonische Evidence-ID oder einen\nGrund, warum es keine gibt. Das macht den Unterschied zwischen einem\nDedup-Treffer und einem Extraktionsfehler nachtr\u00e4glich aufl\u00f6sbar.",
+      "properties": {
+        "canonical_evidence_id": {
+          "anyOf": [
+            {
+              "pattern": "^ev_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Die kanonische Evidence \u2014 Pflicht bei status='canonicalized'.",
+          "title": "Canonical Evidence Id"
+        },
+        "fact": {
+          "description": "Der Fakt im Wortlaut der Quelle.",
+          "minLength": 1,
+          "title": "Fact",
+          "type": "string"
+        },
+        "normalized_value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Normalized Value"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Warum verworfen \u2014 Pflicht bei status='dropped'.",
+          "title": "Reason"
+        },
+        "source_result_id": {
+          "description": "Tool-Ergebnis, aus dem der Fakt stammt (producer_key oder Tool-Name).",
+          "minLength": 1,
+          "title": "Source Result Id",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "canonicalized",
+            "dropped"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        }
+      },
+      "required": [
+        "source_result_id",
+        "fact",
+        "status"
+      ],
+      "title": "EvidenceCoverageEntry",
+      "type": "object"
+    },
+    "EvidenceDegradationModel": {
+      "additionalProperties": false,
+      "description": "Maschinenlesbares Protokoll einer lokalen Claim-Degradierung (Issue #1006).\n\nEin einzelner ADR-0002-Verstoss kippte bisher den gesamten Report auf\nFAILED und vernichtete bereits fertige Sections. Statt den Validator zu\nlockern, wird der verletzende Claim lokal abgestuft und die Reparatur\nhier protokolliert.",
+      "properties": {
+        "action": {
+          "title": "Action",
+          "type": "string"
+        },
+        "claim_id": {
+          "title": "Claim Id",
+          "type": "string"
+        },
+        "detail": {
+          "title": "Detail",
+          "type": "string"
+        },
+        "section_index": {
+          "title": "Section Index",
+          "type": "integer"
+        },
+        "violation": {
+          "title": "Violation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "section_index",
+        "claim_id",
+        "violation",
+        "action",
+        "detail"
+      ],
+      "title": "EvidenceDegradationModel",
+      "type": "object"
+    },
+    "EvidenceMapModel": {
+      "additionalProperties": false,
+      "description": "Persistierte Evidence-Map. Abl\u00f6se f\u00fcr die rohen Dicts in report_agent.py.",
+      "properties": {
+        "degradation_log": {
+          "items": {
+            "$ref": "#/$defs/EvidenceDegradationModel"
+          },
+          "title": "Degradation Log",
+          "type": "array"
+        },
+        "evidence_coverage_ledger": {
+          "items": {
+            "$ref": "#/$defs/EvidenceCoverageEntry"
+          },
+          "title": "Evidence Coverage Ledger",
+          "type": "array"
+        },
+        "evidence_index": {
+          "additionalProperties": {
+            "$ref": "#/$defs/EvidenceRecordModel"
+          },
+          "title": "Evidence Index",
+          "type": "object"
+        },
+        "gate_decision_log": {
+          "items": {
+            "$ref": "#/$defs/EvidenceDegradationModel"
+          },
+          "title": "Gate Decision Log",
+          "type": "array"
+        },
+        "global_evidence_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Global Evidence Refs",
+          "type": "array"
+        },
+        "report_id": {
+          "minLength": 1,
+          "title": "Report Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 3,
+          "default": 3,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "sections": {
+          "items": {
+            "$ref": "#/$defs/ReportSectionModel"
+          },
+          "title": "Sections",
+          "type": "array"
+        },
+        "simulation_id": {
+          "minLength": 1,
+          "title": "Simulation Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "report_id",
+        "simulation_id"
+      ],
+      "title": "EvidenceMapModel",
+      "type": "object"
+    },
+    "EvidenceOmissionModel": {
+      "additionalProperties": false,
+      "description": "Warum ein Export-Envelope keine Evidence-Map traegt (Issue #987).\n\nBis #987 fiel eine Evidence-Map, die nach allen Migrationen den Vertrag\nverletzte, mit einer ``logger.warning`` aus dem Envelope. Der Nutzer bekam\nHTTP 200 und eine herunterladbare JSON-Datei mit ``evidence: null`` \u2014 von\neinem Report ohne Evidence nicht zu unterscheiden.\n\nDer Fallback bleibt: ein unvollstaendiger Export ist besser als gar keiner,\nund der Report-Rumpf ist unbeschaedigt. Er ist nur nicht laenger stumm.\n\nAbgrenzung zu ``EvidenceDegradationModel`` (#1006): das protokolliert die\nAbstufung eines *einzelnen Claims* waehrend der Report-Erzeugung. Hier ist\ndie *gesamte Map* nicht ausliefertbar, und zwar erst beim Export.",
+      "properties": {
+        "detail": {
+          "description": "Erklaerung fuer den Leser der exportierten Datei, nicht fuer die Oberflaeche: wer die JSON spaeter ohne Agora oeffnet, soll den fehlenden Evidence-Teil einordnen koennen.",
+          "minLength": 1,
+          "title": "Detail",
+          "type": "string"
+        },
+        "reason": {
+          "const": "contract_violation",
+          "description": "Stabiler Schluessel. Die Oberflaeche uebersetzt daraus per vue-i18n \u2014 dieser Vertrag transportiert keinen UI-Text.",
+          "title": "Reason",
+          "type": "string"
+        },
+        "validation_errors": {
+          "description": "Die ersten Validierungsfehler als ``loc: msg``. Belegt die Einstufung, ohne die verworfenen Rohdaten mitzuexportieren.",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 5,
+          "title": "Validation Errors",
+          "type": "array"
+        }
+      },
+      "required": [
+        "reason",
+        "detail"
+      ],
+      "title": "EvidenceOmissionModel",
+      "type": "object"
+    },
+    "EvidenceRecordModel": {
+      "additionalProperties": false,
+      "description": "Claim-unabhaengiger, kanonisch adressierbarer Quellen-Datensatz.",
+      "properties": {
+        "agent_log_ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentLogRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "evidence_id": {
+          "pattern": "^ev_[0-9a-f]{32}$",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "persona_role_family": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Persona Role Family"
+        },
+        "persona_stakeholder_group": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Persona Stakeholder Group"
+        },
+        "producer_key": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Producer Key",
+          "type": "string"
+        },
+        "query": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Query"
+        },
+        "quote": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quote"
+        },
+        "raw": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Raw"
+        },
+        "sentiment_score": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": -1.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sentiment Score"
+        },
+        "snippet": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Snippet",
+          "type": "string"
+        },
+        "source": {
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "source_id_anchor": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Id Anchor"
+        },
+        "source_kind": {
+          "$ref": "#/$defs/EvidenceSourceKind",
+          "default": "inferred"
+        },
+        "source_model": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Model"
+        },
+        "tool_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tool Name"
+        },
+        "topic_stance": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": -1.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Topic Stance"
+        },
+        "type": {
+          "$ref": "#/$defs/EvidenceType"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "producer_key",
+        "type",
+        "source",
+        "snippet"
+      ],
+      "title": "EvidenceRecordModel",
+      "type": "object"
+    },
+    "EvidenceSourceKind": {
+      "description": "ADR-0002 Anker 3 \u2014 Quellengattung pro Evidence-Item.\n\nWird von den Cross-Stakeholder-/Inferred-Validators auf\n``ReportClaimModel`` ausgewertet (Sub-Slice M11.7b, Anker 4 + 5).\nDrift-Guard: Diese Werte sind im Prompt-Block\n``backend/app/services/report_prompts/sections.py`` referenziert (Anker 1).\n\nErweiterung (Report-Trust-Slice): ``agent_action`` und ``web_source``\nerg\u00e4nzen die urspr\u00fcnglichen vier Werte. Das ist additiv und versch\u00e4rft\nADR-0002, statt es zu schw\u00e4chen \u2014 vorher liefen Agentenaktionen und\nWeb-Treffer \u00fcber den Default ``seed_corpus`` und verschmolzen damit\nSeed-Dokument, Simulation und Recherche zu einer einzigen Quellengattung.\nF\u00fcr die Confidence-Anker gilt weiterhin: nur ``agent_quote`` z\u00e4hlt als\nStakeholder-Stimme, nur ``seed_corpus`` als Dokumentfakt.",
+      "enum": [
+        "seed_corpus",
+        "agent_quote",
+        "agent_action",
+        "graph_relation",
+        "web_source",
+        "inferred"
+      ],
+      "title": "EvidenceSourceKind",
+      "type": "string"
+    },
+    "EvidenceType": {
+      "description": "\u00dcbernommen aus report_agent.py \u2014 bestehende Typen plus model_generated_inference.",
+      "enum": [
+        "graph_fact",
+        "graph_metric",
+        "graph_metric_status",
+        "relationship_chain",
+        "entity_summary",
+        "agent_action",
+        "agent_interview",
+        "web_search_result",
+        "web_fetch",
+        "seed_document",
+        "model_generated_inference"
+      ],
+      "title": "EvidenceType",
+      "type": "string"
+    },
+    "IndexedReportClaimModel": {
+      "additionalProperties": false,
+      "description": "Claim-Shape der EvidenceMap v3 mit referenzierten Bindings.",
+      "properties": {
+        "audit_trail": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Audit Trail",
+          "type": "array"
+        },
+        "claim_id": {
+          "pattern": "^claim_\\d{2,}$",
+          "title": "Claim Id",
+          "type": "string"
+        },
+        "claim_text": {
+          "minLength": 8,
+          "title": "Claim Text",
+          "type": "string"
+        },
+        "confidence_label": {
+          "$ref": "#/$defs/ConfidenceLabel"
+        },
+        "confidence_score": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence Score",
+          "type": "number"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/ClaimEvidenceBindingModel"
+          },
+          "maxItems": 10,
+          "title": "Evidence",
+          "type": "array"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Notes"
+        }
+      },
+      "required": [
+        "claim_id",
+        "claim_text",
+        "confidence_label",
+        "confidence_score"
+      ],
+      "title": "IndexedReportClaimModel",
+      "type": "object"
+    },
+    "ReportSectionDataGapModel": {
+      "additionalProperties": false,
+      "description": "P2.1: Maschinenlesbare Luecke fuer nicht belegbare Claim-Kandidaten.",
+      "properties": {
+        "claim_text": {
+          "maxLength": 1000,
+          "minLength": 8,
+          "title": "Claim Text",
+          "type": "string"
+        },
+        "gap_id": {
+          "pattern": "^gap_\\d{2,}$",
+          "title": "Gap Id",
+          "type": "string"
+        },
+        "gap_reason": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Gap Reason",
+          "type": "string"
+        },
+        "hypothesis_id": {
+          "anyOf": [
+            {
+              "pattern": "^hypothesis_\\d{2,}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hypothesis Id"
+        },
+        "suggested_fix": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Suggested Fix"
+        }
+      },
+      "required": [
+        "gap_id",
+        "claim_text",
+        "gap_reason"
+      ],
+      "title": "ReportSectionDataGapModel",
+      "type": "object"
+    },
+    "ReportSectionHypothesisModel": {
+      "additionalProperties": false,
+      "description": "ADR-0002 hypothesis slot \u2014 reasoning without evidence, not a claim.\n\nHypothesen duerfen nicht in ``claims[]`` formuliert werden, weil sie keine\nEvidence tragen. Dieses DTO macht den separaten Slot maschinenlesbar, ohne\ndie bestehenden Claim-/Evidence-Validatoren zu schwaechen.",
+      "properties": {
+        "hypothesis_id": {
+          "pattern": "^hypothesis_\\d{2,}$",
+          "title": "Hypothesis Id",
+          "type": "string"
+        },
+        "hypothesis_text": {
+          "maxLength": 1000,
+          "minLength": 8,
+          "title": "Hypothesis Text",
+          "type": "string"
+        },
+        "rationale": {
+          "maxLength": 1000,
+          "minLength": 8,
+          "title": "Rationale",
+          "type": "string"
+        },
+        "suggested_evidence": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 5,
+          "title": "Suggested Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "hypothesis_id",
+        "hypothesis_text",
+        "rationale"
+      ],
+      "title": "ReportSectionHypothesisModel",
+      "type": "object"
+    },
+    "ReportSectionModel": {
+      "additionalProperties": false,
+      "properties": {
+        "claims": {
+          "items": {
+            "$ref": "#/$defs/IndexedReportClaimModel"
+          },
+          "title": "Claims",
+          "type": "array"
+        },
+        "data_gaps": {
+          "items": {
+            "$ref": "#/$defs/ReportSectionDataGapModel"
+          },
+          "title": "Data Gaps",
+          "type": "array"
+        },
+        "generation_failed": {
+          "default": false,
+          "title": "Generation Failed",
+          "type": "boolean"
+        },
+        "hypotheses": {
+          "items": {
+            "$ref": "#/$defs/ReportSectionHypothesisModel"
+          },
+          "title": "Hypotheses",
+          "type": "array"
+        },
+        "hypotheses_appendix": {
+          "items": {
+            "$ref": "#/$defs/ReportSectionHypothesisModel"
+          },
+          "maxItems": 50,
+          "title": "Hypotheses Appendix",
+          "type": "array"
+        },
+        "section_index": {
+          "minimum": 1,
+          "title": "Section Index",
+          "type": "integer"
+        },
+        "section_summary": {
+          "minLength": 1,
+          "title": "Section Summary",
+          "type": "string"
+        },
+        "section_title": {
+          "minLength": 3,
+          "title": "Section Title",
+          "type": "string"
+        },
+        "structured_metadata": {
+          "additionalProperties": true,
+          "title": "Structured Metadata",
+          "type": "object"
+        },
+        "unbound_evidence_refs": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 200,
+          "title": "Unbound Evidence Refs",
+          "type": "array"
+        },
+        "unverified_statements": {
+          "items": {
+            "$ref": "#/$defs/ReportSectionUnverifiedStatementModel"
+          },
+          "maxItems": 200,
+          "title": "Unverified Statements",
+          "type": "array"
+        }
+      },
+      "required": [
+        "section_index",
+        "section_title",
+        "section_summary"
+      ],
+      "title": "ReportSectionModel",
+      "type": "object"
+    },
+    "ReportSectionUnverifiedStatementModel": {
+      "additionalProperties": false,
+      "description": "Issue #1356: eine im Flie\u00dftext belassene, unbelegte Faktenaussage.\n\nBis #1356 wurde alles entfernt, was die Pr\u00fcfung nicht bestand \u2014 auch das,\nwas sie mangels passender Quelle nur nicht *entscheiden* konnte. Ein\nvollst\u00e4ndiger Referenzlauf verlor so 28 Aussagen, die weit \u00fcberwiegende\nMehrheit davon belegt. Seither bleibt der Satz stehen und tr\u00e4gt sichtbar\n``[Beleg fehlt]``; dieses Modell h\u00e4lt dieselbe Information maschinenlesbar,\ndamit Frontend und Audit nicht am Markerstring parsen m\u00fcssen.\n\nAbgrenzung zu ``ReportSectionHypothesisModel``: die Hypothese ist die\n*herausgel\u00f6ste* Behauptung samt Vorschlag, wie sie zu belegen w\u00e4re. Dieses\nModell beschreibt, was im gelesenen Text mit welcher Einschr\u00e4nkung\nstehengeblieben ist. Beide Slots werden bef\u00fcllt.",
+      "properties": {
+        "reason": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "statement_text": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Statement Text",
+          "type": "string"
+        },
+        "verdict": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Verdict",
+          "type": "string"
+        }
+      },
+      "required": [
+        "statement_text",
+        "verdict",
+        "reason"
+      ],
+      "title": "ReportSectionUnverifiedStatementModel",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/evidence-map-response.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Response-Envelope fuer ``GET /api/report/<id>/evidence`` (Review B7 Fix, Issue #1477 F1).\n\nVorher stand die Form dieser Antwort nur als handgeschriebenes\nTypeScript-Interface (``EvidenceOmittedEnvelope`` in\n``frontend/src/api/report.ts``) \u2014 die Schema-Generierung kannte diese\nAPI-Grenze nicht, und Axios behauptete beliebige ``data``-Formen ohne\nPruefung.\n\nUnion aus Erfolgsfall (``data`` gesetzt) und Degradations-Fall\n(``evidence_omitted`` gesetzt, siehe ``EvidenceOmissionModel``) \u2014\n``backend/app/api/report.py::get_report_evidence`` liefert nie beide\nFelder gleichzeitig und nie keines von beiden. Der Route-Handler dumpt\ndieses Modell mit ``exclude_none=True``, sodass die jeweils ungesetzte\nSeite (anders als bei ``ReportContractModel.evidence_omitted``) als Key\nganz fehlt statt ``null`` zu sein \u2014 bestehende Tests pruefen exakt das.",
+  "properties": {
+    "data": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EvidenceMapModel"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "evidence_omitted": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EvidenceOmissionModel"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "success": {
+      "const": true,
+      "default": true,
+      "title": "Success",
+      "type": "boolean"
+    }
+  },
+  "title": "EvidenceMapResponseModel",
+  "type": "object"
+}

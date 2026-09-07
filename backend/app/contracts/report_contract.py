@@ -1182,6 +1182,38 @@ class EvidenceOmissionModel(BaseModel):
     )
 
 
+class EvidenceMapResponseModel(BaseModel):
+    """Response-Envelope fuer ``GET /api/report/<id>/evidence`` (Review B7 Fix, Issue #1477 F1).
+
+    Vorher stand die Form dieser Antwort nur als handgeschriebenes
+    TypeScript-Interface (``EvidenceOmittedEnvelope`` in
+    ``frontend/src/api/report.ts``) — die Schema-Generierung kannte diese
+    API-Grenze nicht, und Axios behauptete beliebige ``data``-Formen ohne
+    Pruefung.
+
+    Union aus Erfolgsfall (``data`` gesetzt) und Degradations-Fall
+    (``evidence_omitted`` gesetzt, siehe ``EvidenceOmissionModel``) —
+    ``backend/app/api/report.py::get_report_evidence`` liefert nie beide
+    Felder gleichzeitig und nie keines von beiden. Der Route-Handler dumpt
+    dieses Modell mit ``exclude_none=True``, sodass die jeweils ungesetzte
+    Seite (anders als bei ``ReportContractModel.evidence_omitted``) als Key
+    ganz fehlt statt ``null`` zu sein — bestehende Tests pruefen exakt das.
+    """
+
+    model_config = _STRICT
+    success: Literal[True] = True
+    data: Optional[EvidenceMapModel] = None
+    evidence_omitted: Optional[EvidenceOmissionModel] = None
+
+    @model_validator(mode="after")
+    def exactly_one_variant(self) -> "EvidenceMapResponseModel":
+        if (self.data is None) == (self.evidence_omitted is None):
+            raise ValueError(
+                "Genau eines von 'data' oder 'evidence_omitted' muss gesetzt sein."
+            )
+        return self
+
+
 class ReportContractModel(BaseModel):
     """Wurzel — was tatsächlich beim Export rausgeht."""
     model_config = _STRICT

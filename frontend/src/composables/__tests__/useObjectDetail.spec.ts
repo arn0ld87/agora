@@ -219,6 +219,32 @@ describe('useObjectDetail', () => {
     expect(detail.value?.redTeamFindings).toEqual(['Befund A'])
   })
 
+  it('Issue #1477 F2: markiert eine degradierte Evidence-Map statt sie still als Erfolg zu behandeln', async () => {
+    vi.mocked(getReport).mockResolvedValue({
+      success: true,
+      data: { outline: { title: 'T', summary: 'S', sections: [] }, evidence_sections: 3 },
+    } as never)
+    vi.mocked(getReportEvidence).mockResolvedValue({
+      success: true,
+      evidence_omitted: {
+        reason: 'contract_violation',
+        detail: 'Testfall.',
+        validation_errors: [],
+      },
+    } as never)
+
+    const obj = ref<ShelfObject | null>(makeObject({ id: 'report_9' }))
+    const { detail } = useObjectDetail(obj, t)
+    await nextTick(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+
+    expect(detail.value?.evidenceOmitted).toBe(true)
+    // Ohne validierte Evidence-Map bleiben Verteilung und Zaehler unbesetzt —
+    // vor dem Fix wurden diese Felder unbemerkt uebersprungen, aber auch
+    // keine Warnung gesetzt.
+    expect(detail.value?.confidenceDistribution).toBeUndefined()
+    expect(detail.value?.claimsCount).toBeUndefined()
+  })
+
   it('haelt einen fehlgeschlagenen Abruf von der Ablage fern', async () => {
     vi.mocked(getReport).mockRejectedValue(new Error('kaputt'))
 

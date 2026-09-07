@@ -1768,6 +1768,7 @@
       "kpiSections": "Sections",
       "kpiEvidence": "Evidence",
       "kpiClaims": "Claims",
+      "evidenceOmittedWarning": "Confidence distribution and claim count are missing: the persisted evidence map violates the evidence contract and is not shown. The report itself is unaffected.",
       "partsOpen": "Open",
       "parts": {
         "actors": "Actors",

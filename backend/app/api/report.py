@@ -5,13 +5,14 @@ Provides interfaces for simulation report generation, retrieval, and conversatio
 
 import os
 
-from flask import Response, request, send_file, current_app
+from flask import Response, jsonify, request, send_file, current_app
 from pydantic import ValidationError
 
 from . import report_bp
 from ..contracts import (
     DEFAULT_REPORT_MODE,
     EvidenceMapModel,
+    EvidenceMapResponseModel,
     ReportMode,
 )
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
@@ -305,8 +306,14 @@ def get_report_evidence(report_id: str):
             report_id,
             omission.validation_errors[:3],
         )
-        return json_success(None, evidence_omitted=omission.model_dump(mode="json"))
-    return json_success(validated.model_dump(mode="json"))
+        # Issue #1477 F1: die Envelope-Form ist jetzt vertraglich fixiert
+        # (EvidenceMapResponseModel) statt handgeschrieben. exclude_none
+        # sorgt dafuer, dass die jeweils ungesetzte Seite als Key ganz fehlt
+        # (wie zuvor per json_success), nicht als ``null`` auftaucht.
+        envelope = EvidenceMapResponseModel(evidence_omitted=omission)
+        return jsonify(envelope.model_dump(mode="json", exclude_none=True)), 200
+    envelope = EvidenceMapResponseModel(data=validated)
+    return jsonify(envelope.model_dump(mode="json", exclude_none=True)), 200
 
 
 @report_bp.route('/<report_id>/evidence/<int:section_index>', methods=['GET'])

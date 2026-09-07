@@ -541,6 +541,25 @@ export const EvidenceOmissionSchema = z.object({
 }).strict();
 export type EvidenceOmission = z.infer<typeof EvidenceOmissionSchema>;
 
+/**
+ * Spiegel zu `EvidenceMapResponseModel` (Issue #1477 F1).
+ *
+ * Response-Envelope für `GET /api/report/<id>/evidence`. Vorher stand diese
+ * Form nur als handgeschriebenes TypeScript-Interface in
+ * `frontend/src/api/report.ts` — die Schema-Generierung kannte diese
+ * API-Grenze nicht. Union aus Erfolgsfall (`data` gesetzt) und
+ * Degradations-Fall (`evidence_omitted` gesetzt) — das Backend liefert nie
+ * beide Felder gleichzeitig und nie keines von beiden; anders als
+ * `ReportContractSchema.evidence_omitted` fehlt die jeweils ungesetzte Seite
+ * hier als Key ganz, statt `null` zu sein.
+ */
+export const EvidenceMapResponseSchema = z.object({
+  success: z.literal(true),
+  data: EvidenceMapSchema.optional(),
+  evidence_omitted: EvidenceOmissionSchema.optional(),
+}).strict();
+export type EvidenceMapResponse = z.infer<typeof EvidenceMapResponseSchema>;
+
 export const ReportContractSchema = z.object({
   schema_version: z.literal(2),
   exported_at: z.string().datetime(),

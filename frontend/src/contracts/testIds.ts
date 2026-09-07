@@ -135,6 +135,8 @@ export const DossierTestId = {
   jobsTimeline: 'dossier-jobs-timeline',
   confidenceDistribution: 'dossier-confidence-distribution',
   redTeamFindings: 'dossier-red-team-findings',
+  // Issue #1477 F2: Vertrauenswarnung, wenn die Evidence-Map degradiert ist.
+  evidenceOmittedWarning: 'dossier-evidence-omitted-warning',
 } as const
 
 /**

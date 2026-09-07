@@ -1,10 +1,9 @@
 import service, { requestWithRetry } from './index'
-import type { ApiEnvelope, ApiErrorEnvelope, ApiSuccessEnvelope } from './envelope'
+import type { ApiEnvelope, ApiErrorEnvelope } from './envelope'
 import type { LlmRuntimePayload } from './llmRuntime'
 import type {
   Report,
-  EvidenceMap,
-  EvidenceOmission,
+  EvidenceMapResponse,
   ReportSection,
   EvidenceItem,
 } from '../contracts/reportContract'
@@ -166,23 +165,17 @@ export const getReport = (reportId: string): Promise<ApiEnvelope<Report>> => {
 }
 
 /**
- * Envelope für den degradierten Fall (Review B7 / PR #1477): das Backend
- * antwortet mit HTTP 200 und `evidence_omitted`, wenn die persistierte
- * Evidence-Map auch nach der Migration den Vertrag verletzt. Es gibt dann
- * bewusst KEIN `data`-Feld — ein `EvidenceMap`-Placeholder wäre selbst eine
- * unvalidierte Behauptung. Aufrufer müssen `evidence_omitted` prüfen, bevor
- * sie `data` als vorhanden annehmen.
+ * Envelope für `GET /api/report/<id>/evidence` (Review B7 / PR #1477, Issue
+ * #1477 F1). Backend-Vertrag: `EvidenceMapResponseModel`
+ * (`backend/app/contracts/report_contract.py`), Zod-Spiegel:
+ * `EvidenceMapResponseSchema`. Im degradierten Fall antwortet das Backend mit
+ * HTTP 200 und `evidence_omitted`, wenn die persistierte Evidence-Map auch
+ * nach der Migration den Vertrag verletzt — dann gibt es bewusst KEIN
+ * `data`-Feld, ein `EvidenceMap`-Placeholder wäre selbst eine unvalidierte
+ * Behauptung. Aufrufer müssen `evidence_omitted` prüfen, bevor sie `data` als
+ * vorhanden annehmen.
  */
-export interface EvidenceOmittedEnvelope {
-  success: true
-  data?: undefined
-  evidence_omitted: EvidenceOmission
-}
-
-export type EvidenceEnvelope =
-  | ApiSuccessEnvelope<EvidenceMap>
-  | EvidenceOmittedEnvelope
-  | ApiErrorEnvelope
+export type EvidenceEnvelope = EvidenceMapResponse | ApiErrorEnvelope
 
 export const getReportEvidence = (reportId: string): Promise<EvidenceEnvelope> => {
   return service.get(`/api/report/${reportId}/evidence`)

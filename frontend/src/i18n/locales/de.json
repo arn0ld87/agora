@@ -1768,6 +1768,7 @@
       "kpiSections": "Abschnitte",
       "kpiEvidence": "Belege",
       "kpiClaims": "Aussagen",
+      "evidenceOmittedWarning": "Vertrauensverteilung und Aussagenzahl fehlen: die persistierte Evidence-Map verletzt den Evidence-Vertrag und wird nicht angezeigt. Der Bericht selbst ist davon unberührt.",
       "partsOpen": "Öffnen",
       "parts": {
         "actors": "Akteure",
