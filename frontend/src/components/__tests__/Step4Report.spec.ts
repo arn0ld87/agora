@@ -493,30 +493,37 @@ describe('Step4Report — Evidence-Fehlerklassifizierung: HTTP-Fehler vs. Schema
     expect(wrapper.find('.schema-error').exists()).toBe(false)
   })
 
-  // Codex-Review PR #1456: Ein HTTP 422 mit Code `contract_violation`
-  // (backend/app/api/report.py: die persistierte Evidence-Map ist auch nach
-  // Migration nicht vertragskonform) ist dauerhaft, nicht transient wie ein
-  // 404. Ein Retry wuerde denselben Vertragsverstoss zehn Minuten lang
-  // verschweigen — er muss sichtbar werden, ohne Retry.
-  it('zeigt bei einer 422-contract_violation-ApiError den Fehler an und plant keinen Retry', async () => {
+  // Review B7 (PR #1477): der Lese-Endpoint wirft fuer eine dauerhaft
+  // vertragswidrige Evidence-Map keinen 422 mehr, sondern degradiert zu HTTP
+  // 200 mit `evidence_omitted` und OHNE `data` (backend/app/api/report.py,
+  // get_report_evidence) — dasselbe Muster wie der JSON-Export (Issue #987).
+  // Ohne den Fix parst `EvidenceMapSchema.parse(res.data)` `undefined` und
+  // die UI zeigt einen generischen Schema-Mismatch statt der spezifischen
+  // Auslassungs-Meldung — oder, je nach Zod-Verhalten, gar nichts.
+  it('zeigt bei einer degradierten 200-Antwort mit evidence_omitted den Hinweis an und plant keinen Retry', async () => {
     ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
       success: true,
       data: { status: 'completed', report_id: 'report_test01', simulation_id: 'sim_test01' },
     })
-    ;(getReportEvidence as ReturnType<typeof vi.fn>).mockRejectedValue(
-      new ApiError({
-        code: 'contract_violation',
-        status: 422,
-        message: 'Evidence map is not contract-compliant even after migration',
-      })
-    )
+    ;(getReportEvidence as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      evidence_omitted: {
+        reason: 'contract_violation',
+        detail: 'Evidence map is not contract-compliant even after migration',
+        validation_errors: ['sections.0.claims.2: Doppelte Rollenfamilie'],
+      },
+    })
 
     const wrapper = mountComponent()
     await flushPromises()
 
-    // Vertragsverstoss muss sichtbar werden — dieselbe rote Box wie bei
-    // einem Zod-Parse-Fehler.
-    expect(wrapper.find('.schema-error').exists()).toBe(true)
+    // Vertragsverstoss muss sichtbar werden — dieselbe rote Box wie beim
+    // JSON-Export, kein stiller Leerzustand und kein generischer
+    // Schema-Mismatch.
+    const notice = wrapper.find('[data-testid="report-evidence-omitted"]')
+    expect(notice.exists()).toBe(true)
+    expect(notice.attributes('role')).toBe('alert')
+    expect(notice.text()).toContain('sections.0.claims.2: Doppelte Rollenfamilie')
 
     const callsBefore = (getReportEvidence as ReturnType<typeof vi.fn>).mock.calls.length
     await vi.advanceTimersByTimeAsync(3000)

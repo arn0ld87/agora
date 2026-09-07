@@ -642,7 +642,7 @@
     "next": "Weiter zum Gespräch →",
     "export": {
       "evidenceOmitted": {
-        "contract_violation": "JSON-Export ausgeliefert, aber ohne Evidence-Map: die persistierte Evidence verletzt den Evidence-Vertrag. Der Report-Rumpf in der Datei ist vollständig."
+        "contract_violation": "Evidence-Map wird nicht angezeigt: die persistierte Evidence verletzt den Evidence-Vertrag. Der Report-Rumpf ist davon unberührt und vollständig."
       },
       "evidencePending": "Evidenzkarte wird noch erzeugt — der Export steht zur Verfügung, sobald sie fertig ist.",
       "evidenceUnavailable": "Evidenzkarte für diesen Report nicht verfügbar."

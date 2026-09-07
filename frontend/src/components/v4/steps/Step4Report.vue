@@ -11,8 +11,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { renderMarkdown } from '../../../utils/markdown'
 import { getAgentLog, getConsoleLog, getReportEvidence } from '../../../api/report'
-import type { GenerateReportData } from '../../../api/report'
-import { isApiError } from '../../../api/envelope'
+import type { GenerateReportData, EvidenceEnvelope } from '../../../api/report'
 import { createSimulationBranch } from '../../../api/simulation'
 import { getRun } from '../../../api/runs'
 import { getRunLlmRouting } from '../../../api/llmRouting'
@@ -53,15 +52,6 @@ import {
   DEFAULT_REPORT_MODE,
   type ReportMode,
 } from '../../../contracts/reportV3Contract'
-
-interface ApiResult {
-  success?: boolean
-  data?: Record<string, unknown> & {
-    report_id?: string
-    simulation_id?: string
-  }
-  error?: string
-}
 
 const { t } = useI18n()
 const router = useRouter()
@@ -621,9 +611,9 @@ function scheduleEvidenceRetry(): void {
 
 async function loadEvidence() {
   if (!props.reportId) return
-  let res: ApiResult
+  let res: EvidenceEnvelope
   try {
-    res = (await getReportEvidence(props.reportId)) as ApiResult
+    res = await getReportEvidence(props.reportId)
   } catch (err) {
     // HTTP-/Transport-Fehler (z.B. 404, solange die Evidenzkarte noch nicht
     // geschrieben ist): der Interceptor in api/index.ts wirft dafuer eine
@@ -632,24 +622,32 @@ async function loadEvidence() {
     // recordSchemaError — sonst zeigt die UI faelschlich "Schema-Mismatch"
     // fuer einen erwartbaren transienten Zustand.
     //
-    // Codex-Review PR #1456: HTTP 422 ist keine Transienz wie 404, sondern
-    // der dokumentierte contract_violation-Fall (backend/app/api/report.py:
-    // GET .../evidence validiert die persistierte Map und liefert 422, wenn
-    // sie auch nach Migration nicht vertragskonform ist). Ein Retry wuerde
-    // dasselbe dauerhaft ungueltige Artefakt zehn Minuten lang erneut
-    // anfordern und den Verstoss am Ende still verschwinden lassen. Deshalb
-    // wie einen Zod-Schema-Mismatch behandeln: sichtbar in der roten Box,
-    // kein Retry. Unterscheidung ausschliesslich ueber ApiError.status
-    // (structured field), kein Textvergleich auf der Fehlermeldung.
-    if (isApiError(err) && err.status !== 422) { scheduleEvidenceRetry(); return }
-    recordSchemaError('evidence', err)
+    // Review B7 (PR #1477): der frueher hier behandelte 422-Sonderfall
+    // (contract_violation) existiert fuer diese Route nicht mehr — das
+    // Backend degradiert eine vertragswidrige Evidence-Map jetzt zu HTTP 200
+    // mit `evidence_omitted` statt 422 zu werfen (backend/app/api/report.py,
+    // get_report_evidence). Dieser catch-Zweig bleibt Restfehlern (5xx,
+    // Netzwerkabbruch) vorbehalten und retryt sie wie bisher.
+    scheduleEvidenceRetry()
     return
   }
   if (!res?.success) { scheduleEvidenceRetry(); return }
+  if ('evidence_omitted' in res && res.evidence_omitted) {
+    // Review B7 (PR #1477): dauerhaft vertragswidrige Evidence-Map — kein
+    // transienter Zustand, ein weiterer Poll liefert dasselbe Ergebnis.
+    // Sichtbar machen statt als leeren Erfolg (`data` fehlt) stillschweigend
+    // zu akzeptieren; dasselbe Muster wie beim JSON-Export (Issue #987).
+    recordEvidenceOmission(res.evidence_omitted)
+    evidenceMap.value = null
+    clearEvidenceRetry()
+    evidenceUnavailable.value = true
+    return
+  }
   try {
     const parsed = EvidenceMapSchema.parse(res.data)
     evidenceMap.value = parsed
     resetEvidenceRetryState()
+    recordEvidenceOmission(null)
     if (!selectedEvidenceSection.value && parsed.sections.length) selectedEvidenceSection.value = parsed.sections[0].section_index
   } catch (err) { recordSchemaError('evidence', err) }
 }

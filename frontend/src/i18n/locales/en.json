@@ -642,7 +642,7 @@
     "next": "Next: conversation →",
     "export": {
       "evidenceOmitted": {
-        "contract_violation": "JSON export delivered without its evidence map: the persisted evidence violates the evidence contract. The report body in the file is complete."
+        "contract_violation": "Evidence map is not shown: the persisted evidence violates the evidence contract. The report body is unaffected and complete."
       },
       "evidencePending": "Evidence map is still being generated — the export will be available once it is ready.",
       "evidenceUnavailable": "Evidence map is not available for this report."
