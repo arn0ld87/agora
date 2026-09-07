@@ -815,3 +815,81 @@ class TestHardBudgetCapsConcurrentPersonaDispatch:
             monkeypatch, is_gevent=False, remaining_budget=0
         )
         assert max_active == 1
+
+
+class TestHardBudgetAbortPropagates:
+    """Codex-Finding P2 auf PR #1461.
+
+    ``max(1, remaining)`` allein bricht bei erschoepftem Budget nichts ab: der
+    breite ``except Exception`` in ``_generate_profile_with_llm`` fing
+    ``BudgetExceededError`` mit, schlief drei Versuche lang und lieferte ein
+    regelbasiertes Profil. Eine 30-Personen-Vorbereitung haette so rund 180
+    Sekunden mit garantiert abgelehnten Calls verbracht und die Stufe ohne
+    Budget-Abbruch verlassen. Diese Tests halten fest, dass der Abbruch
+    stattdessen durchschlaegt.
+    """
+
+    @staticmethod
+    def _budget_error():
+        from app.services.run_budget import BudgetExceededError
+
+        return BudgetExceededError("calls", observed=2, threshold=2)
+
+    def test_retry_loop_does_not_swallow_budget_abort(self) -> None:
+        """Kein Retry, kein Schlafen, kein regelbasiertes Ersatzprofil."""
+        from app.services.run_budget import BudgetExceededError
+
+        gen = _make_generator()
+        gen.run_id = "run-budget-abort"
+        attempts = 0
+
+        class _ExhaustedClient:
+            def __init__(self, *_a, **_kw):
+                pass
+
+            def chat_json(self, *_a, **_kw):
+                nonlocal attempts
+                attempts += 1
+                raise TestHardBudgetAbortPropagates._budget_error()
+
+        # ``_generate_profile_with_llm`` importiert den Client lokal
+        # (``from ..llm.client import LLMClient as _LLMClient``), das
+        # Patch-Ziel ist deshalb das Herkunftsmodul.
+        with patch("app.llm.client.LLMClient", _ExhaustedClient):
+            with pytest.raises(BudgetExceededError):
+                gen._generate_profile_with_llm(
+                    entity_name="Alex",
+                    entity_type="Person",
+                    entity_summary="Eine Person.",
+                    entity_attributes={},
+                    context="Kontext",
+                )
+
+        assert attempts == 1, (
+            f"Der Budget-Abbruch wurde {attempts}-mal wiederholt statt "
+            "durchgereicht"
+        )
+
+    def test_dispatch_propagates_budget_abort_instead_of_fallback_profiles(
+        self,
+    ) -> None:
+        """Der Abbruch verlaesst auch die parallele Erzeugung, statt Platzhalter zu liefern."""
+        from app.services.run_budget import BudgetExceededError
+
+        gen = _make_generator()
+        gen.run_id = "run-budget-abort"
+        entities = [_entity(f"Kandidat {i}", "Person") for i in range(4)]
+
+        def _raise(*_a, **_kw):
+            raise TestHardBudgetAbortPropagates._budget_error()
+
+        with (
+            patch("gevent.monkey.is_module_patched", return_value=False),
+            patch.object(
+                OasisProfileGenerator, "generate_profile_from_entity", _raise
+            ),
+        ):
+            with pytest.raises(BudgetExceededError):
+                gen.generate_profiles_from_entities(
+                    entities, use_llm=True, parallel_count=2
+                )
