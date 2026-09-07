@@ -323,7 +323,7 @@ onMounted(() => void loadRun())
   font-family: var(--ff-mono, monospace);
   font-size: 11px;
   padding: 2px 8px;
-  border-radius: 2px;
+  border-radius: var(--r-2);
   text-transform: uppercase;
 }
 .status-badge--pending,

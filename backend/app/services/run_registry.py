@@ -27,6 +27,17 @@ logger = get_logger("agora.run_registry")
 # ``os.path.exists`` check.
 _MISSING = object()
 
+# ``update_run``-Felder, die ohne Truthy-/Typ-Sonderfall 1:1 aus ``updates``
+# ins Manifest durchgereicht werden (siehe ``update_run``).
+_RUN_PASSTHROUGH_FIELDS = (
+    "message_key",
+    "error",
+    "parent_run_id",
+    "replayed_from_run_id",
+    "branch_label",
+    "termination_reason",
+)
+
 
 class RunRegistry:
     REGISTRY_DIR = os.path.join(Config.UPLOAD_FOLDER, "run_registry")
@@ -185,19 +196,16 @@ class RunRegistry:
                 manifest["progress"] = int(updates["progress"])
             if "message" in updates and updates["message"] is not None:
                 manifest["message"] = updates["message"]
-            if "error" in updates:
-                manifest["error"] = updates["error"]
             if "entity_id" in updates and updates["entity_id"]:
                 manifest["entity_id"] = updates["entity_id"]
-            if "parent_run_id" in updates:
-                manifest["parent_run_id"] = updates["parent_run_id"]
-            if "replayed_from_run_id" in updates:
-                manifest["replayed_from_run_id"] = updates["replayed_from_run_id"]
-            if "branch_label" in updates:
-                manifest["branch_label"] = updates["branch_label"]
-            if "termination_reason" in updates:
-                # Issue #764: Abbruchgrund (budget_*, user_*, error, completed)
-                manifest["termination_reason"] = updates["termination_reason"]
+            # Skalarfelder, die ohne Truthy-/Typ-Sonderfall 1:1 durchgereicht
+            # werden — als Schleife statt Einzel-ifs, damit ``update_run``
+            # unter der Radon-Allowlist-Obergrenze (MAI-17) bleibt.
+            # ``termination_reason``: Issue #764, Abbruchgrund
+            # (budget_*, user_*, error, completed).
+            for field in _RUN_PASSTHROUGH_FIELDS:
+                if field in updates:
+                    manifest[field] = updates[field]
 
             if updates.get("artifacts"):
                 manifest.setdefault("artifacts", {}).update(updates["artifacts"])
@@ -399,6 +407,7 @@ class RunRegistry:
             status=getattr(task, "status", None).value if getattr(task, "status", None) else None,
             progress=getattr(task, "progress", None),
             message=getattr(task, "message", None),
+            message_key=getattr(task, "message_key", None),
             error=getattr(task, "error", None),
             linked_ids={"task_id": getattr(task, "task_id", None)},
             metadata={"task_type": getattr(task, "task_type", None)},

@@ -159,7 +159,7 @@
           >
             <span class="shelf__row-tag" :data-testid="ShelfTestId.rowTag">{{ SHELF_KIND_TAG[obj.kind] }}</span>
             <span class="shelf__row-main">
-              <span class="shelf__row-title" :data-testid="ShelfTestId.rowTitle">{{ obj.title }}</span>
+              <span class="shelf__row-title" :title="obj.title" :data-testid="ShelfTestId.rowTitle">{{ obj.title }}</span>
               <span class="shelf__row-status" :data-testid="ShelfTestId.rowStatus">{{ obj.statusLine }}</span>
               <span class="shelf__row-meta">{{ formatUpdatedAt(obj.updatedAt) }} · {{ obj.metaId }}</span>
               <span v-if="personaStartErrorId === obj.id" class="shelf__row-error" role="alert" :data-testid="ShelfTestId.rowPersonaError">
@@ -675,7 +675,7 @@ function onRowKeydown(e: KeyboardEvent, index: number): void {
   letter-spacing: 0.06em;
   color: var(--text-tertiary);
   border: 1px solid var(--hairline-strong);
-  border-radius: 2px;
+  border-radius: var(--r-2);
   height: 17px;
   display: flex;
   align-items: center;
@@ -699,10 +699,15 @@ function onRowKeydown(e: KeyboardEvent, index: number): void {
 }
 
 .shelf__row-title {
+  display: block;
+  min-width: 0;
   font-size: var(--fs-callout);
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .shelf__row-status {

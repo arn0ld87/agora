@@ -150,7 +150,7 @@ watch(
   width: 100%;
   height: clamp(360px, 55vh, 640px);
   border: 1px solid var(--hairline);
-  border-radius: 8px;
+  border-radius: var(--r-5);
   overflow: hidden;
 }
 </style>

@@ -131,6 +131,16 @@ describe('Dossier', () => {
     expect(wrapper.find(`[data-testid="${DossierTestId.kpis}"]`).text()).toContain('sim_xyz')
   })
 
+  it('langer Titel traegt volles title-Attribut fuer Tooltip (CSS kuerzt visuell, #1458)', () => {
+    const longTitle = 'x'.repeat(200)
+    const obj = makeObject({ title: longTitle })
+    const wrapper = mountDossier(obj)
+
+    const heading = wrapper.find(`[data-testid="${DossierTestId.title}"]`)
+    expect(heading.attributes('title')).toBe(longTitle)
+    expect(heading.text()).toBe(longTitle)
+  })
+
   it('Abbrechen-Knopf nur bei aktivem Objekt', () => {
     const active = makeObject({ active: { runId: 'run_a', status: 'processing', pausable: false, simulationId: null, progress: null } })
     const inactive = makeObject({ active: null })

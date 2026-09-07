@@ -1469,7 +1469,13 @@
       "oasisHint": "Becomes active when a run starts.",
       "ollamaHint": "{n} models available",
       "ollamaSkippedHint": "Check skipped — active provider is {provider}",
-      "providerUnknown": "another provider"
+      "providerUnknown": "another provider",
+      "error": {
+        "unreachable": "not reachable",
+        "timeout": "probe timed out",
+        "auth": "authentication failed",
+        "unexpected": "unexpected error"
+      }
     },
     "reports": {
       "title": "Recent reports",

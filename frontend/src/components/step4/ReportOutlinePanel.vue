@@ -182,7 +182,7 @@ function sectionConfidenceAuditTrail(idx: number): SectionConfidenceResult['audi
 .markdown-body :deep(code) {
   background: var(--bg-elevated);
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: var(--r-2);
   font-family: var(--ff-mono);
   font-size: 0.9em;
 }

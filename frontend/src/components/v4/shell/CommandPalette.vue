@@ -177,7 +177,7 @@ function pickCommand(value: unknown): void {
   z-index: 201;
   width: min(600px, calc(100vw - 32px));
   background: var(--surface-base, #fff);
-  border-radius: 12px;
+  border-radius: var(--r-5);
   box-shadow:
     0 0 0 1px var(--hairline),
     0 20px 60px rgba(0, 0, 0, 0.18),
@@ -289,7 +289,7 @@ function pickCommand(value: unknown): void {
   font-size: 10px;
   font-weight: 600;
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--r-2);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -332,7 +332,7 @@ function pickCommand(value: unknown): void {
   min-width: 20px;
   height: 20px;
   padding: 0 4px;
-  border-radius: 4px;
+  border-radius: var(--r-2);
   background: var(--surface-hover, rgba(0, 0, 0, 0.06));
   border: 1px solid var(--hairline);
   font-family: inherit;
@@ -347,7 +347,7 @@ function pickCommand(value: unknown): void {
 }
 .cmdk-list-wrapper::-webkit-scrollbar-thumb {
   background: var(--hairline-strong, var(--hairline));
-  border-radius: 3px;
+  border-radius: var(--r-2);
 }
 
 /* Reduced-motion */

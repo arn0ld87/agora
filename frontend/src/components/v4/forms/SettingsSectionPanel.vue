@@ -362,7 +362,7 @@ function setDraftValue(key: string, value: unknown) {
 
 .v4-banner {
   padding: 12px 16px;
-  border-radius: 10px;
+  border-radius: var(--r-5);
   background: var(--surface-tint);
   color: var(--text-secondary);
   font-size: 13px;
@@ -388,7 +388,7 @@ function setDraftValue(key: string, value: unknown) {
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-secondary);
@@ -418,7 +418,7 @@ function setDraftValue(key: string, value: unknown) {
 .v4-panel {
   background: var(--surface-elevated);
   border: 1px solid var(--hairline);
-  border-radius: 12px;
+  border-radius: var(--r-5);
   overflow: hidden;
 }
 .v4-fields {
@@ -466,7 +466,7 @@ function setDraftValue(key: string, value: unknown) {
   font-size: 13px;
   padding: 6px 10px;
   border: 1px solid var(--hairline-strong);
-  border-radius: 8px;
+  border-radius: var(--r-3);
   background: var(--surface-base);
   color: var(--text-primary);
   width: 100%;
@@ -517,7 +517,7 @@ function setDraftValue(key: string, value: unknown) {
 }
 .v4-modal {
   background: var(--surface-elevated);
-  border-radius: 14px;
+  border-radius: var(--r-5);
   padding: 24px;
   max-width: 480px;
   width: calc(100% - 32px);

@@ -261,7 +261,7 @@ defineExpose({
   border: 1px solid var(--hairline);
   padding: 1rem;
   margin-bottom: 1rem;
-  border-radius: 4px;
+  border-radius: var(--r-5);
 }
 .locked {
   background-color: var(--surface-hover);
@@ -285,7 +285,7 @@ defineExpose({
 .version {
   background: var(--surface-hover);
   padding: 2px 6px;
-  border-radius: 10px;
+  border-radius: var(--r-2);
   font-size: 0.7rem;
 }
 .version--ok {

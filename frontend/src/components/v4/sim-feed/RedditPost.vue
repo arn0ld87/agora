@@ -80,7 +80,7 @@ const scoreDisplay = computed(() => {
   bottom: 0;
   width: 2px;
   background: var(--hairline);
-  border-radius: 1px;
+  border-radius: var(--r-2);
 }
 .rp-root[data-depth='0'] .rp-rail {
   display: none;

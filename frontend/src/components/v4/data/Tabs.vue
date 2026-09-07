@@ -148,7 +148,7 @@ function isActive(tab: TabItem): boolean {
 .tabs-item:focus-visible {
   outline: var(--v4-state-focus-ring-width) solid var(--v4-state-focus-ring);
   outline-offset: var(--v4-state-focus-ring-offset);
-  border-radius: 2px;
+  border-radius: var(--r-3);
 }
 
 /* ── Badge ──────────────────────────────────────────────────── */

@@ -202,7 +202,7 @@ const hasLabels = computed(() => Array.isArray(props.item.data.labels) && props.
 
 .detail-type-badge {
   padding: 4px 10px;
-  border-radius: 12px;
+  border-radius: var(--r-2);
   font-size: 11px;
   font-weight: 500;
   margin-left: auto;
@@ -313,7 +313,7 @@ const hasLabels = computed(() => Array.isArray(props.item.data.labels) && props.
   padding: 4px 12px;
   background: var(--bg-panel-2);
   border: 1px solid var(--rule);
-  border-radius: 16px;
+  border-radius: var(--r-2);
   font-size: 11px;
   color: var(--fg-body);
 }
@@ -329,7 +329,7 @@ const hasLabels = computed(() => Array.isArray(props.item.data.labels) && props.
   padding: 6px 10px;
   background: var(--bg-panel);
   border: 1px solid var(--rule);
-  border-radius: 6px;
+  border-radius: var(--r-2);
   font-family: var(--ff-mono);
   font-size: 10px;
   color: var(--fg-body);
@@ -339,7 +339,7 @@ const hasLabels = computed(() => Array.isArray(props.item.data.labels) && props.
 .edge-relation-header {
   background: var(--bg-panel);
   padding: 12px;
-  border-radius: 8px;
+  border-radius: var(--r-5);
   margin-bottom: 16px;
   font-size: 13px;
   font-weight: 500;
@@ -374,7 +374,7 @@ const hasLabels = computed(() => Array.isArray(props.item.data.labels) && props.
 .self-loop-item {
   background: var(--bg-sunken);
   border: 1px solid var(--rule);
-  border-radius: 8px;
+  border-radius: var(--r-5);
 }
 
 .self-loop-item-header {
@@ -401,7 +401,7 @@ const hasLabels = computed(() => Array.isArray(props.item.data.labels) && props.
   color: var(--fg-muted);
   background: var(--rule-strong);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--r-2);
 }
 
 .self-loop-name {
@@ -421,7 +421,7 @@ const hasLabels = computed(() => Array.isArray(props.item.data.labels) && props.
   font-weight: 600;
   color: var(--fg-muted);
   background: var(--rule-strong);
-  border-radius: 4px;
+  border-radius: var(--r-3);
   transition: all 0.2s;
 }
 

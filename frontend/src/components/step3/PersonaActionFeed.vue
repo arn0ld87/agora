@@ -199,7 +199,7 @@ const emit = defineEmits(['set-density', 'toggle-tool-panel'])
   min-width: 18px;
   height: 18px;
   padding: 0 6px;
-  border-radius: 9px;
+  border-radius: var(--r-2);
   background: var(--status-red);
   color: var(--text-on-accent);
   font-size: 10px;

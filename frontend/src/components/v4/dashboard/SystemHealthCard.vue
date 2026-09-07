@@ -10,6 +10,7 @@ import { useI18n } from 'vue-i18n'
 import Card from '../forms/Card.vue'
 import Badge from '../forms/Badge.vue'
 import type { SystemStatusResponse } from '../../../contracts/systemStatusContract'
+import { statusErrorKey } from '../../../composables/useSystemStatus'
 
 const props = defineProps<{
   status: SystemStatusResponse | null
@@ -102,14 +103,16 @@ const rows = computed<HealthRow[]>(() => {
           state: s.ollama.reachable ? 'reachable' : 'unreachable',
           hint: s.ollama.reachable
             ? t('dashboard.system.ollamaHint', { n: ollamaModels })
-            : (s.ollama.error ?? s.ollama.base_url ?? ''),
+            : (s.ollama.error ? t(statusErrorKey(s.ollama.error)) : (s.ollama.base_url ?? '')),
         },
     {
       key: 'neo4j',
       label: t('dashboard.system.neo4j'),
       tone: s.neo4j.reachable ? 'green' : 'red',
       state: s.neo4j.reachable ? 'reachable' : 'unreachable',
-      hint: s.neo4j.reachable ? (s.neo4j.uri ?? '') : (s.neo4j.error ?? ''),
+      hint: s.neo4j.reachable
+        ? (s.neo4j.uri ?? '')
+        : (s.neo4j.error ? t(statusErrorKey(s.neo4j.error)) : ''),
     },
     {
       key: 'oasis',

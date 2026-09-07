@@ -54,7 +54,7 @@ withDefaults(defineProps<{
 .v4-coming-soon__icon {
   width: 44px;
   height: 44px;
-  border-radius: 12px;
+  border-radius: var(--r-5);
   background: var(--accent-tint-bg);
   color: var(--accent);
   display: inline-flex;

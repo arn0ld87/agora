@@ -74,7 +74,7 @@ onMounted(async () => {
   padding: 16px;
   color: var(--status-red);
   background: var(--status-red-bg);
-  border-radius: 8px;
+  border-radius: var(--r-5);
 }
 
 .compare-view-loading {

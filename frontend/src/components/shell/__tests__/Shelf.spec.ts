@@ -125,6 +125,18 @@ describe('Shelf', () => {
     expect(wrapper.emitted('select')).toEqual([[obj]])
   })
 
+  it('langer Titel traegt das title-Attribut mit dem vollen Text (Issue #1458)', () => {
+    const langerTitel =
+      'Wie veraendert sich die Akzeptanz einer stufenweisen CO2-Bepreisung in ' +
+      'unterschiedlichen Einkommensgruppen ueber einen Zeitraum von fuenf Jahren?'
+    const obj = makeObject({ id: 'sim_lang', title: langerTitel })
+    const { wrapper } = mountShelf([obj])
+    const titleEl = wrapper.find(`[data-testid="${ShelfTestId.rowTitle}"]`)
+
+    expect(titleEl.text()).toBe(langerTitel)
+    expect(titleEl.attributes('title')).toBe(langerTitel)
+  })
+
   it('Zeile mit active zeigt den Abbrechen-Knopf, Zeile ohne active nicht', () => {
     const active = makeObject({ id: 'a', active: { runId: 'run_a', status: 'processing', pausable: false, simulationId: null, progress: null } })
     const inactive = makeObject({ id: 'b', active: null })

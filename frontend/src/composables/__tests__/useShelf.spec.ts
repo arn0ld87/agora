@@ -415,6 +415,25 @@ describe('buildShelfObjects', () => {
     expect(berichtObjs[0].nextAction?.to.params).toEqual({ reportId: 'rep_4' })
   })
 
+  it('Bericht-Titel wird nicht mehr auf 80 Zeichen gekuerzt (Issue #1458)', () => {
+    const langerTitel =
+      'Wie veraendert sich die Akzeptanz einer stufenweisen CO2-Bepreisung in ' +
+      'unterschiedlichen Einkommensgruppen ueber einen Zeitraum von fuenf Jahren?'
+    expect(langerTitel.length).toBeGreaterThan(80)
+
+    const run = makeRun({ linked_ids: { simulation_id: 'sim_5' } })
+    const report = makeReport({
+      report_id: 'rep_5',
+      simulation_id: 'sim_5',
+      simulation_requirement: langerTitel,
+    })
+
+    const objs = buildShelfObjects([run], [report], [], [], t)
+    const berichtObj = objs.find((o) => o.kind === 'bericht')
+
+    expect(berichtObj?.title).toBe(langerTitel)
+  })
+
   it('Personasatz ohne jede ID wird uebersprungen', () => {
     const templates: PersonaTemplateRecord[] = [
       { template_id: '', username: '', name: '' },

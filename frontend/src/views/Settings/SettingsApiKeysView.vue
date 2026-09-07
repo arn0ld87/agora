@@ -414,7 +414,7 @@ onMounted(() => {
   font-size: 12px;
   background: var(--surface-inset);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--r-2);
   color: var(--text-secondary);
 }
 
@@ -442,7 +442,7 @@ onMounted(() => {
 
 .v4-modal {
   background: var(--surface-elevated);
-  border-radius: 16px;
+  border-radius: var(--r-5);
   padding: 28px;
   width: 100%;
   max-width: 480px;
@@ -471,7 +471,7 @@ onMounted(() => {
   color: var(--status-red);
   background: var(--status-red-bg);
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--r-3);
 }
 
 .v4-modal__footer {
@@ -524,7 +524,7 @@ onMounted(() => {
   padding: 10px 12px;
   background: var(--status-red-bg);
   color: var(--status-red);
-  border-radius: 8px;
+  border-radius: var(--r-3);
   font-size: 13px;
   margin-bottom: 8px;
 }

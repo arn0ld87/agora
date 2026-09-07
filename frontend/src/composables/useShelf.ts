@@ -270,7 +270,7 @@ export function buildShelfObjects(
     objects.push({
       kind: 'bericht',
       id: r.report_id,
-      title: r.simulation_requirement?.slice(0, 80) || r.report_id,
+      title: r.simulation_requirement || r.report_id,
       statusLine:
         r.status === 'completed'
           ? t('shelf.status.reportSections', { n: sections })
