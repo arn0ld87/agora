@@ -31,6 +31,29 @@ import os
 # dagegen ``setdefault``, damit der Betreiber die Entscheidung überschreiben kann.
 os.environ["NLTK_DISABLE_IMPORT_SECURITY"] = "1"
 
+# Hermetik: ``LLM_API_KEY`` darf nicht aus der lokalen ``.env`` kommen.
+#
+# ``Config.validate()`` erzwingt einen nicht-leeren Wert, und ``create_app()``
+# ruft sie auf. Ohne Vorgabe scheitern deshalb alle Tests, die eine App bauen
+# (``tests/test_embedding_service.py``, ``tests/services/
+# test_initial_post_agent_assignment.py``) mit ``Critical configuration
+# missing`` — und zwar nur dort, wo keine ``.env`` liegt. Lokal lief die Suite
+# gruen, weil ``app/config.py`` beim Import ``load_dotenv()`` aufruft und den
+# echten Key prozessweit in ``os.environ`` zieht; in CI lief sie gruen, weil
+# ``ci.yml`` ``LLM_API_KEY: dummy-ci-key`` als Job-Env setzt. Ein frischer
+# Checkout ohne beides — etwa ein neuer Worktree — war rot. Der schlimmere
+# Fall ist der stille: ``test_create_app_still_fails_on_embedding_
+# misconfiguration`` erwartet ``Embedding configuration invalid``, bekam aber
+# den LLM-Key-Fehler und haette damit auch gegen eine reparierte
+# Embedding-Pruefung nichts mehr ausgesagt.
+#
+# ``setdefault`` statt unbedingter Zuweisung, anders als beim nltk-Hook
+# darueber: ein aus der Shell exportierter Key soll weiterhin gewinnen, damit
+# Laeufe gegen ein echtes Provider-Backend (Marker ``llm``) moeglich bleiben.
+# Vorweggenommen wird nur der ``.env``-Pfad, denn ``load_dotenv(override=
+# False)`` ueberspringt Keys, die bereits in ``os.environ`` stehen.
+os.environ.setdefault("LLM_API_KEY", "test-dummy-key")
+
 # ``torch`` MUSS vor der ersten ``mock.patch.dict(sys.modules, ...)`` geladen
 # sein — sonst stirbt der Interpreter mit SIGSEGV.
 #
