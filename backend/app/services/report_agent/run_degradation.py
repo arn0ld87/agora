@@ -345,6 +345,21 @@ def mark_fallback_outline_used(agent: Any) -> None:
     events_for(agent).fallback_outline_used = True
 
 
+def clear_fallback_outline_used(agent: Any) -> None:
+    """Den geerbten Fallback-Marker vor einem neuen Planungsversuch loeschen.
+
+    Issue #1479 (Codex-Review Runde 6): ``_restore_work_trace_markers`` setzt
+    das Flag beim Resume aus dem persistierten Zustand des VORIGEN Laufs.
+    Gelingt der neue ``plan_outline``-Versuch, stammt der ausgelieferte
+    Outline aber nicht mehr aus dem Fallback — ohne dieses Zuruecksetzen
+    schriebe ``_persist_fallback_outline_marker`` den geerbten Wert
+    unveraendert zurueck, der Report truege eine falsche
+    ``outline_planning/fallback_outline_used``-Warnung, und der naechste
+    Cancel/Resume verwuerfe den gueltigen Outline erneut.
+    """
+    events_for(agent).fallback_outline_used = False
+
+
 def mark_work_traces_removed(agent: Any, section_index: int) -> None:
     """Aus dem Abschnittsinhalt wurden interne Arbeitsspur-Segmente entfernt.
 

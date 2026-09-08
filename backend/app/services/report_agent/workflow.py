@@ -44,6 +44,7 @@ from .run_degradation import (
     assert_run_invariants,
     collect_run_degradations,
     events_for,
+    clear_fallback_outline_used,
     mark_fallback_outline_used,
     mark_forced_final,
     mark_metadata_failure,
@@ -1709,6 +1710,11 @@ def generate_report(
 
         outline = _reusable_persisted_outline(existing_outline, report_id)
         if outline is None:
+            # Vor dem neuen Versuch den aus dem Vorlauf geerbten Marker
+            # loeschen (#1479 Codex-Runde 6) — nur der Fallback-Pfad dieses
+            # Versuchs darf ihn wieder setzen. Sonst gilt ein gelungener
+            # Retry weiterhin als Fallback.
+            clear_fallback_outline_used(agent)
             outline = plan_outline_impl(
                 agent,
                 progress_callback=lambda stage, prog, msg: progress_callback(stage, prog // 5, msg) if progress_callback else None,

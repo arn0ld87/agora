@@ -1079,6 +1079,105 @@ def test_resume_keeps_failed_section_marker_after_restore(tmp_path):
 # ---------------------------------------------------------------------------
 
 
+def test_successful_replan_clears_the_inherited_fallback_marker(tmp_path, monkeypatch):
+    """Gelingt der Planungsversuch beim Resume, darf der Lauf nicht weiter als
+    Fallback gelten.
+
+    Codex-Review Runde 6: ``_restore_work_trace_markers`` setzt
+    ``fallback_outline_used`` beim Resume aus dem persistierten Zustand des
+    VORLAUFS. Ohne Zuruecksetzen vor dem neuen Versuch schreibt
+    ``_persist_fallback_outline_marker`` diesen geerbten Wert unveraendert
+    zurueck: der Report truege eine ``outline_planning``-Warnung fuer einen
+    Outline, der gar nicht aus dem Fallback stammt, und der naechste
+    Cancel/Resume verwuerfe diesen gueltigen Outline erneut.
+    """
+    from app.services.report_agent.manager import ReportManager
+    from app.services.report_agent.workflow import generate_report
+    from app.services.report_prompts import DEFAULT_REPORT_SECTIONS
+
+    monkeypatch.setattr(ReportManager, "REPORTS_DIR", str(tmp_path))
+    cancel_run_id = _unique_id()
+    report_id = f"report_{uuid.uuid4().hex[:12]}"
+    clear_cancel(cancel_run_id)
+
+    def make_agent(planning_succeeds: bool) -> MagicMock:
+        agent = _make_generation_agent()
+        agent.graph_tools.get_simulation_context.return_value = {
+            "graph_statistics": {"total_nodes": 0, "total_edges": 0, "entity_types": {}},
+            "total_entities": 0,
+            "related_facts": [],
+        }
+        if planning_succeeds:
+            agent.llm.chat_json.return_value = {
+                "title": "Simulation Analysis Report",
+                "summary": "Overview of simulation results",
+                "sections": [
+                    {"title": title, "description": f"Pflichtabschnitt: {title}"}
+                    for title, _ in DEFAULT_REPORT_SECTIONS
+                ],
+            }
+        else:
+            agent.llm.chat_json.side_effect = RuntimeError("LLM nicht erreichbar")
+        return agent
+
+    def real_manager_mock() -> MagicMock:
+        mock_rm = MagicMock(wraps=ReportManager)
+        mock_rm.get_evidence_map.return_value = None
+        mock_rm.get_generated_sections.return_value = []
+        mock_rm.assemble_full_report.return_value = "## Section 1\n"
+        return mock_rm
+
+    def run_once(planning_succeeds: bool):
+        with patch("app.services.report_agent.workflow.EvidenceMapModel") as mock_em:
+            mock_em.model_validate.return_value = MagicMock(
+                model_dump=MagicMock(
+                    return_value={
+                        "schema_version": 2,
+                        "report_id": report_id,
+                        "simulation_id": "sim_test",
+                        "global_evidence": [],
+                        "sections": [],
+                    }
+                )
+            )
+            with (
+                patch("app.services.report_agent.workflow.ReportManager", real_manager_mock()),
+                patch("app.services.report_agent.workflow.migrate_v1_to_v2", return_value=None),
+                patch("app.config.Config.REPORT_REQUIREMENT_CHECKER_ENABLED", False),
+            ):
+                return generate_report(
+                    make_agent(planning_succeeds),
+                    progress_callback=None,
+                    report_id=report_id,
+                    cancel_run_id=cancel_run_id,
+                )
+
+    # Phase A: Planung scheitert, Cancel steht an -> Fallback-Marker persistiert.
+    request_cancel(cancel_run_id)
+    run_once(planning_succeeds=False)
+    clear_cancel(cancel_run_id)
+    assert ReportManager.load_fallback_outline_used(report_id) is True, (
+        "Vorbedingung: Phase A muss den Fallback-Marker gesetzt haben"
+    )
+
+    # Phase B: Resume mit funktionierender Planung. Cancel bleibt gesetzt,
+    # damit der Lauf an derselben Stelle endet und nur der Marker-Pfad
+    # verglichen wird.
+    request_cancel(cancel_run_id)
+    result_b = run_once(planning_succeeds=True)
+    clear_cancel(cancel_run_id)
+
+    assert ReportManager.load_fallback_outline_used(report_id) is False, (
+        "Nach erfolgreicher Neuplanung darf der geerbte Fallback-Marker nicht "
+        "unveraendert zurueckgeschrieben werden"
+    )
+    components_b = {e["component"]: e["reason"] for e in result_b.run_degradations}
+    assert components_b.get("outline_planning") != "fallback_outline_used", (
+        "Der erfolgreich neu geplante Outline wird faelschlich als Fallback "
+        f"gemeldet: {result_b.run_degradations}"
+    )
+
+
 def test_resume_replans_instead_of_reusing_a_fallback_outline(tmp_path, monkeypatch):
     """Ein als ``fallback_outline_used`` markierter Outline darf beim Resume
     NICHT wiederverwendet werden — ``plan_outline`` muss erneut laufen.
