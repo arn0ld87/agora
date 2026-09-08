@@ -20,9 +20,16 @@ nicht (mehr) UND ist ``run_state.json`` noch in einem unklaren Zustand
 weil nur ein Worker-Prozess neu gestartet wurde, der Subprozess aber
 überlebt hat), bleibt er unangetastet. Ist ``run_state.json`` dagegen
 bereits terminal (``COMPLETED``/``STOPPED``/``FAILED``) — der Prozess also
-tot, weil er regulär beendet wurde, nicht weil er verwaist ist —, wird
-dieser autoritative Endzustand zur Registry propagiert statt ihn
-fälschlich mit ``process_restart`` zu überschreiben (Finding B).
+tot, weil er regulär beendet wurde, nicht weil er verwaist ist —, wird der
+Run NICHT mit ``process_restart`` überschrieben, aber der Endzustand auch
+NICHT auf die Registry propagiert (F2, Codex-Review Runde 3, PR #1476):
+``run_state.json`` trägt keine RunRegistry-``run_id``, nur die
+``simulation_id`` — bei mehreren Registry-Manifesten für dieselbe
+Simulation (z. B. Alt-Run + Ersatzlauf nach einem Resume, siehe Finding F1)
+ist nicht feststellbar, zu welchem der terminale Zustand gehört. Der Run
+bleibt in diesem Fall unangetastet, nur geloggt (ursprünglich Finding B —
+dessen Propagation wurde in Runde 3 wegen genau dieser Fehlzuordnungsgefahr
+wieder entfernt).
 
 Aufrufer: ``run_startup_reconciliation`` bündelt Config-Flag-Check und
 Best-effort-Fehlerbehandlung für zwei Einhängepunkte — ``app/__init__.py::
@@ -80,9 +87,12 @@ class ReconciliationResult(BaseModel):
 
     reconciled_run_ids: List[str] = []
     skipped_run_ids: List[str] = []
-    #: Finding B: Runs, deren bereits terminaler ``run_state.json``-Status
-    #: (COMPLETED/STOPPED/FAILED) auf die Registry propagiert wurde, statt
-    #: sie fälschlich mit ``process_restart`` zu überschreiben.
+    #: Bleibt aktuell immer leer (F2, Codex-Review Runde 3, PR #1476): ein
+    #: bereits terminaler ``run_state.json``-Status wird NICHT mehr auf die
+    #: Registry propagiert, weil ``run_state.json`` keine RunRegistry-
+    #: ``run_id`` trägt und die Zuordnung damit nicht verifizierbar ist —
+    #: solche Runs landen stattdessen in ``skipped_run_ids``. Feld bleibt im
+    #: Contract, bis eine echte Run-ID-Verknüpfung existiert (Folgearbeit).
     synced_terminal_run_ids: List[str] = []
 
 
@@ -165,30 +175,38 @@ def reconcile_stale_runs(
             skipped.append(run_id)
             continue
 
-        # Finding B (Codex-Review 2026-09-08): ein toter Prozess heißt nicht
-        # zwangsläufig "verwaist" — ``run_state.json`` kann bereits einen
-        # autoritativen Endzustand tragen, weil der Run regulär fertig wurde
-        # oder der Nutzer ihn stoppte, und nur die anschließende
-        # RunRegistry-Sync nie ankam (Prozess starb dazwischen). Diesen
-        # Zustand NICHT mit ``process_restart`` überschreiben, sondern zur
-        # Registry propagieren.
+        # Finding B (Codex-Review 2026-09-08) / F2 (Codex-Review Runde 3,
+        # PR #1476): ein toter Prozess heißt nicht zwangsläufig "verwaist" —
+        # ``run_state.json`` kann bereits einen autoritativen Endzustand
+        # tragen, weil der Run regulär fertig wurde oder der Nutzer ihn
+        # stoppte, und nur die anschließende RunRegistry-Sync nie ankam
+        # (Prozess starb dazwischen).
+        #
+        # ABER: ``run_state.json``/``SimulationRunState`` ist ausschließlich
+        # pro ``simulation_id`` gespeichert (siehe ``run_state_store.py``)
+        # und trägt KEINE RunRegistry-``run_id``. Existieren mehrere
+        # RunRegistry-Manifeste für dieselbe ``simulation_id`` — z. B. ein
+        # verwaister Alt-Run neben einem längst abgeschlossenen Ersatzlauf
+        # nach einem Resume (siehe Finding F1) —, ist NICHT feststellbar, zu
+        # welchem der beiden Manifeste dieser eine terminale Zustand
+        # tatsächlich gehört. Propagieren wäre dann stille Datenkorruption:
+        # ein fremder Endzustand (z. B. COMPLETED des Ersatzlaufs) landet auf
+        # dem in Wahrheit verwaisten/gescheiterten Alt-Run.
+        #
+        # Ohne verifizierbare Run-ID-Verknüpfung (aktuell nicht herstellbar)
+        # wird deshalb NICHT propagiert — nur geloggt. Der Run bleibt
+        # unangetastet (weder "completed" noch fälschlich "failed"), bis eine
+        # echte Run-ID-Verknüpfung existiert (Folgearbeit).
         if state is not None and state.runner_status in _TERMINAL_RUNNER_STATUSES:
-            target_status = state.runner_status.value
-            termination_reason = run.get("termination_reason")
-            updates: dict[str, Any] = {"status": target_status}
-            if termination_reason:
-                updates["termination_reason"] = termination_reason
-            if state.error:
-                updates["error"] = state.error
-
-            logger.info(
-                "reconcile_stale_runs: run=%s sim=%s pid=%s bereits terminal "
-                "(runner_status=%s) — Registry auf %s synchronisiert statt "
-                "process_restart",
-                run_id, simulation_id, pid, state.runner_status.value, target_status,
+            logger.warning(
+                "reconcile_stale_runs: run=%s sim=%s pid=%s run_state.json "
+                "bereits terminal (runner_status=%s), aber ohne verifizierbare "
+                "Run-ID-Verknuepfung zu diesem Manifest (run_state.json kennt "
+                "nur simulation_id) — keine Propagation, Run bleibt "
+                "unveraendert",
+                run_id, simulation_id, pid, state.runner_status.value,
             )
-            registry.update_run(run_id, **updates)
-            synced_terminal.append(run_id)
+            skipped.append(run_id)
             continue
 
         logger.warning(

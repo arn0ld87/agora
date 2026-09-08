@@ -400,7 +400,8 @@ def start_simulation(
     setup_graph_memory: Callable[[str], None],
     max_rounds: Optional[int] = None,
     runtime_env: Optional[Dict[str, str]] = None,
-    correct_stale_run: Optional[Callable[[SimulationRunState], None]] = None,
+    correct_stale_run: Optional[Callable[[SimulationRunState, Optional[str]], None]] = None,
+    requested_run_id: Optional[str] = None,
 ) -> SimulationRunState:
     """Public entrypoint — serialisiert pro ``simulation_id`` (Finding A,
     Codex-Review 2026-09-08, PR #1476).
@@ -432,6 +433,7 @@ def start_simulation(
             max_rounds=max_rounds,
             runtime_env=runtime_env,
             correct_stale_run=correct_stale_run,
+            requested_run_id=requested_run_id,
         )
 
 
@@ -456,7 +458,8 @@ def _start_simulation_impl(
     setup_graph_memory: Callable[[str], None],
     max_rounds: Optional[int] = None,
     runtime_env: Optional[Dict[str, str]] = None,
-    correct_stale_run: Optional[Callable[[SimulationRunState], None]] = None,
+    correct_stale_run: Optional[Callable[[SimulationRunState, Optional[str]], None]] = None,
+    requested_run_id: Optional[str] = None,
 ) -> SimulationRunState:
     """Start an OASIS simulation: validate, init state, launch subprocess, start monitor.
 
@@ -483,18 +486,29 @@ def _start_simulation_impl(
         setup_graph_memory:     Callable(simulation_id) that configures graph
                                 memory and mutates ``graph_memory_enabled``.
         max_rounds:             Optional round cap (passed to script CLI).
-        correct_stale_run:      Optional callable(state), invoked instead of
-                                ``save_state`` when a stale RUNNING/STARTING
-                                run is corrected to FAILED (Finding B,
-                                Codex-Review 2026-09-08, PR #1476) — needed
-                                because a plain ``save_state`` in this branch
-                                would sync the run-registry entry via
-                                "latest manifest for this simulation_id",
-                                which on the resume/restart path is already
-                                the freshly created REPLACEMENT manifest
+        correct_stale_run:      Optional callable(state, requested_run_id),
+                                invoked instead of ``save_state`` when a stale
+                                RUNNING/STARTING run is corrected to FAILED
+                                (Finding B, Codex-Review 2026-09-08, PR
+                                #1476) — needed because a plain
+                                ``save_state`` in this branch would sync the
+                                run-registry entry via "latest manifest for
+                                this simulation_id", which on the
+                                resume/restart path is already the freshly
+                                created REPLACEMENT manifest
                                 (``RunLifecycle.begin`` runs before this
                                 function), not the actually orphaned run.
                                 Falls back to ``save_state`` when ``None``.
+        requested_run_id:       Run-registry ``run_id`` of the run the caller
+                                actually asked to resume/restart (Finding F1,
+                                Codex-Review Runde 3, PR #1476) — passed
+                                through to ``correct_stale_run`` so it targets
+                                exactly that manifest instead of guessing
+                                among several "processing" manifests for the
+                                same ``simulation_id``. ``None`` when the
+                                caller has no specific run in mind (plain
+                                start / replay onto a brand-new
+                                ``simulation_id``).
 
     Returns:
         Updated ``SimulationRunState`` (status RUNNING).
@@ -533,7 +547,7 @@ def _start_simulation_impl(
         existing.runner_status = RunnerStatus.FAILED
         existing.error = "Prozess-Neustart während des Runs"
         if correct_stale_run is not None:
-            correct_stale_run(existing)
+            correct_stale_run(existing, requested_run_id)
         else:
             save_state(existing)
 

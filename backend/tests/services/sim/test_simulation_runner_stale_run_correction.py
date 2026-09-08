@@ -96,3 +96,76 @@ def test_stale_correction_targets_orphaned_run_not_replacement(registry_env):
     # 5. ... das Replacement bleibt komplett unangetastet.
     untouched_replacement = registry.get_run(replacement_run_id)
     assert untouched_replacement["status"] == "pending"
+
+
+def test_stale_correction_with_multiple_processing_manifests_targets_requested_run_id(
+    registry_env,
+):
+    """F1 (Codex-Review Runde 3, PR #1476): existieren MEHRERE historische
+    ``processing``-Manifeste fuer dieselbe Simulation (z. B. zwei
+    verschiedene verwaiste Alt-Runs aus fruehren Resume-Versuchen), darf
+    ``_correct_stale_run_state`` NICHT einfach ``candidates[0]`` (das
+    zuletzt angelegte) korrigieren, sondern muss gezielt die per
+    ``requested_run_id`` angefragte Resume-Run-ID treffen -- der jeweils
+    ANDERE Orphan bleibt unangetastet und bleibt fuer immer 'processing',
+    wenn er nicht der angefragte ist (dann muss ein spaeterer Resume dafuer
+    explizit erfolgen)."""
+    registry = registry_env
+
+    older_orphan = registry.create_run(
+        run_type="simulation_run",
+        entity_id=SIM_ID,
+        status="processing",
+        linked_ids={"simulation_id": SIM_ID},
+    )
+    newer_orphan = registry.create_run(
+        run_type="simulation_run",
+        entity_id=SIM_ID,
+        status="processing",
+        linked_ids={"simulation_id": SIM_ID},
+    )
+    assert older_orphan["run_id"] != newer_orphan["run_id"]
+
+    stale_state = SimulationRunState(
+        simulation_id=SIM_ID,
+        runner_status=RunnerStatus.FAILED,
+        error="Prozess-Neustart während des Runs",
+        started_at=datetime.now().isoformat(),
+    )
+
+    # Der Nutzer fragt gezielt den AELTEREN Orphan per /resume an --
+    # list_runs() sortiert neueste zuerst, "candidates[0]" traefe also den
+    # falschen (newer_orphan).
+    SimulationRunner._correct_stale_run_state(stale_state, older_orphan["run_id"])
+
+    assert registry.get_run(older_orphan["run_id"])["status"] == "failed"
+    assert registry.get_run(older_orphan["run_id"])["termination_reason"] == "process_restart"
+    # Der nicht angefragte, andere Orphan bleibt komplett unangetastet.
+    assert registry.get_run(newer_orphan["run_id"])["status"] == "processing"
+
+
+def test_stale_correction_with_unmatched_requested_run_id_corrects_nothing(registry_env):
+    """Traegt ``requested_run_id`` keine passende 'processing'-Manifest
+    (z. B. weil der Run inzwischen schon anders geschlossen wurde), darf
+    NICHTS korrigiert werden -- kein Fallback auf irgendein anderes
+    Manifest."""
+    registry = registry_env
+
+    orphan = registry.create_run(
+        run_type="simulation_run",
+        entity_id=SIM_ID,
+        status="processing",
+        linked_ids={"simulation_id": SIM_ID},
+    )
+
+    stale_state = SimulationRunState(
+        simulation_id=SIM_ID,
+        runner_status=RunnerStatus.FAILED,
+        error="Prozess-Neustart während des Runs",
+        started_at=datetime.now().isoformat(),
+    )
+
+    SimulationRunner._correct_stale_run_state(stale_state, "run_id_that_does_not_exist")
+
+    # Unangetastet -- kein Fallback auf den vorhandenen orphan.
+    assert registry.get_run(orphan["run_id"])["status"] == "processing"

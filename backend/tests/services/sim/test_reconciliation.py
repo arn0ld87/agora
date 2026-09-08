@@ -168,15 +168,18 @@ class TestReconcileStaleRuns:
 
         assert result == ReconciliationResult(reconciled_run_ids=[], skipped_run_ids=["run_5"])
 
-    def test_dead_pid_with_completed_run_state_is_propagated_not_overwritten(
+    def test_dead_pid_with_completed_run_state_is_left_untouched_not_propagated(
         self, monkeypatch
     ):
-        """Finding B (Codex-Review 2026-09-08, PR #1476): ``run_state.json``
-        wurde bereits erfolgreich als COMPLETED persistiert, aber die
+        """F2 (Codex-Review Runde 3, PR #1476): ``run_state.json`` wurde
+        bereits erfolgreich als COMPLETED persistiert, aber die
         anschließende RunRegistry-Synchronisation kam nie an (Prozess starb
         dazwischen) — die Registry steht noch auf ``processing``, die PID
-        ist tot. Der autoritative Endzustand (COMPLETED) muss propagiert
-        werden, NICHT mit ``failed``/``process_restart`` überschrieben."""
+        ist tot. ``run_state.json`` trägt keine RunRegistry-``run_id``,
+        daher ist NICHT verifizierbar, dass dieser COMPLETED-Zustand zu
+        GENAU diesem Manifest gehört (statt z. B. zu einem Ersatzlauf nach
+        einem Resume, Finding F1) — der Run bleibt unangetastet, nur
+        geloggt/übersprungen, statt fälschlich propagiert zu werden."""
         run = _make_run("run_6", status="processing", simulation_id="sim_6")
         registry = _FakeRegistry([run])
 
@@ -192,21 +195,21 @@ class TestReconcileStaleRuns:
         result = reconcile_stale_runs(registry, "/fake/run-state-dir")
 
         assert result == ReconciliationResult(
-            reconciled_run_ids=[], skipped_run_ids=[], synced_terminal_run_ids=["run_6"]
+            reconciled_run_ids=[], skipped_run_ids=["run_6"], synced_terminal_run_ids=[]
         )
-        assert registry._runs["run_6"]["status"] == "completed"
-        assert registry._runs["run_6"].get("termination_reason") is None
-        assert "termination_reason" not in registry.updates[0]
-        # run_state.json ist bereits terminal -- kein erneuter Write nötig.
+        # Unveraendert -- keine stille Datenkorruption durch einen fremden
+        # Endzustand.
+        assert registry._runs["run_6"]["status"] == "processing"
+        assert not registry.updates
         save_mock.assert_not_called()
 
-    def test_dead_pid_with_stopped_run_state_preserves_existing_termination_reason(
+    def test_dead_pid_with_stopped_run_state_is_left_untouched_not_propagated(
         self, monkeypatch
     ):
         """Analog zu oben, aber STOPPED mit bereits gesetztem
         ``termination_reason`` (z. B. ``user_stop``, seit Slice 1) auf der
-        Registry -- dieser Grund darf nicht durch ``process_restart``
-        ersetzt werden."""
+        Registry -- auch dieser Zustand wird ohne verifizierbare Run-ID-
+        Verknuepfung nicht propagiert."""
         run = _make_run("run_7", status="processing", simulation_id="sim_7")
         run["termination_reason"] = "user_stop"
         registry = _FakeRegistry([run])
@@ -223,11 +226,40 @@ class TestReconcileStaleRuns:
         result = reconcile_stale_runs(registry, "/fake/run-state-dir")
 
         assert result == ReconciliationResult(
-            reconciled_run_ids=[], skipped_run_ids=[], synced_terminal_run_ids=["run_7"]
+            reconciled_run_ids=[], skipped_run_ids=["run_7"], synced_terminal_run_ids=[]
         )
-        assert registry._runs["run_7"]["status"] == "stopped"
+        assert registry._runs["run_7"]["status"] == "processing"
         assert registry._runs["run_7"]["termination_reason"] == "user_stop"
+        assert not registry.updates
         save_mock.assert_not_called()
+
+    def test_dead_pid_with_completed_run_state_and_multiple_manifests_is_not_corrupted(
+        self, monkeypatch
+    ):
+        """F2-Kernszenario: zwei RunRegistry-Manifeste fuer dieselbe
+        ``simulation_id`` -- ein aelterer, tatsaechlich verwaister Run
+        (``run_orphan``, noch ``processing``) neben einem Ersatzlauf, der
+        bereits laengst als ``completed`` geschlossen wurde und NICHT mehr
+        in der stale-Liste auftaucht. Das geteilte ``run_state.json`` zeigt
+        (vom Ersatzlauf) COMPLETED. Ohne Run-ID-Verknuepfung darf dieser
+        fremde Endzustand nicht auf ``run_orphan`` durchschlagen."""
+        run_orphan = _make_run("run_orphan", status="processing", simulation_id="sim_8")
+        registry = _FakeRegistry([run_orphan])
+
+        state = SimulationRunState(
+            simulation_id="sim_8",
+            runner_status=RunnerStatus.COMPLETED,
+            process_pid=_dead_pid(),
+        )
+        monkeypatch.setattr(reconciliation_module, "load_run_state", lambda sim_id, base: state)
+        monkeypatch.setattr(reconciliation_module, "save_run_state", MagicMock())
+
+        result = reconcile_stale_runs(registry, "/fake/run-state-dir")
+
+        assert result == ReconciliationResult(
+            reconciled_run_ids=[], skipped_run_ids=["run_orphan"], synced_terminal_run_ids=[]
+        )
+        assert registry._runs["run_orphan"]["status"] == "processing"
 
     def test_other_run_types_are_not_touched(self, monkeypatch):
         """Nur ``simulation_run`` hat eine verifizierbare Prozess-PID —

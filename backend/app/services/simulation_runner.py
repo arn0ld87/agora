@@ -195,7 +195,9 @@ class SimulationRunner:
         cls._run_states[state.simulation_id] = state
 
     @classmethod
-    def _correct_stale_run_state(cls, state: SimulationRunState) -> None:
+    def _correct_stale_run_state(
+        cls, state: SimulationRunState, requested_run_id: Optional[str] = None
+    ) -> None:
         """Persist a stale-run correction (Finding B, Codex-Review 2026-09-08,
         PR #1476) — passed as ``correct_stale_run`` to
         ``process_manager.start_simulation``.
@@ -216,7 +218,23 @@ class SimulationRunner:
         ``run_lifecycle.py``) — so at this exact call site, any registry
         entry for this simulation_id that already carries status
         "processing" can only be a previous, no-longer-current run, never
-        the in-flight replacement. That is the targeting criterion below.
+        the in-flight replacement. That narrows the candidate set, but
+        does NOT by itself disambiguate WHICH previous run to correct if
+        several historical manifests are still "processing" (Finding F1,
+        Codex-Review Runde 3, PR #1476 — e.g. multiple resume attempts on
+        different orphans before any of them was ever closed out).
+
+        ``requested_run_id``: the run-registry ``run_id`` the caller
+        actually asked to resume/restart (threaded through from
+        ``_resume_or_restart_simulation_run`` in ``app/api/runs.py``).
+        When given, ONLY that exact manifest is corrected — never "the
+        newest" or "the first in the list". When it does not resolve to a
+        matching "processing" manifest for this simulation_id, nothing is
+        corrected and the mismatch is logged (no guessing). When ``None``
+        (callers without a specific target run, e.g. plain start/replay),
+        a single unambiguous "processing" candidate is still corrected —
+        but with more than one candidate and no ``requested_run_id`` to
+        disambiguate, nothing is corrected either.
         """
         def _publish(data: Dict[str, Any]) -> None:
             bus = resolve_default_event_bus()
@@ -238,9 +256,36 @@ class SimulationRunner:
                 status="processing",
                 limit=1000,
             )
-            if candidates:
+            target: Optional[Dict[str, Any]] = None
+            if requested_run_id is not None:
+                target = next(
+                    (c for c in candidates if c.get("run_id") == requested_run_id), None
+                )
+                if target is None:
+                    logger.warning(
+                        "_correct_stale_run_state: requested_run_id=%s hat kein "
+                        "passendes 'processing'-Manifest fuer simulation_id=%s "
+                        "(candidates=%s) — keine Korrektur, um nicht den "
+                        "falschen Run zu treffen",
+                        requested_run_id, simulation_id,
+                        [c.get("run_id") for c in candidates],
+                    )
+                    return
+            elif len(candidates) == 1:
+                target = candidates[0]
+            elif len(candidates) > 1:
+                logger.warning(
+                    "_correct_stale_run_state: %d mehrdeutige 'processing'-"
+                    "Manifeste fuer simulation_id=%s ohne requested_run_id — "
+                    "keine Korrektur, kein 'nimm das neueste' (candidates=%s)",
+                    len(candidates), simulation_id,
+                    [c.get("run_id") for c in candidates],
+                )
+                return
+
+            if target is not None:
                 registry.update_run(
-                    candidates[0]["run_id"],
+                    target["run_id"],
                     status=state.runner_status.value,
                     message=f"Runner status: {state.runner_status.value}",
                     error=state.error,
@@ -285,11 +330,19 @@ class SimulationRunner:
         graph_id: str = None,
         storage: Any = None,
         runtime_env: Optional[Dict[str, str]] = None,
+        requested_run_id: Optional[str] = None,
     ) -> SimulationRunState:
         """Start simulation.
 
         Delegates fully to
         :func:`~app.services.sim.process_manager.start_simulation`.
+
+        ``requested_run_id`` (Finding F1, Codex-Review Runde 3, PR #1476):
+        run-registry ``run_id`` the caller actually asked to resume/restart,
+        e.g. from ``/api/runs/<run_id>/resume``. Threaded through to
+        ``_correct_stale_run_state`` so a stale-run correction targets
+        exactly that manifest. ``None`` for callers without a specific
+        target (plain start, replay onto a new ``simulation_id``).
 
         M11 Phase 5 PR 5 — body extracted; wrapper kept for backward-compat.
         """
@@ -329,6 +382,7 @@ class SimulationRunner:
             max_rounds=max_rounds,
             runtime_env=runtime_env,
             correct_stale_run=cls._correct_stale_run_state,
+            requested_run_id=requested_run_id,
         )
 
     @classmethod
