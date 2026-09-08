@@ -137,6 +137,10 @@ try:
     from .sim_runtime.run_control import RoundAction, RoundBoundaryControl
 except ImportError:  # direct script execution
     from sim_runtime.run_control import RoundAction, RoundBoundaryControl
+try:
+    from .sim_runtime.ipc import report_attribution
+except ImportError:  # direct script execution
+    from sim_runtime.ipc import report_attribution
 
 _runtime_paths = resolve_runtime_paths(__file__)
 install_script_paths(_runtime_paths)
@@ -446,12 +450,17 @@ class ParallelIPCHandler:
         reddit_env=None,
         reddit_agent_graph=None,
         redis_bridge=None,
+        budget_guard: Optional[SubprocessBudgetGuard] = None,
     ):
         self.simulation_dir = simulation_dir
         self.twitter_env = twitter_env
         self.twitter_agent_graph = twitter_agent_graph
         self.reddit_env = reddit_env
         self.reddit_agent_graph = reddit_agent_graph
+        # Tech-Review Slice B4c: ohne Guard bucht kein Interview-Kommando
+        # dieses Handlers seinen Verbrauch auf einen Report-Run — derselbe
+        # Mechanismus wie ``sim_runtime.ipc.IPCHandler`` (#1478 Codex P1).
+        self.budget_guard = budget_guard
 
         self.commands_dir = os.path.join(simulation_dir, IPC_COMMANDS_DIR)
         self.responses_dir = os.path.join(simulation_dir, IPC_RESPONSES_DIR)
@@ -548,18 +557,20 @@ class ParallelIPCHandler:
         else:
             return None, None, None
     
-    async def _interview_single_platform(self, agent_id: int, prompt: str, platform: str) -> Dict[str, Any]:
+    async def _interview_single_platform(
+        self, agent_id: int, prompt: str, platform: str, report_run_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Execute Interview on a single platform
-        
+
         Returns:
             Dictionary containing result, or dictionary containing error
         """
         env, agent_graph, actual_platform = self._get_env_and_graph(platform)
-        
+
         if not env or not agent_graph:
             return {"platform": platform, "error": f"{platform}platform unavailable"}
-        
+
         try:
             agent = agent_graph.get_agent(agent_id)
             interview_action = ManualAction(
@@ -567,19 +578,30 @@ class ParallelIPCHandler:
                 action_args={"prompt": prompt}
             )
             actions = {agent: interview_action}
-            await env.step(actions)
-            
+            # Tech-Review Slice B4c: physische Modellaufrufe waehrend dieses
+            # Interviews auf den Report-Run buchen statt (unsichtbar) auf die
+            # laufende Simulation — siehe sim_runtime.ipc.report_attribution.
+            with report_attribution(self.budget_guard, report_run_id):
+                await env.step(actions)
+
             result = self._get_interview_result(agent_id, actual_platform)
             result["platform"] = actual_platform
             return result
-            
+
         except Exception as e:
             return {"platform": platform, "error": str(e)}
-    
-    async def handle_interview(self, command_id: str, agent_id: int, prompt: str, platform: str = None) -> bool:
+
+    async def handle_interview(
+        self,
+        command_id: str,
+        agent_id: int,
+        prompt: str,
+        platform: str = None,
+        report_run_id: Optional[str] = None,
+    ) -> bool:
         """
         Handle single Agent interview command
-        
+
         Args:
             command_id: Command ID
             agent_id: Agent ID
@@ -588,14 +610,16 @@ class ParallelIPCHandler:
                 - "twitter": Interview only Twitter platform
                 - "reddit": Interview only Reddit platform
                 - None/unspecified: Interview both platforms simultaneously, return integrated result
-            
+            report_run_id: Report-Run, dessen Budget dieses Interview belastet
+                (Tech-Review Slice B4c; siehe sim_runtime.ipc.IPCHandler).
+
         Returns:
             True means success, False means failure
         """
         # If platform is specified, only interview that platform
         if platform in ("twitter", "reddit"):
-            result = await self._interview_single_platform(agent_id, prompt, platform)
-            
+            result = await self._interview_single_platform(agent_id, prompt, platform, report_run_id)
+
             if "error" in result:
                 await self.send_response(command_id, "failed", error=result["error"])
                 print(f"  Interview failed: agent_id={agent_id}, platform={platform}, error={result['error']}")
@@ -604,29 +628,29 @@ class ParallelIPCHandler:
                 await self.send_response(command_id, "completed", result=result)
                 print(f"  Interview completed: agent_id={agent_id}, platform={platform}")
                 return True
-        
+
         # Platform not specified: interview both platforms simultaneously
         if not self.twitter_env and not self.reddit_env:
             await self.send_response(command_id, "failed", error="No available simulation environment")
             return False
-        
+
         results = {
             "agent_id": agent_id,
             "prompt": prompt,
             "platforms": {}
         }
         success_count = 0
-        
+
         # Interview both platforms in parallel
         tasks = []
         platforms_to_interview = []
-        
+
         if self.twitter_env:
-            tasks.append(self._interview_single_platform(agent_id, prompt, "twitter"))
+            tasks.append(self._interview_single_platform(agent_id, prompt, "twitter", report_run_id))
             platforms_to_interview.append("twitter")
-        
+
         if self.reddit_env:
-            tasks.append(self._interview_single_platform(agent_id, prompt, "reddit"))
+            tasks.append(self._interview_single_platform(agent_id, prompt, "reddit", report_run_id))
             platforms_to_interview.append("reddit")
         
         # Execute in parallel
@@ -647,10 +671,16 @@ class ParallelIPCHandler:
             print(f"  Interview failed: agent_id={agent_id}, All platforms failed")
             return False
     
-    async def handle_batch_interview(self, command_id: str, interviews: List[Dict], platform: str = None) -> bool:
+    async def handle_batch_interview(
+        self,
+        command_id: str,
+        interviews: List[Dict],
+        platform: str = None,
+        report_run_id: Optional[str] = None,
+    ) -> bool:
         """
         Handle batch interview command
-        
+
         Args:
             command_id: Command ID
             interviews: [{"agent_id": int, "prompt": str, "platform": str(optional)}, ...]
@@ -658,6 +688,8 @@ class ParallelIPCHandler:
                 - "twitter": Interview only Twitter platform
                 - "reddit": Interview only Reddit platform
                 - None/unspecified: Interview both platforms simultaneously for each Agent
+            report_run_id: Report-Run, dessen Budget dieser Batch belastet
+                (Tech-Review Slice B4c; siehe sim_runtime.ipc.IPCHandler).
         """
         # Group by platform
         twitter_interviews = []
@@ -700,8 +732,9 @@ class ParallelIPCHandler:
                         print(f"  Warning: Unable to get Twitter Agent {agent_id}: {e}")
                 
                 if twitter_actions:
-                    await self.twitter_env.step(twitter_actions)
-                    
+                    with report_attribution(self.budget_guard, report_run_id):
+                        await self.twitter_env.step(twitter_actions)
+
                     for interview in twitter_interviews:
                         agent_id = interview.get("agent_id")
                         result = self._get_interview_result(agent_id, "twitter")
@@ -727,8 +760,9 @@ class ParallelIPCHandler:
                         print(f"  Warning: Unable to get Reddit Agent {agent_id}: {e}")
                 
                 if reddit_actions:
-                    await self.reddit_env.step(reddit_actions)
-                    
+                    with report_attribution(self.budget_guard, report_run_id):
+                        await self.reddit_env.step(reddit_actions)
+
                     for interview in reddit_interviews:
                         agent_id = interview.get("agent_id")
                         result = self._get_interview_result(agent_id, "reddit")
@@ -800,7 +834,8 @@ class ParallelIPCHandler:
                 command_id,
                 args.get("agent_id", 0),
                 args.get("prompt", ""),
-                args.get("platform")
+                args.get("platform"),
+                report_run_id=args.get("report_run_id"),
             )
             return True
 
@@ -808,7 +843,8 @@ class ParallelIPCHandler:
             await self.handle_batch_interview(
                 command_id,
                 args.get("interviews", []),
-                args.get("platform")
+                args.get("platform"),
+                report_run_id=args.get("report_run_id"),
             )
             return True
 
@@ -2405,7 +2441,8 @@ async def main():
             twitter_env=twitter_result.env if twitter_result else None,
             twitter_agent_graph=twitter_result.agent_graph if twitter_result else None,
             reddit_env=reddit_result.env if reddit_result else None,
-            reddit_agent_graph=reddit_result.agent_graph if reddit_result else None
+            reddit_agent_graph=reddit_result.agent_graph if reddit_result else None,
+            budget_guard=budget_guard,
         )
         ipc_handler.update_status("alive")
 
