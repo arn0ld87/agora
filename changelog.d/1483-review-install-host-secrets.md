@@ -33,3 +33,10 @@
   `RunRegistry` und die Monitor-Threads in `app.services.sim.monitor`
   Pflicht ist (Prozess-lokaler State, Monitor-Generation-Zähler). Keine
   Wertänderung.
+
+### Fixed (Installation - 2026-09-08, Codex-Review Runde 2)
+
+- **Der Host-Modus erzeugt jetzt auch `AGORA_AUTH_TOKEN`.** `.env.example` führt den Key nur auskommentiert und setzt `FLASK_DEBUG=false`; ohne Token bricht `backend/run.py` beim Start mit `AGORA_AUTH_TOKEN missing in non-debug mode` aus `Config.validate()` ab. Eine frische Host-Installation war damit auch nach korrekt hinterlegten Neo4j-Zugangsdaten nicht startfähig.
+- **Die Secret-Erzeugung setzt kein System-`python3` mehr voraus.** `install.sh` läuft vor `uv sync`; auf einem sauberen macOS mit den dokumentierten Voraussetzungen (bun, node, uv) bringt `uv` seinen eigenen Interpreter mit und `/usr/bin/python3` existiert nicht — die Generierung starb vor der ersten Abhängigkeitsinstallation. Neuer Helfer `random_urlsafe_32` mit Fallback-Kette `python3` → `openssl rand 32` → `head -c 32 /dev/urandom`, jeweils als URL-sicheres Base64 aus derselben Entropiequelle. Die Längenprüfung (44 Zeichen mit Padding für Fernet-Keys, 43 ohne für `token_urlsafe`-Äquivalente) bricht ab, bevor ein zu kurzer Wert in die `.env` geschrieben wird.
+- **`README.md` nennt `NEO4J_PASSWORD` wieder im Quickstart.** `.env.example` liefert `NEO4J_PASSWORD=change-me`, und `Config.validate()` lehnt diesen Platzhalter außerhalb des Debug-Modus ab — die Kurzanleitung führte mit „nur LLM-Endpunkte konfigurieren, dann `bun run dev`" in einen Backend, der nicht startet.
+- **Der Testblock in `install.sh` ist jetzt durch `# >>> ensure-secret-block` / `# <<< ensure-secret-block` markiert.** `test_install_ensure_secret.py` extrahierte ihn vorher per `sed`-Range bis zur ersten `^}` — jede zusätzliche Funktion vor `ensure_secret` hätte den Range still abgeschnitten.

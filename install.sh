@@ -105,7 +105,7 @@ setup_env() {
     if [[ -f "$template" ]]; then
       cp "$template" .env
       warn ".env aus $template erstellt — bitte SECRET_KEY, AGORA_AUTH_TOKEN und NEO4J_PASSWORD setzen!"
-      warn "  python3 -c \"import secrets; print(secrets.token_urlsafe(32))\""
+      warn "  openssl rand 32 | base64 | tr '+/' '-_' | tr -d '=\n'"
     else
       die "Vorlage $template nicht gefunden."
     fi
@@ -121,6 +121,9 @@ setup_env() {
 # Zweitkopie hier. Drift-Guard-Test:
 # backend/tests/test_install_ensure_secret.py::test_placeholder_list_matches_config
 # haelt beide Listen synchron.
+# >>> ensure-secret-block (wird von backend/tests/test_install_ensure_secret.py
+# als Ganzes extrahiert und in einer Subshell ausgefuehrt — die Marker sind
+# der Vertrag mit diesem Test, nicht Deko.)
 ENSURE_SECRET_PLACEHOLDERS=(change-me change-me-use-token_urlsafe-32 agora password neo4j)
 
 # Pflicht-Secret in .env sicherstellen. Fehlt der Wert ODER steht dort noch
@@ -137,6 +140,43 @@ ENSURE_SECRET_PLACEHOLDERS=(change-me change-me-use-token_urlsafe-32 agora passw
 # base64.urlsafe_b64encode(os.urandom(32)) entspricht exakt
 # Fernet.generate_key(), funktioniert aber mit der Standardbibliothek —
 # `cryptography` ist an dieser Stelle im Installationsablauf typischerweise
+# 32 kryptografisch zufaellige Bytes als URL-sicheres Base64.
+#   padded   -> 44 Zeichen inkl. "="-Padding, bitgleich zu
+#               `Fernet.generate_key()` (base64.urlsafe_b64encode(os.urandom(32)))
+#   stripped -> 43 Zeichen ohne Padding, bitgleich zu `secrets.token_urlsafe(32)`
+#
+# install.sh laeuft VOR `uv sync`, darf also keinen Projekt-Interpreter
+# voraussetzen — und auf einem sauberen macOS mit den dokumentierten
+# Voraussetzungen (bun, node, uv) gibt es ueberhaupt kein System-`python3`,
+# weil `uv` seinen eigenen Interpreter mitbringt. Deshalb eine Fallback-Kette
+# statt eines harten `python3`-Aufrufs; alle drei Wege liefern dasselbe
+# Format aus derselben Entropiequelle (32 Bytes aus dem CSPRNG des Systems).
+random_urlsafe_32() {
+  local mode="$1"
+  local raw=""
+  if command -v python3 &>/dev/null; then
+    raw=$(python3 -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())")
+  elif command -v openssl &>/dev/null; then
+    raw=$(openssl rand 32 | base64 | tr -d '\n' | tr '+/' '-_')
+  elif [[ -r /dev/urandom ]]; then
+    raw=$(head -c 32 /dev/urandom | base64 | tr -d '\n' | tr '+/' '-_')
+  else
+    die "Kein Zufallsgenerator verfuegbar (weder python3 noch openssl noch /dev/urandom) — Secrets koennen nicht erzeugt werden."
+  fi
+  if [[ "$mode" == "stripped" ]]; then
+    raw="${raw//=/}"
+  fi
+  # 32 Bytes ergeben genau 44 Base64-Zeichen (43 ohne Padding). Weicht das ab,
+  # hat der Generator etwas anderes geliefert als erwartet — dann lieber
+  # abbrechen als ein zu kurzes Secret in die .env schreiben.
+  local expected=44
+  [[ "$mode" == "stripped" ]] && expected=43
+  if [[ "${#raw}" -ne "$expected" ]]; then
+    die "Zufallswert hat ${#raw} statt $expected Zeichen — Secret-Generierung abgebrochen."
+  fi
+  printf '%s' "$raw"
+}
+
 # noch nicht installiert.
 ensure_secret() {
   local key="$1"
@@ -162,10 +202,10 @@ ensure_secret() {
   local val
   case "$key" in
     AGORA_SECRET_KEY|AGORA_FERNET_KEY)
-      val=$(python3 -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())")
+      val=$(random_urlsafe_32 padded)
       ;;
     *)
-      val=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
+      val=$(random_urlsafe_32 stripped)
       ;;
   esac
   if grep -qE "^${key}=" .env; then
@@ -199,6 +239,7 @@ ensure_secret() {
   done
   info "  $key automatisch erzeugt"
 }
+# <<< ensure-secret-block
 
 # ---------------------------------------------------------------------------
 # MODUS: check
@@ -279,6 +320,11 @@ setup_env ".env.example"
 
 info "Prüfe Pflicht-Secrets …"
 ensure_secret SECRET_KEY
+# `.env.example` fuehrt AGORA_AUTH_TOKEN nur auskommentiert und setzt
+# FLASK_DEBUG=false. Ohne Token bricht `backend/run.py` beim Start mit
+# "AGORA_AUTH_TOKEN missing in non-debug mode" aus `Config.validate()` ab —
+# der Host-Modus muss ihn deshalb genauso erzeugen wie der Docker-Modus.
+ensure_secret AGORA_AUTH_TOKEN
 ensure_secret AGORA_SECRET_KEY
 ensure_secret AGORA_FERNET_KEY
 
