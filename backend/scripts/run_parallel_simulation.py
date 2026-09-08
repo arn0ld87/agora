@@ -126,6 +126,18 @@ except ImportError:  # direct script execution
         seed_simulation_rng,
     )
 
+# Rundengrenzen-Kontrolle + Budget-Guard (Tech-Review Slice B4c): derselbe
+# Kontrollpfad wie in sim_runtime.platform_runner, jetzt auch fuer den
+# Default-Pfad (Twitter+Reddit parallel).
+try:
+    from .sim_runtime.budget_guard import SubprocessBudgetGuard
+except ImportError:  # direct script execution
+    from sim_runtime.budget_guard import SubprocessBudgetGuard
+try:
+    from .sim_runtime.run_control import RoundAction, RoundBoundaryControl
+except ImportError:  # direct script execution
+    from sim_runtime.run_control import RoundAction, RoundBoundaryControl
+
 _runtime_paths = resolve_runtime_paths(__file__)
 install_script_paths(_runtime_paths)
 init_runner_tracing("agora-oasis-runner")
@@ -1658,39 +1670,47 @@ class PlatformSimulation:
         self.env = None
         self.agent_graph = None
         self.total_actions = 0
+        # Budget-Guard (Tech-Review Slice B4c): None bei Stop/Normal-Durchlauf,
+        # Info-Dict bei Budget-Abbruch — spiegelt platform_runner.py.
+        self.budget_abort_info = None
 
 
 async def run_twitter_simulation(
-    config: Dict[str, Any], 
+    config: Dict[str, Any],
     simulation_dir: str,
     action_logger: Optional[PlatformActionLogger] = None,
     main_logger: Optional[SimulationLogManager] = None,
-    max_rounds: Optional[int] = None
+    max_rounds: Optional[int] = None,
+    budget_guard: Optional[SubprocessBudgetGuard] = None,
 ) -> PlatformSimulation:
     """Run Twitter simulation
-    
+
     Args:
         config: Simulation configuration
         simulation_dir: Simulation directory
         action_logger: Action logger
         main_logger: Main logger manager
         max_rounds: Maximum simulation rounds (optional, used to truncate long simulations)
-        
+        budget_guard: geteilter Guard aus ``main()`` (Tech-Review Slice B4c);
+            ``None`` heisst kein Usage-Recording/Hard-Budget fuer diesen Lauf.
+
     Returns:
         PlatformSimulation: Result object containing env and agent_graph
     """
     result = PlatformSimulation()
-    
+
     def log_info(msg):
         if main_logger:
             main_logger.info(f"[Twitter] {msg}")
         else:
             print(f"[Twitter] {msg}")
-    
+
     log_info("Initializing...")
 
     # Twitter use common LLM configuration
     model = create_model(config, use_boost=False)
+    if budget_guard is not None:
+        model = budget_guard.wrap_model(model)
     # Preflight: ein einzelner Probe-Call vor dem Fan-out fängt permanente
     # Auth-/Routing-Fehler (401/403/404) mit klarer Root-Cause ab — kein
     # N-facher identischer Fehler während der Simulation.
@@ -1827,11 +1847,19 @@ async def run_twitter_simulation(
         hour=0, minute=0, second=0, microsecond=0
     )
 
+    round_control = RoundBoundaryControl(simulation_dir, budget_guard)
     for round_num in range(total_rounds):
         # Check if received exit signal
         if _shutdown_event and _shutdown_event.is_set():
             if main_logger:
                 main_logger.info(f"Received exit signal，at round {round_num + 1} stop simulation")
+            break
+
+        decision = round_control.check(round_num)
+        if decision.action == RoundAction.STOP:
+            break
+        if decision.action == RoundAction.BUDGET_ABORT:
+            result.budget_abort_info = decision.budget_abort_info
             break
 
         simulated_minutes = round_num * minutes_per_round
@@ -1951,36 +1979,41 @@ async def run_twitter_simulation(
 
 
 async def run_reddit_simulation(
-    config: Dict[str, Any], 
+    config: Dict[str, Any],
     simulation_dir: str,
     action_logger: Optional[PlatformActionLogger] = None,
     main_logger: Optional[SimulationLogManager] = None,
-    max_rounds: Optional[int] = None
+    max_rounds: Optional[int] = None,
+    budget_guard: Optional[SubprocessBudgetGuard] = None,
 ) -> PlatformSimulation:
     """Run Reddit simulation
-    
+
     Args:
         config: Simulation configuration
         simulation_dir: Simulation directory
         action_logger: Action logger
         main_logger: Main logger manager
         max_rounds: Maximum simulation rounds (optional, used to truncate long simulations)
-        
+        budget_guard: geteilter Guard aus ``main()`` (Tech-Review Slice B4c);
+            ``None`` heisst kein Usage-Recording/Hard-Budget fuer diesen Lauf.
+
     Returns:
         PlatformSimulation: Result object containing env and agent_graph
     """
     result = PlatformSimulation()
-    
+
     def log_info(msg):
         if main_logger:
             main_logger.info(f"[Reddit] {msg}")
         else:
             print(f"[Reddit] {msg}")
-    
+
     log_info("Initializing...")
-    
+
     # Reddit use acceleration LLM configuration(if available，otherwise fallback toCommon configuration）
     model = create_model(config, use_boost=True)
+    if budget_guard is not None:
+        model = budget_guard.wrap_model(model)
     # Preflight: ein einzelner Probe-Call vor dem Fan-out fängt permanente
     # Auth-/Routing-Fehler (401/403/404) mit klarer Root-Cause ab — kein
     # N-facher identischer Fehler während der Simulation.
@@ -2108,11 +2141,19 @@ async def run_reddit_simulation(
         hour=0, minute=0, second=0, microsecond=0
     )
 
+    round_control = RoundBoundaryControl(simulation_dir, budget_guard)
     for round_num in range(total_rounds):
         # Check if received exit signal
         if _shutdown_event and _shutdown_event.is_set():
             if main_logger:
                 main_logger.info(f"Received exit signal，at round {round_num + 1} stop simulation")
+            break
+
+        decision = round_control.check(round_num)
+        if decision.action == RoundAction.STOP:
+            break
+        if decision.action == RoundAction.BUDGET_ABORT:
+            result.budget_abort_info = decision.budget_abort_info
             break
 
         simulated_minutes = round_num * minutes_per_round
@@ -2297,29 +2338,61 @@ async def main():
     log_manager.info("=" * 60)
     
     start_time = datetime.now()
-    
+
+    # Budget-Guard (Tech-Review Slice B4c): Usage-Recording in den gemeinsamen
+    # Run-Ledger + harte Limits an Runden-Grenzen, geteilt ueber beide
+    # Plattform-Schleifen. Vorlage: sim_runtime.platform_runner.
+    budget_guard: Optional[SubprocessBudgetGuard] = None
+    try:
+        budget_guard = SubprocessBudgetGuard.from_environment(simulation_dir)
+        if budget_guard is not None:
+            log_manager.info(
+                "[budget-guard] usage recording active"
+                + (f" (enforcement={budget_guard.enforcement})" if budget_guard.budget_config else "")
+            )
+    except Exception as exc:  # noqa: BLE001 — Guard ist Zusatz, kein Blocker
+        log_manager.warning(f"[budget-guard] setup failed ({exc}); continuing without")
+        budget_guard = None
+
     # Store simulation results of both platforms
     twitter_result: Optional[PlatformSimulation] = None
     reddit_result: Optional[PlatformSimulation] = None
-    
+
     if args.twitter_only:
-        twitter_result = await run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds)
+        twitter_result = await run_twitter_simulation(
+            config, simulation_dir, twitter_logger, log_manager, args.max_rounds, budget_guard
+        )
     elif args.reddit_only:
-        reddit_result = await run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds)
+        reddit_result = await run_reddit_simulation(
+            config, simulation_dir, reddit_logger, log_manager, args.max_rounds, budget_guard
+        )
     else:
         # Run in parallel (each platform uses independent logger)
         results = await asyncio.gather(
-            run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds),
-            run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds),
+            run_twitter_simulation(
+                config, simulation_dir, twitter_logger, log_manager, args.max_rounds, budget_guard
+            ),
+            run_reddit_simulation(
+                config, simulation_dir, reddit_logger, log_manager, args.max_rounds, budget_guard
+            ),
         )
         twitter_result, reddit_result = results
-    
+
     total_elapsed = (datetime.now() - start_time).total_seconds()
     log_manager.info("=" * 60)
     log_manager.info(f"Simulation loop completed! Total time: {total_elapsed:.1f}seconds")
-    
+
+    # Bei Budgetabbruch nicht in den Wait-Mode gehen: der Run soll
+    # deterministisch enden, damit der Backend-Monitor den Abbruchgrund
+    # (budget_abort.json) uebernehmen kann (spiegelt platform_runner.py:673).
+    budget_abort_info = None
+    if twitter_result and twitter_result.budget_abort_info is not None:
+        budget_abort_info = twitter_result.budget_abort_info
+    elif reddit_result and reddit_result.budget_abort_info is not None:
+        budget_abort_info = reddit_result.budget_abort_info
+
     # Whether to enter wait mode
-    if wait_for_commands:
+    if wait_for_commands and budget_abort_info is None:
         log_manager.info("")
         log_manager.info("=" * 60)
         log_manager.info("Enter wait mode - environment keeps running")
