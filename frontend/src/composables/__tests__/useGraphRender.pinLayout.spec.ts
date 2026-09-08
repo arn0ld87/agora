@@ -158,6 +158,12 @@ const d3Mock: any = d3MockStar
 // jsdom in this vitest setup does not expose `localStorage` as a global, so we
 // install a minimal in-memory stub. The composable reads/writes `localStorage`
 // directly (module-scope helpers), so the stub must live on globalThis.
+//
+// vitest 5's updated jsdom environment exposes `localStorage` on `Window` as a
+// getter-only accessor (matching real browsers), so a plain assignment now
+// throws `TypeError: Cannot set property localStorage of [object Window]
+// which has only a getter`. `Object.defineProperty` replaces the accessor
+// outright instead of invoking its (nonexistent) setter.
 function installLocalStorageStub() {
   const store = new Map<string, string>()
   const stub = {
@@ -168,7 +174,11 @@ function installLocalStorageStub() {
     key: (i: number) => Array.from(store.keys())[i] ?? null,
     get length() { return store.size },
   }
-  ;(globalThis as Record<string, unknown>).localStorage = stub
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: stub,
+    writable: true,
+    configurable: true,
+  })
   return stub
 }
 
