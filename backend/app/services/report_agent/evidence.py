@@ -378,6 +378,62 @@ def text_confidence_label_of(claim: Dict[str, Any]) -> str | None:
     return None
 
 
+def downgrade_medium_without_agent_grounded(
+    claim: Dict[str, Any],
+    *,
+    evidence_index: Dict[str, Any] | None = None,
+    logger: Any = None,
+) -> Dict[str, Any] | None:
+    """Senkt ``medium`` auf ``low``, wenn ADR-0002 Stufe agent_grounded fehlt.
+
+    ``medium`` verlangt mind. 1 ``agent_quote`` (mit nicht-leerem Zitat) UND
+    mind. 1 ``seed_corpus``. Der Claim-Builder prüfte das lange nicht — ein
+    medium-Claim ohne diese Komposition erreichte den
+    ``ReportClaimModel``-Validator und ließ die gesamte EvidenceMap-Validierung
+    scheitern: Report abgebrochen statt Claim abgestuft. Der Reparaturlauf in
+    :func:`degrade_sections_for_violations` fängt das nicht zuverlässig auf,
+    weil Pydantic pro Durchgang nur den ersten Verstoß je Modell meldet — bei
+    mehreren betroffenen Claims einer Section bleibt nach der Reparatur des
+    ersten der nächste stehen.
+
+    Der Validator bleibt unverändert streng (ADR-0002 Anker 4/5 unberührt);
+    hier entsteht das verletzende Label gar nicht erst.
+
+    Schwesterregel für ``high``/``verified``:
+    :func:`auto_downgrade_unsupported_high_claims`. Beide setzen dieselbe
+    ADR-0002-Semantik durch, an unterschiedlichen Labels.
+
+    Der Claim wird in place verändert (wie zuvor im Claim-Builder). Rückgabe
+    ist die Audit-Trail-Entscheidung für ``gate_decisions``, oder ``None``,
+    wenn kein Downgrade nötig war. ``section_index`` ergänzt der Caller.
+    """
+    if str(claim.get("confidence_label") or "").lower() != "medium":
+        return None
+    evidence = claim.get("evidence") or []
+    if has_agent_grounded_evidence(evidence, evidence_index=evidence_index or {}):
+        return None
+
+    claim["confidence_label"] = "low"
+    claim_id = str(claim.get("claim_id") or "<no-id>")
+    if logger is not None:
+        logger.warning(
+            "downgrade_medium_without_agent_grounded: %s medium → low (%s)",
+            claim_id,
+            "nicht agent_grounded",
+        )
+    detail = (
+        "medium verlangt agent_quote (mit Zitat) UND seed_corpus "
+        "(ADR-0002 Stufe agent_grounded) — Komposition nicht "
+        "erfüllt, Claim als low geführt."
+    )
+    return {
+        "claim_id": claim_id,
+        "violation": "medium_without_agent_grounded_evidence",
+        "action": "downgraded_to_low",
+        "detail": detail[:500],
+    }
+
+
 def auto_downgrade_unsupported_high_claims(
     claims: List[Dict[str, Any]],
     *,

@@ -123,7 +123,7 @@ app/services/oasis_profile_generator.py::OasisProfileGenerator._build_entity_con
 # ohne Allowlist-Eintrag.
 app/services/report_agent/agent.py::ReportAgent._record_tool_evidence  # cc<=57
 app/services/report_agent/agent.py::ReportAgent._build_claims_for_section  # cc<=37
-app/services/report_agent/agent.py::ReportAgent._finalize_section_claims  # cc<=35
+app/services/report_agent/agent.py::ReportAgent._finalize_section_claims  # cc<=24
 app/services/report_agent/agent.py::ReportAgent._save_evidence_section  # cc<=52
 app/services/report_agent/workflow.py::generate_report  # cc<=55
 app/services/report_agent/workflow.py::generate_section_react  # cc<=41
