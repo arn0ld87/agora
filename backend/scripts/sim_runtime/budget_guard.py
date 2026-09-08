@@ -147,11 +147,14 @@ class SubprocessBudgetGuard:
             return
         report_run_id, _stage = override
         from app.services.run_budget import BudgetExceededError, RunBudgetEnforcer
+        from app.utils.logger import get_logger
+
+        logger = get_logger("agora.sim_runtime.budget_guard")
 
         try:
             enforcer = RunBudgetEnforcer.for_run(report_run_id)
         except Exception as exc:  # noqa: BLE001 — Aufbaufehler blockiert den Call nicht
-            print(f"[budget-guard] report enforcer unavailable: {exc}", flush=True)
+            logger.warning("[budget-guard] report enforcer unavailable: %s", exc)
             return
         if enforcer is None:
             return
@@ -160,7 +163,9 @@ class SubprocessBudgetGuard:
         except BudgetExceededError:
             raise
         except Exception as exc:  # noqa: BLE001 — Budget ist Zusatz, kein Hotpath-Risiko
-            print(f"[budget-guard] report budget check failed (call proceeds): {exc}", flush=True)
+            logger.warning(
+                "[budget-guard] report budget check failed (call proceeds): %s", exc
+            )
 
     def _release_report_reservation(self, report_run_id: str) -> None:
         """Reservierung aus :meth:`_enforce_before_physical_call` freigeben.
@@ -173,13 +178,16 @@ class SubprocessBudgetGuard:
         (900s) besetzt und blockiert nachfolgende Calls faelschlich.
         """
         from app.services.run_budget import RunBudgetEnforcer
+        from app.utils.logger import get_logger
+
+        logger = get_logger("agora.sim_runtime.budget_guard")
 
         try:
             enforcer = RunBudgetEnforcer.for_run(report_run_id)
         except Exception as exc:  # noqa: BLE001
-            print(
-                f"[budget-guard] report enforcer unavailable (reservation not released): {exc}",
-                flush=True,
+            logger.warning(
+                "[budget-guard] report enforcer unavailable (reservation not released): %s",
+                exc,
             )
             return
         if enforcer is None:
@@ -187,7 +195,7 @@ class SubprocessBudgetGuard:
         try:
             enforcer.record_after_call()
         except Exception as exc:  # noqa: BLE001 — Budget ist Zusatz, kein Hotpath-Risiko
-            print(f"[budget-guard] report record_after_call failed: {exc}", flush=True)
+            logger.warning("[budget-guard] report record_after_call failed: %s", exc)
 
     # -- Usage-Recording -----------------------------------------------------
 
