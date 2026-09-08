@@ -473,8 +473,11 @@ class TestInterviewClientIpcPathBlockedByHardBudget:
             result = {"interviews_count": 0, "results": {}}
             timestamp = "2026-09-08T00:00:00"
 
-        def _fake_send_batch(self, interviews, platform=None, timeout=120.0):
+        def _fake_send_batch(
+            self, interviews, platform=None, timeout=120.0, *, report_run_id=None
+        ):
             sent["called"] = True
+            sent["report_run_id"] = report_run_id
             return _Response()
 
         monkeypatch.setattr(

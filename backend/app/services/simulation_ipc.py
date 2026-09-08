@@ -266,10 +266,23 @@ class SimulationIPCClient:
         prompt: str,
         platform: Optional[str] = None,
         timeout: float = 60.0,
+        *,
+        report_run_id: Optional[str] = None,
     ) -> IPCResponse:
+        """``report_run_id`` traegt den Report-Kontext in den Worker-Subprozess.
+
+        Additiv (#1478 Codex P1, Runde 6): ohne ``report_run_id`` bleibt das
+        Kommando unveraendert und ein Alt-Worker ohne dieses Feld ignoriert
+        es einfach (``args.get("report_run_id")`` bleibt ``None``). Der
+        Worker prueft/verbucht damit jeden physischen Modellaufruf dieses
+        Interviews gegen das Report-Budget statt gegen sein simulationszeitliches
+        ``AGORA_RUN_ID`` (siehe ``sim_runtime.ipc.IPCHandler``).
+        """
         args: Dict[str, Any] = {"agent_id": agent_id, "prompt": prompt}
         if platform:
             args["platform"] = platform
+        if report_run_id:
+            args["report_run_id"] = report_run_id
         return self.send_command(
             command_type=CommandType.INTERVIEW,
             args=args,
@@ -281,10 +294,15 @@ class SimulationIPCClient:
         interviews: List[Dict[str, Any]],
         platform: Optional[str] = None,
         timeout: float = 120.0,
+        *,
+        report_run_id: Optional[str] = None,
     ) -> IPCResponse:
+        """``report_run_id`` siehe :meth:`send_interview` (#1478 Codex P1, Runde 6)."""
         args: Dict[str, Any] = {"interviews": interviews}
         if platform:
             args["platform"] = platform
+        if report_run_id:
+            args["report_run_id"] = report_run_id
         return self.send_command(
             command_type=CommandType.BATCH_INTERVIEW,
             args=args,

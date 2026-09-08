@@ -202,8 +202,18 @@ def interview_agent(
     ipc_client = SimulationIPCClient(sim_dir)
     with _report_budget_guard(run_id):
         try:
+            # ``report_run_id=run_id`` (#1478 Codex P1, Runde 6): der Guard oben
+            # haertet nur das Vorab-Gate im Flask-Prozess. Ohne den Report-Kontext
+            # im Kommando selbst verbucht der Worker den physischen Modellaufruf
+            # unter seinem simulationszeitlichen AGORA_RUN_ID statt unter diesem
+            # Report-Run — der Report-Ledger bliebe unveraendert und ein Folge-Call
+            # duerfte trotz erreichtem Limit erneut starten.
             response = ipc_client.send_interview(
-                agent_id=agent_id, prompt=prompt, platform=platform, timeout=timeout
+                agent_id=agent_id,
+                prompt=prompt,
+                platform=platform,
+                timeout=timeout,
+                report_run_id=run_id,
             )
         except TimeoutError:
             # Der Poller galt als lebendig, antwortet aber nicht. Statt den Aufrufer
@@ -277,8 +287,13 @@ def interview_agents_batch(
     ipc_client = SimulationIPCClient(sim_dir)
     with _report_budget_guard(run_id):
         try:
+            # ``report_run_id=run_id`` — siehe Kommentar in ``interview_agent``
+            # (#1478 Codex P1, Runde 6).
             response = ipc_client.send_batch_interview(
-                interviews=interviews, platform=platform, timeout=timeout
+                interviews=interviews,
+                platform=platform,
+                timeout=timeout,
+                report_run_id=run_id,
             )
         except TimeoutError:
             logger.warning(

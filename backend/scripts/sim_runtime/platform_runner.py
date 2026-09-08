@@ -485,6 +485,11 @@ class SinglePlatformRunner:
             manual_action_cls=ManualAction,
             # Issue #1320: derselbe Schluesselraum wie im Parallel-Runner.
             platform_key=self.PLATFORM_NAME.lower(),
+            # #1478 Codex P1, Runde 6: Report-Interviews pruefen/verbuchen
+            # ihre physischen Modellaufrufe ueber denselben Guard wie die
+            # Simulationsrunden — ohne ihn bleibt ein Interview-Kommando mit
+            # ``report_run_id`` unbewacht (nullcontext in ``IPCHandler``).
+            budget_guard=budget_guard,
         )
         self.ipc_handler.update_status("running")
 
