@@ -443,10 +443,44 @@ export type EvidenceCoverageEntry = z.infer<typeof EvidenceCoverageEntrySchema>;
  */
 function _stakeholderGroupKey(value: string | null | undefined): string {
   if (!value) return "";
-  // `str.casefold()` in Python faltet "ß" auf "ss"; `toLowerCase()` tut das
-  // nicht. Ohne diese Ersetzung waeren "Grosshaendler" und "Großhaendler"
-  // im Backend eine Gruppe und hier zwei — Spiegel-Drift auf einem Hartanker.
-  return value.split(/\s+/).filter(Boolean).join(" ").toLowerCase().replace(/ß/g, "ss");
+  // Naeherung an Python `str.casefold()` (ADR-0002 Anker 4, Backend-Anker
+  // `_stakeholder_group_key`). JS kennt kein `casefold()`. Reihenfolge ist
+  // bindend — siehe Regressionstests in reportContract.spec.ts:
+  //   1. `toLowerCase()` fuer den regulaeren Gross-/Kleinschreibungsfall.
+  //      JS deckt damit bereits die Titlecase-Digraphen (`ǅ` -> `ǆ`) und
+  //      `İ` -> `i̇` genauso ab wie Python.
+  //   2. Explizite Faltungen aus CaseFolding.txt (Status F/C), die
+  //      `toLowerCase()` unveraendert liesse: `ß` -> `ss`, `ſ` (LONG S) -> `s`,
+  //      `ς` (Schluss-Sigma) -> `σ` sowie die lateinischen Ligaturen.
+  //
+  // BEWUSST KEIN `normalize("NFKC")`: die Kompatibilitaetszerlegung faltet
+  // mehr, als `casefold()` faltet — Fullwidth-Formen (`Ａｕｆｓｉｃｈｔ` -> `Aufsicht`)
+  // und eingekreiste Ziffern (`①` -> `1`) kollabieren unter NFKC, unter
+  // `casefold()` nicht. Ein solcher Kollaps macht den Spiegel STRENGER als
+  // das Backend: er zaehlt eine Stakeholder-Gruppe, wo Python zwei zaehlt,
+  // und lehnt eine backend-gueltige `high`-Antwort als `schema_mismatch` ab.
+  //
+  // Bleibende Divergenz zu Python: das ist KEINE vollstaendige
+  // `casefold()`-Aequivalenz — armenische Ligaturen und einige
+  // Cherokee-/Deseret-Faelle fehlen. Die Divergenz laeuft nun aber nur noch
+  // in die unschaedliche Richtung: der Spiegel zaehlt hoechstens mehr
+  // Gruppen als Python (LOCKERER), nie weniger. Ein lockererer Spiegel
+  // laesst bereits backend-validierte Daten durch; ein strengerer wuerde
+  // sie in der UI verwerfen.
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .replace(/ß/g, "ss")
+    .replace(/ſ/g, "s")
+    .replace(/ς/g, "σ")
+    .replace(/ﬀ/g, "ff")
+    .replace(/ﬁ/g, "fi")
+    .replace(/ﬂ/g, "fl")
+    .replace(/ﬃ/g, "ffi")
+    .replace(/ﬄ/g, "ffl")
+    .replace(/[ﬅﬆ]/g, "st");
 }
 
 /**

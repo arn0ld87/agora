@@ -235,8 +235,10 @@ graph TD
 
 - Git
 - Linux or macOS recommended
+- [bun](https://bun.sh) >= 1.3 and Node.js >= 20 (checked by `install.sh`)
+- [uv](https://docs.astral.sh/uv/) — manages the Python 3.14 backend environment
 - a configured LLM and embedding provider
-- Docker for the full stack
+- Docker for the full stack (`./install.sh --docker`)
 
 ### Local setup
 
@@ -244,9 +246,16 @@ graph TD
 git clone https://github.com/arn0ld87/agora.git
 cd agora
 ./install.sh
+# install.sh creates .env from .env.example and generates SECRET_KEY,
+# AGORA_AUTH_TOKEN, AGORA_SECRET_KEY, and AGORA_FERNET_KEY automatically.
 
-cp .env.example .env
-# Configure LLM endpoints and secrets in .env
+# Two values install.sh cannot generate for you — set them in .env now:
+#   NEO4J_PASSWORD  the password of your external Neo4j instance. It ships as
+#                   `change-me`, and Config.validate() rejects that placeholder
+#                   outside debug mode, so the backend will not start without it.
+#   NEO4J_URI/_USER if your instance is not the default bolt://localhost:7687.
+
+# Configure LLM endpoints in .env, then:
 bun run dev
 ```
 

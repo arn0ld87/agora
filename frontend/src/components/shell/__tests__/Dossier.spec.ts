@@ -437,4 +437,30 @@ describe('Dossier — Bericht-Anreicherung (Redesign PR 4)', () => {
     expect(wrapper.find(`[data-testid="${DossierTestId.confidenceDistribution}"]`).exists()).toBe(false)
     expect(wrapper.find(`[data-testid="${DossierTestId.redTeamFindings}"]`).exists()).toBe(false)
   })
+
+  it('zeigt den Evidence-Omission-Hinweis als Alert, wenn die Evidence-Map degradiert ist (Issue #1477 F2)', async () => {
+    vi.mocked(getReport).mockResolvedValue({
+      success: true,
+      data: { outline: { title: 'T', summary: 'S', sections: [] }, evidence_sections: 0, red_team_findings: [] },
+    } as never)
+    vi.mocked(getReportEvidence).mockResolvedValue({
+      success: true,
+      evidence_omitted: {
+        reason: 'contract_violation',
+        detail: 'Evidence-Map verletzt den Vertrag.',
+        validation_errors: [],
+      },
+    } as never)
+
+    const obj = makeObject({ kind: 'bericht', id: 'rep_3' })
+    const wrapper = mountDossier(obj)
+    await flushPromises()
+
+    const warning = wrapper.find(`[data-testid="${DossierTestId.evidenceOmittedWarning}"]`)
+    expect(warning.exists()).toBe(true)
+    expect(warning.attributes('role')).toBe('alert')
+    expect(warning.text()).toBe(
+      'Vertrauensverteilung und Aussagenzahl fehlen: die persistierte Evidence-Map verletzt den Evidence-Vertrag und wird nicht angezeigt. Der Bericht selbst ist davon unberührt.',
+    )
+  })
 })

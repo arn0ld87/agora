@@ -134,7 +134,7 @@ minversion = "8.0"
 # nie die Total-Coverage erreicht. Stattdessen aktiviert
 # `.github/workflows/ci.yml::backend`-Job die Coverage-Flags explizit.
 # Lokal manuell: `uv run pytest --cov=app --cov-report=term-missing`.
-addopts = "-ra --tb=short --import-mode=importlib -m 'not llm'"
+addopts = "-ra --tb=short --import-mode=importlib -m 'not llm and not integration'"
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 pythonpath = ["."]
@@ -142,6 +142,7 @@ markers = [
     "eval: baseline/eval suite (fixture-driven)",
     "llm: Echter LLM-Aufruf (Ollama-Instanz erforderlich). Ausführen mit: pytest -m llm",
     "perf: Performance-Budget-Tests (Stufe 1 deterministisch via Mock; Stufe 2 mit -m 'perf and llm' gegen echtes Ollama).",
+    "integration: Echte Neo4j/Redis-Instanz erforderlich (AGORA_TEST_*-Env). Ausführen mit: pytest tests/integration -m integration",
 ]
 # Issue #1090 (E8 aus #979): belegte Upstream-Warnquellen gezielt filtern.
 # Jeder Filter ist auf Nachricht UND Modul eingegrenzt — nie auf eine ganze
