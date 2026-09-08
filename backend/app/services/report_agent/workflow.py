@@ -1459,6 +1459,32 @@ def _apply_requirement_check(report: Report, agent: Any, report_id: str) -> None
         )
 
 
+def _sections_with_persisted_evidence(agent: Any, report_id: str) -> List[Dict[str, Any]]:
+    """Persistierte Sektionen ohne verwaiste Markdown-Dateien.
+
+    Codex-Review PR #1475, Finding 2: Markdown ohne zugehörigen
+    Evidence-Eintrag ist eine Waise (siehe ``process_section``) — sie wird
+    gleich neu generiert. Ungefiltert flösse sie hier trotzdem in den
+    Prompt-Kontext (``previous_sections``) und die Fortschrittsmeldung
+    (``completed_section_titles``) ein und würde nach der Regeneration ein
+    zweites Mal angehängt.
+
+    Bewusst als eigene Funktion und nicht inline in ``generate_report``:
+    ``generate_report`` steht in ``backend/radon-allowlist.txt`` mit
+    ``cc<=55`` und wäre inline auf 59 gestiegen — das Komplexitäts-Gate
+    schlägt dann fehl.
+    """
+    persisted_evidence_section_indices = {
+        section.get("section_index")
+        for section in (agent.evidence_map or {}).get("sections") or []
+    }
+    return [
+        section_info
+        for section_info in ReportManager.get_generated_sections(report_id)
+        if section_info["section_index"] in persisted_evidence_section_indices
+    ]
+
+
 def generate_report(
     agent: Any,
     progress_callback: Optional[Callable[[str, int, str], None]] = None,
@@ -1610,7 +1636,7 @@ def generate_report(
         # erfolglos blieb — macht den Report ebenfalls höchstens INCOMPLETE.
         quote_validation_failed_section_indices: List[int] = []
         existing_sections = {item["section_index"]: item["content"] for item in ReportManager.get_generated_sections(report_id)}
-        for section_info in ReportManager.get_generated_sections(report_id):
+        for section_info in _sections_with_persisted_evidence(agent, report_id):
             title = outline.sections[section_info["section_index"] - 1].title if outline.sections and section_info["section_index"] <= len(outline.sections) else ""
             completed_section_titles.append(title)
             generated_sections.append(section_info["content"])
