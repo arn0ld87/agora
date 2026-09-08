@@ -246,6 +246,25 @@ class TestBatchDirect:
         assert result["success"] is False
         assert client.calls == []
 
+    def test_budget_exceeded_error_propagates_instead_of_per_item_capture(
+        self, tmp_path
+    ) -> None:
+        """Issue #1478 (Codex P1): ein erschoepftes Hard-Budget ist kein
+        Item-Fehler wie ein RuntimeError (siehe
+        ``test_llm_error_is_captured_per_item``) — es muss den ganzen Batch
+        abbrechen, damit ``report_generation.py`` den Run als
+        ``stopped``/``termination_reason=budget_*`` beenden kann statt
+        klaglos weiterzulaufen."""
+        from app.services.run_budget import BudgetExceededError
+
+        client = _FakeLLMClient()
+        client.chat = MagicMock(
+            side_effect=BudgetExceededError("calls", 11, 10)
+        )
+
+        with pytest.raises(BudgetExceededError):
+            self._run(tmp_path, [{"agent_id": 0, "prompt": "Frage"}], client=client)
+
     def test_raises_when_no_personas_available(self, tmp_path) -> None:
         sim_dir = tmp_path / "sim_0123456789ab"
         sim_dir.mkdir(exist_ok=True)

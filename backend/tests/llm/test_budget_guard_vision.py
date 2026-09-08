@@ -4,10 +4,19 @@ Vor dem Fix rief ``describe_image`` (bzw. sein interner ``_create_vision``-
 Provider-Call) weder ``_budget_check()`` noch ``_log_invocation_event``/
 ``_budget_record()`` auf — Vision-Aufrufe waren fuer Budget-Guard und Ledger
 vollstaendig unsichtbar, unabhaengig vom Ausgang des Calls.
+
+Issue #1478 (Codex P1): der Guard sass ausserdem auf der falschen Ebene — er
+umschloss die gesamte ``execute()``-Operation statt jeden physischen
+Provider-Request. Ein wiederholter Versuch (transient retry,
+``TOKEN_KEY_QUIRK``) erzeugte dadurch nur EINEN Budget-Check/Event/Record,
+obwohl mehrere physische Requests abgesetzt wurden — ``max_llm_calls=1``
+erlaubte damit mehrere abgerechnete Requests und das Ledger zaehlte zu
+niedrig. ``TestBudgetGuardVisionRetry`` deckt das mit einem echten Retry ab.
 """
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -170,3 +179,50 @@ class TestVisionLedgerBooking:
         assert recorder.calls[0]["stage"] == "vision"
         assert recorder.calls[0]["success"] is False
         assert recorder.calls[0]["error_type"] == "RuntimeError"
+
+
+class TestBudgetGuardVisionRetry:
+    """Issue #1478 (Codex P1): der Guard-Lebenszyklus laeuft pro physischem
+    Providerattempt, nicht einmal um die gesamte Operation — ein Retry muss
+    deshalb ZWEI Budget-Checks/Records und ZWEI Invocation-Events erzeugen."""
+
+    def test_transient_retry_produces_two_budget_checks_and_events(
+        self, monkeypatch
+    ) -> None:
+        from openai import APIConnectionError
+
+        enforcer = _RecordingEnforcer()
+        client = _make_client(enforcer)
+        # max_retries=1 statt 0 (Default in _make_client) — genau EIN
+        # Neuversuch nach dem ersten transienten Fehlschlag.
+        object.__setattr__(client, "_max_retries", 1)
+        recorder = _wire_invocation_recorder(client)
+
+        response = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="Ein Hund."))],
+            usage=SimpleNamespace(prompt_tokens=50, completion_tokens=4),
+        )
+
+        attempts = {"count": 0}
+
+        def _flaky_create(**kwargs: object) -> object:
+            attempts["count"] += 1
+            if attempts["count"] == 1:
+                raise APIConnectionError(request=MagicMock())
+            return response
+
+        _wire_provider(client, _flaky_create)
+
+        result = client.describe_image(image_b64="Zm9v", prompt="Was zeigt das Bild?")
+
+        assert result == "Ein Hund."
+        assert attempts["count"] == 2
+        # Vor dem Fix: EIN Check/Record fuer beide physischen Requests
+        # zusammen. Nach dem Fix: einer pro Attempt.
+        assert enforcer.check_calls == 2
+        assert enforcer.record_calls == 2
+        assert len(recorder.calls) == 2
+        assert recorder.calls[0]["success"] is False
+        assert recorder.calls[0]["stage"] == "vision"
+        assert recorder.calls[1]["success"] is True
+        assert recorder.calls[1]["stage"] == "vision"

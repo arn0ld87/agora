@@ -1148,37 +1148,31 @@ class LLMClient:
             ),
         )
 
-        def _create_vision(call_kwargs: Dict[str, Any]) -> Any:
+        def _create_vision(call_kwargs: Dict[str, Any]) -> Tuple[Any, float]:
+            """Ein physischer Providerattempt mit transient-retry.
+
+            Issue #1478 (Codex P1): Budget-Check, Failure-Telemetrie und
+            -Record laufen INNERHALB von ``_provider_attempt`` — analog zu
+            ``chat()``. Vorher lag der Guard um die gesamte ``execute()``-
+            Operation, sodass ein Retry oder ein ``TOKEN_KEY_QUIRK``-
+            Korrekturversuch nur EINEN Budget-Check/Event/Record erzeugte,
+            obwohl mehrere physische Requests abgesetzt wurden. Jeder
+            Retried-Attempt (transient retry, Token-Key-Fallback) bekommt
+            damit sein eigenes Check/Event/Record-Triplet.
+            """
             return llm_call_with_retry(
-                self.client.chat.completions.create,
+                lambda: self._provider_attempt(call_kwargs, context="vision"),
                 max_retries=self._max_retries,
                 initial_delay=self._retry_initial_delay,
                 max_delay=self._retry_max_delay,
-                **call_kwargs,
             )
 
-        # Budget-Guard VOR dem Provider-Call (analog zu ``_provider_attempt``
-        # im Textpfad): ``BudgetExceededError`` wird bewusst ungefangen
-        # durchgereicht — der Call ist noch nicht gestartet, es gibt also
-        # nichts zu loggen/zu recorden.
-        self._budget_check()
-        _vision_started = _time_mod.monotonic()
-        try:
-            response = execute(
-                plan, _create_vision, quirks=(TOKEN_KEY_QUIRK,), label="vision"
-            )
-        except Exception as exc:  # noqa: BLE001 — Failure-Telemetrie, weiterreichen
-            latency_ms = (_time_mod.monotonic() - _vision_started) * 1000.0
-            self._log_invocation_event(
-                stage="vision",
-                latency_ms=latency_ms,
-                success=False,
-                error_type=type(exc).__name__,
-                http_status=getattr(exc, "status_code", None),
-            )
-            self._budget_record()
-            raise
-        latency_ms = (_time_mod.monotonic() - _vision_started) * 1000.0
+        # Analog zu ``chat()``: ``execute`` sieht keinen eigenen Budget-Check
+        # mehr — jeder physische Request (erster Call, Retry, Token-Key-
+        # Fallback) bekommt seinen ueber ``_provider_attempt``.
+        response, latency_ms = execute(
+            plan, _create_vision, quirks=(TOKEN_KEY_QUIRK,), label="vision"
+        )
         self._record_provider_success(response, latency_ms, context="vision")
         content = response.choices[0].message.content or ""
         content = re.sub(r'<think>[\s\S]*?</think>', '', content, flags=re.IGNORECASE).strip()

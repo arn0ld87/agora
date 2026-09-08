@@ -637,6 +637,15 @@ def interview_agents_batch_direct(
                 ),
             )
         except Exception as exc:  # noqa: BLE001 — ein Fehler kippt nicht den Batch
+            # Issue #1478 (Codex P1): ein erschoepftes Hard-Budget ist kein
+            # Item-Fehler, sondern ein Run-Abbruch — hart durchreichen, sonst
+            # sieht ``report_generation.py`` die ``BudgetExceededError`` nie
+            # und markiert den Run nie als ``stopped``/``termination_reason=
+            # budget_*``. Analog zum bereits gehaerteten Selection-Pfad in
+            # ``graph_tools.py``.
+            from ..run_budget import reraise_if_budget_exceeded
+
+            reraise_if_budget_exceeded(exc)
             logger.warning(
                 f"Direkt-Interview fehlgeschlagen ({simulation_id}, agent_id={agent_id}): {exc}"
             )

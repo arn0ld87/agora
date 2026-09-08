@@ -549,6 +549,16 @@ class GraphToolsService:
             result.terminal_reason = str(e)
             return result
         except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
+            # Issue #1478 (Codex P1): ein erschoepftes Hard-Budget ist kein
+            # Interview-Fehler, sondern ein Run-Abbruch — hart durchreichen,
+            # analog zum bereits gehaerteten Selection-Pfad in
+            # ``_select_agents_for_interview`` weiter oben in dieser Klasse.
+            # Sonst sieht ``report_generation.py`` die
+            # ``BudgetExceededError`` nie und der Run laeuft klaglos weiter,
+            # statt als ``stopped``/``termination_reason=budget_*`` zu enden.
+            from .run_budget import reraise_if_budget_exceeded
+
+            reraise_if_budget_exceeded(e)
             logger.error(f"Interview API call exception: {e}")
             import traceback
             logger.error(traceback.format_exc())

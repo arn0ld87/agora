@@ -286,6 +286,13 @@ def _chat_with_tools(
             error_type=exc.__class__.__name__,
             http_status=getattr(exc, "status_code", None),
         )
+        # Issue #1478 (Codex P1): ``_budget_check()`` reserviert einen
+        # In-Flight-Slot; ohne das passende ``_budget_record()`` bleibt die
+        # Reservierung bis zum TTL-Ablauf stehen UND das Ledger zaehlt den
+        # gescheiterten Call gar nicht — beides verzerrt das weiche
+        # ``max_llm_calls``-Limit. Analog zu ``_provider_attempt`` im
+        # Textpfad: Freigabe auch im Fehlerfall.
+        self._budget_record()
         raise
 
     elapsed = _time.monotonic() - _t0
@@ -302,6 +309,10 @@ def _chat_with_tools(
         latency_ms=elapsed * 1000,
         success=True,
     )
+    # Issue #1478 (Codex P1): Erfolgreicher Providerattempt muss die von
+    # ``_budget_check()`` gesetzte Reservierung freigeben, sonst zaehlt der
+    # Call bis zum Ablauf der 900s-TTL doppelt (Reservierung + Ledger-Eintrag).
+    self._budget_record()
 
     # <think>...</think> aus Textinhalt entfernen (analog zu chat())
     content = re.sub(r"<think>[\s\S]*?</think>", "", content, flags=re.IGNORECASE).strip()
