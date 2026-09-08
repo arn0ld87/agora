@@ -1,325 +1,354 @@
 # Security Threat Model
 
-**Stand:** 2026-05-01, Europe/Berlin
-**Gegen den Code geprüft:** 2026-08-11 — Dateipfade, Kommandos, Skript- und Dokumentverweise. Die fachlichen Aussagen dieses Dokuments sind dabei **nicht** einzeln nachvollzogen worden.
-**Scope:** Single-User-Agora hinter Loopback / Tailscale, mit optionalem
-Reverse-Proxy. Kein Mehrbenutzer-AuthN/AuthZ-Stack. Das Modell deckt
-Application-Layer-Angriffe auf den lokalen Stack und Drive-by-Vektoren
-gegen den Browser des einen Users — **nicht** Nation-State-grade Attacker
-oder physischen Zugriff auf die Maschine.
+**Stand:** 08.09.2026  
+**Geprüfte Main-Baseline:** `0c47737f`  
+**Scope:** Single-User-Agora auf lokalem Host, Tailnet oder hinter einem gehärteten Reverse-Proxy. Kein Multi-Tenant-/Enterprise-IAM-Modell.
 
-Verwandte Dokumente:
-- [`auth.md`](auth.md) — Token-Vertrag und Frontend-Storage-Modi.
-- [`security-hardening.md`](security-hardening.md) — Phase 1/2/3 plus P1
-  CI-Security-Scans, Slice 3 Redis-Tickets.
-- [`dependency-risk-register.md`](dependency-risk-register.md) — aktive
-  CVE-Baseline und Aufräum-Prozess.
-- [`deployment-prod-like.md`](deployment-prod-like.md) — Hardening-Pflicht
-  in Produktion.
+Verwandte Referenzen:
+
+- [`auth.md`](auth.md)
+- [`secret-key-lifecycle.md`](secret-key-lifecycle.md)
+- [`security-hardening.md`](security-hardening.md)
+- [`dependency-risk-register.md`](dependency-risk-register.md)
+- [`deployment-prod-like.md`](deployment-prod-like.md)
+- [`agent-tools.md`](agent-tools.md)
+- [`STATUS.md`](STATUS.md)
 
 ---
 
-## Assets
+## 1. Sicherheitsziel
 
-| Asset | Sensitivität | Wo lebt es | Warum schützenswert |
+Agora soll im definierten Single-User-Betrieb verhindern, dass:
+
+- unauthentifizierte oder unzureichend berechtigte Clients sensible API-Aktionen ausführen,
+- Secrets über Logs, Reports, Manifeste oder Frontend-Persistenz unnötig offengelegt werden,
+- manipulierte Uploads oder Modellinhalte direkt zu Code-/Filesystem-/Netzwerkzugriff eskalieren,
+- ein Fehler in Evidence-/Statusverträgen als scheinbar vertrauenswürdiger Erfolg ausgeliefert wird,
+- interne Dienste durch den Standard-Stack unbeabsichtigt öffentlich erreichbar werden.
+
+Das Modell garantiert **nicht**, dass synthetische Personas korrektes reales Verhalten abbilden. Simulationstreue ist ein Trust-/Produktproblem, nicht allein ein klassischer Security-Guard.
+
+---
+
+## 2. Assets
+
+| Asset | Sensitivität | Persistenz / Ort | Risiko |
 |---|---|---|---|
-| **Neo4j-Daten** (Wissensgraphen, Episoden, Embeddings) | hoch | Compose-Volume `neo4j_data` | Inhaltliche Substanz aller Reports; ein Angreifer mit Schreibrecht kann Reports beliebig vergiften. |
-| **Uploads** (PDF/MD/TXT) | mittel-hoch | Bind-Mount `./backend/uploads` | Quellmaterial inkl. evtl. interner Dokumente; Path-Traversal oder Prompt-Injection beginnt hier. |
-| **Reports** + Audit-Trails | mittel | `./backend/reports/`, Storage über `ArtifactStore` | Endprodukt der Pipeline; Manipulation untergräbt das Vertrauen ins System. |
-| **OASIS-Artefakte** (`simulation_config.json`, `state.json`, Persona-CSV, Subprocess-Logs) | mittel | Bind-Mount `./backend/uploads/<sim_id>/` | Persistierte Persona-Felder werden vom OASIS-Subprozess in System-Prompts gespiegelt — Prompt-Injection-Surface. |
-| **Auth-Token** (`AGORA_AUTH_TOKEN`) | hoch | `.env` auf Host, Frontend-`localStorage` oder JS-Heap | Single shared secret; Leak öffnet die gesamte API. |
-| **SSE-/Download-Tickets** (`v1.<exp>.<scope>.<sig>`) | mittel | URL-Parameter, Redis (`ticket:<sig>`), in-process-Set als Fallback | Zeitlich begrenzt + scope-bound, aber während der Lebenszeit voll-mächtig im Scope. |
-| **`SECRET_KEY`** | hoch | `.env` | Signiert `itsdangerous`-Tickets und Flask-Session-Cookies. |
-| **Neo4j-Passwort** | hoch | `.env`, an Compose-Service `neo4j` durchgereicht | DB-Auth; Bolt-Treiber im Backend kennt den Wert. |
-| **HuggingFace-Cache** + lokale Modelle | niedrig | `./backend/.cache/huggingface` | Re-fetch ist kostenlos, aber 1+ GB Bandbreite und Cold-Start-Risiko. |
-| **`backend/agora.log`** | niedrig-mittel | tmpfs `/app/backend/logs` (Container) bzw. Bind-Mount lokal | Enthält Auth-Mode, Konfigurationsfehler; Logger-Redaction blendet Token, aber Restleck-Pfade bleiben möglich. |
+| Quelldokumente | hoch | `backend/uploads/` | können interne oder personenbezogene Inhalte enthalten |
+| Knowledge Graph / Embeddings | hoch | Neo4j | Manipulation vergiftet Retrieval und Reports |
+| Simulationsartefakte | mittel-hoch | `backend/uploads/simulations/<sim_id>/` | enthalten Personas, Config, Aktionen und Logs |
+| Reports / Evidence / Audit | mittel-hoch | `backend/uploads/reports/<report_id>/` | Endprodukt; falsche Integrität erzeugt falsches Vertrauen |
+| `AGORA_AUTH_TOKEN` | kritisch | Laufzeit/.env | Master-API-Zugriff |
+| Workspace-API-Keys | hoch | verschlüsselt in `backend/data/api_keys.json` | technische Scoped-Credentials |
+| `AGORA_FERNET_KEY` | kritisch | Laufzeit/.env | entschlüsselt Workspace-API-Key-Store |
+| Provider-Credentials | kritisch | verschlüsselt in `backend/data/llm_provider_secrets.json` | Zugriff auf externe LLM-/Embedding-Dienste |
+| `AGORA_SECRET_KEY` | kritisch | Laufzeit/.env | entschlüsselt Provider-Secret-Store |
+| `SECRET_KEY` | kritisch | Laufzeit/.env | signiert Tickets/Flask-Daten |
+| Neo4j-Credentials | kritisch | Laufzeit/.env | direkter Datenbankzugriff |
+| Redis-State | mittel | Redis | Live-State, Events, Ticket-/IPC-Funktionen; keine dauerhafte Job-SSoT |
+| CI-/Release-Artefakte | mittel-hoch | GitHub Actions/GHCR | Supply-Chain- und Release-Integrität |
 
 ---
 
-## Trust Boundaries
+## 3. Trust Boundaries
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│  Internet  /  Tailnet  /  LAN                                           │
-└──────────────────────────────┬──────────────────────────────────────────┘
-                               │  TLS / Tailscale
-                       ┌───────▼────────┐
-                       │ Reverse-Proxy  │  ◄── B0  Boundary 0: TLS-Term, RateLimit
-                       │ (Traefik/Nginx)│
-                       └───────┬────────┘
-                               │ HTTP/1.1, X-Forwarded-*
-              ┌────────────────▼─────────────────┐
-              │       Browser (User)             │  ◄── B1  Boundary 1: Browser ↔ Frontend
-              │  Vue 3 SPA, JS-Heap-Token        │
-              └────────────────┬─────────────────┘
-                               │ fetch() + X-Agora-Token
-              ┌────────────────▼─────────────────┐
-              │       Flask Backend (Gunicorn)   │  ◄── B2  Boundary 2: Frontend ↔ Backend
-              │  Token-Guard, CORS-Whitelist,    │
-              │  signed_ticket, install_blueprint│
-              └──┬───────┬──────────┬────────────┘
-                 │       │          │
-       Bolt 7687 │  6379 │     11434│        ◄── B3  Boundary 3: Backend ↔ Internals
-                 ▼       ▼          ▼
-          ┌──────────┐ ┌──────┐ ┌─────────┐
-          │  Neo4j   │ │Redis │ │ Ollama  │
-          └──────────┘ └──────┘ └─────────┘
-                               │
-                 OASIS-Subprozess (eigener Python-Prozess)  ◄── B4  Boundary 4
-                               │
-                               ▼
-                       ┌──────────────────┐
-                       │ Outbound HTTP    │  ◄── B5  Boundary 5: Backend ↔ Internet
-                       │ (Tavily, fetch_url)
-                       └──────────────────┘
+```text
+Browser / API Client
+        │
+        │ TLS / Tailnet / Loopback
+        ▼
+Reverse Proxy (optional)
+        │
+        ▼
+Flask API + Auth/Scopes
+   │       │        │
+   │       │        ├────────► HTTP LLM/Embedding Provider
+   │       │
+   │       ├───────────────► CLI Provider Subprocess (z. B. Codex CLI)
+   │
+   ├────────► Neo4j
+   ├────────► Redis
+   ├────────► Filesystem-Artefakte
+   │
+   └────────► OASIS/CAMEL Subprocess
+                │
+                ├──────────► Provider/Model Runtime
+                └──────────► optionale Agent-Webtools
 ```
 
-| Boundary | Vom → Ins | Kontrolle |
-|---|---|---|
-| **B0** Reverse-Proxy ↔ Backend | Internet/Tailnet → Loopback | TLS, Rate-Limit, Header-Hardening, `client_max_body_size`. Backend bindet auf `127.0.0.1:5001`. |
-| **B1** Browser ↔ Frontend | Untrusted Browser-Renderer → Vue-SPA | Vue-Default-HTML-Escape, eigener Markdown-Sanitizer (`frontend/src/utils/markdown.ts`), keine `v-html` ohne Sanitize, Token in JS-Heap (Memory-Mode) statt `localStorage`. |
-| **B2** Frontend ↔ Backend | Browser-fetch → Flask | `install_blueprint_guard()` auf jedem `/api/*`-Blueprint, `token_required` Decorator, CORS-Whitelist (Loopback + `AGORA_EXTRA_ORIGINS`), Tickets für SSE/Download-Pfade. |
-| **B3** Backend ↔ Neo4j/Redis/Ollama | Backend → Internal-Service | Compose-Netzwerk, kein Host-Port-Publishing in Prod-Override. Neo4j-Auth, Redis ohne Auth (Compose-intern), Ollama ohne Auth (Loopback-only). |
-| **B4** Backend ↔ OASIS-Subprozess | Flask-Prozess → fork/exec Python | IPC über File + Redis-Bus (`subprocess_redis_bridge.py`). Persona-Felder werden in Subprozess-System-Prompts gespiegelt — Whitelist-Filter beim `POST /<sim>/profiles`-Merge. |
-| **B5** Backend ↔ Outbound HTTP | Flask → Internet | SSRF-Blocker (`web_tools._is_public_url`), Request-Timeouts, Vision-Call-Cap (`VISION_MAX_CALLS_PER_UPLOAD`). |
+### B0 — Netzwerk / Reverse Proxy
+
+Kontrollen:
+
+- Standard-Prod-Bind auf Loopback,
+- TLS/VPN/Reverse-Proxy für Remote-Zugriff,
+- ProxyFix nur explizit konfigurieren,
+- keine Annahme, dass ein zufälliger LAN-/Tailnet-Peer vertrauenswürdig ist.
+
+### B1 — Browser/API-Client → Flask
+
+Kontrollen:
+
+- `AGORA_AUTH_TOKEN` als Master-Credential,
+- Workspace-API-Keys mit Scopes,
+- signierte Tickets für URL-Auth,
+- CORS-Whitelist/konfigurierte Origins,
+- strukturierte API-Fehler statt roher Exceptions.
+
+### B2 — Flask → persistente Daten
+
+Kontrollen:
+
+- sichere Pfadauflösung/definierte Roots,
+- atomare Writes für kritische Artefakte,
+- verschlüsselte Secret-/API-Key-Stores,
+- Neo4j-Auth und getrennte Storage-Schicht.
+
+### B3 — Flask → OASIS/CAMEL-Subprozess
+
+Der Simulationsprozess ist eine **Prozessgrenze, keine Sicherheits-Sandbox**. Er läuft unter demselben Vertrauenskontext des Deployments und besitzt bewusst Zugriff auf benötigte Artefakte/Runtime-Verbindungen.
+
+Die Environment-Weitergabe ist whitelist-basiert; Secrets sollen nicht pauschal per `os.environ.copy()` an jeden Subprozess vererbt werden.
+
+Wenn `ENABLE_AGENT_TOOLS=true` gesetzt ist, erhält dieser Subprozess zusätzlich eine optionale Outbound-Webfläche. Deren aktueller SSRF-Stand ist unter A7 beschrieben.
+
+### B4 — Flask → CLI-Provider
+
+`codex_cli` startet einen lokal authentifizierten CLI-Prozess. Seine Auth lebt in der lokalen CLI-Session, nicht im Agora-Provider-Secret-Store.
+
+Risiken:
+
+- der CLI-Prozess besitzt Rechte des Backend-Users,
+- Prompts sind untrusted Daten,
+- große Eingaben müssen über stdin statt unsichere/limitierte argv-Übergabe laufen,
+- CLI-Transport ist keine Sandbox gegen einen kompromittierten lokalen Useraccount.
+
+### B5 — Backend / OASIS → externe Provider / Web
+
+Vorhandene Schutzmechanismen unterscheiden sich je Pfad. Für credential-behaftete Provider-Verbindungen existieren Transport-Security, Timeouts, Retry-/Budget-Grenzen und Secret-Redaction.
+
+**Nicht pauschal behaupten, dass jeder direkte URL-Fetch denselben SSRF-Guard benutzt.** Der experimentelle OASIS-Agent-Tool-Pfad `backend/scripts/agent_tools.py::web_fetch` ist auf dieser Baseline eine dokumentierte Ausnahme (#1485).
 
 ---
 
-## Angreifer-Modelle
+## 4. Angreifermodelle
 
-### A1 — Untrusted LAN / Tailnet-Peer
+### A1 — Untrusted LAN/Tailnet-Peer
 
-**Kontext:** Agora läuft auf einer Maschine im Tailnet oder hinter einem
-Reverse-Proxy. Ein anderer Tailnet-Peer (oder ein LAN-Co-Tenant) kann den
-Stack TCP-erreichen.
+**Ziel:** API ohne Credential nutzen, Ressourcen lesen/löschen, LLM-Kosten auslösen.
 
-**Was er versucht:**
-- `/api/graph/project/<id>` `DELETE` ohne Auth.
-- CORS-Preflight von beliebigem Origin, dann Cross-Origin-`fetch()` aus
-  Drive-by-Browser auf einem anderen Tailnet-Host.
-- Brute-Force-Bearer-Tokens (timing-Side-Channel).
+**Mitigations:**
 
-**Aktive Mitigations:**
-- Loopback-Bind aller Compose-Ports (Default-Compose `127.0.0.1`),
-  Prod-Override droppt zusätzlich Vite + Neo4j-Host-Ports.
-- `install_blueprint_guard()` auf allen `/api/*`-Blueprints; `/health`
-  bleibt bewusst öffentlich.
-- CORS-Whitelist: nur statische Defaults plus `AGORA_EXTRA_ORIGINS`. Kein
-  Wildcard, außer `AGORA_CORS_ALLOW_ALL=true` mit Log-Warning (in Prod
-  hard rejected, siehe [`deployment-prod-like.md`](deployment-prod-like.md)).
-- Token-Vergleich timing-safe (`hmac.compare_digest`).
+- Loopback-orientierte Produktionsdefaults,
+- Auth-Guard auf `/api/*`,
+- Master-Token oder scoped API-Key,
+- Reverse-Proxy/Tailnet als zusätzliche Netzgrenze.
 
-**Restrisiko:** Wer den Reverse-Proxy umgeht und den `127.0.0.1:5001`
-direkt erreicht (gleicher Host als Co-Tenant), umgeht TLS und
-Rate-Limit. Mitigation = Container-Isolation und Single-Tenant-Host.
+**Restrisiko:** Ein korrektes Master-Token besitzt administrative Wirkung. Netzwerkisolation ersetzt daher keine Credential-Hygiene.
 
-### A2 — XSS-Gadget oder kompromittiertes Browser-Plugin
+### A2 — Geleakter Master-Token / API-Key
 
-**Kontext:** Der User hat ein Browser-Tab mit Agora offen. Eine andere
-Site oder ein Plugin landet im selben Browser.
+**Ziel:** API-Funktionen im erlaubten Umfang ausführen.
 
-**Was er versucht:**
-- `localStorage.getItem('agora_token')` aus dem Agora-Origin (XSS-Origin
-  oder via manipuliertes Plugin mit `host_permissions`).
-- Daten-Exfiltration über `fetch()` aus dem Agora-Origin (gleicher Origin
-  → Token wird automatisch angehängt).
-- DOM-Injection in `v-html`-Pfaden, vor allem in Report-Markdown.
+**Mitigations:**
 
-**Aktive Mitigations:**
-- Memory-Mode (`VITE_AGORA_TOKEN_STORAGE=memory`) als Prod-Empfehlung —
-  Token überlebt keinen Page-Reload.
-- Markdown-Sanitizer (`frontend/src/utils/markdown.ts`, 9 Regression-Tests
-  seit v0.9.0) blockt aktive XSS-Vektoren in Report-Inhalten.
-- CORS-Whitelist verhindert Cross-Origin-Aufrufe aus fremden Tabs.
+- Workspace-API-Keys können minimierte Scopes tragen und widerrufen werden.
+- Master-Token wird timing-safe verglichen.
+- Query-Bearer `?token=` ist in Produktion deaktiviert.
+- URL-Auth verwendet kurzlebige signierte Tickets.
 
-**Restrisiko:** Aktiver XSS-Exploit im selben Tab kann während der
-Session den Token aus dem JS-Heap lesen — Memory-Mode reduziert das
-Residuum, eliminiert den Vektor aber nicht. Echte Mitigation =
-HttpOnly-Cookie-Flow (in [`auth.md`](auth.md), Option C, als
-Zielarchitektur dokumentiert; aktuell nicht implementiert).
+**Restrisiko:** Master-Token = Admin. Es existiert noch kein Benutzer-/Session-/RBAC-Modell.
 
-### A3 — Supply-Chain / kompromittierte Dependency
+### A3 — XSS / kompromittierter Browserkontext
 
-**Kontext:** Eine NPM- oder PyPI-Dependency wird upstream kompromittiert
-(typo-squat, hijacked maintainer, malicious version).
+**Ziel:** Client-seitige Tokens lesen oder API-Aufrufe im Namen des Users ausführen.
 
-**Was er versucht:**
-- Build-Time-Hook im Frontend (`postinstall`) liest `.env`.
-- Import-Time-Code im Backend macht Outbound-Call mit Secrets.
-- Tool-Call durch ein malicious package während `pytest` oder
-  `vite build`.
+**Mitigations:**
 
-**Aktive Mitigations:**
-- `bun audit --audit-level=high` und `pip-audit` als CI-Gates (siehe
-  [`security-hardening.md`](security-hardening.md), P1-Sektion).
-- Gitleaks-Scan in CI mit historischer Baseline (`.gitleaksignore`,
-  fingerprint-genau).
-- Dependency-Risk-Register
-  ([`dependency-risk-register.md`](dependency-risk-register.md)) trackt
-  bewusst ignorierte CVEs mit Owner, Frist und Issue-Link; alle 30 Tage
-  Review.
-- Lockfiles versioniert (`bun.lock` in Root und `frontend/`, `backend/uv.lock`).
+- Vue escaped normalen Text standardmäßig,
+- Report-/Markdown-Pfade müssen sanitizen,
+- persistenter Token-Storage ist vermeidbar/reduzierbar,
+- CORS verhindert keinen XSS im eigenen Origin, begrenzt aber fremde Origins.
 
-**Restrisiko:** Ein neues Advisory kann mehrere Tage zwischen Disclosure
-und CI-Detection liegen. CI deckt **bekannte** Findings, nicht
-Zero-Day-Lieferketten-Hijacks. Mitigation = niedrige Dependency-Anzahl,
-explizite Pins, Supply-Chain-Disziplin (kein blindes `bun install` ohne
-`--frozen-lockfile` aus
-Forks).
+**Restrisiko:** Ein Credential im JS-Kontext ist bei erfolgreicher Same-Origin-XSS angreifbar. Ein vollständiger HttpOnly-Session-Login existiert derzeit nicht.
 
-### A4 — Geleakter `AGORA_AUTH_TOKEN`
+### A4 — Bösartiges Quelldokument / Prompt Injection
 
-**Kontext:** Der Token landet in einem Screenshot, einem Pastebin, einem
-Browser-History-Export oder einem fehlerhaft geteilten Setup-Snippet.
+**Ziel:** Modellinstruktionen über Upload, Graphinhalt oder Observation beeinflussen.
 
-**Was er versucht:**
-- API-Calls von außerhalb des erlaubten Tailnets gegen die Reverse-Proxy-
-  URL.
-- Persona-Manipulation (`POST /<sim>/profiles`) zur Prompt-Injection.
-- Datenexfiltration über `GET /api/graph/data/<id>`.
+Beispiele:
 
-**Aktive Mitigations:**
-- Token ist case-sensitive `secrets.token_urlsafe(32)`-Niveau, nicht in
-  `.env.example` als Default.
-- Rotation = `.env` ändern + Container-Restart + Frontend-`localStorage`/
-  Memory-Token neu setzen. Manuell, aber unkompliziert.
-- `AGORA_AUTH_TOKEN` nicht in Logs (Logger-Redaction-Tests im Backend).
-- Reverse-Proxy ist die externe Angriffsfläche; Tailscale-only stellt
-  sicher, dass der Token-Klau außerhalb des Tailnets nicht reicht.
+- „Ignoriere Systemregeln …“ im Quelldokument,
+- manipulierte Persona-Felder,
+- untrusted Observation aus Simulationsaktionen,
+- externe Webinhalte mit instruktionsähnlichem Text.
 
-**Restrisiko:** Keine automatische Rotation, keine Audit-Trail-Pflicht
-für ausgehende API-Calls. Alle Token-Träger sind gleichermaßen voll
-berechtigt — kein Rollenmodell.
+**Mitigations:**
 
-### A5 — Bösartiges Upload-Dokument
+- Schema-/Output-Validierung,
+- Tool-Whitelists und Limits,
+- Trennung zwischen Quellinhalt und Systeminstruktion,
+- Sanitizer/Validatoren auf strukturierten Übergängen,
+- Evidence-Gates statt blindem Vertrauen in Modellprosa.
 
-**Kontext:** PDF/MD-Datei mit präparierten Inhalten landet im Upload-Pfad.
+**Offen:** #1224 verfolgt zusätzliche Prompt-Injection-Härtung von Simulation-Observation. Diese Grenze ist nicht „gelöst“, nur weil JSON-Schemas existieren.
 
-**Was er versucht:**
-- Path-Traversal über manipulierten Filename (`../../etc/passwd`).
-- Cypher-Injection über LLM-extrahierte Entity-Types mit Backticks.
-- Prompt-Injection im Content („Ignoriere alle Regeln…“).
-- Vision-Cost-Explosion durch hunderte eingebettete Bilder.
+### A5 — Path Traversal / Dateimanipulation
 
-**Aktive Mitigations:**
-- `Config.ALLOWED_EXTENSIONS = {'pdf', 'md', 'txt', 'markdown'}`,
-  `MAX_CONTENT_LENGTH = 50 MB`.
-- Cypher-Label-Sanitizer (`backend/app/storage/neo4j_mappings.py`,
-  Regex `^[A-Za-z_][A-Za-z0-9_]{0,49}$`, Backtick-Neutralization).
-- Vision-Call-Cap (`VISION_MAX_CALLS_PER_UPLOAD`, Default 40, hardes
-  Cap mit einmaligem Warning-Log).
-- Persona-Whitelist auf `POST /<sim>/profiles` reduziert die in
-  Subprozess-Prompts spiegelbaren Felder auf bekannte Schlüssel.
+**Ziel:** Upload-/Reportpfade verlassen oder fremde Artefakte überschreiben.
 
-**Restrisiko:** Prompt-Injection im **Inhalt** des Uploads bleibt — das
-LLM verarbeitet User-Content und kann durch geschicktes Wording
-umkonditioniert werden. Test-Coverage für SSRF, Upload-Limits und
-Cypher-Sanitizer ist umgesetzt (`backend/tests/test_ssrf_blocker.py`,
-`test_upload_limits.py`, `test_cypher_label_sanitizer.py`); der zugehörige
-Plan liegt nicht mehr im Repository.
+**Mitigations:**
 
-### A6 — Ungewollt erreichbare interne Ressource (SSRF)
+- definierte Upload-/Data-Roots,
+- ID-/Pfadvalidierung,
+- sichere Join-/ArtifactStore-Logik,
+- atomare Writes,
+- read-only Root-Filesystem im gehärteten Container mit expliziten Write-Pfaden.
 
-**Kontext:** ReportAgent-Tool `fetch_url` wird mit einer URL aufgerufen,
-die auf eine interne Ressource zielt (`localhost`, `169.254.169.254`,
-`10.0.0.x`).
+### A6 — Graph-/Cypher-Manipulation
 
-**Aktive Mitigations:**
-- `_is_public_url()` macht DNS-Lookup, prüft `is_private`,
-  `is_loopback`, `is_link_local`, `is_multicast`, `is_reserved`,
-  `is_unspecified` und blacklisted explizit AWS-/EC2-Metadaten-IPs
-  (`169.254.169.254`, `fd00:ec2::254`).
-- Reject-Reason wird geloggt; `fetch_url` erlaubt nur `http`/`https`.
+**Ziel:** dynamische Labels/Relationen zur Cypher-Injection oder Datenvergiftung verwenden.
 
-**Restrisiko:** DNS-Rebinding zwischen Lookup und tatsächlichem Request
-ist nicht abgedeckt — Tavily macht den eigentlichen Outbound-Call,
-unsere Pre-Check-IP ist eine zweite Auflösung. Im aktuellen Architekturpfad
-(`fetch_url` → Tavily) ist das Risiko niedrig, weil Tavily extern fetched.
-Bei einem zukünftigen Direkt-Fetch-Pfad muss das Modell neu bewertet werden.
+**Mitigations:**
+
+- Label-/Identifier-Sanitizing,
+- Storage-Adapter statt frei zusammengebauter Queries in API-Routen,
+- idempotente UUID-basierte Writes für retry-kritische Graphobjekte (#1460).
+
+### A7 — SSRF / interne Netzressourcen
+
+**Ziel:** Web-/Research-Tools gegen Loopback, RFC1918, CGNAT/Tailnet, Link-Local, Cloud-Metadata oder andere interne Dienste richten.
+
+**Aktueller Befund:** `backend/scripts/agent_tools.py::AgentToolRegistry.web_fetch()` ruft die vom Agenten gelieferte URL auf der geprüften Baseline direkt über `requests.get(..., allow_redirects=True)` ab. In diesem Pfad ist vor dem Request **kein eigener Private-IP-/Loopback-/Metadata-SSRF-Guard sichtbar**; Redirect-Ziele werden ebenfalls nicht einzeln validiert. Tracking: **#1485**.
+
+`ENABLE_AGENT_TOOLS` ist standardmäßig `false`, daher ist die Lücke nicht im Default-Lauf aktiv. Bei Aktivierung erweitert sie jedoch die Outbound-Netzwerkfläche des OASIS-Subprozesses.
+
+**Bis #1485 geschlossen ist:**
+
+- Agent-Webtools nur in kontrollierter Netzwerk-/Egress-Umgebung aktivieren,
+- URLs aus Modelloutput/Observation als untrusted behandeln,
+- nicht davon ausgehen, dass SSRF-Härtung anderer Fetch-Pfade automatisch für `agent_tools.py` gilt.
+
+**Zielzustand:**
+
+- nur `http`/`https`,
+- IPv4/IPv6-Adressklassen prüfen,
+- private/loopback/link-local/metadata Ziele blockieren,
+- jedes Redirect erneut validieren,
+- DNS-Rebinding/TOCTOU im Verbindungsdesign berücksichtigen,
+- Timeouts und Response-Größenlimits beibehalten.
+
+### A8 — Supply Chain
+
+**Ziel:** kompromittierte NPM-/PyPI-/Action-Abhängigkeit in Build/Test/Runtime ausnutzen.
+
+**Mitigations:**
+
+- Lockfiles,
+- Dependency-/Secret-Scanning,
+- SBOM-Workflow,
+- `dependency-risk-register.md` mit Owner/Deadline/Hardstop,
+- Release-Publish erst nach definierten Gates.
+
+**Restrisiko:** Scans erkennen bekannte Probleme, keine garantierte Zero-Day-Freiheit.
+
+### A9 — Ciphertext ohne passenden Master-Key
+
+**Ziel/Folge:** nicht klassische Angreiferaktion, aber relevanter Availability-/Recovery-Failure.
+
+Zwei getrennte kritische Paare:
+
+```text
+AGORA_SECRET_KEY + llm_provider_secrets.json
+AGORA_FERNET_KEY + api_keys.json
+```
+
+Ein Restore des Ciphertexts ohne passenden Master-Key bedeutet Datenverlust der gespeicherten Credentials.
+
+Mitigation: getrennt gesicherte Master-Keys + Restore-Drills.
 
 ---
 
-## Bekannte Restrisiken (Top 5)
+## 5. Evidence-/Trust-Risiken
 
-1. **Kein echtes AuthN/AuthZ.** `AGORA_AUTH_TOKEN` ist ein Shared-Secret-
-   Bearer; alle Token-Träger sind voll berechtigt. Es gibt kein
-   Login-Backend, keine Sessions, keine Rollen, kein RBAC. Single-User-
-   Vertrauensmodell ist die Grundannahme. Zielarchitektur:
-   `/api/auth/login` mit HttpOnly-Cookie + Session-Backend (siehe
-   [`auth.md`](auth.md), Option C). Status: nicht implementiert.
+Nicht jedes Trust-Problem ist ein Angreiferproblem. Für Agora sind folgende fachliche Integritätsrisiken relevant:
 
-2. **Keine Secrets-Rotation.** `SECRET_KEY`, `AGORA_AUTH_TOKEN`,
-   `NEO4J_PASSWORD` werden manuell gesetzt und manuell rotiert. Keine
-   Vault-Integration, kein Refresh-Flow, keine Ablaufzeit. Ein Leak
-   bleibt gültig bis zur nächsten manuellen Rotation.
+### Evidence passt nicht zum Claim
 
-3. **OASIS-Subprozess-Vertrauen.** Persona-Felder fließen in
-   Subprozess-System-Prompts; der Subprozess ist genauso vertrauenswürdig
-   wie der Flask-Parent (gleicher User, gleicher FS-Zugriff). Whitelist-
-   Filter in `simulation_profiles.py` reduziert die Felder, aber ein
-   manipuliertes Persona-Dataset kann das Agenten-Verhalten weiterhin
-   beeinflussen — das ist Feature, nicht Bug, aber damit auch Angriffsfläche.
+- Quantoren können stärker sein als die aggregierte Evidence (#1345).
+- Eval-Seeds können erwartete Antworten enthalten und als vermeintliche Erkenntnis wieder auftauchen (#1240).
 
-4. **Prompt-Injection im Quelldokument.** Upload-Content fließt durch
-   NER, Embedding, ReportAgent. Ein Dokument mit „Ignoriere alle
-   Regeln…“ kann das Verhalten des LLM-Pfades beeinflussen — strukturelle
-   Mitigation (Output-Validation, Tool-Call-Whitelist) ist nur teilweise
-   implementiert. Tool-Call-Limit (`MAX_TOOL_CALLS_PER_ACTION`) und
-   Tool-Schema-Trennung (Issue #47) reduzieren die Hebelwirkung.
+### Role Leakage
 
-5. **Browser-Token-Storage.** `localStorage` ist der Dev-Default; ein
-   einmaliger XSS-Treffer reicht zum Token-Theft. Memory-Mode reduziert
-   das Residuum, aber ein aktiver Exploit im selben Tab ist nicht
-   ausgeschlossen. HttpOnly-Cookie ist die saubere Lösung — siehe
-   Restrisiko #1.
+Synthetische Personas können Rollen wechseln oder fremde Fachperspektiven annehmen (#1323). Das kann einen Report inhaltlich vergiften, ohne dass irgendein externer Angreifer beteiligt ist.
+
+### Recommender-Reproduzierbarkeit
+
+Der Twitter-Recommender besitzt bekannte Modell-/Pooler-Probleme (#1236). Dadurch kann Rankingvarianz wie „soziales Verhalten“ aussehen, obwohl sie aus der technischen Empfehlungsschicht stammt.
+
+### Reproduzierbarkeit
+
+Ein gespeicherter Seed allein kontrolliert noch nicht alle Zufalls-/Modell-/Promptquellen (#763/#1274). Deshalb darf Reproduzierbarkeit nicht als Security-/Audit-Eigenschaft behauptet werden, bevor der vollständige Manifest-/Replay-Vertrag steht.
 
 ---
 
-## Was bewusst out-of-scope ist
+## 6. Aktive technische Mitigations
 
-- **Multi-Tenant-Setups.** Agora ist Single-User. Wer das Ding für
-  mehrere Personen aufstellt, baut zwingend eigene Auth davor.
-- **Container-Escape und Kernel-Exploits.** Wir setzen auf
-  read-only-Rootfs, `cap_drop: ALL`, `no-new-privileges`. Tiefere
-  Container-Härtung (gVisor, Seccomp-Profile, Falco) ist nicht aktiviert
-  und auch nicht geplant.
-- **Physischer Zugriff auf den Host.** Wer am Server sitzt, hat
-  `.env` im Klartext, das Neo4j-Volume, die Uploads. Encryption-at-rest
-  liegt außerhalb des Scopes.
-- **DDoS / Volumen-Angriffe.** Rate-Limiting im Reverse-Proxy ist
-  Pflicht für jedes Internet-exponierte Setup; Backend selbst hat
-  keinen eingebauten Limiter.
-- **Browser-Hijack-Schutz auf OS-Ebene.** Ein kompromittiertes OS
-  (Keylogger, Disk-Inspector) hebelt jede Browser-Maßnahme aus.
-
----
-
-## Mapping zu umgesetzten Mitigations
-
-| Threat | Slice / Phase | Datei |
-|---|---|---|
-| Wildcard-CORS, fehlender Auth-Token | Phase 2 (v0.6.0+) | `backend/app/__init__.py`, `backend/app/utils/auth.py` |
-| Bekannte Platzhalter-Secrets | Slice 1 PR1 | `backend/app/config.py`, `backend/tests/test_config_security.py` |
-| Multi-Worker-Replay auf SSE-Tickets | Slice 3 PR3 | `backend/app/utils/signed_ticket.py`, `backend/tests/test_signed_ticket_redis.py` |
-| Aktive CVEs ohne Exit-Plan | Slice 4 PR4 | [`dependency-risk-register.md`](dependency-risk-register.md), `.github/workflows/ci.yml` |
-| `localStorage`-Token + XSS-Residuum | Slice 5 PR5 | `frontend/src/api/index.ts`, [`auth.md`](auth.md) |
-| SSRF auf interne IPs | Phase 3.1 | `backend/app/services/web_tools.py` |
-| Prompt-Injection über Persona-Merge | Phase 3.2 | `backend/app/api/simulation_profiles.py` |
-| Vision-Cost-Explosion | Phase 3.3 | `backend/app/utils/file_parser.py` |
-| Cypher-Label-Injection | Phase 3.4 / Issue #50 | `backend/app/storage/neo4j_mappings.py` |
-| Compose Dev/Prod-Drift, offene Ports | Slice 2 PR2 | `docker-compose.yml`, `docker-compose.prod.yml` |
+| Bereich | Aktueller Schutz |
+|---|---|
+| API Auth | Master-Token + Workspace-API-Keys |
+| Authorization | Scopes auf dafür geschützten Endpunkten |
+| URL Auth | signierte kurzlebige Tickets |
+| Provider-Secrets | Fernet-Store mit `AGORA_SECRET_KEY` |
+| Workspace-API-Key-Store | Fernet-Store mit `AGORA_FERNET_KEY` |
+| Subprozess-Env | Allowlist statt Vollvererbung |
+| Container | read-only Rootfs / `cap_drop` / explizite Write-Pfade im Prod-Override |
+| Contracts | Pydantic + JSON-Schema + Zod-Drift-Gates |
+| Evidence | Contract-Gates und `evidence_omitted` bei invalidem Altbestand |
+| Logs | strukturierte Logger + Secret-Redaction |
+| Dependencies | Audit-/Risk-Register-/SBOM-Gates |
+| Run-Kosten | Call-/Token-/Kosten-/Zeitbudgets |
+| Agent-Webtools | opt-in (`ENABLE_AGENT_TOOLS=false` Default); SSRF-Härtung #1485 offen |
 
 ---
 
-## Review-Pflichten
+## 7. Bekannte Restrisiken vor 1.0
 
-- **Code-Änderung an einer Trust Boundary** → diesen Threat-Model-Eintrag
-  prüfen und ggf. aktualisieren. Boundaries sind B0–B5 oben.
-- **Neue Outbound-HTTP-Quelle** → SSRF-Blocker erweitern
-  (`_is_public_url` ist die einzige Wahrheit), Modell-Eintrag A6 anfassen.
-- **Neuer Persistenzpfad für Secrets** → Asset-Tabelle ergänzen,
-  Rotation/Backup-Implikationen klären.
-- **Neue Dependency** → CVE-Baseline und `dependency-risk-register.md`
-  prüfen, A3 ggf. nachschärfen.
-- **Größere Schema-Änderung an `/api/*`** → Auth-Decorator-Coverage
-  testen; B2-Boundary darf keine Lücke bekommen.
+1. **Shared Admin-Token:** kein Human-IAM/RBAC; Master-Token bleibt Vollzugriff.
+2. **Prompt Injection:** untrusted Quellen/Observation sind noch nicht überall maximal getrennt (#1224).
+3. **Agent-Tool-SSRF:** experimentelles `web_fetch` besitzt noch keinen vollständigen Private-IP-/Redirect-/Rebinding-Guard (#1485).
+4. **Webprozess-Langläufer:** Prepare/Report/Graph sind noch nicht vollständig restart-sicher (#1472).
+5. **Embedding-SSoT:** UI-aktive Konfiguration kann von Runtime-Env abweichen (#1417).
+6. **Simulationstreue:** Role Leakage/Recommender-Probleme (#1323/#1236).
+7. **Reproduzierbarkeit:** Manifest/Replay unvollständig (#763/#1274).
+8. **Restore-Nachweis:** Backup-Doku existiert, vollständiger Fresh-Host-Drill bleibt Release-Arbeit (#766).
+
+---
+
+## 8. Out of Scope
+
+Für `0.9.5` bewusst nicht versprochen:
+
+- Multi-Tenant-Isolation,
+- Enterprise-SSO/RBAC,
+- Schutz gegen kompromittierten Host/Kernel/Root,
+- Hardware-backed Secret Storage,
+- DDoS-Schutz ohne vorgelagerten Proxy/Netzlayer,
+- wissenschaftliche Validität synthetischer Verhaltensprognosen.
+
+---
+
+## 9. Review-Pflichten
+
+Dieses Threat Model muss geprüft werden, wenn:
+
+- eine neue Trust Boundary entsteht,
+- neue Secrets oder Credential-Stores eingeführt werden,
+- ein neuer Provider-/CLI-/Outbound-Transport hinzukommt,
+- Upload-/Parsing-/Web-Tools verändert werden,
+- Auth-/Scope-Regeln geändert werden,
+- ein neuer persistenter Artefaktpfad entsteht,
+- Container-/Netzwerk-Exposure geändert wird,
+- Evidence-/Report-Gates abgeschwächt oder neu definiert werden.
+
+Historische Security-Audits bleiben historische Belege. Der aktuelle Risk-Stand gehört hier, in [`STATUS.md`](STATUS.md), [`dependency-risk-register.md`](dependency-risk-register.md) und in offene Issues.

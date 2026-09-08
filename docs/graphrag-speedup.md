@@ -1,234 +1,248 @@
-# Agora GraphRAG Build Speedup
+# Graph-/Ingestion-Performance
 
-Konkrete Schritte, um die GraphRAG-Build-Phase von „mehrere Minuten pro Dokument“ auf „unter einer Minute“ zu bringen. Getestet gegen Ollama Cloud.
+**Stand:** 08.09.2026  
+**Geprüfte Main-Baseline:** `0c47737f`  
+**Scope:** Laufzeit der Graph-Build-/NER-/RE-Phase diagnostizieren und kontrolliert tunen.
 
-Ziel-Repo: `nikmcfly/Agora`-Fork (oder kompatibel).
-
----
-
-## Ausgangslage & Symptome
-
-- Build-Phase zerlegt Dokument in viele kleine Chunks (`chunk_size=500`) und schickt sie **sequenziell** an das LLM für NER/RE-Extraktion.
-- Pro Chunk 20–70 s Netzwerk-/Inferenzlatenz gegen Ollama Cloud.
-- Ergebnis: 11 Chunks × ~30 s = 5–7 Min für ein 4 000-Zeichen-Dokument.
-
-## Hebel (4 unabhängige Stellschrauben)
-
-### 1. Modellwahl
-
-`ministral-3:14b-cloud` ist zu schwach (Tool-Calling-Inkompatibilitäten, 400er). `gemma4:31b-cloud` ist langsam und liefert JSON teils als verschachtelte Dicts (`{"value": N, "reasoning": "..."}`).
-
-**Empfehlung für Build + Report:** `qwen3-coder-next:cloud`
-- Coder-Tuning → striktes JSON
-- Tool-Calling offiziell stabil
-- Thinking via API-Parameter deaktivierbar
-- Gute deutsche Ausgabe
-
-Setzen in `.env`:
-```env
-LLM_MODEL_NAME=qwen3-coder-next:cloud
-OPENAI_MODEL_NAME=qwen3-coder-next:cloud
-```
-
-### 2. Thinking per API-Parameter abschalten
-
-Ollama-Cloud-Modelle mit Reasoning (Qwen3-Familie, GPT-OSS, DeepSeek-R1) senden Think-Blöcke die Zeit kosten. Top-Level-Feld `think: false` im `extra_body` unterdrückt das.
-
-`.env`:
-```env
-OLLAMA_THINKING=false
-```
-
-`backend/app/utils/llm_client.py` — im Konstruktor:
-```python
-self._think = os.environ.get('OLLAMA_THINKING', 'false').lower() in ('1', 'true', 'yes')
-```
-
-Im `chat()`-Aufruf, wenn `_is_ollama()`:
-```python
-if self._is_ollama():
-    extra_body: Dict[str, Any] = {}
-    if self._num_ctx:
-        extra_body["options"] = {"num_ctx": self._num_ctx}
-    extra_body["think"] = self._think
-    kwargs["extra_body"] = extra_body
-```
-
-Ein `<think>…</think>`-Stripper als Fallback ist bereits in `chat()` verbaut — damit werden auch leere Thinking-Blöcke von Gemma 4 etc. abgefangen.
-
-### 3. JSON-Mode abschalten
-
-`response_format={"type":"json_object"}` bremst Ollama-Cloud-Modelle massiv und wird nicht von allen sauber unterstützt.
-
-`.env`:
-```env
-LLM_DISABLE_JSON_MODE=true
-```
-
-`llm_client.py` prüft das bereits in `chat_json()`:
-```python
-disable_json_mode = os.environ.get('LLM_DISABLE_JSON_MODE', '').lower() in ('1', 'true', 'yes')
-response = self.chat(
-    ...,
-    response_format=None if disable_json_mode else {"type": "json_object"}
-)
-```
-
-Der Markdown-Fence-Stripper in `chat_json()` räumt ` ```json `-Blöcke vor dem `json.loads()` weg.
-
-### 4. Chunk-Größe erhöhen + Parallelisierung
-
-Der eigentliche Gamechanger. Zwei Änderungen:
-
-**4a) Chunk-Größe von 500 → 1500** (weniger LLM-Calls bei identischer Qualität für NER).
-
-`backend/app/config.py`:
-```python
-DEFAULT_CHUNK_SIZE = int(os.environ.get('GRAPH_CHUNK_SIZE', '1500'))
-DEFAULT_CHUNK_OVERLAP = int(os.environ.get('GRAPH_CHUNK_OVERLAP', '150'))
-GRAPH_PARALLEL_CHUNKS = int(os.environ.get('GRAPH_PARALLEL_CHUNKS', '4'))
-```
-
-**4b) `add_text_batches` parallelisieren** mit `ThreadPoolExecutor`. Neo4j-Driver und OpenAI-SDK sind thread-safe (jeder `storage.add_text`-Aufruf öffnet eine eigene `session`).
-
-`backend/app/services/graph_builder.py`:
-
-```python
-from concurrent.futures import ThreadPoolExecutor, as_completed
-
-def add_text_batches(self, graph_id, chunks, batch_size=3, progress_callback=None):
-    total_chunks = len(chunks)
-    if total_chunks == 0:
-        return []
-
-    max_workers = max(1, min(Config.GRAPH_PARALLEL_CHUNKS, total_chunks))
-    logger.info(f"[graph_build] Starting: {total_chunks} chunks, parallel workers={max_workers}")
-
-    episode_uuids: List[Optional[str]] = [None] * total_chunks
-
-    def _process(idx: int, chunk: str) -> str:
-        t0 = time.time()
-        try:
-            episode_id = self.storage.add_text(graph_id, chunk)
-            logger.info(f"[graph_build] Chunk {idx + 1}/{total_chunks} done in {time.time()-t0:.1f}s")
-            return episode_id
-        except Exception as e:
-            logger.error(f"[graph_build] Chunk {idx + 1}/{total_chunks} FAILED after {time.time()-t0:.1f}s: {e}")
-            raise
-
-    completed = 0
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = {pool.submit(_process, idx, chunk): idx for idx, chunk in enumerate(chunks)}
-        for future in as_completed(futures):
-            idx = futures[future]
-            episode_uuids[idx] = future.result()
-            completed += 1
-            if progress_callback:
-                progress_callback(
-                    f"Processed {completed}/{total_chunks} chunks...",
-                    completed / total_chunks,
-                )
-
-    return [uuid for uuid in episode_uuids if uuid is not None]
-```
-
-`.env`:
-```env
-GRAPH_CHUNK_SIZE=1500
-GRAPH_CHUNK_OVERLAP=150
-GRAPH_PARALLEL_CHUNKS=4
-```
-
-Parallelität bei Ollama Cloud: 4 ist der Sweet Spot. Höhere Werte triggern gelegentlich Rate-Limits.
+Diese Datei ist **keine Patch-Anleitung mehr**. Die früher hier beschriebenen Codeänderungen (Chunking, Parallelisierung, Provider-Hacks) sind längst in die Produktarchitektur eingeflossen oder überholt. Produktcode per Copy/Paste aus einer Doku zu überschreiben war ohnehin eine bemerkenswert kreative Form von Paketmanagement.
 
 ---
 
-## Wichtige Fallstricke
+## 1. Aktuelle relevante Einstellungen
 
-### Docker-Restart reicht NICHT
+Die führenden Defaults stehen im Code (`backend/app/config.py` / `backend/app/settings.py`). Baseline 08.09.2026:
 
-`docker compose restart agora` **lädt weder `.env` neu noch aktualisiert es den Image-Code**. Der Container behält Env-Vars aus dem Startzeitpunkt und bakt den Quellcode beim `build` ein.
+| Variable | Default | Bedeutung |
+|---|---:|---|
+| `GRAPH_CHUNK_SIZE` | `1500` | Zielgröße für Textchunks |
+| `GRAPH_CHUNK_OVERLAP` | `150` | Überlappung zwischen Chunks |
+| `GRAPH_PARALLEL_CHUNKS` | `4` | Parallelität der per-Chunk NER/RE-Verarbeitung |
+| `GRAPH_MIN_ENTITIES` | code/config | Qualitätswarnschwelle |
+| `GRAPH_MIN_RELATIONS` | code/config | blockierende Mindestrelationsschwelle |
+| `GRAPH_MIN_CHUNK_SUCCESS_RATIO` | code/config | Mindestanteil verwertbarer Chunks |
 
-Nach **Env-Änderung**:
+Bei Abweichungen ist der aktuelle Code führend; [`configuration.md`](configuration.md) erklärt die Variablen.
+
+---
+
+## 2. Wo Zeit entsteht
+
+Ein Graph-Build umfasst typischerweise:
+
+```text
+Parsing
+→ Chunking
+→ Embedding
+→ NER/Relationsextraktion per LLM
+→ Neo4j-Persistenz
+→ Qualitäts-/Statusprüfung
+```
+
+Die teuersten Teile sind je nach Setup:
+
+- Provider-Latenz pro NER/RE-Call,
+- Anzahl Chunks,
+- effektive Parallelität,
+- Embedding-Latenz,
+- Neo4j-Netzwerk/Transaktionslatenz,
+- Provider-Retries/Rate-Limits.
+
+Erst messen, dann drehen. Ein langsamer Lauf mit zehn Retries wird durch acht zusätzliche Worker oft nur schneller dabei, den Provider zu verärgern.
+
+---
+
+## 3. Chunking
+
+### Größere Chunks
+
+Vorteile:
+
+- weniger LLM-Aufrufe,
+- weniger Provider-Roundtrips.
+
+Nachteile:
+
+- mehr Inhalt pro Extraktionscall,
+- höhere Gefahr, dass kleine Entitäten/Relationen im langen Kontext untergehen,
+- größere Prompt-/Outputlast.
+
+### Kleinere Chunks
+
+Vorteile:
+
+- lokalere Extraktion,
+- kleinere Einzelcalls.
+
+Nachteile:
+
+- mehr Requests,
+- mehr Overlap-Duplikate,
+- höhere Gesamtlatenz bei Cloud-Providern.
+
+`1500/150` ist ein aktueller Default, **kein universeller Benchmark-Sweet-Spot** für jedes Modell und jedes Dokument.
+
+---
+
+## 4. Parallelität
+
+`GraphBuildService.add_text_batches()` verarbeitet Chunks parallel. `GRAPH_PARALLEL_CHUNKS` begrenzt diese Parallelität.
+
+Tuning-Regel:
+
+1. mit Default `4` messen,
+2. Provider-429/Timeout/Connection-Fehler beobachten,
+3. CPU/RAM und Neo4j-Pool beobachten,
+4. nur dann kontrolliert erhöhen oder senken.
+
+Eine höhere Zahl kann schaden, wenn:
+
+- Provider Rate Limits greift,
+- Neo4j-Verbindungen knapp werden,
+- der Host CPU-/Memory-bound ist,
+- mehrere Graph-Builds gleichzeitig laufen.
+
+---
+
+## 5. Retry- und Neo4j-Semantik
+
+Ein Netzwerkfehler bedeutet nicht automatisch, dass Neo4j die letzte Transaktion nicht committed hat.
+
+Seit #1460 sind Episode- und Relationswrites auf stabiler UUID retry-idempotent. Der Produktionsbefund war: Neo4j konnte eine Transaktion committen, die Antwortverbindung brach danach ab, und ein Retry führte früher zu Constraint-Fehlern bzw. doppelten Relationen.
+
+Folge für Diagnose:
+
+- Connection-Reset separat untersuchen,
+- nicht als erste Reaktion Retry abschalten,
+- keine manuelle Dublettenbereinigung durchführen, bevor geprüft wurde, ob der aktuelle Code die idempotenten MERGE-Pfade nutzt.
+
+---
+
+## 6. Provider- und Modellwahl
+
+Die Graph-Stage verwendet das kanonische LLM-Routing. Eine `.env`-Modell-ID ist nicht automatisch die produktive Route, sobald Workspace-/Run-Routing greift.
+
+Prüfreihenfolge:
+
+1. aktive Graph-/NER-Stage-Route,
+2. `provider_id`/`provider_type`,
+3. ProviderConnection,
+4. Modell-ID,
+5. effektive Context-/Output-Limits,
+6. Retry-/Rate-Limit-Telemetrie.
+
+Keine harte Empfehlung wie „immer Modell X verwenden“ in dieser Datei. Modellkataloge, Preise und Providerverhalten ändern sich schneller als dieses Dokument sinnvoll gepflegt werden kann.
+
+---
+
+## 7. JSON-/Reasoning-Einstellungen
+
+`LLMClient.chat_json` besitzt heute einen eigenen Schema-/Repair-Pfad. Die historischen Flags und Providerquirks gehören in [`provider-runtime-settings.md`](provider-runtime-settings.md) bzw. den Client-Code.
+
+Insbesondere nicht pauschal `LLM_DISABLE_JSON_MODE=true` als Performance-Tipp setzen. Der Legacy-Alias ist veraltet; strukturierte Calls sollen nach Möglichkeit ihren Vertragsmodus behalten.
+
+Wenn ein Provider mit JSON-Schema inkompatibel ist, gezielt den vorgesehenen Runtime-Schalter für genau diesen Fall verwenden und Contract-Tests ausführen.
+
+---
+
+## 8. Embeddings separat betrachten
+
+Embedding-Latenz ist ein eigener Teil des Graph-Builds. Ein Wechsel des Embedding-Modells ist aber keine harmlose Performance-Option.
+
+Vor einem Wechsel: [`embedding-provider-switch.md`](embedding-provider-switch.md).
+
+Bekannte Grenze #1417: aktive UI-/Store-Konfiguration ist noch nicht für jeden Runtime-Consumer die alleinige SSoT.
+
+---
+
+## 9. Messen
+
+### Build-Logs
+
+Relevante Laufzeiten und Fehler nach Graph-/Chunk-Markern filtern:
+
 ```bash
-docker compose up -d --force-recreate --no-deps agora
+docker compose logs agora --since 30m | grep -E "graph_build|Chunk|Neo4j|retry|429|timeout"
 ```
 
-Nach **Code-Änderung** (z. B. `graph_builder.py` oder `llm_client.py`):
+### Run-/Statussicht
+
+Über Run-/Graph-Status prüfen:
+
+- Anzahl Chunks,
+- Erfolg/Fehler,
+- Progress,
+- Laufzeit,
+- Degradation/Qualitätsschwellen.
+
+### Provider-Latenz
+
+Wenn möglich Provider-/LLM-Telemetrie gegen echte physische Calls auswerten. Retried Calls zählen zur realen Laufzeit und bei kostenpflichtigen Providern zur realen Nutzung.
+
+---
+
+## 10. Kontrollierte Experimente
+
+Für ein Tuning-Experiment immer dieselbe Eingabe verwenden und nur **eine** relevante Variable gleichzeitig ändern, z. B.:
+
+```text
+A: chunk=1500, workers=4
+B: chunk=1500, workers=2
+C: chunk=1000, workers=4
+```
+
+Messen:
+
+- Gesamtlaufzeit,
+- physische LLM-Calls,
+- Retry-/Fehlerrate,
+- Entitäten/Relationen,
+- Chunk-Success-Ratio,
+- nachgelagerte Retrieval-Qualität.
+
+Nur Laufzeit zu messen kann eine schnellere, aber fachlich schlechtere Extraktion belohnen.
+
+---
+
+## 11. Docker-/Env-Änderungen
+
+Eine geänderte `.env` wird nicht zuverlässig durch einen simplen Container-`restart` neu eingelesen. Für Compose-Konfigurationsänderungen den Service recreaten:
+
+```bash
+docker compose up -d --force-recreate agora
+```
+
+Nach Code-/Dependency-Änderung neu bauen:
+
 ```bash
 docker compose build agora
 docker compose up -d --force-recreate --no-deps agora
 ```
 
-Verifizieren:
-```bash
-docker exec agora env | grep -E "LLM_MODEL|GRAPH_"
-docker exec agora grep -c "ThreadPoolExecutor" /app/backend/app/services/graph_builder.py
-```
-
-### Simulation friert Modell ein
-
-Die `simulation_config.json` pro Simulation enthält `llm_model` aus dem Zeitpunkt der Vorbereitung. Wechselst du nach der Agent-Persona-Generierung das Modell in `.env`, läuft die Simulation weiter mit dem alten Wert.
-
-Patchen:
-```bash
-docker exec agora python3 -c "
-import json
-p='/app/backend/uploads/simulations/<sim_id>/simulation_config.json'
-d=json.load(open(p)); d['llm_model']='qwen3-coder-next:cloud'
-json.dump(d, open(p,'w'), indent=2)
-"
-```
-
-Danach laufenden Subprozess killen und Simulation in der UI neu starten:
-```bash
-docker exec agora ps -ef | grep run_parallel_simulation
-docker exec agora kill -9 <PID>
-```
-
-Falls `run_state.json` auf `"runner_status": "failed"` steht, auf `"ready"` zurücksetzen — sonst reagiert der Start-Button nicht.
-
-### Gemma-4-spezifischer Bug
-
-Gemma 4 verpackt manchmal Skalare als `{"value": N, "reasoning": "..."}` in seinen JSON-Output. Im `simulation_config_generator.py` defensiv parsen mit einem `_coerce_int()`-Helper:
-
-```python
-@staticmethod
-def _coerce_int(value, default):
-    if isinstance(value, dict):
-        for key in ("value", "val", "n", "amount", "count"):
-            if key in value:
-                value = value[key]
-                break
-        else:
-            return default
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
-```
-
-Bei Wechsel auf Qwen3-Coder tritt der Fehler nicht mehr auf — die Coercion bleibt aber als Safety-Net nützlich.
+Vorher laufende Prepare-/Report-/Graph-Jobs beachten: Diese sind noch nicht vollständig restart-sicher (#1472).
 
 ---
 
-## Benchmark
+## 12. Was nicht tun
 
-| Konfiguration | Chunks | Dauer |
-|---|---|---|
-| `ministral-3:14b` + chunk 500 + seriell | 11 | 5–10 min (+ 400er-Errors) |
-| `qwen3-coder-next` + chunk 500 + seriell | 11 | ~4–5 min |
-| `qwen3-coder-next` + chunk 1500 + 4× parallel | ~3 | **unter 1 min** |
+Nicht als Performance-Tuning:
+
+- laufende OASIS-/Backend-Prozesse blind mit `kill -9` beenden,
+- `run_state.json` manuell von `failed` auf `ready` umschreiben,
+- `simulation_config.json` eines laufenden Jobs per Einzeiler patchen,
+- Provider-/Routing-SSoT durch zusätzliche `.env`-Heuristiken umgehen,
+- Evidence-/Qualitätsgates abschalten, um einen Lauf schneller „grün“ zu bekommen.
+
+Solche Schritte sind Debug-/Recovery-Eingriffe und brauchen einen konkreten Fehlerfall, keine Performance-Seite.
 
 ---
 
-## Checkliste für den nachmachenden Agenten
+## 13. Aktuelle Priorität
 
-1. `.env` anpassen: `LLM_MODEL_NAME`, `OPENAI_MODEL_NAME`, `OLLAMA_THINKING=false`, `LLM_DISABLE_JSON_MODE=true`, `GRAPH_CHUNK_SIZE=1500`, `GRAPH_PARALLEL_CHUNKS=4`.
-2. `llm_client.py`: `think`-Flag in `extra_body` einbauen.
-3. `config.py`: `GRAPH_CHUNK_SIZE`, `GRAPH_CHUNK_OVERLAP`, `GRAPH_PARALLEL_CHUNKS` aus Env.
-4. `graph_builder.py`: `add_text_batches` auf `ThreadPoolExecutor` umstellen.
-5. `simulation_config_generator.py`: `_coerce_int`/`_coerce_int_list` gegen Dict-Wrapping (optional, für Gemma-Fallback).
-6. `docker compose build agora && docker compose up -d --force-recreate --no-deps agora`.
-7. Container-Env prüfen: `docker exec agora env | grep GRAPH_`.
-8. Neuen Build in der UI starten und Log beobachten: `docker logs -f agora | grep graph_build`.
+Vor weiterem Mikro-Tuning sind für 0.10 strukturell wichtiger:
+
+- restart-sichere Langläufer (#1472),
+- Embedding Runtime SSoT (#1417),
+- vollständiges Run-Manifest/Replay (#763/#1274),
+- reproduzierbare Simulationstreue (#1236/#1323).
+
+Eine um 20 Sekunden schnellere Graphphase ist nett. Ein reproduzierbar falscher Zustands- oder Evidence-Pfad ist trotzdem das wichtigere Problem.

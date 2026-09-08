@@ -1,133 +1,157 @@
-# Agora Netzwerk-Analytik (Issue #12)
+# Netzwerk-Analytik
 
-Dieses Dokument beschreibt die Heuristiken hinter
-`backend/app/services/network_analytics.py` und
-`GET /api/simulation/<id>/metrics`.
+**Stand:** 08.09.2026  
+**Geprüfte Main-Baseline:** `0c47737f`  
+**Code:** `backend/app/services/network_analytics.py` · `GET /api/simulation/<id>/metrics`
 
-## Was wird gemessen?
+Die Netzwerk-Analytik beschreibt Strukturen **innerhalb eines konkreten synthetischen Simulationslaufs**. Sie misst weder reale öffentliche Meinung noch macht sie einen Agora-Lauf insgesamt reproduzierbar.
 
-| Kennzahl | Kurzdefinition |
-|----------|----------------|
-| `echo_chamber_index` | Anteil der Interaktionen, die innerhalb einer Community bleiben. `0.0` = vollständig durchmischt, `1.0` = strikte Echokammern. |
-| `cluster_count` | Anzahl der gefundenen Communities. |
-| `dominant_clusters[]` | Sortierte Liste der Communities (größte zuerst) mit Mitglieder-`agent_id`s. |
-| `bridge_agents[]` | Top-*k* (Default 5) Agenten mit höchstem Betweenness-Score, die mindestens einen Nachbarn in einer anderen Community haben. |
-| `total_agents` | Knotenzahl im Interaktionsgraphen (nicht alle Simulationsagenten — nur die mit mindestens einer in- oder out-going Interaktion). |
-| `total_interactions` | Gewichtete Anzahl der verwerteten Aktionen (siehe Filter). |
+---
 
-## Welche OASIS-Aktionen gehen in den Graph?
+## 1. Kennzahlen
 
-Nur **gerichtete, paarweise** Aktionen. Broadcasts wie `CREATE_POST` oder
-`DO_NOTHING` werden ignoriert, weil sie keine Sender→Empfänger-Kante
-erzeugen.
+| Kennzahl | Bedeutung |
+|---|---|
+| `echo_chamber_index` | Anteil verwerteter Interaktionen, die innerhalb derselben erkannten Community bleiben |
+| `cluster_count` | Anzahl erkannter Communities |
+| `dominant_clusters[]` | Communities, typischerweise nach Größe sortiert |
+| `bridge_agents[]` | Agenten mit hoher Betweenness, die mindestens eine clusterübergreifende Verbindung besitzen |
+| `total_agents` | Agenten, die im projizierten Interaktionsgraphen vorkommen |
+| `total_interactions` | Anzahl der für die Projektion verwerteten gerichteten Interaktionen |
 
-Whitelist in `_DIRECTED_ACTIONS`:
+`total_agents` ist nicht zwingend identisch mit der konfigurierten Persona-/Agentenzahl: Agenten ohne verwertete Interaktion können im Analysegraph fehlen.
 
-- Reddit + Twitter: `FOLLOW`, `LIKE_POST`, `DISLIKE_POST`, `REPOST`,
-  `CREATE_COMMENT`, `LIKE_COMMENT`, `DISLIKE_COMMENT`, `MUTE`,
-  `QUOTE_POST`.
+---
 
-Die Ziel-Agent-ID wird aus `action_args` extrahiert
-(`target_agent_id` / `followee_id` / `user_id` / `target_user_id` /
-`author_id`). Aktionen ohne Ziel-Agent (z. B. `LIKE_POST` mit nur
-`post_id` im Log) werden übersprungen — bewusst: sonst mischen wir
-User- und Post-Knoten im selben Graph.
+## 2. Welche Aktionen zählen
+
+Die Analyse verwendet paarweise Interaktionen, also Aktionen mit einem identifizierbaren Sender und Empfänger.
+
+Broadcast-/No-op-Aktionen wie `CREATE_POST` oder `DO_NOTHING` erzeugen keine Sender→Empfänger-Kante und werden deshalb nicht wie eine direkte Interaktion behandelt.
+
+Die konkrete Action-Whitelist und Target-ID-Auflösung sind im Code führend. Bei OASIS-Upgrades oder neuen ActionTypes muss die Analytik dagegen geprüft werden; ein neuer Action-Name zählt nicht automatisch sinnvoll in denselben Graph.
 
 Self-Interaktionen (`src == tgt`) werden verworfen.
 
-## Graph-Projektion
+---
 
-Die Interaktionen werden zu einem **gewichteten, ungerichteten** Graphen
-zusammengefasst:
+## 3. Graphprojektion
 
-- Jede Kante hat `weight = Anzahl Interaktionen zwischen den beiden
-  Agenten in beide Richtungen`.
-- Ungerichtet, weil Louvain und Betweenness auf ungerichteten Graphen
-  robuster sind; die Richtungsinformation wird für Echokammer-/Bridge-
-  Analyse nicht benötigt.
+Die verwerteten Interaktionen werden für Community-/Bridge-Analyse zu einem gewichteten, ungerichteten Graphen aggregiert.
 
-## Community-Detection
+Eine Kante repräsentiert damit die Interaktionsstärke zwischen zwei Agenten, unabhängig von der Richtung einzelner Aktionen.
 
-`networkx.algorithms.community.louvain_communities(graph, weight='weight', seed=42)`
+Diese Projektion ist eine bewusste Heuristik:
 
-- Louvain maximiert die Modularität; die Communities landen in
-  `dominant_clusters` absteigend nach Größe.
-- Fixer `seed=42` macht Reports reproduzierbar — zwei Aufrufe auf
-  identischen Aktionen liefern identische Cluster-IDs.
-- Alternativen (Leiden, Infomap) wurden evaluiert, aber nicht benötigt:
-  `networkx>=3.2` bringt Louvain ohne Zusatzabhängigkeit mit.
+- gut für Community-/Bridge-Struktur,
+- nicht geeignet, um Richtung/Initiator einer Beziehung direkt abzulesen.
 
-## Echokammer-Index
+Wer gerichtete Einfluss- oder Antwortketten untersuchen will, braucht die Rohaktionen bzw. eine andere Projektion.
 
-```
-intra = sum(1 for src,tgt in interactions if cluster[src] == cluster[tgt])
-total = len(interactions)
+---
+
+## 4. Community Detection
+
+Die aktuelle Implementierung verwendet NetworkX-Louvain mit einem festen Algorithmus-Seed.
+
+Wichtig zur Begrifflichkeit:
+
+> Der feste Seed macht **diesen Clustering-Schritt auf identischer Eingabe** deterministischer. Er macht weder die vorausgehende Multi-Agenten-Simulation noch den Report insgesamt reproduzierbar.
+
+Die offene Gesamt-Reproduzierbarkeit wird unter #763/#1274 verfolgt.
+
+Cluster-IDs sind Implementierungs-/Laufartefakte und keine fachlich stabilen Identitäten über unterschiedliche Simulationen hinweg.
+
+---
+
+## 5. Echokammer-Index
+
+Konzeptuell:
+
+```text
+intra = Interaktionen, deren Endpunkte im selben Cluster liegen
+total = alle verwerteten Interaktionen
 echo_chamber_index = intra / total
 ```
 
-Interaktionen sind hier *nicht* deduplizierte Paare, sondern alle
-verwerteten Aktionen (die Gewichtung steckt also in der Zählweise).
-
 Interpretation:
 
-- `echo_chamber_index ≈ 1.0` → jede Kommunikation bleibt innerhalb der
-  eigenen Tribe (starke Polarisierung).
-- `echo_chamber_index ≈ 0.0` → Agenten reden überwiegend
-  cluster-übergreifend (integrierte Diskussion).
-- Bei wenigen Clustern (z. B. 1 großes) ist der Wert trivial hoch —
-  immer zusammen mit `cluster_count` bewerten.
+- nahe `1.0`: Interaktionen bleiben überwiegend innerhalb erkannter Communities,
+- nahe `0.0`: viele Interaktionen verlaufen clusterübergreifend.
 
-## Bridge-Agents
+Aber:
 
-1. `networkx.betweenness_centrality(graph, weight='weight', normalized=True)` —
-   Score pro Agent.
-2. Für jeden Kandidaten: nimm nur diejenigen, die mindestens einen
-   Nachbarn in einer *anderen* Community haben (sonst ist „Bridge“
-   irreführend: hohe Zentralität innerhalb einer einzigen Community
-   bedeutet *Hub*, nicht Bridge).
-3. Sortiere absteigend, liefere die Top `top_bridge_k` (Default 5).
+- bei nur einer Community ist der Wert strukturell hoch/trivial,
+- ein hoher Wert ist kein Beweis realer gesellschaftlicher Polarisierung,
+- das Ergebnis hängt von simulierten Aktionen, Community-Algorithmus und Projektion ab.
 
-## API
+Immer zusammen mit `cluster_count`, Interaktionsmenge und dem Laufkontext lesen.
 
-`GET /api/simulation/<simulation_id>/metrics`
+---
 
-Optionale Query-Parameter:
+## 6. Bridge Agents
 
-- `window_size_rounds` (int > 0) — nur die letzten *N* Runden werden
-  analysiert. Default: ganze Simulation.
-- `platform` (`twitter` | `reddit`) — Filter auf einen Kanal.
+Ein Bridge-Kandidat braucht:
 
-Antwort (Schema — gekürzt):
+1. einen hohen Betweenness-Wert und
+2. mindestens einen Nachbarn außerhalb der eigenen Community.
 
-```json
-{
-  "success": true,
-  "data": {
-    "simulation_id": "sim_abcdef012345",
-    "window_size_rounds": 10,
-    "total_agents": 42,
-    "total_interactions": 318,
-    "echo_chamber_index": 0.7123,
-    "cluster_count": 3,
-    "dominant_clusters": [
-      {"cluster_id": 0, "size": 18, "agent_ids": [1, 2, ...]},
-      {"cluster_id": 1, "size": 16, "agent_ids": [...]}
-    ],
-    "bridge_agents": [7, 23, 41]
-  }
-}
+Damit wird ein reiner interner Hub nicht automatisch als „Bridge“ bezeichnet.
+
+Auch hier gilt: Das ist eine Eigenschaft des **simulierten Interaktionsgraphen**, keine Aussage über die reale Person/Organisation, aus der eine Persona abgeleitet wurde.
+
+---
+
+## 7. API
+
+```text
+GET /api/simulation/<simulation_id>/metrics
 ```
 
-## Ausblick
+Optionale Filter wie Zeitfenster/Plattform sind im aktuellen API-/Contract-Code führend. Siehe [`api.md`](api.md) für die Route und die Contracts für die genaue Response-Form.
 
-- **Live-Push statt Polling**: sobald `CHANGE_ACTION` auf dem
-  `SimulationEventBus` vollständig gespiegelt ist, kann ein Daemon
-  (`AnalyticsWorker`) die Metriken pro Runde berechnen und über SSE
-  schieben. Aktuell reicht der synchrone `GET`-Pfad — `networkx` auf
-  ≤ 10k Interaktionen liegt im Millisekundenbereich.
-- **Zeitliche Serie**: Kombination mit `TemporalGraphService` (Issue
-  #10) ermöglicht „Echokammer-Index pro Runde“ — offen als Analytics-
-  Dashboard-Follow-up.
-- **Heuristik-Tuning**: Gewichtung nach Action-Typ (`FOLLOW` > `LIKE`
-  > `DISLIKE`?) ist derzeit uniform. Falls die Simulation das braucht,
-  vor der Graph-Aggregation die Kantengewichte skalieren.
+Für Exporte existiert zusätzlich der in `api.md` dokumentierte Metrics-Exportpfad.
+
+---
+
+## 8. Datenqualität
+
+Die Netzwerkmetrik ist nur so gut wie die zugrunde liegenden Aktionen.
+
+Bekannte Trust-Themen der Simulation:
+
+- Role Leakage / Persona-Konsistenz (#1323),
+- Twitter-Recommender-/Ranking-Reproduzierbarkeit (#1236),
+- Persona-/Entitätskohärenz (#1470/#1471).
+
+Wenn die Simulation systematisch falsche Rollen oder Interaktionen erzeugt, kann die Netzwerkanalyse diese Fehler sehr ordentlich quantifizieren. Ordentlich quantifizierter Unsinn bleibt allerdings Unsinn.
+
+---
+
+## 9. Vergleich zwischen Läufen
+
+Für Vergleiche möglichst konstant halten:
+
+- Eingabedaten,
+- Persona-/Agentenzahl,
+- Plattform,
+- Rundenanzahl,
+- Routing/Modelle,
+- Agent-Tools/Feature Flags,
+- Analytics-Codeversion.
+
+Bis vollständige Run-Manifeste/Replay (#763/#1274) vorliegen, Vergleichsergebnisse nicht als streng kontrolliertes Experiment verkaufen.
+
+---
+
+## 10. Erweiterungen
+
+Sinnvolle spätere Erweiterungen sind:
+
+- Zeitreihen pro Runde,
+- getrennte gerichtete und ungerichtete Projektionen,
+- Action-Typ-Gewichtungen mit begründeter fachlicher Semantik,
+- Unsicherheits-/Stabilitätsanalyse über mehrere Läufe,
+- Verknüpfung mit vollständig reproduzierbaren Run-Manifests.
+
+Neue Metriken brauchen eine dokumentierte Interpretation und einen Test gegen triviale/degenerierte Fälle. Eine Zahl allein ist noch keine Analyse.

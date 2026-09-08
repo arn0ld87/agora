@@ -1,119 +1,64 @@
 # Agora Roadmap
 
-**Stand:** 14.08.2026  
-**Aktuelle Produktversion:** `0.9.5` Stability Beta
+**Stand:** 08.09.2026  
+**Aktuelle Produktversion:** `0.9.5` Stability Beta  
+**Istzustand:** [`docs/STATUS.md`](docs/STATUS.md)
 
-Diese Datei beschreibt ausschließlich die strategische Reihenfolge der nächsten Releases. Konkrete Arbeitspakete, Akzeptanzkriterien und Fortschritt werden als GitHub Issues gepflegt.
+Diese Datei beschreibt ausschließlich die **strategische Release-Reihenfolge**. Konkrete Arbeitspakete, Akzeptanzkriterien und Fortschritt werden als GitHub Issues gepflegt. Ein erledigter Commit gehört nicht als Mini-Changelog hier hinein; dafür existiert `changelog.d/`. Offenbar braucht selbst Dokumentation eine Gewaltenteilung.
 
 ## Verbindliche Dokumentationshierarchie
 
 | Ebene | Aufgabe |
 |---|---|
-| [`README.md`](README.md) | Produkt, Einstieg, Grenzen und Release-Linie |
+| [`README.md`](README.md) / [`README.de.md`](README.de.md) | Produkt, Einstieg, Grenzen, Schnellstart |
 | [`docs/STATUS.md`](docs/STATUS.md) | verifizierter Istzustand |
 | `ROADMAP.md` | Release-Ziele und Reihenfolge |
-| [GitHub Issues](https://github.com/arn0ld87/agora/issues) | ausführbare Tasks |
+| [GitHub Issues](https://github.com/arn0ld87/agora/issues) | ausführbare Tasks und Abnahme |
 
-ADRs, Architektur-, Security- und Runbook-Dokumente bleiben verbindliche Referenzen. Sie ersetzen weder Roadmap noch Issues.
-
-Historische Planungsstände: [`docs/archive/planning/`](docs/archive/planning/)
+ADRs, Architektur-, Security- und Runbook-Dokumente bleiben verbindliche Referenzen. Historische Planungsstände und Audits sind keine aktive Steuerungsquelle.
 
 ---
 
 ## Produktziel
 
-Agora wird eine stabile, lokal oder kontrolliert hybrid betreibbare Single-User-Plattform für evidenzorientierte Stakeholder-, Zielgruppen- und Marktreaktionssimulationen.
+Agora soll eine stabile, lokal oder kontrolliert hybrid betreibbare **Single-User-Plattform für evidenzorientierte Stakeholder-, Risiko- und Szenarioanalyse** werden.
 
 Der Weg zu `1.0.0` folgt vier Regeln:
 
-1. Stabilität vor weiteren großen Features.
-2. Eine kanonische Oberfläche und eine kanonische Provider-/Routing-Wahrheit.
+1. Stabilität und Trust vor neuen großen Produktflächen.
+2. Eine kanonische Oberfläche sowie eine kanonische Provider-/Secret-/Routing-Wahrheit.
 3. Reproduzierbarkeit und messbarer Erkenntnisgewinn vor Plattformausbau.
-4. Keine öffentliche SaaS- oder Multi-User-Erweiterung vor `1.0.0`.
+4. Kein Multi-User-/SaaS-/Kubernetes-Ausbau vor einem belastbaren Single-User-1.0.
 
 ---
 
-# 0.8.0 — Technical Preview
+# 0.9.x — Stability Beta
 
-## Bedeutung
+## Status
 
-Der aktuelle Stand besitzt eine vollständige fachliche Grundpipeline:
+`0.9.5` besitzt die vollständige fachliche Pipeline und eine weitgehend konsolidierte Produktoberfläche. Die September-Stabilisierung hat unter anderem folgende Fehlerklassen geschlossen:
 
-- Onboarding und Provider-Verbindungen
-- Dokument- und Webseitenaufnahme
-- Wissensgraph und Embeddings
-- Persona-Erzeugung und Review
-- Multi-Agenten-Simulation
-- Run-Steuerung und Live-Ereignisse
-- Evidence-orientierte Reports
-- Compare-, Export- und Observability-Grundlagen
+- Persona-Routing für CLI-Provider und Codex-CLI-Transport in OASIS (#1418/#1422, #1423/#1424)
+- idempotente Neo4j-Writes bei Retry-after-commit (#1460)
+- harte LLM-Call-Reservierung bei paralleler Persona-Erzeugung (#1461)
+- korrekter Nutzer-Stop und Force-Restart-Monitoring (#1474)
+- crash-konsistente Report-Sektionspersistenz (#1475)
+- Startup-Reconciliation stale Simulationsläufe (#1476)
+- Evidence-Envelope und Backend/Frontend-Contract-Parität (#1477/#1482)
+- Budget-Guard/Ledger für Tool-, Vision- und Interview-Pfade (#1478)
+- ehrliche `INCOMPLETE`-Teilberichte inklusive Resume-Semantik (#1479)
+- echte Redis-/Neo4j-Integrationstests (#1481)
+- Fresh-Install-Secret-Erzeugung und korrigierte Backup-Pfade (#1483)
 
-Der Stand ist trotzdem keine stabile `1.0` — die verbleibenden Freigabekriterien stehen unter `0.9.0`. Die E2E-Pipeline wird seit 31.07.2026 als verpflichtender Pull-Request-Check erzwungen. Die Vue-v4-Konsolidierung selbst ist abgeschlossen (Migration der v3-Inhaltskomponenten [#922](https://github.com/arn0ld87/agora/issues/922) und der `/home`-Redirect [#915](https://github.com/arn0ld87/agora/issues/915) sind umgesetzt, siehe [#760](https://github.com/arn0ld87/agora/issues/760)).
+## Was 0.9.x **noch nicht** behauptet
 
-## Erreicht
+- vollständige Run-Reproduzierbarkeit
+- wissenschaftlich validierte Verhaltensprognosen
+- vollständig restart-sichere Prepare-/Report-/Graph-Jobs
+- vollständig kanonische Embedding-Runtime-Konfiguration
+- Multi-User-/SaaS-Betrieb
 
-Die ursprünglichen Voraussetzungen für den `0.8.0`-Stand sind abgeschlossen: die sechs Kern-E2E-Smokes sind repariert (Issue #739) und laufen seit mehreren Tagen durchgehend grün, die Dokumentation ist auf vier aktive Ebenen reduziert, die Versionslinie ist auf `0.8.0` zurückgesetzt, und Provider-/Secret-/Dependency-Drifts aus dieser Phase sind geschlossen (Issues #759, #761, #762). Offene Arbeit für den nächsten Schritt steht unter `0.9.0` unten.
-
----
-
-# 0.9.0 — Stability Beta
-
-## Ziel
-
-Agora soll als zusammenhängendes Produkt zuverlässig installierbar, bedienbar und testbar sein. Neue große Produktbereiche sind in dieser Phase nachrangig.
-
-## Stand
-
-Der Version-Cut auf `0.9.0` ist am 06.08.2026 erfolgt, nachdem Deep-Audit-Stabilisierung Welle 1 gemergt war (#1116, #1117, #1118) und die Kern-Kriterien (E2E als Required PR-Check, Vue-v4-Konsolidierung, Provider-/Secret-SSoTs, Dependency-SSoT) erfüllt sind. Die unten noch offenen Checkboxen sind bewusst nicht Blocker des Cuts, sondern verbleibende Arbeit der `0.9.x`-Linie vor dem `0.10.0`-Schnitt.
-
-## Freigabekriterien
-
-### Kernpipeline
-
-- [x] Health, Upload + Graph, Minimalreport, Report-Modi, Accessibility und AiModelPicker sind stabil grün (20/20 aufeinanderfolgende `e2e-smokes`-Läufe auf `push` und `pull_request`, 21.–22.07.2026)
-- [x] E2E-Smokes laufen mehrfach ohne Flakes (siehe oben)
-- [x] E2E ist als verpflichtender Pull-Request-Check aktiviert (31.07.2026: Branch-Protection auf `main` mit 17 Required Status Checks — alle sechs Smokes plus die beiden PR-Smoke-Gates, `strict: true`, `enforce_admins: true`)
-- [ ] keine Skips, abgeschwächten Assertions oder pauschalen Retries als Ersatz für Fehlerbehebung
-
-### Frontend
-
-- [x] Vue-v4 ist die einzige produktive Oberfläche — jede fachliche Hauptfunktion hat genau eine produktive Route (`frontend/src/router/index.ts`), belegt in [Issue #760](https://github.com/arn0ld87/agora/issues/760) via [#829](https://github.com/arn0ld87/agora/issues/829)/[#839](https://github.com/arn0ld87/agora/issues/839)
-- [x] klassische Prozess-Views besitzen Lösch- oder Redirect-Entscheidungen — `/process`, `/simulation`, `/simulation/:id/start`, `/report`, `/interaction` sind reine Redirects auf die v4-Referenzrouten, dokumentiert in [ADR-0010](docs/decisions/0010-vue-v4-route-consolidation.md)
-- [x] `/agora-2026` ist kein produktiv gerouteter Parallelentwurf — als Designreferenz unter `docs/design-reference/agora-2026/` archiviert ([PR #878](https://github.com/arn0ld87/agora/pull/878)), Regressionstest pinnt `/agora-2026` → NotFound
-- [x] kein produktiv verdrahteter React-/Lovable-Rewrite — ein Lovable-Prototyp existiert, liegt aber außerhalb dieses Repos, ist unveröffentlicht und in keinem Auslieferungspfad referenziert, siehe [`docs/epics/frontend-next/2026-STATUS.md`](docs/epics/frontend-next/2026-STATUS.md)
-- [x] Responsive- und Accessibility-Gates sind grün — `Playwright Golden-Gate-Accessibility-Smoke` grün auf `main` (zuletzt PR #938); der einzige bekannte Responsive-Mangel ([Issue #920](https://github.com/arn0ld87/agora/issues/920), `/home` bei 320px) ist mit dem `/home → /dashboard`-Redirect gegenstandslos geworden (`Home.vue` ist nicht mehr produktiv geroutet, siehe Kommentar in `frontend/tests/e2e/golden-gate-accessibility.spec.ts:130-134`)
-
-### Provider und Routing
-
-- [x] `ProviderConnection`, `AiRoute` und `AiModelPicker` sind die kanonischen Pfade
-- [x] Legacy-Profile greifen nicht mehr bevorzugt auf eigene Secrets oder Routingwerte zu
-- [x] explizite Provider-Konfiguration gewinnt vor URL-/Modell-Heuristiken
-- [x] Frontend- und Backend-Provider-Vokabular sind synchron
-- [x] Chat-Routing und Embedding-Konfiguration bleiben getrennt
-
-### Betrieb und Supply Chain
-
-- [x] `pyproject.toml` und `uv.lock` sind einzige Backend-Dependency-SSoT (Issue #762)
-- [x] `requirements.txt` ist entfernt oder automatisch generiert (`backend/requirements.txt` existiert nicht mehr)
-- [x] Produktversion und Komponentenmanifest-Versionen werden automatisch synchronisiert (Issue #759, `.github/workflows/version-drift.yml`, `pre-push-gate.sh schemas`)
-- [x] offene CVE-Ausnahmen besitzen aktuelle Owner, Fristen und Auflösungsweg (siehe `docs/dependency-risk-register.md`; verbleibender Hardstop NLTK 28.09.2026 — der Trivy-OS-Layer-Hardstop 30.08.2026 ist am 31.07.2026 mit [#772](https://github.com/arn0ld87/agora/issues/772) ersatzlos entfallen)
-- [ ] Readiness, Auth, Tickets und Secret Stores sind durch produktnahe Smokes abgedeckt
-
-### Dokumentation
-
-- [x] README, STATUS, ROADMAP und Issues widersprechen sich nicht (zuletzt verifiziert 14.08.2026 — laufend bei jeder größeren Änderung neu zu prüfen)
-- [ ] `docs/STATUS.md` wird automatisch erzeugt oder CI-geprüft — `scripts/sync-status.sh` regeneriert nur die markierten Versions-/Test-Blöcke, nicht die Fließtext-Abschnitte; die STATUS-Sync-Prüfung läuft ausschließlich lokal über `pre-push-gate.sh schemas`. Der CI-Job dafür wurde am 17.05.2026 entfernt (`.github/workflows/ci.yml`, Kommentar „2026-05-17 entfernt: status-sync (MAI-16)"), `docs/STATUS.md` bleibt laut diesem Kommentar bewusst manuell pflegbar
-- [ ] historische Pläne liegen ausschließlich im Archiv
-- [ ] Installations- und Betriebsanleitung sind gegen einen frischen Host geprüft
-
-## Nicht Bestandteil von 0.9.0
-
-- Multi-User- oder Teamverwaltung
-- öffentliches SaaS-Hosting
-- Helm-Chart
-- Federation mehrerer Agora-Instanzen
-- allgemeines Plugin-System
-- vollständiger Frontend-Rewrite
+Die verbleibenden Punkte werden nicht durch weitere 0.9-Featureflächen verdeckt, sondern bilden den Übergang zu 0.10.
 
 ---
 
@@ -121,86 +66,114 @@ Der Version-Cut auf `0.9.0` ist am 06.08.2026 erfolgt, nachdem Deep-Audit-Stabil
 
 ## Ziel
 
-Agora soll nicht nur technisch laufen, sondern Ergebnisse reproduzierbar, budgetierbar und überprüfbar erzeugen.
+Agora soll nicht nur technisch funktionieren, sondern Ergebnisse **reproduzierbar beschreiben, budgetierbar ausführen, nach Abstürzen ehrlich fortsetzen bzw. beenden und evidenzseitig überprüfbar ausliefern**.
 
-## Freigabekriterien
+## P0 — Prozess- und Konfigurationswahrheit
 
-### Reproduzierbarkeit
+- [ ] **Langlaufende Webprozess-Jobs restart-sicher:** Prepare, Report und Graph-Build dürfen bei SIGTERM nicht ohne persistierten Interrupted-/Resume-Zustand verschwinden ([#1472](https://github.com/arn0ld87/agora/issues/1472)).
+- [ ] **Embedding-Runtime-SSoT:** aktive Embedding-Konfiguration aus Store/Connection/Secret-Store muss den produktiven Runtime-Pfad steuern; `.env` nur noch Legacy/Bootstrap-Fallback ([#1417](https://github.com/arn0ld87/agora/issues/1417)).
+- [ ] **Budget vollständig über alle produktiven Pfade:** der separate `ParallelIPCHandler` des Default-Parallelrunners muss dieselbe Report-Budget-Attribution wie der normale IPC-Pfad erhalten (Follow-up zu #1478).
+- [ ] **Report-Parallelität ohne Ein-Worker-Blockade:** entweder bewusst serialisieren oder Reportarbeit aus dem gevent-Webworker in einen eigenen Prozess/Worker verschieben ([#1265](https://github.com/arn0ld87/agora/issues/1265)).
 
-- [ ] jeder Run speichert Eingangsdaten-Hash, Graph-Version, Modelle, Provider, Routing-Snapshot, Prompt-Versionen und Seeds — **Teilstand:** der Seed steht (`simulation_config.json::random_seed`, sonst deterministisch aus der `simulation_id` abgeleitet) und wird im Simulationslog ausgewiesen ([#1160](https://github.com/arn0ld87/agora/issues/1160) F, 10.08.2026); die übrigen Felder fehlen
-- [ ] ein vorhandener Run kann mit gleicher oder bewusst geänderter Konfiguration reproduziert werden — der **stochastische** Anteil ist wiederholbar, die LLM-Antworten sind es nicht; Same-Seed-Same-Report verlangt zusätzlich eine Aufzeichnung der Modellantworten ([#763](https://github.com/arn0ld87/agora/issues/763))
-- [ ] Exporte enthalten ein maschinenlesbares Run-Manifest
-- [ ] Datenmigrationen besitzen Resume-, Rollback- und Fehlerpfade
+## P0/P1 — Simulationstreue und Trust
 
-### Kosten und Ressourcen
+- [ ] Alias-/Koreferenzauflösung und kontrollierte semantische Entitätsklasse vor Persona-Cap ([#1470](https://github.com/arn0ld87/agora/issues/1470)).
+- [ ] Persona-Domänendrift zuverlässig erkennen, auch wenn nur eine Nebendomäne mit der Quelle überlappt ([#1471](https://github.com/arn0ld87/agora/issues/1471)).
+- [ ] Role Leakage in texttragenden Simulationsaktionen messen und begrenzen ([#1323](https://github.com/arn0ld87/agora/issues/1323)).
+- [ ] Twitter-Recommender nicht mehr auf untrainierten/neu initialisierten Pooler-Gewichten ranken lassen; identische Seed-Läufe müssen reproduzierbare Ranking-Matrizen liefern ([#1236](https://github.com/arn0ld87/agora/issues/1236)).
+- [ ] Quantifizierte Claims nur dann als supported behandeln, wenn aggregierte Evidence die Quantorstärke trägt ([#1345](https://github.com/arn0ld87/agora/issues/1345)).
+- [ ] Evaluation-Seeds von Erwartungs-/Lösungstext trennen und Evidence-Herkunft typisieren ([#1240](https://github.com/arn0ld87/agora/issues/1240)).
+- [ ] Claim-Typen/Confidence-Kalibrierung abschließen (#1301/#1400).
 
-- [x] erwartete Modelle, Token, Kosten und Laufzeit werden vor dem Start angezeigt (#764, Preflight-Schätzung mit ehrlichen Bereichen)
-- [x] Token-, Kosten- und Zeitlimits können pro Run gesetzt werden (#764, weich/hart, zusätzlich LLM-Aufruflimit)
-- [x] Abbrüche und Budgetüberschreitungen erzeugen nachvollziehbare Zustände (#764, `termination_reason` + Budgetwarnungen)
-- [ ] Hardware-Tiers werden durch reproduzierbare Benchmarks statt Schätzwerte beschrieben
+## P1 — Reproduzierbare Runs
 
-### Produktnachweis
+Parent: [#763](https://github.com/arn0ld87/agora/issues/763), Detail-Lücken: [#1274](https://github.com/arn0ld87/agora/issues/1274).
 
-- [ ] mindestens drei reale Referenzfälle sind dokumentiert
-- [ ] Agora wird gegen eine Single-Prompt-Baseline verglichen
-- [ ] wiederholte Runs zeigen Varianz und Stabilität
-- [ ] Confidence-Werte werden gegen Evidence-Abdeckung kalibriert
-- [ ] bekannte Fehlannahmen und Grenzen werden veröffentlicht, nicht versteckt
+- [ ] rohen Input-Hash und Dateiname im Manifest speichern
+- [ ] Prompt-Snapshots bytegenau erfassen
+- [ ] echten Runtime-RNG-Seed speichern **und tatsächlich in die Simulation verdrahten**
+- [ ] Provider, Modell, Route, Graph-/Embedding-Version und relevante Feature Flags einfrieren
+- [ ] Replay übernimmt alle reproduzierbaren Originalparameter
+- [ ] Varianten-Replay zeigt jede Abweichung explizit
+- [ ] Legacy-Manifeste verwenden ehrliche `null`/`unknown`-Werte statt scheinbarer Daten
+- [ ] Export besitzt eine Secret-Allowlist/Regressionstest
 
-### Betrieb
+**Wichtig:** Der heutige `random_seed`-Eintrag allein ist **kein Nachweis eines reproduzierbaren Runs**. Solange der gespeicherte Wert nicht die tatsächlichen Zufallsquellen und alle relevanten Inputs kontrolliert, ist „same seed = same experiment“ eine zu starke Aussage.
 
-- [ ] Backup und Restore für Projekte, Graph, Secrets und Konfiguration sind dokumentiert und getestet
-- [ ] Upgrade- und Rollback-Pfad zwischen unterstützten Versionen ist dokumentiert
-- [ ] ein frischer Docker- und ein Host-Installationspfad sind reproduzierbar
-- [ ] keine offenen kritischen Security- oder Datenintegritätsblocker
-- [ ] Release-Artefakte, SBOM und Checksummen sind verfügbar
+## P1 — Betrieb und Release-Nachweis
+
+Parent: [#766](https://github.com/arn0ld87/agora/issues/766).
+
+- [ ] vollständiges Backup eines Referenzprojekts auf frischem Host wiederherstellen
+- [ ] Graph, Runs, Reports, Provider-Konfiguration und verschlüsselte Secrets nach Restore prüfen
+- [ ] Upgrade von unterstützter 0.9.x-Version auf 0.10.0 dokumentiert und durchgeführt
+- [ ] Rollback nach absichtlich fehlgeschlagener Migration nachweisen
+- [ ] frischen Docker- und Host-Installationspfad reproduzieren
+- [ ] Release-Artefakte, Checksummen und SBOM erzeugen
+
+`install.sh` und die Backup-Dokumentation sind inzwischen erheblich besser, aber **Dokumentation ist noch kein Restore-Nachweis**.
+
+## P1 — Produktnachweis
+
+Parent: [#765](https://github.com/arn0ld87/agora/issues/765).
+
+Mindestens drei veröffentlichbare Referenzfälle sollen vergleichen:
+
+1. einen guten Single-Prompt-Baseline-Ansatz,
+2. eine einfache statische Persona-Liste,
+3. den vollständigen Agora-Lauf,
+4. soweit möglich reale Interviews, Reviews oder historische Referenzreaktionen.
+
+Zu messen sind mindestens Treffer, Fehlannahmen, Abdeckung, Varianz, Kosten und Laufzeit. Negative Ergebnisse werden mitveröffentlicht.
 
 ## Feature-Freeze
 
-Mit dem ersten `0.10.0`-Release-Candidate beginnt der Feature-Freeze. Danach werden bis `1.0.0` nur Fehler, Dokumentation, Migrationen, Security und nachgewiesene Release-Blocker bearbeitet.
+Mit dem ersten `0.10.0`-Release-Candidate beginnt der Feature-Freeze. Danach werden bis `1.0.0` nur Fehler, Dokumentation, Migrationen, Security, Evaluation und nachgewiesene Release-Blocker bearbeitet.
 
 ---
 
 # 1.0.0 — Stable Single-User Release
 
-## Definition
+Parent-Gate: [#767](https://github.com/arn0ld87/agora/issues/767).
 
-`1.0.0` bedeutet nicht „alle denkbaren Features vorhanden“. Es bedeutet, dass der definierte Single-User-Anwendungsbereich stabil und nachvollziehbar unterstützt wird.
+`1.0.0` bedeutet nicht „alles denkbare eingebaut“, sondern: Der definierte Single-User-Anwendungsbereich ist stabil, nachvollziehbar und operativ wiederherstellbar.
 
 ## Freigabekriterien
 
-- [ ] stabile und versionierte API-, Report- und Persistenzverträge
+- [ ] versionierte API-, Report-, Run- und Persistenzverträge
 - [ ] dokumentierte Kompatibilitäts- und Deprecation-Regeln
-- [ ] eine unterstützte produktive Oberfläche
-- [ ] eine kanonische Provider-, Secret- und Routing-Architektur
-- [ ] vollständig grüne verpflichtende CI- und E2E-Gates
-- [ ] reproduzierbare Installation, Upgrade, Backup und Restore
-- [ ] mindestens ein öffentlich nachvollziehbarer Referenzlauf
-- [ ] messbarer Mehrwert gegenüber einer einfachen LLM-Baseline
-- [ ] keine bekannten P0-/P1-Release-Blocker
-- [ ] Release Notes, Migrationshinweise, SBOM und signierte Artefakte
+- [ ] Migrationen mit Test-, Resume- und Rollback-Pfaden
+- [ ] genau eine produktive Oberfläche
+- [ ] genau eine kanonische Provider-/Secret-/Routing-Architektur
+- [ ] vollständig grüne erforderliche Backend-/Frontend-/Schema-/Security-/E2E-Gates
+- [ ] keine offenen P0/P1-Release-Blocker
+- [ ] keine ungeklärten Critical/High-Security-Findings ohne dokumentierte Ausnahme
+- [ ] Fresh-Install, Backup, Restore, Upgrade und Rollback nachgewiesen
+- [ ] Release-Artefakte, Checksummen und SBOM vorhanden
+- [ ] mindestens ein öffentlich nachvollziehbarer, reproduzierbarer Referenzlauf
+- [ ] dokumentierter Vergleich mit mindestens einer einfacheren LLM-Baseline
+- [ ] sichtbare Grenzen und Non-Goals
+- [ ] Feature-Freeze seit 0.10-RC
+- [ ] finaler RC mindestens sieben Tage ohne neuen P0/P1-Blocker
 
 ---
 
 ## Nach 1.0.0
 
-Erst nach einer stabilen Single-User-Version werden größere Ausbaupfade bewertet:
+Erst danach werden größere Ausbaupfade neu bewertet:
 
-- Team- und Rollenmodell
+- Team-/Rollenmodell und Multi-User
 - Plugin-System
 - Kubernetes/Helm
 - Federation
-- weitere Analysepakete und Branchenvorlagen
+- zusätzliche Branchen-/Analysepakete
 - optionale gehostete Betriebsmodelle
 
-Diese Punkte sind keine Zusagen für `1.0.0` und erhalten erst nach dem stabilen Release eigene Problemstatements und Entscheidungen.
-
----
+Diese Punkte sind **keine Zusagen für 1.0.0**.
 
 ## Pflege dieser Roadmap
 
-- Die Roadmap enthält keine ausführbaren Kleintasks.
-- GitHub Issues enthalten Scope, Akzeptanzkriterien, Owner und Abhängigkeiten.
-- Ausgelieferte Änderungen gehören als Fragment nach [`changelog.d/`](changelog.d/README.md); `CHANGELOG.md` wird ausschließlich beim Release-Schnitt aus diesen Fragmenten erzeugt (`scripts/collect-changelog.py`), nie direkt im PR.
-- Der tatsächliche Stand gehört in `docs/STATUS.md`.
-- Erledigte historische Planung wird nicht an diese Datei angehängt.
+- Kleintasks und Abnahmekriterien gehören in Issues.
+- Ausgelieferte Änderungen gehören als Fragment nach [`changelog.d/`](changelog.d/README.md).
+- Der tatsächliche Iststand gehört in [`docs/STATUS.md`](docs/STATUS.md).
+- Historische Planung wird nicht an diese Datei angehängt.

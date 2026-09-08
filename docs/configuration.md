@@ -1,8 +1,27 @@
 # Konfiguration — Umgebungsvariablen
 
-**Status:** Referenz zu Backend `0.9.5` (Stand 14.08.2026, Europe/Berlin). Konkrete Defaults und Beispiele liefert [`.env.example`](../.env.example) — bei Abweichung ist `.env.example` führend. Geheimnisse 🔐 niemals committen, in Logs ausgeben oder in Doku schreiben.
+**Stand:** 08.09.2026  
+**Geprüfte Main-Baseline:** `0c47737f`  
+**Backend:** `0.9.5`
 
-Quelle für die Variablennamen ist der Code (Backend `os.getenv` / `pydantic-settings` `validation_alias`). Bei neuen Variablen: hier und in `.env.example` mit-pflegen.
+Die **exakte** Konfigurations-SSoT ist der Code plus [`.env.example`](../.env.example) bzw. [`.env.docker.example`](../.env.docker.example). Diese Seite erklärt die operativ relevanten Gruppen und Semantik. Bei einem neuen Schalter gewinnt deshalb nicht diese Tabelle, nur weil jemand vergessen hat, sie am selben Dienstag zu aktualisieren.
+
+Geheimnisse niemals committen, in Logs ausgeben oder in Run-/Report-Artefakte schreiben.
+
+---
+
+## Installation und Pflicht-Secrets
+
+`./install.sh` erzeugt bei einer frischen Installation `.env` aus der Vorlage und ersetzt bekannte Platzhalter durch sichere Werte. Seit #1483 erzeugt der Host-/Docker-Pfad unter anderem:
+
+- `SECRET_KEY`
+- `AGORA_AUTH_TOKEN`
+- `AGORA_SECRET_KEY`
+- `AGORA_FERNET_KEY`
+
+`AGORA_SECRET_KEY` und `AGORA_FERNET_KEY` müssen **gültige Fernet-Keys** sein. Ein beliebiges `token_urlsafe(32)` ist dafür nicht automatisch geeignet.
+
+`NEO4J_PASSWORD` bleibt eine Operator-Konfiguration, weil Agora das Passwort einer vorhandenen/externalen Neo4j-Instanz nicht erraten kann.
 
 ---
 
@@ -10,150 +29,211 @@ Quelle für die Variablennamen ist der Code (Backend `os.getenv` / `pydantic-set
 
 | Variable | Zweck |
 |---|---|
-| `AGORA_DATA_DIR` | Basisverzeichnis für Laufzeitdaten |
-| `AGORA_INSTANCE_DIR` | Instanzspezifisches Datenverzeichnis |
-| `AGORA_ALLOW_ANONYMOUS` | anonyme Nutzung ohne Auth (nur lokal) |
-| `AGORA_CORS_ALLOW_ALL` | CORS pauschal öffnen (Dev) |
-| `AGORA_EXTRA_ORIGINS` | zusätzliche erlaubte CORS-Origins |
-| `AGORA_PROXY_FIX_X_FOR` / `_X_HOST` / `_X_PORT` / `_X_PREFIX` / `_X_PROTO` | ProxyFix-Header für Reverse-Proxy-Betrieb |
-| `AGORA_LOG_FORMAT` | Log-Format |
+| `AGORA_DATA_DIR` | Basisverzeichnis für persistente Anwendungsdaten |
+| `AGORA_INSTANCE_DIR` | instanzspezifische Einstellungen |
+| `AGORA_ALLOW_ANONYMOUS` | Open-Mode; nur bewusst in lokaler/dev Umgebung |
+| `AGORA_CORS_ALLOW_ALL` | CORS pauschal öffnen; nicht für Prod |
+| `AGORA_EXTRA_ORIGINS` | zusätzliche erlaubte Origins |
+| `AGORA_PROXY_FIX_X_FOR`, `_X_HOST`, `_X_PORT`, `_X_PREFIX`, `_X_PROTO` | Reverse-Proxy-Headervertrauen |
+| `AGORA_LOG_FORMAT` | Logformat (`text`/strukturierte Variante laut Code) |
 | `AGORA_WERKZEUG_LOG_LEVEL` | Werkzeug-Log-Level |
-| `FLASK_HOST` / `FLASK_PORT` / `FLASK_DEBUG` | Flask-Run-Parameter |
-| `AGORA_BIND_HOST` / `AGORA_FRONTEND_PORT` / `AGORA_BACKEND_PORT` | Host-Bind und Host-Ports des Compose-Stacks (Defaults `127.0.0.1`, `5173`, `5001`). Nur `docker-compose.yml` liest sie; Neo4j und Redis binden fest auf Loopback. Ein anderer Bind-Host öffnet den Stack auf LAN-/Tailscale-Interfaces |
-| `WERKZEUG_RUN_MAIN` | Werkzeug-Reloader-Internal |
-| `DOCKER_IPV4_ONLY` | Docker-IPv4-Beschränkung |
-| `SECRET_KEY` 🔐 | Flask-Session-Signing |
-| `AGORA_FERNET_KEY` 🔐 | symmetrische Verschlüsselung (Secrets-at-rest) — siehe [`secret-key-lifecycle.md`](secret-key-lifecycle.md) |
+| `FLASK_HOST`, `FLASK_PORT`, `FLASK_DEBUG` | Flask-Dev-Parameter |
+| `AGORA_BIND_HOST` | Host-Bind des Compose-Stacks; Default Loopback |
+| `AGORA_FRONTEND_PORT`, `AGORA_BACKEND_PORT` | Host-Ports |
 | `AGORA_MAX_UPLOAD_SIZE_MB` | Upload-Limit |
-| `NLTK_DISABLE_IMPORT_SECURITY` | schaltet den Import-Hook von nltk ≥ 3.10 ab; nötig, weil die venv unter dem Arbeitsverzeichnis liegt (Container und `cd backend`). `backend/app/__init__.py`, das Dockerfile und die Testsuite setzen `1` bereits — siehe [`dependency-risk-register.md`](dependency-risk-register.md), Abschnitt „nltk-Baseline“ |
+| `NLTK_DISABLE_IMPORT_SECURITY` | Workaround für nltk-Import-Hook im Repo/venv-CWD |
+| `DOCKER_IPV4_ONLY` | Docker-IPv4-Beschränkung |
 
-## Auth & Tickets
-
-| Variable | Zweck |
-|---|---|
-| `AGORA_AUTH_TOKEN` 🔐 | Bearer-Token für `/api/*` — siehe [`auth.md`](auth.md) |
-| `AGORA_TICKET_RATE_LIMIT_MAX` / `_WINDOW_SECONDS` | Rate-Limit für signierte Tickets |
-| `AGORA_ALLOW_ANONYMOUS` | (siehe App & Core) |
-
-## Rate-Limits
+## Auth & Secret Stores
 
 | Variable | Zweck |
 |---|---|
-| `AGORA_LLM_TRIGGER_RATE_LIMIT_MAX` / `_WINDOW_SECONDS` | LLM-Trigger-Limit |
-| `AGORA_REPORT_RATE_LIMIT_MAX` / `_WINDOW_SECONDS` | Report-Generierungs-Limit |
-| `AGORA_UPLOAD_RATE_LIMIT_MAX` / `_WINDOW_SECONDS` | Upload-Limit |
+| `SECRET_KEY` 🔐 | Flask-Session-Signing |
+| `AGORA_AUTH_TOKEN` 🔐 | Single-User-Mastertoken für geschützte API-Pfade |
+| `AGORA_SECRET_KEY` 🔐 | Fernet-Master-Key für gespeicherte LLM-Provider-Secrets |
+| `AGORA_FERNET_KEY` 🔐 | Fernet-Key u. a. für persistierte Agora-API-Keys / Hash-Secret-Fallback |
+| `AGORA_TICKET_RATE_LIMIT_MAX`, `AGORA_TICKET_RATE_LIMIT_WINDOW_SECONDS` | Signed-Ticket-Rate-Limit |
+
+Die beiden Fernet-Keys erfüllen unterschiedliche Persistenzaufgaben und sind nicht bloß zwei Namen für `SECRET_KEY`. Lebenszyklus/Recovery: [`secret-key-lifecycle.md`](secret-key-lifecycle.md).
+
+Auth-Header werden in [`auth.md`](auth.md) beschrieben. Bevorzugt ist `Authorization: Bearer ...`; `X-Agora-Token` bleibt kompatibel.
+
+## App-Rate-Limits
+
+| Variable | Zweck |
+|---|---|
+| `AGORA_LLM_TRIGGER_RATE_LIMIT_MAX`, `_WINDOW_SECONDS` | LLM-Trigger |
+| `AGORA_REPORT_RATE_LIMIT_MAX`, `_WINDOW_SECONDS` | Report-Generierung |
+| `AGORA_UPLOAD_RATE_LIMIT_MAX`, `_WINDOW_SECONDS` | Uploads |
+
+---
 
 ## LLM & Provider
 
-Provider-Erkennung: [`../backend/app/llm/providers/registry.py`](../backend/app/llm/providers/registry.py)::`detect_provider` ist SSoT. Strukturierte JSON-Calls laufen über `LLMClient.chat_json` mit Pydantic-Schema.
+Die Provider-Runtime wird heute primär durch `ProviderConnection` + Secret Store + `AiRoute`/`LlmRoute` gesteuert. Die `LLM_*`-Variablen sind wichtige Defaults/Legacy-/Bootstrap-Werte, aber **nicht** die kanonische Wahrheit, sobald eine konkrete Route aufgelöst wurde.
+
+Details: [`provider-runtime-settings.md`](provider-runtime-settings.md).
 
 | Variable | Zweck |
 |---|---|
-| `LLM_API_KEY` 🔐 | genereller LLM-API-Key |
-| `LLM_BASE_URL` | genereller LLM-Endpoint |
-| `LLM_MODEL_NAME` | generelles Modell |
-| `LLM_CONTEXT_LIMIT` / `LLM_MAX_OUTPUT_TOKENS` | Token-Limits |
-| `LLM_MAX_RETRIES` / `LLM_RETRY_INITIAL_DELAY` / `LLM_RETRY_MAX_DELAY` | Retry-Verhalten |
+| `LLM_API_KEY` 🔐 | generischer Fallback-Key |
+| `LLM_BASE_URL` | generischer Fallback-Endpoint |
+| `LLM_MODEL_NAME` | generisches Fallback-Modell |
+| `LLM_CONTEXT_LIMIT` | Kontextlimit |
+| `LLM_MAX_OUTPUT_TOKENS` | Ausgabe-Limit |
+| `LLM_MAX_RETRIES`, `LLM_RETRY_INITIAL_DELAY`, `LLM_RETRY_MAX_DELAY` | Retry-Verhalten |
 | `LLM_FORCE_STREAM` | Streaming erzwingen |
-| `LLM_BOOST_API_KEY` 🔐 / `LLM_BOOST_BASE_URL` / `LLM_BOOST_MODEL_NAME` | Boost-Provider |
-| `LLM_MODEL_CONTEXT_LIMITS_JSON` | modellspezifische Context-Limits (JSON) |
-| `LLM_MAX_TOKENS_FLOOR` | Untergrenze für `max_tokens` je Call (Default `32768`, `0` schaltet ab) — siehe [`app/llm/tokens.py`](../backend/app/llm/tokens.py) |
-| `LLM_MODEL_OUTPUT_LIMITS_JSON` | modellspezifische **Ausgabe**-Limits (JSON), deckeln den Boden; nicht zu verwechseln mit den Context-Limits |
-| `OPENAI_API_KEY` 🔐 / `OPENAI_BASE_URL` | OpenAI-kompatibel |
-| `OPENAI_API_BASE` / `OPENAI_API_BASE_URL` | werden vom Backend **an den OASIS-Subprozess durchgereicht** ([`app/services/llm_runtime.py`](../backend/app/services/llm_runtime.py)), nicht als Eingangskonfiguration gelesen. Nicht selbst setzen — der Wert kommt aus der aufgelösten Route |
-| `GEMINI_API_KEY` 🔐 / `GOOGLE_API_KEY` 🔐 | Google/Gemini |
-| `OLLAMA_API_KEY` 🔐 / `OLLAMA_BASE_URL` / `OLLAMA_NUM_CTX` / `OLLAMA_THINKING` | Ollama (lokal/Cloud) |
-| `TAVILY_API_KEY` 🔐 | Tavily-Web-Suche (Agent-Tools) |
-| `AGENT_LANGUAGE` | Agenten-Sprache |
-| `AGORA_LLM_ALLOW_INSECURE_HTTP` | dokumentierte Ausnahme (CWE-319, [`app/llm/transport_security.py`](../backend/app/llm/transport_security.py)): erlaubt `http://` mit API-Key gegen einen öffentlichen Host. Default aus/sicher — `http://` mit Credential ist sonst nur für lokale/private Hosts (loopback, RFC1918, CGNAT/Tailscale, Docker-Compose-/Host-Gateway-Namen) zulässig, alles andere bricht mit `InsecureTransportError` ab. |
+| `LLM_MODEL_CONTEXT_LIMITS_JSON` | modellspezifische Context-Limits |
+| `LLM_MODEL_OUTPUT_LIMITS_JSON` | modellspezifische Ausgabe-Limits |
+| `LLM_MAX_TOKENS_FLOOR` | Untergrenze für `max_tokens` je Call |
+| `AGORA_LLM_ALLOW_INSECURE_HTTP` | dokumentierte Ausnahme für Credential-over-HTTP außerhalb sicherer lokaler/private Hosts |
+| `LLM_DISABLE_JSON_OBJECT_MODE` | `json_object`-Modus deaktivieren |
+| `LLM_DISABLE_JSON_SCHEMA_MODE` | nativen Strict-JSON-Schema-Modus deaktivieren; Pydantic bleibt Grenze |
+| `LLM_DISABLE_JSON_MODE` | veralteter Legacy-Alias |
 
-## Embedding
+Provider-spezifische Secret-/Endpoint-Variablen existieren für Bootstrap/Legacy-Pfade, z. B. `OPENAI_API_KEY`, `GOOGLE_API_KEY`, `OLLAMA_API_KEY`, `OLLAMA_BASE_URL`, `AWS_BEARER_TOKEN_BEDROCK`. Die aktuelle öffentliche Provider-Matrix steht in `backend/app/services/llm_provider_registry.py`.
 
-Embedding-Konfiguration wird vom [`EmbeddingConfigurationStore`](../backend/app/services/embedding_configuration_store.py) in einer JSON-Datei unter `AGORA_DATA_DIR/embedding_configurations.json` persistiert (Index-Versionen in einer Sibling-JSON). Embedding-Arbeit läuft über `embedding_service.py`, der Migrations-Lifecycle über `embedding_migration.py` (ADR-0007).
+### CLI-Transport
+
+`codex_cli` benötigt keine Base-URL und keinen API-Key im Agora-Store. Die Authentifizierung stammt aus der lokalen `codex login`-Session. `AGORA_LLM_TRANSPORT=cli` ist ein internes Runtime-Signal an Subprozesspfade; Operatoren sollen daraus **keine zweite Provider-Konfiguration** bauen.
+
+---
+
+## Embeddings
 
 | Variable | Zweck |
 |---|---|
-| `EMBEDDING_API_KEY` 🔐 / `EMBEDDING_BASE_URL` / `EMBEDDING_MODEL` | Embedding-Provider |
-| `VECTOR_DIM` | Vektor-Dimension (muss zum Modell passen — siehe [`embedding-provider-switch.md`](embedding-provider-switch.md)) |
-| `AGORA_SKIP_EMBEDDING_PROBE` | Embedding-Preflight überspringen |
+| `EMBEDDING_API_KEY` 🔐 | Legacy/Bootstrap-Embedding-Key |
+| `EMBEDDING_BASE_URL` | Legacy/Bootstrap-Endpoint |
+| `EMBEDDING_MODEL` | Legacy/Bootstrap-Modell |
+| `VECTOR_DIM` | Vektordimension |
+| `AGORA_SKIP_EMBEDDING_PROBE` | Preflight bewusst überspringen |
+
+Persistente Konfigurationen liegen im `EmbeddingConfigurationStore`; Migrationen verwenden den eigenen Lifecycle aus ADR-0007.
+
+**Bekannter SSoT-Bruch:** Einige Runtime-Consumer lesen weiterhin `Config.EMBEDDING_*`, obwohl die UI eine andere Konfiguration als aktiv markiert. Siehe [#1417](https://github.com/arn0ld87/agora/issues/1417). Bis zur Behebung ist die Env-Konfiguration für produktive Graph-/Evidence-Pfade weiterhin relevant.
+
+---
 
 ## Neo4j
 
 | Variable | Zweck |
 |---|---|
-| `NEO4J_URI` / `NEO4J_USER` / `NEO4J_PASSWORD` 🔐 | Verbindung |
-| `NEO4J_MAX_POOL_SIZE` / `NEO4J_MAX_LIFETIME` | Pool-Konfiguration |
-| `NEO4J_ACQ_TIMEOUT` / `NEO4J_CONN_TIMEOUT` / `NEO4J_LIVENESS_TIMEOUT` | Timeouts |
-| `NEO4J_STARTUP_RETRY_MAX` / `NEO4J_STARTUP_RETRY_DELAY` | Startup-Retry |
+| `NEO4J_URI` | Bolt-URI |
+| `NEO4J_USER` | Benutzer |
+| `NEO4J_PASSWORD` 🔐 | Passwort |
+| `NEO4J_MAX_POOL_SIZE`, `NEO4J_MAX_LIFETIME` | Pool-Limits |
+| `NEO4J_ACQ_TIMEOUT`, `NEO4J_CONN_TIMEOUT`, `NEO4J_LIVENESS_TIMEOUT` | Timeouts |
+| `NEO4J_STARTUP_RETRY_MAX`, `NEO4J_STARTUP_RETRY_DELAY` | Startup-Retry |
 
-## Redis & Event Bus
+---
+
+## Redis, Event Bus und Reconciliation
 
 | Variable | Zweck |
 |---|---|
-| `REDIS_URL` | Redis-Verbindung (Events, Status, IPC) |
-| `TEST_REDIS_URL` | Redis für Tests |
-| `EVENT_BUS_BACKEND` | Event-Bus-Backend |
+| `REDIS_URL` | Redis für Event-/Live-Infrastruktur |
+| `EVENT_BUS_BACKEND` | `auto`/`redis`/`file` gemäß Event-Bus-Implementierung |
+| `AGORA_STARTUP_RECONCILIATION` | stale Simulations-Runs beim App-/Workerstart prüfen; Default `true` (#1476) |
+
+Startup-Reconciliation korrigiert persistierte Simulation-Runs mit toter PID. Sie ersetzt **keine** persistente Jobqueue für Prepare/Report/Graph; siehe #1472.
+
+---
 
 ## Graph & Ontologie
 
 | Variable | Zweck |
 |---|---|
-| `GRAPH_CHUNK_SIZE` / `GRAPH_CHUNK_OVERLAP` | Chunking beim Graph-Build |
-| `GRAPH_PARALLEL_CHUNKS` | Parallelität beim Build |
-| `GRAPH_MIN_ENTITIES` | Qualitätsschwelle: Entitäten im fertigen Graphen (Default `3`). Darunter eine Warnung |
-| `GRAPH_MIN_RELATIONS` | Qualitätsschwelle: Beziehungen (Default `1`). Darunter **blockierend** — der Schritt erreicht „bereit“ nicht |
-| `GRAPH_MIN_CHUNK_SUCCESS_RATIO` | Anteil der Chunks, die Entitäten oder Beziehungen liefern müssen (Default `0.5`; `0.0` schaltet die Prüfung ab) |
-| `GRAPH_MEMORY_PUT_TIMEOUT` / `GRAPH_MEMORY_QUEUE_MAX` | Graph-Memory-Backpressure |
-| `ONTOLOGY_MAX_ENTITY_TYPES` / `_MAX_EDGE_TYPES` / `_MIN_ENTITY_TYPES` | Ontologie-Grenzen |
-| `ONTOLOGY_MUTATION_MODE` / `_MUTATION_MIN_CONFIDENCE` | Ontologie-Mutation |
-| `HYBRID_SEARCH_VECTOR_WEIGHT` / `_KEYWORD_WEIGHT` | Hybrid-Search-Gewichtung |
+| `GRAPH_CHUNK_SIZE`, `GRAPH_CHUNK_OVERLAP` | Chunking |
+| `GRAPH_PARALLEL_CHUNKS` | Build-Parallelität |
+| `GRAPH_MIN_ENTITIES` | minimale Entitätsqualitätsschwelle |
+| `GRAPH_MIN_RELATIONS` | minimale Relationsschwelle; kann blockierend sein |
+| `GRAPH_MIN_CHUNK_SUCCESS_RATIO` | Anteil erfolgreicher Chunks |
+| `GRAPH_MEMORY_PUT_TIMEOUT`, `GRAPH_MEMORY_QUEUE_MAX` | Graph-Memory-Backpressure |
+| `ONTOLOGY_MAX_ENTITY_TYPES`, `ONTOLOGY_MAX_EDGE_TYPES`, `ONTOLOGY_MIN_ENTITY_TYPES` | Ontologie-Grenzen |
+| `ONTOLOGY_MUTATION_MODE`, `ONTOLOGY_MUTATION_MIN_CONFIDENCE` | Mutation |
+| `HYBRID_SEARCH_VECTOR_WEIGHT`, `HYBRID_SEARCH_KEYWORD_WEIGHT` | Hybrid-Suche |
+
+---
 
 ## Simulation & OASIS
 
 | Variable | Zweck |
 |---|---|
-| `OASIS_DEFAULT_MAX_ROUNDS` | Standard-Simulationsrunden |
-| `AGORA_AGENTS_PER_BATCH` | Agenten pro Batch |
-| `AGORA_ALLOW_SMALL_SIM` | kleine Simulationen erlauben |
-| `PERSONA_REVIEW_ENABLED` | Persona-Review-Pflicht |
-| `ENABLE_AGENT_TOOLS` / `MAX_TOOL_CALLS_PER_ACTION` | Agent-Tools |
+| `OASIS_DEFAULT_MAX_ROUNDS` | Standardrunden |
+| `AGORA_AGENTS_PER_BATCH` | Persona-/Agent-Batching |
+| `AGORA_ALLOW_SMALL_SIM` | kleine Simulationen bewusst erlauben |
+| `PERSONA_REVIEW_ENABLED` | Review-Gate |
+| `ENABLE_AGENT_TOOLS` | Agent-Tools aktivieren |
+| `MAX_TOOL_CALLS_PER_ACTION` | Tool-Limit pro Aktion |
+
+Ein persistierter `random_seed` ist derzeit **noch kein vollständiger Reproduktionsanker**. Siehe #763/#1274.
+
+---
 
 ## Report
 
 | Variable | Zweck |
 |---|---|
-| `REPORT_LANGUAGE` | Report-Sprache |
-| `REPORT_AGENT_TEMPERATURE` | Report-Agent-Temperatur |
-| `REPORT_AGENT_MAX_REFLECTION_ROUNDS` / `_MAX_TOOL_CALLS` | Report-Agent-Limits |
+| `REPORT_LANGUAGE` | Berichtssprache |
+| `REPORT_AGENT_TEMPERATURE` | Agent-Temperatur |
+| `REPORT_AGENT_MAX_REFLECTION_ROUNDS` | ReAct-/Reflection-Limit |
+| `REPORT_AGENT_MAX_TOOL_CALLS` | Tool-Limit |
 | `REPORT_TOOLCALL_MODE` | Toolcall-Modus |
+| `REPORT_REQUIREMENT_CHECKER_ENABLED` | Requirement-Check aktivieren/deaktivieren, primär für kontrollierte Tests/Debug |
+
+Run-Budgets werden nicht durch diese Report-Variablen ersetzt; Budgetgrenzen sind eigene Run-Verträge.
+
+---
 
 ## Vision & PDF
 
 | Variable | Zweck |
 |---|---|
-| `ENABLE_PDF_VISION` | PDF-Vision-Extraktion |
+| `ENABLE_PDF_VISION` | PDF-Vision |
 | `VISION_MODEL_NAME` | Vision-Modell |
-| `VISION_MAX_CALLS_PER_UPLOAD` / `VISION_MAX_DIM` / `VISION_MIN_IMAGE_AREA` / `VISION_PAGE_SCAN_THRESHOLD` | Vision-Limits |
+| `VISION_MAX_CALLS_PER_UPLOAD` | Call-Cap |
+| `VISION_MAX_DIM` | Bilddimension |
+| `VISION_MIN_IMAGE_AREA` | Mindestfläche |
+| `VISION_PAGE_SCAN_THRESHOLD` | Scan-Schwelle |
 
-## Observability (OpenTelemetry)
-
-| Variable | Zweck |
-|---|---|
-| `OTEL_ENABLED` | OTEL-Schalter |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP-Endpoint |
-| `OTEL_METRICS_ENABLED` / `OTEL_LOGS_ENABLED` | Metrics/Logs-Export |
-| `OTEL_METRIC_EXPORT_INTERVAL` / `OTEL_SERVICE_NAME` | Export-Interval / Service-Name |
-| `AGORA_DEBUG_MEMORY` / `AGORA_BERT_MEMORY_PROFILE` | Memory-Debug |
-| `TIME_PROFILE` / `TRACEPARENT` | Profiling / Traceparent |
-
-## Testing & E2E
-
-| Variable | Zweck |
-|---|---|
-| `AGORA_E2E_LLM_MODE` | E2E-LLM-Stub-Modus (z. B. `stub`, `compact`). Der aktive Wert ist unter `GET /api/status` im `e2e`-Teilbaum sichtbar (`llm_mode`, `stub_active`) — die E2E-Suite assertiert hart darauf. |
-| `AGORA_SKIP_PREFLIGHT` | Preflight überspringen |
-| `AGORA_RUN_ID` | Run-ID für Tests |
+Vision-Aufrufe werden seit #1478 in Budget-Guard und Ledger erfasst.
 
 ---
 
-Siehe auch: [`deployment-dev.md`](deployment-dev.md), [`deployment.md`](deployment.md), [`provider-runtime-settings.md`](provider-runtime-settings.md), [`secret-key-lifecycle.md`](secret-key-lifecycle.md).
+## Observability
+
+| Variable | Zweck |
+|---|---|
+| `OTEL_ENABLED` | OpenTelemetry-Schalter |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP-Endpunkt |
+| `OTEL_METRICS_ENABLED`, `OTEL_LOGS_ENABLED` | Exportarten |
+| `OTEL_METRIC_EXPORT_INTERVAL`, `OTEL_SERVICE_NAME` | Export-Intervall/Name |
+| `AGORA_DEBUG_MEMORY`, `AGORA_BERT_MEMORY_PROFILE` | Memory-Diagnose |
+| `TIME_PROFILE`, `TRACEPARENT` | Profiling/Tracing |
+
+---
+
+## Tests und echte Integrationsdienste
+
+Unit-/Contract-Tests sollen nicht von der lokalen `.env` abhängen (#1462).
+
+Für echte Service-Integrationstests:
+
+| Variable | Zweck |
+|---|---|
+| `AGORA_TEST_REDIS_URL` | Redis-Server für Integrationstest |
+| `AGORA_TEST_NEO4J_URI` | Neo4j-URI |
+| `AGORA_TEST_NEO4J_USER` | Neo4j-Testuser |
+| `AGORA_TEST_NEO4J_PASSWORD` 🔐 | Neo4j-Testpasswort |
+| `AGORA_TEST_REQUIRE_SERVICES` | wenn `1`, fehlende Services sind Fail statt Skip (#1481) |
+| `AGORA_E2E_LLM_MODE` | E2E-LLM-Modus |
+| `AGORA_SKIP_PREFLIGHT` | gezielter Test-/Debug-Bypass |
+
+Historische `TEST_REDIS_URL`-Verwendungen existieren eventuell noch in älteren Tests/Dokumenten; für die neue echte Integrationsschicht sind die `AGORA_TEST_*`-Variablen maßgeblich.
+
+---
+
+## Praktische Regel
+
+Bei Konfigurationsproblemen zuerst [`.env.example`](../.env.example), dann `backend/app/config.py` und die jeweilige SSoT lesen. **Nicht** einen alten Screenshot oder eine im Browser gespeicherte Provider-Auswahl als Runtime-Wahrheit behandeln.

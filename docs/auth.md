@@ -1,138 +1,225 @@
 # Auth-Dokumentation
 
-**Stand:** 2026-08-11, Europe/Berlin
-**Scope:** API-Token-Vertrag, Workspace-API-Keys, Scopes, Ticket-Flow, Frontend-Storage-Optionen.
-**Code:** [`../backend/app/utils/auth.py`](../backend/app/utils/auth.py), [`../backend/app/utils/scopes.py`](../backend/app/utils/scopes.py), [`../backend/app/api/auth.py`](../backend/app/api/auth.py), [ADR-0001](decisions/0001-auth-model.md)
+**Stand:** 08.09.2026  
+**Geprüfte Main-Baseline:** `0c47737f`  
+**Scope:** Master-Token, Workspace-API-Keys, Scopes, Ticket-Flow und Browser-Auth.
+
+Code-Referenzen:
+
+- [`../backend/app/utils/auth.py`](../backend/app/utils/auth.py) — Blueprint-/Token-Guard und Ticket-Auth
+- [`../backend/app/utils/scopes.py`](../backend/app/utils/scopes.py) — Workspace-API-Key-Auflösung und Scope-Durchsetzung
+- [`../backend/app/api/auth.py`](../backend/app/api/auth.py) — Ticket-Ausstellung
+- [ADR-0001](decisions/0001-auth-model.md) — Architekturentscheidung
 
 ---
 
-## Token-Header-Vertrag
+## 1. Auth-Modell
 
-Agora schuetzt alle `/api/*`-Routen mit einem statischen Bearer-Token
-(`AGORA_AUTH_TOKEN` im Backend, `VITE_AGORA_TOKEN` oder
-`localStorage.agora_token` im Frontend).
+Agora ist weiterhin ein **Single-User-System**, besitzt aber zwei API-Credential-Klassen:
 
-| Header | Wert | Verwendung |
+1. **Master-Token** `AGORA_AUTH_TOKEN` — administrativer Vollzugriff.
+2. **Workspace-API-Keys** mit Präfix `ago_...` — persistiert, widerrufbar und scope-basiert.
+
+Das ist kein vollständiges Human-Identity-/RBAC-System. Es gibt weder Benutzerkonten noch Teams/Rollenmodell; Scopes begrenzen API-Keys auf technische Fähigkeiten.
+
+---
+
+## 2. Empfohlene Header
+
+Für neue Integrationen gelten diese Formen:
+
+| Credential | Empfohlener Header | Beispiel |
 |---|---|---|
-| `X-Agora-Token` | `<token>` | Primaerer Weg; Axios-Interceptor haengt ihn automatisch an. |
-| `Authorization` | `Bearer <token>` | Fallback, z.B. fuer curl/Postman. |
+| Master-Token | `Authorization: Bearer <AGORA_AUTH_TOKEN>` | Admin-/Operatorzugriff |
+| Workspace-API-Key | `X-Agora-Api-Key: ago_...` | eingeschränkte Automation/Integration |
+| Legacy | `X-Agora-Token: <token>` | Backward-Compatibility, nicht für neue Clients bevorzugen |
 
-Der Token-Vergleich im Backend ist timing-safe (`hmac.compare_digest`).
-
----
-
-## Die drei Auth-Wege
-
-`_extract_token()` liest genau einen Wert (Header zuerst), und die Guards
-pruefen ihn danach in fester Reihenfolge:
-
-1. **Master-Token** — `AGORA_AUTH_TOKEN`, timing-safe verglichen.
-2. **Workspace-API-Key** — jeder Token mit Praefix `ago_` wird gegen den
-   API-Key-Store geprueft und muss `status == "active"` tragen. Ein
-   widerrufener Key wird abgelehnt und protokolliert. Verwaltung ueber
-   `/api/api-keys`.
-3. **Open Mode** — ist **kein** `AGORA_AUTH_TOKEN` gesetzt, laesst der Guard
-   jeden Aufruf durch. Das ist kein Fehler, sondern der lokale
-   Bequemlichkeitsmodus — und der Grund, warum `/api/status` den Auth-Modus
-   (`token` / `anonymous` / `open` / `misconfigured`) ausweist. Fuer jeden
-   Betrieb ausserhalb des eigenen Rechners ist er unzulaessig.
-
-## Scopes
-
-API-Keys tragen Scopes; einzelne Routen fordern sie ueber
-`@require_scope("report:read")`, `"report:write"`, `"simulation:control"`,
-`"graph:write"` und weitere. Der Master-Token unterliegt keiner
-Scope-Pruefung. Katalog und Ableitungslogik: [`scopes.py`](../backend/app/utils/scopes.py).
+Wichtig: Die historische Blueprint-Guard-Implementierung akzeptiert weiterhin `X-Agora-Token` und `Authorization: Bearer`. Der Scope-Resolver priorisiert für Workspace-Keys dagegen ausdrücklich `X-Agora-Api-Key`. Die beiden Ebenen beschreiben denselben Authbereich aus unterschiedlichen Generationen des Codes; neue Doku und neue Clients sollen die obige Empfehlung verwenden.
 
 ---
 
-## Ticket-Flow (URL-Auth)
+## 3. Auth-Auflösung
 
-Fuer Ressourcen, die Browser nicht per Custom-Header anfragen koennen
-(SSE-Streams, Download-Links), stellt das Backend
-`POST /api/auth/ticket` bereit.
+### Blueprint-/Token-Guard
 
-1. Client holt Ticket via Header-Auth:
-   ```bash
-   curl -H "X-Agora-Token: $TOKEN" \
-     -X POST http://localhost:5001/api/auth/ticket \
-     -d '{"scope": "sse:sim_123", "ttl_seconds": 60}'
-   ```
-2. Backend liefert `{"ticket": "v1.<exp>.<scope>.<sig>"}`.
-3. Client baut URL mit `?ticket=<signed>`.
-4. Backend prueft Signatur, Scope und Single-Use via Redis (Multi-Worker-
-   safe) oder In-Memory-Fallback.
+`install_blueprint_guard()` schützt `/api/*`-Blueprints und akzeptiert:
 
-Das Ticket ist scope-bound und single-use. `ttl_seconds` ist optional:
-Default **60 s**, Maximum **300 s** — darueber antwortet der Endpunkt mit
-400 und `code=invalid_ttl`. Kein Bearer im URL, Proxy-Log oder Referer.
+1. korrektes `AGORA_AUTH_TOKEN`,
+2. aktiven Workspace-API-Key (`ago_...`),
+3. für dafür markierte Endpunkte ein gültiges signiertes Ticket,
+4. Open Mode nur, wenn kein Master-Token konfiguriert ist.
 
----
+Der Master-Token-Vergleich ist timing-safe (`hmac.compare_digest`).
 
-## Query-Token: in Produktion abgeschaltet
+### Scope-Resolver
 
-`?token=<bearer>` wird **ausserhalb des Flask-Debug-Modus verworfen** — der
-Wert wird nicht ausgewertet, der Aufruf laeuft in den Auth-Fehler, und das
-Backend protokolliert das auf Log-Level `error`. Nur mit `FLASK_DEBUG` wird
-er noch als Fallback akzeptiert und mit einer Warnung quittiert.
+`_resolve_active_api_key()` in `scopes.py` prüft Credential-Kandidaten in dieser Reihenfolge:
 
-Neue Query-Tokens sind projektweit untersagt; URL-Auth laeuft
-ausschliesslich ueber `?ticket=<signed>`.
+1. `X-Agora-Api-Key: ago_...`
+2. `Authorization: Bearer ...`
+3. `X-Agora-Token: ...` als Backward-Compatibility
+
+Ein gültiger Master-Token wird intern als synthetischer Admin-Key behandelt und passiert jeden Scope-Check.
 
 ---
 
-## Frontend-Token-Storage
+## 4. Scope-Hierarchie
 
-### Option A: localStorage (Dev-Default)
+`@require_scope("...")` schützt sensitive Endpunkte zusätzlich zur allgemeinen Auth.
 
-```javascript
-localStorage.setItem('agora_token', 'mein-token')
-```
+Regeln:
 
-**Risiko:** XSS kann `localStorage.getItem('agora_token')` auslesen. Token
-ueberlebt Page-Reload und ist persistent.
+1. `admin` erfüllt jeden Scope.
+2. Ein exakt passender fine-grained Scope erfüllt sich selbst, z. B. `report:read`.
+3. `write` erfüllt `*:write`, `*:control` und `*:read`.
+4. `read` erfüllt `*:read`.
 
-**Wann:** Lokale Entwicklung, vertrauenswuerdige Browser.
+Typische Scopes sind unter anderem:
 
-### Option B: Memory-Mode (Prod-Empfehlung)
+- `report:read`
+- `report:write`
+- `simulation:control`
+- `graph:write`
+
+Die aktuelle, vollständige Durchsetzung steht im Code. Nicht jeder historische Endpoint besitzt bereits einen eigenen `@require_scope`; dort greift weiterhin der allgemeine Token-/API-Key-Guard. Deshalb darf aus der Existenz des Scope-Systems **kein Deny-by-default-RBAC für jede Route** abgeleitet werden.
+
+### Fehler
+
+- kein gültiges Credential → 401
+- gültiger API-Key, aber Scope fehlt → 403
+- widerrufener API-Key → abgelehnt
+
+---
+
+## 5. Open Mode
+
+Wenn kein `AGORA_AUTH_TOKEN` gesetzt ist, kann der Auth-Guard technisch im Open Mode arbeiten.
+
+Für aktuelle Setups gilt jedoch:
+
+- lokale Entwicklung mit Debug kann diesen Modus bewusst verwenden,
+- `AGORA_ALLOW_ANONYMOUS=true` ist ein ausdrückliches Opt-in,
+- außerhalb von Debug/Opt-in soll `Config.validate()` eine fehlende Auth-Konfiguration blockieren,
+- Open Mode ist **kein** akzeptabler Internet-/LAN-Produktionsmodus.
+
+`/api/status` weist den Authzustand aus. Bei unerwartetem Open Mode zuerst die Startup-Logs und `.env` prüfen.
+
+---
+
+## 6. Signierte Tickets für URL-Auth
+
+Browser-APIs wie `EventSource` oder direkte Download-Navigation können nicht immer den normalen Custom-/Bearer-Header verwenden. Dafür existiert `POST /api/auth/ticket`.
+
+Ablauf:
+
+1. Client authentifiziert den Ticket-Request normal per Master-Token oder Workspace-API-Key.
+2. Backend erzeugt ein kurzlebiges, scope-gebundenes Ticket.
+3. Client hängt `?ticket=<signed>` an die freigegebene SSE-/Download-URL.
+4. Backend prüft Signatur, Ablauf und erwarteten Scope.
+
+Beispiel:
 
 ```bash
-# .env oder Build-Time
-VITE_AGORA_TOKEN_STORAGE=memory
+curl \
+  -H "Authorization: Bearer $AGORA_AUTH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -X POST http://localhost:5001/api/auth/ticket \
+  -d '{"scope":"sse:sim_123","ttl_seconds":60}'
 ```
 
-```javascript
-import { setAgoraToken } from '@/api'
-setAgoraToken('mein-token')  // Lebt nur im JS-Heap
-```
+### Single-Use ist endpointabhängig
 
-**Vorteil:** Keine Persistence; XSS-Exploit muss im aktiven Tab passieren.
-Token ueberlebt keinen Reload.
+`allow_ticket_auth(..., single_use=True)` konsumiert ein Ticket beim ersten erfolgreichen Zugriff. Der Default ist `True`.
 
-**Nachteil:** Nach Page-Reload muss der Token erneut gesetzt werden (z.B.
-durch erneutes Login oder injiziertes Secret bei SPA-Reload).
-
-### Option C: HttpOnly-Cookie (Zielarchitektur)
-
-Die sauberste Prod-Loesung ist ein Session-Backend, das den Token als
-`HttpOnly; Secure; SameSite=Strict`-Cookie setzt. Der Frontend-Code
-braucht dann keinen Token mehr zu kennen; der Browser sendet das Cookie
-automatisch.
-
-Dies erfordert:
-- Einen `/api/auth/login`-Endpoint, der das Cookie setzt.
-- CSRF-Protection fuer state-changing Requests.
-- Session-Storage im Backend (Redis oder DB).
-
-Agora hat aktuell keinen Session-Login; das ist eine geplante
-Nachfolgearbeit.
+SSE-Endpunkte können `single_use=False` verwenden, damit ein `EventSource` innerhalb der kurzen Ticket-TTL reconnecten kann. Dort begrenzt die TTL den Replay-Zeitraum. Deshalb nicht pauschal dokumentieren: „jedes Agora-Ticket ist single-use“.
 
 ---
 
-## Empfohlene Konfiguration
+## 7. `?token=` ist kein Produktionspfad
 
-| Umgebung | Storage | Begruendung |
-|---|---|---|
-| Dev (lokal) | `localStorage` | Bequem, Page-Reload ueberlebt, Dev-Maschine ist vertrauenswuerdig. |
-| Prod (Docker, Tailscale) | `memory` | Keine Persistence, minimiert XSS-Residuum. Token nach Deployment-Restart via Login/Inject erneut setzen. |
-| Prod (Internet-exposed) | HttpOnly-Cookie | Nicht implementiert; empfohlen fuer Follow-Up. |
+Der alte Query-Parameter `?token=<bearer>` ist außerhalb des Flask-Debug-Modus deaktiviert und wird protokolliert.
+
+Für URL-Auth gilt:
+
+```text
+?ticket=<signed-short-lived-ticket>
+```
+
+Nicht:
+
+```text
+?token=<master-secret>
+```
+
+Dadurch landet der langfristige Master-Token nicht unnötig in Browser-History, Proxy-Logs oder Referer-Kontexten.
+
+---
+
+## 8. Workspace-API-Key-Persistenz
+
+Workspace-API-Keys werden nicht nur im Prozessspeicher gehalten. Der Store wird unter `backend/data/api_keys.json` persistiert und als kompletter JSON-Blob mit Fernet verschlüsselt.
+
+Master-Key:
+
+```text
+AGORA_FERNET_KEY
+```
+
+In Produktion ist ein stabiler Schlüssel Pflicht. Ein nur im Debug-Modus temporär generierter Fernet-Key macht den persistierten Store nach einem Neustart unlesbar und ist deshalb kein Produktionssetup.
+
+Details: [`secret-key-lifecycle.md`](secret-key-lifecycle.md).
+
+---
+
+## 9. Frontend-Token-Speicherung
+
+Das Browser-Frontend muss für das Single-User-Master-Token einen Client-seitigen Zustand halten, solange kein serverseitiger Session-/HttpOnly-Cookie-Login existiert.
+
+Sicherheitsgrenze:
+
+- Jeder Token im JavaScript-Kontext kann durch eine erfolgreiche XSS im selben Origin kompromittiert werden.
+- Persistenter Browser-Storage vergrößert das Zeitfenster.
+- Memory-Storage reduziert Persistenz, ist aber keine XSS-Sandbox.
+
+Agora besitzt aktuell keinen vollständigen Benutzer-Login mit HttpOnly-Session-Cookie und CSRF-Modell. Ein solcher Ausbau gehört in ein späteres Multi-User-/Identity-Design und ist **nicht** Voraussetzung dafür, den aktuellen Single-User-Stack korrekt zu betreiben.
+
+---
+
+## 10. Praktische Beispiele
+
+### Master-Token
+
+```bash
+curl -fsS \
+  -H "Authorization: Bearer $AGORA_AUTH_TOKEN" \
+  http://localhost:5001/api/status
+```
+
+### Workspace-API-Key
+
+```bash
+curl -fsS \
+  -H "X-Agora-Api-Key: $AGORA_API_KEY" \
+  http://localhost:5001/api/report/<report_id>
+```
+
+### Legacy-Kompatibilität
+
+```bash
+curl -fsS \
+  -H "X-Agora-Token: $AGORA_AUTH_TOKEN" \
+  http://localhost:5001/api/status
+```
+
+Funktioniert weiterhin, ist aber nicht die bevorzugte Form für neue Integrationen.
+
+---
+
+## 11. Sicherheitsregeln
+
+- Master-Token niemals in URL, Issue, Chat, Screenshot oder Log schreiben.
+- Workspace-API-Keys möglichst mit minimal nötigem Scope erzeugen.
+- Keys nach Leak-Verdacht widerrufen/rotieren.
+- `AGORA_FERNET_KEY` und `AGORA_AUTH_TOKEN` getrennt sichern.
+- Public Exposure nur hinter dem gehärteten Deployment-/TLS-/VPN-Konzept aus [`deployment-prod-like.md`](deployment-prod-like.md).
+- Authentifizierung ersetzt keine Prompt-Injection-Härtung von untrusted Inhalten (#1224).
