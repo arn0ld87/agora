@@ -44,6 +44,7 @@ from .run_degradation import (
     assert_run_invariants,
     collect_run_degradations,
     events_for,
+    mark_fallback_outline_used,
     mark_forced_final,
     mark_metadata_failure,
     mark_work_traces_removed,
@@ -1288,9 +1289,24 @@ def _restore_work_trace_markers(agent: Any, report_id: str) -> None:
     Agenten; bereits persistierte Sections laufen nicht erneut durch
     _finalize_content, ihr Sanitization-Marker wäre also endgültig
     verloren. Der Zustand wird pro Lauf persistiert und hier — vor der
-    ersten Cancel-Grenze — wiederhergestellt."""
+    ersten Cancel-Grenze — wiederhergestellt.
+
+    Issue #1479 (Codex-Review Runde 3, Finding 2): derselbe Verlust betrifft
+    ``fallback_outline_used`` — ein Resume baut einen neuen Agenten mit
+    ``fallback_outline_used = False``, und eine bereits persistierte
+    Fallback-Outline umgeht die erneute LLM-Planung, in der der Marker
+    sonst gesetzt würde. Wiederhergestellt aus demselben Run-Events-
+    Artefakt wie die Work-Trace-Marker."""
     for index in sorted(ReportManager.load_work_trace_removed_sections(report_id)):
         mark_work_traces_removed(agent, index)
+    # ``is True`` statt Truthy-Check: ein in Tests unkonfigurierter
+    # ``ReportManager``-MagicMock liefert für einen beliebigen Methodenaufruf
+    # ein truthy MagicMock-Objekt zurück, das den Marker sonst überall dort
+    # fälschlich setzen würde, wo ``load_fallback_outline_used`` nicht
+    # explizit auf ``True``/``False`` gestellt ist. Die echte Implementierung
+    # liefert immer einen echten ``bool``.
+    if ReportManager.load_fallback_outline_used(report_id) is True:
+        mark_fallback_outline_used(agent)
 
 
 def _persist_work_trace_markers(agent: Any, report_id: str) -> None:
@@ -1301,6 +1317,46 @@ def _persist_work_trace_markers(agent: Any, report_id: str) -> None:
     markers = events_for(agent).work_trace_removed_sections
     if markers:
         ReportManager.save_work_trace_removed_sections(report_id, markers)
+
+
+def _persist_fallback_outline_marker(agent: Any, report_id: str) -> None:
+    """Issue #1479 (Codex-Review Runde 3, Finding 2): der Marker muss den
+    Lauf überleben, sonst verliert ihn ein Resume mit neuem Agenten — siehe
+    ``_restore_work_trace_markers``."""
+    if events_for(agent).fallback_outline_used:
+        ReportManager.save_fallback_outline_used(report_id, True)
+
+
+def _merge_run_degradations(
+    existing_report: Optional["Report"],
+    freshly_collected: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Führt eine bereits persistierte Degradationsliste mit frisch
+    berechneten Einträgen zusammen, statt sie zu ersetzen.
+
+    Issue #1479 (Codex-Review Runde 3, Finding 2): die in Runde 2 in den
+    ``missing``-Zweig eingebaute Zuweisung ersetzte eine zuvor persistierte
+    Degradationsliste (z. B. ``outline_planning`` und ``run_cancellation``
+    aus einem Cancel an der Post-Outline-Grenze im vorigen Aufruf) durch
+    eine frisch berechnete — auf dem Resume-Pfad, wo der neue Agent
+    ``fallback_outline_used`` erst wieder aus dem Run-Events-Artefakt lernt,
+    potenziell eine leere oder unvollständige Liste. Deduplikation über
+    ``(component, reason)``, damit ein wiederholter Lauf keinen Eintrag
+    verdoppelt.
+    """
+    existing = existing_report.run_degradations if existing_report else None
+    merged: List[Dict[str, Any]] = list(existing or [])
+    seen = {
+        (entry.get("component"), entry.get("reason"))
+        for entry in merged
+        if isinstance(entry, dict)
+    }
+    for entry in freshly_collected:
+        key = (entry.get("component"), entry.get("reason"))
+        if key not in seen:
+            merged.append(entry)
+            seen.add(key)
+    return merged
 
 
 def _build_partial_report(
@@ -1613,6 +1669,7 @@ def generate_report(
             )
             agent.report_logger.log_planning_complete(outline.to_dict())
             ReportManager.save_outline(report_id, outline)
+            _persist_fallback_outline_marker(agent, report_id)
 
         report.outline = outline
         ReportManager.update_progress(report_id, "planning", 15, f"Outline planning completed, {len(outline.sections)} sections in total", completed_sections=[])
@@ -1654,8 +1711,17 @@ def generate_report(
             # ausschliesslich ``fallback_outline_used`` ist deshalb ehrlich
             # und nicht unvollstaendig. ``apply_run_degradation_downgrade``
             # braucht es hier nicht: der Status ist bereits INCOMPLETE.
-            report.run_degradations = collect_run_degradations(
-                fallback_outline_used=events_for(agent).fallback_outline_used,
+            # Issue #1479 (Codex-Review Runde 3, Finding 2): diese Zuweisung
+            # ersetzte in Runde 2 eine bereits persistierte Degradationsliste
+            # durch eine frisch berechnete — auf dem Resume-Pfad also durch
+            # eine leere. ``_merge_run_degradations`` bewahrt den zuvor
+            # persistierten Eintrag (``existing_outline`` wurde oben bereits
+            # geladen).
+            report.run_degradations = _merge_run_degradations(
+                existing_outline,
+                collect_run_degradations(
+                    fallback_outline_used=events_for(agent).fallback_outline_used,
+                ),
             )
             message = f"Fehlende Pflichtabschnitte: {', '.join(missing)}"
             ReportManager.update_progress(
@@ -1743,10 +1809,17 @@ def generate_report(
             result: SectionResult = process_section(
                 agent, section, section_ctx, section_index=section_num
             )
-            if result.restored:
-                continue
+            # Issue #1479 (Codex-Review Runde 3, Finding 1): auch ein
+            # wiederhergestellter (restaurierter) Abschnitt kann laut
+            # persistierter Evidence ``generation_failed`` sein — dieser
+            # Zweig muss ihn in ``failed_section_indices`` aufnehmen, bevor
+            # der ``continue`` unten die restlichen Übernahmeschritte
+            # überspringt (die für einen bereits gezählten Abschnitt nicht
+            # nötig sind).
             if result.failed:
                 failed_section_indices.append(section_num)
+            if result.restored:
+                continue
             if result.quote_validation_failed:
                 quote_validation_failed_section_indices.append(section_num)
             generated_sections.append(result.markdown)

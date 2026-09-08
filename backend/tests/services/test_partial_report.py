@@ -585,26 +585,44 @@ def _make_generation_agent() -> MagicMock:
 
 
 def _wire_real_run_event_storage(mock_rm, report_folder: str) -> None:
-    """Bindet save/load_work_trace_removed_sections an echte Dateien im
-    Report-Ordner — derselbe ReportManager-Mock bleibt für alles andere
-    stumm, aber der Persistenzweg des Markers ist echt."""
+    """Bindet save/load_work_trace_removed_sections UND
+    save/load_fallback_outline_used an dieselbe echte Datei im Report-Ordner
+    — derselbe ReportManager-Mock bleibt für alles andere stumm, aber der
+    Persistenzweg beider Marker ist echt (Issue #1479, Codex-Review Runde 3:
+    beide Marker teilen sich in der echten Implementierung dasselbe
+    Run-Events-Artefakt, siehe ``ReportManager.save_fallback_outline_used``)."""
+    path = os.path.join(report_folder, "run_events.json")
 
-    def save(report_id_arg: str, indices) -> None:
-        path = os.path.join(report_folder, "run_events.json")
-        with open(path, "w", encoding="utf-8") as fh:
-            json.dump({"work_trace_removed_sections": sorted(indices)}, fh)
-
-    def load(report_id_arg: str) -> set:
-        path = os.path.join(report_folder, "run_events.json")
+    def _read() -> Dict[str, Any]:
         if not os.path.exists(path):
-            return set()
+            return {}
         with open(path, encoding="utf-8") as fh:
-            return {
-                int(i) for i in json.load(fh).get("work_trace_removed_sections") or []
-            }
+            return json.load(fh)
 
-    mock_rm.save_work_trace_removed_sections.side_effect = save
-    mock_rm.load_work_trace_removed_sections.side_effect = load
+    def _write(data: Dict[str, Any]) -> None:
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(data, fh)
+
+    def save_markers(report_id_arg: str, indices) -> None:
+        data = _read()
+        data["work_trace_removed_sections"] = sorted(indices)
+        _write(data)
+
+    def load_markers(report_id_arg: str) -> set:
+        return {int(i) for i in _read().get("work_trace_removed_sections") or []}
+
+    def save_fallback(report_id_arg: str, used: bool) -> None:
+        data = _read()
+        data["fallback_outline_used"] = bool(used)
+        _write(data)
+
+    def load_fallback(report_id_arg: str) -> bool:
+        return bool(_read().get("fallback_outline_used", False))
+
+    mock_rm.save_work_trace_removed_sections.side_effect = save_markers
+    mock_rm.load_work_trace_removed_sections.side_effect = load_markers
+    mock_rm.save_fallback_outline_used.side_effect = save_fallback
+    mock_rm.load_fallback_outline_used.side_effect = load_fallback
 
 
 def _patch_generation_stack(mock_rm, outline, section_react):
@@ -914,3 +932,267 @@ def test_run_event_state_roundtrip(tmp_path, monkeypatch):
     ReportManager.save_work_trace_removed_sections(report_id, [3, 7, 7])
 
     assert ReportManager.load_work_trace_removed_sections(report_id) == {3, 7}
+
+
+# ---------------------------------------------------------------------------
+# Codex-Review Runde 3, Finding 1: ``failed_section_indices`` ueberlebt den
+# Resume nicht. Eine gescheiterte Section, die ein Resume nur noch aus der
+# persistierten Evidence (``generation_failed``) restauriert statt neu zu
+# generieren, muss weiterhin als fehlgeschlagen zaehlen — sonst hebt ein
+# sonst vollstaendiger Rest-Lauf den Report faelschlich auf COMPLETED.
+# ---------------------------------------------------------------------------
+
+
+def test_resume_keeps_failed_section_marker_after_restore(tmp_path):
+    """Section 2 scheitert (LLM-Exception) -> Cancel vor Section 3 -> Resume:
+    Section 2 wird aus der persistierten Evidence (generation_failed=True)
+    nur restauriert, nicht neu generiert. Der resultierende Report muss
+    trotz erfolgreicher restlicher Sections INCOMPLETE bleiben."""
+    from app.services.report_agent.workflow import generate_report
+
+    cancel_run_id = _unique_id()
+    report_id = f"report_{uuid.uuid4().hex[:12]}"
+    clear_cancel(cancel_run_id)
+
+    outline = _make_outline(4)
+    report_folder = str(tmp_path / report_id)
+    os.makedirs(report_folder, exist_ok=True)
+
+    # Phase A: Section 2 scheitert, danach Cancel vor Section 3.
+    def fake_section_a(
+        ag,
+        section=None,
+        outline=None,
+        previous_sections=None,
+        progress_callback=None,
+        section_index=0,
+        **kw,
+    ):
+        if section_index == 2:
+            request_cancel(cancel_run_id)
+            raise RuntimeError("LLM nicht erreichbar")
+        return f"## {section.title}\n\n" + "Inhalt zum Abschnitt. " * 3
+
+    with patch("app.services.report_agent.workflow.EvidenceMapModel") as mock_em:
+        mock_em.model_validate.return_value = MagicMock(
+            model_dump=MagicMock(
+                return_value={
+                    "schema_version": 2,
+                    "report_id": report_id,
+                    "simulation_id": "sim_test",
+                    "global_evidence": [],
+                    "sections": [],
+                }
+            )
+        )
+        mock_rm = MagicMock()
+        _configure_manager_mock(mock_rm, report_folder)
+        _wire_real_run_event_storage(mock_rm, report_folder)
+        with (
+            _patch_generation_stack(mock_rm, outline, fake_section_a),
+            patch("app.config.Config.REPORT_REQUIREMENT_CHECKER_ENABLED", False),
+        ):
+            result_a = generate_report(
+                _make_generation_agent(),
+                progress_callback=None,
+                report_id=report_id,
+                cancel_run_id=cancel_run_id,
+            )
+
+    assert result_a.status == ReportStatus.INCOMPLETE
+    reasons_a = [e["reason"] for e in result_a.run_degradations]
+    assert "1_sections_failed" in reasons_a, reasons_a
+
+    # Phase B: Resume. Section 2 liegt persistiert vor (Markdown + Evidence
+    # mit generation_failed=True) und wird nur restauriert. Sections 3+4
+    # generieren erfolgreich.
+    clear_cancel(cancel_run_id)
+
+    def fake_section_b(
+        ag,
+        section=None,
+        outline=None,
+        previous_sections=None,
+        progress_callback=None,
+        section_index=0,
+        **kw,
+    ):
+        return f"## {section.title}\n\n" + "Inhalt zum Abschnitt. " * 3
+
+    with patch("app.services.report_agent.workflow.EvidenceMapModel") as mock_em:
+        mock_em.model_validate.return_value = MagicMock(
+            model_dump=MagicMock(
+                return_value={
+                    "schema_version": 2,
+                    "report_id": report_id,
+                    "simulation_id": "sim_test",
+                    "global_evidence": [],
+                    "sections": [
+                        {
+                            "section_index": 2,
+                            "section_title": "Section 2",
+                            "claims": [],
+                            "hypotheses": [],
+                            "hypotheses_appendix": [],
+                            "data_gaps": [],
+                            "generation_failed": True,
+                        }
+                    ],
+                }
+            )
+        )
+        mock_rm = MagicMock()
+        _configure_manager_mock(mock_rm, report_folder)
+        _wire_real_run_event_storage(mock_rm, report_folder)
+        mock_rm.get_generated_sections.return_value = [
+            {
+                "filename": "section_02.md",
+                "section_index": 2,
+                "content": "## Section 2\n\nDieser Abschnitt konnte nicht generiert werden.",
+            }
+        ]
+        with (
+            _patch_generation_stack(mock_rm, outline, fake_section_b),
+            patch("app.config.Config.REPORT_REQUIREMENT_CHECKER_ENABLED", False),
+        ):
+            result_b = generate_report(
+                _make_generation_agent(),
+                progress_callback=None,
+                report_id=report_id,
+                cancel_run_id=cancel_run_id,
+            )
+
+    assert result_b.status == ReportStatus.INCOMPLETE, (
+        "Ein restaurierter, zuvor fehlgeschlagener Abschnitt darf den Report "
+        f"nicht auf COMPLETED heben, run_degradations={result_b.run_degradations}"
+    )
+    reasons_b = [e["reason"] for e in result_b.run_degradations]
+    assert "1_sections_failed" in reasons_b, reasons_b
+    clear_cancel(cancel_run_id)
+
+
+# ---------------------------------------------------------------------------
+# Codex-Review Runde 3, Finding 2: ``fallback_outline_used`` ueberlebt den
+# Resume nicht, UND die in Runde 2 in den missing-Zweig eingebaute Zuweisung
+# ersetzt eine bereits persistierte Degradationsliste durch eine frisch
+# berechnete statt sie zusammenzufuehren.
+# ---------------------------------------------------------------------------
+
+
+def test_resume_preserves_fallback_outline_degradation_after_cancel(tmp_path):
+    """Fallback-Outline (LLM-Planung scheitert) -> Cancel direkt an der
+    Post-Outline-Grenze -> Resume: ``outline_planning`` bleibt in
+    ``run_degradations`` erhalten, und die beim Cancel zusaetzlich
+    persistierte ``run_cancellation``-Degradation darf die
+    Runde-2-Zuweisung im missing-Zweig nicht ueberschreiben (letztere kann
+    ein frischer ``collect_run_degradations``-Aufruf im missing-Zweig gar
+    nicht reproduzieren, da er keine Cancel-Information erhaelt — ihr
+    Ueberleben beweist gezielt die Merge- statt Ersetzen-Semantik)."""
+    from app.services.report_agent.workflow import generate_report
+
+    cancel_run_id = _unique_id()
+    report_id = f"report_{uuid.uuid4().hex[:12]}"
+    clear_cancel(cancel_run_id)
+
+    report_folder = str(tmp_path / report_id)
+    os.makedirs(report_folder, exist_ok=True)
+
+    saved_reports: Dict[str, Any] = {}
+
+    def make_agent() -> MagicMock:
+        agent = _make_generation_agent()
+        agent.graph_tools.get_simulation_context.return_value = {
+            "graph_statistics": {"total_nodes": 0, "total_edges": 0, "entity_types": {}},
+            "total_entities": 0,
+            "related_facts": [],
+        }
+        # Echte plan_outline()-Fallback-Logik ausloesen, nicht mocken.
+        agent.llm.chat_json.side_effect = RuntimeError("LLM nicht erreichbar")
+        return agent
+
+    # Phase A: Cancel ist bereits gesetzt, bevor generate_report startet —
+    # der Lauf faellt in plan_outline() in den Fallback und bricht direkt an
+    # der Post-Outline-Grenze ab, lange bevor der missing-Zweig erreicht wird.
+    request_cancel(cancel_run_id)
+    with patch("app.services.report_agent.workflow.EvidenceMapModel") as mock_em:
+        mock_em.model_validate.return_value = MagicMock(
+            model_dump=MagicMock(
+                return_value={
+                    "schema_version": 2,
+                    "report_id": report_id,
+                    "simulation_id": "sim_test",
+                    "global_evidence": [],
+                    "sections": [],
+                }
+            )
+        )
+        mock_rm = MagicMock()
+        _configure_manager_mock(mock_rm, report_folder)
+        _wire_real_run_event_storage(mock_rm, report_folder)
+        mock_rm.save_report.side_effect = lambda report_obj: saved_reports.__setitem__(
+            "report", report_obj
+        )
+        mock_rm.get_report.return_value = None
+        with (
+            patch("app.services.report_agent.workflow.ReportManager", mock_rm),
+            patch("app.services.report_agent.workflow.migrate_v1_to_v2", return_value=None),
+            patch("app.config.Config.REPORT_REQUIREMENT_CHECKER_ENABLED", False),
+        ):
+            result_a = generate_report(
+                make_agent(),
+                progress_callback=None,
+                report_id=report_id,
+                cancel_run_id=cancel_run_id,
+            )
+
+    assert result_a.status == ReportStatus.INCOMPLETE
+    reasons_a = {e["component"]: e["reason"] for e in result_a.run_degradations}
+    assert reasons_a.get("outline_planning") == "fallback_outline_used", (
+        result_a.run_degradations
+    )
+    assert reasons_a.get("run_cancellation") == "3_sections_missing_after_cancel", (
+        result_a.run_degradations
+    )
+
+    # Phase B: Resume. Cancel aufgehoben, neuer Agent (fallback_outline_used
+    # startet wieder bei False). Die persistierte Fallback-Outline existiert
+    # bereits -> plan_outline() wird umgangen, der missing-Zweig greift
+    # erneut (3 Ersatz-Sections erfuellen die Pflichtabschnitte nicht).
+    clear_cancel(cancel_run_id)
+    with patch("app.services.report_agent.workflow.EvidenceMapModel") as mock_em:
+        mock_em.model_validate.return_value = MagicMock(
+            model_dump=MagicMock(
+                return_value={
+                    "schema_version": 2,
+                    "report_id": report_id,
+                    "simulation_id": "sim_test",
+                    "global_evidence": [],
+                    "sections": [],
+                }
+            )
+        )
+        mock_rm = MagicMock()
+        _configure_manager_mock(mock_rm, report_folder)
+        _wire_real_run_event_storage(mock_rm, report_folder)
+        mock_rm.get_report.return_value = saved_reports["report"]
+        with (
+            patch("app.services.report_agent.workflow.ReportManager", mock_rm),
+            patch("app.services.report_agent.workflow.migrate_v1_to_v2", return_value=None),
+        ):
+            result_b = generate_report(
+                make_agent(),
+                progress_callback=None,
+                report_id=report_id,
+                cancel_run_id=cancel_run_id,
+            )
+
+    assert result_b.status == ReportStatus.INCOMPLETE
+    reasons_b = {e["component"]: e["reason"] for e in result_b.run_degradations}
+    assert reasons_b.get("outline_planning") == "fallback_outline_used", (
+        f"outline_planning-Degradation ueberlebt den Resume nicht: {result_b.run_degradations}"
+    )
+    assert reasons_b.get("run_cancellation") == "3_sections_missing_after_cancel", (
+        "Die Runde-2-Zuweisung im missing-Zweig darf die aus Phase A "
+        f"persistierte run_cancellation-Degradation nicht verwerfen: {result_b.run_degradations}"
+    )
+    clear_cancel(cancel_run_id)
