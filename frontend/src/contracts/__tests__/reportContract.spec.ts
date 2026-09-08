@@ -605,6 +605,48 @@ describe('EvidenceMapSchema — cross_stakeholder_for_high Rollenfamilien-Spiege
     );
   });
 
+  it('faltet U+017F (LATIN SMALL LETTER LONG S) wie Pythons casefold auf "s" — eine Rollenfamilie', () => {
+    // Python `str.casefold()` faltet "ſupervisor" (mit U+017F) und
+    // "supervisor" auf denselben Vergleichsschluessel. `toLowerCase()`
+    // allein liesse "ſ" unveraendert stehen — ohne die explizite Faltung
+    // `ſ` -> `s` zaehlte der Spiegel hier zwei Rollenfamilien, wo das
+    // Backend eine sieht, und waere damit LOCKERER als ADR-0002 Anker 4.
+    const evidenceMap = buildEvidenceMap([
+      { persona_stakeholder_group: 'ſupervisor Team A', persona_role_family: 'ſupervisor' },
+      { persona_stakeholder_group: 'supervisor Team B', persona_role_family: 'supervisor' },
+    ]);
+    expect(() => EvidenceMapSchema.parse(evidenceMap)).toThrow(
+      /mindestens 2 unterschiedlichen Stakeholder-Gruppen/,
+    );
+  });
+
+  it('faltet Fullwidth-Formen NICHT — zwei Backend-Gruppen bleiben zwei Gruppen', () => {
+    // Regression zum NFKC-Befund: `str.casefold()` laesst Fullwidth-Zeichen
+    // stehen ("Ａｕｆｓｉｃｈｔ".casefold() == "ａｕｆｓｉｃｈｔ" != "aufsicht"), das
+    // Backend zaehlt hier also zwei Stakeholder-Gruppen und laesst `high` zu.
+    // Ein `normalize("NFKC")` im Spiegel kollabierte beide auf denselben
+    // Schluessel und verwarf die backend-gueltige Antwort als
+    // `schema_mismatch` — der Spiegel waere STRENGER als das Backend.
+    const evidenceMap = buildEvidenceMap([
+      { persona_stakeholder_group: 'Ａｕｆｓｉｃｈｔ Nord', persona_role_family: 'Ａｕｆｓｉｃｈｔ' },
+      { persona_stakeholder_group: 'Aufsicht Sued', persona_role_family: 'Aufsicht' },
+    ]);
+    expect(() => EvidenceMapSchema.parse(evidenceMap)).not.toThrow();
+  });
+
+  it('faltet lateinische Ligaturen wie Pythons casefold — eine Rollenfamilie', () => {
+    // "ﬁ" (U+FB01) faellt unter Full Case Folding auf "fi"; das Backend
+    // sieht hier eine Gruppe und lehnt `high` ab. Ohne die Ersetzung
+    // zaehlte der Spiegel zwei und waere LOCKERER als ADR-0002 Anker 4.
+    const evidenceMap = buildEvidenceMap([
+      { persona_stakeholder_group: 'Finanzen Nord', persona_role_family: 'ﬁnanzen' },
+      { persona_stakeholder_group: 'Finanzen Sued', persona_role_family: 'finanzen' },
+    ]);
+    expect(() => EvidenceMapSchema.parse(evidenceMap)).toThrow(
+      /mindestens 2 unterschiedlichen Stakeholder-Gruppen/,
+    );
+  });
+
   it('faellt ohne persona_role_family auf den rohen Stakeholder-Titel zurück (Alt-Artefakte)', () => {
     const evidenceMap = buildEvidenceMap([
       { persona_stakeholder_group: 'Geschaeftsfuehrung' },
