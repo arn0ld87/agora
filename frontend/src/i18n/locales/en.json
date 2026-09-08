@@ -642,7 +642,7 @@
     "next": "Next: conversation →",
     "export": {
       "evidenceOmitted": {
-        "contract_violation": "JSON export delivered without its evidence map: the persisted evidence violates the evidence contract. The report body in the file is complete."
+        "contract_violation": "Evidence map is not shown: the persisted evidence violates the evidence contract. The report body is unaffected and complete."
       },
       "evidencePending": "Evidence map is still being generated — the export will be available once it is ready.",
       "evidenceUnavailable": "Evidence map is not available for this report."
@@ -1768,6 +1768,7 @@
       "kpiSections": "Sections",
       "kpiEvidence": "Evidence",
       "kpiClaims": "Claims",
+      "evidenceOmittedWarning": "Confidence distribution and claim count are missing: the persisted evidence map violates the evidence contract and is not shown. The report itself is unaffected.",
       "partsOpen": "Open",
       "parts": {
         "actors": "Actors",
@@ -1859,6 +1860,7 @@
     "terminationBudgetCost": "Cost budget reached",
     "terminationBudgetTime": "Time budget reached",
     "terminationBudgetCalls": "Call budget reached",
+    "terminationProcessRestart": "Marked as ended after a process restart",
     "costStatusMeasured": "measured",
     "costStatusEstimated": "estimated",
     "costStatusFree": "free",

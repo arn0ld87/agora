@@ -70,6 +70,10 @@ services:
 
   agora:
     container_name: ${AGORA_E2E_PROJECT:-agora-e2e}
+    # Siehe docker-compose.yml: gunicorn graceful_timeout=30, Docker-Default
+    # (10s) reicht dafuer nicht.
+    stop_grace_period: 45s
+    init: true
     read_only: false
     environment:
       # E2E-Stub-Modus: ersetzt alle LLM-Calls durch deterministische

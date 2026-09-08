@@ -219,6 +219,19 @@
         </div>
       </dl>
 
+      <!-- Evidence-Omission-Hinweis (Issue #1477 F2): eine degradierte
+           Evidence-Map darf im Dossier nicht wie ein leerer Erfolg aussehen —
+           die Vertrauensverteilung fehlt oben schlicht, sichtbar wurde das
+           bisher erst beim Oeffnen des vollen Readers. -->
+      <p
+        v-if="props.object.kind === 'bericht' && detail?.evidenceOmitted"
+        class="dossier__evidence-omitted"
+        role="alert"
+        :data-testid="DossierTestId.evidenceOmittedWarning"
+      >
+        {{ t('views.dossier.evidenceOmittedWarning') }}
+      </p>
+
       <!-- Bestandteile: erst beim Auswaehlen nachgeladen. Ein Bericht
            zeigt seine Abschnitte, ein Graph seine Kennzahlen, ein Lauf
            seine Akteure/Ausgabe mit Zahl + Weiter-Link (Redesign PR 4).
@@ -665,6 +678,15 @@ function formatUpdatedAt(iso: string): string {
   margin-top: var(--sp-6);
   border-top: 1px solid var(--hairline);
   padding-top: var(--sp-5);
+}
+
+.dossier__evidence-omitted {
+  margin-top: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--color-danger, #b3261e);
+  border-radius: var(--radius-2, 6px);
+  color: var(--color-danger, #b3261e);
+  font-size: var(--fs-footnote);
 }
 
 .dossier__timeline-list {

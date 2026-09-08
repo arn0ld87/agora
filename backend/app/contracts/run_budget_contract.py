@@ -34,6 +34,9 @@ BudgetState = Literal["ok", "warning", "exceeded"]
 
 # Abbruchgründe auf Run-Ebene (Issue #764): Budgetabbruch muss von
 # technischem Fehler und Nutzerabbruch unterscheidbar sein.
+# "process_restart" (Tech-Review 2026-09-07 Slice B1, additiv): Startup-
+# Reconciliation hat den Run nach einem Container-/Prozess-Neustart als
+# verwaist erkannt (Subprozess-PID existiert nicht mehr).
 TerminationReason = Literal[
     "completed",
     "error",
@@ -43,6 +46,7 @@ TerminationReason = Literal[
     "budget_cost",
     "budget_time",
     "budget_calls",
+    "process_restart",
 ]
 
 

@@ -24,7 +24,12 @@ from app.contracts.pipeline_degradation_contract import (
     PipelineDegradationModel,
     PipelineDegradationReport,
 )
-from app.contracts.report_contract import EvidenceMapModel, ReportContractModel, ReportModel
+from app.contracts.report_contract import (
+    EvidenceMapModel,
+    EvidenceMapResponseModel,
+    ReportContractModel,
+    ReportModel,
+)
 from app.contracts.report_v3 import ReportV3
 from app.contracts.run_budget_contract import (
     PreflightEstimate,
@@ -111,6 +116,8 @@ CONTRACTS: dict[str, type] = {
     "report-contract.schema.json": ReportContractModel,
     "report.schema.json": ReportModel,
     "evidence-map.schema.json": EvidenceMapModel,
+    # Response-Envelope fuer GET /api/report/<id>/evidence (Issue #1477 F1)
+    "evidence-map-response.schema.json": EvidenceMapResponseModel,
     "persona.schema.json": PersonaModel,
     "persona-quota-plan.schema.json": PersonaQuotaPlan,
     # Persona-Ziel für den Fortschrittszähler (Issue #1034)

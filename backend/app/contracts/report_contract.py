@@ -17,9 +17,19 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Literal, Optional
+from typing import Any, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    GetJsonSchemaHandler,
+    RootModel,
+    field_validator,
+    model_validator,
+)
+from pydantic.json_schema import JsonSchemaValue
+from pydantic_core import CoreSchema
 
 
 # Strenger Default für Vertrags-Modelle
@@ -1092,8 +1102,18 @@ class EvidenceMapModel(BaseModel):
                     for binding in claim.evidence
                 ]
                 if claim.confidence_label in (ConfidenceLabel.high, ConfidenceLabel.verified):
+                    # Issue #1248 Folgefehler (Review B7): dieser Validator
+                    # zaehlte bisher den rohen persona_stakeholder_group-Wert,
+                    # waehrend Schreibpfad (auto_downgrade_unsupported_high_claims)
+                    # und der Hartanker cross_stakeholder_for_high ueber
+                    # _role_family_key normalisieren. Persistierte Altbestaende
+                    # umgehen den Schreibpfad, sodass "Buerger" und "buerger "
+                    # hier als zwei Gruppen zaehlten, obwohl sie eine Rolle
+                    # sind. Verschaerfung von ADR-0002 Anker 4, keine
+                    # Schwaechung: die Zahl unterscheidbarer Gruppen kann
+                    # dadurch nur sinken.
                     groups = {
-                        record.persona_stakeholder_group
+                        _role_family_key(record)
                         for binding, record in resolved
                         if binding.supports_claim
                         and record.source_kind == EvidenceSourceKind.agent_quote
@@ -1170,6 +1190,111 @@ class EvidenceOmissionModel(BaseModel):
             "Einstufung, ohne die verworfenen Rohdaten mitzuexportieren."
         ),
     )
+
+
+class EvidenceMapResponseSuccessVariant(BaseModel):
+    """Erfolgsvariante von ``EvidenceMapResponseModel`` (Issue #1477 F3)."""
+
+    model_config = _STRICT
+    success: Literal[True] = Field(
+        description=(
+            "Pflichtfeld ohne Default (Review B7 Runde 5, Issue #1477 F1): "
+            "ein Default wandert im generierten JSON-Schema aus der "
+            "``required``-Liste heraus und liesse ``{\"data\": ...}`` ohne "
+            "``success`` durch, obwohl die Zod-Grenze im Frontend "
+            "(``reportContract.ts``) ``success: true`` verlangt."
+        ),
+    )
+    data: EvidenceMapModel
+
+
+class EvidenceMapResponseOmittedVariant(BaseModel):
+    """Degradations-Variante von ``EvidenceMapResponseModel`` (Issue #1477 F3)."""
+
+    model_config = _STRICT
+    success: Literal[True] = Field(
+        description=(
+            "Pflichtfeld ohne Default (Review B7 Runde 5, Issue #1477 F1) — "
+            "siehe ``EvidenceMapResponseSuccessVariant.success``."
+        ),
+    )
+    evidence_omitted: EvidenceOmissionModel
+
+
+class EvidenceMapResponseModel(
+    RootModel[Union[EvidenceMapResponseSuccessVariant, EvidenceMapResponseOmittedVariant]]
+):
+    """Response-Envelope fuer ``GET /api/report/<id>/evidence`` (Review B7 Fix, Issue #1477 F1/F3).
+
+    Vorher stand die Form dieser Antwort nur als handgeschriebenes
+    TypeScript-Interface (``EvidenceOmittedEnvelope`` in
+    ``frontend/src/api/report.ts``) — die Schema-Generierung kannte diese
+    API-Grenze nicht, und Axios behauptete beliebige ``data``-Formen ohne
+    Pruefung.
+
+    Review B7 Runde 4 (Issue #1477 F3): die erste Fassung trug ``data`` und
+    ``evidence_omitted`` als zwei optionale Felder auf einem einzigen Modell
+    plus einen ``model_validator`` (``exactly_one_variant``), der die
+    Exklusivitaet nur zur Laufzeit durchsetzte. Das generierte JSON-Schema
+    deklarierte beide Felder lediglich als optional ohne ``required``/
+    ``oneOf`` — ein externer Schema-Consumer haette ``{"success": true}``,
+    beide Felder gleichzeitig oder eine explizite ``null``-Variante
+    akzeptiert, obwohl weder der Validator noch die Route
+    (``backend/app/api/report.py::get_report_evidence``) das je ausliefern.
+
+    Jetzt eine echte Union zweier Varianten-Modelle (je ``extra=forbid``,
+    genau ein Pflichtfeld): die Exklusivitaet ist strukturell statt
+    nachtraeglich validiert, und Pydantic rendert die Union unten explizit
+    als ``oneOf`` statt ``anyOf`` (siehe ``__get_pydantic_json_schema__``).
+    Aufrufer nutzen ``for_data``/``for_omission`` statt des rohen
+    ``RootModel``-Konstruktors: ``RootModel.__init__`` reicht ueberzaehlige
+    Keyword-Argumente zwar zur Laufzeit an die Root-Validierung durch (z.B.
+    ``EvidenceMapResponseModel(data=...)`` funktioniert), der von Pydantics
+    Mypy-Plugin synthetisierte ``__init__`` kennt aber nur ``root`` — die
+    Factory-Methoden sind deshalb sowohl zur Laufzeit als auch fuer Mypy
+    korrekt.
+    """
+
+    root: Union[EvidenceMapResponseSuccessVariant, EvidenceMapResponseOmittedVariant]
+
+    @classmethod
+    def for_data(cls, data: EvidenceMapModel) -> "EvidenceMapResponseModel":
+        return cls(root=EvidenceMapResponseSuccessVariant(success=True, data=data))
+
+    @classmethod
+    def for_omission(cls, evidence_omitted: EvidenceOmissionModel) -> "EvidenceMapResponseModel":
+        return cls(
+            root=EvidenceMapResponseOmittedVariant(success=True, evidence_omitted=evidence_omitted)
+        )
+
+    @classmethod
+    def __get_pydantic_json_schema__(
+        cls, core_schema: CoreSchema, handler: GetJsonSchemaHandler
+    ) -> JsonSchemaValue:
+        schema = handler(core_schema)
+        # Pydantic rendert eine untagged Union standardmaessig als `anyOf`
+        # (>=1 passende Variante). Die beiden Varianten hier sind aber
+        # exklusiv (je `extra=forbid`, disjunkte Pflichtfelder) — `oneOf`
+        # (genau eine passende Variante) ist die praezisere JSON-Schema-
+        # Aussage und wird von Zod (`z.union`/`z.discriminatedUnion` im
+        # Frontend-Spiegel) sowie externen Schema-Consumern entsprechend
+        # ausgewertet.
+        if "anyOf" in schema:
+            schema["oneOf"] = schema.pop("anyOf")
+        return schema
+
+    def to_payload(self) -> dict[str, Any]:
+        """Wire-Form der Antwort: nur die ungesetzte TOP-LEVEL-Seite fehlt.
+
+        Jede Variante traegt nur ihr eigenes Feld (``data`` bzw.
+        ``evidence_omitted``) — ein Dump der aktiven Variante ohne
+        ``exclude_none`` liefert deshalb automatisch nur den gesetzten
+        Top-Level-Key, waehrend verschachtelte ``None``-Felder *innerhalb*
+        von ``EvidenceMapModel`` (``quote``, ``tool_name``,
+        ``sentiment_score``, ``value`` …) erhalten bleiben — dieselbe
+        Wire-Form wie zuvor ``json_success(validated.model_dump(mode="json"))``.
+        """
+        return self.root.model_dump(mode="json")
 
 
 class ReportContractModel(BaseModel):

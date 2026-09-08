@@ -642,7 +642,7 @@
     "next": "Weiter zum Gespräch →",
     "export": {
       "evidenceOmitted": {
-        "contract_violation": "JSON-Export ausgeliefert, aber ohne Evidence-Map: die persistierte Evidence verletzt den Evidence-Vertrag. Der Report-Rumpf in der Datei ist vollständig."
+        "contract_violation": "Evidence-Map wird nicht angezeigt: die persistierte Evidence verletzt den Evidence-Vertrag. Der Report-Rumpf ist davon unberührt und vollständig."
       },
       "evidencePending": "Evidenzkarte wird noch erzeugt — der Export steht zur Verfügung, sobald sie fertig ist.",
       "evidenceUnavailable": "Evidenzkarte für diesen Report nicht verfügbar."
@@ -1768,6 +1768,7 @@
       "kpiSections": "Abschnitte",
       "kpiEvidence": "Belege",
       "kpiClaims": "Aussagen",
+      "evidenceOmittedWarning": "Vertrauensverteilung und Aussagenzahl fehlen: die persistierte Evidence-Map verletzt den Evidence-Vertrag und wird nicht angezeigt. Der Bericht selbst ist davon unberührt.",
       "partsOpen": "Öffnen",
       "parts": {
         "actors": "Akteure",
@@ -1859,6 +1860,7 @@
     "terminationBudgetCost": "Kosten-Budget erreicht",
     "terminationBudgetTime": "Zeit-Budget erreicht",
     "terminationBudgetCalls": "Aufruf-Budget erreicht",
+    "terminationProcessRestart": "Nach Prozess-Neustart als beendet markiert",
     "costStatusMeasured": "gemessen",
     "costStatusEstimated": "geschätzt",
     "costStatusFree": "kostenlos",
