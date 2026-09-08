@@ -235,7 +235,7 @@ graph TD
 
 - Git
 - Linux or macOS recommended
-- [bun](https://bun.sh) >= 1.3 and Node.js >= 20 (checked by `install.sh`)
+- [bun](https://bun.sh) >= 1.3 and Node.js `^22.12.0 || ^24.0.0 || >=26.0.0` — the range vitest 5 requires; Node 23 and 25 are not LTS lines and are excluded (checked by `install.sh`)
 - [uv](https://docs.astral.sh/uv/) — manages the Python 3.14 backend environment
 - a configured LLM and embedding provider
 - Docker for the full stack (`./install.sh --docker`)
