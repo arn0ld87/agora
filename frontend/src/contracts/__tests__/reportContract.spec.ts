@@ -517,3 +517,99 @@ describe('RunDegradationSchema — Persona-Komponente (#1419)', () => {
     ).toThrow();
   });
 });
+
+describe('EvidenceMapSchema — cross_stakeholder_for_high Rollenfamilien-Spiegel (Issue #1477 F2)', () => {
+  // Baut eine minimale gültige EvidenceMap mit genau einem `high`-Claim, der
+  // von zwei agent_quote-Records gestützt wird. Nur `persona_stakeholder_group`
+  // und `persona_role_family` der Records variieren pro Test.
+  function buildEvidenceMap(records: Array<{
+    persona_stakeholder_group: string;
+    persona_role_family?: string;
+  }>) {
+    const evidence_index: Record<string, unknown> = {};
+    const evidenceIds = records.map((_, idx) => {
+      const id = `ev_${String(idx + 1).padStart(32, '0')}`;
+      evidence_index[id] = {
+        evidence_id: id,
+        producer_key: `agent:persona_${idx}:interview:1`,
+        type: 'agent_interview',
+        source: 'agent_log',
+        snippet: `Persona ${idx} äußerte sich.`,
+        source_kind: 'agent_quote',
+        persona_stakeholder_group: records[idx].persona_stakeholder_group,
+        persona_role_family: records[idx].persona_role_family,
+      };
+      return id;
+    });
+    return {
+      schema_version: 3,
+      report_id: 'report_abc',
+      simulation_id: 'sim_abc',
+      evidence_index,
+      global_evidence_refs: [],
+      sections: [
+        {
+          section_index: 1,
+          section_title: 'Erster Eindruck',
+          section_summary: 'Zusammenfassung',
+          hypotheses: [],
+          data_gaps: [],
+          claims: [
+            {
+              claim_id: 'claim_01',
+              claim_text: 'Die Personas reagieren skeptisch.',
+              confidence_label: 'high',
+              confidence_score: 0.78,
+              evidence: evidenceIds.map((id) => ({
+                evidence_id: id,
+                match_score: 0.7,
+                supports_claim: true,
+              })),
+              audit_trail: [],
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  it('akzeptiert zwei Records mit demselben Stakeholder-Titel, aber verschiedenen nicht-generischen Rollenfamilien (spiegelt Backend _role_family_key)', () => {
+    const evidenceMap = buildEvidenceMap([
+      { persona_stakeholder_group: 'Fachkraft', persona_role_family: 'dozentin_it_umschulung' },
+      { persona_stakeholder_group: 'Fachkraft', persona_role_family: 'betriebsratsmitglied' },
+    ]);
+    expect(() => EvidenceMapSchema.parse(evidenceMap)).not.toThrow();
+  });
+
+  it('lehnt zwei Records mit derselben Rollenfamilie ab, auch wenn die rohen Stakeholder-Titel unterschiedlich formuliert sind', () => {
+    const evidenceMap = buildEvidenceMap([
+      { persona_stakeholder_group: 'Umschueler im IT-Bereich (Teilnehmer)', persona_role_family: 'it_umschueler' },
+      { persona_stakeholder_group: 'Teilnehmer einer IT-Umschulung (Retrainee)', persona_role_family: 'it_umschueler' },
+    ]);
+    expect(() => EvidenceMapSchema.parse(evidenceMap)).toThrow(
+      /mindestens 2 unterschiedlichen Stakeholder-Gruppen/,
+    );
+  });
+
+  it('faltet ß wie Pythons casefold auf ss — zwei Schreibweisen sind eine Rollenfamilie', () => {
+    // `_stakeholder_group_key` im Backend nutzt `str.casefold()`, das "ß" auf
+    // "ss" faltet. `toLowerCase()` in JS tut das nicht — ohne die Ersetzung
+    // zaehlte der Spiegel hier zwei Gruppen, wo das Backend eine sieht, und
+    // waere damit LOCKERER als ADR-0002 Anker 4.
+    const evidenceMap = buildEvidenceMap([
+      { persona_stakeholder_group: 'Großhaendler Nord', persona_role_family: 'Großhaendler' },
+      { persona_stakeholder_group: 'Grosshaendler Sued', persona_role_family: 'Grosshaendler' },
+    ]);
+    expect(() => EvidenceMapSchema.parse(evidenceMap)).toThrow(
+      /mindestens 2 unterschiedlichen Stakeholder-Gruppen/,
+    );
+  });
+
+  it('faellt ohne persona_role_family auf den rohen Stakeholder-Titel zurück (Alt-Artefakte)', () => {
+    const evidenceMap = buildEvidenceMap([
+      { persona_stakeholder_group: 'Geschaeftsfuehrung' },
+      { persona_stakeholder_group: 'IT-Abteilung' },
+    ]);
+    expect(() => EvidenceMapSchema.parse(evidenceMap)).not.toThrow();
+  });
+});
