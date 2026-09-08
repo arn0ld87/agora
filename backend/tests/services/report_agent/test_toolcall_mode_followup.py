@@ -2,7 +2,8 @@
 
 Adressiert:
 - Config.REPORT_TOOLCALL_MODE casing/whitelist robustness.
-- workflow.py defense-in-depth: unbekannte Mode-Werte fallen auf "xml".
+- workflow.py defense-in-depth: unbekannte Mode-Werte fallen auf den
+  Default "native" (siehe changelog.d/toolcall-mode-fallback-native.md).
 - LLMClient.chat_with_tools provider=unknown short-circuit (kein 400, leerer
   tool_calls-Return → Caller nutzt XML-Fallback).
 
@@ -16,16 +17,47 @@ kein Reload nötig, da REPORT_TOOLCALL_MODE nachträglich überschrieben werden 
 """
 from __future__ import annotations
 
+import os
+import pathlib
+import subprocess
+import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-import app.config as cfg_module
 
 
 # ---------------------------------------------------------------------------
 # Config.REPORT_TOOLCALL_MODE — Casing + Whitelist
 # ---------------------------------------------------------------------------
+
+
+def _config_mode_for_env(value: str | None) -> str:
+    """Liest Config.REPORT_TOOLCALL_MODE in einem frischen Interpreter aus.
+
+    Config normalisiert beim Modulimport auf Klassenebene. Ein monkeypatch auf
+    das bereits importierte Config-Objekt wuerde die Normalisierung ueberspringen
+    und damit nur die Testlogik pruefen, nicht den Produktionscode (genau das
+    taten die Vorgaengertests hier). Ein Subprozess mit gesetzter Env ist der
+    einzige Weg, die Normalisierung echt auszufuehren — ohne importlib.reload,
+    dessen Modul-Cache-Fallstricke der Modul-Docstring beschreibt.
+    """
+    env = dict(os.environ)
+    env.pop("REPORT_TOOLCALL_MODE", None)
+    if value is not None:
+        env["REPORT_TOOLCALL_MODE"] = value
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from app.config import Config; print(Config.REPORT_TOOLCALL_MODE)",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=str(pathlib.Path(__file__).resolve().parents[2]),
+        check=True,
+    )
+    return result.stdout.strip()
 
 
 @pytest.mark.parametrize(
@@ -40,55 +72,36 @@ import app.config as cfg_module
     ],
 )
 def test_report_toolcall_mode_normalizes_casing_and_whitespace(
-    raw: str, expected: str, monkeypatch: pytest.MonkeyPatch
+    raw: str, expected: str
 ) -> None:
-    """Casing/Whitespace-Drift wird beim Setzen normalisiert.
-
-    Die Normalisierungslogik (strip().lower() + Whitelist-Check) liegt in Config.
-    Wir testen sie, indem wir das Ergebnis direkt auf Config setzen — kein Reload.
-    """
-    normalized = raw.strip().lower()
-    if normalized not in ("native", "xml"):
-        normalized = "xml"
-    monkeypatch.setattr(cfg_module.Config, "REPORT_TOOLCALL_MODE", normalized)
-    assert cfg_module.Config.REPORT_TOOLCALL_MODE == expected
+    """Casing/Whitespace-Drift wird von Config selbst normalisiert."""
+    assert _config_mode_for_env(raw) == expected
 
 
 @pytest.mark.parametrize(
     "invalid",
     ["foo", "json", "auto", "true", "1", "Native!", ""],
 )
-def test_report_toolcall_mode_invalid_falls_back_to_xml(
-    invalid: str, monkeypatch: pytest.MonkeyPatch
+def test_report_toolcall_mode_invalid_falls_back_to_default_native(
+    invalid: str,
 ) -> None:
-    """Unbekannte Werte werden NICHT als 'native' interpretiert (verhindert 400er).
+    """Ungueltige Werte fallen auf den Default 'native', nicht auf 'xml'.
 
-    Testet die Whitelist-Logik aus Config direkt: ungültige Werte fallen auf 'xml'.
+    Ein Tippfehler ist ein Konfigurationsfehler und soll sich verhalten wie
+    "nicht konfiguriert". Der fruehere xml-Fallback gab ausgerechnet dem
+    Vertipper ein anderes Verhalten als dem Nicht-Konfigurierer.
     """
-    normalized = invalid.strip().lower()
-    if normalized not in ("native", "xml"):
-        normalized = "xml"
-    monkeypatch.setattr(cfg_module.Config, "REPORT_TOOLCALL_MODE", normalized)
-    assert cfg_module.Config.REPORT_TOOLCALL_MODE == "xml", (
-        f"Invalid mode {invalid!r} should fall back to 'xml', got "
-        f"{cfg_module.Config.REPORT_TOOLCALL_MODE!r}"
-    )
+    assert _config_mode_for_env(invalid) == "native"
 
 
-def test_report_toolcall_mode_default_when_unset() -> None:
-    """Default ist 'native' (Modelle wie deepseek-v4-flash:cloud).
+def test_invalid_fallback_equals_unset_default() -> None:
+    """Invariante: Fallback bei Fehlwert == Verhalten ohne gesetzte Variable.
 
-    Prüft den normalisierten Wert, den Config beim Modulimport aus der Env geladen hat.
-    In der Test-Suite ist REPORT_TOOLCALL_MODE nicht gesetzt → 'native'.
+    Diese Gleichheit ist der eigentliche Vertrag. Faellt einer der beiden Pfade
+    kuenftig auseinander, ist das eine bewusste Entscheidung und muss hier
+    sichtbar brechen.
     """
-    # Der Wert muss nach Normalisierung in der Whitelist liegen.
-    assert cfg_module.Config.REPORT_TOOLCALL_MODE in ("native", "xml"), (
-        "REPORT_TOOLCALL_MODE must be either 'native' or 'xml' after normalization"
-    )
-    # Wenn die Env-Variable in CI nicht gesetzt ist, muss der Default 'native' sein.
-    import os
-    if not os.environ.get("REPORT_TOOLCALL_MODE"):
-        assert cfg_module.Config.REPORT_TOOLCALL_MODE == "native"
+    assert _config_mode_for_env("voellig-ungueltig") == _config_mode_for_env(None)
 
 
 # ---------------------------------------------------------------------------
@@ -96,17 +109,20 @@ def test_report_toolcall_mode_default_when_unset() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_workflow_unknown_mode_uses_legacy_xml_path() -> None:
-    """Wenn jemand Config.REPORT_TOOLCALL_MODE auf 'Native' (Casing-Drift) patcht,
-    soll workflow trotzdem auf den XML-Pfad fallen oder native akzeptieren —
-    nie schweigend in den unknown-Pfad rutschen, der keinen Tool-Call mehr macht.
+def test_workflow_unknown_mode_uses_default_native_path() -> None:
+    """Ein ungueltiger Runtime-Wert faellt in workflow.py auf den Default 'native'.
+
+    Frueher fiel er hier auf 'xml' — damit landete ein Fehlwert in einem anderen
+    Modus als der Nicht-gesetzt-Fall, der ueber den Config-Default 'native' laeuft.
+    Entscheidend bleibt, dass er nie in den unknown-Pfad rutscht, der gar keinen
+    Tool-Call mehr macht.
     """
     from app.services.report_agent import workflow as wf
 
     # Wir testen die zentrale Normalisierungs-Logik durch direktes Aufrufen.
     # generate_section_react liest Config.REPORT_TOOLCALL_MODE einmal am Anfang.
     # Wir bauen ein minimales Agent-Mock und prüfen, dass bei "FooBar"-Mode der
-    # XML-Pfad (chat) statt chat_with_tools angerufen wird.
+    # native Pfad (chat_with_tools) statt des XML-Pfads angerufen wird.
     agent = MagicMock()
     agent.simulation_requirement = "test"
     agent.MAX_TOOL_CALLS_PER_SECTION = 3
@@ -120,7 +136,13 @@ def test_workflow_unknown_mode_uses_legacy_xml_path() -> None:
     agent._parse_tool_calls.return_value = []
     agent.report_logger = None
     agent._current_section_index = None
-    agent.llm.chat.return_value = "Final Answer: ok"
+    agent._get_openai_tools_schema.return_value = []
+    agent.llm.chat_with_tools.return_value = {
+        "content": "Final Answer: ok",
+        "tool_calls": [],
+        "finish_reason": "stop",
+        "raw_response": None,
+    }
 
     section = MagicMock()
     section.title = "T"
@@ -139,10 +161,12 @@ def test_workflow_unknown_mode_uses_legacy_xml_path() -> None:
             section_index=0,
         )
 
-    # FooBar → fällt auf "xml" → chat() wird aufgerufen, chat_with_tools nicht
-    assert agent.llm.chat.called, "Legacy chat() path must be used on invalid mode"
-    assert not agent.llm.chat_with_tools.called, (
-        "chat_with_tools must NOT be called when mode is unknown — would risk 400"
+    # FooBar → fällt auf "native" → chat_with_tools wird aufgerufen, chat() nicht
+    assert agent.llm.chat_with_tools.called, (
+        "Invalid mode must fall back to the default native path"
+    )
+    assert not agent.llm.chat.called, (
+        "Legacy XML chat() path must only run when xml is chosen deliberately"
     )
 
 

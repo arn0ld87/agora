@@ -179,7 +179,7 @@ Ein persistierter `random_seed` ist derzeit **noch kein vollständiger Reprodukt
 | `REPORT_AGENT_TEMPERATURE` | Agent-Temperatur |
 | `REPORT_AGENT_MAX_REFLECTION_ROUNDS` | ReAct-/Reflection-Limit |
 | `REPORT_AGENT_MAX_TOOL_CALLS` | Tool-Limit |
-| `REPORT_TOOLCALL_MODE` | Toolcall-Modus |
+| `REPORT_TOOLCALL_MODE` | Toolcall-Modus: `native` (Default) oder `xml`. Ungültige Werte fallen auf `native` zurück. |
 | `REPORT_REQUIREMENT_CHECKER_ENABLED` | Requirement-Check aktivieren/deaktivieren, primär für kontrollierte Tests/Debug |
 
 Run-Budgets werden nicht durch diese Report-Variablen ersetzt; Budgetgrenzen sind eigene Run-Verträge.

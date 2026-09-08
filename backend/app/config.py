@@ -208,17 +208,22 @@ class Config:
     # REPORT_TOOLCALL_MODE: "native" nutzt OpenAI function-calling (tools=/tool_choice=);
     # "xml" behält den Legacy-XML-Parsing-Pfad (<tool_call>...</tool_call>).
     # Default: "native" — Modelle wie deepseek-v4-flash:cloud senden keinen sauberen XML-Block.
-    # Casing-tolerant + Whitelist: ungültige Werte fallen auf "xml" (legacy-stable) zurück
-    # statt stillschweigend in den native-Pfad zu rutschen und 400er zu provozieren.
+    # Casing-tolerant + Whitelist: ungültige Werte fallen auf den Default "native"
+    # zurück, nicht auf "xml". Begründung: ein Tippfehler ist ein Konfigurationsfehler
+    # und soll sich verhalten wie "nicht konfiguriert" — nicht wie ein stiller
+    # Moduswechsel. Der frühere xml-Fallback war als "legacy-stable" gedacht, trug
+    # aber nicht: wer die Variable gar nicht setzt, landet ohnehin im native-Pfad.
+    # Damit bekam ausgerechnet der Vertipper ein anderes Verhalten als der
+    # Nicht-Konfigurierer. Wer den XML-Pfad will, setzt ihn ausdrücklich.
     _RAW_REPORT_TOOLCALL_MODE = os.environ.get('REPORT_TOOLCALL_MODE', 'native')
     _NORMALIZED_REPORT_TOOLCALL_MODE = _RAW_REPORT_TOOLCALL_MODE.strip().lower()
     if _NORMALIZED_REPORT_TOOLCALL_MODE not in ('native', 'xml'):
         import logging as _logging
         _logging.getLogger(__name__).warning(
-            "Invalid REPORT_TOOLCALL_MODE=%r — falling back to 'xml' (legacy XML-parsing path)",
+            "Invalid REPORT_TOOLCALL_MODE=%r — falling back to default 'native'",
             _RAW_REPORT_TOOLCALL_MODE,
         )
-        _NORMALIZED_REPORT_TOOLCALL_MODE = 'xml'
+        _NORMALIZED_REPORT_TOOLCALL_MODE = 'native'
     REPORT_TOOLCALL_MODE: str = _NORMALIZED_REPORT_TOOLCALL_MODE
 
     REPORT_AGENT_MAX_TOOL_CALLS = int(os.environ.get('REPORT_AGENT_MAX_TOOL_CALLS', '5'))
