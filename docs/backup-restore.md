@@ -21,7 +21,7 @@ Verwandte Dokumente:
 |---|---|---|
 | Neo4j-Graph (Knoten, Episoden, Embeddings) | Compose-Volume `neo4j_data` (Container `/data`) | nein — entspricht Wochen/Monaten Ingestion. |
 | Uploads (PDF/MD/TXT, OASIS-Subprocess-Snapshots, Console-Logs) | Bind-Mount `./backend/uploads/` | teilweise — Quelldokumente können neu hochgeladen werden, aber Run-State wäre weg. |
-| Reports + Audit-Trails | `./backend/reports/` plus `ArtifactStore`-Pfade unter `backend/uploads/<sim_id>/` | teilweise — neuer Run reproduziert nicht zwingend dasselbe Report-Wording. |
+| Reports + Audit-Trails | `backend/uploads/reports/` plus `ArtifactStore`-Pfade unter `backend/uploads/<sim_id>/` | teilweise — neuer Run reproduziert nicht zwingend dasselbe Report-Wording. |
 | `simulation_config.json`, `state.json` | unter `backend/uploads/<sim_id>/` | nein, sobald die Simulation läuft. Frozen Config wird beim Run-Start geschrieben. |
 | **Multi-Provider-Hub-Daten** (Issue #450 P1.3) | Bind-Mount `./backend/data/` mit `llm_provider_secrets.json` + `workspace_llm_routing.json` | nein — verschlüsselte Provider-Keys + Workspace-Routing-Defaults. Verlust = jeder Workspace muss seine Cloud-Keys neu eingeben. |
 | **`AGORA_SECRET_KEY`** | `.env` (Fernet-Master-Key für `backend/data/llm_provider_secrets.json`) | nein — Verlust = Provider-Keys sind nicht mehr entschlüsselbar (Datenverlust). Separat zu `.env` sichern. |
@@ -155,9 +155,10 @@ Mit Borg analog. Btrfs-Snapshot des Subvolume genauso valide.
 
 ### Reports
 
-`./backend/reports/` enthält generierte Reports und Audit-Trails (per
-`ReportLogger`). Wird selten überschrieben — meistens append-only. Im
-Restic-Job mitsichern.
+`backend/uploads/reports/` enthält generierte Reports und Audit-Trails (per
+`ReportLogger`). Wird selten überschrieben — meistens append-only. Liegt
+unter dem `./backend/uploads`-Bind-Mount und ist damit bereits im
+Restic-Job oben abgedeckt.
 
 ### Multi-Provider-Hub (`backend/data/`)
 
@@ -221,9 +222,11 @@ Crontab auf dem Compose-Host (Repo-Root als Working-Dir):
 0 3 * * * /usr/local/bin/agora-backup-neo4j.sh
 
 # Stündliches Restic-Inkrement für Uploads/Reports + Multi-Provider-Hub.
+# backend/uploads/reports/ liegt unter backend/uploads/ und ist damit
+# bereits mitgesichert — kein eigener Pfad noetig.
 17 * * * * cd /opt/agora && restic -r /backups/agora backup \
               --tag agora-fs --exclude '*.lock' --exclude '*.tmp' \
-              ./backend/uploads ./backend/reports ./backend/data
+              ./backend/uploads ./backend/data
 
 # Wöchentliche Restic-Forget-Politik.
 30 4 * * 0 restic -r /backups/agora forget \
@@ -248,12 +251,12 @@ plus `gzip` und Restic-Push an `/backups/agora`.
 1. `docker compose down`. Volumes nicht löschen, falls noch erreichbar.
 2. `.env` aus Backup wiederherstellen.
 3. Neo4j-Dump ins Volume restauren — siehe oben.
-4. Uploads + Reports per Restic restauren:
+4. Uploads + Reports per Restic restauren (Reports liegen unter
+   `backend/uploads/reports/`, also im selben Include):
    ```bash
    restic -r /backups/agora restore latest \
-     --target /opt/agora-restore --include backend/uploads --include backend/reports
+     --target /opt/agora-restore --include backend/uploads
    rsync -a --delete /opt/agora-restore/backend/uploads/ ./backend/uploads/
-   rsync -a --delete /opt/agora-restore/backend/reports/ ./backend/reports/
    ```
 5. `docker compose up -d --build`.
 6. Smoke-Test: `/api/status`, Cypher-Knoten-Count, ein Run-Detail im

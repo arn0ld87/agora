@@ -114,21 +114,67 @@ setup_env() {
   fi
 }
 
-# Pflicht-Secret in .env sicherstellen; fehlt der Wert, wird er per Python
-# erzeugt und inplace in .env geschrieben (GNU- und BSD-sed-kompatibel).
+# Bekannte Platzhalter aus `.env.example`/`.env.docker.example` — Vereinigung
+# von SECRET_KEY_PLACEHOLDERS und NEO4J_PASSWORD_PLACEHOLDERS aus
+# backend/app/config.py:31-42. install.sh laeuft vor der Dependency-
+# Installation und kann diese Python-Liste nicht importieren, deshalb die
+# Zweitkopie hier. Drift-Guard-Test:
+# backend/tests/test_install_ensure_secret.py::test_placeholder_list_matches_config
+# haelt beide Listen synchron.
+ENSURE_SECRET_PLACEHOLDERS=(change-me change-me-use-token_urlsafe-32 agora password neo4j)
+
+# Pflicht-Secret in .env sicherstellen. Fehlt der Wert ODER steht dort noch
+# ein bekannter Platzhalter (s. ENSURE_SECRET_PLACEHOLDERS), wird er generiert
+# und inplace in .env geschrieben (GNU- und BSD-sed-kompatibel). Ohne die
+# Platzhalter-Erkennung waere dieser Aufruf im Host-Modus wirkungslos, weil
+# .env.example nicht-leere Platzhalter wie `change-me-use-token_urlsafe-32`
+# enthaelt.
+#
+# AGORA_SECRET_KEY und AGORA_FERNET_KEY muessen gueltige Fernet-Keys sein
+# (siehe llm_provider_secrets_store.py / api_keys_persistence.py) —
+# secrets.token_urlsafe(32) waere ein ungueltiger Fernet-Key und liesse die
+# Anwendung beim ersten Zugriff mit RuntimeError abbrechen.
+# base64.urlsafe_b64encode(os.urandom(32)) entspricht exakt
+# Fernet.generate_key(), funktioniert aber mit der Standardbibliothek —
+# `cryptography` ist an dieser Stelle im Installationsablauf typischerweise
+# noch nicht installiert.
 ensure_secret() {
   local key="$1"
-  if grep -qE "^${key}=[^[:space:]]+" .env; then
+  local current
+  current=$(grep -E "^${key}=" .env | head -1 | cut -d'=' -f2- || true)
+  local current_norm
+  current_norm=$(printf '%s' "$current" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+  local needs_value=0
+  if [[ -z "$current_norm" ]]; then
+    needs_value=1
+  else
+    local ph
+    for ph in "${ENSURE_SECRET_PLACEHOLDERS[@]}"; do
+      if [[ "$current_norm" == "$ph" ]]; then
+        needs_value=1
+        break
+      fi
+    done
+  fi
+  if [[ "$needs_value" -eq 0 ]]; then
     return 0
   fi
   local val
-  val=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
-  if grep -qE "^${key}=[[:space:]]*\$" .env; then
-    # Leere Zuweisung vorhanden — inplace ersetzen (GNU- und BSD-sed-kompatibel).
+  case "$key" in
+    AGORA_SECRET_KEY|AGORA_FERNET_KEY)
+      val=$(python3 -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())")
+      ;;
+    *)
+      val=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
+      ;;
+  esac
+  if grep -qE "^${key}=" .env; then
+    # Zeile vorhanden (leer oder Platzhalter) — inplace ersetzen
+    # (GNU- und BSD-sed-kompatibel).
     if sed --version >/dev/null 2>&1; then
-      sed -i "s|^${key}=[[:space:]]*\$|${key}=${val}|" .env
+      sed -i "s|^${key}=.*\$|${key}=${val}|" .env
     else
-      sed -i '' "s|^${key}=[[:space:]]*\$|${key}=${val}|" .env
+      sed -i '' "s|^${key}=.*\$|${key}=${val}|" .env
     fi
   else
     # Schlüssel fehlt ganz (ältere .env vor Einführung des Keys) — anhängen.
@@ -139,6 +185,18 @@ ensure_secret() {
   if ! grep -qE "^${key}=[^[:space:]]+" .env; then
     die "$key konnte nicht in .env gesetzt werden."
   fi
+  # Verteidigungs-Check: nach der Generierung darf kein bekannter Platzhalter
+  # mehr in .env stehen. Sollte bei korrekter Generatorlogik nie greifen,
+  # bricht install.sh aber mit klarer Meldung ab statt eine kaputte .env
+  # durchzureichen.
+  local final_norm
+  final_norm=$(grep -E "^${key}=" .env | head -1 | cut -d'=' -f2- | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+  local ph2
+  for ph2 in "${ENSURE_SECRET_PLACEHOLDERS[@]}"; do
+    if [[ "$final_norm" == "$ph2" ]]; then
+      die "$key steht nach der automatischen Generierung noch auf einem bekannten Platzhalter — Installation abgebrochen."
+    fi
+  done
   info "  $key automatisch erzeugt"
 }
 
@@ -163,6 +221,13 @@ if [[ "$MODE" == "docker" ]]; then
   ensure_secret SECRET_KEY
   ensure_secret AGORA_AUTH_TOKEN
   ensure_secret NEO4J_PASSWORD
+  # Die beiden Master-Keys gelten im Docker-Modus genauso: ohne
+  # AGORA_FERNET_KEY wirft api_keys_persistence.py ausserhalb des
+  # Debug-Modus RuntimeError, ohne AGORA_SECRET_KEY faellt
+  # llm_provider_secrets_store.py beim ersten Zugriff aus. Beide
+  # fehlten hier, weil .env.docker.example sie nie gefuehrt hat.
+  ensure_secret AGORA_SECRET_KEY
+  ensure_secret AGORA_FERNET_KEY
 
   BACKEND_PORT="${AGORA_BACKEND_PORT:-5001}"
   FRONTEND_PORT="${AGORA_FRONTEND_PORT:-5173}"
@@ -211,6 +276,11 @@ fi
 # ---------------------------------------------------------------------------
 info "Host-Dev-Modus"
 setup_env ".env.example"
+
+info "Prüfe Pflicht-Secrets …"
+ensure_secret SECRET_KEY
+ensure_secret AGORA_SECRET_KEY
+ensure_secret AGORA_FERNET_KEY
 
 # Root-Abhängigkeiten (concurrently etc.)
 info "Installiere Root-Abhängigkeiten (bun install) …"
