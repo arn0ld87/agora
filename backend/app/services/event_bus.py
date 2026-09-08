@@ -476,6 +476,9 @@ class FilePollingEventBus:
                                 "status": data.get("status"),
                                 "result": data.get("result"),
                                 "error": data.get("error"),
+                                # #1478 Codex P1, Runde 7: strukturierter
+                                # Budget-Abbruch statt Fehlertext-Parsing.
+                                "budget_exceeded": data.get("budget_exceeded"),
                             },
                             ts=data.get("timestamp", datetime.now().isoformat()),
                             correlation_id=correlation_id,

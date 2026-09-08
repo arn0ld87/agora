@@ -32,6 +32,8 @@ from sim_runtime.ipc import (  # noqa: E402
     IPCHandler,
 )
 
+from app.services.run_budget import BudgetExceededError  # noqa: E402
+
 INTERVIEW_VALUE = "interview"
 
 
@@ -75,6 +77,18 @@ class FakeEnv:
         if self.raise_on_step:
             raise RuntimeError("boom")
         self.steps.append(actions)
+
+
+class BudgetExceededEnv:
+    """``env.step`` wirft ``BudgetExceededError`` — der harte Budget-Guard
+    schlaegt waehrend des physischen Modellaufrufs zu (#1478 Codex P1,
+    Runde 7)."""
+
+    def __init__(self, *, dimension: str = "calls", observed: int = 5, threshold: int = 5) -> None:
+        self._exc = BudgetExceededError(dimension, observed=observed, threshold=threshold)
+
+    async def step(self, actions: Dict[Any, Any]) -> None:
+        raise self._exc
 
 
 class FakeBridge:
@@ -540,3 +554,54 @@ async def test_execute_command_batch_forwards_report_run_id(tmp_path: Path):
         {"interviews": [{"agent_id": 1, "prompt": "p"}], "report_run_id": "run-report-5"},
     ) is True
     assert guard.attribute_calls == [("run-report-5", "report_interview")]
+
+
+# ---------------------------------------------------------------------------
+# Budget-Abbruch strukturiert in der IPC-Fehlerantwort (#1478 Codex P1, Runde 7)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_handle_interview_budget_exceeded_sends_structured_field(tmp_path: Path):
+    env = BudgetExceededEnv(dimension="calls", observed=5, threshold=5)
+    handler = _make_handler(tmp_path, env=env, agent_graph=FakeAgentGraph({7}))
+    ok = await handler.handle_interview("cmd1", 7, "prompt")
+    assert ok is False
+    resp = json.loads((tmp_path / IPC_RESPONSES_DIR / "cmd1.json").read_text(encoding="utf-8"))
+    assert resp["status"] == "failed"
+    assert resp["budget_exceeded"] == {
+        "dimension": "calls",
+        "observed": 5,
+        "threshold": 5,
+    }
+
+
+@pytest.mark.asyncio
+async def test_handle_interview_generic_failure_has_no_budget_exceeded_field(
+    tmp_path: Path,
+):
+    env = FakeEnv(raise_on_step=True)
+    handler = _make_handler(tmp_path, env=env, agent_graph=FakeAgentGraph({7}))
+    ok = await handler.handle_interview("cmd1", 7, "prompt")
+    assert ok is False
+    resp = json.loads((tmp_path / IPC_RESPONSES_DIR / "cmd1.json").read_text(encoding="utf-8"))
+    assert resp["budget_exceeded"] is None
+
+
+@pytest.mark.asyncio
+async def test_handle_batch_interview_budget_exceeded_sends_structured_field(
+    tmp_path: Path,
+):
+    env = BudgetExceededEnv(dimension="tokens", observed=1000, threshold=800)
+    handler = _make_handler(tmp_path, env=env, agent_graph=FakeAgentGraph({1, 2}))
+    ok = await handler.handle_batch_interview(
+        "cmd1", [{"agent_id": 1, "prompt": "a"}, {"agent_id": 2, "prompt": "b"}]
+    )
+    assert ok is False
+    resp = json.loads((tmp_path / IPC_RESPONSES_DIR / "cmd1.json").read_text(encoding="utf-8"))
+    assert resp["status"] == "failed"
+    assert resp["budget_exceeded"] == {
+        "dimension": "tokens",
+        "observed": 1000,
+        "threshold": 800,
+    }

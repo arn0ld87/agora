@@ -163,6 +163,10 @@ class IPCResponse:
     result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
+    # #1478 Codex P1, Runde 7: strukturierter Budget-Abbruch statt Fehlertext
+    # (siehe ``sim_runtime.ipc.IPCHandler.send_response``). ``None`` fuer
+    # jede andere Fehlerursache — bestehende Consumer bleiben unveraendert.
+    budget_exceeded: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -170,6 +174,7 @@ class IPCResponse:
             "status": self.status.value,
             "result": self.result,
             "error": self.error,
+            "budget_exceeded": self.budget_exceeded,
             "timestamp": self.timestamp,
         }
 
@@ -180,6 +185,7 @@ class IPCResponse:
             status=CommandStatus(data["status"]),
             result=data.get("result"),
             error=data.get("error"),
+            budget_exceeded=data.get("budget_exceeded"),
             timestamp=data.get("timestamp", datetime.now().isoformat()),
         )
 
@@ -197,6 +203,7 @@ def _event_to_response(event: SimulationEvent, correlation_id: str) -> IPCRespon
         status=status,
         result=payload.get("result"),
         error=payload.get("error"),
+        budget_exceeded=payload.get("budget_exceeded"),
         timestamp=event.ts,
     )
 

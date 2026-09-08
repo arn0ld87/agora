@@ -132,13 +132,26 @@ class IPCHandler:
         status: str,
         result: Dict = None,
         error: str = None,
+        budget_exceeded: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """Send response: write file (legacy path) and mirror to Redis (issue #17)."""
+        """Send response: write file (legacy path) and mirror to Redis (issue #17).
+
+        ``budget_exceeded`` (#1478 Codex P1, Runde 7): additiv gegenueber dem
+        bisherigen Response-Format. Ein hartes Report-Budget, das waehrend
+        ``env.step()`` erreicht wird, ist kein generischer Interview-Fehler,
+        sondern das Ende des Report-Laufs — ``error`` allein (ein Freitext)
+        war fuer den Flask-Prozess nicht sicher von einem gewoehnlichen
+        Interview-Fehler unterscheidbar, ohne den Fehlertext zu parsen. Dieses
+        Feld traegt ``dimension``/``observed``/``threshold`` strukturiert und
+        bleibt ``None`` fuer jede andere Fehlerursache — bestehende Consumer,
+        die das Feld nicht kennen, ignorieren es unveraendert.
+        """
         response = {
             "command_id": command_id,
             "status": status,
             "result": result,
             "error": error,
+            "budget_exceeded": budget_exceeded,
             "timestamp": datetime.now().isoformat()
         }
 
@@ -189,6 +202,8 @@ class IPCHandler:
         Returns:
             True means success, False means failure
         """
+        from app.services.run_budget import BudgetExceededError
+
         try:
             # Get Agent
             agent = self.agent_graph.get_agent(agent_id)
@@ -211,6 +226,24 @@ class IPCHandler:
             print(f"  Interview completed: agent_id={agent_id}")
             return True
 
+        except BudgetExceededError as e:
+            # #1478 Codex P1, Runde 7: strukturiert statt als Fehlertext, damit
+            # der Flask-Prozess den Abbruch wieder als BudgetExceededError
+            # werfen kann statt ihn als generisches success=False zu behandeln.
+            error_msg = str(e)
+            print(f"  Interview failed (budget exceeded): agent_id={agent_id}, error={error_msg}")
+            await self.send_response(
+                command_id,
+                "failed",
+                error=error_msg,
+                budget_exceeded={
+                    "dimension": e.dimension,
+                    "observed": e.observed,
+                    "threshold": e.threshold,
+                },
+            )
+            return False
+
         except Exception as e:
             error_msg = str(e)
             print(f"  Interview failed: agent_id={agent_id}, error={error_msg}")
@@ -230,6 +263,8 @@ class IPCHandler:
             interviews: [{"agent_id": int, "prompt": str}, ...]
             report_run_id: siehe :meth:`handle_interview` (#1478 Codex P1, Runde 6).
         """
+        from app.services.run_budget import BudgetExceededError
+
         try:
             # Build action dictionary
             actions = {}
@@ -272,6 +307,22 @@ class IPCHandler:
             })
             print(f"  Batch Interview completed: {len(results)} Agents")
             return True
+
+        except BudgetExceededError as e:
+            # #1478 Codex P1, Runde 7: siehe Kommentar in ``handle_interview``.
+            error_msg = str(e)
+            print(f"  batchInterview failed (budget exceeded): {error_msg}")
+            await self.send_response(
+                command_id,
+                "failed",
+                error=error_msg,
+                budget_exceeded={
+                    "dimension": e.dimension,
+                    "observed": e.observed,
+                    "threshold": e.threshold,
+                },
+            )
+            return False
 
         except Exception as e:
             error_msg = str(e)

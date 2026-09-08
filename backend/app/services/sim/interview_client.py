@@ -74,6 +74,32 @@ def _report_budget_guard(run_id: Optional[str]) -> Iterator[None]:
         enforcer.record_after_call()
 
 
+def _reraise_if_budget_exceeded(response: Any) -> None:
+    """Wandelt einen strukturierten Budget-Abbruch der IPC-Antwort wieder in
+    ``BudgetExceededError`` um (#1478 Codex P1, Runde 7).
+
+    Vorher fingen beide IPC-Interview-Handler in ``sim_runtime.ipc`` einen
+    waehrend ``env.step()`` geworfenen ``BudgetExceededError`` als generische
+    Exception und antworteten mit ``status="failed"``. Dieser Client las das
+    nur als ``{"success": False, "error": <Text>}`` — ``GraphToolsService``
+    behandelte das wie ein dauerhaft nicht verfuegbares Tool statt wie das
+    Ende des Report-Laufs, und ``report_generation.py`` markierte den Run nie
+    als ``stopped``/``termination_reason=budget_*``. ``response.budget_exceeded``
+    (siehe ``sim_runtime.ipc.IPCHandler.send_response``) traegt die drei
+    Felder strukturiert durch das IPC-Protokoll; ist es gesetzt, wird hier
+    wieder dieselbe ``BudgetExceededError`` geworfen wie im bereits
+    gehaerteten Direktpfad (``LLMClient``/``_report_budget_guard`` oben).
+    """
+    info = getattr(response, "budget_exceeded", None)
+    if not info:
+        return
+    from ..run_budget import BudgetExceededError
+
+    raise BudgetExceededError(
+        info["dimension"], observed=info["observed"], threshold=info["threshold"]
+    )
+
+
 # ---------------------------------------------------------------------------
 # Env-status helpers
 # ---------------------------------------------------------------------------
@@ -231,6 +257,7 @@ def interview_agent(
                 "result": response.result,
                 "timestamp": response.timestamp,
             }
+        _reraise_if_budget_exceeded(response)
         return {
             "success": False,
             "agent_id": agent_id,
@@ -308,6 +335,7 @@ def interview_agents_batch(
                 "result": response.result,
                 "timestamp": response.timestamp,
             }
+        _reraise_if_budget_exceeded(response)
         return {
             "success": False,
             "interviews_count": len(interviews),
