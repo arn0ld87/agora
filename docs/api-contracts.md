@@ -1,169 +1,255 @@
 # API Contracts — Agora Backend ↔ Frontend
 
-**Status:** Single Source of Truth seit v0.7.0
-**Quelldateien:**
-- Codes & Backend-Default-Messages: [`backend/app/utils/api_errors.py`](../backend/app/utils/api_errors.py)
-- Frontend-UX-Texte & Retry-Mapping: [`frontend/src/api/errorMessages.ts`](../frontend/src/api/errorMessages.ts)
-- Envelope-Mapper & `ApiError`-Klasse: [`frontend/src/api/envelope.ts`](../frontend/src/api/envelope.ts)
-- Schema-Tests (31 über 7 Domänen): [`backend/tests/api/test_response_schemas.py`](../backend/tests/api/test_response_schemas.py)
+**Stand:** 08.09.2026  
+**Geprüfte Main-Baseline:** `0c47737f`  
+**Produktversion:** `0.9.5`
 
-Diese Datei spiegelt den Code-Stand. Bei Änderungen am Code: hier mit-pflegen, sonst driftet die Doku.
+Agora arbeitet **contracts-first**: öffentliche JSON-Grenzen werden im Backend als Pydantic-v2-Modelle definiert, im Frontend als Zod-Schemas gespiegelt und für relevante Verträge als JSON-Schema unter `schemas/` eingecheckt.
+
+Kanonische Quellen:
+
+- Backend-Verträge: [`backend/app/contracts/`](../backend/app/contracts/)
+- JSON-Schema-Generator: [`backend/app/contracts/dump_schemas.py`](../backend/app/contracts/dump_schemas.py)
+- Frontend-Spiegel: [`frontend/src/contracts/`](../frontend/src/contracts/)
+- eingecheckte Schemas: [`schemas/`](../schemas/)
+- API-Fehlercodes: [`backend/app/utils/api_errors.py`](../backend/app/utils/api_errors.py)
+- Envelope-Helfer: [`backend/app/utils/api_responses.py`](../backend/app/utils/api_responses.py)
+- Frontend-Envelope/API-Fehler: [`frontend/src/api/`](../frontend/src/api/)
+
+---
+
+## Contract-Regel
+
+Bei einer Änderung an einer JSON-Grenze gehören in **denselben Slice**:
+
+1. Pydantic-Vertrag,
+2. API-Serialisierung/Validierung,
+3. Zod-Spiegel,
+4. generiertes JSON-Schema, soweit der Vertrag exportiert wird,
+5. Backend-/Frontend-Regressionstests,
+6. `dump_schemas --check`.
+
+Dataclasses oder handgeschriebene Inline-Dicts sind für neue öffentliche API-Verträge keine Ersatzlösung.
 
 ---
 
 ## Response-Envelopes
 
-Alle `/api/*`-Endpunkte liefern strukturierte JSON-Envelopes. Frontend nutzt `unwrap()` aus [`envelope.ts`](../frontend/src/api/envelope.ts) zum Auspacken.
+### Regulärer Erfolg
 
-### Erfolg
+Typischer Shape:
 
 ```json
 {
   "success": true,
-  "data": <T>,
-  "count": <number?>,
-  "message": <string?>,
-  "meta": <object?>
+  "data": {},
+  "meta": {}
 }
 ```
 
-- `data` ist immer gesetzt; Typ hängt vom Endpunkt ab (siehe Schema-Tests).
-- `count` nur bei Listen-Endpunkten.
-- `message` für menschenlesbare Bestätigungen (selten).
-- `meta` für Pagination, Cursor, Trace-IDs etc.
+Je Endpunkt können zusätzliche vertraglich definierte Felder wie `count`, `message` oder Cursor-Metadaten existieren. Nicht jede erfolgreiche Response muss denselben generischen `data`-Typ besitzen; der **konkrete Contract** ist führend.
 
-### Fehler
+### Regulärer Fehler
+
+Typischer Shape:
 
 ```json
 {
   "success": false,
-  "code": "<ApiErrorCode>",
-  "error": "<string>",
-  "details": <object?>
+  "code": "validation_failed",
+  "error": "Eingabe ungültig",
+  "details": {}
 }
 ```
 
-- `code` aus dem `ApiErrorCode`-Katalog (siehe unten).
-- `error` ist die Backend-Default-Message (DE) oder eine kontextspezifische Override-Message.
-- `details` optional, enthält strukturierte Zusatzinfos (`task_id`, `retry_after`, etc.).
-- Backend ergänzt sporadisch zusätzliche Top-Level-Felder (`task_id`, …) — Frontend liest diese via `originalResponse` auf der `ApiError`-Instanz.
+Regeln:
+
+- UI-Logik soll auf stabile Codes/strukturierte Details reagieren, nicht auf String-Matching der Fehlermeldung.
+- rohe Exception-Texte, Hostnamen, Treiberdetails oder Dateipfade gehören ins Log und nicht ungefiltert in die API-Antwort.
+- Streaming- und Datei-Download-Endpunkte dürfen bewusst vom JSON-Envelope abweichen.
 
 ---
 
-## ApiErrorCode-Katalog (23 Codes)
+## ApiErrorCode-Katalog
 
-Spalten:
-- **Code** — Wert aus `ApiErrorCode`-StrEnum (lowercase).
-- **HTTP** — beobachteter HTTP-Status; Werte ohne aktuellen Aufrufer markiert mit `(Konvention)`.
-- **Backend-Default** — DE-Message aus `DEFAULT_MESSAGES` (api_errors.py).
-- **Frontend-UX** — DE-Toast-Text aus `ERROR_MESSAGES` (errorMessages.ts).
-- **Retry** — `✓` wenn in `RETRYABLE_CODES` (frontend triggert Retry-UI).
+Der aktuelle `ApiErrorCode`-Katalog enthält **24** Werte. Die Liste im Code ist die SSoT:
 
-### Validierung & Anfrage-Form
+### Anfrage/Validierung
 
-| Code | HTTP | Backend-Default | Frontend-UX | Retry |
-|------|------|-----------------|-------------|-------|
-| `invalid_id` | 400 | Ungültige ID | Ungültige ID — bitte erneut prüfen | — |
-| `not_found` | 404 | Nicht gefunden | Eintrag nicht gefunden | — |
-| `validation_failed` | 400 | Eingabe ungültig | Eingabe ungültig — bitte Werte prüfen | — |
-| `bad_request` | 400 (Konvention) | Ungültige Anfrage | Anfrage ungültig | — |
-| `method_not_allowed` | 405 (Konvention) | Methode nicht erlaubt | Methode nicht erlaubt | — |
+- `invalid_id`
+- `not_found`
+- `validation_failed`
+- `bad_request`
+- `method_not_allowed`
 
 ### Auth
 
-| Code | HTTP | Backend-Default | Frontend-UX | Retry |
-|------|------|-----------------|-------------|-------|
-| `auth_required` | 401 (Konvention) | Authentifizierung erforderlich | Anmeldung erforderlich | — |
-| `auth_invalid` | 401 (Konvention) | Authentifizierung ungültig | Anmeldung ungültig — bitte neu einloggen | — |
-| `auth_forbidden` | 403 (Konvention) | Zugriff verweigert | Zugriff verweigert | — |
+- `auth_required`
+- `auth_invalid`
+- `auth_forbidden`
 
-### Rate-Limit & Timeout
+### Rate-Limit/Timeout
 
-| Code | HTTP | Backend-Default | Frontend-UX | Retry |
-|------|------|-----------------|-------------|-------|
-| `rate_limited` | 429 (Konvention) | Zu viele Anfragen | Zu viele Anfragen — bitte später erneut versuchen | ✓ |
-| `timeout` | 504 (Konvention) | Zeitüberschreitung | Zeitüberschreitung — Backend antwortet zu langsam | ✓ |
+- `rate_limited`
+- `timeout`
 
-### Infrastruktur (transient)
+### Infrastruktur
 
-| Code | HTTP | Backend-Default | Frontend-UX | Retry |
-|------|------|-----------------|-------------|-------|
-| `service_unavailable` | 503 | Dienst nicht verfügbar | Backend offline oder nicht erreichbar | ✓ |
-| `neo4j_unavailable` | 503 | Neo4j nicht erreichbar | Datenbank (Neo4j) nicht erreichbar | ✓ |
-| `llm_unavailable` | 503 (Konvention) | LLM-Endpoint nicht erreichbar | LLM-Endpunkt nicht erreichbar | ✓ |
+- `service_unavailable`
+- `neo4j_unavailable`
+- `llm_unavailable`
 
-### Domänen-Konflikte (Workflow-spezifisch)
+### Ontologie/Workflow
 
-| Code | HTTP | Backend-Default | Frontend-UX | Retry |
-|------|------|-----------------|-------------|-------|
-| `ontology_missing` | 400 | Ontologie fehlt | Ontologie fehlt — bitte zuerst generieren | — |
-| `ontology_generation_failed` | 500 (Konvention) | Ontologie-Generierung fehlgeschlagen | Ontologie-Generierung fehlgeschlagen — erneut versuchen | ✓ |
-| `simulation_not_prepared` | 409 (auch 404 beobachtet) | Simulation noch nicht vorbereitet | Simulation noch nicht vorbereitet — Schritt /prepare ausführen | — |
-| `simulation_already_running` | 409 | Simulation läuft bereits | Simulation läuft bereits | — |
-| `persona_review_required` | 409 | Persona-Review erforderlich | Persona-Review erforderlich, bevor die Simulation startet | — |
-| `graph_build_in_progress` | 409 | Graph-Build läuft bereits | Graph-Build läuft bereits — bitte warten | — |
+- `ontology_missing`
+- `ontology_generation_failed`
+- `simulation_not_prepared`
+- `simulation_already_running`
+- `simulation_prepare_in_progress`
+- `persona_review_required`
+- `graph_build_in_progress`
 
 ### Upload
 
-| Code | HTTP | Backend-Default | Frontend-UX | Retry |
-|------|------|-----------------|-------------|-------|
-| `upload_too_large` | 413 (Konvention) | Upload zu groß | Datei zu groß | — |
-| `unsupported_format` | 400 | Format nicht unterstützt | Format nicht unterstützt | — |
+- `upload_too_large`
+- `unsupported_format`
 
 ### Generisch
 
-| Code | HTTP | Backend-Default | Frontend-UX | Retry |
-|------|------|-----------------|-------------|-------|
-| `internal_error` | 500 (Konvention) | Interner Serverfehler | Interner Serverfehler | — |
-| `not_implemented` | 501 (Konvention) | Nicht implementiert | Funktion noch nicht verfügbar | — |
+- `internal_error`
+- `not_implemented`
 
-**Hinweis zu `(Konvention)`:** Diese Codes sind im Katalog definiert, haben aber zum Zeitpunkt v0.7.0 keinen aktiven `json_error()`-Aufrufer mit explizitem `status=`-Argument. Die genannten HTTP-Werte folgen der RFC-Standardkonvention und sind die geplante Vergabe, sobald entsprechende Endpunkte den Code nutzen.
+HTTP-Status und zusätzliche `details` hängen vom Endpunkt ab. Diese Datei erfindet deshalb keine „Konventions-Statuscodes“ für Codes, die ein konkreter Call anders verwenden kann.
 
 ---
 
-## Domänen-Schemas
+## Pydantic ↔ Zod ↔ JSON Schema
 
-Alle Response-Schemas werden in `backend/tests/api/test_response_schemas.py` per `jsonschema.validate()` enforced. 31 Tests über 7 Domänen:
+Contract-Parität bedeutet mehr als gleiche Feldnamen.
 
-| Domäne | Schema-Test-Klasse | Zweck |
-|--------|-------------------|-------|
-| Project | `TestProjectSchemas` | `/api/projects` CRUD-Responses |
-| Simulation | `TestSimulationSchemas` | `/api/simulations` State, Branches |
-| RunStatus | `TestRunStatusSchemas` | `/api/runs/<id>/status` Polling-Antwort |
-| ReportStatus | `TestReportStatusSchemas` | `/api/reports/<id>` Generation-Status |
-| GraphData | `TestGraphDataSchemas` | `/api/graph/<id>` Nodes/Edges/Triples |
-| OntologyDefinition | `TestOntologySchemas` | `/api/graph/<id>/ontology` Entity-Types |
-| Persona | `TestPersonaSchemas` | `/api/personas/*` lokale Persona-Bibliothek |
+Beispiel aus #1477: `success: Literal[True] = True` war in Pydantic semantisch bequem, machte das Feld im generierten JSON-Schema aber **optional**, während Zod `success: z.literal(true)` verlangte. Der Contract akzeptierte dadurch Backend-seitig ein Objekt, das das Frontend ablehnte.
 
-Bei Schema-Änderungen: Schema-Test anpassen, neuen Validierungs-Snapshot committen, Frontend-Konsumenten gegenchecken.
+Die Korrektur lautet heute:
+
+- discriminierende Pflichtfelder ohne Default, wenn sie im Wire-Format tatsächlich Pflicht sind,
+- JSON-Schema aus Pydantic regenerieren,
+- Zod-Spiegel mit demselben Required-/Literal-Verhalten,
+- Regressionstest auf beiden Seiten.
+
+Ein zweites Beispiel ist Python-`casefold` vs. JavaScript-Lowercasing (#1482). Semantische Normalisierung muss bei Cross-Layer-Contracts mit Testvektoren gespiegelt werden, nicht nur ungefähr ähnlich aussehen.
+
+---
+
+## Evidence-Map-Response
+
+`GET /api/report/<id>/evidence` ist kein „Map oder Fehler“-Sonderfall mehr, sondern ein expliziter Union-Contract.
+
+### Variante A — validierte Evidence
+
+Vereinfacht:
+
+```json
+{
+  "success": true,
+  "data": {
+    "schema_version": 3
+  }
+}
+```
+
+### Variante B — Evidence bewusst nicht ausgeliefert
+
+Vereinfacht:
+
+```json
+{
+  "success": false,
+  "evidence_omitted": true,
+  "reason": "contract_violation"
+}
+```
+
+Dieser zweite Fall ist für persistierte Altartefakte wichtig: Ein Bericht kann lesbar bleiben, obwohl seine alte Evidence-Map die heute strengere Rollenfamilien-/Cross-Reference-Semantik nicht mehr erfüllt. Die API darf dann nicht so tun, als sei die Evidence validiert.
+
+Exportpfade sind teilweise absichtlich strenger, weil ein ZIP/CSV eine invalidierte Evidence-Datei sonst als geprüftes Artefakt materialisieren würde.
+
+Kanonische Dateien:
+
+- `backend/app/contracts/report_contract.py`
+- `frontend/src/contracts/reportContract.ts`
+- `schemas/evidence-map-response.schema.json`
+
+---
+
+## Run- und Reportstatus
+
+`RunStatus` und `ReportStatus` sind **nicht** austauschbar.
+
+Ein Report kann fachlich `INCOMPLETE` und trotzdem auslieferbar sein. Der Run-/Resume-Pfad muss diesen Status transportieren, statt alles außerhalb von `COMPLETED` pauschal auf `failed` zu mappen (#1479).
+
+Für Consumer gilt:
+
+- technischer Runstatus beschreibt den Ausführungszustand,
+- `metadata.report_status` kann die Ergebnisqualität des Reports genauer benennen,
+- Degradierungen sind maschinenlesbar und dürfen nicht nur im Log existieren.
+
+---
+
+## Run-Degradierungen
+
+`RunDegradationModel.component` ist ein striktes Literal-Vokabular. Neue Komponenten müssen gleichzeitig in Backend, Zod und Tests ergänzt werden. Aktuelle Beispiele umfassen unter anderem:
+
+- `persona_generation`
+- `requirement_checker`
+- `section_generation`
+- `outline_planning`
+- `run_cancellation`
+
+Der Zweck ist nicht, jeden Fehler mit einem neuen Status zu erschlagen, sondern technische Ausführung und fachliche Ergebnisqualität getrennt sichtbar zu machen.
+
+---
+
+## Status- und Task-Contracts
+
+Nicht jede historische API-Grenze ist bereits vollständig contracts-first. [#1466](https://github.com/arn0ld87/agora/issues/1466) verfolgt verbleibende Bereiche wie die vollständigen Neo4j-/Disk-Teilbäume von `/api/status` und Task-Responses.
+
+Das ist ein **offener Architektur-Slice**, kein Grund, neue untypisierte Dict-Grenzen hinzuzufügen.
+
+---
+
+## Schema-Workflow
+
+Prüfen:
+
+```bash
+cd backend
+uv run python -m app.contracts.dump_schemas --check
+```
+
+Regenerieren:
+
+```bash
+cd backend
+uv run python -m app.contracts.dump_schemas
+```
+
+Danach immer den Diff unter `schemas/` prüfen. Ein regeneriertes Schema ist kein Freifahrtschein: Wenn sich `required`, Enum-Werte oder Union-Branches unerwartet ändern, ist zuerst der Pydantic-Vertrag zu prüfen.
 
 ---
 
 ## Frontend-Konsumtion
 
-```typescript
-import { unwrap, isApiError, ApiError } from './api/envelope'
-import { userMessageFor, isRetryable } from './api/errorMessages'
+Grundregel:
 
-try {
-  const data = unwrap(envelope)            // T bei Erfolg, sonst ApiError-throw
-  // ...
-} catch (e) {
-  if (isApiError(e)) {
-    showToast(userMessageFor(e))            // semantischer DE-Text
-    if (isRetryable(e)) showRetryButton()   // nur bei transient-Codes
-  } else {
-    showToast('Unbekannter Fehler')
-  }
-}
-```
+- Response an der API-Grenze parsen,
+- intern mit validierten Typen arbeiten,
+- unbekannte additive Werte dort tolerant behandeln, wo Rückwärtskompatibilität vorgesehen ist,
+- einen unbekannten Listeneintrag nicht die komplette bekannte Liste zerstören lassen.
 
-`ApiError` exposiert `code`, `status`, `message`, `details`, `originalResponse` — UI kann auf `code` switchen statt String-Matching auf `message`.
+Der Provider-Fall aus #1414 ist das Gegenbeispiel: Ein neuer `provider_kind` durfte ein älteres Frontend nicht dazu bringen, alle bekannten ProviderConnections zu verwerfen.
 
 ---
 
-## Migrations-Hinweis (vor v0.7.0 → v0.7.0)
+## Keine statischen Testzahlen in diesem Dokument
 
-- Backend `json_error()` akzeptiert jetzt `ApiErrorCode` als Argument; positional-string-Aufrufe (198 Stellen) bleiben Backwards-Compat.
-- Frontend wirft seit v0.7.0 `ApiError` aus dem Response-Interceptor (`frontend/src/api/index.js`); Komponenten, die noch `res.data` lesen, funktionieren weiter (additive Migration).
-- 5xx-Antworten sind security-safe: ungefangene Exceptions liefern außerhalb von `Config.DEBUG=true` nur generische Meldungen plus `code` — Details bleiben im Log.
+Frühere Versionen dieser Seite nannten „31 Schema-Tests über 7 Domänen“. Solche Zahlen veralten bei einem aktiven Repo schneller als der Satz, der sie beschreibt. Aktuelle Zähler stehen in [`STATUS.md`](STATUS.md) bzw. werden durch die Testtools selbst erzeugt.
