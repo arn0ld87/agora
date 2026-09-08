@@ -11,6 +11,7 @@ Verwandte Referenzen:
 - [`security-hardening.md`](security-hardening.md)
 - [`dependency-risk-register.md`](dependency-risk-register.md)
 - [`deployment-prod-like.md`](deployment-prod-like.md)
+- [`agent-tools.md`](agent-tools.md)
 - [`STATUS.md`](STATUS.md)
 
 ---
@@ -71,7 +72,8 @@ Flask API + Auth/Scopes
    │
    └────────► OASIS/CAMEL Subprocess
                 │
-                └──────────► Provider/Model Runtime
+                ├──────────► Provider/Model Runtime
+                └──────────► optionale Agent-Webtools
 ```
 
 ### B0 — Netzwerk / Reverse Proxy
@@ -108,6 +110,8 @@ Der Simulationsprozess ist eine **Prozessgrenze, keine Sicherheits-Sandbox**. Er
 
 Die Environment-Weitergabe ist whitelist-basiert; Secrets sollen nicht pauschal per `os.environ.copy()` an jeden Subprozess vererbt werden.
 
+Wenn `ENABLE_AGENT_TOOLS=true` gesetzt ist, erhält dieser Subprozess zusätzlich eine optionale Outbound-Webfläche. Deren aktueller SSRF-Stand ist unter A7 beschrieben.
+
 ### B4 — Flask → CLI-Provider
 
 `codex_cli` startet einen lokal authentifizierten CLI-Prozess. Seine Auth lebt in der lokalen CLI-Session, nicht im Agora-Provider-Secret-Store.
@@ -119,15 +123,11 @@ Risiken:
 - große Eingaben müssen über stdin statt unsichere/limitierte argv-Übergabe laufen,
 - CLI-Transport ist keine Sandbox gegen einen kompromittierten lokalen Useraccount.
 
-### B5 — Backend → externe Provider / Web
+### B5 — Backend / OASIS → externe Provider / Web
 
-Kontrollen:
+Vorhandene Schutzmechanismen unterscheiden sich je Pfad. Für credential-behaftete Provider-Verbindungen existieren Transport-Security, Timeouts, Retry-/Budget-Grenzen und Secret-Redaction.
 
-- Transport-Security für credential-behaftete HTTP-Endpunkte,
-- Timeouts/Retry-Grenzen,
-- Budget-Limits,
-- SSRF-Prüfung für direkte URL-Werkzeuge,
-- Secret-Redaction in Logs.
+**Nicht pauschal behaupten, dass jeder direkte URL-Fetch denselben SSRF-Guard benutzt.** Der experimentelle OASIS-Agent-Tool-Pfad `backend/scripts/agent_tools.py::web_fetch` ist auf dieser Baseline eine dokumentierte Ausnahme (#1485).
 
 ---
 
@@ -217,16 +217,26 @@ Beispiele:
 
 ### A7 — SSRF / interne Netzressourcen
 
-**Ziel:** Web-/Research-Tools gegen Loopback, RFC1918, Link-Local oder Metadata-Endpunkte richten.
+**Ziel:** Web-/Research-Tools gegen Loopback, RFC1918, CGNAT/Tailnet, Link-Local, Cloud-Metadata oder andere interne Dienste richten.
 
-**Mitigations:**
+**Aktueller Befund:** `backend/scripts/agent_tools.py::AgentToolRegistry.web_fetch()` ruft die vom Agenten gelieferte URL auf der geprüften Baseline direkt über `requests.get(..., allow_redirects=True)` ab. In diesem Pfad ist vor dem Request **kein eigener Private-IP-/Loopback-/Metadata-SSRF-Guard sichtbar**; Redirect-Ziele werden ebenfalls nicht einzeln validiert. Tracking: **#1485**.
 
-- URL-/IP-Prüfung vor direkten Fetch-Pfaden,
-- nur definierte Schemes,
-- Timeouts,
-- keine automatische Gleichsetzung „URL vom Modell = vertrauenswürdiges Ziel“.
+`ENABLE_AGENT_TOOLS` ist standardmäßig `false`, daher ist die Lücke nicht im Default-Lauf aktiv. Bei Aktivierung erweitert sie jedoch die Outbound-Netzwerkfläche des OASIS-Subprozesses.
 
-Bei neuen direkten Outbound-Fetchern muss die SSRF-Prüfung erneut bewertet werden; ein Precheck ist insbesondere bei DNS-Rebinding nicht automatisch ausreichend.
+**Bis #1485 geschlossen ist:**
+
+- Agent-Webtools nur in kontrollierter Netzwerk-/Egress-Umgebung aktivieren,
+- URLs aus Modelloutput/Observation als untrusted behandeln,
+- nicht davon ausgehen, dass SSRF-Härtung anderer Fetch-Pfade automatisch für `agent_tools.py` gilt.
+
+**Zielzustand:**
+
+- nur `http`/`https`,
+- IPv4/IPv6-Adressklassen prüfen,
+- private/loopback/link-local/metadata Ziele blockieren,
+- jedes Redirect erneut validieren,
+- DNS-Rebinding/TOCTOU im Verbindungsdesign berücksichtigen,
+- Timeouts und Response-Größenlimits beibehalten.
 
 ### A8 — Supply Chain
 
@@ -298,6 +308,7 @@ Ein gespeicherter Seed allein kontrolliert noch nicht alle Zufalls-/Modell-/Prom
 | Logs | strukturierte Logger + Secret-Redaction |
 | Dependencies | Audit-/Risk-Register-/SBOM-Gates |
 | Run-Kosten | Call-/Token-/Kosten-/Zeitbudgets |
+| Agent-Webtools | opt-in (`ENABLE_AGENT_TOOLS=false` Default); SSRF-Härtung #1485 offen |
 
 ---
 
@@ -305,11 +316,12 @@ Ein gespeicherter Seed allein kontrolliert noch nicht alle Zufalls-/Modell-/Prom
 
 1. **Shared Admin-Token:** kein Human-IAM/RBAC; Master-Token bleibt Vollzugriff.
 2. **Prompt Injection:** untrusted Quellen/Observation sind noch nicht überall maximal getrennt (#1224).
-3. **Webprozess-Langläufer:** Prepare/Report/Graph sind noch nicht vollständig restart-sicher (#1472).
-4. **Embedding-SSoT:** UI-aktive Konfiguration kann von Runtime-Env abweichen (#1417).
-5. **Simulationstreue:** Role Leakage/Recommender-Probleme (#1323/#1236).
-6. **Reproduzierbarkeit:** Manifest/Replay unvollständig (#763/#1274).
-7. **Restore-Nachweis:** Backup-Doku existiert, vollständiger Fresh-Host-Drill bleibt Release-Arbeit (#766).
+3. **Agent-Tool-SSRF:** experimentelles `web_fetch` besitzt noch keinen vollständigen Private-IP-/Redirect-/Rebinding-Guard (#1485).
+4. **Webprozess-Langläufer:** Prepare/Report/Graph sind noch nicht vollständig restart-sicher (#1472).
+5. **Embedding-SSoT:** UI-aktive Konfiguration kann von Runtime-Env abweichen (#1417).
+6. **Simulationstreue:** Role Leakage/Recommender-Probleme (#1323/#1236).
+7. **Reproduzierbarkeit:** Manifest/Replay unvollständig (#763/#1274).
+8. **Restore-Nachweis:** Backup-Doku existiert, vollständiger Fresh-Host-Drill bleibt Release-Arbeit (#766).
 
 ---
 
