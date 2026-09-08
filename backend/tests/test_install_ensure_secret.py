@@ -28,6 +28,13 @@ from pathlib import Path
 
 import pytest
 
+from app.config import NEO4J_PASSWORD_PLACEHOLDERS, SECRET_KEY_PLACEHOLDERS
+
+# Einzige Quelle fuer die Platzhalter in diesem Modul. install.sh fuehrt eine
+# Bash-Zweitkopie, weil es vor der Dependency-Installation laeuft; dass die
+# beiden uebereinstimmen, prueft `test_placeholder_list_matches_config`.
+_CONFIG_PLACEHOLDERS = SECRET_KEY_PLACEHOLDERS | NEO4J_PASSWORD_PLACEHOLDERS
+
 INSTALL_SH = Path(__file__).resolve().parents[2] / "install.sh"
 
 
@@ -134,11 +141,15 @@ class TestEnsureSecret:
 class TestEnsureSecretPlaceholders:
     """F1: bekannte Platzhalter werden wie ungesetzt behandelt."""
 
-    @pytest.mark.parametrize(
-        "placeholder",
-        ["change-me", "change-me-use-token_urlsafe-32", "agora", "AGORA", "password", "neo4j"],
-    )
+    @pytest.mark.parametrize("placeholder", sorted(_CONFIG_PLACEHOLDERS | {"AGORA"}))
     def test_replaces_known_placeholder(self, placeholder: str) -> None:
+        """Die Faelle kommen aus ``app.config``, nicht aus einer dritten
+        Literalliste: eine handgepflegte Kopie hier waere die naechste
+        Driftquelle neben der Bash-Kopie in install.sh — und GitGuardian las
+        das Literal ``password`` darin als hartkodiertes Secret (Incident
+        32406958, PR #1483). ``AGORA`` kommt zusaetzlich dazu, weil der
+        Vergleich case-insensitiv sein muss und die Konstanten nur
+        Kleinschreibung fuehren."""
         result = _run_ensure_secret(f"TEST_SECRET={placeholder}\n")
         value = _value_of(result, "TEST_SECRET")
         assert value is not None
@@ -152,13 +163,11 @@ class TestEnsureSecretPlaceholders:
         driftet die Zweitkopie garantiert auseinander — install.sh kann die
         Python-Konstanten nicht importieren, weil es vor der
         Dependency-Installation laeuft."""
-        from app.config import NEO4J_PASSWORD_PLACEHOLDERS, SECRET_KEY_PLACEHOLDERS
-
         text = INSTALL_SH.read_text(encoding="utf-8")
         match = re.search(r"^ENSURE_SECRET_PLACEHOLDERS=\(([^)]*)\)", text, re.MULTILINE)
         assert match, "ENSURE_SECRET_PLACEHOLDERS-Array nicht in install.sh gefunden"
         bash_values = set(match.group(1).split())
-        expected = SECRET_KEY_PLACEHOLDERS | NEO4J_PASSWORD_PLACEHOLDERS
+        expected = _CONFIG_PLACEHOLDERS
         assert bash_values == expected, (
             f"Bash-Platzhalterliste driftet von app.config ab: "
             f"bash={bash_values} config={expected}"
