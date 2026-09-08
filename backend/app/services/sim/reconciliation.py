@@ -46,7 +46,7 @@ via ``post_fork``) ist harmlos: der zweite Durchlauf findet keine weiteren
 
 from __future__ import annotations
 
-from typing import Any, Callable, List, Optional, Protocol
+from typing import Any, Callable, Dict, List, Optional, Protocol
 
 from pydantic import BaseModel, ConfigDict
 
@@ -58,7 +58,34 @@ logger = get_logger("agora.sim.reconciliation")
 
 #: Registry-Status, die nach einem Neustart nicht mehr vertrauenswürdig
 #: sind — es gibt keinen Prozess mehr, der sie aktiv hält.
-_STALE_STATUSES = ["pending", "processing"]
+#:
+#: F1 (Codex-Review Runde 4, PR #1476): ``paused`` gehört dazu.
+#: ``pause_simulation`` (``simulation_run.py``) setzt nur ein kooperatives
+#: IPC-Flag — der OASIS-Subprozess läuft weiter und pausiert sich selbst nach
+#: der laufenden Runde; die PID bleibt bis dahin gültig. Stirbt der Prozess
+#: durch einen Container-/Worker-Neustart, ist ein ``paused``-Eintrag genauso
+#: verwaist wie ein ``processing``-Eintrag — nur dass hier zusätzlich der
+#: direkte Resume-Endpunkt (``simulation_run.py::resume_simulation``) das
+#: Control-Flag blind zurücksetzt und die Registry ungeprüft auf
+#: ``processing`` schaltet, ohne einen Ersatzprozess zu starten. Ohne diese
+#: Ergänzung bliebe ein solcher Run für immer ein Phantom-Run.
+#:
+#: Entscheidung (bewusst NICHT ``resume_simulation`` selbst ändern): diese
+#: Reconciliation läuft als Startup-Hook (``post_fork`` in
+#: ``gunicorn.conf.py``, siehe Modul-Docstring/Finding A) VOR dem ersten von
+#: gunicorn angenommenen Request. Ein verwaister ``paused``-Run wird also
+#: bereits hier — vor jeder möglichen ``/resume``-Anfrage an diesen Worker —
+#: auf ``failed``/``process_restart`` korrigiert; ``run_state.json`` steht
+#: dabei auf ``RunnerStatus.PAUSED`` (kein Eintrag in
+#: ``_TERMINAL_RUNNER_STATUSES``), fällt also regulär in den
+#: "verwaist"-Zweig unten. Der Resume-Endpunkt sieht in diesem Fall den
+#: bereits korrigierten ``failed``-Status und keinen echten Phantom-Run mehr.
+#: ``resume_simulation`` bliebe weiterhin unsicher, wenn der Subprozess aus
+#: einem ANDEREN Grund als einem Worker-Neustart stirbt (z. B. Absturz
+#: während der Pause, ohne dass gunicorn neu forkt) — das ist ein separates,
+#: vorbestehendes Problem des Endpunkts selbst (keine eigene Liveness-Prüfung
+#: vor dem Statuswechsel) und außerhalb dieses Reconciliation-Slices.
+_STALE_STATUSES = ["pending", "processing", "paused"]
 
 #: Nur ``simulation_run`` hat eine ``process_pid`` in ``run_state.json`` und
 #: damit eine verifizierbare Liveness. Andere Run-Typen (``report_generate``,
@@ -142,15 +169,36 @@ def reconcile_stale_runs(
         statuses=_STALE_STATUSES, run_type=_RUN_TYPE, limit=100_000
     )
 
+    # F2 (Codex-Review Runde 4, PR #1476): mehrere RunRegistry-Manifeste
+    # koennen dieselbe ``simulation_id`` teilen (z. B. ein verwaister Alt-Run
+    # neben einem laengst abgeschlossenen Ersatzlauf, siehe Finding F1).
+    # ``run_state.json`` ist ausschliesslich pro ``simulation_id`` persistiert
+    # (nicht pro Registry-Manifest) — die urspruengliche Implementierung lud
+    # und aktualisierte diesen Zustand PRO MANIFEST innerhalb derselben
+    # Schleife: die erste Iteration schrieb ``run_state.json`` bereits auf
+    # FAILED, die zweite Iteration derselben ``simulation_id`` las diesen
+    # (nun terminalen) Zustand erneut und wurde vom Terminal-Zweig
+    # uebersprungen, statt ebenfalls als verwaist erkannt zu werden.
+    #
+    # Fix: Manifeste nach ``simulation_id`` gruppieren und ``run_state.json``
+    # pro Simulation genau EINMAL lesen und (falls verwaist) genau EINMAL
+    # schreiben — die getroffene Entscheidung (lebend / terminal / verwaist)
+    # gilt dann fuer alle Manifeste dieser Gruppe gleichermassen. Das
+    # verursacht weniger Zustandsverflechtung als die Alternative (State-
+    # Write zurueckstellen, bis alle Manifeste "gesehen" wurden), weil kein
+    # Zwischenspeicher fuer aufgeschobene Writes noetig ist und die
+    # Kernschleife weiterhin einen einzigen linearen Durchlauf macht.
+    groups: Dict[Optional[str], List[dict]] = {}
     for run in stale_runs:
         run_id = run.get("run_id")
         if not run_id:
             continue
-
         simulation_id = (run.get("linked_ids") or {}).get("simulation_id") or run.get(
             "entity_id"
         )
+        groups.setdefault(simulation_id, []).append(run)
 
+    for simulation_id, runs in groups.items():
         state = load_run_state(simulation_id, run_state_dir) if simulation_id else None
         pid = state.process_pid if state is not None else None
 
@@ -165,14 +213,16 @@ def reconcile_stale_runs(
             # erreicht ihn). Ein automatisches Terminieren wäre riskant
             # (siehe Abschlussbericht) — daher nur lautes Logging statt
             # Prozess-Kill.
-            logger.warning(
-                "reconcile_stale_runs: run=%s sim=%s pid=%s lebt noch, wird aber "
-                "von diesem (neu gestarteten) Worker nicht mehr verwaltet — "
-                "kein Popen-Handle, kein Monitor-Thread; Run bleibt 'processing' "
-                "und ist nicht mehr über die API steuerbar",
-                run_id, simulation_id, pid,
-            )
-            skipped.append(run_id)
+            for run in runs:
+                run_id = run["run_id"]
+                logger.warning(
+                    "reconcile_stale_runs: run=%s sim=%s pid=%s lebt noch, wird aber "
+                    "von diesem (neu gestarteten) Worker nicht mehr verwaltet — "
+                    "kein Popen-Handle, kein Monitor-Thread; Run bleibt 'processing' "
+                    "und ist nicht mehr über die API steuerbar",
+                    run_id, simulation_id, pid,
+                )
+                skipped.append(run_id)
             continue
 
         # Finding B (Codex-Review 2026-09-08) / F2 (Codex-Review Runde 3,
@@ -198,34 +248,37 @@ def reconcile_stale_runs(
         # unangetastet (weder "completed" noch fälschlich "failed"), bis eine
         # echte Run-ID-Verknüpfung existiert (Folgearbeit).
         if state is not None and state.runner_status in _TERMINAL_RUNNER_STATUSES:
-            logger.warning(
-                "reconcile_stale_runs: run=%s sim=%s pid=%s run_state.json "
-                "bereits terminal (runner_status=%s), aber ohne verifizierbare "
-                "Run-ID-Verknuepfung zu diesem Manifest (run_state.json kennt "
-                "nur simulation_id) — keine Propagation, Run bleibt "
-                "unveraendert",
-                run_id, simulation_id, pid, state.runner_status.value,
-            )
-            skipped.append(run_id)
+            for run in runs:
+                run_id = run["run_id"]
+                logger.warning(
+                    "reconcile_stale_runs: run=%s sim=%s pid=%s run_state.json "
+                    "bereits terminal (runner_status=%s), aber ohne verifizierbare "
+                    "Run-ID-Verknuepfung zu diesem Manifest (run_state.json kennt "
+                    "nur simulation_id) — keine Propagation, Run bleibt "
+                    "unveraendert",
+                    run_id, simulation_id, pid, state.runner_status.value,
+                )
+                skipped.append(run_id)
             continue
 
-        logger.warning(
-            "reconcile_stale_runs: run=%s sim=%s pid=%s verwaist — markiere failed/%s",
-            run_id, simulation_id, pid, _TERMINATION_REASON,
-        )
-        registry.update_run(
-            run_id,
-            status="failed",
-            termination_reason=_TERMINATION_REASON,
-            error=_ERROR_MESSAGE,
-        )
+        for run in runs:
+            run_id = run["run_id"]
+            logger.warning(
+                "reconcile_stale_runs: run=%s sim=%s pid=%s verwaist — markiere failed/%s",
+                run_id, simulation_id, pid, _TERMINATION_REASON,
+            )
+            registry.update_run(
+                run_id,
+                status="failed",
+                termination_reason=_TERMINATION_REASON,
+                error=_ERROR_MESSAGE,
+            )
+            reconciled.append(run_id)
 
         if state is not None:
             state.runner_status = RunnerStatus.FAILED
             state.error = _ERROR_MESSAGE
             save_run_state(state, run_state_dir)
-
-        reconciled.append(run_id)
 
     return ReconciliationResult(
         reconciled_run_ids=reconciled,

@@ -261,6 +261,99 @@ class TestReconcileStaleRuns:
         )
         assert registry._runs["run_orphan"]["status"] == "processing"
 
+    def test_paused_run_with_dead_pid_is_marked_failed_process_restart(self, monkeypatch):
+        """F1 (Codex-Review Runde 4, PR #1476): ``pause_simulation``
+        persistiert die Registry als ``paused``, nicht ``processing`` —
+        ein solcher Run muss nach einem Prozess-Neustart genauso als
+        verwaist erkannt werden wie ein ``processing``-Run."""
+        run = _make_run("run_paused", status="paused", simulation_id="sim_paused")
+        registry = _FakeRegistry([run])
+
+        state = SimulationRunState(
+            simulation_id="sim_paused",
+            runner_status=RunnerStatus.PAUSED,
+            process_pid=_dead_pid(),
+        )
+        saved_states: List[SimulationRunState] = []
+        monkeypatch.setattr(reconciliation_module, "load_run_state", lambda sim_id, base: state)
+        monkeypatch.setattr(
+            reconciliation_module,
+            "save_run_state",
+            lambda s, base, **kw: saved_states.append(s),
+        )
+
+        result = reconcile_stale_runs(registry, "/fake/run-state-dir")
+
+        assert result == ReconciliationResult(
+            reconciled_run_ids=["run_paused"], skipped_run_ids=[]
+        )
+        assert registry._runs["run_paused"]["status"] == "failed"
+        assert registry._runs["run_paused"]["termination_reason"] == "process_restart"
+        assert saved_states[0].runner_status == RunnerStatus.FAILED
+
+    def test_paused_run_with_live_pid_is_left_untouched(self, monkeypatch):
+        """Kooperative Pause: der OASIS-Subprozess lebt noch und pausiert
+        sich erst nach der laufenden Runde selbst — kein verwaister Run."""
+        import os
+
+        run = _make_run("run_paused_alive", status="paused", simulation_id="sim_paused_alive")
+        registry = _FakeRegistry([run])
+
+        state = SimulationRunState(
+            simulation_id="sim_paused_alive",
+            runner_status=RunnerStatus.PAUSED,
+            process_pid=os.getpid(),
+        )
+        save_mock = MagicMock()
+        monkeypatch.setattr(reconciliation_module, "load_run_state", lambda sim_id, base: state)
+        monkeypatch.setattr(reconciliation_module, "save_run_state", save_mock)
+
+        result = reconcile_stale_runs(registry, "/fake/run-state-dir")
+
+        assert result == ReconciliationResult(
+            reconciled_run_ids=[], skipped_run_ids=["run_paused_alive"]
+        )
+        assert registry._runs["run_paused_alive"]["status"] == "paused"
+        save_mock.assert_not_called()
+
+    def test_multiple_manifests_for_same_simulation_are_all_reconciled(self, monkeypatch):
+        """F2 (Codex-Review Runde 4, PR #1476): teilen sich zwei stale
+        Manifeste (``run_a``, ``run_b``) dieselbe ``simulation_id`` mit
+        totem Prozess und nichtterminalem ``run_state.json``, muessen BEIDE
+        als verwaist markiert werden — nicht nur das erste, dessen
+        Bearbeitung den gemeinsamen Zustand vor der zweiten Iteration
+        bereits auf FAILED umschreibt."""
+        run_a = _make_run("run_a", status="processing", simulation_id="sim_shared")
+        run_b = _make_run("run_b", status="processing", simulation_id="sim_shared")
+        registry = _FakeRegistry([run_a, run_b])
+
+        state = SimulationRunState(
+            simulation_id="sim_shared",
+            runner_status=RunnerStatus.RUNNING,
+            process_pid=_dead_pid(),
+        )
+        saved_states: List[SimulationRunState] = []
+        monkeypatch.setattr(reconciliation_module, "load_run_state", lambda sim_id, base: state)
+        monkeypatch.setattr(
+            reconciliation_module,
+            "save_run_state",
+            lambda s, base, **kw: saved_states.append(s),
+        )
+
+        result = reconcile_stale_runs(registry, "/fake/run-state-dir")
+
+        assert result == ReconciliationResult(
+            reconciled_run_ids=["run_a", "run_b"], skipped_run_ids=[]
+        )
+        assert registry._runs["run_a"]["status"] == "failed"
+        assert registry._runs["run_a"]["termination_reason"] == "process_restart"
+        assert registry._runs["run_b"]["status"] == "failed"
+        assert registry._runs["run_b"]["termination_reason"] == "process_restart"
+        # Der gemeinsame run_state.json-Zustand wird nur EINMAL geschrieben,
+        # nicht pro Manifest.
+        assert len(saved_states) == 1
+        assert saved_states[0].runner_status == RunnerStatus.FAILED
+
     def test_other_run_types_are_not_touched(self, monkeypatch):
         """Nur ``simulation_run`` hat eine verifizierbare Prozess-PID —
         andere Run-Typen bleiben außerhalb dieses Slices unangetastet."""
