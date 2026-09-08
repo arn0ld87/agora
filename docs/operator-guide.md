@@ -1,307 +1,384 @@
 # Agora Operator Guide
 
-**Stand:** 2026-05-15
-**Gegen den Code geprüft:** 2026-08-11 — Dateipfade, Kommandos, Skript- und Dokumentverweise. Die fachlichen Aussagen dieses Dokuments sind dabei **nicht** einzeln nachvollzogen worden.
-**Scope:** Komplette Anleitung für Operatoren, die eine Agora-Instanz
-installieren, betreiben, aktualisieren und im Fehlerfall debuggen
-müssen. Single-User-Setup auf Tailnet oder hinter Reverse-Proxy.
-**Related:**
-[`docs/deployment.md`](./deployment.md) · [`docs/deployment-prod-like.md`](./deployment-prod-like.md) ·
-[`docs/backup-restore.md`](./backup-restore.md) ·
-[`docs/secret-key-lifecycle.md`](./secret-key-lifecycle.md) ·
-[`docs/security-hardening.md`](./security-hardening.md).
+**Stand:** 08.09.2026  
+**Geprüfte Main-Baseline:** `0c47737f`  
+**Scope:** Installation, Betrieb, Update und Diagnose einer Single-User-Agora-Instanz.
+
+Verwandt:
+
+- [`deployment.md`](deployment.md)
+- [`deployment-prod-like.md`](deployment-prod-like.md)
+- [`operations.md`](operations.md)
+- [`backup-restore.md`](backup-restore.md)
+- [`configuration.md`](configuration.md)
+- [`provider-runtime-settings.md`](provider-runtime-settings.md)
+- [`secret-key-lifecycle.md`](secret-key-lifecycle.md)
 
 ---
 
-## 0. Voraussetzungen
+## 1. Voraussetzungen
 
-- **Host:** Linux x86_64 oder macOS (Apple Silicon). Mindestens 8 GB RAM,
-  4 vCPU, 40 GB freier Plattenplatz für `neo4j_data` + `backend/uploads`.
-- **Docker:** `docker` ≥ 24 mit Compose v2 (`docker compose`), nicht
-  `docker-compose`. Auf Linux Hosts: Compose-User in der `docker`-Gruppe
-  oder Root-Login akzeptieren.
-- **uv (Python):** für lokale Hilfsskripte (z. B.
-  `llm-secrets-doctor.py`). Installation via
-  `curl -LsSf https://astral.sh/uv/install.sh | sh`.
-- **Reverse-Proxy:** Pflicht für jeden Public-Expose — Tailscale-VPN,
-  Cloudflare-Tunnel oder nginx/Caddy mit TLS. Default-Compose bindet
-  Backend ans Loopback, daher kein direktes Internet-Exposure möglich
-  (auch nicht über IPv6).
-- **DNS / Tailnet:** Hostname (`agora.tail<id>.ts.net`) für Tailnet-Setup;
-  öffentliches A-Record + ALPN für Public-Mode.
+Für den Docker-Pfad:
+
+- Git
+- Docker Engine/Desktop mit Compose v2 (`docker compose`)
+- ausreichend freier Speicher für Neo4j, Uploads, Reports und Modellcache
+- Zugriff auf den gewünschten LLM-/Embedding-Provider bzw. lokalen Ollama-/CLI-Transport
+
+Für Host-/Entwicklungspfade zusätzlich je nach Workflow:
+
+- `uv`
+- Bun/Node gemäß Repo-Toolchain
+- Python wird für Backend-Abhängigkeiten über `uv` verwaltet
+
+Für jeden nicht rein lokalen Zugriff: Tailnet oder Reverse Proxy mit TLS/Auth. Der Default-Bind ist bewusst lokal/private ausgerichtet.
 
 ---
 
-## 1. Initial-Install
-
-### 1.1 Repo holen
+## 2. Fresh Install
 
 ```bash
 git clone https://github.com/arn0ld87/agora.git
 cd agora
+./install.sh
 ```
 
-### 1.2 `.env` mit Secrets befüllen
+`install.sh` erstellt bei Bedarf `.env` und generiert sichere Werte für:
 
-`.env.example` ist die Vorlage. Erforderliche Variablen:
+- `SECRET_KEY`
+- `AGORA_AUTH_TOKEN`
+- `AGORA_SECRET_KEY`
+- `AGORA_FERNET_KEY`
 
-| Var | Pflicht | Bedeutung |
-|---|---|---|
-| `SECRET_KEY` | ja | Flask-Session/CSRF-Token. ≥ 32 zufällige Bytes (base64). |
-| `AGORA_AUTH_TOKEN` | ja (Prod) | Master-Token für `/api/*`; clients schicken `X-Agora-Token`. |
-| `AGORA_SECRET_KEY` | ja (sobald Multi-Provider-Hub genutzt) | Fernet-Master-Key für `backend/data/llm_provider_secrets.json`. **Verlust = Datenverlust.** Siehe `docs/secret-key-lifecycle.md`. |
-| `NEO4J_PASSWORD` | ja | Neo4j-User `neo4j`. |
-| `LLM_API_KEY` | optional | Fallback-Key wenn UI keinen Provider konfiguriert hat. |
-| `LLM_BASE_URL` / `EMBEDDING_BASE_URL` | optional | Override für Provider-URL. Standard ist `host.docker.internal:11434` (Ollama auf Host). |
-| `VITE_AGORA_TOKEN` / `ALLOW_BUILD_TIME_TOKEN` | optional | Frontend-Build-Time-Token-Gate, nur für Single-User-Tailnet-Deploys. |
+Bekannte Placeholder aus der Vorlage gelten nicht als „fertige Secrets“ (#1483).
 
-Generieren der drei Crypto-Keys:
+### Danach manuell prüfen/setzen
 
-```bash
-# Flask SECRET_KEY (32 Bytes base64)
-python -c 'import secrets, base64; print(base64.b64encode(secrets.token_bytes(32)).decode())'
+Mindestens:
 
-# Auth-Token (Hex)
-python -c 'import secrets; print(secrets.token_hex(32))'
-
-# Fernet AGORA_SECRET_KEY (44-Zeichen base64)
-python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
+```text
+NEO4J_PASSWORD
 ```
 
-Werte in `.env` einfügen, `chmod 600 .env`, **nicht versionieren**.
+sowie die Provider-/Endpoint-Werte, die für die konkrete Installation erforderlich sind.
 
-### 1.3 Stack starten
+**Nicht erneut blind `cp .env.example .env` ausführen.** Das würde die Arbeit des Installers zurückdrehen und wäre eine erstaunlich effiziente Methode, sichere Keys wieder in Platzhalter zu verwandeln.
+
+### `.env` schützen
 
 ```bash
-# Dev/Test
+chmod 600 .env
+```
+
+Nie committen.
+
+---
+
+## 3. Stack starten
+
+### Entwicklung / Standard-Compose
+
+```bash
 docker compose up -d --build
-
-# Prod-like (Loopback-Bind, gunicorn, read_only rootfs)
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
-Erster Start dauert 8–15 Min (Neo4j-Init + Image-Build + HuggingFace-Cache).
+### Prod-like
 
-### 1.4 Health-Check
+```bash
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.prod.yml \
+  up -d --build
+```
+
+Die exakten Compose-Kombinationen stehen in [`deployment.md`](deployment.md) und [`deployment-prod-like.md`](deployment-prod-like.md).
+
+### Health
 
 ```bash
 curl -fsS http://localhost:5001/health
-# → {"ok":true}
-
-# Mit Auth-Token (Prod):
-AGORA_AUTH_TOKEN=$(grep AGORA_AUTH_TOKEN .env | cut -d= -f2)
-curl -fsS -H "X-Agora-Token: $AGORA_AUTH_TOKEN" http://localhost:5001/api/status
 ```
 
-Verify-Deploy als One-Liner:
+### Authentifizierter Status
 
 ```bash
-bash scripts/verify-deploy.sh
-# Mit Persistenz-Smoke (schreibt einen Smoke-Provider-Key, restartet, prüft Erhalt):
-AGORA_AUTH_TOKEN=$AGORA_AUTH_TOKEN bash scripts/verify-deploy.sh --full
+set -a
+. ./.env
+set +a
+
+curl -fsS \
+  -H "Authorization: Bearer $AGORA_AUTH_TOKEN" \
+  http://localhost:5001/api/status
 ```
+
+`X-Agora-Token` bleibt kompatibel, `Authorization: Bearer` ist der bevorzugte dokumentierte Weg.
 
 ---
 
-## 2. Provider-Key-Verwaltung
+## 4. Provider einrichten
 
-### 2.1 Über die UI
+Die aktuelle Architektur ist **nicht** mehr „API-Key im Browser-SessionStorage und pro Request mitschicken“.
 
-1. Login mit `AGORA_AUTH_TOKEN` (UI-Modal beim ersten Aufruf).
-2. **Settings → LLM Provider → Add Key.**
-3. Provider auswählen (OpenAI, Google, Anthropic, Together, Ollama, …).
-4. API-Key einfügen → **Save**.
-5. Optional: **Validate** → Key wird gegen `GET /v1/models` des Providers
-   geprüft, Status erscheint in der Maske (`ok` / `failed`).
+Kanonischer Ablauf:
 
-Daten:
+1. Settings → LLM Provider öffnen.
+2. ProviderConnection anlegen/prüfen.
+3. Bei `auth_mode=api_key` Secret im Backend-Store speichern.
+4. Verbindung/Model-Discovery testen.
+5. Workspace-/Stage-Routing bzw. Run-Route wählen.
+6. Lauf starten.
 
-- Klartext wird im Backend zu Fernet-Ciphertext und in
-  `backend/data/llm_provider_secrets.json` (Mode `0600`) abgelegt.
-- Die UI sieht nur den `masked_value` (`sk-...abcd`).
-- `AGORA_SECRET_KEY` aus `.env` ist der Decrypt-Key.
+Details: [`provider-runtime-settings.md`](provider-runtime-settings.md).
 
-### 2.2 Über die CLI (Doctor-Script)
+### CLI-Provider
+
+`codex_cli`:
+
+- kein API-Key-Feld
+- keine Base-URL
+- Auth über lokale Session
 
 ```bash
-# Status — welche Provider sind gespeichert?
-uv run --project backend python scripts/llm-secrets-doctor.py status
+codex --version
+codex login
+```
 
-# Roundtrip-Test — jeden Eintrag einmal decryptieren
+Beim Containerbetrieb muss die CLI vorhanden und die Session wie vorgesehen eingebunden sein.
+
+### Provider-Secrets prüfen
+
+Soweit für die Installation verfügbar:
+
+```bash
+uv run --project backend python scripts/llm-secrets-doctor.py status
 uv run --project backend python scripts/llm-secrets-doctor.py verify
 ```
 
-Vollständige Subcommand-Doku: [`docs/secret-key-lifecycle.md`](./secret-key-lifecycle.md).
+Keine Klartext-Secrets in Diagnoseausgaben kopieren.
 
-### 2.3 Workspace-Routing-Defaults
+---
 
-Bestimmt, welches Modell pro Pipeline-Stage genutzt wird, wenn der Run
-keinen expliziten Override mitgibt.
+## 5. Embedding-Konfiguration
 
-```bash
-# Aktuelle Defaults lesen
-curl -fsS -H "X-Agora-Token: $AGORA_AUTH_TOKEN" \
-  http://localhost:5001/api/llm/routing/defaults | jq
+Chat-Routing und Embeddings sind getrennt.
 
-# Global-Default setzen
-curl -fsS -X PUT \
-  -H "X-Agora-Token: $AGORA_AUTH_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"provider_id":"openai","model":"gpt-4o-mini"}' \
-  http://localhost:5001/api/llm/routing/defaults/global
+Aktuell wichtig: [#1417](https://github.com/arn0ld87/agora/issues/1417). Die UI kann eine aktive Embedding-Konfiguration anzeigen, während einzelne Runtime-Consumer weiterhin `EMBEDDING_*` aus `.env` lesen.
+
+Vor einem produktiven Modellwechsel deshalb:
+
+1. Store-Konfiguration prüfen,
+2. `.env`-/Runtime-Konfiguration prüfen,
+3. `VECTOR_DIM` prüfen,
+4. vorgesehenen Migrations-Lifecycle verwenden,
+5. nach Migration Retrieval/Graph-Pfad testen.
+
+Gleiche Vektordimension bedeutet nicht gleicher semantischer Vektorraum.
+
+---
+
+## 6. Lauf starten und beobachten
+
+Ein kompletter Lauf umfasst fachlich:
+
+```text
+Quelle
+  → Graph
+  → Prepare / Personas
+  → Simulation
+  → Report
 ```
 
-Persistiert in `backend/data/workspace_llm_routing.json` (Mode `0600`,
-prozesssicher mit `fcntl.flock`).
+Wichtige Zustandsregeln:
 
----
+- vollständiger Persona-LLM-Fallback ist blockierend
+- Nutzer-Stop → `stopped/user_stop`
+- Worker-/Containerverlust kann stale Simulation → `failed/process_restart` reconciliieren
+- unvollständiger, aber auslieferbarer Report → `INCOMPLETE`, nicht künstlich `COMPLETED`
 
-## 3. Backup & Restore
-
-Komplette Tabelle der Assets in [`docs/backup-restore.md`](./backup-restore.md).
-Kurz-Routine:
-
-| Asset | Backup-Frequenz | Restore-Tool |
-|---|---|---|
-| Neo4j-Graph (Compose-Volume `neo4j_data`) | täglich `neo4j-admin database dump` oder Btrfs-Snapshot | `neo4j-admin database load` |
-| `backend/uploads/` | stündlich Restic (`--tag agora-fs`) | `restic restore latest` |
-| `backend/data/` (Multi-Provider-Hub) | täglich Restic mit demselben Tag | `restic restore` + `chown 1000:1000` |
-| `backend/instance/settings.json` | täglich | trivial copy-restore |
-| `.env` (inkl. `AGORA_SECRET_KEY`) | jede Rotation **separat** sichern | Passwort-Manager |
-| `backend/reports/` | täglich Restic | `restic restore` |
-
-Recovery-Drill: einmal pro Quartal auf einer Test-Maschine durchspielen.
-Pflicht.
-
----
-
-## 4. Update-Prozess
+### Logs
 
 ```bash
-# 1. State sichern
-bash scripts/verify-deploy.sh             # Pre-Update-Smoke
-docker compose stop agora
-docker compose exec neo4j neo4j-admin server stop
-# Neo4j-Dump (siehe docs/backup-restore.md)
+docker compose logs -f agora
+```
 
-# 2. Code pullen
+Laufbezogen zusätzlich:
+
+- Simulationsartefakte unter `backend/uploads/<simulation_id>/`
+- Reports unter `backend/uploads/reports/<report_id>/`
+- Report-Agent-Forensik über `agent_log.jsonl`
+
+---
+
+## 7. Restart / Deploy während laufender Jobs
+
+### Simulation
+
+OASIS-Simulationen besitzen seit #1474/#1476 deutlich bessere Stop-/Restart-/Reconciliation-Semantik.
+
+### Prepare / Report / Graph
+
+**Nicht gleich robust.** Diese Jobs laufen weiterhin als daemonisierte Threads im Webprozess (#1472).
+
+Operative Regel bis zur Behebung:
+
+> Einen Container-/Worker-Recreate möglichst nicht mitten in Prepare, Report oder Graph-Build durchführen.
+
+Ein SIGTERM kann diese Arbeit beenden, ohne einen vollständigen persistenten Interrupted-/Resume-Zustand zu hinterlassen.
+
+---
+
+## 8. Parallelität
+
+Gunicorn läuft produktiv bewusst mit **einem Worker**. Nicht auf `workers=2` oder höher drehen, um einen langsamen Report zu „beschleunigen“.
+
+Warum:
+
+- Run-/Monitor-/Cancel-Teile sind prozesslokal
+- mehrere Worker könnten widersprüchlichen Zustand erzeugen
+- parallele CPU-schwere Reports konkurrieren im gevent-Worker (#1265)
+
+Bis zur Worker-/Queue-Entkopplung:
+
+- möglichst ein schwerer Report zur Zeit
+- Latenz erst gegen CPU/Konkurrenz messen, bevor Provider gewechselt werden
+
+---
+
+## 9. Backup vor Update
+
+Vor jedem produktiven Update:
+
+1. `.env`/Master-Keys sicher verfügbar?
+2. `backend/uploads/` gesichert?
+3. `backend/data/` gesichert?
+4. `backend/instance/` gesichert?
+5. Neo4j konsistent gesichert?
+6. Git-/Versionsstand dokumentiert?
+
+Komplette Recovery-Reihenfolge: [`backup-restore.md`](backup-restore.md).
+
+Der alte Pfad `backend/reports/` ist falsch. Reports liegen unter `backend/uploads/reports/`.
+
+---
+
+## 10. Update-Prozess
+
+Beispiel für ein normales Code-/Image-Update:
+
+```bash
+# Vorher Backup/Smoke entsprechend Betriebsstandard
+
 git fetch origin
-git log --oneline HEAD..origin/main       # Was kommt?
+git log --oneline HEAD..origin/main
 git pull --ff-only origin main
 
-# 3. Stack neu bauen
-docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.prod.yml \
   up -d --build
 
-# 4. Migration (falls Changelog welche nennt)
-docker compose exec agora uv run --project backend python -m app.migrate
-
-# 5. Verify
-AGORA_AUTH_TOKEN=… bash scripts/verify-deploy.sh --full
+curl -fsS http://localhost:5001/health
 ```
 
-Bei Migration-Fehler: `docker compose down`, Neo4j-Volume aus Backup
-wiederherstellen, alten Git-Stand auschecken, Container neu starten.
+Wenn Release Notes/Migrationen zusätzliche Schritte verlangen, haben diese Vorrang.
+
+### Kein automatisches „migrate“-Kommando erfinden
+
+Nur einen Migrationsbefehl ausführen, wenn er in der konkreten Release-/Runbook-Doku für diese Version existiert. Ein generisches `python -m app.migrate` gehört nicht als Ritual in jede Update-Anleitung, wenn der konkrete Releasepfad es nicht definiert.
 
 ---
 
-## 5. Fehlerdiagnose
+## 11. Diagnose
 
-### 5.1 Standard-Diagnose-Befehle
+### Dienste
 
 ```bash
-# Container-Health
 docker compose ps
-docker compose exec agora curl -fsS http://localhost:5001/health
-
-# Logs (letzte 100 Zeilen)
-docker compose logs agora --tail=100
-docker compose logs neo4j --tail=100
-
-# Schreibrechte auf backend/data?
-docker compose exec -T agora test -w /app/backend/data && echo "OK"
-
-# Mode 0600 für Provider-Secrets-File?
-docker compose exec -T agora stat -c '%a' /app/backend/data/llm_provider_secrets.json
-
-# Secret-Store-Doctor
-uv run --project backend python scripts/llm-secrets-doctor.py status
-uv run --project backend python scripts/llm-secrets-doctor.py verify
+docker compose logs --tail 200 agora
+docker compose logs --tail 200 neo4j
+docker compose logs --tail 200 redis
 ```
 
-### 5.2 Typische Symptome
+### Redis
 
-| Symptom | Mögliche Ursache | Erster Schritt |
-|---|---|---|
-| `/api/status` 503, „Secret store unavailable“ | `AGORA_SECRET_KEY` fehlt oder ist invalid in `.env` | `llm-secrets-doctor.py status` |
-| Provider-Maske nach Restart leer | `backend/data` nicht persistent gemountet | `docker compose config | grep backend/data` |
-| `LLMClient: LLM_API_KEY not configured` | `.env` fehlt im Repo-Root oder Var nicht gesetzt | `cat .env | grep LLM_API_KEY` |
-| `/api/status` „Neo4j offline — NoneType“ | Fork-Reset im Storage; behoben in #443. Falls trotzdem auf älterer Version: Backend restarten | `docker compose restart agora` |
-| Run-Status hängt bei `persona_generation` | OASIS-Subprozess hat keinen Kontext, Memory-Floor nicht aktiv | Logs prüfen, ggf. `LLM_CONTEXT_LIMIT` setzen |
-| Frontend-Bundle leer / 404 | `docker compose up` ohne `--build` nach Code-Update | `docker compose up -d --build` |
+```bash
+docker compose exec redis redis-cli ping
+```
 
-### 5.3 Wo welche Logs?
+### Neo4j
 
-| Was | Wo |
+```bash
+docker compose exec neo4j \
+  cypher-shell -u neo4j -p "$NEO4J_PASSWORD" "RETURN 1"
+```
+
+### Status
+
+```bash
+curl -fsS \
+  -H "Authorization: Bearer $AGORA_AUTH_TOKEN" \
+  http://localhost:5001/api/status | jq
+```
+
+Weitere konkrete Fehlerbilder: [`troubleshooting.md`](troubleshooting.md).
+
+---
+
+## 12. Häufige aktuelle Befunde
+
+| Symptom | Aktueller erster Verdacht |
 |---|---|
-| Backend (Flask + gunicorn) | `docker compose logs agora` |
-| OASIS-Subprozess | `backend/uploads/<sim_id>/console.log` |
-| Neo4j | `docker compose logs neo4j` |
-| Run-Status / Audit | `/api/runs/<id>/status` + ReportLogger-Files unter `backend/reports/<sim_id>/audit/` |
+| Provider/Modell geht an falsche URL | Route → ProviderConnection → transport/auth → Secret-Resolver prüfen; nicht zuerst `.env` |
+| `codex_cli` ohne Key/URL | normal; Session-Transport |
+| Embedding-UI und Runtime widersprechen sich | #1417 |
+| Run hängt nach Restart | Startup-Reconciliation/`run_state.json`/PID prüfen; bei Prepare/Report/Graph #1472 beachten |
+| User-Stop endet `failed` | Regression gegen #1474 |
+| Teilreport wirkt vollständig | `metadata.report_status`; Regression gegen #1479 |
+| Evidence 200 ohne Map | möglichen `evidence_omitted`-Contract prüfen (#1477) |
+| parallele Reports extrem langsam | #1265 / Ein-Worker-gevent-Kontext |
+| Budget via Vision/Tool/Interview | #1478 sollte greifen; ParallelIPC-Follow-up beachten |
+| Personas driften fachlich | #1471/#1470 |
 
 ---
 
-## 6. Security-Hinweise
+## 13. Security-Basics
 
-- **Niemals direkt aus dem Internet** ohne Reverse-Proxy mit Auth.
-  Tailscale oder Cloudflare-Tunnel sind erste Wahl. Compose bindet
-  Backend defaultmäßig ans Loopback (`127.0.0.1:5001`), aber dieser
-  Schutz gilt nur, solange die Default-Compose nicht durch
-  `0.0.0.0`-Overrides übergangen wird.
-- **`.env` ist die einzige Datei mit Klartext-Secrets im Repo-Tree.**
-  `chmod 600 .env`, niemals in `git add -A`, nie in Pull-Requests
-  einfügen.
-- **`AGORA_SECRET_KEY` separat vom Repo sichern.** Das ist der
-  Decrypt-Key für alle Provider-API-Keys; Verlust bedeutet, dass
-  `backend/data/llm_provider_secrets.json` zur unbrauchbaren Datei
-  wird. Recovery-Pfad in
-  [`docs/secret-key-lifecycle.md`](./secret-key-lifecycle.md#verlust-verhalten).
-- **API-Key-Rotation:** Cloud-Provider-Keys (OpenAI, Anthropic, …)
-  pro Quartal rotieren. `AGORA_SECRET_KEY` mindestens jährlich oder
-  nach Leak-Verdacht. Doctor-Script `rotate` automatisiert den
-  Re-Encrypt-Schritt.
-- **`backend/data/` ist ab #450 aus dem git-Tracking entfernt.** Falls
-  ihr ein älteres Repo updatet, prüft `git log -- backend/data` — ein
-  Force-Push-History-Rewrite ist eine separate Security-Aktion, keine
-  Slice-Operation.
-- **HIGH/CRITICAL CVE-Findings:** Trivy läuft jetzt blockierend (`exit-code: 1`).
-  Dokumentierte Upstream-Blocker sind in `.trivyignore` hinterlegt.
-  Bei Hardstop-Datum 2026-07-30 muss die Ignore-Liste leer sein oder via
-  ADR explizit verlängert (siehe
-  [`docs/dependency-risk-register.md`](./dependency-risk-register.md)).
-- **Logs enthalten keine Secrets:** `app.utils.logger.install_redaction_filter`
-  maskiert `?token=`, `Bearer …` und API-Key-Fragmente. Vor jedem
-  Diagnose-Bundle-Export trotzdem manuell durchsehen.
+- kein direktes öffentliches Exposure ohne geeignete Auth/TLS-/Tailnet-Grenze
+- `.env` nie committen
+- `AGORA_SECRET_KEY` und `AGORA_FERNET_KEY` separat recoverbar halten
+- Provider-Keys über Secret Store statt Run-Artefakte/Browserpersistenz
+- Logs vor externer Weitergabe auf Secrets/Personendaten prüfen
+- offene Dependency-Risiken über [`dependency-risk-register.md`](dependency-risk-register.md) behandeln
+
+Prompt-Injection-Härtung der Simulations-`observation` ist als #1224 noch offen.
 
 ---
 
-## 7. Checkliste (Operator-DoD)
+## 14. Operator-DoD
 
-Pre-Deploy:
+### Fresh Install
 
-- [ ] Alle vier Crypto-Secrets in `.env` gesetzt (`SECRET_KEY`,
-      `AGORA_AUTH_TOKEN`, `AGORA_SECRET_KEY`, `NEO4J_PASSWORD`).
-- [ ] `.env` hat Mode `600`.
-- [ ] `docker compose config` zeigt `./backend/data:/app/backend/data` und
-      `./backend/instance:/app/backend/instance` als Bind-Mounts.
-- [ ] Reverse-Proxy steht (Tailscale-MagicDNS oder TLS-Zertifikat).
-- [ ] Restic-Repo + Cronjob für `backend/data` + `backend/uploads` aktiv.
-- [ ] `AGORA_SECRET_KEY`-Recovery-Plan (Passwort-Manager-Eintrag) ist
-      dokumentiert.
+- [ ] `./install.sh` erfolgreich
+- [ ] keine bekannten Placeholder-Secrets in `.env`
+- [ ] `NEO4J_PASSWORD` bewusst gesetzt
+- [ ] LLM-/Embedding-Runtime konfiguriert
+- [ ] `/health` grün
+- [ ] `/api/status` mit Auth lesbar
+- [ ] Provider-Verbindung getestet
 
-Post-Deploy:
+### Vor Update
 
-- [ ] `bash scripts/verify-deploy.sh` grün.
-- [ ] `bash scripts/verify-deploy.sh --full` grün (Persistenz-Smoke).
-- [ ] `uv run --project backend python scripts/llm-secrets-doctor.py status` ok.
-- [ ] Erster Test-Run startet ohne Auth-/Provider-Fehler.
+- [ ] Backup-Punkt vorhanden
+- [ ] Master-Keys recoverbar
+- [ ] laufende daemonisierte Jobs beendet/abgewartet
+- [ ] Release-/Migrationshinweise gelesen
+
+### Nach Update
+
+- [ ] `/health` grün
+- [ ] `/api/status` plausibel
+- [ ] Neo4j/Redis erreichbar
+- [ ] Provider-Route korrekt
+- [ ] mindestens ein produktnaher Smoke
+
+Für einen `0.10`-RC reicht diese Checkliste allein nicht: Fresh-Host-Restore, Upgrade und Rollback müssen als echter Nachweis durchgeführt werden (#766).
