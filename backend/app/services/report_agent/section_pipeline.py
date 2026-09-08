@@ -267,11 +267,29 @@ def _remove_orphan_markdown(
     (das nachfolgende ``os.replace`` scheitert unter denselben
     Rechteproblemen typischerweise ebenfalls). Die Sektion scheitert damit
     sauber, statt stillschweigend inkonsistent zu werden.
+
+    CodeRabbit-Review PR #1475, Runde 3, Finding 2: eine ``FileNotFoundError``
+    ist die eine Ausnahme davon. Der DELETE-Endpunkt löscht den Report-Ordner
+    per ``shutil.rmtree`` und kann ``stale_path`` genau zwischen der
+    ``os.path.exists``-Prüfung oben und diesem ``os.remove`` entfernen
+    (TOCTOU). In dem Fall ist der gewünschte Endzustand — keine Waise mehr
+    auf der Platte — bereits erreicht, also wird das als Erfolg gewertet.
+    ``PermissionError`` und jeder andere ``OSError`` propagieren weiterhin
+    unverändert (siehe Finding 1 oben).
     """
     stale_path = ctx.report_manager._get_section_path(ctx.report_id, section_index)
     if not os.path.exists(stale_path):
         return
-    os.remove(stale_path)
+    try:
+        os.remove(stale_path)
+    except FileNotFoundError:
+        logger.info(
+            "section %d (%r): verwaiste Markdown-Datei bereits entfernt (%s)",
+            section_index,
+            title,
+            stale_path,
+        )
+        return
     logger.info(
         "section %d (%r): verwaiste Markdown-Datei entfernt (%s)",
         section_index,

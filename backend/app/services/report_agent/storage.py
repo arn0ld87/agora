@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import json
 import logging
 import os
@@ -70,6 +71,26 @@ def get_run_events_path(reports_dir: str, report_id: str) -> str:
     return os.path.join(get_report_folder(reports_dir, report_id), "run_events.json")
 
 
+# Codex-Review PR #1475, Runde 3, Finding 1: nur die errno-Werte, die
+# tatsächlich "Verzeichnis-fsync von dieser Plattform/diesem Dateisystem
+# nicht unterstützt" bedeuten, dürfen still degradieren. Alles andere
+# (z. B. ``EIO``, ``ENOSPC``) ist ein echter Storage-Fehler und muss
+# propagieren — sonst meldet ``write_json_atomic``/``write_section_markdown``
+# einen Write als erfolgreich, dessen Commit-Marker-Rename einen Absturz
+# nicht übersteht.
+_DIRECTORY_FSYNC_UNSUPPORTED_ERRNOS = frozenset(
+    e
+    for e in (
+        errno.EINVAL,
+        errno.EACCES,
+        errno.EPERM,
+        getattr(errno, "ENOTSUP", None),
+        getattr(errno, "EOPNOTSUPP", None),
+    )
+    if e is not None
+)
+
+
 def _fsync_directory(dir_path: str) -> None:
     """Synchronisiert das Elternverzeichnis nach einem ``os.replace``.
 
@@ -84,17 +105,28 @@ def _fsync_directory(dir_path: str) -> None:
 
     Manche Plattformen/Dateisysteme unterstützen kein Verzeichnis-``fsync``
     (z. B. Windows, einige Netzwerk-Dateisysteme). Das degradiert hier
-    bewusst still: ein bereits erfolgreicher Schreibvorgang darf dadurch
-    nicht nachträglich als Fehler gemeldet werden.
+    bewusst still, aber NUR für die dafür typischen errno-Werte (siehe
+    ``_DIRECTORY_FSYNC_UNSUPPORTED_ERRNOS``): ein bereits erfolgreicher
+    Schreibvorgang darf dadurch nicht nachträglich als Fehler gemeldet
+    werden.
+
+    Codex-Review PR #1475, Runde 3, Finding 1: echte Storage-Fehler
+    (``EIO``, ``ENOSPC``, ...) propagieren stattdessen — ein Crash danach
+    würde sonst genau das ``os.replace`` verlieren, das diese Funktion
+    eigentlich absichern soll.
     """
     try:
         dir_fd = os.open(dir_path, os.O_RDONLY)
-    except OSError:
-        return
+    except OSError as exc:
+        if exc.errno in _DIRECTORY_FSYNC_UNSUPPORTED_ERRNOS:
+            return
+        raise
     try:
         os.fsync(dir_fd)
-    except OSError:
-        pass
+    except OSError as exc:
+        if exc.errno in _DIRECTORY_FSYNC_UNSUPPORTED_ERRNOS:
+            return
+        raise
     finally:
         os.close(dir_fd)
 

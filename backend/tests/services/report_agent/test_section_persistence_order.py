@@ -4,8 +4,10 @@ Die Sektionen werden atomar geschrieben: Evidence zuerst, dann Markdown.
 Der Markdown-Datei ist der Commit-Marker — existiert sie, existiert auch die Evidence.
 """
 
+import errno
 import json
 import os
+import stat as stat_module
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -312,6 +314,57 @@ class TestSectionPersistenceOrder:
         assert section_path.exists()
         assert "OLD STALE CONTENT" in section_path.read_text(encoding='utf-8')
 
+    def test_process_section_treats_missing_orphan_file_as_already_removed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """CodeRabbit-Review PR #1475, Runde 3, Finding 2: verschwindet die
+        Waise zwischen ``os.path.exists`` und ``os.remove`` (TOCTOU, z. B.
+        weil der DELETE-Endpunkt den Report-Ordner per ``shutil.rmtree``
+        gelöscht hat), ist der gewünschte Endzustand bereits erreicht — die
+        Sektion muss trotzdem sauber regeneriert werden, statt an einer
+        ``FileNotFoundError`` zu scheitern.
+        """
+        (
+            agent,
+            section,
+            ctx,
+            fake_manager,
+            section_path,
+            generate_section,
+            evidence_calls,
+        ) = _build_process_section_harness(
+            tmp_path,
+            evidence_sections=[],  # keine Evidence für section_index 1
+            generated_content="NEW GENERATED CONTENT",
+        )
+
+        original_remove = os.remove
+
+        def _racy_remove(path: str) -> None:
+            # Simuliert einen Konkurrenzprozess (z. B. das DELETE-Endpunkt
+            # ``shutil.rmtree``), der die Waise zwischen der
+            # ``os.path.exists``-Prüfung und diesem Aufruf bereits entfernt
+            # hat — der Effekt (Datei weg) tritt real ein, os.remove sieht
+            # aber trotzdem eine bereits verschwundene Datei.
+            if os.path.exists(path):
+                original_remove(path)
+            raise FileNotFoundError(
+                errno.ENOENT, "No such file or directory (simulated TOCTOU)", path
+            )
+
+        monkeypatch.setattr(
+            "app.services.report_agent.section_pipeline.os.remove",
+            _racy_remove,
+        )
+
+        result = process_section(agent, section, ctx, section_index=1)
+
+        assert result.restored is False
+        generate_section.assert_called_once()
+        assert len(evidence_calls) == 1
+        assert fake_manager.save_section_calls == 1
+        assert "NEW GENERATED CONTENT" in section_path.read_text(encoding='utf-8')
+
 
 class TestParentDirectoryFsync:
     """CodeRabbit-Review PR #1475, Runde 2, Finding 3: nach ``os.replace``
@@ -324,10 +377,12 @@ class TestParentDirectoryFsync:
     ) -> None:
         target = tmp_path / "evidence_map.json"
         fsync_calls: list[int] = []
+        fsync_call_is_dir: list[bool] = []
         original_fsync = os.fsync
 
         def _tracking_fsync(fd: int) -> None:
             fsync_calls.append(fd)
+            fsync_call_is_dir.append(stat_module.S_ISDIR(os.fstat(fd).st_mode))
             original_fsync(fd)
 
         monkeypatch.setattr(
@@ -339,16 +394,26 @@ class TestParentDirectoryFsync:
         assert target.exists()
         # Ein fsync für die Temp-Datei, ein weiterer für das Verzeichnis.
         assert len(fsync_calls) == 2
+        # CodeRabbit-Review PR #1475, Runde 3, Finding 3: die Aufrufanzahl
+        # allein deckt eine Regression mit zwei Datei-Deskriptoren nicht
+        # auf — mindestens einer der gefsyncten Deskriptoren muss ein
+        # Verzeichnis sein.
+        assert any(fsync_call_is_dir), (
+            "Kein gefsyncter Deskriptor war ein Verzeichnis, erhalten: "
+            f"{fsync_call_is_dir}"
+        )
 
     def test_write_section_markdown_fsyncs_parent_directory(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         target = tmp_path / "section_01.md"
         fsync_calls: list[int] = []
+        fsync_call_is_dir: list[bool] = []
         original_fsync = os.fsync
 
         def _tracking_fsync(fd: int) -> None:
             fsync_calls.append(fd)
+            fsync_call_is_dir.append(stat_module.S_ISDIR(os.fstat(fd).st_mode))
             original_fsync(fd)
 
         monkeypatch.setattr(
@@ -359,28 +424,38 @@ class TestParentDirectoryFsync:
 
         assert target.exists()
         assert len(fsync_calls) == 2
+        assert any(fsync_call_is_dir), (
+            "Kein gefsyncter Deskriptor war ein Verzeichnis, erhalten: "
+            f"{fsync_call_is_dir}"
+        )
 
     def test_write_json_atomic_degrades_when_directory_fsync_unsupported(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Ein Verzeichnis-``fsync``, das ``OSError`` wirft (z. B. auf
-        Plattformen ohne Unterstützung), darf den erfolgreichen Schreib-
-        vorgang nicht nachträglich als Fehler melden."""
+        """Ein Verzeichnis-``fsync``, das mit einem "nicht unterstützt"-
+        errno (z. B. ``EINVAL`` auf Plattformen ohne Verzeichnis-fsync)
+        scheitert, darf den erfolgreichen Schreibvorgang nicht nachträglich
+        als Fehler melden."""
         target = tmp_path / "evidence_map.json"
         original_fsync = os.fsync
+        dir_fsync_attempted = False
 
         def _failing_dir_fsync(fd: int) -> None:
+            nonlocal dir_fsync_attempted
             # Die Temp-Datei bekommt echtes fsync, das Verzeichnis-fsync
-            # (danach, gleicher fd-Namespace) schlägt fehl.
+            # (danach, gleicher fd-Namespace) schlägt mit einem
+            # "nicht unterstützt"-errno fehl.
             try:
                 st = os.fstat(fd)
             except OSError:
                 original_fsync(fd)
                 return
-            import stat as stat_module
 
             if stat_module.S_ISDIR(st.st_mode):
-                raise OSError("Verzeichnis-fsync nicht unterstützt (simuliert)")
+                dir_fsync_attempted = True
+                raise OSError(
+                    errno.EINVAL, "Verzeichnis-fsync nicht unterstützt (simuliert)"
+                )
             original_fsync(fd)
 
         monkeypatch.setattr(
@@ -392,6 +467,41 @@ class TestParentDirectoryFsync:
         assert target.exists()
         with open(target, encoding="utf-8") as fh:
             assert json.load(fh) == {"a": 1}
+        # Finding 3: ohne diese Assertion würde ein Mock, der nie am
+        # Verzeichnis-Deskriptor scheitert, unbemerkt denselben Testnamen
+        # tragen und trotzdem grün bleiben.
+        assert dir_fsync_attempted, "Verzeichnis-fsync wurde nie versucht"
+
+    def test_write_json_atomic_propagates_real_directory_fsync_failure(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Codex-Review PR #1475, Runde 3, Finding 1: ein echter Storage-
+        Fehler (hier ``ENOSPC``) beim Verzeichnis-fsync darf NICHT
+        stillschweigend verschluckt werden — sonst meldet
+        ``write_json_atomic`` einen Write als erfolgreich, dessen
+        Commit-Marker-Rename einen Absturz danach nicht übersteht."""
+        target = tmp_path / "evidence_map.json"
+        original_fsync = os.fsync
+
+        def _failing_dir_fsync(fd: int) -> None:
+            try:
+                st = os.fstat(fd)
+            except OSError:
+                original_fsync(fd)
+                return
+
+            if stat_module.S_ISDIR(st.st_mode):
+                raise OSError(errno.ENOSPC, "No space left on device (simulated)")
+            original_fsync(fd)
+
+        monkeypatch.setattr(
+            "app.services.report_agent.storage.os.fsync", _failing_dir_fsync
+        )
+
+        with pytest.raises(OSError) as exc_info:
+            write_json_atomic(str(target), {"a": 1})
+
+        assert exc_info.value.errno == errno.ENOSPC
 
 
 if __name__ == "__main__":

@@ -518,6 +518,16 @@ def test_generate_report_filters_markdown_only_orphan_from_context(tmp_path):
             f"Section 2 taucht in einem Fortschritts-Snapshot doppelt auf: {snapshot}"
         )
 
+    # CodeRabbit-Review PR #1475, Runde 3, Finding 4: die Negativ-Assertion
+    # oben (<=1 in jedem Snapshot) würde auch dann grün bleiben, wenn
+    # "Section 2" in KEINEM Snapshot auftaucht — z. B. weil sie nie als
+    # abgeschlossen gemeldet wird. Die Positiv-Assertion stellt sicher, dass
+    # sie im letzten Snapshot tatsächlich genau einmal steht.
+    assert progress_snapshots[-1].count("Section 2") == 1, (
+        "Die regenerierte Section 2 muss im letzten Fortschritts-Snapshot "
+        f"genau einmal stehen, erhalten: {progress_snapshots[-1]}"
+    )
+
     assert result is not None
 
 
