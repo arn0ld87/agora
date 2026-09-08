@@ -972,7 +972,15 @@ def _resume_or_restart_simulation_run(run: dict):
         metadata={"graph_id": state.graph_id, "branch_name": state.branch_name},
     ) as lifecycle:
         new_run = lifecycle.record
-        new_run_state = SimulationRunner.start_simulation(simulation_id=simulation_id, platform="parallel")
+        # Finding F1 (Codex-Review Runde 3, PR #1476): requested_run_id ist
+        # run["run_id"] — der urspruenglich angefragte, hier zu resumierende
+        # (moeglicherweise verwaiste) Run, NICHT das gerade eben angelegte
+        # Replacement-Manifest (new_run["run_id"]). Ohne diese gezielte
+        # Weitergabe koennte die Stale-Korrektur bei mehreren historischen
+        # "processing"-Manifesten einen falschen, neueren Run treffen.
+        new_run_state = SimulationRunner.start_simulation(
+            simulation_id=simulation_id, platform="parallel", requested_run_id=run["run_id"]
+        )
         state.status = SimulationStatus.RUNNING
         manager._save_simulation_state(state)
         lifecycle.succeed(status="processing", message="Simulation restarted")

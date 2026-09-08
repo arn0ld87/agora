@@ -283,6 +283,15 @@ class Config:
     AGORA_PROXY_FIX_X_PORT = int(os.environ.get('AGORA_PROXY_FIX_X_PORT', '0'))
     AGORA_PROXY_FIX_X_PREFIX = int(os.environ.get('AGORA_PROXY_FIX_X_PREFIX', '0'))
 
+    # Startup-Reconciliation (Tech-Review 2026-09-07 Slice B1): nach einem
+    # Container-Restart markiert ``reconcile_stale_runs`` verwaiste Runs
+    # (RunRegistry-Status pending/processing, deren Subprozess-PID tot ist
+    # oder fehlt) als failed/process_restart, statt sie für immer als
+    # "laufend" auszuweisen. Default an; für Tests/Debugging abschaltbar.
+    AGORA_STARTUP_RECONCILIATION = (
+        os.environ.get('AGORA_STARTUP_RECONCILIATION', 'true').lower() in ('true', '1', 'yes')
+    )
+
     # Ontology mutation (Issue #11) — how to handle novel entity types that
     # the NER pipeline flags during simulation:
     #   disabled (default) → drop the signal, ontology never changes

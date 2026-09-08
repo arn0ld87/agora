@@ -40,6 +40,10 @@ services:
         # ist damit in Browser-DevTools sichtbar, ohne Bundle-Hash-Vergleich.
         # Override via `.env` oder `VITE_UI_VERSION=… docker compose up`.
         VITE_UI_VERSION: ${VITE_UI_VERSION:-v4}
+    # Siehe docker-compose.yml: gunicorn graceful_timeout=30, Docker-Default
+    # (10s) reicht dafuer nicht.
+    stop_grace_period: 45s
+    init: true
     ports: !override
       # Backend bleibt auf Loopback gebunden — externer Zugriff geht
       # über Reverse-Proxy / Tailscale / SSH-Forward, nicht direkt.

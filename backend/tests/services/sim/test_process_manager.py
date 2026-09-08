@@ -281,3 +281,373 @@ class TestRegisterCleanup:
                 process_manager._cleanup_registered = original_flag
 
         mock_atexit.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# is_process_alive (Tech-Review 2026-09-07 Slice B1)
+# ---------------------------------------------------------------------------
+
+
+class TestIsProcessAlive:
+    def test_none_is_dead(self):
+        from app.services.sim.process_manager import is_process_alive
+
+        assert is_process_alive(None) is False
+
+    def test_zero_or_negative_is_dead(self):
+        from app.services.sim.process_manager import is_process_alive
+
+        assert is_process_alive(0) is False
+        assert is_process_alive(-1) is False
+
+    def test_own_pid_is_alive(self):
+        from app.services.sim.process_manager import is_process_alive
+
+        assert is_process_alive(os.getpid()) is True
+
+    def test_finished_subprocess_pid_is_dead(self):
+        """Ein bereits beendeter Subprozess gilt als tot (PID kann vom OS
+        wiederverwendet worden sein, aber i.d.R. nicht in derselben
+        Test-Ausführung — os.kill(pid, 0) wirft ProcessLookupError)."""
+        import subprocess as _subprocess
+
+        from app.services.sim.process_manager import is_process_alive
+
+        proc = _subprocess.Popen([sys.executable, "-c", "pass"])
+        pid = proc.pid
+        proc.wait(timeout=5)
+
+        assert is_process_alive(pid) is False
+
+    def test_process_lookup_error_is_dead(self):
+        from app.services.sim.process_manager import is_process_alive
+
+        with patch("os.kill", side_effect=ProcessLookupError):
+            assert is_process_alive(4242) is False
+
+    def test_permission_error_is_conservatively_alive(self):
+        from app.services.sim.process_manager import is_process_alive
+
+        with patch("os.kill", side_effect=PermissionError):
+            assert is_process_alive(4242) is True
+
+
+# ---------------------------------------------------------------------------
+# start_simulation — stale RUNNING/STARTING state with a dead PID must not
+# block a restart (Tech-Review 2026-09-07 Slice B1, Fix-Punkt 3).
+# ---------------------------------------------------------------------------
+
+
+class TestStartSimulationStaleRunningGuard:
+    def _base_kwargs(self, tmp_path, *, get_run_state, save_state):
+        script_path = tmp_path / "run_parallel_simulation.py"
+        script_path.write_text("print('ok')\n", encoding="utf-8")
+        sim_dir = tmp_path / "sim_stale_running"
+        sim_dir.mkdir()
+        (sim_dir / "simulation_config.json").write_text("{}", encoding="utf-8")
+        return dict(
+            run_state_dir=str(tmp_path),
+            scripts_dir=str(tmp_path),
+            processes={},
+            action_queues={},
+            monitor_threads={},
+            stdout_files={},
+            stderr_files={},
+            graph_memory_enabled={},
+            get_run_state=get_run_state,
+            save_state=save_state,
+            on_monitor_start=MagicMock(),
+            write_control_state=MagicMock(),
+            get_config=lambda _: {
+                "time_config": {"total_simulation_hours": 1, "minutes_per_round": 60}
+            },
+            config_exists=lambda _: True,
+            setup_graph_memory=MagicMock(),
+        )
+
+    def test_stale_running_with_dead_pid_does_not_block_restart(self, tmp_path, monkeypatch):
+        from app.services.sim import process_manager
+        from app.services.sim.run_state_store import RunnerStatus, SimulationRunState
+
+        import subprocess as _subprocess
+
+        # Garantiert tote PID: ein bereits beendeter Subprozess.
+        dead_proc = _subprocess.Popen([sys.executable, "-c", "pass"])
+        dead_pid = dead_proc.pid
+        dead_proc.wait(timeout=5)
+
+        stale_state = SimulationRunState(
+            simulation_id="sim_stale_running",
+            runner_status=RunnerStatus.RUNNING,
+            process_pid=dead_pid,
+        )
+        save_state = MagicMock()
+
+        class FakeProcess:
+            pid = 55555
+
+        monkeypatch.setattr(
+            process_manager.subprocess, "Popen", lambda *a, **kw: FakeProcess()
+        )
+
+        result = process_manager.start_simulation(
+            "sim_stale_running",
+            "parallel",
+            **self._base_kwargs(
+                tmp_path, get_run_state=lambda _: stale_state, save_state=save_state
+            ),
+        )
+
+        # Erfolgreicher Spawn setzt den neuen State auf RUNNING (siehe
+        # start_simulation-Ende) — die eigentliche Prüfung dieses Tests ist,
+        # dass ueberhaupt kein ValueError("already running") fliegt.
+        assert result.runner_status == RunnerStatus.RUNNING
+        # Der verwaiste alte State wurde vor dem Neustart auf FAILED korrigiert
+        # und persistiert — save_state wird mehrfach aufgerufen: einmal für die
+        # Korrektur, danach für die weiteren State-Uebergaenge bis RUNNING.
+        save_calls = [c.args[0] for c in save_state.call_args_list]
+        assert any(
+            s.runner_status == RunnerStatus.FAILED
+            and s.error == "Prozess-Neustart während des Runs"
+            for s in save_calls
+        )
+
+    def test_running_with_live_pid_still_blocks_restart(self, tmp_path):
+        from app.services.sim import process_manager
+        from app.services.sim.run_state_store import RunnerStatus, SimulationRunState
+
+        live_state = SimulationRunState(
+            simulation_id="sim_stale_running",
+            runner_status=RunnerStatus.RUNNING,
+            process_pid=os.getpid(),
+        )
+
+        with pytest.raises(ValueError, match="already running"):
+            process_manager.start_simulation(
+                "sim_stale_running",
+                "parallel",
+                **self._base_kwargs(
+                    tmp_path, get_run_state=lambda _: live_state, save_state=MagicMock()
+                ),
+            )
+
+
+# ---------------------------------------------------------------------------
+# start_simulation — Finding A (Codex-Review 2026-09-08, PR #1476): ein
+# PID-loser STARTING-Zustand darf nur dann als verwaist gelten, wenn er
+# ALT ist. Ein frischer PID-loser STARTING-Zustand ist das Bild eines
+# gerade laufenden Starts (Fenster zwischen STARTING-Persist und Popen) und
+# darf keinen zweiten Subprozess ausloesen.
+# ---------------------------------------------------------------------------
+
+
+class TestStartSimulationStartingWithoutPidFreshnessGuard:
+    # Dupliziert bewusst TestStartSimulationStaleRunningGuard._base_kwargs
+    # statt zu erben — Vererbung wuerde pytest dazu bringen, auch die dort
+    # bereits vorhandenen Tests unter dieser Klasse ein zweites Mal zu
+    # sammeln und auszufuehren.
+    def _base_kwargs(self, tmp_path, *, get_run_state, save_state):
+        script_path = tmp_path / "run_parallel_simulation.py"
+        script_path.write_text("print('ok')\n", encoding="utf-8")
+        sim_dir = tmp_path / "sim_stale_running"
+        sim_dir.mkdir()
+        (sim_dir / "simulation_config.json").write_text("{}", encoding="utf-8")
+        return dict(
+            run_state_dir=str(tmp_path),
+            scripts_dir=str(tmp_path),
+            processes={},
+            action_queues={},
+            monitor_threads={},
+            stdout_files={},
+            stderr_files={},
+            graph_memory_enabled={},
+            get_run_state=get_run_state,
+            save_state=save_state,
+            on_monitor_start=MagicMock(),
+            write_control_state=MagicMock(),
+            get_config=lambda _: {
+                "time_config": {"total_simulation_hours": 1, "minutes_per_round": 60}
+            },
+            config_exists=lambda _: True,
+            setup_graph_memory=MagicMock(),
+        )
+
+    def test_fresh_starting_without_pid_blocks_second_spawn(self, tmp_path):
+        """Ein FRISCHER PID-loser STARTING-Zustand (< Grace-Period) gilt als
+        legitim laufender Start, nicht als verwaist — ein zweiter Start wird
+        abgelehnt statt einen zweiten Subprozess zu spawnen (Codex-Finding A)."""
+        from app.services.sim import process_manager
+        from app.services.sim.run_state_store import RunnerStatus, SimulationRunState
+        from datetime import datetime
+
+        fresh_starting_state = SimulationRunState(
+            simulation_id="sim_stale_running",
+            runner_status=RunnerStatus.STARTING,
+            process_pid=None,
+            started_at=datetime.now().isoformat(),
+        )
+        save_state = MagicMock()
+        popen_calls: list = []
+
+        def fake_popen(*a, **kw):
+            popen_calls.append((a, kw))
+            raise AssertionError("Popen must not be called for a fresh PID-less STARTING state")
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(process_manager.subprocess, "Popen", fake_popen)
+            with pytest.raises(ValueError, match="already running"):
+                process_manager.start_simulation(
+                    "sim_stale_running",
+                    "parallel",
+                    **self._base_kwargs(
+                        tmp_path,
+                        get_run_state=lambda _: fresh_starting_state,
+                        save_state=save_state,
+                    ),
+                )
+
+        assert popen_calls == [], "Ein zweiter Subprozess darf im frischen Fenster nicht gespawnt werden"
+        # Die Korrektur (FAILED + save_state) darf ebenfalls nicht laufen —
+        # der Zustand gilt als legitim laufend, nicht als verwaist.
+        save_state.assert_not_called()
+
+    def test_old_stuck_starting_without_pid_allows_restart(self, tmp_path):
+        """Ein wirklich ALTER PID-loser STARTING-Zustand (> Grace-Period,
+        z. B. nach einem Container-Restart waehrend genau dieses Fensters)
+        bleibt weiterhin korrigierbar und darf den Neustart nicht dauerhaft
+        blockieren."""
+        from app.services.sim import process_manager
+        from app.services.sim.run_state_store import RunnerStatus, SimulationRunState
+        from datetime import datetime, timedelta
+
+        old_started_at = (
+            datetime.now()
+            - timedelta(seconds=process_manager._STARTING_GRACE_PERIOD_SECONDS + 5)
+        ).isoformat()
+        old_starting_state = SimulationRunState(
+            simulation_id="sim_stale_running",
+            runner_status=RunnerStatus.STARTING,
+            process_pid=None,
+            started_at=old_started_at,
+        )
+        save_state = MagicMock()
+
+        class FakeProcess:
+            pid = 55555
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(process_manager.subprocess, "Popen", lambda *a, **kw: FakeProcess())
+
+            result = process_manager.start_simulation(
+                "sim_stale_running",
+                "parallel",
+                **self._base_kwargs(
+                    tmp_path,
+                    get_run_state=lambda _: old_starting_state,
+                    save_state=save_state,
+                ),
+            )
+
+        assert result.runner_status == RunnerStatus.RUNNING
+        save_calls = [c.args[0] for c in save_state.call_args_list]
+        assert any(
+            s.runner_status == RunnerStatus.FAILED
+            and s.error == "Prozess-Neustart während des Runs"
+            for s in save_calls
+        ), "Ein wirklich alter PID-loser Zustand muss weiterhin korrigiert werden"
+
+
+# ---------------------------------------------------------------------------
+# start_simulation — Finding A: Serialisierung ueberlappender Start-
+# Anfragen fuer dieselbe simulation_id (Lock in process_manager.py).
+# ---------------------------------------------------------------------------
+
+
+class TestStartSimulationLockSerialization:
+    def test_overlapping_starts_for_same_simulation_are_serialized(self, tmp_path):
+        """Zwei ueberlappende Start-Anfragen fuer dieselbe simulation_id
+        duerfen sich niemals im Popen-Aufruf ueberlappen — der Lock aus
+        _get_start_lock() serialisiert sie vollstaendig (Codex-Finding A)."""
+        import threading as _threading
+
+        from app.services.sim import process_manager
+
+        script_path = tmp_path / "run_parallel_simulation.py"
+        script_path.write_text("print('ok')\n", encoding="utf-8")
+        sim_dir = tmp_path / "sim_lock_race"
+        sim_dir.mkdir()
+        (sim_dir / "simulation_config.json").write_text("{}", encoding="utf-8")
+
+        popen_entered = _threading.Event()
+        release_popen = _threading.Event()
+        call_order: list = []
+        order_lock = _threading.Lock()
+
+        class FakeProcess:
+            pid = 42424
+
+        def fake_popen(*a, **kw):
+            with order_lock:
+                call_order.append("start")
+            popen_entered.set()
+            release_popen.wait(timeout=5)
+            with order_lock:
+                call_order.append("end")
+            return FakeProcess()
+
+        errors: list = []
+
+        def _run():
+            try:
+                process_manager.start_simulation(
+                    "sim_lock_race",
+                    "parallel",
+                    run_state_dir=str(tmp_path),
+                    scripts_dir=str(tmp_path),
+                    processes={},
+                    action_queues={},
+                    monitor_threads={},
+                    stdout_files={},
+                    stderr_files={},
+                    graph_memory_enabled={},
+                    get_run_state=lambda _: None,
+                    save_state=lambda _s: None,
+                    on_monitor_start=lambda _s: None,
+                    write_control_state=lambda *a, **kw: None,
+                    get_config=lambda _: {
+                        "time_config": {"total_simulation_hours": 1, "minutes_per_round": 60}
+                    },
+                    config_exists=lambda _: True,
+                    setup_graph_memory=lambda _s: None,
+                )
+            except Exception as exc:  # noqa: BLE001 — capture for the main thread
+                errors.append(exc)
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(process_manager.subprocess, "Popen", fake_popen)
+
+            thread_a = _threading.Thread(target=_run)
+            thread_b = _threading.Thread(target=_run)
+
+            thread_a.start()
+            assert popen_entered.wait(timeout=5), "Thread A muss den Popen-Aufruf erreichen"
+
+            thread_b.start()
+            # Thread B muss auf den Lock warten — solange release_popen nicht
+            # gesetzt ist, darf B niemals "start" anhaengen.
+            thread_b.join(timeout=0.3)
+            with order_lock:
+                assert call_order == ["start"], (
+                    "Thread B darf den Popen-Aufruf nicht betreten, solange "
+                    "Thread A den Lock haelt"
+                )
+
+            release_popen.set()
+            thread_a.join(timeout=5)
+            thread_b.join(timeout=5)
+
+        assert not errors, f"Unerwartete Exceptions in den Start-Threads: {errors}"
+        assert call_order == ["start", "end", "start", "end"], (
+            "Die beiden Popen-Aufrufe muessen sich vollstaendig serialisieren, "
+            f"tatsaechliche Reihenfolge: {call_order}"
+        )

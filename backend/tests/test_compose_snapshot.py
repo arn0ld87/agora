@@ -78,6 +78,23 @@ class TestComposeDevDefault:
         for p in ports:
             assert "127.0.0.1" in str(p), f"neo4j port not bound to 127.0.0.1: {p}"
 
+    def test_agora_has_stop_grace_period(self):
+        """Tech-Review 2026-09-07 Slice B1: gunicorn graceful_timeout=30
+        (gunicorn.conf.py) braucht mehr als Dockers stop_grace_period-Default
+        (10s), sonst killt Docker den Worker per SIGKILL bevor er sauber
+        beenden kann — verwaiste Runs wären die Folge."""
+        cfg = _compose_config()
+        agora = cfg["services"]["agora"]
+        assert agora.get("stop_grace_period") == "45s", (
+            f"expected stop_grace_period=45s, got {agora.get('stop_grace_period')}"
+        )
+
+    def test_agora_has_init_true(self):
+        """init:true reapt Zombie-Kindprozesse (OASIS-Subprozesse)."""
+        cfg = _compose_config()
+        agora = cfg["services"]["agora"]
+        assert agora.get("init") is True, f"expected init=true, got {agora.get('init')}"
+
 
 @pytest.mark.skipif(not _has_docker(), reason="docker not available")
 class TestComposeProdOverride:
@@ -102,3 +119,9 @@ class TestComposeProdOverride:
         assert backend, "backend port 5001 not found in prod"
         assert any("127.0.0.1" in str(p) for p in backend), \
             f"backend not bound to 127.0.0.1 in prod: {backend}"
+
+    def test_stop_grace_period_survives_prod_override(self):
+        cfg = _compose_config("docker-compose.prod.yml")
+        agora = cfg["services"]["agora"]
+        assert agora.get("stop_grace_period") == "45s"
+        assert agora.get("init") is True

@@ -1859,6 +1859,7 @@
     "terminationBudgetCost": "Kosten-Budget erreicht",
     "terminationBudgetTime": "Zeit-Budget erreicht",
     "terminationBudgetCalls": "Aufruf-Budget erreicht",
+    "terminationProcessRestart": "Nach Prozess-Neustart als beendet markiert",
     "costStatusMeasured": "gemessen",
     "costStatusEstimated": "geschätzt",
     "costStatusFree": "kostenlos",
