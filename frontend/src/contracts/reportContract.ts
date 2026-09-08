@@ -437,7 +437,10 @@ export type EvidenceCoverageEntry = z.infer<typeof EvidenceCoverageEntrySchema>;
  */
 function _stakeholderGroupKey(value: string | null | undefined): string {
   if (!value) return "";
-  return value.split(/\s+/).filter(Boolean).join(" ").toLowerCase();
+  // `str.casefold()` in Python faltet "ß" auf "ss"; `toLowerCase()` tut das
+  // nicht. Ohne diese Ersetzung waeren "Grosshaendler" und "Großhaendler"
+  // im Backend eine Gruppe und hier zwei — Spiegel-Drift auf einem Hartanker.
+  return value.split(/\s+/).filter(Boolean).join(" ").toLowerCase().replace(/ß/g, "ss");
 }
 
 /**
@@ -537,6 +540,12 @@ export const EvidenceMapSchema = z.object({
         const stakeholderGroups = new Set(
           supportingRecords
             .filter((record) => record.source_kind === 'agent_quote')
+            // Spiegel zu `cross_stakeholder_for_high`: das Backend nimmt nur
+            // Records mit gesetztem `persona_stakeholder_group` in die
+            // Zaehlmenge auf. Ohne diesen Filter zaehlte ein Record ohne
+            // Gruppe hier als eigener Schluessel ("title:") und der Spiegel
+            // waere LOCKERER als der Anker.
+            .filter((record) => Boolean(record.persona_stakeholder_group))
             .map((record) => _roleFamilyKey(record)),
         );
         if (stakeholderGroups.size < 2) {

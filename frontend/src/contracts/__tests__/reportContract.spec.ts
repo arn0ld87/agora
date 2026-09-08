@@ -591,6 +591,20 @@ describe('EvidenceMapSchema — cross_stakeholder_for_high Rollenfamilien-Spiege
     );
   });
 
+  it('faltet ß wie Pythons casefold auf ss — zwei Schreibweisen sind eine Rollenfamilie', () => {
+    // `_stakeholder_group_key` im Backend nutzt `str.casefold()`, das "ß" auf
+    // "ss" faltet. `toLowerCase()` in JS tut das nicht — ohne die Ersetzung
+    // zaehlte der Spiegel hier zwei Gruppen, wo das Backend eine sieht, und
+    // waere damit LOCKERER als ADR-0002 Anker 4.
+    const evidenceMap = buildEvidenceMap([
+      { persona_stakeholder_group: 'Großhaendler Nord', persona_role_family: 'Großhaendler' },
+      { persona_stakeholder_group: 'Grosshaendler Sued', persona_role_family: 'Grosshaendler' },
+    ]);
+    expect(() => EvidenceMapSchema.parse(evidenceMap)).toThrow(
+      /mindestens 2 unterschiedlichen Stakeholder-Gruppen/,
+    );
+  });
+
   it('faellt ohne persona_role_family auf den rohen Stakeholder-Titel zurück (Alt-Artefakte)', () => {
     const evidenceMap = buildEvidenceMap([
       { persona_stakeholder_group: 'Geschaeftsfuehrung' },
