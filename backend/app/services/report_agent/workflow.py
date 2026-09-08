@@ -763,9 +763,13 @@ def generate_section_react(
     report_context = f"Section Title: {section.title}\nSimulation Requirement: {agent.simulation_requirement}"
 
     # Config normalisiert bereits, aber defense-in-depth: Runtime-Patches könnten
-    # andere Casings/Werte einschleusen. Unbekannte Werte fallen auf "xml".
-    _raw_toolcall_mode = (Config.REPORT_TOOLCALL_MODE or "xml").strip().lower()
-    _toolcall_mode = _raw_toolcall_mode if _raw_toolcall_mode in ("native", "xml") else "xml"
+    # andere Casings/Werte einschleusen. Unbekannte Werte fallen auf den Default
+    # "native" — symmetrisch zu Config/AgoraSettings, damit ein Fehlwert nicht
+    # ausgerechnet in einen anderen Modus wechselt als der Nicht-gesetzt-Fall.
+    _raw_toolcall_mode = (Config.REPORT_TOOLCALL_MODE or "native").strip().lower()
+    _toolcall_mode = (
+        _raw_toolcall_mode if _raw_toolcall_mode in ("native", "xml") else "native"
+    )
 
     for iteration in range(max_iterations):
         if progress_callback:
@@ -2159,9 +2163,11 @@ def chat(agent: Any, message: str, chat_history: List[Dict[str, str]] = None) ->
     tool_calls_made = []
     max_iterations = 2
     # Casing-tolerant + Whitelist (symmetrisch zu generate_section_react).
-    _raw_chat_toolcall_mode = (Config.REPORT_TOOLCALL_MODE or "xml").strip().lower()
+    _raw_chat_toolcall_mode = (Config.REPORT_TOOLCALL_MODE or "native").strip().lower()
     _chat_toolcall_mode = (
-        _raw_chat_toolcall_mode if _raw_chat_toolcall_mode in ("native", "xml") else "xml"
+        _raw_chat_toolcall_mode
+        if _raw_chat_toolcall_mode in ("native", "xml")
+        else "native"
     )
 
     for _ in range(max_iterations):

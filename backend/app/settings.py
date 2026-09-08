@@ -130,8 +130,8 @@ class AgoraSettings(BaseSettings):
 
     # ---------------------------------------------------------- Report-Agent
     # str (not Literal) because the normaliser provides fail-soft fallback to
-    # "xml" for unknown values instead of raising ValidationError. The allowed
-    # set is {"native", "xml"}.
+    # the default "native" for unknown values instead of raising
+    # ValidationError. The allowed set is {"native", "xml"}.
     report_toolcall_mode: str = Field(
         default="native", alias="REPORT_TOOLCALL_MODE"
     )
@@ -215,14 +215,20 @@ class AgoraSettings(BaseSettings):
     @field_validator("report_toolcall_mode", mode="before")
     @classmethod
     def _normalize_report_toolcall_mode(cls, v: Any) -> str:
-        """Strip+lower; unknown values fall back to 'xml' with a warning."""
+        """Strip+lower; unknown values fall back to the default 'native'.
+
+        Ein Tippfehler ist ein Konfigurationsfehler und soll sich verhalten wie
+        "nicht konfiguriert". Der frühere xml-Fallback gab ausgerechnet dem
+        Vertipper ein anderes Verhalten als dem Nicht-Konfigurierer, der ueber
+        den Default ohnehin im native-Pfad landet.
+        """
         normalized = str(v).strip().lower()
         if normalized not in {"native", "xml"}:
             _logger.warning(
-                "Invalid REPORT_TOOLCALL_MODE=%r — falling back to 'xml'",
+                "Invalid REPORT_TOOLCALL_MODE=%r — falling back to default 'native'",
                 v,
             )
-            return "xml"
+            return "native"
         return normalized
 
     @field_validator("ontology_mutation_mode", mode="before")

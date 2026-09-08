@@ -218,12 +218,25 @@ class TestValidators:
         s = AgoraSettings(_env_file=None)
         assert s.report_toolcall_mode == "xml"
 
-    def test_report_toolcall_mode_garbage_falls_back_to_xml(self, monkeypatch):
+    def test_report_toolcall_mode_garbage_falls_back_to_default_native(
+        self, monkeypatch
+    ):
+        """Fehlwert verhaelt sich wie 'nicht gesetzt' — Default 'native'."""
         monkeypatch.setenv("FLASK_DEBUG", "true")
         monkeypatch.setenv("LLM_API_KEY", "dummy")
         monkeypatch.setenv("REPORT_TOOLCALL_MODE", "Garbage")
         s = AgoraSettings(_env_file=None)
-        assert s.report_toolcall_mode == "xml"
+        assert s.report_toolcall_mode == "native"
+
+    def test_report_toolcall_mode_fallback_equals_unset_default(self, monkeypatch):
+        """Invariante: Fallback bei Fehlwert == Default ohne gesetzte Variable."""
+        monkeypatch.setenv("FLASK_DEBUG", "true")
+        monkeypatch.setenv("LLM_API_KEY", "dummy")
+        monkeypatch.setenv("REPORT_TOOLCALL_MODE", "voellig-ungueltig")
+        with_garbage = AgoraSettings(_env_file=None).report_toolcall_mode
+        monkeypatch.delenv("REPORT_TOOLCALL_MODE", raising=False)
+        unset = AgoraSettings(_env_file=None).report_toolcall_mode
+        assert with_garbage == unset
 
     # ---- llm_model_context_limits_json ----
 
