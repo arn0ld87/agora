@@ -5,13 +5,14 @@ Provides interfaces for simulation report generation, retrieval, and conversatio
 
 import os
 
-from flask import Response, request, send_file, current_app
+from flask import Response, jsonify, request, send_file, current_app
 from pydantic import ValidationError
 
 from . import report_bp
 from ..contracts import (
     DEFAULT_REPORT_MODE,
     EvidenceMapModel,
+    EvidenceMapResponseModel,
     ReportMode,
 )
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
@@ -286,22 +287,34 @@ def get_report_evidence(report_id: str):
         # Issue #1160 G: Vorher lief diese Validierung ohne ``try`` — eine
         # vertragswidrige Map wurde zum 500er, und der Aufrufer konnte nicht
         # unterscheiden, ob Agora kaputt ist oder die Daten. Der JSON-Export
-        # meldet denselben Fall seit #987 strukturiert; dieser Endpoint tut es
-        # jetzt auch, mit demselben ``reason``-Schluessel.
+        # meldet denselben Fall seit #987 strukturiert.
+        #
+        # Review B7 (2026-09-08): dieser Pfad wich vom JSON-Export ab, indem
+        # er einen 422 warf statt zu degradieren. Das wurde durch die
+        # Rollenfamilien-Verschaerfung von
+        # ``EvidenceMapModel.validate_evidence_cross_references`` akut — ein
+        # Altartefakt mit zwei Schreibweisen derselben Rollenfamilie
+        # ("Buerger"/"buerger ") validierte vor dieser Verschaerfung noch,
+        # scheitert jetzt zurecht am Anker, und keine Migration kann den
+        # Rohtext nachtraeglich vereinheitlichen. Der Lese-Pfad degradiert
+        # jetzt wie der JSON-Export: 200 mit ``evidence_omitted`` statt 422 —
+        # derselbe Befund, ohne den Report-Rumpf mitzureissen.
         omission = build_evidence_omission(exc)
         logger.warning(
             "Evidence map for report %s is not contract-compliant even after "
-            "migration; refused with 422. First errors: %s",
+            "migration; degraded like the JSON export. First errors: %s",
             report_id,
             omission.validation_errors[:3],
         )
-        return json_error(
-            omission.detail,
-            status=422,
-            code=omission.reason,
-            extra={"evidence_omitted": omission.model_dump(mode="json")},
-        )
-    return json_success(validated.model_dump(mode="json"))
+        # Issue #1477 F1: die Envelope-Form ist jetzt vertraglich fixiert
+        # (EvidenceMapResponseModel) statt handgeschrieben. ``to_payload``
+        # laesst nur die ungesetzte TOP-LEVEL-Seite weg (wie zuvor
+        # ``json_success``) und ruehrt die verschachtelten ``None``-Felder
+        # der Evidence-Records nicht an.
+        envelope = EvidenceMapResponseModel.for_omission(omission)
+        return jsonify(envelope.to_payload()), 200
+    envelope = EvidenceMapResponseModel.for_data(validated)
+    return jsonify(envelope.to_payload()), 200
 
 
 @report_bp.route('/<report_id>/evidence/<int:section_index>', methods=['GET'])
