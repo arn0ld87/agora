@@ -85,6 +85,12 @@ def test_build_partial_report_writes_metadata(tmp_path):
     # ReportManager auf tmp_path zeigen
     with (
         patch("app.services.report_agent.workflow.ReportManager") as mock_rm,
+        # Issue #1479: _build_partial_report ruft jetzt _apply_requirement_check
+        # auf; agent.simulation_requirement ist hier ein unkonfigurierter
+        # MagicMock, den detect_report_intent() nicht verarbeiten kann. Der
+        # Requirement-Checker ist nicht Gegenstand dieses Tests — Muster aus
+        # tests/services/test_report_requirement_gating.py:143-149.
+        patch("app.config.Config.REPORT_REQUIREMENT_CHECKER_ENABLED", False),
     ):
         report_folder = str(tmp_path / report_id)
         os.makedirs(report_folder, exist_ok=True)
@@ -110,7 +116,10 @@ def test_build_partial_report_writes_metadata(tmp_path):
             progress_callback=None,
         )
 
-    assert result.status == ReportStatus.COMPLETED
+    # Issue #1479: die Outline hat 3 Sections, nur 2 sind fertig — der
+    # Abbruch verhinderte die dritte. Ein Teil-Report mit fehlenden Sections
+    # ist ein ehrliches INCOMPLETE, nicht COMPLETED.
+    assert result.status == ReportStatus.INCOMPLETE
     assert result.completed_at
 
     # partial_metadata.json muss existieren
@@ -154,6 +163,10 @@ def test_build_partial_report_carries_the_persona_degradation(tmp_path):
             "app.services.report_agent.workflow.resolve_default_store",
             return_value=store,
         ),
+        # Issue #1479: _build_partial_report ruft jetzt _apply_requirement_check
+        # auf; agent.simulation_requirement ist hier ein unkonfigurierter
+        # MagicMock. Der Requirement-Checker ist nicht Gegenstand dieses Tests.
+        patch("app.config.Config.REPORT_REQUIREMENT_CHECKER_ENABLED", False),
     ):
         report_folder = str(tmp_path / report_id)
         os.makedirs(report_folder, exist_ok=True)
@@ -196,6 +209,10 @@ def test_build_partial_report_stays_quiet_without_a_persona_fallback(tmp_path):
             "app.services.report_agent.workflow.resolve_default_store",
             return_value=store,
         ),
+        # Issue #1479: _build_partial_report ruft jetzt _apply_requirement_check
+        # auf; agent.simulation_requirement ist hier ein unkonfigurierter
+        # MagicMock. Der Requirement-Checker ist nicht Gegenstand dieses Tests.
+        patch("app.config.Config.REPORT_REQUIREMENT_CHECKER_ENABLED", False),
     ):
         report_folder = str(tmp_path / report_id)
         os.makedirs(report_folder, exist_ok=True)
@@ -217,7 +234,9 @@ def test_build_partial_report_stays_quiet_without_a_persona_fallback(tmp_path):
         for entry in result.run_degradations
         if entry["component"] == "persona_generation"
     ]
-    assert result.status == ReportStatus.COMPLETED
+    # Issue #1479: die Outline hat 3 Sections, nur 1 ist fertig — der Abbruch
+    # verhinderte 2 weitere. Kein Persona-Ausfall, aber trotzdem INCOMPLETE.
+    assert result.status == ReportStatus.INCOMPLETE
 
 
 # ---------------------------------------------------------------------------
@@ -270,6 +289,10 @@ def test_generate_report_partial_after_stage_2(tmp_path):
         patch("app.services.report_agent.workflow.MIN_PERSONA_TABLE_ROWS", 0),
         patch("app.services.report_agent.workflow.validate_quote_anchors", return_value=MagicMock(valid=True)),
         patch("app.services.report_agent.workflow.migrate_v1_to_v2", return_value=None),
+        # Issue #1479: _build_partial_report ruft jetzt _apply_requirement_check
+        # auf — nicht Gegenstand dieses Tests, der ausschließlich den Cancel-Pfad
+        # prüft.
+        patch("app.config.Config.REPORT_REQUIREMENT_CHECKER_ENABLED", False),
     ):
         mock_rm._ensure_report_folder.return_value = report_folder
         mock_rm.get_evidence_map.return_value = None
@@ -297,7 +320,10 @@ def test_generate_report_partial_after_stage_2(tmp_path):
 
     # Nur 2 Sections generiert, dann abgebrochen
     assert section_call_count[0] == 2, f"Erwartet 2 Sections, erhalten: {section_call_count[0]}"
-    assert result.status == ReportStatus.COMPLETED
+    # Issue #1479: die Outline hat 4 Sections, nur 2 wurden erzeugt — der
+    # Abbruch verhinderte die anderen beiden. Ein ehrlicher Teil-Report mit
+    # fehlenden Sections ist INCOMPLETE, nicht COMPLETED.
+    assert result.status == ReportStatus.INCOMPLETE
     assert result.completed_at
 
     clear_cancel(cancel_run_id)
@@ -693,7 +719,13 @@ def test_cancel_after_sanitization_keeps_the_warning_in_the_partial_report(tmp_p
         mock_rm = MagicMock()
         _configure_manager_mock(mock_rm, report_folder)
         _wire_real_run_event_storage(mock_rm, report_folder)
-        with _patch_generation_stack(mock_rm, outline, _section_react_with_work_traces(state)):
+        with (
+            _patch_generation_stack(mock_rm, outline, _section_react_with_work_traces(state)),
+            # Issue #1479: _build_partial_report ruft jetzt
+            # _apply_requirement_check auf — nicht Gegenstand dieses Tests, der
+            # ausschließlich die Sanitization- und Cancel-Degradationen prüft.
+            patch("app.config.Config.REPORT_REQUIREMENT_CHECKER_ENABLED", False),
+        ):
             result = generate_report(
                 agent,
                 progress_callback=None,
@@ -702,10 +734,13 @@ def test_cancel_after_sanitization_keeps_the_warning_in_the_partial_report(tmp_p
             )
 
     reasons = [entry["reason"] for entry in result.run_degradations]
-    assert reasons == ["1_sections_sanitized"], (
-        f"Partial Report muss den Sanitization-Hinweis tragen, erhalten: {reasons}"
+    # Issue #1479: die Outline hat 4 Sections, Cancel greift nach Section 2 —
+    # 2 Sections wurden nie angefasst. Der Cancel-Hinweis kommt hinzu, ohne
+    # den bestehenden Sanitization-Hinweis zu verdrängen.
+    assert reasons == ["1_sections_sanitized", "2_sections_missing_after_cancel"], (
+        f"Partial Report muss Sanitization- und Cancel-Hinweis tragen, erhalten: {reasons}"
     )
-    assert result.status == ReportStatus.COMPLETED
+    assert result.status == ReportStatus.INCOMPLETE
     # Der Zustand muss über den Prozess hinaus bestellbar sein — Grundlage
     # für den Resume-Pfad.
     assert os.path.exists(os.path.join(report_folder, "run_events.json"))
@@ -741,7 +776,11 @@ def test_resume_restores_the_sanitization_warning_exactly_once(tmp_path):
         mock_rm = MagicMock()
         _configure_manager_mock(mock_rm, report_folder)
         _wire_real_run_event_storage(mock_rm, report_folder)
-        with _patch_generation_stack(mock_rm, outline, _section_react_with_work_traces(state_a)):
+        with (
+            _patch_generation_stack(mock_rm, outline, _section_react_with_work_traces(state_a)),
+            # Issue #1479: nicht Gegenstand dieses Tests (siehe Test oben).
+            patch("app.config.Config.REPORT_REQUIREMENT_CHECKER_ENABLED", False),
+        ):
             result_a = generate_report(
                 _make_generation_agent(),
                 progress_callback=None,
@@ -749,7 +788,11 @@ def test_resume_restores_the_sanitization_warning_exactly_once(tmp_path):
                 cancel_run_id=cancel_run_id,
             )
 
-    assert [e["reason"] for e in result_a.run_degradations] == ["1_sections_sanitized"]
+    # Issue #1479: outline=4, Cancel nach Section 2 — 2 Sections fehlen.
+    assert [e["reason"] for e in result_a.run_degradations] == [
+        "1_sections_sanitized",
+        "2_sections_missing_after_cancel",
+    ]
 
     # Phase B: neuer Agent, Cancel aufgehoben, Section 1 liegt persistiert
     # vor und wird nur noch restoriert — nichts wird neu markiert.

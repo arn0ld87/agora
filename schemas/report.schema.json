@@ -78,7 +78,9 @@
             "section_generation",
             "section_metadata",
             "requirement_checker",
-            "contract_export"
+            "contract_export",
+            "outline_planning",
+            "run_cancellation"
           ],
           "title": "Component",
           "type": "string"

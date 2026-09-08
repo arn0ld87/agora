@@ -142,6 +142,54 @@ def _interview_degradations(
     ]
 
 
+def _outline_degradations(fallback_outline_used: bool) -> List[Dict[str, Any]]:
+    """Die Gliederung stammt nicht vom Modell, sondern aus dem Ersatzschema.
+
+    ``plan_outline`` faengt jeden Fehler der LLM-Planung ab und liefert ein
+    festes Drei-Abschnitte-Schema zurueck (Issue #1479). Der Bericht bleibt
+    lesbar, aber seine Struktur spiegelt nicht mehr die konkrete
+    Fragestellung — eine Warnung, kein blockierender Mangel, denn der
+    Rueckfallpfad ist ein bewusst unterstuetzter Ablauf.
+    """
+    if not fallback_outline_used:
+        return []
+    return [
+        _entry(
+            "outline_planning",
+            "fallback_outline_used",
+            (
+                "Die Gliederung stammt nicht vom Modell, sondern aus einem "
+                "festen Ersatzschema — die LLM-basierte Outline-Planung ist "
+                "fehlgeschlagen."
+            ),
+        )
+    ]
+
+
+def _cancellation_degradations(missing_section_count: int) -> List[Dict[str, Any]]:
+    """Abschnitte, die ein Nutzer-Abbruch nie erreichte, sind kein Nebenaspekt.
+
+    Anders als ``failed_section_indices`` (versucht, aber gescheitert) zaehlt
+    dieser Wert Abschnitte, die die Section-Schleife nach dem Cancel
+    ueberhaupt nicht mehr anfasste. Der Teil-Report existiert und ist
+    nutzbar, aber er ist strukturell unvollstaendig — das ist blockierend,
+    nicht bloss eine Randbemerkung.
+    """
+    if missing_section_count <= 0:
+        return []
+    return [
+        _entry(
+            "run_cancellation",
+            f"{missing_section_count}_sections_missing_after_cancel",
+            (
+                f"Der Lauf wurde durch einen Nutzer-Abbruch (Cancel) beendet, "
+                f"bevor {missing_section_count} Abschnitt(e) erzeugt wurden."
+            ),
+            severity="blocking",
+        )
+    ]
+
+
 def collect_run_degradations(
     *,
     simulation_snapshot: Optional[Mapping[str, Any]] = None,
@@ -155,6 +203,8 @@ def collect_run_degradations(
     work_trace_removed_section_indices: Iterable[int] = (),
     metadata_failed_section_indices: Iterable[int] = (),
     contract_validation_errors: Sequence[Any] = (),
+    fallback_outline_used: bool = False,
+    cancelled_missing_section_count: int = 0,
 ) -> List[Dict[str, Any]]:
     """Alle deterministisch feststellbaren Qualitätsmängel eines Laufs.
 
@@ -162,6 +212,7 @@ def collect_run_degradations(
     inhaltlich beruht, steht vor dem, was beim Erzeugen schiefging.
     """
     found: List[Dict[str, Any]] = _simulation_degradations(simulation_snapshot)
+    found.extend(_outline_degradations(fallback_outline_used))
     # Reihenfolge nach Schwere fuer den Leser: worauf der Bericht beruht,
     # steht vor dem, was beim Erzeugen schiefging. Die Personas sind die
     # Stimmen des Berichts — sie gehoeren direkt hinter die Simulation.
@@ -211,6 +262,8 @@ def collect_run_degradations(
             )
         )
 
+    found.extend(_cancellation_degradations(cancelled_missing_section_count))
+
     metadata_failed = sorted(set(metadata_failed_section_indices))
     if metadata_failed:
         found.append(
@@ -256,6 +309,7 @@ class RunEventLog:
         self.forced_final_sections: set[int] = set()
         self.work_trace_removed_sections: set[int] = set()
         self.metadata_failed_sections: set[int] = set()
+        self.fallback_outline_used: bool = False
 
 
 def events_for(agent: Any) -> RunEventLog:
@@ -283,6 +337,12 @@ def mark_forced_final(agent: Any, section_index: int) -> None:
 def mark_metadata_failure(agent: Any, section_index: int) -> None:
     """Die strukturierte Metadaten-Extraktion lieferte für den Abschnitt nichts."""
     events_for(agent).metadata_failed_sections.add(int(section_index))
+
+
+def mark_fallback_outline_used(agent: Any) -> None:
+    """Die Outline-Planung scheiterte; ``plan_outline`` griff auf das feste
+    Ersatzschema zurueck (Issue #1479)."""
+    events_for(agent).fallback_outline_used = True
 
 
 def mark_work_traces_removed(agent: Any, section_index: int) -> None:
@@ -388,6 +448,7 @@ __all__ = [
     "assert_run_invariants",
     "collect_run_degradations",
     "events_for",
+    "mark_fallback_outline_used",
     "mark_forced_final",
     "mark_metadata_failure",
     "mark_work_traces_removed",

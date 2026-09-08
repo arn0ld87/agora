@@ -3,6 +3,8 @@ Service for generating simulation reports.
 """
 
 import uuid
+from typing import Dict
+
 from flask import current_app
 
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
@@ -39,7 +41,13 @@ def was_run_cancelled(run_id: str) -> bool:
         return False
 
 
-def finish_completed_run(run_id: str, *, report_id: str, simulation_id: str) -> None:
+def finish_completed_run(
+    run_id: str,
+    *,
+    report_id: str,
+    simulation_id: str,
+    report_status: str | None = None,
+) -> None:
     """Setzt den Erfolgs-Endzustand eines fertigen Reports (Issue #1243).
 
     Bewusst eine eigene Funktion statt eines Inline-Blocks: der Resume-Pfad
@@ -52,7 +60,15 @@ def finish_completed_run(run_id: str, *, report_id: str, simulation_id: str) -> 
 
     Als Funktion ist der Endzustand gegen eine echte Registry pruefbar, statt
     nur als Textmuster im Quelltext (CodeRabbit PR #1262).
+
+    Issue #1479: ``report_status`` (``completed``/``incomplete``) landet als
+    Metadatum am Run — der Run-Status selbst bleibt ``completed`` (der Lauf
+    *als Prozess* endete regulaer), aber der Nutzer sieht am Metadatum, dass
+    der ausgelieferte Report ein ehrliches Teilergebnis ist.
     """
+    metadata: Dict[str, str] = {}
+    if report_status is not None:
+        metadata["report_status"] = report_status
     RunRegistry().update_run(
         run_id,
         status="completed",
@@ -64,6 +80,7 @@ def finish_completed_run(run_id: str, *, report_id: str, simulation_id: str) -> 
             "simulation": ArtifactLocator.simulation_artifacts(simulation_id),
         }),
         resume_capability={"available": False, "action": None, "label": None},
+        metadata=metadata,
     )
 
 

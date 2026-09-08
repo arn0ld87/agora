@@ -1312,12 +1312,17 @@ def _build_partial_report(
     agent: Any,
     progress_callback: Optional[Callable[[str, int, str], None]],
     quote_validation_failed_section_indices: Optional[List[int]] = None,
+    failed_section_indices: Optional[List[int]] = None,
 ) -> "Report":
     """Finalisiert einen Teil-Report nach kooperativem Cancel.
 
-    Assembliert den Markdown-Inhalt aus den bereits geschriebenen Sections,
-    setzt ``status=COMPLETED`` (success-with-caveat) und persistiert
-    einen separaten Partial-Metadata-JSON-Artifact neben dem Report.
+    Assembliert den Markdown-Inhalt aus den bereits geschriebenen Sections
+    und ermittelt den ehrlichen Status: ``COMPLETED`` nur wenn tatsächlich
+    alle Sections vorliegen und keine blockierende Degradation greift, sonst
+    ``INCOMPLETE`` (Issue #1479 — ein Teil-Report mit Cancel-bedingt
+    fehlenden Sections lief bislang unbedingt als COMPLETED hinaus).
+    Persistiert zusätzlich einen separaten Partial-Metadata-JSON-Artifact
+    neben dem Report.
     """
     from ...models.report import ReportStatus
     from datetime import datetime
@@ -1348,9 +1353,20 @@ def _build_partial_report(
     # darin regelbasierte Platzhalter waren — genau die Luecke, die der
     # Normalpfad seit diesem Issue schliesst.
     persona_fallbacks, persona_total = _load_persona_fallback_stats(agent)
+    # Issue #1479: Sections, die die Schleife nach dem Cancel nie mehr
+    # anfasste, sind kein Nebenaspekt — ``completed_section_titles`` zählt
+    # auch fehlgeschlagene, aber immerhin versuchte Sections mit; die
+    # Differenz zur Outline-Länge ist ausschließlich das, was der Abbruch
+    # verhindert hat.
+    missing_section_count = max(
+        len(outline.sections) - len(completed_section_titles), 0
+    )
     report.run_degradations = collect_run_degradations(
         persona_fallback_count=persona_fallbacks,
         persona_total=persona_total,
+        failed_section_indices=failed_section_indices or [],
+        fallback_outline_used=events_for(agent).fallback_outline_used,
+        cancelled_missing_section_count=missing_section_count,
         work_trace_removed_section_indices=sorted(
             events_for(agent).work_trace_removed_sections
         ),
@@ -1358,6 +1374,11 @@ def _build_partial_report(
     report.status = apply_run_degradation_downgrade(
         report.status, report.run_degradations
     )
+    # Issue #1479: auch der Teil-Report muss durch die Vollständigkeits-
+    # prüfung — sonst zeigt ein abgebrochener Lauf ohne fehlende Section
+    # (Cancel exakt an der letzten Grenze) trotzdem inhaltlich dünnen Text
+    # als COMPLETED aus.
+    _apply_requirement_check(report, agent, report_id)
 
     ReportManager.save_report(report)
 
@@ -1674,6 +1695,7 @@ def generate_report(
                     agent=agent,
                     progress_callback=progress_callback,
                     quote_validation_failed_section_indices=quote_validation_failed_section_indices,
+                    failed_section_indices=failed_section_indices,
                 )
             section_num = i + 1
             result: SectionResult = process_section(
@@ -1748,6 +1770,9 @@ def generate_report(
             interviews_succeeded=_count_interview_evidence(agent),
             interview_disabled_reason=breaker_for(agent).reason_for("interview_agents"),
             failed_section_indices=failed_section_indices,
+            # Issue #1479: dieselbe Warnung gilt auch für einen Lauf, der
+            # trotz Fallback-Outline bis zum Ende durchlief.
+            fallback_outline_used=events_for(agent).fallback_outline_used,
             forced_final_section_indices=events_for(agent).forced_final_sections,
             work_trace_removed_section_indices=events_for(
                 agent

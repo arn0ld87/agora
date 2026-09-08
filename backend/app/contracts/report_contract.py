@@ -859,6 +859,14 @@ class RunDegradationModel(BaseModel):
         # jede Antwort mit einem solchen Eintrag ab.
         "requirement_checker",
         "contract_export",
+        # Issue #1479: die LLM-Outline-Planung scheiterte, ``plan_outline``
+        # griff auf das feste Ersatzschema zurueck — additiv ergaenzt, damit
+        # der Bericht das ausweisen kann (severity="warning").
+        "outline_planning",
+        # Issue #1479: die Section-Schleife erreichte nach einem
+        # Nutzer-Abbruch (Cancel) nicht mehr alle Outline-Sections —
+        # additiv ergaenzt, blockierend (severity="blocking").
+        "run_cancellation",
     ]
     reason: str = Field(
         min_length=1,
