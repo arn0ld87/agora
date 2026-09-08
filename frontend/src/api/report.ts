@@ -1,7 +1,13 @@
 import service, { requestWithRetry } from './index'
-import type { ApiEnvelope } from './envelope'
+import { ApiError, type ApiEnvelope, type ApiErrorEnvelope } from './envelope'
 import type { LlmRuntimePayload } from './llmRuntime'
-import type { Report, EvidenceMap, ReportSection, EvidenceItem } from '../contracts/reportContract'
+import {
+  EvidenceMapResponseSchema,
+  type Report,
+  type EvidenceMapResponse,
+  type ReportSection,
+  type EvidenceItem,
+} from '../contracts/reportContract'
 import type { ReportMode } from '../contracts/reportV3Contract'
 import type { AiModelRef } from '../contracts/aiModelRef'
 
@@ -159,8 +165,51 @@ export const getReport = (reportId: string): Promise<ApiEnvelope<Report>> => {
   return service.get(`/api/report/${reportId}`)
 }
 
-export const getReportEvidence = (reportId: string): Promise<ApiEnvelope<EvidenceMap>> => {
-  return service.get(`/api/report/${reportId}/evidence`)
+/**
+ * Envelope für `GET /api/report/<id>/evidence` (Review B7 / PR #1477, Issue
+ * #1477 F1). Backend-Vertrag: `EvidenceMapResponseModel`
+ * (`backend/app/contracts/report_contract.py`), Zod-Spiegel:
+ * `EvidenceMapResponseSchema`. Im degradierten Fall antwortet das Backend mit
+ * HTTP 200 und `evidence_omitted`, wenn die persistierte Evidence-Map auch
+ * nach der Migration den Vertrag verletzt — dann gibt es bewusst KEIN
+ * `data`-Feld, ein `EvidenceMap`-Placeholder wäre selbst eine unvalidierte
+ * Behauptung. Aufrufer müssen `evidence_omitted` prüfen, bevor sie `data` als
+ * vorhanden annehmen.
+ *
+ * Verletzt eine 2xx-Antwort `EvidenceMapResponseSchema` (Version-Skew,
+ * Response-Drift), wirft dieses Promise eine `ApiError` mit
+ * `code: 'schema_mismatch'` statt eines generischen `Error` — Aufrufer
+ * unterscheiden damit einen Schema-Mismatch von einem Transport-/HTTP-Fehler
+ * (z.B. 404/5xx), ohne die Fehlermeldung parsen zu müssen.
+ */
+export type EvidenceEnvelope = EvidenceMapResponse | ApiErrorEnvelope
+
+export const getReportEvidence = (reportId: string): Promise<EvidenceEnvelope> => {
+  return service.get(`/api/report/${reportId}/evidence`).then((resp: unknown) => {
+    // Der Fehler-Envelope (`success: false`) läuft NICHT durch
+    // `EvidenceMapResponseSchema` — das Schema verlangt `success: true` und
+    // würde jeden Fehlerfall als Drift ablehnen.
+    if (resp !== null && typeof resp === 'object' && (resp as { success?: unknown }).success === false) {
+      return resp as ApiErrorEnvelope
+    }
+    const parsed = EvidenceMapResponseSchema.safeParse(resp)
+    if (!parsed.success) {
+      console.warn('[api] evidence envelope parse failed', parsed.error.flatten())
+      // Review B7 (PR #1477 F1): eigener `code` statt eines einfachen `Error`,
+      // damit `Step4Report.loadEvidence()` diesen Fall unterscheidbar VOR dem
+      // Transport-Retry-Zweig abfangen und an `recordSchemaError` weiterreichen
+      // kann (siehe `getReportEvidence`-Aufrufstelle dort). Ein plain `Error`
+      // wuerde dort denselben `catch` treffen wie eine 404/5xx-ApiError und
+      // den Drift stillschweigend in den Retry-Loop schicken.
+      throw new ApiError({
+        code: 'schema_mismatch',
+        status: 0,
+        message: `schema mismatch: ${parsed.error.message}`,
+        originalResponse: resp,
+      })
+    }
+    return parsed.data
+  })
 }
 
 export const getReportEvidenceSection = (

@@ -263,17 +263,30 @@ class TestCsvRefusesInsteadOfAsserting:
 
 
 class TestReadRouteAnswersInsteadOfCrashing:
-    def test_violating_map_yields_422_not_500(self, client) -> None:
+    def test_violating_map_degrades_instead_of_crashing(self, client) -> None:
         """Vorher lief hier ``model_validate`` ohne ``try``: ein 500er, an dem
         der Aufrufer nicht erkennen konnte, ob Agora kaputt ist oder die
-        Daten."""
+        Daten. Das wurde zunaechst mit einem 422 behoben (Issue #1160 G).
+
+        Review B7 (2026-09-08): der Lese-Pfad degradiert jetzt wie der
+        JSON-Export — 200 mit ``evidence_omitted`` statt 422 — statt eine
+        vertragswidrige Map abzuweisen. Ausschlaggebend war, dass die
+        Rollenfamilien-Verschaerfung von
+        ``validate_evidence_cross_references`` Altartefakte treffen kann, die
+        vor der Verschaerfung noch valide waren; kein Migrationsschritt kann
+        den Rohtext nachtraeglich vereinheitlichen. Der Report-Rumpf bleibt
+        dabei unversehrt, nur die Evidence-Map faellt aus."""
         _persist(_violating_map())
 
         response = client.get(f"/api/report/{REPORT_ID}/evidence")
 
-        assert response.status_code == 422, response.get_data()
+        assert response.status_code == 200, response.get_data()
         payload = json.loads(response.data)
         assert payload["evidence_omitted"]["reason"] == "contract_violation"
+        assert "data" not in payload, (
+            "eine degradierte Antwort darf keine ungeprüfte Evidence-Map als "
+            "'data' mitschicken"
+        )
 
 
 class TestAllThreePathsAgree:
