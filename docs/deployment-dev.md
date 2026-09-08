@@ -16,7 +16,7 @@ Für produktionsnahe Härtung siehe [`deployment-prod-like.md`](deployment-prod-
 |---|---|---|
 | Git | aktuell | Repository |
 | Bun | >= 1.3 | JS-Paketmanager/Task-Runner |
-| Node.js | >= 20 | Vite-/Frontend-Tooling |
+| Node.js | `^22.12.0 || ^24.0.0 || >=26.0.0` | Vite-/Frontend-Testtooling; durch Vitest 5/`install.sh` vorgegeben |
 | `uv` | aktuell unterstützte Version | Python-Environment/Dependencies |
 | Python | 3.14 über Backend-Toolchain | Backend |
 | Neo4j | 5.18+ | Graph-Storage |
@@ -166,7 +166,7 @@ backend/instance/                 Instanz-/UI-Settings
 backend/.cache/                   regenerierbare Caches
 ```
 
-Der alte Pfad `backend/reports/` ist kein aktueller Report-Root.
+Ein früher dokumentierter alternativer Report-Root ist kein aktueller Pfad.
 
 ### Bind-Mount-Rechte
 

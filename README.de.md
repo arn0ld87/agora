@@ -141,7 +141,7 @@ Die tatsächliche Architektur und ihre offenen Schulden stehen in [`docs/archite
 
 - Git
 - Linux oder macOS empfohlen
-- Bun >= 1.3 und Node.js >= 20
+- Bun >= 1.3 und Node.js `^22.12.0 || ^24.0.0 || >=26.0.0` — der von Vitest 5 benötigte und von `install.sh` geprüfte Bereich; Node 23 und 25 sind bewusst ausgeschlossen
 - `uv`
 - ein konfigurierter LLM-Provider und Embedding-Setup
 - Docker für den vollständigen Container-Stack
