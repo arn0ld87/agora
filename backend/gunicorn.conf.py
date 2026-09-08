@@ -38,6 +38,13 @@ worker_class = "gevent"
 # HARDSTOP --workers 1 (Code-Review 2026-05-17, Finding 1.2):
 # TaskManager, ApiKeysStore and SimulationRunner keep state in process-
 # local dicts. Lifted in PR 2/4 of that wave once those move to Redis.
+#
+# Same reason ``RunRegistry`` and the ``app.services.sim.monitor`` background
+# threads are safe: each run's monitor thread and its Monitor-Generation
+# counter (see ``monitor.py``) live only in this one worker's memory. With
+# more than one worker, a second process would spawn a second monitor for
+# the same run — duplicate SSE events, racing writes to run state, and no
+# shared generation counter to detect a stale monitor after a force-restart.
 workers = 1
 
 # Preload keeps fork-time short and lets post_fork own pool resets.
