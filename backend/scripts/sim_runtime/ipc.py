@@ -47,6 +47,22 @@ class CommandType:
     CLOSE_ENV = "close_env"
 
 
+def report_attribution(budget_guard: Any, report_run_id: Optional[str]):
+    """Contextmanager: Modellaufrufe waehrend des Blocks dem Report-Run zuordnen.
+
+    No-op (``nullcontext``) ohne ``budget_guard`` oder ohne ``report_run_id`` —
+    bestehende Aufrufer/Kommandos ohne Report-Kontext bleiben unveraendert
+    (#1478 Codex P1, Runde 6). Modulfunktion statt Methode (Tech-Review Slice
+    B4c), damit ``ParallelIPCHandler`` in ``run_parallel_simulation.py``
+    dieselbe Implementierung nutzt statt einer zweiten.
+    """
+    if budget_guard is None or not report_run_id:
+        return nullcontext()
+    from sim_runtime.budget_guard import REPORT_INTERVIEW_STAGE_ID
+
+    return budget_guard.attribute_to(report_run_id, REPORT_INTERVIEW_STAGE_ID)
+
+
 class IPCHandler:
     """IPC command handler"""
 
@@ -174,15 +190,11 @@ class IPCHandler:
     def _report_attribution(self, report_run_id: Optional[str]):
         """Contextmanager: Modellaufrufe waehrend des Blocks dem Report-Run zuordnen.
 
-        No-op (``nullcontext``) ohne ``budget_guard`` oder ohne ``report_run_id``
-        — bestehende Aufrufer/Kommandos ohne Report-Kontext bleiben unveraendert
-        (#1478 Codex P1, Runde 6).
+        Delegiert an die Modulfunktion :func:`report_attribution` (Tech-Review
+        Slice B4c) — Verhalten unveraendert, nur die Implementierung ist jetzt
+        geteilt mit ``ParallelIPCHandler``.
         """
-        if self.budget_guard is None or not report_run_id:
-            return nullcontext()
-        from sim_runtime.budget_guard import REPORT_INTERVIEW_STAGE_ID
-
-        return self.budget_guard.attribute_to(report_run_id, REPORT_INTERVIEW_STAGE_ID)
+        return report_attribution(self.budget_guard, report_run_id)
 
     async def handle_interview(
         self,

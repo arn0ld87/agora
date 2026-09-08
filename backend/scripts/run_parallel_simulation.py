@@ -126,6 +126,22 @@ except ImportError:  # direct script execution
         seed_simulation_rng,
     )
 
+# Rundengrenzen-Kontrolle + Budget-Guard (Tech-Review Slice B4c): derselbe
+# Kontrollpfad wie in sim_runtime.platform_runner, jetzt auch fuer den
+# Default-Pfad (Twitter+Reddit parallel).
+try:
+    from .sim_runtime.budget_guard import SubprocessBudgetGuard
+except ImportError:  # direct script execution
+    from sim_runtime.budget_guard import SubprocessBudgetGuard
+try:
+    from .sim_runtime.run_control import RoundAction, RoundBoundaryControl
+except ImportError:  # direct script execution
+    from sim_runtime.run_control import RoundAction, RoundBoundaryControl
+try:
+    from .sim_runtime.ipc import report_attribution
+except ImportError:  # direct script execution
+    from sim_runtime.ipc import report_attribution
+
 _runtime_paths = resolve_runtime_paths(__file__)
 install_script_paths(_runtime_paths)
 init_runner_tracing("agora-oasis-runner")
@@ -434,12 +450,17 @@ class ParallelIPCHandler:
         reddit_env=None,
         reddit_agent_graph=None,
         redis_bridge=None,
+        budget_guard: Optional[SubprocessBudgetGuard] = None,
     ):
         self.simulation_dir = simulation_dir
         self.twitter_env = twitter_env
         self.twitter_agent_graph = twitter_agent_graph
         self.reddit_env = reddit_env
         self.reddit_agent_graph = reddit_agent_graph
+        # Tech-Review Slice B4c: ohne Guard bucht kein Interview-Kommando
+        # dieses Handlers seinen Verbrauch auf einen Report-Run — derselbe
+        # Mechanismus wie ``sim_runtime.ipc.IPCHandler`` (#1478 Codex P1).
+        self.budget_guard = budget_guard
 
         self.commands_dir = os.path.join(simulation_dir, IPC_COMMANDS_DIR)
         self.responses_dir = os.path.join(simulation_dir, IPC_RESPONSES_DIR)
@@ -536,18 +557,20 @@ class ParallelIPCHandler:
         else:
             return None, None, None
     
-    async def _interview_single_platform(self, agent_id: int, prompt: str, platform: str) -> Dict[str, Any]:
+    async def _interview_single_platform(
+        self, agent_id: int, prompt: str, platform: str, report_run_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Execute Interview on a single platform
-        
+
         Returns:
             Dictionary containing result, or dictionary containing error
         """
         env, agent_graph, actual_platform = self._get_env_and_graph(platform)
-        
+
         if not env or not agent_graph:
             return {"platform": platform, "error": f"{platform}platform unavailable"}
-        
+
         try:
             agent = agent_graph.get_agent(agent_id)
             interview_action = ManualAction(
@@ -555,19 +578,30 @@ class ParallelIPCHandler:
                 action_args={"prompt": prompt}
             )
             actions = {agent: interview_action}
-            await env.step(actions)
-            
+            # Tech-Review Slice B4c: physische Modellaufrufe waehrend dieses
+            # Interviews auf den Report-Run buchen statt (unsichtbar) auf die
+            # laufende Simulation — siehe sim_runtime.ipc.report_attribution.
+            with report_attribution(self.budget_guard, report_run_id):
+                await env.step(actions)
+
             result = self._get_interview_result(agent_id, actual_platform)
             result["platform"] = actual_platform
             return result
-            
+
         except Exception as e:
             return {"platform": platform, "error": str(e)}
-    
-    async def handle_interview(self, command_id: str, agent_id: int, prompt: str, platform: str = None) -> bool:
+
+    async def handle_interview(
+        self,
+        command_id: str,
+        agent_id: int,
+        prompt: str,
+        platform: str = None,
+        report_run_id: Optional[str] = None,
+    ) -> bool:
         """
         Handle single Agent interview command
-        
+
         Args:
             command_id: Command ID
             agent_id: Agent ID
@@ -576,14 +610,16 @@ class ParallelIPCHandler:
                 - "twitter": Interview only Twitter platform
                 - "reddit": Interview only Reddit platform
                 - None/unspecified: Interview both platforms simultaneously, return integrated result
-            
+            report_run_id: Report-Run, dessen Budget dieses Interview belastet
+                (Tech-Review Slice B4c; siehe sim_runtime.ipc.IPCHandler).
+
         Returns:
             True means success, False means failure
         """
         # If platform is specified, only interview that platform
         if platform in ("twitter", "reddit"):
-            result = await self._interview_single_platform(agent_id, prompt, platform)
-            
+            result = await self._interview_single_platform(agent_id, prompt, platform, report_run_id)
+
             if "error" in result:
                 await self.send_response(command_id, "failed", error=result["error"])
                 print(f"  Interview failed: agent_id={agent_id}, platform={platform}, error={result['error']}")
@@ -592,29 +628,29 @@ class ParallelIPCHandler:
                 await self.send_response(command_id, "completed", result=result)
                 print(f"  Interview completed: agent_id={agent_id}, platform={platform}")
                 return True
-        
+
         # Platform not specified: interview both platforms simultaneously
         if not self.twitter_env and not self.reddit_env:
             await self.send_response(command_id, "failed", error="No available simulation environment")
             return False
-        
+
         results = {
             "agent_id": agent_id,
             "prompt": prompt,
             "platforms": {}
         }
         success_count = 0
-        
+
         # Interview both platforms in parallel
         tasks = []
         platforms_to_interview = []
-        
+
         if self.twitter_env:
-            tasks.append(self._interview_single_platform(agent_id, prompt, "twitter"))
+            tasks.append(self._interview_single_platform(agent_id, prompt, "twitter", report_run_id))
             platforms_to_interview.append("twitter")
-        
+
         if self.reddit_env:
-            tasks.append(self._interview_single_platform(agent_id, prompt, "reddit"))
+            tasks.append(self._interview_single_platform(agent_id, prompt, "reddit", report_run_id))
             platforms_to_interview.append("reddit")
         
         # Execute in parallel
@@ -635,10 +671,16 @@ class ParallelIPCHandler:
             print(f"  Interview failed: agent_id={agent_id}, All platforms failed")
             return False
     
-    async def handle_batch_interview(self, command_id: str, interviews: List[Dict], platform: str = None) -> bool:
+    async def handle_batch_interview(
+        self,
+        command_id: str,
+        interviews: List[Dict],
+        platform: str = None,
+        report_run_id: Optional[str] = None,
+    ) -> bool:
         """
         Handle batch interview command
-        
+
         Args:
             command_id: Command ID
             interviews: [{"agent_id": int, "prompt": str, "platform": str(optional)}, ...]
@@ -646,6 +688,8 @@ class ParallelIPCHandler:
                 - "twitter": Interview only Twitter platform
                 - "reddit": Interview only Reddit platform
                 - None/unspecified: Interview both platforms simultaneously for each Agent
+            report_run_id: Report-Run, dessen Budget dieser Batch belastet
+                (Tech-Review Slice B4c; siehe sim_runtime.ipc.IPCHandler).
         """
         # Group by platform
         twitter_interviews = []
@@ -688,8 +732,9 @@ class ParallelIPCHandler:
                         print(f"  Warning: Unable to get Twitter Agent {agent_id}: {e}")
                 
                 if twitter_actions:
-                    await self.twitter_env.step(twitter_actions)
-                    
+                    with report_attribution(self.budget_guard, report_run_id):
+                        await self.twitter_env.step(twitter_actions)
+
                     for interview in twitter_interviews:
                         agent_id = interview.get("agent_id")
                         result = self._get_interview_result(agent_id, "twitter")
@@ -715,8 +760,9 @@ class ParallelIPCHandler:
                         print(f"  Warning: Unable to get Reddit Agent {agent_id}: {e}")
                 
                 if reddit_actions:
-                    await self.reddit_env.step(reddit_actions)
-                    
+                    with report_attribution(self.budget_guard, report_run_id):
+                        await self.reddit_env.step(reddit_actions)
+
                     for interview in reddit_interviews:
                         agent_id = interview.get("agent_id")
                         result = self._get_interview_result(agent_id, "reddit")
@@ -788,7 +834,8 @@ class ParallelIPCHandler:
                 command_id,
                 args.get("agent_id", 0),
                 args.get("prompt", ""),
-                args.get("platform")
+                args.get("platform"),
+                report_run_id=args.get("report_run_id"),
             )
             return True
 
@@ -796,7 +843,8 @@ class ParallelIPCHandler:
             await self.handle_batch_interview(
                 command_id,
                 args.get("interviews", []),
-                args.get("platform")
+                args.get("platform"),
+                report_run_id=args.get("report_run_id"),
             )
             return True
 
@@ -1658,39 +1706,47 @@ class PlatformSimulation:
         self.env = None
         self.agent_graph = None
         self.total_actions = 0
+        # Budget-Guard (Tech-Review Slice B4c): None bei Stop/Normal-Durchlauf,
+        # Info-Dict bei Budget-Abbruch — spiegelt platform_runner.py.
+        self.budget_abort_info = None
 
 
 async def run_twitter_simulation(
-    config: Dict[str, Any], 
+    config: Dict[str, Any],
     simulation_dir: str,
     action_logger: Optional[PlatformActionLogger] = None,
     main_logger: Optional[SimulationLogManager] = None,
-    max_rounds: Optional[int] = None
+    max_rounds: Optional[int] = None,
+    budget_guard: Optional[SubprocessBudgetGuard] = None,
 ) -> PlatformSimulation:
     """Run Twitter simulation
-    
+
     Args:
         config: Simulation configuration
         simulation_dir: Simulation directory
         action_logger: Action logger
         main_logger: Main logger manager
         max_rounds: Maximum simulation rounds (optional, used to truncate long simulations)
-        
+        budget_guard: geteilter Guard aus ``main()`` (Tech-Review Slice B4c);
+            ``None`` heisst kein Usage-Recording/Hard-Budget fuer diesen Lauf.
+
     Returns:
         PlatformSimulation: Result object containing env and agent_graph
     """
     result = PlatformSimulation()
-    
+
     def log_info(msg):
         if main_logger:
             main_logger.info(f"[Twitter] {msg}")
         else:
             print(f"[Twitter] {msg}")
-    
+
     log_info("Initializing...")
 
     # Twitter use common LLM configuration
     model = create_model(config, use_boost=False)
+    if budget_guard is not None:
+        model = budget_guard.wrap_model(model)
     # Preflight: ein einzelner Probe-Call vor dem Fan-out fängt permanente
     # Auth-/Routing-Fehler (401/403/404) mit klarer Root-Cause ab — kein
     # N-facher identischer Fehler während der Simulation.
@@ -1827,11 +1883,19 @@ async def run_twitter_simulation(
         hour=0, minute=0, second=0, microsecond=0
     )
 
+    round_control = RoundBoundaryControl(simulation_dir, budget_guard)
     for round_num in range(total_rounds):
         # Check if received exit signal
         if _shutdown_event and _shutdown_event.is_set():
             if main_logger:
                 main_logger.info(f"Received exit signal，at round {round_num + 1} stop simulation")
+            break
+
+        decision = round_control.check(round_num)
+        if decision.action == RoundAction.STOP:
+            break
+        if decision.action == RoundAction.BUDGET_ABORT:
+            result.budget_abort_info = decision.budget_abort_info
             break
 
         simulated_minutes = round_num * minutes_per_round
@@ -1951,36 +2015,41 @@ async def run_twitter_simulation(
 
 
 async def run_reddit_simulation(
-    config: Dict[str, Any], 
+    config: Dict[str, Any],
     simulation_dir: str,
     action_logger: Optional[PlatformActionLogger] = None,
     main_logger: Optional[SimulationLogManager] = None,
-    max_rounds: Optional[int] = None
+    max_rounds: Optional[int] = None,
+    budget_guard: Optional[SubprocessBudgetGuard] = None,
 ) -> PlatformSimulation:
     """Run Reddit simulation
-    
+
     Args:
         config: Simulation configuration
         simulation_dir: Simulation directory
         action_logger: Action logger
         main_logger: Main logger manager
         max_rounds: Maximum simulation rounds (optional, used to truncate long simulations)
-        
+        budget_guard: geteilter Guard aus ``main()`` (Tech-Review Slice B4c);
+            ``None`` heisst kein Usage-Recording/Hard-Budget fuer diesen Lauf.
+
     Returns:
         PlatformSimulation: Result object containing env and agent_graph
     """
     result = PlatformSimulation()
-    
+
     def log_info(msg):
         if main_logger:
             main_logger.info(f"[Reddit] {msg}")
         else:
             print(f"[Reddit] {msg}")
-    
+
     log_info("Initializing...")
-    
+
     # Reddit use acceleration LLM configuration(if available，otherwise fallback toCommon configuration）
     model = create_model(config, use_boost=True)
+    if budget_guard is not None:
+        model = budget_guard.wrap_model(model)
     # Preflight: ein einzelner Probe-Call vor dem Fan-out fängt permanente
     # Auth-/Routing-Fehler (401/403/404) mit klarer Root-Cause ab — kein
     # N-facher identischer Fehler während der Simulation.
@@ -2108,11 +2177,19 @@ async def run_reddit_simulation(
         hour=0, minute=0, second=0, microsecond=0
     )
 
+    round_control = RoundBoundaryControl(simulation_dir, budget_guard)
     for round_num in range(total_rounds):
         # Check if received exit signal
         if _shutdown_event and _shutdown_event.is_set():
             if main_logger:
                 main_logger.info(f"Received exit signal，at round {round_num + 1} stop simulation")
+            break
+
+        decision = round_control.check(round_num)
+        if decision.action == RoundAction.STOP:
+            break
+        if decision.action == RoundAction.BUDGET_ABORT:
+            result.budget_abort_info = decision.budget_abort_info
             break
 
         simulated_minutes = round_num * minutes_per_round
@@ -2297,29 +2374,61 @@ async def main():
     log_manager.info("=" * 60)
     
     start_time = datetime.now()
-    
+
+    # Budget-Guard (Tech-Review Slice B4c): Usage-Recording in den gemeinsamen
+    # Run-Ledger + harte Limits an Runden-Grenzen, geteilt ueber beide
+    # Plattform-Schleifen. Vorlage: sim_runtime.platform_runner.
+    budget_guard: Optional[SubprocessBudgetGuard] = None
+    try:
+        budget_guard = SubprocessBudgetGuard.from_environment(simulation_dir)
+        if budget_guard is not None:
+            log_manager.info(
+                "[budget-guard] usage recording active"
+                + (f" (enforcement={budget_guard.enforcement})" if budget_guard.budget_config else "")
+            )
+    except Exception as exc:  # noqa: BLE001 — Guard ist Zusatz, kein Blocker
+        log_manager.warning(f"[budget-guard] setup failed ({exc}); continuing without")
+        budget_guard = None
+
     # Store simulation results of both platforms
     twitter_result: Optional[PlatformSimulation] = None
     reddit_result: Optional[PlatformSimulation] = None
-    
+
     if args.twitter_only:
-        twitter_result = await run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds)
+        twitter_result = await run_twitter_simulation(
+            config, simulation_dir, twitter_logger, log_manager, args.max_rounds, budget_guard
+        )
     elif args.reddit_only:
-        reddit_result = await run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds)
+        reddit_result = await run_reddit_simulation(
+            config, simulation_dir, reddit_logger, log_manager, args.max_rounds, budget_guard
+        )
     else:
         # Run in parallel (each platform uses independent logger)
         results = await asyncio.gather(
-            run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds),
-            run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds),
+            run_twitter_simulation(
+                config, simulation_dir, twitter_logger, log_manager, args.max_rounds, budget_guard
+            ),
+            run_reddit_simulation(
+                config, simulation_dir, reddit_logger, log_manager, args.max_rounds, budget_guard
+            ),
         )
         twitter_result, reddit_result = results
-    
+
     total_elapsed = (datetime.now() - start_time).total_seconds()
     log_manager.info("=" * 60)
     log_manager.info(f"Simulation loop completed! Total time: {total_elapsed:.1f}seconds")
-    
+
+    # Bei Budgetabbruch nicht in den Wait-Mode gehen: der Run soll
+    # deterministisch enden, damit der Backend-Monitor den Abbruchgrund
+    # (budget_abort.json) uebernehmen kann (spiegelt platform_runner.py:673).
+    budget_abort_info = None
+    if twitter_result and twitter_result.budget_abort_info is not None:
+        budget_abort_info = twitter_result.budget_abort_info
+    elif reddit_result and reddit_result.budget_abort_info is not None:
+        budget_abort_info = reddit_result.budget_abort_info
+
     # Whether to enter wait mode
-    if wait_for_commands:
+    if wait_for_commands and budget_abort_info is None:
         log_manager.info("")
         log_manager.info("=" * 60)
         log_manager.info("Enter wait mode - environment keeps running")
@@ -2332,7 +2441,8 @@ async def main():
             twitter_env=twitter_result.env if twitter_result else None,
             twitter_agent_graph=twitter_result.agent_graph if twitter_result else None,
             reddit_env=reddit_result.env if reddit_result else None,
-            reddit_agent_graph=reddit_result.agent_graph if reddit_result else None
+            reddit_agent_graph=reddit_result.agent_graph if reddit_result else None,
+            budget_guard=budget_guard,
         )
         ipc_handler.update_status("alive")
 
