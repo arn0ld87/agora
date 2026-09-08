@@ -71,21 +71,30 @@ def get_run_events_path(reports_dir: str, report_id: str) -> str:
     return os.path.join(get_report_folder(reports_dir, report_id), "run_events.json")
 
 
-# Codex-Review PR #1475, Runde 3, Finding 1: nur die errno-Werte, die
+# Codex-Review PR #1475, Runde 3+4, Finding 1: nur die errno-Werte, die
 # tatsächlich "Verzeichnis-fsync von dieser Plattform/diesem Dateisystem
 # nicht unterstützt" bedeuten, dürfen still degradieren. Alles andere
-# (z. B. ``EIO``, ``ENOSPC``) ist ein echter Storage-Fehler und muss
-# propagieren — sonst meldet ``write_json_atomic``/``write_section_markdown``
-# einen Write als erfolgreich, dessen Commit-Marker-Rename einen Absturz
-# nicht übersteht.
+# (``EIO``, ``ENOSPC``, ``EACCES``, ``EPERM``, ...) ist ein echter
+# Storage- oder Rechtefehler und muss propagieren — sonst meldet
+# ``write_json_atomic``/``write_section_markdown`` einen Write als
+# erfolgreich, dessen Commit-Marker-Rename einen Absturz nicht übersteht.
+#
+# ``EACCES``/``EPERM`` stehen bewusst NICHT in dieser Menge (Codex-Runde 4):
+# auf POSIX heißt das Zugriffsverweigerung, nicht "nicht unterstützt" — ein
+# nur schreib-/ausführbares Report-Verzeichnis erlaubt ``os.replace``, lässt
+# ``os.open(dir, O_RDONLY)`` aber mit ``EACCES`` scheitern, und der Write
+# wäre dann fälschlich als dauerhaft gemeldet. Nur unter Windows ist das
+# Öffnen eines Verzeichnis-Handles generell nicht möglich und schlägt dort
+# als ``PermissionError`` fehl; deshalb ist die Ausnahme auf ``os.name ==
+# "nt"`` beschränkt.
 _DIRECTORY_FSYNC_UNSUPPORTED_ERRNOS = frozenset(
     e
     for e in (
         errno.EINVAL,
-        errno.EACCES,
-        errno.EPERM,
+        getattr(errno, "ENOSYS", None),
         getattr(errno, "ENOTSUP", None),
         getattr(errno, "EOPNOTSUPP", None),
+        *((errno.EACCES, errno.EPERM) if os.name == "nt" else ()),
     )
     if e is not None
 )

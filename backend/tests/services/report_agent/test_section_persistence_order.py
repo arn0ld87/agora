@@ -503,6 +503,36 @@ class TestParentDirectoryFsync:
 
         assert exc_info.value.errno == errno.ENOSPC
 
+    @pytest.mark.skipif(
+        os.name == "nt", reason="Auf Windows ist EACCES beim Verzeichnis-Handle erwartet."
+    )
+    def test_write_json_atomic_propagates_directory_permission_failure(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Codex-Review PR #1475, Runde 4: ``EACCES`` heisst auf POSIX
+        Zugriffsverweigerung, nicht "Verzeichnis-fsync nicht unterstuetzt".
+
+        Ein nur schreib-/ausfuehrbares Report-Verzeichnis laesst ``os.replace``
+        zu, aber ``os.open(dir, O_RDONLY)`` scheitert mit ``EACCES`` — waere
+        das in der Degradations-Liste, meldete ``write_json_atomic`` den Write
+        faelschlich als dauerhaft."""
+        target = tmp_path / "evidence_map.json"
+        real_open = os.open
+
+        def _denying_open(path, flags, *args, **kwargs):
+            if os.path.isdir(path) and flags == os.O_RDONLY:
+                raise OSError(errno.EACCES, "Permission denied (simuliert)")
+            return real_open(path, flags, *args, **kwargs)
+
+        monkeypatch.setattr(
+            "app.services.report_agent.storage.os.open", _denying_open
+        )
+
+        with pytest.raises(OSError) as exc_info:
+            write_json_atomic(str(target), {"a": 1})
+
+        assert exc_info.value.errno == errno.EACCES
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
