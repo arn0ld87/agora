@@ -73,6 +73,7 @@ class _InvocationRecorder:
         remote_request_id: object = None,
         prompt_tokens: object = None,
         completion_tokens: object = None,
+        model: object = None,
     ) -> None:
         self.calls.append(
             {
@@ -81,6 +82,7 @@ class _InvocationRecorder:
                 "error_type": error_type,
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,
+                "model": model,
             }
         )
 
@@ -226,3 +228,65 @@ class TestBudgetGuardVisionRetry:
         assert recorder.calls[0]["stage"] == "vision"
         assert recorder.calls[1]["success"] is True
         assert recorder.calls[1]["stage"] == "vision"
+
+
+class TestVisionModelOverrideAttribution:
+    """Issue #1478 (Codex P1, Runde 4): ``describe_image(model=...)`` muss die
+    Usage dem tatsaechlich angefragten Modell zurechnen, nicht ``self.model``.
+
+    Vor dem Fix schrieb ``_log_invocation_event`` immer ``self.model`` ins
+    Invocation-Event, unabhaengig davon, welches Modell der physische Request
+    tatsaechlich ansprach — ein guenstigeres/unbepreistes Text-Modell liess
+    die beobachtete Kostensumme zu niedrig erscheinen und ein hartes
+    ``max_cost_micros``-Budget erlaubte zusaetzliche Calls.
+    """
+
+    def test_success_attributes_usage_to_override_model_not_client_model(
+        self, monkeypatch
+    ) -> None:
+        enforcer = _RecordingEnforcer()
+        client = _make_client(enforcer)
+        assert client.model == "vision-model"
+        recorder = _wire_invocation_recorder(client)
+
+        response = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="Eine Katze."))],
+            usage=SimpleNamespace(prompt_tokens=120, completion_tokens=8),
+        )
+        _wire_provider(client, lambda **kwargs: response)
+
+        result = client.describe_image(
+            image_b64="Zm9v",
+            prompt="Was zeigt das Bild?",
+            model="gemini-3-flash-preview:cloud",
+        )
+
+        assert result == "Eine Katze."
+        assert len(recorder.calls) == 1
+        assert recorder.calls[0]["model"] == "gemini-3-flash-preview:cloud"
+        assert recorder.calls[0]["model"] != client.model
+
+    def test_failure_attributes_usage_to_override_model_not_client_model(
+        self, monkeypatch
+    ) -> None:
+        enforcer = _RecordingEnforcer()
+        client = _make_client(enforcer)
+        assert client.model == "vision-model"
+        recorder = _wire_invocation_recorder(client)
+
+        def _boom(**kwargs: object) -> None:
+            raise RuntimeError("provider 503")
+
+        _wire_provider(client, _boom)
+
+        with pytest.raises(RuntimeError, match="provider 503"):
+            client.describe_image(
+                image_b64="Zm9v",
+                prompt="Was zeigt das Bild?",
+                model="gemini-3-flash-preview:cloud",
+            )
+
+        assert len(recorder.calls) == 1
+        assert recorder.calls[0]["success"] is False
+        assert recorder.calls[0]["model"] == "gemini-3-flash-preview:cloud"
+        assert recorder.calls[0]["model"] != client.model

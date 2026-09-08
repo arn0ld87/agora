@@ -99,6 +99,7 @@ class _InvocationRecorder:
         remote_request_id: object = None,
         prompt_tokens: object = None,
         completion_tokens: object = None,
+        model: object = None,
     ) -> None:
         self.calls.append(
             {
@@ -107,6 +108,7 @@ class _InvocationRecorder:
                 "error_type": error_type,
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,
+                "model": model,
             }
         )
 
