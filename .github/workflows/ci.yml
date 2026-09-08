@@ -522,6 +522,88 @@ jobs:
         working-directory: frontend
         run: bun run build
 
+  integration:
+    name: Integration tests (echtes Neo4j/Redis)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Slice 9 (Tech-Review 2026-09-07): laeuft NUR auf push:main und
+    # workflow_dispatch — PRs bleiben schnell, der Integrations-Marker ist
+    # per Default (`pyproject.toml::addopts`) ohnehin ausgeschlossen.
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    env:
+      LLM_API_KEY: dummy-ci-key
+      FLASK_DEBUG: "true"
+      AGORA_TEST_REQUIRE_SERVICES: "1"
+      AGORA_TEST_REDIS_URL: redis://localhost:6379/0
+      AGORA_TEST_NEO4J_URI: bolt://localhost:7687
+      AGORA_TEST_NEO4J_USER: neo4j
+      AGORA_TEST_NEO4J_PASSWORD: agora-itest-ci-password
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      neo4j:
+        image: neo4j:5
+        env:
+          NEO4J_AUTH: neo4j/agora-itest-ci-password
+        ports:
+          - 7687:7687
+        options: >-
+          --health-cmd "wget -qO- http://localhost:7474 || exit 1"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            astral.sh:443
+            raw.githubusercontent.com:443
+            download.pytorch.org:443
+            download-r2.pytorch.org:443
+            files.pythonhosted.org:443
+            github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            pypi.org:443
+            results-receiver.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Sync backend dependencies
+        working-directory: backend
+        run: uv sync --group dev
+
+      - name: Run integration tests
+        working-directory: backend
+        run: uv run pytest tests/integration -m integration -q
+
   # 2026-05-17 entfernt: status-sync (MAI-16) als eigener Job — lief nur auf
   # push:main und doppelte sich mit contract-gates::status-sync-drift.
   # 2026-07-25 (Issue #883): Die Pruefung ist als Step im backend-pr-gate
