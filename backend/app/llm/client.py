@@ -1228,10 +1228,32 @@ class LLMClient:
         response, latency_ms = execute(
             plan, _create_vision, quirks=(TOKEN_KEY_QUIRK,), label="vision"
         )
+        # Issue #1478 (Codex P1, Runde 7): die Antwort VOR dem Success-Record
+        # parsen — analog zum bereits abgesicherten Textpfad (``chat()``).
+        # Eine HTTP-erfolgreiche, aber kaputte Antwort (leeres ``choices``,
+        # eine Choice ohne ``message.content``) darf keinen Erfolg im
+        # Ledger/in der Telemetrie hinterlassen, bevor der lokale Parse-
+        # Schritt selbst gelungen ist.
+        try:
+            content = response.choices[0].message.content or ""
+        except Exception as exc:  # noqa: BLE001 — Failure-Telemetrie, dann weiterreichen
+            usage = getattr(response, "usage", None)
+            prompt_tokens = getattr(usage, "prompt_tokens", None) if usage else None
+            completion_tokens = getattr(usage, "completion_tokens", None) if usage else None
+            self._log_invocation_event(
+                stage="vision",
+                latency_ms=latency_ms,
+                success=False,
+                error_type=type(exc).__name__,
+                prompt_tokens=prompt_tokens if isinstance(prompt_tokens, int) else None,
+                completion_tokens=completion_tokens if isinstance(completion_tokens, int) else None,
+                model=vision_model,
+            )
+            self._budget_record()
+            raise
         self._record_provider_success(
             response, latency_ms, context="vision", model=vision_model
         )
-        content = response.choices[0].message.content or ""
         content = re.sub(r'<think>[\s\S]*?</think>', '', content, flags=re.IGNORECASE).strip()
         return content
 

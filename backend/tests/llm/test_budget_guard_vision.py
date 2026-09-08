@@ -157,6 +157,59 @@ class TestVisionLedgerBooking:
         assert recorder.calls[0]["prompt_tokens"] == 120
         assert recorder.calls[0]["completion_tokens"] == 8
 
+    def test_malformed_response_empty_choices_is_recorded_as_failure(
+        self, monkeypatch
+    ) -> None:
+        """Codex P1, Runde 7: eine HTTP-erfolgreiche, aber kaputte Antwort
+        (leeres ``choices``) darf keinen Erfolg verbuchen — vor dem Fix lief
+        ``_record_provider_success`` (Event + Budget-Record) VOR dem lokalen
+        Parse-Schritt, sodass Ledger/Telemetrie einen Erfolg zeigten, obwohl
+        ``describe_image`` mit einer Exception endete."""
+        enforcer = _RecordingEnforcer()
+        client = _make_client(enforcer)
+        recorder = _wire_invocation_recorder(client)
+
+        response = SimpleNamespace(
+            choices=[],
+            usage=SimpleNamespace(prompt_tokens=120, completion_tokens=8),
+        )
+        _wire_provider(client, lambda **kwargs: response)
+
+        with pytest.raises(IndexError):
+            client.describe_image(image_b64="Zm9v", prompt="Was zeigt das Bild?")
+
+        assert enforcer.check_calls == 1
+        # Genau EIN Providerattempt — Erfolg UND Fehlschlag duerfen nicht
+        # beide verbucht werden.
+        assert enforcer.record_calls == 1
+        assert len(recorder.calls) == 1
+        assert recorder.calls[0]["stage"] == "vision"
+        assert recorder.calls[0]["success"] is False
+        assert recorder.calls[0]["error_type"] == "IndexError"
+
+    def test_malformed_response_missing_message_content_is_recorded_as_failure(
+        self, monkeypatch
+    ) -> None:
+        """Analog: eine Choice ohne ``message.content``-Attribut."""
+        enforcer = _RecordingEnforcer()
+        client = _make_client(enforcer)
+        recorder = _wire_invocation_recorder(client)
+
+        response = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace())],
+            usage=SimpleNamespace(prompt_tokens=120, completion_tokens=8),
+        )
+        _wire_provider(client, lambda **kwargs: response)
+
+        with pytest.raises(AttributeError):
+            client.describe_image(image_b64="Zm9v", prompt="Was zeigt das Bild?")
+
+        assert enforcer.check_calls == 1
+        assert enforcer.record_calls == 1
+        assert len(recorder.calls) == 1
+        assert recorder.calls[0]["success"] is False
+        assert recorder.calls[0]["error_type"] == "AttributeError"
+
     def test_failed_vision_call_logs_failure_event_and_records_budget(
         self, monkeypatch
     ) -> None:
