@@ -343,12 +343,13 @@
         },
         "success": {
           "const": true,
-          "default": true,
+          "description": "Pflichtfeld ohne Default (Review B7 Runde 5, Issue #1477 F1) \u2014 siehe ``EvidenceMapResponseSuccessVariant.success``.",
           "title": "Success",
           "type": "boolean"
         }
       },
       "required": [
+        "success",
         "evidence_omitted"
       ],
       "title": "EvidenceMapResponseOmittedVariant",
@@ -363,12 +364,13 @@
         },
         "success": {
           "const": true,
-          "default": true,
+          "description": "Pflichtfeld ohne Default (Review B7 Runde 5, Issue #1477 F1): ein Default wandert im generierten JSON-Schema aus der ``required``-Liste heraus und liesse ``{\"data\": ...}`` ohne ``success`` durch, obwohl die Zod-Grenze im Frontend (``reportContract.ts``) ``success: true`` verlangt.",
           "title": "Success",
           "type": "boolean"
         }
       },
       "required": [
+        "success",
         "data"
       ],
       "title": "EvidenceMapResponseSuccessVariant",
@@ -917,7 +919,7 @@
   },
   "$id": "https://alexle135.de/schemas/evidence-map-response.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Response-Envelope fuer ``GET /api/report/<id>/evidence`` (Review B7 Fix, Issue #1477 F1/F3).\n\nVorher stand die Form dieser Antwort nur als handgeschriebenes\nTypeScript-Interface (``EvidenceOmittedEnvelope`` in\n``frontend/src/api/report.ts``) \u2014 die Schema-Generierung kannte diese\nAPI-Grenze nicht, und Axios behauptete beliebige ``data``-Formen ohne\nPruefung.\n\nReview B7 Runde 4 (Issue #1477 F3): die erste Fassung trug ``data`` und\n``evidence_omitted`` als zwei optionale Felder auf einem einzigen Modell\nplus einen ``model_validator`` (``exactly_one_variant``), der die\nExklusivitaet nur zur Laufzeit durchsetzte. Das generierte JSON-Schema\ndeklarierte beide Felder lediglich als optional ohne ``required``/\n``oneOf`` \u2014 ein externer Schema-Consumer haette ``{\"success\": true}``,\nbeide Felder gleichzeitig oder eine explizite ``null``-Variante\nakzeptiert, obwohl weder der Validator noch die Route\n(``backend/app/api/report.py::get_report_evidence``) das je ausliefern.\n\nJetzt eine echte Union zweier Varianten-Modelle (je ``extra=forbid``,\ngenau ein Pflichtfeld): die Exklusivitaet ist strukturell statt\nnachtraeglich validiert, und Pydantic rendert die Union unten explizit\nals ``oneOf`` statt ``anyOf`` (siehe ``__get_pydantic_json_schema__``).\nDie Aufrufer-Ergonomie bleibt unveraendert \u2014 ``RootModel`` reicht\nueberzaehlige Keyword-Argumente an die Root-Validierung durch, sodass\n``EvidenceMapResponseModel(data=...)`` bzw.\n``EvidenceMapResponseModel(evidence_omitted=...)`` weiterhin funktionieren.",
+  "description": "Response-Envelope fuer ``GET /api/report/<id>/evidence`` (Review B7 Fix, Issue #1477 F1/F3).\n\nVorher stand die Form dieser Antwort nur als handgeschriebenes\nTypeScript-Interface (``EvidenceOmittedEnvelope`` in\n``frontend/src/api/report.ts``) \u2014 die Schema-Generierung kannte diese\nAPI-Grenze nicht, und Axios behauptete beliebige ``data``-Formen ohne\nPruefung.\n\nReview B7 Runde 4 (Issue #1477 F3): die erste Fassung trug ``data`` und\n``evidence_omitted`` als zwei optionale Felder auf einem einzigen Modell\nplus einen ``model_validator`` (``exactly_one_variant``), der die\nExklusivitaet nur zur Laufzeit durchsetzte. Das generierte JSON-Schema\ndeklarierte beide Felder lediglich als optional ohne ``required``/\n``oneOf`` \u2014 ein externer Schema-Consumer haette ``{\"success\": true}``,\nbeide Felder gleichzeitig oder eine explizite ``null``-Variante\nakzeptiert, obwohl weder der Validator noch die Route\n(``backend/app/api/report.py::get_report_evidence``) das je ausliefern.\n\nJetzt eine echte Union zweier Varianten-Modelle (je ``extra=forbid``,\ngenau ein Pflichtfeld): die Exklusivitaet ist strukturell statt\nnachtraeglich validiert, und Pydantic rendert die Union unten explizit\nals ``oneOf`` statt ``anyOf`` (siehe ``__get_pydantic_json_schema__``).\nAufrufer nutzen ``for_data``/``for_omission`` statt des rohen\n``RootModel``-Konstruktors: ``RootModel.__init__`` reicht ueberzaehlige\nKeyword-Argumente zwar zur Laufzeit an die Root-Validierung durch (z.B.\n``EvidenceMapResponseModel(data=...)`` funktioniert), der von Pydantics\nMypy-Plugin synthetisierte ``__init__`` kennt aber nur ``root`` \u2014 die\nFactory-Methoden sind deshalb sowohl zur Laufzeit als auch fuer Mypy\nkorrekt.",
   "oneOf": [
     {
       "$ref": "#/$defs/EvidenceMapResponseSuccessVariant"

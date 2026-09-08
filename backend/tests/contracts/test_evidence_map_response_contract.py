@@ -64,6 +64,24 @@ class TestEvidenceMapResponseModelIsAUnion:
         with pytest.raises(ValidationError):
             EvidenceMapResponseModel.model_validate(payload)
 
+    def test_success_variant_without_success_key_is_rejected(self) -> None:
+        # Review B7 Runde 5, Issue #1477 F1: ``success`` trug einen Default
+        # (``= True``) und fiel dadurch aus der ``required``-Liste des
+        # generierten JSON-Schemas heraus. Eine Payload ohne ``success``
+        # bestand die Pydantic-Validierung trotzdem, obwohl die Zod-Grenze
+        # im Frontend (``reportContract.ts``) ``success: true`` verlangt.
+        payload = {"data": _minimal_evidence_map().model_dump(mode="json")}
+        with pytest.raises(ValidationError):
+            EvidenceMapResponseModel.model_validate(payload)
+
+    def test_omission_variant_without_success_key_is_rejected(self) -> None:
+        # Siehe test_success_variant_without_success_key_is_rejected — beide
+        # Varianten muessen ``success`` als Pflichtfeld durchsetzen, nicht
+        # nur eine.
+        payload = {"evidence_omitted": _omission().model_dump(mode="json")}
+        with pytest.raises(ValidationError):
+            EvidenceMapResponseModel.model_validate(payload)
+
 
 class TestToPayloadKeepsNestedNulls:
     """``to_payload`` darf nur die ungesetzte TOP-LEVEL-Seite weglassen.

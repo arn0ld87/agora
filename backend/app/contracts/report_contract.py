@@ -1196,7 +1196,15 @@ class EvidenceMapResponseSuccessVariant(BaseModel):
     """Erfolgsvariante von ``EvidenceMapResponseModel`` (Issue #1477 F3)."""
 
     model_config = _STRICT
-    success: Literal[True] = True
+    success: Literal[True] = Field(
+        description=(
+            "Pflichtfeld ohne Default (Review B7 Runde 5, Issue #1477 F1): "
+            "ein Default wandert im generierten JSON-Schema aus der "
+            "``required``-Liste heraus und liesse ``{\"data\": ...}`` ohne "
+            "``success`` durch, obwohl die Zod-Grenze im Frontend "
+            "(``reportContract.ts``) ``success: true`` verlangt."
+        ),
+    )
     data: EvidenceMapModel
 
 
@@ -1204,7 +1212,12 @@ class EvidenceMapResponseOmittedVariant(BaseModel):
     """Degradations-Variante von ``EvidenceMapResponseModel`` (Issue #1477 F3)."""
 
     model_config = _STRICT
-    success: Literal[True] = True
+    success: Literal[True] = Field(
+        description=(
+            "Pflichtfeld ohne Default (Review B7 Runde 5, Issue #1477 F1) — "
+            "siehe ``EvidenceMapResponseSuccessVariant.success``."
+        ),
+    )
     evidence_omitted: EvidenceOmissionModel
 
 
@@ -1246,11 +1259,13 @@ class EvidenceMapResponseModel(
 
     @classmethod
     def for_data(cls, data: EvidenceMapModel) -> "EvidenceMapResponseModel":
-        return cls(root=EvidenceMapResponseSuccessVariant(data=data))
+        return cls(root=EvidenceMapResponseSuccessVariant(success=True, data=data))
 
     @classmethod
     def for_omission(cls, evidence_omitted: EvidenceOmissionModel) -> "EvidenceMapResponseModel":
-        return cls(root=EvidenceMapResponseOmittedVariant(evidence_omitted=evidence_omitted))
+        return cls(
+            root=EvidenceMapResponseOmittedVariant(success=True, evidence_omitted=evidence_omitted)
+        )
 
     @classmethod
     def __get_pydantic_json_schema__(
