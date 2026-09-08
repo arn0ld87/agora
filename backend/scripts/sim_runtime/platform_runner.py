@@ -71,6 +71,13 @@ try:
 except ImportError:  # direct script execution
     from sim_runtime.ipc import IPCHandler
 
+# Rundengrenzen-Kontrolle (Tech-Review Slice B4c): Pause/Stop/Budget an einer
+# Stelle statt inline in der Runden-Schleife dieser Klasse.
+try:
+    from .run_control import RoundAction, RoundBoundaryControl
+except ImportError:  # direct script execution
+    from sim_runtime.run_control import RoundAction, RoundBoundaryControl
+
 # CAMEL/Oasis — harte Abhängigkeit wie in den Runner-Skripten.
 from camel.models import ModelFactory  # noqa: E402
 from camel.types import ModelPlatformType  # noqa: E402
@@ -566,37 +573,15 @@ class SinglePlatformRunner:
         elif enable_tools and not AGENT_TOOLS_AVAILABLE:
             print("[ToolUse] WARNING: enable_agent_tools=true but agent_tools.py could not be imported")
 
+        round_control = RoundBoundaryControl(self.simulation_dir, budget_guard)
         budget_abort_info = None
         for round_num in range(total_rounds):
-            # Honour pause flag from Flask (Phase 4 — soft-pause between rounds).
-            try:
-                from app.services.simulation_ipc import wait_while_paused, read_control_state
-                wait_while_paused(self.simulation_dir)
-                if read_control_state(self.simulation_dir).get("stop_requested"):
-                    print(f"  Stop requested via control_state.json — exiting after round {round_num}")
-                    break
-            except Exception:
-                pass
-
-            # Budget-Guard (Issue #764): harte Limits an der Runden-Grenze,
-            # BEVOR weitere planbare Modellaufrufe entstehen. Die laufende
-            # Runde wurde zuvor sauber abgeschlossen; Teilresultate bleiben
-            # in der SQLite-DB erhalten.
-            if budget_guard is not None:
-                try:
-                    budget_abort_info = budget_guard.check_round_boundary(round_num)
-                except Exception as exc:  # noqa: BLE001 — Check-Fehler stoppt die Sim nicht
-                    print(f"[budget-guard] round check failed ({exc})", flush=True)
-                    budget_abort_info = None
-                if budget_abort_info is not None:
-                    print(
-                        f"  [budget-guard] hard budget exceeded "
-                        f"({budget_abort_info['dimension']}: "
-                        f"{budget_abort_info['observed']} >= {budget_abort_info['threshold']}) "
-                        f"— stopping before round {round_num + 1}",
-                        flush=True,
-                    )
-                    break
+            decision = round_control.check(round_num)
+            if decision.action == RoundAction.STOP:
+                break
+            if decision.action == RoundAction.BUDGET_ABORT:
+                budget_abort_info = decision.budget_abort_info
+                break
 
             # Calculate current simulation time
             simulated_minutes = round_num * minutes_per_round
