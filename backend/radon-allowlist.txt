@@ -44,7 +44,7 @@
 # ---------------------------------------------------------------------------
 #
 # Top-Hotspots und ihre Refactor-Zustaendigkeit:
-#   F (cc=69)  report_agent/manager.py::ReportManager.build_report_v3
+#   F (cc=47)  report_agent/manager.py::ReportManager.build_report_v3
 #   F (cc=57)  report_agent/agent.py::ReportAgent._record_tool_evidence
 #   F (cc=55)  report_agent/workflow.py::generate_report
 #   F (cc=52)  report_agent/agent.py::ReportAgent._save_evidence_section
@@ -128,7 +128,12 @@ app/services/report_agent/agent.py::ReportAgent._save_evidence_section  # cc<=52
 app/services/report_agent/workflow.py::generate_report  # cc<=55
 app/services/report_agent/workflow.py::generate_section_react  # cc<=41
 app/services/report_agent/workflow.py::chat  # cc<=25
-app/services/report_agent/manager.py::ReportManager.build_report_v3  # cc<=69
+app/services/report_agent/manager.py::ReportManager.build_report_v3  # cc<=47
+# Aus build_report_v3 herausgeloest (08.09.2026): die Claim-Extraktion eines
+# Abschnitts. Die Komplexitaet ist nicht verschwunden, sondern umgezogen —
+# jetzt aber isoliert testbar und ohne Instanz-Zustand. Naechster Schnitt
+# dort: die Confidence-Label-Ableitung.
+app/services/report_agent/manager.py::_extract_claims_for_section  # cc<=23
 app/services/report_agent/manager.py::ReportManager._post_process_report  # cc<=27
 app/services/report_agent/planning.py::plan_outline  # cc<=24
 app/services/report_agent/evidence.py::degrade_sections_for_violations  # cc<=50
