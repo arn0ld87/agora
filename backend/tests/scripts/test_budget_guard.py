@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import sys
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from camel.models.base_model import BaseModelBackend as _BaseModelBackend  # typ
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 
 from sim_runtime.budget_guard import (  # noqa: E402
+    REPORT_INTERVIEW_STAGE_ID,
     SubprocessBudgetGuard,
 )
 
@@ -33,6 +35,47 @@ def run_ledger(tmp_path, monkeypatch):
     monkeypatch.setenv("LLM_MODEL_NAME", "gpt-4o-mini")
     monkeypatch.setenv("LLM_BASE_URL", "https://api.openai.com")
     return run_dirs / "run_sim1"
+
+
+@pytest.fixture()
+def report_run_env(run_ledger, tmp_path, monkeypatch):
+    """Echten ``RunBudgetEnforcer`` fuer einen Report-Run isolieren.
+
+    Erweitert ``run_ledger`` (schon fuer den Simulations-Ledger isoliert) um
+    dieselbe Isolation fuer ``run_budget``/``run_usage_ledger`` UND eine
+    isolierte ``RunRegistry`` — der komplette Pfad, den
+    :meth:`SubprocessBudgetGuard.attribute_to` fuer einen Report-Run auch
+    im echten Subprozess durchlaeuft (#1478 Codex P1, Runde 6).
+    """
+    from app.services.run_registry import RunRegistry
+    from app.services.run_usage_ledger import reset_usage_cache
+
+    run_dirs = run_ledger.parent  # dieselbe <tmp_path>/runs wie run_ledger
+    registry_dir = tmp_path / "run_registry"
+    registry_dir.mkdir()
+    monkeypatch.setattr(RunRegistry, "REGISTRY_DIR", str(registry_dir))
+    RunRegistry._instance = None
+    monkeypatch.setattr(
+        "app.services.run_budget.ArtifactLocator.run_dir",
+        staticmethod(lambda run_id: str(run_dirs / run_id)),
+    )
+    monkeypatch.setattr(
+        "app.services.run_usage_ledger.ArtifactLocator.run_dir",
+        staticmethod(lambda run_id: str(run_dirs / run_id)),
+    )
+    reset_usage_cache()
+    yield run_dirs
+    RunRegistry._instance = None
+    reset_usage_cache()
+
+
+def _create_report_run(budget: dict) -> str:
+    from app.services.run_registry import RunRegistry
+
+    manifest = RunRegistry().create_run(
+        "report_run", "sim_report_1", metadata={"budget": budget}
+    )
+    return manifest["run_id"]
 
 
 def _read_events(run_dir: Path) -> list[dict]:
@@ -394,3 +437,241 @@ class TestProxyProtocolSurface:
         proxy = guard.wrap_model(_FakeModel(_FakeUsage(1, 1)))
         copy.copy(proxy)
         copy.deepcopy(proxy)
+
+
+class TestReportAttribution:
+    """#1478 Codex P1, Runde 6: physische Modellaufruf-Versuche fuer ein
+    IPC-Interview mit Report-Kontext muessen gegen das Report-Budget
+    (nicht das Simulations-Budget) geprueft UND im Report-Ledger verbucht
+    werden — derselbe ``RunBudgetEnforcer``, kein zweiter Mechanismus.
+    """
+
+    def test_attribute_to_routes_event_to_report_run_not_simulation_run(
+        self, run_ledger
+    ):
+        guard = SubprocessBudgetGuard(str(run_ledger), "run_sim1")
+        proxy = guard.wrap_model(_FakeModel(_FakeUsage(10, 5)))
+
+        with guard.attribute_to("run_report1", REPORT_INTERVIEW_STAGE_ID):
+            proxy.run([{"role": "user", "content": "Interview-Frage"}])
+
+        # Simulations-Ledger bleibt leer — der Call gehoert dem Report-Run.
+        assert _read_events(run_ledger) == []
+        report_events = _read_events(run_ledger.parent / "run_report1")
+        assert len(report_events) == 1
+        assert report_events[0]["stage"] == REPORT_INTERVIEW_STAGE_ID
+        assert report_events[0]["prompt_tokens"] == 10
+        assert report_events[0]["completion_tokens"] == 5
+        # Die lokalen Simulations-Zaehler (Runden-Grenzen-Pruefung) duerfen
+        # von einem fremden Budget nicht mitbelastet werden.
+        assert guard._calls == 0
+
+    def test_attribution_is_restored_after_the_block(self, run_ledger):
+        guard = SubprocessBudgetGuard(str(run_ledger), "run_sim1")
+        proxy = guard.wrap_model(_FakeModel(_FakeUsage(1, 1)))
+
+        with guard.attribute_to("run_report1", REPORT_INTERVIEW_STAGE_ID):
+            pass
+        proxy.run([])
+
+        # Nach dem Block wieder Standardpfad: Simulations-Ledger + -Zaehler.
+        assert len(_read_events(run_ledger)) == 1
+        assert _read_events(run_ledger.parent / "run_report1") == []
+        assert guard._calls == 1
+
+    def test_consumed_increases_after_an_allowed_call_under_attribution(
+        self, report_run_env
+    ):
+        """Kernbehauptung des Findings: nach einem erlaubten physischen Call
+        muss ``RunBudgetEnforcer.consumed()`` fuer den Report-Run gestiegen
+        sein — vorher blieb der Report-Ledger nach einem erfolgreichen
+        IPC-Batch unveraendert."""
+        from app.services.run_budget import RunBudgetEnforcer
+
+        report_run_id = _create_report_run(
+            {"max_llm_calls": 2, "enforcement": "hard"}
+        )
+        guard = SubprocessBudgetGuard(str(report_run_env / "run_sim1"), "run_sim1")
+        proxy = guard.wrap_model(_FakeModel(_FakeUsage(100, 50)))
+
+        enforcer = RunBudgetEnforcer.for_run(report_run_id)
+        assert enforcer is not None
+        assert enforcer.consumed().llm_calls == 0
+
+        with guard.attribute_to(report_run_id, REPORT_INTERVIEW_STAGE_ID):
+            proxy.run([{"role": "user", "content": "Frage 1"}])
+
+        assert enforcer.consumed().llm_calls == 1
+
+    def test_second_call_rejected_once_hard_budget_is_reached(self, report_run_env):
+        """... und der naechste Batch, der das harte Limit reissen wuerde,
+        wird abgelehnt — ohne den physischen Call ueberhaupt auszufuehren."""
+        from app.services.run_budget import BudgetExceededError, RunBudgetEnforcer
+
+        report_run_id = _create_report_run(
+            {"max_llm_calls": 1, "enforcement": "hard"}
+        )
+        guard = SubprocessBudgetGuard(str(report_run_env / "run_sim1"), "run_sim1")
+        model = _FakeModel(_FakeUsage(1, 1))
+        proxy = guard.wrap_model(model)
+
+        with guard.attribute_to(report_run_id, REPORT_INTERVIEW_STAGE_ID):
+            proxy.run([{"role": "user", "content": "Frage 1"}])
+        assert model.calls == 1
+
+        with pytest.raises(BudgetExceededError):
+            with guard.attribute_to(report_run_id, REPORT_INTERVIEW_STAGE_ID):
+                proxy.run([{"role": "user", "content": "Frage 2"}])
+
+        # Der zweite Versuch wurde VOR dem physischen Call geblockt.
+        assert model.calls == 1
+        report_events = _read_events(report_run_env / report_run_id)
+        assert len(report_events) == 1
+
+        enforcer = RunBudgetEnforcer.for_run(report_run_id)
+        assert enforcer is not None
+        assert enforcer.consumed().llm_calls == 1
+
+    def test_without_attribution_report_budget_is_never_consulted(
+        self, run_ledger, monkeypatch
+    ):
+        """Standardpfad (keine ``attribute_to``-Zuordnung) darf
+        ``RunBudgetEnforcer`` gar nicht erst anfassen — sonst bricht jeder
+        bestehende Aufrufer ohne Report-Kontext."""
+
+        def _boom(*args, **kwargs):
+            raise AssertionError("RunBudgetEnforcer.for_run darf ohne Zuordnung nicht laufen")
+
+        monkeypatch.setattr(
+            "app.services.run_budget.RunBudgetEnforcer.for_run", classmethod(_boom)
+        )
+        guard = SubprocessBudgetGuard(str(run_ledger), "run_sim1")
+        proxy = guard.wrap_model(_FakeModel(_FakeUsage(1, 1)))
+        proxy.run([])  # darf nicht raisen
+        assert guard._calls == 1
+
+
+class TestReportAttributionErrorPathsUseStructuredLogging:
+    """#1478 Codex P1, Runde 7: die vier in Runde 6 neu eingefuehrten
+    Fehlerpfade rund um ``attribute_to`` nutzten ``print()`` statt
+    strukturiertem Logging (AGORA_VERBOTEN). Jeder Pfad muss stattdessen
+    ueber ``app.utils.logger.get_logger`` protokollieren UND darf nicht
+    mehr auf stdout drucken.
+    """
+
+    def test_enforcer_construction_failure_during_check_is_logged_not_printed(
+        self, run_ledger, monkeypatch, caplog
+    ):
+        # ``setup_logger`` setzt ``propagate=False`` (app/utils/logger.py) —
+        # caplog haengt am Root-Handler, muss also Propagation entlang der
+        # Logger-Kette explizit erlauben (Muster: test_transport_security.py).
+        monkeypatch.setattr(logging.getLogger("agora"), "propagate", True)
+        monkeypatch.setattr(
+            logging.getLogger("agora.sim_runtime.budget_guard"), "propagate", True
+        )
+
+        def _boom(*args, **kwargs):
+            raise RuntimeError("enforcer construction boom")
+
+        monkeypatch.setattr(
+            "app.services.run_budget.RunBudgetEnforcer.for_run", classmethod(_boom)
+        )
+        guard = SubprocessBudgetGuard(str(run_ledger), "run_sim1")
+        proxy = guard.wrap_model(_FakeModel(_FakeUsage(1, 1)))
+
+        with caplog.at_level(logging.WARNING, logger="agora.sim_runtime.budget_guard"):
+            with guard.attribute_to("run_report1", REPORT_INTERVIEW_STAGE_ID):
+                proxy.run([{"role": "user", "content": "Frage"}])
+
+        assert any(
+            "report enforcer unavailable" in record.getMessage()
+            for record in caplog.records
+        )
+
+    def test_budget_check_failure_is_logged_not_printed(
+        self, report_run_env, monkeypatch, caplog
+    ):
+        from app.services.run_budget import RunBudgetEnforcer
+
+        monkeypatch.setattr(logging.getLogger("agora"), "propagate", True)
+        monkeypatch.setattr(
+            logging.getLogger("agora.sim_runtime.budget_guard"), "propagate", True
+        )
+        report_run_id = _create_report_run({"enforcement": "hard"})
+        guard = SubprocessBudgetGuard(str(report_run_env / "run_sim1"), "run_sim1")
+        proxy = guard.wrap_model(_FakeModel(_FakeUsage(1, 1)))
+
+        def _boom(self):
+            raise RuntimeError("budget check boom")
+
+        monkeypatch.setattr(RunBudgetEnforcer, "check_before_call", _boom)
+
+        with caplog.at_level(logging.WARNING, logger="agora.sim_runtime.budget_guard"):
+            with guard.attribute_to(report_run_id, REPORT_INTERVIEW_STAGE_ID):
+                proxy.run([{"role": "user", "content": "Frage"}])
+
+        assert any(
+            "report budget check failed" in record.getMessage()
+            for record in caplog.records
+        )
+
+    def test_reservation_release_enforcer_unavailable_is_logged_not_printed(
+        self, report_run_env, monkeypatch, caplog
+    ):
+        from app.services.run_budget import RunBudgetEnforcer
+
+        monkeypatch.setattr(logging.getLogger("agora"), "propagate", True)
+        monkeypatch.setattr(
+            logging.getLogger("agora.sim_runtime.budget_guard"), "propagate", True
+        )
+        report_run_id = _create_report_run({"enforcement": "hard"})
+        guard = SubprocessBudgetGuard(str(report_run_env / "run_sim1"), "run_sim1")
+        proxy = guard.wrap_model(_FakeModel(_FakeUsage(1, 1)))
+
+        original_for_run = RunBudgetEnforcer.for_run
+        calls = {"n": 0}
+
+        def _flaky(cls, run_id):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return original_for_run(run_id)
+            raise RuntimeError("release-side enforcer boom")
+
+        monkeypatch.setattr(RunBudgetEnforcer, "for_run", classmethod(_flaky))
+
+        with caplog.at_level(logging.WARNING, logger="agora.sim_runtime.budget_guard"):
+            with guard.attribute_to(report_run_id, REPORT_INTERVIEW_STAGE_ID):
+                proxy.run([{"role": "user", "content": "Frage"}])
+
+        assert any(
+            "report enforcer unavailable (reservation not released)"
+            in record.getMessage()
+            for record in caplog.records
+        )
+
+    def test_record_after_call_failure_is_logged_not_printed(
+        self, report_run_env, monkeypatch, caplog
+    ):
+        from app.services.run_budget import RunBudgetEnforcer
+
+        monkeypatch.setattr(logging.getLogger("agora"), "propagate", True)
+        monkeypatch.setattr(
+            logging.getLogger("agora.sim_runtime.budget_guard"), "propagate", True
+        )
+        report_run_id = _create_report_run({"enforcement": "hard"})
+        guard = SubprocessBudgetGuard(str(report_run_env / "run_sim1"), "run_sim1")
+        proxy = guard.wrap_model(_FakeModel(_FakeUsage(1, 1)))
+
+        def _boom(self):
+            raise RuntimeError("record_after_call boom")
+
+        monkeypatch.setattr(RunBudgetEnforcer, "record_after_call", _boom)
+
+        with caplog.at_level(logging.WARNING, logger="agora.sim_runtime.budget_guard"):
+            with guard.attribute_to(report_run_id, REPORT_INTERVIEW_STAGE_ID):
+                proxy.run([{"role": "user", "content": "Frage"}])
+
+        assert any(
+            "report record_after_call failed" in record.getMessage()
+            for record in caplog.records
+        )

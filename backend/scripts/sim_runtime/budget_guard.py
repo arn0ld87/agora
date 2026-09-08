@@ -28,9 +28,13 @@ from __future__ import annotations
 import json
 import os
 import time
-from typing import Any, Mapping, Optional
+from contextlib import contextmanager
+from typing import Any, Iterator, Mapping, Optional
 
 STAGE_ID = "simulation_rounds"
+# Stage fuer physische Modellaufruf-Versuche, die im Auftrag eines Report-Runs
+# ueber ein IPC-Interview-Kommando ausgeloest werden (#1478 Codex P1, Runde 6).
+REPORT_INTERVIEW_STAGE_ID = "report_interview"
 BUDGET_CONFIG_FILENAME = "budget_config.json"
 BUDGET_ABORT_FILENAME = "budget_abort.json"
 
@@ -64,7 +68,12 @@ class SubprocessBudgetGuard:
         self._calls = 0
         self._prompt_tokens = 0
         self._completion_tokens = 0
-        self._logger = None
+        self._loggers: dict[str, Any] = {}
+        # Report-Attribution (#1478 Codex P1, Runde 6): waehrend eines mit
+        # ``attribute_to`` markierten Blocks gehen physische Modellaufrufe an
+        # ein FREMDES Budget (den Report-Run), nicht an ``self.run_id``/
+        # ``STAGE_ID``. ``None`` = Standardpfad, unveraendertes Verhalten.
+        self._attribution_override: Optional[tuple[str, str]] = None
 
     # -- Setup ---------------------------------------------------------------
 
@@ -87,12 +96,106 @@ class SubprocessBudgetGuard:
             config = None
         return cls(simulation_dir, run_id, config)
 
-    def _invocation_logger(self):
-        if self._logger is None:
+    def _invocation_logger(self, run_id: str):
+        logger = self._loggers.get(run_id)
+        if logger is None:
             from app.services.llm_invocation_logger import LlmInvocationLogger
 
-            self._logger = LlmInvocationLogger(self.run_id)
-        return self._logger
+            logger = LlmInvocationLogger(run_id)
+            self._loggers[run_id] = logger
+        return logger
+
+    # -- Report-Attribution (#1478 Codex P1, Runde 6) -------------------------
+
+    @contextmanager
+    def attribute_to(self, run_id: str, stage: str) -> Iterator[None]:
+        """Physische Modellaufrufe waehrend dieses Blocks einem anderen Run zuordnen.
+
+        Der physische LLM-Call fuer ein IPC-Interview laeuft ueber denselben
+        ``_UsageTrackingModelProxy`` wie jede Simulationsrunde, traegt aber ein
+        ANDERES Budget: den Report-Run, dessen ``run_id`` das Interview-Kommando
+        mitbringt (``report_run_id`` in ``sim_runtime.ipc.IPCHandler``), statt
+        ``self.run_id`` (das simulationszeitliche ``AGORA_RUN_ID``). Ohne diese
+        Zuordnung landete der physische Call im falschen Ledger, und der Report-
+        Run sah trotz erfolgreichem Interview nie einen gestiegenen Verbrauch.
+
+        Die Wait-Mode-Kommandoschleife in ``platform_runner.py`` verarbeitet
+        IPC-Kommandos sequentiell (``await self.ipc_handler.process_commands()``
+        in einer einzigen Coroutine) — es gibt daher keine Nebenlaeufigkeit
+        zwischen zwei Zuordnungen, ein einfaches Instanzattribut genuegt.
+        """
+        previous = self._attribution_override
+        self._attribution_override = (run_id, stage)
+        try:
+            yield
+        finally:
+            self._attribution_override = previous
+
+    def _enforce_before_physical_call(self) -> None:
+        """Hartes Report-Budget UNMITTELBAR vor jedem physischen Call pruefen.
+
+        Nur aktiv unter :meth:`attribute_to`. Der Standardpfad des
+        Simulations-Runs bleibt bei der bestehenden Runden-Grenzen-Pruefung
+        (:meth:`check_round_boundary`) — unbeteiligte Aufrufer aendern ihr
+        Verhalten nicht. Nutzt denselben zentralen Mechanismus wie das
+        Flask-seitige Vorab-Gate (``_report_budget_guard`` in
+        ``interview_client.py``): ``RunBudgetEnforcer.check_before_call()``.
+        Kein zweiter Budget-Mechanismus neben ``RunBudgetEnforcer``.
+        """
+        override = self._attribution_override
+        if override is None:
+            return
+        report_run_id, _stage = override
+        from app.services.run_budget import BudgetExceededError, RunBudgetEnforcer
+        from app.utils.logger import get_logger
+
+        logger = get_logger("agora.sim_runtime.budget_guard")
+
+        try:
+            enforcer = RunBudgetEnforcer.for_run(report_run_id)
+        except Exception as exc:  # noqa: BLE001 — Aufbaufehler blockiert den Call nicht
+            logger.warning("[budget-guard] report enforcer unavailable: %s", exc)
+            return
+        if enforcer is None:
+            return
+        try:
+            enforcer.check_before_call()
+        except BudgetExceededError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — Budget ist Zusatz, kein Hotpath-Risiko
+            logger.warning(
+                "[budget-guard] report budget check failed (call proceeds): %s", exc
+            )
+
+    def _release_report_reservation(self, report_run_id: str) -> None:
+        """Reservierung aus :meth:`_enforce_before_physical_call` freigeben.
+
+        Dasselbe Check/Record-Paar wie ``LLMClient._provider_attempt`` /
+        ``_record_provider_success`` (``_budget_check`` + ``_budget_record``):
+        ``check_before_call()`` reserviert einen Slot, der erst nach dem
+        abgeschlossenen physischen Call wieder frei wird — sonst haelt jeder
+        Report-Interview-Call sein Reservierungs-Slot bis zum TTL-Ablauf
+        (900s) besetzt und blockiert nachfolgende Calls faelschlich.
+        """
+        from app.services.run_budget import RunBudgetEnforcer
+        from app.utils.logger import get_logger
+
+        logger = get_logger("agora.sim_runtime.budget_guard")
+
+        try:
+            enforcer = RunBudgetEnforcer.for_run(report_run_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "[budget-guard] report enforcer unavailable (reservation not released): %s",
+                exc,
+            )
+            return
+        if enforcer is None:
+            return
+        try:
+            enforcer.record_after_call()
+        except Exception as exc:  # noqa: BLE001 — Budget ist Zusatz, kein Hotpath-Risiko
+            logger.warning("[budget-guard] report record_after_call failed: %s", exc)
 
     # -- Usage-Recording -----------------------------------------------------
 
@@ -105,19 +208,33 @@ class SubprocessBudgetGuard:
         completion_tokens: Optional[int] = None,
         error_type: Optional[str] = None,
     ) -> None:
-        """Einen CAMEL-Call in den gemeinsamen Ledger verbuchen."""
-        self._calls += 1 if success else 0
-        if isinstance(prompt_tokens, int):
-            self._prompt_tokens += prompt_tokens
-        if isinstance(completion_tokens, int):
-            self._completion_tokens += completion_tokens
+        """Einen CAMEL-Call in den gemeinsamen Ledger verbuchen.
+
+        Ohne aktive :meth:`attribute_to`-Zuordnung geht der Call wie bisher an
+        ``self.run_id``/``STAGE_ID`` und zaehlt in die lokalen Runden-Zaehler
+        (``check_round_boundary``). Unter einer aktiven Report-Zuordnung
+        (#1478 Codex P1, Runde 6) geht der Call an den Report-Run/dessen Stage;
+        die lokalen Simulations-Zaehler bleiben unberuehrt, weil dieser Call
+        ein fremdes Budget traegt und sonst das Simulations-Budget faelschlich
+        mitbelasten wuerde.
+        """
+        override = self._attribution_override
+        target_run_id, stage = override if override is not None else (self.run_id, STAGE_ID)
+
+        if override is None:
+            self._calls += 1 if success else 0
+            if isinstance(prompt_tokens, int):
+                self._prompt_tokens += prompt_tokens
+            if isinstance(completion_tokens, int):
+                self._completion_tokens += completion_tokens
+
         try:
             from app.llm.providers.registry import detect_provider
 
             base_url = os.environ.get("LLM_BASE_URL", "")
             model = os.environ.get("LLM_MODEL_NAME", "") or "unknown"
-            self._invocation_logger().log_event(
-                stage=STAGE_ID,
+            self._invocation_logger(target_run_id).log_event(
+                stage=stage,
                 provider_id=detect_provider(base_url, model),
                 model=model,
                 base_url=base_url,
@@ -130,6 +247,13 @@ class SubprocessBudgetGuard:
             )
         except Exception as exc:  # noqa: BLE001 — Recording darf die Sim nicht stören
             print(f"[budget-guard] usage recording failed: {exc}", flush=True)
+
+        if override is not None:
+            # Reservierung aus ``_enforce_before_physical_call`` erst NACH dem
+            # Ledger-Write freigeben — dieselbe Reihenfolge wie
+            # ``LLMClient._record_provider_success``/``_provider_attempt``
+            # (Event zuerst, dann ``_budget_record``/``record_after_call``).
+            self._release_report_reservation(target_run_id)
 
     def wrap_model(self, model: Any) -> Any:
         """CAMEL-Modell mit Usage-Tracking-Proxy umgeben."""
@@ -280,6 +404,7 @@ class _UsageTrackingModelProxy:
     def run(self, messages, *args, **kwargs):
         target = object.__getattribute__(self, "_target")
         guard = object.__getattribute__(self, "_guard")
+        guard._enforce_before_physical_call()
         started = time.monotonic()
         try:
             result = target.run(messages, *args, **kwargs)
@@ -302,6 +427,7 @@ class _UsageTrackingModelProxy:
     def _run(self, messages, *args, **kwargs):
         target = object.__getattribute__(self, "_target")
         guard = object.__getattribute__(self, "_guard")
+        guard._enforce_before_physical_call()
         started = time.monotonic()
         try:
             result = target._run(messages, *args, **kwargs)
@@ -324,6 +450,7 @@ class _UsageTrackingModelProxy:
     async def arun(self, messages, *args, **kwargs):
         target = object.__getattribute__(self, "_target")
         guard = object.__getattribute__(self, "_guard")
+        guard._enforce_before_physical_call()
         started = time.monotonic()
         try:
             result = await target.arun(messages, *args, **kwargs)
@@ -346,6 +473,7 @@ class _UsageTrackingModelProxy:
     async def _arun(self, messages, *args, **kwargs):
         target = object.__getattribute__(self, "_target")
         guard = object.__getattribute__(self, "_guard")
+        guard._enforce_before_physical_call()
         started = time.monotonic()
         try:
             result = await target._arun(messages, *args, **kwargs)

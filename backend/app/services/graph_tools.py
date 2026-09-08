@@ -424,7 +424,12 @@ class GraphToolsService:
                 simulation_id=simulation_id,
                 interviews=interviews_request,
                 platform=None,
-                timeout=180.0
+                timeout=180.0,
+                # Slice B4: die echte Lauf-run_id durchreichen, damit der
+                # Direktpfad (interview_direct._default_client_factory) den
+                # LLMClient mit run_id baut — Budget-Guard und Ledger sehen
+                # sonst keine Interview-Calls (#Slice-B4).
+                run_id=getattr(self._llm_client, "run_id", None),
             )
 
             logger.info(f"Interview API returned: {api_result.get('interviews_count', 0)} results, success={api_result.get('success')}")
@@ -544,6 +549,16 @@ class GraphToolsService:
             result.terminal_reason = str(e)
             return result
         except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
+            # Issue #1478 (Codex P1): ein erschoepftes Hard-Budget ist kein
+            # Interview-Fehler, sondern ein Run-Abbruch — hart durchreichen,
+            # analog zum bereits gehaerteten Selection-Pfad in
+            # ``_select_agents_for_interview`` weiter oben in dieser Klasse.
+            # Sonst sieht ``report_generation.py`` die
+            # ``BudgetExceededError`` nie und der Run laeuft klaglos weiter,
+            # statt als ``stopped``/``termination_reason=budget_*`` zu enden.
+            from .run_budget import reraise_if_budget_exceeded
+
+            reraise_if_budget_exceeded(e)
             logger.error(f"Interview API call exception: {e}")
             import traceback
             logger.error(traceback.format_exc())

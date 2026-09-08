@@ -32,6 +32,8 @@ from sim_runtime.ipc import (  # noqa: E402
     IPCHandler,
 )
 
+from app.services.run_budget import BudgetExceededError  # noqa: E402
+
 INTERVIEW_VALUE = "interview"
 
 
@@ -77,6 +79,18 @@ class FakeEnv:
         self.steps.append(actions)
 
 
+class BudgetExceededEnv:
+    """``env.step`` wirft ``BudgetExceededError`` — der harte Budget-Guard
+    schlaegt waehrend des physischen Modellaufrufs zu (#1478 Codex P1,
+    Runde 7)."""
+
+    def __init__(self, *, dimension: str = "calls", observed: int = 5, threshold: int = 5) -> None:
+        self._exc = BudgetExceededError(dimension, observed=observed, threshold=threshold)
+
+    async def step(self, actions: Dict[Any, Any]) -> None:
+        raise self._exc
+
+
 class FakeBridge:
     def __init__(self, *, active: bool = True) -> None:
         self.active = active
@@ -84,6 +98,49 @@ class FakeBridge:
 
     async def publish_response(self, command_id: str, response: Dict[str, Any]) -> None:
         self.published.append((command_id, response))
+
+
+class _FakeAttributionCtx:
+    def __init__(self, guard: "FakeBudgetGuard") -> None:
+        self._guard = guard
+
+    def __enter__(self) -> None:
+        self._guard.active_calls += 1
+        return None
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        self._guard.active_calls -= 1
+        return False
+
+
+class FakeBudgetGuard:
+    """Testdouble fuer ``SubprocessBudgetGuard`` (#1478 Codex P1, Runde 6).
+
+    Zeichnet auf, mit welchem ``(run_id, stage)`` ``attribute_to`` aufgerufen
+    wurde, und ob ``env.step`` waehrend eines aktiven Attribution-Blocks lief.
+    """
+
+    def __init__(self) -> None:
+        self.attribute_calls: list[tuple[str, str]] = []
+        self.active_calls = 0
+        self.step_ran_while_attributed: list[bool] = []
+
+    def attribute_to(self, run_id: str, stage: str) -> _FakeAttributionCtx:
+        self.attribute_calls.append((run_id, stage))
+        return _FakeAttributionCtx(self)
+
+
+class RecordingFakeEnv(FakeEnv):
+    """``FakeEnv``, die zusaetzlich beobachtet, ob eine ``budget_guard``-
+    Attribution beim ``step``-Aufruf aktiv war."""
+
+    def __init__(self, *, guard: FakeBudgetGuard, raise_on_step: bool = False) -> None:
+        super().__init__(raise_on_step=raise_on_step)
+        self._guard = guard
+
+    async def step(self, actions: Dict[Any, Any]) -> None:
+        self._guard.step_ran_while_attributed.append(self._guard.active_calls > 0)
+        await super().step(actions)
 
 
 def _make_handler(
@@ -94,6 +151,7 @@ def _make_handler(
     redis_bridge: Any | None = None,
     db_filename: str = "twitter_simulation.db",
     platform_key: str = "twitter",
+    budget_guard: Any | None = None,
 ) -> IPCHandler:
     return IPCHandler(
         str(tmp_path),
@@ -104,6 +162,7 @@ def _make_handler(
         manual_action_cls=FakeManualAction,
         platform_key=platform_key,
         redis_bridge=redis_bridge,
+        budget_guard=budget_guard,
     )
 
 
@@ -392,3 +451,157 @@ async def test_file_then_redis_dedup(tmp_path: Path):
     # Redis delivers the same id after file polling already handled it.
     await handler.dispatch_bus_event({"correlation_id": "shared", "type": CommandType.INTERVIEW, "payload": {"agent_id": 1, "prompt": "p"}})
     assert set(os.listdir(tmp_path / IPC_RESPONSES_DIR)) == responses_before
+
+
+# ---------------------------------------------------------------------------
+# Report-Kontext im IPC-Kommando (#1478 Codex P1, Runde 6)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_handle_interview_attributes_step_to_report_run_when_present(
+    tmp_path: Path,
+):
+    guard = FakeBudgetGuard()
+    env = RecordingFakeEnv(guard=guard)
+    handler = _make_handler(
+        tmp_path, env=env, agent_graph=FakeAgentGraph({7}), budget_guard=guard
+    )
+    ok = await handler.handle_interview(
+        "cmd1", 7, "Wie siehst du das?", report_run_id="run-report-1"
+    )
+    assert ok is True
+    assert guard.attribute_calls == [("run-report-1", "report_interview")]
+    assert guard.step_ran_while_attributed == [True]
+
+
+@pytest.mark.asyncio
+async def test_handle_batch_interview_attributes_step_to_report_run_when_present(
+    tmp_path: Path,
+):
+    guard = FakeBudgetGuard()
+    env = RecordingFakeEnv(guard=guard)
+    handler = _make_handler(
+        tmp_path, env=env, agent_graph=FakeAgentGraph({1, 2}), budget_guard=guard
+    )
+    ok = await handler.handle_batch_interview(
+        "cmd1",
+        [{"agent_id": 1, "prompt": "a"}, {"agent_id": 2, "prompt": "b"}],
+        report_run_id="run-report-2",
+    )
+    assert ok is True
+    assert guard.attribute_calls == [("run-report-2", "report_interview")]
+    assert guard.step_ran_while_attributed == [True]
+
+
+@pytest.mark.asyncio
+async def test_handle_interview_without_report_run_id_never_attributes(tmp_path: Path):
+    """Rueckwaertskompatibilitaet: ein Kommando ohne ``report_run_id`` (Alt-
+    Worker-Kommando oder Simulation ohne Report-Kontext) laesst den Guard
+    unangetastet, selbst wenn er injiziert wurde."""
+    guard = FakeBudgetGuard()
+    env = RecordingFakeEnv(guard=guard)
+    handler = _make_handler(
+        tmp_path, env=env, agent_graph=FakeAgentGraph({7}), budget_guard=guard
+    )
+    ok = await handler.handle_interview("cmd1", 7, "Wie siehst du das?")
+    assert ok is True
+    assert guard.attribute_calls == []
+    assert guard.step_ran_while_attributed == [False]
+
+
+@pytest.mark.asyncio
+async def test_handle_interview_without_budget_guard_ignores_report_run_id(
+    tmp_path: Path,
+):
+    """Rueckwaertskompatibilitaet: kein injizierter Guard (aeltere
+    Runner-Version) -> ``report_run_id`` wird stillschweigend ignoriert,
+    kein Fehler."""
+    env = FakeEnv()
+    handler = _make_handler(tmp_path, env=env, agent_graph=FakeAgentGraph({7}))
+    ok = await handler.handle_interview(
+        "cmd1", 7, "Wie siehst du das?", report_run_id="run-report-3"
+    )
+    assert ok is True
+    assert len(env.steps) == 1
+
+
+@pytest.mark.asyncio
+async def test_execute_command_interview_forwards_report_run_id(tmp_path: Path):
+    guard = FakeBudgetGuard()
+    env = RecordingFakeEnv(guard=guard)
+    handler = _make_handler(
+        tmp_path, env=env, agent_graph=FakeAgentGraph({1}), budget_guard=guard
+    )
+    assert await handler._execute_command(
+        "c1",
+        CommandType.INTERVIEW,
+        {"agent_id": 1, "prompt": "p", "report_run_id": "run-report-4"},
+    ) is True
+    assert guard.attribute_calls == [("run-report-4", "report_interview")]
+
+
+@pytest.mark.asyncio
+async def test_execute_command_batch_forwards_report_run_id(tmp_path: Path):
+    guard = FakeBudgetGuard()
+    env = RecordingFakeEnv(guard=guard)
+    handler = _make_handler(
+        tmp_path, env=env, agent_graph=FakeAgentGraph({1}), budget_guard=guard
+    )
+    assert await handler._execute_command(
+        "c1",
+        CommandType.BATCH_INTERVIEW,
+        {"interviews": [{"agent_id": 1, "prompt": "p"}], "report_run_id": "run-report-5"},
+    ) is True
+    assert guard.attribute_calls == [("run-report-5", "report_interview")]
+
+
+# ---------------------------------------------------------------------------
+# Budget-Abbruch strukturiert in der IPC-Fehlerantwort (#1478 Codex P1, Runde 7)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_handle_interview_budget_exceeded_sends_structured_field(tmp_path: Path):
+    env = BudgetExceededEnv(dimension="calls", observed=5, threshold=5)
+    handler = _make_handler(tmp_path, env=env, agent_graph=FakeAgentGraph({7}))
+    ok = await handler.handle_interview("cmd1", 7, "prompt")
+    assert ok is False
+    resp = json.loads((tmp_path / IPC_RESPONSES_DIR / "cmd1.json").read_text(encoding="utf-8"))
+    assert resp["status"] == "failed"
+    assert resp["budget_exceeded"] == {
+        "dimension": "calls",
+        "observed": 5,
+        "threshold": 5,
+    }
+
+
+@pytest.mark.asyncio
+async def test_handle_interview_generic_failure_has_no_budget_exceeded_field(
+    tmp_path: Path,
+):
+    env = FakeEnv(raise_on_step=True)
+    handler = _make_handler(tmp_path, env=env, agent_graph=FakeAgentGraph({7}))
+    ok = await handler.handle_interview("cmd1", 7, "prompt")
+    assert ok is False
+    resp = json.loads((tmp_path / IPC_RESPONSES_DIR / "cmd1.json").read_text(encoding="utf-8"))
+    assert resp["budget_exceeded"] is None
+
+
+@pytest.mark.asyncio
+async def test_handle_batch_interview_budget_exceeded_sends_structured_field(
+    tmp_path: Path,
+):
+    env = BudgetExceededEnv(dimension="tokens", observed=1000, threshold=800)
+    handler = _make_handler(tmp_path, env=env, agent_graph=FakeAgentGraph({1, 2}))
+    ok = await handler.handle_batch_interview(
+        "cmd1", [{"agent_id": 1, "prompt": "a"}, {"agent_id": 2, "prompt": "b"}]
+    )
+    assert ok is False
+    resp = json.loads((tmp_path / IPC_RESPONSES_DIR / "cmd1.json").read_text(encoding="utf-8"))
+    assert resp["status"] == "failed"
+    assert resp["budget_exceeded"] == {
+        "dimension": "tokens",
+        "observed": 1000,
+        "threshold": 800,
+    }

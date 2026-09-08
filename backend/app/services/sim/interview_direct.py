@@ -319,7 +319,7 @@ def _persist_interview(
 
 
 def _default_client_factory(
-    timeout: float, context: Dict[str, Any]
+    timeout: float, context: Dict[str, Any], run_id: Optional[str] = None
 ) -> Callable[[], Any]:
     """Client-Factory, die die im Lauf verwendete Route bevorzugt.
 
@@ -371,6 +371,7 @@ def _default_client_factory(
                         use_active_config=False,
                         allow_api_key_fallback=False,
                         timeout=timeout,
+                        run_id=run_id,
                     )
                 except Exception as exc:  # noqa: BLE001 — Fallback ist besser als Abbruch
                     logger.warning(
@@ -421,7 +422,9 @@ def _default_client_factory(
                     base_url,
                 )
                 try:
-                    return LLMClient(model=model, base_url=base_url, timeout=timeout)
+                    return LLMClient(
+                        model=model, base_url=base_url, timeout=timeout, run_id=run_id
+                    )
                 except Exception as exc:  # noqa: BLE001 — Fallback ist besser als Abbruch
                     logger.warning(
                         "Route des Laufs (model=%s) nicht nutzbar (%s) — Interview "
@@ -429,7 +432,7 @@ def _default_client_factory(
                         model,
                         exc,
                     )
-        return LLMClient(timeout=timeout)
+        return LLMClient(timeout=timeout, run_id=run_id)
 
     return factory
 
@@ -519,6 +522,7 @@ def interview_agents_batch_direct(
     client_factory: Optional[Callable[[], Any]] = None,
     max_tokens: int = 1024,
     max_workers: int = _MAX_WORKERS,
+    run_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Beantworte mehrere Interviews direkt über den LLM-Client.
 
@@ -569,7 +573,7 @@ def interview_agents_batch_direct(
 
     context = _simulation_context(simulation_id)
     clients = _ThreadLocalClients(
-        client_factory or _default_client_factory(timeout, context)
+        client_factory or _default_client_factory(timeout, context, run_id=run_id)
     )
     timestamp = datetime.now().isoformat()
     # Gesamt-Deadline: ohne sie summieren sich bei mehr als _MAX_WORKERS Items
@@ -633,6 +637,15 @@ def interview_agents_batch_direct(
                 ),
             )
         except Exception as exc:  # noqa: BLE001 — ein Fehler kippt nicht den Batch
+            # Issue #1478 (Codex P1): ein erschoepftes Hard-Budget ist kein
+            # Item-Fehler, sondern ein Run-Abbruch — hart durchreichen, sonst
+            # sieht ``report_generation.py`` die ``BudgetExceededError`` nie
+            # und markiert den Run nie als ``stopped``/``termination_reason=
+            # budget_*``. Analog zum bereits gehaerteten Selection-Pfad in
+            # ``graph_tools.py``.
+            from ..run_budget import reraise_if_budget_exceeded
+
+            reraise_if_budget_exceeded(exc)
             logger.warning(
                 f"Direkt-Interview fehlgeschlagen ({simulation_id}, agent_id={agent_id}): {exc}"
             )
@@ -687,6 +700,7 @@ def interview_agent_direct(
     *,
     run_state_dir: str,
     client_factory: Optional[Callable[[], Any]] = None,
+    run_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Beantworte ein einzelnes Interview direkt über den LLM-Client.
 
@@ -700,6 +714,7 @@ def interview_agent_direct(
         timeout,
         run_state_dir=run_state_dir,
         client_factory=client_factory,
+        run_id=run_id,
     )
     entries = list(batch["result"]["results"].values())
     entry = entries[0] if entries else {}

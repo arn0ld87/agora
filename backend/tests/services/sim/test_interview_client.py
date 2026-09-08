@@ -15,12 +15,117 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app.services.run_budget import BudgetExceededError
 from app.services.sim.interview_client import (
     _get_interview_history_from_db,
     check_env_alive,
     get_env_status_detail,
     get_interview_history,
+    interview_agent,
+    interview_agents_batch,
 )
+
+
+class _FakeStatus:
+    def __init__(self, value: str) -> None:
+        self.value = value
+
+
+class _FakeIPCResponse:
+    """Testdouble fuer ``simulation_ipc.IPCResponse`` (nur die vom Client
+    gelesenen Attribute)."""
+
+    def __init__(
+        self,
+        *,
+        status: str,
+        result=None,
+        error=None,
+        budget_exceeded=None,
+        timestamp="2026-09-08T00:00:00",
+    ) -> None:
+        self.status = _FakeStatus(status)
+        self.result = result
+        self.error = error
+        self.budget_exceeded = budget_exceeded
+        self.timestamp = timestamp
+
+
+class TestInterviewAgentBudgetExceededPropagation:
+    """#1478 Codex P1, Runde 7: ein waehrend ``env.step()`` geworfener
+    ``BudgetExceededError`` erreicht den IPC-Interview-Client jetzt als
+    strukturiertes ``budget_exceeded``-Feld statt als generischer Fehlertext
+    — und wird hier wieder als ``BudgetExceededError`` geworfen statt als
+    ``{"success": False}`` zurueckgegeben."""
+
+    def test_interview_agent_raises_budget_exceeded_error(self, tmp_path) -> None:
+        sim_dir = tmp_path / "sim1"
+        sim_dir.mkdir()
+        fake_response = _FakeIPCResponse(
+            status="failed",
+            error="Aufrufbudget überschritten: 5 >= 5",
+            budget_exceeded={"dimension": "calls", "observed": 5, "threshold": 5},
+        )
+        mock_client = MagicMock()
+        mock_client.send_interview.return_value = fake_response
+
+        with patch(
+            "app.services.sim.interview_client.check_env_alive", return_value=True
+        ), patch(
+            "app.services.sim.interview_client.SimulationIPCClient",
+            return_value=mock_client,
+        ):
+            with pytest.raises(BudgetExceededError) as excinfo:
+                interview_agent(
+                    "sim1", 7, "prompt", run_state_dir=str(tmp_path)
+                )
+        assert excinfo.value.dimension == "calls"
+        assert excinfo.value.observed == 5
+        assert excinfo.value.threshold == 5
+
+    def test_interview_agent_generic_failure_still_returns_dict(self, tmp_path) -> None:
+        sim_dir = tmp_path / "sim1"
+        sim_dir.mkdir()
+        fake_response = _FakeIPCResponse(status="failed", error="provider down")
+        mock_client = MagicMock()
+        mock_client.send_interview.return_value = fake_response
+
+        with patch(
+            "app.services.sim.interview_client.check_env_alive", return_value=True
+        ), patch(
+            "app.services.sim.interview_client.SimulationIPCClient",
+            return_value=mock_client,
+        ):
+            result = interview_agent(
+                "sim1", 7, "prompt", run_state_dir=str(tmp_path)
+            )
+        assert result["success"] is False
+        assert result["error"] == "provider down"
+
+    def test_interview_agents_batch_raises_budget_exceeded_error(self, tmp_path) -> None:
+        sim_dir = tmp_path / "sim1"
+        sim_dir.mkdir()
+        fake_response = _FakeIPCResponse(
+            status="failed",
+            error="Kostenbudget überschritten: 100 >= 90",
+            budget_exceeded={"dimension": "cost", "observed": 100, "threshold": 90},
+        )
+        mock_client = MagicMock()
+        mock_client.send_batch_interview.return_value = fake_response
+
+        with patch(
+            "app.services.sim.interview_client.check_env_alive", return_value=True
+        ), patch(
+            "app.services.sim.interview_client.SimulationIPCClient",
+            return_value=mock_client,
+        ):
+            with pytest.raises(BudgetExceededError) as excinfo:
+                interview_agents_batch(
+                    "sim1",
+                    [{"agent_id": 1, "prompt": "a"}],
+                    run_state_dir=str(tmp_path),
+                )
+        assert excinfo.value.dimension == "cost"
 
 
 # ---------------------------------------------------------------------------

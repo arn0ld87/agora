@@ -246,6 +246,25 @@ class TestBatchDirect:
         assert result["success"] is False
         assert client.calls == []
 
+    def test_budget_exceeded_error_propagates_instead_of_per_item_capture(
+        self, tmp_path
+    ) -> None:
+        """Issue #1478 (Codex P1): ein erschoepftes Hard-Budget ist kein
+        Item-Fehler wie ein RuntimeError (siehe
+        ``test_llm_error_is_captured_per_item``) — es muss den ganzen Batch
+        abbrechen, damit ``report_generation.py`` den Run als
+        ``stopped``/``termination_reason=budget_*`` beenden kann statt
+        klaglos weiterzulaufen."""
+        from app.services.run_budget import BudgetExceededError
+
+        client = _FakeLLMClient()
+        client.chat = MagicMock(
+            side_effect=BudgetExceededError("calls", 11, 10)
+        )
+
+        with pytest.raises(BudgetExceededError):
+            self._run(tmp_path, [{"agent_id": 0, "prompt": "Frage"}], client=client)
+
     def test_raises_when_no_personas_available(self, tmp_path) -> None:
         sim_dir = tmp_path / "sim_0123456789ab"
         sim_dir.mkdir(exist_ok=True)
@@ -487,7 +506,7 @@ class TestClientFactory:
             interview_direct._default_client_factory(60.0, context)()
 
         assert len(attempts) == 2
-        assert attempts[1] == {"timeout": 60.0}
+        assert attempts[1] == {"timeout": 60.0, "run_id": None}
 
     def test_falls_back_and_logs_named_degradation_when_no_connection_resolves(
         self, monkeypatch
@@ -608,7 +627,7 @@ class TestClientFactory:
             interview_direct._default_client_factory(60.0, context)()
 
         assert len(captured) == 1
-        assert captured[0] == {"timeout": 60.0}
+        assert captured[0] == {"timeout": 60.0, "run_id": None}
         assert any("haelt kein nutzbares Secret" in w for w in warnings), warnings
 
     def test_falls_back_completely_when_base_url_points_elsewhere(
@@ -657,7 +676,7 @@ class TestClientFactory:
             interview_direct._default_client_factory(60.0, context)()
 
         assert len(captured) == 1
-        assert captured[0] == {"timeout": 60.0}
+        assert captured[0] == {"timeout": 60.0, "run_id": None}
         assert any(
             "zeigt nicht auf den globalen Endpunkt" in w for w in warnings
         ), warnings

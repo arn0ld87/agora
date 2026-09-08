@@ -576,9 +576,18 @@ class LLMClient:
         )
         return {key: max_tokens}
 
-    def _detect_provider(self) -> Literal["ollama", "cloud", "minimax", "openai", "google", "unknown"]:
+    def _detect_provider(
+        self, *, model: Optional[str] = None
+    ) -> Literal["ollama", "cloud", "minimax", "openai", "google", "unknown"]:
         """
         Identify the LLM provider associated with the configured endpoint and model.
+
+        ``model`` ueberschreibt ``self.model`` fuer diese eine Detection —
+        noetig, damit Aufrufer mit einem abweichenden effektiven Modell
+        (z. B. ``describe_image(model=...)``) denselben Modellwert an die
+        Provider-Erkennung reichen, den sie auch fuer die Telemetrie nutzen
+        (#1478 Codex P1, Runde 5). Default bleibt ``self.model``, damit alle
+        bestehenden Aufrufer ohne Override unveraendertes Verhalten behalten.
 
         Returns:
             str: The provider name: ``"ollama"``, ``"cloud"``, ``"minimax"``,
@@ -590,7 +599,8 @@ class LLMClient:
         # ist das korrekte Label fuer dieses Vokabular, nicht ein neuer Wert.
         if self._codex_cli_active:
             return "unknown"
-        return _provider_base.detect_provider(self.base_url, self.model)
+        effective_model = model if model is not None else self.model
+        return _provider_base.detect_provider(self.base_url, effective_model)
 
     def _publish_model_active(
         self,
@@ -720,10 +730,29 @@ class LLMClient:
         remote_request_id: Optional[str] = None,
         prompt_tokens: Optional[int] = None,
         completion_tokens: Optional[int] = None,
+        model: Optional[str] = None,
     ) -> None:
-        """Persist LLM call telemetry for routed runs without blocking execution."""
+        """Persist LLM call telemetry for routed runs without blocking execution.
+
+        ``model`` ueberschreibt ``self.model`` fuer diesen einen Event —
+        noetig fuer Pfade, die pro Aufruf ein abweichendes Modell waehlen
+        (``describe_image`` mit ``model=``-Override oder ``VISION_MODEL_NAME``).
+        Default bleibt ``self.model``, damit alle bestehenden Aufrufer
+        unveraendertes Verhalten behalten (#1478 Codex P1, Runde 4).
+
+        ``provider_id`` wird aus demselben effektiven Modell abgeleitet wie
+        ``model`` (ueber ``_detect_provider(model=...)``, das zentrale
+        ``registry.py::detect_provider`` bleibt die einzige Detection-
+        Heuristik) — sonst klassifiziert ein ``describe_image(model=...:cloud)``
+        gegen einen lokalen Ollama-Endpoint faelschlich als ``ollama`` statt
+        ``cloud`` und die Kostenberechnung im ``PricingRegistry`` haelt den
+        Call faelschlich fuer kostenlos (#1478 Codex P1, Runde 5).
+        ``route_provider_id`` hat weiterhin Vorrang, wo es gesetzt ist.
+        """
         if not getattr(self, "run_id", None):
             return
+
+        effective_model = model if model is not None else self.model
 
         try:
             from ..services.llm_invocation_logger import LlmInvocationLogger
@@ -731,8 +760,9 @@ class LLMClient:
             logger_service = LlmInvocationLogger(self.run_id)
             logger_service.log_event(
                 stage=getattr(self, "route_stage", None) or stage,
-                provider_id=getattr(self, "route_provider_id", None) or self._detect_provider(),
-                model=self.model or "unknown",
+                provider_id=getattr(self, "route_provider_id", None)
+                or self._detect_provider(model=effective_model),
+                model=effective_model or "unknown",
                 base_url=self.base_url,
                 routing_version=getattr(self, "routing_version", None) or 0,
                 latency_ms=latency_ms,
@@ -750,6 +780,8 @@ class LLMClient:
         self,
         call_kwargs: Dict[str, Any],
         context: str,
+        *,
+        model: Optional[str] = None,
     ) -> Tuple[Any, float]:
         """Run a SINGLE physical provider request with budget gate + failure telemetry.
 
@@ -763,6 +795,13 @@ class LLMClient:
                loggt das Success-Event und führt ``_budget_record`` aus, sobald
                Usage-Informationen verfügbar sind (Streaming sammelt Usage
                erst während der Iteration).
+
+        ``model`` ist das tatsaechlich angefragte Modell, falls es von
+        ``self.model`` abweicht (z. B. ``describe_image`` mit ``model=``-
+        Override oder ``VISION_MODEL_NAME``). Wird an die Failure-Telemetrie
+        durchgereicht, damit die Usage nicht dem Text-Modell des Clients
+        zugerechnet wird (#1478 Codex P1, Runde 4). Default ``None`` laesst
+        ``_log_invocation_event`` auf ``self.model`` zurueckfallen.
 
         Wird absichtlich INNERHALB von ``llm_call_with_retry`` aufgerufen, damit
         jeder Retried-Attempt eine eigene Check/Event/Record-Triplet erhält.
@@ -799,6 +838,7 @@ class LLMClient:
                 success=False,
                 error_type=type(exc).__name__,
                 http_status=getattr(exc, "status_code", None),
+                model=model,
             )
             # Issue #764 (Codex P2): Fehlgeschlagener OpenAI-kompatibler
             # Call zaehlt ebenfalls als Providerattempt — ``_budget_record``
@@ -816,12 +856,18 @@ class LLMClient:
         latency_ms: float,
         context: str,
         usage: Any = None,
+        *,
+        model: Optional[str] = None,
     ) -> None:
         """Log Success-Invocation-Event + ``_budget_record`` nach erfolgreichem Provider-Attempt.
 
         ``usage`` ist optional: bei regulären Responses wird es aus
         ``response.usage`` abgeleitet, bei Streams wird die Usage des letzten
         Chunks uebergeben.
+
+        ``model`` ist das tatsaechlich angefragte Modell (siehe
+        ``_provider_attempt``) — Default ``None`` faellt auf ``self.model``
+        zurueck (#1478 Codex P1, Runde 4).
         """
         if usage is None:
             usage = getattr(response, "usage", None)
@@ -833,6 +879,7 @@ class LLMClient:
             success=True,
             prompt_tokens=prompt_tokens if isinstance(prompt_tokens, int) else None,
             completion_tokens=completion_tokens if isinstance(completion_tokens, int) else None,
+            model=model,
         )
         # Weiche Budget-Limits nach dem abgeschlossenen Call pruefen (#764).
         self._budget_record()
@@ -1148,19 +1195,65 @@ class LLMClient:
             ),
         )
 
-        def _create_vision(call_kwargs: Dict[str, Any]) -> Any:
+        def _create_vision(call_kwargs: Dict[str, Any]) -> Tuple[Any, float]:
+            """Ein physischer Providerattempt mit transient-retry.
+
+            Issue #1478 (Codex P1): Budget-Check, Failure-Telemetrie und
+            -Record laufen INNERHALB von ``_provider_attempt`` — analog zu
+            ``chat()``. Vorher lag der Guard um die gesamte ``execute()``-
+            Operation, sodass ein Retry oder ein ``TOKEN_KEY_QUIRK``-
+            Korrekturversuch nur EINEN Budget-Check/Event/Record erzeugte,
+            obwohl mehrere physische Requests abgesetzt wurden. Jeder
+            Retried-Attempt (transient retry, Token-Key-Fallback) bekommt
+            damit sein eigenes Check/Event/Record-Triplet.
+
+            Issue #1478 (Codex P1, Runde 4): ``model=vision_model`` wird
+            durchgereicht, damit die Failure-Telemetrie das tatsaechlich
+            angefragte Modell traegt, wenn ``model=``-Override oder
+            ``VISION_MODEL_NAME`` von ``self.model`` abweichen — sonst
+            gruppiert/bepreist das Ledger die Usage unter dem falschen Modell.
+            """
             return llm_call_with_retry(
-                self.client.chat.completions.create,
+                lambda: self._provider_attempt(
+                    call_kwargs, context="vision", model=vision_model
+                ),
                 max_retries=self._max_retries,
                 initial_delay=self._retry_initial_delay,
                 max_delay=self._retry_max_delay,
-                **call_kwargs,
             )
 
-        response = execute(
+        # Analog zu ``chat()``: ``execute`` sieht keinen eigenen Budget-Check
+        # mehr — jeder physische Request (erster Call, Retry, Token-Key-
+        # Fallback) bekommt seinen ueber ``_provider_attempt``.
+        response, latency_ms = execute(
             plan, _create_vision, quirks=(TOKEN_KEY_QUIRK,), label="vision"
         )
-        content = response.choices[0].message.content or ""
+        # Issue #1478 (Codex P1, Runde 7): die Antwort VOR dem Success-Record
+        # parsen — analog zum bereits abgesicherten Textpfad (``chat()``).
+        # Eine HTTP-erfolgreiche, aber kaputte Antwort (leeres ``choices``,
+        # eine Choice ohne ``message.content``) darf keinen Erfolg im
+        # Ledger/in der Telemetrie hinterlassen, bevor der lokale Parse-
+        # Schritt selbst gelungen ist.
+        try:
+            content = response.choices[0].message.content or ""
+        except Exception as exc:  # noqa: BLE001 — Failure-Telemetrie, dann weiterreichen
+            usage = getattr(response, "usage", None)
+            prompt_tokens = getattr(usage, "prompt_tokens", None) if usage else None
+            completion_tokens = getattr(usage, "completion_tokens", None) if usage else None
+            self._log_invocation_event(
+                stage="vision",
+                latency_ms=latency_ms,
+                success=False,
+                error_type=type(exc).__name__,
+                prompt_tokens=prompt_tokens if isinstance(prompt_tokens, int) else None,
+                completion_tokens=completion_tokens if isinstance(completion_tokens, int) else None,
+                model=vision_model,
+            )
+            self._budget_record()
+            raise
+        self._record_provider_success(
+            response, latency_ms, context="vision", model=vision_model
+        )
         content = re.sub(r'<think>[\s\S]*?</think>', '', content, flags=re.IGNORECASE).strip()
         return content
 

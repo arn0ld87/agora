@@ -27,6 +27,7 @@ import json
 import logging
 import os
 import sqlite3
+from contextlib import nullcontext
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -60,6 +61,7 @@ class IPCHandler:
         manual_action_cls: Any,
         platform_key: str,
         redis_bridge: Any = None,
+        budget_guard: Any = None,
     ) -> None:
         self.simulation_dir = simulation_dir
         self.env = env
@@ -72,6 +74,11 @@ class IPCHandler:
         # call _execute_command(); seen_command_ids dedupes the dispatch.
         self.redis_bridge = redis_bridge
         self.seen_command_ids: set = set()
+        # #1478 Codex P1, Runde 6: der ``SubprocessBudgetGuard`` (Issue #764),
+        # optional injiziert vom Runner. ``None`` (Default) haelt bestehende
+        # Aufrufer ohne Guard unveraendert — Interview-Kommandos laufen dann
+        # wie bisher ohne Report-Budget-Pruefung/-Verbuchung.
+        self.budget_guard = budget_guard
 
         # Injizierte Oasis-Symbole — bisher Modul-Level-Import in den Runnern.
         self.db_filename = db_filename
@@ -125,13 +132,26 @@ class IPCHandler:
         status: str,
         result: Dict = None,
         error: str = None,
+        budget_exceeded: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """Send response: write file (legacy path) and mirror to Redis (issue #17)."""
+        """Send response: write file (legacy path) and mirror to Redis (issue #17).
+
+        ``budget_exceeded`` (#1478 Codex P1, Runde 7): additiv gegenueber dem
+        bisherigen Response-Format. Ein hartes Report-Budget, das waehrend
+        ``env.step()`` erreicht wird, ist kein generischer Interview-Fehler,
+        sondern das Ende des Report-Laufs — ``error`` allein (ein Freitext)
+        war fuer den Flask-Prozess nicht sicher von einem gewoehnlichen
+        Interview-Fehler unterscheidbar, ohne den Fehlertext zu parsen. Dieses
+        Feld traegt ``dimension``/``observed``/``threshold`` strukturiert und
+        bleibt ``None`` fuer jede andere Fehlerursache — bestehende Consumer,
+        die das Feld nicht kennen, ignorieren es unveraendert.
+        """
         response = {
             "command_id": command_id,
             "status": status,
             "result": result,
             "error": error,
+            "budget_exceeded": budget_exceeded,
             "timestamp": datetime.now().isoformat()
         }
 
@@ -151,13 +171,39 @@ class IPCHandler:
         if self.redis_bridge is not None and self.redis_bridge.active:
             await self.redis_bridge.publish_response(command_id, response)
 
-    async def handle_interview(self, command_id: str, agent_id: int, prompt: str) -> bool:
+    def _report_attribution(self, report_run_id: Optional[str]):
+        """Contextmanager: Modellaufrufe waehrend des Blocks dem Report-Run zuordnen.
+
+        No-op (``nullcontext``) ohne ``budget_guard`` oder ohne ``report_run_id``
+        — bestehende Aufrufer/Kommandos ohne Report-Kontext bleiben unveraendert
+        (#1478 Codex P1, Runde 6).
+        """
+        if self.budget_guard is None or not report_run_id:
+            return nullcontext()
+        from sim_runtime.budget_guard import REPORT_INTERVIEW_STAGE_ID
+
+        return self.budget_guard.attribute_to(report_run_id, REPORT_INTERVIEW_STAGE_ID)
+
+    async def handle_interview(
+        self,
+        command_id: str,
+        agent_id: int,
+        prompt: str,
+        report_run_id: Optional[str] = None,
+    ) -> bool:
         """
         Handle single Agent interview command
+
+        ``report_run_id`` (#1478 Codex P1, Runde 6): traegt den Report-Run,
+        dessen Budget dieses Interview belastet. Physische Modellaufruf-
+        Versuche laufen damit gegen ``RunBudgetEnforcer`` dieses Report-Runs
+        statt (unsichtbar) gegen ``AGORA_RUN_ID`` der Simulation.
 
         Returns:
             True means success, False means failure
         """
+        from app.services.run_budget import BudgetExceededError
+
         try:
             # Get Agent
             agent = self.agent_graph.get_agent(agent_id)
@@ -170,7 +216,8 @@ class IPCHandler:
 
             # Execute Interview
             actions = {agent: interview_action}
-            await self.env.step(actions)
+            with self._report_attribution(report_run_id):
+                await self.env.step(actions)
 
             # Get result from database
             result = self._get_interview_result(agent_id)
@@ -179,19 +226,45 @@ class IPCHandler:
             print(f"  Interview completed: agent_id={agent_id}")
             return True
 
+        except BudgetExceededError as e:
+            # #1478 Codex P1, Runde 7: strukturiert statt als Fehlertext, damit
+            # der Flask-Prozess den Abbruch wieder als BudgetExceededError
+            # werfen kann statt ihn als generisches success=False zu behandeln.
+            error_msg = str(e)
+            print(f"  Interview failed (budget exceeded): agent_id={agent_id}, error={error_msg}")
+            await self.send_response(
+                command_id,
+                "failed",
+                error=error_msg,
+                budget_exceeded={
+                    "dimension": e.dimension,
+                    "observed": e.observed,
+                    "threshold": e.threshold,
+                },
+            )
+            return False
+
         except Exception as e:
             error_msg = str(e)
             print(f"  Interview failed: agent_id={agent_id}, error={error_msg}")
             await self.send_response(command_id, "failed", error=error_msg)
             return False
 
-    async def handle_batch_interview(self, command_id: str, interviews: List[Dict]) -> bool:
+    async def handle_batch_interview(
+        self,
+        command_id: str,
+        interviews: List[Dict],
+        report_run_id: Optional[str] = None,
+    ) -> bool:
         """
         Handle batch interview command
 
         Args:
             interviews: [{"agent_id": int, "prompt": str}, ...]
+            report_run_id: siehe :meth:`handle_interview` (#1478 Codex P1, Runde 6).
         """
+        from app.services.run_budget import BudgetExceededError
+
         try:
             # Build action dictionary
             actions = {}
@@ -216,7 +289,8 @@ class IPCHandler:
                 return False
 
             # Execute batch Interview
-            await self.env.step(actions)
+            with self._report_attribution(report_run_id):
+                await self.env.step(actions)
 
             # Get all results
             results = {}
@@ -233,6 +307,22 @@ class IPCHandler:
             })
             print(f"  Batch Interview completed: {len(results)} Agents")
             return True
+
+        except BudgetExceededError as e:
+            # #1478 Codex P1, Runde 7: siehe Kommentar in ``handle_interview``.
+            error_msg = str(e)
+            print(f"  batchInterview failed (budget exceeded): {error_msg}")
+            await self.send_response(
+                command_id,
+                "failed",
+                error=error_msg,
+                budget_exceeded={
+                    "dimension": e.dimension,
+                    "observed": e.observed,
+                    "threshold": e.threshold,
+                },
+            )
+            return False
 
         except Exception as e:
             error_msg = str(e)
@@ -291,14 +381,16 @@ class IPCHandler:
             await self.handle_interview(
                 command_id,
                 args.get("agent_id", 0),
-                args.get("prompt", "")
+                args.get("prompt", ""),
+                report_run_id=args.get("report_run_id"),
             )
             return True
 
         elif command_type == CommandType.BATCH_INTERVIEW:
             await self.handle_batch_interview(
                 command_id,
-                args.get("interviews", [])
+                args.get("interviews", []),
+                report_run_id=args.get("report_run_id"),
             )
             return True
 

@@ -612,11 +612,13 @@ class SimulationRunner:
         prompt: str,
         platform: Optional[str] = None,
         timeout: float = 60.0,
+        run_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Interview a single agent via IPC."""
         return _interview_agent_fn(
             simulation_id, agent_id, prompt, platform, timeout,
             run_state_dir=cls.RUN_STATE_DIR,
+            run_id=run_id,
         )
 
     @classmethod
@@ -626,11 +628,13 @@ class SimulationRunner:
         interviews: List[Dict[str, Any]],
         platform: Optional[str] = None,
         timeout: float = 120.0,
+        run_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Batch-interview multiple agents via IPC."""
         return _interview_agents_batch_fn(
             simulation_id, interviews, platform, timeout,
             run_state_dir=cls.RUN_STATE_DIR,
+            run_id=run_id,
         )
 
     @classmethod

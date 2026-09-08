@@ -15,7 +15,8 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-from typing import Any, Dict, List, Optional
+from contextlib import contextmanager
+from typing import Any, Dict, Iterator, List, Optional
 
 from ...utils.logger import get_logger
 from ..artifact_store import resolve_default_store
@@ -33,6 +34,70 @@ logger = get_logger("agora.interview_client")
 def _store():
     """Return the active SimulationArtifactStore (lazy, no app-context required)."""
     return resolve_default_store()
+
+
+@contextmanager
+def _report_budget_guard(run_id: Optional[str]) -> Iterator[None]:
+    """Haertet einen Interview-Versuch gegen das harte Report-Budget.
+
+    ``run_id`` ist der Report-Run, dessen Budget der Aufrufer traegt (additiv
+    durchgereicht, #Slice-B4). Ohne ``run_id`` ist dieser Kontextmanager ein
+    No-op — bestehende Aufrufer ohne Budget-Kontext bleiben unveraendert.
+
+    Nutzt denselben zentralen Mechanismus wie der bereits gehaertete
+    Direktpfad (``LLMClient._budget_check``/``_budget_record`` in
+    ``app/llm/client.py``): ``RunBudgetEnforcer.check_before_call()`` wirft
+    ``BudgetExceededError`` VOR dem Interview-Versuch, wenn ein hartes Limit
+    bereits erreicht ist. Dieser Guard ist zusaetzlich zum Direktpfad noetig,
+    weil der IPC-Zweig keinen eigenen ``LLMClient`` mit eingebautem
+    Budget-Check hat — der tatsaechliche LLM-Call laeuft im OASIS-Worker-
+    Subprozess (#1478 Codex P1, Runde 5). ``record_after_call()`` gibt die
+    Reservierung wieder frei, unabhaengig von Erfolg oder Fehler des
+    Interview-Versuchs — dasselbe Check/Record-Paar wie
+    ``LLMClient._provider_attempt``.
+    """
+    if not run_id:
+        yield
+        return
+
+    from ..run_budget import RunBudgetEnforcer
+
+    enforcer = RunBudgetEnforcer.for_run(run_id)
+    if enforcer is None:
+        yield
+        return
+
+    enforcer.check_before_call()
+    try:
+        yield
+    finally:
+        enforcer.record_after_call()
+
+
+def _reraise_if_budget_exceeded(response: Any) -> None:
+    """Wandelt einen strukturierten Budget-Abbruch der IPC-Antwort wieder in
+    ``BudgetExceededError`` um (#1478 Codex P1, Runde 7).
+
+    Vorher fingen beide IPC-Interview-Handler in ``sim_runtime.ipc`` einen
+    waehrend ``env.step()`` geworfenen ``BudgetExceededError`` als generische
+    Exception und antworteten mit ``status="failed"``. Dieser Client las das
+    nur als ``{"success": False, "error": <Text>}`` — ``GraphToolsService``
+    behandelte das wie ein dauerhaft nicht verfuegbares Tool statt wie das
+    Ende des Report-Laufs, und ``report_generation.py`` markierte den Run nie
+    als ``stopped``/``termination_reason=budget_*``. ``response.budget_exceeded``
+    (siehe ``sim_runtime.ipc.IPCHandler.send_response``) traegt die drei
+    Felder strukturiert durch das IPC-Protokoll; ist es gesetzt, wird hier
+    wieder dieselbe ``BudgetExceededError`` geworfen wie im bereits
+    gehaerteten Direktpfad (``LLMClient``/``_report_budget_guard`` oben).
+    """
+    info = getattr(response, "budget_exceeded", None)
+    if not info:
+        return
+    from ..run_budget import BudgetExceededError
+
+    raise BudgetExceededError(
+        info["dimension"], observed=info["observed"], threshold=info["threshold"]
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -122,11 +187,17 @@ def interview_agent(
     timeout: float = 60.0,
     *,
     run_state_dir: str,
+    run_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Interview a single agent.
 
     Uses IPC while an OASIS worker is polling; falls back to the in-process
     direct path (:mod:`interview_direct`) once the environment is closed.
+
+    ``run_id`` wird additiv durchgereicht (Budget-Guard/Ledger, #Slice-B4) —
+    an den Direktpfad (``interview_agent_direct``) UND als hartes Vorab-Gate
+    (:func:`_report_budget_guard`) um den IPC-Versuch, der sonst keinen
+    eigenen ``LLMClient``-Budget-Check hat (#1478 Codex P1, Runde 5).
 
     Raises:
         ValueError: Simulation does not exist, or neither IPC nor persisted
@@ -145,6 +216,7 @@ def interview_agent(
             platform=platform,
             timeout=timeout,
             run_state_dir=run_state_dir,
+            run_id=run_id,
         )
 
     if not check_env_alive(simulation_id, run_state_dir=run_state_dir):
@@ -154,33 +226,58 @@ def interview_agent(
         f"Send Interview command: simulation_id={simulation_id}, agent_id={agent_id}, platform={platform}"
     )
     ipc_client = SimulationIPCClient(sim_dir)
-    try:
-        response = ipc_client.send_interview(
-            agent_id=agent_id, prompt=prompt, platform=platform, timeout=timeout
-        )
-    except TimeoutError:
-        # Der Poller galt als lebendig, antwortet aber nicht. Statt den Aufrufer
-        # mit einem Timeout stehen zu lassen, wird direkt beantwortet.
-        logger.warning(
-            f"IPC-Interview ohne Antwort ({simulation_id}) — Fallback auf Direktpfad"
-        )
-        return _direct()
+    ipc_timed_out = False
+    with _report_budget_guard(run_id):
+        try:
+            # ``report_run_id=run_id`` (#1478 Codex P1, Runde 6): der Guard oben
+            # haertet nur das Vorab-Gate im Flask-Prozess. Ohne den Report-Kontext
+            # im Kommando selbst verbucht der Worker den physischen Modellaufruf
+            # unter seinem simulationszeitlichen AGORA_RUN_ID statt unter diesem
+            # Report-Run — der Report-Ledger bliebe unveraendert und ein Folge-Call
+            # duerfte trotz erreichtem Limit erneut starten.
+            response = ipc_client.send_interview(
+                agent_id=agent_id,
+                prompt=prompt,
+                platform=platform,
+                timeout=timeout,
+                report_run_id=run_id,
+            )
+        except TimeoutError:
+            # Der Poller galt als lebendig, antwortet aber nicht. Statt den Aufrufer
+            # mit einem Timeout stehen zu lassen, wird direkt beantwortet.
+            logger.warning(
+                f"IPC-Interview ohne Antwort ({simulation_id}) — Fallback auf Direktpfad"
+            )
+            # Kein ``return _direct()`` INNERHALB des Guards (#1478 Codex
+            # Runde 8): der Guard haelt bis zum Verlassen des with-Blocks
+            # seine prozesslokale Reservierung, und der Direktpfad zaehlt sie
+            # in seinem eigenen ``_budget_check()`` mit. Bei genau einem
+            # verbleibenden Call haette der Fallback deshalb
+            # ``BudgetExceededError`` geworfen, obwohl der Ledger noch nichts
+            # verbraucht hat — und den Report faelschlich gestoppt.
+            ipc_timed_out = True
+            response = None
 
-    if response.status.value == "completed":
-        return {
-            "success": True,
-            "agent_id": agent_id,
-            "prompt": prompt,
-            "result": response.result,
-            "timestamp": response.timestamp,
-        }
-    return {
-        "success": False,
-        "agent_id": agent_id,
-        "prompt": prompt,
-        "error": response.error,
-        "timestamp": response.timestamp,
-    }
+        if not ipc_timed_out:
+            if response.status.value == "completed":
+                return {
+                    "success": True,
+                    "agent_id": agent_id,
+                    "prompt": prompt,
+                    "result": response.result,
+                    "timestamp": response.timestamp,
+                }
+            _reraise_if_budget_exceeded(response)
+            return {
+                "success": False,
+                "agent_id": agent_id,
+                "prompt": prompt,
+                "error": response.error,
+                "timestamp": response.timestamp,
+            }
+
+    # Erst hier ist die Reservierung des Guards freigegeben.
+    return _direct()
 
 
 def interview_agents_batch(
@@ -190,11 +287,17 @@ def interview_agents_batch(
     timeout: float = 120.0,
     *,
     run_state_dir: str,
+    run_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Batch-interview multiple agents.
 
     Uses IPC while an OASIS worker is polling; falls back to the in-process
     direct path (:mod:`interview_direct`) once the environment is closed.
+
+    ``run_id`` wird additiv durchgereicht (Budget-Guard/Ledger, #Slice-B4) —
+    an den Direktpfad (``interview_agents_batch_direct``) UND als hartes
+    Vorab-Gate (:func:`_report_budget_guard`) um den IPC-Versuch, der sonst
+    keinen eigenen ``LLMClient``-Budget-Check hat (#1478 Codex P1, Runde 5).
 
     Raises:
         ValueError: Simulation does not exist, or neither IPC nor persisted
@@ -212,6 +315,7 @@ def interview_agents_batch(
             platform,
             timeout,
             run_state_dir=run_state_dir,
+            run_id=run_id,
         )
 
     if not check_env_alive(simulation_id, run_state_dir=run_state_dir):
@@ -221,29 +325,44 @@ def interview_agents_batch(
         f"Send batch Interview command: simulation_id={simulation_id}, count={len(interviews)}, platform={platform}"
     )
     ipc_client = SimulationIPCClient(sim_dir)
-    try:
-        response = ipc_client.send_batch_interview(
-            interviews=interviews, platform=platform, timeout=timeout
-        )
-    except TimeoutError:
-        logger.warning(
-            f"IPC-Batch-Interview ohne Antwort ({simulation_id}) — Fallback auf Direktpfad"
-        )
-        return _direct()
+    ipc_timed_out = False
+    with _report_budget_guard(run_id):
+        try:
+            # ``report_run_id=run_id`` — siehe Kommentar in ``interview_agent``
+            # (#1478 Codex P1, Runde 6).
+            response = ipc_client.send_batch_interview(
+                interviews=interviews,
+                platform=platform,
+                timeout=timeout,
+                report_run_id=run_id,
+            )
+        except TimeoutError:
+            logger.warning(
+                f"IPC-Batch-Interview ohne Antwort ({simulation_id}) — Fallback auf Direktpfad"
+            )
+            # Siehe interview_agent: der Direktpfad darf erst laufen, wenn der
+            # Guard seine Reservierung freigegeben hat (#1478 Codex Runde 8).
+            ipc_timed_out = True
+            response = None
 
-    if response.status.value == "completed":
-        return {
-            "success": True,
-            "interviews_count": len(interviews),
-            "result": response.result,
-            "timestamp": response.timestamp,
-        }
-    return {
-        "success": False,
-        "interviews_count": len(interviews),
-        "error": response.error,
-        "timestamp": response.timestamp,
-    }
+        if not ipc_timed_out:
+            if response.status.value == "completed":
+                return {
+                    "success": True,
+                    "interviews_count": len(interviews),
+                    "result": response.result,
+                    "timestamp": response.timestamp,
+                }
+            _reraise_if_budget_exceeded(response)
+            return {
+                "success": False,
+                "interviews_count": len(interviews),
+                "error": response.error,
+                "timestamp": response.timestamp,
+            }
+
+    # Erst hier ist die Reservierung des Guards freigegeben.
+    return _direct()
 
 
 def interview_all_agents(

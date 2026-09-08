@@ -66,13 +66,24 @@ def _extract_tool_calls_from_message(message: Any) -> List[ToolCallItem]:
 
 def _accumulate_streaming_tool_calls(
     chunks: Any,
-) -> tuple[str, List[ToolCallItem], str]:
+) -> tuple[str, List[ToolCallItem], str, Any]:
     """Akkumuliert Streaming-Chunks und baut content + tool_calls zusammen.
 
-    Gibt ``(content, tool_calls, finish_reason)`` zurück.
+    Gibt ``(content, tool_calls, finish_reason, usage)`` zurück. ``usage``
+    ist das letzte Chunk-``usage``-Objekt mit einem gesetzten
+    ``completion_tokens`` (analog zum Streaming-Zweig in ``LLMClient.chat``)
+    oder ``None``, wenn kein Chunk Usage mitgeliefert hat — Ollama liefert es
+    im letzten Chunk, das OpenAI-SDK nur mit ``stream_options={"include_usage":
+    true}``, das dieser Pfad nicht setzt.
+
+    Issue #1478 (Codex P1, Runde 3): ohne diese Usage-Extraktion blieb jeder
+    erfolgreiche native Tool-Call fuer das Usage-Ledger "token-unknown" —
+    harte Token-/Kostenbudgets konnten den Streaming-Tool-Pfad damit
+    unbegrenzt ueberschreiten.
     """
     content_parts: List[str] = []
     finish_reason: str = "stop"
+    usage: Any = None
 
     # Indexed accumulator: index → {id, name, arguments_parts}
     tc_acc: dict[int, dict] = {}
@@ -110,6 +121,10 @@ def _accumulate_streaming_tool_calls(
                     if fargs:
                         entry["arguments_parts"].append(fargs)
 
+        chunk_usage = getattr(chunk, "usage", None)
+        if chunk_usage and getattr(chunk_usage, "completion_tokens", None) is not None:
+            usage = chunk_usage
+
     content = "".join(content_parts)
 
     tool_calls: List[ToolCallItem] = []
@@ -129,7 +144,7 @@ def _accumulate_streaming_tool_calls(
             ToolCallItem(id=entry["id"], name=entry["name"], arguments=arguments)
         )
 
-    return content, tool_calls, finish_reason
+    return content, tool_calls, finish_reason, usage
 
 
 # P5.4: Native OpenAI function-calling method
@@ -239,12 +254,24 @@ def _chat_with_tools(
     )
 
     def _create(call_kwargs: Dict[str, Any]) -> Any:
+        """Ein physischer Providerattempt mit transient-retry.
+
+        Issue #1478 (Codex P1, Runde 3): Budget-Check, Failure-Telemetrie und
+        -Record laufen INNERHALB von ``_provider_attempt`` — analog zu
+        ``LLMClient.chat``/``describe_image``. Vorher lag der Guard um die
+        gesamte ``execute()``-Operation, sodass ein transienter Retry oder
+        eine Quirk-Korrektur (``TOKEN_KEY_QUIRK``/``TEMPERATURE_QUIRK``) nur
+        EINEN Budget-Check/Event/Record erzeugte, obwohl mehrere physische
+        Requests abgesetzt wurden — ``max_llm_calls=1`` erlaubte damit
+        mehrere abgerechnete Requests, und nur das Endergebnis landete im
+        Ledger. Jeder Retried-Attempt bekommt jetzt sein eigenes
+        Check/Event/Record-Triplet.
+        """
         return llm_call_with_retry(
-            self.client.chat.completions.create,
+            lambda: self._provider_attempt(call_kwargs, context),
             max_retries=self._max_retries,
             initial_delay=self._retry_initial_delay,
             max_delay=self._retry_max_delay,
-            **call_kwargs,
         )
 
     def _create_with_fallback() -> Any:
@@ -259,27 +286,43 @@ def _chat_with_tools(
     tool_calls: List[ToolCallItem] = []
     finish_reason: str = "stop"
     raw_response: Any = None
+    usage: Any = None
+    _latency_ms: float = 0.0
+
+    # ``_provider_attempt`` hat fuer jeden physischen Versuch (erster Call,
+    # transienter Retry, Quirk-Korrektur) bereits Check + Failure-Telemetrie
+    # + ``_budget_record`` erledigt — hier nur sauber durchreichen, kein
+    # zweites Event fuer denselben Fehlschlag.
+    _response, _latency_ms = _create_with_fallback()
 
     try:
         if force_stream:
-            stream = _create_with_fallback()
-            content, tool_calls, finish_reason = _accumulate_streaming_tool_calls(stream)
+            content, tool_calls, finish_reason, usage = _accumulate_streaming_tool_calls(
+                _response
+            )
         else:
-            raw_response = _create_with_fallback()
+            raw_response = _response
             choice = raw_response.choices[0]
             finish_reason = getattr(choice, "finish_reason", "stop") or "stop"
             message = choice.message
             content = getattr(message, "content", None) or ""
             tool_calls = _extract_tool_calls_from_message(message)
+            usage = getattr(raw_response, "usage", None)
     except Exception as exc:  # noqa: BLE001
-        elapsed = _time.monotonic() - _t0
+        # Lokale Nachverarbeitung eines HTTP-erfolgreichen Providerattempts
+        # (Stream-Konsum, malformed ``choices``) ist ein eigener
+        # Fehlschlag-Fall: ``_provider_attempt`` hat den physischen Request
+        # bereits als Erfolg verbucht, es fehlt noch dessen
+        # Abschluss-Telemetrie — Event + Record duerfen deshalb nicht
+        # ausbleiben, sonst unterlaeuft der Call das weiche
+        # ``max_llm_calls``-Limit.
         self._log_invocation_event(
             stage=context,
-            latency_ms=elapsed * 1000,
+            latency_ms=_latency_ms,
             success=False,
             error_type=exc.__class__.__name__,
-            http_status=getattr(exc, "status_code", None),
         )
+        self._budget_record()
         raise
 
     elapsed = _time.monotonic() - _t0
@@ -291,11 +334,13 @@ def _chat_with_tools(
         elapsed,
         force_stream,
     )
-    self._log_invocation_event(
-        stage=context,
-        latency_ms=elapsed * 1000,
-        success=True,
-    )
+    # Issue #1478 (Codex P1, Runde 3): Usage VOR der Budget-Auswertung ins
+    # Invocation-Event aufnehmen — ``_record_provider_success`` leitet
+    # prompt_tokens/completion_tokens aus ``usage`` ab (Streaming: letztes
+    # Chunk mit Usage; sonst ``response.usage``). Ohne das markierte das
+    # Ledger jeden nativen Tool-Call als "token-unknown" und liess Tokens
+    # und Kosten aus den beobachteten Summen heraus.
+    self._record_provider_success(_response, _latency_ms, context, usage=usage)
 
     # <think>...</think> aus Textinhalt entfernen (analog zu chat())
     content = re.sub(r"<think>[\s\S]*?</think>", "", content, flags=re.IGNORECASE).strip()
