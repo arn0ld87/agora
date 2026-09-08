@@ -1,5 +1,5 @@
 import service, { requestWithRetry } from './index'
-import type { ApiEnvelope, ApiErrorEnvelope } from './envelope'
+import { ApiError, type ApiEnvelope, type ApiErrorEnvelope } from './envelope'
 import type { LlmRuntimePayload } from './llmRuntime'
 import {
   EvidenceMapResponseSchema,
@@ -175,6 +175,12 @@ export const getReport = (reportId: string): Promise<ApiEnvelope<Report>> => {
  * `data`-Feld, ein `EvidenceMap`-Placeholder wäre selbst eine unvalidierte
  * Behauptung. Aufrufer müssen `evidence_omitted` prüfen, bevor sie `data` als
  * vorhanden annehmen.
+ *
+ * Verletzt eine 2xx-Antwort `EvidenceMapResponseSchema` (Version-Skew,
+ * Response-Drift), wirft dieses Promise eine `ApiError` mit
+ * `code: 'schema_mismatch'` statt eines generischen `Error` — Aufrufer
+ * unterscheiden damit einen Schema-Mismatch von einem Transport-/HTTP-Fehler
+ * (z.B. 404/5xx), ohne die Fehlermeldung parsen zu müssen.
  */
 export type EvidenceEnvelope = EvidenceMapResponse | ApiErrorEnvelope
 
@@ -189,7 +195,18 @@ export const getReportEvidence = (reportId: string): Promise<EvidenceEnvelope> =
     const parsed = EvidenceMapResponseSchema.safeParse(resp)
     if (!parsed.success) {
       console.warn('[api] evidence envelope parse failed', parsed.error.flatten())
-      throw new Error(`schema mismatch: ${parsed.error.message}`)
+      // Review B7 (PR #1477 F1): eigener `code` statt eines einfachen `Error`,
+      // damit `Step4Report.loadEvidence()` diesen Fall unterscheidbar VOR dem
+      // Transport-Retry-Zweig abfangen und an `recordSchemaError` weiterreichen
+      // kann (siehe `getReportEvidence`-Aufrufstelle dort). Ein plain `Error`
+      // wuerde dort denselben `catch` treffen wie eine 404/5xx-ApiError und
+      // den Drift stillschweigend in den Retry-Loop schicken.
+      throw new ApiError({
+        code: 'schema_mismatch',
+        status: 0,
+        message: `schema mismatch: ${parsed.error.message}`,
+        originalResponse: resp,
+      })
     }
     return parsed.data
   })

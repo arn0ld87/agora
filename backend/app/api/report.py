@@ -311,9 +311,9 @@ def get_report_evidence(report_id: str):
         # laesst nur die ungesetzte TOP-LEVEL-Seite weg (wie zuvor
         # ``json_success``) und ruehrt die verschachtelten ``None``-Felder
         # der Evidence-Records nicht an.
-        envelope = EvidenceMapResponseModel(evidence_omitted=omission)
+        envelope = EvidenceMapResponseModel.for_omission(omission)
         return jsonify(envelope.to_payload()), 200
-    envelope = EvidenceMapResponseModel(data=validated)
+    envelope = EvidenceMapResponseModel.for_data(validated)
     return jsonify(envelope.to_payload()), 200
 
 

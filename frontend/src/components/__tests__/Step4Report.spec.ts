@@ -564,6 +564,38 @@ describe('Step4Report — Evidence-Fehlerklassifizierung: HTTP-Fehler vs. Schema
     expect((getReportEvidence as ReturnType<typeof vi.fn>).mock.calls.length).toBe(callsBefore)
   })
 
+  // Review B7 (PR #1477 F4/F1): `getReportEvidence()` selbst wirft eine
+  // ApiError mit `code: 'schema_mismatch'`, wenn die 2xx-Antwort
+  // `EvidenceMapResponseSchema` verletzt (Version-Skew, Response-Drift).
+  // Ohne die Klassifizierung im catch-Zweig von loadEvidence() landet dieser
+  // Fehler im selben Pfad wie eine 404-ApiError und wird endlos geretryt statt
+  // als schemaError sichtbar zu werden.
+  it('meldet eine ApiError mit code=schema_mismatch aus getReportEvidence() als schemaError und plant keinen Retry', async () => {
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: { status: 'completed', report_id: 'report_test01', simulation_id: 'sim_test01' },
+    })
+    ;(getReportEvidence as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new ApiError({
+        code: 'schema_mismatch',
+        status: 0,
+        message: 'schema mismatch: invalid_type at data',
+      })
+    )
+
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    expect(wrapper.find('.schema-error').exists()).toBe(true)
+
+    const callsBefore = (getReportEvidence as ReturnType<typeof vi.fn>).mock.calls.length
+    await vi.advanceTimersByTimeAsync(3000)
+    await flushPromises()
+
+    // Kein Transport-Retry bei einem Schema-Mismatch aus getReportEvidence().
+    expect((getReportEvidence as ReturnType<typeof vi.fn>).mock.calls.length).toBe(callsBefore)
+  })
+
   it('haelt die Budget-Semantik ein: bei terminalem Status zaehlt der 404-Retry gegen das Budget', async () => {
     ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
       success: true,

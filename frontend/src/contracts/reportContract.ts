@@ -589,33 +589,44 @@ export const EvidenceOmissionSchema = z.object({
 export type EvidenceOmission = z.infer<typeof EvidenceOmissionSchema>;
 
 /**
- * Spiegel zu `EvidenceMapResponseModel` (Issue #1477 F1).
+ * Spiegel zu `EvidenceMapResponseSuccessVariant` (Issue #1477 F1/F3).
+ */
+export const EvidenceMapSuccessResponseSchema = z.object({
+  success: z.literal(true),
+  data: EvidenceMapSchema,
+}).strict();
+export type EvidenceMapSuccessResponse = z.infer<typeof EvidenceMapSuccessResponseSchema>;
+
+/**
+ * Spiegel zu `EvidenceMapResponseOmittedVariant` (Issue #1477 F1/F3).
+ */
+export const EvidenceMapOmittedResponseSchema = z.object({
+  success: z.literal(true),
+  evidence_omitted: EvidenceOmissionSchema,
+}).strict();
+export type EvidenceMapOmittedResponse = z.infer<typeof EvidenceMapOmittedResponseSchema>;
+
+/**
+ * Spiegel zu `EvidenceMapResponseModel` (Issue #1477 F1, verschaerft in F3).
  *
  * Response-Envelope für `GET /api/report/<id>/evidence`. Vorher stand diese
  * Form nur als handgeschriebenes TypeScript-Interface in
  * `frontend/src/api/report.ts` — die Schema-Generierung kannte diese
- * API-Grenze nicht. Union aus Erfolgsfall (`data` gesetzt) und
- * Degradations-Fall (`evidence_omitted` gesetzt) — das Backend liefert nie
- * beide Felder gleichzeitig und nie keines von beiden; anders als
- * `ReportContractSchema.evidence_omitted` fehlt die jeweils ungesetzte Seite
- * hier als Key ganz, statt `null` zu sein.
+ * API-Grenze nicht.
+ *
+ * Review B7 Runde 4 (F3): die erste Fassung war ein einzelnes Objekt mit
+ * zwei optionalen Feldern plus einem `superRefine`, das die Exklusivitaet
+ * nachtraeglich pruefte — dieselbe Schwaeche wie im Backend-Vertrag vor dem
+ * Fix. Jetzt eine echte `z.union` aus den beiden `.strict()`-Varianten
+ * (`EvidenceMapSuccessResponseSchema` / `EvidenceMapOmittedResponseSchema`),
+ * analog zu `EvidenceMapResponseModel` als Pydantic-`RootModel`-Union: jede
+ * Variante erlaubt genau ihr eigenes Feld, `data` bzw. `evidence_omitted`
+ * gleichzeitig oder keines von beiden lehnen beide Varianten strukturell ab.
  */
-export const EvidenceMapResponseSchema = z.object({
-  success: z.literal(true),
-  data: EvidenceMapSchema.optional(),
-  evidence_omitted: EvidenceOmissionSchema.optional(),
-}).strict().superRefine((value, ctx) => {
-  // Spiegelt `EvidenceMapResponseModel.exactly_one_variant`. JSON Schema kann
-  // diese Bedingung nicht ausdruecken, der Spiegel muss sie deshalb selbst
-  // tragen — sonst akzeptiert das Frontend eine Form, die das Backend gar
-  // nicht erzeugen kann.
-  if ((value.data === undefined) === (value.evidence_omitted === undefined)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Genau eines von 'data' oder 'evidence_omitted' muss gesetzt sein.",
-    });
-  }
-});
+export const EvidenceMapResponseSchema = z.union([
+  EvidenceMapSuccessResponseSchema,
+  EvidenceMapOmittedResponseSchema,
+]);
 export type EvidenceMapResponse = z.infer<typeof EvidenceMapResponseSchema>;
 
 export const ReportContractSchema = z.object({

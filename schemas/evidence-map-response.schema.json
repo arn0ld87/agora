@@ -334,6 +334,46 @@
       "title": "EvidenceMapModel",
       "type": "object"
     },
+    "EvidenceMapResponseOmittedVariant": {
+      "additionalProperties": false,
+      "description": "Degradations-Variante von ``EvidenceMapResponseModel`` (Issue #1477 F3).",
+      "properties": {
+        "evidence_omitted": {
+          "$ref": "#/$defs/EvidenceOmissionModel"
+        },
+        "success": {
+          "const": true,
+          "default": true,
+          "title": "Success",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "evidence_omitted"
+      ],
+      "title": "EvidenceMapResponseOmittedVariant",
+      "type": "object"
+    },
+    "EvidenceMapResponseSuccessVariant": {
+      "additionalProperties": false,
+      "description": "Erfolgsvariante von ``EvidenceMapResponseModel`` (Issue #1477 F3).",
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/EvidenceMapModel"
+        },
+        "success": {
+          "const": true,
+          "default": true,
+          "title": "Success",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "EvidenceMapResponseSuccessVariant",
+      "type": "object"
+    },
     "EvidenceOmissionModel": {
       "additionalProperties": false,
       "description": "Warum ein Export-Envelope keine Evidence-Map traegt (Issue #987).\n\nBis #987 fiel eine Evidence-Map, die nach allen Migrationen den Vertrag\nverletzte, mit einer ``logger.warning`` aus dem Envelope. Der Nutzer bekam\nHTTP 200 und eine herunterladbare JSON-Datei mit ``evidence: null`` \u2014 von\neinem Report ohne Evidence nicht zu unterscheiden.\n\nDer Fallback bleibt: ein unvollstaendiger Export ist besser als gar keiner,\nund der Report-Rumpf ist unbeschaedigt. Er ist nur nicht laenger stumm.\n\nAbgrenzung zu ``EvidenceDegradationModel`` (#1006): das protokolliert die\nAbstufung eines *einzelnen Claims* waehrend der Report-Erzeugung. Hier ist\ndie *gesamte Map* nicht ausliefertbar, und zwar erst beim Export.",
@@ -877,38 +917,14 @@
   },
   "$id": "https://alexle135.de/schemas/evidence-map-response.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": false,
-  "description": "Response-Envelope fuer ``GET /api/report/<id>/evidence`` (Review B7 Fix, Issue #1477 F1).\n\nVorher stand die Form dieser Antwort nur als handgeschriebenes\nTypeScript-Interface (``EvidenceOmittedEnvelope`` in\n``frontend/src/api/report.ts``) \u2014 die Schema-Generierung kannte diese\nAPI-Grenze nicht, und Axios behauptete beliebige ``data``-Formen ohne\nPruefung.\n\nUnion aus Erfolgsfall (``data`` gesetzt) und Degradations-Fall\n(``evidence_omitted`` gesetzt, siehe ``EvidenceOmissionModel``) \u2014\n``backend/app/api/report.py::get_report_evidence`` liefert nie beide\nFelder gleichzeitig und nie keines von beiden. Der Route-Handler dumpt\ndieses Modell mit ``exclude_none=True``, sodass die jeweils ungesetzte\nSeite (anders als bei ``ReportContractModel.evidence_omitted``) als Key\nganz fehlt statt ``null`` zu sein \u2014 bestehende Tests pruefen exakt das.",
-  "properties": {
-    "data": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/EvidenceMapModel"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null
+  "description": "Response-Envelope fuer ``GET /api/report/<id>/evidence`` (Review B7 Fix, Issue #1477 F1/F3).\n\nVorher stand die Form dieser Antwort nur als handgeschriebenes\nTypeScript-Interface (``EvidenceOmittedEnvelope`` in\n``frontend/src/api/report.ts``) \u2014 die Schema-Generierung kannte diese\nAPI-Grenze nicht, und Axios behauptete beliebige ``data``-Formen ohne\nPruefung.\n\nReview B7 Runde 4 (Issue #1477 F3): die erste Fassung trug ``data`` und\n``evidence_omitted`` als zwei optionale Felder auf einem einzigen Modell\nplus einen ``model_validator`` (``exactly_one_variant``), der die\nExklusivitaet nur zur Laufzeit durchsetzte. Das generierte JSON-Schema\ndeklarierte beide Felder lediglich als optional ohne ``required``/\n``oneOf`` \u2014 ein externer Schema-Consumer haette ``{\"success\": true}``,\nbeide Felder gleichzeitig oder eine explizite ``null``-Variante\nakzeptiert, obwohl weder der Validator noch die Route\n(``backend/app/api/report.py::get_report_evidence``) das je ausliefern.\n\nJetzt eine echte Union zweier Varianten-Modelle (je ``extra=forbid``,\ngenau ein Pflichtfeld): die Exklusivitaet ist strukturell statt\nnachtraeglich validiert, und Pydantic rendert die Union unten explizit\nals ``oneOf`` statt ``anyOf`` (siehe ``__get_pydantic_json_schema__``).\nDie Aufrufer-Ergonomie bleibt unveraendert \u2014 ``RootModel`` reicht\nueberzaehlige Keyword-Argumente an die Root-Validierung durch, sodass\n``EvidenceMapResponseModel(data=...)`` bzw.\n``EvidenceMapResponseModel(evidence_omitted=...)`` weiterhin funktionieren.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/EvidenceMapResponseSuccessVariant"
     },
-    "evidence_omitted": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/EvidenceOmissionModel"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null
-    },
-    "success": {
-      "const": true,
-      "default": true,
-      "title": "Success",
-      "type": "boolean"
+    {
+      "$ref": "#/$defs/EvidenceMapResponseOmittedVariant"
     }
-  },
-  "title": "EvidenceMapResponseModel",
-  "type": "object"
+  ],
+  "title": "EvidenceMapResponseModel"
 }

@@ -75,12 +75,19 @@ export function useObjectDetail(object: Ref<ShelfObject | null>, t: Translate) {
         const res = await getReport(obj.id)
         const report = res?.success ? res.data : null
         const outline = report?.outline
-        if (outline) {
+        // Issue #1477 F2: das Detail entsteht sobald der Report selbst
+        // geladen ist, unabhaengig von einer vorhandenen Outline.
+        // `ReportSchema` erlaubt eine fehlende/`null`-Outline ausdruecklich
+        // (genau betroffene Alt-Artefakte haben oft keine) — vorher hing die
+        // Omission-Markierung weiter unten an `detail.value`, das nur bei
+        // vorhandener Outline entstand, und ein outline-loser Report mit
+        // `evidence_omitted` verlor die Warnung dadurch still.
+        if (report) {
           detail.value = {
-            summary: outline.summary,
-            parts: outline.sections.map((s) => ({ title: s.title, description: s.description })),
-            evidenceSections: report?.evidence_sections,
-            redTeamFindings: report?.red_team_findings,
+            summary: outline?.summary ?? '',
+            parts: outline ? outline.sections.map((s) => ({ title: s.title, description: s.description })) : [],
+            evidenceSections: report.evidence_sections,
+            redTeamFindings: report.red_team_findings,
           }
         }
         // Confidence-Verteilung und Aussagenzahl leben in der Evidence-Map
@@ -93,10 +100,15 @@ export function useObjectDetail(object: Ref<ShelfObject | null>, t: Translate) {
           // statt `data`, siehe Review B7 / PR #1477) darf im Dossier nicht
           // wie ein leerer Erfolg aussehen — davor fehlte die Warnung hier
           // komplett und wurde erst beim Oeffnen des vollen Readers sichtbar.
-          if (evidenceRes?.success && 'evidence_omitted' in evidenceRes && evidenceRes.evidence_omitted && detail.value) {
+          // Issue #1477 F3: `evidenceRes` ist jetzt eine echte Union
+          // (`EvidenceMapResponse`) aus zwei sich gegenseitig
+          // ausschliessenden `.strict()`-Varianten; `evidence_omitted` ist in
+          // seiner Variante ein Pflichtfeld (nie falsy), der `in`-Check
+          // narrowt deshalb ohne zusaetzliche Truthy-Pruefung.
+          if (evidenceRes?.success && 'evidence_omitted' in evidenceRes && detail.value) {
             detail.value = { ...detail.value, evidenceOmitted: true }
           }
-          const evidence = evidenceRes?.success && !('evidence_omitted' in evidenceRes && evidenceRes.evidence_omitted)
+          const evidence = evidenceRes?.success && !('evidence_omitted' in evidenceRes)
             ? evidenceRes.data
             : null
           if (evidence && detail.value) {

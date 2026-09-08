@@ -245,6 +245,34 @@ describe('useObjectDetail', () => {
     expect(detail.value?.claimsCount).toBeUndefined()
   })
 
+  // Review B7 (PR #1477 F2): `ReportSchema` erlaubt eine fehlende/`null`
+  // Outline ausdruecklich, genau betroffene Alt-Artefakte haben oft keine.
+  // Vor dem Fix haengte die Omission-Markierung an `detail.value`, das nur
+  // bei vorhandener Outline entstand — ein outline-loser Report mit
+  // `evidence_omitted` verlor die Warnung dadurch still.
+  it('Issue #1477 F2: zeigt evidenceOmitted auch fuer einen Report ohne Outline', async () => {
+    vi.mocked(getReport).mockResolvedValue({
+      success: true,
+      data: { outline: null, evidence_sections: 3 },
+    } as never)
+    vi.mocked(getReportEvidence).mockResolvedValue({
+      success: true,
+      evidence_omitted: {
+        reason: 'contract_violation',
+        detail: 'Testfall ohne Outline.',
+        validation_errors: [],
+      },
+    } as never)
+
+    const obj = ref<ShelfObject | null>(makeObject({ id: 'report_9' }))
+    const { detail } = useObjectDetail(obj, t)
+    await nextTick(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+
+    expect(detail.value).not.toBeNull()
+    expect(detail.value?.evidenceOmitted).toBe(true)
+    expect(detail.value?.parts).toEqual([])
+  })
+
   it('haelt einen fehlgeschlagenen Abruf von der Ablage fern', async () => {
     vi.mocked(getReport).mockRejectedValue(new Error('kaputt'))
 

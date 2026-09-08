@@ -10,6 +10,7 @@ vi.mock('../index', () => ({
 }))
 
 import { getReportEvidence } from '../report'
+import { isApiError } from '../envelope'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -78,5 +79,25 @@ describe('getReportEvidence (Issue #1477 F1)', () => {
     mockGet.mockResolvedValue(driftingEnvelope)
 
     await expect(getReportEvidence('report-1')).rejects.toThrow(/schema mismatch/)
+  })
+
+  // Review B7 (PR #1477 F1): der geworfene Fehler muss von einem
+  // Transport-/HTTP-Fehler unterscheidbar sein, sonst behandelt
+  // `Step4Report.loadEvidence()` einen Schema-Mismatch faelschlich als
+  // transienten Zustand und plant einen unbegrenzten Retry statt
+  // `recordSchemaError` aufzurufen.
+  it('throws an ApiError with code "schema_mismatch" for a drifting envelope, not a plain Error', async () => {
+    const driftingEnvelope = { success: true }
+    mockGet.mockResolvedValue(driftingEnvelope)
+
+    let caught: unknown
+    try {
+      await getReportEvidence('report-1')
+    } catch (err) {
+      caught = err
+    }
+
+    expect(isApiError(caught)).toBe(true)
+    expect((caught as { code?: string }).code).toBe('schema_mismatch')
   })
 })

@@ -12,6 +12,7 @@ import { useI18n } from 'vue-i18n'
 import { renderMarkdown } from '../../../utils/markdown'
 import { getAgentLog, getConsoleLog, getReportEvidence } from '../../../api/report'
 import type { GenerateReportData, EvidenceEnvelope } from '../../../api/report'
+import { isApiError } from '../../../api/envelope'
 import { createSimulationBranch } from '../../../api/simulation'
 import { getRun } from '../../../api/runs'
 import { getRunLlmRouting } from '../../../api/llmRouting'
@@ -615,12 +616,23 @@ async function loadEvidence() {
   try {
     res = await getReportEvidence(props.reportId)
   } catch (err) {
-    // HTTP-/Transport-Fehler (z.B. 404, solange die Evidenzkarte noch nicht
-    // geschrieben ist): der Interceptor in api/index.ts wirft dafuer eine
-    // ApiError, kein Schema-Mismatch. Das gehoert in den bestehenden Retry
-    // (Budget/Terminal-Semantik siehe Kommentarblock oben), nicht in
-    // recordSchemaError — sonst zeigt die UI faelschlich "Schema-Mismatch"
-    // fuer einen erwartbaren transienten Zustand.
+    // Review B7 (PR #1477 F1): `getReportEvidence()` wirft fuer eine
+    // vertragswidrige 2xx-Antwort (Version-Skew, Response-Drift) eine
+    // ApiError mit `code: 'schema_mismatch'` (siehe api/report.ts) — das ist
+    // KEIN transienter Zustand und muss VOR dem Retry-Zweig abgefangen
+    // werden, sonst verbirgt ein terminaler Report den Mismatch bis zu zehn
+    // Minuten lang und ein nichtterminaler Report retryt unbegrenzt.
+    if (isApiError(err) && err.code === 'schema_mismatch') {
+      recordSchemaError('evidence', err)
+      return
+    }
+    // Alle uebrigen Faelle (z.B. 404, solange die Evidenzkarte noch nicht
+    // geschrieben ist; 5xx; Netzwerkabbruch): der Interceptor in api/index.ts
+    // wirft dafuer ebenfalls eine ApiError, aber ohne diesen `code`. Das
+    // gehoert in den bestehenden Retry (Budget/Terminal-Semantik siehe
+    // Kommentarblock oben), nicht in recordSchemaError — sonst zeigt die UI
+    // faelschlich "Schema-Mismatch" fuer einen erwartbaren transienten
+    // Zustand.
     //
     // Review B7 (PR #1477): der frueher hier behandelte 422-Sonderfall
     // (contract_violation) existiert fuer diese Route nicht mehr — das
@@ -632,7 +644,12 @@ async function loadEvidence() {
     return
   }
   if (!res?.success) { scheduleEvidenceRetry(); return }
-  if ('evidence_omitted' in res && res.evidence_omitted) {
+  // Issue #1477 F3: `res` ist jetzt eine echte Union (`EvidenceMapResponse`)
+  // aus zwei sich gegenseitig ausschliessenden `.strict()`-Varianten;
+  // `evidence_omitted` ist in seiner Variante ein Pflichtfeld (nie
+  // `undefined`/falsy), der `in`-Check narrowt deshalb sauber ohne
+  // zusaetzliche Truthy-Pruefung.
+  if ('evidence_omitted' in res) {
     // Review B7 (PR #1477): dauerhaft vertragswidrige Evidence-Map — kein
     // transienter Zustand, ein weiterer Poll liefert dasselbe Ergebnis.
     // Sichtbar machen statt als leeren Erfolg (`data` fehlt) stillschweigend
