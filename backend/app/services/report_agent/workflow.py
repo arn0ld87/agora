@@ -1650,6 +1650,20 @@ def generate_report(
         )
         agent.console_logger = agent.ReportConsoleLogger(report_id)
 
+        # Issue #1479 (Codex-Review Runde 4, Finding 1): dieser Read muss VOR
+        # dem folgenden ``save_report(report)`` stattfinden. Der frische
+        # ``Report`` von oben traegt eine leere ``run_degradations``-Liste;
+        # laese man ``existing_outline`` erst danach (wie zuvor), saehe man
+        # bereits die eigene, gerade geschriebene leere Liste statt des
+        # zuvor persistierten Stands — ein ``run_cancellation``-Eintrag aus
+        # einem Cancel nach Planung (Stage-Boundary 1) waere dann schon beim
+        # naechsten Resume verloren, bevor ``_merge_run_degradations`` (unten)
+        # ihn je zu Gesicht bekommt. Separates Persistieren des
+        # Cancel-Zustands (Alternativoption aus dem Finding) wuerde denselben
+        # Bug nur duplizieren: die Reihenfolge Save-vor-Read ist der Fehler,
+        # nicht das fehlende Feld.
+        existing_outline = ReportManager.get_report(report_id)
+
         ReportManager.update_progress(report_id, "pending", 0, "Initializing report...", completed_sections=[])
         ReportManager.save_report(report)
 
@@ -1659,7 +1673,6 @@ def generate_report(
         if progress_callback:
             progress_callback("planning", 0, "Start planning report outline...")
 
-        existing_outline = ReportManager.get_report(report_id)
         if existing_outline and existing_outline.outline:
             outline = existing_outline.outline
         else:

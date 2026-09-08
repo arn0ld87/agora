@@ -1079,7 +1079,7 @@ def test_resume_keeps_failed_section_marker_after_restore(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_resume_preserves_fallback_outline_degradation_after_cancel(tmp_path):
+def test_resume_preserves_fallback_outline_degradation_after_cancel(tmp_path, monkeypatch):
     """Fallback-Outline (LLM-Planung scheitert) -> Cancel direkt an der
     Post-Outline-Grenze -> Resume: ``outline_planning`` bleibt in
     ``run_degradations`` erhalten, und die beim Cancel zusaetzlich
@@ -1087,17 +1087,32 @@ def test_resume_preserves_fallback_outline_degradation_after_cancel(tmp_path):
     Runde-2-Zuweisung im missing-Zweig nicht ueberschreiben (letztere kann
     ein frischer ``collect_run_degradations``-Aufruf im missing-Zweig gar
     nicht reproduzieren, da er keine Cancel-Information erhaelt — ihr
-    Ueberleben beweist gezielt die Merge- statt Ersetzen-Semantik)."""
+    Ueberleben beweist gezielt die Merge- statt Ersetzen-Semantik).
+
+    Codex-Review Runde 4, Finding 1: die urspruengliche Fassung dieses Tests
+    mockte ``ReportManager.get_report()`` in Phase B statisch auf das in
+    Phase A gespeicherte Objekt (``mock_rm.get_report.return_value =
+    saved_reports["report"]``). Das verdeckte den eigentlichen Fehler
+    vollstaendig — ``generate_report()`` liest ``existing_outline`` erst
+    NACH einem ``save_report()``-Aufruf mit einer frischen, leeren
+    ``run_degradations``-Liste (siehe workflow.py, Kommentar bei
+    ``existing_outline = ReportManager.get_report(...)``); mit einem echten
+    Manager saehe dieser Read also den eigenen, gerade geschriebenen leeren
+    Stand, unabhaengig davon, ob der Aufrufer den Bug behoben hat oder nicht.
+    Dieser Test nutzt jetzt einen echten ``ReportManager`` (nur
+    ``REPORTS_DIR`` zeigt auf ``tmp_path``) fuer ``save_report``/
+    ``get_report`` und jede Methode, die intern davon abhaengt — nur
+    Abschnitts-Generierung und Evidence-Map bleiben aus Aufwandsgruenden
+    Stubs, weil dieser Testpfad (Fallback-Outline, Abbruch vor der
+    Section-Schleife) sie nie erreicht."""
+    from app.services.report_agent.manager import ReportManager
     from app.services.report_agent.workflow import generate_report
+
+    monkeypatch.setattr(ReportManager, "REPORTS_DIR", str(tmp_path))
 
     cancel_run_id = _unique_id()
     report_id = f"report_{uuid.uuid4().hex[:12]}"
     clear_cancel(cancel_run_id)
-
-    report_folder = str(tmp_path / report_id)
-    os.makedirs(report_folder, exist_ok=True)
-
-    saved_reports: Dict[str, Any] = {}
 
     def make_agent() -> MagicMock:
         agent = _make_generation_agent()
@@ -1109,6 +1124,17 @@ def test_resume_preserves_fallback_outline_degradation_after_cancel(tmp_path):
         # Echte plan_outline()-Fallback-Logik ausloesen, nicht mocken.
         agent.llm.chat_json.side_effect = RuntimeError("LLM nicht erreichbar")
         return agent
+
+    def real_manager_mock() -> MagicMock:
+        # ``wraps=ReportManager`` delegiert jeden nicht explizit gestubbten
+        # Aufruf an die echte Klasse (und damit an das echte, per
+        # ``REPORTS_DIR``-Monkeypatch umgeleitete Dateisystem) — insbesondere
+        # ``save_report`` und ``get_report``, um die dieses Finding geht.
+        mock_rm = MagicMock(wraps=ReportManager)
+        mock_rm.get_evidence_map.return_value = None
+        mock_rm.get_generated_sections.return_value = []
+        mock_rm.assemble_full_report.return_value = "## Fallback Section 1\n"
+        return mock_rm
 
     # Phase A: Cancel ist bereits gesetzt, bevor generate_report startet —
     # der Lauf faellt in plan_outline() in den Fallback und bricht direkt an
@@ -1126,13 +1152,7 @@ def test_resume_preserves_fallback_outline_degradation_after_cancel(tmp_path):
                 }
             )
         )
-        mock_rm = MagicMock()
-        _configure_manager_mock(mock_rm, report_folder)
-        _wire_real_run_event_storage(mock_rm, report_folder)
-        mock_rm.save_report.side_effect = lambda report_obj: saved_reports.__setitem__(
-            "report", report_obj
-        )
-        mock_rm.get_report.return_value = None
+        mock_rm = real_manager_mock()
         with (
             patch("app.services.report_agent.workflow.ReportManager", mock_rm),
             patch("app.services.report_agent.workflow.migrate_v1_to_v2", return_value=None),
@@ -1154,6 +1174,16 @@ def test_resume_preserves_fallback_outline_degradation_after_cancel(tmp_path):
         result_a.run_degradations
     )
 
+    # Zwischenkontrolle: das Meta-JSON auf der echten Disk traegt den
+    # run_cancellation-Eintrag bereits VOR Phase B — sonst waere ein
+    # Verlust in Phase B nicht dem save-vor-read-Fehler zuzuschreiben.
+    persisted_after_a = ReportManager.get_report(report_id)
+    assert persisted_after_a is not None
+    components_after_a = {e["component"] for e in persisted_after_a.run_degradations}
+    assert {"outline_planning", "run_cancellation"} <= components_after_a, (
+        persisted_after_a.run_degradations
+    )
+
     # Phase B: Resume. Cancel aufgehoben, neuer Agent (fallback_outline_used
     # startet wieder bei False). Die persistierte Fallback-Outline existiert
     # bereits -> plan_outline() wird umgangen, der missing-Zweig greift
@@ -1171,10 +1201,7 @@ def test_resume_preserves_fallback_outline_degradation_after_cancel(tmp_path):
                 }
             )
         )
-        mock_rm = MagicMock()
-        _configure_manager_mock(mock_rm, report_folder)
-        _wire_real_run_event_storage(mock_rm, report_folder)
-        mock_rm.get_report.return_value = saved_reports["report"]
+        mock_rm = real_manager_mock()
         with (
             patch("app.services.report_agent.workflow.ReportManager", mock_rm),
             patch("app.services.report_agent.workflow.migrate_v1_to_v2", return_value=None),
@@ -1192,7 +1219,8 @@ def test_resume_preserves_fallback_outline_degradation_after_cancel(tmp_path):
         f"outline_planning-Degradation ueberlebt den Resume nicht: {result_b.run_degradations}"
     )
     assert reasons_b.get("run_cancellation") == "3_sections_missing_after_cancel", (
-        "Die Runde-2-Zuweisung im missing-Zweig darf die aus Phase A "
-        f"persistierte run_cancellation-Degradation nicht verwerfen: {result_b.run_degradations}"
+        "Mit einem echten ReportManager darf der erste save_report() in "
+        "generate_report() den bereits persistierten run_cancellation-"
+        f"Eintrag nicht vor dem naechsten get_report() ueberschreiben: {result_b.run_degradations}"
     )
     clear_cancel(cancel_run_id)
