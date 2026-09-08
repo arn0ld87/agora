@@ -10,6 +10,7 @@ Modulnamen in ``workflow`` erreicht und damit Namen statt Verhalten festhält.
 from __future__ import annotations
 
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Any, Dict, List
 
 from app.models.report import ReportOutline, ReportSection
@@ -74,11 +75,27 @@ class FakeAgent:
 
 
 class FakeReportManager:
-    def __init__(self) -> None:
+    #: Ohne gesetzten ``report_folder`` zeigen Sektionspfade in ein Verzeichnis,
+    #: das nicht existiert. ``_remove_orphan_markdown`` (#1475) findet dort
+    #: nichts und kehrt sofort zurück — das ist der Sollzustand für alle Tests
+    #: ohne Plattenbezug.
+    _MISSING_FOLDER = Path("/agora-fake-report-manager-ohne-ordner")
+
+    def __init__(self, report_folder: Path | None = None) -> None:
         self.progress_calls: List[Dict[str, Any]] = []
         self.saved_sections: List[tuple] = []
         self.clean_calls: List[tuple] = []
         self.evidence_prep_calls: List[str] = []
+        self.report_folder = report_folder
+
+    def _get_section_path(self, _report_id: str, section_index: int) -> str:
+        """Spiegelt ``ReportManager._get_section_path``.
+
+        Die Pipeline fragt diesen Anschluss seit #1475 ab, um eine verwaiste
+        Markdown-Datei zu entfernen, bevor neue Evidence geschrieben wird.
+        """
+        folder = self.report_folder or self._MISSING_FOLDER
+        return str(folder / f"section_{section_index:02d}.md")
 
     def update_progress(self, report_id: str, stage: str, progress: int, message: str, **kw: Any) -> None:
         self.progress_calls.append({"stage": stage, "progress": progress, "message": message, **kw})
@@ -216,16 +233,33 @@ def test_persisted_section_is_restored_without_generating():
     assert agent.saved_evidence_calls == [], "Resume darf keine Evidence neu binden"
 
 
-def test_restored_section_without_persisted_evidence_still_returns_content():
-    """Fehlende Evidenz zum Abschnitt wird geloggt, der Inhalt bleibt erhalten."""
+def test_persisted_section_without_evidence_is_regenerated_and_orphan_removed(tmp_path):
+    """Markdown ohne Evidence ist eine Waise: sie wird entfernt, der Abschnitt neu erzeugt.
+
+    Das ist das Sollverhalten seit #1475 — vorher restaurierte die Pipeline den
+    alten Inhalt trotz fehlender Evidence. Dieser Test hielt bis dahin das alte
+    Verhalten fest und lief in ``AttributeError``, weil ``FakeReportManager``
+    den neuen Anschluss ``_get_section_path`` nicht kannte.
+    """
+    manager = FakeReportManager(report_folder=tmp_path)
+    orphan = Path(manager._get_section_path("report_test123", 1))
+    orphan.write_text("## Section 1\n\nAlter Text.", encoding="utf-8")
+
     outline = _make_outline(2)
-    ctx = _make_ctx(outline=outline, total_sections=2, persisted_section_contents={1: "Alter Text."})
+    ctx = _make_ctx(
+        outline=outline,
+        total_sections=2,
+        generated_content="Neu erzeugter Text.",
+        persisted_section_contents={1: "Alter Text."},
+        report_manager=manager,
+    )
     agent = FakeAgent(evidence_map={"sections": []})
 
     result = process_section(agent, outline.sections[0], ctx, section_index=1)
 
-    assert result.restored is True
-    assert result.content == "Alter Text."
+    assert result.restored is False, "ohne Evidence darf nicht restauriert werden"
+    assert result.content == "Neu erzeugter Text."
+    assert not orphan.exists(), "die verwaiste Markdown-Datei muss vor neuer Evidence weg sein"
 
 
 # ---------------------------------------------------------------------------
