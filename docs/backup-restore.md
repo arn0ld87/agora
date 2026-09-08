@@ -1,288 +1,265 @@
 # Backup & Restore
 
-**Stand:** 2026-05-01, Europe/Berlin
-**Gegen den Code geprüft:** 2026-08-11 — Dateipfade, Kommandos, Skript- und Dokumentverweise. Die fachlichen Aussagen dieses Dokuments sind dabei **nicht** einzeln nachvollzogen worden.
-**Scope:** Wie Agora-Daten gesichert und wiederhergestellt werden. Drei
-Asset-Klassen: Neo4j-Graph, FS-Artefakte (Uploads, Reports, OASIS-State)
-und `.env` mit Secrets. Kein Cluster-Backup, kein PITR — Single-User-
-Setup.
+**Stand:** 08.09.2026  
+**Geprüfte Main-Baseline:** `0c47737f`  
+**Scope:** Single-User-Datensicherung und Recovery-Inventar. Kein Cluster-Backup, kein PITR.
 
-Verwandte Dokumente:
-- [`operations.md`](operations.md) — Logs, Healthcheck, Ausfälle.
-- [`deployment-prod-like.md`](deployment-prod-like.md) — Update- und
-  Rollback-Pfad.
-- [`security-threat-model.md`](security-threat-model.md), Asset-Tabelle.
+> [!IMPORTANT]
+> Diese Anleitung beschreibt den aktuellen Sicherungsumfang und die Recovery-Reihenfolge. Der **Release-Nachweis**, dass ein vollständiger Restore auf einem frischen Host inklusive Upgrade/Rollback reproduzierbar funktioniert, ist für `0.10` noch offen ([#766](https://github.com/arn0ld87/agora/issues/766)). Ein Markdown-Dokument ist keine Sicherung. Diese Erkenntnis musste die Menschheit offenbar mehrfach bezahlen.
+
+Verwandt:
+
+- [`operations.md`](operations.md)
+- [`operator-guide.md`](operator-guide.md)
+- [`secret-key-lifecycle.md`](secret-key-lifecycle.md)
+- [`deployment-prod-like.md`](deployment-prod-like.md)
 
 ---
 
 ## Was gesichert werden muss
 
-| Asset | Quelle | Restore-Verlust akzeptabel? |
+| Asset | Aktuelle Quelle | Kritikalität |
 |---|---|---|
-| Neo4j-Graph (Knoten, Episoden, Embeddings) | Compose-Volume `neo4j_data` (Container `/data`) | nein — entspricht Wochen/Monaten Ingestion. |
-| Uploads (PDF/MD/TXT, OASIS-Subprocess-Snapshots, Console-Logs) | Bind-Mount `./backend/uploads/` | teilweise — Quelldokumente können neu hochgeladen werden, aber Run-State wäre weg. |
-| Reports + Audit-Trails | `backend/uploads/reports/` plus `ArtifactStore`-Pfade unter `backend/uploads/<sim_id>/` | teilweise — neuer Run reproduziert nicht zwingend dasselbe Report-Wording. |
-| `simulation_config.json`, `state.json` | unter `backend/uploads/<sim_id>/` | nein, sobald die Simulation läuft. Frozen Config wird beim Run-Start geschrieben. |
-| **Multi-Provider-Hub-Daten** (Issue #450 P1.3) | Bind-Mount `./backend/data/` mit `llm_provider_secrets.json` + `workspace_llm_routing.json` | nein — verschlüsselte Provider-Keys + Workspace-Routing-Defaults. Verlust = jeder Workspace muss seine Cloud-Keys neu eingeben. |
-| **`AGORA_SECRET_KEY`** | `.env` (Fernet-Master-Key für `backend/data/llm_provider_secrets.json`) | nein — Verlust = Provider-Keys sind nicht mehr entschlüsselbar (Datenverlust). Separat zu `.env` sichern. |
-| UI-Settings (LLM-Provider, Modell-Defaults) | Bind-Mount `./backend/instance/` (`settings.json`, `llm_profiles.db`) | nein, sobald operative Defaults gesetzt sind. |
-| `.env` (Secrets) | Repo-Root, **nicht versioniert** | nein — `SECRET_KEY`, `AGORA_AUTH_TOKEN`, `NEO4J_PASSWORD`, `AGORA_SECRET_KEY`. |
-| HuggingFace-Cache | `./backend/.cache/huggingface/` | ja — kostenfrei nachladbar (~1 GB). |
-| Redis | Compose-Volume `redis_data` (RDB-Snapshot) | ja — nur Tickets + Pub/Sub-Backlog, kurzlebig. |
-| Neo4j-Logs | Compose-Volume `neo4j_logs` | ja. |
+| Neo4j-Graph/Vektoren | Compose-Volume `neo4j_data` / Neo4j-Datenbank | **hoch** |
+| Uploads + Simulationsartefakte | `backend/uploads/` | **hoch** |
+| Reports + Evidence/Audit | `backend/uploads/reports/` | **hoch** |
+| Provider-/Routing-/App-Stores | `backend/data/` | **hoch** |
+| Instanzsettings | `backend/instance/` | **hoch** |
+| `.env` / Master-Keys | Repo-Root, nicht versioniert | **kritisch** |
+| Redis | kurzlebiger Event-/Ticketzustand | niedrig; nicht als kanonisches Backup behandeln |
+| HuggingFace-/Model-Cache | Cache | niedrig; rekonstruierbar |
+| Logs | je nach Diagnose-/Auditbedarf | mittel/niedrig |
+
+### Wichtige Korrektur
+
+Reports liegen unter:
+
+```text
+backend/uploads/reports/
+```
+
+nicht unter `backend/reports/` (#1483).
 
 ---
 
-## Neo4j
+## Welche Secrets wirklich mitgesichert werden müssen
 
-### Online-Dump (Hot-Backup mit Neo4j-Admin)
+Mindestens:
 
-Neo4j 5 unterstützt `neo4j-admin database dump` im Online-Modus für die
-Community Edition mit der Einschränkung, dass die Datenbank gestoppt sein
-muss. Pragmatisch heißt das: Backend kurz pausieren, Dump ziehen, weiter.
+- `SECRET_KEY`
+- `AGORA_AUTH_TOKEN`
+- `AGORA_SECRET_KEY`
+- `AGORA_FERNET_KEY`
+- `NEO4J_PASSWORD`
+- weitere externe Provider-/Infrastruktur-Secrets, sofern nicht separat im Passwortmanager vorhanden
 
-```bash
-TS=$(date +%Y%m%d-%H%M%S)
-BACKUP_DIR=/var/backups/agora/neo4j
-mkdir -p "$BACKUP_DIR"
+### Master-Key-Bedeutung
 
-# 1. Backend anhalten — Neo4j muss frei sein.
-docker compose stop agora
+- `AGORA_SECRET_KEY` entschlüsselt gespeicherte LLM-Provider-Secrets.
+- `AGORA_FERNET_KEY` schützt persistierte Agora-API-Key-Daten bzw. zugehörige Secret-/Hash-Pfade.
 
-# 2. Neo4j stoppen (nur die DB, nicht den Container).
-docker compose exec neo4j neo4j-admin server stop
+Ein Restore der verschlüsselten JSON-Datei **ohne den zugehörigen Master-Key** ist kein Restore, sondern eine besonders ordentlich archivierte Form von Datenverlust.
 
-# 3. Dump.
-docker compose exec neo4j neo4j-admin database dump neo4j \
-  --to-path=/var/lib/neo4j/dumps
-
-# 4. Dump aus dem Container holen.
-docker compose cp neo4j:/var/lib/neo4j/dumps/neo4j.dump \
-  "$BACKUP_DIR/neo4j-$TS.dump"
-
-# 5. Neo4j wieder hoch und Backend dazu.
-docker compose exec neo4j neo4j-admin server start &
-docker compose start agora
-```
-
-Dump-Größe: typisch ~30–60 % der `neo4j_data`-Volume-Größe (Pagecache
-und Logs sind nicht im Dump).
-
-### Schnelle Volume-Variante
-
-Für regelmäßige Cronjobs reicht oft der Volume-Snapshot. Setzt voraus,
-dass die Backup-Lösung (Btrfs, ZFS, Restic) konsistente Snapshots auf
-Block-Ebene macht.
-
-```bash
-docker compose stop agora neo4j
-sudo btrfs subvolume snapshot \
-  /var/lib/docker/volumes/agora_neo4j_data \
-  /backups/snapshots/neo4j-$(date +%Y%m%d-%H%M%S)
-docker compose start neo4j agora
-```
-
-Vorteil: schneller, weniger Disk-IO. Nachteil: braucht Btrfs/ZFS-Filesystem
-unter `/var/lib/docker/volumes`.
-
-### Restore aus Dump
-
-```bash
-# Backend + Neo4j stoppen
-docker compose stop agora
-docker compose exec neo4j neo4j-admin server stop
-
-# Dump in den Container kopieren
-docker compose cp /var/backups/agora/neo4j/neo4j-20260501-030000.dump \
-  neo4j:/var/lib/neo4j/dumps/neo4j.dump
-
-# Vorhandenes Neo4j-DB-Volume leerräumen — sonst meckert load
-docker compose exec neo4j rm -rf /data/databases/neo4j /data/transactions/neo4j
-
-# Restore
-docker compose exec neo4j neo4j-admin database load neo4j \
-  --from-path=/var/lib/neo4j/dumps --overwrite-destination=true
-
-# Neo4j + Backend starten
-docker compose exec neo4j neo4j-admin server start &
-docker compose start agora
-
-# Verifikation
-docker compose exec neo4j cypher-shell -u neo4j -p $NEO4J_PASSWORD \
-  "MATCH (n) RETURN count(n) AS knoten"
-```
-
-### Restore-Drill
-
-**Pflicht-Routine, sonst wertloses Backup.** Quartalsweise mindestens
-einmal:
-
-1. Dump aus Production-Backup auf Test-Maschine kopieren.
-2. Frischen Compose-Stack hochfahren mit Test-`.env`.
-3. Restore-Schritte oben ausführen.
-4. Smoke-Test: `curl http://localhost:5001/api/status` (auth-pflichtig)
-   und Cypher-Knoten-Count gegen erwartete Größenordnung.
-
-Wenn der Drill fehlschlägt, ist das Backup defekt — vor dem
-nächsten regulären Lauf reparieren.
+Secrets getrennt und verschlüsselt sichern, z. B. Passwortmanager oder verschlüsseltes Backup. Nie ins Git-Repository legen.
 
 ---
 
-## Filesystem-Artefakte
+## Filesystem-Backup
 
-### Uploads + OASIS-State
+Ein einzelner Backup-Job sollte mindestens diese Verzeichnisse erfassen:
 
-Bind-Mount `./backend/uploads/` enthält pro Simulation einen Ordner
-`<sim_id>/` mit:
+```text
+backend/uploads/
+backend/data/
+backend/instance/
+```
 
-- Original-Upload-Dateien (`*.pdf`, `*.md`).
-- `simulation_config.json` (frozen Config: Modell, Persona-Limit,
-  Sprache, Time-Profile).
-- `state.json` (Run-State: Status, Round-Counter, Pause-Marker).
-- `console.log` (Subprocess-Output).
-- Persona-CSV, Round-Snapshots, Event-Bus-File-Backlog.
-
-Sicherung mit Restic (vom Repo-Host):
+Beispiel mit Restic:
 
 ```bash
 restic -r /backups/agora backup \
-  --tag agora-uploads \
+  --tag agora-fs \
   --exclude '*.tmp' \
-  ./backend/uploads
+  --exclude '*.lock' \
+  ./backend/uploads \
+  ./backend/data \
+  ./backend/instance
 ```
 
-Mit Borg analog. Btrfs-Snapshot des Subvolume genauso valide.
+Lock-/Temp-Dateien sind Laufzeitartefakte und sollen nicht als konsistenter Anwendungszustand restauriert werden.
 
 ### Reports
 
-`backend/uploads/reports/` enthält generierte Reports und Audit-Trails (per
-`ReportLogger`). Wird selten überschrieben — meistens append-only. Liegt
-unter dem `./backend/uploads`-Bind-Mount und ist damit bereits im
-Restic-Job oben abgedeckt.
+`backend/uploads/reports/` liegt bereits unter `backend/uploads/` und muss bei einem vollständigen Upload-Backup **nicht doppelt** erfasst werden.
 
-### Multi-Provider-Hub (`backend/data/`)
+---
 
-Seit dem LLM-Provider-Hub liegen in `backend/data/`:
+## Neo4j-Backup
 
-- `llm_provider_secrets.json` — Fernet-verschlüsselte Provider-Keys, gehärtet
-  via `fcntl.flock` + Mode `0600`. Klartext-Keys gibt es nur kurzzeitig im
-  Speicher der Backend-Prozesse.
-- `workspace_llm_routing.json` — Workspace-Routing-Defaults (Global-Default
-  und Stage-Overrides pro Pipeline-Stage), ebenfalls mit `0600`.
-- `*.lock` — Sidecar-Dateien für `fcntl.flock`; sind transient und müssen
-  **nicht** mitgesichert werden.
+Neo4j benötigt einen **konsistenten** Datenbank-/Volume-Stand. Zwei grundsätzlich vertretbare Strategien:
 
-Backup mit Restic:
+1. ein mit der eingesetzten Neo4j-5-Version kompatibler `neo4j-admin database dump`-Workflow,
+2. ein konsistenter Storage-/Volume-Snapshot bei gestoppter bzw. entsprechend quiesced Datenbank.
+
+Die exakte `neo4j-admin`-Syntax hängt an der tatsächlich eingesetzten Neo4j-Version und Betriebsform und soll **vor dem Drill gegen die laufende Version geprüft** werden. Diese Doku pinnt deshalb keinen Monate alten Befehl, der einen Server im Container stoppt und danach so tut, als könne man fröhlich weiter in denselben Prozess `exec`en.
+
+### Minimaler sicherer Ablauf
+
+```text
+1. neue Schreibjobs stoppen
+2. Agora-Webservice kontrolliert anhalten
+3. Neo4j konsistent sichern
+4. Hash/Größe/Backup-Metadaten speichern
+5. Neo4j + Agora wieder starten
+6. /health + /api/status prüfen
+```
+
+Bei Storage-Snapshots Neo4j nicht während unkontrollierter Writes einfrieren.
+
+---
+
+## Redis
+
+Redis ist derzeit **nicht** die kanonische Persistenz für Runs, Reports oder Graphen. Es trägt kurzlebige Ticket-/Event-/PubSub-Zustände.
+
+Darum:
+
+- Redis-RDB kann optional mitgesichert werden,
+- ein Agora-Disaster-Recovery darf aber **nicht** davon abhängen,
+- nach Restore sind laufende SSE-/PubSub-Sessions erwartbar verloren.
+
+Wichtig: Redis/Event Bus ist aktuell auch **keine persistente Jobqueue** für Prepare/Report/Graph (#1472).
+
+---
+
+## Recovery-Reihenfolge
+
+Worst-Case auf einem frischen Host:
+
+1. passende Agora-Version auschecken,
+2. `.env`/Master-Keys aus sicherer Quelle herstellen,
+3. `backend/data/` restaurieren,
+4. `backend/instance/` restaurieren,
+5. `backend/uploads/` restaurieren,
+6. Neo4j-Datenbank/Volume konsistent restaurieren,
+7. Dateirechte für den Container prüfen,
+8. Stack starten,
+9. Health/Status prüfen,
+10. Provider-Secret-Store entschlüsseln/testen,
+11. Graph/Run/Report eines Referenzfalls öffnen,
+12. erst danach produktive neue Runs zulassen.
+
+### Reihenfolge der Secrets
+
+Master-Keys müssen **vor** dem ersten produktiven Zugriff auf die verschlüsselten Stores wiederhergestellt sein. Nicht mit neu generierten Keys starten und anschließend erwarten, dass die alten Ciphertexte plötzlich Verständnis zeigen.
+
+---
+
+## Restore-Verifikation
+
+Ein Restore gilt erst als brauchbar, wenn mindestens folgende Checks grün sind:
+
+### Infrastruktur
 
 ```bash
-restic -r /backups/agora backup \
-  --tag agora-data \
-  --exclude '*.lock' \
-  --exclude '*.tmp' \
-  ./backend/data
+docker compose ps
+curl -fsS http://localhost:5001/health
+curl -fsS \
+  -H "Authorization: Bearer $AGORA_AUTH_TOKEN" \
+  http://localhost:5001/api/status
 ```
 
-Restore-Reihenfolge:
+### Neo4j
 
-1. `docker compose down` (Backend muss aus sein, weil Workspace-Routing-Writes
-   beim Start passieren können).
-2. `restic restore latest --include backend/data --target /opt/agora-restore`.
-3. `rsync -a --delete /opt/agora-restore/backend/data/ ./backend/data/`.
-4. **`AGORA_SECRET_KEY` aus dem ursprünglichen `.env` wiederherstellen** —
-   sonst ist `llm_provider_secrets.json` mit dem aktuellen Key nicht
-   entschlüsselbar (`scripts/llm-secrets-doctor.py verify` schlägt dann fehl).
-5. `docker compose up -d --build` und im UI prüfen, ob die Provider-Maske
-   die gewohnten Keys zeigt.
+- Datenbank erreichbar
+- Knoten-/Relationen-Größenordnung plausibel
+- ein bekannter Graph lässt sich lesen
 
-> **Achtung — Host-Rechte.** Der Container läuft als `uid=1000`. Auf
-> Linux-Hosts muss das Host-Verzeichnis `./backend/data/` für diesen User
-> schreibbar sein (`chown -R 1000:1000 backend/data` einmal vor dem ersten
-> Start; danach erbt der Bind-Mount die Rechte). Auf macOS/Docker-Desktop
-> mapped Docker die Bind-Mount-UID automatisch — kein `chown` nötig.
+### Provider/Secrets
 
-### `.env` (Secrets)
+- gespeicherte ProviderConnections vorhanden
+- Secret-Store lässt sich mit dem restaurierten `AGORA_SECRET_KEY` entschlüsseln
+- gespeicherte Agora-API-Keys/Scope-Daten sind mit `AGORA_FERNET_KEY` lesbar, soweit der Pfad genutzt wird
+- keine Secrets in Logs ausgeben
 
-Wegen der `SECRET_KEY` / `AGORA_AUTH_TOKEN`-Werte ist `.env` kritisch.
-Optionen:
+### Artefakte
 
-- Verschlüsselt im Restic-Backup mitsichern (`restic` macht das per
-  Default mit dem Repo-Passwort, sofern das nicht `.env` selbst ist).
-- Separate Sicherung in Passwort-Manager (Bitwarden, KeePass).
-- Nicht im Git versionieren — `.gitignore` sperrt sie. Niemals
-  Pull-Request mit echter `.env` öffnen.
+- ein bestehender Run ist sichtbar
+- zugehörige Simulation-Artefakte vorhanden
+- ein Report lädt
+- Evidence-Endpunkt verhält sich contract-konform (validierte Map oder ehrliches `evidence_omitted`)
 
 ---
 
-## Cron-Strategie (Vorschlag)
+## Reconciliation nach Restore
 
-Crontab auf dem Compose-Host (Repo-Root als Working-Dir):
+Beim Start führt Agora für persistierte Simulation-Runs Startup-Reconciliation aus (#1476). Runs, deren gespeicherte PID auf dem neuen Host naturgemäß nicht mehr lebt, können als:
 
-```cron
-# Täglicher Neo4j-Dump um 03:00 — schiebt Backend für ~30s in Pause.
-0 3 * * * /usr/local/bin/agora-backup-neo4j.sh
-
-# Stündliches Restic-Inkrement für Uploads/Reports + Multi-Provider-Hub.
-# backend/uploads/reports/ liegt unter backend/uploads/ und ist damit
-# bereits mitgesichert — kein eigener Pfad noetig.
-17 * * * * cd /opt/agora && restic -r /backups/agora backup \
-              --tag agora-fs --exclude '*.lock' --exclude '*.tmp' \
-              ./backend/uploads ./backend/data
-
-# Wöchentliche Restic-Forget-Politik.
-30 4 * * 0 restic -r /backups/agora forget \
-              --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune
+```text
+failed / process_restart
 ```
 
-`agora-backup-neo4j.sh` umschließt die `neo4j-admin dump`-Sequenz oben
-plus `gzip` und Restic-Push an `/backups/agora`.
+korrigiert werden.
 
-### Retention-Vorschlag
+Das ist erwünscht: Ein restaurierter Host darf keinen historischen Prozess als „läuft gerade“ vortäuschen.
 
-| Klasse | Retention |
+`COMPLETED`/`STOPPED` werden ohne beweisbare Zuordnung nicht geraten/überschrieben.
+
+---
+
+## Was ein Restore **nicht** reproduziert
+
+Ein Restore ist keine Garantie für bitidentische neue Simulationen oder Reports.
+
+Aktuell offen (#763/#1274):
+
+- vollständige Prompt-Snapshots
+- echter Input-Hash/Dateiname im Manifest
+- vollständig verdrahteter RNG-Seed
+- vollständige Route-/Feature-Flag-Snapshots
+- identische Replay-Parameter
+
+Ein wiederhergestelltes historisches Artefakt soll lesbar sein. Ein **neu ausgeführter** Run kann dennoch andere LLM-Ausgaben erzeugen.
+
+---
+
+## Backup-Frequenz
+
+Richtwert für einen aktiv genutzten Single-User-Host:
+
+| Asset | Vorschlag |
 |---|---|
-| Neo4j-Dumps | 7 Tage täglich, 4 Wochen wöchentlich, 6 Monate monatlich. |
-| Uploads/Reports (Restic) | analog Neo4j. |
-| `.env` | bei Rotation neu sichern; alte Versionen 90 Tage halten. |
+| `backend/uploads/`, `backend/data/`, `backend/instance/` | mindestens täglich; bei aktiver Nutzung häufiger inkrementell |
+| Neo4j | täglich bzw. nach wichtigen Ingestion-/Migrationsläufen |
+| `.env`/Master-Keys | bei jeder Rotation/Änderung |
+| Release-/Migrations-Backup | **vor jedem Upgrade** |
+
+Retention hängt von Disk/Compliance ab. Ein pragmatisches Schema ist 7 tägliche, 4 wöchentliche und mehrere monatliche Stände.
 
 ---
 
-## Recovery-Reihenfolge (Worst-Case)
+## Vor Upgrade
 
-1. `docker compose down`. Volumes nicht löschen, falls noch erreichbar.
-2. `.env` aus Backup wiederherstellen.
-3. Neo4j-Dump ins Volume restauren — siehe oben.
-4. Uploads + Reports per Restic restauren (Reports liegen unter
-   `backend/uploads/reports/`, also im selben Include):
-   ```bash
-   restic -r /backups/agora restore latest \
-     --target /opt/agora-restore --include backend/uploads
-   rsync -a --delete /opt/agora-restore/backend/uploads/ ./backend/uploads/
-   ```
-5. `docker compose up -d --build`.
-6. Smoke-Test: `/api/status`, Cypher-Knoten-Count, ein Run-Detail im
-   Frontend öffnen.
+1. aktuellen Git-/Versionsstand dokumentieren,
+2. Filesystem-Backup erstellen,
+3. Neo4j konsistent sichern,
+4. Secret-/Master-Key-Backup prüfen,
+5. einen Restore-Punkt mit Timestamp/Version markieren,
+6. erst dann Code/Image aktualisieren.
 
-Wenn Neo4j-Dump und Restic-Snapshot zeitlich auseinanderlaufen,
-gewinnt Neo4j — Reports referenzieren Graph-IDs, also lieber neuere
-FS-Daten verwerfen als Graph-Drift einzubauen.
+Rollback ohne passenden Daten-/Schema-Stand kann einen Mischzustand erzeugen. Genau deshalb ist #766 ein echter Release-Gate und kein Doku-Todo.
 
 ---
 
-## Was nicht gesichert wird (bewusst)
+## 0.10-Abnahme (#766)
 
-- **Redis** — nur kurzlebige Tickets und Pub/Sub-Backlog. Nach Restore
-  sind Live-SSE-Sessions weg, das ist unkritisch.
-- **HuggingFace-Cache** — Re-Pull beim ersten OASIS-Run. Ein
-  Backup-Eintrag für den Cache verdoppelt das Volumen ohne Mehrwert.
-- **`/tmp`-tmpfs** — Definition.
+Vor dem Release Candidate fehlt noch der formale Nachweis:
 
----
+- [ ] vollständiges Referenzprojekt auf frischem Host restauriert
+- [ ] Graph, Runs, Reports und Secrets danach geprüft
+- [ ] Upgrade 0.9.x → 0.10.0 durchgeführt
+- [ ] absichtlich fehlgeschlagene Migration sauber zurückgerollt
+- [ ] automatisierter Betriebs-Smoke für Restore oder Upgrade vorhanden
+- [ ] Release-Artefakte/SBOM/Checksummen vorhanden
 
-## Checks nach jedem Backup
-
-| Check | Wie |
-|---|---|
-| Dump-Größe plausibel | `du -sh /var/backups/agora/neo4j/*.dump | tail -5`. |
-| Restic-Snapshot vorhanden | `restic -r /backups/agora snapshots --tag agora-fs | tail -10`. |
-| Cronjob-Log fehlerlos | `journalctl --user -u cron --since '24 hours ago' | grep agora`. |
-| Restore-Drill quartalsweise | Termin im Kalender, nicht in `crontab`. |
+Bis diese Punkte dokumentiert durchgeführt sind, ist der Backup-Pfad **plausibel dokumentiert, aber nicht release-verifiziert**.
