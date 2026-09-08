@@ -17,6 +17,8 @@ import sys
 from typing import Any, Dict, List, Optional
 from unittest.mock import MagicMock
 
+import pytest
+
 from app.services.sim import reconciliation as reconciliation_module
 from app.services.sim.reconciliation import ReconciliationResult, reconcile_stale_runs
 from app.services.sim.run_state_store import RunnerStatus, SimulationRunState
@@ -353,6 +355,76 @@ class TestReconcileStaleRuns:
         # nicht pro Manifest.
         assert len(saved_states) == 1
         assert saved_states[0].runner_status == RunnerStatus.FAILED
+
+    def test_save_run_state_failure_prevents_registry_update(self, monkeypatch):
+        """F1 (Codex-Review Runde 5, PR #1476): schlägt ``save_run_state``
+        fehl, BEVOR die Registry aktualisiert wurde, muss der Run stale
+        bleiben — sonst haengt eine permanente Halb-Korrektur in der Luft
+        (Registry ``failed``, ``run_state.json`` weiterhin ``RUNNING``) und
+        wird nie wieder aufgegriffen, weil ``failed`` nicht in
+        ``_STALE_STATUSES`` liegt."""
+        run = _make_run("run_half", status="processing", simulation_id="sim_half")
+        registry = _FakeRegistry([run])
+
+        state = SimulationRunState(
+            simulation_id="sim_half",
+            runner_status=RunnerStatus.RUNNING,
+            process_pid=_dead_pid(),
+        )
+        monkeypatch.setattr(reconciliation_module, "load_run_state", lambda sim_id, base: state)
+        monkeypatch.setattr(
+            reconciliation_module,
+            "save_run_state",
+            MagicMock(side_effect=RuntimeError("disk full")),
+        )
+
+        with pytest.raises(RuntimeError, match="disk full"):
+            reconcile_stale_runs(registry, "/fake/run-state-dir")
+
+        # Registry darf NICHT angefasst worden sein -- der Run bleibt stale
+        # und wird beim naechsten Start erneut verarbeitet.
+        assert registry._runs["run_half"]["status"] == "processing"
+        assert not registry.updates
+
+    def test_failed_run_state_with_dead_pid_and_stale_manifest_is_reconciled(
+        self, monkeypatch
+    ):
+        """F1 (Codex-Review Runde 5, PR #1476): ``run_state.json`` steht
+        bereits auf FAILED (z. B. weil ein vorheriger Reconciliation-Lauf nur
+        den State-Schritt geschafft, den Registry-Schritt aber verpasst hat),
+        die Registry aber noch auf einem stale Status. Ein solches Manifest
+        muss trotzdem wie ein verwaister Run auf failed/process_restart
+        gesetzt werden -- sonst haengt die Registry fuer immer fest, weil der
+        alte Terminal-Zweig FAILED faelschlich wie COMPLETED/STOPPED
+        uebersprungen haette."""
+        run = _make_run(
+            "run_half_registry", status="processing", simulation_id="sim_half_registry"
+        )
+        registry = _FakeRegistry([run])
+
+        state = SimulationRunState(
+            simulation_id="sim_half_registry",
+            runner_status=RunnerStatus.FAILED,
+            error="vorheriger Reconciliation-Lauf",
+            process_pid=_dead_pid(),
+        )
+        saved_states: List[SimulationRunState] = []
+        monkeypatch.setattr(reconciliation_module, "load_run_state", lambda sim_id, base: state)
+        monkeypatch.setattr(
+            reconciliation_module,
+            "save_run_state",
+            lambda s, base, **kw: saved_states.append(s),
+        )
+
+        result = reconcile_stale_runs(registry, "/fake/run-state-dir")
+
+        assert result == ReconciliationResult(
+            reconciled_run_ids=["run_half_registry"], skipped_run_ids=[]
+        )
+        assert registry._runs["run_half_registry"]["status"] == "failed"
+        assert registry._runs["run_half_registry"]["termination_reason"] == "process_restart"
+        assert saved_states[0].runner_status == RunnerStatus.FAILED
+        assert saved_states[0].error == "Prozess-Neustart während des Runs"
 
     def test_other_run_types_are_not_touched(self, monkeypatch):
         """Nur ``simulation_run`` hat eine verifizierbare Prozess-PID —

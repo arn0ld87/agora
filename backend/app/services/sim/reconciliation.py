@@ -19,10 +19,10 @@ nicht (mehr) UND ist ``run_state.json`` noch in einem unklaren Zustand
 ``failed``/``process_restart`` markiert. Existiert der Prozess noch (z. B.
 weil nur ein Worker-Prozess neu gestartet wurde, der Subprozess aber
 überlebt hat), bleibt er unangetastet. Ist ``run_state.json`` dagegen
-bereits terminal (``COMPLETED``/``STOPPED``/``FAILED``) — der Prozess also
-tot, weil er regulär beendet wurde, nicht weil er verwaist ist —, wird der
-Run NICHT mit ``process_restart`` überschrieben, aber der Endzustand auch
-NICHT auf die Registry propagiert (F2, Codex-Review Runde 3, PR #1476):
+bereits terminal mit ``COMPLETED`` oder ``STOPPED`` — der Prozess also tot,
+weil er regulär beendet wurde, nicht weil er verwaist ist —, wird der Run
+NICHT mit ``process_restart`` überschrieben, aber der Endzustand auch NICHT
+auf die Registry propagiert (F2, Codex-Review Runde 3, PR #1476):
 ``run_state.json`` trägt keine RunRegistry-``run_id``, nur die
 ``simulation_id`` — bei mehreren Registry-Manifesten für dieselbe
 Simulation (z. B. Alt-Run + Ersatzlauf nach einem Resume, siehe Finding F1)
@@ -30,6 +30,14 @@ ist nicht feststellbar, zu welchem der terminale Zustand gehört. Der Run
 bleibt in diesem Fall unangetastet, nur geloggt (ursprünglich Finding B —
 dessen Propagation wurde in Runde 3 wegen genau dieser Fehlzuordnungsgefahr
 wieder entfernt).
+
+``run_state.json`` auf ``FAILED`` ist davon bewusst ausgenommen (F1,
+Codex-Review Runde 5, PR #1476): ein toter Prozess bei bereits
+persistiertem ``FAILED`` trägt keine neue, potenziell falsche
+Erfolgsaussage in sich — der Verwaist-Zweig würde ein noch stale Manifest
+ohnehin auf genau diesen Zustand (``failed``/``process_restart``) setzen.
+Ein solches Manifest wird deshalb wie ein verwaister Run behandelt statt
+übersprungen, siehe ``_TERMINAL_RUNNER_STATUSES`` unten.
 
 Aufrufer: ``run_startup_reconciliation`` bündelt Config-Flag-Check und
 Best-effort-Fehlerbehandlung für zwei Einhängepunkte — ``app/__init__.py::
@@ -96,14 +104,30 @@ _RUN_TYPE = "simulation_run"
 _TERMINATION_REASON = "process_restart"
 _ERROR_MESSAGE = "Prozess-Neustart während des Runs"
 
-#: Terminale ``run_state.json``-Status (Finding B): ein toter Prozess ist
-#: hier kein Hinweis auf einen verwaisten Run, sondern schlicht der Beweis,
-#: dass der Run bereits regulär beendet wurde — die RunRegistry-Sync danach
-#: ist nur (noch) nicht angekommen.
+#: Terminale ``run_state.json``-Status, die NICHT wie ein verwaister Run
+#: behandelt werden (Finding B / F2): ein toter Prozess ist hier kein
+#: Hinweis auf einen verwaisten Run, sondern schlicht der Beweis, dass der
+#: Run bereits regulär beendet wurde (``COMPLETED``) oder vom Nutzer
+#: gestoppt wurde (``STOPPED``) — die RunRegistry-Sync danach ist nur (noch)
+#: nicht angekommen. Eine Propagation wäre hier eine echte Falschaussage
+#: (ein fremder Erfolgs-/Stop-Zustand auf einem in Wahrheit verwaisten
+#: Alt-Manifest), siehe Kommentar im verwaisten-Zweig unten.
+#:
+#: ``RunnerStatus.FAILED`` gehört bewusst NICHT in diese Menge (F1,
+#: Codex-Review Runde 5, PR #1476): anders als bei COMPLETED/STOPPED gibt es
+#: hier keine Falschaussage zu vermeiden — der Verwaist-Zweig würde ein noch
+#: stale Manifest ohnehin auf ``failed``/``process_restart`` setzen, also
+#: exakt den Zustand, den ``run_state.json`` schon trägt. FAILED fällt
+#: deshalb durch diesen Filter und wird unten wie ein verwaister Run
+#: verarbeitet. Das schließt die Lücke aus PR #1476 Runde 5, Finding F1: eine
+#: halb geschriebene Korrektur (Registry bereits ``failed``, aber
+#: ``save_run_state`` schlägt fehl, oder umgekehrt) blieb bisher für immer
+#: unangetastet, weil ``failed`` weder in ``_STALE_STATUSES`` (Registry-Seite)
+#: noch — nach dem ersten halben Schritt — im verwaisten Zweig (State-Seite)
+#: erneut aufgegriffen wurde.
 _TERMINAL_RUNNER_STATUSES = {
     RunnerStatus.COMPLETED,
     RunnerStatus.STOPPED,
-    RunnerStatus.FAILED,
 }
 
 
@@ -227,10 +251,15 @@ def reconcile_stale_runs(
 
         # Finding B (Codex-Review 2026-09-08) / F2 (Codex-Review Runde 3,
         # PR #1476): ein toter Prozess heißt nicht zwangsläufig "verwaist" —
-        # ``run_state.json`` kann bereits einen autoritativen Endzustand
-        # tragen, weil der Run regulär fertig wurde oder der Nutzer ihn
-        # stoppte, und nur die anschließende RunRegistry-Sync nie ankam
-        # (Prozess starb dazwischen).
+        # ``run_state.json`` kann bereits einen autoritativen ERFOLGS- oder
+        # STOP-Endzustand tragen (``COMPLETED``/``STOPPED``), weil der Run
+        # regulär fertig wurde oder der Nutzer ihn stoppte, und nur die
+        # anschließende RunRegistry-Sync nie ankam (Prozess starb
+        # dazwischen). Nur für DIESE beiden Zustände gilt die
+        # Propagationssperre unten — ``FAILED`` ist seit Runde 5 (F1)
+        # bewusst NICHT mehr Teil von ``_TERMINAL_RUNNER_STATUSES`` und
+        # erreicht diesen Zweig gar nicht mehr (siehe Kommentar an der
+        # Konstante).
         #
         # ABER: ``run_state.json``/``SimulationRunState`` ist ausschließlich
         # pro ``simulation_id`` gespeichert (siehe ``run_state_store.py``)
@@ -241,12 +270,16 @@ def reconcile_stale_runs(
         # welchem der beiden Manifeste dieser eine terminale Zustand
         # tatsächlich gehört. Propagieren wäre dann stille Datenkorruption:
         # ein fremder Endzustand (z. B. COMPLETED des Ersatzlaufs) landet auf
-        # dem in Wahrheit verwaisten/gescheiterten Alt-Run.
+        # dem in Wahrheit verwaisten/gescheiterten Alt-Run. Bei ``FAILED``
+        # besteht dieses Korruptionsrisiko nicht — ein fremdes ``failed``
+        # sagt nichts aus, was der Verwaist-Zweig für ein stale Manifest
+        # nicht ohnehin selbst schreiben würde.
         #
         # Ohne verifizierbare Run-ID-Verknüpfung (aktuell nicht herstellbar)
-        # wird deshalb NICHT propagiert — nur geloggt. Der Run bleibt
-        # unangetastet (weder "completed" noch fälschlich "failed"), bis eine
-        # echte Run-ID-Verknüpfung existiert (Folgearbeit).
+        # wird deshalb bei COMPLETED/STOPPED NICHT propagiert — nur geloggt.
+        # Der Run bleibt unangetastet (weder "completed" noch fälschlich
+        # "failed"), bis eine echte Run-ID-Verknüpfung existiert
+        # (Folgearbeit).
         if state is not None and state.runner_status in _TERMINAL_RUNNER_STATUSES:
             for run in runs:
                 run_id = run["run_id"]
@@ -261,6 +294,32 @@ def reconcile_stale_runs(
                 skipped.append(run_id)
             continue
 
+        # F1 (Codex-Review Runde 5, PR #1476): ``save_run_state`` zuerst,
+        # ``registry.update_run`` danach — nicht umgekehrt. Ein verwaister
+        # Run wird als „korrigiert" behandelt, sobald er auch nur EINE der
+        # beiden Persistenzen erreicht hat; ohne die richtige Reihenfolge
+        # entstand eine Halb-Korrektur, die für immer stehen blieb:
+        #
+        # - Registry zuerst, dann ``save_run_state`` (alte Reihenfolge):
+        #   schlägt der State-Write fehl, steht die Registry bereits auf
+        #   ``failed`` (nicht mehr in ``_STALE_STATUSES``) — der Run wird nie
+        #   wieder von ``list_runs`` gefunden, ``run_state.json`` bleibt aber
+        #   für immer auf ``RUNNING``/``STARTING`` stehen.
+        # - ``save_run_state`` zuerst (neue Reihenfolge): schlägt dieser
+        #   Schritt fehl, wird ``registry.update_run`` gar nicht erst
+        #   aufgerufen — die Registry bleibt unverändert auf einem
+        #   ``_STALE_STATUSES``-Wert und der Run wird beim nächsten Start
+        #   erneut aufgegriffen. Schlägt umgekehrt ``registry.update_run``
+        #   fehl, NACHDEM ``run_state.json`` bereits FAILED trägt, greift der
+        #   oben verschärfte Terminal-Zweig: ein stale Manifest mit
+        #   ``FAILED``+toter PID fällt durch ``_TERMINAL_RUNNER_STATUSES``
+        #   und wird beim nächsten Durchlauf erneut als verwaist erkannt und
+        #   auf die Registry propagiert.
+        if state is not None:
+            state.runner_status = RunnerStatus.FAILED
+            state.error = _ERROR_MESSAGE
+            save_run_state(state, run_state_dir)
+
         for run in runs:
             run_id = run["run_id"]
             logger.warning(
@@ -274,11 +333,6 @@ def reconcile_stale_runs(
                 error=_ERROR_MESSAGE,
             )
             reconciled.append(run_id)
-
-        if state is not None:
-            state.runner_status = RunnerStatus.FAILED
-            state.error = _ERROR_MESSAGE
-            save_run_state(state, run_state_dir)
 
     return ReconciliationResult(
         reconciled_run_ids=reconciled,
