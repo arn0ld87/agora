@@ -307,13 +307,14 @@ def get_report_evidence(report_id: str):
             omission.validation_errors[:3],
         )
         # Issue #1477 F1: die Envelope-Form ist jetzt vertraglich fixiert
-        # (EvidenceMapResponseModel) statt handgeschrieben. exclude_none
-        # sorgt dafuer, dass die jeweils ungesetzte Seite als Key ganz fehlt
-        # (wie zuvor per json_success), nicht als ``null`` auftaucht.
+        # (EvidenceMapResponseModel) statt handgeschrieben. ``to_payload``
+        # laesst nur die ungesetzte TOP-LEVEL-Seite weg (wie zuvor
+        # ``json_success``) und ruehrt die verschachtelten ``None``-Felder
+        # der Evidence-Records nicht an.
         envelope = EvidenceMapResponseModel(evidence_omitted=omission)
-        return jsonify(envelope.model_dump(mode="json", exclude_none=True)), 200
+        return jsonify(envelope.to_payload()), 200
     envelope = EvidenceMapResponseModel(data=validated)
-    return jsonify(envelope.model_dump(mode="json", exclude_none=True)), 200
+    return jsonify(envelope.to_payload()), 200
 
 
 @report_bp.route('/<report_id>/evidence/<int:section_index>', methods=['GET'])

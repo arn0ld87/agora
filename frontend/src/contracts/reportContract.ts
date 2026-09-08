@@ -557,7 +557,18 @@ export const EvidenceMapResponseSchema = z.object({
   success: z.literal(true),
   data: EvidenceMapSchema.optional(),
   evidence_omitted: EvidenceOmissionSchema.optional(),
-}).strict();
+}).strict().superRefine((value, ctx) => {
+  // Spiegelt `EvidenceMapResponseModel.exactly_one_variant`. JSON Schema kann
+  // diese Bedingung nicht ausdruecken, der Spiegel muss sie deshalb selbst
+  // tragen — sonst akzeptiert das Frontend eine Form, die das Backend gar
+  // nicht erzeugen kann.
+  if ((value.data === undefined) === (value.evidence_omitted === undefined)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Genau eines von 'data' oder 'evidence_omitted' muss gesetzt sein.",
+    });
+  }
+});
 export type EvidenceMapResponse = z.infer<typeof EvidenceMapResponseSchema>;
 
 export const ReportContractSchema = z.object({

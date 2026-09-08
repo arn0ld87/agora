@@ -1213,6 +1213,20 @@ class EvidenceMapResponseModel(BaseModel):
             )
         return self
 
+    def to_payload(self) -> dict[str, Any]:
+        """Wire-Form der Antwort: nur die ungesetzte TOP-LEVEL-Seite faellt weg.
+
+        Bewusst kein ``model_dump(exclude_none=True)`` — das wirkt rekursiv und
+        wuerde auch die ``None``-Felder *innerhalb* jedes
+        ``EvidenceRecordModel`` (``quote``, ``tool_name``, ``sentiment_score``,
+        ``value`` …) aus der Antwort entfernen. Das waere eine stille
+        Wire-Aenderung gegenueber dem vorherigen
+        ``json_success(validated.model_dump(mode="json"))`` und damit genau die
+        Vertragsdrift, die dieses Modell verhindern soll.
+        """
+        payload = self.model_dump(mode="json")
+        return {key: value for key, value in payload.items() if value is not None}
+
 
 class ReportContractModel(BaseModel):
     """Wurzel — was tatsächlich beim Export rausgeht."""
