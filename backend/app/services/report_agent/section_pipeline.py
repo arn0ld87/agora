@@ -31,6 +31,7 @@ läuft ``agent`` → ``workflow`` → ``section_pipeline``.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
@@ -226,25 +227,74 @@ def _restore_persisted_section(
     *,
     section_index: int,
 ) -> SectionResult:
-    """Übernimmt einen bereits persistierten Abschnitt unverändert."""
+    """Übernimmt einen bereits persistierten Abschnitt unverändert.
+
+    Der Aufrufer prüft vorher, ob Evidence vorhanden ist. Siehe process_section().
+    """
     section.content = ctx.report_manager._clean_section_content(
         ctx.persisted_section_contents[section_index], section.title
     )
-    persisted_sections = (agent.evidence_map or {}).get("sections") or []
-    has_persisted_evidence = any(
-        s.get("section_index") == section_index for s in persisted_sections
-    )
-    if not has_persisted_evidence:
-        logger.warning(
-            "Section %s already exists on disk without persisted evidence; "
-            "preserving markdown and leaving evidence unchanged",
-            section_index,
-        )
     return SectionResult(
         section_index=section_index,
         title=section.title,
         content=section.content,
         restored=True,
+    )
+
+
+def _remove_orphan_markdown(
+    ctx: SectionContext, *, section_index: int, title: str
+) -> None:
+    """Entfernt eine verwaiste Markdown-Datei, bevor die Sektion neu generiert wird.
+
+    Codex-Review PR #1475, Finding 1: ``process_section`` schreibt bei einer
+    Regeneration zuerst neue Evidence, dann neues Markdown (Commit-Marker).
+    Bliebe die alte, evidence-lose Markdown-Datei bis dahin liegen, sähe ein
+    Absturz zwischen beiden Schritten sowohl die neue Evidence als auch das
+    ALTE Markdown auf der Platte — ein nächster Resume würde das alte Markdown
+    gegen die neue Evidence restaurieren, obwohl beide aus unterschiedlichem
+    Inhalt stammen.
+    Einfachste Lösung statt einer Bindung beider Artefakte über einen
+    Generations-Identifier: die Waise sofort entfernen. Ohne Evidence-Eintrag
+    darf ohnehin niemand dem alten Inhalt vertrauen, ein Identifier-Abgleich
+    wäre hier reiner Mehraufwand für dasselbe Ergebnis.
+
+    Codex-Review PR #1475, Runde 2, Finding 1: ein ``OSError`` beim Entfernen
+    wird NICHT mehr geschluckt — er propagiert an ``process_section`` und
+    damit VOR dem Schreiben neuer Evidence. Ein geschluckter Fehler ließe die
+    Waise liegen, während ``_save_evidence_section`` trotzdem neue Evidence
+    persistiert — exakt die Inkonsistenz, die dieser Slice beseitigen soll
+    (das nachfolgende ``os.replace`` scheitert unter denselben
+    Rechteproblemen typischerweise ebenfalls). Die Sektion scheitert damit
+    sauber, statt stillschweigend inkonsistent zu werden.
+
+    CodeRabbit-Review PR #1475, Runde 3, Finding 2: eine ``FileNotFoundError``
+    ist die eine Ausnahme davon. Der DELETE-Endpunkt löscht den Report-Ordner
+    per ``shutil.rmtree`` und kann ``stale_path`` genau zwischen der
+    ``os.path.exists``-Prüfung oben und diesem ``os.remove`` entfernen
+    (TOCTOU). In dem Fall ist der gewünschte Endzustand — keine Waise mehr
+    auf der Platte — bereits erreicht, also wird das als Erfolg gewertet.
+    ``PermissionError`` und jeder andere ``OSError`` propagieren weiterhin
+    unverändert (siehe Finding 1 oben).
+    """
+    stale_path = ctx.report_manager._get_section_path(ctx.report_id, section_index)
+    if not os.path.exists(stale_path):
+        return
+    try:
+        os.remove(stale_path)
+    except FileNotFoundError:
+        logger.info(
+            "section %d (%r): verwaiste Markdown-Datei bereits entfernt (%s)",
+            section_index,
+            title,
+            stale_path,
+        )
+        return
+    logger.info(
+        "section %d (%r): verwaiste Markdown-Datei entfernt (%s)",
+        section_index,
+        title,
+        stale_path,
     )
 
 
@@ -523,9 +573,26 @@ def process_section(
     Cancel-Prüfung, Akkumulation und Statusableitung des Gesamtreports.
     """
     if section_index in ctx.persisted_section_contents:
-        return _restore_persisted_section(
-            agent, section, ctx, section_index=section_index
+        # Prüfe ob Evidence vorhanden ist — Markdown ohne Evidence wird
+        # als unvollständig behandelt und neu generiert (verhindert Orphans).
+        persisted_sections = (agent.evidence_map or {}).get("sections") or []
+        has_persisted_evidence = any(
+            s.get("section_index") == section_index for s in persisted_sections
         )
+        if has_persisted_evidence:
+            return _restore_persisted_section(
+                agent, section, ctx, section_index=section_index
+            )
+        logger.warning(
+            "section %d (%r): Markdown auf Platte, aber Evidence fehlt — "
+            "Sektion wird neu generiert",
+            section_index,
+            section.title,
+        )
+        # Finding 1 (Codex-Review PR #1475): die Waise muss weg, BEVOR unten
+        # neue Evidence geschrieben wird — sonst überlebt sie einen Absturz
+        # zwischen Evidence- und Markdown-Schreiben als stille Inkonsistenz.
+        _remove_orphan_markdown(ctx, section_index=section_index, title=section.title)
 
     base_progress = ctx.base_progress_for(section_index)
     content = _generate_content(
@@ -574,7 +641,9 @@ def process_section(
     _apply_metadata(agent, section, section_meta, section_index=section_index)
 
     section.content = content
-    ctx.report_manager.save_section(ctx.report_id, section_index, section)
+    # Reihenfolge: Evidence ZUERST, dann Markdown.
+    # Die Markdown-Datei ist der Commit-Marker — existiert sie, existiert auch
+    # die Evidence. Bei Crashes dazwischen wird keine Orphan-Datei hinterlassen.
     # Issue #1316: Die Claim-Extraktion sah bislang exakt dasselbe ``content``
     # wie ``save_section`` — nur reinigt ``save_section`` intern, die
     # Extraktion nicht. Rohes <simulated_quote>-Markup landete damit in den
@@ -588,6 +657,8 @@ def process_section(
         section.title,
         ctx.report_manager.prepare_content_for_evidence(content),
     )
+    # Markdown wird erst NACH Evidence geschrieben — das ist das Commit-Signal
+    ctx.report_manager.save_section(ctx.report_id, section_index, section)
 
     return SectionResult(
         section_index=section_index,
