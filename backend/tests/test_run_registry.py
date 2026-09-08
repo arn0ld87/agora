@@ -1,4 +1,5 @@
 import json
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -203,3 +204,29 @@ def test_write_run_is_atomic(tmp_path, monkeypatch):
     # File is a valid, fully formed JSON manifest.
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert payload["run_id"] == run["run_id"]
+
+
+def test_update_run_bumps_updated_at_for_passthrough_only_update(tmp_path, monkeypatch):
+    # Regression fuer B11 (Tech-Review 2026-09-07): ``update_run`` muss
+    # ``updated_at`` auch dann setzen, wenn ausschliesslich ein reines
+    # Passthrough-Feld (``_RUN_PASSTHROUGH_FIELDS``) uebergeben wird -
+    # also kein ``status``, kein ``progress``, keine ``message``.
+    registry = _reset_registry(tmp_path, monkeypatch)
+
+    run = registry.create_run(
+        run_type="simulation_run",
+        entity_id="sim_passthrough",
+        status="pending",
+        linked_ids={"simulation_id": "sim_passthrough"},
+    )
+    original_updated_at = run["updated_at"]
+
+    time.sleep(0.01)
+    updated = registry.update_run(
+        run["run_id"],
+        branch_label="replay-of-main",
+    )
+
+    assert updated is not None
+    assert updated["branch_label"] == "replay-of-main"
+    assert updated["updated_at"] != original_updated_at
