@@ -158,6 +158,97 @@ def _bind_and_dedup_thresholds(metadata_kwargs: dict, evidence_index: dict) -> N
     )
 
 
+def _extract_claims_for_section(
+    raw_claims: Any,
+    *,
+    section_index: int,
+    evidence_index: Dict[str, Any],
+    report_mode: Optional[str],
+) -> List[ReportV3Claim]:
+    """Baut die exportierten Claims eines Abschnitts aus der Rohform.
+
+    Issue #1341: Die abschnittsinterne ``claim_id`` (``claim_01``) ist nur
+    innerhalb ihres Abschnitts eindeutig. Beim Merge zu einer flachen Liste
+    kollidieren die Nummernraeume. Exportiert wird deshalb eine
+    abschnittsqualifizierte ID nach demselben Muster, das die Hypothesen
+    benutzen (``H<n>_<i>``). Der Zaehler laeuft ueber die *akzeptierten*
+    Claims: er wird erst hochgezaehlt, wenn der Claim alle Filter passiert hat,
+    damit die ID die finale Liste beschreibt und nicht die Rohextraktion.
+
+    Die Funktion ist bewusst frei von Instanz-Zustand — sie haengt nur an ihren
+    Argumenten und den Modul-Helfern ``derive_aggregation_basis``,
+    ``_derive_confidence_scope`` und ``_text_confidence_for``.
+    """
+    claims: List[ReportV3Claim] = []
+    claim_slot = 0
+    for claim in raw_claims or []:
+        if not isinstance(claim, dict):
+            continue
+        evidence_refs = list(dict.fromkeys(
+            str(item.get("evidence_id"))
+            for item in claim.get("evidence") or []
+            if isinstance(item, dict)
+            and item.get("evidence_id")
+            and item.get("supports_claim") is True
+        ))
+        # balanced/explorative: Claims ohne Evidence → überspringen (kein Evidence-Anker)
+        # strict: Claims ohne Evidence → gedroppt (gleiche Logik, aber auch low-conf)
+        if not evidence_refs:
+            continue
+        statement = str(claim.get("claim_text") or claim.get("claim") or "").strip()
+        if len(statement) < 8:
+            continue
+        label = str(claim.get("confidence_label") or "speculative")
+        _valid_confidence = {"speculative", "low", "medium", "high", "verified"}
+        confidence: Literal["speculative", "low", "medium", "high", "verified"]
+        if label in _valid_confidence:
+            confidence = label  # type: ignore[assignment]
+        elif label in {"high", "verified"}:
+            confidence = "high"
+        elif label == "medium":
+            confidence = "medium"
+        elif label == "low":
+            confidence = "low"
+        else:
+            confidence = "speculative"
+        single_source_text_confidence: Literal[
+            "speculative", "low", "medium", "high", "verified"
+        ] | None = None
+        if len(evidence_refs) == 1 and confidence in {"medium", "high", "verified"}:
+            single_source_text_confidence = confidence
+            confidence = "low"
+        # strict: speculative/low-confidence Claims werden gedroppt
+        if report_mode == "strict" and confidence in {"speculative", "low"}:
+            continue
+        claim_slot += 1
+        claims.append(ReportV3Claim(
+            id=f"C{section_index}_{claim_slot:02d}",
+            statement=statement,
+            evidence_refs=evidence_refs,
+            confidence=confidence,
+            # Issue #1358: beide Angaben stammen aus derselben Menge
+            # stuetzender Items. Vorher stand hier der Literalwert
+            # "persona" — jeder Claim behauptete damit Persona-
+            # Traegerschaft, auch wenn er ausschliesslich aus dem
+            # Seed-Dokument stammte.
+            aggregation_basis=derive_aggregation_basis(
+                claim.get("evidence"), evidence_index
+            ),
+            confidence_scope=_derive_confidence_scope(
+                claim.get("evidence"), evidence_index
+            ),
+            # Issue #1012: nur gesetzt, wenn der Claim nachtraeglich
+            # abgestuft wurde. Der Wortlaut stammt dann aus einer
+            # hoeheren Stufe und deckt mehr Sicherheit ab als das
+            # Label — ohne dass irgendetwas am Text geaendert wird.
+            text_confidence=(
+                _text_confidence_for(claim, confidence)
+                or single_source_text_confidence
+            ),
+        ))
+    return claims
+
+
 class ReportManager:
     """Persistence and retrieval facade for generated reports."""
     
@@ -418,80 +509,14 @@ class ReportManager:
             if not isinstance(section, dict):
                 continue
             section_index = int(section.get("section_index") or 0)
-            # Issue #1341: Die abschnittsinterne ``claim_id`` (``claim_01``) ist
-            # nur innerhalb ihres Abschnitts eindeutig. Beim Merge zu einer
-            # flachen Liste kollidieren die Nummernraeume. Exportiert wird
-            # deshalb eine abschnittsqualifizierte ID nach demselben Muster,
-            # das die Hypothesen weiter unten schon benutzen (``H<n>_<i>``).
-            # Der Zaehler laeuft ueber die *akzeptierten* Claims: er wird erst
-            # hochgezaehlt, wenn der Claim alle Filter passiert hat, damit die
-            # ID die finale Liste beschreibt und nicht die Rohextraktion.
-            claim_slot = 0
-            for claim in section.get("claims") or []:
-                if not isinstance(claim, dict):
-                    continue
-                evidence_refs = list(dict.fromkeys(
-                    str(item.get("evidence_id"))
-                    for item in claim.get("evidence") or []
-                    if isinstance(item, dict)
-                    and item.get("evidence_id")
-                    and item.get("supports_claim") is True
-                ))
-                # balanced/explorative: Claims ohne Evidence → überspringen (kein Evidence-Anker)
-                # strict: Claims ohne Evidence → gedroppt (gleiche Logik, aber auch low-conf)
-                if not evidence_refs:
-                    continue
-                statement = str(claim.get("claim_text") or claim.get("claim") or "").strip()
-                if len(statement) < 8:
-                    continue
-                label = str(claim.get("confidence_label") or "speculative")
-                _valid_confidence = {"speculative", "low", "medium", "high", "verified"}
-                confidence: Literal["speculative", "low", "medium", "high", "verified"]
-                if label in _valid_confidence:
-                    confidence = label  # type: ignore[assignment]
-                elif label in {"high", "verified"}:
-                    confidence = "high"
-                elif label == "medium":
-                    confidence = "medium"
-                elif label == "low":
-                    confidence = "low"
-                else:
-                    confidence = "speculative"
-                single_source_text_confidence: Literal[
-                    "speculative", "low", "medium", "high", "verified"
-                ] | None = None
-                if len(evidence_refs) == 1 and confidence in {"medium", "high", "verified"}:
-                    single_source_text_confidence = confidence
-                    confidence = "low"
-                # strict: speculative/low-confidence Claims werden gedroppt
-                if report_mode == "strict" and confidence in {"speculative", "low"}:
-                    continue
-                claim_slot += 1
-                claims.append(ReportV3Claim(
-                    id=f"C{section_index}_{claim_slot:02d}",
-                    statement=statement,
-                    evidence_refs=evidence_refs,
-                    confidence=confidence,
-                    # Issue #1358: beide Angaben stammen aus derselben Menge
-                    # stuetzender Items. Vorher stand hier der Literalwert
-                    # "persona" — jeder Claim behauptete damit Persona-
-                    # Traegerschaft, auch wenn er ausschliesslich aus dem
-                    # Seed-Dokument stammte.
-                    aggregation_basis=derive_aggregation_basis(
-                        claim.get("evidence"), evidence_index
-                    ),
-                    confidence_scope=_derive_confidence_scope(
-                        claim.get("evidence"), evidence_index
-                    ),
-                    # Issue #1012: nur gesetzt, wenn der Claim nachtraeglich
-                    # abgestuft wurde. Der Wortlaut stammt dann aus einer
-                    # hoeheren Stufe und deckt mehr Sicherheit ab als das
-                    # Label — ohne dass irgendetwas am Text geaendert wird.
-                    text_confidence=(
-                        _text_confidence_for(claim, confidence)
-                        or single_source_text_confidence
-                    ),
-                ))
+            claims.extend(
+                _extract_claims_for_section(
+                    section.get("claims"),
+                    section_index=section_index,
+                    evidence_index=evidence_index,
+                    report_mode=report_mode,
+                )
+            )
             # Slice 3 (Issue #495): stable Re-ID after Dedup.
             # visible hypotheses get IDs H{section_idx}_{i:02d} (1-based),
             # appendix hypotheses get IDs HA{section_idx}_{i:02d} (1-based).
