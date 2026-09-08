@@ -60,14 +60,34 @@ if [[ "$BUN_MAJOR" -lt 1 ]] || { [[ "$BUN_MAJOR" -eq 1 ]] && [[ "${BUN_MINOR:-0}
 fi
 success "bun $BUN_VER"
 
-# --- node >= 20 ---
+# --- node: muss zu engines.node aus package.json passen ---
+# Der Bereich ist nicht "ab X aufwaerts", sondern der von vitest 5 geforderte
+# ^22.12.0 || ^24.0.0 || >=26.0.0. Die ungeraden Majors 23 und 25 sind
+# ausgeschlossen, weil sie keine LTS-Linien sind und vitest sie nicht traegt.
+# Wer hier einen simplen ">= 22"-Vergleich einsetzt, laesst Node 23/25 durch
+# und baut damit genau den Widerspruch wieder ein, den dieser Block aufloest:
+# ein Installer, der eine Umgebung durchwinkt, die die Manifeste ablehnen.
 if ! command -v node &>/dev/null; then
   die "node ist nicht installiert.\n  → https://nodejs.org/  (empfohlen: nvm oder Homebrew)"
 fi
 NODE_VER=$(node --version | tr -d 'v')
 NODE_MAJOR=$(semver_major "$NODE_VER")
-if [[ "$NODE_MAJOR" -lt 20 ]]; then
-  die "node $NODE_VER ist zu alt — benötigt >= 20.\n  → nvm install 20 && nvm use 20"
+NODE_MINOR=$(semver_minor "$NODE_VER")
+# >>> node-support-block (wird von backend/tests/test_install_node_engine.py
+# als Ganzes extrahiert und gegen engines.node aus package.json geprueft —
+# die Marker sind der Vertrag mit diesem Test, nicht Deko.)
+node_supported() {
+  local major="$1"
+  local minor="${2:-0}"
+  case "$major" in
+    22) [[ "$minor" -ge 12 ]] ;;
+    24) return 0 ;;
+    *)  [[ "$major" -ge 26 ]] ;;
+  esac
+}
+# <<< node-support-block
+if ! node_supported "$NODE_MAJOR" "$NODE_MINOR"; then
+  die "node $NODE_VER wird nicht unterstuetzt — benoetigt ^22.12.0 || ^24.0.0 || >=26.0.0 (vitest 5).\n  → nvm install 24 && nvm use 24"
 fi
 success "node $NODE_VER"
 

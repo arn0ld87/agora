@@ -141,7 +141,7 @@ For the actual architecture and its remaining debts, see [`docs/architecture.md`
 
 - Git
 - Linux or macOS recommended
-- Bun >= 1.3 and Node.js >= 20
+- Bun >= 1.3 and Node.js `^22.12.0 || ^24.0.0 || >=26.0.0` — the range required by vitest 5 and enforced by `install.sh`; Node 23 and 25 are intentionally excluded
 - `uv`
 - a configured LLM provider and embedding setup
 - Docker for the full-stack container path

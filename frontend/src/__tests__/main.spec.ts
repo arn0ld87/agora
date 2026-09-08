@@ -54,6 +54,14 @@ vi.mock('vue', async (importOriginal) => {
 })
 
 describe('main.ts Bootstrap', () => {
+  // vitest 5 setzt `clearMocks` jetzt standardmässig auf `true` — jeder
+  // vi.fn() wird vor dem ersten `it()` geleert, auch wenn der eigentliche
+  // Aufruf (hier: der Side-Effect aus `main.ts`) bereits in `beforeAll`
+  // passiert ist. Die Aufrufzahl muss deshalb HIER, vor dem Clearing,
+  // festgehalten werden statt sie spaeter aus dem (dann geleerten) Mock
+  // zu lesen.
+  let initFrontendTracingCallCount = -1
+
   beforeAll(async () => {
     // Stelle sicher, dass #app im DOM vorhanden ist
     if (!document.getElementById('app')) {
@@ -64,6 +72,9 @@ describe('main.ts Bootstrap', () => {
 
     // Dynamic import triggert die Side-Effects deterministisch
     await import('../main')
+
+    const { initFrontendTracing } = await import('../observability/tracing')
+    initFrontendTracingCallCount = (initFrontendTracing as ReturnType<typeof vi.fn>).mock.calls.length
   })
 
   // Block B1 (18.08.2026): Agora ist dark-first. Der Wert wird zweimal
@@ -82,8 +93,7 @@ describe('main.ts Bootstrap', () => {
     expect(typeof (window as any).__AGORA_UI_VERSION__).toBe('string')
   })
 
-  it('initFrontendTracing wurde 1× aufgerufen', async () => {
-    const { initFrontendTracing } = await import('../observability/tracing')
-    expect(initFrontendTracing).toHaveBeenCalledTimes(1)
+  it('initFrontendTracing wurde 1× aufgerufen', () => {
+    expect(initFrontendTracingCallCount).toBe(1)
   })
 })
