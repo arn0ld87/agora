@@ -1,184 +1,211 @@
-# Agent Tools Integration — Status & Änderungen
+# Agent Tools in der Simulation
 
-**Stand:** 2026-04-21, Abend
-**Ziel:** Simulations-Agenten (OASIS/CAMEL) sollen während der Sim echte Web-Tools (Tavily, URL-Fetch, Graph-Search) aufrufen können, bevor sie posten.
+**Stand:** 08.09.2026  
+**Geprüfte Main-Baseline:** `0c47737f`  
+**Status:** experimentell und standardmäßig deaktiviert.
 
-## Ausgangslage
+Dieses Dokument beschreibt den **aktuellen** Tool-Pfad für OASIS/CAMEL-Agenten. Das frühere chronologische Debug-Protokoll aus April 2026 ist keine Laufzeitreferenz mehr.
 
-Die Agenten posteten nur auf Basis des Knowledge-Graphen aus der hochgeladenen Datei
-— kein echter Webzugriff, keine externen Fakten. Erwartung war, dass sie bei einer
-Frage wie "Wie entwickelt sich alexle135.de?" die Website tatsächlich besuchen.
+Code:
 
-## Geänderte Dateien
+- `backend/scripts/agent_tools.py`
+- `backend/scripts/sim_runtime/platform_runner.py`
+- `backend/scripts/run_parallel_simulation.py`
+- `backend/scripts/run_twitter_simulation.py`
+- `backend/scripts/run_reddit_simulation.py`
 
-- `backend/scripts/agent_tools.py` — zentrale Tool-Registry + CAMEL-FunctionTools
-- `backend/scripts/run_parallel_simulation.py` — Modellauswahl, Token-Handling, Tool-Attach
-- `.env` — `TAVILY_API_KEY` (bereits vorhanden), `ENABLE_AGENT_TOOLS=true` (neu)
+---
 
-## Sequenz der Probleme und Fixes
+## 1. Aktivierung
 
-### 1. Web-Tools gab es noch nicht
+Default:
 
-**Was:** `AgentToolRegistry` in `agent_tools.py` hatte nur Graph-Tools
-(`search_graph`, `get_entity_detail`, `get_related_entities`), keinen Internet-Zugriff.
-
-**Fix:** Zwei neue Methoden auf `AgentToolRegistry`:
-
-- `web_fetch(url, max_chars=2000)` → `requests` + `BeautifulSoup`, entfernt
-  nav/footer/script/style, gibt Reintext zurück (max 4000 Zeichen).
-- `web_search(query, num_results=5)` → zuerst DuckDuckGo-HTML-Scraping
-  (POST `https://html.duckduckgo.com/html/`), später ersetzt durch Tavily-API
-  (`POST https://api.tavily.com/search`) mit `TAVILY_API_KEY` aus `.env`.
-
-**Verifiziert:** Tavily findet `alexle135.de` mit Score 1.0.
-
-### 2. `ENABLE_AGENT_TOOLS` stand auf `false`
-
-**Was:** In `simulation_config_generator.py:391` wird `enable_agent_tools` aus
-`Config.ENABLE_AGENT_TOOLS` gesetzt — und diese Env-Var war nicht gesetzt
-(Default `false`). Der ganze Tool-Zweig wurde in OASIS-Skripten nie
-aktiviert.
-
-**Fix:** `ENABLE_AGENT_TOOLS=true` zur `.env` hinzugefügt (direkt nach
-`TAVILY_API_KEY`).
-
-### 3. Modellauswahl aus dem UI griff nicht
-
-**Was:** In `run_parallel_simulation.py:1027` stand
-`llm_model = os.environ.get("LLM_MODEL_NAME", "")`, `config.get("llm_model")`
-war nur Fallback. Heißt: Auswahl im Frontend wurde immer durch `.env`
-überschrieben.
-
-**Fix:** Prioritäten umgedreht — `config_model = config.get("llm_model", "")`
-zuerst, dann `.env`, dann Fallback `gpt-4o-mini`.
-
-### 4. Reasoning-Tokens fraßen `content`
-
-**Was:** `ModelFactory.create(...)` wurde ohne `model_config_dict` gerufen.
-Qwen3/Nemotron-Cloud-Modelle geben bei `think=True` die komplette Antwort
-ins `reasoning`-Feld, `content` bleibt leer. CAMEL las aber nur `content`
-→ leere Responses, Tool-Parser findet nichts.
-
-**Fix:** `model_config_dict = {"extra_body": {"think": <OLLAMA_THINKING>}}`
-gesetzt. `OLLAMA_THINKING=false` propagiert jetzt korrekt bis zum Cloud-Endpoint.
-
-### 5. `max_tokens = 1024` war zu klein
-
-**Was:** CAMEL interpretierte mein `max_tokens=1024` als Gesamt-Budget. Die
-System-Message (mit Persona-Bio + Tool-Definitionen) war schon 2500+ Tokens
-lang → Warning `"System message alone exceeds token limit: 2531 > 1024"`.
-
-**Fix:** `max_tokens = 8192`. Warnings verschwanden.
-
-### 6. ReACT-Loop war der falsche Ansatz
-
-**Was:** Ich hatte einen eigenen `ToolAwareActionLoop` gebaut, der
-`<tool_call>`-Tags per Prompt-Engineering parst. Die Modelle generierten
-aber keine solchen Tags — Logs voller "LLM call failed: Error code: 500".
-Dieser Ansatz war technisch überflüssig.
-
-**Recherche via Context7 + GitHub:**
-
-- CAMEL `ChatAgent(tools=[FunctionTool(func)])` nutzt **natives**
-  OpenAI-function-calling via `tools`-Parameter in `/v1/chat/completions`.
-- OASIS' `SocialAgent.__init__` nimmt `tools` an und reicht es an
-  `ChatAgent` weiter — **aber** `generate_twitter_agent_graph` und
-  `generate_reddit_agent_graph` reichen keinen eigenen `tools`-Parameter durch.
-- `ChatAgent` hat `add_tool(tool)` — Tools können nach der Initialisierung
-  dynamisch nachgerüstet werden.
-- Ollama v1 unterstützt den `tools`-Parameter (Qwen3, Nemotron-Super bestätigt).
-
-**Fix:** Zwei neue Helper in `agent_tools.py`:
-
-- `build_camel_function_tools(config)` → erzeugt 3 `FunctionTool`-Objekte
-  mit docstrings + type hints. CAMEL generiert daraus automatisch das
-  OpenAI-Schema.
-- `attach_tools_to_agents(agent_graph, tools)` → iteriert alle Agents im
-  Graph und ruft `agent.add_tool(tool)` pro Tool auf.
-
-In `run_parallel_simulation.py` werden die Tools nach
-`generate_*_agent_graph(...)` attached, der alte `tool_loop` ist deaktiviert
-(`tool_loop = None`).
-
-**Direkter Isolations-Test bestand:** CAMEL `ChatAgent` + `nemotron-3-super:cloud`
-+ `FunctionTool(get_weather)` → Model rief `get_weather("Berlin")` nativ auf,
-gab `"Sunny 22°C in Berlin"` korrekt zurück. In einem zweiten Test mit unseren
-Tools rief es `web_search(query='alexle135.de', num_results=5)` auf und bekam
-5 echte Tavily-Treffer.
-
-### 7. OASIS-System-Prompt sagte nichts von Tools
-
-**Was:** Der Persona-Prompt sagt nur "du bist ein Social-Media-Agent, poste
-etwas". Die Tool-Schemas sind zwar im API-Request drin, aber das Modell
-priorisiert die Persona-Instruktion.
-
-**Fix:** `attach_tools_to_agents` hängt jetzt auch `TOOL_USE_INSTRUCTION`
-an die `system_message.content` jedes Agents an:
-
-```
-## Research Tools
-You have access to web_search, web_fetch and search_graph tools.
-Before posting about any specific website, company, person or topic you
-are not certain about, CALL web_search (and optionally web_fetch on a
-relevant result) to gather real information first.
+```text
+ENABLE_AGENT_TOOLS=false
 ```
 
-### 8. `max_iteration = 1` verhinderte Tool-Chains
+Konfiguration:
 
-**Was:** `SocialAgent.__init__` setzt `max_iteration = 1`. Der Agent
-kann pro Runde **eine** LLM-Entscheidung treffen — entweder `web_search`
-ODER `create_post`, niemals beide nacheinander. Die ganze Idee eines
-Tool-Loops (research → act) kann damit nicht funktionieren.
+```dotenv
+ENABLE_AGENT_TOOLS=true
+MAX_TOOL_CALLS_PER_ACTION=2
+```
 
-**Fix:** `attach_tools_to_agents` setzt `agent.max_iteration = 4`.
+`SimulationConfigGenerator` friert `enable_agent_tools` und `max_tool_calls_per_action` in die Simulationskonfiguration ein.
 
-### 9. Debug-Instrumentierung (aktuell noch offen)
+Tools sind damit ein explizites Opt-in. Ein Lauf ohne aktivierte Agent-Tools darf nicht so dokumentiert werden, als hätten Agenten live recherchiert.
 
-**Was:** Trotz attach + prompt-patch + max_iteration → Tools werden immer
-noch nicht aufgerufen (DB `trace` table zeigt nur Standard-Actions:
-`sign_up, create_post, refresh, like_post, quote_post, repost`).
+---
 
-**Eingebaut zum Diagnostizieren (noch nicht verifiziert):**
+## 2. Aktuell bevorzugter Pfad: native CAMEL FunctionTools
 
-- `print("[FunctionTool] >>> web_search(...)")` direkt in die Closure
-  → wird definitiv geloggt, wenn das Tool jemals aufgerufen wird.
-- Sanity-Dump nach `attach_tools_to_agents`: gibt für Agent 0 aus
-  - Liste aller Tool-Namen (soll unsere 3 + OASIS' Action-Tools enthalten)
-  - aktueller `max_iteration`-Wert (soll 4 sein)
+`build_camel_function_tools(config)` erzeugt CAMEL-`FunctionTool`-Objekte. `attach_tools_to_agents(...)` hängt diese an die Social Agents.
 
-## Hypothesen für das verbleibende Problem
+Damit werden Tools über das native Tool-/Function-Calling des Modelladapters transportiert. Das ist der bevorzugte Pfad.
 
-1. **`add_tool()` aktualisiert internen OpenAI-Schema-Cache nicht.**
-   CAMEL könnte die `tools`-Schema-Liste bei `ChatAgent.__init__` einmal
-   generieren und cachen; spätere `add_tool()`-Aufrufe ändern zwar
-   `self.tools`, aber nicht den Request-Body an Ollama.
-   → Lösung: CAMEL-Quellcode prüfen, ggf. `_update_tool_schemas()` o.ä.
-   nach `add_tool` aufrufen.
+Aktuell exponiert der native Builder:
 
-2. **Tools sind da, aber Modell ignoriert sie trotz expliziter Instruktion.**
-   → Lösung: Tool-Calling-Mode auf `"required"` zwingen (OpenAI-API-Parameter
-   `tool_choice: "required"` oder konkret `{"type":"function","function":{"name":"web_search"}}`).
+| Tool | Zweck | Voraussetzung |
+|---|---|---|
+| `web_search(query, num_results)` | Websuche über Tavily | `TAVILY_API_KEY` |
+| `web_fetch(url, max_chars)` | HTML/Text einer URL abrufen | Netzwerkzugriff |
+| `search_graph(query, limit)` | interner Hybrid-Search gegen Agora-Graph | Neo4j-/Graphzugriff |
 
-3. **OASIS' `perform_action_by_llm` überschreibt `user_msg` so, dass
-   Tool-Nutzung nicht plausibel erscheint.**
-   → Lösung: Agent-Hook patchen oder direkt `perform_action_by_llm`
-   monkey-patchen.
+`search_graph` wird nur hinzugefügt, wenn der Registry ein funktionierender Graph-Storage zur Verfügung steht.
 
-## Offene TODO
+---
 
-1. Neuen Sim-Lauf starten, Log auf `[attach_tools] sanity` und
-   `[FunctionTool] >>> web_search` prüfen.
-2. Je nach Ergebnis: Cache-Rebuild, `tool_choice="required"`, oder
-   Monkey-Patch.
-3. Sobald Tool-Calls funktionieren: aufgeräumte Version (ReACT-Loop-Code
-   und Debug-Prints entfernen).
+## 3. AgentToolRegistry
 
-## Testumgebung
+`AgentToolRegistry` bündelt Toolimplementierungen und Laufzeitkontext.
 
-- Modell: `nemotron-3-super:cloud` via Ollama Cloud
-  (`http://localhost:11434/v1`)
-- Test-Dokument: `test-tavily.md` (~400 Zeichen, Thema: Hacker News)
-- Test-Prompt: "Was sind die aktuell meistdiskutierten Themen auf
-  news.ycombinator.com?"
-- Empfohlene Sim-Settings für Speed: 3–4 Agents, 12 Sim-Hours, Max 10 Rounds,
-  nur eine Platform.
+Die Registry kennt neben den drei nativen Research-Tools zusätzliche Helfer wie:
+
+- `get_entity_detail`
+- `get_related_entities`
+- `get_simulation_context`
+- `get_recent_posts`
+
+Diese Registry-Funktionen sind **nicht automatisch identisch mit dem Toolset, das einem CAMEL-Agenten nativ exponiert wird**. Maßgeblich ist `build_camel_function_tools()`.
+
+---
+
+## 4. Neo4j- und Secret-Auflösung
+
+`AgentToolRegistry.from_config()` verwendet für die Neo4j-Verbindung:
+
+1. Runtime-Environment,
+2. danach persistierte nicht geheime Configwerte,
+3. sichere Defaults, wo vorhanden.
+
+Das Neo4j-Passwort wird ausschließlich aus der Runtime-Umgebung gelesen und nicht in `simulation_config.json` persistiert.
+
+Der Graph-Search-Pfad konstruiert derzeit einen `EmbeddingService`. Wegen der bekannten Embedding-SSoT-Lücke #1417 muss bei Tool-/Retrieval-Tests geprüft werden, welche Embedding-Konfiguration effektiv aktiv ist.
+
+---
+
+## 5. Websuche
+
+`web_search` verwendet Tavily:
+
+```text
+POST https://api.tavily.com/search
+```
+
+Voraussetzung:
+
+```dotenv
+TAVILY_API_KEY=...
+```
+
+Der Key bleibt Runtime-Secret und gehört nicht in persistierte Simulationsartefakte.
+
+Die Antwort wird für Agenten auf Titel, URL, Snippet und Score reduziert.
+
+---
+
+## 6. `web_fetch` und SSRF-Grenze
+
+Der aktuelle `web_fetch`-Pfad verwendet direkt `requests.get(...)` mit Redirects und einem Timeout und extrahiert lesbaren Text aus HTML.
+
+**Wichtige aktuelle Sicherheitsgrenze:** In `backend/scripts/agent_tools.py::web_fetch` ist auf der geprüften Baseline **kein dedizierter Private-IP-/Loopback-/Metadata-SSRF-Guard vor dem Request sichtbar**.
+
+Das bedeutet:
+
+- Agenteninhalt darf nicht als vertrauenswürdige URL-Policy behandelt werden.
+- `ENABLE_AGENT_TOOLS=true` erweitert die Outbound-Netzwerkfläche des OASIS-Subprozesses.
+- In sensiblen Netzen sollte `web_fetch` bis zu einer expliziten SSRF-Härtung nur unter kontrollierter Egress-/Netzwerkpolicy aktiviert werden.
+- Redirect-Ziele müssen bei einer künftigen Härtung genauso geprüft werden wie die Ausgangs-URL.
+
+Eine allgemeine SSRF-Härtung anderer Agora-Webpfade beweist nicht automatisch, dass dieser Subprozesspfad geschützt ist.
+
+---
+
+## 7. Prompt-/Observation-Sicherheit
+
+Tool-Resultate und Social-Observations sind **untrusted Modellinput**.
+
+Sie können enthalten:
+
+- instruktionsähnlichen Webtext,
+- Prompt-Injection,
+- manipulierte Agentenposts,
+- falsche oder widersprüchliche externe Informationen.
+
+Das Modell darf solche Inhalte als Daten verwenden, aber nicht als neue Systemregeln interpretieren. Zusätzliche Härtung von untrusted Observation wird unter #1224 verfolgt.
+
+---
+
+## 8. Legacy `ToolAwareActionLoop`
+
+`agent_tools.py` enthält weiterhin einen älteren ReACT-/Prompt-Parsing-Pfad (`ToolAwareActionLoop`, `<tool_call>...</tool_call>` und `<action>...</action>`).
+
+Dieser Code ist **nicht die kanonische Erklärung des aktuellen Parallel-Laufs**. Native CAMEL FunctionTools sind der bevorzugte Pfad.
+
+Besonders wichtig wegen #1215: Regeln, die ausschließlich im Legacy-Prompt stehen, dürfen nicht als wirksame Produktionsregel dokumentiert werden, wenn der produktive Lauf diesen Promptpfad nicht erreicht.
+
+Bei Änderungen an Agentenverhalten immer prüfen:
+
+```text
+Welche Funktion baut den tatsächlichen Agenten?
+Welche Tools landen tatsächlich in ChatAgent.tools?
+Welche System-/User-Message erreicht das Modell?
+```
+
+Nicht aus einem vorhandenen Promptstring schließen, dass er benutzt wird. Toter Code ist ausgesprochen überzeugend, solange man ihn nur liest.
+
+---
+
+## 9. Tool-Calling-Fähigkeit des Modells
+
+Ein aktivierter Toolpfad funktioniert nur, wenn der effektive Provider-/Modelladapter Tool-Calling unterstützt.
+
+Prüfen:
+
+- effektive `AiRoute`/Modell-ID,
+- Provider-Typ,
+- Tool-Capability,
+- tatsächliche Tool-Calls im Laufzeitlog/Trace.
+
+Ein Lauf mit `ENABLE_AGENT_TOOLS=true`, aber ohne beobachteten Tool-Call ist **kein Nachweis**, dass das Modell recherchiert hat.
+
+---
+
+## 10. Tool-Limits
+
+`MAX_TOOL_CALLS_PER_ACTION` begrenzt die vorgesehenen Toolinteraktionen pro Agentenaktion. Die konkrete Durchsetzung hängt vom aktiven OASIS/CAMEL-Pfad ab.
+
+Tool-Calls sind außerdem echte Modell-/Netzwerkoperationen und müssen in Kosten-/Budgetbetrachtungen einbezogen werden.
+
+Die allgemeine `LLMClient`-Budget-Härtung aus #1478 deckt viele physische Call-Pfade ab; der OASIS-Subprozess besitzt jedoch eigene Adapter-/IPC-Wege. Budget- und Tool-Tests müssen deshalb den tatsächlich verwendeten Subprozesspfad abdecken, nicht nur den Flask-Client.
+
+---
+
+## 11. Verifikation eines Tool-Laufs
+
+Für einen echten Testlauf mindestens nachweisen:
+
+1. `ENABLE_AGENT_TOOLS=true` steht in der effektiven Simulationsconfig.
+2. `build_camel_function_tools()` liefert das erwartete Toolset.
+3. Tools werden an alle gewünschten Agenten angehängt.
+4. Der Provider akzeptiert Tool-Calling.
+5. Logs/Traces zeigen einen **realen Tool-Aufruf**.
+6. Das Tool-Resultat fließt in eine nachfolgende Agentenentscheidung ein.
+7. Outbound-Webtools verhalten sich unter Fehlern/Timeouts kontrolliert.
+8. Secrets tauchen nicht in Artefakten/Logs auf.
+
+---
+
+## 12. Was diese Funktion nicht beweist
+
+Live-Webtools machen eine Simulation nicht automatisch „realer“ oder „wahrer“.
+
+Ein Agent kann:
+
+- schlechte Treffer auswählen,
+- Suchergebnisse falsch interpretieren,
+- Prompt-Injection übernehmen,
+- dieselbe Quelle mehrfach echoen,
+- externe Information mit Persona-/Simulationsannahmen vermischen.
+
+Toolnutzung ist deshalb eine zusätzliche Evidence-/Attack-Surface, kein Wahrheitsstempel.
