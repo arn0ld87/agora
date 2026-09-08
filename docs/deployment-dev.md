@@ -1,77 +1,59 @@
-# Deployment — Dev
+# Deployment — Entwicklung
 
-**Stand:** 2026-08-11, Europe/Berlin
-**Scope:** Lokaler Entwicklungsbetrieb auf einer Single-User-Maschine. Zwei
-Pfade: bare-metal mit `bun run dev` und Docker-Compose-Dev-Stage. Beide laufen
-gegen `127.0.0.1`, beide nutzen Hot-Reload.
+**Stand:** 08.09.2026  
+**Geprüfte Main-Baseline:** `0c47737f`  
+**Scope:** Lokaler Entwicklungsbetrieb auf einer Single-User-Maschine, entweder Host/Bare-Metal oder Docker Compose.
 
-> **Paketmanager ist `bun`, nicht `npm`.** Root und Frontend halten je eine
-> `bun.lock`; eine `package-lock.json` gibt es nicht. Wer `npm install` fährt,
-> erzeugt einen zweiten, nicht committeten Lockfile-Pfad. Der bequemste
-> Einstieg ist `./install.sh` (Host-Modus) bzw. `./install.sh --docker`.
+> **Paketmanager ist Bun, Backend-Environment kommt über `uv`.** Keine zweite npm-/pip-Dependency-Wahrheit daneben anlegen.
 
-Für Prod-Härtung (Gunicorn, Reverse-Proxy, restriktive CORS) siehe
-[`deployment-prod-like.md`](deployment-prod-like.md).
+Für produktionsnahe Härtung siehe [`deployment-prod-like.md`](deployment-prod-like.md).
 
 ---
 
-## Voraussetzungen
+## 1. Voraussetzungen
 
-| Komponente | Mindestversion | Zweck |
+| Komponente | Anforderung | Zweck |
 |---|---|---|
-| `bun` | 1.3.0+ | Paketmanager und Task-Runner (`engines.bun` in beiden `package.json`) |
-| Node.js | 20.x+ | Laufzeit für Vite und die Test-Runner (`engines.node`) |
-| Python | 3.14 (`>=3.14,<3.15`) | Backend-Runtime, gepinnt in `backend/pyproject.toml` |
-| `uv` | 0.4+ | Python-Dependency-Manager (statt `pip`/`venv`) |
-| Neo4j | 5.18+ | Graph-Storage. Lokal oder via Compose. |
-| Ollama | aktuell | LLM + Embedding. Auf dem Host, nicht im Container. |
-| Docker / Compose | optional | Compose-Dev-Pfad braucht v2.24+ wegen `!override`/`!reset`. |
-| Redis | optional | Single-Use-Tickets + Event-Bus. Compose startet Redis automatisch. |
+| Git | aktuell | Repository |
+| Bun | >= 1.3 | JS-Paketmanager/Task-Runner |
+| Node.js | >= 20 | Vite-/Frontend-Tooling |
+| `uv` | aktuell unterstützte Version | Python-Environment/Dependencies |
+| Python | 3.14 über Backend-Toolchain | Backend |
+| Neo4j | 5.18+ | Graph-Storage |
+| Redis | Compose oder lokaler Service | Events/Tickets/Integration |
+| Docker Compose | optional | vollständiger Dev-Stack |
+| LLM-/Embedding-Zugang | lokal, HTTP oder unterstützter CLI-Transport | Pipeline |
 
-`uv` installieren (einmalig):
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-Ollama-Modelle ziehen (einmalig):
-
-```bash
-ollama pull qwen2.5:32b              # oder ein leichteres Modell
-ollama pull qwen3-embedding:4b       # 2560-dim, erfordert VECTOR_DIM=2560
-# Fallback: ollama pull nomic-embed-text  # 768-dim, VECTOR_DIM=768
-```
+`install.sh` prüft die für den gewählten Pfad nötigen Werkzeuge und ist der bevorzugte Einstieg.
 
 ---
 
-## Pfad A — Bare-Metal (`bun run dev`)
-
-Schnellster Pfad für aktive Entwicklung. Kein Container, kein Build-Layer.
-
-### Setup
+## 2. Host-/Bare-Metal-Setup
 
 ```bash
 git clone https://github.com/arn0ld87/agora.git
 cd agora
-cp .env.example .env
-
-# Dependencies (root + frontend + backend)
-bun run setup:all
+./install.sh
 ```
 
-`.env` minimal anpassen:
+**Nicht zusätzlich `cp .env.example .env` ausführen.** `install.sh` erstellt die Datei bereits und ersetzt bekannte Secret-Platzhalter.
 
-```env
-FLASK_DEBUG=true                     # Dev: Tracebacks + Reloader, blockt Placeholder-Reject nicht
-SECRET_KEY=change-me-use-token_urlsafe-32   # Dev darf Placeholder bleiben, Config.validate() warnt
-NEO4J_PASSWORD=<dein_lokales_neo4j_pw>
-LLM_BASE_URL=http://localhost:11434/v1
-NEO4J_URI=bolt://localhost:7687
-EMBEDDING_BASE_URL=http://localhost:11434
+Automatisch erzeugt werden:
+
+- `SECRET_KEY`
+- `AGORA_AUTH_TOKEN`
+- `AGORA_SECRET_KEY`
+- `AGORA_FERNET_KEY`
+
+Danach `.env` für die lokale Infrastruktur konfigurieren, insbesondere:
+
+```text
+NEO4J_PASSWORD
+NEO4J_URI      (wenn nicht Default)
+NEO4J_USER     (wenn nicht Default)
 ```
 
-Token-Auth optional, siehe Abschnitt
-[Auth-Token im Dev-Modus](#auth-token-im-dev-modus).
+LLM-/Embedding-Konfiguration kann je nach Provider über Connections/UI bzw. lokale Defaults erfolgen. Die aktuelle Routingarchitektur steht in [`provider-runtime-settings.md`](provider-runtime-settings.md).
 
 ### Start
 
@@ -79,193 +61,248 @@ Token-Auth optional, siehe Abschnitt
 bun run dev
 ```
 
-Startet Backend und Frontend parallel über `concurrently`:
+Typische Endpunkte:
 
-| Endpoint | URL | Bind |
-|---|---|---|
-| Frontend (Vite) | <http://localhost:5173> | 127.0.0.1 |
-| Backend (Flask) | <http://localhost:5001/health> | 127.0.0.1 |
+| Dienst | URL |
+|---|---|
+| Frontend | `http://localhost:5173` |
+| Backend | `http://localhost:5001` |
+| Liveness | `http://localhost:5001/health` |
+| Diagnose | `http://localhost:5001/api/status` |
 
-Hot-Reload greift in beide Richtungen. Backend-Reload via `werkzeug` ist nur
-mit `FLASK_DEBUG=true` aktiv.
-
-### Lokales Neo4j
-
-Variante 1 — Neo4j-Desktop oder System-Service:
+Bei gesetztem `AGORA_AUTH_TOKEN` ist `/api/status` zu authentifizieren:
 
 ```bash
-# Beispiel Arch / Cachy
-sudo systemctl start neo4j
-# Browser: http://localhost:7474, Credentials wie in .env
+set -a
+. ./.env
+set +a
+
+curl -fsS \
+  -H "Authorization: Bearer $AGORA_AUTH_TOKEN" \
+  http://localhost:5001/api/status
 ```
 
-Variante 2 — nur Neo4j aus Compose ziehen (Backend bleibt bare-metal):
+---
+
+## 3. Lokale Infrastruktur
+
+### Nur Neo4j/Redis aus Compose
+
+Wenn Backend/Frontend auf dem Host laufen sollen:
 
 ```bash
 docker compose up -d neo4j redis
-# Beide binden auf 127.0.0.1 (siehe docker-compose.yml).
-# Backend-`NEO4J_URI` bleibt `bolt://localhost:7687`.
 ```
 
-### Tests + Lint
+Dann verwendet der Host-Betrieb typischerweise:
+
+```text
+NEO4J_URI=bolt://localhost:7687
+```
+
+Die exakten Compose-Bindings stehen in `docker-compose.yml`; nicht von alten Doku-Screenshots ableiten.
+
+### Ollama lokal
+
+Ollama ist eine mögliche, aber nicht die einzige Runtime. Modellname, Context-Limit und Embedding-Dimension müssen zur konkreten Installation passen.
+
+Beispiel:
+
+```bash
+ollama list
+```
+
+Keine Modell-ID als „Agora-Default“ dokumentieren, wenn sie nur die lokale Entwicklerinstallation beschreibt.
+
+### CLI-Provider
+
+Ein Provider mit `transport="cli"`, insbesondere `codex_cli`, braucht keine HTTP-Base-URL und keinen Agora-API-Key.
+
+Lokale Voraussetzung:
+
+```bash
+codex --version
+codex login
+```
+
+---
+
+## 4. Docker-Dev-Stack
+
+```bash
+git clone https://github.com/arn0ld87/agora.git
+cd agora
+./install.sh --docker
+```
+
+Alternativ nach bereits erfolgtem Setup:
+
+```bash
+docker compose up -d --build
+```
+
+Der Dev-Stack darf Hot-Reload/zusätzliche Hostports besitzen. Für Prod-like gelten andere Mount-/Read-only-/Port-Regeln.
+
+### Diagnose
+
+```bash
+docker compose ps
+docker compose logs -f agora
+docker compose logs --tail 200 neo4j
+docker compose logs --tail 200 redis
+```
+
+---
+
+## 5. Datenpfade im Dev-Betrieb
+
+Wichtige persistente Bereiche:
+
+```text
+backend/uploads/                  Uploads, Simulationen, Reports
+backend/uploads/reports/          Report-Artefakte
+backend/data/                     Provider-/API-Key-/Routingdaten
+backend/instance/                 Instanz-/UI-Settings
+backend/.cache/                   regenerierbare Caches
+```
+
+Der alte Pfad `backend/reports/` ist kein aktueller Report-Root.
+
+### Bind-Mount-Rechte
+
+Container können Host-Verzeichnisse mit einer anderen UID anlegen. Wenn Host-Tools danach auf `backend/.cache/` oder andere Bind-Mounts nicht schreiben können, Ownership gezielt korrigieren statt mit `chmod -R 777` die nächste Überraschung vorzubereiten.
+
+Beispiel auf Linux:
+
+```bash
+sudo chown -R "$USER":"$(id -gn)" backend/.cache
+```
+
+---
+
+## 6. Tests und Gates
+
+### Schneller lokaler Gesamtcheck
 
 ```bash
 bun run check
 ```
 
-Stufen: Backend-Lint (`ruff check app/ tests/`), Backend-Tests (`pytest`),
-Frontend-Lint (ESLint), Frontend-Tests (Vitest auf `jsdom`),
-Frontend-Build. Pre-Commit-Gate für jeden Slice. Zwei Redis-Integrationstests
-skippen sauber, wenn `TEST_REDIS_URL` nicht gesetzt ist.
+### Repo-Gate
 
----
-
-## Pfad B — Docker Compose (`target: dev`)
-
-Compose-Stack mit Backend, Frontend, Neo4j und Redis. Default-Compose nutzt
-seit v0.9.0 explizit den `dev`-Stage aus dem Multi-Stage-Dockerfile (Vite +
-Flask, Hot-Reload, kein Gunicorn).
-
-### Setup
+Vor Push entsprechend [`runbooks/pre-push-gate.md`](runbooks/pre-push-gate.md):
 
 ```bash
-git clone https://github.com/arn0ld87/agora.git
-cd agora
-cp .env.example .env
-# Pflichtwert: NEO4J_PASSWORD. Compose bricht sonst ab (`:?`-Syntax).
+bash scripts/pre-push-gate.sh
 ```
 
-### Start
+Je nach Slice können gezielte Modi sinnvoll sein; das Runbook ist führend.
+
+### Backend
 
 ```bash
-docker compose up -d --build
-docker compose logs -f agora        # Live-Log
+cd backend
+uv run ruff check app tests
+uv run mypy app
+uv run pytest
 ```
 
-Was läuft:
-
-| Service | Port (Host) | Bind | Zweck |
-|---|---|---|---|
-| `agora` (Vite) | `AGORA_FRONTEND_PORT`, Default 5173 | `AGORA_BIND_HOST`, Default 127.0.0.1 | Frontend Hot-Reload |
-| `agora` (Flask) | `AGORA_BACKEND_PORT`, Default 5001 | `AGORA_BIND_HOST`, Default 127.0.0.1 | API + `/health` |
-| `neo4j` (Browser) | 7474 (fest) | 127.0.0.1 (fest) | Neo4j-Web-UI |
-| `neo4j` (Bolt) | 7687 (fest) | 127.0.0.1 (fest) | Bolt-Treiber |
-| `redis` | — | nur Compose-intern | Event-Bus + Tickets |
-
-Die drei `AGORA_*`-Variablen stehen auskommentiert in `.env.example`. Der
-Default `127.0.0.1` ist die sichere Wahl; ihn zu ändern öffnet den Stack auf
-LAN- oder Tailscale-Interfaces.
-
-Container-zu-Container-Verbindungen laufen über das Compose-Netzwerk und
-brauchen die Host-Ports nicht. Die Loopback-Bindings sind explizit gewählt,
-damit der Stack nicht versehentlich auf Tailscale/LAN-Interfaces hört. Wer
-LAN-Zugriff will, setzt einen Reverse-Proxy davor — siehe
-[`deployment-prod-like.md`](deployment-prod-like.md).
-
-Ollama läuft auf dem Host und wird über `host.docker.internal` (im Compose
-als `extra_hosts: host-gateway` aufgelöst) erreicht. Im Container überschreibt
-Compose `LLM_BASE_URL`, `NEO4J_URI` und `EMBEDDING_BASE_URL`, sodass die
-`localhost`-Defaults in `.env` für den Bare-Metal-Pfad nutzbar bleiben.
-
-### Häufige Dev-Kommandos
+### Frontend
 
 ```bash
-# Container neu starten ohne Image-Rebuild
-docker compose up -d --force-recreate agora
-
-# Image rebuilden (z. B. nach Dependency-Bump)
-docker compose build agora && docker compose up -d --force-recreate --no-deps agora
-
-# Volumes resetten (Achtung: löscht Neo4j-Daten und Cache)
-docker compose down -v && docker compose up -d
+cd frontend
+bun run check
 ```
 
-### Volumes
-
-| Volume | Zweck |
-|---|---|
-| `./backend/uploads` (Bind) | Hochgeladene Dokumente. Nicht versioniert. |
-| `./backend/.cache/huggingface` (Bind) | OASIS-Modelle (~1 GB). Persistiert über Restarts. |
-| `neo4j_data` (Named) | Neo4j-Datenbank. |
-| `neo4j_logs` (Named) | Neo4j-Logs. |
-| `redis_data` (Named) | Redis-Persistenz (RDB-Snapshots). |
-
-### Read-Only-Rootfs — nur im Prod-Compose
-
-Der Dev-Stack setzt bewusst `read_only: false` (`docker-compose.yml`), damit
-Hot-Reload und Zwischenartefakte nicht an Mount-Grenzen scheitern. Erst
-`docker-compose.prod.yml` schaltet `read_only: true`; dort sind nur explizite
-`tmpfs`-Mounts (`/tmp`, `/app/backend/logs`, Caches) und die oben gelisteten
-Volumes schreibbar.
-
-Wer eine Änderung gegen den Prod-Pfad absichern will, testet sie deshalb mit
-`docker-compose.prod.yml` — im Dev-Stack fällt ein neues Schreibziel nicht auf.
-Kommt eines dazu, gehört der Mount ins Compose oder der Pfad geändert — nicht
-das Read-Only-Flag.
-
-### Der `backend/.cache`-Bind gehört danach root
-
-`./backend/.cache/huggingface` ist ein Bind-Mount. Legt der Container das
-Verzeichnis an, gehört `backend/.cache` auf dem Host anschließend `root` — und
-Host-Werkzeuge, die darunter schreiben wollen, brechen ab. Betroffen ist unter
-anderem `scripts/sync-status.sh`, das seinen Zähler-Cache in
-`backend/.cache/sync-status/` ablegt und dann mit „Keine Berechtigung“
-aussteigt.
+### Schemas
 
 ```bash
-sudo chown -R "$USER" backend/.cache    # oder: sudo rm -rf backend/.cache
+cd backend
+uv run python -m app.contracts.dump_schemas --check
+```
+
+### STATUS-Sync
+
+Normaler PR-Check soll nicht zwangsläufig teure Testzähler neu schreiben. Für einen dedizierten Refresh:
+
+```bash
+bash scripts/sync-status.sh --no-cache
 ```
 
 ---
 
-## Auth-Token im Dev-Modus
+## 7. Echte Redis-/Neo4j-Integrationstests
 
-Im Dev-Default ist `AGORA_AUTH_TOKEN` leer und das Backend läuft im Open-Mode
-mit Log-Warning. Für eine echte Token-Schleife siehe
-[`auth.md`](auth.md). Kurzfassung:
+Seit #1481 existiert eine eigene Integrationstest-Schicht unter:
 
-```bash
-# Token erzeugen
-AGORA_AUTH_TOKEN=$(python -c 'import secrets; print(secrets.token_urlsafe(32))')
-echo "AGORA_AUTH_TOKEN=$AGORA_AUTH_TOKEN" >> .env
-
-# Frontend-Storage (Browser-Devtools auf http://localhost:5173):
-localStorage.setItem('agora_token', '<derselbe_wert>')
+```text
+backend/tests/integration/
 ```
 
-Prod-Empfehlung ist Memory-Mode (`VITE_AGORA_TOKEN_STORAGE=memory`) statt
-`localStorage` — siehe [`auth.md`](auth.md), Abschnitt „Frontend-Token-Storage“.
+Sie testet reale Redis-/Neo4j-Interaktion und ist vom normalen Unit-Testpfad getrennt.
+
+In CI wird der dafür vorgesehene Job mit echten Services ausgeführt; fehlende benötigte Services sollen dort nicht als freundlicher Skip einen grünen Integrationsnachweis vortäuschen.
+
+Lokal nur ausführen, wenn die dafür dokumentierten `AGORA_TEST_*`-/Service-Variablen gesetzt sind.
 
 ---
 
-## Bekannte Dev-Stolperfallen
+## 8. Embedding-Entwicklung
 
-- **`NEO4J_PASSWORD` fehlt:** Compose bricht beim `up` mit Fehlermeldung ab.
-  Nicht-Debug-Backend rejected zusätzlich Placeholder (`agora`, `neo4j`,
-  `password`). Im Dev-Modus (`FLASK_DEBUG=true`) läuft es mit Warning
-  durch. Siehe [`security-hardening.md`](security-hardening.md), Phase 1.
-- **Embedding-Mismatch:** `EMBEDDING_MODEL` und `VECTOR_DIM` müssen
-  zusammenpassen (`qwen3-embedding:4b` ↔ `2560`, `nomic-embed-text` ↔ `768`).
-  Backend probet beim Start; Mismatch blockiert den Start.
-- **Ollama nicht erreichbar:** `/api/status` zeigt `ollama_uses_gpu: null`.
-  Im Compose-Pfad: `host.docker.internal` muss vom Container zum Host
-  auflösen — Linux braucht `extra_hosts: host-gateway` (ist im Compose
-  gesetzt).
-- **Vite-Port belegt:** Vite zieht selbst auf den nächsten freien Port hoch,
-  Backend kennt aber nur `5173` für CORS. Belegten Port abräumen statt Vite
-  ausweichen lassen, oder `AGORA_EXTRA_ORIGINS` setzen.
-- **Read-Only-Rootfs + neuer Schreibpfad:** Dev-Setups, die plötzlich `EROFS`
-  liefern, brauchen einen tmpfs- oder Volume-Mount im Compose. Siehe
-  Abschnitt „Volumes“.
+Embedding-Konfiguration besitzt einen eigenen Store-/Migrationspfad.
+
+Bekannte Grenze #1417: Die UI-/Store-Aktivierung ist noch nicht für jeden Runtime-Consumer die alleinige Wahrheit. Bei Tests eines Embedding-Wechsels deshalb sowohl Store/Connection als auch effektive Runtime-Konfiguration prüfen.
+
+Nie einen bestehenden Vektorindex nur deshalb wiederverwenden, weil die neue Konfiguration dieselbe Dimension meldet. Zwei Modelle können dieselbe Dimension und einen inkompatiblen semantischen Raum besitzen.
 
 ---
 
-## Verweise
+## 9. Reproduzierbarkeit im Dev-Test
 
-- [`auth.md`](auth.md) — Token-Header, Ticket-Flow, Storage-Optionen.
-- [`security-hardening.md`](security-hardening.md) — Secure-Defaults,
-  Placeholder-Reject, CORS-Whitelist, SSRF-Blocker.
-- [`deployment-prod-like.md`](deployment-prod-like.md) — Gunicorn,
-  Reverse-Proxy, Compose-Prod-Override.
-- [`dependency-risk-register.md`](dependency-risk-register.md) — aktiv
-  gepinnte CVEs.
+Ein gespeichertes `random_seed` ist noch kein vollständiger Replay-Vertrag. Tests, die Reproduzierbarkeit behaupten, müssen klar benennen, welche Zufallsquelle sie tatsächlich kontrollieren.
+
+Offene Gesamtthemen: #763/#1274.
+
+---
+
+## 10. Häufige Fehler
+
+### `.env` nach `install.sh` überschrieben
+
+Symptom: Secret-Platzhalter oder fehlende Keys tauchen wieder auf.
+
+Behebung: `.env` nicht erneut aus `.env.example` kopieren; `install.sh` als Bootstrap verwenden.
+
+### Provider funktioniert im Test, aber falscher Runtime-Pfad
+
+Prüfreihenfolge:
+
+1. aktive Route,
+2. ProviderConnection,
+3. Provider-Typ/Transport,
+4. Secret-Resolver,
+5. erst danach Env-Fallback.
+
+### Mehr Gunicorn-Worker im Dev/Prod-like gesetzt
+
+Nicht als Performance-Tuning übernehmen. Produktion ist aktuell bewusst auf einen Web-Worker begrenzt, solange prozesslokale Job-/Monitorzustände existieren.
+
+### Container-Neustart während Prepare/Report/Graph
+
+Diese Langläufer sind noch nicht vollständig restart-sicher (#1472). Bei Entwicklungs-Recreates mit laufenden Jobs mit verlorener Arbeit rechnen.
+
+---
+
+## 11. Was Dev und Prod-like unterscheidet
+
+| Thema | Dev | Prod-like |
+|---|---|---|
+| Hot Reload | ja | nein |
+| Debug | möglich | aus |
+| Root-Filesystem | weniger restriktiv | read-only-orientiert |
+| Netzwerk | lokale Entwicklungsports | restriktive Bindings/Proxy |
+| Auth | lokale Debug-Ausnahme möglich | Pflicht/Fail-fast |
+| Gunicorn | nicht zwingend | 1 Worker, gevent |
+| Daten | Test-/Entwicklungsdaten | Backup-/Recovery-Pflicht |
+
+Ein grüner Dev-Stack ist deshalb kein Prod-like-Smoke. Für Release-/Betriebsfragen den gehärteten Pfad separat testen.
