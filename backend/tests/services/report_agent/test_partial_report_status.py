@@ -236,3 +236,61 @@ def test_incomplete_partial_report_exports_without_outline(tmp_path):
     contract_model = ReportExportService.build_report_contract_model(result)
 
     assert contract_model.outline is None
+
+
+# ---------------------------------------------------------------------------
+# Codex-Review Runde 2, Finding 1: ein auf INCOMPLETE abgestufter Teil-Report
+# darf weder ueber update_progress (Polling) noch ueber progress_callback
+# (Streaming) "completed" an Consumer melden.
+# ---------------------------------------------------------------------------
+
+
+def test_incomplete_partial_report_does_not_report_completed_to_consumers(tmp_path):
+    """Der persistierte Report ist hier ehrlich INCOMPLETE (Section 2
+    scheiterte) — beide Terminal-Kanaele muessen das widerspiegeln, nicht nur
+    der eine oder der andere."""
+    report_id = f"report_{uuid.uuid4().hex[:12]}"
+    report = _make_report(report_id)
+    outline = _make_outline(2)
+    agent = _make_agent()
+    progress_events: list[tuple[str, int, str]] = []
+
+    with (
+        patch("app.services.report_agent.workflow.ReportManager") as mock_rm,
+        patch("app.config.Config.REPORT_REQUIREMENT_CHECKER_ENABLED", False),
+    ):
+        report_folder = str(tmp_path / report_id)
+        os.makedirs(report_folder, exist_ok=True)
+        mock_rm.assemble_full_report.return_value = "## Section 1"
+        mock_rm._ensure_report_folder.return_value = report_folder
+        mock_rm._write_json_atomic.side_effect = lambda path, data: None
+
+        result = _build_partial_report(
+            report,
+            report_id=report_id,
+            completed_section_titles=["Section 1", "Section 2"],
+            outline=outline,
+            agent=agent,
+            progress_callback=lambda stage, pct, msg: progress_events.append(
+                (stage, pct, msg)
+            ),
+            failed_section_indices=[2],
+        )
+
+    assert result.status == ReportStatus.INCOMPLETE
+
+    # Kanal 1: Polling ueber ReportManager.update_progress.
+    assert mock_rm.update_progress.call_args is not None
+    polling_stage = mock_rm.update_progress.call_args.args[1]
+    assert polling_stage == "incomplete", (
+        f"update_progress meldete '{polling_stage}' statt 'incomplete' fuer "
+        "einen abgestuften Teil-Report."
+    )
+
+    # Kanal 2: Streaming ueber progress_callback.
+    assert progress_events, "progress_callback wurde nicht aufgerufen"
+    streaming_stage = progress_events[-1][0]
+    assert streaming_stage == "incomplete", (
+        f"progress_callback meldete '{streaming_stage}' statt 'incomplete' "
+        "fuer einen abgestuften Teil-Report."
+    )

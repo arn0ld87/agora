@@ -1400,20 +1400,47 @@ def _build_partial_report(
             "_build_partial_report: could not write partial_metadata.json: %r", exc
         )
 
+    # Issue #1479 (Codex-Review Runde 2, Finding 1): der Status oben kann
+    # bereits ehrlich INCOMPLETE sein (Run-Degradation-Downgrade,
+    # Requirement-Check) — die beiden Terminal-Events an Polling
+    # (``update_progress``) und Streaming (``progress_callback``) duerfen das
+    # nicht uebertoenen, sonst sieht jeder Consumer trotzdem "completed".
+    # Progress bleibt bei 100: anders als die fruehen ``missing``-/Persona-
+    # Floor-Returns (Progress 0, dort wurde nichts generiert) hat dieser Pfad
+    # bereits fertige Sections. Gleiches Muster wie der Normalpfad am
+    # eigentlichen Laufende (siehe unten, "terminal_stage").
+    if report.status == ReportStatus.INCOMPLETE:
+        terminal_stage = "incomplete"
+        terminal_message = (
+            f"Partial report incomplete ({len(completed_section_titles)} "
+            "sections completed before cancel)"
+        )
+    else:
+        terminal_stage = "completed"
+        terminal_message = (
+            f"Partial report generated ({len(completed_section_titles)} "
+            "sections completed before cancel)"
+        )
     ReportManager.update_progress(
         report_id,
-        "completed",
+        terminal_stage,
         100,
-        f"Partial report generated ({len(completed_section_titles)} sections completed before cancel)",
+        terminal_message,
         completed_sections=completed_section_titles,
     )
     if progress_callback:
         progress_callback(
-            "completed",
+            terminal_stage,
             100,
-            f"Partial report generated ({len(completed_section_titles)} sections)",
+            terminal_message,
         )
     if agent.report_logger:
+        # Bewusst unveraendert: ``log_report_complete`` ist ein interner
+        # Audit-Log-Eintrag (agent_log.jsonl), kein Consumer-Terminal-Event.
+        # Er meldet, dass die Generierungsphase abgeschlossen wurde — nicht,
+        # dass der Inhalt vollstaendig ist. Der Normalpfad ruft ihn ebenso
+        # unbedingt auf, bevor dort ueber INCOMPLETE/COMPLETED entschieden
+        # wird (Zeile ~1795 vor Zeile ~1927) — dieselbe Semantik gilt hier.
         agent.report_logger.log_report_complete(
             total_sections=len(completed_section_titles),
             total_time_seconds=0.0,
@@ -1615,6 +1642,21 @@ def generate_report(
         if missing:
             report.status = ReportStatus.INCOMPLETE
             report.missing_sections = missing
+            # Issue #1479 (Codex-Review Runde 2, Finding 2): dieser fruehe
+            # Return erreicht die einzige Degradations-Aggregation (siehe
+            # unten, ~Zeile 1780) nie. Faellt plan_outline() in den Fallback
+            # (drei feste Ersatz-Sections, die weder ein Intent-Preset noch
+            # DEFAULT_REPORT_SECTIONS treffen), landet der Lauf garantiert
+            # hier — ohne diesen Eintrag wuerde die Fallback-Outline nie
+            # persistiert, und der Report verschwiege, dass seine Struktur
+            # nicht vom Modell stammt. Es sind an dieser Stelle noch keine
+            # Sections gelaufen; ein ``collect_run_degradations``-Aufruf mit
+            # ausschliesslich ``fallback_outline_used`` ist deshalb ehrlich
+            # und nicht unvollstaendig. ``apply_run_degradation_downgrade``
+            # braucht es hier nicht: der Status ist bereits INCOMPLETE.
+            report.run_degradations = collect_run_degradations(
+                fallback_outline_used=events_for(agent).fallback_outline_used,
+            )
             message = f"Fehlende Pflichtabschnitte: {', '.join(missing)}"
             ReportManager.update_progress(
                 report_id,

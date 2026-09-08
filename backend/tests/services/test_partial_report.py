@@ -838,6 +838,69 @@ def test_resume_restores_the_sanitization_warning_exactly_once(tmp_path):
     clear_cancel(cancel_run_id)
 
 
+def test_fallback_outline_used_is_persisted_before_missing_sections_early_return(
+    tmp_path,
+):
+    """Codex-Review Runde 2, Finding 2: faellt plan_outline() in den Fallback
+    (LLM-Aufruf scheitert, kein Cancel), treffen die drei fest verdrahteten
+    Ersatz-Sections weder ein Intent-Preset noch die Pflichtabschnitte aus
+    DEFAULT_REPORT_SECTIONS — generate_report() kehrt im missing-Zweig lange
+    vor der einzigen Degradations-Aggregation zurueck. Ohne den Fix
+    persistiert dieser Pfad ``outline_planning`` nie, obwohl die Struktur des
+    Berichts nicht vom Modell stammt. Der Test geht den echten
+    plan_outline()-Fallback-Pfad, statt collect_run_degradations() direkt
+    aufzurufen."""
+    from app.services.report_agent.workflow import generate_report
+
+    report_id = f"report_{uuid.uuid4().hex[:12]}"
+    agent = _make_generation_agent()
+    agent.graph_tools.get_simulation_context.return_value = {
+        "graph_statistics": {"total_nodes": 0, "total_edges": 0, "entity_types": {}},
+        "total_entities": 0,
+        "related_facts": [],
+    }
+    # Echte plan_outline()-Fallback-Logik ausloesen, nicht mocken.
+    agent.llm.chat_json.side_effect = RuntimeError("LLM nicht erreichbar")
+
+    report_folder = str(tmp_path / report_id)
+    os.makedirs(report_folder, exist_ok=True)
+
+    with patch("app.services.report_agent.workflow.EvidenceMapModel") as mock_em:
+        mock_em.model_validate.return_value = MagicMock(
+            model_dump=MagicMock(
+                return_value={
+                    "schema_version": 2,
+                    "report_id": report_id,
+                    "simulation_id": "sim_test",
+                    "global_evidence": [],
+                    "sections": [],
+                }
+            )
+        )
+        mock_rm = MagicMock()
+        _configure_manager_mock(mock_rm, report_folder)
+        with (
+            patch("app.services.report_agent.workflow.ReportManager", mock_rm),
+            patch(
+                "app.services.report_agent.workflow.migrate_v1_to_v2",
+                return_value=None,
+            ),
+        ):
+            result = generate_report(
+                agent,
+                progress_callback=None,
+                report_id=report_id,
+                cancel_run_id=None,
+            )
+
+    assert result.status == ReportStatus.INCOMPLETE
+    reasons = [entry["reason"] for entry in result.run_degradations]
+    assert "fallback_outline_used" in reasons, (
+        "outline_planning-Degradation fehlt im missing-Zweig, erhalten: "
+        f"{result.run_degradations}"
+    )
+
+
 def test_run_event_state_roundtrip(tmp_path, monkeypatch):
     """Der persistierte Marker-Zustand überlebt einen Manager-Wechsel:
     schreiben, neu laden, dieselbe Menge — dedupliziert und index-basiert."""
