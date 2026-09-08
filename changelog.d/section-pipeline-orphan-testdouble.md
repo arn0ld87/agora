@@ -1,0 +1,4 @@
+### Fixed (Testdouble der Abschnitts-Pipeline nachgezogen — 2026-09-08)
+
+- **Report Agent (Tests):** `FakeReportManager` in `tests/services/test_section_pipeline.py` kennt jetzt `_get_section_path`. #1475 zog `_remove_orphan_markdown` in `process_section` ein und griff damit auf einen Anschluss zu, den dieses Testdouble nicht hatte — `test_restored_section_without_persisted_evidence_still_returns_content` lief in einen `AttributeError` und färbte `main` rot. (#1475)
+- **Report Agent (Tests):** derselbe Test prüft jetzt das Sollverhalten seit #1475 statt des abgelösten: Markdown ohne Evidence wird als Waise entfernt und der Abschnitt neu generiert, nicht mehr restauriert. Er heißt entsprechend `test_persisted_section_without_evidence_is_regenerated_and_orphan_removed` und belegt das Löschen an einer echten Datei unter `tmp_path`. (#1475)

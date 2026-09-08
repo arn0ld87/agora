@@ -1860,6 +1860,7 @@
     "terminationBudgetCost": "Cost budget reached",
     "terminationBudgetTime": "Time budget reached",
     "terminationBudgetCalls": "Call budget reached",
+    "terminationProcessRestart": "Marked as ended after a process restart",
     "costStatusMeasured": "measured",
     "costStatusEstimated": "estimated",
     "costStatusFree": "free",
