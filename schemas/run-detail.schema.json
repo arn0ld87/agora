@@ -661,7 +661,8 @@
             "budget_tokens",
             "budget_cost",
             "budget_time",
-            "budget_calls"
+            "budget_calls",
+            "process_restart"
           ],
           "type": "string"
         },

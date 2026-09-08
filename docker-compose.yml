@@ -10,6 +10,14 @@ services:
       context: .
       target: dev
     container_name: agora
+    # gunicorn.conf.py setzt graceful_timeout=30 (SIGTERM -> WINCH ->
+    # Worker-Drain). Docker-Default fuer stop_grace_period ist nur 10s und
+    # wuerde den Worker per SIGKILL abschiessen, bevor er sauber beenden
+    # kann — Runs blieben dann als verwaist zurueck (siehe
+    # reconcile_stale_runs). init:true reapt Zombie-Kindprozesse (OASIS-
+    # Subprozesse), die der PID-1-Python-Prozess sonst nicht einsammelt.
+    stop_grace_period: 45s
+    init: true
     env_file:
       - .env
     # Loopback-Bind: Frontend (Vite) und Backend (Flask) sind im Dev-

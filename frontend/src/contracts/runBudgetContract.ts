@@ -57,6 +57,7 @@ export const TerminationReasonSchema = z.enum([
   "budget_cost",
   "budget_time",
   "budget_calls",
+  "process_restart",
 ]);
 export type TerminationReason = z.infer<typeof TerminationReasonSchema>;
 
