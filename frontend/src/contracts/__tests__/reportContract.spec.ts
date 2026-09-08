@@ -495,7 +495,31 @@ describe('RunDegradationSchema — Persona-Komponente (#1419)', () => {
       'section_metadata',
       'requirement_checker',
       'contract_export',
+      'outline_planning',
+      'run_cancellation',
     ]);
+  });
+
+  it('parst die Eintraege outline_planning und run_cancellation (#1479)', () => {
+    // Der Backend-Vertrag kennt beide seit Slice B5; ohne Spiegelung wiese
+    // der Zod-Parser jeden INCOMPLETE-Report mit Fallback-Outline oder
+    // Cancel-Luecke ab.
+    expect(() =>
+      RunDegradationSchema.parse({
+        component: 'outline_planning',
+        reason: 'fallback_outline',
+        detail: '',
+        severity: 'warning',
+      }),
+    ).not.toThrow();
+    expect(() =>
+      RunDegradationSchema.parse({
+        component: 'run_cancellation',
+        reason: 'sections_missing',
+        detail: '',
+        severity: 'blocking',
+      }),
+    ).not.toThrow();
   });
 
   it('parst den requirement_checker-Eintrag, den das Backend seit #1302 schreibt', () => {

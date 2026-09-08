@@ -334,6 +334,12 @@ export const RunDegradationSchema = z.object({
     // Fehlende Analyseaspekte im fertigen Berichtstext (Issue #1302).
     'requirement_checker',
     'contract_export',
+    // Issue #1479: die LLM-Outline-Planung scheiterte, `plan_outline` griff
+    // auf das feste Ersatzschema zurück (severity="warning").
+    'outline_planning',
+    // Issue #1479: die Section-Schleife erreichte nach einem Nutzer-Abbruch
+    // nicht mehr alle Outline-Sections (severity="blocking").
+    'run_cancellation',
   ]),
   reason: z.string().min(1),
   detail: z.string().default(''),
