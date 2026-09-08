@@ -101,6 +101,7 @@ const TERMINATION_LABEL: Record<TerminationReason, string> = {
   budget_cost: 'runBudget.terminationBudgetCost',
   budget_time: 'runBudget.terminationBudgetTime',
   budget_calls: 'runBudget.terminationBudgetCalls',
+  process_restart: 'runBudget.terminationProcessRestart',
 }
 
 const totals = computed(() => props.usage.totals)

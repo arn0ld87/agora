@@ -315,6 +315,27 @@ def create_app(config_class=Config):
     if should_log_startup:
         logger.info("Simulation process cleanup function registered")
 
+    # Startup-Reconciliation (Tech-Review 2026-09-07 Slice B1; Codex-Review
+    # Finding A, 2026-09-08): nach einem Container-/Prozess-Neustart bleiben
+    # Runs sonst für immer als "laufend" markiert, weil kein Subprozess mehr
+    # existiert, der ihren Zustand je wieder aktualisieren würde.
+    #
+    # ``create_app`` bleibt bewusst ein Aufrufer (nicht der einzige): unter
+    # gunicorn mit ``preload_app=True`` + ``workers=1`` läuft diese Funktion
+    # nur einmal im Master VOR dem Fork, der einzige Worker kann aber
+    # danach unabhängig neu starten (Timeout, Crash, Replacement) — das ist
+    # der kanonische Einhängepunkt ``gunicorn.conf.py::post_fork``. Für
+    # Entwicklungs-/Testbetrieb ohne gunicorn (``flask run``, Test-Fixtures,
+    # direkte ``create_app()``-Aufrufe) ist dieser Aufruf hier weiterhin der
+    # einzige Reconciliation-Trigger. Der doppelte Aufruf unter gunicorn
+    # beim allerersten Boot ist ein harmloses No-op (siehe reconciliation.py).
+    from .services.sim.reconciliation import run_startup_reconciliation
+
+    run_startup_reconciliation(
+        enabled=app.config.get("AGORA_STARTUP_RECONCILIATION", True),
+        should_log_startup=should_log_startup,
+    )
+
     # Request-ID middleware + request/response logging
     req_logger = get_logger('agora.request')
 
