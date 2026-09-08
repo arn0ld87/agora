@@ -440,29 +440,41 @@ function _stakeholderGroupKey(value: string | null | undefined): string {
   // Naeherung an Python `str.casefold()` (ADR-0002 Anker 4, Backend-Anker
   // `_stakeholder_group_key`). JS kennt kein `casefold()`. Reihenfolge ist
   // bindend — siehe Regressionstests in reportContract.spec.ts:
-  //   1. `normalize("NFKC")` faengt u.a. `ſ` (U+017F LATIN SMALL LETTER
-  //      LONG S) und Kompatibilitaets-Ligaturen ab, die `toLowerCase()`
-  //      allein unveraendert liesse.
-  //   2. `toLowerCase()` fuer den regulaeren Gross-/Kleinschreibungsfall.
-  //   3. Explizite Sonderfaelle, die weder NFKC noch `toLowerCase()`
-  //      abdecken, Python-`casefold()` aber faltet: `ß` -> `ss`,
-  //      `ς` (griechisches Schluss-Sigma) -> `σ`.
+  //   1. `toLowerCase()` fuer den regulaeren Gross-/Kleinschreibungsfall.
+  //      JS deckt damit bereits die Titlecase-Digraphen (`ǅ` -> `ǆ`) und
+  //      `İ` -> `i̇` genauso ab wie Python.
+  //   2. Explizite Faltungen aus CaseFolding.txt (Status F/C), die
+  //      `toLowerCase()` unveraendert liesse: `ß` -> `ss`, `ſ` (LONG S) -> `s`,
+  //      `ς` (Schluss-Sigma) -> `σ` sowie die lateinischen Ligaturen.
+  //
+  // BEWUSST KEIN `normalize("NFKC")`: die Kompatibilitaetszerlegung faltet
+  // mehr, als `casefold()` faltet — Fullwidth-Formen (`Ａｕｆｓｉｃｈｔ` -> `Aufsicht`)
+  // und eingekreiste Ziffern (`①` -> `1`) kollabieren unter NFKC, unter
+  // `casefold()` nicht. Ein solcher Kollaps macht den Spiegel STRENGER als
+  // das Backend: er zaehlt eine Stakeholder-Gruppe, wo Python zwei zaehlt,
+  // und lehnt eine backend-gueltige `high`-Antwort als `schema_mismatch` ab.
   //
   // Bleibende Divergenz zu Python: das ist KEINE vollstaendige
-  // `casefold()`-Aequivalenz. Es deckt keine weiteren Sonderfaelle der
-  // Unicode-Casefolding-Tabelle ab, die weder unter NFKC noch unter den
-  // beiden Ersetzungen fallen (z.B. tuerkisches "İ"/"i̇"). Der Spiegel darf
-  // dadurch nur STRENGER, nie LAXER als das Backend werden — ein noch nicht
-  // abgedeckter Sonderfall fuehrt hoechstens dazu, dass der Spiegel zwei
-  // Gruppen zaehlt, wo Python eine zaehlt (strenger), nie umgekehrt.
+  // `casefold()`-Aequivalenz — armenische Ligaturen und einige
+  // Cherokee-/Deseret-Faelle fehlen. Die Divergenz laeuft nun aber nur noch
+  // in die unschaedliche Richtung: der Spiegel zaehlt hoechstens mehr
+  // Gruppen als Python (LOCKERER), nie weniger. Ein lockererer Spiegel
+  // laesst bereits backend-validierte Daten durch; ein strengerer wuerde
+  // sie in der UI verwerfen.
   return value
     .split(/\s+/)
     .filter(Boolean)
     .join(" ")
-    .normalize("NFKC")
     .toLowerCase()
     .replace(/ß/g, "ss")
-    .replace(/ς/g, "σ");
+    .replace(/ſ/g, "s")
+    .replace(/ς/g, "σ")
+    .replace(/ﬀ/g, "ff")
+    .replace(/ﬁ/g, "fi")
+    .replace(/ﬂ/g, "fl")
+    .replace(/ﬃ/g, "ffi")
+    .replace(/ﬄ/g, "ffl")
+    .replace(/[ﬅﬆ]/g, "st");
 }
 
 /**
