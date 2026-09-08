@@ -38,7 +38,7 @@ Reports liegen unter:
 backend/uploads/reports/
 ```
 
-nicht unter `backend/reports/` (#1483).
+Der frühere abweichende Reports-Pfad war falsch und wurde mit #1483 korrigiert.
 
 ---
 
