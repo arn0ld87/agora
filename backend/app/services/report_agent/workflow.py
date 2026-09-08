@@ -1323,8 +1323,42 @@ def _persist_fallback_outline_marker(agent: Any, report_id: str) -> None:
     """Issue #1479 (Codex-Review Runde 3, Finding 2): der Marker muss den
     Lauf überleben, sonst verliert ihn ein Resume mit neuem Agenten — siehe
     ``_restore_work_trace_markers``."""
-    if events_for(agent).fallback_outline_used:
-        ReportManager.save_fallback_outline_used(report_id, True)
+    used = bool(events_for(agent).fallback_outline_used)
+    # Auch das ``False`` schreiben: heilt ein Resume die Planungsstoerung,
+    # muss der Marker das sagen — sonst verwirft ``_reusable_persisted_outline``
+    # den nun reell geplanten Outline bei jedem weiteren Resume erneut.
+    ReportManager.save_fallback_outline_used(report_id, used)
+
+
+def _reusable_persisted_outline(
+    existing_report: Optional["Report"], report_id: str
+) -> Optional[Any]:
+    """Persistierten Outline nur wiederverwenden, wenn er echt geplant wurde.
+
+    Issue #1479 (Codex-Review Runde 5): seit Runde 4 der Read vor dem ersten
+    ``save_report`` liegt, ist ein persistierter Outline auf dem Resume-Pfad
+    tatsaechlich sichtbar — vorher sah ``generate_report`` hier immer den
+    frisch gespeicherten Report mit ``outline=None`` und plante ohnehin neu.
+    Damit wurde ein FALLBACK-Outline erstmals wiederverwendbar, und genau das
+    ist schaedlich: der Drei-Sektionen-Fallback besteht die
+    Required-Section-Pruefung nicht, ein Resume liefe sofort wieder in
+    ``INCOMPLETE`` und die angebotene Wiederaufnahme koennte eine nur
+    voruebergehende Planungsstoerung nie mehr heilen.
+
+    Ein als ``fallback_outline_used`` markierter Outline wird deshalb
+    verworfen und neu geplant. Ein reell geplanter Outline wird wie bisher
+    wiederverwendet — das ist der Sinn des Resume.
+    """
+    outline = existing_report.outline if existing_report else None
+    if outline is None:
+        return None
+    if ReportManager.load_fallback_outline_used(report_id) is True:
+        logger.info(
+            "Persistierter Outline stammt aus dem Fallback — wird verworfen und neu geplant",
+            extra={"report_id": report_id},
+        )
+        return None
+    return outline
 
 
 def _merge_run_degradations(
@@ -1673,9 +1707,8 @@ def generate_report(
         if progress_callback:
             progress_callback("planning", 0, "Start planning report outline...")
 
-        if existing_outline and existing_outline.outline:
-            outline = existing_outline.outline
-        else:
+        outline = _reusable_persisted_outline(existing_outline, report_id)
+        if outline is None:
             outline = plan_outline_impl(
                 agent,
                 progress_callback=lambda stage, prog, msg: progress_callback(stage, prog // 5, msg) if progress_callback else None,

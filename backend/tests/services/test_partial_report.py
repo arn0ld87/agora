@@ -1079,6 +1079,104 @@ def test_resume_keeps_failed_section_marker_after_restore(tmp_path):
 # ---------------------------------------------------------------------------
 
 
+def test_resume_replans_instead_of_reusing_a_fallback_outline(tmp_path, monkeypatch):
+    """Ein als ``fallback_outline_used`` markierter Outline darf beim Resume
+    NICHT wiederverwendet werden — ``plan_outline`` muss erneut laufen.
+
+    Codex-Review Runde 5: seit Runde 4 der ``get_report``-Read vor dem ersten
+    ``save_report`` liegt, sieht ``generate_report`` beim Resume erstmals
+    wirklich den persistierten Outline. Damit wurde ein Fallback-Outline
+    wiederverwendbar — und der besteht die Required-Section-Pruefung nie. Ein
+    Resume nach einer nur voruebergehenden Planungsstoerung lieferte dann
+    sofort wieder ``INCOMPLETE``, ohne je einen zweiten Planungsversuch zu
+    unternehmen. Die angebotene Wiederaufnahme waere wirkungslos gewesen.
+    """
+    from app.services.report_agent.manager import ReportManager
+    from app.services.report_agent import workflow as workflow_mod
+    from app.services.report_agent.workflow import generate_report
+
+    monkeypatch.setattr(ReportManager, "REPORTS_DIR", str(tmp_path))
+    cancel_run_id = _unique_id()
+    report_id = f"report_{uuid.uuid4().hex[:12]}"
+    clear_cancel(cancel_run_id)
+
+    def make_agent() -> MagicMock:
+        agent = _make_generation_agent()
+        agent.graph_tools.get_simulation_context.return_value = {
+            "graph_statistics": {"total_nodes": 0, "total_edges": 0, "entity_types": {}},
+            "total_entities": 0,
+            "related_facts": [],
+        }
+        agent.llm.chat_json.side_effect = RuntimeError("LLM nicht erreichbar")
+        return agent
+
+    def real_manager_mock() -> MagicMock:
+        mock_rm = MagicMock(wraps=ReportManager)
+        mock_rm.get_evidence_map.return_value = None
+        mock_rm.get_generated_sections.return_value = []
+        mock_rm.assemble_full_report.return_value = "## Fallback Section 1\n"
+        return mock_rm
+
+    def run_once() -> None:
+        with patch("app.services.report_agent.workflow.EvidenceMapModel") as mock_em:
+            mock_em.model_validate.return_value = MagicMock(
+                model_dump=MagicMock(
+                    return_value={
+                        "schema_version": 2,
+                        "report_id": report_id,
+                        "simulation_id": "sim_test",
+                        "global_evidence": [],
+                        "sections": [],
+                    }
+                )
+            )
+            with (
+                patch("app.services.report_agent.workflow.ReportManager", real_manager_mock()),
+                patch("app.services.report_agent.workflow.migrate_v1_to_v2", return_value=None),
+                patch("app.config.Config.REPORT_REQUIREMENT_CHECKER_ENABLED", False),
+            ):
+                generate_report(
+                    make_agent(),
+                    progress_callback=None,
+                    report_id=report_id,
+                    cancel_run_id=cancel_run_id,
+                )
+
+    # Phase A: Cancel steht bereits an -> Fallback-Outline wird persistiert
+    # und der Marker gesetzt.
+    request_cancel(cancel_run_id)
+    run_once()
+    clear_cancel(cancel_run_id)
+
+    assert ReportManager.load_fallback_outline_used(report_id) is True, (
+        "Vorbedingung: Phase A muss den Fallback-Marker persistiert haben"
+    )
+    persisted = ReportManager.get_report(report_id)
+    assert persisted is not None and persisted.outline is not None, (
+        "Vorbedingung: Phase A muss einen Outline persistiert haben — sonst "
+        "wuerde Phase B ohnehin neu planen und der Test bewiese nichts"
+    )
+
+    # Phase B: Resume. Der persistierte Outline ist da UND als Fallback
+    # markiert — plan_outline muss trotzdem erneut aufgerufen werden.
+    real_plan = workflow_mod.plan_outline_impl
+    calls: list[int] = []
+
+    def spy(*args, **kwargs):
+        calls.append(1)
+        return real_plan(*args, **kwargs)
+
+    monkeypatch.setattr(workflow_mod, "plan_outline_impl", spy)
+    run_once()
+
+    assert calls, (
+        "Der persistierte Fallback-Outline wurde wiederverwendet statt neu "
+        "geplant — ein Resume koennte eine voruebergehende Planungsstoerung "
+        "damit nie heilen"
+    )
+    clear_cancel(cancel_run_id)
+
+
 def test_resume_preserves_fallback_outline_degradation_after_cancel(tmp_path, monkeypatch):
     """Fallback-Outline (LLM-Planung scheitert) -> Cancel direkt an der
     Post-Outline-Grenze -> Resume: ``outline_planning`` bleibt in
@@ -1185,9 +1283,11 @@ def test_resume_preserves_fallback_outline_degradation_after_cancel(tmp_path, mo
     )
 
     # Phase B: Resume. Cancel aufgehoben, neuer Agent (fallback_outline_used
-    # startet wieder bei False). Die persistierte Fallback-Outline existiert
-    # bereits -> plan_outline() wird umgangen, der missing-Zweig greift
-    # erneut (3 Ersatz-Sections erfuellen die Pflichtabschnitte nicht).
+    # startet wieder bei False). Der persistierte Outline ist als Fallback
+    # markiert und wird seit Runde 5 verworfen -> plan_outline() laeuft
+    # erneut, scheitert hier aber wieder (derselbe kaputte Agent) und faellt
+    # abermals in den Fallback; der missing-Zweig greift erneut, weil 3
+    # Ersatz-Sections die Pflichtabschnitte nicht erfuellen.
     clear_cancel(cancel_run_id)
     with patch("app.services.report_agent.workflow.EvidenceMapModel") as mock_em:
         mock_em.model_validate.return_value = MagicMock(
