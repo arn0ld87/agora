@@ -3,7 +3,6 @@
 from app.services.evidence_identity import build_evidence_id
 from app.services.evidence_migrations import (
     migrate_evidence_map_v2_to_v3,
-    migrate_v2_to_v3,
     normalize_persisted_evidence_map,
 )
 
@@ -39,17 +38,6 @@ def _legacy_report_tool_payload() -> dict:
     }
 
 
-def test_legacy_report_tool_becomes_unresolved_hypothesis_not_claim() -> None:
-    migrated = migrate_v2_to_v3(_legacy_report_tool_payload())
-
-    assert migrated["claims"] == []
-    assert migrated["evidence_index"] == {}
-    assert any(
-        hypothesis["hypothesis_text"]
-        == "Die Zielgruppe reagiert positiv auf den Ansatz."
-        and "legacy_unresolved" in hypothesis["rationale"]
-        for hypothesis in migrated["hypotheses"]
-    )
 
 
 def test_short_legacy_claim_is_not_promoted_to_hypothesis() -> None:

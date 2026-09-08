@@ -11,6 +11,7 @@ Sammlung der Architektur-Entscheidungen für Agora. Format: [MADR-Light](https:/
 | [0002-S](0002-supersedes.md) | Der Entailment-Judge darf in der Grauzone belegen | Accepted (2026-08-17) | #1357 |
 | [0003](0003-pydantic-settings-migration.md) | Pydantic-Settings-Migration | Accepted (2026-05-15) | Pydantic-Settings-Epic |
 | [0004](0004-cve-upstream-escalation.md) | CVE-Upstream-Eskalation: Risikoakzeptanz nltk | Accepted (2026-07-06) | ALE-20 |
+| [0005](0005-keine-v2-report-migration.md) | Keine v2→ReportV3-Migration mehr vorhalten | Accepted (2026-09-08) | — |
 | [0006](0006-ai-provider-connections.md) | Kanonische KI-Provider-Verbindungen | Proposed | Onboarding/Provider-Unification Slice 0 |
 | [0007](0007-embedding-configuration-and-index-migration.md) | Embedding-Konfiguration und Indexmigration | Proposed | Onboarding/Provider-Unification Slice 0 |
 | [0008](0008-single-user-profile-and-onboarding.md) | Single-User-Profil und Erst-Onboarding | Proposed | Onboarding/Provider-Unification Slice 0 |

@@ -555,113 +555,13 @@ def test_build_report_v3_gap_verweist_auf_exportierte_hypothesen_id():
             assert gap.related_hypothesis_id in hypothesis_ids
 
 
-# ---- migrate_v2_to_v3 Unit-Tests ----
-
-def test_migrate_v2_to_v3_minimal():
-    """migrate_v2_to_v3 erzeugt ein ReportV3-valides dict aus einem minimalen v2-dict."""
-    from app.services.evidence_migrations import migrate_v2_to_v3  # noqa: PLC0415
-
-    v2 = {
-        "report_id": "rep-migration-001",
-        "sections": [
-            {
-                "section_index": 1,
-                "claims": [
-                    {
-                        "claim_id": "c01",
-                        "claim_text": "Nachhaltige Mobilität ist ein zentrales Thema.",
-                        "confidence_label": "medium",
-                        "evidence": [
-                            {
-                                "source_id_anchor": "kg:node:mobility-001",
-                                "type": "graph_node",
-                            }
-                        ],
-                    }
-                ],
-                "data_gaps": [
-                    {
-                        "gap_id": "g01",
-                        "claim_text": "Regionale Unterschiede nicht abgedeckt.",
-                        "gap_reason": "insufficient_data",
-                        "suggested_fix": "Regionale Studie beauftragen.",
-                    }
-                ],
-            }
-        ],
-    }
-    result = migrate_v2_to_v3(v2)
-    report_v3 = ReportV3.model_validate(result)
-
-    assert report_v3.schema_version == 4
-    assert report_v3.report_id == "rep-migration-001"
-    assert len(report_v3.claims) == 1
-    assert report_v3.claims[0].confidence == "medium"
-    evidence_ref = report_v3.claims[0].evidence_refs[0]
-    assert evidence_ref in report_v3.evidence_index
-    assert report_v3.evidence_index[evidence_ref].source_id_anchor == "kg:node:mobility-001"
-    # DataGap aus Claim + DataGap aus Migration-Hinweis (keine Personas)
-    # Issue #1341: die Migration vergibt abschnittsqualifizierte IDs statt die
-    # abschnittslokale Rohform (``g01``) durchzureichen — sonst kollidieren
-    # mehrabschnittige Altreports miteinander.
-    gap_ids = {dg.id for dg in report_v3.data_gaps}
-    assert "G1_01" in gap_ids
-    assert "dg-migration-personas" in gap_ids
 
 
-def test_migrate_v2_to_v3_empty_sections_produces_valid_v3():
-    """migrate_v2_to_v3 mit leerer Sections-Liste → valide ReportV3 mit leeren Listen."""
-    from app.services.evidence_migrations import migrate_v2_to_v3  # noqa: PLC0415
-
-    result = migrate_v2_to_v3({"report_id": "rep-empty", "sections": []})
-    report_v3 = ReportV3.model_validate(result)
-
-    assert report_v3.report_id == "rep-empty"
-    assert report_v3.claims == []
-    assert len(report_v3.data_gaps) == 1  # Nur der Personas-Hinweis
-    assert report_v3.data_gaps[0].id == "dg-migration-personas"
 
 
-def test_migrate_v2_to_v3_simulation_id_in_hint():
-    """simulation_id taucht im DataGap-Hinweis auf."""
-    from app.services.evidence_migrations import migrate_v2_to_v3  # noqa: PLC0415
-
-    result = migrate_v2_to_v3(
-        {"report_id": "rep-x", "sections": []},
-        simulation_id="sim_test_123",
-    )
-    report_v3 = ReportV3.model_validate(result)
-    hint_gap = next(
-        (dg for dg in report_v3.data_gaps if dg.id == "dg-migration-personas"),
-        None,
-    )
-    assert hint_gap is not None
-    assert "sim_test_123" in hint_gap.beschreibung
 
 
-def test_migrate_v2_to_v3_skips_claims_without_evidence():
-    """Claims ohne evidence_refs werden nicht in v3 übernommen."""
-    from app.services.evidence_migrations import migrate_v2_to_v3  # noqa: PLC0415
 
-    v2 = {
-        "report_id": "rep-no-ev",
-        "sections": [
-            {
-                "section_index": 1,
-                "claims": [
-                    {
-                        "claim_id": "c_no_ev",
-                        "claim_text": "Ein Claim ohne Evidence-Belege.",
-                        "confidence_label": "high",
-                        "evidence": [],
-                    }
-                ],
-            }
-        ],
-    }
-    result = migrate_v2_to_v3(v2)
-    report_v3 = ReportV3.model_validate(result)
-    assert report_v3.claims == []
 
 
 def test_write_and_read_report_v3_roundtrip(tmp_path):
@@ -1121,57 +1021,6 @@ def test_red_team_findings_ueberleben_den_rebuild_durch_save_report(tmp_path, mo
     )
 
 
-def test_legacy_migration_liefert_eindeutige_ids_ueber_abschnitte():
-    """Issue #1341, Codex-Review PR #1349: der zweite ReportV3-Producer.
-
-    ``migrate_v2_to_v3()`` sagt zu, ein ReportV3-valides Dict zu liefern. Es
-    uebernahm dieselbe abschnittslokale Rohform wie der Live-Pfad — mit der
-    Eindeutigkeit im Vertrag haette eine mehrabschnittige Legacy-Migration
-    damit ein Dokument erzeugt, das an der eigenen Zusage scheitert.
-    """
-    from app.services.evidence_migrations import migrate_v2_to_v3  # noqa: PLC0415
-
-    def _abschnitt(index: int, thema: str) -> dict:
-        return {
-            "section_index": index,
-            "section_title": f"Abschnitt {index}",
-            "claims": [
-                {
-                    "claim_id": "claim_01",
-                    "claim_text": f"{thema} ist im Korpus belegt.",
-                    "confidence_label": "medium",
-                    "evidence": [],
-                },
-                {
-                    "claim_id": "claim_02",
-                    "claim_text": f"{thema} wirkt auf die Adoption.",
-                    "confidence_label": "medium",
-                    "evidence": [],
-                },
-            ],
-            "data_gaps": [
-                {
-                    "gap_id": "gap_01",
-                    "claim_text": f"Zahlen zu {thema} fehlen.",
-                    "gap_reason": "no_evidence_bound",
-                },
-            ],
-        }
-
-    migrated = migrate_v2_to_v3({
-        "schema_version": 2,
-        "report_id": "report_legacy00001",
-        "simulation_id": "sim_legacy000001",
-        "global_evidence": [],
-        "sections": [_abschnitt(1, "Sicherheitsbedenken"), _abschnitt(2, "Preisdruck")],
-    })
-
-    claim_ids = [claim["id"] for claim in migrated.get("claims", [])]
-    gap_ids = [gap["id"] for gap in migrated.get("data_gaps", [])]
-    assert len(claim_ids) == len(set(claim_ids)), f"Claim-IDs kollidieren: {claim_ids}"
-    assert len(gap_ids) == len(set(gap_ids)), f"Gap-IDs kollidieren: {gap_ids}"
-    # Die Zusage des Migrationspfads: das Ergebnis ist ReportV3-valide.
-    ReportV3.model_validate(migrated)
 
 
 def test_geerbte_red_team_findings_werden_validiert(tmp_path, monkeypatch):

@@ -45,7 +45,6 @@
 #
 # Top-Hotspots und ihre Refactor-Zustaendigkeit:
 #   F (cc=69)  report_agent/manager.py::ReportManager.build_report_v3
-#   F (cc=68)  evidence_migrations.py::migrate_v2_to_v3
 #   F (cc=57)  report_agent/agent.py::ReportAgent._record_tool_evidence
 #   F (cc=55)  report_agent/workflow.py::generate_report
 #   F (cc=52)  report_agent/agent.py::ReportAgent._save_evidence_section
@@ -56,8 +55,11 @@
 #     Komplexitaet aber wieder auf 55 gestiegen. Zweiter Schnitt offen:
 #     Init -> Status -> Budget-Reraise (#978).
 #   - app/services/oasis_profile_generator.py (E): OASIS-Profil-Refactor.
-#   - app/services/evidence_migrations.py (F/D): aus P3.1-Followup (Commit
-#     83b7488), echte Persona/Segment/FrictionPoint/TrustSignal-Aggregation.
+#   - app/services/evidence_migrations.py (D): verbleibende Hotspots sind
+#     migrate_evidence_map_v2_to_v3 und demote_unanchored_seed_corpus_records,
+#     beide live ueber normalize_persisted_evidence_map. Der frueher hier
+#     gelistete F-Hotspot migrate_v2_to_v3 (cc=68) ist ersatzlos entfallen,
+#     siehe docs/decisions/0005-keine-v2-report-migration.md.
 #     Eigener Refactor-Slice nach v1.0 (Aufgabenkatalog: Aggregations-Helper
 #     splitten, Persona-Mapper als eigenes Modul).
 #   - app/services/sim/process_manager.py: start_simulation aufspalten (nach v1.0).
@@ -138,9 +140,7 @@ app/services/report_agent/storage.py::_upgrade_report_v3_payload  # cc<=21
 # fuenf D-Hotspots in den Bestand gebracht, deren Allowlist-Nachzug ausgeblieben
 # war; contract-gates lief auf main deshalb ueber acht Laeufe rot (#1213).
 app/services/evidence_entailment.py::classify_evidence  # cc<=38
-app/services/evidence_migrations.py::migrate_v2_to_v3  # cc<=68
 app/services/evidence_migrations.py::migrate_evidence_map_v2_to_v3  # cc<=25
 app/services/evidence_migrations.py::demote_unanchored_seed_corpus_records  # cc<=27
-app/services/evidence_migrations.py::_map_profile_to_persona  # cc<=21
 app/contracts/report_contract.py::EvidenceMapModel  # cc<=25
 app/contracts/report_contract.py::EvidenceMapModel.validate_evidence_cross_references  # cc<=24
