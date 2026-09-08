@@ -288,7 +288,16 @@ describe('Router – Struktur-Integrität', () => {
   // InteractionView.vue, SettingsView.vue, SettingsUsersTeamsView.vue,
   // AppShellDemoView.vue, Agora2026View.vue, ActiveModelBadge.vue,
   // Workspace*-Familie — alle laut Filesystem-Check nicht mehr vorhanden).
-  it('jede nicht-redirect Route liefert eine auflösbare Komponente (keine toten Legacy-Referenzen)', async () => {
+  // Eigenes Timeout: dieser Test loest die Routen-Komponenten ECHT auf, statt
+  // nur den Router zu befragen. Die einzige nicht per `vi.mock` gestubbte View
+  // (`views/shell/SimulationLiveView.vue`) wird dabei samt Abhaengigkeiten
+  // frisch transformiert und braucht dafuer gemessene ~2 s, je nach Maschine
+  // auch mehr — der Test lag damit schon unter vitest 4 knapp unter dem
+  // 5-s-Default und kippte je nach Auslastung darueber (auf `main` lokal
+  // reproduzierbar, im CI nur sporadisch). Das ist kein Grund, die Aufloesung
+  // zu stubben: genau sie ist der Zweck des Tests. Also bekommt er die Zeit,
+  // die echte Transforms nun einmal kosten.
+  it('jede nicht-redirect Route liefert eine auflösbare Komponente (keine toten Legacy-Referenzen)', { timeout: 30_000 }, async () => {
     for (const route of router.getRoutes()) {
       if (route.redirect !== undefined) continue
       const componentEntry = route.components?.default
