@@ -10,6 +10,7 @@ from ...utils.logger import get_logger
 from ..report_intent import ReportIntent, detect_report_intent, section_specs_for_intent
 from ..report_prompts import DEFAULT_REPORT_SECTIONS, format_required_sections
 from .prompts import PLAN_SYSTEM_PROMPT_TEMPLATE, PLAN_USER_PROMPT_TEMPLATE
+from .run_degradation import mark_fallback_outline_used
 from .schemas import PlanResponse
 
 logger = get_logger('agora.report_agent')
@@ -158,6 +159,9 @@ def plan_outline(
         if isinstance(e, BudgetExceededError):
             raise
         logger.error(f"Outline planning failed: {str(e)}")
+        # Issue #1479: der Bericht muss ausweisen, dass seine Struktur nicht
+        # vom Modell stammt, sondern aus diesem festen Ersatzschema.
+        mark_fallback_outline_used(agent)
         # Return default outline (3 sections as fallback) — all descriptions filled.
         return ReportOutline(
             title="Scenario Evaluation Report",

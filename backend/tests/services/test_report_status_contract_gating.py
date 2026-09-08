@@ -442,7 +442,15 @@ class TestBuildPartialReportCarriesQuoteValidationFailure:
     def _call(self, quote_validation_failed_section_indices):
         report = MagicMock()
         report.report_id = "report_partial_01"
-        with patch("app.services.report_agent.workflow.ReportManager") as mock_rm:
+        with (
+            patch("app.services.report_agent.workflow.ReportManager") as mock_rm,
+            # Issue #1479: _build_partial_report ruft jetzt
+            # _apply_requirement_check auf; agent.simulation_requirement ist
+            # hier ein unkonfigurierter MagicMock, den detect_report_intent()
+            # nicht verarbeiten kann. Der Requirement-Checker ist nicht
+            # Gegenstand dieser Tests.
+            patch("app.config.Config.REPORT_REQUIREMENT_CHECKER_ENABLED", False),
+        ):
             mock_rm.assemble_full_report.return_value = "# Teil-Report\n\nInhalt."
             mock_rm.save_report.return_value = None
             mock_rm.update_progress.return_value = None

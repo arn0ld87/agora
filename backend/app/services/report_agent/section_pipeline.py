@@ -226,18 +226,30 @@ def _restore_persisted_section(
     ctx: SectionContext,
     *,
     section_index: int,
+    persisted_entry: Dict[str, Any],
 ) -> SectionResult:
     """Übernimmt einen bereits persistierten Abschnitt unverändert.
 
     Der Aufrufer prüft vorher, ob Evidence vorhanden ist. Siehe process_section().
+
+    Issue #1479 (Codex-Review Runde 3, Finding 1): ``generation_failed`` steht
+    bereits in der persistierten Evidence — ein Resume baut aber einen neuen
+    Aufruf mit einer leeren ``failed_section_indices``-Liste, und diese
+    Funktion gab den Fehlschlag bisher nicht weiter. Ein zuvor gescheiterter,
+    beim Resume nur restaurierter Abschnitt verschwand damit aus der
+    Fehlerliste, und ein sonst vollständiger Rest-Lauf konnte den Report auf
+    COMPLETED heben, obwohl der Abschnitt weiterhin Fallback-Text enthält.
     """
     section.content = ctx.report_manager._clean_section_content(
         ctx.persisted_section_contents[section_index], section.title
     )
+    generation_failed = bool(persisted_entry.get("generation_failed", False))
     return SectionResult(
         section_index=section_index,
         title=section.title,
         content=section.content,
+        failed=generation_failed,
+        evidence=SectionEvidenceOutcome(generation_failed=generation_failed),
         restored=True,
     )
 
@@ -576,12 +588,21 @@ def process_section(
         # Prüfe ob Evidence vorhanden ist — Markdown ohne Evidence wird
         # als unvollständig behandelt und neu generiert (verhindert Orphans).
         persisted_sections = (agent.evidence_map or {}).get("sections") or []
-        has_persisted_evidence = any(
-            s.get("section_index") == section_index for s in persisted_sections
+        persisted_entry = next(
+            (
+                s
+                for s in persisted_sections
+                if isinstance(s, dict) and s.get("section_index") == section_index
+            ),
+            None,
         )
-        if has_persisted_evidence:
+        if persisted_entry is not None:
             return _restore_persisted_section(
-                agent, section, ctx, section_index=section_index
+                agent,
+                section,
+                ctx,
+                section_index=section_index,
+                persisted_entry=persisted_entry,
             )
         logger.warning(
             "section %d (%r): Markdown auf Platte, aber Evidence fehlt — "

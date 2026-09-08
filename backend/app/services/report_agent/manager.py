@@ -808,14 +808,11 @@ class ReportManager:
         ihn endgültig. Das Artefakt ist bewusst backend-intern (dieselbe
         Kategorie wie progress.json), kein API-Contract.
         """
-        cls._write_json_atomic(
-            cls._get_run_events_path(report_id),
-            {
-                "work_trace_removed_sections": sorted(
-                    {int(index) for index in section_indices}
-                )
-            },
+        existing = cls._read_json_safe(cls._get_run_events_path(report_id)) or {}
+        existing["work_trace_removed_sections"] = sorted(
+            {int(index) for index in section_indices}
         )
+        cls._write_json_atomic(cls._get_run_events_path(report_id), existing)
 
     @classmethod
     def load_work_trace_removed_sections(cls, report_id: str) -> set:
@@ -825,6 +822,32 @@ class ReportManager:
             int(index)
             for index in (data.get("work_trace_removed_sections") or [])
         }
+
+    @classmethod
+    def save_fallback_outline_used(cls, report_id: str, used: bool) -> None:
+        """Persistiert den Fallback-Outline-Marker im selben Run-Events-
+        Artefakt wie die Work-Trace-Marker (Issue #1479, Codex-Review
+        Runde 3, Finding 2).
+
+        Ein Resume baut einen neuen Agenten mit ``fallback_outline_used =
+        False``. Existiert die (fehlerhafte) Fallback-Outline bereits, umgeht
+        ``generate_report`` die erneute LLM-Planung — der Marker würde ohne
+        diese Persistenz beim Resume unwiederbringlich verloren gehen, und
+        der Report würde verschweigen, dass seine Struktur nicht vom Modell
+        stammt. Liest und schreibt dieselbe Datei wie
+        ``save_work_trace_removed_sections`` — bewusst kein zweiter
+        Persistenzmechanismus daneben.
+        """
+        existing = cls._read_json_safe(cls._get_run_events_path(report_id)) or {}
+        existing["fallback_outline_used"] = bool(used)
+        cls._write_json_atomic(cls._get_run_events_path(report_id), existing)
+
+    @classmethod
+    def load_fallback_outline_used(cls, report_id: str) -> bool:
+        """Liest den persistierten Fallback-Outline-Marker; False wenn nicht
+        vorhanden."""
+        data = cls._read_json_safe(cls._get_run_events_path(report_id)) or {}
+        return bool(data.get("fallback_outline_used", False))
 
     @classmethod
     def assemble_full_report(cls, report_id: str, outline: ReportOutline) -> str:

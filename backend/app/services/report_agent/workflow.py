@@ -44,6 +44,8 @@ from .run_degradation import (
     assert_run_invariants,
     collect_run_degradations,
     events_for,
+    clear_fallback_outline_used,
+    mark_fallback_outline_used,
     mark_forced_final,
     mark_metadata_failure,
     mark_work_traces_removed,
@@ -1288,9 +1290,24 @@ def _restore_work_trace_markers(agent: Any, report_id: str) -> None:
     Agenten; bereits persistierte Sections laufen nicht erneut durch
     _finalize_content, ihr Sanitization-Marker wäre also endgültig
     verloren. Der Zustand wird pro Lauf persistiert und hier — vor der
-    ersten Cancel-Grenze — wiederhergestellt."""
+    ersten Cancel-Grenze — wiederhergestellt.
+
+    Issue #1479 (Codex-Review Runde 3, Finding 2): derselbe Verlust betrifft
+    ``fallback_outline_used`` — ein Resume baut einen neuen Agenten mit
+    ``fallback_outline_used = False``, und eine bereits persistierte
+    Fallback-Outline umgeht die erneute LLM-Planung, in der der Marker
+    sonst gesetzt würde. Wiederhergestellt aus demselben Run-Events-
+    Artefakt wie die Work-Trace-Marker."""
     for index in sorted(ReportManager.load_work_trace_removed_sections(report_id)):
         mark_work_traces_removed(agent, index)
+    # ``is True`` statt Truthy-Check: ein in Tests unkonfigurierter
+    # ``ReportManager``-MagicMock liefert für einen beliebigen Methodenaufruf
+    # ein truthy MagicMock-Objekt zurück, das den Marker sonst überall dort
+    # fälschlich setzen würde, wo ``load_fallback_outline_used`` nicht
+    # explizit auf ``True``/``False`` gestellt ist. Die echte Implementierung
+    # liefert immer einen echten ``bool``.
+    if ReportManager.load_fallback_outline_used(report_id) is True:
+        mark_fallback_outline_used(agent)
 
 
 def _persist_work_trace_markers(agent: Any, report_id: str) -> None:
@@ -1303,6 +1320,80 @@ def _persist_work_trace_markers(agent: Any, report_id: str) -> None:
         ReportManager.save_work_trace_removed_sections(report_id, markers)
 
 
+def _persist_fallback_outline_marker(agent: Any, report_id: str) -> None:
+    """Issue #1479 (Codex-Review Runde 3, Finding 2): der Marker muss den
+    Lauf überleben, sonst verliert ihn ein Resume mit neuem Agenten — siehe
+    ``_restore_work_trace_markers``."""
+    used = bool(events_for(agent).fallback_outline_used)
+    # Auch das ``False`` schreiben: heilt ein Resume die Planungsstoerung,
+    # muss der Marker das sagen — sonst verwirft ``_reusable_persisted_outline``
+    # den nun reell geplanten Outline bei jedem weiteren Resume erneut.
+    ReportManager.save_fallback_outline_used(report_id, used)
+
+
+def _reusable_persisted_outline(
+    existing_report: Optional["Report"], report_id: str
+) -> Optional[Any]:
+    """Persistierten Outline nur wiederverwenden, wenn er echt geplant wurde.
+
+    Issue #1479 (Codex-Review Runde 5): seit Runde 4 der Read vor dem ersten
+    ``save_report`` liegt, ist ein persistierter Outline auf dem Resume-Pfad
+    tatsaechlich sichtbar — vorher sah ``generate_report`` hier immer den
+    frisch gespeicherten Report mit ``outline=None`` und plante ohnehin neu.
+    Damit wurde ein FALLBACK-Outline erstmals wiederverwendbar, und genau das
+    ist schaedlich: der Drei-Sektionen-Fallback besteht die
+    Required-Section-Pruefung nicht, ein Resume liefe sofort wieder in
+    ``INCOMPLETE`` und die angebotene Wiederaufnahme koennte eine nur
+    voruebergehende Planungsstoerung nie mehr heilen.
+
+    Ein als ``fallback_outline_used`` markierter Outline wird deshalb
+    verworfen und neu geplant. Ein reell geplanter Outline wird wie bisher
+    wiederverwendet — das ist der Sinn des Resume.
+    """
+    outline = existing_report.outline if existing_report else None
+    if outline is None:
+        return None
+    if ReportManager.load_fallback_outline_used(report_id) is True:
+        logger.info(
+            "Persistierter Outline stammt aus dem Fallback — wird verworfen und neu geplant",
+            extra={"report_id": report_id},
+        )
+        return None
+    return outline
+
+
+def _merge_run_degradations(
+    existing_report: Optional["Report"],
+    freshly_collected: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Führt eine bereits persistierte Degradationsliste mit frisch
+    berechneten Einträgen zusammen, statt sie zu ersetzen.
+
+    Issue #1479 (Codex-Review Runde 3, Finding 2): die in Runde 2 in den
+    ``missing``-Zweig eingebaute Zuweisung ersetzte eine zuvor persistierte
+    Degradationsliste (z. B. ``outline_planning`` und ``run_cancellation``
+    aus einem Cancel an der Post-Outline-Grenze im vorigen Aufruf) durch
+    eine frisch berechnete — auf dem Resume-Pfad, wo der neue Agent
+    ``fallback_outline_used`` erst wieder aus dem Run-Events-Artefakt lernt,
+    potenziell eine leere oder unvollständige Liste. Deduplikation über
+    ``(component, reason)``, damit ein wiederholter Lauf keinen Eintrag
+    verdoppelt.
+    """
+    existing = existing_report.run_degradations if existing_report else None
+    merged: List[Dict[str, Any]] = list(existing or [])
+    seen = {
+        (entry.get("component"), entry.get("reason"))
+        for entry in merged
+        if isinstance(entry, dict)
+    }
+    for entry in freshly_collected:
+        key = (entry.get("component"), entry.get("reason"))
+        if key not in seen:
+            merged.append(entry)
+            seen.add(key)
+    return merged
+
+
 def _build_partial_report(
     report: "Report",
     *,
@@ -1312,12 +1403,17 @@ def _build_partial_report(
     agent: Any,
     progress_callback: Optional[Callable[[str, int, str], None]],
     quote_validation_failed_section_indices: Optional[List[int]] = None,
+    failed_section_indices: Optional[List[int]] = None,
 ) -> "Report":
     """Finalisiert einen Teil-Report nach kooperativem Cancel.
 
-    Assembliert den Markdown-Inhalt aus den bereits geschriebenen Sections,
-    setzt ``status=COMPLETED`` (success-with-caveat) und persistiert
-    einen separaten Partial-Metadata-JSON-Artifact neben dem Report.
+    Assembliert den Markdown-Inhalt aus den bereits geschriebenen Sections
+    und ermittelt den ehrlichen Status: ``COMPLETED`` nur wenn tatsächlich
+    alle Sections vorliegen und keine blockierende Degradation greift, sonst
+    ``INCOMPLETE`` (Issue #1479 — ein Teil-Report mit Cancel-bedingt
+    fehlenden Sections lief bislang unbedingt als COMPLETED hinaus).
+    Persistiert zusätzlich einen separaten Partial-Metadata-JSON-Artifact
+    neben dem Report.
     """
     from ...models.report import ReportStatus
     from datetime import datetime
@@ -1348,9 +1444,20 @@ def _build_partial_report(
     # darin regelbasierte Platzhalter waren — genau die Luecke, die der
     # Normalpfad seit diesem Issue schliesst.
     persona_fallbacks, persona_total = _load_persona_fallback_stats(agent)
+    # Issue #1479: Sections, die die Schleife nach dem Cancel nie mehr
+    # anfasste, sind kein Nebenaspekt — ``completed_section_titles`` zählt
+    # auch fehlgeschlagene, aber immerhin versuchte Sections mit; die
+    # Differenz zur Outline-Länge ist ausschließlich das, was der Abbruch
+    # verhindert hat.
+    missing_section_count = max(
+        len(outline.sections) - len(completed_section_titles), 0
+    )
     report.run_degradations = collect_run_degradations(
         persona_fallback_count=persona_fallbacks,
         persona_total=persona_total,
+        failed_section_indices=failed_section_indices or [],
+        fallback_outline_used=events_for(agent).fallback_outline_used,
+        cancelled_missing_section_count=missing_section_count,
         work_trace_removed_section_indices=sorted(
             events_for(agent).work_trace_removed_sections
         ),
@@ -1358,6 +1465,11 @@ def _build_partial_report(
     report.status = apply_run_degradation_downgrade(
         report.status, report.run_degradations
     )
+    # Issue #1479: auch der Teil-Report muss durch die Vollständigkeits-
+    # prüfung — sonst zeigt ein abgebrochener Lauf ohne fehlende Section
+    # (Cancel exakt an der letzten Grenze) trotzdem inhaltlich dünnen Text
+    # als COMPLETED aus.
+    _apply_requirement_check(report, agent, report_id)
 
     ReportManager.save_report(report)
 
@@ -1379,20 +1491,47 @@ def _build_partial_report(
             "_build_partial_report: could not write partial_metadata.json: %r", exc
         )
 
+    # Issue #1479 (Codex-Review Runde 2, Finding 1): der Status oben kann
+    # bereits ehrlich INCOMPLETE sein (Run-Degradation-Downgrade,
+    # Requirement-Check) — die beiden Terminal-Events an Polling
+    # (``update_progress``) und Streaming (``progress_callback``) duerfen das
+    # nicht uebertoenen, sonst sieht jeder Consumer trotzdem "completed".
+    # Progress bleibt bei 100: anders als die fruehen ``missing``-/Persona-
+    # Floor-Returns (Progress 0, dort wurde nichts generiert) hat dieser Pfad
+    # bereits fertige Sections. Gleiches Muster wie der Normalpfad am
+    # eigentlichen Laufende (siehe unten, "terminal_stage").
+    if report.status == ReportStatus.INCOMPLETE:
+        terminal_stage = "incomplete"
+        terminal_message = (
+            f"Partial report incomplete ({len(completed_section_titles)} "
+            "sections completed before cancel)"
+        )
+    else:
+        terminal_stage = "completed"
+        terminal_message = (
+            f"Partial report generated ({len(completed_section_titles)} "
+            "sections completed before cancel)"
+        )
     ReportManager.update_progress(
         report_id,
-        "completed",
+        terminal_stage,
         100,
-        f"Partial report generated ({len(completed_section_titles)} sections completed before cancel)",
+        terminal_message,
         completed_sections=completed_section_titles,
     )
     if progress_callback:
         progress_callback(
-            "completed",
+            terminal_stage,
             100,
-            f"Partial report generated ({len(completed_section_titles)} sections)",
+            terminal_message,
         )
     if agent.report_logger:
+        # Bewusst unveraendert: ``log_report_complete`` ist ein interner
+        # Audit-Log-Eintrag (agent_log.jsonl), kein Consumer-Terminal-Event.
+        # Er meldet, dass die Generierungsphase abgeschlossen wurde — nicht,
+        # dass der Inhalt vollstaendig ist. Der Normalpfad ruft ihn ebenso
+        # unbedingt auf, bevor dort ueber INCOMPLETE/COMPLETED entschieden
+        # wird (Zeile ~1795 vor Zeile ~1927) — dieselbe Semantik gilt hier.
         agent.report_logger.log_report_complete(
             total_sections=len(completed_section_titles),
             total_time_seconds=0.0,
@@ -1546,6 +1685,20 @@ def generate_report(
         )
         agent.console_logger = agent.ReportConsoleLogger(report_id)
 
+        # Issue #1479 (Codex-Review Runde 4, Finding 1): dieser Read muss VOR
+        # dem folgenden ``save_report(report)`` stattfinden. Der frische
+        # ``Report`` von oben traegt eine leere ``run_degradations``-Liste;
+        # laese man ``existing_outline`` erst danach (wie zuvor), saehe man
+        # bereits die eigene, gerade geschriebene leere Liste statt des
+        # zuvor persistierten Stands — ein ``run_cancellation``-Eintrag aus
+        # einem Cancel nach Planung (Stage-Boundary 1) waere dann schon beim
+        # naechsten Resume verloren, bevor ``_merge_run_degradations`` (unten)
+        # ihn je zu Gesicht bekommt. Separates Persistieren des
+        # Cancel-Zustands (Alternativoption aus dem Finding) wuerde denselben
+        # Bug nur duplizieren: die Reihenfolge Save-vor-Read ist der Fehler,
+        # nicht das fehlende Feld.
+        existing_outline = ReportManager.get_report(report_id)
+
         ReportManager.update_progress(report_id, "pending", 0, "Initializing report...", completed_sections=[])
         ReportManager.save_report(report)
 
@@ -1555,16 +1708,20 @@ def generate_report(
         if progress_callback:
             progress_callback("planning", 0, "Start planning report outline...")
 
-        existing_outline = ReportManager.get_report(report_id)
-        if existing_outline and existing_outline.outline:
-            outline = existing_outline.outline
-        else:
+        outline = _reusable_persisted_outline(existing_outline, report_id)
+        if outline is None:
+            # Vor dem neuen Versuch den aus dem Vorlauf geerbten Marker
+            # loeschen (#1479 Codex-Runde 6) — nur der Fallback-Pfad dieses
+            # Versuchs darf ihn wieder setzen. Sonst gilt ein gelungener
+            # Retry weiterhin als Fallback.
+            clear_fallback_outline_used(agent)
             outline = plan_outline_impl(
                 agent,
                 progress_callback=lambda stage, prog, msg: progress_callback(stage, prog // 5, msg) if progress_callback else None,
             )
             agent.report_logger.log_planning_complete(outline.to_dict())
             ReportManager.save_outline(report_id, outline)
+            _persist_fallback_outline_marker(agent, report_id)
 
         report.outline = outline
         ReportManager.update_progress(report_id, "planning", 15, f"Outline planning completed, {len(outline.sections)} sections in total", completed_sections=[])
@@ -1594,6 +1751,30 @@ def generate_report(
         if missing:
             report.status = ReportStatus.INCOMPLETE
             report.missing_sections = missing
+            # Issue #1479 (Codex-Review Runde 2, Finding 2): dieser fruehe
+            # Return erreicht die einzige Degradations-Aggregation (siehe
+            # unten, ~Zeile 1780) nie. Faellt plan_outline() in den Fallback
+            # (drei feste Ersatz-Sections, die weder ein Intent-Preset noch
+            # DEFAULT_REPORT_SECTIONS treffen), landet der Lauf garantiert
+            # hier — ohne diesen Eintrag wuerde die Fallback-Outline nie
+            # persistiert, und der Report verschwiege, dass seine Struktur
+            # nicht vom Modell stammt. Es sind an dieser Stelle noch keine
+            # Sections gelaufen; ein ``collect_run_degradations``-Aufruf mit
+            # ausschliesslich ``fallback_outline_used`` ist deshalb ehrlich
+            # und nicht unvollstaendig. ``apply_run_degradation_downgrade``
+            # braucht es hier nicht: der Status ist bereits INCOMPLETE.
+            # Issue #1479 (Codex-Review Runde 3, Finding 2): diese Zuweisung
+            # ersetzte in Runde 2 eine bereits persistierte Degradationsliste
+            # durch eine frisch berechnete — auf dem Resume-Pfad also durch
+            # eine leere. ``_merge_run_degradations`` bewahrt den zuvor
+            # persistierten Eintrag (``existing_outline`` wurde oben bereits
+            # geladen).
+            report.run_degradations = _merge_run_degradations(
+                existing_outline,
+                collect_run_degradations(
+                    fallback_outline_used=events_for(agent).fallback_outline_used,
+                ),
+            )
             message = f"Fehlende Pflichtabschnitte: {', '.join(missing)}"
             ReportManager.update_progress(
                 report_id,
@@ -1674,15 +1855,23 @@ def generate_report(
                     agent=agent,
                     progress_callback=progress_callback,
                     quote_validation_failed_section_indices=quote_validation_failed_section_indices,
+                    failed_section_indices=failed_section_indices,
                 )
             section_num = i + 1
             result: SectionResult = process_section(
                 agent, section, section_ctx, section_index=section_num
             )
-            if result.restored:
-                continue
+            # Issue #1479 (Codex-Review Runde 3, Finding 1): auch ein
+            # wiederhergestellter (restaurierter) Abschnitt kann laut
+            # persistierter Evidence ``generation_failed`` sein — dieser
+            # Zweig muss ihn in ``failed_section_indices`` aufnehmen, bevor
+            # der ``continue`` unten die restlichen Übernahmeschritte
+            # überspringt (die für einen bereits gezählten Abschnitt nicht
+            # nötig sind).
             if result.failed:
                 failed_section_indices.append(section_num)
+            if result.restored:
+                continue
             if result.quote_validation_failed:
                 quote_validation_failed_section_indices.append(section_num)
             generated_sections.append(result.markdown)
@@ -1748,6 +1937,9 @@ def generate_report(
             interviews_succeeded=_count_interview_evidence(agent),
             interview_disabled_reason=breaker_for(agent).reason_for("interview_agents"),
             failed_section_indices=failed_section_indices,
+            # Issue #1479: dieselbe Warnung gilt auch für einen Lauf, der
+            # trotz Fallback-Outline bis zum Ende durchlief.
+            fallback_outline_used=events_for(agent).fallback_outline_used,
             forced_final_section_indices=events_for(agent).forced_final_sections,
             work_trace_removed_section_indices=events_for(
                 agent

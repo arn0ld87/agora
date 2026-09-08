@@ -34,7 +34,8 @@ from ..services.llm_routing_seed import (
     resolve_route_api_key,
     seed_run_stage_routing,
 )
-from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
+from ..services.report_agent import ReportAgent, ReportManager
+from ..services.report_agent.output_contract import is_deliverable_report_status
 from ..services.report_generation import (
     finish_cancelled_run,
     finish_completed_run,
@@ -1104,11 +1105,18 @@ def _resume_report_generate(run: dict):
                 finish_cancelled_run(
                     run["run_id"], report_id=report_id, simulation_id=simulation_id
                 )
-            elif report.status == ReportStatus.COMPLETED:
+            elif is_deliverable_report_status(report.status):
+                # Issue #1479: ein INCOMPLETE-Report ist ein ehrliches
+                # Teilergebnis, kein Fehlschlag — die alte Gleichheitsprüfung
+                # gegen COMPLETED schickte ihn in den else-Zweig und meldete
+                # den Resume faelschlich als "failed".
                 finish_completed_run(
-                    run["run_id"], report_id=report_id, simulation_id=simulation_id
+                    run["run_id"],
+                    report_id=report_id,
+                    simulation_id=simulation_id,
+                    report_status=report.status.value,
                 )
-                task_manager.complete_task(task_id, result={"report_id": report_id, "simulation_id": simulation_id})
+                task_manager.complete_task(task_id, result={"report_id": report_id, "simulation_id": simulation_id, "status": report.status.value})
             else:
                 run_registry.update_run(run["run_id"], status="failed", message=report.error or "Report generation failed", error=report.error)
                 task_manager.fail_task(task_id, report.error or "Report generation failed")
