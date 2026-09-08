@@ -437,10 +437,32 @@ export type EvidenceCoverageEntry = z.infer<typeof EvidenceCoverageEntrySchema>;
  */
 function _stakeholderGroupKey(value: string | null | undefined): string {
   if (!value) return "";
-  // `str.casefold()` in Python faltet "ß" auf "ss"; `toLowerCase()` tut das
-  // nicht. Ohne diese Ersetzung waeren "Grosshaendler" und "Großhaendler"
-  // im Backend eine Gruppe und hier zwei — Spiegel-Drift auf einem Hartanker.
-  return value.split(/\s+/).filter(Boolean).join(" ").toLowerCase().replace(/ß/g, "ss");
+  // Naeherung an Python `str.casefold()` (ADR-0002 Anker 4, Backend-Anker
+  // `_stakeholder_group_key`). JS kennt kein `casefold()`. Reihenfolge ist
+  // bindend — siehe Regressionstests in reportContract.spec.ts:
+  //   1. `normalize("NFKC")` faengt u.a. `ſ` (U+017F LATIN SMALL LETTER
+  //      LONG S) und Kompatibilitaets-Ligaturen ab, die `toLowerCase()`
+  //      allein unveraendert liesse.
+  //   2. `toLowerCase()` fuer den regulaeren Gross-/Kleinschreibungsfall.
+  //   3. Explizite Sonderfaelle, die weder NFKC noch `toLowerCase()`
+  //      abdecken, Python-`casefold()` aber faltet: `ß` -> `ss`,
+  //      `ς` (griechisches Schluss-Sigma) -> `σ`.
+  //
+  // Bleibende Divergenz zu Python: das ist KEINE vollstaendige
+  // `casefold()`-Aequivalenz. Es deckt keine weiteren Sonderfaelle der
+  // Unicode-Casefolding-Tabelle ab, die weder unter NFKC noch unter den
+  // beiden Ersetzungen fallen (z.B. tuerkisches "İ"/"i̇"). Der Spiegel darf
+  // dadurch nur STRENGER, nie LAXER als das Backend werden — ein noch nicht
+  // abgedeckter Sonderfall fuehrt hoechstens dazu, dass der Spiegel zwei
+  // Gruppen zaehlt, wo Python eine zaehlt (strenger), nie umgekehrt.
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .join(" ")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/ß/g, "ss")
+    .replace(/ς/g, "σ");
 }
 
 /**

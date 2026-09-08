@@ -605,6 +605,21 @@ describe('EvidenceMapSchema — cross_stakeholder_for_high Rollenfamilien-Spiege
     );
   });
 
+  it('faltet U+017F (LATIN SMALL LETTER LONG S) wie Pythons casefold auf "s" — eine Rollenfamilie', () => {
+    // Python `str.casefold()` faltet "ſupervisor" (mit U+017F) und
+    // "supervisor" auf denselben Vergleichsschluessel. `toLowerCase()`
+    // allein liesse "ſ" unveraendert stehen — ohne `normalize("NFKC")"
+    // zaehlte der Spiegel hier zwei Rollenfamilien, wo das Backend eine
+    // sieht, und waere damit LOCKERER als ADR-0002 Anker 4.
+    const evidenceMap = buildEvidenceMap([
+      { persona_stakeholder_group: 'ſupervisor Team A', persona_role_family: 'ſupervisor' },
+      { persona_stakeholder_group: 'supervisor Team B', persona_role_family: 'supervisor' },
+    ]);
+    expect(() => EvidenceMapSchema.parse(evidenceMap)).toThrow(
+      /mindestens 2 unterschiedlichen Stakeholder-Gruppen/,
+    );
+  });
+
   it('faellt ohne persona_role_family auf den rohen Stakeholder-Titel zurück (Alt-Artefakte)', () => {
     const evidenceMap = buildEvidenceMap([
       { persona_stakeholder_group: 'Geschaeftsfuehrung' },
