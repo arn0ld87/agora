@@ -290,3 +290,86 @@ class TestVisionModelOverrideAttribution:
         assert recorder.calls[0]["success"] is False
         assert recorder.calls[0]["model"] == "gemini-3-flash-preview:cloud"
         assert recorder.calls[0]["model"] != client.model
+
+
+class TestLogInvocationEventProviderIdFollowsEffectiveModel:
+    """Issue #1478 (Codex P1, Runde 5): ``provider_id`` muss aus demselben
+    effektiven Modell abgeleitet werden wie das ``model``-Feld — ueber den
+    zentralen Pfad ``registry.py::detect_provider`` (via
+    ``LLMClient._detect_provider``).
+
+    Vor dem Fix blieb ``_detect_provider()`` ohne Modell-Override an
+    ``self.model`` haengen: ``describe_image(model="...:cloud")`` gegen einen
+    lokalen Ollama-Endpoint schrieb ``provider_id="ollama"`` statt
+    ``"cloud"`` ins Ledger — ``PricingRegistry`` haelt den Call dann
+    faelschlich fuer kostenlos und ein hartes Kostenbudget kann
+    ueberschritten werden.
+    """
+
+    def _make_real_client(self) -> LLMClient:
+        """Echter ``_log_invocation_event``/``_detect_provider`` bleiben aktiv —
+        nur der Logger-Import wird im Test durch ein Double ersetzt."""
+        obj = LLMClient.__new__(LLMClient)
+        obj.model = "qwen3:8b"  # lokales Ollama-Modell, kein Cloud-Tag
+        obj.base_url = "http://localhost:11434/v1"
+        obj.run_id = "run-provider-1"
+        obj.route_provider_id = None
+        obj.route_stage = None
+        obj.routing_version = None
+        return obj
+
+    def test_success_event_uses_provider_of_effective_model(self, monkeypatch) -> None:
+        client = self._make_real_client()
+        logged: dict[str, object] = {}
+
+        class _FakeLogger:
+            def __init__(self, run_id: str) -> None:
+                logged["run_id"] = run_id
+
+            def log_event(self, **kwargs: object) -> None:
+                logged.update(kwargs)
+
+        monkeypatch.setattr(
+            "app.services.llm_invocation_logger.LlmInvocationLogger", _FakeLogger
+        )
+
+        client._log_invocation_event(
+            stage="vision",
+            latency_ms=12.0,
+            success=True,
+            prompt_tokens=10,
+            completion_tokens=5,
+            model="qwen3-coder-next:cloud",
+        )
+
+        assert logged["model"] == "qwen3-coder-next:cloud"
+        # Ollama-Cloud-Tag schlaegt den ":11434"-Basis-URL-Treffer, den
+        # self.model allein ausgeloest haette (Prioritaet in
+        # registry.py::_detect_http).
+        assert logged["provider_id"] == "cloud"
+
+    def test_no_override_keeps_provider_of_client_model(self, monkeypatch) -> None:
+        """Ohne ``model``-Override bleibt das Verhalten unveraendert:
+        ``self.model`` (kein Cloud-Tag) + lokale Base-URL -> ``"ollama"``."""
+        client = self._make_real_client()
+        logged: dict[str, object] = {}
+
+        class _FakeLogger:
+            def __init__(self, run_id: str) -> None:
+                logged["run_id"] = run_id
+
+            def log_event(self, **kwargs: object) -> None:
+                logged.update(kwargs)
+
+        monkeypatch.setattr(
+            "app.services.llm_invocation_logger.LlmInvocationLogger", _FakeLogger
+        )
+
+        client._log_invocation_event(
+            stage="chat",
+            latency_ms=5.0,
+            success=True,
+        )
+
+        assert logged["model"] == "qwen3:8b"
+        assert logged["provider_id"] == "ollama"

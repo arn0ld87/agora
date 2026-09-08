@@ -14,6 +14,8 @@ from __future__ import annotations
 from typing import Any, Dict, List
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app.services.sim import interview_client, interview_direct
 from app.services.sim.interview_direct import (
     _default_client_factory,
@@ -348,3 +350,144 @@ class TestInterviewClientLandsInBudgetGuardAndLedger:
         assert len(logged_events) == 1
         assert logged_events[0]["run_id"] == "run-e2e-1"
         assert logged_events[0]["success"] is True
+
+
+# ---------------------------------------------------------------------------
+# 6. IPC-Zweig (lebender Worker) wird gegen das harte Report-Budget gehaertet
+#    (#1478 Codex P1, Runde 5) — vorher trug der IPC-Zweig gar keinen
+#    Budget-Check; run_id lief ins Leere.
+# ---------------------------------------------------------------------------
+
+
+class _ExhaustedEnforcer:
+    """Simuliert ein bereits erschoepftes hartes Budget."""
+
+    def __init__(self) -> None:
+        self.record_calls = 0
+
+    def check_before_call(self) -> None:
+        from app.services.run_budget import BudgetExceededError
+
+        raise BudgetExceededError("calls", 11, 10)
+
+    def record_after_call(self) -> None:  # pragma: no cover - darf nicht erreicht werden
+        self.record_calls += 1
+        raise AssertionError(
+            "record_after_call darf nach einer Ablehnung in check_before_call "
+            "nicht erreicht werden"
+        )
+
+
+class TestInterviewClientIpcPathBlockedByHardBudget:
+    def test_ipc_single_interview_blocked_before_ipc_command_is_sent(
+        self, monkeypatch, tmp_path
+    ) -> None:
+        from app.services.run_budget import BudgetExceededError
+
+        sim_dir = tmp_path / "sim_0123456789ab"
+        sim_dir.mkdir(exist_ok=True)
+
+        # Worker lebt -> interview_agent waehlt den IPC-Zweig.
+        monkeypatch.setattr(interview_client, "check_env_alive", lambda *a, **k: True)
+        monkeypatch.setattr(
+            "app.services.run_budget.RunBudgetEnforcer.for_run",
+            classmethod(lambda cls, run_id: _ExhaustedEnforcer()),
+        )
+
+        def _fail_send_interview(*args: Any, **kwargs: Any) -> Any:
+            raise AssertionError(
+                "IPC-Command darf bei erschoepftem hartem Budget nicht gesendet werden"
+            )
+
+        monkeypatch.setattr(
+            interview_client.SimulationIPCClient, "send_interview", _fail_send_interview
+        )
+
+        with pytest.raises(BudgetExceededError):
+            interview_client.interview_agent(
+                "sim_0123456789ab",
+                1,
+                "Was hältst du davon?",
+                run_state_dir=str(tmp_path),
+                run_id="run-ipc-1",
+            )
+
+    def test_ipc_batch_interview_blocked_before_ipc_command_is_sent(
+        self, monkeypatch, tmp_path
+    ) -> None:
+        from app.services.run_budget import BudgetExceededError
+
+        sim_dir = tmp_path / "sim_0123456789ab"
+        sim_dir.mkdir(exist_ok=True)
+
+        monkeypatch.setattr(interview_client, "check_env_alive", lambda *a, **k: True)
+        monkeypatch.setattr(
+            "app.services.run_budget.RunBudgetEnforcer.for_run",
+            classmethod(lambda cls, run_id: _ExhaustedEnforcer()),
+        )
+
+        def _fail_send_batch(*args: Any, **kwargs: Any) -> Any:
+            raise AssertionError(
+                "IPC-Command darf bei erschoepftem hartem Budget nicht gesendet werden"
+            )
+
+        monkeypatch.setattr(
+            interview_client.SimulationIPCClient,
+            "send_batch_interview",
+            _fail_send_batch,
+        )
+
+        with pytest.raises(BudgetExceededError):
+            interview_client.interview_agents_batch(
+                "sim_0123456789ab",
+                [{"agent_id": 1, "prompt": "x"}],
+                run_state_dir=str(tmp_path),
+                run_id="run-ipc-2",
+            )
+
+    def test_ipc_path_without_run_id_stays_unguarded(self, monkeypatch, tmp_path) -> None:
+        """Kein bestehender Aufrufer ohne ``run_id`` darf Verhalten aendern —
+        der Guard bleibt dann ein No-op und das IPC-Command wird gesendet."""
+        sim_dir = tmp_path / "sim_0123456789ab"
+        sim_dir.mkdir(exist_ok=True)
+
+        monkeypatch.setattr(interview_client, "check_env_alive", lambda *a, **k: True)
+
+        def _boom_if_called(*args: Any, **kwargs: Any) -> Any:
+            raise AssertionError(
+                "RunBudgetEnforcer.for_run darf ohne run_id nicht aufgerufen werden"
+            )
+
+        monkeypatch.setattr(
+            "app.services.run_budget.RunBudgetEnforcer.for_run",
+            classmethod(_boom_if_called),
+        )
+
+        sent: Dict[str, Any] = {}
+
+        class _Response:
+            class _Status:
+                value = "completed"
+
+            status = _Status()
+            result = {"interviews_count": 0, "results": {}}
+            timestamp = "2026-09-08T00:00:00"
+
+        def _fake_send_batch(self, interviews, platform=None, timeout=120.0):
+            sent["called"] = True
+            return _Response()
+
+        monkeypatch.setattr(
+            interview_client.SimulationIPCClient,
+            "send_batch_interview",
+            _fake_send_batch,
+        )
+
+        result = interview_client.interview_agents_batch(
+            "sim_0123456789ab",
+            [{"agent_id": 1, "prompt": "x"}],
+            run_state_dir=str(tmp_path),
+        )
+
+        assert sent.get("called") is True
+        assert result["success"] is True

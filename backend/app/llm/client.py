@@ -576,9 +576,18 @@ class LLMClient:
         )
         return {key: max_tokens}
 
-    def _detect_provider(self) -> Literal["ollama", "cloud", "minimax", "openai", "google", "unknown"]:
+    def _detect_provider(
+        self, *, model: Optional[str] = None
+    ) -> Literal["ollama", "cloud", "minimax", "openai", "google", "unknown"]:
         """
         Identify the LLM provider associated with the configured endpoint and model.
+
+        ``model`` ueberschreibt ``self.model`` fuer diese eine Detection —
+        noetig, damit Aufrufer mit einem abweichenden effektiven Modell
+        (z. B. ``describe_image(model=...)``) denselben Modellwert an die
+        Provider-Erkennung reichen, den sie auch fuer die Telemetrie nutzen
+        (#1478 Codex P1, Runde 5). Default bleibt ``self.model``, damit alle
+        bestehenden Aufrufer ohne Override unveraendertes Verhalten behalten.
 
         Returns:
             str: The provider name: ``"ollama"``, ``"cloud"``, ``"minimax"``,
@@ -590,7 +599,8 @@ class LLMClient:
         # ist das korrekte Label fuer dieses Vokabular, nicht ein neuer Wert.
         if self._codex_cli_active:
             return "unknown"
-        return _provider_base.detect_provider(self.base_url, self.model)
+        effective_model = model if model is not None else self.model
+        return _provider_base.detect_provider(self.base_url, effective_model)
 
     def _publish_model_active(
         self,
@@ -729,9 +739,20 @@ class LLMClient:
         (``describe_image`` mit ``model=``-Override oder ``VISION_MODEL_NAME``).
         Default bleibt ``self.model``, damit alle bestehenden Aufrufer
         unveraendertes Verhalten behalten (#1478 Codex P1, Runde 4).
+
+        ``provider_id`` wird aus demselben effektiven Modell abgeleitet wie
+        ``model`` (ueber ``_detect_provider(model=...)``, das zentrale
+        ``registry.py::detect_provider`` bleibt die einzige Detection-
+        Heuristik) — sonst klassifiziert ein ``describe_image(model=...:cloud)``
+        gegen einen lokalen Ollama-Endpoint faelschlich als ``ollama`` statt
+        ``cloud`` und die Kostenberechnung im ``PricingRegistry`` haelt den
+        Call faelschlich fuer kostenlos (#1478 Codex P1, Runde 5).
+        ``route_provider_id`` hat weiterhin Vorrang, wo es gesetzt ist.
         """
         if not getattr(self, "run_id", None):
             return
+
+        effective_model = model if model is not None else self.model
 
         try:
             from ..services.llm_invocation_logger import LlmInvocationLogger
@@ -739,8 +760,9 @@ class LLMClient:
             logger_service = LlmInvocationLogger(self.run_id)
             logger_service.log_event(
                 stage=getattr(self, "route_stage", None) or stage,
-                provider_id=getattr(self, "route_provider_id", None) or self._detect_provider(),
-                model=model or self.model or "unknown",
+                provider_id=getattr(self, "route_provider_id", None)
+                or self._detect_provider(model=effective_model),
+                model=effective_model or "unknown",
                 base_url=self.base_url,
                 routing_version=getattr(self, "routing_version", None) or 0,
                 latency_ms=latency_ms,
