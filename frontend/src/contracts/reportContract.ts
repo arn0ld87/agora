@@ -429,6 +429,45 @@ export const EvidenceCoverageEntrySchema = z.object({
 });
 export type EvidenceCoverageEntry = z.infer<typeof EvidenceCoverageEntrySchema>;
 
+/**
+ * Vergleichsschluessel fuer `persona_stakeholder_group` (Spiegel zu
+ * `_stakeholder_group_key`, `backend/app/contracts/report_contract.py`).
+ * Normalisiert ausschliesslich fuer den Vergleich (casefold + Whitespace-
+ * Kollaps) — der gespeicherte Wortlaut bleibt unveraendert.
+ */
+function _stakeholderGroupKey(value: string | null | undefined): string {
+  if (!value) return "";
+  return value.split(/\s+/).filter(Boolean).join(" ").toLowerCase();
+}
+
+/**
+ * Auffangtypen, die keine Rollenfamilie bezeichnen (Spiegel zu
+ * `_GENERIC_ENTITY_TYPES`, `backend/app/contracts/report_contract.py`).
+ */
+const _GENERIC_ENTITY_TYPES = new Set([
+  "person", "organization", "entity", "node", "unknown", "other",
+]);
+
+/**
+ * Zaehlschluessel fuer `cross_stakeholder_for_high` (Spiegel zu
+ * `_role_family_key`, `backend/app/contracts/report_contract.py`, Issue
+ * #1477 F2). Zaehlt zuerst das kontrollierte Rollenfamilien-Label
+ * (`persona_role_family`), faellt bei generischen/fehlenden Familien auf den
+ * rohen Stakeholder-Titel (`persona_stakeholder_group`) zurueck. Muss 1:1 mit
+ * dem Backend-Pendant uebereinstimmen — dieser Validator ist ADR-0002
+ * Anker 4.
+ */
+function _roleFamilyKey(record: {
+  persona_role_family?: string | null;
+  persona_stakeholder_group?: string | null;
+}): string {
+  const family = record.persona_role_family;
+  if (family && !_GENERIC_ENTITY_TYPES.has(_stakeholderGroupKey(family))) {
+    return `family:${_stakeholderGroupKey(family)}`;
+  }
+  return `title:${_stakeholderGroupKey(record.persona_stakeholder_group)}`;
+}
+
 export const EvidenceMapSchema = z.object({
   schema_version: z.literal(3),
   report_id: z.string().min(1),
@@ -498,8 +537,7 @@ export const EvidenceMapSchema = z.object({
         const stakeholderGroups = new Set(
           supportingRecords
             .filter((record) => record.source_kind === 'agent_quote')
-            .map((record) => record.persona_stakeholder_group)
-            .filter((group): group is string => group !== undefined && group !== null),
+            .map((record) => _roleFamilyKey(record)),
         );
         if (stakeholderGroups.size < 2) {
           ctx.addIssue({

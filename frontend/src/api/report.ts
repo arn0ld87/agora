@@ -1,11 +1,12 @@
 import service, { requestWithRetry } from './index'
 import type { ApiEnvelope, ApiErrorEnvelope } from './envelope'
 import type { LlmRuntimePayload } from './llmRuntime'
-import type {
-  Report,
-  EvidenceMapResponse,
-  ReportSection,
-  EvidenceItem,
+import {
+  EvidenceMapResponseSchema,
+  type Report,
+  type EvidenceMapResponse,
+  type ReportSection,
+  type EvidenceItem,
 } from '../contracts/reportContract'
 import type { ReportMode } from '../contracts/reportV3Contract'
 import type { AiModelRef } from '../contracts/aiModelRef'
@@ -178,7 +179,20 @@ export const getReport = (reportId: string): Promise<ApiEnvelope<Report>> => {
 export type EvidenceEnvelope = EvidenceMapResponse | ApiErrorEnvelope
 
 export const getReportEvidence = (reportId: string): Promise<EvidenceEnvelope> => {
-  return service.get(`/api/report/${reportId}/evidence`)
+  return service.get(`/api/report/${reportId}/evidence`).then((resp: unknown) => {
+    // Der Fehler-Envelope (`success: false`) läuft NICHT durch
+    // `EvidenceMapResponseSchema` — das Schema verlangt `success: true` und
+    // würde jeden Fehlerfall als Drift ablehnen.
+    if (resp !== null && typeof resp === 'object' && (resp as { success?: unknown }).success === false) {
+      return resp as ApiErrorEnvelope
+    }
+    const parsed = EvidenceMapResponseSchema.safeParse(resp)
+    if (!parsed.success) {
+      console.warn('[api] evidence envelope parse failed', parsed.error.flatten())
+      throw new Error(`schema mismatch: ${parsed.error.message}`)
+    }
+    return parsed.data
+  })
 }
 
 export const getReportEvidenceSection = (
