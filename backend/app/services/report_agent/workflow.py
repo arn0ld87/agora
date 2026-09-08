@@ -1628,6 +1628,61 @@ def _sections_with_persisted_evidence(agent: Any, report_id: str) -> List[Dict[s
     ]
 
 
+def _build_and_validate_report_v3(
+    report: Any,
+    agent: Any,
+    *,
+    report_mode: Optional[str],
+    report_id: str,
+) -> None:
+    """Baut ReportV3 vorab und stuft den Report bei Schema-Verstoessen ab.
+
+    Issue #1299 (Review-Finding Codex/CodeRabbit): ``ReportManager.save_report()``
+    baut ``report-v3.json`` nur wenn ``report.status == COMPLETED`` ist und faengt
+    einen ``ValidationError`` dabei INTERN ab (kein Artefakt, aber auch kein Signal
+    an den Aufrufer, siehe ``manager.py::save_report``). Ohne diesen Vorab-Check
+    erreicht ein frisch fehlgeschlagener ReportV3-Build den Downgrade-Block im
+    Red-Team-Abschnitt nie: ``get_report_v3()`` liefert ``None`` (kein Artefakt
+    geschrieben), die Truthiness-Pruefung dort ueberspringt den gesamten
+    Validierungsblock, und ``report.status`` bleibt faelschlich ``COMPLETED``.
+
+    Mutiert ``report`` in place (``status``, ``error``, ``run_degradations``) —
+    wie zuvor inline in :func:`generate_report`. ``ReportManager`` wird bewusst
+    ueber den Modul-Namensraum aufgeloest, damit die bestehenden
+    ``patch("...workflow.ReportManager")``-Ziele der Testsuite weiter greifen.
+    """
+    if not (report.status == ReportStatus.COMPLETED and agent.evidence_map):
+        return
+    try:
+        ReportManager.build_report_v3(report, agent.evidence_map, report_mode=report_mode)
+    except ValidationError as val_exc:
+        error_count = len(val_exc.errors())
+        logger.error(
+            "generate_report: build_report_v3 hat report=%s vor der ersten "
+            "Persistierung abgelehnt — %d Schema-Verletzung(en). Errors=%s",
+            report_id,
+            error_count,
+            val_exc.errors()[:5],
+        )
+        if not getattr(report, "error", None):
+            report.error = (
+                f"Report enthält {error_count} unvollständige Section(s) — "
+                "LLM-Calls sind fehlgeschlagen. Server-Logs zeigen die "
+                "betroffenen Felder. Mit gültigem LLM-Profil neu starten."
+            )
+        report.status = apply_report_v3_validation_downgrade(
+            report.status, val_exc.errors()
+        )
+        # Die Bilanz wurde vom Aufrufer gezogen, bevor dieser Fehler auftrat.
+        # Ohne den Nachtrag stufte der Status zwar ab, aber ``run_degradations``
+        # bliebe leer — die API meldete einen unvollstaendigen Contract-Export
+        # ohne einen einzigen Grund, und die Red-Team-Invariante "degradiert,
+        # aber completed" liefe ins Leere.
+        report.run_degradations = list(report.run_degradations) + (
+            collect_run_degradations(contract_validation_errors=val_exc.errors())
+        )
+
+
 def generate_report(
     agent: Any,
     progress_callback: Optional[Callable[[str, int, str], None]] = None,
@@ -1966,46 +2021,12 @@ def generate_report(
         if agent.report_logger:
             agent.report_logger.log_report_complete(total_sections=total_sections, total_time_seconds=total_time_seconds)
 
-        # Issue #1299 (Review-Finding Codex/CodeRabbit): ``ReportManager.save_report()``
-        # baut ``report-v3.json`` nur wenn ``report.status == COMPLETED`` ist und faengt
-        # einen ``ValidationError`` dabei INTERN ab (kein Artefakt, aber auch kein Signal
-        # an den Aufrufer, siehe ``manager.py::save_report``). Ohne diesen Vorab-Check
-        # erreicht ein frisch fehlgeschlagener ReportV3-Build den Downgrade-Block unten
-        # nie: ``get_report_v3()`` liefert ``None`` (kein Artefakt geschrieben), die
-        # Truthiness-Pruefung dort ueberspringt den gesamten Validierungsblock, und
-        # ``report.status`` bleibt faelschlich ``COMPLETED``.
-        if report.status == ReportStatus.COMPLETED and agent.evidence_map:
-            try:
-                ReportManager.build_report_v3(report, agent.evidence_map, report_mode=report_mode)
-            except ValidationError as val_exc:
-                error_count = len(val_exc.errors())
-                logger.error(
-                    "generate_report: build_report_v3 hat report=%s vor der ersten "
-                    "Persistierung abgelehnt — %d Schema-Verletzung(en). Errors=%s",
-                    report_id,
-                    error_count,
-                    val_exc.errors()[:5],
-                )
-                if not getattr(report, "error", None):
-                    report.error = (
-                        f"Report enthält {error_count} unvollständige Section(s) — "
-                        "LLM-Calls sind fehlgeschlagen. Server-Logs zeigen die "
-                        "betroffenen Felder. Mit gültigem LLM-Profil neu starten."
-                    )
-                report.status = apply_report_v3_validation_downgrade(
-                    report.status, val_exc.errors()
-                )
-                # Die Bilanz wurde oben gezogen, bevor dieser Fehler auftrat.
-                # Ohne den Nachtrag stufte der Status zwar ab, aber
-                # ``run_degradations`` bliebe leer — die API meldete einen
-                # unvollständigen Contract-Export ohne einen einzigen Grund,
-                # und die Red-Team-Invariante "degradiert, aber completed"
-                # liefe ins Leere.
-                report.run_degradations = list(report.run_degradations) + (
-                    collect_run_degradations(
-                        contract_validation_errors=val_exc.errors()
-                    )
-                )
+        # Issue #1299: Vorab-Build, damit ein fehlgeschlagener ReportV3-Build den
+        # Status abstuft statt still auf COMPLETED zu bleiben. Begruendung im
+        # Docstring von ``_build_and_validate_report_v3``.
+        _build_and_validate_report_v3(
+            report, agent, report_mode=report_mode, report_id=report_id
+        )
         # Issue #1302: siehe _apply_requirement_check.
         _apply_requirement_check(report, agent, report_id)
         ReportManager.save_report(report)
