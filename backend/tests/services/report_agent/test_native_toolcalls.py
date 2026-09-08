@@ -846,7 +846,7 @@ class TestToolArgumentJsonLogging:
         ]
 
         with patch.object(llm_client_mod.logger, "warning") as warn:
-            content, tool_calls, finish = (
+            content, tool_calls, finish, _usage = (
                 llm_client_mod._accumulate_streaming_tool_calls(chunks)
             )
 
