@@ -201,14 +201,13 @@ def _extract_claims_for_section(
         label = str(claim.get("confidence_label") or "speculative")
         _valid_confidence = {"speculative", "low", "medium", "high", "verified"}
         confidence: Literal["speculative", "low", "medium", "high", "verified"]
+        # Bekannte Labels werden uebernommen, alles Unbekannte faellt auf
+        # "speculative". Hier standen frueher drei zusaetzliche elif-Zweige
+        # ("high"/"verified" -> "high", "medium" -> "medium", "low" -> "low"),
+        # die unerreichbar waren: ihre Labels liegen samt und sonders in
+        # _valid_confidence und wurden bereits vom ersten Zweig abgefangen.
         if label in _valid_confidence:
             confidence = label  # type: ignore[assignment]
-        elif label in {"high", "verified"}:
-            confidence = "high"
-        elif label == "medium":
-            confidence = "medium"
-        elif label == "low":
-            confidence = "low"
         else:
             confidence = "speculative"
         single_source_text_confidence: Literal[
