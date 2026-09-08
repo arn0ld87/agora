@@ -226,6 +226,7 @@ def interview_agent(
         f"Send Interview command: simulation_id={simulation_id}, agent_id={agent_id}, platform={platform}"
     )
     ipc_client = SimulationIPCClient(sim_dir)
+    ipc_timed_out = False
     with _report_budget_guard(run_id):
         try:
             # ``report_run_id=run_id`` (#1478 Codex P1, Runde 6): der Guard oben
@@ -247,24 +248,36 @@ def interview_agent(
             logger.warning(
                 f"IPC-Interview ohne Antwort ({simulation_id}) — Fallback auf Direktpfad"
             )
-            return _direct()
+            # Kein ``return _direct()`` INNERHALB des Guards (#1478 Codex
+            # Runde 8): der Guard haelt bis zum Verlassen des with-Blocks
+            # seine prozesslokale Reservierung, und der Direktpfad zaehlt sie
+            # in seinem eigenen ``_budget_check()`` mit. Bei genau einem
+            # verbleibenden Call haette der Fallback deshalb
+            # ``BudgetExceededError`` geworfen, obwohl der Ledger noch nichts
+            # verbraucht hat — und den Report faelschlich gestoppt.
+            ipc_timed_out = True
+            response = None
 
-        if response.status.value == "completed":
+        if not ipc_timed_out:
+            if response.status.value == "completed":
+                return {
+                    "success": True,
+                    "agent_id": agent_id,
+                    "prompt": prompt,
+                    "result": response.result,
+                    "timestamp": response.timestamp,
+                }
+            _reraise_if_budget_exceeded(response)
             return {
-                "success": True,
+                "success": False,
                 "agent_id": agent_id,
                 "prompt": prompt,
-                "result": response.result,
+                "error": response.error,
                 "timestamp": response.timestamp,
             }
-        _reraise_if_budget_exceeded(response)
-        return {
-            "success": False,
-            "agent_id": agent_id,
-            "prompt": prompt,
-            "error": response.error,
-            "timestamp": response.timestamp,
-        }
+
+    # Erst hier ist die Reservierung des Guards freigegeben.
+    return _direct()
 
 
 def interview_agents_batch(
@@ -312,6 +325,7 @@ def interview_agents_batch(
         f"Send batch Interview command: simulation_id={simulation_id}, count={len(interviews)}, platform={platform}"
     )
     ipc_client = SimulationIPCClient(sim_dir)
+    ipc_timed_out = False
     with _report_budget_guard(run_id):
         try:
             # ``report_run_id=run_id`` — siehe Kommentar in ``interview_agent``
@@ -326,22 +340,29 @@ def interview_agents_batch(
             logger.warning(
                 f"IPC-Batch-Interview ohne Antwort ({simulation_id}) — Fallback auf Direktpfad"
             )
-            return _direct()
+            # Siehe interview_agent: der Direktpfad darf erst laufen, wenn der
+            # Guard seine Reservierung freigegeben hat (#1478 Codex Runde 8).
+            ipc_timed_out = True
+            response = None
 
-        if response.status.value == "completed":
+        if not ipc_timed_out:
+            if response.status.value == "completed":
+                return {
+                    "success": True,
+                    "interviews_count": len(interviews),
+                    "result": response.result,
+                    "timestamp": response.timestamp,
+                }
+            _reraise_if_budget_exceeded(response)
             return {
-                "success": True,
+                "success": False,
                 "interviews_count": len(interviews),
-                "result": response.result,
+                "error": response.error,
                 "timestamp": response.timestamp,
             }
-        _reraise_if_budget_exceeded(response)
-        return {
-            "success": False,
-            "interviews_count": len(interviews),
-            "error": response.error,
-            "timestamp": response.timestamp,
-        }
+
+    # Erst hier ist die Reservierung des Guards freigegeben.
+    return _direct()
 
 
 def interview_all_agents(

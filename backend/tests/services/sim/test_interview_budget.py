@@ -494,3 +494,109 @@ class TestInterviewClientIpcPathBlockedByHardBudget:
 
         assert sent.get("called") is True
         assert result["success"] is True
+
+
+class _ReservationCountingEnforcer:
+    """Zaehlt Reservierungen wie ``RunBudgetEnforcer`` es prozesslokal tut.
+
+    ``check_before_call`` reserviert einen Slot und wirft, sobald mehr Slots
+    gleichzeitig gehalten werden als das harte Limit erlaubt — genau die
+    Mechanik, an der der Timeout-Fallback scheiterte, solange er noch
+    innerhalb des Guards lief.
+    """
+
+    def __init__(self, hard_limit: int = 1) -> None:
+        self.hard_limit = hard_limit
+        self.in_flight = 0
+        self.max_in_flight = 0
+
+    def check_before_call(self) -> None:
+        from app.services.run_budget import BudgetExceededError
+
+        if self.in_flight + 1 > self.hard_limit:
+            raise BudgetExceededError("calls", self.in_flight + 1, self.hard_limit)
+        self.in_flight += 1
+        self.max_in_flight = max(self.max_in_flight, self.in_flight)
+
+    def record_after_call(self) -> None:
+        self.in_flight = max(0, self.in_flight - 1)
+
+
+class TestIpcTimeoutFallbackReleasesReservation:
+    """#1478 Codex Runde 8.
+
+    Laeuft der Direktpfad-Fallback noch INNERHALB von ``_report_budget_guard``,
+    zaehlt sein eigener ``_budget_check()`` die Reservierung des Guards mit.
+    Bei genau einem verbleibenden Call warf der Fallback deshalb
+    ``BudgetExceededError``, obwohl der Ledger noch gar nichts verbraucht hat —
+    und stoppte den Report faelschlich.
+    """
+
+    def _install(self, monkeypatch, tmp_path, *, batch: bool):
+        enforcer = _ReservationCountingEnforcer(hard_limit=1)
+        sim_dir = tmp_path / "sim_0123456789ab"
+        sim_dir.mkdir(exist_ok=True)
+
+        monkeypatch.setattr(interview_client, "check_env_alive", lambda *a, **k: True)
+        monkeypatch.setattr(
+            "app.services.run_budget.RunBudgetEnforcer.for_run",
+            classmethod(lambda cls, run_id: enforcer),
+        )
+
+        def _timeout(*args: Any, **kwargs: Any) -> Any:
+            raise TimeoutError("Worker antwortet nicht")
+
+        method = "send_batch_interview" if batch else "send_interview"
+        monkeypatch.setattr(interview_client.SimulationIPCClient, method, _timeout)
+
+        seen: dict[str, Any] = {}
+
+        def _direct(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            # Der Direktpfad prueft im Produktivcode sein eigenes Budget ueber
+            # denselben Enforcer. Genau dieser Aufruf muss gelingen.
+            enforcer.check_before_call()
+            seen["in_flight_beim_fallback"] = enforcer.in_flight
+            enforcer.record_after_call()
+            return {"success": True, "result": "direkt beantwortet"}
+
+        target = "interview_agents_batch_direct" if batch else "interview_agent_direct"
+        monkeypatch.setattr(interview_client, target, _direct)
+        return enforcer, seen
+
+    def test_single_interview_timeout_falls_back_without_budget_error(
+        self, monkeypatch, tmp_path
+    ) -> None:
+        enforcer, seen = self._install(monkeypatch, tmp_path, batch=False)
+
+        result = interview_client.interview_agent(
+            "sim_0123456789ab",
+            1,
+            "Was hältst du davon?",
+            run_state_dir=str(tmp_path),
+            run_id="run-timeout-1",
+        )
+
+        assert result["success"] is True
+        assert seen["in_flight_beim_fallback"] == 1, (
+            "Der Fallback darf nur seine EIGENE Reservierung halten — die des "
+            "Guards muss beim Verlassen des with-Blocks freigegeben sein"
+        )
+        assert enforcer.max_in_flight == 1
+        assert enforcer.in_flight == 0
+
+    def test_batch_interview_timeout_falls_back_without_budget_error(
+        self, monkeypatch, tmp_path
+    ) -> None:
+        enforcer, seen = self._install(monkeypatch, tmp_path, batch=True)
+
+        result = interview_client.interview_agents_batch(
+            "sim_0123456789ab",
+            [{"agent_id": 1, "prompt": "Was hältst du davon?"}],
+            run_state_dir=str(tmp_path),
+            run_id="run-timeout-2",
+        )
+
+        assert result["success"] is True
+        assert seen["in_flight_beim_fallback"] == 1
+        assert enforcer.max_in_flight == 1
+        assert enforcer.in_flight == 0
