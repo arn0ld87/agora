@@ -27,13 +27,11 @@ from __future__ import annotations
 
 import atexit
 import os
-from pathlib import Path
 import re
 import signal
 import subprocess
 import sys
 import threading
-import time
 from datetime import datetime
 from queue import Queue
 from typing import Any, Callable, Dict, List, Optional
@@ -41,10 +39,30 @@ from typing import Any, Callable, Dict, List, Optional
 from opentelemetry import trace
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
-from ...llm.providers.codex_cli import CLI_TRANSPORT_VALUE, TRANSPORT_ENV_KEY
 from ...observability import sim_active_gauge, sim_counter
 from ...utils.logger import get_logger
 from .run_state_store import RunnerStatus, SimulationRunState
+from .process_cancel import (
+    CANCEL_ABORT_FILENAME as CANCEL_ABORT_FILENAME,
+    _clear_cancel_abort as _clear_cancel_abort,
+    _read_cancel_abort as _read_cancel_abort,
+    _write_cancel_abort as _write_cancel_abort,
+)
+from .process_environment import (
+    SAFE_ENV_KEYS as SAFE_ENV_KEYS,
+    _build_subprocess_env as _build_subprocess_env,
+    _compute_oasis_db_path as _compute_oasis_db_path,
+    _inject_oasis_db_env as _inject_oasis_db_env,
+    _resolve_child_path as _resolve_child_path,
+)
+from .process_termination import (
+    IS_WINDOWS as IS_WINDOWS,
+    cleanup_all_simulations as cleanup_all_simulations,
+    stop_simulation as stop_simulation,
+    terminate_process as terminate_process,
+    terminate_run as terminate_run,
+)
+
 
 _tracer = trace.get_tracer(__name__)
 
@@ -137,76 +155,14 @@ def is_process_alive(pid: Optional[int]) -> bool:
     return True
 
 
-def _resolve_child_path(base_dir: str, child_name: str, *, kind: str) -> Path:
-    base = Path(base_dir).expanduser().resolve()
-    child = (base / child_name).resolve()
-    try:
-        child.relative_to(base)
-    except ValueError as exc:
-        raise ValueError(f"Invalid {kind} path") from exc
-    return child
 
 
-CANCEL_ABORT_FILENAME = "cancel_abort.json"
 
 
-def _read_cancel_abort(sim_dir: str) -> Optional[Dict[str, Any]]:
-    """cancel_abort.json lesen (vom Monitor bei konsumiertem Cancel-Flag oder von
-    stop_simulation bei einem Nutzer-Stop geschrieben).
-
-    Beheimatet in process_manager.py statt monitor.py (Review-Fix B2,
-    2026-09-07): monitor.py importiert bereits lazy aus process_manager
-    (``terminate_run`` in ``_cancel_supervision``) — ein Re-Import in
-    Gegenrichtung haette einen Modul-Zyklus erzeugt.
-    """
-    import json
-
-    path = os.path.join(sim_dir, CANCEL_ABORT_FILENAME)
-    try:
-        with open(path, encoding="utf-8") as handle:
-            data = json.load(handle)
-        return data if isinstance(data, dict) else None
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return None
 
 
-def _write_cancel_abort(sim_dir: str, abort_info: Dict[str, Any]) -> None:
-    """First-writer-wins — analog zu ``_write_budget_abort`` in monitor.py."""
-    import json
-
-    path = os.path.join(sim_dir, CANCEL_ABORT_FILENAME)
-    if os.path.exists(path):
-        return
-    try:
-        tmp_path = f"{path}.tmp"
-        with open(tmp_path, "w", encoding="utf-8") as handle:
-            json.dump(abort_info, handle)
-            handle.write("\n")
-        os.replace(tmp_path, path)
-    except OSError as exc:
-        logger.warning("cancel abort marker write failed: %s", exc)
 
 
-def _clear_cancel_abort(sim_dir: str) -> None:
-    """Stale ``cancel_abort.json`` (und eine evtl. verwaiste ``.tmp``-Datei)
-    vor einem Neustart entfernen — idempotent (Codex-Review PR #1474).
-
-    ``_write_cancel_abort`` ist first-writer-wins und ``cancel_abort.json``
-    liegt persistent im sim_dir. Wird dieselbe ``simulation_id`` nach einem
-    Nutzer-Stop erneut gestartet, liest der neue Monitor sonst den ALTEN
-    Marker und klassifiziert einen sauberen Exit-0-Lauf faelschlich als
-    ``stopped``/``user_stop``. Aufruf in ``start_simulation`` VOR dem
-    Subprozess-Spawn beseitigt das.
-    """
-    path = os.path.join(sim_dir, CANCEL_ABORT_FILENAME)
-    tmp_path = f"{path}.tmp"
-    for candidate in (path, tmp_path):
-        try:
-            os.remove(candidate)
-        except FileNotFoundError:
-            pass
-        except OSError as exc:
-            logger.warning("cancel abort marker cleanup failed: %s", exc)
 
 # ---------------------------------------------------------------------------
 # Subprozess-Env-Whitelist (Code-Review 2026-05-17 §1.6)
@@ -231,152 +187,22 @@ def _clear_cancel_abort(sim_dir: str) -> None:
 #   authentifiziert ueber die lokale ``codex login``-Session, nicht ueber
 #   einen Key. Ohne diese Keys faellt der Subprozess auf ``codex`` im PATH
 #   und 180 s zurueck, was fuer den Regelfall stimmt.
-SAFE_ENV_KEYS: frozenset[str] = frozenset(
-    {
-        "PATH",
-        "PYTHONPATH",
-        "PYTHONUTF8",
-        "PYTHONIOENCODING",
-        "TZ",
-        "LLM_BASE_URL",
-        "LLM_MODEL_NAME",
-        "LLM_MAX_OUTPUT_TOKENS",
-        "OLLAMA_THINKING",
-        "REDIS_URL",
-        "HF_TOKEN",
-        "AGORA_CODEX_CLI_BIN",
-        "AGORA_CODEX_CLI_TIMEOUT_SECONDS",
-    }
-)
 
-def _build_subprocess_env(
-    runtime_env: Optional[Dict[str, str]], sim_dir: Any
-) -> Dict[str, str]:
-    """Env für den OASIS-Subprozess — Whitelist-only (Code-Review 2026-05-17 §1.6).
-
-    Nur explizit erlaubte Keys aus ``os.environ``; Secrets wie SECRET_KEY,
-    AGORA_AUTH_TOKEN oder NEO4J_PASSWORD werden bewusst NICHT vererbt.
-    ``runtime_env``-Werte kommen immer mit und überschreiben Whitelist-Werte
-    (enthält u. a. LLM_API_KEY und OPENAI_API_KEY für den Subprozess).
-
-    Aus ``start_simulation`` extrahiert, als der CLI-Sonderfall unten die
-    Funktion über das radon-Gate (MAI-17) gehoben hätte.
-    """
-    env = {k: v for k, v in os.environ.items() if k in SAFE_ENV_KEYS}
-    env["PYTHONUTF8"] = "1"
-    env["PYTHONIOENCODING"] = "utf-8"
-    if runtime_env:
-        env.update({k: v for k, v in runtime_env.items() if v})
-    # Issue #1423: Bei CLI-Transport (codex_cli) darf das aus der Whitelist
-    # geerbte ``LLM_BASE_URL`` NICHT stehen bleiben. Der Provider hat keinen
-    # HTTP-Endpunkt; das geerbte Feld ist die ``.env``-URL des Backends, und
-    # der Subprozess schickte das geroutete Modell genau dorthin (beobachtet:
-    # ``gpt-5.6-luna`` an ``api.minimax.io`` → HTTP 400 (2013)). Das Signal
-    # setzt ``build_route_subprocess_env`` anhand von
-    # ``ProviderConnectionDefinition.transport``.
-    if env.get(TRANSPORT_ENV_KEY, "").strip().lower() == CLI_TRANSPORT_VALUE:
-        env.pop("LLM_BASE_URL", None)
-    # Sub-Slice 21: OASIS-DB pro Sim ins schreibbare uploads/-Volume
-    _inject_oasis_db_env(env, str(sim_dir))
-    return env
 
 
 # Flag whether cleanup function is registered
 _cleanup_registered = False
 
 # Platform detection
-IS_WINDOWS = sys.platform == "win32"
 
 # Sub-Slice 21 — OASIS-DB-Pfad pro Sim, damit OASIS keine DB ins
 # read-only Site-Packages-Verzeichnis schreibt.
-_OASIS_DB_DIR_NAME = "oasis_db"
-_OASIS_DB_FILE_NAME = "social_media.db"
 
 
-def _compute_oasis_db_path(sim_dir: str) -> str:
-    """Liefert ``<sim_dir>/oasis_db/social_media.db`` und legt das
-    Verzeichnis an (idempotent). OASIS' ``get_db_path()`` macht **kein**
-    ``mkdir``, wenn ``OASIS_DB_PATH``-ENV gesetzt ist — das Verzeichnis
-    muss vorhanden sein, bevor der Subprozess startet."""
-    db_dir = os.path.join(sim_dir, _OASIS_DB_DIR_NAME)
-    os.makedirs(db_dir, exist_ok=True)
-    return os.path.join(db_dir, _OASIS_DB_FILE_NAME)
 
 
-def _inject_oasis_db_env(env: Dict[str, str], sim_dir: str) -> None:
-    """Setzt ``OASIS_DB_PATH`` im Subprozess-Env auf einen sim-spezifischen
-    Pfad — aber nur, wenn der User es nicht selbst überschrieben hat
-    (z. B. via Compose-Env oder ``.env``)."""
-    if env.get("OASIS_DB_PATH"):
-        return
-    env["OASIS_DB_PATH"] = _compute_oasis_db_path(sim_dir)
 
 
-def terminate_process(
-    process: subprocess.Popen,  # type: ignore[type-arg]
-    simulation_id: str,
-    timeout: int = 10,
-) -> None:
-    """Cross-platform: terminate a simulation process and its children.
-
-    Args:
-        process:       The Popen object to terminate.
-        simulation_id: Simulation ID (for logging only).
-        timeout:       Seconds to wait for graceful exit before SIGKILL.
-    """
-    if IS_WINDOWS:
-        # Windows: Use taskkill command to terminate process tree
-        # /F = force terminate, /T = terminate process tree (including child processes)
-        logger.info(
-            f"Terminate process tree (Windows): simulation={simulation_id}, pid={process.pid}"
-        )
-        try:
-            # Try graceful termination first
-            subprocess.run(
-                ["taskkill", "/PID", str(process.pid), "/T"],
-                capture_output=True,
-                timeout=5,
-            )
-            try:
-                process.wait(timeout=timeout)
-            except subprocess.TimeoutExpired:
-                # Force terminate
-                logger.warning(
-                    f"Process not responding, force terminating: {simulation_id}"
-                )
-                subprocess.run(
-                    ["taskkill", "/F", "/PID", str(process.pid), "/T"],
-                    capture_output=True,
-                    timeout=5,
-                )
-                process.wait(timeout=5)
-        except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
-            logger.warning(f"taskkill failed, trying terminate: {e}")
-            process.terminate()
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
-    else:
-        # Unix: Use process group termination
-        # Since start_new_session=True, process group ID equals main process PID
-        pgid = os.getpgid(process.pid)
-        logger.info(
-            f"Terminate process group (Unix): simulation={simulation_id}, pgid={pgid}"
-        )
-
-        # First send SIGTERM to the entire process group
-        os.killpg(pgid, signal.SIGTERM)
-
-        try:
-            process.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            # If still not ended after timeout, force send SIGKILL
-            logger.warning(
-                f"Process group not responding to SIGTERM, force terminating: {simulation_id}"
-            )
-            os.killpg(pgid, signal.SIGKILL)
-            process.wait(timeout=5)
 
 
 def start_simulation(
@@ -685,199 +511,8 @@ def _start_simulation_impl(
     return state
 
 
-def stop_simulation(
-    simulation_id: str,
-    *,
-    run_state_dir: str,
-    processes: Dict[str, subprocess.Popen],  # type: ignore[type-arg]
-    graph_memory_enabled: Dict[str, bool],
-    get_run_state: Callable[[str], Optional[SimulationRunState]],
-    save_state: Callable[[SimulationRunState], None],
-    stop_graph_memory_updater: Callable[[str], None],
-) -> SimulationRunState:
-    """Stop a running simulation and clean up its process.
-
-    Args:
-        simulation_id:              Simulation ID.
-        run_state_dir:              ``SimulationRunner.RUN_STATE_DIR``.
-        processes:                  ``SimulationRunner._processes``.
-        graph_memory_enabled:       ``SimulationRunner._graph_memory_enabled``.
-        get_run_state:              Callable to load current run state.
-        save_state:                 Callable to persist updated state.
-        stop_graph_memory_updater:  Callable(simulation_id) to stop updater.
-
-    Returns:
-        Updated ``SimulationRunState`` (status STOPPED).
-    """
-    state = get_run_state(simulation_id)
-    if not state:
-        raise ValueError(f"Simulation does not exist: {simulation_id}")
-
-    if state.runner_status not in [RunnerStatus.RUNNING, RunnerStatus.PAUSED]:
-        raise ValueError(
-            f"Simulation not running: {simulation_id}, status={state.runner_status}"
-        )
-
-    state.runner_status = RunnerStatus.STOPPING
-    save_state(state)
-
-    # Nutzer-Stop-Marker (B2, Issue-Review 2026-09-07): VOR dem Terminieren
-    # schreiben, damit monitor_simulation den SIGTERM-Exit (returncode -15)
-    # nicht faelschlich als FAILED klassifiziert, sondern als STOPPED mit
-    # termination_reason="user_stop" erkennt.
-    sim_dir = _resolve_child_path(run_state_dir, simulation_id, kind="simulation")
-    _write_cancel_abort(str(sim_dir), {"source": "user_stop", "ts": time.time()})
-
-    # Terminate process
-    process = processes.get(simulation_id)
-    if process and process.poll() is None:
-        try:
-            terminate_process(process, simulation_id)
-        except ProcessLookupError:
-            pass
-        except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
-            logger.error(
-                f"Failed to terminate process group: {simulation_id}, error={e}"
-            )
-            try:
-                process.terminate()
-                process.wait(timeout=5)
-            except Exception:  # noqa: BLE001 — process termination; exc discarded, kill follows
-                process.kill()
-
-    state.runner_status = RunnerStatus.STOPPED
-    state.twitter_running = False
-    state.reddit_running = False
-    state.completed_at = datetime.now().isoformat()
-    save_state(state)
-
-    # Stop graph memory updater
-    if graph_memory_enabled.get(simulation_id, False):
-        try:
-            stop_graph_memory_updater(simulation_id)
-            logger.info(f"Graph memory update stopped: simulation_id={simulation_id}")
-        except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
-            logger.error(f"Failed to stop graph memory updater: {e}")
-        graph_memory_enabled.pop(simulation_id, None)
-
-    logger.info(
-        f"Simulation stopped: {simulation_id}",
-        extra={"simulation_id": simulation_id},
-    )
-    return state
 
 
-def cleanup_all_simulations(
-    *,
-    processes: Dict[str, subprocess.Popen],  # type: ignore[type-arg]
-    stdout_files: Dict[str, Any],
-    stderr_files: Dict[str, Any],
-    graph_memory_enabled: Dict[str, bool],
-    action_queues: Dict[str, Any],
-    get_run_state: Callable[[str], Optional[SimulationRunState]],
-    save_state: Callable[[SimulationRunState], None],
-    stop_all_graph_memory: Callable[[], None],
-    update_store_state: Callable[[str], None],
-    cleanup_done_flag: List[bool],
-) -> None:
-    """Terminate all running simulation processes.
-
-    Called when the server closes; ensures all child processes are terminated.
-
-    Args:
-        processes:             ``SimulationRunner._processes``.
-        stdout_files:          ``SimulationRunner._stdout_files``.
-        stderr_files:          ``SimulationRunner._stderr_files``.
-        graph_memory_enabled:  ``SimulationRunner._graph_memory_enabled``.
-        action_queues:         ``SimulationRunner._action_queues``.
-        get_run_state:         Callable to load current run state.
-        save_state:            Callable to persist updated state.
-        stop_all_graph_memory: Callable() to stop all graph memory updaters.
-        update_store_state:    Callable(simulation_id) to update state.json.
-        cleanup_done_flag:     Single-element list used as a mutable bool flag.
-    """
-    # Prevent duplicate cleanup
-    if cleanup_done_flag[0]:
-        return
-    cleanup_done_flag[0] = True
-
-    has_processes = bool(processes)
-    has_updaters = bool(graph_memory_enabled)
-
-    if not has_processes and not has_updaters:
-        return
-
-    logger.info("Cleaning up all simulation processes...")
-
-    # Stop all graph memory updaters
-    try:
-        stop_all_graph_memory()
-    except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
-        logger.error(f"Failed to stop graph memory updater: {e}")
-    graph_memory_enabled.clear()
-
-    # Copy dict to avoid modification during iteration
-    process_list = list(processes.items())
-
-    for simulation_id, process in process_list:
-        try:
-            if process.poll() is None:
-                logger.info(
-                    f"Terminate simulation process: {simulation_id}, pid={process.pid}"
-                )
-
-                try:
-                    terminate_process(process, simulation_id, timeout=5)
-                except (ProcessLookupError, OSError):
-                    try:
-                        process.terminate()
-                        process.wait(timeout=3)
-                    except Exception:  # noqa: BLE001 — process termination; exc discarded, kill follows
-                        process.kill()
-
-                # Update run_state.json
-                state = get_run_state(simulation_id)
-                if state:
-                    state.runner_status = RunnerStatus.STOPPED
-                    state.twitter_running = False
-                    state.reddit_running = False
-                    state.completed_at = datetime.now().isoformat()
-                    state.error = "Server closed, simulation terminated"
-                    save_state(state)
-
-                # Update state.json via injected callback
-                try:
-                    update_store_state(simulation_id)
-                except Exception as state_err:  # noqa: BLE001 — exception is logged; swallowed intentionally
-                    logger.warning(
-                        f"Failed to update state.json: {simulation_id}, error={state_err}"
-                    )
-
-        except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
-            logger.error(f"Failed to clean up process: {simulation_id}, error={e}")
-
-    # Clean up file handles
-    for _sim_id, file_handle in list(stdout_files.items()):
-        try:
-            if file_handle:
-                file_handle.close()
-        except Exception as exc:  # noqa: BLE001 — file handle close; exc discarded
-            logger.debug("process_manager: file handle close failed, ignoring: %s", exc)
-    stdout_files.clear()
-
-    for _sim_id, file_handle in list(stderr_files.items()):
-        try:
-            if file_handle:
-                file_handle.close()
-        except Exception as exc:  # noqa: BLE001 — file handle close; exc discarded
-            logger.debug("process_manager: file handle close failed, ignoring: %s", exc)
-    stderr_files.clear()
-
-    # Clean up in-memory state
-    processes.clear()
-    action_queues.clear()
-
-    logger.info("Simulation process cleanup completed")
 
 
 def register_cleanup(*, cleanup_callable: Callable[[], None]) -> None:
@@ -955,48 +590,6 @@ def register_cleanup(*, cleanup_callable: Callable[[], None]) -> None:
     _cleanup_registered = True
 
 
-def terminate_run(
-    run_id: str,
-    *,
-    processes: Dict[str, subprocess.Popen],  # type: ignore[type-arg]
-    grace_period: float = 5.0,
-) -> bool:
-    """Beende den OASIS-Subprozess für ``run_id`` kooperativ (SIGTERM + Grace → SIGKILL).
-
-    Idempotent: Wenn kein Prozess läuft oder der Prozess bereits beendet ist,
-    wird kein Fehler geworfen und ``False`` zurückgegeben.
-
-    Args:
-        run_id:       Simulation-ID (= Prozess-Schlüssel in ``processes``).
-        processes:    ``SimulationRunner._processes`` (by reference).
-        grace_period: Sekunden, die nach SIGTERM gewartet wird, bevor SIGKILL
-                      gesendet wird.
-
-    Returns:
-        ``True``, wenn ein laufender Prozess terminiert wurde.
-        ``False``, wenn kein Prozess vorhanden oder bereits beendet war.
-    """
-    process = processes.get(run_id)
-    if process is None or process.poll() is not None:
-        return False
-
-    timeout_int = max(1, int(grace_period))
-    try:
-        terminate_process(process, run_id, timeout=timeout_int)
-    except ProcessLookupError:
-        pass
-    except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
-        logger.warning(
-            "terminate_run: graceful terminate failed for %s, forcing kill: %s",
-            run_id,
-            exc,
-        )
-        try:
-            process.kill()
-            process.wait(timeout=5)
-        except Exception as kill_err:  # noqa: BLE001 — process termination; kill_err discarded
-            logger.debug("process_manager: process kill failed, ignoring: %s", kill_err)
-    return True
 
 
 def get_running_simulations(
