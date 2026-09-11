@@ -69,16 +69,32 @@ def check_simulation_prepared(simulation_id: str) -> tuple:
             profiles_count = len(profiles_data) if isinstance(profiles_data, list) else 0
 
             if status == "preparing":
-                try:
-                    from datetime import datetime
+                # Der Aufrufer uebersetzt is_prepared=True unabhaengig vom
+                # Detailstatus in "status: ready" (siehe simulation_prepare.py).
+                # Schlaegt die Persistierung fehl, waere das ein Ready-Signal
+                # ohne persistierten Ready-Zustand. Deshalb wird hier erst
+                # persistiert und nur bei Erfolg ein positives Ergebnis
+                # gemeldet; der Fehlerfall wird als "nicht vorbereitet"
+                # zurueckgegeben statt still verschluckt.
+                from datetime import datetime
 
-                    state_data["status"] = "ready"
-                    state_data["updated_at"] = datetime.now().isoformat()
-                    store.write_json(simulation_id, "state", state_data)
-                    logger.info(f"Auto update simulation status: {simulation_id} preparing -> ready")
-                    status = "ready"
-                except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
-                    logger.warning(f"Failed to auto update status: {exc}")
+                promoted = dict(state_data)
+                promoted["status"] = "ready"
+                promoted["updated_at"] = datetime.now().isoformat()
+                try:
+                    store.write_json(simulation_id, "state", promoted)
+                except Exception as exc:  # noqa: BLE001 — Storefehler sind nicht typisiert
+                    logger.error(
+                        f"Failed to persist auto status update for {simulation_id}: {exc}"
+                    )
+                    return False, {
+                        "reason": f"Failed to persist ready state: {exc}",
+                        "status": status,
+                        "config_generated": config_generated,
+                    }
+                logger.info(f"Auto update simulation status: {simulation_id} preparing -> ready")
+                state_data = promoted
+                status = "ready"
 
             logger.info(
                 f"Simulation {simulation_id} Detection result: HasPreparation complete (status={status}, config_generated={config_generated})"
