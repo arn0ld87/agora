@@ -1,5 +1,7 @@
 """Tests für _ensure_skeptic_quota — Slice 5 (Issue #497)."""
 
+import pytest
+
 
 from app.services.simulation_config_generator import (
     AgentActivityConfig,
@@ -59,3 +61,96 @@ class TestEnsureSkepticQuota:
         result = SimulationConfigGenerator._ensure_skeptic_quota(personas, min_ratio=0.20)
         skeptic_count = sum(1 for p in result if p.stance == "opposing")
         assert skeptic_count >= 1
+
+
+class TestQuotaHoldsForFinalPopulation:
+    """Regression: die Quote galt gegen die *urspruengliche* Population.
+
+    ``required = ceil(original_total * min_ratio)`` ignorierte, dass jeder
+    hinzugefuegte Skeptiker die Population mitvergroessert. 10 Personas ohne
+    Skeptiker bei 20 % ergaben zwei Zusaetze — 2/12 = 16,67 %, nicht 20 %.
+    Die Zusage im Docstring ("Erzwingt >= min_ratio Skeptiker im Persona-Set")
+    war damit fuer jedes Set verletzt, das ueberhaupt aufgefuellt werden musste.
+    """
+
+    @staticmethod
+    def _ratio(result) -> float:
+        return sum(1 for p in result if p.stance == "opposing") / len(result)
+
+    def test_ten_personas_without_skeptics_reach_twenty_percent(self) -> None:
+        personas = [_make_agent(i, "neutral") for i in range(10)]
+
+        result = SimulationConfigGenerator._ensure_skeptic_quota(personas, min_ratio=0.20)
+
+        assert self._ratio(result) >= 0.20
+        # 3 Zusaetze: 3/13 = 23,1 % — 2/12 = 16,7 % waere zu wenig.
+        assert len(result) == 13
+
+    def test_added_skeptics_are_minimal(self) -> None:
+        """Kein Ueberschiessen: ein Zusatz weniger unterschreitet die Quote."""
+        personas = [_make_agent(i, "neutral") for i in range(10)]
+
+        result = SimulationConfigGenerator._ensure_skeptic_quota(personas, min_ratio=0.20)
+
+        added = len(result) - len(personas)
+        assert (added - 1) / (len(personas) + added - 1) < 0.20
+
+    def test_existing_skeptics_are_counted(self) -> None:
+        personas = [_make_agent(i, "opposing" if i < 2 else "neutral") for i in range(10)]
+
+        result = SimulationConfigGenerator._ensure_skeptic_quota(personas, min_ratio=0.40)
+
+        assert self._ratio(result) >= 0.40
+
+    def test_already_satisfied_quota_adds_nothing(self) -> None:
+        personas = [_make_agent(i, "opposing" if i < 5 else "neutral") for i in range(10)]
+
+        result = SimulationConfigGenerator._ensure_skeptic_quota(personas, min_ratio=0.20)
+
+        assert result == personas
+
+    def test_small_population(self) -> None:
+        personas = [_make_agent(0, "neutral")]
+
+        result = SimulationConfigGenerator._ensure_skeptic_quota(personas, min_ratio=0.20)
+
+        assert self._ratio(result) >= 0.20
+        assert len(result) == 2
+
+    def test_zero_ratio_adds_nothing(self) -> None:
+        personas = [_make_agent(i, "neutral") for i in range(10)]
+
+        assert SimulationConfigGenerator._ensure_skeptic_quota(personas, min_ratio=0.0) == personas
+
+    @pytest.mark.parametrize("min_ratio", [0.05, 0.1, 0.2, 0.25, 0.33, 0.5, 0.75, 0.9])
+    @pytest.mark.parametrize("existing_skeptics", [0, 1, 3])
+    def test_quota_holds_across_the_valid_range(
+        self, min_ratio: float, existing_skeptics: int
+    ) -> None:
+        personas = [
+            _make_agent(i, "opposing" if i < existing_skeptics else "neutral")
+            for i in range(12)
+        ]
+
+        result = SimulationConfigGenerator._ensure_skeptic_quota(personas, min_ratio=min_ratio)
+
+        assert self._ratio(result) >= min_ratio
+
+    @pytest.mark.parametrize("min_ratio", [1.0, 1.5])
+    def test_unreachable_ratio_terminates_without_infinite_loop(self, min_ratio: float) -> None:
+        """``min_ratio >= 1`` ist durch Hinzufuegen nicht erreichbar, solange
+        Nicht-Skeptiker im Set stehen. Die Funktion muss trotzdem terminieren
+        und ein brauchbares Set zurueckgeben (bestehender Contract)."""
+        personas = [_make_agent(i, "neutral") for i in range(10)]
+
+        result = SimulationConfigGenerator._ensure_skeptic_quota(personas, min_ratio=min_ratio)
+
+        assert len(result) >= len(personas)
+        assert all(p.stance == "neutral" for p in result[: len(personas)])
+
+    def test_all_opposing_satisfies_ratio_one(self) -> None:
+        personas = [_make_agent(i, "opposing") for i in range(4)]
+
+        result = SimulationConfigGenerator._ensure_skeptic_quota(personas, min_ratio=1.0)
+
+        assert result == personas
