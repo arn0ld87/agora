@@ -47,10 +47,16 @@ cd backend && uv run python -c "import sys; print(sys.version_info)"
 # releaselevel muss 'final' sein, nicht 'candidate'
 ```
 
-Trifft das zu, wurde das venv auf einer Vorabversion gebaut — neu anlegen:
+Trifft das zu, wurde das venv auf einer Vorabversion gebaut — neu anlegen.
+**Erst den Interpreter pruefen, dann loeschen:** `command -v python3.14` kann
+genau die Vorabversion liefern, die das defekte venv erzeugt hat, und der
+Neuaufbau stellte den Fehler unveraendert wieder her.
 
 ```bash
-cd backend && rm -rf .venv && uv venv --python "$(command -v python3.14)" && uv sync --frozen
+PY314="$(command -v python3.14)"
+"$PY314" -c 'import sys; v=sys.version_info; raise SystemExit(0 if v[:2]==(3,14) and v.releaselevel=="final" else 1)' \
+  && (cd backend && rm -rf .venv && uv venv --python "$PY314" && uv sync --frozen) \
+  || echo "‼ $PY314 ist keine finale 3.14 — anderen Interpreter besorgen (siehe .claude/hooks/session-start.sh)"
 ```
 
 In Claude-Code-Web-Sessions erledigt das `.claude/hooks/session-start.sh`
