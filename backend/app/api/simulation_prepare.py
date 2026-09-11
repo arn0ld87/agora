@@ -80,6 +80,11 @@ _active_prepare_jobs: set[str] = set()
 
 @contextmanager
 def _prepare_start_lock(simulation_id: str) -> Iterator[None]:
+    """Thread-sicherer Context-Manager für vorbereitungsspezifische Locks.
+
+    Verhindert parallele Prepare-Jobs für dieselbe Simulation-ID durch
+    einsetzbaren Lock-Mechanismus mit Referenzzählung.
+    """
     with _prepare_start_locks_guard:
         entry = _prepare_start_locks.setdefault(
             simulation_id,
@@ -425,6 +430,12 @@ def _track_active_prepare_job(
     simulation_id: str,
     target: "Callable[[], None]",
 ) -> "Callable[[], None]":
+    """Wrapt den Hintergrund-Job, damit er sich in ``_active_prepare_jobs`` trägt.
+
+    Der Eintrag wird garantiert im ``finally`` wieder entfernt — auch bei
+    Exceptions im Job. Consumer (z.B. Cancel) prüfen darüber, ob ein
+    Prepare-Job für die Simulation läuft.
+    """
     with _prepare_start_locks_guard:
         _active_prepare_jobs.add(simulation_id)
 
@@ -439,6 +450,7 @@ def _track_active_prepare_job(
 
 
 def _discard_active_prepare_job(simulation_id: str) -> None:
+    """Entfernt den Active-Job-Eintrag idempotent (Discard statt Remove)."""
     with _prepare_start_locks_guard:
         _active_prepare_jobs.discard(simulation_id)
 

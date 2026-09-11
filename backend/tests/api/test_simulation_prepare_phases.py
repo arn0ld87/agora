@@ -319,6 +319,29 @@ def test_collect_prepare_inputs_keeps_supported_language(app_ctx, monkeypatch):
     assert inputs.agent_language_override == "de"
 
 
+def test_collect_prepare_inputs_tolerates_non_string_language(app_ctx, monkeypatch):
+    """CodeRabbit PR #1497: Nicht-String-Wire-Felder dürfen nicht als 500 enden.
+
+    ``(data.get('language') or '').strip()`` warf ``AttributeError`` auf z.B.
+    ``{"language": 5}`` — gleiche None-Semantik wie bei ungültigem ``max_agents``.
+    """
+    monkeypatch.setattr(mod.ProjectManager, "get_extracted_text", staticmethod(lambda _pid: ""))
+
+    inputs = mod._collect_prepare_inputs({"language": 5}, _project(), _state())
+
+    assert inputs.agent_language_override is None
+
+
+def test_read_client_choice_tolerates_non_string_fields(app_ctx):
+    """Nicht-String ``llm_model``/``llm_profile_id`` zählen als nicht gesetzt."""
+    choice = mod._read_client_choice(
+        {"llm_model": 123, "llm_profile_id": ["p1"]}, _project()
+    )
+
+    assert choice.data_profile is None
+    assert choice.explicit_model_override is False
+
+
 def test_collect_prepare_inputs_applies_max_agents_floor(app_ctx, monkeypatch):
     monkeypatch.setattr(mod.ProjectManager, "get_extracted_text", staticmethod(lambda _pid: ""))
 
