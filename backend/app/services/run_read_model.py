@@ -1,7 +1,7 @@
 """Read-only enrichment for run list/detail representations.
 
 Extracted from :mod:`app.api.runs` so HTTP/run-control orchestration no longer
-owns project/simulation lookup logic.  This module deliberately performs no
+owns project/simulation lookup logic. This module deliberately performs no
 writes; failures in optional enrichment stay best-effort exactly as in the
 legacy API implementation.
 """
@@ -57,6 +57,44 @@ def _resolve_project(project_id: str, project_cache: dict):
     return project
 
 
+def _project_document_name(project) -> str | None:
+    names: list[str] = []
+    for entry in getattr(project, "files", []) or []:
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("original_filename") or entry.get("filename")
+        if name:
+            names.append(name)
+    if not names:
+        return None
+    return names[0] if len(names) == 1 else f"{names[0]} (+{len(names) - 1})"
+
+
+def _apply_project_summary(summary: dict, project) -> None:
+    document_name = _project_document_name(project)
+    if document_name:
+        summary["document_name"] = document_name
+    if not summary["graph_name"] and getattr(project, "name", None):
+        summary["graph_name"] = project.name
+    if not summary["graph_id"] and getattr(project, "graph_id", None):
+        summary["graph_id"] = project.graph_id
+
+
+def _apply_simulation_summary(summary: dict, sim_entry: dict) -> None:
+    config = sim_entry.get("config") or {}
+    state = sim_entry.get("state")
+    if config:
+        summary["model"] = config.get("llm_model") or summary["model"]
+        if not summary["graph_id"]:
+            summary["graph_id"] = config.get("graph_id")
+    if state is not None:
+        if not summary["graph_id"]:
+            summary["graph_id"] = getattr(state, "graph_id", None)
+        if not summary["branch_name"]:
+            summary["branch_name"] = getattr(state, "branch_name", None)
+    summary["persona_count"] = sim_entry.get("persona_count")
+
+
 def build_run_summary(run: dict, *, sim_cache: dict, project_cache: dict) -> dict:
     """Derive display fields for a run manifest without persisting them.
 
@@ -79,38 +117,14 @@ def build_run_summary(run: dict, *, sim_cache: dict, project_cache: dict) -> dic
     if project_id:
         project = _resolve_project(project_id, project_cache)
         if project is not None:
-            files = getattr(project, "files", []) or []
-            names: list = []
-            for entry in files:
-                if not isinstance(entry, dict):
-                    continue
-                name = entry.get("original_filename") or entry.get("filename")
-                if name:
-                    names.append(name)
-            if names:
-                summary["document_name"] = (
-                    names[0] if len(names) == 1 else f"{names[0]} (+{len(names) - 1})"
-                )
-            if not summary["graph_name"] and getattr(project, "name", None):
-                summary["graph_name"] = project.name
-            if not summary["graph_id"] and getattr(project, "graph_id", None):
-                summary["graph_id"] = project.graph_id
+            _apply_project_summary(summary, project)
 
     simulation_id = linked.get("simulation_id")
     if simulation_id:
-        sim_entry = _resolve_simulation_summary(simulation_id, sim_cache)
-        config = sim_entry.get("config") or {}
-        state = sim_entry.get("state")
-        if config:
-            summary["model"] = config.get("llm_model") or summary["model"]
-            if not summary["graph_id"]:
-                summary["graph_id"] = config.get("graph_id")
-        if state is not None:
-            if not summary["graph_id"]:
-                summary["graph_id"] = getattr(state, "graph_id", None)
-            if not summary["branch_name"]:
-                summary["branch_name"] = getattr(state, "branch_name", None)
-        summary["persona_count"] = sim_entry.get("persona_count")
+        _apply_simulation_summary(
+            summary,
+            _resolve_simulation_summary(simulation_id, sim_cache),
+        )
 
     return summary
 
