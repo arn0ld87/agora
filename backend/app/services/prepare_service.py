@@ -23,23 +23,20 @@ from __future__ import annotations
 import json
 import os
 import traceback
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple
 
 from ..contracts import (
-    PersonaQuotaActual,
     PersonaQuotaPlan,
     PersonaTargetContract,
 )
 from ..contracts.llm_routing_contract import ResolvedRoute
-from ..contracts.provider_types import PROVIDER_CODEX_CLI
 from ..utils.logger import get_logger
 from .degradation_collector import DegradationCollector
-from .entity_reader import EntityReader
+from .entity_reader import EntityReader as EntityReader
 from .settings_layer import get_default_service as _get_settings
-from .llm_routing_seed import resolve_route_api_key
 from .llm_runtime import RuntimeLlmConfig
 from .oasis_profile_generator import OasisAgentProfile, OasisProfileGenerator
-from .persona_eligibility import filter_eligible_entities
+from .persona_eligibility import filter_eligible_entities as filter_eligible_entities
 from .persona_quota_defaults import default_dach_industry_quota
 from .report_agent import MIN_PERSONA_TABLE_ROWS
 from .simulation_config_generator import SimulationConfigGenerator
@@ -48,88 +45,18 @@ if TYPE_CHECKING:
     from .entity_reader import EntityNode
     from .simulation_manager import SimulationManager, SimulationState
 
+from . import prepare_llm as _prepare_llm
+from . import prepare_entities as _prepare_entities
+from . import prepare_quota as _prepare_quota
+
 logger = get_logger("agora.prepare")
+
 
 LlmRuntimeInput = RuntimeLlmConfig | ResolvedRoute
 
 
-def _resolve_llm_connection(
-    llm_runtime: Optional[LlmRuntimeInput],
-    *,
-    require: bool = True,
-) -> tuple[Optional[str], Optional[str], Optional[str]]:
-    """Loest Key, Endpoint und Provider-Typ aus der Route — oder bricht ab.
-
-    Fruehere Fassung gab bei nicht aufloesbarer Route ``(None, None)`` zurueck.
-    Das sah harmlos aus, war aber der Ausloeser einer stillen Provider-
-    Vertauschung: ``OasisProfileGenerator.__init__`` fuellt fehlende Werte aus
-    ``Config.LLM_BASE_URL``/``Config.LLM_API_KEY`` auf, waehrend ``model_name``
-    aus der Route weitergereicht wird. Ergebnis war eine Halb-Uebergabe —
-    Modell aus der UI-Route, Endpoint und Key aus der ``.env`` — die das Modell
-    an einen fremden Provider schickte (beobachtet: ``deepseek-v4-flash:0731``
-    an ``https://api.minimax.io/v1`` → HTTP 401). Nach aussen meldete der Lauf
-    trotzdem "30 Personas erfolgreich generiert", weil jeder Einzelfehler still
-    auf ``rule-based generation`` zurueckfiel.
-
-    Der ``#778``-Schutz in ``OasisProfileGenerator`` greift hier nicht: er
-    verhindert nur, dass der ``.env``-Key zu einer *uebergebenen* Fremd-URL
-    einspringt. Wird gar keine URL uebergeben, sind beide aus der ``.env`` —
-    formal "dieselbe Quelle", sachlich die falsche.
-
-    Issue #1418: ``codex_cli`` (transport="cli", #1405) hat by design weder
-    ``base_url`` noch ``api_key`` — die dritte Rueckgabe traegt den
-    Provider-Typ deshalb explizit weiter, statt ihn wie bisher stillschweigend
-    zu verlieren. Ohne sie las ``OasisProfileGenerator`` ein fehlendes
-    ``base_url`` als "nicht aufgeloest" und fuellte ``Config.LLM_BASE_URL``
-    auf — das Modell aus der codex_cli-Route ging an den .env-HTTP-Endpoint
-    (beobachtet: ``gpt-5.6-luna`` an ``https://api.minimax.io/v1`` → HTTP 400).
-
-    Args:
-        llm_runtime: Aufgeloeste Route oder Legacy-Runtime-Override.
-        require: Wenn ``True`` (Default), ist eine nicht aufloesbare Route ein
-            Fehler. ``False`` nur fuer Pfade, die bewusst ohne LLM laufen
-            (``use_llm_for_profiles=False``) — dort ist regelbasiert das
-            gewollte Ergebnis und kein Notbehelf.
-
-    Raises:
-        ValueError: ``require`` ist gesetzt und weder eine ``ResolvedRoute``
-            noch ein aktiver Runtime-Override liegt vor, oder die
-            ``ResolvedRoute`` selbst keine aufloesbare ``base_url_sanitized``
-            traegt und ihr Provider keinen CLI-Transport nutzt (#1104: zweite
-            Verteidigungslinie gegen die Halb-Uebergabe, falls der
-            Store-Lookup in ``StageModelRouter`` keine Base-URL findet — z. B.
-            eine deaktivierte oder geloeschte Connection).
-    """
-    if isinstance(llm_runtime, ResolvedRoute):
-        base_url = llm_runtime.base_url_sanitized
-        from .llm_provider_registry import LlmProviderRegistry
-
-        definition = LlmProviderRegistry.connection_definition(llm_runtime.provider_id)
-        provider_type = definition.provider_kind if definition else None
-        is_cli_transport = definition is not None and definition.transport == "cli"
-        if require and not base_url and not is_cli_transport:
-            raise ValueError(
-                f"kein Endpoint für Provider '{llm_runtime.provider_id}' aufgelöst: die "
-                "Route nennt Modell und Provider, aber keine Basis-URL. Ohne Endpoint "
-                "würde die Anfrage an die .env-Konfiguration statt an die konfigurierte "
-                "Verbindung gehen, während Modell und Schlüssel aus der Route stammen — "
-                "diese Mischung erreicht den falschen Provider. Bitte unter Einstellungen "
-                f"→ LLM-Anbieter die Verbindung '{llm_runtime.provider_id}' prüfen."
-            )
-        return resolve_route_api_key(llm_runtime), base_url, provider_type
-    if llm_runtime and llm_runtime.enabled:
-        provider_type = PROVIDER_CODEX_CLI if llm_runtime.provider == PROVIDER_CODEX_CLI else None
-        return llm_runtime.api_key, llm_runtime.base_url, provider_type
-    if require:
-        raise ValueError(
-            "kein LLM-Provider aufgelöst: die Vorbereitung erwartet eine "
-            "aufgelöste Route oder einen aktiven Runtime-Override. Ohne beides "
-            "würden Endpoint und Schlüssel aus der .env stammen, während das "
-            "Modell aus der Route kommt — diese Mischung erreicht den falschen "
-            "Provider. Bitte unter Einstellungen → LLM-Anbieter eine aktive "
-            "Verbindung wählen."
-        )
-    return None, None, None
+def _resolve_llm_connection(llm_runtime: Optional[LlmRuntimeInput], *, require: bool=True) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    return _prepare_llm._resolve_llm_connection(llm_runtime, require=require)
 
 
 # Bestimmte und unbestimmte Artikel, die einer Entitaetsbezeichnung
@@ -155,257 +82,27 @@ _MIN_ADJECTIVE_STEM_LENGTH = 4
 
 
 def _strip_leading_article(tokens: list[str]) -> list[str]:
-    """Entfernt fuehrende Artikel, falls danach noch ein Namensrest bleibt."""
-    while len(tokens) > 1 and tokens[0].casefold() in _LEADING_ARTICLES:
-        tokens = tokens[1:]
-    return tokens
+    return _prepare_entities._strip_leading_article(tokens)
 
 
 def _normalize_adjective_endings(tokens: list[str]) -> list[str]:
-    """Gleicht einfache Adjektivflexion an ("digitaler"/"digitale"/"digitalen"
-    -> "digital").
-
-    Bewusst konservativ in drei Punkten:
-
-    1. Nur das Token unmittelbar vor dem letzten (dem Kopf-Nomen) kommt
-       ueberhaupt infrage. In deutschen Nominalphrasen steht das attributive
-       Adjektiv direkt vor seinem Kopf-Nomen, ohne trennendes Wort dazwischen
-       ("digitaler Zwilling", "junge Familien"). Ein Token, das *nicht*
-       unmittelbar vor dem letzten steht, ist damit strukturell kein
-       attributives Adjektiv des Kopf-Nomens, selbst wenn es zufaellig auf
-       eine Adjektivendung endet. Das ist bewusst enger als "irgendein
-       nicht-letztes Token": geprueft an einer Grossschreibungs-Heuristik
-       ("Nomen werden grossgeschrieben") zeigte sich, dass sie am
-       Phrasenanfang nicht traegt — "Junge Familien" (bestehender Testfall)
-       braucht die Normalisierung genau am ersten, grossgeschriebenen Token,
-       weil dort auch attributive Adjektive phrasenanfangs grossgeschrieben
-       auftreten. Grossschreibung allein trennt Nomen und Adjektiv also
-       nicht zuverlaessig; die Wortstellung tut es. Sie schuetzt zugleich
-       "Unternehmen der Region" vs. "Unternehmer der Region" (Codex-Finding
-       auf PR #1453): "Unternehmen"/"Unternehmer" stehen dort nicht
-       unmittelbar vor dem Kopf-Nomen "Region" — dazwischen steht "der" —,
-       werden also nie angefasst, obwohl beide Nomen zufaellig auf eine
-       Adjektivendung ("-en"/"-er") enden. Einwortige Namen ("Lehrkraft",
-       "Lernplattform") sind ueberhaupt nie betroffen, weil ihr einziges
-       Token immer das letzte ist.
-    2. Der verbleibende Stamm muss mindestens
-       ``_MIN_ADJECTIVE_STEM_LENGTH`` Zeichen lang sein, sonst wird nicht
-       gestrippt (siehe Kommentar dort). Das schuetzt z. B. "der" in
-       "Unternehmen der Region" zusaetzlich, falls die Phrase kuerzer waere.
-    3. Trifft keine der beiden Bedingungen zu, bleibt das Token unveraendert
-       stehen. Im Zweifel wird nicht gestemmt — ein verpasster Treffer ist
-       billig, eine falsche Fusion verfaelscht die Persona-Menge.
-
-    Grenze: bei mehreren attributiven Adjektiven vor dem Kopf-Nomen ("die
-    grosse digitale Lernplattform") wird nur das unmittelbar vorangehende
-    Adjektiv normalisiert; weiter vorne stehende Adjektive bleiben
-    unveraendert. Das ist ein verpasster Treffer, keine falsche Fusion, und
-    damit im Sinne des Auftrags die sicherere Seite.
-
-    Kein Nomen-Stemmer, kein Fremdbibliotheks-Ansatz — nur eine kleine feste
-    Endungsliste auf Wortebene.
-    """
-    if len(tokens) < 2:
-        return tokens
-    normalized = list(tokens)
-    index = len(normalized) - 2
-    lower = normalized[index].casefold()
-    for suffix in _ADJECTIVE_SUFFIXES:
-        stem_length = len(lower) - len(suffix)
-        if lower.endswith(suffix) and stem_length >= _MIN_ADJECTIVE_STEM_LENGTH:
-            normalized[index] = lower[: -len(suffix)]
-            break
-    return normalized
+    return _prepare_entities._normalize_adjective_endings(tokens)
 
 
-def _entity_identity_key(entity: "EntityNode") -> tuple[str, str]:
-    """Vergleichsschluessel fuer Persona-Kandidaten (Issue #1177, #1177-Folge).
-
-    Normalisiert wie ``report_contract._stakeholder_group_key``: casefold plus
-    Whitespace-Kollaps. Die Ontologie liefert denselben Stakeholder mehrfach in
-    leicht abweichender Schreibweise; roh verglichen zaehlt jede Variante als
-    eigene Gruppe. Zusaetzlich werden fuehrende Artikel entfernt und einfache
-    Adjektivendungen angeglichen (siehe ``_strip_leading_article`` und
-    ``_normalize_adjective_endings``), damit z. B. "digitaler Zwilling", "der
-    digitale Zwilling" und "digitale Zwilling" als eine Gruppe zaehlen.
-
-    Der Typ gehoert in den Schluessel: derselbe Name unter zwei Typen ist
-    fachlich nicht dasselbe — der Bildungstraeger als ``Traeger`` und als
-    ``Kostentraeger`` sind zwei Rollen, auch wenn der Typfehler selbst
-    (zweiter Befund in #1177) hier nicht behoben wird.
-    """
-    tokens = (entity.name or "").split()
-    tokens = _strip_leading_article(tokens)
-    tokens = _normalize_adjective_endings(tokens)
-    name = " ".join(tokens).casefold()
-    entity_type = " ".join((entity.get_entity_type() or "Entity").split()).casefold()
-    return name, entity_type
+def _entity_identity_key(entity: 'EntityNode') -> tuple[str, str]:
+    return _prepare_entities._entity_identity_key(entity)
 
 
-def _dedupe_entities(
-    entities: "List[EntityNode]",
-) -> "tuple[List[EntityNode], int]":
-    """Entfernt Mehrfachnennungen; erste Nennung gewinnt.
-
-    Gibt die bereinigte Liste und die Zahl entfernter Dubletten zurueck.
-    """
-    seen: set[tuple[str, str]] = set()
-    unique: List[EntityNode] = []
-    for entity in entities:
-        key = _entity_identity_key(entity)
-        if key in seen:
-            continue
-        seen.add(key)
-        unique.append(entity)
-    return unique, len(entities) - len(unique)
+def _dedupe_entities(entities: 'List[EntityNode]') -> 'tuple[List[EntityNode], int]':
+    return _prepare_entities._dedupe_entities(entities)
 
 
-def _cap_entities_across_types(
-    entities: "List[EntityNode]", max_agents: int
-) -> "List[EntityNode]":
-    """Kappt auf ``max_agents`` und sichert dabei jedem Typ einen Platz.
-
-    Issue #1177: ``entities[:max_agents]`` liess eine ueberrepraesentierte
-    Gruppe alle Plaetze belegen — kleine, aber fachlich wichtige Gruppen
-    (``Betriebsrat``, ``Honorarkraft``) fielen komplett heraus. Die Auswahl
-    geht deshalb reihum durch die Typen: erst je ein Vertreter pro Typ, dann
-    der zweite und so weiter, bis das Limit erreicht ist.
-
-    Innerhalb eines Typs bleibt die Reihenfolge der Quelle erhalten. Sie ist
-    unsortiert — der Lesepfad kennt kein ``ORDER BY``; welcher Vertreter eines
-    Typs gewinnt, ist damit weiterhin willkuerlich. Was diese Funktion
-    aendert, ist nur, dass *jeder* Typ vertreten ist, solange Plaetze
-    reichen. Eine Sortierung nach Grad oder Zentralitaet waere der naechste
-    Schritt und braucht eine Aenderung im Reader.
-    """
-    if max_agents <= 0 or len(entities) <= max_agents:
-        return list(entities)
-
-    by_type: Dict[str, List[EntityNode]] = {}
-    for entity in entities:
-        by_type.setdefault(entity.get_entity_type() or "Entity", []).append(entity)
-
-    selected: List[EntityNode] = []
-    round_index = 0
-    # Typen in Erstauftrittsreihenfolge — deterministisch und ohne stille
-    # Bevorzugung alphabetisch frueher Bezeichnungen.
-    while len(selected) < max_agents:
-        added_this_round = False
-        for bucket in by_type.values():
-            if round_index >= len(bucket):
-                continue
-            selected.append(bucket[round_index])
-            added_this_round = True
-            if len(selected) >= max_agents:
-                break
-        if not added_this_round:
-            break
-        round_index += 1
-
-    return selected
+def _cap_entities_across_types(entities: 'List[EntityNode]', max_agents: int) -> 'List[EntityNode]':
+    return _prepare_entities._cap_entities_across_types(entities, max_agents)
 
 
-def _phase_read_entities(
-    state: SimulationState,
-    storage: Any,
-    defined_entity_types: Optional[List[str]],
-    max_agents: Optional[int],
-    progress_callback: Optional[Callable] = None,
-    degradations: Optional[DegradationCollector] = None,
-):
-    """Phase 1: Entities aus dem Graphen lesen + filtern + cappen.
-
-    Aktualisiert ``state.entities_count`` und ``state.entity_types`` als
-    Seiteneffekt; gibt das ``FilteredEntities``-Objekt zurück.
-    """
-    if progress_callback:
-        progress_callback("reading", 0, "Connecting to graph...")
-
-    if not storage:
-        raise ValueError("storage (GraphStorage) is required for prepare_simulation")
-    reader = EntityReader(storage)
-
-    if progress_callback:
-        progress_callback("reading", 30, "Reading node data...")
-
-    filtered = reader.filter_defined_entities(
-        graph_id=state.graph_id,
-        defined_entity_types=defined_entity_types,
-        enrich_with_edges=True,
-    )
-
-    # Issue #1034: entity_type-Filter (label-technisch) findet auch
-    # Entitäten ohne menschlichen Träger — "USA" (Country), "Agora"
-    # (Product) usw. Der Eignungsfilter schließt sie vor dem
-    # max_agents-Cap aus, damit sie weder zählen noch generiert werden.
-    eligibility = filter_eligible_entities(filtered.entities, degradations=degradations)
-    if eligibility.exclusions:
-        filtered.entities = eligibility.eligible
-        filtered.filtered_count = len(filtered.entities)
-        filtered.entity_types = {
-            entity.get_entity_type() or "Entity" for entity in filtered.entities
-        }
-
-    # Issue #1177: Vor dem Cap deduplizieren. Mehrfachnennungen derselben
-    # Stakeholdergruppe belegten sonst die begrenzten Persona-Plaetze und
-    # verdraengten tatsaechlich verschiedene Gruppen.
-    deduped, duplicate_count = _dedupe_entities(filtered.entities)
-    if duplicate_count:
-        logger.info(
-            "Persona-Kandidaten: %d Dublette(n) vor dem Cap entfernt "
-            "(%d → %d Entitaeten)",
-            duplicate_count,
-            len(filtered.entities),
-            len(deduped),
-        )
-        filtered.entities = deduped
-        filtered.filtered_count = len(deduped)
-
-    # User-controlled cap on number of agents (optional).
-    #
-    # Issue #1177: Frueher ``entities[:max_agents]`` mit der Begruendung, der
-    # Reader sortiere nach Grad/Wichtigkeit. Diese Annahme stimmt nicht —
-    # weder ``filter_defined_entities`` noch der Neo4j-Lesepfad enthalten ein
-    # ``ORDER BY``. Die Auswahl war damit die unsortierte
-    # Rueckgabereihenfolge der Query, also willkuerlich, und eine
-    # ueberrepraesentierte Gruppe konnte alle Plaetze belegen.
-    if (
-        max_agents is not None
-        and max_agents > 0
-        and len(filtered.entities) > max_agents
-    ):
-        logger.info(
-            f"Capping agent count at {max_agents} "
-            f"(originally {len(filtered.entities)} entities)"
-        )
-        capped = _cap_entities_across_types(filtered.entities, max_agents)
-        # Issue #1247: Was der Cap wegschneidet, ist die Reserve. Die
-        # typunabhaengige Eignungspruefung faellt erst im
-        # Persona-Generierungsaufruf, also *nach* dem Cap — ohne Reservepool
-        # bliebe jeder dort abgelehnte Platz ersatzlos leer und der
-        # konfigurierte max_agents-Wert wuerde unterschritten.
-        selected_uuids = {entity.uuid for entity in capped}
-        filtered.reserve_entities = [
-            entity for entity in filtered.entities if entity.uuid not in selected_uuids
-        ]
-        filtered.entities = capped
-        filtered.filtered_count = len(filtered.entities)
-        filtered.entity_types = {
-            entity.get_entity_type() or "Entity" for entity in filtered.entities
-        }
-
-    state.entities_count = filtered.filtered_count
-    state.entity_types = list(filtered.entity_types)
-
-    if progress_callback:
-        progress_callback(
-            "reading", 100,
-            f"Completed, total {filtered.filtered_count} entities",
-            current=filtered.filtered_count,
-            total=filtered.filtered_count,
-        )
-
-    return filtered
+def _phase_read_entities(state: SimulationState, storage: Any, defined_entity_types: Optional[List[str]], max_agents: Optional[int], progress_callback: Optional[Callable]=None, degradations: Optional[DegradationCollector]=None):
+    return _prepare_entities._phase_read_entities(state, storage, defined_entity_types, max_agents, progress_callback, degradations)
 
 
 def _phase_generate_profiles(
@@ -660,205 +357,24 @@ def _phase_generate_config(
         )
 
 
-def _expand_entities_for_quota(
-    entities: List[Any],
-    plan: Optional[PersonaQuotaPlan],
-) -> List[Any]:
-    """Sub-Slice 20b — Generator-Erzwingung.
-
-    Mappt einen Entity-Pool auf den Soll-Plan: pro ``plan.targets[seg]``
-    werden so viele Entities zurückgegeben, wie die Quote vorgibt.
-    Round-Robin durch den Segment-Pool, wenn der Pool kleiner ist als
-    die Quote — keine Synth-Entities (würde semantische KG-Verankerung
-    aufgeben). Wenn ein Plan-Segment im Pool nicht existiert, wird ein
-    klarer ``ValueError`` geworfen, statt heimlich zu reduzieren.
-
-    Backwards-Compat: ``plan=None`` → Pool wird durchgereicht.
-
-    Hinweis zur Persona-Identität: Bei Replikation derselben Entity
-    bekommt jede Persona einen eigenen ``user_id`` (durch Position in
-    der Generator-Loop) und nutzt die bestehende Display-Name-/User-Name-
-    Dedup-Logik im Generator (s. ``oasis_profile_generator.py`` Z. 1269+),
-    die LLM-Name-Kollisionen abfängt.
-    """
-    if plan is None:
-        return entities
-
-    by_segment: Dict[str, List[Any]] = {}
-    for e in entities:
-        seg = e.get_entity_type() or "Entity"
-        by_segment.setdefault(seg, []).append(e)
-
-    expanded: List[Any] = []
-    for segment, target in plan.targets.items():
-        pool = by_segment.get(segment, [])
-        if not pool:
-            available = sorted(by_segment.keys())
-            raise ValueError(
-                f"PersonaQuotaPlan verlangt {target} Personas im Segment "
-                f"'{segment}', aber der Entity-Pool enthält keine Entity "
-                f"mit entity_type='{segment}'. Verfügbare Segmente: "
-                f"{available or '(leer)'}. Entweder Plan anpassen oder "
-                f"Ontologie um den fehlenden Type erweitern."
-            )
-        for i in range(target):
-            expanded.append(pool[i % len(pool)])
-
-    return expanded
+def _expand_entities_for_quota(entities: List[Any], plan: Optional[PersonaQuotaPlan]) -> List[Any]:
+    return _prepare_quota._expand_entities_for_quota(entities, plan)
 
 
-def _apply_persona_floor_to_entities(
-    entities: List[Any],
-    *,
-    minimum: int = MIN_PERSONA_TABLE_ROWS,
-) -> List[Any]:
-    """Ensure the generation pool can yield the report persona-table floor.
-
-    The generator creates a distinct profile per input position. When the graph
-    has fewer entities than the output contract requires, repeat the existing
-    entity pool in deterministic round-robin order instead of inventing
-    synthetic entities.
-    """
-    if not entities or len(entities) >= minimum:
-        return entities
-
-    logger.info(
-        "persona-floor angewendet: generation_pool=%s floor=%s",
-        len(entities),
-        minimum,
-    )
-    return [entities[i % len(entities)] for i in range(minimum)]
+def _apply_persona_floor_to_entities(entities: List[Any], *, minimum: int=MIN_PERSONA_TABLE_ROWS) -> List[Any]:
+    return _prepare_quota._apply_persona_floor_to_entities(entities, minimum=minimum)
 
 
-def _apply_persona_floor_to_quota_plan(
-    plan: Optional[PersonaQuotaPlan],
-    *,
-    minimum: int = MIN_PERSONA_TABLE_ROWS,
-) -> Optional[PersonaQuotaPlan]:
-    """Raise an explicit quota plan to the report persona floor.
-
-    Segment proportions are preserved via largest-remainder allocation. The
-    adjusted plan is used consistently for generation, validation and persisted
-    config, so downstream quota checks stay exact.
-    """
-    if plan is None or plan.total >= minimum:
-        return plan
-
-    raw_targets = {
-        segment: (target / plan.total) * minimum
-        for segment, target in plan.targets.items()
-    }
-    targets = {
-        segment: max(1, int(raw_value))
-        for segment, raw_value in raw_targets.items()
-    }
-    remaining = minimum - sum(targets.values())
-    if remaining > 0:
-        ranked_segments = sorted(
-            raw_targets,
-            key=lambda segment: (
-                raw_targets[segment] - int(raw_targets[segment]),
-                plan.targets[segment],
-                segment,
-            ),
-            reverse=True,
-        )
-        for segment in ranked_segments[:remaining]:
-            targets[segment] += 1
-
-    logger.info(
-        "persona-floor angewendet: quota_total=%s floor=%s targets=%s",
-        plan.total,
-        minimum,
-        targets,
-    )
-    return PersonaQuotaPlan(targets=targets, total=minimum)
+def _apply_persona_floor_to_quota_plan(plan: Optional[PersonaQuotaPlan], *, minimum: int=MIN_PERSONA_TABLE_ROWS) -> Optional[PersonaQuotaPlan]:
+    return _prepare_quota._apply_persona_floor_to_quota_plan(plan, minimum=minimum)
 
 
-def compute_persona_target(
-    entity_count: int,
-    *,
-    max_agents: Optional[int] = None,
-    quota_plan: Optional[PersonaQuotaPlan] = None,
-    floor: Optional[int] = None,
-) -> PersonaTargetContract:
-    """Bestimmt das Persona-Generierungsziel — eine Quelle für beide Pfade.
-
-    ``entity_count`` ist die Entitätenzahl nach Eignungsfilter und
-    ``max_agents``-Cap. Der wirksame Floor ist ``MIN_PERSONA_TABLE_ROWS``,
-    gedeckelt durch ein gesetztes ``max_agents > 0`` (Nutzer-Wunsch schlägt
-    Contract). Wer den Floor bereits aufgelöst hat — der Orchestrator tut
-    das für die Generierung —, reicht ihn als ``floor`` herein, statt ihn
-    hier ein zweites Mal berechnen zu lassen.
-
-    Mit ``quota_plan`` ist das Ziel dessen ``total`` nach
-    ``_apply_persona_floor_to_quota_plan``; ohne Plan ist es
-    ``max(entity_count, floor)`` — dasselbe, was
-    ``_apply_persona_floor_to_entities`` auf den Entity-Pool anwendet.
-
-    Ein leerer Pool bleibt leer: ``_apply_persona_floor_to_entities``
-    skaliert nichts hoch, wenn es nichts zu wiederholen gibt. Ein Ziel von
-    50 bei null Entitäten wäre genau die Divergenz zwischen Zähler und
-    Nenner, die dieser Contract beseitigen soll.
-
-    ``api/simulation_prepare.py`` (Preview) und ``_phase_generate_profiles``
-    (Laufpfad) rufen exakt diese Funktion.
-    """
-    effective_floor = MIN_PERSONA_TABLE_ROWS if floor is None else floor
-    if floor is None and max_agents is not None and max_agents > 0:
-        effective_floor = min(effective_floor, max_agents)
-
-    if entity_count == 0:
-        # Vor dem Quota-Zweig, nicht dahinter: auch mit Plan gibt es nichts
-        # zu wiederholen. `_expand_entities_for_quota` wirft hier ohnehin,
-        # und der Orchestrator bricht bei `filtered_count == 0` ab — ein
-        # Nenner von 50 wäre eine Zahl, die nie erreicht werden kann.
-        target = 0
-        floor_applied = False
-    elif quota_plan is not None:
-        adjusted_plan = _apply_persona_floor_to_quota_plan(
-            quota_plan, minimum=effective_floor
-        )
-        target = adjusted_plan.total if adjusted_plan is not None else quota_plan.total
-        # Mit Plan sagt ein Vergleich gegen `entity_count` nichts über den
-        # Floor aus: 80 Entitäten mit einer Quota von 6 werden angehoben,
-        # lägen aber unter der Entitätenzahl. Maßgeblich ist allein, ob der
-        # Plan unter dem Floor lag.
-        floor_applied = quota_plan.total < effective_floor
-    else:
-        target = max(entity_count, effective_floor)
-        floor_applied = entity_count < effective_floor
-
-    return PersonaTargetContract(
-        entity_count=entity_count,
-        persona_target_count=target,
-        floor_applied=floor_applied,
-        floor=effective_floor,
-    )
+def compute_persona_target(entity_count: int, *, max_agents: Optional[int]=None, quota_plan: Optional[PersonaQuotaPlan]=None, floor: Optional[int]=None) -> PersonaTargetContract:
+    return _prepare_quota.compute_persona_target(entity_count, max_agents=max_agents, quota_plan=quota_plan, floor=floor)
 
 
-def _validate_persona_quota(
-    plan: PersonaQuotaPlan,
-    profiles: List[OasisAgentProfile],
-) -> None:
-    """Validate actual persona segment counts against ``plan``.
-
-    Raises ``pydantic.ValidationError`` (propagates to caller) when:
-    - A required segment is missing or has wrong count (tolerance=0).
-    - Profiles contain segments not declared in the plan.
-    """
-    actual_counts: Dict[str, int] = {}
-    for p in profiles:
-        seg = getattr(p, "segment", None)
-        if seg:
-            actual_counts[seg] = actual_counts.get(seg, 0) + 1
-    PersonaQuotaActual.model_validate(
-        {
-            "plan": plan.model_dump(),
-            "actual_counts": actual_counts,
-            "tolerance": 0,
-        }
-    )
+def _validate_persona_quota(plan: PersonaQuotaPlan, profiles: List[OasisAgentProfile]) -> None:
+    return _prepare_quota._validate_persona_quota(plan, profiles)
 
 
 class PrepareCancelledError(Exception):
