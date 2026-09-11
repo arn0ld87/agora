@@ -56,7 +56,7 @@ Die exakte Liste steht in `.env.example`/Compose. Häufig relevante Werte:
 | `AGORA_BIND_HOST` | Host-Bind, Default Loopback |
 | `AGORA_BACKEND_PORT` | API/Frontend-Port |
 | `AGORA_FRONTEND_PORT` | Dev-Frontend-Port |
-| `AGORA_DNS_PRIMARY`, `AGORA_DNS_SECONDARY` | Container-DNS |
+| `AGORA_DNS_PRIMARY`, `AGORA_DNS_SECONDARY` | Container-DNS — nur mit `deploy/compose/docker-compose.external-dns.yml`, sonst erbt der Container den Host-Resolver |
 | `NEO4J_IMAGE` | Neo4j-Image-Pin |
 | `NEO4J_HEAP_INITIAL`, `NEO4J_HEAP_MAX`, `NEO4J_PAGECACHE_SIZE` | Neo4j-Memory |
 | `AGORA_STARTUP_RECONCILIATION` | stale Simulationen beim Workerstart korrigieren |

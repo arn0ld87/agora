@@ -29,9 +29,13 @@ services:
       - "${AGORA_BIND_HOST:-127.0.0.1}:${AGORA_BACKEND_PORT:-5001}:5001"
     restart: unless-stopped
     read_only: false
-    dns:
-      - ${AGORA_DNS_PRIMARY:-8.8.8.8}
-      - ${AGORA_DNS_SECONDARY:-8.8.4.4}
+    # Kein `dns:`-Default. Der Container erbt den Resolver der Docker-Engine und
+    # damit den des Hosts — noetig, damit Split-DNS-Namen (Tailscale MagicDNS,
+    # Homelab-Domains, firmeninterne Zonen) und ein lokaler LLM-Endpoint
+    # ueberhaupt aufloesbar bleiben. Ein hart gesetzter oeffentlicher Resolver
+    # widerspricht ausserdem dem local-first-Default: jede Namensaufloesung
+    # ginge dann an einen Dritten. Wer bewusst externe Resolver braucht,
+    # legt `deploy/compose/docker-compose.external-dns.yml` dazu.
     tmpfs:
       - /tmp:size=128M,mode=1777
       - /app/backend/logs:size=64M,mode=0700,uid=1000,gid=1000

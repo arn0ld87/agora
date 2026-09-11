@@ -165,7 +165,7 @@ Einzelne Vektoren schließen, die auch nach Auth+CORS noch Missbrauchspotenzial 
 | `AGORA_PROXY_FIX_X_PROTO` | nein | `0` | Anzahl vertrauenswürdiger Proxies, deren `X-Forwarded-Proto` Flask für das Request-Schema auswertet. Im Repo-Sidecar-Proxy-Compose auf `1` gesetzt. |
 | `AGORA_PROXY_FIX_X_HOST` / `AGORA_PROXY_FIX_X_PORT` / `AGORA_PROXY_FIX_X_PREFIX` | nein | `0` | Weitere Werkzeug-`ProxyFix`-Zähler. Nur setzen, wenn ein vertrauenswürdiger Proxy diese Header kontrolliert. |
 | `VISION_MAX_CALLS_PER_UPLOAD` | nein | `40` | Hartes Cap für Vision-LLM-Calls pro PDF-Upload. |
-| `AGORA_DNS_PRIMARY` / `AGORA_DNS_SECONDARY` | nein | `8.8.8.8` / `8.8.4.4` | Compose-DNS-Resolver fuer Container. |
+| `AGORA_DNS_PRIMARY` / `AGORA_DNS_SECONDARY` | nein | leer (Engine-/Host-Resolver) | Nur wirksam zusammen mit `deploy/compose/docker-compose.external-dns.yml`; dort sind beide Pflicht. Der Standard-Stack setzt keinen eigenen Resolver, damit Split-DNS (Tailscale MagicDNS, Homelab-Zonen) aufloesbar bleibt und keine Namensaufloesung ungefragt an Dritte geht. |
 | `NEO4J_IMAGE` | nein | `neo4j:5.18-community` | Neo4j-Image-Pin fuer Compose. |
 | `NEO4J_HEAP_INITIAL` / `NEO4J_HEAP_MAX` / `NEO4J_PAGECACHE_SIZE` | nein | `512m` / `2g` / `4g` | Neo4j-Memory-Tuning ohne Compose-Patch. |
 

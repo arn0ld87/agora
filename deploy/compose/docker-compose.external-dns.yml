@@ -1,0 +1,27 @@
+# Optionaler DNS-Override.
+#
+# Der Standard-Stack setzt bewusst keinen `dns:`-Eintrag und erbt damit den
+# Resolver der Docker-Engine. Das ist der richtige Default: Split-DNS-Setups
+# (Tailscale MagicDNS, Homelab-Zonen, interne Firmen-Domains) und lokale
+# LLM-Endpoints bleiben aufloesbar, und keine Namensaufloesung verlaesst
+# ungefragt den Host.
+#
+# Dieses Override ist nur fuer Hosts gedacht, deren eigener Resolver im
+# Container nachweislich nicht funktioniert.
+#
+# Verwendung — beide Variablen sind Pflicht, damit kein stiller Default
+# zurueckkehrt:
+#
+#   export AGORA_DNS_PRIMARY=192.168.1.1
+#   export AGORA_DNS_SECONDARY=9.9.9.9
+#   docker compose \
+#     -f docker-compose.yml \
+#     -f docker-compose.prod.yml \
+#     -f deploy/compose/docker-compose.external-dns.yml \
+#     up -d
+
+services:
+  agora:
+    dns:
+      - ${AGORA_DNS_PRIMARY:?AGORA_DNS_PRIMARY muss gesetzt sein, wenn das external-dns-Override verwendet wird}
+      - ${AGORA_DNS_SECONDARY:?AGORA_DNS_SECONDARY muss gesetzt sein, wenn das external-dns-Override verwendet wird}
