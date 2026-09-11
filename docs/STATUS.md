@@ -130,9 +130,17 @@ Bekannt offen: `detect_domain_drift` kann Drift übersehen, sobald Quell- und Pe
 - Exportpfade bleiben strenger: Formate, die Evidence als geprüfte Datei ausgeben würden, lassen invalides Material aus oder antworten mit einem Contract-Fehler.
 - Cross-Stakeholder-Zählung normalisiert Rollenfamilien konsistent; der Zod-Spiegel bildet Python-`casefold` für die relevanten Fälle nach (#1477/#1482).
 
+### Fließtext-Faktenprüfung
+
+- Jeder numerische Fakt wird mit seinem **eigenen** Textausschnitt gegen den Evidence-Pool gehalten. Bis [#1492](https://github.com/arn0ld87/agora/issues/1492) lief das Prädikat eines Fakts bis zum Satzende und trug die übrigen Zahlen desselben Satzes mit — gebündelte, wörtlich belegte Seed-Aussagen bekamen dadurch `[Beleg fehlt]`, und im Prozentfall wurden mit der Quelle identische Sätze als vermeintlicher Widerspruch entfernt.
+- Absolutzahlen und Prozentangaben werden im selben Satz beide erfasst; vorher entfielen die Absolutzahlen, sobald der Satz eine Prozentangabe enthielt.
+- Die strukturierte Beanstandung (`unverified_statements[].reason`) benennt die konkret unbelegte Zahl und unterscheidet „teilweise belegt" von „gar kein Beleg".
+- Offener Restbefund: ausgeschriebene Zahlwörter („sechs Angebote") erzeugen keinen prüfbaren Fakt — als `xfail` in `backend/tests/regression/test_evidence_fact_boundaries.py` festgehalten.
+
 ### Weiter offene Trust-Themen
 
 - Quantifizierte Aussagen können noch Evidence referenzieren, die den Quantor nicht trägt ([#1345](https://github.com/arn0ld87/agora/issues/1345)).
+- Die **Gewinnung** von Evidence aus dem Seed bleibt LLM-seitig: Zerlegt die Graph-Ingestion einen gebündelten Seed-Satz zu einem Teilfakt, fehlen die übrigen Angaben im Pool. #1492 hat die Prüfseite deterministisch repariert, nicht die Extraktion davor.
 - Evaluation-Seeds können erwartete Antworten enthalten, die später als vermeintliche Simulationserkenntnis wiedergefunden werden ([#1240](https://github.com/arn0ld87/agora/issues/1240)).
 - Claim-Typisierung und Confidence-Kalibrierung sind noch nicht vollständig abgeschlossen (#1301/#1400).
 
