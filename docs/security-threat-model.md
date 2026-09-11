@@ -127,7 +127,7 @@ Risiken:
 
 Vorhandene Schutzmechanismen unterscheiden sich je Pfad. Für credential-behaftete Provider-Verbindungen existieren Transport-Security, Timeouts, Retry-/Budget-Grenzen und Secret-Redaction.
 
-**Nicht pauschal behaupten, dass jeder direkte URL-Fetch denselben SSRF-Guard benutzt.** Der experimentelle OASIS-Agent-Tool-Pfad `backend/scripts/agent_tools.py::web_fetch` ist auf dieser Baseline eine dokumentierte Ausnahme (#1485).
+Direkte URL-Fetches mit agenten- oder modellgelieferten Zielen laufen ausnahmslos über `backend/app/security/outbound_http.py`. Das gilt seit #1485 auch für den OASIS-Agent-Tool-Pfad `backend/scripts/agent_tools.py::web_fetch`, der vorher als dokumentierte Ausnahme geführt wurde. Tavily-basierte Pfade (`app/services/web_tools.py`) rufen denselben Guard auf, bevor sie eine URL an den externen Extraktor geben.
 
 ---
 
@@ -219,24 +219,25 @@ Beispiele:
 
 **Ziel:** Web-/Research-Tools gegen Loopback, RFC1918, CGNAT/Tailnet, Link-Local, Cloud-Metadata oder andere interne Dienste richten.
 
-**Aktueller Befund:** `backend/scripts/agent_tools.py::AgentToolRegistry.web_fetch()` ruft die vom Agenten gelieferte URL auf der geprüften Baseline direkt über `requests.get(..., allow_redirects=True)` ab. In diesem Pfad ist vor dem Request **kein eigener Private-IP-/Loopback-/Metadata-SSRF-Guard sichtbar**; Redirect-Ziele werden ebenfalls nicht einzeln validiert. Tracking: **#1485**.
+**Status:** geschlossen mit #1485. Der gesamte Outbound-Pfad für untrusted URLs liegt in `backend/app/security/outbound_http.py`; `agent_tools.web_fetch` ruft ihn auf und hat keinen eigenen `requests`-Aufruf mehr.
 
-`ENABLE_AGENT_TOOLS` ist standardmäßig `false`, daher ist die Lücke nicht im Default-Lauf aktiv. Bei Aktivierung erweitert sie jedoch die Outbound-Netzwerkfläche des OASIS-Subprozesses.
+**Umgesetzte Kontrollen:**
 
-**Bis #1485 geschlossen ist:**
+- nur `http`/`https`, keine Credentials in der URL,
+- IPv4- und IPv6-Adressklassen werden geprüft, inklusive IPv4-mapped IPv6 (`::ffff:127.0.0.1`) und 6to4,
+- private/loopback/link-local/multicast/reserved/unspecified sowie Cloud-Metadata-Ziele werden blockiert; ein `is_global`-Catch-all fängt Sonderbereiche wie CGNAT,
+- Docker-/Kubernetes-/`.internal`-Sondernamen werden schon vor der Auflösung abgelehnt,
+- löst ein Hostname auf mehrere Adressen auf und ist **eine** davon nicht öffentlich, wird die gesamte URL verworfen,
+- Redirects werden manuell verfolgt und jeder Hop vollständig neu validiert (`max_redirects`, Default 3),
+- DNS-Rebinding/TOCTOU: die Verbindung wird auf die geprüfte IP gepinnt, während Host-Header, TLS-SNI und Zertifikatsprüfung am echten Hostnamen bleiben,
+- Connect-/Read-Timeouts und ein gestreamtes Response-Byte-Limit (Default 1 MB) statt eines vollständigen `resp.text`,
+- Ablehnungsgründe werden ohne URL-Userinfo geloggt.
 
-- Agent-Webtools nur in kontrollierter Netzwerk-/Egress-Umgebung aktivieren,
-- URLs aus Modelloutput/Observation als untrusted behandeln,
-- nicht davon ausgehen, dass SSRF-Härtung anderer Fetch-Pfade automatisch für `agent_tools.py` gilt.
+Regressionstests: `backend/tests/security/test_outbound_http.py` und `backend/tests/scripts/test_agent_tools_web_fetch.py`.
 
-**Zielzustand:**
+`ENABLE_AGENT_TOOLS` bleibt standardmäßig `false`. URLs aus Modelloutput/Observation bleiben untrusted — der Guard begrenzt das Ziel, nicht den Inhalt.
 
-- nur `http`/`https`,
-- IPv4/IPv6-Adressklassen prüfen,
-- private/loopback/link-local/metadata Ziele blockieren,
-- jedes Redirect erneut validieren,
-- DNS-Rebinding/TOCTOU im Verbindungsdesign berücksichtigen,
-- Timeouts und Response-Größenlimits beibehalten.
+**Bewusste Grenze:** Der gepinnte Pfad honoriert `HTTP(S)_PROXY` nicht. Pinning und ein vorgeschalteter Proxy schließen sich aus, weil der Proxy selbst auflöst. Wer zwingend über einen Egress-Proxy will, setzt diese Grenze auf Netzwerkebene statt im Client.
 
 ### A8 — Supply Chain
 
@@ -308,7 +309,7 @@ Ein gespeicherter Seed allein kontrolliert noch nicht alle Zufalls-/Modell-/Prom
 | Logs | strukturierte Logger + Secret-Redaction |
 | Dependencies | Audit-/Risk-Register-/SBOM-Gates |
 | Run-Kosten | Call-/Token-/Kosten-/Zeitbudgets |
-| Agent-Webtools | opt-in (`ENABLE_AGENT_TOOLS=false` Default); SSRF-Härtung #1485 offen |
+| Agent-Webtools | opt-in (`ENABLE_AGENT_TOOLS=false` Default); SSRF-Guard `app/security/outbound_http.py` mit Adressklassen-, Redirect- und Pinning-Prüfung (#1485) |
 
 ---
 
@@ -316,12 +317,11 @@ Ein gespeicherter Seed allein kontrolliert noch nicht alle Zufalls-/Modell-/Prom
 
 1. **Shared Admin-Token:** kein Human-IAM/RBAC; Master-Token bleibt Vollzugriff.
 2. **Prompt Injection:** untrusted Quellen/Observation sind noch nicht überall maximal getrennt (#1224).
-3. **Agent-Tool-SSRF:** experimentelles `web_fetch` besitzt noch keinen vollständigen Private-IP-/Redirect-/Rebinding-Guard (#1485).
-4. **Webprozess-Langläufer:** Prepare/Report/Graph sind noch nicht vollständig restart-sicher (#1472).
-5. **Embedding-SSoT:** UI-aktive Konfiguration kann von Runtime-Env abweichen (#1417).
-6. **Simulationstreue:** Role Leakage/Recommender-Probleme (#1323/#1236).
-7. **Reproduzierbarkeit:** Manifest/Replay unvollständig (#763/#1274).
-8. **Restore-Nachweis:** Backup-Doku existiert, vollständiger Fresh-Host-Drill bleibt Release-Arbeit (#766).
+3. **Webprozess-Langläufer:** Prepare/Report/Graph sind noch nicht vollständig restart-sicher (#1472).
+4. **Embedding-SSoT:** UI-aktive Konfiguration kann von Runtime-Env abweichen (#1417).
+5. **Simulationstreue:** Role Leakage/Recommender-Probleme (#1323/#1236).
+6. **Reproduzierbarkeit:** Manifest/Replay unvollständig (#763/#1274).
+7. **Restore-Nachweis:** Backup-Doku existiert, vollständiger Fresh-Host-Drill bleibt Release-Arbeit (#766).
 
 ---
 
