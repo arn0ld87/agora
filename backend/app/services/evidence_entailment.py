@@ -620,20 +620,74 @@ def _full_predicate(prefix: str, tail_predicate: str) -> str:
     return " ".join(part for part in (prefix.strip(",.;:() "), tail_predicate) if part).strip()
 
 
+def _numeric_spans(sentence: str) -> List[tuple[str, "re.Match[str]"]]:
+    """Alle Zahlenvorkommen eines Satzes, in Lesereihenfolge.
+
+    Prozent- und Absolutzahlen wurden vorher in zwei getrennten Durchläufen
+    gesucht, und der zweite lief nur, wenn der erste **nichts** gefunden hatte.
+    Ein Satz wie "Von 120 Teilnehmenden lehnen 18 % der Lehrkräfte ab" verlor
+    dadurch die 120 vollständig: sie tauchte in keinem Fakt auf, war für den
+    Trust-Layer nicht vorhanden und konnte weder belegt noch widerlegt werden.
+
+    Beide Muster laufen jetzt über denselben Satz; überlappende Treffer
+    gewinnt das Prozentmuster, damit aus "18 % der Lehrkräfte" nicht
+    zusätzlich ein Absolutfakt "18 Lehrkräfte" entsteht.
+    """
+    spans: List[tuple[str, "re.Match[str]"]] = [
+        ("percent", match) for match in _PERCENT_RE.finditer(sentence)
+    ]
+    percent_ranges = [(m.start(), m.end()) for _, m in spans]
+    for match in _ABSOLUTE_RE.finditer(sentence):
+        if any(lo <= match.start() < hi for lo, hi in percent_ranges):
+            continue
+        spans.append(("absolute", match))
+    spans.sort(key=lambda entry: entry[1].start())
+    return spans
+
+
 def extract_numeric_facts(text: str) -> List[NumericFact]:
     """Extrahiert Zahlen samt Bezugsgruppe, Aussage und Modalität.
 
     Nur was sich einer Bezugsgruppe zuordnen lässt, wird zum ``NumericFact`` —
     eine nackte Zahl ohne Subjekt ist für den Faktencheck wertlos.
+
+    Issue #1492: Jeder Fakt bekommt seinen **eigenen Textausschnitt**. Vorher
+    lief das Prädikat bis zum Satzende und trug damit die übrigen Zahlen
+    desselben Satzes mit sich. Aus "Der Pilot umfasst 120 Teilnehmende, 18
+    Lehrkräfte und sechs Qualifizierungsangebote" wurde für die 120 das
+    Prädikat "18 Lehrkräfte und sechs Qualifizierungsangebote" — keine
+    einzelne Quelle konnte das decken, und der Satz bekam ``[Beleg fehlt]``,
+    obwohl seine Zahlen wörtlich im Seed stehen. Im Prozentfall war die Folge
+    schwerer: die Evidenz zu "18 % … 44 %" trug in ihrem 18-%-Fakt das
+    Prädikat der 44 % mit, kollidierte mit dem 44-%-Fakt des Berichts und
+    erzeugte einen ``CONTRADICTED``-Fehlalarm — der Satz wurde gelöscht,
+    obwohl er mit der Quelle identisch war.
+
+    :func:`_split_subject_predicate` zog diese Grenze seit #1356 bereits für
+    das Subjekt; hier gilt sie jetzt für den gesamten Ausschnitt eines Fakts.
     """
     facts: List[NumericFact] = []
     for sentence in _sentences(text):
-        for match in _PERCENT_RE.finditer(sentence):
+        spans = _numeric_spans(sentence)
+        for index, (unit, match) in enumerate(spans):
             value = _parse_number(match.group("value"))
             if value is None:
                 continue
-            prefix = sentence[: match.start()]
-            subject, tail = _split_subject_predicate(sentence[match.end():])
+            # Der Ausschnitt eines Fakts endet, wo der nächste beginnt, und
+            # beginnt, wo der vorige endet.
+            prefix_start = spans[index - 1][1].end() if index else 0
+            tail_end = (
+                spans[index + 1][1].start()
+                if index + 1 < len(spans)
+                else len(sentence)
+            )
+            prefix = sentence[prefix_start : match.start()]
+            # Beim Absolutmuster gehört das Bezugsnomen zum Tail, beim
+            # Prozentmuster steht es hinter der Einheit.
+            tail_start = (
+                match.end() if unit == "percent" else match.start("noun")
+            )
+            subject, tail = _split_subject_predicate(sentence[tail_start:tail_end])
             if not subject:
                 # Deutsches Vorfeld: "Die Verwaltung erreichte 91 Prozent."
                 subject = _subject_from_prefix(prefix)
@@ -643,39 +697,17 @@ def extract_numeric_facts(text: str) -> List[NumericFact]:
             facts.append(
                 NumericFact(
                     value=value,
-                    unit="percent",
+                    unit=unit,
                     subject=subject,
                     predicate=predicate,
                     modality=_modality_of(predicate, sentence),
+                    # Der Rohsatz bleibt an jedem Fakt erhalten: die Zerlegung
+                    # darf den Kontext einschraenken, nicht loeschen.
                     raw=sentence.strip(),
                     bound=_bound_of(prefix),
                     scope=_scope_terms(prefix, subject),
                 )
             )
-        if not any(f.raw == sentence.strip() for f in facts):
-            for match in _ABSOLUTE_RE.finditer(sentence):
-                value = _parse_number(match.group("value"))
-                if value is None:
-                    continue
-                prefix = sentence[: match.start()]
-                subject, tail = _split_subject_predicate(sentence[match.start("noun"):])
-                if not subject:
-                    subject = _subject_from_prefix(prefix)
-                if not subject:
-                    continue
-                predicate = _full_predicate(prefix, tail)
-                facts.append(
-                    NumericFact(
-                        value=value,
-                        unit="absolute",
-                        subject=subject,
-                        predicate=predicate,
-                        modality=_modality_of(predicate, sentence),
-                        raw=sentence.strip(),
-                        bound=_bound_of(prefix),
-                        scope=_scope_terms(prefix, subject),
-                    )
-                )
     return facts
 
 

@@ -455,32 +455,88 @@ def _renumber_block(lines: List[str], anchor: int, indent: str) -> None:
         counter += 1
 
 
+def _fact_label(fact: NumericFact) -> str:
+    """Kurzbezeichnung eines Fakts für Leser: die Zahl mit ihrer Bezugsgruppe."""
+    head = f"{fact.value:g} %" if fact.unit == "percent" else f"{fact.value:g}"
+    return " ".join(part for part in (head, fact.subject) if part).strip()
+
+
+@dataclass(frozen=True)
+class FactOutcome:
+    """Das entscheidende Urteil eines Satzes samt auslösendem Fakt.
+
+    Issue #1492: Der Marker entwertete den ganzen Satz, ohne zu sagen, welche
+    seiner Zahlen unbelegt ist. Bei einem Satz mit drei Angaben, von denen zwei
+    sauber belegt sind, ist das die falsche Auskunft — der Leser kann belegte
+    und unbelegte Teile nicht mehr trennen. Die Zählung hier macht den
+    Unterschied zwischen "gar kein Beleg" und "teilweise belegt" maschinenlesbar.
+    """
+
+    result: EntailmentResult
+    fact: NumericFact
+    supported: int
+    checked: int
+
+    @property
+    def partially_supported(self) -> bool:
+        return self.supported > 0
+
+    @property
+    def verdict(self) -> EntailmentVerdict:
+        return self.result.verdict
+
+    @property
+    def reason(self) -> str:
+        base = f"»{_fact_label(self.fact)}«: {self.result.reason}"
+        if not self.partially_supported:
+            return base
+        verb = "ist" if self.supported == 1 else "sind"
+        return (
+            f"{base} — {self.supported} der {self.checked} Zahlenangaben "
+            f"des Satzes {verb} belegt"
+        )
+
+
 def _worst_fact_verdict(
     sentence: str,
     evidence_pool: Sequence[Dict[str, Any]],
     *,
     judge: Optional[EntailmentJudge] = None,
-) -> Optional[EntailmentResult]:
+) -> Optional[FactOutcome]:
     """Das schwerwiegendste Urteil über die Zahlenfakten eines Satzes.
 
     ``None`` heißt: der Satz trägt keine prüfbare Zahl, oder jede seiner
     Zahlen ist belegt. Geprüft wird pro Fakt, nicht pro Satz — ein Satz mit
     drei Quoten darf nicht daran scheitern, dass eine Quelle eine davon einer
     fremden Bezugsgruppe zuordnet.
+
+    Zurück kommt nicht nur das Urteil, sondern auch der Fakt, der es ausgelöst
+    hat, und wie viele Zahlen des Satzes belegt sind (Issue #1492) — sonst
+    nennt die Beanstandung den Satz, aber nicht den Grund.
     """
-    worst: Optional[EntailmentResult] = None
+    worst: Optional[FactOutcome] = None
+    supported = 0
+    checked = 0
+    pending: List[tuple[EntailmentResult, NumericFact]] = []
     for fact in extract_numeric_facts(sentence):
+        checked += 1
         result = _best_verdict(_fact_probe(fact), evidence_pool, judge=judge)
         if result.verdict is EntailmentVerdict.SUPPORTED:
+            supported += 1
             continue
+        pending.append((result, fact))
+
+    for result, fact in pending:
         if worst is None or _SEVERITY[result.verdict] > _SEVERITY[worst.verdict]:
-            worst = result
+            worst = FactOutcome(
+                result=result, fact=fact, supported=supported, checked=checked
+            )
     return worst
 
 
 def _reject_sentence(
     sentence: str,
-    result: EntailmentResult,
+    result: "FactOutcome",
     *,
     block_index: int,
     rejected: List["RejectedStatement"],
