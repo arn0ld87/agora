@@ -1,0 +1,79 @@
+# mypy-Schuld-Baseline — erzeugt mit `python scripts/check_mypy_debt.py --write`.
+#
+# Gemessen mit mypy-debt.ini: derselben Konfiguration wie das regulaere Gate,
+# aber OHNE den ignore_errors-Block. Jede Zeile: <fehler> <datei>.
+#
+# Diese Zahlen duerfen nur sinken. Waechst eine, ist die Aenderung schuld —
+# nicht die Baseline. Nach einem Cleanup: neu schreiben und mitcommitten.
+
+[ignore-errors-module]
+# Diese Module sind im regulaeren Gate abgeschaltet. Die Liste darf nicht
+# wachsen: ein neues Modul hier hinein zu schreiben, statt es zu typisieren,
+# waere der offensichtliche Umgehungsweg um die Zahlen unten.
+app
+app.config
+app.container
+app.llm.*
+app.models.*
+app.services.*
+app.storage.*
+app.utils.*
+
+[errors-per-file]
+4 app/container.py
+4 app/llm/client.py
+1 app/llm/providers/base.py
+4 app/llm/providers/openai.py
+1 app/llm/tool_calls.py
+1 app/models/project.py
+1 app/models/report.py
+11 app/models/task.py
+1 app/services/api_keys_store.py
+2 app/services/event_bus.py
+3 app/services/graph_builder.py
+1 app/services/graph_tools.py
+11 app/services/llm_provider_registry.py
+1 app/services/network_analytics.py
+4 app/services/oasis_profile_batch.py
+1 app/services/oasis_profile_core.py
+2 app/services/oasis_profile_generator.py
+1 app/services/oasis_profile_llm.py
+1 app/services/prepare_llm.py
+30 app/services/report_agent/agent.py
+2 app/services/report_agent/attribution_guard.py
+7 app/services/report_agent/csv_export.py
+1 app/services/report_agent/evidence.py
+17 app/services/report_agent/manager.py
+3 app/services/report_agent/markdown_renderer.py
+1 app/services/report_agent/schemas.py
+1 app/services/report_agent/text_verification.py
+2 app/services/report_agent/threshold_provenance.py
+7 app/services/report_agent/workflow.py
+1 app/services/report_export.py
+1 app/services/run_budget.py
+6 app/services/run_budget_preflight.py
+1 app/services/run_lifecycle.py
+12 app/services/run_registry.py
+1 app/services/secret_resolver.py
+10 app/services/sim/interview_client.py
+1 app/services/simulation_config_events.py
+2 app/services/simulation_manager.py
+3 app/services/simulation_runner.py
+19 app/services/stage_model_router.py
+1 app/services/temporal_graph.py
+2 app/services/web_tools.py
+2 app/storage/embedding_service.py
+22 app/storage/neo4j_read.py
+1 app/storage/neo4j_search.py
+1 app/storage/neo4j_storage.py
+27 app/storage/neo4j_write.py
+1 app/storage/ner_extractor.py
+1 app/utils/api_responses.py
+4 app/utils/file_parser.py
+15 app/utils/gpu_probe.py
+2 app/utils/llm_e2e_stub.py
+2 app/utils/llm_profile_resolver.py
+1 app/utils/proxy.py
+1 app/utils/signed_ticket.py
+
+# Summe: 266 Fehler in 55 Dateien.
