@@ -361,7 +361,14 @@ class TestAblehnungPassiertDasSchema:
         assert "`0`" not in block
 
     def test_platzhalter_aus_dem_prompt_validieren_gegen_das_schema(self):
-        """Die im Prompt genannten Werte müssen tatsächlich durchgehen."""
+        """Die im Prompt genannten Werte müssen tatsächlich durchgehen.
+
+        ``gender`` stand hier bis zur Verengung der Wertemenge auf ``"other"``.
+        Für Individualpersonas ist das ausdrücklich verboten ("das ist
+        Institutionen vorbehalten", siehe ``oasis_profile_prompts.py``); der
+        Ablehnungspfad nennt jetzt ``null``, weil es bei ``ineligible: true``
+        keine Demografie gibt, die nicht erfunden wäre.
+        """
         from app.services.oasis_profile_generator import PersonaProfileSchema
 
         payload = PersonaProfileSchema.model_validate({
@@ -370,7 +377,7 @@ class TestAblehnungPassiertDasSchema:
             "bio": "",
             "persona": "",
             "age": 30,
-            "gender": "other",
+            "gender": None,
             "mbti": "ISTJ",
             "country": "DE",
             "profession": "",
@@ -380,6 +387,7 @@ class TestAblehnungPassiertDasSchema:
             "ineligible_reason": "Lernplattform",
         })
         assert payload.ineligible is True
+        assert payload.gender is None
 
 
 class TestKeineLeerenSlotsNachAussen:
