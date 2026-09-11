@@ -111,8 +111,54 @@ class EntailmentResult:
 # Numerische Faktenextraktion
 # ---------------------------------------------------------------------------
 
+#: Ausgeschriebene Zahlwoerter. Die deutsche Schreibkonvention setzt Zahlen bis
+#: zwoelf als Wort — "sechs Qualifizierungsangebote" ist derselbe pruefbare
+#: Fakt wie "6 Qualifizierungsangebote", erzeugte aber keinen ``NumericFact``,
+#: weil beide Muster eine Ziffer verlangten (#1492, Restbefund).
+#:
+#: ``ein``/``eine`` fehlt bewusst: im Deutschen weit oefter unbestimmter Artikel
+#: als Zahlwort. Aus "eine Lehrkraft berichtet von Zeitgewinn" wuerde sonst der
+#: Fakt "1 Lehrkraft" — eine Mengenbehauptung, die der Satz gar nicht aufstellt,
+#: und im Trust-Layer damit eine erfundene Zahl.
+#:
+#: ``null`` fehlt aus dem Gegengrund: als Mengenangabe praktisch nie
+#: ausgeschrieben, als Wort dagegen haeufig ("null Ahnung").
+_WORD_NUMBERS: dict[str, float] = {
+    "zwei": 2.0,
+    "drei": 3.0,
+    "vier": 4.0,
+    "fünf": 5.0,
+    "fuenf": 5.0,
+    "sechs": 6.0,
+    "sieben": 7.0,
+    "acht": 8.0,
+    "neun": 9.0,
+    "zehn": 10.0,
+    "elf": 11.0,
+    "zwölf": 12.0,
+    "zwoelf": 12.0,
+}
+
+#: Klein- und Grossschreibung getrennt gefuehrt statt ``re.IGNORECASE``: das
+#: Flag wuerde auch ``(?P<noun>[A-ZÄÖÜ]…)`` aufweichen, und genau diese
+#: Grossschreibung traegt im Deutschen die Nominalphrase.
+_WORD_NUMBER_ALTERNATION = "|".join(
+    sorted(
+        {form for word in _WORD_NUMBERS for form in (word, word.capitalize())},
+        key=len,
+        reverse=True,
+    )
+)
+
+#: Zahlwert als Ziffernfolge oder ausgeschriebenes Wort. Die Lookbehind-Sperre
+#: gilt nur im Wortzweig und verhindert Treffer im Wortinneren ("Entzweiung").
+_NUMBER_VALUE = (
+    r"\d{1,3}(?:\.\d{3})+|\d+(?:[.,]\d+)?"
+    rf"|(?<![A-Za-zÄÖÜäöüßÀ-ÿ])(?:{_WORD_NUMBER_ALTERNATION})"
+)
+
 _PERCENT_RE = re.compile(
-    r"(?P<value>\d{1,3}(?:[.,]\d+)?)\s*(?:%|Prozent|percent)\s*"
+    rf"(?P<value>{_NUMBER_VALUE})\s*(?:%|Prozent|percent)\s*"
     r"(?:der|des|von\s+den|von|aller|of)?\s*",
     re.IGNORECASE,
 )
@@ -124,7 +170,7 @@ _PERCENT_RE = re.compile(
 #: vorhanden — im Referenzlauf traf das die 38 abweichenden Dringlichkeitsfälle
 #: und die 412 geprüften Fälle.
 _ABSOLUTE_RE = re.compile(
-    r"(?P<value>\d{1,3}(?:\.\d{3})+|\d+(?:[.,]\d+)?)\s+"
+    rf"(?P<value>{_NUMBER_VALUE})\s+"
     r"(?:[a-zäöüß]+\s+){0,2}"
     r"(?P<noun>[A-ZÄÖÜ][\wÄÖÜäöüß-]+)",
 )
@@ -306,6 +352,9 @@ def _is_negated(text: str) -> bool:
 
 def _parse_number(raw: str) -> Optional[float]:
     cleaned = raw.strip()
+    word_value = _WORD_NUMBERS.get(cleaned.lower())
+    if word_value is not None:
+        return word_value
     if re.fullmatch(r"\d{1,3}(?:\.\d{3})+", cleaned):  # 1.234.567
         cleaned = cleaned.replace(".", "")
     else:
@@ -596,7 +645,7 @@ def _sentences(text: str) -> List[str]:
 _TAIL_PREDICATE_MIN_TOKENS = 2
 
 
-def _full_predicate(prefix: str, tail_predicate: str) -> str:
+def _full_predicate(prefix: str, tail_predicate: str, head: str = "") -> str:
     """Wählt die Satzhälfte, die die Aussage trägt.
 
     Deutsch besetzt das Vorfeld frei: "Auf der Personalliste des Trägers
@@ -614,10 +663,58 @@ def _full_predicate(prefix: str, tail_predicate: str) -> str:
 
     Die Bezugsgruppe bleibt außen vor: sie wird aus dem Tail bestimmt und
     separat über :func:`subjects_match` geprüft.
+
+    ``head`` ist der Satzteil vor der **ersten** Zahl und traegt das Praedikat
+    einer Aufzaehlung. In "Der Pilot umfasst 120 Teilnehmende, 18 Lehrkraefte
+    und sechs Angebote" haben die hinteren Glieder keine eigene Aussage — was
+    sie behaupten, steht im Kopf und gilt fuer alle drei. Seit die Faktengrenze
+    den Ausschnitt beim Vorgaenger abschneidet (#1492), blieben fuer sie sonst
+    nur Bindewoerter uebrig, und die Pruefung meldete "Aussage zu kurz" statt
+    eines Urteils.
     """
     if len(_content_tokens(tail_predicate)) >= _TAIL_PREDICATE_MIN_TOKENS:
         return tail_predicate
-    return " ".join(part for part in (prefix.strip(",.;:() "), tail_predicate) if part).strip()
+    combined = " ".join(
+        part for part in (prefix.strip(",.;:() "), tail_predicate) if part
+    ).strip()
+    if len(_content_tokens(combined)) >= _TAIL_PREDICATE_MIN_TOKENS or not head:
+        return combined
+    return head.strip(",.;:() ")
+
+
+#: Zahlenspanne: zwei Zahlen, verbunden durch "bis"/"to"/Gedankenstrich.
+#:
+#: "sechs bis neun Stunden" ist keine Punktbehauptung. Ohne diese Erkennung
+#: entstand daraus der Fakt "6 Stunden" mit ``BoundKind.EXACT`` — eine
+#: Genauigkeit, die der Satz nicht behauptet, und gegen eine Quelle mit
+#: derselben Spanne ein Fehlurteil. Die Vergleichslogik kennt nur Punktwerte
+#: und Schranken; eine Spanne laesst sich darin nicht ehrlich abbilden, also
+#: entsteht gar kein Fakt und der Satz laeuft ueber den Textpfad.
+#:
+#: ``bis zu`` ist ausgenommen — das ist eine Obergrenze (``AT_MOST``) und ein
+#: vollwertiger Fakt, kein Spannenende.
+_RANGE_RE = re.compile(
+    rf"(?:{_NUMBER_VALUE})\s*(?:bis(?!\s+zu\b)|to|[–—]|(?<=\d)\s*-\s*(?=\d))\s*"
+    rf"(?:{_NUMBER_VALUE})",
+    re.IGNORECASE,
+)
+
+
+#: "zwischen X und Y" ist ebenfalls eine Spanne. Das Wort ``zwischen`` ist der
+#: Unterscheider: ein blosses "und" zwischen zwei Zahlen ist meist eine
+#: Aufzaehlung ("120 Teilnehmende und 18 Lehrkraefte") und muss zwei Fakten
+#: ergeben, kein leeres Ergebnis.
+_BETWEEN_RE = re.compile(
+    rf"zwischen\s+(?:{_NUMBER_VALUE})\s*(?:%|Prozent)?\s*und\s*(?:{_NUMBER_VALUE})",
+    re.IGNORECASE,
+)
+
+
+def _range_spans(sentence: str) -> List[tuple[int, int]]:
+    """Zeichenbereiche, in denen Zahlen zu einer Spanne gehoeren."""
+    spans = [(m.start(), m.end()) for m in _RANGE_RE.finditer(sentence)]
+    spans.extend((m.start(), m.end()) for m in _BETWEEN_RE.finditer(sentence))
+    return spans
 
 
 def _numeric_spans(sentence: str) -> List[tuple[str, "re.Match[str]"]]:
@@ -633,11 +730,20 @@ def _numeric_spans(sentence: str) -> List[tuple[str, "re.Match[str]"]]:
     gewinnt das Prozentmuster, damit aus "18 % der Lehrkräfte" nicht
     zusätzlich ein Absolutfakt "18 Lehrkräfte" entsteht.
     """
+    ranges = _range_spans(sentence)
+
+    def _in_range(position: int) -> bool:
+        return any(lo <= position < hi for lo, hi in ranges)
+
     spans: List[tuple[str, "re.Match[str]"]] = [
-        ("percent", match) for match in _PERCENT_RE.finditer(sentence)
+        match_pair
+        for match_pair in (("percent", m) for m in _PERCENT_RE.finditer(sentence))
+        if not _in_range(match_pair[1].start())
     ]
     percent_ranges = [(m.start(), m.end()) for _, m in spans]
     for match in _ABSOLUTE_RE.finditer(sentence):
+        if _in_range(match.start()):
+            continue
         if any(lo <= match.start() < hi for lo, hi in percent_ranges):
             continue
         spans.append(("absolute", match))
@@ -669,6 +775,8 @@ def extract_numeric_facts(text: str) -> List[NumericFact]:
     facts: List[NumericFact] = []
     for sentence in _sentences(text):
         spans = _numeric_spans(sentence)
+        # Satzkopf vor der ersten Zahl — Praedikat einer Aufzaehlung.
+        head = sentence[: spans[0][1].start()] if spans else ""
         for index, (unit, match) in enumerate(spans):
             value = _parse_number(match.group("value"))
             if value is None:
@@ -693,7 +801,7 @@ def extract_numeric_facts(text: str) -> List[NumericFact]:
                 subject = _subject_from_prefix(prefix)
             if not subject:
                 continue
-            predicate = _full_predicate(prefix, tail)
+            predicate = _full_predicate(prefix, tail, head=head)
             facts.append(
                 NumericFact(
                     value=value,
