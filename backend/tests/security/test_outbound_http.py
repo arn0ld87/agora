@@ -482,3 +482,50 @@ def test_success_status_is_returned(monkeypatch, status: int):
 
     result = fetch("https://public.example/page")
     assert result.status == status
+
+
+# --------------------------------------------------------------------------- #
+# Aus dem Review: Userinfo und IPv6-Literale
+# --------------------------------------------------------------------------- #
+
+def test_exception_message_does_not_leak_url_credentials(monkeypatch):
+    """Der Ablehnungsgrund ist harmlos, die URL nicht.
+
+    Sie steht in der Exception-Message und landet damit in jedem Traceback und
+    in jedem generischen Handler, der `str(e)` protokolliert oder
+    zurueckgibt — etwa `AgentToolRegistry.execute`.
+    """
+    with pytest.raises(OutboundRequestBlocked) as exc:
+        validate_url("https://user:sup3rgeheim@example.com/x")
+
+    assert "sup3rgeheim" not in str(exc.value)
+    assert "user:" not in str(exc.value)
+    assert "***@example.com" in str(exc.value)
+    # Das Ziel bleibt erkennbar — redigiert wird nur die Userinfo.
+    assert "example.com" in str(exc.value)
+
+
+def test_blocked_url_attribute_is_redacted_too():
+    """Auch `exc.url` wird protokolliert, nicht nur die Message."""
+    with pytest.raises(OutboundRequestBlocked) as exc:
+        validate_url("https://user:sup3rgeheim@example.com/x")
+    assert "sup3rgeheim" not in (exc.value.url or "")
+
+
+@pytest.mark.parametrize(
+    "url, expected",
+    [
+        ("http://[2606:4700::1111]:8080/x", "[2606:4700::1111]:8080"),
+        ("http://[2606:4700::1111]/x", "[2606:4700::1111]"),
+        ("http://93.184.216.34:8080/x", "93.184.216.34:8080"),
+        ("https://example.com/x", "example.com"),
+    ],
+)
+def test_host_header_brackets_ipv6_literals(url: str, expected: str):
+    """RFC 7230 verlangt eckige Klammern fuer IP-Literale im Host-Header.
+
+    `urlsplit().hostname` liefert sie ohne — aus `[2001:db8::1]:8080` wuerde
+    sonst der ungueltige Header `Host: 2001:db8::1:8080`, und die Gegenstelle
+    antwortet mit einem Fehler oder liefert den falschen vHost.
+    """
+    assert outbound_http._check_shape(url, DEFAULT_POLICY).host_header == expected

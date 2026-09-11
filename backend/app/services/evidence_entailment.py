@@ -693,6 +693,16 @@ def _full_predicate(prefix: str, tail_predicate: str, head: str = "") -> str:
 #:
 #: ``bis zu`` ist ausgenommen — das ist eine Obergrenze (``AT_MOST``) und ein
 #: vollwertiger Fakt, kein Spannenende.
+#: "von X bis zu Y" ist eine Spanne, obwohl sie "bis zu" enthaelt. Das Wort
+#: ``von`` unterscheidet sie von der eigenstaendigen Obergrenze "bis zu Y":
+#: dort gibt es keinen Startwert, hier schon. Ohne diese Form entstuende aus
+#: "von sechs bis zu neun Stunden" der Fakt "9 Stunden (AT_MOST)" — die
+#: Untergrenze faellt weg und die Aussage wird enger, als der Satz sie macht.
+_FROM_TO_RE = re.compile(
+    rf"von\s+(?:{_NUMBER_VALUE})\s*(?:%|Prozent)?\s*bis\s+zu\s+(?:{_NUMBER_VALUE})",
+    re.IGNORECASE,
+)
+
 _RANGE_RE = re.compile(
     rf"(?:{_NUMBER_VALUE})\s*(?:bis(?!\s+zu\b)|to|[–—]|(?<=\d)\s*-\s*(?=\d))\s*"
     rf"(?:{_NUMBER_VALUE})",
@@ -714,6 +724,7 @@ def _range_spans(sentence: str) -> List[tuple[int, int]]:
     """Zeichenbereiche, in denen Zahlen zu einer Spanne gehoeren."""
     spans = [(m.start(), m.end()) for m in _RANGE_RE.finditer(sentence)]
     spans.extend((m.start(), m.end()) for m in _BETWEEN_RE.finditer(sentence))
+    spans.extend((m.start(), m.end()) for m in _FROM_TO_RE.finditer(sentence))
     return spans
 
 
@@ -791,6 +802,17 @@ def extract_numeric_facts(text: str) -> List[NumericFact]:
                 else len(sentence)
             )
             prefix = sentence[prefix_start : match.start()]
+            # Satzzeichen trennen Teilaussagen. In "120 Teilnehmende kamen;
+            # 18 Lehrkraefte streikten" reicht der Abschnitt der zweiten Zahl
+            # sonst bis hinter das Verb der ersten — der Fakt "18 Lehrkraefte"
+            # bekaeme das Praedikat "kamen streikten" und damit eine Aussage,
+            # die der Satz ueber ihn gar nicht trifft. Innerhalb einer
+            # Aufzaehlung ("A, B und C") trennt nur das Komma, das hier
+            # bewusst NICHT zaehlt: dort teilen sich die Glieder das Praedikat
+            # des Satzkopfs.
+            for separator in (";", ":", "—", " – "):
+                if separator in prefix:
+                    prefix = prefix.rsplit(separator, 1)[1]
             # Beim Absolutmuster gehört das Bezugsnomen zum Tail, beim
             # Prozentmuster steht es hinter der Einheit.
             tail_start = (

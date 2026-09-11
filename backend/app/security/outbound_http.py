@@ -85,6 +85,22 @@ _BLOCKED_HOST_SUFFIXES: tuple[str, ...] = (
 )
 
 
+def _redact_userinfo(url: str) -> str:
+    """Ersetzt ``user:pass@`` durch ``***@``.
+
+    Der Ablehnungsgrund allein ist harmlos, die URL nicht: sie steht in der
+    Exception-Message und landet damit in jedem Traceback und in jedem
+    generischen Handler, der ``str(e)`` protokolliert oder zurueckgibt.
+    """
+    scheme, sep, rest = url.partition("://")
+    if not sep:
+        return url
+    authority, slash, tail = rest.partition("/")
+    if "@" in authority:
+        authority = f"***@{authority.rsplit('@', 1)[1]}"
+    return f"{scheme}://{authority}{slash}{tail}"
+
+
 class OutboundHttpError(Exception):
     """Die Gegenstelle hat mit einem Fehlerstatus geantwortet.
 
@@ -105,8 +121,8 @@ class OutboundRequestBlocked(Exception):
 
     def __init__(self, reason: str, url: str | None = None) -> None:
         self.reason = reason
-        self.url = url
-        super().__init__(reason if not url else f"{reason} ({url})")
+        self.url = _redact_userinfo(url) if url else url
+        super().__init__(reason if not self.url else f"{reason} ({self.url})")
 
 
 @dataclass(frozen=True)
@@ -274,6 +290,11 @@ def _check_shape(url: str, policy: OutboundHttpPolicy) -> _UrlShape:
     default_port = 443 if parts.scheme == "https" else 80
     port = port or default_port
 
+    # RFC 7230: IP-Literale gehoeren im Host-Header in eckige Klammern.
+    # `parts.hostname` liefert sie ohne — aus "[2001:db8::1]:8080" wuerde sonst
+    # der ungueltige Header "Host: 2001:db8::1:8080".
+    host_label = f"[{host}]" if ":" in host else host
+
     request_target = parts.path or "/"
     if parts.query:
         request_target = f"{request_target}?{parts.query}"
@@ -283,7 +304,7 @@ def _check_shape(url: str, policy: OutboundHttpPolicy) -> _UrlShape:
         host=host,
         port=port,
         request_target=request_target,
-        host_header=host if port == default_port else f"{host}:{port}",
+        host_header=host_label if port == default_port else f"{host_label}:{port}",
     )
 
 

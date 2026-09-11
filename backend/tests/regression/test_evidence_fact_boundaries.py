@@ -319,3 +319,50 @@ def test_bis_zu_bleibt_eine_obergrenze():
     """`bis zu` ist eine Schranke, kein Spannenende — der Fakt muss bleiben."""
     facts = extract_numeric_facts("Die Nacharbeit dauert bis zu neun Stunden.")
     assert [(f.value, f.bound.value) for f in facts] == [(9.0, "at_most")]
+
+
+# --------------------------------------------------------------------------- #
+# Aus dem Review: Teilaussagen und "von X bis zu Y"
+# --------------------------------------------------------------------------- #
+
+def test_praedikat_traegt_kein_fremdes_verb():
+    """Satzzeichen trennen Teilaussagen.
+
+    In "120 Teilnehmende kamen; 18 Lehrkraefte streikten" reichte der
+    Ausschnitt der zweiten Zahl bis hinter das Verb der ersten — der Fakt
+    "18 Lehrkraefte" bekam das Praedikat "kamen streikten" und damit eine
+    Aussage, die der Satz ueber ihn gar nicht trifft.
+    """
+    facts = {f.value: f for f in extract_numeric_facts(
+        "120 Teilnehmende kamen; 18 Lehrkräfte streikten."
+    )}
+
+    assert facts[120.0].predicate.strip() == "kamen"
+    assert facts[18.0].predicate.strip() == "streikten"
+
+
+def test_aufzaehlung_teilt_sich_weiterhin_den_satzkopf():
+    """Gegenprobe: das Komma trennt keine Teilaussagen.
+
+    In einer Aufzaehlung tragen die Glieder kein eigenes Praedikat — was sie
+    behaupten, steht im Satzkopf und gilt fuer alle.
+    """
+    facts = extract_numeric_facts(SEED_PILOT)
+    assert {f.predicate.strip() for f in facts} == {"Der Pilot umfasst"}
+
+
+def test_von_x_bis_zu_y_ist_eine_spanne():
+    """`von sechs bis zu neun Stunden` hat eine Unter- und eine Obergrenze.
+
+    Ohne diese Form entstand daraus der Fakt "9 Stunden (AT_MOST)" — die
+    Untergrenze fiel weg und die Aussage wurde enger, als der Satz sie macht.
+    """
+    assert extract_numeric_facts(
+        "Die Nacharbeit dauert von sechs bis zu neun Stunden."
+    ) == []
+
+
+def test_bis_zu_ohne_startwert_bleibt_obergrenze():
+    """Gegenprobe zur Abgrenzung: ohne `von` ist es eine echte Schranke."""
+    facts = extract_numeric_facts("Die Nacharbeit dauert bis zu neun Stunden.")
+    assert [(f.value, f.bound.value) for f in facts] == [(9.0, "at_most")]
