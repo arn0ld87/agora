@@ -34,16 +34,8 @@ jobs:
         run: |
           python backend/scripts/_tmp_refactor_prepare_service.py
           python backend/scripts/_tmp_fix_prepare_generated.py
-          python -m py_compile \
-            backend/app/services/prepare_service.py \
-            backend/app/services/prepare_llm.py \
-            backend/app/services/prepare_entities.py \
-            backend/app/services/prepare_quota.py
-          wc -l \
-            backend/app/services/prepare_service.py \
-            backend/app/services/prepare_llm.py \
-            backend/app/services/prepare_entities.py \
-            backend/app/services/prepare_quota.py | sort -nr
+          python -m py_compile backend/app/services/prepare_service.py backend/app/services/prepare_llm.py backend/app/services/prepare_entities.py backend/app/services/prepare_quota.py
+          wc -l backend/app/services/prepare_service.py backend/app/services/prepare_llm.py backend/app/services/prepare_entities.py backend/app/services/prepare_quota.py | sort -nr
 
       - name: Install backend dependencies
         working-directory: backend
@@ -52,31 +44,15 @@ jobs:
       - name: Ruff targeted slice
         working-directory: backend
         run: |
-          uv run ruff check --fix \
-            app/services/prepare_service.py \
-            app/services/prepare_llm.py \
-            app/services/prepare_entities.py \
-            app/services/prepare_quota.py
-          uv run ruff check \
-            app/services/prepare_service.py \
-            app/services/prepare_llm.py \
-            app/services/prepare_entities.py \
-            app/services/prepare_quota.py
+          uv run ruff check --fix app/services/prepare_service.py app/services/prepare_llm.py app/services/prepare_entities.py app/services/prepare_quota.py
+          uv run ruff check app/services/prepare_service.py app/services/prepare_llm.py app/services/prepare_entities.py app/services/prepare_quota.py
 
       - name: Compile after Ruff
-        run: python -m py_compile \
-          backend/app/services/prepare_service.py \
-          backend/app/services/prepare_llm.py \
-          backend/app/services/prepare_entities.py \
-          backend/app/services/prepare_quota.py
+        run: python -m py_compile backend/app/services/prepare_service.py backend/app/services/prepare_llm.py backend/app/services/prepare_entities.py backend/app/services/prepare_quota.py
 
       - name: Mypy targeted slice
         working-directory: backend
-        run: uv run mypy \
-          app/services/prepare_service.py \
-          app/services/prepare_llm.py \
-          app/services/prepare_entities.py \
-          app/services/prepare_quota.py
+        run: uv run mypy app/services/prepare_service.py app/services/prepare_llm.py app/services/prepare_entities.py app/services/prepare_quota.py
 
       - name: Run prepare regression suite
         working-directory: backend
