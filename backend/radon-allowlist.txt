@@ -89,7 +89,6 @@ app/llm/client.py::LLMClient.chat_json  # cc<=32
 
 # --- API ---
 app/api/simulation_profiles.py::add_simulation_profile  # cc<=26
-app/api/runs.py::_build_run_summary  # cc<=27
 app/api/runs.py::_build_run_detail  # cc<=21
 app/api/graph_build.py::generate_ontology  # cc<=27
 app/api/graph_build.py::build_graph  # cc<=23

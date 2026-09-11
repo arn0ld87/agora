@@ -25,6 +25,8 @@ from ...observability import sim_active_gauge, sim_counter, sim_duration_histogr
 from ...utils.logger import get_logger
 from .action_log_reader import get_actions as _get_actions
 from .action_log_reader import read_action_log_chunk
+from .run_metrics import get_agent_stats as _aggregate_agent_stats
+from .run_metrics import get_timeline as _aggregate_timeline
 from .process_manager import _read_cancel_abort, _write_cancel_abort
 from .run_state_store import RunnerStatus, SimulationRunState
 
@@ -767,127 +769,30 @@ def monitor_simulation(
             stderr_files.pop(simulation_id, None)
 
 
+
 def get_timeline(
     simulation_id: str,
     base_dir: str,
     start_round: int = 0,
     end_round: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
-    """Return per-round timeline summaries for a simulation.
-
-    Extracted from ``SimulationRunner.get_timeline``.
-
-    Args:
-        simulation_id: Simulation identifier.
-        base_dir: ``SimulationRunner.RUN_STATE_DIR``.
-        start_round: Lowest round number to include (inclusive).
-        end_round: Highest round number to include (inclusive, ``None`` = unbounded).
-
-    Returns:
-        List of per-round summary dicts sorted by ``round_num`` ascending.
-    """
-    actions = _get_actions(simulation_id, base_dir, limit=10000)
-
-    # Group by round
-    rounds: Dict[int, Dict[str, Any]] = {}
-
-    for action in actions:
-        round_num = action.round_num
-
-        if round_num < start_round:
-            continue
-        if end_round is not None and round_num > end_round:
-            continue
-
-        if round_num not in rounds:
-            rounds[round_num] = {
-                "round_num": round_num,
-                "twitter_actions": 0,
-                "reddit_actions": 0,
-                "active_agents": set(),
-                "action_types": {},
-                "first_action_time": action.timestamp,
-                "last_action_time": action.timestamp,
-            }
-
-        r = rounds[round_num]
-
-        if action.platform == "twitter":
-            r["twitter_actions"] += 1
-        else:
-            r["reddit_actions"] += 1
-
-        r["active_agents"].add(action.agent_id)
-        r["action_types"][action.action_type] = r["action_types"].get(action.action_type, 0) + 1
-        r["last_action_time"] = action.timestamp
-
-    # Convert to list
-    result = []
-    for round_num in sorted(rounds.keys()):
-        r = rounds[round_num]
-        result.append(
-            {
-                "round_num": round_num,
-                "twitter_actions": r["twitter_actions"],
-                "reddit_actions": r["reddit_actions"],
-                "total_actions": r["twitter_actions"] + r["reddit_actions"],
-                "active_agents_count": len(r["active_agents"]),
-                "active_agents": list(r["active_agents"]),
-                "action_types": r["action_types"],
-                "first_action_time": r["first_action_time"],
-                "last_action_time": r["last_action_time"],
-            }
-        )
-
-    return result
+    """Delegate pure timeline aggregation while preserving monkeypatch hooks."""
+    return _aggregate_timeline(
+        simulation_id,
+        base_dir,
+        start_round=start_round,
+        end_round=end_round,
+        get_actions=_get_actions,
+    )
 
 
 def get_agent_stats(
     simulation_id: str,
     base_dir: str,
 ) -> List[Dict[str, Any]]:
-    """Return per-agent action statistics for a simulation.
-
-    Extracted from ``SimulationRunner.get_agent_stats``.
-
-    Args:
-        simulation_id: Simulation identifier.
-        base_dir: ``SimulationRunner.RUN_STATE_DIR``.
-
-    Returns:
-        List of per-agent statistics dicts sorted by ``total_actions`` descending.
-    """
-    actions = _get_actions(simulation_id, base_dir, limit=10000)
-
-    agent_stats: Dict[int, Dict[str, Any]] = {}
-
-    for action in actions:
-        agent_id = action.agent_id
-
-        if agent_id not in agent_stats:
-            agent_stats[agent_id] = {
-                "agent_id": agent_id,
-                "agent_name": action.agent_name,
-                "total_actions": 0,
-                "twitter_actions": 0,
-                "reddit_actions": 0,
-                "action_types": {},
-                "first_action_time": action.timestamp,
-                "last_action_time": action.timestamp,
-            }
-
-        stats = agent_stats[agent_id]
-        stats["total_actions"] += 1
-
-        if action.platform == "twitter":
-            stats["twitter_actions"] += 1
-        else:
-            stats["reddit_actions"] += 1
-
-        stats["action_types"][action.action_type] = (
-            stats["action_types"].get(action.action_type, 0) + 1
-        )
-        stats["last_action_time"] = action.timestamp
-
-    # Sort by total actions descending
-    return sorted(agent_stats.values(), key=lambda x: x["total_actions"], reverse=True)
+    """Delegate pure per-agent aggregation while preserving monkeypatch hooks."""
+    return _aggregate_agent_stats(
+        simulation_id,
+        base_dir,
+        get_actions=_get_actions,
+    )
