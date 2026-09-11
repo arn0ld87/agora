@@ -228,9 +228,22 @@ jobs:
         working-directory: backend
         # Coverage-Flags bewusst hier statt in pyproject.toml addopts -- sonst
         # brechen Subset-Aufrufe wie `pytest tests/contracts/` in
-        # contract-gates.yml. Schwelle 60 % = Step2 (Ist 66.00 %, vorgezogen
-        # 2026-06-10). Roadmap +2 Punkte/Monat -> 85 %.
-        run: uv run pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-fail-under=60
+        # contract-gates.yml.
+        #
+        # Issue #1495: --cov-fail-under=60 lag 24 Punkte unter dem tatsaechlichen
+        # Ist (83.82 % line, gemessen 2026-09-11) und konnte deshalb keine
+        # Regression erkennen -- die halbe Suite haette wegfallen koennen, ohne
+        # dass CI rot wird. Branch-Coverage wurde gar nicht gemessen.
+        # Die Schwellen stehen jetzt in backend/coverage-baseline.json und
+        # werden im naechsten Step einzeln geprueft.
+        run: uv run pytest --cov=app --cov-branch --cov-report=term-missing --cov-report=xml --cov-report=json:coverage.json
+
+      - name: Coverage-Gate gegen gemessene Baseline (Issue #1495)
+        working-directory: backend
+        # Line und Branch getrennt: sie laufen in diesem Projekt weit
+        # auseinander (83.8 % gegen 71.9 %), eine kombinierte Zahl verdeckt,
+        # welche von beiden gefallen ist.
+        run: uv run python scripts/check_coverage.py
 
       - name: Upload coverage report
         # CI-Welle 2026-05-16: Coverage-Artifact-Upload nur auf push:main —

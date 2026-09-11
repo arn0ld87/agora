@@ -53,6 +53,9 @@ yarn-error.log*
 .coverage
 .coverage.*
 coverage.xml
+# Coverage-JSON-Report fuer scripts/check_coverage.py (Issue #1495).
+# Die eingecheckte Schwelle steht in backend/coverage-baseline.json.
+coverage.json
 htmlcov/
 frontend/coverage/
 frontend/lcov.info

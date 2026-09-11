@@ -1,0 +1,29 @@
+{
+  "_comment": [
+    "Coverage-Baseline (Issue #1495, Befund N). Geprueft von scripts/check_coverage.py.",
+    "",
+    "Gemessen am 2026-09-11 auf dem Stabilisierungsbranch mit",
+    "  uv run pytest --cov=app --cov-branch --cov-report=json:coverage.json",
+    "ueber die vollstaendige Backend-Suite (6787 Tests):",
+    "  Line   83.82 %  (26661 von 31806 Statements)",
+    "  Branch 71.94 %  (6571 von 9134 Branches)",
+    "",
+    "Die Schwellen liegen je einen Prozentpunkt darunter. Das ist Puffer fuer",
+    "Umgebungsunterschiede (in CI laufen die docker-compose-Tests, die lokal ohne",
+    "NEO4J_PASSWORD uebersprungen werden), nicht Spielraum zum Absinken.",
+    "",
+    "Die vorherige Schwelle war --cov-fail-under=60 ohne Branch-Messung. Sie lag",
+    "24 Punkte unter dem Ist und konnte deshalb keine Regression erkennen: die",
+    "halbe Testsuite haette wegfallen koennen, ohne dass CI rot wird.",
+    "",
+    "branch_min ist bewusst NICHT auf 80 gesetzt. 71.94 % ist der gemessene Wert;",
+    "eine Wunschzahl daraus zu machen hiesse, das Gate entweder sofort rot zu",
+    "faerben oder Tests zu schreiben, die Zweige beruehren statt Verhalten zu",
+    "pruefen. Die Zahl gehoert angehoben, wenn echte Tests sie anheben.",
+    "",
+    "Steigt die Coverage, meldet das Gate einen Hinweis (kein Fail) — die",
+    "Schwelle gehoert dann nachgezogen."
+  ],
+  "line_min": 82.8,
+  "branch_min": 70.9
+}
