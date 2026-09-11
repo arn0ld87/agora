@@ -1,4 +1,4 @@
-name: refactor-python-sim-prepare-red
+name: refactor-python-sim-prepare
 
 on:
   push:
@@ -6,28 +6,140 @@ on:
       - claude/refactor-python-hotspots
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  red:
+  refactor:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     env:
       LLM_API_KEY: dummy-ci-key
       FLASK_DEBUG: "true"
+      PYTHON_REFACTOR_BASE: 4496d7ad425593ec12084e508d3f148be9a4166e
     steps:
       - uses: actions/checkout@v4
         with:
           ref: claude/refactor-python-hotspots
+          fetch-depth: 0
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.14"
+
       - name: Install uv
         run: python -m pip install --upgrade pip uv
+
+      - name: Generate simulation-prepare split
+        run: |
+          python backend/scripts/_tmp_refactor_simulation_prepare.py
+          python -m py_compile \
+            backend/app/api/simulation_prepare.py \
+            backend/app/api/simulation_prepare_contracts.py \
+            backend/app/api/simulation_prepare_state.py \
+            backend/app/api/simulation_prepare_jobs.py
+          wc -l \
+            backend/app/api/simulation_prepare.py \
+            backend/app/api/simulation_prepare_contracts.py \
+            backend/app/api/simulation_prepare_state.py \
+            backend/app/api/simulation_prepare_jobs.py | sort -nr
+
       - name: Install backend dependencies
         working-directory: backend
         run: uv sync --group dev
-      - name: Boundary test must fail before implementation
+
+      - name: Ruff targeted slice
         working-directory: backend
-        run: uv run pytest -q tests/api/test_simulation_prepare_module_boundaries.py
+        run: |
+          uv run ruff check --fix \
+            app/api/simulation_prepare.py \
+            app/api/simulation_prepare_contracts.py \
+            app/api/simulation_prepare_state.py \
+            app/api/simulation_prepare_jobs.py \
+            tests/api/test_simulation_prepare_module_boundaries.py
+          uv run ruff check \
+            app/api/simulation_prepare.py \
+            app/api/simulation_prepare_contracts.py \
+            app/api/simulation_prepare_state.py \
+            app/api/simulation_prepare_jobs.py \
+            tests/api/test_simulation_prepare_module_boundaries.py
+
+      - name: Compile after Ruff
+        run: |
+          python -m py_compile \
+            backend/app/api/simulation_prepare.py \
+            backend/app/api/simulation_prepare_contracts.py \
+            backend/app/api/simulation_prepare_state.py \
+            backend/app/api/simulation_prepare_jobs.py \
+            backend/tests/api/test_simulation_prepare_module_boundaries.py
+
+      - name: Mypy targeted slice
+        working-directory: backend
+        run: |
+          uv run mypy \
+            app/api/simulation_prepare.py \
+            app/api/simulation_prepare_contracts.py \
+            app/api/simulation_prepare_state.py \
+            app/api/simulation_prepare_jobs.py
+
+      - name: Run simulation-prepare regression suite
+        working-directory: backend
+        run: |
+          uv run pytest -q \
+            tests/api/test_simulation_prepare_module_boundaries.py \
+            tests/api/test_simulation_prepare_phases.py \
+            tests/api/test_simulation_prepare_startability.py \
+            tests/api/test_simulation_prepare_routing.py \
+            tests/api/test_simulation_prepare_provider_route_api.py \
+            tests/api/test_simulation_prepare_profile_routing.py \
+            tests/api/test_provider_override_key_fallback.py \
+            tests/api/test_simulation_prepare_quota.py \
+            tests/services/test_prepare_cancel.py \
+            tests/api/test_runs_resume_budget.py \
+            tests/api/test_runs_resume_stop.py \
+            tests/test_persona_target.py \
+            tests/test_quota_persistence.py \
+            tests/test_persona_eligibility.py \
+            tests/test_simulation_api_routes.py \
+            tests/test_log_message_quality.py
+
+      - name: Verify Python-only final diff
+        run: |
+          rm backend/scripts/_tmp_refactor_simulation_prepare.py
+          rm .github/workflows/refactor-python-sim-prepare.yml
+          python - <<'PY'
+          import subprocess
+          from pathlib import Path
+
+          base = "4496d7ad425593ec12084e508d3f148be9a4166e"
+          changed = subprocess.check_output(
+              ["git", "diff", "--name-only", base, "--"], text=True
+          ).splitlines()
+          for name in changed:
+              if name.endswith(".py"):
+                  path = Path(name)
+                  if path.exists():
+                      text = path.read_text(encoding="utf-8")
+                      cleaned = "\n".join(line.rstrip() for line in text.splitlines())
+                      if text.endswith("\n"):
+                          cleaned += "\n"
+                      path.write_text(cleaned, encoding="utf-8")
+          PY
+          git diff --check "$PYTHON_REFACTOR_BASE" --
+          changed="$(git diff --name-only "$PYTHON_REFACTOR_BASE" --)"
+          bad="$(printf '%s\n' "$changed" | sed '/^$/d' | grep -vE '\.py$' || true)"
+          if [ -n "$bad" ]; then
+            echo 'Non-Python files would remain in final diff:'
+            echo "$bad"
+            exit 1
+          fi
+          echo 'Final net diff contains only Python files:'
+          printf '%s\n' "$changed"
+
+      - name: Commit verified simulation-prepare split
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'refactor(api): split simulation prepare responsibilities'
+          git push origin HEAD:claude/refactor-python-hotspots
