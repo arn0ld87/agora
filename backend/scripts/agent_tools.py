@@ -400,38 +400,45 @@ class AgentToolRegistry:
             return {"error": f"Related search failed: {e}"}
 
     def web_fetch(self, url: str, max_chars: int = 2000) -> Dict[str, Any]:
-        """Fetch a web page and return its readable text content."""
+        """Fetch a web page and return its readable text content.
+
+        The URL comes straight from the model, so it is untrusted input. All
+        network access therefore goes through ``app.security.outbound_http``,
+        which rejects non-public targets, revalidates every redirect hop and
+        pins the connection to the address it actually validated. Never call
+        ``requests`` directly here — that is exactly the hole this replaced.
+        """
         max_chars = min(int(max_chars), 4000)
         try:
-            resp = requests.get(
-                url,
-                timeout=10,
-                headers={"User-Agent": "Mozilla/5.0 (compatible; AgoraAgent/1.0)"},
-                allow_redirects=True,
-            )
-            resp.raise_for_status()
-            content_type = resp.headers.get("Content-Type", "")
-            if "text/html" not in content_type and "text/plain" not in content_type:
-                return {"error": f"Unsupported content type: {content_type}"}
+            from app.security.outbound_http import OutboundRequestBlocked, fetch
+        except ImportError as e:
+            # Fail closed: without the guard we do not fetch at all.
+            logger.error("Outbound HTTP guard unavailable: %s", e)
+            return {"error": f"Outbound HTTP guard unavailable: {e}"}
 
-            soup = BeautifulSoup(resp.text, "html.parser")
-            for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
-                tag.decompose()
-            text = soup.get_text(separator="\n")
-            text = re.sub(r"\n{3,}", "\n\n", text).strip()
-            truncated = len(text) > max_chars
-            return {
-                "url": url,
-                "chars_returned": min(len(text), max_chars),
-                "truncated": truncated,
-                "content": text[:max_chars],
-            }
-        except requests.exceptions.Timeout:
-            return {"error": "Request timed out after 10 seconds"}
-        except requests.exceptions.RequestException as e:
-            return {"error": f"HTTP error: {e}"}
+        try:
+            result = fetch(url)
+        except OutboundRequestBlocked as e:
+            # Log the reason, not the URL: it may carry query-string secrets.
+            logger.warning("web_fetch blocked by outbound policy: %s", e.reason)
+            return {"error": f"Blocked by outbound policy: {e.reason}"}
         except Exception as e:
+            logger.warning("web_fetch failed: %s", type(e).__name__)
             return {"error": f"Fetch failed: {e}"}
+
+        soup = BeautifulSoup(result.text, "html.parser")
+        for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
+            tag.decompose()
+        text = soup.get_text(separator="\n")
+        text = re.sub(r"\n{3,}", "\n\n", text).strip()
+        return {
+            # Final URL after redirects — the agent should cite what it read,
+            # not the URL it guessed.
+            "url": result.url,
+            "chars_returned": min(len(text), max_chars),
+            "truncated": len(text) > max_chars or result.truncated,
+            "content": text[:max_chars],
+        }
 
     def web_search(self, query: str, num_results: int = 5) -> Dict[str, Any]:
         """Search the web via Tavily API (optimized for LLM agents)."""

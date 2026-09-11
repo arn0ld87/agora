@@ -48,7 +48,7 @@ Aktuell exponiert der native Builder:
 | Tool | Zweck | Voraussetzung |
 |---|---|---|
 | `web_search(query, num_results)` | Websuche über Tavily | `TAVILY_API_KEY` |
-| `web_fetch(url, max_chars)` | HTML/Text einer URL abrufen | Netzwerkzugriff |
+| `web_fetch(url, max_chars)` | HTML/Text einer URL abrufen | Netzwerkzugriff; laeuft ueber den SSRF-Guard (Abschnitt 6) |
 | `search_graph(query, limit)` | interner Hybrid-Search gegen Agora-Graph | Neo4j-/Graphzugriff |
 
 `search_graph` wird nur hinzugefügt, wenn der Registry ein funktionierender Graph-Storage zur Verfügung steht.
@@ -104,20 +104,26 @@ Die Antwort wird für Agenten auf Titel, URL, Snippet und Score reduziert.
 
 ---
 
-## 6. `web_fetch` und SSRF-Grenze
+## 6. `web_fetch` und SSRF-Guard
 
-Der aktuelle `web_fetch`-Pfad verwendet direkt `requests.get(...)` mit Redirects und einem Timeout und extrahiert lesbaren Text aus HTML.
+`web_fetch` extrahiert lesbaren Text aus HTML, führt den Abruf aber nicht selbst aus. Der gesamte Netzwerkteil liegt in `backend/app/security/outbound_http.py` (seit #1485). In `agent_tools.py` steht kein `requests`-Aufruf mehr — das war die eigentliche Lücke.
 
-**Wichtige aktuelle Sicherheitsgrenze:** In `backend/scripts/agent_tools.py::web_fetch` ist auf der geprüften Baseline **kein dedizierter Private-IP-/Loopback-/Metadata-SSRF-Guard vor dem Request sichtbar**.
+Der Guard prüft in vier Schichten:
 
-Das bedeutet:
+1. **URL-Form** — nur `http`/`https`, keine Credentials in der URL, kein leerer Host, keine Docker-/Kubernetes-/`.internal`-Sondernamen.
+2. **Adressklassen** — jede aufgelöste Adresse muss öffentlich sein. Loopback, RFC1918, CGNAT, Link-Local, Multicast, Reserved und Cloud-Metadata werden abgelehnt, ebenso IPv4-mapped IPv6. Löst ein Hostname auf mehrere Adressen auf und ist eine davon nicht öffentlich, fällt die ganze URL durch.
+3. **Verbindungs-Pinning** — verbunden wird mit der geprüften IP, nicht erneut mit dem Hostnamen. Ohne das bleibt zwischen Prüfung und Verbindung ein DNS-Rebinding-Fenster offen. Host-Header, TLS-SNI und Zertifikatsprüfung verwenden weiterhin den echten Hostnamen, TLS wird dadurch nicht geschwächt.
+4. **Redirects** — werden manuell verfolgt; jeder Hop durchläuft die Schichten 1–3 erneut. Default-Limit: 3.
 
-- Agenteninhalt darf nicht als vertrauenswürdige URL-Policy behandelt werden.
-- `ENABLE_AGENT_TOOLS=true` erweitert die Outbound-Netzwerkfläche des OASIS-Subprozesses.
-- In sensiblen Netzen sollte `web_fetch` bis zu einer expliziten SSRF-Härtung nur unter kontrollierter Egress-/Netzwerkpolicy aktiviert werden.
-- Redirect-Ziele müssen bei einer künftigen Härtung genauso geprüft werden wie die Ausgangs-URL.
+Zusätzlich: Connect-/Read-Timeouts, ein gestreamtes Byte-Limit (Default 1 MB) statt eines vollständigen `resp.text`, und eine Content-Type-Allowlist (`text/html`, `text/plain`).
 
-Eine allgemeine SSRF-Härtung anderer Agora-Webpfade beweist nicht automatisch, dass dieser Subprozesspfad geschützt ist.
+Grenzen, die der Guard **nicht** abdeckt:
+
+- Der Inhalt der abgerufenen Seite bleibt untrusted Modellinput (siehe Abschnitt 7).
+- `HTTP(S)_PROXY` wird bewusst nicht honoriert: Pinning und ein auflösender Proxy schließen sich aus. Egress-Policy gehört in diesem Fall auf die Netzwerkebene.
+- `ENABLE_AGENT_TOOLS=true` vergrößert weiterhin die Outbound-Fläche des OASIS-Subprozesses — der Guard begrenzt, wohin, nicht ob.
+
+Regressionstests: `backend/tests/security/test_outbound_http.py`, `backend/tests/scripts/test_agent_tools_web_fetch.py`.
 
 ---
 
