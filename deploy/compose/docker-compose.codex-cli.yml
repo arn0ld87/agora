@@ -1,0 +1,45 @@
+# Optionaler Credential-Mount fuer den codex_cli-Provider (ChatGPT-Abo).
+#
+# Warum ein eigenes Override:
+# Bis 0.9.5 hat der Standard-Stack `${CODEX_HOME:-${HOME}/.codex}` read/write
+# in den Container gemountet — also die persoenlichen ChatGPT-Session- und
+# Refresh-Tokens des Hosts, unabhaengig davon, ob der Provider ueberhaupt
+# benutzt wird. Ein kompromittierter Backend-Prozess haette sie lesen und
+# ueberschreiben koennen. Der Provider ist optional; sein Credential-Mount
+# gehoert deshalb ebenfalls hinter eine bewusste Entscheidung.
+#
+# `AGORA_CODEX_HOME` ist Pflicht und hat absichtlich KEINEN Default: ein
+# Fallback auf `~/.codex` wuerde genau die Vermischung wiederherstellen, die
+# dieses Override aufloest. Zeige auf ein Agora-eigenes Verzeichnis, nicht auf
+# dein persoenliches Codex-Home.
+#
+# Einrichtung:
+#
+#   export AGORA_CODEX_HOME="$HOME/.local/share/agora/codex"
+#   mkdir -p "$AGORA_CODEX_HOME"
+#   chmod 700 "$AGORA_CODEX_HOME"
+#   CODEX_HOME="$AGORA_CODEX_HOME" codex login
+#
+# Das Verzeichnis muss VOR dem `up` existieren: legt Docker es an, gehoert es
+# root, und der Container-User (uid=1000) kommt nicht hinein. Die Provider-Probe
+# meldet diesen Fall als `invalid_credentials` mit Hinweis statt als
+# "available".
+#
+# Start:
+#
+#   docker compose \
+#     -f docker-compose.yml \
+#     -f docker-compose.prod.yml \
+#     -f deploy/compose/docker-compose.codex-cli.yml \
+#     up -d
+#
+# Bewusst NICHT read-only: `codex exec` startet einen In-Process-App-Server,
+# legt Session-State unter CODEX_HOME ab und bricht auf einem read-only Mount
+# mit "failed to initialize in-process app-server client: Read-only file
+# system (os error 30)" ab. Der Container muss ausserdem den Refresh-Token
+# zurueckschreiben koennen, sobald das Abo-Token ablaeuft.
+
+services:
+  agora:
+    volumes:
+      - ${AGORA_CODEX_HOME:?AGORA_CODEX_HOME muss auf ein Agora-eigenes Codex-Verzeichnis zeigen (NICHT ~/.codex) — siehe deploy/compose/docker-compose.codex-cli.yml}:/home/agora/.codex

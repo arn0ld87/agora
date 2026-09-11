@@ -109,10 +109,21 @@ Diagnose:
 
 ```bash
 codex --version
-codex login
 ```
 
-Im Container muss das Binary vorhanden und die Session read-only eingebunden sein. Agora darf für diese Route nicht auf einen HTTP-Key aus `.env` zurückfallen.
+Agora darf für diese Route nicht auf einen HTTP-Key aus `.env` zurückfallen.
+
+### Codex CLI meldet `invalid_credentials`, obwohl das Binary installiert ist
+
+Seit der Trennung von Binary und Credential-Mount unterscheidet die Provider-Probe drei Zustände. Die Statusmeldung nennt jeweils den konkreten Fall:
+
+| Meldung enthält | Bedeutung | Behebung |
+|---|---|---|
+| `Verzeichnis … fehlt` | kein Credential-Mount im Container | Override `deploy/compose/docker-compose.codex-cli.yml` einhängen |
+| `nicht lesbar` | Verzeichnis gehört root | Docker hat es beim `up` angelegt; auf dem Host vorher anlegen und uid=1000 Zugriff geben |
+| `nicht angemeldet` | Mount da, aber leer | `CODEX_HOME="$AGORA_CODEX_HOME" codex login` auf dem Host |
+
+Der Mount ist bewusst **nicht** read-only: `codex exec` startet einen In-Process-App-Server, legt Session-State unter `CODEX_HOME` ab und muss den Refresh-Token zurückschreiben können. Ein read-only Mount bricht mit `failed to initialize in-process app-server client: Read-only file system (os error 30)`.
 
 ### Codex-CLI-Simulationsrunden schlagen mit „argument list too long“ fehl
 
