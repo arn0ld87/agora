@@ -33,6 +33,7 @@ jobs:
       - name: Generate prepare-service split
         run: |
           python backend/scripts/_tmp_refactor_prepare_service.py
+          python backend/scripts/_tmp_fix_prepare_generated.py
           python -m py_compile \
             backend/app/services/prepare_service.py \
             backend/app/services/prepare_llm.py \
@@ -94,6 +95,7 @@ jobs:
       - name: Verify Python-only final diff
         run: |
           rm backend/scripts/_tmp_refactor_prepare_service.py
+          rm backend/scripts/_tmp_fix_prepare_generated.py
           rm .github/workflows/refactor-python-prepare.yml
           git diff --check "$PYTHON_REFACTOR_BASE" --
           changed="$(git diff --name-only "$PYTHON_REFACTOR_BASE" --)"
