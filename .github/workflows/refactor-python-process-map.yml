@@ -33,6 +33,7 @@ jobs:
       - name: Generate process-manager split
         run: |
           python backend/scripts/_tmp_refactor_process_manager.py
+          python backend/scripts/_tmp_strip_python_trailing_whitespace.py
           python -m py_compile backend/app/services/sim/process_manager.py backend/app/services/sim/process_environment.py backend/app/services/sim/process_cancel.py backend/app/services/sim/process_termination.py
           wc -l backend/app/services/sim/process_manager.py backend/app/services/sim/process_environment.py backend/app/services/sim/process_cancel.py backend/app/services/sim/process_termination.py | sort -nr
 
@@ -70,6 +71,7 @@ jobs:
       - name: Verify Python-only final diff
         run: |
           rm backend/scripts/_tmp_refactor_process_manager.py
+          rm backend/scripts/_tmp_strip_python_trailing_whitespace.py
           rm .github/workflows/refactor-python-process-map.yml
           git diff --check "$PYTHON_REFACTOR_BASE" --
           changed="$(git diff --name-only "$PYTHON_REFACTOR_BASE" --)"
