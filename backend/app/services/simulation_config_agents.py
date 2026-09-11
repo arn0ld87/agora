@@ -105,6 +105,56 @@ def _generate_agent_configs_batch(self, context: str, entities: List[EntityNode]
     return configs
 
 
+def _skeptics_needed(*, total: int, skeptic_count: int, min_ratio: float) -> int:
+    """Kleinste Zahl zusaetzlicher Skeptiker, fuer die die *Endquote* stimmt.
+
+    Die Vorgaengerrechnung ``ceil(total * min_ratio) - skeptic_count`` mass die
+    Quote gegen die Ausgangspopulation und uebersah, dass jeder Zusatz die
+    Population mitvergroessert: 10 Personas ohne Skeptiker ergaben bei 20 %
+    zwei Zusaetze — 2/12 = 16,67 %.
+
+    Gesucht ist stattdessen das kleinste ``k >= 0`` mit::
+
+        (skeptic_count + k) / (total + k) >= min_ratio
+
+    Umgestellt (fuer ``min_ratio < 1``)::
+
+        k >= (min_ratio * total - skeptic_count) / (1 - min_ratio)
+
+    Fuer ``min_ratio >= 1`` existiert kein solches ``k``, solange auch nur eine
+    nicht-skeptische Persona im Set steht: Hinzufuegen kann den Anteil gegen 1
+    treiben, ihn aber nie erreichen. Dieser Fall behaelt darum bewusst die
+    bisherige Best-Effort-Rechnung und wird protokolliert, statt zu schleifen
+    oder zu werfen — er kommt im Produktivpfad nicht vor (der einzige Aufrufer
+    nutzt den Default 0.2).
+    """
+    if min_ratio <= 0:
+        return 0
+    if min_ratio >= 1:
+        if skeptic_count >= total:
+            return 0
+        logger.warning(
+            '_ensure_skeptic_quota: min_ratio=%.3f ist durch Hinzufuegen nicht '
+            'erreichbar (%d/%d Skeptiker); fuelle best effort auf',
+            min_ratio, skeptic_count, total,
+        )
+        return max(0, math.ceil(total * min_ratio) - skeptic_count)
+    needed = (min_ratio * total - skeptic_count) / (1 - min_ratio)
+    if needed <= 0:
+        return 0
+    # Fliesskomma-Rundungsfehler duerfen die Quote nicht um einen Zusatz
+    # verfehlen: ``ceil`` auf einen Wert, der rechnerisch exakt ganzzahlig ist,
+    # aber als 2.0000000000000004 dasteht, gaebe sonst 3 statt 2 — und
+    # umgekehrt kann 1.9999999999999998 zu 2 statt 3 werden. Deshalb wird das
+    # Ergebnis anschliessend gegen die Zielungleichung geprueft.
+    candidate = math.ceil(round(needed, 9))
+    while (skeptic_count + candidate) / (total + candidate) < min_ratio:
+        candidate += 1
+    while candidate > 0 and (skeptic_count + candidate - 1) / (total + candidate - 1) >= min_ratio:
+        candidate -= 1
+    return candidate
+
+
 def _ensure_skeptic_quota(personas: List[AgentActivityConfig], min_ratio: float=0.2) -> List[AgentActivityConfig]:
     """Erzwingt ≥ ``min_ratio`` Skeptiker im Persona-Set.
 
@@ -120,10 +170,9 @@ def _ensure_skeptic_quota(personas: List[AgentActivityConfig], min_ratio: float=
         return personas
     total = len(personas)
     skeptic_count = sum(1 for p in personas if getattr(p, 'stance', '') == 'opposing')
-    required = math.ceil(total * min_ratio)
-    if skeptic_count >= required:
+    to_add = _skeptics_needed(total=total, skeptic_count=skeptic_count, min_ratio=min_ratio)
+    if to_add <= 0:
         return personas
-    to_add = required - skeptic_count
     result = list(personas)
     base_agent_id = max((p.agent_id for p in personas), default=-1) + 1
     for i in range(to_add):
