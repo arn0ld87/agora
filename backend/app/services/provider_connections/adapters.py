@@ -157,15 +157,24 @@ class _CodexCliProbeAdapter:
         self, connection: ProviderConnection, api_key: str | None
     ) -> ProviderProbeResult:
         from app.llm.providers.codex_cli import (
+            codex_cli_readiness,
             discover_codex_cli_models,
-            is_codex_cli_available,
         )
         from app.services.llm_provider_registry import LlmProviderRegistry
 
-        if not is_codex_cli_available():
+        # Binary, Credential-Verzeichnis und Login werden getrennt gemeldet.
+        # Vorher galt "Binary im PATH" als available, und ein fehlender Login
+        # fiel erst im ersten echten Run als kryptischer Subprozessfehler auf.
+        readiness = codex_cli_readiness()
+        if not readiness.binary_present:
             return ProviderProbeResult(
                 status="unavailable",
-                status_message="codex-CLI nicht im PATH gefunden — Installation + `codex login` pruefen.",
+                status_message=readiness.status_message,
+            )
+        if not readiness.ready:
+            return ProviderProbeResult(
+                status="invalid_credentials",
+                status_message=readiness.status_message,
             )
         definition = LlmProviderRegistry.connection_definition(connection.provider_kind)
         fallback_models = definition.fallback_models if definition else ()

@@ -29,7 +29,8 @@ import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Literal, Optional
 
 from ..errors import LlmProviderError
 from ...contracts.llm_request import NormalizedLlmError
@@ -163,6 +164,101 @@ def is_codex_cli_available() -> bool:
     sich erst als Subprozess-Fehler beim ersten echten Aufruf.
     """
     return shutil.which(codex_cli_binary()) is not None
+
+
+CODEX_HOME_ENV = "CODEX_HOME"
+"""Env-Variable der Codex-CLI selbst — bestimmt, wo sie ihre Anmeldung ablegt.
+
+Im Container zeigt sie auf ``/home/agora/.codex``; auf dem Host setzt der
+Operator sie beim ``codex login`` auf ein Agora-eigenes Verzeichnis
+(``AGORA_CODEX_HOME``), damit nicht die persoenliche ChatGPT-Session gemountet
+wird. Siehe ``deploy/compose/docker-compose.codex-cli.yml``.
+"""
+
+CodexCredentialState = Literal["ok", "missing", "unreadable", "empty"]
+
+
+def codex_cli_home() -> Path:
+    """Verzeichnis, in dem die Codex-CLI ihre Anmeldung erwartet."""
+    raw = os.environ.get(CODEX_HOME_ENV, "").strip()
+    if raw:
+        return Path(raw)
+    return Path(os.path.expanduser("~")) / ".codex"
+
+
+def codex_cli_credential_state(home: Path | None = None) -> CodexCredentialState:
+    """Unterscheidet die drei Arten, auf die der Login fehlen kann.
+
+    Bewusst *kein* Test auf einen konkreten Dateinamen der CLI: deren internes
+    Anmeldeformat ist nicht Teil unseres Vertrags und hat sich in der
+    Vergangenheit geaendert. Ein lesbares, nicht-leeres Verzeichnis gilt als
+    "angemeldet"; die endgueltige Wahrheit liefert erst der Aufruf selbst.
+
+    ``unreadable`` ist der praktisch haeufigste Fall: existiert das
+    Host-Verzeichnis beim ``up`` noch nicht, legt Docker es als root an, und
+    der Container-User (uid=1000) kommt nicht hinein.
+    """
+    home = home or codex_cli_home()
+    try:
+        if not home.is_dir():
+            return "missing"
+        return "ok" if any(home.iterdir()) else "empty"
+    except PermissionError:
+        return "unreadable"
+    except OSError:
+        return "unreadable"
+
+
+@dataclass(frozen=True)
+class CodexCliReadiness:
+    """Warum der codex_cli-Provider (nicht) benutzbar ist.
+
+    Trennt bewusst Binary, Credential-Verzeichnis und Login: vorher meldete die
+    Probe "available", sobald das Binary im PATH lag — der fehlende Login fiel
+    erst im ersten echten Run als kryptischer Subprozessfehler auf.
+    """
+
+    binary_present: bool
+    home: Path
+    credentials: CodexCredentialState
+
+    @property
+    def ready(self) -> bool:
+        return self.binary_present and self.credentials == "ok"
+
+    @property
+    def status_message(self) -> str | None:
+        if not self.binary_present:
+            return (
+                "codex-CLI nicht im PATH gefunden — Installation pruefen."
+            )
+        if self.credentials == "ok":
+            return None
+        hint = (
+            f"Auf dem Host `export AGORA_CODEX_HOME={self.home}` setzen, dort "
+            "einmal `codex login` ausfuehren und den Stack mit "
+            "`-f deploy/compose/docker-compose.codex-cli.yml` starten."
+        )
+        if self.credentials == "missing":
+            return f"Codex-Credential-Verzeichnis {self.home} fehlt. {hint}"
+        if self.credentials == "unreadable":
+            return (
+                f"Codex-Credential-Verzeichnis {self.home} ist nicht lesbar — "
+                "meist von Docker als root angelegt. Verzeichnis vor dem "
+                f"`up` anlegen und uid=1000 Zugriff geben. {hint}"
+            )
+        return f"Codex-CLI ist installiert, aber nicht angemeldet. {hint}"
+
+
+def codex_cli_readiness() -> CodexCliReadiness:
+    """Vollstaendiger Bereitschaftsbefund fuer den codex_cli-Provider."""
+    home = codex_cli_home()
+    binary_present = is_codex_cli_available()
+    return CodexCliReadiness(
+        binary_present=binary_present,
+        home=home,
+        credentials=codex_cli_credential_state(home) if binary_present else "missing",
+    )
 
 
 class CodexCliUnavailableError(RuntimeError):

@@ -140,10 +140,30 @@ Details: [`provider-runtime-settings.md`](provider-runtime-settings.md).
 
 ```bash
 codex --version
-codex login
 ```
 
-Beim Containerbetrieb muss die CLI vorhanden und die Session wie vorgesehen eingebunden sein.
+```bash
+export AGORA_CODEX_HOME="$HOME/.local/share/agora/codex"
+mkdir -p "$AGORA_CODEX_HOME" && chmod 700 "$AGORA_CODEX_HOME"
+CODEX_HOME="$AGORA_CODEX_HOME" codex login
+```
+
+Der Standard-Stack mountet **kein** Codex-Verzeichnis. Fuer den Containerbetrieb
+kommt das Override dazu:
+
+```bash
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.prod.yml \
+  -f deploy/compose/docker-compose.codex-cli.yml \
+  up -d
+```
+
+`AGORA_CODEX_HOME` ist Pflicht und zeigt bewusst auf ein Agora-eigenes
+Verzeichnis, nicht auf `~/.codex`: sonst haette der Backend-Prozess Lese- und
+Schreibzugriff auf die persoenliche ChatGPT-Session des Hosts. Das Verzeichnis
+muss vor dem `up` existieren — legt Docker es an, gehoert es root und der
+Container-User (uid=1000) kommt nicht hinein.
 
 ### Provider-Secrets prüfen
 

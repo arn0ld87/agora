@@ -131,6 +131,11 @@ def test_codex_cli_probe_falls_back_to_sentinel_when_catalog_unavailable(
     monkeypatch.setattr(
         "app.llm.providers.codex_cli.is_codex_cli_available", lambda: True
     )
+    # Seit der Credential-Mount-Trennung genuegt das Binary nicht mehr fuer
+    # "available" — der Login muss ebenfalls vorhanden sein.
+    monkeypatch.setattr(
+        "app.llm.providers.codex_cli.codex_cli_credential_state", lambda home=None: "ok"
+    )
     monkeypatch.setattr(
         "app.llm.providers.codex_cli.discover_codex_cli_models", lambda: ()
     )
@@ -152,6 +157,9 @@ def test_codex_cli_probe_lists_discovered_models_and_keeps_sentinel_last(
     von ``_verify_selected_model`` verworfen."""
     monkeypatch.setattr(
         "app.llm.providers.codex_cli.is_codex_cli_available", lambda: True
+    )
+    monkeypatch.setattr(
+        "app.llm.providers.codex_cli.codex_cli_credential_state", lambda home=None: "ok"
     )
     monkeypatch.setattr(
         "app.llm.providers.codex_cli.discover_codex_cli_models",
@@ -179,6 +187,39 @@ def test_codex_cli_probe_reports_unavailable_when_binary_missing(monkeypatch) ->
 
     assert result.status == "unavailable"
     assert "codex-CLI" in (result.status_message or "")
+
+
+@pytest.mark.parametrize(
+    "state, expected_hint",
+    [
+        ("missing", "fehlt"),
+        ("empty", "nicht angemeldet"),
+        ("unreadable", "nicht lesbar"),
+    ],
+)
+def test_codex_cli_probe_separates_login_from_installation(
+    monkeypatch, state: str, expected_hint: str
+) -> None:
+    """Binary vorhanden, Login nicht — das darf nicht als "available" gelten.
+
+    Vorher meldete die Probe allein anhand des PATH "available"; der fehlende
+    Login fiel erst im ersten echten Run als kryptischer Subprozessfehler auf.
+    """
+    monkeypatch.setattr(
+        "app.llm.providers.codex_cli.is_codex_cli_available", lambda: True
+    )
+    monkeypatch.setattr(
+        "app.llm.providers.codex_cli.codex_cli_credential_state",
+        lambda home=None: state,
+    )
+
+    result = adapter_for_connection("codex_cli").probe(_codex_cli_connection(), None)
+
+    assert result.status == "invalid_credentials"
+    message = result.status_message or ""
+    assert expected_hint in message
+    # Die Meldung muss den Weg nach vorne nennen, nicht nur den Fehlzustand.
+    assert "AGORA_CODEX_HOME" in message
 
 
 def test_registry_has_one_canonical_connection_matrix() -> None:

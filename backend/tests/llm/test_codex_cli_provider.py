@@ -268,3 +268,94 @@ def test_discover_models_runs_in_isolated_cwd(monkeypatch):
     cwd = mock_run.call_args.kwargs["cwd"]
     assert cwd is not None
     assert "agora-codex-catalog-" in cwd
+
+
+# --------------------------------------------------------------------------- #
+# Credential-Mount-Trennung
+# --------------------------------------------------------------------------- #
+
+class TestCodexCliReadiness:
+    """Binary, Credential-Verzeichnis und Login sind drei verschiedene Dinge.
+
+    Bis 0.9.5 mountete der Standard-Compose `~/.codex` des Hosts read/write in
+    den Container; "Provider verfuegbar" hiess allein "Binary im PATH". Nach der
+    Trennung liegt das Credential-Verzeichnis hinter einem eigenen
+    Compose-Override, und die Probe muss den Unterschied benennen koennen.
+    """
+
+    def test_home_follows_codex_home_env(self, monkeypatch, tmp_path):
+        from app.llm.providers.codex_cli import CODEX_HOME_ENV, codex_cli_home
+
+        monkeypatch.setenv(CODEX_HOME_ENV, str(tmp_path / "agora-codex"))
+        assert codex_cli_home() == tmp_path / "agora-codex"
+
+    def test_home_falls_back_to_user_home(self, monkeypatch, tmp_path):
+        from app.llm.providers.codex_cli import CODEX_HOME_ENV, codex_cli_home
+
+        monkeypatch.delenv(CODEX_HOME_ENV, raising=False)
+        monkeypatch.setenv("HOME", str(tmp_path))
+        assert codex_cli_home() == tmp_path / ".codex"
+
+    def test_missing_directory(self, tmp_path):
+        from app.llm.providers.codex_cli import codex_cli_credential_state
+
+        assert codex_cli_credential_state(tmp_path / "nope") == "missing"
+
+    def test_empty_directory_means_no_login(self, tmp_path):
+        from app.llm.providers.codex_cli import codex_cli_credential_state
+
+        empty = tmp_path / "codex"
+        empty.mkdir()
+        assert codex_cli_credential_state(empty) == "empty"
+
+    def test_populated_directory_counts_as_login(self, tmp_path):
+        """Bewusst kein Test auf einen konkreten Dateinamen der CLI.
+
+        Deren internes Anmeldeformat ist nicht Teil unseres Vertrags; ein
+        hartkodierter Dateiname wuerde beim naechsten CLI-Update still zu einem
+        Falsch-Negativ.
+        """
+        from app.llm.providers.codex_cli import codex_cli_credential_state
+
+        home = tmp_path / "codex"
+        home.mkdir()
+        (home / "some-session-file").write_text("{}")
+        assert codex_cli_credential_state(home) == "ok"
+
+    def test_unreadable_directory_is_reported_distinctly(self, tmp_path):
+        """Docker legt ein fehlendes Host-Verzeichnis als root an — uid=1000
+        kommt dann nicht hinein. Das ist der haeufigste Praxisfall und darf
+        nicht als "nicht angemeldet" verschleiert werden."""
+        import os
+
+        from app.llm.providers.codex_cli import codex_cli_credential_state
+
+        if os.geteuid() == 0:
+            pytest.skip("als root ist jedes Verzeichnis lesbar")
+
+        home = tmp_path / "codex"
+        home.mkdir()
+        (home / "session").write_text("{}")
+        home.chmod(0o000)
+        try:
+            assert codex_cli_credential_state(home) == "unreadable"
+        finally:
+            home.chmod(0o700)
+
+    def test_readiness_requires_both_binary_and_login(self, monkeypatch, tmp_path):
+        from app.llm.providers import codex_cli
+
+        monkeypatch.setattr(codex_cli, "is_codex_cli_available", lambda: True)
+        monkeypatch.setattr(codex_cli, "codex_cli_home", lambda: tmp_path)
+
+        monkeypatch.setattr(
+            codex_cli, "codex_cli_credential_state", lambda home=None: "empty"
+        )
+        assert codex_cli.codex_cli_readiness().ready is False
+
+        monkeypatch.setattr(
+            codex_cli, "codex_cli_credential_state", lambda home=None: "ok"
+        )
+        readiness = codex_cli.codex_cli_readiness()
+        assert readiness.ready is True
+        assert readiness.status_message is None

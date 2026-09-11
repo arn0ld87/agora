@@ -123,6 +123,8 @@ Risiken:
 - große Eingaben müssen über stdin statt unsichere/limitierte argv-Übergabe laufen,
 - CLI-Transport ist keine Sandbox gegen einen kompromittierten lokalen Useraccount.
 
+**Credential-Isolation:** Der Standard-Stack mountet seit 0.9.6 kein Codex-Verzeichnis mehr. Bis dahin hing `${CODEX_HOME:-${HOME}/.codex}` read/write im Container, wodurch ein kompromittierter Backend-Prozess die persönlichen ChatGPT-Session- und Refresh-Tokens des Hosts lesen und überschreiben konnte — auch ohne dass `codex_cli` überhaupt benutzt wurde. Der Mount liegt jetzt in `deploy/compose/docker-compose.codex-cli.yml` und verlangt mit `AGORA_CODEX_HOME` ein dediziertes Verzeichnis ohne stillen Fallback.
+
 ### B5 — Backend / OASIS → externe Provider / Web
 
 Vorhandene Schutzmechanismen unterscheiden sich je Pfad. Für credential-behaftete Provider-Verbindungen existieren Transport-Security, Timeouts, Retry-/Budget-Grenzen und Secret-Redaction.
