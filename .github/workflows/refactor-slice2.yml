@@ -1,0 +1,77 @@
+name: refactor-slice2
+
+on:
+  push:
+    branches:
+      - claude/refactor-repo-loc-audit
+
+permissions:
+  contents: write
+
+jobs:
+  extract-monitor-read-metrics:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: claude/refactor-repo-loc-audit
+      - uses: astral-sh/setup-uv@v6
+      - name: Extract pure simulation read metrics
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd backend
+          uv sync --group dev
+          python - <<'PY'
+          from pathlib import Path
+
+          monitor = Path('app/services/sim/monitor.py')
+          text = monitor.read_text(encoding='utf-8')
+          marker = '\ndef get_timeline(\n'
+          if text.count(marker) != 1:
+              raise SystemExit(f'expected one get_timeline marker, got {text.count(marker)}')
+
+          import_anchor = 'from .action_log_reader import read_action_log_chunk\n'
+          extra_import = (
+              'from .run_metrics import get_agent_stats as _aggregate_agent_stats\n'
+              'from .run_metrics import get_timeline as _aggregate_timeline\n'
+          )
+          if extra_import not in text:
+              if import_anchor not in text:
+                  raise SystemExit('action_log_reader import anchor missing')
+              text = text.replace(import_anchor, import_anchor + extra_import, 1)
+
+          prefix = text[: text.index(marker)]
+          wrappers = '''\n\ndef get_timeline(\n    simulation_id: str,\n    base_dir: str,\n    start_round: int = 0,\n    end_round: Optional[int] = None,\n) -> List[Dict[str, Any]]:\n    \"\"\"Delegate pure timeline aggregation while preserving monkeypatch hooks.\"\"\"\n    return _aggregate_timeline(\n        simulation_id,\n        base_dir,\n        start_round=start_round,\n        end_round=end_round,\n        get_actions=_get_actions,\n    )\n\n\ndef get_agent_stats(\n    simulation_id: str,\n    base_dir: str,\n) -> List[Dict[str, Any]]:\n    \"\"\"Delegate pure per-agent aggregation while preserving monkeypatch hooks.\"\"\"\n    return _aggregate_agent_stats(\n        simulation_id,\n        base_dir,\n        get_actions=_get_actions,\n    )\n'''
+          monitor.write_text(prefix + wrappers, encoding='utf-8')
+
+          Path('app/services/sim/run_metrics.py').write_text('''\"\"\"Pure read-only aggregation for persisted simulation actions.\n\nKept separate from monitor supervision so timeline/statistics logic has no\nprocess, cancellation or manifest-finalisation side effects.\n\"\"\"\n\nfrom __future__ import annotations\n\nfrom collections.abc import Callable\nfrom typing import Any\n\nfrom .run_state_store import AgentAction\n\nGetActions = Callable[..., list[AgentAction]]\n\n\ndef get_timeline(\n    simulation_id: str,\n    base_dir: str,\n    start_round: int = 0,\n    end_round: int | None = None,\n    *,\n    get_actions: GetActions,\n) -> list[dict[str, Any]]:\n    \"\"\"Return per-round timeline summaries sorted by round number.\"\"\"\n    actions = get_actions(simulation_id, base_dir, limit=10000)\n    rounds: dict[int, dict[str, Any]] = {}\n\n    for action in actions:\n        round_num = action.round_num\n        if round_num < start_round:\n            continue\n        if end_round is not None and round_num > end_round:\n            continue\n\n        if round_num not in rounds:\n            rounds[round_num] = {\n                \"round_num\": round_num,\n                \"twitter_actions\": 0,\n                \"reddit_actions\": 0,\n                \"active_agents\": set(),\n                \"action_types\": {},\n                \"first_action_time\": action.timestamp,\n                \"last_action_time\": action.timestamp,\n            }\n\n        summary = rounds[round_num]\n        if action.platform == \"twitter\":\n            summary[\"twitter_actions\"] += 1\n        else:\n            summary[\"reddit_actions\"] += 1\n        summary[\"active_agents\"].add(action.agent_id)\n        summary[\"action_types\"][action.action_type] = (\n            summary[\"action_types\"].get(action.action_type, 0) + 1\n        )\n        summary[\"last_action_time\"] = action.timestamp\n\n    result: list[dict[str, Any]] = []\n    for round_num in sorted(rounds):\n        summary = rounds[round_num]\n        result.append(\n            {\n                \"round_num\": round_num,\n                \"twitter_actions\": summary[\"twitter_actions\"],\n                \"reddit_actions\": summary[\"reddit_actions\"],\n                \"total_actions\": summary[\"twitter_actions\"] + summary[\"reddit_actions\"],\n                \"active_agents_count\": len(summary[\"active_agents\"]),\n                \"active_agents\": list(summary[\"active_agents\"]),\n                \"action_types\": summary[\"action_types\"],\n                \"first_action_time\": summary[\"first_action_time\"],\n                \"last_action_time\": summary[\"last_action_time\"],\n            }\n        )\n    return result\n\n\ndef get_agent_stats(\n    simulation_id: str,\n    base_dir: str,\n    *,\n    get_actions: GetActions,\n) -> list[dict[str, Any]]:\n    \"\"\"Return per-agent action statistics sorted by total actions.\"\"\"\n    actions = get_actions(simulation_id, base_dir, limit=10000)\n    agent_stats: dict[int, dict[str, Any]] = {}\n\n    for action in actions:\n        agent_id = action.agent_id\n        if agent_id not in agent_stats:\n            agent_stats[agent_id] = {\n                \"agent_id\": agent_id,\n                \"agent_name\": action.agent_name,\n                \"total_actions\": 0,\n                \"twitter_actions\": 0,\n                \"reddit_actions\": 0,\n                \"action_types\": {},\n                \"first_action_time\": action.timestamp,\n                \"last_action_time\": action.timestamp,\n            }\n\n        stats = agent_stats[agent_id]\n        stats[\"total_actions\"] += 1\n        if action.platform == \"twitter\":\n            stats[\"twitter_actions\"] += 1\n        else:\n            stats[\"reddit_actions\"] += 1\n        stats[\"action_types\"][action.action_type] = (\n            stats[\"action_types\"].get(action.action_type, 0) + 1\n        )\n        stats[\"last_action_time\"] = action.timestamp\n\n    return sorted(\n        agent_stats.values(),\n        key=lambda item: item[\"total_actions\"],\n        reverse=True,\n    )\n''', encoding='utf-8')
+
+          allowlist = Path('radon-allowlist.txt')
+          allow_text = allowlist.read_text(encoding='utf-8')
+          stale = 'app/api/runs.py::_build_run_summary  # cc<=27\n'
+          if stale in allow_text:
+              allowlist.write_text(allow_text.replace(stale, '', 1), encoding='utf-8')
+
+          frontend_types = Path('../frontend/src/types/run.ts')
+          ft = frontend_types.read_text(encoding='utf-8')
+          ft = ft.replace(
+              'backend/app/api/runs.py (`_build_run_summary`)',
+              'backend/app/services/run_read_model.py (`build_run_summary`)',
+          )
+          frontend_types.write_text(ft, encoding='utf-8')
+          PY
+
+          uv run ruff check app/services/sim/monitor.py app/services/sim/run_metrics.py app/services/run_read_model.py app/api/runs.py
+          uv run mypy app/services/sim/monitor.py app/services/sim/run_metrics.py app/services/run_read_model.py app/api/runs.py
+          uv run pytest tests/services/sim/test_monitor.py tests/test_runs_api.py -q
+          uv run python scripts/check_complexity.py
+          cd ..
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend/app/services/sim/monitor.py backend/app/services/sim/run_metrics.py backend/radon-allowlist.txt frontend/src/types/run.ts
+          git commit -m 'refactor(sim): extract read-only run metrics'
+          git push origin HEAD:claude/refactor-repo-loc-audit
