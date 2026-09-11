@@ -32,6 +32,7 @@ jobs:
       - name: Generate responsibility split
         run: |
           python backend/scripts/_tmp_refactor_oasis.py
+          python backend/scripts/_tmp_fix_oasis_generated.py
           python -m py_compile \
             backend/app/services/oasis_profile_generator.py \
             backend/app/services/oasis_profile_*.py \
@@ -43,11 +44,9 @@ jobs:
         working-directory: backend
         run: uv sync --group dev
 
-      - name: Ruff fix moved imports only
+      - name: Ruff targeted slice
         working-directory: backend
-        run: |
-          uv run ruff check --fix app/services/oasis_profile_generator.py app/services/oasis_profile_*.py app/services/simulation_config_generator.py
-          uv run ruff check app/services/oasis_profile_generator.py app/services/oasis_profile_*.py app/services/simulation_config_generator.py
+        run: uv run ruff check app/services/oasis_profile_generator.py app/services/oasis_profile_*.py app/services/simulation_config_generator.py
 
       - name: Mypy targeted slice
         working-directory: backend
@@ -67,6 +66,7 @@ jobs:
       - name: Verify Python-only final diff
         run: |
           rm backend/scripts/_tmp_refactor_oasis.py
+          rm backend/scripts/_tmp_fix_oasis_generated.py
           rm .github/workflows/refactor-python-oasis-v2.yml
           git diff --check
           changed="$(git diff --name-only origin/main...HEAD; git diff --name-only)"
