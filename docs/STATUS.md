@@ -135,7 +135,8 @@ Bekannt offen: `detect_domain_drift` kann Drift übersehen, sobald Quell- und Pe
 - Jeder numerische Fakt wird mit seinem **eigenen** Textausschnitt gegen den Evidence-Pool gehalten. Bis [#1492](https://github.com/arn0ld87/agora/issues/1492) lief das Prädikat eines Fakts bis zum Satzende und trug die übrigen Zahlen desselben Satzes mit — gebündelte, wörtlich belegte Seed-Aussagen bekamen dadurch `[Beleg fehlt]`, und im Prozentfall wurden mit der Quelle identische Sätze als vermeintlicher Widerspruch entfernt.
 - Absolutzahlen und Prozentangaben werden im selben Satz beide erfasst; vorher entfielen die Absolutzahlen, sobald der Satz eine Prozentangabe enthielt.
 - Die strukturierte Beanstandung (`unverified_statements[].reason`) benennt die konkret unbelegte Zahl und unterscheidet „teilweise belegt" von „gar kein Beleg".
-- Offener Restbefund: ausgeschriebene Zahlwörter („sechs Angebote") erzeugen keinen prüfbaren Fakt — als `xfail` in `backend/tests/regression/test_evidence_fact_boundaries.py` festgehalten.
+- Ausgeschriebene Zahlwörter („sechs Angebote") sind prüfbare Fakten. `ein`/`eine` bleibt bewusst ausgenommen — im Deutschen weit öfter unbestimmter Artikel als Zahlwort; mitgezählt entstünde aus „eine Lehrkraft berichtet" eine Mengenbehauptung, die der Satz nicht aufstellt.
+- Zahlenspannen („sechs bis neun Stunden", „zwischen 40 und 60 Prozent") erzeugen **keinen** Punktfakt. Die Vergleichslogik kennt nur Punktwerte und Schranken; eine Spanne als `EXACT` zu führen war eine Genauigkeit, die der Satz nicht behauptet. `bis zu` bleibt eine Obergrenze und damit ein vollwertiger Fakt.
 
 ### Weiter offene Trust-Themen
 

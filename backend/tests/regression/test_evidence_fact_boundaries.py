@@ -65,8 +65,9 @@ def _pool(*snippets: str) -> List[Dict[str, Any]]:
 # --------------------------------------------------------------------------- #
 
 def test_every_number_of_a_bundled_sentence_becomes_a_fact():
+    """Alle drei Angaben des Seed-Satzes, auch das Zahlwort."""
     facts = extract_numeric_facts(SEED_PILOT)
-    assert sorted(f.value for f in facts) == [18.0, 120.0]
+    assert sorted(f.value for f in facts) == [6.0, 18.0, 120.0]
 
 
 def test_each_fact_keeps_only_its_own_predicate():
@@ -166,19 +167,59 @@ def test_abweichender_wert_derselben_kennzahl_bleibt_ein_widerspruch():
     assert result.rejected[0].verdict is EntailmentVerdict.CONTRADICTED
 
 
-@pytest.mark.xfail(
-    reason=(
-        "#1492, Restbefund: ausgeschriebene Zahlwoerter ('sechs "
-        "Qualifizierungsangebote') erzeugen keinen NumericFact — _ABSOLUTE_RE "
-        "verlangt eine Ziffer. Der Satz wird dadurch nicht falsch markiert, "
-        "die Angabe ist aber auch nicht pruefbar. Bewusst als offener Befund "
-        "dokumentiert statt still gelassen."
-    ),
-    strict=True,
-)
+# --------------------------------------------------------------------------- #
+# Ausgeschriebene Zahlwoerter (#1492, Restbefund)
+# --------------------------------------------------------------------------- #
+
 def test_ausgeschriebene_zahlwoerter_werden_erkannt():
+    """Die deutsche Schreibkonvention setzt Zahlen bis zwoelf als Wort.
+
+    "sechs Qualifizierungsangebote" ist derselbe pruefbare Fakt wie "6
+    Qualifizierungsangebote", erzeugte aber keinen NumericFact, weil beide
+    Muster eine Ziffer verlangten.
+    """
     values = [f.value for f in extract_numeric_facts(SEED_PILOT)]
     assert 6.0 in values
+
+
+def test_zahlwort_am_satzanfang():
+    values = [f.value for f in extract_numeric_facts("Sechs Angebote entstanden.")]
+    assert values == [6.0]
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "Eine Lehrkraft berichtet von Zeitgewinn.",
+        "Ein Angebot wurde eingerichtet.",
+        "Einer der Beteiligten widersprach.",
+    ],
+)
+def test_unbestimmter_artikel_wird_nicht_zur_mengenangabe(sentence: str):
+    """Gegenprobe — der wichtigste Fehlerfall dieser Erweiterung.
+
+    "ein"/"eine" ist im Deutschen weit oefter Artikel als Zahlwort. Wuerde es
+    mitgezaehlt, entstuende aus "eine Lehrkraft berichtet" der Fakt
+    "1 Lehrkraft" — eine Mengenbehauptung, die der Satz nicht aufstellt, und
+    damit eine vom Trust-Layer selbst erfundene Zahl.
+    """
+    assert extract_numeric_facts(sentence) == []
+
+
+def test_zahlwort_im_wortinneren_ist_kein_treffer():
+    """"Entzweiung" enthaelt "zwei", ist aber keine Mengenangabe."""
+    assert extract_numeric_facts("Die Entzweiung der Gruppe schritt voran.") == []
+
+
+def test_ausgeschriebene_prozentangabe():
+    facts = extract_numeric_facts("Acht Prozent der Lehrkräfte lehnen ab.")
+    assert [(f.value, f.unit) for f in facts] == [(8.0, "percent")]
+
+
+def test_ausgeschriebene_zahl_ist_belegbar():
+    """Die Angabe ist jetzt nicht nur sichtbar, sondern auch pruefbar."""
+    result = verify_prose(SEED_PILOT, _pool(SEED_PILOT))
+    assert UNVERIFIED_MARKER not in result.content
 
 
 # --------------------------------------------------------------------------- #
@@ -234,3 +275,47 @@ def test_hypothese_traegt_die_konkrete_zahl_weiter():
 
     hypothesis = result.unverified[0].as_hypothesis(1)
     assert "99 Schulleitungen" in hypothesis["rationale"]
+
+
+# --------------------------------------------------------------------------- #
+# Zahlenspannen sind keine Punktwerte
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "Dozenten berichten sechs bis neun Stunden Nacharbeit pro Woche.",
+        "Es waren 6 bis 9 Stunden.",
+        "Zwischen 40 und 60 Prozent der Lehrkräfte stimmen zu.",
+        "Es nahmen zwischen sechs und neun Schulen teil.",
+    ],
+)
+def test_spannen_erzeugen_keinen_punktfakt(sentence: str):
+    """Eine Spanne behauptet keinen exakten Wert.
+
+    Vorher wurde aus "sechs bis neun Stunden" der Fakt `6 Stunden` mit
+    `BoundKind.EXACT` — eine Genauigkeit, die der Satz nicht aufstellt. Gegen
+    eine Quelle mit derselben Spanne ergab das ein Fehlurteil. Die
+    Vergleichslogik kennt nur Punktwerte und Schranken; eine Spanne laesst sich
+    darin nicht ehrlich abbilden, also entsteht gar kein Fakt.
+    """
+    assert extract_numeric_facts(sentence) == []
+
+
+def test_aufzaehlung_ist_keine_spanne():
+    """Gegenprobe: ein blosses "und" zwischen zwei Zahlen zaehlt auf.
+
+    Ohne diese Abgrenzung haette die Spannenerkennung den Kernfall dieses
+    Issues selbst zerstoert — "120 Teilnehmende und 18 Lehrkraefte" sind zwei
+    Fakten, keine Spanne.
+    """
+    values = [f.value for f in extract_numeric_facts(
+        "Der Pilot umfasst 120 Teilnehmende und 18 Lehrkräfte."
+    )]
+    assert sorted(values) == [18.0, 120.0]
+
+
+def test_bis_zu_bleibt_eine_obergrenze():
+    """`bis zu` ist eine Schranke, kein Spannenende — der Fakt muss bleiben."""
+    facts = extract_numeric_facts("Die Nacharbeit dauert bis zu neun Stunden.")
+    assert [(f.value, f.bound.value) for f in facts] == [(9.0, "at_most")]
