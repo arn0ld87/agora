@@ -69,7 +69,7 @@ jobs:
 
       - name: Mypy targeted slice
         working-directory: backend
-        run: uv run mypy app/services/oasis_profile_generator.py app/services/oasis_profile_*.py app/services/simulation_config_generator.py
+        run: uv run mypy app/services/oasis_profile_*.py app/services/simulation_config_generator.py
 
       - name: Run persona regression suite
         working-directory: backend
