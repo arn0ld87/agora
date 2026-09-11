@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import ast
-import textwrap
 from pathlib import Path
 
 SOURCE = Path("backend/app/services/graph_tools.py")
-HELPERS = Path("backend/app/services/graph/interview_helpers.py")
 
 source = SOURCE.read_text(encoding="utf-8")
 lines = source.splitlines(keepends=True)
@@ -29,17 +27,6 @@ def span(name: str) -> tuple[int, int]:
     return min(starts) - 1, node.end_lineno
 
 
-def method_source(name: str) -> str:
-    start, end = span(name)
-    return textwrap.dedent("".join(lines[start:end])).rstrip() + "\n"
-
-
-def replace_header(text: str, marker: str, end_marker: str, new_header: str) -> str:
-    start = text.index(marker)
-    end = text.index(end_marker, start) + len(end_marker)
-    return text[:start] + new_header + text[end:]
-
-
 extract_names = [
     "_clean_tool_call_response",
     "_load_agent_profiles",
@@ -48,91 +35,6 @@ extract_names = [
     "_generate_interview_summary",
 ]
 
-clean = method_source("_clean_tool_call_response")
-clean = clean.replace("@staticmethod\n", "", 1)
-clean = replace_header(
-    clean,
-    "def _clean_tool_call_response(",
-    ") -> str:",
-    "def clean_tool_call_response(response: str) -> str:",
-)
-
-load = method_source("_load_agent_profiles")
-load = replace_header(
-    load,
-    "def _load_agent_profiles(",
-    ") -> List[Dict[str, Any]]:",
-    "def load_agent_profiles(\n"
-    "    simulation_id: str, *, service_dir: str\n"
-    ") -> List[Dict[str, Any]]:",
-)
-load = load.replace("os.path.dirname(__file__)", "service_dir")
-
-select = method_source("_select_agents_for_interview")
-select = replace_header(
-    select,
-    "def _select_agents_for_interview(",
-    ") -> tuple:",
-    "def select_agents_for_interview(\n"
-    "    profiles: List[Dict[str, Any]],\n"
-    "    interview_requirement: str,\n"
-    "    simulation_requirement: str,\n"
-    "    max_agents: int,\n"
-    "    llm: LLMClient,\n"
-    "    panel_tracker: Optional[InterviewPanelTracker] = None,\n"
-    ") -> tuple:",
-)
-select = select.replace("self.llm", "llm")
-
-questions = method_source("_generate_interview_questions")
-questions = replace_header(
-    questions,
-    "def _generate_interview_questions(",
-    ") -> List[str]:",
-    "def generate_interview_questions(\n"
-    "    interview_requirement: str,\n"
-    "    simulation_requirement: str,\n"
-    "    selected_agents: List[Dict[str, Any]],\n"
-    "    llm: LLMClient,\n"
-    ") -> List[str]:",
-)
-questions = questions.replace("self.llm", "llm")
-
-summary = method_source("_generate_interview_summary")
-summary = replace_header(
-    summary,
-    "def _generate_interview_summary(",
-    ") -> str:",
-    "def generate_interview_summary(\n"
-    "    interviews: List[AgentInterview],\n"
-    "    interview_requirement: str,\n"
-    "    llm: LLMClient,\n"
-    ") -> str:",
-)
-summary = summary.replace("self.llm", "llm")
-
-helper_header = '''"""Interview helper implementations extracted from :mod:`graph_tools`."""
-
-from __future__ import annotations
-
-import json
-from typing import Any, Dict, List, Optional
-
-from ...utils.llm_client import LLMClient
-from ...utils.logger import get_logger
-from ..interview_panel import InterviewPanelTracker
-from .graph_dtos import AgentInterview
-
-logger = get_logger("agora.graph_tools")
-
-'''
-helper_text = helper_header + "\n\n".join(
-    part.rstrip() for part in (clean, load, select, questions, summary)
-) + "\n"
-HELPERS.write_text(helper_text, encoding="utf-8")
-
-# Remove the heavy implementations from GraphToolsService and insert stable
-# compatibility wrappers at the location of the first extracted method.
 remove_lines: set[int] = set()
 for name in extract_names:
     start, end = span(name)
@@ -217,4 +119,3 @@ facade = facade.replace(
 SOURCE.write_text(facade, encoding="utf-8")
 
 print(f"graph_tools.py: {len(facade.splitlines())} LOC")
-print(f"graph/interview_helpers.py: {len(helper_text.splitlines())} LOC")
