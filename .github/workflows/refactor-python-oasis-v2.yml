@@ -44,9 +44,28 @@ jobs:
         working-directory: backend
         run: uv sync --group dev
 
+      - name: Remove scanner-generated false helper imports
+        working-directory: backend
+        shell: bash
+        run: |
+          helpers="$(find app/services -maxdepth 1 -name 'oasis_profile_*.py' \
+            ! -name 'oasis_profile_generator.py' \
+            ! -name 'oasis_profile_models.py' -print)"
+          uv run ruff check --fix $helpers app/services/oasis_profile_models.py || true
+
+      - name: Rewire helpers to direct dependencies
+        run: |
+          python backend/scripts/_tmp_rewire_oasis_imports.py
+          python -m py_compile backend/app/services/oasis_profile_generator.py backend/app/services/oasis_profile_*.py
+
       - name: Ruff targeted slice
         working-directory: backend
-        run: uv run ruff check app/services/oasis_profile_generator.py app/services/oasis_profile_*.py app/services/simulation_config_generator.py
+        run: |
+          uv run ruff check --fix app/services/oasis_profile_generator.py app/services/oasis_profile_*.py app/services/simulation_config_generator.py
+          uv run ruff check app/services/oasis_profile_generator.py app/services/oasis_profile_*.py app/services/simulation_config_generator.py
+
+      - name: Compile after rewiring and formatting
+        run: python -m py_compile backend/app/services/oasis_profile_generator.py backend/app/services/oasis_profile_*.py backend/app/services/simulation_config_generator.py
 
       - name: Mypy targeted slice
         working-directory: backend
@@ -67,6 +86,7 @@ jobs:
         run: |
           rm backend/scripts/_tmp_refactor_oasis.py
           rm backend/scripts/_tmp_fix_oasis_generated.py
+          rm backend/scripts/_tmp_rewire_oasis_imports.py
           rm .github/workflows/refactor-python-oasis-v2.yml
           git diff --check
           changed="$(git diff --name-only origin/main...HEAD; git diff --name-only)"
