@@ -62,6 +62,13 @@ run_backend() {
   (cd backend && uv run python scripts/check_complexity.py) \
     || fail "complexity gate — neue D+-Hotspots; siehe backend/radon-allowlist.txt"
 
+  step "Backend: Typ-Schuld-Gate (mypy, Issue #1495)"
+  # Spiegel des CI-Jobs "Typ-Schuld-Gate" im contract-gates-Workflow.
+  # Blockiert neue mypy-Fehler in den Bereichen, die pyproject.toml per
+  # ignore_errors abschaltet. Bestand steht in mypy-debt-baseline.txt.
+  (cd backend && uv run python scripts/check_mypy_debt.py) \
+    || fail "mypy debt gate — neue Typfehler; siehe backend/mypy-debt-baseline.txt"
+
   if [ "${GATE_FULL:-0}" = "1" ]; then
     step "Backend: mypy app/ (GATE_FULL=1)"
     (cd backend && uv run mypy app) || fail "mypy"
