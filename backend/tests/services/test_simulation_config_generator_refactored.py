@@ -146,7 +146,14 @@ class TestSimulationConfigGeneratorRefactored:
 
         assert params is not None
         assert params.time_config.total_simulation_hours == 72
-        assert len(params.agent_configs) == 36  # 30 entities + 6 synthetic skeptics due to skepticism quota enforcement (36 total)
+        # 30 Entitaeten + 8 synthetische Skeptiker. Die Zahl stand hier bis zur
+        # Korrektur der Quotenrechnung auf 36 (= 30 + ceil(30 * 0.2)) und
+        # spiegelte damit den Rechenfehler: 6/36 sind 16,67 %, nicht die
+        # zugesagten 20 %. Die Assertion prueft deshalb jetzt die Quote selbst
+        # statt einer Magic Number.
+        skeptics = [c for c in params.agent_configs if c.stance == "opposing"]
+        assert len(skeptics) / len(params.agent_configs) >= 0.20
+        assert len(params.agent_configs) == 38
 
     @pytest.mark.parametrize(
         "agents_per_hour_max, expected_max",
