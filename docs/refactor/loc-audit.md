@@ -2,7 +2,7 @@
 
 Stand: 2026-09-11  
 Basis-Commit: `4496d7ad425593ec12084e508d3f148be9a4166e` (`main`)  
-Status: Vorher-Zustand vor dem ersten Refactoring-Slice
+Status: Abschlussstand nach zwei verhaltensneutralen Refactoring-Slices
 
 ## Ziel und Regeln
 
@@ -10,19 +10,13 @@ Dieses Audit nutzt LOC nur als Screening-Signal. Refactoring-Prioritaet entsteht
 
 Vor der Analyse wurden `CLAUDE.md`, `AGENTS.md`, `docs/agents/tool-pipeline.md` und die spezialisierten Agent-Profile unter `.claude/agents/` gelesen. Die dort definierten Contract-, Evidence-, Schema-, Security-, Git- und Test-Gates bleiben bindend. Die geschuetzten Evidence-Gating-Anker werden nicht veraendert. Vendored OASIS-Source, generierte Artefakte und `design/**` sind nicht Teil des produktiven LOC-Refactorings.
 
-## Messmethode und Einschraenkung
+## Messmethode
 
-Die Analyse lief in einer GitHub-Connector-Umgebung ohne lokale Repository-Shell. `tokei`, `cloc`, `scc`, `git ls-files`, `wc -l`, `rg`, `pytest`, `ruff`, `mypy` und `bun` konnten deshalb fuer diesen Vorher-Stand nicht direkt ausgefuehrt werden.
+Der erste Screening-Durchlauf lief ueber den GitHub-Connector. Fuer den Abschlussstand wurde das Inventar anschliessend in GitHub Actions reproduzierbar ueber `git ls-files` erzeugt. Gezaehlt werden logische Textzeilen (`splitlines()`) fuer alle getrackten `.py`, `.ts`, `.tsx`, `.vue`, `.js` und `.sh`-Dateien. Tests werden separat klassifiziert; `design/`, Vendor-/Build-/Dist-Verzeichnisse und eindeutig generierte Dateien sind ausgeschlossen.
 
-Verwendet wurden:
+Die vollstaendigen Rohdaten stehen in `docs/refactor/loc-inventory.tsv`, die menschenlesbare Rangliste in `docs/refactor/loc-inventory.md`. Damit sind die frueheren Schwellenproben durch exakte Repo-Zahlen ersetzt.
 
-- GitHub-Code-Suche als Byte-Groessen-Vorscreening,
-- zeilenadressierbare Datei-Reads an den Schwellen 251/351/501/801,
-- vollstaendige Reads der priorisierten Kandidaten,
-- Repo-weite Symbolsuche fuer ausgewaehlte private/public Use-Sites,
-- bestehende Radon-Allowlist und vorhandene Tests als Struktur-/Komplexitaetssignal.
-
-Darum sind LOC-Angaben entweder **exakt** oder als **verifizierte Schwellenklasse** notiert. Eine Schwellenangabe wie `>800` bedeutet: Zeile 801 ist nachweislich vorhanden; es ist keine aus Dateigroesse geschaetzte LOC-Zahl. Exakte Gesamtzahlen fuer alle Dateien muessen in einer Shell-faehigen CI-/Workspace-Umgebung mit `tokei`/`cloc` nachgezogen werden. Es werden bewusst keine Pseudo-Praezisionswerte erfunden.
+Aktueller Abschlussstand: **633 Produktionsdateien**, **755 Testdateien**, davon im Produktionscode **23 P0**, **49 P1**, **57 P2** und **75 P3**.
 
 ## Ausschluesse
 
@@ -205,3 +199,45 @@ Noch kein Produktionscode in diesem Auftrag veraendert. Dieses Dokument bildet d
 ## Nachher-Zustand
 
 Wird nach jedem verifizierten Slice und im Abschluss-Audit ergaenzt.
+
+
+## Abschlussentscheidung fuer aktuelle P0-Hotspots
+
+LOC bleibt ein Screening-Signal, kein Selbstzweck. Ein P0 wird in diesem PR nur dann geteilt, wenn die Verantwortung sauber abgrenzbar ist und bestehende Contract-/Semantik-Gates die Verschiebung ohne Parallelumbau absichern.
+
+| Datei | LOC nach Slices | Entscheidung in diesem PR | Begruendung / naechste saubere Grenze |
+|---|---:|---|---|
+| `backend/app/services/oasis_profile_generator.py` | 2792 | spaeter | Provider-, Fallback- und Persona-Semantik stark gekoppelt; zuerst reine Mapping-/Normalisierungshelfer separat charakterisieren. |
+| `backend/scripts/run_parallel_simulation.py` | 2564 | spaeter | eigenstaendiger Runtime-Orchestrator mit Prozess-/IPC-Semantik; eigener Refactor-PR statt Beifang. |
+| `backend/app/services/report_agent/workflow.py` | 2272 | bewusste Stop-Bedingung | Prompt-, Tool- und Evidence-Gate-Semantik; nur mit Characterization-Tests pro Workflow-Phase. |
+| `backend/app/services/report_agent/agent.py` | 1631 | bewusste Stop-Bedingung | zentrale Evidence-/Claim-/Tool-Facade; geschuetzte Evidence-Gates haben Vorrang vor LOC. |
+| `backend/app/llm/client.py` | 1620 | spaeter | Provider-/Secret-/Transport-Semantik; kein mechanischer Split ohne eigene Provider-Regressionen. |
+| `backend/app/services/evidence_entailment.py` | 1496 | bewusste Ausnahme | hochsensible Evidence-Urteile; keine LOC-Kosmetik an semantischen Schwellen. |
+| `backend/app/services/simulation_config_generator.py` | 1390 | naechster geeigneter Slice | deterministische Parser/Normalizer sind abtrennbar, aber nicht mit diesem PR vermischen. |
+| `backend/app/contracts/report_contract.py` | 1318 | bewusste Ausnahme | deklarative Pydantic-SSoT; Split kann Schema-/Zod-Drift statt Wartbarkeit erzeugen. |
+| `backend/app/api/runs.py` | 1316 | **teilweise refactored** | Read-Model extrahiert (-103 LOC). Resume/Restart bleibt vorerst, weil Regressionstests Budget-/Cancel-Semantik sogar per `inspect.getsource` an die Funktion pinnen; eigener Folge-Slice erforderlich. |
+| `backend/scripts/agent_tools.py` | 1307 | spaeter | Simulations-/Agenten-Tooling als Script-Oberflaeche; Use-Sites und CLI-Kompatibilitaet zuerst separat kartieren. |
+| `backend/app/api/simulation_prepare.py` | 1293 | naechster geeigneter Slice | Lock-/Request-/Quota-Helfer sind trennbar; Routing-/Provider-Aufloesung bleibt dabei unveraendert. |
+| `backend/app/services/report_agent/manager.py` | 1269 | spaeter | Report-Persistenz und Lifecycle; Endzustands-/Persistenztests vor Split erforderlich. |
+| `backend/app/api/simulation_run.py` | 1133 | spaeter | Start, Budget, Routing und Manifest-Lifecycle eng gekoppelt; eigener Contract-Slice. |
+| `backend/app/services/prepare_service.py` | 1088 | spaeter | Provider-Aufloesung, Quoten und FSM teilen Semantik; Phasen nur einzeln mit Regressionstests extrahieren. |
+| `frontend/src/components/shell/Dossier.vue` | 1078 | bewusste UI-Ausnahme fuer diesen PR | erheblicher Template-/Style-Anteil; zuerst fachliche Panel-Grenzen statt CSS-Dateiverschiebung. |
+| `backend/scripts/_sim_common.py` | 1022 | spaeter | breit geteilter Runtime-Helfer; Import-/Script-Kompatibilitaet zuerst sichern. |
+| `backend/app/services/sim/process_manager.py` | 1014 | spaeter | Prozess-, Cleanup- und Cancel-Lifecycle; eigener Prozess-Slice. |
+| `backend/app/services/report_agent/evidence.py` | 984 | bewusste Stop-Bedingung | Evidence-Provenance/Degradation geschuetzt; keine semantische Aenderung in einem LOC-PR. |
+| `frontend/src/components/v4/dashboard/HeroNewRun.vue` | 959 | spaeter | UI-State/Flows; Component-/A11y-Schnitt separat. |
+| `backend/app/services/graph_tools.py` | 924 | spaeter | Retrieval und Interviews sind Report-/Evidence-nah; getrennte Tool-Familien erst mit Regressionen. |
+| `frontend/src/components/v4/steps/Step4Report.vue` | 924 | spaeter | Report-UI und Confirm-/Budget-Flows; fachliche Child-Komponenten als eigener Frontend-Slice. |
+| `frontend/src/components/shell/Shelf.vue` | 892 | spaeter | Shell-SFC; erst Script/Template/Style-Verantwortungen separat bewerten. |
+| `frontend/src/components/compare/BranchComparePanel.vue` | 882 | spaeter | Compare-Contract/UI gekoppelt; eigener komponentenbezogener Refactor. |
+
+### In diesem PR abgeschlossen
+
+1. `backend/app/api/runs.py`: Read-only Summary-Enrichment nach `services/run_read_model.py` extrahiert; die zuvor verschobene CC=27-Funktion wurde real zerlegt statt neu allowzulisten.
+2. `backend/app/services/sim/monitor.py`: reine Timeline-/Agent-Statistik nach `sim/run_metrics.py` extrahiert; bestehender `_get_actions`-Monkeypatch-Hook bleibt ueber duenne Wrapper kompatibel. Dadurch faellt `monitor.py` von **893 auf 798 LOC** und damit von P0 auf P1.
+3. Exaktes Repo-Inventar fuer alle geforderten Quelltypen inklusive separater Testliste erzeugt.
+4. Veralteten Radon-Allowlist-Eintrag fuer `_build_run_summary` entfernt und Frontend-SSoT-Kommentar auf das neue Modul aktualisiert.
+
+### Nicht als Erfolg verkauft
+
+`runs.py` bleibt mit **1316 LOC** P0. Der erste Slice reduziert Verantwortungsmischung, loest den God-Controller aber nicht vollstaendig. Die verbleibenden Resume-/Restart-Pfade sind fachlich deutlich riskanter und werden deshalb nicht nur fuer eine schoenere LOC-Zahl verschoben.
