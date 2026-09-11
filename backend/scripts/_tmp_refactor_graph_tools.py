@@ -116,6 +116,7 @@ facade = facade.replace(
     import_marker + "from .graph import interview_helpers as _interview_helpers\n",
     1,
 )
+facade = facade.rstrip() + "\n"
 SOURCE.write_text(facade, encoding="utf-8")
 
 print(f"graph_tools.py: {len(facade.splitlines())} LOC")
