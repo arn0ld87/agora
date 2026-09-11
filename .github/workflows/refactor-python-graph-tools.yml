@@ -1,0 +1,40 @@
+name: refactor-python-graph-tools-map
+
+on:
+  push:
+    branches:
+      - claude/refactor-python-hotspots
+
+permissions:
+  contents: read
+
+jobs:
+  map:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/refactor-python-hotspots
+          fetch-depth: 0
+      - name: Map graph_tools structure and direct test coupling
+        shell: bash
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          path = Path('backend/app/services/graph_tools.py')
+          source = path.read_text(encoding='utf-8')
+          tree = ast.parse(source)
+          print(f'LOC {len(source.splitlines())}')
+          for node in tree.body:
+              if isinstance(node, ast.ClassDef):
+                  print(f'Class {node.name}: {node.lineno}-{node.end_lineno} ({node.end_lineno-node.lineno+1})')
+                  for item in node.body:
+                      if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                          print(f'  {item.name}: {item.lineno}-{item.end_lineno} ({item.end_lineno-item.lineno+1})')
+              elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                  print(f'{node.name}: {node.lineno}-{node.end_lineno} ({node.end_lineno-node.lineno+1})')
+          PY
+          echo '--- direct test references ---'
+          grep -R -n -E 'GraphToolsService|graph_tools|interview_agents|_load_agent_profiles|_select_agents_for_interview|_apply_panel_rotation|_generate_interview_questions|_call_interview_api|_parse_interview' backend/tests | head -600 || true
