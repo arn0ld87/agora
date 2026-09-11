@@ -93,9 +93,17 @@ class TestDefaults:
         s = AgoraSettings(_env_file=None)
         assert s.debug is False
 
-    def test_llm_model_name_default(self):
+    def test_llm_model_name_default_is_empty(self):
+        """Leer, nicht `qwen2.5:32b`.
+
+        Ein vorbelegtes lokales Ollama-Tag fuehrte in Cloud-Setups zu 404,
+        weil das Auto-Bootstrap-Profil auf ein Modell verwies, das im aktiven
+        Backend nicht existiert. `config.py` und `SETTINGS_FIELDS` haben den
+        leeren Default seither; `AgoraSettings` hing zurueck, und dieser Test
+        hat den Drift festgeschrieben statt ihn zu melden.
+        """
         s = AgoraSettings(_env_file=None)
-        assert s.llm_model_name == "qwen2.5:32b"
+        assert s.llm_model_name == ""
 
     def test_llm_max_output_tokens_default(self):
         s = AgoraSettings(_env_file=None)

@@ -54,7 +54,12 @@ class AgoraSettings(BaseSettings):
     llm_base_url: str = Field(
         default="http://localhost:11434/v1", alias="LLM_BASE_URL"
     )
-    llm_model_name: str = Field(default="qwen2.5:32b", alias="LLM_MODEL_NAME")
+    # Leerer Default wie in ``config.py``: der Operator MUSS ein Modell setzen
+    # (ENV, Settings-UI oder LLM-Profil). Ein vorbelegtes lokales Tag wie
+    # ``qwen2.5:32b`` fuehrte in Cloud-Setups (Ollama Cloud / OpenAI / Gemini)
+    # zu 404, weil das Auto-Bootstrap-Profil auf ein Modell verwies, das im
+    # aktiven Backend nicht existiert.
+    llm_model_name: str = Field(default="", alias="LLM_MODEL_NAME")
     llm_max_output_tokens: int = Field(default=8192, alias="LLM_MAX_OUTPUT_TOKENS")
     llm_context_limit: int = Field(default=262144, alias="LLM_CONTEXT_LIMIT")
     # Parsed from LLM_MODEL_CONTEXT_LIMITS_JSON env var (JSON string → dict).
