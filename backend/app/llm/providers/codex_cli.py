@@ -236,10 +236,18 @@ class CodexCliReadiness:
             )
         if self.credentials == "ok":
             return None
+        # `self.home` ist der Pfad IM Container. Ihn als Host-Wert
+        # vorzuschlagen waere falsch, und `codex login` liest auf dem Host
+        # ohnehin `CODEX_HOME`, nicht `AGORA_CODEX_HOME` — wer die Anleitung
+        # woertlich befolgt, schriebe den Login wieder nach `~/.codex`, waehrend
+        # das Override ein anderes Verzeichnis mountet. Der Provider bliebe
+        # trotz befolgter Anleitung auf `invalid_credentials`.
         hint = (
-            f"Auf dem Host `export AGORA_CODEX_HOME={self.home}` setzen, dort "
-            "einmal `codex login` ausfuehren und den Stack mit "
-            "`-f deploy/compose/docker-compose.codex-cli.yml` starten."
+            "Auf dem Host ein eigenes Verzeichnis waehlen (NICHT ~/.codex), "
+            'z. B. `export AGORA_CODEX_HOME="$HOME/.local/share/agora/codex"`, '
+            'dort `CODEX_HOME="$AGORA_CODEX_HOME" codex login` ausfuehren und '
+            "den Stack mit `-f deploy/compose/docker-compose.codex-cli.yml` "
+            "starten."
         )
         if self.credentials == "missing":
             return f"Codex-Credential-Verzeichnis {self.home} fehlt. {hint}"

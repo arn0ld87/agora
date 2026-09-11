@@ -359,3 +359,34 @@ class TestCodexCliReadiness:
         readiness = codex_cli.codex_cli_readiness()
         assert readiness.ready is True
         assert readiness.status_message is None
+
+
+class TestCodexLoginHinweis:
+    """Die Handlungsanweisung muss auf dem Host tatsaechlich funktionieren."""
+
+    def _message(self, state: str) -> str:
+        from pathlib import Path
+
+        from app.llm.providers.codex_cli import CodexCliReadiness
+
+        readiness = CodexCliReadiness(
+            binary_present=True, home=Path("/home/agora/.codex"), credentials=state
+        )
+        return readiness.status_message or ""
+
+    @pytest.mark.parametrize("state", ["missing", "empty", "unreadable"])
+    def test_login_wird_mit_codex_home_ausgefuehrt(self, state: str):
+        """`codex login` liest CODEX_HOME, nicht AGORA_CODEX_HOME.
+
+        Ohne das Praefix schriebe der Login wieder nach `~/.codex`, waehrend
+        das Compose-Override ein anderes Verzeichnis mountet — der Provider
+        bliebe trotz befolgter Anleitung auf `invalid_credentials`.
+        """
+        message = self._message(state)
+        assert 'CODEX_HOME="$AGORA_CODEX_HOME" codex login' in message
+
+    @pytest.mark.parametrize("state", ["missing", "empty", "unreadable"])
+    def test_container_pfad_wird_nicht_als_host_wert_vorgeschlagen(self, state: str):
+        """`self.home` ist der Pfad IM Container, kein Host-Vorschlag."""
+        message = self._message(state)
+        assert "export AGORA_CODEX_HOME=/home/agora/.codex" not in message
