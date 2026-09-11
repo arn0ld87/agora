@@ -115,6 +115,10 @@ app/services/sim/monitor.py::monitor_simulation  # cc<=29
 app/services/sim/process_manager.py::start_simulation  # cc<=21
 app/services/oasis_profile_generator.py::OasisProfileGenerator.generate_profiles_from_entities  # cc<=40
 app/services/oasis_profile_generator.py::OasisProfileGenerator._build_entity_context  # cc<=26
+# PR #1497 (OASIS-Split): funktional Aequivalente der Generator-Methoden in
+# neue Module gewandert — gleiche cc-Obergrenzen wie das Bestands-Original.
+app/services/oasis_profile_batch.py::generate_profiles_from_entities  # cc<=40
+app/services/oasis_profile_context.py::_build_entity_context  # cc<=26
 
 # --- Services: Report-Agent ---
 # app/services/report_status.py::ReportStatusService (cc<=42) und
