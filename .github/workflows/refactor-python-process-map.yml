@@ -1,4 +1,4 @@
-name: refactor-python-process-map
+name: refactor-python-process-manager
 
 on:
   push:
@@ -6,30 +6,86 @@ on:
       - claude/refactor-python-hotspots
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  map:
+  refactor:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      LLM_API_KEY: dummy-ci-key
+      FLASK_DEBUG: "true"
+      PYTHON_REFACTOR_BASE: 4496d7ad425593ec12084e508d3f148be9a4166e
     steps:
       - uses: actions/checkout@v4
         with:
           ref: claude/refactor-python-hotspots
           fetch-depth: 0
-      - name: Map process_manager structure and tests
-        shell: bash
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        run: python -m pip install --upgrade pip uv
+
+      - name: Generate process-manager split
         run: |
-          python - <<'PY'
-          import ast
-          from pathlib import Path
-          path = Path('backend/app/services/sim/process_manager.py')
-          source = path.read_text(encoding='utf-8')
-          tree = ast.parse(source)
-          print(f'LOC {len(source.splitlines())}')
-          for node in tree.body:
-              if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                  print(f'{type(node).__name__} {node.name}: {node.lineno}-{node.end_lineno} ({node.end_lineno-node.lineno+1})')
-          PY
-          echo '--- direct test references ---'
-          grep -R -n -E 'process_manager|start_simulation|stop_simulation|terminate_process|cleanup_all_simulations|_build_subprocess_env|_compute_oasis_db_path|_read_cancel_abort|_write_cancel_abort' backend/tests | head -300 || true
+          python backend/scripts/_tmp_refactor_process_manager.py
+          python -m py_compile backend/app/services/sim/process_manager.py backend/app/services/sim/process_environment.py backend/app/services/sim/process_cancel.py backend/app/services/sim/process_termination.py
+          wc -l backend/app/services/sim/process_manager.py backend/app/services/sim/process_environment.py backend/app/services/sim/process_cancel.py backend/app/services/sim/process_termination.py | sort -nr
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync --group dev
+
+      - name: Ruff targeted slice
+        working-directory: backend
+        run: |
+          uv run ruff check --fix app/services/sim/process_manager.py app/services/sim/process_environment.py app/services/sim/process_cancel.py app/services/sim/process_termination.py
+          uv run ruff check app/services/sim/process_manager.py app/services/sim/process_environment.py app/services/sim/process_cancel.py app/services/sim/process_termination.py
+
+      - name: Compile after Ruff
+        run: python -m py_compile backend/app/services/sim/process_manager.py backend/app/services/sim/process_environment.py backend/app/services/sim/process_cancel.py backend/app/services/sim/process_termination.py
+
+      - name: Mypy targeted slice
+        working-directory: backend
+        run: uv run mypy app/services/sim/process_manager.py app/services/sim/process_environment.py app/services/sim/process_cancel.py app/services/sim/process_termination.py
+
+      - name: Run process-manager regression suite
+        working-directory: backend
+        run: |
+          uv run pytest -q \
+            tests/services/sim/test_process_manager.py \
+            tests/services/sim/test_process_manager_stale_cancel_marker.py \
+            tests/services/sim/test_monitor_stop.py \
+            tests/services/sim/test_metrics_wiring.py \
+            tests/services/test_process_manager_runtime_env.py \
+            tests/services/test_process_manager_env_whitelist.py \
+            tests/services/test_simulation_runner_stop_join.py \
+            tests/test_simulation_runner_oasis_db_path.py \
+            tests/scripts/test_codex_cli_simulation_transport.py
+
+      - name: Verify Python-only final diff
+        run: |
+          rm backend/scripts/_tmp_refactor_process_manager.py
+          rm .github/workflows/refactor-python-process-map.yml
+          git diff --check "$PYTHON_REFACTOR_BASE" --
+          changed="$(git diff --name-only "$PYTHON_REFACTOR_BASE" --)"
+          bad="$(printf '%s\n' "$changed" | sed '/^$/d' | grep -vE '\.py$' || true)"
+          if [ -n "$bad" ]; then
+            echo 'Non-Python files would remain in final diff:'
+            echo "$bad"
+            exit 1
+          fi
+          echo 'Final net diff contains only Python files:'
+          printf '%s\n' "$changed"
+
+      - name: Commit verified process-manager split
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'refactor(sim): split process manager responsibilities'
+          git push origin HEAD:claude/refactor-python-hotspots
