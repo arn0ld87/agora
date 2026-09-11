@@ -140,15 +140,33 @@ self: Any ,pool ,worker_wrapper ,entities ,process_result ,completed_count ,tota
     sofort zu stoppen (best effort).
     """
     cancel_requested =False
+    # Der ``imap_unordered``-Produzent ist selbst ein Greenlet und *kein*
+    # Pool-Mitglied. ``pool.kill()`` allein stoppt ihn deshalb nicht: er legt
+    # sofort das naechste Greenlet in den frei gewordenen Pool-Slot. Der
+    # Produzent wird darum als Erstes gestoppt, erst danach der Pool.
+    results =pool .imap_unordered (worker_wrapper ,enumerate (entities ))
+
+    def _stop_pool ()->None :
+        results .kill ()
+        pool .kill ()
+
     # Consume results inside try/finally so the pool is joined on success
     # and on exceptions — no orphaned greenlets outlive the loop.
     try :
-        for result_idx ,profile ,error in pool .imap_unordered (worker_wrapper ,enumerate (entities )):
+        for result_idx ,profile ,error in results :
             process_result (result_idx ,profile ,error )
             if self ._cancel_checkpoint (completed_count [0 ],total ,"gevent"):
                 cancel_requested =True
-                pool .kill ()
+                _stop_pool ()
                 break
+    except BudgetExceededError :
+    # Hartes Budget: wartende Greenlets duerfen keinen weiteren LLM-Call
+    # mehr starten. Ohne diesen Stopp liefen sie im ``finally``-``join()``
+    # weiter — und ueberlebten den Funktionsaustritt sogar, weil der
+    # Produzent den Pool waehrend des Joins immer wieder nachfuellte.
+    # Kein Retry: das Budget ist erschoepft, nicht gestoert.
+        _stop_pool ()
+        raise
     finally :
         pool .join ()
     return cancel_requested
@@ -186,6 +204,13 @@ self: Any ,generate_single_profile ,entities ,parallel_count ,process_result ,co
             try :
                 result_idx ,profile ,error =future .result ()
             except BudgetExceededError :
+            # Hartes Budget: noch nicht gestartete Futures verwerfen, bevor
+            # der Fehler den ``with``-Block verlaesst. ``__exit__`` ruft
+            # ``shutdown(wait=True)`` *ohne* ``cancel_futures`` — jede
+            # eingereihte Persona haette sonst trotzdem ihre LLM-Calls
+            # abgesetzt. Bereits laufende Worker duerfen wie bisher
+            # auslaufen (bestehende Semantik), kein Retry.
+                executor .shutdown (wait =False ,cancel_futures =True )
                 raise
             except Exception as e :# noqa: BLE001
                 _legacy .logger .error (f"Thread execution failed unexpectedly for entity {entity .name }: {str (e )}")
