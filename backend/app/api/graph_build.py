@@ -137,9 +137,7 @@ def _limit_upload_endpoint():
     response.headers["Retry-After"] = str(result.retry_after_seconds)
     return response, status
 
-@graph_bp.route('/ontology/generate', methods=['POST'])
-@require_scope("graph:write")
-@handle_api_errors(log_prefix="Ontology generation failed")
+
 def _mirror_uploaded_documents(project_id: str, entries, file_paths: dict) -> None:
     """Supabase-Mirror (Phase 1): best-effort, asynchron, nie fatal —
     das Projekt-Verzeichnis bleibt die Wahrheit."""
@@ -151,6 +149,9 @@ def _mirror_uploaded_documents(project_id: str, entries, file_paths: dict) -> No
         logger.warning("supabase mirror submit failed (non-fatal)", exc_info=True)
 
 
+@graph_bp.route('/ontology/generate', methods=['POST'])
+@require_scope("graph:write")
+@handle_api_errors(log_prefix="Ontology generation failed")
 def generate_ontology():
     """Interface 1: Upload files and analyze to generate ontology definition"""
     simulation_requirement = request.form.get('simulation_requirement', '')
@@ -267,10 +268,6 @@ def generate_ontology():
             project.project_id, DocumentManifest(documents=document_manifest_entries)
         )
 
-        _mirror_uploaded_documents(
-            project.project_id, document_manifest_entries, mirrored_file_paths
-        )
-
         # Persistieren, BEVOR der Service das Projekt frisch von Platte lädt —
         # create_project() hat bereits VOR dem Setzen von simulation_requirement,
         # files und total_text_length gespeichert. Ohne dieses save_project gehen
@@ -321,6 +318,15 @@ def generate_ontology():
     except ValueError as exc:
         _discard_project_after_upload_failure(project.project_id)
         return json_error_from_exception(exc)
+
+    # Supabase-Mirror erst hier: Vorher kann jeder Fehlerpfad
+    # (save_project, generate_ontology) das Projektverzeichnis via
+    # _discard_project_after_upload_failure() wieder loeschen — ein bereits
+    # abgesetzter, asynchroner Mirror-Auftrag wuerde dann Dokumentzeilen zu
+    # einem Projekt schreiben, das lokal nicht mehr existiert.
+    _mirror_uploaded_documents(
+        project.project_id, document_manifest_entries, mirrored_file_paths
+    )
 
     return json_success({
         "project_id": project.project_id,

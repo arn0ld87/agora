@@ -20,7 +20,8 @@ import json
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timezone
+from typing import Any, Callable, Dict, List, Optional
 
 from pydantic import ValidationError
 
@@ -39,6 +40,24 @@ from .client import SupabaseMirrorError, SupabaseRestClient
 logger = get_logger("agora.supabase_mirror")
 
 _SHA256_CHUNK = 64 * 1024
+
+# Obergrenze wartender Spiegel-Auftraege. Pro Entitaet (Run, Report, Projekt)
+# wartet hoechstens ein Snapshot — neuere ersetzen aeltere derselben Entitaet.
+# Erst wenn mehr *verschiedene* Entitaeten anstehen als hier erlaubt, wird
+# verworfen (mit Warnung): Der Spiegel ist Index, kein Transaktionslog, und
+# der Rebuild schliesst jede so entstandene Luecke.
+MAX_PENDING_MIRROR_JOBS = 256
+
+
+def _utc_now_iso() -> str:
+    """Zeitstempel fuer ``mirrored_at`` — eine Uhr fuer Write und Sweep.
+
+    Bewusst nicht der Postgres-Default ``now()``: Der Rebuild-Sweep
+    vergleicht ``mirrored_at`` gegen seinen eigenen Startstempel. Kaemen
+    Write-Through-Zeilen von der DB-Uhr und der Sweep-Stempel von der
+    App-Uhr, wuerde Uhren-Drift frisch gespiegelte Zeilen loeschen.
+    """
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _sha256_of_file(path: str) -> Optional[str]:
@@ -113,7 +132,10 @@ def _build_report_record(report_dict: Dict[str, Any]) -> Optional[ReportIndexRec
     try:
         return ReportIndexRecord(
             report_id=report_id,
-            status=report_dict.get("status") or "unknown",
+            # Kein "unknown"-Fallback: Ein Status ausserhalb des
+            # ReportStatus-Vertrags ist kein Spiegelwert, sondern ein Defekt
+            # der Wahrheit — die Zeile wird uebersprungen, nicht erfunden.
+            status=report_dict.get("status"),
             evidence_ok=bool(report_dict.get("has_evidence")),
             evidence_sections=int(report_dict.get("evidence_sections") or 0),
             artifact_path=f"reports/{report_id}",
@@ -125,6 +147,13 @@ def _build_report_record(report_dict: Dict[str, Any]) -> Optional[ReportIndexRec
         return None
 
 
+def _row(record: Any, mirrored_at: str) -> Dict[str, Any]:
+    """Contract-Record -> PostgREST-Zeile mit Sweep-Stempel."""
+    payload = record.model_dump(mode="json")
+    payload["mirrored_at"] = mirrored_at
+    return payload
+
+
 class SupabaseMirror:
     """Async-best-effort Spiegel der App-Metadaten nach Supabase/Postgres."""
 
@@ -133,6 +162,8 @@ class SupabaseMirror:
 
     _client: Optional[SupabaseRestClient]
     _lock: threading.Lock
+    _queue_lock: threading.Lock
+    _pending: Dict[str, Callable[[], None]]
     _event_counts: Dict[str, int]
     _executor: ThreadPoolExecutor
 
@@ -147,6 +178,11 @@ class SupabaseMirror:
                     # Erstkontakt spiegelt alle Events (idempotent via
                     # on_conflict=run_id,seq), danach nur das Delta.
                     instance._event_counts = {}
+                    instance._queue_lock = threading.Lock()
+                    # Wartende Auftraege pro Entitaets-Key. Der Executor
+                    # bekommt nur einen Platzhalter je Key; der Snapshot
+                    # dahinter wird bis zur Ausfuehrung ueberschrieben.
+                    instance._pending = {}
                     instance._executor = ThreadPoolExecutor(
                         max_workers=1, thread_name_prefix="supabase-mirror"
                     )
@@ -177,15 +213,49 @@ class SupabaseMirror:
         with self._lock:
             self._client = None
             self._event_counts = {}
+        with self._queue_lock:
+            self._pending = {}
 
-    def _submit(self, fn) -> None:
+    def _submit(self, fn: Callable[[], None], *, key: str) -> None:
+        """Auftrag einreihen — pro Entitaets-Key hoechstens einer wartend.
+
+        ``ThreadPoolExecutor(max_workers=1)`` begrenzt nur die Parallelitaet;
+        seine interne Queue ist unbegrenzt. Waehrend ein Upsert bis zum
+        Timeout haengt, wuerde jeder weitere Run-/Report-/Dokument-Update
+        einen weiteren Snapshot im Speicher halten. Darum wird pro Entitaet
+        verdichtet: Der neueste Snapshot ersetzt den wartenden aelteren
+        derselben Entitaet — die Wahrheit ist ohnehin kumulativ (Manifest,
+        meta.json, Dokument-Manifest), ein uebersprungener Zwischenstand
+        geht nicht verloren.
+        """
         if not self.enabled:
             return
+        with self._queue_lock:
+            if key in self._pending:
+                self._pending[key] = fn  # verdichtet: nur der neueste Stand zaehlt
+                return
+            if len(self._pending) >= MAX_PENDING_MIRROR_JOBS:
+                logger.warning(
+                    "supabase mirror: %d jobs pending, dropping update for %s "
+                    "(rebuild closes the gap)",
+                    len(self._pending),
+                    key,
+                )
+                return
+            self._pending[key] = fn
         try:
-            self._executor.submit(self._guarded, fn)
+            self._executor.submit(self._run_pending, key)
         except RuntimeError:
             # Executor nach Interpreter-Shutdown — Mirror ist best-effort.
             logger.debug("supabase mirror: executor rejected task (shutdown)")
+            with self._queue_lock:
+                self._pending.pop(key, None)
+
+    def _run_pending(self, key: str) -> None:
+        with self._queue_lock:
+            fn = self._pending.pop(key, None)
+        if fn is not None:
+            self._guarded(fn)
 
     @staticmethod
     def _guarded(fn) -> None:
@@ -199,26 +269,37 @@ class SupabaseMirror:
     # ---------------------------------------------------------------- Runs
 
     def mirror_run(self, manifest: Dict[str, Any]) -> None:
-        if not manifest.get("run_id"):
+        run_id = manifest.get("run_id")
+        if not run_id:
             return
-        self._submit(lambda: self._mirror_run_sync(dict(manifest)))
+        snapshot = dict(manifest)
+        self._submit(lambda: self._mirror_run_sync(snapshot), key=f"run:{run_id}")
 
-    def _mirror_run_sync(self, manifest: Dict[str, Any]) -> None:
+    def _mirror_run_sync(
+        self,
+        manifest: Dict[str, Any],
+        *,
+        mirrored_at: Optional[str] = None,
+        full: bool = False,
+    ) -> None:
         record = _build_run_record(manifest)
         if record is None:
             return
+        stamp = mirrored_at or _utc_now_iso()
         client = self._get_client()
-        client.upsert("runs", [record.model_dump()], on_conflict=["run_id"])
+        client.upsert("runs", [_row(record, stamp)], on_conflict=["run_id"])
 
         events = _build_event_rows(manifest)
-        seen = self._event_counts.get(record.run_id, 0)
+        # Der Rebuild spiegelt immer alle Events: Nur so traegt jede noch
+        # gueltige Zeile den Sweep-Stempel und ueberlebt delete_stale().
+        seen = 0 if full else self._event_counts.get(record.run_id, 0)
         if seen > len(events):
             seen = 0  # Manifest gekuerzt/neu aufgebaut -> vollstaendig spiegeln
         delta = events[seen:]
         if delta:
             client.upsert(
                 "run_events",
-                [event.model_dump() for event in delta],
+                [_row(event, stamp) for event in delta],
                 on_conflict=["run_id", "seq"],
             )
         self._event_counts[record.run_id] = len(events)
@@ -226,14 +307,22 @@ class SupabaseMirror:
     # -------------------------------------------------------------- Reports
 
     def mirror_report(self, report_dict: Dict[str, Any]) -> None:
-        self._submit(lambda: self._mirror_report_sync(dict(report_dict)))
+        snapshot = dict(report_dict)
+        self._submit(
+            lambda: self._mirror_report_sync(snapshot),
+            key=f"report:{snapshot.get('report_id') or ''}",
+        )
 
-    def _mirror_report_sync(self, report_dict: Dict[str, Any]) -> None:
+    def _mirror_report_sync(
+        self, report_dict: Dict[str, Any], *, mirrored_at: Optional[str] = None
+    ) -> None:
         record = _build_report_record(report_dict)
         if record is None:
             return
         self._get_client().upsert(
-            "report_index", [record.model_dump()], on_conflict=["report_id"]
+            "report_index",
+            [_row(record, mirrored_at or _utc_now_iso())],
+            on_conflict=["report_id"],
         )
 
     # ------------------------------------------------------------ Dokumente
@@ -246,8 +335,10 @@ class SupabaseMirror:
         file_paths: Optional[Dict[str, str]] = None,
     ) -> None:
         paths = dict(file_paths or {})
+        snapshot = list(entries)
         self._submit(
-            lambda: self._mirror_documents_sync(project_id, list(entries), paths)
+            lambda: self._mirror_documents_sync(project_id, snapshot, paths),
+            key=f"documents:{project_id}",
         )
 
     def _mirror_documents_sync(
@@ -255,7 +346,10 @@ class SupabaseMirror:
         project_id: str,
         entries: List[DocumentManifestEntry],
         file_paths: Dict[str, str],
+        *,
+        mirrored_at: Optional[str] = None,
     ) -> None:
+        stamp = mirrored_at or _utc_now_iso()
         rows: List[Dict[str, Any]] = []
         for entry in entries:
             try:
@@ -273,7 +367,8 @@ class SupabaseMirror:
             # Anreicherung — ohne Datei werden die Spalten NICHT geliefert,
             # und PostgREST überschreibt nur gelieferte Spalten (Rebuild
             # nullt damit keine vorhandenen Checksums).
-            payload = record.model_dump(exclude_none=True)
+            payload = record.model_dump(mode="json", exclude_none=True)
+            payload["mirrored_at"] = stamp
             path = file_paths.get(entry.document_id)
             if path:
                 size = None
@@ -306,6 +401,12 @@ class SupabaseMirror:
         Report-Metadaten und Dokument-Manifesten rekonstruierbar.
         Dokument-Anreicherungen (size/sha256) werden vom Rebuild NICHT
         geliefert (PostgREST ueberschreibt nur gelieferte Spalten).
+
+        Der Rebuild ist nicht nur additiv: Jede geschriebene Zeile traegt
+        den Startstempel dieses Laufs in ``mirrored_at``; danach loescht
+        ein Sweep alles Aeltere. Zeilen lokal geloeschter Runs, Reports
+        oder Projekte verschwinden damit aus dem Spiegel, statt dauerhaft
+        von der Wahrheit abzuweichen.
         """
         if not self.enabled:
             raise SupabaseMirrorError(
@@ -316,6 +417,7 @@ class SupabaseMirror:
         from ..run_registry import RunRegistry
 
         counts = {"runs": 0, "run_events": 0, "reports": 0, "documents": 0}
+        sweep_stamp = _utc_now_iso()
 
         registry_dir = RunRegistry.REGISTRY_DIR
         if os.path.isdir(registry_dir):
@@ -324,7 +426,7 @@ class SupabaseMirror:
                     continue
                 with open(os.path.join(registry_dir, filename), "r", encoding="utf-8") as handle:
                     manifest = json.load(handle)
-                self._mirror_run_sync(manifest)
+                self._mirror_run_sync(manifest, mirrored_at=sweep_stamp, full=True)
                 counts["runs"] += 1
                 counts["run_events"] += len(manifest.get("events") or [])
 
@@ -336,17 +438,34 @@ class SupabaseMirror:
                     continue
                 with open(meta_path, "r", encoding="utf-8") as handle:
                     report_dict = json.load(handle)
-                self._mirror_report_sync(report_dict)
+                self._mirror_report_sync(report_dict, mirrored_at=sweep_stamp)
                 counts["reports"] += 1
 
-        for project in ProjectManager.list_projects(limit=1000):
+        # iter_projects statt list_projects(limit=...): ein Limit wuerde den
+        # Rebuild stillschweigend nach N Projekten abschneiden und trotzdem
+        # "complete" melden.
+        for project in ProjectManager.iter_projects():
             manifest = ProjectManager.get_document_manifest(project.project_id)
             if not manifest:
                 continue
-            self._mirror_documents_sync(project.project_id, manifest.documents, {})
+            self._mirror_documents_sync(
+                project.project_id, manifest.documents, {}, mirrored_at=sweep_stamp
+            )
             counts["documents"] += len(manifest.documents)
 
+        self._sweep_stale_rows(sweep_stamp)
         return counts
+
+    def _sweep_stale_rows(self, sweep_stamp: str) -> None:
+        """Loescht alles, was dieser Rebuild nicht bestaetigt hat.
+
+        ``runs`` zuerst: ``run_events`` haengt per ON DELETE CASCADE daran.
+        Der anschliessende Sweep auf ``run_events`` raeumt zusaetzlich
+        Events, die aus einem noch existierenden Manifest verschwunden sind.
+        """
+        client = self._get_client()
+        for table in ("runs", "run_events", "report_index", "documents"):
+            client.delete_stale(table, mirrored_before=sweep_stamp)
 
 
 def get_supabase_mirror() -> SupabaseMirror:

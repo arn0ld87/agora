@@ -4,6 +4,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from app.contracts.report_contract import ReportStatus
 from app.contracts.supabase_mirror_contract import (
     MAX_EVENT_MESSAGE_CHARS,
     DocumentMirrorRecord,
@@ -89,11 +90,33 @@ class TestReportIndexRecord:
     def test_defaults_reflect_no_evidence(self):
         record = ReportIndexRecord(
             report_id="rep_1",
-            status="INCOMPLETE",
+            status="incomplete",
             artifact_path="reports/rep_1",
         )
+        assert record.status is ReportStatus.INCOMPLETE
         assert record.evidence_ok is False
         assert record.evidence_sections == 0
+
+    def test_accepts_every_report_status_value(self):
+        # Der Spiegel darf keinen Status verlieren, den die Wahrheit kennt.
+        for status in ReportStatus:
+            record = ReportIndexRecord(
+                report_id="rep_1",
+                status=status.value,
+                artifact_path="reports/rep_1",
+            )
+            assert record.status is status
+
+    @pytest.mark.parametrize("status", ["unknown", "INCOMPLETE", "", "done"])
+    def test_rejects_status_outside_report_contract(self, status):
+        # Regression: status war ein freier String — "unknown" landete so
+        # als erfundener Wert in agora.report_index.
+        with pytest.raises(ValidationError):
+            ReportIndexRecord(
+                report_id="rep_1",
+                status=status,
+                artifact_path="reports/rep_1",
+            )
 
 
 class TestDocumentMirrorRecord:

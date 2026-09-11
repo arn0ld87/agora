@@ -24,6 +24,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.contracts.report_contract import ReportStatus
 from app.contracts.runs_contract import RunStatus
 
 _STRICT = ConfigDict(extra="forbid")
@@ -79,7 +80,10 @@ class ReportIndexRecord(BaseModel):
     model_config = _STRICT
 
     report_id: str
-    status: str = Field(..., description="Report-Status inkl. INCOMPLETE (ReportStatus-Werte).")
+    status: ReportStatus = Field(
+        ...,
+        description="Report-Status aus dem ReportStatus-Vertrag (inkl. incomplete).",
+    )
     evidence_ok: bool = False
     evidence_sections: int = Field(default=0, ge=0)
     artifact_path: str

@@ -38,37 +38,38 @@ def main(argv: list[str] | None = None) -> int:
 
     mirror = get_supabase_mirror()
     if not mirror.enabled:
-        print(
+        logger.error(
             "Supabase mirror is disabled (SUPABASE_ENABLED=false or "
-            "SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY missing). Nothing to do.",
-            file=sys.stderr,
+            "SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY missing). Nothing to do."
         )
         return 1
 
     client = mirror._get_client()
     if not client.healthcheck():
-        print(
-            f"Supabase unreachable at {client._base_url!r} — fix connectivity "
-            "before rebuilding (no writes attempted).",
-            file=sys.stderr,
+        logger.error(
+            "Supabase unreachable or schema not exposed at %r — fix "
+            "connectivity/db-schemas before rebuilding (no writes attempted).",
+            client._base_url,
         )
         return 1
-    print(f"Supabase reachable at {client._base_url!r}.")
+    logger.info("Supabase reachable at %r.", client._base_url)
 
     if args.check:
-        print("Dry-run OK: enabled + reachable. No writes performed.")
+        logger.info("Dry-run OK: enabled + reachable. No writes performed.")
         return 0
 
     try:
         counts = mirror.rebuild_index()
     except SupabaseMirrorError as exc:
-        print(f"Rebuild failed: {exc}", file=sys.stderr)
+        logger.error("Rebuild failed: %s", exc)
         return 1
 
-    print(
-        "Rebuild complete: "
-        f"runs={counts['runs']}, run_events={counts['run_events']}, "
-        f"reports={counts['reports']}, documents={counts['documents']}"
+    logger.info(
+        "Rebuild complete: runs=%d, run_events=%d, reports=%d, documents=%d",
+        counts["runs"],
+        counts["run_events"],
+        counts["reports"],
+        counts["documents"],
     )
     return 0
 

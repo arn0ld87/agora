@@ -15,6 +15,7 @@ Sicherheitsvertrag (Phase 0, docs/plans/supabase.md):
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
+from urllib.parse import quote
 
 import requests
 
@@ -54,14 +55,18 @@ class SupabaseRestClient:
             self._session = requests.Session()
         return self._session
 
-    def _headers(self, *, write: bool = False) -> Dict[str, str]:
+    def _headers(self, *, write: bool = False, prefer: Optional[str] = None) -> Dict[str, str]:
+        # Accept-Profile waehlt das Lese-Schema, Content-Profile das
+        # Schreib-Schema (PostgREST db-schemas). Ohne beides landen Requests
+        # im Default-Schema (``public``) — siehe deploy/supabase/README.md.
         headers = {
             "apikey": self._service_role_key,
             "Authorization": f"Bearer {self._service_role_key}",
+            "Accept-Profile": self._schema,
         }
         if write:
             headers["Content-Type"] = "application/json"
-            headers["Prefer"] = "resolution=merge-duplicates,return=minimal"
+            headers["Prefer"] = prefer or "resolution=merge-duplicates,return=minimal"
             headers["Content-Profile"] = self._schema
         return headers
 
@@ -81,23 +86,65 @@ class SupabaseRestClient:
             f"{self._base_url}/rest/v1/{table}"
             f"?on_conflict={','.join(on_conflict)}"
         )
-        response = self._get_session().post(
-            url,
-            json=rows,
-            headers=self._headers(write=True),
-            timeout=self._timeout,
+        try:
+            response = self._get_session().post(
+                url,
+                json=rows,
+                headers=self._headers(write=True),
+                timeout=self._timeout,
+            )
+        except requests.RequestException as exc:
+            # Transportfehler (DNS, Connect, Read-Timeout) erreichen sonst
+            # ungefangen die Rebuild-CLI, die nur SupabaseMirrorError kennt.
+            raise SupabaseMirrorError(
+                f"upsert {table} failed before receiving a response: {exc}"
+            ) from exc
+        self._raise_for_status(response, f"upsert {table}")
+
+    def delete_stale(self, table: str, *, mirrored_before: str) -> None:
+        """Loescht Spiegelzeilen, die ein Rebuild nicht mehr bestaetigt hat.
+
+        Der Rebuild stempelt jede geschriebene Zeile mit seinem Start-
+        Zeitstempel (``mirrored_at``); alles Aeltere gehoert zu lokal
+        geloeschten Runs/Reports/Projekten und faellt hier weg. Ohne diesen
+        Sweep waere der Spiegel nur additiv und wuerde dauerhaft von der
+        Wahrheit abweichen.
+        """
+        url = (
+            f"{self._base_url}/rest/v1/{table}"
+            f"?mirrored_at=lt.{quote(mirrored_before, safe='')}"
         )
+        try:
+            response = self._get_session().delete(
+                url,
+                headers=self._headers(write=True, prefer="return=minimal"),
+                timeout=self._timeout,
+            )
+        except requests.RequestException as exc:
+            raise SupabaseMirrorError(
+                f"delete_stale {table} failed before receiving a response: {exc}"
+            ) from exc
+        self._raise_for_status(response, f"delete_stale {table}")
+
+    @staticmethod
+    def _raise_for_status(response: Any, what: str) -> None:
         if response.status_code < 200 or response.status_code >= 300:
             raise SupabaseMirrorError(
-                f"upsert {table} failed: HTTP {response.status_code}: "
+                f"{what} failed: HTTP {response.status_code}: "
                 f"{response.text[:500]}"
             )
 
-    def healthcheck(self) -> bool:
-        """True, wenn PostgREST den service_role-Key akzeptiert."""
+    def healthcheck(self, table: str = "runs") -> bool:
+        """True, wenn PostgREST den Key akzeptiert UND das Schema exponiert.
+
+        Bewusst gegen eine Mirror-Tabelle mit ``Accept-Profile: <schema>``:
+        Ein Ping auf ``/rest/v1/`` wuerde auch dann 200 liefern, wenn
+        ``agora`` gar nicht in ``db-schemas`` steht — und jeder Upsert
+        spaeter scheitern.
+        """
         try:
             response = self._get_session().get(
-                f"{self._base_url}/rest/v1/",
+                f"{self._base_url}/rest/v1/{table}?select=count&limit=1",
                 headers=self._headers(),
                 timeout=self._timeout,
             )

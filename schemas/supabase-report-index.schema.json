@@ -1,4 +1,19 @@
 {
+  "$defs": {
+    "ReportStatus": {
+      "description": "Spiegelt models/report.py:ReportStatus 1:1.",
+      "enum": [
+        "pending",
+        "planning",
+        "generating",
+        "incomplete",
+        "completed",
+        "failed"
+      ],
+      "title": "ReportStatus",
+      "type": "string"
+    }
+  },
   "$id": "https://alexle135.de/schemas/supabase-report-index.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
@@ -36,9 +51,8 @@
       "type": "string"
     },
     "status": {
-      "description": "Report-Status inkl. INCOMPLETE (ReportStatus-Werte).",
-      "title": "Status",
-      "type": "string"
+      "$ref": "#/$defs/ReportStatus",
+      "description": "Report-Status aus dem ReportStatus-Vertrag (inkl. incomplete)."
     },
     "updated_at": {
       "anyOf": [

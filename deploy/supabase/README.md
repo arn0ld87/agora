@@ -13,7 +13,30 @@ Report-Metadaten, Dokument-Manifeste), Neo4j (Graph/Vektoren), Ollama
    psql "$SUPABASE_DB_URL" -f deploy/supabase/schema.sql
    ```
 
-2. Agora-Backend-Env setzen (`.env`, Werte via Vaultwarden — nie im Repo):
+2. Schema `agora` fuer PostgREST exponieren — **sonst scheitert jeder
+   Upsert mit PGRST106 (`schema must be one of the following: ...`)**.
+   Der Mirror schreibt mit `Content-Profile: agora`, liest mit
+   `Accept-Profile: agora`:
+
+   ```text
+   # supabase/docker/.env bzw. Service `rest` in docker-compose.yml
+   PGRST_DB_SCHEMAS=public,storage,graphql_public,agora
+   ```
+
+   Alternativ in der DB (ersetzt die Liste vollstaendig, also die
+   bestehenden Schemas mit aufzaehlen — Details und Verifikations-`curl`
+   stehen als Kommentar in `schema.sql`):
+
+   ```sql
+   alter role authenticator set pgrst.db_schemas = 'public, storage, graphql_public, agora';
+   notify pgrst, 'reload config';
+   ```
+
+   Grants und RLS bleiben davon unberuehrt: `anon`/`authenticated` haben
+   auf `agora` keine Grants und RLS ist deny-by-default — exponiert heisst
+   nicht lesbar.
+
+3. Agora-Backend-Env setzen (`.env`, Werte via Vaultwarden — nie im Repo):
 
    ```text
    SUPABASE_ENABLED=true
@@ -25,11 +48,11 @@ Report-Metadaten, Dokument-Manifeste), Neo4j (Graph/Vektoren), Ollama
    (null Netzwerkaufrufe). `Config.validate()` lehnt `SUPABASE_ENABLED=true`
    ohne URL/Key beim Start ab.
 
-3. Netz: Läuft Supabase auf demselben Docker-Host, das `supabase`-Netz
+4. Netz: Läuft Supabase auf demselben Docker-Host, das `supabase`-Netz
    ans Agora-Backend hängen (external network) — sonst interne URL über
    Tailscale. Kong-Ports müssen dafür nicht auf dem Host published werden.
 
-4. Healthcheck + Rebuild:
+5. Healthcheck + Rebuild:
 
    ```bash
    cd backend
@@ -37,9 +60,16 @@ Report-Metadaten, Dokument-Manifeste), Neo4j (Graph/Vektoren), Ollama
    uv run python -m app.services.supabase_mirror.rebuild           # Voll-Rebuild
    ```
 
+   `--check` prüft mit `Accept-Profile: agora` gegen eine Mirror-Tabelle:
+   Ein 200 beweist Erreichbarkeit *und* korrekte `db-schemas`-Config.
+
    Der Voll-Rebuild rekonstruiert runs/run_events/report_index/documents
    komplett aus der lokalen Wahrheit und ist der Rollforward nach
-   Supabase-Ausfällen oder Schema-Änderungen.
+   Supabase-Ausfällen oder Schema-Änderungen. Er ist nicht nur additiv:
+   Jede geschriebene Zeile trägt den Startstempel des Laufs in
+   `mirrored_at`, anschließend löscht ein Sweep alles Ältere — Zeilen
+   lokal gelöschter Runs/Reports/Projekte verschwinden damit aus dem
+   Spiegel.
 
 ## Was gespiegelt wird (Write-Through, best-effort)
 
