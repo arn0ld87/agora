@@ -1,4 +1,4 @@
-name: refactor-python-sim-prepare-map
+name: refactor-python-sim-prepare-red
 
 on:
   push:
@@ -9,27 +9,25 @@ permissions:
   contents: read
 
 jobs:
-  map:
+  red:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      LLM_API_KEY: dummy-ci-key
+      FLASK_DEBUG: "true"
     steps:
       - uses: actions/checkout@v4
         with:
           ref: claude/refactor-python-hotspots
-          fetch-depth: 0
-      - name: Map simulation_prepare structure and tests
-        shell: bash
-        run: |
-          python - <<'PY'
-          import ast
-          from pathlib import Path
-          path = Path('backend/app/api/simulation_prepare.py')
-          source = path.read_text(encoding='utf-8')
-          tree = ast.parse(source)
-          print(f'LOC {len(source.splitlines())}')
-          for node in tree.body:
-              if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                  print(f'{type(node).__name__} {node.name}: {node.lineno}-{node.end_lineno} ({node.end_lineno-node.lineno+1})')
-          PY
-          echo '--- direct test references ---'
-          grep -R -n -E 'simulation_prepare|_Prepare|_parse_prepare|_resolve_prepare|_collect_prepare|_preview_entity|_begin_prepare|_seed_prepare|_make_prepare_job|_track_active_prepare|_build_prepare_response|_check_simulation_prepared|prepare_simulation|prepare/status' backend/tests | head -500 || true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Install uv
+        run: python -m pip install --upgrade pip uv
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync --group dev
+      - name: Boundary test must fail before implementation
+        working-directory: backend
+        run: uv run pytest -q tests/api/test_simulation_prepare_module_boundaries.py
