@@ -21,6 +21,7 @@ jobs:
         run: |
           python - <<'PY'
           import ast
+          import re
           from pathlib import Path
 
           targets = [
@@ -31,11 +32,25 @@ jobs:
               'backend/app/services/sim/process_manager.py',
           ]
 
+          def regex_map(src: str) -> None:
+              for lineno, line in enumerate(src.splitlines(), 1):
+                  m = re.match(r'^(\s*)(async\s+def|def|class)\s+([A-Za-z_][A-Za-z0-9_]*)', line)
+                  if not m:
+                      continue
+                  indent = len(m.group(1).replace('\t', '    '))
+                  kind = m.group(2).upper().replace(' ', '_')
+                  print(f'FALLBACK {indent:02d} {kind} {m.group(3)} @ {lineno}')
+
           for name in targets:
               path = Path(name)
               src = path.read_text(encoding='utf-8')
-              tree = ast.parse(src)
               print(f'\n===== {name} ({len(src.splitlines())} LOC) =====')
+              try:
+                  tree = ast.parse(src)
+              except SyntaxError as exc:
+                  print(f'SYNTAX_ERROR line={exc.lineno}: {exc.msg}')
+                  regex_map(src)
+                  continue
               for node in tree.body:
                   if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                       print(f'FUNC {node.name}: {node.lineno}-{node.end_lineno} ({node.end_lineno-node.lineno+1})')
