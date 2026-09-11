@@ -31,6 +31,7 @@ import pytest
 
 from app.contracts.llm_routing_contract import ResolvedRoute
 from app.services import llm_routing_seed
+from app.services.llm_runtime import RuntimeLlmConfig
 from app.services.prepare_service import _resolve_llm_connection
 
 
@@ -305,3 +306,57 @@ class TestResolveLlmConnectionCliTransport:
 
         assert base_url is None
         assert provider_type == "codex_cli"
+
+
+class TestRuntimeOverrideEndpointRequired:
+    """Regression #C: aktivierter Runtime-Override ohne Endpoint.
+
+    Root Cause: der ``RuntimeLlmConfig``-Zweig von ``_resolve_llm_connection``
+    gab ``(api_key, base_url, provider_type)`` ungeprueft zurueck. Fuer einen
+    HTTP-Provider mit ``base_url=None`` — erzeugbar ueber
+    ``build_runtime_llm_config`` aus einer Route ohne aufgeloeste Base-URL —
+    entstand damit genau die Halb-Uebergabe, gegen die der
+    ``ResolvedRoute``-Zweig bereits absichert: Modell und Schluessel aus der
+    Route, Endpoint aus ``Config.LLM_BASE_URL``.
+    """
+
+    def test_http_runtime_override_without_base_url_is_rejected(self) -> None:
+        runtime = RuntimeLlmConfig(provider="custom_openai", api_key="sk-runtime", base_url=None)
+
+        with pytest.raises(ValueError, match="Endpoint"):
+            _resolve_llm_connection(runtime)
+
+    def test_named_http_provider_without_base_url_is_rejected(self) -> None:
+        runtime = RuntimeLlmConfig(provider="openai", api_key="sk-runtime", base_url=None)
+
+        with pytest.raises(ValueError, match="Endpoint"):
+            _resolve_llm_connection(runtime)
+
+    def test_cli_transport_runtime_override_without_base_url_is_allowed(self) -> None:
+        runtime = RuntimeLlmConfig(provider="codex_cli", api_key=None, base_url=None)
+
+        api_key, base_url, provider_type = _resolve_llm_connection(runtime)
+
+        assert base_url is None
+        assert provider_type == "codex_cli"
+        assert api_key is None
+
+    def test_http_runtime_override_with_base_url_passes_through(self) -> None:
+        runtime = RuntimeLlmConfig(
+            provider="custom_openai", api_key="sk-runtime", base_url="https://api.example.test/v1"
+        )
+
+        assert _resolve_llm_connection(runtime) == (
+            "sk-runtime",
+            "https://api.example.test/v1",
+            None,
+        )
+
+    def test_non_required_path_still_tolerates_missing_base_url(self) -> None:
+        """``use_llm_for_profiles=False`` laeuft bewusst ohne LLM — dort ist
+        eine unvollstaendige Route kein Fehler, weil gar kein Call folgt."""
+        runtime = RuntimeLlmConfig(provider="custom_openai", api_key="sk-runtime", base_url=None)
+
+        api_key, base_url, _ = _resolve_llm_connection(runtime, require=False)
+
+        assert (api_key, base_url) == ("sk-runtime", None)

@@ -77,6 +77,15 @@ def _resolve_llm_connection(
         return resolve_route_api_key(llm_runtime), base_url, provider_type
     if llm_runtime and llm_runtime.enabled:
         provider_type = PROVIDER_CODEX_CLI if llm_runtime.provider == PROVIDER_CODEX_CLI else None
+        if require and not llm_runtime.base_url and not _runtime_uses_cli_transport(llm_runtime):
+            raise ValueError(
+                f"kein Endpoint für Runtime-Override '{llm_runtime.provider}' aufgelöst: der "
+                "Override nennt Provider und Schlüssel, aber keine Basis-URL. Ohne Endpoint "
+                "würde die Anfrage an die .env-Konfiguration statt an den gewählten Provider "
+                "gehen, während Modell und Schlüssel aus dem Override stammen — diese "
+                "Mischung erreicht den falschen Provider. Bitte unter Einstellungen → "
+                "LLM-Anbieter eine Basis-URL hinterlegen."
+            )
         return llm_runtime.api_key, llm_runtime.base_url, provider_type
     if require:
         raise ValueError(
@@ -88,3 +97,19 @@ def _resolve_llm_connection(
             "Verbindung wählen."
         )
     return None, None, None
+
+
+def _runtime_uses_cli_transport(llm_runtime: RuntimeLlmConfig) -> bool:
+    """True nur fuer Provider mit echtem CLI-Transport (aktuell ``codex_cli``).
+
+    Ein fehlendes ``base_url`` ist dort der Normalfall (#1405) und kein Grund,
+    den Override abzulehnen. Die Transport-Auskunft kommt aus derselben
+    kanonischen Definition wie im ``ResolvedRoute``-Zweig, damit ein kuenftiger
+    zweiter CLI-Provider hier nicht nachgepflegt werden muss. Unbekannte
+    Runtime-Provider-Namen (z. B. der generische ``custom_openai``-Bucket)
+    gelten bewusst als HTTP — die sichere Annahme.
+    """
+    from .llm_provider_registry import LlmProviderRegistry
+
+    definition = LlmProviderRegistry.connection_definition(llm_runtime.provider)
+    return definition is not None and definition.transport == "cli"
