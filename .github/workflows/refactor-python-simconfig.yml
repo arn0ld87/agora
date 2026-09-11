@@ -1,0 +1,90 @@
+name: refactor-python-simconfig
+
+on:
+  push:
+    branches:
+      - claude/refactor-python-hotspots
+
+permissions:
+  contents: write
+
+jobs:
+  refactor:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      LLM_API_KEY: dummy-ci-key
+      FLASK_DEBUG: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/refactor-python-hotspots
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        run: python -m pip install --upgrade pip uv
+
+      - name: Generate simulation config split
+        run: |
+          python backend/scripts/_tmp_refactor_simulation_config.py
+          python -m py_compile backend/app/services/simulation_config_*.py
+          echo '--- LOC after split ---'
+          wc -l backend/app/services/simulation_config_*.py | sort -nr
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync --group dev
+
+      - name: Ruff targeted slice
+        working-directory: backend
+        run: |
+          uv run ruff check --fix app/services/simulation_config_*.py
+          uv run ruff check app/services/simulation_config_*.py
+
+      - name: Compile after formatting
+        run: python -m py_compile backend/app/services/simulation_config_*.py
+
+      - name: Mypy targeted slice
+        working-directory: backend
+        run: uv run mypy app/services/simulation_config_*.py
+
+      - name: Run simulation config regression suite
+        working-directory: backend
+        run: |
+          uv run pytest -q \
+            tests/services/test_simulation_config_generator_refactored.py \
+            tests/services/test_simulation_config_generator_parallel_batches.py \
+            tests/services/test_agents_per_batch.py \
+            tests/services/test_skeptic_quota.py \
+            tests/services/test_initial_post_agent_assignment.py \
+            tests/services/test_agent_config_active_hours_coerce.py \
+            tests/services/test_sim_prep_key_routing.py \
+            tests/api/test_runs_resume_budget.py
+
+      - name: Verify Python-only final diff
+        run: |
+          rm backend/scripts/_tmp_refactor_simulation_config.py
+          rm .github/workflows/refactor-python-simconfig.yml
+          git diff --check origin/main --
+          changed="$(git diff --name-only origin/main --)"
+          bad="$(printf '%s\n' "$changed" | sed '/^$/d' | grep -vE '\.py$' || true)"
+          if [ -n "$bad" ]; then
+            echo 'Non-Python files would remain in final diff:'
+            echo "$bad"
+            exit 1
+          fi
+          echo 'Final net diff contains only Python files:'
+          printf '%s\n' "$changed"
+
+      - name: Commit verified simulation config split
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'refactor(sim-config): split generator by responsibility'
+          git push origin HEAD:claude/refactor-python-hotspots
