@@ -1,0 +1,115 @@
+name: refactor-python-prepare
+
+on:
+  push:
+    branches:
+      - claude/refactor-python-hotspots
+
+permissions:
+  contents: write
+
+jobs:
+  refactor:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      LLM_API_KEY: dummy-ci-key
+      FLASK_DEBUG: "true"
+      PYTHON_REFACTOR_BASE: 4496d7ad425593ec12084e508d3f148be9a4166e
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/refactor-python-hotspots
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        run: python -m pip install --upgrade pip uv
+
+      - name: Generate prepare-service split
+        run: |
+          python backend/scripts/_tmp_refactor_prepare_service.py
+          python -m py_compile \
+            backend/app/services/prepare_service.py \
+            backend/app/services/prepare_llm.py \
+            backend/app/services/prepare_entities.py \
+            backend/app/services/prepare_quota.py
+          wc -l \
+            backend/app/services/prepare_service.py \
+            backend/app/services/prepare_llm.py \
+            backend/app/services/prepare_entities.py \
+            backend/app/services/prepare_quota.py | sort -nr
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync --group dev
+
+      - name: Ruff targeted slice
+        working-directory: backend
+        run: |
+          uv run ruff check --fix \
+            app/services/prepare_service.py \
+            app/services/prepare_llm.py \
+            app/services/prepare_entities.py \
+            app/services/prepare_quota.py
+          uv run ruff check \
+            app/services/prepare_service.py \
+            app/services/prepare_llm.py \
+            app/services/prepare_entities.py \
+            app/services/prepare_quota.py
+
+      - name: Compile after Ruff
+        run: python -m py_compile \
+          backend/app/services/prepare_service.py \
+          backend/app/services/prepare_llm.py \
+          backend/app/services/prepare_entities.py \
+          backend/app/services/prepare_quota.py
+
+      - name: Mypy targeted slice
+        working-directory: backend
+        run: uv run mypy \
+          app/services/prepare_service.py \
+          app/services/prepare_llm.py \
+          app/services/prepare_entities.py \
+          app/services/prepare_quota.py
+
+      - name: Run prepare regression suite
+        working-directory: backend
+        run: |
+          uv run pytest -q \
+            tests/test_persona_target.py \
+            tests/test_persona_eligibility.py \
+            tests/test_entity_propagation.py \
+            tests/test_quota_persistence.py \
+            tests/services/test_persona_quota_wiring.py \
+            tests/services/test_prepare_cancel.py \
+            tests/services/test_prepare_blocking_degradation.py \
+            tests/services/test_provider_resolution_store_precedence.py \
+            tests/services/test_sim_prep_key_routing.py
+
+      - name: Verify Python-only final diff
+        run: |
+          rm backend/scripts/_tmp_refactor_prepare_service.py
+          rm .github/workflows/refactor-python-prepare.yml
+          git diff --check "$PYTHON_REFACTOR_BASE" --
+          changed="$(git diff --name-only "$PYTHON_REFACTOR_BASE" --)"
+          bad="$(printf '%s\n' "$changed" | sed '/^$/d' | grep -vE '\.py$' || true)"
+          if [ -n "$bad" ]; then
+            echo 'Non-Python files would remain in final diff:'
+            echo "$bad"
+            exit 1
+          fi
+          echo 'Final net diff contains only Python files:'
+          printf '%s\n' "$changed"
+
+      - name: Commit verified prepare-service split
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'refactor(prepare): split service responsibilities'
+          git push origin HEAD:claude/refactor-python-hotspots
