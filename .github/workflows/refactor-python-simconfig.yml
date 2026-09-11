@@ -34,6 +34,7 @@ jobs:
           python backend/scripts/_tmp_fix_simconfig_transformer.py
           python backend/scripts/_tmp_refactor_simulation_config.py
           python backend/scripts/_tmp_fix_simconfig_generated.py
+          python backend/scripts/_tmp_normalize_python_whitespace.py
           python -m py_compile backend/app/services/simulation_config_*.py
           echo '--- LOC after split ---'
           wc -l backend/app/services/simulation_config_*.py | sort -nr
@@ -73,6 +74,7 @@ jobs:
           rm backend/scripts/_tmp_refactor_simulation_config.py
           rm backend/scripts/_tmp_fix_simconfig_transformer.py
           rm backend/scripts/_tmp_fix_simconfig_generated.py
+          rm backend/scripts/_tmp_normalize_python_whitespace.py
           rm .github/workflows/refactor-python-simconfig.yml
           git diff --check origin/main --
           changed="$(git diff --name-only origin/main --)"
