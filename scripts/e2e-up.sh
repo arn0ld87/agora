@@ -134,6 +134,20 @@ else
        exit 1 ;;
   esac
 fi
+# Modellname explizit pinnen. `.env.example` setzt seit dem Settings-SSoT-Fix
+# bewusst KEIN LLM_MODEL_NAME mehr: der Code-Default ist leer, damit ein
+# Operator ein Modell waehlt, das in seinem Backend wirklich existiert.
+# Fuer den E2E-Stack ist genau das aber toedlich — `_bootstrap_profile()` in
+# llm_profiles_store.py gibt bei leerem Modellnamen `None` zurueck, es entsteht
+# kein Auto-Profil, und jeder Smoke, der einen Run startet oder ein Modell
+# auswaehlt, scheitert. (Health-Smoke nicht: der prueft nur Endpunkte.)
+#
+# Der Wert wird im Stub-Modus nie wirklich aufgerufen; er muss nur vorhanden
+# und plausibel sein. Eine Vorlagendatei ist der falsche Ort fuer diese
+# Festlegung — der E2E-Stack pinnt seine Konfiguration selbst, wie bei
+# AGORA_PROXY_PORT und AGORA_E2E_LLM_MODE auch.
+_env_upsert LLM_MODEL_NAME "${LLM_MODEL_NAME:-qwen2.5:32b}"
+
 echo "[e2e-up] runtime credentials written to .env (one line per key)" >&2
 
 # Followup #8: Bind-Mount-Sources mit Container-User-UID anlegen, sonst

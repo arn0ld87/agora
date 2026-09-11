@@ -22,6 +22,11 @@ Verträge:
      bewusst leer, damit der Operator ein Modell waehlt, das im aktiven
      Backend existiert; ein aktiv gesetztes lokales Ollama-Tag in der Vorlage
      stellt genau den Cloud-404 wieder her, den der leere Default vermeidet.
+  E. Weil D gilt, muss `scripts/e2e-up.sh` den Modellnamen selbst pinnen.
+     Der E2E-Stack seedet seine `.env` aus `.env.example`; ohne eigenen Wert
+     liefert `_bootstrap_profile()` `None`, es entsteht kein Auto-Profil, und
+     jeder Smoke, der einen Run startet oder ein Modell auswaehlt, faellt.
+     D und E gehoeren zusammen — wer eines aendert, muss das andere mitdenken.
 """
 
 from __future__ import annotations
@@ -196,4 +201,39 @@ def test_env_example_does_not_pin_a_model():
     assert "LLM_MODEL_NAME" not in active, (
         "`.env.example` setzt LLM_MODEL_NAME aktiv auf "
         f"{active.get('LLM_MODEL_NAME')!r} — als Kommentar-Beispiel fuehren"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Vertrag E — der E2E-Stack bringt seinen Modellnamen selbst mit
+# ---------------------------------------------------------------------------
+
+E2E_UP = REPO_ROOT / "scripts" / "e2e-up.sh"
+
+
+def test_e2e_seed_pins_a_model_name():
+    """Gegenstueck zu Vertrag D.
+
+    Regression: Mit dem Entfernen des aktiven `LLM_MODEL_NAME` aus
+    `.env.example` startete der E2E-Stack ohne Modell. Sechs der sieben
+    Playwright-Smokes fielen; nur der Health-Smoke blieb gruen, weil er keinen
+    Run startet. Der Modellname gehoert in den E2E-Seed, nicht in die Vorlage.
+    """
+    assert E2E_UP.is_file(), f"{E2E_UP} fehlt"
+    raw = E2E_UP.read_text(encoding="utf-8")
+
+    assert "_env_upsert LLM_MODEL_NAME" in raw, (
+        "scripts/e2e-up.sh muss LLM_MODEL_NAME in die geseedete .env schreiben — "
+        "`.env.example` liefert bewusst keinen (Vertrag D)"
+    )
+
+
+def test_contracts_d_and_e_stay_coupled():
+    """Genau eine der beiden Quellen liefert den Modellnamen — nie keine."""
+    example_sets_it = "LLM_MODEL_NAME" in _parse_active_keys(ENV_EXAMPLE)
+    seed_pins_it = "_env_upsert LLM_MODEL_NAME" in E2E_UP.read_text(encoding="utf-8")
+
+    assert example_sets_it or seed_pins_it, (
+        "weder .env.example noch scripts/e2e-up.sh setzen LLM_MODEL_NAME — "
+        "der E2E-Stack startet dann ohne Modell und sechs Smokes fallen"
     )
