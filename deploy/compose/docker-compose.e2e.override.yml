@@ -85,6 +85,27 @@ services:
       # Absicherung) — seit Issue #989 idempotent pro Schlüssel, und
       # e2e-down.sh entfernt ihn danach wieder.
       - AGORA_E2E_LLM_MODE=${AGORA_E2E_LLM_MODE:-}
+    # Fester Resolver — nur fuer den E2E-Stack, nicht im ausgelieferten
+    # Default (der erbt bewusst den Host-Resolver, damit Split-DNS wie
+    # Tailscale MagicDNS funktioniert).
+    #
+    # Der AiModelPicker-Smoke seedet absichtlich eine Verbindung auf
+    # `mock-models-unreachable:8080`, um den Offline-Fall zu pruefen. Fuer
+    # den Test zaehlt nicht, *dass* der Name scheitert, sondern *wie schnell*:
+    # Ein Resolver, der NXDOMAIN zurueckgibt, laesst die Discovery-Probe
+    # sofort fehlschlagen, die Verbindung geht auf `disconnected`, und die
+    # Combobox rendert ihre Optionen. Ohne festen Resolver laeuft die Abfrage
+    # unter der Egress-Sperre des CI-Runners stattdessen in einen Timeout —
+    # die Modell-Requests bleiben haengen und der Picker rendert nie.
+    # Beobachtet als sechs haengende `/provider-connections/openai/models`-
+    # Requests (HAR-Status -1) in der Playwright-Trace zu Lauf 34600171007.
+    #
+    # Compose-Servicenamen (`neo4j`, `redis`, `mock-models`) sind davon nicht
+    # betroffen — die beantwortet Dockers eingebettetes DNS lokal. Nur externe
+    # Namen brauchen den Upstream.
+    dns:
+      - ${AGORA_E2E_DNS_PRIMARY:-8.8.8.8}
+      - ${AGORA_E2E_DNS_SECONDARY:-8.8.4.4}
 
   # Slice 5.6: Mock-Model-Server fuer die AiModelPicker-Discovery-Probe.
   #

@@ -153,3 +153,46 @@ def test_codex_override_requires_dedicated_directory():
     assert "HOME}/.codex" not in source, (
         f"kein Fallback auf das persoenliche Codex-Home: {source}"
     )
+
+
+# --------------------------------------------------------------------------- #
+# Der E2E-Stack braucht einen festen Resolver
+# --------------------------------------------------------------------------- #
+
+E2E_OVERRIDE = REPO_ROOT / "deploy" / "compose" / "docker-compose.e2e.override.yml"
+
+
+def test_e2e_override_pins_a_resolver():
+    """Gegenstueck zu `test_no_dns_default_in_shipped_stack`.
+
+    Der ausgelieferte Stack erbt bewusst den Host-Resolver. Der E2E-Stack darf
+    das nicht: der AiModelPicker-Smoke seedet absichtlich eine Verbindung auf
+    `mock-models-unreachable`, um den Offline-Fall zu pruefen. Entscheidend ist
+    nicht, *dass* der Name scheitert, sondern *wie schnell* — ein Resolver mit
+    NXDOMAIN laesst die Discovery-Probe sofort fehlschlagen, ohne ihn laeuft
+    sie unter der Egress-Sperre des CI-Runners in einen Timeout und die
+    Modell-Requests bleiben haengen.
+
+    Compose-Servicenamen sind davon nicht betroffen — die beantwortet Dockers
+    eingebettetes DNS lokal. Nur externe Namen brauchen den Upstream.
+    """
+    assert E2E_OVERRIDE.is_file(), f"{E2E_OVERRIDE} fehlt"
+    dns_entries = _load(E2E_OVERRIDE)["services"]["agora"].get("dns")
+
+    assert dns_entries, (
+        "der E2E-Stack muss einen Resolver pinnen — der ausgelieferte Stack "
+        "liefert bewusst keinen"
+    )
+    assert len(dns_entries) == 2
+
+
+def test_shipped_stack_and_e2e_override_stay_coupled():
+    """Genau eine Seite liefert den Resolver — nie keine."""
+    shipped = _load(DEV_COMPOSE)["services"]["agora"].get("dns")
+    e2e = _load(E2E_OVERRIDE)["services"]["agora"].get("dns")
+
+    assert shipped or e2e, (
+        "weder der ausgelieferte Stack noch das E2E-Override setzen einen "
+        "Resolver — externe Namen laufen dann im CI in Timeouts statt in "
+        "NXDOMAIN, und der AiModelPicker-Smoke haengt"
+    )
