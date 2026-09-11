@@ -67,7 +67,7 @@ def _save_twitter_csv (self: Any ,profiles :List [OasisAgentProfile ],file_path 
     - user_char: Internal use, LLM system prompt, determines how agent thinks and acts
     - description: External display, visible to other users
     """
-    import csv 
+    import csv
 
     # Ensure file extension is .csv
     if not file_path .endswith ('.csv'):
@@ -83,7 +83,7 @@ def _save_twitter_csv (self: Any ,profiles :List [OasisAgentProfile ],file_path 
         # Write data rows
         for idx ,profile in enumerate (profiles ):
         # user_char: Complete persona (bio + persona) for LLM system prompt
-            user_char =profile .bio 
+            user_char =profile .bio
             if profile .persona and profile .persona !=profile .bio :
                 user_char =f"{profile .bio } {profile .persona }"
                 # Handle newlines (replace with space in CSV)
