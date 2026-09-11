@@ -1,0 +1,47 @@
+name: refactor-python-ast-map
+
+on:
+  push:
+    branches:
+      - claude/refactor-python-hotspots
+
+permissions:
+  contents: read
+
+jobs:
+  map:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/refactor-python-hotspots
+      - name: Print Python hotspot AST map
+        shell: bash
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+
+          targets = [
+              'backend/app/services/oasis_profile_generator.py',
+              'backend/app/services/simulation_config_generator.py',
+              'backend/app/api/simulation_prepare.py',
+              'backend/app/services/prepare_service.py',
+              'backend/app/services/sim/process_manager.py',
+          ]
+
+          for name in targets:
+              path = Path(name)
+              src = path.read_text(encoding='utf-8')
+              tree = ast.parse(src)
+              print(f'\n===== {name} ({len(src.splitlines())} LOC) =====')
+              for node in tree.body:
+                  if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                      print(f'FUNC {node.name}: {node.lineno}-{node.end_lineno} ({node.end_lineno-node.lineno+1})')
+                  elif isinstance(node, ast.ClassDef):
+                      print(f'CLASS {node.name}: {node.lineno}-{node.end_lineno} ({node.end_lineno-node.lineno+1})')
+                      for child in node.body:
+                          if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                              print(f'  METHOD {child.name}: {child.lineno}-{child.end_lineno} ({child.end_lineno-child.lineno+1})')
+          PY
