@@ -85,6 +85,21 @@ _BLOCKED_HOST_SUFFIXES: tuple[str, ...] = (
 )
 
 
+class OutboundHttpError(Exception):
+    """Die Gegenstelle hat mit einem Fehlerstatus geantwortet.
+
+    Bewusst getrennt von :class:`OutboundRequestBlocked`: ein 404 ist keine
+    Richtlinienentscheidung von uns, sondern eine Auskunft der Gegenstelle.
+    Beides in einen Topf zu werfen wuerde dem Agenten "blockiert" melden, wo
+    "Seite existiert nicht" die Wahrheit ist.
+    """
+
+    def __init__(self, status: int, url: str | None = None) -> None:
+        self.status = status
+        self.url = url
+        super().__init__(f"HTTP {status}")
+
+
 class OutboundRequestBlocked(Exception):
     """Raised when the outbound policy rejects a URL or a redirect hop."""
 
@@ -353,7 +368,11 @@ def _open_pinned_pool(target: ResolvedTarget, policy: OutboundHttpPolicy):
             retries=False,
             cert_reqs="CERT_REQUIRED",
             assert_hostname=target.host,
-            conn_kw={"server_hostname": target.host},
+            # `server_hostname` ist KEIN benannter Pool-Parameter, sondern
+            # wandert ueber `**conn_kw` in die Connection. Als
+            # `conn_kw={...}` uebergeben wuerde es dort verschachtelt
+            # ankommen und `HTTPSConnection.__init__` mit TypeError brechen.
+            server_hostname=target.host,
         )
     return urllib3.HTTPConnectionPool(
         host=target.ip,
@@ -437,6 +456,13 @@ def fetch(url: str, policy: OutboundHttpPolicy | None = None) -> FetchResult:
                     # then loop so the new URL is fully revalidated.
                     current = urljoin(current, location)
                     continue
+
+                # Fehlerstatus vor allem anderen: die HTML-Fehlerseite eines
+                # 404 ist kein Seiteninhalt. Ohne diese Pruefung landete sie
+                # als "content" beim Modell — der Vorgaengercode hatte dafuer
+                # `raise_for_status()`, das beim Umbau verloren ging.
+                if response.status >= 400:
+                    raise OutboundHttpError(response.status, current)
 
                 content_type = response.headers.get("Content-Type", "")
                 if not _content_type_allowed(content_type, policy.allowed_content_types):

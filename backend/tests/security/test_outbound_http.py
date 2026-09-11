@@ -18,8 +18,10 @@ import pytest
 
 from app.security import outbound_http
 from app.security.outbound_http import (
+    DEFAULT_POLICY,
     OutboundHttpPolicy,
     OutboundRequestBlocked,
+    ResolvedTarget,
     fetch,
     validate_url,
 )
@@ -377,3 +379,106 @@ def test_decodes_declared_charset(monkeypatch):
 
     result = fetch("https://public.example/page")
     assert "Grüße" in result.text
+
+
+# --------------------------------------------------------------------------- #
+# Echte Pool-Konstruktion — ohne Mock
+# --------------------------------------------------------------------------- #
+#
+# Die Tests oben ersetzen `_open_pinned_pool` vollstaendig. Dadurch blieb
+# ausgerechnet das sicherheitskritischste Stueck — das Pinning selbst — in
+# jedem Lauf unausgefuehrt, und ein `TypeError` beim Verbindungsaufbau fiel
+# nicht auf: `server_hostname` war als `conn_kw={...}` uebergeben worden und
+# kam dort verschachtelt an. Jeder echte HTTPS-Abruf waere abgestuerzt.
+#
+# Diese Tests bauen Pool und Connection wirklich. `_new_conn()` erzeugt nur das
+# Connection-Objekt und oeffnet noch keinen Socket — die Tests bleiben damit
+# netzfrei und deterministisch.
+
+class TestPinnedPoolConstruction:
+    def _target(self, scheme: str = "https", port: int = 443) -> ResolvedTarget:
+        return ResolvedTarget(
+            url=f"{scheme}://example.com/x",
+            scheme=scheme,
+            host="example.com",
+            port=port,
+            ip=PUBLIC_IP,
+            request_target="/x",
+            host_header="example.com",
+        )
+
+    def test_https_connection_is_pinned_to_the_validated_ip(self):
+        pool = outbound_http._open_pinned_pool(self._target(), DEFAULT_POLICY)
+        try:
+            conn = pool._new_conn()
+        finally:
+            pool.close()
+
+        # Verbunden wird mit der geprueften Adresse …
+        assert conn.host == PUBLIC_IP
+
+    def test_https_connection_keeps_tls_anchored_to_the_hostname(self):
+        """Pinning darf TLS nicht schwaechen.
+
+        SNI und Zertifikatspruefung muessen am echten Hostnamen haengen,
+        sonst wuerde das Zertifikat gegen eine IP geprueft und der Abruf
+        entweder scheitern oder — schlimmer — ungeprueft durchgehen.
+        """
+        pool = outbound_http._open_pinned_pool(self._target(), DEFAULT_POLICY)
+        try:
+            conn = pool._new_conn()
+        finally:
+            pool.close()
+
+        assert conn.server_hostname == "example.com"
+        assert conn.assert_hostname == "example.com"
+        assert conn.cert_reqs == "CERT_REQUIRED"
+
+    def test_plain_http_pool_is_pinned_too(self):
+        target = self._target(scheme="http", port=80)
+        pool = outbound_http._open_pinned_pool(target, DEFAULT_POLICY)
+        try:
+            conn = pool._new_conn()
+        finally:
+            pool.close()
+
+        assert conn.host == PUBLIC_IP
+
+    def test_non_default_port_is_honoured(self):
+        target = self._target(scheme="https", port=8443)
+        pool = outbound_http._open_pinned_pool(target, DEFAULT_POLICY)
+        try:
+            assert pool.port == 8443
+        finally:
+            pool.close()
+
+
+# --------------------------------------------------------------------------- #
+# Fehlerstatus der Gegenstelle
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.parametrize("status", [400, 401, 403, 404, 410, 500, 502, 503])
+def test_error_status_is_raised_not_returned_as_content(monkeypatch, status: int):
+    """Die HTML-Fehlerseite eines 404 ist kein Seiteninhalt.
+
+    Der Vorgaengercode hatte dafuer `raise_for_status()`; beim Umbau ging das
+    verloren, und eine Fehlerseite waere als `content` beim Modell gelandet.
+    """
+    _fake_dns(monkeypatch, {"public.example": [PUBLIC_IP]})
+    _install_transport(
+        monkeypatch,
+        [Hop(status=status, body=b"<html>Not found</html>")],
+    )
+
+    with pytest.raises(outbound_http.OutboundHttpError) as exc:
+        fetch("https://public.example/missing")
+    assert exc.value.status == status
+
+
+@pytest.mark.parametrize("status", [200, 203, 204])
+def test_success_status_is_returned(monkeypatch, status: int):
+    _fake_dns(monkeypatch, {"public.example": [PUBLIC_IP]})
+    _install_transport(monkeypatch, [Hop(status=status, body=b"<html>ok</html>")])
+
+    result = fetch("https://public.example/page")
+    assert result.status == status

@@ -410,7 +410,11 @@ class AgentToolRegistry:
         """
         max_chars = min(int(max_chars), 4000)
         try:
-            from app.security.outbound_http import OutboundRequestBlocked, fetch
+            from app.security.outbound_http import (
+                OutboundHttpError,
+                OutboundRequestBlocked,
+                fetch,
+            )
         except ImportError as e:
             # Fail closed: without the guard we do not fetch at all.
             logger.error("Outbound HTTP guard unavailable: %s", e)
@@ -422,6 +426,12 @@ class AgentToolRegistry:
             # Log the reason, not the URL: it may carry query-string secrets.
             logger.warning("web_fetch blocked by outbound policy: %s", e.reason)
             return {"error": f"Blocked by outbound policy: {e.reason}"}
+        except OutboundHttpError as e:
+            # Distinct from a policy block: the target answered, it just
+            # answered with an error. Telling the model "blocked" here would
+            # send it looking for a permission problem that does not exist.
+            logger.info("web_fetch got HTTP %s", e.status)
+            return {"error": f"HTTP {e.status}"}
         except Exception as e:
             logger.warning("web_fetch failed: %s", type(e).__name__)
             return {"error": f"Fetch failed: {e}"}

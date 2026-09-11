@@ -116,3 +116,39 @@ def test_web_fetch_does_not_resolve_blocked_literals(registry, monkeypatch):
 
     result = registry.web_fetch(url="http://169.254.169.254/")
     assert "error" in result
+
+
+def test_http_error_is_reported_as_such_not_as_a_block(registry, monkeypatch):
+    """404 ist keine Richtlinienentscheidung.
+
+    Meldete web_fetch hier "Blocked by outbound policy", suchte das Modell ein
+    Rechteproblem, das es nicht gibt — statt zu erkennen, dass die Seite nicht
+    existiert.
+    """
+    from app.security import outbound_http
+
+    def _raise(url, policy=None):
+        raise outbound_http.OutboundHttpError(404, url)
+
+    monkeypatch.setattr(outbound_http, "fetch", _raise)
+
+    result = registry.web_fetch(url="https://example.com/weg")
+
+    assert result["error"] == "HTTP 404"
+    assert "Blocked" not in result["error"]
+
+
+def test_error_page_body_never_reaches_the_model(registry, monkeypatch):
+    """Der Fehlerstatus schlaegt durch, nicht der Inhalt der Fehlerseite."""
+    from app.security import outbound_http
+
+    monkeypatch.setattr(
+        outbound_http,
+        "fetch",
+        lambda url, policy=None: (_ for _ in ()).throw(
+            outbound_http.OutboundHttpError(500, url)
+        ),
+    )
+
+    result = registry.web_fetch(url="https://example.com/kaputt")
+    assert "content" not in result
