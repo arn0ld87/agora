@@ -42,10 +42,7 @@ from ..services.report_generation import (
     was_run_cancelled,
 )
 from ..services.run_lifecycle import RunLifecycle
-from ..services.run_read_model import (
-    attach_summary as _attach_summary,
-    build_run_summary as _build_run_summary,
-)
+from ..services.run_read_model import attach_summary as _attach_summary
 from ..services.run_registry import RunRegistry
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import RunnerStatus, SimulationRunner
@@ -609,10 +606,6 @@ def _restart_graph_build(run: dict):
                     progress = 15 + int(progress_ratio * 40)
                     task_manager.update_task(task_id, message=msg, progress=progress)
 
-                # Checkpoint (Issue B2, Review-Finding Befund 4): derselbe
-                # kooperative Abbruch wie im produktiven Build-Pfad
-                # (services/graph_build.py) — ohne run_id konnte das
-                # Cancel-Flag hier vorher nie ankommen.
                 from ..services.sim.cancel_flag import is_cancel_requested
                 if is_cancel_requested(new_run["run_id"]):
                     _finish_cancelled_restart(graph_id, [], builder)
@@ -689,8 +682,6 @@ def _restart_simulation_prepare(run: dict):
         raise ValueError("GraphStorage not initialized")
 
     config = manager.get_simulation_config(simulation_id) or {}
-    # Issue #841/#844/#1183: Anlage-Fenster hinter RunLifecycle — Markierung,
-    # Task-Reihenfolge und strikte Persistenzsemantik liegen im Kontextmanager.
     with RunLifecycle.begin(
         run_registry,
         "simulation_prepare",
@@ -708,12 +699,6 @@ def _restart_simulation_prepare(run: dict):
         new_run = lifecycle.record
         run_id = new_run["run_id"]
 
-        # Restart hat keinen Request-Payload — llm_runtime=None, damit das
-        # Resolving ausschließlich über die persistierte Route bzw. den in der
-        # Settings-DB hinterlegten Store-Key läuft und nicht still auf
-        # Config.LLM_API_KEY/LLM_BASE_URL aus der lokalen .env zurückfällt (#798,
-        # Opus-Review-Folgebefund zu #778). Exakt derselbe Resolver-Pfad wie
-        # simulation_prepare.py::prepare_simulation.
         from ..utils.endpoints import LOCAL_NO_AUTH_API_KEY, is_local_endpoint
 
         seed_run_stage_routing(
@@ -735,7 +720,6 @@ def _restart_simulation_prepare(run: dict):
                 "oder im Sitzungsfeld eingeben."
             )
             guard_error = ValueError(guard_message)
-            # RunLifecycle liest die failed-Meldung über dieses Attribut (#841).
             guard_error.run_failure_message = guard_message  # type: ignore[attr-defined]
             raise guard_error
 
@@ -754,9 +738,6 @@ def _restart_simulation_prepare(run: dict):
         manager._save_simulation_state(state)
 
         def run_prepare():
-            # Review-Finding PR #1371, Befund 4 (MITTEL): ohne run_id konnte
-            # das Cancel-Flag hier nie ankommen — ein neu gestarteter Restart
-            # war trotz "Restart"-Angebot im Endzustand nicht abbrechbar.
             from ..services.prepare_service import PrepareCancelledError
 
             try:
@@ -773,12 +754,6 @@ def _restart_simulation_prepare(run: dict):
                     current_progress = int(start + (end - start) * progress / 100)
                     task_manager.update_task(task_id, progress=current_progress, message=f"[{stage}] {message}")
 
-                # Sub-Slice 20a: quota_plan aus persistierter Run-Config wieder
-                # aufnehmen, damit Restart denselben Soll-Plan nutzt wie der
-                # ursprüngliche Prepare-Run. Inkonsistenter Plan im persisted
-                # Config-Snapshot würde im Service-Layer als ValidationError
-                # propagieren und den Restart als FAILED markieren — das ist
-                # gewollt (kein silent-Fallback auf "ohne Plan").
                 from ..api.simulation_prepare import _parse_quota_plan
                 quota_plan = _parse_quota_plan(config or {})
 
@@ -808,9 +783,6 @@ def _restart_simulation_prepare(run: dict):
                     resume_capability={"available": True, "action": "restart", "label": "Restart preparation"},
                 )
             except PrepareCancelledError:
-                # Spiegelt api/simulation_prepare.py::_make_prepare_job — hier
-                # bewusst wiederverwendet statt neu gebaut, damit beide Pfade
-                # denselben Endzustand liefern (kein zweites Muster).
                 logger.info(
                     "Simulation prepare restart cancelled by user (run_id=%s, simulation_id=%s)",
                     new_run["run_id"], simulation_id,
@@ -854,9 +826,6 @@ def _resume_or_restart_simulation_run(run: dict):
         )
         return {"run_id": run["run_id"], "status": "processing", "message": "Simulation resumed"}
 
-    # Issue #1183: Der Run-Record entsteht VOR dem Prozessstart im
-    # Lifecycle-Fenster — schlägt der Start fehl, existiert ein failed-Record
-    # statt gar keinem (vorher: create_run erst nach start_simulation).
     with RunLifecycle.begin(
         run_registry,
         "simulation_run",
@@ -872,12 +841,6 @@ def _resume_or_restart_simulation_run(run: dict):
         metadata={"graph_id": state.graph_id, "branch_name": state.branch_name},
     ) as lifecycle:
         new_run = lifecycle.record
-        # Finding F1 (Codex-Review Runde 3, PR #1476): requested_run_id ist
-        # run["run_id"] — der urspruenglich angefragte, hier zu resumierende
-        # (moeglicherweise verwaiste) Run, NICHT das gerade eben angelegte
-        # Replacement-Manifest (new_run["run_id"]). Ohne diese gezielte
-        # Weitergabe koennte die Stale-Korrektur bei mehreren historischen
-        # "processing"-Manifesten einen falschen, neueren Run treffen.
         new_run_state = SimulationRunner.start_simulation(
             simulation_id=simulation_id, platform="parallel", requested_run_id=run["run_id"]
         )
@@ -893,13 +856,7 @@ def _resume_report_generate(run: dict):
     if not simulation_id:
         raise ValueError("Run is missing simulation_id linkage")
 
-    # Recover the model override that was active when the run was originally started.
-    # The original /api/report/generate call stores llm_model_override in the run
-    # metadata; we honour it on resume so the same model is used throughout.
     llm_model_override = (run.get("metadata") or {}).get("llm_model") or None
-    # Wenn der originale Request ein UI-Profile-Token war (`profile:<id>`),
-    # expandieren wir es jetzt — sonst landet der Pseudo-Modellname als Modell
-    # beim LLM (Ollama 404, kein Entity-Output).
     if isinstance(llm_model_override, str) and llm_model_override.startswith("profile:"):
         from ..utils.llm_profile_resolver import expand_profile_in_data
         _expand_buf = {"llm_model": llm_model_override}
@@ -915,20 +872,13 @@ def _resume_report_generate(run: dict):
         raise ValueError(f"Project does not exist: {state.project_id}")
     graph_id = state.graph_id or project.graph_id
     if not graph_id:
-        # Reiner Persona-Lauf ohne Graphen (Block B4).
         raise ValueError(
             "Dieser Lauf hat keinen Wissensgraphen — Berichte stuetzen sich auf Belege aus dem Graphen und sind fuer reine Persona-Laeufe deshalb noch nicht moeglich. Die Simulation selbst laeuft und ist auswertbar."
         )
     storage = current_app.extensions.get("neo4j_storage")
     if not storage:
         raise ValueError("GraphStorage not initialized")
-    # Budget-Enforcement + Routing-SSoT (#984): Der Resume-Client entsteht aus
-    # der beim Original-Start gelockten Stage-Route MIT run_id — das frühere
-    # LLMClient(model=...) ohne run_id lieferte keinen Budget-Enforcer, ein
-    # fortgesetzter Report lief ohne jede Budgetdurchsetzung.
-    # StageModelRouter.resolve() gibt den gelockten Snapshot zurück; nur für
-    # Alt-Runs ohne Snapshot entscheidet der kanonische Resolver. Keine zweite
-    # Client-Bauweise neben der Route (SSoT aus #817).
+
     from ..services.ai_route_resolver import NoAiRouteCandidateError
     from ..services.secret_resolver import SecretResolver
 
@@ -941,9 +891,6 @@ def _resume_report_generate(run: dict):
             run_id=run["run_id"],
         )
     except (ValueError, NoAiRouteCandidateError) as exc:
-        # Kein API-Key konfiguriert → kein sinnvoller Resume-Pfad möglich.
-        # Synchron mit 422 antworten statt still None zu setzen und im
-        # Worker-Thread beim ersten LLM-Call zu sterben (Copilot PR #466).
         logger.warning(
             "LLMClient für Resume-Report nicht verfügbar — synchrones 422: %s",
             exc,
@@ -979,8 +926,6 @@ def _resume_report_generate(run: dict):
             def progress_callback(stage, progress, message):
                 task_manager.update_task(task_id, progress=progress, message=f"[{stage}] {message}")
 
-            # Issue #1243: auch der Resume-Pfad muss abbrechbar sein — ohne
-            # cancel_run_id liest generate_report das Flag nie.
             report = agent.generate_report(
                 progress_callback=progress_callback,
                 report_id=report_id,
@@ -988,12 +933,6 @@ def _resume_report_generate(run: dict):
             )
             ReportManager.save_report(report)
             if was_run_cancelled(run["run_id"]):
-                # Teilreport nach Nutzerabbruch traegt status=COMPLETED; ohne
-                # diesen Zweig waere er von einem vollstaendigen Lauf nicht zu
-                # unterscheiden.
-                # Reihenfolge bindend (#978): complete_task spiegelt sich per
-                # sync_task auf den Run zurueck und wuerde "stopped" wieder
-                # ueberschreiben. Der Run-Update laeuft zuletzt.
                 task_manager.complete_task(
                     task_id,
                     result={
@@ -1006,10 +945,6 @@ def _resume_report_generate(run: dict):
                     run["run_id"], report_id=report_id, simulation_id=simulation_id
                 )
             elif is_deliverable_report_status(report.status):
-                # Issue #1479: ein INCOMPLETE-Report ist ein ehrliches
-                # Teilergebnis, kein Fehlschlag — die alte Gleichheitsprüfung
-                # gegen COMPLETED schickte ihn in den else-Zweig und meldete
-                # den Resume faelschlich als "failed".
                 finish_completed_run(
                     run["run_id"],
                     report_id=report_id,
@@ -1021,11 +956,6 @@ def _resume_report_generate(run: dict):
                 run_registry.update_run(run["run_id"], status="failed", message=report.error or "Report generation failed", error=report.error)
                 task_manager.fail_task(task_id, report.error or "Report generation failed")
         except BudgetExceededError as exc:
-            # Budgetabbruch (#984): Teilresultate bleiben erhalten, Status
-            # "stopped" + termination_reason statt technischem "failed".
-            # Reihenfolge bindend (#978, gleiche Falle wie #841): fail_task()
-            # zuerst — sync_task setzt generisch "failed" —, der detaillierte
-            # mark_budget_abort() zuletzt (setzt stopped + termination_reason).
             logger.warning(
                 "Resume report budget-aborted (run_id=%s, report_id=%s): %s",
                 run["run_id"], report_id, exc,
@@ -1042,16 +972,7 @@ def _resume_report_generate(run: dict):
 
 
 def _replay_simulation_run(run: dict, run_id: str, overrides):
-    """Klont die Original-Simulation per ``create_branch`` und startet sie neu.
-
-    ``create_branch`` liefert bereits Config+Profile-Klon inklusive
-    ``llm_model``-Override auf ``READY`` — danach läuft exakt derselbe
-    Start-Flow wie ``POST /api/simulation/start`` (Routing auflösen, Route
-    sperren, Subprozess starten).
-
-    Rückgabe: entweder ein dict ``{run_id, status}`` (Erfolg) oder eine
-    fertige Flask-Error-Response (``json_error(...)``).
-    """
+    """Klont die Original-Simulation per ``create_branch`` und startet sie neu."""
     simulation_id = (run.get("linked_ids") or {}).get("simulation_id")
     if not simulation_id:
         return json_error("Run is missing simulation_id linkage", status=409)
@@ -1106,9 +1027,6 @@ def _replay_simulation_run(run: dict, run_id: str, overrides):
         new_run = lifecycle.record
         new_run_id = new_run["run_id"]
 
-        # ai_model_ref durchreichen, nicht nur model_id: dieselbe Modell-ID kann
-        # auf mehreren Provider-Connections liegen. Ohne die Connection-ID
-        # liefe das Replay auf einer anderen Connection als das Original.
         seed_run_stage_routing(
             new_run_id,
             "simulation_rounds",
@@ -1137,17 +1055,7 @@ def _replay_simulation_run(run: dict, run_id: str, overrides):
 @runs_bp.route("/<run_id>/replay", methods=["POST"])
 @handle_api_errors(logger=logger, log_prefix="Failed to replay run")
 def replay_run(run_id: str):
-    """POST /api/runs/<run_id>/replay — Neuen Run aus Manifest starten (Issue #763).
-
-    Klont die Original-Simulation (Config + Profile) in eine neue
-    ``simulation_id`` und startet sie. Optionale Overrides erlauben
-    Varianten-Replay mit anderem Seed-Wert oder AI-Modell.
-    ``seed_document_id``-Overrides sind noch nicht unterstützt — es gibt
-    keinen Mechanismus, einen Branch mit einem neuen Ausgangsdokument neu
-    vorzubereiten.
-
-    Antwort: 202 { run_id, status: "processing" }
-    """
+    """POST /api/runs/<run_id>/replay — Neuen Run aus Manifest starten (Issue #763)."""
     run, error = _get_run_or_404(run_id)
     if error:
         return error
@@ -1167,11 +1075,6 @@ def replay_run(run_id: str):
             code="no_manifest",
         )
 
-    # Overrides aus dem Request-Body parsen — body ist die ReplayRequest-Hülle
-    # {overrides: {...}}, nicht die flachen ReplayOverrides-Felder selbst.
-    # model_validate() statt ReplayRequest(**body): **body wirft bei einem
-    # Nicht-Mapping-Body (z.B. einem JSON-Array) einen rohen TypeError statt
-    # einer ValidationError — @handle_api_errors hätte das als 500 beantwortet.
     overrides = None
     if request.is_json and request.get_json(silent=True):
         body = request.get_json(silent=True) or {}
@@ -1179,10 +1082,6 @@ def replay_run(run_id: str):
         try:
             overrides = ReplayRequest.model_validate(body).overrides if body else None
         except ValidationError as exc:
-            # exc.errors() gehört in ``extra``, nicht in den ``error``-Parameter:
-            # json_error sanitisiert nur ``extra``. ValidationError-Payloads
-            # tragen in ``ctx`` lebende ValueError-Instanzen, an denen Flasks
-            # JSON-Encoder abbricht — aus der 400 würde sonst eine 500.
             return json_error(
                 "Invalid replay request body",
                 status=400,
@@ -1212,7 +1111,7 @@ def replay_run(run_id: str):
 
     result = _replay_simulation_run(run, run_id, overrides)
     if not isinstance(result, dict):
-        return result  # bereits eine fertige json_error(...)-Response
+        return result
 
     from flask import make_response, jsonify
     body = jsonify(result)
@@ -1244,11 +1143,7 @@ def get_run_manifest(run_id: str):
 @runs_bp.route("/<run_id>/export", methods=["GET"])
 @handle_api_errors(logger=logger, log_prefix="Failed to export run")
 def export_run(run_id: str):
-    """GET /api/runs/<run_id>/export — ZIP-Download mit Manifest + Artefakten (Issue #763).
-
-    Erzeugt ein ZIP-Archiv mit manifest.json und allen Dateien aus dem
-    Run-Verzeichnis. Streaming-Response, kein Temp-File.
-    """
+    """GET /api/runs/<run_id>/export — ZIP-Download mit Manifest + Artefakten (Issue #763)."""
     import io
     import zipfile
 
@@ -1267,12 +1162,8 @@ def export_run(run_id: str):
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        # manifest.json
         zf.write(manifest_path, "manifest.json")
 
-        # Alle weiteren Dateien im Run-Verzeichnis rekursiv (keine Secrets) —
-        # os.listdir+isfile hätte Unterverzeichnisse wie stages/ (eingefrorene
-        # Routing-Snapshots) stillschweigend übersprungen.
         for root, _dirs, files in os.walk(run_dir):
             for name in files:
                 full_path = os.path.join(root, name)
@@ -1308,8 +1199,6 @@ def resume_run(run_id: str):
     elif run_type == "simulation_run":
         data = _resume_or_restart_simulation_run(run)
     elif run_type == "report_generate":
-        # _resume_report_generate kann bei fehlendem LLM-Key direkt eine
-        # Fehler-Response (Tuple) zurückgeben — in dem Fall weiterleiten.
         result = _resume_report_generate(run)
         if not isinstance(result, dict):
             return result
