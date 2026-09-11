@@ -15,7 +15,7 @@ def _strip_leading_article (tokens :list [str ])->list [str ]:
     """Entfernt fuehrende Artikel, falls danach noch ein Namensrest bleibt."""
     while len (tokens )>1 and tokens [0 ].casefold ()in _legacy ._LEADING_ARTICLES :
         tokens =tokens [1 :]
-    return tokens 
+    return tokens
 
 
 def _normalize_adjective_endings (tokens :list [str ])->list [str ]:
@@ -63,16 +63,16 @@ def _normalize_adjective_endings (tokens :list [str ])->list [str ]:
     Endungsliste auf Wortebene.
     """
     if len (tokens )<2 :
-        return tokens 
+        return tokens
     normalized =list (tokens )
-    index =len (normalized )-2 
+    index =len (normalized )-2
     lower =normalized [index ].casefold ()
     for suffix in _legacy ._ADJECTIVE_SUFFIXES :
         stem_length =len (lower )-len (suffix )
         if lower .endswith (suffix )and stem_length >=_legacy ._MIN_ADJECTIVE_STEM_LENGTH :
             normalized [index ]=lower [:-len (suffix )]
-            break 
-    return normalized 
+            break
+    return normalized
 
 
 def _entity_identity_key (entity :"EntityNode")->tuple [str ,str ]:
@@ -96,7 +96,7 @@ def _entity_identity_key (entity :"EntityNode")->tuple [str ,str ]:
     tokens =_normalize_adjective_endings (tokens )
     name =" ".join (tokens ).casefold ()
     entity_type =" ".join ((entity .get_entity_type ()or "Entity").split ()).casefold ()
-    return name ,entity_type 
+    return name ,entity_type
 
 
 def _dedupe_entities (
@@ -111,14 +111,14 @@ entities :"List[EntityNode]",
     for entity in entities :
         key =_entity_identity_key (entity )
         if key in seen :
-            continue 
+            continue
         seen .add (key )
         unique .append (entity )
     return unique ,len (entities )-len (unique )
 
 
 def _cap_entities_across_types (
-entities :"List[EntityNode]",max_agents :int 
+entities :"List[EntityNode]",max_agents :int
 )->"List[EntityNode]":
     """Kappt auf ``max_agents`` und sichert dabei jedem Typ einen Platz.
 
@@ -143,23 +143,23 @@ entities :"List[EntityNode]",max_agents :int
         by_type .setdefault (entity .get_entity_type ()or "Entity",[]).append (entity )
 
     selected :List [EntityNode ]=[]
-    round_index =0 
+    round_index =0
     # Typen in Erstauftrittsreihenfolge — deterministisch und ohne stille
     # Bevorzugung alphabetisch frueher Bezeichnungen.
     while len (selected )<max_agents :
-        added_this_round =False 
+        added_this_round =False
         for bucket in by_type .values ():
             if round_index >=len (bucket ):
-                continue 
+                continue
             selected .append (bucket [round_index ])
-            added_this_round =True 
+            added_this_round =True
             if len (selected )>=max_agents :
-                break 
+                break
         if not added_this_round :
-            break 
-        round_index +=1 
+            break
+        round_index +=1
 
-    return selected 
+    return selected
 
 
 def _phase_read_entities (
@@ -197,10 +197,10 @@ degradations :Optional [DegradationCollector ]=None ,
     # max_agents-Cap aus, damit sie weder zählen noch generiert werden.
     eligibility =_legacy .filter_eligible_entities (filtered .entities ,degradations =degradations )
     if eligibility .exclusions :
-        filtered .entities =eligibility .eligible 
+        filtered .entities =eligibility .eligible
         filtered .filtered_count =len (filtered .entities )
         filtered .entity_types ={
-        entity .get_entity_type ()or "Entity"for entity in filtered .entities 
+        entity .get_entity_type ()or "Entity"for entity in filtered .entities
         }
 
         # Issue #1177: Vor dem Cap deduplizieren. Mehrfachnennungen derselben
@@ -215,7 +215,7 @@ degradations :Optional [DegradationCollector ]=None ,
         len (filtered .entities ),
         len (deduped ),
         )
-        filtered .entities =deduped 
+        filtered .entities =deduped
         filtered .filtered_count =len (deduped )
 
         # User-controlled cap on number of agents (optional).
@@ -227,9 +227,9 @@ degradations :Optional [DegradationCollector ]=None ,
         # Rueckgabereihenfolge der Query, also willkuerlich, und eine
         # ueberrepraesentierte Gruppe konnte alle Plaetze belegen.
     if (
-    max_agents is not None 
-    and max_agents >0 
-    and len (filtered .entities )>max_agents 
+    max_agents is not None
+    and max_agents >0
+    and len (filtered .entities )>max_agents
     ):
         _legacy .logger .info (
         f"Capping agent count at {max_agents } "
@@ -243,15 +243,15 @@ degradations :Optional [DegradationCollector ]=None ,
         # konfigurierte max_agents-Wert wuerde unterschritten.
         selected_uuids ={entity .uuid for entity in capped }
         filtered .reserve_entities =[
-        entity for entity in filtered .entities if entity .uuid not in selected_uuids 
+        entity for entity in filtered .entities if entity .uuid not in selected_uuids
         ]
-        filtered .entities =capped 
+        filtered .entities =capped
         filtered .filtered_count =len (filtered .entities )
         filtered .entity_types ={
-        entity .get_entity_type ()or "Entity"for entity in filtered .entities 
+        entity .get_entity_type ()or "Entity"for entity in filtered .entities
         }
 
-    state .entities_count =filtered .filtered_count 
+    state .entities_count =filtered .filtered_count
     state .entity_types =list (filtered .entity_types )
 
     if progress_callback :
