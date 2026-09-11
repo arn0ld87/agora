@@ -1,0 +1,35 @@
+name: refactor-python-process-map
+
+on:
+  push:
+    branches:
+      - claude/refactor-python-hotspots
+
+permissions:
+  contents: read
+
+jobs:
+  map:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/refactor-python-hotspots
+          fetch-depth: 0
+      - name: Map process_manager structure and tests
+        shell: bash
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          path = Path('backend/app/services/sim/process_manager.py')
+          source = path.read_text(encoding='utf-8')
+          tree = ast.parse(source)
+          print(f'LOC {len(source.splitlines())}')
+          for node in tree.body:
+              if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                  print(f'{type(node).__name__} {node.name}: {node.lineno}-{node.end_lineno} ({node.end_lineno-node.lineno+1})')
+          PY
+          echo '--- direct test references ---'
+          grep -R -n -E 'process_manager|start_simulation|stop_simulation|terminate_process|cleanup_all_simulations|_build_subprocess_env|_compute_oasis_db_path|_read_cancel_abort|_write_cancel_abort' backend/tests | head -300 || true
