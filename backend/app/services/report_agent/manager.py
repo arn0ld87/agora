@@ -1099,6 +1099,15 @@ class ReportManager:
         # savemetainformationJSON
         cls._write_json_atomic(cls._get_report_path(report.report_id), report.to_dict())
 
+        # Supabase-Mirror (Phase 1): report_index best-effort spiegeln.
+        # Die meta.json oben ist die Wahrheit und bereits committed.
+        try:
+            from ..supabase_mirror import get_supabase_mirror
+
+            get_supabase_mirror().mirror_report(report.to_dict())
+        except Exception:  # noqa: BLE001 — Mirror darf save_report nie brechen
+            logger.warning("supabase mirror submit failed (non-fatal)", exc_info=True)
+
         # saveoutline
         if report.outline:
             cls.save_outline(report.report_id, report.outline)

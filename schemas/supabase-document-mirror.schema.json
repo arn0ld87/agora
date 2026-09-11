@@ -1,0 +1,64 @@
+{
+  "$id": "https://alexle135.de/schemas/supabase-document-mirror.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Eine Zeile in ``agora.documents`` \u2014 Ingest-Index eines Projektdokuments.\n\n``size_bytes``/``sha256`` sind abgeleitete Anreicherung aus dem\nUpload-Pfad; der Rebuild laesst sie bewusst weg (PostgREST ueberschreibt\nnur gelieferte Spalten), damit vorhandene Werte einen Rebuild ueberleben.",
+  "properties": {
+    "document_id": {
+      "title": "Document Id",
+      "type": "string"
+    },
+    "filename": {
+      "title": "Filename",
+      "type": "string"
+    },
+    "ingested_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ingested At"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "sha256": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sha256"
+    },
+    "size_bytes": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Size Bytes"
+    }
+  },
+  "required": [
+    "project_id",
+    "document_id",
+    "filename"
+  ],
+  "title": "DocumentMirrorRecord",
+  "type": "object"
+}

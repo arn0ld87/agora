@@ -140,6 +140,17 @@ def _limit_upload_endpoint():
 @graph_bp.route('/ontology/generate', methods=['POST'])
 @require_scope("graph:write")
 @handle_api_errors(log_prefix="Ontology generation failed")
+def _mirror_uploaded_documents(project_id: str, entries, file_paths: dict) -> None:
+    """Supabase-Mirror (Phase 1): best-effort, asynchron, nie fatal —
+    das Projekt-Verzeichnis bleibt die Wahrheit."""
+    try:
+        from ..services.supabase_mirror import get_supabase_mirror
+
+        get_supabase_mirror().mirror_documents(project_id, entries, file_paths=file_paths)
+    except Exception:  # noqa: BLE001 — Mirror darf den Upload nie brechen
+        logger.warning("supabase mirror submit failed (non-fatal)", exc_info=True)
+
+
 def generate_ontology():
     """Interface 1: Upload files and analyze to generate ontology definition"""
     simulation_requirement = request.form.get('simulation_requirement', '')
@@ -193,6 +204,9 @@ def generate_ontology():
     all_text = ""
     document_manifest_entries: list[DocumentManifestEntry] = []
     existing_document_ids: set = set()
+    # Supabase-Mirror (Phase 1): document_id -> gespeicherter Pfad, damit der
+    # Mirror size/sha256 als abgeleitete Anreicherung nachreichen kann.
+    mirrored_file_paths: dict[str, str] = {}
 
     try:
         for file in uploaded_files:
@@ -230,6 +244,7 @@ def generate_ontology():
                 marker = f"\n\n=== {file_info['original_filename']} ===\n"
                 document_id = derive_document_id(file_info["original_filename"], existing_document_ids)
                 existing_document_ids.add(document_id)
+                mirrored_file_paths[document_id] = file_info["path"]
                 start_offset = len(all_text) + len(marker)
                 all_text += f"{marker}{text}"
                 end_offset = len(all_text)
@@ -250,6 +265,10 @@ def generate_ontology():
         ProjectManager.save_extracted_text(project.project_id, all_text)
         ProjectManager.save_document_manifest(
             project.project_id, DocumentManifest(documents=document_manifest_entries)
+        )
+
+        _mirror_uploaded_documents(
+            project.project_id, document_manifest_entries, mirrored_file_paths
         )
 
         # Persistieren, BEVOR der Service das Projekt frisch von Platte lädt —

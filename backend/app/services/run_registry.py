@@ -101,7 +101,22 @@ class RunRegistry:
         path = self._run_path(run_id)
         write_json_atomic(path, data)
         self._cache[run_id] = deepcopy(data)
+        self._mirror_run(data)
         return deepcopy(data)
+
+    def _mirror_run(self, data: Dict[str, Any]) -> None:
+        """Supabase-Mirror (Phase 1): best-effort, asynchron, nie fatal.
+
+        Die Datei oben ist geschrieben und der Cache aktualisiert — der
+        Mirror darf in keinem Fall den Registry-Write-Pfad beeinflussen
+        (Postgres ist Index, nie Wahrheit).
+        """
+        try:
+            from .supabase_mirror import get_supabase_mirror
+
+            get_supabase_mirror().mirror_run(data)
+        except Exception:  # noqa: BLE001 — Mirror darf RunRegistry nie brechen
+            logger.debug("supabase mirror submit failed (non-fatal)", exc_info=True)
 
     def create_run(
         self,

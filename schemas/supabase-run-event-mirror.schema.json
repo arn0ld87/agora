@@ -1,0 +1,66 @@
+{
+  "$id": "https://alexle135.de/schemas/supabase-run-event-mirror.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Eine Zeile in ``agora.run_events`` \u2014 append-only Realtime-Quelle (Phase 2).",
+  "properties": {
+    "event_type": {
+      "title": "Event Type",
+      "type": "string"
+    },
+    "message": {
+      "default": "",
+      "title": "Message",
+      "type": "string"
+    },
+    "occurred_at": {
+      "title": "Occurred At",
+      "type": "string"
+    },
+    "progress": {
+      "anyOf": [
+        {
+          "maximum": 100,
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Progress"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "seq": {
+      "description": "Event-Index innerhalb des Runs, beginnend bei 0.",
+      "minimum": 0,
+      "title": "Seq",
+      "type": "integer"
+    },
+    "status": {
+      "enum": [
+        "pending",
+        "processing",
+        "paused",
+        "completed",
+        "failed",
+        "stopped"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id",
+    "seq",
+    "occurred_at",
+    "event_type",
+    "status"
+  ],
+  "title": "RunEventMirrorRecord",
+  "type": "object"
+}

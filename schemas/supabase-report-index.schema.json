@@ -1,0 +1,63 @@
+{
+  "$id": "https://alexle135.de/schemas/supabase-report-index.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Eine Zeile in ``agora.report_index`` \u2014 Metadaten-Zeiger auf das Artefakt.\n\n``artifact_path`` ist bewusst relativ (``reports/<report_id>``) \u2014 der\nReport-Content selbst bleibt im Dateisystem (Evidence-Commit-Modell).",
+  "properties": {
+    "artifact_path": {
+      "title": "Artifact Path",
+      "type": "string"
+    },
+    "created_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Created At"
+    },
+    "evidence_ok": {
+      "default": false,
+      "title": "Evidence Ok",
+      "type": "boolean"
+    },
+    "evidence_sections": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Evidence Sections",
+      "type": "integer"
+    },
+    "report_id": {
+      "title": "Report Id",
+      "type": "string"
+    },
+    "status": {
+      "description": "Report-Status inkl. INCOMPLETE (ReportStatus-Werte).",
+      "title": "Status",
+      "type": "string"
+    },
+    "updated_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Updated At"
+    }
+  },
+  "required": [
+    "report_id",
+    "status",
+    "artifact_path"
+  ],
+  "title": "ReportIndexRecord",
+  "type": "object"
+}
