@@ -1,4 +1,4 @@
-name: refactor-python-graph-tools-red
+name: refactor-python-graph-tools
 
 on:
   push:
@@ -6,27 +6,124 @@ on:
       - claude/refactor-python-hotspots
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  red:
+  refactor:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     env:
       LLM_API_KEY: dummy-ci-key
+      PYTHON_REFACTOR_BASE: 4496d7ad425593ec12084e508d3f148be9a4166e
     steps:
       - uses: actions/checkout@v4
         with:
           ref: claude/refactor-python-hotspots
+          fetch-depth: 0
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.14"
+
       - name: Install uv
         run: python -m pip install --upgrade pip uv
+
+      - name: Generate graph-tools helper split
+        run: |
+          python backend/scripts/_tmp_refactor_graph_tools.py
+          python -m py_compile \
+            backend/app/services/graph_tools.py \
+            backend/app/services/graph/interview_helpers.py \
+            backend/tests/services/test_graph_tools_module_boundaries.py
+          wc -l \
+            backend/app/services/graph_tools.py \
+            backend/app/services/graph/interview_helpers.py | sort -nr
+
       - name: Install backend dependencies
         working-directory: backend
         run: uv sync --group dev
-      - name: Boundary test must fail before implementation
+
+      - name: Ruff targeted slice
         working-directory: backend
-        run: uv run pytest -q tests/services/test_graph_tools_module_boundaries.py
+        run: |
+          uv run ruff check --fix \
+            app/services/graph_tools.py \
+            app/services/graph/interview_helpers.py \
+            tests/services/test_graph_tools_module_boundaries.py
+          uv run ruff check \
+            app/services/graph_tools.py \
+            app/services/graph/interview_helpers.py \
+            tests/services/test_graph_tools_module_boundaries.py
+
+      - name: Compile after Ruff
+        run: |
+          python -m py_compile \
+            backend/app/services/graph_tools.py \
+            backend/app/services/graph/interview_helpers.py \
+            backend/tests/services/test_graph_tools_module_boundaries.py
+
+      - name: Mypy targeted slice
+        working-directory: backend
+        run: |
+          uv run mypy \
+            app/services/graph_tools.py \
+            app/services/graph/interview_helpers.py
+
+      - name: Run graph-tools regression suite
+        working-directory: backend
+        run: |
+          uv run pytest -q \
+            tests/services/test_graph_tools_module_boundaries.py \
+            tests/services/report_agent/test_budget_exceeded_propagation.py \
+            tests/services/test_graph_tools_interview_soft_fail.py \
+            tests/services/test_graph_tools_interview_uses_direct_path.py \
+            tests/services/test_interview_panel_rotation.py \
+            tests/services/test_graph_tools_single_platform_render.py \
+            tests/services/test_graph_tools_interview_budget_propagation.py \
+            tests/llm/test_max_tokens_floor.py \
+            tests/test_report_prompts.py \
+            tests/test_wording_glossary.py \
+            tests/regression/test_interview_stance.py \
+            tests/services/sim/test_interview_budget.py
+
+      - name: Verify Python-only final diff
+        run: |
+          rm backend/scripts/_tmp_refactor_graph_tools.py
+          rm .github/workflows/refactor-python-graph-tools.yml
+          python - <<'PY'
+          import subprocess
+          from pathlib import Path
+
+          base = "4496d7ad425593ec12084e508d3f148be9a4166e"
+          changed = subprocess.check_output(
+              ["git", "diff", "--name-only", base, "--"], text=True
+          ).splitlines()
+          for name in changed:
+              if name.endswith(".py"):
+                  path = Path(name)
+                  if path.exists():
+                      text = path.read_text(encoding="utf-8")
+                      cleaned = "\n".join(line.rstrip() for line in text.splitlines())
+                      if text.endswith("\n"):
+                          cleaned += "\n"
+                      path.write_text(cleaned, encoding="utf-8")
+          PY
+          git diff --check "$PYTHON_REFACTOR_BASE" --
+          changed="$(git diff --name-only "$PYTHON_REFACTOR_BASE" --)"
+          bad="$(printf '%s\n' "$changed" | sed '/^$/d' | grep -vE '\.py$' || true)"
+          if [ -n "$bad" ]; then
+            echo 'Non-Python files would remain in final diff:'
+            echo "$bad"
+            exit 1
+          fi
+          echo 'Final net diff contains only Python files:'
+          printf '%s\n' "$changed"
+
+      - name: Commit verified graph-tools split
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'refactor(graph): split interview helper implementations'
+          git push origin HEAD:claude/refactor-python-hotspots
