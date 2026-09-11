@@ -85,20 +85,34 @@ _BLOCKED_HOST_SUFFIXES: tuple[str, ...] = (
 )
 
 
-def _redact_userinfo(url: str) -> str:
-    """Ersetzt ``user:pass@`` durch ``***@``.
+def _safe_origin(url: str) -> str | None:
+    """Reduziert eine untrusted URL auf ``scheme://host[:port]``.
 
-    Der Ablehnungsgrund allein ist harmlos, die URL nicht: sie steht in der
-    Exception-Message und landet damit in jedem Traceback und in jedem
-    generischen Handler, der ``str(e)`` protokolliert oder zurueckgibt.
+    Der Ablehnungsgrund allein ist harmlos, die URL nicht: sie stand in der
+    Exception-Message und landete damit in jedem Traceback und in jedem
+    generischen Handler, der ``str(e)`` protokolliert oder zurueckgibt. Reine
+    Userinfo-Redaktion reichte dafuer nicht — Query, Fragment und Pfad tragen in
+    der Praxis genauso haeufig Token (``?token=…``, ``?api_key=…``, ein
+    Signatur-Fragment, ein Secret im Pfadsegment).
+
+    Fuer die Diagnose zaehlt ohnehin nur, *wohin* der Request gegangen waere.
+    Alles andere faellt weg. Laesst sich die URL nicht sicher zerlegen, gibt es
+    gar keine Herkunftsangabe — im Zweifel lieber weniger Diagnostik als ein
+    durchgereichtes Geheimnis.
     """
-    scheme, sep, rest = url.partition("://")
-    if not sep:
-        return url
-    authority, slash, tail = rest.partition("/")
-    if "@" in authority:
-        authority = f"***@{authority.rsplit('@', 1)[1]}"
-    return f"{scheme}://{authority}{slash}{tail}"
+    try:
+        parts = urlsplit(url)
+        host = parts.hostname
+        port = parts.port
+    except ValueError:
+        return None
+    if not host:
+        return None
+    scheme = parts.scheme or "http"
+    # RFC 3986: IPv6-Literale gehoeren in eckige Klammern; ``hostname`` liefert
+    # sie ohne.
+    host_label = f"[{host}]" if ":" in host else host
+    return f"{scheme}://{host_label}:{port}" if port else f"{scheme}://{host_label}"
 
 
 class OutboundHttpError(Exception):
@@ -121,8 +135,12 @@ class OutboundRequestBlocked(Exception):
 
     def __init__(self, reason: str, url: str | None = None) -> None:
         self.reason = reason
-        self.url = _redact_userinfo(url) if url else url
-        super().__init__(reason if not self.url else f"{reason} ({self.url})")
+        # Nur die sichere Herkunft, nie die untrusted URL — und die Message
+        # traegt ausschliesslich den Grund. Wer die Herkunft zum Debuggen
+        # braucht, liest ``.url`` bewusst aus, statt sie unbemerkt ueber
+        # ``str(exc)`` in ein Log oder eine API-Antwort zu tragen.
+        self.url = _safe_origin(url) if url else None
+        super().__init__(reason)
 
 
 @dataclass(frozen=True)
