@@ -157,7 +157,7 @@ facade = facade.replace(
 )
 
 compat_imports = '''from .simulation_prepare_contracts import (
-    ClientChoice as _ClientChoice,
+    ClientChoice,
     PrepareInputs as _PrepareInputs,
     PrepareRejected as _PrepareRejected,
     PrepareRequest as _PrepareRequest,
@@ -178,6 +178,8 @@ from .simulation_prepare_jobs import (
 from .simulation_prepare_state import (
     check_simulation_prepared as _check_simulation_prepared,
 )
+
+_ClientChoice = ClientChoice
 
 '''
 marker = "@dataclass\nclass _PrepareStartLockEntry:"
