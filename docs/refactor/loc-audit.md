@@ -2,7 +2,7 @@
 
 Stand: 2026-09-11  
 Basis-Commit: `4496d7ad425593ec12084e508d3f148be9a4166e` (`main`)  
-Status: Abschlussstand nach zwei verhaltensneutralen Refactoring-Slices
+Status: Zwei verhaltensneutrale Refactoring-Slices umgesetzt; Abschlussverifikation durch die Protected Gates ausstehend
 
 ## Ziel und Regeln
 
@@ -12,11 +12,11 @@ Vor der Analyse wurden `CLAUDE.md`, `AGENTS.md`, `docs/agents/tool-pipeline.md` 
 
 ## Messmethode
 
-Der erste Screening-Durchlauf lief ueber den GitHub-Connector. Fuer den Abschlussstand wurde das Inventar anschliessend in GitHub Actions reproduzierbar ueber `git ls-files` erzeugt. Gezaehlt werden logische Textzeilen (`splitlines()`) fuer alle getrackten `.py`, `.ts`, `.tsx`, `.vue`, `.js` und `.sh`-Dateien. Tests werden separat klassifiziert; `design/`, Vendor-/Build-/Dist-Verzeichnisse und eindeutig generierte Dateien sind ausgeschlossen.
+Der erste Screening-Durchlauf lief ueber den GitHub-Connector. Fuer den aktuellen Inventarstand wurde das Inventar anschliessend in GitHub Actions reproduzierbar ueber `git ls-files` erzeugt. Gezaehlt werden logische Textzeilen (`splitlines()`) fuer alle getrackten `.py`, `.ts`, `.tsx`, `.vue`, `.js` und `.sh`-Dateien. Tests werden separat klassifiziert; `design/`, Vendor-/Build-/Dist-Verzeichnisse und eindeutig generierte Dateien sind ausgeschlossen.
 
 Die vollstaendigen Rohdaten stehen in `docs/refactor/loc-inventory.tsv`, die menschenlesbare Rangliste in `docs/refactor/loc-inventory.md`. Damit sind die frueheren Schwellenproben durch exakte Repo-Zahlen ersetzt.
 
-Aktueller Abschlussstand: **633 Produktionsdateien**, **755 Testdateien**, davon im Produktionscode **23 P0**, **49 P1**, **57 P2** und **75 P3**.
+Aktueller Inventarstand: **633 Produktionsdateien**, **755 Testdateien**, davon im Produktionscode **23 P0**, **49 P1**, **57 P2** und **75 P3**.
 
 ## Ausschluesse
 
@@ -68,14 +68,14 @@ Tests werden separat betrachtet.
 | P1 | `backend/app/services/graph_build.py` | **501-800 verifiziert** | Graph-Build-Lifecycle, Progress, Persistenz, Cancel, Fehler-/Degradation-Pfade | zentrale Orchestrierung mit vielen Seiteneffekten | Phasen-/Finalisierungshelfer extrahieren, Lifecycle-Endzustaende unveraendert pinnen | hoch |
 | P1 | `backend/app/services/simulation_runner.py` | **501-800 verifiziert** | Runner-Facade und Delegationen zu `sim/*` | bereits teilweise modularisiert; Restgroesse nicht automatisch Fehlarchitektur | nur verbleibende echte Mehrfachverantwortung extrahieren; Thin-Facade darf bewusst bestehen | niedrig bis mittel |
 | P1 | `frontend/src/contracts/reportContract.ts` | **501-800 verifiziert** | Frontend-Zod/TypeScript-Spiegel des Backend-Report-Contracts | gross, aber Contract-SSoT/Mirror; Split kann Drift-Gate komplizieren | **bewusste Ausnahme vorerst**, solange Schema-Mirror und Imports kohaerent bleiben | hoch |
-| P2 | `backend/app/contracts/report_v3.py` | **351-500 verifiziert** | Report-v3-Contract/Normalisierung | deklarativ/vertraglich; keine LOC-Kosmetik | beobachten; nur bei fachlich sauberer Contract-Grenze | hoch |
-| P3 | `backend/app/services/report_agent/text_verification.py` | **251-350 verifiziert** | deterministische Text-/Prose-Verifikation | aktuell innerhalb Beobachtungsbereich; Evidence-nah | keine Aktion nur wegen LOC | hoch |
+| P1 | `backend/app/contracts/report_v3.py` | **794 exakt** | Report-v3-Contract/Normalisierung | deklarativ/vertraglich; keine LOC-Kosmetik | beobachten; nur bei fachlich sauberer Contract-Grenze | hoch |
+| P1 | `backend/app/services/report_agent/text_verification.py` | **788 exakt** | deterministische Text-/Prose-Verifikation | Evidence-nah; trotz P1 keine mechanische Aufteilung nur wegen LOC | spaeter nur entlang fachlicher Verifikationsgrenzen | hoch |
 
 ### Weitere gescreente Bereiche
 
-Das Byte-Vorscreening zeigt weitere produktive Python-Dateien im Bereich 20-30 KB, darunter u. a. `backend/app/config.py`, `backend/app/__init__.py` und `backend/app/api/report.py`. Diese muessen im Shell-faehigen Voll-Lauf noch exakt gegen 251/351/501 LOC klassifiziert werden. Sie werden nicht allein wegen Byte-Groesse hochgestuft.
+Das exakte Inventar in `docs/refactor/loc-inventory.md` ersetzt das fruehere Byte-Vorscreening. Die zuvor nur grob eingeordneten Dateien sind damit abschliessend klassifiziert; es steht keine LOC-Klassifizierung mehr aus. Insbesondere sind `backend/app/config.py` mit **429 LOC (P2)**, `backend/app/__init__.py` mit **465 LOC (P2)** und `backend/app/api/report.py` mit **697 LOC (P1)** erfasst.
 
-Groessere `.tsx`- oder `.js`-Produktionsdateien (>10 KB) wurden im Default-Branch nicht gefunden. Bei `.sh` wurden fuenf groessere Kandidaten gescreent: `install.sh`, `scripts/e2e-up.sh`, `scripts/sync-status.sh`, `scripts/verify-deploy.sh` und `scripts/pre-push-gate.sh`; sie werden vor einem Shell-Refactor separat nach echter LOC und Verantwortlichkeit bewertet. `scripts/pre-push-gate.sh` ist zudem ein Gate und wird nicht im Vorbeigehen umgebaut.
+Auch Shell-Dateien werden vom gleichen Inventar abgedeckt. Fuer Prioritaet und LOC ist durchgehend `docs/refactor/loc-inventory.md` massgeblich; `scripts/pre-push-gate.sh` bleibt als Gate ausserhalb eines beiläufigen Refactorings.
 
 ## Tests separat
 
@@ -192,14 +192,13 @@ uv run pytest tests/test_runs_api.py -q
 
 In der aktuellen Connector-Umgebung koennen diese Befehle nicht lokal ausgefuehrt werden. Ein Code-Slice gilt daher erst dann als verifiziert, wenn die entsprechenden PR-Gates/CI-Jobs auf dem Branch gruen sind. Bis dahin wird er im Abschlussaudit nicht als abgeschlossen markiert.
 
-## Vorher-Zustand
+## Historische Baseline vor dem Refactoring
 
-Noch kein Produktionscode in diesem Auftrag veraendert. Dieses Dokument bildet den analysierten Zustand des Basis-Commits ab.
+Vor dem ersten Slice war noch kein Produktionscode dieses Auftrags veraendert. Diese Aussage bezieht sich ausschliesslich auf den Basis-Commit `4496d7ad425593ec12084e508d3f148be9a4166e` und ist als historische Baseline zu lesen.
 
 ## Nachher-Zustand
 
-Wird nach jedem verifizierten Slice und im Abschluss-Audit ergaenzt.
-
+Zwei verhaltensneutrale Slices sind im PR implementiert. Ihre **Abschlussverifikation ist weiterhin ausstehend**, solange die erforderlichen Protected Gates fuer den aktuellen PR-Head nicht erfolgreich durchgelaufen sind. Der Commit `80af7ad0ed2835b721225541d5cfdc1ba57f8204` wird daher nicht als abgeschlossen gewertet; seine geschuetzten Workflow-Laeufe endeten mit `action_required` statt mit ausgefuehrten erfolgreichen Jobs. Erfolgreiche Job-/Commit-Nachweise werden erst nach gruener Abschlussverifikation dokumentiert.
 
 ## Abschlussentscheidung fuer aktuelle P0-Hotspots
 
@@ -231,12 +230,14 @@ LOC bleibt ein Screening-Signal, kein Selbstzweck. Ein P0 wird in diesem PR nur 
 | `frontend/src/components/shell/Shelf.vue` | 892 | spaeter | Shell-SFC; erst Script/Template/Style-Verantwortungen separat bewerten. |
 | `frontend/src/components/compare/BranchComparePanel.vue` | 882 | spaeter | Compare-Contract/UI gekoppelt; eigener komponentenbezogener Refactor. |
 
-### In diesem PR abgeschlossen
+### In diesem PR umgesetzt; Abschlussverifikation ausstehend
 
-1. `backend/app/api/runs.py`: Read-only Summary-Enrichment nach `services/run_read_model.py` extrahiert; die zuvor verschobene CC=27-Funktion wurde real zerlegt statt neu allowzulisten.
-2. `backend/app/services/sim/monitor.py`: reine Timeline-/Agent-Statistik nach `sim/run_metrics.py` extrahiert; bestehender `_get_actions`-Monkeypatch-Hook bleibt ueber duenne Wrapper kompatibel. Dadurch faellt `monitor.py` von **893 auf 798 LOC** und damit von P0 auf P1.
+1. **Ausstehend:** `backend/app/api/runs.py`: Read-only Summary-Enrichment nach `services/run_read_model.py` extrahiert; die zuvor verschobene CC=27-Funktion wurde real zerlegt statt neu allowzulisten. Der Slice gilt erst nach gruener Protected-Gate-Verifikation als abgeschlossen.
+2. **Ausstehend:** `backend/app/services/sim/monitor.py`: reine Timeline-/Agent-Statistik nach `sim/run_metrics.py` extrahiert; bestehender `_get_actions`-Monkeypatch-Hook bleibt ueber duenne Wrapper kompatibel. Dadurch faellt `monitor.py` von **893 auf 798 LOC** und damit von P0 auf P1. Der Slice gilt erst nach gruener Protected-Gate-Verifikation als abgeschlossen.
 3. Exaktes Repo-Inventar fuer alle geforderten Quelltypen inklusive separater Testliste erzeugt.
 4. Veralteten Radon-Allowlist-Eintrag fuer `_build_run_summary` entfernt und Frontend-SSoT-Kommentar auf das neue Modul aktualisiert.
+
+Es wird bewusst noch kein erfolgreicher Job-/Commit-Nachweis fuer den Abschluss dokumentiert; dieser folgt erst, wenn die erforderlichen Protected Gates fuer den aktuellen PR-Head erfolgreich ausgefuehrt wurden.
 
 ### Nicht als Erfolg verkauft
 
