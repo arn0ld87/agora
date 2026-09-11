@@ -681,13 +681,13 @@ class SimulationConfigGenerator:
 
             try:
                 return json.loads(json_str)
-            except json.JSONDecodeError, ValueError:
+            except (json.JSONDecodeError, ValueError):
                 # Try removing all control characters
                 json_str = re.sub(r"[\x00-\x1f\x7f-\x9f]", " ", json_str)
                 json_str = re.sub(r"\s+", " ", json_str)
                 try:
                     return json.loads(json_str)
-                except json.JSONDecodeError, ValueError:
+                except (json.JSONDecodeError, ValueError):
                     pass
 
         return None
