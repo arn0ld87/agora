@@ -10,7 +10,7 @@ Core Retrieval Tools (Optimized):
 3. QuickSearch (Simple Search) - Quick retrieval
 """
 
-import json
+import os
 from typing import Dict, Any, List, Optional
 
 from ..utils.logger import get_logger
@@ -18,6 +18,7 @@ from ..utils.llm_client import LLMClient
 from ..storage import GraphStorage
 import app.services.graph.graph_reader as _reader
 import app.services.graph.insight_forge_tool as _forge
+from .graph import interview_helpers as _interview_helpers
 
 # Re-Export der Dataclasses aus dem ausgegliederten Submodul
 # (M11 Phase 5b PR 1 — siehe app/services/graph/graph_dtos.py)
@@ -585,68 +586,60 @@ class GraphToolsService:
 
     @staticmethod
     def _clean_tool_call_response(response: str) -> str:
-        """Clean JSON tool call wrappers in Agent responses and extract actual content"""
-        if not response or not response.strip().startswith('{'):
-            return response
-        text = response.strip()
-        if 'tool_name' not in text[:80]:
-            return response
-        import re as _re
-        try:
-            data = json.loads(text)
-            if isinstance(data, dict) and 'arguments' in data:
-                for key in ('content', 'text', 'body', 'message', 'reply'):
-                    if key in data['arguments']:
-                        return str(data['arguments'][key])
-        except (json.JSONDecodeError, KeyError, TypeError):
-            match = _re.search(r'"content"\s*:\s*"((?:[^"\\]|\\.)*)"', text)
-            if match:
-                return match.group(1).replace('\\n', '\n').replace('\\"', '"')
-        return response
+        """Delegate response cleanup to the focused interview helper module."""
+        return _interview_helpers.clean_tool_call_response(response)
 
     def _load_agent_profiles(self, simulation_id: str) -> List[Dict[str, Any]]:
-        """Load Agent profile files for simulation"""
-        import os
-        import csv
-
-        sim_dir = os.path.join(
-            os.path.dirname(__file__),
-            f'../../uploads/simulations/{simulation_id}'
+        """Load persisted agent profiles through the focused helper module."""
+        return _interview_helpers.load_agent_profiles(
+            simulation_id,
+            service_dir=os.path.dirname(__file__),
         )
 
-        profiles = []
+    def _select_agents_for_interview(
+        self,
+        profiles: List[Dict[str, Any]],
+        interview_requirement: str,
+        simulation_requirement: str,
+        max_agents: int,
+        panel_tracker: Optional[InterviewPanelTracker] = None,
+    ) -> tuple:
+        """Delegate LLM-backed panel selection while preserving the public method."""
+        return _interview_helpers.select_agents_for_interview(
+            profiles=profiles,
+            interview_requirement=interview_requirement,
+            simulation_requirement=simulation_requirement,
+            max_agents=max_agents,
+            llm=self.llm,
+            panel_tracker=panel_tracker,
+        )
 
-        # Preferentially try to read Reddit JSON format
-        reddit_profile_path = os.path.join(sim_dir, "reddit_profiles.json")
-        if os.path.exists(reddit_profile_path):
-            try:
-                with open(reddit_profile_path, 'r', encoding='utf-8') as f:
-                    profiles = json.load(f)
-                logger.info(f"Loaded {len(profiles)} profiles from reddit_profiles.json")
-                return profiles
-            except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
-                logger.warning(f"Failed to read reddit_profiles.json: {e}")
+    def _generate_interview_questions(
+        self,
+        interview_requirement: str,
+        simulation_requirement: str,
+        selected_agents: List[Dict[str, Any]],
+    ) -> List[str]:
+        """Delegate interview-question generation to the focused helper module."""
+        return _interview_helpers.generate_interview_questions(
+            interview_requirement=interview_requirement,
+            simulation_requirement=simulation_requirement,
+            selected_agents=selected_agents,
+            llm=self.llm,
+        )
 
-        # Try to read Twitter CSV format
-        twitter_profile_path = os.path.join(sim_dir, "twitter_profiles.csv")
-        if os.path.exists(twitter_profile_path):
-            try:
-                with open(twitter_profile_path, 'r', encoding='utf-8') as f:
-                    reader = csv.DictReader(f)
-                    for row in reader:
-                        profiles.append({
-                            "realname": row.get("name", ""),
-                            "username": row.get("username", ""),
-                            "bio": row.get("description", ""),
-                            "persona": row.get("user_char", ""),
-                            "profession": "Unknown"
-                        })
-                logger.info(f"Loaded {len(profiles)} profiles from twitter_profiles.csv")
-                return profiles
-            except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
-                logger.warning(f"Failed to read twitter_profiles.csv: {e}")
+    def _generate_interview_summary(
+        self,
+        interviews: List[AgentInterview],
+        interview_requirement: str,
+    ) -> str:
+        """Delegate interview summarisation to the focused helper module."""
+        return _interview_helpers.generate_interview_summary(
+            interviews=interviews,
+            interview_requirement=interview_requirement,
+            llm=self.llm,
+        )
 
-        return profiles
 
     def _apply_panel_rotation(
         self,
@@ -696,229 +689,3 @@ class GraphToolsService:
             indices=indices,
             requirement=requirement,
         )
-
-    def _select_agents_for_interview(
-        self,
-        profiles: List[Dict[str, Any]],
-        interview_requirement: str,
-        simulation_requirement: str,
-        max_agents: int,
-        panel_tracker: Optional[InterviewPanelTracker] = None
-    ) -> tuple:
-        """Use LLM to select Agents for interview"""
-
-        agent_summaries = []
-        for i, profile in enumerate(profiles):
-            summary = {
-                "index": i,
-                "name": profile.get("realname", profile.get("username", f"Agent_{i}")),
-                "profession": profile.get("profession", "Unknown"),
-                "bio": profile.get("bio", "")[:200],
-                "interested_topics": profile.get("interested_topics", [])
-            }
-            # Issue #1303: Nutzungszahlen sichtbar machen, damit das Modell
-            # die Rotation beim Ranking mitdenkt. Der harte Filter im
-            # InterviewPanelTracker bleibt die Garantie — der Hinweis
-            # verbessert nur die Relevanzordnung innerhalb der Klassen.
-            if panel_tracker is not None:
-                summary["times_interviewed"] = panel_tracker.usage(
-                    panel_tracker.persona_key(profile)
-                )
-            agent_summaries.append(summary)
-
-        rotation_rule = (
-            "\n5. Diversify across report sections: agents with "
-            "\"times_interviewed\": 0 have NOT yet been interviewed in this "
-            "report run and must be strongly preferred. Reuse an already "
-            "interviewed agent only for a clearly different aspect."
-            if panel_tracker is not None
-            else ""
-        )
-
-        system_prompt = """You are a professional interview planning expert. Your task is to select the most suitable Agents for interview from the simulated Agent list based on the interview requirements.
-
-Selection Criteria:
-1. Agent's identity/profession is relevant to the interview topic
-2. Agent may hold unique or valuable perspectives
-3. Select diverse perspectives (e.g., supporters, opposers, neutral, experts, etc.)
-4. Prioritize roles directly related to the event""" + rotation_rule + """
-
-Return JSON format:
-{
-    "selected_indices": [List of indices of selected Agents],
-    "reasoning": "Brief explanation (max 2 short sentences, 200 characters total)"
-}
-
-Keep `reasoning` deliberately short — the truncation budget caps the payload."""
-
-        user_prompt = f"""Interview Requirement:
-{interview_requirement}
-
-Simulation Background:
-{simulation_requirement if simulation_requirement else "Not provided"}
-
-Available Agent List ({len(agent_summaries)} total):
-{json.dumps(agent_summaries, ensure_ascii=False, indent=2)}
-
-Please select up to {max_agents} most suitable Agents for interview and explain your selection rationale."""
-
-        try:
-            # max_tokens 32768: bei 50-Agent-Profil-Listen produzieren Modelle
-            # wie Gemini 3.1 Pro 500+ Zeichen "reasoning"; bei Default-4096
-            # finish=length → JSON-Repair fischt 91 Zeichen raus → Caller
-            # faellt auf Default [0,1,2,3,4]. Folge: jede Report-Section
-            # interviewt dieselben 5 Agents (Bias). 32768 ist sicher fuer
-            # Gemini 2.5+/Claude 4+/Ollama; gpt-4o (4096-Hardlimit) ist im
-            # Stack bewusst nicht im Einsatz.
-            response = self.llm.chat_json(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=0.3,
-                max_tokens=32768,
-            )
-
-            selected_indices = response.get("selected_indices", [])[:max_agents]
-            reasoning = response.get("reasoning", "Automatically selected based on relevance")
-
-            selected_agents = []
-            valid_indices = []
-            for idx in selected_indices:
-                if 0 <= idx < len(profiles):
-                    selected_agents.append(profiles[idx])
-                    valid_indices.append(idx)
-
-            return selected_agents, valid_indices, reasoning
-
-        except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
-            # Issue #978: Budgetabbruch (#764) ist kein Auswahlfehler — hart
-            # durchreichen, sonst interviewt der Run nach einem harten Limit
-            # klaglos mit einer Default-Auswahl weiter.
-            from .run_budget import BudgetExceededError
-
-            if isinstance(e, BudgetExceededError):
-                raise
-            logger.warning(f"LLM agent selection failed, using default selection: {e}")
-            selected = profiles[:max_agents]
-            indices = list(range(min(max_agents, len(profiles))))
-            return selected, indices, "Using default selection strategy"
-
-    def _generate_interview_questions(
-        self,
-        interview_requirement: str,
-        simulation_requirement: str,
-        selected_agents: List[Dict[str, Any]]
-    ) -> List[str]:
-        """Use LLM to generate interview questions"""
-
-        agent_roles = [a.get("profession", "Unknown") for a in selected_agents]
-
-        system_prompt = """You are a professional journalist/interviewer. Based on the interview requirements, generate 3-5 deep interview questions.
-
-Question Requirements:
-1. Open-ended questions that encourage detailed answers
-2. Questions that may have different answers for different roles
-3. Cover multiple dimensions: facts, viewpoints, feelings, etc.
-4. Natural language, like real interviews
-5. Keep each question under 50 characters, concise and clear
-6. Ask directly, do not include background explanation or prefix
-
-Return JSON format: {"questions": ["question1", "question2", ...]}"""
-
-        user_prompt = f"""Interview Requirement: {interview_requirement}
-
-Simulation Background: {simulation_requirement if simulation_requirement else "Not provided"}
-
-Interview Subject Roles: {', '.join(agent_roles)}
-
-Please generate 3-5 interview questions."""
-
-        try:
-            response = self.llm.chat_json(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=0.5,
-                max_tokens=8192,
-            )
-
-            return response.get("questions", [f"What is your perspective on {interview_requirement}?"])
-
-        except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
-            # Issue #978: Budgetabbruch (#764) ist kein Generierungsfehler —
-            # hart durchreichen, sonst interviewt der Run nach einem harten
-            # Limit klaglos mit Default-Fragen weiter.
-            from .run_budget import BudgetExceededError
-
-            if isinstance(e, BudgetExceededError):
-                raise
-            logger.warning(f"Failed to generate interview questions: {e}")
-            return [
-                f"What is your perspective on {interview_requirement}?",
-                "What impact does this have on you or the group you represent?",
-                "How do you think this issue should be solved or improved?"
-            ]
-
-    def _generate_interview_summary(
-        self,
-        interviews: List[AgentInterview],
-        interview_requirement: str
-    ) -> str:
-        """Generate interview summary"""
-
-        if not interviews:
-            return "No interviews completed"
-
-        interview_texts = []
-        for interview in interviews:
-            interview_texts.append(f"[{interview.agent_name} ({interview.agent_role})]\n{interview.response[:500]}")
-
-        system_prompt = """You are a professional news editor. Please generate an interview summary based on the responses from multiple interviewees.
-
-Summary Requirements:
-1. Extract main viewpoints from all parties
-2. Point out consensus and disagreement among viewpoints
-3. Highlight valuable quotes
-4. Remain objective and neutral, do not favor any side
-5. Keep it under 1000 words
-
-Format Constraints (Must Follow):
-- Use plain text paragraphs, separated by blank lines
-- Do not use Markdown headings (e.g., #, ##, ###)
-- Do not use dividers (e.g., ---, ***)
-- Use appropriate quotes when citing interviewees
-- Can use **bold** to mark keywords, but do not use other Markdown syntax"""
-
-        user_prompt = f"""Interview Topic: {interview_requirement}
-
-Interview Content:
-{"".join(interview_texts)}
-
-Please generate an interview summary."""
-
-        try:
-            summary = self.llm.chat(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=0.3,
-                max_tokens=800,
-                # Kurzzusammenfassung mit bewusst engem Limit — der
-                # Token-Boden gilt hier nicht.
-                enforce_token_floor=False,
-            )
-            return summary
-
-        except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
-            # Issue #978: Budgetabbruch (#764) ist kein Generierungsfehler —
-            # hart durchreichen, sonst interviewt der Run nach einem harten
-            # Limit klaglos mit einem Default-Summary-Text weiter.
-            from .run_budget import BudgetExceededError
-
-            if isinstance(e, BudgetExceededError):
-                raise
-            logger.warning(f"Failed to generate interview summary: {e}")
-            return f"Interviewed {len(interviews)} interviewees, including: " + ", ".join([i.agent_name for i in interviews])
