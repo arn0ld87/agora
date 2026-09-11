@@ -142,6 +142,7 @@ def test_generate_ontology_failure_submits_no_mirror_job(upload_env):
 
     response = _post(upload_env.client)
 
-    assert response.status_code >= 400
+    # ValueError ohne ApiErrorCode -> json_error_from_exception(fallback 400).
+    assert response.status_code == 400
     upload_env.project_manager.delete_project.assert_called_with(PROJECT_ID)
     assert upload_env.mirror.jobs == []

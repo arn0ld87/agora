@@ -672,11 +672,23 @@ class TestRebuildCli:
     def test_cli_module_has_no_print_calls(self):
         # AGENTS.md verbietet print() in backend/app/** — der Logger ist der
         # einzige Ausgabekanal, die Exit-Codes bleiben das CLI-Interface.
+        # Ueber den AST statt ueber den Quelltext: eine Textsuche nach
+        # "print(" schlaegt auch bei pprint( oder einer Erwaehnung im
+        # Docstring an und wuerde diese Regel falsch durchsetzen.
+        import ast
         import inspect
 
         from app.services.supabase_mirror import rebuild as rebuild_cli
 
-        assert "print(" not in inspect.getsource(rebuild_cli)
+        tree = ast.parse(inspect.getsource(rebuild_cli))
+        calls = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "print"
+        ]
+        assert calls == []
 
 
 class TestRunRegistryHook:
