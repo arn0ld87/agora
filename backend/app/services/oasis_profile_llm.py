@@ -61,10 +61,11 @@ demographic_slot :Optional [PersonaDemographicSlot ]=None ,
         detail_level =detail_level ,demographic_slot =demographic_slot ,
         )
 
-        # Issue #1247: Einmal angehaengt statt in beide Prompts kopiert — es ist
-        # dieselbe Frage, unabhaengig davon, ob die Entitaet als Individuum oder
-        # als Kollektiv gefuehrt wird.
-    prompt =f"{prompt }\n\n{self ._build_eligibility_prompt_block (entity_name ,entity_type )}"
+        # Issue #1247: Dieselbe Frage fuer beide Persona-Arten — aber nicht
+        # derselbe Text. Die im Ablehnungsfall geforderten Platzhalter muessen
+        # zu dem Schema passen, das derselbe Aufruf unten uebergibt
+        # (CollectivePersonaSchema kennt keine Personenfelder).
+    prompt =f"{prompt }\n\n{self ._build_eligibility_prompt_block (entity_name ,entity_type ,is_collective =not is_individual )}"
 
     # Try multiple times until successful or max retry attempts reached
     max_attempts =3

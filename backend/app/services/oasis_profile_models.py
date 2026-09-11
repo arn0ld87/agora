@@ -7,9 +7,26 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
+
+from ..contracts.persona_contract import VoiceRegister
+
+# Geschlossene Wertemengen der Persona-Anreicherung. Sie standen bisher nur in
+# Prompttexten und in Laufzeitpruefungen — als ``str`` im Schema konnte jeder
+# Wert durchkommen, und der Fehler fiel erst dort auf, wo der Wert konsumiert
+# wurde.
+#
+# ``other`` gehoert bewusst NICHT hierher: der Individuen-Prompt nennt es
+# ausdruecklich als verboten ("das ist Institutionen vorbehalten", siehe
+# oasis_profile_prompts.py), und die Gewichtstabelle PERSONA_GENDER_WEIGHTS
+# erzeugt es nie. Es bleibt ausschliesslich dort, wo ein eigener Vertrag es
+# braucht: in ``PersonaModel`` fuer persistierte Profile und in der
+# Twitter-/CSV-Serialisierung, die Institutionen auf "other" abbildet.
+PersonaGender = Literal["male", "female", "nonbinary"]
+PersonaKind = Literal["individual", "collective"]
+GenerationSource = Literal["llm", "rule_based"]
 
 class PersonaProfileSchema(BaseModel):
     """Striktes Pydantic-Schema für die LLM-generierte Persona.
@@ -30,12 +47,26 @@ class PersonaProfileSchema(BaseModel):
     bio: str = Field("", description="Social media bio, <=200 chars")
     persona: str = Field("", description="Detailed persona description, pure text")
     age: int = Field(..., description="Age as integer 18-75", ge=18, le=75)
-    gender: str = Field(..., description="One of male/female/nonbinary/other")
+    # ``None`` ist der Platzhalter des Ablehnungspfads (#1247): bei
+    # ``ineligible: true`` gibt es keine Demografie, die nicht erfunden waere,
+    # und der strict-json_schema-Mode macht jedes Feld zum Pflichtfeld — ein
+    # explizites ``null`` ist die einzige ehrliche Antwort. Fuer echte Personas
+    # bleibt die Pflicht erhalten: ``_validate_profile_metadata`` meldet ein
+    # fehlendes oder ungueltiges Geschlecht als Missing und erzwingt den Retry.
+    gender: Optional[PersonaGender] = Field(
+        None, description="One of male/female/nonbinary; null only when ineligible"
+    )
     mbti: str = Field(..., description="MBTI type, e.g. INTJ, ENFP")
     country: str = Field(..., description="ISO country code, e.g. DE, AT, CH")
     profession: str = Field("", description="Profession")
     interested_topics: List[str] = Field(default_factory=list, description="Topic strings")
-    voice_register: str = Field(..., description="One of formal-de/neutral-de/technical-de/skeptisch-de")
+    # Geschlossene Menge statt freiem String — der Provider bekommt im
+    # strict-Mode ein Enum und kann gar nichts anderes liefern. ``None`` bleibt
+    # zulaessig, damit der bestehende neutral-de-Fallback in
+    # oasis_profile_llm.py greifen kann, statt drei Versuche zu verbrennen.
+    voice_register: Optional[VoiceRegister] = Field(
+        None, description="One of formal-de/neutral-de/technical-de/skeptisch-de"
+    )
     # Issue #1247: Ablehnung statt Erfindung. Die Frage "kann diese Entitaet
     # einen menschlichen Traeger haben" haengt am Namen und am Kontext, nicht
     # am Typlabel — 28 von 29 beobachteten Nicht-Stakeholdern trugen den
@@ -87,7 +118,9 @@ class CollectivePersonaSchema(BaseModel):
     persona: str = Field("", description="Detailed description of the organization, pure text")
     country: str = Field(..., description="ISO country code, e.g. DE, AT, CH")
     interested_topics: List[str] = Field(default_factory=list, description="Topic strings")
-    voice_register: str = Field(..., description="One of formal-de/neutral-de/technical-de/skeptisch-de")
+    voice_register: Optional[VoiceRegister] = Field(
+        None, description="One of formal-de/neutral-de/technical-de/skeptisch-de"
+    )
     # Issue #1247: Der Eignungsblock haengt an beiden Prompts, also braucht auch
     # der Kollektiv-Vertrag das Ablehnungsfeld — sonst scheitert eine Ablehnung
     # fuer Gruppen-Entitaeten an der Schemavalidierung.
@@ -137,7 +170,7 @@ class OasisAgentProfile:
     # entstand aus dem Bildungstraeger "Nordharz Bildungswerk gGmbH" ein
     # "Juergen Hartmann, 57, Dozent und Betriebsratsmitglied". Kollektiv-
     # Personas tragen keine Vita, also nichts, was erfunden werden koennte.
-    persona_kind: str = "individual"
+    persona_kind: PersonaKind = "individual"
 
     # DACH-Voice-Register (Layer 2)
     voice_register: Optional[str] = None
@@ -147,12 +180,35 @@ class OasisAgentProfile:
     # nach drei gescheiterten LLM-Versuchen. Sie nehmen regulär an der
     # Simulation teil; ohne dieses Feld sind ihre Beiträge im Report nicht
     # von denen echter Personas zu unterscheiden.
-    generation_source: str = "llm"
+    generation_source: GenerationSource = "llm"
     # Nur gesetzt, wenn die Degradierung aus einem Ausfall entstand — bei
     # bewusst regelbasierter Erzeugung bleibt es None.
     generation_error: Optional[str] = None
 
     created_at: str = field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d"))
+
+    def __post_init__(self) -> None:
+        """Erzwingt die geschlossenen Wertemengen auch zur Laufzeit.
+
+        ``OasisAgentProfile`` ist ein ``@dataclass``: die ``Literal``-
+        Annotationen oben sind reine Typinformation und werden beim Erzeugen
+        nicht geprueft. Genau diese beiden Felder landen aber unveraendert in
+        ``reddit_profiles.json`` und steuern dort, ob die Persona-Galerie ein
+        Profil als Kollektiv fuehrt und ob der Report einen Beitrag als
+        regelbasiert kennzeichnet. Ein Tippfehler bliebe sonst bis in den
+        ausgelieferten Bericht unbemerkt.
+        """
+        if self.persona_kind not in ("individual", "collective"):
+            raise ValueError(
+                f"persona_kind muss 'individual' oder 'collective' sein, nicht "
+                f"{self.persona_kind!r}"
+            )
+        if self.generation_source not in ("llm", "rule_based"):
+            raise ValueError(
+                f"generation_source muss 'llm' oder 'rule_based' sein, nicht "
+                f"{self.generation_source!r}"
+            )
+
     def to_reddit_format(self) -> Dict[str, Any]:
         """Convert to Reddit platform format"""
         profile = {
