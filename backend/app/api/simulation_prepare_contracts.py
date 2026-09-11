@@ -5,9 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Optional
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from ..contracts import PersonaQuotaPlan
+from ..contracts.ai_provider_contract import AiModelRef
+from ..contracts.run_budget_contract import RunBudgetConfig
 from ..models.project import ProjectManager
 from ..services.llm_runtime import parse_runtime_llm_config
 from ..services.report_agent import MIN_SIMULATION_AGENTS
@@ -17,9 +19,19 @@ from ..utils.validation import validate_simulation_id
 from .simulation_common import logger
 
 if TYPE_CHECKING:
-    from ..contracts.ai_provider_contract import AiModelRef
-    from ..contracts.run_budget_contract import RunBudgetConfig
     from ..services.llm_runtime import RuntimeLlmConfig
+
+def _coerce_optional_str(value: Any) -> "str | None":
+    """Erzwingt ``str | None`` aus beliebigem JSON-Wert ohne ``AttributeError``.
+
+    ``value.strip()`` auf einer Nicht-Zahl (z.B. ``"language": 5``) würde als
+    HTTP 500 enden; Client-Fehler im Wire-Format müssen aber als Fehlen
+    behandelt werden wie ein ungültiges ``max_agents`` — konsistente
+    None-Semantik statt Typ-Crash (CodeRabbit-Finding PR #1497).
+    """
+    if not isinstance(value, str):
+        return None
+    return value
 
 def _parse_quota_plan(data: dict) -> Optional[PersonaQuotaPlan]:
     """Parse ``quota_plan`` aus dem POST-Body in ein ``PersonaQuotaPlan``.
@@ -90,18 +102,21 @@ class PrepareRejected(Exception):
             # landet zuletzt auf dem Run, nach fail_task()).
             self.run_failure_message = run_failure_message
 
-@dataclass(frozen=True)
-class PrepareRequest:
-    """Validierte Eingaben eines ``POST /api/simulation/prepare``.
+class PrepareRequest(BaseModel):
+    """Volldefinierte Pydantic-Contracts für ``POST /api/simulation/prepare``.
 
-    Interner Parameter-Container zwischen den Prepare-Phasen, **kein**
-    API-Vertrag: die Wire-Validierung bleibt feldweise in den Parse-Phasen.
+    Konsistente Validierungs-Semantik vermeidet inkonsonante Fehler-Routing:
+    - Feld-Level-Validierung statt .strip() auf potentiell nicht-string Werten
+    - Einheitliche HTTP-400-Antworten bei Validierungsfehlern
+    - Explizite Typkonversion durch Pydantic vermeidet None/Fehler-Unsicherheit
     """
 
     simulation_id: str
-    ai_model_ref: "AiModelRef | None"
-    budget_config: "RunBudgetConfig | None"
-    force_regenerate: bool
+    ai_model_ref: "AiModelRef | None" = None
+    budget_config: "RunBudgetConfig | None" = None
+    force_regenerate: bool = False
+
+    model_config = ConfigDict(str_strip_whitespace=True, str_to_lower=False)
 
 @dataclass(frozen=True)
 class PrepareRouting:
@@ -154,8 +169,6 @@ def _parse_prepare_identity(data: "dict[str, Any]") -> "tuple[str, AiModelRef | 
     if raw_ai_model_ref is None:
         return simulation_id, None
 
-    from ..contracts.ai_provider_contract import AiModelRef
-
     try:
         ai_model_ref = AiModelRef.model_validate(raw_ai_model_ref)
     except ValidationError:
@@ -190,8 +203,6 @@ def _parse_prepare_budget(data: "dict[str, Any]") -> "RunBudgetConfig | None":
     raw_budget = data.get('budget')
     if raw_budget is None:
         return None
-
-    from ..contracts.run_budget_contract import RunBudgetConfig
 
     try:
         return RunBudgetConfig.model_validate(raw_budget)
@@ -246,9 +257,9 @@ def _read_client_choice(data: "dict[str, Any]", project) -> ClientChoice:
     `default` ist die UI-Platzhalterwahl (`useEnvForm.effectiveModel()` liefert
     dafür `null`) und zählt deshalb nicht als explizite Modellwahl.
     """
-    data_profile = (data.get('llm_profile_id') or '').strip() or None
-    project_profile = (getattr(project, 'llm_profile_id', None) or '').strip() or None
-    data_model = (data.get('llm_model') or '').strip() or None
+    data_profile = (_coerce_optional_str(data.get('llm_profile_id')) or '').strip() or None
+    project_profile = (_coerce_optional_str(getattr(project, 'llm_profile_id', None)) or '').strip() or None
+    data_model = (_coerce_optional_str(data.get('llm_model')) or '').strip() or None
     return ClientChoice(
         data_profile=data_profile,
         project_profile=project_profile,
@@ -369,7 +380,7 @@ def _collect_prepare_inputs(data: "dict[str, Any]", project, state) -> PrepareIn
             )
         ) from exc
 
-    agent_language_override = (data.get('language') or '').strip().lower() or None
+    agent_language_override = (_coerce_optional_str(data.get('language')) or '').strip().lower() or None
     if agent_language_override and agent_language_override not in ('de', 'en'):
         agent_language_override = None
 
