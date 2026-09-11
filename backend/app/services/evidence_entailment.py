@@ -733,6 +733,7 @@ def _numeric_spans(sentence: str) -> List[tuple[str, "re.Match[str]"]]:
     ranges = _range_spans(sentence)
 
     def _in_range(position: int) -> bool:
+        """Liegt diese Zahl innerhalb einer erkannten Spanne?"""
         return any(lo <= position < hi for lo, hi in ranges)
 
     spans: List[tuple[str, "re.Match[str]"]] = [

@@ -479,14 +479,17 @@ class FactOutcome:
 
     @property
     def partially_supported(self) -> bool:
+        """True, wenn mindestens eine Zahl des Satzes belegt ist."""
         return self.supported > 0
 
     @property
     def verdict(self) -> EntailmentVerdict:
+        """Das Urteil des ausloesenden Fakts."""
         return self.result.verdict
 
     @property
     def reason(self) -> str:
+        """Beanstandung mit konkreter Zahl und Belegstand des Satzes."""
         base = f"»{_fact_label(self.fact)}«: {self.result.reason}"
         if not self.partially_supported:
             return base
