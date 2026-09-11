@@ -18,6 +18,10 @@ Verträge:
   C. `.env.docker.example` setzt keine Geheimnis-Klartexte — `SECRET_KEY`,
      `AGORA_AUTH_TOKEN` und `NEO4J_PASSWORD` müssen vom Operator gefüllt
      werden (leerer Wert oder Generieren-Marker, kein hartcodierter Wert).
+  D. `.env.example` setzt `LLM_MODEL_NAME` nicht aktiv. Der Code-Default ist
+     bewusst leer, damit der Operator ein Modell waehlt, das im aktiven
+     Backend existiert; ein aktiv gesetztes lokales Ollama-Tag in der Vorlage
+     stellt genau den Cloud-404 wieder her, den der leere Default vermeidet.
 """
 
 from __future__ import annotations
@@ -172,4 +176,24 @@ def test_env_docker_example_secrets_are_placeholders(env_docker_example_active, 
         f"{key} in .env.docker.example darf kein hartcodiertes Geheimnis "
         f"sein — aktuell: {value!r}. Akzeptierte Platzhalter: "
         f"{sorted(_PLACEHOLDER_TOKENS)}."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Vertrag D — .env.example gibt kein Modell vor
+# ---------------------------------------------------------------------------
+
+
+def test_env_example_does_not_pin_a_model():
+    """`LLM_MODEL_NAME` darf in der Vorlage nur als Kommentar stehen.
+
+    `config.py`, `AgoraSettings` und `SETTINGS_FIELDS` haben alle den leeren
+    Default, damit der Operator bewusst waehlt. Eine Vorlage, die `cp
+    .env.example .env` beantwortet und dabei `qwen2.5:32b` aktiv setzt, hebt
+    diese Entscheidung wieder auf.
+    """
+    active = _parse_active_keys(ENV_EXAMPLE)
+    assert "LLM_MODEL_NAME" not in active, (
+        "`.env.example` setzt LLM_MODEL_NAME aktiv auf "
+        f"{active.get('LLM_MODEL_NAME')!r} — als Kommentar-Beispiel fuehren"
     )

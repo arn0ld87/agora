@@ -70,7 +70,7 @@ def get_settings():
             "fields": {
               "llm": [
                  {"key": "LLM_MODEL_NAME", "type": "string",
-                  "value": "qwen2.5:32b", "default": "qwen2.5:32b",
+                  "value": "llama3.1:8b", "default": "",
                   "source": "env", "is_set": true,
                   "secret": false, "reload_required": false},
                  ...
