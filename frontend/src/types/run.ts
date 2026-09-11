@@ -3,7 +3,7 @@
  *
  * Backend source of truth: backend/app/services/run_registry.py
  * (RunRegistry.create / .update_run / canonical_status) for the manifest, and
- * backend/app/api/runs.py (`_build_run_summary`) for the read-path
+ * backend/app/services/run_read_model.py (`build_run_summary`) for the read-path
  * `summary` block. Keep field names in sync — anything we add here must
  * exist either in the manifest or in the API enrichment, otherwise the
  * type lies.
