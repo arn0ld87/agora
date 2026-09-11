@@ -224,10 +224,12 @@ class CodexCliReadiness:
 
     @property
     def ready(self) -> bool:
+        """Nur mit Binary UND vorhandenem Login ist der Provider benutzbar."""
         return self.binary_present and self.credentials == "ok"
 
     @property
     def status_message(self) -> str | None:
+        """Handlungsanweisung fuer den Operator, ``None`` wenn alles passt."""
         if not self.binary_present:
             return (
                 "codex-CLI nicht im PATH gefunden — Installation pruefen."

@@ -205,6 +205,12 @@ def _reject_reason_for_ip(ip: IpAddress) -> str | None:
 
 
 def _hostname_is_blocked(host: str, policy: OutboundHttpPolicy) -> str | None:
+    """Rejection reason for an infrastructure hostname, or ``None``.
+
+    Checked before resolution: in some runtimes these names resolve to an
+    address that looks public, so the address check alone would let them
+    through.
+    """
     lowered = host.lower().rstrip(".")
     if lowered in policy.allowed_hostnames:
         return None
@@ -400,6 +406,12 @@ def _read_capped(response, policy: OutboundHttpPolicy) -> tuple[bytes, bool]:
 
 
 def _decode(body: bytes, content_type: str) -> str:
+    """Decode a body using the declared charset, falling back to UTF-8.
+
+    Never raises: a hostile or broken target must not be able to kill the
+    fetch with an unknown or malformed charset, so undecodable bytes are
+    replaced rather than propagated.
+    """
     charset = "utf-8"
     for part in content_type.split(";"):
         part = part.strip()
@@ -413,6 +425,7 @@ def _decode(body: bytes, content_type: str) -> str:
 
 
 def _content_type_allowed(content_type: str, allowed: Iterable[str]) -> bool:
+    """Compare the bare media type, ignoring parameters like ``charset``."""
     base = content_type.split(";", 1)[0].strip().lower()
     return any(base == entry.lower() for entry in allowed)
 
