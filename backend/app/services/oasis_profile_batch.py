@@ -52,7 +52,7 @@ reserve_entities :Optional [List [EntityNode ]]=None ,
     Returns:
         List of Agent Profiles
     """
-    from threading import Lock 
+    from threading import Lock
 
 
     if parallel_count is None :
@@ -62,7 +62,7 @@ reserve_entities :Optional [List [EntityNode ]]=None ,
 
         # Set graph_id for knowledge graph search
     if graph_id :
-        self .graph_id =graph_id 
+        self .graph_id =graph_id
 
     total =len (entities )
     profiles =[None ]*total # Pre-allocate list to maintain order
@@ -76,13 +76,13 @@ reserve_entities :Optional [List [EntityNode ]]=None ,
     def save_profiles_realtime ():
         """Real-time save generated profiles to file"""
         if not realtime_output_path :
-            return 
+            return
 
         with lock :
         # Filter generated profiles
             existing_profiles =[p for p in profiles if p is not None ]
             if not existing_profiles :
-                return 
+                return
 
             try :
                 if output_platform =="reddit":
@@ -92,7 +92,7 @@ reserve_entities :Optional [List [EntityNode ]]=None ,
                         json .dump (profiles_data ,f ,ensure_ascii =False ,indent =2 )
                 else :
                 # Twitter CSV format
-                    import csv 
+                    import csv
                     profiles_data =[p .to_twitter_format ()for p in existing_profiles ]
                     if profiles_data :
                     # Issue #1246 (CodeRabbit PR #1257): Spaltenmenge
@@ -131,7 +131,7 @@ reserve_entities :Optional [List [EntityNode ]]=None ,
             # Real-time output generated persona to console and log
             self ._print_generated_profile (entity .name ,entity_type ,profile )
 
-            return idx ,profile ,None 
+            return idx ,profile ,None
 
         except PersonaIneligible as rejection :
         # Issue #1247: Ablehnung ist kein Fehlschlag. Der Slot bleibt
@@ -145,14 +145,14 @@ reserve_entities :Optional [List [EntityNode ]]=None ,
         # eine Entitaet auszugeben, die gar kein Profil bekommen hat.
             with lock :
                 rejected .append (rejection )
-            return idx ,None ,rejection .reason 
+            return idx ,None ,rejection .reason
 
         except BudgetExceededError :
         # Kein Fallback-Profil bei erschoepftem Budget — der Abbruch
         # gehoert nach oben, sonst entstehen Platzhalterprofile fuer
         # Calls, die nie stattfinden durften (Codex-Finding P2 auf
         # PR #1461).
-            raise 
+            raise
         except Exception as e :# noqa: BLE001 — exception is logged; swallowed intentionally
             _legacy .logger .error (f"Failed to generate persona for entity {entity .name }: {str (e )}")
             # Create a fallback profile
@@ -185,9 +185,9 @@ reserve_entities :Optional [List [EntityNode ]]=None ,
     # der Import-Fallback eng bleibt und Programmierfehler nicht
     # verschluckt werden.
     try :
-        from gevent import monkey 
+        from gevent import monkey
     except ImportError :
-        is_gevent =False 
+        is_gevent =False
     else :
         is_gevent =monkey .is_module_patched ("socket")
 
@@ -195,10 +195,10 @@ reserve_entities :Optional [List [EntityNode ]]=None ,
         """Unified per-result handling: store profile, write realtime file, report progress, log."""
         entity =entities [result_idx ]
         entity_type =entity .get_entity_type ()or "Entity"
-        profiles [result_idx ]=profile 
+        profiles [result_idx ]=profile
 
         with lock :
-            completed_count [0 ]+=1 
+            completed_count [0 ]+=1
             current =completed_count [0 ]
 
             # Real-time file writing
@@ -238,7 +238,7 @@ reserve_entities :Optional [List [EntityNode ]]=None ,
             # sofort. ``cancel_requested`` gated unten die Nachbesetzungsrunde
             # (``_backfill_rejected_slots``), die sonst weitere LLM-Calls
             # auslösen würde, obwohl der Nutzer bereits abgebrochen hat.
-    cancel_requested =False 
+    cancel_requested =False
 
     # Codex-Finding PR #1452 (P1), Folgearbeit: dieselbe Budget-Race
     # trifft die parallele Persona-Generierung. Ohne Deckelung pruefen
@@ -259,10 +259,10 @@ reserve_entities :Optional [List [EntityNode ]]=None ,
     # zum Auslesen wuerde Secret-Aufloesung, Client-Bau und eine
     # zusaetzliche Audit-Zeile ausloesen und ohne API-Key scheitern,
     # womit der Deckel ausgerechnet dann ausfiele, wenn er greifen soll.
-    remaining_budget :Optional [int ]=None 
+    remaining_budget :Optional [int ]=None
     if self .run_id :
         try :
-            from .run_budget import RunBudgetEnforcer 
+            from .run_budget import RunBudgetEnforcer
 
             enforcer =RunBudgetEnforcer .for_run (self .run_id )
             if enforcer is not None :
@@ -270,22 +270,22 @@ reserve_entities :Optional [List [EntityNode ]]=None ,
         except Exception as exc :# noqa: BLE001 — Budget ist Zusatz, kein Hotpath-Risiko
             _legacy .logger .warning (
             "Persona-Generierung: verbleibendes Hartbudget nicht "
-            "ermittelbar, Parallelitaet bleibt ungedeckelt: %s",exc 
+            "ermittelbar, Parallelitaet bleibt ungedeckelt: %s",exc
             )
     if remaining_budget is not None :
         parallel_count =min (parallel_count ,max (1 ,remaining_budget ))
 
     if is_gevent :
         _legacy .logger .info ("Gevent detected: using native cooperative Pool for parallel persona generation")
-        from gevent .pool import Pool 
+        from gevent .pool import Pool
         pool =Pool (parallel_count )
 
         def worker_wrapper (args ):
-            idx ,entity =args 
+            idx ,entity =args
             try :
                 return generate_single_profile (idx ,entity )
             except BudgetExceededError :
-                raise 
+                raise
             except Exception as e :# noqa: BLE001
                 _legacy .logger .error (f"Cooperative greenlet failed unexpectedly for entity {entity .name }: {str (e )}")
                 entity_type =entity .get_entity_type ()or "Entity"
@@ -306,12 +306,12 @@ reserve_entities :Optional [List [EntityNode ]]=None ,
                 return idx ,fallback_profile ,str (e )
 
         cancel_requested =self ._consume_gevent_results (
-        pool ,worker_wrapper ,entities ,_process_result ,completed_count ,total 
+        pool ,worker_wrapper ,entities ,_process_result ,completed_count ,total
         )
     else :
         cancel_requested =self ._consume_thread_results (
         generate_single_profile ,entities ,parallel_count ,
-        _process_result ,completed_count ,total 
+        _process_result ,completed_count ,total
         )
 
         # Issue #1247: Abgelehnte Slots aus dem Reservepool nachbesetzen. Ohne
@@ -339,7 +339,7 @@ reserve_entities :Optional [List [EntityNode ]]=None ,
     seen_handles :set =set ()
     for p in profiles :
         if p is None :
-            continue 
+            continue
             # Issue #1246 (CodeRabbit PR #1257): Kollektive nehmen an der
             # Personennamen-Dedup nicht teil. Zwei Organisationen mit gleichem
             # Schlusstoken — "… GmbH", "… e.V." — galten hier als doppelter
@@ -348,22 +348,22 @@ reserve_entities :Optional [List [EntityNode ]]=None ,
             # Organisation beschreibt. Das ist exakt der Identitaetsbruch,
             # den dieser Slice schliesst.
         if p .persona_kind =="collective":
-            continue 
+            continue
         norm_name =(p .name or "").strip ().lower ()
         last_name =self ._last_name (p .name or "")
         if norm_name and (
-        norm_name in seen_names 
+        norm_name in seen_names
         or (last_name is not None and last_name in seen_last_names )
         ):
             new_name =self ._pick_dach_name (p .gender )
-            attempts =0 
+            attempts =0
             while (
-            new_name .lower ()in seen_names 
-            or (self ._last_name (new_name )or "")in seen_last_names 
+            new_name .lower ()in seen_names
+            or (self ._last_name (new_name )or "")in seen_last_names
             )and attempts <30 :
                 new_name =self ._pick_dach_name (p .gender )
-                attempts +=1 
-            p .name =new_name 
+                attempts +=1
+            p .name =new_name
             p .user_name =self ._generate_username (new_name )
         seen_names .add ((p .name or "").strip ().lower ())
         last_name =self ._last_name (p .name or "")
@@ -373,7 +373,7 @@ reserve_entities :Optional [List [EntityNode ]]=None ,
         norm_handle =(p .user_name or "").strip ().lower ()
         if norm_handle and norm_handle in seen_handles :
         # Handle steht schon; hänge Suffix-Rotation an.
-            base =norm_handle .rsplit ("_",1 )[0 ]if "_"in norm_handle else norm_handle 
+            base =norm_handle .rsplit ("_",1 )[0 ]if "_"in norm_handle else norm_handle
             p .user_name =self ._generate_username (base )
         seen_handles .add ((p .user_name or "").strip ().lower ())
 

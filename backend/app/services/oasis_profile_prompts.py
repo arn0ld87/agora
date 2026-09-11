@@ -50,7 +50,7 @@ def _build_individual_persona_prompt (
         _industry_block_de =build_industry_quota_prompt_block (self ._industry_quota_plan )
         _slot_block =(
         self ._build_demographic_slot_prompt_block (demographic_slot )
-        if demographic_slot is not None 
+        if demographic_slot is not None
         else ""
         )
 

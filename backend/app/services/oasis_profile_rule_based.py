@@ -44,7 +44,7 @@ degradations :"DegradationCollector",
     present =[p for p in profiles if p ]
     failed =[p for p in present if p .generation_error ]
     if not failed :
-        return 
+        return
 
     first_error =failed [0 ].generation_error or "unbekannt"
     # Issue #1419: Faellt jede einzelne Persona aus, gibt es keine echte
@@ -54,9 +54,9 @@ degradations :"DegradationCollector",
     # bleibt der Lauf verwertbar: die Platzhalter sind einzeln
     # gekennzeichnet, der Leser kann sie gewichten.
     severity =(
-    DegradationSeverity .BLOCKING 
+    DegradationSeverity .BLOCKING
     if len (failed )==len (present )
-    else DegradationSeverity .WARNING 
+    else DegradationSeverity .WARNING
     )
     degradations .record (
     kind =DegradationKind .PERSONA_RULE_BASED_FALLBACK ,
@@ -96,11 +96,11 @@ demographic_slot :Optional [PersonaDemographicSlot ]=None ,
     eine Degradierung.
     """
     payload =self ._build_rule_based_payload (
-    entity_name ,entity_type ,entity_summary ,entity_attributes ,demographic_slot 
+    entity_name ,entity_type ,entity_summary ,entity_attributes ,demographic_slot
     )
     payload ["generation_source"]="rule_based"
     if generation_error :
-        payload ["generation_error"]=generation_error 
+        payload ["generation_error"]=generation_error
     return payload
 
 
@@ -152,8 +152,8 @@ demographic_slot :Optional [PersonaDemographicSlot ]=None ,
     assigned_gender =(
     demographic_slot .gender if demographic_slot is not None else self ._pick_individual_gender ()
     )
-    assigned_age =demographic_slot .age if demographic_slot is not None else None 
-    assigned_mbti =demographic_slot .mbti if demographic_slot is not None else None 
+    assigned_age =demographic_slot .age if demographic_slot is not None else None
+    assigned_mbti =demographic_slot .mbti if demographic_slot is not None else None
 
     # Issue #1246: Kollektiv-Fallback. Sichtbar vor allen Personenzweigen,
     # damit eine Organisation gar nicht erst in einen Pfad geraet, der ihr
@@ -261,7 +261,7 @@ assigned_mbti :Optional [str ],
     dach =self ._pick_dach_name (assigned_gender )
     persona =(
     f"{dach } steht im Szenario für „{entity_name }“. {entity_summary }".strip ()
-    if entity_summary 
+    if entity_summary
     else f"{dach } nimmt aktiv an sozialen Diskussionen teil."
     )
     return {
@@ -276,6 +276,6 @@ assigned_mbti :Optional [str ],
     "profession":None ,
     "interested_topics":["Allgemein","Gesellschaft"],
     "voice_register":self ._rule_based_voice_register (
-    entity_type .lower (),entity_type 
+    entity_type .lower (),entity_type
     ),
     }

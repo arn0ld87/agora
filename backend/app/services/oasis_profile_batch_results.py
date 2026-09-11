@@ -49,11 +49,11 @@ rejected :List ["PersonaIneligible"],
     }
     open_slots =[idx for idx ,profile in enumerate (profiles )if profile is None ]
     if not open_slots :
-        return 
+        return
 
     reserve_slots =self ._build_demographic_slots (reserve_entities )
     used :set [int ]=set ()
-    filled =0 
+    filled =0
 
     def _next_candidate (preferred_type :Optional [str ])->Optional [int ]:
         """Naechster unverbrauchter Reserve-Index, Typgleichheit bevorzugt.
@@ -68,20 +68,20 @@ rejected :List ["PersonaIneligible"],
         if preferred_type :
             for idx ,entity in enumerate (reserve_entities ):
                 if idx in used :
-                    continue 
+                    continue
                 if (entity .get_entity_type ()or "Entity")==preferred_type :
-                    return idx 
+                    return idx
         for idx in range (len (reserve_entities )):
             if idx not in used :
-                return idx 
-        return None 
+                return idx
+        return None
 
     for slot_idx in open_slots :
-        preferred =slot_types .get (slot_idx )if slot_types else None 
+        preferred =slot_types .get (slot_idx )if slot_types else None
         while True :
             reserve_index =_next_candidate (preferred )
             if reserve_index is None :
-                break 
+                break
             candidate =reserve_entities [reserve_index ]
             candidate_slot =reserve_slots [reserve_index ]
             used .add (reserve_index )
@@ -94,11 +94,11 @@ rejected :List ["PersonaIneligible"],
                 )
             except PersonaIneligible as rejection :
                 rejected .append (rejection )
-                continue 
+                continue
             except BudgetExceededError :
             # Ausnahme von "Nachruecker duerfen den Lauf nicht kippen":
             # ein erschoepftes Hartbudget soll ihn genau das.
-                raise 
+                raise
             except Exception as exc :# noqa: BLE001 — Nachrücker duerfen den Lauf nicht kippen
                 _legacy .logger .warning (
                 "Nachbesetzung fuer Slot %d fehlgeschlagen (%s): %r",
@@ -106,14 +106,14 @@ rejected :List ["PersonaIneligible"],
                 candidate .name ,
                 exc ,
                 )
-                continue 
+                continue
                 # Die Entity am selben Index mittauschen, damit die
                 # Config-Generierung den Nachruecker beschreibt und nicht die
                 # abgelehnte Entitaet.
             if slot_idx <len (entities ):
-                entities [slot_idx ]=candidate 
-            filled +=1 
-            break 
+                entities [slot_idx ]=candidate
+            filled +=1
+            break
 
     _legacy .logger .info (
     "Persona-Eligibility: %d Kandidat(en) abgelehnt, %d von %d freien "
@@ -128,7 +128,7 @@ rejected :List ["PersonaIneligible"],
 
 
 def _consume_gevent_results (
-self: Any ,pool ,worker_wrapper ,entities ,process_result ,completed_count ,total 
+self: Any ,pool ,worker_wrapper ,entities ,process_result ,completed_count ,total
 )->bool :
     """Issue B2: Gevent-Verbrauchsschleife, ausgelagert wegen radon-Gate.
 
@@ -139,23 +139,23 @@ self: Any ,pool ,worker_wrapper ,entities ,process_result ,completed_count ,tota
     Thread-Pfad, aber der einzige verfuegbare Weg, neue LLM-Calls
     sofort zu stoppen (best effort).
     """
-    cancel_requested =False 
+    cancel_requested =False
     # Consume results inside try/finally so the pool is joined on success
     # and on exceptions — no orphaned greenlets outlive the loop.
     try :
         for result_idx ,profile ,error in pool .imap_unordered (worker_wrapper ,enumerate (entities )):
             process_result (result_idx ,profile ,error )
             if self ._cancel_checkpoint (completed_count [0 ],total ,"gevent"):
-                cancel_requested =True 
+                cancel_requested =True
                 pool .kill ()
-                break 
+                break
     finally :
         pool .join ()
     return cancel_requested
 
 
 def _consume_thread_results (
-self: Any ,generate_single_profile ,entities ,parallel_count ,process_result ,completed_count ,total 
+self: Any ,generate_single_profile ,entities ,parallel_count ,process_result ,completed_count ,total
 )->bool :
     """Issue B2: Thread-Verbrauchsschleife, ausgelagert wegen radon-Gate.
 
@@ -171,9 +171,9 @@ self: Any ,generate_single_profile ,entities ,parallel_count ,process_result ,co
     progress and incremental file writes regress to 0% until the slowest
     persona completes.
     """
-    import concurrent .futures 
+    import concurrent .futures
 
-    cancel_requested =False 
+    cancel_requested =False
     with concurrent .futures .ThreadPoolExecutor (max_workers =parallel_count )as executor :
         future_to_entity ={
         executor .submit (generate_single_profile ,idx ,entity ):(idx ,entity )
@@ -186,7 +186,7 @@ self: Any ,generate_single_profile ,entities ,parallel_count ,process_result ,co
             try :
                 result_idx ,profile ,error =future .result ()
             except BudgetExceededError :
-                raise 
+                raise
             except Exception as e :# noqa: BLE001
                 _legacy .logger .error (f"Thread execution failed unexpectedly for entity {entity .name }: {str (e )}")
                 profile =OasisAgentProfile (
@@ -201,9 +201,9 @@ self: Any ,generate_single_profile ,entities ,parallel_count ,process_result ,co
                 result_idx ,error =idx ,str (e )
             process_result (result_idx ,profile ,error )
             if self ._cancel_checkpoint (completed_count [0 ],total ,"Thread-Pfad"):
-                cancel_requested =True 
+                cancel_requested =True
                 executor .shutdown (wait =False ,cancel_futures =True )
-                break 
+                break
     return cancel_requested
 
 
@@ -215,10 +215,10 @@ def _cancel_checkpoint (self: Any ,completed :int ,total :int ,path :str )->bool
     Obergrenze bleibt (cc<=40) — die Funktion ist ein Bestands-Hotspot,
     der nicht weiter wachsen darf.
     """
-    from .sim .cancel_flag import is_cancel_requested 
+    from .sim .cancel_flag import is_cancel_requested
 
     if not (self .run_id and is_cancel_requested (self .run_id )):
-        return False 
+        return False
     _legacy .logger .info (
     "Persona-Generierung kooperativ abgebrochen (%s): "
     "run_id=%s, %d/%d Personas fertig",

@@ -35,7 +35,7 @@ demographic_slot :Optional [PersonaDemographicSlot ]=None ,
 
     # Fallback-Basics: echter Entity-Name + abgeleiteter Username.
     # Werden später überschrieben, wenn LLM/Rule-based display_name + handle liefern.
-    name =entity .name 
+    name =entity .name
     user_name =self ._generate_username (name )
 
     # Build context information
@@ -85,17 +85,17 @@ demographic_slot :Optional [PersonaDemographicSlot ]=None ,
     persona_kind ="collective"if is_collective else "individual"
 
     if is_collective :
-        profile_data ["age"]=None 
-        profile_data ["gender"]=None 
-        profile_data ["mbti"]=None 
+        profile_data ["age"]=None
+        profile_data ["gender"]=None
+        profile_data ["mbti"]=None
         # Eine Kollektiv-Persona hat keinen Beruf. "Dozent und
         # Betriebsratsmitglied" war aus einem Bildungstraeger nicht
         # ableitbar, sondern eine plausible Vita.
-        profile_data ["profession"]=None 
+        profile_data ["profession"]=None
     elif demographic_slot is not None :
-        profile_data ["age"]=demographic_slot .age 
-        profile_data ["gender"]=demographic_slot .gender 
-        profile_data ["mbti"]=demographic_slot .mbti 
+        profile_data ["age"]=demographic_slot .age
+        profile_data ["gender"]=demographic_slot .gender
+        profile_data ["mbti"]=demographic_slot .mbti
 
         # LLM/Rule-based darf display_name (echter Name) + handle (kurzes Social-Handle)
         # überschreiben. So wird aus Entity "GraphRAG" z.B. Person "Lena Hoffmann" mit
@@ -104,7 +104,7 @@ demographic_slot :Optional [PersonaDemographicSlot ]=None ,
     if not is_collective :
         display_name =(profile_data .get ("display_name")or "").strip ()
         if display_name :
-            name =display_name 
+            name =display_name
         handle =(profile_data .get ("handle")or "").strip ()
         if handle :
             user_name =self ._generate_username (handle )
@@ -125,7 +125,7 @@ demographic_slot :Optional [PersonaDemographicSlot ]=None ,
         "Persona-Beruf verworfen: entity_type wurde als profession durchgereicht (%s)",
         entity_type ,
         )
-        profession =None 
+        profession =None
 
     profession =self ._profession_after_coherence_check (
     entity_type =entity_type ,
@@ -139,7 +139,7 @@ demographic_slot :Optional [PersonaDemographicSlot ]=None ,
 
     # Segment = entity_type string for PersonaQuotaPlan validation.
     # entity_type is already resolved above (get_entity_type() or "Entity").
-    segment =entity_type if entity_type !="Entity"else None 
+    segment =entity_type if entity_type !="Entity"else None
 
     return OasisAgentProfile (
     user_id =user_id ,

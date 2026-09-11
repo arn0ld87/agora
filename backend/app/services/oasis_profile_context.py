@@ -28,7 +28,7 @@ def _search_graph_for_entity (self: Any ,entity :EntityNode )->Dict [str ,Any ]:
     if not self .storage :
         return {"facts":[],"node_summaries":[],"context":""}
 
-    entity_name =entity .name 
+    entity_name =entity .name
 
     results ={
     "facts":[],
@@ -38,7 +38,7 @@ def _search_graph_for_entity (self: Any ,entity :EntityNode )->Dict [str ,Any ]:
 
     if not self .graph_id :
         _legacy .logger .debug ("Skip knowledge graph search: graph_id not set")
-        return results 
+        return results
 
     comprehensive_query =f"All information, activities, events, relationships and background about {entity_name }"
 
@@ -191,15 +191,15 @@ def _align_persona_identity (cls: Any ,persona :str ,display_name :str )->str :
     Eroeffnungsname oder stimmt er bereits, bleibt der Text unangetastet.
     """
     if not persona or not display_name :
-        return persona 
+        return persona
 
     match =cls ._LEADING_NAME_RE .match (persona )
     if not match :
-        return persona 
+        return persona
 
     found =match .group (1 ).strip ()
     if found ==display_name :
-        return persona 
+        return persona
 
     found_parts =found .split ()
     target_parts =display_name .split ()
@@ -209,11 +209,11 @@ def _align_persona_identity (cls: Any ,persona :str ,display_name :str )->str :
     replacements :List [tuple [str ,str ]]=[(found ,display_name )]
     for idx ,part in enumerate (found_parts ):
         if len (part )<3 :
-            continue 
+            continue
         target =target_parts [idx ]if idx <len (target_parts )else target_parts [-1 ]
         replacements .append ((part ,target ))
 
-    aligned =persona 
+    aligned =persona
     for source ,target in sorted (replacements ,key =lambda p :-len (p [0 ])):
         aligned =re .sub (rf"\b{re .escape (source )}\b",target ,aligned )
     return aligned
@@ -242,7 +242,7 @@ entity_context :Optional [str ],
     zerstoeren als retten, und der Befund steht im Log.
     """
     source_text =" ".join (
-    part for part in (entity_summary or "",entity_context or "")if part 
+    part for part in (entity_summary or "",entity_context or "")if part
     )
     findings =coherence_findings (
     entity_type =entity_type ,
@@ -253,7 +253,7 @@ entity_context :Optional [str ],
     source_text =source_text ,
     )
     if not findings :
-        return profession 
+        return profession
         # Der Entitaetsname bleibt draussen: er traegt einen Personen- oder
         # Organisationsnamen, und Logs verlassen den Prozess (dieselbe Linie
         # wie beim producer_key, CodeRabbit PR #1151). Typ und Befundart
@@ -265,9 +265,9 @@ entity_context :Optional [str ],
     "; ".join (finding ["kind"]for finding in findings ),
     )
     if profession and any (
-    finding ["kind"]=="domain_drift"for finding in findings 
+    finding ["kind"]=="domain_drift"for finding in findings
     ):
-        return None 
+        return None
     return profession
 
 
@@ -288,7 +288,7 @@ def _is_group_entity (self: Any ,entity_type :str )->bool :
     hervor; die Liste hinterherzupflegen ist kein Verfahren.
     """
     return (
-    entity_type .lower ()in self .GROUP_ENTITY_TYPES 
+    entity_type .lower ()in self .GROUP_ENTITY_TYPES
     or is_collective_entity_type (entity_type )
     )
 

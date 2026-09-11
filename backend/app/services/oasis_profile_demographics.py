@@ -29,7 +29,7 @@ def _pick_dach_name (gender :Optional [str ]=None )->str :
 def _last_name (name :str )->Optional [str ]:
     parts =(name or "").strip ().split ()
     if len (parts )<2 :
-        return None 
+        return None
     return parts [-1 ].lower ()
 
 
@@ -47,7 +47,7 @@ def _largest_remainder_counts (weighted_values :tuple [tuple [object ,float ],..
     reverse =True ,
     )
     for _ ,idx in ranked [:remainder ]:
-        counts [idx ]+=1 
+        counts [idx ]+=1
     return counts
 
 
@@ -72,7 +72,7 @@ total :int ,
     weighted_bands ,
     cls ._largest_remainder_counts (weighted_bands ,total ),
     ):
-        start ,end =age_range 
+        start ,end =age_range
         band_ages =list (range (start ,end +1 ))
         random .shuffle (band_ages )
         ages .extend (band_ages [idx %len (band_ages )]for idx in range (count ))
@@ -88,7 +88,7 @@ def _build_demographic_slots (self: Any ,entities :List [EntityNode ])->list [Pe
     genders =self ._build_weighted_slots (self .PERSONA_GENDER_WEIGHTS ,total )
     mbtis =self ._build_weighted_slots (self .PERSONA_MBTI_WEIGHTS ,total )
 
-    age_by_index :list [Optional [int ]]=[None ]*total 
+    age_by_index :list [Optional [int ]]=[None ]*total
     individual_indices :list [int ]=[]
     group_indices :list [int ]=[]
     for idx ,entity in enumerate (entities ):
@@ -103,13 +103,13 @@ def _build_demographic_slots (self: Any ,entities :List [EntityNode ])->list [Pe
         individual_indices ,
         self ._build_age_slots (self .INDIVIDUAL_AGE_BANDS ,len (individual_indices )),
         ):
-            age_by_index [idx ]=age 
+            age_by_index [idx ]=age
     if group_indices :
         for idx ,age in zip (
         group_indices ,
         self ._build_age_slots (self .GROUP_AGE_BANDS ,len (group_indices )),
         ):
-            age_by_index [idx ]=age 
+            age_by_index [idx ]=age
 
     if any (age is None for age in age_by_index ):
         raise AssertionError ("Demographic slot planning left at least one age unassigned.")

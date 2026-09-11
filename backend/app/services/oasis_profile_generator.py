@@ -218,7 +218,7 @@ class OasisProfileGenerator:
         "university", "governmentagency", "organization", "ngo",
         "mediaoutlet", "company", "institution", "group", "community"
     ]
-    
+
     def __init__(
         self,
         api_key: Optional[str] = None,
@@ -272,19 +272,19 @@ class OasisProfileGenerator:
         self._industry_quota_plan: PersonaQuotaPlan = (
             industry_quota_plan or default_dach_industry_quota(100)
         )
-    
+
     def generate_profile_from_entity(self, entity: EntityNode, user_id: int, use_llm: bool=True, demographic_slot: Optional[PersonaDemographicSlot]=None) -> OasisAgentProfile:
         return _oasis_profile_core.generate_profile_from_entity(self, entity, user_id, use_llm, demographic_slot)
-    
+
     def _generate_username(self, name: str) -> str:
         return _oasis_profile_core._generate_username(self, name)
-    
+
     def _search_graph_for_entity(self, entity: EntityNode) -> Dict[str, Any]:
         return _oasis_profile_context._search_graph_for_entity(self, entity)
-    
+
     def _build_entity_context(self, entity: EntityNode) -> str:
         return _oasis_profile_context._build_entity_context(self, entity)
-    
+
     #: Erster Eigenname am Textanfang: zwei bis drei grossgeschriebene Tokens,
     #: gefolgt von einer namenstypischen Grenze.
     #:
@@ -331,7 +331,7 @@ class OasisProfileGenerator:
 
     def _try_fix_json(self, content: str, entity_name: str, entity_type: str, entity_summary: str='') -> Dict[str, Any]:
         return _oasis_profile_llm._try_fix_json(self, content, entity_name, entity_type, entity_summary)
-    
+
     def _get_system_prompt(self, is_individual: bool) -> str:
         return _oasis_profile_prompts._get_system_prompt(self, is_individual)
 
@@ -340,7 +340,7 @@ class OasisProfileGenerator:
 
     def _build_group_persona_prompt(self, entity_name: str, entity_type: str, entity_summary: str, entity_attributes: Dict[str, Any], context: str, detail_level: Optional[dict]=None, demographic_slot: Optional[PersonaDemographicSlot]=None) -> str:
         return _oasis_profile_prompts._build_group_persona_prompt(self, entity_name, entity_type, entity_summary, entity_attributes, context, detail_level, demographic_slot)
-    
+
     @staticmethod
     def _rule_based_voice_register(entity_type: str, profession: str='') -> str:
         return _oasis_profile_rule_based._rule_based_voice_register(entity_type, profession)
@@ -359,11 +359,11 @@ class OasisProfileGenerator:
 
     def _build_generic_person_payload(self, *, entity_name: str, entity_type: str, entity_summary: str, assigned_gender: str, assigned_age: Optional[int], assigned_mbti: Optional[str]) -> Dict[str, Any]:
         return _oasis_profile_rule_based._build_generic_person_payload(self, entity_name=entity_name, entity_type=entity_type, entity_summary=entity_summary, assigned_gender=assigned_gender, assigned_age=assigned_age, assigned_mbti=assigned_mbti)
-    
+
     def set_graph_id(self, graph_id: str):
         """Set knowledge graph ID for knowledge graph search"""
         self.graph_id = graph_id
-    
+
     def _backfill_rejected_slots(self, *, profiles: List[Optional[OasisAgentProfile]], entities: List[EntityNode], reserve_entities: List[EntityNode], use_llm: bool, rejected: List['PersonaIneligible']) -> None:
         return _oasis_profile_batch_results._backfill_rejected_slots(self, profiles=profiles, entities=entities, reserve_entities=reserve_entities, use_llm=use_llm, rejected=rejected)
 
@@ -378,22 +378,22 @@ class OasisProfileGenerator:
 
     def generate_profiles_from_entities(self, entities: List[EntityNode], use_llm: bool=True, progress_callback: Optional[callable]=None, graph_id: Optional[str]=None, parallel_count: Optional[int]=None, realtime_output_path: Optional[str]=None, output_platform: str='reddit', degradations: Optional['DegradationCollector']=None, reserve_entities: Optional[List[EntityNode]]=None) -> List[OasisAgentProfile]:
         return _oasis_profile_batch.generate_profiles_from_entities(self, entities, use_llm, progress_callback, graph_id, parallel_count, realtime_output_path, output_platform, degradations, reserve_entities)
-    
+
     def _print_generated_profile(self, entity_name: str, entity_type: str, profile: OasisAgentProfile):
         return _oasis_profile_persistence._print_generated_profile(self, entity_name, entity_type, profile)
-    
+
     def save_profiles(self, profiles: List[OasisAgentProfile], file_path: str, platform: str='reddit'):
         return _oasis_profile_persistence.save_profiles(self, profiles, file_path, platform)
-    
+
     def _save_twitter_csv(self, profiles: List[OasisAgentProfile], file_path: str):
         return _oasis_profile_persistence._save_twitter_csv(self, profiles, file_path)
-    
+
     def _normalize_gender(self, gender: Optional[str]) -> str:
         return _oasis_profile_persistence._normalize_gender(self, gender)
-    
+
     def _save_reddit_json(self, profiles: List[OasisAgentProfile], file_path: str):
         return _oasis_profile_persistence._save_reddit_json(self, profiles, file_path)
-    
+
     # Keep old method name as alias for backward compatibility
     def save_profiles_to_json(self, profiles: List[OasisAgentProfile], file_path: str, platform: str='reddit'):
         return _oasis_profile_persistence.save_profiles_to_json(self, profiles, file_path, platform)

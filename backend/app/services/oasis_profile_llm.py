@@ -67,15 +67,15 @@ demographic_slot :Optional [PersonaDemographicSlot ]=None ,
     prompt =f"{prompt }\n\n{self ._build_eligibility_prompt_block (entity_name ,entity_type )}"
 
     # Try multiple times until successful or max retry attempts reached
-    max_attempts =3 
-    last_error =None 
+    max_attempts =3
+    last_error =None
 
     # LLMClient statt rohem OpenAI-Client: kapselt Provider-Detection
     # (MiniMax-thinking-extra_body), strict json_schema-Mode und zentrale
     # JSON-Repair-Logik. force_no_thinking=True deaktiviert M3-Reasoning,
     # das ohne diese Verdrahtung bis zu 63 % des Token-Budgets als
     # lesbaren Text in den content emittiert → kaputtes JSON → Retry-Loop.
-    from ..llm .client import LLMClient as _LLMClient 
+    from ..llm .client import LLMClient as _LLMClient
 
     llm =_LLMClient (
     api_key =self .api_key ,
@@ -115,9 +115,9 @@ demographic_slot :Optional [PersonaDemographicSlot ]=None ,
             # nachfolgenden Fallbacks (bio, persona, voice_register)
             # bleiben als Defensive-Programmierung bestehen.
             if demographic_slot is not None :
-                result ["age"]=demographic_slot .age 
-                result ["gender"]=demographic_slot .gender 
-                result ["mbti"]=demographic_slot .mbti 
+                result ["age"]=demographic_slot .age
+                result ["gender"]=demographic_slot .gender
+                result ["mbti"]=demographic_slot .mbti
             if not result .get ("bio"):
                 result ["bio"]=entity_summary [:200 ]if entity_summary else f"{entity_type }: {entity_name }"
             if not result .get ("persona"):
@@ -127,12 +127,12 @@ demographic_slot :Optional [PersonaDemographicSlot ]=None ,
             vr_value =result .get ("voice_register")
             if vr_value not in VOICE_REGISTERS :
                 _legacy .logger .warning (
-                "voice_register fehlt oder ungültig: %r → fallback neutral-de",vr_value 
+                "voice_register fehlt oder ungültig: %r → fallback neutral-de",vr_value
                 )
                 result ["voice_register"]="neutral-de"
 
             missing_fields =self ._validate_profile_metadata (
-            result ,is_collective =not is_individual 
+            result ,is_collective =not is_individual
             )
             if missing_fields :
                 last_error =ValueError (
@@ -142,9 +142,9 @@ demographic_slot :Optional [PersonaDemographicSlot ]=None ,
                 f"LLM persona missing required metadata (attempt {attempt +1 }): "
                 f"{', '.join (missing_fields )}"
                 )
-                continue 
+                continue
 
-            return result 
+            return result
 
         except BudgetExceededError :
         # Codex-Finding P2 auf PR #1461: ein hartes Budget muss
@@ -154,11 +154,11 @@ demographic_slot :Optional [PersonaDemographicSlot ]=None ,
         # Bei erschoepftem Budget haette eine 30-Personen-Vorbereitung
         # so rund 180 Sekunden mit garantiert abgelehnten Calls
         # verbracht und die Stufe ohne Budget-Abbruch verlassen.
-            raise 
+            raise
         except Exception as e :# noqa: BLE001 — exception is logged; swallowed intentionally
             _legacy .logger .warning (f"LLM call failed (attempt {attempt +1 }): {str (e )[:80 ]}")
-            last_error =e 
-            import time 
+            last_error =e
+            import time
             time .sleep (1 *(attempt +1 ))# Exponential backoff
 
     _legacy .logger .warning (f"LLM persona generation failed ({max_attempts } attempts): {last_error }, using rule-based generation")
@@ -178,7 +178,7 @@ demographic_slot :Optional [PersonaDemographicSlot ]=None ,
 
 
 def _validate_profile_metadata (
-self: Any ,result :Dict [str ,Any ],*,is_collective :bool =False 
+self: Any ,result :Dict [str ,Any ],*,is_collective :bool =False
 )->List [str ]:
     """Validate and normalize structured fields that OASIS actually consumes.
 
@@ -197,12 +197,12 @@ self: Any ,result :Dict [str ,Any ],*,is_collective :bool =False
         register =result .get ("voice_register")
         if not isinstance (register ,str )or register .strip ()not in VOICE_REGISTERS :
             missing_fields .append ("voice_register")
-        return missing_fields 
+        return missing_fields
 
     age =result .get ("age")
     if isinstance (age ,str )and age .strip ().isdigit ():
         age =int (age .strip ())
-        result ["age"]=age 
+        result ["age"]=age
     if not isinstance (age ,int )or age <18 or age >75 :
         missing_fields .append ("age")
 
@@ -210,7 +210,7 @@ self: Any ,result :Dict [str ,Any ],*,is_collective :bool =False
     if isinstance (gender ,str ):
         normalized_gender =gender .strip ().lower ()
         if normalized_gender in self .VALID_PROFILE_GENDERS :
-            result ["gender"]=normalized_gender 
+            result ["gender"]=normalized_gender
         else :
             missing_fields .append ("gender")
     else :
@@ -220,7 +220,7 @@ self: Any ,result :Dict [str ,Any ],*,is_collective :bool =False
     if isinstance (mbti ,str ):
         normalized_mbti =mbti .strip ().upper ()
         if normalized_mbti in self .MBTI_TYPES :
-            result ["mbti"]=normalized_mbti 
+            result ["mbti"]=normalized_mbti
         else :
             missing_fields .append ("mbti")
     else :
@@ -248,7 +248,7 @@ self: Any ,result :Dict [str ,Any ],*,is_collective :bool =False
 
 def _try_fix_json (self: Any ,content :str ,entity_name :str ,entity_type :str ,entity_summary :str ="")->Dict [str ,Any ]:
     """Try to fix corrupted JSON"""
-    import re 
+    import re
 
     # 1. First try to fix truncated case via the centralized repair helper
     # (Issue #869). Returns the repaired payload or None when no
@@ -258,7 +258,7 @@ def _try_fix_json (self: Any ,content :str ,entity_name :str ,entity_type :str ,
     # extraction, etc.).
     repaired =_legacy ._try_repair_truncated_json (content )
     if repaired is not None :
-        content =repaired 
+        content =repaired
 
         # 2. Try to extract JSON portion
     json_match =re .search (r'\{[\s\S]*\}',content )
@@ -273,7 +273,7 @@ def _try_fix_json (self: Any ,content :str ,entity_name :str ,entity_type :str ,
             s =s .replace ('\n',' ').replace ('\r',' ')
             # Replace excess spaces
             s =re .sub (r'\s+',' ',s )
-            return s 
+            return s
 
             # Match JSON string values
         json_str =re .sub (r'"[^"\\]*(?:\\.[^"\\]*)*"',fix_string_newlines ,json_str )
@@ -281,8 +281,8 @@ def _try_fix_json (self: Any ,content :str ,entity_name :str ,entity_type :str ,
         # 4. Try to parse
         try :
             result =json .loads (json_str )
-            result ["_fixed"]=True 
-            return result 
+            result ["_fixed"]=True
+            return result
         except json .JSONDecodeError :
         # 5. If still failed, try more aggressive fix
             try :
@@ -291,10 +291,10 @@ def _try_fix_json (self: Any ,content :str ,entity_name :str ,entity_type :str ,
                 # Replace all consecutive whitespace
                 json_str =re .sub (r'\s+',' ',json_str )
                 result =json .loads (json_str )
-                result ["_fixed"]=True 
-                return result 
+                result ["_fixed"]=True
+                return result
             except (json .JSONDecodeError ,ValueError ,TypeError ):
-                pass 
+                pass
 
                 # 6. Try to extract partial information from content
     bio_match =re .search (r'"bio"\s*:\s*"([^"]*)"',content )
@@ -309,7 +309,7 @@ def _try_fix_json (self: Any ,content :str ,entity_name :str ,entity_type :str ,
         return {
         "bio":bio ,
         "persona":persona ,
-        "_fixed":True 
+        "_fixed":True
         }
 
         # 7. Complete failure, return basic structure
