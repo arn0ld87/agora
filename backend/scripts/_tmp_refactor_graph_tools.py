@@ -34,6 +34,12 @@ def method_source(name: str) -> str:
     return textwrap.dedent("".join(lines[start:end])).rstrip() + "\n"
 
 
+def replace_header(text: str, marker: str, end_marker: str, new_header: str) -> str:
+    start = text.index(marker)
+    end = text.index(end_marker, start) + len(end_marker)
+    return text[:start] + new_header + text[end:]
+
+
 extract_names = [
     "_clean_tool_call_response",
     "_load_agent_profiles",
@@ -43,55 +49,65 @@ extract_names = [
 ]
 
 clean = method_source("_clean_tool_call_response")
-clean = clean.replace("def _clean_tool_call_response(", "def clean_tool_call_response(", 1)
+clean = clean.replace("@staticmethod\n", "", 1)
+clean = replace_header(
+    clean,
+    "def _clean_tool_call_response(",
+    ") -> str:",
+    "def clean_tool_call_response(response: str) -> str:",
+)
 
 load = method_source("_load_agent_profiles")
-load = load.replace(
-    "def _load_agent_profiles(self, simulation_id: str) -> List[Dict[str, Any]]:",
-    "def load_agent_profiles(\n    simulation_id: str, *, service_dir: str\n) -> List[Dict[str, Any]]:",
-    1,
+load = replace_header(
+    load,
+    "def _load_agent_profiles(",
+    ") -> List[Dict[str, Any]]:",
+    "def load_agent_profiles(\n"
+    "    simulation_id: str, *, service_dir: str\n"
+    ") -> List[Dict[str, Any]]:",
 )
 load = load.replace("os.path.dirname(__file__)", "service_dir")
 
 select = method_source("_select_agents_for_interview")
-select = select.replace(
-    "def _select_agents_for_interview(", "def select_agents_for_interview(", 1
-)
-select = select.replace("    self,\n", "", 1)
-select = select.replace(
-    "    panel_tracker: Optional[InterviewPanelTracker] = None\n) -> tuple:",
+select = replace_header(
+    select,
+    "def _select_agents_for_interview(",
+    ") -> tuple:",
+    "def select_agents_for_interview(\n"
+    "    profiles: List[Dict[str, Any]],\n"
+    "    interview_requirement: str,\n"
+    "    simulation_requirement: str,\n"
+    "    max_agents: int,\n"
     "    llm: LLMClient,\n"
     "    panel_tracker: Optional[InterviewPanelTracker] = None,\n"
     ") -> tuple:",
-    1,
 )
 select = select.replace("self.llm", "llm")
 
 questions = method_source("_generate_interview_questions")
-questions = questions.replace(
-    "def _generate_interview_questions(", "def generate_interview_questions(", 1
-)
-questions = questions.replace("    self,\n", "", 1)
-questions = questions.replace(
-    "    selected_agents: List[Dict[str, Any]]\n) -> List[str]:",
+questions = replace_header(
+    questions,
+    "def _generate_interview_questions(",
+    ") -> List[str]:",
+    "def generate_interview_questions(\n"
+    "    interview_requirement: str,\n"
+    "    simulation_requirement: str,\n"
     "    selected_agents: List[Dict[str, Any]],\n"
     "    llm: LLMClient,\n"
     ") -> List[str]:",
-    1,
 )
 questions = questions.replace("self.llm", "llm")
 
 summary = method_source("_generate_interview_summary")
-summary = summary.replace(
-    "def _generate_interview_summary(", "def generate_interview_summary(", 1
-)
-summary = summary.replace("    self,\n", "", 1)
-summary = summary.replace(
-    "    interview_requirement: str\n) -> str:",
+summary = replace_header(
+    summary,
+    "def _generate_interview_summary(",
+    ") -> str:",
+    "def generate_interview_summary(\n"
+    "    interviews: List[AgentInterview],\n"
     "    interview_requirement: str,\n"
     "    llm: LLMClient,\n"
     ") -> str:",
-    1,
 )
 summary = summary.replace("self.llm", "llm")
 
