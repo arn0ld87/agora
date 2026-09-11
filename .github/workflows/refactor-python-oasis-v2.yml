@@ -88,14 +88,16 @@ jobs:
           rm backend/scripts/_tmp_fix_oasis_generated.py
           rm backend/scripts/_tmp_rewire_oasis_imports.py
           rm .github/workflows/refactor-python-oasis-v2.yml
-          git diff --check
-          changed="$(git diff --name-only origin/main...HEAD; git diff --name-only)"
+          git diff --check origin/main --
+          changed="$(git diff --name-only origin/main --)"
           bad="$(printf '%s\n' "$changed" | sed '/^$/d' | grep -vE '\.py$' || true)"
           if [ -n "$bad" ]; then
             echo 'Non-Python files would remain in final diff:'
             echo "$bad"
             exit 1
           fi
+          echo 'Final net diff contains only Python files:'
+          printf '%s\n' "$changed"
 
       - name: Commit verified Python refactor
         run: |
