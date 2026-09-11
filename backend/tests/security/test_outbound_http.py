@@ -500,9 +500,8 @@ def test_exception_message_does_not_leak_url_credentials(monkeypatch):
 
     assert "sup3rgeheim" not in str(exc.value)
     assert "user:" not in str(exc.value)
-    assert "***@example.com" in str(exc.value)
     # Das Ziel bleibt erkennbar — redigiert wird nur die Userinfo.
-    assert "example.com" in str(exc.value)
+    assert "***@example.com" in str(exc.value)
 
 
 def test_blocked_url_attribute_is_redacted_too():
