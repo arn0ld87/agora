@@ -1,0 +1,35 @@
+name: refactor-python-sim-prepare-map
+
+on:
+  push:
+    branches:
+      - claude/refactor-python-hotspots
+
+permissions:
+  contents: read
+
+jobs:
+  map:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/refactor-python-hotspots
+          fetch-depth: 0
+      - name: Map simulation_prepare structure and tests
+        shell: bash
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          path = Path('backend/app/api/simulation_prepare.py')
+          source = path.read_text(encoding='utf-8')
+          tree = ast.parse(source)
+          print(f'LOC {len(source.splitlines())}')
+          for node in tree.body:
+              if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                  print(f'{type(node).__name__} {node.name}: {node.lineno}-{node.end_lineno} ({node.end_lineno-node.lineno+1})')
+          PY
+          echo '--- direct test references ---'
+          grep -R -n -E 'simulation_prepare|_Prepare|_parse_prepare|_resolve_prepare|_collect_prepare|_preview_entity|_begin_prepare|_seed_prepare|_make_prepare_job|_track_active_prepare|_build_prepare_response|_check_simulation_prepared|prepare_simulation|prepare/status' backend/tests | head -500 || true
