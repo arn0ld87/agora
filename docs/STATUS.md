@@ -47,6 +47,20 @@ Zusätzliche aktuelle Nachweise:
 - Ein geplanter `e2e-smokes`-Lauf auf `e6ced1a2` war am 08.09.2026 grün. Dieser Lauf liegt vor den anschließend gemergten PRs #1478/#1479 und den Dependabot-Merges; daraus wird **nicht** behauptet, dass bereits jeder Workflow auf `0c47737f` grün bestätigt wurde.
 - Echte Integrationstests unter `backend/tests/integration/` laufen gegen Redis und Neo4j. Der CI-Job setzt `AGORA_TEST_REQUIRE_SERVICES=1`, damit ein fehlender Dienst nicht als freundlicher Skip durchrutscht (#1481).
 
+### Qualitäts-Gates
+
+Drei Baseline-Gates halten Bestandsschuld sichtbar und am Wachsen gehindert. Sie reparieren nichts — sie verhindern, dass unbemerkt mehr dazukommt.
+
+| Gate | Skript | Baseline | Gemessen am |
+|---|---|---|---|
+| Komplexität (radon, D+) | `backend/scripts/check_complexity.py` | `backend/radon-allowlist.txt` (47 Einträge) | laufend |
+| mypy-Schuld hinter `ignore_errors` | `backend/scripts/check_mypy_debt.py` | `backend/mypy-debt-baseline.txt` — 266 Fehler in 55 Dateien | 11.09.2026 |
+| Coverage (Line und Branch getrennt) | `backend/scripts/check_coverage.py` | `backend/coverage-baseline.json` — 82,8 % Line / 70,9 % Branch | 11.09.2026 |
+
+Zum Coverage-Gate: der Istwert auf dem Messstand war **83,82 % Line** (26661/31806 Statements) und **71,94 % Branch** (6571/9134 Branches) über die vollständige Backend-Suite. Die Schwellen liegen je einen Punkt darunter — Puffer für Umgebungsunterschiede, kein Spielraum zum Absinken. Die vorherige Schwelle `--cov-fail-under=60` ohne Branch-Messung lag 24 Punkte unter dem Ist und konnte deshalb keine Regression erkennen ([#1495](https://github.com/arn0ld87/agora/issues/1495)).
+
+Zum Typ-Gate: `pyproject.toml` schaltet mypy für `app`, `app.config`, `app.container`, `app.models.*`, `app.services.*`, `app.storage.*`, `app.utils.*` und `app.llm.*` per `ignore_errors` ab. `mypy app` ist deshalb grün, obwohl in genau diesen Bereichen die eigentliche Arbeit liegt. Die 266 Fehler sind **nicht behoben**, sondern gemessen und gedeckelt; die `ignore_errors`-Modulliste selbst darf ebenfalls nicht wachsen.
+
 ## Produktive Architektur
 
 ### Frontend
@@ -176,6 +190,7 @@ Aktueller Schwerpunkt:
 - strukturierte `/api/status`-Fehler statt roher Exception-Strings (#1459).
 - Dependency-Risk-Register mit Hardstops; NLTK/PYSEC-2026-597 bleibt bis zur Upstream-Klärung verfolgt (#661, Hardstop 28.09.2026).
 - Outbound-Fetches mit agenten-/modellgelieferten URLs laufen zentral über `backend/app/security/outbound_http.py` (Adressklassen, Redirect-Revalidierung, IP-Pinning, Byte-Limit). Der zuvor ungeschützte Pfad `scripts/agent_tools.py::web_fetch` ist damit geschlossen ([#1485](https://github.com/arn0ld87/agora/issues/1485)).
+- Eine Ablehnung durch dieselbe Policy gibt die untrusted URL nicht mehr weiter: `OutboundRequestBlocked` trägt in der Message nur den Grund und in `.url` nur die sichere Herkunft (Schema, Host, ggf. Port). Die frühere Userinfo-Redaktion ließ Token in Query, Fragment und Pfad stehen.
 
 Bekannt offen: Simulation-`observation` wird noch nicht überall so strikt als untrusted Prompt-Input getrennt, wie für Prompt-Injection-Härtung gewünscht ([#1224](https://github.com/arn0ld87/agora/issues/1224)).
 
