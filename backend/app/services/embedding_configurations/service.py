@@ -146,6 +146,7 @@ class EmbeddingConfigurationService:
                 "Failed-Konfiguration kann nicht aktiviert werden; "
                 "erst erfolgreichen Probe durchfuehren."
             )
+        self._reject_dimension_change_without_migration(config)
         for other in self._store.list_configurations(scope=config.scope):
             if (
                 other.id != config.id
@@ -164,6 +165,41 @@ class EmbeddingConfigurationService:
             status="active",
             status_message=None,
             last_validated_at=self._now(),
+        )
+
+    def _reject_dimension_change_without_migration(
+        self, config: EmbeddingConfiguration
+    ) -> None:
+        """Verhindert, dass ein Klick das Modell unter den Vektoren wegtauscht (#1417).
+
+        Der aktive Vector-Index traegt eine feste Dimension. Eine Konfiguration
+        mit abweichender Dimension zu aktivieren, ohne dass eine Indexversion
+        fuer diese Dimension existiert, macht jeden vorhandenen Vektor
+        unbrauchbar: der naechste Schreibzugriff faellt gegen den
+        Dimensionswaechter (``_ensure_vector_index_dim``, #263), und bis dahin
+        stimmen Suche und Index nicht mehr ueberein.
+
+        Geprueft wird gegen die *Indexversion*, nicht gegen die abgeloeste
+        Konfiguration: eine abgeschlossene Migration hat die neue Version
+        bereits angelegt, und dann ist die Aktivierung genau der gewollte
+        letzte Schritt. Ein Modellwechsel bei *gleicher* Dimension bleibt
+        erlaubt — er ist semantisch riskant, aber strukturell zulaessig, und
+        genau dafuer existiert der Migrationslauf.
+        """
+        active_index = self._store.get_active_index_version()
+        if active_index is None or active_index.dimensions == config.dimensions:
+            return
+        if any(
+            index.dimensions == config.dimensions
+            for index in self._store.list_index_versions()
+        ):
+            return
+        raise ValueError(
+            f"Konfiguration {config.id} hat {config.dimensions} Dimensionen, der "
+            f"aktive Index (v{active_index.version}) hat {active_index.dimensions}. "
+            "Ohne eine Indexversion in der neuen Dimension wuerde die Aktivierung "
+            "die vorhandenen Vektoren entwerten — erst die Migration laufen "
+            "lassen, dann aktivieren."
         )
 
     def rollback(self, configuration_id: str) -> EmbeddingConfiguration:
