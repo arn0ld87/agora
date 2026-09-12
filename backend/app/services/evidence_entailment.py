@@ -817,10 +817,17 @@ def extract_numeric_facts(text: str) -> List[NumericFact]:
             # 18 "streikten", nicht "kamen" — waehrend die Glieder von "Der
             # Pilot umfasst 120 Teilnehmende, 18 Lehrkraefte und sechs
             # Angebote" sich das Kopf-Praedikat sehr wohl teilen.
+            #
+            # Nur ab dem zweiten Fakt: der Prefix des ersten beginnt am
+            # Satzanfang, ein Trenner darin grenzt also nichts von einer
+            # vorangehenden Zahl ab, sondern gehoert zum Satzkopf selbst.
+            # "Die Studie ergab: 120 Teilnehmende" hat keine Vorgaengerklausel
+            # — der Kopf IST die Aussage, und ihn zu unterdruecken liess ein
+            # leeres Praedikat zurueck (Codex-Befund P1 auf PR #1498).
             starts_new_clause = False
             for separator in (";", ":", "—", " – "):
                 if separator in prefix:
-                    starts_new_clause = True
+                    starts_new_clause = index > 0
                     prefix = prefix.rsplit(separator, 1)[1]
             # Beim Absolutmuster gehört das Bezugsnomen zum Tail, beim
             # Prozentmuster steht es hinter der Einheit.
