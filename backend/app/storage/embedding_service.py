@@ -91,9 +91,38 @@ class EmbeddingService:
         max_retries: int = 3,
         timeout: int = 30,
     ):
-        self.model = model or Config.EMBEDDING_MODEL
-        self.base_url = (base_url or Config.EMBEDDING_BASE_URL).rstrip('/')
-        self.api_key = api_key if api_key is not None else (Config.EMBEDDING_API_KEY or '')
+        # Issue #1417: Praezedenz ist ausdrueckliche Argumente > aktive
+        # Store-Konfiguration > Legacy-Sicht aus ``Config.*``.
+        #
+        # Der Migrationslauf uebergibt seine Route ausdruecklich
+        # (``api/embedding_migrations.py``) und bleibt davon unberuehrt. Die
+        # beiden produktiven Consumer (``storage/neo4j_storage.py``,
+        # ``services/report_agent/evidence.py``) konstruieren argumentlos — und
+        # lasen damit bis hierher ausschliesslich die Umgebung, waehrend die
+        # GUI-Aktivierung folgenlos blieb. Der Migrationslauf bettete gegen den
+        # Store neu ein, der Betrieb gegen die Env; bei zwei Modellen gleicher
+        # Dimension faengt der Dimensionswaechter (#263) diesen Unterschied
+        # nicht, und im selben Index landen Vektoren zweier Modelle.
+        #
+        # Der Store wird nur befragt, wenn ueberhaupt etwas fehlt: sind Modell,
+        # Endpoint und Schluessel alle uebergeben, ist er irrelevant.
+        route = None
+        if model is None or base_url is None or api_key is None:
+            from ..services.embedding_configurations import runtime as _embedding_runtime
+
+            route = _embedding_runtime.resolve_active_embedding_route()
+
+        self.model = model or (route.model if route else None) or Config.EMBEDDING_MODEL
+        resolved_base_url = (
+            base_url or (route.base_url if route else None) or Config.EMBEDDING_BASE_URL
+        )
+        self.base_url = resolved_base_url.rstrip("/")
+        if api_key is not None:
+            self.api_key = api_key
+        elif route is not None and route.api_key is not None:
+            self.api_key = route.api_key
+        else:
+            self.api_key = Config.EMBEDDING_API_KEY or ""
         # Leerer String = kein Credential; das Gate erwartet dann None (#1110).
         ensure_credentialed_transport_security(self.base_url, self.api_key or None)
         self.max_retries = max_retries
