@@ -141,7 +141,7 @@ def _run_build(monkeypatch, builder: _FakeBuilder) -> dict:
     monkeypatch.setattr("app.services.graph_build.TextProcessor.split_text", lambda *_a, **_k: ["c1", "c2"])
     # Der Task läuft synchron statt über die Queue — sonst prüft der Test nur,
     # dass etwas eingereiht wurde, nicht was es tut.
-    monkeypatch.setattr("app.jobs.enqueue", lambda _name, fn: fn())
+    monkeypatch.setattr("app.jobs.enqueue", lambda _name, fn, **_kw: fn())
 
     GraphBuildService.build_graph(
         project_id=PROJECT_ID,

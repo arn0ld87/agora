@@ -118,7 +118,9 @@ def budget_abort_env(tmp_path, monkeypatch):
     monkeypatch.setattr(rg.ReportManager, "save_report", staticmethod(lambda *a, **k: None))
 
     jobs: list[object] = []
-    monkeypatch.setattr("app.jobs.enqueue", lambda name, fn: jobs.append(fn) or "job-test")
+    monkeypatch.setattr(
+        "app.jobs.enqueue", lambda name, fn, **_kw: jobs.append(fn) or "job-test"
+    )
 
     yield SimpleNamespace(jobs=jobs, created=created)
 

@@ -137,3 +137,131 @@ def test_enqueue_propagates_exception_into_thread_log(caplog):
     assert error_records, "expected an ERROR log from agora.jobs on target exception"
     combined = " ".join(r.getMessage() for r in error_records)
     assert "failing_job" in combined or "intentional test failure" in combined
+
+
+# ---------------------------------------------------------------------------
+# Prozess-Identitaet fuer die Startup-Reconciliation (Issue #1472)
+# ---------------------------------------------------------------------------
+
+
+class _RecordingRegistry:
+    def __init__(self) -> None:
+        self.runs: dict = {}
+        self.calls: list = []
+
+    def update_run(self, run_id: str, **updates):
+        self.calls.append((run_id, updates))
+        self.runs.setdefault(run_id, {}).setdefault("metadata", {}).update(
+            updates.get("metadata") or {}
+        )
+        return self.runs[run_id]
+
+
+def _patched_registry(monkeypatch) -> _RecordingRegistry:
+    registry = _RecordingRegistry()
+    monkeypatch.setattr(
+        "app.services.run_registry.RunRegistry", lambda: registry, raising=True
+    )
+    return registry
+
+
+def test_enqueue_stamps_the_worker_identity_when_a_run_id_is_given(monkeypatch):
+    """Ohne diesen Stempel hat ein In-Process-Job keine pruefbare Liveness —
+    nach einem SIGTERM bleibt sein Manifest fuer immer auf 'processing'."""
+    from app.jobs import enqueue
+    from app.jobs.identity import worker_token
+
+    registry = _patched_registry(monkeypatch)
+    done = threading.Event()
+
+    enqueue("simulation_prepare", done.set, run_id="run_abc")
+    done.wait(timeout=5)
+
+    assert registry.calls, "kein update_run aufgerufen"
+    run_id, updates = registry.calls[0]
+    assert run_id == "run_abc"
+    assert updates["metadata"]["worker_token"] == worker_token()
+    assert updates["metadata"]["worker_pid"] > 0
+
+
+def test_enqueue_without_run_id_touches_no_registry(monkeypatch):
+    from app.jobs import enqueue
+
+    registry = _patched_registry(monkeypatch)
+    done = threading.Event()
+
+    enqueue("adhoc", done.set)
+    done.wait(timeout=5)
+
+    assert registry.calls == []
+
+
+def test_a_failing_registry_never_prevents_the_job(monkeypatch, caplog):
+    """Bookkeeping darf den Job nicht verhindern — ein nicht gestempelter Job
+    ist schlechter beobachtbar, ein nicht gestarteter ist kaputt."""
+    from app.jobs import enqueue
+
+    class _Broken:
+        def update_run(self, *_a, **_k):
+            raise OSError("registry unavailable")
+
+    monkeypatch.setattr(
+        "app.services.run_registry.RunRegistry", lambda: _Broken(), raising=True
+    )
+    done = threading.Event()
+
+    enqueue("simulation_prepare", done.set, run_id="run_abc")
+
+    assert done.wait(timeout=5), "Job lief nicht trotz Registry-Fehler"
+
+
+def test_identity_survives_a_restart_as_orphaned(monkeypatch):
+    """Die Kette als Ganzes: gestempelt, Prozess weg, Reconciliation greift."""
+    from app.jobs import enqueue
+    from app.services.sim.reconciliation import reconcile_stale_jobs
+
+    registry = _patched_registry(monkeypatch)
+    done = threading.Event()
+    enqueue("simulation_prepare", done.set, run_id="run_abc")
+    done.wait(timeout=5)
+    stamped = dict(registry.runs["run_abc"]["metadata"])
+
+    class _AfterRestart:
+        """Derselbe Registry-Inhalt, gelesen von einem anderen Prozess."""
+
+        def __init__(self) -> None:
+            self.updates: list = []
+
+        def list_runs(self, *, statuses, run_type, limit):
+            if run_type != "simulation_prepare":
+                return []
+            return [
+                {
+                    "run_id": "run_abc",
+                    "run_type": "simulation_prepare",
+                    "status": "processing",
+                    "entity_id": "sim_0123456789ab",
+                    "linked_ids": {"simulation_id": "sim_0123456789ab"},
+                    "metadata": stamped,
+                }
+            ]
+
+        def update_run(self, run_id, **updates):
+            self.updates.append((run_id, updates))
+            return {}
+
+    after = _AfterRestart()
+
+    # Im selben Prozess gilt der Job als lebend ...
+    assert reconcile_stale_jobs(after, fail_simulation_state=lambda *_: None).skipped_run_ids == [
+        "run_abc"
+    ]
+    assert after.updates == []
+
+    # ... aus Sicht eines anderen Prozesses als verwaist.
+    result = reconcile_stale_jobs(
+        after, owns=lambda _meta: False, fail_simulation_state=lambda *_: None
+    )
+    assert result.reconciled_run_ids == ["run_abc"]
+    assert after.updates[0][1]["status"] == "failed"
+    assert after.updates[0][1]["termination_reason"] == "process_restart"

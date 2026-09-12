@@ -353,7 +353,7 @@ def _run_build(monkeypatch, builder: _FakeBuilder, *, run_id: str) -> dict:
     monkeypatch.setattr("app.services.graph_build.NERExtractor", lambda **_k: MagicMock())
     monkeypatch.setattr("app.services.graph_build.ArtifactLocator.existing_paths", lambda _paths: {})
     monkeypatch.setattr("app.services.graph_build.TextProcessor.split_text", lambda *_a, **_k: ["c1", "c2"])
-    monkeypatch.setattr("app.jobs.enqueue", lambda _name, fn: fn())
+    monkeypatch.setattr("app.jobs.enqueue", lambda _name, fn, **_kw: fn())
 
     GraphBuildService.build_graph(
         project_id=PROJECT_ID,

@@ -476,4 +476,5 @@ class ReportGenerationService:
                 task_manager.fail_task(task_id, error_msg)
 
         from ..jobs import enqueue
-        enqueue("report_generate", run_generate)
+        # run_id: Issue #1472 — siehe simulation_prepare.
+        enqueue("report_generate", run_generate, run_id=run_record["run_id"])

@@ -136,7 +136,7 @@ def _run_build(monkeypatch, builder: _FakeBuilder, *, manifest: DocumentManifest
     )
     # Der Task läuft synchron statt über die Queue — sonst prüft der Test nur,
     # dass etwas eingereiht wurde, nicht was es tut.
-    monkeypatch.setattr("app.jobs.enqueue", lambda _name, fn: fn())
+    monkeypatch.setattr("app.jobs.enqueue", lambda _name, fn, **_kw: fn())
 
     GraphBuildService.build_graph(
         project_id=PROJECT_ID,
