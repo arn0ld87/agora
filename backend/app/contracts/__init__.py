@@ -148,6 +148,12 @@ from .pipeline_degradation_contract import (
     PipelineDegradationReport,
 )
 from .persona_target_contract import PersonaTargetContract
+from .supabase_mirror_contract import (
+    DocumentMirrorRecord,
+    ReportIndexRecord,
+    RunEventMirrorRecord,
+    RunMirrorRecord,
+)
 from .report_v3 import (
     Claim,
     ChangeRecommendation,
@@ -215,6 +221,11 @@ __all__ = [
     "PersonaQuotaActual",
     "PersonaQuotaPlan",
     "PersonaTargetContract",
+    # Supabase-Mirror (Phase 1)
+    "DocumentMirrorRecord",
+    "ReportIndexRecord",
+    "RunEventMirrorRecord",
+    "RunMirrorRecord",
     "ReportClaimModel",
     "ReportContractModel",
     "ReportModel",

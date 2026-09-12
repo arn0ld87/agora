@@ -137,6 +137,18 @@ def _limit_upload_endpoint():
     response.headers["Retry-After"] = str(result.retry_after_seconds)
     return response, status
 
+
+def _mirror_uploaded_documents(project_id: str, entries, file_paths: dict) -> None:
+    """Supabase-Mirror (Phase 1): best-effort, asynchron, nie fatal —
+    das Projekt-Verzeichnis bleibt die Wahrheit."""
+    try:
+        from ..services.supabase_mirror import get_supabase_mirror
+
+        get_supabase_mirror().mirror_documents(project_id, entries, file_paths=file_paths)
+    except Exception:  # noqa: BLE001 — Mirror darf den Upload nie brechen
+        logger.warning("supabase mirror submit failed (non-fatal)", exc_info=True)
+
+
 @graph_bp.route('/ontology/generate', methods=['POST'])
 @require_scope("graph:write")
 @handle_api_errors(log_prefix="Ontology generation failed")
@@ -193,6 +205,9 @@ def generate_ontology():
     all_text = ""
     document_manifest_entries: list[DocumentManifestEntry] = []
     existing_document_ids: set = set()
+    # Supabase-Mirror (Phase 1): document_id -> gespeicherter Pfad, damit der
+    # Mirror size/sha256 als abgeleitete Anreicherung nachreichen kann.
+    mirrored_file_paths: dict[str, str] = {}
 
     try:
         for file in uploaded_files:
@@ -230,6 +245,7 @@ def generate_ontology():
                 marker = f"\n\n=== {file_info['original_filename']} ===\n"
                 document_id = derive_document_id(file_info["original_filename"], existing_document_ids)
                 existing_document_ids.add(document_id)
+                mirrored_file_paths[document_id] = file_info["path"]
                 start_offset = len(all_text) + len(marker)
                 all_text += f"{marker}{text}"
                 end_offset = len(all_text)
@@ -302,6 +318,15 @@ def generate_ontology():
     except ValueError as exc:
         _discard_project_after_upload_failure(project.project_id)
         return json_error_from_exception(exc)
+
+    # Supabase-Mirror erst hier: Vorher kann jeder Fehlerpfad
+    # (save_project, generate_ontology) das Projektverzeichnis via
+    # _discard_project_after_upload_failure() wieder loeschen — ein bereits
+    # abgesetzter, asynchroner Mirror-Auftrag wuerde dann Dokumentzeilen zu
+    # einem Projekt schreiben, das lokal nicht mehr existiert.
+    _mirror_uploaded_documents(
+        project.project_id, document_manifest_entries, mirrored_file_paths
+    )
 
     return json_success({
         "project_id": project.project_id,

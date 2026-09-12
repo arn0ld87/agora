@@ -68,6 +68,19 @@ else:
     load_dotenv(override=False)
 
 
+def _validate_supabase_settings(errors: list) -> None:
+    """Supabase-Mirror-Pflichtfelder (nur geprueft, wenn aktiviert)."""
+    if not Config.SUPABASE_ENABLED:
+        return
+    if not Config.SUPABASE_URL:
+        errors.append("SUPABASE_ENABLED=true requires SUPABASE_URL (internal Kong/REST endpoint)")
+    if not Config.SUPABASE_SERVICE_ROLE_KEY:
+        errors.append(
+            "SUPABASE_ENABLED=true requires SUPABASE_SERVICE_ROLE_KEY "
+            "(service_role key, backend env only — never frontend)"
+        )
+
+
 class Config:
     """Flask configuration class"""
 
@@ -126,6 +139,22 @@ class Config:
     # Agent tool-use during simulation. Experimental and intentionally opt-in.
     ENABLE_AGENT_TOOLS = os.environ.get('ENABLE_AGENT_TOOLS', 'false').lower() in ('true', '1', 'yes')
     MAX_TOOL_CALLS_PER_ACTION = int(os.environ.get('MAX_TOOL_CALLS_PER_ACTION', '2'))
+
+    # ===== Supabase-Mirror (self-hosted, optional; Plan docs/plans/supabase.md) =====
+    # Postgres-Spiegel fuer App-Metadaten (Schema `agora`). Bewusst KEIN Ersatz
+    # fuer Neo4j (Graph/Vektoren), Ollama (Inferenz) oder das Dateisystem
+    # (Run-/Report-Artefakte): Postgres ist Index, nie zweite Wahrheit.
+    # Default false: kein einziges Netzwerk-Byte Richtung Supabase.
+    SUPABASE_ENABLED = os.environ.get('SUPABASE_ENABLED', 'false').lower() in ('true', '1', 'yes')
+    # Interner Kong-/REST-Endpoint des self-hosted Supabase (Operator-Konfiguration,
+    # z.B. Compose-Service-Name oder Tailscale-Adresse). Kein Default-Absichtswert.
+    SUPABASE_URL = os.environ.get('SUPABASE_URL', '').rstrip('/')
+    # service_role-Key: NUR Flask-Backend (Env), nie im Image-Builder, nie im Frontend.
+    SUPABASE_SERVICE_ROLE_KEY = os.environ.get('SUPABASE_SERVICE_ROLE_KEY', '')
+    # anon-Key: Fuer Phase 2 (Frontend-Realtime). Phase 0/1 benoetigen ihn nicht.
+    SUPABASE_ANON_KEY = os.environ.get('SUPABASE_ANON_KEY', '')
+    SUPABASE_SCHEMA = os.environ.get('SUPABASE_SCHEMA', 'agora')
+    SUPABASE_TIMEOUT_SECONDS = float(os.environ.get('SUPABASE_TIMEOUT_SECONDS', '5.0'))
 
     # Embedding configuration. VECTOR_DIM muss zur Ausgabe des EMBEDDING_MODEL passen
     # (nomic-embed-text: 768, embeddinggemma:300m: 768, qwen3-embedding:4b: 2560,
@@ -419,6 +448,8 @@ class Config:
                     "AGORA_AUTH_TOKEN missing in non-debug mode "
                     "(set AGORA_ALLOW_ANONYMOUS=true to opt out explicitly)"
                 )
+
+        _validate_supabase_settings(errors)
 
         expected_dim = infer_vector_dim_for_model(cls.EMBEDDING_MODEL)
         if expected_dim and cls.VECTOR_DIM != expected_dim:

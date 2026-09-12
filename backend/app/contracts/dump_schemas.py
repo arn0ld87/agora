@@ -88,6 +88,12 @@ from app.contracts.embedding_contract import (
 )
 from app.contracts.interview_envelope_contract import InterviewEnvelope
 from app.contracts.document_manifest_contract import DocumentManifest, DocumentManifestEntry
+from app.contracts.supabase_mirror_contract import (
+    DocumentMirrorRecord,
+    ReportIndexRecord,
+    RunEventMirrorRecord,
+    RunMirrorRecord,
+)
 from app.contracts.run_manifest_contract import (
     ManifestInputs,
     ManifestPrompts,
@@ -175,6 +181,11 @@ CONTRACTS: dict[str, type] = {
     # Dokument-Manifest-Sidecar (ADR-0013 Slice 1, Teil A — Issue #1152)
     "document-manifest.schema.json": DocumentManifest,
     "document-manifest-entry.schema.json": DocumentManifestEntry,
+    # Supabase-Mirror (Phase 1 — docs/plans/supabase.md)
+    "supabase-run-mirror.schema.json": RunMirrorRecord,
+    "supabase-run-event-mirror.schema.json": RunEventMirrorRecord,
+    "supabase-report-index.schema.json": ReportIndexRecord,
+    "supabase-document-mirror.schema.json": DocumentMirrorRecord,
     # Run-Manifest (Issue #763 — Reproduzierbare Runs)
     "run-manifest.schema.json": RunManifest,
     "manifest-inputs.schema.json": ManifestInputs,

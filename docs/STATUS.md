@@ -164,6 +164,7 @@ Chat-Routing und Embedding-Konfiguration sind absichtlich getrennt. Die persiste
 - `NEO4J_PASSWORD` für eine externe/individuelle Neo4j-Instanz bleibt Operator-Konfiguration.
 - Reports liegen unter `backend/uploads/reports/`, nicht unter `backend/reports/` (#1483).
 - Prod bindet Backend standardmäßig an Loopback und nutzt einen read-only Root-Filesystem-Ansatz mit expliziten Write-Pfaden.
+- **Supabase-Mirror (Phase 0/1, optional, Default aus):** self-hosted Supabase als App-Metadaten-Index (Schema `agora`) hinter `SUPABASE_ENABLED`. Postgres ist Spiegel, nie Wahrheit; Rebuild via `python -m app.services.supabase_mirror.rebuild`. DDL/RLS in `deploy/supabase/`, Plan in `docs/plans/supabase.md` — Phase 2 (Realtime) und Phase 3 (Auth) sind noch nicht umgesetzt. Der Operator muss das Schema zusaetzlich fuer PostgREST exponieren (`PGRST_DB_SCHEMAS=...,agora`), sonst scheitert jeder Upsert mit PGRST106; `rebuild --check` prueft genau das.
 
 Backup/Restore ist dokumentiert, aber der 0.10-Abnahmepunkt verlangt weiterhin einen **nachgewiesenen Fresh-Host-Restore-, Upgrade- und Rollback-Smoke** ([#766](https://github.com/arn0ld87/agora/issues/766)). Dokumentation ist kein Restore-Test, auch wenn Menschen seit Jahrzehnten tapfer so tun.
 

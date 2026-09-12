@@ -8,7 +8,7 @@ import json
 import uuid
 import shutil
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Iterator, List, Optional
 from enum import Enum
 from dataclasses import dataclass, field
 from ..config import Config
@@ -242,6 +242,21 @@ class ProjectManager:
         return Project.from_dict(data)
 
     @classmethod
+    def iter_projects(cls) -> Iterator[Project]:
+        """Yield every persisted project, unsorted and without a cap.
+
+        Der Gegenpart zu ``list_projects``: Wer vollstaendig ueber alle
+        Projekte laufen muss (Supabase-Rebuild), darf nicht am
+        ``limit``-Schnitt haengen bleiben und trotzdem "complete" melden.
+        """
+        cls._ensure_projects_dir()
+
+        for project_id in os.listdir(cls.PROJECTS_DIR):
+            project = cls.get_project(project_id)
+            if project:
+                yield project
+
+    @classmethod
     def list_projects(cls, limit: int = 50) -> List[Project]:
         """
         List all projects
@@ -252,13 +267,7 @@ class ProjectManager:
         Returns:
             Project list, sorted by creation time (descending)
         """
-        cls._ensure_projects_dir()
-
-        projects = []
-        for project_id in os.listdir(cls.PROJECTS_DIR):
-            project = cls.get_project(project_id)
-            if project:
-                projects.append(project)
+        projects = list(cls.iter_projects())
 
         # Sort by creation time (descending)
         projects.sort(key=lambda p: p.created_at, reverse=True)
