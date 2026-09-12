@@ -27,11 +27,11 @@ Jeder Befund wurde gegen den aktuellen `main` verifiziert, der Datenfluss nachvo
 | Blocked-URL-Exception leakt Secrets | `app/security/outbound_http.py` | `tests/security/test_outbound_http.py` |
 | Nebenklausel erbt Kopf-Prädikat | `app/services/evidence_entailment.py` | `tests/regression/test_evidence_local_clause_predicate.py` |
 
-## Verifizierte, weiterhin offene Architekturblocker
+## Architekturblocker
 
-Diese drei wurden in diesem Lauf **nur geprüft und dokumentiert**, nicht angefasst. Sie gehören jeweils in einen eigenen PR — halb reparierte Architektur ist schlechter als klar benannte offene Architektur.
+Diese drei waren zunächst nur geprüft und dokumentiert. Auf ausdrückliche Anweisung wurden sie anschließend bearbeitet — der Stand je Blocker steht unten. Der Befund selbst (Nachweis, dass der Blocker zum Prüfzeitpunkt bestand) bleibt unverändert stehen; er ist die Begründung der jeweiligen Änderung.
 
-### Durable Background Jobs — OPEN
+### Durable Background Jobs — TEILWEISE GESCHLOSSEN
 
 Nachweis am 11.09.2026: `backend/app/jobs/__init__.py` trägt weiterhin
 
@@ -50,20 +50,34 @@ Folgeempfehlung: eigener PR gegen [#1472](https://github.com/arn0ld87/agora/issu
 
 Spontan RQ in einen Stabilisierungslauf zu ziehen wäre genau der Fehler, den dieser Lauf vermeiden soll.
 
-### Embedding-Runtime-SSoT — OPEN
+**Umgesetzt (Schritt 1 der Empfehlung, ohne Queue):** Der endlos laufende Status ist weg. `app/jobs/identity.py` gibt jedem Webprozess eine PID plus ein einmaliges Token; `enqueue` stempelt beides ins RunRegistry-Manifest, *bevor* der Thread startet. `reconcile_stale_jobs` erkennt daran beim nächsten Start, dass der Eigentümerprozess weg ist, und markiert `failed`/`process_restart` — denselben Endzustand, den `reconcile_stale_runs` für denselben Sachverhalt schreibt. Für `simulation_prepare` kommt zusätzlich der `SimulationState` aus `preparing` heraus.
+
+Bewusst **kein** neuer `interrupted`-Statuswert: `PREPARING → FAILED` ist im FSM bereits erlaubt, und ein eigener Wert hätte Frontend, FSM und jeden Consumer berührt, ohne mehr auszusagen als der Grund es schon tut.
+
+**Offen bleibt die Wiederaufnahme** — Punkte 2 und 3 der Empfehlung. `_BACKEND` ist weiterhin `"thread"`, es gibt keinen Heartbeat und keinen wiederaufnehmbaren Zwischenstand. Ein abgebrochener Lauf ist jetzt ehrlich gescheitert statt ewig laufend; er ist nicht fortsetzbar.
+
+### Embedding-Runtime-SSoT — GESCHLOSSEN
 
 Nachweis am 11.09.2026: `EmbeddingService.__init__` (`app/storage/embedding_service.py`) löst weiterhin gegen `Config.EMBEDDING_MODEL` / `Config.EMBEDDING_BASE_URL` / `Config.EMBEDDING_API_KEY` auf, und beide produktiven Consumer konstruieren argumentlos:
 
 * `app/storage/neo4j_storage.py:69` — `EmbeddingService()`
 * `app/services/report_agent/evidence.py:239` — `EmbeddingService()`
 
-Die in der GUI aktivierte Konfiguration steuert damit den Laufzeitpfad nicht. [#1417](https://github.com/arn0ld87/agora/issues/1417) bleibt offen; der dort beschriebene Vorschlag (Store → Provider-Connection → Secret-Store, dann erst `Config.*`) ist ein Architektur-PR, kein Nebenprodukt einer Bugfix-Serie. Halb repariert wäre er schlimmer als offen: ein Consumer aus dem Store, einer aus der Env, und Vektoren zweier Modelle im selben Index.
+Die in der GUI aktivierte Konfiguration steuerte den Laufzeitpfad damit nicht.
 
-### Backup / Restore / Upgrade / Rollback — OPEN
+**Umgesetzt:** `embedding_configurations/runtime.py` löst Store → Provider-Connection → Secret-Store auf; die Präzedenz in `EmbeddingService` ist ausdrückliche Argumente > aktive Store-Konfiguration > `Config.*`. Beide argumentlosen Consumer folgen damit dem Store, der Migrationslauf übergibt seine Route weiterhin ausdrücklich. Eine aktive, aber unvollständig auflösbare Konfiguration wirft, statt auf die Env zurückzufallen — ein Rückfall wäre genau die Halb-Übergabe, gegen die der Chat-Pfad absichert. Zusätzlich lehnt `activate()` einen Dimensionswechsel ohne passende Indexversion ab.
+
+Der Modellwechsel bei *gleicher* Dimension bleibt strukturell zulässig; davor schützt weiterhin nur der Migrationslauf.
+
+### Backup / Restore / Upgrade / Rollback — OFFEN (Werkzeug steht)
 
 `docs/backup-restore.md` beschreibt das Verfahren und sagt selbst, dass die `neo4j-admin`-Syntax vor einem Drill gegen die laufende Version zu prüfen ist. Ein durchgeführter, reproduzierter Fresh-Host-Restore-, Upgrade- und Rollback-Smoke ist nicht belegt. [#766](https://github.com/arn0ld87/agora/issues/766) bleibt offen.
 
-Dokumentation ersetzt den Betriebsnachweis nicht. Der Drill braucht einen frischen Host, ein echtes Backup aus einem echten Lauf und ein protokolliertes Ergebnis — und gehört deshalb in einen eigenen Vorgang mit Umgebung, nicht in einen Code-PR.
+Dokumentation ersetzt den Betriebsnachweis nicht. Der Drill braucht einen frischen Host, ein echtes Backup aus einem echten Lauf und ein protokolliertes Ergebnis.
+
+**Umgesetzt: das Werkzeug, nicht der Nachweis.** `scripts/restore-drill.sh` fährt die dokumentierte Reihenfolge und protokolliert jeden Befehl; `backend/scripts/restore_verify.py` prüft die bisherige Prosa-Checkliste maschinell, wobei ein übersprungener Punkt nicht als bestanden zählt. In der Testsuite läuft die Verifikationsphase echt, die übrigen vier nur im Dry-Run — dieser Container hat keinen Docker-Daemon (`docker info`: `dial unix /var/run/docker.sock: no such file or directory`).
+
+**#766 bleibt offen.** Ein Dry-Run-Protokoll ist kein Betriebsnachweis; das Skript schreibt diesen Satz selbst hinein, damit ein solches Log nicht versehentlich an das Issue wandert. Durchführung: [`../runbooks/restore-drill.md`](../runbooks/restore-drill.md).
 
 ## Qualitäts-Gates
 

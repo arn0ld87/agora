@@ -169,7 +169,14 @@ Preflight, Zeit-, Token-, Kosten- und LLM-Aufrufbudgets sind produktiv. Seit #14
 
 Chat-Routing und Embedding-Konfiguration sind absichtlich getrennt. Die persistente Embedding-Konfiguration lebt im `EmbeddingConfigurationStore`, Migrationen besitzen einen eigenen Lifecycle.
 
-**Offener SSoT-Bruch:** Der produktive Runtime-Pfad kann weiterhin `Config.EMBEDDING_*` aus der Umgebung verwenden, obwohl in der UI eine andere aktive Embedding-Konfiguration gewählt wurde. Bei zwei Modellen gleicher Dimension schützt der Dimensionswächter nicht vor einem semantisch inkompatiblen Vektorraum. Siehe [#1417](https://github.com/arn0ld87/agora/issues/1417). Bis zur Behebung gilt die UI-Aktivierung **nicht** als Beweis dafür, dass jeder Runtime-Consumer dieselbe Konfiguration nutzt.
+Der Runtime-Pfad folgt seit [#1417](https://github.com/arn0ld87/agora/issues/1417) der aktiven Konfiguration: `EmbeddingService()` löst in der Reihenfolge ausdrückliche Argumente → aktive Store-Konfiguration → Legacy-Sicht aus `Config.*` auf. Der Migrationslauf übergibt seine Route weiterhin ausdrücklich und bleibt unberührt.
+
+Zwei Punkte gehören dazu und sind bewusst hart:
+
+- Eine aktive Konfiguration, deren Verbindung fehlt, deaktiviert ist oder keine Basis-URL trägt, **wirft**, statt auf `Config.*` zurückzufallen. Ein Rückfall würde Modell aus dem Store mit dem Endpoint aus der `.env` mischen — dieselbe stille Provider-Vertauschung, gegen die der Chat-Pfad absichert.
+- `activate()` lehnt einen Dimensionswechsel ab, solange keine Indexversion in der neuen Dimension existiert. Geprüft wird gegen die Indexversion, nicht gegen die abgelöste Konfiguration: nach einer abgeschlossenen Migration ist die Aktivierung genau der gewollte letzte Schritt.
+
+Ein Modellwechsel bei **gleicher** Dimension bleibt strukturell zulässig; davor schützt weiterhin nur der Migrationslauf, nicht der Dimensionswächter (#263).
 
 ## Installation und Betrieb
 
@@ -179,7 +186,9 @@ Chat-Routing und Embedding-Konfiguration sind absichtlich getrennt. Die persiste
 - Reports liegen unter `backend/uploads/reports/`, nicht unter `backend/reports/` (#1483).
 - Prod bindet Backend standardmäßig an Loopback und nutzt einen read-only Root-Filesystem-Ansatz mit expliziten Write-Pfaden.
 
-Backup/Restore ist dokumentiert, aber der 0.10-Abnahmepunkt verlangt weiterhin einen **nachgewiesenen Fresh-Host-Restore-, Upgrade- und Rollback-Smoke** ([#766](https://github.com/arn0ld87/agora/issues/766)). Dokumentation ist kein Restore-Test, auch wenn Menschen seit Jahrzehnten tapfer so tun.
+Backup/Restore ist dokumentiert, und seit [#766](https://github.com/arn0ld87/agora/issues/766)-Vorarbeit auch **ausführbar**: [`scripts/restore-drill.sh`](../scripts/restore-drill.sh) fährt Backup → Restore → Verifikation → Upgrade → Rollback und protokolliert jeden Schritt; [`backend/scripts/restore_verify.py`](../backend/scripts/restore_verify.py) prüft die bisherige Prosa-Checkliste maschinell, wobei ein übersprungener Punkt ausdrücklich nicht als bestanden zählt.
+
+**#766 bleibt offen.** Das ist das Werkzeug, nicht der Nachweis: der Abnahmepunkt verlangt einen **durchgeführten** Fresh-Host-Restore-, Upgrade- und Rollback-Smoke mit echtem Backup. Ein Dry-Run-Protokoll ist keiner — das Skript schreibt diesen Satz selbst hinein. Durchführung: [`runbooks/restore-drill.md`](runbooks/restore-drill.md). Dokumentation ist kein Restore-Test, auch wenn Menschen seit Jahrzehnten tapfer so tun.
 
 ## Security
 
@@ -214,13 +223,13 @@ Reproduzierbarkeit:
 
 Priorität vor neuen Features:
 
-1. #1472 — langlebige Prepare-/Report-/Graph-Jobs restart-/interrupt-sicher machen.
-2. #1417 — Embedding-Runtime auf eine kanonische aktive Konfiguration führen.
+1. #1472 — **Teil erledigt.** Ein per SIGTERM abgeschnittener Prepare-/Report-/Graph-Build-Job wird beim nächsten Start als verwaist erkannt und auf `failed`/`process_restart` korrigiert, statt für immer auf `processing` zu stehen; die Liveness kommt aus der Prozess-Identität im Manifest (`app/jobs/identity.py`). **Offen bleibt die Wiederaufnahme**: `_BACKEND` ist weiterhin `"thread"`, es gibt keine persistente Queue und keinen wiederaufnehmbaren Zwischenstand. Eine Queue, die einen nicht-idempotenten Schritt erneut ausführt, verdoppelt Artefakte statt sie zu retten — idempotente Schritte kommen zuerst.
+2. #1417 — **erledigt**, siehe Abschnitt „Embeddings".
 3. #1470/#1471 — Entitätsauflösung und Persona-Domänenkohärenz.
 4. #1236/#1323 — Recommender- und Rollen-Konsistenz der Simulation.
 5. #1345/#1240 — Quantoren/Evidence und Eval-Leakage.
 6. #763/#1274 — echtes Manifest und Replay.
-7. #766 — Backup/Restore/Upgrade/Rollback nachweisen.
+7. #766 — Backup/Restore/Upgrade/Rollback nachweisen. Werkzeug und Runbook stehen; der Durchgang auf einem frischen Host fehlt.
 8. #765 — Agora gegen einfachere LLM-/Persona-Baselines und reale Referenzen evaluieren.
 
 Nicht priorisiert vor 1.0: Multi-User, Kubernetes/Helm, Federation, allgemeines Plugin-System oder ein weiterer großer Frontend-Rewrite.
