@@ -716,5 +716,6 @@ class GraphBuildService:
                     clear_cancel(run_record["run_id"])
 
             from ..jobs import enqueue
-            enqueue("graph_build", build_task)
+            # run_id: Issue #1472 — siehe simulation_prepare.
+            enqueue("graph_build", build_task, run_id=run_record["run_id"])
         return task_id, run_record["run_id"]

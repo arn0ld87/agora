@@ -20,6 +20,7 @@ import uuid
 from typing import Any, Callable
 
 from ..utils.logger import get_logger
+from .identity import current_worker_identity
 
 logger = get_logger("agora.jobs")
 
@@ -65,14 +66,35 @@ def enqueue(
         job_name: Human-readable name used in logs and future queue routing.
         target:   Callable to execute in the background.
         *args:    Positional arguments forwarded to *target*.
-        run_id:   Optional run-registry ID for correlation (unused today,
-                  will be forwarded to the RQ job context in Wave 2).
+        run_id:   Optional run-registry ID. Wird mit der Prozess-Identitaet
+                  dieses Workers gestempelt, damit die Startup-Reconciliation
+                  einen nach SIGTERM verwaisten Job erkennt (Issue #1472) —
+                  in Wave 2 zusaetzlich der RQ-Job-Kontext.
         **kwargs: Keyword arguments forwarded to *target*.
 
     Returns:
         A stable ``job_id`` of the form ``job_<12-hex-chars>``.
     """
     job_id = f"job_{uuid.uuid4().hex[:12]}"
+
+    # Issue #1472: In-Process-Jobs haben keine eigene Prozess-ID, an der sich
+    # ihre Liveness nach einem Neustart pruefen liesse — sie laufen als Thread
+    # IM Webprozess. Der Stempel muss VOR dem Start stehen: startet der Thread
+    # zuerst und der Prozess stirbt dazwischen, traegt das Manifest keine
+    # Identitaet, und die Reconciliation behandelt es (korrekt) als verwaist.
+    # Bookkeeping darf den Job nie verhindern, deshalb best effort.
+    if run_id:
+        try:
+            from ..services.run_registry import RunRegistry
+
+            RunRegistry().update_run(run_id, metadata=current_worker_identity())
+        except Exception as exc:  # noqa: BLE001 — Job-Start hat Vorrang
+            logger.warning(
+                "Prozess-Identitaet fuer run_id=%s nicht gestempelt (%s) — ein "
+                "Abbruch dieses Jobs waere nach einem Neustart nicht als "
+                "verwaist erkennbar",
+                run_id, exc,
+            )
 
     logger.info(
         "enqueued job=%s job_id=%s backend=%s run_id=%s",

@@ -580,7 +580,11 @@ def _prepare_simulation_under_start_lock(
                 ),
             )
             try:
-                enqueue("simulation_prepare", tracked_job)
+                # run_id: Issue #1472 — stempelt die Prozess-Identitaet ins
+                # Manifest, damit ein per SIGTERM abgeschnittener Prepare-Job
+                # beim naechsten Start als verwaist erkannt wird statt fuer
+                # immer auf "processing" zu stehen.
+                enqueue("simulation_prepare", tracked_job, run_id=run_record["run_id"])
             except BaseException:
                 _discard_active_prepare_job(simulation_id)
                 raise
