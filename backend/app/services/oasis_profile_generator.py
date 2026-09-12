@@ -318,8 +318,12 @@ class OasisProfileGenerator:
     def _is_group_entity(self, entity_type: str) -> bool:
         return _oasis_profile_context._is_group_entity(self, entity_type)
 
-    def _build_eligibility_prompt_block(self, entity_name: str, entity_type: str) -> str:
-        return _oasis_profile_context._build_eligibility_prompt_block(self, entity_name, entity_type)
+    def _build_eligibility_prompt_block(
+        self, entity_name: str, entity_type: str, *, is_collective: bool = False
+    ) -> str:
+        return _oasis_profile_context._build_eligibility_prompt_block(
+            self, entity_name, entity_type, is_collective=is_collective
+        )
 
 
     @measure_llm_latency(operation='persona_generation', extract_model=lambda self, *a, **kw: getattr(self, 'model_name', None), extract_prompt_chars=None)

@@ -54,15 +54,64 @@ def _call_llm_with_retry(self, prompt: str, system_prompt: str, schema: Any) -> 
     raise last_error or Exception('LLM call failed')
 
 
+_CLOSER_FOR = {'{': '}', '[': ']'}
+
+
 def _fix_truncated_json(self, content: str) -> str:
-    """Fix truncated JSON"""
+    """Schliesst eine abgeschnittene JSON-Antwort in LIFO-Reihenfolge.
+
+    Die Vorgaengerfassung zaehlte lediglich ``{``/``}`` und ``[``/``]`` ueber den
+    gesamten Text — inklusive der Vorkommen *innerhalb* von String-Literalen —
+    und haengte danach pauschal erst alle ``]`` und dann alle ``}`` an.
+    Container muessen aber in umgekehrter Oeffnungsreihenfolge geschlossen
+    werden: ``{"initial_posts":[{"content":"x`` braucht ``"`` ``}`` ``]`` ``}``.
+    Ausserdem machte die Heuristik ``content[-1] not in '",}]'`` aus einer
+    abgeschnittenen Zahl (``{"agents": 12``) einen String-Anfang.
+
+    Bewusst kein vollstaendiger JSON-Parser: der Scanner verfolgt nur, ob er in
+    einem String steht (mit Escape-Behandlung), und fuehrt einen Stack der
+    offenen Container. Ein Schliesser, der nicht zum obersten Stackelement
+    passt, ist kaputtes JSON, das dieser Pfad nicht heilt — er wird ignoriert,
+    nicht "korrigiert".
+    """
     content = content.strip()
-    open_braces = content.count('{') - content.count('}')
-    open_brackets = content.count('[') - content.count(']')
-    if content and content[-1] not in '",}]':
+    if not content:
+        return content
+
+    stack: list[str] = []
+    in_string = False
+    escaped = False
+    for char in content:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == '\\':
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char in _CLOSER_FOR:
+            stack.append(char)
+        elif char in ('}', ']') and stack and _CLOSER_FOR[stack[-1]] == char:
+            stack.pop()
+
+    if in_string:
+        if escaped:
+            # Abschnitt direkt hinter einem Backslash: das Anhaengen eines
+            # Anfuehrungszeichens wuerde genau dieses escapen und den String
+            # offen lassen. Der unvollstaendige Escape faellt weg.
+            content = content[:-1]
         content += '"'
-    content += ']' * open_brackets
-    content += '}' * open_braces
+    else:
+        # Ein Komma am Ende gehoert zum naechsten, nie geschriebenen Element.
+        content = content.rstrip()
+        while content.endswith(','):
+            content = content[:-1].rstrip()
+
+    for opener in reversed(stack):
+        content += _CLOSER_FOR[opener]
     return content
 
 

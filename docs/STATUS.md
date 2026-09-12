@@ -47,6 +47,20 @@ Zusätzliche aktuelle Nachweise:
 - Ein geplanter `e2e-smokes`-Lauf auf `e6ced1a2` war am 08.09.2026 grün. Dieser Lauf liegt vor den anschließend gemergten PRs #1478/#1479 und den Dependabot-Merges; daraus wird **nicht** behauptet, dass bereits jeder Workflow auf `0c47737f` grün bestätigt wurde.
 - Echte Integrationstests unter `backend/tests/integration/` laufen gegen Redis und Neo4j. Der CI-Job setzt `AGORA_TEST_REQUIRE_SERVICES=1`, damit ein fehlender Dienst nicht als freundlicher Skip durchrutscht (#1481).
 
+### Qualitäts-Gates
+
+Drei Baseline-Gates halten Bestandsschuld sichtbar und am Wachsen gehindert. Sie reparieren nichts — sie verhindern, dass unbemerkt mehr dazukommt.
+
+| Gate | Skript | Baseline | Gemessen am |
+|---|---|---|---|
+| Komplexität (radon, D+) | `backend/scripts/check_complexity.py` | `backend/radon-allowlist.txt` (47 Einträge) | laufend |
+| mypy-Schuld hinter `ignore_errors` | `backend/scripts/check_mypy_debt.py` | `backend/mypy-debt-baseline.txt` — 266 Fehler in 55 Dateien | 11.09.2026 |
+| Coverage (Line und Branch getrennt) | `backend/scripts/check_coverage.py` | `backend/coverage-baseline.json` — 82,8 % Line / 70,9 % Branch | 11.09.2026 |
+
+Zum Coverage-Gate: der Istwert auf dem Messstand war **83,82 % Line** (26661/31806 Statements) und **71,94 % Branch** (6571/9134 Branches) über die vollständige Backend-Suite. Die Schwellen liegen je einen Punkt darunter — Puffer für Umgebungsunterschiede, kein Spielraum zum Absinken. Die vorherige Schwelle `--cov-fail-under=60` ohne Branch-Messung lag 24 Punkte unter dem Ist und konnte deshalb keine Regression erkennen ([#1495](https://github.com/arn0ld87/agora/issues/1495)).
+
+Zum Typ-Gate: `pyproject.toml` schaltet mypy für `app`, `app.config`, `app.container`, `app.models.*`, `app.services.*`, `app.storage.*`, `app.utils.*` und `app.llm.*` per `ignore_errors` ab. `mypy app` ist deshalb grün, obwohl in genau diesen Bereichen die eigentliche Arbeit liegt. Die 266 Fehler sind **nicht behoben**, sondern gemessen und gedeckelt; die `ignore_errors`-Modulliste selbst darf ebenfalls nicht wachsen.
+
 ## Produktive Architektur
 
 ### Frontend
@@ -155,7 +169,14 @@ Preflight, Zeit-, Token-, Kosten- und LLM-Aufrufbudgets sind produktiv. Seit #14
 
 Chat-Routing und Embedding-Konfiguration sind absichtlich getrennt. Die persistente Embedding-Konfiguration lebt im `EmbeddingConfigurationStore`, Migrationen besitzen einen eigenen Lifecycle.
 
-**Offener SSoT-Bruch:** Der produktive Runtime-Pfad kann weiterhin `Config.EMBEDDING_*` aus der Umgebung verwenden, obwohl in der UI eine andere aktive Embedding-Konfiguration gewählt wurde. Bei zwei Modellen gleicher Dimension schützt der Dimensionswächter nicht vor einem semantisch inkompatiblen Vektorraum. Siehe [#1417](https://github.com/arn0ld87/agora/issues/1417). Bis zur Behebung gilt die UI-Aktivierung **nicht** als Beweis dafür, dass jeder Runtime-Consumer dieselbe Konfiguration nutzt.
+Der Runtime-Pfad folgt seit [#1417](https://github.com/arn0ld87/agora/issues/1417) der aktiven Konfiguration: `EmbeddingService()` löst in der Reihenfolge ausdrückliche Argumente → aktive Store-Konfiguration → Legacy-Sicht aus `Config.*` auf. Der Migrationslauf übergibt seine Route weiterhin ausdrücklich und bleibt unberührt.
+
+Zwei Punkte gehören dazu und sind bewusst hart:
+
+- Eine aktive Konfiguration, deren Verbindung fehlt, deaktiviert ist oder keine Basis-URL trägt, **wirft**, statt auf `Config.*` zurückzufallen. Ein Rückfall würde Modell aus dem Store mit dem Endpoint aus der `.env` mischen — dieselbe stille Provider-Vertauschung, gegen die der Chat-Pfad absichert.
+- `activate()` lehnt einen Dimensionswechsel ab, solange keine Indexversion in der neuen Dimension existiert. Geprüft wird gegen die Indexversion, nicht gegen die abgelöste Konfiguration: nach einer abgeschlossenen Migration ist die Aktivierung genau der gewollte letzte Schritt.
+
+Ein Modellwechsel bei **gleicher** Dimension bleibt strukturell zulässig; davor schützt weiterhin nur der Migrationslauf, nicht der Dimensionswächter (#263).
 
 ## Installation und Betrieb
 
@@ -165,7 +186,9 @@ Chat-Routing und Embedding-Konfiguration sind absichtlich getrennt. Die persiste
 - Reports liegen unter `backend/uploads/reports/`, nicht unter `backend/reports/` (#1483).
 - Prod bindet Backend standardmäßig an Loopback und nutzt einen read-only Root-Filesystem-Ansatz mit expliziten Write-Pfaden.
 
-Backup/Restore ist dokumentiert, aber der 0.10-Abnahmepunkt verlangt weiterhin einen **nachgewiesenen Fresh-Host-Restore-, Upgrade- und Rollback-Smoke** ([#766](https://github.com/arn0ld87/agora/issues/766)). Dokumentation ist kein Restore-Test, auch wenn Menschen seit Jahrzehnten tapfer so tun.
+Backup/Restore ist dokumentiert, und seit [#766](https://github.com/arn0ld87/agora/issues/766)-Vorarbeit auch **ausführbar**: [`scripts/restore-drill.sh`](../scripts/restore-drill.sh) fährt Backup → Restore → Verifikation → Upgrade → Rollback und protokolliert jeden Schritt; [`backend/scripts/restore_verify.py`](../backend/scripts/restore_verify.py) prüft die bisherige Prosa-Checkliste maschinell, wobei ein übersprungener Punkt ausdrücklich nicht als bestanden zählt.
+
+**#766 bleibt offen.** Das ist das Werkzeug, nicht der Nachweis: der Abnahmepunkt verlangt einen **durchgeführten** Fresh-Host-Restore-, Upgrade- und Rollback-Smoke mit echtem Backup. Ein Dry-Run-Protokoll ist keiner — das Skript schreibt diesen Satz selbst hinein. Durchführung: [`runbooks/restore-drill.md`](runbooks/restore-drill.md). Dokumentation ist kein Restore-Test, auch wenn Menschen seit Jahrzehnten tapfer so tun.
 
 ## Security
 
@@ -176,6 +199,7 @@ Aktueller Schwerpunkt:
 - strukturierte `/api/status`-Fehler statt roher Exception-Strings (#1459).
 - Dependency-Risk-Register mit Hardstops; NLTK/PYSEC-2026-597 bleibt bis zur Upstream-Klärung verfolgt (#661, Hardstop 28.09.2026).
 - Outbound-Fetches mit agenten-/modellgelieferten URLs laufen zentral über `backend/app/security/outbound_http.py` (Adressklassen, Redirect-Revalidierung, IP-Pinning, Byte-Limit). Der zuvor ungeschützte Pfad `scripts/agent_tools.py::web_fetch` ist damit geschlossen ([#1485](https://github.com/arn0ld87/agora/issues/1485)).
+- Eine Ablehnung durch dieselbe Policy gibt die untrusted URL nicht mehr weiter: `OutboundRequestBlocked` trägt in der Message nur den Grund und in `.url` nur die sichere Herkunft (Schema, Host, ggf. Port). Die frühere Userinfo-Redaktion ließ Token in Query, Fragment und Pfad stehen.
 
 Bekannt offen: Simulation-`observation` wird noch nicht überall so strikt als untrusted Prompt-Input getrennt, wie für Prompt-Injection-Härtung gewünscht ([#1224](https://github.com/arn0ld87/agora/issues/1224)).
 
@@ -199,13 +223,13 @@ Reproduzierbarkeit:
 
 Priorität vor neuen Features:
 
-1. #1472 — langlebige Prepare-/Report-/Graph-Jobs restart-/interrupt-sicher machen.
-2. #1417 — Embedding-Runtime auf eine kanonische aktive Konfiguration führen.
+1. #1472 — **Teil erledigt.** Ein per SIGTERM abgeschnittener Prepare-/Report-/Graph-Build-Job wird beim nächsten Start als verwaist erkannt und auf `failed`/`process_restart` korrigiert, statt für immer auf `processing` zu stehen; die Liveness kommt aus der Prozess-Identität im Manifest (`app/jobs/identity.py`). **Offen bleibt die Wiederaufnahme**: `_BACKEND` ist weiterhin `"thread"`, es gibt keine persistente Queue und keinen wiederaufnehmbaren Zwischenstand. Eine Queue, die einen nicht-idempotenten Schritt erneut ausführt, verdoppelt Artefakte statt sie zu retten — idempotente Schritte kommen zuerst.
+2. #1417 — **erledigt**, siehe Abschnitt „Embeddings".
 3. #1470/#1471 — Entitätsauflösung und Persona-Domänenkohärenz.
 4. #1236/#1323 — Recommender- und Rollen-Konsistenz der Simulation.
 5. #1345/#1240 — Quantoren/Evidence und Eval-Leakage.
 6. #763/#1274 — echtes Manifest und Replay.
-7. #766 — Backup/Restore/Upgrade/Rollback nachweisen.
+7. #766 — Backup/Restore/Upgrade/Rollback nachweisen. Werkzeug und Runbook stehen; der Durchgang auf einem frischen Host fehlt.
 8. #765 — Agora gegen einfachere LLM-/Persona-Baselines und reale Referenzen evaluieren.
 
 Nicht priorisiert vor 1.0: Multi-User, Kubernetes/Helm, Federation, allgemeines Plugin-System oder ein weiterer großer Frontend-Rewrite.

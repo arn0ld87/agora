@@ -157,7 +157,15 @@ Master-Keys müssen **vor** dem ersten produktiven Zugriff auf die verschlüssel
 
 ## Restore-Verifikation
 
-Ein Restore gilt erst als brauchbar, wenn mindestens folgende Checks grün sind:
+Ein Restore gilt erst als brauchbar, wenn mindestens folgende Checks grün sind.
+
+Die Punkte unter „Artefakte", „Provider/Secrets" und „Reconciliation" prüft [`backend/scripts/restore_verify.py`](../backend/scripts/restore_verify.py) maschinell und schreibt ein Protokoll mit Zeitstempel und Exit-Code:
+
+```bash
+cd backend && uv run python scripts/restore_verify.py --data-dir uploads
+```
+
+Ein übersprungener Punkt zählt dort ausdrücklich **nicht** als bestanden. Für den vollständigen Fresh-Host-Durchgang siehe [`runbooks/restore-drill.md`](runbooks/restore-drill.md).
 
 ### Infrastruktur
 
@@ -193,7 +201,7 @@ curl -fsS \
 
 ## Reconciliation nach Restore
 
-Beim Start führt Agora für persistierte Simulation-Runs Startup-Reconciliation aus (#1476). Runs, deren gespeicherte PID auf dem neuen Host naturgemäß nicht mehr lebt, können als:
+Beim Start führt Agora Startup-Reconciliation aus — für persistierte Simulation-Runs anhand der gespeicherten PID (#1476) und für die In-Process-Jobs (Prepare, Report, Graph-Build) anhand der Prozess-Identität im Manifest (#1472). Runs, deren Eigentümerprozess auf dem neuen Host naturgemäß nicht mehr existiert, können als:
 
 ```text
 failed / process_restart

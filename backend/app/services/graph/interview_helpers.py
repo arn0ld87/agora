@@ -11,6 +11,11 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List, Optional
 
+from ...contracts.interview_contract import (
+    InterviewAgentSelection,
+    InterviewQuestions,
+    PersistedAgentProfiles,
+)
 from ...utils.logger import get_logger
 from ..interview_panel import InterviewPanelTracker
 from .graph_dtos import AgentInterview
@@ -61,7 +66,16 @@ def load_agent_profiles(
     if os.path.exists(reddit_profile_path):
         try:
             with open(reddit_profile_path, "r", encoding="utf-8") as file_handle:
-                profiles = json.load(file_handle)
+                raw_profiles = json.load(file_handle)
+            # Strukturpruefung vor der Nutzung: die Datei wurde bisher
+            # ungeprueft als ``List[Dict[str, Any]]`` weitergereicht. Ein
+            # ``{"profiles": []}``-Wrapper, ``[null]`` oder ``[123]`` flog erst
+            # weit spaeter beim ersten ``profile.get(...)`` auseinander — dort
+            # ohne jeden Bezug zur eigentlichen Ursache. Bewusst nur validiert,
+            # nicht umgeschrieben: weitergereicht werden die Originaldicts
+            # (siehe PersistedAgentProfiles).
+            PersistedAgentProfiles.model_validate(raw_profiles)
+            profiles = raw_profiles
             logger.info(
                 "Loaded %s profiles from reddit_profiles.json",
                 len(profiles),
@@ -168,22 +182,22 @@ Please select up to {max_agents} most suitable Agents for interview and explain 
             ],
             temperature=0.3,
             max_tokens=32768,
+            schema=InterviewAgentSelection,
+            schema_name="interview_agent_selection",
         )
 
-        selected_indices = response.get("selected_indices", [])[:max_agents]
-        reasoning = response.get(
-            "reasoning",
-            "Automatically selected based on relevance",
+        # Der Vertrag prueft Typ (kein bool, kein String), Vorzeichen,
+        # Eindeutigkeit sowie — ueber den Kontext — Profilgrenzen und Cap.
+        # Vorher filterte die Schleife nur den Indexbereich: ``[true]`` waehlte
+        # wegen ``bool`` < ``int`` den Agenten mit Index 1, ``[1, 1]``
+        # interviewte dieselbe Persona doppelt.
+        selection = InterviewAgentSelection.model_validate(
+            response,
+            context={"profile_count": len(profiles), "max_agents": max_agents},
         )
 
-        selected_agents = []
-        valid_indices = []
-        for index in selected_indices:
-            if 0 <= index < len(profiles):
-                selected_agents.append(profiles[index])
-                valid_indices.append(index)
-
-        return selected_agents, valid_indices, reasoning
+        selected_agents = [profiles[index] for index in selection.selected_indices]
+        return selected_agents, list(selection.selected_indices), selection.reasoning
 
     except Exception as exc:  # noqa: BLE001 — budget errors re-raised, fallback intentional
         from ..run_budget import BudgetExceededError
@@ -236,11 +250,16 @@ Please generate 3-5 interview questions."""
             ],
             temperature=0.5,
             max_tokens=8192,
+            schema=InterviewQuestions,
+            schema_name="interview_questions",
         )
-        return response.get(
-            "questions",
-            [f"What is your perspective on {interview_requirement}?"],
-        )
+        # ``response.get("questions", …)`` gab bei ``{"questions": null}``
+        # ``None`` zurueck und bei ``{"questions": "Warum?"}`` einen String —
+        # der Aufrufer iterierte anschliessend ueber ``None`` bzw. ueber
+        # Einzelzeichen. Der Vertrag erzwingt eine Liste nichtleerer Strings in
+        # der vom Prompt verlangten Spanne; alles andere landet im
+        # Default-Fragensatz unten.
+        return list(InterviewQuestions.model_validate(response).questions)
 
     except Exception as exc:  # noqa: BLE001 — budget errors re-raised, fallback intentional
         from ..run_budget import BudgetExceededError

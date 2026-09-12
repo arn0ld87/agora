@@ -810,8 +810,24 @@ def extract_numeric_facts(text: str) -> List[NumericFact]:
             # Aufzaehlung ("A, B und C") trennt nur das Komma, das hier
             # bewusst NICHT zaehlt: dort teilen sich die Glieder das Praedikat
             # des Satzkopfs.
+            # Ein Klauseltrenner beginnt eine eigenstaendige Aussage; ein
+            # Aufzaehlungskomma nicht. Der Unterschied entscheidet weiter
+            # unten, ob das Kopf-Praedikat noch gilt: "Im Pilotprojekt kamen
+            # 120 Teilnehmende; 18 Lehrkraefte streikten" behauptet ueber die
+            # 18 "streikten", nicht "kamen" — waehrend die Glieder von "Der
+            # Pilot umfasst 120 Teilnehmende, 18 Lehrkraefte und sechs
+            # Angebote" sich das Kopf-Praedikat sehr wohl teilen.
+            #
+            # Nur ab dem zweiten Fakt: der Prefix des ersten beginnt am
+            # Satzanfang, ein Trenner darin grenzt also nichts von einer
+            # vorangehenden Zahl ab, sondern gehoert zum Satzkopf selbst.
+            # "Die Studie ergab: 120 Teilnehmende" hat keine Vorgaengerklausel
+            # — der Kopf IST die Aussage, und ihn zu unterdruecken liess ein
+            # leeres Praedikat zurueck (Codex-Befund P1 auf PR #1498).
+            starts_new_clause = False
             for separator in (";", ":", "—", " – "):
                 if separator in prefix:
+                    starts_new_clause = index > 0
                     prefix = prefix.rsplit(separator, 1)[1]
             # Beim Absolutmuster gehört das Bezugsnomen zum Tail, beim
             # Prozentmuster steht es hinter der Einheit.
@@ -824,7 +840,13 @@ def extract_numeric_facts(text: str) -> List[NumericFact]:
                 subject = _subject_from_prefix(prefix)
             if not subject:
                 continue
-            predicate = _full_predicate(prefix, tail, head=head)
+            # Hinter einem Klauseltrenner traegt der Satzkopf die Aussage
+            # nicht mehr — dann lieber ein kurzes eigenes Praedikat (das die
+            # Pruefung notfalls als "Aussage zu kurz" verwirft) als ein
+            # fremdes, das der Satz ueber diese Zahl nie getroffen hat.
+            predicate = _full_predicate(
+                prefix, tail, head="" if starts_new_clause else head
+            )
             facts.append(
                 NumericFact(
                     value=value,

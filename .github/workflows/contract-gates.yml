@@ -242,3 +242,12 @@ jobs:
         # Neue D/E/F-Funktionen ausserhalb der Allow-List → Exit 1.
         # Skript: backend/scripts/check_complexity.py (radon cc -j + allowlist-Match)
         run: cd backend && uv run python scripts/check_complexity.py
+      - name: Typ-Schuld-Gate (Issue #1495)
+        # Dasselbe Muster wie oben, fuer die von ignore_errors verdeckte
+        # mypy-Schuld: gemessen mit backend/mypy-debt.ini (Projektkonfiguration
+        # ohne den ignore_errors-Block), verglichen gegen
+        # backend/mypy-debt-baseline.txt. Faellt bei mehr Fehlern je Datei, bei
+        # neuen fehlerbehafteten Dateien und bei einer wachsenden
+        # ignore_errors-Modulliste. Repariert nichts — macht nur sichtbar und
+        # haelt die Schuld am Wachsen.
+        run: cd backend && uv run python scripts/check_mypy_debt.py

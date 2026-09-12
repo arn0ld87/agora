@@ -58,6 +58,7 @@ from typing import Any, Callable, Dict, List, Optional, Protocol
 
 from pydantic import BaseModel, ConfigDict
 
+from ...jobs.identity import owns_run
 from ...utils.logger import get_logger
 from .process_manager import is_process_alive
 from .run_state_store import RunnerStatus, load_run_state, save_run_state
@@ -100,6 +101,16 @@ _STALE_STATUSES = ["pending", "processing", "paused"]
 #: ``graph_build``, ...) laufen als In-Process-Threads ohne dieses Muster —
 #: sie bleiben bewusst außerhalb dieses Slices (siehe Abschlussbericht).
 _RUN_TYPE = "simulation_run"
+
+#: Run-Typen, die als ``threading.Thread(daemon=True)`` IM Webprozess laufen
+#: (``app/jobs/__init__.py``) und deshalb keine eigene ``process_pid`` haben.
+#: Ihre Liveness haengt am Webprozess selbst — siehe ``reconcile_stale_jobs``.
+_IN_PROCESS_RUN_TYPES = (
+    "simulation_prepare",
+    "report_generate",
+    "graph_build",
+    "ontology_generate",
+)
 
 _TERMINATION_REASON = "process_restart"
 _ERROR_MESSAGE = "Prozess-Neustart während des Runs"
@@ -341,6 +352,126 @@ def reconcile_stale_runs(
     )
 
 
+
+def _default_fail_simulation_state(simulation_id: str, error: str) -> None:
+    """Schiebt einen auf ``PREPARING`` haengengebliebenen State nach ``FAILED``.
+
+    Lazy importiert, damit dieses Modul von beiden Startup-Hooks aus ohne
+    Flask-App-Kontext importierbar bleibt (siehe ``run_startup_reconciliation``).
+    """
+    from ..simulation_manager import SimulationManager, SimulationStatus
+
+    manager = SimulationManager()
+    state = manager.get_simulation(simulation_id)
+    if state is None or state.status != SimulationStatus.PREPARING:
+        return
+    state.error = error
+    manager._set_status(state, SimulationStatus.FAILED)
+
+
+def reconcile_stale_jobs(
+    registry: _RunRegistryProtocol,
+    *,
+    enabled: bool = True,
+    owns: Callable[[Optional[Dict[str, Any]]], bool] = owns_run,
+    fail_simulation_state: Optional[Callable[[str, str], None]] = None,
+) -> ReconciliationResult:
+    """Markiert verwaiste In-Process-Jobs als ``failed``/``process_restart``.
+
+    Gegenstueck zu :func:`reconcile_stale_runs` fuer die Run-Typen aus
+    ``_IN_PROCESS_RUN_TYPES``. Deren Slice-Grenze war bisher ausdruecklich
+    gezogen (siehe Kommentar an ``_RUN_TYPE``): sie haben keine
+    ``process_pid``, also gab es keine verifizierbare Liveness — und damit
+    blieb ein per SIGTERM abgeschnittener Prepare-, Report- oder
+    Graph-Build-Job fuer immer auf ``processing`` stehen (Issue #1472).
+
+    Die Liveness kommt hier aus der Prozess-Identitaet im Manifest
+    (``app/jobs/identity.py``): ``enqueue`` stempelt PID und ein pro Prozess
+    einmaliges Token in ``metadata``, bevor der Thread startet. Traegt ein
+    Manifest das Token *dieses* Prozesses, laeuft der Job noch und bleibt
+    unangetastet; traegt es ein fremdes oder gar keines, ist sein Eigentuemer
+    weg.
+
+    Bewusst eine eigene Funktion statt eines weiteren Zweigs in
+    ``reconcile_stale_runs``: die beiden Liveness-Modelle haben nichts
+    gemeinsam — dort eine fremde Subprozess-PID, hier die Identitaet des
+    eigenen Prozesses —, und die dortigen Invarianten (Gruppierung nach
+    ``simulation_id``, Terminal-Propagationssperre, Schreibreihenfolge) haengen
+    alle am ``run_state.json``, das es hier gar nicht gibt.
+
+    Kein neuer Statuswert: ``failed``/``process_restart`` ist derselbe
+    Endzustand, den ``reconcile_stale_runs`` fuer denselben Sachverhalt
+    schreibt, und ``PREPARING -> FAILED`` ist im FSM bereits erlaubt. Ein
+    eigener ``interrupted``-Status haette Frontend, FSM und jeden Consumer
+    beruehrt, ohne mehr auszusagen als der Grund es schon tut.
+
+    Args:
+        registry: ``RunRegistry``-Instanz (oder Stub mit ``list_runs``/``update_run``).
+        enabled: ``False`` laesst jeden Run unangetastet
+            (``AGORA_STARTUP_RECONCILIATION=false``).
+        owns: Liveness-Pruefung gegen die Manifest-Metadaten, injizierbar.
+        fail_simulation_state: Wird fuer ``simulation_prepare`` mit
+            ``(simulation_id, error)`` gerufen, damit auch der
+            ``SimulationState`` aus ``preparing`` herauskommt. ``None``
+            verwendet die Default-Implementierung.
+    """
+    if not enabled:
+        return ReconciliationResult()
+
+    on_state = (
+        _default_fail_simulation_state
+        if fail_simulation_state is None
+        else fail_simulation_state
+    )
+    reconciled: List[str] = []
+    skipped: List[str] = []
+
+    for run_type in _IN_PROCESS_RUN_TYPES:
+        for run in registry.list_runs(
+            statuses=_STALE_STATUSES, run_type=run_type, limit=100_000
+        ):
+            run_id = run.get("run_id")
+            if not run_id:
+                continue
+            if owns(run.get("metadata") or {}):
+                logger.debug(
+                    "reconcile_stale_jobs: run=%s (%s) laeuft in diesem Prozess",
+                    run_id, run_type,
+                )
+                skipped.append(run_id)
+                continue
+
+            logger.warning(
+                "reconcile_stale_jobs: run=%s (%s) verwaist — markiere failed/%s",
+                run_id, run_type, _TERMINATION_REASON,
+            )
+            registry.update_run(
+                run_id,
+                status="failed",
+                termination_reason=_TERMINATION_REASON,
+                error=_ERROR_MESSAGE,
+            )
+            reconciled.append(run_id)
+
+            if run_type != "simulation_prepare":
+                continue
+            simulation_id = (run.get("linked_ids") or {}).get("simulation_id") or run.get(
+                "entity_id"
+            )
+            if not simulation_id:
+                continue
+            try:
+                on_state(simulation_id, _ERROR_MESSAGE)
+            except Exception:  # noqa: BLE001 — das Manifest ist bereits korrigiert
+                logger.error(
+                    "reconcile_stale_jobs: SimulationState fuer %s nicht "
+                    "korrigierbar — Manifest %s steht bereits auf failed",
+                    simulation_id, run_id, exc_info=True,
+                )
+
+    return ReconciliationResult(reconciled_run_ids=reconciled, skipped_run_ids=skipped)
+
+
 def run_startup_reconciliation(
     *, enabled: bool = True, should_log_startup: bool = True
 ) -> ReconciliationResult:
@@ -377,12 +508,25 @@ def run_startup_reconciliation(
         from ..run_registry import RunRegistry
         from ..simulation_runner import SimulationRunner
 
-        result = reconcile_stale_runs(RunRegistry(), SimulationRunner.RUN_STATE_DIR)
+        registry = RunRegistry()
+        result = reconcile_stale_runs(registry, SimulationRunner.RUN_STATE_DIR)
+        # Issue #1472: dieselbe Runde fuer die In-Process-Jobs. Eigener
+        # Aufruf statt eines Zweigs in reconcile_stale_runs — die
+        # Liveness-Modelle haben nichts gemeinsam (dort eine fremde
+        # Subprozess-PID, hier die Identitaet dieses Prozesses).
+        job_result = reconcile_stale_jobs(registry)
+        result = ReconciliationResult(
+            reconciled_run_ids=[*result.reconciled_run_ids, *job_result.reconciled_run_ids],
+            skipped_run_ids=[*result.skipped_run_ids, *job_result.skipped_run_ids],
+            synced_terminal_run_ids=result.synced_terminal_run_ids,
+        )
         if should_log_startup:
             logger.info(
-                "Startup-Reconciliation: %d Run(s) als process_restart markiert, "
-                "%d terminal synchronisiert, %d unveraendert",
+                "Startup-Reconciliation: %d Run(s) als process_restart markiert "
+                "(davon %d In-Process-Jobs), %d terminal synchronisiert, "
+                "%d unveraendert",
                 len(result.reconciled_run_ids),
+                len(job_result.reconciled_run_ids),
                 len(result.synced_terminal_run_ids),
                 len(result.skipped_run_ids),
             )

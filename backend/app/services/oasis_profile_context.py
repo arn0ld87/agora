@@ -293,7 +293,7 @@ def _is_group_entity (self: Any ,entity_type :str )->bool :
     )
 
 
-def _build_eligibility_prompt_block (self: Any ,entity_name :str ,entity_type :str )->str :
+def _build_eligibility_prompt_block (self: Any ,entity_name :str ,entity_type :str ,*,is_collective :bool =False )->str :
         """Erlaubt dem Modell, die Entitaet abzulehnen statt sie zu erfinden (#1247).
 
         Die Blockliste in ``persona_eligibility`` haengt am ``entity_type`` und
@@ -310,7 +310,16 @@ def _build_eligibility_prompt_block (self: Any ,entity_name :str ,entity_type :s
 
         Die Frage wird deshalb am Namen und am Kontext beantwortet, nicht am
         Label, und in den ohnehin stattfindenden Generierungsaufruf gefaltet.
+
+        ``is_collective`` trennt die geforderten Platzhalter nach Vertrag. Der
+        Kollektivzweig laeuft gegen ``CollectivePersonaSchema``, das
+        ``display_name``, ``handle``, ``age``, ``gender``, ``mbti`` und
+        ``profession`` gar nicht kennt — der gemeinsame Text verlangte sie
+        trotzdem und widersprach damit dem Schema, das derselbe Aufruf im
+        strict-``json_schema``-Mode (``additionalProperties: false``) mitgibt.
         """
+        if is_collective :
+            return _collective_eligibility_block (self .language ,entity_name ,entity_type )
         if self .language =="de":
             return f"""### Eignungsprüfung (vor allem anderen zu beantworten)
 
@@ -326,7 +335,7 @@ Setze `ineligible: true` und begründe knapp in `ineligible_reason`, wenn „{en
 
 Der Entitätstyp ist dabei nur ein Hinweis, keine Antwort — er trägt in der Praxis häufig „Organization“, auch wenn die Entität eine Software oder eine Stadt ist. Entscheide nach dem Namen und dem Kontext.
 
-Bei `ineligible: true` sind alle übrigen Felder bedeutungslos, müssen aber weiterhin schemagültig sein — sonst wird die Antwort verworfen, drei Versuche scheitern und die Entität landet über den regelbasierten Pfad doch als Persona im Lauf. Verwende genau: display_name und handle je ein Minuszeichen, age 30, gender other, mbti ISTJ, country DE, voice_register neutral-de, leere Strings für bio, persona und profession, leere Liste für interested_topics. Erfinde in diesem Fall KEINE Persona.
+Bei `ineligible: true` sind alle übrigen Felder bedeutungslos, müssen aber weiterhin schemagültig sein — sonst wird die Antwort verworfen, drei Versuche scheitern und die Entität landet über den regelbasierten Pfad doch als Persona im Lauf. Verwende genau: display_name und handle je ein Minuszeichen, age 30, gender null, mbti ISTJ, country DE, voice_register neutral-de, leere Strings für bio, persona und profession, leere Liste für interested_topics. Erfinde in diesem Fall KEINE Persona.
 
 Bei `ineligible: false` beantworte die Aufgabe oben wie beschrieben."""
 
@@ -344,6 +353,52 @@ Set `ineligible: true` and give a short `ineligible_reason` if "{entity_name }" 
 
 The entity type is a hint, not an answer — in practice it often reads "Organization" even when the entity is software or a city. Decide from the name and the context.
 
-When `ineligible: true`, all other fields are meaningless but must still be schema-valid — otherwise the response is rejected, three attempts fail and the entity becomes a persona anyway via the rule-based path. Use exactly: display_name and handle each a single hyphen, age 30, gender other, mbti ISTJ, country DE, voice_register neutral-de, empty strings for bio, persona and profession, empty list for interested_topics. Do NOT invent a persona in that case.
+When `ineligible: true`, all other fields are meaningless but must still be schema-valid — otherwise the response is rejected, three attempts fail and the entity becomes a persona anyway via the rule-based path. Use exactly: display_name and handle each a single hyphen, age 30, gender null, mbti ISTJ, country DE, voice_register neutral-de, empty strings for bio, persona and profession, empty list for interested_topics. Do NOT invent a persona in that case.
+
+When `ineligible: false`, answer the task above as described."""
+
+
+def _collective_eligibility_block (language :str ,entity_name :str ,entity_type :str )->str :
+    """Eignungsblock fuer Kollektiv-Personas — nur Felder aus ``CollectivePersonaSchema``.
+
+    Bewusst ein eigener Text statt einer Variante des Individuenblocks: eine
+    Organisation hat weder Namen noch Alter, Geschlecht, MBTI-Typ oder Beruf.
+    Platzhalter fuer diese Felder zu verlangen hiesse, eine Demografie zu
+    erfinden, die der Vertrag nicht einmal aufnehmen koennte.
+    """
+    if language =="de":
+        return f"""### Eignungsprüfung (vor allem anderen zu beantworten)
+
+Prüfe zuerst, ob „{entity_name }“ überhaupt einen menschlichen Träger haben kann — also ob es Menschen gibt, die für diese Entität sprechen und im Szenario eine eigene Interessenlage vertreten.
+
+Setze `ineligible: true` und begründe knapp in `ineligible_reason`, wenn „{entity_name }“ eines der folgenden ist:
+- eine Software, ein Modell, ein Werkzeug oder ein technisches System (auch wenn der Typ „{entity_type }“ etwas anderes nahelegt)
+- ein Ort, eine Stadt, ein Bundesland oder eine Region
+- ein Datum, ein Termin, ein Zeitraum oder ein Meilenstein
+- ein Dokument, ein Abschnitt, eine Zulassung, ein Verfahren oder ein Regelwerk
+- ein Gerät, eine Infrastruktur oder eine Systemkomponente
+- ein abstrakter Begriff, ein Sammelbegriff oder das Analysewerkzeug selbst
+
+Der Entitätstyp ist dabei nur ein Hinweis, keine Antwort — er trägt in der Praxis häufig „Organization“, auch wenn die Entität eine Software oder eine Stadt ist. Entscheide nach dem Namen und dem Kontext.
+
+Bei `ineligible: true` sind alle übrigen Felder bedeutungslos, müssen aber weiterhin schemagültig sein — sonst wird die Antwort verworfen, drei Versuche scheitern und die Entität landet über den regelbasierten Pfad doch als Persona im Lauf. Verwende genau: country DE, voice_register neutral-de, leere Strings für bio und persona, leere Liste für interested_topics. Dieser Vertrag kennt keine Personenfelder — gib sie nicht aus. Erfinde in diesem Fall KEINE Persona.
+
+Bei `ineligible: false` beantworte die Aufgabe oben wie beschrieben."""
+
+    return f"""### Eligibility check (answer this first)
+
+First decide whether "{entity_name }" can have a human bearer at all — that is, whether there are people who speak for this entity and hold their own stake in the scenario.
+
+Set `ineligible: true` and give a short `ineligible_reason` if "{entity_name }" is any of:
+- a piece of software, a model, a tool, or a technical system (even if the type "{entity_type }" suggests otherwise)
+- a place, city, state, or region
+- a date, deadline, period, or milestone
+- a document, section, accreditation, procedure, or set of rules
+- a device, infrastructure, or system component
+- an abstract concept, an umbrella term, or the analysis tool itself
+
+The entity type is a hint, not an answer — in practice it often reads "Organization" even when the entity is software or a city. Decide from the name and the context.
+
+When `ineligible: true`, all other fields are meaningless but must still be schema-valid — otherwise the response is rejected, three attempts fail and the entity becomes a persona anyway via the rule-based path. Use exactly: country DE, voice_register neutral-de, empty strings for bio and persona, empty list for interested_topics. This contract has no person fields — do not emit them. Do NOT invent a persona in that case.
 
 When `ineligible: false`, answer the task above as described."""

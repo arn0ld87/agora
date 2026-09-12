@@ -491,17 +491,18 @@ def test_success_status_is_returned(monkeypatch, status: int):
 def test_exception_message_does_not_leak_url_credentials(monkeypatch):
     """Der Ablehnungsgrund ist harmlos, die URL nicht.
 
-    Sie steht in der Exception-Message und landet damit in jedem Traceback und
+    Sie stand in der Exception-Message und landete damit in jedem Traceback und
     in jedem generischen Handler, der `str(e)` protokolliert oder
-    zurueckgibt — etwa `AgentToolRegistry.execute`.
+    zurueckgibt — etwa `AgentToolRegistry.execute`. Seit der Verschaerfung
+    traegt die Message nur noch den Grund; das Ziel bleibt ueber `exc.url`
+    erkennbar, aber nur als sichere Herkunft (Schema + Host + ggf. Port).
     """
     with pytest.raises(OutboundRequestBlocked) as exc:
         validate_url("https://user:sup3rgeheim@example.com/x")
 
     assert "sup3rgeheim" not in str(exc.value)
     assert "user:" not in str(exc.value)
-    # Das Ziel bleibt erkennbar — redigiert wird nur die Userinfo.
-    assert "***@example.com" in str(exc.value)
+    assert exc.value.url == "https://example.com"
 
 
 def test_blocked_url_attribute_is_redacted_too():
@@ -528,3 +529,72 @@ def test_host_header_brackets_ipv6_literals(url: str, expected: str):
     antwortet mit einem Fehler oder liefert den falschen vHost.
     """
     assert outbound_http._check_shape(url, DEFAULT_POLICY).host_header == expected
+
+
+# --------------------------------------------------------------------------- #
+# Secret-safety of the blocked-URL exception (#1494-Nachlaeufer)
+# --------------------------------------------------------------------------- #
+
+_SECRET = "SUPERSECRETVALUE"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        pytest.param(f"https://user:{_SECRET}@example.com/path", id="userinfo"),
+        pytest.param(f"http://127.0.0.1/?token={_SECRET}", id="query"),
+        pytest.param(f"http://metadata.google.internal/?api_key={_SECRET}", id="query-internal"),
+        pytest.param(f"http://127.0.0.1/path#{_SECRET}", id="fragment"),
+        pytest.param(f"http://127.0.0.1/{_SECRET}/resource", id="path"),
+        pytest.param(f"ftp://user:{_SECRET}@example.com/secret", id="scheme-plus-userinfo"),
+        pytest.param(f"http://[::1/?token={_SECRET}", id="malformed-bracket"),
+        pytest.param(f"http://user:{_SECRET}@exa mple.com/", id="malformed-space"),
+        pytest.param(f"http://127.0.0.1:99999/?k={_SECRET}", id="invalid-port"),
+    ],
+)
+def test_blocked_url_exception_never_leaks_secrets(url):
+    """Eine Ablehnung darf die untrusted URL nicht unkontrolliert weiterreichen.
+
+    Die Exception-Message landet in jedem Traceback und in jedem generischen
+    Handler, der ``str(e)`` protokolliert oder an den Aufrufer zurueckgibt.
+    Reine Userinfo-Redaktion reichte nicht: Query, Fragment und Pfad tragen in
+    der Praxis genauso haeufig Token.
+    """
+    with pytest.raises(OutboundRequestBlocked) as exc:
+        validate_url(url)
+
+    assert _SECRET not in str(exc.value)
+    assert _SECRET not in (exc.value.url or "")
+    assert _SECRET not in exc.value.reason
+    assert _SECRET not in repr(exc.value)
+
+
+@pytest.mark.parametrize(
+    "url, expected_origin",
+    [
+        ("http://127.0.0.1/a/b?c=d#e", "http://127.0.0.1"),
+        ("http://127.0.0.1:8080/a?c=d", "http://127.0.0.1:8080"),
+        ("https://user:pw@metadata.google.internal/x", "https://metadata.google.internal"),
+        ("http://[::1]:9000/x", "http://[::1]:9000"),
+    ],
+)
+def test_blocked_url_keeps_only_a_safe_origin(url, expected_origin):
+    """Fuer die Diagnose bleibt Schema + Host + ggf. Port — nichts darueber."""
+    with pytest.raises(OutboundRequestBlocked) as exc:
+        validate_url(url)
+
+    assert exc.value.url == expected_origin
+
+
+def test_blocked_url_exception_message_is_the_reason_only():
+    with pytest.raises(OutboundRequestBlocked) as exc:
+        validate_url("http://127.0.0.1/secret/path")
+
+    assert str(exc.value) == exc.value.reason
+
+
+def test_unparsable_url_yields_no_origin_at_all():
+    with pytest.raises(OutboundRequestBlocked) as exc:
+        validate_url(f"http://[::1/?token={_SECRET}")
+
+    assert exc.value.url is None
