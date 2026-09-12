@@ -75,3 +75,48 @@ class TestUnchangedBehaviour:
         predicates = _by_value("Die Verwaltung erreichte 91 Prozent der gesetzten Ziele.")
 
         assert "erreichte" in predicates[91.0]
+
+
+class TestSeparatorBeforeTheFirstNumber:
+    """Codex-Befund P1 auf PR #1498 — Regression aus dem Klauseltrenner-Fix.
+
+    Steht der Trenner *vor* der ersten Zahl, gibt es keine vorangehende
+    numerische Klausel, von der sich etwas abgrenzen liesse: der Satzkopf IST
+    dann die Aussage. Die Unterdrueckung des Kopfes hat den Prefix auf
+    Leerzeichen reduziert und ein leeres Praedikat erzeugt — Claim und Evidence
+    wurden anschliessend ueber ``predicate_not_measurable`` als ``INSUFFICIENT``
+    gewertet statt als belegt.
+    """
+
+    @pytest.mark.parametrize(
+        "text, expected_token",
+        [
+            pytest.param("Die Studie ergab: 120 Teilnehmende.", "ergab", id="colon"),
+            pytest.param("Der Bericht nennt — 45 Prozent der Betriebe.", "nennt", id="emdash"),
+            pytest.param("Der Träger beschäftigt — 31 Honorarkräfte.", "beschäftigt", id="emdash-absolute"),
+            pytest.param("Zum Stichtag – 31 Honorarkräfte.", "Stichtag", id="endash"),
+        ],
+    )
+    def test_head_survives_a_separator_before_the_first_number(
+        self, text: str, expected_token: str
+    ) -> None:
+        predicates = list(_by_value(text).values())
+
+        assert predicates, f"kein Fakt extrahiert aus {text!r}"
+        assert any(p.strip() for p in predicates), f"leeres Praedikat fuer {text!r}"
+        assert any(expected_token in p for p in predicates), predicates
+
+    def test_separator_before_the_first_number_with_its_own_tail_is_unaffected(self) -> None:
+        """Traegt der Teil rechts der Zahl selbst eine Aussage, wird der Kopf
+        ohnehin nicht gebraucht — dieser Pfad bleibt unveraendert."""
+        predicates = _by_value("Kurz gesagt; 31 Honorarkräfte arbeiten dort.")
+
+        assert predicates[31.0] == "arbeiten dort"
+
+    def test_later_span_after_a_separator_still_drops_the_head(self) -> None:
+        """Die eigentliche Wirkung des Fixes bleibt erhalten."""
+        predicates = _by_value("Im Pilotprojekt kamen 120 Teilnehmende; 18 Lehrkräfte streikten.")
+
+        assert "streikten" in predicates[18.0]
+        assert "kamen" not in predicates[18.0]
+
