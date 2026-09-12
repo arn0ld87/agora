@@ -170,3 +170,33 @@ def test_valid_question_response_is_returned() -> None:
 
     assert questions == ["Frage A?", "Frage B?", "Frage C?", "Frage D?"]
     assert llm.schemas == [InterviewQuestions]
+
+
+@pytest.mark.parametrize("field", ["bio", "realname", "username", "persona", "profession"])
+def test_profile_with_explicit_null_field_does_not_reach_the_interview(
+    tmp_path, field: str
+) -> None:
+    """Codex-Befund P2 auf PR #1498: ``{"bio": null}`` passierte den Vertrag,
+    und ``profile.get("bio", "")[:200]`` warf danach ``TypeError`` — ausserhalb
+    des ``try`` von ``select_agents_for_interview``, also mit Abbruch des
+    gesamten Interviewlaufs."""
+    service_dir, sim_dir = _service_dir(tmp_path, "sim_0123456789ab")
+    (sim_dir / "reddit_profiles.json").write_text(
+        json.dumps([{"username": "maria", field: None}]), encoding="utf-8"
+    )
+
+    assert mod.load_agent_profiles("sim_0123456789ab", service_dir=service_dir) == []
+
+
+def test_null_bio_would_otherwise_crash_the_selection() -> None:
+    """Belegt, warum der Vertrag hier hart sein muss: der Zugriff liegt vor dem
+    ``try``, ein ``None`` reisst den ganzen Lauf ab statt in den Fallback zu
+    gehen."""
+    with pytest.raises(TypeError):
+        mod.select_agents_for_interview(
+            profiles=[{"username": "maria", "bio": None}],
+            interview_requirement="Wie wirkt die Massnahme?",
+            simulation_requirement="",
+            max_agents=1,
+            llm=_Llm({"selected_indices": [0]}),
+        )

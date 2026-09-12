@@ -34,6 +34,33 @@ class TestPersistedAgentProfiles:
         with pytest.raises(ValidationError):
             PersistedAgentProfiles.model_validate(payload)
 
+    @pytest.mark.parametrize(
+        "field", ["bio", "realname", "username", "name", "persona", "profession"]
+    )
+    def test_explicit_null_is_rejected_even_though_the_field_is_optional(
+        self, field: str
+    ) -> None:
+        """Codex-Befund P2 auf PR #1498.
+
+        Ein *fehlendes* Feld ist unproblematisch — die Fallbackkette des
+        Interviewpfads faengt es ab. Ein ausdrueckliches ``null`` ist etwas
+        anderes: ``profile.get("bio", "")[:200]`` liefert dann ``None[:200]``
+        und wirft ``TypeError``, und zwar ausserhalb des ``try`` von
+        ``select_agents_for_interview`` — der ganze Interviewlauf reisst ab.
+        Der Vertrag muss solche Dateien in den CSV-/Leer-Fallback schicken,
+        statt sie durchzulassen.
+        """
+        with pytest.raises(ValidationError):
+            PersistedAgentProfiles.model_validate([{field: None}])
+
+    def test_null_interested_topics_is_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            PersistedAgentProfiles.model_validate([{"interested_topics": None}])
+
+    def test_absent_fields_stay_valid(self) -> None:
+        """Die Gegenprobe: nichts davon ist Pflicht."""
+        assert PersistedAgentProfiles.model_validate([{"user_id": 3}]).root
+
     def test_empty_list_is_valid(self) -> None:
         assert PersistedAgentProfiles.model_validate([]).root == []
 

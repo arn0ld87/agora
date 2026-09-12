@@ -25,7 +25,7 @@ bisher.
 
 from __future__ import annotations
 
-from typing import Any, List, Optional
+from typing import Any, List
 
 from pydantic import (
     BaseModel,
@@ -58,13 +58,24 @@ class InterviewAgentProfile(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    realname: Optional[str] = None
-    username: Optional[str] = None
-    name: Optional[str] = None
-    profession: Optional[str] = None
-    bio: Optional[str] = None
-    persona: Optional[str] = None
-    interested_topics: Optional[List[Any]] = None
+    # Default statt ``Optional``: ein *fehlendes* Feld ist unproblematisch — die
+    # Fallbackkette des Interviewpfads (``realname`` → ``username`` →
+    # ``Agent_<i>``) faengt es ab, und weil nur validiert und nicht umgeschrieben
+    # wird, bleibt der Schluessel im Originaldict weiterhin abwesend.
+    #
+    # Ein ausdrueckliches ``null`` ist etwas anderes und wird abgelehnt:
+    # ``profile.get("bio", "")[:200]`` liefert dafuer ``None[:200]`` und wirft
+    # ``TypeError`` — und zwar ausserhalb des ``try`` von
+    # ``select_agents_for_interview``, also mit Abbruch des gesamten
+    # Interviewlaufs statt eines Fallbacks. Eine Datei mit ``null``-Feldern
+    # gehoert deshalb in denselben CSV-/Leer-Pfad wie eine unlesbare.
+    realname: str = ""
+    username: str = ""
+    name: str = ""
+    profession: str = ""
+    bio: str = ""
+    persona: str = ""
+    interested_topics: List[Any] = Field(default_factory=list)
 
 
 class PersistedAgentProfiles(RootModel[List[InterviewAgentProfile]]):
