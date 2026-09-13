@@ -115,6 +115,29 @@ def test_invalid_selection_response_falls_back_to_default_panel(response) -> Non
     assert reasoning == "Using default selection strategy"
 
 
+def test_selection_response_with_one_too_many_indices_is_capped_not_dropped() -> None:
+    """Codex-Befund (Review PR #1498): eine um EINEN Index zu lange, sonst
+    voellig brauchbare Antwort darf nicht die gesamte Auswahlqualitaet kosten.
+    6 gueltige Indizes bei ``max_agents=5`` muessen zu genau 5 ausgewaehlten
+    Agenten in der vom Modell genannten Reihenfolge fuehren — kein Fallback."""
+    llm = _Llm({"selected_indices": [4, 2, 0, 3, 1, 5], "reasoning": "Sechs Kandidaten."})
+    profiles = [
+        {"username": f"agent_{i}", "profession": "Lehrkraft", "bio": "Bio"} for i in range(6)
+    ]
+
+    selected, indices, reasoning = mod.select_agents_for_interview(
+        profiles=profiles,
+        interview_requirement="Wie wirkt die Massnahme?",
+        simulation_requirement="",
+        max_agents=5,
+        llm=llm,
+    )
+
+    assert indices == [4, 2, 0, 3, 1]
+    assert selected == [profiles[i] for i in [4, 2, 0, 3, 1]]
+    assert reasoning == "Sechs Kandidaten."
+
+
 def test_valid_selection_response_is_honoured_and_schema_is_passed() -> None:
     from app.contracts.interview_contract import InterviewAgentSelection
 
@@ -154,6 +177,33 @@ def test_invalid_question_response_falls_back_to_default_questions(response) -> 
     assert isinstance(questions, list)
     assert len(questions) == 3
     assert all(isinstance(q, str) and q.strip() for q in questions)
+
+
+def test_question_response_with_six_questions_is_capped_not_dropped() -> None:
+    """Codex-Befund (Review PR #1498): 6 gueltige Fragen sind keine kaputte
+    Antwort. Genau 5 Fragen muessen zurueckkommen, nicht der generische
+    Default-Fragensatz (eine einzige Frage)."""
+    llm = _Llm(
+        {
+            "questions": [
+                "Frage A?",
+                "Frage B?",
+                "Frage C?",
+                "Frage D?",
+                "Frage E?",
+                "Frage F?",
+            ]
+        }
+    )
+
+    questions = mod.generate_interview_questions(
+        interview_requirement="Wie wirkt die Massnahme?",
+        simulation_requirement="",
+        selected_agents=_PROFILES[:2],
+        llm=llm,
+    )
+
+    assert questions == ["Frage A?", "Frage B?", "Frage C?", "Frage D?", "Frage E?"]
 
 
 def test_valid_question_response_is_returned() -> None:

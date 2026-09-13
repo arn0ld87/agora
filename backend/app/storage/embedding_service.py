@@ -39,17 +39,67 @@ def validate_embedding_configuration(
     When ``skip_probe`` is True, only the static KNOWN_EMBEDDING_DIMS lookup runs
     (no network call). Returns None in that case. Used in CI environments without
     a reachable embedding backend (siehe AGORA_SKIP_EMBEDDING_PROBE).
+
+    Issue #1417: die Probe folgt derselben Praezedenz wie der Betrieb —
+    ausdrueckliche Argumente > aktive Store-Konfiguration > ``Config.*``.
+    Vorher reichte sie ``Config.EMBEDDING_MODEL``/``_BASE_URL``/``_API_KEY``
+    *ausdruecklich* an ``EmbeddingService`` durch und hebelte die
+    Store-Aufloesung damit per Definition aus: validiert wurde das Env-Modell,
+    eingebettet wurde gegen das Store-Modell. Genau die Divergenz, gegen die
+    #1417 antritt, nur eine Ebene hoeher.
+
+    ``vector_dim`` bleibt bewusst an ``Config.VECTOR_DIM`` haengen und wird
+    *nicht* aus der Route genommen: ``VECTOR_DIM`` definiert die Dimension des
+    Betriebsindex (``storage/neo4j_schema.py``). Gegen die Route zu pruefen
+    haette bedeutet, Modell und Index gegeneinander zu validieren und die
+    Abweichung genau dann zu verschweigen, wenn sie zaehlt.
+
+    Raises:
+        EmbeddingError: Env-seitige Fehlkonfiguration — fatal, nur ueber
+            ``.env`` + Neustart reparierbar.
+        EmbeddingRuntimeConfigurationError: Die aktive Store-Konfiguration
+            passt nicht zum Betriebsindex bzw. laesst sich nicht aufloesen. Das
+            ist ein Bedienfehler, der in der GUI reparierbar ist — der
+            Startpfad darf daran nicht in einen Crash-Loop laufen, sonst ist
+            genau die GUI weg, mit der man ihn behebt.
     """
-    effective_model = model or Config.EMBEDDING_MODEL
+    from ..services.embedding_configurations import runtime as _embedding_runtime
+
+    EmbeddingRuntimeConfigurationError = (
+        _embedding_runtime.EmbeddingRuntimeConfigurationError
+    )
+
+    # Der Store wird nur befragt, wenn ueberhaupt etwas fehlt — der CI-Pfad und
+    # die Tests uebergeben Modell und Endpoint ausdruecklich.
+    route = None
+    if model is None or base_url is None:
+        route = _embedding_runtime.resolve_active_embedding_route()
+
+    effective_model = model or (route.model if route else None) or Config.EMBEDDING_MODEL
     effective_dim = vector_dim or Config.VECTOR_DIM
-    effective_base_url = base_url or Config.EMBEDDING_BASE_URL
+    effective_base_url = (
+        base_url or (route.base_url if route else None) or Config.EMBEDDING_BASE_URL
+    )
+    # Spiegelt ``EmbeddingService.__init__``: ein Schluessel aus der Route hat
+    # Vorrang, der Env-Schluessel bleibt der Rueckfall fuer schluessellose
+    # Routen (Ollama).
+    effective_api_key = (route.api_key if route else None) or Config.EMBEDDING_API_KEY
 
     expected_dim = infer_vector_dim_for_model(effective_model)
     if expected_dim and effective_dim != expected_dim:
-        raise EmbeddingError(
+        message = (
             f"VECTOR_DIM={effective_dim} does not match known dimension {expected_dim} "
             f"for EMBEDDING_MODEL='{effective_model}'"
         )
+        if route is not None and model is None:
+            raise EmbeddingRuntimeConfigurationError(
+                f"Die aktive Embedding-Konfiguration {route.configuration_id} nutzt "
+                f"'{effective_model}' mit {expected_dim} Dimensionen, der "
+                f"Betriebsindex ist auf {effective_dim} (VECTOR_DIM) angelegt. Bitte "
+                "unter Einstellungen → Embedding-Konfiguration eine passende "
+                "Konfiguration aktivieren oder die Re-Embedding-Migration fahren."
+            )
+        raise EmbeddingError(message)
 
     if skip_probe:
         return None
@@ -57,7 +107,7 @@ def validate_embedding_configuration(
     service = EmbeddingService(
         model=effective_model,
         base_url=effective_base_url,
-        api_key=Config.EMBEDDING_API_KEY,
+        api_key=effective_api_key,
         max_retries=3,
         timeout=timeout,
     )
@@ -65,6 +115,12 @@ def validate_embedding_configuration(
     actual_dim = len(vector)
 
     if actual_dim != effective_dim:
+        if route is not None and model is None:
+            raise EmbeddingRuntimeConfigurationError(
+                f"Die aktive Embedding-Konfiguration {route.configuration_id} "
+                f"({effective_model}) liefert {actual_dim} Dimensionen, der "
+                f"Betriebsindex ist auf {effective_dim} (VECTOR_DIM) angelegt."
+            )
         raise EmbeddingError(
             f"Embedding probe for model '{effective_model}' returned dimension {actual_dim}, "
             f"but VECTOR_DIM is configured as {effective_dim}"

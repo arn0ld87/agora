@@ -233,11 +233,24 @@ def resolve_embedder(
 ) -> Optional[Callable[[str], List[float]]]:
     if cached != "missing":
         return cached
+    # Issue #1417: ein fehlender Embedder und eine falsch konfigurierte
+    # Embedding-Route sind nicht dasselbe. Ersteres ist Umgebung (Backend nicht
+    # erreichbar, Port zu) — dagegen ist der Degradationspfad unten richtig,
+    # der Report läuft dann ohne Evidence-Embedding weiter. Letzteres ist ein
+    # Bedienfehler: ``resolve_active_embedding_route`` wirft ausdrücklich,
+    # statt Modell aus dem Store mit dem Endpoint aus der .env zu mischen. Den
+    # hier auf ``debug`` zu loggen und ``None`` zurückzugeben, degradierte
+    # genau den lauten Fehler wieder zu Stille — der Report wäre ohne Hinweis
+    # schwächer belegt als er sein müsste.
+    from ..embedding_configurations.runtime import EmbeddingRuntimeConfigurationError
+
     try:
         from ...storage.embedding_service import EmbeddingService
 
         service = EmbeddingService()
         return service.embed
+    except EmbeddingRuntimeConfigurationError:
+        raise
     except Exception as exc:  # pragma: no cover - environment dependent  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.debug(f"EvidenceBinder: kein Embedder verfügbar ({exc!r})")
         return None
