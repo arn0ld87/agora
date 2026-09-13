@@ -159,9 +159,18 @@ jobs:
     # 2026-05-17: PR-Skip — Backend-Tests laufen nur noch auf push:main.
     # Auf PR via Label 'needs-backend-ci' reaktivierbar. Reaktivieren ohne
     # Label: if-Zeile entfernen.
+    #
+    # 2026-09-13 (PR #1498): Der zweite Zweig prueft den Label-Zustand des PR
+    # statt nur das 'labeled'-Event. Vorher sprang der Job bei jedem Push nach
+    # dem Labeln auf 'skipping' — wer nach dem Labeln nochmal pusht und merged,
+    # merged einen Commit, den die volle Suite nie gesehen hat. Der
+    # 'labeled'-Zweig bleibt als Guertel zum Hosentraeger stehen: das Gate darf
+    # nicht davon abhaengen, dass das Event-Payload das frisch gesetzte Label
+    # bereits in pull_request.labels fuehrt.
     if: |
       github.event_name != 'pull_request' ||
-      (github.event.action == 'labeled' && github.event.label.name == 'needs-backend-ci')
+      (github.event.action == 'labeled' && github.event.label.name == 'needs-backend-ci') ||
+      contains(github.event.pull_request.labels.*.name, 'needs-backend-ci')
     env:
       # Tests instantiate LLMClient() directly (e.g. test_ontology_generator);
       # the constructor rejects an empty API key. No HTTP calls are made.
@@ -270,9 +279,18 @@ jobs:
     # 2026-05-17: PR-Skip — Frontend-CI läuft nur noch auf push:main.
     # Auf PR via Label 'needs-frontend-ci' reaktivierbar. Reaktivieren ohne
     # Label: if-Zeile entfernen.
+    #
+    # 2026-09-13 (PR #1498): Der zweite Zweig prueft den Label-Zustand des PR
+    # statt nur das 'labeled'-Event. Vorher sprang der Job bei jedem Push nach
+    # dem Labeln auf 'skipping' — wer nach dem Labeln nochmal pusht und merged,
+    # merged einen Commit, den die volle Suite nie gesehen hat. Der
+    # 'labeled'-Zweig bleibt als Guertel zum Hosentraeger stehen: das Gate darf
+    # nicht davon abhaengen, dass das Event-Payload das frisch gesetzte Label
+    # bereits in pull_request.labels fuehrt.
     if: |
       github.event_name != 'pull_request' ||
-      (github.event.action == 'labeled' && github.event.label.name == 'needs-frontend-ci')
+      (github.event.action == 'labeled' && github.event.label.name == 'needs-frontend-ci') ||
+      contains(github.event.pull_request.labels.*.name, 'needs-frontend-ci')
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
