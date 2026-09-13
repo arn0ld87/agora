@@ -278,9 +278,25 @@ WORKDIR /app
 # nicht neu und der Scan bleibt rot, obwohl der Fix laengst im trixie-Repo
 # liegt. Der Digest-Bump oben ist deshalb hier kein Ersatz fuer den Upgrade,
 # sondern sein Ausloeser: neuer FROM-Digest = invalidierter Layer = frischer
-# apt-Lauf. Bei der naechsten Distro-CVE ist der Digest-Bump wieder das
-# Mittel, um diese Zeile erneut scharf zu stellen.
-RUN apt-get update \
+# apt-Lauf.
+#
+# Ergaenzung 2026-09-13 (CVE-2026-57433 / -57432 / -48962, perl-base
+# 5.40.1-6 -> 5.40.1-6+deb13u1): Der Digest-Bump als alleiniges Mittel traegt
+# nicht. Debian hatte den Fix veroeffentlicht, waehrend `python:3.14-slim`
+# unveraendert auf demselben Digest stand, der hier ohnehin schon gepinnt war
+# — es gab also gar keinen neueren Digest, auf den man haette bumpen koennen.
+# Der Build zog `#18 CACHED` und lieferte weiter das ungepatchte perl-base
+# aus. Das Mittel darf deshalb nicht daran haengen, dass Docker Official
+# Images nachbaut: APT_SECURITY_EPOCH geht in den Cache-Key dieser Schicht
+# ein und macht sie unabhaengig davon invalidierbar.
+#
+# Bei der naechsten Distro-CVE: dieses Datum auf den Tag des Fixes setzen.
+# Der Digest-Pin oben bleibt die reproduzierbare Ausgangsbasis und wird
+# weiterhin gebumpt, sobald ein neuer Digest existiert — er ist dann aber
+# eine Hygienemassnahme, nicht mehr der Ausloeser des apt-Laufs.
+ARG APT_SECURITY_EPOCH=2026-09-13
+RUN echo "apt security epoch: ${APT_SECURITY_EPOCH}" \
+  && apt-get update \
   && apt-get upgrade -y \
   && apt-get install -y --no-install-recommends tzdata \
   && rm -rf /var/lib/apt/lists/* \
