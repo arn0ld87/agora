@@ -21,6 +21,14 @@ Profil-Vertrag laesst die Originaldicts unveraendert (siehe
 ``PersistedAgentProfiles``), damit die vorhandene Feld-Fallback-Kette
 (``realname`` → ``username`` → ``Agent_<i>``) genau so weiterarbeitet wie
 bisher.
+
+Eine bewusste, eng begrenzte Ausnahme von der Gate-Regel (Review PR #1498):
+``InterviewAgentSelection.selected_indices`` und ``InterviewQuestions.questions``
+kappen auf ihre jeweilige Obergrenze, statt eine Antwort zu verwerfen, die
+*ausschliesslich* zu viele ansonsten gueltige, eindeutige Eintraege enthaelt.
+Das ist keine Transformation von Nutzdaten wie beim Profil-Vertrag, sondern
+eine Mengenbegrenzung auf einer bereits vollstaendig validierten Auswahl —
+siehe die Begruendung an den jeweiligen Validatoren.
 """
 
 from __future__ import annotations
@@ -108,6 +116,17 @@ class InterviewAgentSelection(BaseModel):
         )
 
     Ohne Kontext prueft das Modell nur Typ, Vorzeichen und Eindeutigkeit.
+
+    Ueberschreitet ``max_agents`` (Review PR #1498, Befund): wird auf die
+    ersten ``max_agents`` Indizes gekappt, nicht verworfen. Eine Antwort mit
+    6 statt 5 eindeutigen, in-range Indizes ist keine kaputte Antwort — sie
+    ueberschreitet nur das Cap. Ein fruehes ``raise`` hier landete im breiten
+    ``except Exception`` von ``select_agents_for_interview`` und ersetzte die
+    inhaltliche LLM-Auswahl durch den generischen "erste N Profile"-Fallback,
+    also durch einen strikt schlechteren Ersatz fuer eine im Kern brauchbare
+    Antwort. Ausserhalb des Cap-Falls bleibt jede sonstige Verletzung
+    (falscher Typ, negative Indizes, Duplikate, Indizes ausserhalb des
+    Profilarrays) eine echte Ablehnung.
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -144,20 +163,32 @@ class InterviewAgentSelection(BaseModel):
                 )
         max_agents = context.get("max_agents")
         if max_agents is not None and len(self.selected_indices) > max_agents:
-            raise ValueError(
-                f"selected_indices nennt {len(self.selected_indices)} Agenten, "
-                f"erlaubt sind hoechstens {max_agents}"
-            )
+            # Kappen statt verwerfen: an dieser Stelle ist die Auswahl bereits
+            # typgeprueft, positiv, eindeutig und im Profilarray belegt — die
+            # einzige verbleibende Abweichung ist die Laenge. Die ersten
+            # ``max_agents`` vom Modell genannten Indizes zu behalten erhaelt
+            # die inhaltliche Auswahl; ein ``ValueError`` hier wuerde sie
+            # komplett wegwerfen (siehe Klassendocstring).
+            self.selected_indices = self.selected_indices[:max_agents]
         return self
 
 
 class InterviewQuestions(BaseModel):
     """LLM-Antwort der Fragengenerierung.
 
-    Der Prompt verlangt 3–5 Fragen; der Vertrag haelt dieselbe Spanne fest,
-    damit der Strict-JSON-Schema-Pfad sie bereits providerseitig durchsetzt.
-    Eine Antwort ausserhalb der Spanne faellt in den bestehenden
-    Default-Fragensatz statt still auf fuenf gekuerzt zu werden.
+    Der Prompt verlangt 3–5 Fragen; ``max_length`` haelt diese Obergrenze im
+    Modell fest, damit ``model_json_schema()`` sie providerseitig im
+    Strict-JSON-Schema-Pfad mitdurchsetzt (``schema=InterviewQuestions`` in
+    ``chat_json``). Trotzdem kann eine Antwort ankommen, die die Grenze
+    verletzt — nicht jeder Provider erzwingt ``maxItems`` zuverlaessig.
+
+    Zu WENIGE Fragen (< ``MIN_INTERVIEW_QUESTIONS``) bleiben eine echte
+    Ablehnung: das ist eine kaputte Antwort, Kappen kann sie nicht reparieren.
+    Zu VIELE gueltige, nichtleere Fragen sind das nicht — ``_cap_excess``
+    kappt sie (Review PR #1498) auf die ersten ``MAX_INTERVIEW_QUESTIONS``,
+    statt die komplette Antwort zu verwerfen und in den generischen
+    Default-Fragensatz des Aufrufers zu fallen (eine einzige Frage statt
+    fuenf inhaltlich passender).
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -166,6 +197,18 @@ class InterviewQuestions(BaseModel):
         min_length=MIN_INTERVIEW_QUESTIONS,
         max_length=MAX_INTERVIEW_QUESTIONS,
     )
+
+    @field_validator("questions", mode="before")
+    @classmethod
+    def _cap_excess_questions(cls, value: Any) -> Any:
+        # ``mode="before"`` laeuft vor der ``max_length``-Pruefung von
+        # ``Field`` — deshalb kappt dieser Validator, statt dass ``Field``
+        # anschliessend verwirft. Nicht-Listen (z. B. ``None`` oder ein
+        # blanker String) unveraendert durchreichen: die Typ-/Struktur-
+        # pruefung dafuer bleibt Sache der Kernvalidierung weiter unten.
+        if isinstance(value, list) and len(value) > MAX_INTERVIEW_QUESTIONS:
+            return value[:MAX_INTERVIEW_QUESTIONS]
+        return value
 
     @field_validator("questions")
     @classmethod

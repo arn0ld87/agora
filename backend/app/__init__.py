@@ -103,6 +103,94 @@ def configure_werkzeug_log_level() -> int:
     return level
 
 
+def _validate_embedding_at_startup(app, logger, *, should_log_startup: bool) -> None:
+    """Prueft die Embedding-Konfiguration beim Start und setzt den Degraded-Marker.
+
+    Aus ``create_app`` herausgeloest: der Zweig fuer die kaputte *aktive
+    Store-Konfiguration* (#1417, siehe unten) hob die Funktion ueber die
+    Radon-Allowlist-Obergrenze cc<=31. Den Deckel dafuer anzuheben waere genau
+    der Umgehungsweg, den das Typ- und Komplexitaetsgate aus #1495 verhindern
+    soll — also wandert der Block hierher.
+
+    Drei Ausgaenge, bewusst unterschiedlich: Provider-Ausfall und kaputte
+    Store-Konfiguration laufen degradiert weiter, eine ungueltige
+    ``.env``-Konfiguration bricht hart ab. ``logger`` wird uebergeben, weil er
+    in ``create_app`` erst erzeugt wird (``setup_logger('agora')``) und es
+    keinen Modul-Logger gibt.
+
+    AGORA_SKIP_EMBEDDING_PROBE=true skips the live network probe (CI/Smoke
+    contexts without a reachable embedding backend). Static KNOWN_EMBEDDING_DIMS
+    validation still runs — dimension mismatches are caught even without Ollama.
+    """
+    skip_embedding_probe = os.environ.get('AGORA_SKIP_EMBEDDING_PROBE', 'false').lower() in ('true', '1', 'yes')
+    from .services.embedding_configurations.runtime import (
+        EmbeddingRuntimeConfigurationError,
+    )
+    from .storage.embedding_service import (
+        EmbeddingBackendUnavailableError,
+        EmbeddingError,
+        validate_embedding_configuration,
+    )
+    app.config['EMBEDDING_DEGRADED'] = False
+    try:
+        actual_embedding_dim = validate_embedding_configuration(skip_probe=skip_embedding_probe)
+        if skip_embedding_probe:
+            logger.warning(
+                "Embedding probe skipped via AGORA_SKIP_EMBEDDING_PROBE — only static "
+                "dimension validation ran. Use this only in CI/Smoke contexts without "
+                "a reachable embedding backend."
+            )
+        elif should_log_startup:
+            # Kein ``Config.EMBEDDING_MODEL`` mehr in dieser Zeile: geprobt wird
+            # seit #1417 das Modell der aktiven Route, und das ist nicht
+            # zwingend das der ``.env``. Welches es war, steht in der Zeile
+            # "Embedding-Route aus dem Store aufgeloest" aus
+            # ``embedding_configurations/runtime.py`` — eine Zeile, die das
+            # Env-Modell nennt, obwohl der Store gewonnen hat, waere genau die
+            # Verwechslung, gegen die #1417 antritt.
+            logger.info(
+                "Embedding configuration validated (%s dims)",
+                actual_embedding_dim,
+            )
+    except EmbeddingBackendUnavailableError as e:
+        # Provider-Ausfall, keine Fehlkonfiguration: Quota erschoepft (429),
+        # Serverfehler oder Host nicht erreichbar. Ein Abbruch wuerde hier nur
+        # einen Crash-Loop erzeugen — der Reverse Proxy antwortet dann 502 auf
+        # *alle* Routen, obwohl nur die Embedding-Funktion betroffen ist.
+        # Deshalb: laut loggen, degradiert weiterlaufen. Semantische Suche und
+        # Graph-Embeddings schlagen zur Laufzeit fehl, bis der Provider zurueck
+        # ist; der Rest der Anwendung bleibt bedienbar.
+        app.config['EMBEDDING_DEGRADED'] = True
+        logger.error(
+            "Embedding backend unavailable (%s) — starting in DEGRADED mode. "
+            "Semantic search and graph embeddings will fail until the backend "
+            "recovers. Configuration itself is valid; no restart will fix this.",
+            e,
+        )
+    except EmbeddingRuntimeConfigurationError as e:
+        # Issue #1417: nicht die ``.env`` ist kaputt, sondern die *aktive
+        # Store-Konfiguration* (Verbindung fehlt/deaktiviert, oder ihre
+        # Dimension passt nicht zum Betriebsindex). Der Unterschied ist
+        # betrieblich entscheidend: eine .env-Fehlkonfiguration erfordert
+        # ohnehin einen Neustart, dieser Fall dagegen wird in der GUI
+        # repariert — und ein harter Abbruch nimmt dem Operator genau die
+        # Oberflaeche weg, mit der er ihn beheben koennte. Deshalb derselbe
+        # Umgang wie beim Provider-Ausfall: laut im Log, degradiert im
+        # Betrieb. Stumm wird dadurch nichts, jeder Embedding-Aufruf wirft
+        # weiterhin.
+        app.config['EMBEDDING_DEGRADED'] = True
+        logger.error(
+            "Active embedding configuration is unusable (%s) — starting in "
+            "DEGRADED mode. Semantic search and graph embeddings will fail "
+            "until the configuration is fixed under Settings → "
+            "Embedding-Konfiguration.",
+            e,
+        )
+    except EmbeddingError as e:
+        logger.error("Embedding configuration invalid: %s", e)
+        raise RuntimeError(f"Embedding configuration invalid: {e}") from e
+
+
 def create_app(config_class=Config):
     """Flask application factory function"""
     # Observability: Tracing + Metrics vor Flask-Instanz initialisieren,
@@ -189,48 +277,7 @@ def create_app(config_class=Config):
 
     # Fail fast on embedding misconfiguration or unavailable embedding backend.
     # Keep startup checks crisp and local — small nod to alexle135.de.
-    # AGORA_SKIP_EMBEDDING_PROBE=true skips the live network probe (CI/Smoke
-    # contexts without a reachable embedding backend). Static KNOWN_EMBEDDING_DIMS
-    # validation still runs — dimension mismatches are caught even without Ollama.
-    skip_embedding_probe = os.environ.get('AGORA_SKIP_EMBEDDING_PROBE', 'false').lower() in ('true', '1', 'yes')
-    from .storage.embedding_service import (
-        EmbeddingBackendUnavailableError,
-        EmbeddingError,
-        validate_embedding_configuration,
-    )
-    app.config['EMBEDDING_DEGRADED'] = False
-    try:
-        actual_embedding_dim = validate_embedding_configuration(skip_probe=skip_embedding_probe)
-        if skip_embedding_probe:
-            logger.warning(
-                "Embedding probe skipped via AGORA_SKIP_EMBEDDING_PROBE — only static "
-                "dimension validation ran. Use this only in CI/Smoke contexts without "
-                "a reachable embedding backend."
-            )
-        elif should_log_startup:
-            logger.info(
-                "Embedding configuration validated (%s → %s dims)",
-                Config.EMBEDDING_MODEL,
-                actual_embedding_dim,
-            )
-    except EmbeddingBackendUnavailableError as e:
-        # Provider-Ausfall, keine Fehlkonfiguration: Quota erschoepft (429),
-        # Serverfehler oder Host nicht erreichbar. Ein Abbruch wuerde hier nur
-        # einen Crash-Loop erzeugen — der Reverse Proxy antwortet dann 502 auf
-        # *alle* Routen, obwohl nur die Embedding-Funktion betroffen ist.
-        # Deshalb: laut loggen, degradiert weiterlaufen. Semantische Suche und
-        # Graph-Embeddings schlagen zur Laufzeit fehl, bis der Provider zurueck
-        # ist; der Rest der Anwendung bleibt bedienbar.
-        app.config['EMBEDDING_DEGRADED'] = True
-        logger.error(
-            "Embedding backend unavailable (%s) — starting in DEGRADED mode. "
-            "Semantic search and graph embeddings will fail until the backend "
-            "recovers. Configuration itself is valid; no restart will fix this.",
-            e,
-        )
-    except EmbeddingError as e:
-        logger.error("Embedding configuration invalid: %s", e)
-        raise RuntimeError(f"Embedding configuration invalid: {e}") from e
+    _validate_embedding_at_startup(app, logger, should_log_startup=should_log_startup)
 
     # CORS: nur explizit freigegebene Origins. Default = lokaler Vite-Dev-Server.
     # Zusätzliche Origins (z.B. Tailnet-Hostname) via AGORA_EXTRA_ORIGINS als

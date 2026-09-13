@@ -187,7 +187,9 @@ Please select up to {max_agents} most suitable Agents for interview and explain 
         )
 
         # Der Vertrag prueft Typ (kein bool, kein String), Vorzeichen,
-        # Eindeutigkeit sowie — ueber den Kontext — Profilgrenzen und Cap.
+        # Eindeutigkeit sowie — ueber den Kontext — Profilgrenzen; eine
+        # Ueberschreitung von ``max_agents`` wird dort auf die ersten
+        # ``max_agents`` Indizes gekappt statt verworfen (Review PR #1498).
         # Vorher filterte die Schleife nur den Indexbereich: ``[true]`` waehlte
         # wegen ``bool`` < ``int`` den Agenten mit Index 1, ``[1, 1]``
         # interviewte dieselbe Persona doppelt.
@@ -256,9 +258,11 @@ Please generate 3-5 interview questions."""
         # ``response.get("questions", …)`` gab bei ``{"questions": null}``
         # ``None`` zurueck und bei ``{"questions": "Warum?"}`` einen String —
         # der Aufrufer iterierte anschliessend ueber ``None`` bzw. ueber
-        # Einzelzeichen. Der Vertrag erzwingt eine Liste nichtleerer Strings in
-        # der vom Prompt verlangten Spanne; alles andere landet im
-        # Default-Fragensatz unten.
+        # Einzelzeichen. Der Vertrag erzwingt eine Liste nichtleerer Strings
+        # mit mindestens ``MIN_INTERVIEW_QUESTIONS`` Eintraegen; zu viele
+        # werden auf ``MAX_INTERVIEW_QUESTIONS`` gekappt statt verworfen
+        # (Review PR #1498). Nur eine echt kaputte Antwort (falscher Typ, zu
+        # wenige, leere Fragen) landet im Default-Fragensatz unten.
         return list(InterviewQuestions.model_validate(response).questions)
 
     except Exception as exc:  # noqa: BLE001 — budget errors re-raised, fallback intentional

@@ -126,12 +126,31 @@ class TestInterviewAgentSelection:
                 context={"profile_count": 3, "max_agents": 5},
             )
 
-    def test_more_than_max_agents_is_rejected(self) -> None:
-        with pytest.raises(ValidationError):
-            InterviewAgentSelection.model_validate(
-                {"selected_indices": [0, 1, 2]},
-                context={"profile_count": 10, "max_agents": 2},
-            )
+    def test_more_than_max_agents_is_capped_not_rejected(self) -> None:
+        """Codex-Befund (Review PR #1498): zu viele gueltige, eindeutige,
+        in-range Indizes sind keine kaputte Antwort — nur eine, die das Cap
+        ueberschreitet. Kappen auf die ersten ``max_agents`` erhaelt die
+        inhaltliche LLM-Auswahl; ein ``ValueError`` haette den Aufrufer in
+        seinen breiten ``except Exception`` und damit in den generischen
+        "erste N Profile"-Fallback geschickt."""
+        selection = InterviewAgentSelection.model_validate(
+            {"selected_indices": [0, 1, 2], "reasoning": "Drei Perspektiven."},
+            context={"profile_count": 10, "max_agents": 2},
+        )
+
+        assert selection.selected_indices == [0, 1]
+        assert selection.reasoning == "Drei Perspektiven."
+
+    def test_six_indices_at_max_agents_five_keeps_first_five(self) -> None:
+        """Konkretes Beispiel aus dem Review: 6 statt 5 Indizes darf nicht auf
+        den generischen Fallback fuehren, sondern muss die ersten 5 der
+        LLM-Auswahl behalten."""
+        selection = InterviewAgentSelection.model_validate(
+            {"selected_indices": [3, 1, 4, 0, 2, 5]},
+            context={"profile_count": 6, "max_agents": 5},
+        )
+
+        assert selection.selected_indices == [3, 1, 4, 0, 2]
 
     def test_valid_selection_passes(self) -> None:
         selection = InterviewAgentSelection.model_validate(
@@ -165,7 +184,6 @@ class TestInterviewQuestions:
             pytest.param({"questions": [None]}, id="null-element"),
             pytest.param({"questions": ["   ", "b", "c"]}, id="blank-question"),
             pytest.param({"questions": ["a", "b"]}, id="too-few"),
-            pytest.param({"questions": ["a", "b", "c", "d", "e", "f"]}, id="too-many"),
             pytest.param({}, id="missing"),
         ],
     )
@@ -178,3 +196,21 @@ class TestInterviewQuestions:
         payload = {"questions": [f"Frage {i}?" for i in range(count)]}
 
         assert len(InterviewQuestions.model_validate(payload).questions) == count
+
+    def test_six_questions_are_capped_to_five_not_rejected(self) -> None:
+        """Codex-Befund (Review PR #1498): 6 gueltige, nichtleere Fragen sind
+        keine kaputte Antwort. ``max_length`` wirkt weiterhin providerseitig
+        im Strict-JSON-Schema (siehe ``schema=InterviewQuestions``); trotzdem
+        ankommende Ueberschuesse werden gekappt statt in den generischen
+        Default-Fragensatz (eine einzige Frage) zu fallen."""
+        payload = {"questions": [f"Frage {i}?" for i in range(6)]}
+
+        result = InterviewQuestions.model_validate(payload)
+
+        assert result.questions == [f"Frage {i}?" for i in range(5)]
+
+    def test_too_few_questions_stay_rejected_even_after_capping_logic(self) -> None:
+        """Gegenprobe: das Kappen darf die Untergrenze nicht aufweichen — zu
+        wenige Fragen bleiben eine kaputte Antwort, das behebt kein Kappen."""
+        with pytest.raises(ValidationError):
+            InterviewQuestions.model_validate({"questions": ["Nur eine?"]})

@@ -16,7 +16,7 @@ es entstehen Vektoren zweier Modelle im selben Index.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 import pytest
 
@@ -432,3 +432,170 @@ class TestActivateRejectsDimensionChangeWithoutMigration:
         service.activate("cfg_new")
 
         assert store.status_updates
+
+
+class TestValidateEmbeddingConfigurationFollowsTheRoute:
+    """Befund 3 (Review PR #1498): ``validate_embedding_configuration`` folgte
+    vor der Korrektur nicht der aktiven Store-Konfiguration, sondern reichte
+    immer ``Config.EMBEDDING_MODEL``/``_BASE_URL``/``_API_KEY`` *ausdruecklich*
+    an ``EmbeddingService`` durch (siehe ``effective_model = model or
+    Config.EMBEDDING_MODEL`` vor der Korrektur — die Store-Aufloesung wurde
+    dabei nie befragt). Die Startup-Probe validierte damit das Env-Modell,
+    waehrend der Betrieb (``EmbeddingService()`` ohne Argumente,
+    ``storage/neo4j_storage.py`` + ``services/report_agent/evidence.py``)
+    gegen das Store-Modell einbettete. Diese Klasse sichert die seither
+    geltende Praezedenz: ausdrueckliche Argumente > aktive Store-Konfiguration
+    > ``Config.*`` — sowie die bewusste Ausnahme ``vector_dim``, das an
+    ``Config.VECTOR_DIM`` haengen bleibt.
+    """
+
+    @staticmethod
+    def _capture_embed(monkeypatch, captured: Dict[str, Any], vector_len: int) -> None:
+        """Ersetzt ``EmbeddingService.embed`` durch einen Spion statt eines
+        echten Netzwerkaufrufs — haelt fest, mit welchem model/base_url/api_key
+        die Probe tatsaechlich konstruiert wurde, ohne dafuer ein Netzwerk zu
+        brauchen."""
+
+        def fake_embed(self, text):  # noqa: ANN001 — Spion, keine echte API
+            captured["model"] = self.model
+            captured["base_url"] = self.base_url
+            captured["api_key"] = self.api_key
+            return [0.0] * vector_len
+
+        monkeypatch.setattr(
+            "app.storage.embedding_service.EmbeddingService.embed", fake_embed
+        )
+
+    def test_store_configuration_wins_over_config_when_args_are_missing(
+        self, monkeypatch
+    ) -> None:
+        """Kernbefund: fehlen ``model``/``base_url``, muss die aktive
+        Store-Route gewinnen, nicht ``Config.*``. Unter dem alten Code haette
+        ``effective_model`` hier ``"env-model"`` ergeben (Config-Fallback ohne
+        je die Route zu befragen) — der Test waere rot."""
+        from app.config import Config
+        from app.storage.embedding_service import validate_embedding_configuration
+
+        monkeypatch.setattr(
+            runtime_module,
+            "resolve_active_embedding_route",
+            lambda: runtime_module.ResolvedEmbeddingRoute(
+                model="store-custom-model",
+                base_url="https://store.example.test/v1",
+                api_key="sk-store",
+                configuration_id="cfg_active",
+                dimensions=1536,
+            ),
+        )
+        monkeypatch.setattr(Config, "EMBEDDING_MODEL", "env-model")
+        monkeypatch.setattr(Config, "EMBEDDING_BASE_URL", "http://env-host:11434")
+        monkeypatch.setattr(Config, "EMBEDDING_API_KEY", "env-key")
+        monkeypatch.setattr(Config, "VECTOR_DIM", 42)
+
+        captured: Dict[str, Any] = {}
+        self._capture_embed(monkeypatch, captured, vector_len=42)
+
+        actual_dim = validate_embedding_configuration()
+
+        assert captured == {
+            "model": "store-custom-model",
+            "base_url": "https://store.example.test/v1",
+            "api_key": "sk-store",
+        }
+        assert actual_dim == 42
+
+    def test_vector_dim_is_not_taken_from_the_route(self, monkeypatch) -> None:
+        """``vector_dim`` bleibt bewusst an ``Config.VECTOR_DIM`` haengen
+        (Docstring von ``validate_embedding_configuration``): eine aktive
+        Route mit einem Modell bekannter Dimension darf die Abweichung vom
+        Betriebsindex nicht verschweigen. Unter dem alten Code (Route wurde
+        nie befragt, ``effective_model`` blieb bei ``Config.EMBEDDING_MODEL``
+        ohne bekannte Dimension) haette dieser Fall gar keine Exception
+        ausgeloest — der Test waere rot."""
+        from app.config import Config
+        from app.storage.embedding_service import validate_embedding_configuration
+
+        monkeypatch.setattr(
+            runtime_module,
+            "resolve_active_embedding_route",
+            lambda: runtime_module.ResolvedEmbeddingRoute(
+                model="qwen3-embedding:4b",  # bekannte Dimension: 2560
+                base_url="https://store.example.test/v1",
+                api_key="sk-store",
+                configuration_id="cfg_active",
+                dimensions=2560,
+            ),
+        )
+        monkeypatch.setattr(Config, "EMBEDDING_MODEL", "legacy-model-without-known-dim")
+        monkeypatch.setattr(Config, "VECTOR_DIM", 768)
+
+        with pytest.raises(
+            EmbeddingRuntimeConfigurationError, match=r"auf 768 \(VECTOR_DIM\)"
+        ):
+            validate_embedding_configuration()
+
+    def test_explicit_arguments_bypass_the_store_entirely(self, monkeypatch) -> None:
+        """Der Migrationslauf (``api/embedding_migrations.py``) uebergibt
+        Modell und Endpoint ausdruecklich — die Store-Aufloesung darf dafuer
+        gar nicht erst angefragt werden (spiegelt
+        ``EmbeddingService.__init__``). Reine Bewahrungsregel: unter dem alten
+        Code wurde ``resolve_active_embedding_route`` an dieser Stelle ohnehin
+        nie aufgerufen; dieser Test haelt fest, dass die neue Store-Anbindung
+        den vollstaendig-expliziten Pfad nicht versehentlich mit erfasst."""
+        from app.config import Config
+        from app.storage.embedding_service import validate_embedding_configuration
+
+        def _must_not_be_called():
+            raise AssertionError(
+                "resolve_active_embedding_route darf nicht befragt werden, "
+                "wenn model UND base_url explizit uebergeben werden"
+            )
+
+        monkeypatch.setattr(
+            runtime_module, "resolve_active_embedding_route", _must_not_be_called
+        )
+        monkeypatch.setattr(Config, "EMBEDDING_API_KEY", "env-key")
+
+        captured: Dict[str, Any] = {}
+        self._capture_embed(monkeypatch, captured, vector_len=999)
+
+        actual_dim = validate_embedding_configuration(
+            model="explicit-model",
+            base_url="https://explicit.example.test/v1",
+            vector_dim=999,
+        )
+
+        assert captured == {
+            "model": "explicit-model",
+            "base_url": "https://explicit.example.test/v1",
+            "api_key": "env-key",
+        }
+        assert actual_dim == 999
+
+    def test_without_an_active_configuration_the_legacy_config_view_applies(
+        self, monkeypatch
+    ) -> None:
+        """Unveraendertes Verhalten: ohne aktive Store-Konfiguration bleibt
+        ``Config.*`` die einzige Quelle — wie vor #1417. Kein Regressionsfund
+        fuer sich, aber Teil derselben Praezedenzkette und schliesst die
+        Luecke zwischen den beiden anderen Faellen."""
+        from app.config import Config
+        from app.storage.embedding_service import validate_embedding_configuration
+
+        monkeypatch.setattr(runtime_module, "resolve_active_embedding_route", lambda: None)
+        monkeypatch.setattr(Config, "EMBEDDING_MODEL", "env-model-without-known-dim")
+        monkeypatch.setattr(Config, "EMBEDDING_BASE_URL", "http://env-host:11434")
+        monkeypatch.setattr(Config, "EMBEDDING_API_KEY", "env-key")
+        monkeypatch.setattr(Config, "VECTOR_DIM", 11)
+
+        captured: Dict[str, Any] = {}
+        self._capture_embed(monkeypatch, captured, vector_len=11)
+
+        actual_dim = validate_embedding_configuration()
+
+        assert captured == {
+            "model": "env-model-without-known-dim",
+            "base_url": "http://env-host:11434",
+            "api_key": "env-key",
+        }
+        assert actual_dim == 11
