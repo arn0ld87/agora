@@ -13,6 +13,7 @@ erbracht — siehe ``docs/runbooks/restore-drill.md``.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -22,18 +23,29 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 DRILL = REPO_ROOT / "scripts" / "restore-drill.sh"
 
 
-def _run(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess:
+def _run(
+    *args: str,
+    cwd: Path | None = None,
+    env: dict[str, str | None] | None = None,
+) -> subprocess.CompletedProcess:
+    environ = dict(os.environ)
+    for key, value in (env or {}).items():
+        if value is None:
+            environ.pop(key, None)
+        else:
+            environ[key] = value
     return subprocess.run(
         ["bash", str(DRILL), *args],
         capture_output=True,
         text=True,
         cwd=str(cwd or REPO_ROOT),
+        env=environ,
     )
 
 
 @pytest.fixture()
 def restored(tmp_path: Path) -> Path:
-    """Ein plausibel restauriertes Datenverzeichnis."""
+    """Ein plausibel restauriertes Artefaktverzeichnis (``backend/uploads``)."""
     data = tmp_path / "uploads"
     (data / "run_registry").mkdir(parents=True)
     (data / "run_registry" / "run_a.json").write_text(
@@ -43,8 +55,21 @@ def restored(tmp_path: Path) -> Path:
     (data / "simulations" / "sim_0123456789ab").mkdir(parents=True)
     (data / "reports" / "r1").mkdir(parents=True)
     (data / "reports" / "r1" / "report.json").write_text("{}", encoding="utf-8")
+    return data
+
+
+@pytest.fixture()
+def store(tmp_path: Path) -> Path:
+    """Das Store-Verzeichnis (``backend/data``, ``AGORA_DATA_DIR``).
+
+    ``provider_connections.json`` liegt hier, NICHT unter ``uploads`` — siehe
+    ``app/services/data_dir.py::resolve_data_dir``.
+    """
+    data = tmp_path / "data"
+    data.mkdir(parents=True)
     (data / "provider_connections.json").write_text(
-        json.dumps({"connections": [{"id": "conn_1"}]}), encoding="utf-8"
+        json.dumps({"version": 1, "connections": {"conn_1": {"id": "conn_1"}}}),
+        encoding="utf-8",
     )
     return data
 
@@ -150,20 +175,102 @@ class TestDryRunCoversEveryPhase:
         assert "übersprungen: --rollback-ref nicht gesetzt" in text
 
 
+class TestBackupCoversEveryPersistedDirectory:
+    """Codex-Befund P1 auf PR #1498. ``docs/backup-restore.md`` listet drei
+    Verzeichnisse mit Kritikalitaet „hoch": ``backend/uploads`` (Artefakte),
+    ``backend/data`` (Provider-/Routing-/App-Stores) und ``backend/instance``
+    (Instanzsettings). Ein Backup, das nur das erste erfasst, laesst nach dem
+    Restore genau die Stores fehlen, die der Pruefer belegen soll."""
+
+    def _protocol(self, tmp_path: Path, phase: str) -> str:
+        protocol = tmp_path / "drill.log"
+        _run(
+            "--phase", phase,
+            "--backup-dir", str(tmp_path / "backup"),
+            "--data-dir", str(tmp_path / "uploads"),
+            "--store-dir", str(tmp_path / "data"),
+            "--instance-dir", str(tmp_path / "instance"),
+            "--protocol", str(protocol),
+            "--dry-run",
+        )
+        return protocol.read_text(encoding="utf-8")
+
+    @pytest.mark.parametrize("archive", ["uploads.tar.gz", "data.tar.gz", "instance.tar.gz"])
+    def test_backup_writes_every_archive(self, tmp_path, archive: str) -> None:
+        assert archive in self._protocol(tmp_path, "backup")
+
+    @pytest.mark.parametrize("archive", ["uploads.tar.gz", "data.tar.gz", "instance.tar.gz"])
+    def test_restore_reads_every_archive(self, tmp_path, archive: str) -> None:
+        assert archive in self._protocol(tmp_path, "restore")
+
+    def test_restore_follows_the_documented_recovery_order(self, tmp_path) -> None:
+        """docs/backup-restore.md, „Recovery-Reihenfolge": data, instance,
+        uploads, dann Neo4j."""
+        text = self._protocol(tmp_path, "restore")
+
+        order = [
+            text.index("data.tar.gz"),
+            text.index("instance.tar.gz"),
+            text.index("uploads.tar.gz"),
+            text.index("neo4j-admin database load"),
+        ]
+        assert order == sorted(order)
+
+
+class TestNeo4jDumpReachesTheNewContainer:
+    """Codex-Befund P1 auf PR #1498. ``docker compose down`` nimmt den
+    Container mit; der neue startet mit einem leeren ``/backups``. Ein
+    ``neo4j-admin database load --from-path=/backups`` ohne vorheriges
+    Zurueckkopieren laedt nichts — und der Drill meldete das als erledigt."""
+
+    def _protocol(self, tmp_path: Path) -> str:
+        protocol = tmp_path / "drill.log"
+        _run(
+            "--phase", "restore",
+            "--backup-dir", str(tmp_path / "backup"),
+            "--data-dir", str(tmp_path / "uploads"),
+            "--protocol", str(protocol),
+            "--dry-run",
+        )
+        return protocol.read_text(encoding="utf-8")
+
+    def test_the_dump_is_copied_into_the_container(self, tmp_path) -> None:
+        text = self._protocol(tmp_path)
+
+        assert "docker compose cp" in text
+        assert "neo4j:/backups" in text
+
+    def test_the_copy_happens_before_the_load(self, tmp_path) -> None:
+        text = self._protocol(tmp_path)
+
+        assert text.index("neo4j:/backups") < text.index("neo4j-admin database load")
+
+    def test_the_container_is_up_before_the_copy(self, tmp_path) -> None:
+        """``docker compose cp`` in einen nicht existierenden Service schlaegt
+        fehl — die Reihenfolge up, cp, load ist die einzige, die traegt."""
+        text = self._protocol(tmp_path)
+
+        assert text.index("docker compose up -d neo4j") < text.index("neo4j:/backups")
+
+
 class TestVerifyPhaseIsReal:
     """Diese Phase laeuft wirklich — sie braucht kein Docker."""
 
-    def test_a_healthy_restore_passes(self, tmp_path, restored) -> None:
+    def test_a_healthy_restore_passes(self, tmp_path, restored, store, monkeypatch) -> None:
         result = _run(
             "--phase", "verify",
             "--backup-dir", str(tmp_path / "backup"),
             "--data-dir", str(restored),
+            "--store-dir", str(store),
             "--protocol", str(tmp_path / "drill.log"),
+            env={"AGORA_SECRET_KEY": "x" * 32},
         )
 
         assert result.returncode == 0, result.stdout + result.stderr
 
-    def test_a_run_still_marked_running_fails_the_drill(self, tmp_path, restored) -> None:
+    def test_a_run_still_marked_running_fails_the_drill(
+        self, tmp_path, restored, store
+    ) -> None:
         """Genau die Zusage aus docs/backup-restore.md: ein restaurierter Host
         darf keinen historischen Prozess als laufend vortaeuschen."""
         (restored / "run_registry" / "run_b.json").write_text(
@@ -178,8 +285,52 @@ class TestVerifyPhaseIsReal:
             "--phase", "verify",
             "--backup-dir", str(tmp_path / "backup"),
             "--data-dir", str(restored),
+            "--store-dir", str(store),
             "--protocol", str(protocol),
+            env={"AGORA_SECRET_KEY": "x" * 32},
         )
 
         assert result.returncode == 1
         assert "FEHLGESCHLAGEN: Restore-Verifikation" in protocol.read_text(encoding="utf-8")
+
+    def test_an_unproven_verification_does_not_pass_the_drill(
+        self, tmp_path, restored, store
+    ) -> None:
+        """Codex-Befund P1 auf PR #1498: ``restore_verify.py`` liest nur seinen
+        Exit-Code, und ein uebersprungener Pruefpunkt ergab dort 0. Ohne
+        ``AGORA_SECRET_KEY`` bleibt der Secret-Store ungeprueft — der Drill darf
+        das nicht als Nachweis verbuchen."""
+        protocol = tmp_path / "drill.log"
+
+        result = _run(
+            "--phase", "verify",
+            "--backup-dir", str(tmp_path / "backup"),
+            "--data-dir", str(restored),
+            "--store-dir", str(store),
+            "--protocol", str(protocol),
+            env={"AGORA_SECRET_KEY": None},
+        )
+
+        assert result.returncode == 1
+        assert "nicht belegt" in protocol.read_text(encoding="utf-8")
+
+    def test_the_store_directory_is_where_the_secret_check_looks(
+        self, tmp_path, restored, store
+    ) -> None:
+        """``provider_connections.json`` liegt in ``backend/data``. Ein Drill,
+        der dem Pruefer nur ``uploads`` zeigt, ueberspringt den gesamten
+        Provider/Secrets-Abschnitt und merkt es nicht."""
+        protocol = tmp_path / "drill.log"
+
+        _run(
+            "--phase", "verify",
+            "--backup-dir", str(tmp_path / "backup"),
+            "--data-dir", str(restored),
+            "--store-dir", str(store),
+            "--protocol", str(protocol),
+            env={"AGORA_SECRET_KEY": "x" * 32},
+        )
+
+        text = protocol.read_text(encoding="utf-8")
+        assert "OK    ProviderConnections vorhanden" in text
+        assert "SKIP  ProviderConnections vorhanden" not in text

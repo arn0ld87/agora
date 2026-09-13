@@ -20,8 +20,15 @@ Upgrade-/Rollback-Durchgang — siehe ``scripts/restore-drill.sh``.
 
 Aufruf::
 
-    uv run python scripts/restore_verify.py --data-dir backend/uploads
+    uv run python scripts/restore_verify.py --data-dir uploads --store-dir data
     uv run python scripts/restore_verify.py --data-dir ... --json
+
+``--data-dir`` ist das Artefaktverzeichnis (``backend/uploads``),
+``--store-dir`` das der dateibasierten JSON-Stores (``backend/data``, siehe
+``app/services/data_dir.py::resolve_data_dir``). Zwei Pfade, weil es zwei
+Verzeichnisse sind: ``provider_connections.json`` liegt im zweiten, und ein
+Pruefer, dem man nur das erste zeigt, ueberspringt den gesamten
+Provider/Secrets-Abschnitt — schweigend.
 """
 
 from __future__ import annotations
@@ -64,10 +71,23 @@ class VerificationReport:
     def skipped(self) -> List[Check]:
         return [c for c in self.checks if c.skipped]
 
+    @property
+    def proven(self) -> bool:
+        """Nur ohne Fehler UND ohne uebersprungene Punkte ist ein Restore belegt.
+
+        Ein uebersprungener Punkt ist kein Nachweis — genau das sagt das
+        Protokoll seit jeher in Prosa, und genau daran hing es, dass ``main``
+        trotzdem mit 0 endete und ``restore-drill.sh`` gruen meldete.
+        """
+        return not self.failed and not self.skipped
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "started_at": self.started_at,
-            "ok": not self.failed,
+            "ok": self.proven,
+            "proven": self.proven,
+            "failed_count": len(self.failed),
+            "skipped_count": len(self.skipped),
             "checks": [
                 {
                     "name": c.name,
@@ -209,14 +229,40 @@ def verify_reconciliation(data_dir: Path, report: VerificationReport) -> None:
 # ---------------------------------------------------------------------------
 
 
-def verify_secrets(data_dir: Path, report: VerificationReport) -> None:
+def _connection_entries(raw: Any) -> List[Dict[str, Any]]:
+    """Normalisiert ``provider_connections.json`` auf eine Liste von Eintraegen.
+
+    ``ProviderConnectionStore`` schreibt ``{"version": 1, "connections":
+    {<id>: {...}}}`` — unter ``connections`` steht ein *Objekt*, adressiert nach
+    Connection-ID (``provider_connection_store.py:111``). Ueber dieses Objekt zu
+    iterieren liefert die Schluessel, also ``str``; ein ``.get("secret_ref")``
+    darauf beendete den Pruefpunkt mit einem ``AttributeError`` statt mit einer
+    Aussage darueber, ob der Secret-Store entschluesselbar ist.
+
+    Die Listenform wird weiter gelesen: sie kommt in Handstaenden und
+    Fremdexporten vor, und ein Pruefer, der daran abstuerzt, prueft nichts mehr.
+    """
+    container = raw.get("connections", raw) if isinstance(raw, dict) else raw
+    if isinstance(container, dict):
+        values: List[Any] = list(container.values())
+    elif isinstance(container, list):
+        values = list(container)
+    else:
+        return []
+    return [entry for entry in values if isinstance(entry, dict)]
+
+
+def verify_secrets(store_dir: Path, report: VerificationReport) -> None:
     """„Secret-Store laesst sich mit dem restaurierten AGORA_SECRET_KEY entschluesseln".
 
     Geprueft wird ausschliesslich, OB die Entschluesselung gelingt — kein
     Klartext verlaesst diese Funktion, und keiner landet im Protokoll.
+
+    ``store_dir`` ist ``backend/data`` bzw. ``AGORA_DATA_DIR``, nicht das
+    Artefaktverzeichnis.
     """
     section = "Provider/Secrets"
-    connections = data_dir / "provider_connections.json"
+    connections = store_dir / "provider_connections.json"
 
     if not connections.is_file():
         report.checks.append(
@@ -231,8 +277,7 @@ def verify_secrets(data_dir: Path, report: VerificationReport) -> None:
         return
 
     def _connections() -> tuple:
-        raw = json.loads(connections.read_text(encoding="utf-8"))
-        entries = raw.get("connections", raw) if isinstance(raw, dict) else raw
+        entries = _connection_entries(json.loads(connections.read_text(encoding="utf-8")))
         return bool(entries), f"{len(entries)} Verbindung(en)", False
 
     _check(report, section, "ProviderConnections vorhanden")(_connections)
@@ -243,9 +288,8 @@ def verify_secrets(data_dir: Path, report: VerificationReport) -> None:
         from app.services.llm_provider_secrets_store import get_llm_provider_secrets_store
 
         store = get_llm_provider_secrets_store()
-        raw = json.loads(connections.read_text(encoding="utf-8"))
-        entries = raw.get("connections", raw) if isinstance(raw, dict) else raw
-        refs = [e.get("secret_ref") for e in entries if e.get("secret_ref")]
+        entries = _connection_entries(json.loads(connections.read_text(encoding="utf-8")))
+        refs = [e["secret_ref"] for e in entries if e.get("secret_ref")]
         if not refs:
             return True, "keine hinterlegten Secrets", False
         failures = []
@@ -270,11 +314,19 @@ def verify_secrets(data_dir: Path, report: VerificationReport) -> None:
 # ---------------------------------------------------------------------------
 
 
-def run_verification(data_dir: Path) -> VerificationReport:
+def run_verification(
+    data_dir: Path, store_dir: Optional[Path] = None
+) -> VerificationReport:
+    """Faehrt alle drei Abschnitte ab.
+
+    ``store_dir`` faellt auf ``data_dir`` zurueck, damit aeltere Aufrufe mit
+    einem einzigen Pfad weiter funktionieren; im Drill zeigt es auf
+    ``backend/data``.
+    """
     report = VerificationReport()
     verify_artifacts(data_dir, report)
     verify_reconciliation(data_dir, report)
-    verify_secrets(data_dir, report)
+    verify_secrets(store_dir if store_dir is not None else data_dir, report)
     return report
 
 
@@ -304,20 +356,41 @@ def render(report: VerificationReport) -> str:
     return "\n".join(lines)
 
 
+#: Jeder Pruefpunkt gruen, keiner uebersprungen.
+_EXIT_OK = 0
+#: Mindestens ein Pruefpunkt ist fehlgeschlagen.
+_EXIT_FAILED = 1
+#: Kein Fehler, aber mindestens ein Punkt konnte nicht geprueft werden. Ein
+#: eigener Code, damit ``restore-drill.sh`` „nicht belegt" von „kaputt"
+#: unterscheiden kann, ohne dass eines von beiden als gruen durchgeht.
+_EXIT_UNPROVEN = 2
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--data-dir",
         type=Path,
         required=True,
-        help="Restauriertes Datenverzeichnis (ueblicherweise backend/uploads)",
+        help="Restauriertes Artefaktverzeichnis (ueblicherweise backend/uploads)",
+    )
+    parser.add_argument(
+        "--store-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Restauriertes Store-Verzeichnis (ueblicherweise backend/data bzw. "
+            "AGORA_DATA_DIR). Ohne Angabe wird --data-dir verwendet."
+        ),
     )
     parser.add_argument("--json", action="store_true", help="Protokoll als JSON ausgeben")
     args = parser.parse_args(argv)
 
-    report = run_verification(args.data_dir)
+    report = run_verification(args.data_dir, args.store_dir)
     print(json.dumps(report.to_dict(), indent=2) if args.json else render(report))
-    return 1 if report.failed else 0
+    if report.failed:
+        return _EXIT_FAILED
+    return _EXIT_OK if report.proven else _EXIT_UNPROVEN
 
 
 if __name__ == "__main__":
