@@ -169,14 +169,19 @@ Preflight, Zeit-, Token-, Kosten- und LLM-Aufrufbudgets sind produktiv. Seit #14
 
 Chat-Routing und Embedding-Konfiguration sind absichtlich getrennt. Die persistente Embedding-Konfiguration lebt im `EmbeddingConfigurationStore`, Migrationen besitzen einen eigenen Lifecycle.
 
-Der Runtime-Pfad folgt seit [#1417](https://github.com/arn0ld87/agora/issues/1417) der aktiven Konfiguration: `EmbeddingService()` löst in der Reihenfolge ausdrückliche Argumente → aktive Store-Konfiguration → Legacy-Sicht aus `Config.*` auf. Der Migrationslauf übergibt seine Route weiterhin ausdrücklich und bleibt unberührt.
+Der Runtime-Pfad löst die Embedding-Route inzwischen über den Store auf: `EmbeddingService()` geht in der Reihenfolge ausdrückliche Argumente → aktive Store-Konfiguration → Legacy-Sicht aus `Config.*`. Der Migrationslauf übergibt seine Route weiterhin ausdrücklich und bleibt unberührt.
 
-Zwei Punkte gehören dazu und sind bewusst hart:
+Drei Punkte gehören dazu und sind bewusst hart:
 
 - Eine aktive Konfiguration, deren Verbindung fehlt, deaktiviert ist oder keine Basis-URL trägt, **wirft**, statt auf `Config.*` zurückzufallen. Ein Rückfall würde Modell aus dem Store mit dem Endpoint aus der `.env` mischen — dieselbe stille Provider-Vertauschung, gegen die der Chat-Pfad absichert.
 - `activate()` lehnt einen Dimensionswechsel ab, solange keine Indexversion in der neuen Dimension existiert. Geprüft wird gegen die Indexversion, nicht gegen die abgelöste Konfiguration: nach einer abgeschlossenen Migration ist die Aktivierung genau der gewollte letzte Schritt.
+- Die Auflösung lässt nur eine Konfiguration durch, die zu dem passt, was der **aktive Index tatsächlich enthält** (aktive `EmbeddingIndexVersion`, sonst die Legacy-Sicht aus `Config.EMBEDDING_MODEL`/`VECTOR_DIM`). Alles andere wirft.
 
-Ein Modellwechsel bei **gleicher** Dimension bleibt strukturell zulässig; davor schützt weiterhin nur der Migrationslauf, nicht der Dimensionswächter (#263).
+**[#1417](https://github.com/arn0ld87/agora/issues/1417) ist damit nicht geschlossen.** Der Grund ist der fehlende Index-Cutover: Lese- und Schreibpfad hängen am *unversionierten* Legacy-Index — `storage/neo4j_write.py` schreibt `n.embedding`, `storage/search_service.py` fragt `entity_embedding`/`fact_embedding` ab. Der Migrationslauf legt daneben `entity_embedding_v{N}` mit Property `embedding_v{N}` an, das liest niemand. Eine abgeschlossene Migration schaltet den Betrieb also nicht um.
+
+Das Modell allein umzustellen wäre deshalb schlimmer als der Zustand davor: bei gleicher Dimension landen Vektoren zweier Modelle im selben Index (genau die Korruption aus #1417), bei abweichender Dimension gehen inkompatible Query-Vektoren an den Altindex — der Dimensionswächter (#263) fängt nur letzteres, und auch das nur am Index, nicht am Modell. Der harte Riegel oben verhindert beides; die Oberfläche kann das Modell weiterhin **nicht** wechseln, sagt das aber laut, statt es vorzutäuschen.
+
+Offen bleibt der Cutover selbst: Reads und Writes auf die Versionsnamen umstellen plus ein Umschaltschritt.
 
 ## Installation und Betrieb
 
@@ -224,7 +229,7 @@ Reproduzierbarkeit:
 Priorität vor neuen Features:
 
 1. #1472 — **Teil erledigt.** Ein per SIGTERM abgeschnittener Prepare-/Report-/Graph-Build-Job wird beim nächsten Start als verwaist erkannt und auf `failed`/`process_restart` korrigiert, statt für immer auf `processing` zu stehen; die Liveness kommt aus der Prozess-Identität im Manifest (`app/jobs/identity.py`). **Offen bleibt die Wiederaufnahme**: `_BACKEND` ist weiterhin `"thread"`, es gibt keine persistente Queue und keinen wiederaufnehmbaren Zwischenstand. Eine Queue, die einen nicht-idempotenten Schritt erneut ausführt, verdoppelt Artefakte statt sie zu retten — idempotente Schritte kommen zuerst.
-2. #1417 — **erledigt**, siehe Abschnitt „Embeddings".
+2. #1417 — **Teil erledigt.** Der Laufzeitpfad folgt der aktiven Store-Konfiguration statt ausschließlich der `.env`, und eine Konfiguration, die nicht zum Inhalt des aktiven Index passt, wirft. **Offen bleibt der Index-Cutover**: Reads und Writes hängen am unversionierten Legacy-Index, die versionierten Indizes des Migrationslaufs liest niemand. Ohne ihn ist ein Modellwechsel über die Oberfläche weiterhin nicht möglich — siehe Abschnitt „Embeddings".
 3. #1470/#1471 — Entitätsauflösung und Persona-Domänenkohärenz.
 4. #1236/#1323 — Recommender- und Rollen-Konsistenz der Simulation.
 5. #1345/#1240 — Quantoren/Evidence und Eval-Leakage.

@@ -56,7 +56,7 @@ Bewusst **kein** neuer `interrupted`-Statuswert: `PREPARING → FAILED` ist im F
 
 **Offen bleibt die Wiederaufnahme** — Punkte 2 und 3 der Empfehlung. `_BACKEND` ist weiterhin `"thread"`, es gibt keinen Heartbeat und keinen wiederaufnehmbaren Zwischenstand. Ein abgebrochener Lauf ist jetzt ehrlich gescheitert statt ewig laufend; er ist nicht fortsetzbar.
 
-### Embedding-Runtime-SSoT — GESCHLOSSEN
+### Embedding-Runtime-SSoT — OFFEN (Riegel steht, Cutover fehlt)
 
 Nachweis am 11.09.2026: `EmbeddingService.__init__` (`app/storage/embedding_service.py`) löst weiterhin gegen `Config.EMBEDDING_MODEL` / `Config.EMBEDDING_BASE_URL` / `Config.EMBEDDING_API_KEY` auf, und beide produktiven Consumer konstruieren argumentlos:
 
@@ -67,7 +67,20 @@ Die in der GUI aktivierte Konfiguration steuerte den Laufzeitpfad damit nicht.
 
 **Umgesetzt:** `embedding_configurations/runtime.py` löst Store → Provider-Connection → Secret-Store auf; die Präzedenz in `EmbeddingService` ist ausdrückliche Argumente > aktive Store-Konfiguration > `Config.*`. Beide argumentlosen Consumer folgen damit dem Store, der Migrationslauf übergibt seine Route weiterhin ausdrücklich. Eine aktive, aber unvollständig auflösbare Konfiguration wirft, statt auf die Env zurückzufallen — ein Rückfall wäre genau die Halb-Übergabe, gegen die der Chat-Pfad absichert. Zusätzlich lehnt `activate()` einen Dimensionswechsel ohne passende Indexversion ab.
 
-Der Modellwechsel bei *gleicher* Dimension bleibt strukturell zulässig; davor schützt weiterhin nur der Migrationslauf.
+**Korrektur (Codex-Review auf PR #1498).** Dieser Abschnitt trug zunächst „GESCHLOSSEN". Das war falsch, und die Änderung allein war nicht nur unvollständig, sondern gefährlich.
+
+Nachgeprüft: Lese- und Schreibpfad hängen am *unversionierten* Legacy-Index.
+
+* `app/storage/neo4j_write.py:422` schreibt `n.embedding`
+* `app/storage/search_service.py` fragt `entity_embedding` und `fact_embedding` ab
+* `embedding_migration.py` legt `entity_embedding_v{N}` mit Property `embedding_v{N}` an — die liest niemand
+* `embedding_configurations/legacy.py` legt gar keinen `EmbeddingIndexVersion`-Datensatz an
+
+Es gibt also keinen Cutover: eine abgeschlossene Migration schaltet den Betrieb nicht um. Das Modell dem Store folgen zu lassen, während der Index ihm nicht folgen kann, öffnet damit einen Korruptionspfad, den es vorher nicht gab — bei gleicher Dimension Vektoren zweier Modelle im selben Index, bei abweichender Dimension inkompatible Query-Vektoren am Altindex.
+
+**Nachgezogen:** `_reject_unmigrated_model_switch` lässt nur eine Konfiguration durch, die zu dem passt, was der aktive Index tatsächlich enthält — aktive `EmbeddingIndexVersion`, sonst die Legacy-Sicht aus `Config.EMBEDDING_MODEL`/`VECTOR_DIM`. Der Riegel greift vor der Secret-Entschlüsselung. Die Oberfläche hört damit auf zu lügen: sie kann das Modell weiterhin nicht wechseln, sagt das aber laut.
+
+**[#1417](https://github.com/arn0ld87/agora/issues/1417) bleibt offen.** Der Wechsel selbst braucht den Index-Cutover: Reads und Writes auf die Versionsnamen umstellen plus einen Umschaltschritt. Das ist eine eigene Architekturänderung und gehört nicht in diesen Stabilisierungs-PR.
 
 ### Backup / Restore / Upgrade / Rollback — OFFEN (Werkzeug steht)
 
@@ -86,3 +99,31 @@ Siehe [`../STATUS.md`](../STATUS.md#qualitäts-gates). Kurz:
 * mypy-Schuld hinter `ignore_errors`: **266 Fehler in 55 Dateien**, gemessen und gedeckelt, nicht behoben.
 * Coverage: **83,82 % Line**, **71,94 % Branch**; Schwellen 82,8 / 70,9.
 * Radon: `radon-allowlist.txt` unverändert, kein Deckel angehoben.
+
+## Review-Runden auf PR #1498
+
+Alle Befunde beider Runden lagen in Code, der in genau diesem PR entstanden ist — nicht im Bestand.
+
+### Runde 1 (Codex)
+
+| Befund | Datei | Regressionstest |
+|---|---|---|
+| P1: Trennzeichen vor der ersten Zahl erzeugt leeres Prädikat | `app/services/evidence_entailment.py` | `tests/regression/test_evidence_local_clause_predicate.py` |
+| P2: `bio: null` bricht den gesamten Interviewlauf ab | `app/contracts/interview_contract.py` | `tests/contracts/test_interview_contract.py` |
+
+Der zweite war härter als beschrieben: der Zugriff liegt *vor* dem `try` in `select_agents_for_interview`, der `TypeError` beendete damit nicht einen Kandidaten, sondern den Lauf. Behoben mit Defaults statt `Optional`.
+
+### Runde 2 (Codex)
+
+| Befund | Datei | Regressionstest |
+|---|---|---|
+| P1: aktive Route wählt den migrierten Index nicht aus | `app/services/embedding_configurations/runtime.py` | `tests/services/test_embedding_runtime_ssot.py` |
+| P1: übersprungene Prüfpunkte ergeben Exit 0 | `backend/scripts/restore_verify.py` | `tests/scripts/test_restore_verify.py` |
+| P1: Neo4j-Dump erreicht den neuen Container nie | `scripts/restore-drill.sh` | `tests/scripts/test_restore_drill_script.py` |
+| P1: Backup erfasst nur `backend/uploads` | `scripts/restore-drill.sh` | dito |
+| P2: `SimulationState` nach der Manifest-Terminalisierung | `app/services/sim/reconciliation.py` | `tests/services/sim/test_job_reconciliation.py` |
+| P2: `provider_connections.json` ist ein Objekt, keine Liste | `backend/scripts/restore_verify.py` | `tests/scripts/test_restore_verify.py` |
+
+Beim Nachprüfen des letzten Punkts fiel ein weiterer auf, den niemand gemeldet hatte: `provider_connections.json` liegt in `backend/data`, nie in `backend/uploads`. Der dokumentierte Aufruf `restore_verify.py --data-dir uploads` übersprang damit den gesamten Provider/Secrets-Abschnitt — schweigend. Der Prüfer nimmt jetzt `--store-dir` daneben.
+
+Der erste Befund der Runde führte zur Korrektur oben: „#1417 — GESCHLOSSEN" war falsch.
