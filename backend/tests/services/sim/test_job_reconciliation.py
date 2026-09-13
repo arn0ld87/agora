@@ -168,14 +168,64 @@ class TestSimulationStateFollows:
 
         assert seen == []
 
-    def test_a_failing_state_write_does_not_abort_the_reconciliation(self) -> None:
-        """Das Manifest zu korrigieren ist wichtiger als der Folgeschritt."""
+
+class TestWriteOrderMatchesTheF1Invariant:
+    """Codex-Befund P2 auf PR #1498.
+
+    ``reconcile_stale_runs`` schreibt seit PR #1476 Runde 5 (Finding F1)
+    bewusst ``save_run_state`` *vor* ``registry.update_run``: ein verwaister
+    Run gilt als korrigiert, sobald er auch nur EINE der beiden Persistenzen
+    erreicht hat, denn das Manifest faellt mit ``failed`` aus
+    ``_STALE_STATUSES`` und wird nie wieder aufgegriffen. Steht die Registry
+    zuerst und scheitert der zweite Schritt, bleibt eine Halb-Korrektur fuer
+    immer stehen — hier: ein Manifest auf ``failed`` neben einem
+    ``SimulationState`` auf ``preparing``, also genau der endlose
+    Vorbereitungs-Status aus #1472.
+
+    ``reconcile_stale_jobs`` haelt dieselben zwei Persistenzen und damit
+    dieselbe Invariante.
+    """
+
+    def test_the_simulation_state_is_written_before_the_manifest(self) -> None:
+        order: List[str] = []
+
+        class _OrderingRegistry(_FakeRegistry):
+            def update_run(self, run_id: str, **updates: Any):
+                order.append("manifest")
+                return super().update_run(run_id, **updates)
+
+        registry = _OrderingRegistry([_run("run_a", metadata={"worker_token": "gone"})])
+
+        reconcile_stale_jobs(
+            registry,
+            fail_simulation_state=lambda sid, error: order.append("state"),
+        )
+
+        assert order == ["state", "manifest"]
+
+    def test_a_failing_state_write_leaves_the_manifest_stale(self) -> None:
+        """Damit der naechste Start denselben Run erneut aufgreift."""
 
         def _boom(simulation_id: str, error: str) -> None:
             raise OSError("disk full")
 
         registry = _FakeRegistry([_run("run_a", metadata={"worker_token": "gone"})])
 
-        result = reconcile_stale_jobs(registry, fail_simulation_state=_boom)
+        with pytest.raises(OSError, match="disk full"):
+            reconcile_stale_jobs(registry, fail_simulation_state=_boom)
+
+        assert registry.updates == []
+        assert registry._runs["run_a"]["status"] == "processing"
+
+    def test_a_run_without_a_simulation_id_still_reaches_the_manifest(self) -> None:
+        """Ohne ``simulation_id`` gibt es keinen zweiten Zustand — das Manifest
+        allein zu korrigieren ist dann vollstaendig, keine Halb-Korrektur."""
+        run = _run("run_a", metadata={"worker_token": "gone"})
+        run["entity_id"] = None
+        run["linked_ids"] = {}
+        registry = _FakeRegistry([run])
+
+        result = reconcile_stale_jobs(registry, fail_simulation_state=lambda *_: None)
 
         assert result.reconciled_run_ids == ["run_a"]
+        assert registry.updates[0]["status"] == "failed"
