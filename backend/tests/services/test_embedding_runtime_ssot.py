@@ -36,6 +36,16 @@ class _Config:
 
 
 @dataclass
+class _IndexVersion:
+    version: int = 1
+    model_id: str = "text-embedding-3-small"
+    dimensions: int = 1536
+
+
+_MATCHING_INDEX = object()
+
+
+@dataclass
 class _Connection:
     id: str = "conn_1"
     base_url: Optional[str] = "https://api.example.test/v1"
@@ -43,10 +53,36 @@ class _Connection:
     secret_ref: Optional[str] = None
 
 
-def _install(monkeypatch, *, config: Any, connections: List[Any], secret: str = "sk-store") -> None:
+def _install(
+    monkeypatch,
+    *,
+    config: Any,
+    connections: List[Any],
+    secret: str = "sk-store",
+    index: Any = _MATCHING_INDEX,
+) -> None:
+    """Verdrahtet die drei Stores.
+
+    ``index`` ist per Default eine aktive Indexversion, die zur Konfiguration
+    passt — sonst greift der Riegel gegen den unmigrierten Modellwechsel und
+    jeder Aufloesungstest wuerde an ihm scheitern statt an dem, was er prueft.
+    """
+    if index is _MATCHING_INDEX:
+        index = (
+            None
+            if config is None
+            else _IndexVersion(model_id=config.model_id, dimensions=config.dimensions)
+        )
     monkeypatch.setattr(
         "app.services.embedding_configuration_store.EmbeddingConfigurationStore",
-        lambda: type("S", (), {"get_active_global_configuration": lambda _s: config})(),
+        lambda: type(
+            "S",
+            (),
+            {
+                "get_active_global_configuration": lambda _s: config,
+                "get_active_index_version": lambda _s: index,
+            },
+        )(),
     )
     monkeypatch.setattr(
         "app.services.provider_connection_store.ProviderConnectionStore",
@@ -107,6 +143,109 @@ class TestBrokenActiveConfigurationIsLoud:
 
         with pytest.raises(EmbeddingRuntimeConfigurationError, match="keine Basis-URL"):
             resolve_active_embedding_route()
+
+
+class TestUnmigratedModelSwitchIsRejected:
+    """Codex-Befund P1 auf PR #1498, verifiziert.
+
+    Lese- und Schreibpfad haengen am *unversionierten* Legacy-Index:
+    ``storage/neo4j_write.py`` schreibt ``n.embedding``,
+    ``storage/search_service.py`` fragt ``entity_embedding``/``fact_embedding``
+    ab. Der Migrationslauf legt daneben ``entity_embedding_v{N}`` an, das liest
+    niemand — es gibt keinen Cutover. Die Konfiguration darf den Laufzeitpfad
+    deshalb nur erreichen, wenn sie zu dem passt, was im aktiven Index
+    tatsaechlich steht.
+    """
+
+    def test_configuration_matching_the_active_index_passes(self, monkeypatch) -> None:
+        _install(
+            monkeypatch,
+            config=_Config(model_id="text-embedding-3-small", dimensions=1536),
+            connections=[_Connection()],
+            index=_IndexVersion(model_id="text-embedding-3-small", dimensions=1536),
+        )
+
+        assert resolve_active_embedding_route().model == "text-embedding-3-small"
+
+    def test_model_switch_at_equal_dimensions_raises(self, monkeypatch) -> None:
+        """Genau der Fall, den der Dimensionswaechter (#263) nicht faengt:
+        ``ada-002`` und ``3-small`` haben beide 1536 Dimensionen."""
+        _install(
+            monkeypatch,
+            config=_Config(model_id="text-embedding-ada-002", dimensions=1536),
+            connections=[_Connection()],
+            index=_IndexVersion(model_id="text-embedding-3-small", dimensions=1536),
+        )
+
+        with pytest.raises(EmbeddingRuntimeConfigurationError, match="Index-Cutover fehlt"):
+            resolve_active_embedding_route()
+
+    def test_dimension_switch_against_the_active_index_raises(self, monkeypatch) -> None:
+        _install(
+            monkeypatch,
+            config=_Config(model_id="nomic-embed-text", dimensions=768),
+            connections=[_Connection()],
+            index=_IndexVersion(model_id="text-embedding-3-small", dimensions=1536),
+        )
+
+        with pytest.raises(EmbeddingRuntimeConfigurationError, match="Index-Cutover fehlt"):
+            resolve_active_embedding_route()
+
+    def test_without_an_index_version_the_legacy_view_decides(self, monkeypatch) -> None:
+        """``legacy.py`` legt keinen ``EmbeddingIndexVersion``-Datensatz an. Ohne
+        einen solchen ist ``Config.*`` der einzige Nachweis darueber, womit der
+        vorhandene Index gefuellt wurde."""
+        from app.config import Config
+
+        monkeypatch.setattr(Config, "EMBEDDING_MODEL", "legacy-model")
+        monkeypatch.setattr(Config, "VECTOR_DIM", 1536)
+        _install(
+            monkeypatch,
+            config=_Config(model_id="legacy-model", dimensions=1536),
+            connections=[_Connection()],
+            index=None,
+        )
+
+        assert resolve_active_embedding_route().model == "legacy-model"
+
+    def test_without_an_index_version_a_deviating_model_raises(self, monkeypatch) -> None:
+        from app.config import Config
+
+        monkeypatch.setattr(Config, "EMBEDDING_MODEL", "legacy-model")
+        monkeypatch.setattr(Config, "VECTOR_DIM", 1536)
+        _install(
+            monkeypatch,
+            config=_Config(model_id="text-embedding-3-small", dimensions=1536),
+            connections=[_Connection()],
+            index=None,
+        )
+
+        with pytest.raises(EmbeddingRuntimeConfigurationError, match="Index-Cutover"):
+            resolve_active_embedding_route()
+
+    def test_the_guard_runs_before_the_secret_is_read(self, monkeypatch) -> None:
+        """Ein Schluessel, der fuer eine abgelehnte Route entschluesselt wird, ist
+        ein unnoetig entpackte Geheimnis."""
+        reads: List[str] = []
+
+        _install(
+            monkeypatch,
+            config=_Config(model_id="text-embedding-ada-002", dimensions=1536),
+            connections=[_Connection(secret_ref="ref_1")],
+            index=_IndexVersion(model_id="text-embedding-3-small", dimensions=1536),
+        )
+        monkeypatch.setattr(
+            "app.services.llm_provider_secrets_store.get_llm_provider_secrets_store",
+            lambda: type(
+                "K",
+                (),
+                {"get_plaintext": lambda _s, ref: reads.append(ref) or "sk"},
+            )(),
+        )
+
+        with pytest.raises(EmbeddingRuntimeConfigurationError):
+            resolve_active_embedding_route()
+        assert reads == []
 
 
 class TestEmbeddingServiceUsesTheStore:

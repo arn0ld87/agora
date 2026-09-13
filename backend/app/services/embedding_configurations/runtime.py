@@ -33,14 +33,38 @@ mischen: dieselbe stille Provider-Vertauschung, gegen die
 ``prepare_llm._resolve_llm_connection`` auf der Chat-Seite absichert. Lieber ein
 lauter Fehler, der auf die Einstellungen zeigt, als ein Index aus zwei
 Vektorraeumen.
+
+Warum ein Modellwechsel hier (noch) nicht durchgereicht wird
+------------------------------------------------------------
+Codex-Befund P1 auf PR #1498, verifiziert: Lese- und Schreibpfad haengen fest
+am *unversionierten* Legacy-Index. ``storage/neo4j_write.py`` schreibt
+``n.embedding``, ``storage/search_service.py`` fragt ``entity_embedding`` und
+``fact_embedding`` ab. Der Migrationslauf legt daneben ``entity_embedding_v{N}``
+mit Property ``embedding_v{N}`` an — die liest niemand. Es gibt also keinen
+Cutover: eine abgeschlossene Migration schaltet den Betrieb nicht um.
+
+Damit gilt: das Modell allein umzustellen, ohne den Index mitzunehmen, waere
+schlimmer als der Zustand davor. Bei gleicher Dimension landen Vektoren zweier
+Modelle im selben Index (genau die Korruption, die #1417 beschreibt), bei
+abweichender Dimension gehen inkompatible Query-Vektoren an den Altindex.
+
+Diese Aufloesung laesst deshalb nur eine Konfiguration durch, die zu dem passt,
+was der aktive Index tatsaechlich enthaelt — und wirft sonst. Die GUI hoert
+damit auf zu luegen: sie kann das Modell weiterhin nicht wechseln, sagt das aber
+laut, statt es vorzutaeuschen. Der Wechsel selbst braucht den Index-Cutover
+(Reads/Writes auf die Versionsnamen umstellen plus einen Umschaltschritt) und
+bleibt Folgearbeit an #1417.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from ...utils.logger import get_logger
+
+if TYPE_CHECKING:  # pragma: no cover - nur fuer die Signatur
+    from ...contracts.embedding_contract import EmbeddingConfiguration
 
 logger = get_logger("agora.embedding.runtime")
 
@@ -107,6 +131,8 @@ def resolve_active_embedding_route() -> Optional[ResolvedEmbeddingRoute]:
             "die .env-Konfiguration gehen, während das Modell aus dem Store kommt."
         )
 
+    _reject_unmigrated_model_switch(config)
+
     api_key = None
     if connection.secret_ref:
         from ..llm_provider_secrets_store import get_llm_provider_secrets_store
@@ -123,6 +149,57 @@ def resolve_active_embedding_route() -> Optional[ResolvedEmbeddingRoute]:
         api_key=api_key,
         configuration_id=config.id,
         dimensions=config.dimensions,
+    )
+
+
+def _reject_unmigrated_model_switch(config: "EmbeddingConfiguration") -> None:
+    """Laesst nur durch, was zum tatsaechlichen Inhalt des aktiven Index passt.
+
+    Siehe Modul-Docstring: Reads und Writes haengen am unversionierten
+    Legacy-Index, und es gibt keinen Cutover auf die Versionsnamen. Ein
+    Modellwechsel darf deshalb den Laufzeitpfad nicht erreichen.
+
+    Zwei Faelle:
+
+    * Es gibt eine aktive Indexversion — sie kennt das Modell, mit dem die
+      gespeicherten Vektoren erzeugt wurden. Die Konfiguration muss dazu passen.
+    * Es gibt keine — dann existiert kein Nachweis darueber, was im Legacy-Index
+      steht, ausser der Legacy-Sicht selbst (``Config.EMBEDDING_MODEL``,
+      ``Config.VECTOR_DIM``, siehe ``embedding_configurations/legacy.py``). Die
+      Konfiguration muss dann dieser entsprechen.
+    """
+    from ...config import Config
+    from ..embedding_configuration_store import EmbeddingConfigurationStore
+
+    active_index = EmbeddingConfigurationStore().get_active_index_version()
+    if active_index is not None:
+        if (
+            active_index.model_id == config.model_id
+            and active_index.dimensions == config.dimensions
+        ):
+            return
+        raise EmbeddingRuntimeConfigurationError(
+            f"Aktive Embedding-Konfiguration {config.id} nutzt "
+            f"{config.model_id!r} ({config.dimensions} Dim.), der aktive Index "
+            f"v{active_index.version} enthaelt aber Vektoren von "
+            f"{active_index.model_id!r} ({active_index.dimensions} Dim.). "
+            "Lese- und Schreibpfad haengen weiterhin am unversionierten "
+            "Legacy-Index — ein Modellwechsel wuerde Vektoren zweier Modelle "
+            "vermischen. Der Index-Cutover fehlt (#1417)."
+        )
+
+    if (
+        config.model_id == Config.EMBEDDING_MODEL
+        and config.dimensions == Config.VECTOR_DIM
+    ):
+        return
+    raise EmbeddingRuntimeConfigurationError(
+        f"Aktive Embedding-Konfiguration {config.id} nutzt {config.model_id!r} "
+        f"({config.dimensions} Dim.), die Legacy-Sicht meldet aber "
+        f"{Config.EMBEDDING_MODEL!r} ({Config.VECTOR_DIM} Dim.) — und es gibt "
+        "keine Indexversion, die belegen wuerde, womit der vorhandene Index "
+        "gefuellt wurde. Ohne Index-Cutover (#1417) wuerde der Wechsel Vektoren "
+        "zweier Modelle vermischen."
     )
 
 
