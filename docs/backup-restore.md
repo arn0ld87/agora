@@ -162,10 +162,12 @@ Ein Restore gilt erst als brauchbar, wenn mindestens folgende Checks grün sind.
 Die Punkte unter „Artefakte", „Provider/Secrets" und „Reconciliation" prüft [`backend/scripts/restore_verify.py`](../backend/scripts/restore_verify.py) maschinell und schreibt ein Protokoll mit Zeitstempel und Exit-Code:
 
 ```bash
-cd backend && uv run python scripts/restore_verify.py --data-dir uploads
+cd backend && uv run python scripts/restore_verify.py --data-dir uploads --store-dir data
 ```
 
-Ein übersprungener Punkt zählt dort ausdrücklich **nicht** als bestanden. Für den vollständigen Fresh-Host-Durchgang siehe [`runbooks/restore-drill.md`](runbooks/restore-drill.md).
+`--data-dir` ist das Artefaktverzeichnis, `--store-dir` das der JSON-Stores (`backend/data` bzw. `AGORA_DATA_DIR`) — `provider_connections.json` liegt dort, nicht unter `uploads`.
+
+Ein übersprungener Punkt zählt dort ausdrücklich **nicht** als bestanden: das Skript beendet sich dann mit Exit-Code `2` (Exit `1` = mindestens ein Prüfpunkt ist rot, Exit `0` = alles grün und nichts übersprungen). Für den vollständigen Fresh-Host-Durchgang siehe [`runbooks/restore-drill.md`](runbooks/restore-drill.md).
 
 ### Infrastruktur
 

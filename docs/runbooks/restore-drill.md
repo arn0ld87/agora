@@ -12,7 +12,7 @@ Zwei Werkzeuge schließen genau diese Lücke:
 | Werkzeug | Was es tut | Braucht |
 |---|---|---|
 | [`scripts/restore-drill.sh`](../../scripts/restore-drill.sh) | fährt Backup → Restore → Verifikation → Upgrade → Rollback in dieser Reihenfolge und schreibt ein Protokoll | frischer Host, Docker, echtes Backup |
-| [`backend/scripts/restore_verify.py`](../../backend/scripts/restore_verify.py) | prüft die Checkliste aus `backup-restore.md` maschinell gegen das restaurierte Datenverzeichnis | nur das Datenverzeichnis |
+| [`backend/scripts/restore_verify.py`](../../backend/scripts/restore_verify.py) | prüft die Checkliste aus `backup-restore.md` maschinell gegen die restaurierten Verzeichnisse | Artefakt- und Store-Verzeichnis |
 
 ## Stand
 
@@ -45,6 +45,18 @@ bash scripts/restore-drill.sh \
 
 Einzelne Phasen (`--phase backup|restore|verify|upgrade|rollback`) lassen sich getrennt fahren, wenn ein Durchgang abbricht und nur ein Teil zu wiederholen ist.
 
+### Was gesichert wird
+
+Drei Verzeichnisse, je ein Archiv — dieselben, die `docs/backup-restore.md` mit Kritikalität „hoch" führt:
+
+| Option | Vorgabe | Archiv | Inhalt |
+|---|---|---|---|
+| `--data-dir` | `backend/uploads` | `uploads.tar.gz` | Runs, Simulationen, Reports |
+| `--store-dir` | `backend/data` (bzw. `AGORA_DATA_DIR`) | `data.tar.gz` | Provider-, Routing- und App-Stores |
+| `--instance-dir` | `backend/instance` | `instance.tar.gz` | Instanzsettings |
+
+Die Restore-Phase spielt sie in der dokumentierten Recovery-Reihenfolge zurück (Stores, Instanz, Artefakte, dann Neo4j) und kopiert den Neo4j-Dump vor dem `database load` zurück in den neu gestarteten Container — `docker compose down` nimmt den alten mitsamt seinem `/backups` mit.
+
 ### Vor dem Lauf prüfen
 
 Die `neo4j-admin`-Syntax hängt an der eingesetzten Neo4j-Version und Betriebsform. Das Skript pinnt sie bewusst nicht und protokolliert stattdessen einen Hinweis — ein Monate alter Befehl, der einen Server im Container stoppt und danach so tut, als könne man fröhlich weiter in denselben Prozess `exec`en, ist gefährlicher als gar keiner. Vor dem Drill gegen die laufende Version prüfen.
@@ -53,7 +65,7 @@ Die `neo4j-admin`-Syntax hängt an der eingesetzten Neo4j-Version und Betriebsfo
 
 Der Drill gilt als bestanden, wenn:
 
-- Exit-Code `0`,
+- Exit-Code `0` (`2` heißt: nichts ist rot, aber etwas blieb ungeprüft — das Skript wertet das als Fehlschlag),
 - die Verifikation **keinen** übersprungenen Punkt meldet (ein `SKIP` ist kein Erfolg — ohne gesetzten `AGORA_SECRET_KEY` etwa bleibt die Secret-Prüfung ungeprüft, und dann ist genau der Teil offen, der am häufigsten bricht),
 - Upgrade und Rollback jeweils mit einer eigenen Verifikation abgeschlossen sind.
 
@@ -65,9 +77,19 @@ Die maschinelle Checkliste lässt sich jederzeit gegen eine bestehende Installat
 
 ```bash
 cd backend
-uv run python scripts/restore_verify.py --data-dir uploads
-uv run python scripts/restore_verify.py --data-dir uploads --json   # für Automatisierung
+uv run python scripts/restore_verify.py --data-dir uploads --store-dir data
+uv run python scripts/restore_verify.py --data-dir uploads --store-dir data --json
 ```
+
+`--data-dir` zeigt auf die Artefakte (`backend/uploads`), `--store-dir` auf die
+dateibasierten JSON-Stores (`backend/data` bzw. `AGORA_DATA_DIR`).
+`provider_connections.json` liegt im zweiten — ohne den Pfad überspringt die
+Prüfung den gesamten Provider/Secrets-Abschnitt.
+
+Exit-Codes: `0` alle Punkte grün und keiner übersprungen, `1` mindestens ein
+Punkt ist rot, `2` kein Fehler, aber mindestens ein Punkt konnte nicht geprüft
+werden. `restore-drill.sh` behandelt `2` wie einen Fehlschlag — ein
+übersprungener Punkt ist kein Nachweis.
 
 Geprüft werden Artefakte (RunRegistry lesbar, Simulationen und Reports vorhanden), Reconciliation (kein Run steht fälschlich auf `pending`/`processing`/`paused` — siehe [#1476](https://github.com/arn0ld87/agora/issues/1476) und [#1472](https://github.com/arn0ld87/agora/issues/1472)) und Secrets (ProviderConnections vorhanden, Secret-Store mit dem restaurierten `AGORA_SECRET_KEY` entschlüsselbar).
 

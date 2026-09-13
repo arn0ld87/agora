@@ -46,10 +46,22 @@ def _install(tmp_path: Path, *, run_status: str = "completed") -> Path:
     reports = data / "reports" / "report_1"
     reports.mkdir(parents=True)
     (reports / "report.json").write_text("{}", encoding="utf-8")
-    (data / "provider_connections.json").write_text(
-        json.dumps({"connections": [{"id": "conn_1"}]}), encoding="utf-8"
-    )
+    _write_connections(data, {"conn_1": {"id": "conn_1"}})
     return data
+
+
+def _write_connections(data: Path, connections: dict) -> None:
+    """Genau die Form, die ``ProviderConnectionStore`` schreibt.
+
+    ``provider_connection_store._read_raw`` legt ``{"version": 1,
+    "connections": {}}`` an und adressiert darin nach Connection-ID
+    (``raw["connections"][connection_id] = ...``). Ein *Objekt*, keine Liste —
+    ein Restore-Pruefer, der eine Liste erwartet, iteriert ueber die Schluessel
+    und faellt ueber ``str.get``.
+    """
+    (data / "provider_connections.json").write_text(
+        json.dumps({"version": 1, "connections": connections}), encoding="utf-8"
+    )
 
 
 def _named(report, name: str):
@@ -62,10 +74,15 @@ class TestHealthyRestore:
 
         assert report.failed == []
 
-    def test_exit_code_is_zero(self, verify, tmp_path, capsys) -> None:
+    def test_exit_code_is_zero(self, verify, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("AGORA_SECRET_KEY", "x" * 32)
+
         assert verify.main(["--data-dir", str(_install(tmp_path))]) == 0
 
-    def test_json_output_is_machine_readable(self, verify, tmp_path, capsys) -> None:
+    def test_json_output_is_machine_readable(
+        self, verify, tmp_path, capsys, monkeypatch
+    ) -> None:
+        monkeypatch.setenv("AGORA_SECRET_KEY", "x" * 32)
         verify.main(["--data-dir", str(_install(tmp_path)), "--json"])
 
         payload = json.loads(capsys.readouterr().out)
@@ -133,6 +150,105 @@ class TestSkipIsNotSuccess:
 
         assert _named(report, "Secret-Store entschluesselbar").skipped is True
 
+    def test_a_skipped_check_does_not_produce_a_green_exit_code(
+        self, verify, tmp_path, monkeypatch
+    ) -> None:
+        """Codex-Befund P1 auf PR #1498: das Protokoll sagt „ein
+        uebersprungener Punkt ist kein Nachweis" und beendete sich dann mit 0.
+        ``restore-drill.sh`` liest nur den Exit-Code — und meldete gruen."""
+        monkeypatch.delenv("AGORA_SECRET_KEY", raising=False)
+
+        assert verify.main(["--data-dir", str(_install(tmp_path))]) == 2
+
+    def test_a_real_failure_still_outranks_a_skip(
+        self, verify, tmp_path, monkeypatch
+    ) -> None:
+        monkeypatch.delenv("AGORA_SECRET_KEY", raising=False)
+        data = _install(tmp_path, run_status="processing")
+
+        assert verify.main(["--data-dir", str(data)]) == 1
+
+    def test_the_json_payload_marks_an_unproven_run_as_not_ok(
+        self, verify, tmp_path, monkeypatch, capsys
+    ) -> None:
+        monkeypatch.delenv("AGORA_SECRET_KEY", raising=False)
+        verify.main(["--data-dir", str(_install(tmp_path)), "--json"])
+
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["ok"] is False
+        assert payload["proven"] is False
+        assert payload["failed_count"] == 0
+        assert payload["skipped_count"] == 1
+
+
+class TestConnectionsAreReadInTheirRealShape:
+    """Codex-Befund P2 auf PR #1498. ``provider_connections.json`` traegt unter
+    ``connections`` ein Objekt nach Connection-ID, keine Liste."""
+
+    def test_secret_refs_are_found_in_the_object_shape(
+        self, verify, tmp_path, monkeypatch
+    ) -> None:
+        data = _install(tmp_path)
+        _write_connections(data, {"conn_1": {"id": "conn_1", "secret_ref": "ref_1"}})
+        monkeypatch.setenv("AGORA_SECRET_KEY", "x" * 32)
+        monkeypatch.setattr(
+            "app.services.llm_provider_secrets_store.get_llm_provider_secrets_store",
+            lambda: type("S", (), {"get_plaintext": lambda _s, _r: "value"})(),
+        )
+
+        check = _named(verify.run_verification(data), "Secret-Store entschluesselbar")
+
+        assert check.ok is True
+        assert "1 Secret(s)" in check.detail
+
+    def test_an_undecryptable_secret_is_reported_in_the_object_shape(
+        self, verify, tmp_path, monkeypatch
+    ) -> None:
+        """Der eigentliche Zweck des Pruefpunkts: einen restaurierten
+        Secret-Store zu erkennen, dessen Schluessel nicht mitgekommen ist."""
+        data = _install(tmp_path)
+        _write_connections(data, {"conn_1": {"id": "conn_1", "secret_ref": "ref_1"}})
+        monkeypatch.setenv("AGORA_SECRET_KEY", "x" * 32)
+
+        def _boom(_s, _r):
+            raise ValueError("InvalidToken")
+
+        monkeypatch.setattr(
+            "app.services.llm_provider_secrets_store.get_llm_provider_secrets_store",
+            lambda: type("S", (), {"get_plaintext": _boom})(),
+        )
+
+        check = _named(verify.run_verification(data), "Secret-Store entschluesselbar")
+
+        assert check.ok is False
+        assert "ref_1" in check.detail
+
+    def test_the_legacy_list_shape_is_still_read(self, verify, tmp_path, monkeypatch) -> None:
+        """Aeltere Handstaende und Fremdexporte. Ein Pruefer, der daran
+        abstuerzt, prueft nichts mehr."""
+        data = _install(tmp_path)
+        (data / "provider_connections.json").write_text(
+            json.dumps({"connections": [{"id": "conn_1", "secret_ref": "ref_1"}]}),
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("AGORA_SECRET_KEY", "x" * 32)
+        monkeypatch.setattr(
+            "app.services.llm_provider_secrets_store.get_llm_provider_secrets_store",
+            lambda: type("S", (), {"get_plaintext": lambda _s, _r: "value"})(),
+        )
+
+        assert _named(
+            verify.run_verification(data), "Secret-Store entschluesselbar"
+        ).ok is True
+
+    def test_an_empty_connection_store_is_not_silently_green(
+        self, verify, tmp_path
+    ) -> None:
+        data = _install(tmp_path)
+        _write_connections(data, {})
+
+        assert _named(verify.run_verification(data), "ProviderConnections vorhanden").ok is False
+
 
 class TestProtocolIsEvidence:
     def test_report_carries_a_timestamp(self, verify, tmp_path) -> None:
@@ -151,10 +267,7 @@ class TestProtocolIsEvidence:
         """Das Protokoll wird an Issues geheftet — es darf nie einen Klartext
         tragen, auch nicht versehentlich ueber eine Fehlermeldung."""
         data = _install(tmp_path)
-        (data / "provider_connections.json").write_text(
-            json.dumps({"connections": [{"id": "conn_1", "secret_ref": "ref_1"}]}),
-            encoding="utf-8",
-        )
+        _write_connections(data, {"conn_1": {"id": "conn_1", "secret_ref": "ref_1"}})
         monkeypatch.setenv("AGORA_SECRET_KEY", "x" * 32)
         monkeypatch.setattr(
             "app.services.llm_provider_secrets_store.get_llm_provider_secrets_store",
