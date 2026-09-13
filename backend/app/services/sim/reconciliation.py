@@ -445,6 +445,26 @@ def reconcile_stale_jobs(
                 "reconcile_stale_jobs: run=%s (%s) verwaist — markiere failed/%s",
                 run_id, run_type, _TERMINATION_REASON,
             )
+
+            # Dieselbe Schreibreihenfolge wie in ``reconcile_stale_runs``
+            # (F1, PR #1476 Runde 5): der zweite Zustand zuerst, das Manifest
+            # danach. Der Prepare-Job haelt zwei Persistenzen, und das
+            # Manifest ist die, die den Run mit ``failed`` aus
+            # ``_STALE_STATUSES`` nimmt — es zuerst zu schreiben hiesse, bei
+            # einem Fehler im ``SimulationState`` eine Halb-Korrektur zu
+            # hinterlassen, die nie wieder aufgegriffen wird: ein Manifest auf
+            # ``failed`` neben einem State auf ``preparing``, also genau der
+            # endlose Vorbereitungs-Status aus #1472. Scheitert der
+            # State-Write in dieser Reihenfolge, bleibt das Manifest stale und
+            # der naechste Start greift den Run erneut auf.
+            simulation_id = (
+                (run.get("linked_ids") or {}).get("simulation_id") or run.get("entity_id")
+                if run_type == "simulation_prepare"
+                else None
+            )
+            if simulation_id:
+                on_state(simulation_id, _ERROR_MESSAGE)
+
             registry.update_run(
                 run_id,
                 status="failed",
@@ -452,22 +472,6 @@ def reconcile_stale_jobs(
                 error=_ERROR_MESSAGE,
             )
             reconciled.append(run_id)
-
-            if run_type != "simulation_prepare":
-                continue
-            simulation_id = (run.get("linked_ids") or {}).get("simulation_id") or run.get(
-                "entity_id"
-            )
-            if not simulation_id:
-                continue
-            try:
-                on_state(simulation_id, _ERROR_MESSAGE)
-            except Exception:  # noqa: BLE001 — das Manifest ist bereits korrigiert
-                logger.error(
-                    "reconcile_stale_jobs: SimulationState fuer %s nicht "
-                    "korrigierbar — Manifest %s steht bereits auf failed",
-                    simulation_id, run_id, exc_info=True,
-                )
 
     return ReconciliationResult(reconciled_run_ids=reconciled, skipped_run_ids=skipped)
 
