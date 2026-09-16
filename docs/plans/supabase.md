@@ -334,12 +334,6 @@ Transaction Pooling erst später prüfen.
 curl -f https://<supabase-host>/auth/v1/health
 ```
 
-und aus dem Agora-Container:
-
-```bash
-python -c "import psycopg; print('db-driver-ok')"
-```
-
 Außerdem:
 
 ```text
@@ -397,6 +391,17 @@ Ab jetzt gilt:
 > Datenbankschema wird ausschließlich über versionierte Migrationen geändert.
 
 Keine `CREATE TABLE IF NOT EXISTS`-Strings mehr innerhalb fachlicher Stores.
+
+## Abnahmekriterium
+
+Aus dem Agora-Container:
+
+```bash
+python -c "import psycopg; print('db-driver-ok')"
+```
+
+Der Treiber kommt erst mit dieser Phase in die Abhängigkeiten; in Phase 1 kann
+die Prüfung nicht bestehen.
 
 ---
 
