@@ -1,0 +1,315 @@
+# Supabase self-hosted fuer Agora — eigenes Compose-Projekt.
+#
+# Bewusst NICHT in die Agora-`docker-compose.yml` hineingezogen (Plan
+# `docs/plans/supabase.md` §7): zwei Projekte, ein gemeinsames externes Docker-
+# Netz `agora-backend`. Agora bleibt ohne diesen Stack vollstaendig lauffaehig.
+#
+# Vor dem ersten Start:
+#   1. `./bootstrap.sh`            — laedt die gepinnten Supabase-Config-Dateien
+#                                    nach `volumes/` (siehe README)
+#   2. `cp .env.example .env`      — Werte setzen (Secrets: `vw get …`)
+#   3. `docker network create agora-backend`
+#   4. `docker compose up -d`
+#
+# Abweichungen vom offiziellen `supabase/docker/docker-compose.yml`:
+#   - Realtime, Edge Runtime (functions), imgproxy und Analytics/Logflare sind
+#     nicht enthalten (Plan §7: "je weniger Container am Anfang, desto weniger
+#     bewegliche Teile"). Storage laeuft deshalb mit
+#     ENABLE_IMAGE_TRANSFORMATION=false.
+#   - Alle Host-Ports sind auf 127.0.0.1 gebunden. Exposition nach aussen
+#     ausschliesslich ueber den Reverse Proxy (Plan §7 "Exposition").
+name: agora-supabase
+
+services:
+  # PostgreSQL. Source of Truth fuer App-Metadaten ab Phase 3.
+  db:
+    container_name: agora-supabase-db
+    image: ${POSTGRES_IMAGE:-supabase/postgres:17.6.1.136}
+    restart: unless-stopped
+    volumes:
+      - ./volumes/db/realtime.sql:/docker-entrypoint-initdb.d/migrations/99-realtime.sql:Z
+      - ./volumes/db/webhooks.sql:/docker-entrypoint-initdb.d/init-scripts/98-webhooks.sql:Z
+      - ./volumes/db/roles.sql:/docker-entrypoint-initdb.d/init-scripts/99-roles.sql:Z
+      - ./volumes/db/jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql:Z
+      - ./volumes/db/_supabase.sql:/docker-entrypoint-initdb.d/migrations/97-_supabase.sql:Z
+      - ./volumes/db/pooler.sql:/docker-entrypoint-initdb.d/migrations/99-pooler.sql:Z
+      - db_data:/var/lib/postgresql/data:Z
+      - db_config:/etc/postgresql-custom
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    environment:
+      POSTGRES_HOST: /var/run/postgresql
+      PGPORT: ${POSTGRES_PORT}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD muss in .env gesetzt sein}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+      POSTGRES_DB: ${POSTGRES_DB}
+      JWT_EXP: ${JWT_EXPIRY}
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
+      - -c
+      - log_min_messages=fatal
+
+  # Connection Pooler. Flask verbindet sich im Session Mode (Plan §7
+  # "Verbindungsmodus"); Transaction Pooling erst nach eigener Pruefung.
+  supavisor:
+    container_name: agora-supabase-pooler
+    image: ${SUPAVISOR_IMAGE:-supabase/supavisor:2.9.12}
+    restart: unless-stopped
+    # Loopback-Bind wie im Agora-Stack: der Pooler ist fuer Container im Netz
+    # `agora-backend` ueber den Servicenamen erreichbar und braucht keinen
+    # oeffentlichen Host-Port. Der 127.0.0.1-Port bleibt fuer psql/Alembic
+    # vom Host aus.
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT}:5432"
+      - "127.0.0.1:${POOLER_PROXY_PORT_TRANSACTION}:6543"
+    volumes:
+      - ./volumes/pooler/pooler.exs:/etc/pooler/pooler.exs:ro,z
+    healthcheck:
+      test: ["CMD", "curl", "-sSfL", "--head", "-o", "/dev/null", "http://127.0.0.1:4000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: 4000
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DATABASE_URL: ecto://supabase_admin:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/_supabase
+      CLUSTER_POSTGRES: "true"
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:?SECRET_KEY_BASE muss in .env gesetzt sein}
+      VAULT_ENC_KEY: ${VAULT_ENC_KEY:?VAULT_ENC_KEY muss in .env gesetzt sein}
+      API_JWT_SECRET: ${JWT_SECRET}
+      METRICS_JWT_SECRET: ${JWT_SECRET}
+      REGION: local
+      ERL_AFLAGS: -proto_dist inet_tcp
+      POOLER_TENANT_ID: ${POOLER_TENANT_ID}
+      POOLER_DEFAULT_POOL_SIZE: ${POOLER_DEFAULT_POOL_SIZE}
+      POOLER_MAX_CLIENT_CONN: ${POOLER_MAX_CLIENT_CONN}
+      POOLER_POOL_MODE: transaction
+      DB_POOL_SIZE: ${POOLER_DB_POOL_SIZE}
+    networks:
+      - default
+      - agora-backend
+    command:
+      - /bin/sh
+      - -c
+      - /app/bin/migrate && /app/bin/supavisor eval "$$(cat /etc/pooler/pooler.exs)" && /app/bin/server
+
+  # GoTrue. Laeuft ab Phase 1 mit, wird fachlich erst in Phase 6 genutzt
+  # (Plan §14) — `/auth/v1/health` ist das Abnahmekriterium von Phase 1.
+  auth:
+    container_name: agora-supabase-auth
+    image: ${GOTRUE_IMAGE:-supabase/gotrue:v2.196.0}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9999/health"]
+      timeout: 5s
+      interval: 5s
+      retries: 3
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: ${API_EXTERNAL_URL}
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      GOTRUE_SITE_URL: ${SITE_URL}
+      GOTRUE_URI_ALLOW_LIST: ${ADDITIONAL_REDIRECT_URLS}
+      # Single User bis 1.0 (ROADMAP): Selbstregistrierung ist zu.
+      GOTRUE_DISABLE_SIGNUP: ${DISABLE_SIGNUP:-true}
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: ${JWT_EXPIRY}
+      GOTRUE_JWT_SECRET: ${JWT_SECRET:?JWT_SECRET muss in .env gesetzt sein}
+      GOTRUE_JWT_ISSUER: ${API_EXTERNAL_URL}
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: ${ENABLE_EMAIL_SIGNUP:-false}
+      GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: ${ENABLE_ANONYMOUS_USERS:-false}
+      GOTRUE_MAILER_AUTOCONFIRM: ${ENABLE_EMAIL_AUTOCONFIRM:-true}
+      GOTRUE_EXTERNAL_PHONE_ENABLED: ${ENABLE_PHONE_SIGNUP:-false}
+      GOTRUE_SMS_AUTOCONFIRM: ${ENABLE_PHONE_AUTOCONFIRM:-true}
+
+  # PostgREST. Backend-Zugriff laeuft ueber SQLAlchemy (Plan §7 "DB-Verbindung
+  # fuer Flask"); PostgREST bedient Studio und spaeter das Frontend.
+  rest:
+    container_name: agora-supabase-rest
+    image: ${POSTGREST_IMAGE:-postgrest/postgrest:v14.17}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "postgrest", "--ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      PGRST_DB_SCHEMAS: ${PGRST_DB_SCHEMAS}
+      PGRST_DB_MAX_ROWS: ${PGRST_DB_MAX_ROWS:-1000}
+      PGRST_DB_EXTRA_SEARCH_PATH: ${PGRST_DB_EXTRA_SEARCH_PATH:-public}
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_ADMIN_SERVER_PORT: 3001
+      PGRST_ADMIN_SERVER_HOST: localhost
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      PGRST_APP_SETTINGS_JWT_EXP: ${JWT_EXPIRY}
+    command: ["postgrest"]
+
+  # Storage. Ab Phase 7 fuer grosse immutable Artefakte (Plan §19).
+  # imgproxy ist nicht Teil des Stacks, deshalb keine Bildtransformation.
+  storage:
+    container_name: agora-supabase-storage
+    image: ${STORAGE_IMAGE:-supabase/storage-api:v1.74.0}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      rest:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://storage:5000/status"]
+      timeout: 5s
+      interval: 5s
+      retries: 3
+      start_period: 10s
+    environment:
+      ANON_KEY: ${ANON_KEY}
+      SERVICE_KEY: ${SERVICE_ROLE_KEY}
+      POSTGREST_URL: http://rest:3000
+      AUTH_JWT_SECRET: ${JWT_SECRET}
+      DATABASE_URL: postgres://supabase_storage_admin:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      STORAGE_PUBLIC_URL: ${SUPABASE_PUBLIC_URL}
+      REQUEST_ALLOW_X_FORWARDED_PATH: "true"
+      FILE_SIZE_LIMIT: ${STORAGE_FILE_SIZE_LIMIT:-52428800}
+      STORAGE_BACKEND: file
+      GLOBAL_S3_BUCKET: ${GLOBAL_S3_BUCKET}
+      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
+      TENANT_ID: ${STORAGE_TENANT_ID}
+      REGION: ${REGION}
+      ENABLE_IMAGE_TRANSFORMATION: "false"
+      S3_PROTOCOL_ACCESS_KEY_ID: ${S3_PROTOCOL_ACCESS_KEY_ID}
+      S3_PROTOCOL_ACCESS_KEY_SECRET: ${S3_PROTOCOL_ACCESS_KEY_SECRET}
+    volumes:
+      - storage_data:/var/lib/storage:z
+
+  # Schema-Introspektion fuer Studio.
+  meta:
+    container_name: agora-supabase-meta
+    image: ${POSTGRES_META_IMAGE:-supabase/postgres-meta:v0.99.0}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PG_META_PORT: 8080
+      PG_META_DB_HOST: ${POSTGRES_HOST}
+      PG_META_DB_PORT: ${POSTGRES_PORT}
+      PG_META_DB_NAME: ${POSTGRES_DB}
+      PG_META_DB_USER: postgres
+      PG_META_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      CRYPTO_KEY: ${PG_META_CRYPTO_KEY:?PG_META_CRYPTO_KEY muss in .env gesetzt sein}
+
+  # Studio. Kein eigener Host-Port: nur ueber das Gateway und dort nur intern
+  # bzw. ueber VPN/Tailscale erreichbar (Plan §7 "Exposition").
+  studio:
+    container_name: agora-supabase-studio
+    image: ${STUDIO_IMAGE:-supabase/studio:2026.09.07-sha-7996410}
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - node -e "fetch('http://localhost:3000/api/platform/profile').then((r) => {if (r.status !== 200) throw new Error(r.status)})"
+      timeout: 10s
+      interval: 5s
+      retries: 3
+      start_period: 20s
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      HOSTNAME: "0.0.0.0"
+      STUDIO_PG_META_URL: http://meta:8080
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER_READ_WRITE: postgres
+      PG_META_CRYPTO_KEY: ${PG_META_CRYPTO_KEY}
+      PGRST_DB_SCHEMAS: ${PGRST_DB_SCHEMAS}
+      PGRST_DB_MAX_ROWS: ${PGRST_DB_MAX_ROWS:-1000}
+      PGRST_DB_EXTRA_SEARCH_PATH: ${PGRST_DB_EXTRA_SEARCH_PATH:-public}
+      DEFAULT_ORGANIZATION_NAME: ${STUDIO_DEFAULT_ORGANIZATION}
+      DEFAULT_PROJECT_NAME: ${STUDIO_DEFAULT_PROJECT}
+      SUPABASE_URL: http://api-gw:8000
+      SUPABASE_PUBLIC_URL: ${SUPABASE_PUBLIC_URL}
+      SUPABASE_ANON_KEY: ${ANON_KEY}
+      SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY}
+      AUTH_JWT_SECRET: ${JWT_SECRET}
+      # Logflare/Analytics laeuft nicht mit — Log-Ansichten bleiben leer.
+      ENABLED_FEATURES_LOGS_ALL: "false"
+
+  # API-Gateway (Envoy). Einziger Eingang: /auth/v1, /rest/v1, /storage/v1
+  # und das Dashboard. Netzwerk-Aliase `envoy`/`kong` wie im Original, damit
+  # mitgelieferte Configs beide Namen aufloesen.
+  api-gw:
+    container_name: agora-supabase-gateway
+    image: ${ENVOY_IMAGE:-envoyproxy/envoy:v1.39.1}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 1 bash -c '</dev/tcp/127.0.0.1/8000'"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      studio:
+        condition: service_healthy
+    ports:
+      - "${SUPABASE_BIND_HOST:-127.0.0.1}:${API_GW_HTTP_PORT:-8000}:8000/tcp"
+    volumes:
+      - ./volumes/api/envoy/envoy.yaml:/etc/envoy/envoy.yaml:ro
+      - ./volumes/api/envoy/cds.yaml:/etc/envoy/cds.yaml:ro
+      - ./volumes/api/envoy/lds.template.yaml:/etc/envoy/lds.template.yaml:ro
+      - ./volumes/api/envoy/docker-entrypoint.sh:/docker-entrypoint.sh:ro
+    environment:
+      ANON_KEY: ${ANON_KEY:?ANON_KEY muss in .env gesetzt sein}
+      SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY:?SERVICE_ROLE_KEY muss in .env gesetzt sein}
+      SUPABASE_PUBLIC_URL: ${SUPABASE_PUBLIC_URL}
+      DASHBOARD_USERNAME: ${DASHBOARD_USERNAME}
+      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD}
+    entrypoint: ["/bin/sh", "/docker-entrypoint.sh"]
+    networks:
+      default:
+        aliases:
+          - envoy
+          - kong
+      agora-backend:
+
+volumes:
+  db_data:
+  db_config:
+  storage_data:
+
+networks:
+  # Projektinternes Netz. Alles, was nicht explizit an `agora-backend` haengt,
+  # ist von Agora aus nicht erreichbar.
+  default:
+    enable_ipv6: false
+  # Gemeinsames Netz mit dem Agora-Compose-Projekt (Plan §7 "Netzwerk").
+  # Muss vorher existieren: `docker network create agora-backend`.
+  agora-backend:
+    external: true
