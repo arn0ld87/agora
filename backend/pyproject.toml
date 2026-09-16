@@ -75,6 +75,21 @@ dependencies = [
     # the FilePolling fallback keeps the offline-only path working without Redis.
     "redis>=5.0.0",
 
+    # PostgreSQL-Grundlage (docs/plans/supabase.md §8). Installiert, aber im
+    # Default ungenutzt: AGORA_METADATA_BACKEND=legacy laesst jeden Pfad auf
+    # Dateisystem und Neo4j. Die Deps stehen trotzdem fest in dependencies und
+    # nicht in einem Extra — ein optionaler Block bedeutet, dass der Import-Pfad
+    # in einer Installation fehlen kann, und genau daran scheitern Migrationen
+    # dann erst auf dem Zielsystem.
+    #
+    # psycopg[binary] statt psycopg2: psycopg 3 ist der gepflegte Treiber und
+    # SQLAlchemy spricht ihn ueber das Dialekt-Praefix `postgresql+psycopg`.
+    # Der `binary`-Extra bringt libpq als Wheel mit; ohne ihn braucht jeder
+    # Build-Host pg_config und die libpq-Header.
+    "sqlalchemy>=2.0.0",
+    "psycopg[binary]>=3.2.0",
+    "alembic>=1.14.0",
+
     # Graph analytics (Issue #12): Louvain community detection + betweenness
     # centrality on the agent-interaction graph. networkx >= 3.2 ships the
     # built-in community.louvain_communities implementation.
