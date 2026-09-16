@@ -45,6 +45,7 @@ Zusätzliche aktuelle Nachweise:
 - PR #1480 dokumentiert danach ein grünes `pre-push-gate.sh backend`, nachdem eine durch #1475 sichtbar gewordene Testdouble-Lücke repariert wurde.
 - PR #1479 dokumentiert `pytest tests/contracts` (700), die gezielten Backend-Suiten, `ruff`, `mypy`, Schema-Drift und `bun run check` mit **2163 Frontend-Tests** als grün.
 - Ein geplanter `e2e-smokes`-Lauf auf `e6ced1a2` war am 08.09.2026 grün. Dieser Lauf liegt vor den anschließend gemergten PRs #1478/#1479 und den Dependabot-Merges; daraus wird **nicht** behauptet, dass bereits jeder Workflow auf `0c47737f` grün bestätigt wurde.
+- Die label-gesteuerten Vollsuiten (`Backend tests + lint` / `Frontend build + lint`) griffen auf PRs bis 13.09.2026 nur für genau den Commit, auf dem das Label gesetzt wurde; jeder Folge-Push sprang auf `skipping`. Seither prüft die `if`-Bedingung den Label-Zustand des PR, nicht mehr nur das `labeled`-Event. Ein PR, der vor dem 13.09.2026 nach dem Labeln noch einmal gepusht wurde, hat die volle Suite auf seinem Endstand daher **nicht** gesehen.
 - Echte Integrationstests unter `backend/tests/integration/` laufen gegen Redis und Neo4j. Der CI-Job setzt `AGORA_TEST_REQUIRE_SERVICES=1`, damit ein fehlender Dienst nicht als freundlicher Skip durchrutscht (#1481).
 
 ### Qualitäts-Gates

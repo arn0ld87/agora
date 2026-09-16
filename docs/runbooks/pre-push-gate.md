@@ -17,7 +17,10 @@ Die vollen Coverage-Gates (`pytest --cov --cov-fail-under=60`,
 `bun run test:coverage`) laufen in den Jobs `Backend tests + lint` /
 `Frontend build + lint`, die auf PRs label-gated sind
 (`needs-backend-ci` / `needs-frontend-ci`) und außerhalb von PRs immer
-laufen. Die Required-Statuschecks sind die harte Absicherung; das
+laufen. Das Label gilt seit 13.09.2026 für den gesamten PR und nicht mehr
+nur für den Commit, auf dem es gesetzt wurde: Folge-Pushes
+(`synchronize`) lassen die volle Suite weiterhin laufen, bis das Label
+entfernt wird. Die Required-Statuschecks sind die harte Absicherung; das
 lokale Gate fängt nur die häufigsten "lokal grün, CI rot"-Fälle in
 Sekunden statt Minuten.
 
