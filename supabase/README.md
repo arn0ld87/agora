@@ -76,6 +76,14 @@ Storage-Laufzeitdaten.
 Update auf einen neueren Supabase-Stand: `SUPABASE_REF` **und** die Image-Tags
 gemeinsam anheben, dann `./bootstrap.sh --force`.
 
+**Dieser Schritt kommt vor dem ersten `docker compose up`.** Andersherum legt
+Docker für jeden fehlenden Bind-Mount ein leeres *Verzeichnis* an Stelle der
+Datei an (`volumes/db/roles.sql/` statt `roles.sql`), und Postgres
+initialisiert ohne Rollen — sichtbar erst später daran, dass `auth`, `rest` und
+`storage` sich nicht anmelden können. `bootstrap.sh` erkennt so ein Verzeichnis
+und ersetzt es; danach einmal `docker compose down -v` und neu starten, weil
+die kaputt initialisierte Datenbank bestehen bleibt.
+
 ### 2. `.env` füllen
 
 ```bash

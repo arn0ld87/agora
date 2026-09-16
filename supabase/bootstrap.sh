@@ -29,9 +29,28 @@ elif [[ $# -gt 0 ]]; then
   exit 2
 fi
 
-if [[ -d volumes && $FORCE -eq 0 ]]; then
-  echo "volumes/ existiert bereits — nichts getan. Mit --force ueberschreiben." >&2
+# `volumes/.supabase-ref` ist der Beleg, dass dieses Skript das Verzeichnis
+# angelegt hat. Nur auf `-d volumes` zu pruefen waere eine Falle: wer
+# `docker compose up` VOR dem Bootstrap ausfuehrt, bekommt von Docker fuer
+# jeden fehlenden Bind-Mount ein leeres VERZEICHNIS an Stelle der Datei
+# (volumes/db/roles.sql/ statt roles.sql). Postgres initialisiert dann ohne
+# Rollen, und ein reines Existenz-Kriterium wuerde die Reparatur auch noch
+# verweigern.
+if [[ -f volumes/.supabase-ref && $FORCE -eq 0 ]]; then
+  echo "volumes/ steht auf $(cat volumes/.supabase-ref | cut -c1-12) — nichts getan." >&2
+  echo "Mit --force neu holen." >&2
   exit 0
+fi
+
+if [[ -d volumes && ! -f volumes/.supabase-ref ]]; then
+  echo "volumes/ existiert, stammt aber nicht aus diesem Skript." >&2
+  echo "Typisch nach einem 'docker compose up' vor dem Bootstrap: Docker hat" >&2
+  echo "die fehlenden Dateien als leere Verzeichnisse angelegt." >&2
+  if [[ -d volumes/db/roles.sql ]]; then
+    echo "Die Datenbank ist in dem Fall ohne Rollen initialisiert worden." >&2
+    echo "Nach diesem Lauf einmal 'docker compose down -v' und neu starten." >&2
+  fi
+  echo "Wird ersetzt." >&2
 fi
 
 WORK="$(mktemp -d)"

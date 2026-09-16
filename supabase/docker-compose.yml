@@ -33,7 +33,9 @@ services:
       - ./volumes/db/jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql:Z
       - ./volumes/db/_supabase.sql:/docker-entrypoint-initdb.d/migrations/97-_supabase.sql:Z
       - ./volumes/db/pooler.sql:/docker-entrypoint-initdb.d/migrations/99-pooler.sql:Z
-      - db_data:/var/lib/postgresql/data:Z
+      # Kein `:Z` an benannten Volumes — das SELinux-Relabel gehoert an
+      # Bind-Mounts. Compose warnt sonst bei jedem Aufruf.
+      - db_data:/var/lib/postgresql/data
       - db_config:/etc/postgresql-custom
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "postgres", "-h", "localhost"]
@@ -205,7 +207,7 @@ services:
       S3_PROTOCOL_ACCESS_KEY_ID: ${S3_PROTOCOL_ACCESS_KEY_ID}
       S3_PROTOCOL_ACCESS_KEY_SECRET: ${S3_PROTOCOL_ACCESS_KEY_SECRET}
     volumes:
-      - storage_data:/var/lib/storage:z
+      - storage_data:/var/lib/storage
 
   # Schema-Introspektion fuer Studio.
   meta:
