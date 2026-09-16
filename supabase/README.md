@@ -93,6 +93,13 @@ cp .env.example .env
 Jedes Secret-Feld ist leer und muss gefüllt werden. Die Werte liegen in
 Vaultwarden (`vw get <name>`), nie in einem Commit und nie im Chat.
 
+`POSTGRES_PASSWORD` muss URI-sicher sein, also nur `[A-Za-z0-9]` enthalten.
+Compose setzt das Passwort unkodiert in die Verbindungs-URLs von Supavisor,
+GoTrue, PostgREST und Storage; ein `/`, `@`, `:` oder `+` zerlegt diese URLs,
+und die Dienste melden sich mit falschen Zugangsdaten an, obwohl Postgres mit
+dem wörtlichen Passwort initialisiert wurde. Erzeugen mit
+`openssl rand -hex 32`, nicht mit `-base64`.
+
 `ANON_KEY` und `SERVICE_ROLE_KEY` sind JWTs, die mit `JWT_SECRET` signiert sind
 und `role: anon` bzw. `role: service_role` tragen — erzeugbar nach
 [Supabase Self-Hosting](https://supabase.com/docs/guides/self-hosting/docker).
@@ -181,8 +188,8 @@ Und aus dem Agora-Container heraus, sobald das Overlay läuft:
 docker compose exec agora python -c "import psycopg; print('db-driver-ok')"
 ```
 
-Der zweite Befehl gehört zu Phase 2 — `psycopg` kommt erst mit der
-SQLAlchemy-Grundlage (§8) in die Abhängigkeiten.
+Das ist kein Abnahmekriterium von Phase 1, sondern von Phase 2 (§8) — `psycopg`
+kommt erst mit der SQLAlchemy-Grundlage in die Abhängigkeiten.
 
 Container-Status:
 
@@ -212,9 +219,13 @@ Agora braucht.
 
 Dieser Stack lässt sich ersatzlos entfernen, solange Agora ihn nicht nutzt:
 
+Aus dem Repository-Root, mit ausdrücklich benannter Compose-Datei — ein
+nacktes `docker compose down -v` im Root träfe den Agora-Stack und löschte
+dessen Redis- und Neo4j-Volumes:
+
 ```bash
-docker compose down -v
-cd .. && docker compose up -d      # ohne das Supabase-Overlay
+docker compose -f supabase/docker-compose.yml down -v   # Supabase inkl. Daten
+docker compose up -d                                     # Agora ohne Overlay
 docker network rm agora-backend
 ```
 
