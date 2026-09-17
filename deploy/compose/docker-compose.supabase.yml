@@ -1,0 +1,35 @@
+# Overlay: haengt den Agora-Container zusaetzlich an das gemeinsame Docker-Netz
+# `agora-backend`, ueber das das Supabase-Compose-Projekt (`supabase/`)
+# erreichbar ist (Plan `docs/plans/supabase.md` §7 "Netzwerk").
+#
+# Bewusst ein Overlay und nicht die Basis-`docker-compose.yml`: ein
+# `external: true`-Netz muss vor dem Start existieren, sonst bricht
+# `docker compose up` ab. In der Basis wuerde das jeden bestehenden Stack
+# brechen und dem Abnahmekriterium von Phase 1 widersprechen — "Agora
+# funktioniert weiterhin komplett ohne neue Supabase-Funktion".
+#
+# Voraussetzung:
+#   docker network create agora-backend
+#
+# Aufruf:
+#   docker compose -f docker-compose.yml \
+#     -f deploy/compose/docker-compose.supabase.yml up -d
+#
+# Danach erreicht der Agora-Container:
+#   http://api-gw:8000/auth/v1/health   (Gateway)
+#   postgres://…@supavisor:5432/postgres (Pooler, Session Mode)
+#
+# Redis und Neo4j bleiben ausserhalb von `agora-backend` — Supabase hat auf
+# den Graphen und den Event-Bus keinen Zugriff.
+services:
+  agora:
+    # Beide Netze explizit: sobald ein Service `networks` deklariert, faellt
+    # die implizite Zuordnung zu `default` weg, und Agora verloere damit
+    # Redis und Neo4j.
+    networks:
+      - default
+      - agora-backend
+
+networks:
+  agora-backend:
+    external: true

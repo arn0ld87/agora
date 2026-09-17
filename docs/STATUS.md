@@ -196,6 +196,16 @@ Backup/Restore ist dokumentiert, und seit [#766](https://github.com/arn0ld87/ago
 
 **#766 bleibt offen.** Das ist das Werkzeug, nicht der Nachweis: der Abnahmepunkt verlangt einen **durchgeführten** Fresh-Host-Restore-, Upgrade- und Rollback-Smoke mit echtem Backup. Ein Dry-Run-Protokoll ist keiner — das Skript schreibt diesen Satz selbst hinein. Durchführung: [`runbooks/restore-drill.md`](runbooks/restore-drill.md). Dokumentation ist kein Restore-Test, auch wenn Menschen seit Jahrzehnten tapfer so tun.
 
+### Supabase: Infrastruktur vorhanden, ungenutzt
+
+Unter [`supabase/`](../supabase/README.md) liegt ein **eigenes** Compose-Projekt mit self-hosted Supabase (PostgreSQL 17, Supavisor, GoTrue, PostgREST, Storage, postgres-meta, Studio, Envoy-Gateway). Realtime, Edge Runtime, imgproxy und Analytics laufen bewusst nicht mit.
+
+Das ist Phase 1 des Migrationsplans [`plans/supabase.md`](plans/supabase.md) §7 und **ausschließlich Infrastruktur**: im Backend existiert kein PostgreSQL-Code, keine Abhängigkeit, kein Feature-Flag. Der Agora-Stack startet und läuft unverändert ohne diesen Stack; die Kopplung ans gemeinsame Docker-Netz `agora-backend` ist ein zusätzliches Overlay ([`deploy/compose/docker-compose.supabase.yml`](../deploy/compose/docker-compose.supabase.yml)), nie die Basis-`docker-compose.yml`.
+
+Daraus folgt ausdrücklich **nicht**, dass Agora Postgres nutzt, dass Multi-User näher rückt oder dass Auth sich geändert hat. `AGORA_AUTH_TOKEN` und das API-Key-Scope-Modell sind unverändert die Auth-Wahrheit; GoTrue läuft mit `DISABLE_SIGNUP=true` mit und wird von nichts aufgerufen.
+
+Die Supabase-Konfigurationsdateien (DB-Init-SQL, Envoy-Routing, Supavisor-Config) liegen nicht im Repository. `supabase/bootstrap.sh` holt sie von einem gepinnten supabase/supabase-Commit nach `supabase/volumes/` (gitignored) — ohne diesen Lauf startet der Stack nicht.
+
 ## Security
 
 Aktueller Schwerpunkt:
