@@ -1,0 +1,41 @@
+---
+title: Diagramme
+description: Interaktive Architektur-, Ablauf- und Datenflussdiagramme von Agora — als eigenständige Viewer mit Suche, Fokus, Themenwechsel und Export.
+---
+
+# Diagramme
+
+Fünf mit [Archify](https://github.com/tt-a1i/archify) erzeugte Diagramme. Jedes ist ein
+eigenständiges HTML-Dokument mit Pan/Zoom, Suche, Relationsverfolgung, Hell/Dunkel-Umschaltung
+und Export (PNG, SVG, WebM). Quelle jedes Diagramms ist die zugehörige `*.json`-Spezifikation
+im selben Verzeichnis — nicht das HTML.
+
+| Diagramm | Typ | Zeigt |
+| --- | --- | --- |
+| [Systemarchitektur](agora-architektur.mdx) | architecture | Komponenten, Schichten und Grenzen der Plattform |
+| [Report-Pipeline](agora-report-pipeline.mdx) | dataflow | Weg vom Korpus über Evidenz zum auditierbaren Report |
+| [Run-Lifecycle](agora-run-lifecycle.mdx) | lifecycle | Zustände eines Simulationslaufs samt Abbruch- und Endzuständen |
+| [Codex-CLI als Provider](agora-codex-cli.mdx) | sequence | Aufrufkette, wenn Codex als LLM-Provider bedient wird |
+| [Blume-Doku-Pipeline](blume-doku-pipeline.mdx) | dataflow | Wie diese Doku-Site aus `docs/` entsteht |
+
+## Wie die Diagramme ausgeliefert werden
+
+Der Content-Loader dieser Site liest ausschließlich `**/*.{md,mdx}` unterhalb von `docs/`.
+Die HTML-Artefakte in `docs/diagrams/` werden dadurch **nie** zu einer Doku-Route. Ausgeliefert
+werden sie über das `public/`-Verzeichnis des Blume-Projekts, das Astro als `publicDir` kopiert —
+erreichbar unter `/diagrams/<name>.html`. Die [Blume-Doku-Pipeline](blume-doku-pipeline.mdx)
+zeigt genau diesen Sonderweg.
+
+## Diagramm ändern
+
+```bash
+# Spezifikation bearbeiten, dann prüfen und neu ausliefern
+cd ~/.claude/skills/archify
+node bin/archify.mjs validate <typ> <pfad>.json --quality showcase --json
+node bin/archify.mjs deliver  <typ> <pfad>.json <pfad>.html --quality showcase --json
+node bin/archify.mjs visual-check <pfad>.html --json
+```
+
+`deliver` friert die Spezifikations-Bytes ein, rendert daraus und schreibt das HTML erst nach
+bestandener Prüfung. `visual-check` braucht ein Chrome- oder Chromium-Binary; ist keines im
+Pfad, setze `ARCHIFY_CHROME` auf die ausführbare Datei.

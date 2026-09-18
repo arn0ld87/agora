@@ -1,0 +1,251 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Blume-Doku-Pipeline",
+    "output": "docs/diagrams/blume-doku-pipeline.html",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1068,
+      500
+    ],
+    "views": [
+      {
+        "id": "inhaltspfad",
+        "label": "Inhaltspfad",
+        "focus": [
+          "docs",
+          "build",
+          "server",
+          "site",
+          "reader"
+        ],
+        "note": "Markdown aus agora/docs wird gebaut und als Doku-Seite gelesen."
+      },
+      {
+        "id": "statikpfad",
+        "label": "Statische Dateien",
+        "focus": [
+          "publicAssets",
+          "diagrams",
+          "reader"
+        ],
+        "note": "Blume/public umgeht die Content-Pipeline und wird unveraendert ausgeliefert."
+      },
+      {
+        "id": "agentenpfad",
+        "label": "Agentenpfad",
+        "focus": [
+          "server",
+          "agentApi",
+          "agent"
+        ],
+        "note": "Derselbe Bestand als MCP-Werkzeuge, Textindex und JSON-Routen."
+      }
+    ]
+  },
+  "stages": [
+    {
+      "label": "Quelle"
+    },
+    {
+      "label": "Build"
+    },
+    {
+      "label": "Laufzeit"
+    },
+    {
+      "label": "Ausgabe"
+    },
+    {
+      "label": "Konsument"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "publicAssets",
+      "type": "database",
+      "label": "Blume/public",
+      "sublabel": "statische Dateien",
+      "stage": 0,
+      "row": 0,
+      "tag": "kein Glob"
+    },
+    {
+      "id": "docs",
+      "type": "database",
+      "label": "agora/docs",
+      "sublabel": "Markdown, MDX, meta.ts",
+      "stage": 0,
+      "row": 1,
+      "tag": "Quelle der Wahrheit"
+    },
+    {
+      "id": "build",
+      "type": "backend",
+      "label": "blume build",
+      "sublabel": "Astro, Vite, MDX",
+      "stage": 1,
+      "row": 1,
+      "tag": "Glob md/mdx"
+    },
+    {
+      "id": "server",
+      "type": "cloud",
+      "label": "Node-Server",
+      "sublabel": "dist/, Standalone",
+      "stage": 2,
+      "row": 1,
+      "tag": "output: server"
+    },
+    {
+      "id": "diagrams",
+      "type": "frontend",
+      "label": "/diagrams/*.html",
+      "sublabel": "Archify-Viewer",
+      "stage": 3,
+      "row": 0,
+      "tag": "eigenstaendig"
+    },
+    {
+      "id": "site",
+      "type": "frontend",
+      "label": "Doku-Seiten",
+      "sublabel": "Sidebar aus meta.ts",
+      "stage": 3,
+      "row": 1,
+      "tag": "HTML"
+    },
+    {
+      "id": "agentApi",
+      "type": "backend",
+      "label": "Agent-Endpunkte",
+      "sublabel": "/mcp, /llms.txt, JSON",
+      "stage": 3,
+      "row": 2,
+      "tag": "4 Werkzeuge"
+    },
+    {
+      "id": "reader",
+      "type": "external",
+      "label": "Leser",
+      "sublabel": "Browser",
+      "stage": 4,
+      "row": 0
+    },
+    {
+      "id": "agent",
+      "type": "external",
+      "label": "Coding-Agent",
+      "sublabel": "Claude Code, Codex",
+      "stage": 4,
+      "row": 2
+    }
+  ],
+  "flows": [
+    {
+      "id": "static-passthrough",
+      "from": "publicAssets",
+      "to": "diagrams",
+      "label": "unveraendert kopiert",
+      "classification": "an der Pipeline vorbei",
+      "variant": "dashed",
+      "route": "straight"
+    },
+    {
+      "id": "content-in",
+      "from": "docs",
+      "to": "build",
+      "label": "md und mdx",
+      "classification": "Inhalt",
+      "variant": "emphasis",
+      "route": "straight"
+    },
+    {
+      "id": "build-out",
+      "from": "build",
+      "to": "server",
+      "label": "nach dist/",
+      "classification": "Artefakt",
+      "variant": "emphasis",
+      "route": "straight"
+    },
+    {
+      "id": "serve-pages",
+      "from": "server",
+      "to": "site",
+      "label": "Seiten",
+      "classification": "SSR",
+      "variant": "emphasis",
+      "route": "straight"
+    },
+    {
+      "id": "serve-agent",
+      "from": "server",
+      "to": "agentApi",
+      "label": "live",
+      "classification": "Endpunkt",
+      "variant": "default",
+      "route": "vertical-channel",
+      "channelX": 610
+    },
+    {
+      "id": "read-diagram",
+      "from": "diagrams",
+      "to": "reader",
+      "label": "Vollbild",
+      "classification": "Direktaufruf",
+      "variant": "default",
+      "route": "straight",
+      "labelDy": -23
+    },
+    {
+      "id": "read-docs",
+      "from": "site",
+      "to": "reader",
+      "label": "im Browser",
+      "classification": "Lesepfad",
+      "variant": "emphasis",
+      "route": "vertical-channel",
+      "channelX": 812
+    },
+    {
+      "id": "agent-call",
+      "from": "agentApi",
+      "to": "agent",
+      "label": "search_docs",
+      "classification": "Werkzeugaufruf",
+      "variant": "emphasis",
+      "route": "straight"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Eine Quelle, mehrere Oberflaechen",
+      "items": [
+        "agora/docs ist die einzige Content-Quelle; Blume haelt keine eigene Kopie",
+        "meta.ts steuert allein die Sidebar-Reihenfolge, nicht den Seitenbestand",
+        "Neue Markdown-Dateien erscheinen automatisch hinter den gelisteten Seiten"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Statik laeuft an der Pipeline vorbei",
+      "items": [
+        "Der Content-Loader liest ausschliesslich md- und mdx-Dateien unter agora/docs",
+        "HTML-Artefakte in docs/diagrams werden dadurch nie zu einer Doku-Route",
+        "Auslieferbar sind sie nur aus Blume/public, das Astro als publicDir kopiert"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Agentenpfad",
+      "items": [
+        "/mcp liefert search_docs, get_page, list_pages und get_navigation",
+        "/llms.txt, /llms-full.txt und /api/docs/*.json geben denselben Bestand aus",
+        "MCP und Live-Suche setzen output: server voraus, keinen statischen Export"
+      ]
+    }
+  ]
+}

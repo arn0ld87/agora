@@ -1,0 +1,351 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Agora Report-Pipeline",
+    "output": "agora-report-pipeline.html",
+    "viewBox": [
+      1068,
+      780
+    ],
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "evidenzweg",
+        "label": "Evidenzweg",
+        "focus": [
+          "simulation",
+          "agent",
+          "evidencemap",
+          "binder"
+        ],
+        "note": "Von der Simulation ueber die Evidenzkarte bis zur Bindung an den einzelnen Claim."
+      },
+      {
+        "id": "trust-layer",
+        "label": "Trust-Layer",
+        "focus": [
+          "evidencemap",
+          "quotes",
+          "prose",
+          "binder"
+        ],
+        "note": "Die beiden Gates, die ungedeckte Aussagen markieren statt sie zu loeschen."
+      },
+      {
+        "id": "artefakte",
+        "label": "Artefakte",
+        "focus": [
+          "confidence",
+          "persist",
+          "export",
+          "frontend"
+        ],
+        "note": "Was am Ende auf der Platte liegt und wer es liest."
+      }
+    ]
+  },
+  "stages": [
+    {
+      "label": "Quellen"
+    },
+    {
+      "label": "Erhebung"
+    },
+    {
+      "label": "Verifikation"
+    },
+    {
+      "label": "Bindung & Bewertung"
+    },
+    {
+      "label": "Ausgabe"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "graph",
+      "type": "database",
+      "label": "Wissensgraph",
+      "sublabel": "Neo4j-Entitaeten",
+      "stage": 0,
+      "row": 0,
+      "tag": "insight_forge"
+    },
+    {
+      "id": "simulation",
+      "type": "backend",
+      "label": "Simulationslauf",
+      "sublabel": "Metriken, Aktionen",
+      "stage": 0,
+      "row": 2,
+      "tag": "Primaerquelle"
+    },
+    {
+      "id": "websearch",
+      "type": "external",
+      "label": "Web-Recherche",
+      "sublabel": "web_search, fetch_url",
+      "stage": 0,
+      "row": 4,
+      "tag": "optional"
+    },
+    {
+      "id": "agent",
+      "type": "backend",
+      "label": "ReportAgent",
+      "sublabel": "ReAct, 6 Tools",
+      "stage": 1,
+      "row": 2,
+      "tag": "je Abschnitt"
+    },
+    {
+      "id": "evidencemap",
+      "type": "database",
+      "label": "Evidenzkarte",
+      "sublabel": "evidence_map.json",
+      "stage": 2,
+      "row": 4,
+      "tag": "append-only"
+    },
+    {
+      "id": "quotes",
+      "type": "security",
+      "label": "Zitatanker",
+      "sublabel": "validate_quote_anchors",
+      "stage": 2,
+      "row": 0,
+      "tag": "1 Repair-Retry"
+    },
+    {
+      "id": "prose",
+      "type": "security",
+      "label": "Fliesstext-Gate",
+      "sublabel": "verify_prose",
+      "stage": 2,
+      "row": 2,
+      "tag": "markiert, loescht nicht"
+    },
+    {
+      "id": "binder",
+      "type": "backend",
+      "label": "Evidence-Binding",
+      "sublabel": "Atomizer, Entailment",
+      "stage": 3,
+      "row": 2,
+      "tag": "je Claim"
+    },
+    {
+      "id": "confidence",
+      "type": "backend",
+      "label": "Confidence",
+      "sublabel": "Deckel, Penalty",
+      "stage": 3,
+      "row": 0,
+      "tag": "Score"
+    },
+    {
+      "id": "export",
+      "type": "backend",
+      "label": "Export-Service",
+      "sublabel": "Vertrag, ZIP, CSV",
+      "stage": 4,
+      "row": 0,
+      "tag": "Pydantic"
+    },
+    {
+      "id": "persist",
+      "type": "database",
+      "label": "Report-Store",
+      "sublabel": "report_v3.json",
+      "stage": 4,
+      "row": 2,
+      "tag": "Resume-faehig"
+    },
+    {
+      "id": "frontend",
+      "type": "frontend",
+      "label": "Report-Ansicht",
+      "sublabel": "Vue 3, Zod",
+      "stage": 4,
+      "row": 4,
+      "tag": "lesend"
+    }
+  ],
+  "flows": [
+    {
+      "id": "graph-facts",
+      "from": "graph",
+      "to": "agent",
+      "label": "Entitaeten",
+      "classification": "Graph-Abfrage"
+    },
+    {
+      "id": "sim-evidence",
+      "from": "simulation",
+      "to": "agent",
+      "label": "Metriken",
+      "variant": "emphasis",
+      "classification": "Metrik + Aktion",
+      "labelAt": [
+        200,
+        440
+      ]
+    },
+    {
+      "id": "web-hits",
+      "from": "websearch",
+      "to": "agent",
+      "label": "Fundstellen",
+      "classification": "nur auf Aufruf",
+      "variant": "dashed",
+      "route": "vertical-channel",
+      "channelX": 250
+    },
+    {
+      "id": "evidence-write",
+      "from": "agent",
+      "to": "evidencemap",
+      "label": "Evidence-Items",
+      "classification": "Schreibpfad"
+    },
+    {
+      "id": "draft",
+      "from": "agent",
+      "to": "quotes",
+      "label": "Entwurf",
+      "classification": "LLM-Rohtext",
+      "variant": "emphasis"
+    },
+    {
+      "id": "quotes-passed",
+      "from": "quotes",
+      "to": "prose",
+      "label": "gedeckt",
+      "classification": "sonst Retry",
+      "variant": "emphasis",
+      "labelAt": [
+        530,
+        270
+      ]
+    },
+    {
+      "id": "fact-lookup",
+      "from": "evidencemap",
+      "to": "prose",
+      "label": "Faktenbelege",
+      "classification": "Zahlenabgleich",
+      "variant": "security",
+      "labelAt": [
+        530,
+        500
+      ]
+    },
+    {
+      "id": "verified-text",
+      "from": "prose",
+      "to": "binder",
+      "label": "[Beleg fehlt]",
+      "classification": "Struktur intakt",
+      "variant": "emphasis",
+      "route": "straight"
+    },
+    {
+      "id": "candidate-pool",
+      "from": "evidencemap",
+      "to": "binder",
+      "label": "Kandidaten",
+      "classification": "Embeddings",
+      "fromSide": "right",
+      "toSide": "bottom",
+      "via": [
+        [
+          637.5,
+          613
+        ],
+        [
+          637.5,
+          470
+        ],
+        [
+          745,
+          470
+        ]
+      ],
+      "labelAt": [
+        637,
+        545
+      ]
+    },
+    {
+      "id": "bound-evidence",
+      "from": "binder",
+      "to": "confidence",
+      "label": "gebunden",
+      "classification": "pro Claim",
+      "labelAt": [
+        745,
+        270
+      ]
+    },
+    {
+      "id": "scored-claims",
+      "from": "confidence",
+      "to": "persist",
+      "label": "Claims + Score",
+      "classification": "ReportV3-Slots",
+      "variant": "emphasis"
+    },
+    {
+      "id": "bundle",
+      "from": "persist",
+      "to": "export",
+      "label": "Bundle",
+      "classification": "vertragsgeprueft",
+      "labelAt": [
+        960,
+        270
+      ]
+    },
+    {
+      "id": "api-read",
+      "from": "persist",
+      "to": "frontend",
+      "label": "ReportV3",
+      "classification": "ueber die API",
+      "labelAt": [
+        960,
+        500
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Hauptpfad",
+      "items": [
+        "Der Simulationslauf ist die Primaerquelle; Wissensgraph und Web-Recherche kommen nur ueber Tool-Aufrufe dazu",
+        "process_section arbeitet strikt sequentiell: Generierung, Zitatpruefung, Fliesstext-Verifikation, Metadaten, Persistenz",
+        "Jeder Abschnitt liegt einzeln als section_NN.md auf der Platte, damit ein abgebrochener Lauf wieder aufsetzen kann"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Trust-Layer",
+      "items": [
+        "Die Zitatanker-Pruefung liest dieselbe Evidenzkarte und loest bei Bruch einen Repair-Retry aus",
+        "verify_prose gleicht numerische Aussagen gegen den Evidenz-Index ab und markiert Ungedecktes mit [Beleg fehlt]",
+        "Markiert statt geloescht: Saetze und Listennummerierungen bleiben vollstaendig erhalten"
+      ]
+    },
+    {
+      "dot": "orange",
+      "title": "Bewertung und Ausgabe",
+      "items": [
+        "Confidence deckelt Single-Source-Claims und bestraft widerspruechliche Sentiments",
+        "Der Export-Service validiert gegen die Pydantic-Vertraege, bevor ZIP oder CSV entstehen",
+        "Das Frontend liest ausschliesslich ReportV3, nie den Markdown-Zwischenstand"
+      ]
+    }
+  ]
+}

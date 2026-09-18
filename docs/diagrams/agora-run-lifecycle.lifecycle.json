@@ -1,0 +1,201 @@
+{
+  "schema_version": 1,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "Agora Run-Lifecycle",
+    "output": "agora-run-lifecycle.html",
+    "viewBox": [
+      820,
+      640
+    ],
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "hauptpfad",
+        "label": "Hauptpfad",
+        "focus": [
+          "pending",
+          "processing",
+          "reporting",
+          "completed"
+        ],
+        "note": "Vom angelegten Run ueber Simulation und Reportlauf bis zum fertigen Report."
+      },
+      {
+        "id": "unterbrechung",
+        "label": "Unterbrechung",
+        "focus": [
+          "processing",
+          "paused"
+        ],
+        "note": "Pause haelt den Run an, ohne ihn zu beenden."
+      },
+      {
+        "id": "ausgaenge",
+        "label": "Ausgaenge",
+        "focus": [
+          "reporting",
+          "failed",
+          "stopped"
+        ],
+        "note": "Fehler ist wiederaufnehmbar, Abbruch nicht."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "main",
+      "label": "Lauf-Phasen"
+    },
+    {
+      "id": "waiting",
+      "label": "Unterbrechung"
+    },
+    {
+      "id": "exceptions",
+      "label": "Wiederaufnahme"
+    },
+    {
+      "id": "terminal",
+      "label": "Abbruch"
+    }
+  ],
+  "states": [
+    {
+      "id": "pending",
+      "type": "start",
+      "label": "Pending",
+      "sublabel": "Run angelegt",
+      "lane": "main",
+      "col": 0,
+      "step": "01",
+      "tag": "RunLifecycle"
+    },
+    {
+      "id": "processing",
+      "type": "active",
+      "label": "Processing",
+      "sublabel": "Simulationsrunden",
+      "lane": "main",
+      "col": 1,
+      "step": "02",
+      "tag": "OASIS"
+    },
+    {
+      "id": "reporting",
+      "type": "active",
+      "label": "Processing",
+      "sublabel": "Reportlauf",
+      "lane": "main",
+      "col": 2,
+      "step": "03",
+      "tag": "ReportAgent"
+    },
+    {
+      "id": "completed",
+      "type": "success",
+      "label": "Completed",
+      "sublabel": "Report abgelegt",
+      "lane": "main",
+      "col": 3,
+      "step": "04",
+      "tag": "terminal"
+    },
+    {
+      "id": "paused",
+      "type": "waiting",
+      "label": "Paused",
+      "sublabel": "auf Anforderung",
+      "lane": "waiting",
+      "col": 0,
+      "tag": "nicht terminal"
+    },
+    {
+      "id": "failed",
+      "type": "failure",
+      "label": "Failed",
+      "sublabel": "Fehler im Lauf",
+      "lane": "exceptions",
+      "col": 1,
+      "tag": "wiederaufnehmbar",
+      "yOffset": 78
+    },
+    {
+      "id": "stopped",
+      "type": "failure",
+      "label": "Stopped",
+      "sublabel": "Nutzerabbruch",
+      "lane": "terminal",
+      "col": 0,
+      "tag": "terminal"
+    }
+  ],
+  "transitions": [
+    {
+      "id": "pause-run",
+      "from": "processing",
+      "to": "paused",
+      "variant": "default"
+    },
+    {
+      "id": "resume-run",
+      "from": "paused",
+      "to": "processing",
+      "variant": "emphasis",
+      "toSide": "bottom"
+    },
+    {
+      "id": "report-failed",
+      "from": "reporting",
+      "to": "failed",
+      "variant": "security"
+    },
+    {
+      "id": "report-resume",
+      "from": "failed",
+      "to": "reporting",
+      "label": "resume",
+      "variant": "emphasis",
+      "toSide": "right",
+      "labelAt": [
+        540,
+        257
+      ]
+    },
+    {
+      "id": "stop-run",
+      "from": "processing",
+      "to": "stopped",
+      "variant": "security"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Hauptpfad",
+      "items": [
+        "RunLifecycle legt jeden Run mit status pending an und schreibt beim Verlassen des Kontexts einen Endzustand",
+        "Simulation und Reportlauf tragen beide den kanonischen Status processing — der Unterschied steckt in der Phase, nicht im Statuswert",
+        "Nur completed, failed und stopped setzen completed_at"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Unterbrechung",
+      "items": [
+        "Paused haelt die Simulationsrunden an, ohne den Run zu beenden",
+        "Der Uebergang zurueck aus Paused fuehrt in denselben processing-Zustand, nicht in einen neuen Run",
+        "Ein pausierter Run zaehlt in der Registry weiterhin als offen"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Ausgaenge",
+      "items": [
+        "Failed ist wiederaufnehmbar: der Reportlauf setzt auf bereits persistierten Abschnitten auf",
+        "Stopped ist ein Nutzerabbruch und zeigt nicht zurueck in die Ausfuehrung",
+        "run_registry.canonical_status bildet Fremdwerte wie ready oder idle auf diese Menge ab"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+---
+title: Einführung
+description: Agora — evidenzorientierte Multi-Agenten-Analyse für Stakeholder, Zielgruppen und komplexe Entscheidungen.
+---
+
+# 🏛️ Agora
+
+**Documents → Knowledge Graph → Personas → Simulation → auditierbarer Report**
+
+Agora ist eine hybride Multi-Agenten-Resonanz-Simulationsplattform (Flask-Backend, Vue-3-Frontend, Neo4j-Knowledge-Graph, lokale LLMs via Ollama). Sie generiert **auditable Szenarien, mögliche Einwände, Konfliktlinien und Datenlücken** — für Stakeholder-Analysen, Zielgruppen und komplexe Entscheidungen.
+
+> [!IMPORTANT]
+> **Agora sagt menschliches Verhalten nicht voraus.** Die Plattform erzeugt nachvollziehbare Szenarien und weist auf Datenlücken hin. Simulationsergebnisse ersetzen keine Interviews, Usertests oder empirische Forschung.
+
+## Aktueller Stand
+
+- **Produktversion:** 0.9.5 — *Stability Beta* (Details: [`STATUS.md`](status))
+- **Referenzlauf:** Run 7 — *AURORA mit Red-Team-Review* (2026-08-17, siehe Sidebar-Gruppe `reference-runs`)
+- **E2E-Smokes:** 20/20 grün
+
+## Wo anfangen?
+
+| Dokument | Inhalt |
+| --- | --- |
+| [`architecture.md`](architecture) | Zielarchitektur, Modulgrenzen, Schichten |
+| [`STATUS.md`](STATUS) | Verifizierter Istzustand, Versionsstatus |
+| [`api.md`](api) | Reale Endpunkte der API |
+| [`api-contracts.md`](api-contracts) | Verträge (Schnittstellen) |
+| [`operator-guide.md`](operator-guide) | Betriebshandbuch |
+| [`runbooks/architecture-layers.md`](runbooks/architecture-layers) | Runbooks — Start mit der Schichtenkarte |
+| ADRs in `decisions/` | Architektur-Entscheidungen (Sidebar-Gruppe) |
+| [`glossary.md`](glossary) | Begriffsglossar |
+
+## Diese Seite ist agentenfähig
+
+Diese Doku stellt ihre Inhalte auch Maschinen bereit:
+
+- **`/llms.txt`** und **`/llms-full.txt`** — kompakter und vollständiger Index für LLMs
+- **`/mcp`** — MCP-Server (Streamable HTTP) mit den Tools `search_docs`, `get_page`, `list_pages`, `get_navigation`
+- **JSON-API** — `/api/docs/pages.json`, `/api/docs/navigation.json`, `/api/docs/search?q=…`
+
+Zum Verbinden aus Claude Code:
+
+```bash
+claude mcp add --transport http agora-docs http://localhost:4321/mcp
+```

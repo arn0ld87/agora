@@ -2,7 +2,7 @@
 name: agora-doc-worker
 description: Dokumentations-Worker für Markdown-Dateien und ausdrücklich benannte JSON-Dokumentationsregister. Aktualisiert README.md, CHANGELOG.md und docs/* bei sachlicher Betroffenheit. Use for reine Dokumentations-Issues oder nach einer verifizierten Feature-Änderung. Cheap and fast.
 tools: Read, Edit, Write, Grep, Glob, Bash
-model: haiku
+model: claude-haiku-4-5
 effort: low
 maxTurns: 12
 background: true

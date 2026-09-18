@@ -2,7 +2,7 @@
 name: agora-test-worker
 description: Schreibt pytest-Tests für Pydantic-Contracts, FSM-Übergänge, Persona-Quoten, Evidence-Dedup und E2E-Regressionen. Use proactively für jeden Layer-0/1-Task und für klar abgegrenzte Test-Slices.
 tools: Read, Edit, Write, Bash, Grep, Glob
-model: sonnet
+model: claude-sonnet-4-6
 effort: medium
 maxTurns: 30
 background: true

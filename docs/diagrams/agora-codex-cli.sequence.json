@@ -1,0 +1,211 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Codex-CLI als Agora-Provider",
+    "output": "agora-codex-cli.html",
+    "viewBox": [
+      1000,
+      660
+    ],
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "routing",
+        "label": "Routing",
+        "focus": [
+          "client",
+          "registry"
+        ],
+        "note": "codex_cli kommt aus der gerouteten Connection, nie aus einer base_url."
+      },
+      {
+        "id": "ausfuehrung",
+        "label": "Ausfuehrung",
+        "focus": [
+          "shim",
+          "proc"
+        ],
+        "note": "Der Shim uebersetzt den OpenAI-Aufruf in einen codex-exec-Subprozess."
+      },
+      {
+        "id": "rueckgabe",
+        "label": "Rueckgabe",
+        "focus": [
+          "client",
+          "shim",
+          "caller"
+        ],
+        "note": "Rohtext zurueck, JSON-Parsing und Schema-Pruefung bleiben beim LLMClient."
+      }
+    ],
+    "column_fit": "spread"
+  },
+  "participants": [
+    {
+      "id": "caller",
+      "type": "backend",
+      "label": "ReportAgent",
+      "sublabel": "Aufrufer"
+    },
+    {
+      "id": "client",
+      "type": "backend",
+      "label": "LLMClient",
+      "sublabel": "chat_json"
+    },
+    {
+      "id": "registry",
+      "type": "backend",
+      "label": "Provider-Registry",
+      "sublabel": "Connection-Store"
+    },
+    {
+      "id": "shim",
+      "type": "backend",
+      "label": "CodexCliClient",
+      "sublabel": "Duck-Type-Shim"
+    },
+    {
+      "id": "proc",
+      "type": "external",
+      "label": "codex exec",
+      "sublabel": "Subprozess"
+    }
+  ],
+  "segments": [
+    {
+      "from": 160,
+      "to": 310,
+      "label": "Routing"
+    },
+    {
+      "from": 310,
+      "to": 470,
+      "label": "Ausfuehrung"
+    },
+    {
+      "from": 470,
+      "to": 580,
+      "label": "Rueckgabe"
+    }
+  ],
+  "messages": [
+    {
+      "id": "call",
+      "from": "caller",
+      "to": "client",
+      "y": 180,
+      "label": "chat_json(messages, schema)",
+      "variant": "emphasis"
+    },
+    {
+      "id": "resolve",
+      "from": "client",
+      "to": "registry",
+      "y": 232,
+      "label": "Connection aufloesen"
+    },
+    {
+      "id": "provider-type",
+      "from": "registry",
+      "to": "client",
+      "y": 284,
+      "label": "provider_type = codex_cli",
+      "variant": "return",
+      "note": "wird nie aus einer base_url erraten"
+    },
+    {
+      "id": "create",
+      "from": "client",
+      "to": "shim",
+      "y": 336,
+      "label": "chat.completions.create",
+      "variant": "emphasis",
+      "note": "temperature, response_format und stream werden verworfen"
+    },
+    {
+      "id": "exec",
+      "from": "shim",
+      "to": "proc",
+      "y": 388,
+      "label": "codex exec --sandbox read-only",
+      "variant": "security",
+      "note": "eigenes Temp-CWD, --skip-git-repo-check"
+    },
+    {
+      "id": "stdout",
+      "from": "proc",
+      "to": "shim",
+      "y": 440,
+      "label": "stdout oder Fehlercode",
+      "variant": "return"
+    },
+    {
+      "id": "completion",
+      "from": "shim",
+      "to": "client",
+      "y": 492,
+      "label": "_ShimChatCompletion",
+      "variant": "return"
+    },
+    {
+      "id": "json",
+      "from": "client",
+      "to": "caller",
+      "y": 544,
+      "label": "geprueftes JSON",
+      "variant": "return",
+      "note": "Parsing, Reparatur und Pydantic-Pruefung bleiben im LLMClient"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "client",
+      "from": 180,
+      "to": 544,
+      "type": "backend"
+    },
+    {
+      "participant": "shim",
+      "from": 336,
+      "to": 492,
+      "type": "backend"
+    },
+    {
+      "participant": "proc",
+      "from": 388,
+      "to": 440,
+      "type": "external"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Warum ein Shim",
+      "items": [
+        "Die Codex-CLI kennt kein HTTP, keinen API-Key und keine OpenAI-Parameter",
+        "CodexCliClient bildet genau die genutzte Teiloberflaeche von openai.OpenAI nach",
+        "Token-Streaming ist bewusst nicht unterstuetzt; LLMClient erzwingt einen nicht-streamenden Pfad"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Absicherung",
+      "items": [
+        "codex exec laeuft mit --sandbox read-only in einem eigenen Temp-Verzeichnis, nie im Agora-Repo",
+        "Das Binary steckt im Image, die Abo-Anmeldung kommt als Host-Mount unter CODEX_HOME",
+        "Ein fehlendes Binary oder ein Timeout wird als provider_unavailable mit retryable=False gemeldet"
+      ]
+    },
+    {
+      "dot": "orange",
+      "title": "Grenzen",
+      "items": [
+        "Ohne --model entscheidet die lokale codex-Konfiguration ueber das Modell",
+        "Strukturierte Ausgaben entstehen aus dem Prompt, nicht aus response_format",
+        "Die Schema-Pruefung passiert erst im LLMClient, nachdem der Rohtext zurueck ist"
+      ]
+    }
+  ]
+}
