@@ -20,6 +20,7 @@ export default {
   "run-budgets",
   "seed-corpus-document-anchor",
   "psycopg-under-gevent-worker",
+  "single-web-worker-hardstop",
   "README"
 ],
 };
