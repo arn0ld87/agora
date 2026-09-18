@@ -17,12 +17,12 @@ from __future__ import annotations
 
 import json
 import os
-import uuid
 from datetime import datetime
 from typing import Optional
 
 from ..config import Config
 from ..contracts import Project, ProjectStatus
+from ..repositories.project_repository import new_project_id
 from ..utils.logger import get_logger
 from ..utils.validation import join_within
 
@@ -64,7 +64,10 @@ class FileProjectRepository:
         """
         self._ensure_projects_dir()
 
-        project_id = f'proj_{uuid.uuid4().hex[:12]}'
+        # Die Kennung erzeugt der Port, nicht dieser Adapter: der
+        # PostgreSQL-Adapter muss dieselbe Form liefern, sonst faende ein
+        # migriertes Projekt seine Artefakte nicht wieder.
+        project_id = new_project_id()
         now = datetime.now().isoformat()
 
         project = Project(

@@ -31,6 +31,7 @@ haette sie faelschlich.
 
 from __future__ import annotations
 
+import uuid
 from typing import Optional, Protocol, runtime_checkable
 
 from ..config import (
@@ -39,6 +40,18 @@ from ..config import (
     PROJECT_BACKENDS_NOT_YET_AVAILABLE,
 )
 from ..contracts import Project
+
+#: Praefix und Laenge der Projektkennung. Steht hier und nicht in einem
+#: Adapter, weil jeder Adapter dieselbe Form erzeugen muss: die Kennung ist
+#: zugleich der Verzeichnisname unter ``uploads/projects/``, und ein zweites
+#: Format hiesse, dass ein migriertes Projekt seine Artefakte nicht faende.
+PROJECT_ID_PREFIX = 'proj_'
+PROJECT_ID_HEX_LENGTH = 12
+
+
+def new_project_id() -> str:
+    """Erzeugt eine Projektkennung der Form ``proj_<12 Hexstellen>``."""
+    return f'{PROJECT_ID_PREFIX}{uuid.uuid4().hex[:PROJECT_ID_HEX_LENGTH]}'
 
 
 class ProjectBackendUnavailable(RuntimeError):
@@ -67,6 +80,19 @@ class ProjectRepository(Protocol):
 
         Das Stempeln gehoert hierher und nicht zum Aufrufer: sonst haengt es
         davon ab, ob jemand daran gedacht hat.
+
+        Auf ein Projekt, das es nicht gibt, schlaegt ``save`` fehl — kein
+        Adapter erfindet eines als Nebeneffekt eines Schreibvorgangs. **Der
+        Fehlertyp ist adapterabhaengig** (Dateisystem- bzw. Datenbankfehler)
+        und wird hier bewusst nicht festgeschrieben.
+
+        Eine bekannte Ungenauigkeit: ruft jemand ``delete`` und danach ``save``
+        **direkt am Port** auf, ohne den Weg ueber ``ProjectManager``, legt der
+        Dateiadapter den Datensatz neu an — sein ``delete`` entfernt nur
+        ``project.json``, das Verzeichnis bleibt stehen. Der PostgreSQL-Adapter
+        schlaegt in derselben Lage fehl. Im Produktionspfad tritt das nicht
+        auf, weil ``ProjectManager.delete_project`` das Verzeichnis mit
+        abraeumt; fuer direkte Port-Aufrufer ist es real.
         """
         ...
 
@@ -114,6 +140,10 @@ def get_project_repository(storage_root: str | None = None) -> ProjectRepository
         raise ProjectBackendUnavailable(
             f'AGORA_PROJECT_BACKEND={backend} has no adapter yet'
         )
+    if backend == 'postgres':
+        from ..infrastructure.postgres.repositories import PostgresProjectRepository
+
+        return PostgresProjectRepository()
     from ..services.file_project_store import get_file_project_repository
 
     return get_file_project_repository(storage_root)
