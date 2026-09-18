@@ -16,9 +16,17 @@ from .llm_profile_repository import (
     LlmProfileRepository,
     get_llm_profile_repository,
 )
+from .project_repository import (
+    ProjectBackendUnavailable,
+    ProjectRepository,
+    get_project_repository,
+)
 
 __all__ = [
     "LlmProfileBackendUnavailable",
     "LlmProfileRepository",
+    "ProjectBackendUnavailable",
+    "ProjectRepository",
     "get_llm_profile_repository",
+    "get_project_repository",
 ]

@@ -57,6 +57,7 @@ from app.contracts.llm_profile_contract import (
     LlmProfileCreateRequest,
 )
 from app.contracts.model_preset_contract import AvailableModelsResponse, ModelPreset
+from app.contracts.project_contract import Project, ProjectListResponse
 from app.contracts.llm_provider_keys_contract import (
     LlmProviderKeyCreateRequest,
     LlmProviderKeyEntry,
@@ -141,6 +142,11 @@ CONTRACTS: dict[str, type] = {
     "llm-profile.schema.json": LlmProfile,
     "llm-profile-list-response.schema.json": LlmProfileListResponse,
     "llm-profile-create-request.schema.json": LlmProfileCreateRequest,
+    # Projektmetadaten (PR 6): liegt auf einer API-Grenze, seit
+    # GET /project/<id>, GET /project/list und POST /project/<id>/reset
+    # ``Project.to_dict()`` ausliefern.
+    "project.schema.json": Project,
+    "project-list-response.schema.json": ProjectListResponse,
     # Modell-Presets fuer /api/simulation/available-models (Issue #1395)
     "model-preset.schema.json": ModelPreset,
     "available-models-response.schema.json": AvailableModelsResponse,
