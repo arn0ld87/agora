@@ -19,6 +19,7 @@ export default {
   "evidence-entailment-and-provenance",
   "run-budgets",
   "seed-corpus-document-anchor",
+  "psycopg-under-gevent-worker",
   "README"
 ],
 };
