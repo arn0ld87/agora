@@ -289,13 +289,38 @@ def test_factory_rejects_an_unknown_backend_instead_of_falling_back(monkeypatch)
         repository_module.get_project_repository()
 
 
-def test_factory_raises_for_a_backend_without_an_adapter(monkeypatch):
-    """``postgres`` ist gueltige Konfiguration, hat aber noch keinen Adapter.
+def test_factory_serves_postgres_now_that_the_adapter_exists(monkeypatch):
+    """``postgres`` liefert seit dem zweiten Teil von PR 6 den Adapter.
 
-    Der Fehler sagt das, statt beim ersten Projektzugriff als Importfehler zu
-    erscheinen und nach einem Tippfehler aussehen zu lassen.
+    Vorher hat dieser Test das Gegenteil geprueft — dass die Fabrik den Wert
+    mit einer Begruendung ablehnt. Die Erwartung hat sich mit dem Adapter
+    umgedreht, nicht die Mechanik dahinter.
+
+    Der Konstruktor baut keine Verbindung auf: die Engine entsteht erst beim
+    ersten Zugriff. Deshalb braucht dieser Test keine Datenbank.
+    """
+    from app.infrastructure.postgres.repositories import PostgresProjectRepository
+
+    monkeypatch.setattr(Config, 'PROJECT_BACKEND', 'postgres')
+
+    repository = repository_module.get_project_repository()
+
+    assert isinstance(repository, PostgresProjectRepository)
+    assert isinstance(repository, ProjectRepository)
+
+
+def test_factory_still_rejects_a_backend_whose_adapter_is_missing(monkeypatch):
+    """Die Mechanik fuer den Zwischenzustand bleibt geprueft.
+
+    ``PROJECT_BACKENDS_NOT_YET_AVAILABLE`` ist heute leer, weil beide Ablagen
+    bedient sind. Der naechste Store durchlaeuft denselben Zustand — Wert schon
+    gueltig, Adapter noch nicht da —, und dann muss die Fabrik das weiterhin
+    mit einer Begruendung ablehnen statt mit einem Importfehler.
     """
     monkeypatch.setattr(Config, 'PROJECT_BACKEND', 'postgres')
+    monkeypatch.setattr(
+        repository_module, 'PROJECT_BACKENDS_NOT_YET_AVAILABLE', frozenset({'postgres'})
+    )
 
     with pytest.raises(ProjectBackendUnavailable):
         repository_module.get_project_repository()

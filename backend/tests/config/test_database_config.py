@@ -14,7 +14,14 @@ from __future__ import annotations
 import pytest
 
 from app import config as config_module
-from app.config import LLM_PROFILE_BACKENDS, METADATA_BACKENDS, Config, validate_llm_profile_backend
+from app.config import (
+    LLM_PROFILE_BACKENDS,
+    METADATA_BACKENDS,
+    PROJECT_BACKENDS,
+    Config,
+    validate_llm_profile_backend,
+    validate_project_backend,
+)
 
 
 @pytest.fixture
@@ -135,6 +142,70 @@ def test_postgres_llm_profile_backend_is_accepted_since_pr4():
     """Seit PR 4 gibt es den Adapter — eine Ablehnung hier hielte eine
     Installation davon ab, umzuschalten, obwohl alles bereitsteht."""
     assert validate_llm_profile_backend('postgres') == []
+
+
+def test_project_backends_are_exactly_file_and_postgres():
+    assert PROJECT_BACKENDS == frozenset({'file', 'postgres'})
+
+
+def test_unknown_project_backend_is_rejected():
+    """Ein Tippfehler darf nicht still auf die Dateiablage zurückfallen —
+    sonst arbeitet die Installation weiter auf der Datei, während der Betreiber
+    glaubt, er habe umgeschaltet."""
+    errors = validate_project_backend('filee')
+
+    assert len(errors) == 1
+    assert 'unknown value' in errors[0]
+    for backend in PROJECT_BACKENDS:
+        assert backend in errors[0]
+
+
+def test_file_backend_needs_no_database_url():
+    """Der Default darf eine fehlende URL nichts kosten."""
+    assert validate_project_backend('file', '') == []
+
+
+def test_project_postgres_backend_without_database_url_is_rejected():
+    """Ohne URL scheiterte es sonst erst beim ersten Projektzugriff, und der
+    Fehler sähe nach einem Verbindungsproblem aus statt nach einer fehlenden
+    Einstellung."""
+    errors = validate_project_backend('postgres', '')
+
+    assert len(errors) == 1
+    assert 'AGORA_PROJECT_BACKEND=postgres' in errors[0]
+    assert 'DATABASE_URL' in errors[0]
+
+
+def test_project_postgres_backend_with_whitespace_only_url_is_rejected():
+    """Leerzeichen sind keine Konfiguration."""
+    assert len(validate_project_backend('postgres', '   ')) == 1
+
+
+def test_project_postgres_backend_with_url_is_accepted():
+    """Seit dem zweiten Teil von PR 6 gibt es den Adapter."""
+    assert validate_project_backend(
+        'postgres', 'postgresql+psycopg://u:p@host:5432/db'
+    ) == []
+
+
+def test_config_validate_wires_the_project_backend_through(
+    config_without_unrelated_errors, monkeypatch
+):
+    """Die Regel muss auch tatsächlich an `Config.validate()` hängen.
+
+    Ein Test nur gegen die Modulfunktion bewiese nichts darüber, ob sie beim
+    Start überhaupt aufgerufen wird — und genau das ist der Zweck.
+    """
+    monkeypatch.setattr(Config, 'PROJECT_BACKEND', 'postgres')
+    monkeypatch.setattr(Config, 'DATABASE_URL', '')
+
+    fehler = [
+        error
+        for error in Config.validate()
+        if 'AGORA_PROJECT_BACKEND' in error
+    ]
+
+    assert len(fehler) == 1
 
 
 def test_a_backend_without_adapter_is_rejected_with_a_reason(monkeypatch):

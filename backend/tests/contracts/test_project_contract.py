@@ -186,3 +186,37 @@ def test_a_record_without_project_id_raises_keyerror():
     """Ein Datensatz ohne Kennung ist keiner — und war es vorher auch nicht."""
     with pytest.raises(KeyError):
         Project.from_dict({'name': 'Ohne Kennung'})
+
+
+def test_status_values_agree_across_contract_model_and_migration():
+    """Die Statuswerte stehen an drei Stellen und muessen gleich bleiben.
+
+    Der Vertrag fuehrt das Enum, das ORM-Modell spiegelt es als
+    Check-Constraint, und die Alembic-Revision schreibt diesen Constraint in
+    die Datenbank. Die Revision ist nach dem Ausrollen nicht mehr aenderbar:
+    wer dem Enum einen Wert hinzufuegt und die Liste im Modell nachzieht, die
+    Migration aber vergisst, bekommt in Produktion eine Constraint-Verletzung
+    auf einen Status, den die Anwendung fuer gueltig haelt.
+
+    Genau diese Pruefung hat der Kommentar in der Migration behauptet, bevor es
+    sie gab.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    from app.infrastructure.postgres.models.project import PROJECT_STATUS_VALUES
+
+    revision = (
+        Path(__file__).resolve().parents[2]
+        / 'migrations'
+        / 'versions'
+        / '20260919_0110_create_projects.py'
+    )
+    spec = importlib.util.spec_from_file_location('_projects_revision', revision)
+    modul = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modul)
+
+    aus_dem_vertrag = tuple(status.value for status in ProjectStatus)
+
+    assert PROJECT_STATUS_VALUES == aus_dem_vertrag
+    assert modul.STATUS_VALUES == aus_dem_vertrag

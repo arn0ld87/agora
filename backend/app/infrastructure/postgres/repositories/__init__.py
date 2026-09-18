@@ -6,5 +6,10 @@ des Ports.
 """
 
 from .llm_profile_repository import PostgresLlmProfileRepository
+from .project_repository import PostgresProjectRepository, ProjectNotStored
 
-__all__ = ["PostgresLlmProfileRepository"]
+__all__ = [
+    "PostgresLlmProfileRepository",
+    "PostgresProjectRepository",
+    "ProjectNotStored",
+]

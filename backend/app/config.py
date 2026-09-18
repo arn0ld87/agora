@@ -130,20 +130,21 @@ def validate_llm_profile_backend(llm_profile_backend: str) -> list[str]:
     return []
 
 
-#: Ablagen, die `AGORA_PROJECT_BACKEND` kennt. 'postgres' steht hier, weil der
-#: Wert als Konfiguration schon gültig ist — der Adapter dazu kommt mit dem
-#: zweiten Teil von PR 6 (docs/plans/supabase.md §11). Bis dahin lehnt die
-#: Validierung ihn mit einem Satz ab, der sagt warum, statt mit einem
-#: Importfehler beim ersten Projektzugriff.
+#: Ablagen, die `AGORA_PROJECT_BACKEND` kennt. Beide sind bedient, seit der
+#: zweite Teil von PR 6 (docs/plans/supabase.md §11) den PostgreSQL-Adapter
+#: mitbringt.
 PROJECT_BACKENDS = frozenset({'file', 'postgres'})
 
-#: 'postgres' ist konfigurierbar, aber noch nicht bedient. Derselbe
-#: Zwischenzustand, den LLM_PROFILE_BACKENDS_NOT_YET_AVAILABLE zwischen PR 3
-#: und PR 4 abgebildet hat.
-PROJECT_BACKENDS_NOT_YET_AVAILABLE: frozenset[str] = frozenset({'postgres'})
+#: Leer, seit der PostgreSQL-Adapter da ist. Bleibt als Mechanik stehen, weil
+#: der nächste Store denselben Zwischenzustand durchläuft: Wert schon gültig,
+#: Adapter noch nicht da — dieselbe Rolle wie
+#: LLM_PROFILE_BACKENDS_NOT_YET_AVAILABLE zwischen PR 3 und PR 4.
+PROJECT_BACKENDS_NOT_YET_AVAILABLE: frozenset[str] = frozenset()
 
 
-def validate_project_backend(project_backend: str) -> list[str]:
+def validate_project_backend(
+    project_backend: str, database_url: str = ''
+) -> list[str]:
     """Prüft AGORA_PROJECT_BACKEND.
 
     Modulfunktion aus demselben Grund wie `validate_llm_profile_backend`: die
@@ -166,6 +167,15 @@ def validate_project_backend(project_backend: str) -> list[str]:
             'the PostgreSQL adapter arrives with the second part of PR 6 '
             "(docs/plans/supabase.md §11). Use 'file' until then; "
             'existing projects stay where they are.'
+        ]
+
+    if backend == 'postgres' and not (database_url or '').strip():
+        # Ohne URL scheiterte es sonst erst beim ersten Projektzugriff, und der
+        # Fehler sähe dann nach einem Verbindungsproblem aus statt nach einer
+        # fehlenden Einstellung.
+        return [
+            'AGORA_PROJECT_BACKEND=postgres requires DATABASE_URL '
+            f'({DATABASE_URL_PREFIX}user:password@host:5432/dbname)'
         ]
 
     return []
@@ -585,7 +595,9 @@ class Config:
         # Ablage der LLM-Profile (§10, PR 3).
         errors.extend(validate_llm_profile_backend(cls.LLM_PROFILE_BACKEND))
         # Ablage der Projekt-Metadaten (§11, PR 6).
-        errors.extend(validate_project_backend(cls.PROJECT_BACKEND))
+        errors.extend(
+            validate_project_backend(cls.PROJECT_BACKEND, cls.DATABASE_URL)
+        )
 
         expected_dim = infer_vector_dim_for_model(cls.EMBEDDING_MODEL)
         if expected_dim and cls.VECTOR_DIM != expected_dim:
