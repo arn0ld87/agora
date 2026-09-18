@@ -208,13 +208,13 @@ Die Supabase-Konfigurationsdateien (DB-Init-SQL, Envoy-Routing, Supavisor-Config
 
 ### PostgreSQL-Grundlage: installiert, im Default ungenutzt
 
-`sqlalchemy`, `psycopg[binary]` und `alembic` sind Backend-Abhängigkeiten. Der zentrale Adapter liegt in `backend/app/infrastructure/postgres/` (`Database.session()` als einziger vorgesehener Weg zu einer Verbindung), Alembic unter `backend/migrations/` mit einer ersten Migration, die das Fachschema `agora` anlegt.
+`sqlalchemy`, `psycopg[binary]` und `alembic` sind Backend-Abhängigkeiten. Der zentrale Adapter liegt in `backend/app/infrastructure/postgres/` (`Database.session()` als einziger vorgesehener Weg zu einer Verbindung), Alembic unter `backend/migrations/` mit zwei Migrationen: die erste legt das Fachschema `agora` an, die zweite die Tabelle `agora.llm_profiles`.
 
 Wirksam wird davon im Default nichts: `AGORA_METADATA_BACKEND=legacy` ist gesetzt, und solange er gilt, wird keine Verbindung aufgebaut. `DATABASE_URL` hat bewusst keinen Default; `Config.validate()` lehnt `AGORA_METADATA_BACKEND=postgres` ohne URL, einen unbekannten Backend-Wert und ein `postgresql://`-Schema (psycopg2 ist nicht installiert) beim Start ab.
 
 Ab hier gilt die Regel aus Phase 2 des Plans: **das Datenbankschema wird ausschließlich über versionierte Migrationen geändert.** Kein `CREATE TABLE IF NOT EXISTS` in fachlichen Stores.
 
-Kein Store ist umgestellt, kein Repository existiert, keine Fachtabelle ist angelegt — das ist Phase 3 und 4. Offen und benannt: psycopg 3 ist im Synchronmodus nicht gevent-kooperativ, während der Webprozess unter einem gunicorn-Worker mit gevent-Worker-Klasse läuft. Die Frage gehört beantwortet, bevor der erste Store auf Postgres zeigt.
+Die erste Fachtabelle existiert als Definition: `agora.llm_profiles` (SQLAlchemy-Modell `LlmProfileModel` plus Migration) hält LLM-Profil-Metadaten — Name, Provider, Basis-URL, Modellname, ein partieller Unique-Index, der höchstens ein Default-Profil erlaubt. Provider-Secrets bleiben im Fernet-Store, Workspace- und Auth-Spalten sind bewusst nicht vorgezogen. Kein Store ist umgestellt, kein Repository existiert, und solange `AGORA_METADATA_BACKEND=legacy` gilt, liest und schreibt die Tabelle niemand — das ist Phase 4. Offen und benannt: psycopg 3 ist im Synchronmodus nicht gevent-kooperativ, während der Webprozess unter einem gunicorn-Worker mit gevent-Worker-Klasse läuft. Die Frage gehört beantwortet, bevor der erste Store auf Postgres zeigt.
 
 ## Security
 

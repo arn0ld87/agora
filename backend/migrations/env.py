@@ -5,10 +5,9 @@ Zeichenkette mit Passwort gehört nicht in eine versionierte Datei. Gelesen
 wird sie über denselben Adapter wie im Anwendungscode, damit Migration und
 Laufzeit nicht mit zwei verschiedenen Treibern oder Schemata arbeiten.
 
-`target_metadata` ist noch `None`. Agora hat in dieser Phase keine
-ORM-Modelle — das Datenmodell entsteht in Phase 3 (§9). Bis dahin sind
-Migrationen von Hand geschrieben, und `--autogenerate` würde jede vorhandene
-Tabelle als zu löschen vorschlagen.
+`target_metadata` kommt aus der gemeinsamen Declarative Base. Alembic und die
+Anwendung arbeiten dadurch gegen dieselbe Modelldefinition; Tabellen werden
+trotzdem ausschließlich über versionierte Migrationen geändert.
 """
 
 from __future__ import annotations
@@ -29,18 +28,22 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from app.infrastructure.postgres import normalize_database_url  # noqa: E402
+from app.infrastructure.postgres.models import AGORA_SCHEMA, Base  # noqa: E402
 
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Kein ORM-Metadata bis Phase 3 (§9). Siehe Modul-Docstring.
-target_metadata = None
+target_metadata = Base.metadata
 
-# Fachschema. `public` bleibt möglichst leer, damit Fachtabellen nicht in
-# einem direkt über PostgREST exponierten Schema landen (§9).
-AGORA_SCHEMA = 'agora'
+def _include_name(
+    name: str | None,
+    type_: str,
+    _parent_names: dict[str, str | None],
+) -> bool:
+    """Reflektiert für Autogenerate ausschließlich das Agora-Fachschema."""
+    return type_ != 'schema' or name == AGORA_SCHEMA
 
 
 def _database_url() -> str:
@@ -62,6 +65,7 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={'paramstyle': 'named'},
         include_schemas=True,
+        include_name=_include_name,
         version_table_schema=None,
         compare_type=True,
     )
@@ -88,6 +92,7 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             include_schemas=True,
+            include_name=_include_name,
             # `alembic_version` bleibt in `public`. In `agora` wäre es ein
             # Henne-Ei-Problem: die Tabelle müsste in dem Schema liegen, das
             # die erste Migration erst anlegt.
