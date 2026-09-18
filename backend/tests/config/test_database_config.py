@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import pytest
 
+from app import config as config_module
 from app.config import LLM_PROFILE_BACKENDS, METADATA_BACKENDS, Config, validate_llm_profile_backend
 
 
@@ -130,9 +131,27 @@ def test_unknown_llm_profile_backend_is_rejected():
         assert backend in errors[0]
 
 
-def test_postgres_llm_profile_backend_is_rejected_until_pr4():
-    """'postgres' ist gültig, aber ohne Adapter — die Meldung muss das sagen, nicht raten lassen."""
-    errors = validate_llm_profile_backend('postgres')
+def test_postgres_llm_profile_backend_is_accepted_since_pr4():
+    """Seit PR 4 gibt es den Adapter — eine Ablehnung hier hielte eine
+    Installation davon ab, umzuschalten, obwohl alles bereitsteht."""
+    assert validate_llm_profile_backend('postgres') == []
+
+
+def test_a_backend_without_adapter_is_rejected_with_a_reason(monkeypatch):
+    """Die Mechanik bleibt geprüft, auch wenn das Set gerade leer ist: der
+    nächste Store durchläuft denselben Zwischenzustand — Wert schon gültig,
+    Adapter noch nicht da. Ein stiller Fallback auf den Default sähe nach einer
+    bewussten Entscheidung aus, die keine war."""
+    monkeypatch.setattr(
+        config_module, 'LLM_PROFILE_BACKENDS', frozenset({'sqlite', 'kuenftig'})
+    )
+    monkeypatch.setattr(
+        config_module,
+        'LLM_PROFILE_BACKENDS_NOT_YET_AVAILABLE',
+        frozenset({'kuenftig'}),
+    )
+
+    errors = validate_llm_profile_backend('kuenftig')
 
     assert len(errors) == 1
-    assert 'PR 4' in errors[0]
+    assert 'not available yet' in errors[0]
