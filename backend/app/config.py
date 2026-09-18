@@ -97,10 +97,10 @@ def validate_database_settings(metadata_backend: str, database_url: str) -> list
 #: Profilzugriff.
 LLM_PROFILE_BACKENDS = frozenset({'sqlite', 'postgres'})
 
-#: Die einzige Stelle, an der 'PR 4 fehlt noch' als Wahrheit steht. Wenn der
-#: PostgreSQL-Adapter kommt, wird dieses Set leer und die Verzweigung darunter
-#: verschwindet mit ihm.
-LLM_PROFILE_BACKENDS_NOT_YET_AVAILABLE = frozenset({'postgres'})
+#: Leer, seit PR 4 den PostgreSQL-Adapter mitbringt. Bleibt als Mechanik
+#: stehen, weil der nächste Store denselben Zwischenzustand durchläuft: Wert
+#: schon gültig, Adapter noch nicht da.
+LLM_PROFILE_BACKENDS_NOT_YET_AVAILABLE: frozenset[str] = frozenset()
 
 
 def validate_llm_profile_backend(llm_profile_backend: str) -> list[str]:

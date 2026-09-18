@@ -94,9 +94,12 @@ def get_llm_profile_repository() -> LlmProfileRepository:
         # das Repository ohne vorherige Validierung erreicht — ein Test, ein
         # Skript, ein künftiger Aufrufer.
         raise LlmProfileBackendUnavailable(
-            f"AGORA_LLM_PROFILE_BACKEND={backend} has no adapter yet; "
-            "it arrives with PR 4 (docs/plans/supabase.md §10)"
+            f"AGORA_LLM_PROFILE_BACKEND={backend} has no adapter yet"
         )
+    if backend == "postgres":
+        from ..infrastructure.postgres.repositories import PostgresLlmProfileRepository
+
+        return PostgresLlmProfileRepository()
     from ..services.llm_profiles_store import get_llm_profiles_store
 
     return get_llm_profiles_store()
