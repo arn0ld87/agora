@@ -106,8 +106,9 @@ export function useGraphBuildPipeline({
       case 'graph_building':
         currentPhase.value = 1
         break
+      // Kein `case 'completed'`: der Projektstatus kennt diesen Wert nicht.
+      // Er hiess hier wie beim Task, war aber fuer ein Projekt nie erreichbar.
       case 'graph_completed':
-      case 'completed':
         currentPhase.value = 2
         break
       // PR #1371: Ein abgebrochener Build hinterlässt einen bewusst
@@ -229,13 +230,17 @@ export function useGraphBuildPipeline({
         currentPhase.value = 1
         startPollingTask(response.data.graph_build_task_id)
         startGraphPolling()
-      } else if ((response.data.status === 'graph_completed' || response.data.status === 'completed') && response.data.graph_id) {
+      // `|| status === 'completed'` stand hier bis zum Zod-Spiegel und war
+      // toter Code: das Backend kennt diesen Wert nicht, der Status heisst
+      // `graph_completed`. Der strikte Vertrag hat den Vergleich als
+      // unerfuellbar aufgedeckt.
+      } else if (response.data.status === 'graph_completed' && response.data.graph_id) {
         // Issue #1029: Erst die Befunde des abgeschlossenen Builds holen,
         // dann weiterschalten. Ohne diesen Schritt verlöre ein Reload den
         // blockierenden Befund, und der Weiter-Button wäre wieder offen —
         // ausgerechnet auf dem Weg, den ein Nutzer nach einem
         // fehlgeschlagenen Lauf am ehesten nimmt.
-        await restoreDegradations(response.data.graph_build_task_id, generation)
+        await restoreDegradations(response.data.graph_build_task_id ?? undefined, generation)
         currentPhase.value = 2
         await loadGraph(response.data.graph_id, generation)
       } else if (response.data.status === 'graph_incomplete' && response.data.graph_id) {
@@ -243,7 +248,7 @@ export function useGraphBuildPipeline({
         // Ansehen ja, weiterarbeiten nein — graphIncomplete blockiert den
         // Weiter-Knopf in StepGraphBuildView, unabhaengig von den
         // Degradationen (die bei sauberem Abbruch leer sein koennen).
-        await restoreDegradations(response.data.graph_build_task_id, generation)
+        await restoreDegradations(response.data.graph_build_task_id ?? undefined, generation)
         currentPhase.value = 2
         await loadGraph(response.data.graph_id, generation)
         addLog(t('step1.graphIncomplete'))

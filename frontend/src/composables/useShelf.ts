@@ -294,9 +294,13 @@ export function buildShelfObjects(
     objects.push({
       kind: 'graph',
       id: p.project_id,
-      title: p.project_name || p.project_id,
+      // `p.name`, nicht `p.project_name`: dieses Feld hat das Backend nie
+      // geliefert. Bis zum Zod-Spiegel war der Zugriff darauf durch die
+      // `[key: string]: unknown`-Fluchtklappe gueltiges TypeScript, und die
+      // Kachel zeigte deshalb immer die rohe Kennung.
+      title: p.name || p.project_id,
       statusLine: statusText(t, `shelf.status.project_${p.status}`, p.status ?? ''),
-      updatedAt: (p as { updated_at?: string }).updated_at || (p as { created_at?: string }).created_at || '',
+      updatedAt: p.updated_at || p.created_at || '',
       metaId: p.project_id,
       graphId: p.graph_id ?? null,
       nextAction: p.graph_id

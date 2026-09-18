@@ -68,7 +68,7 @@ Zum Typ-Gate: `pyproject.toml` schaltet mypy für `app`, `app.config`, `app.cont
 
 - Vue 3 / TypeScript / Vite / Pinia.
 - Die v4-Routen sind die einzige produktive Oberfläche; historische Parallel-Views sind entfernt oder Redirects.
-- Pydantic-Verträge werden im Frontend durch Zod-Spiegel und eingecheckte JSON-Schemas abgesichert.
+- Pydantic-Verträge werden im Frontend durch Zod-Spiegel und eingecheckte JSON-Schemas abgesichert. **Der Spiegel ist nicht lückenlos**: das Gate `zod-mirror-drift` führt die vorhandenen Vertragstests aus, es erzwingt aber nicht, dass es zu einem Backend-Vertrag überhaupt einen Spiegel gibt. Wo einer fehlt und stattdessen ein handgeschriebenes Interface mit `[key: string]: unknown` steht, ist Drift unsichtbar — genau so zeigte das Projektregal jahrelang die rohe `project_id` statt des Namens (`useShelf` las `project_name`, das Backend liefert `name`). Projekte haben seitdem einen Spiegel (`contracts/projectContract.ts`, `.strict()`).
 - Das Premium-Redesign ist abgeschlossen; die Nachlese #1459 hat Radius-Tokens, Titel-Truncation, i18n und strukturierte Statusfehler bereinigt.
 
 ### Backend

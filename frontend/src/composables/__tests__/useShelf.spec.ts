@@ -94,11 +94,35 @@ function makeReport(overrides: Partial<Report> = {}): Report {
   }
 }
 
+/**
+ * Die vollstaendige Antwortform von `Project.to_dict()`.
+ *
+ * Vorher standen hier drei Felder, von denen zwei erfunden waren:
+ * `project_name` liefert das Backend nicht (es heisst `name`), und `ready` ist
+ * kein Projektstatus. Der Test war damit gruen gegen eine Antwort, die es nie
+ * gab — genau deshalb blieb unbemerkt, dass das Regal die rohe Kennung anzeigt.
+ */
 function makeProject(overrides: Partial<ProjectResponse> = {}): ProjectResponse {
   return {
     project_id: 'proj_1',
-    project_name: 'Projekt',
-    status: 'ready',
+    name: 'Projekt',
+    status: 'graph_completed',
+    created_at: '2026-09-01T10:00:00',
+    updated_at: '2026-09-01T10:00:00',
+    files: [],
+    total_text_length: 0,
+    ontology: null,
+    analysis_summary: null,
+    graph_id: null,
+    graph_build_task_id: null,
+    simulation_requirement: null,
+    chunk_size: 500,
+    chunk_overlap: 50,
+    llm_model: null,
+    llm_provider: null,
+    llm_profile_id: null,
+    ai_model_ref: null,
+    error: null,
     ...overrides,
   }
 }
@@ -380,8 +404,8 @@ describe('buildShelfObjects', () => {
   it('Projekt, dessen project_id von einem Job beansprucht ist, bekommt kein eigenes Graph-Objekt; unbeanspruchtes Projekt schon', () => {
     const run = makeRun({ linked_ids: { project_id: 'proj_claimed' } })
     const projects = [
-      makeProject({ project_id: 'proj_claimed', project_name: 'Beansprucht' }),
-      makeProject({ project_id: 'proj_free', project_name: 'Frei' }),
+      makeProject({ project_id: 'proj_claimed', name: 'Beansprucht' }),
+      makeProject({ project_id: 'proj_free', name: 'Frei' }),
     ]
 
     const objs = buildShelfObjects([run], [], projects, [], t)
@@ -485,7 +509,7 @@ describe('dynamische Statusschluessel — Locale-Treffer vs. Rohwert', () => {
     const objs = buildShelfObjects(
       [],
       [makeReport({ status: 'kuenftiger_status' as Report['status'] })],
-      [makeProject({ status: 'kuenftiger_projektstatus' })],
+      [makeProject({ status: 'kuenftiger_projektstatus' as ProjectResponse['status'] })],
       [],
       tReal,
     )
