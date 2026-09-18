@@ -1,6 +1,7 @@
 import service, { requestWithRetry } from './index'
 import type { ApiResponse } from '../types/run'
 import type { AiModelRefPayload } from './report'
+import type { Project } from '../contracts/projectContract'
 
 // --- Local types --------------------------------------------------------
 
@@ -45,15 +46,16 @@ export interface GraphDataResponse {
   [key: string]: unknown
 }
 
-export interface ProjectResponse {
-  project_id: string
-  project_name?: string
-  status?: string
-  graph_id?: string
-  graph_build_task_id?: string
-  llm_profile_id?: string | null
-  [key: string]: unknown
-}
+/**
+ * Antwortform der Projekt-Endpunkte.
+ *
+ * Abgeleitet aus dem Zod-Spiegel in `../contracts/projectContract`, nicht mehr
+ * von Hand deklariert. Das vorherige Interface trug ein Feld `project_name`,
+ * das das Backend nie geliefert hat, und eine `[key: string]: unknown`-
+ * Fluchtklappe, die den Zugriff darauf zu gueltigem TypeScript machte — der
+ * Grund, warum die Abweichung unbemerkt blieb.
+ */
+export type ProjectResponse = Project
 
 export interface GraphSnapshotResponse {
   graph_id: string
