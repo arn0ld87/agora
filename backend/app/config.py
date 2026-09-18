@@ -41,6 +41,54 @@ NEO4J_PASSWORD_PLACEHOLDERS = frozenset({
     'password',
 })
 
+# Metadaten-Backend (docs/plans/supabase.md §8). 'legacy' ist der heutige Weg:
+# Dateisystem und Neo4j tragen die Wahrheit. 'postgres' schaltet ab Phase 4
+# einzelne Stores auf die Datenbank um, Store fuer Store, nicht auf einmal.
+METADATA_BACKENDS = frozenset({'legacy', 'postgres'})
+
+# SQLAlchemy braucht den Treiber im Schema. 'postgresql://' allein waehlt
+# psycopg2, das hier nicht installiert ist — der Fehler faellt sonst erst beim
+# ersten Verbindungsversuch und mit einem Traceback, der nach einem fehlenden
+# Paket aussieht statt nach einer falschen URL.
+DATABASE_URL_PREFIX = 'postgresql+psycopg://'
+
+
+def validate_database_settings(metadata_backend: str, database_url: str) -> list[str]:
+    """Prüft AGORA_METADATA_BACKEND und DATABASE_URL gegeneinander.
+
+    Steht als Modulfunktion und nicht als Methode in `Config`, damit die
+    Verzweigungen nicht auf das Komplexitätsbudget von `Config.validate()`
+    gehen — die Methode ist bereits an ihrer Allowlist-Grenze
+    (`backend/radon-allowlist.txt`).
+    """
+    backend = (metadata_backend or '').strip().lower()
+    if backend not in METADATA_BACKENDS:
+        # Ein Tippfehler darf nicht still auf 'legacy' zurückfallen: das sieht
+        # im Log aus wie eine bewusste Entscheidung und ist keine.
+        return [
+            f"AGORA_METADATA_BACKEND has unknown value '{backend}' "
+            f"(expected one of: {', '.join(sorted(METADATA_BACKENDS))})"
+        ]
+
+    if backend != 'postgres':
+        return []
+
+    url = (database_url or '').strip()
+    if not url:
+        return [
+            "AGORA_METADATA_BACKEND=postgres requires DATABASE_URL "
+            "(e.g. postgresql+psycopg://user:password@host:5432/dbname)"
+        ]
+
+    if not url.startswith(DATABASE_URL_PREFIX):
+        return [
+            f"DATABASE_URL must start with '{DATABASE_URL_PREFIX}' — "
+            "SQLAlchemy selects the driver from the scheme, and a bare "
+            "'postgresql://' resolves to psycopg2, which is not installed"
+        ]
+
+    return []
+
 
 def infer_vector_dim_for_model(model_name: str | None) -> int | None:
     """Infer a known vector dimension from the embedding model name."""
@@ -122,6 +170,18 @@ class Config:
     NEO4J_CONN_TIMEOUT = float(os.environ.get('NEO4J_CONN_TIMEOUT', '15.0'))
     NEO4J_MAX_LIFETIME = int(os.environ.get('NEO4J_MAX_LIFETIME', '3600'))
     NEO4J_LIVENESS_TIMEOUT = float(os.environ.get('NEO4J_LIVENESS_TIMEOUT', '30.0'))
+
+    # PostgreSQL-Grundlage (docs/plans/supabase.md §8). Beides ist in dieser
+    # Phase ohne Wirkung auf den Laufzeitpfad: AGORA_METADATA_BACKEND schaltet
+    # erst ab Phase 4 einzelne Stores um, und solange er auf 'legacy' steht,
+    # wird nie eine Verbindung aufgebaut.
+    #
+    # Kein Default fuer DATABASE_URL. Ein geratener localhost-Wert waere genau
+    # der Legacy-Fallback, den die Architekturregel verbietet: er wuerde eine
+    # fehlende Konfiguration als funktionierende ausgeben und im Containerpfad
+    # auf den Container selbst zeigen. Fehlt der Wert, sagt validate() das.
+    DATABASE_URL = os.environ.get('DATABASE_URL', '')
+    METADATA_BACKEND = os.environ.get('AGORA_METADATA_BACKEND', 'legacy').strip().lower()
 
     # Agent tool-use during simulation. Experimental and intentionally opt-in.
     ENABLE_AGENT_TOOLS = os.environ.get('ENABLE_AGENT_TOOLS', 'false').lower() in ('true', '1', 'yes')
@@ -419,6 +479,9 @@ class Config:
                     "AGORA_AUTH_TOKEN missing in non-debug mode "
                     "(set AGORA_ALLOW_ANONYMOUS=true to opt out explicitly)"
                 )
+
+        # PostgreSQL-Grundlage (docs/plans/supabase.md §8).
+        errors.extend(validate_database_settings(cls.METADATA_BACKEND, cls.DATABASE_URL))
 
         expected_dim = infer_vector_dim_for_model(cls.EMBEDDING_MODEL)
         if expected_dim and cls.VECTOR_DIM != expected_dim:
