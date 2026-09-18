@@ -165,7 +165,7 @@ def token_required(view):
 # Mehrfach-Installation des Hooks zu verhindern (Blueprints sind Modul-Level-
 # Singletons und können von mehreren Apps/Tests wiederverwendet werden).
 _GUARD_INSTALLED_ATTR = "_agora_guard_installed"
-_GUARD_TOKEN_ONLY_ATTR = "_agora_guard_token_only"
+_GUARD_TOKEN_ONLY_ATTR = "_agora_guard_token_only"  # noqa: S105 - Attributname, kein Secret
 
 
 def install_blueprint_guard(

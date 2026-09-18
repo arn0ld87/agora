@@ -48,7 +48,7 @@ from .data_dir import resolve_data_dir as _resolve_data_dir
 
 logger = get_logger("agora.services.llm_provider_secrets_store")
 
-_SECRET_KEY_ENV = "AGORA_SECRET_KEY"
+_SECRET_KEY_ENV = "AGORA_SECRET_KEY"  # noqa: S105 - Name der Env-Variable, kein Secret
 _STORE_FILENAME = "llm_provider_secrets.json"
 
 

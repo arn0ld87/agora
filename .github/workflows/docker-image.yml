@@ -239,6 +239,28 @@ jobs:
           sarif_file: trivy-results.sarif
           category: trivy-container
 
+      - name: Trivy config scan (Dockerfile, Compose)
+        # Prüft Dockerfile- und Compose-Fehlkonfigurationen (root-User,
+        # fehlende HEALTHCHECK, privilegierte Container). Erst berichtend:
+        # Funde landen im Code-Scanning-Tab, blockieren aber keinen PR,
+        # bis die Baseline gesichtet ist.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: .
+          format: sarif
+          output: trivy-config.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "0"
+          limit-severities-for-sarif: true
+
+      - name: Upload Trivy config SARIF
+        if: always() && hashFiles('trivy-config.sarif') != ''
+        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          sarif_file: trivy-config.sarif
+          category: trivy-config
+
       - name: Image fuer SBOM in Docker-Daemon laden
         # outputs: type=docker exportiert in /tmp/image.tar, laedt aber NICHT
         # automatisch in den Daemon. sbom-action braucht ein daemon-sichtiges

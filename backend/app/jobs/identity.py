@@ -45,7 +45,7 @@ _TOKENS: Dict[int, str] = {}
 
 #: Metadata-Schluessel im RunRegistry-Manifest.
 WORKER_PID_KEY = "worker_pid"
-WORKER_TOKEN_KEY = "worker_token"
+WORKER_TOKEN_KEY = "worker_token"  # noqa: S105 - Manifest-Schlüsselname, kein Secret
 
 
 def worker_token() -> str:

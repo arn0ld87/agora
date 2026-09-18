@@ -5,7 +5,7 @@ Utility functions for endpoint resolution and validation.
 from typing import Optional
 
 
-LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0", "host.docker.internal"})
+LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0", "host.docker.internal"})  # noqa: S104 - Erkennung lokaler Hosts, kein Bind
 
 # Lokale OpenAI-kompatible Server (z. B. Ollama) ignorieren den API-Key
 # vollstaendig, das OpenAI-SDK verlangt aber einen nicht-leeren String (#778).
