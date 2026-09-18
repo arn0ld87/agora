@@ -1,0 +1,5 @@
+### Added (Drei Lücken im statischen Security-Scan geschlossen — 2026-09-18)
+
+- **CodeQL analysiert jetzt auch die GitHub-Actions-Workflows** (Sprache `actions` in `.github/workflows/codeql.yml`). `actionlint` prüft nur Syntax und Ausdrücke; Injection über untrusted Event-Felder in `run:`-Blöcken findet erst die CodeQL-Datenflussanalyse.
+- **Ruff prüft das Backend mit den flake8-bandit-Regeln (`S`).** Bewusst ausgeblendet bleiben `S311` (Simulation und Persona-Sampling nutzen `random` nicht-kryptografisch), `S603`/`S607` (Subprozesse mit Argumentlisten ohne Shell) sowie `S101`/`S110`/`S112` als Baseline-Altlast. `tests/*` ist von `S` ausgenommen. Die übrigen Funde in `app/` waren Fehlalarme (Env-Variablen- und Attributnamen, Loopback-Hostlisten, Prompt-Text) und tragen jetzt eine begründete `noqa`-Markierung; `network_analytics.py` kennzeichnet den SHA1 für die Snapshot-ID mit `usedforsecurity=False`.
+- **Trivy scannt zusätzlich Dockerfile und Compose-Dateien** (`scan-type: config`, Code-Scanning-Kategorie `trivy-config`). Der Schritt blockiert vorerst nicht (`exit-code: "0"`), bis die erste Fundliste gesichtet ist.

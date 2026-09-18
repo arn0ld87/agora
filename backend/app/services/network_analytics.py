@@ -325,7 +325,7 @@ class NetworkAnalyticsService:
         calculated_at_dt = datetime.now(timezone.utc)
         calculated_at = calculated_at_dt.isoformat(timespec="seconds")
         sid_basis = f"{simulation_id or 'no_sim'}|{len(actions)}|{window_size_rounds or 0}|{calculated_at}"
-        snapshot_id = "metrics_" + hashlib.sha1(sid_basis.encode("utf-8")).hexdigest()[:12]
+        snapshot_id = "metrics_" + hashlib.sha1(sid_basis.encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
 
         interactions = list(self._iter_interactions(actions))
         if not interactions:
