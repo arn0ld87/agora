@@ -44,8 +44,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
-import sqlite3
 import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -300,101 +298,6 @@ def snapshot_personas(data_dir: Path) -> ClassSnapshot:
     return snap
 
 
-# ---------------------------------------------------------------------------
-# Klassen ausserhalb des Artefaktverzeichnisses
-# ---------------------------------------------------------------------------
-
-
-def snapshot_llm_profiles(instance_dir: Path) -> ClassSnapshot:
-    """LLM-Profile aus ``instance/llm_profiles.db``.
-
-    Die Spalte ``api_key`` wird bewusst nicht in die Abfrage aufgenommen — sie
-    steht dort im Klartext (``llm_profiles_store.py``) und hat in einem
-    weitergebbaren Manifest nichts verloren. ``base_url`` und ``model_name``
-    bleiben aus demselben Grund draussen: eine Basis-URL kann ein Token
-    tragen, und fuer die Migrationsinvariante reichen ID, Zuordnung und
-    Zeitstempel.
-    """
-    snap = ClassSnapshot(name="llm_profiles")
-    db_path = instance_dir / "llm_profiles.db"
-    if not db_path.is_file():
-        snap.unchecked = True
-        snap.detail = f"{db_path} fehlt"
-        return snap
-    try:
-        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5)
-    except sqlite3.Error as exc:
-        snap.unchecked = True
-        snap.detail = f"nicht lesbar: {type(exc).__name__}"
-        return snap
-    try:
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute(
-            "SELECT id, provider, is_default, created_at, updated_at FROM llm_profiles"
-        ).fetchall()
-    except sqlite3.Error as exc:
-        snap.unchecked = True
-        snap.detail = f"Abfrage fehlgeschlagen: {type(exc).__name__}"
-        return snap
-    finally:
-        conn.close()
-    for row in rows:
-        snap.records[str(row["id"])] = {
-            "provider": row["provider"],
-            "is_default": bool(row["is_default"]),
-            "created_at": row["created_at"],
-            "updated_at": row["updated_at"],
-        }
-    snap.count = len(snap.records)
-    return snap
-
-
-def snapshot_graph() -> List[ClassSnapshot]:
-    """Knoten je Label und Kanten aus Neo4j.
-
-    Verbindung ueber dieselben Umgebungsvariablen wie die Anwendung. Ist die
-    Datenbank nicht erreichbar — im lokalen Lauf der Normalfall — werden beide
-    Klassen als ungeprueft ausgewiesen. Ein Manifest, das eine abwesende
-    Datenbank als „null Knoten" fuehrt, wuerde bei einem spaeteren Vergleich
-    genau das Gegenteil dessen behaupten, was es soll.
-    """
-    nodes = ClassSnapshot(name="graph_nodes")
-    edges = ClassSnapshot(name="graph_edges")
-    uri = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
-    user = os.environ.get("NEO4J_USER", "neo4j")
-    password = os.environ.get("NEO4J_PASSWORD", "")
-
-    try:
-        from neo4j import GraphDatabase
-    except ImportError:
-        for snap in (nodes, edges):
-            snap.unchecked = True
-            snap.detail = "neo4j-Treiber nicht installiert"
-        return [nodes, edges]
-
-    try:
-        driver = GraphDatabase.driver(uri, auth=(user, password))
-        with driver.session() as session:
-            for label in ("Graph", "Entity", "Episode"):
-                result = session.run(f"MATCH (n:{label}) RETURN count(n) AS c").single()
-                count = int(result["c"]) if result else 0
-                nodes.records[label] = {"count": count}
-                nodes.count += count
-            result = session.run(
-                "MATCH ()-[r:RELATION]->() RETURN count(r) AS c"
-            ).single()
-            edges.count = int(result["c"]) if result else 0
-            edges.records["RELATION"] = {"count": edges.count}
-        driver.close()
-    except Exception as exc:  # noqa: BLE001 — jede Treiberstoerung heisst „ungeprueft"
-        for snap in (nodes, edges):
-            snap.unchecked = True
-            snap.count = 0
-            snap.records.clear()
-            snap.detail = f"Neo4j nicht erreichbar: {type(exc).__name__}"
-    return [nodes, edges]
-
-
 def snapshot_artifacts(data_dir: Path) -> tuple[Dict[str, str], bool]:
     """sha256 je Datei unter dem Artefaktverzeichnis, Pfad relativ zu diesem."""
     if not data_dir.is_dir():
@@ -415,12 +318,7 @@ def snapshot_artifacts(data_dir: Path) -> tuple[Dict[str, str], bool]:
 
 
 def build_manifest(
-    repo_root: Path,
-    data_dir: Path,
-    instance_dir: Path,
-    *,
-    with_checksums: bool = True,
-    with_graph: bool = True,
+    repo_root: Path, data_dir: Path, *, with_checksums: bool = True
 ) -> BaselineManifest:
     manifest = BaselineManifest(
         commit=_git_commit(repo_root), version=_version(repo_root)
@@ -431,15 +329,7 @@ def build_manifest(
         snapshot_runs(data_dir),
         snapshot_reports(data_dir),
         snapshot_personas(data_dir),
-        snapshot_llm_profiles(instance_dir),
     ]
-    if with_graph:
-        manifest.classes.extend(snapshot_graph())
-    else:
-        for name in ("graph_nodes", "graph_edges"):
-            manifest.classes.append(
-                ClassSnapshot(name=name, unchecked=True, detail="per --skip-graph ausgelassen")
-            )
     if with_checksums:
         manifest.artifacts, manifest.artifacts_unchecked = snapshot_artifacts(data_dir)
     else:
