@@ -2,7 +2,7 @@
 name: agora-frontend-worker
 description: Vue 3, TypeScript, Pinia, Zod und Accessibility. Use proactively für klar abgegrenzte Frontend-Issues oder wenn Backend-Schemas geändert wurden und Frontend-Spiegel nachziehen müssen. Does NOT touch backend source.
 tools: Read, Grep, Glob, Edit, Write, Bash
-model: sonnet
+model: claude-sonnet-4-6
 effort: medium
 maxTurns: 30
 background: true

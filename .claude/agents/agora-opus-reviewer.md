@@ -3,7 +3,7 @@ name: agora-opus-reviewer
 description: MUST BE USED after an Agora issue implementation is committed locally. Reviews exactly one issue commit against acceptance criteria, architecture, security, contracts, evidence anchors and test evidence. Read-only; never fixes code.
 tools: Read, Grep, Glob, Bash
 disallowedTools: Edit, Write, Agent
-model: opus
+model: claude-opus-4-7
 effort: high
 maxTurns: 20
 background: true

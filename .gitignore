@@ -218,6 +218,14 @@ docs/paper/**/*.run.xml
 docs/paper/**/*.synctex.gz
 docs/paper/**/*.toc
 
+# archify-Diagramme unter docs/diagrams/: nur die Quell-Definitionen sind
+# versioniert (*.architecture.json, *.dataflow.json, *.sequence.json,
+# *.lifecycle.json). Die gerenderten Standalone-HTML (~15k Zeilen je Datei,
+# inline SVG/CSS/JS) und die visual-check-Artefakte sind reproduzierbar und
+# blaehen jeden Diff auf.
+docs/diagrams/*.html
+docs/diagrams/*.visual-check.json
+
 # Lokale Secrets (Fernet-Master-Key fuer LLM-Provider-Secrets-Store)
 secrets.env
 
