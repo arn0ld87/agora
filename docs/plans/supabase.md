@@ -208,7 +208,11 @@ Referenzen sind vollständig
 
 ## Abnahmekriterium
 
-Ein dokumentierter Baseline-Run lässt sich vor und nach jeder späteren Phase reproduzieren.
+Ein dokumentierter Baseline-Lauf liefert vor und nach jeder späteren Phase
+dieselben stabilen Migrationsinvarianten: Anzahl, IDs, Timestamps, Statuswerte,
+Referenzen und Artefaktprüfsummen. LLM- und Simulationsausgaben werden nicht
+byteweise verglichen; ein gespeicherter Seed macht einen Lauf nicht
+reproduzierbar.
 
 ---
 
@@ -423,6 +427,12 @@ public.*    -> möglichst leer / nur bewusst exponierte Views
 
 Damit liegen Fach-Tabellen nicht versehentlich in einem direkt exponierten API-Schema.
 
+**Umsetzungsbeschluss vom 17.09.2026:** Phase 3 wird nicht als vollständiges
+Schema auf einmal ausgerollt. PR 3 legt ausschließlich das Single-User-Modell
+`agora.llm_profiles` an und hält SQLite als Laufzeit-Default. Die folgenden
+Tabellen beschreiben weiterhin das langfristige Ziel; Workspace-, Membership-
+und Auth-Abhängigkeiten entstehen erst in der dafür freigegebenen Phase.
+
 ## Kern-Tabellen
 
 ### `agora.workspaces`
@@ -520,7 +530,6 @@ updated_at timestamptz
 
 ```text
 id uuid PK
-workspace_id uuid FK
 name text
 provider text
 base_url text
@@ -529,6 +538,24 @@ is_default boolean
 created_at timestamptz
 updated_at timestamptz
 ```
+
+Persistenzmatrix für den ersten Single-User-Schnitt:
+
+| Feld / Invariante | Pydantic/API | Legacy-SQLite | PostgreSQL ab PR 3 |
+|---|---|---|---|
+| `id` | `str`, servergenerierte UUID | `TEXT`, `uuid4().hex` | `uuid`, beim Migrieren unverändert |
+| `name` | 1–80 Zeichen | `TEXT NOT NULL` | `text NOT NULL`, Länge 1–80 |
+| `provider` | `ProviderType` | `TEXT NOT NULL` | `text NOT NULL`; der Contract validiert den Wert |
+| `base_url` | nicht leer | `TEXT NOT NULL` | `text NOT NULL`, nicht leer |
+| `model_name` | nicht leer | `TEXT NOT NULL` | `text NOT NULL`, nicht leer |
+| `api_key` | optionales Schreibfeld, in Antworten redigiert | aus Kompatibilitätsgründen vorerst vorhanden | **keine Spalte**; Secrets bleiben im verschlüsselten Secret-Store |
+| `is_default` | `bool`, Default `false` | höchstens ein Profil wird gesetzt | `boolean NOT NULL`; höchstens ein Profil darf `true` sein |
+| `created_at` / `updated_at` | timezone-aware `datetime` | ISO-8601-Text in UTC | `timestamptz NOT NULL` |
+| `workspace_id` | nicht vorhanden | nicht vorhanden | **noch keine Spalte**; folgt erst mit der freigegebenen Multi-User-Phase |
+
+Damit ist `agora.llm_profiles` zunächst bewusst ein Single-User-Modell. Die
+spätere Workspace-Migration ergänzt `workspace_id` samt per-Workspace-Default,
+ohne die heutige Roadmap durch Auth- oder Membership-Abhängigkeiten vorzuziehen.
 
 ## API-Schlüssel nicht im Klartext
 
@@ -607,12 +634,12 @@ AGORA_LLM_PROFILE_BACKEND=postgres
 
 ## Migrationsablauf
 
-1. PostgreSQL-Tabelle anlegen.
-2. SQLite-Daten lesen.
-3. IDs unverändert übernehmen.
-4. Daten nach PostgreSQL schreiben.
-5. Anzahl vergleichen.
-6. Datensätze feldweise vergleichen.
+1. PR 3 legt Modell und PostgreSQL-Tabelle an; SQLite bleibt aktiv.
+2. PR 3 zieht den SQLite-Pfad hinter `LlmProfileRepository`.
+3. PR 4 liest die SQLite-Daten.
+4. IDs und Timestamps unverändert übernehmen.
+5. Daten nach PostgreSQL schreiben.
+6. Anzahl und Datensätze feldweise vergleichen.
 7. Postgres-Adapter in Tests aktivieren.
 8. Feature Flag umschalten.
 9. SQLite-Datei noch nicht löschen.
@@ -1728,15 +1755,16 @@ Noch keine Fachmigration.
 ## PR 3
 
 ```text
-feat(llm): repository abstraction for LLM profiles
+feat(llm): LLM profile model + repository boundary
 ```
 
-SQLite bleibt Default.
+Legt `agora.llm_profiles` ohne Secrets, Workspace oder Auth-Abhängigkeiten an,
+führt die Repository-Abstraktion ein und lässt SQLite als Default aktiv.
 
 ## PR 4
 
 ```text
-feat(llm): PostgreSQL LLM profile adapter + migration
+feat(llm): PostgreSQL LLM profile adapter + data migration
 ```
 
 ## PR 5
@@ -1906,8 +1934,8 @@ PostgreSQL ist aus Flask erreichbar.
 Ergebnis:
 
 ```text
-LLM Profiles laufen über Repository-Abstraktion.
-Migration und Rollback funktionieren.
+Das LLM-Profil-Schema und die Repository-Abstraktion sind aktiv.
+SQLite bleibt bis PR 4 Default; Datenmigration und Rollback funktionieren dort.
 ```
 
 ## M3 – Business Metadata

@@ -162,7 +162,7 @@ markers = [
     "eval: baseline/eval suite (fixture-driven)",
     "llm: Echter LLM-Aufruf (Ollama-Instanz erforderlich). Ausführen mit: pytest -m llm",
     "perf: Performance-Budget-Tests (Stufe 1 deterministisch via Mock; Stufe 2 mit -m 'perf and llm' gegen echtes Ollama).",
-    "integration: Echte Neo4j/Redis-Instanz erforderlich (AGORA_TEST_*-Env). Ausführen mit: pytest tests/integration -m integration",
+    "integration: Echte Neo4j/Redis/PostgreSQL-Instanz erforderlich (AGORA_TEST_*-Env). Ausführen mit: pytest tests/integration -m integration",
 ]
 # Issue #1090 (E8 aus #979): belegte Upstream-Warnquellen gezielt filtern.
 # Jeder Filter ist auf Nachricht UND Modul eingegrenzt — nie auf eine ganze
