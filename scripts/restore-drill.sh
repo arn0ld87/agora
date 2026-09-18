@@ -52,8 +52,28 @@ set -euo pipefail
 # world-readable.
 umask 077
 
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd -P)
+
+# Löst einen Pfad auf, bevor er verglichen wird: relativ zu absolut, `..` und
+# Symlinks aufgelöst. Ohne das vergleicht der Zielschutz Zeichenketten, und
+# `--data-dir backend/uploads` — genau die Schreibweise, die der Kopf dieses
+# Skripts vorschlägt — liefe an ihm vorbei, obwohl sie zur Laufzeit im eigenen
+# Checkout landet.
+resolve_path() {
+  local p="$1" parent
+  case "$p" in /*) ;; *) p="$PWD/$p" ;; esac
+  if [ -d "$p" ]; then
+    (cd "$p" && pwd -P)
+    return 0
+  fi
+  parent=$(dirname "$p")
+  if [ -d "$parent" ]; then
+    printf '%s/%s\n' "$(cd "$parent" && pwd -P)" "$(basename "$p")"
+  else
+    printf '%s\n' "$p"
+  fi
+}
 
 PHASE="all"
 BACKUP_DIR=""
@@ -110,9 +130,12 @@ MANIFEST="$BACKUP_DIR/MANIFEST.sha256"
 # ist die Absicherung gegen den naheliegendsten nächsten Schritt, nicht gegen
 # einen heutigen Fund.
 redact() {
+  # Das zweite Muster erfasst das oeffnende Anfuehrungszeichen mit: ohne es
+  # laeuft der haeufigste Fall, ein JSON-Koerper wie {"api_key": "sk-…"}, am
+  # Filter vorbei, weil die Wertklasse an der Position des Quotes nicht greift.
   sed -E \
     -e 's/(Authorization: ?(Bearer|Basic) )[^" ]+/\1[REDACTED]/gI' \
-    -e 's/((token|secret|password|api[_-]?key)["'"'"']? ?[:=] ?)[^" ,]+/\1[REDACTED]/gI'
+    -e 's/((token|secret|password|api[_-]?key)["'"'"']? ?[:=] ?["'"'"']?)[^"'"'"', ]+/\1[REDACTED]/gI'
 }
 
 log() {
@@ -170,7 +193,14 @@ archive() {
   # Prüfsumme sofort, nicht am Ende: ein durch volle Platte abgebrochenes tar
   # hinterlässt sonst ein Archiv, das beim Backup grün durchläuft und erst beim
   # Restore auffällt — oder gar nicht.
-  (cd "$BACKUP_DIR" && _sha256 "$name.tar.gz" >>"$(basename "$MANIFEST")")
+  #
+  # Erst berechnen, dann anhängen. Ein `_sha256 … >> manifest` würde bei einem
+  # Fehlschlag mitten im Schreiben eine halbe Zeile im Manifest hinterlassen,
+  # und die nähme der nächste Restore für eine Prüfsumme.
+  local digest
+  digest=$(cd "$BACKUP_DIR" && _sha256 "$name.tar.gz") \
+    || fail "Prüfsumme nicht berechenbar: $BACKUP_DIR/$name.tar.gz"
+  printf '%s\n' "$digest" >>"$MANIFEST"
   log "    Prüfsumme in $(basename "$MANIFEST") abgelegt"
 }
 
@@ -196,7 +226,11 @@ unarchive() {
 
 phase_backup() {
   step "Phase 1/5 — Backup"
+  # install -d setzt den Modus nur auf Verzeichnissen, die es selbst anlegt.
+  # Ein aus einem frueheren Lauf oder von Hand angelegtes Backup-Verzeichnis
+  # behielte sonst seine 0755 und zeigte fremden Nutzern die Archivnamen.
   run install -d -m 0700 "$BACKUP_DIR"
+  run chmod 0700 "$BACKUP_DIR"
   # Frisches Manifest je Lauf: ein angehängtes würde die Prüfsumme des
   # Vorgängerarchivs mitführen, und `sha256sum -c` prüfte dann gegen einen
   # Stand, den niemand mehr hat.
@@ -239,10 +273,13 @@ phase_backup() {
 # niemanden auf.
 guard_restore_target() {
   [ "$ALLOW_REPO_TARGET" = "1" ] && return 0
-  local live=""
-  case "$DATA_DIR"     in "$REPO_ROOT"/*) live="$live $DATA_DIR" ;; esac
-  case "$STORE_DIR"    in "$REPO_ROOT"/*) live="$live $STORE_DIR" ;; esac
-  case "$INSTANCE_DIR" in "$REPO_ROOT"/*) live="$live $INSTANCE_DIR" ;; esac
+  local live="" resolved
+  for dir in "$DATA_DIR" "$STORE_DIR" "$INSTANCE_DIR"; do
+    resolved=$(resolve_path "$dir")
+    case "$resolved" in
+      "$REPO_ROOT"|"$REPO_ROOT"/*) live="$live $resolved" ;;
+    esac
+  done
   [ -z "$live" ] && return 0
   log "  Restore-Ziel liegt im Checkout:$live"
   fail "Restore würde in den eigenen Checkout schreiben. Entweder --data-dir, --store-dir und --instance-dir auf ein verwerfbares Ziel setzen, oder --allow-repo-target angeben."
@@ -284,10 +321,13 @@ phase_verify() {
   fi
   local rc=0
   set +e
+  # Auch hier durch redact: restore_verify.py bindet zwar bewusst nie einen
+  # Klartextwert, aber der Filter darf nicht an der einen Stelle fehlen, an der
+  # eine spaetere Erweiterung ihn braeuchte.
   ( cd "$REPO_ROOT/backend" \
       && uv run python scripts/restore_verify.py \
            --data-dir "$DATA_DIR" --store-dir "$STORE_DIR" ) \
-    | tee -a "$PROTOCOL"
+    | redact | tee -a "$PROTOCOL"
   rc=${PIPESTATUS[0]}
   set -e
   # Exit 2 heißt: kein Prüfpunkt ist rot, aber mindestens einer konnte gar

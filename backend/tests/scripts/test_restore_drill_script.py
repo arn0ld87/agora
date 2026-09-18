@@ -419,6 +419,57 @@ class TestGuardRestoreTarget:
         text = protocol.read_text(encoding="utf-8")
         assert "Restore würde in den eigenen Checkout schreiben" in text
 
+    @pytest.mark.parametrize(
+        "target",
+        [
+            "backend/uploads",
+            str(REPO_ROOT / "backend" / ".." / "backend" / "uploads"),
+        ],
+        ids=["relativ", "punkt-punkt"],
+    )
+    def test_the_guard_resolves_paths_before_it_compares_them(
+        self, tmp_path, target: str
+    ) -> None:
+        """Ein Zeichenkettenvergleich haette genau die Schreibweise durchgelassen,
+        die der Skriptkopf selbst vorschlaegt — ``--data-dir backend/uploads``
+        loest zur Laufzeit auf den eigenen Checkout auf."""
+        protocol = tmp_path / "drill.log"
+
+        result = _run(
+            "--phase", "restore",
+            "--backup-dir", str(tmp_path / "backup"),
+            "--data-dir", target,
+            "--store-dir", str(tmp_path / "data"),
+            "--instance-dir", str(tmp_path / "instance"),
+            "--protocol", str(protocol),
+        )
+
+        assert result.returncode == 1
+        assert "Restore würde in den eigenen Checkout schreiben" in protocol.read_text(
+            encoding="utf-8"
+        )
+
+    def test_a_symlink_into_the_checkout_is_caught(self, tmp_path) -> None:
+        """Der Pfadstring liegt ausserhalb, das Ziel nicht — ohne Aufloesung
+        waere das der bequemste Weg am Guard vorbei."""
+        link = tmp_path / "sieht-harmlos-aus"
+        link.symlink_to(REPO_ROOT / "backend" / "uploads")
+        protocol = tmp_path / "drill.log"
+
+        result = _run(
+            "--phase", "restore",
+            "--backup-dir", str(tmp_path / "backup"),
+            "--data-dir", str(link),
+            "--store-dir", str(tmp_path / "data"),
+            "--instance-dir", str(tmp_path / "instance"),
+            "--protocol", str(protocol),
+        )
+
+        assert result.returncode == 1
+        assert "Restore würde in den eigenen Checkout schreiben" in protocol.read_text(
+            encoding="utf-8"
+        )
+
     def test_allow_repo_target_bypasses_the_guard(self, tmp_path) -> None:
         """Der explizite Opt-out fuer den frischen Host, auf dem der Checkout
         selbst das Ziel ist, darf den Guard tatsaechlich umgehen."""
@@ -532,3 +583,17 @@ class TestRedaction:
         text = (tmp_path / "backup.log").read_text(encoding="utf-8")
         assert "[REDACTED]" in text
         assert "geheim123" not in text
+
+    def test_a_key_inside_a_json_body_is_redacted_too(self, tmp_path) -> None:
+        """Die haeufigste Form, in der ein Schluessel auftaucht. Das Muster
+        erfasste den Wert erst nach dem oeffnenden Anfuehrungszeichen nicht —
+        ein JSON-Koerper lief unveraendert ins Protokoll."""
+        stub = _docker_stub(
+            tmp_path, secret_line='{"api_key": "sk-nichtinsprotokoll"}'
+        )
+        _, result = _real_backup(tmp_path, stub)
+        assert result.returncode == 0, result.stdout + result.stderr
+
+        text = (tmp_path / "backup.log").read_text(encoding="utf-8")
+        assert "[REDACTED]" in text
+        assert "sk-nichtinsprotokoll" not in text

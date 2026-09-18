@@ -404,8 +404,11 @@ def snapshot_artifacts(data_dir: Path) -> tuple[Dict[str, str], bool]:
         if not path.is_file():
             continue
         digest = _sha256(path)
-        if digest is not None:
-            sums[str(path.relative_to(data_dir))] = digest
+        # Eine unlesbare Datei faellt nicht aus dem Manifest, sondern bekommt
+        # einen Marker. Verschwaende sie stillschweigend und waere sie in
+        # beiden Laeufen unlesbar, ginge der Vergleich glatt durch, obwohl
+        # niemand hingesehen hat.
+        sums[str(path.relative_to(data_dir))] = digest or "<nicht lesbar>"
     return sums, False
 
 
