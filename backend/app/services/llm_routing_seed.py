@@ -17,7 +17,7 @@ from ..llm.providers.codex_cli import CLI_TRANSPORT_VALUE, TRANSPORT_ENV_KEY
 from ..llm.providers.registry import detect_provider
 from .llm_provider_registry import LlmProviderRegistry
 from .llm_provider_secrets_store import get_llm_provider_secrets_store
-from .llm_profiles_store import get_llm_profiles_store
+from ..repositories.llm_profile_repository import get_llm_profile_repository
 from .llm_runtime import RuntimeLlmConfig
 from .profile_connection_resolver import canonical_connection_base_url, resolve_profile_connection
 from .provider_connection_store import ProviderConnectionStore
@@ -421,7 +421,7 @@ def seed_run_stage_routing(
         if has_existing_config:
             config.routing_version += 1
     elif llm_profile_id:
-        profile = get_llm_profiles_store().get(
+        profile = get_llm_profile_repository().get(
             llm_profile_id,
             include_api_key=False,
         )

@@ -17,7 +17,7 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from ..contracts import LEGACY_GEMINI, PROVIDER_GOOGLE
-from ..services.llm_profiles_store import get_llm_profiles_store
+from ..repositories.llm_profile_repository import get_llm_profile_repository
 
 _PROFILE_PREFIX = "profile:"
 
@@ -47,7 +47,7 @@ def expand_profile_in_data(data: Any) -> None:
     if not profile_id:
         return
     try:
-        profile = get_llm_profiles_store().get(profile_id, include_api_key=True)
+        profile = get_llm_profile_repository().get(profile_id, include_api_key=True)
     except Exception:  # noqa: BLE001 — defensive: store failure must not break the request earlier
         return
     if profile is None:

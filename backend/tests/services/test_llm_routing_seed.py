@@ -118,9 +118,8 @@ def test_profile_id_expands_to_a_secret_free_stage_route(mock_run_dir, monkeypat
         )
     ]
     monkeypatch.setattr(
-        "app.services.llm_routing_seed.get_llm_profiles_store",
+        "app.services.llm_routing_seed.get_llm_profile_repository",
         lambda: profile_store,
-        raising=False,
     )
     monkeypatch.setattr(
         "app.services.llm_routing_seed.ProviderConnectionStore",
@@ -185,9 +184,8 @@ def test_local_no_auth_profile_route_omits_secret_binding(mock_run_dir, monkeypa
         )
     ]
     monkeypatch.setattr(
-        "app.services.llm_routing_seed.get_llm_profiles_store",
+        "app.services.llm_routing_seed.get_llm_profile_repository",
         lambda: profile_store,
-        raising=False,
     )
     monkeypatch.setattr(
         "app.services.llm_routing_seed.ProviderConnectionStore",
@@ -219,9 +217,8 @@ def test_explicit_runtime_route_wins_without_reading_the_profile(mock_run_dir, m
     profile_store = MagicMock()
     profile_store.get.side_effect = AssertionError("profile path must not be read")
     monkeypatch.setattr(
-        "app.services.llm_routing_seed.get_llm_profiles_store",
+        "app.services.llm_routing_seed.get_llm_profile_repository",
         lambda: profile_store,
-        raising=False,
     )
 
     config = seed_run_stage_routing(

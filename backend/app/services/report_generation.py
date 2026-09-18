@@ -154,8 +154,8 @@ class ReportGenerationService:
 
         _resolved_profile = None
         if llm_profile_id:
-            from ..services.llm_profiles_store import get_llm_profiles_store
-            _resolved_profile = get_llm_profiles_store().get(llm_profile_id, include_api_key=True)
+            from ..repositories.llm_profile_repository import get_llm_profile_repository
+            _resolved_profile = get_llm_profile_repository().get(llm_profile_id, include_api_key=True)
             if _resolved_profile is None:
                 raise ValueError(ApiErrorCode.NOT_FOUND)
 
@@ -166,9 +166,9 @@ class ReportGenerationService:
             and (not llm_model_override or llm_model_override.lower() == 'default')
             and getattr(project, 'llm_profile_id', None)
         ):
-            from ..services.llm_profiles_store import get_llm_profiles_store
+            from ..repositories.llm_profile_repository import get_llm_profile_repository
             llm_profile_id = project.llm_profile_id
-            _resolved_profile = get_llm_profiles_store().get(llm_profile_id, include_api_key=True)
+            _resolved_profile = get_llm_profile_repository().get(llm_profile_id, include_api_key=True)
             if _resolved_profile is None:
                 logger.warning(
                     "Project %s referenziert unbekanntes LLM-Profil %r — Fallback auf Stage-Routing",

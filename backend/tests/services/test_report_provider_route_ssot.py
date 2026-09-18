@@ -123,9 +123,8 @@ def report_env(monkeypatch, tmp_path):
         "app.services.llm_profiles_store.get_llm_profiles_store", lambda: profile_store
     )
     monkeypatch.setattr(
-        "app.services.llm_routing_seed.get_llm_profiles_store",
+        "app.services.llm_routing_seed.get_llm_profile_repository",
         lambda: profile_store,
-        raising=False,
     )
     monkeypatch.setattr(
         "app.services.llm_routing_seed.ProviderConnectionStore", lambda: connection_store
