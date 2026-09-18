@@ -43,6 +43,26 @@ bash scripts/restore-drill.sh \
   --protocol /srv/agora-drill-$(date -u +%Y%m%d).log
 ```
 
+### Der Restore weigert sich, in den eigenen Checkout zu schreiben
+
+Die Vorgabewerte für `--data-dir`, `--store-dir` und `--instance-dir` zeigen auf `backend/uploads`, `backend/data` und `backend/instance` des Checkouts. Für das Backup ist das richtig — gesichert wird die laufende Installation. Für den Restore wäre es der teuerste Tippfehler im Repository, deshalb bricht `--phase restore` ab, sobald eines der drei Ziele unterhalb der Repository-Wurzel liegt:
+
+```text
+FEHLGESCHLAGEN: Restore würde in den eigenen Checkout schreiben.
+```
+
+Auf dem frischen Host, wo der Checkout *das* Ziel ist, hebt `--allow-repo-target` die Sperre auf. Das Flag gehört in den bewussten Aufruf, nicht in ein Skript, das jemand später aus dem Verlauf kopiert.
+
+### Prüfsummen
+
+`--phase backup` legt neben den Archiven ein `MANIFEST.sha256` an, je Lauf frisch. `--phase restore` prüft jedes Archiv dagegen und bricht bei Abweichung ab, bevor irgendetwas entpackt wird. Ein Archiv ohne Manifesteintrag — etwa aus einem Lauf vor dieser Prüfung — wird entpackt, aber im Protokoll als **ungeprüft** vermerkt; es ist damit kein Nachweis.
+
+Backup-Verzeichnis und Archive entstehen mit `0700` beziehungsweise `0600`. Sie enthalten `backend/data` mit den Fernet-Stores und `backend/instance/llm_profiles.db`, das die Spalte `api_key` im Klartext führt — ein world-lesbares Backup-Verzeichnis wäre ein Exposure-Pfad unabhängig davon, dass die Stores selbst verschlüsselt sind.
+
+### SQLite im WAL-Modus
+
+`llm_profiles.db` läuft mit `journal_mode=WAL`. Zur Laufzeit besteht sie aus `.db`, `.db-wal` und `.db-shm`; ein reines `tar` würde den Zwischenzustand einfrieren, in dem die letzten Schreibvorgänge noch im WAL stehen. Die Backup-Phase setzt deshalb vorher `PRAGMA wal_checkpoint(TRUNCATE)`. Fehlt `sqlite3` auf dem Host, steht eine Warnung im Protokoll und das Archiv ist entsprechend weniger wert.
+
 Einzelne Phasen (`--phase backup|restore|verify|upgrade|rollback`) lassen sich getrennt fahren, wenn ein Durchgang abbricht und nur ein Teil zu wiederholen ist.
 
 ### Was gesichert wird
@@ -94,3 +114,5 @@ werden. `restore-drill.sh` behandelt `2` wie einen Fehlschlag — ein
 Geprüft werden Artefakte (RunRegistry lesbar, Simulationen und Reports vorhanden), Reconciliation (kein Run steht fälschlich auf `pending`/`processing`/`paused` — siehe [#1476](https://github.com/arn0ld87/agora/issues/1476) und [#1472](https://github.com/arn0ld87/agora/issues/1472)) und Secrets (ProviderConnections vorhanden, Secret-Store mit dem restaurierten `AGORA_SECRET_KEY` entschlüsselbar).
 
 Kein Klartext verlässt die Prüfung: gemessen wird ausschließlich, **ob** die Entschlüsselung gelingt. Das Protokoll ist zum Weitergeben gedacht.
+
+Dasselbe gilt für `restore-drill.sh`: Protokollzeilen und die Ausgabe jedes ausgeführten Befehls laufen durch einen Redaktionsfilter, der `Authorization: Bearer …` sowie `token=`/`secret=`/`password=`/`api_key=` durch `[REDACTED]` ersetzt. Heute nimmt kein verdrahteter Befehl ein Geheimnis entgegen — der Filter sichert gegen den naheliegendsten nächsten Schritt ab, etwa den Health-Check mit Auth-Header aus `docs/backup-restore.md`.

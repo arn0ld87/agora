@@ -214,6 +214,8 @@ Wirksam wird davon im Default nichts: `AGORA_METADATA_BACKEND=legacy` ist gesetz
 
 Ab hier gilt die Regel aus Phase 2 des Plans: **das Datenbankschema wird ausschließlich über versionierte Migrationen geändert.** Kein `CREATE TABLE IF NOT EXISTS` in fachlichen Stores.
 
+Für den Nachweis, dass eine Migration nichts verliert, existiert `backend/scripts/migration_baseline.py`: es erhebt je Objektklasse Anzahl, IDs, Zeitstempel, Statuswerte und Referenzen plus eine Prüfsumme je Artefaktdatei und vergleicht zwei solche Manifeste (Runbook: [`runbooks/migration-baseline.md`](runbooks/migration-baseline.md)). Erhoben wurde damit bisher nur der Ist-Stand; **kein Vorher/Nachher-Vergleich über eine echte Migrationsphase liegt vor**, weil noch keine gelaufen ist.
+
 Die erste Fachtabelle existiert als Definition: `agora.llm_profiles` (SQLAlchemy-Modell `LlmProfileModel` plus Migration) hält LLM-Profil-Metadaten — Name, Provider, Basis-URL, Modellname, ein partieller Unique-Index, der höchstens ein Default-Profil erlaubt. Provider-Secrets bleiben im Fernet-Store, Workspace- und Auth-Spalten sind bewusst nicht vorgezogen. Kein Store ist umgestellt, kein Repository existiert, und solange `AGORA_METADATA_BACKEND=legacy` gilt, liest und schreibt die Tabelle niemand — das ist Phase 4. Offen und benannt: psycopg 3 ist im Synchronmodus nicht gevent-kooperativ, während der Webprozess unter einem gunicorn-Worker mit gevent-Worker-Klasse läuft. Die Frage gehört beantwortet, bevor der erste Store auf Postgres zeigt.
 
 ## Security

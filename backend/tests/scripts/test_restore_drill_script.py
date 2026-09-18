@@ -43,6 +43,21 @@ def _run(
     )
 
 
+def _targets(tmp_path: Path) -> list[str]:
+    """Alle drei Zielverzeichnisse auf verwerfbare Pfade.
+
+    Ohne sie zeigen ``--store-dir`` und ``--instance-dir`` auf den eigenen
+    Checkout, und der Restore bricht ab (``guard_restore_target``). Genau dieser
+    Halbfehler — ein Pfad gesetzt, zwei vergessen — stand vorher in diesen
+    Tests.
+    """
+    return [
+        "--data-dir", str(tmp_path / "uploads"),
+        "--store-dir", str(tmp_path / "data"),
+        "--instance-dir", str(tmp_path / "instance"),
+    ]
+
+
 @pytest.fixture()
 def restored(tmp_path: Path) -> Path:
     """Ein plausibel restauriertes Artefaktverzeichnis (``backend/uploads``)."""
@@ -98,7 +113,7 @@ class TestDryRunCoversEveryPhase:
         result = _run(
             "--phase", "all",
             "--backup-dir", str(tmp_path / "backup"),
-            "--data-dir", str(tmp_path / "uploads"),
+            *_targets(tmp_path),
             "--protocol", str(protocol),
             "--upgrade-ref", "v0.9.5",
             "--rollback-ref", "v0.9.4",
@@ -124,7 +139,7 @@ class TestDryRunCoversEveryPhase:
         _run(
             "--phase", "all",
             "--backup-dir", str(tmp_path / "backup"),
-            "--data-dir", str(tmp_path / "uploads"),
+            *_targets(tmp_path),
             "--protocol", str(protocol),
             "--dry-run",
         )
@@ -137,7 +152,7 @@ class TestDryRunCoversEveryPhase:
         _run(
             "--phase", "backup",
             "--backup-dir", str(backup),
-            "--data-dir", str(tmp_path / "uploads"),
+            *_targets(tmp_path),
             "--protocol", str(tmp_path / "drill.log"),
             "--dry-run",
         )
@@ -150,7 +165,7 @@ class TestDryRunCoversEveryPhase:
         _run(
             "--phase", "restore",
             "--backup-dir", str(tmp_path / "backup"),
-            "--data-dir", str(tmp_path / "uploads"),
+            *_targets(tmp_path),
             "--protocol", str(protocol),
             "--dry-run",
         )
@@ -165,7 +180,7 @@ class TestDryRunCoversEveryPhase:
         _run(
             "--phase", "all",
             "--backup-dir", str(tmp_path / "backup"),
-            "--data-dir", str(tmp_path / "uploads"),
+            *_targets(tmp_path),
             "--protocol", str(protocol),
             "--dry-run",
         )
@@ -187,9 +202,7 @@ class TestBackupCoversEveryPersistedDirectory:
         _run(
             "--phase", phase,
             "--backup-dir", str(tmp_path / "backup"),
-            "--data-dir", str(tmp_path / "uploads"),
-            "--store-dir", str(tmp_path / "data"),
-            "--instance-dir", str(tmp_path / "instance"),
+            *_targets(tmp_path),
             "--protocol", str(protocol),
             "--dry-run",
         )
@@ -228,7 +241,7 @@ class TestNeo4jDumpReachesTheNewContainer:
         _run(
             "--phase", "restore",
             "--backup-dir", str(tmp_path / "backup"),
-            "--data-dir", str(tmp_path / "uploads"),
+            *_targets(tmp_path),
             "--protocol", str(protocol),
             "--dry-run",
         )
@@ -334,3 +347,253 @@ class TestVerifyPhaseIsReal:
         text = protocol.read_text(encoding="utf-8")
         assert "OK    ProviderConnections vorhanden" in text
         assert "SKIP  ProviderConnections vorhanden" not in text
+
+
+def _docker_stub(tmp_path: Path, secret_line: str | None = None) -> Path:
+    """Ein ``docker``-Stub, der ``docker compose ...`` ohne echten Daemon gruen
+    macht.
+
+    ``phase_backup``/``phase_restore`` rufen echten Docker auf; ohne Daemon
+    scheitert jeder nicht-dry Testlauf am ersten ``docker compose``-Aufruf,
+    bevor Manifest, Rechte oder Pruefsumme ueberhaupt entstehen. Optional gibt
+    der Stub eine Zeile auf stdout aus, um die Redaktion im echten ``run()``-Pfad
+    zu pruefen.
+    """
+    stub_dir = tmp_path / "stubbin"
+    stub_dir.mkdir(exist_ok=True)
+    docker = stub_dir / "docker"
+    body = "#!/bin/sh\n"
+    if secret_line:
+        body += f'echo "{secret_line}"\n'
+    body += "exit 0\n"
+    docker.write_text(body, encoding="utf-8")
+    docker.chmod(0o755)
+    return stub_dir
+
+
+def _real_backup(
+    tmp_path: Path, stub_bin: Path
+) -> tuple[Path, subprocess.CompletedProcess]:
+    """Fuehrt ``--phase backup`` echt (nicht dry) gegen tmp-Verzeichnisse aus."""
+    backup = tmp_path / "backup"
+    uploads = tmp_path / "uploads"
+    uploads.mkdir()
+    data = tmp_path / "data"
+    data.mkdir()
+    instance = tmp_path / "instance"
+    instance.mkdir()
+    protocol = tmp_path / "backup.log"
+
+    result = _run(
+        "--phase", "backup",
+        "--backup-dir", str(backup),
+        "--data-dir", str(uploads),
+        "--store-dir", str(data),
+        "--instance-dir", str(instance),
+        "--protocol", str(protocol),
+        env={"PATH": f"{stub_bin}:{os.environ['PATH']}"},
+    )
+    return backup, result
+
+
+class TestGuardRestoreTarget:
+    """Codex-Befund aus dem Phase-0-Audit (docs/plans/supabase.md §6): ein
+    ``--phase restore`` ohne explizite Zielpfade ueberschrieb bislang
+    ``backend/data``, ``backend/instance`` und ``backend/uploads`` des
+    Rechners, auf dem der Drill laeuft."""
+
+    def test_restore_without_explicit_targets_refuses_to_write_into_the_checkout(
+        self, tmp_path
+    ) -> None:
+        """Verhindert, dass ein Restore ohne --data-dir/--store-dir/--instance-dir
+        den eigenen Checkout des Betreibers ueberschreibt."""
+        protocol = tmp_path / "drill.log"
+
+        result = _run(
+            "--phase", "restore",
+            "--backup-dir", str(tmp_path / "backup"),
+            "--protocol", str(protocol),
+        )
+
+        assert result.returncode == 1
+        text = protocol.read_text(encoding="utf-8")
+        assert "Restore würde in den eigenen Checkout schreiben" in text
+
+    @pytest.mark.parametrize(
+        "target",
+        [
+            "backend/uploads",
+            str(REPO_ROOT / "backend" / ".." / "backend" / "uploads"),
+        ],
+        ids=["relativ", "punkt-punkt"],
+    )
+    def test_the_guard_resolves_paths_before_it_compares_them(
+        self, tmp_path, target: str
+    ) -> None:
+        """Ein Zeichenkettenvergleich haette genau die Schreibweise durchgelassen,
+        die der Skriptkopf selbst vorschlaegt — ``--data-dir backend/uploads``
+        loest zur Laufzeit auf den eigenen Checkout auf."""
+        protocol = tmp_path / "drill.log"
+
+        result = _run(
+            "--phase", "restore",
+            "--backup-dir", str(tmp_path / "backup"),
+            "--data-dir", target,
+            "--store-dir", str(tmp_path / "data"),
+            "--instance-dir", str(tmp_path / "instance"),
+            "--protocol", str(protocol),
+        )
+
+        assert result.returncode == 1
+        assert "Restore würde in den eigenen Checkout schreiben" in protocol.read_text(
+            encoding="utf-8"
+        )
+
+    def test_a_symlink_into_the_checkout_is_caught(self, tmp_path) -> None:
+        """Der Pfadstring liegt ausserhalb, das Ziel nicht — ohne Aufloesung
+        waere das der bequemste Weg am Guard vorbei."""
+        link = tmp_path / "sieht-harmlos-aus"
+        link.symlink_to(REPO_ROOT / "backend" / "uploads")
+        protocol = tmp_path / "drill.log"
+
+        result = _run(
+            "--phase", "restore",
+            "--backup-dir", str(tmp_path / "backup"),
+            "--data-dir", str(link),
+            "--store-dir", str(tmp_path / "data"),
+            "--instance-dir", str(tmp_path / "instance"),
+            "--protocol", str(protocol),
+        )
+
+        assert result.returncode == 1
+        assert "Restore würde in den eigenen Checkout schreiben" in protocol.read_text(
+            encoding="utf-8"
+        )
+
+    def test_allow_repo_target_bypasses_the_guard(self, tmp_path) -> None:
+        """Der explizite Opt-out fuer den frischen Host, auf dem der Checkout
+        selbst das Ziel ist, darf den Guard tatsaechlich umgehen."""
+        protocol = tmp_path / "drill.log"
+
+        result = _run(
+            "--phase", "restore",
+            "--backup-dir", str(tmp_path / "backup"),
+            "--allow-repo-target",
+            "--protocol", str(protocol),
+            "--dry-run",
+        )
+
+        text = protocol.read_text(encoding="utf-8")
+        assert result.returncode == 0
+        assert "Phase 2/5" in text
+        assert "Restore würde in den eigenen Checkout schreiben" not in text
+
+    def test_explicit_disposable_targets_bypass_the_guard(self, tmp_path) -> None:
+        """Der Normalfall — alle drei Ziele explizit auf ein verwerfbares
+        Verzeichnis gesetzt — darf ebenfalls ohne Guard-Abbruch laufen."""
+        protocol = tmp_path / "drill.log"
+
+        result = _run(
+            "--phase", "restore",
+            "--backup-dir", str(tmp_path / "backup"),
+            *_targets(tmp_path),
+            "--protocol", str(protocol),
+            "--dry-run",
+        )
+
+        text = protocol.read_text(encoding="utf-8")
+        assert result.returncode == 0
+        assert "Restore würde in den eigenen Checkout schreiben" not in text
+
+
+class TestBackupManifestAndPermissions:
+    """Codex-Befund aus dem Phase-0-Audit: ein durch volle Platte oder Bitrot
+    beschaedigtes Archiv durchlief das Backup bislang unbemerkt gruen, und die
+    Archive selbst trugen Fernet-Stores und Klartext-API-Keys ohne
+    eingeschraenkte Dateirechte."""
+
+    def test_backup_writes_a_checksum_manifest_for_every_archive(
+        self, tmp_path
+    ) -> None:
+        """Verhindert, dass ein durch abgebrochenes tar beschaedigtes Archiv
+        ohne Pruefsumme in den Restore wandert."""
+        stub = _docker_stub(tmp_path)
+        backup, result = _real_backup(tmp_path, stub)
+
+        assert result.returncode == 0, result.stdout + result.stderr
+        manifest = (backup / "MANIFEST.sha256").read_text(encoding="utf-8")
+        assert "uploads.tar.gz" in manifest
+        assert "data.tar.gz" in manifest
+        assert "instance.tar.gz" in manifest
+
+    def test_backup_directory_and_archives_are_not_world_or_group_readable(
+        self, tmp_path
+    ) -> None:
+        """Verhindert, dass die Fernet-Stores und Klartext-API-Keys im Backup
+        fuer andere Systemnutzer lesbar auf der Platte liegen."""
+        stub = _docker_stub(tmp_path)
+        backup, result = _real_backup(tmp_path, stub)
+
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert (backup.stat().st_mode & 0o777) == 0o700
+        archives = list(backup.glob("*.tar.gz"))
+        assert archives, "keine Archive erzeugt"
+        for archive in archives:
+            assert (archive.stat().st_mode & 0o777) == 0o600
+
+
+class TestRestoreRejectsCorruptedArchive:
+    def test_a_corrupted_archive_fails_the_restore_instead_of_silently_loading(
+        self, tmp_path
+    ) -> None:
+        """Verhindert, dass ein durch Bitrot oder abgebrochenes tar
+        beschaedigtes Archiv unbemerkt zurueckgespielt wird und den
+        Restore-Host mit kaputten Daten befuellt."""
+        stub = _docker_stub(tmp_path)
+        backup, backup_result = _real_backup(tmp_path, stub)
+        assert backup_result.returncode == 0, backup_result.stdout + backup_result.stderr
+
+        with (backup / "data.tar.gz").open("ab") as fh:
+            fh.write(b"\x00\x00corrupt-append")
+
+        protocol = tmp_path / "restore.log"
+        result = _run(
+            "--phase", "restore",
+            "--backup-dir", str(backup),
+            "--data-dir", str(tmp_path / "uploads"),
+            "--store-dir", str(tmp_path / "data"),
+            "--instance-dir", str(tmp_path / "instance"),
+            "--protocol", str(protocol),
+            env={"PATH": f"{stub}:{os.environ['PATH']}"},
+        )
+
+        assert result.returncode == 1
+        assert "Prüfsumme weicht ab" in protocol.read_text(encoding="utf-8")
+
+
+class TestRedaction:
+    def test_a_bearer_token_never_reaches_the_protocol(self, tmp_path) -> None:
+        """Verhindert, dass ein per Copy-Paste in ``run()`` geratener
+        ``Authorization: Bearer``-Header das Backend-Token im weitergegebenen
+        Protokoll offenlegt."""
+        stub = _docker_stub(tmp_path, secret_line="Authorization: Bearer geheim123")
+        _, result = _real_backup(tmp_path, stub)
+        assert result.returncode == 0, result.stdout + result.stderr
+
+        text = (tmp_path / "backup.log").read_text(encoding="utf-8")
+        assert "[REDACTED]" in text
+        assert "geheim123" not in text
+
+    def test_a_key_inside_a_json_body_is_redacted_too(self, tmp_path) -> None:
+        """Die haeufigste Form, in der ein Schluessel auftaucht. Das Muster
+        erfasste den Wert erst nach dem oeffnenden Anfuehrungszeichen nicht —
+        ein JSON-Koerper lief unveraendert ins Protokoll."""
+        stub = _docker_stub(
+            tmp_path, secret_line='{"api_key": "sk-nichtinsprotokoll"}'
+        )
+        _, result = _real_backup(tmp_path, stub)
+        assert result.returncode == 0, result.stdout + result.stderr
+
+        text = (tmp_path / "backup.log").read_text(encoding="utf-8")
+        assert "[REDACTED]" in text
+        assert "sk-nichtinsprotokoll" not in text
