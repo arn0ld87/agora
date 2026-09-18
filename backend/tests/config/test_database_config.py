@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.config import METADATA_BACKENDS, Config
+from app.config import LLM_PROFILE_BACKENDS, METADATA_BACKENDS, Config, validate_llm_profile_backend
 
 
 @pytest.fixture
@@ -118,3 +118,21 @@ def test_unknown_metadata_backend_is_rejected(config_without_unrelated_errors, m
 def test_metadata_backends_are_exactly_legacy_and_postgres():
     """Hält die Menge fest, die `.env.example` und der Plan beschreiben."""
     assert METADATA_BACKENDS == frozenset({'legacy', 'postgres'})
+
+
+def test_unknown_llm_profile_backend_is_rejected():
+    """Ein Tippfehler in AGORA_LLM_PROFILE_BACKEND darf nicht still auf 'sqlite' zurückfallen."""
+    errors = validate_llm_profile_backend('sqlit')
+
+    assert len(errors) == 1
+    assert 'unknown value' in errors[0]
+    for backend in LLM_PROFILE_BACKENDS:
+        assert backend in errors[0]
+
+
+def test_postgres_llm_profile_backend_is_rejected_until_pr4():
+    """'postgres' ist gültig, aber ohne Adapter — die Meldung muss das sagen, nicht raten lassen."""
+    errors = validate_llm_profile_backend('postgres')
+
+    assert len(errors) == 1
+    assert 'PR 4' in errors[0]
