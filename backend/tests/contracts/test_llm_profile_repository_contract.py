@@ -25,6 +25,7 @@ from app.repositories.llm_profile_repository import (
     LlmProfileRepository,
     get_llm_profile_repository,
 )
+from app.repositories import llm_profile_repository as repository_module
 from app.services import llm_profiles_store as store_module
 
 
@@ -249,8 +250,26 @@ def test_factory_returns_something_satisfying_the_port_protocol():
 
 
 def test_factory_raises_for_backend_without_adapter(monkeypatch):
-    """Ein stiller Fallback auf sqlite sähe nach einer bewussten Entscheidung aus, die keine war."""
+    """Ein stiller Fallback auf sqlite sähe nach einer bewussten Entscheidung aus, die keine war.
+
+    Seit PR 4 hat ``postgres`` einen Adapter, das Set ist also leer. Die
+    Mechanik bleibt trotzdem geprüft: der nächste Store durchläuft denselben
+    Zwischenzustand — Wert schon gültig, Adapter noch nicht da.
+    """
+    monkeypatch.setattr(
+        repository_module, "LLM_PROFILE_BACKENDS_NOT_YET_AVAILABLE", frozenset({"kuenftig"})
+    )
+    monkeypatch.setattr(Config, "LLM_PROFILE_BACKEND", "kuenftig")
+
+    with pytest.raises(LlmProfileBackendUnavailable, match="kuenftig"):
+        get_llm_profile_repository()
+
+
+def test_factory_returns_the_postgres_adapter_when_selected(monkeypatch):
+    """Der Schalter muss den Adapter wirklich wechseln — sonst liefe eine
+    umgestellte Installation weiter auf der SQLite, ohne es zu sagen."""
+    from app.infrastructure.postgres.repositories import PostgresLlmProfileRepository
+
     monkeypatch.setattr(Config, "LLM_PROFILE_BACKEND", "postgres")
 
-    with pytest.raises(LlmProfileBackendUnavailable, match="PR 4"):
-        get_llm_profile_repository()
+    assert isinstance(get_llm_profile_repository(), PostgresLlmProfileRepository)
