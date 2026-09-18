@@ -90,6 +90,46 @@ def validate_database_settings(metadata_backend: str, database_url: str) -> list
     return []
 
 
+#: Ablagen, die `AGORA_LLM_PROFILE_BACKEND` kennt. 'postgres' steht hier, weil
+#: der Wert als Konfiguration schon gültig ist — der Adapter dazu kommt mit
+#: PR 4 (docs/plans/supabase.md §10). Bis dahin lehnt die Validierung ihn mit
+#: einem Satz ab, der sagt warum, statt mit einem Importfehler beim ersten
+#: Profilzugriff.
+LLM_PROFILE_BACKENDS = frozenset({'sqlite', 'postgres'})
+
+#: Die einzige Stelle, an der 'PR 4 fehlt noch' als Wahrheit steht. Wenn der
+#: PostgreSQL-Adapter kommt, wird dieses Set leer und die Verzweigung darunter
+#: verschwindet mit ihm.
+LLM_PROFILE_BACKENDS_NOT_YET_AVAILABLE = frozenset({'postgres'})
+
+
+def validate_llm_profile_backend(llm_profile_backend: str) -> list[str]:
+    """Prüft AGORA_LLM_PROFILE_BACKEND.
+
+    Wie `validate_database_settings` eine Modulfunktion, damit die
+    Verzweigungen nicht auf das Komplexitätsbudget von `Config.validate()`
+    gehen.
+    """
+    backend = (llm_profile_backend or '').strip().lower()
+    if backend not in LLM_PROFILE_BACKENDS:
+        # Derselbe Grund wie bei AGORA_METADATA_BACKEND: ein Tippfehler darf
+        # nicht still auf den Default zurückfallen.
+        return [
+            f"AGORA_LLM_PROFILE_BACKEND has unknown value '{backend}' "
+            f"(expected one of: {', '.join(sorted(LLM_PROFILE_BACKENDS))})"
+        ]
+
+    if backend in LLM_PROFILE_BACKENDS_NOT_YET_AVAILABLE:
+        return [
+            f"AGORA_LLM_PROFILE_BACKEND={backend} is not available yet — "
+            "the PostgreSQL adapter arrives with PR 4 "
+            "(docs/plans/supabase.md §10). Use 'sqlite' until then; "
+            "existing profiles stay where they are."
+        ]
+
+    return []
+
+
 def infer_vector_dim_for_model(model_name: str | None) -> int | None:
     """Infer a known vector dimension from the embedding model name."""
     normalized = (model_name or '').strip().lower()
@@ -182,6 +222,15 @@ class Config:
     # auf den Container selbst zeigen. Fehlt der Wert, sagt validate() das.
     DATABASE_URL = os.environ.get('DATABASE_URL', '')
     METADATA_BACKEND = os.environ.get('AGORA_METADATA_BACKEND', 'legacy').strip().lower()
+
+    # Ablage der LLM-Profile (docs/plans/supabase.md §10, PR 3). Getrennt von
+    # METADATA_BACKEND, weil die Stores einzeln umgestellt werden — ein
+    # Schalter fuer alles waere genau die Migration in einem Schritt, die der
+    # Plan vermeidet. Default 'sqlite': instance/llm_profiles.db bleibt die
+    # Wahrheit, bis PR 4 den PostgreSQL-Adapter bringt.
+    LLM_PROFILE_BACKEND = os.environ.get(
+        'AGORA_LLM_PROFILE_BACKEND', 'sqlite'
+    ).strip().lower()
 
     # Agent tool-use during simulation. Experimental and intentionally opt-in.
     ENABLE_AGENT_TOOLS = os.environ.get('ENABLE_AGENT_TOOLS', 'false').lower() in ('true', '1', 'yes')
@@ -482,6 +531,8 @@ class Config:
 
         # PostgreSQL-Grundlage (docs/plans/supabase.md §8).
         errors.extend(validate_database_settings(cls.METADATA_BACKEND, cls.DATABASE_URL))
+        # Ablage der LLM-Profile (§10, PR 3).
+        errors.extend(validate_llm_profile_backend(cls.LLM_PROFILE_BACKEND))
 
         expected_dim = infer_vector_dim_for_model(cls.EMBEDDING_MODEL)
         if expected_dim and cls.VECTOR_DIM != expected_dim:

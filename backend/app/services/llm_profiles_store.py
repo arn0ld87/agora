@@ -3,6 +3,15 @@
 Persistiert LlmProfile-Einträge in instance/llm_profiles.db.
 Invariante: genau ein Profil hat is_default=True.
 Bootstrap: beim ersten list()-Aufruf wird ein Standard-Profil aus LLM_*-Env-Variablen erzeugt.
+
+Seit PR 3 (docs/plans/supabase.md §38) ist dieses Modul der SQLite-Adapter des
+Ports ``app.repositories.LlmProfileRepository``. Die Klasse heißt deshalb
+``SqliteLlmProfileRepository``; ``LlmProfilesStore`` bleibt als Alias bestehen,
+weil der Name in Consumern und Tests steht und ein Rename dort nichts
+verbessert, was der Port nicht schon leistet.
+
+Das Datenformat ändert sich mit PR 3 nicht. Eine bestehende
+``llm_profiles.db`` wird unverändert weiterbenutzt.
 """
 from __future__ import annotations
 
@@ -107,7 +116,9 @@ def _bootstrap_profile() -> Optional[dict]:
     )
 
 
-class LlmProfilesStore:
+class SqliteLlmProfileRepository:
+    """SQLite-Adapter des ``LlmProfileRepository``-Ports."""
+
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._init_db()
@@ -245,8 +256,12 @@ class LlmProfilesStore:
             conn.execute("DELETE FROM llm_profiles")
 
 
-_store_singleton = LlmProfilesStore()
+#: Der Name, unter dem dieses Modul seit P5.2 in Consumern und Tests steht.
+#: Bleibt bestehen, damit PR 3 kein Rename quer durch den Bestand erzwingt.
+LlmProfilesStore = SqliteLlmProfileRepository
+
+_store_singleton = SqliteLlmProfileRepository()
 
 
-def get_llm_profiles_store() -> LlmProfilesStore:
+def get_llm_profiles_store() -> SqliteLlmProfileRepository:
     return _store_singleton

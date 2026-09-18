@@ -24,7 +24,17 @@ from __future__ import annotations
 
 from typing import Optional, Protocol, runtime_checkable
 
+from ..config import Config, LLM_PROFILE_BACKENDS_NOT_YET_AVAILABLE
 from ..contracts import LlmProfile, LlmProfileCreateRequest
+
+
+class LlmProfileBackendUnavailable(RuntimeError):
+    """Der konfigurierte Backend-Wert ist gültig, aber es gibt keinen Adapter.
+
+    Kein `ValueError`: der Wert ist nicht falsch, er ist noch nicht bedient.
+    Der Unterschied steht in der Meldung, damit niemand nach einem Tippfehler
+    sucht, den es nicht gibt.
+    """
 
 
 @runtime_checkable
@@ -69,3 +79,24 @@ class LlmProfileRepository(Protocol):
         """Macht ein Profil zum Default und nimmt das Flag allen anderen, oder
         ``None`` wenn es das Profil nicht gibt."""
         ...
+
+
+def get_llm_profile_repository() -> LlmProfileRepository:
+    """Die einzige Stelle, an der ein Consumer an ein Profil-Repository kommt.
+
+    Der Import des Adapters steht bewusst in der Funktion: er zieht ``sqlite3``
+    und das Schema nach sich, und ein Modul, das nur den Port braucht, soll das
+    nicht mitladen.
+    """
+    backend = Config.LLM_PROFILE_BACKEND
+    if backend in LLM_PROFILE_BACKENDS_NOT_YET_AVAILABLE:
+        # Dieselbe Aussage wie in Config.validate(), für den Fall, dass jemand
+        # das Repository ohne vorherige Validierung erreicht — ein Test, ein
+        # Skript, ein künftiger Aufrufer.
+        raise LlmProfileBackendUnavailable(
+            f"AGORA_LLM_PROFILE_BACKEND={backend} has no adapter yet; "
+            "it arrives with PR 4 (docs/plans/supabase.md §10)"
+        )
+    from ..services.llm_profiles_store import get_llm_profiles_store
+
+    return get_llm_profiles_store()

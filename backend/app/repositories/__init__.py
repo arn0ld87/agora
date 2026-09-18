@@ -11,6 +11,14 @@ zweiter dazukommt, ist er die Stelle, an der sich beide gegeneinander
 austauschen lassen, ohne dass ein Consumer davon erfaehrt.
 """
 
-from .llm_profile_repository import LlmProfileRepository
+from .llm_profile_repository import (
+    LlmProfileBackendUnavailable,
+    LlmProfileRepository,
+    get_llm_profile_repository,
+)
 
-__all__ = ["LlmProfileRepository"]
+__all__ = [
+    "LlmProfileBackendUnavailable",
+    "LlmProfileRepository",
+    "get_llm_profile_repository",
+]
