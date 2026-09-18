@@ -24,6 +24,7 @@ from typing import Optional
 from ..config import Config
 from ..contracts import Project, ProjectStatus
 from ..utils.logger import get_logger
+from ..utils.validation import join_within
 
 logger = get_logger('agora.projects.file_store')
 
@@ -42,7 +43,11 @@ class FileProjectRepository:
         os.makedirs(self.projects_dir, exist_ok=True)
 
     def _project_dir(self, project_id: str) -> str:
-        return os.path.join(self.projects_dir, project_id)
+        # ``join_within`` statt ``os.path.join``: hier wird aus einem
+        # Bezeichner ein Pfad, und das ist die Stelle, an der ein ``..`` zu
+        # verhindern ist — unabhaengig davon, ob ein Aufrufer vorher
+        # validiert hat.
+        return join_within(self.projects_dir, project_id)
 
     def _meta_path(self, project_id: str) -> str:
         return os.path.join(self._project_dir(project_id), PROJECT_META_FILENAME)

@@ -1,3 +1,4 @@
+import os
 import re
 
 # Standard identifier regex: prefix_ followed by 12 hex characters
@@ -15,6 +16,42 @@ UUID_PATTERN = re.compile(r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-
 # kein "task_"-Prefix. Security-Review f5dd63b hatte hier fälschlich ^task_[a-f0-9]+$
 # erzwungen, wodurch jeder /api/graph/task/<id>-Poll mit 400 abstürzte.
 TASK_ID_PATTERN = UUID_PATTERN
+
+def join_within(root: str, segment: str) -> str:
+    """Setzt ``root`` und ``segment`` zusammen und stellt sicher, dass das
+    Ergebnis unterhalb von ``root`` bleibt.
+
+    Tiefenverteidigung fuer die Ablageschicht. Die API-Schicht prueft
+    Bezeichner bereits mit ``validate_project_id`` und Verwandten, aber das
+    ist eine Schicht darueber: wer einen Store direkt aufruft — ein
+    Wartungsskript, ein Hintergrundlauf, ein kuenftiger Adapter — kommt daran
+    vorbei. Diese Funktion sitzt an der Stelle, an der ein Bezeichner
+    tatsaechlich zu einem Pfad wird.
+
+    Bewusst **keine** Formatpruefung: ``PROJ_ID_PATTERN`` verlangt zwoelf
+    Hexstellen, und synthetische Kennungen aus Tests und Altbestand erfuellen
+    das nicht. Geprueft wird nur, was gefaehrlich ist — dass der Pfad das
+    Wurzelverzeichnis nicht verlaesst.
+
+    Der Rueckgabewert ist die schlichte Zusammensetzung, nicht der
+    aufgeloeste Pfad: ``root`` darf relativ sein und bleibt es auch, damit
+    sich an den erzeugten Pfaden nichts aendert.
+
+    Vorbild ist die bestehende Pruefung in
+    ``ProjectManager.save_file_to_project``.
+    """
+    candidate = os.path.join(root, segment)
+    resolved_root = os.path.abspath(root)
+    resolved_candidate = os.path.abspath(candidate)
+
+    if not resolved_candidate.startswith(resolved_root + os.sep):
+        raise ValueError(
+            f'Path traversal attempt detected: {segment!r} does not stay '
+            f'inside its storage root'
+        )
+
+    return candidate
+
 
 def validate_project_id(project_id: str) -> bool:
     """Validate project_id format"""

@@ -14,6 +14,7 @@ from ..repositories.project_repository import (
     ProjectRepository,
     get_project_repository,
 )
+from ..utils.validation import join_within
 
 # ``Project`` und ``ProjectStatus`` leben seit PR 6 im Vertrag
 # (``app/contracts/project_contract.py``) und werden hier nur
@@ -45,8 +46,13 @@ class ProjectManager:
 
     @classmethod
     def _get_project_dir(cls, project_id: str) -> str:
-        """Get project directory path"""
-        return os.path.join(cls.PROJECTS_DIR, project_id)
+        """Get project directory path.
+
+        ``join_within`` statt ``os.path.join``: aus dieser Methode speist sich
+        ``delete_project``, das ein ganzes Verzeichnis abraeumt. Ein ``..`` im
+        Bezeichner traefe dort nicht das Projekt, sondern dessen Nachbarn.
+        """
+        return join_within(cls.PROJECTS_DIR, project_id)
 
     # ``_get_project_meta_path`` ist mit dem Port entfallen: den Pfad zu
     # ``project.json`` kennt nur noch der Dateiadapter. Zwei Stellen, die

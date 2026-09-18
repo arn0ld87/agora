@@ -221,6 +221,45 @@ def test_delete_leaves_the_artifacts_to_the_caller(repo):
     assert (project_dir / 'files' / 'quelle.pdf').exists()
 
 
+# --- Pfadsicherheit ---------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    'boesartig',
+    [
+        '../anderswo',
+        '../../etc',
+        'proj_x/../../anderswo',
+        '/etc/passwd',
+    ],
+)
+def test_a_traversing_id_never_reaches_the_filesystem(repo, boesartig):
+    """Tiefenverteidigung: die Ablage prueft selbst, nicht nur die API.
+
+    Die API-Schicht filtert Bezeichner bereits ueber ``validate_project_id``.
+    Diese Pruefung sitzt eine Schicht tiefer, wo aus dem Bezeichner
+    tatsaechlich ein Pfad wird — erreichbar auch fuer Wartungsskripte und
+    kuenftige Aufrufer, die an der API vorbeigehen.
+    """
+    with pytest.raises(ValueError):
+        repo.get(boesartig)
+
+
+def test_a_synthetic_but_harmless_id_still_works(repo):
+    """Geprueft wird Traversal, nicht das Kennungsformat.
+
+    ``PROJ_ID_PATTERN`` verlangt zwoelf Hexstellen. Bestehende Tests und
+    Altbestand benutzen Kennungen wie ``proj_test``; die duerfen nicht
+    plotzlich unerreichbar werden.
+    """
+    from app.contracts import Project
+
+    (Path(repo.projects_dir) / 'proj_test').mkdir(parents=True)
+    repo.save(Project(project_id='proj_test', name='Synthetisch'))
+
+    assert repo.get('proj_test').name == 'Synthetisch'
+
+
 # --- Fabrik -----------------------------------------------------------------
 
 
