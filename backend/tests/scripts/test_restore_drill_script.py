@@ -43,6 +43,21 @@ def _run(
     )
 
 
+def _targets(tmp_path: Path) -> list[str]:
+    """Alle drei Zielverzeichnisse auf verwerfbare Pfade.
+
+    Ohne sie zeigen ``--store-dir`` und ``--instance-dir`` auf den eigenen
+    Checkout, und der Restore bricht ab (``guard_restore_target``). Genau dieser
+    Halbfehler — ein Pfad gesetzt, zwei vergessen — stand vorher in diesen
+    Tests.
+    """
+    return [
+        "--data-dir", str(tmp_path / "uploads"),
+        "--store-dir", str(tmp_path / "data"),
+        "--instance-dir", str(tmp_path / "instance"),
+    ]
+
+
 @pytest.fixture()
 def restored(tmp_path: Path) -> Path:
     """Ein plausibel restauriertes Artefaktverzeichnis (``backend/uploads``)."""
@@ -98,7 +113,7 @@ class TestDryRunCoversEveryPhase:
         result = _run(
             "--phase", "all",
             "--backup-dir", str(tmp_path / "backup"),
-            "--data-dir", str(tmp_path / "uploads"),
+            *_targets(tmp_path),
             "--protocol", str(protocol),
             "--upgrade-ref", "v0.9.5",
             "--rollback-ref", "v0.9.4",
@@ -124,7 +139,7 @@ class TestDryRunCoversEveryPhase:
         _run(
             "--phase", "all",
             "--backup-dir", str(tmp_path / "backup"),
-            "--data-dir", str(tmp_path / "uploads"),
+            *_targets(tmp_path),
             "--protocol", str(protocol),
             "--dry-run",
         )
@@ -137,7 +152,7 @@ class TestDryRunCoversEveryPhase:
         _run(
             "--phase", "backup",
             "--backup-dir", str(backup),
-            "--data-dir", str(tmp_path / "uploads"),
+            *_targets(tmp_path),
             "--protocol", str(tmp_path / "drill.log"),
             "--dry-run",
         )
@@ -150,7 +165,7 @@ class TestDryRunCoversEveryPhase:
         _run(
             "--phase", "restore",
             "--backup-dir", str(tmp_path / "backup"),
-            "--data-dir", str(tmp_path / "uploads"),
+            *_targets(tmp_path),
             "--protocol", str(protocol),
             "--dry-run",
         )
@@ -165,7 +180,7 @@ class TestDryRunCoversEveryPhase:
         _run(
             "--phase", "all",
             "--backup-dir", str(tmp_path / "backup"),
-            "--data-dir", str(tmp_path / "uploads"),
+            *_targets(tmp_path),
             "--protocol", str(protocol),
             "--dry-run",
         )
@@ -187,9 +202,7 @@ class TestBackupCoversEveryPersistedDirectory:
         _run(
             "--phase", phase,
             "--backup-dir", str(tmp_path / "backup"),
-            "--data-dir", str(tmp_path / "uploads"),
-            "--store-dir", str(tmp_path / "data"),
-            "--instance-dir", str(tmp_path / "instance"),
+            *_targets(tmp_path),
             "--protocol", str(protocol),
             "--dry-run",
         )
@@ -228,7 +241,7 @@ class TestNeo4jDumpReachesTheNewContainer:
         _run(
             "--phase", "restore",
             "--backup-dir", str(tmp_path / "backup"),
-            "--data-dir", str(tmp_path / "uploads"),
+            *_targets(tmp_path),
             "--protocol", str(protocol),
             "--dry-run",
         )

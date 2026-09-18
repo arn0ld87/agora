@@ -46,6 +46,12 @@
 
 set -euo pipefail
 
+# Die Archive enthalten backend/data (Fernet-Stores) und backend/instance
+# (llm_profiles.db mit der api_key-Spalte im Klartext). Ohne diese Zeile erbt
+# alles, was hier entsteht, den Prozess-Umask — auf den meisten Hosts 022, also
+# world-readable.
+umask 077
+
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
 
@@ -58,6 +64,7 @@ PROTOCOL=""
 DRY_RUN=0
 UPGRADE_REF=""
 ROLLBACK_REF=""
+ALLOW_REPO_TARGET=0
 
 usage() {
   sed -n '2,46p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
@@ -75,6 +82,7 @@ while [ $# -gt 0 ]; do
     --upgrade-ref)  UPGRADE_REF="${2:-}"; shift 2 ;;
     --rollback-ref) ROLLBACK_REF="${2:-}"; shift 2 ;;
     --dry-run)      DRY_RUN=1; shift ;;
+    --allow-repo-target) ALLOW_REPO_TARGET=1; shift ;;
     -h|--help)      usage 0 ;;
     *) echo "Unbekannte Option: $1" >&2; usage 2 ;;
   esac
@@ -91,10 +99,25 @@ if [ -z "$BACKUP_DIR" ]; then
 fi
 
 PROTOCOL="${PROTOCOL:-$REPO_ROOT/restore-drill-$(date -u +%Y%m%dT%H%M%SZ).log}"
+# Prüfsummen liegen neben den Archiven, nicht beim Protokoll: ein Backup, das
+# ohne sein Manifest umzieht, ist nicht mehr prüfbar.
+MANIFEST="$BACKUP_DIR/MANIFEST.sha256"
+
+# Das Protokoll ist zum Weitergeben gedacht — es gehört an #766. Heute nimmt
+# kein verdrahteter Befehl ein Geheimnis als Argument entgegen, aber der vom
+# Runbook selbst nahegelegte Health-Check trägt einen `Authorization: Bearer
+# …`-Header, und per Copy-Paste in `run` wäre er sofort im Protokoll. Der Filter
+# ist die Absicherung gegen den naheliegendsten nächsten Schritt, nicht gegen
+# einen heutigen Fund.
+redact() {
+  sed -E \
+    -e 's/(Authorization: ?(Bearer|Basic) )[^" ]+/\1[REDACTED]/gI' \
+    -e 's/((token|secret|password|api[_-]?key)["'"'"']? ?[:=] ?)[^" ,]+/\1[REDACTED]/gI'
+}
 
 log() {
   # Protokoll und Terminal bekommen denselben Text — der Nachweis ist die Datei.
-  printf '%s  %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" | tee -a "$PROTOCOL"
+  printf '%s  %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" | redact | tee -a "$PROTOCOL"
 }
 
 run() {
@@ -105,7 +128,7 @@ run() {
     log "      (dry-run: nicht ausgeführt)"
     return 0
   fi
-  "$@" >>"$PROTOCOL" 2>&1
+  "$@" 2>&1 | redact >>"$PROTOCOL"
 }
 
 step() { log ""; log "== $* =="; }
@@ -122,6 +145,16 @@ fail() {
 # damit die Restore-Phase die dokumentierte Reihenfolge (data, instance,
 # uploads) einhalten kann und ein fehlendes Verzeichnis benannt wird statt
 # still zu fehlen.
+# sha256 portabel: Linux bringt sha256sum, macOS shasum. Beide geben
+# "<summe>  <pfad>" aus, sodass `-c` gegen dieselbe Manifestdatei arbeitet.
+if command -v sha256sum >/dev/null 2>&1; then
+  _sha256()       { sha256sum "$@"; }
+  _sha256_check() { sha256sum -c "$@"; }
+else
+  _sha256()       { shasum -a 256 "$@"; }
+  _sha256_check() { shasum -a 256 -c "$@"; }
+fi
+
 archive() {
   local name="$1" dir="$2"
   if [ ! -d "$dir" ] && [ "$DRY_RUN" != "1" ]; then
@@ -130,18 +163,54 @@ archive() {
   run tar -czf "$BACKUP_DIR/$name.tar.gz" \
     --exclude '*.tmp' --exclude '*.lock' \
     -C "$(dirname "$dir")" "$(basename "$dir")"
+  [ "$DRY_RUN" = "1" ] && return 0
+  # Das Archiv trägt Fernet-Stores und Klartext-API-Keys; umask allein reicht
+  # nicht, wenn tar eine bestehende Datei überschreibt.
+  chmod 0600 "$BACKUP_DIR/$name.tar.gz"
+  # Prüfsumme sofort, nicht am Ende: ein durch volle Platte abgebrochenes tar
+  # hinterlässt sonst ein Archiv, das beim Backup grün durchläuft und erst beim
+  # Restore auffällt — oder gar nicht.
+  (cd "$BACKUP_DIR" && _sha256 "$name.tar.gz" >>"$(basename "$MANIFEST")")
+  log "    Prüfsumme in $(basename "$MANIFEST") abgelegt"
 }
 
 unarchive() {
   local name="$1" dir="$2"
   [ -f "$BACKUP_DIR/$name.tar.gz" ] || [ "$DRY_RUN" = "1" ] \
     || fail "Backup fehlt: $BACKUP_DIR/$name.tar.gz"
+  if [ "$DRY_RUN" != "1" ]; then
+    if [ -f "$MANIFEST" ]; then
+      (cd "$BACKUP_DIR" && grep " $name.tar.gz\$" "$(basename "$MANIFEST")" \
+        | _sha256_check -) >/dev/null 2>&1 \
+        || fail "Prüfsumme weicht ab oder fehlt im Manifest: $name.tar.gz"
+      log "    Prüfsumme bestätigt: $name.tar.gz"
+    else
+      # Ein Archiv ohne Manifest stammt aus einem Lauf vor dieser Prüfung. Es
+      # wird entpackt, aber der Punkt gilt als ungeprüft und darf den Drill
+      # nicht grün färben.
+      log "    WARNUNG: kein Manifest — $name.tar.gz wird ungeprüft entpackt"
+    fi
+  fi
   run tar -xzf "$BACKUP_DIR/$name.tar.gz" -C "$(dirname "$dir")"
 }
 
 phase_backup() {
   step "Phase 1/5 — Backup"
-  run mkdir -p "$BACKUP_DIR"
+  run install -d -m 0700 "$BACKUP_DIR"
+  # Frisches Manifest je Lauf: ein angehängtes würde die Prüfsumme des
+  # Vorgängerarchivs mitführen, und `sha256sum -c` prüfte dann gegen einen
+  # Stand, den niemand mehr hat.
+  [ "$DRY_RUN" = "1" ] || : >"$MANIFEST"
+  # llm_profiles.db läuft im WAL-Modus (app/services/llm_profiles_store.py).
+  # Eine WAL-Datenbank besteht zur Laufzeit aus .db, .db-wal und .db-shm; ein
+  # reines tar friert genau den Zwischenzustand ein, in dem die letzten
+  # Schreibvorgänge noch im WAL stehen. Der Checkpoint schreibt sie in die
+  # Hauptdatei zurück, bevor archiviert wird.
+  if [ -f "$INSTANCE_DIR/llm_profiles.db" ] && command -v sqlite3 >/dev/null 2>&1; then
+    run sqlite3 "$INSTANCE_DIR/llm_profiles.db" "PRAGMA wal_checkpoint(TRUNCATE);"
+  elif [ -f "$INSTANCE_DIR/llm_profiles.db" ]; then
+    log "  WARNUNG: sqlite3 fehlt — llm_profiles.db wird ohne WAL-Checkpoint gesichert"
+  fi
   # Reihenfolge aus docs/backup-restore.md: erst die Dateiverzeichnisse, dann
   # Neo4j. Ein Neo4j-Dump ohne die zugehörigen Artefakte ist kein brauchbares
   # Backup — und Artefakte ohne backend/data (Provider-/Routing-/App-Stores)
@@ -161,8 +230,27 @@ phase_backup() {
   log "  Backup abgelegt unter $BACKUP_DIR"
 }
 
+# Die Vorgabewerte für die drei Zielverzeichnisse zeigen auf den eigenen
+# Checkout. Für das Backup ist das richtig — man sichert die laufende
+# Installation. Für den Restore ist es die gefährlichste Zeile im Skript: ein
+# Aufruf mit --phase restore und ohne explizite Pfade überschreibt backend/data,
+# backend/instance und backend/uploads des Rechners, auf dem er läuft. Das
+# Runbook sagt „auf einem frischen Host"; ein Satz in einer Markdown-Datei hält
+# niemanden auf.
+guard_restore_target() {
+  [ "$ALLOW_REPO_TARGET" = "1" ] && return 0
+  local live=""
+  case "$DATA_DIR"     in "$REPO_ROOT"/*) live="$live $DATA_DIR" ;; esac
+  case "$STORE_DIR"    in "$REPO_ROOT"/*) live="$live $STORE_DIR" ;; esac
+  case "$INSTANCE_DIR" in "$REPO_ROOT"/*) live="$live $INSTANCE_DIR" ;; esac
+  [ -z "$live" ] && return 0
+  log "  Restore-Ziel liegt im Checkout:$live"
+  fail "Restore würde in den eigenen Checkout schreiben. Entweder --data-dir, --store-dir und --instance-dir auf ein verwerfbares Ziel setzen, oder --allow-repo-target angeben."
+}
+
 phase_restore() {
   step "Phase 2/5 — Restore"
+  guard_restore_target
   run docker compose down
   # Recovery-Reihenfolge aus docs/backup-restore.md, Schritte 3-6: erst die
   # Stores, dann die Instanzsettings, dann die Artefakte, dann Neo4j.
