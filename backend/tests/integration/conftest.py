@@ -16,6 +16,8 @@ import uuid
 from typing import Iterator
 
 import pytest
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
 
 
 def _skip_or_fail(reason: str) -> None:
@@ -106,3 +108,42 @@ def neo4j_session() -> Iterator[tuple]:
         finally:
             cleanup_session.close()
             driver.close()
+
+
+@pytest.fixture
+def postgres_database_url() -> Iterator[str]:
+    """Erzeugt eine eigene disposable Datenbank für Alembic-Roundtrips."""
+    admin_url = os.environ.get('AGORA_TEST_POSTGRES_URL')
+    if not admin_url:
+        _skip_or_fail('AGORA_TEST_POSTGRES_URL ist nicht gesetzt.')
+
+    database_name = f'agora_itest_{uuid.uuid4().hex}'
+    parsed_url = make_url(admin_url)
+    test_url = parsed_url.set(database=database_name)
+    admin_engine = create_engine(parsed_url, isolation_level='AUTOCOMMIT')
+
+    try:
+        with admin_engine.connect() as connection:
+            connection.execute(text(f'CREATE DATABASE "{database_name}"'))
+    except Exception as exc:  # noqa: BLE001 — in Skip-Meldung umgewandelt
+        admin_engine.dispose()
+        _skip_or_fail(
+            f'PostgreSQL-Testdatenbank konnte nicht erzeugt werden: '
+            f'{type(exc).__name__}'
+        )
+
+    try:
+        yield test_url.render_as_string(hide_password=False)
+    finally:
+        with admin_engine.connect() as connection:
+            connection.execute(
+                text(
+                    'SELECT pg_terminate_backend(pid) '
+                    'FROM pg_stat_activity '
+                    'WHERE datname = :database_name '
+                    'AND pid <> pg_backend_pid()'
+                ),
+                {'database_name': database_name},
+            )
+            connection.execute(text(f'DROP DATABASE "{database_name}"'))
+        admin_engine.dispose()
