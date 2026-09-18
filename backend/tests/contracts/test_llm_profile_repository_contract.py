@@ -134,7 +134,10 @@ def test_list_stays_empty_without_model_name_env(repo, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-_SECRET = "sk-super-secret-value-should-never-leak"
+# Beginnt bewusst NICHT mit einem Provider-Praefix wie `sk-`: GitHubs Push
+# Protection prueft auf genau solche Muster, und ein Testwert, der einen Push
+# blockiert, kostet mehr als er an Realitaetsnaehe bringt.
+_SECRET = "TESTWERT-darf-niemals-nach-aussen-gelangen"
 
 
 def test_list_never_returns_api_key(repo):
