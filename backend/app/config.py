@@ -130,6 +130,47 @@ def validate_llm_profile_backend(llm_profile_backend: str) -> list[str]:
     return []
 
 
+#: Ablagen, die `AGORA_PROJECT_BACKEND` kennt. 'postgres' steht hier, weil der
+#: Wert als Konfiguration schon gültig ist — der Adapter dazu kommt mit dem
+#: zweiten Teil von PR 6 (docs/plans/supabase.md §11). Bis dahin lehnt die
+#: Validierung ihn mit einem Satz ab, der sagt warum, statt mit einem
+#: Importfehler beim ersten Projektzugriff.
+PROJECT_BACKENDS = frozenset({'file', 'postgres'})
+
+#: 'postgres' ist konfigurierbar, aber noch nicht bedient. Derselbe
+#: Zwischenzustand, den LLM_PROFILE_BACKENDS_NOT_YET_AVAILABLE zwischen PR 3
+#: und PR 4 abgebildet hat.
+PROJECT_BACKENDS_NOT_YET_AVAILABLE: frozenset[str] = frozenset({'postgres'})
+
+
+def validate_project_backend(project_backend: str) -> list[str]:
+    """Prüft AGORA_PROJECT_BACKEND.
+
+    Modulfunktion aus demselben Grund wie `validate_llm_profile_backend`: die
+    Verzweigungen sollen nicht auf das Komplexitätsbudget von
+    `Config.validate()` gehen.
+    """
+    backend = (project_backend or '').strip().lower()
+    if backend not in PROJECT_BACKENDS:
+        # Ein Tippfehler darf nicht still auf den Default zurückfallen — sonst
+        # arbeitet die Installation weiter auf der Datei, während der Betreiber
+        # glaubt, er habe umgeschaltet.
+        return [
+            f"AGORA_PROJECT_BACKEND has unknown value '{backend}' "
+            f"(expected one of: {', '.join(sorted(PROJECT_BACKENDS))})"
+        ]
+
+    if backend in PROJECT_BACKENDS_NOT_YET_AVAILABLE:
+        return [
+            f'AGORA_PROJECT_BACKEND={backend} is not available yet — '
+            'the PostgreSQL adapter arrives with the second part of PR 6 '
+            "(docs/plans/supabase.md §11). Use 'file' until then; "
+            'existing projects stay where they are.'
+        ]
+
+    return []
+
+
 def infer_vector_dim_for_model(model_name: str | None) -> int | None:
     """Infer a known vector dimension from the embedding model name."""
     normalized = (model_name or '').strip().lower()
@@ -230,6 +271,16 @@ class Config:
     # Wahrheit, bis PR 4 den PostgreSQL-Adapter bringt.
     LLM_PROFILE_BACKEND = os.environ.get(
         'AGORA_LLM_PROFILE_BACKEND', 'sqlite'
+    ).strip().lower()
+
+    # Ablage der Projekt-Metadaten (docs/plans/supabase.md §11, PR 6). Wieder
+    # ein eigener Schalter aus demselben Grund wie bei den LLM-Profilen: die
+    # Stores werden einzeln umgestellt. Default 'file' — der Inhalt von
+    # uploads/projects/<project_id>/project.json bleibt die Wahrheit, bis der
+    # PostgreSQL-Adapter da ist. Artefakte im selben Verzeichnis sind von
+    # diesem Schalter nie betroffen.
+    PROJECT_BACKEND = os.environ.get(
+        'AGORA_PROJECT_BACKEND', 'file'
     ).strip().lower()
 
     # Agent tool-use during simulation. Experimental and intentionally opt-in.
@@ -533,6 +584,8 @@ class Config:
         errors.extend(validate_database_settings(cls.METADATA_BACKEND, cls.DATABASE_URL))
         # Ablage der LLM-Profile (§10, PR 3).
         errors.extend(validate_llm_profile_backend(cls.LLM_PROFILE_BACKEND))
+        # Ablage der Projekt-Metadaten (§11, PR 6).
+        errors.extend(validate_project_backend(cls.PROJECT_BACKEND))
 
         expected_dim = infer_vector_dim_for_model(cls.EMBEDDING_MODEL)
         if expected_dim and cls.VECTOR_DIM != expected_dim:

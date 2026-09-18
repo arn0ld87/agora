@@ -4,135 +4,22 @@ Persists project state on server to avoid frontend passing large data between in
 """
 
 import os
-import json
-import uuid
 import shutil
-from datetime import datetime
-from typing import Dict, Any, List, Optional
-from enum import Enum
-from dataclasses import dataclass, field
+import uuid
+from typing import Dict, List, Optional
 from ..config import Config
 from ..contracts.document_manifest_contract import DocumentManifest
+from ..contracts.project_contract import Project, ProjectStatus
+from ..repositories.project_repository import (
+    ProjectRepository,
+    get_project_repository,
+)
 
-
-class ProjectStatus(str, Enum):
-    """Project status"""
-    CREATED = "created"              # Just created, files uploaded
-    ONTOLOGY_GENERATED = "ontology_generated"  # Ontology generated
-    GRAPH_BUILDING = "graph_building"    # Graph building in progress
-    GRAPH_COMPLETED = "graph_completed"  # Graph build completed
-    # Issue B2 (PLAN.md „Abbrechen & Pause“): kooperativer Abbruch eines
-    # graph_build. Kein FAILED — der Graph trägt bereits committete
-    # Episoden/Entities/Relations und bleibt auswertbar, nur unvollständig
-    # gegenüber dem Ursprungsdokument.
-    GRAPH_INCOMPLETE = "graph_incomplete"
-    FAILED = "failed"                # Failed
-
-
-@dataclass
-class Project:
-    """Project data model"""
-    project_id: str
-    name: str
-    status: ProjectStatus
-    created_at: str
-    updated_at: str
-
-    # File information
-    files: List[Dict[str, str]] = field(default_factory=list)  # [{filename, path, size}]
-    total_text_length: int = 0
-
-    # Ontology information (populated after interface 1 generates)
-    ontology: Optional[Dict[str, Any]] = None
-    analysis_summary: Optional[str] = None
-
-    # Graph information (populated after interface 2 completes)
-    graph_id: Optional[str] = None
-    graph_build_task_id: Optional[str] = None
-
-    # Configuration
-    simulation_requirement: Optional[str] = None
-    chunk_size: int = 500
-    chunk_overlap: int = 50
-
-    # LLM-Auswahl, die der Benutzer im Frontend für diesen Projekt-Run
-    # gewählt hat (Sub-Slice „ontology-respects-frontend-model“). Wird beim
-    # Ontology-Generate aus dem Request persistiert und kann von späteren
-    # Stufen (Build/Persona/Report) als Default herangezogen werden, ohne
-    # dass das Frontend bei jedem Folge-Request denselben Wert erneut
-    # mitschicken muss. `llm_provider` enthält **keine** Secrets — der
-    # API-Key bleibt bei der ``llm_runtime``-Konvention session-local; hier
-    # wird nur ``redacted_metadata()`` (Provider + Base-URL + api_key_set)
-    # abgelegt.
-    llm_model: Optional[str] = None
-    llm_provider: Optional[Dict[str, Any]] = None
-    # ID des persistierten LLM-Profils, das beim Ontology-Generate aktiv war.
-    # Spätere Stages (build_graph, simulation_prepare, report) ziehen dieses
-    # Profil als Default heran, wenn der Request kein eigenes Profil mitgibt.
-    llm_profile_id: Optional[str] = None
-    # Kanonische (Provider-Connection, Modell)-Referenz des Ontology-Generate-
-    # Runs (``AiModelRef.model_dump()``). Auf dem ``ai_model_ref``-Pfad bleiben
-    # ``llm_model``/``llm_provider``/``llm_profile_id`` bewusst leer — ohne
-    # dieses Feld verlöre ein wiederaufgenommener Graph-Build (neuer Tab,
-    # verlorene Session) jede Modell-/Connection-Bindung. Trägt keine Secrets:
-    # AiModelRef referenziert die Connection nur per ID.
-    ai_model_ref: Optional[Dict[str, Any]] = None
-
-    # Error information
-    error: Optional[str] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary"""
-        return {
-            "project_id": self.project_id,
-            "name": self.name,
-            "status": self.status.value if isinstance(self.status, ProjectStatus) else self.status,
-            "created_at": self.created_at,
-            "updated_at": self.updated_at,
-            "files": self.files,
-            "total_text_length": self.total_text_length,
-            "ontology": self.ontology,
-            "analysis_summary": self.analysis_summary,
-            "graph_id": self.graph_id,
-            "graph_build_task_id": self.graph_build_task_id,
-            "simulation_requirement": self.simulation_requirement,
-            "chunk_size": self.chunk_size,
-            "chunk_overlap": self.chunk_overlap,
-            "llm_model": self.llm_model,
-            "llm_provider": self.llm_provider,
-            "llm_profile_id": self.llm_profile_id,
-            "ai_model_ref": self.ai_model_ref,
-            "error": self.error
-        }
-    
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'Project':
-        """Create from dictionary"""
-        status = data.get('status', 'created')
-        if isinstance(status, str):
-            status = ProjectStatus(status)
-        
-        return cls(
-            project_id=data['project_id'],
-            name=data.get('name', 'Unnamed Project'),
-            status=status,
-            created_at=data.get('created_at', ''),
-            updated_at=data.get('updated_at', ''),
-            files=data.get('files', []),
-            total_text_length=data.get('total_text_length', 0),
-            ontology=data.get('ontology'),
-            analysis_summary=data.get('analysis_summary'),
-            graph_id=data.get('graph_id'),
-            graph_build_task_id=data.get('graph_build_task_id'),
-            simulation_requirement=data.get('simulation_requirement'),
-            chunk_size=data.get('chunk_size', 500),
-            chunk_overlap=data.get('chunk_overlap', 50),
-            llm_model=data.get('llm_model'),
-            llm_provider=data.get('llm_provider'),
-            llm_profile_id=data.get('llm_profile_id'),
-            ai_model_ref=data.get('ai_model_ref'),
-            error=data.get('error')
-        )
+# ``Project`` und ``ProjectStatus`` leben seit PR 6 im Vertrag
+# (``app/contracts/project_contract.py``) und werden hier nur
+# weitergereicht. Die Namen bleiben importierbar, wo sie immer waren —
+# 13 Module und 39 Testdateien greifen darauf zu.
+__all__ = ['Project', 'ProjectStatus', 'ProjectManager']
 
 
 class ProjectManager:
@@ -142,19 +29,29 @@ class ProjectManager:
     PROJECTS_DIR = os.path.join(Config.UPLOAD_FOLDER, 'projects')
 
     @classmethod
-    def _ensure_projects_dir(cls):
-        """Ensure project directory exists"""
-        os.makedirs(cls.PROJECTS_DIR, exist_ok=True)
+    def _repository(cls) -> ProjectRepository:
+        """Das Repository fuer die Metadaten dieses Aufrufs.
+
+        Pro Aufruf gebaut und nicht zwischengespeichert, weil ``PROJECTS_DIR``
+        zur Laufzeit umgebogen wird — elf Testdateien tun das. Ein gecachtes
+        Repository hielte den Pfad fest, den es beim ersten Zugriff gesehen
+        hat, und schriebe danach am Patch vorbei. Das Objekt ist ein Wrapper
+        um einen Pfad; es neu zu bauen kostet nichts.
+        """
+        return get_project_repository(storage_root=cls.PROJECTS_DIR)
+
+    # ``_ensure_projects_dir`` ist mit dem Port entfallen: das Wurzelverzeichnis
+    # anzulegen gehoert dem Adapter, der darin schreibt.
 
     @classmethod
     def _get_project_dir(cls, project_id: str) -> str:
         """Get project directory path"""
         return os.path.join(cls.PROJECTS_DIR, project_id)
 
-    @classmethod
-    def _get_project_meta_path(cls, project_id: str) -> str:
-        """Get project metadata file path"""
-        return os.path.join(cls._get_project_dir(project_id), 'project.json')
+    # ``_get_project_meta_path`` ist mit dem Port entfallen: den Pfad zu
+    # ``project.json`` kennt nur noch der Dateiadapter. Zwei Stellen, die
+    # denselben Dateinamen bilden, waeren genau die Doppelwahrheit, die der
+    # Port beseitigen soll.
 
     @classmethod
     def _get_project_files_dir(cls, project_id: str) -> str:
@@ -187,38 +84,19 @@ class ProjectManager:
         Returns:
             Newly created Project object
         """
-        cls._ensure_projects_dir()
+        project = cls._repository().create(name)
 
-        project_id = f"proj_{uuid.uuid4().hex[:12]}"
-        now = datetime.now().isoformat()
-
-        project = Project(
-            project_id=project_id,
-            name=name,
-            status=ProjectStatus.CREATED,
-            created_at=now,
-            updated_at=now
-        )
-
-        # Create project directory structure
-        project_dir = cls._get_project_dir(project_id)
-        files_dir = cls._get_project_files_dir(project_id)
-        os.makedirs(project_dir, exist_ok=True)
-        os.makedirs(files_dir, exist_ok=True)
-
-        # Save project metadata
-        cls.save_project(project)
+        # Das Artefaktverzeichnis gehoert nicht ins Repository: es haelt
+        # Uploads, keine Metadaten, und bleibt auf dem Dateisystem, egal
+        # welches Backend die Metadaten traegt.
+        os.makedirs(cls._get_project_files_dir(project.project_id), exist_ok=True)
 
         return project
 
     @classmethod
     def save_project(cls, project: Project) -> None:
         """Save project metadata"""
-        project.updated_at = datetime.now().isoformat()
-        meta_path = cls._get_project_meta_path(project.project_id)
-
-        with open(meta_path, 'w', encoding='utf-8') as f:
-            json.dump(project.to_dict(), f, ensure_ascii=False, indent=2)
+        cls._repository().save(project)
 
     @classmethod
     def get_project(cls, project_id: str) -> Optional[Project]:
@@ -231,15 +109,7 @@ class ProjectManager:
         Returns:
             Project object, or None if not found
         """
-        meta_path = cls._get_project_meta_path(project_id)
-
-        if not os.path.exists(meta_path):
-            return None
-
-        with open(meta_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-
-        return Project.from_dict(data)
+        return cls._repository().get(project_id)
 
     @classmethod
     def list_projects(cls, limit: int = 50) -> List[Project]:
@@ -252,18 +122,7 @@ class ProjectManager:
         Returns:
             Project list, sorted by creation time (descending)
         """
-        cls._ensure_projects_dir()
-
-        projects = []
-        for project_id in os.listdir(cls.PROJECTS_DIR):
-            project = cls.get_project(project_id)
-            if project:
-                projects.append(project)
-
-        # Sort by creation time (descending)
-        projects.sort(key=lambda p: p.created_at, reverse=True)
-
-        return projects[:limit]
+        return cls._repository().list(limit)
 
     @classmethod
     def delete_project(cls, project_id: str) -> bool:
@@ -276,13 +135,29 @@ class ProjectManager:
         Returns:
             Whether deletion succeeded
         """
+        # Zwei Schritte, weil zwei Dinge verschwinden muessen: das
+        # Artefaktverzeichnis und der Metadatensatz (wo auch immer er liegt).
+        # Beim Dateibackend faellt beides zusammen; sobald die Metadaten in
+        # PostgreSQL liegen, nicht mehr.
+        #
+        # **Die Artefakte zuerst.** Scheitert das Aufraeumen des Verzeichnisses
+        # — gesperrte Datei, fehlende Berechtigung, ein parallel schreibender
+        # graph_build —, dann bleibt der Metadatensatz erhalten und das Projekt
+        # sichtbar. Der Nutzer sieht einen Fehler und kann es erneut versuchen.
+        # In der umgekehrten Reihenfolge waere der Datensatz bereits weg und
+        # die hochgeladenen Dokumente laegen unerreichbar auf der Platte, ohne
+        # dass eine Route sie noch findet.
         project_dir = cls._get_project_dir(project_id)
+        directory_existed = os.path.exists(project_dir)
+        if directory_existed:
+            shutil.rmtree(project_dir)
 
-        if not os.path.exists(project_dir):
-            return False
+        removed_record = cls._repository().delete(project_id)
 
-        shutil.rmtree(project_dir)
-        return True
+        # ``True``, wenn es irgendetwas zu loeschen gab. Ein Projektverzeichnis
+        # ohne lesbare project.json hat vorher ``True`` geliefert und tut es
+        # weiterhin.
+        return removed_record or directory_existed
 
     @classmethod
     def save_file_to_project(cls, project_id: str, file_storage, original_filename: str) -> Dict[str, str]:

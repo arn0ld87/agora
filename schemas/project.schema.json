@@ -1,0 +1,197 @@
+{
+  "$defs": {
+    "ProjectStatus": {
+      "description": "Status eines Projekts.\n\nKanonisch hier, nicht in ``app/models/project.py``: der Status steht im\nVertrag und wird von dort re-exportiert. Die Reihenfolge und die Werte\nsind unveraendert \u2014 sie stehen so in jeder bestehenden ``project.json``.",
+      "enum": [
+        "created",
+        "ontology_generated",
+        "graph_building",
+        "graph_completed",
+        "graph_incomplete",
+        "failed"
+      ],
+      "title": "ProjectStatus",
+      "type": "string"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/project.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Metadaten eines Projekts.\n\n``created_at`` und ``updated_at`` sind ISO-8601-Zeichenketten und keine\n``datetime``: so stehen sie in der Ablage, und ``list_projects`` sortiert\nlexikografisch darueber. Eine Umstellung auf ``datetime`` aendert das\nFormat in der Datei und gehoert zur PostgreSQL-Tabelle, nicht hierher.",
+  "properties": {
+    "ai_model_ref": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ai Model Ref"
+    },
+    "analysis_summary": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Analysis Summary"
+    },
+    "chunk_overlap": {
+      "default": 50,
+      "title": "Chunk Overlap",
+      "type": "integer"
+    },
+    "chunk_size": {
+      "default": 500,
+      "title": "Chunk Size",
+      "type": "integer"
+    },
+    "created_at": {
+      "default": "",
+      "title": "Created At",
+      "type": "string"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    },
+    "files": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Files",
+      "type": "array"
+    },
+    "graph_build_task_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Graph Build Task Id"
+    },
+    "graph_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Graph Id"
+    },
+    "llm_model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Llm Model"
+    },
+    "llm_profile_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Llm Profile Id"
+    },
+    "llm_provider": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Llm Provider"
+    },
+    "name": {
+      "default": "Unnamed Project",
+      "title": "Name",
+      "type": "string"
+    },
+    "ontology": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ontology"
+    },
+    "project_id": {
+      "minLength": 1,
+      "title": "Project Id",
+      "type": "string"
+    },
+    "simulation_requirement": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Simulation Requirement"
+    },
+    "status": {
+      "$ref": "#/$defs/ProjectStatus",
+      "default": "created"
+    },
+    "total_text_length": {
+      "default": 0,
+      "title": "Total Text Length",
+      "type": "integer"
+    },
+    "updated_at": {
+      "default": "",
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id"
+  ],
+  "title": "Project",
+  "type": "object"
+}

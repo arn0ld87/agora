@@ -79,6 +79,11 @@ from .llm_profile_contract import (
     LlmProfileCreateRequest,
     LlmProfileListResponse,
 )
+from .project_contract import (
+    Project,
+    ProjectListResponse,
+    ProjectStatus,
+)
 from .provider_types import (
     ALL_PROVIDER_TYPES,
     LEGACY_GEMINI,
@@ -211,6 +216,9 @@ __all__ = [
     "PipelineDegradationReport",
     "Platform",
     "PostCreatedEvent",
+    "Project",
+    "ProjectListResponse",
+    "ProjectStatus",
     "PostVoiceRegister",
     "PersonaQuotaActual",
     "PersonaQuotaPlan",
