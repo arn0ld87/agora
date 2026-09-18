@@ -222,7 +222,15 @@ Für die LLM-Profile existiert seit PR 3 ein Port (`app/repositories/llm_profile
 
 **Umgeschaltet ist nichts.** Der Default bleibt `sqlite`, und in dieser Installation ist keine Migration gelaufen. Der Adapter ist gegen eine echte PostgreSQL-Instanz verifiziert (16 Integrationstests), nicht gegen einen produktiven Bestand.
 
-Dazu gehört ein zweiter Baustein: `LlmProfileSecretsStore` (`app/services/llm_profile_secrets_store.py`) legt die API-Keys **pro Profil** Fernet-verschlüsselt unter `AGORA_DATA_DIR` ab, weil `agora.llm_profiles` bewusst keine `api_key`-Spalte hat und der bestehende Provider-Secret-Store pro **Provider** ablegt — zwei Profile desselben Providers dürfen aber verschiedene Schlüssel tragen. `backend/scripts/migrate_profile_secrets.py` füllt den Store aus der SQLite (read-only, `--verify` vergleicht feldweise). **Kein Lesepfad nutzt ihn bisher**: die SQLite bleibt die Wahrheit, der Store ist die Ablage, die PR 4 vorfinden wird. Offen und benannt: psycopg 3 ist im Synchronmodus nicht gevent-kooperativ, während der Webprozess unter einem gunicorn-Worker mit gevent-Worker-Klasse läuft. Die Frage gehört beantwortet, bevor der erste Store auf Postgres zeigt.
+Dazu gehört ein zweiter Baustein: `LlmProfileSecretsStore` (`app/services/llm_profile_secrets_store.py`) legt die API-Keys **pro Profil** Fernet-verschlüsselt unter `AGORA_DATA_DIR` ab, weil `agora.llm_profiles` bewusst keine `api_key`-Spalte hat und der bestehende Provider-Secret-Store pro **Provider** ablegt — zwei Profile desselben Providers dürfen aber verschiedene Schlüssel tragen. `backend/scripts/migrate_profile_secrets.py` füllt den Store aus der SQLite (read-only, `--verify` vergleicht feldweise). **Kein Lesepfad nutzt ihn bisher**: die SQLite bleibt die Wahrheit, der Store ist die Ablage, die PR 4 vorfinden wird.
+
+### psycopg unter gevent: geprüft, kooperativ
+
+Bis PR 4 stand hier als offener Punkt, psycopg 3 sei im Synchronmodus nicht gevent-kooperativ, während der Webprozess unter einem gunicorn-Worker mit gevent-Worker-Klasse läuft. **Die Annahme war falsch, und sie ist jetzt gemessen statt vermutet.** Acht gleichzeitige `SELECT pg_sleep(1)` in acht Greenlets brauchen 1,08 s direkt über psycopg und 1,04 s über `build_engine()`; seriell wären es acht. Die Gegenprobe ohne `gevent.monkey.patch_all()` braucht 8,19 s — der Unterschied liegt um eine Größenordnung auseinander, nicht im Messrauschen. Bei gepatchtem `select` wählt psycopg die Wartefunktion auf Python-Ebene; das ist die von psycopg ab 3.1.14 dokumentierte gevent-Unterstützung, `psycogreen` entfällt. Der Mindest-Pin liegt mit `>=3.2.0` darüber.
+
+Bedingung dafür ist die Importreihenfolge: `gevent.monkey.patch_all()` muss vor dem ersten psycopg-Import laufen. Das ist keine neue Auflage, sondern dieselbe, die seit [#529](https://github.com/arn0ld87/agora/issues/529) `requests`/`ssl` schützt — `backend/wsgi.py` patcht als erstes Statement, das `Dockerfile` startet `wsgi:app`. Festgehalten wird das durch `backend/tests/integration/test_gevent_psycopg_cooperation.py`, nicht durch diese Notiz. Begründung und Grenzen: [ADR-0014](decisions/0014-psycopg-under-gevent-worker.md).
+
+Ungeprüft bleibt das Verhalten hinter Supavisor unter Last. Der HARDSTOP `--workers 1` bleibt aus den in `backend/gunicorn.conf.py` genannten Gründen unberührt.
 
 ## Security
 
