@@ -1,0 +1,287 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Agora Systemarchitektur",
+    "output": "agora-architektur.html",
+    "viewBox": [
+      1040,
+      380
+    ],
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "zugang",
+        "label": "Zugang",
+        "focus": [
+          "browser",
+          "vite",
+          "flask"
+        ],
+        "note": "Der Browser spricht den Vite-Server an, der /api an Flask weiterreicht."
+      },
+      {
+        "id": "zustand",
+        "label": "Zustand",
+        "focus": [
+          "flask",
+          "neo4j",
+          "redis"
+        ],
+        "note": "Graph und Event-Bus laufen als eigene Compose-Dienste neben dem Backend."
+      },
+      {
+        "id": "provider",
+        "label": "Provider-Routing",
+        "focus": [
+          "llmclient",
+          "registry",
+          "codex",
+          "httpprov"
+        ],
+        "note": "Eine Stelle entscheidet, welcher Provider einen Call bekommt."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "browser",
+      "type": "external",
+      "label": "Browser",
+      "sublabel": "Single User",
+      "pos": [
+        30,
+        160
+      ],
+      "size": [
+        130,
+        60
+      ]
+    },
+    {
+      "id": "vite",
+      "type": "frontend",
+      "label": "Vue 3 / Vite",
+      "sublabel": "SPA auf :5173",
+      "pos": [
+        230,
+        160
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "tag": "Zod-Spiegel"
+    },
+    {
+      "id": "flask",
+      "type": "backend",
+      "label": "Flask-Backend",
+      "sublabel": "gunicorn auf :5001",
+      "pos": [
+        430,
+        160
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "tag": "AGORA_DATA_DIR"
+    },
+    {
+      "id": "neo4j",
+      "type": "database",
+      "label": "Neo4j 5.26",
+      "sublabel": "Graph, Vektorindex",
+      "pos": [
+        430,
+        40
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "tag": "eigener Dienst"
+    },
+    {
+      "id": "redis",
+      "type": "messagebus",
+      "label": "Redis 7",
+      "sublabel": "Run-Events, SSE",
+      "pos": [
+        430,
+        280
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "tag": "eigener Dienst"
+    },
+    {
+      "id": "llmclient",
+      "type": "backend",
+      "label": "LLMClient",
+      "sublabel": "chat, chat_json",
+      "pos": [
+        640,
+        160
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "tag": "Pydantic-Schema"
+    },
+    {
+      "id": "registry",
+      "type": "backend",
+      "label": "Provider-Registry",
+      "sublabel": "detect_provider",
+      "pos": [
+        850,
+        160
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "tag": "einzige Stelle"
+    },
+    {
+      "id": "codex",
+      "type": "security",
+      "label": "codex-CLI",
+      "sublabel": "Subprozess im Image",
+      "pos": [
+        850,
+        40
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "tag": "ChatGPT-Abo"
+    },
+    {
+      "id": "httpprov",
+      "type": "external",
+      "label": "HTTP-Provider",
+      "sublabel": "Ollama, Gemini, OpenAI",
+      "pos": [
+        850,
+        280
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "tag": "OpenAI-kompatibel"
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "security-group",
+      "label": "codex exec: sandbox read-only, isoliertes CWD",
+      "wraps": [
+        "codex"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "browser-vite",
+      "from": "browser",
+      "to": "vite",
+      "label": "HTTP :5173",
+      "variant": "emphasis"
+    },
+    {
+      "id": "vite-flask",
+      "from": "vite",
+      "to": "flask",
+      "label": "Proxy /api",
+      "variant": "emphasis",
+      "labelAt": [
+        405,
+        150
+      ]
+    },
+    {
+      "id": "flask-neo4j",
+      "from": "flask",
+      "to": "neo4j",
+      "label": "Cypher :7687"
+    },
+    {
+      "id": "flask-redis",
+      "from": "flask",
+      "to": "redis",
+      "label": "Run-Events",
+      "labelAt": [
+        505,
+        250
+      ]
+    },
+    {
+      "id": "flask-llm",
+      "from": "flask",
+      "to": "llmclient",
+      "label": "chat_json",
+      "variant": "emphasis"
+    },
+    {
+      "id": "llm-registry",
+      "from": "llmclient",
+      "to": "registry",
+      "label": "Modellwahl",
+      "variant": "emphasis"
+    },
+    {
+      "id": "registry-codex",
+      "from": "registry",
+      "to": "codex",
+      "label": "Subprozess",
+      "variant": "security"
+    },
+    {
+      "id": "registry-http",
+      "from": "registry",
+      "to": "httpprov",
+      "label": "HTTPS",
+      "labelAt": [
+        925,
+        250
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Zugang",
+      "items": [
+        "Browser, Vite-Server und Flask-Backend laufen im selben Container agora",
+        "Der Vite-Dev-Server reicht /api an gunicorn auf :5001 weiter",
+        "Single-User-Betrieb: keine Mandantentrennung, keine Sitzungsverwaltung"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Zustand",
+      "items": [
+        "Neo4j und Redis sind eigene Compose-Dienste mit eigenen Volumes",
+        "Reports, Evidenzkarten und Fernet-verschluesselte Provider-Keys liegen als Bind-Mounts unter backend/data und backend/instance",
+        "Redis traegt die Run-Events, aus denen der SSE-Stream im Frontend gespeist wird"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Provider-Routing",
+      "items": [
+        "detect_provider in registry.py ist die einzige erlaubte Provider-Heuristik",
+        "codex_cli wird nie aus einer base_url erraten, sondern nur ueber eine ausdruecklich geroutete Connection aktiviert",
+        "Das codex-Binary steckt im Image, die Abo-Anmeldung ausschliesslich als Host-Mount unter CODEX_HOME"
+      ]
+    }
+  ]
+}

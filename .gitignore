@@ -225,6 +225,24 @@ docs/paper/**/*.toc
 # blaehen jeden Diff auf.
 docs/diagrams/*.html
 docs/diagrams/*.visual-check.json
+docs/diagrams/*.visual-check.*.png
+
+# claude-mem schreibt seinen Kontextblock in die Instruktionsdatei jedes
+# Agent-Tools, das es kennt. Der Inhalt ist maschinenlokal (er spiegelt die
+# Sessions DIESES Rechners), nicht projektweit gueltig.
+WARP.md
+.github/copilot-instructions.md
+
+# Generierter Skill-Spiegel: .agents/skills/ ist eine Kopie der installierten
+# Claude-Skills plus ein SKILL.md je Slash-Command. Reproduzierbar aus der
+# lokalen Toolinstallation und maschinenspezifisch.
+.agents/
+
+# Roh mitgeschriebene Debug-Sitzungen. Sie enthalten Umgebungsdumps und damit
+# regelmaessig Zugangsdaten — die Datei vom 18.07. traegt einen GCP-Service-
+# Account-Key im Klartext und wurde von der Push Protection abgefangen.
+# Verwertbares aus so einer Sitzung gehoert redigiert nach docs/runbooks/.
+docs/session-*.md
 
 # Lokale Secrets (Fernet-Master-Key fuer LLM-Provider-Secrets-Store)
 secrets.env
