@@ -49,8 +49,8 @@ def normalize_database_url(url: str) -> str:
 
     if not cleaned.startswith(DATABASE_URL_PREFIX):
         raise ValueError(
-            f"DATABASE_URL must start with '{DATABASE_URL_PREFIX}', got "
-            f"'{cleaned.split('://', 1)[0]}://…'"
+            f"DATABASE_URL must start with '{DATABASE_URL_PREFIX}'; "
+            'the supplied value was rejected'
         )
     return cleaned
 

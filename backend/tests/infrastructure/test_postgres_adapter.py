@@ -68,12 +68,19 @@ def test_foreign_scheme_raises():
         normalize_database_url('mysql+pymysql://user:pw@host:3306/db')
 
 
-def test_error_message_does_not_leak_credentials():
+@pytest.mark.parametrize(
+    ('invalid_url', 'secret'),
+    [
+        ('mysql+pymysql://user:sehr-geheim@host:3306/db', 'sehr-geheim'),
+        ('postgresql+psycopg:user:noch-geheimer@host/db', 'noch-geheimer'),
+    ],
+)
+def test_error_message_does_not_leak_credentials(invalid_url, secret):
     """Die URL trägt ein Passwort — es darf nicht in der Exception landen."""
     with pytest.raises(ValueError) as excinfo:
-        normalize_database_url('mysql+pymysql://user:sehr-geheim@host:3306/db')
+        normalize_database_url(invalid_url)
 
-    assert 'sehr-geheim' not in str(excinfo.value)
+    assert secret not in str(excinfo.value)
 
 
 # ---------------------------------------------------------------------------
