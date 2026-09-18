@@ -252,7 +252,7 @@ def test_legacy_profile_token_in_llm_model_is_still_expanded(client, prepare_env
     store = MagicMock()
     store.get.side_effect = lambda pid, **_kw: profile if pid == "prof-legacy" else None
     prepare_env.monkeypatch.setattr(
-        "app.utils.llm_profile_resolver.get_llm_profiles_store", lambda: store
+        "app.utils.llm_profile_resolver.get_llm_profile_repository", lambda: store
     )
 
     response = _post(client, llm_model="profile:prof-legacy")

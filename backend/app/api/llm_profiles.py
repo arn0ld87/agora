@@ -13,7 +13,7 @@ from pydantic import ValidationError
 
 from .deprecation import add_legacy_deprecation_headers
 from ..contracts.llm_profile_contract import LlmProfileCreateRequest, LlmProfileListResponse
-from ..services.llm_profiles_store import get_llm_profiles_store
+from ..repositories.llm_profile_repository import get_llm_profile_repository
 from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.logger import get_logger
 
@@ -36,7 +36,7 @@ def add_profile_deprecation_headers(response):
 @llm_profiles_bp.route("/", methods=["GET"])
 @handle_api_errors
 def list_profiles():
-    store = get_llm_profiles_store()
+    store = get_llm_profile_repository()
     profiles = store.list()
     return json_success(LlmProfileListResponse(profiles=profiles).model_dump(mode="json"))
 
@@ -55,7 +55,7 @@ def create_profile():
             code="invalid_request",
             extra={"errors": exc.errors(include_url=False)},
         )
-    store = get_llm_profiles_store()
+    store = get_llm_profile_repository()
     created = store.create(body)
     return json_success(created.model_dump(mode="json"), status=201)
 
@@ -73,7 +73,7 @@ def update_profile(profile_id: str):
             code="invalid_request",
             extra={"errors": exc.errors(include_url=False)},
         )
-    store = get_llm_profiles_store()
+    store = get_llm_profile_repository()
     updated = store.update(profile_id, body)
     if updated is None:
         return json_error(f"Profile not found: {profile_id}", status=404, code="not_found")
@@ -83,7 +83,7 @@ def update_profile(profile_id: str):
 @llm_profiles_bp.route("/<profile_id>", methods=["DELETE"])
 @handle_api_errors
 def delete_profile(profile_id: str):
-    store = get_llm_profiles_store()
+    store = get_llm_profile_repository()
     deleted = store.delete(profile_id)
     if not deleted:
         return json_error(f"Profile not found: {profile_id}", status=404, code="not_found")
@@ -93,7 +93,7 @@ def delete_profile(profile_id: str):
 @llm_profiles_bp.route("/<profile_id>/default", methods=["POST"])
 @handle_api_errors
 def set_default_profile(profile_id: str):
-    store = get_llm_profiles_store()
+    store = get_llm_profile_repository()
     profile = store.set_default(profile_id)
     if profile is None:
         return json_error(f"Profile not found: {profile_id}", status=404, code="not_found")
