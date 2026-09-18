@@ -208,9 +208,19 @@ exclude = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "B", "BLE", "I", "UP", "SIM"]
+select = ["E", "F", "B", "BLE", "I", "UP", "SIM", "S"]
 ignore = [
     "E501",
+    # flake8-bandit (S): Simulation und Persona-Sampling nutzen `random` bewusst
+    # nicht-kryptografisch (S311); Subprozesse laufen mit Argumentlisten ohne
+    # Shell (S603/S607). Asserts und stille try/except-Blöcke (S101/S110/S112)
+    # sind Baseline-Altlasten wie die Einträge darunter.
+    "S101",
+    "S110",
+    "S112",
+    "S311",
+    "S603",
+    "S607",
     # Phase-2 Baseline: bestehende Altlasten bleiben bis zu den fokussierten
     # Refactor-Phasen unverändert; neue Regel-Familien sind trotzdem sichtbar.
     "B007",
@@ -245,12 +255,16 @@ ignore = [
 "scripts/run_reddit_simulation.py" = ["F401"]
 "scripts/run_twitter_simulation.py" = ["F401"]
 "scripts/security_verify.py" = ["E402"]
+# S608 schlägt auf den "SELECT"-Wortlaut im LLM-Prompt an; dort wird kein SQL gebaut.
+"app/services/graph/interview_helpers.py" = ["S608"]
 # BLE001 kam mit #626 in select; app/ wurde dabei bereinigt (~120 Stellen).
 # Standalone-CLI-Runner (scripts/) und Tests fangen bewusst breit ab —
 # Aufräumen läuft unter Milestone M5 (#638), bis dahin Baseline-Ignore,
 # damit der Heavy-Job (`ruff check .`) auf main nicht rot bleibt.
 "scripts/*" = ["BLE001"]
-"tests/*" = ["BLE001"]
+# Tests dürfen Fixture-Passwörter, Bind-all-Adressen, Temp-Pfade und
+# Test-Parser (XML/YAML/urlopen) ohne Bandit-Befund verwenden.
+"tests/*" = ["BLE001", "S"]
 
 [tool.mypy]
 python_version = "3.14"

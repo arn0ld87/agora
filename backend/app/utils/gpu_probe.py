@@ -56,8 +56,8 @@ def detect_gpu() -> Dict[str, Any]:
     ps_url = f"{ollama_base}/api/ps"
 
     try:
-        req = urllib.request.Request(ps_url)
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        req = urllib.request.Request(ps_url)  # noqa: S310 - URL stammt aus LLM_BASE_URL-Konfiguration
+        with urllib.request.urlopen(req, timeout=5) as resp:  # noqa: S310 - siehe oben
             data = json_mod.loads(resp.read().decode('utf-8'))
         models = data.get("models", [])
         total_vram = sum(m.get("size_vram", 0) for m in models)

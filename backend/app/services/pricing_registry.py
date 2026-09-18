@@ -28,7 +28,7 @@ _DEFAULT_DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "model_prici
 
 # Provider-IDs/Vokabular, das als lokal gilt, wenn die URL ein Loopback ist.
 _LOCAL_PROVIDER_HINTS = ("ollama", "local", "llamafile", "lmstudio")
-_LOOPBACK_HOSTS = ("localhost", "127.0.0.1", "::1", "host.docker.internal", "0.0.0.0")
+_LOOPBACK_HOSTS = ("localhost", "127.0.0.1", "::1", "host.docker.internal", "0.0.0.0")  # noqa: S104 - Erkennung lokaler Hosts, kein Bind
 
 
 @dataclass(frozen=True)
