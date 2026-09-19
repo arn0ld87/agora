@@ -19,11 +19,15 @@ Reconciliation beim nächsten Start zu warten.
 
 from __future__ import annotations
 
+import os
+import signal
+
 from typing import Any, Dict, List, Optional
 
 import pytest
 
 from app.jobs.identity import current_worker_identity
+from app.services.sim import process_shutdown
 from app.services.sim.cancel_flag import is_cancel_requested
 from app.services.sim.reconciliation import reconcile_stale_jobs
 from app.services.sim.process_shutdown import _mark_in_process_jobs_failed
@@ -381,3 +385,94 @@ class TestProcessShutdownHandler:
 
         assert result.reconciled_run_ids == []
         assert result.skipped_run_ids == ["run_a"]
+
+    def test_handler_survives_an_init_signals_style_reset(self) -> None:
+        """Nachbau der realen gunicorn-Reihenfolge (Slice 1.1 Fund, #1472a):
+        ``init_signals()`` (``workers/base.py``) setzt SIGTERM zuerst auf
+        einen Fremd-Handler (hier simuliert durch ``_foreign_handler``, in
+        Produktion gunicorns eigener ``handle_exit``), ERST DANACH registriert
+        ``post_worker_init`` via ``register_shutdown_handler`` unseren
+        Handler. Ein SIGTERM muss danach tatsächlich zugestellt werden und
+        die In-Process-Jobs markieren — nicht nur der Python-Aufruf des
+        Handlers wird simuliert, sondern ``signal.raise_signal`` schickt das
+        echte Signal an diesen Prozess.
+        """
+        original_sigterm = signal.getsignal(signal.SIGTERM)
+        original_pid = process_shutdown._shutdown_registered_pid
+        registry = _FakeRegistry([
+            _run("run_a", run_type="simulation_prepare", metadata={"worker_token": "other"}),
+        ])
+
+        def _foreign_handler(signum: int, frame: Any) -> None:
+            """Steht für gunicorns ``Worker.handle_exit``, von init_signals() gesetzt."""
+
+        try:
+            # Der Zustand VOR register_shutdown_handler: init_signals() hat
+            # bereits einen Fremd-Handler installiert.
+            signal.signal(signal.SIGTERM, _foreign_handler)
+
+            # PID-Lock zurücksetzen, damit die Registrierung in diesem
+            # Prozess tatsächlich läuft (siehe test_registration_is_pid_bound...).
+            process_shutdown._shutdown_registered_pid = None
+
+            process_shutdown.register_shutdown_handler(get_registry=lambda: registry)
+
+            signal.raise_signal(signal.SIGTERM)
+        finally:
+            signal.signal(signal.SIGTERM, original_sigterm)
+            process_shutdown._shutdown_registered_pid = original_pid
+
+        assert registry.updates
+        assert registry.updates[0]["status"] == "failed"
+        assert registry.updates[0]["termination_reason"] == "process_restart"
+
+    def test_foreign_handler_is_chained_after_registration(self) -> None:
+        """Chaining-Nachweis: der zuvor gesetzte Fremd-Handler (gunicorns
+        ``handle_exit``) wird nach unserem Job-Marking ebenfalls noch
+        aufgerufen. Ohne diese Kette würde der Worker beim Shutdown hängen,
+        weil gunicorns eigener Exit-Pfad nie liefe."""
+        original_sigterm = signal.getsignal(signal.SIGTERM)
+        original_pid = process_shutdown._shutdown_registered_pid
+        registry = _FakeRegistry([])
+
+        foreign_calls: List[int] = []
+
+        def _foreign_handler(signum: int, frame: Any) -> None:
+            foreign_calls.append(signum)
+
+        try:
+            signal.signal(signal.SIGTERM, _foreign_handler)
+            process_shutdown._shutdown_registered_pid = None
+
+            process_shutdown.register_shutdown_handler(get_registry=lambda: registry)
+
+            signal.raise_signal(signal.SIGTERM)
+        finally:
+            signal.signal(signal.SIGTERM, original_sigterm)
+            process_shutdown._shutdown_registered_pid = original_pid
+
+        assert foreign_calls == [signal.SIGTERM]
+
+    def test_registration_is_pid_bound_not_a_plain_bool(self) -> None:
+        """Slice 1.1 Fund: unter ``preload_app = True`` erbt der geforkte
+        Worker den Modul-Zustand des Masters, inklusive eines bereits auf
+        die Master-PID gesetzten Locks. Ein davon abweichendes
+        ``os.getpid()`` (wie im geforkten Worker) muss die Registrierung
+        erneut zulassen, statt sie stillschweigend zu überspringen."""
+        original_sigterm = signal.getsignal(signal.SIGTERM)
+        original_pid = process_shutdown._shutdown_registered_pid
+        registry = _FakeRegistry([])
+
+        try:
+            # Simuliert den geerbten Zustand: "bereits registriert", aber
+            # unter einer PID, die nicht die aktuelle ist.
+            foreign_pid = os.getpid() + 1
+            process_shutdown._shutdown_registered_pid = foreign_pid
+
+            process_shutdown.register_shutdown_handler(get_registry=lambda: registry)
+
+            assert process_shutdown._shutdown_registered_pid == os.getpid()
+            assert process_shutdown._shutdown_registered_pid != foreign_pid
+        finally:
+            signal.signal(signal.SIGTERM, original_sigterm)
+            process_shutdown._shutdown_registered_pid = original_pid

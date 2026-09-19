@@ -251,13 +251,13 @@ class TestRegisterCleanup:
             patch("signal.getsignal", return_value=None),
             patch.dict(os.environ, {"WERKZEUG_RUN_MAIN": "true"}, clear=False),
         ):
-            # Reset module-level flag so registration runs
-            original_flag = process_manager._cleanup_registered
-            process_manager._cleanup_registered = False
+            # Reset module-level (PID-gebundene) Sperre, damit die Registrierung läuft
+            original_pid = process_manager._cleanup_registered_pid
+            process_manager._cleanup_registered_pid = None
             try:
                 process_manager.register_cleanup(cleanup_callable=my_cleanup)
             finally:
-                process_manager._cleanup_registered = original_flag
+                process_manager._cleanup_registered_pid = original_pid
 
         mock_atexit.assert_called_once()
 
@@ -273,12 +273,12 @@ class TestRegisterCleanup:
             patch("atexit.register") as mock_atexit,
             patch.dict(os.environ, env_without_main, clear=True),
         ):
-            original_flag = process_manager._cleanup_registered
-            process_manager._cleanup_registered = False
+            original_pid = process_manager._cleanup_registered_pid
+            process_manager._cleanup_registered_pid = None
             try:
                 process_manager.register_cleanup(cleanup_callable=lambda: None)
             finally:
-                process_manager._cleanup_registered = original_flag
+                process_manager._cleanup_registered_pid = original_pid
 
         mock_atexit.assert_not_called()
 
