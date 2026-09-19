@@ -60,10 +60,37 @@ from pydantic import BaseModel, ConfigDict
 
 from ...jobs.identity import owns_run
 from ...utils.logger import get_logger
-from .process_manager import is_process_alive
 from .run_state_store import RunnerStatus, load_run_state, save_run_state
 
 logger = get_logger("agora.sim.reconciliation")
+
+
+def _is_process_alive(pid: Optional[int]) -> bool:
+    """True wenn ``pid`` einen (noch) existierenden Prozess bezeichnet.
+
+    Liveness-Muster wie ``SimulationIPCClient.check_env_alive``
+    (``simulation_ipc.py``): ``os.kill(pid, 0)`` sendet kein Signal, prüft
+    nur Existenz/Berechtigung.
+
+    ``pid`` fehlend/``None``/``<= 0`` → tot (konservativ: kein PID heißt kein
+    verifizierbarer laufender Prozess). ``ProcessLookupError`` → tot.
+    ``PermissionError`` → Prozess existiert, gehört aber jemand anderem —
+    im Container unwahrscheinlich, wird konservativ als lebend behandelt
+    (Tech-Review 2026-09-07 Slice B1, Fix-Punkt 1/3).
+    """
+    import os
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
 
 #: Registry-Status, die nach einem Neustart nicht mehr vertrauenswürdig
 #: sind — es gibt keinen Prozess mehr, der sie aktiv hält.
@@ -172,7 +199,7 @@ def reconcile_stale_runs(
     registry: _RunRegistryProtocol,
     run_state_dir: str,
     *,
-    is_pid_alive: Callable[[Optional[int]], bool] = is_process_alive,
+    is_pid_alive: Callable[[Optional[int]], bool] = _is_process_alive,
     enabled: bool = True,
 ) -> ReconciliationResult:
     """Markiert verwaiste ``simulation_run``-Runs als ``failed``/``process_restart``.
@@ -182,7 +209,7 @@ def reconcile_stale_runs(
             ``update_run``).
         run_state_dir: Basisverzeichnis für ``run_state.json``
             (``SimulationRunner.RUN_STATE_DIR``).
-        is_pid_alive: Liveness-Prüfung, Default ``process_manager.is_process_alive``
+        is_pid_alive: Liveness-Prüfung, Default ``_is_process_alive``
             (``os.kill(pid, 0)``-Muster). Injizierbar für Tests.
         enabled: Schaltet die Reconciliation komplett ab, wenn ``False``
             (``AGORA_STARTUP_RECONCILIATION=false``) — dann bleibt jeder
