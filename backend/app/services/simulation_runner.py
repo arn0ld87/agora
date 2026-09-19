@@ -571,8 +571,28 @@ class SimulationRunner:
 
     @classmethod
     def register_cleanup(cls) -> None:
-        """Register atexit / signal handlers for cleanup (PR 5, delegates to process_manager)."""
-        _register_cleanup_fn(cleanup_callable=cls.cleanup_all_simulations)
+        """Register atexit / signal handlers for cleanup (PR 5, delegates to process_manager).
+
+        Also registers SIGTERM handler for in-process jobs (Issue #1472a).
+        """
+        def _get_registry():
+            from .run_registry import RunRegistry
+            return RunRegistry()
+
+        def _fail_simulation_state(simulation_id: str, error: str) -> None:
+            """Mark SimulationState as FAILED for simulation_prepare jobs."""
+            from .simulation_manager import SimulationManager, SimulationStatus
+            manager = SimulationManager()
+            state = manager.get_simulation(simulation_id)
+            if state is not None and state.status == SimulationStatus.PREPARING:
+                state.error = error
+                manager._set_status(state, SimulationStatus.FAILED)
+
+        _register_cleanup_fn(
+            cleanup_callable=cls.cleanup_all_simulations,
+            get_registry=_get_registry,
+            fail_simulation_state=_fail_simulation_state,
+        )
 
     @classmethod
     def get_running_simulations(cls) -> List[str]:

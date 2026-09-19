@@ -1,6 +1,6 @@
-"""Tests fuer ``reconcile_stale_jobs`` — Startup-Reconciliation der In-Process-Jobs.
+"""Tests fuer ``reconcile_stale_jobs`` und ``process_shutdown`` — SIGTERM/Worker-Exit-Hook.
 
-Issue #1472. ``reconcile_stale_runs`` deckt ausschliesslich ``simulation_run``
+Issue #1472 / #1472a. ``reconcile_stale_runs`` deckt ausschliesslich ``simulation_run``
 ab, weil nur dieser Run-Typ eine ``process_pid`` in ``run_state.json`` traegt
 und damit eine verifizierbare Liveness hat — der Modulkommentar an
 ``_RUN_TYPE`` benennt das ausdruecklich als bewusste Slice-Grenze.
@@ -11,6 +11,10 @@ Die In-Process-Jobs (``simulation_prepare``, ``report_generate``,
 der Thread nicht mehr, das Manifest bleibt aber auf ``processing`` stehen — fuer
 immer, weil nichts mehr existiert, das es je wieder aendern wuerde. Genau das
 ist der endlos laufende Status aus #1472.
+
+Der SIGTERM-Handler in ``process_shutdown`` markiert diese Jobs sofort als
+``failed``/``process_restart`` beim Empfang von SIGTERM, statt auf die
+Reconciliation beim nächsten Start zu warten.
 """
 
 from __future__ import annotations
@@ -20,7 +24,9 @@ from typing import Any, Dict, List, Optional
 import pytest
 
 from app.jobs.identity import current_worker_identity
+from app.services.sim.cancel_flag import is_cancel_requested
 from app.services.sim.reconciliation import reconcile_stale_jobs
+from app.services.sim.process_shutdown import _mark_in_process_jobs_failed
 
 IN_PROCESS_RUN_TYPES = [
     "simulation_prepare",
@@ -229,3 +235,149 @@ class TestWriteOrderMatchesTheF1Invariant:
 
         assert result.reconciled_run_ids == ["run_a"]
         assert registry.updates[0]["status"] == "failed"
+
+
+class TestProcessShutdownHandler:
+    """Tests für den SIGTERM-Handler in ``process_shutdown`` (Issue #1472a).
+
+    Der Handler markiert alle In-Process-Jobs *dieses* Prozesses als
+    failed/process_restart, setzt das Cancel-Flag und aktualisiert (für
+    simulation_prepare) auch den SimulationState.
+    """
+
+    def test_marks_all_in_process_jobs_as_failed(self) -> None:
+        """Alle vier In-Process-Run-Typen werden markiert."""
+        registry = _FakeRegistry([
+            _run("run_prepare", run_type="simulation_prepare", metadata={"worker_token": "other"}),
+            _run("run_report", run_type="report_generate", metadata={"worker_token": "other"}),
+            _run("run_graph", run_type="graph_build", metadata={"worker_token": "other"}),
+            _run("run_ontology", run_type="ontology_generate", metadata={"worker_token": "other"}),
+        ])
+
+        seen_state: List[tuple] = []
+        result = _mark_in_process_jobs_failed(
+            registry,
+            fail_simulation_state=lambda sid, err: seen_state.append((sid, err)),
+        )
+
+        assert set(result.reconciled_run_ids) == {
+            "run_prepare", "run_report", "run_graph", "run_ontology"
+        }
+        assert result.skipped_run_ids == []
+        assert len(registry.updates) == 4
+        for update in registry.updates:
+            assert update["status"] == "failed"
+            assert update["termination_reason"] == "process_restart"
+            assert update["error"] == "Prozess-Neustart während des Runs"
+
+    def test_sets_cancel_flag_for_each_run(self) -> None:
+        """Cancel-Flag wird für jeden Run gesetzt (kooperativer Abbruch)."""
+        registry = _FakeRegistry([
+            _run("run_a", run_type="simulation_prepare", metadata={"worker_token": "other"}),
+            _run("run_b", run_type="report_generate", metadata={"worker_token": "other"}),
+        ])
+
+        _mark_in_process_jobs_failed(registry, fail_simulation_state=lambda *_: None)
+
+        assert is_cancel_requested("run_a")
+        assert is_cancel_requested("run_b")
+
+    def test_calls_fail_simulation_state_for_prepare_only(self) -> None:
+        """fail_simulation_state wird nur für simulation_prepare aufgerufen."""
+        seen: List[tuple] = []
+        registry = _FakeRegistry([
+            _run("run_prepare", run_type="simulation_prepare", metadata={"worker_token": "other"}),
+            _run("run_report", run_type="report_generate", metadata={"worker_token": "other"}),
+            _run("run_graph", run_type="graph_build", metadata={"worker_token": "other"}),
+        ])
+
+        _mark_in_process_jobs_failed(
+            registry,
+            fail_simulation_state=lambda sid, err: seen.append((sid, err)),
+        )
+
+        assert len(seen) == 1
+        assert seen[0][0] == "sim_0123456789ab"
+        assert seen[0][1] == "Prozess-Neustart während des Runs"
+
+    def test_write_order_state_before_manifest(self) -> None:
+        """F1-Invariante: State-Write vor Manifest-Write (wie reconcile_stale_jobs)."""
+        order: List[str] = []
+
+        class _OrderingRegistry(_FakeRegistry):
+            def update_run(self, run_id: str, **updates: Any):
+                order.append("manifest")
+                return super().update_run(run_id, **updates)
+
+        registry = _OrderingRegistry([
+            _run("run_prepare", run_type="simulation_prepare", metadata={"worker_token": "other"}),
+        ])
+
+        _mark_in_process_jobs_failed(
+            registry,
+            fail_simulation_state=lambda sid, err: order.append("state"),
+        )
+
+        assert order == ["state", "manifest"]
+
+    def test_jobs_of_this_process_are_also_marked(self) -> None:
+        """Jobs, die *diesem* Prozess gehören, werden AUCH markiert (kein Skip).
+
+        Anders als bei der Startup-Reconciliation (wo laufende Jobs nicht
+        angefasst werden), markiert der SIGTERM-Handler ALLE Jobs — auch die
+        des eigenen Prozesses —, weil der Prozess ja gerade stirbt.
+        """
+        my_identity = current_worker_identity()
+        registry = _FakeRegistry([
+            _run("run_a", metadata=my_identity),
+            _run("run_b", run_type="report_generate", metadata=my_identity),
+        ])
+
+        result = _mark_in_process_jobs_failed(registry, fail_simulation_state=lambda *_: None)
+
+        # Beide Runs gehören diesem Prozess, werden aber trotzdem markiert
+        assert set(result.reconciled_run_ids) == {"run_a", "run_b"}
+        assert result.skipped_run_ids == []
+
+    def test_simulation_run_is_not_touched(self) -> None:
+        """simulation_run wird nicht angefasst (gehört zu reconcile_stale_runs)."""
+        registry = _FakeRegistry([
+            _run("run_a", run_type="simulation_run", metadata={"worker_token": "other"}),
+        ])
+
+        result = _mark_in_process_jobs_failed(registry, fail_simulation_state=lambda *_: None)
+
+        assert result.reconciled_run_ids == []
+        assert registry.updates == []
+
+    def test_terminal_runs_are_not_touched(self) -> None:
+        """Bereits terminale Runs (completed/failed/stopped) werden nicht einmal
+        von list_runs zurückgegeben (Filter über _STALE_STATUSES)."""
+        registry = _FakeRegistry([
+            _run("run_a", status="completed", metadata={"worker_token": "other"}),
+            _run("run_b", status="failed", metadata={"worker_token": "other"}),
+            _run("run_c", status="stopped", metadata={"worker_token": "other"}),
+        ])
+
+        result = _mark_in_process_jobs_failed(registry, fail_simulation_state=lambda *_: None)
+
+        # Terminal Runs sind nicht in _STALE_STATUSES → list_runs liefert leer
+        # → weder reconciled noch skipped
+        assert result.reconciled_run_ids == []
+        assert result.skipped_run_ids == []
+        assert registry.updates == []
+
+    def test_registry_error_is_logged_not_raised(self) -> None:
+        """Fehler bei registry.update_run werden geloggt, nicht geworfen."""
+        registry = _FakeRegistry([_run("run_a", metadata={"worker_token": "other"})])
+
+        # Registry update_run zum Fehlschlagen bringen
+        def _fail_update(run_id: str, **updates):
+            raise RuntimeError("DB down")
+        registry.update_run = _fail_update  # type: ignore[method-assign]
+
+        # Sollte nicht werfen
+        result = _mark_in_process_jobs_failed(registry, fail_simulation_state=lambda *_: None)
+
+        assert result.reconciled_run_ids == []
+        assert result.skipped_run_ids == ["run_a"]
