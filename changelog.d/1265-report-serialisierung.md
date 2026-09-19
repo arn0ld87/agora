@@ -1,3 +1,5 @@
+# Slice 1.2 — Report-Generierung serialisiert statt parallel
+
 Eine zweite parallele Report-Generierung für dieselbe Simulation wird
 deterministisch mit HTTP `409 report_generate_in_progress` abgewiesen, statt
 kooperativ gebremst zu werden. Der neue Guard
