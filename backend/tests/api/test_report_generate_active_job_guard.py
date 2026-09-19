@@ -16,7 +16,13 @@ def app():
 
 
 class TestReportGenerateActiveJobGuard:
-    """Tests für den Active-Job-Guard bei Report-Generierung."""
+    """Tests für den Active-Job-Guard bei Report-Generierung.
+
+    Die Durchlass-Faelle mocken ``_wire_and_enqueue_generation``: geprueft wird der
+    Guard vor der Verdrahtung, nicht die Routenaufloesung dahinter. Ohne den Mock
+    laeuft der Test bis ``StageModelRouter.resolve`` und scheitert in Umgebungen
+    ohne konfigurierte AI-Route (``NoAiRouteCandidateError``).
+    """
 
     def test_active_report_generate_rejects_second_start(self, app: Flask) -> None:
         """Ein laufender report_generate-Run blockiert einen zweiten Start mit 409."""
@@ -117,7 +123,8 @@ class TestReportGenerateActiveJobGuard:
                             mock_run.record = {"run_id": "run_report_new"}
                             mock_lifecycle.return_value = mock_run
 
-                            with patch("app.services.report_generation.TaskManager") as mock_task_mgr:
+                            with patch("app.services.report_generation.TaskManager") as mock_task_mgr, \
+                                 patch.object(ReportGenerationService, "_wire_and_enqueue_generation"):
                                 mock_task_mgr.return_value.create_task.return_value = "task_123"
 
                                 # Should not raise, proceeds to enqueue
@@ -168,7 +175,8 @@ class TestReportGenerateActiveJobGuard:
                             mock_run.record = {"run_id": "run_report_new"}
                             mock_lifecycle.return_value = mock_run
 
-                            with patch("app.services.report_generation.TaskManager") as mock_task_mgr:
+                            with patch("app.services.report_generation.TaskManager") as mock_task_mgr, \
+                                 patch.object(ReportGenerationService, "_wire_and_enqueue_generation"):
                                 mock_task_mgr.return_value.create_task.return_value = "task_123"
 
                                 result = ReportGenerationService.start_generation(
@@ -217,7 +225,8 @@ class TestReportGenerateActiveJobGuard:
                             mock_run.record = {"run_id": "run_report_new"}
                             mock_lifecycle.return_value = mock_run
 
-                            with patch("app.services.report_generation.TaskManager") as mock_task_mgr:
+                            with patch("app.services.report_generation.TaskManager") as mock_task_mgr, \
+                                 patch.object(ReportGenerationService, "_wire_and_enqueue_generation"):
                                 mock_task_mgr.return_value.create_task.return_value = "task_123"
 
                                 result = ReportGenerationService.start_generation(
@@ -266,7 +275,8 @@ class TestReportGenerateActiveJobGuard:
                             mock_run.record = {"run_id": "run_report_new"}
                             mock_lifecycle.return_value = mock_run
 
-                            with patch("app.services.report_generation.TaskManager") as mock_task_mgr:
+                            with patch("app.services.report_generation.TaskManager") as mock_task_mgr, \
+                                 patch.object(ReportGenerationService, "_wire_and_enqueue_generation"):
                                 mock_task_mgr.return_value.create_task.return_value = "task_123"
 
                                 result = ReportGenerationService.start_generation(
