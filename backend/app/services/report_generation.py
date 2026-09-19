@@ -133,6 +133,17 @@ class ReportGenerationService:
         if not state:
             raise ValueError(ApiErrorCode.NOT_FOUND)
 
+        # Active-Job-Guard: prevent concurrent report_generate runs for the same simulation
+        # (Issue #1265 / Slice 1.2). Query RunRegistry for pending/processing runs.
+        active_runs = run_registry.list_runs(
+            simulation_id=simulation_id,
+            run_type="report_generate",
+            statuses=["pending", "processing"],
+            limit=1,
+        )
+        if active_runs:
+            raise ValueError(ApiErrorCode.REPORT_GENERATE_IN_PROGRESS)
+
         if cls.can_reuse_existing_report(
             force_regenerate,
             llm_model_override,

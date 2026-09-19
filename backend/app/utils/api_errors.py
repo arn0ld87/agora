@@ -47,6 +47,7 @@ class ApiErrorCode(StrEnum):
     PERSONA_REVIEW_REQUIRED = "persona_review_required"
 
     GRAPH_BUILD_IN_PROGRESS = "graph_build_in_progress"
+    REPORT_GENERATE_IN_PROGRESS = "report_generate_in_progress"
 
     UPLOAD_TOO_LARGE = "upload_too_large"
     UNSUPPORTED_FORMAT = "unsupported_format"
@@ -82,6 +83,7 @@ DEFAULT_MESSAGES: dict[ApiErrorCode, str] = {
     ApiErrorCode.PERSONA_REVIEW_REQUIRED: "Persona-Review erforderlich",
 
     ApiErrorCode.GRAPH_BUILD_IN_PROGRESS: "Graph-Build läuft bereits",
+    ApiErrorCode.REPORT_GENERATE_IN_PROGRESS: "Report-Generierung läuft bereits",
 
     ApiErrorCode.UPLOAD_TOO_LARGE: "Upload zu groß",
     ApiErrorCode.UNSUPPORTED_FORMAT: "Format nicht unterstützt",

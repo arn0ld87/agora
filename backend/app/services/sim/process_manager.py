@@ -62,6 +62,7 @@ from .process_termination import (
     terminate_process as terminate_process,
     terminate_run as terminate_run,
 )
+from .process_shutdown import register_shutdown_handler
 
 
 _tracer = trace.get_tracer(__name__)
@@ -515,7 +516,12 @@ def _start_simulation_impl(
 
 
 
-def register_cleanup(*, cleanup_callable: Callable[[], None]) -> None:
+def register_cleanup(
+    *,
+    cleanup_callable: Callable[[], None],
+    get_registry: Optional[Callable[[], Any]] = None,
+    fail_simulation_state: Optional[Callable[[str, str], None]] = None,
+) -> None:
     """Register atexit and signal handlers to clean up simulation processes.
 
     Called when Flask app starts. The actual cleanup action is injected as
@@ -529,6 +535,12 @@ def register_cleanup(*, cleanup_callable: Callable[[], None]) -> None:
     Args:
         cleanup_callable: Zero-argument callable (typically
                           ``SimulationRunner.cleanup_all_simulations``).
+        get_registry: Optional callable returning the RunRegistry instance.
+                      If provided, also registers SIGTERM handler for
+                      in-process jobs (Issue #1472a).
+        fail_simulation_state: Optional callback for simulation_prepare to
+                               also update SimulationState (passed through
+                               to process_shutdown).
     """
     global _cleanup_registered
 
@@ -576,7 +588,7 @@ def register_cleanup(*, cleanup_callable: Callable[[], None]) -> None:
     # Register atexit handler (as fallback)
     atexit.register(cleanup_callable)
 
-    # Register signal handler (only in main thread)
+    # Register signal handler for simulation subprocesses (only in main thread)
     try:
         signal.signal(signal.SIGTERM, cleanup_handler)
         signal.signal(signal.SIGINT, cleanup_handler)
@@ -586,6 +598,19 @@ def register_cleanup(*, cleanup_callable: Callable[[], None]) -> None:
         logger.warning(
             "Cannot register signal handler (not in main thread), only using atexit"
         )
+
+    # Register separate handler for in-process jobs (Issue #1472a)
+    # This runs in addition to the subprocess cleanup and marks
+    # simulation_prepare, report_generate, graph_build, ontology_generate
+    # as failed/process_restart immediately on SIGTERM.
+    if get_registry is not None:
+        try:
+            register_shutdown_handler(
+                get_registry=get_registry,
+                fail_simulation_state=fail_simulation_state,
+            )
+        except Exception as exc:  # noqa: BLE001 — best effort, nicht blockieren
+            logger.warning("process_manager: register_shutdown_handler failed: %s", exc)
 
     _cleanup_registered = True
 
