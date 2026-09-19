@@ -33,11 +33,13 @@ Neue Regressionstests in `tests/scripts/test_run_parallel_ipc_attribution.py`:
 - (b) Gemischter Beide-Plattformen-Fall: Budget hat Vorrang vor `success_count`
 - (c) Batch-Interview BudgetExceeded → strukturierte Response
 - (d) Batch beide Plattformen: erste Dimension gewinnt
-- (e) Client-Re-Raise-Shape verifiziert
+- (e) Client-Re-Raise über den echten Weg: geschriebenes Response-JSON →
+  `IPCResponse.from_dict` → `_reraise_if_budget_exceeded` → `BudgetExceededError`.
+  Der Test bricht damit auch bei reiner Feldnamen-Drift zwischen Runner und
+  Client-Deserialisierung.
 
 ## Referenzen
 
 - Vorbild: `scripts/sim_runtime/ipc.py:151-170,241-251`
-- ADR-0002 Evidence-Gating: `BudgetExceededError` nie weichspülen
+- Repo-Regel: `BudgetExceededError` wird nie in eine Fallback-Antwort umgewandelt
 - Follow-up zu #1478 (Codex P1, Runde 7)
-- ROADMAP.md P0: „Budget vollständig über alle produktiven Pfade“

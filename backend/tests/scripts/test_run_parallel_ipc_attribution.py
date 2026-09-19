@@ -362,9 +362,14 @@ async def test_handle_batch_interview_both_platforms_budget_exceeded_first_wins(
 async def test_interview_single_platform_budget_exceeded_client_reraises(
     tmp_path: Path,
 ) -> None:
-    """Client-Seite (_reraise_if_budget_exceeded) wirft BudgetExceededError
-    wieder, wenn Response budget_exceeded traegt.
-    Integrationstest ueber den Handler -> send_response -> Response-Shape.
+    """Der Parallelrunner schreibt eine Response, die der Client wieder in
+    ``BudgetExceededError`` uebersetzt.
+
+    Der Test geht den echten Weg statt ihn nachzubilden: Handler ->
+    Response-JSON -> ``IPCResponse.from_dict`` -> ``_reraise_if_budget_exceeded``.
+    Damit bricht er auch dann, wenn nur die Feldnamen im geschriebenen JSON
+    von dem abweichen, was die Client-Deserialisierung erwartet — genau die
+    Luecke, die #1478 offen gelassen hatte.
     """
     guard = FakeBudgetGuard()
     env = BudgetExceededFakeEnv(guard, dimension="time", observed=3600, threshold=1800)
@@ -375,13 +380,19 @@ async def test_interview_single_platform_budget_exceeded_client_reraises(
         "cmd1", 7, "prompt", platform="twitter", report_run_id="run-report-11"
     )
     assert ok is False
+
     import json
+
+    from app.services.run_budget import BudgetExceededError
+    from app.services.sim.interview_client import _reraise_if_budget_exceeded
+    from app.services.simulation_ipc import IPCResponse
+
     response_file = Path(tmp_path) / "ipc_responses" / "cmd1.json"
-    response = json.loads(response_file.read_text(encoding="utf-8"))
-    # Simulate what _reraise_if_budget_exceeded in interview_client.py does
-    budget_info = response.get("budget_exceeded")
-    assert budget_info is not None
-    # This is the shape that triggers re-raise in interview_client
-    assert budget_info["dimension"] == "time"
-    assert budget_info["observed"] == 3600
-    assert budget_info["threshold"] == 1800
+    response = IPCResponse.from_dict(json.loads(response_file.read_text(encoding="utf-8")))
+
+    with pytest.raises(BudgetExceededError) as excinfo:
+        _reraise_if_budget_exceeded(response)
+
+    assert excinfo.value.dimension == "time"
+    assert excinfo.value.observed == 3600
+    assert excinfo.value.threshold == 1800
