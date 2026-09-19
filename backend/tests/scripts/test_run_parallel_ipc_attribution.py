@@ -6,6 +6,8 @@ Vor diesem Fix kannte ``ParallelIPCHandler`` (Default-Pfad Twitter+Reddit)
 Modellaufruf eines Report-Interviews blieb auf diesem Pfad unverbucht, das
 Hard-Budget des Report-Runs war umgehbar. Stilvorlage:
 ``tests/scripts/test_sim_runtime_ipc.py`` (``IPCHandler``-Pendant).
+
+Zusatz: BudgetExceededError-Handling (Slice 3.1, #1478 Codex P1, Runde 7).
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
 import run_parallel_simulation as rps  # type: ignore[import-not-found]  # noqa: E402
+from app.services.run_budget import BudgetExceededError  # noqa: E402  # BudgetExceededError is imported locally in the module; import from source for tests
 
 
 class FakeAgent:
@@ -77,6 +80,19 @@ class RecordingFakeEnv:
     async def step(self, actions: Dict[Any, Any]) -> None:
         self.step_ran_while_attributed.append(self._guard.active_calls > 0)
         self.steps.append(actions)
+
+
+class BudgetExceededFakeEnv(RecordingFakeEnv):
+    """FakeEnv, das bei ``step`` ein ``BudgetExceededError`` wirft."""
+
+    def __init__(self, guard: FakeBudgetGuard, dimension: str = "tokens", observed: int = 1000, threshold: int = 800) -> None:
+        super().__init__(guard)
+        self._budget_error = BudgetExceededError(dimension, observed, threshold)
+
+    async def step(self, actions: Dict[Any, Any]) -> None:
+        self.step_ran_while_attributed.append(self._guard.active_calls > 0)
+        self.steps.append(actions)
+        raise self._budget_error
 
 
 def _make_handler(
@@ -212,3 +228,160 @@ async def test_execute_command_batch_forwards_report_run_id(tmp_path: Path) -> N
         },
     ) is True
     assert guard.attribute_calls == [("run-report-6", "report_interview")]
+
+
+# ---------------------------------------------------------------------------
+# Slice 3.1 — BudgetExceededError handling regression tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_handle_interview_single_platform_budget_exceeded_returns_structured_error(
+    tmp_path: Path,
+) -> None:
+    """BudgetExceededError auf einzelner Plattform -> strukturiertes
+    ``budget_exceeded``-Feld in der Response, ok=False."""
+    guard = FakeBudgetGuard()
+    env = BudgetExceededFakeEnv(guard, dimension="tokens", observed=1000, threshold=800)
+    handler = _make_handler(
+        tmp_path, twitter_env=env, twitter_agent_graph=FakeAgentGraph(), budget_guard=guard
+    )
+    ok = await handler.handle_interview(
+        "cmd1", 7, "prompt", platform="twitter", report_run_id="run-report-7"
+    )
+    assert ok is False
+    # Response file written with budget_exceeded
+    import json
+    response_file = Path(tmp_path) / "ipc_responses" / "cmd1.json"
+    assert response_file.exists()
+    response = json.loads(response_file.read_text(encoding="utf-8"))
+    assert response["status"] == "failed"
+    assert response["budget_exceeded"] is not None
+    assert response["budget_exceeded"]["dimension"] == "tokens"
+    assert response["budget_exceeded"]["observed"] == 1000
+    assert response["budget_exceeded"]["threshold"] == 800
+    # Attribution still ran
+    assert guard.attribute_calls == [("run-report-7", "report_interview")]
+
+
+@pytest.mark.asyncio
+async def test_handle_interview_both_platforms_budget_exceeded_on_one_detected_before_success_count(
+    tmp_path: Path,
+) -> None:
+    """BudgetExceeded auf einer Plattform, andere erfolgreich -> Budget
+    hat Vorrang vor success_count, Response traegt budget_exceeded."""
+    guard = FakeBudgetGuard()
+    twitter_env = BudgetExceededFakeEnv(guard, dimension="tokens", observed=1000, threshold=800)
+    reddit_env = RecordingFakeEnv(guard)
+    handler = _make_handler(
+        tmp_path,
+        twitter_env=twitter_env,
+        twitter_agent_graph=FakeAgentGraph(),
+        reddit_env=reddit_env,
+        reddit_agent_graph=FakeAgentGraph(),
+        budget_guard=guard,
+    )
+    ok = await handler.handle_interview("cmd1", 3, "prompt", report_run_id="run-report-8")
+    assert ok is False
+    import json
+    response_file = Path(tmp_path) / "ipc_responses" / "cmd1.json"
+    response = json.loads(response_file.read_text(encoding="utf-8"))
+    assert response["status"] == "failed"
+    assert response["budget_exceeded"] is not None
+    assert response["budget_exceeded"]["dimension"] == "tokens"
+    # Reddit step still ran (attribution active)
+    assert reddit_env.step_ran_while_attributed == [True]
+    # Twitter step also ran
+    assert twitter_env.step_ran_while_attributed == [True]
+
+
+@pytest.mark.asyncio
+async def test_handle_batch_interview_budget_exceeded_returns_structured_error(
+    tmp_path: Path,
+) -> None:
+    """Batch-Interview: BudgetExceeded auf einer Plattform ->
+    strukturiertes budget_exceeded in Response."""
+    guard = FakeBudgetGuard()
+    env = BudgetExceededFakeEnv(guard, dimension="cost", observed=5000, threshold=3000)
+    handler = _make_handler(
+        tmp_path, twitter_env=env, twitter_agent_graph=FakeAgentGraph(), budget_guard=guard
+    )
+    ok = await handler.handle_batch_interview(
+        "cmd1",
+        [{"agent_id": 1, "prompt": "a"}, {"agent_id": 2, "prompt": "b"}],
+        platform="twitter",
+        report_run_id="run-report-9",
+    )
+    assert ok is False
+    import json
+    response_file = Path(tmp_path) / "ipc_responses" / "cmd1.json"
+    response = json.loads(response_file.read_text(encoding="utf-8"))
+    assert response["status"] == "failed"
+    assert response["budget_exceeded"] is not None
+    assert response["budget_exceeded"]["dimension"] == "cost"
+    assert response["budget_exceeded"]["observed"] == 5000
+    assert response["budget_exceeded"]["threshold"] == 3000
+    assert guard.attribute_calls == [("run-report-9", "report_interview")]
+
+
+@pytest.mark.asyncio
+async def test_handle_batch_interview_both_platforms_budget_exceeded_first_wins(
+    tmp_path: Path,
+) -> None:
+    """Batch beide Plattformen: Twitter BudgetExceeded, Reddit OK ->
+    Twitter-Dimension gewinnt (first budget_exceeded wins)."""
+    guard = FakeBudgetGuard()
+    twitter_env = BudgetExceededFakeEnv(guard, dimension="tokens", observed=1000, threshold=800)
+    reddit_env = RecordingFakeEnv(guard)
+    handler = _make_handler(
+        tmp_path,
+        twitter_env=twitter_env,
+        twitter_agent_graph=FakeAgentGraph(),
+        reddit_env=reddit_env,
+        reddit_agent_graph=FakeAgentGraph(),
+        budget_guard=guard,
+    )
+    ok = await handler.handle_batch_interview(
+        "cmd1",
+        [{"agent_id": 1, "prompt": "a"}],
+        platform=None,  # both platforms
+        report_run_id="run-report-10",
+    )
+    assert ok is False
+    import json
+    response_file = Path(tmp_path) / "ipc_responses" / "cmd1.json"
+    response = json.loads(response_file.read_text(encoding="utf-8"))
+    assert response["status"] == "failed"
+    assert response["budget_exceeded"] is not None
+    assert response["budget_exceeded"]["dimension"] == "tokens"  # Twitter dimension wins
+    # Both platforms still ran (attribution active)
+    assert twitter_env.step_ran_while_attributed == [True]
+    assert reddit_env.step_ran_while_attributed == [True]
+
+
+@pytest.mark.asyncio
+async def test_interview_single_platform_budget_exceeded_client_reraises(
+    tmp_path: Path,
+) -> None:
+    """Client-Seite (_reraise_if_budget_exceeded) wirft BudgetExceededError
+    wieder, wenn Response budget_exceeded traegt.
+    Integrationstest ueber den Handler -> send_response -> Response-Shape.
+    """
+    guard = FakeBudgetGuard()
+    env = BudgetExceededFakeEnv(guard, dimension="time", observed=3600, threshold=1800)
+    handler = _make_handler(
+        tmp_path, twitter_env=env, twitter_agent_graph=FakeAgentGraph(), budget_guard=guard
+    )
+    ok = await handler.handle_interview(
+        "cmd1", 7, "prompt", platform="twitter", report_run_id="run-report-11"
+    )
+    assert ok is False
+    import json
+    response_file = Path(tmp_path) / "ipc_responses" / "cmd1.json"
+    response = json.loads(response_file.read_text(encoding="utf-8"))
+    # Simulate what _reraise_if_budget_exceeded in interview_client.py does
+    budget_info = response.get("budget_exceeded")
+    assert budget_info is not None
+    # This is the shape that triggers re-raise in interview_client
+    assert budget_info["dimension"] == "time"
+    assert budget_info["observed"] == 3600
+    assert budget_info["threshold"] == 1800
