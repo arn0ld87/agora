@@ -104,7 +104,7 @@ Die 0.9.5-Stabilisierung hat mehrere vorher stille Zustandsfehler geschlossen:
 
 ### Bekannte Lifecycle-Grenze
 
-Prepare-, Report- und Graph-Build-Jobs laufen weiterhin als daemonisierte Threads im Webprozess. Ein SIGTERM kann diese Jobs beenden, ohne einen vollständig persistierten `interrupted`-/Resume-Zustand zu erzeugen. Das ist in [#1472](https://github.com/arn0ld87/agora/issues/1472) offen und ein 0.10-Release-Thema. Der Redis-Event-Bus ist **keine persistente Jobqueue**.
+Prepare-, Report- und Graph-Build-Jobs laufen weiterhin als daemonisierte Threads im Webprozess. Ein SIGTERM markiert diese Jobs nun **sofort** als `failed/process_restart` (Slice 1.1, #1472a), statt auf die Startup-Reconciliation beim nächsten Start zu warten. Das Cancel-Flag wird kooperativ gesetzt; für `simulation_prepare` wird auch der `SimulationState` auf `FAILED` gesetzt. Ein vollständig persistierter `interrupted`-/Resume-Zustand wird **nicht** erzeugt — das bleibt in #1472 offen und ein 0.10-Release-Thema. Der Redis-Event-Bus ist **keine persistente Jobqueue**.
 
 ## Graph und Ingestion
 
