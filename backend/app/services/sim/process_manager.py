@@ -191,8 +191,14 @@ def is_process_alive(pid: Optional[int]) -> bool:
 
 
 
-# Flag whether cleanup function is registered
-_cleanup_registered = False
+# Prozessgebunden statt ein reines bool (Slice 1.1 Fund, 2026-09-20):
+# unter ``preload_app = True`` (gunicorn.conf.py) erbt der geforkte Worker
+# den Modul-Zustand des Masters, inklusive eines bereits auf True stehenden
+# Flags — eine erneute Registrierung im Worker (nötig, weil init_signals()
+# den geerbten Handler ohnehin geloescht hat, siehe gunicorn.conf.py) würde
+# damit still übersprungen. Die PID im Vergleich macht die Sperre pro
+# Prozess statt pro Modul-Import gültig.
+_cleanup_registered_pid: Optional[int] = None
 
 # Platform detection
 
@@ -542,9 +548,10 @@ def register_cleanup(
                                also update SimulationState (passed through
                                to process_shutdown).
     """
-    global _cleanup_registered
+    global _cleanup_registered_pid
 
-    if _cleanup_registered:
+    current_pid = os.getpid()
+    if _cleanup_registered_pid == current_pid:
         return
 
     # env-only: werkzeug/subprocess intern, kein settings_layer-Kandidat
@@ -557,7 +564,7 @@ def register_cleanup(
     # In debug mode, only register in reloader child process;
     # always register in non-debug mode.
     if is_debug_mode and not is_reloader_process:
-        _cleanup_registered = True
+        _cleanup_registered_pid = current_pid
         return
 
     # Save original signal handlers
@@ -612,7 +619,7 @@ def register_cleanup(
         except Exception as exc:  # noqa: BLE001 — best effort, nicht blockieren
             logger.warning("process_manager: register_shutdown_handler failed: %s", exc)
 
-    _cleanup_registered = True
+    _cleanup_registered_pid = current_pid
 
 
 

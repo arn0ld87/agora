@@ -25,6 +25,23 @@ run here to actually cover the failure mode it was built for; the
 `create_app()` call stays in place for entrypoints that never go through
 gunicorn (dev server, tests) and the resulting double run on cold boot is
 a harmless no-op (see ``reconciliation.py`` module docstring).
+
+Slice 1.1 finding (2026-09-20, #1472a follow-up): the SIGTERM/Worker-Exit
+hook for in-process jobs (``app.services.sim.process_shutdown``) must NOT
+be registered in ``post_fork`` or in ``create_app()`` — it belongs in
+``post_worker_init``. Reason, verified against gunicorn 26.0.0
+(``workers/base.py`` ``Worker.init_process``): the worker calls
+``self.init_signals()`` *before* ``self.load_wsgi()`` /
+``self.cfg.post_worker_init(self)``, and ``init_signals()``
+(``workers/base.py``) resets every signal to ``signal.SIG_DFL`` before
+installing gunicorn's own ``SIGTERM``/``SIGINT`` handlers
+(``self.handle_exit``). Any handler installed earlier — in the preloading
+master, or in ``post_fork`` right after the fork but still ahead of
+``init_process()`` — is silently wiped by that reset. ``post_worker_init``
+is the first hook gunicorn calls after ``init_signals()`` has run and
+inside the worker process, so it is the only hook where
+``signal.signal(SIGTERM, ...)`` survives to actually catch the shutdown
+signal.
 """
 from __future__ import annotations
 
@@ -90,4 +107,39 @@ def post_fork(server, worker) -> None:  # noqa: ARG001 — gunicorn signature
     except Exception as exc:  # noqa: BLE001 — never crash a worker on hook failure
         logger.warning(
             "post_fork startup reconciliation failed (worker pid=%s): %s", worker.pid, exc
+        )
+
+
+def post_worker_init(worker) -> None:  # noqa: ARG001 — gunicorn signature
+    """Register the SIGTERM/Worker-Exit hook for in-process jobs (#1472a).
+
+    Must run here, not in ``post_fork`` or in ``create_app()`` — see the
+    "Slice 1.1 finding" paragraph in the module docstring for why
+    ``init_signals()`` wipes any handler installed earlier. This is the
+    first hook gunicorn calls after ``init_signals()`` has run, in the
+    worker process, so ``SimulationRunner.register_cleanup()`` — which
+    installs the ``SIGTERM``/``SIGINT``/``SIGHUP`` handlers for both the
+    OASIS-subprocess cleanup and the in-process-job shutdown handler
+    (``app.services.sim.process_shutdown.register_shutdown_handler``) —
+    actually survives to catch the shutdown signal here.
+
+    Re-running the ``create_app()``-time registration is intentional and
+    safe: the idempotency locks in ``process_manager``/``process_shutdown``
+    are PID-bound, so a registration inherited from the preloading master
+    (a different PID) does not block re-registration in this worker.
+    """
+    logger = logging.getLogger("agora.gunicorn")
+    try:
+        from app.services.simulation_runner import SimulationRunner
+
+        SimulationRunner.register_cleanup()
+        logger.info(
+            "post_worker_init: in-process shutdown handlers registered in worker pid=%s",
+            worker.pid,
+        )
+    except Exception as exc:  # noqa: BLE001 — never crash a worker on hook failure
+        logger.warning(
+            "post_worker_init shutdown handler registration failed (worker pid=%s): %s",
+            worker.pid,
+            exc,
         )
