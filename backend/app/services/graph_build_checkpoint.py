@@ -152,6 +152,26 @@ def checkpoint_is_resumable(
     return bool(checkpoint.completed_chunk_indices)
 
 
+def resume_capability_for_checkpoint(
+    checkpoint: Optional[GraphBuildCheckpoint],
+) -> dict[str, Any]:
+    """``resume_capability`` für einen Build-Loop, der seinen eigenen
+    Checkpoint bereits im Speicher hält (keine erneute Disk-Lesung, kein
+    Graph-Identitäts-Check nötig — der Checkpoint gehört per Konstruktion
+    zu diesem Versuch)."""
+    if checkpoint is not None and checkpoint.completed_chunk_indices:
+        return {
+            "available": True,
+            "action": "resume",
+            "label": "Resume graph build",
+        }
+    return {
+        "available": True,
+        "action": "restart",
+        "label": "Restart graph build",
+    }
+
+
 def resume_capability_for_run(run: Mapping[str, Any]) -> dict[str, Any]:
     """Bestimmt ``resume_capability`` für einen terminalisierten ``graph_build``-Run.
 

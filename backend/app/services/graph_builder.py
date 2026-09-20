@@ -387,6 +387,7 @@ class GraphBuilderService:
         document_ids: Optional[List[Optional[str]]] = None,
         chunk_ids: Optional[List[Optional[int]]] = None,
         run_id: Optional[str] = None,
+        checkpoint_callback: Optional[Callable[[int, str], None]] = None,
     ) -> List[str]:
         """Add text chunks to graph in parallel, return uuid list of all episodes.
 
@@ -432,6 +433,18 @@ class GraphBuilderService:
         den bis dahin fertigen Episode-UUIDs statt normal zurückzukehren.
         Bleibt ``run_id`` ``None`` (Default), ändert sich nichts am
         bisherigen Verhalten.
+
+        ``checkpoint_callback`` (Issue #1472b): wird im Hauptthread der
+        ``as_completed``-Schleife für jeden fertig committeten Chunk mit
+        ``(idx, episode_uuid)`` aufgerufen — ``idx`` ist die Position des
+        Chunks in der hier übergebenen ``chunks``-Liste, NICHT irgendeine
+        globale ID. Läuft auch für Chunks, die im Cancel-Zweig nachgesammelt
+        werden, damit ein Resume nach einem Abbruch keinen bereits
+        committeten Chunk verliert. Wirft der Callback (z. B. ein
+        Checkpoint-Schreibfehler), propagiert die Exception unverändert aus
+        ``add_text_batches`` heraus — ein Checkpoint-Fehler darf den Build
+        nicht unbemerkt weiterlaufen lassen. Bleibt ``checkpoint_callback``
+        ``None`` (Default), ändert sich nichts am bisherigen Verhalten.
         """
         total_chunks = len(chunks)
         if total_chunks == 0:
@@ -490,6 +503,12 @@ class GraphBuilderService:
                 idx = futures[future]
                 episode_uuids[idx] = future.result()  # raises on first failed chunk
                 completed += 1
+                if checkpoint_callback:
+                    # Issue #1472b: läuft VOR dem Progress-Callback — ein
+                    # Checkpoint-Schreibfehler propagiert unverändert und
+                    # bricht den Build sichtbar ab, statt den Fortschritt
+                    # zu melden, während der Checkpoint dahinter zurückbleibt.
+                    checkpoint_callback(idx, episode_uuids[idx])
                 if progress_callback:
                     progress_callback(
                         f"Processed {completed}/{total_chunks} chunks...",
@@ -543,13 +562,21 @@ class GraphBuilderService:
                             if other_future.cancelled():
                                 continue
                             try:
-                                episode_uuids[other_idx] = other_future.result()
+                                other_result = other_future.result()
                             except Exception as exc:  # noqa: BLE001 — best effort; Abbruch-Meldung geht vor
                                 logger.warning(
                                     "[graph_build] Chunk %d konnte nach dem Abbruch "
                                     "nicht nachträglich eingesammelt werden: %r",
                                     other_idx + 1, exc,
                                 )
+                                continue
+                            episode_uuids[other_idx] = other_result
+                            if checkpoint_callback:
+                                # Bewusst AUSSERHALB des obigen try/except:
+                                # ein Checkpoint-Schreibfehler ist kein
+                                # bestenfalls zu ignorierender Chunk-Fehler
+                                # und muss propagieren (Issue #1472b).
+                                checkpoint_callback(other_idx, other_result)
 
                         raise GraphBuildCancelled(
                             [uuid for uuid in episode_uuids if uuid is not None]
