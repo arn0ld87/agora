@@ -10,6 +10,7 @@ configured")` greift — statt eines stillen Fremd-Provider/.env-Key-Mismatch
 """
 from __future__ import annotations
 
+from contextlib import AbstractContextManager, nullcontext
 from unittest.mock import patch
 
 import pytest
@@ -26,10 +27,18 @@ ENV_KEY = "env-key-fixture"
 GENERATOR_CLASSES = (SimulationConfigGenerator, OasisProfileGenerator)
 
 
-def _patch_openai_target(generator_cls: type) -> str:
+def _patched_openai(generator_cls: type) -> AbstractContextManager[object]:
+    """Haelt den rohen ``OpenAI``-Client aus dem Konstruktor heraus.
+
+    ``SimulationConfigGenerator`` baut ihn weiterhin ueber ``app.llm.client``.
+    ``OasisProfileGenerator`` hat keinen mehr: er wurde dort nie gelesen und
+    haette fuer einen CLI-Provider ohne Base-URL auf den OpenAI-Default
+    gezeigt. Fuer ihn gibt es entsprechend nichts wegzupatchen — die
+    Key-Routing-Invariante aus #778 pruefen die Assertions unveraendert.
+    """
     if generator_cls is SimulationConfigGenerator:
-        return "app.llm.client.OpenAI"
-    return "app.services.oasis_profile_generator.OpenAI"
+        return patch("app.llm.client.OpenAI")
+    return nullcontext()
 
 
 @pytest.mark.parametrize("generator_cls", GENERATOR_CLASSES)
@@ -40,7 +49,7 @@ def test_store_key_and_foreign_base_url_take_precedence(
     monkeypatch.setattr(Config, "LLM_API_KEY", ENV_KEY)
     monkeypatch.setattr(Config, "LLM_BASE_URL", "http://localhost:11434/v1")
 
-    with patch(_patch_openai_target(generator_cls)):
+    with _patched_openai(generator_cls):
         gen = generator_cls(api_key=STORE_KEY, base_url=FOREIGN_BASE_URL)
 
     assert gen.api_key == STORE_KEY
@@ -56,7 +65,7 @@ def test_no_key_with_foreign_base_url_raises(
     monkeypatch.setattr(Config, "LLM_API_KEY", ENV_KEY)
     monkeypatch.setattr(Config, "LLM_BASE_URL", "http://localhost:11434/v1")
 
-    with patch(_patch_openai_target(generator_cls)):
+    with _patched_openai(generator_cls):
         with pytest.raises(ValueError, match="LLM_API_KEY not configured"):
             generator_cls(api_key=None, base_url=FOREIGN_BASE_URL)
 
@@ -69,7 +78,7 @@ def test_no_key_no_base_url_uses_env_pair(
     monkeypatch.setattr(Config, "LLM_API_KEY", ENV_KEY)
     monkeypatch.setattr(Config, "LLM_BASE_URL", "http://localhost:11434/v1")
 
-    with patch(_patch_openai_target(generator_cls)):
+    with _patched_openai(generator_cls):
         gen = generator_cls(api_key=None, base_url=None)
 
     assert gen.api_key == ENV_KEY
@@ -84,7 +93,7 @@ def test_no_key_explicit_env_base_url_uses_env_key(
     monkeypatch.setattr(Config, "LLM_API_KEY", ENV_KEY)
     monkeypatch.setattr(Config, "LLM_BASE_URL", "http://localhost:11434/v1")
 
-    with patch(_patch_openai_target(generator_cls)):
+    with _patched_openai(generator_cls):
         gen = generator_cls(api_key=None, base_url=Config.LLM_BASE_URL)
 
     assert gen.api_key == ENV_KEY

@@ -186,8 +186,7 @@ def test_generate_profiles_rebalances_demographics_when_llm_returns_single_mode(
         def chat_json(self, **kwargs):
             return dict(payload)
 
-    with patch("app.services.oasis_profile_generator.OpenAI"), \
-            patch("app.llm.client.LLMClient", _LLMStub):
+    with patch("app.llm.client.LLMClient", _LLMStub):
         gen = OasisProfileGenerator(api_key="test-key", base_url="https://example.test/v1")
         gen.graph_id = None
         gen._print_generated_profile = lambda *args, **kwargs: None

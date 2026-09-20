@@ -24,9 +24,7 @@ from app.services.oasis_profile_generator import (
 # ---------------------------------------------------------------------------
 
 def _make_generator() -> OasisProfileGenerator:
-    with patch("app.services.oasis_profile_generator.OpenAI"):
-        gen = OasisProfileGenerator(api_key="fake-key")
-    return gen
+    return OasisProfileGenerator(api_key="fake-key")
 
 
 # ---------------------------------------------------------------------------
