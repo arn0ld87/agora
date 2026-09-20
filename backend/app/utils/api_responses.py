@@ -52,6 +52,7 @@ _TIMEOUT_ERROR_MESSAGE = "request timed out"
 _API_ERROR_STATUS_MAP: dict[ApiErrorCode, int] = {
     ApiErrorCode.NOT_FOUND: 404,
     ApiErrorCode.GRAPH_BUILD_IN_PROGRESS: 409,
+    ApiErrorCode.REPORT_GENERATE_IN_PROGRESS: 409,
 }
 
 

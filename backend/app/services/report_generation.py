@@ -126,12 +126,31 @@ class ReportGenerationService:
         """Reuse only when the caller did not request concrete LLM runtime settings."""
         return not force_regenerate and not llm_model_override and not runtime_provider_override
 
+    @staticmethod
+    def _reject_if_report_generate_active(simulation_id: str) -> None:
+        """Serialisiert Report-Generierungen je Simulation (Issue #1265 / Slice 1.2).
+
+        Die RunRegistry ist die SSoT fuer laufende Jobs — ein In-Memory-Set waere
+        nach einem Worker-Neustart blind. Ein zweiter Start wird abgewiesen, nicht
+        kooperativ gebremst.
+        """
+        active_runs = run_registry.list_runs(
+            simulation_id=simulation_id,
+            run_type="report_generate",
+            statuses=["pending", "processing"],
+            limit=1,
+        )
+        if active_runs:
+            raise ValueError(ApiErrorCode.REPORT_GENERATE_IN_PROGRESS)
+
     @classmethod
     def start_generation(cls, simulation_id, report_mode, force_regenerate, llm_model_override, llm_runtime, llm_profile_id=None, ai_model_ref=None, budget=None):
         manager = SimulationManager()
         state = manager.get_simulation(simulation_id)
         if not state:
             raise ValueError(ApiErrorCode.NOT_FOUND)
+
+        cls._reject_if_report_generate_active(simulation_id)
 
         if cls.can_reuse_existing_report(
             force_regenerate,

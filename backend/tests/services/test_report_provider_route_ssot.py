@@ -174,6 +174,13 @@ def report_env(monkeypatch, tmp_path):
 
     run_registry = MagicMock()
     run_registry.create_run.return_value = {"run_id": RUN_ID}
+    # Ohne expliziten Rueckgabewert liefert der MagicMock hier ein truthy
+    # MagicMock, und der Active-Job-Guard aus Slice 1.2 (#1265) liest das als
+    # "es laeuft bereits eine Report-Generierung" und wirft
+    # REPORT_GENERATE_IN_PROGRESS, bevor dieser Test ueberhaupt bei der
+    # Routen-Aufloesung ankommt. Diese Fixture beschreibt einen Lauf ohne
+    # konkurrierenden Job.
+    run_registry.list_runs.return_value = []
     monkeypatch.setattr(rg, "run_registry", run_registry)
 
     captured: dict[str, object] = {}
