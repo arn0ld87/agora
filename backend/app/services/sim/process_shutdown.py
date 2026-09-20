@@ -32,7 +32,15 @@ from .reconciliation import (
 
 logger = get_logger("agora.process_shutdown")
 
-_shutdown_registered = False
+# Prozessgebunden statt ein reines bool (Slice 1.1 Fund, 2026-09-20): unter
+# ``preload_app = True`` (gunicorn.conf.py) erbt der geforkte Worker den
+# Modul-Zustand des Masters, inklusive eines bereits auf True stehenden
+# Flags — eine erneute Registrierung im Worker (nötig, weil init_signals()
+# den geerbten Handler ohnehin geloescht hat, siehe gunicorn.conf.py) würde
+# damit still übersprungen. Die PID im Vergleich macht die Sperre pro
+# Prozess statt pro Modul-Import gültig: ein anderer ``os.getpid()`` als
+# beim letzten Erfolg gilt als "noch nicht registriert".
+_shutdown_registered_pid: Optional[int] = None
 _shutdown_lock = threading.Lock()
 
 
@@ -42,31 +50,6 @@ class _RunRegistryProtocol(Protocol):
     def list_runs(self, *, statuses: List[str], run_type: str, limit: int) -> List[Dict[str, Any]]: ...
 
     def update_run(self, run_id: str, **updates: Any) -> Optional[Dict[str, Any]]: ...
-
-
-def _is_process_alive(pid: Optional[int]) -> bool:
-    """True wenn ``pid`` einen (noch) existierenden Prozess bezeichnet.
-
-    Liveness-Muster wie ``SimulationIPCClient.check_env_alive``
-    (``simulation_ipc.py``): ``os.kill(pid, 0)`` sendet kein Signal, prüft
-    nur Existenz/Berechtigung.
-
-    ``pid`` fehlend/``None``/``<= 0`` → tot (konservativ: kein PID heißt kein
-    verifizierbarer laufender Prozess). ``ProcessLookupError`` → tot.
-    ``PermissionError`` → Prozess existiert, gehört aber jemand anderem —
-    im Container unwahrscheinlich, wird konservativ als lebend behandelt.
-    """
-    if not isinstance(pid, int) or pid <= 0:
-        return False
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    except OSError:
-        return False
-    return True
 
 
 def _mark_in_process_jobs_failed(
@@ -87,16 +70,14 @@ def _mark_in_process_jobs_failed(
     reconciled: List[str] = []
     skipped: List[str] = []
 
-    current_pid = os.getpid()
-    current_token = None
-    # Worker-Token für diesen Prozess holen (lazy, damit Import-Zyklen vermieden werden)
-    try:
-        from ...jobs.identity import worker_token
-
-        current_token = worker_token()
-    except Exception as exc:  # noqa: BLE001 — best effort
-        logger.warning("process_shutdown: worker_token nicht verfügbar: %s", exc)
-
+    # Anders als ``reconcile_stale_jobs`` (reconciliation.py, filtert per
+    # ``owns()``) wird hier bewusst NICHT nach Ownership gefiltert: die
+    # ``workers = 1``-HARDSTOP-Invariante in ``gunicorn.conf.py`` garantiert,
+    # dass in Produktion genau ein Prozess In-Process-Jobs besitzen kann.
+    # Der SIGTERM, der diesen Handler auslöst, trifft also entweder den
+    # Prozess, der die Jobs selbst hält (der gerade stirbt), oder es gibt
+    # keinen zweiten Prozess, dessen fremde Jobs verschont werden müssten.
+    # Eine Ownership-Prüfung wäre hier reine Attrappe.
     for run_type in _IN_PROCESS_RUN_TYPES:
         for run in registry.list_runs(
             statuses=_STALE_STATUSES, run_type=run_type, limit=100_000
@@ -105,31 +86,12 @@ def _mark_in_process_jobs_failed(
             if not run_id:
                 continue
 
-            metadata = run.get("metadata") or {}
-            run_token = metadata.get("worker_token")
-            run_pid = metadata.get("worker_pid")
-
-            # Prüfen, ob der Job *diesem* Prozess gehört
-            owns_job = (
-                run_token == current_token and run_pid == current_pid
-            ) if current_token else False
-
-            if owns_job:
-                logger.info(
-                    "process_shutdown: run=%s (%s) gehört zu diesem Prozess — markiere failed/%s",
-                    run_id,
-                    run_type,
-                    _TERMINATION_REASON,
-                )
-            else:
-                logger.info(
-                    "process_shutdown: run=%s (%s) gehört NICHT zu diesem Prozess (pid=%s token=%s) — markiere failed/%s",
-                    run_id,
-                    run_type,
-                    run_pid,
-                    run_token[:8] if run_token else None,
-                    _TERMINATION_REASON,
-                )
+            logger.info(
+                "process_shutdown: run=%s (%s) — markiere failed/%s",
+                run_id,
+                run_type,
+                _TERMINATION_REASON,
+            )
 
             # Cancel-Flag setzen für kooperativen Abbruch (Issue #1082)
             request_cancel(run_id)
@@ -182,10 +144,11 @@ def register_shutdown_handler(
         fail_simulation_state: Optional, wird an _mark_in_process_jobs_failed
             durchgereicht (für simulation_prepare).
     """
-    global _shutdown_registered
+    global _shutdown_registered_pid
 
     with _shutdown_lock:
-        if _shutdown_registered:
+        current_pid = os.getpid()
+        if _shutdown_registered_pid == current_pid:
             return
 
         # In Flask debug mode (Werkzeug reloader): nur im Child-Prozess registrieren
@@ -196,7 +159,7 @@ def register_shutdown_handler(
         )
 
         if is_debug_mode and not is_reloader_process:
-            _shutdown_registered = True
+            _shutdown_registered_pid = current_pid
             return
 
         def _shutdown_handler(signum: int, frame: Any) -> None:
@@ -235,13 +198,13 @@ def register_shutdown_handler(
         try:
             signal.signal(signal.SIGTERM, _combined_handler)
             signal.signal(signal.SIGINT, _combined_handler)
-            _shutdown_registered = True
+            _shutdown_registered_pid = current_pid
             logger.info("process_shutdown: SIGTERM/SIGINT handler registered for in-process jobs")
         except ValueError:
             logger.warning(
                 "process_shutdown: Cannot register signal handler (not in main thread)"
             )
-            _shutdown_registered = True
+            _shutdown_registered_pid = current_pid
 
 
 __all__ = [
