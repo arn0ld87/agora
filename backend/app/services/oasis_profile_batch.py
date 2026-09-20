@@ -18,6 +18,40 @@ from .oasis_profile_models import OasisAgentProfile, PersonaDemographicSlot, Per
 from .run_budget import BudgetExceededError
 from .settings_layer import get_default_service as _get_settings
 
+
+def _resolve_demographic_slots (
+generator :Any ,
+entities :List [EntityNode ],
+demographic_slots :Optional [List [PersonaDemographicSlot ]],
+total :int ,
+)->List [PersonaDemographicSlot ]:
+    """Liefert den zu verwendenden Slot-Plan (Codex-Finding P1, PR #1539).
+
+    Ein vom Aufrufer fixierter Plan (Resume, oder frisch gewuerfelt UND im
+    Checkpoint persistiert — siehe
+    ``prepare_service._build_profile_checkpoint_hooks``) wird UNVERAENDERT
+    uebernommen statt neu gewuerfelt zu werden. Sonst verzerrt ein
+    teilweise fortgesetzter Lauf die vorgegebene demografische
+    Gesamtverteilung: die uebernommenen Profile tragen ihre Slots aus dem
+    ersten Versuch, die neu erzeugten welche aus einer zweiten Mischung.
+
+    Fehlt der Plan (Aufrufer ausserhalb von ``prepare_service``, Tests),
+    bleibt das Verhalten unveraendert: frisch wuerfeln.
+
+    Ausgelagert statt inline, weil ``generate_profiles_from_entities`` mit
+    cc=40 am Allowlist-Limit steht — die Vorbedingungspruefung haette es
+    gerissen.
+    """
+    if demographic_slots is None :
+        return generator ._build_demographic_slots (entities )
+    if len (demographic_slots )!=total :
+        raise ValueError (
+        f"demographic_slots length ({len (demographic_slots )}) does not match "
+        f"entities length ({total })"
+        )
+    return demographic_slots
+
+
 def generate_profiles_from_entities (
 self: Any ,
 entities :List [EntityNode ],
@@ -71,21 +105,9 @@ demographic_slots :Optional [List [PersonaDemographicSlot ]]=None ,
     profiles =[None ]*total # Pre-allocate list to maintain order
     completed_count =[0 ]# Use list for modification in closure
     lock =Lock ()
-    # Codex-Finding P1 (PR #1539, Issue #1472c): ein vom Aufrufer fixierter
-    # Slot-Plan (Resume oder frisch gewuerfelt UND im Checkpoint persistiert,
-    # siehe ``prepare_service._build_profile_checkpoint_hooks``) wird
-    # UNVERAENDERT uebernommen statt neu gewuerfelt zu werden — sonst
-    # verzerrt ein teilweise fortgesetzter Lauf die vorgegebene
-    # demografische Gesamtverteilung. Fehlt er (z. B. Aufrufer ausserhalb
-    # von ``prepare_service``, Tests), bleibt das Verhalten unveraendert:
-    # frisch wuerfeln.
-    if demographic_slots is None :
-        demographic_slots =self ._build_demographic_slots (entities )
-    elif len (demographic_slots )!=total :
-        raise ValueError (
-        f"demographic_slots length ({len (demographic_slots )}) does not match "
-        f"entities length ({total })"
-        )
+    demographic_slots =_resolve_demographic_slots (
+    self ,entities ,demographic_slots ,total
+    )
     # Issue #1247: abgelehnte Kandidaten, gesammelt fuer die Nachbesetzung.
     rejected :List [PersonaIneligible ]=[]
 
