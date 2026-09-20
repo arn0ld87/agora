@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Optional
 
 import pytest
 
-from app.jobs.identity import current_worker_identity
+from app.jobs.identity import current_worker_identity, remember_unstamped_run
 from app.services.sim import process_shutdown
 from app.services.sim.cancel_flag import is_cancel_requested
 from app.services.sim.reconciliation import reconcile_stale_jobs
@@ -367,6 +367,25 @@ class TestProcessShutdownHandler:
         assert result.reconciled_run_ids == []
         assert set(result.skipped_run_ids) == {"run_fremd", "run_ohne_token"}
         assert registry.updates == []
+
+    def test_own_job_with_a_failed_identity_stamp_is_still_marked(self) -> None:
+        """Ein eigener Job ohne Token wird markiert (Codex-P2, PR #1532).
+
+        ``enqueue`` stempelt die Prozess-Identitaet best effort und startet den
+        Job auch dann, wenn der Registry-Write scheitert. Dessen Manifest
+        traegt kein Token — ohne ``remember_unstamped_run`` saehe der eigene
+        laufende Job beim Worker-Exit fremd aus und bliebe auf ``processing``.
+        """
+        registry = _FakeRegistry([
+            _run("run_ungestempelt", metadata={}),
+            _run("run_wirklich_fremd", run_type="report_generate", metadata={}),
+        ])
+        remember_unstamped_run("run_ungestempelt")
+
+        result = _mark_in_process_jobs_failed(registry, fail_simulation_state=lambda *_: None)
+
+        assert result.reconciled_run_ids == ["run_ungestempelt"]
+        assert result.skipped_run_ids == ["run_wirklich_fremd"]
 
     def test_simulation_run_is_not_touched(self) -> None:
         """simulation_run wird nicht angefasst (gehört zu reconcile_stale_runs)."""

@@ -62,7 +62,7 @@ import signal
 import threading
 from typing import Any, Callable, Dict, List, Optional, Protocol
 
-from ...jobs.identity import owns_run
+from ...jobs.identity import is_unstamped_local_run, owns_run
 from ...utils.logger import get_logger
 from .cancel_flag import request_cancel
 from .reconciliation import (
@@ -135,9 +135,13 @@ def _mark_in_process_jobs_failed(
     # wuerde also von einem fremden Prozess fuer tot erklaert. ``workers = 1``
     # begrenzt die Worker pro Master, nicht die Zahl der Master.
     #
-    # ``owns_run`` ist dafuer belastbar: das Manifest eines laufenden Jobs
-    # traegt immer ein Token, weil ``enqueue`` es vor dem Threadstart setzt
-    # (``app/jobs/identity.py``).
+    # ``owns_run`` allein reicht dafuer nicht: ``enqueue`` stempelt die
+    # Identitaet best effort und startet den Job auch dann, wenn der
+    # Registry-Write scheitert (``app/jobs/__init__.py``). Ein solcher Job
+    # traegt kein Token und saehe hier fremd aus — obwohl dieser Prozess ihn
+    # gerade ausfuehrt. ``is_unstamped_local_run`` traegt genau diesen Fall
+    # nach; ohne ihn bliebe der eigene Job beim Exit auf ``processing`` stehen
+    # und wartete auf die naechste Startup-Reconciliation (Codex-P2, PR #1532).
     for run_type in _IN_PROCESS_RUN_TYPES:
         for run in registry.list_runs(
             statuses=_STALE_STATUSES, run_type=run_type, limit=100_000
@@ -146,7 +150,7 @@ def _mark_in_process_jobs_failed(
             if not run_id:
                 continue
 
-            if not owns_run(run.get("metadata") or {}):
+            if not owns_run(run.get("metadata") or {}) and not is_unstamped_local_run(run_id):
                 logger.info(
                     "process_shutdown: run=%s (%s) gehoert einem anderen Prozess — uebersprungen",
                     run_id,

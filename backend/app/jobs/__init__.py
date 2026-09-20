@@ -20,7 +20,7 @@ import uuid
 from typing import Any, Callable
 
 from ..utils.logger import get_logger
-from .identity import current_worker_identity
+from .identity import current_worker_identity, remember_unstamped_run
 
 logger = get_logger("agora.jobs")
 
@@ -89,6 +89,11 @@ def enqueue(
 
             RunRegistry().update_run(run_id, metadata=current_worker_identity())
         except Exception as exc:  # noqa: BLE001 — Job-Start hat Vorrang
+            # Prozesslokal merken: das Manifest traegt kein Token, dieser
+            # Prozess weiss aber, dass der Job ihm gehoert. Ohne das behandelte
+            # der Worker-Exit-Hook den eigenen laufenden Job als fremd und
+            # liesse ihn auf processing stehen (Codex-P2, PR #1532).
+            remember_unstamped_run(run_id)
             logger.warning(
                 "Prozess-Identitaet fuer run_id=%s nicht gestempelt (%s) — ein "
                 "Abbruch dieses Jobs waere nach einem Neustart nicht als "

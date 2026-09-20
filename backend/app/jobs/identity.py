@@ -37,11 +37,16 @@ from __future__ import annotations
 
 import os
 import uuid
-from typing import Any, Dict
+from typing import Any, Dict, Set
 
 #: PID -> Token. Siehe Modul-Docstring: die Schluesselung nach PID ist der
 #: Fork-Schutz, kein Performance-Detail.
 _TOKENS: Dict[int, str] = {}
+
+#: PID -> run_ids, deren Identitaets-Stempel fehlgeschlagen ist. Nach PID
+#: geschluesselt aus demselben Fork-Grund wie ``_TOKENS``. Siehe
+#: ``remember_unstamped_run``.
+_UNSTAMPED: Dict[int, Set[str]] = {}
 
 #: Metadata-Schluessel im RunRegistry-Manifest.
 WORKER_PID_KEY = "worker_pid"
@@ -69,18 +74,42 @@ def owns_run(metadata: Dict[str, Any] | None) -> bool:
     ``False`` fuer ein Manifest ohne Token: entweder stammt es aus der Zeit vor
     diesem Mechanismus, oder der stempelnde Prozess ist weg. Beides heisst nach
     einem Neustart dasselbe — niemand fuehrt diesen Job noch aus. Ein Manifest
-    eines *laufenden* Prozesses traegt immer ein Token, weil ``enqueue`` es
-    setzt, bevor der Thread startet.
+    eines *laufenden* Prozesses traegt in aller Regel ein Token, weil ``enqueue``
+    es setzt, bevor der Thread startet; die Ausnahme traegt
+    ``remember_unstamped_run`` nach.
     """
     if not metadata:
         return False
     return metadata.get(WORKER_TOKEN_KEY) == worker_token()
 
 
+def remember_unstamped_run(run_id: str) -> None:
+    """Merkt einen Job, dessen Identitaets-Stempel nicht persistiert werden konnte.
+
+    ``enqueue`` stempelt best effort: schlaegt der Registry-Write fehl, startet
+    der Job trotzdem (``app/jobs/__init__.py``), und sein Manifest traegt kein
+    Token. Fuer die Startup-Reconciliation ist das richtig so — nach einem
+    Neustart ist ein tokenloses Manifest tatsaechlich verwaist. Der laufende
+    Prozess weiss aber, dass der Job ihm gehoert, und darf ihn beim eigenen
+    Exit nicht als fremd behandeln.
+
+    Gefuehrt wird nur der Fehlerfall, nicht jeder Job: im Normalbetrieb bleibt
+    die Menge leer, und sie kann nicht mit der Laufzeit volllaufen.
+    """
+    _UNSTAMPED.setdefault(os.getpid(), set()).add(run_id)
+
+
+def is_unstamped_local_run(run_id: str) -> bool:
+    """True, wenn ``run_id`` in *diesem* Prozess ungestempelt gestartet wurde."""
+    return run_id in _UNSTAMPED.get(os.getpid(), frozenset())
+
+
 __all__ = [
     "WORKER_PID_KEY",
     "WORKER_TOKEN_KEY",
     "current_worker_identity",
+    "is_unstamped_local_run",
     "owns_run",
+    "remember_unstamped_run",
     "worker_token",
 ]
