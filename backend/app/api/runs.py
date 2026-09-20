@@ -1391,7 +1391,7 @@ def resume_run(run_id: str):
 
     run_type = run.get("run_type")
     if run_type == "graph_build":
-        data = _restart_graph_build(run)
+        data = _resume_or_restart_graph_build(run)
     elif run_type == "simulation_prepare":
         data = _restart_simulation_prepare(run)
     elif run_type == "simulation_run":
