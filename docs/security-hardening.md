@@ -1,7 +1,7 @@
 # Security Hardening — Changelog und Migrations-Hinweise
 
 **Stand:** 20.09.2026, Europe/Berlin
-**Geprüfte Main-Baseline:** `4296b7de`
+**Geprüfte Main-Baseline:** `b62aea62`
 **Gegen den Code geprüft:** 2026-09-20 — Dateipfade, Kommandos, Skript- und Dokumentverweise. Die fachlichen Aussagen dieses Dokuments sind dabei **nicht** einzeln nachvollzogen worden.
 **Ausgelöst durch:** Veröffentlichung des Repos auf GitHub (`github.com/arn0ld87/agora`). Parallel-Audit durch Claude (general-purpose) und Codex (rescue). Ergebnisberichte sind im Review-Transcript dokumentiert; dieses Dokument listet die daraus umgesetzten Fixes und die nötigen Env-Änderungen für bestehende Deployments.
 

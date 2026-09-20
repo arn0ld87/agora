@@ -1,7 +1,7 @@
 # HTTP-API — Agora Backend
 
 **Stand:** 20.09.2026  
-**Geprüfte Main-Baseline:** `4296b7de`  
+**Geprüfte Main-Baseline:** `b62aea62`  
 **Backend:** `0.9.6`
 
 Diese Datei ist eine **Domänenübersicht**, keine handgepflegte vollständige Routenliste. Quelle der Wahrheit für konkrete Routen ist [`../backend/app/api/`](../backend/app/api/) mit der Blueprint-Registrierung in [`../backend/app/__init__.py`](../backend/app/__init__.py). Response-Verträge und Fehlerkonventionen: [`api-contracts.md`](api-contracts.md).

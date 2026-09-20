@@ -1,7 +1,7 @@
 # Auth-Dokumentation
 
 **Stand:** 20.09.2026  
-**Geprüfte Main-Baseline:** `4296b7de`  
+**Geprüfte Main-Baseline:** `b62aea62`  
 **Scope:** Master-Token, Workspace-API-Keys, Scopes, Ticket-Flow und Browser-Auth.
 
 Code-Referenzen:

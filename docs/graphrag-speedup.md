@@ -1,7 +1,7 @@
 # Graph-/Ingestion-Performance
 
 **Stand:** 20.09.2026  
-**Geprüfte Main-Baseline:** `4296b7de`  
+**Geprüfte Main-Baseline:** `b62aea62`  
 **Scope:** Laufzeit der Graph-Build-/NER-/RE-Phase diagnostizieren und kontrolliert tunen.
 
 Diese Datei ist **keine Patch-Anleitung mehr**. Die früher hier beschriebenen Codeänderungen (Chunking, Parallelisierung, Provider-Hacks) sind längst in die Produktarchitektur eingeflossen oder überholt. Produktcode per Copy/Paste aus einer Doku zu überschreiben war ohnehin eine bemerkenswert kreative Form von Paketmanagement.

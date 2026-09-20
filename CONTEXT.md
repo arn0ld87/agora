@@ -2,7 +2,7 @@
 
 Orientierung für Agenten und Maintainer, die mit Agora-Code, Laufartefakten oder Reports arbeiten.
 
-> **Verifiziert gegen:** `main@0c47737f` am 08.09.2026, Produktversion `0.9.6`.  
+> **Stand:** 20.09.2026. **Verifiziert gegen:** `main@b62aea62`, Produktversion `0.9.6`.  
 > Für den verifizierten Projekt-Iststand ist [`docs/STATUS.md`](docs/STATUS.md) führend. Diese Datei erklärt Begriffe, Datenflüsse und die wichtigsten Invarianten.
 
 ---
@@ -117,7 +117,7 @@ Aktuelle Lifecycle-Härtungen:
 - Startup-Reconciliation prüft stale `pending`/`processing`/`paused` Runs gegen den persistierten Prozesszustand (#1476).
 - `post_fork` führt die Reconciliation auch nach einem Gunicorn-Worker-Replacement aus (#1476).
 
-Bekannte Grenze: Prepare-, Report- und Graph-Build-Jobs laufen noch in daemonisierten Threads des Webprozesses. Vollständige Crash-/Restart-Recovery ist dafür offen (#1472).
+Bekannte Grenze: Prepare-, Report- und Graph-Build-Jobs laufen noch in daemonisierten Threads des Webprozesses. Bei einem regulären Shutdown (SIGTERM, nicht SIGKILL) markiert ein `atexit`-Hook (`app/services/sim/process_shutdown.py`, registriert in `post_worker_init`) die zu diesem Worker-Prozess gehörenden In-Process-Jobs (`simulation_prepare`, `report_generate`, `graph_build`, `ontology_generate`) noch im selben Lauf ehrlich als `failed/process_restart` — anhand von Worker-Token und PID, damit nur eigene Jobs markiert werden, nicht die anderer Worker. Das läuft bewusst außerhalb des Signalkontexts (der SIGTERM-Handler setzt nur ein Flag), weil `gevent.signal.signal()` den echten CPython-Signalkontext liefert, in dem ein `threading.Lock` nach `patch_all()` als kooperatives Semaphore blockieren könnte. Ein `SIGKILL` nach Ablauf des `graceful_timeout` überspringt den Hook; dafür bleibt die Startup-Reconciliation (#1476) der Mechanismus. Ein persistierter, automatisch fortsetzbarer Zwischenstand entsteht in keinem der beiden Pfade — vollständige Crash-/Restart-Recovery bleibt an einer Job-Queue mit eigenen Workern (#1472).
 
 ### Phase 4 — Report
 
@@ -200,6 +200,12 @@ Report-Persistenz folgt seit #1475 einer Commit-Marker-Invariante:
 
 Wo möglich werden Datei-/Verzeichnis-Writes atomar und mit `fsync` behandelt; echte Storage-/Permissionfehler dürfen nicht still als „nicht unterstützt“ geschluckt werden.
 
+### PostgreSQL-Schicht (parallel, nicht Default)
+
+Neben den Datei-/JSON-/SQLite-Stores existiert eine SQLAlchemy-/Alembic-gestützte PostgreSQL-Schicht: ein self-hosted Supabase-Compose-Overlay (#1504), die SQLAlchemy-/Alembic-Grundlage (#1505), sowie je ein Repository-Port mit Datei-/SQLite- **und** PostgreSQL-Adapter für LLM-Profile (`LlmProfileRepository` #1515, `LlmProfileSecretsStore` #1516, `PostgresLlmProfileRepository` auf `agora.llm_profiles` #1507/#1517) und Projektmetadaten (`ProjectRepository`/`FileProjectRepository`, `PostgresProjectRepository`; changelog.d/projekt-vertrag-und-repository-port.md, changelog.d/projekt-postgres-adapter.md — ohne Issue-Nummer).
+
+Drei unabhängige Umschalter steuern das, jeder mit dem bisherigen Pfad als Default: `AGORA_METADATA_BACKEND` (`legacy`), `AGORA_PROJECT_BACKEND` (`file`), `AGORA_LLM_PROFILE_BACKEND` (`sqlite`). Ohne explizites Umschalten bleibt Agora vollständig auf Datei-/SQLite-Stores; **„Agora läuft auf PostgreSQL“ ist keine zutreffende Aussage über den Default**.
+
 ---
 
 ## 6. Provider, Routing und Secrets
@@ -217,11 +223,13 @@ Kanonische Bausteine:
 
 Transportarten:
 
-- `http`
+- `http` (u. a. OpenAI, Anthropic, Gemini, MiniMax, Amazon Bedrock über den OpenAI-kompatiblen Mantle-Pfad, Default-Region `eu-central-1`, #1282)
 - `local` (lokaler HTTP-Dienst, z. B. Ollama)
-- `cli` (z. B. Codex CLI mit lokaler Login-Session)
+- `cli`: zwei Provider sprechen eine lokale CLI per Subprozess statt Pay-per-Token-API an — `codex_cli` (ChatGPT-Abo, `auth_mode="session"`, lokale CLI-Login-Session) und `claude_cli` (Claude-Abo, #1531, Langzeit-Token `CLAUDE_CODE_OAUTH_TOKEN` im Fernet-Secret-Store, isoliertes `HOME` pro Aufruf). Eine aufgelöste `cli`-Route darf nicht mit `.env`-HTTP-Endpunkt oder fremdem API-Key vermischt werden (#1418/#1422).
 
-Embedding-Konfiguration ist davon getrennt. **Bekannter SSoT-Bruch:** Einige Runtime-Consumer können noch `Config.EMBEDDING_*` lesen, obwohl im `EmbeddingConfigurationStore` eine andere Konfiguration aktiv ist (#1417).
+`codex_cli` fragt seinen Modellkatalog seit #1416 laufzeitseitig über `codex debug models` ab (`discover_codex_cli_models()`) statt einen einzelnen Platzhalter (`codex-cli-default`) zu zeigen; der Katalog ist account-/planabhängig, der Sentinel bleibt als Fallback bei jedem Discovery-Fehlschlag erhalten.
+
+Embedding-Konfiguration ist davon getrennt. Lese- und Schreibpfad lösen Index- und Property-Namen inzwischen kanonisch über den Store auf (`resolve_active_entity_index()`/`resolve_active_fact_index()`, Slice 2.1), und `EmbeddingMigrationService` schaltet eine neue Index-Version erst nach geprüftem Re-Embedding und Index-Check gegen Neo4j atomar frei (Slice 2.2). **#1417 ist damit noch nicht vollständig geschlossen:** offen bleiben eine `VECTOR_DIM`-SSoT (Slice 2.3), eine Legacy-View für Bestandsgraphen (Slice 2.4) und der Frontend-Zod-Spiegel für den neuen `building`-Status.
 
 ---
 
@@ -235,7 +243,7 @@ Seit #1478 werden Text-, Tool-, Vision- und Interview-Pfade pro physischem Provi
 
 ## 8. Reproduzierbarkeit
 
-Ein gespeichertes `random_seed`-Feld bedeutet **nicht**, dass ein Agora-Lauf bereits reproduzierbar ist.
+Ein gespeichertes `random_seed`-Feld bedeutet **nicht**, dass ein Agora-Lauf bereits reproduzierbar ist. Ein strukturelles `RunManifest` und ein Replay-Dialog existieren (#763/#1273); das Manifest wird atomar geschrieben, referenziert den kanonischen `AiModelRef` bei Modell-Overrides und übernimmt `runtime.usage_summary` beim Finalisieren. Es ist damit noch kein vollständiger Reproduktionsanker.
 
 Für einen belastbaren Replay müssen mindestens kontrolliert oder aufgezeichnet werden:
 

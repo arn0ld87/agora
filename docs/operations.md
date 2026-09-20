@@ -1,7 +1,7 @@
 # Operations
 
 **Stand:** 20.09.2026  
-**Geprüfte Main-Baseline:** `4296b7de`  
+**Geprüfte Main-Baseline:** `b62aea62`  
 **Scope:** Single-User-Betrieb, Diagnose, Restart-/Recovery-Semantik und bekannte operative Grenzen.
 
 Verwandt:

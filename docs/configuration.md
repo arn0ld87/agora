@@ -1,7 +1,7 @@
 # Konfiguration — Umgebungsvariablen
 
 **Stand:** 20.09.2026  
-**Geprüfte Main-Baseline:** `4296b7de`  
+**Geprüfte Main-Baseline:** `b62aea62`  
 **Backend:** `0.9.6`
 
 Die **exakte** Konfigurations-SSoT ist der Code plus [`.env.example`](../.env.example) bzw. [`.env.docker.example`](../.env.docker.example). Diese Seite erklärt die operativ relevanten Gruppen und Semantik. Bei einem neuen Schalter gewinnt deshalb nicht diese Tabelle, nur weil jemand vergessen hat, sie am selben Dienstag zu aktualisieren.

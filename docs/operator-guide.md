@@ -1,7 +1,7 @@
 # Agora Operator Guide
 
 **Stand:** 20.09.2026  
-**Geprüfte Main-Baseline:** `4296b7de`  
+**Geprüfte Main-Baseline:** `b62aea62`  
 **Scope:** Installation, Betrieb, Update und Diagnose einer Single-User-Agora-Instanz.
 
 Verwandt:

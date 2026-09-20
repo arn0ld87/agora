@@ -1,6 +1,6 @@
 # Architektur — Single Sources of Truth
 
-> Laden bei Architektur-, Vertrags- oder Routing-Fragen. Stand 20.09.2026, geprüfte Main-Baseline `4296b7de`; Details und bekannte Ausnahmen in [`../architecture.md`](../architecture.md) und [`../STATUS.md`](../STATUS.md).
+> Laden bei Architektur-, Vertrags- oder Routing-Fragen. Stand 20.09.2026, geprüfte Main-Baseline `b62aea62`; Details und bekannte Ausnahmen in [`../architecture.md`](../architecture.md) und [`../STATUS.md`](../STATUS.md).
 
 | Konzept | Kanonischer Pfad |
 |---------|-----------------|

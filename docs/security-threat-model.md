@@ -1,7 +1,7 @@
 # Security Threat Model
 
 **Stand:** 20.09.2026  
-**Geprüfte Main-Baseline:** `4296b7de`  
+**Geprüfte Main-Baseline:** `b62aea62`  
 **Scope:** Single-User-Agora auf lokalem Host, Tailnet oder hinter einem gehärteten Reverse-Proxy. Kein Multi-Tenant-/Enterprise-IAM-Modell.
 
 Verwandte Referenzen:
