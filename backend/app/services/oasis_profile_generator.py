@@ -11,8 +11,6 @@ Optimization improvements:
 import re
 from typing import TYPE_CHECKING, Dict, Any, List, Optional
 
-from openai import OpenAI
-
 from ..config import Config
 from ..contracts import PersonaQuotaPlan
 from ..contracts.provider_types import PROVIDER_CLAUDE_CLI, PROVIDER_CODEX_CLI
@@ -263,12 +261,20 @@ class OasisProfileGenerator:
         self.language = (language or Config.AGENT_LANGUAGE or "de").lower()
 
         if not self.api_key:
+            if provider_type:
+                # Der Key eines aufgeloesten Providers haengt an der Stage-Route
+                # (Provider-Secret-Store), nicht an der .env. Auf ``LLM_API_KEY``
+                # zu zeigen schickt den Leser an die falsche Stelle.
+                raise ValueError(
+                    f"Kein API-Key fuer Provider '{provider_type}' aufgeloest — "
+                    "Secret an der Stage-Route der Persona-Generierung pruefen"
+                )
             raise ValueError("LLM_API_KEY not configured")
 
-        self.client = OpenAI(
-            api_key=self.api_key,
-            base_url=self.base_url
-        )
+        # Kein roher ``OpenAI``-Client mehr: die Persona-Calls laufen seit
+        # PR #858 ueber ``LLMClient.chat_json``. Der Client hier wurde nie
+        # gelesen, haette aber fuer einen CLI-Provider (base_url=None) auf den
+        # OpenAI-Default gezeigt — ein HTTP-Pfad neben einer Subprozess-Route.
 
         # GraphStorage for hybrid search enrichment
         self.storage = storage

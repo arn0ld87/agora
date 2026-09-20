@@ -211,6 +211,21 @@ class LlmProviderRegistry:
             None,
         )
 
+    @staticmethod
+    def uses_session_auth(provider_kind: str) -> bool:
+        """Ob der Provider ohne eigenen Secret auskommt.
+
+        Nur Session-Provider (``auth_mode="session"``, aktuell ``codex_cli``
+        mit lokaler ``codex login``-Session) sind wirklich keylos. Der
+        Transport taugt als Kriterium nicht: ``claude_cli`` ist ebenfalls
+        ``transport="cli"``, traegt aber einen echten Langzeit-Token im
+        Provider-Secret-Store. Die Aufrufer, die einen fehlenden Key
+        durchlassen duerfen, fragen deshalb hier statt jeweils eigene
+        Transport-Bedingungen zu fuehren.
+        """
+        definition = LlmProviderRegistry.connection_definition(provider_kind)
+        return definition is not None and definition.auth_mode == "session"
+
     def get_providers(
         self, session_api_keys: Optional[dict] = None
     ) -> list[ProviderDescriptor]:

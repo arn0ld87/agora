@@ -451,6 +451,20 @@ def test_constructor_does_not_env_fallback_for_codex_cli(monkeypatch):
     assert gen.api_key != "env-minimax-key"
 
 
+def test_constructor_error_names_provider_and_route_not_env_var():
+    """Regression: ein ``claude_cli``-Lauf ohne aufgeloesten Token brach mit
+    ``LLM_API_KEY not configured`` ab — einer ``.env``-Variablen, die fuer
+    diesen Provider gar nicht die Quelle ist. Der Token haengt an der
+    Stage-Route (Provider-Secret-Store), also muss die Meldung dorthin zeigen.
+    """
+    with pytest.raises(ValueError) as excinfo:
+        OasisProfileGenerator(api_key=None, provider_type="claude_cli")
+
+    message = str(excinfo.value)
+    assert "claude_cli" in message
+    assert "LLM_API_KEY" not in message
+
+
 def test_generate_profile_with_llm_passes_provider_type_for_codex_cli(monkeypatch):
     """Regression for Issue #1418: ohne ``provider_type`` an ``_LLMClient``
     weitergereicht erkennt ``LLMClient`` codex_cli nicht als

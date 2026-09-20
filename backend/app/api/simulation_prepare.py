@@ -327,10 +327,21 @@ def _resolve_prepare_route(run_record: "dict[str, Any]", llm_runtime):
     route_router = StageModelRouter(run_record["run_id"])
     resolved_route = route_router.resolve("persona_generation")
     route_router.lock_stage("persona_generation", resolved_route)
-    definition = LlmProviderRegistry.connection_definition(resolved_route.provider_id)
-    if definition is not None and definition.transport == "cli":
-        # CLI-Provider nutzen ihre lokale Anmeldung, keinen HTTP-API-Key.
-        # Die Registry entscheidet; eine fehlende URL allein ist keine Freigabe.
+    if LlmProviderRegistry.uses_session_auth(resolved_route.provider_id):
+        # Session-Provider (codex_cli) authentifizieren über die lokale
+        # CLI-Anmeldung und haben gar kein Secret — für sie gibt es nichts
+        # aufzulösen und nichts einzufordern.
+        #
+        # Die Bedingung hängt bewusst am ``auth_mode``, nicht am ``transport``:
+        # ``claude_cli`` ist ebenfalls ``transport="cli"``, trägt aber einen
+        # echten Langzeit-Token (``claude setup-token``) im Secret-Store, der
+        # als Env-Variable an den Subprozess geht statt als HTTP-Header. Ein
+        # Kurzschluss auf den Transport verwarf diesen Token hier, und weil
+        # der Rückgabewert einmal in ``effective_llm_runtime`` gegossen und
+        # durch den gesamten Vorbereitungs-Job gereicht wird, scheiterte
+        # anschließend jede LLM-Phase mit "LLM_API_KEY not configured" —
+        # während der Graph-Build mit derselben Verbindung lief, weil er den
+        # Key direkt auflöst. "Kein HTTP" ist nicht "kein Key".
         return resolved_route, None
     resolved_api_key = resolve_route_api_key(resolved_route, llm_runtime)
 

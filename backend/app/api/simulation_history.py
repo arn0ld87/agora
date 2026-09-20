@@ -163,6 +163,11 @@ def _resolve_profile_connection(resolved_route, llm_runtime):
     abgelehnt, bevor es überhaupt dazu kommt: der Provider hat per Definition
     keinen Key, und ``is_local_endpoint(None)`` ist ``False``.
 
+    Die Guard-Ausnahme hängt am ``auth_mode``, nicht am ``transport``: nur
+    Session-Provider (``codex_cli``) sind wirklich keylos. ``claude_cli`` ist
+    ebenfalls ``transport="cli"``, braucht aber seinen Langzeit-Token — für
+    ihn muss der Guard greifen statt den Lauf ohne Anmeldung durchzulassen.
+
     Raises:
         _ProfileConnectionRejected: wenn ein HTTP-Provider ohne Key dasteht.
     """
@@ -172,9 +177,9 @@ def _resolve_profile_connection(resolved_route, llm_runtime):
     base_url = resolved_route.base_url_sanitized
     definition = LlmProviderRegistry.connection_definition(resolved_route.provider_id)
     provider_type = definition.provider_kind if definition else None
-    is_cli_transport = definition is not None and definition.transport == "cli"
+    is_session_auth = LlmProviderRegistry.uses_session_auth(resolved_route.provider_id)
 
-    if api_key is None and not is_cli_transport and not is_local_endpoint(base_url):
+    if api_key is None and not is_session_auth and not is_local_endpoint(base_url):
         raise _ProfileConnectionRejected(
             json_error(
                 ApiErrorCode.VALIDATION_FAILED,
