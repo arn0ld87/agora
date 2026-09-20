@@ -1,7 +1,7 @@
 # API Contracts — Agora Backend ↔ Frontend
 
-**Stand:** 08.09.2026  
-**Geprüfte Main-Baseline:** `0c47737f`  
+**Stand:** 20.09.2026  
+**Geprüfte Main-Baseline:** `4296b7de`  
 **Produktversion:** `0.9.6`
 
 Agora arbeitet **contracts-first**: öffentliche JSON-Grenzen werden im Backend als Pydantic-v2-Modelle definiert, im Frontend als Zod-Schemas gespiegelt und für relevante Verträge als JSON-Schema unter `schemas/` eingecheckt.
@@ -67,6 +67,10 @@ Regeln:
 - UI-Logik soll auf stabile Codes/strukturierte Details reagieren, nicht auf String-Matching der Fehlermeldung.
 - rohe Exception-Texte, Hostnamen, Treiberdetails oder Dateipfade gehören ins Log und nicht ungefiltert in die API-Antwort.
 - Streaming- und Datei-Download-Endpunkte dürfen bewusst vom JSON-Envelope abweichen.
+
+### Envelope-Typisierung im Frontend (#1373)
+
+`frontend/src/api/*.ts` deklariert den Rückgabetyp jeder Funktion so, wie er zur Laufzeit tatsächlich ankommt: der Response-Interceptor liefert grundsätzlich die Envelope (`{success, data, …}`), nicht den ausgepackten Nutzdatentyp — außer bei den wenigen Endpunkten, die nachweislich flach antworten (z. B. `cancelRun`, `replayRun`) oder ihre Envelope selbst von Hand bauen. Der Guard `frontend/src/api/__tests__/envelopeContract.spec.ts` meldet jede exportierte Funktion, die ein Service-Ergebnis ohne deklarierten Envelope-Typ durchreicht; Ausnahmen brauchen einen Beleg der Form `datei.py::funktion`.
 
 ---
 
@@ -179,13 +183,17 @@ Kanonische Dateien:
 - `frontend/src/contracts/reportContract.ts`
 - `schemas/evidence-map-response.schema.json`
 
+### ReportV3: global eindeutige Claim-/Gap-IDs
+
+`ReportV3.validate_unique_export_ids` lehnt doppelte `Claim.id`/`DataGap.id` ab. Vor #1340/#1342 vergab jeder Abschnitt lokale IDs ab 1 (`claim_01`), wodurch sich die Nummernräume beim Zusammenführen mehrerer Abschnitte überlagerten. Exportiert wird jetzt eine abschnittsqualifizierte ID (`C<abschnitt>_<i>` für Claims, `G<abschnitt>_<i>` für Datenlücken); der Zähler läuft ausschließlich über akzeptierte, gefilterte Einträge. Ein Artefakt mit kollidierenden IDs ist im Contract-Sinn nicht interpretierbar — `ReportManager.build_report_v3_markdown()` liefert dann `None` und protokolliert den Grund, statt mehrdeutige IDs auszuliefern.
+
 ---
 
 ## Run- und Reportstatus
 
 `RunStatus` und `ReportStatus` sind **nicht** austauschbar.
 
-Ein Report kann fachlich `INCOMPLETE` und trotzdem auslieferbar sein. Der Run-/Resume-Pfad muss diesen Status transportieren, statt alles außerhalb von `COMPLETED` pauschal auf `failed` zu mappen (#1479).
+Ein Report kann fachlich `INCOMPLETE` und trotzdem auslieferbar sein. Der Run-/Resume-Pfad muss diesen Status transportieren, statt alles außerhalb von `COMPLETED` pauschal auf `failed` zu mappen (#1479). Der Reportstatus ist zusätzlich an die Contract-Validität des gebauten Artefakts gekoppelt (#1299): `COMPLETED` gilt erst, wenn der ReportV3-Export tatsächlich gegen seinen Vertrag besteht — ein durchgelaufener Pipeline-Schritt allein reicht nicht, wenn das Ergebnis den Contract verletzt (z. B. kollidierende Claim-/Gap-IDs oder ein fehlgeschlagener `RequirementChecker`-Durchlauf, siehe unten).
 
 Für Consumer gilt:
 

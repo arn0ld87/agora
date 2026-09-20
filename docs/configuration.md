@@ -1,7 +1,7 @@
 # Konfiguration — Umgebungsvariablen
 
-**Stand:** 08.09.2026  
-**Geprüfte Main-Baseline:** `0c47737f`  
+**Stand:** 20.09.2026  
+**Geprüfte Main-Baseline:** `4296b7de`  
 **Backend:** `0.9.6`
 
 Die **exakte** Konfigurations-SSoT ist der Code plus [`.env.example`](../.env.example) bzw. [`.env.docker.example`](../.env.docker.example). Diese Seite erklärt die operativ relevanten Gruppen und Semantik. Bei einem neuen Schalter gewinnt deshalb nicht diese Tabelle, nur weil jemand vergessen hat, sie am selben Dienstag zu aktualisieren.
@@ -95,7 +95,31 @@ Provider-spezifische Secret-/Endpoint-Variablen existieren für Bootstrap/Legacy
 
 ### CLI-Transport
 
-`codex_cli` benötigt keine Base-URL und keinen API-Key im Agora-Store. Die Authentifizierung stammt aus der lokalen `codex login`-Session. `AGORA_LLM_TRANSPORT=cli` ist ein internes Runtime-Signal an Subprozesspfade; Operatoren sollen daraus **keine zweite Provider-Konfiguration** bauen.
+Zwei Provider laufen über `transport="cli"` statt HTTP:
+
+| Provider | Auth | Env-Var |
+|---|---|---|
+| `codex_cli` | lokale `codex login`-Session (Credential-Mount, siehe [`security-hardening.md`](security-hardening.md)) | keine — Session-basiert |
+| `claude_cli` | Langzeit-Token aus `claude setup-token`, im Fernet-Secret-Store hinterlegt (`secret_ref="claude_cli"`) | `CLAUDE_CODE_OAUTH_TOKEN` (offiziell für CI/Headless dokumentiert) |
+
+Beide Provider brauchen weder eine Base-URL noch einen klassischen API-Key im Agora-Store, und `AGORA_LLM_TRANSPORT=cli` ist ein internes Runtime-Signal an Subprozesspfade — Operatoren sollen daraus **keine zweite Provider-Konfiguration** bauen. Eine einmal aufgelöste `cli`-Route wird nie mit einem `.env`-HTTP-Endpunkt oder einem fremden API-Key vermischt (#1418/#1422): Sobald eine Route auf `codex_cli`/`claude_cli` zeigt, gewinnen `LLM_BASE_URL`/`LLM_API_KEY` nicht mehr.
+
+`claude_cli` läuft je Aufruf mit isoliertem `HOME`/`cwd` und `--tools ""` (kein Tool-Zugriff der CLI selbst) — ohne diese Isolation lädt die CLI das komplette interaktive Setup des Hosts (`CLAUDE.md`, Skills, Plugins) in den Prompt-Cache.
+
+---
+
+## Metadaten-Backend (Supabase/PostgreSQL, optional)
+
+Drei unabhängige Schalter steuern, ob einzelne Stores von Datei/SQLite auf PostgreSQL wechseln. Sie werden **einzeln** umgestellt, nicht gemeinsam. Default in allen drei Fällen: PostgreSQL ist verfügbar, aber nicht aktiv — die JSON-/SQLite-Dateien bleiben die Wahrheit, bis der Operator bewusst umschaltet.
+
+| Variable | Default | Werte | Zweck |
+|---|---|---|---|
+| `AGORA_METADATA_BACKEND` | `legacy` | `legacy`, `postgres` | Dateisystem/Neo4j vs. PostgreSQL für allgemeine Metadaten |
+| `AGORA_PROJECT_BACKEND` | `file` | `file`, `postgres` | `uploads/projects/<project_id>/project.json` vs. PostgreSQL |
+| `AGORA_LLM_PROFILE_BACKEND` | `sqlite` | `sqlite`, `postgres` | `instance/llm_profiles.db` vs. PostgreSQL |
+| `DATABASE_URL` 🔐 | leer, kein Default | `postgresql+psycopg://user:password@host:5432/dbname` | Pflicht, sobald einer der drei Schalter auf `postgres` steht |
+
+`DATABASE_URL` hat bewusst **keinen** aktiven Default — ein geratener `localhost`-Wert wäre genau der Legacy-Fallback, den die Architekturregel verbietet. Das Schema-Präfix `postgresql+psycopg://` ist Pflicht (nicht `postgresql://`), weil SQLAlchemy sonst `psycopg2` wählt, das hier nicht installiert ist; der Fehler fiele sonst erst beim ersten Verbindungsversuch. Details: `docs/plans/supabase.md`.
 
 ---
 

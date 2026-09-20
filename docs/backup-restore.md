@@ -1,7 +1,7 @@
 # Backup & Restore
 
-**Stand:** 08.09.2026  
-**Geprüfte Main-Baseline:** `0c47737f`  
+**Stand:** 20.09.2026  
+**Geprüfte Main-Baseline:** `4296b7de`  
 **Scope:** Single-User-Datensicherung und Recovery-Inventar. Kein Cluster-Backup, kein PITR.
 
 > [!IMPORTANT]

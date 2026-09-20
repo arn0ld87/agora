@@ -1,7 +1,7 @@
 # Agora — Architektur
 
-**Stand:** 08.09.2026  
-**Geprüfte Main-Baseline:** `0c47737f`  
+**Stand:** 20.09.2026  
+**Geprüfte Main-Baseline:** `4296b7de`  
 **Produktversion:** `0.9.6`
 
 Dieses Dokument beschreibt die **aktuelle produktive Architektur** und ihre noch offenen Grenzen. Der frühere April-2026-Zielentwurf mit geplanten Modulnamen ist als Migrationsgeschichte überholt; der tatsächliche Istzustand steht hier, Detailentscheidungen in [`decisions/`](decisions/) und der verifizierte Projektstatus in [`STATUS.md`](STATUS.md).
@@ -55,9 +55,11 @@ graph TD
     CONTRACTS --> ZOD[JSON Schemas / Zod Mirrors]
 
     API --> ROUTING[LLM Routing / Provider Registry]
-    ROUTING --> HTTP[HTTP Providers]
+    ROUTING --> HTTP[HTTP Providers: OpenAI/Anthropic/Google/MiniMax/Bedrock]
     ROUTING --> LOCAL[Local HTTP: Ollama]
-    ROUTING --> CLI[CLI Providers: Codex CLI]
+    ROUTING --> CLI[CLI Providers: Codex CLI, Claude CLI]
+
+    API --> PG[(PostgreSQL, optional: Projekte/LLM-Profile)]
 
     API --> GRAPH[Graph / Ingestion Services]
     GRAPH --> NEO[(Neo4j)]
@@ -121,7 +123,7 @@ Das Backend nutzt eine Flask Application Factory mit zentraler Konfiguration, Bl
 - Auth/API Keys
 - Status/Logs
 
-Die Route ist nicht der Ort für Persistenz- oder Promptlogik.
+Die Route ist nicht der Ort für Persistenz- oder Promptlogik. Zwei God-Controller-Kandidaten wurden entsprechend entkoppelt (#1496): die lesende Summary-Anreicherung für Run-Listen/-Details liegt in `backend/app/services/run_read_model.py` (vormals in `api/runs.py`), Timeline- und Agent-Stats-Aggregation der Simulation in `backend/app/services/sim/run_metrics.py` (vormals in `sim/monitor.py`, das dünne kompatible Wrapper behält).
 
 ### Ein Web-Worker als aktueller Hardstop
 
@@ -197,11 +199,15 @@ Kanonische Komponenten:
 
 ### Transportklassen
 
-- `http` — externer oder lokaler HTTP-Endpunkt mit Provideradapter
+- `http` — externer oder lokaler HTTP-Endpunkt mit Provideradapter. Amazon Bedrock läuft seit #1282 als OpenAI-kompatibler mantle-Pfad über denselben `OpenAIAdapter` (Bearer-API-Key statt boto3/SigV4); Host-Erkennung ausschließlich über `registry.py::_is_bedrock_host` (`bedrock-mantle.<region>.api.aws` / `bedrock-runtime.<region>.amazonaws.com`, keine zweite Heuristik).
 - `local` — lokaler HTTP-Dienst ohne Credential-Transport, aktuell vor allem Ollama
-- `cli` — lokaler CLI-Subprozess mit eigener Sessionauth, z. B. Codex CLI
+- `cli` — lokaler CLI-Subprozess mit eigener Sessionauth. Zwei Provider: `codex_cli` (#1405, ambiente `codex login`-Session unter einem gemounteten `$CODEX_HOME`) und `claude_cli` (#1531, Claude-Code-CLI mit explizit mitgeführtem `CLAUDE_CODE_OAUTH_TOKEN` aus dem Fernet-Secret-Store, kein Verzeichnis-Mount nötig). Beide instanziieren bewusst keinen `ProviderAdapter`, sondern imitieren nur die vom `LLMClient` tatsächlich genutzte Teiloberfläche des OpenAI-SDK-Clients (`chat.completions.create`), und laufen mit leerem `HOME`/`cwd` sowie ohne Werkzeugzugriff — beide sind agentische Coding-Tools und dürfen nicht auf das Agora-Repo zugreifen.
 
 Eine aufgelöste CLI-Route hat bewusst keine Base-URL. `.env` darf diesen Zustand nicht mit einem fremden HTTP-Key/Endpoint „reparieren“ (#1418/#1422).
+
+### Request-Shaping
+
+`backend/app/llm/request_plan.py` trennt den kwargs-Bau für einen Provider-Request (`build_request`, provider-spezifische Quirks wie Ollamas `options.num_ctx`/`think` oder MiniMax' `thinking.type`) von der Fehlerbehandlung (`execute`, Retry pro Quirk). Vorher lag beides gemeinsam in einer 315-Zeilen-Methode `LLMClient.chat` und war zusätzlich in `describe_image` und `tool_calls._chat_with_tools` dupliziert, mit voneinander abweichenden Lücken (#1225). Das Modul trifft selbst keine Provider-Detection — die bleibt bei `providers/registry.py::detect_provider`.
 
 ### Secrets
 
@@ -262,6 +268,14 @@ Pydantic, JSON Schema und Zod spiegeln die Evidence-Response. Vertragswidrige Al
 
 Offene Trust-Arbeit: #1345, #1240, #1301/#1400.
 
+### Vollständigkeitsprüfung und Interview-Diversität
+
+`RequirementChecker` (`backend/app/services/report_agent/requirement_checker.py`) prüft vor dem ersten `save_report` deterministisch per Mustersuche, ob ein Bericht Pflichtaspekte (Stakeholder-Widersprüche, Frühwarnindikatoren, Stop-/Expand-Kriterien, Positionswechsel, Koalitionen) tatsächlich behandelt; fehlende Aspekte stufen den Status über die bestehende Degradations-Mechanik ab (kein zweiter Statuspfad neben #1006/#1299). Gilt für die vier entscheidungsorientierten Presets (FULL/OPINION/RISK/COMPARISON); der explorative Report prüft bewusst nichts (#1302).
+
+`InterviewPanelTracker` (`backend/app/services/interview_panel.py`) verhindert, dass mehr Interview-Budget nur denselben Konsens lauter macht: er ordnet Kandidaten nach frisch befragt vor regelkonform wiederverwendbar vor Ausschöpfungs-Fallback und ist lauf-scoped über eine `GraphToolsService`-Instanz (#1303).
+
+`ReportV3.validate_unique_export_ids` erzwingt global eindeutige, abschnittsqualifizierte `Claim`- und `DataGap`-IDs (`C<abschnitt>_<i>`/`G<abschnitt>_<i>` statt abschnittslokal wiederholter `claim_01`) — vorher kollidierten IDs beim Merge mehrerer Abschnitte (#1340/#1342).
+
 ---
 
 ## 10. Budget- und Telemetriearchitektur
@@ -286,6 +300,12 @@ Bekannte Grenze: `scripts/run_parallel_simulation.py` besitzt einen eigenen `Par
 | Workspace-API-Keys | verschlüsseltes `backend/data/api_keys.json` |
 | Live-Events | Redis, nicht als dauerhafte Job-SSoT |
 | Contracts | Pydantic-Code + generierte Schemas/Zod-Spiegel |
+| Projekt-Metadaten | `uploads/projects/<project_id>/project.json` (Default, `FileProjectRepository`), optional `agora.projects` in PostgreSQL (`PostgresProjectRepository`, `AGORA_PROJECT_BACKEND=postgres`) |
+| LLM-Profil-Metadaten | SQLite `instance/llm_profiles.db` (Default, `SqliteLlmProfileRepository`), optional `agora.llm_profiles` in PostgreSQL (`PostgresLlmProfileRepository`, `AGORA_LLM_PROFILE_BACKEND=postgres`); Profil-API-Keys in beiden Fällen im Fernet-`LlmProfileSecretsStore`, nie in der Tabelle |
+
+### PostgreSQL: paralleler Adapter, kein Ersatz
+
+Seit `docs/plans/supabase.md` steht eine SQLAlchemy-/Alembic-Grundlage (`backend/app/infrastructure/postgres/`, Migrationen unter `backend/migrations/`) und je ein zweiter Repository-Adapter für Projekte und LLM-Profile. Alle drei Umschalter — `AGORA_METADATA_BACKEND`, `AGORA_PROJECT_BACKEND`, `AGORA_LLM_PROFILE_BACKEND` — stehen im Default auf dem bisherigen Datei-/SQLite-Pfad; ohne expliziten Umstieg entsteht keine einzige Datenbankverbindung, und Dateisystem/SQLite bleiben die Wahrheit. Migrationsskripte (`backend/scripts/migrate_projects_to_postgres.py`, `migrate_llm_profiles_to_postgres.py`) übertragen den Bestand mit `--dry-run`/`--verify`, ohne die bisherige Ablage anzufassen. Offen: `psycopg` läuft synchron und nicht gevent-kooperativ unter dem Ein-Worker-Gunicorn-Setup — für die heutigen kurzen Metadatenabfragen tragbar, für lange Scans nicht (Hinweis steht im Modul).
 
 ---
 

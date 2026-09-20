@@ -1,7 +1,8 @@
 # Security Hardening — Changelog und Migrations-Hinweise
 
-**Stand:** 2026-05-07, Europe/Berlin
-**Gegen den Code geprüft:** 2026-08-11 — Dateipfade, Kommandos, Skript- und Dokumentverweise. Die fachlichen Aussagen dieses Dokuments sind dabei **nicht** einzeln nachvollzogen worden.
+**Stand:** 20.09.2026, Europe/Berlin
+**Geprüfte Main-Baseline:** `4296b7de`
+**Gegen den Code geprüft:** 2026-09-20 — Dateipfade, Kommandos, Skript- und Dokumentverweise. Die fachlichen Aussagen dieses Dokuments sind dabei **nicht** einzeln nachvollzogen worden.
 **Ausgelöst durch:** Veröffentlichung des Repos auf GitHub (`github.com/arn0ld87/agora`). Parallel-Audit durch Claude (general-purpose) und Codex (rescue). Ergebnisberichte sind im Review-Transcript dokumentiert; dieses Dokument listet die daraus umgesetzten Fixes und die nötigen Env-Änderungen für bestehende Deployments.
 
 > Kurzfassung: Der Backend lief vorher als unauthentifizierter, `0.0.0.0`-gebundener Prototyp mit wildcard-CORS, Debug-Defaults, statischem Secret-Key und Default-Neo4j-Passwort. Nach den drei Phasen ist die Angriffsfläche auf ein loopback-gebundenes, token-geschütztes API mit restriktivem CORS, Prod-tauglichen Defaults und SSRF-/Injection-Hardenings reduziert.
@@ -147,6 +148,53 @@ Einzelne Vektoren schließen, die auch nach Auth+CORS noch Missbrauchspotenzial 
 **Alternative geprüft:** `apoc.create.addLabels(n, [$label])` würde das Label als Parameter akzeptieren, setzt aber APOC im Neo4j-Container voraus und ersetzt die Regex-Prüfung nicht (sonst bleibt der Graph mit beliebigen Label-Namen verseucht). Wir bleiben bei `SET n:\`$label\`` mit striktem Sanitizer, weil der Blast-Radius kleiner ist und keine APOC-Dependency eingeführt wird.
 
 **Verifikation:** Unit-Check gegen 13 Input-Fälle. Legitime Labels (`Person`, `Organization`, `_Internal`, `Film`) bleiben durch. Angriffsmuster (Backticks, Cypher-Fragmente) werden bereinigt, nicht mehr interpretierbar. `Entity`, leer, `None`, >50-Zeichen, mit-Ziffer-beginnend werden verworfen.
+
+---
+
+## Phase 5, 12 — Remediation Plan (v0.9.6): Credential-Mount, Agent-SSRF-Guard, Host-DNS
+
+**Stand:** 2026-09-18/19
+
+### 5.1 — Isolierter Codex-Credential-Mount
+
+**Vorher:** `docker-compose.yml` mountete `${CODEX_HOME:-${HOME}/.codex}` bedingungslos read/write in den Agora-Container — unabhängig davon, ob der optionale `codex_cli`-Provider überhaupt benutzt wurde. Ein kompromittierter Backend-Prozess hätte die persönliche ChatGPT-Session inklusive Refresh-Token des Hosts lesen **und überschreiben** können.
+
+**Jetzt:** Der Mount ist aus dem Default-Stack entfernt. Wer `codex_cli` nutzt, hängt explizit `deploy/compose/docker-compose.codex-cli.yml` an:
+
+```bash
+export AGORA_CODEX_HOME="$HOME/.local/share/agora/codex"
+mkdir -p "$AGORA_CODEX_HOME" && chmod 700 "$AGORA_CODEX_HOME"
+CODEX_HOME="$AGORA_CODEX_HOME" codex login
+
+docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  -f deploy/compose/docker-compose.codex-cli.yml up -d
+```
+
+`AGORA_CODEX_HOME` ist im Override eine Pflichtvariable ohne Default (`${AGORA_CODEX_HOME:?…}`) — ein Fallback auf `~/.codex` würde die aufgelöste Vermischung wiederherstellen. Der Mount ist bewusst **nicht** read-only: `codex exec` schreibt Session-State und würde auf einem read-only Mount mit `Read-only file system (os error 30)` abbrechen.
+
+Die Provider-Probe unterscheidet jetzt vier Zustände statt nur „Binary im PATH": `missing` (kein Mount), `unreadable` (von Docker als root angelegt — häufigster Praxisfall, siehe [`docs/troubleshooting.md`](troubleshooting.md)), `empty` (kein Login) und `ok`.
+
+**Regression:** `backend/tests/test_compose_defaults.py` prüft direkt gegen die geparsten Volume-Definitionen, dass weder Dev- noch Prod-Stack ein `.codex`-Verzeichnis oder etwas aus `$HOME` einhängt.
+
+### 12.1 — Container erbt wieder den DNS des Hosts
+
+**Vorher:** `docker-compose.yml` setzte hart `8.8.8.8`/`8.8.4.4` als Resolver. Für ein local-first-System ist das der falsche Default: jede Namensauflösung ging ungefragt an einen Dritten, und Split-DNS-Setups (Tailscale MagicDNS, Homelab-Zonen, interne Firmen-Domains) waren nicht auflösbar.
+
+**Jetzt:** Kein `dns:`-Block mehr; der Container erbt den Resolver der Docker-Engine und damit den des Hosts. Wer nachweislich einen externen Resolver braucht, hängt `deploy/compose/docker-compose.external-dns.yml` an (`AGORA_DNS_PRIMARY`/`AGORA_DNS_SECONDARY` als Pflichtvariablen, siehe Env-Tabelle unten).
+
+### Agent-`web_fetch` hat jetzt einen SSRF-Guard (#1485)
+
+**Vorher:** `backend/scripts/agent_tools.py::web_fetch()` reichte die vom Modell gelieferte URL ungeprüft an `requests.get(..., allow_redirects=True)` durch — kein Adressklassen-Check, keine Redirect-Validierung. Bei `ENABLE_AGENT_TOOLS=true` war der OASIS-Subprozess ein Confused Deputy für alles im Container erreichbare (Loopback, RFC1918, Tailnet-Peers, Cloud-Metadata).
+
+**Jetzt:** Der gesamte Netzwerkteil liegt zentral in `backend/app/security/outbound_http.py`; `backend/app/services/web_tools.py::_is_public_url` (siehe Abschnitt 3.1) delegiert an dasselbe Modul statt eine zweite Kopie der Allow/Deny-Logik zu führen. Vier Prüfschichten: URL-Form, Adressklassen (inkl. IPv4-mapped IPv6 und 6to4, `is_global` als Catch-all), Connection-Pinning gegen DNS-Rebinding und Redirect-Revalidierung pro Hop (Default-Limit 3). Response-Bodies werden gestreamt und bei 1 MB gekappt, Content-Type-Allowlist (`text/html`, `text/plain`) greift vor dem Lesen. Bewusste Grenze: der gepinnte Pfad honoriert `HTTP(S)_PROXY` nicht — das Repo konfiguriert an keiner Stelle einen Proxy für den Subprozess.
+
+**Regression:** `backend/tests/scripts/test_agent_tools_web_fetch.py`, `backend/tests/security/test_outbound_http.py` (45 Fälle), bestehender `backend/tests/test_ssrf_blocker.py` unverändert.
+
+### Drei Lücken im statischen Security-Scan geschlossen (2026-09-18)
+
+- **CodeQL analysiert jetzt auch die GitHub-Actions-Workflows** (`.github/workflows/codeql.yml`, Matrix-Sprache `actions`, zusätzlich zu `python` und `javascript-typescript`). `actionlint` prüft nur Syntax; Injection über untrusted Event-Felder in `run:`-Blöcken findet erst die Datenflussanalyse.
+- **Ruff prüft das Backend mit den flake8-bandit-Regeln** (`select = [..., "S"]` in `backend/pyproject.toml`). Bewusst ausgeblendet: `S311` (nicht-kryptografisches `random` in Simulation/Persona-Sampling), `S603`/`S607` (Subprozesse mit Argumentlisten ohne Shell), `S101`/`S110`/`S112` als Baseline-Altlast. `tests/*` ist von `S` ausgenommen.
+- **Trivy scannt zusätzlich Dockerfile und Compose-Dateien** (`config`-Scan, Kategorie `trivy-config` in `.github/workflows/docker-image.yml`, neben dem bestehenden Container-Scan `trivy-container`). Blockiert vorerst nicht (`exit-code: "0"`), bis die erste Fundliste gesichtet ist.
 
 ---
 

@@ -1,7 +1,7 @@
 # Provider-Runtime-Optionen
 
-**Stand:** 08.09.2026  
-**Geprüfte Main-Baseline:** `0c47737f`  
+**Stand:** 20.09.2026  
+**Geprüfte Main-Baseline:** `4296b7de`  
 **Produktversion:** `0.9.6`
 
 Diese Datei beschreibt die **heutige** Provider-, Secret- und Routing-Architektur. Der frühere Pfad „Provider im Browser auswählen, API-Key in `sessionStorage` halten und bei jedem Prepare/Start/Report im Request-Body mitschicken“ ist nicht mehr die kanonische Architektur.
