@@ -5,10 +5,17 @@ Service for building graphs and generating ontologies.
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from datetime import UTC, datetime
 
 from ..config import Config
 from ..contracts.ai_provider_contract import AiModelRef
 from ..services.degradation_collector import ChunkExtractionTally, DegradationCollector
+from ..services.graph_build_checkpoint import (
+    GraphBuildCheckpoint,
+    clear_checkpoint,
+    resume_capability_for_checkpoint,
+    save_checkpoint,
+)
 from ..services.ontology_generator import OntologyGenerator
 from ..services.llm_routing_seed import resolve_route_api_key, seed_run_stage_routing
 from ..services.stage_model_router import StageModelRouter
@@ -110,6 +117,51 @@ def _terminalize_ai_model_ref_sync_failure(
 
 
 class GraphBuildService:
+    @staticmethod
+    def chunk_project_text(
+        project_id: str,
+        text: str,
+        chunk_size: int,
+        chunk_overlap: int,
+    ) -> tuple[list[str], list[str | None] | None, list[int | None] | None, bool]:
+        """Zerlegt den extrahierten Text eines Projekts deterministisch in Chunks.
+
+        Ausgelagert aus ``build_task`` (Issue #1472b): ein Resume-Versuch
+        (``api/runs.py::_resume_graph_build``) muss GENAU dieselbe
+        Chunk-Zerlegung reproduzieren wie der Original-Lauf, dessen
+        Checkpoint er fortsetzt — sonst zeigt ein Chunk-Index nach einem
+        Resume auf ein anderes Textstück als beim Original-Lauf. Eine
+        zweite, unabhängig gepflegte Kopie dieser Verzweigung wäre genau
+        die Drift-Quelle, die das verhindern soll.
+
+        Projekte mit Dokument-Manifest-Sidecar (Issue #1152) chunken über
+        den dokument-verankerten Pfad (liefert ``document_ids``/
+        ``chunk_ids``); Altprojekte ohne Sidecar nehmen den bisherigen
+        Pfad — beides unverändert gegenüber dem vorherigen Inline-Code.
+
+        Returns:
+            ``(chunks, document_ids, chunk_ids, manifest_anchored)``.
+        """
+        manifest = ProjectManager.get_document_manifest(project_id)
+        if manifest is not None:
+            anchored_chunks = split_text_into_chunks_with_documents(
+                text, manifest, chunk_size=chunk_size, overlap=chunk_overlap
+            )
+            chunks = [c.text for c in anchored_chunks]
+            document_ids = [c.document_id for c in anchored_chunks]
+            chunk_ids = [c.chunk_id for c in anchored_chunks]
+            return chunks, document_ids, chunk_ids, True
+
+        chunks = TextProcessor.split_text(text, chunk_size=chunk_size, overlap=chunk_overlap)
+        # Bewusst ``None`` (nicht ``[None] * len(chunks)``) — identisch zum
+        # vorherigen Inline-Code, byte-genau dasselbe Argument, mit dem
+        # ``add_text_batches`` schon immer für Altprojekte ohne Sidecar
+        # aufgerufen wurde. ``resume_graph_build`` normalisiert diesen Fall
+        # selbst auf eine indexierbare Liste, wo es das für den Chunk-Skip
+        # braucht — kein Grund, den etablierten Aufruf-Vertrag hier zu
+        # ändern.
+        return chunks, None, None, False
+
     @classmethod
     def generate_ontology(
         cls,
@@ -439,6 +491,14 @@ class GraphBuildService:
                 # blind, wo es zählt.
                 degradations = DegradationCollector()
                 extraction_tally = ChunkExtractionTally()
+                # Issue #1472b: haelt den jeweils aktuellsten, bereits auf
+                # Platte geschriebenen Checkpoint — eine Ein-Element-Liste
+                # statt einer einfachen Variable, damit sowohl der innere
+                # Callback als auch ``_finish_cancelled_build`` (weiter unten
+                # definiert, per Closure) denselben veraenderlichen Zustand
+                # sehen, ohne ``nonlocal`` ueber mehrere Funktionsgrenzen
+                # hinweg zu brauchen.
+                checkpoint_holder: "list[GraphBuildCheckpoint | None]" = [None]
 
                 def _finish_cancelled_build(cancelled_episode_uuids: "list[str]") -> None:
                     """Issue B2: Endzustand eines per ``/cancel`` gestoppten Graph-Builds.
@@ -546,11 +606,12 @@ class GraphBuildService:
                             artifacts=ArtifactLocator.existing_paths({
                                 "project_dir": ProjectManager._get_project_dir(project_id),
                             }),
-                            resume_capability={
-                                "available": True,
-                                "action": "restart",
-                                "label": "Restart graph build",
-                            },
+                            # Issue #1472b: "resume" nur, wenn der Checkpoint
+                            # tatsächlich mindestens einen fertigen Chunk
+                            # trägt — sonst bleibt es beim ehrlichen "restart".
+                            resume_capability=resume_capability_for_checkpoint(
+                                checkpoint_holder[0]
+                            ),
                         )
                     except Exception as exc:  # noqa: BLE001 — best effort; siehe Docstring
                         build_logger.error(
@@ -572,25 +633,24 @@ class GraphBuildService:
                     task_manager.update_task(task_id, status=TaskStatus.PROCESSING, message="Initializing graph build service...")
                     builder = container.graph_builder()
 
+                    # Issue #1472b: ein frischer Build (erster Versuch ODER
+                    # ``force``-Restart) startet ohne verwertbaren Checkpoint
+                    # — ein liegen gebliebener Checkpoint eines VORHERIGEN,
+                    # anderen Graphen darf hier nicht fälschlich anschlagen.
+                    # Der eigentliche Resume-Pfad läuft nie über
+                    # ``build_task``, sondern über
+                    # ``api/runs.py::_resume_graph_build``.
+                    clear_checkpoint(project_id)
+
                     task_manager.update_task(task_id, message="Chunking text...", progress=5)
-                    # Issue #1152 Slice 1, Teil B: Projekte mit einem
-                    # Dokument-Manifest-Sidecar (``extracted_documents.json``)
-                    # chunken über den dokument-verankerten Pfad, damit jeder
-                    # Chunk seine Quelldatei + laufenden Index trägt.
-                    # Altprojekte ohne Sidecar (``manifest is None``) nehmen
-                    # unverändert den bisherigen Pfad — kein neues Verhalten.
-                    manifest = ProjectManager.get_document_manifest(project_id)
-                    document_ids: list[str | None] | None = None
-                    chunk_ids: list[int | None] | None = None
-                    if manifest is not None:
-                        anchored_chunks = split_text_into_chunks_with_documents(
-                            text, manifest, chunk_size=chunk_size, overlap=chunk_overlap
-                        )
-                        chunks = [c.text for c in anchored_chunks]
-                        document_ids = [c.document_id for c in anchored_chunks]
-                        chunk_ids = [c.chunk_id for c in anchored_chunks]
-                    else:
-                        chunks = TextProcessor.split_text(text, chunk_size=chunk_size, overlap=chunk_overlap)
+                    # Issue #1152 Slice 1, Teil B / #1472b: dieselbe
+                    # Chunk-Zerlegung wie ein späterer Resume-Versuch
+                    # (``chunk_project_text``) — beide Pfade teilen sich
+                    # denselben Code, damit Chunk-Indizes über einen Resume
+                    # hinweg stabil bleiben.
+                    chunks, document_ids, chunk_ids, manifest_anchored = cls.chunk_project_text(
+                        project_id, text, chunk_size, chunk_overlap
+                    )
 
                     task_manager.update_task(task_id, message="Creating graph...", progress=10)
                     graph_id = builder.create_graph(name=graph_name)
@@ -612,6 +672,31 @@ class GraphBuildService:
                             progress_detail={"batch_count": completed, "total_batches": total, "batch_at": time.time()}
                         )
 
+                    def record_checkpoint(idx: int, episode_uuid: str) -> None:
+                        """Issue #1472b: schreibt nach jedem committeten Chunk
+
+                        einen aktualisierten Checkpoint. Läuft ausschließlich im
+                        Hauptthread der ``as_completed``-Schleife in
+                        ``add_text_batches`` (kein Lock nötig). Ein
+                        Schreibfehler propagiert unverändert — siehe
+                        Docstring von ``checkpoint_callback`` in
+                        ``add_text_batches`` und
+                        ``graph_build_checkpoint.save_checkpoint``.
+                        """
+                        current = checkpoint_holder[0]
+                        if current is None:
+                            current = GraphBuildCheckpoint(
+                                graph_id=graph_id,
+                                total_chunks=len(chunks),
+                                chunk_size=chunk_size,
+                                chunk_overlap=chunk_overlap,
+                                manifest_anchored=manifest_anchored,
+                                updated_at=datetime.now(UTC),
+                            )
+                        updated = current.with_completed_chunk(idx, episode_uuid)
+                        save_checkpoint(project_id, updated)
+                        checkpoint_holder[0] = updated
+
                     # Checkpoint (Issue B2): zwischen Ontologie-Setzen und dem
                     # eigentlichen (potenziell langen) Chunk-Durchlauf. Noch
                     # keine Episode geschrieben — der Cancel-Pfad bekommt eine
@@ -632,6 +717,7 @@ class GraphBuildService:
                             document_ids=document_ids,
                             chunk_ids=chunk_ids,
                             run_id=run_record["run_id"],
+                            checkpoint_callback=record_checkpoint,
                         )
                     except GraphBuildCancelled as cancel_exc:
                         _finish_cancelled_build(cancel_exc.episode_uuids)
@@ -656,6 +742,11 @@ class GraphBuildService:
                     project.graph_id = graph_id
                     project.status = ProjectStatus.GRAPH_COMPLETED
                     ProjectManager.save_project(project)
+                    # Issue #1472b: ein abgeschlossener Graph hat nichts mehr
+                    # zum Fortsetzen — ein stehen gebliebener Checkpoint
+                    # würde nur einen künftigen, unverwandten Build-Versuch
+                    # verwirren.
+                    clear_checkpoint(project_id)
 
                     task_manager.update_task(
                         task_id, status=TaskStatus.COMPLETED, message="Graph build completed", progress=100,
@@ -685,13 +776,36 @@ class GraphBuildService:
                             except Exception as err:  # noqa: BLE001 — best-effort cleanup; primary exception already propagated
                                 logger.debug("graph_build: mark_graph_failed also failed, ignoring: %s", err)
 
+                    # P1-1 (PR #1535 Review): delete_graph raeumt den
+                    # Graph-Knoten weg, aber ein liegen gebliebener
+                    # Checkpoint wuerde ``resume_capability`` unten trotzdem
+                    # "resume" melden — der Resume-Pfad arbeitet nur mit
+                    # ``MATCH`` (kein ``create_graph``) und liefe ins Leere.
+                    # Ein angebotenes Resume, das nicht funktioniert, ist
+                    # schlimmer als keins: Checkpoint mit loeschen, nur
+                    # "restart" bleibt eine ehrliche Option.
+                    if checkpoint_holder[0] is not None:
+                        clear_checkpoint(project_id)
+                        checkpoint_holder[0] = None
+
                     project.status = ProjectStatus.FAILED
                     project.error = str(exc)
                     ProjectManager.save_project(project)
 
                     import traceback
                     task_manager.update_task(task_id, status=TaskStatus.FAILED, message=f"Build failed: {str(exc)}", error=traceback.format_exc())
-                    run_registry.update_run(run_record["run_id"], status="failed", message=str(exc), error=str(exc))
+                    run_registry.update_run(
+                        run_record["run_id"],
+                        status="failed",
+                        message=str(exc),
+                        error=str(exc),
+                        # Issue #1472b/P1-1: "resume" nur, wenn ein Checkpoint
+                        # UND der Graph, auf den er zeigt, noch existieren —
+                        # nach dem obigen delete_graph ist das nie der Fall,
+                        # checkpoint_holder[0] ist an dieser Stelle immer
+                        # None, also immer "restart".
+                        resume_capability=resume_capability_for_checkpoint(checkpoint_holder[0]),
+                    )
                 finally:
                     # Review-Finding (PR #1371, Befund 7): ohne diesen
                     # finally-Block räumte nur der GraphBuildCancelled-Zweig
@@ -719,3 +833,306 @@ class GraphBuildService:
             # run_id: Issue #1472 — siehe simulation_prepare.
             enqueue("graph_build", build_task, run_id=run_record["run_id"])
         return task_id, run_record["run_id"]
+
+    @classmethod
+    def resume_graph_build(
+        cls,
+        *,
+        project_id: str,
+        parent_run_id: str,
+        checkpoint: GraphBuildCheckpoint,
+        chunks: list[str],
+        # Wie in ``GraphBuilderService.add_text_batches``: beide Listen sind
+        # optional, und ihre Elemente duerfen einzeln ``None`` sein (ein
+        # Chunk ohne Dokument-/Chunk-Provenance).
+        document_ids: list[str | None] | None,
+        chunk_ids: list[int | None] | None,
+        container,
+    ) -> dict:
+        """Setzt einen unterbrochenen ``graph_build`` anhand eines Checkpoints fort
+        (Issue #1472b).
+
+        Verarbeitet ausschließlich die Chunks, deren Index NICHT in
+        ``checkpoint.completed_chunk_indices`` steht — bereits committete
+        Episoden/Entities/Relations werden nicht erneut geschrieben (Neo4j
+        MERGEt Episode- und Relation-Knoten über eine je Aufruf frisch
+        generierte UUID; ein erneuter Durchlauf bereits fertiger Chunks
+        würde also Dubletten erzeugen statt sie zu deduplizieren — siehe
+        ``storage/neo4j_write.py``).
+
+        Bewusst kein ``builder.create_graph(...)`` — der Checkpoint trägt
+        den ``graph_id`` des unterbrochenen Versuchs, in den
+        weitergeschrieben wird. Wie ``api/runs.py::_restart_graph_build``
+        bewusst ohne Route-Locking, NER-Override und
+        Degradation-Sammlung (dieselbe Vereinfachung, die der bestehende
+        Restart-Pfad bereits trägt) — kein Feature-Ausbau in diesem Slice.
+
+        Aufrufer (``api/runs.py::_resume_graph_build``) validiert
+        Projekt/Ontologie/Container-Verfügbarkeit bereits vor dem Aufruf
+        und übergibt die für DIESEN Checkpoint passende Chunk-Zerlegung
+        (``chunk_project_text`` — dieselbe Methode wie beim
+        Original-Build).
+        """
+        project = ProjectManager.get_project(project_id)
+        if not project:
+            raise ValueError(ApiErrorCode.NOT_FOUND)
+        ontology = project.ontology
+        if not ontology:
+            raise ValueError("Ontology definition not found")
+
+        graph_id = checkpoint.graph_id
+        completed_indices = set(checkpoint.completed_chunk_indices)
+        # Reihenfolge stabil halten (nicht die Set-Iterationsreihenfolge) —
+        # ``remaining_original_indices[local_idx]`` übersetzt die Position
+        # innerhalb der REDUZIERTEN Liste zurück auf den ursprünglichen,
+        # checkpoint-relevanten Chunk-Index.
+        remaining_original_indices = [
+            idx for idx in range(len(chunks)) if idx not in completed_indices
+        ]
+        remaining_chunks = [chunks[idx] for idx in remaining_original_indices]
+        # ``document_ids``/``chunk_ids`` sind optional (ein Lauf ohne
+        # Provenance uebergibt ``None``, siehe ``add_text_batches``). Ohne
+        # diese Fallunterscheidung waere ein Resume genau dort mit einem
+        # TypeError gestorben, wo er am noetigsten ist.
+        remaining_document_ids = (
+            [document_ids[idx] for idx in remaining_original_indices]
+            if document_ids is not None
+            else None
+        )
+        remaining_chunk_ids = (
+            [chunk_ids[idx] for idx in remaining_original_indices]
+            if chunk_ids is not None
+            else None
+        )
+
+        from .run_lifecycle import RunLifecycle
+
+        # Issue #1183: Anlage-Fenster hinter RunLifecycle — jeder Abbruch bis
+        # zum Job-Start markiert den Run als failed statt ihn pending zu
+        # verwaisen (dieselbe Invariante wie ``build_graph``/``_restart_graph_build``).
+        with RunLifecycle.begin(
+            run_registry,
+            "graph_build",
+            project_id,
+            parent_run_id=parent_run_id,
+            failure_message="Graph build resume failed: {exc_type}",
+            progress=int(100 * len(completed_indices) / len(chunks)) if chunks else 0,
+            message="Graph build resume queued",
+            linked_ids={"project_id": project_id, "graph_id": graph_id},
+            artifacts=ArtifactLocator.existing_paths({
+                "project_dir": ProjectManager._get_project_dir(project_id),
+            }),
+            resume_capability={"available": True, "action": "resume", "label": "Resume graph build"},
+            metadata={"graph_name": project.name or "Agora Graph"},
+        ) as lifecycle:
+            new_run = lifecycle.record
+            task_manager = TaskManager()
+            task_id = task_manager.create_task(
+                f"Resume graph build: {project.name or graph_id}",
+                metadata={"project_id": project_id, "run_id": new_run["run_id"]},
+            )
+            lifecycle.attach_task(task_manager, task_id)
+            project.status = ProjectStatus.GRAPH_BUILDING
+            project.graph_build_task_id = task_id
+            ProjectManager.save_project(project)
+
+            checkpoint_holder = [checkpoint]
+
+            def record_checkpoint(local_idx: int, episode_uuid: str) -> None:
+                original_idx = remaining_original_indices[local_idx]
+                updated = checkpoint_holder[0].with_completed_chunk(original_idx, episode_uuid)
+                save_checkpoint(project_id, updated)
+                checkpoint_holder[0] = updated
+
+            def _finish_cancelled_resume(episode_uuids: list) -> None:
+                build_logger = logger
+                build_logger.info(
+                    "Graph build resume cancelled by user [project_id=%s, run_id=%s, "
+                    "graph_id=%s, episodes=%d]",
+                    project_id, new_run["run_id"], graph_id, len(episode_uuids),
+                )
+                builder = container.graph_builder()
+                try:
+                    builder.mark_graph_incomplete(graph_id, reason="user_cancel")
+                except Exception as exc:  # noqa: BLE001 — best effort, siehe build_graph._finish_cancelled_build
+                    build_logger.warning(
+                        "graph_build resume: mark_graph_incomplete fehlgeschlagen "
+                        "[project_id=%s, run_id=%s, graph_id=%s]: %r",
+                        project_id, new_run["run_id"], graph_id, exc,
+                    )
+                try:
+                    project.graph_id = graph_id
+                    project.status = ProjectStatus.GRAPH_INCOMPLETE
+                    ProjectManager.save_project(project)
+                except Exception as exc:  # noqa: BLE001 — best effort
+                    build_logger.warning(
+                        "graph_build resume: save_project (GRAPH_INCOMPLETE) fehlgeschlagen "
+                        "[project_id=%s, run_id=%s]: %r",
+                        project_id, new_run["run_id"], exc,
+                    )
+                try:
+                    task_manager.complete_task(
+                        task_id,
+                        result={
+                            "project_id": project_id,
+                            "graph_id": graph_id,
+                            "episode_count": len(episode_uuids),
+                            "cancelled": True,
+                        },
+                    )
+                except Exception as exc:  # noqa: BLE001 — best effort
+                    build_logger.warning(
+                        "graph_build resume: complete_task (cancel) fehlgeschlagen "
+                        "[project_id=%s, run_id=%s, task_id=%s]: %r",
+                        project_id, new_run["run_id"], task_id, exc,
+                    )
+                try:
+                    run_registry.update_run(
+                        new_run["run_id"],
+                        status="stopped",
+                        termination_reason="user_cancel",
+                        message=(
+                            "Vom Nutzer abgebrochen — bereits geschriebene Entitäten "
+                            "und Relationen bleiben im Graphen erhalten, der Graph "
+                            "gilt als unvollständig"
+                        ),
+                        artifacts=ArtifactLocator.existing_paths({
+                            "project_dir": ProjectManager._get_project_dir(project_id),
+                        }),
+                        resume_capability=resume_capability_for_checkpoint(checkpoint_holder[0]),
+                    )
+                except Exception as exc:  # noqa: BLE001 — best effort
+                    build_logger.error(
+                        "graph_build resume: run_registry.update_run (cancel) fehlgeschlagen "
+                        "[project_id=%s, run_id=%s]: %r",
+                        project_id, new_run["run_id"], exc,
+                    )
+                try:
+                    from .sim.cancel_flag import clear_cancel
+                    clear_cancel(new_run["run_id"])
+                except Exception as exc:  # noqa: BLE001 — best effort
+                    build_logger.debug(
+                        "graph_build resume: clear_cancel fehlgeschlagen [run_id=%s]: %r",
+                        new_run["run_id"], exc,
+                    )
+
+            def build_task():
+                builder = None
+                try:
+                    task_manager.update_task(task_id, status=TaskStatus.PROCESSING, message="Resuming graph build...")
+                    builder = container.graph_builder()
+                    builder.set_ontology(graph_id, ontology)
+
+                    def add_progress_callback(msg, progress_ratio, completed, total):
+                        # ``completed``/``total`` beziehen sich nur auf die in
+                        # DIESEM Versuch verbleibenden Chunks — der bereits vor
+                        # dem Resume abgeschlossene Anteil fließt separat in
+                        # den Startwert von ``progress`` bei
+                        # ``RunLifecycle.begin`` ein.
+                        done_before = len(checkpoint.completed_chunk_indices)
+                        overall_ratio = (done_before + completed) / len(chunks) if chunks else 1.0
+                        task_manager.update_task(
+                            task_id, message=msg, progress=int(overall_ratio * 100)
+                        )
+
+                    if remaining_chunks:
+                        from .sim.cancel_flag import is_cancel_requested
+                        if is_cancel_requested(new_run["run_id"]):
+                            _finish_cancelled_resume([])
+                            return
+
+                        from .graph_builder import GraphBuildCancelled
+                        try:
+                            builder.add_text_batches(
+                                graph_id, remaining_chunks, batch_size=3,
+                                progress_callback=add_progress_callback,
+                                document_ids=remaining_document_ids,
+                                chunk_ids=remaining_chunk_ids,
+                                run_id=new_run["run_id"],
+                                checkpoint_callback=record_checkpoint,
+                            )
+                        except GraphBuildCancelled as cancel_exc:
+                            _finish_cancelled_resume(cancel_exc.episode_uuids)
+                            return
+                    # else: der komplette Rest war bereits vor diesem
+                    # Resume-Versuch fertig — direkt zum Qualitätsgate.
+
+                    task_manager.update_task(task_id, message="Retrieving graph data...", progress=95)
+                    graph_data = builder.get_graph_data(graph_id)
+
+                    # P1-3 (PR #1535 Review): derselbe Qualitaetsgate wie im
+                    # Original-Build (siehe ``build_graph.build_task``) —
+                    # ohne ihn faehrt ein resumeter Graph mit zu wenigen
+                    # Relationen als "fertig" durch, weil sein Task-Ergebnis
+                    # keine ``degradations`` traegt. Ein frischer Collector
+                    # genuegt: der Resume-Pfad wiring bewusst keine
+                    # NER-Degradationen durch (Docstring oben), die
+                    # Chunk-Erfolgsquote bleibt bei ``extraction_tally.total
+                    # == 0`` deshalb ungeprueft — nur die Node-/Edge-Zahlen
+                    # zaehlen hier, wie beim Original-Build.
+                    degradations = DegradationCollector()
+                    extraction_tally = ChunkExtractionTally()
+                    builder.assess_graph_quality_from_counts(
+                        node_count=graph_data.get("node_count", 0),
+                        edge_count=graph_data.get("edge_count", 0),
+                        extraction_tally=extraction_tally,
+                        degradations=degradations,
+                    )
+                    degradation_payload = degradations.report().model_dump(mode="json")
+
+                    builder.mark_graph_completed(graph_id)
+                    project.status = ProjectStatus.GRAPH_COMPLETED
+                    project.graph_id = graph_id
+                    ProjectManager.save_project(project)
+                    # Issue #1472b: fertig — kein Checkpoint mehr zum Fortsetzen.
+                    clear_checkpoint(project_id)
+
+                    task_manager.update_task(
+                        task_id,
+                        status=TaskStatus.COMPLETED,
+                        message="Graph build completed",
+                        progress=100,
+                        result={
+                            "project_id": project_id,
+                            "graph_id": graph_id,
+                            "node_count": graph_data.get("node_count", 0),
+                            "edge_count": graph_data.get("edge_count", 0),
+                            "chunk_count": len(chunks),
+                            "resumed_chunk_count": len(checkpoint.completed_chunk_indices),
+                            # Leere Liste heißt „nichts ist still ausgefallen“
+                            # — spiegelt den Original-Build (P1-3).
+                            "degradations": degradation_payload,
+                        },
+                    )
+                    run_registry.update_run(
+                        new_run["run_id"],
+                        status="completed",
+                        progress=100,
+                        message="Graph build completed",
+                        artifacts=ArtifactLocator.existing_paths({
+                            "project_dir": ProjectManager._get_project_dir(project_id),
+                        }),
+                    )
+                except Exception as exc:  # noqa: BLE001 — exception reported to task/run registry
+                    project.status = ProjectStatus.FAILED
+                    project.error = str(exc)
+                    ProjectManager.save_project(project)
+                    import traceback
+                    task_manager.update_task(
+                        task_id,
+                        status=TaskStatus.FAILED,
+                        message=f"Build failed: {exc}",
+                        error=traceback.format_exc(),
+                    )
+                    run_registry.update_run(
+                        new_run["run_id"],
+                        status="failed",
+                        message=str(exc),
+                        error=str(exc),
+                        resume_capability=resume_capability_for_checkpoint(checkpoint_holder[0]),
+                    )
+
+            from ..jobs import enqueue
+            enqueue("graph_build", build_task, run_id=new_run["run_id"])
+
+        return {"run_id": new_run["run_id"], "task_id": task_id, "status": "processing"}
