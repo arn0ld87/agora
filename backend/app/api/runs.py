@@ -517,8 +517,11 @@ def _resume_graph_build(
     checkpoint: GraphBuildCheckpoint,
     *,
     chunks: list[str],
-    document_ids: list,
-    chunk_ids: list,
+    # Wie in ``GraphBuilderService.add_text_batches``: beide Listen sind
+    # optional, und ihre Elemente duerfen einzeln ``None`` sein (ein Chunk
+    # ohne Dokument-/Chunk-Provenance). Ein blankes ``list`` verdeckte das.
+    document_ids: list[str | None] | None,
+    chunk_ids: list[int | None] | None,
     manifest_anchored: bool,
 ):
     """Reine Routing-Schicht (Issue #1472b): löst Projekt/Container auf und

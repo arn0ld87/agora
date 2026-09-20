@@ -829,8 +829,11 @@ class GraphBuildService:
         parent_run_id: str,
         checkpoint: GraphBuildCheckpoint,
         chunks: list[str],
-        document_ids: list,
-        chunk_ids: list,
+        # Wie in ``GraphBuilderService.add_text_batches``: beide Listen sind
+        # optional, und ihre Elemente duerfen einzeln ``None`` sein (ein
+        # Chunk ohne Dokument-/Chunk-Provenance).
+        document_ids: list[str | None] | None,
+        chunk_ids: list[int | None] | None,
         container,
     ) -> dict:
         """Setzt einen unterbrochenen ``graph_build`` anhand eines Checkpoints fort
@@ -874,8 +877,20 @@ class GraphBuildService:
             idx for idx in range(len(chunks)) if idx not in completed_indices
         ]
         remaining_chunks = [chunks[idx] for idx in remaining_original_indices]
-        remaining_document_ids = [document_ids[idx] for idx in remaining_original_indices]
-        remaining_chunk_ids = [chunk_ids[idx] for idx in remaining_original_indices]
+        # ``document_ids``/``chunk_ids`` sind optional (ein Lauf ohne
+        # Provenance uebergibt ``None``, siehe ``add_text_batches``). Ohne
+        # diese Fallunterscheidung waere ein Resume genau dort mit einem
+        # TypeError gestorben, wo er am noetigsten ist.
+        remaining_document_ids = (
+            [document_ids[idx] for idx in remaining_original_indices]
+            if document_ids is not None
+            else None
+        )
+        remaining_chunk_ids = (
+            [chunk_ids[idx] for idx in remaining_original_indices]
+            if chunk_ids is not None
+            else None
+        )
 
         from .run_lifecycle import RunLifecycle
 
