@@ -17,6 +17,16 @@ Die Oberfläche ist über zehn PRs neu geschnitten — Ablage und Dossier sind d
 
 Was dieses Release **nicht** liefert: Reproduzierbarkeit. `RunManifest` und Replay-Dialog existieren strukturell, das Manifest ist aber kein vollständiger Reproduktionsanker — derselbe gespeicherte Seed erzeugt weiterhin nicht denselben Lauf (#763/#1274). Die Embedding-SSoT-Ausnahme (#1417) ist enger geworden, nicht geschlossen: Slice 2.1 und 2.2 sind gelandet, 2.3 und 2.4 offen. Langläufer ausserhalb der OASIS-Simulation überleben einen Neustart weiterhin nicht (#1472) — der neue `atexit`-Hook markiert sie ehrlich als `failed/process_restart`, statt sie stumm verschwinden zu lassen.
 
+### Release-Metadaten — Zenodo-Versionsstring
+
+`.zenodo.json` setzt seit dem 0.9.6-Schnitt ein eigenes `version`-Feld. Zuvor
+gab es keines, und der Zenodo-Webhook übernahm den Tag-Namen — die sechs
+bisherigen Archiv-Einträge stehen deshalb als `v0.9.5`, `v0.9.4` und so
+weiter. Der Wert lautet jetzt `v0.9.6` statt `0.9.6`, damit die Versionsliste
+im Archiv einheitlich bleibt; nachträglich lässt sich das dort nicht mehr
+korrigieren. `VERSION` und `CITATION.cff` führen weiterhin die reine
+SemVer-Zahl — CFF-Konvention und Quelle für `check_version_drift.py`.
+
 ### Slice 1.3 — Graph-Build-Resume
 
 Ein unterbrochener Graph-Build kann jetzt an der Stelle fortgesetzt werden, an
