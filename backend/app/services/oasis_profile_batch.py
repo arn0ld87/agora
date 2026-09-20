@@ -122,6 +122,17 @@ on_profile_saved :Optional [Callable [[int ,OasisAgentProfile ],None ]]=None ,
         """Worker function to generate single profile"""
         entity_type =entity .get_entity_type ()or "Entity"
 
+        # Issue #1472c (Prepare-Resume): fuer diesen Generierungs-Index
+        # liegt aus einem frueheren, unterbrochenen Versuch bereits ein
+        # Profil vor — kein erneuter LLM-Call. Schluessel ist der Index,
+        # NICHT die Entity-UUID: dieselbe Entity kann durch Quota-Expansion
+        # mehrfach im Pool stehen, und jede Wiederholung hat einen eigenen
+        # demografischen Slot (siehe ``already_done``-Docstring oben).
+        if already_done is not None and idx in already_done :
+            cached_profile =already_done [idx ]
+            self ._print_generated_profile (entity .name ,entity_type ,cached_profile )
+            return idx ,cached_profile ,None
+
         try :
             profile =self .generate_profile_from_entity (
             entity =entity ,
@@ -202,6 +213,21 @@ on_profile_saved :Optional [Callable [[int ,OasisAgentProfile ],None ]]=None ,
         with lock :
             completed_count [0 ]+=1
             current =completed_count [0 ]
+
+            # Issue #1472c (Prepare-Resume): Checkpoint-Schreiben unter
+            # demselben Lock wie der Fortschrittszaehler — nur fuer frisch
+            # generierte Profile, nicht fuer aus dem Checkpoint uebernommene
+            # (sonst wuerde jeder Prozess-Restart den Checkpoint erneut mit
+            # denselben Eintraegen beschreiben, ohne Mehrwert). Ein
+            # ``None``-Profil (Ablehnung) wird NICHT gecheckpointet — die
+            # Ablehnung ist kein abgeschlossenes Ergebnis, ein Resume soll
+            # sie erneut versuchen (moeglicherweise mit anderem Ausgang).
+            if (
+            profile is not None
+            and on_profile_saved is not None
+            and (already_done is None or result_idx not in already_done )
+            ):
+                on_profile_saved (result_idx ,profile )
 
             # Real-time file writing
         save_profiles_realtime ()

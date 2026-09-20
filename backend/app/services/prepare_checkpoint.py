@@ -25,13 +25,17 @@ statt unbemerkt ohne aktuellen Checkpoint weiterzulaufen.
 
 from __future__ import annotations
 
+import dataclasses
 import os
 from datetime import UTC, datetime
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from ..contracts.prepare_checkpoint_contract import PreparePersonaCheckpoint
 from ..utils.json_io import read_json_file, write_json_atomic
 from ..utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from .oasis_profile_models import OasisAgentProfile
 
 logger = get_logger("agora.prepare_checkpoint")
 
@@ -43,11 +47,49 @@ __all__ = [
     "checkpoint_is_resumable",
     "checkpoint_path",
     "clear_checkpoint",
+    "completed_profiles_from_checkpoint",
     "load_checkpoint",
     "new_checkpoint",
+    "profile_from_dict",
+    "profile_to_dict",
     "resolve_interruption_status",
     "save_checkpoint",
 ]
+
+
+def profile_to_dict(profile: "OasisAgentProfile") -> dict[str, Any]:
+    """Serialisiert ein ``OasisAgentProfile`` (Dataclass) für den Checkpoint."""
+    return dataclasses.asdict(profile)
+
+
+def profile_from_dict(data: dict[str, Any]) -> "OasisAgentProfile":
+    """Rekonstruiert ein ``OasisAgentProfile`` aus Checkpoint-Daten."""
+    from .oasis_profile_models import OasisAgentProfile
+
+    return OasisAgentProfile(**data)
+
+
+def completed_profiles_from_checkpoint(
+    checkpoint: PreparePersonaCheckpoint,
+) -> dict[int, "OasisAgentProfile"]:
+    """Baut die ``already_done``-Map (Generierungs-Index → Profil) aus dem Checkpoint.
+
+    Ein einzelner defekter Eintrag invalidiert nicht den gesamten
+    Checkpoint — er wird übersprungen (und damit beim Resume neu
+    generiert), statt den Resume-Versuch komplett scheitern zu lassen.
+    """
+    result: dict[int, "OasisAgentProfile"] = {}
+    for raw_index, profile_data in checkpoint.completed_profiles.items():
+        try:
+            index = int(raw_index)
+            result[index] = profile_from_dict(profile_data)
+        except (TypeError, ValueError) as exc:
+            logger.warning(
+                "Prepare-Checkpoint: Eintrag %r nicht rekonstruierbar (%s), wird uebersprungen",
+                raw_index,
+                exc,
+            )
+    return result
 
 
 def checkpoint_path(sim_dir: str) -> str:
