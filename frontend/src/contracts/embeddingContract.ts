@@ -53,6 +53,9 @@ export type EmbeddingMigrationStatus = z.infer<
 >
 
 export const EmbeddingIndexStatusSchema = z.enum([
+  // 'building': angelegt, das Re-Embedding befuellt ihn noch. Der Betrieb
+  // folgt weiterhin der vorherigen 'active'-Version (Slice 2.2, #1417).
+  'building',
   'active',
   'superseded',
   'rolled_back',

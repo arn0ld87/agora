@@ -6,6 +6,7 @@ import {
   EmbeddingMigrationProgressSchema,
   EmbeddingMigrationStatusSchema,
   EmbeddingIndexStatusSchema,
+  EmbeddingIndexVersionSchema,
   EmbeddingProviderKindSchema,
   EmbeddingConfigurationScopeSchema,
 } from '../embeddingContract'
@@ -56,8 +57,9 @@ describe('embeddingContract — Zod-Spiegel der Backend-Contracts', () => {
     }
   })
 
-  it('akzeptiert alle 4 EmbeddingIndexStatus-Werte', () => {
+  it('akzeptiert alle 5 EmbeddingIndexStatus-Werte', () => {
     for (const status of [
+      'building',
       'active',
       'superseded',
       'rolled_back',
@@ -65,6 +67,24 @@ describe('embeddingContract — Zod-Spiegel der Backend-Contracts', () => {
     ]) {
       expect(EmbeddingIndexStatusSchema.parse(status)).toBe(status)
     }
+  })
+
+  it('EmbeddingIndexVersion: status=building ist ein gueltiger Zwischenstand', () => {
+    // Slice 2.2 (#1417): waehrend das Re-Embedding laeuft, traegt die neue
+    // Index-Version diesen Status. Ohne den Wert im Spiegel wuerde das
+    // Frontend eine laufende Migration als Vertragsverletzung abweisen.
+    const parsed = EmbeddingIndexVersionSchema.parse({
+      version: 2,
+      provider_connection_id: 'conn-1',
+      model_id: 'nomic-embed-text',
+      dimensions: 768,
+      index_name: 'entity_embedding_v2',
+      property_key: 'embedding_v2',
+      status: 'building',
+      created_at: '2026-09-20T08:00:00+00:00',
+      retired_at: null,
+    })
+    expect(parsed.status).toBe('building')
   })
 
   it('EmbeddingConfiguration: scope=project erfordert project_id', () => {
