@@ -70,6 +70,7 @@ Wichtige Konfliktcodes:
 - nicht vorbereitete Simulation → `simulation_not_prepared`
 - aktive Simulation → `simulation_already_running`
 - ausstehendes Persona-Review → `persona_review_required`
+- aktive Report-Generierung → `409 report_generate_in_progress`
 
 Nutzer-Stop und Infrastrukturabbruch sind unterschiedliche Zustände: ein expliziter Stop wird als `stopped` mit `termination_reason="user_stop"` geführt; stale Prozesse nach Worker-/Container-Restart können durch Startup-Reconciliation als `failed/process_restart` markiert werden.
 
@@ -83,6 +84,12 @@ Wichtige Bereiche:
 - Markdown/JSON/CSV/ZIP-Export
 - Agent-/Console-Logs
 - Report-Chat und Report-Tools
+
+#### Report-Generierung (Serialisierung)
+
+Eine zweite parallele Report-Generierung für dieselbe Simulation wird mit HTTP `409 report_generate_in_progress` abgewiesen, solange bereits ein Run mit `run_type=report_generate` und Status `pending` oder `processing` existiert. Dies ist **bewusst serialisierend** (Issue #1265), da parallele Report-Generierungen den Faktor ~6 an Ressourcenverbrauch (Tokens, LLM-Calls, Laufzeit) verursachen, ohne Mehrwert zu liefern. Der aktive `run_id` wird im Fehlerfall nicht im Response-Body mitgegeben; der Client fragt `/api/report/generate/status` mit der `simulation_id` ab, um den laufenden Run zu identifizieren.
+
+Nach Completion (`completed`, `failed`, `stopped`) ist ein neuer Start wieder erlaubt. Ein bereits existierender, abgeschlossener Report (`COMPLETED`) wird bei `force_regenerate=false` weiterhin wiederverwendet — der Guard läuft dabei zuerst, die Wiederverwendung wird erst danach geprüft.
 
 #### Reportstatus
 

@@ -106,6 +106,8 @@ Die 0.9.5-Stabilisierung hat mehrere vorher stille Zustandsfehler geschlossen:
 
 Prepare-, Report- und Graph-Build-Jobs laufen weiterhin als daemonisierte Threads im Webprozess. Ein SIGTERM markiert diese Jobs nun **sofort** als `failed/process_restart` (Slice 1.1, #1472a), statt auf die Startup-Reconciliation beim nächsten Start zu warten. Das Cancel-Flag wird kooperativ gesetzt; für `simulation_prepare` wird auch der `SimulationState` auf `FAILED` gesetzt. Ein vollständig persistierter `interrupted`-/Resume-Zustand wird **nicht** erzeugt — das bleibt in #1472 offen und ein 0.10-Release-Thema. Der Redis-Event-Bus ist **keine persistente Jobqueue**.
 
+Report-Generierungen sind seit Slice 1.2 (#1265) je Simulation **serialisiert**: ein zweiter Start wird mit `409 report_generate_in_progress` abgewiesen, solange ein Run mit `run_type=report_generate` in `pending` oder `processing` steht. Das ist eine bewusste Verhaltensänderung gegenüber 0.9.5 und eine Einschränkung für parallele Nutzung, keine Optimierung. Reportarbeit in einen eigenen Prozess zu verschieben bleibt 1.0-Vorarbeit.
+
 ## Graph und Ingestion
 
 - Episode- und `RELATION`-Writes sind gegen Retry-after-commit idempotent (`MERGE` auf stabiler UUID), damit ein verlorenes Neo4j-ACK nicht zu Constraint-Fehlern oder stillen Dubletten führt (#1460).
