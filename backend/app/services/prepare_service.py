@@ -144,6 +144,90 @@ def _entity_uuids_or_none(entities: List[Any]) -> Optional[List[str]]:
     return uuids
 
 
+def _build_profile_checkpoint_hooks(
+    *,
+    state: SimulationState,
+    filtered: Any,
+    entities: List[Any],
+    sim_dir: str,
+    defined_entity_types: Optional[List[str]],
+    max_agents: Optional[int],
+    persona_floor: int,
+    use_llm_for_profiles: bool,
+    quota_plan: Optional[PersonaQuotaPlan],
+    resume_checkpoint: Optional["_prepare_checkpoint.PreparePersonaCheckpoint"],
+) -> Tuple[Optional[Dict[int, OasisAgentProfile]], Optional[Callable[[int, OasisAgentProfile], None]]]:
+    """Baut ``already_done``/``on_profile_saved`` für ``_phase_generate_profiles`` (Issue #1472c).
+
+    Ausgelagert in eine eigene Funktion statt inline in
+    ``_phase_generate_profiles`` — Lehre aus Slice 1.3: zusätzliche
+    Resume-Zweige direkt in der Phasenfunktion kippen deren zyklomatische
+    Komplexität schnell über den Radon-Schwellenwert; ein neuer Eintrag in
+    ``radon-allowlist.txt`` ist keine Lösung, eine Auslagerung schon.
+
+    Checkpointing ist eine Zusatzabsicherung, kein hartes Erfordernis für
+    die Generierung selbst: fehlt ``state.simulation_id`` (Test-Doubles
+    unterhalb dieser Ebene) oder tragen die Entities kein echtes
+    ``uuid``-Attribut, liefert diese Funktion ``(None, None)`` — die
+    Generierung läuft normal weiter, nur ohne Checkpoint.
+    """
+    simulation_id = getattr(state, "simulation_id", None)
+
+    if resume_checkpoint is not None:
+        already_done = _prepare_checkpoint.completed_profiles_from_checkpoint(
+            resume_checkpoint
+        )
+        logger.info(
+            "Prepare-Resume: %d/%d Personas aus Checkpoint übernommen für %s",
+            len(already_done),
+            len(entities),
+            simulation_id,
+        )
+        checkpoint_box: List[Any] = [resume_checkpoint]
+    elif simulation_id:
+        primary_uuids = _entity_uuids_or_none(filtered.entities)
+        reserve_uuids = _entity_uuids_or_none(
+            getattr(filtered, "reserve_entities", None) or []
+        )
+        expanded_uuids = _entity_uuids_or_none(entities)
+        if primary_uuids is None or reserve_uuids is None or expanded_uuids is None:
+            logger.debug(
+                "Prepare-Checkpoint übersprungen für %s: Entities ohne "
+                "echtes uuid-Attribut (Test-/Fake-Pfad)",
+                simulation_id,
+            )
+            return None, None
+        checkpoint_box = [
+            _prepare_checkpoint.new_checkpoint(
+                simulation_id=simulation_id,
+                graph_id=state.graph_id,
+                defined_entity_types=defined_entity_types,
+                max_agents=max_agents,
+                persona_floor=persona_floor,
+                use_llm_for_profiles=use_llm_for_profiles,
+                effective_quota_plan=(
+                    quota_plan.model_dump() if quota_plan is not None else None
+                ),
+                primary_entity_uuids=primary_uuids,
+                reserve_entity_uuids=reserve_uuids,
+                expanded_entity_uuids=expanded_uuids,
+                entities_count=state.entities_count,
+                entity_types=state.entity_types,
+            )
+        ]
+        already_done = None
+    else:
+        return None, None
+
+    def _on_profile_saved(index: int, profile: OasisAgentProfile) -> None:
+        checkpoint_box[0] = checkpoint_box[0].with_completed_profile(
+            index, _prepare_checkpoint.profile_to_dict(profile)
+        )
+        _prepare_checkpoint.save_checkpoint(sim_dir, checkpoint_box[0])
+
+    return already_done, _on_profile_saved
+
+
 def _phase_generate_profiles(
     state: SimulationState,
     storage: Any,
@@ -265,74 +349,20 @@ def _phase_generate_profiles(
         realtime_platform = "twitter"
 
     # Issue #1472c (Prepare-Resume): Checkpoint aufsetzen bzw. fortsetzen.
-    # ``checkpoint_box`` ist eine Einzelelement-Liste statt einer einfachen
-    # Variable, weil ``_on_profile_saved`` (unten) sie in einer Closure
-    # SCHREIBEND braucht — ``PreparePersonaCheckpoint`` ist unveränderlich
-    # (``with_completed_profile`` liefert eine neue Instanz zurück), also
-    # muss die Referenz selbst austauschbar sein.
-    #
-    # Checkpointing ist eine Zusatzabsicherung, kein hartes Erfordernis für
-    # die Generierung selbst: ruft ein Aufrufer diese Funktion mit Entities
-    # ohne echte ``uuid``-Strings auf (z. B. Test-Doubles unterhalb dieser
-    # Ebene, die Persona-Logik statt Prepare-Resume prüfen), wird das
-    # Checkpointing für diesen Aufruf still deaktiviert statt die
-    # Generierung mit einer ``ValidationError`` zum Absturz zu bringen.
-    already_done: Optional[Dict[int, OasisAgentProfile]] = None
-    on_profile_saved: Optional[Callable[[int, OasisAgentProfile], None]] = None
-    checkpoint_box: List[Any] = []
-
-    if resume_checkpoint is not None:
-        checkpoint_box = [resume_checkpoint]
-        already_done = _prepare_checkpoint.completed_profiles_from_checkpoint(
-            resume_checkpoint
-        )
-        logger.info(
-            "Prepare-Resume: %d/%d Personas aus Checkpoint übernommen für %s",
-            len(already_done),
-            len(entities),
-            state.simulation_id,
-        )
-    else:
-        primary_uuids = _entity_uuids_or_none(filtered.entities)
-        reserve_uuids = _entity_uuids_or_none(
-            getattr(filtered, "reserve_entities", None) or []
-        )
-        expanded_uuids = _entity_uuids_or_none(entities)
-        if primary_uuids is not None and reserve_uuids is not None and expanded_uuids is not None:
-            checkpoint_box = [
-                _prepare_checkpoint.new_checkpoint(
-                    simulation_id=state.simulation_id,
-                    graph_id=state.graph_id,
-                    defined_entity_types=defined_entity_types,
-                    max_agents=max_agents,
-                    persona_floor=persona_floor,
-                    use_llm_for_profiles=use_llm_for_profiles,
-                    effective_quota_plan=(
-                        quota_plan.model_dump() if quota_plan is not None else None
-                    ),
-                    primary_entity_uuids=primary_uuids,
-                    reserve_entity_uuids=reserve_uuids,
-                    expanded_entity_uuids=expanded_uuids,
-                    entities_count=state.entities_count,
-                    entity_types=state.entity_types,
-                )
-            ]
-        else:
-            logger.debug(
-                "Prepare-Checkpoint übersprungen für %s: Entities ohne "
-                "echtes uuid-Attribut (Test-/Fake-Pfad)",
-                state.simulation_id,
-            )
-
-    if checkpoint_box:
-
-        def _on_profile_saved(index: int, profile: OasisAgentProfile) -> None:
-            checkpoint_box[0] = checkpoint_box[0].with_completed_profile(
-                index, _prepare_checkpoint.profile_to_dict(profile)
-            )
-            _prepare_checkpoint.save_checkpoint(sim_dir, checkpoint_box[0])
-
-        on_profile_saved = _on_profile_saved
+    # Ausgelagert in ``_build_profile_checkpoint_hooks`` (Komplexitäts-
+    # Gründe, siehe deren Docstring).
+    already_done, on_profile_saved = _build_profile_checkpoint_hooks(
+        state=state,
+        filtered=filtered,
+        entities=entities,
+        sim_dir=sim_dir,
+        defined_entity_types=defined_entity_types,
+        max_agents=max_agents,
+        persona_floor=persona_floor,
+        use_llm_for_profiles=use_llm_for_profiles,
+        quota_plan=quota_plan,
+        resume_checkpoint=resume_checkpoint,
+    )
 
     profiles = generator.generate_profiles_from_entities(
         entities=entities,
@@ -348,7 +378,7 @@ def _phase_generate_profiles(
         # lief damit nie. Ohne diese Zeile bleibt die Meldung dort tot.
         degradations=degradations,
         already_done=already_done,
-        on_profile_saved=_on_profile_saved,
+        on_profile_saved=on_profile_saved,
         # Issue #1247: Nachrücker für Kandidaten, die der Generator als nicht
         # personenfähig zurückweist.
         reserve_entities=getattr(filtered, "reserve_entities", None),
