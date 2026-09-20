@@ -7,7 +7,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [0.9.6] - 2026-09-20
 
-Ein Zwischenrelease zwischen `0.9.5` (11.08.2026) und dem Ziel `0.10.0`: 331 Commits, 183 eingesammelte Changelog-Fragmente, sechs Wochen Arbeit. Es ist ausdrücklich **kein `0.10.0`** — die neun Release-Prioritäten aus [`ROADMAP.md`](ROADMAP.md) sind nicht erfüllt, und dieses Release beansprucht keines ihrer Gates.
+Ein Zwischenrelease zwischen `0.9.5` (11.08.2026) und dem Ziel `0.10.0`: mehr als 330 Commits, 184 eingesammelte Changelog-Fragmente, sechs Wochen Arbeit. Es ist ausdrücklich **kein `0.10.0`** — die neun Release-Prioritäten aus [`ROADMAP.md`](ROADMAP.md) sind nicht erfüllt, und dieses Release beansprucht keines ihrer Gates.
 
 Vier Wege zu einem Modell statt einem: neben HTTP sprechen `codex_cli` und `claude_cli` eine lokal installierte CLI über deren Login-Session — ohne API-Key, ohne Endpunkt — und Amazon Bedrock kommt als OpenAI-kompatibler Provider dazu. Das Request-Shaping liegt dafür nicht mehr verteilt in `chat`, `describe_image` und `tool_calls`, sondern hinter `build_request` und `execute` in `app/llm/request_plan.py`.
 
@@ -17,14 +17,99 @@ Die Oberfläche ist über zehn PRs neu geschnitten — Ablage und Dossier sind d
 
 Was dieses Release **nicht** liefert: Reproduzierbarkeit. `RunManifest` und Replay-Dialog existieren strukturell, das Manifest ist aber kein vollständiger Reproduktionsanker — derselbe gespeicherte Seed erzeugt weiterhin nicht denselben Lauf (#763/#1274). Die Embedding-SSoT-Ausnahme (#1417) ist enger geworden, nicht geschlossen: Slice 2.1 und 2.2 sind gelandet, 2.3 und 2.4 offen. Langläufer ausserhalb der OASIS-Simulation überleben einen Neustart weiterhin nicht (#1472) — der neue `atexit`-Hook markiert sie ehrlich als `failed/process_restart`, statt sie stumm verschwinden zu lassen.
 
+### Slice 1.3 — Graph-Build-Resume
+
+Ein unterbrochener Graph-Build kann jetzt an der Stelle fortgesetzt werden, an
+der er abgebrochen wurde, statt komplett neu zu starten. `GraphBuilderService.
+add_text_batches` verarbeitet Chunks parallel über einen `ThreadPoolExecutor`
+und schließt sie deshalb außerhalb ihrer Ursprungsreihenfolge ab — ein
+einzelner Höchstwert-Cursor wie bei `EmbeddingMigrationProgress.
+last_processed_id` reicht als Checkpoint-Einheit nicht. Der neue
+`GraphBuildCheckpoint`-Vertrag (`backend/app/contracts/
+graph_build_checkpoint_contract.py`) führt deshalb die tatsächliche MENGE
+bereits committeter Chunk-Indizes, nicht nur einen Höchstwert, und wird je
+Projekt (nicht je Run-ID) atomar mit `fsync` persistiert — ein Resume-Versuch
+legt einen eigenen, neuen Run an, der Fortschritt selbst gehört aber zum
+Graph-Build-Vorhaben des Projekts als Ganzes und muss über mehrere Versuche
+hinweg erhalten bleiben.
+
+Der Plan-Wortlaut "Stage-Checkpoint pro abgeschlossenem Build-Abschnitt" trägt
+nicht wörtlich: der Build zerfällt nicht in abgrenzbare Abschnitte wie
+Ingest/Chunking/Extraktion/Embedding/Write, sondern ist eine durchgehende
+Chunk-Schleife, in der jeder Chunk NER-Extraktion, Embedding und Neo4j-Write
+in einem Aufruf bündelt. Die richtige Einheit ist ein Chunk-Index.
+
+Der Checkpoint bindet sich zusätzlich an `graph_id`, `chunk_size`,
+`chunk_overlap` und eine `manifest_anchored`-Flagge (dokument-verankerte vs.
+Legacy-Chunk-Zerlegung). Das ist kein Zusatzschutz, sondern zwingend: Neo4j
+dedupliziert Entities über einen inhaltlichen MERGE-Schlüssel
+(`graph_id + name_lower + entity_type`), aber Episode- und Relation-Knoten
+über eine je Aufruf frisch generierte UUID — ein erneut prozessierter, bereits
+committeter Chunk würde also Dubletten-Episoden und -Relationen erzeugen statt
+sie zu deduplizieren. Ändern sich Chunk-Größe, Overlap oder die
+Chunking-Methode gegenüber dem Original-Lauf, bedeutet ein Chunk-Index nicht
+mehr dasselbe Textstück — der Checkpoint gilt dann als ungültig und die Route
+fällt sauber auf einen kompletten Restart zurück, statt falsch übersprungene
+Chunks zu produzieren.
+
+`POST /api/runs/<id>/resume` bietet für `graph_build`-Runs jetzt zwei Pfade
+hinter derselben Route (analog dem bestehenden Resume/Restart-Dispatch für
+`simulation_run`): `_resume_or_restart_graph_build` prüft den Checkpoint gegen
+die aktuelle Chunk-Zerlegung und wählt `GraphBuildService.resume_graph_build`
+(setzt am Checkpoint fort, kein erneutes `create_graph`, verarbeitet nur die
+noch nicht abgeschlossenen Chunks) oder fällt auf den bestehenden
+`_restart_graph_build` zurück. `resume_capability` beschreibt jetzt den
+tatsächlichen Zustand: `resume` wird nur angeboten, wenn ein zum aktuellen
+Graphen passender Checkpoint mit mindestens einem abgeschlossenen Chunk
+existiert — ein angebotenes Resume, das doch bei null beginnt, wäre schlimmer
+als keins.
+
+Das schließt auch den Prozess-Neustart-Fall aus Slice 1.1 aus #1472: dessen
+Changelog hielt ausdrücklich fest, dass dort "kein vollständig persistierter
+interrupted-/Resume-Zustand" entsteht. Sowohl der Shutdown-Hook
+(`services/sim/process_shutdown.py`) als auch die Startup-Reconciliation
+(`services/sim/reconciliation.py`) markierten `graph_build`-Runs bisher ohne
+Checkpoint-Prüfung failed/`process_restart` und ließen dabei den sticky
+`restart`-Default aus der Run-Anlage stehen. Beide setzen jetzt für
+`graph_build`-Runs `resume_capability` anhand des vorhandenen Checkpoints
+(leichtgewichtige Prüfung: Graph-Identität + mindestens ein fertiger Chunk;
+die volle Parametervalidierung inklusive Chunk-Größe/Overlap übernimmt erst
+der eigentliche Resume-Versuch und fällt bei Nichtübereinstimmung sauber auf
+Restart zurück). Ohne diese Ergänzung würde der genau für diesen Fall gebaute
+Checkpoint-Mechanismus dem Nutzer nie angeboten — der Prozess-Neustart ist der
+Hauptfall, für den Slice 1.3 überhaupt existiert.
+
+Ein Checkpoint-Schreibfehler (Festplatte, Berechtigungen) propagiert
+unverändert aus `add_text_batches` heraus und beendet den betroffenen Run
+sichtbar als `failed`, statt den Build unbemerkt ohne aktuellen Checkpoint
+weiterlaufen zu lassen.
+
+Weiterhin offen: Prepare-Resume (Slice 1.4, #1472c) und Heartbeat/Lease
+(Slice 1.5, #1472d). #1472 als Ganzes ist damit nicht geschlossen.
+
+Review-Nachbesserung (PR #1535): drei Fälle behoben. Erstens scheiterte ein
+Build nach dem ersten gesetzten Checkpoint bislang mit `delete_graph`, obwohl
+`resume_capability` weiter `resume` anbot — der Resume-Pfad arbeitet aber
+ausschließlich mit `MATCH` und hätte ins Leere gegriffen. Der Checkpoint wird
+jetzt zusammen mit dem gelöschten Graphen verworfen, danach bleibt nur noch
+`restart` eine ehrliche Option. Zweitens verlor `add_text_batches` bei einem
+scheiternden Chunk in der `as_completed`-Schleife den Checkpoint für Chunks,
+die zu diesem Zeitpunkt bereits erfolgreich committet, aber noch nicht
+gecheckpointet waren — ein anschließender Resume hätte sie erneut verarbeitet
+und Dubletten-Episoden erzeugt. Drittens durchlief ein resumeter Build das
+Qualitätsgate (`assess_graph_quality_from_counts`) nicht und trug deshalb nie
+eine `degradations`-Meldung, selbst wenn der fertige Graph unter der
+Mindestzahl an Relationen blieb — der resumete Pfad meldet diese Degradation
+jetzt genauso wie der Original-Build.
+
 ### Added (die LLM-Profile können jetzt in PostgreSQL liegen — 2026-09-18)
 
-- **`PostgresLlmProfileRepository` ist der zweite Adapter des Ports**, PR 4 aus [`docs/plans/supabase.md`](../docs/plans/supabase.md) §10 und die erste echte Datenmigration des Plans. `AGORA_LLM_PROFILE_BACKEND=postgres` ist damit ein Wert, der etwas tut — der Default bleibt `sqlite`.
+- **`PostgresLlmProfileRepository` ist der zweite Adapter des Ports**, PR 4 aus [`docs/plans/supabase.md`](docs/plans/supabase.md) §10 und die erste echte Datenmigration des Plans. `AGORA_LLM_PROFILE_BACKEND=postgres` ist damit ein Wert, der etwas tut — der Default bleibt `sqlite`.
 - **Die ID-Darstellung bleibt die der SQLite.** Der bisherige Store erzeugt IDs als `uuid4().hex` (32 Zeichen), die Spalte in PostgreSQL ist ein `UUID` (36 Zeichen mit Bindestrichen) — dieselbe Zahl, andere Schreibweise. Der Adapter reicht nach außen immer `.hex`. Ohne das bekäme dieselbe Zeile nach der Migration eine andere ID, und jede gespeicherte Referenz der Form `llm_model: "profile:<id>"` in einer Simulationskonfiguration zeigte ins Leere.
 - **Der Schlüssel liegt nicht in der Tabelle.** `agora.llm_profiles` hat keine `api_key`-Spalte; der Adapter holt ihn aus dem Fernet-Store, den PR #1516 eingeführt hat, unter derselben Profil-ID. Zwei Profile desselben Providers behalten damit verschiedene Schlüssel — verifiziert gegen eine echte Datenbank, nicht nur behauptet.
 - **`scripts/migrate_llm_profiles_to_postgres.py` überträgt den Bestand** und lässt die SQLite unberührt (`mode=ro`, §10 Schritt 9). `--dry-run` zählt, `--verify` vergleicht feldweise: Anzahl, IDs, alle Felder, beide Zeitstempel und die Schlüssel über den **entschlüsselten Klartext** — eine Existenzprüfung würde einen Eintrag durchgehen lassen, der unter der falschen ID liegt. Verwaiste Zeilen in PostgreSQL werden benannt. Der Lauf ist wiederholbar: ein zweiter Durchgang aktualisiert, statt an der Primärschlüssel-Kollision zu scheitern.
 - **`list()` legt in PostgreSQL kein Bootstrap-Profil an**, anders als der SQLite-Adapter. Das Bootstrap ist Erstinbetriebnahme einer leeren Installation; wer auf PostgreSQL umschaltet, hat seinen Bestand migriert und bekäme sonst ein zusätzliches Profil, das niemand angelegt hat.
-- **Ablauf, Rückweg und Grenzen stehen in [`docs/runbooks/llm-profile-postgres-umstellung.md`](../docs/runbooks/llm-profile-postgres-umstellung.md).** Dort auch der Satz, der am leichtesten übersehen wird: der Rückweg auf `sqlite` ist sofort wirksam, verliert aber jedes Profil, das nach der Umstellung angelegt wurde — er gilt für den Tag der Umstellung, nicht für den Monat danach.
+- **Ablauf, Rückweg und Grenzen stehen in [`docs/runbooks/llm-profile-postgres-umstellung.md`](docs/runbooks/llm-profile-postgres-umstellung.md).** Dort auch der Satz, der am leichtesten übersehen wird: der Rückweg auf `sqlite` ist sofort wirksam, verliert aber jedes Profil, das nach der Umstellung angelegt wurde — er gilt für den Tag der Umstellung, nicht für den Monat danach.
 
 ### Changed
 
@@ -32,7 +117,7 @@ Was dieses Release **nicht** liefert: Reproduzierbarkeit. `RunManifest` und Repl
 
 ### Added (die Profil-Schlüssel haben jetzt eine verschlüsselte Ablage — 2026-09-18)
 
-- **`LlmProfileSecretsStore` legt API-Keys pro Profil verschlüsselt ab**, Fernet unter `AGORA_SECRET_KEY`, Datei `llm_profile_secrets.json` im `AGORA_DATA_DIR`. Vorarbeit für PR 4 aus [`docs/plans/supabase.md`](../docs/plans/supabase.md) §10: das Ziel-Datenmodell `agora.llm_profiles` hat bewusst keine `api_key`-Spalte, also braucht der PostgreSQL-Adapter die Schlüssel woanders.
+- **`LlmProfileSecretsStore` legt API-Keys pro Profil verschlüsselt ab**, Fernet unter `AGORA_SECRET_KEY`, Datei `llm_profile_secrets.json` im `AGORA_DATA_DIR`. Vorarbeit für PR 4 aus [`docs/plans/supabase.md`](docs/plans/supabase.md) §10: das Ziel-Datenmodell `agora.llm_profiles` hat bewusst keine `api_key`-Spalte, also braucht der PostgreSQL-Adapter die Schlüssel woanders.
 - **Warum nicht der bestehende Provider-Store.** Der legt **pro Provider** ab (`get_plaintext("openai")`). Profile sind feiner geschnitten: es gibt keinen Unique-Constraint auf `provider`, zwei Profile desselben Providers dürfen verschiedene Schlüssel tragen, und der Laufzeit-Resolver zieht den Schlüssel pro Profil. Hätte der PostgreSQL-Adapter auf den Provider-Store zurückgegriffen, teilten sich diese Profile stillschweigend einen Schlüssel — ein Verhaltenswechsel, der erst aufgefallen wäre, wenn das Feature-Flag längst umgelegt ist.
 - **Ein nicht entschlüsselbarer Eintrag ist kein fehlender Eintrag.** `get_plaintext` gibt `None` zurück, wenn kein Schlüssel hinterlegt ist, wirft aber `ProfileSecretDecryptionError`, wenn einer existiert und der Master-Key nicht passt. Ohne diese Trennung liefe ein Profil nach einer Key-Rotation stillschweigend ohne Authentifizierung weiter.
 - **Ein leerer Wert löscht den Eintrag**, statt einen verschlüsselten Leerstring abzulegen — dieselbe Bedeutung, die ein leeres `api_key`-Feld in der SQLite hat. Ein solcher Eintrag würde vorgeben, einen Schlüssel zu haben.
@@ -40,7 +125,7 @@ Was dieses Release **nicht** liefert: Reproduzierbarkeit. `RunManifest` und Repl
 
 ### Added (die LLM-Profile liegen jetzt hinter einem Port — 2026-09-18)
 
-- **`LlmProfileRepository` ist der Port für LLM-Profil-Metadaten**, PR 3 aus [`docs/plans/supabase.md`](../docs/plans/supabase.md) §38 und die erste Hälfte der Repository-Schicht aus §12. Der Port schreibt die Semantik des heutigen SQLite-Stores fest, damit der PostgreSQL-Adapter aus PR 4 sie nicht anders auslegt: `get()` gibt `None` zurück statt zu werfen (ein fehlendes Profil ist beim Auflösen einer Route ein erwarteter Fall), `api_key` verlässt das Repository nur mit `include_api_key=True`, und `list()` legt bei leerer Ablage das Bootstrap-Profil aus den `LLM_*`-Env-Variablen an — ohne das stünde eine frische Installation ohne jede Route da.
+- **`LlmProfileRepository` ist der Port für LLM-Profil-Metadaten**, PR 3 aus [`docs/plans/supabase.md`](docs/plans/supabase.md) §38 und die erste Hälfte der Repository-Schicht aus §12. Der Port schreibt die Semantik des heutigen SQLite-Stores fest, damit der PostgreSQL-Adapter aus PR 4 sie nicht anders auslegt: `get()` gibt `None` zurück statt zu werfen (ein fehlendes Profil ist beim Auflösen einer Route ein erwarteter Fall), `api_key` verlässt das Repository nur mit `include_api_key=True`, und `list()` legt bei leerer Ablage das Bootstrap-Profil aus den `LLM_*`-Env-Variablen an — ohne das stünde eine frische Installation ohne jede Route da.
 - **Der schwierigste Teil des Vertrags steht in `update()`.** Für `api_key` gilt eine Dreiteilung: `None` heißt „nicht mitgeschickt" und lässt den gespeicherten Schlüssel stehen, `""` heißt „ausdrücklich leeren", jeder andere Wert ersetzt ihn. Ohne diese Unterscheidung löschte jedes Speichern aus der Oberfläche den Schlüssel, denn die API gibt ihn nie aus und ein Formular schickt ihn leer zurück. Ein zweiter Adapter, der das übersieht, macht genau diesen Fehler wieder.
 - **`AGORA_LLM_PROFILE_BACKEND` schaltet die Ablage, Default `sqlite`.** Bewusst getrennt von `AGORA_METADATA_BACKEND`: die Stores werden einzeln umgestellt, und ein Schalter für alles wäre genau die Migration in einem Schritt, die der Plan vermeidet.
 - **`postgres` ist ein gültiger Wert ohne Adapter, und das sagt die Anwendung auch so.** `Config.validate()` lehnt ihn beim Start ab mit dem Hinweis, dass der Adapter mit PR 4 kommt und bestehende Profile bleiben, wo sie sind — nicht mit einem Importfehler beim ersten Profilzugriff. Die Factory wirft dieselbe Aussage als `LlmProfileBackendUnavailable`, falls jemand sie ohne Validierung erreicht; kein `ValueError`, weil der Wert nicht falsch ist, sondern noch nicht bedient. Die Verzweigung hängt an einer Konstanten, die mit PR 4 leer wird und die Verzweigung mitnimmt.
@@ -51,8 +136,8 @@ Was dieses Release **nicht** liefert: Reproduzierbarkeit. `RunManifest` und Repl
 
 ### Added (ein Maßstab dafür, dass eine Migration nichts verloren hat — 2026-09-18)
 
-- **`backend/scripts/migration_baseline.py` erzeugt ein Baseline-Manifest**, Phase 0 aus [`docs/plans/supabase.md`](../docs/plans/supabase.md) §6. Es wird zweimal gefahren — vor und nach einer Migrationsphase — und `--compare` hält beide gegeneinander: Anzahl, IDs, Zeitstempel, Statuswerte, Referenzen und eine sha256 je Artefaktdatei. „Die Migration lief sauber durch" ist keine Aussage, gegen die sich etwas prüfen lässt; „620 Runs vorher, 620 nachher, alle IDs identisch" ist es.
-- **Drei Fragen, drei Werkzeuge.** `restore-drill.sh` sichert, `restore_verify.py` prüft ob eine Wiederherstellung funktioniert, `migration_baseline.py` prüft ob eine Migration etwas verloren hat. Keines ersetzt ein anderes, und das neue Runbook [`docs/runbooks/migration-baseline.md`](../docs/runbooks/migration-baseline.md) sagt das als Erstes.
+- **`backend/scripts/migration_baseline.py` erzeugt ein Baseline-Manifest**, Phase 0 aus [`docs/plans/supabase.md`](docs/plans/supabase.md) §6. Es wird zweimal gefahren — vor und nach einer Migrationsphase — und `--compare` hält beide gegeneinander: Anzahl, IDs, Zeitstempel, Statuswerte, Referenzen und eine sha256 je Artefaktdatei. „Die Migration lief sauber durch" ist keine Aussage, gegen die sich etwas prüfen lässt; „620 Runs vorher, 620 nachher, alle IDs identisch" ist es.
+- **Drei Fragen, drei Werkzeuge.** `restore-drill.sh` sichert, `restore_verify.py` prüft ob eine Wiederherstellung funktioniert, `migration_baseline.py` prüft ob eine Migration etwas verloren hat. Keines ersetzt ein anderes, und das neue Runbook [`docs/runbooks/migration-baseline.md`](docs/runbooks/migration-baseline.md) sagt das als Erstes.
 - **Ungeprüft ist kein Erfolg.** Eine nicht erreichbare Quelle — fehlendes Verzeichnis, nicht lesbare `llm_profiles.db`, abwesendes Neo4j — wird als `unchecked` geführt, nie als `count = 0`. Der Vergleich endet dann mit Exit 2 statt grün. Dieselbe Regel, die `restore_verify.py` schon für übersprungene Prüfpunkte führt: ein blinder Fleck ist kein Nachweis.
 - **Das Manifest ist zum Weitergeben gedacht.** Keine Dateiinhalte, keine Geheimnisse. Die Spalte `api_key` aus `instance/llm_profiles.db` wird nicht gelesen — sie steht dort im Klartext —, `base_url` ebenso wenig, weil eine Basis-URL ein Token tragen kann.
 
@@ -67,7 +152,7 @@ Was dieses Release **nicht** liefert: Reproduzierbarkeit. `RunManifest` und Repl
 
 ### Added (die erste Fachtabelle existiert, und niemand liest sie — 2026-09-18)
 
-- **`agora.llm_profiles` ist das erste fachliche PostgreSQL-Modell**, Phase 3 aus [`docs/plans/supabase.md`](../docs/plans/supabase.md) §9 — und zwar nur die Definition. Ein SQLAlchemy-Modell (`LlmProfileModel`) und eine Alembic-Revision legen die Tabelle an; kein Store, kein Repository und kein Endpunkt zeigt darauf. Solange `AGORA_METADATA_BACKEND=legacy` gilt, entsteht keine Verbindung und die Tabelle bleibt leer. Der Umstieg ist Phase 4 und ein eigener Schritt.
+- **`agora.llm_profiles` ist das erste fachliche PostgreSQL-Modell**, Phase 3 aus [`docs/plans/supabase.md`](docs/plans/supabase.md) §9 — und zwar nur die Definition. Ein SQLAlchemy-Modell (`LlmProfileModel`) und eine Alembic-Revision legen die Tabelle an; kein Store, kein Repository und kein Endpunkt zeigt darauf. Solange `AGORA_METADATA_BACKEND=legacy` gilt, entsteht keine Verbindung und die Tabelle bleibt leer. Der Umstieg ist Phase 4 und ein eigener Schritt.
 - **Die Tabelle trägt Metadaten, keine Geheimnisse.** Name, Provider, Basis-URL, Modellname, ein Default-Flag, zwei Zeitstempel. API-Keys und Provider-Secrets bleiben im Fernet-Store (§10): eine Kopie in Postgres wäre eine zweite Stelle, an der ein Schlüssel im Klartext liegen kann, und der Betreiber müsste zwei Ablagen rotieren statt einer.
 - **Workspace- und Auth-Spalten sind nicht vorgezogen.** Agora ist Single-User, und eine `workspace_id`, die niemand füllt, ist entweder nullable und damit wertlos oder sie zwingt beim Multi-User-Schritt zu einer Backfill-Migration auf Platzhalterdaten. Sie kommt, wenn Phase 6 sie braucht.
 - **Höchstens ein Default-Profil, und das erzwingt die Datenbank.** `uq_llm_profiles_single_default` ist ein partieller Unique-Index über `is_default WHERE is_default` — Anwendungscode, der zwei Profile als Default markieren will, scheitert am Constraint statt an einer Prüfung, die ein zweiter Aufrufer umgehen kann. Dazu vier `CHECK`-Constraints gegen leere Zeichenketten und einen Namen über 80 Zeichen.
@@ -77,7 +162,7 @@ Was dieses Release **nicht** liefert: Reproduzierbarkeit. `RunManifest` und Repl
 
 ### Added (Agora kann PostgreSQL sprechen, tut es aber nicht — 2026-09-17)
 
-- **`sqlalchemy`, `psycopg[binary]` und `alembic` sind jetzt Abhängigkeiten, und der Laufzeitpfad merkt davon nichts.** Das ist Phase 2 aus [`docs/plans/supabase.md`](../docs/plans/supabase.md) §8: die Grundlage steht, bevor irgendein Store sie benutzt. `AGORA_METADATA_BACKEND=legacy` ist der Default, und solange er gilt, entsteht keine einzige Datenbankverbindung. Dateisystem und Neo4j bleiben die Wahrheit.
+- **`sqlalchemy`, `psycopg[binary]` und `alembic` sind jetzt Abhängigkeiten, und der Laufzeitpfad merkt davon nichts.** Das ist Phase 2 aus [`docs/plans/supabase.md`](docs/plans/supabase.md) §8: die Grundlage steht, bevor irgendein Store sie benutzt. `AGORA_METADATA_BACKEND=legacy` ist der Default, und solange er gilt, entsteht keine einzige Datenbankverbindung. Dateisystem und Neo4j bleiben die Wahrheit.
 - **Die Deps stehen fest in `dependencies`, nicht in einem Extra.** Ein optionaler Block bedeutet, dass der Import-Pfad in einer Installation fehlen kann — und daran scheitern Migrationen dann erst auf dem Zielsystem. `psycopg[binary]` statt `psycopg2`: psycopg 3 ist der gepflegte Treiber, SQLAlchemy spricht ihn über das Dialekt-Präfix `postgresql+psycopg`, und der `binary`-Extra bringt libpq als Wheel mit, statt auf jedem Build-Host `pg_config` zu verlangen.
 - **`app/infrastructure/postgres/` ist der einzige Weg zu einer Verbindung.** `Database.session()` ist ein Kontextmanager mit Transaktionsgrenze: Commit bei sauberem Austritt, Rollback bei jeder Exception, und die Exception wird weitergereicht — ein fehlgeschlagener Schreibvorgang ist ein Fehler, keine leere Antwort. Engine und Session-Factory entstehen beim ersten Zugriff, nicht im Konstruktor, damit ein ungenutzter Adapter nichts hält. Freie `psycopg.connect()`-Aufrufe quer durch Services sind ausdrücklich nicht vorgesehen; sie umgehen Pool, Konfiguration und Transaktionsgrenze.
 - **`pool_pre_ping` ist gesetzt, aus derselben Erfahrung, die `NEO4J_LIVENESS_TIMEOUT` erzwungen hat:** im Docker-Bridge-Netz verschwinden Sockets, die im Pool liegen, ohne dass eine Seite es merkt. Ohne Pre-Ping bekommt der erste Zugriff nach einer Idle-Phase einen toten Socket statt einer Verbindung. `pool_recycle` liegt unter den Timeouts, die Supavisor auf einer Verbindung durchsetzt.
@@ -90,7 +175,7 @@ Was dieses Release **nicht** liefert: Reproduzierbarkeit. `RunManifest` und Repl
 
 ### Added (Self-hosted Supabase steht als eigenes Compose-Projekt bereit, ohne dass Agora es benutzt — 2026-09-17)
 
-- **`supabase/` ist ein zweites Compose-Projekt, kein Anbau an den Agora-Stack.** Enthalten sind PostgreSQL 17, Supavisor, GoTrue, PostgREST, Storage, postgres-meta, Studio und ein Envoy-Gateway. Realtime, Edge Runtime, imgproxy und Analytics/Logflare laufen bewusst nicht mit — je weniger Container am Anfang, desto weniger bewegliche Teile. Sichtbare Folgen: `/realtime/v1` und `/functions/v1` antworten am Gateway mit 503, Storage läuft ohne Bildtransformation, die Log-Ansichten in Studio bleiben leer. Das ist Phase 1 aus [`docs/plans/supabase.md`](../docs/plans/supabase.md) §7, der mit diesem Commit ebenfalls ins Repository kommt.
+- **`supabase/` ist ein zweites Compose-Projekt, kein Anbau an den Agora-Stack.** Enthalten sind PostgreSQL 17, Supavisor, GoTrue, PostgREST, Storage, postgres-meta, Studio und ein Envoy-Gateway. Realtime, Edge Runtime, imgproxy und Analytics/Logflare laufen bewusst nicht mit — je weniger Container am Anfang, desto weniger bewegliche Teile. Sichtbare Folgen: `/realtime/v1` und `/functions/v1` antworten am Gateway mit 503, Storage läuft ohne Bildtransformation, die Log-Ansichten in Studio bleiben leer. Das ist Phase 1 aus [`docs/plans/supabase.md`](docs/plans/supabase.md) §7, der mit diesem Commit ebenfalls ins Repository kommt.
 - **Im Backend ändert sich nichts.** Kein PostgreSQL-Code, keine neue Abhängigkeit, kein Feature-Flag, keine Auth-Änderung. `AGORA_AUTH_TOKEN` und das API-Key-Scope-Modell bleiben die Auth-Wahrheit; GoTrue läuft mit `DISABLE_SIGNUP=true` mit und wird von nichts aufgerufen. Die SQLAlchemy-/Alembic-Grundlage ist Phase 2 (§8), das Datenmodell Phase 3 (§9).
 - **Die Netzkopplung ist ein Overlay, nicht die Basis-Compose.** `deploy/compose/docker-compose.supabase.yml` hängt den Agora-Container zusätzlich an das externe Netz `agora-backend`. Der Grund ist unspektakulär und entscheidend: ein `external: true`-Netz muss vor `docker compose up` existieren, und in `docker-compose.yml` eingetragen hätte es jeden bestehenden Stack gebrochen, bei dem `docker network create agora-backend` nicht gelaufen ist — genau gegen das Abnahmekriterium von Phase 1, „Agora funktioniert weiterhin komplett ohne neue Supabase-Funktion". Das Overlay nennt `default` und `agora-backend` beide explizit, weil eine explizite `networks`-Liste die implizite Default-Zuordnung ersetzt und Agora sonst Redis und Neo4j verlöre. Redis und Neo4j bleiben außerhalb von `agora-backend`: Supabase kommt an Graph und Event-Bus nicht heran.
 - **Die Supabase-Konfigurationsdateien liegen nicht im Repository.** DB-Init-SQL, Envoy-Routing und `pooler.exs` sind zusammen rund 1500 Zeilen fremder Konfiguration aus supabase/supabase (Apache-2.0); vendored müssten sie bei jedem Supabase-Update nachgezogen und reviewt werden. Stattdessen holt `supabase/bootstrap.sh` sie per sparse-checkout von einem gepinnten Commit nach `supabase/volumes/` (gitignored), prüft jede erwartete Datei und bricht sonst mit Verweis auf `SUPABASE_REF` ab. Der Preis steht als Schritt 1 im README: ohne Bootstrap-Lauf startet der Stack nicht. `SUPABASE_REF` und die Image-Tags in `.env.example` werden gemeinsam angehoben.
@@ -273,9 +358,9 @@ Was dieses Release **nicht** liefert: Reproduzierbarkeit. `RunManifest` und Repl
 - **Ein als Fallback markierter Outline wird beim Resume verworfen und neu geplant, statt wiederverwendet zu werden.** Folgefehler der Runde-4-Korrektur: erst dadurch, dass der `get_report`-Read vor dem ersten `save_report` liegt, sah `generate_report` beim Resume überhaupt einen persistierten Outline — und machte damit den Drei-Sektionen-Fallback aus `plan_outline` erstmals wiederverwendbar. Der besteht die Required-Section-Prüfung nie, ein Resume lief also sofort wieder in `INCOMPLETE`, ohne je einen zweiten Planungsversuch zu unternehmen; die angebotene Wiederaufnahme konnte eine nur vorübergehende Planungsstörung nicht mehr heilen. Neuer Helfer `_reusable_persisted_outline` liest dafür den in Runde 3 eingeführten `fallback_outline_used`-Marker. `_persist_fallback_outline_marker` schreibt jetzt auch das `False`, damit ein geheilter Lauf seinen Outline beim nächsten Resume wieder verwenden darf.
 - **Der geerbte Fallback-Marker wird vor einem neuen Planungsversuch gelöscht** (Codex-Review Runde 6, Folgefehler von Runde 5). `_restore_work_trace_markers` setzt `fallback_outline_used` beim Resume aus dem persistierten Zustand des Vorlaufs. Gelingt der neue `plan_outline`-Versuch, stammt der ausgelieferte Outline nicht mehr aus dem Fallback — ohne Zurücksetzen schrieb `_persist_fallback_outline_marker` den geerbten Wert unverändert zurück: der Report trug eine falsche `outline_planning/fallback_outline_used`-Warnung, und der nächste Cancel/Resume hätte den gültigen Outline erneut verworfen. Neuer Helfer `clear_fallback_outline_used` in `run_degradation.py`; nur der Fallback-Pfad des jeweiligen Versuchs setzt den Marker.
 
-# Slice 3.1 — BudgetExceededError im ParallelIPCHandler
+### Slice 3.1 — BudgetExceededError im ParallelIPCHandler
 
-## Problem
+#### Problem
 
 Der `ParallelIPCHandler` (Default-Parallelrunner für Twitter+Reddit) fing
 `BudgetExceededError` im generischen `except Exception` statt strukturiert.
@@ -288,7 +373,7 @@ Zusätzlich fehlte das `budget_exceeded`-Feld in der IPC-Response, sodass der
 Client (`interview_client._reraise_if_budget_exceeded`) den Abbruch nicht als
 `BudgetExceededError` re-raisen konnte.
 
-## Lösung
+#### Lösung
 
 1. **`send_response`** um optionales `budget_exceeded: Dict[dimension, observed, threshold]` ergänzt (kompatibel zu `sim_runtime.ipc.IPCHandler`).
 
@@ -300,7 +385,7 @@ Client (`interview_client._reraise_if_budget_exceeded`) den Abbruch nicht als
 
 5. **Client-seitig** (`interview_client._reraise_if_budget_exceeded`) unverändert: liest `response.budget_exceeded` und wirft wieder `BudgetExceededError` — Run endet korrekt `stopped`/`budget_*` (via `mark_budget_abort`).
 
-## Tests
+#### Tests
 
 Neue Regressionstests in `tests/scripts/test_run_parallel_ipc_attribution.py`:
 
@@ -313,11 +398,11 @@ Neue Regressionstests in `tests/scripts/test_run_parallel_ipc_attribution.py`:
   Der Test bricht damit auch bei reiner Feldnamen-Drift zwischen Runner und
   Client-Deserialisierung.
 
-## Referenzen
+#### Referenzen
 
 - Vorbild: `scripts/sim_runtime/ipc.py:151-170,241-251`
 - Repo-Regel: `BudgetExceededError` wird nie in eine Fallback-Antwort umgewandelt
-- Follow-up zu #1478 (Codex P1, Runde 7)
+- Follow-up zu #1478
 
 ### Fixed (Budget-Guard und Ledger decken Tool-Calls, Vision und Interview-Client ab — 2026-09-08)
 
@@ -377,7 +462,7 @@ Neue Regressionstests in `tests/scripts/test_run_parallel_ipc_attribution.py`:
 - Cancel-Flags (`cancel_flag.py`) liegen nur als `threading.Event` im Prozessspeicher, nicht Redis-persistent.
 - Kein `worker_exit`-Hook in `gunicorn.conf.py`, der laufende Subprozesse beim Worker-Reload proaktiv abräumt.
 
-## Fixed
+### Fixed
 
 - **Report Agent**: Sektions-Persistenz ist jetzt atomar und prüft beide Artefakte. Zuvor wurde `write_section_markdown` nicht-atomar ausgeführt, was bei Crashes zwischen Evidence und Markdown zu Orphan-Dateien führte (nur Markdown ohne Evidence). `_restore_persisted_section` überprüft jetzt, dass BEIDE Artefakte vorhanden sind, bevor ein Abschnitt als persistiert restauriert wird — fehlt die Evidence, wird die Sektion neu generiert. `write_section_markdown` nutzt jetzt das gleiche atomare Muster wie `write_json_atomic` (tmp-Datei + `os.replace`).
 - **Report Agent** (Codex-Review PR #1475, Finding 1): eine verwaiste Markdown-Datei (auf Platte, aber ohne zugehörigen Evidence-Eintrag) wird jetzt entfernt, BEVOR die neu generierte Sektion ihre Evidence schreibt. Vorher konnte ein Absturz zwischen dem Schreiben der neuen Evidence und dem Ersetzen des Markdowns beide Artefakte inkonsistent zueinander hinterlassen — ein nachfolgender Resume hätte das alte Markdown gegen die neue Evidence restauriert.
@@ -387,7 +472,7 @@ Neue Regressionstests in `tests/scripts/test_run_parallel_ipc_attribution.py`:
 - **Report Agent** (Codex-Review PR #1475, Runde 3, Finding 1): das Verzeichnis-`fsync` degradiert jetzt nur noch für die typischen "nicht unterstützt"-errno-Werte (`EINVAL`, `EACCES`, `EPERM`, `ENOTSUP`/`EOPNOTSUPP`) still — echte Storage-Fehler (z. B. `ENOSPC`, `EIO`) propagieren jetzt, statt einen Write, dessen Rename einen Absturz nicht übersteht, fälschlich als erfolgreich zu melden.
 - **Report Agent** (CodeRabbit-Review PR #1475, Runde 3, Finding 2): entfernt eine `FileNotFoundError` beim Löschen der verwaisten Markdown-Datei (z. B. weil der DELETE-Endpunkt den Report-Ordner zwischen Existenzprüfung und Löschversuch bereits per `shutil.rmtree` entfernt hat), wird das jetzt als Erfolg gewertet — der gewünschte Endzustand liegt bereits vor. `PermissionError` und jeder andere `OSError` propagieren weiterhin unverändert.
 
-# Slice 1.1 — Worker-Exit-Hook für In-Process-Jobs
+### Slice 1.1 — Worker-Exit-Hook für In-Process-Jobs
 
 Beendet sich der Webprozess, bekommen alle laufenden In-Process-Jobs —
 `simulation_prepare`, `report_generate`, `graph_build`, `ontology_generate` —
@@ -686,7 +771,7 @@ Die Persona-Dublettenerkennung vor dem Agenten-Cap erkannte deutsche Oberfläche
 - **Der angezeigte Provider kommt jetzt bevorzugt aus der `provider_id` der aktiven Verbindung statt aus der URL-Heuristik.** `detect_provider` kann nur aus der Base-URL raten — für `codex_cli` gibt es nichts zu raten. `SkippedProviderKind` ist per Vertrag ein freier String, und `providerLabel` im Frontend fällt auf den Rohwert zurück; die bekannten Connection-IDs haben zusätzlich einen Anzeigenamen bekommen.
 - **Nebenwirkung für Tests:** `backend/instance/active_llm_config.json` liegt im Repo-Verzeichnis und existiert auf Entwicklerrechnern, in CI nicht. `tests/test_status.py` isoliert den Reader deshalb per Autouse-Fixture, sonst hinge das Provider-Gating daran, welche Verbindung der Entwickler zuletzt aktiviert hat.
 
-# Slice 2.1 — Kanonische Index-Auflösung
+### Slice 2.1 — Kanonische Index-Auflösung
 
 Lese- und Schreibpfad des Vector-Index lösen Index- und Property-Namen jetzt
 über zwei neue Methoden am `EmbeddingConfigurationStore` auf,
@@ -729,7 +814,7 @@ Legacy-View für Bestandsgraphen (Slice 2.4). Die in
 ist mit diesem Slice noch nicht geschlossen — er liefert nur die
 Auflösungslogik, die die folgenden Slices verwenden.
 
-# Slice 2.2 — Echter Cutover
+### Slice 2.2 — Echter Cutover
 
 `EmbeddingMigrationService.start()` markierte die neue Index-Version bisher sofort
 als `active` und supersedierte die alte — noch bevor der Re-Embedder überhaupt lief.
@@ -1158,7 +1243,7 @@ Hintergrund: In PR #1372 hat genau dieser Typfehler zwei echte Defekte verursach
 ### Changed
 
 - **Regel 3 ist dreiteilig.** Deckung ≥ 0.60 ergibt `SUPPORTED`, Deckung < 0.10 ohne Retrieval-Signal `RELATED_ONLY`; dazwischen entscheidet der Judge. Ohne Judge endet die Grauzone bei `RELATED_ONLY` — unentschieden heißt nicht belegt. Die deterministischen Regeln 1 und 2 (Zahl, Bezugsgruppe, Mengenaussage) bleiben unverändert vorgelagert und bindend; ein regelbasiertes `CONTRADICTED` erreicht den Judge nie.
-- **Der Judge ist verdrahtet und darf in der Grauzone belegen.** `build_llm_judge` existierte, wurde aber von keinem Aufrufer gesetzt — der `judge`-Parameter war toter Code. `ReportAgent` baut ihn jetzt einmal pro Lauf und reicht ihn an `bind_evidence_to_claim`. Die alte ADR-0002-Klausel („darf `SUPPORTED` nur abschwächen, nie erzeugen“) ist für den qualitativen Pfad abgelöst, siehe [`docs/decisions/0002-supersedes.md`](../docs/decisions/0002-supersedes.md) — sie war eine Bremse gegen die alte Großzügigkeit von Regel 3 und wäre nach deren Umkehrung eine Sperre gewesen, hinter der die Grauzone dauerhaft unbelegt bliebe.
+- **Der Judge ist verdrahtet und darf in der Grauzone belegen.** `build_llm_judge` existierte, wurde aber von keinem Aufrufer gesetzt — der `judge`-Parameter war toter Code. `ReportAgent` baut ihn jetzt einmal pro Lauf und reicht ihn an `bind_evidence_to_claim`. Die alte ADR-0002-Klausel („darf `SUPPORTED` nur abschwächen, nie erzeugen“) ist für den qualitativen Pfad abgelöst, siehe [`docs/decisions/0002-supersedes.md`](docs/decisions/0002-supersedes.md) — sie war eine Bremse gegen die alte Großzügigkeit von Regel 3 und wäre nach deren Umkehrung eine Sperre gewesen, hinter der die Grauzone dauerhaft unbelegt bliebe.
 - **Der Binder klassifiziert erst nach dem Kürzen auf `top_k`.** Vorher lief der Entailment-Check über jeden Kandidaten oberhalb der Retrieval-Schwelle. Mit einem Judge in der Kette wäre das ein Call je Kandidat gewesen, auch für die, die anschließend ohnehin herausfallen. Das Budget hängt damit an `top_k` (Referenzlauf: höchstens 5 je Claim). Der Preis: ein widersprechendes Item mit schwachem Retrieval-Score fällt heraus, statt `contradicts_claim` zu setzen.
 - **Judge-Ausfall fällt auf den Regelpfad.** Exception oder unbekanntes Verdikt setzen `judge_failed`; die Grauzone endet bei `RELATED_ONLY`. Der Report wird dadurch vorsichtiger, nicht falscher.
 - **Antwortet der Provider in Prosa statt JSON, wird das Urteil aus dem Text gelesen.** Gemessen an den fünf verfügbaren Ollama-Cloud-Modellen lieferte genau eines strukturiertes JSON; die übrigen antworteten mit einer sauberen, aber prosaischen Begründung (`**Urteil:** RELATED_ONLY — die Evidence thematisiert zwar …`). Mit `LLM_DISABLE_JSON_MODE` fällt der erzwungene Modus ohnehin weg. Ohne diesen zweiten Versuch wäre der Judge in vier von fünf Konfigurationen dauerhaft im `judge_failed`-Pfad, obwohl das Modell inhaltlich korrekt geurteilt hat; mit ihm sind es drei von fünf tauglich. Gelesen wird ausschließlich der Urteilsname und nur, wenn er eindeutig ist — bei null oder mehreren Treffern wird nichts geraten. Gesucht wird als eigenständiges Wort, nicht als Teilstring: „The claim is UNSUPPORTED“ enthält sonst genau einen Treffer, ausgerechnet das gegenteilige Urteil. Der zweite Versuch läuft mit `force_no_thinking`, weil Reasoning-Modelle ihr Budget sonst im Denkteil verbrauchen und leer antworten, und mit `context="report"`, damit Tokens und Kosten nicht dem interaktiven Chat zugeschrieben werden.
@@ -1492,7 +1577,7 @@ Hintergrund: In PR #1372 hat genau dieser Typfehler zwei echte Defekte verursach
 - **Platzhalter in spitzen Klammern zerlegten den eigenen Section-Parser.** `_QUOTE_TAG_RE` liest die Attributliste mit `[^>]+` und endet damit am ersten `>`. Ein Beispiel-Tag wie `<simulated_quote persona_id="<persona_id>" seed_anchor="<evidence_id_or_seed_doc>">` schneidet sich selbst ab: `seed_anchor` bleibt unterminiert, fällt aus `_ATTR_RE` heraus und das Zitat gilt als ankerlos — der Attributrest landet zusätzlich im Zitattext. Der Prompt ist das Vorbild, dem das Modell folgt, also war das ein Defekt im Prompt, nicht im Parser. Alle Beispiel-Tags verwenden jetzt klammerfreie Großschreibungs-Platzhalter (`PERSONA_ID`, `DOCUMENT_ID`, `CHUNK_INDEX`), und der Prompt benennt die Regel ausdrücklich. Zwei der vier betroffenen Stellen bestanden schon vorher (Format-Vorgabe und Quote-Reminder), zwei wären mit dem #1267-Fix neu hinzugekommen — der Regressionstest deckt beide Fälle über denselben Produktions-Parser ab.
 - Validator und Gating bleiben unverändert — der Validator war richtig, der Prompt war falsch. Der `<evidence_gating priority="hard">`-Block (ADR-0002 Hartanker 1) und der Hedge-Snapshot (Hartanker 2) sind nicht berührt; der Diff beginnt hinter dem Block.
 
-# Slice 1.2 — Report-Generierung serialisiert statt parallel
+### Slice 1.2 — Report-Generierung serialisiert statt parallel
 
 Eine zweite parallele Report-Generierung für dieselbe Simulation wird
 deterministisch mit HTTP `409 report_generate_in_progress` abgewiesen, statt
@@ -3598,7 +3683,7 @@ erfundene „Abschnitt bricht ab"-Data-Gaps).
   `backend/scripts/check_version_drift.py` um `--write`-Modus erweitert, prüft
   nun auch `frontend/package.json`. CI-Job `version-drift.yml` und lokal
   `pre-push-gate.sh schemas` erzwingen Einhaltung. Abwicklung:
-  [`docs/runbooks/release-versioning.md`](../runbooks/release-versioning.md).
+  [`docs/runbooks/release-versioning.md`](docs/runbooks/release-versioning.md).
 
 ### Fixed (Issue #739 — 2026-07-18)
 
