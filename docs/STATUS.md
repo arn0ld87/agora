@@ -89,7 +89,7 @@ Kanonische Begriffe und Pfade:
 - strukturierte Calls: `LLMClient.chat_json`
 - Modellauswahl: `AiModelPicker.vue`
 
-Unterstützte Transportklassen sind `http`, `local` und `cli`. `codex_cli` ist ein echter CLI-/Session-Transport ohne HTTP-Base-URL und API-Key; der Fix für den früheren Persona-Route-Mix mit `.env` ist gemergt (#1418/#1422), ebenso der Codex-CLI-Transport für OASIS-Simulationsrunden (#1423/#1424).
+Unterstützte Transportklassen sind `http`, `local` und `cli`. `codex_cli` ist ein echter CLI-/Session-Transport ohne HTTP-Base-URL und API-Key; der Fix für den früheren Persona-Route-Mix mit `.env` ist gemergt (#1418/#1422), ebenso der Codex-CLI-Transport für OASIS-Simulationsrunden (#1423/#1424). `claude_cli` (Claude-Abo statt Pay-per-Token-API) ist der zweite `cli`-Transport-Provider — anders als `codex_cli` mit `auth_mode="api_key"` (Langzeit-Token aus `claude setup-token`, kein Verzeichnis-Mount) und isoliertem `HOME` pro Subprozess-Aufruf statt einer gemounteten Login-Session.
 
 ## Run- und Simulations-Lifecycle
 

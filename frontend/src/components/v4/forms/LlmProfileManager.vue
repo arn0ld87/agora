@@ -30,8 +30,8 @@ const providersStore = useLlmProvidersStore()
 type ProviderConnectionKind = ProviderConnection['provider_kind']
 
 // LlmProvider → AiProviderKind|null. Provider ohne Connection-Äquivalent
-// (custom, github_copilot, cloud, codex_cli, unknown) mappen auf null → kein
-// Connection-Match möglich → unknownConnection.
+// (custom, github_copilot, cloud, codex_cli, claude_cli, unknown) mappen auf
+// null → kein Connection-Match möglich → unknownConnection.
 const LLM_PROVIDER_TO_AI_KIND: Record<LlmProvider, AiProviderKind | null> = {
   ollama: 'ollama',
   openai: 'openai',
@@ -47,6 +47,7 @@ const LLM_PROVIDER_TO_AI_KIND: Record<LlmProvider, AiProviderKind | null> = {
   bedrock: null,
   cloud: null,
   codex_cli: null,
+  claude_cli: null,
   unknown: null,
 }
 
@@ -64,6 +65,7 @@ const CONNECTION_KIND_TO_AI_KIND: Record<ProviderConnectionKind, AiProviderKind 
   bedrock: null,
   cloud: null,
   codex_cli: null,
+  claude_cli: null,
   unknown: null,
 }
 
@@ -82,6 +84,7 @@ const CONNECTION_KIND_TO_LLM_PROVIDER: Record<ProviderConnectionKind, LlmProvide
   bedrock: 'custom',
   cloud: 'cloud',
   codex_cli: 'codex_cli',
+  claude_cli: 'claude_cli',
   unknown: 'unknown',
 }
 
@@ -207,9 +210,9 @@ const pickerError = computed<boolean>(() => {
   if (explicitPickerError.value) return true
   if (!formModel.value) return false
   const targetAiKind = LLM_PROVIDER_TO_AI_KIND[formProvider.value]
-  // Hybrid: Provider ohne Connection-Äquivalent (custom/cloud/github_copilot/codex_cli/
-  // unknown) nutzen Preset + Freitext-URL + manuelle Modellauswahl — kein
-  // unknown-connection-Fehler.
+  // Hybrid: Provider ohne Connection-Äquivalent (custom/cloud/github_copilot/
+  // codex_cli/claude_cli/unknown) nutzen Preset + Freitext-URL + manuelle
+  // Modellauswahl — kein unknown-connection-Fehler.
   if (!targetAiKind) return false
   const candidates = Object.values(providersStore.connections).filter(
     (conn) => CONNECTION_KIND_TO_AI_KIND[conn.provider_kind] === targetAiKind,

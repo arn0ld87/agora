@@ -189,6 +189,57 @@ def test_codex_cli_probe_reports_unavailable_when_binary_missing(monkeypatch) ->
     assert "codex-CLI" in (result.status_message or "")
 
 
+def _claude_cli_connection() -> ProviderConnection:
+    return ProviderConnection(
+        id="claude_cli",
+        provider_kind="claude_cli",
+        display_name="Claude Code (Abo)",
+        transport="cli",
+        auth_mode="api_key",
+        base_url=None,
+    )
+
+
+def test_claude_cli_probe_reports_unavailable_when_binary_missing(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.llm.providers.claude_cli.is_claude_cli_available", lambda: False
+    )
+
+    result = adapter_for_connection("claude_cli").probe(_claude_cli_connection(), "irrelevant")
+
+    assert result.status == "unavailable"
+    assert "claude-CLI" in (result.status_message or "")
+
+
+def test_claude_cli_probe_reports_invalid_credentials_when_token_missing(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.llm.providers.claude_cli.is_claude_cli_available", lambda: True
+    )
+
+    result = adapter_for_connection("claude_cli").probe(_claude_cli_connection(), None)
+
+    assert result.status == "invalid_credentials"
+    assert "CLAUDE_CODE_OAUTH_TOKEN" in (result.status_message or "")
+
+
+def test_claude_cli_probe_available_lists_fallback_models_when_token_present(
+    monkeypatch,
+) -> None:
+    """Keine Live-Discovery fuer claude_cli (kein Analog zu ``codex debug
+    models``) — die Probe meldet ``available`` mit den registrierten
+    Fallback-Modellen, sobald Binary und Token vorhanden sind."""
+    monkeypatch.setattr(
+        "app.llm.providers.claude_cli.is_claude_cli_available", lambda: True
+    )
+
+    result = adapter_for_connection("claude_cli").probe(_claude_cli_connection(), "tok_abc")
+
+    assert result.status == "available"
+    assert result.status_message is None
+    model_ids = [m.model_id for m in result.models]
+    assert model_ids == list(LlmProviderRegistry.connection_definition("claude_cli").fallback_models)
+
+
 @pytest.mark.parametrize(
     "state, expected_hint",
     [
@@ -236,6 +287,7 @@ def test_registry_has_one_canonical_connection_matrix() -> None:
         "opencode_go",
         "github_copilot",
         "codex_cli",
+        "claude_cli",
         "bedrock",
     )
     assert definitions[2].default_base_url == (
@@ -250,12 +302,20 @@ def test_registry_has_one_canonical_connection_matrix() -> None:
     assert definitions[9].auth_mode == "session"
     assert definitions[9].api_key_ref is None
     assert definitions[9].default_base_url is None
-    # Issue #1282 — Amazon Bedrock OpenAI-kompatibler Mantle-Pfad.
-    assert definitions[10].adapter_kind == "bedrock"
+    # Claude-CLI-Subprozess-Bridge (Claude-Abo) — anders als codex_cli ein
+    # echter Secret (Langzeit-Token aus ``claude setup-token``), deshalb
+    # auth_mode="api_key" trotz transport="cli".
+    assert definitions[10].adapter_kind == "claude_cli"
+    assert definitions[10].transport == "cli"
     assert definitions[10].auth_mode == "api_key"
-    assert definitions[10].api_key_ref == "AWS_BEARER_TOKEN_BEDROCK"
-    assert definitions[10].supports_tools is True
+    assert definitions[10].api_key_ref == "CLAUDE_CODE_OAUTH_TOKEN"
+    assert definitions[10].default_base_url is None
+    # Issue #1282 — Amazon Bedrock OpenAI-kompatibler Mantle-Pfad.
+    assert definitions[11].adapter_kind == "bedrock"
+    assert definitions[11].auth_mode == "api_key"
+    assert definitions[11].api_key_ref == "AWS_BEARER_TOKEN_BEDROCK"
+    assert definitions[11].supports_tools is True
     # Region eu-central-1 ist an ``fallback_models``/``LLM_MODEL_PRESETS``
     # gekoppelt: die Preset-IDs sind gegen genau diesen mantle-Katalog
     # chat-verifiziert (siehe tests/llm/test_bedrock_model_catalog.py).
-    assert definitions[10].default_base_url == "https://bedrock-mantle.eu-central-1.api.aws/v1"
+    assert definitions[11].default_base_url == "https://bedrock-mantle.eu-central-1.api.aws/v1"

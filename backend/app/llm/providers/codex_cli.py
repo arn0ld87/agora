@@ -56,6 +56,18 @@ entfernt bei gesetztem Signal das geerbte ``LLM_BASE_URL``.
 """
 
 CLI_TRANSPORT_VALUE = "cli"
+
+CLI_PROVIDER_ENV_KEY = "AGORA_LLM_CLI_PROVIDER"
+"""Benennt bei aktivem CLI-Transport den konkreten Provider (``codex_cli``
+oder ``claude_cli``). ``TRANSPORT_ENV_KEY`` allein sagt nur "irgendein
+CLI-Provider ist aktiv" — mit einem zweiten CLI-Provider (claude_cli) reicht
+das nicht mehr, um zu entscheiden, welche ``BaseModelBackend``-Klasse der
+OASIS-Subprozess instanziieren soll. Gesetzt von
+``llm_routing_seed.build_route_subprocess_env`` (Wert = ``route.provider_id``),
+ausgewertet in ``scripts/sim_runtime/platform_runner.py`` und
+``run_parallel_simulation.py``.
+"""
+
 DEFAULT_CODEX_CLI_BINARY = "codex"
 DEFAULT_CODEX_CLI_TIMEOUT_SECONDS = 180
 DEFAULT_CODEX_CLI_CATALOG_TIMEOUT_SECONDS = 30

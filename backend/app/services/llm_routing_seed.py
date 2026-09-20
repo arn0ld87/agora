@@ -12,8 +12,12 @@ from typing import Optional
 
 from ..contracts.ai_provider_contract import AiModelRef, ProviderConnection
 from ..contracts.llm_routing_contract import ResolvedRoute, RuntimeLlmRouting, StageId, StageLLMRoute
-from ..contracts.provider_types import PROVIDER_CODEX_CLI
-from ..llm.providers.codex_cli import CLI_TRANSPORT_VALUE, TRANSPORT_ENV_KEY
+from ..contracts.provider_types import PROVIDER_CLAUDE_CLI, PROVIDER_CODEX_CLI
+from ..llm.providers.codex_cli import (
+    CLI_PROVIDER_ENV_KEY,
+    CLI_TRANSPORT_VALUE,
+    TRANSPORT_ENV_KEY,
+)
 from ..llm.providers.registry import detect_provider
 from .llm_provider_registry import LlmProviderRegistry
 from .llm_provider_secrets_store import get_llm_provider_secrets_store
@@ -51,8 +55,10 @@ _ROUTE_TO_RUNTIME_PROVIDER = {
     # verschwindet in ``build_runtime_llm_config`` die einzige Information,
     # die ``_resolve_llm_connection`` braeuchte, um ein fehlendes
     # ``base_url`` als Normalfall statt als Ausloeser fuer den
-    # ``.env``-Fallback zu erkennen.
+    # ``.env``-Fallback zu erkennen. claude_cli (transport="cli") hat dieselbe
+    # Eigenschaft — kein ``base_url`` — deshalb derselbe Selbst-Eintrag.
     PROVIDER_CODEX_CLI: PROVIDER_CODEX_CLI,
+    PROVIDER_CLAUDE_CLI: PROVIDER_CLAUDE_CLI,
 }
 
 
@@ -594,8 +600,12 @@ def build_route_subprocess_env(
         # geroutete Modell an den ``.env``-Endpunkt (beobachtet:
         # ``gpt-5.6-luna`` an ``api.minimax.io`` → HTTP 400 (2013)).
         # ``process_manager`` entfernt das geerbte Feld, wenn dieses Signal
-        # gesetzt ist; die Runner wählen daran den ``CodexCliModel``-Transport.
+        # gesetzt ist; die Runner wählen daran den CLI-Transport überhaupt.
+        # ``CLI_PROVIDER_ENV_KEY`` benennt zusätzlich WELCHEN CLI-Provider
+        # (codex_cli/claude_cli) — mit zwei CLI-Providern reicht das reine
+        # Transport-Signal allein nicht mehr, um die Model-Klasse zu wählen.
         env[TRANSPORT_ENV_KEY] = CLI_TRANSPORT_VALUE
+        env[CLI_PROVIDER_ENV_KEY] = route.provider_id
     elif not base_url and route.provider_id:
         # Weder Route noch Registry kennen einen Endpoint: der Subprozess wird
         # das Parent-``LLM_BASE_URL`` erben (Alt-Verhalten, Standalone-/

@@ -74,6 +74,7 @@ describe('canonical AI provider contracts', () => {
       'bedrock',
       'cloud',
       'codex_cli',
+      'claude_cli',
       'unknown',
     ])
     expect(providerConnectionJsonSchema.properties.base_url.anyOf).toContainEqual({ type: 'null' })

@@ -128,6 +128,50 @@ RUN set -eux; \
     rm -rf /tmp/codex.tar.gz /tmp/codex-extract; \
     codex --version
 
+# ---------- claude-cli (Binary-Bezug, landet per COPY in dev und prod) ----------
+# Der claude_cli-Provider ruft das ``claude``-Binary als Subprozess auf
+# (Claude-Abo statt Pay-per-Token-API, siehe app/llm/providers/claude_cli.py).
+# Eigene Stage aus demselben Grund wie codex-cli: ``prod`` erbt nicht von
+# ``base``, der Download passiert im Build genau einmal.
+#
+# Anders als codex (gepinntes GitHub-Release-Tarball + hier hartkodiertem
+# SHA256) hat Claude Code keinen vergleichbaren "Tarball + Digest"-Vertrag an
+# einer stabilen URL. Der offizielle Installer (curl https://claude.ai/
+# install.sh) laedt pro Release ein Manifest mit SHA256-Pruefsummen je
+# Plattform und prueft intern dagegen (verifiziert im Script: Checksum-Format-
+# Validierung + Vergleich vor dem Entpacken) — die Integritaetspruefung liegt
+# damit bei Anthropics eigener Release-Infrastruktur statt bei einem hier
+# gepflegten Hash. Bewusster, dokumentierter Trade-off, kein Uebersehen.
+#
+# Version PINNED (kein "stable"/"latest") aus demselben Grund wie bei codex:
+# ein Image-Build soll reproduzierbar sein, nicht vom Tagesstand von
+# downloads.claude.ai abhaengen. Beim Versionsbump: ``claude --version`` auf
+# einer vertrauenswuerdigen Installation pruefen und ``CLAUDE_CODE_VERSION``
+# hier nachziehen.
+#
+# Plattform-Erkennung bleibt dem Installer selbst ueberlassen (``uname``-
+# basiert, kein eigenes TARGETARCH-Mapping wie bei codex noetig) — verifiziert
+# funktionierend unter dem Zielarchitektur-``uname`` auch bei QEMU-Emulation
+# (dieselbe Eigenschaft, die die codex-Stage fuer ihr eigenes ``uname -m``
+# nutzt).
+#
+# Groesse ehrlich benannt: das Binary ist ein selbstenthaltenes,
+# kompiliertes ~224 MB ELF-Executable (kein Node/keine Laufzeitabhaengigkeiten,
+# aehnlich codex) — ein spuerbarer, aber bewusster Preis dafuer, das
+# Claude-Abo ueberhaupt aus dem Container heraus nutzen zu koennen.
+FROM base AS claude-cli
+
+ARG CLAUDE_CODE_VERSION=2.1.278
+
+RUN set -eux; \
+    export HOME=/root; \
+    curl -fsSL https://claude.ai/install.sh | bash -s "${CLAUDE_CODE_VERSION}"; \
+    _bin="$(readlink -f "${HOME}/.local/bin/claude")"; \
+    test -n "${_bin}" && test -x "${_bin}"; \
+    install -m 0755 "${_bin}" /usr/local/bin/claude; \
+    rm -rf "${HOME}/.local/share/claude" "${HOME}/.local/bin/claude" "${HOME}/.claude"; \
+    claude --version
+
 # ---------- dev (default) ----------
 FROM base AS dev
 
@@ -136,6 +180,14 @@ FROM base AS dev
 # ab, und die wird zur Laufzeit als read-only Volume hereingereicht — siehe
 # docker-compose.yml. Ein Abo-Token gehoert in keine Image-Schicht.
 COPY --from=codex-cli /usr/local/bin/codex /usr/local/bin/codex
+# ``claude`` fuer den claude_cli-Provider. Anders als codex_cli braucht dieser
+# Provider KEIN Verzeichnis-Volume: die Anmeldung ist ein per
+# ``claude setup-token`` erzeugter Langzeit-Token, der wie jeder andere
+# API-Key im Fernet-Secret-Store liegt und pro Aufruf als
+# ``CLAUDE_CODE_OAUTH_TOKEN``-Env-Var an einen isolierten Subprozess
+# uebergeben wird (siehe app/llm/providers/claude_cli.py — dort auch der
+# Kostengrund fuer die Prozess-Isolation, nicht nur Sicherheit).
+COPY --from=claude-cli /usr/local/bin/claude /usr/local/bin/claude
 
 COPY --chown=agora:agora package.json bun.lock ./
 COPY --chown=agora:agora frontend/package.json frontend/bun.lock ./frontend/
@@ -347,6 +399,10 @@ COPY --chown=agora:agora --from=frontend-build /app/frontend/dist ./frontend/dis
 # kein Nutzdatum, und ``agora`` braucht darauf nur Ausfuehrungsrecht.
 # Die Anmeldung kommt zur Laufzeit per read-only Volume, nie aus dem Image.
 COPY --from=codex-cli /usr/local/bin/codex /usr/local/bin/codex
+# ``claude`` fuer den claude_cli-Provider — siehe Kommentar an der
+# claude-cli-Stage. Kein Volume noetig: die Anmeldung ist ein Langzeit-Token
+# aus dem Fernet-Secret-Store, keine gemountete Session.
+COPY --from=claude-cli /usr/local/bin/claude /usr/local/bin/claude
 
 USER agora
 

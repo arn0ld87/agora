@@ -192,6 +192,48 @@ class _CodexCliProbeAdapter:
         )
 
 
+class _ClaudeCliProbeAdapter:
+    """Probe fuer den claude_cli-Provider: kein HTTP-Discovery-Endpunkt.
+
+    Einfacher als ``_CodexCliProbeAdapter``: kein Verzeichnis-Login, dessen
+    Zustand getrennt gemeldet werden muesste (siehe
+    ``llm/providers/claude_cli.py``) — der Token kommt pro Aufruf explizit
+    aus dem Secret-Store, nicht aus einer ambienten CLI-Session. Die Probe
+    prueft nur Binary-Praesenz + einen nicht-leeren Token; ob der Token
+    tatsaechlich gueltig ist, zeigt sich erst beim echten Aufruf
+    (``is_error`` im JSON-Result) — dieselbe bewusste Abwaegung wie bei
+    codex_cli: eine reine Verbindungspruefung soll kein Kontingent des
+    Claude-Abos verbrauchen.
+    """
+
+    def probe(
+        self, connection: ProviderConnection, api_key: str | None
+    ) -> ProviderProbeResult:
+        from app.llm.providers.claude_cli import is_claude_cli_available
+        from app.services.llm_provider_registry import LlmProviderRegistry
+
+        if not is_claude_cli_available():
+            return ProviderProbeResult(
+                status="unavailable",
+                status_message="claude-CLI nicht im PATH gefunden — Installation prüfen.",
+            )
+        if not api_key:
+            return ProviderProbeResult(
+                status="invalid_credentials",
+                status_message=(
+                    "Kein CLAUDE_CODE_OAUTH_TOKEN hinterlegt — `claude setup-token` "
+                    "ausführen und den Token hier eintragen."
+                ),
+            )
+        definition = LlmProviderRegistry.connection_definition(connection.provider_kind)
+        fallback_models = definition.fallback_models if definition else ()
+        return ProviderProbeResult(
+            status="available",
+            status_message=None,
+            models=tuple(_ai_model(connection, model_id) for model_id in fallback_models),
+        )
+
+
 def adapter_for_connection(
     provider_kind: str,
     *,
@@ -207,6 +249,8 @@ def adapter_for_connection(
         return _UnsupportedAdapter()
     if definition.adapter_kind == "codex_cli":
         return _CodexCliProbeAdapter()
+    if definition.adapter_kind == "claude_cli":
+        return _ClaudeCliProbeAdapter()
     protocol = _PROTOCOLS.get(definition.adapter_kind)
     if protocol is None:
         return _UnsupportedAdapter()

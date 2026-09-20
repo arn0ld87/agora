@@ -208,9 +208,14 @@ def _chat_with_tools(
     # sind. ``_CodexCliCompletions.create`` nimmt ``tools`` entgegen, schreibt
     # die Schemas in den Prompt und übersetzt die Antwort zurück in
     # ``tool_calls``. Ohne diese Ausnahme erreichten die Werkzeuge den Shim nie
-    # und der Report-Agent bliebe dauerhaft im XML-Fallback.
+    # und der Report-Agent bliebe dauerhaft im XML-Fallback. claude_cli
+    # (Issue analog #1423) nutzt denselben Shim-Mechanismus und braucht
+    # dieselbe Ausnahme.
     provider = self._detect_provider()
-    if provider == "unknown" and not getattr(self, "_codex_cli_active", False):
+    is_cli_shim_provider = getattr(self, "_codex_cli_active", False) or getattr(
+        self, "_claude_cli_active", False
+    )
+    if provider == "unknown" and not is_cli_shim_provider:
         logger.info(
             "LLMClient.chat_with_tools: provider=unknown (model=%s, base=%s) — "
             "skipping tools= and falling back to chat() for XML-tool-call parsing",

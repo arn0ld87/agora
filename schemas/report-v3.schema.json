@@ -702,6 +702,7 @@
             "bedrock",
             "cloud",
             "codex_cli",
+            "claude_cli",
             "unknown"
           ],
           "title": "Provider",

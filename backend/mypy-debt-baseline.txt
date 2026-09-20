@@ -21,7 +21,7 @@ app.utils.*
 
 [errors-per-file]
 4 app/container.py
-4 app/llm/client.py
+3 app/llm/client.py
 1 app/llm/providers/base.py
 4 app/llm/providers/openai.py
 1 app/llm/tool_calls.py
@@ -36,7 +36,7 @@ app.utils.*
 1 app/services/network_analytics.py
 4 app/services/oasis_profile_batch.py
 1 app/services/oasis_profile_core.py
-2 app/services/oasis_profile_generator.py
+1 app/services/oasis_profile_generator.py
 1 app/services/oasis_profile_llm.py
 1 app/services/prepare_llm.py
 30 app/services/report_agent/agent.py
@@ -76,4 +76,4 @@ app.utils.*
 1 app/utils/proxy.py
 1 app/utils/signed_ticket.py
 
-# Summe: 266 Fehler in 55 Dateien.
+# Summe: 264 Fehler in 55 Dateien.

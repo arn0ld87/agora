@@ -62,8 +62,10 @@ except ImportError:  # direct script execution
 # hoeher liegt. Dieselbe Form nutzt der ``sim_runtime.ipc``-Import unten.
 try:
     from .codex_cli_model import CodexCliModel, cli_transport_active
+    from .claude_cli_model import ClaudeCliModel, claude_cli_transport_active
 except ImportError:  # direct script execution
     from sim_runtime.codex_cli_model import CodexCliModel, cli_transport_active
+    from sim_runtime.claude_cli_model import ClaudeCliModel, claude_cli_transport_active
 
 # IPC layer (CommandType, constants, IPCHandler) — zentral in sim_runtime.ipc.
 try:
@@ -208,6 +210,11 @@ class SinglePlatformRunner:
         # an das geerbte LLM_BASE_URL schickt. Das Signal kommt aus
         # ``build_route_subprocess_env`` und ist damit an der Registry
         # entschieden, nicht an einer zweiten Heuristik.
+        if claude_cli_transport_active():
+            print(f"LLM configuration: model={llm_model}, transport=cli (claude)", flush=True)
+            return ClaudeCliModel(
+                model_type=llm_model, api_key=os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", "")
+            )
         if cli_transport_active():
             print(f"LLM configuration: model={llm_model}, transport=cli (codex)", flush=True)
             return CodexCliModel(model_type=llm_model)
