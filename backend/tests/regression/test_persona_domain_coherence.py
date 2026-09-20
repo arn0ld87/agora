@@ -87,45 +87,100 @@ def test_a_manufacturing_role_in_a_clinic_source_is_drift():
     """Der Fall aus dem Referenzlauf."""
     assert detect_domain_drift(
         "Schichtleiter Maschinenbau in der Produktionsleitung", CLINIC_SOURCE
-    ) == ["manufacturing"]
+    ).drifted == ["manufacturing"]
 
 
 def test_a_clerk_in_production_planning_is_drift():
     assert detect_domain_drift(
         "Sachbearbeiterin in der Fertigungsplanung", CLINIC_SOURCE
-    ) == ["manufacturing"]
+    ).drifted == ["manufacturing"]
 
 
 def test_a_role_from_the_source_domain_is_no_drift():
-    assert detect_domain_drift("Pflegekraft in der Nachtschicht", CLINIC_SOURCE) == []
+    result = detect_domain_drift("Pflegekraft in der Nachtschicht", CLINIC_SOURCE)
+    assert result.drifted == []
+    assert result.unverifiable is False
 
 
-def test_a_persona_spanning_both_domains_is_no_drift():
-    """Eine Schnittstelle ist kein Drift.
+def test_a_tied_main_domain_no_longer_protects_against_drift_1471():
+    """Umgekehrte Erwartung seit #1471 — vorher hieß dieser Test '..._is_no_drift'.
 
-    Wer Medizintechnik in der Klinik betreut, trägt zu Recht Vokabular aus
-    beiden Fächern.
+    Alte Annahme: Wer Medizintechnik in der Klinik betreut, trägt zu Recht
+    Vokabular aus beiden Fächern, also kein Drift. Das war das alte
+    ANY-Overlap-Verhalten, hart in diesem Test fixiert.
+
+    Neue Annahme (#1471): "Instandhaltung" (Fertigung, ein exakter Treffer)
+    und "Klinikum" (Gesundheitswesen, ein exakter Treffer) liefern einen
+    Gleichstand — keine der beiden Domänen ist die eindeutige Hauptdomäne der
+    Persona. Ein Gleichstand schützt nicht mehr: die Persona trägt Fachwörter
+    (Fertigung), die die Quelle nicht hergibt, und das wird jetzt gemeldet.
     """
-    assert (
-        detect_domain_drift(
-            "Instandhaltung der Medizintechnik im Klinikum", CLINIC_SOURCE
-        )
-        == []
+    result = detect_domain_drift(
+        "Instandhaltung der Medizintechnik im Klinikum", CLINIC_SOURCE
     )
+    assert result.drifted == ["manufacturing"]
+    assert result.unverifiable is False
+
+
+def test_a_healthcare_main_domain_drifts_against_a_pure_education_source():
+    """Das Beispiel aus der Spezifikation zu #1471.
+
+    Die Persona hat ihre Hauptdomäne eindeutig im Gesundheitswesen (drei
+    exakte Treffer) und berührt Bildung nur als Nebendomäne (ein exakter
+    Treffer). Gegenüber einer reinen Bildungsquelle ist das Drift — auch wenn
+    die Nebendomäne der Persona zur Quelle passt, schützt das die Persona
+    nicht mehr, weil ihre Hauptdomäne fehlt.
+    """
+    persona_text = (
+        "Ärztin für Diagnose und Therapie, betreut zusätzlich die "
+        "Patientenaufnahme; hilft gelegentlich in der Schule aus."
+    )
+    source_text = (
+        "Die Schule plant den neuen Lehrplan; das Kollegium bespricht die "
+        "Didaktik im Unterricht."
+    )
+
+    result = detect_domain_drift(persona_text, source_text)
+
+    assert result.drifted == ["healthcare"]
+    assert result.unverifiable is False
+
+
+def test_a_persona_whose_main_domain_matches_the_source_is_unremarkable():
+    """Fachlich passende Persona: eindeutige Hauptdomäne deckt sich mit der Quelle."""
+    persona_text = "Pflegekraft mit Schwerpunkt Diagnose und Therapie in der Notaufnahme."
+
+    result = detect_domain_drift(persona_text, CLINIC_SOURCE)
+
+    assert result.drifted == []
+    assert result.unverifiable is False
 
 
 def test_a_neutral_role_is_no_drift():
     """Ohne Fachvokabular gibt es nichts zu beanstanden."""
-    assert detect_domain_drift("Mitarbeiterin der Verwaltung", CLINIC_SOURCE) == []
+    result = detect_domain_drift("Mitarbeiterin der Verwaltung", CLINIC_SOURCE)
+    assert result.drifted == []
+    assert result.unverifiable is False
 
 
-def test_a_source_without_a_domain_cannot_accuse_anyone():
-    assert detect_domain_drift("Schichtleiter Maschinenbau", "Ein Projekt startet.") == []
+def test_a_source_without_a_domain_is_unverifiable_not_clean():
+    """Eine Quelle ohne erkennbares Fach ist ungeprüft, nicht entwarnt.
+
+    Vorher lieferte ``detect_domain_drift`` hier dieselbe leere Liste wie bei
+    einer geprüften, sauberen Quelle — ununterscheidbar. Seit #1471 trägt das
+    Ergebnis ``unverifiable=True`` und ist damit nicht mehr versehentlich als
+    Entwarnung lesbar.
+    """
+    result = detect_domain_drift("Schichtleiter Maschinenbau", "Ein Projekt startet.")
+    assert result.drifted == []
+    assert result.unverifiable is True
 
 
 def test_a_network_in_the_source_is_not_read_as_manufacturing():
     """"Netzwerk" enthält "werk" — ein kurzer Marker hätte hier zugeschlagen."""
-    assert detect_domain_drift("Betreuer im Klinik-Netzwerk", CLINIC_SOURCE) == []
+    result = detect_domain_drift("Betreuer im Klinik-Netzwerk", CLINIC_SOURCE)
+    assert result.drifted == []
+    assert result.unverifiable is False
 
 
 @pytest.mark.parametrize(
@@ -143,7 +198,70 @@ def test_a_station_compound_is_not_read_as_healthcare(text: str):
 def test_a_manufacturing_persona_keeps_its_profession_next_to_a_station():
     source = "Rollout an den Ladestationen der Werkhalle, Fertigung betroffen."
 
-    assert detect_domain_drift("Anlagenführer in der Montage", source) == []
+    result = detect_domain_drift("Anlagenführer in der Montage", source)
+    assert result.drifted == []
+    assert result.unverifiable is False
+
+
+# --- Neue Domänen (#1471) ----------------------------------------------------
+
+
+def test_an_it_security_marker_fires_without_matching_workplace_safety():
+    """"Sicherheit" allein ist zu generisch — nur volle Komposita zählen."""
+    assert "it/security" in _domains_in(
+        "Zuständig für Cyberangriffe und Firewall-Härtung im Rechenzentrum."
+    )
+    assert "it/security" not in _domains_in(
+        "Verantwortlich für Arbeitssicherheit und Unfallverhütung in der Werkhalle."
+    )
+
+
+def test_a_public_sector_marker_fires_without_matching_property_management():
+    """"Verwaltung" allein steckt auch in "Hausverwaltung" — nicht gemeint."""
+    assert "public-sector" in _domains_in(
+        "Die Kommunalverwaltung bearbeitet den Antrag im Bürgeramt."
+    )
+    assert "public-sector" not in _domains_in(
+        "Die Hausverwaltung kümmert sich um die Nebenkostenabrechnung."
+    )
+
+
+def test_a_retail_marker_fires_without_matching_a_bare_cash_desk():
+    """"Kasse" allein wäre zu generisch — nur volle Komposita zählen."""
+    assert "retail" in _domains_in(
+        "Leitet die Filialleitung und plant die Sortimentsplanung für den Einzelhandel."
+    )
+    assert "retail" not in _domains_in(
+        "Zahlt an der Kasse und wartet auf die Quittung."
+    )
+
+
+def test_a_media_marker_fires_without_matching_a_chemical_reaction():
+    """"Redaktion" und "Reaktion" unterscheiden sich um ein "d" — keine Kollision."""
+    assert "media" in _domains_in(
+        "Die Redaktionsleitung verantwortet die Berichterstattung und Pressemitteilungen."
+    )
+    assert "media" not in _domains_in("Die chemische Reaktion verläuft exotherm.")
+
+
+def test_a_legal_marker_fires_without_matching_spelling_conventions():
+    """"Recht" allein steckt auch in "Rechtschreibung" — nicht gemeint."""
+    assert "legal" in _domains_in(
+        "Die Rechtsabteilung der Kanzlei übernimmt die Prozessvertretung für den Mandanten."
+    )
+    assert "legal" not in _domains_in(
+        "Die Rechtschreibung wird regelmäßig überprüft."
+    )
+
+
+def test_an_energy_marker_fires_without_matching_a_delivery_driver():
+    """"Kraft" allein steckt auch in "Kraftfahrer" — nicht gemeint."""
+    assert "energy" in _domains_in(
+        "Der Netzbetreiber treibt den Netzausbau für die Energiewende voran."
+    )
+    assert "energy" not in _domains_in(
+        "Der Kraftfahrer liefert die Pakete pünktlich aus."
+    )
 
 
 # --- Zusammengefasste Befunde -----------------------------------------------

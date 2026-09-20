@@ -25,12 +25,25 @@ nicht vorkommt, während die Domäne der Quelle in ihr fehlt.
 Beide Prüfungen melden und bereinigen konservativ; sie verwerfen keine
 Persona. Ein Fehlalarm darf einen Lauf nicht kosten — und die Befunde selbst
 sind das eigentliche Produkt, weil sie im Degradation-Protokoll landen.
+
+**Nachtrag #1471 — Hauptdomäne statt jedem Overlap.** Die ursprüngliche
+Fassung von ``detect_domain_drift`` galt schon als entwarnt, sobald Persona-
+und Quelldomänen sich in *irgendeinem* Punkt schnitten. Eine Persona mit
+Hauptfach Gesundheitswesen und einer beiläufigen Nebendomäne Bildung galt
+damit gegenüber einer reinen Bildungsquelle als unauffällig — obwohl ihr
+eigentliches Fach fehlte. Jetzt zählt nur noch die Hauptdomäne der Persona
+(das Fach mit den meisten *exakten* Markertreffern): deckt sie sich mit einer
+Quelldomäne, ist ein Überschneiden in Nebendomänen weiterhin eine legitime
+Schnittstellenrolle. Deckt sie sich nicht — auch bei Gleichstand ohne
+eindeutigen Sieger —, ist es Drift.
 """
 
 from __future__ import annotations
 
 import re
-from typing import Dict, FrozenSet, List, Sequence
+from typing import Dict, FrozenSet, List, NamedTuple, Sequence
+
+from .persona_domain_taxonomy import DOMAIN_MARKERS
 
 #: Grundwörter, die eine Mehrzahl benennen. Geprüft wird das Wortende eines
 #: Entitätstyps: ``HospitalNetwork`` → *network*, ``PatientAdvisoryCouncil`` →
@@ -66,45 +79,6 @@ COLLECTIVE_HEAD_NOUNS: FrozenSet[str] = frozenset({
     "cooperative", "genossenschaft",
     "workforce", "belegschaft",
 })
-
-#: Fachdomänen mit ihrem Leitvokabular. Bewusst klein und trennscharf: es geht
-#: nicht darum, jede Branche zu erfassen, sondern die Verwechslungen zu fangen,
-#: die im Referenzlauf tatsächlich auftraten — eine Klinik, aus der ein
-#: Maschinenbaubetrieb wurde.
-DOMAIN_MARKERS: Dict[str, FrozenSet[str]] = {
-    "healthcare": frozenset({
-        "klinik", "kliniken", "klinikum", "krankenhaus", "pflege", "pflegekraft",
-        "patient", "patienten", "patientin", "ärztlich", "aerztlich", "arzt",
-        "ärztin", "aerztin", "medizin", "medizinisch", "triage", "notaufnahme",
-        # "station" steckt in "Ladestation", "Arbeitsstation", "Bahnstation" —
-        # derselbe Fehlertyp wie "werk" in "Netzwerk". Die längeren Formen
-        # sind eindeutig.
-        "stationsleitung", "stationär", "stationaer", "bettenstation",
-        "diagnose", "therapie", "visite", "gesundheitswesen", "hospital",
-    }),
-    # Kurze Marker sind hier gefährlich: "werk" steckt in "Netzwerk", "bank"
-    # in "Datenbank". Ein Fehlalarm beschädigt eine korrekte Persona, deshalb
-    # stehen hier nur Wörter, die ihr Fach eindeutig festlegen.
-    "manufacturing": frozenset({
-        "fertigung", "fertigungsplanung", "maschinenbau", "produktion",
-        "produktionsleitung", "montage", "werkhalle", "fließband",
-        "fliessband", "zerspanung", "anlagenbau", "instandhaltung",
-        "manufacturing",
-    }),
-    "education": frozenset({
-        "schule", "schulen", "lehrkraft", "lehrkräfte", "lehrkraefte",
-        "unterricht", "schüler", "schueler", "kollegium", "lehrplan",
-        "didaktik", "hochschule", "seminar", "curriculum",
-    }),
-    "logistics": frozenset({
-        "logistik", "spedition", "lagerhalle", "kommissionierung", "fuhrpark",
-        "frachtführer", "frachtfuehrer", "warehouse",
-    }),
-    "finance": frozenset({
-        "sparkasse", "kreditinstitut", "wertpapier", "bilanzierung",
-        "versicherung", "schadensregulierung",
-    }),
-}
 
 _TOKEN_RE = re.compile(r"[^\wäöüßÄÖÜ]+")
 #: Trennt ``HospitalNetwork`` in *hospital* und *network*, ohne dass der Typ
@@ -164,24 +138,75 @@ def _domains_in(text: str) -> FrozenSet[str]:
     return frozenset(found)
 
 
-def detect_domain_drift(persona_text: str, source_text: str) -> List[str]:
+def _main_domains(text: str) -> FrozenSet[str]:
+    """Die Domäne(n) mit den meisten *exakten* Markertreffern im Text.
+
+    Gezählt werden nur exakte Token-Treffer, keine Kompositum-Treffer: ein
+    Kompositum-Treffer ("Medizintechnik" für "medizin") ist ein schwächeres
+    Signal als ein eigenständiges Fachwort und soll die Hauptdomäne nicht
+    tragen. Ein Gleichstand liefert eine leere Menge zurück — bei #1471 hat
+    sich gezeigt, dass "jeder Treffer schützt" zu nachsichtig war, also
+    schützt bei Gleichstand *keine* der beiden Domänen mehr; das ist die
+    bewusste Entscheidung an dieser Stelle.
+    """
+    tokens = [
+        token for token in _TOKEN_RE.split((text or "").lower()) if len(token) > 3
+    ]
+    counts: Dict[str, int] = {}
+    for token in tokens:
+        for domain, markers in DOMAIN_MARKERS.items():
+            if token in markers:
+                counts[domain] = counts.get(domain, 0) + 1
+    if not counts:
+        return frozenset()
+    top = max(counts.values())
+    winners = frozenset(domain for domain, hits in counts.items() if hits == top)
+    return winners if len(winners) == 1 else frozenset()
+
+
+class DomainDriftResult(NamedTuple):
+    """Ergebnis eines Domänenvergleichs.
+
+    ``unverifiable`` heißt: die Quelle trägt kein erkennbares Fachvokabular,
+    über sie lässt sich nichts sagen. Das ist ausdrücklich nicht dasselbe wie
+    ein geprüftes, sauberes Ergebnis (``drifted == []`` bei
+    ``unverifiable == False``) — nur Letzteres ist eine Entwarnung. Ein
+    Aufrufer, der beide Fälle gleich behandelt, würde Ungeprüftes als geprüft
+    ausgeben.
+    """
+
+    drifted: List[str]
+    unverifiable: bool
+
+
+def detect_domain_drift(persona_text: str, source_text: str) -> DomainDriftResult:
     """Trägt die Persona ein Fach, das in ihrer Quelle nicht vorkommt?
 
-    Gemeldet wird nur der eindeutige Fall: die Quelle weist eine Fachdomäne
-    aus, die Persona eine andere — und die der Quelle fehlt bei ihr ganz. Eine
-    Persona, die beide Domänen berührt, ist kein Drift, sondern eine
-    Schnittstelle; und eine Quelle ohne erkennbares Fach kann nichts belegen
-    und darf nichts beanstanden.
+    Entscheidend ist die Hauptdomäne der Persona (das Fach mit den meisten
+    exakten Markertreffern), nicht jede Überschneidung: deckt sie sich mit
+    einer Quelldomäne, ist eine zusätzliche Nebendomäne eine legitime
+    Schnittstellenrolle. Deckt sie sich nicht — auch bei Gleichstand ohne
+    eindeutigen Sieger — ist es Drift, selbst wenn eine Nebendomäne der
+    Persona zufällig zur Quelle passt (#1471).
 
-    Zurückgegeben werden die abgedrifteten Domänen, sortiert. Leer heißt sauber.
+    Eine Quelle ohne erkennbares Fach kann nichts belegen; das ist
+    ``unverifiable``, keine Entwarnung. Eine Persona ohne Fachvokabular hat
+    nichts, worüber sie abdriften könnte.
     """
     source_domains = _domains_in(source_text)
     if not source_domains:
-        return []
+        return DomainDriftResult(drifted=[], unverifiable=True)
+
     persona_domains = _domains_in(persona_text)
-    if not persona_domains or persona_domains & source_domains:
-        return []
-    return sorted(persona_domains)
+    if not persona_domains:
+        return DomainDriftResult(drifted=[], unverifiable=False)
+
+    persona_main = _main_domains(persona_text)
+    if persona_main and persona_main & source_domains:
+        return DomainDriftResult(drifted=[], unverifiable=False)
+
+    foreign = sorted(persona_domains - source_domains)
+    return DomainDriftResult(drifted=foreign, unverifiable=False)
 
 
 def coherence_findings(
@@ -211,13 +236,18 @@ def coherence_findings(
         })
 
     drift_source = " ".join(part for part in (profession, persona_text) if part)
-    drifted = detect_domain_drift(drift_source, source_text)
-    if drifted:
+    drift = detect_domain_drift(drift_source, source_text)
+    # ``unverifiable`` wird hier bewusst nicht ausgewertet: eine Quelle ohne
+    # erkennbares Fach liefert kein Kohärenzsignal, aber auch keinen Grund,
+    # den Beruf zu bereinigen — das ist keine Entwarnung, sondern schlicht
+    # nichts zu melden.
+    if drift.drifted:
         findings.append({
             "kind": "domain_drift",
             "detail": (
-                f"'{entity_name}' trägt Fachvokabular aus {', '.join(drifted)}, "
-                "während die Quelle eine andere Domäne beschreibt."
+                f"'{entity_name}' trägt Fachvokabular aus "
+                f"{', '.join(drift.drifted)}, während die Quelle eine andere "
+                "Domäne beschreibt."
             ),
         })
 
@@ -231,13 +261,14 @@ def drifted_professions(
     return [
         profession
         for profession in professions
-        if profession and detect_domain_drift(profession, source_text)
+        if profession and detect_domain_drift(profession, source_text).drifted
     ]
 
 
 __all__ = [
     "COLLECTIVE_HEAD_NOUNS",
     "DOMAIN_MARKERS",
+    "DomainDriftResult",
     "coherence_findings",
     "detect_domain_drift",
     "drifted_professions",
