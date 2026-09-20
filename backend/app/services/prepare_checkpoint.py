@@ -34,7 +34,7 @@ from .artifact_store import resolve_default_store
 from ..utils.logger import get_logger
 
 if TYPE_CHECKING:
-    from .oasis_profile_models import OasisAgentProfile
+    from .oasis_profile_models import OasisAgentProfile, PersonaDemographicSlot
 
 logger = get_logger("agora.prepare_checkpoint")
 
@@ -46,6 +46,8 @@ __all__ = [
     "checkpoint_is_resumable",
         "clear_checkpoint",
     "completed_profiles_from_checkpoint",
+    "demographic_slot_to_dict",
+    "demographic_slots_from_checkpoint",
     "load_checkpoint",
     "new_checkpoint",
     "profile_from_dict",
@@ -88,6 +90,42 @@ def completed_profiles_from_checkpoint(
                 exc,
             )
     return result
+
+
+def demographic_slot_to_dict(slot: "PersonaDemographicSlot") -> dict[str, Any]:
+    """Serialisiert einen ``PersonaDemographicSlot`` (Dataclass) für den Checkpoint.
+
+    Gleiches Muster wie ``profile_to_dict`` — der Checkpoint hält Dicts,
+    nie die Domänenobjekte selbst.
+    """
+    return dataclasses.asdict(slot)
+
+
+def demographic_slots_from_checkpoint(
+    checkpoint: PreparePersonaCheckpoint,
+) -> Optional[list["PersonaDemographicSlot"]]:
+    """Rekonstruiert den beim Original-Versuch fixierten Slot-Plan (Codex-Finding P1, PR #1539).
+
+    ``None`` heißt: der Checkpoint trägt (noch) keinen Slot-Plan — ein
+    Altbestand vor diesem Fix, oder ein defekter Eintrag. Beides macht den
+    Checkpoint für den Slot-Plan-Zweck nicht verwertbar; ``checkpoint_is_resumable``
+    lehnt einen solchen Checkpoint bereits ab, diese Funktion ist die
+    defensive zweite Ebene für direkte Aufrufer.
+    """
+    if checkpoint.demographic_slots is None:
+        return None
+    from .oasis_profile_models import PersonaDemographicSlot
+
+    try:
+        return [
+            PersonaDemographicSlot(**slot) for slot in checkpoint.demographic_slots
+        ]
+    except TypeError as exc:
+        logger.warning(
+            "Prepare-Checkpoint: Slot-Plan nicht rekonstruierbar (%s), wird ignoriert",
+            exc,
+        )
+        return None
 
 
 #: Logischer Artefaktname im ``SimulationArtifactStore`` (dort auf
@@ -153,6 +191,7 @@ def new_checkpoint(
     entity_types: list[str],
     llm_model: Optional[str] = None,
     language: Optional[str] = None,
+    demographic_slots: Optional[list[dict[str, Any]]] = None,
 ) -> PreparePersonaCheckpoint:
     """Baut den initialen Checkpoint eines Prepare-Versuchs (noch ohne Profile)."""
     return PreparePersonaCheckpoint(
@@ -167,6 +206,7 @@ def new_checkpoint(
         effective_quota_plan=effective_quota_plan,
         llm_model=llm_model,
         language=language,
+        demographic_slots=demographic_slots,
         primary_entity_uuids=list(primary_entity_uuids),
         reserve_entity_uuids=list(reserve_entity_uuids),
         expanded_entity_uuids=list(expanded_entity_uuids),
@@ -200,6 +240,13 @@ def checkpoint_is_resumable(
     bereits abgeschlossen hat. Ohne verwertbaren Zwischenstand ist es kein
     Resume-Kandidat, auch wenn die Parameter sonst passen (Fehlermuster
     "Angebot ohne Deckung").
+
+    Codex-Finding P1 (PR #1539): zusätzlich muss der Checkpoint einen
+    vollständigen demografischen Slot-Plan tragen (ein Eintrag je
+    ``expanded_entity_uuids``-Index). Ein Altbestand vor diesem Fix ohne
+    Slot-Plan gilt als nicht resumable — ein sauberer Neustart ist der
+    Verzerrung der demografischen Gesamtverteilung durch neu gewürfelte
+    Slots vorzuziehen.
     """
     if checkpoint is None or not graph_id:
         return False
@@ -223,6 +270,11 @@ def checkpoint_is_resumable(
     if checkpoint.language != language:
         return False
     if not checkpoint.expanded_entity_uuids:
+        return False
+    if (
+        checkpoint.demographic_slots is None
+        or len(checkpoint.demographic_slots) != len(checkpoint.expanded_entity_uuids)
+    ):
         return False
     return bool(checkpoint.completed_profiles)
 

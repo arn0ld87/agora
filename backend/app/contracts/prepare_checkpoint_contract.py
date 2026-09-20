@@ -65,6 +65,17 @@ class PreparePersonaCheckpoint(BaseModel):
     llm_model: Optional[str] = None
     language: Optional[str] = None
 
+    # Codex-Finding P1 (PR #1539, Issue #1472c): ``_build_demographic_slots``
+    # mischt Alters-/Gender-/MBTI-Slots bei jedem Lauf zufaellig. Ohne diesen
+    # fixierten Plan wuerden beim Resume die aus dem Checkpoint uebernommenen
+    # Profile ihre urspruenglichen Slots behalten, waehrend die fehlenden
+    # Indizes Slots aus einer NEUEN Mischung bekaemen — ein teilweise
+    # fortgesetzter Lauf koennte damit die vorgegebene demografische
+    # Gesamtverteilung verletzen. Dicts statt Domaenenobjekte, analog
+    # ``completed_profiles``. ``None`` heisst: Altbestand vor diesem Fix, fuer
+    # den Slot-Plan-Zweck nicht verwertbar (siehe ``checkpoint_is_resumable``).
+    demographic_slots: Optional[list[dict[str, Any]]] = None
+
     # Fixierte Auswahl aus Phase 1 (Cap) bzw. der Quota-Expansion — siehe
     # Moduldocstring. Reihenfolge ist bedeutungstragend: der Index in
     # ``expanded_entity_uuids`` ist der ``user_id``/Generierungs-Index.

@@ -43,6 +43,7 @@ from .simulation_config_generator import SimulationConfigGenerator
 
 if TYPE_CHECKING:
     from .entity_reader import EntityNode
+    from .oasis_profile_models import PersonaDemographicSlot
     from .simulation_manager import SimulationManager, SimulationState
 
 from . import prepare_llm as _prepare_llm
@@ -156,10 +157,15 @@ def _build_profile_checkpoint_hooks(
     use_llm_for_profiles: bool,
     quota_plan: Optional[PersonaQuotaPlan],
     resume_checkpoint: Optional["_prepare_checkpoint.PreparePersonaCheckpoint"],
+    generator: OasisProfileGenerator,
     llm_model: Optional[str] = None,
     language: Optional[str] = None,
-) -> Tuple[Optional[Dict[int, OasisAgentProfile]], Optional[Callable[[int, OasisAgentProfile], None]]]:
-    """Baut ``already_done``/``on_profile_saved`` für ``_phase_generate_profiles`` (Issue #1472c).
+) -> Tuple[
+    Optional[Dict[int, OasisAgentProfile]],
+    Optional[Callable[[int, OasisAgentProfile], None]],
+    Optional[List["PersonaDemographicSlot"]],
+]:
+    """Baut ``already_done``/``on_profile_saved``/Slot-Plan für ``_phase_generate_profiles`` (Issue #1472c).
 
     Ausgelagert in eine eigene Funktion statt inline in
     ``_phase_generate_profiles`` — Lehre aus Slice 1.3: zusätzliche
@@ -170,8 +176,16 @@ def _build_profile_checkpoint_hooks(
     Checkpointing ist eine Zusatzabsicherung, kein hartes Erfordernis für
     die Generierung selbst: fehlt ``state.simulation_id`` (Test-Doubles
     unterhalb dieser Ebene) oder tragen die Entities kein echtes
-    ``uuid``-Attribut, liefert diese Funktion ``(None, None)`` — die
-    Generierung läuft normal weiter, nur ohne Checkpoint.
+    ``uuid``-Attribut, liefert diese Funktion ``(None, None, None)`` — die
+    Generierung läuft normal weiter, nur ohne Checkpoint (und die
+    demografischen Slots werden wie vor Issue #1472c pro Aufruf neu
+    gewürfelt).
+
+    Der dritte Rückgabewert (Codex-Finding P1, PR #1539) ist der fixierte
+    demografische Slot-Plan: bei einem Resume der aus dem Checkpoint
+    übernommene Plan (siehe ``PreparePersonaCheckpoint``-Docstring — ein
+    Resume darf ihn NIE neu würfeln), bei einem neuen Versuch ein frisch
+    gewürfelter Plan, der zusammen mit der Auswahl im Checkpoint landet.
     """
     # Bewusst als ``str | None`` gefuehrt und vor jeder Checkpoint-Schreibung
     # geprueft: Test-Doubles tragen nicht zwingend eine ``simulation_id``, und
@@ -194,6 +208,9 @@ def _build_profile_checkpoint_hooks(
             simulation_id,
         )
         checkpoint_box: List[Any] = [resume_checkpoint]
+        demographic_slots = _prepare_checkpoint.demographic_slots_from_checkpoint(
+            resume_checkpoint
+        )
     elif simulation_id:
         primary_uuids = _entity_uuids_or_none(filtered.entities)
         reserve_uuids = _entity_uuids_or_none(
@@ -206,7 +223,13 @@ def _build_profile_checkpoint_hooks(
                 "echtes uuid-Attribut (Test-/Fake-Pfad)",
                 simulation_id,
             )
-            return None, None
+            return None, None, None
+        # Codex-Finding P1 (PR #1539): EINMAL würfeln, dann sowohl an den
+        # Checkpoint als auch an die Generierung reichen — sonst würfelt
+        # ``generate_profiles_from_entities`` intern ein zweites Mal und der
+        # Checkpoint hielte einen Plan fest, der nie tatsächlich verwendet
+        # wurde.
+        demographic_slots = generator._build_demographic_slots(entities)
         checkpoint_box = [
             _prepare_checkpoint.new_checkpoint(
                 simulation_id=simulation_id,
@@ -225,15 +248,19 @@ def _build_profile_checkpoint_hooks(
                 entity_types=state.entity_types,
                 llm_model=llm_model,
                 language=language,
+                demographic_slots=[
+                    _prepare_checkpoint.demographic_slot_to_dict(slot)
+                    for slot in demographic_slots
+                ],
             )
         ]
         already_done = None
     else:
-        return None, None
+        return None, None, None
 
     # Ab hier steht fest, dass eine ``simulation_id`` vorliegt: der
     # ``resume_checkpoint``-Zweig traegt sie im Checkpoint, der ``elif``-Zweig
-    # hat sie geprueft, und jeder andere Fall ist oben mit ``None, None``
+    # hat sie geprueft, und jeder andere Fall ist oben mit ``None, None, None``
     # ausgestiegen. Die eigene Bindung macht das fuer die Closure explizit,
     # statt sich auf ein Narrowing zu verlassen, das dort nicht mehr greift.
     checkpoint_simulation_id: str = simulation_id or checkpoint_box[0].simulation_id
@@ -244,7 +271,7 @@ def _build_profile_checkpoint_hooks(
         )
         _prepare_checkpoint.save_checkpoint(checkpoint_simulation_id, checkpoint_box[0])
 
-    return already_done, _on_profile_saved
+    return already_done, _on_profile_saved, demographic_slots
 
 
 def _phase_generate_profiles(
@@ -370,7 +397,7 @@ def _phase_generate_profiles(
     # Issue #1472c (Prepare-Resume): Checkpoint aufsetzen bzw. fortsetzen.
     # Ausgelagert in ``_build_profile_checkpoint_hooks`` (Komplexitäts-
     # Gründe, siehe deren Docstring).
-    already_done, on_profile_saved = _build_profile_checkpoint_hooks(
+    already_done, on_profile_saved, demographic_slots = _build_profile_checkpoint_hooks(
         state=state,
         filtered=filtered,
         entities=entities,
@@ -381,6 +408,7 @@ def _phase_generate_profiles(
         use_llm_for_profiles=use_llm_for_profiles,
         quota_plan=quota_plan,
         resume_checkpoint=resume_checkpoint,
+        generator=generator,
         llm_model=llm_model,
         language=language,
     )
@@ -393,6 +421,10 @@ def _phase_generate_profiles(
         parallel_count=parallel_profile_count,
         realtime_output_path=realtime_output_path,
         output_platform=realtime_platform,
+        # Codex-Finding P1 (PR #1539, Issue #1472c): fixierter Slot-Plan
+        # (neu gewürfelt oder aus dem Checkpoint übernommen) — verhindert,
+        # dass ein Resume die demografische Mischung neu würfelt.
+        demographic_slots=demographic_slots,
         # Issue #1034: Der Parameter existiert seit #1029 (Slice 12,
         # regelbasierte Fallback-Profile), wurde aus dem produktiven
         # Prepare-Pfad aber nie gefüllt — ``_report_persona_degradation``

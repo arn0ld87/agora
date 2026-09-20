@@ -251,6 +251,14 @@ def test_resume_reproduces_baseline_selection_without_regenerating_done_profiles
         expanded_entity_uuids=_EXPECTED_SELECTION,
         entities_count=4,
         entity_types=["Stakeholder", "Institution"],
+        # Codex-Finding P1 (PR #1539): fixierter Slot-Plan, sonst nicht
+        # resumable (siehe ``checkpoint_is_resumable``).
+        demographic_slots=[
+            {"age": 30, "gender": "female", "mbti": "INTJ"},
+            {"age": 40, "gender": "male", "mbti": "ENTP"},
+            {"age": 25, "gender": "nonbinary", "mbti": "INFP"},
+            {"age": 55, "gender": "female", "mbti": "ESTJ"},
+        ],
     )
     for index in (0, 1):
         partial = partial.with_completed_profile(
@@ -302,6 +310,103 @@ def test_resume_reproduces_baseline_selection_without_regenerating_done_profiles
 
     # Checkpoint ist nach erfolgreichem Abschluss aufgeräumt.
     assert prepare_checkpoint.load_checkpoint("sim-resume") is None
+
+
+def test_resume_reuses_demographic_slot_plan_instead_of_reshuffling(
+    tmp_path, monkeypatch, _phase2_spy
+):
+    """Ein Resume darf den demografischen Slot-Plan nicht neu würfeln.
+
+    Codex-Finding P1 (PR #1539): ``_build_demographic_slots`` mischt
+    Alters-/Gender-/MBTI-Slots bei jedem Lauf zufällig. Ohne fixierten Plan
+    im Checkpoint würden die aus dem Checkpoint übernommenen Profile ihre
+    ursprünglichen Slots behalten, während die fehlenden Indizes Slots aus
+    einer NEUEN Mischung bekämen — ein teilweise fortgesetzter Lauf könnte
+    damit die vorgegebene demografische Gesamtverteilung verletzen.
+
+    Konkret geprüft: (1) ``_build_demographic_slots`` wird beim Resume kein
+    einziges Mal aufgerufen — der Plan kommt vollständig aus dem
+    Checkpoint —, und (2) die NEU generierten Slots (Index 2/3) sind nach
+    dem Resume identisch mit dem Baseline-Lauf.
+    """
+    from app.services.oasis_profile_generator import OasisProfileGenerator
+
+    slot_call_log: list[int] = []
+    original_build_slots = OasisProfileGenerator._build_demographic_slots
+
+    def _counting_build_slots(self, entities):
+        slot_call_log.append(len(entities))
+        return original_build_slots(self, entities)
+
+    monkeypatch.setattr(
+        OasisProfileGenerator, "_build_demographic_slots", _counting_build_slots
+    )
+
+    # --- Baseline: ununterbrochener Lauf --------------------------------
+    baseline_storage = _OrderedStorage([_ORDER_BASELINE])
+    baseline_state = _make_state("sim-baseline-slots", "graph-x")
+    baseline_manager = _FakeManager(baseline_state, tmp_path / "baseline-slots")
+
+    baseline_result = _run(
+        baseline_manager, "sim-baseline-slots", baseline_storage, max_agents=4
+    )
+    assert baseline_result.status == SimulationStatus.READY
+    baseline_profiles, _ = _phase2_spy[0]
+
+    # Genau einmal gewürfelt -- für alle vier Entities in einem Rutsch.
+    assert slot_call_log == [4]
+
+    # --- Checkpoint vorbereiten: 2 von 4 Personas gelten als fertig,
+    # Slot-Plan spiegelt exakt die Baseline-Mischung.
+    resume_sim_dir = tmp_path / "resume-slots"
+    resume_sim_dir.mkdir()
+    partial = prepare_checkpoint.new_checkpoint(
+        simulation_id="sim-resume-slots",
+        graph_id="graph-x",
+        defined_entity_types=None,
+        max_agents=4,
+        persona_floor=4,
+        use_llm_for_profiles=False,
+        effective_quota_plan=None,
+        primary_entity_uuids=_EXPECTED_SELECTION,
+        reserve_entity_uuids=["s3", "s4"],
+        expanded_entity_uuids=_EXPECTED_SELECTION,
+        entities_count=4,
+        entity_types=["Stakeholder", "Institution"],
+        demographic_slots=[
+            {"age": p.age, "gender": p.gender, "mbti": p.mbti}
+            for p in baseline_profiles
+        ],
+    )
+    for index in (0, 1):
+        partial = partial.with_completed_profile(
+            index, prepare_checkpoint.profile_to_dict(baseline_profiles[index])
+        )
+    prepare_checkpoint.save_checkpoint("sim-resume-slots", partial)
+
+    # --- Resume: andere Lesereihenfolge, Slot-Aufruf-Zähler zurückgesetzt.
+    slot_call_log.clear()
+    resume_storage = _OrderedStorage([_ORDER_SHUFFLED])
+    resume_state = _make_state(
+        "sim-resume-slots", "graph-x", status=SimulationStatus.INTERRUPTED
+    )
+    resume_manager = _FakeManager(resume_state, resume_sim_dir)
+
+    resume_result = _run(
+        resume_manager, "sim-resume-slots", resume_storage, max_agents=4
+    )
+    assert resume_result.status == SimulationStatus.READY
+    resume_profiles, _ = _phase2_spy[1]
+
+    # Kern des Tests: kein einziger neuer Würfelvorgang beim Resume.
+    assert slot_call_log == []
+
+    # Die neu generierten Slots (Index 2/3) entsprechen exakt der
+    # Baseline-Mischung -- keine abweichende Verteilung trotz Unterbrechung.
+    for index in (2, 3):
+        assert resume_profiles[index].age == baseline_profiles[index].age
+        assert resume_profiles[index].gender == baseline_profiles[index].gender
+        assert resume_profiles[index].mbti == baseline_profiles[index].mbti
 
 
 # ---------------------------------------------------------------------------
@@ -401,6 +506,7 @@ def test_checkpoint_is_resumable_false_on_language_or_model_mismatch():
         entity_types=["Stakeholder"],
         llm_model="gpt-4o",
         language="de",
+        demographic_slots=[{"age": 30, "gender": "female", "mbti": "INTJ"}],
     ).with_completed_profile(0, {"user_id": 0, "user_name": "u", "name": "n", "bio": "b", "persona": "p"})
 
     # Sprache weicht ab -> nicht mehr verwertbar.

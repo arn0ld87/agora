@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 import json
 from typing import Callable, Dict, List, Optional
 from .entity_reader import EntityNode
-from .oasis_profile_models import OasisAgentProfile, PersonaIneligible
+from .oasis_profile_models import OasisAgentProfile, PersonaDemographicSlot, PersonaIneligible
 from .run_budget import BudgetExceededError
 from .settings_layer import get_default_service as _get_settings
 
@@ -31,6 +31,7 @@ degradations :Optional ["DegradationCollector"]=None ,
 reserve_entities :Optional [List [EntityNode ]]=None ,
 already_done :Optional [Dict [int ,OasisAgentProfile ]]=None ,
 on_profile_saved :Optional [Callable [[int ,OasisAgentProfile ],None ]]=None ,
+demographic_slots :Optional [List [PersonaDemographicSlot ]]=None ,
 )->List [OasisAgentProfile ]:
     """
     Generate Agent Profiles in batch from entities (supports parallel generation)
@@ -70,7 +71,21 @@ on_profile_saved :Optional [Callable [[int ,OasisAgentProfile ],None ]]=None ,
     profiles =[None ]*total # Pre-allocate list to maintain order
     completed_count =[0 ]# Use list for modification in closure
     lock =Lock ()
-    demographic_slots =self ._build_demographic_slots (entities )
+    # Codex-Finding P1 (PR #1539, Issue #1472c): ein vom Aufrufer fixierter
+    # Slot-Plan (Resume oder frisch gewuerfelt UND im Checkpoint persistiert,
+    # siehe ``prepare_service._build_profile_checkpoint_hooks``) wird
+    # UNVERAENDERT uebernommen statt neu gewuerfelt zu werden — sonst
+    # verzerrt ein teilweise fortgesetzter Lauf die vorgegebene
+    # demografische Gesamtverteilung. Fehlt er (z. B. Aufrufer ausserhalb
+    # von ``prepare_service``, Tests), bleibt das Verhalten unveraendert:
+    # frisch wuerfeln.
+    if demographic_slots is None :
+        demographic_slots =self ._build_demographic_slots (entities )
+    elif len (demographic_slots )!=total :
+        raise ValueError (
+        f"demographic_slots length ({len (demographic_slots )}) does not match "
+        f"entities length ({total })"
+        )
     # Issue #1247: abgelehnte Kandidaten, gesammelt fuer die Nachbesetzung.
     rejected :List [PersonaIneligible ]=[]
 
