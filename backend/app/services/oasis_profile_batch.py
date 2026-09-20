@@ -12,7 +12,7 @@ from . import oasis_profile_generator as _legacy
 if TYPE_CHECKING:
     from .degradation_collector import DegradationCollector
 import json
-from typing import List, Optional
+from typing import Callable, Dict, List, Optional
 from .entity_reader import EntityNode
 from .oasis_profile_models import OasisAgentProfile, PersonaIneligible
 from .run_budget import BudgetExceededError
@@ -29,6 +29,8 @@ realtime_output_path :Optional [str ]=None ,
 output_platform :str ="reddit",
 degradations :Optional ["DegradationCollector"]=None ,
 reserve_entities :Optional [List [EntityNode ]]=None ,
+already_done :Optional [Dict [int ,OasisAgentProfile ]]=None ,
+on_profile_saved :Optional [Callable [[int ,OasisAgentProfile ],None ]]=None ,
 )->List [OasisAgentProfile ]:
     """
     Generate Agent Profiles in batch from entities (supports parallel generation)

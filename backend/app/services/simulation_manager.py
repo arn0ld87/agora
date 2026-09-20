@@ -37,6 +37,10 @@ class SimulationStatus(str, Enum):
     CANCELLED_PARTIAL = "cancelled_partial"  # Cooperative cancel — partial report available
     COMPLETED = "completed"       # Simulation completed naturally
     FAILED = "failed"
+    # Issue #1472c: Prepare wurde mit verwertbarem Zwischenstand unterbrochen
+    # (Checkpoint mit mindestens einem generierten Profil) — kein endgültiges
+    # FAILED, sondern ein Resume-Angebot analog CANCELLED_PARTIAL.
+    INTERRUPTED = "interrupted"
 
 
 class PlatformType(str, Enum):

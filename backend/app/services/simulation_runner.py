@@ -580,13 +580,29 @@ class SimulationRunner:
             return RunRegistry()
 
         def _fail_simulation_state(simulation_id: str, error: str) -> None:
-            """Mark SimulationState as FAILED for simulation_prepare jobs."""
+            """Terminalisiert den SimulationState für unterbrochene ``simulation_prepare``-Jobs.
+
+            Issue #1472c: ``FAILED`` ist nicht mehr die einzige Terminalisierung
+            — liegt ein Checkpoint mit mindestens einem generierten Profil vor,
+            landet der State auf ``INTERRUPTED`` und bietet einen Resume an,
+            statt den bereits erzeugten Zwischenstand wegzuwerfen. Ohne
+            verwertbaren Checkpoint bleibt es beim bisherigen ``FAILED``
+            (Fehlermuster "Angebot ohne Deckung").
+            """
+            from .prepare_checkpoint import resolve_interruption_status
             from .simulation_manager import SimulationManager, SimulationStatus
             manager = SimulationManager()
             state = manager.get_simulation(simulation_id)
-            if state is not None and state.status == SimulationStatus.PREPARING:
-                state.error = error
-                manager._set_status(state, SimulationStatus.FAILED)
+            if state is None or state.status != SimulationStatus.PREPARING:
+                return
+            sim_dir = manager._get_simulation_dir(simulation_id)
+            target_status = (
+                SimulationStatus.INTERRUPTED
+                if resolve_interruption_status(sim_dir) == "interrupted"
+                else SimulationStatus.FAILED
+            )
+            state.error = error
+            manager._set_status(state, target_status)
 
         _register_cleanup_fn(
             cleanup_callable=cls.cleanup_all_simulations,
