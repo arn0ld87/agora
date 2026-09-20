@@ -1,17 +1,31 @@
-# Slice 1.1 — SIGTERM-Hook für In-Process-Jobs
+# Slice 1.1 — Worker-Exit-Hook für In-Process-Jobs
 
-Beim SIGTERM bekommen alle laufenden In-Process-Jobs — `simulation_prepare`,
-`report_generate`, `graph_build`, `ontology_generate` — sofort einen ehrlichen
-terminalen Zustand `failed/process_restart`, statt auf die
-Startup-Reconciliation beim nächsten Start zu warten. Der neue Shutdown-Hook
-in `backend/app/services/sim/process_shutdown.py` erkennt anhand von
-Worker-Token und PID, welche laufenden Runs diesem Prozess gehören, und setzt
-sie in derselben Schreibreihenfolge wie `reconcile_stale_jobs`: erst das
-Cancel-Flag für kooperativen Abbruch, dann — nur für `simulation_prepare` —
-der SimulationState (F1-Invariante: State vor Manifest), zuletzt das
+Beendet sich der Webprozess, bekommen alle laufenden In-Process-Jobs —
+`simulation_prepare`, `report_generate`, `graph_build`, `ontology_generate` —
+noch in diesem Lauf einen ehrlichen terminalen Zustand `failed/process_restart`,
+statt auf die Startup-Reconciliation beim nächsten Start zu warten. Der neue
+Hook in `backend/app/services/sim/process_shutdown.py` markiert dabei nur Runs,
+die anhand von Worker-Token und PID diesem Prozess gehören, und setzt sie in
+derselben Schreibreihenfolge wie `reconcile_stale_jobs`: erst das Cancel-Flag
+für kooperativen Abbruch, dann — nur für `simulation_prepare` — der
+SimulationState (F1-Invariante: State vor Manifest), zuletzt das
 RunRegistry-Manifest.
 
-Registriert wird der Handler in `gunicorn.conf.py::post_worker_init`, nicht in
+Die Arbeit läuft nicht im Signal-Handler, sondern über `atexit`. Der
+SIGTERM-Handler setzt nur ein Flag und ruft die Handler-Kette weiter; alles
+Lock-Nehmende passiert außerhalb des Signalkontexts. Der Grund steht im
+Moduldocstring: `gevent.signal.signal()` delegiert für jedes Signal außer
+SIGCHLD an die ungepatchte stdlib, der Handler läuft also im echten
+CPython-Signalkontext, während `threading.Lock` nach `patch_all()` ein
+kooperatives Semaphore ist. Unterbricht das Signal ausgerechnet das Greenlet,
+das `RunRegistry._lock` hält, kommt genau dieses Greenlet nie wieder zum Zug.
+
+Daraus folgt eine Grenze, die der Hook nicht überschreitet: `atexit` läuft nur
+bei einem regulären Interpreter-Shutdown. Wird der Worker nach Ablauf von
+`graceful_timeout` per SIGKILL beendet, bleibt die Startup-Reconciliation beim
+nächsten Start der Mechanismus, der die Jobs terminalisiert.
+
+Registriert wird der Hook in `gunicorn.conf.py::post_worker_init`, nicht in
 `create_app()` und nicht in `post_fork`. Unter `preload_app = True` läuft
 `create_app()` im Master vor dem Fork, und gunicorns `Worker.init_process()`
 setzt in `init_signals()` zuerst jedes Signal auf `SIG_DFL` zurück, bevor es
