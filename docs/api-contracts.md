@@ -2,7 +2,7 @@
 
 **Stand:** 08.09.2026  
 **Geprüfte Main-Baseline:** `0c47737f`  
-**Produktversion:** `0.9.5`
+**Produktversion:** `0.9.6`
 
 Agora arbeitet **contracts-first**: öffentliche JSON-Grenzen werden im Backend als Pydantic-v2-Modelle definiert, im Frontend als Zod-Schemas gespiegelt und für relevante Verträge als JSON-Schema unter `schemas/` eingecheckt.
 

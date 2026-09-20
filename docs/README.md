@@ -1,7 +1,7 @@
 # Agora — Dokumentation
 
 **Stand:** 08.09.2026  
-**Produktversion:** `0.9.5`
+**Produktversion:** `0.9.6`
 
 Die Dokumentation ist nach **aktueller Steuerungsquelle**, **lebender technischer Referenz** und **historischem Beleg** getrennt. Ein altes Audit wird nicht durch ein neues Datum aktueller; es wird nur schwerer zu erkennen, dass es alt ist.
 

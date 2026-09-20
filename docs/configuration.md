@@ -2,7 +2,7 @@
 
 **Stand:** 08.09.2026  
 **Geprüfte Main-Baseline:** `0c47737f`  
-**Backend:** `0.9.5`
+**Backend:** `0.9.6`
 
 Die **exakte** Konfigurations-SSoT ist der Code plus [`.env.example`](../.env.example) bzw. [`.env.docker.example`](../.env.docker.example). Diese Seite erklärt die operativ relevanten Gruppen und Semantik. Bei einem neuen Schalter gewinnt deshalb nicht diese Tabelle, nur weil jemand vergessen hat, sie am selben Dienstag zu aktualisieren.
 

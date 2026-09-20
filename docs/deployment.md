@@ -2,7 +2,7 @@
 
 **Stand:** 08.09.2026  
 **Geprüfte Main-Baseline:** `0c47737f`  
-**Produktversion:** `0.9.5`
+**Produktversion:** `0.9.6`
 
 Diese Datei ist der Einstieg für Deployment-Fragen. Details bleiben getrennt:
 

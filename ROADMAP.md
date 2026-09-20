@@ -1,7 +1,7 @@
 # Agora Roadmap
 
 **Stand:** 08.09.2026  
-**Aktuelle Produktversion:** `0.9.5` Stability Beta  
+**Aktuelle Produktversion:** `0.9.6` Stability Beta  
 **Istzustand:** [`docs/STATUS.md`](docs/STATUS.md)
 
 Diese Datei beschreibt ausschließlich die **strategische Release-Reihenfolge**. Konkrete Arbeitspakete, Akzeptanzkriterien und Fortschritt werden als GitHub Issues gepflegt. Ein erledigter Commit gehört nicht als Mini-Changelog hier hinein; dafür existiert `changelog.d/`. Offenbar braucht selbst Dokumentation eine Gewaltenteilung.

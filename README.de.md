@@ -12,7 +12,7 @@
 
 **Dokumente → Knowledge Graph → Personas → Simulation → nachvollziehbarer Bericht**
 
-[![Version](https://img.shields.io/badge/version-0.9.5-635BFF?style=flat-square)](./VERSION)
+[![Version](https://img.shields.io/badge/version-0.9.6-635BFF?style=flat-square)](./VERSION)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-111827?style=flat-square)](./LICENSE)
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21830644-1682D4?style=flat-square)](https://doi.org/10.5281/zenodo.21830644)
 [![Python](https://img.shields.io/badge/Python-3.14-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -188,7 +188,7 @@ Standard-Endpunkte:
 
 ## Aktueller Stand
 
-**Aktuelle Produktversion:** `0.9.5` Stability Beta.
+**Aktuelle Produktversion:** `0.9.6` Stability Beta.
 
 Der exakt verifizierte Stand, aktuelle Testnachweise, bekannte Grenzen und die geprüfte Baseline werden in [`docs/STATUS.md`](./docs/STATUS.md) gepflegt. Release-Prioritäten und die Gates für 0.10/1.0 stehen in [`ROADMAP.md`](./ROADMAP.md). Diese README enthält bewusst keine schnell alternden Testzähler.
 
@@ -204,7 +204,7 @@ Die wichtigsten Arbeiten vor 1.0 liegen derzeit bei:
 
 ### Grenze der Reproduzierbarkeit
 
-Agora speichert Run- und Simulationsmetadaten einschließlich seed-bezogener Felder. Das System garantiert aktuell **noch nicht**, dass derselbe gespeicherte Seed dasselbe Experiment reproduziert. Dafür müssen alle relevanten Zufallsquellen, Prompts, Inputs, Routen, Modellantworten und Feature Flags eingefroren oder aufgezeichnet werden. Das ist 0.10-Arbeit, keine Behauptung von 0.9.5.
+Agora speichert Run- und Simulationsmetadaten einschließlich seed-bezogener Felder. Das System garantiert aktuell **noch nicht**, dass derselbe gespeicherte Seed dasselbe Experiment reproduziert. Dafür müssen alle relevanten Zufallsquellen, Prompts, Inputs, Routen, Modellantworten und Feature Flags eingefroren oder aufgezeichnet werden. Das ist 0.10-Arbeit, keine Behauptung von 0.9.6.
 
 ## Referenzlauf
 

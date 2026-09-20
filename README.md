@@ -12,7 +12,7 @@
 
 **Documents → Knowledge Graph → Personas → Simulation → auditable report**
 
-[![Version](https://img.shields.io/badge/version-0.9.5-635BFF?style=flat-square)](./VERSION)
+[![Version](https://img.shields.io/badge/version-0.9.6-635BFF?style=flat-square)](./VERSION)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-111827?style=flat-square)](./LICENSE)
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21830644-1682D4?style=flat-square)](https://doi.org/10.5281/zenodo.21830644)
 [![Python](https://img.shields.io/badge/Python-3.14-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -188,7 +188,7 @@ Default service endpoints:
 
 ## Current status
 
-**Current product version:** `0.9.5` Stability Beta.
+**Current product version:** `0.9.6` Stability Beta.
 
 The exact verified state, recent test evidence, known gaps, and current baseline are maintained in [`docs/STATUS.md`](./docs/STATUS.md). Release priorities and 0.10/1.0 gates are maintained in [`ROADMAP.md`](./ROADMAP.md). This README deliberately avoids embedding fast-aging test counters.
 
@@ -204,7 +204,7 @@ The main pre-1.0 work is currently concentrated on:
 
 ### Reproducibility boundary
 
-Agora stores run and simulation metadata, including seed-related fields, but the current system **does not yet guarantee that the same stored seed reproduces the same experiment**. Full reproducibility requires all relevant random sources, prompts, inputs, routes, model responses, and feature flags to be frozen or recorded. That is 0.10 work, not a claim made by 0.9.5.
+Agora stores run and simulation metadata, including seed-related fields, but the current system **does not yet guarantee that the same stored seed reproduces the same experiment**. Full reproducibility requires all relevant random sources, prompts, inputs, routes, model responses, and feature flags to be frozen or recorded. That is 0.10 work, not a claim made by 0.9.6.
 
 ## Reference run
 

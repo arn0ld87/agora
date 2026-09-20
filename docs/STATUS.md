@@ -2,7 +2,7 @@
 
 **Stand:** 08.09.2026  
 **Geprüfte Main-Baseline:** `0c47737f`  
-**Produktversion:** `0.9.5` Stability Beta
+**Produktversion:** `0.9.6` Stability Beta
 
 Diese Datei ist die **Single Source of Truth für den verifizierten Istzustand**. Strategische Release-Ziele stehen in [`ROADMAP.md`](../ROADMAP.md), konkrete Arbeitspakete und Akzeptanzkriterien in [GitHub Issues](https://github.com/arn0ld87/agora/issues), ausgelieferte Änderungen in [`changelog.d/`](../changelog.d/README.md). Historische Audits, Pläne und Referenzläufe behalten ihren damaligen Stand und sind keine aktuelle Steuerungsquelle.
 
@@ -19,9 +19,9 @@ Agora besitzt eine vollständige Single-User-Pipeline von Dokumentaufnahme und K
 <!-- BEGIN_AUTOGEN_VERSIONS -->
 | Komponente | Pfad | Version |
 |---|---|---|
-| Backend | `backend/pyproject.toml` | 0.9.5 |
-| Frontend | `frontend/package.json` | 0.9.5 |
-| Root | `package.json` | 0.9.5 |
+| Backend | `backend/pyproject.toml` | 0.9.6 |
+| Frontend | `frontend/package.json` | 0.9.6 |
+| Root | `package.json` | 0.9.6 |
 <!-- END_AUTOGEN_VERSIONS -->
 
 Die README-Badges müssen denselben Wert tragen. Der Versions-Cut ist in [`runbooks/release-versioning.md`](runbooks/release-versioning.md) beschrieben.
