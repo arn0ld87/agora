@@ -26,12 +26,11 @@ statt unbemerkt ohne aktuellen Checkpoint weiterzulaufen.
 from __future__ import annotations
 
 import dataclasses
-import os
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Optional
 
 from ..contracts.prepare_checkpoint_contract import PreparePersonaCheckpoint
-from ..utils.json_io import read_json_file, write_json_atomic
+from .artifact_store import resolve_default_store
 from ..utils.logger import get_logger
 
 if TYPE_CHECKING:
@@ -45,8 +44,7 @@ __all__ = [
     "CHECKPOINT_FILENAME",
     "PreparePersonaCheckpoint",
     "checkpoint_is_resumable",
-    "checkpoint_path",
-    "clear_checkpoint",
+        "clear_checkpoint",
     "completed_profiles_from_checkpoint",
     "load_checkpoint",
     "new_checkpoint",
@@ -92,51 +90,51 @@ def completed_profiles_from_checkpoint(
     return result
 
 
-def checkpoint_path(sim_dir: str) -> str:
-    return os.path.join(sim_dir, CHECKPOINT_FILENAME)
+#: Logischer Artefaktname im ``SimulationArtifactStore`` (dort auf
+#: ``prepare_persona_checkpoint.json`` abgebildet).
+CHECKPOINT_ARTIFACT = "prepare_checkpoint"
 
 
-def load_checkpoint(sim_dir: str) -> Optional[PreparePersonaCheckpoint]:
-    """Lädt den persistierten Checkpoint, falls vorhanden und valide.
+def load_checkpoint(simulation_id: str) -> Optional[PreparePersonaCheckpoint]:
+    """Laedt den persistierten Checkpoint, falls vorhanden und valide.
 
     Ein defekter/fremdformatiger Checkpoint gilt als "kein Checkpoint"
     (``None``) — er darf einen Resume-Versuch nicht mit einer
-    ``ValidationError`` zum Absturz bringen; der Aufrufer fällt dann auf
-    den regulären (Neu-)Startpfad zurück.
+    ``ValidationError`` zum Absturz bringen; der Aufrufer faellt dann auf
+    den regulaeren (Neu-)Startpfad zurueck.
     """
-    raw = read_json_file(checkpoint_path(sim_dir))
+    raw = resolve_default_store().read_json(simulation_id, CHECKPOINT_ARTIFACT)
     if raw is None:
         return None
     try:
         return PreparePersonaCheckpoint.model_validate(raw)
     except Exception:  # noqa: BLE001 — defekter Checkpoint faellt auf "kein Checkpoint" zurueck
         logger.warning(
-            "Prepare-Checkpoint unter %s ist nicht lesbar, wird ignoriert",
-            checkpoint_path(sim_dir),
+            "Prepare-Checkpoint von Simulation %s ist nicht lesbar, wird ignoriert",
+            simulation_id,
         )
         return None
 
 
-def save_checkpoint(sim_dir: str, checkpoint: PreparePersonaCheckpoint) -> None:
-    """Schreibt den Checkpoint atomar mit fsync.
+def save_checkpoint(simulation_id: str, checkpoint: PreparePersonaCheckpoint) -> None:
+    """Schreibt den Checkpoint atomar mit fsync (ueber den Artefakt-Store).
 
-    Ein I/O-Fehler propagiert unverändert (keine Auffangbehandlung hier) —
+    Ein I/O-Fehler propagiert unveraendert (keine Auffangbehandlung hier) —
     das ist Absicht: die Persona-Generierung soll sichtbar scheitern statt
     unbemerkt ohne aktuellen Checkpoint weiterzulaufen (Fehlermuster
-    "ungecheckpointete Teilergebnisse", siehe Issue-Auftrag).
+    "ungecheckpointete Teilergebnisse").
     """
-    write_json_atomic(checkpoint_path(sim_dir), checkpoint.model_dump(mode="json"))
+    resolve_default_store().write_json(
+        simulation_id, CHECKPOINT_ARTIFACT, checkpoint.model_dump(mode="json")
+    )
 
 
-def clear_checkpoint(sim_dir: str) -> None:
-    """Entfernt den Checkpoint nach erfolgreichem Abschluss oder ungültigem Resume.
+def clear_checkpoint(simulation_id: str) -> None:
+    """Entfernt den Checkpoint nach erfolgreichem Abschluss oder ungueltigem Resume.
 
-    Best effort — ein bereits fehlendes File ist kein Fehler.
+    Best effort — ein bereits fehlendes Artefakt ist kein Fehler.
     """
-    try:
-        os.remove(checkpoint_path(sim_dir))
-    except FileNotFoundError:
-        pass
+    resolve_default_store().delete(simulation_id, CHECKPOINT_ARTIFACT)
 
 
 def new_checkpoint(
@@ -217,7 +215,7 @@ def checkpoint_is_resumable(
     return bool(checkpoint.completed_profiles)
 
 
-def resolve_interruption_status(sim_dir: str) -> str:
+def resolve_interruption_status(simulation_id: str) -> str:
     """Liefert ``"interrupted"`` oder ``"failed"`` für einen abgebrochenen Prepare-Lauf.
 
     Gemeinsam genutzt vom SIGTERM/atexit-Shutdown-Hook
@@ -230,7 +228,7 @@ def resolve_interruption_status(sim_dir: str) -> str:
     ``failed`` (Fehlermuster "Angebot ohne Deckung": kein Resume-Angebot
     ohne Deckung durch echte Teilergebnisse).
     """
-    checkpoint = load_checkpoint(sim_dir)
+    checkpoint = load_checkpoint(simulation_id)
     if checkpoint is not None and checkpoint.completed_profiles:
         return "interrupted"
     return "failed"

@@ -121,6 +121,24 @@ def _make_state(simulation_id: str, graph_id: str, *, status=SimulationStatus.CR
 
 
 @pytest.fixture(autouse=True)
+def artifact_store(monkeypatch, tmp_path):
+    """Isolierter Artefakt-Store je Test.
+
+    Der Prepare-Checkpoint geht seit Issue #13 nicht mehr direkt über
+    ``json_io``, sondern über den ``SimulationArtifactStore``. Ohne diese
+    Fixture schriebe jeder Test in das echte Simulationsverzeichnis.
+    """
+    from app.services import artifact_store as artifact_store_module
+
+    store = artifact_store_module.LocalFilesystemArtifactStore(
+        simulations_root=str(tmp_path / "simulations")
+    )
+    monkeypatch.setattr(artifact_store_module, "resolve_default_store", lambda: store)
+    monkeypatch.setattr(prepare_checkpoint, "resolve_default_store", lambda: store)
+    return store
+
+
+@pytest.fixture(autouse=True)
 def _stub_settings_and_phase3(monkeypatch):
     """Phase 3 (LLM-Config) und die Parallelitäts-Auflösung sind für diesen
     Slice irrelevant — analog ``test_prepare_cancel.py`` gestubbt, damit nur
@@ -238,7 +256,7 @@ def test_resume_reproduces_baseline_selection_without_regenerating_done_profiles
         partial = partial.with_completed_profile(
             index, prepare_checkpoint.profile_to_dict(baseline_profiles[index])
         )
-    prepare_checkpoint.save_checkpoint(str(resume_sim_dir), partial)
+    prepare_checkpoint.save_checkpoint("sim-resume", partial)
 
     # --- Aufruf-Zähler: belegt, dass für Index 0/1 KEIN LLM-/Generierungs-
     # Aufruf mehr erfolgt (Szenario 2).
@@ -283,7 +301,7 @@ def test_resume_reproduces_baseline_selection_without_regenerating_done_profiles
     assert resume_profiles[1].source_entity_uuid == baseline_profiles[1].source_entity_uuid
 
     # Checkpoint ist nach erfolgreichem Abschluss aufgeräumt.
-    assert prepare_checkpoint.load_checkpoint(str(resume_sim_dir)) is None
+    assert prepare_checkpoint.load_checkpoint("sim-resume") is None
 
 
 # ---------------------------------------------------------------------------
@@ -358,11 +376,11 @@ def test_checkpoint_is_resumable_false_on_parameter_mismatch():
     ) is False
 
 
-def test_resolve_interruption_status_ohne_checkpoint_bleibt_failed(tmp_path):
-    assert prepare_checkpoint.resolve_interruption_status(str(tmp_path)) == "failed"
+def test_resolve_interruption_status_ohne_checkpoint_bleibt_failed(artifact_store):
+    assert prepare_checkpoint.resolve_interruption_status("sim-x") == "failed"
 
 
-def test_resolve_interruption_status_mit_verwertbarem_checkpoint_ist_interrupted(tmp_path):
+def test_resolve_interruption_status_mit_verwertbarem_checkpoint_ist_interrupted(artifact_store):
     checkpoint = prepare_checkpoint.new_checkpoint(
         simulation_id="sim-x",
         graph_id="graph-x",
@@ -377,9 +395,9 @@ def test_resolve_interruption_status_mit_verwertbarem_checkpoint_ist_interrupted
         entities_count=1,
         entity_types=["Stakeholder"],
     ).with_completed_profile(0, {"user_id": 0, "user_name": "u", "name": "n", "bio": "b", "persona": "p"})
-    prepare_checkpoint.save_checkpoint(str(tmp_path), checkpoint)
+    prepare_checkpoint.save_checkpoint("sim-x", checkpoint)
 
-    assert prepare_checkpoint.resolve_interruption_status(str(tmp_path)) == "interrupted"
+    assert prepare_checkpoint.resolve_interruption_status("sim-x") == "interrupted"
 
 
 # ---------------------------------------------------------------------------
@@ -387,7 +405,7 @@ def test_resolve_interruption_status_mit_verwertbarem_checkpoint_ist_interrupted
 # ---------------------------------------------------------------------------
 
 
-def test_checkpoint_write_failure_propagiert(tmp_path):
+def test_checkpoint_write_failure_propagiert(artifact_store, monkeypatch):
     checkpoint = prepare_checkpoint.new_checkpoint(
         simulation_id="sim-x",
         graph_id="graph-x",
@@ -402,17 +420,21 @@ def test_checkpoint_write_failure_propagiert(tmp_path):
         entities_count=1,
         entity_types=["Stakeholder"],
     )
-    # Zielpfad ist eine bestehende DATEI statt eines Verzeichnisses — jeder
-    # Schreibversuch darunter muss fehlschlagen (kein stilles Schlucken).
-    blocked_dir = tmp_path / "not_a_directory"
-    blocked_dir.write_text("blockiert das Verzeichnis")
+
+    def _boom(*args, **kwargs):
+        raise OSError("Disk voll (simuliert)")
+
+    # Der Fehler kommt aus dem Artefakt-Store, nicht aus einem blockierten
+    # Pfad: der Store ist die einzige Schreibstelle, und genau von dort muss
+    # ein I/O-Fehler ungefiltert durchschlagen.
+    monkeypatch.setattr(artifact_store, "write_json", _boom)
 
     with pytest.raises(OSError):
-        prepare_checkpoint.save_checkpoint(str(blocked_dir), checkpoint)
+        prepare_checkpoint.save_checkpoint("sim-x", checkpoint)
 
 
 def test_prepare_simulation_bricht_sichtbar_ab_wenn_checkpoint_schreiben_fehlschlaegt(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, artifact_store
 ):
     storage = _OrderedStorage([[_S1, _I1]])
     state = _make_state("sim-io-fail", "graph-x")
@@ -421,7 +443,7 @@ def test_prepare_simulation_bricht_sichtbar_ab_wenn_checkpoint_schreiben_fehlsch
     def _boom(*args, **kwargs):
         raise OSError("Disk voll (simuliert)")
 
-    monkeypatch.setattr(prepare_checkpoint, "write_json_atomic", _boom)
+    monkeypatch.setattr(artifact_store, "write_json", _boom)
 
     with pytest.raises(OSError):
         _run(manager, "sim-io-fail", storage, max_agents=2)

@@ -595,10 +595,9 @@ class SimulationRunner:
             state = manager.get_simulation(simulation_id)
             if state is None or state.status != SimulationStatus.PREPARING:
                 return
-            sim_dir = manager._get_simulation_dir(simulation_id)
             target_status = (
                 SimulationStatus.INTERRUPTED
-                if resolve_interruption_status(sim_dir) == "interrupted"
+                if resolve_interruption_status(simulation_id) == "interrupted"
                 else SimulationStatus.FAILED
             )
             state.error = error

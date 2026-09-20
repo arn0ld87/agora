@@ -171,7 +171,10 @@ def _build_profile_checkpoint_hooks(
     ``uuid``-Attribut, liefert diese Funktion ``(None, None)`` — die
     Generierung läuft normal weiter, nur ohne Checkpoint.
     """
-    simulation_id = getattr(state, "simulation_id", None)
+    # Bewusst als ``str | None`` gefuehrt und vor jeder Checkpoint-Schreibung
+    # geprueft: Test-Doubles tragen nicht zwingend eine ``simulation_id``, und
+    # der Artefakt-Store weist eine fehlende hart zurueck.
+    simulation_id: Optional[str] = getattr(state, "simulation_id", None)
 
     if resume_checkpoint is not None:
         already_done = _prepare_checkpoint.completed_profiles_from_checkpoint(
@@ -219,11 +222,18 @@ def _build_profile_checkpoint_hooks(
     else:
         return None, None
 
+    # Ab hier steht fest, dass eine ``simulation_id`` vorliegt: der
+    # ``resume_checkpoint``-Zweig traegt sie im Checkpoint, der ``elif``-Zweig
+    # hat sie geprueft, und jeder andere Fall ist oben mit ``None, None``
+    # ausgestiegen. Die eigene Bindung macht das fuer die Closure explizit,
+    # statt sich auf ein Narrowing zu verlassen, das dort nicht mehr greift.
+    checkpoint_simulation_id: str = simulation_id or checkpoint_box[0].simulation_id
+
     def _on_profile_saved(index: int, profile: OasisAgentProfile) -> None:
         checkpoint_box[0] = checkpoint_box[0].with_completed_profile(
             index, _prepare_checkpoint.profile_to_dict(profile)
         )
-        _prepare_checkpoint.save_checkpoint(sim_dir, checkpoint_box[0])
+        _prepare_checkpoint.save_checkpoint(checkpoint_simulation_id, checkpoint_box[0])
 
     return already_done, _on_profile_saved
 
@@ -391,7 +401,12 @@ def _phase_generate_profiles(
     # erreichen diese Zeile normal, nur ein SIGTERM/Absturz MITTEN in der
     # Generierung tut das nicht). Der Checkpoint hat seinen Zweck erfüllt;
     # ein Retry nach Cancel/Erfolg startet Phase 2 wie bisher komplett neu.
-    _prepare_checkpoint.clear_checkpoint(sim_dir)
+    # ``getattr`` wie in ``_build_profile_checkpoint_hooks``: Test-Doubles
+    # tragen nicht zwingend eine ``simulation_id``, und ohne sie gibt es auch
+    # keinen Checkpoint, der aufzuraeumen waere.
+    _cleanup_simulation_id = getattr(state, "simulation_id", None)
+    if _cleanup_simulation_id:
+        _prepare_checkpoint.clear_checkpoint(_cleanup_simulation_id)
 
     # Save Profile files (Note: Twitter uses CSV format, Reddit uses JSON format)
     # Reddit has been saved in real-time during generation, save once more here to ensure completeness
@@ -571,7 +586,7 @@ def _resolve_phase1_result(
     tatsächlich verwertbaren Checkpoint gesetzt (sonst beide ``None`` und
     ``filtered`` kommt aus einer regulär ausgeführten Phase 1).
     """
-    existing_checkpoint = _prepare_checkpoint.load_checkpoint(sim_dir)
+    existing_checkpoint = _prepare_checkpoint.load_checkpoint(simulation_id)
     resumable = _prepare_checkpoint.checkpoint_is_resumable(
         existing_checkpoint,
         simulation_id=simulation_id,
@@ -620,7 +635,7 @@ def _resolve_phase1_result(
         # — als Altlast entfernen. Sonst läse
         # ``resolve_interruption_status`` beim nächsten Absturz diese
         # stale Datei fälschlich als Resume-Angebot.
-        _prepare_checkpoint.clear_checkpoint(sim_dir)
+        _prepare_checkpoint.clear_checkpoint(simulation_id)
 
     filtered = _phase_read_entities(
         state,
