@@ -309,3 +309,98 @@ def test_upsert_preserves_last_validated_at_when_relevant_fields_unchanged(
         status="probed",
     )
     assert after.last_validated_at == validated_at
+
+
+# ----------------------------------------------------------------------
+# Kanonische Index-Aufloesung (Issue #1417 Slice 2.1)
+# ----------------------------------------------------------------------
+
+
+def test_resolve_active_entity_index_without_active_version_returns_legacy_names(
+    configured_store: EmbeddingConfigurationStore,
+) -> None:
+    """Rueckwaertskompatibilitaets-Zusage: ohne aktive Index-Version bleiben
+    Index- und Property-Name exakt die Legacy-Namen aus ``search_service.py``
+    (``entity_embedding``) und ``neo4j_write.py`` (``n.embedding``)."""
+    assert configured_store.resolve_active_entity_index() == ("entity_embedding", "embedding")
+
+
+def test_resolve_active_fact_index_without_active_version_returns_legacy_names(
+    configured_store: EmbeddingConfigurationStore,
+) -> None:
+    """Rueckwaertskompatibilitaets-Zusage fuer die Fact-Seite: ohne aktive
+    Index-Version bleiben Index- und Property-Name ``fact_embedding``
+    (``search_service.py`` / ``r.fact_embedding`` in ``neo4j_write.py``)."""
+    assert configured_store.resolve_active_fact_index() == ("fact_embedding", "fact_embedding")
+
+
+def test_resolve_active_entity_index_with_active_version_reads_from_store(
+    configured_store: EmbeddingConfigurationStore,
+) -> None:
+    """Mit aktiver Index-Version liest die Entity-Aufloesung Index- und
+    Property-Name direkt aus dem gespeicherten ``EmbeddingIndexVersion``
+    (``entity_embedding_v1`` / ``embedding_v1``, wie von
+    ``EmbeddingMigrationService.start()`` angelegt)."""
+    configured_store.upsert_index_version(
+        version=None,
+        provider_connection_id="conn-1",
+        model_id="nomic-embed-text",
+        dimensions=768,
+        index_name="entity_embedding_v1",
+        property_key="embedding_v1",
+    )
+    assert configured_store.resolve_active_entity_index() == (
+        "entity_embedding_v1",
+        "embedding_v1",
+    )
+
+
+def test_resolve_active_fact_index_with_active_version_derives_from_version_number(
+    configured_store: EmbeddingConfigurationStore,
+) -> None:
+    """Mit aktiver Index-Version leitet die Fact-Aufloesung Index- und
+    Property-Name konventionell aus der Versionsnummer ab
+    (``fact_embedding_v{N}`` fuer beide) — exakt die Konvention, mit der
+    ``EmbeddingMigrationService.run()`` die Fact-Phase anstoesst
+    (``embedding_migration.py``, Zeilen 254-255). Fact-Indizes haben keinen
+    eigenen ``EmbeddingIndexVersion``-Datensatz (dokumentierte Asymmetrie)."""
+    configured_store.upsert_index_version(
+        version=None,
+        provider_connection_id="conn-1",
+        model_id="nomic-embed-text",
+        dimensions=768,
+        index_name="entity_embedding_v1",
+        property_key="embedding_v1",
+    )
+    assert configured_store.resolve_active_fact_index() == (
+        "fact_embedding_v1",
+        "fact_embedding_v1",
+    )
+
+
+def test_resolve_active_fact_index_follows_second_version_number(
+    configured_store: EmbeddingConfigurationStore,
+) -> None:
+    """Nach einem zweiten Re-Embedding (Version 2 aktiv, Version 1
+    superseded) folgt die Fact-Aufloesung der neuen Versionsnummer."""
+    configured_store.upsert_index_version(
+        version=None,
+        provider_connection_id="conn-1",
+        model_id="m1",
+        dimensions=768,
+        index_name="entity_embedding_v1",
+        property_key="embedding_v1",
+    )
+    configured_store.supersede_index_version(1)
+    configured_store.upsert_index_version(
+        version=None,
+        provider_connection_id="conn-1",
+        model_id="m2",
+        dimensions=1024,
+        index_name="entity_embedding_v2",
+        property_key="embedding_v2",
+    )
+    assert configured_store.resolve_active_fact_index() == (
+        "fact_embedding_v2",
+        "fact_embedding_v2",
+    )

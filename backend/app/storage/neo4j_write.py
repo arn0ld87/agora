@@ -17,6 +17,9 @@ Mixin-Voraussetzungen am konkreten Storage:
 - ``self._embedding`` — Embedding-Service (für ``add_text``)
 - ``self._ontology_mutation_service`` — kann ``None`` sein
 - ``self.get_ontology`` — vom ``Neo4jReadMixin``
+- ``self._embedding_index_store`` — optional (``EmbeddingConfigurationStore``);
+  fehlt das Attribut (z. B. in isolierten Mixin-Tests), instanziiert
+  ``_persist_episode`` sich selbst einen Store (Issue #1417 Slice 2.1).
 """
 
 import json
@@ -25,6 +28,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
+from ..services.embedding_configuration_store import EmbeddingConfigurationStore
 from ..services.ingestion_pipeline import (
     embed_entities_and_relations,
     extract_entities_and_relations,
@@ -343,6 +347,17 @@ class Neo4jWriteMixin:
         also unverändert weder ``document_id`` noch ``chunk_id``. Kein
         Schema-Zwang, keine Migration, kein Backfill (ADR-0013 §3).
         """
+        # Property-Namen einmal pro Aufruf aufloesen (nicht pro Entity-/
+        # Relation-Schleifendurchlauf) — der Store liest von Platte. Ohne
+        # aktive Index-Version liefert der Store exakt die Legacy-Namen
+        # ("embedding" / "fact_embedding") zurueck (Issue #1417 Slice 2.1,
+        # Rueckwaertskompatibilitaets-Zusage).
+        index_store = getattr(self, "_embedding_index_store", None)
+        if index_store is None:
+            index_store = EmbeddingConfigurationStore()
+        _entity_index_name, entity_property_key = index_store.resolve_active_entity_index()
+        _fact_index_name, fact_property_key = index_store.resolve_active_fact_index()
+
         with self._get_session() as session:
             # Create episode node
             def _create_episode(tx):
@@ -407,25 +422,33 @@ class Neo4jWriteMixin:
 
                 def _merge_entity(tx, _uuid=e_uuid, _name=ename, _type=etype,
                                   _attrs=attrs, _embedding=embedding,
-                                  _summary=summary_text, _now=now):
+                                  _summary=summary_text, _now=now,
+                                  _property_key=entity_property_key):
                     # MERGE by (graph_id, name_lower, entity_type) — typed deduplication.
                     # Same name with different entity_type yields two distinct nodes,
                     # e.g. "Apple" (ORG) vs "Apple" (FRUIT).
+                    #
+                    # Neo4j-Property-Namen sind in SET-Klauseln nicht als
+                    # Query-Parameter bindbar, sie muessen in den Query-
+                    # String. ``_property_key`` stammt ausschliesslich aus
+                    # ``EmbeddingConfigurationStore.resolve_active_entity_index()``
+                    # (Pydantic-validiert, Store-only) — nie aus Benutzer-
+                    # eingaben (Issue #1417 Slice 2.1).
                     result = tx.run(
-                        """
-                        MERGE (n:Entity {graph_id: $gid, name_lower: $name_lower, entity_type: $entity_type})
+                        f"""
+                        MERGE (n:Entity {{graph_id: $gid, name_lower: $name_lower, entity_type: $entity_type}})
                         ON CREATE SET
                             n.uuid = $uuid,
                             n.name = $name,
                             n.summary = $summary,
                             n.attributes_json = $attrs_json,
-                            n.embedding = $embedding,
+                            n.{_property_key} = $embedding,
                             n.created_at = $now
                         ON MATCH SET
                             n.summary = CASE WHEN n.summary = '' OR n.summary IS NULL
                                 THEN $summary ELSE n.summary END,
                             n.attributes_json = $attrs_json,
-                            n.embedding = $embedding
+                            n.{_property_key} = $embedding
                         RETURN n.uuid AS uuid
                         """,
                         gid=graph_id,
@@ -502,18 +525,27 @@ class Neo4jWriteMixin:
                                      _target_uuid=target_uuid, _rtype=rtype,
                                      _fact=fact, _fact_emb=fact_embedding,
                                      _episode_id=episode_id, _now=now,
-                                     _round=round_num):
+                                     _round=round_num,
+                                     _property_key=fact_property_key):
+                    # Neo4j-Property-Namen sind in SET-Klauseln nicht als
+                    # Query-Parameter bindbar, sie muessen in den Query-
+                    # String. ``_property_key`` stammt ausschliesslich aus
+                    # ``EmbeddingConfigurationStore.resolve_active_fact_index()``
+                    # (Pydantic-validiert, Store-only) — nie aus Benutzer-
+                    # eingaben (Issue #1417 Slice 2.1). ``{{}}`` fuer das
+                    # leere JSON-Objekt-Literal ist die f-string-Eskapierung
+                    # der geschweiften Klammern, keine Interpolation.
                     tx.run(
-                        """
-                        MATCH (src:Entity {uuid: $src_uuid})
-                        MATCH (tgt:Entity {uuid: $tgt_uuid})
-                        MERGE (src)-[r:RELATION {uuid: $uuid}]->(tgt)
+                        f"""
+                        MATCH (src:Entity {{uuid: $src_uuid}})
+                        MATCH (tgt:Entity {{uuid: $tgt_uuid}})
+                        MERGE (src)-[r:RELATION {{uuid: $uuid}}]->(tgt)
                         ON CREATE SET
                             r.graph_id = $gid,
                             r.name = $name,
                             r.fact = $fact,
-                            r.fact_embedding = $fact_embedding,
-                            r.attributes_json = '{}',
+                            r.{_property_key} = $fact_embedding,
+                            r.attributes_json = '{{}}',
                             r.episode_ids = [$episode_id],
                             r.created_at = $now,
                             r.valid_at = null,

@@ -7,17 +7,24 @@ the existing Neo4j integration tests when a database is available).
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
 from app.config import Config
+from app.services.embedding_configuration_store import EmbeddingConfigurationStore
 from app.storage.search_service import SearchService
 
 
 @pytest.fixture
 def fake_embedding():
     return MagicMock()
+
+
+@pytest.fixture
+def index_store(tmp_path: Path) -> EmbeddingConfigurationStore:
+    return EmbeddingConfigurationStore(data_dir=tmp_path)
 
 
 def test_default_weights_match_class_constants(fake_embedding):
@@ -56,3 +63,92 @@ def test_merge_math_uses_instance_weights(fake_embedding):
     k_score = 0.5
     combined = svc.vector_weight * v_score + svc.keyword_weight * k_score
     assert combined == pytest.approx(0.6)
+
+
+# ---------------------------------------------------------------------------
+# Kanonische Index-Aufloesung (Issue #1417 Slice 2.1)
+# ---------------------------------------------------------------------------
+
+
+def test_node_vector_search_uses_legacy_index_name_without_active_version(
+    fake_embedding, index_store
+):
+    """Rueckwaertskompatibilitaet: ohne aktive Index-Version bindet die
+    Entity-Vektorsuche exakt den Legacy-Index-Namen ``entity_embedding``."""
+    svc = SearchService(fake_embedding, index_store=index_store)
+    session = MagicMock()
+    mock_tx = MagicMock()
+    mock_tx.run.return_value = iter([])
+    session.execute_read.side_effect = lambda cb: list(cb(mock_tx))
+
+    svc._run_node_vector_search(session, "g1", [0.1], 5)
+
+    _, kwargs = mock_tx.run.call_args
+    assert kwargs["index_name"] == "entity_embedding"
+
+
+def test_node_vector_search_uses_versioned_index_name_with_active_version(
+    fake_embedding, index_store
+):
+    """Mit aktiver Index-Version bindet die Entity-Vektorsuche den
+    versionierten Index-Namen aus dem Store."""
+    index_store.upsert_index_version(
+        version=None,
+        provider_connection_id="conn-1",
+        model_id="nomic-embed-text",
+        dimensions=768,
+        index_name="entity_embedding_v1",
+        property_key="embedding_v1",
+    )
+    svc = SearchService(fake_embedding, index_store=index_store)
+    session = MagicMock()
+    mock_tx = MagicMock()
+    mock_tx.run.return_value = iter([])
+    session.execute_read.side_effect = lambda cb: list(cb(mock_tx))
+
+    svc._run_node_vector_search(session, "g1", [0.1], 5)
+
+    _, kwargs = mock_tx.run.call_args
+    assert kwargs["index_name"] == "entity_embedding_v1"
+
+
+def test_edge_vector_search_uses_legacy_index_name_without_active_version(
+    fake_embedding, index_store
+):
+    """Rueckwaertskompatibilitaet: ohne aktive Index-Version bindet die
+    Fact-Vektorsuche exakt den Legacy-Index-Namen ``fact_embedding``."""
+    svc = SearchService(fake_embedding, index_store=index_store)
+    session = MagicMock()
+    mock_tx = MagicMock()
+    mock_tx.run.return_value = iter([])
+    session.execute_read.side_effect = lambda cb: list(cb(mock_tx))
+
+    svc._run_edge_vector_search(session, "g1", [0.1], 5)
+
+    _, kwargs = mock_tx.run.call_args
+    assert kwargs["index_name"] == "fact_embedding"
+
+
+def test_edge_vector_search_uses_versioned_index_name_with_active_version(
+    fake_embedding, index_store
+):
+    """Mit aktiver Index-Version bindet die Fact-Vektorsuche den
+    konventionell aus der Versionsnummer abgeleiteten Index-Namen."""
+    index_store.upsert_index_version(
+        version=None,
+        provider_connection_id="conn-1",
+        model_id="nomic-embed-text",
+        dimensions=768,
+        index_name="entity_embedding_v1",
+        property_key="embedding_v1",
+    )
+    svc = SearchService(fake_embedding, index_store=index_store)
+    session = MagicMock()
+    mock_tx = MagicMock()
+    mock_tx.run.return_value = iter([])
+    session.execute_read.side_effect = lambda cb: list(cb(mock_tx))
+
+    svc._run_edge_vector_search(session, "g1", [0.1], 5)
+
+    _, kwargs = mock_tx.run.call_args
+    assert kwargs["index_name"] == "fact_embedding_v1"

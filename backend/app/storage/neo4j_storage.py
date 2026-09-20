@@ -22,6 +22,7 @@ from neo4j.exceptions import (
 )
 
 from ..config import Config
+from ..services.embedding_configuration_store import EmbeddingConfigurationStore
 from ..utils.retry import neo4j_call_with_retry
 from .graph_storage import GraphStorage
 from .embedding_service import EmbeddingService
@@ -68,10 +69,15 @@ class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, Neo4jSearchMixin, GraphStora
         self._driver = GraphDatabase.driver(self._uri, **self._driver_kwargs())
         self._embedding = embedding_service or EmbeddingService()
         self._ner = ner_extractor or NERExtractor()
+        # Kanonische Index-/Property-Namen-Aufloesung (Issue #1417 Slice
+        # 2.1) — geteilt zwischen Such- (SearchService) und Schreibpfad
+        # (Neo4jWriteMixin._persist_episode).
+        self._embedding_index_store = EmbeddingConfigurationStore()
         self._search = SearchService(
             self._embedding,
             vector_weight=Config.HYBRID_SEARCH_VECTOR_WEIGHT,
             keyword_weight=Config.HYBRID_SEARCH_KEYWORD_WEIGHT,
+            index_store=self._embedding_index_store,
         )
 
         # Issue #11 Phase 2 — late-bound to avoid the
