@@ -173,8 +173,13 @@ def _build_profile_checkpoint_hooks(
     """
     # Bewusst als ``str | None`` gefuehrt und vor jeder Checkpoint-Schreibung
     # geprueft: Test-Doubles tragen nicht zwingend eine ``simulation_id``, und
-    # der Artefakt-Store weist eine fehlende hart zurueck.
-    simulation_id: Optional[str] = getattr(state, "simulation_id", None)
+    # der Artefakt-Store weist eine fehlende hart zurueck. ``isinstance`` statt
+    # blosser Truthiness, weil ein ``MagicMock`` truthy ist und sonst bis in
+    # den Store durchschlagen wuerde.
+    _raw_simulation_id = getattr(state, "simulation_id", None)
+    simulation_id: Optional[str] = (
+        _raw_simulation_id if isinstance(_raw_simulation_id, str) and _raw_simulation_id else None
+    )
 
     if resume_checkpoint is not None:
         already_done = _prepare_checkpoint.completed_profiles_from_checkpoint(
@@ -404,8 +409,11 @@ def _phase_generate_profiles(
     # ``getattr`` wie in ``_build_profile_checkpoint_hooks``: Test-Doubles
     # tragen nicht zwingend eine ``simulation_id``, und ohne sie gibt es auch
     # keinen Checkpoint, der aufzuraeumen waere.
+    # ``isinstance``, nicht blosse Truthiness: ein ``MagicMock`` aus einem
+    # Test-Double ist truthy und kaeme bis in den Artefakt-Store, der ihn
+    # zu Recht als ungueltige ``simulation_id`` zurueckweist.
     _cleanup_simulation_id = getattr(state, "simulation_id", None)
-    if _cleanup_simulation_id:
+    if isinstance(_cleanup_simulation_id, str) and _cleanup_simulation_id:
         _prepare_checkpoint.clear_checkpoint(_cleanup_simulation_id)
 
     # Save Profile files (Note: Twitter uses CSV format, Reddit uses JSON format)
