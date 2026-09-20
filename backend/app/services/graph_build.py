@@ -776,6 +776,18 @@ class GraphBuildService:
                             except Exception as err:  # noqa: BLE001 — best-effort cleanup; primary exception already propagated
                                 logger.debug("graph_build: mark_graph_failed also failed, ignoring: %s", err)
 
+                    # P1-1 (PR #1535 Review): delete_graph raeumt den
+                    # Graph-Knoten weg, aber ein liegen gebliebener
+                    # Checkpoint wuerde ``resume_capability`` unten trotzdem
+                    # "resume" melden — der Resume-Pfad arbeitet nur mit
+                    # ``MATCH`` (kein ``create_graph``) und liefe ins Leere.
+                    # Ein angebotenes Resume, das nicht funktioniert, ist
+                    # schlimmer als keins: Checkpoint mit loeschen, nur
+                    # "restart" bleibt eine ehrliche Option.
+                    if checkpoint_holder[0] is not None:
+                        clear_checkpoint(project_id)
+                        checkpoint_holder[0] = None
+
                     project.status = ProjectStatus.FAILED
                     project.error = str(exc)
                     ProjectManager.save_project(project)
@@ -787,10 +799,11 @@ class GraphBuildService:
                         status="failed",
                         message=str(exc),
                         error=str(exc),
-                        # Issue #1472b: "resume" nur, wenn der Checkpoint bis
-                        # zum Fehlschlag mindestens einen Chunk verzeichnet
-                        # hat — sonst bleibt der sticky Default aus der
-                        # Run-Anlage ("restart") stehen.
+                        # Issue #1472b/P1-1: "resume" nur, wenn ein Checkpoint
+                        # UND der Graph, auf den er zeigt, noch existieren —
+                        # nach dem obigen delete_graph ist das nie der Fall,
+                        # checkpoint_holder[0] ist an dieser Stelle immer
+                        # None, also immer "restart".
                         resume_capability=resume_capability_for_checkpoint(checkpoint_holder[0]),
                     )
                 finally:
@@ -1046,6 +1059,27 @@ class GraphBuildService:
 
                     task_manager.update_task(task_id, message="Retrieving graph data...", progress=95)
                     graph_data = builder.get_graph_data(graph_id)
+
+                    # P1-3 (PR #1535 Review): derselbe Qualitaetsgate wie im
+                    # Original-Build (siehe ``build_graph.build_task``) —
+                    # ohne ihn faehrt ein resumeter Graph mit zu wenigen
+                    # Relationen als "fertig" durch, weil sein Task-Ergebnis
+                    # keine ``degradations`` traegt. Ein frischer Collector
+                    # genuegt: der Resume-Pfad wiring bewusst keine
+                    # NER-Degradationen durch (Docstring oben), die
+                    # Chunk-Erfolgsquote bleibt bei ``extraction_tally.total
+                    # == 0`` deshalb ungeprueft — nur die Node-/Edge-Zahlen
+                    # zaehlen hier, wie beim Original-Build.
+                    degradations = DegradationCollector()
+                    extraction_tally = ChunkExtractionTally()
+                    builder.assess_graph_quality_from_counts(
+                        node_count=graph_data.get("node_count", 0),
+                        edge_count=graph_data.get("edge_count", 0),
+                        extraction_tally=extraction_tally,
+                        degradations=degradations,
+                    )
+                    degradation_payload = degradations.report().model_dump(mode="json")
+
                     builder.mark_graph_completed(graph_id)
                     project.status = ProjectStatus.GRAPH_COMPLETED
                     project.graph_id = graph_id
@@ -1065,6 +1099,9 @@ class GraphBuildService:
                             "edge_count": graph_data.get("edge_count", 0),
                             "chunk_count": len(chunks),
                             "resumed_chunk_count": len(checkpoint.completed_chunk_indices),
+                            # Leere Liste heißt „nichts ist still ausgefallen“
+                            # — spiegelt den Original-Build (P1-3).
+                            "degradations": degradation_payload,
                         },
                     )
                     run_registry.update_run(

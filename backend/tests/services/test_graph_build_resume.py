@@ -117,6 +117,55 @@ def test_add_text_batches_without_checkpoint_callback_unchanged():
     assert sorted(result) == ["episode-c1", "episode-c2"]
 
 
+def test_add_text_batches_checkpoint_callback_runs_for_chunk_committed_during_worker_error(
+    monkeypatch,
+):
+    """P1-2 (PR #1535 Review): scheitert EIN Chunk in der
+    ``as_completed``-Schleife (``future.result()`` wirft), müssen andere,
+    zu diesem Zeitpunkt noch laufende, aber erfolgreich committende Chunks
+    TROTZDEM gecheckpointed werden. Vorher verließ die Schleife sofort per
+    Exception — der ``ThreadPoolExecutor`` wartete beim Verlassen des
+    ``with``-Blocks zwar noch auf sie, aber ihre ``checkpoint_callback``-Läufe
+    fanden nie statt. Diese Chunks stehen dann in Neo4j committet, aber
+    NICHT im Checkpoint — ein Resume würde sie erneut verarbeiten und
+    Dubletten-Episoden erzeugen (neue UUID pro Aufruf, siehe
+    ``storage/neo4j_write.py``)."""
+    import time as _time
+
+    from app.config import Config
+
+    monkeypatch.setattr(Config, "GRAPH_PARALLEL_CHUNKS", 2)
+
+    class _MixedStorage:
+        """c1 scheitert sofort, c2 committet erfolgreich, aber langsamer —
+        c1s ``future.result()`` wirft garantiert, bevor c2 fertig ist."""
+
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def add_text(self, graph_id, chunk, **kwargs):
+            self.calls.append(chunk)
+            if chunk == "c1":
+                raise RuntimeError("neo4j hiccup")
+            _time.sleep(0.1)
+            return f"episode-{chunk}"
+
+    storage = _MixedStorage()
+    service = GraphBuilderService(storage=storage)
+    recorded: list[tuple[int, str]] = []
+
+    with pytest.raises(RuntimeError, match="neo4j hiccup"):
+        service.add_text_batches(
+            "graph-x", ["c1", "c2"], batch_size=3,
+            checkpoint_callback=lambda idx, uuid: recorded.append((idx, uuid)),
+        )
+
+    assert (1, "episode-c2") in recorded, (
+        "Der erfolgreich committete Chunk c2 muss trotz des Fehlers in c1 "
+        "gecheckpointed worden sein"
+    )
+
+
 def test_add_text_batches_checkpoint_callback_runs_for_nachgesammelte_chunks(monkeypatch):
     """Cancel-Zweig: auch nachgesammelte (bereits laufende) Chunks lösen
     ``checkpoint_callback`` aus — sonst würde ein Resume nach Abbruch genau
@@ -273,13 +322,17 @@ def test_resume_capability_for_run_with_mismatched_graph_id_is_restart(monkeypat
 class _FakeResumeBuilder:
     """Spiegelt die im Resume-Pfad genutzte Teilmenge der Builder-API."""
 
-    def __init__(self, *, cancel_effect=None):
+    def __init__(self, *, cancel_effect=None, graph_data=None):
         self.create_graph_calls = 0
         self.set_ontology_calls: list[tuple] = []
         self.add_text_batches_calls: list[dict] = []
         self.completed_graph_ids: list[str] = []
         self.incomplete_calls: list[tuple] = []
         self._cancel_effect = cancel_effect
+        # P1-3 (PR #1535 Review): konfigurierbar, damit ein Test zu wenige
+        # Relationen simulieren kann (Default besteht das Qualitätsgate).
+        self.graph_data = graph_data or {"node_count": 10, "edge_count": 6}
+        self.assess_quality_calls: list[dict] = []
 
     def create_graph(self, name: str) -> str:  # pragma: no cover — darf nie laufen
         self.create_graph_calls += 1
@@ -308,7 +361,17 @@ class _FakeResumeBuilder:
         return [f"episode-{c}" for c in chunks]
 
     def get_graph_data(self, graph_id):
-        return {"node_count": 10, "edge_count": 6}
+        return self.graph_data
+
+    def assess_graph_quality_from_counts(self, *, node_count, edge_count, extraction_tally, degradations) -> None:
+        # P1-3: delegiert an die echte Produktionslogik statt sie in
+        # Testcode zu duplizieren — der Methodenkörper greift nie auf
+        # ``self`` zu, ist also unverändert als freie Funktion aufrufbar.
+        self.assess_quality_calls.append({"node_count": node_count, "edge_count": edge_count})
+        GraphBuilderService.assess_graph_quality_from_counts(
+            self, node_count=node_count, edge_count=edge_count,
+            extraction_tally=extraction_tally, degradations=degradations,
+        )
 
     def mark_graph_completed(self, graph_id) -> None:
         self.completed_graph_ids.append(graph_id)
@@ -465,3 +528,37 @@ def test_resume_graph_build_cancel_keeps_checkpoint_and_offers_resume_again(monk
     # Checkpoint hatte vor dem Cancel bereits Fortschritt (Index 0, 2) —
     # "resume" bleibt eine ehrliche Option, nicht "restart".
     assert final_update["resume_capability"]["action"] == "resume"
+
+
+def test_resume_graph_build_with_too_few_relations_reports_blocking_degradation(
+    monkeypatch, tmp_path
+):
+    """P1-3 (PR #1535 Review): ein resumeter Build mit weniger als
+    ``GRAPH_MIN_RELATIONS`` Relationen muss dieselbe blockierende
+    Degradation im Task-Ergebnis tragen wie der Original-Build (siehe
+    ``GraphBuilderService.assess_graph_quality_from_counts``) — sonst
+    präsentiert ``StepGraphBuildView.vue`` einen beziehungslosen Graphen
+    fälschlich als fertig, weil es nur den Degradations-Report oder einen
+    ``incomplete``-Status auswertet."""
+    checkpoint = _checkpoint(completed_chunk_indices=[0, 2])
+    builder = _FakeResumeBuilder(graph_data={"node_count": 3, "edge_count": 0})
+
+    outcome = _run_resume(monkeypatch, tmp_path, builder, checkpoint)
+
+    assert builder.assess_quality_calls == [{"node_count": 3, "edge_count": 0}], (
+        "Der Resume-Pfad muss das Qualitätsgate wie der Original-Build durchlaufen"
+    )
+
+    completed_calls = [
+        call for call in outcome["task_manager"].update_task.call_args_list
+        if call.kwargs.get("status") is not None
+        and call.kwargs["status"].value == "completed"
+    ]
+    assert len(completed_calls) == 1
+    task_result = completed_calls[0].kwargs["result"]
+    degradations = task_result["degradations"]
+    assert degradations["events"], (
+        "Das Task-Ergebnis muss die blockierende Degradation tragen, "
+        "sonst gilt ein beziehungsloser resumeter Graph fälschlich als sauber"
+    )
+    assert any(d["severity"] == "blocking" for d in degradations["events"])

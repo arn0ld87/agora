@@ -234,7 +234,14 @@ class _FakeBuilder:
     bestehen.
     """
 
-    def __init__(self, *, cancel_effect=None, mark_incomplete_effect=None, late_cancel_run_id=None):
+    def __init__(
+        self,
+        *,
+        cancel_effect=None,
+        mark_incomplete_effect=None,
+        late_cancel_run_id=None,
+        checkpoint_then_raise=None,
+    ):
         self.completed_graph_ids: list[str] = []
         self.incomplete_calls: list[tuple] = []
         self.delete_calls: list[str] = []
@@ -242,6 +249,10 @@ class _FakeBuilder:
         self._cancel_effect = cancel_effect
         self._mark_incomplete_effect = mark_incomplete_effect
         self._late_cancel_run_id = late_cancel_run_id
+        # P1-1 (PR #1535 Review): checkpointet EINEN Chunk und wirft dann
+        # eine echte (Nicht-Cancel-)Exception — simuliert einen Absturz
+        # NACH dem ersten Checkpoint.
+        self._checkpoint_then_raise = checkpoint_then_raise
 
     def create_graph(self, name: str) -> str:
         return "graph-cancel-1"
@@ -264,6 +275,9 @@ class _FakeBuilder:
         checkpoint_callback,
     ):
         self.add_text_batches_called = True
+        if self._checkpoint_then_raise is not None:
+            checkpoint_callback(0, "ep1")
+            raise self._checkpoint_then_raise
         if self._cancel_effect is not None:
             raise self._cancel_effect
         return ["ep1", "ep2"]
@@ -309,10 +323,16 @@ class _Router:
         return None
 
 
-def _run_build(monkeypatch, builder: _FakeBuilder, *, run_id: str) -> dict:
+def _run_build(monkeypatch, builder: _FakeBuilder, *, run_id: str, project_dir: str = "/tmp/project") -> dict:
     """Führt ``build_graph`` synchron aus (dieselbe Harness wie
     ``test_graph_build_degradation_wiring.py``) und gibt den ``run_registry``-
     Update-Verlauf plus Task-Manager-Mock zurück.
+
+    ``project_dir`` steuert, wohin ``ProjectManager._get_project_dir``
+    zeigt — Default bleibt der bisherige Fixwert (bestehende Tests
+    schreiben nie tatsächlich einen Checkpoint), Tests, die echte
+    Checkpoint-Dateien schreiben (P1-1), übergeben ein isoliertes
+    ``tmp_path``.
     """
     project = MagicMock()
     project.project_id = PROJECT_ID
@@ -337,7 +357,7 @@ def _run_build(monkeypatch, builder: _FakeBuilder, *, run_id: str) -> dict:
     monkeypatch.setattr("app.services.graph_build.ProjectManager.get_project", lambda _id: project)
     monkeypatch.setattr("app.services.graph_build.ProjectManager.get_extracted_text", lambda _id: "text")
     monkeypatch.setattr("app.services.graph_build.ProjectManager.save_project", lambda _project: None)
-    monkeypatch.setattr("app.services.graph_build.ProjectManager._get_project_dir", lambda _id: "/tmp/project")
+    monkeypatch.setattr("app.services.graph_build.ProjectManager._get_project_dir", lambda _id: project_dir)
     monkeypatch.setattr("app.services.graph_build.TaskManager", lambda: task_manager)
     monkeypatch.setattr(
         "app.services.graph_build.run_registry.create_run",
@@ -495,4 +515,46 @@ def test_build_task_late_cancel_still_clears_flag(monkeypatch, run_id):
     assert is_cancel_requested(run_id) is False, (
         "Ein zu spät angekommener Cancel darf das Flag nicht dauerhaft "
         "im Prozessspeicher hinterlassen"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 4. build_task: echter Fehler NACH dem ersten Checkpoint (P1-1, PR #1535)
+# ---------------------------------------------------------------------------
+
+
+def test_build_task_error_after_checkpoint_never_offers_resume_into_deleted_graph(
+    monkeypatch, run_id, tmp_path
+):
+    """P1-1 (PR #1535 Review): stürzt der Build NACH dem ersten Checkpoint mit
+    einer echten Exception ab (nicht Cancel), löscht der bestehende
+    Fehlerpfad den Graphen über ``delete_graph``. Ein liegen gebliebener
+    Checkpoint würde trotzdem ``resume_capability={"action": "resume"}``
+    melden — der Resume-Pfad arbeitet nur mit ``MATCH`` (kein
+    ``create_graph``) und liefe ins Leere. Nach dem Fix wird der Checkpoint
+    zusammen mit dem Graphen verworfen, nur ``restart`` bleibt eine ehrliche
+    Option — kein Zustand dazwischen.
+    """
+    from app.services.graph_build_checkpoint import load_checkpoint
+
+    builder = _FakeBuilder(checkpoint_then_raise=RuntimeError("boom"))
+
+    result = _run_build(monkeypatch, builder, run_id=run_id, project_dir=str(tmp_path))
+
+    assert builder.delete_calls == ["graph-cancel-1"], (
+        "Der Graph muss weiterhin gelöscht werden — kein Teilgraph-Erhalt "
+        "in dieser Auflösung"
+    )
+    assert result["project"].status == ProjectStatus.FAILED
+
+    update = result["run_updates"][-1]
+    assert update["status"] == "failed"
+    assert update["resume_capability"]["action"] == "restart", (
+        "Ein gelöschter Graph darf kein 'resume' mehr anbieten — der "
+        "Resume-Pfad fände ihn per MATCH nicht mehr"
+    )
+    assert load_checkpoint(PROJECT_ID) is None, (
+        "Der Checkpoint muss mit dem gelöschten Graphen zusammen verworfen "
+        "werden, sonst bietet ein späterer resume_capability_for_run-Check "
+        "immer noch fälschlich 'resume' an"
     )
