@@ -514,13 +514,26 @@ class ParallelIPCHandler:
         status: str,
         result: Dict = None,
         error: str = None,
+        budget_exceeded: Optional[Dict[str, Any]] = None,
     ):
-        """Send response: write file (legacy path) and mirror to Redis (issue #17)."""
+        """Send response: write file (legacy path) and mirror to Redis (issue #17).
+
+        ``budget_exceeded`` (#1478 Codex P1, Runde 7): additiv gegenueber dem
+        bisherigen Response-Format. Ein hartes Report-Budget, das waehrend
+        ``env.step()`` erreicht wird, ist kein generischer Interview-Fehler,
+        sondern das Ende des Report-Laufs — ``error`` allein (ein Freitext)
+        war fuer den Flask-Prozess nicht sicher von einem gewoehnlichen
+        Interview-Fehler unterscheidbar, ohne den Fehlertext zu parsen. Dieses
+        Feld traegt ``dimension``/``observed``/``threshold`` strukturiert und
+        bleibt ``None`` fuer jede andere Fehlerursache — bestehende Consumer,
+        die das Feld nicht kennen, ignorieren es unveraendert.
+        """
         response = {
             "command_id": command_id,
             "status": status,
             "result": result,
             "error": error,
+            "budget_exceeded": budget_exceeded,
             "timestamp": datetime.now().isoformat()
         }
 
@@ -564,8 +577,12 @@ class ParallelIPCHandler:
         Execute Interview on a single platform
 
         Returns:
-            Dictionary containing result, or dictionary containing error
+            Dictionary containing result, or dictionary containing error.
+            If BudgetExceededError is raised, returns a dict with
+            "budget_exceeded" containing structured dimension/observed/threshold.
         """
+        from app.services.run_budget import BudgetExceededError
+
         env, agent_graph, actual_platform = self._get_env_and_graph(platform)
 
         if not env or not agent_graph:
@@ -588,6 +605,17 @@ class ParallelIPCHandler:
             result["platform"] = actual_platform
             return result
 
+        except BudgetExceededError as e:
+            # Structure the budget exceeded error for the caller to handle
+            return {
+                "platform": platform,
+                "error": str(e),
+                "budget_exceeded": {
+                    "dimension": e.dimension,
+                    "observed": e.observed,
+                    "threshold": e.threshold,
+                },
+            }
         except Exception as e:
             return {"platform": platform, "error": str(e)}
 
@@ -621,8 +649,12 @@ class ParallelIPCHandler:
             result = await self._interview_single_platform(agent_id, prompt, platform, report_run_id)
 
             if "error" in result:
-                await self.send_response(command_id, "failed", error=result["error"])
-                print(f"  Interview failed: agent_id={agent_id}, platform={platform}, error={result['error']}")
+                budget_exceeded = result.get("budget_exceeded")
+                await self.send_response(command_id, "failed", error=result["error"], budget_exceeded=budget_exceeded)
+                if budget_exceeded:
+                    print(f"  Interview failed (budget exceeded): agent_id={agent_id}, platform={platform}, error={result['error']}")
+                else:
+                    print(f"  Interview failed: agent_id={agent_id}, platform={platform}, error={result['error']}")
                 return False
             else:
                 await self.send_response(command_id, "completed", result=result)
@@ -640,6 +672,7 @@ class ParallelIPCHandler:
             "platforms": {}
         }
         success_count = 0
+        budget_exceeded_info: Optional[Dict[str, Any]] = None
 
         # Interview both platforms in parallel
         tasks = []
@@ -656,11 +689,26 @@ class ParallelIPCHandler:
         # Execute in parallel
         platform_results = await asyncio.gather(*tasks)
         
+        # Detect budget_exceeded BEFORE success_count aggregation
+        # If any platform hit a hard budget, that takes precedence — the Run
+        # must end stopped/termination_reason=budget_* (never soften).
         for platform_name, platform_result in zip(platforms_to_interview, platform_results):
             results["platforms"][platform_name] = platform_result
             if "error" not in platform_result:
                 success_count += 1
+            elif budget_exceeded_info is None and platform_result.get("budget_exceeded"):
+                # First budget_exceeded wins — Run ends with that dimension
+                budget_exceeded_info = platform_result["budget_exceeded"]
         
+        if budget_exceeded_info:
+            # Budget exceeded on at least one platform: report structured abort
+            errors = [f"{p}: {r.get('error', 'Unknown error')}" for p, r in results["platforms"].items()]
+            await self.send_response(
+                command_id, "failed", error="; ".join(errors), budget_exceeded=budget_exceeded_info
+            )
+            print(f"  Interview failed (budget exceeded): agent_id={agent_id}, dimension={budget_exceeded_info['dimension']}")
+            return False
+
         if success_count > 0:
             await self.send_response(command_id, "completed", result=results)
             print(f"  Interview completed: agent_id={agent_id}, success_platforms={success_count}/{len(platforms_to_interview)}")
@@ -691,6 +739,8 @@ class ParallelIPCHandler:
             report_run_id: Report-Run, dessen Budget dieser Batch belastet
                 (Tech-Review Slice B4c; siehe sim_runtime.ipc.IPCHandler).
         """
+        from app.services.run_budget import BudgetExceededError
+
         # Group by platform
         twitter_interviews = []
         reddit_interviews = []
@@ -714,6 +764,7 @@ class ParallelIPCHandler:
                 reddit_interviews.extend(both_platforms_interviews)
         
         results = {}
+        budget_exceeded_info: Optional[Dict[str, Any]] = None
         
         # Handle Twitter platform interview
         if twitter_interviews and self.twitter_env:
@@ -740,6 +791,13 @@ class ParallelIPCHandler:
                         result = self._get_interview_result(agent_id, "twitter")
                         result["platform"] = "twitter"
                         results[f"twitter_{agent_id}"] = result
+            except BudgetExceededError as e:
+                budget_exceeded_info = {
+                    "dimension": e.dimension,
+                    "observed": e.observed,
+                    "threshold": e.threshold,
+                }
+                print(f"  Twitter batch Interview failed (budget exceeded): {e}")
             except Exception as e:
                 print(f"  Twitter batch Interview failed: {e}")
         
@@ -768,8 +826,25 @@ class ParallelIPCHandler:
                         result = self._get_interview_result(agent_id, "reddit")
                         result["platform"] = "reddit"
                         results[f"reddit_{agent_id}"] = result
+            except BudgetExceededError as e:
+                # First budget_exceeded wins — Run ends with that dimension
+                if budget_exceeded_info is None:
+                    budget_exceeded_info = {
+                        "dimension": e.dimension,
+                        "observed": e.observed,
+                        "threshold": e.threshold,
+                    }
+                print(f"  Reddit batch Interview failed (budget exceeded): {e}")
             except Exception as e:
                 print(f"  Reddit batch Interview failed: {e}")
+        
+        if budget_exceeded_info:
+            # Budget exceeded on at least one platform: report structured abort
+            await self.send_response(
+                command_id, "failed", error="Budget exceeded during batch interview", budget_exceeded=budget_exceeded_info
+            )
+            print(f"  Batch Interview failed (budget exceeded): dimension={budget_exceeded_info['dimension']}")
+            return False
         
         if results:
             await self.send_response(command_id, "completed", result={

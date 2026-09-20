@@ -72,7 +72,6 @@ Agora soll nicht nur technisch funktionieren, sondern Ergebnisse **reproduzierba
 
 - [ ] **Langlaufende Webprozess-Jobs restart-sicher:** Prepare, Report und Graph-Build dürfen bei SIGTERM nicht ohne persistierten Interrupted-/Resume-Zustand verschwinden ([#1472](https://github.com/arn0ld87/agora/issues/1472)).
 - [ ] **Embedding-Runtime-SSoT:** aktive Embedding-Konfiguration aus Store/Connection/Secret-Store muss den produktiven Runtime-Pfad steuern; `.env` nur noch Legacy/Bootstrap-Fallback ([#1417](https://github.com/arn0ld87/agora/issues/1417)).
-- [ ] **Budget vollständig über alle produktiven Pfade:** der separate `ParallelIPCHandler` des Default-Parallelrunners muss dieselbe Report-Budget-Attribution wie der normale IPC-Pfad erhalten (Follow-up zu #1478).
 - [ ] **Report-Parallelität ohne Ein-Worker-Blockade:** entweder bewusst serialisieren oder Reportarbeit aus dem gevent-Webworker in einen eigenen Prozess/Worker verschieben ([#1265](https://github.com/arn0ld87/agora/issues/1265)).
 
 ## P0/P1 — Simulationstreue und Trust
