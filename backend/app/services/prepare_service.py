@@ -156,6 +156,8 @@ def _build_profile_checkpoint_hooks(
     use_llm_for_profiles: bool,
     quota_plan: Optional[PersonaQuotaPlan],
     resume_checkpoint: Optional["_prepare_checkpoint.PreparePersonaCheckpoint"],
+    llm_model: Optional[str] = None,
+    language: Optional[str] = None,
 ) -> Tuple[Optional[Dict[int, OasisAgentProfile]], Optional[Callable[[int, OasisAgentProfile], None]]]:
     """Baut ``already_done``/``on_profile_saved`` für ``_phase_generate_profiles`` (Issue #1472c).
 
@@ -221,6 +223,8 @@ def _build_profile_checkpoint_hooks(
                 expanded_entity_uuids=expanded_uuids,
                 entities_count=state.entities_count,
                 entity_types=state.entity_types,
+                llm_model=llm_model,
+                language=language,
             )
         ]
         already_done = None
@@ -377,6 +381,8 @@ def _phase_generate_profiles(
         use_llm_for_profiles=use_llm_for_profiles,
         quota_plan=quota_plan,
         resume_checkpoint=resume_checkpoint,
+        llm_model=llm_model,
+        language=language,
     )
 
     profiles = generator.generate_profiles_from_entities(
@@ -581,6 +587,8 @@ def _resolve_phase1_result(
     effective_quota_plan_snapshot: Optional[Dict[str, Any]],
     progress_callback: Optional[Callable],
     degradations: Optional[DegradationCollector],
+    llm_model: Optional[str] = None,
+    language: Optional[str] = None,
 ) -> Tuple[Any, Optional["_prepare_checkpoint.PreparePersonaCheckpoint"], Optional[List[Any]]]:
     """Phase 1 oder deren Resume-Variante (Issue #1472c).
 
@@ -604,6 +612,8 @@ def _resolve_phase1_result(
         persona_floor=persona_floor,
         use_llm_for_profiles=use_llm_for_profiles,
         effective_quota_plan=effective_quota_plan_snapshot,
+        llm_model=llm_model,
+        language=language,
     )
 
     if resumable:
@@ -694,6 +704,7 @@ def prepare_simulation(
     quota_plan: Optional[PersonaQuotaPlan] = None,
     run_id: Optional[str] = None,
     degradations: Optional[DegradationCollector] = None,
+    force_regenerate: bool = False,
 ) -> SimulationState:
     """Orchestrator für die drei Prepare-Phasen.
 
@@ -706,6 +717,14 @@ def prepare_simulation(
     ``report_agent/workflow.py``. Bereits geschriebene Artefakte (Profildatei
     aus Phase 2, Entity-Zählung aus Phase 1) bleiben unangetastet stehen;
     nur der FSM-Status wechselt auf ``CANCELLED_PARTIAL`` statt ``READY``.
+
+    ``force_regenerate`` (Codex-Finding P2 auf PR #1539, Issue #1472c): ein
+    Aufrufer, der ausdrücklich eine vollständige Neugenerierung verlangt,
+    darf keine Teilergebnisse aus einem alten Checkpoint erben. Der
+    Checkpoint wird deshalb VOR der Resume-Erkennung gelöscht — nicht erst
+    ignoriert —, sonst würde ein Absturz mitten in diesem "frischen"
+    Versuch beim nächsten Restart wieder den alten, jetzt fachlich
+    überholten Zwischenstand anbieten.
     """
     from .simulation_manager import SimulationStatus
     from .sim.cancel_flag import is_cancel_requested
@@ -713,6 +732,9 @@ def prepare_simulation(
     state = manager._load_simulation_state(simulation_id)
     if not state:
         raise ValueError(f"Simulation does not exist: {simulation_id}")
+
+    if force_regenerate:
+        _prepare_checkpoint.clear_checkpoint(simulation_id)
 
     def _raise_if_cancelled() -> None:
         if run_id and is_cancel_requested(run_id):
@@ -765,6 +787,8 @@ def prepare_simulation(
             effective_quota_plan_snapshot=effective_quota_plan_snapshot,
             progress_callback=progress_callback,
             degradations=degradations,
+            llm_model=llm_model,
+            language=language,
         )
 
         if filtered.filtered_count == 0:

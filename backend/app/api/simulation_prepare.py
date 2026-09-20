@@ -409,6 +409,7 @@ def _make_prepare_job(
     llm_model: str,
     effective_llm_runtime,
     run_record: "dict[str, Any]",
+    force_regenerate: bool = False,
 ) -> "Callable[[], None]":
     """Compatibility wrapper around the extracted background-job builder."""
     return _make_prepare_job_impl(
@@ -423,6 +424,7 @@ def _make_prepare_job(
         run_record=run_record,
         progress_callback_factory=_build_progress_callback,
         finish_cancelled_prepare_run=_finish_cancelled_prepare_run,
+        force_regenerate=force_regenerate,
     )
 
 
@@ -577,6 +579,7 @@ def _prepare_simulation_under_start_lock(
                     llm_model=resolved_route.model,
                     effective_llm_runtime=effective_llm_runtime,
                     run_record=run_record,
+                    force_regenerate=req.force_regenerate,
                 ),
             )
             try:

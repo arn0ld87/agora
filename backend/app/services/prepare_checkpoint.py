@@ -151,6 +151,8 @@ def new_checkpoint(
     expanded_entity_uuids: list[str],
     entities_count: int,
     entity_types: list[str],
+    llm_model: Optional[str] = None,
+    language: Optional[str] = None,
 ) -> PreparePersonaCheckpoint:
     """Baut den initialen Checkpoint eines Prepare-Versuchs (noch ohne Profile)."""
     return PreparePersonaCheckpoint(
@@ -163,6 +165,8 @@ def new_checkpoint(
         persona_floor=persona_floor,
         use_llm_for_profiles=use_llm_for_profiles,
         effective_quota_plan=effective_quota_plan,
+        llm_model=llm_model,
+        language=language,
         primary_entity_uuids=list(primary_entity_uuids),
         reserve_entity_uuids=list(reserve_entity_uuids),
         expanded_entity_uuids=list(expanded_entity_uuids),
@@ -182,6 +186,8 @@ def checkpoint_is_resumable(
     persona_floor: int,
     use_llm_for_profiles: bool,
     effective_quota_plan: Optional[dict[str, Any]],
+    llm_model: Optional[str] = None,
+    language: Optional[str] = None,
 ) -> bool:
     """Prüft, ob ein Checkpoint zum AKTUELLEN Prepare-Versuch passt.
 
@@ -189,9 +195,11 @@ def checkpoint_is_resumable(
     demselben Graphen gehört UND alle Parameter trägt, die die Cap-/Quota-
     Auswahl bestimmen (``defined_entity_types``, ``max_agents``,
     ``persona_floor``, ``use_llm_for_profiles``, ``effective_quota_plan``)
-    — UND mindestens ein Profil bereits abgeschlossen hat. Ohne
-    verwertbaren Zwischenstand ist es kein Resume-Kandidat, auch wenn die
-    Parameter sonst passen (Fehlermuster "Angebot ohne Deckung").
+    sowie die Parameter, die die Persona-INHALTE bestimmen (``llm_model``,
+    ``language`` — Codex-Finding P2, PR #1539) — UND mindestens ein Profil
+    bereits abgeschlossen hat. Ohne verwertbaren Zwischenstand ist es kein
+    Resume-Kandidat, auch wenn die Parameter sonst passen (Fehlermuster
+    "Angebot ohne Deckung").
     """
     if checkpoint is None or not graph_id:
         return False
@@ -209,6 +217,10 @@ def checkpoint_is_resumable(
     if checkpoint.use_llm_for_profiles != use_llm_for_profiles:
         return False
     if checkpoint.effective_quota_plan != effective_quota_plan:
+        return False
+    if checkpoint.llm_model != llm_model:
+        return False
+    if checkpoint.language != language:
         return False
     if not checkpoint.expanded_entity_uuids:
         return False

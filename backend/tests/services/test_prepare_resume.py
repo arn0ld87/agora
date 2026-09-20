@@ -376,6 +376,76 @@ def test_checkpoint_is_resumable_false_on_parameter_mismatch():
     ) is False
 
 
+def test_checkpoint_is_resumable_false_on_language_or_model_mismatch():
+    """Ein Checkpoint aus einer anderen Sprach-/Modellroute ist nicht resumable.
+
+    Codex-Finding P2 (PR #1539): ``llm_model``/``language`` werden bei jedem
+    ``/prepare``-Aufruf neu aufgelöst und bestimmen die Persona-Sprache bzw.
+    die LLM-Handschrift genauso wie die Cap-/Quota-Parameter. Ohne diese
+    Prüfung würde ein Resume alte Checkpoint-Profile (z. B. deutsch) mit
+    neuen aus einer anderen Route (z. B. englisch oder anderes Modell)
+    mischen.
+    """
+    checkpoint = prepare_checkpoint.new_checkpoint(
+        simulation_id="sim-x",
+        graph_id="graph-x",
+        defined_entity_types=None,
+        max_agents=4,
+        persona_floor=4,
+        use_llm_for_profiles=False,
+        effective_quota_plan=None,
+        primary_entity_uuids=["s1"],
+        reserve_entity_uuids=[],
+        expanded_entity_uuids=["s1"],
+        entities_count=1,
+        entity_types=["Stakeholder"],
+        llm_model="gpt-4o",
+        language="de",
+    ).with_completed_profile(0, {"user_id": 0, "user_name": "u", "name": "n", "bio": "b", "persona": "p"})
+
+    # Sprache weicht ab -> nicht mehr verwertbar.
+    assert prepare_checkpoint.checkpoint_is_resumable(
+        checkpoint,
+        simulation_id="sim-x",
+        graph_id="graph-x",
+        defined_entity_types=None,
+        max_agents=4,
+        persona_floor=4,
+        use_llm_for_profiles=False,
+        effective_quota_plan=None,
+        llm_model="gpt-4o",
+        language="en",
+    ) is False
+
+    # Modell weicht ab -> nicht mehr verwertbar.
+    assert prepare_checkpoint.checkpoint_is_resumable(
+        checkpoint,
+        simulation_id="sim-x",
+        graph_id="graph-x",
+        defined_entity_types=None,
+        max_agents=4,
+        persona_floor=4,
+        use_llm_for_profiles=False,
+        effective_quota_plan=None,
+        llm_model="claude-cli",
+        language="de",
+    ) is False
+
+    # Beide identisch -> weiterhin resumable.
+    assert prepare_checkpoint.checkpoint_is_resumable(
+        checkpoint,
+        simulation_id="sim-x",
+        graph_id="graph-x",
+        defined_entity_types=None,
+        max_agents=4,
+        persona_floor=4,
+        use_llm_for_profiles=False,
+        effective_quota_plan=None,
+        llm_model="gpt-4o",
+        language="de",
+    ) is True
+
+
 def test_resolve_interruption_status_ohne_checkpoint_bleibt_failed(artifact_store):
     assert prepare_checkpoint.resolve_interruption_status("sim-x") == "failed"
 
@@ -449,6 +519,86 @@ def test_prepare_simulation_bricht_sichtbar_ab_wenn_checkpoint_schreiben_fehlsch
         _run(manager, "sim-io-fail", storage, max_agents=2)
 
     assert state.status == SimulationStatus.FAILED
+
+
+# ---------------------------------------------------------------------------
+# Szenario 6 (Codex-Finding P3, PR #1539): force_regenerate verwirft Checkpoint
+# ---------------------------------------------------------------------------
+
+
+def test_force_regenerate_verwirft_checkpoint_und_generiert_alles_neu(
+    tmp_path, monkeypatch, _phase2_spy
+):
+    """``force_regenerate=True`` darf keine Profile aus einem alten Checkpoint erben.
+
+    Codex-Finding P3 (PR #1539): ohne Weiterreichung des Flags bis zum
+    Checkpoint-Pfad übernähme ein zu den aktuellen Parametern passender
+    alter Checkpoint stillschweigend Teilergebnisse, obwohl der Aufrufer
+    ausdrücklich eine vollständige Neugenerierung verlangt hat — ein
+    gebrochenes Versprechen an den Aufrufer.
+    """
+    sim_dir = tmp_path / "force"
+    sim_dir.mkdir()
+    partial = prepare_checkpoint.new_checkpoint(
+        simulation_id="sim-force",
+        graph_id="graph-x",
+        defined_entity_types=None,
+        max_agents=4,
+        persona_floor=4,
+        use_llm_for_profiles=False,
+        effective_quota_plan=None,
+        primary_entity_uuids=_EXPECTED_SELECTION,
+        reserve_entity_uuids=["s3", "s4"],
+        expanded_entity_uuids=_EXPECTED_SELECTION,
+        entities_count=4,
+        entity_types=["Stakeholder", "Institution"],
+    )
+    for index in (0, 1):
+        partial = partial.with_completed_profile(
+            index,
+            {
+                "user_id": index,
+                "user_name": f"alt_{index}",
+                "name": f"Alt {index}",
+                "bio": "b",
+                "persona": "p",
+            },
+        )
+    prepare_checkpoint.save_checkpoint("sim-force", partial)
+
+    call_log: list[str] = []
+    from app.services.oasis_profile_generator import OasisProfileGenerator
+
+    original_generate = OasisProfileGenerator.generate_profile_from_entity
+
+    def _counting_generate(self, *args, **kwargs):
+        entity = kwargs.get("entity") or args[0]
+        call_log.append(entity.uuid)
+        return original_generate(self, *args, **kwargs)
+
+    monkeypatch.setattr(
+        OasisProfileGenerator, "generate_profile_from_entity", _counting_generate
+    )
+
+    storage = _OrderedStorage([_ORDER_BASELINE])
+    state = _make_state("sim-force", "graph-x")
+    manager = _FakeManager(state, sim_dir)
+
+    result = _run(manager, "sim-force", storage, max_agents=4, force_regenerate=True)
+
+    assert result.status == SimulationStatus.READY
+    force_profiles, force_expanded = _phase2_spy[0]
+
+    # Alle vier Slots wurden neu generiert -- keiner kam unveraendert aus
+    # dem alten Checkpoint (der zwei Alt-Profile mit dem Namen "Alt 0"/
+    # "Alt 1" trug).
+    assert sorted(call_log) == sorted(_EXPECTED_SELECTION)
+    assert [e.uuid for e in force_expanded] == _EXPECTED_SELECTION
+    assert all(profile.name not in {"Alt 0", "Alt 1"} for profile in force_profiles)
+
+    # Ein neuer Checkpoint wurde angelegt und nach erfolgreichem Abschluss
+    # wieder aufgeräumt -- kein Rest vom force-regenerate-Versuch.
+    assert prepare_checkpoint.load_checkpoint("sim-force") is None
 
 
 # ---------------------------------------------------------------------------

@@ -316,6 +316,7 @@ class SimulationManager:
         quota_plan: Optional["PersonaQuotaPlan"] = None,
         run_id: Optional[str] = None,
         degradations: Optional["DegradationCollector"] = None,
+        force_regenerate: bool = False,
     ) -> SimulationState:
         return prepare_service.prepare_simulation(
             self,
@@ -334,6 +335,7 @@ class SimulationManager:
             quota_plan=quota_plan,
             run_id=run_id,
             degradations=degradations,
+            force_regenerate=force_regenerate,
         )
 
     

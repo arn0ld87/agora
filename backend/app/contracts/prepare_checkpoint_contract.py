@@ -55,6 +55,15 @@ class PreparePersonaCheckpoint(BaseModel):
     persona_floor: int
     use_llm_for_profiles: bool
     effective_quota_plan: Optional[dict[str, Any]] = None
+    # Codex-Finding P2 (PR #1539, Issue #1472c): ``llm_model``/``language``
+    # werden bei jedem ``/prepare``-Aufruf neu aufgeloest und bestimmen die
+    # Persona-Sprache und die LLM-Handschrift ebenso wie die Cap-/Quota-
+    # Parameter oben. Ohne diesen Anker akzeptierte ein Resume einen
+    # Checkpoint aus einer anderen Modell-/Sprachroute und mischte alte mit
+    # neuen Profilen — halb deutsch, halb englisch, zwei Handschriften in
+    # einem Personasatz.
+    llm_model: Optional[str] = None
+    language: Optional[str] = None
 
     # Fixierte Auswahl aus Phase 1 (Cap) bzw. der Quota-Expansion — siehe
     # Moduldocstring. Reihenfolge ist bedeutungstragend: der Index in
