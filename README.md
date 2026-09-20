@@ -133,7 +133,9 @@ graph TD
 
 Production Gunicorn intentionally runs with **one web worker** while process-local job/monitor state still exists — quantified in ADR-0015: the non-relocatable part is OS-level handles (`Popen` objects, in-process queues, open file descriptors) inside `SimulationRunner`, which only a persisted job queue with dedicated workers ([#1472](https://github.com/arn0ld87/agora/issues/1472)) can move. Increasing the worker count is not a harmless performance setting.
 
-A SQLAlchemy/Alembic-backed PostgreSQL layer exists alongside the file/JSON/SQLite stores (self-hosted Supabase as an optional Compose overlay, LLM profiles, provider secrets, and project metadata each have a Postgres adapter behind a repository port). It is **opt-in per store** and does not change the default: `AGORA_METADATA_BACKEND`, `AGORA_LLM_PROFILE_BACKEND`, and `AGORA_PROJECT_BACKEND` all default to the existing file/SQLite path. Agora is not "on PostgreSQL"; the JSON/file stores remain the shipped default.
+A SQLAlchemy/Alembic-backed PostgreSQL layer exists alongside the file/JSON/SQLite stores (self-hosted Supabase as an optional Compose overlay). Exactly two stores have a Postgres adapter behind a repository port: **project metadata** and **LLM profile metadata**. Provider secrets have none — they stay in the file-backed Fernet store. It is **opt-in per store** and does not change the default: `AGORA_METADATA_BACKEND`, `AGORA_LLM_PROFILE_BACKEND`, and `AGORA_PROJECT_BACKEND` all default to the existing file/SQLite path. Agora is not "on PostgreSQL"; the JSON/file stores remain the shipped default.
+
+One caveat that the opt-in hides: with the **default** `SqliteLlmProfileRepository`, profile API keys are stored **in plaintext** in the `api_key` column of `instance/llm_profiles.db` (`backend/app/services/llm_profiles_store.py`). Only the Postgres adapter keeps them in the Fernet-backed `LlmProfileSecretsStore`. Treat that file as a secret.
 
 For the actual architecture and its remaining debts, see [`docs/architecture.md`](./docs/architecture.md) and [`docs/STATUS.md`](./docs/STATUS.md).
 

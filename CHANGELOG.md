@@ -3684,6 +3684,7 @@ erfundene „Abschnitt bricht ab"-Data-Gaps).
   nun auch `frontend/package.json`. CI-Job `version-drift.yml` und lokal
   `pre-push-gate.sh schemas` erzwingen Einhaltung. Abwicklung:
   [`docs/runbooks/release-versioning.md`](docs/runbooks/release-versioning.md).
+  [`docs/runbooks/release-versioning.md`](runbooks/release-versioning.md).
 
 ### Fixed (Issue #739 — 2026-07-18)
 

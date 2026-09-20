@@ -201,7 +201,10 @@ Kanonische Komponenten:
 
 - `http` — externer oder lokaler HTTP-Endpunkt mit Provideradapter. Amazon Bedrock läuft seit #1282 als OpenAI-kompatibler mantle-Pfad über denselben `OpenAIAdapter` (Bearer-API-Key statt boto3/SigV4); Host-Erkennung ausschließlich über `registry.py::_is_bedrock_host` (`bedrock-mantle.<region>.api.aws` / `bedrock-runtime.<region>.amazonaws.com`, keine zweite Heuristik).
 - `local` — lokaler HTTP-Dienst ohne Credential-Transport, aktuell vor allem Ollama
-- `cli` — lokaler CLI-Subprozess mit eigener Sessionauth. Zwei Provider: `codex_cli` (#1405, ambiente `codex login`-Session unter einem gemounteten `$CODEX_HOME`) und `claude_cli` (#1531, Claude-Code-CLI mit explizit mitgeführtem `CLAUDE_CODE_OAUTH_TOKEN` aus dem Fernet-Secret-Store, kein Verzeichnis-Mount nötig). Beide instanziieren bewusst keinen `ProviderAdapter`, sondern imitieren nur die vom `LLMClient` tatsächlich genutzte Teiloberfläche des OpenAI-SDK-Clients (`chat.completions.create`), und laufen mit leerem `HOME`/`cwd` sowie ohne Werkzeugzugriff — beide sind agentische Coding-Tools und dürfen nicht auf das Agora-Repo zugreifen.
+- `cli` — lokaler CLI-Subprozess mit eigener Sessionauth. Zwei Provider: `codex_cli` (#1405, ambiente `codex login`-Session unter einem gemounteten `$CODEX_HOME`) und `claude_cli` (#1531, Claude-Code-CLI mit explizit mitgeführtem `CLAUDE_CODE_OAUTH_TOKEN` aus dem Fernet-Secret-Store, kein Verzeichnis-Mount nötig). Beide instanziieren bewusst keinen `ProviderAdapter`, sondern imitieren nur die vom `LLMClient` tatsächlich genutzte Teiloberfläche des OpenAI-SDK-Clients (`chat.completions.create`). Beide sind agentische Coding-Tools und dürfen nicht auf das Agora-Repo zugreifen — der Weg dorthin ist aber **je Provider verschieden**, weil `codex_cli` sein `CODEX_HOME` für die Session braucht:
+
+- `claude_cli` läuft mit einem leeren, temporären `HOME` **und** `cwd` und schaltet die Werkzeuge per `--tools ""` ab.
+- `codex_cli` behält das `HOME` des Prozesses (sonst fände es die gemountete Login-Session nicht), isoliert nur das `cwd` auf ein Scratch-Verzeichnis und ruft `codex exec` mit `--sandbox read-only` auf.
 
 Eine aufgelöste CLI-Route hat bewusst keine Base-URL. `.env` darf diesen Zustand nicht mit einem fremden HTTP-Key/Endpoint „reparieren“ (#1418/#1422).
 
@@ -301,7 +304,8 @@ Bekannte Grenze: `scripts/run_parallel_simulation.py` besitzt einen eigenen `Par
 | Live-Events | Redis, nicht als dauerhafte Job-SSoT |
 | Contracts | Pydantic-Code + generierte Schemas/Zod-Spiegel |
 | Projekt-Metadaten | `uploads/projects/<project_id>/project.json` (Default, `FileProjectRepository`), optional `agora.projects` in PostgreSQL (`PostgresProjectRepository`, `AGORA_PROJECT_BACKEND=postgres`) |
-| LLM-Profil-Metadaten | SQLite `instance/llm_profiles.db` (Default, `SqliteLlmProfileRepository`), optional `agora.llm_profiles` in PostgreSQL (`PostgresLlmProfileRepository`, `AGORA_LLM_PROFILE_BACKEND=postgres`); Profil-API-Keys in beiden Fällen im Fernet-`LlmProfileSecretsStore`, nie in der Tabelle |
+| LLM-Profil-Metadaten | SQLite `instance/llm_profiles.db` (Default, `SqliteLlmProfileRepository`), optional `agora.llm_profiles` in PostgreSQL (`PostgresLlmProfileRepository`, `AGORA_LLM_PROFILE_BACKEND=postgres`) |
+| Profil-API-Keys | **Unterschiedlich je Adapter.** Der Postgres-Adapter legt sie in den Fernet-`LlmProfileSecretsStore` und hält die Tabellenspalte leer. Der **Default-SQLite-Adapter speichert sie im Klartext** in der `api_key`-Spalte von `instance/llm_profiles.db` (`llm_profiles_store.py`). Diese Datei ist damit selbst ein Geheimnis und gehört entsprechend behandelt. |
 
 ### PostgreSQL: paralleler Adapter, kein Ersatz
 
