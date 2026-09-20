@@ -7,11 +7,13 @@ Output dimension depends on the model (see Config.VECTOR_DIM).
 Stub-Modus (AGORA_E2E_LLM_MODE=stub):
     embed() und embed_batch() liefern deterministischen Vector ohne Netzwerkaufruf.
     Dimension: Config.VECTOR_DIM (identisch mit Prod-Konfiguration).
-    Determinismus: hash(text)-basiert, L2-normalisiert — Cosine-Similarity ist
+    Determinismus: blake2b(text)-basiert (prozessunabhängig, im Gegensatz zu Pythons
+    PYTHONHASHSEED-randomisiertem hash()), L2-normalisiert — Cosine-Similarity ist
     textspezifisch (nicht konstant 1.0), um Section-Dedup-Fehler nicht zu verschleiern.
     health_check() gibt True zurück.
 """
 
+import hashlib
 import math
 import os
 import time
@@ -198,9 +200,15 @@ class EmbeddingService:
     def _stub_vector(self, text: str) -> List[float]:
         """Erzeugt einen deterministischen, L2-normierten Vector für den Stub-Modus.
 
-        Formel: vec[i] = ((hash(text) + i) % 1000 - 500) / 500.0, dann L2-normiert.
-        Jeder Text liefert einen einzigartigen Vector — Cosine-Similarity ist NICHT
-        konstant 1.0, sodass Section-Dedup-Fehler nicht verschleiert werden.
+        Formel: vec[i] = ((h + i) % 1000 - 500) / 500.0, dann L2-normiert, wobei h aus
+        einem stabilen Byte-Hash (blake2b) über die UTF-8-Bytes von text stammt.
+        Pythons eingebautes hash() für str ist bewusst NICHT prozessunabhängig
+        (PYTHONHASHSEED-Randomisierung als Schutz gegen Hash-Flooding) und wäre daher
+        zwischen Prozessen nicht reproduzierbar — deshalb blake2b statt hash().
+
+        Kollisionen bei `% 1000` bleiben möglich (ca. 1:1000 pro Textpaar); anders als
+        bei hash() sind sie jetzt aber für einen gegebenen Text stabil und nicht mehr
+        von einem zufälligen Prozess-Seed abhängig.
 
         Dimension: Config.VECTOR_DIM (identisch mit Prod-Konfiguration).
         """
@@ -211,7 +219,7 @@ class EmbeddingService:
             )
             EmbeddingService._stub_mode_logged = True
 
-        h = hash(text)
+        h = int.from_bytes(hashlib.blake2b(text.encode("utf-8"), digest_size=8).digest(), "big")
         dim = Config.VECTOR_DIM
         vec = [((h + i) % 1000 - 500) / 500.0 for i in range(dim)]
 

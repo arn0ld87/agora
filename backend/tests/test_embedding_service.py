@@ -1,4 +1,9 @@
+import json
 import logging
+import os
+import subprocess
+import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -306,6 +311,58 @@ class TestEmbeddingServiceStubMode:
 
         norm = math.sqrt(sum(v * v for v in vec))
         assert abs(norm - 1.0) < 1e-9, f"Stub-Vector ist nicht L2-normiert: |v|₂={norm}"
+
+    def test_stub_vector_is_stable_across_process_hash_seeds(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Stub-Vector ist prozessunabhaengig deterministisch (Issue: hash()-Randomisierung).
+
+        Pythons hash() fuer str wird pro Prozess durch PYTHONHASHSEED randomisiert,
+        sofern die Umgebungsvariable nicht fest gesetzt ist. Ein Stub-Vector, der auf
+        hash(text) basiert, waere daher zwischen Prozessen NICHT reproduzierbar und
+        koennte zufaellig mit einem anderen Text kollidieren (test_stub_embed_different_
+        texts_produce_different_vectors war deshalb in CI ein echter Flake).
+
+        Dieser Test erzeugt den Vektor fuer denselben Text einmal im Testprozess und
+        einmal in einem Subprozess mit explizit ABWEICHENDEM PYTHONHASHSEED und
+        vergleicht beide. Mit hash() waeren beide Werte (nahezu) immer verschieden,
+        mit einem stabilen Byte-Hash sind sie identisch.
+        """
+        monkeypatch.setenv("AGORA_E2E_LLM_MODE", "stub")
+        EmbeddingService._stub_mode_logged = False
+
+        text = "hash-seed-stabilitaet"
+        svc = EmbeddingService(model="nomic-embed-text", base_url="http://x:11434")
+        vec_in_process = svc.embed(text)
+
+        backend_root = str(Path(__file__).resolve().parents[1])
+        marker = "STUB_VECTOR_JSON::"
+        script = (
+            "import json, os\n"
+            "os.environ['AGORA_E2E_LLM_MODE'] = 'stub'\n"
+            "from app.storage.embedding_service import EmbeddingService\n"
+            "svc = EmbeddingService(model='nomic-embed-text', base_url='http://x:11434')\n"
+            f"print({marker!r} + json.dumps(svc.embed({text!r})))\n"
+        )
+
+        subprocess_env = dict(os.environ, PYTHONHASHSEED="1")
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            env=subprocess_env,
+            cwd=backend_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        marker_line = next(
+            line for line in result.stdout.splitlines() if line.startswith(marker)
+        )
+        vec_from_subprocess = json.loads(marker_line[len(marker) :])
+
+        assert vec_from_subprocess == pytest.approx(vec_in_process), (
+            "Stub-Vector muss ueber Prozessgrenzen mit abweichendem PYTHONHASHSEED "
+            "stabil bleiben — sonst ist der Stub weder reproduzierbar noch kollisionsfrei"
+        )
 
 
 # ---------------------------------------------------------------------------
