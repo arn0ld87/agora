@@ -1,7 +1,7 @@
 # Deployment — Prod-Like
 
-**Stand:** 08.09.2026  
-**Geprüfte Main-Baseline:** `0c47737f`  
+**Stand:** 20.09.2026  
+**Geprüfte Main-Baseline:** `b62aea62`  
 **Scope:** gehärteter Single-User-/Single-Tenant-Betrieb hinter Tailnet oder Reverse Proxy. Kein Multi-User-AuthN-System.
 
 Für Entwicklung: [`deployment-dev.md`](deployment-dev.md). Für Betrieb/Recovery: [`operations.md`](operations.md), [`backup-restore.md`](backup-restore.md).

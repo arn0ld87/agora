@@ -12,7 +12,7 @@
 
 **Dokumente → Knowledge Graph → Personas → Simulation → nachvollziehbarer Bericht**
 
-[![Version](https://img.shields.io/badge/version-0.9.5-635BFF?style=flat-square)](./VERSION)
+[![Version](https://img.shields.io/badge/version-0.9.6-635BFF?style=flat-square)](./VERSION)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-111827?style=flat-square)](./LICENSE)
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21830644-1682D4?style=flat-square)](https://doi.org/10.5281/zenodo.21830644)
 [![Python](https://img.shields.io/badge/Python-3.14-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -95,13 +95,13 @@ Unterstützte Transportklassen:
 
 | Transport | Bedeutung | Beispiel |
 |---|---|---|
-| `http` | externer oder lokaler HTTP-Endpunkt | OpenAI, Gemini, MiniMax, Bedrock Mantle |
+| `http` | externer oder lokaler HTTP-Endpunkt | OpenAI, Anthropic, Gemini, MiniMax, Amazon Bedrock (Mantle) |
 | `local` | lokaler HTTP-Dienst ohne API-Key-Auth | Ollama |
-| `cli` | lokal authentifizierter CLI-Subprozess | Codex CLI |
+| `cli` | lokal authentifizierter CLI-Subprozess | Codex CLI, Claude Code CLI |
 
-`codex_cli` ist ein echter Session-Transport: Es werden weder HTTP-Base-URL noch API-Key erwartet. Details stehen in [`docs/provider-runtime-settings.md`](./docs/provider-runtime-settings.md).
+`codex_cli` (ChatGPT-Abo) ist ein echter Session-Transport: Es werden weder HTTP-Base-URL noch API-Key erwartet. `claude_cli` (Claude-Abo, [#1531](https://github.com/arn0ld87/agora/issues/1531)) spricht die lokal installierte Claude-Code-CLI per Subprozess mit isoliertem `HOME` pro Aufruf an und authentifiziert über einen langlebigen `claude setup-token` (`CLAUDE_CODE_OAUTH_TOKEN`) im verschlüsselten Secret-Store. Amazon Bedrock ([#1282](https://github.com/arn0ld87/agora/issues/1282)) spricht den OpenAI-kompatiblen Bedrock-Mantle-Endpunkt (Default-Region `eu-central-1`) über einen Bearer-API-Key an, nicht über boto3/SigV4. Details stehen in [`docs/provider-runtime-settings.md`](./docs/provider-runtime-settings.md).
 
-Embedding-Konfiguration ist bewusst vom Chat-Routing getrennt. Ein bekannter Runtime-SSoT-Bruch wird in [#1417](https://github.com/arn0ld87/agora/issues/1417) verfolgt.
+Embedding-Konfiguration ist bewusst vom Chat-Routing getrennt. Lese- und Schreibpfad lösen Index- und Property-Namen inzwischen kanonisch über den Store auf, und der Migrations-Cutover schaltet erst nach geprüftem Re-Embedding auf eine neue Index-Version um; [#1417](https://github.com/arn0ld87/agora/issues/1417) ist damit noch nicht vollständig geschlossen (offen: `VECTOR_DIM`-SSoT, Legacy-View für Bestandsgraphen, Frontend-Zod-Spiegel für den neuen `building`-Status).
 
 ## Architektur
 
@@ -126,12 +126,14 @@ graph TD
 | Backend | Flask, Python 3.14, Pydantic v2, `uv` |
 | Contracts | Pydantic → generierte JSON-Schemas → Zod-Spiegel |
 | Knowledge Graph | Neo4j 5.18+ |
-| Events / Live-State | Redis |
+| Events / Live-State | Redis 8 |
 | Simulation | OASIS / CAMEL in separatem Subprozess |
 | LLM-Schicht | ProviderConnection, AiRoute/LlmRoute, `LLMClient` |
 | Report | Evidence-Sammlung, Claim-Gates, Degradationsmodell, Exporte |
 
-Produktions-Gunicorn läuft bewusst mit **einem Web-Worker**, solange prozesslokale Job-/Monitor-Zustände existieren. Mehr Worker sind hier kein kostenloser Performance-Regler.
+Produktions-Gunicorn läuft bewusst mit **einem Web-Worker**, solange prozesslokale Job-/Monitor-Zustände existieren — in ADR-0015 beziffert: Der nicht verschiebbare Anteil sind Betriebssystem-Handles (`Popen`-Objekte, In-Prozess-Queues, offene Dateideskriptoren) im `SimulationRunner`, die nur eine persistente Job-Queue mit eigenen Workern ([#1472](https://github.com/arn0ld87/agora/issues/1472)) auflösen kann. Mehr Worker sind hier kein kostenloser Performance-Regler.
+
+Parallel zu den Datei-/JSON-/SQLite-Stores existiert eine SQLAlchemy-/Alembic-gestützte PostgreSQL-Schicht (self-hosted Supabase als optionales Compose-Overlay, sowie LLM-Profile, Provider-Secrets und Projektmetadaten jeweils mit einem PostgreSQL-Adapter hinter einem Repository-Port). Sie ist **je Store optional zuschaltbar** und ändert nichts am Default: `AGORA_METADATA_BACKEND`, `AGORA_LLM_PROFILE_BACKEND` und `AGORA_PROJECT_BACKEND` stehen alle auf dem bisherigen Datei-/SQLite-Pfad. Agora läuft nicht „auf PostgreSQL" — die JSON-/Datei-Stores bleiben der ausgelieferte Standard.
 
 Die tatsächliche Architektur und ihre offenen Schulden stehen in [`docs/architecture.md`](./docs/architecture.md) und [`docs/STATUS.md`](./docs/STATUS.md).
 
@@ -188,14 +190,14 @@ Standard-Endpunkte:
 
 ## Aktueller Stand
 
-**Aktuelle Produktversion:** `0.9.5` Stability Beta.
+**Aktuelle Produktversion:** `0.9.6` Stability Beta.
 
 Der exakt verifizierte Stand, aktuelle Testnachweise, bekannte Grenzen und die geprüfte Baseline werden in [`docs/STATUS.md`](./docs/STATUS.md) gepflegt. Release-Prioritäten und die Gates für 0.10/1.0 stehen in [`ROADMAP.md`](./ROADMAP.md). Diese README enthält bewusst keine schnell alternden Testzähler.
 
 Die wichtigsten Arbeiten vor 1.0 liegen derzeit bei:
 
 - restart-sicheren langlaufenden Prepare-/Report-/Graph-Jobs ([#1472](https://github.com/arn0ld87/agora/issues/1472)),
-- einer kanonischen Embedding-Runtime-Konfiguration ([#1417](https://github.com/arn0ld87/agora/issues/1417)),
+- den verbleibenden Embedding-Runtime-SSoT-Teilen — `VECTOR_DIM`, Legacy-View, Frontend-`building`-Status-Spiegel ([#1417](https://github.com/arn0ld87/agora/issues/1417)),
 - Persona-/Entitätskohärenz und Rollenkonsistenz ([#1470](https://github.com/arn0ld87/agora/issues/1470), [#1471](https://github.com/arn0ld87/agora/issues/1471), [#1323](https://github.com/arn0ld87/agora/issues/1323)),
 - Simulationstreue und Recommender-Reproduzierbarkeit ([#1236](https://github.com/arn0ld87/agora/issues/1236)),
 - stärkerer Evidenzsemantik und sauberen Evaluationsfixtures ([#1345](https://github.com/arn0ld87/agora/issues/1345), [#1240](https://github.com/arn0ld87/agora/issues/1240)),
@@ -204,7 +206,7 @@ Die wichtigsten Arbeiten vor 1.0 liegen derzeit bei:
 
 ### Grenze der Reproduzierbarkeit
 
-Agora speichert Run- und Simulationsmetadaten einschließlich seed-bezogener Felder. Das System garantiert aktuell **noch nicht**, dass derselbe gespeicherte Seed dasselbe Experiment reproduziert. Dafür müssen alle relevanten Zufallsquellen, Prompts, Inputs, Routen, Modellantworten und Feature Flags eingefroren oder aufgezeichnet werden. Das ist 0.10-Arbeit, keine Behauptung von 0.9.5.
+Ein strukturelles `RunManifest` und ein Replay-Dialog existieren, Reports und Simulationen führen seed-bezogene Felder. Das ist keine Garantie: Das Manifest ist noch kein vollständiger Reproduktionsanker. Prompt-Snapshots, Seed-Dokument-Hashing, echtes RNG-Wiring und vollständige Replay-Parameter sind weiterhin offen ([#1274](https://github.com/arn0ld87/agora/issues/1274)). Das System garantiert aktuell **noch nicht**, dass derselbe gespeicherte Seed dasselbe Experiment reproduziert. Dafür müssen alle relevanten Zufallsquellen, Prompts, Inputs, Routen, Modellantworten und Feature Flags eingefroren oder aufgezeichnet werden ([#763](https://github.com/arn0ld87/agora/issues/763)). Das ist 0.10-Arbeit, keine Behauptung von 0.9.6.
 
 ## Referenzlauf
 

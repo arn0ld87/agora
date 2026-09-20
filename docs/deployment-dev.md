@@ -1,7 +1,7 @@
 # Deployment — Entwicklung
 
-**Stand:** 08.09.2026  
-**Geprüfte Main-Baseline:** `0c47737f`  
+**Stand:** 20.09.2026  
+**Geprüfte Main-Baseline:** `b62aea62`  
 **Scope:** Lokaler Entwicklungsbetrieb auf einer Single-User-Maschine, entweder Host/Bare-Metal oder Docker Compose.
 
 > **Paketmanager ist Bun, Backend-Environment kommt über `uv`.** Keine zweite npm-/pip-Dependency-Wahrheit daneben anlegen.

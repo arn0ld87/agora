@@ -3,6 +3,2039 @@
 Alle nennenswerten Änderungen an Agora werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [Unreleased]
+
+## [0.9.6] - 2026-09-20
+
+Ein Zwischenrelease zwischen `0.9.5` (11.08.2026) und dem Ziel `0.10.0`: mehr als 330 Commits, 184 eingesammelte Changelog-Fragmente, sechs Wochen Arbeit. Es ist ausdrücklich **kein `0.10.0`** — die neun Release-Prioritäten aus [`ROADMAP.md`](ROADMAP.md) sind nicht erfüllt, und dieses Release beansprucht keines ihrer Gates.
+
+Vier Wege zu einem Modell statt einem: neben HTTP sprechen `codex_cli` und `claude_cli` eine lokal installierte CLI über deren Login-Session — ohne API-Key, ohne Endpunkt — und Amazon Bedrock kommt als OpenAI-kompatibler Provider dazu. Das Request-Shaping liegt dafür nicht mehr verteilt in `chat`, `describe_image` und `tool_calls`, sondern hinter `build_request` und `execute` in `app/llm/request_plan.py`.
+
+Eine PostgreSQL-Schicht existiert, **und niemand benutzt sie**: LLM-Profile, Provider-Secrets und Projektmetadaten haben je einen Repository-Port mit Datei- und Postgres-Adapter, dazu eine Alembic-Baseline und einen prüfbaren Restore-Drill. `AGORA_METADATA_BACKEND`, `AGORA_PROJECT_BACKEND` und `AGORA_LLM_PROFILE_BACKEND` stehen alle drei auf dem Dateipfad. Die Schicht ist gebaut, nicht in Betrieb.
+
+Die Oberfläche ist über zehn PRs neu geschnitten — Ablage und Dossier sind der Einstieg, das Legacy-Frontend ist abgebaut. Der grösste Block sind Evidence- und Report-Härtungen: Claim-Atomisierung, semantisches Entailment statt Wortüberlappung, Interview-Panel-Rotation, ein Requirement-Checker vor Report-Abschluss, global eindeutige Claim- und Gap-IDs.
+
+Was dieses Release **nicht** liefert: Reproduzierbarkeit. `RunManifest` und Replay-Dialog existieren strukturell, das Manifest ist aber kein vollständiger Reproduktionsanker — derselbe gespeicherte Seed erzeugt weiterhin nicht denselben Lauf (#763/#1274). Die Embedding-SSoT-Ausnahme (#1417) ist enger geworden, nicht geschlossen: Slice 2.1 und 2.2 sind gelandet, 2.3 und 2.4 offen. Langläufer ausserhalb der OASIS-Simulation überleben einen Neustart weiterhin nicht (#1472) — der neue `atexit`-Hook markiert sie ehrlich als `failed/process_restart`, statt sie stumm verschwinden zu lassen.
+
+### Slice 1.3 — Graph-Build-Resume
+
+Ein unterbrochener Graph-Build kann jetzt an der Stelle fortgesetzt werden, an
+der er abgebrochen wurde, statt komplett neu zu starten. `GraphBuilderService.
+add_text_batches` verarbeitet Chunks parallel über einen `ThreadPoolExecutor`
+und schließt sie deshalb außerhalb ihrer Ursprungsreihenfolge ab — ein
+einzelner Höchstwert-Cursor wie bei `EmbeddingMigrationProgress.
+last_processed_id` reicht als Checkpoint-Einheit nicht. Der neue
+`GraphBuildCheckpoint`-Vertrag (`backend/app/contracts/
+graph_build_checkpoint_contract.py`) führt deshalb die tatsächliche MENGE
+bereits committeter Chunk-Indizes, nicht nur einen Höchstwert, und wird je
+Projekt (nicht je Run-ID) atomar mit `fsync` persistiert — ein Resume-Versuch
+legt einen eigenen, neuen Run an, der Fortschritt selbst gehört aber zum
+Graph-Build-Vorhaben des Projekts als Ganzes und muss über mehrere Versuche
+hinweg erhalten bleiben.
+
+Der Plan-Wortlaut "Stage-Checkpoint pro abgeschlossenem Build-Abschnitt" trägt
+nicht wörtlich: der Build zerfällt nicht in abgrenzbare Abschnitte wie
+Ingest/Chunking/Extraktion/Embedding/Write, sondern ist eine durchgehende
+Chunk-Schleife, in der jeder Chunk NER-Extraktion, Embedding und Neo4j-Write
+in einem Aufruf bündelt. Die richtige Einheit ist ein Chunk-Index.
+
+Der Checkpoint bindet sich zusätzlich an `graph_id`, `chunk_size`,
+`chunk_overlap` und eine `manifest_anchored`-Flagge (dokument-verankerte vs.
+Legacy-Chunk-Zerlegung). Das ist kein Zusatzschutz, sondern zwingend: Neo4j
+dedupliziert Entities über einen inhaltlichen MERGE-Schlüssel
+(`graph_id + name_lower + entity_type`), aber Episode- und Relation-Knoten
+über eine je Aufruf frisch generierte UUID — ein erneut prozessierter, bereits
+committeter Chunk würde also Dubletten-Episoden und -Relationen erzeugen statt
+sie zu deduplizieren. Ändern sich Chunk-Größe, Overlap oder die
+Chunking-Methode gegenüber dem Original-Lauf, bedeutet ein Chunk-Index nicht
+mehr dasselbe Textstück — der Checkpoint gilt dann als ungültig und die Route
+fällt sauber auf einen kompletten Restart zurück, statt falsch übersprungene
+Chunks zu produzieren.
+
+`POST /api/runs/<id>/resume` bietet für `graph_build`-Runs jetzt zwei Pfade
+hinter derselben Route (analog dem bestehenden Resume/Restart-Dispatch für
+`simulation_run`): `_resume_or_restart_graph_build` prüft den Checkpoint gegen
+die aktuelle Chunk-Zerlegung und wählt `GraphBuildService.resume_graph_build`
+(setzt am Checkpoint fort, kein erneutes `create_graph`, verarbeitet nur die
+noch nicht abgeschlossenen Chunks) oder fällt auf den bestehenden
+`_restart_graph_build` zurück. `resume_capability` beschreibt jetzt den
+tatsächlichen Zustand: `resume` wird nur angeboten, wenn ein zum aktuellen
+Graphen passender Checkpoint mit mindestens einem abgeschlossenen Chunk
+existiert — ein angebotenes Resume, das doch bei null beginnt, wäre schlimmer
+als keins.
+
+Das schließt auch den Prozess-Neustart-Fall aus Slice 1.1 aus #1472: dessen
+Changelog hielt ausdrücklich fest, dass dort "kein vollständig persistierter
+interrupted-/Resume-Zustand" entsteht. Sowohl der Shutdown-Hook
+(`services/sim/process_shutdown.py`) als auch die Startup-Reconciliation
+(`services/sim/reconciliation.py`) markierten `graph_build`-Runs bisher ohne
+Checkpoint-Prüfung failed/`process_restart` und ließen dabei den sticky
+`restart`-Default aus der Run-Anlage stehen. Beide setzen jetzt für
+`graph_build`-Runs `resume_capability` anhand des vorhandenen Checkpoints
+(leichtgewichtige Prüfung: Graph-Identität + mindestens ein fertiger Chunk;
+die volle Parametervalidierung inklusive Chunk-Größe/Overlap übernimmt erst
+der eigentliche Resume-Versuch und fällt bei Nichtübereinstimmung sauber auf
+Restart zurück). Ohne diese Ergänzung würde der genau für diesen Fall gebaute
+Checkpoint-Mechanismus dem Nutzer nie angeboten — der Prozess-Neustart ist der
+Hauptfall, für den Slice 1.3 überhaupt existiert.
+
+Ein Checkpoint-Schreibfehler (Festplatte, Berechtigungen) propagiert
+unverändert aus `add_text_batches` heraus und beendet den betroffenen Run
+sichtbar als `failed`, statt den Build unbemerkt ohne aktuellen Checkpoint
+weiterlaufen zu lassen.
+
+Weiterhin offen: Prepare-Resume (Slice 1.4, #1472c) und Heartbeat/Lease
+(Slice 1.5, #1472d). #1472 als Ganzes ist damit nicht geschlossen.
+
+Review-Nachbesserung (PR #1535): drei Fälle behoben. Erstens scheiterte ein
+Build nach dem ersten gesetzten Checkpoint bislang mit `delete_graph`, obwohl
+`resume_capability` weiter `resume` anbot — der Resume-Pfad arbeitet aber
+ausschließlich mit `MATCH` und hätte ins Leere gegriffen. Der Checkpoint wird
+jetzt zusammen mit dem gelöschten Graphen verworfen, danach bleibt nur noch
+`restart` eine ehrliche Option. Zweitens verlor `add_text_batches` bei einem
+scheiternden Chunk in der `as_completed`-Schleife den Checkpoint für Chunks,
+die zu diesem Zeitpunkt bereits erfolgreich committet, aber noch nicht
+gecheckpointet waren — ein anschließender Resume hätte sie erneut verarbeitet
+und Dubletten-Episoden erzeugt. Drittens durchlief ein resumeter Build das
+Qualitätsgate (`assess_graph_quality_from_counts`) nicht und trug deshalb nie
+eine `degradations`-Meldung, selbst wenn der fertige Graph unter der
+Mindestzahl an Relationen blieb — der resumete Pfad meldet diese Degradation
+jetzt genauso wie der Original-Build.
+
+### Added (die LLM-Profile können jetzt in PostgreSQL liegen — 2026-09-18)
+
+- **`PostgresLlmProfileRepository` ist der zweite Adapter des Ports**, PR 4 aus [`docs/plans/supabase.md`](docs/plans/supabase.md) §10 und die erste echte Datenmigration des Plans. `AGORA_LLM_PROFILE_BACKEND=postgres` ist damit ein Wert, der etwas tut — der Default bleibt `sqlite`.
+- **Die ID-Darstellung bleibt die der SQLite.** Der bisherige Store erzeugt IDs als `uuid4().hex` (32 Zeichen), die Spalte in PostgreSQL ist ein `UUID` (36 Zeichen mit Bindestrichen) — dieselbe Zahl, andere Schreibweise. Der Adapter reicht nach außen immer `.hex`. Ohne das bekäme dieselbe Zeile nach der Migration eine andere ID, und jede gespeicherte Referenz der Form `llm_model: "profile:<id>"` in einer Simulationskonfiguration zeigte ins Leere.
+- **Der Schlüssel liegt nicht in der Tabelle.** `agora.llm_profiles` hat keine `api_key`-Spalte; der Adapter holt ihn aus dem Fernet-Store, den PR #1516 eingeführt hat, unter derselben Profil-ID. Zwei Profile desselben Providers behalten damit verschiedene Schlüssel — verifiziert gegen eine echte Datenbank, nicht nur behauptet.
+- **`scripts/migrate_llm_profiles_to_postgres.py` überträgt den Bestand** und lässt die SQLite unberührt (`mode=ro`, §10 Schritt 9). `--dry-run` zählt, `--verify` vergleicht feldweise: Anzahl, IDs, alle Felder, beide Zeitstempel und die Schlüssel über den **entschlüsselten Klartext** — eine Existenzprüfung würde einen Eintrag durchgehen lassen, der unter der falschen ID liegt. Verwaiste Zeilen in PostgreSQL werden benannt. Der Lauf ist wiederholbar: ein zweiter Durchgang aktualisiert, statt an der Primärschlüssel-Kollision zu scheitern.
+- **`list()` legt in PostgreSQL kein Bootstrap-Profil an**, anders als der SQLite-Adapter. Das Bootstrap ist Erstinbetriebnahme einer leeren Installation; wer auf PostgreSQL umschaltet, hat seinen Bestand migriert und bekäme sonst ein zusätzliches Profil, das niemand angelegt hat.
+- **Ablauf, Rückweg und Grenzen stehen in [`docs/runbooks/llm-profile-postgres-umstellung.md`](docs/runbooks/llm-profile-postgres-umstellung.md).** Dort auch der Satz, der am leichtesten übersehen wird: der Rückweg auf `sqlite` ist sofort wirksam, verliert aber jedes Profil, das nach der Umstellung angelegt wurde — er gilt für den Tag der Umstellung, nicht für den Monat danach.
+
+### Changed
+
+- `LLM_PROFILE_BACKENDS_NOT_YET_AVAILABLE` ist leer. Die Mechanik bleibt stehen, weil der nächste Store denselben Zwischenzustand durchläuft: Wert schon gültig, Adapter noch nicht da.
+
+### Added (die Profil-Schlüssel haben jetzt eine verschlüsselte Ablage — 2026-09-18)
+
+- **`LlmProfileSecretsStore` legt API-Keys pro Profil verschlüsselt ab**, Fernet unter `AGORA_SECRET_KEY`, Datei `llm_profile_secrets.json` im `AGORA_DATA_DIR`. Vorarbeit für PR 4 aus [`docs/plans/supabase.md`](docs/plans/supabase.md) §10: das Ziel-Datenmodell `agora.llm_profiles` hat bewusst keine `api_key`-Spalte, also braucht der PostgreSQL-Adapter die Schlüssel woanders.
+- **Warum nicht der bestehende Provider-Store.** Der legt **pro Provider** ab (`get_plaintext("openai")`). Profile sind feiner geschnitten: es gibt keinen Unique-Constraint auf `provider`, zwei Profile desselben Providers dürfen verschiedene Schlüssel tragen, und der Laufzeit-Resolver zieht den Schlüssel pro Profil. Hätte der PostgreSQL-Adapter auf den Provider-Store zurückgegriffen, teilten sich diese Profile stillschweigend einen Schlüssel — ein Verhaltenswechsel, der erst aufgefallen wäre, wenn das Feature-Flag längst umgelegt ist.
+- **Ein nicht entschlüsselbarer Eintrag ist kein fehlender Eintrag.** `get_plaintext` gibt `None` zurück, wenn kein Schlüssel hinterlegt ist, wirft aber `ProfileSecretDecryptionError`, wenn einer existiert und der Master-Key nicht passt. Ohne diese Trennung liefe ein Profil nach einer Key-Rotation stillschweigend ohne Authentifizierung weiter.
+- **Ein leerer Wert löscht den Eintrag**, statt einen verschlüsselten Leerstring abzulegen — dieselbe Bedeutung, die ein leeres `api_key`-Feld in der SQLite hat. Ein solcher Eintrag würde vorgeben, einen Schlüssel zu haben.
+- **`scripts/migrate_profile_secrets.py` füllt den Store aus der bestehenden SQLite** und **fasst sie dabei nicht an**: die Verbindung ist auf `mode=ro` gesetzt, kein Schlüssel wird dort gelöscht. Solange `AGORA_LLM_PROFILE_BACKEND=sqlite` gilt, bleibt die Datenbank die Wahrheit und der Store nur eine zweite Kopie. `--dry-run` zählt, ohne zu schreiben; `--verify` vergleicht beide Seiten **feldweise über den entschlüsselten Klartext** — eine reine Existenzprüfung würde einen Eintrag durchgehen lassen, der unter der falschen Profil-ID liegt oder aus einem früheren Lauf mit anderem Wert stammt — und benennt auch verwaiste Einträge, deren Profil verschwunden ist.
+
+### Added (die LLM-Profile liegen jetzt hinter einem Port — 2026-09-18)
+
+- **`LlmProfileRepository` ist der Port für LLM-Profil-Metadaten**, PR 3 aus [`docs/plans/supabase.md`](docs/plans/supabase.md) §38 und die erste Hälfte der Repository-Schicht aus §12. Der Port schreibt die Semantik des heutigen SQLite-Stores fest, damit der PostgreSQL-Adapter aus PR 4 sie nicht anders auslegt: `get()` gibt `None` zurück statt zu werfen (ein fehlendes Profil ist beim Auflösen einer Route ein erwarteter Fall), `api_key` verlässt das Repository nur mit `include_api_key=True`, und `list()` legt bei leerer Ablage das Bootstrap-Profil aus den `LLM_*`-Env-Variablen an — ohne das stünde eine frische Installation ohne jede Route da.
+- **Der schwierigste Teil des Vertrags steht in `update()`.** Für `api_key` gilt eine Dreiteilung: `None` heißt „nicht mitgeschickt" und lässt den gespeicherten Schlüssel stehen, `""` heißt „ausdrücklich leeren", jeder andere Wert ersetzt ihn. Ohne diese Unterscheidung löschte jedes Speichern aus der Oberfläche den Schlüssel, denn die API gibt ihn nie aus und ein Formular schickt ihn leer zurück. Ein zweiter Adapter, der das übersieht, macht genau diesen Fehler wieder.
+- **`AGORA_LLM_PROFILE_BACKEND` schaltet die Ablage, Default `sqlite`.** Bewusst getrennt von `AGORA_METADATA_BACKEND`: die Stores werden einzeln umgestellt, und ein Schalter für alles wäre genau die Migration in einem Schritt, die der Plan vermeidet.
+- **`postgres` ist ein gültiger Wert ohne Adapter, und das sagt die Anwendung auch so.** `Config.validate()` lehnt ihn beim Start ab mit dem Hinweis, dass der Adapter mit PR 4 kommt und bestehende Profile bleiben, wo sie sind — nicht mit einem Importfehler beim ersten Profilzugriff. Die Factory wirft dieselbe Aussage als `LlmProfileBackendUnavailable`, falls jemand sie ohne Validierung erreicht; kein `ValueError`, weil der Wert nicht falsch ist, sondern noch nicht bedient. Die Verzweigung hängt an einer Konstanten, die mit PR 4 leer wird und die Verzweigung mitnimmt.
+
+### Changed
+
+- **`LlmProfilesStore` heißt jetzt `SqliteLlmProfileRepository`** und sagt damit, was es ist: der SQLite-Adapter des Ports. Der alte Name bleibt als Alias — er steht in vier Consumern und sechs Testdateien, und ein Rename dort verbessert nichts, was der Port nicht schon leistet. **Das Datenformat ändert sich nicht**: eine bestehende `instance/llm_profiles.db` wird unverändert weiterbenutzt, es gibt keine Migration und nichts zu sichern.
+
+### Added (ein Maßstab dafür, dass eine Migration nichts verloren hat — 2026-09-18)
+
+- **`backend/scripts/migration_baseline.py` erzeugt ein Baseline-Manifest**, Phase 0 aus [`docs/plans/supabase.md`](docs/plans/supabase.md) §6. Es wird zweimal gefahren — vor und nach einer Migrationsphase — und `--compare` hält beide gegeneinander: Anzahl, IDs, Zeitstempel, Statuswerte, Referenzen und eine sha256 je Artefaktdatei. „Die Migration lief sauber durch" ist keine Aussage, gegen die sich etwas prüfen lässt; „620 Runs vorher, 620 nachher, alle IDs identisch" ist es.
+- **Drei Fragen, drei Werkzeuge.** `restore-drill.sh` sichert, `restore_verify.py` prüft ob eine Wiederherstellung funktioniert, `migration_baseline.py` prüft ob eine Migration etwas verloren hat. Keines ersetzt ein anderes, und das neue Runbook [`docs/runbooks/migration-baseline.md`](docs/runbooks/migration-baseline.md) sagt das als Erstes.
+- **Ungeprüft ist kein Erfolg.** Eine nicht erreichbare Quelle — fehlendes Verzeichnis, nicht lesbare `llm_profiles.db`, abwesendes Neo4j — wird als `unchecked` geführt, nie als `count = 0`. Der Vergleich endet dann mit Exit 2 statt grün. Dieselbe Regel, die `restore_verify.py` schon für übersprungene Prüfpunkte führt: ein blinder Fleck ist kein Nachweis.
+- **Das Manifest ist zum Weitergeben gedacht.** Keine Dateiinhalte, keine Geheimnisse. Die Spalte `api_key` aus `instance/llm_profiles.db` wird nicht gelesen — sie steht dort im Klartext —, `base_url` ebenso wenig, weil eine Basis-URL ein Token tragen kann.
+
+### Fixed (der Restore-Drill konnte den Rechner überschreiben, auf dem er lief — 2026-09-18)
+
+- **`--phase restore` verweigert jetzt Ziele im eigenen Checkout.** Die Vorgaben für `--data-dir`, `--store-dir` und `--instance-dir` zeigen auf `backend/uploads`, `backend/data` und `backend/instance`. Fürs Backup ist das richtig — gesichert wird die laufende Installation. Für den Restore war es die teuerste Zeile im Skript: ein Aufruf ohne explizite Pfade überschrieb genau diese drei Verzeichnisse, inklusive Fernet-Stores und LLM-Profilen. Das Runbook sagte „auf einem frischen Host"; ein Satz in einer Markdown-Datei hält niemanden auf. `--allow-repo-target` hebt die Sperre dort auf, wo der Checkout tatsächlich das Ziel ist.
+- **`llm_profiles.db` wird vor dem Archivieren gecheckpointet.** Die Datenbank läuft mit `journal_mode=WAL` und besteht zur Laufzeit aus `.db`, `.db-wal` und `.db-shm`; ein reines `tar` fror den Zwischenstand ein, in dem die letzten Schreibvorgänge noch im WAL standen. Fehlt `sqlite3` auf dem Host, steht eine Warnung im Protokoll statt stiller Inkonsistenz.
+- **Backup-Verzeichnis und Archive entstehen mit `0700` beziehungsweise `0600`.** Vorher erbten sie den Prozess-Umask, auf den meisten Hosts 022 — world-readable, obwohl die Archive `backend/data` mit den Fernet-Stores und `llm_profiles.db` mit der `api_key`-Spalte im Klartext tragen.
+- **Jeder Lauf schreibt ein frisches `MANIFEST.sha256`**, und der Restore prüft jedes Archiv dagegen, bevor er entpackt. Ein durch volle Platte abgebrochenes `tar` lief vorher beim Backup grün durch und fiel erst beim Restore auf — oder nie. Ein Archiv ohne Manifesteintrag wird entpackt, aber als ungeprüft protokolliert.
+- **Protokollzeilen und Befehlsausgaben laufen durch einen Redaktionsfilter** für `Authorization`-Header und `token`/`secret`/`password`/`api_key`. Heute nimmt kein verdrahteter Befehl ein Geheimnis entgegen; der vom Runbook selbst nahegelegte Health-Check mit Bearer-Token wäre per Copy-Paste sofort einer.
+- **Die Tests setzten selbst nur `--data-dir`** und liefen für die beiden anderen Pfade in den Checkout — genau der Halbfehler, den der neue Schutz abfängt. Acht Regressionstests decken Zielschutz, Manifest, Dateirechte, beschädigte Archive und Redaktion ab.
+
+### Added (die erste Fachtabelle existiert, und niemand liest sie — 2026-09-18)
+
+- **`agora.llm_profiles` ist das erste fachliche PostgreSQL-Modell**, Phase 3 aus [`docs/plans/supabase.md`](docs/plans/supabase.md) §9 — und zwar nur die Definition. Ein SQLAlchemy-Modell (`LlmProfileModel`) und eine Alembic-Revision legen die Tabelle an; kein Store, kein Repository und kein Endpunkt zeigt darauf. Solange `AGORA_METADATA_BACKEND=legacy` gilt, entsteht keine Verbindung und die Tabelle bleibt leer. Der Umstieg ist Phase 4 und ein eigener Schritt.
+- **Die Tabelle trägt Metadaten, keine Geheimnisse.** Name, Provider, Basis-URL, Modellname, ein Default-Flag, zwei Zeitstempel. API-Keys und Provider-Secrets bleiben im Fernet-Store (§10): eine Kopie in Postgres wäre eine zweite Stelle, an der ein Schlüssel im Klartext liegen kann, und der Betreiber müsste zwei Ablagen rotieren statt einer.
+- **Workspace- und Auth-Spalten sind nicht vorgezogen.** Agora ist Single-User, und eine `workspace_id`, die niemand füllt, ist entweder nullable und damit wertlos oder sie zwingt beim Multi-User-Schritt zu einer Backfill-Migration auf Platzhalterdaten. Sie kommt, wenn Phase 6 sie braucht.
+- **Höchstens ein Default-Profil, und das erzwingt die Datenbank.** `uq_llm_profiles_single_default` ist ein partieller Unique-Index über `is_default WHERE is_default` — Anwendungscode, der zwei Profile als Default markieren will, scheitert am Constraint statt an einer Prüfung, die ein zweiter Aufrufer umgehen kann. Dazu vier `CHECK`-Constraints gegen leere Zeichenketten und einen Namen über 80 Zeichen.
+- **`target_metadata` in `migrations/env.py` zeigt jetzt auf die gemeinsame Declarative Base.** Alembic und Anwendungscode arbeiten damit gegen dieselbe Modelldefinition, statt dass ein handgeschriebenes DDL und ein ORM-Modell auseinanderlaufen. Die Regel bleibt unverändert: Tabellen werden ausschließlich über versionierte Migrationen geändert, `--autogenerate` schreibt einen Vorschlag, keinen Commit.
+- **`include_name` beschränkt die Reflexion auf `agora`.** Ohne diesen Filter sieht Autogenerate auch `public`, `auth` und `storage` — die Schemata, die Supabase selbst mitbringt — und schlägt vor, sie zu löschen, weil kein Modell sie beschreibt. Ein einziges unbesehen übernommenes Autogenerate-Ergebnis hätte gereicht.
+- **Getestet wird gegen echtes PostgreSQL, nicht gegen SQLite.** Partielle Indizes, `CHECK`-Constraints und schema-qualifizierte Tabellen sind genau die Dinge, bei denen ein SQLite-Ersatz grün meldet und Postgres danach etwas anderes tut. Die Integrationstests fahren `upgrade` und `downgrade` gegen eine laufende Instanz und überspringen sich, wenn keine erreichbar ist.
+
+### Added (Agora kann PostgreSQL sprechen, tut es aber nicht — 2026-09-17)
+
+- **`sqlalchemy`, `psycopg[binary]` und `alembic` sind jetzt Abhängigkeiten, und der Laufzeitpfad merkt davon nichts.** Das ist Phase 2 aus [`docs/plans/supabase.md`](docs/plans/supabase.md) §8: die Grundlage steht, bevor irgendein Store sie benutzt. `AGORA_METADATA_BACKEND=legacy` ist der Default, und solange er gilt, entsteht keine einzige Datenbankverbindung. Dateisystem und Neo4j bleiben die Wahrheit.
+- **Die Deps stehen fest in `dependencies`, nicht in einem Extra.** Ein optionaler Block bedeutet, dass der Import-Pfad in einer Installation fehlen kann — und daran scheitern Migrationen dann erst auf dem Zielsystem. `psycopg[binary]` statt `psycopg2`: psycopg 3 ist der gepflegte Treiber, SQLAlchemy spricht ihn über das Dialekt-Präfix `postgresql+psycopg`, und der `binary`-Extra bringt libpq als Wheel mit, statt auf jedem Build-Host `pg_config` zu verlangen.
+- **`app/infrastructure/postgres/` ist der einzige Weg zu einer Verbindung.** `Database.session()` ist ein Kontextmanager mit Transaktionsgrenze: Commit bei sauberem Austritt, Rollback bei jeder Exception, und die Exception wird weitergereicht — ein fehlgeschlagener Schreibvorgang ist ein Fehler, keine leere Antwort. Engine und Session-Factory entstehen beim ersten Zugriff, nicht im Konstruktor, damit ein ungenutzter Adapter nichts hält. Freie `psycopg.connect()`-Aufrufe quer durch Services sind ausdrücklich nicht vorgesehen; sie umgehen Pool, Konfiguration und Transaktionsgrenze.
+- **`pool_pre_ping` ist gesetzt, aus derselben Erfahrung, die `NEO4J_LIVENESS_TIMEOUT` erzwungen hat:** im Docker-Bridge-Netz verschwinden Sockets, die im Pool liegen, ohne dass eine Seite es merkt. Ohne Pre-Ping bekommt der erste Zugriff nach einer Idle-Phase einen toten Socket statt einer Verbindung. `pool_recycle` liegt unter den Timeouts, die Supavisor auf einer Verbindung durchsetzt.
+- **`DATABASE_URL` hat bewusst keinen Default.** Ein geratener `localhost`-Wert wäre genau der Legacy-Fallback, den die Architekturregel verbietet: er gäbe eine fehlende Konfiguration als funktionierende aus und zeigte im Containerpfad auf den Container selbst. `Config.validate()` lehnt stattdessen drei Fälle beim Start ab statt beim ersten Zugriff — `AGORA_METADATA_BACKEND=postgres` ohne URL, ein unbekannter Backend-Wert (ein Tippfehler darf nicht still auf `legacy` zurückfallen, das sähe im Log aus wie eine Entscheidung), und ein blankes `postgresql://`, das in SQLAlchemy psycopg2 wählt und damit ein nicht installiertes Paket.
+- **Ab jetzt gilt: das Datenbankschema wird ausschließlich über versionierte Migrationen geändert.** Alembic liegt unter `backend/migrations/`, liest die Verbindung aus `DATABASE_URL` statt aus `alembic.ini` — eine Zeichenkette mit Passwort gehört nicht in eine versionierte Datei — und trägt eine erste Migration, die das Fachschema `agora` anlegt. Ohne `IF NOT EXISTS`, mit Absicht: existiert das Schema schon, hat es jemand von Hand angelegt, und dann soll die Migration scheitern statt so zu tun, als hätte sie es getan. `alembic_version` bleibt in `public`, weil es sonst in dem Schema liegen müsste, das die erste Migration erst erzeugt.
+- **`public` bleibt leer.** Es ist das Schema, das PostgREST über die Supabase-API nach außen reicht; Fachtabellen gehören nicht versehentlich dorthin (§9).
+- **Eine offene Frage ist benannt, nicht gelöst:** psycopg 3 ist im Synchronmodus nicht gevent-kooperativ, und der Webprozess läuft unter einem gunicorn-Worker mit gevent-Worker-Klasse — eine laufende Query blockiert den Hub und damit jeden anderen Greenlet. Für kurze Metadaten-Abfragen ist das tragbar, für lange Scans nicht. Solange der Default `legacy` gilt, entsteht keine Verbindung; bevor in Phase 4 der erste Store umgestellt wird, gehört die Frage beantwortet. Der Hinweis steht im Modul, nicht nur hier.
+- **Die prod-Stage im `Dockerfile` kopiert jetzt `backend/migrations` mit.** Sie kopiert selektiv (`backend/app`, `backend/scripts`, …) statt `COPY . .` wie die dev-Stage — das Verzeichnis fehlte, und `alembic upgrade head` wäre im Produktionscontainer schlicht nicht ausführbar gewesen. Aufgefallen wäre das erst, wenn ein Zielsystem die erste Migration braucht. Ein Test hält die COPY-Zeile jetzt fest, statt einen Docker-Build dafür zu bezahlen.
+- **Das Komplexitäts-Gate hat mitgeredet.** Die neue Validierung hätte `Config.validate()` über seine Allowlist-Grenze gehoben (rank D, cc 26 gegen erlaubte 21). Statt die Grenze anzuheben liegt die Prüfung als Modulfunktion `validate_database_settings()` daneben; `validate()` bleibt bei 21, und die Allowlist bleibt unverändert.
+
+### Added (Self-hosted Supabase steht als eigenes Compose-Projekt bereit, ohne dass Agora es benutzt — 2026-09-17)
+
+- **`supabase/` ist ein zweites Compose-Projekt, kein Anbau an den Agora-Stack.** Enthalten sind PostgreSQL 17, Supavisor, GoTrue, PostgREST, Storage, postgres-meta, Studio und ein Envoy-Gateway. Realtime, Edge Runtime, imgproxy und Analytics/Logflare laufen bewusst nicht mit — je weniger Container am Anfang, desto weniger bewegliche Teile. Sichtbare Folgen: `/realtime/v1` und `/functions/v1` antworten am Gateway mit 503, Storage läuft ohne Bildtransformation, die Log-Ansichten in Studio bleiben leer. Das ist Phase 1 aus [`docs/plans/supabase.md`](docs/plans/supabase.md) §7, der mit diesem Commit ebenfalls ins Repository kommt.
+- **Im Backend ändert sich nichts.** Kein PostgreSQL-Code, keine neue Abhängigkeit, kein Feature-Flag, keine Auth-Änderung. `AGORA_AUTH_TOKEN` und das API-Key-Scope-Modell bleiben die Auth-Wahrheit; GoTrue läuft mit `DISABLE_SIGNUP=true` mit und wird von nichts aufgerufen. Die SQLAlchemy-/Alembic-Grundlage ist Phase 2 (§8), das Datenmodell Phase 3 (§9).
+- **Die Netzkopplung ist ein Overlay, nicht die Basis-Compose.** `deploy/compose/docker-compose.supabase.yml` hängt den Agora-Container zusätzlich an das externe Netz `agora-backend`. Der Grund ist unspektakulär und entscheidend: ein `external: true`-Netz muss vor `docker compose up` existieren, und in `docker-compose.yml` eingetragen hätte es jeden bestehenden Stack gebrochen, bei dem `docker network create agora-backend` nicht gelaufen ist — genau gegen das Abnahmekriterium von Phase 1, „Agora funktioniert weiterhin komplett ohne neue Supabase-Funktion". Das Overlay nennt `default` und `agora-backend` beide explizit, weil eine explizite `networks`-Liste die implizite Default-Zuordnung ersetzt und Agora sonst Redis und Neo4j verlöre. Redis und Neo4j bleiben außerhalb von `agora-backend`: Supabase kommt an Graph und Event-Bus nicht heran.
+- **Die Supabase-Konfigurationsdateien liegen nicht im Repository.** DB-Init-SQL, Envoy-Routing und `pooler.exs` sind zusammen rund 1500 Zeilen fremder Konfiguration aus supabase/supabase (Apache-2.0); vendored müssten sie bei jedem Supabase-Update nachgezogen und reviewt werden. Stattdessen holt `supabase/bootstrap.sh` sie per sparse-checkout von einem gepinnten Commit nach `supabase/volumes/` (gitignored), prüft jede erwartete Datei und bricht sonst mit Verweis auf `SUPABASE_REF` ab. Der Preis steht als Schritt 1 im README: ohne Bootstrap-Lauf startet der Stack nicht. `SUPABASE_REF` und die Image-Tags in `.env.example` werden gemeinsam angehoben.
+- **Der Bootstrap muss vor dem ersten `docker compose up` laufen, und das Skript weiß das.** Andersherum legt Docker für jeden fehlenden Bind-Mount ein leeres *Verzeichnis* an Stelle der Datei an (`volumes/db/roles.sql/` statt `roles.sql`); Postgres initialisiert dann ohne Rollen, sichtbar erst später daran, dass `auth`, `rest` und `storage` sich nicht anmelden können. `bootstrap.sh` erkennt an einem fehlenden `volumes/.supabase-ref`, dass das Verzeichnis nicht von ihm stammt, ersetzt es und weist auf das nötige `docker compose down -v` hin — eine reine Existenzprüfung hätte die Reparatur genau dann verweigert, wenn sie gebraucht wird.
+- **Nicht öffentlich exponiert.** Alle Host-Ports binden auf `127.0.0.1`; das offizielle Supabase-Compose exponiert die Supavisor-Ports ohne Bind-Adresse, hier tun sie es nicht. Nach außen geht ausschließlich das Gateway über den Reverse Proxy, Studio nur intern bzw. über VPN und dahinter mit Basic Auth. `supabase/.env.example` trägt kein einziges Secret: alle Secret-Felder sind leer, die Werte kommen aus Vaultwarden.
+- **Nebenbefund für den Plan:** das Supabase-Gateway ist inzwischen Envoy, nicht mehr Kong. Die Zielarchitektur-Skizze im Plan nennt noch „Kong :8000". Das Compose exponiert die Netzwerk-Aliase `envoy` und `kong`, alte Hostnamen lösen also weiter auf.
+
+### Fixed (Prepare-Wire-Validierung: Nicht-String-Felder enden nicht mehr als HTTP 500 — CodeRabbit-Finding PR #1497)
+
+- **`PrepareRequest` ist jetzt ein vollständiger Pydantic-Contract** statt einer frozen Dataclass. Die Wire-Validierung bleibt feldweise in den Parse-Phasen (bewusste Architektur-Entscheidung des Modul-Splits), aber der Container erzwingt jetzt selbst Typen und White-Striping (`str_strip_whitespace`), statt sich auf die Disziplin der Caller zu verlassen.
+- **Nicht-String-Wire-Felder crashten mit `AttributeError` → HTTP 500.** `(data.get('language') or '').strip()` in `_collect_prepare_inputs` und dieselbe Konstruktion für `llm_model`/`llm_profile_id`/`llm_project_profile` in `_read_client_choice` warfen bei `{"language": 5}` oder `{"llm_model": 123}` einen 500er, während ein ungültiges `max_agents` sauber zu `None` fällt. Die neue Hilfsfunktion `_coerce_optional_str` in `simulation_prepare_contracts.py` erzwingt an allen vier Stellen dieselbe None-Semantik: Client-Fehler im Wire-Format zählen als nicht gesetzt, statt den Handler zu sprengen.
+- **`AiModelRef`/`RunBudgetConfig` sind Laufzeit-Importe** statt TYPE_CHECKING-only — Pydantic braucht die Forward-Referenzen zur Modelldefinition; die funktionslokalen Lazy-Importe in `_parse_prepare_identity`/`_parse_prepare_budget` entfallen damit.
+- **Regressionstests** in `tests/api/test_simulation_prepare_phases.py`: `test_collect_prepare_inputs_tolerates_non_string_language` und `test_read_client_choice_tolerates_non_string_fields` pinnen die None-Semantik für Nicht-String-Input fest.
+- **Docstring-Lücken geschlossen** (`_prepare_start_lock`, `_track_active_prepare_job`, `_discard_active_prepare_job`), die der Coverage-Check des PR bemängelt hatte.
+
+### Changed (Simulations-Read-Metriken aus Monitor-Orchestrierung extrahiert — 2026-09-11)
+
+- `get_timeline` und `get_agent_stats` aggregieren persistierte Agentenaktionen jetzt in `backend/app/services/sim/run_metrics.py`.
+- `backend/app/services/sim/monitor.py` behaelt duenne kompatible Wrapper und den bestehenden `_get_actions`-Monkeypatch-Hook; Prozessueberwachung, Cancellation und Manifest-Finalisierung bleiben unveraendert im Monitor-Modul.
+- Der veraltete Radon-Allowlist-Eintrag fuer die bereits extrahierte Run-Summary wurde entfernt; der Frontend-Kommentar zur Run-Summary-SSoT zeigt auf `services/run_read_model.py`.
+
+### Changed (Run-Read-Model aus API-God-Controller extrahiert — 2026-09-11)
+
+- Die rein lesende Summary-Anreicherung fuer Run-Listen und Run-Details liegt jetzt in `backend/app/services/run_read_model.py` statt in `backend/app/api/runs.py`.
+- HTTP-Contracts, Feldnamen, Caching-Verhalten und Best-Effort-Fehlerbehandlung bleiben unveraendert; Resume-, Routing-, Budget- und Lifecycle-Pfade wurden nicht angefasst.
+- Hintergrund ist das repository-weite LOC-/Struktur-Audit unter `docs/refactor/loc-audit.md`; `runs.py` war mit 1419 Zeilen der deutlichste God-Controller-Kandidat.
+
+### Fixed (Ein Setting, ein Default — `LLM_MODEL_NAME` war auf drei Flächen zweierlei — Phase 7 des Remediation Plans)
+
+- **`LLM_MODEL_NAME` hatte zwei verschiedene Code-Defaults.** `app/config.py` und `SETTINGS_FIELDS` führten bewusst den leeren String, `AgoraSettings` dagegen `"qwen2.5:32b"` — obwohl deren eigene Docstring behauptet, `config.py` „1:1" zu spiegeln. Der leere Default ist der gewollte: ein vorbelegtes lokales Ollama-Tag führte in Cloud-Setups (Ollama Cloud / OpenAI / Gemini) zu 404, weil das Auto-Bootstrap-Profil auf ein Modell zeigte, das im aktiven Backend nicht existiert. Genau diese Begründung steht seit dem damaligen Fix in `config.py`; `AgoraSettings` wurde nicht mitgezogen.
+- **`backend/tests/test_settings.py` hat den falschen Wert festgeschrieben** (`assert s.llm_model_name == "qwen2.5:32b"`) und damit den Drift gegen Korrektur verteidigt, statt ihn zu melden. Korrigiert samt Begründung im Docstring.
+- **Neues Drift-Gate `backend/tests/test_settings_default_drift.py`.** Es vergleicht die **deklarierten** Defaults von `AgoraSettings` und `SETTINGS_FIELDS` feldweise über den Env-Alias — nie aufgelöste Werte, weil `Config` seine Klassenattribute beim Import aus `os.environ` (inklusive `.env`) belegt und damit kein Default-Anker ist. `Config` hängt transitiv über die Literalliste in `test_settings_layer.py` mit drin. Der bestehende Pin-Test deckte nur `SETTINGS_FIELDS` ab — deshalb konnte der Drift überhaupt entstehen.
+- **Secrets werden im Gate explizit behandelt, nicht stillschweigend übersprungen.** `LLM_API_KEY` und `AGORA_AUTH_TOKEN` modellieren „nicht gesetzt" unterschiedlich (`''` im Settings-Layer, `None` als `SecretStr | None`). Das ist eine Typ-, keine Wertaussage; das Gate fordert für Secret-Felder stattdessen, dass *keine* Fläche einen vorbelegten Wert trägt.
+- **Ein Test, der nichts mehr vergleicht, fällt jetzt auf.** `test_surfaces_actually_overlap` sichert ab, dass die Parametrisierung überhaupt Paare findet — ein Alias-Refactor würde den Drift-Test sonst still grün und wertlos machen.
+- **`.env.example` setzte `LLM_MODEL_NAME=qwen2.5:32b` aktiv** und stellte damit bei `cp .env.example .env` genau den Zustand wieder her, den der leere Code-Default vermeidet — im Widerspruch zur eigenen Dateikonvention („Aktive Defaults sind bewusst auskommentiert"). Die Zeile ist jetzt ein kommentiertes Beispiel; `Vertrag D` in `backend/tests/config/test_env_examples_consistency.py` hält das fest.
+- **Kein vierter Runtime-Default:** Das `qwen2.5:32b` in `app/api/settings.py` steht nur im Docstring-Beispiel der GET-Antwort — der reale Wert kommt aus dem Settings-Layer. Das Beispiel war trotzdem irreführend und zeigt jetzt `"default": ""`.
+
+### Fixed (E2E-Stack bringt seinen Modellnamen selbst mit)
+
+- **Sechs der sieben Playwright-Smokes fielen, nachdem `.env.example` den aktiven `LLM_MODEL_NAME` verloren hatte.** `scripts/e2e-up.sh` seedet die `.env` des CI-Stacks aus `.env.example`; ohne Modellnamen gibt `_bootstrap_profile()` in `llm_profiles_store.py` `None` zurück, es entsteht kein Auto-LLM-Profil, und jeder Smoke, der einen Run startet oder ein Modell auswählt, scheitert. Der Health-Smoke blieb als einziger grün — er prüft nur Endpunkte und braucht kein Modell. Genau dieses Muster (ein grüner, sechs rote Jobs) war der Hinweis auf die Ursache.
+- **Der Modellname gehört in den E2E-Seed, nicht in die Vorlage.** `.env.example` setzt bewusst keinen mehr: der Code-Default ist leer, damit ein Operator ein Modell wählt, das in seinem Backend wirklich existiert. `scripts/e2e-up.sh` pinnt ihn jetzt über denselben `_env_upsert`-Mechanismus, mit dem der Stack auch `AGORA_PROXY_PORT` und `AGORA_E2E_LLM_MODE` deterministisch festlegt. Im Stub-Modus wird der Wert nie wirklich aufgerufen.
+- **Regression:** `backend/tests/config/test_env_examples_consistency.py` bekommt Vertrag E. `test_contracts_d_and_e_stay_coupled` hätte den Fehler gefangen: es fordert, dass **genau eine** der beiden Quellen den Modellnamen liefert — nie keine. Beide Tests sind ohne den Fix rot (verifiziert).
+
+### Fixed (AiModelPicker-Smoke hängt nicht mehr an einer DNS-Auflösung)
+
+- **Der AiModelPicker-Smoke fiel, nachdem der `dns:`-Default aus dem ausgelieferten Compose-Stack entfernt wurde** — als einziger der sieben Playwright-Jobs. Die Playwright-Trace zu Lauf `34600171007` zeigt warum: `openai_compatible` meldet `status: "connected"` und der Modell-Endpunkt liefert beide Modelle mit HTTP 200. Das Backend war gesund. Hängen blieben stattdessen sechs Requests auf `/api/llm/provider-connections/**openai**/models` mit HAR-Status `-1` — der *absichtlich unerreichbaren* Verbindung.
+- **Entscheidend ist nicht, dass der Name scheitert, sondern wie schnell.** Der Smoke seedet `mock-models-unreachable:8080`, um den Offline-Fall zu prüfen. Mit festem Resolver kommt NXDOMAIN sofort, die Verbindung geht auf `disconnected`, und die Combobox rendert. Ohne festen Resolver läuft die Abfrage unter der Egress-Sperre des CI-Runners in einen Timeout; die Modell-Requests bleiben offen und der Picker rendert nie seine Optionen.
+- **Compose-Servicenamen waren nie betroffen.** `neo4j`, `redis` und `mock-models` beantwortet Dockers eingebettetes DNS lokal — deshalb liefen die anderen sechs Smokes durch, und deshalb war die naheliegende Vermutung „Compose-DNS kaputt" falsch. Nur externe Namen brauchen den Upstream.
+- **Der Resolver ist jetzt im E2E-Override gepinnt, nicht im ausgelieferten Stack.** Der Default erbt weiterhin den Host-Resolver, damit Split-DNS (Tailscale MagicDNS, Homelab-Zonen) funktioniert und keine Namensauflösung ungefragt an Dritte geht. Der E2E-Stack legt seine Konfiguration wie gehabt selbst fest — dasselbe Muster wie bei `AGORA_PROXY_PORT`, `AGORA_E2E_LLM_MODE` und `LLM_MODEL_NAME`.
+- **Regression:** `test_e2e_override_pins_a_resolver` und `test_shipped_stack_and_e2e_override_stay_coupled` in `backend/tests/test_compose_defaults.py`; beide ohne den Pin rot (verifiziert).
+
+### Changed (Der Container erbt wieder den DNS des Hosts — Phase 12 des Remediation Plans)
+
+- **`docker-compose.yml` hat dem `agora`-Service hart `8.8.8.8`/`8.8.4.4` als Resolver gesetzt.** Für ein local-first-System ist das der falsche Default gleich zweifach: jede Namensauflösung des Containers ging ungefragt an einen Dritten, und Split-DNS-Setups waren schlicht kaputt — Tailscale-MagicDNS-Namen, Homelab-Zonen und interne Firmen-Domains sind über einen öffentlichen Resolver nicht auflösbar. Ein lokaler LLM-Endpunkt hinter einem solchen Namen war damit aus dem Container nicht erreichbar.
+- **Der `dns:`-Block ist entfernt.** Der Container erbt jetzt den Resolver der Docker-Engine und damit den des Hosts, was für Homelab-, Tailnet- und Firmennetze der einzige Default ist, der ohne Vorwissen funktioniert.
+- **Wer externe Resolver braucht, hängt `deploy/compose/docker-compose.external-dns.yml` an.** Dort sind `AGORA_DNS_PRIMARY` und `AGORA_DNS_SECONDARY` bewusst als Pflichtvariablen deklariert (`${VAR:?…}`, nicht `${VAR:-default}`): ein stiller Fallback würde exakt den Zustand wiederherstellen, den dieser Fix entfernt.
+- **Regression:** `backend/tests/test_compose_defaults.py` parst die Compose-Dateien direkt statt über `docker compose config` — die Invariante gilt damit auch auf Testhosts ohne Docker-Engine. Gegen den Vor-Fix-Stand sind zwei der fünf Tests rot (verifiziert).
+- **Doku nachgezogen:** `.env.example`, `docs/security-hardening.md` und `docs/deployment.md` beschrieben die Variablen bisher als wirksame Defaults; sie sind jetzt als „nur mit Override wirksam" gekennzeichnet.
+
+### Security (Der Standard-Stack mountet keine persönlichen ChatGPT-Credentials mehr — Phase 5 des Remediation Plans)
+
+- **`docker-compose.yml` hat `${CODEX_HOME:-${HOME}/.codex}` read/write in den Agora-Container gemountet — bedingungslos.** Damit hatte der Backend-Prozess Lese- *und* Schreibzugriff auf die persönliche ChatGPT-Session inklusive Refresh-Token, unabhängig davon, ob der `codex_cli`-Provider überhaupt benutzt wird. Ein optionaler Provider hat eine nicht-optionale Credential-Exposition erzeugt; bei einem kompromittierten Backend-Prozess wäre das Abo-Token direkt abgreifbar und überschreibbar gewesen.
+- **Der Mount ist aus dem Default-Stack entfernt und liegt jetzt in `deploy/compose/docker-compose.codex-cli.yml`.** Dort ist `AGORA_CODEX_HOME` eine Pflichtvariable ohne Default: ein Fallback auf `~/.codex` würde genau die Vermischung wiederherstellen, die das Override auflöst. Eingerichtet wird mit `CODEX_HOME="$AGORA_CODEX_HOME" codex login` gegen ein Agora-eigenes Verzeichnis.
+- **Die Provider-Probe unterscheidet jetzt Binary, Credential-Verzeichnis und Login.** Vorher galt „Binary im PATH" als `available`, und ein fehlender Login fiel erst im ersten echten Run als kryptischer Subprozessfehler auf. `codex_cli_readiness()` liefert stattdessen `missing` (kein Mount), `unreadable` (von Docker als root angelegt — der häufigste Praxisfall), `empty` (kein Login) oder `ok`; die ersten drei melden `invalid_credentials` mit konkreter Handlungsanweisung statt eines Erfolgsstatus.
+- **Bewusst kein Test auf einen konkreten Dateinamen der CLI.** Deren internes Anmeldeformat ist nicht Teil unseres Vertrags und hat sich in der Vergangenheit geändert; ein hartkodierter Dateiname wäre beim nächsten CLI-Update still zu einem Falsch-Negativ geworden. Ein lesbares, nicht-leeres Verzeichnis gilt als angemeldet — die endgültige Wahrheit liefert der Aufruf selbst.
+- **`docs/troubleshooting.md` behauptete, die Session sei „read-only eingebunden".** Das war schon vor dieser Änderung falsch — der Compose-Kommentar begründet ausdrücklich das Gegenteil, weil `codex exec` Session-State schreibt und ohne Schreibrecht mit `Read-only file system (os error 30)` abbricht. Korrigiert, zusammen mit einer Tabelle der drei neuen Fehlzustände.
+- **Regression:** `backend/tests/test_compose_defaults.py` prüft gegen die geparsten Volume-Definitionen, dass weder Dev- noch Prod-Stack ein `.codex`-Verzeichnis oder irgendetwas aus `$HOME` einhängt, und dass das Override ohne stillen Default arbeitet. Gegen den Vor-Fix-Stand ist der Test rot (verifiziert). `backend/tests/llm/test_codex_cli_provider.py` deckt die vier Credential-Zustände ab, `tests/services/provider_connections/test_adapters.py` die Probe-Semantik.
+
+### Fixed (Ausgeschriebene Zahlwörter werden prüfbar, Spannen nicht mehr als Punktwert gelesen — Rest von [#1492](https://github.com/arn0ld87/agora/issues/1492))
+
+- **„sechs Qualifizierungsangebote" erzeugte keinen prüfbaren Fakt.** Beide Extraktionsmuster verlangten eine Ziffer, obwohl die deutsche Schreibkonvention Zahlen bis zwölf als Wort setzt. Die Angabe war für den Trust-Layer unsichtbar — weder belegbar noch widerlegbar. Der Wertausdruck akzeptiert jetzt `zwei` bis `zwölf` in beiden Mustern, groß wie klein geschrieben.
+- **`ein`/`eine` bleibt bewusst ausgenommen.** Im Deutschen ist es weit öfter unbestimmter Artikel als Zahlwort. Mitgezählt entstünde aus „eine Lehrkraft berichtet von Zeitgewinn" der Fakt „1 Lehrkraft" — eine Mengenbehauptung, die der Satz gar nicht aufstellt, und damit eine vom Trust-Layer selbst erfundene Zahl. `null` fehlt aus dem Gegengrund: als Mengenangabe praktisch nie ausgeschrieben, als Wort dagegen häufig.
+- **Dabei fiel ein zweiter, älterer Fehler auf: Zahlenspannen wurden als exakte Punktwerte gelesen.** Aus „sechs bis neun Stunden" entstand der Fakt `6 Stunden` mit `BoundKind.EXACT` — eine Genauigkeit, die der Satz nicht behauptet. Gegen eine Quelle mit derselben Spanne ergab das ein Fehlurteil; der bestehende Test `test_late_evidence_reaches_the_binder` (#1217) wurde davon rot. Der Fehler betraf auch die Ziffernform („6 bis 9 Stunden") und bestand damit schon vor dieser Änderung — sichtbar wurde er erst, als die Zahlwörter dazukamen.
+- **Spannen erzeugen jetzt gar keinen Fakt.** Die Vergleichslogik kennt nur Punktwerte und Schranken (`EXACT`/`AT_LEAST`/`AT_MOST`); eine Spanne lässt sich darin nicht ehrlich abbilden. Kein Fakt ist die richtige Antwort — der Satz läuft dann über den Textpfad, statt eine erfundene Präzision zu prüfen. Erkannt werden `X bis Y`, `X to Y`, Gedankenstrich-Formen und `zwischen X und Y`.
+- **Zwei Abgrenzungen, die den Fix sonst zerstört hätten:** `bis zu neun Stunden` ist eine Obergrenze (`AT_MOST`) und bleibt ein vollwertiger Fakt, kein Spannenende. Und ein bloßes `und` zwischen zwei Zahlen zählt auf — „120 Teilnehmende und 18 Lehrkräfte" sind zwei Fakten. Nur mit dem Marker `zwischen` gilt `und` als Spanne. Ohne diese Abgrenzung hätte die Spannenerkennung den Kernfall von #1492 selbst kaputtgemacht.
+- **Das Prädikat einer Aufzählung steht im Satzkopf.** Seit die Faktengrenze den Ausschnitt beim Vorgänger abschneidet, blieben für die hinteren Glieder von „Der Pilot umfasst A, B und C" nur Bindewörter übrig, und die Prüfung meldete „Aussage zu kurz" statt eines Urteils. `_full_predicate` greift jetzt auf den Satzteil vor der **ersten** Zahl zurück — der trägt die Aussage für alle Glieder.
+- **Regression:** 29 Tests in `backend/tests/regression/test_evidence_fact_boundaries.py`, davon neun neue für Zahlwörter, Artikelabgrenzung, Wortinneres („Entzweiung" enthält „zwei"), Spannen und die beiden Abgrenzungen. Volle Backend-Suite 6560 passed.
+
+### Fixed (Belegte Seed-Aussagen tragen kein `[Beleg fehlt]` mehr — [#1492](https://github.com/arn0ld87/agora/issues/1492))
+
+- **Sätze wurden entwertet, deren Zahlen wörtlich im Seed stehen.** In `report_6daa7796257e` trug „120 Teilnehmende, 18 Lehrkräfte und sechs Qualifizierungsangebote …" die Markierung `[Beleg fehlt]`. Für einen Bericht, dessen Kernversprechen Evidenzbindung ist, ist das ein Vertrauensschaden: Leser können belegte und unbelegte Aussagen nicht mehr unterscheiden.
+- **Ursache war die Faktengrenze, nicht die Satzprüfung.** Die Prüfung läuft seit #1356 bereits pro numerischem Fakt — der Ausschnitt *je Fakt* endete aber weiterhin erst am Satzende. Für die 120 entstand damit das Prädikat „18 Lehrkräfte und sechs Qualifizierungsangebote"; keine einzelne Quelle konnte das decken. `_split_subject_predicate` zog diese Grenze für das *Subjekt* seit #1356; für den restlichen Ausschnitt fehlte sie. Jetzt gilt sie durchgängig: der Ausschnitt eines Fakts endet, wo der nächste beginnt, und beginnt, wo der vorige endet.
+- **Der schwerere, bisher unbemerkte Teilbefund: Sätze wurden gelöscht, nicht nur markiert.** Die Evidenz „18 % … 44 % …" trug in ihrem 18-%-Fakt das Prädikat der 44 % mit. Gegen den 44-%-Fakt des Berichts ergab das „gleiche Aussage über dieselbe Gruppe, abweichender Zahlenwert" — `CONTRADICTED`. Ein Satz, der mit seiner Quelle **identisch** war, verschwand damit aus dem Bericht. Reproduziert und mit `test_identischer_prozentsatz_wird_nicht_als_widerspruch_geloescht` festgenagelt.
+- **Gemischte Sätze verloren ihre Absolutzahlen vollständig.** Die Absolutzahl-Extraktion lief nur, wenn der Satz *keine* Prozentangabe enthielt (`if not any(f.raw == sentence.strip() …)`). „Von 120 Teilnehmenden lehnen 18 % der Lehrkräfte ab" erzeugte keinen Fakt für die 120 — sie war für den Trust-Layer schlicht nicht vorhanden und konnte weder belegt noch widerlegt werden. Beide Muster laufen jetzt über denselben Satz; überlappende Treffer gewinnt das Prozentmuster, damit aus „18 % der Lehrkräfte" nicht zusätzlich ein Absolutfakt „18 Lehrkräfte" entsteht.
+- **Die Beanstandung benennt jetzt die konkrete Zahl.** `unverified_statements[].reason` lautet z. B. `»71 Schulleitungen«: numerischer Claim ohne passenden Zahlenbeleg — 1 der 2 Zahlenangaben des Satzes ist belegt`. Damit sind „teilweise belegt" und „gar kein Beleg" unterscheidbar, ohne dass Frontend oder Audit am Markerstring parsen müssen — so, wie der Contract es seit #1356 vorsieht. Der sichtbare Marker `[Beleg fehlt]` bleibt unverändert.
+- **Gegenproben mitgeliefert, damit der Fix kein abgeschaltetes Gate ist:** erfundene Zahlen werden weiterhin markiert, und ein abweichender Wert derselben Kennzahl über dieselbe Gruppe bleibt ein `CONTRADICTED` mit Löschung.
+- **Regression:** `backend/tests/regression/test_evidence_fact_boundaries.py`. Gegen den Vor-Fix-Stand sind fünf der Tests rot (verifiziert).
+- **Bewusst offen geblieben** bleibt die **Gewinnung** der Evidence: zerlegt die Graph-Ingestion einen gebündelten Seed-Satz LLM-seitig zu einem Teilfakt, fehlen die übrigen Angaben im Pool. Dieser Fix repariert die Prüfseite deterministisch; Lösungsrichtung 1 des Issues (Rohsatz zusätzlich als Evidenz führen) bleibt eigene Arbeit.
+
+### Security (Agent-`web_fetch` kann nicht mehr ins interne Netz zeigen — #1485)
+
+- **`backend/scripts/agent_tools.py::web_fetch()` hat die vom Modell gelieferte URL ungeprüft an `requests.get(..., allow_redirects=True)` gereicht.** Kein Scheme-Check über `http`/`https` hinaus, keine Adressklassenprüfung, keine Redirect-Validierung, kein Größenlimit. Bei `ENABLE_AGENT_TOOLS=true` war der OASIS-Subprozess damit ein Confused Deputy für alles, was aus dem Container erreichbar ist — Loopback-APIs, RFC1918-Hosts, Tailnet-Peers und der Cloud-Metadata-Endpunkt inklusive. Der Default `false` hat die Lücke entschärft, aber nicht geschlossen.
+- **Der gesamte Netzwerkteil liegt jetzt in `backend/app/security/outbound_http.py`.** `agent_tools.py` enthält keinen `requests`-Aufruf mehr; `app/services/web_tools.py::_is_public_url` delegiert an dasselbe Modul, statt eine zweite Kopie derselben Allow/Deny-Logik zu führen. Zwei Kopien laufen auseinander, und eine davon ist dann wieder die Lücke.
+- **Vier Prüfschichten statt einer:** (1) URL-Form — nur `http`/`https`, keine Credentials in der URL, keine Docker-/Kubernetes-/`.internal`-Sondernamen; (2) Adressklassen — Loopback, RFC1918, CGNAT, Link-Local, Multicast, Reserved, Unspecified und Cloud-Metadata werden abgelehnt, inklusive IPv4-mapped IPv6 (`::ffff:127.0.0.1`) und 6to4, mit `is_global` als Catch-all; (3) Verbindungs-Pinning; (4) Redirect-Revalidierung.
+- **Gegen DNS-Rebinding hilft nur Pinning, nicht ein zweiter Lookup.** Zwischen „Hostname prüfen“ und `requests.get(hostname)` liegt ein Fenster, in dem die Auflösung wechseln kann. Die Verbindung geht deshalb an die *geprüfte* IP; Host-Header, TLS-SNI und Zertifikatsprüfung bleiben am echten Hostnamen (`urllib3`-Pool mit `host=<ip>`, `assert_hostname` und `server_hostname`). TLS wird dadurch nicht abgeschwächt.
+- **Löst ein Hostname auf mehrere Adressen auf und ist eine davon nicht öffentlich, fällt die gesamte URL durch.** Sonst ist eine Round-Robin-Antwort mit einem öffentlichen und einem privaten Eintrag ein Umgehungsweg.
+- **Redirects werden manuell verfolgt.** Jeder Hop durchläuft die Schichten 1–3 erneut, relative `Location`-Header werden gegen den tatsächlich gemachten Hop aufgelöst. `allow_redirects=True` hätte eine öffentliche URL weiterhin direkt in die Metadata-Adresse springen lassen. Default-Limit: 3 Hops.
+- **Fehlerstatus der Gegenstelle werden als solche gemeldet.** Ein 4xx/5xx bricht den Abruf ab, statt die HTML-Fehlerseite als Seiteninhalt zurückzugeben; `agent_tools.web_fetch` meldet dann `HTTP 404` statt `Blocked by outbound policy`. Beides in einen Topf zu werfen würde dem Modell ein Rechteproblem melden, wo „Seite existiert nicht" die Wahrheit ist.
+- **Response-Bodies werden gestreamt und bei 1 MB gekappt** statt über ein vollständiges `resp.text` geladen; Content-Type-Allowlist (`text/html`, `text/plain`) greift vor dem Lesen des Bodies. Connect- und Read-Timeout sind getrennt (5 s / 10 s).
+- **Ablehnungsgründe werden ohne URL-Userinfo geloggt.** Der Grund nennt die blockierende Adressklasse, nicht die vollständige URL mit möglichen Query-Secrets.
+- **Bewusste Grenze:** Der gepinnte Pfad honoriert `HTTP(S)_PROXY` nicht — Pinning und ein selbst auflösender Proxy schließen sich aus. Wer zwingend über einen Egress-Proxy will, setzt diese Grenze auf Netzwerkebene. Das Repo konfiguriert an keiner Stelle einen Proxy für den Subprozess, der Wegfall betrifft also keine bestehende Konfiguration.
+- **Der Pinning-Pfad wird ohne Mock getestet.** `TestPinnedPoolConstruction` baut Pool und Connection wirklich (netzfrei — `_new_conn()` erzeugt nur das Objekt) und prüft, dass die Verbindung an der geprüften IP hängt, während SNI und Zertifikatsprüfung am Hostnamen bleiben. Ohne diesen Test blieb ausgerechnet das sicherheitskritischste Stück in jedem Lauf unausgeführt.
+- **Regression:** `backend/tests/scripts/test_agent_tools_web_fetch.py` schlägt gegen den Vor-Fix-Stand in 9 von 10 Fällen fehl (verifiziert) und lässt jeden direkten `requests`-Aufruf aus `web_fetch` hart auflaufen. `backend/tests/security/test_outbound_http.py` deckt die vier Schichten mit 45 Fällen ab, inklusive „öffentliche URL → Redirect auf Metadata-IP“ und „gemischte DNS-Antwort“. Der bestehende `backend/tests/test_ssrf_blocker.py` läuft unverändert gegen die zentrale Implementierung weiter.
+
+### Dokumentation
+
+- Synchronisiert die lebende Projekt-, Architektur-, Betriebs-, Auth-, Secret- und Release-Dokumentation mit dem aktuellen `0.9.5`-Stand.
+- Entfernt veraltete 0.9.4-/Testzähler-Angaben und zu starke Reproduzierbarkeitsbehauptungen aus den READMEs; aktuelle Nachweise bleiben zentral in `docs/STATUS.md`.
+- Trennt aktuelle Referenzen klar von historischen Audits, Worklogs und eingefrorenen Referenzläufen.
+
+### Fixed
+
+- **`install.sh` erzeugte im Host-Modus keine Pflicht-Secrets — trotz Aufruf
+  von `ensure_secret` wäre der Fix wirkungslos geblieben.** `.env.example` Der Docker-Modus sichert dieselben beiden Master-Keys ab — er kannte sie zuvor gar nicht, weil `.env.docker.example` sie nie gefuehrt hat.
+  enthält nicht-leere Platzhalter (`SECRET_KEY=change-me-use-token_urlsafe-32`,
+  `NEO4J_PASSWORD=change-me`); der alte `ensure_secret`-Fruehausstieg
+  (`grep -qE "^KEY=[^[:space:]]+"`) hielt einen Platzhalter für „gesetzt“ und
+  griff nur im Docker-Modus, wo die Docker-Vorlage leere Werte nutzt.
+  `ensure_secret` behandelt bekannte Platzhalter jetzt wie ungesetzt (Bash-Kopie
+  der `SECRET_KEY_PLACEHOLDERS`/`NEO4J_PASSWORD_PLACEHOLDERS`-Frozensets aus
+  `backend/app/config.py`, gegen Drift per Test abgesichert) und generiert im
+  Host-Modus zusätzlich `AGORA_SECRET_KEY` und `AGORA_FERNET_KEY`.
+- **`AGORA_SECRET_KEY`/`AGORA_FERNET_KEY` wären mit ungültigen Werten belegt
+  worden.** Beide müssen gültige Fernet-Keys sein
+  (`llm_provider_secrets_store.py`, `api_keys_persistence.py`); der bisherige
+  Generator (`secrets.token_urlsafe(32)`) erzeugt kein gültiges Fernet-Format
+  und hätte die Anwendung beim ersten Zugriff mit `RuntimeError` abbrechen
+  lassen. `ensure_secret` erzeugt für diese beiden Keys jetzt
+  `base64.urlsafe_b64encode(os.urandom(32))` — bit-identisch zu
+  `Fernet.generate_key()`, aber ohne dass `cryptography` zum
+  Installationszeitpunkt bereits installiert sein muss.
+- Beide `AGORA_*`-Keys fehlten in `.env.example` und `.env.docker.example`
+  vollständig und sind dort jetzt auskommentiert mit Zweck und
+  Erzeugungsbefehl dokumentiert.
+- `docs/backup-restore.md` verwies an fünf Stellen auf das nie existierende
+  `./backend/reports/` — der reale Pfad ist `backend/uploads/reports/`
+  (`Config.UPLOAD_FOLDER/reports`).
+- README-Quickstart: redundantes `cp .env.example .env` entfernt (macht
+  `install.sh` bereits selbst) und Requirements-Block um die tatsächlich von
+  `install.sh` geprüften Voraussetzungen (`bun` >= 1.3, Node >= 20, `uv`)
+  ergänzt.
+- `backend/gunicorn.conf.py`: Kommentar ergänzt, warum `workers = 1` auch für
+  `RunRegistry` und die Monitor-Threads in `app.services.sim.monitor`
+  Pflicht ist (Prozess-lokaler State, Monitor-Generation-Zähler). Keine
+  Wertänderung.
+
+### Fixed (Installation - 2026-09-08, Codex-Review Runde 2)
+
+- **Der Host-Modus erzeugt jetzt auch `AGORA_AUTH_TOKEN`.** `.env.example` führt den Key nur auskommentiert und setzt `FLASK_DEBUG=false`; ohne Token bricht `backend/run.py` beim Start mit `AGORA_AUTH_TOKEN missing in non-debug mode` aus `Config.validate()` ab. Eine frische Host-Installation war damit auch nach korrekt hinterlegten Neo4j-Zugangsdaten nicht startfähig.
+- **Die Secret-Erzeugung setzt kein System-`python3` mehr voraus.** `install.sh` läuft vor `uv sync`; auf einem sauberen macOS mit den dokumentierten Voraussetzungen (bun, node, uv) bringt `uv` seinen eigenen Interpreter mit und `/usr/bin/python3` existiert nicht — die Generierung starb vor der ersten Abhängigkeitsinstallation. Neuer Helfer `random_urlsafe_32` mit Fallback-Kette `python3` → `openssl rand 32` → `head -c 32 /dev/urandom`, jeweils als URL-sicheres Base64 aus derselben Entropiequelle. Die Längenprüfung (44 Zeichen mit Padding für Fernet-Keys, 43 ohne für `token_urlsafe`-Äquivalente) bricht ab, bevor ein zu kurzer Wert in die `.env` geschrieben wird.
+- **`README.md` nennt `NEO4J_PASSWORD` wieder im Quickstart.** `.env.example` liefert `NEO4J_PASSWORD=change-me`, und `Config.validate()` lehnt diesen Platzhalter außerhalb des Debug-Modus ab — die Kurzanleitung führte mit „nur LLM-Endpunkte konfigurieren, dann `bun run dev`" in einen Backend, der nicht startet.
+- **Der Testblock in `install.sh` ist jetzt durch `# >>> ensure-secret-block` / `# <<< ensure-secret-block` markiert.** `test_install_ensure_secret.py` extrahierte ihn vorher per `sed`-Range bis zur ersten `^}` — jede zusätzliche Funktion vor `ensure_secret` hätte den Range still abgeschnitten.
+- **Die Platzhalterliste im Test kommt jetzt aus `app.config` statt aus einer dritten Literalkopie.** `test_replaces_known_placeholder` führte `["change-me", …, "password", "neo4j"]` handgepflegt — neben der Bash-Kopie in `install.sh` die zweite Driftquelle, und GitGuardian las das Literal `password` darin als hartkodiertes Secret (Incident 32406958). Die Parametrisierung speist sich aus `SECRET_KEY_PLACEHOLDERS | NEO4J_PASSWORD_PLACEHOLDERS`; neue Platzhalter in der Config werden damit automatisch mitgetestet.
+
+### Fixed (Frontend-Contracts - 2026-09-08, Review-Slice B7-Nachzug)
+
+- **`_stakeholderGroupKey` (`frontend/src/contracts/reportContract.ts`) nähert sich Pythons `str.casefold()` an, statt nur `toLowerCase()` zu rufen.** Der Zod-Spiegel zu `_stakeholder_group_key` (`backend/app/contracts/report_contract.py`, ADR-0002 Anker 4) zählte bei `Großhaendler`/`Grosshaendler` und bei `ſupervisor`/`supervisor` zwei Stakeholder-Gruppen, wo das Backend eine sieht — der Validator `cross_stakeholder_for_high` war im Spiegel damit LOCKERER als am Vertrag. Ergänzt sind die Faltungen aus CaseFolding.txt, die `toLowerCase()` unverändert lässt: `ß` → `ss`, `ſ` (U+017F) → `s`, `ς` → `σ` sowie die lateinischen Ligaturen `ﬀ ﬁ ﬂ ﬃ ﬄ ﬅ ﬆ`.
+- **Kein `normalize("NFKC")` im Spiegel (Codex-Review PR #1482).** Die Kompatibilitätszerlegung faltet mehr als `casefold()`: Fullwidth-Formen (`Ａｕｆｓｉｃｈｔ` → `Aufsicht`) und eingekreiste Ziffern (`①` → `1`) kollabieren unter NFKC, unter `casefold()` nicht. Ein solcher Kollaps macht den Spiegel STRENGER als das Backend — er zählt eine Gruppe, wo Python zwei zählt, und verwirft eine backend-gültige `high`-Antwort als `schema_mismatch`, sodass `getReportEvidence` die Evidence gar nicht mehr anzeigt. Die verbleibende Divergenz (armenische Ligaturen, Cherokee-/Deseret-Sonderfälle) läuft nun ausschließlich in die unschädliche Richtung: der Spiegel zählt höchstens mehr Gruppen als Python, nie weniger.
+- **Regressionstest für den Evidence-Omission-Hinweis** (`frontend/src/api/__tests__/report.spec.ts`): eine Antwort mit `success: true`, aber ohne `evidence_map`, liefert den Omission-Grund durch, statt still als leere Evidence zu erscheinen.
+
+### Added
+
+- Echte Integrationstest-Schicht gegen laufendes Neo4j/Redis (Slice 9, Tech-Review 2026-09-07): neuer `integration`-Marker (`backend/pyproject.toml`), standardmäßig ausgeschlossen wie `llm`; `backend/tests/integration/conftest.py` mit `redis_client`- und `neo4j_session`-Fixtures, die bei fehlenden `AGORA_TEST_*`-Env-Variablen kontrolliert überspringen; `neo4j_session` erzeugt eine pro Lauf eindeutige Kennung und räumt im Teardown ausschließlich die davon markierten Knoten ab. Zwei Tests: Redis-Event-Bus Publish/Subscribe über einen echten Server, sowie Idempotenz des Episode/RELATION-Schreibpfads gegen echtes Neo4j. Neuer CI-Job `integration` (`redis:7` + `neo4j:5` als Services), läuft nur auf `push:main` und `workflow_dispatch`. `AGORA_TEST_REQUIRE_SERVICES=1` (im CI-Job gesetzt) macht aus dem Env-Skip ein hartes Fail — sonst meldete sich der Integrationsjob gruen, wenn ein Service-Container gar nicht hochkommt. Der Redis-Integrationstest wartet auf die Server-Bestaetigung (`PUBSUB NUMSUB`) statt auf ein festes `sleep` und publiziert einen Marker-Typ, den der Retained-Snapshot-Pfad nicht erzeugen kann — sonst koennte er gruen werden, ohne dass je eine Pub/Sub-Nachricht floss (Codex-Review PR #1481).
+
+### Fixed
+
+- Kein Fix in diesem Slice — B9 (`_entity_identity_key`) und B11 (`update_run`/`updated_at`) waren bei Prüfung gegen `main` bereits behoben; dieser Slice ergänzt für B11 den fehlenden Regressionstest (Passthrough-Feld-only Update bumpt `updated_at`). B9 hatte bereits einen Regressionstest (`backend/tests/services/test_persona_cap_dedup.py::test_gleicher_name_unter_verschiedenen_typen_bleibt_getrennt`).
+
+### Fixed
+
+- **Partial-Reports nach Nutzer-Abbruch (Cancel) endeten unbedingt als `COMPLETED`, auch wenn Sections fehlten.** `_build_partial_report` (`backend/app/services/report_agent/workflow.py`) setzte den Status bislang bedingungslos auf `completed` ("success-with-caveat"), unabhängig davon, ob die Section-Schleife durch den Abbruch vorzeitig endete. Der Bericht enthielt dadurch weniger Inhalte, als seine eigene Outline versprach, ohne das im Status auszuweisen. Zwei neue Degradationen schließen die Lücke: `run_cancellation` (blockierend, sobald `len(outline.sections) - len(completed_section_titles) > 0`) und `outline_planning` (Warnung, wenn die LLM-Outline-Planung scheiterte und das feste Ersatzschema griff). Der Teil-Report bekommt außerdem `failed_section_indices` und durchläuft dieselbe Vollständigkeitsprüfung (`_apply_requirement_check`) wie ein regulär abgeschlossener Report.
+- **`POST /api/runs/<id>/resume` meldete einen `INCOMPLETE`-Report als technischen Fehlschlag.** `_resume_report_generate` verglich `report.status` exakt gegen `ReportStatus.COMPLETED` und schickte jeden anderen deliverable Status in den `failed`-Zweig. Der Vergleich läuft jetzt über `is_deliverable_report_status`; `finish_completed_run` trägt den tatsächlichen Report-Status als `metadata.report_status` am Run nach.
+- **Codex-Review Runde 2: ein auf `INCOMPLETE` abgestufter Teil-Report meldete Polling- und Streaming-Consumern trotzdem `completed`.** `_build_partial_report` rief `ReportManager.update_progress(...)` und `progress_callback(...)` unbedingt mit `"completed"` auf — unabhängig vom zuvor ermittelten, ehrlichen `report.status`. Beide Terminal-Events verzweigen jetzt auf `report.status`: bei `INCOMPLETE` melden sie `"incomplete"` samt entsprechender Meldung, Progress bleibt bei 100 (Sections wurden tatsächlich generiert), analog zum Terminal-Handling am regulären Laufende.
+- **Codex-Review Runde 2: die `outline_planning`-Degradation (Fallback-Outline) erreichte im gewöhnlichen Planungsfehler-Fall nie die Persistenz.** Fällt `plan_outline` in das feste Drei-Sections-Ersatzschema, erfüllt keine der Sections ein Intent-Preset oder die Pflichtabschnitte — `generate_report` kehrt dann im `missing`-Zweig zurück, lange bevor die einzige Degradations-Aggregation erreicht wird. Der `missing`-Zweig sammelt `fallback_outline_used` jetzt selbst ein und persistiert es mit `save_report`, sodass der Bericht ausweist, dass seine Struktur nicht vom Modell stammt.
+- **Codex-Review Runde 3: zwei Degradations-Marker überlebten einen Resume nicht, und die Runde-2-Zuweisung im `missing`-Zweig überschrieb dabei eine bereits persistierte Degradationsliste.** Der Degradations-Zustand eines Laufs lebt im (flüchtigen) Agent-Objekt; ein Resume baut einen neuen Agenten, dessen Marker wieder auf Default stehen. (1) `failed_section_indices` wurde pro Aufruf neu aufgebaut — ein Resume übersprang eine zuvor fehlgeschlagene, jetzt nur noch aus der persistierten Evidence restaurierte Section, ohne sie erneut als fehlgeschlagen zu zählen; ein sonst vollständiger Rest-Lauf konnte den Report fälschlich auf `COMPLETED` heben. `process_section`/`_restore_persisted_section` lesen jetzt `generation_failed` aus der persistierten Evidence und geben es an den Aufrufer zurück. (2) `fallback_outline_used` stand nach einem Resume wieder auf `False`, weil die bereits vorhandene Fallback-Outline die erneute LLM-Planung (und damit die Markierung) umgeht — der Marker wird jetzt im selben Run-Events-Artefakt wie die Sanitization-Marker persistiert und vor der ersten Cancel-Grenze wiederhergestellt. Zusätzlich ersetzte die in Runde 2 in den `missing`-Zweig eingebaute Zuweisung eine bereits persistierte Degradationsliste (z. B. `run_cancellation` aus einem Cancel an der Post-Outline-Grenze im vorigen Aufruf) durch eine frisch berechnete — auf dem Resume-Pfad also durch eine potenziell unvollständige. Ein neuer Merge-Helper führt die persistierte Liste jetzt mit der frischen zusammen, statt sie zu ersetzen.
+- **Codex-Review Runde 4: der Merge aus Runde 3 bekam trotzdem eine leere Liste, weil `generate_report` sie erst nach dem eigenen Überschreiben las.** `existing_outline = ReportManager.get_report(report_id)` stand hinter dem ersten `ReportManager.save_report(report)` — dieser erste Save persistiert bereits die leere `run_degradations`-Liste des frischen `Report`-Objekts, bevor der nachfolgende Read sie zurückliest. Ein `run_cancellation`-Eintrag aus einem Cancel nach Planung ging dadurch bei jedem Resume unwiederbringlich verloren, sobald der Lauf erneut im `missing`-Zweig landete. Der Read steht jetzt vor dem ersten Save. Der zugehörige Runde-3-Regressionstest hatte den Fehler verdeckt, weil er `ReportManager.get_report()` statisch auf das in Phase A gespeicherte Objekt mockte, statt die reale Save-vor-Read-Reihenfolge zu durchlaufen — er läuft jetzt gegen einen echten `ReportManager` auf einem `tmp_path`-Datenverzeichnis.
+
+### Fixed (Report-Laufzeit - 2026-09-08, Codex-Review Runde 5)
+
+- **Ein als Fallback markierter Outline wird beim Resume verworfen und neu geplant, statt wiederverwendet zu werden.** Folgefehler der Runde-4-Korrektur: erst dadurch, dass der `get_report`-Read vor dem ersten `save_report` liegt, sah `generate_report` beim Resume überhaupt einen persistierten Outline — und machte damit den Drei-Sektionen-Fallback aus `plan_outline` erstmals wiederverwendbar. Der besteht die Required-Section-Prüfung nie, ein Resume lief also sofort wieder in `INCOMPLETE`, ohne je einen zweiten Planungsversuch zu unternehmen; die angebotene Wiederaufnahme konnte eine nur vorübergehende Planungsstörung nicht mehr heilen. Neuer Helfer `_reusable_persisted_outline` liest dafür den in Runde 3 eingeführten `fallback_outline_used`-Marker. `_persist_fallback_outline_marker` schreibt jetzt auch das `False`, damit ein geheilter Lauf seinen Outline beim nächsten Resume wieder verwenden darf.
+- **Der geerbte Fallback-Marker wird vor einem neuen Planungsversuch gelöscht** (Codex-Review Runde 6, Folgefehler von Runde 5). `_restore_work_trace_markers` setzt `fallback_outline_used` beim Resume aus dem persistierten Zustand des Vorlaufs. Gelingt der neue `plan_outline`-Versuch, stammt der ausgelieferte Outline nicht mehr aus dem Fallback — ohne Zurücksetzen schrieb `_persist_fallback_outline_marker` den geerbten Wert unverändert zurück: der Report trug eine falsche `outline_planning/fallback_outline_used`-Warnung, und der nächste Cancel/Resume hätte den gültigen Outline erneut verworfen. Neuer Helfer `clear_fallback_outline_used` in `run_degradation.py`; nur der Fallback-Pfad des jeweiligen Versuchs setzt den Marker.
+
+### Slice 3.1 — BudgetExceededError im ParallelIPCHandler
+
+#### Problem
+
+Der `ParallelIPCHandler` (Default-Parallelrunner für Twitter+Reddit) fing
+`BudgetExceededError` im generischen `except Exception` statt strukturiert.
+Dadurch konnte ein hartes Report-Budget, das während eines Interviews in einer
+Plattform erreicht wurde, durch die `success_count`-Aggregation der zweiten
+Plattform verschluckt werden — der Run endete `completed` statt
+`stopped`/`termination_reason=budget_*`.
+
+Zusätzlich fehlte das `budget_exceeded`-Feld in der IPC-Response, sodass der
+Client (`interview_client._reraise_if_budget_exceeded`) den Abbruch nicht als
+`BudgetExceededError` re-raisen konnte.
+
+#### Lösung
+
+1. **`send_response`** um optionales `budget_exceeded: Dict[dimension, observed, threshold]` ergänzt (kompatibel zu `sim_runtime.ipc.IPCHandler`).
+
+2. **`_interview_single_platform`** fängt `BudgetExceededError` **explizit** vor dem generischen `except` und gibt strukturierten Fehler mit `budget_exceeded`-Dict zurück.
+
+3. **`handle_interview` (beide Plattformen):** Budget-Abbruch wird **vor** der `success_count`-Aggregation erkannt — erster `budget_exceeded` gewinnt, Response trägt strukturiertes Feld, Rückgabe `False`.
+
+4. **`handle_batch_interview`** analog: `BudgetExceededError` explizit gefangen, `budget_exceeded` in Response, `False`.
+
+5. **Client-seitig** (`interview_client._reraise_if_budget_exceeded`) unverändert: liest `response.budget_exceeded` und wirft wieder `BudgetExceededError` — Run endet korrekt `stopped`/`budget_*` (via `mark_budget_abort`).
+
+#### Tests
+
+Neue Regressionstests in `tests/scripts/test_run_parallel_ipc_attribution.py`:
+
+- (a) Einzelplattform BudgetExceeded → Response-Feld + `ok=False`
+- (b) Gemischter Beide-Plattformen-Fall: Budget hat Vorrang vor `success_count`
+- (c) Batch-Interview BudgetExceeded → strukturierte Response
+- (d) Batch beide Plattformen: erste Dimension gewinnt
+- (e) Client-Re-Raise über den echten Weg: geschriebenes Response-JSON →
+  `IPCResponse.from_dict` → `_reraise_if_budget_exceeded` → `BudgetExceededError`.
+  Der Test bricht damit auch bei reiner Feldnamen-Drift zwischen Runner und
+  Client-Deserialisierung.
+
+#### Referenzen
+
+- Vorbild: `scripts/sim_runtime/ipc.py:151-170,241-251`
+- Repo-Regel: `BudgetExceededError` wird nie in eine Fallback-Antwort umgewandelt
+- Follow-up zu #1478
+
+### Fixed (Budget-Guard und Ledger decken Tool-Calls, Vision und Interview-Client ab — 2026-09-08)
+
+- **Tool-Calls konnten das Budget beliebig überschreiten:** `LLMClient.chat_with_tools` (`app.llm.tool_calls._chat_with_tools`) rief `_budget_check()` nirgends auf — anders als der Textpfad (`chat`/`chat_json`), der jeden physischen Providerrequest über `_provider_attempt`/`_budget_check` absichert. Ein erschöpftes Hard-Limit (`max_llm_calls`) wurde auf diesem Pfad ignoriert, der Provider trotzdem angefragt. Der Guard läuft jetzt vor dem Providercall und wirft dieselbe `BudgetExceededError` wie der Textpfad.
+- **Vision-Calls (`describe_image`) waren komplett unsichtbar für Budget-Guard und Ledger:** weder `_budget_check()` noch `_log_invocation_event`/`_budget_record()` liefen für diesen Pfad — Vision-Aufrufe erschienen weder in `llm_invocation_logger` noch in den weichen/harten Run-Budget-Limits. Beides ist jetzt nachgezogen (Erfolg und Fehlschlag werden gebucht, analog zu `_provider_attempt`).
+- **Der Interview-Direktpfad (Post-Simulation, kein IPC) baute seinen `LLMClient` ohne `run_id`:** `interview_direct._default_client_factory` konstruierte den Client an allen drei Fallback-Zweigen ohne `run_id`, wodurch `_budget_enforcer`/`_log_invocation_event` mangels Run-Kontext No-Ops blieben. `run_id` wird jetzt additiv durch die gesamte Kette gereicht (`graph_tools.interview_agents` → `SimulationRunner.interview_agents_batch`/`interview_agent` → `interview_client.interview_agents_batch`/`interview_agent` → `interview_agents_batch_direct`/`interview_agent_direct` → `_default_client_factory`), bestehende Aufrufer ohne `run_id` bleiben unverändert (Default `None`).
+- **Tool-Call-Reservierungen wurden nie freigegeben:** `chat_with_tools` rief `_budget_check()` vor dem Providercall auf, aber weder der Erfolgs- noch der Exception-Pfad das passende `_budget_record()` — die In-Flight-Reservierung blieb bis zum Ablauf der 900s-TTL bestehen und der Call zählte doppelt (Reservierung + Ledger-Eintrag). `_budget_record()` läuft jetzt auf beiden Ausgängen, analog zu `_provider_attempt` im Textpfad.
+- **Ein erschöpftes Hard-Budget während eines Interviews wurde zum weichen Fehler statt zum Run-Abbruch:** `interview_direct._run` und `GraphToolsService.interview_agents` fingen `BudgetExceededError` mit ihren breiten `except Exception`-Blöcken ab und verwandelten sie in ein Item-Fehler-Feld bzw. eine `result.summary` — `report_generation.py` sah die Exception nie und der Run lief als `completed` statt `stopped`/`termination_reason=budget_*` weiter. Beide Stellen reichen ein hartes Budget jetzt durch (`reraise_if_budget_exceeded`), analog zum bereits gehärteten Selection-Pfad.
+- **Der Vision-Budget-Guard saß auf der falschen Ebene:** `describe_image` prüfte das Budget einmal um die gesamte `execute()`-Operation statt pro physischem Providerrequest — ein transienter Retry oder ein `TOKEN_KEY_QUIRK`-Korrekturversuch erzeugte dadurch nur einen Check/Event/Record, obwohl mehrere Requests abgesetzt wurden (`max_llm_calls=1` erlaubte so mehrere abgerechnete Requests, das Ledger zählte zu niedrig). Der Guard-Lebenszyklus läuft jetzt pro Attempt über `_provider_attempt`, analog zum Textpfad.
+- **Derselbe Fehler im Tool-Call-Pfad:** `chat_with_tools` (`app.llm.tool_calls._chat_with_tools`) hatte denselben Guard-auf-falscher-Ebene-Fehler wie zuvor `describe_image` — ein einzelner `_budget_check()` deckte die gesamte logische Operation ab statt jeden physischen Providerrequest, sodass ein transienter Retry oder eine Quirk-Korrektur (`TOKEN_KEY_QUIRK`/`TEMPERATURE_QUIRK`) nur einen Budget-Check/Event/Record erzeugte, obwohl mehrere physische Requests abgesetzt wurden. Der native Tool-Call-Pfad läuft jetzt ebenfalls über `_provider_attempt`.
+- **Native Tool-Calls trugen keine Tokens ins Usage-Ledger:** `_log_invocation_event` bekam bei jedem erfolgreichen `chat_with_tools`-Aufruf nie `prompt_tokens`/`completion_tokens` — das Ledger markierte diese Calls als "token-unknown" und ließ ihre Tokens/Kosten aus den beobachteten Summen heraus, harte Token-/Kostenbudgets konnten den Tool-Pfad also unbegrenzt überschreiten. Usage wird jetzt sowohl aus der regulären Response als auch aus dem letzten Streaming-Chunk extrahiert und vor der Budget-Auswertung ins Event aufgenommen.
+- **Vision-Usage wurde bei Modell-Override dem falschen Modell zugerechnet:** wählte `describe_image()` per `model=`-Parameter oder `VISION_MODEL_NAME` ein anderes Modell als `self.model`, schrieb `_log_invocation_event` trotzdem `self.model` ins Invocation-Event — die Usage landete im Ledger unter dem Text-Modell des Clients statt unter dem tatsächlich angefragten Vision-Modell. War das Text-Modell günstiger oder unbepreist, erschien die beobachtete Kostensumme zu niedrig und ein hartes `max_cost_micros`-Budget erlaubte zusätzliche Calls. `_provider_attempt`/`_record_provider_success`/`_log_invocation_event` nehmen jetzt einen optionalen `model`-Parameter (Default `self.model`), den `describe_image` mit dem tatsächlich angefragten Modell befüllt.
+- **Runde 5 — der Vision-Provider wurde weiterhin vom falschen Modell abgeleitet:** der Runde-4-Fix reichte das effektive Modell nur ans `model`-Feld des Invocation-Events durch, `provider_id` blieb bei `self._detect_provider()` ohne Modell-Override hängen. `describe_image(model="...:cloud")` gegen einen lokalen Ollama-Endpoint schrieb damit `provider_id="ollama"` statt `"cloud"` ins Ledger — `PricingRegistry` hielt den Call für kostenlos, ein hartes Kostenbudget konnte überschritten werden. `_detect_provider` nimmt jetzt denselben optionalen `model`-Parameter wie `_log_invocation_event` an und leitet ihn über den zentralen `registry.py::detect_provider` ab; ohne Override bleibt das Verhalten unverändert.
+- **Runde 5 — der IPC-Interview-Pfad umging das Report-Budget vollständig:** lebt der OASIS-Worker nach der Simulation noch (normaler Wartemodus), nimmt `interview_client.interview_agent`/`interview_agents_batch` den IPC-Zweig — `run_id` erreichte diesen Zweig nie, anders als den bereits gehärteten Direktpfad. Der Worker läuft mit der `AGORA_RUN_ID` der *Simulation*, und `scripts/sim_runtime/budget_guard.py` prüft harte Limits nur an Rundengrenzen, nicht um einzelne Interview-Kommandos im Wartemodus. IPC-Interviews eines Report-Laufs waren damit gegen dessen hartes Call-/Token-/Kostenbudget ungeschützt. Beide Funktionen prüfen das harte Report-Budget jetzt vor dem IPC-Versuch über denselben zentralen Mechanismus (`RunBudgetEnforcer.check_before_call`/`record_after_call`, wie im Direktpfad über `LLMClient`) — ohne `run_id` bleibt der Guard ein No-op.
+- **Runde 6 — das Vorab-Gate aus Runde 5 reichte nicht: der physische Modellaufruf im Worker landete weiterhin im falschen Ledger.** `_report_budget_guard` prüfte nur ein einziges Mal vor dem IPC-Versuch und gab im `finally` seine Reservierung wieder frei — der tatsächliche LLM-Call lief im OASIS-Worker-Subprozess und wurde dort ausschließlich gegen dessen simulationszeitliche `AGORA_RUN_ID`/Stage `simulation_rounds` verbucht (`scripts/sim_runtime/budget_guard.py`). Ein erfolgreicher IPC-Batch hinterließ damit im Report-Ledger keine Spur, und ein Folge-Batch durfte erneut starten, obwohl das harte Limit längst erreicht war. `SimulationIPCClient.send_interview`/`send_batch_interview` reichen jetzt optional `report_run_id` im Kommando-Payload durch; `sim_runtime.ipc.IPCHandler` bekommt optional den `SubprocessBudgetGuard` injiziert und ordnet den physischen Modellaufruf für die Dauer von `env.step()` per `SubprocessBudgetGuard.attribute_to(report_run_id, "report_interview")` dem Report-Run zu. Jeder physische Aufruf innerhalb dieses Blocks prüft `RunBudgetEnforcer.check_before_call()` VOR dem Call und verbucht das Ergebnis danach im Report-Ledger (`record_after_call`) — dasselbe Check/Record-Paar wie `LLMClient._provider_attempt`, kein zweiter Budget-Mechanismus. Ohne `report_run_id` (Alt-Worker, Simulation ohne Report-Kontext) bleibt das Kommando unverändert; ohne injizierten Guard (ältere Runner-Version) wird `report_run_id` stillschweigend ignoriert. Bekannte Grenze: `scripts/run_parallel_simulation.py` (Dual-Platform-Runner) hat eine eigene, separate `ParallelIPCHandler`-Implementierung ohne jede `SubprocessBudgetGuard`-Anbindung — dieser Pfad bleibt von diesem Fix unberührt und braucht ein eigenes Issue.
+- **Runde 7 (Codex-Review, Finding 3) — die vier in Runde 6 neu eingeführten Fehlerpfade in `scripts/sim_runtime/budget_guard.py` (`_enforce_before_physical_call`: Enforcer-Konstruktion und Budget-Check; `_release_report_reservation`: Enforcer-Konstruktion und `record_after_call`) nutzten `print()` statt strukturiertem Logging — ein von AGENTS.md verbotenes Muster.** Verifiziert: `app.utils.logger.get_logger` ist im OASIS-Subprozess importierbar (derselbe Import-Kontext, in dem `app.services.run_budget` bereits erfolgreich läuft) und sein Konsolen-Handler schreibt auf `sys.stdout`, das der Subprozess-Start (`process_manager.py::start_simulation`) 1:1 auf `simulation.log` im Simulationsverzeichnis umleitet — dieselbe Stelle, die `print()` zuvor traf, plus redundant `backend/logs/<datum>.log`. Die vier neuen Aufrufe protokollieren jetzt über `logger.warning(...)`; die zwei präexistenten `print()`-Aufrufe (Usage-Recording-Fehler, Abort-Marker-Schreibfehler aus Issue #764) bleiben unverändert — das wäre ein ungefragter Refactor gewesen.
+- **Runde 7 (Codex-Review, Finding 2) — ein Budget-Abbruch während eines IPC-Interviews wurde im Flask-Prozess als generischer Tool-Fehler statt als Run-Ende behandelt.** Erreichte der Worker während `env.step()` ein hartes Report-Budget, warf der `SubprocessBudgetGuard` (Runde 6) zwar `BudgetExceededError`, aber `sim_runtime.ipc.IPCHandler.handle_interview`/`handle_batch_interview` fingen das nur mit ihrem generischen `except Exception`-Block ab und antworteten mit `status="failed"` und einem reinen Fehlertext. `interview_client.interview_agent`/`interview_agents_batch` lasen das als `{"success": False, "error": <Text>}`, `GraphToolsService` behandelte das Interview-Tool damit als dauerhaft nicht verfügbar statt den Lauf zu beenden — der Report kam nie als `stopped`/`termination_reason=budget_*` an. Beide Handler unterscheiden jetzt `BudgetExceededError` von generischen Fehlern und tragen `dimension`/`observed`/`threshold` strukturiert als eigenes `budget_exceeded`-Feld durch das IPC-Protokoll (Datei- und Redis-Transport: `sim_runtime.ipc.IPCHandler.send_response` → `event_bus.py`/`event_bus_redis.py` (Legacy-Response-Decode) → `simulation_ipc.IPCResponse`) — kein Parsen von Fehlertexten. `interview_client.py` wirft bei gesetztem Feld wieder dieselbe `BudgetExceededError`, statt `success=False` zurückzugeben; ein generischer Interview-Fehler bleibt unverändert ein weiches `{"success": False}`.
+- **Runde 7 (Codex-Review, Finding 4) — eine kaputte, aber HTTP-erfolgreiche Vision-Antwort wurde als erfolgreicher Aufruf verbucht.** `describe_image()` rief `_record_provider_success` (Success-Event + Freigabe der Budget-Reservierung) auf, BEVOR die Antwort geparst wurde (`response.choices[0].message.content`) — ein Provider mit `choices=[]` oder einer Choice ohne `message.content` ließ Ledger und Telemetrie einen Erfolg melden, obwohl `describe_image` anschließend mit einer Exception endete, anders als die bereits abgesicherten Text-/Tool-Call-Pfade in derselben Datei. Die Antwort wird jetzt vor dem Success-Record geparst; schlägt der Parse fehl, läuft genau ein Failure-Event + `_budget_record()`, dann wird die Exception durchgereicht — derselbe Aufbau wie im Textpfad (`chat()`).
+- **Der Timeout-Fallback auf den Direktpfad läuft außerhalb des Budget-Guards** (Codex-Review Runde 8). Galt der Worker als lebendig, antwortete aber nicht, lief `_direct()` noch innerhalb von `_report_budget_guard` — der Guard hielt seine prozesslokale Reservierung, und der eigene `_budget_check()` des Direktpfads zählte sie mit. Bei genau einem verbleibenden Call warf der Fallback deshalb `BudgetExceededError` und stoppte den Report, obwohl der Ledger noch gar nichts verbraucht hatte. Beide Timeout-Pfade (Einzel- und Batch-Interview) verlassen den `with`-Block jetzt, bevor sie den Direktpfad rufen.
+
+### Fixed (Evidence-Map-Normalisierung - 2026-09-08)
+
+- **`EvidenceMapModel.validate_evidence_cross_references` zählte Stakeholder-Gruppen für persistierte Reports anders als die ADR-0002-Hartanker:** der Persistenz-Validator zählte den rohen `persona_stakeholder_group`-Wert, während der Schreibpfad (`auto_downgrade_unsupported_high_claims`) und der Hartanker `cross_stakeholder_for_high` bereits über `_role_family_key` normalisieren. Folge: „Bürger“ und „bürger “ zählten beim Laden/Exportieren von Altbestand als zwei Gruppen, im Schreibpfad als eine — ein `high`-Label ließ sich aus einer einzigen Stakeholder-Stimme mit zwei Schreibweisen erzeugen. Frisch generierte Reports waren unauffällig, weil sie vorher durch `auto_downgrade` laufen. Der Validator zählt jetzt ebenfalls über `_role_family_key`. Reine Verschärfung: die Zahl unterscheidbarer Gruppen kann dadurch nur sinken.
+- **`GET /api/report/<id>/evidence` degradiert bei einer vertragswidrigen Evidence-Map jetzt wie der JSON-Export** (200 mit `evidence_omitted`) statt mit 422 abzuweisen. Die Rollenfamilien-Verschärfung oben kann Altartefakte treffen, die vor der Verschärfung noch valide waren und die keine Migration nachträglich reparieren kann — der Report-Rumpf bleibt dabei unversehrt, nur die Evidence-Map entfällt.
+- **Frontend zieht diesen Degradierungspfad nach (PR #1477):** `getReportEvidence` unterscheidet die degradierte 200-Antwort (`evidence_omitted`, kein `data`) strukturell von einer echten Evidence-Map. `Step4Report.vue` zeigt dafür denselben Auslassungshinweis wie beim JSON-Export, statt den fehlenden `data`-Wert stillschweigend als leeren Erfolg zu behandeln oder ihn fälschlich als generischen Schema-Mismatch zu melden.
+- **Review-Nachbesserung (Runde 3):** `getReportEvidence` parste die Erfolgsantwort bislang nur per TypeScript-Assertion, ohne `EvidenceMapResponseSchema` tatsächlich aufzurufen — eine driftende Antwort (z. B. eine Omission ohne `validation_errors`) erreichte ungeprüft `Step4Report.vue` und riss dort beim `.length`-Zugriff. `getReportEvidence` parst die Erfolgsantwort jetzt mit `EvidenceMapResponseSchema.safeParse`, wirft bei Drift einen definierten Fehler und lässt den Fehler-Envelope (`success: false`) unangetastet durch. Der Zod-Spiegel des Cross-Stakeholder-Zählers (`EvidenceMapSchema`) zog außerdem exakt dieselbe `_role_family_key`-Normalisierung nach wie der Backend-Hartanker `cross_stakeholder_for_high` — vorher zählte er noch den rohen `persona_stakeholder_group`-Wert und lag damit strenger als das Backend.
+- **Review-Nachbesserung (Runde 4):** ein Schema-Mismatch aus `getReportEvidence` warf bislang einen einfachen `Error`, den `Step4Report.loadEvidence()` nicht von einem Transport-/HTTP-Fehler unterscheiden konnte — er landete deshalb ungewollt im Retry-Zweig statt bei `recordSchemaError`. `getReportEvidence` wirft jetzt eine `ApiError` mit `code: 'schema_mismatch'`; `loadEvidence()` klassifiziert diesen Fall vor dem Retry-Zweig. Außerdem verlor `useObjectDetail` die `evidence_omitted`-Markierung für einen outline-losen Report (von `ReportSchema` ausdrücklich erlaubt) still, weil das Detail-Objekt nur bei vorhandener Outline entstand — es entsteht jetzt sobald der Report selbst geladen ist. Schließlich modelliert `EvidenceMapResponseModel` die Erfolgs-/Degradations-Union jetzt strukturell als `RootModel`-Union zweier `.strict()`-Varianten statt über zwei optionale Felder plus Laufzeit-Validator — das generierte JSON-Schema trägt die Exklusivität jetzt selbst (`oneOf` statt zweier optionaler Felder ohne `required`), der Zod-Spiegel zieht mit `z.union` nach.
+- **Review-Nachbesserung (Runde 5):** `success` trug in beiden Envelope-Varianten (`EvidenceMapResponseSuccessVariant`/`EvidenceMapResponseOmittedVariant`) noch einen Default (`Literal[True] = True`) — ein Default nimmt ein Feld im generierten JSON-Schema aus der `required`-Liste heraus, `{"data": <valide Map>}` ohne `success` bestand also sowohl Pydantic als auch das eingecheckte `schemas/evidence-map-response.schema.json`, während die Zod-Grenze im Frontend (`reportContract.ts`) `success: true` verlangte und dieselbe Payload ablehnte. `success` ist jetzt in beiden Varianten Pflichtfeld ohne Default; die Factories `for_data`/`for_omission` übergeben `success=True` jetzt explizit. Außerdem war das eingecheckte Schema-Artefakt bereits vor dieser Änderung veraltet: sein `description`-Feld trug noch den alten Klassen-Docstring-Satz aus Runde 3 (\"``RootModel`` reicht ueberzaehlige Keyword-Argumente … durch\"), während der Docstring in `report_contract.py` seit Runde 4 auf die Factories verweist — `dump_schemas --check` war dadurch unabhängig vom `success`-Fix bereits rot. Beide Ursachen sind jetzt in einer Regenerierung behoben.
+- **Review-Nachbesserung (Runde 5, Frontend):** `_stakeholderGroupKey` im Zod-Spiegel (`reportContract.ts`) normalisierte mit `toLowerCase()` + expliziter `ß`→`ss`-Ersetzung — schwächer als der Backend-Hartanker `_stakeholder_group_key`, der Pythons `str.casefold()` nutzt. Belegtes Gegenbeispiel: `"ſupervisor"` (U+017F LATIN SMALL LETTER LONG S) faltete im Frontend nicht auf `"supervisor"`, im Backend schon — der Spiegel hätte eine `high`-Evidence-Map akzeptiert, die das Backend abgelehnt hätte. Die Normalisierung läuft jetzt über `normalize("NFKC")` vor `toLowerCase()` vor den expliziten Sonderfällen (`ß`→`ss`, `ς`→`σ`); eine vollständige `casefold()`-Äquivalenz ist das weiterhin nicht (siehe Kommentar an `_stakeholderGroupKey`), der Spiegel bleibt aber ausschließlich strenger, nie laxer als das Backend. Ergänzend ein Regressionstest für den Evidence-Omission-Hinweis in `Dossier.vue`, der bislang ungetestet war.
+
+### Added (Simulations-Laufzeit - 2026-09-07, Review-Fixes 2026-09-08)
+
+- **Startup-Reconciliation für verwaiste `simulation_run`-Runs:** `reconcile_stale_runs` (`backend/app/services/sim/reconciliation.py`) iteriert alle RunRegistry-Einträge mit Status `pending`/`processing` und Typ `simulation_run`, lädt den zugehörigen `run_state.json` und prüft die dort persistierte `process_pid` per `os.kill(pid, 0)`-Liveness (`is_process_alive`). Fehlt der Prozess UND ist `run_state.json` in einem unklaren Zustand (`RUNNING`/`STARTING` oder gar nicht vorhanden), wird der Run als `failed`/`process_restart` markiert. Ist `run_state.json` dagegen bereits terminal (`COMPLETED`/`STOPPED`/`FAILED` — der Run also regulär beendet, nur die anschließende RunRegistry-Sync kam nie an), wird der Run NICHT mit `process_restart` überschrieben, aber der Endzustand auch nicht propagiert (siehe Review-Runde 3, F2 unten) — nur geloggt, Run bleibt unangetastet. Lebt der Prozess noch, bleibt der Run unangetastet, aber ein `logger.warning` macht sichtbar, dass er von diesem (neuen) Worker nicht mehr verwaltet wird (Finding C, siehe „Bekannt offen").
+- **Kanonischer Einhängepunkt jetzt `gunicorn.conf.py::post_fork`** statt ausschließlich `create_app` (Codex-Review Finding A, PR #1476): mit `preload_app=True` + `workers=1` läuft `create_app` nur einmal im Master vor dem ersten Fork — ersetzt gunicorn den einzigen Worker danach (Timeout, Crash, Replacement) ohne Master-Neustart, läuft `create_app` nie wieder, während `post_fork` bei jedem Worker-Start feuert. `run_startup_reconciliation` (neu, `reconciliation.py`) bündelt Config-Flag-Check (`AGORA_STARTUP_RECONCILIATION`) und Best-effort-Fehlerbehandlung für beide Aufrufer. `create_app` bleibt zusätzlich Aufrufer für Entwicklungs-/Testbetrieb ohne gunicorn (`flask run`, Test-Fixtures) — der doppelte Lauf beim allerersten gunicorn-Boot ist ein harmloses No-op, da der zweite Durchlauf keine weiteren `pending`/`processing`-Runs mehr findet.
+- **`TerminationReason` um `"process_restart"` erweitert** (additiv, kein neuer `RunStatus`) — `backend/app/contracts/run_budget_contract.py` und Zod-Spiegel `frontend/src/contracts/runBudgetContract.ts`; Schemas neu gerendert.
+
+### Fixed (Simulations-Laufzeit - 2026-09-07)
+
+- **`process_manager.start_simulation` blockt einen Neustart nicht mehr allein wegen eines persistierten `RUNNING`/`STARTING`-Status.** Vor dem Ablehnen wird die `process_pid` aus dem letzten `run_state.json` per Liveness geprüft (`is_process_alive`); ist der Prozess tot, wird der alte State auf `FAILED`/„Prozess-Neustart während des Runs" korrigiert und der Start zugelassen, statt eine Simulation für immer als „läuft schon" zu blockieren.
+- **F1 (Codex-Review Runde 3):** `_resume_or_restart_simulation_run` reicht die per `/api/runs/<run_id>/resume` angefragte Run-ID jetzt bis in `_correct_stale_run_state` durch, statt bei mehreren historischen `processing`-Manifesten blind das erste (`candidates[0]`, faktisch das neueste) zu korrigieren — sonst traf der Fix den falschen, neueren Run und der angefragte blieb für immer `processing`.
+- **F2 (Codex-Review Runde 3):** die Terminal-Propagation aus Finding B überträgt einen `COMPLETED`/`STOPPED`/`FAILED`-Zustand aus `run_state.json` nicht mehr auf ein `processing`-Manifest, weil `run_state.json` keine RunRegistry-`run_id` führt und die Zuordnung bei mehreren Manifesten pro `simulation_id` (z. B. Alt-Run + Ersatzlauf nach Resume) nicht verifizierbar ist — sonst wäre ein fremder Endzustand als stille Datenkorruption in die Historie eines verwaisten/gescheiterten Runs geschrieben worden.
+- **Docker `stop_grace_period: 45s` + `init: true` am `agora`-Service in allen fünf Compose-Files** (`docker-compose.yml`, `docker-compose.override.yml`, `docker-compose.prod.yml`, `deploy/compose/docker-compose.prod-with-proxy.yml`, `deploy/compose/docker-compose.e2e.override.yml`). `gunicorn.conf.py` setzt `graceful_timeout=30`; Dockers Default von 10s hätte den Worker per SIGKILL abgeschossen, bevor er sauber beenden kann — genau die Ursache für die oben behobenen Orphan-Runs. `init: true` reapt Zombie-Kindprozesse (OASIS-Subprozesse).
+
+### Fixed (Startup-Reconciliation - 2026-09-08, Review-Runde 4)
+
+- **F1:** `reconcile_stale_runs` behandelt `paused`-Registry-Einträge jetzt genauso wie `pending`/`processing` — ein soft-pausierter Run, dessen OASIS-Subprozess durch einen Container-/Worker-Neustart stirbt, wird beim nächsten Start als `failed`/`process_restart` markiert, bevor der direkte Resume-Endpunkt darauf zugreifen kann.
+- **F2:** teilen sich mehrere `pending`/`processing`/`paused`-Manifeste eine `simulation_id` mit totem Prozess, wird die Liveness-Entscheidung jetzt pro Simulation genau einmal getroffen und auf alle betroffenen Manifeste angewendet — vorher wurde nur das erste Manifest gescheitert, weil dessen Bearbeitung das geteilte `run_state.json` bereits auf `FAILED` schrieb, bevor das nächste Manifest denselben Zustand las.
+
+### Fixed (Startup-Reconciliation - 2026-09-08, Review-Runde 5)
+
+- **F1 (Major):** eine halb geschriebene Korrektur konnte permanenten Teilfortschritt hinterlassen: `reconcile_stale_runs` setzte die `RunRegistry` zuerst auf `failed` und persistierte `run_state.json` erst danach — schlug der zweite Schritt fehl, blieb das Manifest für immer auf `failed` hängen (nicht mehr in `_STALE_STATUSES`), während `run_state.json` weiterhin `RUNNING`/`STARTING` zeigte. Die Reihenfolge ist jetzt umgedreht (`save_run_state` zuerst); schlägt dieser Schritt fehl, bleibt die Registry unangetastet und der Run stale für den nächsten Start. Damit auch der umgekehrte Fehlerfall (State geschrieben, Registry-Update gescheitert) wieder aufgegriffen wird, ist `RunnerStatus.FAILED` kein Terminal-Status mehr, der übersprungen wird: steht `run_state.json` bereits auf `FAILED`, ist die PID tot und das Manifest weiterhin stale, wird es wie ein verwaister Run auf `failed`/`process_restart` gesetzt — anders als bei `COMPLETED`/`STOPPED`, wo eine Propagation weiterhin eine echte Falschaussage wäre (fremder Erfolgs-/Stop-Zustand auf einem verwaisten Alt-Manifest) und deshalb unterbleibt.
+
+### Bekannt offen (nicht Teil dieses Slices)
+
+- **Codex-Review Finding C (PR #1476, bewusst nicht behoben):** eine lebende PID heißt nur, dass der OASIS-Subprozess `start_new_session=True` den Tod seines Gunicorn-Worker-Elternprozesses überlebt hat — nicht, dass der (neue) Ersatz-Worker ihn noch verwaltet. Weder `Popen`-Objekt noch Monitor-Thread existieren dort; der Run bleibt dauerhaft `processing` und ist über die API nicht mehr steuerbar. Der naheliegende Fix (überlebenden Prozess beim Worker-Start terminieren) ist zu riskant: startete nur der Master neu, während der Worker gesund weiterlief, würde eine laufende Simulation abgeschossen. Reconciliation loggt diesen Fall stattdessen laut (`logger.warning` mit Run-ID, Simulation-ID, PID).
+- Prepare-/Report-Daemon-Threads überleben einen Container-Restart ebenfalls nicht sauber (Issue [#1472](https://github.com/arn0ld87/agora/issues/1472)).
+- Cancel-Flags (`cancel_flag.py`) liegen nur als `threading.Event` im Prozessspeicher, nicht Redis-persistent.
+- Kein `worker_exit`-Hook in `gunicorn.conf.py`, der laufende Subprozesse beim Worker-Reload proaktiv abräumt.
+
+### Fixed
+
+- **Report Agent**: Sektions-Persistenz ist jetzt atomar und prüft beide Artefakte. Zuvor wurde `write_section_markdown` nicht-atomar ausgeführt, was bei Crashes zwischen Evidence und Markdown zu Orphan-Dateien führte (nur Markdown ohne Evidence). `_restore_persisted_section` überprüft jetzt, dass BEIDE Artefakte vorhanden sind, bevor ein Abschnitt als persistiert restauriert wird — fehlt die Evidence, wird die Sektion neu generiert. `write_section_markdown` nutzt jetzt das gleiche atomare Muster wie `write_json_atomic` (tmp-Datei + `os.replace`).
+- **Report Agent** (Codex-Review PR #1475, Finding 1): eine verwaiste Markdown-Datei (auf Platte, aber ohne zugehörigen Evidence-Eintrag) wird jetzt entfernt, BEVOR die neu generierte Sektion ihre Evidence schreibt. Vorher konnte ein Absturz zwischen dem Schreiben der neuen Evidence und dem Ersetzen des Markdowns beide Artefakte inkonsistent zueinander hinterlassen — ein nachfolgender Resume hätte das alte Markdown gegen die neue Evidence restauriert.
+- **Report Agent** (Codex-Review PR #1475, Finding 2): beim Resume eines Reports werden Abschnitte ohne Evidence-Eintrag jetzt aus dem Prompt-Kontext (`previous_sections`) und der Fortschrittsliste (`completed_section_titles`) herausgefiltert. Vorher floss ihr veralteter Inhalt in die Generierung nachfolgender Abschnitte ein und wurde nach der Regeneration ein zweites Mal angehängt.
+- **Report Agent** (Codex-Review PR #1475, Runde 2, Finding 1): schlägt das Entfernen der verwaisten Markdown-Datei mit `OSError` fehl, propagiert der Fehler jetzt, statt ihn zu loggen und fortzufahren. Vorher hätte `_save_evidence_section` trotz gescheitertem Löschversuch neue Evidence geschrieben, während die veraltete Markdown-Datei liegen blieb — die Sektion scheitert jetzt sauber, bevor diese Inkonsistenz entstehen kann.
+- **Report Agent** (CodeRabbit-Review PR #1475, Runde 2, Finding 3): `write_json_atomic` und `write_section_markdown` synchronisieren nach `os.replace` jetzt zusätzlich das Elternverzeichnis (`fsync`), damit der Rename einen Stromausfall übersteht — vorher wurde nur die temporäre Datei selbst gefsynct. Auf Plattformen/Dateisystemen ohne Verzeichnis-`fsync` degradiert der Aufruf still, statt den bereits erfolgreichen Schreibvorgang nachträglich als Fehler zu melden.
+- **Report Agent** (Codex-Review PR #1475, Runde 3, Finding 1): das Verzeichnis-`fsync` degradiert jetzt nur noch für die typischen "nicht unterstützt"-errno-Werte (`EINVAL`, `EACCES`, `EPERM`, `ENOTSUP`/`EOPNOTSUPP`) still — echte Storage-Fehler (z. B. `ENOSPC`, `EIO`) propagieren jetzt, statt einen Write, dessen Rename einen Absturz nicht übersteht, fälschlich als erfolgreich zu melden.
+- **Report Agent** (CodeRabbit-Review PR #1475, Runde 3, Finding 2): entfernt eine `FileNotFoundError` beim Löschen der verwaisten Markdown-Datei (z. B. weil der DELETE-Endpunkt den Report-Ordner zwischen Existenzprüfung und Löschversuch bereits per `shutil.rmtree` entfernt hat), wird das jetzt als Erfolg gewertet — der gewünschte Endzustand liegt bereits vor. `PermissionError` und jeder andere `OSError` propagieren weiterhin unverändert.
+
+### Slice 1.1 — Worker-Exit-Hook für In-Process-Jobs
+
+Beendet sich der Webprozess, bekommen alle laufenden In-Process-Jobs —
+`simulation_prepare`, `report_generate`, `graph_build`, `ontology_generate` —
+noch in diesem Lauf einen ehrlichen terminalen Zustand `failed/process_restart`,
+statt auf die Startup-Reconciliation beim nächsten Start zu warten. Der neue
+Hook in `backend/app/services/sim/process_shutdown.py` markiert dabei nur Runs,
+die anhand von Worker-Token und PID diesem Prozess gehören, und setzt sie in
+derselben Schreibreihenfolge wie `reconcile_stale_jobs`: erst das Cancel-Flag
+für kooperativen Abbruch, dann — nur für `simulation_prepare` — der
+SimulationState (F1-Invariante: State vor Manifest), zuletzt das
+RunRegistry-Manifest.
+
+Die Arbeit läuft nicht im Signal-Handler, sondern über `atexit`. Der
+SIGTERM-Handler setzt nur ein Flag und ruft die Handler-Kette weiter; alles
+Lock-Nehmende passiert außerhalb des Signalkontexts. Der Grund steht im
+Moduldocstring: `gevent.signal.signal()` delegiert für jedes Signal außer
+SIGCHLD an die ungepatchte stdlib, der Handler läuft also im echten
+CPython-Signalkontext, während `threading.Lock` nach `patch_all()` ein
+kooperatives Semaphore ist. Unterbricht das Signal ausgerechnet das Greenlet,
+das `RunRegistry._lock` hält, kommt genau dieses Greenlet nie wieder zum Zug.
+
+Daraus folgt eine Grenze, die der Hook nicht überschreitet: `atexit` läuft nur
+bei einem regulären Interpreter-Shutdown. Wird der Worker nach Ablauf von
+`graceful_timeout` per SIGKILL beendet, bleibt die Startup-Reconciliation beim
+nächsten Start der Mechanismus, der die Jobs terminalisiert.
+
+Registriert wird der Hook in `gunicorn.conf.py::post_worker_init`, nicht in
+`create_app()` und nicht in `post_fork`. Unter `preload_app = True` läuft
+`create_app()` im Master vor dem Fork, und gunicorns `Worker.init_process()`
+setzt in `init_signals()` zuerst jedes Signal auf `SIG_DFL` zurück, bevor es
+die eigenen Handler installiert — alles davor Registrierte ist danach weg.
+`post_worker_init` ist der erste Hook nach diesem Reset und läuft im
+Worker-Prozess. Der bestehende Handler wird dabei gekettet, damit gunicorns
+`handle_exit` den Worker weiterhin beenden kann. Die Idempotenz-Sperren in
+`process_shutdown` und `process_manager` hängen jetzt an der PID statt an
+einem Bool, weil der geforkte Worker sonst das `True` des Masters erbt und
+die Registrierung still überspringt.
+
+Es entsteht kein neuer `TerminationReason`-Wert — `process_restart` wird
+wiederverwendet, derselbe Wert, den die Reconciliation beim Neustart auch für
+Runs setzt, die einen Prozessabsturz ohne SIGTERM nicht überlebt haben. Für
+Debug-Modus mit Werkzeug-Reloader registriert sich der Handler nur im
+Child-Prozess, um doppelte Registrierung zu vermeiden.
+
+Wichtig, um keine Erwartung zu wecken, die der Code nicht einlöst: ein
+vollständig persistierter `interrupted`-/Resume-Zustand entsteht dadurch
+nicht. Der Job endet sichtbar und ehrlich als `failed`, nicht als
+automatisch fortsetzbarer Zwischenstand. #1472 (Job-Queue mit eigenen Workern
+für Out-of-Process-Ausführung) bleibt offen.
+
+### Geändert
+
+- **Frontend-Testrunner auf vitest 5.0.0** (von 4.1.11). Drei Kompatibilitätsanpassungen waren nötig, alle in Testcode, keine in Produktionscode:
+  - jsdom exponiert `localStorage` jetzt als reinen Getter auf `Window` (wie echte Browser). Die Direktzuweisung in `useGraphRender.pinLayout.spec.ts` warf `TypeError: Cannot set property localStorage of [object Window] which has only a getter`; sie ist durch `Object.defineProperty` ersetzt.
+  - `clearMocks` ist jetzt standardmäßig `true`. Der Side-Effect-Aufruf aus `main.ts` passiert in `beforeAll` und wurde vor dem ersten `it()` geleert, sodass die Aufrufzählung ins Leere lief. `main.spec.ts` hält die Zahl jetzt in `beforeAll` fest. Der neue Default bleibt bewusst aktiv — er verhindert Mock-Leakage zwischen Tests und wird nicht global ausgehebelt.
+  - Der Routen-Integritätstest in `router/__tests__/index.spec.ts` bekommt ein eigenes `{ timeout: 30_000 }`. Das ist **keine** vitest-5-Regression: ein Differential-Lauf gegen vitest 4.1.11 auf `main` erzeugt denselben `Test timed out in 5000ms`, und dasselbe Timeout heilt ihn auch dort. Der Test löst Routen-Komponenten echt auf; die einzige nicht per `vi.mock` gestubbte View (`SimulationLiveView.vue`) braucht dafür gemessene ~2 s und lag damit schon vorher knapp unter dem 5-s-Default. Die Auflösung zu stubben wäre der falsche Fix — genau sie ist der Zweck des Tests.
+
+### Behoben
+
+- **`engines.node` und der Node-Gate in `install.sh` widersprachen dem Dependency-Tree.** vitest 5 verlangt `^22.12.0 || ^24.0.0 || >=26.0.0`; beide `package.json` deklarierten weiter `>=20.0.0`, `install.sh` ließ jeden Node ab Major 20 durch und das README versprach „Node.js >= 20". Eine saubere Installation nach README landete damit auf einer Laufzeit, die die Manifeste selbst ablehnen. Aufgefallen ist das nur im Review, nicht in der CI: die Workflows starten vitest ausschließlich über bun und richten nie Node ein, `engines` wird dort also nie erzwungen. Manifeste, Installer und README führen jetzt denselben Bereich; die ungeraden Majors 23 und 25 sind ausgeschlossen, weil sie keine LTS-Linien sind. Neuer Regressionstest `backend/tests/test_install_node_engine.py` prüft nicht die Zahl, sondern die Übereinstimmung zwischen `engines.node` und dem Bash-Gate — ein späterer Bump, der nur die Manifeste anfasst, wird damit rot. (Codex-P1 auf PR #1469)
+
+  Wichtig für spätere Änderungen: `bun` wertet `engines` **nicht** aus — empirisch geprüft, ein `"node": ">=99.0.0"` installiert anstandslos durch. Der Bereich ist deshalb Dokumentation plus `install.sh`-Gate, keine vom Paketmanager erzwungene Schranke. Wer sich auf `bun install` als Schutz verlässt, hat keinen.
+
+### Behoben
+
+- Die Backend-Testsuite läuft in einem frischen Checkout ohne `.env` durch. `LLM_API_KEY` wird in `tests/conftest.py` per `setdefault` vorbelegt; zuvor hing die Suite an einer lokalen `.env` beziehungsweise am Job-Env der CI. Ein exportierter Key gewinnt weiterhin, damit Läufe gegen ein echtes Provider-Backend möglich bleiben.
+
+### Behoben
+
+- Ein hartes `max_llm_calls`-Budget wird bei paralleler Arbeit jetzt tatsächlich eingehalten, nicht nur angenähert. Ein bestandener `check_before_call()` reserviert einen Slot, und die Reservierung zählt wie ein verbrauchter Call, bis der Call verbucht ist — zuvor lasen alle gleichzeitigen Aufrufer denselben Vor-Aufruf-Stand und kamen durch. Zusätzlich deckelt die Persona-Generierung die Anzahl gleichzeitig gestarteter Worker auf das verbleibende Kontingent.
+- Ein erschöpftes hartes Budget bricht die Persona-Stufe ab, statt drei Versuche lang zu warten und regelbasierte Ersatzprofile zu liefern. `BudgetExceededError` wird von den breiten Fehlerbehandlungen auf dem Persona-Pfad nicht mehr verschluckt.
+
+### Changed (Radius-Skala durchgesetzt, Ablage-Titel nicht mehr hart gekuerzt — 2026-09-06)
+
+- **56 hartkodierte `border-radius`-Werte im Frontend wurden auf die `--r-2`/`--r-3`/`--r-5`/`--r-pill`-Skala aus `tokens-v3.css` umgestellt**, je nach Semantik des gerundeten Elements (Chip/Tag/Badge/Kbd → `--r-2`, Button/Eingabe/Zeile → `--r-3`, Karte/Panel/Dialog/Drawer → `--r-5`, `999px`/`9999px` → `--r-pill`), nicht nach Pixelnaehe zum alten Wert. `50%`-Kreise und bewusste `0`-Werte blieben unangetastet. Drei Werte in `useReportExports.ts` (Standalone-HTML-Export ohne Zugriff auf `tokens-v3.css`) bleiben mit Begruendung hartkodiert.
+- **Der Ablage-Titel in `useShelf.ts` wird nicht mehr bei 80 Zeichen mitten im Wort abgeschnitten.** Der volle `simulation_requirement`-Text landet im Datenmodell; Shelf-Zeile und Dossier-Ueberschrift kuerzen jetzt visuell per CSS (`text-overflow: ellipsis`) und tragen den vollen Text als `title`-Attribut fuer den Hover-Tooltip.
+
+### Fixed (Visual-Audit-Restpunkte — Backend — 2026-09-06)
+
+- **Task-Statusmeldungen liefern jetzt einen i18n-Schlüssel statt hartkodiertem Englisch:** `TaskManager.complete_task`/`fail_task` setzten `message="Task completed"`/`"Task failed"` — in einer deutschen Oberfläche unübersetzt sichtbar. `Task` trägt jetzt zusätzlich `message_key` (`"task.completed"`/`"task.failed"`); `message` bleibt als menschenlesbarer Fallback unverändert, ältere Consumer laufen nicht leer. Die Übersetzung selbst gehört ins Frontend (#1458).
+- **`/api/status` liefert keinen rohen Exception-Text mehr:** Die drei Stellen (`_get_neo4j_status`, `_get_ollama_status`, `_get_disk_status`), die bislang `str(exc)` direkt in die HTTP-Antwort schrieben, geben jetzt einen strukturierten `StatusCheckError` mit geschlossenem Code (`unreachable` | `timeout` | `auth` | `unexpected`) zurück. Der rohe Text (Dateipfade, Hostnamen, Treiberdetails) landet nur noch im strukturierten Log — vorher ein Informationsleck und für ein Frontend unrenderbarer Traceback-Text. `SystemStatusOllama.error` und der Zod-Spiegel `frontend/src/contracts/systemStatusContract.ts` sind entsprechend nachgezogen. (#1458)
+
+### Fixed
+
+- Die Init-Zeile des `LLMClient` benennt jetzt zusaetzlich `provider_type`. Bisher
+  loggten Aufrufer, die API-Key und Basis-URL selbst aufloesen und direkt
+  durchreichen (etwa die Simulations-Konfigurationsgenerierung), ein
+  `provider_id=unknown base_url=None` — bei `codex_cli` beides sachlich richtig,
+  im Log aber nicht von einem fehlkonfigurierten Client zu unterscheiden. Die
+  Provider-Erkennung selbst bleibt unveraendert; `provider_type` stammt aus
+  derselben Aufloesung, aus der sich auch der Transport ergibt.
+  Der Typ wird auch dann aufgeloest, wenn der Aufrufer den Schluessel
+  selbst mitbringt und die aktive Konfiguration nur Modell oder Basis-URL
+  beisteuert (Review-Nachbesserung).
+
+Der Registry-Lookup und die Key-Aufloesung der Active-Config liegen dafuer jetzt
+als Modul-Helfer neben `LLMClient` statt inline im Konstruktor — sonst haette der
+zweite Lookup `__init__` ueber die Radon-Obergrenze aus `radon-allowlist.txt`
+getrieben (gemessen 38, erlaubt 34; jetzt 31).
+
+### Fixed
+
+Ein noch nicht vorhandener Evidence-Endpunkt (HTTP 404, solange die Evidenzkarte serverseitig noch nicht geschrieben ist) wurde im Bericht faelschlich als "Schema-Mismatch" gemeldet, obwohl kein Zod-Fehler vorlag. `loadEvidence()` in `Step4Report.vue` unterscheidet jetzt anhand des Fehlertyps: eine geworfene `ApiError` (HTTP-/Transport-Ebene) fuehrt weiterhin in den bestehenden Retry mit Backoff und Budget, ein echter Zod-Parse-Fehler bleibt ein Schema-Mismatch.
+
+Nachbesserung (Codex-Review PR #1456): Innerhalb der `ApiError`-Faelle ist HTTP 422 mit Code `contract_violation` (die persistierte Evidence-Map ist auch nach Migration nicht vertragskonform, siehe `backend/app/api/report.py`) kein transienter Zustand wie 404. Ein Retry wuerde denselben Vertragsverstoss zehn Minuten lang verschweigen — 422 wird deshalb wie ein Zod-Fehler behandelt: sichtbar als Schema-Mismatch, ohne Retry.
+
+### Fixed
+
+Die Persona-Generierung protokollierte abgelehnte Kandidaten widersprüchlich: Auf die Zeile „Entitaet abgelehnt name=… reason=…" folgte in der nächsten Zeile trotzdem „Successfully generated persona“ für dieselbe Entität, weil die Fortschrittsmeldung nur zwischen Notprofil (Fehlerfall) und Erfolg unterschied, nicht aber danach, ob überhaupt ein Profil entstanden war. Die Meldung nennt für abgelehnte Kandidaten jetzt wahrheitsgemäß Name und Ablehnungsgrund statt eines falschen Erfolgs, und am Ende der Generierung steht zusätzlich eine Summenzeile mit der Bilanz aus angetretenen Kandidaten, Ablehnungen und tatsächlich erzeugten Personas, damit eine Lücke wie „15/20 Personas“ nicht mehr aus dem Nichts kommt.
+
+### Fixed (Persona-Mindestanzahl-Gate nennt jetzt Kandidaten- und Defizitzahl — 2026-09-06)
+
+- **Die Fehlermeldung „Persona-Mindestanzahl nicht erreicht: 15/20 Personas vorhanden.“ ließ den Nutzer im Dunkeln, wenn der Unterlauf gar kein Fehlschlag war.** Ein Produktionslauf zeigte: 23 Persona-Kandidaten nach Dedup, 8 davon durch das Eignungs-Gate korrekt als technische Artefakte abgelehnt (z. B. „digitaler Zwilling“), 15 zugelassene Personas — unter dem Floor von 20. Die Meldung ließ diesen Zusammenhang nicht erkennen.
+- **Review-Nachbesserung:** Die Differenz aus Kandidaten- und Personazahl wurde zunächst als Ablehnungszahl des Eignungs-Gates formuliert. Das ist nicht in jedem Fall zutreffend — `state.entities_count` wird bei einem Branch unverändert von der Quelle kopiert (`branching_service.py::create_branch`), während sowohl `persona_removals` (`_apply_persona_overrides`) als auch die manuelle Persona-Löschroute nur `reddit_profiles` mutieren, nicht diesen Zähler. Ein Branch mit 20 kopierten Kandidaten und einer absichtlich entfernten Persona hätte damit als „1 vom Eignungs-Gate abgelehnt“ gegolten, obwohl keine Ablehnung stattfand; auch Reserve-Backfills können die Differenz von der tatsächlichen Ablehnungszahl des Generators abweichen lassen.
+- **Die Meldung benennt die Differenz deshalb als Defizit mit mehreren möglichen Ursachen** (Eignungs-Gate oder nachträgliche Entfernung), statt eine unbelegte Ursache zu behaupten. Der ursprüngliche Zweck — dem Nutzer zeigen, dass die 15 nicht aus dem Nichts kommen — bleibt erhalten. Die tatsächliche Ablehnungszahl des Generators wird an dieser Stelle weiterhin nicht persistiert (Folgearbeit).
+- **Die Bezugsgröße des Gates bleibt unverändert:** Es vergleicht weiterhin die tatsächlich zugelassenen Personas gegen den Floor (`MIN_PERSONA_TABLE_ROWS`, Default 20) — die Schwelle selbst wurde nicht angetastet.
+
+### Fixed
+
+Die Persona-Dublettenerkennung vor dem Agenten-Cap erkannte deutsche Oberflächenvarianten desselben Stakeholders nicht: „digitaler Zwilling", „der digitale Zwilling" und „digitale Zwilling" zählten ebenso als drei getrennte Gruppen wie „Lernplattform" und „die Lernplattform" — ein Produktionslauf verlor dadurch nur eine von acht tatsächlichen Dubletten und der Graph zersplitterte in mehrere Knoten für dasselbe Konzept. `_entity_identity_key` in `backend/app/services/prepare_service.py` entfernt jetzt einen führenden bestimmten oder unbestimmten Artikel und gleicht einfache Adjektivendungen (`-er`/`-es`/`-em`/`-en`/`-e`) an, sofern der verbleibende Wortstamm mindestens vier Zeichen lang ist — bewusst konservativ, damit ähnliche, aber fachlich unterschiedliche Stakeholder wie „Lehrkraft" und „Lehrkräftevertretung" oder „Lernplattform" und „Lernender" getrennt bleiben; das letzte Wort einer Bezeichnung (das Kopf-Nomen) wird nie gestemmt. Nachbesserung (Review-Finding auf PR #1453): nur noch das Token unmittelbar vor dem Kopf-Nomen kommt für die Stemmung infrage, nicht mehr jedes nicht-letzte Token. Sonst kollabierten Nomen-Paare wie „Unternehmen der Region" und „Unternehmer der Region" fälschlich auf denselben Stamm, weil beide zufällig auf eine Adjektivendung enden, obwohl sie durch ein trennendes Wort („der") nicht unmittelbar vor dem Kopf-Nomen stehen und damit strukturell keine Adjektive sein können.
+
+### Changed
+
+- **Die Agent-Config-Batches der Simulationskonfiguration laufen jetzt parallel statt sequentiell.** Produktionsmessung (armserver): drei Batches über 23 Entities kosteten sequentiell ~81s (28s + 27s + 26s), weil sie disjunkte Entity-Bereiche generieren, aber nacheinander auf den Abschluss des jeweils vorherigen warteten, obwohl sie voneinander unabhängig sind. Die Zeit- und Event-Konfiguration sowie die Plattform-Konfiguration bleiben sequentiell — sie wurden geprüft und haben entweder eine echte Abhängigkeit (Skeptiker-Quote und Initial-Post-Zuordnung konsumieren die fertigen Agent-Configs) oder liefern keinen relevanten Parallelitätsgewinn (Plattform-Config macht keinen LLM-Call). Der Produktionsserver läuft unter `gunicorn -k gevent` mit monkey-gepatchten Sockets; ein naiver `ThreadPoolExecutor` reißt dort Verbindungen ab, weil OS-Threads nicht den gevent-Hub des aufrufenden Greenlets teilen. `SimulationConfigGenerator` erkennt daher aktive Gevent-Patches über `gevent.monkey.is_module_patched("socket")` und nutzt in diesem Fall den kooperativen `gevent.pool.Pool`, andernfalls einen `ThreadPoolExecutor` — analog zum bereits etablierten Muster in `oasis_profile_generator.generate_profiles_from_entities`. Ergebnisreihenfolge und Entity-Zuordnung bleiben deterministisch identisch zur sequentiellen Variante, ein Fehler in einem Batch propagiert weiterhin nach außen statt still verschluckt zu werden.
+
+### Removed (UI-Redesign 2026-09, PR 10 Legacy-Abbau — 2026-09-06)
+
+- **Zweite Hülle entfernt:** das Shell-Flag `useShellVariant` ist entfallen. Es hielt neben der Ablage eine zweite Navigationswelt („classic") am Leben — genau die zwei Navigationsmodelle nebeneinander sind der erste Befund des Audits. Der Default stand seit Block B3 ohnehin auf „dossier"; `/` leitet jetzt statisch auf `/ablage`. `/dashboard` bleibt als eigene Route erreichbar, nur nicht mehr als alternativer Einstieg. (#1449)
+- **Unerreichbare Views gelöscht:** `RunsAppShellView.vue`, `RunsView.vue`, `RunsDashboard.vue` und `HistoryView.vue` samt ihrer Specs. Seit PR 8 leiten `/runs` und `/v4/history` auf die Ablage um; die Views waren danach von keiner Route mehr erreichbar. Mit ihnen entfallen die dadurch verwaisten `HistoryDatabase.vue`, `AppFooter.vue` (der im Audit gerügte Website-Footer in der Shell) und `AgoraGlyph.vue`. Die Redirects selbst bleiben als Deep-Link-Kompatibilität. (#1449)
+
+### Offen aus PR 10 (bewusst nicht in diesem PR)
+
+- `/runs/:id` zeigt weiterhin auf `RunDetailAppShellView`/`RunDetailView`, weil `usage-totals` (Verbrauchsanalyse) und `budget-exceeded-banner` nur dort existieren. Der Umstieg ist eine Feature-Migration, keine Löschung: erst muss der Kennzahlstreifen des Dossiers beide Blöcke tragen. Zusätzlich ist dabei die Schlüsselauflösung zu lösen — `groupJobsByEndeavor` schlüsselt Läufe über `simulation_id`/`project_id`, nicht über die Registry-ID, ein Deep-Link mit `run_…` fände sein Objekt sonst nicht.
+- `StepSimulationFeedView.vue` bleibt, weil der Feed ein **Tab** innerhalb von `StepSimulationView` ist. Ihn auf die Vollbild-Live-Ansicht aus PR 7 umzubiegen hiesse, den Tab-Rahmen zu verlassen — auch das eine Verhaltensänderung, die eine eigene Entscheidung braucht statt in einen Lösch-PR mitgenommen zu werden.
+
+### Fixed (UI-Redesign 2026-09, Nachtrag zu PR 8 — 2026-09-06)
+
+- **Fortschritt abgeschlossener Läufe:** die Fortschrittsspalte der Läufe-Tabelle las ihren Wert aus `ShelfObject.active`, das bei abgeschlossenen, gescheiterten und gestoppten Läufen `null` ist — die Spalte blieb also für genau die Zeilen leer, die in einer Läufe-Tabelle die Mehrheit stellen. `ShelfObject` trägt den Fortschritt jetzt unabhängig vom Aktiv-Zustand, gespeist aus `RunDetail.progress` des jüngsten Jobs. (#1448)
+- **Tabellenzeilen per Tastatur bedienbar:** `DataTable.rowClick` hing bisher nur an `@click`, und eine `<tr>` ist nicht fokussierbar — die Zeilenauswahl war für Tastaturnutzer schlicht nicht erreichbar. Mit gesetztem `rowClick` bekommt die Zeile jetzt `tabindex="0"`, reagiert auf Enter und Leertaste und trägt einen sichtbaren Fokusring. Das behebt den Mangel in allen drei Verbrauchern zugleich (Ablage-Tabelle, `ActiveRunsCard`, `RecentReportsCard`). Tastendrücke aus Bedienelementen innerhalb einer Zeile lösen die Zeilenauswahl bewusst nicht aus — sonst führte Enter auf „Vergleichen" oder dem Stopp-Knopf beides zugleich aus, weil `@click.stop` nur den späteren Klick aufhält, nicht den `keydown`. Bewusst ohne `role="button"`: das nähme der Zeile ihre Tabellensemantik. (#1448)
+- **Wertloser Test korrigiert:** die Zusicherung für einen ungültigen `?filter=` steckte in `expect(async () => …).not.toThrow()`. `toThrow` ist synchron, sieht ein Promise statt eines Wurfs und ist zufrieden — der Rumpf wurde nie ausgewertet, ein Fehlschlag wäre eine unbehandelte Rejection geblieben. Jetzt direkt awaited. (#1448)
+
+### Changed (UI-Redesign 2026-09, PR 8 Läufe-Tabelle — 2026-09-06)
+
+- **Läufe leben in der Ablage:** `/runs` leitet auf `/ablage?filter=lauf` um, `/v4/history` auf `/ablage?filter=jobs`. `/runs/:id` bleibt bewusst die Detailansicht: `usage-totals` (Verbrauchsanalyse) und `budget-exceeded-banner` gibt es nur in `RunDetailView.vue`, das Dossier trägt beides nicht — ein Redirect hätte Verbrauch und Budgetabbruch eines Laufs ersatzlos unzugänglich gemacht. Der Umstieg gehört in PR 10 und setzt voraus, dass der Kennzahlstreifen des Dossiers die beiden Blöcke vorher übernimmt. Die Ablage wertet `?filter=` jetzt aus und schreibt den gewählten Filter per `router.replace` zurück in die Query, damit der Zustand teilbar ist. Die Legacy-Views `RunsAppShellView.vue` und `HistoryView.vue` bleiben vorerst liegen — ihre Löschung gehört in PR 10. (#1447)
+- **Tabellenmodus in der Ablage:** für die Filter „Läufe" und „Alle Jobs" lässt sich zwischen Zeilenliste und dichter Tabelle umschalten; die Wahl merkt sich `localStorage` pro Browser. Die Tabelle ist die `DataTable` aus PR 5 (36px-Zeilen, Label-Spaltenköpfe ohne Versalien, rechtsbündige Zahlen in Mono, Auswahl als Kupferkante). Spalten für Läufe: Vorhaben, Zustand, Fortschritt, Personas, Angefasst, Nächster Schritt; für Jobs: Typ, Zustand, Meldung, Fortschritt, Angefasst. Zeilenklick wählt das Objekt aus wie in der Liste. (#1447)
+- **Zwei bewusste Abweichungen von der Audit-Vorgabe (Zeile 137/146), beide im Code begründet:** Die Spalten „Aussagen", „Belege" und „Lücken" fehlen, weil ihre Werte aus `getReportEvidence(reportId)` stammen — ein Abruf pro Zeile, also ein N+1 im Listenpfad; sie bleiben im Kennzahlstreifen des Dossiers (PR 4). Statt der vorgesehenen Zwei-Läufe-Auswahl trägt jede Läufe-Zeile eine Aktion „Vergleichen", die zu `CompareV4` führt: `CompareView.vue` vergleicht Branches *einer* Simulation (`listSimulationBranches`), ein Vergleich zweier beliebiger Läufe hat keinen Endpunkt, der ihn einlösen würde. (#1447)
+- **Barrierefreiheit:** der horizontal scrollende Jobs-Kasten der Ablage ist jetzt per Tastatur erreichbar (`role="region"`, `tabindex="0"`, Name, sichtbarer Fokusring). Der Befund (`scrollable-region-focusable`, serious) lag dort schon vorher, wurde aber von keinem Gate berührt, solange keine geprüfte Route auf den Jobs-Filter zeigte — der `/v4/history`-Redirect tut das jetzt. (#1447)
+
+### Changed (UI-Redesign 2026-09, PR 6 Leseumgebung "Bericht lesen" — 2026-09-06)
+
+- **Dreispalten-Leseumgebung für den abgeschlossenen Bericht:** `Step4Report.vue` rendert einen fertigen Report (`phase === 2 && reportHtml`) jetzt über die neue `ReportReader.vue` statt der bisherigen `ReportFinalView.vue` — Outline links (`ReportOutline.vue`, `role="tablist"`/`role="tab"`, Tastaturnavigation via Pfeiltasten/Home/End), Serif-Lesespalte in der Mitte (Newsreader, 62ch, `--fs-prose`/`--lh-prose`) und Belegrand rechts (`ReportEvidenceRail.vue`, 320–336px). Behebt Audit-Problem #4 ("Bericht als Formular-Stack … keine Leseumgebung"). `ReportFinalView.vue` und `ReportEvidencePanel.vue` sind zusammen mit ihren dedizierten Specs entfernt — ihre Funktion (Markdown-Rendering, Claims/Belege/Hypothesen-Anzeige, Export- und Branch-Aktionen) übernimmt vollständig `ReportReader.vue`/`ReportEvidenceRail.vue`, die vorhandenen `ReportBranchControls.vue` und `ReportRedTeamSection.vue` wurden wiederverwendet statt neu gebaut. (#1446)
+- **Confidence als Wort statt nackter Prozentzahl:** der Belegrand zeigt für jeden Claim ein Confidence-Wort (`spekulativ`/`niedrig`/`mittel`/`hoch`/`verifiziert`) aus `step4.reader.confidence.*`, dazu die daran gebundenen Belege (Typ, Quelle, Zitat, Anker-Link), Datenlücken und — separat abgegrenzt — Hypothesen des Abschnitts. Behebt die Audit-Rüge zu "Confidence als '0% · spekulativ'-Chip ohne Erklärung". (#1446)
+- **Overlay "Neu generieren" statt dauerhaftem Formular:** sobald ein Bericht angezeigt wird, wandern `ReportModelControls.vue`/`ReportModeControls.vue` aus dem Lesefluss in ein Overlay (`role="dialog"`, Escape schließt, Fokus wandert beim Öffnen/Schließen), das über einen Button im Reader-Header geöffnet wird. Vor dem ersten Report (Bestätigungs-/Generierungsphase) bleibt die bisherige inline Modell-/Modus-Auswahl unverändert. (#1446)
+- Neue Testid-Konstanten `ReportReaderTestId` (`contracts/testIds.ts`) und i18n-Keys unter `step4.reader.*` (`de.json`/`en.json`).
+
+**Bekannte Lücke:** die vormalige `ConfidenceBadge`-Anzeige (Prozent + Wort) in `ReportOutlinePanel.vue` bleibt für die laufende Generierung (Phase 0/1) unverändert bestehen — nur die abgeschlossene Leseansicht wurde migriert, siehe `Step4Report.spec.ts`.
+- **Belegrand vollständig:** Belege ohne optionales `quote` zeigen jetzt ihren Pflicht-`snippet` statt nur den Quellennamen, und der Hypothesen-Block liest zusätzlich `hypotheses_appendix` — die serverseitig auf fünf gedeckelte Liste hatte den Überhang (bis 50 Einträge) bisher verschluckt, auch im Anhangszähler der Outline. (#1446)
+- **Leseumgebung ohne Leerabschnitte:** Outline und Abschnitts-HTML werden in `composables/useReportReaderView.ts` gemeinsam bestimmt. Ein aus der Persistenz geladener Bericht (`_status_from_persisted_report`) liefert `markdown_content` als Ganzes, aber keine `generated_sections`; die getrennt gewählten Fallbacks ergaben dort eine Outline mit allen Abschnitten neben einem einzigen HTML-Block, sodass jeder Abschnitt außer dem ersten leer aufging. Jetzt trägt in diesem Fall genau ein Sammelabschnitt den vollständigen Bericht. (#1446)
+
+### Added (UI-Redesign 2026-09, PR 7 Simulation live — 2026-09-06)
+
+- **Simulation-live-Instrument:** neue Route `/v4/simulation/:simulationId/live` (`SimulationLiveView`) ersetzt den bisher shell-losen, im Audit mit 2/10 bewerteten Zustand von Step 3 (Text + Button, leerer Feed) durch ein Vollbild-Instrument — Kopfzeile mit Runde x/y, vergangener Zeit, s/Runde sowie echten Fortsetzen-/Pausieren- und Abbrechen-Aktionen; eine Rundenachse markiert erledigte, laufende und geplante Runden; vier Bahnen (Akteure, Reddit, Twitter, System und Ereignisse) zeigen den Lauf live. Datenquellen sind ausschließlich bestehende Endpunkte: `getRunStatusDetail` (Runde, Pause-Status, `started_at`/`completed_at` für die vergangene Zeit und s/Runde — beide in echten Sekunden, damit ein pausierter oder frisch neu geladener Lauf nicht 00:00 anzeigt), `useSimFeed`/`useEventStream` (Zod-validierter Post-Strom für Akteure/Reddit/Twitter, wiederverwendet aus `StepSimulationFeedView`, chronologisch zusammengeführt), `getRunEvents` (`/api/runs/<id>/events`) und `getRunUsage` (`/api/runs/<id>/usage`) für die System-Bahn. Die dafür nötige Registry-Lauf-ID wird über `GET /api/runs?simulation_id=<id>` aufgelöst — der Status-Detail-Payload (`SimulationRunState.to_dict()`) führt kein `run_id`. Bewusst weggelassen, weil aus den erlaubten Quellen nicht ableitbar: eine Aktivitätshöhe pro Runde auf der Rundenachse (`PostCreatedEvent` trägt kein `round_num`), „Aufkommende Themen" (kein Themen-Extraktions-Endpunkt) und Eingriffsaktionen wie „Ereignis einspeisen"/„Budget anheben" (kein Endpunkt gelistet). Neue reine Ableitungsfunktionen in `composables/useSimulationLiveMetrics.ts` (Rundenachse, s/Runde, Akteurs-Statistik) sind unabhängig von Mount/Router testbar. (#1445)
+
+### Changed (UI-Redesign 2026-09, PR 5 Control-Primitives — 2026-09-06)
+
+- **Buttons auf vier Varianten reduziert:** `.btn` nutzt jetzt `--r-3` (6px) statt Pill-Radius; `primary`/`secondary`/`ghost`/`danger` bleiben, `tinted`/`accent`/`info`/`plasma`/`glass` sind gestrichen — `info`/`plasma` trugen das repo-fremde `--status-purple` in die UI, `glass` einen `backdrop-filter`. `ghost` ist kein Akzent mehr (Text statt Kupfer), `danger` bekommt einen Coral-Rahmen statt getönter Fläche, Controls tragen keinen Schatten mehr. Der `ButtonVariant`-Typ in `v4/forms/Button.vue` erzwingt die vier Varianten jetzt auch statisch. Die zwei Aufrufer von `variant="accent"` in `SettingsSectionPanel.vue` stehen jetzt auf `primary`. (#1444)
+- **Select-Primitive vereinheitlicht:** `v4/forms/Select.vue` ist jetzt das kanonische Select — Radius `--r-3`, Inset-Surface-Hintergrund, optionale `label`/`required`-Props im `label`-Typo-Stil (Satzschrift, kein Uppercase) und ein `aria-label`-Fallback für den axe-core-Fix aus Issue #838. Das sichtbare Label ist per `for`/`id` (`useId()`) mit dem Steuerelement verknüpft, sodass ein Klick darauf fokussiert; `required` setzt jetzt die native Validierungs-Constraint, statt nur einen Sternchen-Marker zu zeichnen. `components/ui/Select.vue` ist gelöscht, seine zwei Verwender (`EnvSetupModelPanel.vue`, `ReportModeControls.vue`) migriert. Rohe native `<select>`-Elemente bleiben unangetastet (folgen in PR 6–8), bekommen aber über eine neue globale `select`-Basisregel in `global.css` Radius, Hairline, Inset-Surface und einen eigenen Chevron ohne Markup-Änderung. (#1444)
+- **Tabellen-Primitive:** `.dt-th` verliert Uppercase/0.04em-Tracking zugunsten des `label`-Typo-Stils (Satzschrift, 0.02em, Gewicht 500). Body-Zeilen sind jetzt 36px hoch (compact 28px) mit Hairline unten, Hover auf dem Surface-Hover-Token; das vertikale Zellpadding entfällt, damit die Zeilenhöhe die Dichte-Spec trifft statt sich mit dem Padding zu addieren. Neues Prop `rowSelected` markiert eine Zeile mit Accent-Tint, 2px-Kupfer-Kante links und `aria-current` — nicht `aria-selected`, das auf `<tr>` nur in einem `role="grid"` zulässig wäre. Rechtsbündige Zellen (`dt-cell--right`) bekommen `tabular-nums`; die Mono-Familie bleibt an `col.mono` gebunden, weil rechtsbündig nicht zwangsläufig numerisch bedeutet. (#1444)
+
+### Changed (UI-Redesign 2026-09, PR 4 Lauf + Bericht anreichern — 2026-09-06)
+
+- **Kennzahlstreifen erweitert:** `Dossier.vue`s KPI-Reihe (jetzt semantisch als `dl`) zeigt bei einem Lauf zusätzlich Personas (`RunSummaryContract.persona_count`) und Jobs (Anzahl gruppierter Jobs), bei einem Bericht Abschnitte, Belege (`Report.evidence_sections`) und Aussagen (Claims aus der Evidence-Map) — jede Kachel nur, wenn das Feld tatsächlich bekannt ist. (#1442)
+- **Bestandteile mit Zahl + Link:** ein Lauf zeigt jetzt "Akteure" (Personenzahl, Link zu den Personas) und "Ausgabe" (Belegzahl des verknüpften Berichts, Link zum Bericht) — beide aus bereits geladenen Daten (`obj.jobs`, `obj.personaCount`) plus einem bestehenden `getReport`-Aufruf für die Ausgabe, kein neuer Endpunkt. (#1442)
+- **Jobs-Zeitleiste:** neue Sektion im Lauf-Dossier — alle Jobs des Vorhabens als `<ol>`, neuestes zuerst, direkt aus `useShelf.buildShelfObjects` (kein Nachladen). (#1442)
+- **Bericht-Anreicherung:** Confidence-Verteilung (Claims je Vertrauenslabel) und Red-Team-Befunde als eigene Abschnitte, gespeist aus dem bestehenden `GET /api/report/<id>/evidence`-Endpunkt (Evidence-Map) bzw. direkt aus dem bereits geladenen Report-Contract. (#1442)
+- **Bewusst weggelassen (kein Contract-Feld ohne Fabrikation):** "Runden" im Lauf-Kennzahlstreifen (kein zuverlässiges typisiertes Feld auf einem abgeschlossenen Run ohne einen zusätzlichen Live-Status-Endpunkt) und "Budget" (RunBudgetStatus ist ein mehrdimensionales Verbrauchsobjekt — Tokens/Kosten/Zeit/Calls —, keine einzelne Kennzahl im Contract; eine korrekte Darstellung gehört in einen eigenen Slice statt einer zusammengefassten Schätzzahl). "Quellenumfeld" als Lauf-Bestandteil fehlt ebenfalls: `linked_ids` trägt nur `project_id`, keine `graph_id` — ein Entitäten-/Relationszähler bräuchte einen zusätzlichen Projekt→Graph-Nachschlag. (#1442)
+
+### Changed (UI-Redesign 2026-09, PR 3 Ablage-Übersicht + Zeilen — 2026-09-06)
+
+- **Dossier-Übersichtszustand:** `Dossier.vue` zeigt ohne Auswahl nicht mehr nur einen Satz, sondern eine Übersicht aus vier Abschnitten — "Braucht dich" (Objekte mit `nextAction.kind === 'warn'`), "Läuft gerade" (aktive Läufe mit Fortschrittsbalken, Pause/Abbrechen), "Zuletzt fertig" (jüngste abgeschlossene Objekte) und ein kompakter Systemstatus (Neo4j/Ollama über das bestehende `useSystemStatus`/`/api/status`). Primäraktion "Quelle ablegen" führt wie die Ablage-Zeile zum Dashboard. Alle Daten kommen aus dem bereits geladenen `useShelf()`-Zustand, kein zweiter Request. (#1441)
+- **Weiter-Aktion pro Kind:** Personasatz-Zeilen hatten bisher keine Weiter-Aktion (nur der Dossier-Kopf konnte einen Lauf starten). Die neue Composable `useStartFromPersona.ts` teilt diese Logik zwischen `Shelf.vue`-Zeile und `Dossier.vue`-Kopf; ein Fehlschlag zeigt jetzt eine sichtbare Fehlermeldung an der Zeile statt still zu bleiben. (#1441)
+- **Datum bei älteren Objekten:** `formatShelfDate` (`useShelf.ts`) unterscheidet jetzt heute (Uhrzeit), gestern ("Gestern"/"Yesterday") und älter (tt.mm.) — vorher fiel jedes Nicht-Heute-Datum auf tt.mm. ohne "Gestern"-Zwischenstufe. (#1441)
+- **Filter als Text-Tabs:** die Filterleiste in `Shelf.vue` ist jetzt `role="tablist"`/`role="tab"` mit `aria-selected` statt `role="group"`/`aria-pressed`; die Labels stehen in Satzschrift statt Mono-Versalien, die Zähler bleiben in Geist Mono. (#1441)
+
+### Fixed (LLM-Routing-Einstieg vollständig lokalisiert — 2026-09-06)
+
+- Die LLM-Routing-Einstellungsansicht löst Seitentexte, Run-Auswahl, Feldlabels, Aktualisieren-Aktion, Leerzustand und Fallback-Ladefehler jetzt über `vue-i18n` auf. Deutsche und englische Texte liegen unter `settings.v4.llmRouting.*`; ein englischer Render-Regressionstest verhindert, dass die englische Oberfläche erneut deutsche Literale zeigt. (#1440)
+
+### Changed (UI-Redesign 2026-09, PR 9 Einstellungen-Overlay — 2026-09-06)
+
+- **Sektionsliste statt Pro-Seite-Breadcrumbs:** neue Komponente `SettingsOverlay.vue` fasst alle acht `/settings/*`-Routen unter einem gemeinsamen Kopf ("Einstellungen" + "Zurück") mit linker Sektionsliste zusammen (Allgemein, Integrationen, Profil, API-Schlüssel, LLM-Anbieter, Embedding-Konfiguration, LLM-Routing, Audit-Logs). Ersetzt die bisherigen `:breadcrumbs="BREADCRUMBS"`-Props (Audit-Punkt 12, "Breadcrumb 'Settings / General' über Titel 'Allgemein'"). Bewusst nicht umgesetzt: ein echtes, App.vue-weites Overlay über der eingefrorenen Arbeitsfläche (Vorlage `08-einstellungen.html`) — der Router tauscht `router-view` heute komplett aus, das bräuchte Eingriffe ausserhalb von Settings-Views/-Komponenten. (#1439)
+- **LLM-Provider als Liste statt Card-Grid:** `LlmProvidersView.vue` zeigt Provider jetzt als kompakte, semantische Liste (`<ul role="list">`/`<li>`/`<button aria-current>`, kein `role="listbox"`/`"option"`); genau ein Provider steht im Detail-Formular (Audit-Punkt 9, "3×3 Cards mit acht Primärbuttons"). Aktionen (Speichern/Testen/Modelle laden/Trennen) nutzen jetzt die gemeinsame `Button`-Komponente (primary/secondary/danger) statt ad-hoc `.llm-btn`-Klassen; der Ladeindikator hängt nur noch am tatsächlich laufenden Aktions-Button, nicht an allen vieren gleichzeitig. (#1439)
+- Neue Testids `SettingsOverlayTestId`, `LlmProviderListTestId` in `contracts/testIds.ts`; neue i18n-Schlüssel unter `settings.v4.overlay.*` und `settings.v4.llmProviders.list.*` (de/en). (#1439)
+
+### Fixed (Review-Befunde PR #1439 — 2026-09-06)
+
+- Golden-Gate-Accessibility-Smoke schlug auf `/settings/llm-providers` fehl: `aria-required-children`/`aria-required-parent` (Listbox-Muster ohne direkte `role="option"`-Kinder), `listitem` (semantisch ungültige `<li>` unter `role="listbox"`) und `color-contrast` (`--text-tertiary` auf dem Kupfer-Tint der Auswahl). Behoben durch die Umstellung auf `role="list"` + `aria-current` und `--text-secondary` für den Provider-Typ der ausgewählten Zeile. (#1439)
+
+### Fixed
+
+- Persona-Vorbereitung akzeptiert CLI-Provider mit lokaler Anmeldung ohne HTTP-API-Key. Die Transportart kommt aus der Provider-Registry; HTTP- und unbekannte Provider werden weiterhin auf fehlende Schlüssel geprüft. Modellwahl und Stage-Routing bleiben unverändert. (#1438)
+
+### Fixed
+
+- Dashboard: Eine fehlgeschlagene globale Ollama-Probe sperrt neue Runs nicht mehr. Profile, zentrale Modellrouten und explizite Provider-Connections werden weiterhin beim Ausführen im Backend aufgelöst. Neo4j- und Profil-Ladebedingungen bleiben erhalten; der deaktivierte Startknopf benennt den zutreffenden Grund. (#1437)
+
+### Changed (UI-Redesign 2026-09, PR 2 Chrome bereinigen — 2026-09-05)
+
+- **LOGS-FAB entfernt:** globale, feste FAB in `App.vue` ersetzt durch ein 20px-Icon "Protokoll" in beiden Kopfzeilen (`Topbar.vue`, `ShellRoot.vue`); Zustand + Ctrl/Cmd+Shift+L-Shortcut leben jetzt in `useLogDrawer.ts` (Single Source of Truth, analog `useCommandPalette.ts`). (#1436)
+- **⌘K-Chip vereinheitlicht:** beide Kopfzeilen zeigen jetzt "Suchen ⌘K" mit identischem Markup/Styling (`.kbd`-Klasse, Tokens statt hartkodierter Werte); vorher Icon-only in `Topbar.vue`, Mono-Chip in `ShellRoot.vue`. (#1436)
+- **Brand-Ring statt Glyph:** `AgoraBrand.vue` bekommt `mode="ring"` (reine CSS-Form, kein Asset) — `Sidebar.vue` zeigt jetzt den Kupfer-Ring statt des blau-violetten SVG-Glyphen. (#1436)
+- **"?"-Fallback entfernt:** `UserMenu.vue` zeigte ohne Profil ein Fragezeichen als Avatar-Initiale — fällt jetzt zuerst auf den Benutzernamen, sonst auf ein neutrales Personen-Symbol zurück. Zusätzlich ein "Hilfe"-Eintrag im Menü (README-Anker, neuer Tab, opener-los). (#1436)
+- **`/feed` im Shell:** `StepSimulationFeedView.vue` war shell-los ohne Rückweg — jetzt in `AppShell` + `PageHeader` gewrappt, analog `StepReportView.vue`, mit Rückweg-Breadcrumb zur Simulations-Pipeline. (#1436)
+
+### Added (Screenshot-Vergleich PR 1 (Tokens) bei 1440/1024 — 2026-09-05)
+
+- **Nachgereichter Vorher/Nachher-Vergleich für #1427:** `docs/ui/premium-redesign-2026-09/02-screenshot-vergleich-pr1.md` misst Body-Typografie, Karten-/Button-Radius, Feldlabel-Stil und Logo-Akzentfarbe je Route (`getComputedStyle`) und zeigt zehn Composite-Screenshots (`shots/vergleich-pr1/`, vorher/nachher nebeneinander) bei 1440×900 und 1024×768 — beide Zustände liefen gegen denselben Backend-Container und denselben Stub-Lauf, nur das ausgelieferte Frontend-Bundle wurde getauscht. (#1427)
+
+### Changed
+
+- Dependabot pflegt Frontend-Abhängigkeiten jetzt über das `bun`-Ökosystem statt
+  `npm`. Das npm-Ökosystem aktualisierte nur `package.json` und ließ `bun.lock`
+  stehen; der Frontend-Smoke-Gate brach mit „lockfile had changes, but lockfile
+  is frozen" ab und jedes Frontend-Update musste manuell nachgezogen werden.
+  Ein Wächtertest (`tests/config/test_dependabot_config.py`) verhindert den
+  Rückfall. (#1428)
+- Der bewusst unquotierte `$PIP_AUDIT_FLAGS`-Aufruf in `ci.yml` trägt eine
+  begründete `shellcheck disable=SC2086`-Direktive. reviewdog/actionlint hängte
+  den Befund bisher an jeden PR, der `ci.yml` berührte, und blockierte den
+  Merge über die Konversationsauflösung. (#1428)
+
+### Changed (UI-Redesign 2026-09, Audit + PR 1 Tokens — 2026-09-05)
+
+- **Visuelles Audit der gerenderten App** mit Scores, Top-15-Problemen, Designrichtung, Design-System und 10-PR-Plan unter `docs/ui/premium-redesign-2026-09/` (Ist-Screenshots, Vorlagen, drei Zielversionen für Ablage/Simulation/Bericht als HTML). (#1427)
+- **`tokens-v3.css` entkernt:** acht Typo-Rollen (`--fs-display` fluid … `--fs-mono-lg`), Radius-Skala 4/6/10/pill, semantische Namen (`--bg-*`, `--border-*`, `--text-muted`, `--accent-live`, `--status-warning`), Motion-Tokens. Body-Text 15 → 14 px. (#1427)
+- **`tokens-compat.css` abgespalten:** nur noch referenzierte v1/v2-Aliase, 75 tote Tokens (Mesh, Grid, Glow, Paper, Ink-Skala) entfernt. (#1427)
+- **Label-Stil:** Tabellenköpfe, KPI-Labels, Abschnitts-Kicker, Menü-Labels, `.meta` in Satzschrift ohne Versalien; Mono nur noch für IDs und Zahlen. (#1427)
+- **Logo-Glyph** auf Kupfer statt Blau. (#1427)
+
+### Fixed
+
+- Simulationsrunden über die Codex-CLI reichen den Prompt jetzt über stdin
+  statt als Kommandozeilenargument. Ein Runden-Prompt trägt Persona, Historie
+  und Werkzeugschemata und riss als einzelnes argv-Element Linux'
+  `MAX_ARG_STRLEN` von 128 KiB; auf armserver starben dadurch 12 Agenten-Turns
+  einer Runde mit `OSError: [Errno 7] Argument list too long`. (#1425)
+
+### Added (Simulationsrunden laufen jetzt auch über die Codex-CLI — 2026-09-05)
+
+- **Mit `codex_cli` als Provider scheiterte jeder Simulationslauf, obwohl Ontologie, Graph, Personas und Simulations-Config seit [#1418](https://github.com/arn0ld87/agora/issues/1418) sauber durchliefen.** Im Log stand `OASIS-Preflight: Provider-Fehler (HTTP 400) … Simulation vor dem Fan-out abgelehnt`, verursacht durch `invalid params, unknown model 'gpt-5.6-luna' (2013)` — MiniMax' Fehlerformat. Issue [#1423](https://github.com/arn0ld87/agora/issues/1423).
+- **Ursache war eine Lücke an der Subprozess-Grenze, nicht im Backend.** `build_route_subprocess_env` löst die Base-URL dreistufig auf (Route → Store → Registry-Default). Für einen Provider mit `transport="cli"` liefern alle drei `None`, also blieb `LLM_BASE_URL` ungesetzt — und weil der Schlüssel in `SAFE_ENV_KEYS` steht, **erbte** der Subprozess die `.env`-URL des Backend-Prozesses. Zusammen mit dem korrekt gerouteten `LLM_MODEL_NAME` ergab das: Codex-Modell an MiniMax-Endpunkt.
+- **Der OASIS-Subprozess kannte `codex_cli` überhaupt nicht.** `detect_oasis_platform` mappt auf genau drei CAMEL-Plattformen (GEMINI, OLLAMA, OPENAI), alle HTTP; einen CLI-Transport gab es in `backend/scripts/` nicht. Das `codex`-Binary lief bis hierher ausschließlich in-process im Flask-Backend.
+- **Neu: `scripts/sim_runtime/codex_cli_model.py` mit `CodexCliModel(BaseModelBackend)`.** Das Backend spricht `codex exec` statt HTTP und nutzt dafür dieselbe Brücke wie der In-Process-Pfad (`app/llm/providers/codex_cli.py`) — der Subprozess hat `app` im `PYTHONPATH`, deshalb wird importiert statt kopiert.
+- **Tool-Call-Emulation, weil `codex exec` kein natives Function-Calling kennt.** OASIS-Agenten wählen ihre Aktionen ausschließlich über Werkzeugaufrufe; ohne Übersetzung wären sie handlungsunfähig. Die Schemas gehen als Prompt-Abschnitt mit, die Antwort wird über das Format `<tool_call>{"name":…,"parameters":{…}}</tool_call>` zurückgelesen — dasselbe Protokoll, das `scripts/agent_tools.py` bereits verwendet, statt eines zweiten. Davon profitiert auch der In-Process-Shim: `tools` wurde dort bisher stillschweigend verworfen.
+- **`_arun` läuft über `asyncio.to_thread`.** Das ist nicht kosmetisch: OASIS treibt alle Agenten einer Runde nebenläufig, und ein blockierender Aufruf im Event-Loop hätte die Simulation von paralleler auf serielle Ausführung fallen lassen — bei 8–40 s pro CLI-Aufruf der Unterschied zwischen Minuten und Stunden.
+- **Der Transport wird explizit signalisiert statt geraten.** `build_route_subprocess_env` setzt `AGORA_LLM_TRANSPORT=cli` anhand von `ProviderConnectionDefinition.transport`; `process_manager` entfernt daraufhin das geerbte `LLM_BASE_URL`. Die URL-Heuristik in `registry.py::detect_provider` bleibt unangetastet — für einen Provider ohne URL hätte sie ohnehin nichts zu mustern, und AGENTS.md verbietet Detection-Heuristiken daneben.
+- **Zwei Guards nehmen CLI-Transport aus.** `simulation_run.py` und `simulation_history.py` lehnten einen Start bisher mit 422 ab, wenn kein `api_key` vorlag und der Endpunkt nicht lokal war — `is_local_endpoint(None)` ist `False`, also traf das jeden CLI-Provider, der per Definition keinen Key hat.
+- **Nachtrag zu #1418:** `api/simulation_history.py` reichte `provider_type` nicht an `OasisProfileGenerator` durch. Dieser zweite Aufrufer wurde beim damaligen Fix übersehen und füllte weiterhin die `.env`-URL auf.
+- **Laufzeit:** `codex exec` kostet im Container 8,7 s für einen Trivialprompt und rund 40 s für einen echten Persona-Prompt. Für eine 72-Runden-Simulation mit 20 Agenten sind grob 45–60 Minuten pro Lauf zu erwarten; Ratelimits des ChatGPT-Abos sind dabei eine offene Größe. Token-Zahlen meldet die CLI nicht, `usage` bleibt deshalb bei null statt einer erfundenen Schätzung.
+
+### Behoben
+
+- Ein Lauf, bei dem **alle** Personas nach gescheiterten LLM-Versuchen als
+  regelbasierte Platzhalter in die Simulation gingen, meldete sich nach außen
+  als erfolgreich. Die Degradierung war erfasst, blieb aber folgenlos: sie
+  stand als `warning` im Task-Ergebnis, und der Report, der am Ende
+  weitergegeben wird, wusste nichts davon. Ein Nutzer ohne Blick ins
+  Backend-Log hielt das Ergebnis für belastbar. Zwei Stellen ziehen die
+  Konsequenz jetzt nach:
+  - `persona_rule_based_fallback` wird `blocking`, wenn keine einzige Persona
+    vom Modell kam. `prepare_simulation` setzt dann `failed` statt `ready`
+    und trägt die Ursache in `state.error` — der Vertrag verlangt seit jeher,
+    dass ein blockierender Ausfall „bereit" nicht erreicht, durchgesetzt hat
+    das bis hierher niemand. Bei einer Teilquote bleibt es `warning`: echte
+    Stimmen sind dabei, die Platzhalter sind einzeln gekennzeichnet, der Lauf
+    ist verwertbar und bleibt startbar.
+  - `RunDegradationModel.component` kennt `persona_generation`. Ein Report,
+    dessen Personas Platzhalter waren, wird über die bestehende
+    `apply_run_degradation_downgrade`-Mechanik auf `INCOMPLETE` abgestuft
+    statt als `completed` hinauszugehen. Das gilt auch für den nach einem
+    Abbruch finalisierten Teil-Report, der bislang an der einzigen
+    Degradations-Aggregation am Laufende vorbeilief.
+
+  Die bewusste Wahl `use_llm_for_profiles=False` bleibt degradierungsfrei —
+  gezählt wird `generation_error`, nicht `generation_source`. (#1419)
+
+### Fixed (Die Persona-Generierung schickt das geroutete Modell nicht mehr an den `.env`-Endpunkt — 2026-09-04)
+
+- **Mit `codex_cli` als Workspace-Default schlug jede Persona-Generierung fehl, während Ontologie, Graph und Report mit demselben Provider einwandfrei liefen.** Im Log stand pro Persona dreimal `Error code: 400 — invalid params, unknown model 'gpt-5.6-luna' (2013)`, danach `using rule-based generation`. Der Fehlercode `(2013)` ist MiniMax' Format: das aus der Route stammende Modell ging an `LLM_BASE_URL` aus der `.env`. Issue [#1418](https://github.com/arn0ld87/agora/issues/1418).
+- **Ursache war ein Informationsverlust in der Bridge zurück in den Legacy-Vertrag.** `build_runtime_llm_config` bildet eine `ResolvedRoute` auf `RuntimeLlmConfig` ab; `_ROUTE_TO_RUNTIME_PROVIDER` kannte `codex_cli` nicht und ließ es in den generischen `custom_openai`-Eimer fallen. Für HTTP-Provider ist das folgenlos — die `base_url` trägt als String genug Information, damit `detect_provider` später wieder greift. `codex_cli` (transport=`cli`, [#1405](https://github.com/arn0ld87/agora/issues/1405)) hat aber gar keine `base_url`, also gab es nichts mehr zu erkennen.
+- **Der `#1104`-Schutz in `_resolve_llm_connection` griff deshalb nie.** Er sitzt im `ResolvedRoute`-Zweig, die gebridgte Konfiguration nahm den Legacy-Zweig daneben und lieferte `(key, None)` zurück. `OasisProfileGenerator.__init__` las das fehlende `base_url` als „nicht aufgelöst" und füllte `Config.LLM_BASE_URL` auf — Modell aus der Route, Endpunkt aus der `.env`.
+- **`_resolve_llm_connection` gibt jetzt zusätzlich den Provider-Typ zurück** und kennt CLI-Transporte: für `transport="cli"` ist eine fehlende `base_url` der Normalfall und kein Abbruchgrund. Die Gegenprobe bleibt scharf — ein HTTP-Provider ohne `base_url` wirft weiterhin.
+- **`OasisProfileGenerator` und `SimulationConfigGenerator` reichen den Provider-Typ an `LLMClient` durch.** Damit greift dort `_codex_cli_active` und der Subprozess-Transport statt eines HTTP-Calls, wie in `LLMClient.from_route()` seit [#1406](https://github.com/arn0ld87/agora/issues/1406) bereits vorgesehen. Der Persona-Pfad war der einzige, der seinen Client selbst zusammenbaute — und der einzige, der scheiterte.
+- **Bewusst nicht angefasst:** `SimulationConfigGenerator.self.base_url` behält den `.env`-Fallback, weil `SimulationParameters.llm_base_url` daran hängt und damit die Simulationsrunden — ein Pfad, den dieses Issue nicht untersucht hat. Nur der eigene `LLMClient` des Generators wird jetzt ohne diesen Fallback gebaut.
+- **Zweiter Befund aus demselben Screenshot: das System-Panel meldete dauerhaft den `.env`-Provider.** „Ollama — Prüfung übersprungen — aktiver Provider ist MiniMax" stand da unabhängig davon, welche Verbindung unter Einstellungen → LLM-Anbieter aktiviert war. `_get_ollama_status` leitete sowohl die Probe-Entscheidung als auch den angezeigten Provider ausschließlich aus `Config.LLM_BASE_URL`/`Config.LLM_MODEL_NAME` ab, also aus der `.env` des Containers. Die aktive Konfiguration hat jetzt Vorrang; die `.env` bleibt Fallback für Installationen, die nie eine Verbindung aktiviert haben.
+- **Der angezeigte Provider kommt jetzt bevorzugt aus der `provider_id` der aktiven Verbindung statt aus der URL-Heuristik.** `detect_provider` kann nur aus der Base-URL raten — für `codex_cli` gibt es nichts zu raten. `SkippedProviderKind` ist per Vertrag ein freier String, und `providerLabel` im Frontend fällt auf den Rohwert zurück; die bekannten Connection-IDs haben zusätzlich einen Anzeigenamen bekommen.
+- **Nebenwirkung für Tests:** `backend/instance/active_llm_config.json` liegt im Repo-Verzeichnis und existiert auf Entwicklerrechnern, in CI nicht. `tests/test_status.py` isoliert den Reader deshalb per Autouse-Fixture, sonst hinge das Provider-Gating daran, welche Verbindung der Entwickler zuletzt aktiviert hat.
+
+### Slice 2.1 — Kanonische Index-Auflösung
+
+Lese- und Schreibpfad des Vector-Index lösen Index- und Property-Namen jetzt
+über zwei neue Methoden am `EmbeddingConfigurationStore` auf,
+`resolve_active_entity_index()` und `resolve_active_fact_index()`, statt sie
+als Literale in `backend/app/storage/search_service.py` und
+`backend/app/storage/neo4j_write.py` zu verdrahten. Die Entity-Methode liest
+Index- und Property-Namen direkt aus dem gespeicherten
+`EmbeddingIndexVersion`-Datensatz, den `EmbeddingMigrationService.start()`
+anlegt (`entity_embedding_vN` / `embedding_vN`). Die Fact-Methode leitet
+beide Namen konventionell aus der Versionsnummer ab (`fact_embedding_vN` für
+Index und Property), weil Fact-Indizes keinen eigenen
+`EmbeddingIndexVersion`-Datensatz haben — eine bereits vor diesem Slice
+dokumentierte Asymmetrie in `embedding_migration.py`. Diese Konvention wurde
+gegen die tatsächlich in `embedding_migration.py` (Zeilen 254-255) und
+`embedding_reembedder.py` verwendeten Namen geprüft und deckt sich exakt
+damit; sie ist keine zweite, unabhängige Quelle für Namensbildung, sondern
+spiegelt die einzige, die es im Migrationslauf bereits gibt.
+
+Im Lesepfad (`SearchService`) wird der Index-Name als Query-Parameter an
+`db.index.vector.queryNodes`/`queryRelationships` gebunden — das sind
+reguläre Prozedur-Argumente, keine DDL-Identifier, deshalb ist Parameter-
+Bindung hier möglich und sicherer als String-Interpolation. Im Schreibpfad
+(`Neo4jWriteMixin._persist_episode`) lässt sich der Property-Name in einer
+`SET`-Klausel nicht als Parameter binden; er wird einmal pro Aufruf (nicht
+pro Entity-/Relation-Schleifendurchlauf) aus dem Store gelesen und an der
+Interpolationsstelle mit einem Kommentar versehen, der festhält, dass der
+Wert ausschließlich aus dem Store stammt und nie aus Benutzereingaben.
+
+Ohne aktive Index-Version bleibt das Verhalten unverändert: beide
+Store-Methoden fallen dann auf exakt die bisherigen Legacy-Namen zurück
+(`entity_embedding`/`embedding`, `fact_embedding`/`fact_embedding`). Das ist
+die Rückwärtskompatibilitäts-Zusage dieses Slices und mit eigenen Tests
+abgesichert.
+
+Was dieser Slice ausdrücklich nicht tut: Er schaltet keine Konfiguration
+scharf und ändert nicht, welcher Index aktiv ist — das bleibt Slice 2.2
+(Cutover). Die `VECTOR_DIM`-SSoT bleibt offen (Slice 2.3), ebenso eine
+Legacy-View für Bestandsgraphen (Slice 2.4). Die in
+`docs/agents/architecture-ssot.md` dokumentierte SSoT-Ausnahme für Embedding
+ist mit diesem Slice noch nicht geschlossen — er liefert nur die
+Auflösungslogik, die die folgenden Slices verwenden.
+
+### Slice 2.2 — Echter Cutover
+
+`EmbeddingMigrationService.start()` markierte die neue Index-Version bisher sofort
+als `active` und supersedierte die alte — noch bevor der Re-Embedder überhaupt lief.
+Sobald Slice 2.1 (kanonische Index-Auflösung) aktiv war, hätte das Reads auf einen
+leeren oder nicht existierenden Index geschickt und Writes des noch laufenden alten
+Modells in die neue Property geschrieben: genau die Korruption, vor der #1417 warnt.
+Dieser Slice schließt die Lücke.
+
+`start()` legt die Ziel-Index-Version jetzt mit dem neuen, additiven Status
+`building` an (Erweiterung von `EmbeddingIndexStatus`, keine Änderung bestehender
+Werte oder Defaults) und supersediert die alte Version nicht mehr sofort. Solange
+eine Migration läuft, bleibt die alte Version `active`, und `get_active_index_
+version()` sowie die kanonische Auflösung aus Slice 2.1
+(`resolve_active_entity_index()` / `resolve_active_fact_index()`) liefern
+weiterhin ihre Namen — das ist der Regressionsschutz, mit dem dieser Slice
+abgesichert ist.
+
+Erst nach erfolgreichem Re-Embedding, bestandener Fortschritts-Validierung und
+einer neuen Index-Prüfung (`Neo4jReEmbedder.index_is_online()`, `SHOW INDEXES`
+gegen die Spalte `state`, analog zum bestehenden Dimensionswächter aus #263)
+schaltet der Service atomar um: die Ziel-Version wird zuerst `active`, danach erst
+wird die Quell-Version `superseded` — in dieser Reihenfolge, damit zwischen beiden
+Schreibvorgängen nie ein Moment ohne aktive Version existiert. Jeder Fehlschlag-
+oder Abbruchpfad (Exception, `failed`-Ergebnis des Re-Embedders, fehlgeschlagene
+Fortschritts- oder Index-Validierung, expliziter `cancel()`) setzt die Ziel-Version
+stattdessen auf `rolled_back` zurück; die Quell-Version bleibt dabei unangetastet
+`active`. Ein fehlgeschlagener oder abgebrochener Re-Embedding-Lauf schaltet den
+Betrieb also nie um.
+
+ADR-0007 gilt unverändert: Der alte Index wird `superseded`, aber nie gedroppt —
+dieser Slice fügt keine `DROP INDEX`-Ausführung hinzu.
+
+Was dieser Slice nicht rückwirkend repariert: Ein Bestandssystem, bei dem eine
+Migration bereits vor diesem Slice mit dem alten Verhalten gestartet wurde, trägt
+diesen Zwischenzustand (Ziel-Version sofort `active`, Quell-Version sofort
+`superseded`) weiterhin unverändert. Die `VECTOR_DIM`-SSoT (Slice 2.3) und eine
+Legacy-View für Bestandsgraphen (Slice 2.4) bleiben ebenfalls offen.
+
+### Changed (Der codex_cli-Provider bietet den echten Modellkatalog statt eines einzelnen Platzhalters — 2026-09-04)
+
+- **`codex_cli` zeigte genau ein Modell, `codex-cli-default`** — obwohl dasselbe Abo in der CLI unter `/model` sechs auswählbare Modelle führt. Der Sentinel stammt aus #1405 und war dort die richtige Entscheidung: Ohne Einträge in der Probe weist `_verify_selected_model` jede Modellauswahl zurück, und ein erfundener „echter" Modellname wäre veraltungsanfällig gewesen. Er war als Platzhalter gedacht, nicht als Endzustand.
+- **Die CLI kann ihren Katalog selbst ausgeben:** `codex debug models` liefert ihn als JSON. `discover_codex_cli_models()` fragt ihn zur Laufzeit ab und filtert auf `visibility == "list"` — genau der Filter, den die CLI für ihr eigenes `/model`-Menü verwendet. `hide` markiert interne Einträge (`gpt-reserve`, `codex-auto-review`), die keine Nutzerauswahl sind.
+- **Laufzeit-Abfrage statt gepflegter Liste, weil der Katalog account- und planabhängig ist.** Das Binary kennt intern mehr Slugs, als ein konkretes Abo freischaltet — verifiziert: `gpt-5.6` und `gpt-5.6-pro` stehen im Binary, fehlen aber im Katalog eines Plus-Accounts. Eine im Repo gepflegte Liste wäre damit nicht nur veraltungsanfällig, sondern für einen Teil der Nutzer schlicht falsch.
+- **Der Sentinel bleibt hinter den echten Slugs stehen, statt von ihnen ersetzt zu werden.** Eine bereits gespeicherte Routing-Auswahl auf `codex-cli-default` würde sonst von `_verify_selected_model` verworfen, sobald die Discovery zum ersten Mal greift. Außerdem bleibt „nimm, was `/model` in der CLI eingestellt hat" eine bewusst wählbare Option — `_run_codex_cli` lässt `--model` für den Sentinel weiterhin weg.
+- **Discovery ist Komfort und darf nie eine funktionierende Verbindung kippen.** Jeder Fehlschlag — Binary fehlt, Timeout, Exit ≠ 0, kaputtes JSON, unerwartete Katalogform — liefert ein leeres Tupel und wird geloggt; die Probe fällt dann auf den Sentinel zurück und bleibt `available`. Der Katalog-Aufruf läuft wie jeder codex-Aufruf in einem isolierten, leeren `cwd` und mit eigenem Timeout (30 s), nicht mit dem 180-s-Timeout der Chat-Aufrufe.
+
+### Added (Die codex-CLI liegt im Container — das ChatGPT-Abo ist damit nutzbar — 2026-09-04)
+
+- **Der `codex_cli`-Provider war vollständig implementiert und trotzdem in keinem containerisierten Setup benutzbar** (#1412). `is_codex_cli_available()` prüft per `shutil.which("codex")` den **Container**-PATH; weder `dev` noch `prod` installierten das Binary. Eine Installation auf dem Host half nicht — die Probe meldete dauerhaft „codex-CLI nicht im PATH gefunden" und der Provider blieb `unavailable`, obwohl Contract, Registry, Adapter, Frontend und Schemas aus #1405/#1406 korrekt standen.
+- **Eigene `codex-cli`-Build-Stage, aus der `dev` und `prod` per `COPY` bedient werden.** Eine Stage statt zweier Installationen, weil `prod` nicht von `base` erbt: So wird der Download (86 MB komprimiert, 222 MB entpackt) im Build genau einmal ausgeführt und beide Ziel-Stages bekommen dasselbe verifizierte Binary. Seit dem Rust-Rewrite ist codex ein statisch gelinktes musl-Binary — kein Node, keine Laufzeitabhängigkeiten, läuft unverändert im slim-Image.
+- **Version und beide Architektur-Hashes sind gepinnt** (`CODEX_VERSION`, `CODEX_SHA256_AMD64`, `CODEX_SHA256_ARM64`), die Architektur wird primär aus `uname -m` der bauenden Maschine abgeleitet; `TARGETARCH` überschreibt sie nur, wenn BuildKit sie tatsächlich setzt. Die umgekehrte Reihenfolge mit `ARG TARGETARCH=amd64` war nachweislich falsch: `docker compose build` setzt `TARGETARCH` nicht, der Default griff, und ein aarch64-Server lud kommentarlos das x86_64-Binary — Download und Hash-Prüfung liefen sauber durch, erst `codex --version` scheiterte mit Exit 126. Der Download wird vor der Installation gegen den Hash geprüft — dasselbe Muster, das die `FROM`-Digests bereits verwenden; ein ungeprüftes Binary aus dem Netz gehört nicht ins Laufzeit-Image.
+- **Die Anmeldung bleibt ausdrücklich außerhalb des Images.** `codex login` legt sie auf dem Host unter `${CODEX_HOME:-~/.codex}` ab; `docker-compose.yml` reicht dieses Verzeichnis in den Container. Ein Abo-Token gehört weder in eine Image-Schicht noch ins Repo. Der Mount ist bewusst **nicht** read-only: `codex exec` startet einen In-Process-App-Server und legt Session-State sowie PATH-Aliase unter `CODEX_HOME` ab — auf einem `:ro`-Mount bricht jeder Aufruf mit `failed to initialize in-process app-server client: Read-only file system (os error 30)` ab, während die Verfügbarkeitsprobe (`shutil.which`) weiterhin `True` meldet. Der Container kann damit auch den Refresh-Token zurückschreiben, was nötig ist, sobald das Abo-Token abläuft; im Gegenzug teilt er sich den Zustand mit der interaktiven codex-Installation des Hosts. Existiert das Host-Verzeichnis nicht, legt Docker es als `root` an und der Container-User (uid 1000) kann es nicht lesen — deshalb muss `codex login` einmal auf dem Host gelaufen sein.
+
+### Behoben
+
+- **`build-only` lief seit dem 2026-08-28 auf `main` und damit auf jedem PR
+  rot.** Der `Trivy container scan` blockierte den Merge jedes offenen PRs,
+  auch solcher mit sonst durchweg gruenen Checks. Die Ursache war
+  mehrschichtig; alle vier Ebenen sind jetzt geschlossen (#1410):
+
+  1. **openssl (CVE-2026-14456, HIGH)** in `openssl`, `libssl3t64` und
+     `openssl-provider-legacy`: installiert `3.5.6-1~deb13u2`, gefixt in
+     `3.5.7-1~deb13u2`. Gescannt wird `target: prod`, also genau die Stage,
+     die seit #1328 ein `apt-get update && apt-get upgrade -y` traegt. Der
+     Upgrade lief trotzdem ins Leere: Der Build-Job zieht `cache-from:
+     type=gha`, und solange FROM-Digest und Instruktion unveraendert bleiben,
+     serviert BuildKit den alten apt-Layer — die Zeile wird nie neu
+     ausgefuehrt. Die prod-Stage haengt jetzt am aktuellen
+     `python:3.14-slim`-Digest (`sha256:cad9a2c8...`). Der Bump ersetzt den
+     Upgrade nicht, er loest ihn aus.
+
+  2. **unstructured (CVE-2026-71428, CRITICAL)**: `0.18.32` → `0.27.5`. Der
+     Bump erzwang einen zweiten Override: unstructured ab 0.24.0 verlangt
+     `psutil>=7.2.2`, waehrend `camel-ai` `psutil<6` pinnt — auch in der
+     aktuellsten Version 0.2.90, es gibt also keine camel-ai, die beides
+     erfuellt. Ohne `psutil>=7.2.2` im Override-Block ist die Resolution
+     unloesbar und die CRITICAL bliebe offen. `camel` 0.2.78 importiert
+     gegen psutil 7.2.2 sauber, das Backend-Gate ist gruen.
+
+  3. **nltk faellt ganz weg** und nimmt CVE-2026-79675 (CRITICAL),
+     CVE-2026-78680, CVE-2026-71513 sowie GHSA-8mgp-746c-j5xp (HIGH) mit.
+     nltk stand bis hierher nur im Override-Block und kam transitiv ueber
+     unstructured herein; mit 2. (spacy statt nltk) faellt es aus `uv.lock`.
+
+     Der naheliegende Reflex — nltk explizit auf die gefixte 3.10.3 pinnen, um
+     die Import-Guard-Tests am Leben zu halten — war nachweislich falsch und
+     wurde wieder zurueckgenommen: `GHSA-8mgp-746c-j5xp` ("Model-artifact APIs
+     bypass pathsec") trifft nltk `<= 3.10.3` und traegt im
+     GitHub-Advisory-Datensatz `first_patched_version: null`, waehrend 3.10.3
+     zugleich die neueste Release ist. Es gibt **keine** sichere
+     nltk-Version; der Pin holte die Advisory nur zurueck und liess
+     `Dependency Review` (`fail-on-severity: high`) rot laufen. nltk
+     fernzuhalten ist die staerkere Loesung, nicht der Nebeneffekt.
+
+     Die Guard-Infrastruktur wurde entsprechend zurueckgebaut, ohne
+     Assertions aufzuweichen: Die vier nltk-abhaengigen Tests in
+     `tests/test_nltk_import_guard.py` tragen jetzt ein `requires_nltk`-skipif
+     (ohne nltk pruefen sie nichts mehr — `import nltk` scheitert am
+     ImportError statt am Guard) und bleiben stehen, damit sie bei einem
+     Wiedereinzug sofort wieder greifen. Der Dockerfile-Test laeuft
+     unabhaengig weiter. `test_pyproject_and_uv_lock_nltk_pin_match` skippt
+     bei Abwesenheit statt zu scheitern; an seine Stelle tritt der schaerfere
+     `test_nltk_is_absent_from_uv_lock`, der den Abwesenheitszustand aktiv
+     festhaelt. `NLTK_DISABLE_IMPORT_SECURITY=1` und der Override-Eintrag
+     bleiben als Riegel fuer den Fall stehen, dass eine kuenftige Transitive
+     nltk zurueckholt.
+
+  4. **msgpack (GHSA-6v7p-g79w-8964) und setuptools (CVE-2025-47273)**, beide
+     HIGH, waren ueber `uv.lock` gar nicht erreichbar: Die venv fuehrt
+     setuptools 83.0.0 und kein msgpack. Beide stecken in
+     `site-packages/pip/_vendor` — pip 26.2.1 bundelt laut `vendor.txt`
+     `msgpack==1.1.2` und `setuptools==70.3.0`. Das prod-Image braucht pip zur
+     Laufzeit nicht (die venv kommt fertig aus `backend-build` und enthaelt
+     selbst kein pip, gunicorn startet aus `.venv/bin`, der HEALTHCHECK nutzt
+     `urllib`), deshalb wird pip dort jetzt entfernt — statt die Funde per
+     `.trivyignore` zu unterdruecken. Die `dev`-Stage behaelt pip.
+
+  Nebenwirkung von 2.: `unstructured` 0.27.5 zieht das spaCy-Oekosystem nach
+  (17 neue Lock-Eintraege, 5 entfallen). Die 214 Parsing- und Chunking-Tests
+  sowie das vollstaendige Backend-Gate laufen unveraendert gruen.
+
+### Added (neuer LLM-Provider „Codex CLI (ChatGPT-Abo)“ — 2026-08-30)
+
+- **Agora kann jetzt gegen die lokal eingeloggte Codex-CLI routen, statt einen `OPENAI_API_KEY` zu verlangen.** Der neue Provider `codex_cli` spricht `codex exec` als Subprozess in einem isolierten `cwd` und mit `--sandbox read-only` an — kein HTTP-Endpunkt, kein Secret im Store. Nutzung setzt eine bestehende, per ChatGPT-Abo authentifizierte Codex-CLI-Session voraus.
+- Der Aufruf läuft mit hartem Timeout (Default 180s, konfigurierbar über `AGORA_CODEX_CLI_TIMEOUT_SECONDS`). Token-Streaming unterstützt dieser Provider in diesem Slice noch nicht.
+- Bewusst nur Codex/ChatGPT in diesem Slice — ein möglicher Claude-CLI-Provider ist ausdrücklich nicht Teil dieser Änderung (höheres ToS-Risiko, eigenes Folge-Issue).
+
+### Changed (LLM-Modell-Presets sind jetzt ein Pydantic-Vertrag statt einer Dict-Liste — 2026-08-24)
+
+- **`Config.LLM_MODEL_PRESETS` und die Response von `/api/simulation/available-models` liefen bisher außerhalb der Schema-Generierung.** Der Endpunkt reichte rohe Dicts unvalidiert durch, das Frontend spiegelte sie in einem handgeschriebenen TypeScript-Interface — ein CodeRabbit-P1-Finding auf [#1390](https://github.com/arn0ld87/agora/pull/1390), entgegen der Contracts-first-Regel aus AGENTS.md.
+- **`ModelPreset`/`AvailableModelsResponse` sind jetzt Pydantic-Modelle** (`backend/app/contracts/model_preset_contract.py`). Der Endpunkt konstruiert die Response darüber und validiert sie beim `model_dump`, statt Dicts durchzureichen.
+- **`label` bleibt bewusst ein optionales Legacy-Feld** (Bestandsschutz aus [#1290](https://github.com/arn0ld87/agora/issues/1290)): Ollama-Tag-Einträge setzen es weiterhin auf den rohen Modellnamen, ältere Backends im Mischbetrieb können es für kuratierte Presets noch liefern. Ein `field_serializer` lässt ungesetzte Preset-Felder aus der Serialisierung weg statt sie als `null` zu senden — kuratierte Presets ohne `label` bekommen kein `"label": null` untergeschoben, sonst würde `test_no_preset_carries_hardcoded_label_text` durch die neue Validierung wieder scharf.
+- **Frontend-Spiegel `frontend/src/contracts/modelPresetContract.ts`** nach dem bestehenden Zod-Mechanismus (strikt, gegen `schemas/model-preset.schema.json` und `schemas/available-models-response.schema.json` getestet). `frontend/src/api/simulation.ts` re-exportiert die generierten Typen statt eigene Interfaces zu pflegen; `useEnvForm.ts` bezog `ModelPreset` bereits darüber (Rework aus [#1390](https://github.com/arn0ld87/agora/pull/1390)).
+- **`default_provider` ist im Vertrag bewusst `str`, nicht `Literal`** — analog zu `SystemStatusOllama.skipped_provider`: ein neuer Provider in `registry.py::detect_provider` (aktuell `ollama|cloud|minimax|openai|google|bedrock|unknown`) darf den Vertrag nicht brechen. Das vorherige TypeScript-Interface kannte nur vier der sieben Werte — `useEnvForm.ts`s `defaultProvider`-Ref ist entsprechend von der engen Union auf `string` geweitet.
+- **`frontend/src/i18n/modelPresetLabel.ts::ModelPresetLike` bleibt unverändert** — der eigene Minimal-Strukturtyp entkoppelt die i18n-Schicht bewusst vom API-Layer und ist kein Duplikat.
+
+- Tests: zwei Regressions-Waechter dokumentieren das offene CodeRabbit-Finding
+  zur Nullability optionaler Felder und zur Integer-Validierung in Zod.
+  Die Fixes erfordern eine Folge-Issue (Backend-Schema-Generator vs.
+  ``field_validator``; Frontend Schema-Spiegel-Mechanik).
+
+### Fixed (Drei Panel-Rotation-Regressionen aus #1380 behoben — 2026-08-23)
+
+- **`InterviewResult.selected_agents` bekommt jetzt einen Produzenten.** Das Feld existierte seit jeher im DTO, wurde nach der Panel-Rotation in `GraphToolsService.interview_agents` aber nie zugewiesen — serialisierte Ergebnisse lieferten `selected_agents: []`, obwohl Interviews stattfanden. `graph_tools.py` schreibt die Auswahl jetzt neben ihre Begründung (`result.selected_agents = selected_agents`).
+- **Nicht-antwortende Personas belasten das Diversitätskonto nicht mehr.** `_record_interviewed_panel` verbuchte bisher die volle `selected_indices`-Liste, unabhängig davon, ob eine Persona tatsächlich eine Plattformantwort lieferte oder nur den Platzhalter `"(No response from this platform)"` bekam. Eine neue `responded_indices`-Liste wird additiv neben der bestehenden `selected_indices`-Iteration aufgebaut (Positionskopplung `selected_agents[i]` bleibt unangetastet) und ist jetzt Grundlage der Buchung — eine stumme Persona wird dadurch nicht mehr fälschlich aus späteren Panels gedrängt.
+- **Der Ausschöpfungs-Fallback unterscheidet jetzt zwischen anderem und gleichem Aspekt.** `InterviewPanelTracker.class_rank` gab bisher für beide Fälle denselben Rang 2 zurück, obwohl der Modul-Docstring eine Bevorzugung des anderen Kontexts dokumentierte. Die Klasse ist jetzt vierstufig (0 frisch, 1 wiederverwendbar unter Limit, 2 Ausschöpfung mit anderem Aspekt, 3 Ausschöpfung mit gleichem Aspekt); die Notiz-Schwelle in `apply_selection` wurde von `== 2` auf `>= 2` angepasst, damit Klasse 3 weiterhin als Ausschöpfungs-Notiz sichtbar bleibt.
+- Drei gezielte Regressionstests in `test_interview_panel_rotation.py` decken jeweils genau den vorher stillschweigend falschen Fall ab, inklusive des bis dahin ungetesteten Teilerfolgs-Batches (nur ein Teil der Auswahl antwortet).
+
+### Added (Kooperatives Abbrechen für `simulation_prepare` und `graph_build` — 2026-08-18)
+
+- **`POST /api/runs/<id>/cancel` funktioniert jetzt auch für laufende Simulationsvorbereitungen und Graph-Builds** — vorher liefen beide Jobtypen unbeirrt bis zum Ende durch, auch nachdem der Nutzer abgebrochen hatte (nur `simulation_run` und `report_generate` kannten das Cancel-Flag). Beide Jobtypen prüfen jetzt an mehreren Stellen kooperativ nach, ob ein Abbruch angefordert wurde: `simulation_prepare` zwischen den drei Phasen (Entities lesen, Personas generieren, Config generieren) und zusätzlich in der `as_completed`-Schleife der Persona-Generierung; `graph_build` vor dem Chunk-Durchlauf und in dessen `as_completed`-Schleife.
+- **Beide Pfade lassen bereits laufende Arbeit auslaufen, statt sie hart abzubrechen** — für `graph_build` heißt das: bereits committete Neo4j-Transaktionen (Episode, Entitäten, Relationen) bleiben stehen, es gibt kein Rollback und kein `delete_graph`; der Graph wird stattdessen als `incomplete` markiert (`Neo4jWriteMixin.mark_graph_incomplete`, `ProjectStatus.GRAPH_INCOMPLETE`). Für `simulation_prepare` bleibt die bereits geschriebene Profildatei (`realtime_output_path`) als Teilergebnis erhalten; der Simulations-FSM bekommt dafür einen neuen Übergang `PREPARING → CANCELLED_PARTIAL` (plus Retry-Pfad `CANCELLED_PARTIAL → PREPARING`, symmetrisch zum bestehenden `FAILED → PREPARING`).
+- **Beide Endzustände folgen demselben Muster wie der bestehende Report-Abbruch:** `status="stopped"`, `termination_reason="user_cancel"`, `resume_capability` bietet einen Neustart an. `ontology_generate` bleibt bewusst außen vor (läuft synchron im Request-Handler, kein Job).
+
+### Fixed (Review-Nachbesserungen am Cancel-Feature — 2026-08-18)
+
+- **Der `graph_build`-Cancel-Pfad war über die API komplett unerreichbar:** `cancel_run` verlangte für JEDEN Run-Typ eine `linked_ids.simulation_id`, bevor das Flag überhaupt gesetzt wurde — `graph_build`-Runs verknüpfen aber nie eine simulation_id. Die Pflicht gilt jetzt nur noch für `simulation_run`, wo sie fachlich gebraucht wird.
+- **Ein Abbruch während der Persona-Generierung mit gesetztem `quota_plan` endete als `failed` statt `stopped`:** die Quota-Validierung lief vor dem Cancel-Check und scheiterte an der durch den Abbruch gekürzten Profilliste. Der Cancel-Check läuft jetzt zuerst.
+- **Ein Fehler im Cancel-Finalisierer selbst (Neo4j-Aussetzer, Registry-Schreibfehler) konnte den geretteten Teilgraphen wieder löschen**, weil er ins äußere Fehlerbehandlungs `except` durchschlug. Jeder Schritt läuft jetzt einzeln best-effort, der wichtigste (Run-Status auf `stopped`) unabhängig vom Erfolg der anderen.
+- **Ein Restart nach einem Abbruch war selbst nicht mehr abbrechbar** — beide Restart-Pfade (`_restart_graph_build`, `_restart_simulation_prepare`) übergaben die neue `run_id` nicht an den Service. „Abbrechen → Neu starten → nochmal abbrechen“ quittierte 202, passierte aber nichts.
+- **Die gemeldete Episodenzahl nach einem Abbruch konnte niedriger sein als tatsächlich im Graphen committet** — bereits laufende (nicht mehr stornierbare) Chunks committen ihre Transaktion trotzdem, ihr Ergebnis wurde aber nie eingesammelt. `add_text_batches` liest sie jetzt nach.
+- **Ein zu spät angekommener Abbruch (nach dem letzten Checkpoint) hinterließ das Cancel-Flag dauerhaft im Prozessspeicher** — beide Job-Closures räumen es jetzt in einem `finally`-Block auf, unabhängig vom Ausgang.
+
+### Behoben
+
+- Der Coverage-Ledger persistiert keine rohen `producer_key`-Werte mehr —
+  Web-Items tragen dort die volle Tool-URL samt Query.
+- Ein Interview-Ausfall gilt nur bei explizit bekannter, nicht behebbarer
+  Ursache als terminal. `503` und `connection refused` schalten das Tool nicht
+  mehr für den ganzen Lauf ab; der Hinweistext folgt derselben Einschätzung.
+- Der Coverage-Ledger ist referenzinteger: eine kanonisierte Zeile muss auf
+  vorhandene Evidence zeigen, und Status und Feldbelegung schließen einander aus.
+- Ein Schwellenwert in Tagen wird nicht mehr von einer Angabe in Minuten belegt.
+- Zwei einander ausschließende Schranken ("mindestens 80" gegen "höchstens 70")
+  gelten als Widerspruch.
+- Ein an der Producer-Grenze gescheiterter Fakt zählt für die Data-Gap-Prüfung
+  als vorhanden — sonst wird ein Registrierungsfehler zur fehlenden Information.
+- Ein später Contract-Validierungsfehler landet in `run_degradations`.
+- Ein Interview-Record deckt keine Simulationszuschreibung mehr ab.
+- Die Red-Team-Invarianten prüfen komponentenscharf; ein unbezogener Mangel
+  stellt keine fremde Prüfung mehr still.
+- Ein zuerst als wiederholbar vermerkter Tool-Ausfall blockiert die spätere
+  Abschaltung nicht mehr.
+- Kein `KeyError` mehr im Sanitizer: Aufzählungswörter und Zählpositionen sind
+  jetzt dieselbe Menge, durch eine Modul-Invariante gesichert.
+- Threshold-Labels werden auf zehn statt sechs Zeichen gekürzt —
+  "Fallbackdauer" und "Fallbackzeit" fielen sonst zusammen.
+- Der Persona-Kohärenz-Log nennt keinen Entitätsnamen mehr (CodeQL).
+
+### Behoben
+
+- Ein Prozentwert gilt nicht mehr als durch dieselbe Absolutzahl belegt:
+  "15 Prozent der Beschäftigten" wurde von "15 Beschäftigte" gestützt, weil
+  die Einheit beim Gleichheitsvergleich fehlte.
+
+### Behoben
+
+- Ein satzeinleitendes Adverb ("Aktuell", "Insgesamt") galt als
+  Teilpopulation und unterdrückte echte Widersprüche. Als Abgrenzung zählt
+  jetzt nur, was hinter einer eingrenzenden Präposition steht.
+- Die Faktenart wird am ganzen Satz erkannt, nicht nur am Prädikat rechts der
+  Zahl: "Der Projektplan *fordert* mindestens 80 Prozent" wurde sonst als
+  gemessener Wert gelesen.
+
+### Neu
+
+- Ein Pipeline-Regressionstest über den vollständigen Referenzlauf
+  `report_cc2ef45da5e9`: dieselben Zahlen, derselbe Absatz, dieselbe
+  gescheiterte Simulation. Er prüft das Zusammenspiel der Schutzmechanismen
+  statt jeden einzeln — inklusive der Vertragstreue des entstehenden
+  Artefakts.
+
+### Behoben
+
+- Abschnitte, die erst nach erzwungener Endgenerierung entstanden, und
+  Abschnitte ohne strukturierte Metadaten erscheinen in der Qualitätsbilanz
+  des Laufs. Beides stand bisher nur im Log — der Leser sah einen Abschnitt,
+  dem er nicht ansehen konnte, dass dem Agenten die Schritte ausgegangen waren.
+
+### Behoben
+
+- Die Evidence-Bindung trug ein Feld, das der strikte Contract verbietet. Die
+  Section-Validierung schlug dadurch fehl, und der Reparaturlauf verwarf jeden
+  Claim mit gebundener Evidence.
+- Interviews werden am Evidence-Typ erkannt, nicht an der Quellengattung:
+  `agent_post` und `agent_interview` fallen beide auf `agent_quote`. Die
+  Interview-Prüfungen waren dadurch genau dann still, wenn eine Simulation lief.
+- Eine Quellenangabe links der Zahl ("Laut Betriebsrat") galt als
+  Populationsunterschied und unterdrückte echte Widersprüche.
+- Eine überschrittene Ober- oder Untergrenze gilt wieder als Widerspruch.
+  Schrankenwörter bestimmen die Schranke, nicht mehr auch die Absicht.
+- `run_degradations` wird beim Laden zurückgelesen; die API meldete sonst
+  jeden Lauf als ungestört.
+- Nur blockierende Mängel stufen `completed` ab — ein Bericht über eine noch
+  laufende Simulation bleibt vollständig.
+- Der Belegprüfungs-Anhang trägt wieder Abschnittsüberschriften.
+- Ein Interview-Timeout schaltet das Tool nicht mehr für den ganzen Lauf ab.
+- Modellableitungen und Web-Fundstellen können keinen Schwellenwert auf
+  `verified` heben.
+- "station" wird nicht mehr in "Ladestation" gelesen; ein solcher Fehlalarm
+  löschte den Beruf einer korrekten Persona.
+
+### Neu
+
+- Deterministische Red-Team-Invarianten über den fertigen Lauf: angeforderte
+  Interviews ohne Ergebnis, eine nicht regulär beendete Simulation und ein
+  degradierter Lauf mit Status `completed` erscheinen als Befund im Bericht.
+  Sie laufen unabhängig vom LLM-Red-Team — was sich abzählen lässt, gehört
+  nicht in einen Prompt.
+
+### Behoben
+
+- Zuschreibungen im Fließtext folgen der Beleglage. "Die Simulation zeigt …"
+  wird zu "Die Quellenlage zeigt …", wenn keine Simulations-Evidence vorliegt;
+  Interview-Formulierungen ohne stattgefundene Interviews ebenso. Ersetzt wird
+  nur die Zeugenformel, nie die Aussage.
+- Semantisch identische Claims aus mehreren Abschnitten erscheinen einmal.
+  Zusammengeführt wird nur bei gleichen Zahlen, gleicher Belegmenge und hoher
+  Wortüberlappung; Entferntes steht im Protokoll.
+- Ein zusammengesetzter Claim gilt nur als belegt, wenn die Quelle jede seiner
+  Teilaussagen berührt.
+- Die Belegprüfung steht gesammelt im Anhang statt hinter jedem Abschnitt.
+  Gelöscht wird nichts — die Marken im Fließtext bleiben satzgenau erhalten.
+
+### Behoben (Regression aus diesem Branch)
+
+- Der Report-Export antwortete mit 400, weil `to_dict()` ein `degraded`-Feld
+  ausgab, das der strikte Contract nicht kennt.
+
+### Changed (Die Ablage ist der Standard, 2026-08-19)
+
+- **`/` führt jetzt in die Ablage statt aufs Dashboard.** Der Shell-Standard ist von `classic` auf `dossier` gewechselt: Ablage und Dossier sind gebaut, Abbrechen und Pause hängen an der Zeile, Personasätze und Berichte sind Startpunkte. `agora.shell=classic` im localStorage bleibt als Rückweg erreichbar, bis die alten Ansichten gelöscht sind — dann fällt der Flag ganz.
+- **`views/Home.vue` ist entfernt.** Sie war seit dem `/home`→`/dashboard`-Redirect (ADR-0010) an keiner Stelle mehr eingebunden. `RunsView`, `RunDetailView` und `RunsDashboard` bleiben: sie leben in den v4-Wrappern weiter und werden von den Weiter-Aktionen der Ablage angesteuert.
+
+### Added (Läufe allein aus gespeicherten Personas, 2026-08-19)
+
+- **`POST /api/simulation/create-from-personas`** legt Projekt und Simulation an und bereitet sie ausschließlich aus Personas vor — Verweise in die Bibliothek (`template_ids`) oder Inline-Personas. Kein Dokument, keine Ontologie, kein Graph. Bewusst ein eigener Endpunkt: in `/create` bleibt die `graph_id` Pflicht, der reguläre Weg über Dokument und Graph weicht nicht auf.
+- **`prepare_from_personas`** fährt denselben FSM-Pfad wie `branching_service.create_branch` (`CREATED → PREPARING → READY`, kein Direktsprung) und schreibt `reddit_profiles.json`/`twitter_profiles.csv` sowie eine `simulation_config.json`. Beim Übersetzen der Bibliothekseinträge werden Felder ergänzt, die die Bibliothek gar nicht führt: `user_id`, `karma`, `created_at` (auf das Tagesformat normiert), `persona_kind` — und vor allem `age`/`gender`/`mbti`, die **immer** existieren müssen, weil die OASIS-Bibliothek sie ungeschützt indiziert. `PersonaLibrary._normalize` lässt leere Werte weg, ein Eintrag ohne Alter hat den Schlüssel also gar nicht.
+
+### Changed
+
+- **Die harte Untergrenze von 30 Personas ist entfallen** (`_validate_persona_quota` im `simulation_config_generator`, Issue #496). Sie stand genau dem im Weg, wofür der neue Weg gedacht ist: einem kleinen, gezielten Lauf — einem Gremium aus acht Leuten etwa. 30 bleibt der Vorschlagswert im Dashboard, ist aber keine Schranke mehr; unterhalb erscheint ein Hinweis auf die dünnere Aussagekraft statt einer Sperre. Mit der Grenze fällt auch der Schalter, der sie aufhob: `AGORA_ALLOW_SMALL_SIM` und das gespiegelte `allow_small_sim` in `/api/status` sind entfernt, ebenso die Abfrage im Dashboard, die den Regler beim Mount wieder hochklemmte.
+
+### Fixed
+
+- **Berichte sagen jetzt, was einem Persona-Lauf fehlt.** Die drei Prüfpunkte (`report_generation.py`, `report.py`, `runs.py`) antworteten mit „Missing graph ID“ — einem Satz, der jemandem nichts sagt, der nie einen Graphen bauen wollte. Sie nennen jetzt den Grund und halten fest, dass die Simulation selbst in Ordnung ist. Bewusst **kein** Platzhalter-Graph: ein formal gültiger Fake würde die Prüfungen passieren lassen, und der Bericht liefe ohne jede Graph-Evidenz durch — er sähe aus wie ein normaler. Ein klarer Abbruch ist ehrlicher.
+
+### Behoben
+
+- Gruppenentitäten werden nicht mehr zu erfundenen Einzelpersonen. Erkannt wird
+  jetzt am Grundwort des Entitätstyps (`HospitalNetwork`, `EmployeeGroup`,
+  `PatientAdvisoryCouncil`), nicht mehr an einer festen Liste, die jede neue
+  Ontologie überholte.
+- Ein Beruf, der einer Fachdomäne entstammt, die in keiner Quelle vorkommt,
+  wird geleert statt erfunden. Ein Klinik-Rollout wird damit nicht mehr zu
+  Fertigungsplanung oder Maschinenbau.
+
+### Behoben
+
+- Ein terminal ausgefallenes Tool wird abgeschaltet statt abgeraten. Der
+  Hinweis "Do NOT call interview_agents again" stand nur im Tool-Ergebnis und
+  blieb folgenlos; das Tool verschwindet jetzt aus dem angebotenen Schema und
+  ein trotzdem angeforderter Aufruf wird nicht ausgeführt.
+- Der Reportstatus bildet den Zustand des Laufs ab. Gescheiterte Simulation,
+  unvollständige Runden, angeforderte Interviews ohne Ergebnis und
+  fehlgeschlagene Abschnitte stufen `completed` auf `incomplete` ab.
+- Parallele Reports schreiben nicht mehr in die Logdateien des jeweils anderen.
+
+### Neu
+
+- `run_degradations` am Report: strukturierte Qualitätsmängel des Laufs mit
+  Komponente, Grund und Schweregrad. Additiv mit Default.
+- Deterministische Red-Team-Invarianten über den fertigen Lauf
+  (`assert_run_invariants`) — abzählbar statt erzählt.
+
+### Fixed (API-Funktionen deklarieren, was sie wirklich liefern — #1373, 2026-08-19)
+
+- **38 Funktionen in `frontend/src/api/*.ts` gaben den ausgepackten Nutzdatentyp vor, obwohl der Response-Interceptor grundsätzlich die Envelope zurückgibt** (`{success, data, …}`, siehe `api/index.ts`). Der deklarierte Typ beschrieb also nicht, was zur Laufzeit ankam — und weil er log, konnte der Compiler keinen Aufrufer mehr warnen. Jede Funktion wurde einzeln gegen ihren Endpunkt geprüft: die Zuordnung stammt aus Flasks eigener `url_map` (182 Routen), nicht aus einer Namensheuristik, und für jede Route wurde nachgesehen, ob sie `json_success` nutzt oder flach antwortet. `cancelRun` und `replayRun` antworten tatsächlich flach und bleiben unverändert; `closeSimulationEnv` baut seine Envelope von Hand (`jsonify({"success", "data"})`) und zählt deshalb dazu.
+- **`AvailableModelsResponse` beschrieb ein Feld `models`, das der Endpunkt nie geliefert hat.** `get_available_models` gibt `ollama`, `presets`, `current_default` und weitere zurück. Nur die Index-Signatur `[key: string]: unknown` hat verhindert, dass das auffiel — der Aufrufer griff seit jeher auf Felder zu, die im Typ nicht standen.
+- **Die `as unknown as …`-Casts in den Aufrufern sind entfallen.** Sie waren nie Absicht, sondern Notwehr gegen die falschen Signaturen, und haben die Diskrepanz versteckt statt behoben.
+
+### Added
+
+- **Guard `frontend/src/api/__tests__/envelopeContract.spec.ts`.** Er liest die Quelltexte und meldet jede exportierte Funktion, die ein `service.*`-Ergebnis direkt durchreicht, ohne einen Envelope-Typ zu deklarieren. Ausnahmen brauchen einen Eintrag samt Backend-Beleg (`datei.py::funktion`) — wer etwas einträgt, muss die Route nachgesehen haben. Funktionen, die die Envelope selbst auspacken und bewusst etwas anderes zurückgeben (etwa `getSimulationFeedSnapshot`), bleiben unbehelligt: ihr Typ beschreibt korrekt die eigene Rückgabe.
+
+Hintergrund: In PR #1372 hat genau dieser Typfehler zwei echte Defekte verursacht — die Personasätze wären in der Ablage nie erschienen, und die Vergleichsansicht konnte noch nie Branches laden. Beide Male war der zugehörige Test grün, weil er dieselbe falsche Annahme mockte.
+
+### Behoben
+
+- Schwellenwerte werden semantisch dedupliziert. Maßgeblich ist der
+  Sachverhalt (Kennzahl, Bezug, Wert, Einheit, Rolle), nicht die vom Modell
+  vergebene ID — derselbe Wert aus zwei Abschnitten ist ein Schwellenwert.
+- Ein Wert, der wörtlich in einer Quelle steht, wird an sie gebunden statt als
+  unbelegte Heuristik zu enden.
+- Bei widersprüchlicher, unbelegter Herkunftsangabe gilt die schwächere. Zwei
+  unbelegte Behauptungen werden nicht dadurch wahrer, dass man die lautere nimmt.
+
+### Added (Ablage und Dossier — eine Liste für alle Objekte, 2026-08-18)
+
+- **Die neue Hülle `/ablage` zeigt Läufe, Berichte, Graphen und Personasätze in EINER Liste.** Bisher lag jede Sorte in einer eigenen Ansicht mit eigener Navigation, und ein Lauf war nur als Kette einzelner Jobs sichtbar — die erstellten Graphen ließen sich nirgends überblicken. Steht hinter dem Flag `agora.shell=dossier` (localStorage) bzw. `VITE_AGORA_SHELL`; ohne Flag ändert sich nichts. Ausgewertet wird das Flag ausschließlich im Router, nie in Komponenten.
+- **Jede Zeile trägt eine Weiter-Aktion und, bei laufender Arbeit, Abbrechen und Pause.** Ein Abbruchknopf existierte zuvor nirgends in der Oberfläche. Abgebrochen wird ohne Rückfragedialog, dafür mit einem 5-Sekunden-Fenster zum Rückgängigmachen.
+- **Ein Lauf ist eine Zeile, auch wenn er aus mehreren Jobs besteht.** Die Zusammenfassung läuft transitiv über `linked_ids`: `graph_build` trägt nur eine `project_id`, das folgende `simulation_prepare` trägt beide IDs. Wer je Job stur die `simulation_id` bevorzugt, zerlegt genau diesen Lauf in zwei Zeilen — einmal als Projekt-, einmal als Simulationszeile. Die Rohebene bleibt über den Filter „Alle Jobs“ erreichbar.
+- **Das Dossier lädt die Bestandteile eines Objekts erst beim Auswählen.** Ein Bericht zeigt seine Zusammenfassung und die Abschnitte seiner Gliederung, ein Graph seine Entitäten- und Beziehungszahl. Sorten ohne Detail-Endpunkt zeigen bewusst nichts, statt ein leeres Gerüst zu behaupten; ein fehlgeschlagener Abruf lässt die Ablage unberührt.
+- **Das Fake-Profil oben rechts ist weg.** Es gab zwei davon: ein `<div aria-hidden>AD</div>` in der klassischen Kopfzeile — nicht einmal fokussierbar — und ein nachgebautes `AS` in der neuen Hülle. Beide ersetzt durch ein echtes Menü mit Initialen aus dem Profil-Store (ohne Profil ein neutrales `?`) und den Einträgen Profil und Einstellungen. Die Glocke daneben war ein `<button>` ganz ohne Handler, dessen Badge-Wert nirgends je gesetzt wurde, und ist ersatzlos entfernt.
+
+### Fixed
+
+- **`listPersonaTemplates` deklarierte `Promise<PersonaTemplateRecord[]>`, obwohl der Axios-Interceptor grundsätzlich die Envelope zurückgibt.** Personasätze wären in der Ablage nie erschienen. Nach dem Ehrlichmachen des Typs deckte der Compiler prompt eine zweite Stelle auf, die im Erfolgszweig auf ein `error`-Feld zugriff, das dort nicht existiert.
+- **Dynamisch gebildete Statusschlüssel (`shelf.status.report_*`, `project_*`) existierten in keiner Locale**, und das mitgegebene `{ fallback }` war wirkungslos: vue-i18n interpoliert benannte Werte nur *in* eine gefundene Message und gibt bei einem Fehltreffer den Schlüssel selbst zurück. In der Ablage hätte wörtlich `shelf.status.report_generating` gestanden. Alle zwölf Enum-Werte ergänzt, plus Rückfall auf den Rohstatus für künftige Backend-Werte.
+- **Ein zweiter Abbruch innerhalb des Undo-Fensters verwarf den ersten stillschweigend** — der erste Lauf erreichte `cancelRun` nie, ohne dass es jemand bemerkt hätte. Er wird jetzt sofort ausgeführt, statt verschluckt zu werden.
+- **Escape schloss das Aktivitäts-Panel, ohne den Fokus zurückzugeben**; er fiel auf den Dokumentkörper. Und der Stapel übernahm jeden Wert aus dem `sessionStorage` ungeprüft — ein beschädigter Eintrag erzeugte Pillen, deren Klick ins Leere navigierte.
+
+### Changed
+
+- **Control-Höhen wachsen unter `pointer: coarse` auf 36/44/48px.** Angehängt an die Eingabeart, nicht an eine Breite: ein 1280px-Tablet wird mit dem Finger bedient, ein schmales Desktop-Fenster mit der Maus. Die Icon-Knöpfe der Kopfzeile und die Grid-Zeile der AppShell hängen jetzt an diesen Tokens statt an festen Pixelwerten.
+
+### Behoben
+
+- Numerische Evidence wird deterministisch gefunden. Eine Quelle, die dieselbe
+  Zahl in derselben Einheit nennt, ist Kandidat, auch wenn ihr Embedding-Score
+  unter der Retrieval-Schwelle liegt. Ob sie den Claim belegt, entscheidet
+  unverändert das Entailment.
+- Absolutzahlen mit Adjektiv ("38 abweichende Dringlichkeitsfälle") werden
+  überhaupt erst als Fakt erkannt.
+- Eine gescheiterte Evidence-Bindung wird nicht mehr als Datenlücke exportiert.
+  Als Data Gap gilt nur noch, wozu in keiner verfügbaren Quelle etwas steht.
+
+### Neu
+
+- `evidence_coverage_ledger` in der Evidence-Map: für jeden quantitativen
+  Tool-Fakt entweder eine kanonische Evidence-ID oder ein Verwerfungsgrund.
+  Additiv mit Default — bestehende persistierte Maps bleiben gültig.
+
+### Behoben
+
+- Ein abweichender Zahlenwert allein gilt nicht mehr als Widerspruch. Vor einem
+  `CONTRADICTED` prüft der Trust-Layer jetzt Einheit, Faktenart (Ist-Wert gegen
+  Zielvorgabe oder Schranke) und Teilpopulation. Ein gemessener Anteil einer
+  Teilgruppe widerlegt damit keine Mindestanforderung an die Gesamtheit mehr.
+- Zahlen, deren Bezugsgruppe links steht ("Die Verwaltung erreichte 91 Prozent"),
+  werden überhaupt erst als Fakt erkannt. Vorher waren sie für Beleg *und*
+  Widerspruch unsichtbar.
+- Ausgeschriebene Aufzählungen ("Erstens … Zweitens …") werden nach dem
+  Entfernen eines widerlegten Punkts lückenlos neu gezählt — bisher galt dieser
+  Schutz nur für nummerierte Listen.
+
+### Fixed (Ein ausgefallener Ubuntu-Mirror macht die Playwright-Gates nicht mehr rot — 2026-08-18)
+
+- **Zwei PRs nacheinander scheiterten an einem Host, der nichts mit Agora zu tun hat.** `npx playwright install --with-deps` zieht Font-Pakete von den Ubuntu-Mirrors; war `azure.archive.ubuntu.com` nicht erreichbar, brach apt mit Exit 100 ab — nach gut einer Minute, bevor ein einziger Test lief. Der Install-Schritt läuft jetzt bis zu dreimal mit wachsender Pause und `apt-get update` dazwischen, damit ein rotierter Mirror auch benutzt wird statt derselbe unerreichbare Host erneut.
+- **Ein größeres Step-Timeout wäre der falsche Hebel gewesen.** Das war der Fix für [#1070](https://github.com/arn0ld87/agora/issues/1070), wo der Schritt tatsächlich in die Zeitgrenze lief. Hier gibt apt von sich aus auf; mehr Zeit verlängert nur die Wartezeit auf denselben Fehler.
+- **Der apt-Teil wird bewusst nicht bei warmem Cache übersprungen.** Gecacht ist `~/.cache/ms-playwright`, also die Browser-Binärdateien; die Systempakete liegen im Runner-Image und sind bei jedem Lauf frisch. Ein Cache-Treffer sagt nichts darüber, ob die Fonts da sind — ihn als Beleg zu nehmen hieße, still gegen ein anderes Font-Set zu rendern.
+
+### Added (Interviewantworten tragen eine Richtung — 2026-08-18)
+
+- **`sentiment_score` war ein Feld, das niemand schrieb.** Es steht in `EvidenceRecordModel`, wird von `confidence_calculator._extract_sentiment_scores` gelesen — und war im 7-Sektionen-Referenzlauf bei **0 von 99 Items** gesetzt. Damit war jede Mengenaussage über Stakeholder („die Mehrheit lehnt den ungestaffelten Vollstart ab“) strukturell unbelegbar: Regel 2 in `evidence_entailment` prüft solche Aussagen gegen einen Prozentwert, und ohne Richtung gibt es nichts auszuzählen. Die Persona nennt ihre Haltung jetzt selbst als letzte Zeile ihrer Antwort (`STANCE: <-1.0…1.0>`).
+- **Warum die Persona sich selbst einschätzt.** Eine Markerliste wäre genau das lexikalische Raten, das [#1357](https://github.com/arn0ld87/agora/issues/1357) im Entailment gerade abgeschafft hat; ein eigener Judge-Call je Interview kostet im Referenzlauf 32 zusätzliche Calls. Gefragt ist hier die Haltung der Persona, nicht ein Urteil über sie — die Selbstauskunft ist die Sache selbst, nicht ihre Schätzung.
+- **Fehlt die Zeile, bleibt der Wert leer.** Nicht `0.0`: eine Antwort ohne erkennbare Richtung ist keine Enthaltung, und sie als eine zu zählen füllte die Grundgesamtheit mit Stimmen, die niemand abgegeben hat. Werte außerhalb der Skala werden auf `[-1, 1]` gekappt statt das Item zu verwerfen; wiederholt das Modell die Zeile, zählt die letzte — dort, wo der Prompt sie verlangt hat, während frühere Vorkommen Echos der Anweisung sind.
+- **Die Marke verlässt den Text nicht.** Die Zeile wird abgetrennt, bevor der Antworttext gerendert, gekürzt oder auf Zitate durchsucht wird — sonst stünde `STANCE: -0.6` im persistierten `quote`, im `snippet` und am Ende im Berichtstext.
+
+### Changed
+
+- **Die Haltung bekommt ein eigenes Feld, statt `sentiment_score` zu belegen.** `topic_stance` in `EvidenceRecordModel` und `EvidenceItemModel` trägt die Position der Person zum Thema; `sentiment_score` beschreibt weiterhin den Tenor eines Snippets. Der Unterschied ist nicht akademisch: `_has_contradiction` wertet die Sentiment-Spanne der Belege **eines Claims** aus und zieht bei `min < -0.3 UND max > +0.3` zwanzig Punkte ab. Zwei Personas können beide „Schulung ist nötig“ sagen — beide Snippets zustimmend — und dabei gegensätzlich zum Rollout stehen. Fiele die Themenhaltung in dasselbe Feld, würde genau der Claim abgewertet, über den sie einig sind. Die Widerspruchs-Penalty bleibt damit weiter ohne Eingabe; sie zu aktivieren wäre nur richtig, wenn die Sentiments claim-relativ wären, und das sind sie nicht.
+
+### Fixed (Das Red Team bewertet den Bericht, nicht die ersten 4000 Zeichen — 2026-08-18)
+
+- **Der Reviewer meldete einen Abbruch, den es nicht gab.** Im Referenzlauf lautete ein Befund, der Bericht breche bei „Das Management handelte zunächst unter dem Druck wirtschaf…“ ab. Das war der Schnitt des Excerpts, nicht des Berichts; der Satz und seine Sektion waren vollständig vorhanden. Gemessen an acht Artefakten griff die 4000-Zeichen-Grenze in fünf Fällen — jedes Mal mitten im Satz. Ein Reviewer, der ein Artefakt des Werkzeugs für einen Inhaltsfehler hält, verbraucht Aufmerksamkeit, statt sie zu schaffen.
+- **Zwei weitere Kappungen lagen davor.** Der Entwurf bestand aus `claims[:20]` und `hypotheses[:10]`. Bei 339 Claims in einem gemessenen Artefakt sah der Reviewer sechs Prozent davon. Alle drei Grenzen sind weg; das verbleibende Zeichenbudget (60k, rund 20k Token) ist eine Kostenbremse gegen entartete Läufe, keine inhaltliche Auswahl — und es schneidet nur noch am Zeilenende, mit einer Marke, die die Kürzung als Kürzung ausweist und die Zahl der ausgelassenen Einträge nennt.
+- **Die Schwellen fehlten vollständig, und genau dort lag der Widerspruch.** Der Bericht fordert in Sektion 1 vier Wochen Pilotbetrieb und in Sektion 7 mindestens acht. Beide Werte stehen als `Threshold` im Artefakt — im Entwurf für den Reviewer standen sie nie. Sie sind jetzt drin, mit Wert, Einheit, Herkunft und Beleglage, und der Prompt fragt ausdrücklich nach widersprüchlichen operativen Zahlen.
+- **Jede Zeile trägt ihre Kennung.** `C7_03` nennt den Abschnitt, aus dem der Claim stammt. Der Prompt erklärt das und weist darauf hin, dass Widersprüche zwischen weit auseinanderliegenden Abschnitten die sind, die beim Lesen am wenigsten auffallen — derselbe Zuschnitt, der den 4-gegen-8-Wochen-Fall verdeckt hat.
+
+### Fixed (Die Herkunft eines Claims wird abgeleitet, nicht behauptet — 2026-08-18)
+
+- **Sechzehn von sechzehn Claims wiesen dieselbe Herkunft aus, und sie war bei fünfzehn falsch.** Jeder Claim trug `aggregation_basis="persona"` und `confidence_scope="simulation_consensus"`, während seine `evidence_refs` auf 22 `seed_corpus`- und 2 `agent_action`-Items auflösten. Der Leser erfuhr, ein Befund beruhe auf der Meinung simulierter Personas, obwohl er aus dem Seed-Dokument stammte. `aggregation_basis` war schlicht ein Literalwert im Konstruktoraufruf.
+- **Die zweite Ursache saß eine Ebene tiefer.** Die Evidence-Dicts *am Claim* tragen nur die Bindungsdaten (`evidence_id`, `match_score`, `entailment` …); die Quellengattung steht ausschließlich im vollen Datensatz im `evidence_index`. Die Ableitung des Geltungsbereichs las `source_kind` direkt am Item, fand dort nie etwas und fiel still auf den Default zurück — ein Fehler, der sich als Vorsicht tarnte. Sie schlägt jetzt über die `evidence_id` im Index nach.
+- **Eine einfache Mehrheit trägt keinen Claim.** Verlangt wird eine strikte: mehr als die Hälfte der stützenden Items. Zwei Seed-Belege und zwei Zitate ergeben `aggregat`, nicht `seed` — bei Gleichstand trägt keine Gattung die Aussage allein. `graph_relation` und `web_source` führen bewusst nicht auf `seed`, obwohl eine Graph-Kante aus dem Korpus stammt: Der Knoten verdichtet viele Erwähnungen zu einer Kante und ist damit selbst schon eine Aggregation. Items ohne auflösbare Gattung zählen in die Grundgesamtheit, können eine Mehrheit also verhindern, nie begründen.
+- **Der Vertrag weist widersprüchliche Kombinationen jetzt ab.** `ReportV3Claim` lässt `seed` neben `confidence_scope="simulation_consensus"` nicht mehr zu — `seed_corpus` ist eine quellengebundene Gattung. `datenluecke` verträgt weder einen quellengebundenen Geltungsbereich noch ein `high`/`verified`-Label. Beide Felder stammen aus derselben Menge stützender Items; dass sie beliebig kombinierbar waren, ist der Grund, warum der Literalwert sechzehn Claims lang unbemerkt blieb.
+
+### Fixed (qualitative Claims werden nicht mehr über Wortüberlappung belegt — 2026-08-17)
+
+- **Die Deckungsrichtung war verkehrt herum.** Regel 3 maß Containment: sobald der Evidence-Text Teilmenge des Claims war, galt der Claim als belegt. Im Referenzlauf stammten deshalb **alle 24 `SUPPORTED` aus dem lexikalischen Zweig**, bei Containment-Median 1.00 und Deckungs-Median 0.21 — der Claim behauptete im Schnitt das Fünffache seiner Quelle. So band „Die simulationsgestützte Evaluation … ergibt gravierende Risiken für die Patientensicherheit“ an „Der Städtische Klinikverbund Falkenbrück plant unter dem Projektnamen AURORA die Einführung des Systems Nexora Triage Assist.“ Gemessen wird jetzt `coverage_ratio(claim, evidence)`: was der Claim behauptet, muss in der Quelle stehen.
+- **Persona-Interviews konnten strukturell nie binden.** Ihre lexikalische Deckung liegt im Median bei 0.02, im Maximum bei 0.29 — ein Interviewzitat sagt dasselbe in anderen Worten. Das Retrieval fand sie mit 0.65 bis 0.79 korrekt, der lexikalische Vorfilter warf sie danach weg (22 von 25 Paaren). Da `agent_interview` auf `EvidenceSourceKind.agent_quote` abgebildet wird und `cross_stakeholder_for_high` genau diese Gattung verlangt, war `high`/`verified` damit **unerreichbar**: im Referenzlauf alle 16 Claims `low`, 0 `agent_quote` in den `evidence_refs`. Liegt ein Retrieval-Ergebnis über `RETRIEVAL_RELEVANCE_THRESHOLD` (0.60) vor, entfallen beide lexikalischen Filter — die Frage „geht es um dasselbe“ hat die Embedding-Stufe dann bereits besser beantwortet.
+
+- **Eine Quelle, die den Claim ausdrücklich verneint, galt als Beleg.** `nicht` steht in `_STOPWORDS`, also reduzieren „die Betriebsvereinbarung ist abgeschlossen“ und „… ist *nicht* abgeschlossen“ auf dasselbe Token-Set und erreichen Deckung 1.00 — das regelbasierte `SUPPORTED` fiel vor dem Judge. Der qualitative Pfad prüft die Polarität jetzt zuerst (`qualitative_polarity_mismatch` → `CONTRADICTED`), wie der numerische seit [#1317](https://github.com/arn0ld87/agora/issues/1317).
+- **Ein erschöpftes Run-Budget wurde als Judge-Fehler verschluckt.** Seit der Judge in der Bindungskette hängt, kann er `BudgetExceededError` auslösen — `classify_evidence` und der Binder-Block im `ReportAgent` fingen aber pauschal `Exception`. Der Lauf wäre als `completed` angekommen statt mit `termination_reason=budget_*`, und alle folgenden Kandidaten hätten weiter Calls versucht. Beide Schichten reichen die Ausnahme jetzt durch.
+
+### Changed
+
+- **Regel 3 ist dreiteilig.** Deckung ≥ 0.60 ergibt `SUPPORTED`, Deckung < 0.10 ohne Retrieval-Signal `RELATED_ONLY`; dazwischen entscheidet der Judge. Ohne Judge endet die Grauzone bei `RELATED_ONLY` — unentschieden heißt nicht belegt. Die deterministischen Regeln 1 und 2 (Zahl, Bezugsgruppe, Mengenaussage) bleiben unverändert vorgelagert und bindend; ein regelbasiertes `CONTRADICTED` erreicht den Judge nie.
+- **Der Judge ist verdrahtet und darf in der Grauzone belegen.** `build_llm_judge` existierte, wurde aber von keinem Aufrufer gesetzt — der `judge`-Parameter war toter Code. `ReportAgent` baut ihn jetzt einmal pro Lauf und reicht ihn an `bind_evidence_to_claim`. Die alte ADR-0002-Klausel („darf `SUPPORTED` nur abschwächen, nie erzeugen“) ist für den qualitativen Pfad abgelöst, siehe [`docs/decisions/0002-supersedes.md`](docs/decisions/0002-supersedes.md) — sie war eine Bremse gegen die alte Großzügigkeit von Regel 3 und wäre nach deren Umkehrung eine Sperre gewesen, hinter der die Grauzone dauerhaft unbelegt bliebe.
+- **Der Binder klassifiziert erst nach dem Kürzen auf `top_k`.** Vorher lief der Entailment-Check über jeden Kandidaten oberhalb der Retrieval-Schwelle. Mit einem Judge in der Kette wäre das ein Call je Kandidat gewesen, auch für die, die anschließend ohnehin herausfallen. Das Budget hängt damit an `top_k` (Referenzlauf: höchstens 5 je Claim). Der Preis: ein widersprechendes Item mit schwachem Retrieval-Score fällt heraus, statt `contradicts_claim` zu setzen.
+- **Judge-Ausfall fällt auf den Regelpfad.** Exception oder unbekanntes Verdikt setzen `judge_failed`; die Grauzone endet bei `RELATED_ONLY`. Der Report wird dadurch vorsichtiger, nicht falscher.
+- **Antwortet der Provider in Prosa statt JSON, wird das Urteil aus dem Text gelesen.** Gemessen an den fünf verfügbaren Ollama-Cloud-Modellen lieferte genau eines strukturiertes JSON; die übrigen antworteten mit einer sauberen, aber prosaischen Begründung (`**Urteil:** RELATED_ONLY — die Evidence thematisiert zwar …`). Mit `LLM_DISABLE_JSON_MODE` fällt der erzwungene Modus ohnehin weg. Ohne diesen zweiten Versuch wäre der Judge in vier von fünf Konfigurationen dauerhaft im `judge_failed`-Pfad, obwohl das Modell inhaltlich korrekt geurteilt hat; mit ihm sind es drei von fünf tauglich. Gelesen wird ausschließlich der Urteilsname und nur, wenn er eindeutig ist — bei null oder mehreren Treffern wird nichts geraten. Gesucht wird als eigenständiges Wort, nicht als Teilstring: „The claim is UNSUPPORTED“ enthält sonst genau einen Treffer, ausgerechnet das gegenteilige Urteil. Der zweite Versuch läuft mit `force_no_thinking`, weil Reasoning-Modelle ihr Budget sonst im Denkteil verbrauchen und leer antworten, und mit `context="report"`, damit Tokens und Kosten nicht dem interaktiven Chat zugeschrieben werden.
+
+### Fixed (Fließtext-Faktenprüfung löscht keine belegten Aussagen mehr — 2026-08-17)
+
+- **Ein vollständiger 7-Sektionen-Referenzlauf verlor 28 Faktenaussagen, die weit überwiegende Mehrheit davon belegt.** Aufgeschlüsselt nach Grund: 14 `predicate_overreach`, 8 `no_matching_number`, 4 `subject_mismatch`, 2 `predicate_not_measurable`. Gegen die neue Prüfung kehren alle 28 zurück — sie bleiben im Text stehen und tragen den Marker `[Beleg fehlt]`.
+- **Dieselbe Zeile Code beschädigte Markdown-Struktur und Satzsyntax.** `_SENTENCE_SPLIT = (?<=[.!?])\s+` hielt Ordinalzahlen für Satzenden. Aus `… (3. bis 14. Juni mit 14 Ärzten …) wichen 38 Empfehlungen ab` wurden zwei Fragmente; das zweite trug die Zahlen und fiel, übrig blieb ein Satz, der mitten in der Datumsklammer abbrach. Bei Listen zerfiel `1. Erfolgreicher Wiederholungstest …` in `"1."` und den Rest — der Rest fiel, der nackte Marker blieb (`section_01.md` und `section_03.md` mit je zwei leeren Zeilen). Aufzählungspräfixe werden jetzt vor der Zerlegung abgetrennt, Ordinalzahlen und Abkürzungen (`z. B.`, `Nr. 3`, `15. Mai`) sind als Satzgrenze ausgeschlossen. Verliert eine Listenzeile ihren Inhalt, verschwindet sie ganz und die Liste zählt lückenlos weiter.
+- **`INSUFFICIENT` wurde wie `CONTRADICTED` behandelt.** „Kein passendes Evidence-Item gefunden“ heißt nicht „falsch“. Entfernt wird nur noch, was einer Quelle aktiv widerspricht. `predicate_overreach` und `modality_mismatch` gelten dabei nicht mehr als Widerspruch: eine unbelegte Zusatzaussage ist keine falsche, und die Modalität wird ohne Parser aus Markerlisten geraten. `_modality_of` kennt jetzt zusätzlich substantivische Zielmarker (Ziel, Vorgabe, Anforderung, Schwellenwert, mindestens, maximal), damit „Schulungsziel von 80 Prozent“ nicht länger als Ist-Wert gelesen wird.
+- **Ein einzelnes kollidierendes Evidence-Item entschied über einen ganzen Satz.** Ein beliebiges Item mit demselben Zahlenwert bei fremder Bezugsgruppe kippte einen Satz, dessen übrige Zahlen sauber belegt waren. Geprüft wird jetzt pro numerischem Fakt. Aggregiert wird über zwei bewusst verschiedene Ordnungen: pro Fakt zählt das *entschiedenste* Urteil des Pools (ein Beleg schlägt alles, danach kommt der Widerspruch), pro Satz das *schwerwiegendste* seiner Fakten. Dass dabei kein Zufallstreffer durchschlägt, sichert nicht die Rangfolge, sondern die Verdikte selbst — `subject_mismatch` ist kein Widerspruch mehr. Ergänzend endet eine Bezugsgruppe an der nächsten Zahlenangabe — vorher lief das Subjekt des ersten Fakts in einer Aufzählung über alle folgenden Zahlen hinweg.
+- **Ein Claim, der den belegten Wert selbst nennt, widerspricht der Quelle nicht.** Steht die Bezugsgruppe vor der Zahl, läuft das Subjekt der ersten Zahl bis zur zweiten Gruppe durch. „83 Prozent im Ärztlichen Dienst und 91 Prozent in der Verwaltung“ verglich deshalb 83 mit den belegten 91 Prozent derselben Verwaltung und las einen Widerspruch, wo die Quelle den Satz stützt. `value_mismatch` verlangt jetzt zusätzlich, dass der Quellwert im Claim nirgends vorkommt; sonst gilt die Zuordnung als unscharf (`value_mismatch_ambiguous_subject`, `INSUFFICIENT`).
+
+### Changed
+
+- **Abschnitte führen `unverified_statements`** (`ReportSectionUnverifiedStatementModel`, Zod-Spiegel in `frontend/src/contracts/reportContract.ts`). Der Marker im Fließtext ist für den Leser da; dieses Feld trägt Aussagetext, Urteil und Begründung maschinenlesbar, damit UI und Audit nicht am Markerstring parsen müssen.
+- **Die Fließtext-Prüfung vergleicht gegen den vollständigen `evidence_index`** statt nur gegen Abschnitts- und globale Evidence. Ein in Abschnitt 4 erhobener Fakt war für Abschnitt 1 vorher unsichtbar, obwohl der Beleg im selben Artefakt lag.
+- **Das `gate_decision_log` unterscheidet `prose_fact_contradicted` von `prose_fact_unverified`.** `action` bleibt für beide `moved_to_hypotheses`, damit bestehende Konsumenten keinen neuen Wert sehen.
+
+### Known limitation
+
+- **Der Gründungsfall des Sanitizers bleibt bis [#1357] sichtbar im Text.** „61 % der Lehrkräfte bewerteten die Lernhilfe positiv und berichteten von einer Zeitersparnis“ ist eine echte Falschzuordnung — die Quelle belegt nur die Zeitersparnis. Sie ist von einer korrekten Paraphrase lexikalisch nicht zu trennen: die erfundene Aussage erreicht Deckung 0.56, die korrekte („forderten **bereits im Vorfeld** eine Verschiebung“) nur 0.50. Jede Schwelle, die die eine fängt, löscht die andere mit. `test_1e` prüft deshalb ab jetzt die Kennzeichnung statt die Entfernung; die semantische Trennung braucht ein Urteil jenseits der Wortzählung.
+- **Steht die Bezugsgruppe vor der Zahl** („in der Ärzteschaft 83 Prozent“), sucht `_split_subject_predicate` nur rechts der Zahl und ordnet dem Fakt die nächstfolgende Gruppe zu. Auf das Gating schlägt das nicht mehr durch — eine fremde Bezugsgruppe ergibt `INSUFFICIENT`, und ein Wert, den der Claim selbst nennt, ebenfalls. Die Zuordnung bleibt trotzdem falsch und trägt die Begründung; als `xfail` gegen `extract_numeric_facts` festgehalten und in [#1357] aufgenommen.
+
+[#1356]: https://github.com/arn0ld87/agora/issues/1356
+[#1357]: https://github.com/arn0ld87/agora/issues/1357
+
+### Fixed (`file_parser.py` — Zeilenalignment beim Chunk-Folgestart, 2026-08-23)
+
+- **Mehrzeilige Aussagen zerfielen am Fensterrand in ein kontextloses Fragment:** Fiel die Chunk-Grenze (Projekt-Default 500 Zeichen) mitten in eine Pfeil-Listen-Aussage, begann der Folgechunk beim letzten Halbsatz — im AURORA-Referenzlauf trug der Evidence-Snippet nur noch „Danach Entscheidung ueber Falkenbrueck-Nord.“, während die tragende Bedingung „vier Wochen stabiler Betrieb“ allein im Vorchunk lag. Der Matcher verlor damit genau die Bedingung (#1347).
+- **Neu: Der Folgechunk-Start wird vor dem Wort-Snap an den Anfang seiner Zeile ausgerichtet** (`_snap_to_line_start`), wenn eine Zeilengrenze im festen Rückblick von 100 Zeichen liegt; sonst greift unverändert der bisherige Wort-Snap. Beide Snaps sind verlustfrei — der Start wandert nur rückwärts, es wird kein Text übersprungen.
+- **Bewusst fester, kleiner Rückblick statt Overlap-Scaling oder Absatz-Chunking:** Die Ausrichtung soll benachbarte Zeilen einer Aussage zusammenhalten; ein mit dem Overlap skalierender Rückblick erzeugte bei `GRAPH_CHUNK_SIZE=1500` messbar mehr (und kürzere) Chunks — also mehr Extraktionsaufrufe beim Graph-Build — ohne dort ein Problem zu lösen. Semantisches Chunking und Parent-Chunk-Anreicherung wurden geprüft und verworfen: neue Produktfläche bzw. wachsende Evidenzkarte (#1190).
+- **Messbar (Synthetik-Dokument, Projekt-Default 500/50):** isolierte Entscheidungs-Fragmente 66 → 0 (großes Dokument: 266 → 0) bei identischer Chunk-Anzahl (133 bzw. 533) und +3 % Chunktext-Volumen durch den größeren Überlappungsanteil. Bei Graph-Default 1500/150 bleibt die Ausgabe byte-identisch. Die Nachbearbeitung (Claim-Binding, #1190) ist strukturell unberührt: Snippets sind LLM-Fakten mit unverändertem 300-Zeichen-Cap, Chunk-Anzahl und damit Extraktions- wie Evidence-Item-Menge bleiben gleich.
+
+### Fixed (Sammelclaims werden pro Teilaussage bewertet statt komplett auf INSUFFICIENT abgestuft — 2026-08-24)
+
+- **Ein Claim, der mehrere Voraussetzungen bündelt ("Rollout nur wenn: S-17 behoben, S-24 behoben, Schulungsquote erreicht"), war ein einziger Claim-Eintrag mit einem einzigen Evidence-Urteil.** Der bestehende Kompositions-Check (`claim_atomizer.split_compound_claim`, #1369) lief ausschließlich innerhalb der Entailment-Stufe (`evidence_entailment.py::_classify_qualitative_claim`) und konnte einen teilweise belegten Sammelclaim nur komplett auf `INSUFFICIENT` abstufen — das verhinderte das falsche `SUPPORTED`, lieferte aber nicht die im Issue verlangte Granularität ("jeden Teilclaim separat bewerten"). Ein Claim mit 2 von 5 belegten Teilen blieb ein einziger, komplett unbelegter Eintrag statt in 2 belegte und 3 unbelegte Einzelclaims zu zerfallen.
+- **Die Zerlegung sitzt jetzt an der Extraktionsstufe:** `ReportAgent._build_claims_for_section` (`agent.py:725`) wendet `claim_atomizer.split_claim_chunks` nach den #1316-Struktur-/Diskursfiltern und vor der Evidence-Bindungsschleife an — jedes Sub-Atom durchläuft danach Roh-ID-Vergabe, Evidence-Binding und Confidence-Berechnung einzeln. Reihenfolge ist bewusst: vor den #1316-Filtern angesetzt hätte die Zerlegung Markup- oder Gliederungssatz-Fragmente erzeugt, die diese Filter (laufen nur einmal) nie zu sehen bekommen.
+- **`split_compound_claim` erkennt jetzt zusätzlich Doppelpunkt-eingeleitete Bullet-Aufzählungen**, nicht nur Satzgrenzen/Semikolon/Konjunktionen (`sowie`, `und zugleich`, `und gleichzeitig`, `während`, `wohingegen`). Jede Bullet-Zeile wird mit der Einleitung vor dem Doppelpunkt zu einer eigenständigen Teilaussage kombiniert — ein blankes Listenelement wie "S-17 behoben" wäre sonst ohne Bezug und zu kurz für `MIN_ATOM_TOKENS`. Bewusst konservativ: ohne Doppelpunkt vor der Aufzählung greift die neue Erkennung nicht (Gegenprobe getestet), `oder` bleibt weiterhin kein Trennzeichen.
+- **Die Export-ID-Vergabe (`ReportManager.build_report_v3`, #1341) ist unberührt** — sie zählt akzeptierte Claims der bereits fertigen Section-Liste und bekommt durch mehr Roh-Atome strukturell nur mehr Slots im selben `section_index`-Namensraum, keine Kollision. Die dedizierten Eindeutigkeitstests (`test_report_v3_contract.py`) laufen unverändert grün.
+- **Nebenwirkung, bewusst hingenommen (im Issue benannt):** mehr Atome pro Section verschieben `claim_slot`-basierte Statistiken (Abwertungsquote, Data-Gap-Zahl) nachgelagerter Reports gegenüber älteren Läufen.
+
+### Fixed (Datumswerte in Thresholds — Review PR #1379 — 2026-08-23)
+
+- **Unmögliche ISO-Daten werden am Contract abgelehnt**: Bei explizitem `kind='date'` prüfte der After-Validator nur das Muster `YYYY-MM-DD` — `2026-02-30`, `2026-13-01` und Jahreswerte außerhalb der Grenzen passierten den Backend-Contract, und der Zod-Spiegel prüfte ebenfalls nur die Regex. Jetzt vergleicht der Validator den Wert gegen denselben Parser (`parse_date_value`) und übernimmt damit dessen komplette Kalender- und Jahresprüfung (1900–2100) statt einer zweiten, driftenden Datumslogik; der Zod-Spiegel liest Jahr/Monat/Tag, erzeugt über UTC und vergleicht alle drei Komponenten zurück.
+- **Rückwärtskompatibilität numerischer Strings wiederhergestellt**: Vor #1343 war `value` ein reines `float`-Feld — Pydantic konvertierte `"90"` zu `90.0`. Mit `value: float | str` wählte Smart Union für exakte Strings den Textzweig, den die Shape-Prüfung anschließend verwarf; ältere bzw. providerseitig leicht abweichende Payloads wären plötzlich abgelehnt worden. Nach erfolgloser Datumserkennung wandelt der Before-Validator rein numerische Strings (`^-?\d+([.,]\d+)?$`, auch deutsches Kommaformat) wieder zu float um — echte Datumsstrings bleiben Strings.
+- **Validierung ohne Seiteneffekte**: Der Before-Validator veränderte das übergebene Dict direkt (`data[...]`, `pop`). Er arbeitet jetzt auf einer flachen Kopie; das Eingabe-Dict bleibt unangetastet.
+- **Regressionstests** am Contract-Pfad (nicht Parser) für alle drei Fälle plus Schalttag-Gegenprobe, numerische Coercion (positiv/negativ) und Seiteneffektfreiheit; Spiegel-Tests in `reportV3Contract.spec.ts`.
+
+### Fixed (Datumswerte als numerische Thresholds — 2026-08-23)
+
+- **Aus „15. Oktober 2026“ wurde `{value: 15.0, unit: "October"}`** (#1343, Part of #1297). Der AURORA-Referenzlauf extrahierte Datumsangaben über dieselbe generische Number+Unit-Lesart wie operative Schwellwerte: der Tag als Zahl, der Monatsname als Einheit. Beides ist in keinem Vergleich verwendbar — ein Datum ist keine Menge, es trägt keine Einheit und keinen Sinn als Schwellwert.
+- **Contract-Erweiterung um eine `kind`-Diskriminante** (`Threshold.kind: Literal["quantity", "date"] | None = None`, `value: float | str`, `unit` optional): `quantity` ist die operative Zahl mit Einheit, `date` das Kalenderdatum als ISO-Wert (`YYYY-MM-DD`). Bewusst ein flaches Modell statt einer Pydantic-Discriminated-Union — das Schema erreicht über `model_json_schema()` auch Fallback-Provider im json_object-Modus (Ollama), wo anyOf-Unions mit zwei Objektformen unzuverlässig sind. `kind` ist optional mit Default `None`: Bestandsartefakte vor #1343 tragen das Feld nicht und laden unverändert; „nicht erfasst“ ist nicht dasselbe wie eine erfasste quantity (Muster: `Claim.confidence_scope`, #1160 A).
+- **Der Datumsparser läuft VOR der Number-Coercion** (`mode="before"`-Validator): ein String, der „15. Oktober 2026“, „15 October 2026“, „2026-10-15“ oder „15.10.2026“ trifft, wird zu ISO normalisiert und auf `kind='date'` festgelegt — auch gegen einen fälschlichen `kind='quantity'`-Anspruch, dessen Einheit als Fehllesart verworfen wird. Nur vollständige Daten mit Jahr gelten; „15. Oktober“ ohne Jahr bleibt eine Lücke statt eines geratenen Werts.
+- **Ein Monatsname ist strukturell keine Einheit**: der verstümmelte Eintrag `{value: 15.0, unit: "October"}` wird vom Vertrag verworfen, statt ins Artefakt zu rutschen. Ohne Jahr wäre er nur rekonstruierbar durch Raten — verworfen ist die ehrliche Richtung.
+- **Consumer nachgezogen**: Deduplizierung führt Datum-Schlüssel getrennt von Mengen-Schlüsseln (gleiche Label verschmelzen kein Datum mit einer Zahl), die numerische Provenance-Bindung nimmt Datumsangaben aus, Markdown-Tabelle und Red-Team-Excerpt rendern den ISO-Wert ohne Einheit (`display_value`) — vorher wäre `:g` an einem ISO-String mitten im Review-Entwurf gesprengt worden. Die Feldbeschreibungen von `SectionMetadata.thresholds` weisen das Modell an, Datumsangaben ausschließlich als `kind='date'` mit ISO-Wert zu melden.
+- **Schema-Dump und Zod-Spiegel synchron**: `schemas/report-v3.schema.json` regeneriert, `frontend/src/contracts/reportV3Contract.ts` spiegelt kind/value/unit samt Monatsnamen-Ablehnung; Drift-Guard für `Threshold` ergänzt. Regressionstests über alle vier Schreibweisen in `test_threshold_kind.py` (Vertrag) und `test_threshold_dates.py` (Pipeline).
+
+### Changed (Referenzlauf 7 als aktuelle Referenz dokumentiert — 2026-08-17)
+
+- **AURORA-Lauf vom 17.08.2026 ersetzt Referenzlauf 6 als aktuelle Referenz:** Englische und deutsche Referenzdokumentation unter `docs/reference-runs/2026-08-17-aurora-red-team/`, Referenzlauf-Index und der Referenzlauf-Abschnitt beider READMEs beschreiben `report_b259e254ee3f` aus der 24-Runden-Simulation `sim_c2108c7f543e`. Der Lauf ist die erste Referenz für das nachgeschaltete Red-Team-Review (9 Befunde, Echo-Index 0,703) und für das aktive Umleiten ungedeckter Faktenaussagen in den Hypothesen-Slot (10 Fälle in fünf von sieben Abschnitten). Er belegt zugleich den Export-Fix aus #1340 bis #1342 am Artefakt: Befunde und Modellzuordnung der Review-Stufe überleben den Neuaufbau, Claim-, Gap- und Hypothesen-IDs sind abschnittsqualifiziert und kollisionsfrei.
+- **Kennzahlentabelle statt Screenshots:** Der Referenzlauf-Abschnitt beider READMEs führt Runden, Laufzeit, Evidenzarten, Claims, Hypothesen, Data Gaps und Red-Team-Befunde als Tabelle. Für diesen Lauf liegen keine UI-Screenshots vor; die Bilder von Referenzlauf 6 bleiben ausschließlich dort verlinkt.
+- **Offene Trust-Grenzen bleiben als Regressionsziele benannt:** durchgängig `low` Confidence über alle 29 Claims, 92 von 116 ungebundenen Evidenzdatensätzen, 126 Data Gaps mit identischer Severity, fehlende `source_id_anchor`- und `source_model`-Werte sowie die gegenüber Lauf 6 gestiegene Laufzeit, die wegen der anderen Simulation kein direkter Reporter-Vergleich ist. Die erfüllte Erwartung aus Lauf 6 — auflösbare `ev_`-Anker in allen 24 Persona-O-Tönen — ist ausdrücklich vermerkt.
+
+### Fixed (ReportV3: Red-Team-Befunde überleben den Export, Claim- und Gap-IDs sind global eindeutig — 2026-08-17)
+
+- **Red-Team-Befunde verschwanden zwischen Log und Artefakt (#1340):** Der Lauf protokollierte `_run_red_team_review: 8 Befunde` und `generate_report: red_team_review abgeschlossen, findings=8`, im `report-v3.json` stand `"red_team_findings": []`. Ursache waren zwei Schreibpfade auf dieselbe Datei: der Red-Team-Schritt persistiert sein Ergebnis über `ReportManager.save_report_v3()` korrekt, danach läuft im selben `generate_report()` noch `ReportManager.save_report()` und baut das Artefakt über `build_report_v3()` komplett neu auf. Dieser Neuaufbau speist sich ausschließlich aus Report und Evidenzkarte — beide wissen nichts von der Red-Team-Stage, die ihr Ergebnis direkt auf dem ReportV3-Objekt ablegt. Das Feld fiel auf `default_factory=list` zurück und überschrieb die Befunde. `model_attribution` traf es über denselben Pfad: die Modell-Zuordnung der Review-Stage ging genauso verloren. `build_report_v3()` übernimmt beide Felder jetzt aus dem vorhandenen Artefakt (`ReportManager._preserved_review_state()`) — bewusst als Merge und nicht als Umbau der Aufrufreihenfolge, damit das Artefakt unabhängig davon korrekt bleibt, wie oft und an welcher Stelle gespeichert wird. Fehlt das Artefakt oder ist es unlesbar, wird nichts übernommen und der Grund geloggt.
+- **Claim- und Gap-IDs kollidierten beim Merge der Abschnitte (#1341, #1342):** `build_report_v3()` übernahm die abschnittsinterne Rohform (`claim_01`, `gap_01`) unverändert als Export-ID. Da jeder Abschnitt bei 1 zu zählen beginnt, legten sich die Nummernräume übereinander: im Referenzlauf standen 10 Claims auf 8 IDs und 125 Datenlücken auf 22. Ein Consumer, der eine ID auflöst, bekam damit irgendeinen der Träger. Exportiert wird jetzt eine abschnittsqualifizierte ID nach demselben Muster, das die Hypothesen im selben Codeblock schon benutzen (`H<n>_<i>`): Claims als `C<abschnitt>_<i>`, Datenlücken als `G<abschnitt>_<i>`. Der Zähler läuft über die *akzeptierten* Einträge — er wird erst hochgezählt, wenn alle Filter (Evidence-Anker, Mindestlänge, `strict`-Modus) passiert sind, damit die ID die finale Liste beschreibt und nicht die Rohextraktion.
+- **Der Übertrag gilt nur innerhalb eines Laufs (Codex-Review PR #1349):** Mit `force_regenerate` läuft die Generierung erneut auf derselben `report_id`. Ohne Schnitt hätte jeder Neuaufbau die Befunde des Vorlaufs importiert — und wenn `_red_team_required()` die Stage im neuen Lauf überspringt, wäre der fertige Report mit Befunden zu einem Claim-Set ausgeliefert worden, das es nicht mehr gibt. `generate_report()` verwirft den fremden Review-Stand jetzt zu Laufbeginn (`ReportManager.reset_review_state()`), bewusst nur die beiden Review-Felder und nicht das ganze Artefakt: bricht der neue Lauf ab, bleibt der übrige Bestand lesbar. Geerbte Werte werden außerdem validiert (CodeRabbit-Review) — kein `str()`-Zwang, der aus einem `None` im Artefakt den Befund „None“ macht, und keine Übernahme über `RED_TEAM_FINDINGS_LIMIT` hinaus, die genau den Rebuild sprengen würde, den das Erben retten soll.
+- **Auch der zweite ReportV3-Producer vergibt jetzt eindeutige IDs (Codex-Review PR #1349):** `migrate_v2_to_v3()` sagt zu, ein ReportV3-valides Dict zu liefern, übernahm aber dieselbe abschnittslokale Rohform. Mit der Eindeutigkeit im Vertrag hätte jede mehrabschnittige Legacy-Migration ein Dokument erzeugt, das an der eigenen Zusage scheitert. Umgestellt sind dort bewusst nur `claims` und `data_gaps` — die aus derselben `claim_id` abgeleiteten `friction_points` und `trust_signals` tragen ihren eigenen gewachsenen Namensraum, werden vertraglich nicht geprüft und bleiben unverändert; ihr latentes Kollisionsrisiko ist separat zu bewerten.
+- **Die Eindeutigkeit ist jetzt Vertragsbestandteil, nicht bloß Testaussage:** `ReportV3.validate_unique_export_ids` lehnt doppelte `Claim.id` und `DataGap.id` ab. Ein Artefakt mit kollidierenden IDs ist nicht unschön, es ist nicht interpretierbar. Der Validator deckte prompt ein Test-Fixture auf, das zwei Claims unbemerkt unter derselben ID führte (`tests/services/test_downgraded_claim_wording.py`). Bestandsartefakte aus der Zeit vor der Umstellung können an der Prüfung scheitern — dann liefert `ReportManager.build_report_v3_markdown()` wie bisher `None` und protokolliert den Grund, statt mehrdeutige IDs weiterzureichen. Das JSON-Schema ändert sich dadurch nicht; alle 70 Schemas matchen unverändert.
+
+### Fixed (Ankerspezifikation aktualisiert, ungebundene Belege werden persistiert — 2026-08-17)
+
+- **`CONTEXT.md` dokumentierte eine Ankerform, die für den Regelfall verboten ist:** Als einzige Form stand dort `seed_doc:<doc_id>#chunk:<chunk_id>`. Seit #1300 lehnen die Validatoren `agent_quote_rejects_seed_doc_anchor` genau diese Form auf Interview-Evidence ab — eine Persona-Aussage steht in keinem Seed-Dokument. Der Abschnitt nennt jetzt beide kanonischen Formen mit ihrer Quellengattung (`ev_<id>` für `agent_quote`, `seed_doc:…` für `seed_corpus`), hält fest, dass `seed_anchor` ein Prompt-Attribut und nicht das Vertragsfeld `source_id_anchor` ist, und dass ein Anker seit #1249 unabhängig von seinem Präfix gegen `known_anchors` geprüft wird (#1324).
+- **`unbound_evidence_refs` wurde befüllt, aber nie geschrieben:** `QuoteValidationResult` trug das Feld, `section_pipeline` loggte es an zwei Stellen — im persistierten Artefakt war nicht sichtbar, welcher zitierte Beleg nie gebunden wurde, obwohl genau das den Statuswechsel auf `incomplete` erklärt. `_validate_quotes_with_repair` liefert die Refs des gescheiterten Repair-Versuchs jetzt zurück, `process_section` reicht sie über den bestehenden `_pending_*`-Weg an `_save_evidence_section` durch, und `ReportSectionModel` trägt sie als `unbound_evidence_refs` (`max_length=200`, Default leer — Bestandsartefakte ohne das Feld bleiben gültig). Der Frontend-Spiegel `reportContract.ts` zieht nach, weil sein Schema `.strict()` ist.
+
+### Fixed (Vor #1322 geplante Outlines überstehen den Resume — 2026-08-17)
+
+- **Ein Bestandsreport konnte beim Fortsetzen als `incomplete` enden, obwohl seine Outline korrekt war:** Die Handlungsempfehlung kam mit #1322 nachträglich in die Intent-Presets. `matches_known_preset` verlangt *alle* Titel genau eines Presets; eine davor geplante und persistierte Outline trägt die Empfehlung nicht, fiel damit durch die Preset-Prüfung und anschließend auf den Full-Report-Pflichtsatz zurück — `report.status = INCOMPLETE` mit einer langen `missing_sections`-Liste, obwohl zum Planungszeitpunkt nichts fehlte. Betroffen sind beide Prüfstellen: `workflow.py` und der Validator `require_default_sections` in `report_contract.py`. Gemeldet im Codex-Review zu PR #1331.
+- **Die Lockerung gilt genau der Empfehlung, sonst nichts:** Ein Preset trifft jetzt auch dann zu, wenn die Outline ihm ohne `RECOMMENDATION_SECTION_TITLE` entspricht. Presets ohne Empfehlung (`EXPLORATIVE_SECTIONS`) werden dabei übersprungen, statt ein zweites Mal gegen denselben Titelsatz geprüft zu werden. Eine beliebige Kurz-Outline besteht die Prüfung weiterhin nicht — der Full-Report bleibt gegen versehentliche Verkürzung geschützt.
+
+### Added (Berichte enden mit einem Beschlussvorschlag statt mit Datenlücken — 2026-08-17)
+
+- **Kein einziges Section-Preset endete mit einer Empfehlung:** `FULL_SECTIONS` schloss mit „Datenlücken“, die vier Intent-Presets mit „Unsicherheiten und Datenlücken“. Am nächsten kamen „Top 10 Änderungen“ (Position 7 von 11) und „Gegenmaßnahmen“ (Position 5 von 6) — beide mitten im Bericht und beide nicht als Beschlussvorschlag formuliert. Der Leser bekam am Ende, was die Simulation *nicht* weiß, und musste sich die Entscheidung selbst zusammensuchen (#1322).
+- **Neue Pflicht-Section „Handlungsempfehlung“** am Ende von `FULL_SECTIONS`, `OPINION_SECTIONS`, `RISK_SECTIONS` und `COMPARISON_SECTIONS`. Ihre Beschreibung gibt die sechs geforderten Elemente vor: empfohlene Variante, Vorbedingungen, Restrisiken, zustimmende und widerständige Akteure, mögliche Positionswechsel, Frühwarnindikatoren. Titel und Beschreibung liegen als `RECOMMENDATION_SECTION_TITLE`/`RECOMMENDATION_SECTION_DESCRIPTION` in `report_prompts.planning` — ein abweichender Wortlaut zwischen den Presets würde `matches_known_preset` auseinanderlaufen lassen.
+- **`EXPLORATIVE_SECTIONS` bleibt bewusst ohne:** ein Explorationsbericht soll beschreiben, was auffällt, und offene Fragen offen lassen. Ein Beschlussvorschlag würde dort eine Entscheidungsreife behaupten, die die Fragestellung nicht verlangt hat.
+- **Der Pflichtabschnitt-Satz wächst damit von 11 auf 12.** Bestehende gespeicherte Reports sind davon nicht betroffen: `ReportOutlineModel` wird ausschließlich beim Planen eines neuen Reports gebaut (`report_agent/planning.py`), das Laden geht über die Dataclass `ReportOutline` und validiert nicht gegen den Pflichtsatz. `ReportOutlineModel.sections` hat `max_length=15`, der Puffer reicht. Mitgezogen: Snapshot `output-contract-required-sections.txt`, der eingebettete Container-Fallback in `llm_e2e_stub` (dabei `_eleven_required_sections` zu `_required_sections` umbenannt — der Name stimmte nicht mehr) und die Zählungs-Assertions in vier Testdateien.
+
+### Fixed (Token-Cap bei der Metadaten-Extraktion wird sichtbar — 2026-08-17)
+
+- **Eine stumme Truncation degradierte den Report ohne Begründung im Log:** Lief `generate_section_metadata` in ein LLM-Token-Limit, warf der Provider `LLMOutputTruncatedError`, die Funktion fing sie über das generische `except Exception` ab und lieferte `{}` — der spätere `status = incomplete` (#1299) stand im `console_log.txt` ohne jede Erklärung (#1321).
+- **`LLMOutputTruncatedError` bekommt jetzt einen eigenen degradation_log-Eintrag:** `generate_section_metadata` erkennt die Truncation gesondert und hängt einen contract-konformen Eintrag (Feldform nach `EvidenceDegradationModel`) an `agent.evidence_map["degradation_log"]` an, sofern die Evidence-Map an dieser Stelle bereits ein dict ist — sonst wird nur geloggt. `return {}` bleibt unverändert nicht blockierend; die Section-Schleife läuft weiter.
+- **Die Extraktion setzt jetzt ein eigenes `max_tokens` statt `LLM_MAX_TOKENS_FLOOR` zu erben:** Der Boden ist für volle Fließtext-Sections gedacht; die Metadaten-Extraktion ist eine andere Aufgabe und soll nicht mitwandern, wenn jemand ihn für die Prosa nachjustiert. Neue Modulkonstante `METADATA_MAX_OUTPUT_TOKENS = 32768` mit `enforce_token_floor=False`.
+- **Der Wert ist bewusst nicht kleiner:** Naheliegend wäre ein enger Deckel gewesen — die Extraktion liefert kompaktes JSON. Genau das wäre falsch. Im beobachteten Lauf lief sie in das Ausgabelimit von `gemini-2.0-flash` (8192), und dieses Modell ist Legacy: aktuelle Gemini-Modelle greifen über den `gemini-3`-Präfix und lösen auf 65536 auf. Ein Deckel von 8192 hätte ihnen das Legacy-Limit aufgezwungen — ausgerechnet den Wert, bei dem die Truncation auftrat. 32768 entspricht dem, was für Modelle mit ausreichendem Limit ohnehin galt; der Wert ist heute verhaltensneutral, entkoppelt die Extraktion aber vom Prosa-Boden. `resolve_max_tokens` deckelt weiterhin pro Modell, Legacy-Modelle behalten also ihre 8192 — nur bleibt ein Anschlag dort jetzt nicht mehr stumm.
+- **Zur Einordnung: das behebt die Truncation selbst nicht.** Der Hebel dafür liegt auf der Eingangsseite (`METADATA_MAX_CONTENT_CHARS`, Schemagröße) und gehört in einen eigenen Slice. Geändert hat sich, dass ein Anschlag sichtbar wird und der Grenzwert eine Entscheidung ist statt eines Nebenprodukts.
+- **Nicht umgesetzt:** die Arbeitsspur-Entfernungen aus `_finalize_content` (`workflow.py:345-351`) landen weiterhin nur im Log. Die Funktion hat an dieser Stelle keinen Zugriff auf `agent`, und eine Signaturänderung quer durch den Aufrufbaum gehört nicht in diesen Fix. Bleibt in #1321 offen.
+
+### Fixed (Entfernte Arbeitsspur-Segmente werden im Bericht nachvollziehbar — 2026-08-23)
+
+- **Eine still bereinigte Section war von einer unangetasteten nicht zu unterscheiden:** `_finalize_content` entfernte Arbeitsspur-Segmente (Thought-/Action-Zeilen, Tool-Call-Reste) aus dem Abschnittsinhalt und schrieb das nur ins Server-Log — der Bericht wies den Abschnitt aus wie jeden anderen (#1321).
+- **`_finalize_content` nimmt jetzt einen optionalen `agent` entgegen** und trägt eine Bereinigung mit erhaltenem Inhalt in `RunEventLog.work_trace_removed_sections` ein. Am Laufende zieht `collect_run_degradations` die Summe als `N_sections_sanitized`-Eintrag in `report.run_degradations` (Schwere `warning` — der Inhalt selbst ist ja erhalten, ein Statusabstieg wäre unverhältnismäßig). Alle drei Aufrufer reichen den Agenten durch.
+- **Der Marker überlebt jetzt auch Cancel und Resume:** Er lebte nur im flüchtigen RunEventLog des aktuellen Agenten — der Teil-Report nach kooperativem Abbruch erreichte die einzige Degradations-Aggregation nie, und beim Resume liefen bereits persistierte Sections nicht erneut durch `_finalize_content`; die Warnung blieb endgültig verloren. `_build_partial_report` zieht die Summe jetzt selbst, und der Zustand wird pro Section in `run_events.json` neben dem Report persistiert (`ReportManager.save_/load_work_trace_removed_sections`) und beim Resume vor der ersten Cancel-Grenze wiederhergestellt — dedupliziert, sodass die Warnung auch nach Fortsetzung genau einmal steht.
+- **Der `FinalContentRejected`-Fall bleibt bewusst unmarkiert:** Wirft der Final-Content-Contract den ganzen Output weg, endet der Abschnitt im Fallback-Text und ist über `generation_failed` bzw. `failed_section_indices` bereits sichtbar — ein zweiter Marker würde denselben Abschnitt doppelt zählen.
+- **`generation_failed` wird nicht an fehlgeschlagene Metadaten gekoppelt:** Der Flag heißt "der Abschnittsinhalt ist Fallback". Eine gescheiterte Extraktion bei vorhandenem Inhalt ist kein Generierungsfehler; sie ist über die bestehende `N_sections_without_metadata`-Warnung sichtbar. Eine Kopplung hätte erfolgreiche Sections fälschlich auf `incomplete` abgestuft.
+
+### Fixed (Interview-Transkripte erfinden keine stumme Plattform mehr — 2026-08-17)
+
+- **Jedes Interview trug einen leeren `[Twitter Platform Response]`-Block:** Im Referenzlauf standen 32 Interview-Traces in `reddit_simulation.db` und 0 in `twitter_simulation.db`, trotzdem rendered `GraphToolsService.interview_agents` für alle 42 Interviews beide Plattformen — die stumme mit dem Platzhalter `(No response from this platform)`. Das sah wie eine gescheiterte Befragung aus, war aber eine, die nie stattgefunden hat: der Direktpfad (`interview_agents_batch_direct`, der Normalfall für abgeschlossene Simulationen) ist bewusst single-platform, der Renderer wurde nie nachgezogen (#1320).
+- **Gerendert werden nur noch Plattformen, die geantwortet haben:** Antworten beide, bleiben beide Blöcke mit ihrem Marker stehen. Antwortet keine, bleibt genau ein Platzhalter statt zweier — der Report-Agent erkennt daran weiterhin das gescheiterte Interview und verwirft es als Evidence (`_INTERVIEW_NO_RESPONSE`). Die Zitat-Extraktion arbeitet nur noch auf den tatsächlichen Antworten.
+- **Zusatzdefekt, nicht in der ursprünglichen Kritik: der Einzelplattform-Runner schrieb einen Schlüsselraum, den niemand liest.** `sim_runtime/ipc.py::handle_batch_interview` legte die Ergebnisse unter der blanken `agent_id` ab; der Consumer sucht sie unter `<plattform>_<agent_id>`. Damit ging der Lookup für **beide** Plattformen ins Leere — nur `run_parallel_simulation.py` erzeugte die erwarteten Schlüssel. `IPCHandler` bekommt dafür ein `platform_key`, das `SinglePlatformRunner` aus seinem `PLATFORM_NAME` setzt; jeder Eintrag trägt zusätzlich sein `platform`-Feld wie im Parallel-Runner.
+
+### Fixed (Datenlücken-Vorschlag wiederholt nicht mehr den Claim-Text — 2026-08-17)
+
+- **`suggested_fix` einer Datenlücke war identisch mit dem Claim-Text:** Der Zweig `if not supporting_ids:` in `_finalize_section_claims` nahm für `suggested_fix` das erste Element von `suggestions` — bei fehlender direkter Evidence ist das der Synthesis-Audit-Eintrag mit `snippet = claim_text[:300]`. Im Referenzlauf betraf das 93 von 93 Datenlücken (#1319).
+- **`suggested_fix` wird jetzt aus `gap_reason` abgeleitet:** `no_evidence_bound` liefert den Hinweis, gezielt einen Beleg zu recherchieren oder die Aussage zu streichen; `related_evidence_only` verweist darauf, eine Quelle mit direktem Aussagebezug zu suchen statt der nur thematisch verwandten. Die per LLM/Audit ermittelten `suggestions` bleiben unverändert als `suggested_evidence` an der zugehörigen Hypothese erhalten.
+- **Die Doppelung Hypothese/Datenlücke ist als Beziehung ausgewiesen:** Beide entstehen im selben Zweig aus demselben `claim_text`. `data_gaps` trägt jetzt `hypothesis_id`, und `build_report_v3` übernimmt den Verweis als `DataGap.related_hypothesis_id` in den ReportV3-Vertrag — aus einer stummen Wiederholung wird eine auflösbare Beziehung. Der Verweis trägt die exportierte Hypothesen-ID (`H<n>_<i>` / `HA<n>_<i>`), nicht den abschnittsinternen Rohschlüssel, und entfällt, wenn Dedup oder Appendix-Cap die Hypothese entfernt haben — sonst zeigt er auf eine ID, die in der Hypothesentabelle des Artefakts nicht vorkommt. Die ReportV3-Datenlückentabelle bekommt dafür eine eigene Spalte, `reportV3Contract.ts` spiegelt das Feld. `claim_text` bleibt im Dict, weil `manager.py` es für die `beschreibung` braucht; die Datenlücke ohne ihn zu rendern würde den Leser zu einem Lookup zwingen. `ReportSectionDataGapModel` bekommt das neue optionale Feld, der Frontend-Spiegel `reportContract.ts` zieht nach — dessen Schema ist `.strict()` und hätte das neue Backend-Feld sonst zurückgewiesen.
+- **`severity` einer `ReportV3DataGap` war hartkodiert `"medium"`:** `build_report_v3` leitet sie jetzt aus `gap_reason` ab — `no_evidence_bound` (keine Quelle gebunden) wird `"high"`, `related_evidence_only` (Quelle vorhanden, aber ohne Aussagebezug) bleibt `"medium"`.
+
+### Fixed (Evidence-Duplikate verzerrten das Confidence-Mittel — 2026-08-17)
+
+- **`EvidenceCandidatePool` deduplizierte nicht:** `agent.py` reicht `direct_items + global_items` in den Pool — beide Quellen werden nirgends disjunkt gehalten, dieselbe `evidence_id` konnte in beiden stehen. Ohne Dedup landete so ein Item doppelt im Pool, konnte zweimal an denselben Claim binden und zählte doppelt im Mittelwert von `confidence_calculator._component_relevance`. Der Konstruktor dedupliziert jetzt nach `evidence_id`, erstes Vorkommen gewinnt, die Reihenfolge bleibt stabil. Items ohne oder mit leerer `evidence_id` haben keine Identität zum Abgleichen und bleiben alle erhalten — ein leerer String als Schlüssel würde verschiedene Items zusammenfallen lassen und wäre ein stiller Datenverlust (#1318).
+- **`contradicts_claim` in `detect_contradiction_penalty` ist redundant, nicht kaputt (#1327):** Die Boolean-Flag-Schleife prüft nur `supporting`-Items und sieht ein binder-erzeugtes `contradicts_claim=True` deshalb nie — das sieht nach totem Code aus. Der vollständige Pfad zeigt etwas anderes: `confidence_calculator.partition_by_entailment` zählt genau dieses Item bereits als `contradicting`, und `_compute_confidence_with_penalties` zieht dafür 0.2 ab. Da `report_agent/agent.py` das Ergebnis von `detect_contradiction_penalty` als `contradiction_penalty` in ebendiesen Rechner reicht, wäre eine Öffnung der Schleife ein doppelter Abzug für denselben Widerspruch. Die Schleife bleibt deshalb auf `supporting` beschränkt und deckt weiterhin den Fall ab, den der Entailment-Pfad nicht kennt: ein stützendes Item mit `is_contradiction`/`contradiction` aus fremder Quelle. Der Grund steht jetzt im Code und ist durch drei Tests festgehalten — kein Doppelabzug, der Entailment-Pfad bestraft nachweislich trotzdem, und das fremde Flag wirkt weiterhin.
+
+### Fixed (nicht messbare Deckung wird nicht mehr als Widerspruch gewertet — 2026-08-17)
+
+- **Eine "Deckung 0.00" bedeutete bisher "widerlegt", auch wenn gar nichts gemessen wurde:** `coverage_ratio` liefert 0.0 sowohl, wenn der Claim tatsächlich mehr behauptet als die Quelle deckt, als auch, wenn `_content_tokens` das Prädikat von Claim oder Evidence auf ein leeres Set kürzt — Stopwords und Tokens mit `len <= 3` fallen dort komplett weg. Ein kurzes Prädikat wie "sind da" ergab damit dieselbe Deckung 0.00 wie ein tatsächlich unbelegter Überschuss, und `classify_evidence` vergab in beiden Fällen `CONTRADICTED` (#1317).
+- **`classify_evidence` unterscheidet jetzt beide Fälle:** Zahl und Bezugsgruppe passen, aber Claim- oder Evidence-Prädikat liefert nach dem Stopword-/Kurzwort-Filter kein Inhaltswort — das ergibt `INSUFFICIENT` mit dem Hinweis, dass die Aussage zu kurz ist, um gegen die Quelle geprüft zu werden (`predicate_not_measurable`). Die vier übrigen `CONTRADICTED`-Zweige (Normativ-vs-Faktisch, Prädikat-Überschuss bei tatsächlich gemessener Teildeckung, abweichendes Subjekt, abweichender Zahlenwert) bleiben unverändert.
+- **Eine Verneinung bleibt ein Widerspruch:** `nicht` steht selbst in `_STOPWORDS`, deshalb reduzieren „sind da“ und „sind nicht da“ beide auf ein leeres Content-Token-Set. Vor der Nicht-messbar-Entscheidung wird jetzt die Polarität verglichen — gleiche Zahl, gleiche Bezugsgruppe, gegensätzliche Verneinung ergibt `CONTRADICTED` mit `polarity_mismatch`. Die Prüfung ist bewusst grob und macht keine Skopusanalyse; sie trennt nur zwei sonst nicht unterscheidbare Prädikate.
+- **Was sich dadurch ändert und was nicht:** `verify_prose` behält einen numerischen Satz weiterhin nur bei `SUPPORTED` — ein nicht prüfbarer Satz wird also nach wie vor aus dem Fließtext entfernt und in die Hypothesen geroutet. Das ist Absicht: unbelegte Zahlen stehen zu lassen wäre eine Aufweichung des Evidence-Gatings und damit eine ADR-0002-Entscheidung, kein Bugfix. Geändert hat sich die *Begründung*, mit der er fällt — statt eines behaupteten Widerspruchs steht jetzt "nicht prüfbar" an der Hypothese. Auf dem Binder-Pfad entfällt zugleich das `contradicts_claim`-Flag, das `bind_evidence_to_claim` bei `CONTRADICTED` setzt.
+
+### Fixed (Claim-Extraktion bindet kein Markup und keine Gliederungssätze mehr — 2026-08-17)
+
+- **Die Claim-Extraktion bekam rohes Zitat-Markup:** `process_section` reichte denselben ungereinigten `content` an `save_section` und `_save_evidence_section` weiter. Nur `save_section` reinigte ihn intern — die Extraktion las die `<simulated_quote>`-Tags mit und zerlegte sie in Claim-Kandidaten, für die es naturgemäß keine Evidenz geben kann. Der Evidence-Pfad geht jetzt über `ReportManager.prepare_content_for_evidence`, das die Zitate zu Blockquotes rendert (#1316).
+- **Bewusst nicht die volle Reinigung für den Evidence-Pfad:** `_clean_section_content` wandelt zusätzlich jede Markdown-Überschrift in Fettschrift um. Das ist eine Darstellungsfrage des Dateipfads und für die Extraktion schädlich — sie erkennt Überschriften am `#`, und der Bold-Filter in `is_claim_candidate` greift nur unterhalb von acht Wörtern. Eine lange Zwischenüberschrift wäre so als Aussage gebunden worden. `prepare_content_for_evidence` macht deshalb nur den einen Schritt, den die Extraktion braucht.
+- **Zitatblöcke und Tag-Zeilen sind keine Claim-Kandidaten mehr:** Die Teilprüfung, mit der der Fließtext-Validator leere Zeilen, `>`/`|`-Zitatpräfixe und vollständig getaggte Zeilen aussortiert, ist als `is_markup_or_quote_line` aus `text_verification._is_structural` herausgezogen und wird jetzt auch von `is_claim_candidate` verwendet — eine Definition statt zweier. Ergänzend fällt Rest-Markup aus dem Section-Prompt heraus (`simulated_quote`, `tool_call`, `evidence_gating`, `self_check`), roh wie HTML-escapt.
+- **Gliederungsansagen werden nicht mehr als Aussagen gebunden:** „Im Folgenden werden die Reaktionsmuster dargestellt.“ kündigt an, was der Abschnitt zeigt, und behauptet selbst nichts — als Claim gebunden ergibt sie zwangsläufig eine unbelegte Hypothese. `is_atomic_claim` verwirft solche Sätze. Der Filter ist bewusst eng: bestimmte Satzanfänge sowie die Kopplung aus Folgend-Verweis und passivem Darstellungsverb im selben Satz. „Die Personagruppe wird in den Interviews als skeptisch beschrieben.“ bleibt deshalb Claim.
+- **Der Chunk-Fallback holt den verworfenen Metasatz nicht mehr zurück:** `_build_claims_for_section` fällt auf den ganzen Chunk zurück, wenn kein Atom den Filter passiert — damit eine legitime Single-Sentence-Section nicht verschwindet. Steht die Gliederungsansage als eigener Absatz, war `atoms` genau deshalb leer und `atoms or [chunk]` setzte den Satz unverändert wieder ein, womit der Filter wirkungslos blieb. Der Fallback ist jetzt für Gliederungsansagen ausgesetzt, für alles andere unverändert.
+
+### Fixed (der Markdown-Export kehrt die Aussage des Berichts nicht mehr um — 2026-08-17)
+
+- **Ein `incomplete`-Report lieferte beim `.md`-Download die annotierte Roh-Narrative statt des Contract-Artefakts:** `save_report` schrieb `report-v3.json` nur bei `COMPLETED`. Wurde ein Report per [#1299](https://github.com/arn0ld87/agora/issues/1299) auf `incomplete` abgestuft — etwa weil die Metadaten-Extraktion in den Token-Cap lief und `ReportV3.model_validate` deshalb scheiterte —, gab es kein v3-Artefakt, `build_report_v3_markdown()` lieferte `None`, und der Export-Endpunkt fiel auf `report.markdown_content` zurück. Im Referenzlauf `report_3c594fcc7613` war das exportierte Dokument dadurch 2,3-mal so lang wie die Rohprosa und bestand zu 57 % aus Annotation: 91× `Hypothese (unbelegt):` mitten im Fließtext, 45× sichtbares `&lt;simulated_quote&gt;`, 28× rohes `<span class="conf-badge">` (#1315). Das v3-Artefakt wird jetzt auch bei `INCOMPLETE` geschrieben, sofern es valide ist; der Statuswert selbst bleibt unberührt.
+- **Bleibt der Fallback nötig, ist er als solcher gekennzeichnet:** Bestandsreports ohne Evidence-Map bekommen weiterhin `markdown_content`, jetzt aber mit vorangestelltem Hinweis, dass es sich nicht um das validierte Contract-Artefakt handelt.
+- **Der Unbelegt-Marker steht einmal pro Hypothese statt an jeder Fundstelle:** `mark_hypotheses_in_content` nutzte `re.sub` ohne `count` und markierte damit jedes Vorkommen; zusätzlich markierte eine Hypothese, die Teilstring einer längeren war, dieselbe Passage ein zweites Mal — daher die drei Marker im selben Absatz. Die Zuordnung läuft jetzt über Span-Claiming gegen den Originaltext: erster Treffer je Hypothese, keine Überlappung. Appendix-Hypothesen bleiben markiert (sie sind genauso unbelegt, alles andere wäre ein Rückfall hinter [#1232](https://github.com/arn0ld87/agora/issues/1232)); neu ist, dass die Hypothesenliste ihre Restzahl ausweist, statt den Marker auf eine Aufzählung ohne diesen Satz zeigen zu lassen.
+- **Confidence-Marker haben eine Markdown-Variante:** `render_claim_to_markdown(claim, raw_html=False)` liefert Fettung statt `<span class="conf-badge …">`. Der Default bleibt unverändert, damit der HTML-/Print-Pfad (CSS in `frontend/src/composables/useReportExports.ts` und `frontend/src/assets/styles/global.css`) weiter funktioniert.
+- **Der Fallback liefert kein unrendertes HTML mehr:** Scheitert `build_report_v3` selbst an der Validierung — genau das Token-Cap-Szenario, das den Downgrade auf `incomplete` überhaupt auslöst ([#1321](https://github.com/arn0ld87/agora/issues/1321)) —, entsteht kein Artefakt und die Narrative bleibt der Fallback. Sie wird jetzt über `strip_raw_html_markers` gereinigt: die `<span class="conf-badge …">`-Badges werden zu Markdown-Fettung. Der gespeicherte `markdown_content` bleibt unverändert, damit das Frontend seine gefärbten Badges behält.
+
+### Changed (Persona-Floor 50 → 20 — 2026-08-12)
+
+- **`MIN_PERSONA_TABLE_ROWS` von 50 auf 20 gesenkt:** praktische Läufe mit kleineren DACH-Seed-Dokumenten erreichen nach typbasierter Vorfilterung, Dedup und LLM-seitiger Eignungsprüfung häufig nur ~40 elige Personas und scheiterten am harten 50er-Report-Gate (`Persona-Mindestanzahl nicht erreicht: 42/50`), obwohl der Report inhaltlich erstellbar war. 20 hält eine statistisch noch belastbare Untergrenze für die Persona-Tabelle, lässt dokumenttreue Runs aber durch.
+
+### Fixed (nginx-Sidecar — 2026-08-13)
+
+- **502 nach Backend-Container-Neubau behoben:** `deploy/nginx/agora.conf` nutzte literale `proxy_pass http://agora:5001;`-Direktiven, nginx cachte die IP prozesslebenslang. Jetzt: Docker-Resolver `127.0.0.11` (`valid=10s`) + Variablen-`proxy_pass` löst den Upstream pro Request auf. Regressionstest: `backend/tests/test_nginx_upstream_resolution.py`.
+
+### Fixed (install.sh — 2026-08-13)
+
+- **`ensure_secret` robuster:** Fehlende Keys werden angehängt statt still übersprungen; fail-fast wenn der Key danach nicht in `.env` steht. Regressionstest: `backend/tests/test_install_ensure_secret.py`.
+
+### Fixed (AURORA reference screenshots — 2026-08-14)
+
+- **Reference documentation:** Replaces the unreadable AI-rerendered AURORA screenshots with literal crops from the original UI captures, preserving readable Evidence Inspector, claim and `agent_interview` text in both English and German documentation. (#1307)
+
+### Changed (AURORA-Referenzlauf dokumentiert — 2026-08-14)
+
+- **AURORA als Referenzlauf 6 dokumentiert:** Englische und deutsche Referenzdokumentation, Referenzlauf-Index und anklickbare Evidence-Inspector-Screenshots beschreiben den Same-Simulation-Reportvergleich sowie bekannte Trust-Grenzen ausdrücklich als beobachtbare Regressionreferenz statt als vollständig reproduzierbaren Golden Run. (#1305)
+
+### Added (Der Report weist aus, wie viel die Simulation zu ihm beiträgt — 2026-08-17)
+
+- **Die Kritik „24 Runden Simulation, 0 % Beitrag“ war richtig und unbelegbar zugleich:** Es gab keine Zahl, gegen die man sie hätte prüfen können — und nach jedem Eingriff an Sampling oder Interviewkontext wäre unklar geblieben, ob er gewirkt hat. `compute_simulation_contribution` zählt jetzt über dieselbe Evidenzkarte, aus der `build_report_v3` seine Claims baut: kein zweiter Datenpfad, der driften kann (#1304, S3).
+- **Drei Ebenen, absichtlich getrennt ausgewiesen:** `claims_with_simulation_evidence` (irgendein Simulationsbeleg, Interviews eingeschlossen), `claims_with_action_evidence` (mindestens eine beobachtete Aktion aus Phase 3) und `claims_requiring_action_evidence` (*alle* stützenden Belege sind Aktionen — ohne die Simulationsrunden gäbe es die Aussage nicht). Die mittlere Zahl allein überschätzt den Beitrag, die letzte allein unterschätzt ihn.
+- **Gezählt wird nur, was auch validiert ist:** Ein Beleg ohne `supports_claim=True` trägt die Aussage nicht, egal wie ähnlich er ist; Hypothesen und Datenlücken sind per Definition unbelegt und würden die Quote beschönigen. Ohne validierte Aussage sind die Anteile `None`, nicht `0.0` — eine Null würde „kein Beitrag“ behaupten, wo nichts gemessen wurde.
+- **Sichtbar im Artefakt und im Export:** `ReportV3.simulation_contribution` (additiv, Default `None` — Bestandsreports laden unverändert), gespiegelt in `reportV3Contract.ts`, und als eigener Block direkt unter dem Simulationsstand im ReportV3-Markdown. 24 Runden auszuweisen und zu verschweigen, dass keine Aussage darauf beruht, wäre die halbe Wahrheit.
+
+### Fixed (Aktions-Sampling ist nicht mehr inhaltsblind — 2026-08-17)
+
+- **Ein `like_post` an der Bin-Grenze schlug einen ausformulierten Beitrag:** `sample_actions_timeseries` zog aus jedem Zeit-Bin das erste Element, rein positional. Von 355 Aktionen erreichten so acht die Evidence-Schicht — und welche acht, entschied die Sortierung, nicht der Inhalt (#1304, S2).
+- **Bevorzugt wird jetzt der längste Textbeitrag des Bins.** Trägt kein Eintrag eines Bins Text, bleibt es beim ersten: ein Bin ohne Textbeitrag soll seinen Platz behalten, damit die Zeitreihe keine Lücken bekommt. Die Bin-Struktur — der eigentliche Sinn der Funktion — bleibt unangetastet.
+- **Der größere Befund lag daneben: die gezogene Evidence trug gar keinen Text.** Der Snippet war reine Metabeschreibung — `Anna create_post on reddit in round 3`. Gegen so einen Text kann kein Entailment eine Aussage stützen, egal wie gut gesampelt wurde. Damit war jede Agentenaktion strukturell unfähig, einen Claim zu tragen — die eigentliche Erklärung für die 0 % aus der Kritik, die auch besseres Sampling allein nicht behoben hätte. Der Beitragstext steht jetzt im Snippet (auf 600 Zeichen gekürzt).
+
+### Fixed (Interviewte Personas kennen ihre eigenen Simulationsbeiträge — 2026-08-17)
+
+- **Die Persona wusste im Interview nichts von ihren eigenen 10–20 Runden:** `build_persona_messages` baute den System-Prompt allein aus Profil und Simulationsfragestellung. Die Antworten klangen plausibel und bezogen sich auf nichts, was die Persona in der Simulation tatsächlich getan hatte — einer der Gründe, warum sich im Referenzlauf keine validierte Aussage auf eine Agentenaktion stützt (#1304, S1).
+- **Der Prompt trägt jetzt die eigenen Beiträge:** `interview_agents_batch_direct` lädt sie über `action_log_reader.get_all_actions` für genau diese `agent_id` und Plattform. Gerendert werden die **letzten** acht Einträge in ihrer chronologischen Reihenfolge, jeder auf 240 Zeichen gekürzt: gefragt wird nach der aktuellen Haltung der Persona, nicht nach der aus Runde eins.
+- **Fehlende Historie ist kein Fehler:** Ohne Aktionslog, ohne Einträge zu dieser `agent_id` oder bei einem Lesefehler bleibt der Prompt byte-identisch zum bisherigen. Ein Interview ohne Historie ist schlechter, aber immer noch eines.
+- **Das falsche Versprechen im Interview-Prefix ist eingelöst:** `graph_tools.py` versicherte der Persona wörtlich, sie möge *"all past memories and actions"* einbeziehen. Auf dem Direktpfad — dem Normalfall für abgeschlossene Simulationen — existierten diese im Kontext gar nicht. Ein Versprechen, das der Kontext nicht einlöst, lädt das Modell zum Erfinden ein; der Prefix verweist jetzt auf das, was tatsächlich mitgeliefert wird.
+
+### Added (`interview_panel.py` — Panel-Rotation für Abschnitts-Interviews, 2026-08-23)
+
+- **Mehr Interviews bedeuteten bisher mehr vom Gleichen:** Im Referenzlauf interviewten Abschnitt 1, 3 und 5 praktisch dasselbe Fünferpanel — die LLM-Auswahl in `_select_agents_for_interview` hatte kein Run-Gedächtnis. Mehr Interview-Budget machte den bestehenden Konsens nur lauter, statt neue Perspektiven zu bringen (#1303).
+- **Neu: `InterviewPanelTracker` (`backend/app/services/interview_panel.py`) ist dieses Run-Gedächtnis.** Eine `GraphToolsService`-Instanz lebt genau einen Report-Lauf, damit ist das Tracking automatisch lauf-scoped. Kandidaten werden in drei Prioritätsklassen geordnet: frisch (noch nie befragt) schlägt regelkonforme Wiederverwendung (unter dem Limit **und** signifikant anderer Aspekt), und erst wenn beide das Panel nicht füllen, greift der Ausschöpfungs-Fallback — Wiederverwendung trotz Limit, mit anderem Aspekt bevorzugt, gleicher Aspekt als letzter Ausweg, weil ein leeres Panel den Bericht seine Stakeholder-Stimmen kostet.
+- **Interpretation von „signifikant anders“:** zwei Anforderungstexte gelten als unterschiedliche Aspekte, wenn ihre Inhaltswoerter (≥ 4 Zeichen, Stopwörter entfernt) eine Jaccard-Ähnlichkeit unter 0.5 haben. Bewusst lexikalisch und billig — ein Judge-LLM-Call je Section wäre ein zusätzlicher Call pro Abschnitt für wenig Zuwachs gewesen.
+- **Die LLM-Auswahl bleibt Vorschlag, der Tracker die Garantie:** Nutzungszahlen wandern als `times_interviewed` in den Auswahl-Prompt (besseres Ranking innerhalb der Klassen), der harte Nachfilter im Tracker setzt sie aber auch dann durch, wenn das Modell darauf nicht hört. Eingriffe landen mit Begründung in `selection_reasoning` und bleiben damit im Berichts-Trace nachvollziehbar.
+- **Konfigurierbar über `REPORT_INTERVIEW_MAX_PER_PERSONA`** (Default 2, wie im Issue gefordert); `0` schaltet die Rotation als Notbremse ab.
+- **Metrik assertierbar:** `panel_overlap_ratio(panel_a, panel_b)` (Jaccard über Persona-Namen) macht sinkende Panel-Überlappung zwischen Abschnitten prüfbar; 19 neue Tests in `test_interview_panel_rotation.py`, darunter die beiden Testplan-Szenarien (5 Personas × 5 Abschnitte → jede Persona max. 2×; Ausschöpfung → Wiederverwendung mit anderem Kontext) und die Verdrahtung über `interview_agents`.
+
+### Added (`requirement_checker.py` — maschinelle Vollständigkeitsprüfung vor dem Report-Abschluss, 2026-08-23)
+
+- **`completed` hieß bisher nur „die Pipeline ist durchgelaufen", nicht „der Bericht behandelt alles Geforderte":** Der Reporter setzte den Status ab, ohne zu prüfen, ob Widersprüche zwischen Stakeholdern, Frühwarnindikatoren, Stop-/Expand-Bedingungen, Positionswechsel und Koalitionen im Text stehen. Genau diese Aspekte verspricht die Pflicht-Section „Handlungsempfehlung" (#1322), und die Aurora-Regressionserwartung Nr. 5 verlangt, dass Frühwarnindikatoren und Stop-/Expand-Kriterien im finalen Report sichtbar bleiben (#1302).
+- **Neu: `RequirementChecker` (`backend/app/services/report_agent/requirement_checker.py`).** Deterministische Mustersuche über den fertigen Berichtstext — kein LLM-Urteil, es geht um das Vorhandensein benannter Aspekte. Pro fehlendem Requirement entsteht ein `requirement_checker`-Eintrag mit `severity=blocking`; die Statusabstufung übernimmt die bestehende `apply_run_degradation_downgrade`-Mechanik aus #1277 — keine zweite parallele Statuslogik neben #1006/#1299.
+- **Die Naht liegt nach dem ReportV3-Build, vor dem ersten `save_report`:** Der Contract-Export entscheidet bis dahin mit COMPLETED (sonst würde der V3-Build übersprungen und das Artefakt fehlte); erst danach stuft der Checker ab und persistiert Status + Fehlerliste in einem einzigen Save.
+- **„Alle vier Varianten" = die vier entscheidungsorientierten Presets:** FULL, OPINION, RISK und COMPARISON tragen laut #1322 dieselbe Handlungsempfehlung und damit dieselbe Default-Checkliste. Der explorative Report prüft bewusst nichts — er soll offene Fragen offen lassen und keinen Entscheidungsreifegrad behaupten; ein Gate auf Empfehlungsaspekte hätte jeden Explorativ-Report dauerhaft INCOMPLETE gesetzt.
+- **Checkliste ist Daten, nicht Code-Pfad:** `Requirement(id, title, description, patterns)` als frozen Dataclass, `DEFAULT_REQUIREMENT_CHECKLIST` als Tupel, `checklist_for_intent()` als Intent-Mapping, eigene Checklisten per Parameter übergebbar. Notbremse: `REPORT_REQUIREMENT_CHECKER_ENABLED=false`.
+- **Erkennungsmuster sind bewusst breit** (z. B. „Widerspruch/Konfliktlinie/Kontroverse", „Stop-Bedingung/-kriterium/Abbruchkriterium"): die Prüfung stellt Vollständigkeit fest, keine Formulierungstreue. Ein Aspekt gilt als behandelt, sobald er in irgendeinem Abschnitt steht.
+- **Tests:** 29 neue Unit-/Integrationstests (`test_requirement_checker.py`, `test_report_requirement_gating.py`) inklusive der Testplan-Fälle — vollständiger Report → COMPLETED erlaubt, Report ohne Stop-Bedingungen → INCOMPLETE mit persistierter Fehlerliste in `run_degradations`. Drei Bestandsfixtures tragen jetzt checklistenerfüllenden Text, damit sie weiterhin ihr eigentliches Thema isolieren.
+- **Die Checkliste folgt der Berichtssprache.** `REPORT_LANGUAGE` ist eine persistierte Nutzereinstellung und steuert bereits die Generierung; der Checker prüfte trotzdem immer gegen deutsche Muster. Ein englisch erzeugter Report hätte damit alle Aspekte gleichzeitig als fehlend gemeldet und wäre dauerhaft `incomplete` gewesen. `Requirement` trägt jetzt `patterns_en` neben `patterns`; die Auswahl **ersetzt** die Musterliste statt sie zu ergänzen, damit ein deutscher Report nicht durch englische Treffer als vollständig gilt. Unbekannte Sprachwerte fallen konservativ auf Deutsch zurück.
+- **Stop-/Expand-Muster erkennen Plural- und Kombiformen.** Die früheren Muster akzeptierten nur den Singular direkt hinter dem Präfix. Dadurch fiel ausgerechnet `Stop-/Expand-Kriterien` durch — die Schreibweise, die der Modul-Docstring selbst als Regressionserwartung Nr. 5 des Aurora-Referenzlaufs zitiert. Ebenso `Stopkriterien`, `Stoppkriterien` und `Abbruchkriterien`. Ein Report hätte die beworbene Anforderung erfüllt und wäre trotzdem abgestuft worden.
+
+### Fixed (E2E-Regression aus #1302 behoben, #1387, 2026-08-24)
+
+- **Der E2E-Stub kannte den neuen Vertrag nicht:** Der Checker prüft `report.markdown_content` gegen sechs Pflichtaspekte (s. o.), aber `llm_e2e_stub.py::_STUB_FINAL_ANSWER_TEMPLATE` lieferte für alle zwölf Sections denselben generischen Platzhaltertext, der keines der sechs Muster trifft. Damit stufte der Checker jeden Stub-Report bedingungslos `COMPLETED → INCOMPLETE` ab, und die E2E-Smokes (`minimal-report.spec.ts`, `report-modes.spec.ts`) liefen 300 s in den Timeout. Genau dieselbe Lücke hätte auch das Persona-Floor-Gate treffen können — dort wird der Stub aber bereits explizit bedient (`seedPersonaFloor`); das wurde bei #1302 für den neuen Checker vergessen.
+- **Fix Teil A — Stub-Vertrag erweitert:** `_STUB_FINAL_ANSWER_TEMPLATE` enthält jetzt je einen Satz zu Stakeholder-Widersprüchen, Frühwarnindikatoren, Stop-/Expand-Kriterien, Positionswechsel und Koalitionen, zusätzlich zum bisherigen Disclaimer-Text („Keine echten LLM-Daten in diesem Lauf"). Bleibt vollständig deterministisch — kein I/O, kein Random. Vor der Änderung per Graph-Abfrage geprüft, ob Tests am Wortlaut des Templates hängen: keiner tut es (`test_llm_e2e_stub.py` prüft nur Struktur/Schema-Validierung, nicht den Text), daher genügte eine Erweiterung des Basistexts statt section-spezifischer Varianten.
+- **Fix Teil B — Poller erkennt terminale Nicht-Erfolgsstatus:** `pollReportReady` (`frontend/tests/e2e/helpers/report.ts`) akzeptierte ausschließlich `"completed"` und lief bei jedem anderen Endzustand in den vollen 300-s-Timeout. `"incomplete"` ist seit #1277-2 ein bewusster, vom gesamten System (Backend `report_status.py`, Zod-Contract, `useReportGeneration.ts`, `Step4Report.vue`) getragener dritter Endzustand — nur der Playwright-Helper kannte ihn nicht. Der Poller wirft jetzt sofort bei `"incomplete"` oder `"failed"` mit einer Meldung, die Status, `error` und (falls vorhanden) `run_degradations`/`missing_sections` nennt. Das macht den Test **strenger, nicht toleranter**: `"incomplete"` gilt weiterhin nicht als Erfolg, der Test schlägt nur schneller und mit Begründung fehl statt nach 5 Minuten mit einem bloßen Timeout.
+- **Bewusst nicht gemacht:** `REPORT_REQUIREMENT_CHECKER_ENABLED=false` im E2E-Kontext — das wäre der schnellste Fix gewesen, hätte aber die einzige CI-Absicherung gegen eine #1302-Regression geopfert. Ebenso unangetastet: die Abstufungslogik in `run_degradation.py`/`requirement_checker.py` und `severity="blocking"` — beide sind korrekt, das Problem lag ausschließlich im Stub-Vertrag und im Test-Helper.
+
+### Fixed (Single-Source-Deckel differenziert ab starkem Match — 2026-08-24)
+
+- **Der 0.59-Deckel für Ein-Quellen-Claims war ein Attraktor, kein Grenzfall-Schutz:** `_compute_confidence_with_penalties` kappte jeden Claim mit nur einer `(type, source)`-Quelle bedingungslos auf `0.59`/`low`, unabhängig davon, wie gut der `match_score` war. Ein SUPPORTED-Fakt mit `match_score=0.946` erreichte einen Rohscore von 0.82–0.92, wurde aber trotzdem auf `0.59` gezogen. Im AURORA-Referenzlauf landeten dadurch 27 von 28 verbliebenen Claims exakt bei `0.59` — die gesamte Qualitätsdifferenzierung bei Ein-Quellen-Claims ging verloren. (#1301)
+- **Der Deckel greift jetzt nur noch bei schwachem Match:** Ist `has_strong_match` (mind. ein `match_score >= 0.85` — dieselbe Schwelle, die die Verified-Schranke bereits verwendet) gesetzt, bleibt der 0.59-Deckel aus; der Rohscore zählt wieder. `backend/app/services/confidence_calculator.py:257` (`unique_sources < 2 and not has_strong_match`). Kein neuer Schwellwert — die 0.85-Grenze existierte bereits als `has_strong_match` und als oberste `specificity`-Stufe.
+- **Die Verified-Schranke bleibt unangetastet:** `score >= 0.90` erfordert weiterhin `has_strong_match` UND `unique_sources >= 2` (`confidence_calculator.py:271-273`). Ein Ein-Quellen-Claim erreicht dadurch höchstens `0.89`/`high`, nie `verified` — auch nicht bei `match_score == 1.0`.
+- **Regressionstest `test_repeated_high_scores_from_one_source_cap_at_low`** (5 Items, `match_score=0.78`, unter der 0.85-Schwelle) bleibt unverändert grün — der Deckel greift dort weiterhin exakt wie vorher.
+- **Ein bestehender Test (`test_duplicate_bindings_do_not_raise_single_source_confidence`) prüfte den alten Deckelwert direkt am Rohscore** (`match_score=0.95` → vorher `<= 0.59`). Die eigentliche Dedup-Invariante — zwei Bindings derselben Evidence-ID ergeben keine zweite Quelle — bleibt bestehen, zeigt sich aber jetzt am finalisierten Label (`auto_downgrade_unsupported_high_claims` stuft `high` mangels Cross-Stakeholder-Beleg weiterhin auf `low` zurück), nicht mehr zufällig am Rohscore. Assertion auf `<= 0.89` und `label != "verified"` angepasst.
+
+**Nicht Teil dieser Änderung (Slice 2, eigenes Issue):** Claim-Typ-Klassifikation (`empirical`/`analytical`/`recommendation`/`structural`). `evidence_entailment.py` (Issue #1317) wurde nicht angefasst.
+
+### Fixed (Interviewzitate verankert — keine seed_doc-Referenzen mehr — 2026-08-14)
+
+- Evidence mit `source_kind=agent_quote` (Interview-Aussagen) darf keinen `seed_doc:`-Anker tragen: neuer Contract-Validator `agent_quote_rejects_seed_doc_anchor` auf `EvidenceItemModel` und `EvidenceRecordModel` lehnt die Kombination ab — ein `seed_doc:`-Anker auf einer Persona-Aussage behauptet eine Dokumentstelle, die der Lauf nie produzierte (Referenzlauf: `seed_doc:seed_aurora#chunk:0`). Die Producer-Boundary `register_evidence_record` entfernt fabrizierte Anker, statt den ganzen Interview-Record zu verlieren; der Schreibpfad für echte Dokumentfakten (`seed_corpus`) bleibt unberührt. Der Section-Prompt beschränkt die `seed_doc:`-Form des `seed_anchor` ausdrücklich auf Zitate, die tatsächlich aus einer Seed-Dokument-Passage stammen, und weist Interview-Aussagen der `ev_`-Evidence-ID zu (contracts-first; das Positivbeispiel zeigt eine formgültige `ev_`-ID statt Persona × seed_doc).
+- Der `interview_agents`-Tool-Ergebnistext zeigt jetzt die vergebene `ev_`-Evidence-ID direkt unter jeder Interviewantwort (`register_evidence_record` vergibt die ID vor dem finalen Rendern) — ohne sie hätte das Modell keine Möglichkeit gehabt, den vom Prompt verlangten `ev_`-Anker zu kopieren statt zu erfinden.
+- Bereits als `schema_version=3` persistierte Reports mit der alten Kombination `source_kind=agent_quote` + `seed_doc:`-Anker werden beim Laden über `normalize_persisted_evidence_map` migriert (`strip_seed_doc_anchor_from_agent_quote_records`), statt `GET /api/report/<id>/evidence` mit HTTP 422 abzuweisen bzw. die Evidence-Map aus JSON/ZIP/CSV-Export stumm auszulassen.
+
+### Fixed (Reportstatus an Contract-Validität gekoppelt — 2026-08-14)
+
+- Ein Report mit ungültigem `ReportV3`-Contract oder fehlgeschlagener Zitat-Validierung (`quote_validation_failed=True`) erreicht nicht mehr fälschlich den Status `completed` — er wird mindestens auf `incomplete` abgestuft, nie aufgewertet. Erfasst jetzt auch: einen frisch fehlgeschlagenen `ReportV3`-Build ohne persistiertes Artefakt (vorher unsichtbar, da `save_report()` den Fehler intern abfängt) sowie eine bereits vor einem Cancel erfolglos gebliebene Zitatprüfung im Teil-Report-Pfad.
+
+### Fixed (insight_forge Key Facts jenseits von Position 10 fielen still aus dem Evidence-Index — 2026-08-14)
+
+- **`_record_tool_evidence` kappte `InsightForgeResult.semantic_facts` bei `[:10]`, bevor überhaupt geprüft wurde, ob ein Fakt eine Dokument-Provenienz trägt:** `insight_forge_tool.py::insight_forge()` dedupliziert Fakten aus mehreren Sub-Queries (`limit=15` je Sub-Query) plus der Hauptquery (`limit=20`) über ein `seen_facts`-Set — realistische Läufe liefern dabei deutlich mehr als 10 Key Facts (der auslösende Fall: 38). Das Slicing in `backend/app/services/report_agent/agent.py` griff vor `build_seed_document_anchor`/`register_evidence_record`, sodass jeder Fakt ab Position 10 unwiederbringlich verworfen wurde — auch solche mit gültigem `document_id`/`chunk_id`-Bezug, die als `EvidenceRecord` mit `source_kind=seed_corpus` hätten persistieren müssen.
+- **Der Fix entfernt das Slicing im `InsightForgeResult`-Zweig; alle anderen Zweige (`InterviewResult`, `PanoramaResult`, `SearchResult`) bleiben unverändert**, insbesondere der bewusste Interview-Cap bei 10 (`test_interview_cap_registers_at_most_ten`). Determinismus und Idempotenz waren bereits über `build_evidence_id`/`register_evidence_record` gegeben und sind unverändert.
+
+### Fixed
+
+- **Report-Agent:** `min_tool_calls` von 3 auf 1 gesenkt — der ReAct-Loop akzeptiert nun ein korrektes Final Answer nach bereits einem Tool-Call, statt unnötige Über-Recherche zu erzwingen.
+- **E2E-Stub:** Stub-Threshold an `min_tool_calls=1` angepasst, sodass Smoke-Tests das reale Verhalten abbilden.
+- **CONTEXT.md:** Falsche Behauptung über parallele Tool-Calls korrigiert (nur `tool_calls[0]` wird pro Iteration ausgeführt).
+
+### Fixed
+
+- Frontend-Zod-Spiegel verwarf Backend-Payloads mit `persona_role_family` (`.strict()`-Rejection) und kannte `seed_document` nicht im `EvidenceTypeSchema`-Enum.
+
+### Changed (Die Modell-Presets im Dropdown sind jetzt übersetzbar — 2026-08-24)
+
+- **`Config.LLM_MODEL_PRESETS` trug den Anzeigetext als fertigen deutschen String** ("Qwen 2.5 14B (lokal, GPU-arm)", "GPT-OSS 120B (Bedrock)"). `/api/simulation/available-models` reichte ihn durch, `useEnvForm.ts` rendert ihn mit `p.label || p.name` unverändert — der Text lief damit komplett am `vue-i18n`-Katalog vorbei. Wer die Oberfläche auf `en` stellte, bekam im Modell-Dropdown weiter Deutsch; eine Textkorrektur brauchte einen Backend-Deploy.
+- **Der Vertrag liefert statt `label` jetzt `label_key`** — einen stabilen, sprachneutralen Schlüssel nach dem Schema `llm.preset.<kind>.<slug>` (z. B. `llm.preset.bedrock.gpt_oss_120b`). Der Anzeigetext liegt in `frontend/src/i18n/locales/{de,en}.json` unter `llm.preset.*`. Die Entscheidung fiel bewusst für Backend-Schlüssel statt für eine Label-Ableitung im Frontend: der Preset-Katalog ist Backend-Wissen (Regionsbindung, Chat-Verifikation der Bedrock-IDs), nur der Text ist es nicht.
+- **Alle elf Presets ziehen mit, nicht nur die sechs Bedrock-Einträge aus [#1288](https://github.com/arn0ld87/agora/pull/1288).** Ein halb umgestellter Katalog wäre schlechter als gar keiner — der Nutzer sähe im selben Dropdown übersetzte und nicht übersetzte Zeilen.
+- **`i18n/modelPresetLabel.ts` löst die Kette `label_key` → `label` → `name` auf**, mit optionalem `te()`-Guard. Die Struktur ist absichtlich die von `components/graph/edgeLabelI18n.ts` — dieselbe Klasse Problem, dieselbe Lösung, kein zweites Muster im Repo. `label` bleibt als Fallback-Feld im TypeScript-Typ, damit ein Frontend gegen ein älteres Backend nicht auf rohe Modellnamen zurückfällt.
+- **Der `(Ollama)`-Zusatz für lokal installierte Modelle ist ebenfalls raus aus dem Code** und kommt als `step2.model.ollamaOption` mit `{model}`-Parameter aus den Locales. Er saß als String-Literal in derselben `computed`.
+- **`ModelPreset` in `api/simulation.ts` deklarierte `id` und `provider` als Pflichtfelder**, obwohl der Endpunkt beide nie geliefert hat — dieselbe Vertragslüge wie das bereits entfernte `models`-Feld, nur von der Index-Signatur verdeckt. Der Typ spiegelt jetzt, was tatsächlich über die Leitung geht.
+- **Drift-Wächter in beide Richtungen:** `backend/tests/api/test_model_preset_label_keys.py` prüft Schema, `kind`-Konsistenz, Eindeutigkeit, die Abwesenheit von `label` — und löst jeden `label_key` gegen **beide** Locale-Dateien auf. Ein neues Preset ohne Locale-Eintrag fällt damit im Test auf statt im UI. `locale-coverage.spec.ts` und `modelPresetLabel.spec.ts` decken die Frontend-Seite ab.
+
+### Fixed (Amazon Bedrock — Preset-Modelle chat-verifiziert, 2026-08-13)
+
+- **Bedrock-Modell-Presets waren unbenutzbar:** die mit #1282 eingeführten sechs Preset-IDs waren nie gegen einen Live-Endpunkt geprüft worden. Fünf davon (`anthropic.claude-sonnet-5`, `anthropic.claude-opus-4-8`, `openai.gpt-5.6-sol/terra/luna`) existieren im mantle-Katalog der Default-Region `eu-central-1` gar nicht — jeder Chat-Call endete in `404 The model '<id>' does not exist`. Auth, Base-URL-Kanonisierung, Adapter-Routing und `/v1/models`-Discovery waren dabei die ganze Zeit korrekt. `LLM_MODEL_PRESETS` und die `fallback_models` des Connection-Eintrags führen jetzt sechs Modelle, die in `eu-central-1` mit einem echten `POST /v1/chat/completions` verifiziert sind: `openai.gpt-oss-120b`, `qwen.qwen3-235b-a22b-2507`, `minimax.minimax-m2.5`, `mistral.devstral-2-123b`, `nvidia.nemotron-super-3-120b`, `zai.glm-4.7-flash`. (#1282)
+- **Claude und GPT-5.x sind über diesen Pfad grundsätzlich nicht erreichbar:** der mantle-Endpunkt führt die `anthropic.*`-Familie zwar im Katalog (in `us-east-1`, nicht in `eu-central-1`), bedient sie aber weder über `/v1/chat/completions` noch über `/v1/responses` — beide antworten `400 does not support the API`. Gleiches gilt für alle `openai.gpt-5.x`. In `us-east-1` sprechen 38 von 55 Katalog-Modellen Chat-Completions. Diese Modelle brauchen die native Converse/InvokeModel-API mit SigV4, die #1282 bewusst ausgeschlossen hat; Folge-Issue angelegt. Die Provider-Dokumentation im Code hält den Befund samt Messdatum fest. (#1282)
+- **Regressionstest `tests/llm/test_bedrock_model_catalog.py`:** hält `LLM_MODEL_PRESETS` und `fallback_models` deckungsgleich (offline) und probt jedes Preset mit einem echten Chat-Call gegen die Default-Region (`@pytest.mark.llm`, Skip ohne `AWS_BEARER_TOKEN_BEDROCK`). Der Netz-Seam ist notwendig, weil `GET /v1/models` kein Capability-Feld liefert — ein reiner Katalog-Abgleich hätte die zweite Fehlerschicht durchgelassen. (#1282)
+
+### Added (Amazon Bedrock als LLM-Provider — 2026-08-12)
+
+- **Amazon Bedrock (OpenAI-kompatibler mantle-Pfad) als LLM-Provider:** `detect_provider` erkennt `bedrock-mantle.<region>.api.aws` / `bedrock-runtime.<region>.amazonaws.com` und resolved sie zu `OpenAIAdapter`; `openai_compat_base_url` erzwingt das nötige `/v1`. Connection-Discovery-Eintrag (`adapter_kind="bedrock"`, `api_key_ref=AWS_BEARER_TOKEN_BEDROCK`, Bearer-Auth) plus `/v1/models`-Discovery-Protokoll; Default-Region `eu-central-1` (im Connection-UI frei editierbar). `LLM_MODEL_PRESETS` um sechs Bedrock-Modelle ergänzt (Claude Sonnet 5, Claude Opus 4.8, OpenAI GPT-5.6 Sol/Terra/Luna, gpt-oss-120b). Frontend-Zod-Provider-Kind-Enums gespiegelt. Auth via Bedrock-API-Key (Bearer), kein boto3/SigV4. (#1282)
+
+### Fixed (Output-Contract — toter Zweig nach PR #929 — 2026-08-12)
+
+- **Toter `required`-Schnittmengen-Zweig in `resolve_report_status` entfernt:** Beide Arme nach dem `COMPLETED`-Early-Return lieferten `INCOMPLETE`; `required` und die Schnittmenge `failed & required` wurden bei jedem Aufruf berechnet und verworfen. Die Invariante (jeder Aufrufer übergibt `required_section_indices=list(range(1, total+1))` → jede failed Section wird `INCOMPLETE`) macht die Prüfung überflüssig. Eingedampft auf `COMPLETED if not failed else INCOMPLETE`; `required_section_indices` bleibt als Parameter, damit Aufrufer nicht geändert werden müssen. Verhaltensneutral — bestehende Trust-Tests decken beide Pfade ab. (#1277-5)
+
+### Fixed (Report-Agent — Quote-Fallback und Binding-Merge — 2026-08-12)
+
+- **Quote-Fallback behält keine Plattform-Strukturmarker mehr:** Bei leeren `key_quotes` fiel `quote_source` in `_record_tool_evidence` auf das rohe `response` zurück, sodass Marker wie `[Twitter Platform Response]` im persistierten `quote` landeten und in die Report-Prosa gerendert wurden. Der Fallback nutzt jetzt das bereits bereinigte `substance`. (#1277-4)
+- **`_remap_claim_bindings` verwirft bei ID-Kollision nicht mehr die stärkere Bindung:** `merged.setdefault(target, binding)` war First-Wins — kam die schwächere `RELATED_ONLY`/`supports_claim=False`-Bindung zuerst, wurde die stärkere `SUPPORTED`-Bindung still verworfen; in `_finalize_section_claims` blieb `supporting_ids` leer und der Claim wanderte mit `no_supporting_evidence` in die Hypothesen. Die stärkere Bindung gewinnt jetzt nach Entailment-Rang (Tie-Break über `match_score`), unabhängig von der Reihenfolge. (#1277-6)
+- **`demote_unanchored_seed_corpus_records` nutzt dieselbe strongest-binding-Policy:** Die Migrations-Pfad (`evidence_migrations.py`) enthielt eine zweite `setdefault`-Stelle mit derselben First-Wins-Bug-Klasse — beim Re-Key von Seed-Records konnte eine schwächere Bindung eine stärkere verdrängen. Die Policy wird dort jetzt konsistent angewendet; die Helper sind lokal gespiegelt (Konsolidierung in ein gemeinsames Modul steht aus). (#1277-6)
+
+### Fixed (Confidence-Calculator — Audit-Trail und tote Zweige — 2026-08-12)
+
+- **`compute_claim_confidence`-Audit-Trail beschreibt dieselbe Penalty-Menge wie der Score:** Bisher extrahierte die Funktion Sentiment-Scores über die gesamte Evidence-Menge (inkl. widersprechender und nur verwandter Items), während der Score in `compute_confidence` nur über die stützende Teilmenge lief — der Audit-Trail konnte Penalties aufführen, die der Score gar nicht abbildete, und umgekehrt fehlte die Entailment-Penalty im Audit. Beide Wrapper leiten jetzt aus der gemeinsamen Helper-Funktion `_compute_confidence_with_penalties` ab, sodass Score und Audit-Trail dieselbe Penalty-Menge tragen. (#1277-7(2), #1277-7(3))
+- **Boolesche `sentiment_score`-Werte werden nicht mehr als numerische Sentiments interpretiert:** `bool` erbt von `int`, sodass `isinstance(True, (int, float))` True war und boolesche Sentinel-Werte als `1.0`/`0.0` durch die Extraktion rutschten — im schlimmsten Fall löste das einen Schein-Widerspruch und damit eine fälschliche Contradiction-Penalty aus. Boolesche Werte werden jetzt ausgeschlossen. (#1277-7(4))
+- **Toter `base_score`-Parameter aus `compute_claim_confidence` entfernt:** Der Parameter wurde nie ausgewertet und führte Aufrufer in die Irre. (#1277-7(1))
+- **Toter `elif`-Zweig in `apply_echo_cap` entfernt:** Der Zweig war unreachable: das vorherige `if` fängt alle `high`/`verified`-Labels ab, und für alle anderen Labels ist sein zweites Prädikat immer False. (#1277-3)
+
+### Fixed (Report-Trust-Pfad — Laufzeit-Bugs — 2026-08-12)
+
+- **Native Tool-Call-Modus retryt bei `content: None` statt dauerhaft zu scheitern:** Im nativen Pfad konnte `chat_with_tools` `{"content": None, "tool_calls": []}` liefern (erschöpftes `max_tokens`, Safety-Filter, leere Completion). Der Folgecode warf einen `TypeError`, den `_safe_generate_section_react` abfing — der vorgesehene None-Retry war auf diesem Pfad unerreichbar, die Section wurde dauerhaft `generation_failed` und der Report `INCOMPLETE`, obwohl ein einzelner Retry gereicht hätte. None wird jetzt frühzeitig im else-Zweig abgefangen, sodass der bestehende Retry-Pfad greift. (#1277-1)
+- **`generate_report` meldet terminal `incomplete` statt `completed`, wenn der Report `INCOMPLETE` ist:** Der terminale Progress-Event am Happy Path sendete unterschiedslos `stage="completed"` bei 100 %, auch wenn `resolve_report_status`/`apply_degradation_downgrade` den Report auf `INCOMPLETE` gesetzt hatten. Consumern (WebSocket, Polling, Streaming-UI) wurde so Erfolg für einen unvollständigen Report vorgaukelt — genau die Fehldarstellung, die #1006 / P0-7 beseitigen sollte. Stage und Message verzweigen jetzt auf `report.status`. (#1277-2)
+- **`/api/report/generate/status` propagiert den INCOMPLETE-Report-Status:** Der Progress-Event-Fix schrieb `stage="incomplete"` in `progress.json`, aber der Polling-Pfad (`ReportStatusService.get_status`) las den Status aus der Run-Registry — und `run_generate` schreibt den Registry-Status auch bei INCOMPLETE auf `"completed"` (Teilergebnis, kein Fehlschlag, #1006). `get_status` spiegelt jetzt den Report-Status in das `status`-Feld des Public-Contract, wenn der Run terminal ist; `useReportGeneration` nimmt damit den `incomplete`-Branch statt den completed-Branch für einen unvollständigen Report. (#1277-2)
+
+### Fixed
+
+- Replay-Overrides verwenden den kanonischen `AiModelRef` statt eines offenen
+  Dictionaries. Die `provider_connection_id` wird jetzt an das Stage-Routing
+  durchgereicht — dieselbe Modell-ID auf zwei Provider-Connections landete
+  vorher auf der falschen Connection.
+- Validierungsfehler beim Replay liefern einen strukturierten Fehler-Envelope
+  mit `code` und sanitisierten Details, statt das rohe
+  `ValidationError.errors()`-Payload als Fehlertext zu setzen.
+- Run-Manifeste werden atomar geschrieben (tmp-Datei + `os.replace`). Ein
+  fehlgeschlagener Schreibvorgang lässt das vorhandene Manifest unverändert;
+  parallele Leser sehen kein halbfertiges JSON.
+- `runtime.usage_summary` wird beim Finalisieren aus `usage_summary.json`
+  übernommen und blieb bisher in jedem Simulations-Manifest leer.
+- `RunManifest` mit `status="final"` verlangt jetzt Laufzeitdaten. `draft` und
+  `legacy` bleiben ohne `runtime` gültig.
+- Der Replay-Dialog bietet keine Eingabefelder mehr für Seed-Dokument und
+  Zufalls-Seed an — beide werden serverseitig mit HTTP 400 abgelehnt. Ein halb
+  ausgefülltes Modell-Override sperrt den Submit, statt still auf das
+  Originalmodell zurückzufallen.
+- Der Fehlerpfad des Replay-Dialogs verwendet einen i18n-Key statt eines
+  hartkodierten deutschen Texts.
+
+### Fixed (Simulationsvorbereitung und Gemini-Tool-Turns - 2026-08-12)
+
+- **Prepare läuft pro Simulation exklusiv:** Ein zweiter Start bei aktivem Prepare-Task wird vor Run-, Task- und Artefakterzeugung mit HTTP 409 abgelehnt; verwaiste `preparing`-Zustände bleiben recoverbar.
+- **Gemini-3-Tool-Historie behält Thought-Signaturen:** Der CAMEL-Adapter übernimmt die Provider-Signatur pro Tool-Call in nachfolgende Assistant-Nachrichten und nutzt den dokumentierten Validator-Ersatz nur für synthetisch rekonstruierte Calls.
+
+### Fixed (406+ deutsche Zitate schlossen mit ASCII-Quote statt „…“ — 2026-08-24)
+
+- **Repo-weite Korrektur des Zitat-Schlusszeichens:** 515 Stellen in `backend/app/`, `backend/tests/`, `backend/scripts/`, `frontend/src/`, `docs/` und `changelog.d/` öffneten ein deutsches Zitat mit `„` und schlossen es mit dem ASCII-`"` statt mit `“`. Getrennte Commits pro Bereich, reiner Zeichenersatz ohne inhaltliche Änderung. Zwei Treffer in `report_agent/text_verification.py` sind bewusst ausgenommen — dort ist der ASCII-Quote das Delimiter-Zeichen einer `str.strip()`-Zeichenklasse, kein Zitat. Schema-Drift aus den betroffenen Contract-Docstrings (Pydantic `Field`-Description) wurde mitgerendert. (#1269)
+
+### Fixed (Section-Prompt beschreibt die Anker-Prüfung wieder korrekt — 2026-08-11)
+
+- **Der Section-Prompt sagte dem Modell eine Freikarte zu, die es seit #1249 nicht mehr gibt:** Die Zeile `The "seed_doc:" prefix is accepted as an opaque reference without further lookup` beschrieb ein Verhalten, das `validate_quote_anchors` nach der #1249-Umsetzung nicht mehr zeigt — dort wird jeder Anker präfixunabhängig gegen `known_anchors` geprüft. Die Folge war nicht kosmetisch: ein nicht auflösbarer Anker setzt `QuoteValidationResult.valid` auf `False`, und `section_pipeline._validate_quotes_with_repair` löst daraufhin einen vollständigen zweiten ReAct-Durchlauf für die Section aus. Der lief mit demselben irreführenden Prompt und konnte strukturell nicht erfolgreich sein — ein verschwendeter Section-Call pro betroffenem Abschnitt, am Ende `quote_validation_failed=True`. Betroffen war jeder Abschnitt, dessen Titel `_section_expects_quotes` erfüllt (Persona, Segment, Reibung, Vertrauen, Interview, Reaktion), außerhalb des `explorative`-Modus.
+- **Das vorgegebene Ankerformat war zusätzlich strukturell unauflösbar.** Der Prompt verlangte `seed_doc:<document_id>`, der Lesepfad (`_SEED_DOC_ANCHOR_RE`, ADR-0013) akzeptiert aber ausschließlich `seed_doc:<document_id>#chunk:<chunk_id>` — und nur solche Anker erzeugt `build_seed_document_anchor`, nur sie landen als `source_id_anchor` in `known_anchors`. Ein Modell, das dem Prompt exakt folgte, produzierte damit garantiert einen ungebundenen Anker. Ohne diese zweite Korrektur wäre die Aufforderung, einen auflösbaren Anker zu setzen, eine Anweisung gewesen, die das Modell nicht befolgen kann.
+- **Das Beispiel `ev_kg_042` verletzte `EVIDENCE_ID_PATTERN`** (`^ev_[0-9a-f]{32}$`) — dieselbe Fehlerklasse wie der kopierbare Beispielwert aus #1244, nur im anderen Namensraum. Die Beispiele nutzen jetzt durchgängig die Platzhalterform, kein nachahmbares Literal.
+- **Der Prompt benennt jetzt die tatsächliche Konsequenz:** jeder Anker wird geprüft, ein nicht auflösbarer wird als ungebundene Referenz ausgewiesen und kostet die Section einen Reparaturlauf. Erfundene Anker erzeugen keine Evidence.
+- **Platzhalter in spitzen Klammern zerlegten den eigenen Section-Parser.** `_QUOTE_TAG_RE` liest die Attributliste mit `[^>]+` und endet damit am ersten `>`. Ein Beispiel-Tag wie `<simulated_quote persona_id="<persona_id>" seed_anchor="<evidence_id_or_seed_doc>">` schneidet sich selbst ab: `seed_anchor` bleibt unterminiert, fällt aus `_ATTR_RE` heraus und das Zitat gilt als ankerlos — der Attributrest landet zusätzlich im Zitattext. Der Prompt ist das Vorbild, dem das Modell folgt, also war das ein Defekt im Prompt, nicht im Parser. Alle Beispiel-Tags verwenden jetzt klammerfreie Großschreibungs-Platzhalter (`PERSONA_ID`, `DOCUMENT_ID`, `CHUNK_INDEX`), und der Prompt benennt die Regel ausdrücklich. Zwei der vier betroffenen Stellen bestanden schon vorher (Format-Vorgabe und Quote-Reminder), zwei wären mit dem #1267-Fix neu hinzugekommen — der Regressionstest deckt beide Fälle über denselben Produktions-Parser ab.
+- Validator und Gating bleiben unverändert — der Validator war richtig, der Prompt war falsch. Der `<evidence_gating priority="hard">`-Block (ADR-0002 Hartanker 1) und der Hedge-Snapshot (Hartanker 2) sind nicht berührt; der Diff beginnt hinter dem Block.
+
+### Slice 1.2 — Report-Generierung serialisiert statt parallel
+
+Eine zweite parallele Report-Generierung für dieselbe Simulation wird
+deterministisch mit HTTP `409 report_generate_in_progress` abgewiesen, statt
+kooperativ gebremst zu werden. Der neue Guard
+`ReportGenerationService._reject_if_report_generate_active` fragt vor jedem
+Start die RunRegistry nach einem Run mit `run_type=report_generate` und
+Status `pending` oder `processing` für dieselbe `simulation_id` ab — bewusst
+kein In-Memory-Dict, weil das einen Worker-Neustart nicht überleben würde und
+den zweiten Start dann wieder durchließe.
+
+Das ist eine bewusste Verhaltensänderung und für Nutzer, die bisher parallel
+generiert haben, eine Laufzeit-Regression: der zweite Aufruf schlägt jetzt
+fehl statt (unkontrolliert) mitzulaufen. Begründung ist der in #1265
+belegte Faktor ~6 an Ressourcenverbrauch — Tokens, LLM-Calls, Laufzeit —, den
+zwei parallele Generierungen für dieselbe Simulation ohne Mehrwert
+verursachen.
+
+Out-of-Process-Jobausführung bleibt 1.0-Vorarbeit und ist mit diesem Slice
+nicht erledigt; der Guard serialisiert nur den Start, er ändert nichts an der
+grundsätzlichen In-Process-Ausführung der Jobs selbst.
+
+### Changed (Runtime-Context verifiziert — 2026-08-11)
+
+- **`CONTEXT.md` beschreibt wieder den tatsächlichen Runtime-Stand:** Prepare-/Persona-Pipeline, Initial-Post-Publishing, Interview-Mechanik, Evidence-Binding und bekannte Signaturen sind gegen `main@a3cebd38f38fc2c0043dc245766869eb05b41e0f` abgeglichen; bekannte Beobachtungen tragen jetzt explizite Status statt pauschal als „nicht neu melden“ zu gelten. (#1261)
+
+### Fixed (`seed_doc:`-Anker werden gebunden statt geglaubt — 2026-08-11)
+
+- **Ein Provenance-Anker mit `seed_doc:`-Präfix umging die Bindungsprüfung vollständig:** Die Validierung prüfte einen Anker nur dann gegen die bekannten Anker, wenn er dieses Präfix *nicht* trug — es galt als opake Referenz. Ein `ev_`-Anker ohne Bindung wurde als `unbound_evidence_refs` sichtbar, `seed_doc:beliebig` niemals. Das Modell wählte in den beobachteten Läufen exakt diesen einen ungeprüften Pfad, und zwar mit dem Wert, den der Prompt ihm vorgab: Alle acht Zitate einer Section, von sieben verschiedenen Personas, trugen `seed_doc:interview_transcript_07`; ein Dokument dieses Namens existierte im Lauf nicht. Über mehrere Läufe zeigte sich eine Verschärfung nach oben — ein stärkeres Modell konstruierte statt eines konstanten Ankers pro Persona einen individuell klingenden (`seed_doc:interview_<name>`), der ebenfalls auf nichts verweist. Der konstante Anker ist als wertlos sofort erkennbar, der individuelle nicht: Dann sieht jedes Zitat einzeln belegt aus.
+- **Eine eigene Auflösungsquelle war dafür nicht nötig:** Echte Seed-Anker haben nach ADR-0013 die Form `seed_doc:<document_id>#chunk:<chunk_id>` und stehen als `source_id_anchor` bereits im Ankerindex. Es fehlte nur die Prüfung; der Kern der Änderung ist eine gelöschte Bedingung.
+- **Gewählte Politik (Sign-off 2026-08-11):** Ein nicht auflösbarer `seed_doc:`-Anker wird geführt wie ein ungebundener `ev_`-Anker — sichtbar als `unbound_evidence_refs`, ohne das Zitat hart zu verwerfen. Ein real existierendes, aber aus technischen Gründen nicht indiziertes Dokument kostet damit Sichtbarkeit, keinen Inhalt. Die Behandlung von `ev_`-Ankern ist unverändert, ein *fehlender* Anker bleibt weiterhin ein hartes `invalid_quote`, und der `<evidence_gating priority="hard">`-Block sowie der Hedge-Snapshot sind unberührt.
+
+### Changed (Der Cross-Stakeholder-Anker zählt Rollenfamilien statt Berufstitel — 2026-08-11)
+
+- **Zwei Formulierungen desselben Berufs galten als zwei Stakeholder-Gruppen:** `persona_stakeholder_group` wird aus dem Berufstitel der Persona gefüllt und ist damit ein frei formulierter Satz. Der Validator zählte distinkte Werte nach einer Normalisierung, die nur Groß-/Kleinschreibung und Whitespace einebnet. In den Evidence-Karten zweier Referenzläufe standen deshalb `Umschüler im IT-Bereich (Teilnehmer)` und `Teilnehmer einer IT-Umschulung (Retrainee)` als verschiedene Gruppen nebeneinander, ebenso `Umschüler & Sprecher der Teilnehmenden`, `Umschüler zur Fachkraft für Lagerlogistik`, `Umschüler:in (Logistik & Lagerwesen)` und `Umschülerin zur Kauffrau für E-Commerce` — vier Gruppen, eine Rolle. In einem weiteren Lauf genügte ein Genusunterschied: `Festangestellte Dozentin für IT-Umschulungen und Betriebsratsmitglied` gegen `Festangestellter Fachdozent für IT-Umschulungen und Betriebsratsmitglied`. Der Anker verlangt zwei distinkte Gruppen für `high`; es genügte also eine andere Formulierung desselben Berufs, um eine Aussage als breit gestützt einzustufen, obwohl nur eine Perspektive gesprochen hat.
+- **Gezählt wird jetzt ein kontrolliertes Rollenfamilien-Label:** Das neue Feld `persona_role_family` trägt den Entitätstyp der Quellentität — pro Lauf stabil, im Gegensatz zum Freitext. Der Berufstitel bleibt als Anzeigetext vollständig erhalten; er trägt Information, die der Report nutzt. Der Konsenswert in der Confidence-Berechnung folgt derselben Zählgröße, damit er keine andere Vorstellung von „Gruppe“ hat als der Validator, der über dasselbe Label entscheidet.
+- **Kollektiv und Individuum derselben Organisation sind eine Familie:** Beide tragen den Entitätstyp ihrer Quellentität, die Zusammenführung fällt damit ohne eine zweite Identitätsquelle an. Ein Kollektiv-Zitat zählt nicht mehr als zusätzliche Stimme neben einem Individuum derselben Organisation.
+- **Artefakte aus älteren Läufen bleiben lesbar:** Fehlt das Label, bleibt der Berufstitel die Vergleichsgröße — das bisherige Verhalten, nie strenger und nie lockerer. Die beiden Namensräume werden über ein Präfix getrennt, damit eine Familie `Lecturer` nicht mit einem gleichlautenden Freitext verschmilzt.
+- **Verhältnis zu ADR-0002:** Das ist eine Verschärfung von Hartanker 4, keine Schwächung — die Zahl unterscheidbarer Gruppen kann durch das Label nur sinken. Der `<evidence_gating priority="hard">`-Block und der Hedge-Snapshot sind unverändert.
+
+### Fixed (Nicht-Stakeholder werden keine Personas mehr, und abgelehnte Plätze bleiben nicht leer — 2026-08-11)
+
+- **Die Blockliste konnte den Hauptfall strukturell nicht fangen:** Der Eignungsfilter prüft den Entitätstyp gegen eine harte Blockliste (`city`, `software`, `technology`, `date` …) und funktioniert dabei nachweislich. Gemessen über zwei Referenzläufe tragen aber **28 von 29 Nicht-Stakeholdern den Typ `Organization`** — `Moodle`, `ChatGPT`, `granite-4.0-h-tiny`, `GPU-Server`, `Magdeburg`, `AZAV-Zulassung`, `Kursstart Februar 2027`, `Abschnitt 7 (U1–U5)`. `organization` kann nicht auf die Blockliste, weil Bildungsträger, Betriebe und Behörden legitime Stakeholder-Organisationen sind. Ein enger gefasstes Typvokabular hilft ebenfalls nicht: In einem Lauf lieferte das Modell ausschließlich kanonische Typen — und trotzdem landeten 16 von 16 Nicht-Stakeholdern in `Organization`. Der Typ ist gleichzeitig legitimes Label und Auffangtopf für alles Unklare. Die Frage „kann diese Entität einen menschlichen Träger haben“ wird deshalb jetzt am Namen und am Kontext beantwortet und in den ohnehin stattfindenden Persona-Generierungsaufruf gefaltet — sie kostet keinen zusätzlichen Roundtrip. Das Modell darf mit einer Ablehnung antworten, statt eine Persona erfinden zu müssen. Die Blockliste bleibt als billige erste Stufe erhalten.
+- **Wirkung, bis in die Evidence belegt:** In den Reports der Referenzläufe traten `Technische Mitarbeiterin im Rechenzentrum Magdeburg`, `Projektkoordinatorin KI-Lernassistent` und `Teamleiterin AZAV-Zulassung bei der Agentur für Arbeit` (6 Zitate) als zitierte Quellen auf. Ein Slot, der leer bleibt, wäre hinnehmbar; ein Slot, der mitredet und zitiert wird, verfälscht das Ergebnis.
+- **Abgelehnte Plätze werden nachbesetzt:** Die typunabhängige Prüfung fällt erst im Generierungsaufruf, also **nach** dem `max_agents`-Cap. Ohne Nachbesetzung unterschritte jede Ablehnung den konfigurierten Wert — bei einem Cap von 30, nach eigener Empfehlung der Floor ohne Puffer, und einer beobachteten Ablehnungsquote von bis zu 32 % wäre das der Unterschied zwischen 30 und 20 Stimmen. Was der Cap wegschneidet, bleibt jetzt als Reservepool erhalten; jeder abgelehnte Platz zieht daraus nach, und auch ein abgelehnter Nachrücker führt zum nächsten Kandidaten. Das Typ-Round-Robin aus #1177 bleibt unverändert und läuft weiterhin vor der Reservebildung, sodass jeder Typ seinen Platz behält.
+- **Ablehnung und Ausfall bleiben unterscheidbar:** Eine Zurückweisung ist eine eigene Ausnahme, kein stiller `None`-Rückgabewert. Ein Generierungsfehler führt weiterhin zum Notprofil und belegt seinen Platz; nur eine Ablehnung gibt den Platz frei. Der regelbasierte Pfad lehnt nie ab — dort gibt es kein Modell, das die Frage beantworten könnte, und ein Ausfall darf nicht in einen Ausschluss umgedeutet werden.
+
+### Fixed (Personas sind wieder kohärent sie selbst — 2026-08-11)
+
+- **Anzeigename und Profiltext beschrieben verschiedene Menschen:** `username=katharina_schäfer_846` trug den Profiltext „Sabine Krüger …“, `felix_krause_452` den Text „Klaus Weber …“ — häufig mit abweichendem Geschlecht. Über vier Referenzläufe lag die Quote auf der maschinell messbaren Teilmenge bei 50, 81, 68 und 73 Prozent. Der Interview-Systemprompt setzt beides zusammen: „Du bist \<label\>“ und direkt darunter ein Profil, in dem jemand anders beschrieben wird. Die Persona bekam damit zwei Identitäten in derselben Nachricht — die plausibelste Erklärung für die beobachtete Rollenübernahme, bei der eine Rechenzentrums-Technikerin mit „Als Betriebsrat hätte ich vorab klären müssen…“ antwortete. Der Freitext wird jetzt deterministisch auf den Anzeigenamen gezogen, inklusive späterer Erwähnungen („Sabine schätzt…“, „Frau Krüger meldet…“). Bewusst kein weiterer Prompt-Appell: der Prompt enthielt bereits eine Rollentreue-Regel, das Modell verletzte also eine vorhandene Regel, keine fehlende.
+- **Organisationen bekamen eine erfundene Vita:** Aus dem Bildungsträger `Nordharz Bildungswerk gGmbH` (`source_entity_type: Organization`) wurde `juergen_hartmann_nhb_832` mit `profession: "Dozent für IT-Umschulungen und Betriebsratsmitglied"`. Weder „Dozent“ noch „Betriebsratsmitglied“ ist aus einer gGmbH ableitbar. Die Ursache war strukturell: Der Gruppen-Prompt forderte ausdrücklich einen erfundenen Menschen mit Alter, Geschlecht, MBTI-Typ, Bildungsweg und „prägenden Erfahrungen“ an — eine Institution hat davon nichts, also musste der Generator alles erfinden. Gruppen-Entitäten werden jetzt als Kollektiv-Persona geführt: kein Alter, kein Geschlecht, kein Persönlichkeitstyp, keine Berufsbezeichnung, kein erfundener Personenname. Sie äußern sich als „der Träger“ statt als „Jürgen Hartmann, 57“. Das ist eine Darstellungs-, keine Architekturänderung — der Simulations-Agent bleibt ein Agent und führt weiterhin individuelle Aktionen aus. Das neue Feld `persona_kind` (`individual` | `collective`) steht in allen drei Serialisierungen, damit Konsumenten die Ausprägung lesen können, ohne den Entitätstyp nachzuschlagen.
+- **Der Entitätstyp wurde als Beruf durchgereicht:** Wo der degradierte Pfad nichts abzuleiten wusste, schrieb er den Typnamen wörtlich ins Berufsfeld — `profession: "AIProvider"`, `"WorkingGroup"`, `"TechnologyVendor"`. Das Feld bleibt jetzt leer, und ein Wächter verwirft jede `profession`, die dem Entitätstyp entspricht, unabhängig davon, welcher Pfad sie erzeugt hat. Lieber keine Angabe als eine falsche.
+
+### Fixed (Twitter verwirft keine Initial-Posts mehr, und das Log zeigt es an — 2026-08-11)
+
+- **Der Twitter-Zweig überschrieb Seed-Posts desselben Agenten:** Die Publish-Schleife hielt die Initial-Posts in einem Dict mit dem Agent-**Objekt** als Schlüssel und wies per einfacher Zuweisung zu. Trugen mehrere Posts dieselbe `poster_agent_id`, gewann der letzte — alle vorherigen verschwanden ersatzlos, ohne Fehler und ohne Warnung. In einem Lauf, in dem alle neun Seed-Posts derselben `agent_id` zugewiesen waren, veröffentlichte Twitter genau einen (den letzten) und Reddit alle neun. Der Reddit-Zweig derselben Datei behandelte diese Kollision bereits korrekt; es war ein Copy-Paste-Divergenzfehler, kein Designunterschied. Beide Zweige benutzen jetzt denselben Helfer, damit die Vorlage nicht erneut auseinanderläuft. Der Fix ist bewusst unabhängig von der Poster-Zuordnung: auch nach deren Korrektur kann eine Entität legitim mehrfach als Sprecher auftreten, und dann verschwänden die Posts weiterhin still.
+- **Die Publish-Meldung zählte Agenten und nannte sie Posts:** Die Zeile gab `len(initial_actions)` aus, also die Anzahl distinkter Poster-Agenten. Bei neun auf einen Agenten kollabierten Posts meldete sie `Published 1 initial posts`, bei neun verteilten `Published 9 initial posts` — dieselbe Formulierung für einen Faktor neun Unterschied. Sie war damit die ganze Zeit ein direkter Indikator für den Kollaps, nur als solcher nicht lesbar. Beide Größen stehen jetzt getrennt in der Zeile: `Published 9 initial posts from 1 distinct agent`.
+
+### Fixed (Der Beispiel-Provenance-Anker im Section-Prompt geht nicht mehr als echter Wert durch — 2026-08-11)
+
+- **Modelle kopierten den Beispielwert aus der Prompt-Anweisung in jedes Zitat:** Die Formatbeschreibung für den `seed_anchor` eines Persona-Zitats nannte ein Beispiel in der Form `"seed_doc:" gefolgt von der Dokument-ID (z. B. "seed_doc:interview_transcript_07")`. Dieser Beispielstring ist gleichzeitig ein syntaktisch gültiger Wert — ein Modell, das die Anweisung nicht auflösen kann, greift zur naheliegendsten gültigen Zeichenkette, und das ist das Beispiel. In einem beobachteten Lauf trugen alle acht Zitate von sieben verschiedenen Personas genau diesen Anker; ein Dokument dieses Namens existierte im Lauf nicht. Der Prompt nennt jetzt nur noch die Platzhalter-Syntax `seed_doc:<document_id>` und weist ausdrücklich darauf hin, dass sie zu ersetzen und nicht zu übernehmen ist. Die Formatbeschreibung selbst bleibt vollständig erhalten.
+- **Nicht Teil dieser Änderung:** Dass ein `seed_doc:`-Anker die Bindungsprüfung ohne Auflösung passiert, bleibt unverändert bestehen — die Ablehnungspolitik dafür braucht eine eigene Entscheidung und liegt in #1249. Der `<evidence_gating priority="hard">`-Block und der Hedge-Snapshot sind byte-identisch (ADR-0002).
+
+### Fixed (Der Report-Abbruch bricht jetzt tatsächlich ab — 2026-08-11)
+
+- **`POST /api/runs/<id>/cancel` quittierte Erfolg und tat nichts:** Die Workflow-Funktion `generate_report` prüft das Abbruchsignal an zwei Stage-Grenzen völlig korrekt — nach der Outline und zu Beginn jeder Section-Iteration. Der zugehörige Parameter `cancel_run_id` ist aber keyword-only mit Default `None`, und die Prüffunktion steigt bei `None` sofort mit `False` aus. Kein einziger Produktivaufrufer übergab ihn: weder der Report-Generation-Service noch der Resume-Pfad in der Runs-API. Der Parameter kam außerhalb der Signatur nur in `tests/services/test_partial_report.py` vor, wo er explizit gesetzt wird — deshalb war der Test grün, während die Funktion produktiv nie eine `run_id` zu prüfen bekam. Praktische Folge im Feld: Ein laufender Report ließ sich nur per `docker restart` beenden, was alle anderen Jobs im selben Container mitnahm. Beide Aufrufer reichen die `run_id` jetzt durch, und die Agent-Fassade `ReportAgent.generate_report` leitet sie an die Workflow-Ebene weiter, statt sie zu schlucken.
+- **Ein abgebrochener Lauf ist nicht mehr von einem vollständigen zu unterscheiden gewesen:** Der Teilreport aus dem kooperativen Abbruch trägt bewusst `status=COMPLETED` (success-with-caveat), weil die bereits geschriebenen Sections lesbar und exportierbar bleiben. Der Run übernahm diesen Status ungeprüft und stand anschließend als regulär abgeschlossen in der Liste. Nach einem Nutzerabbruch endet er jetzt als `stopped` mit `termination_reason="user_cancel"` — dasselbe Endzustandspaar, das der Simulations-Monitor bei einem abgebrochenen OASIS-Subprozess setzt. Die Reihenfolge ist dabei bindend und aus #978 bekannt: `complete_task` spiegelt sich per `RunRegistry.sync_task` auf den Run zurück, der detaillierte Run-Update muss deshalb zuletzt laufen.
+
+### Documentation (CONTEXT.md beschreibt die Laufzeit-Mechanik für Agenten — 2026-08-11)
+
+- **Wer einen Agora-Lauf beobachtet oder auswertet, musste sich die Mechanik bisher aus Code, Logs und Artefakten zusammensuchen:** `README.md` beschreibt das Produkt, `AGENTS.md` die Arbeitsregeln — wie ein Lauf tatsächlich abläuft, stand nirgends. Das kostete wiederholt Zeit an Symptomen, die sich als korrektes Verhalten herausstellten: Reposts sind eigene `post`-Zeilen mit leerem `content`, Twitter kennt keine Kommentare, die Neo4j-Schreibfehler beim Simulationsstart sind ein dokumentierter Fork-Transient, und der Zähler in `Published N initial posts` zählt distinkte Poster-Agenten statt Posts.
+
+  `CONTEXT.md` füllt den in [`docs/agents/domain.md`](docs/agents/domain.md) vorgesehenen, bislang bewusst leeren Slot. Sie beschreibt die fünf Phasen mit ihren Artefakt-IDs, den `interview_agents`-Mechanismus samt seiner drei Eigenheiten (Frage-Echo, Rollenübernahme, und dass ein Zitat im Report meist aus dem Interview stammt und nicht im Feed steht), das Evidence-Modell mit seinen **zwei getrennten Prüfstellen** — `claim_extraction_and_evidence_binding` prüft alle Claims, `verify_prose` nur Sätze mit einer Zahl —, die Artefaktpfade im Container, das Sim-DB-Schema mit der `original_post_id`-Auswertungsfalle, das getrennte Embedding-Routing zwischen Env und Konfigurationsstore, die Standardgriffe zur Auswertung eines Laufs, und eine Liste bekannter Fehlerbilder, die ausdrücklich **nicht** als Neufund zu melden sind.
+
+  `AGENTS.md` und `CLAUDE.md` verweisen darauf, damit Agent-Runtimes die Datei ohne Suche finden.
+
+### Fixed (Vision-Pfad behandelt MiniMax-thinking — 2026-08-23)
+
+- **`LLMClient.describe_image` schickte gegen MiniMax kein `thinking`-Feld.** Der extra_body wurde nur für Ollama gebaut (`think=False` — „never want reasoning noise in vision output“); der MiniMax-Zweig war auf dem Vision-Pfad bewusst ausgeklammert (#1225) und blieb damit ohne Behandlung. Gegen MiniMax-M3 ist das die falsche Voreinstellung: fehlt das Feld, ist Thinking laut API-Spec standardmäßig **an**.
+- **MiniMax-M3 ist vision-fähig** und nimmt über den OpenAI-kompatiblen Pfad `image_url`-Content-Parts entgegen — genau die Message-Shape, die `describe_image` baut. Ein Vision-Call gegen `api.minimax.io` lief also mit Reasoning-Rauschen im Bild-Beschreibungstext, den der Pfad nachträglich per `<think>`-Regex abwäscht, statt es am Request zu verhindern.
+- **Der Vision-Pfad reicht jetzt denselben Schalter durch wie `chat` und `tool_calls`:** `minimax=self._is_minimax()` ergibt zusammen mit `think=False` den extra_body `{"thinking": {"type": "disabled"}}`. Bei M3 wirksam; M2.x akzeptiert das Feld ohne Verhaltensänderung (dort lässt sich Thinking nicht abschalten). Ollama- und OpenAI-Pfad bleiben unverändert.
+- **Abgesichert durch drei Regressionstests** (`tests/llm/test_vision_minimax_thinking.py`): MiniMax-Vision-Request trägt `{"thinking": {"type": "disabled"}}`, OpenAI bleibt ohne `extra_body`, und der Ollama-Zweig behält `think: False`.
+
+### Fixed (Der Tools-Pfad wendet den Temperature-Quirk an — 2026-08-23)
+
+- **Natives Tool-Calling gegen GPT-5-/o-Reasoning-Modelle lief garantiert in einen 400:** `tool_calls._chat_with_tools` setzte `temperature` bedingungslos in den Request. Der Quirk aus #1096 — die GPT-5-/o1/o3/o4-Familie akzeptiert ausschließlich den Default-Wert (1) und antwortet sonst 400 `unsupported_value` mit `param=temperature` — war auf diesem Pfad nie nachgezogen worden, obwohl `chat()` und `describe_image()` ihn beim Requestbau anwenden. Der Pfad trug die Abweichung seit #1225 als sichtbarer Seam (`_never_omits_temperature` / `_TOOLS_REQUEST_OPTIONS`). Der Tools-Pfad verwendet jetzt dasselbe `DEFAULT_REQUEST_OPTIONS`-Shaping wie die übrigen Pfade: gegen ein Quirk-Modell landet `temperature` gar nicht erst im Request.
+- **Der Tools-Pfad hat jetzt auch das Retry-Netz (Parität mit `chat()`):** Zusätzlich zum Shaping steht der `TEMPERATURE_QUIRK` in der execute-Quirkliste neben dem bestehenden Token-Key-Quirk. Die `omits_temperature`-Heuristik erkennt bekannte Familien per Prefix; ein unbekanntes Reasoning-Modell oder ein Proxy, der einen solchen 400 durchreicht, bekam bisher keinen zweiten Versuch. Das Netz greift genau einmal und nur bei einem erkennbaren temperature-400; alle anderen Fehler propagieren unverändert.
+
+### Fixed (Seed-Posts treffen wieder ihren Sprecher — 2026-08-11)
+
+- **Alle Eröffnungsbeiträge eines Laufs konnten auf einem einzigen Agenten landen:** Die Zuordnung der Initial-Posts baute ihren Agenten-Index ausschließlich über `entity_type.lower()` — die Schlüssel waren also Typen wie `chamberofcommerce` oder `lecturer`. Verglichen wurde dagegen der `poster_type` aus der LLM-Event-Config, und welchen Namensraum dieser Wert trägt, entscheidet das Modell pro Lauf neu: mal Entity-Typen, mal Entity-**Namen** (`betriebsrat`, `kostenträger`, `geschäftsführung`). Im Namensfall sind beide Namensräume disjunkt und der Direktabgleich kann strukturell nie greifen. Beobachtet in einem Lauf über eine deutsche Umschulungsdomäne: 9 von 9 Seed-Posts auf demselben Agenten, der IHK. Der Eröffnungsbeitrag des Betriebsrats, der des Kostenträgers und der der Teilnehmenden mit Migrationsgeschichte wurden alle von der Prüfungskammer gepostet — und landeten unverändert so in der Simulationsdatenbank, auf der jede Folgerunde und später die Evidence-Bindung des Reports aufbaut. Ein zusätzlicher Index auf `entity_name` löst diesen Lauf mit 9 von 9 korrekt auf und deckt beide Ausgabeformen des Modells ab, unabhängig vom NER-Vokabular.
+- **Der Fallback verteilte nicht, er kollabierte:** Blieb ein `poster_type` unauflösbar, wurde immer derselbe Agent gewählt — der Rotationszähler, den der Direktabgleich führt, wurde dort nicht mitgeführt. Ein einziger Miss legte damit sämtliche Seed-Posts auf eine Stimme. Der Fallback verteilt jetzt reihum.
+- **Bei Gleichstand im `influence_weight` entschied die Generierungsreihenfolge:** In demselben Lauf lagen `IHK`, `IHK-Prüfungsausschuss` und `Träger` alle bei `3.0`. Wer davon „der Agent mit dem höchsten Einfluss“ ist, hing damit an der stabilen Sortierreihenfolge der Kandidatenliste. Bei Gleichstand entscheidet jetzt die niedrigste `agent_id`, also deterministisch.
+- **Die Alias-Tabelle ist als domänenspezifisch gekennzeichnet:** Ihre Einträge (`official`, `university`, `mediaoutlet`, `student`, `professor`, `alumni`) stammen aus der OASIS-Campus-Demo und greifen außerhalb davon nicht — insbesondere für keine deutschsprachige Domäne. Sie bleibt für die Campus-Demo erhalten, suggeriert aber keine Abdeckung mehr, die sie nicht hat.
+
+### Fixed (belegte Zahlenaussagen überleben eine deutsche Umstellung — 2026-08-11)
+
+- **Die Faktenextraktion las den Aussageteil nur rechts der Zahl und erklärte belegte Sätze dadurch zu Widersprüchen:** `extract_numeric_facts` bestimmte das Prädikat eines `NumericFact` ausschließlich aus `sentence[match.end():]`. Deutsch besetzt das Vorfeld aber frei — in „Auf der Personalliste des Trägers stehen 31 Honorarkräfte.“ steht die gesamte Aussage *links* der Zahl, rechts bleibt nichts. `classify_evidence` verglich anschließend ein leeres Prädikat gegen die Evidence, kam auf eine Deckung von 0.00 und vergab `CONTRADICTED` mit der Begründung „der Claim behauptet mehr als die Quelle deckt“. Die Deckung war nicht null, sie war nie gemessen worden. Folge: `verify_prose` entfernte den Satz aus dem Fließtext, obwohl er wörtlich im Evidence-Pool stand, und `detect_contradiction_penalty` senkte zusätzlich die Confidence des Claims. Beobachtet an `report_4786a1a3d4ea` (Section 2, „31 Honorarkräfte“) in #1209 — derselbe Fakt blieb in Section 1 stehen, weil er dort in der Wortstellung der Quelle formuliert war.
+- **Das Vorfeld wird jetzt ergänzend herangezogen, aber nur wenn der Teil rechts der Zahl keine eigene Aussage trägt** (weniger als zwei Inhaltswörter). Die Einschränkung ist der Punkt: ein generelles Zusammenziehen beider Satzhälften zog Rahmensprache wie „Die Datenlage zeigt, dass …“ ins Prädikat, blähte die Claim-Seite von `coverage_ratio` auf und machte umgekehrt belegte Aussagen zu `predicate_overreach` — gemessen an den Artefakten zweier abgeschlossener Läufe fielen dadurch zwei zuvor gebundene Claims heraus. Mit der Einengung ändert sich über ~21.000 reale Claim-/Evidence-Paare aus `report_a7bc5c0cbc0d` und `report_6078e644a860` kein einziges `SUPPORTED`-Urteil.
+- **Nicht behoben und bewusst als `xfail` mit Begründung geführt:** wechselt zusätzlich das Verb („stehen auf“ → „werden geführt“), bleibt die Aussage unbelegt. `coverage_ratio` vergleicht Prädikate rein lexikalisch ohne Stemming, und der LLM-Judge darf im numerischen Pfad kein `SUPPORTED` erzeugen. Beides zu ändern ist eine ADR-0002-Entscheidung und gehört nicht in diesen Fix.
+
+### Added (Guard gegen Prompt-Regeln auf unerreichbaren Codepfaden — 2026-08-11)
+
+- **Die Konfliktregel und die Tool-Skip-Klausel für `DISLIKE_*` erreichen im Parallel-Lauf keinen Agenten.** Beide stehen ausschließlich in `build_agent_prompt_with_tools` (`backend/scripts/agent_tools.py`), die produktiv nur über `ToolAwareActionLoop.decide_action` erreicht wird. `run_parallel_simulation.py` setzt `tool_loop` in `run_twitter_simulation()` und `run_reddit_simulation()` hart auf `None` („Native CAMEL function-calling replaces the old ReACT-style tool_loop”), womit der einzige Guard, der `decide_action` aufruft, statisch unerreichbar ist. Das erklärt, warum fünf vollständige Läufe über vier Modellkonfigurationen kein einziges Dislike produziert haben, obwohl die Fixes aus #1220 und #1223 gemerged sind. Bestätigt am Log von `sim_fcacad36b13b` (`enable_agent_tools: true`, aber kein `[ToolUse] Tool registry ready` — stattdessen `Attached 2 FunctionTools`).
+- **Es ist eine Divergenz zwischen zwei Runnern, kein genereller Defekt.** `SinglePlatformRunner` (`sim_runtime/platform_runner.py`, bedient `run_twitter_simulation.py` und `run_reddit_simulation.py`) weist `self.tool_loop` per `create_tool_aware_loop` regulär zu — dort wirkt die Regel. Produktive Läufe fahren aber `run_parallel_simulation.py`.
+- **Neuer Guard `test_parallel_runner_prompt_builder_is_reachable`** meldet per AST jeden `if <name> and …`-Zweig, dessen Name innerhalb derselben Funktion ausschließlich `None` zugewiesen bekommt. Er ist bewusst konservativ: eine zweite Zuweisung — auch in einem anderen Zweig — macht den Fund hinfällig, Tupel-Ziele und `AugAssign` werden nicht erfasst. Das kostet höchstens einen übersehenen Fund, nie einen falschen. Als `xfail(strict=True)` geführt, damit die Suite grün bleibt und der Test laut wird, sobald #1215 entschieden ist. `test_single_platform_runner_keeps_the_tool_loop_reachable` sichert die intakte Gegenseite.
+- **Die beiden Tests aus #1220/#1223 tragen jetzt einen Hinweis im Docstring**, dass sie den Prompt-Text prüfen und nicht den Produktivpfad. Ohne ihn liest sich ihr grüner Status als Beleg, dass die Regel wirkt — dieselbe Fehlerklasse, die #1230 für Befund 5c benannt hat („der Test prüfte eine Annahme, nicht die Realität“).
+
+### Behoben
+
+- `test_on_hardcutoff_day_list_must_already_be_empty` verglich das Datum der
+  lokalen Zeitzone (`datetime.date.today()`) gegen das UTC-Datum, das
+  `scripts/check-pip-audit-hardstop.sh` mit `date -u` bildet. In Zeitzonen mit
+  UTC-Versatz fielen beide zwischen Mitternacht und dem Versatz auf
+  verschiedene Tage — der Test setzte den Cutoff dann auf den Folgetag aus
+  Sicht des Skripts, das nahm korrekt den „vor dem Hardcutoff"-Zweig und lieferte
+  Exit 0 statt der erwarteten 2. In Europe/Berlin betraf das das Zeitfenster
+  00:00–02:00. Der Test bildet sein „heute" jetzt ebenfalls in UTC. (#1203)
+
+Der HARDSTOP `workers = 1` im Produktions-Gunicorn ist nicht mehr nur ein
+Kommentar in der Konfiguration, sondern in ADR-0015 beziffert — und der
+Kommentar erwies sich dabei als unvollständig.
+
+Der prozesslokale Zustand zerfällt in drei Klassen: verschiebbare Datenwerte
+ohne geteilten Ort, Fälle mit vorhandener Ablage, denen nur Cache oder Sperre
+fehlen, und **nicht verschiebbare** Betriebssystem-Handles — Popen-Objekte,
+In-Prozess-Queues und offene Dateideskriptoren im `SimulationRunner`. Die dritte
+Klasse ist durch keine geteilte Ablage lösbar, sondern nur dadurch, dass genau
+ein Prozess einen Lauf besitzt. Genau das liefert die persistente Job-Queue mit
+eigenen Workern aus #1472; das Anheben von `workers = 1` ist dessen Folge, keine
+Vorarbeit.
+
+Kein Produktionscode geändert.
+
+### Fixed (Der Container-Scan läuft nicht mehr auf einer längst behobenen Distro-CVE rot — 2026-08-17)
+
+- **`build-only` scheiterte acht Läufe am Stück am Schritt „Trivy container scan“, ohne dass ein einziger dieser Commits die Ursache trug.** Auslöser war CVE-2026-53615 (Integer-Overflow in `libblkid/src/partitions/dos.c`) im `util-linux`-Stack des Prod-Basisimages — neun Binärpakete (`bsdutils`, `libblkid1`, `liblastlog2-2`, `libmount1`, `libsmartcols1`, `libuuid1`, `login`, `mount`, `util-linux`) auf `2.41-5`, fixbar ab `2.41.5-0+deb13u1`. Da `ignore-unfixed: true` gesetzt ist, zog das Gate genau deshalb hart: der Fix existierte, das Image hatte ihn nur nicht.
+- **Der Befund war im Job-Log nicht sichtbar.** Der Scan läuft mit `format: sarif`, und in dem Modus druckt Trivy keine Findings-Tabelle — das Log endete nach den `Detecting vulnerabilities`-Zeilen direkt auf `exit code 1`. Die CVE ließ sich nur über die hochgeladenen Code-Scanning-Alerts (`tool_name=Trivy`, Kategorie `trivy-container`) bestimmen. Issue [#1328](https://github.com/arn0ld87/agora/issues/1328) vermutete daher zunächst eine fehlende `ignore-unfixed`-Einstellung, die tatsächlich seit `ee2adb9e` gesetzt ist.
+- **Ein Digest-Bump hätte nicht geholfen.** Verifiziert: der gepinnte `python:3.14-slim` (`sha256:cea0e604…`) und der am 2026-08-17 aktuellste (`sha256:ce407646…`) lieferten beide weiterhin `util-linux 2.41-5`. Debian hatte den Fix zu dem Zeitpunkt bereits im trixie-Repo (`apt-cache policy` meldet `Candidate: 2.41.5-0+deb13u1`); nachgebaut war das Docker-Official-Image noch nicht.
+- **Die `prod`-Stage fährt jetzt `apt-get upgrade -y`,** bevor `tzdata` installiert wird. Bewusst allgemein statt auf `util-linux` verengt: ein Digest-Pin ohne Upgrade-Schritt koppelt die Rotphase der CI an einen fremden Rebuild-Zyklus, und jedes künftige Debian-Advisory wäre erneut ein mehrtägiger Dauerrot-Zustand. Der Digest-Pin bleibt die reproduzierbare Ausgangsbasis; die Security-Patches darauf sind per Definition zeitabhängig.
+- **Keine Ausnahme, keine Absenkung.** `severity: CRITICAL,HIGH` und `exit-code: "1"` bleiben unverändert, `.trivyignore` und `docs/dependency-risk-exceptions.json` bekommen keinen Eintrag — Bedingung 1 der Ausnahmeregel („kein Upstream-Fix verfügbar“) war nicht erfüllt, also gilt der Registergrundsatz „sofort fixen“. Der Vorgang ist in `docs/dependency-risk-register.md` als aufgelöster Fall mit Verifikationsprotokoll dokumentiert.
+- **Nebenwirkung, die den Anlass mitträgt:** solange das Gate dauerhaft rot steht, steht jeder PR auf `mergeState=UNSTABLE` und die Folgeschritte (`SBOM erzeugen`, `Image-Artefakt hochladen`) werden übersprungen — es entstand seit dem 2026-08-17 keine SBOM mehr. Beides läuft mit diesem Fix wieder.
+
+### Fixed (Fehlkonfigurierter Toolcall-Modus verhält sich wie nicht konfiguriert — 2026-09-08)
+
+- **Ein Tippfehler in `REPORT_TOOLCALL_MODE` wechselte den Modus, statt auf den Default zurückzufallen.** Wer die Variable gar nicht setzt, bekommt `native` — das ist der dokumentierte Default, begründet damit, dass Modelle wie `deepseek-v4-flash:cloud` keinen sauberen XML-Block senden. Wer sich vertippte, bekam dagegen `xml`, den Legacy-XML-Parsing-Pfad. Damit erhielt ausgerechnet die Fehlkonfiguration ein anderes Verhalten als die Nicht-Konfiguration. Der Kommentar begründete den xml-Fallback als „legacy-stable … statt stillschweigend in den native-Pfad zu rutschen und 400er zu provozieren" — die Begründung trug nicht, weil der Default-Pfad genau dorthin führt. Der Fallback zeigt jetzt an allen vier Stellen auf `native`: `Config` (`app/config.py`), `AgoraSettings._normalize_report_toolcall_mode` (`app/settings.py`) sowie die beiden Defense-in-Depth-Normalisierungen in `report_agent/workflow.py` (`generate_section_react`, `chat`). Wer den XML-Pfad will, wählt ihn ausdrücklich.
+- **Die Whitelist-Tests der Config-Ebene prüften ihre eigene Testlogik, nicht den Produktionscode.** `test_report_toolcall_mode_normalizes_casing_and_whitespace` und `test_report_toolcall_mode_invalid_falls_back_to_xml` replizierten die Normalisierung (`strip().lower()` + Whitelist) in Python, setzten das selbst berechnete Ergebnis per `monkeypatch.setattr` auf `Config` und prüften es anschließend zurück. Sie wären bei jeder beliebigen Änderung an `app/config.py` grün geblieben. Ersetzt durch `_config_mode_for_env`, das `Config.REPORT_TOOLCALL_MODE` in einem frischen Interpreter mit gesetzter Env ausliest — die Normalisierung läuft damit echt, ohne `importlib.reload` und dessen im Modul-Docstring beschriebene Modul-Cache-Fallstricke. Gegenprobe: mit zurückgedrehter Änderung fallen 8 Tests, vorher keiner.
+- **Zwei Invariantentests halten die Entscheidung fest:** `test_invalid_fallback_equals_unset_default` (Config-Ebene) und `test_report_toolcall_mode_fallback_equals_unset_default` (`AgoraSettings`) vergleichen das Verhalten bei Fehlwert direkt mit dem Verhalten ohne gesetzte Variable. Fällt beides künftig auseinander, ist das eine bewusste Entscheidung und bricht sichtbar.
+- **Der XML-Pfad bleibt erhalten.** Er ist kein Altlast-Zweig, sondern das Netz für lokale Modelle, die zwar OpenAI-kompatibel sprechen, sich beim Function-Calling aber nicht ans Format halten. Geändert hat sich nur, dass man ihn absichtlich wählt statt versehentlich hineinzurutschen.
+
+### Fixed (Testdouble der Abschnitts-Pipeline nachgezogen — 2026-09-08)
+
+- **Report Agent (Tests):** `FakeReportManager` in `tests/services/test_section_pipeline.py` kennt jetzt `_get_section_path`. #1475 zog `_remove_orphan_markdown` in `process_section` ein und griff damit auf einen Anschluss zu, den dieses Testdouble nicht hatte — `test_restored_section_without_persisted_evidence_still_returns_content` lief in einen `AttributeError` und färbte `main` rot. (#1475)
+- **Report Agent (Tests):** derselbe Test prüft jetzt das Sollverhalten seit #1475 statt des abgelösten: Markdown ohne Evidence wird als Waise entfernt und der Abschnitt neu generiert, nicht mehr restauriert. Er heißt entsprechend `test_persisted_section_without_evidence_is_regenerated_and_orphan_removed` und belegt das Löschen an einer echten Datei unter `tmp_path`. (#1475)
+
+### Behoben
+
+- Der parallele Twitter+Reddit-Runner (`run_parallel_simulation.py`) ist der
+  Default-Pfad für jeden Simulationslauf, der nicht explizit Twitter- oder
+  Reddit-only ist — er hatte bisher weder Hard-Budget noch Pause- noch
+  Stop-Kontrolle. Beide Runden-Schleifen prüfen jetzt an jeder Rundengrenze
+  über dieselbe `RoundBoundaryControl` wie `sim_runtime.platform_runner`
+  (Pause abwarten, kooperativen Stop, hartes Budget); bei Budget-Abbruch
+  endet der Lauf deterministisch statt in den Wait-Mode zu gehen, damit der
+  Backend-Monitor den Abbruchgrund übernimmt.
+- `platform_runner.py` nutzt dieselbe `RoundBoundaryControl` statt eines
+  inline duplizierten Prüfblocks — Verhalten unverändert, `budget_abort_info`
+  bleibt bei Stop/Normal-Durchlauf `None` und trägt nur beim Budget-Abbruch
+  das Info-Dict, damit der nachfolgende Wait-Mode-Guard weiter korrekt greift.
+- `ParallelIPCHandler` bucht Interview- und Batch-Interview-Verbrauch jetzt
+  auf den Report-Run (`report_run_id`), sobald ein Report-Interview über den
+  parallelen Default-Pfad läuft — vorher blieb dieser physische Modellaufruf
+  unverbucht und das Hard-Budget eines Report-Laufs war dort umgehbar. Die
+  Zuordnung nutzt dieselbe `report_attribution()`-Funktion wie
+  `sim_runtime.ipc.IPCHandler` (aus dessen bisheriger Methode extrahiert,
+  verhaltensneutral) statt einer zweiten Implementierung.
+
+### Fixed (Simulations-Laufzeit - 2026-09-07)
+
+- **Nutzer-Stop endet als `stopped`/`user_stop` statt `failed`/`error`:** `process_manager.stop_simulation` schreibt vor dem Terminieren des Subprozesses einen `cancel_abort`-Marker mit `source="user_stop"`, damit der Monitor-Thread den SIGTERM-Exit (returncode -15) nicht als technischen Fehler klassifiziert. Der Monitor wertet das `source`-Feld aus und schreibt `termination_reason="user_stop"` in RunRegistry und finales Manifest; Marker ohne `source` oder mit `source="backend-monitor"` (Cancel-Flag-Konsum) bleiben beim bisherigen `user_cancel` (Rückwärtskompatibilität).
+- **Force-Restart erzeugt keine Orphan-Finalisierung mehr:** `start_simulation` vergibt pro Simulation einen Generation-Token an den Monitor-Thread. Ein veralteter Monitor (Stop direkt gefolgt von Neustart derselben `simulation_id`) überspringt Finalisierung (Guard vor save_state/RunRegistry/Manifest-Write), `processes.pop` greift nur noch per Identitätscheck auf den eigenen Prozess, und `stop_simulation` joint den Monitor-Thread mit Timeout (grace_period + 2s, min 5s) und warnt bei Überschreitung.
+- **Stale `cancel_abort.json` verfälscht keinen Folgelauf mehr:** Der Marker ist first-writer-wins und blieb nach einem Nutzer-Stop im Simulationsverzeichnis liegen, sodass ein Neustart derselben `simulation_id` selbst bei Exit 0 als `stopped`/`user_stop` klassifiziert wurde. `start_simulation` entfernt ihn jetzt (samt verwaister `.tmp`-Datei) vor dem Subprozess-Spawn.
+- **Generation-Guard greift vor jedem Monitor-Write:** Der Guard saß bisher nur im Terminal-Pfad. Ein veralteter Monitor konnte den State des neuen Laufs weiterhin über den `save_state`-Aufruf der Schleife oder über den Exception-Handler (`FAILED` + Manifest-Finalisierung) überschreiben. Beide Pfade prüfen die Generation jetzt ebenfalls.
+- **Cleanup trifft nur noch eigene Ressourcen:** Der `finally`-Block eines veralteten Monitors entfernte Action-Queue und Log-Handles des Ersatzlaufs und stoppte dessen Graph-Memory-Updater. Queue und Datei-Handles werden jetzt per Identitätscheck abgeräumt, das Graph-Memory-Cleanup nur bei aktueller Generation.
+
+### Changed (`get_status` ist in eine Quellen-Kette zerlegt — 2026-08-17)
+
+- **`ReportStatusService.get_status` war mit cyclomatic complexity 41 der viertgrößte Hotspot im Backend** und beantwortete dieselbe Frage — „wie steht es um diesen Report?“ — aus vier Quellen in einer einzigen Funktion, mit einem Zustandsfluss quer durch die Blöcke: der Zweig für den persistierten Report schrieb `task_id` und `simulation_id` für die nachfolgenden Zweige fort. Der Refactor-Auftrag („Extraktion von Stage-Branching“) stand seit Juni 2026 im Kommentarkopf der radon-Allowlist.
+- **Die Quellen sind jetzt einzeln benannte Stufen**, nach Verlässlichkeit geordnet: Run-Registry → persistierter Report → lebender Task → Simulation → Acknowledge. Jede liefert entweder ein fertiges Statusdokument oder `None`, worauf die nächste übernimmt. Der Zustandsfluss ist nicht wegabstrahiert, sondern explizit gemacht: die Stufen reichen ein gemeinsames, veränderliches `_StatusQuery` weiter, und der Modul-Docstring benennt, dass Stufe 1 die späteren Stufen mit IDs versorgt.
+- **Komplexität je Funktion:** `get_status` 41 → **7**, Klasse `ReportStatusService` 42 → **8**. Höchster Wert im Modul ist `_status_from_run_registry` mit 15 — unter der D-Schwelle. **Beide Allowlist-Einträge für `report_status.py` entfallen damit ersatzlos**, es kommt kein neuer hinzu.
+- **Ein Detail, das vorher nur implizit im Kontrollfluss stand, ist jetzt benannt:** die Menge der Run-Status, bei denen der Registry-Eintrag die Auskunft abschließt, heißt `_CONCLUSIVE_RUN_STATUSES`. Ein *unbekannter* Run-Status beendet die Kette bewusst nicht — dann entscheiden die späteren Stufen. Ebenso dokumentiert ist, warum Stufe 3 bei bekannter `report_id` nicht greift: sonst käme ein fremder Report als Antwort auf die Frage nach einem bestimmten.
+- **Abgesichert durch 23 neue Charakterisierungstests** (`test_report_status_resolution_paths.py`), die vor dem Umbau geschrieben wurden und gegen den unveränderten Code grün waren. Sie decken alle fünf Stufen ab, darunter bisher ungetestete Pfade: Durchfallen bei unbekanntem Run-Status, tote `task_id` nach Serverneustart, `simulation_id` aus Task-Metadaten, und ein kaputter Task-Store, der geschluckt und geloggt statt durchgereicht wird. Die drei bestehenden Regressionstests aus #1277-2 laufen unverändert.
+
+### Changed (Outline-Mapping auf den Contract lebt nur noch an einer Stelle — 2026-08-17)
+
+- **`map_outline_for_contract` existierte zweimal:** einmal als `ReportStatusService.map_outline_for_contract` (`report_status.py`), einmal als `ReportExportService.map_outline_for_contract` (`report_export.py`). Beide bilden dieselbe Regel ab — Dataclass-Outline auf die v2-Contract-Form, inklusive der Fallbacks `"Section"`, `"Report"` und `"—"` sowie des `description`-vor-`content`-Vorrangs. Die Rümpfe unterschieden sich ausschließlich in Typannotationen (`dict | None` gegen `Optional[dict[str, Any]]`, `list[dict]` gegen `list[dict[str, Any]]`), die zur Laufzeit wirkungslos sind; über fünf Eingabefälle inklusive `None`, leerem Dict und Nicht-Dict-Einträgen in `sections` lieferten beide dieselbe Ausgabe. Eine Änderung an der Contract-Form hätte nur eine der beiden Stellen erwischt.
+- **Der Status-Service bezieht das Mapping jetzt vom Export-Service**, dem `api/report.py` es ohnehin schon entnimmt (`_map_outline_for_contract = ReportExportService.map_outline_for_contract`). Kein neues Modul: die Regel gehört dem Contract-/Export-Pfad, ein dritter Ort hätte die Zahl der Stellen erhöht statt gesenkt. `report_export` importiert `report_status` nicht — es entsteht kein Import-Zyklus. Die Zuweisung ist bewusst in `staticmethod(...)` gehüllt: als blankes Klassenattribut bekäme die Funktion bei Zugriff über eine Instanz `self` als erstes Argument gebunden und verlöre das Outline-Dict.
+- **Ein wörtlich doppelter Kommentarblock in `get_status` ist entfernt** — die neunzeilige Begründung zu Issue #1277-2 stand zweimal unmittelbar hintereinander.
+- **Die Allowlist-Obergrenze für die Klasse `ReportStatusService` steigt von 27 auf 42, ohne dass Komplexität hinzugekommen wäre.** radon misst Klassen als Mittelwert über ihre Methoden: vorher `get_status` (41) und `map_outline_for_contract` (10) → 27, nachher `get_status` allein → 42. Der Wert steigt, weil die *einfache* Methode verschwunden ist. `get_status` selbst bleibt unverändert bei 41; der Refactor-Auftrag (Stage-Branching extrahieren) steckt vollständig dort und ist weiterhin offen.
+
+Das Projektregal zeigt wieder den Projektnamen statt der rohen `project_id`.
+`useShelf` las das Feld `project_name`, das Backend liefert `name` — die
+Bedingung fiel deshalb immer auf die Kennung zurück.
+
+Unentdeckt blieb das, weil die Antwortform von Hand als Interface deklariert war
+(mit `[key: string]: unknown`, wodurch der Zugriff auf ein nicht existierendes
+Feld gültiges TypeScript blieb) und die Testfixture das Feld erfand. Beides ist
+durch einen Zod-Spiegel `contracts/projectContract.ts` ersetzt, der die Antwort
+`.strict()` prüft. Der strikte Typ hat direkt einen zweiten toten Zweig
+aufgedeckt: `useGraphBuildPipeline` verglich den Projektstatus mit `completed`,
+den es nur für Tasks gibt — für ein Projekt heißt der Wert `graph_completed`.
+
+`docker-compose.yml` zieht die Redis-Image-Version von `redis:7-alpine` auf
+`redis:8-alpine` nach. `agora-redis` lief produktiv bereits seit dem 18.09.
+auf Version 8 (manuell hochgezogen); ohne diesen Commit hätte der nächste
+`docker compose up` auf dem Deploy-Host die Version stillschweigend wieder
+auf 7 zurückgesetzt.
+
+Kein Anwendungscode geändert.
+
+### Fixed (Kollektiv-Personas behalten age/gender/mbti als Schlüssel in `reddit_profiles.json` — 2026-08-11)
+
+- **Kollektiv-Personas ließen `age`, `gender` und `mbti` beim Reddit-Export komplett verschwinden, nicht nur ihren Wert:** `to_reddit_format()` schrieb diese drei Felder nur, wenn ihr Wert wahr war — bei `None` (dem korrekten Wert für Organisationen, Behörden und andere Kollektiv-Entitäten) fehlte der **Schlüssel** in `reddit_profiles.json`, nicht nur der Wert. `oasis/social_agent/agents_generator.py::process_agent` greift auf `agent_info[i]["mbti"]`/`["gender"]`/`["age"]` aber ungeschützt zu und wirft dort ein `KeyError`. Weil Reddit- und Twitter-Zweig über ein gemeinsames `asyncio.gather` laufen, riss ein einziges betroffenes Profil die komplette Simulation mit Exit-Code 1 — beobachtet an einem Lauf mit 12 von 46 betroffenen Profilen, alle mit `persona_kind: collective`. Betroffen war jeder Lauf mit mindestens einer Entität aus `GROUP_ENTITY_TYPES` (`organization`, `company`, `institution`, `group`, `community`, …), praktisch jedes reale Dokument.
+- **Der Fix schreibt die drei Schlüssel jetzt immer, mit `""` statt `None` als Wert für Kollektiv-Personas.** Das erfindet keine Demografie: `oasis/social_platform/config/user.py::to_reddit_system_message` baut unbedingt den Satz `"You are a {gender}, {age} years old, with an MBTI personality type of {mbti} from {country}."` — ein `None` stünde dort wörtlich im Agent-Prompt, der Leerstring nicht. Die Substanz einer Kollektiv-Persona steht im vorangehenden `user_profile`, nicht in diesen drei Feldern; die zugrundeliegende Zusage („Organisationen haben keine erfundene Vita“) bleibt unverändert. `to_twitter_format()` ist nicht betroffen: der Twitter-Pfad läuft über ein CSV mit festem Header, das diese Felder gar nicht führt.
+
+### Fixed (Komplexitäts-Gate meldet wieder Wachstum in geduldeten Funktionen — 2026-08-17)
+
+- **Das radon-Gate duldete Bestands-Hotspots in beliebiger Höhe, nicht in gemessener:** `check_complexity.py` unterstützt seit [#1084](https://github.com/arn0ld87/agora/issues/1084) eine cc-Obergrenze je Allowlist-Eintrag (`# cc<=<N>`), aber nur 5 von 55 Einträgen trugen eine. Ein Eintrag ohne Obergrenze prüft ausschließlich, *ob* eine Funktion geduldet ist, nie *wie stark sie gewachsen ist* — der Kommentarkopf der Allowlist benannte diese Lücke bereits am 04.08.2026, ohne dass sie geschlossen wurde. Gemessen am 17.08.2026 gegen die dokumentierten Aufnahmewerte: `ReportAgent._save_evidence_section` 36 → **52**, `degrade_sections_for_violations` 34 → **50**, `monitor_simulation` 23 → **29**, `classify_evidence` 34 → **38**. `generate_report` war durch [#1219](https://github.com/arn0ld87/agora/issues/1219) (SectionPipeline) am 11.08. auf 47 gesenkt worden und stand sechs Tage später wieder bei **55**. Kein einziger dieser Zuwächse hat je einen roten Lauf erzeugt.
+- **Jeder Eintrag trägt jetzt eine Obergrenze in Höhe des gemessenen Ist-Werts.** Das zementiert den Bestand nicht, es friert ihn ein: weiteres Wachstum schlägt an, eine Absenkung erzeugt einen Hinweis, die Obergrenze nachzuziehen. Der Refactor-Auftrag je Cluster bleibt im Kommentarkopf stehen und ist unverändert offen.
+- **Fünf Einträge sind ersatzlos entfallen, weil ihre Duldung gegenstandslos geworden war.** `app/api/report.py::get_generate_status` stand als „F (cc=44)“, später „F (cc=68)“ in der Liste und misst real **B (cc=9)**; `app/api/report.py::generate_report`, `ReportGenerationService.start_generation` und `OasisProfileGenerator._generate_profile_with_llm` liegen bei C und damit unter der D-Schwelle; `app/api/graph.py::generate_ontology` existiert nicht mehr, die Funktion ist nach `app/api/graph_build.py` gewandert. Fällt eine davon künftig wieder auf D+, schlägt das Gate an — das ist gewollt. Der Bestand beträgt damit 50 Einträge und deckt sich exakt mit den 50 gemessenen D+-Hotspots: keine ungedeckten Hotspots, keine Karteileichen.
+- **Zwei Regressionstests halten den Zustand:** `test_every_entry_has_a_complexity_ceiling` schlägt bei einem Eintrag ohne Obergrenze an, `test_no_entry_points_at_a_vanished_symbol` bei einem Eintrag ohne zugehöriges Symbol. Letzterer prüft per AST auf Symbol- statt auf Datei-Ebene — ein Datei-Existenz-Check hätte den historischen Fall `app/api/graph.py::generate_ontology` nicht gefangen, weil die Datei weiterhin existiert und nur die Funktion daraus verschwunden ist.
+
+Die vor PR 4 offen geführte Frage, ob psycopg 3 unter dem gunicorn-gevent-Worker
+den Hub blockiert, ist beantwortet: der Treiber kooperiert, sobald
+`gevent.monkey.patch_all()` vor dem ersten psycopg-Import gelaufen ist — was
+`backend/wsgi.py` bereits sicherstellt. Acht gleichzeitige Abfragen von je einer
+Sekunde brauchen 1,08 s statt 8. Der Nachweis liegt als Integrationstest vor
+(`backend/tests/integration/test_gevent_psycopg_cooperation.py`), die
+Entscheidung samt ihrer Grenzen in ADR-0014.
+
+Projektmetadaten haben einen Pydantic-Vertrag (`app/contracts/project_contract.py`)
+und eine Repository-Grenze (`ProjectRepository` mit dem Dateiadapter
+`FileProjectRepository`). `Project` war bisher eine Dataclass, deren `to_dict()`
+über drei Endpunkte ausgeliefert wurde — eine Dataclass auf einer API-Grenze.
+
+An der Ablage ändert sich nichts: `uploads/projects/<project_id>/project.json`
+behält Pfad, Schlüssel und Reihenfolge, `ProjectManager` bleibt als Fassade
+stehen, und `AGORA_PROJECT_BACKEND` steht im Default auf `file`. Artefakte
+(`files/`, `extracted_text.txt`, Dokument-Manifest) bleiben ausdrücklich außerhalb
+des Ports.
+
+Projektmetadaten haben einen zweiten Adapter: `PostgresProjectRepository` auf
+der neuen Tabelle `agora.projects`. Der Spaltenschnitt ist Kern plus Nutzlast —
+die Felder, nach denen abgefragt und sortiert wird, bekommen eine eigene Spalte,
+alles Übrige liegt in `payload jsonb`. Die Aufteilung wird aus
+`Project.to_dict()` abgeleitet statt gepflegt, damit ein künftiges Vertragsfeld
+nicht still verlorengeht.
+
+`backend/scripts/migrate_projects_to_postgres.py` überträgt den Dateibestand,
+lässt das Dateisystem unberührt und vergleicht mit `--verify` jedes Feld jedes
+Projekts. Ablauf und Rückweg stehen in
+`docs/runbooks/projekt-postgres-umstellung.md`.
+
+Umgeschaltet ist nichts: `AGORA_PROJECT_BACKEND` bleibt im Default auf `file`.
+Neu ist, dass `Config.validate()` den Wert `postgres` ohne gesetzte
+`DATABASE_URL` schon beim Start ablehnt statt erst beim ersten Projektzugriff.
+
+### Behoben (Post-#1497-Stabilisierung — 2026-09-11)
+
+- **Prepare meldet kein nicht persistiertes `ready` mehr:** `check_simulation_prepared` promotete einen `preparing`-Zustand nach `ready` und verschluckte einen fehlgeschlagenen `store.write_json` still. Weil die Aufrufer `is_prepared=True` unabhängig vom Detailstatus in `status: ready, progress: 100` übersetzen, meldete die API einen Ready-Zustand, den die Persistenz nie gesehen hatte. Die Promotion schreibt jetzt auf einer Kopie, persistiert zuerst und meldet nur bei erfolgreichem Write ein positives Ergebnis; ein Fehlschlag wird auf error-Level protokolliert und als „nicht vorbereitet" mit Grund zurückgegeben.
+- **Erschöpftes Hartbudget stoppt wartende Persona-Jobs:** Im Thread-Pfad verließ `BudgetExceededError` den `ThreadPoolExecutor`-Block ungebremst — `__exit__` ruft `shutdown(wait=True)` ohne `cancel_futures`, also setzte jede eingereihte Persona trotzdem noch ihre LLM-Calls ab. Im Gevent-Pfad ist der `imap_unordered`-Produzent kein Pool-Mitglied; `pool.kill()` stoppte ihn nicht, und das `join()` im `finally` ließ ihn den Pool weiter nachfüllen, sodass die Greenlets sogar den Funktionsaustritt überlebten. Beide Pfade brechen jetzt kontrolliert ab; laufende Worker laufen wie bisher aus, kein Retry auf `BudgetExceededError`.
+- **Runtime-Override ohne Endpoint wird abgelehnt:** Der `RuntimeLlmConfig`-Zweig von `_resolve_llm_connection` reichte einen aktivierten Override mit API-Key, aber ohne `base_url`, ungeprüft durch — der nachgelagerte Consumer füllte dann `Config.LLM_BASE_URL` auf und schickte Modell und Schlüssel des einen Providers an den Endpoint eines anderen. Bei `require=True` ist eine `base_url` jetzt Pflicht; ausgenommen bleiben Provider mit echtem CLI-Transport (`codex_cli`).
+- **Interviewpfad validiert seine Eingaben:** `reddit_profiles.json` wird vor der Nutzung gegen `PersistedAgentProfiles` geprüft (`{"profiles": []}`, `[null]`, `["invalid"]`, `[123]` flogen vorher erst beim ersten `profile.get(...)` auseinander). Die LLM-Antworten der Panel-Auswahl und der Fragengenerierung haben eigene Pydantic-v2-Verträge, die zusätzlich als Schema an `chat_json` gehen: `selected_indices` akzeptiert keine Booleans, keine Strings, keine Duplikate und keine Indizes außerhalb des Profilarrays; `questions` muss eine Liste aus 3–5 nichtleeren Strings sein.
+- **Skeptikerquote gilt für die Endpopulation:** `_ensure_skeptic_quota` rechnete `ceil(original_total * min_ratio)` und übersah, dass jeder hinzugefügte Skeptiker die Population mitvergrößert — 10 Personas ohne Skeptiker ergaben bei 20 % zwei Zusätze, also 16,67 %. Gelöst wird jetzt die Zielungleichung nach dem kleinsten passenden Zuwachs.
+- **`MAX_CONTEXT_LENGTH` gilt für den ganzen Kontext:** Gekürzt wurde nur `document_text`; ein überlanges `simulation_requirement` oder eine überlange Entity-Zusammenfassung überschritt das Limit allein. Die Abschnitte werden jetzt in Prioritätsreihenfolge gegen ein gemeinsames Budget gefüllt, Header nie angeschnitten, der zeilenstrukturierte Entity-Block an der Zeilengrenze.
+- **Truncated-JSON-Reparatur respektiert Verschachtelung:** Offene `{}`/`[]` wurden global gezählt (inklusive der Vorkommen in String-Literalen) und pauschal erst alle `]`, dann alle `}` angehängt. Ein String- und Escape-bewusster Scanner führt jetzt einen Stack und schließt in LIFO-Reihenfolge.
+- **Kollektiv-Ablehnung passt zum Kollektiv-Schema:** Der Eignungsblock verlangte bei `ineligible: true` auch von Gruppen-Entitäten `display_name`, `handle`, `age`, `gender`, `mbti` und `profession` — Felder, die `CollectivePersonaSchema` nicht kennt. Der Kollektivzweig hat jetzt einen eigenen Block ohne erfundene Demografie.
+- **Geschlossene Persona-Wertemengen werden erzwungen:** `gender` (individuell) und `voice_register` sind `Literal`-Mengen statt freier Strings; `persona_kind` und `generation_source` bekommen einen Laufzeit-Riegel in `OasisAgentProfile`, weil beide unverändert in `reddit_profiles.json` landen und dort Persona-Galerie und Report-Kennzeichnung steuern.
+- **Eigenständige Nebenklausel erbt kein fremdes Prädikat:** In „Im Pilotprojekt kamen 120 Teilnehmende; 18 Lehrkräfte streikten." bekam die 18 das Prädikat „Im Pilotprojekt kamen". Die Unterscheidung läuft jetzt über die Satzstruktur — hinter einem Klauseltrenner beginnt eine neue Aussage, hinter einem Aufzählungskomma nicht —, nicht über die Tokenzahl, die Aufzählungen beschädigt hätte.
+
+### Sicherheit
+
+- **Blockierte-URL-Ausnahmen leaken keine Geheimnisse mehr:** `OutboundRequestBlocked` trug die untrusted URL in Message und `.url`; redigiert wurde nur die Userinfo. Query, Fragment und Pfad tragen in der Praxis genauso häufig Token (`?token=`, `?api_key=`, Secrets im Pfadsegment). Die Message trägt jetzt ausschließlich den Grund, `.url` nur noch Schema + Host + ggf. Port; eine nicht sicher zerlegbare URL liefert gar keine Herkunftsangabe.
+
+### Qualitäts-Gates
+
+- **mypy-Schuld ist sichtbar und eingefroren:** `pyproject.toml` schaltet mypy für `app`, `app.services.*`, `app.utils.*`, `app.llm.*` und weitere per `ignore_errors` ab — das reguläre `mypy app` war grün, obwohl dort die eigentliche Arbeit liegt. `scripts/check_mypy_debt.py` misst mit `mypy-debt.ini` (derselben Konfiguration ohne diesen Block) und vergleicht je Datei gegen `mypy-debt-baseline.txt`: **266 Fehler in 55 Dateien**, gemessen am 11.09.2026. Das Gate failt bei mehr Fehlern je Datei, bei neu fehlerbehafteten Dateien und bei einer wachsenden `ignore_errors`-Liste. Es repariert bewusst nichts.
+- **Coverage-Gate basiert auf dem gemessenen Istwert:** Die Schwelle stand auf `--cov-fail-under=60` ohne Branch-Messung, 24 Punkte unter dem tatsächlichen Wert — eine Regression war damit nicht erkennbar. Gemessen über die vollständige Backend-Suite: **83,82 % Line** (26661/31806) und **71,94 % Branch** (6571/9134). `scripts/check_coverage.py` prüft beide Quoten einzeln gegen `coverage-baseline.json` (82,8 / 70,9). `branch_min` ist bewusst keine Wunschzahl: 80 % hätte entweder das Gate sofort rot gefärbt oder Tests provoziert, die Zweige berühren statt Verhalten zu prüfen.
+- **Keine neue Radon-Schuld:** `radon-allowlist.txt` ist unverändert; kein Bugfix dieses Laufs hat einen Deckel angehoben oder einen neuen Eintrag gebraucht.
+
+### Architekturblocker
+
+- **Verwaiste In-Process-Jobs werden nach einem Neustart korrigiert ([#1472](https://github.com/arn0ld87/agora/issues/1472), teilweise):** `reconcile_stale_runs` deckte ausschließlich `simulation_run` ab — nur dieser Run-Typ trägt eine `process_pid`. Prepare-, Report- und Graph-Build-Jobs laufen als Thread im Webprozess; nach einem SIGTERM blieb ihr Manifest für immer auf `processing`. `app/jobs/identity.py` gibt jedem Webprozess eine PID plus ein einmaliges Token, `enqueue` stempelt beides ins Manifest, bevor der Thread startet, und `reconcile_stale_jobs` markiert daran erkannte Waisen als `failed`/`process_restart`. Kein neuer Statuswert: `PREPARING → FAILED` ist im FSM bereits erlaubt. **Offen bleibt die Wiederaufnahme** — `_BACKEND` ist weiterhin `"thread"`, ein abgebrochener Lauf ist ehrlich gescheitert, aber nicht fortsetzbar.
+- **Die aktive Embedding-Konfiguration steuert den Laufzeitpfad ([#1417](https://github.com/arn0ld87/agora/issues/1417), Teil erledigt):** `EmbeddingService()` löst jetzt in der Reihenfolge ausdrückliche Argumente → aktive Store-Konfiguration → `Config.*` auf. Eine aktive, aber unvollständig auflösbare Konfiguration wirft, statt auf die Env zurückzufallen; `activate()` lehnt einen Dimensionswechsel ohne passende Indexversion ab. Zusätzlich lässt die Auflösung nur eine Konfiguration durch, die zum Inhalt des aktiven Index passt — Lese- und Schreibpfad hängen weiterhin am unversionierten Legacy-Index, ein Modellwechsel würde dort Vektoren zweier Modelle vermischen. Der Index-Cutover fehlt und bleibt Folgearbeit an #1417.
+- **Restore-Drill ist ausführbar und maschinell prüfbar ([#766](https://github.com/arn0ld87/agora/issues/766), Werkzeug):** `scripts/restore-drill.sh` plus `backend/scripts/restore_verify.py`. Der Drill selbst bleibt offen — er braucht einen frischen Host mit echtem Backup, und ein Dry-Run-Protokoll ist ausdrücklich kein Betriebsnachweis.
+
+### Fixed (Typbasierte Persona-Eligibility spart LLM-Calls fuer nicht-menschliche Entitaeten — 2026-09-07)
+
+- **Stufe 1 der Eligibility-Pruefung erkennt jetzt zusammengesetzte Ontologie-Typen ohne menschlichen Traeger deterministisch, bevor die LLM-Pruefung sie ablehnt.** Die bisherige Blockliste vergleicht exakt; generierte Typen wie `LearningTechnology` oder `SuccessCriterion` trafen sie nie und liefen als "unbekannter Typ" durchs Gate — Produktionsbefund vom 07.09.2026 zeigte 82 von 118 Entitaeten mit genau diesem Muster, jede davon einen vollen Generierungs-Call fuer eine erwartbare Ablehnung.
+- **Geprueft wird auf das Kopfnomen als Suffix, nicht als Teilstring** (`INELIGIBLE_TYPE_HEADS`, `_ineligible_head`): `LearningTechnology` endet auf `technology` und wird geblockt, `AIServiceProvider` endet auf `provider` und bleibt zugelassen — ein Teilstringvergleich haette letzteres ueber `service` faelschlich blockiert.
+- **Mehrdeutige Koepfe (`service`, `organization`, `provider`, `representative` u. a.) stehen bewusst nicht in der Menge**, damit Unternehmen und Kollektive mit menschlichem Traeger (z. B. `TechnologyProvider`, `CostPayerOrganization`) das Gate erreichen und weiterhin von der LLM-Pruefung bewertet werden.
+- Abgesichert durch parametrisierte Tests fuer blockierte Kompositatypen (u. a. `SoftwareProduct`, `LegalFramework`, `DiscussionTopic`), fuer weiterhin zugelassene individuelle und kollektive Typen sowie gezielt fuer `TechnologyProvider`, `RoleModel`, `ServiceProvider` und `EmployeeRepresentative`.
+
+### Behoben
+
+- Der Graph-Build bricht nicht mehr mit `ConstraintValidationFailed` ab, wenn Neo4j die Bestätigung einer bereits committeten Transaktion nicht mehr zustellen kann. Episode-Knoten und RELATION-Kanten werden per `MERGE` statt `CREATE` geschrieben und überstehen damit einen Retry; zuvor riss die zweite Ausführung entweder den ganzen Build ab (Episode, Unique-Constraint) oder legte still eine Dublette an (RELATION, ohne Constraint).
+
+### Fixed (Komplexitäts-Gate wieder grün, Hypothesen-Rendering zerlegt — 2026-08-17)
+
+- **Das radon-Gate (MAI-17) blockierte jeden Backend-PR unabhängig vom Diff:** `render_hypotheses_for_section` war mit `rank=D`/`complexity=21` in den Bestand gerutscht, ohne dass das Gate beim verursachenden Merge lief — auffällig wurde es erst in einem unbeteiligten PR. Die Funktion ist jetzt in `_render_hypothesis_entry` (eine Hypothese → Markdown-Zeilen, leere Liste = überspringen) und `_render_hypotheses_appendix_note` (Restzahl-Hinweis) zerlegt; die Hauptfunktion sammelt nur noch Einträge und hängt den Hinweis an. Verhalten unverändert: unbrauchbare Einträge erzeugen weiterhin weder Überschrift noch Appendix-Hinweis, und der Hinweis hängt weiterhin an mindestens einer sichtbaren Hypothese. Ein Regressionstest nagelt genau diese Randfälle fest.
+- **Das Gate konnte auf PRs gar nicht anschlagen:** `contract-gates.yml::complexity-gate` trug seit 2026-05-17 ein `if: github.event_name != 'pull_request'` und lief damit nur auf `push:main`. Neue D+-Hotspots kamen deshalb ungehindert durch den PR und tauchten erst nach dem Merge auf `main` auf — wo sie niemanden mehr blockierten, aber jeden lokalen `pre-push-gate.sh backend` rot färbten. Das Gate läuft wieder auf `pull_request`. Der PR-Skip beim Voice-Lint bleibt: dort gibt es einen sachlichen Grund (False-Positives bei Code-Kommentaren), beim Komplexitäts-Gate nicht — es vergleicht nur Zahlen gegen die Allowlist.
+- **Allowlist-Obergrenze ohne Deckung:** `evidence_migrations.py::demote_unanchored_seed_corpus_records` stand mit `cc<=30` in `backend/radon-allowlist.txt`, misst aber `cc=27` — das Gate wies selbst auf die Luft nach unten hin. Die Obergrenze ist auf den gemessenen Wert abgesenkt, damit weiteres Wachstum wieder anschlägt.
+
+### Fixed (Label-gesteuerte CI-Vollsuiten überleben den nächsten Push — 2026-09-13)
+
+- **Ein gesetztes `needs-backend-ci` galt nur für genau einen Commit:** Die `if`-Bedingung der Jobs `Backend tests + lint` und `Frontend build + lint` in `.github/workflows/ci.yml` griff auf PRs ausschließlich über `github.event.action == 'labeled'`. Jeder danach gepushte Commit löst ein `synchronize`-Event aus, bei dem diese Bedingung falsch ist — der Job sprang auf `skipping`, obwohl das Label weiterhin am PR hing. An [#1498](https://github.com/arn0ld87/agora/pull/1498) wurde das am 13.09.2026 konkret beobachtet: erst ein Ab- und Wiederdranhängen des Labels hat die volle Suite auf dem neuen Stand laufen lassen. Wer nach dem Labeln noch einmal pusht und dann merged, merged einen Commit, den nur das kleine `Backend PR smoke gate` gesehen hat — nie `pytest --cov --cov-fail-under=60`.
+- **Beide Jobs prüfen jetzt zusätzlich den Label-Zustand des PR** über `contains(github.event.pull_request.labels.*.name, 'needs-<scope>-ci')`. Damit greift das Label auch bei `synchronize`, `reopened` und `opened` und bleibt so lange wirksam, bis es entfernt wird. Der bisherige `labeled`-Zweig bleibt daneben stehen: das Gate soll nicht davon abhängen, dass das Event-Payload das frisch gesetzte Label bereits in `pull_request.labels` führt.
+- **Der Zweck der Gatung bleibt unverändert:** Ohne Label läuft die teure Suite auf PRs weiterhin nicht, und ein `unlabeled` auf genau dieses Label schaltet sie sofort wieder ab. Der Job `Integration tests (echtes Neo4j/Redis)` ist nicht betroffen — er ist nicht label-, sondern ereignisgesteuert (`push:main` / `workflow_dispatch`) und trägt das Muster nicht.
+
+### Removed (Toter v2→ReportV3-Migrationspfad entfernt — 2026-09-08)
+
+- **`evidence_migrations.py::migrate_v2_to_v3` war mit cc=68 der zweithöchste Komplexitäts-Hotspot des Projekts und hat nie einen realen Report berührt.** Kein Aufrufer in `backend/app/`, auch nicht aus `scripts/migrate_v2_full_report_to_v3.py`. Der produktive Pfad ist `report_agent/manager.py::build_report_v3`, das Personas/Segments/FrictionPoints/TrustSignals aus `merge_section_metadata` zieht — im Code ausdrücklich als kanonische Quelle kommentiert. Persistierte ReportV3-Dateien hebt `report_agent/storage.py::_upgrade_report_v3_payload` auf Schema 4, eine eigene, kleinere Implementierung. Gemessen gegen `backend/uploads/reports/` (16 Ordner, Mai–August 2026): acht tragen eine `report-v3.json`, **alle auf `schema_version=4`**; die acht ohne sind `incomplete`, `failed` oder `stopped` — abgebrochene Läufe ohne migrierbaren Inhalt. Am Leben gehalten wurde die Funktion allein durch 22 Tests. Begründung und Rückweg: [ADR-0005](docs/decisions/0005-keine-v2-report-migration.md).
+- **Entfernt wurden die Funktion und ihre ausschließlich von ihr genutzte Helfer-Hülle:** `_resolve_evidence_refs`, `_label_to_confidence`, `_section_title_matches`, `_load_personas_from_store`, `_map_profile_to_persona`, `_aggregate_segments`. Die Abgrenzung wurde per AST über die transitive Hülle bestimmt, nicht per Textsuche — `_legacy_item_to_record_and_binding` liegt zwar in derselben Hülle, wird aber von `migrate_evidence_map_v2_to_v3` und `normalize_persisted_evidence_map` weiter gebraucht und bleibt. Keine Modul-Konstante musste weichen. `evidence_migrations.py` schrumpft von 1092 auf 702 Zeilen; die einzige Kopplung des Moduls an `artifact_store` entfällt mit dem `TYPE_CHECKING`-Import.
+- **Die Evidence-Map-Migration v1→v2→v3 bleibt vollständig erhalten.** Entfallen ist ausschließlich der Report-*Container*-Aufbau. `normalize_persisted_evidence_map`, `migrate_v1_to_v2`, `migrate_evidence_map_v2_to_v3`, `demote_unanchored_seed_corpus_records` und die übrigen Anker-Migrationen sind live über `normalize_persisted_evidence_map` erreichbar und werden quer durch `report.py`, `report_export.py` und vier `report_agent`-Module importiert. Auch die Semantik `legacy_unresolved` bleibt bestehen, abgedeckt über `tests/api/test_report_evidence_route.py`.
+- **Zwei Einträge fallen aus `radon-allowlist.txt`** (`migrate_v2_to_v3  # cc<=68`, `_map_profile_to_persona  # cc<=21`), die Refactor-Notiz zum Modul ist auf den verbliebenen Bestand korrigiert.
+
+### Changed (Datei- und Sperrmechanik der JSON-Stores lebt an einer Stelle statt an drei — 2026-08-17)
+
+- **`OnboardingStateStore`, `UserProfileStore` und `WorkspaceRoutingStore` trugen je eine eigene, zeichengleiche Kopie von `__init__`, `_file_lock` und `reset_for_tests`.** Bei der Sperrmechanik ist das die teuerste Sorte Duplikation: ein vergessenes `LOCK_UN` oder ein falsch gesetztes `try`/`finally` in einer der drei Kopien fällt beim Lesen nicht auf, sondern erst als hängender Prozess unter Last — und ein Fix an einer Kopie hätte die beiden anderen nicht erreicht.
+- **Neu ist `app/services/json_file_store.py` mit der Basisklasse `JsonFileStore`.** Sie ist bewusst schmal: sie kennt Pfadableitung (`_path`, `_lock_path`), Prozesssperre (`threading.Lock`) und Dateisperre (`fcntl.flock`), aber weder Payload noch Serialisierung. Es gibt keine abstrakten Hooks — die drei Stores behalten ihre `load`/`save`-Logik unverändert und rufen lediglich `super().__init__(_STORE_FILENAME, data_dir=data_dir)`. Sämtliche Attributnamen bleiben gleich, sodass bestehende Zugriffe und Instanz-Patches unberührt sind.
+- **Store-spezifisches Wissen ist erhalten geblieben, nicht mit der Kopie verschwunden:** die Zusage aus `WorkspaceRoutingStore`, dass reine `load()`-Aufrufe bewusst auf den File-Lock verzichten (weil `os.replace` POSIX-atomar ist), während `set_stage_override`/`set_global_default` ihn über Load **und** Save halten, steht jetzt im Klassen-Docstring dieses Stores.
+- **`tests/services/test_json_file_store.py` nagelt die Sperrmechanik fest:** dass der Lock exklusiv ist, solange er gehalten wird, dass er danach freigegeben ist, und dass er **auch dann** freigegeben wird, wenn der Block eine Exception wirft. Dazu Pfadableitung, Anlegen fehlender Verzeichnisse und das Aufräumen durch `reset_for_tests`.
+- **Der Regressionstest aus dem `data_dir`-Slice wurde angepasst statt gelöscht.** Er prüfte Objektidentität (`module._resolve_data_dir is resolve_data_dir`) und schlug durch diesen Umbau fehl, obwohl sich am Verhalten nichts geändert hatte — die drei Stores beziehen die Auflösung jetzt über die Basisklasse statt als Modulfunktion. Er prüft nun das Ergebnis auf beiden Wegen: vier Stores als Modulfunktion, drei über `JsonFileStore`, und alle sieben landen im selben Verzeichnis.
+
+### Fixed (Der Container meldet beim Start nicht mehr kurzzeitig `unhealthy` — 2026-08-30)
+
+- **Beide `HEALTHCHECK`-Instruktionen im `Dockerfile` liefen mit `--start-period=5s`.** Das Backend braucht auf dem Server rund 60 Sekunden, bis `/readyz` antwortet — in der `dev`-Stage zusätzlich wegen des Vite-Boots. Nach fünf Sekunden zählte Docker die Startup-Fehlschläge bereits als echte Fehler, der Container kippte für rund 20 Sekunden auf `unhealthy` und wurde erst danach `healthy`.
+- **Das ist kein rein kosmetischer Zustand.** `depends_on: condition: service_healthy` wertet den Status aus, ebenso jedes Monitoring und jedes Deploy-Script, das auf Health wartet — ein Rollout kann dadurch fälschlich als gescheitert gelten und zurückgerollt werden, obwohl der Start normal verläuft.
+- **Neue Werte: `dev` 90 s, `prod` 60 s.** Fehlschläge innerhalb der `start-period` lassen den Status auf `starting` stehen, statt auf `unhealthy` zu springen; ein erfolgreicher Check macht den Container weiterhin sofort `healthy`. Die Zeit bis `healthy` verlängert sich dadurch nicht. `interval`, `timeout` und `retries` bleiben unverändert, ein wirklich kaputter Container wird also weiterhin genauso schnell als `unhealthy` erkannt.
+
+### Changed (Fundament fuer „Richtung B · Dossier“ — dunkel-warmes Theme — 2026-08-18)
+
+- **`tokens-v3.css` bleibt namentlich unveraendert, traegt jetzt aber die dunkel-warme Palette aus dem Grilling vom 18.08.2026.** Grund `#0b0a09`, Flaeche `#14110f`, Flaeche erhoeht `#1b1815`, Akzent/Fokusring `#d08a52`, Live/System `#5fb6c9`, belegt/Erfolg `#7fa86a`, Warnung `#d09a3c`. Alle abgeleiteten Tokens (`--surface-inset/-hover/-pressed`, `--hairline*`, `--separator`, `--text-tertiary/-quaternary`, `--accent-hover/-pressed`, `--accent-tint-*`, `--status-*`, `--gray-1..6`) folgen konsistent aus diesen Ankern — keine Fremdfarben.
+- **`--text-secondary` bleibt bewusst bei `#7c736a`, dem Vorlagenwert.** Der Wert unterschreitet die eigene Systemregel „Sekundaertext ≥ 4,6:1“ auf allen drei Flaechen (4,26:1 / 4,04:1 / 3,80:1 gegen Grund/Flaeche/Flaeche-erhoeht) — Farbtreue zur Vorlage wurde der Kontrastschwelle am 18.08.2026 ausdruecklich vorgezogen. Ein aufgehellter Kandidat (`#867c72`) haette die Schwelle knapp gehalten, wurde aber nicht uebernommen. Dokumentiert direkt über der Token-Zeile in `tokens-v3.css`.
+- **Archivo (UI, 400/500/600) und Newsreader (Berichts-Fliesstext, 400/500 + italic 400) kommen per Google-Fonts-CDN dazu** (`frontend/index.html`: preconnect + Stylesheet-Link), Geist Sans/Mono bleiben lokal fuer `--font-mono`. Neues Token `--font-serif` (einzige Neuanlage in diesem Slice). `fonts.css` behauptete bisher faelschlich, es gebe keinen externen Font-Request mehr — der Kommentarkopf ist korrigiert.
+- **`states.css` und `global.css` nachgezogen:** harte `rgba(0,102,204,…)`-Reste (Fokusring) und ein reines Weiss-Glas-System (`--bg-glass-hi`, `.btn--glass`-Rand) folgen jetzt der neuen Kupfer-/Warmton-Palette statt der alten Apple-Enterprise-Werte.
+- **Kein Umbenennen, keine `.vue`-Aenderung.** Betroffen: `tokens-v3.css`, `fonts.css`, `states.css`, `global.css`, `index.html`.
+
+### Changed (Block B1 — Fundament: Dark-Block, self-hosted Fonts, Token-Entkernung — 2026-08-18)
+
+- **Echter `[data-theme="dark"]`-Block statt umgefaerbtem Light-Selektor.** Slice D0 hatte die dunkle Palette unter `:root, [data-theme="light"]` abgelegt — die Werte waren dunkel, der Selektor behauptete das Gegenteil. Alle drei Token-Bloecke in `tokens-v3.css` tragen jetzt `:root, [data-theme="dark"]`; `index.html` und `main.ts` setzen `data-theme="dark"` vor dem ersten Paint. Damit greift die Dark-Readiness-Klausel aus `designTokens.spec.ts` erstmals wirklich, statt trivial erfuellt zu sein. Ihr Regex fand allerdings nur den ersten Dark-Block und wurde auf alle erweitert.
+- **Light-Geruest bleibt leer stehen.** Ein kommentierter, absichtlich leerer `[data-theme="light"]`-Block am Dateiende markiert die Tuer zurueck. Eine zweite Palette ueber alle Komponenten zu pflegen war der Preis, den die Umstellung nicht wert ist — `[data-theme="light"]` faellt bis auf Weiteres auf die `:root`-Werte zurueck.
+- **Fonts self-hosted statt Google-Fonts-CDN.** `@fontsource-variable/archivo` und `@fontsource-variable/newsreader` (inkl. `wght-italic` fuer die kursiven Zitate im Bericht) werden in `main.ts` importiert; preconnect und Stylesheet-Link sind aus `index.html` entfernt. Agora laeuft ueber Tailscale — ein Request an `fonts.googleapis.com` ist dort sowohl ein Datenschutz- als auch ein Verfuegbarkeitsproblem. `GeistSans-Variable.woff2` entfaellt (Archivo ersetzt es), Geist Mono bleibt lokal.
+- **Zwei Fontnamen, die nie gegriffen haetten, korrigiert.** `--font-sans: "Archivo"` traf ins Leere, weil `@fontsource-variable` die Familie als `Archivo Variable` registriert — der Stack waere still auf `-apple-system` zurueckgefallen. Ebenso zeigte `--ff-serif` auf `var(--font-sans)` mit dem Kommentar „v4 hat keine Serif“, womit Newsreader trotz Einbindung nirgends angekommen waere.
+- **Schatten auf Dark umgestellt.** Alle sechs Shadow-Tokens trugen noch Light-Alphawerte (0.02–0.12) und waren auf `--surface-canvas` (`#0b0a09`) faktisch unsichtbar. Jetzt 0.26–0.52; `--shadow-inset` ist ein heller Innenrand statt eines schwarzen, weil auf dunklem Grund Licht die Kante hebt, nicht Schatten.
+- **Hartkodierte Farben in den Bestandskomponenten durch Tokens ersetzt.** Betroffen sind `components/v4/forms/*`, `views/Settings/*`, `components/v4/sim-feed/*`, `components/compare/*`, `components/ui/*`, `components/v4/data/*`, `components/v4/steps/*`, `components/step2..4/*`, `components/v4/dashboard/*`, `components/v4/run-budget/*` sowie einzelne Wurzelkomponenten. Ausgenommen bleiben Dateien, die mit dem Dossier-Umbau ohnehin entfallen (`RunsDashboard.vue`, `RunDetailView.vue`) oder neu entstehen (`components/v4/shell/*`, `components/report/*`, `components/graph/GraphDiffPanel.vue`) — sie zweimal anzufassen waere doppelte Arbeit.
+- **Bewusst hart geblieben:** Plattform-Identitaetsfarben im Simulations-Feed (Reddit/Twitter), algorithmisch erzeugte Persona-Avatarfarben, und `#fff` auf farbigen Kreisen.
+
+### Changed (Claim-Extraktion aus `build_report_v3` herausgelöst — 2026-09-08)
+
+- **`ReportManager.build_report_v3` war mit cc=69 der höchste Komplexitäts-Hotspot des Projekts.** Die dichteste Verzweigung darin war die Claim-Extraktion eines Abschnitts: Evidence-Filter auf `supports_claim is True`, Mindestlänge des Statements, Confidence-Label-Ableitung, Single-Source-Abstufung und der `strict`-Drop. Sie liegt jetzt als freie Modul-Funktion `_extract_claims_for_section` vor und hängt nur an ihren Argumenten sowie den Modul-Helfern `derive_aggregation_basis`, `_derive_confidence_scope` und `_text_confidence_for` — kein Instanz-Zustand, keine ID-Zähler-Kopplung zu Hypothesen oder Datenlücken.
+- **`build_report_v3` fällt von cc=69 auf cc=47**, die extrahierte Funktion liegt bei cc=23. Die Komplexität ist damit nicht verschwunden, sondern umgezogen — an einen Ort, wo sie isoliert prüfbar ist und weiter zerlegt werden kann. Beide Werte stehen als gemessene Obergrenzen in `radon-allowlist.txt`, der neue Eintrag trägt den nächsten Schnitt als Notiz.
+- **Kein Verhaltenswechsel.** Der Zähler läuft weiterhin über die *akzeptierten* Claims, sodass die exportierte ID (`C<n>_<i>`) die finale Liste beschreibt und nicht die Rohextraktion (Issue #1341).
+
+### Removed (Drei unerreichbare Zweige der Confidence-Label-Ableitung — 2026-09-08)
+
+- **In der Label-Ableitung standen drei `elif`-Zweige, die nie feuern konnten.** `if label in _valid_confidence` fängt `speculative`, `low`, `medium`, `high` und `verified` bereits vollständig ab; die nachfolgenden `elif label in {"high", "verified"}`, `elif label == "medium"` und `elif label == "low"` prüften ausschließlich Labels aus genau dieser Menge. Aufgefallen ist das erst, als der Block als eigene Funktion isoliert lesbar wurde — inline in `build_report_v3` stand er zwischen 200 Zeilen anderer Verzweigung.
+- **Kein Verhaltenswechsel, belegt statt behauptet:** die 16 neuen Tests in `tests/services/report_agent/test_extract_claims_confidence_mapping.py` laufen gegen den Stand *mit* den toten Zweigen identisch grün. Sie decken jedes bekannte Label, unbekannte Labels samt Casing-Varianten, fehlendes Label, die Single-Source-Abstufung, den `strict`-Drop und die ID-Vergabe über akzeptierte Claims ab.
+- **`_extract_claims_for_section` fällt dadurch von cc=23 auf cc=20** und damit unter die D-Schwelle des Komplexitäts-Gates. Ihr Allowlist-Eintrag ist ersatzlos entfallen — steigt sie künftig wieder auf D, schlägt das Gate an.
+
+### Fixed (Erschöpfte Provider-Quota legt nicht mehr das ganze Backend lahm — 2026-08-12)
+
+- **Ein 429 des Embedding-Providers hat Agora in einen Crash-Loop geschickt und das komplette Dashboard mit 502 beantwortet:** `create_app()` validiert die Embedding-Konfiguration beim Start und behandelte dabei *jeden* `EmbeddingError` als fatal (`app/__init__.py`). Als Googles Spend Cap erreicht war und `generativelanguage.googleapis.com/v1beta/openai/embeddings` dauerhaft `429 RESOURCE_EXHAUSTED` antwortete, brach der Start ab, `restart: unless-stopped` startete neu, und das im Takt von rund 13 Sekunden — 162 Restarts am Stück. Der nginx-Sidecar fand kein Upstream und lieferte `502` auf `/api/runs` und `/api/status`, also auf *alle* Routen, obwohl nur die Embedding-Funktion betroffen war. Ein externes Zahlungslimit war damit ein Single Point of Failure für die gesamte Anwendung.
+- **Der Fix trennt Provider-Ausfall von Fehlkonfiguration entlang der Frage „hilft ein Neustart?“.** Neu ist `EmbeddingBackendUnavailableError` als Unterklasse von `EmbeddingError` (`app/storage/embedding_service.py`). Sie wird geworfen, wenn die Retries erschöpft sind — Quota (429), Serverfehler (5xx), Verbindungsfehler oder Timeout. `create_app()` fängt sie getrennt ab, setzt `app.config['EMBEDDING_DEGRADED'] = True`, loggt laut auf ERROR und läuft weiter. Semantische Suche und Graph-Embeddings schlagen dann zur Laufzeit fehl, bis der Provider zurück ist; der Rest der Anwendung bleibt bedienbar.
+- **`gemini-embedding-001` ist mit 3072 Dimensionen eingetragen, nicht mehr mit 768.** `KNOWN_EMBEDDING_DIMS` führte den Matryoshka-Kürzungswert statt der Default-Ausgabe. Das Modell antwortet per Default mit 3072 und lässt sich nur über `output_dimensionality` kürzen — einen Parameter, den der OpenAI-Compat-Pfad in `EmbeddingService` gar nicht sendet. Mit dem alten Wert legte Agora den Neo4j-Vektorindex auf 768 an, und der erste echte Embed-Call scheiterte am Dimension-Mismatch. Regressionstests pinnen jetzt sowohl die Inferenz (`infer_vector_dim_for_model`) als auch den Validierungspfad (`validate_embedding_configuration`).
+- **Echte Fehlkonfiguration bleibt unverändert fatal.** 401/403 (falscher oder fehlender Key), 404 (`model not found, try pulling it first`) und Dimension-Mismatch gegen `KNOWN_EMBEDDING_DIMS` scheitern weiter sofort und hart. Das ist Absicht: ein 404 auf das Embedding-Modell ist ein Konfigurationsfehler, der laut sterben soll, statt Agora dauerhaft ohne Vektoren laufen zu lassen. Zuvor wurden 429 und 5xx zusätzlich unterschiedlich behandelt — 5xx wurde retried, 429 brach sofort ab; beide gelten jetzt einheitlich als transient.
+
+### Changed (ADR-0002-Downgrade-Regeln liegen wieder beieinander — 2026-09-08)
+
+- **Die `medium`-Regel der ADR-0002-Stufe `agent_grounded` lag inline in `ReportAgent._finalize_section_claims`, ihre Schwesterregel für `high`/`verified` dagegen als freie Funktion in `report_agent/evidence.py`.** Beide setzen dieselbe Semantik an unterschiedlichen Labels durch, und der Code benannte den Zusammenhang bereits im Kommentar („Schwesterregel für high/verified: `auto_downgrade_unsupported_high_claims`") — ohne dass er sich in der Struktur wiederfand. Die medium-Regel ist jetzt `downgrade_medium_without_agent_grounded` und steht direkt neben `auto_downgrade_unsupported_high_claims`.
+- **Kein Verhaltenswechsel.** Der Claim wird weiterhin in place abgestuft, die Audit-Trail-Entscheidung für `gate_decisions` ist unverändert (`violation`, `action`, auf 500 Zeichen gekürztes `detail`); `section_index` ergänzt weiterhin der Caller. `_finalize_section_claims` bleibt als Methode bestehen und delegiert — zehn Testdateien rufen sie als Methode auf, teils an einer per `__new__` gebauten Instanz ohne `__init__`.
+- **Die Regel ist jetzt direkt testbar.** Acht neue Tests in `tests/services/test_downgrade_medium_agent_grounded.py` decken Fälle ab, die über den Agent-Pfad nur umständlich zu stellen waren: Label-Casing, fehlende `claim_id`, evidenzloser medium-Claim, optionaler Logger, `detail`-Länge. Die Funktion normalisiert das Label selbst, statt sich auf die Vornormalisierung des Callers zu verlassen.
+- **Komplexität:** `_finalize_section_claims` fällt von cc=27 auf cc=24, die neue Funktion liegt bei cc=8. Die Allowlist-Obergrenze ist von `cc<=35` auf den gemessenen Ist-Wert `cc<=24` abgesenkt.
+
+### Changed (Datenverzeichnis-Auflösung der JSON-Stores lebt an einer Stelle statt an sieben — 2026-08-17)
+
+- **Sieben dateibasierte Stores trugen je eine eigene, zeichengleiche Kopie derselben Auflösung:** `api_keys_persistence`, `embedding_configuration_store`, `llm_provider_secrets_store`, `onboarding_state_store`, `provider_connection_store`, `user_profile_store` und `workspace_routing_store` definierten alle ein privates `_resolve_data_dir()` mit identischem Rumpf — `AGORA_DATA_DIR` per `expanduser().resolve()`, sonst `Path(__file__).resolve().parents[2] / "data"` — plus eine eigene `_DATA_DIR_ENV`-Konstante mit demselben Wert. Eine Änderung am Pfadverhalten, etwa eine zweite Env-Variable oder ein anderer Fallback, hätte an sieben Stellen nachgezogen werden müssen; ein Nachzug an sechs davon wäre nicht aufgefallen.
+- **Neu ist `app/services/data_dir.py` mit `resolve_data_dir()`.** Das Modul liegt in derselben Verzeichnistiefe wie die bisherigen Kopien, `parents[2]` zeigt also unverändert auf `backend/`. Die Auflösung bleibt bewusst **pro Aufruf** statt zur Importzeit: `tests/conftest.py` setzt `AGORA_DATA_DIR` je Test auf ein `tmp_path`, was bei einem eingefrorenen Wert wirkungslos wäre. Die Stores importieren die Funktion unter ihrem bisherigen lokalen Namen (`as _resolve_data_dir`), sodass sämtliche Aufrufstellen unverändert bleiben.
+- **Verhaltensgleichheit ist gemessen, nicht angenommen:** alle sieben Stores liefern ohne Env denselben Pfad wie zuvor (`backend/data`), mit gesetzter Env denselben aufgelösten Pfad, und die Variable wirkt weiterhin pro Aufruf. Kein Test patchte `_resolve_data_dir` direkt; die Isolation läuft durchgängig über `monkeypatch.setenv("AGORA_DATA_DIR", ...)` und funktioniert unverändert.
+- **`app/services/api_keys_store.py` ist bewusst nicht einbezogen.** Es führt ein gleichnamiges `_resolve_data_dir`, das aber `Optional[Path]` zurückgibt und eine andere Semantik hat — es ist keine Kopie, sondern eine andere Funktion.
+- **`tests/services/test_data_dir.py` hält den Zustand:** neben Env-Override, Expansion, Leerstring-Fallback und Pro-Aufruf-Auswertung prüft es je Store, dass dessen `_resolve_data_dir` *dasselbe Funktionsobjekt* ist wie das gemeinsame — ein erneut lokal definierter Resolver lässt die Suite fallen.
+
+Neuer LLM-Provider `claude_cli`: spricht die lokal installierte Claude-Code-CLI
+per Subprozess an (Claude-Abo statt Pay-per-Token-API), analog zum
+bestehenden `codex_cli`-Provider (ChatGPT-Abo).
+
+Anders als `codex_cli` authentifiziert `claude_cli` über einen mit
+`claude setup-token` erzeugten Langzeit-Token (Env-Var
+`CLAUDE_CODE_OAUTH_TOKEN`, offiziell für CI/Headless-Nutzung dokumentiert)
+statt einer gemounteten Login-Session — der Token liegt wie jeder andere
+API-Key im bestehenden Fernet-Secret-Store, es ist kein
+Verzeichnis-Mount/Compose-Override nötig.
+
+Jeder Aufruf läuft mit isoliertem `HOME` und `cwd`: ohne diese Isolation lädt
+die CLI das komplette interaktive Setup des Hosts (CLAUDE.md, Skills,
+Plugins) in den Prompt-Cache — gemessen ~64x höhere Kosten für denselben
+Prompt (189.466 vs. 2.935 `cache_creation_input_tokens`). `--tools ""` nimmt
+der CLI zusätzlich jeden Werkzeugzugriff; Function-Calling für OASIS-Agenten
+läuft wie bei `codex_cli` über eine Prompt-basierte `<tool_call>`-Übersetzung.
+
+Der `claude`-Binary wird im Docker-Image über den offiziellen Installer
+(`curl https://claude.ai/install.sh`, Version gepinnt) installiert — der
+Installer verifiziert die Downloads intern gegen ein von Anthropic
+signiertes Checksummen-Manifest.
+
+Neu: `backend/app/llm/providers/claude_cli.py`,
+`backend/scripts/sim_runtime/claude_cli_model.py` (OASIS-Subprozess-Backend).
+Geändert: Provider-Registry, Provider-Connections-Adapter, `LLMClient`-Routing,
+`Dockerfile`, sowie alle Stellen, die bisher `codex_cli` als einzigen
+`transport="cli"`-Provider hartkodiert hatten
+(`llm_routing_seed`, `prepare_llm`, `simulation_config_generator`,
+`oasis_profile_generator`, `tool_calls`).
+
+### Added (Drei Lücken im statischen Security-Scan geschlossen — 2026-09-18)
+
+- **CodeQL analysiert jetzt auch die GitHub-Actions-Workflows** (Sprache `actions` in `.github/workflows/codeql.yml`). `actionlint` prüft nur Syntax und Ausdrücke; Injection über untrusted Event-Felder in `run:`-Blöcken findet erst die CodeQL-Datenflussanalyse.
+- **Ruff prüft das Backend mit den flake8-bandit-Regeln (`S`).** Bewusst ausgeblendet bleiben `S311` (Simulation und Persona-Sampling nutzen `random` nicht-kryptografisch), `S603`/`S607` (Subprozesse mit Argumentlisten ohne Shell) sowie `S101`/`S110`/`S112` als Baseline-Altlast. `tests/*` ist von `S` ausgenommen. Die übrigen Funde in `app/` waren Fehlalarme (Env-Variablen- und Attributnamen, Loopback-Hostlisten, Prompt-Text) und tragen jetzt eine begründete `noqa`-Markierung; `network_analytics.py` kennzeichnet den SHA1 für die Snapshot-ID mit `usedforsecurity=False`.
+- **Trivy scannt zusätzlich Dockerfile und Compose-Dateien** (`scan-type: config`, Code-Scanning-Kategorie `trivy-config`). Der Schritt blockiert vorerst nicht (`exit-code: "0"`), bis die erste Fundliste gesichtet ist.
+
+### Changed (ReportV3-Vorab-Build ist eine eigene, prüfbare Funktion — 2026-09-08)
+
+- **Der Vorab-Build von ReportV3 (Issue #1299) lag inline in `generate_report` und war nur über einen vollständigen Report-Lauf mit rund einem Dutzend Mocks erreichbar.** Er heißt jetzt `_build_and_validate_report_v3` und liegt als Modul-Funktion in derselben Datei — bewusst nicht in einem neuen Modul, weil 32 Patch-Stellen der Testsuite auf `workflow.ReportManager` als Modul-Global zeigen und ein Umzug sie ins Leere laufen ließe.
+- **Kein Verhaltenswechsel.** Der Report wird weiterhin in place mutiert (`status`, `error`, `run_degradations`), der Guard bleibt `COMPLETED` **und** vorhandene Evidence-Map, ein bestehender `error`-Text wird weiterhin nicht überschrieben, `run_degradations` ergänzt statt ersetzt, und nur `ValidationError` wird gefangen — alles andere gehört weiter dem äußeren Handler in `generate_report`.
+- **Neun Direkttests** in `tests/services/report_agent/test_build_and_validate_report_v3.py` prüfen genau diese Zusagen. Gegenprobe mit entferntem Guard: vier Tests fallen. Beim Schreiben fiel ein Helper-Defekt im Testfile selbst auf — ein Default, der `None` still durch ein truthy dict ersetzte und damit den Falsy-Zweig unprüfbar gemacht hätte.
+- **Komplexität:** `generate_report` fällt von cc=54 auf cc=50, die extrahierte Funktion liegt bei cc=5. Die Allowlist-Obergrenze ist von `cc<=55` auf `cc<=50` abgesenkt; die Refactor-Notiz im Kommentarkopf benennt die verbleibenden offenen Schnitte (Init → Status → Budget-Reraise aus #978, sowie den Red-Team-Block mit seinen zwei verschachtelten Exception-Handlern).
+
+### Hinzugefügt
+
+- `bun run bigpowers:sync` legt das Bigpowers-Tooling als relative Symlinks auf
+  `node_modules/bigpowers` in `scripts/` und `.claude/skills/` ab und traegt sie
+  zugleich in `.git/info/exclude` ein. Die Symlinks sind maschinenlokale
+  Build-Artefakte und bleiben damit aus dem Repo heraus, ohne dass jemand sie
+  von Hand ausschliessen muss. Vorhandene AGORA-Dateien werden nie
+  ueberschrieben — gleichnamige Bigpowers-Dateien meldet das Skript als
+  Konflikt und laesst sie liegen. Symlinks, die auf eine inzwischen entfernte
+  Bigpowers-Datei zeigen, raeumt das Skript beim Sync weg.
+
+  `--check` verifiziert das Overlay gegen die installierte Abhaengigkeit statt
+  gegen den Ist-Zustand des Arbeitsbaums: fehlende, kaputte oder nicht
+  ausgeschlossene Symlinks sind Drift, und ein Lauf ohne installiertes
+  Bigpowers meldet Drift statt Erfolg. Damit eignet es sich als Gate-Schritt.
+  In Git-Worktrees (`.git` ist dort eine Datei, kein Verzeichnis) findet das
+  Skript den gemeinsamen Ausschlusspfad ueber `git rev-parse --git-common-dir`.
+
+### Fixed (Provider-Key-Masking akzeptiert Base64-Suffix — 2026-08-12)
+
+- **`MASKED_KEY_PATTERN` nimmt `=`/`+`/`/` auf:** AWS-Bedrock-Bearer-Tokens sind URL-safe-Base64 und enden häufig auf `=`, was das bisherige Pattern `[A-Za-z0-9_\-]{4}` ablehnte — ein Bedrock-Key ließ sich unter „OpenAI Compatible“ gar nicht persistieren (Pydantic `string_pattern_mismatch`). Die End-Klasse deckt jetzt Standard- und URL-safe-Base64.
+
+
 ### Documentation (Zwei neue Referenzläufe, der aktuelle zweisprachig — 2026-08-11)
 
 - **Der Referenzpfad zeigte bisher nur die Domainmigration, in zwei Varianten derselben Domäne:** Damit ließ sich nicht unterscheiden, welche Befunde am Testfall hingen und welche am System. Zwei neue Referenzläufe in einer anderen Domäne sind jetzt dokumentiert — Einführung eines selbstgehosteten KI-Lernassistenten bei einem AZAV-zertifizierten Umschulungsträger.
@@ -1650,7 +3683,8 @@ erfundene „Abschnitt bricht ab"-Data-Gaps).
   `backend/scripts/check_version_drift.py` um `--write`-Modus erweitert, prüft
   nun auch `frontend/package.json`. CI-Job `version-drift.yml` und lokal
   `pre-push-gate.sh schemas` erzwingen Einhaltung. Abwicklung:
-  [`docs/runbooks/release-versioning.md`](../runbooks/release-versioning.md).
+  [`docs/runbooks/release-versioning.md`](docs/runbooks/release-versioning.md).
+  [`docs/runbooks/release-versioning.md`](runbooks/release-versioning.md).
 
 ### Fixed (Issue #739 — 2026-07-18)
 

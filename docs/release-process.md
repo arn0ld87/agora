@@ -1,7 +1,7 @@
 # Release-Prozess
 
-**Stand:** 08.09.2026  
-**Geprüfte Main-Baseline:** `0c47737f`  
+**Stand:** 20.09.2026  
+**Geprüfte Main-Baseline:** `b62aea62`  
 **Scope:** Version-Cut, Changelog, Gates, Release Notes, Tag, Container-Publish und Rollback.
 
 > [!IMPORTANT]
@@ -58,7 +58,9 @@ Aktuell prüft `backend/scripts/check_version_drift.py`:
 5. **englischen** `README.md`-Badge
 6. Runtime-`__version__`
 
-Der Checker erfasst **nicht automatisch `README.de.md`**. Genau deshalb konnte die deutsche README noch `0.9.4` zeigen, während `VERSION` längst `0.9.5` war. Bis der Checker beide Sprachfassungen abdeckt, ist `README.de.md` ein expliziter Release-Check.
+Der Checker erfasst **nicht automatisch `README.de.md`**. Genau deshalb konnte die deutsche README noch `0.9.4` zeigen, während `VERSION` längst `0.9.5` war — und genau deshalb musste `README.de.md` beim `0.9.5`→`0.9.6`-Cut erneut von Hand nachgezogen werden. Bis der Checker beide Sprachfassungen abdeckt, ist `README.de.md` ein expliziter Release-Check.
+
+Zwei weitere Dateien liegen ebenfalls außerhalb des Checkers und müssen beim Release-Cut von Hand gezogen werden: `CITATION.cff` (`version:`-Feld) und `.zenodo.json`. Bleiben sie auf der alten Versionsnummer stehen, archiviert Zenodo beim nächsten Release-Tag veraltete Metadaten — der Fehler fällt dort nicht auf, weil Zenodo nicht gegen `VERSION` prüft, sondern einfach das übernimmt, was in diesen Dateien steht.
 
 ```bash
 cd backend

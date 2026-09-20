@@ -1,8 +1,8 @@
 # Deployment
 
-**Stand:** 08.09.2026  
-**Geprüfte Main-Baseline:** `0c47737f`  
-**Produktversion:** `0.9.5`
+**Stand:** 20.09.2026  
+**Geprüfte Main-Baseline:** `b62aea62`  
+**Produktversion:** `0.9.6`
 
 Diese Datei ist der Einstieg für Deployment-Fragen. Details bleiben getrennt:
 
@@ -42,10 +42,14 @@ docker compose \
 - Host-Port des Backends standardmäßig Loopback.
 - Neo4j/Redis im Prod-Override nicht unnötig öffentlich publizieren.
 - read-only Root-Filesystem mit expliziten Write-Pfaden.
-- Gunicorn verwendet bewusst **einen Worker**; nicht auf mehrere Worker erhöhen, solange prozesslokale Run-/Monitorzustände existieren.
+- Gunicorn verwendet bewusst **einen Worker**; nicht auf mehrere Worker erhöhen, solange prozesslokale Run-/Monitorzustände existieren. Der HARDSTOP ist mittlerweile in [ADR-0015](decisions/0015-single-web-worker-hardstop.md) beziffert begründet: nicht verschiebbarer Zustand (Popen-Objekte, In-Prozess-Queues, offene Dateideskriptoren im `SimulationRunner`) lässt sich nicht über eine geteilte Ablage lösen, sondern nur dadurch, dass genau ein Prozess einen Lauf besitzt.
 - Agora-Service verwendet `init: true` und `stop_grace_period: 45s`.
+- Redis läuft als `redis:8-alpine` (vorher `redis:7-alpine`, #1529).
+- Der `agora`-Container bringt die codex-CLI bereits im Image mit (eigene Build-Stage, Version und Architektur-Hashes gepinnt, SHA256-geprüft, #1412); die Anmeldung bleibt außerhalb des Images (siehe Credential-Mount unten).
+- `HEALTHCHECK --start-period` ist realistisch gesetzt (`dev` 90s, `prod` 60s), damit der Container beim Start nicht kurzzeitig als `unhealthy` gemeldet wird, bevor `/readyz` überhaupt antworten kann.
 - Reverse Proxy/Tailnet ist für Remote-Zugriff die vorgesehene Grenze.
 - `AGORA_AUTH_TOKEN`/API-Key-Scope-Modell bleibt Single-User-/Single-Tenant-Auth, kein Multi-User-Identity-System.
+- Kein `.codex`-Mount im Default-Stack mehr; `codex_cli` braucht das explizite Override `deploy/compose/docker-compose.codex-cli.yml`. Details: [`security-hardening.md`](security-hardening.md).
 
 ## Wichtige Compose-/Runtime-Parameter
 
@@ -77,4 +81,5 @@ Zusätzlich ProviderConnection/Routing, Neo4j, Redis und einen produktnahen Smok
 - Prepare-/Report-/Graph-Daemon-Threads sind noch nicht vollständig restart-sicher (#1472).
 - Mehrere parallele Reports können sich im einzelnen gevent-Worker stark verlangsamen (#1265).
 - Embedding-UI und produktiver Runtime-Pfad können bis #1417 auseinanderlaufen.
-- Ein dokumentiertes Backup ist noch kein nachgewiesener Fresh-Host-Restore; Release-Gate #766 bleibt offen.
+- Ein dokumentiertes Backup ist noch kein nachgewiesener Fresh-Host-Restore; Release-Gate #766 bleibt offen. `scripts/restore-drill.sh` und `backend/scripts/restore_verify.py` machen den Drill inzwischen ausführbar und maschinell prüfbar — der Nachweis auf einem frischen Host mit echtem Backup steht noch aus. Details: [`docs/runbooks/restore-drill.md`](runbooks/restore-drill.md).
+- Ein verwaister Simulationsprozess nach einem Container-Restart wird von der Startup-Reconciliation als `failed/process_restart` markiert statt für immer als `laufend` stehen zu bleiben. Details: [`operations.md`](operations.md).

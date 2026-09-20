@@ -1,8 +1,8 @@
 # Agora — Status
 
-**Stand:** 08.09.2026  
-**Geprüfte Main-Baseline:** `0c47737f`  
-**Produktversion:** `0.9.5` Stability Beta
+**Stand:** 20.09.2026  
+**Geprüfte Main-Baseline:** `b62aea62`  
+**Produktversion:** `0.9.6` (Zwischenrelease, Stability Beta)
 
 Diese Datei ist die **Single Source of Truth für den verifizierten Istzustand**. Strategische Release-Ziele stehen in [`ROADMAP.md`](../ROADMAP.md), konkrete Arbeitspakete und Akzeptanzkriterien in [GitHub Issues](https://github.com/arn0ld87/agora/issues), ausgelieferte Änderungen in [`changelog.d/`](../changelog.d/README.md). Historische Audits, Pläne und Referenzläufe behalten ihren damaligen Stand und sind keine aktuelle Steuerungsquelle.
 
@@ -10,7 +10,9 @@ Diese Datei ist die **Single Source of Truth für den verifizierten Istzustand**
 
 Agora besitzt eine vollständige Single-User-Pipeline von Dokumentaufnahme und Knowledge Graph über Persona-Erzeugung und OASIS/CAMEL-Simulation bis zu evidenzorientiertem Report, Vergleich und Export. Die Stabilisierung der 0.9.x-Linie hat insbesondere Contracts, Run-Lifecycle, Crash-/Restart-Verhalten, Budgetdurchsetzung, Installationspfade und Evidence-Persistenz deutlich gehärtet.
 
-`0.9.5` ist trotzdem **keine 1.0-Freigabe**. Die größten verbleibenden Release-Risiken liegen heute nicht mehr in der grundsätzlichen Web-App-Funktionalität, sondern in Job-Recovery außerhalb der OASIS-Simulation, Embedding-Konfigurations-SSoT, vollständiger Reproduzierbarkeit, Simulationstreue und externer Produktvalidierung.
+Die `0.9.x`-Linie ist trotzdem **keine 1.0-Freigabe**. Die größten verbleibenden Release-Risiken liegen heute nicht mehr in der grundsätzlichen Web-App-Funktionalität, sondern in Job-Recovery außerhalb der OASIS-Simulation, Embedding-Konfigurations-SSoT, vollständiger Reproduzierbarkeit, Simulationstreue und externer Produktvalidierung.
+
+**`0.9.6`-Linie (20.09.2026, über 330 Commits/184 Changelog-Fragmente seit `v0.9.5`):** ein Zwischenrelease, ausdrücklich **kein** `0.10.0` und ohne dessen Release-Gates. Neu dazugekommen sind vier LLM-Provider (inklusive `codex_cli` und `claude_cli` als CLI-/Session-Transporte sowie Amazon Bedrock), eine PostgreSQL-Schicht parallel zu den bestehenden JSON-/SQLite-Stores (gebaut, per Default nicht aktiv), ein zehnteiliges UI-Redesign, ein atomar geschriebenes Run-Manifest mit Replay-Grundlage sowie weitere Evidence-/Budget-/Restart-Härtung. Die fünf oben genannten Release-Risiken sind dadurch **teilweise**, nicht vollständig bearbeitet — Details je Punkt in [`docs/agents/release-priority.md`](agents/release-priority.md) und im Abschnitt „0.10-Blocker aus heutiger Sicht" unten.
 
 ## Versionsstatus
 
@@ -19,9 +21,9 @@ Agora besitzt eine vollständige Single-User-Pipeline von Dokumentaufnahme und K
 <!-- BEGIN_AUTOGEN_VERSIONS -->
 | Komponente | Pfad | Version |
 |---|---|---|
-| Backend | `backend/pyproject.toml` | 0.9.5 |
-| Frontend | `frontend/package.json` | 0.9.5 |
-| Root | `package.json` | 0.9.5 |
+| Backend | `backend/pyproject.toml` | 0.9.6 |
+| Frontend | `frontend/package.json` | 0.9.6 |
+| Root | `package.json` | 0.9.6 |
 <!-- END_AUTOGEN_VERSIONS -->
 
 Die README-Badges müssen denselben Wert tragen. Der Versions-Cut ist in [`runbooks/release-versioning.md`](runbooks/release-versioning.md) beschrieben.
@@ -104,7 +106,7 @@ Die 0.9.5-Stabilisierung hat mehrere vorher stille Zustandsfehler geschlossen:
 
 ### Bekannte Lifecycle-Grenze
 
-Prepare-, Report- und Graph-Build-Jobs laufen weiterhin als daemonisierte Threads im Webprozess. Beendet sich der Worker regulär — etwa nach SIGTERM —, markiert ein `atexit`-Hook die Jobs dieses Prozesses noch im selben Lauf als `failed/process_restart` (Slice 1.1, #1472a), statt auf die Startup-Reconciliation beim nächsten Start zu warten. Das Cancel-Flag wird kooperativ gesetzt; für `simulation_prepare` wird auch der `SimulationState` auf `FAILED` gesetzt.
+Prepare-, Report- und Graph-Build-Jobs laufen weiterhin als daemonisierte Threads im Webprozess. Beendet sich der Worker regulär — etwa nach SIGTERM —, markiert ein `atexit`-Hook die Jobs dieses Prozesses noch im selben Lauf als `failed/process_restart` (Slice 1.1 aus #1472), statt auf die Startup-Reconciliation beim nächsten Start zu warten. Das Cancel-Flag wird kooperativ gesetzt; für `simulation_prepare` wird auch der `SimulationState` auf `FAILED` gesetzt.
 
 Eine Grenze dieses Hooks bleibt bestehen: Die Terminalisierung passiert **nicht** im Signal-Handler, sondern beim Interpreter-Shutdown — wird der Worker nach Ablauf von `graceful_timeout` per SIGKILL beendet, greift weiterhin nur die Startup-Reconciliation. Der Redis-Event-Bus ist weiterhin **keine persistente Jobqueue**.
 

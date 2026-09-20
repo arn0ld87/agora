@@ -1,7 +1,7 @@
 # Embedding-Provider wechseln
 
-**Stand:** 08.09.2026  
-**Geprüfte Main-Baseline:** `0c47737f`  
+**Stand:** 20.09.2026  
+**Geprüfte Main-Baseline:** `b62aea62`  
 **Scope:** Sicherer Wechsel von Embedding-Konfiguration und Vektorindex.
 
 > [!WARNING]

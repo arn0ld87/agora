@@ -1,7 +1,8 @@
 # Agora Roadmap
 
-**Stand:** 08.09.2026  
-**Aktuelle Produktversion:** `0.9.5` Stability Beta  
+**Stand:** 20.09.2026  
+**Geprüfte Main-Baseline:** `b62aea62`  
+**Aktuelle Produktversion:** `0.9.6` (Zwischenrelease, Stability Beta) — Ziel bleibt `0.10.0`  
 **Istzustand:** [`docs/STATUS.md`](docs/STATUS.md)
 
 Diese Datei beschreibt ausschließlich die **strategische Release-Reihenfolge**. Konkrete Arbeitspakete, Akzeptanzkriterien und Fortschritt werden als GitHub Issues gepflegt. Ein erledigter Commit gehört nicht als Mini-Changelog hier hinein; dafür existiert `changelog.d/`. Offenbar braucht selbst Dokumentation eine Gewaltenteilung.
@@ -59,6 +60,24 @@ Der Weg zu `1.0.0` folgt vier Regeln:
 - Multi-User-/SaaS-Betrieb
 
 Die verbleibenden Punkte werden nicht durch weitere 0.9-Featureflächen verdeckt, sondern bilden den Übergang zu 0.10.
+
+---
+
+## 0.9.6 — Zwischenrelease
+
+`0.9.6` liegt zwischen `0.9.5` (11.08.2026) und `0.10.0` und enthält mehr als 330 Commits sowie 184 Changelog-Fragmente seit `v0.9.5`. Es ist ausdrücklich **kein** `0.10.0` und erfüllt dessen Release-Gates (siehe unten) nicht — Feature-Freeze beginnt erst mit dem ersten `0.10.0`-RC.
+
+### Was `0.9.6` enthält
+
+- **Vier LLM-Provider** inklusive der beiden neuen CLI-/Session-Transporte `codex_cli` (ChatGPT-Abo, #1406/#1423/#1424) und `claude_cli` (Claude-Abo statt Pay-per-Token-API, #1531) sowie Amazon Bedrock als OpenAI-kompatibler Provider (#1282).
+- **PostgreSQL-Schicht parallel zu den bestehenden JSON-/SQLite-Stores**: Supabase-Compose als eigene Infrastruktur (#1504), SQLAlchemy-/Alembic-Grundlage (#1505), Tabelle `agora.llm_profiles` (#1507), Repository-Port (#1515), `LlmProfileSecretsStore` (#1516) und `PostgresLlmProfileRepository` (#1517) für LLM-Profile sowie ein eigener Vertrag samt zweitem Adapter für Projektmetadaten (ohne eigene Issue-Nummer), verifiziert gegen echtes PostgreSQL 17 unter dem gevent-Worker (ADR-0014). Drei unabhängige Umschalter, jeweils im Default aus: `AGORA_METADATA_BACKEND` (Default `legacy`), `AGORA_PROJECT_BACKEND` (Default `file`), `AGORA_LLM_PROFILE_BACKEND` (Default `sqlite`) — die Schicht ist gebaut, nicht in Betrieb. Details in [`docs/STATUS.md`](docs/STATUS.md).
+- **UI-Redesign über zehn PRs** (#1427–#1449) plus Nachlese (#1459): Design-Tokens, Shell-Chrome, Ablage, Controls, Report-Leseumgebung, Simulations-Vollbildansicht, Runs-Tabelle, Settings-Overlay, Löschen unerreichbarer Legacy-Views.
+- **Run-Manifest und Replay** (#1273): atomar geschriebene Manifeste, kanonischer `AiModelRef` im Replay-Override, strukturierte Fehler-Envelopes. Das ist eine Manifest-/Replay-**Grundlage**, keine Reproduzierbarkeits-**Garantie** — siehe P1 „Reproduzierbare Runs" unten und [`docs/agents/release-priority.md`](docs/agents/release-priority.md).
+- **Evidence- und Report-Härtung**: satzgenaue Fließtext-Faktenprüfung statt satzweiter Bündelung (#1492), Budget-Guard/Ledger für Tool-, Vision- und Interview-Pfade inklusive `ParallelIPCHandler` (#1478/#1527), SIGTERM-Terminalisierung für In-Process-Jobs (Slice 1.1 aus #1472), Embedding-Index-Auflösung und korruptionssicherer Cutover (#1417, Slices 2.1/2.2), Restore-Drill mit Zielschutz und Migrationsbaseline (#1514).
+
+### Was `0.9.6` nicht behauptet
+
+Dieselben Grenzen wie unter „Was 0.9.x noch nicht behauptet" oben gelten unverändert — keine davon wurde durch `0.9.6` geschlossen, mehrere wurden nur **teilweise** bearbeitet (Details je Punkt in [`docs/agents/release-priority.md`](docs/agents/release-priority.md)). `0.10.0` bleibt das Release, das die P0/P1-Blocker unten tatsächlich schließen muss.
 
 ---
 

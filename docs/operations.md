@@ -1,7 +1,7 @@
 # Operations
 
-**Stand:** 08.09.2026  
-**Geprüfte Main-Baseline:** `0c47737f`  
+**Stand:** 20.09.2026  
+**Geprüfte Main-Baseline:** `b62aea62`  
 **Scope:** Single-User-Betrieb, Diagnose, Restart-/Recovery-Semantik und bekannte operative Grenzen.
 
 Verwandt:
@@ -132,6 +132,8 @@ stop_grace_period: 45s
 
 Gunicorn verwendet einen kleineren `graceful_timeout`, damit normale Shutdown-Logik vor Docker-SIGKILL eine Chance hat.
 
+Der SIGTERM-Hook, der laufende Jobs beim Worker-Exit markiert, ist seit #1528 an `post_worker_init` verankert statt an `create_app()` — unter `preload_app=True` liefe `create_app()` sonst nur im Master vor dem Fork, und gunicorn setzt in `init_signals()` jedes zuvor registrierte Signal auf den Default zurück, bevor der Worker eigene Handler installiert. Seit #1530 fasst der Signal-Handler selbst nur noch ein Flag an; die eigentliche Terminalisierung läuft über `atexit`, außerhalb des Signalkontexts — ein synchroner Lock-Zugriff aus dem Signal-Handler konnte unter gevent das haltende Greenlet blockieren. **Ehrliche Grenze:** Nach Ablauf von `graceful_timeout` beendet gunicorn den Worker per SIGKILL; dann läuft kein `atexit` mehr. Dafür bleibt die Startup-Reconciliation (oben) der Fallback-Mechanismus. Seit #1532 markiert der Hook außerdem nur noch Jobs des eigenen Worker-Prozesses (`owns_run`) — bei einem gunicorn-Hot-Upgrade (`USR2`) markiert der ausscheidende alte Master sonst Jobs des neuen Workers fälschlich als `failed`.
+
 Das reduziert Orphans, ersetzt aber nicht die fehlende Job-Persistenz aus #1472.
 
 ---
@@ -191,7 +193,7 @@ Diagnosefolge:
 4. Secret-Resolver
 5. Fallback-Env
 
-CLI-Provider wie `codex_cli` haben absichtlich keine Base-URL und keinen API-Key im Agora-Store.
+CLI-Provider (`codex_cli`, `claude_cli`) haben absichtlich keine Base-URL und keinen API-Key im Agora-Store; eine aufgelöste `cli`-Route wird nie mit einem `.env`-HTTP-Endpunkt oder einem fremden API-Key vermischt.
 
 Details: [`provider-runtime-settings.md`](provider-runtime-settings.md).
 
@@ -287,7 +289,7 @@ Der aktuelle Sicherungsumfang muss mindestens enthalten:
 
 Siehe [`backup-restore.md`](backup-restore.md).
 
-Für 0.10 zählt nicht „wir haben eine Anleitung“, sondern ein dokumentierter Fresh-Host-Restore-/Upgrade-/Rollback-Smoke (#766).
+Für 0.10 zählt nicht „wir haben eine Anleitung“, sondern ein dokumentierter Fresh-Host-Restore-/Upgrade-/Rollback-Smoke (#766). `scripts/restore-drill.sh` fährt Backup → Restore → Verifikation → Upgrade → Rollback in dieser Reihenfolge und bricht beim ersten roten Prüfpunkt ab; `backend/scripts/restore_verify.py` prüft „Artefakte“, „Provider/Secrets“ und „Reconciliation“ maschinell gegen das restaurierte Datenverzeichnis. `--dry-run` läuft ohne Docker und ist ausdrücklich **kein** Betriebsnachweis. #766 bleibt offen: Der Drill braucht einen frischen Host, einen echten Docker-Daemon und ein echtes Backup aus einem echten Lauf. Runbook: [`runbooks/restore-drill.md`](runbooks/restore-drill.md).
 
 ---
 

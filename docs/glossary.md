@@ -1,6 +1,7 @@
 # Wording-Glossar — Agora
 
-**Stand:** 08.09.2026  
+**Stand:** 20.09.2026  
+**Geprüfte Main-Baseline:** `b62aea62`  
 **Status:** verbindliche Produkt-/Trust-Sprache für aktuelle UI, README, lebende Doku und nutzersichtbare Reporttexte.
 
 Agora ist eine **evidenzorientierte Plattform zur Stakeholder-, Risiko- und Szenarioanalyse**. Die Multi-Agenten-Simulation ist ein Werkzeug innerhalb dieser Pipeline, nicht die Behauptung, menschliche Zukunft vorhersagen zu können.
@@ -32,7 +33,7 @@ Englisch:
 - „hochpräzise Verhaltensprognose“
 - „reproduzierbare Simulationsumgebung“ als pauschale Produkteigenschaft
 
-Die letzte Formulierung ist wichtig: Agora arbeitet an Reproduzierbarkeit, garantiert sie in `0.9.5` aber noch nicht (#763/#1274).
+Die letzte Formulierung ist wichtig: Agora arbeitet an Reproduzierbarkeit, garantiert sie in `0.9.6` aber noch nicht (#763/#1274). Ein Run-Manifest und ein Replay-Pfad existieren (#1273), das ist eine Grundlage — keine Reproduzierbarkeits-Zusage.
 
 ---
 
@@ -135,11 +136,11 @@ und nur dann, wenn die entsprechende Evidence tatsächlich vorhanden ist.
 
 ## 6. Reproduzierbarkeit
 
-### In `0.9.5` zulässig
+### In `0.9.6` zulässig
 
 - „Run-/Seed-Metadaten werden gespeichert.“
 - „Bestimmte deterministische Teilalgorithmen verwenden feste Seeds.“
-- „Die 0.10-Roadmap zielt auf vollständige Manifeste und Replay.“
+- „Ein Run-Manifest und ein Replay-Pfad existieren; vollständige Reproduzierbarkeit ist die 0.10-Roadmap.“
 
 ### Nicht zulässig
 

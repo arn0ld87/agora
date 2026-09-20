@@ -1,7 +1,7 @@
 # Secret- und Key-Lifecycle
 
-**Stand:** 08.09.2026  
-**Geprüfte Main-Baseline:** `0c47737f`  
+**Stand:** 20.09.2026  
+**Geprüfte Main-Baseline:** `b62aea62`  
 **Scope:** Welche Schlüssel Agora besitzt, was sie schützen, wie sie gesichert werden und was bei Verlust passiert.
 
 > [!IMPORTANT]
