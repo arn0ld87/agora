@@ -113,12 +113,17 @@ def _embedder_for_configuration(config: EmbeddingConfiguration) -> EmbedTexts:
 
 
 def _service() -> EmbeddingMigrationService:
+    re_embedder = Neo4jReEmbedder(
+        driver_factory=_neo4j_driver,
+        embedder_factory=_embedder_for_configuration,
+    )
     return EmbeddingMigrationService(
         store=EmbeddingConfigurationStore(),
-        re_embedder=Neo4jReEmbedder(
-            driver_factory=_neo4j_driver,
-            embedder_factory=_embedder_for_configuration,
-        ),
+        re_embedder=re_embedder,
+        # Echte Index-Pruefung vor dem Switch (Slice 2.2, #1417): derselbe
+        # Driver-Factory-Pfad, den die Engine fuer den Re-Embedding-Loop
+        # nutzt.
+        index_validator=re_embedder.index_is_online,
     )
 
 

@@ -563,29 +563,5 @@ class EmbeddingMigrationService:
                 continue
         return jobs
 
-    def _require_connection_id(self, job: EmbeddingMigrationJob) -> str:
-        config = self._store.get_configuration(job.configuration_id)
-        if config is None:
-            raise KeyError(
-                f"Konfiguration fuer Job {job.id} fehlt: {job.configuration_id}"
-            )
-        return config.provider_connection_id
-
-    def _require_model_id(self, job: EmbeddingMigrationJob) -> str:
-        config = self._store.get_configuration(job.configuration_id)
-        if config is None:
-            raise KeyError(
-                f"Konfiguration fuer Job {job.id} fehlt: {job.configuration_id}"
-            )
-        return config.model_id
-
-    def _require_dimensions(self, job: EmbeddingMigrationJob) -> int:
-        config = self._store.get_configuration(job.configuration_id)
-        if config is None:
-            raise KeyError(
-                f"Konfiguration fuer Job {job.id} fehlt: {job.configuration_id}"
-            )
-        return config.dimensions
-
 
 __all__ = ["EmbeddingMigrationService", "ReEmbedder"]
