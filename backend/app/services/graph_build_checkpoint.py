@@ -16,10 +16,17 @@ bleiben. Deshalb liegt die Datei im Projektverzeichnis
 (``ProjectManager._get_project_dir``), nicht unter
 ``ArtifactLocator.run_dir(run_id)``.
 
-Persistenz-Invariante des Repos: Schreibvorgänge sind atomar mit ``fsync``
-(``write_json_atomic``); ein fehlgeschlagener Checkpoint-Schreibvorgang wird
-NICHT geschluckt — er propagiert, damit der Build sichtbar scheitert statt
-unbemerkt ohne Checkpoint weiterzulaufen.
+Das reine Datei-I/O liegt nicht hier, sondern in
+``app/repositories/graph_build_checkpoint_repository.py``: ``app/services``
+darf ``utils.json_io`` nicht direkt importieren (Issue #13, geprüft von
+``tests/test_no_json_io_leakage.py``). Dieses Modul hält die Logik —
+Gültigkeit eines Checkpoints und das daraus abgeleitete
+``resume_capability`` — und reicht die Persistenz an das Repository weiter.
+
+Persistenz-Invariante des Repos: Schreibvorgänge sind atomar mit ``fsync``;
+ein fehlgeschlagener Checkpoint-Schreibvorgang wird NICHT geschluckt — er
+propagiert, damit der Build sichtbar scheitert statt unbemerkt ohne
+Checkpoint weiterzulaufen.
 
 Der Vertrag selbst (``GraphBuildCheckpoint``) liegt unter
 ``app/contracts/graph_build_checkpoint_contract.py`` — analog
@@ -30,17 +37,23 @@ HTTP-API-Grenze überquert und deshalb bewusst nicht in
 """
 from __future__ import annotations
 
-import os
 from collections.abc import Mapping
 from typing import Any, Optional
 
 from ..contracts.graph_build_checkpoint_contract import GraphBuildCheckpoint
-from ..models.project import ProjectManager
-from ..utils.json_io import read_json_file, write_json_atomic
+from ..repositories.graph_build_checkpoint_repository import (
+    CHECKPOINT_FILENAME,
+    clear_checkpoint,
+    load_checkpoint,
+    save_checkpoint,
+)
 
-CHECKPOINT_FILENAME = "graph_build_checkpoint.json"
-
+# Persistenz wird aus dem Repository re-exportiert, damit die bestehenden
+# Aufrufer (graph_build, api/runs, process_shutdown, reconciliation) eine
+# Import-Quelle behalten und nicht zwischen Logik und I/O unterscheiden
+# muessen.
 __all__ = [
+    "CHECKPOINT_FILENAME",
     "GraphBuildCheckpoint",
     "checkpoint_is_resumable",
     "clear_checkpoint",
@@ -49,48 +62,6 @@ __all__ = [
     "resume_capability_for_run",
     "save_checkpoint",
 ]
-
-
-def _checkpoint_path(project_id: str) -> str:
-    return os.path.join(ProjectManager._get_project_dir(project_id), CHECKPOINT_FILENAME)
-
-
-def load_checkpoint(project_id: str) -> Optional[GraphBuildCheckpoint]:
-    """Lädt den persistierten Checkpoint, falls vorhanden und valide.
-
-    Ein defekter/fremdformatiger Checkpoint gilt als "kein Checkpoint"
-    (``None``) — er darf einen Resume-Versuch nicht mit einer
-    ``ValidationError`` zum Absturz bringen; der Aufrufer fällt dann auf
-    den Restart-Pfad zurück.
-    """
-    raw = read_json_file(_checkpoint_path(project_id))
-    if raw is None:
-        return None
-    try:
-        return GraphBuildCheckpoint.model_validate(raw)
-    except Exception:  # noqa: BLE001 — defekter Checkpoint faellt auf "kein Checkpoint" zurueck
-        return None
-
-
-def save_checkpoint(project_id: str, checkpoint: GraphBuildCheckpoint) -> None:
-    """Schreibt den Checkpoint atomar mit fsync.
-
-    Ein I/O-Fehler propagiert unverändert (keine Auffangbehandlung hier) —
-    das ist Absicht: der aufrufende Build-Loop soll sichtbar scheitern statt
-    unbemerkt ohne aktuellen Checkpoint weiterzulaufen.
-    """
-    write_json_atomic(_checkpoint_path(project_id), checkpoint.model_dump(mode="json"))
-
-
-def clear_checkpoint(project_id: str) -> None:
-    """Entfernt den Checkpoint nach erfolgreichem Abschluss oder explizitem Restart.
-
-    Best effort — ein bereits fehlendes File ist kein Fehler.
-    """
-    try:
-        os.remove(_checkpoint_path(project_id))
-    except FileNotFoundError:
-        pass
 
 
 def checkpoint_is_resumable(
