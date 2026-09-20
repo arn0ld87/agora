@@ -123,7 +123,7 @@ class GraphBuildService:
         text: str,
         chunk_size: int,
         chunk_overlap: int,
-    ) -> tuple[list[str], list[str | None], list[int | None], bool]:
+    ) -> tuple[list[str], list[str | None] | None, list[int | None] | None, bool]:
         """Zerlegt den extrahierten Text eines Projekts deterministisch in Chunks.
 
         Ausgelagert aus ``build_task`` (Issue #1472b): ein Resume-Versuch
@@ -153,7 +153,14 @@ class GraphBuildService:
             return chunks, document_ids, chunk_ids, True
 
         chunks = TextProcessor.split_text(text, chunk_size=chunk_size, overlap=chunk_overlap)
-        return chunks, [None] * len(chunks), [None] * len(chunks), False
+        # Bewusst ``None`` (nicht ``[None] * len(chunks)``) — identisch zum
+        # vorherigen Inline-Code, byte-genau dasselbe Argument, mit dem
+        # ``add_text_batches`` schon immer für Altprojekte ohne Sidecar
+        # aufgerufen wurde. ``resume_graph_build`` normalisiert diesen Fall
+        # selbst auf eine indexierbare Liste, wo es das für den Chunk-Skip
+        # braucht — kein Grund, den etablierten Aufruf-Vertrag hier zu
+        # ändern.
+        return chunks, None, None, False
 
     @classmethod
     def generate_ontology(

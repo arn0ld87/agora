@@ -479,30 +479,35 @@ def _resume_or_restart_graph_build(run: dict):
 
     text = ProjectManager.get_extracted_text(project_id)
     graph_id = (run.get("linked_ids") or {}).get("graph_id")
-    checkpoint = load_checkpoint(project_id) if text and graph_id else None
 
-    if checkpoint is not None:
-        chunk_size = project.chunk_size or Config.DEFAULT_CHUNK_SIZE
-        chunk_overlap = project.chunk_overlap or Config.DEFAULT_CHUNK_OVERLAP
-        chunks, document_ids, chunk_ids, manifest_anchored = GraphBuildService.chunk_project_text(
-            project_id, text, chunk_size, chunk_overlap
-        )
-        if checkpoint_is_resumable(
-            checkpoint,
-            graph_id=graph_id,
-            total_chunks=len(chunks),
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
-            manifest_anchored=manifest_anchored,
-        ):
-            return _resume_graph_build(
-                run,
-                checkpoint,
-                chunks=chunks,
-                document_ids=document_ids,
-                chunk_ids=chunk_ids,
-                manifest_anchored=manifest_anchored,
+    # ``text and graph_id`` als Bedingung UM den ganzen Block (statt separat
+    # in einer Inline-Ternary vor ``if checkpoint is not None``) narrowt
+    # ``text`` innerhalb des Blocks strukturell auf ``str`` — mypy kann die
+    # Beziehung zwischen zwei unabhängigen Variablen sonst nicht verfolgen.
+    if text and graph_id:
+        checkpoint = load_checkpoint(project_id)
+        if checkpoint is not None:
+            chunk_size = project.chunk_size or Config.DEFAULT_CHUNK_SIZE
+            chunk_overlap = project.chunk_overlap or Config.DEFAULT_CHUNK_OVERLAP
+            chunks, document_ids, chunk_ids, manifest_anchored = GraphBuildService.chunk_project_text(
+                project_id, text, chunk_size, chunk_overlap
             )
+            if checkpoint_is_resumable(
+                checkpoint,
+                graph_id=graph_id,
+                total_chunks=len(chunks),
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                manifest_anchored=manifest_anchored,
+            ):
+                return _resume_graph_build(
+                    run,
+                    checkpoint,
+                    chunks=chunks,
+                    document_ids=document_ids,
+                    chunk_ids=chunk_ids,
+                    manifest_anchored=manifest_anchored,
+                )
 
     return _restart_graph_build(run)
 

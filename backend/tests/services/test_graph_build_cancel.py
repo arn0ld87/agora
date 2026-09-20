@@ -261,6 +261,7 @@ class _FakeBuilder:
         document_ids,
         chunk_ids,
         run_id,
+        checkpoint_callback,
     ):
         self.add_text_batches_called = True
         if self._cancel_effect is not None:
