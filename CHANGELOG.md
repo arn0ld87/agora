@@ -3,6 +3,8 @@
 Alle nennenswerten Änderungen an Agora werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [Unreleased]
+
 ### Documentation (Zwei neue Referenzläufe, der aktuelle zweisprachig — 2026-08-11)
 
 - **Der Referenzpfad zeigte bisher nur die Domainmigration, in zwei Varianten derselben Domäne:** Damit ließ sich nicht unterscheiden, welche Befunde am Testfall hingen und welche am System. Zwei neue Referenzläufe in einer anderen Domäne sind jetzt dokumentiert — Einführung eines selbstgehosteten KI-Lernassistenten bei einem AZAV-zertifizierten Umschulungsträger.
