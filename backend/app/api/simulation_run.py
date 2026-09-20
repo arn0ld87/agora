@@ -515,19 +515,23 @@ def _resolve_start_route(run_id: str, llm_runtime: RuntimeLlmConfig):
     route_router.lock_stage("simulation_rounds", resolved_route)
     resolved_api_key = resolve_route_api_key(resolved_route, llm_runtime)
 
-    # Issue #1423: Ein CLI-Provider (codex_cli, transport="cli") hat per
-    # Definition keinen api_key — er authentifiziert über die lokale
+    # Issue #1423: Ein Session-Provider (codex_cli, auth_mode="session") hat
+    # per Definition keinen api_key — er authentifiziert über die lokale
     # ``codex login``-Session. ``is_local_endpoint(None)`` ist ``False``,
     # deshalb hätte der Guard darunter jeden codex_cli-Start mit 422
     # abgelehnt, bevor der Subprozess überhaupt startet.
+    #
+    # Die Ausnahme hängt am ``auth_mode``, nicht am ``transport``: ``claude_cli``
+    # ist ebenfalls ``transport="cli"``, braucht aber einen echten Token. Für
+    # ihn muss der Guard greifen, sonst startet der Lauf ohne Anmeldung und
+    # scheitert erst im Subprozess.
     from ..services.llm_provider_registry import LlmProviderRegistry
 
-    definition = LlmProviderRegistry.connection_definition(resolved_route.provider_id)
-    is_cli_transport = definition is not None and definition.transport == "cli"
+    is_session_auth = LlmProviderRegistry.uses_session_auth(resolved_route.provider_id)
 
     if (
         resolved_api_key is None
-        and not is_cli_transport
+        and not is_session_auth
         and not is_local_endpoint(resolved_route.base_url_sanitized)
     ):
         # Fallback-422 für Workspace-Default-Fälle (kein Frontend-Override).

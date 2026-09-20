@@ -604,6 +604,60 @@ def test_resolve_prepare_route_accepts_cli_session_without_http_key(app_ctx, mon
     assert runtime.base_url is None
 
 
+def _claude_cli_route():
+    return ResolvedRoute(
+        stage="persona_generation", provider_id="claude_cli", model="sonnet",
+        base_url_sanitized=None, routing_version=3,
+    )
+
+
+def test_resolve_prepare_route_resolves_token_for_cli_provider_with_api_key_auth(
+    app_ctx, monkeypatch
+):
+    """``transport="cli"`` heisst nicht ``auth_mode="session"``.
+
+    ``claude_cli`` spricht kein HTTP, traegt aber einen echten Langzeit-Token
+    im Secret-Store (``claude setup-token``), der als Env-Variable an den
+    Subprozess geht. Wer hier auf den Transport statt auf den auth_mode
+    verzweigt, verwirft diesen Token — und jede Prepare-Phase, die die daraus
+    gebaute Runtime weiterreicht, scheitert spaeter mit
+    ``LLM_API_KEY not configured``, obwohl der Graph-Build mit derselben
+    Verbindung laeuft.
+    """
+    route = _claude_cli_route()
+    router = _patch_router(monkeypatch, route)
+    key_resolver = MagicMock(return_value="claude-oauth-token")
+    monkeypatch.setattr(mod, "resolve_route_api_key", key_resolver)
+
+    resolved, api_key = mod._resolve_prepare_route({"run_id": "run-claude"}, RuntimeLlmConfig())
+
+    assert resolved is route
+    assert api_key == "claude-oauth-token"
+    key_resolver.assert_called_once()
+    router.lock_stage.assert_called_once_with("persona_generation", route)
+    runtime = mod.build_runtime_llm_config(resolved, api_key)
+    assert runtime.provider == "claude_cli"
+    assert runtime.api_key == "claude-oauth-token"
+    assert runtime.base_url is None
+
+
+def test_resolve_prepare_route_rejects_cli_api_key_provider_without_token(
+    app_ctx, monkeypatch
+):
+    """Fehlender Token wird vor dem Lauf abgelehnt, nicht erst im Subprozess."""
+    _patch_router(monkeypatch, _claude_cli_route())
+    monkeypatch.setattr(mod, "resolve_route_api_key", lambda _route, _runtime: None)
+    registry = MagicMock()
+    monkeypatch.setattr(mod, "run_registry", registry)
+
+    with pytest.raises(mod._PrepareRejected) as excinfo:
+        mod._resolve_prepare_route({"run_id": "run-claude"}, RuntimeLlmConfig())
+
+    assert _status(excinfo) == 422
+    assert "claude_cli" in _body(excinfo)["error"]
+    registry.update_run.assert_not_called()
+
+
 @pytest.mark.parametrize("provider_id", ["openai", "unknown-provider"])
 def test_resolve_prepare_route_missing_url_does_not_imply_cli(app_ctx, monkeypatch, provider_id):
     route = ResolvedRoute(

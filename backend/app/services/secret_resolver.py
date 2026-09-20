@@ -8,7 +8,8 @@ Resolution order:
   2. Persistenter Fernet-encrypted Store (vom Frontend befüllt)
   3. Provider-spezifische Environment-Variablen (mit Format-Sanity-Check)
   4. Globaler Fallback (Config.LLM_API_KEY) — nur für Provider ohne striktes
-     Format oder wenn der Wert das erwartete Format trifft
+     Format oder wenn der Wert das erwartete Format trifft, und nie für
+     Provider mit CLI-Transport (siehe unten)
 
 Format-Sanity-Check (Track 1 Hardening, siehe ``backend/CLAUDE.md`` /
 ``docs/runbooks/architecture-layers.md``): ENV- und Config-Fallback-Werte
@@ -23,6 +24,12 @@ Provider-spezifische ENV-Mapping:
   * ``ollama_cloud``      → ``OLLAMA_API_KEY``         (Bearer, kein striktes Format)
   * ``openai_compatible`` → ``LLM_API_KEY``            (kein striktes Format)
   * ``github_copilot``    → eigene Auflösung über ``llm_providers.github_copilot``
+  * ``claude_cli``        → ``CLAUDE_CODE_OAUTH_TOKEN``, ohne globalen Fallback
+
+Provider mit CLI-Transport (``claude_cli``, ``codex_cli``) reichen den
+aufgelösten Wert als Umgebungsvariable an einen Subprozess weiter. Für sie
+endet die Auflösung nach Schritt 3: ein Key eines anderen Providers wäre dort
+nicht nur nutzlos, sondern ein Secret über Provider-Grenzen hinweg.
 
 Ollama-Cloud-Auth-Doku: ``~/.agents/skills/ollama-cloud-models/SKILL.md`` (v2).
 Zwei Modi: **Direct API** (``https://ollama.com`` nativ oder ``/v1``
@@ -39,6 +46,7 @@ from typing import Optional, Dict
 
 from ..config import Config
 from ..contracts import (
+    PROVIDER_CLAUDE_CLI,
     PROVIDER_GOOGLE,
     PROVIDER_OLLAMA_CLOUD,
     PROVIDER_OPENAI,
@@ -93,6 +101,19 @@ def _format_valid(value: Optional[str], provider_type: str) -> bool:
     if provider_type == PROVIDER_GOOGLE:
         return bool(_GOOGLE_KEY_RE.match(v))
     return True
+
+
+def _uses_cli_transport(provider_type: str) -> bool:
+    """Ob der Provider seinen Key an einen Subprozess weiterreicht.
+
+    Die Auskunft kommt aus der Provider-Matrix, damit hier keine zweite Liste
+    der CLI-Provider entsteht. Der Import ist lokal, weil die Registry ihre
+    Definitionen erst zur Laufzeit aufbaut.
+    """
+    from .llm_provider_registry import LlmProviderRegistry
+
+    definition = LlmProviderRegistry.connection_definition(provider_type)
+    return definition is not None and definition.transport == "cli"
 
 
 def _mask_for_log(value: Optional[str]) -> str:
@@ -201,6 +222,49 @@ class SecretResolver:
             logger.warning("Secret-Store-Zugriff fehlgeschlagen, fallback auf env: %s", exc)
 
         # 3. Provider-spezifische Environment-Variablen (mit Format-Sanity-Check)
+        if provider_type == PROVIDER_GITHUB_COPILOT:
+            # GitHub Copilot: Token-Auflösung über separates Modul (Slice B).
+            return self._resolve_copilot_token()
+
+        env_key = self._resolve_from_env(provider_type)
+        if env_key is not None:
+            return env_key
+
+        # 3b. CLI-Transport endet hier — ohne globalen Fallback.
+        #
+        # Der aufgelöste Wert geht bei diesen Providern als Umgebungsvariable in
+        # einen Subprozess (``CLAUDE_CODE_OAUTH_TOKEN`` für ``claude_cli``). Ein
+        # Key eines anderen Providers wäre dort nicht nur nutzlos, sondern ein
+        # Secret über Provider-Grenzen hinweg: ``Config.LLM_API_KEY`` ist in
+        # vielen Installationen gesetzt (OpenAI, MiniMax, Ollama), passiert den
+        # generischen Zweig unten und landete als Claude-Token in einem fremden
+        # Prozess. Fehlt der eigene Token, ist ``None`` die richtige Antwort —
+        # die Guards der aufrufenden Routen lehnen den Lauf dann sichtbar ab.
+        if _uses_cli_transport(provider_type):
+            return None
+
+        # 4. Globaler Fallback Config.LLM_API_KEY
+        return self._resolve_global_fallback(provider_type)
+
+    def _resolve_copilot_token(self) -> Optional[str]:
+        """GitHub Copilot löst sein Token über ein eigenes Modul auf."""
+        try:
+            from .llm_providers.github_copilot import resolve_copilot_token
+        except ImportError:
+            return None
+        token = resolve_copilot_token()
+        if token:
+            self.last_source = "github_copilot"
+        return token
+
+    def _resolve_from_env(self, provider_type: str) -> Optional[str]:
+        """Schritt 3: provider-eigene ENV-Variablen mit Format-Sanity-Check.
+
+        Gibt ``None`` zurück, wenn der Provider keine eigene Variable hat, sie
+        nicht gesetzt ist oder ihr Wert das erwartete Format verfehlt. Die
+        Entscheidung, ob danach noch ein globaler Fallback greifen darf, liegt
+        beim Aufrufer — für CLI-Provider darf er es nicht.
+        """
         env_candidates: list[tuple[str, Optional[str]]] = []
         if provider_type == PROVIDER_OPENAI:
             env_candidates.append(("env:OPENAI_API_KEY", os.environ.get("OPENAI_API_KEY")))
@@ -211,16 +275,10 @@ class SecretResolver:
             env_candidates.append(("env:OLLAMA_API_KEY", os.environ.get("OLLAMA_API_KEY")))
         elif provider_type == PROVIDER_OPENAI_COMPATIBLE:
             env_candidates.append(("env:LLM_API_KEY", os.environ.get("LLM_API_KEY")))
-        elif provider_type == PROVIDER_GITHUB_COPILOT:
-            # GitHub Copilot: Token-Auflösung über separates Modul (Slice B).
-            try:
-                from .llm_providers.github_copilot import resolve_copilot_token
-            except ImportError:
-                return None
-            token = resolve_copilot_token()
-            if token:
-                self.last_source = "github_copilot"
-            return token
+        elif provider_type == PROVIDER_CLAUDE_CLI:
+            env_candidates.append(
+                ("env:CLAUDE_CODE_OAUTH_TOKEN", os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"))
+            )
 
         for source_label, candidate in env_candidates:
             if candidate is None:
@@ -236,8 +294,13 @@ class SecretResolver:
                 provider_type,
                 _mask_for_log(candidate),
             )
+        return None
 
-        # 4. Globaler Fallback Config.LLM_API_KEY
+    def _resolve_global_fallback(self, provider_type: str) -> Optional[str]:
+        """Schritt 4: ``Config.LLM_API_KEY`` als letzte Quelle.
+
+        Nur für HTTP-Provider erreichbar; CLI-Provider enden vorher.
+        """
         fallback = Config.LLM_API_KEY
         if fallback:
             if provider_type in (PROVIDER_OPENAI, PROVIDER_GOOGLE):

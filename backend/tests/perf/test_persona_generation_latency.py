@@ -233,14 +233,13 @@ def test_generate_profiles_from_entities_resolves_parallel_count_from_env(
 
     monkeypatch.setenv('AGORA_PARALLEL_PERSONA_COUNT', '7')
 
-    # OasisProfileGenerator benötigt LLM_API_KEY + OpenAI-Client im __init__.
-    # Wir patchen OpenAI weg, damit kein echter HTTP-Call stattfindet.
-    with patch('app.services.oasis_profile_generator.OpenAI'):
-        generator = OasisProfileGenerator(
-            api_key='dummy-key',
-            base_url='http://localhost:11434/v1',
-            model_name='qwen2.5:14b',
-        )
+    # OasisProfileGenerator benötigt einen api_key im __init__, baut dort aber
+    # keinen Client mehr — es gibt nichts wegzupatchen.
+    generator = OasisProfileGenerator(
+        api_key='dummy-key',
+        base_url='http://localhost:11434/v1',
+        model_name='qwen2.5:14b',
+    )
 
     # generate_profile_from_entity ist der eigentliche LLM-Pfad — patchen.
     fake_profile = MagicMock()
