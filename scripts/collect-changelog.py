@@ -33,6 +33,24 @@ def _sort_key(p: Path) -> tuple[int, str]:
     return (int(m.group(1)) if m else -1, p.name)
 
 
+_FRAGMENT_RELATIVE_LINK = re.compile(r"\]\(\.\./")
+
+
+def _rewrite_fragment_links(body: str) -> str:
+    """Macht fragment-relative Links gueltig fuer die Repo-Wurzel.
+
+    Ein Fragment liegt in ``changelog.d/`` und verlinkt von dort aus, also
+    etwa ``[…](../docs/plans/supabase.md)``. Nach dem Einsammeln steht
+    derselbe Text in ``CHANGELOG.md`` in der Repo-Wurzel — ``../docs/…``
+    zeigt dann aus dem Repository hinaus und laeuft ins Leere.
+
+    Eine Ebene hoch ab Wurzel gibt es nicht, deshalb ist das Entfernen des
+    ``../`` die vollstaendige Korrektur; alle anderen Linkformen (absolute
+    URLs, Anker, wurzel-relative Pfade) bleiben unberuehrt.
+    """
+    return _FRAGMENT_RELATIVE_LINK.sub("](", body)
+
+
 def fragments() -> list[Path]:
     if not FRAGMENT_DIR.is_dir():
         return []
@@ -68,7 +86,7 @@ def main() -> int:
     blocks = []
     empty = []
     for p in frags:
-        body = p.read_text(encoding="utf-8").strip()
+        body = _rewrite_fragment_links(p.read_text(encoding="utf-8").strip())
         if body:
             blocks.append(body)
         else:

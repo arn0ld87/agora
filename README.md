@@ -12,7 +12,7 @@
 
 **Documents → Knowledge Graph → Personas → Simulation → auditable report**
 
-[![Version](https://img.shields.io/badge/version-0.9.5-635BFF?style=flat-square)](./VERSION)
+[![Version](https://img.shields.io/badge/version-0.9.6-635BFF?style=flat-square)](./VERSION)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-111827?style=flat-square)](./LICENSE)
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21830644-1682D4?style=flat-square)](https://doi.org/10.5281/zenodo.21830644)
 [![Python](https://img.shields.io/badge/Python-3.14-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -95,13 +95,13 @@ Supported transport classes are:
 
 | Transport | Meaning | Example |
 |---|---|---|
-| `http` | remote or local HTTP API | OpenAI, Gemini, MiniMax, Bedrock Mantle |
+| `http` | remote or local HTTP API | OpenAI, Anthropic, Gemini, MiniMax, Amazon Bedrock (Mantle) |
 | `local` | local HTTP service without API-key auth | Ollama |
-| `cli` | local authenticated CLI subprocess | Codex CLI |
+| `cli` | local authenticated CLI subprocess | Codex CLI, Claude Code CLI |
 
-`codex_cli` is a first-class session transport: no HTTP base URL and no API key are expected. See [`docs/provider-runtime-settings.md`](./docs/provider-runtime-settings.md) for the current routing model.
+`codex_cli` (ChatGPT subscription) is a first-class session transport: no HTTP base URL and no API key are expected. `claude_cli` (Claude subscription, [#1531](https://github.com/arn0ld87/agora/issues/1531)) runs the local Claude Code CLI in a subprocess with an isolated `HOME` per call and authenticates via a long-lived `claude setup-token` (`CLAUDE_CODE_OAUTH_TOKEN`) held in the encrypted secret store. Amazon Bedrock ([#1282](https://github.com/arn0ld87/agora/issues/1282)) talks the OpenAI-compatible Bedrock Mantle endpoint (region `eu-central-1` by default) via a bearer API key, not boto3/SigV4. See [`docs/provider-runtime-settings.md`](./docs/provider-runtime-settings.md) for the current routing model.
 
-Embedding configuration is intentionally separate from chat routing. A known runtime SSoT gap is tracked in [#1417](https://github.com/arn0ld87/agora/issues/1417).
+Embedding configuration is intentionally separate from chat routing. Read/write paths now resolve their index and property names canonically through the store, and the migration cutover only activates a new index version after a verified re-embedding pass; [#1417](https://github.com/arn0ld87/agora/issues/1417) is not fully closed yet (remaining: a `VECTOR_DIM` SSoT slice, a legacy view for existing graphs, and a frontend Zod mirror for the new `building` status).
 
 ## Architecture
 
@@ -126,12 +126,16 @@ graph TD
 | Backend | Flask, Python 3.14, Pydantic v2, `uv` |
 | Contracts | Pydantic → generated JSON schemas → Zod mirrors |
 | Knowledge graph | Neo4j 5.18+ |
-| Event / live state | Redis |
+| Event / live state | Redis 8 |
 | Simulation | OASIS / CAMEL in a separate subprocess |
 | LLM layer | ProviderConnection, AiRoute/LlmRoute, `LLMClient` |
 | Report | evidence collection, claim gates, degradation model, exports |
 
-Production Gunicorn intentionally runs with **one web worker** while process-local job/monitor state still exists. Increasing the worker count is not a harmless performance setting.
+Production Gunicorn intentionally runs with **one web worker** while process-local job/monitor state still exists — quantified in ADR-0015: the non-relocatable part is OS-level handles (`Popen` objects, in-process queues, open file descriptors) inside `SimulationRunner`, which only a persisted job queue with dedicated workers ([#1472](https://github.com/arn0ld87/agora/issues/1472)) can move. Increasing the worker count is not a harmless performance setting.
+
+A SQLAlchemy/Alembic-backed PostgreSQL layer exists alongside the file/JSON/SQLite stores (self-hosted Supabase as an optional Compose overlay). Exactly two stores have a Postgres adapter behind a repository port: **project metadata** and **LLM profile metadata**. Provider secrets have none — they stay in the file-backed Fernet store. It is **opt-in per store** and does not change the default: `AGORA_METADATA_BACKEND`, `AGORA_LLM_PROFILE_BACKEND`, and `AGORA_PROJECT_BACKEND` all default to the existing file/SQLite path. Agora is not "on PostgreSQL"; the JSON/file stores remain the shipped default.
+
+One caveat that the opt-in hides: with the **default** `SqliteLlmProfileRepository`, profile API keys are stored **in plaintext** in the `api_key` column of `instance/llm_profiles.db` (`backend/app/services/llm_profiles_store.py`). Only the Postgres adapter keeps them in the Fernet-backed `LlmProfileSecretsStore`. Treat that file as a secret.
 
 For the actual architecture and its remaining debts, see [`docs/architecture.md`](./docs/architecture.md) and [`docs/STATUS.md`](./docs/STATUS.md).
 
@@ -188,14 +192,14 @@ Default service endpoints:
 
 ## Current status
 
-**Current product version:** `0.9.5` Stability Beta.
+**Current product version:** `0.9.6` Stability Beta.
 
 The exact verified state, recent test evidence, known gaps, and current baseline are maintained in [`docs/STATUS.md`](./docs/STATUS.md). Release priorities and 0.10/1.0 gates are maintained in [`ROADMAP.md`](./ROADMAP.md). This README deliberately avoids embedding fast-aging test counters.
 
 The main pre-1.0 work is currently concentrated on:
 
 - restart-safe long-running Prepare/Report/Graph jobs ([#1472](https://github.com/arn0ld87/agora/issues/1472)),
-- one canonical embedding runtime configuration ([#1417](https://github.com/arn0ld87/agora/issues/1417)),
+- closing the remaining embedding runtime SSoT pieces — `VECTOR_DIM`, a legacy view, the frontend `building`-status mirror ([#1417](https://github.com/arn0ld87/agora/issues/1417)),
 - persona/entity coherence and role consistency ([#1470](https://github.com/arn0ld87/agora/issues/1470), [#1471](https://github.com/arn0ld87/agora/issues/1471), [#1323](https://github.com/arn0ld87/agora/issues/1323)),
 - simulation fidelity and recommender reproducibility ([#1236](https://github.com/arn0ld87/agora/issues/1236)),
 - stronger evidence semantics and clean evaluation fixtures ([#1345](https://github.com/arn0ld87/agora/issues/1345), [#1240](https://github.com/arn0ld87/agora/issues/1240)),
@@ -204,7 +208,7 @@ The main pre-1.0 work is currently concentrated on:
 
 ### Reproducibility boundary
 
-Agora stores run and simulation metadata, including seed-related fields, but the current system **does not yet guarantee that the same stored seed reproduces the same experiment**. Full reproducibility requires all relevant random sources, prompts, inputs, routes, model responses, and feature flags to be frozen or recorded. That is 0.10 work, not a claim made by 0.9.5.
+A structural `RunManifest` and a replay dialog exist, and reports and simulations record seed-related fields. That is not the same as a guarantee: the manifest is not yet a complete reproduction anchor. Prompt snapshots, seed-document hashing, real RNG wiring, and full replay parameters are still open ([#1274](https://github.com/arn0ld87/agora/issues/1274)). The current system **does not yet guarantee that the same stored seed reproduces the same experiment**. Full reproducibility requires all relevant random sources, prompts, inputs, routes, model responses, and feature flags to be frozen or recorded ([#763](https://github.com/arn0ld87/agora/issues/763)). That is 0.10 work, not a claim made by 0.9.6.
 
 ## Reference run
 

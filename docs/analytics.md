@@ -1,7 +1,7 @@
 # Netzwerk-Analytik
 
-**Stand:** 08.09.2026  
-**Geprüfte Main-Baseline:** `0c47737f`  
+**Stand:** 20.09.2026  
+**Geprüfte Main-Baseline:** `b62aea62`  
 **Code:** `backend/app/services/network_analytics.py` · `GET /api/simulation/<id>/metrics`
 
 Die Netzwerk-Analytik beschreibt Strukturen **innerhalb eines konkreten synthetischen Simulationslaufs**. Sie misst weder reale öffentliche Meinung noch macht sie einen Agora-Lauf insgesamt reproduzierbar.

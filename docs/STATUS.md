@@ -1,8 +1,8 @@
 # Agora — Status
 
-**Stand:** 08.09.2026  
-**Geprüfte Main-Baseline:** `0c47737f`  
-**Produktversion:** `0.9.5` Stability Beta
+**Stand:** 20.09.2026  
+**Geprüfte Main-Baseline:** `b62aea62`  
+**Produktversion:** `0.9.6` (Zwischenrelease, Stability Beta)
 
 Diese Datei ist die **Single Source of Truth für den verifizierten Istzustand**. Strategische Release-Ziele stehen in [`ROADMAP.md`](../ROADMAP.md), konkrete Arbeitspakete und Akzeptanzkriterien in [GitHub Issues](https://github.com/arn0ld87/agora/issues), ausgelieferte Änderungen in [`changelog.d/`](../changelog.d/README.md). Historische Audits, Pläne und Referenzläufe behalten ihren damaligen Stand und sind keine aktuelle Steuerungsquelle.
 
@@ -10,7 +10,9 @@ Diese Datei ist die **Single Source of Truth für den verifizierten Istzustand**
 
 Agora besitzt eine vollständige Single-User-Pipeline von Dokumentaufnahme und Knowledge Graph über Persona-Erzeugung und OASIS/CAMEL-Simulation bis zu evidenzorientiertem Report, Vergleich und Export. Die Stabilisierung der 0.9.x-Linie hat insbesondere Contracts, Run-Lifecycle, Crash-/Restart-Verhalten, Budgetdurchsetzung, Installationspfade und Evidence-Persistenz deutlich gehärtet.
 
-`0.9.5` ist trotzdem **keine 1.0-Freigabe**. Die größten verbleibenden Release-Risiken liegen heute nicht mehr in der grundsätzlichen Web-App-Funktionalität, sondern in Job-Recovery außerhalb der OASIS-Simulation, Embedding-Konfigurations-SSoT, vollständiger Reproduzierbarkeit, Simulationstreue und externer Produktvalidierung.
+Die `0.9.x`-Linie ist trotzdem **keine 1.0-Freigabe**. Die größten verbleibenden Release-Risiken liegen heute nicht mehr in der grundsätzlichen Web-App-Funktionalität, sondern in Job-Recovery außerhalb der OASIS-Simulation, Embedding-Konfigurations-SSoT, vollständiger Reproduzierbarkeit, Simulationstreue und externer Produktvalidierung.
+
+**`0.9.6`-Linie (20.09.2026, über 330 Commits/184 Changelog-Fragmente seit `v0.9.5`):** ein Zwischenrelease, ausdrücklich **kein** `0.10.0` und ohne dessen Release-Gates. Neu dazugekommen sind vier LLM-Provider (inklusive `codex_cli` und `claude_cli` als CLI-/Session-Transporte sowie Amazon Bedrock), eine PostgreSQL-Schicht parallel zu den bestehenden JSON-/SQLite-Stores (gebaut, per Default nicht aktiv), ein zehnteiliges UI-Redesign, ein atomar geschriebenes Run-Manifest mit Replay-Grundlage sowie weitere Evidence-/Budget-/Restart-Härtung. Die fünf oben genannten Release-Risiken sind dadurch **teilweise**, nicht vollständig bearbeitet — Details je Punkt in [`docs/agents/release-priority.md`](agents/release-priority.md) und im Abschnitt „0.10-Blocker aus heutiger Sicht" unten.
 
 ## Versionsstatus
 
@@ -19,9 +21,9 @@ Agora besitzt eine vollständige Single-User-Pipeline von Dokumentaufnahme und K
 <!-- BEGIN_AUTOGEN_VERSIONS -->
 | Komponente | Pfad | Version |
 |---|---|---|
-| Backend | `backend/pyproject.toml` | 0.9.5 |
-| Frontend | `frontend/package.json` | 0.9.5 |
-| Root | `package.json` | 0.9.5 |
+| Backend | `backend/pyproject.toml` | 0.9.6 |
+| Frontend | `frontend/package.json` | 0.9.6 |
+| Root | `package.json` | 0.9.6 |
 <!-- END_AUTOGEN_VERSIONS -->
 
 Die README-Badges müssen denselben Wert tragen. Der Versions-Cut ist in [`runbooks/release-versioning.md`](runbooks/release-versioning.md) beschrieben.
@@ -104,11 +106,13 @@ Die 0.9.5-Stabilisierung hat mehrere vorher stille Zustandsfehler geschlossen:
 
 ### Bekannte Lifecycle-Grenze
 
-Prepare-, Report- und Graph-Build-Jobs laufen weiterhin als daemonisierte Threads im Webprozess. Beendet sich der Worker regulär — etwa nach SIGTERM —, markiert ein `atexit`-Hook die Jobs dieses Prozesses noch im selben Lauf als `failed/process_restart` (Slice 1.1, #1472a), statt auf die Startup-Reconciliation beim nächsten Start zu warten. Das Cancel-Flag wird kooperativ gesetzt.
+Prepare-, Report- und Graph-Build-Jobs laufen weiterhin als daemonisierte Threads im Webprozess. Beendet sich der Worker regulär — etwa nach SIGTERM —, markiert ein `atexit`-Hook die Jobs dieses Prozesses noch im selben Lauf als `failed/process_restart` (Slice 1.1 aus #1472), statt auf die Startup-Reconciliation beim nächsten Start zu warten. Das Cancel-Flag wird kooperativ gesetzt.
 
-Für `simulation_prepare` ist das seit Slice 1.4 (#1472c) differenzierter: liegt beim Abbruch bereits ein Checkpoint mit mindestens einem generierten Persona-Profil vor (`backend/app/services/prepare_checkpoint.py`), landet der `SimulationState` auf dem neuen Status `INTERRUPTED` statt `FAILED`, und ein erneuter `prepare`-Aufruf setzt die Persona-Generierung fort — die beim Original-Versuch getroffene Cap-/Quota-Auswahl wird dabei **nicht neu berechnet** (der Graph-Lesepfad hat kein `ORDER BY` und könnte sonst driften), sondern per Entity-UUID aus dem Checkpoint übernommen. Ohne verwertbaren Zwischenstand bleibt es beim bisherigen `FAILED`. `report_generate` und `graph_build` haben (noch) keinen Checkpoint — dort bleibt es bei `FAILED` ohne Resume-Angebot.
+Für **Graph-Build** ist die zweite Grenze aus Slice 1.1 seit Slice 1.3 (#1472b) geschlossen: `GraphBuilderService.add_text_batches` schreibt nach jedem committeten Chunk einen `GraphBuildCheckpoint` (Menge bereits abgeschlossener Chunk-Indizes, nicht nur ein Höchstwert-Cursor — die Chunks laufen parallel und schließen außerhalb ihrer Ursprungsreihenfolge ab) atomar ins Projektverzeichnis. `POST /api/runs/<id>/resume` verarbeitet bei einem passenden Checkpoint (gleicher Graph, gleiche Chunk-Größe/-Overlap/-Methode) nur noch die fehlenden Chunks, statt neu zu beginnen; `resume_capability` zeigt das jetzt auch für den SIGTERM- und den Startup-Reconciliation-Pfad korrekt an, nicht nur für einen In-Process-Fehlschlag. Passt der Checkpoint nicht mehr, fällt die Route sauber auf einen vollen Restart zurück.
 
-Drei Grenzen, damit daraus keine falsche Zusage wird: Die Terminalisierung passiert **nicht** im Signal-Handler, sondern beim Interpreter-Shutdown — wird der Worker nach Ablauf von `graceful_timeout` per SIGKILL beendet, greift weiterhin nur die Startup-Reconciliation (die dieselbe Checkpoint-Prüfung nutzt). Der Prepare-Checkpoint deckt nur die parallele Hauptgenerierung ab, nicht die sequenzielle Reject-Backfill-Nachbesetzung danach — wird der Prozess mitten in der Backfill-Phase beendet, generiert ein Resume die offenen Slots erneut. Und eine Heartbeat-/Lease-Mechanik, die einen verwaisten (per SIGKILL beendeten) In-Process-Job zuverlässig von einem noch laufenden unterscheidet, existiert weiterhin nicht (Slice 1.5, #1472d, offen); #1472 als Ganzes (Job-Queue mit eigenen Out-of-Process-Workern) bleibt offen. Der Redis-Event-Bus ist **keine persistente Jobqueue**.
+Für **`simulation_prepare`** gilt seit Slice 1.4 (#1472c) dasselbe Prinzip mit eigener Mechanik: liegt beim Abbruch bereits ein Checkpoint mit mindestens einem generierten Persona-Profil vor (`backend/app/services/prepare_checkpoint.py`), landet der `SimulationState` auf dem neuen Status `INTERRUPTED` statt `FAILED`, und ein erneuter `prepare`-Aufruf setzt die Persona-Generierung fort. Die beim Original-Versuch getroffene Cap-/Quota-Auswahl wird dabei **nicht neu berechnet** — der Graph-Lesepfad hat kein `ORDER BY` und könnte sonst eine andere Typ-Verteilung liefern —, sondern per Entity-UUID aus dem Checkpoint übernommen. Ohne verwertbaren Zwischenstand bleibt es beim bisherigen `FAILED`. **`report_generate`** hat weiterhin keinen Checkpoint; dort bleibt es bei `FAILED` ohne Resume-Angebot.
+
+Drei Grenzen, damit daraus keine falsche Zusage wird: Die Terminalisierung passiert **nicht** im Signal-Handler, sondern beim Interpreter-Shutdown — wird der Worker nach Ablauf von `graceful_timeout` per SIGKILL beendet, greift weiterhin nur die Startup-Reconciliation (die dieselbe Checkpoint-Prüfung nutzt). Der Prepare-Checkpoint deckt nur die parallele Hauptgenerierung ab, nicht die sequenzielle Reject-Backfill-Nachbesetzung danach — wird der Prozess mitten in der Backfill-Phase beendet, generiert ein Resume die offenen Slots erneut. Und eine Heartbeat-/Lease-Mechanik, die einen verwaisten In-Process-Job zuverlässig von einem noch laufenden unterscheidet, existiert weiterhin nicht (Slice 1.5, #1472d, offen); #1472 als Ganzes bleibt offen. Der Redis-Event-Bus ist **keine persistente Jobqueue**.
 
 Report-Generierungen sind seit Slice 1.2 (#1265) je Simulation **serialisiert**: ein zweiter Start wird mit `409 report_generate_in_progress` abgewiesen, solange ein Run mit `run_type=report_generate` in `pending` oder `processing` steht. Das ist eine bewusste Verhaltensänderung gegenüber 0.9.5 und eine Einschränkung für parallele Nutzung, keine Optimierung. Reportarbeit in einen eigenen Prozess zu verschieben bleibt 1.0-Vorarbeit.
 
@@ -286,7 +290,7 @@ Reproduzierbarkeit:
 
 Priorität vor neuen Features:
 
-1. #1472 — **Teil erledigt.** Ein per SIGTERM abgeschnittener Prepare-/Report-/Graph-Build-Job wird beim nächsten Start als verwaist erkannt und auf `failed`/`process_restart` korrigiert, statt für immer auf `processing` zu stehen; die Liveness kommt aus der Prozess-Identität im Manifest (`app/jobs/identity.py`). **Offen bleibt die Wiederaufnahme**: `_BACKEND` ist weiterhin `"thread"`, es gibt keine persistente Queue und keinen wiederaufnehmbaren Zwischenstand. Eine Queue, die einen nicht-idempotenten Schritt erneut ausführt, verdoppelt Artefakte statt sie zu retten — idempotente Schritte kommen zuerst.
+1. #1472 — **Teil erledigt.** Ein per SIGTERM abgeschnittener Prepare-/Report-/Graph-Build-Job wird beim nächsten Start als verwaist erkannt und auf `failed`/`process_restart` korrigiert, statt für immer auf `processing` zu stehen; die Liveness kommt aus der Prozess-Identität im Manifest (`app/jobs/identity.py`). Für **Graph-Build** gibt es seit Slice 1.3 (#1472b) zusätzlich einen echten Wiederaufnahme-Pfad: ein je Projekt persistierter Chunk-Checkpoint lässt `POST /api/runs/<id>/resume` nur die fehlenden Chunks nachholen statt neu zu beginnen. **Offen bleibt die Wiederaufnahme für Prepare und Report** (Slice 1.4/#1472c u. a.): `_BACKEND` ist weiterhin `"thread"`, es gibt keine persistente Queue und keinen wiederaufnehmbaren Zwischenstand. Eine Queue, die einen nicht-idempotenten Schritt erneut ausführt, verdoppelt Artefakte statt sie zu retten — idempotente Schritte kommen zuerst.
 2. #1417 — **Teil erledigt.** Der Laufzeitpfad folgt der aktiven Store-Konfiguration statt ausschließlich der `.env`, eine Konfiguration, die nicht zum Inhalt des aktiven Index passt, wirft, seit Slice 2.1 lösen Reads und Writes ihre Index- und Property-Namen über den Store auf statt über Literale, und seit Slice 2.2 schaltet der Migrationsservice erst nach erfolgreicher Index-Prüfung gegen Neo4j atomar auf die neue Version um — ein laufender oder fehlgeschlagener Re-Embedding-Lauf schaltet den Betrieb nicht mehr vorzeitig um. **Offen bleiben** die `VECTOR_DIM`-SSoT (Slice 2.3), eine Legacy-View für Bestandsgraphen (Slice 2.4) und der Frontend-Zod-Spiegel für den neuen `building`-Status; ein Modellwechsel über die Oberfläche ist weiterhin nicht möglich — siehe Abschnitt „Embeddings".
 3. #1470/#1471 — Entitätsauflösung und Persona-Domänenkohärenz.
 4. #1236/#1323 — Recommender- und Rollen-Konsistenz der Simulation.

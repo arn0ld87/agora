@@ -1,7 +1,7 @@
 # Security Threat Model
 
-**Stand:** 08.09.2026  
-**Geprüfte Main-Baseline:** `0c47737f`  
+**Stand:** 20.09.2026  
+**Geprüfte Main-Baseline:** `b62aea62`  
 **Scope:** Single-User-Agora auf lokalem Host, Tailnet oder hinter einem gehärteten Reverse-Proxy. Kein Multi-Tenant-/Enterprise-IAM-Modell.
 
 Verwandte Referenzen:
@@ -329,7 +329,7 @@ Ein gespeicherter Seed allein kontrolliert noch nicht alle Zufalls-/Modell-/Prom
 
 ## 8. Out of Scope
 
-Für `0.9.5` bewusst nicht versprochen:
+Für `0.9.6` bewusst nicht versprochen:
 
 - Multi-Tenant-Isolation,
 - Enterprise-SSO/RBAC,

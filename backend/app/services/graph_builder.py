@@ -387,6 +387,7 @@ class GraphBuilderService:
         document_ids: Optional[List[Optional[str]]] = None,
         chunk_ids: Optional[List[Optional[int]]] = None,
         run_id: Optional[str] = None,
+        checkpoint_callback: Optional[Callable[[int, str], None]] = None,
     ) -> List[str]:
         """Add text chunks to graph in parallel, return uuid list of all episodes.
 
@@ -432,6 +433,18 @@ class GraphBuilderService:
         den bis dahin fertigen Episode-UUIDs statt normal zurückzukehren.
         Bleibt ``run_id`` ``None`` (Default), ändert sich nichts am
         bisherigen Verhalten.
+
+        ``checkpoint_callback`` (Issue #1472b): wird im Hauptthread der
+        ``as_completed``-Schleife für jeden fertig committeten Chunk mit
+        ``(idx, episode_uuid)`` aufgerufen — ``idx`` ist die Position des
+        Chunks in der hier übergebenen ``chunks``-Liste, NICHT irgendeine
+        globale ID. Läuft auch für Chunks, die im Cancel-Zweig nachgesammelt
+        werden, damit ein Resume nach einem Abbruch keinen bereits
+        committeten Chunk verliert. Wirft der Callback (z. B. ein
+        Checkpoint-Schreibfehler), propagiert die Exception unverändert aus
+        ``add_text_batches`` heraus — ein Checkpoint-Fehler darf den Build
+        nicht unbemerkt weiterlaufen lassen. Bleibt ``checkpoint_callback``
+        ``None`` (Default), ändert sich nichts am bisherigen Verhalten.
         """
         total_chunks = len(chunks)
         if total_chunks == 0:
@@ -488,8 +501,34 @@ class GraphBuilderService:
             futures = {pool.submit(_process, idx, chunk): idx for idx, chunk in enumerate(chunks)}
             for future in as_completed(futures):
                 idx = futures[future]
-                episode_uuids[idx] = future.result()  # raises on first failed chunk
+                try:
+                    episode_uuid = future.result()  # raises on first failed chunk
+                except Exception:
+                    # P1-2 (PR #1535 Review): dieser Chunk ist gescheitert, aber
+                    # andere Worker koennen zu diesem Zeitpunkt bereits fertig
+                    # committet haben, ohne dass ihr checkpoint_callback schon
+                    # lief (as_completed liefert sie erst in einer spaeteren
+                    # Iteration). Ohne dieses Nachsammeln bleiben sie in Neo4j
+                    # committet, aber ungecheckpointed — ein Resume wuerde sie
+                    # erneut verarbeiten und Dubletten-Episoden erzeugen. Der
+                    # `with`-Block wartet beim Verlassen ohnehin auf sie
+                    # (kein cancel_futures hier), wir lesen nur zusaetzlich
+                    # ihr Ergebnis und checkpointen es vor dem Re-raise.
+                    self._collect_chunks_still_running(
+                        futures=futures,
+                        episode_uuids=episode_uuids,
+                        current_future=future,
+                        checkpoint_callback=checkpoint_callback,
+                    )
+                    raise
+                episode_uuids[idx] = episode_uuid
                 completed += 1
+                if checkpoint_callback:
+                    # Issue #1472b: läuft VOR dem Progress-Callback — ein
+                    # Checkpoint-Schreibfehler propagiert unverändert und
+                    # bricht den Build sichtbar ab, statt den Fortschritt
+                    # zu melden, während der Checkpoint dahinter zurückbleibt.
+                    checkpoint_callback(idx, episode_uuid)
                 if progress_callback:
                     progress_callback(
                         f"Processed {completed}/{total_chunks} chunks...",
@@ -515,41 +554,12 @@ class GraphBuilderService:
                             run_id, completed, total_chunks,
                         )
                         pool.shutdown(wait=False, cancel_futures=True)
-
-                        # Review-Finding (PR #1371, Befund 5): Chunks, die
-                        # zum Zeitpunkt des Abbruchs schon aus der Queue
-                        # geholt waren (also bereits laufen), werden von
-                        # ``cancel_futures=True`` NICHT erfasst — das
-                        # storniert nur, was noch in der Warteschlange steht.
-                        # Diese laufenden Worker committen ihre Neo4j-
-                        # Transaktion trotzdem fertig, und der `with`-Block
-                        # wartet beim Verlassen ohnehin auf sie
-                        # (``ThreadPoolExecutor.__exit__`` →
-                        # ``shutdown(wait=True)``). Ohne dieses Nachsammeln
-                        # wären ihre Episode-UUIDs im Graphen vorhanden, aber
-                        # weder in der zurückgegebenen Liste noch im
-                        # ``episode_count`` des Cancel-Ergebnisses gezählt —
-                        # bei mehreren parallelen Workern eine stille
-                        # Untererfassung. ``future.cancelled()`` ist nach
-                        # ``shutdown(cancel_futures=True)`` deterministisch:
-                        # True nur für Futures, die noch in der Queue
-                        # standen; bereits laufende bleiben False und werden
-                        # hier eingesammelt (kein zusätzliches Warten — der
-                        # `with`-Block würde ohnehin auf sie warten, wir
-                        # lesen nur zusätzlich ihr Ergebnis).
-                        for other_future, other_idx in futures.items():
-                            if other_future is future or episode_uuids[other_idx] is not None:
-                                continue
-                            if other_future.cancelled():
-                                continue
-                            try:
-                                episode_uuids[other_idx] = other_future.result()
-                            except Exception as exc:  # noqa: BLE001 — best effort; Abbruch-Meldung geht vor
-                                logger.warning(
-                                    "[graph_build] Chunk %d konnte nach dem Abbruch "
-                                    "nicht nachträglich eingesammelt werden: %r",
-                                    other_idx + 1, exc,
-                                )
+                        self._collect_chunks_still_running(
+                            futures=futures,
+                            episode_uuids=episode_uuids,
+                            current_future=future,
+                            checkpoint_callback=checkpoint_callback,
+                        )
 
                         raise GraphBuildCancelled(
                             [uuid for uuid in episode_uuids if uuid is not None]
@@ -557,6 +567,65 @@ class GraphBuilderService:
 
         logger.info(f"[graph_build] All {total_chunks} chunks processed successfully")
         return [uuid for uuid in episode_uuids if uuid is not None]
+
+    @staticmethod
+    def _collect_chunks_still_running(
+        *,
+        futures: Dict[Any, int],
+        episode_uuids: List[Optional[str]],
+        current_future: Any,
+        checkpoint_callback: Optional[Callable[[int, str], None]],
+    ) -> None:
+        """Sammelt nach einem Abbruch die Ergebnisse noch laufender Chunks ein.
+
+        Review-Finding (PR #1371, Befund 5): Chunks, die zum Zeitpunkt des
+        Abbruchs schon aus der Queue geholt waren (also bereits laufen),
+        werden von ``cancel_futures=True`` NICHT erfasst — das storniert nur,
+        was noch in der Warteschlange steht. Diese laufenden Worker committen
+        ihre Neo4j-Transaktion trotzdem fertig, und der ``with``-Block wartet
+        beim Verlassen ohnehin auf sie (``ThreadPoolExecutor.__exit__`` →
+        ``shutdown(wait=True)``). Ohne dieses Nachsammeln waeren ihre
+        Episode-UUIDs im Graphen vorhanden, aber weder in der
+        zurueckgegebenen Liste noch im ``episode_count`` des
+        Cancel-Ergebnisses gezaehlt — bei mehreren parallelen Workern eine
+        stille Untererfassung.
+
+        ``future.cancelled()`` ist nach ``shutdown(cancel_futures=True)``
+        deterministisch: True nur fuer Futures, die noch in der Queue
+        standen; bereits laufende bleiben False und werden hier eingesammelt
+        (kein zusaetzliches Warten — der ``with``-Block wuerde ohnehin auf
+        sie warten, wir lesen nur zusaetzlich ihr Ergebnis).
+
+        Seit Slice 1.3 (#1472b) laeuft der ``checkpoint_callback`` auch hier:
+        ein Resume nach einem Abbruch darf keinen bereits committeten Chunk
+        verlieren.
+
+        Wird seit PR #1535 (P1-2) auch aus dem Fehlerpfad in
+        ``add_text_batches`` heraus aufgerufen, wenn ``future.result()``
+        eine Exception wirft: derselbe Verlust droht dort genauso, ohne
+        dass der Cancel-Zweig (``pool.shutdown(cancel_futures=True)``)
+        beteiligt ist — noch ausstehende Futures laufen unveraendert weiter.
+        """
+        for other_future, other_idx in futures.items():
+            if other_future is current_future or episode_uuids[other_idx] is not None:
+                continue
+            if other_future.cancelled():
+                continue
+            try:
+                other_result = other_future.result()
+            except Exception as exc:  # noqa: BLE001 — best effort; Abbruch-Meldung geht vor
+                logger.warning(
+                    "[graph_build] Chunk %d konnte nach dem Abbruch "
+                    "nicht nachträglich eingesammelt werden: %r",
+                    other_idx + 1, exc,
+                )
+                continue
+            episode_uuids[other_idx] = other_result
+            if checkpoint_callback:
+                # Bewusst AUSSERHALB des obigen try/except: ein
+                # Checkpoint-Schreibfehler ist kein bestenfalls zu
+                # ignorierender Chunk-Fehler und muss propagieren (#1472b).
+                checkpoint_callback(other_idx, other_result)
 
     def _get_graph_info(self, graph_id: str) -> GraphInfo:
         """Get graph information"""

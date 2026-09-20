@@ -1,7 +1,7 @@
 # Agent Tools in der Simulation
 
-**Stand:** 08.09.2026  
-**Geprüfte Main-Baseline:** `0c47737f`  
+**Stand:** 20.09.2026  
+**Geprüfte Main-Baseline:** `b62aea62`  
 **Status:** experimentell und standardmäßig deaktiviert.
 
 Dieses Dokument beschreibt den **aktuellen** Tool-Pfad für OASIS/CAMEL-Agenten. Das frühere chronologische Debug-Protokoll aus April 2026 ist keine Laufzeitreferenz mehr.

@@ -1,8 +1,8 @@
 # HTTP-API — Agora Backend
 
-**Stand:** 08.09.2026  
-**Geprüfte Main-Baseline:** `0c47737f`  
-**Backend:** `0.9.5`
+**Stand:** 20.09.2026  
+**Geprüfte Main-Baseline:** `b62aea62`  
+**Backend:** `0.9.6`
 
 Diese Datei ist eine **Domänenübersicht**, keine handgepflegte vollständige Routenliste. Quelle der Wahrheit für konkrete Routen ist [`../backend/app/api/`](../backend/app/api/) mit der Blueprint-Registrierung in [`../backend/app/__init__.py`](../backend/app/__init__.py). Response-Verträge und Fehlerkonventionen: [`api-contracts.md`](api-contracts.md).
 
@@ -133,14 +133,15 @@ Bereiche:
 - Workspace-/Stage-Routing
 - Model-Stream
 - Embedding-Konfigurationen und Embedding-Migrationen
+- LLM-Profile (`llm_profiles.py`) — Metadaten-CRUD hinter `LlmProfileRepository`, Default-Ablage SQLite, optional PostgreSQL (`AGORA_LLM_PROFILE_BACKEND`, siehe [`architecture.md`](architecture.md))
 
 Kanonische Provider-Matrix: `backend/app/services/llm_provider_registry.py`.
 
 Transportklassen:
 
-- `http`
+- `http` (inkl. Amazon Bedrock über den OpenAI-kompatiblen mantle-Pfad, #1282)
 - `local` (lokaler HTTP-Dienst, z. B. Ollama)
-- `cli` (z. B. `codex_cli`, Session-Auth, keine Base-URL)
+- `cli` — `codex_cli` (ChatGPT-Abo, #1405) und `claude_cli` (Claude-Abo, #1531), beide Session-Auth, keine Base-URL
 
 Details: [`provider-runtime-settings.md`](provider-runtime-settings.md).
 

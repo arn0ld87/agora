@@ -26,6 +26,12 @@ from ..contracts.runs_contract import (
 from ..models.project import ProjectManager, ProjectStatus
 from ..models.task import TaskManager, TaskStatus
 from ..container import get_container
+from ..services.graph_build import GraphBuildService
+from ..services.graph_build_checkpoint import (
+    GraphBuildCheckpoint,
+    checkpoint_is_resumable,
+    load_checkpoint,
+)
 from ..services.graph_builder import GraphBuilderService  # noqa: F401
 from ..services.graph_tools import GraphToolsService
 from ..services.llm_routing_seed import (
@@ -452,6 +458,100 @@ def cancel_run(run_id: str):
         {"success": True, "status": "cancel_requested", "run_id": resolved_run_id}
     )
     return make_response(body, 202)
+
+
+def _resume_or_restart_graph_build(run: dict):
+    """Entscheidet zwischen Resume (Checkpoint vorhanden und passend) und
+    vollem Restart — dieselbe Route (Issue #1472b), analog
+    ``_resume_or_restart_simulation_run``.
+
+    Die Prüfung rechnet die Chunk-Zerlegung EINMAL hier synchron nach
+    (``GraphBuildService.chunk_project_text``) und validiert den
+    Checkpoint dagegen (``checkpoint_is_resumable``). Passt er nicht mehr
+    (Chunk-Parameter geändert, anderer Graph, kein einziger Chunk fertig),
+    fällt die Route sauber auf ``_restart_graph_build`` zurück — ein
+    angebotenes Resume, das doch bei null beginnt, ist schlimmer als keins.
+    """
+    project_id = _linked_or_entity_id(run, "project_id", "project_id")
+    project = ProjectManager.get_project(project_id)
+    if not project:
+        raise ValueError(f"Project does not exist: {project_id}")
+
+    text = ProjectManager.get_extracted_text(project_id)
+    graph_id = (run.get("linked_ids") or {}).get("graph_id")
+
+    # ``text and graph_id`` als Bedingung UM den ganzen Block (statt separat
+    # in einer Inline-Ternary vor ``if checkpoint is not None``) narrowt
+    # ``text`` innerhalb des Blocks strukturell auf ``str`` — mypy kann die
+    # Beziehung zwischen zwei unabhängigen Variablen sonst nicht verfolgen.
+    if text and graph_id:
+        checkpoint = load_checkpoint(project_id)
+        if checkpoint is not None:
+            chunk_size = project.chunk_size or Config.DEFAULT_CHUNK_SIZE
+            chunk_overlap = project.chunk_overlap or Config.DEFAULT_CHUNK_OVERLAP
+            chunks, document_ids, chunk_ids, manifest_anchored = GraphBuildService.chunk_project_text(
+                project_id, text, chunk_size, chunk_overlap
+            )
+            if checkpoint_is_resumable(
+                checkpoint,
+                graph_id=graph_id,
+                total_chunks=len(chunks),
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                manifest_anchored=manifest_anchored,
+            ):
+                return _resume_graph_build(
+                    run,
+                    checkpoint,
+                    chunks=chunks,
+                    document_ids=document_ids,
+                    chunk_ids=chunk_ids,
+                    manifest_anchored=manifest_anchored,
+                )
+
+    return _restart_graph_build(run)
+
+
+def _resume_graph_build(
+    run: dict,
+    checkpoint: GraphBuildCheckpoint,
+    *,
+    chunks: list[str],
+    # Wie in ``GraphBuilderService.add_text_batches``: beide Listen sind
+    # optional, und ihre Elemente duerfen einzeln ``None`` sein (ein Chunk
+    # ohne Dokument-/Chunk-Provenance). Ein blankes ``list`` verdeckte das.
+    document_ids: list[str | None] | None,
+    chunk_ids: list[int | None] | None,
+    manifest_anchored: bool,
+):
+    """Reine Routing-Schicht (Issue #1472b): löst Projekt/Container auf und
+    delegiert die eigentliche Build-Logik an
+    ``GraphBuildService.resume_graph_build`` — dieselbe Stelle wie der
+    Original-Build (``build_graph``), damit Chunking,
+    Checkpoint-Fortschreibung und Endzustände an EINER Stelle gepflegt
+    werden statt in einer zweiten, unabhängig driftenden Kopie in der
+    API-Schicht.
+    """
+    project_id = _linked_or_entity_id(run, "project_id", "project_id")
+    project = ProjectManager.get_project(project_id)
+    if not project:
+        raise ValueError(f"Project does not exist: {project_id}")
+    if not project.ontology:
+        raise ValueError("Ontology definition not found")
+
+    container = get_container()
+    if container.neo4j_storage is None:
+        raise ValueError("GraphStorage not initialized")
+
+    return GraphBuildService.resume_graph_build(
+        project_id=project_id,
+        parent_run_id=run["run_id"],
+        checkpoint=checkpoint,
+        chunks=chunks,
+        document_ids=document_ids,
+        chunk_ids=chunk_ids,
+        container=container,
+    )
 
 
 def _restart_graph_build(run: dict):
@@ -1299,7 +1399,7 @@ def resume_run(run_id: str):
 
     run_type = run.get("run_type")
     if run_type == "graph_build":
-        data = _restart_graph_build(run)
+        data = _resume_or_restart_graph_build(run)
     elif run_type == "simulation_prepare":
         data = _restart_simulation_prepare(run)
     elif run_type == "simulation_run":
