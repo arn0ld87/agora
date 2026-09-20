@@ -96,7 +96,6 @@ Agora soll nicht nur technisch funktionieren, sondern Ergebnisse **reproduzierba
 ## P0/P1 — Simulationstreue und Trust
 
 - [ ] Alias-/Koreferenzauflösung und kontrollierte semantische Entitätsklasse vor Persona-Cap ([#1470](https://github.com/arn0ld87/agora/issues/1470)).
-- [x] Persona-Domänendrift zuverlässig erkennen, auch wenn nur eine Nebendomäne mit der Quelle überlappt ([#1471](https://github.com/arn0ld87/agora/issues/1471), Slice 4.1: Hauptdomänen-Vergleich statt Any-Overlap).
 - [ ] Role Leakage in texttragenden Simulationsaktionen messen und begrenzen ([#1323](https://github.com/arn0ld87/agora/issues/1323)).
 - [ ] Twitter-Recommender nicht mehr auf untrainierten/neu initialisierten Pooler-Gewichten ranken lassen; identische Seed-Läufe müssen reproduzierbare Ranking-Matrizen liefern ([#1236](https://github.com/arn0ld87/agora/issues/1236)).
 - [ ] Quantifizierte Claims nur dann als supported behandeln, wenn aggregierte Evidence die Quantorstärke trägt ([#1345](https://github.com/arn0ld87/agora/issues/1345)).
