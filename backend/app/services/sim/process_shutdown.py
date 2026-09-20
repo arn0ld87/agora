@@ -185,6 +185,15 @@ def _mark_in_process_jobs_failed(
                             exc,
                         )
 
+            # Issue #1472b: nur fuer graph_build — ein Checkpoint mit
+            # mindestens einem fertigen Chunk macht "resume" zur ehrlichen
+            # Option statt des sticky "restart"-Defaults aus der Run-Anlage.
+            extra_updates: Dict[str, Any] = {}
+            if run_type == "graph_build":
+                from ..graph_build_checkpoint import resume_capability_for_run
+
+                extra_updates["resume_capability"] = resume_capability_for_run(run)
+
             # Manifest aktualisieren
             try:
                 registry.update_run(
@@ -192,6 +201,7 @@ def _mark_in_process_jobs_failed(
                     status="failed",
                     termination_reason=_TERMINATION_REASON,
                     error=_ERROR_MESSAGE,
+                    **extra_updates,
                 )
                 reconciled.append(run_id)
             except Exception as exc:  # noqa: BLE001 — Registry-Write darf nicht blockieren

@@ -492,11 +492,21 @@ def reconcile_stale_jobs(
             if simulation_id:
                 on_state(simulation_id, _ERROR_MESSAGE)
 
+            # Issue #1472b: nur fuer graph_build — ein Checkpoint mit
+            # mindestens einem fertigen Chunk macht "resume" zur ehrlichen
+            # Option statt des sticky "restart"-Defaults aus der Run-Anlage.
+            extra_updates: Dict[str, Any] = {}
+            if run_type == "graph_build":
+                from ..graph_build_checkpoint import resume_capability_for_run
+
+                extra_updates["resume_capability"] = resume_capability_for_run(run)
+
             registry.update_run(
                 run_id,
                 status="failed",
                 termination_reason=_TERMINATION_REASON,
                 error=_ERROR_MESSAGE,
+                **extra_updates,
             )
             reconciled.append(run_id)
 

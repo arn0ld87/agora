@@ -20,64 +20,35 @@ Persistenz-Invariante des Repos: Schreibvorgänge sind atomar mit ``fsync``
 (``write_json_atomic``); ein fehlgeschlagener Checkpoint-Schreibvorgang wird
 NICHT geschluckt — er propagiert, damit der Build sichtbar scheitert statt
 unbemerkt ohne Checkpoint weiterzulaufen.
+
+Der Vertrag selbst (``GraphBuildCheckpoint``) liegt unter
+``app/contracts/graph_build_checkpoint_contract.py`` — analog
+``EmbeddingMigrationProgress``: ein strukturiertes Pydantic-Modell gehört
+nach Contracts-first unter ``contracts/``, auch wenn es (wie hier) nie die
+HTTP-API-Grenze überquert und deshalb bewusst nicht in
+``dump_schemas.CONTRACTS`` steht.
 """
 from __future__ import annotations
 
 import os
 from collections.abc import Mapping
-from datetime import UTC, datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
-
+from ..contracts.graph_build_checkpoint_contract import GraphBuildCheckpoint
 from ..models.project import ProjectManager
 from ..utils.json_io import read_json_file, write_json_atomic
 
 CHECKPOINT_FILENAME = "graph_build_checkpoint.json"
 
-_STRICT = ConfigDict(extra="forbid")
-
-
-class GraphBuildCheckpoint(BaseModel):
-    """Fortschritts-Checkpoint eines ``graph_build``-Laufs.
-
-    ``chunk_size``/``chunk_overlap``/``manifest_anchored`` werden
-    mitgeführt, weil ``TextProcessor.split_text`` bzw.
-    ``split_text_into_chunks_with_documents`` deterministisch, aber NICHT
-    stabil gegen Parameter- oder Methodenänderungen sind — ein Chunk-Index
-    bedeutet nur dann dasselbe Textstück wie beim Original-Lauf, wenn Größe,
-    Overlap UND die Chunking-Methode (manifest-verankert vs. Legacy)
-    unverändert sind.
-    """
-
-    model_config = _STRICT
-
-    graph_id: str
-    total_chunks: int = Field(ge=0)
-    chunk_size: int = Field(gt=0)
-    chunk_overlap: int = Field(ge=0)
-    manifest_anchored: bool
-    completed_chunk_indices: list[int] = Field(default_factory=list)
-    # JSON-Objektschlüssel sind immer Strings — der Chunk-Index steckt als
-    # str(idx) im Key, der Wert ist die zugehörige Episode-UUID.
-    episode_uuids: dict[str, str] = Field(default_factory=dict)
-    updated_at: datetime
-
-    def with_completed_chunk(self, index: int, episode_uuid: str) -> "GraphBuildCheckpoint":
-        """Liefert einen neuen Checkpoint mit einem zusätzlich abgeschlossenen Chunk.
-
-        Unveränderlich (kein In-Place-Mutate) — der Aufrufer hält die
-        jeweils aktuelle Referenz selbst in seiner Closure.
-        """
-        indices = sorted(set(self.completed_chunk_indices) | {index})
-        uuids = {**self.episode_uuids, str(index): episode_uuid}
-        return self.model_copy(
-            update={
-                "completed_chunk_indices": indices,
-                "episode_uuids": uuids,
-                "updated_at": datetime.now(UTC),
-            }
-        )
+__all__ = [
+    "GraphBuildCheckpoint",
+    "checkpoint_is_resumable",
+    "clear_checkpoint",
+    "load_checkpoint",
+    "resume_capability_for_checkpoint",
+    "resume_capability_for_run",
+    "save_checkpoint",
+]
 
 
 def _checkpoint_path(project_id: str) -> str:
