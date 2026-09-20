@@ -67,3 +67,18 @@ weiterlaufen zu lassen.
 
 Weiterhin offen: Prepare-Resume (Slice 1.4, #1472c) und Heartbeat/Lease
 (Slice 1.5, #1472d). #1472 als Ganzes ist damit nicht geschlossen.
+
+Review-Nachbesserung (PR #1535): drei Fälle behoben. Erstens scheiterte ein
+Build nach dem ersten gesetzten Checkpoint bislang mit `delete_graph`, obwohl
+`resume_capability` weiter `resume` anbot — der Resume-Pfad arbeitet aber
+ausschließlich mit `MATCH` und hätte ins Leere gegriffen. Der Checkpoint wird
+jetzt zusammen mit dem gelöschten Graphen verworfen, danach bleibt nur noch
+`restart` eine ehrliche Option. Zweitens verlor `add_text_batches` bei einem
+scheiternden Chunk in der `as_completed`-Schleife den Checkpoint für Chunks,
+die zu diesem Zeitpunkt bereits erfolgreich committet, aber noch nicht
+gecheckpointet waren — ein anschließender Resume hätte sie erneut verarbeitet
+und Dubletten-Episoden erzeugt. Drittens durchlief ein resumeter Build das
+Qualitätsgate (`assess_graph_quality_from_counts`) nicht und trug deshalb nie
+eine `degradations`-Meldung, selbst wenn der fertige Graph unter der
+Mindestzahl an Relationen blieb — der resumete Pfad meldet diese Degradation
+jetzt genauso wie der Original-Build.
