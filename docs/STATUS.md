@@ -99,6 +99,12 @@ am Key-Guard vorbei; `claude_cli` verlor dadurch seinen aufgelösten Token, und
 weil der Rückgabewert einmal in die effektive Runtime-Konfiguration des
 Vorbereitungs-Jobs gegossen wird, fiel jede LLM-Phase nach dem Graph-Build aus.
 
+Für Provider mit CLI-Transport endet die Key-Auflösung im `SecretResolver`
+außerdem nach der provider-eigenen Quelle (Session, Store, `CLAUDE_CODE_OAUTH_TOKEN`)
+und fällt **nicht** auf den globalen `Config.LLM_API_KEY` zurück. Der aufgelöste
+Wert geht dort als Umgebungsvariable in einen Subprozess; ein Schlüssel eines
+fremden Providers wäre ein Secret über Provider-Grenzen hinweg.
+
 ## Run- und Simulations-Lifecycle
 
 Die 0.9.5-Stabilisierung hat mehrere vorher stille Zustandsfehler geschlossen:

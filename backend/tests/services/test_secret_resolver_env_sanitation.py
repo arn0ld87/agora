@@ -213,6 +213,51 @@ class TestProviderEnvMapping:
 
 
 # ---------------------------------------------------------------------------
+# CLI-Transport — kein globaler Fallback in einen fremden Subprozess
+# ---------------------------------------------------------------------------
+
+
+class TestCliTransportHasNoGlobalFallback:
+    """Der aufgelöste Wert geht bei CLI-Providern als Umgebungsvariable in
+    einen Subprozess. Ein Key eines anderen Providers wäre dort nicht nur
+    nutzlos, sondern ein Secret über Provider-Grenzen hinweg.
+    """
+
+    @pytest.mark.parametrize("provider_type", ["claude_cli", "codex_cli"])
+    def test_global_config_key_is_not_handed_to_cli_provider(
+        self, monkeypatch, configured_store, provider_type
+    ):
+        monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
+        monkeypatch.setattr(
+            "app.services.secret_resolver.Config.LLM_API_KEY",
+            "fa6b1234deadbeef5678abcd9876543210",
+        )
+
+        resolver = SecretResolver()
+        assert resolver.get_api_key(provider_type, provider_type) is None
+        assert resolver.last_source is None
+
+    def test_claude_cli_reads_its_own_env_token(self, monkeypatch, configured_store):
+        monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "claude-oauth-token-abc123")
+        monkeypatch.setattr("app.services.secret_resolver.Config.LLM_API_KEY", None)
+
+        resolver = SecretResolver()
+        assert (
+            resolver.get_api_key("claude_cli", "claude_cli")
+            == "claude-oauth-token-abc123"
+        )
+        assert resolver.last_source == "env:CLAUDE_CODE_OAUTH_TOKEN"
+
+    def test_store_token_still_wins_for_claude_cli(self, monkeypatch, configured_store):
+        configured_store.upsert("claude_cli", api_key="stored-claude-token")
+        monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "env-claude-token")
+
+        resolver = SecretResolver()
+        assert resolver.get_api_key("claude_cli", "claude_cli") == "stored-claude-token"
+        assert resolver.last_source == "store"
+
+
+# ---------------------------------------------------------------------------
 # last_source — Audit-Side-Channel für LLMClient-Init-Log
 # ---------------------------------------------------------------------------
 

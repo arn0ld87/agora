@@ -22,6 +22,16 @@ von `/generate-profiles` lösten den Key zwar korrekt auf, sprangen aber mit
 derselben Transport-Bedingung am 422-Guard vorbei — ein `claude_cli`-Lauf ohne
 hinterlegten Token wäre dort gestartet und erst im Subprozess gescheitert.
 
+Beim Review fiel dahinter eine zweite, schwerere Lücke auf: fehlte der Token
+ganz, lieferte der `SecretResolver` für `claude_cli` nicht `None`, sondern den
+globalen `Config.LLM_API_KEY` aus dem generischen Zweig. Dieser Wert geht als
+`CLAUDE_CODE_OAUTH_TOKEN` in den Subprozess — der Schlüssel eines fremden
+Providers (OpenAI, MiniMax, Ollama) wäre dort nicht nur nutzlos, sondern ein
+Secret über Provider-Grenzen hinweg, und der neue Guard hätte nie gegriffen,
+weil der Resolver ja etwas zurückgab. Für Provider mit CLI-Transport endet die
+Auflösung jetzt nach der provider-eigenen Quelle: Session, Store, dann
+`CLAUDE_CODE_OAUTH_TOKEN` — und sonst `None`, ohne globalen Fallback.
+
 Zusätzlich benennt die Fehlermeldung bei fehlendem Key jetzt den Provider und die
 Route statt der `.env`-Variablen `LLM_API_KEY`, die für einen aufgelösten
 Provider gar nicht die Quelle ist. Der nie gelesene rohe `OpenAI`-Client im
