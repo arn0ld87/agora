@@ -18,7 +18,7 @@ from openai import OpenAI
 from pydantic import BaseModel
 
 from ..config import Config
-from ..contracts.provider_types import PROVIDER_CODEX_CLI
+from ..contracts.provider_types import PROVIDER_CLAUDE_CLI, PROVIDER_CODEX_CLI
 from ..contracts.llm_routing_contract import ResolvedRoute, ReasoningEffort
 from ..utils.logger import get_logger
 from ..utils.retry import llm_call_with_retry
@@ -43,6 +43,7 @@ from .json_mode import (
 from .providers import base as _provider_base
 from .providers import ollama as _provider_ollama
 from .providers import openai as _provider_openai
+from .providers.claude_cli import ClaudeCliClient
 from .providers.codex_cli import CodexCliClient
 from .providers.registry import openai_compat_base_url
 from .request_plan import (
@@ -127,6 +128,7 @@ class LLMClient:
     # jeder Aufruf von _is_ollama()/_is_minimax()/_detect_provider() auf
     # solchen Instanzen mit AttributeError crashen.
     _codex_cli_active: bool = False
+    _claude_cli_active: bool = False
 
     def __init__(
         self,
@@ -322,6 +324,12 @@ class LLMClient:
         in ``__init__`` zurueck.
         """
         self._codex_cli_active = resolved_provider_type == PROVIDER_CODEX_CLI
+        # claude_cli hat, anders als codex_cli, einen echten Secret (den per
+        # ``claude setup-token`` erzeugten Langzeit-Token) — der laeuft durch
+        # dieselbe Aufloesung wie jeder andere API-Key-Provider und landet
+        # bereits im ``api_key``-Parameter, sobald diese Methode laeuft.
+        # Nur base_url/Client-Wahl brauchen den eigenen Zweig.
+        self._claude_cli_active = resolved_provider_type == PROVIDER_CLAUDE_CLI
 
         if api_key:
             self.api_key = api_key
@@ -337,7 +345,11 @@ class LLMClient:
                 resolved_source = "config_fallback"
         else:
             self.api_key = None
-        self.base_url = None if self._codex_cli_active else (base_url or Config.LLM_BASE_URL)
+        self.base_url = (
+            None
+            if (self._codex_cli_active or self._claude_cli_active)
+            else (base_url or Config.LLM_BASE_URL)
+        )
 
         if not self.api_key:
             raise ValueError("LLM_API_KEY not configured")
@@ -348,7 +360,14 @@ class LLMClient:
             # nachbildet (die einzige Oberflaeche, die ``_provider_attempt``
             # tatsaechlich ruft) und intern ``codex exec`` als Subprozess
             # startet.
-            self.client = CodexCliClient()
+            self.client: "OpenAI | CodexCliClient | ClaudeCliClient" = CodexCliClient()
+            return resolved_source
+
+        if self._claude_cli_active:
+            # Analog zu codex_cli, aber ``ClaudeCliClient`` bekommt den
+            # aufgeloesten Token direkt uebergeben statt ihn aus einer
+            # ambienten Session zu lesen — siehe llm/providers/claude_cli.py.
+            self.client = ClaudeCliClient(oauth_token=self.api_key)
             return resolved_source
 
         # Issue #1103 (CWE-319): credential-behaftete Requests duerfen nicht
@@ -460,7 +479,7 @@ class LLMClient:
         # ``self.base_url`` fuer codex_cli NICHT uebernimmt, aber diese
         # Methode wird trotzdem robust gehalten) den Force-Stream-Pfad in
         # ``chat()`` ausloesen, den der Codex-CLI-Shim nicht unterstuetzt.
-        if self._codex_cli_active:
+        if self._codex_cli_active or self._claude_cli_active:
             return False
         return _provider_base.is_ollama(self.base_url)
 
@@ -470,7 +489,7 @@ class LLMClient:
         Returns:
             bool: `true` if the endpoint uses MiniMax, `false` otherwise.
         """
-        if self._codex_cli_active:
+        if self._codex_cli_active or self._claude_cli_active:
             return False
         return self._detect_provider() == "minimax"
 
@@ -597,7 +616,7 @@ class LLMClient:
         # AGENTS.md: keine Detection-Heuristik neben registry.py::
         # detect_provider) — es ist immer eine explizite Auswahl. "unknown"
         # ist das korrekte Label fuer dieses Vokabular, nicht ein neuer Wert.
-        if self._codex_cli_active:
+        if self._codex_cli_active or self._claude_cli_active:
             return "unknown"
         effective_model = model if model is not None else self.model
         return _provider_base.detect_provider(self.base_url, effective_model)

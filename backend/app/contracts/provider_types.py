@@ -20,6 +20,12 @@ PROVIDER_UNKNOWN = "unknown"
 # NICHT vom ``_reject_unsupported_connection_provider``-Guard in
 # ``ai_provider_contract.py`` erfasst.
 PROVIDER_CODEX_CLI = "codex_cli"
+# Subprozess-Bridge zur lokal installierten Claude-Code-CLI (Claude-Abo statt
+# Pay-per-Token-API). ``transport="cli"`` wie codex_cli, aber Auth ueber einen
+# per ``claude setup-token`` erzeugten Langzeit-Token (Env-Var
+# ``CLAUDE_CODE_OAUTH_TOKEN``) statt einer gemounteten Login-Session — daher
+# ``auth_mode="api_key"`` in der Registry, obwohl kein HTTP gesprochen wird.
+PROVIDER_CLAUDE_CLI = "claude_cli"
 
 # Legacy alias
 LEGACY_GEMINI = "gemini"
@@ -38,12 +44,13 @@ ProviderType = Literal[
     "bedrock",
     "cloud",
     "codex_cli",
+    "claude_cli",
     "unknown",
 ]
 
 # Connection lifecycle ist HTTP/local/cli. OpenCode Go bleibt ausgeschlossen
 # (kein dokumentierter Request-Vertrag). ``codex_cli`` ist der erste
-# ``transport="cli"``-Provider (#1405).
+# ``transport="cli"``-Provider (#1405), ``claude_cli`` der zweite.
 ProviderConnectionKind = Literal[
     "ollama",
     "openai",
@@ -57,6 +64,7 @@ ProviderConnectionKind = Literal[
     "bedrock",
     "cloud",
     "codex_cli",
+    "claude_cli",
     "unknown",
 ]
 
@@ -97,5 +105,6 @@ ALL_PROVIDER_TYPES: tuple[str, ...] = (
     PROVIDER_BEDROCK,
     PROVIDER_CLOUD,
     PROVIDER_CODEX_CLI,
+    PROVIDER_CLAUDE_CLI,
     PROVIDER_UNKNOWN,
 )

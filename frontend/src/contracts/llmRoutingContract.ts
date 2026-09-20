@@ -46,6 +46,7 @@ export const ProviderDescriptorSchema = z.object({
     "bedrock",
     "cloud",
     "codex_cli",
+    "claude_cli",
     "unknown",
   ]),
   base_url: z.string().url().optional().nullable(),

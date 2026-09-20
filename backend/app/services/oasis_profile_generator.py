@@ -15,7 +15,7 @@ from openai import OpenAI
 
 from ..config import Config
 from ..contracts import PersonaQuotaPlan
-from ..contracts.provider_types import PROVIDER_CODEX_CLI
+from ..contracts.provider_types import PROVIDER_CLAUDE_CLI, PROVIDER_CODEX_CLI
 from .settings_layer import get_default_service as _get_settings
 from ..utils.llm_latency import measure_llm_latency
 from ..utils.logger import get_logger
@@ -241,7 +241,15 @@ class OasisProfileGenerator:
             # Modell aus der Route an einen fremden HTTP-Provider schicken
             # (beobachtet: gpt-5.6-luna an https://api.minimax.io/v1 → 400).
             self.base_url = None
-            self.api_key = api_key or "codex-cli-local-session"
+            self.api_key: Optional[str] = api_key or "codex-cli-local-session"
+        elif provider_type == PROVIDER_CLAUDE_CLI:
+            # claude_cli (transport="cli") hat ebenfalls kein base_url, aber
+            # anders als codex_cli einen echten Secret (den per
+            # ``claude setup-token`` erzeugten Langzeit-Token) — kein
+            # Platzhalter, der ``api_key`` unten fehlende Werte verdeckt wenn
+            # der Aufrufer keinen Token aufgeloest hat.
+            self.base_url = None
+            self.api_key = api_key
         else:
             self.base_url = base_url or Config.LLM_BASE_URL
             # Key und Base-URL muessen aus derselben Quelle stammen (#778). Loest der

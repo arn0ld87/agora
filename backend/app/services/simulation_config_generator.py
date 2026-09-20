@@ -16,7 +16,7 @@ from typing import Dict, Any, List, Optional, Callable
 
 
 from ..config import Config
-from ..contracts.provider_types import PROVIDER_CODEX_CLI
+from ..contracts.provider_types import PROVIDER_CLAUDE_CLI, PROVIDER_CODEX_CLI
 from ..utils.logger import get_logger
 from .entity_reader import EntityNode
 from ..utils.llm_client import LLMClient
@@ -136,15 +136,20 @@ class SimulationConfigGenerator:
         if not self.api_key:
             raise ValueError("LLM_API_KEY not configured")
 
-        # Issue #1418: codex_cli (transport="cli", #1405) hat weder base_url
-        # noch api_key — der eigene LLMClient dieses Generators (fuer die
-        # Config-Generierung) darf nicht mit dem obigen .env-Fallback gebaut
-        # werden, sonst geht das Modell aus der Route an einen fremden
-        # HTTP-Provider (beobachtet: gpt-5.6-luna an minimax.io → 400).
-        is_cli_provider = provider_type == PROVIDER_CODEX_CLI
+        # Issue #1418: codex_cli/claude_cli (transport="cli") haben weder
+        # base_url noch (bei codex_cli) einen echten api_key — der eigene
+        # LLMClient dieses Generators (fuer die Config-Generierung) darf
+        # nicht mit dem obigen .env-Fallback gebaut werden, sonst geht das
+        # Modell aus der Route an einen fremden HTTP-Provider (beobachtet:
+        # gpt-5.6-luna an minimax.io → 400). claude_cli hat dagegen einen
+        # echten Token (``self.api_key`` traegt ihn bereits korrekt, siehe
+        # oben) — nur der Platzhalter-Fallback bleibt codex_cli vorbehalten.
+        is_cli_provider = provider_type in (PROVIDER_CODEX_CLI, PROVIDER_CLAUDE_CLI)
         client_base_url = None if is_cli_provider else self.base_url
         client_api_key = (
-            (api_key or "codex-cli-local-session") if is_cli_provider else self.api_key
+            (api_key or "codex-cli-local-session")
+            if provider_type == PROVIDER_CODEX_CLI
+            else self.api_key
         )
 
         self.llm_client = LLMClient(

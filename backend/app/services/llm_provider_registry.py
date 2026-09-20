@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, Optional
+from typing import Literal, Optional, cast
 
 from ..contracts import (
     PROVIDER_ANTHROPIC,
     PROVIDER_BEDROCK,
+    PROVIDER_CLAUDE_CLI,
     PROVIDER_CODEX_CLI,
     PROVIDER_GITHUB_COPILOT,
     PROVIDER_GOOGLE,
@@ -33,6 +34,13 @@ def _codex_cli_models() -> tuple[str, ...]:
     from ..llm.providers.codex_cli import codex_cli_fallback_models
 
     return codex_cli_fallback_models()
+
+
+def _claude_cli_models() -> tuple[str, ...]:
+    # Lazy import keeps the historical import boundary cycle-free.
+    from ..llm.providers.claude_cli import claude_cli_fallback_models
+
+    return claude_cli_fallback_models()
 
 
 @dataclass(frozen=True)
@@ -151,6 +159,27 @@ _CONNECTION_DEFINITIONS: tuple[ProviderConnectionDefinition, ...] = (
         PROVIDER_CODEX_CLI, "Codex CLI (ChatGPT-Abo)", "cli", "session",
         None, "codex_cli", None,
         fallback_models=_codex_cli_models(),
+    ),
+    # Subprozess-Bridge zur lokal installierten Claude-Code-CLI (Claude-Abo
+    # statt Pay-per-Token-API). Anders als codex_cli (``auth_mode="session"``,
+    # Login lebt in einem gemounteten CLI-eigenen Verzeichnis) authentifiziert
+    # dieser Provider ueber einen expliziten, per ``claude setup-token``
+    # erzeugten Langzeit-Token (Env-Var ``CLAUDE_CODE_OAUTH_TOKEN``, offiziell
+    # dokumentiert fuer CI/Headless-Nutzung) — der Token liegt wie jeder
+    # andere API-Key im Fernet-Secret-Store, deshalb ``auth_mode="api_key"``
+    # obwohl kein HTTP gesprochen wird. Kein Verzeichnis-Mount, kein
+    # Compose-Override: ``llm/providers/claude_cli.py`` isoliert ``HOME`` pro
+    # Aufruf selbst (auch aus Kostengruenden — siehe dortiger Modul-
+    # Docstring, ~64x Cache-Overhead ohne Isolation).
+    ProviderConnectionDefinition(
+        # cast: PROVIDER_CLAUDE_CLI ist als ``str`` inferiert, nicht als
+        # ``Literal[...]`` (dasselbe pre-existing Muster wie bei allen
+        # anderen PROVIDER_*-Konstanten hier — Typ-Schuld-Gate #1495 laesst
+        # 11 bestehende Instanzen bereits zu; dieser cast haelt claude_cli
+        # bei "keine neue Schuld" statt die Baseline auf 12 anzuheben).
+        cast(ProviderType, PROVIDER_CLAUDE_CLI), "Claude Code (Abo)", "cli", "api_key",
+        None, "claude_cli", "CLAUDE_CODE_OAUTH_TOKEN",
+        fallback_models=_claude_cli_models(),
     ),
     ProviderConnectionDefinition(
         PROVIDER_BEDROCK, "Amazon Bedrock", "http", "api_key",

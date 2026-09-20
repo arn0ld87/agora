@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Optional
 
 from ..contracts.llm_routing_contract import ResolvedRoute
-from ..contracts.provider_types import PROVIDER_CODEX_CLI
 from .llm_routing_seed import resolve_route_api_key
 from .llm_runtime import RuntimeLlmConfig
 
@@ -76,7 +75,12 @@ def _resolve_llm_connection(
             )
         return resolve_route_api_key(llm_runtime), base_url, provider_type
     if llm_runtime and llm_runtime.enabled:
-        provider_type = PROVIDER_CODEX_CLI if llm_runtime.provider == PROVIDER_CODEX_CLI else None
+        # Generisch statt auf PROVIDER_CODEX_CLI hartkodiert (#1418-Prinzip):
+        # jeder Provider mit transport="cli" (aktuell codex_cli, claude_cli)
+        # traegt seinen provider_type hier weiter, sonst geht die Information
+        # verloren und ein fehlendes base_url wird faelschlich als
+        # ".env-Fallback noetig" gelesen (siehe Docstring oben).
+        provider_type = llm_runtime.provider if _runtime_uses_cli_transport(llm_runtime) else None
         if require and not llm_runtime.base_url and not _runtime_uses_cli_transport(llm_runtime):
             raise ValueError(
                 f"kein Endpoint für Runtime-Override '{llm_runtime.provider}' aufgelöst: der "

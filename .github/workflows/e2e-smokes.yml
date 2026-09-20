@@ -46,6 +46,7 @@ jobs:
           allowed-endpoints: >
             api.github.com:443
             auth.docker.io:443
+            claude.ai:443
             azure.archive.ubuntu.com:80
             cdn.playwright.dev:443
             dl-cdn.alpinelinux.org:443
@@ -58,6 +59,7 @@ jobs:
             esm.ubuntu.com:443
             download.pytorch.org:443
             download-r2.pytorch.org:443
+            downloads.claude.ai:443
             files.pythonhosted.org:443
             ghcr.io:443
             github.com:443
@@ -146,6 +148,7 @@ jobs:
           allowed-endpoints: >
             api.github.com:443
             auth.docker.io:443
+            claude.ai:443
             azure.archive.ubuntu.com:80
             cdn.playwright.dev:443
             dl-cdn.alpinelinux.org:443
@@ -158,6 +161,7 @@ jobs:
             esm.ubuntu.com:443
             download.pytorch.org:443
             download-r2.pytorch.org:443
+            downloads.claude.ai:443
             files.pythonhosted.org:443
             ghcr.io:443
             github.com:443
@@ -244,6 +248,7 @@ jobs:
           allowed-endpoints: >
             api.github.com:443
             auth.docker.io:443
+            claude.ai:443
             azure.archive.ubuntu.com:80
             cdn.playwright.dev:443
             dl-cdn.alpinelinux.org:443
@@ -256,6 +261,7 @@ jobs:
             esm.ubuntu.com:443
             download.pytorch.org:443
             download-r2.pytorch.org:443
+            downloads.claude.ai:443
             files.pythonhosted.org:443
             ghcr.io:443
             github.com:443
@@ -334,6 +340,7 @@ jobs:
           allowed-endpoints: >
             api.github.com:443
             auth.docker.io:443
+            claude.ai:443
             azure.archive.ubuntu.com:80
             cdn.playwright.dev:443
             dl-cdn.alpinelinux.org:443
@@ -346,6 +353,7 @@ jobs:
             esm.ubuntu.com:443
             download.pytorch.org:443
             download-r2.pytorch.org:443
+            downloads.claude.ai:443
             files.pythonhosted.org:443
             ghcr.io:443
             github.com:443
@@ -427,6 +435,7 @@ jobs:
           allowed-endpoints: >
             api.github.com:443
             auth.docker.io:443
+            claude.ai:443
             azure.archive.ubuntu.com:80
             cdn.playwright.dev:443
             dl-cdn.alpinelinux.org:443
@@ -439,6 +448,7 @@ jobs:
             esm.ubuntu.com:443
             download.pytorch.org:443
             download-r2.pytorch.org:443
+            downloads.claude.ai:443
             files.pythonhosted.org:443
             ghcr.io:443
             github.com:443
@@ -523,6 +533,7 @@ jobs:
           allowed-endpoints: >
             api.github.com:443
             auth.docker.io:443
+            claude.ai:443
             azure.archive.ubuntu.com:80
             cdn.playwright.dev:443
             dl-cdn.alpinelinux.org:443
@@ -535,6 +546,7 @@ jobs:
             esm.ubuntu.com:443
             download.pytorch.org:443
             download-r2.pytorch.org:443
+            downloads.claude.ai:443
             files.pythonhosted.org:443
             ghcr.io:443
             github.com:443
@@ -627,6 +639,7 @@ jobs:
           allowed-endpoints: >
             api.github.com:443
             auth.docker.io:443
+            claude.ai:443
             azure.archive.ubuntu.com:80
             cdn.playwright.dev:443
             dl-cdn.alpinelinux.org:443
@@ -639,6 +652,7 @@ jobs:
             esm.ubuntu.com:443
             download.pytorch.org:443
             download-r2.pytorch.org:443
+            downloads.claude.ai:443
             files.pythonhosted.org:443
             ghcr.io:443
             github.com:443

@@ -44,6 +44,7 @@ const ProviderConnectionKindSchema = z.enum([
   'bedrock',
   'cloud',
   'codex_cli',
+  'claude_cli',
   'unknown',
 ])
 

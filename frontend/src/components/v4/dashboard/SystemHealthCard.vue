@@ -49,6 +49,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   // der aktiven Verbindung statt eines aus der Base-URL geratenen Kinds.
   // Damit erreichen hier auch Connection-IDs die Anzeige.
   codex_cli: 'Codex CLI',
+  claude_cli: 'Claude Code',
   ollama_cloud: 'Ollama Cloud',
   openai_compatible: 'OpenAI-kompatibel',
   github_copilot: 'GitHub Copilot',
