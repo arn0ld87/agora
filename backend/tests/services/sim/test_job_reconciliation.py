@@ -255,10 +255,10 @@ class TestProcessShutdownHandler:
     def test_marks_all_in_process_jobs_as_failed(self) -> None:
         """Alle vier In-Process-Run-Typen werden markiert."""
         registry = _FakeRegistry([
-            _run("run_prepare", run_type="simulation_prepare", metadata={"worker_token": "other"}),
-            _run("run_report", run_type="report_generate", metadata={"worker_token": "other"}),
-            _run("run_graph", run_type="graph_build", metadata={"worker_token": "other"}),
-            _run("run_ontology", run_type="ontology_generate", metadata={"worker_token": "other"}),
+            _run("run_prepare", run_type="simulation_prepare", metadata=current_worker_identity()),
+            _run("run_report", run_type="report_generate", metadata=current_worker_identity()),
+            _run("run_graph", run_type="graph_build", metadata=current_worker_identity()),
+            _run("run_ontology", run_type="ontology_generate", metadata=current_worker_identity()),
         ])
 
         seen_state: List[tuple] = []
@@ -280,8 +280,8 @@ class TestProcessShutdownHandler:
     def test_sets_cancel_flag_for_each_run(self) -> None:
         """Cancel-Flag wird für jeden Run gesetzt (kooperativer Abbruch)."""
         registry = _FakeRegistry([
-            _run("run_a", run_type="simulation_prepare", metadata={"worker_token": "other"}),
-            _run("run_b", run_type="report_generate", metadata={"worker_token": "other"}),
+            _run("run_a", run_type="simulation_prepare", metadata=current_worker_identity()),
+            _run("run_b", run_type="report_generate", metadata=current_worker_identity()),
         ])
 
         _mark_in_process_jobs_failed(registry, fail_simulation_state=lambda *_: None)
@@ -293,9 +293,9 @@ class TestProcessShutdownHandler:
         """fail_simulation_state wird nur für simulation_prepare aufgerufen."""
         seen: List[tuple] = []
         registry = _FakeRegistry([
-            _run("run_prepare", run_type="simulation_prepare", metadata={"worker_token": "other"}),
-            _run("run_report", run_type="report_generate", metadata={"worker_token": "other"}),
-            _run("run_graph", run_type="graph_build", metadata={"worker_token": "other"}),
+            _run("run_prepare", run_type="simulation_prepare", metadata=current_worker_identity()),
+            _run("run_report", run_type="report_generate", metadata=current_worker_identity()),
+            _run("run_graph", run_type="graph_build", metadata=current_worker_identity()),
         ])
 
         _mark_in_process_jobs_failed(
@@ -317,7 +317,7 @@ class TestProcessShutdownHandler:
                 return super().update_run(run_id, **updates)
 
         registry = _OrderingRegistry([
-            _run("run_prepare", run_type="simulation_prepare", metadata={"worker_token": "other"}),
+            _run("run_prepare", run_type="simulation_prepare", metadata=current_worker_identity()),
         ])
 
         _mark_in_process_jobs_failed(
@@ -346,10 +346,32 @@ class TestProcessShutdownHandler:
         assert set(result.reconciled_run_ids) == {"run_a", "run_b"}
         assert result.skipped_run_ids == []
 
+    def test_jobs_of_a_foreign_process_are_left_alone(self) -> None:
+        """Jobs eines fremden Prozesses werden NICHT markiert (Codex-P2, PR #1530).
+
+        ``create_app()`` registriert den atexit-Callback auch im preloadenden
+        Master. Bei einem gunicorn-Hot-Upgrade (USR2) überlappen alter und
+        neuer Master; ohne Ownership-Filter erklärte der ausscheidende alte
+        Master die Jobs des *neuen* Workers für tot.
+
+        Ein Manifest ohne Token gehört ebenfalls nicht diesem Prozess —
+        ``owns_run`` behandelt es bewusst als fremd (``app/jobs/identity.py``).
+        """
+        registry = _FakeRegistry([
+            _run("run_fremd", metadata={"worker_token": "ein-anderer-prozess"}),
+            _run("run_ohne_token", run_type="report_generate", metadata={}),
+        ])
+
+        result = _mark_in_process_jobs_failed(registry, fail_simulation_state=lambda *_: None)
+
+        assert result.reconciled_run_ids == []
+        assert set(result.skipped_run_ids) == {"run_fremd", "run_ohne_token"}
+        assert registry.updates == []
+
     def test_simulation_run_is_not_touched(self) -> None:
         """simulation_run wird nicht angefasst (gehört zu reconcile_stale_runs)."""
         registry = _FakeRegistry([
-            _run("run_a", run_type="simulation_run", metadata={"worker_token": "other"}),
+            _run("run_a", run_type="simulation_run", metadata=current_worker_identity()),
         ])
 
         result = _mark_in_process_jobs_failed(registry, fail_simulation_state=lambda *_: None)
@@ -361,9 +383,9 @@ class TestProcessShutdownHandler:
         """Bereits terminale Runs (completed/failed/stopped) werden nicht einmal
         von list_runs zurückgegeben (Filter über _STALE_STATUSES)."""
         registry = _FakeRegistry([
-            _run("run_a", status="completed", metadata={"worker_token": "other"}),
-            _run("run_b", status="failed", metadata={"worker_token": "other"}),
-            _run("run_c", status="stopped", metadata={"worker_token": "other"}),
+            _run("run_a", status="completed", metadata=current_worker_identity()),
+            _run("run_b", status="failed", metadata=current_worker_identity()),
+            _run("run_c", status="stopped", metadata=current_worker_identity()),
         ])
 
         result = _mark_in_process_jobs_failed(registry, fail_simulation_state=lambda *_: None)
@@ -376,7 +398,7 @@ class TestProcessShutdownHandler:
 
     def test_registry_error_is_logged_not_raised(self) -> None:
         """Fehler bei registry.update_run werden geloggt, nicht geworfen."""
-        registry = _FakeRegistry([_run("run_a", metadata={"worker_token": "other"})])
+        registry = _FakeRegistry([_run("run_a", metadata=current_worker_identity())])
 
         # Registry update_run zum Fehlschlagen bringen
         def _fail_update(run_id: str, **updates):
@@ -474,7 +496,7 @@ class TestProcessShutdownHandler:
         original_sigterm = signal.getsignal(signal.SIGTERM)
         original_sigint = signal.getsignal(signal.SIGINT)
         registry = _FakeRegistry([
-            _run("run_a", run_type="simulation_prepare", metadata={"worker_token": "other"}),
+            _run("run_a", run_type="simulation_prepare", metadata=current_worker_identity()),
         ])
 
         try:
@@ -502,7 +524,7 @@ class TestProcessShutdownHandler:
         original_sigterm = signal.getsignal(signal.SIGTERM)
         original_sigint = signal.getsignal(signal.SIGINT)
         registry = _FakeRegistry([
-            _run("run_a", metadata={"worker_token": "other"}),
+            _run("run_a", metadata=current_worker_identity()),
         ])
 
         try:
@@ -532,7 +554,7 @@ class TestProcessShutdownHandler:
         original_sigterm = signal.getsignal(signal.SIGTERM)
         original_sigint = signal.getsignal(signal.SIGINT)
         registry = _FakeRegistry([
-            _run("run_a", metadata={"worker_token": "other"}),
+            _run("run_a", metadata=current_worker_identity()),
         ])
 
         try:

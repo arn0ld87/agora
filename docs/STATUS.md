@@ -104,7 +104,9 @@ Die 0.9.5-Stabilisierung hat mehrere vorher stille Zustandsfehler geschlossen:
 
 ### Bekannte Lifecycle-Grenze
 
-Prepare-, Report- und Graph-Build-Jobs laufen weiterhin als daemonisierte Threads im Webprozess. Ein SIGTERM markiert diese Jobs nun **sofort** als `failed/process_restart` (Slice 1.1, #1472a), statt auf die Startup-Reconciliation beim nächsten Start zu warten. Das Cancel-Flag wird kooperativ gesetzt; für `simulation_prepare` wird auch der `SimulationState` auf `FAILED` gesetzt. Ein vollständig persistierter `interrupted`-/Resume-Zustand wird **nicht** erzeugt — das bleibt in #1472 offen und ein 0.10-Release-Thema. Der Redis-Event-Bus ist **keine persistente Jobqueue**.
+Prepare-, Report- und Graph-Build-Jobs laufen weiterhin als daemonisierte Threads im Webprozess. Beendet sich der Worker regulär — etwa nach SIGTERM —, markiert ein `atexit`-Hook die Jobs dieses Prozesses noch im selben Lauf als `failed/process_restart` (Slice 1.1, #1472a), statt auf die Startup-Reconciliation beim nächsten Start zu warten. Das Cancel-Flag wird kooperativ gesetzt; für `simulation_prepare` wird auch der `SimulationState` auf `FAILED` gesetzt.
+
+Zwei Grenzen dieses Hooks, damit daraus keine falsche Zusage wird: Die Terminalisierung passiert **nicht** im Signal-Handler, sondern beim Interpreter-Shutdown — wird der Worker nach Ablauf von `graceful_timeout` per SIGKILL beendet, greift weiterhin nur die Startup-Reconciliation. Und ein vollständig persistierter `interrupted`-/Resume-Zustand entsteht **nicht**; das bleibt in #1472 offen und ein 0.10-Release-Thema. Der Redis-Event-Bus ist **keine persistente Jobqueue**.
 
 Report-Generierungen sind seit Slice 1.2 (#1265) je Simulation **serialisiert**: ein zweiter Start wird mit `409 report_generate_in_progress` abgewiesen, solange ein Run mit `run_type=report_generate` in `pending` oder `processing` steht. Das ist eine bewusste Verhaltensänderung gegenüber 0.9.5 und eine Einschränkung für parallele Nutzung, keine Optimierung. Reportarbeit in einen eigenen Prozess zu verschieben bleibt 1.0-Vorarbeit.
 

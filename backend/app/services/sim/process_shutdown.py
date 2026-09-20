@@ -62,6 +62,7 @@ import signal
 import threading
 from typing import Any, Callable, Dict, List, Optional, Protocol
 
+from ...jobs.identity import owns_run
 from ...utils.logger import get_logger
 from .cancel_flag import request_cancel
 from .reconciliation import (
@@ -122,20 +123,36 @@ def _mark_in_process_jobs_failed(
     reconciled: List[str] = []
     skipped: List[str] = []
 
-    # Anders als ``reconcile_stale_jobs`` (reconciliation.py, filtert per
-    # ``owns()``) wird hier bewusst NICHT nach Ownership gefiltert: die
-    # ``workers = 1``-HARDSTOP-Invariante in ``gunicorn.conf.py`` garantiert,
-    # dass in Produktion genau ein Prozess In-Process-Jobs besitzen kann.
-    # Der SIGTERM, der diesen Handler auslöst, trifft also entweder den
-    # Prozess, der die Jobs selbst hält (der gerade stirbt), oder es gibt
-    # keinen zweiten Prozess, dessen fremde Jobs verschont werden müssten.
-    # Eine Ownership-Prüfung wäre hier reine Attrappe.
+    # Ownership-Filter wie in ``reconcile_stale_jobs`` (reconciliation.py:463).
+    #
+    # Die vorherige Fassung verzichtete bewusst darauf und berief sich auf die
+    # ``workers = 1``-HARDSTOP-Invariante aus ``gunicorn.conf.py``. Diese
+    # Begruendung traegt nicht: ``create_app()`` registriert den atexit-Callback
+    # auch im preloadenden Master (``app/__init__.py:361``), und bei einem
+    # gunicorn-Hot-Upgrade (USR2) ueberlappen alter und neuer Master. Beendet
+    # sich der alte, markierte er ohne diesen Filter die Jobs, die im *neuen*
+    # Worker gerade laufen, als failed/process_restart — ein laufender Job
+    # wuerde also von einem fremden Prozess fuer tot erklaert. ``workers = 1``
+    # begrenzt die Worker pro Master, nicht die Zahl der Master.
+    #
+    # ``owns_run`` ist dafuer belastbar: das Manifest eines laufenden Jobs
+    # traegt immer ein Token, weil ``enqueue`` es vor dem Threadstart setzt
+    # (``app/jobs/identity.py``).
     for run_type in _IN_PROCESS_RUN_TYPES:
         for run in registry.list_runs(
             statuses=_STALE_STATUSES, run_type=run_type, limit=100_000
         ):
             run_id = run.get("run_id")
             if not run_id:
+                continue
+
+            if not owns_run(run.get("metadata") or {}):
+                logger.info(
+                    "process_shutdown: run=%s (%s) gehoert einem anderen Prozess — uebersprungen",
+                    run_id,
+                    run_type,
+                )
+                skipped.append(run_id)
                 continue
 
             logger.info(
