@@ -330,14 +330,19 @@ def _phase_read_entities_from_checkpoint(
     by_uuid = _build_eligible_uuid_pool(
         reader, checkpoint.graph_id, checkpoint.defined_entity_types
     )
-    primary = _lookup_entities_by_uuid(by_uuid, checkpoint.primary_entity_uuids)
-    if any(entity is None for entity in primary):
+    primary_raw = _lookup_entities_by_uuid(by_uuid, checkpoint.primary_entity_uuids)
+    if any(entity is None for entity in primary_raw):
         _legacy.logger.warning(
             "Prepare-Resume: mindestens eine im Checkpoint fixierte "
             "Entitaet wurde im Graphen nicht mehr gefunden — Checkpoint "
             "gilt als entwertet, Auswahl wird neu berechnet."
         )
         return None
+    # mypy kann den ``any()``-Check oben nicht auf den Listentyp durchreichen
+    # (weiterhin ``List[EntityNode | None]``) — die Filter-Comprehension
+    # narrowt explizit auf ``List[EntityNode]``; laufzeitseitig ein No-Op,
+    # da oben bereits sichergestellt ist, dass kein Eintrag ``None`` ist.
+    primary: List["EntityNode"] = [entity for entity in primary_raw if entity is not None]
     reserve = [
         entity
         for entity in _lookup_entities_by_uuid(by_uuid, checkpoint.reserve_entity_uuids)
@@ -387,12 +392,13 @@ def _lookup_expanded_entities_from_checkpoint(
     by_uuid = _build_eligible_uuid_pool(
         reader, checkpoint.graph_id, checkpoint.defined_entity_types
     )
-    expanded = _lookup_entities_by_uuid(by_uuid, checkpoint.expanded_entity_uuids)
-    if any(entity is None for entity in expanded):
+    expanded_raw = _lookup_entities_by_uuid(by_uuid, checkpoint.expanded_entity_uuids)
+    if any(entity is None for entity in expanded_raw):
         _legacy.logger.warning(
             "Prepare-Resume: mindestens eine im Checkpoint fixierte "
             "Generierungs-Entitaet wurde im Graphen nicht mehr gefunden — "
             "Checkpoint gilt als entwertet, Auswahl wird neu berechnet."
         )
         return None
-    return list(expanded)
+    # Narrowing-Comprehension wie in ``_phase_read_entities_from_checkpoint``.
+    return [entity for entity in expanded_raw if entity is not None]

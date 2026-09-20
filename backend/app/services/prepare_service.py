@@ -545,6 +545,94 @@ def _validate_persona_quota(plan: PersonaQuotaPlan, profiles: List[OasisAgentPro
     return _prepare_quota._validate_persona_quota(plan, profiles)
 
 
+def _resolve_phase1_result(
+    *,
+    state: SimulationState,
+    storage: Any,
+    simulation_id: str,
+    sim_dir: str,
+    defined_entity_types: Optional[List[str]],
+    max_agents: Optional[int],
+    persona_floor: int,
+    use_llm_for_profiles: bool,
+    effective_quota_plan_snapshot: Optional[Dict[str, Any]],
+    progress_callback: Optional[Callable],
+    degradations: Optional[DegradationCollector],
+) -> Tuple[Any, Optional["_prepare_checkpoint.PreparePersonaCheckpoint"], Optional[List[Any]]]:
+    """Phase 1 oder deren Resume-Variante (Issue #1472c).
+
+    Ausgelagert aus ``prepare_simulation`` — die Resume-Erkennung (Checkpoint
+    laden, Gültigkeit prüfen, zwei Rückfallpfade) hob dessen zyklomatische
+    Komplexität über den Radon-Schwellenwert (Rank D). Ein neuer Eintrag in
+    ``radon-allowlist.txt`` ist dafür keine Lösung, eine Auslagerung schon.
+
+    Liefert ``(filtered, resume_checkpoint, precomputed_entities)``:
+    ``resume_checkpoint``/``precomputed_entities`` sind nur bei einem
+    tatsächlich verwertbaren Checkpoint gesetzt (sonst beide ``None`` und
+    ``filtered`` kommt aus einer regulär ausgeführten Phase 1).
+    """
+    existing_checkpoint = _prepare_checkpoint.load_checkpoint(sim_dir)
+    resumable = _prepare_checkpoint.checkpoint_is_resumable(
+        existing_checkpoint,
+        simulation_id=simulation_id,
+        graph_id=state.graph_id,
+        defined_entity_types=defined_entity_types,
+        max_agents=max_agents,
+        persona_floor=persona_floor,
+        use_llm_for_profiles=use_llm_for_profiles,
+        effective_quota_plan=effective_quota_plan_snapshot,
+    )
+
+    if resumable:
+        # ``checkpoint_is_resumable`` liefert nur dann True, wenn
+        # ``checkpoint is not None`` geprüft wurde (erste Zeile der
+        # Funktion) — die Invariante gilt per Konstruktion, mypy kann sie
+        # nur nicht über den Funktionsaufruf hinweg herleiten.
+        assert existing_checkpoint is not None
+
+        # Resume: die Cap-/Quota-Auswahl steht bereits fest — Phase 1
+        # berechnet NICHTS neu, sie schlägt nur per UUID nach (der
+        # Graph-Lesepfad hat kein ``ORDER BY``, ein erneuter Read könnte
+        # eine andere Typ-Verteilung liefern, siehe
+        # ``prepare_checkpoint.py`` Moduldocstring).
+        filtered = _phase_read_entities_from_checkpoint(
+            state, storage, existing_checkpoint, progress_callback=progress_callback
+        )
+        precomputed_entities = (
+            _lookup_expanded_entities_from_checkpoint(storage, existing_checkpoint)
+            if filtered is not None
+            else None
+        )
+        if filtered is not None and precomputed_entities is not None:
+            logger.info(
+                "Prepare-Resume erkannt für %s: %d/%d Personas aus Checkpoint übernommen",
+                simulation_id,
+                len(existing_checkpoint.completed_profiles),
+                len(existing_checkpoint.expanded_entity_uuids),
+            )
+            return filtered, existing_checkpoint, precomputed_entities
+        # Checkpoint verwertet sich doch nicht (z. B. eine fixierte Entity
+        # wurde im Graphen gelöscht) — auf den regulären Pfad zurückfallen
+        # statt mit einer beschädigten Auswahl weiterzumachen.
+
+    if existing_checkpoint is not None:
+        # Nicht verwertbar (Parameter-Mismatch oder verschwundene Entity)
+        # — als Altlast entfernen. Sonst läse
+        # ``resolve_interruption_status`` beim nächsten Absturz diese
+        # stale Datei fälschlich als Resume-Angebot.
+        _prepare_checkpoint.clear_checkpoint(sim_dir)
+
+    filtered = _phase_read_entities(
+        state,
+        storage,
+        defined_entity_types,
+        max_agents,
+        progress_callback=progress_callback,
+        degradations=degradations,
+    )
+    return filtered, None, None
+
+
 class PrepareCancelledError(Exception):
     """Signalisiert kooperativen Abbruch während ``prepare_simulation()``.
 
@@ -637,78 +725,24 @@ def prepare_simulation(
             quota_plan.model_dump() if quota_plan is not None else None
         )
 
-        # Issue #1472c (Prepare-Resume): Checkpoint aus einem früheren,
-        # unterbrochenen Versuch laden und gegen die AKTUELLEN
-        # Invocation-Parameter prüfen. Nur bei exaktem Match (gleicher
-        # Graph, gleiche Filter/Caps/Quota/Floor) ist er verwertbar — ein
-        # abweichender Aufruf ist kein Resume, sondern ein neuer Versuch.
-        existing_checkpoint = _prepare_checkpoint.load_checkpoint(sim_dir)
-        resumable = _prepare_checkpoint.checkpoint_is_resumable(
-            existing_checkpoint,
+        # Issue #1472c (Prepare-Resume): Phase 1 oder deren Resume-Variante
+        # — ausgelagert in ``_resolve_phase1_result`` (Komplexitätsgründe,
+        # siehe deren Docstring).
+        _raise_if_cancelled()
+
+        filtered, resume_checkpoint, precomputed_entities = _resolve_phase1_result(
+            state=state,
+            storage=storage,
             simulation_id=simulation_id,
-            graph_id=state.graph_id,
+            sim_dir=sim_dir,
             defined_entity_types=defined_entity_types,
             max_agents=max_agents,
             persona_floor=persona_floor,
             use_llm_for_profiles=use_llm_for_profiles,
-            effective_quota_plan=effective_quota_plan_snapshot,
+            effective_quota_plan_snapshot=effective_quota_plan_snapshot,
+            progress_callback=progress_callback,
+            degradations=degradations,
         )
-
-        resume_checkpoint: Optional[_prepare_checkpoint.PreparePersonaCheckpoint] = None
-        precomputed_entities: Optional[List[Any]] = None
-        filtered = None
-
-        _raise_if_cancelled()
-
-        if resumable:
-            # Resume: die Cap-/Quota-Auswahl steht bereits fest — Phase 1
-            # berechnet NICHTS neu, sie schlägt nur per UUID nach (der
-            # Graph-Lesepfad hat kein ``ORDER BY``, ein erneuter Read könnte
-            # eine andere Typ-Verteilung liefern, siehe
-            # ``prepare_checkpoint.py`` Moduldocstring).
-            filtered = _phase_read_entities_from_checkpoint(
-                state, storage, existing_checkpoint, progress_callback=progress_callback
-            )
-            if filtered is not None:
-                precomputed_entities = _lookup_expanded_entities_from_checkpoint(
-                    storage, existing_checkpoint
-                )
-            if filtered is None or precomputed_entities is None:
-                # Checkpoint verwertet sich doch nicht (z. B. eine fixierte
-                # Entity wurde im Graphen gelöscht) — auf den regulären Pfad
-                # zurückfallen statt mit einer beschädigten Auswahl
-                # weiterzumachen.
-                resumable = False
-                filtered = None
-                precomputed_entities = None
-
-        if resumable:
-            resume_checkpoint = existing_checkpoint
-            logger.info(
-                "Prepare-Resume erkannt für %s: %d/%d Personas aus Checkpoint übernommen",
-                simulation_id,
-                len(existing_checkpoint.completed_profiles),
-                len(existing_checkpoint.expanded_entity_uuids),
-            )
-        else:
-            if existing_checkpoint is not None:
-                # Nicht verwertbar (Parameter-Mismatch oder verschwundene
-                # Entity) — als Altlast entfernen. Sonst läse
-                # ``resolve_interruption_status`` beim nächsten Absturz
-                # diese stale Datei fälschlich als Resume-Angebot.
-                _prepare_checkpoint.clear_checkpoint(sim_dir)
-
-            _raise_if_cancelled()
-
-            # Phase 1: Read & filter entities
-            filtered = _phase_read_entities(
-                state,
-                storage,
-                defined_entity_types,
-                max_agents,
-                progress_callback=progress_callback,
-                degradations=degradations,
-            )
 
         if filtered.filtered_count == 0:
             raise ValueError(
