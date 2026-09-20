@@ -501,7 +501,26 @@ class GraphBuilderService:
             futures = {pool.submit(_process, idx, chunk): idx for idx, chunk in enumerate(chunks)}
             for future in as_completed(futures):
                 idx = futures[future]
-                episode_uuid = future.result()  # raises on first failed chunk
+                try:
+                    episode_uuid = future.result()  # raises on first failed chunk
+                except Exception:
+                    # P1-2 (PR #1535 Review): dieser Chunk ist gescheitert, aber
+                    # andere Worker koennen zu diesem Zeitpunkt bereits fertig
+                    # committet haben, ohne dass ihr checkpoint_callback schon
+                    # lief (as_completed liefert sie erst in einer spaeteren
+                    # Iteration). Ohne dieses Nachsammeln bleiben sie in Neo4j
+                    # committet, aber ungecheckpointed — ein Resume wuerde sie
+                    # erneut verarbeiten und Dubletten-Episoden erzeugen. Der
+                    # `with`-Block wartet beim Verlassen ohnehin auf sie
+                    # (kein cancel_futures hier), wir lesen nur zusaetzlich
+                    # ihr Ergebnis und checkpointen es vor dem Re-raise.
+                    self._collect_chunks_still_running(
+                        futures=futures,
+                        episode_uuids=episode_uuids,
+                        current_future=future,
+                        checkpoint_callback=checkpoint_callback,
+                    )
+                    raise
                 episode_uuids[idx] = episode_uuid
                 completed += 1
                 if checkpoint_callback:
@@ -580,6 +599,12 @@ class GraphBuilderService:
         Seit Slice 1.3 (#1472b) laeuft der ``checkpoint_callback`` auch hier:
         ein Resume nach einem Abbruch darf keinen bereits committeten Chunk
         verlieren.
+
+        Wird seit PR #1535 (P1-2) auch aus dem Fehlerpfad in
+        ``add_text_batches`` heraus aufgerufen, wenn ``future.result()``
+        eine Exception wirft: derselbe Verlust droht dort genauso, ohne
+        dass der Cancel-Zweig (``pool.shutdown(cancel_futures=True)``)
+        beteiligt ist — noch ausstehende Futures laufen unveraendert weiter.
         """
         for other_future, other_idx in futures.items():
             if other_future is current_future or episode_uuids[other_idx] is not None:
