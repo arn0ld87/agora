@@ -50,6 +50,7 @@
     "status": {
       "default": "active",
       "enum": [
+        "building",
         "active",
         "superseded",
         "rolled_back",

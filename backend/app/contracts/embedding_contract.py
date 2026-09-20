@@ -97,6 +97,9 @@ EmbeddingMigrationStatus = Literal[
 
 # Status eines versionierten Neo4j-Vector-Index.
 EmbeddingIndexStatus = Literal[
+    "building",       # angelegt, Re-Embedding-Loop befuellt ihn noch;
+                       # der Betrieb (Reads/Writes) folgt weiterhin der
+                       # vorherigen ``active``-Version (Slice 2.2, #1417)
     "active",         # wird aktuell fuer Vektor-Suche genutzt
     "superseded",     # durch eine neuere Version ersetzt, noch lesbar
     "rolled_back",    # Operator hat explizit zurueckgeschaltet

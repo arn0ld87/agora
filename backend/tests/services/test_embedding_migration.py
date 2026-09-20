@@ -61,10 +61,13 @@ def test_start_creates_pending_job(
     assert job.source_index_version == 0
     assert job.error_message is None
     assert job.progress.total == 0
-    # Die neue Index-Version wurde im Store angelegt.
+    # Die neue Index-Version wurde im Store angelegt, aber noch nicht
+    # aktiv — der Switch erfolgt erst nach erfolgreichem run() (Slice 2.2,
+    # #1417: das ist der Regressionsschutz gegen den P1, dass ein
+    # laufendes Re-Embedding den Betrieb vorzeitig umschaltet).
     index = store.get_index_version(1)
     assert index is not None
-    assert index.status == "active"
+    assert index.status == "building"
 
 
 def test_start_with_unknown_configuration_raises(
@@ -328,3 +331,121 @@ def test_get_job_returns_none_for_unknown(
 ) -> None:
     service = EmbeddingMigrationService(store=store, now=lambda: fixed_now)
     assert service.get_job("job-bogus") is None
+
+
+# ----------------------------------------------------------------------
+# Cutover (Slice 2.2, #1417): Ziel-Version bleibt 'building' bis zum
+# erfolgreichen Switch, die alte Version bleibt bis dahin aktiv. Das ist
+# der Regressionsschutz gegen den P1, dass ein laufendes Re-Embedding
+# den Betrieb vorzeitig auf einen leeren/unvollstaendigen Index umschaltet.
+# ----------------------------------------------------------------------
+
+
+def _run_first_migration_to_active(
+    store: EmbeddingConfigurationStore, fixed_now: datetime
+) -> EmbeddingMigrationService:
+    """Bringt eine erste (Cold-Start-)Migration vollstaendig durch, damit
+    Version 1 aktiv ist und ein zweiter Cutover getestet werden kann.
+    """
+    _seed_probed_configuration(store)
+    service = EmbeddingMigrationService(store=store, now=lambda: fixed_now)
+    job = service.start("emb-1")
+    service.run(job.id)
+    # Konfiguration zurueck auf 'probed' setzen, damit ein zweiter
+    # Migrationslauf ueberhaupt gestartet werden darf (start() verlangt
+    # status == 'probed').
+    store.update_configuration_status("emb-1", status="probed")
+    return service
+
+
+def test_active_index_stays_old_while_migration_is_in_progress(
+    store: EmbeddingConfigurationStore, fixed_now: datetime
+) -> None:
+    """Regressionstest: ``start()`` allein darf den Betrieb nicht
+    umschalten. Nach ``start()`` (vor ``run()``) liefert
+    ``get_active_index_version()`` weiterhin die alte Version, und die
+    kanonische Auflösung (Slice 2.1) weiterhin deren Namen.
+    """
+    service = _run_first_migration_to_active(store, fixed_now)
+    v1 = store.get_index_version(1)
+    assert v1 is not None and v1.status == "active"
+
+    job = service.start("emb-1")
+    assert job.target_index_version == 2
+
+    active = store.get_active_index_version()
+    assert active is not None
+    assert active.version == 1
+
+    entity_index, entity_property = store.resolve_active_entity_index()
+    assert entity_index == v1.index_name
+    assert entity_property == v1.property_key
+
+    v2 = store.get_index_version(2)
+    assert v2 is not None
+    assert v2.status == "building"
+
+
+def test_switch_activates_new_version_and_supersedes_old(
+    store: EmbeddingConfigurationStore, fixed_now: datetime
+) -> None:
+    service = _run_first_migration_to_active(store, fixed_now)
+    job = service.start("emb-1")
+    final = service.run(job.id)
+
+    assert final.status == "completed"
+    v1 = store.get_index_version(1)
+    v2 = store.get_index_version(2)
+    assert v1 is not None and v1.status == "superseded"
+    assert v2 is not None and v2.status == "active"
+
+    active = store.get_active_index_version()
+    assert active is not None and active.version == 2
+
+    entity_index, entity_property = store.resolve_active_entity_index()
+    assert entity_index == v2.index_name
+    assert entity_property == v2.property_key
+
+
+def test_failed_index_validation_blocks_switch_and_rolls_back_target(
+    store: EmbeddingConfigurationStore, fixed_now: datetime
+) -> None:
+    """Der Ziel-Index ist laut Validator nicht ONLINE -> kein Switch, der
+    alte Index bleibt aktiv, der Job endet 'failed'.
+    """
+    _run_first_migration_to_active(store, fixed_now)
+    always_offline = EmbeddingMigrationService(
+        store=store,
+        index_validator=lambda index_name: False,
+        now=lambda: fixed_now,
+    )
+    job = always_offline.start("emb-1")
+    final = always_offline.run(job.id)
+
+    assert final.status == "failed"
+    assert "ONLINE" in (final.error_message or "")
+
+    v1 = store.get_index_version(1)
+    v2 = store.get_index_version(2)
+    assert v1 is not None and v1.status == "active"
+    assert v2 is not None and v2.status == "rolled_back"
+
+    config = store.get_configuration("emb-1")
+    assert config is not None
+    assert config.status == "probed", "kein Switch — Konfiguration bleibt unveraendert"
+    assert config.index_version == 1
+
+
+def test_cancel_during_second_migration_keeps_old_index_active(
+    store: EmbeddingConfigurationStore, fixed_now: datetime
+) -> None:
+    service = _run_first_migration_to_active(store, fixed_now)
+    job = service.start("emb-1")
+
+    cancelled = service.cancel(job.id)
+
+    assert cancelled.status == "rolled_back"
+    v1 = store.get_index_version(1)
+    v2 = store.get_index_version(2)
+    assert v1 is not None and v1.status == "active"
+    assert v2 is not None and v2.status == "rolled_back"

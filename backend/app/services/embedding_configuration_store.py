@@ -278,6 +278,42 @@ class EmbeddingConfigurationStore:
             self._write_raw(self._index_path, raw)
         return index
 
+    def resolve_active_entity_index(self) -> tuple[str, str]:
+        """Loest den aktiven Entity-Vector-Index auf: ``(index_name, property_key)``.
+
+        Ist eine Index-Version als ``active`` markiert, stammen beide Namen
+        direkt aus dem gespeicherten ``EmbeddingIndexVersion``-Datensatz —
+        ``embedding_migration.py`` legt ihn mit den tatsaechlich in Neo4j
+        angelegten Namen an (``entity_embedding_vN`` / ``embedding_vN``).
+        Ohne aktive Version gilt der Legacy-Name aus ``search_service.py``
+        und ``neo4j_write.py`` (``entity_embedding`` / ``embedding``) —
+        das ist die Rueckwaertskompatibilitaets-Zusage dieses Slices.
+        """
+        active = self.get_active_index_version()
+        if active is not None:
+            return active.index_name, active.property_key
+        return "entity_embedding", "embedding"
+
+    def resolve_active_fact_index(self) -> tuple[str, str]:
+        """Loest den aktiven Fact-(RELATION-)Vector-Index auf: ``(index_name, property_key)``.
+
+        Fact-Indizes werden **nicht** als eigener ``EmbeddingIndexVersion``-
+        Datensatz verwaltet (dokumentierte Asymmetrie, siehe
+        ``embedding_migration.py`` Zeilen 249-264 und
+        ``embedding_reembedder.py``); Index- und Property-Name werden
+        stattdessen konventionell aus der Versionsnummer der aktiven
+        Entity-Index-Version abgeleitet: ``fact_embedding_v{version}`` fuer
+        beide. Das entspricht exakt der Konvention, mit der
+        ``EmbeddingMigrationService.run()`` die Fact-Phase anstoesst. Ohne
+        aktive Version gilt der Legacy-Name (``fact_embedding`` fuer Index
+        und Property).
+        """
+        active = self.get_active_index_version()
+        if active is not None:
+            version = active.version
+            return f"fact_embedding_v{version}", f"fact_embedding_v{version}"
+        return "fact_embedding", "fact_embedding"
+
     def supersede_index_version(self, version: int) -> EmbeddingIndexVersion:
         """Markiert eine Index-Version als ``superseded`` (nicht mehr aktiv,
         aber noch lesbar). Wird vom Migrations-Flow in Slice 4.3 genutzt.

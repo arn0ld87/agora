@@ -14,13 +14,17 @@ import neo4j.exceptions
 from neo4j import Session as Neo4jSession, ManagedTransaction
 from neo4j.exceptions import ServiceUnavailable, SessionExpired, TransientError
 
+from ..services.embedding_configuration_store import EmbeddingConfigurationStore
 from .embedding_service import EmbeddingService
 
 logger = logging.getLogger('agora.search')
 
-# Cypher for vector search on edges (facts)
+# Cypher for vector search on edges (facts). Der Index-Name ist ein
+# regulaeres Prozedur-Argument (kein DDL-Identifier) und kann daher als
+# Query-Parameter gebunden werden — anders als bei CREATE INDEX oder bei
+# Property-Namen in SET-Klauseln.
 _VECTOR_SEARCH_EDGES = """
-CALL db.index.vector.queryRelationships('fact_embedding', $limit, $query_vector)
+CALL db.index.vector.queryRelationships($index_name, $limit, $query_vector)
 YIELD relationship, score
 WHERE relationship.graph_id = $graph_id
 RETURN relationship AS r, score
@@ -30,7 +34,7 @@ LIMIT $limit
 
 # Cypher for vector search on nodes (entities)
 _VECTOR_SEARCH_NODES = """
-CALL db.index.vector.queryNodes('entity_embedding', $limit, $query_vector)
+CALL db.index.vector.queryNodes($index_name, $limit, $query_vector)
 YIELD node, score
 WHERE node.graph_id = $graph_id
 RETURN node AS n, score
@@ -76,6 +80,7 @@ class SearchService:
         *,
         vector_weight: Optional[float] = None,
         keyword_weight: Optional[float] = None,
+        index_store: Optional[EmbeddingConfigurationStore] = None,
     ):
         self.embedding = embedding_service
         self.vector_weight = (
@@ -84,6 +89,11 @@ class SearchService:
         self.keyword_weight = (
             self.KEYWORD_WEIGHT if keyword_weight is None else float(keyword_weight)
         )
+        # Loest Index-Namen kanonisch ueber den Embedding-Configuration-Store
+        # auf (Issue #1417 Slice 2.1). Ohne uebergebenen Store (z. B. in
+        # Tests) wird ein eigener instanziiert; ohne aktive Index-Version
+        # liefert der Store exakt die bisherigen Legacy-Namen zurueck.
+        self._index_store = index_store or EmbeddingConfigurationStore()
 
     def search_edges(
         self,
@@ -197,10 +207,16 @@ class SearchService:
         self, session: Neo4jSession, graph_id: str, query_vector: List[float], limit: int
     ) -> List[Dict[str, Any]]:
         """Run vector similarity search on edge fact_embedding."""
+        index_name, _property_key = self._index_store.resolve_active_fact_index()
         records = self._run_with_retry(
             session,
             _VECTOR_SEARCH_EDGES,
-            {"graph_id": graph_id, "query_vector": query_vector, "limit": limit},
+            {
+                "graph_id": graph_id,
+                "query_vector": query_vector,
+                "limit": limit,
+                "index_name": index_name,
+            },
             fallback_label="Vector edge search",
         )
         return [
@@ -228,10 +244,16 @@ class SearchService:
         self, session: Neo4jSession, graph_id: str, query_vector: List[float], limit: int
     ) -> List[Dict[str, Any]]:
         """Run vector similarity search on entity embedding."""
+        index_name, _property_key = self._index_store.resolve_active_entity_index()
         records = self._run_with_retry(
             session,
             _VECTOR_SEARCH_NODES,
-            {"graph_id": graph_id, "query_vector": query_vector, "limit": limit},
+            {
+                "graph_id": graph_id,
+                "query_vector": query_vector,
+                "limit": limit,
+                "index_name": index_name,
+            },
             fallback_label="Vector node search",
         )
         return [

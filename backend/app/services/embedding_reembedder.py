@@ -271,6 +271,44 @@ class Neo4jReEmbedder:
         return "completed"
 
     # ------------------------------------------------------------------
+    # Index-Validierung (Slice 2.2, #1417)
+    # ------------------------------------------------------------------
+
+    _SHOW_INDEX_STATE_QUERY = (
+        "SHOW INDEXES YIELD name, state "
+        "WHERE name = $name "
+        "RETURN state AS state"
+    )
+
+    def index_is_online(self, index_name: str) -> bool:
+        """Prueft, ob der benannte Vector-Index in Neo4j existiert und ONLINE ist.
+
+        Wird vom ``EmbeddingMigrationService`` unmittelbar vor dem
+        atomaren Switch aufgerufen: der Job-Fortschritt allein belegt
+        nicht, dass der Betriebspfad auf dem neuen Index tatsaechlich
+        funktioniert. Nutzt dieselbe ``SHOW INDEXES``-Abfrageform wie
+        der Dimensionswaechter in ``neo4j_storage.py`` (Issue #263),
+        hier gegen die Spalte ``state`` statt ``options``. Oeffnet einen
+        eigenen, kurzlebigen Driver — analog zu ``run()`` — statt den
+        App-Pool zu nutzen. Fehlender Index oder ein Zustand ausser
+        ``ONLINE`` (z. B. ``POPULATING``, ``FAILED``) liefert ``False``.
+        """
+        self._require_identifier("Index-Name", index_name)
+        driver = self._driver_factory()
+        try:
+            with driver.session() as session:
+                row = session.execute_read(
+                    lambda tx: tx.run(
+                        self._SHOW_INDEX_STATE_QUERY, name=index_name
+                    ).single()
+                )
+        finally:
+            driver.close()
+        if row is None:
+            return False
+        return row["state"] == "ONLINE"
+
+    # ------------------------------------------------------------------
     # Phasen-Loop
     # ------------------------------------------------------------------
 

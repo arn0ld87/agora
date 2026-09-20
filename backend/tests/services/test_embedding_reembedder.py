@@ -34,7 +34,11 @@ class _FakeResult:
     def __init__(self, records: list[dict[str, Any]]) -> None:
         self._records = records
 
-    def single(self) -> dict[str, Any]:
+    def single(self) -> dict[str, Any] | None:
+        # Wie der echte Neo4j-Treiber: kein Datensatz -> None statt
+        # IndexError (analog ``neo4j_storage._ensure_vector_index_dim``).
+        if not self._records:
+            return None
         return self._records[0]
 
     def consume(self) -> None:
@@ -52,6 +56,11 @@ class _FakeTx:
 
     def run(self, query: str, **params: Any) -> _FakeResult:
         self._graph.queries.append((query, params))
+        if "SHOW INDEXES" in query:
+            state = self._graph.index_states.get(params["name"])
+            if state is None:
+                return _FakeResult([])
+            return _FakeResult([{"state": state}])
         if "CREATE VECTOR INDEX" in query:
             self._graph.created_indexes.append(query)
             return _FakeResult([])
@@ -105,12 +114,14 @@ class _FakeGraph:
         self,
         entities: list[dict[str, Any]],
         relations: list[dict[str, Any]] | None = None,
+        index_states: dict[str, str] | None = None,
     ) -> None:
         self.entities = sorted(entities, key=lambda e: e["uuid"])
         self.relations = sorted((relations or []), key=lambda r: r["uuid"])
         self.queries: list[tuple[str, dict[str, Any]]] = []
         self.written: list[dict[str, Any]] = []
         self.created_indexes: list[str] = []
+        self.index_states: dict[str, str] = index_states or {}
         self.closed = False
 
 
@@ -587,3 +598,47 @@ def test_fact_queries_use_directed_match() -> None:
     # (``FOR ()-[r:RELATION]-() ON`` ist Index-Definition, keine Match-Query).
     ddl = _fact_index_ddl("fact_embedding_v1", "fact_embedding_v1", _DIMS)
     assert "FOR ()-[r:RELATION]-() ON (r.fact_embedding_v1)" in ddl
+
+
+# ----------------------------------------------------------------------
+# index_is_online (Slice 2.2, #1417)
+# ----------------------------------------------------------------------
+
+
+def test_index_is_online_true_for_online_state() -> None:
+    graph = _FakeGraph([], index_states={"entity_embedding_v2": "ONLINE"})
+    engine = _engine(graph)
+
+    assert engine.index_is_online("entity_embedding_v2") is True
+
+
+def test_index_is_online_false_for_populating_state() -> None:
+    """Ein Index, der noch befuellt wird, ist nicht betriebsbereit."""
+    graph = _FakeGraph([], index_states={"entity_embedding_v2": "POPULATING"})
+    engine = _engine(graph)
+
+    assert engine.index_is_online("entity_embedding_v2") is False
+
+
+def test_index_is_online_false_for_missing_index() -> None:
+    graph = _FakeGraph([], index_states={})
+    engine = _engine(graph)
+
+    assert engine.index_is_online("entity_embedding_v2") is False
+
+
+def test_index_is_online_rejects_invalid_identifier() -> None:
+    graph = _FakeGraph([])
+    engine = _engine(graph)
+
+    with pytest.raises(ValueError):
+        engine.index_is_online("evil; DROP INDEX x")
+
+
+def test_index_is_online_closes_driver() -> None:
+    graph = _FakeGraph([], index_states={"entity_embedding_v2": "ONLINE"})
+    engine = _engine(graph)
+
+    engine.index_is_online("entity_embedding_v2")
+
+    assert graph.closed is True
