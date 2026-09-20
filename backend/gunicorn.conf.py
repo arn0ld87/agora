@@ -127,6 +127,15 @@ def post_worker_init(worker) -> None:  # noqa: ARG001 — gunicorn signature
     safe: the idempotency locks in ``process_manager``/``process_shutdown``
     are PID-bound, so a registration inherited from the preloading master
     (a different PID) does not block re-registration in this worker.
+
+    Slice 1.1 P1-fix (Codex-Review, PR #1528, 2026-09-20):
+    ``process_shutdown.register_shutdown_handler`` now installs two things
+    here, not one — the SIGTERM/SIGINT handler (unchanged reason above) and,
+    alongside it, a process-local ``atexit`` callback that does the actual
+    lock-taking termination work. The signal handler itself stays
+    deliberately thin (flag + chain only); see the ``process_shutdown``
+    module docstring for why lock-taking work must not run inside the
+    signal context under gevent.
     """
     logger = logging.getLogger("agora.gunicorn")
     try:

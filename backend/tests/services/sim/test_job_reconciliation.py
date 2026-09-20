@@ -19,6 +19,7 @@ Reconciliation beim nächsten Start zu warten.
 
 from __future__ import annotations
 
+import atexit
 import os
 import signal
 
@@ -244,9 +245,11 @@ class TestWriteOrderMatchesTheF1Invariant:
 class TestProcessShutdownHandler:
     """Tests für den SIGTERM-Handler in ``process_shutdown`` (Issue #1472a).
 
-    Der Handler markiert alle In-Process-Jobs *dieses* Prozesses als
-    failed/process_restart, setzt das Cancel-Flag und aktualisiert (für
-    simulation_prepare) auch den SimulationState.
+    Seit Slice 1.1 (P1-Fund, Codex-Review PR #1528) ist die Arbeit auf zwei
+    Stellen verteilt: der Signal-Handler setzt nur ein Flag und kettet den
+    zuvor bestehenden Handler weiter (nimmt KEIN Lock), die eigentliche
+    Markierung als failed/process_restart — inklusive Cancel-Flag und
+    SimulationState-Update für simulation_prepare — läuft im atexit-Callback.
     """
 
     def test_marks_all_in_process_jobs_as_failed(self) -> None:
@@ -386,53 +389,58 @@ class TestProcessShutdownHandler:
         assert result.reconciled_run_ids == []
         assert result.skipped_run_ids == ["run_a"]
 
-    def test_handler_survives_an_init_signals_style_reset(self) -> None:
-        """Nachbau der realen gunicorn-Reihenfolge (Slice 1.1 Fund, #1472a):
-        ``init_signals()`` (``workers/base.py``) setzt SIGTERM zuerst auf
-        einen Fremd-Handler (hier simuliert durch ``_foreign_handler``, in
-        Produktion gunicorns eigener ``handle_exit``), ERST DANACH registriert
-        ``post_worker_init`` via ``register_shutdown_handler`` unseren
-        Handler. Ein SIGTERM muss danach tatsächlich zugestellt werden und
-        die In-Process-Jobs markieren — nicht nur der Python-Aufruf des
-        Handlers wird simuliert, sondern ``signal.raise_signal`` schickt das
-        echte Signal an diesen Prozess.
+    def test_signal_handler_takes_no_lock(self) -> None:
+        """Regressionsschutz gegen den P1-Fund (Codex-Review, PR #1528):
+        kommt SIGTERM, während der Hauptthread ``RunRegistry._lock`` hält,
+        darf der Signal-Handler selbst KEINE lock-nehmende Registry-Methode
+        aufrufen — unter gevent (siehe Moduldocstring von
+        ``process_shutdown``) wäre das ein Deadlock-Risiko, weil der
+        Handler synchron im unterbrochenen Greenlet läuft. Ein Fake, dessen
+        ``list_runs``/``update_run`` hart fehlschlagen, deckt das direkt ab:
+        bleibt der Handler bei reiner Signalzustellung ausschließlich
+        flag-setzend, wirft dieser Test nie.
         """
+
+        class _ExplodingRegistry:
+            def list_runs(self, *, statuses: List[str], run_type: str, limit: int):
+                raise AssertionError("Signal-Handler darf list_runs nicht aufrufen")
+
+            def update_run(self, run_id: str, **updates: Any):
+                raise AssertionError("Signal-Handler darf update_run nicht aufrufen")
+
         original_sigterm = signal.getsignal(signal.SIGTERM)
         original_pid = process_shutdown._shutdown_registered_pid
-        registry = _FakeRegistry([
-            _run("run_a", run_type="simulation_prepare", metadata={"worker_token": "other"}),
-        ])
+        original_flag = process_shutdown._shutdown_signal_received
 
         def _foreign_handler(signum: int, frame: Any) -> None:
-            """Steht für gunicorns ``Worker.handle_exit``, von init_signals() gesetzt."""
+            """Steht für gunicorns ``Worker.handle_exit``."""
 
         try:
-            # Der Zustand VOR register_shutdown_handler: init_signals() hat
-            # bereits einen Fremd-Handler installiert.
             signal.signal(signal.SIGTERM, _foreign_handler)
-
-            # PID-Lock zurücksetzen, damit die Registrierung in diesem
-            # Prozess tatsächlich läuft (siehe test_registration_is_pid_bound...).
             process_shutdown._shutdown_registered_pid = None
+            process_shutdown._shutdown_signal_received = False
 
-            process_shutdown.register_shutdown_handler(get_registry=lambda: registry)
+            process_shutdown.register_shutdown_handler(get_registry=lambda: _ExplodingRegistry())
 
+            # Darf NICHT werfen — das ist der eigentliche Regressionsschutz.
             signal.raise_signal(signal.SIGTERM)
+
+            assert process_shutdown._shutdown_signal_received is True
         finally:
             signal.signal(signal.SIGTERM, original_sigterm)
             process_shutdown._shutdown_registered_pid = original_pid
-
-        assert registry.updates
-        assert registry.updates[0]["status"] == "failed"
-        assert registry.updates[0]["termination_reason"] == "process_restart"
+            process_shutdown._shutdown_signal_received = original_flag
+            if process_shutdown._shutdown_atexit_callback is not None:
+                atexit.unregister(process_shutdown._shutdown_atexit_callback)
 
     def test_foreign_handler_is_chained_after_registration(self) -> None:
         """Chaining-Nachweis: der zuvor gesetzte Fremd-Handler (gunicorns
-        ``handle_exit``) wird nach unserem Job-Marking ebenfalls noch
+        ``handle_exit``) wird nach unserem Flag-Setzen ebenfalls noch
         aufgerufen. Ohne diese Kette würde der Worker beim Shutdown hängen,
         weil gunicorns eigener Exit-Pfad nie liefe."""
         original_sigterm = signal.getsignal(signal.SIGTERM)
         original_pid = process_shutdown._shutdown_registered_pid
+        original_flag = process_shutdown._shutdown_signal_received
         registry = _FakeRegistry([])
 
         foreign_calls: List[int] = []
@@ -450,8 +458,104 @@ class TestProcessShutdownHandler:
         finally:
             signal.signal(signal.SIGTERM, original_sigterm)
             process_shutdown._shutdown_registered_pid = original_pid
+            process_shutdown._shutdown_signal_received = original_flag
+            if process_shutdown._shutdown_atexit_callback is not None:
+                atexit.unregister(process_shutdown._shutdown_atexit_callback)
 
         assert foreign_calls == [signal.SIGTERM]
+
+    def test_atexit_callback_terminalizes_the_jobs(self) -> None:
+        """Der atexit-Callback ist seit Slice 1.1 der tatsächliche
+        Terminalisierungspfad (siehe Moduldocstring von
+        ``process_shutdown``): direkt aufgerufen — ohne jede Signal-
+        zustellung — muss er dieselben failed/process_restart-Updates
+        schreiben, die vorher der Signal-Handler selbst erledigt hat."""
+        original_pid = process_shutdown._shutdown_registered_pid
+        original_sigterm = signal.getsignal(signal.SIGTERM)
+        original_sigint = signal.getsignal(signal.SIGINT)
+        registry = _FakeRegistry([
+            _run("run_a", run_type="simulation_prepare", metadata={"worker_token": "other"}),
+        ])
+
+        try:
+            process_shutdown._shutdown_registered_pid = None
+            process_shutdown.register_shutdown_handler(get_registry=lambda: registry)
+
+            callback = process_shutdown._shutdown_atexit_callback
+            assert callback is not None
+            callback()
+
+            assert registry.updates
+            assert registry.updates[0]["status"] == "failed"
+            assert registry.updates[0]["termination_reason"] == "process_restart"
+        finally:
+            if process_shutdown._shutdown_atexit_callback is not None:
+                atexit.unregister(process_shutdown._shutdown_atexit_callback)
+            signal.signal(signal.SIGTERM, original_sigterm)
+            signal.signal(signal.SIGINT, original_sigint)
+            process_shutdown._shutdown_registered_pid = original_pid
+
+    def test_atexit_callback_is_idempotent(self) -> None:
+        """Ein Zweitaufruf des atexit-Callbacks (z. B. weil ein Prozess
+        mehrere Einträge trägt) darf die Jobs nicht doppelt markieren."""
+        original_pid = process_shutdown._shutdown_registered_pid
+        original_sigterm = signal.getsignal(signal.SIGTERM)
+        original_sigint = signal.getsignal(signal.SIGINT)
+        registry = _FakeRegistry([
+            _run("run_a", metadata={"worker_token": "other"}),
+        ])
+
+        try:
+            process_shutdown._shutdown_registered_pid = None
+            process_shutdown.register_shutdown_handler(get_registry=lambda: registry)
+
+            callback = process_shutdown._shutdown_atexit_callback
+            assert callback is not None
+            callback()
+            callback()
+
+            assert len(registry.updates) == 1
+        finally:
+            if process_shutdown._shutdown_atexit_callback is not None:
+                atexit.unregister(process_shutdown._shutdown_atexit_callback)
+            signal.signal(signal.SIGTERM, original_sigterm)
+            signal.signal(signal.SIGINT, original_sigint)
+            process_shutdown._shutdown_registered_pid = original_pid
+
+    def test_atexit_callback_skips_a_foreign_pid(self) -> None:
+        """PID-Bindung (Moduldocstring von ``process_shutdown``): ein via
+        ``fork()`` von einem anderen Prozess geerbter atexit-Eintrag darf
+        im aktuellen Prozess keine Jobs terminalisieren. ``os.getpid()``
+        wird für die Dauer des Aufrufs gefälscht, um den Lauf in einem
+        fremden Prozess nachzustellen, ohne tatsächlich zu forken."""
+        original_pid = process_shutdown._shutdown_registered_pid
+        original_sigterm = signal.getsignal(signal.SIGTERM)
+        original_sigint = signal.getsignal(signal.SIGINT)
+        registry = _FakeRegistry([
+            _run("run_a", metadata={"worker_token": "other"}),
+        ])
+
+        try:
+            process_shutdown._shutdown_registered_pid = None
+            process_shutdown.register_shutdown_handler(get_registry=lambda: registry)
+
+            callback = process_shutdown._shutdown_atexit_callback
+            assert callback is not None
+
+            real_getpid = os.getpid
+            os.getpid = lambda: real_getpid() + 1  # type: ignore[assignment]
+            try:
+                callback()
+            finally:
+                os.getpid = real_getpid  # type: ignore[assignment]
+
+            assert registry.updates == []
+        finally:
+            if process_shutdown._shutdown_atexit_callback is not None:
+                atexit.unregister(process_shutdown._shutdown_atexit_callback)
+            signal.signal(signal.SIGTERM, original_sigterm)
+            signal.signal(signal.SIGINT, original_sigint)
+            process_shutdown._shutdown_registered_pid = original_pid
 
     def test_registration_is_pid_bound_not_a_plain_bool(self) -> None:
         """Slice 1.1 Fund: unter ``preload_app = True`` erbt der geforkte
@@ -460,6 +564,7 @@ class TestProcessShutdownHandler:
         ``os.getpid()`` (wie im geforkten Worker) muss die Registrierung
         erneut zulassen, statt sie stillschweigend zu überspringen."""
         original_sigterm = signal.getsignal(signal.SIGTERM)
+        original_sigint = signal.getsignal(signal.SIGINT)
         original_pid = process_shutdown._shutdown_registered_pid
         registry = _FakeRegistry([])
 
@@ -474,5 +579,8 @@ class TestProcessShutdownHandler:
             assert process_shutdown._shutdown_registered_pid == os.getpid()
             assert process_shutdown._shutdown_registered_pid != foreign_pid
         finally:
+            if process_shutdown._shutdown_atexit_callback is not None:
+                atexit.unregister(process_shutdown._shutdown_atexit_callback)
             signal.signal(signal.SIGTERM, original_sigterm)
+            signal.signal(signal.SIGINT, original_sigint)
             process_shutdown._shutdown_registered_pid = original_pid
