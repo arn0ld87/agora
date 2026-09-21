@@ -247,11 +247,49 @@ def test_a_media_marker_fires_without_matching_a_chemical_reaction():
 def test_a_legal_marker_fires_without_matching_spelling_conventions():
     """"Recht" allein steckt auch in "Rechtschreibung" — nicht gemeint."""
     assert "legal" in _domains_in(
-        "Die Rechtsabteilung der Kanzlei übernimmt die Prozessvertretung für den Mandanten."
+        "Die Rechtsabteilung der Anwaltskanzlei übernimmt die Prozessvertretung."
     )
     assert "legal" not in _domains_in(
         "Die Rechtschreibung wird regelmäßig überprüft."
     )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Der Kommandant der Einheit koordiniert den Einsatz.",
+        "Die Kommandantin leitet die Übung.",
+        "Die Kommandantschaft entscheidet über den Ablauf.",
+        "Das Kommandantengespräch findet morgen statt.",
+        "Die Kommandantenakte wird archiviert.",
+        "Die Bundeskanzlei koordiniert die Geschäfte der Verwaltung.",
+    ],
+)
+def test_a_legal_marker_does_not_fire_on_a_commander_or_a_federal_chancellery(text):
+    """"mandant" steckt in "Kommandant", "kanzlei" in "Bundeskanzlei".
+
+    Beides sind reale DACH-Berufs- beziehungsweise Behördenbezeichnungen
+    ohne juristischen Bezug. Griffe ein Marker dort, meldete
+    ``detect_domain_drift`` einen `legal`-Drift, und der produktive
+    Aufrufer setzt bei Drift ``profession=None`` — ein Kommandant verlöre
+    also seinen Beruf.
+
+    Die Kompositum-Fälle stehen hier ausdrücklich mit drin: ``_domains_in``
+    sucht Marker als beliebige Substrings, und jede Langform von "Mandant"
+    steckt im entsprechenden Kommandant-Kompositum gleich mit
+    ("mandantschaft" in "Kommandantschaft"). Deshalb fehlt dieser Wortstamm
+    in der Taxonomie vollständig (Codex-Findings, PR #1540 und #1541).
+    """
+    assert "legal" not in _domains_in(text)
+
+
+def test_the_remaining_legal_markers_still_fire():
+    """Der Verzicht auf die "Mandant"-Familie lässt die Domäne intakt."""
+    assert "legal" in _domains_in("Die Anwaltskanzlei vertritt den Fall.")
+    assert "legal" in _domains_in(
+        "Die Rechtsabteilung übernimmt die Prozessvertretung."
+    )
+    assert "legal" in _domains_in("Der Justiziar prüft die Klageschrift.")
 
 
 def test_an_energy_marker_fires_without_matching_a_delivery_driver():
