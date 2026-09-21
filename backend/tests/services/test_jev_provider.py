@@ -156,6 +156,74 @@ class TestJevDecisionProvider:
             provider.decide(_STATE, NoulQuestion())
         client.system_one.assert_called_once()
 
+    def test_cost_is_priced_against_the_model_jev_actually_reports(self) -> None:
+        """Jev kann laut Anbieterdoku eine andere Version zurückmelden als
+        die angefragte. Der Preis des gepinnten Modells wäre dann der Preis
+        eines anderen Modells."""
+        client = MagicMock(spec=["system_one"])
+        client.system_one.return_value = {
+            "answers": [{"id": "q1", "probability_yes": 0.5, "confidence": 0.5}],
+            "model": "jev-9.9.9-unbekannt",
+            "usage": {"input_tokens": 1_000_000, "output_tokens": 0},
+        }
+
+        result = JevDecisionProvider(client).decide(_STATE, NoulQuestion())
+
+        assert result.model_version == "jev-9.9.9-unbekannt"
+        # Kein Preiseintrag für diese Version -> unbekannt, nicht 0.
+        assert result.cost_micros is None
+
+    def test_missing_usage_makes_the_cost_unknown_not_zero(self) -> None:
+        """Ohne ``usage`` ist der Verbrauch unbekannt, nicht null —
+        ``pricing_registry`` hält dieselbe Regel fest: ein unbekannter
+        Preis wird niemals als 0 ausgegeben."""
+        client = MagicMock(spec=["system_one"])
+        client.system_one.return_value = {
+            "answers": [{"id": "q1", "probability_yes": 0.5, "confidence": 0.5}],
+            "model": "jev-1.13.0",
+        }
+
+        result = JevDecisionProvider(client).decide(_STATE, NoulQuestion())
+
+        assert result.cost_micros is None
+
+    def test_response_payload_never_reaches_the_error_message(self) -> None:
+        """Die Fehlermeldung wandert über den Shadow-Aufrufer in die Logs;
+        eine Antwort eines externen Dienstes kann Teile der Anfrage
+        spiegeln (ADR-0016: Telemetrie referenziert nur den context_hash)."""
+        client = MagicMock(spec=["system_one"])
+        client.system_one.return_value = {
+            "echo": "Bundeskanzleramt, Bundesminister Musterfrau, streng vertraulich",
+        }
+
+        with pytest.raises(DecisionJevResponseError) as excinfo:
+            JevDecisionProvider(client).decide(_STATE, NoulQuestion())
+
+        message = str(excinfo.value)
+        assert "Musterfrau" not in message
+        assert "vertraulich" not in message
+        assert "echo" in message
+
+    @pytest.mark.parametrize(
+        "transient",
+        [TimeoutError("read timeout"), ConnectionError("reset"), RuntimeError("429 rate limit")],
+    )
+    def test_transient_errors_propagate_after_exactly_one_attempt(
+        self, transient: Exception
+    ) -> None:
+        """Der Adapter baut bewusst keine zweite Retry-Schleife über die
+        des SDK (jev-provider-evidence.md warnt vor verschachtelten
+        Retries). Dieser Test nagelt das fest: genau ein Versuch, Fehler
+        unverändert nach außen, damit die Fallback-Kette des Aufrufers
+        entscheidet."""
+        client = MagicMock(spec=["system_one"])
+        client.system_one.side_effect = transient
+
+        with pytest.raises(type(transient)):
+            JevDecisionProvider(client).decide(_STATE, NoulQuestion())
+
+        client.system_one.assert_called_once()
+
     def test_model_version_falls_back_to_pinned_default_when_response_omits_it(self) -> None:
         client = MagicMock(spec=["system_one"])
         client.system_one.return_value = {

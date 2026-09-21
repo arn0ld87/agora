@@ -253,8 +253,15 @@ def local_search(
             # Relevanzentscheidung über den bestbewerteten Treffer, no-op
             # solange AGORA_DECISION_LAYER_MODE nicht "shadow" ist. Wirft
             # nie und ändert weder Score noch Reihenfolge noch Rückgabewert.
+            #
+            # Fakt und Score stammen aus DERSELBEN Kante: ``facts`` über-
+            # springt Kanten mit leerem ``fact`` (oben), ``scored_edges``
+            # nicht — ``facts[0]`` wäre bei einer Top-Kante, die nur über
+            # ``name`` matcht, der Fakt einer niedriger bewerteten Kante,
+            # und die Telemetrie paarte einen Score mit einem fremden Fakt.
             if scored_edges:
-                shadow_relevance_check(query, facts[0] if facts else None, scored_edges[0][0])
+                top_score, top_edge = scored_edges[0]
+                shadow_relevance_check(query, top_edge.get("fact") or None, top_score)
 
         if scope in ["nodes", "both"]:
             all_nodes = storage.get_all_nodes(graph_id)

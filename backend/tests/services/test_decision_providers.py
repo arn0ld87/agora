@@ -92,8 +92,9 @@ class TestLLMProvider:
         assert isinstance(LLMProvider(client), DecisionProvider)
 
     def test_choice_question_builds_an_enum_schema_and_maps_the_response(self) -> None:
-        client = MagicMock(spec=["chat_json", "model"])
+        client = MagicMock(spec=["chat_json", "model", "run_id"])
         client.model = "gpt-test"
+        client.run_id = "run-1"
         client.chat_json.return_value = {"choice": "Organisation", "confidence": 0.8}
 
         provider = LLMProvider(client, provider_label="llm_cheap")
@@ -106,7 +107,41 @@ class TestLLMProvider:
         assert result.distribution == {"Organisation": 0.8}
         assert result.provider == "llm_cheap"
         assert result.model_version == "gpt-test"
+        # 0 heißt hier "vom Ledger gebucht" — der Client trägt eine run_id,
+        # also protokolliert chat_json die Kosten selbst (ADR-0016).
         assert result.cost_micros == 0
+
+    def test_cost_is_unknown_not_zero_when_the_client_has_no_run_id(self) -> None:
+        """Ohne ``run_id`` kehrt ``_log_invocation_event`` früh zurück — die
+        Kosten sind entstanden, aber nirgends gebucht. ``0`` würde das als
+        "kostenlos" tarnen, deshalb ``None``."""
+        client = MagicMock(spec=["chat_json", "model"])
+        client.model = "gpt-test"
+        client.chat_json.return_value = {"choice": "Organisation", "confidence": 0.8}
+
+        result = LLMProvider(client).decide(_STATE, ChoiceQuestion(options=["Organisation"]))
+
+        assert result.cost_micros is None
+
+    def test_response_payload_never_reaches_the_error_message(self) -> None:
+        """Die Fehlermeldung wandert über den Shadow-Aufrufer in die Logs;
+        eine LLM-Antwort kann Teile des Prompts spiegeln, und der Prompt
+        trägt den Entscheidungskontext im Klartext (ADR-0016: Telemetrie
+        referenziert nur den context_hash)."""
+        client = MagicMock(spec=["chat_json", "model"])
+        client.model = "gpt-test"
+        client.chat_json.return_value = {
+            "echo": "Bundeskanzleramt, Bundesminister Musterfrau, streng vertraulich",
+        }
+
+        with pytest.raises(DecisionLLMResponseError) as excinfo:
+            LLMProvider(client).decide(_STATE, NoulQuestion())
+
+        message = str(excinfo.value)
+        assert "Musterfrau" not in message
+        assert "vertraulich" not in message
+        # Die Form bleibt diagnostizierbar.
+        assert "echo" in message
 
     def test_choice_outside_sent_options_is_a_response_error(self) -> None:
         client = MagicMock(spec=["chat_json", "model"])

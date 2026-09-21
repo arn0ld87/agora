@@ -141,6 +141,78 @@ class TestShadowRelevanceCheckShadowMode:
         assert first_hash != second_hash
 
 
+class TestRunsOverEveryTypedProvider:
+    """Akzeptanzkriterium der Slice: derselbe Shadow-Aufruf läuft über die
+    typisierten Rule-, LLM-, Fake- und Jev-Provider. Getestet wird der
+    echte Aufrufpfad inklusive ``shadow``-Markierung und Telemetriezeile,
+    nicht nur die Konstruierbarkeit der Adapter."""
+
+    @staticmethod
+    def _providers() -> list[tuple[str, object]]:
+        from unittest.mock import MagicMock
+
+        from app.contracts.decision_contract import DecisionResult
+        from app.services.decisions.fake_provider import FakeProvider
+        from app.services.decisions.jev_provider import JevDecisionProvider
+        from app.services.decisions.llm_provider import LLMProvider
+
+        llm_client = MagicMock(spec=["chat_json", "model", "run_id"])
+        llm_client.model = "gpt-test"
+        llm_client.run_id = "run-1"
+        llm_client.chat_json.return_value = {"probability_yes": 0.5, "confidence": 0.5}
+
+        jev_client = MagicMock(spec=["system_one"])
+        jev_client.system_one.return_value = {
+            "answers": [{"id": "q1", "probability_yes": 0.5, "confidence": 0.5}],
+            "model": "jev-1.13.0",
+            "usage": {"input_tokens": 10, "output_tokens": 0},
+        }
+
+        scripted = DecisionResult(
+            use_case_id=_USE_CASE_ID,
+            provider="fake",
+            answer=None,
+            probability_yes=0.5,
+            confidence=0.5,
+            cost_micros=0,
+            latency_ms=0,
+            shadow=False,
+        )
+
+        return [
+            ("rule", RuleProvider(use_case_id=_USE_CASE_ID, rule_fn=_relevance_rule)),
+            ("fake", FakeProvider([scripted])),
+            ("llm_cheap", LLMProvider(llm_client)),
+            ("jev", JevDecisionProvider(jev_client)),
+        ]
+
+    def test_every_typed_provider_answers_the_same_shadow_call(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        monkeypatch.setattr(logging.getLogger("agora"), "propagate", True)
+        monkeypatch.setattr(
+            logging.getLogger("agora.decisions.local_search_shadow"), "propagate", True
+        )
+        monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "shadow")
+
+        for expected_provider, provider in self._providers():
+            caplog.clear()
+            with caplog.at_level(
+                logging.INFO, logger="agora.decisions.local_search_shadow"
+            ):
+                shadow_relevance_check(
+                    "Bundeskanzleramt", "ein Fakt", 100, provider=provider
+                )
+
+            assert f"provider={expected_provider}" in caplog.text, (
+                f"{expected_provider}: keine Shadow-Telemetrie — der Aufruf ist "
+                "entweder nicht durchgelaufen oder hat still versagt."
+            )
+            # Ein stiller Fehlschlag würde sonst als 'bestanden' durchgehen,
+            # weil shadow_relevance_check nie wirft.
+            assert "decision_layer_shadow failed" not in caplog.text
+
+
 class TestDefaultRuleProvider:
     """Der Default-Provider (kein ``provider=`` übergeben) — RuleProvider
     mit der Schwellenwertregel dieses Moduls."""

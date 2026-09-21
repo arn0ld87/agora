@@ -9,10 +9,18 @@ bei ``registry.py::detect_provider`` und dem Aufrufer, der den Client baut
 eine zweite Routing-Heuristik einführen.
 
 Kosten: ``LLMClient.chat_json`` protokolliert Token-Verbrauch und Kosten
-bereits selbst in das Run-Usage-Ledger, wenn der Client einen ``run_id``
-trägt (``_log_invocation_event`` in ``llm/client.py``). ``DecisionResult.
-cost_micros`` ist hier deshalb bewusst ``0`` — nicht "kostenlos", sondern
-"an anderer Stelle bereits gebucht, keine zweite Kostenwahrheit" (ADR-0016).
+bereits selbst in das Run-Usage-Ledger, aber nur wenn der Client einen
+``run_id`` trägt — ``_log_invocation_event`` (``llm/client.py``) kehrt
+ohne ``run_id`` früh zurück. Dieser Adapter unterscheidet deshalb zwei
+Fälle statt pauschal ``0`` zu melden:
+
+- ``run_id`` gesetzt → ``cost_micros=0``: nicht "kostenlos", sondern
+  "an anderer Stelle bereits gebucht, keine zweite Kostenwahrheit"
+  (ADR-0016).
+- kein ``run_id`` → ``cost_micros=None``: die Kosten sind entstanden,
+  aber nirgends gebucht und hier nicht beziffert. Ein sichtbarer
+  Unbekannt-Zustand, damit ein Aufruf ohne Ledger nicht als kostenlos
+  durchgeht.
 """
 
 from __future__ import annotations
@@ -28,6 +36,31 @@ from ...contracts.decision_contract import (
     NoulQuestion,
     ScoreQuestion,
 )
+
+
+def _shape(value: Any) -> str:
+    """Strukturbeschreibung statt Inhalt.
+
+    Die Fehlermeldung landet über die Exception-Kette im Log. Eine
+    LLM-Antwort auf einen Schemafehler kann Teile des Prompts spiegeln,
+    und der Prompt trägt den Entscheidungskontext im Klartext — Telemetrie
+    darf laut ADR-0016 nur den ``context_hash`` referenzieren. Deshalb
+    beschreibt diese Funktion die Form der Antwort, nicht ihre Werte.
+    """
+    if isinstance(value, dict):
+        return f"dict(keys={sorted(str(key) for key in value)})"
+    if isinstance(value, list):
+        return f"list(len={len(value)})"
+    return type(value).__name__
+
+
+def _bounded(value: Any, limit: int = 80) -> str:
+    """Gekürzte Wertdarstellung, wo genau der Wert die Diagnose IST — etwa
+    eine Kategorie außerhalb der gesendeten Optionen. Abwägung wie in
+    ``jev_provider._bounded``: ohne Wert nicht debuggbar, mit vollem Wert
+    stünde eine gespiegelte Anfrage im Log."""
+    text = repr(value)
+    return text if len(text) <= limit else f"{text[:limit]}…"
 
 
 class DecisionLLMResponseError(RuntimeError):
@@ -106,19 +139,20 @@ def _result_from_response(
     use_case_id: str,
     provider: Literal["llm_cheap", "llm_capable"],
     model_version: str | None,
+    cost_micros: int | None,
     latency_ms: int,
 ) -> DecisionResult:
     confidence = response.get("confidence")
     if not isinstance(confidence, (int, float)):
         raise DecisionLLMResponseError(
-            f"LLM-Antwort ohne gültiges 'confidence'-Feld: {response!r}"
+            f"LLM-Antwort ohne gültiges 'confidence'-Feld: {_shape(response)}"
         )
 
     if isinstance(question, ChoiceQuestion):
         choice = response.get("choice")
         if choice not in question.options:
             raise DecisionLLMResponseError(
-                f"LLM-Antwort '{choice!r}' liegt außerhalb der gesendeten "
+                f"LLM-Antwort {_bounded(choice)} liegt außerhalb der gesendeten "
                 f"Optionen {question.options!r}."
             )
         return DecisionResult(
@@ -128,7 +162,7 @@ def _result_from_response(
             distribution={choice: float(confidence)},
             confidence=float(confidence),
             model_version=model_version,
-            cost_micros=0,
+            cost_micros=cost_micros,
             latency_ms=latency_ms,
             shadow=False,
         )
@@ -136,7 +170,7 @@ def _result_from_response(
         stage = response.get("stage")
         if not isinstance(stage, int) or not (question.min_stage <= stage <= question.max_stage):
             raise DecisionLLMResponseError(
-                f"LLM-Antwort-Stufe {stage!r} außerhalb "
+                f"LLM-Antwort-Stufe {_bounded(stage)} außerhalb "
                 f"[{question.min_stage}, {question.max_stage}]."
             )
         return DecisionResult(
@@ -145,7 +179,7 @@ def _result_from_response(
             answer=stage,
             confidence=float(confidence),
             model_version=model_version,
-            cost_micros=0,
+            cost_micros=cost_micros,
             latency_ms=latency_ms,
             shadow=False,
         )
@@ -153,7 +187,7 @@ def _result_from_response(
     probability_yes = response.get("probability_yes")
     if not isinstance(probability_yes, (int, float)) or not (0.0 <= probability_yes <= 1.0):
         raise DecisionLLMResponseError(
-            f"LLM-Antwort ohne gültiges 'probability_yes'-Feld: {response!r}"
+            f"LLM-Antwort ohne gültiges 'probability_yes'-Feld: {_shape(response)}"
         )
     return DecisionResult(
         use_case_id=use_case_id,
@@ -162,7 +196,7 @@ def _result_from_response(
         probability_yes=float(probability_yes),
         confidence=float(confidence),
         model_version=model_version,
-        cost_micros=0,
+        cost_micros=cost_micros,
         latency_ms=latency_ms,
         shadow=False,
     )
@@ -191,12 +225,18 @@ class LLMProvider:
             context="chat_json",
         )
         latency_ms = int((time.monotonic() - t0) * 1000)
+        # Siehe Moduldocstring: 0 heißt "im Run-Usage-Ledger gebucht",
+        # None heißt "entstanden, aber nirgends gebucht". Ohne ``run_id``
+        # kehrt ``_log_invocation_event`` früh zurück, die Kosten wären
+        # sonst unsichtbar verschwunden.
+        cost_micros = 0 if getattr(self._client, "run_id", None) else None
         return _result_from_response(
             question,
             response,
             use_case_id=state.use_case_id,
             provider=self._provider_label,
             model_version=getattr(self._client, "model", None),
+            cost_micros=cost_micros,
             latency_ms=latency_ms,
         )
 

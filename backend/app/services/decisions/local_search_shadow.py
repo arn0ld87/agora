@@ -111,6 +111,13 @@ def shadow_relevance_check(
             state.context_hash,
         )
     except Exception:  # noqa: BLE001 - Shadow-Fehler duerfen die Suche nie stoeren
+        # ``logger.exception`` hängt den Traceback an, und der enthält die
+        # Message der Ausnahme. Die Adapter dieses Projekts halten ihre
+        # Fehlermeldungen deshalb payload-frei (``_shape``/``_bounded`` in
+        # ``jev_provider``/``llm_provider``). Für eine künftige Ausnahme aus
+        # einem fremden SDK gilt das nicht automatisch — wird hier ein
+        # externer Provider verdrahtet, ist vor dem Scharfschalten zu
+        # prüfen, ob dessen Ausnahmen Anfrageinhalte spiegeln.
         logger.exception("decision_layer_shadow failed for use_case=%s", _USE_CASE_ID)
 
 

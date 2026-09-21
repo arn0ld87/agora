@@ -86,6 +86,18 @@ class ScoreQuestion(BaseModel):
                 f"ScoreQuestion: legend fehlt Beschriftung für Stufe(n) "
                 f"{sorted(missing)}."
             )
+        # Überzählige Stufen sind kein harmloser Zusatz: beide Adapter
+        # serialisieren ``legend`` vollständig an den jeweiligen Provider
+        # (``jev_provider._question_payload``, ``llm_provider._build_prompt``),
+        # eine Stufe außerhalb von [min_stage, max_stage] ginge also
+        # unbemerkt mit und böte dem Modell eine Antwort an, die der
+        # Aufrufer anschließend als ungültig zurückweisen müsste.
+        surplus = set(self.legend) - expected
+        if surplus:
+            raise ValueError(
+                f"ScoreQuestion: legend beschriftet Stufe(n) außerhalb "
+                f"[{self.min_stage}, {self.max_stage}]: {sorted(surplus)}."
+            )
         return self
 
 
@@ -108,12 +120,35 @@ DecisionQuestion = Annotated[
 class DecisionResult(BaseModel):
     """Ergebnis eines ``DecisionProvider.decide()``-Aufrufs.
 
-    Genau eines von ``distribution``/``probability_yes`` ist gesetzt, je
-    nach angefragter Frageform — kein Validator erzwingt das hier, weil
-    die Zuordnung (Choice→distribution, Score→distribution über Stufen,
-    Noul→probability_yes) beim Provider entsteht, der die passende Frage
-    ohnehin kennt; ein Vertrags-Validator würde nur dieselbe Regel
-    doppelt kodieren.
+    Welches Wahrscheinlichkeitsfeld gesetzt ist, hängt an der Frageform;
+    der Vertrag erzwingt die Zuordnung nicht, weil sie beim Provider
+    entsteht, der die passende Frage ohnehin kennt. Tatsächlich gilt bei
+    den heutigen Referenzadaptern:
+
+    - Choice → ``distribution`` (Verteilung über die gesendeten Optionen)
+    - Score → nur ``answer`` (die Stufe) und ``confidence``
+    - Noul → ``probability_yes``
+
+    Score liefert bewusst **keine** ``distribution``: Jev meldet laut
+    Anbieterdoku zwar eine Verteilung über die Stufen, aber deren
+    Feldname ist ohne echten Zugang nicht verifiziert, und ein geratenes
+    Feld zu parsen wäre eine unbelegte Behauptung (siehe Moduldocstring
+    von ``services/decisions/jev_provider.py``). Sobald echter Zugang
+    besteht, ist das Nachziehen der Stufen-Verteilung eine eigene,
+    benannte Aufgabe — sie ist für die Kalibration des Benchmarks
+    nützlich, aber nicht erfindbar.
+
+    ``cost_micros`` unterscheidet drei Zustände, statt sie auf eine Null
+    zu verflachen (dieselbe Regel wie in ``services/pricing_registry.py``,
+    deren Docstring festhält: "unknown — wird niemals als 0 ausgegeben"):
+
+    - ``0``   — tatsächlich kostenfrei (``RuleProvider``: reiner Python-Code)
+      oder an anderer Stelle bereits gebucht (``LLMProvider`` mit ``run_id``,
+      dessen Kosten ``chat_json`` selbst ins Run-Usage-Ledger schreibt).
+    - ``> 0`` — von diesem Aufruf verursachte, bezifferte Kosten.
+    - ``None`` — Kosten unbekannt. Kein Preis in der ``PricingRegistry``
+      oder kein Ledger, das sie gebucht hätte. Ein sichtbarer Zustand,
+      damit eine Kostenlücke nicht als "kostenlos" durchgeht.
 
     ``shadow=True`` heißt: dieses Ergebnis wurde ermittelt, aber NICHT
     autoritativ verwendet (ADR-0016, Confidence-Zustand `shadow`) — der
@@ -136,9 +171,33 @@ class DecisionResult(BaseModel):
     model_version: str | None = None
     fallback_chain: list[str] = Field(default_factory=list)
     request_id: str | None = None
-    cost_micros: int = Field(ge=0)
+    cost_micros: int | None = Field(default=None, ge=0)
     latency_ms: int = Field(ge=0)
     shadow: bool
+
+    @model_validator(mode="after")
+    def _distribution_values_are_probabilities(self) -> "DecisionResult":
+        """``distribution`` trägt Wahrscheinlichkeiten, nicht beliebige Zahlen.
+
+        ``probability_yes`` und ``confidence`` sind bereits auf ``[0, 1]``
+        begrenzt; ohne diese Prüfung wäre ``distribution`` das einzige
+        Wahrscheinlichkeitsfeld des Vertrags, das jeden Wert annimmt — und
+        genau diese Verteilung wertet der Benchmark später zur Kalibration
+        aus, wo ein Wert außerhalb des Einheitsintervalls kein erkennbarer
+        Fehler mehr wäre, sondern eine verzerrte Kurve.
+        """
+        if self.distribution is None:
+            return self
+        invalid = {
+            key: value
+            for key, value in self.distribution.items()
+            if not (0.0 <= value <= 1.0)
+        }
+        if invalid:
+            raise ValueError(
+                f"DecisionResult: distribution-Werte außerhalb [0, 1]: {invalid}."
+            )
+        return self
 
 
 __all__ = [

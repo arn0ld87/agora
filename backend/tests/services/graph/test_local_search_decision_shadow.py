@@ -64,6 +64,54 @@ class TestLocalSearchUnaffectedByDecisionLayer:
         assert result_shadow_mode.edges == result_disabled_mode.edges
         assert result_shadow_mode.total_count == result_disabled_mode.total_count
 
+    def test_shadow_pairs_the_top_score_with_the_fact_of_that_same_edge(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Regression: ``facts`` überspringt Kanten mit leerem ``fact``,
+        ``scored_edges`` nicht. Vorher wurde der Top-Score mit dem Fakt
+        einer niedriger bewerteten Kante gepaart — die Telemetrie, deren
+        einziger Zweck die spätere Kalibration ist, sammelte damit
+        unbemerkt falsche (Score, Fakt)-Paare."""
+        monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "shadow")
+        seen: list[tuple[str, str | None, int]] = []
+        monkeypatch.setattr(
+            "app.services.graph.graph_reader.shadow_relevance_check",
+            lambda query, top_fact, top_score, **kwargs: seen.append(
+                (query, top_fact, top_score)
+            ),
+        )
+        storage = MagicMock(spec=GraphStorage)
+        storage.get_all_edges.return_value = [
+            # Top-Score (100 über den Namen), aber ohne Fakt.
+            {
+                "uuid": "e1",
+                "name": "Bundeskanzleramt",
+                "fact": "",
+                "source_node_uuid": "",
+                "target_node_uuid": "",
+                "episode_ids": [],
+            },
+            # Niedriger bewertet, aber der einzige Eintrag in ``facts``.
+            {
+                "uuid": "e2",
+                "name": "x",
+                "fact": "Bundeskanzleramt taucht hier nur als Wort auf",
+                "source_node_uuid": "",
+                "target_node_uuid": "",
+                "episode_ids": [],
+            },
+        ]
+        storage.get_all_nodes.return_value = []
+
+        local_search("g1", "Bundeskanzleramt", storage=storage)
+
+        assert len(seen) == 1
+        _query, top_fact, top_score = seen[0]
+        assert top_score == 100
+        # Die Top-Kante hat keinen Fakt — dann gibt es nichts zu bewerten,
+        # statt den Fakt der zweiten Kante unterzuschieben.
+        assert top_fact is None
+
     def test_a_broken_decision_layer_never_breaks_the_search(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

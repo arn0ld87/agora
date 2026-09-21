@@ -99,6 +99,36 @@ class DecisionJevAuthError(RuntimeError):
     Fallback-Kette; dieser Adapter versucht es nie ein zweites Mal selbst."""
 
 
+def _shape(value: Any) -> str:
+    """Strukturbeschreibung statt Inhalt.
+
+    Fehlermeldungen dieses Adapters landen über die Exception-Kette im Log
+    (der Shadow-Aufrufer ruft ``logger.exception``). Eine Antwort eines
+    externen Dienstes kann Teile der Anfrage spiegeln, und die Anfrage
+    trägt den Entscheidungskontext — Telemetrie darf laut ADR-0016 nur den
+    ``context_hash`` referenzieren, nie den Klartext. Deshalb beschreibt
+    diese Funktion die Form der Antwort (Typ, Schlüssel), nicht ihre Werte.
+    """
+    if isinstance(value, dict):
+        return f"dict(keys={sorted(str(key) for key in value)})"
+    if isinstance(value, list):
+        return f"list(len={len(value)})"
+    return type(value).__name__
+
+
+def _bounded(value: Any, limit: int = 80) -> str:
+    """Gekürzte Wertdarstellung für Fälle, in denen genau der Wert die
+    Diagnose IST — etwa eine Kategorie außerhalb der gesendeten Optionen.
+
+    Bewusste Abwägung gegen :func:`_shape`: ohne den Wert ist "unbekannte
+    Kategorie" nicht debuggbar, mit dem vollen Wert wäre eine gespiegelte
+    Anfrage vollständig im Log. Die Grenze begrenzt den Schaden auf einen
+    Ausschnitt.
+    """
+    text = repr(value)
+    return text if len(text) <= limit else f"{text[:limit]}…"
+
+
 def _question_payload(question: DecisionQuestion) -> dict[str, Any]:
     """Jevs eigene Fragenform (nicht das AGORA-JSON-Schema aus ``llm_provider.py``)."""
     if isinstance(question, ChoiceQuestion):
@@ -123,12 +153,15 @@ def _answer_for_question_id(response: dict[str, Any]) -> dict[str, Any]:
     Moduldocstring."""
     answers = response.get("answers")
     if not isinstance(answers, list):
-        raise DecisionJevResponseError(f"Jev-Antwort ohne 'answers'-Liste: {response!r}")
+        raise DecisionJevResponseError(
+            f"Jev-Antwort ohne 'answers'-Liste: {_shape(response)}"
+        )
     for entry in answers:
         if isinstance(entry, dict) and entry.get("id") == _QUESTION_ID:
             return entry
     raise DecisionJevResponseError(
-        f"Jev-Antwort enthält keine Antwort für Fragen-ID '{_QUESTION_ID}': {response!r}"
+        f"Jev-Antwort enthält keine Antwort für Fragen-ID '{_QUESTION_ID}': "
+        f"{_shape(response)}"
     )
 
 
@@ -138,21 +171,21 @@ def _result_from_answer(
     *,
     use_case_id: str,
     model_version: str,
-    cost_micros: int,
+    cost_micros: int | None,
     latency_ms: int,
     request_id: str | None,
 ) -> DecisionResult:
     confidence = answer.get("confidence")
     if not isinstance(confidence, (int, float)):
         raise DecisionJevResponseError(
-            f"Jev-Antwort ohne gültiges 'confidence'-Feld: {answer!r}"
+            f"Jev-Antwort ohne gültiges 'confidence'-Feld: {_shape(answer)}"
         )
 
     if isinstance(question, ChoiceQuestion):
         choice = answer.get("choice")
         if choice not in question.options:
             raise DecisionJevResponseError(
-                f"Jev-Antwort '{choice!r}' liegt außerhalb der gesendeten "
+                f"Jev-Antwort {_bounded(choice)} liegt außerhalb der gesendeten "
                 f"Optionen {question.options!r}."
             )
         return DecisionResult(
@@ -171,7 +204,7 @@ def _result_from_answer(
         stage = answer.get("stage")
         if not isinstance(stage, int) or not (question.min_stage <= stage <= question.max_stage):
             raise DecisionJevResponseError(
-                f"Jev-Antwort-Stufe {stage!r} außerhalb "
+                f"Jev-Antwort-Stufe {_bounded(stage)} außerhalb "
                 f"[{question.min_stage}, {question.max_stage}]."
             )
         return DecisionResult(
@@ -189,7 +222,7 @@ def _result_from_answer(
     probability_yes = answer.get("probability_yes")
     if not isinstance(probability_yes, (int, float)) or not (0.0 <= probability_yes <= 1.0):
         raise DecisionJevResponseError(
-            f"Jev-Antwort ohne gültiges 'probability_yes'-Feld: {answer!r}"
+            f"Jev-Antwort ohne gültiges 'probability_yes'-Feld: {_shape(answer)}"
         )
     return DecisionResult(
         use_case_id=use_case_id,
@@ -205,19 +238,28 @@ def _result_from_answer(
     )
 
 
-def _cost_micros_for(usage: Any) -> int:
-    """Kosten über die bestehende ``PricingRegistry``; ``None`` (Preis
-    unbekannt) und fehlende Usage-Angaben ergeben 0, statt eine zweite
-    Schätzlogik zu erfinden — die Registry selbst kennzeichnet Schätzungen
-    bereits als solche."""
-    input_tokens = 0
-    output_tokens = 0
-    if isinstance(usage, dict):
-        input_tokens = int(usage.get("input_tokens") or 0)
-        output_tokens = int(usage.get("output_tokens") or 0)
-    quote = get_pricing_registry().resolve("jev", JEV_PINNED_MODEL_VERSION)
-    cost = quote.cost_micros(input_tokens, output_tokens)
-    return cost if cost is not None else 0
+def _cost_micros_for(usage: Any, model_version: str) -> int | None:
+    """Kosten über die bestehende ``PricingRegistry`` — die einzige
+    Preisquelle des Systems, keine zweite Schätzlogik hier.
+
+    Bepreist wird das TATSÄCHLICH gemeldete Modell, nicht der Pin. Meldet
+    Jev eine andere Version zurück als die angefragte (laut Anbieterdoku
+    können ``jev-latest``/``jev-preview`` ohne Vorankündigung umziehen),
+    wäre der Preis des gepinnten Modells schlicht der Preis eines anderen
+    Modells.
+
+    ``None`` heißt "Kosten unbekannt" und wird bewusst NICHT auf 0
+    geglättet: ``pricing_registry`` hält dieselbe Regel fest — ein
+    unbekannter Preis wird niemals als 0 ausgegeben, sonst ginge eine
+    Preislücke als "kostenlos" durch. Ohne ``usage`` in der Antwort ist
+    auch der Verbrauch unbekannt, nicht null.
+    """
+    if not isinstance(usage, dict):
+        return None
+    input_tokens = int(usage.get("input_tokens") or 0)
+    output_tokens = int(usage.get("output_tokens") or 0)
+    quote = get_pricing_registry().resolve("jev", model_version)
+    return quote.cost_micros(input_tokens, output_tokens)
 
 
 class JevDecisionProvider:
@@ -243,19 +285,20 @@ class JevDecisionProvider:
         latency_ms = int((time.monotonic() - t0) * 1000)
 
         if not isinstance(response, dict):
-            raise DecisionJevResponseError(f"Jev-Response ist kein Mapping: {response!r}")
+            raise DecisionJevResponseError(
+                f"Jev-Response ist kein Mapping: {_shape(response)}"
+            )
 
         answer = _answer_for_question_id(response)
-        model_version = response.get("model") or self._model_version
+        model_version = str(response.get("model") or self._model_version)
         request_id = response.get("request_id")
-        cost_micros = _cost_micros_for(response.get("usage"))
 
         return _result_from_answer(
             question,
             answer,
             use_case_id=state.use_case_id,
-            model_version=str(model_version),
-            cost_micros=cost_micros,
+            model_version=model_version,
+            cost_micros=_cost_micros_for(response.get("usage"), model_version),
             latency_ms=latency_ms,
             request_id=str(request_id) if request_id is not None else None,
         )

@@ -68,6 +68,16 @@ class TestScoreQuestion:
         with pytest.raises(ValidationError, match="Stufe"):
             ScoreQuestion(min_stage=1, max_stage=3, legend={1: "low", 3: "high"})
 
+    def test_rejects_legend_entries_outside_the_stage_range(self) -> None:
+        """Überzählige Stufen gehen sonst unbemerkt an den Provider: beide
+        Adapter serialisieren ``legend`` vollständig, das Modell bekäme
+        also eine Antwortmöglichkeit angeboten, die der Aufrufer
+        anschließend als ungültig zurückweisen müsste."""
+        with pytest.raises(ValidationError, match="außerhalb"):
+            ScoreQuestion(
+                min_stage=1, max_stage=3, legend={0: "zero", 1: "low", 2: "mid", 3: "high"}
+            )
+
 
 class TestNoulQuestion:
     def test_has_no_extra_fields(self) -> None:
@@ -137,6 +147,40 @@ class TestDecisionResult:
                 answer="a",
                 confidence=0.5,
                 cost_micros=-1,
+                latency_ms=1,
+                shadow=True,
+            )
+
+    def test_unknown_cost_is_representable_and_distinct_from_free(self) -> None:
+        """``None`` heißt "Kosten unbekannt", ``0`` heißt "kostenfrei oder
+        anderswo gebucht". Sie zu verschmelzen ließe eine Preislücke als
+        kostenlos durchgehen — dieselbe Regel, die ``pricing_registry``
+        für ihren ``unknown``-Status festhält."""
+        unknown = DecisionResult(
+            use_case_id="u",
+            provider="jev",
+            answer="a",
+            confidence=0.5,
+            latency_ms=1,
+            shadow=True,
+        )
+        free = unknown.model_copy(update={"cost_micros": 0})
+
+        assert unknown.cost_micros is None
+        assert free.cost_micros == 0
+
+    def test_rejects_distribution_values_outside_unit_interval(self) -> None:
+        """``distribution`` ist das Feld, das der Benchmark zur Kalibration
+        auswertet — ein Wert außerhalb ``[0, 1]`` wäre dort kein erkennbarer
+        Fehler mehr, sondern eine verzerrte Kurve."""
+        with pytest.raises(ValidationError, match="distribution"):
+            DecisionResult(
+                use_case_id="u",
+                provider="jev",
+                answer="a",
+                distribution={"a": 42.0},
+                confidence=0.5,
+                cost_micros=0,
                 latency_ms=1,
                 shadow=True,
             )
