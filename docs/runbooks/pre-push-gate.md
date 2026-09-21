@@ -70,6 +70,26 @@ Exit-Codes: `0` = alle Gates grün · `1` = mind. ein Gate rot · `2` = falscher
 | 11 | Schema-Spiegel-Smoke | Frontend-Zod muss Backend-Schema spiegeln | ja |
 | 12 | Routing-Check (`scripts/check_llm_endpoint_localhost.sh`) | keiner — lokale `.env`-Prüfung, ohne `.env` Skip mit Warnung | ja (Scope `all`/`routing`) |
 | 13 | Komplexitäts-Gate (`scripts/check_complexity.py`) | contract-gates-Workflow (`push:main`) | ja (Scope `backend`/`all`) |
+| 14 | Leak-Gate (`scripts/check_pandaos_managed_leak.sh`) | Backend PR smoke gate | ja (jeder Scope) |
+
+**Gate 14 im Detail.** PandaOS schreibt lokal einen Block zwischen
+`<!-- >>> pandaos-managed (do not edit) >>> -->` und
+`<!-- <<< pandaos-managed <<< -->` an den Anfang von `AGENTS.md`. Er enthält
+Codex-Session-Anweisungen mit maschinenspezifischen Hosts und Pfaden und gehört
+nicht ins öffentliche Repo; PR #1539 hat ihn versehentlich committet. Im
+Haupt-Checkout setzt PandaOS dafür `skip-worktree` auf `AGENTS.md`
+(`git ls-files -v AGENTS.md` zeigt `S`), sodass die lokale Änderung nie in
+`git status` auftaucht. Frische Worktrees haben dieses Bit nicht — dort landet
+der Block mit `git add -A` im Commit. Wird das Gate rot:
+
+```bash
+git grep -lF '<!-- >>> pandaos-managed' HEAD -- AGENTS.md   # schon committet?
+git restore --staged --worktree AGENTS.md                      # nur gestaged: verwerfen
+```
+
+Echte Änderungen an `AGENTS.md` im Haupt-Checkout: vorher
+`git update-index --no-skip-worktree AGENTS.md`, danach wieder
+`git update-index --skip-worktree AGENTS.md`.
 
 ## Warum lokales Gate?
 

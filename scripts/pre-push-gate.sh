@@ -137,6 +137,18 @@ run_backend() {
 }
 
 # ---------------------------------------------------------------------------
+# Leak-Gate: PandaOS pflegt lokal einen managed Block in AGENTS.md
+# (Codex-Session-Anweisungen mit maschinenspezifischen Hosts und Pfaden).
+# PR #1539 hat ihn versehentlich committet. Das Gate prueft den Index, nicht
+# die Arbeitskopie, und kostet nur einen `git grep` — deshalb in jedem Scope.
+run_leak() {
+  step "Leak: kein PandaOS-managed-Block in versionierten Dateien"
+  bash scripts/check_pandaos_managed_leak.sh \
+    || fail "PandaOS-Block im Index — siehe docs/runbooks/pre-push-gate.md (Gate 14)"
+  ok "leak gate green"
+}
+
+# ---------------------------------------------------------------------------
 # Schema-Gates (Drift + STATUS-Sync) — eigenes Scope fuer den schnellen
 # Schema-Check ohne Backend-Test-Suite. Spiegel genau die beiden letzten
 # run_backend-Steps (dump_schemas --check + sync-status --check).
@@ -229,10 +241,10 @@ run_frontend() {
 # Routing
 # ---------------------------------------------------------------------------
 case "$SCOPE" in
-  all)      run_routing; run_backend; run_frontend ;;
-  backend)  run_backend ;;
-  frontend) run_frontend ;;
-  schemas)  run_schemas ;;
+  all)      run_leak; run_routing; run_backend; run_frontend ;;
+  backend)  run_leak; run_backend ;;
+  frontend) run_leak; run_frontend ;;
+  schemas)  run_leak; run_schemas ;;
   routing)  run_routing ;;
   *)        echo "usage: $0 [all|backend|frontend|schemas|routing]" >&2; exit 2 ;;
 esac
