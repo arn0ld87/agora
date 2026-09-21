@@ -145,7 +145,7 @@ Offen bleiben Qualitätsthemen der Entitätsauflösung: Alias-/Koreferenzauflös
 - Ablehnungen werden nicht mehr als „erfolgreich generiert“ protokolliert; die Bilanz zählt Kandidaten, Ablehnungen und erzeugte Personas konsistent (#1455).
 - Das harte LLM-Aufrufbudget reserviert laufende Calls pro Run und greift auch bei paralleler Persona-Generierung; `BudgetExceededError` wird nicht in Fallback-Personas verschluckt (#1461).
 
-Bekannt offen: `detect_domain_drift` kann Drift übersehen, sobald Quell- und Persona-Domänen irgendeine Schnittmenge besitzen ([#1471](https://github.com/arn0ld87/agora/issues/1471)).
+`detect_domain_drift` vergleicht seit [#1471](https://github.com/arn0ld87/agora/issues/1471) die Hauptdomäne der Persona (das Fach mit den meisten exakten Markertreffern) gegen die Quelldomänen, statt jede Schnittmenge als Entwarnung zu werten; ein Overlap nur in einer Nebendomäne oder ein Gleichstand ohne eindeutigen Sieger gilt als Drift. Eine Quelle ohne erkennbares Fach liefert `unverifiable=True` statt einer stillen Entwarnung. Die Taxonomie liegt in `backend/app/services/persona_domain_taxonomy.py` und deckt jetzt elf Domänen ab (zusätzlich `it/security`, `public-sector`, `retail`, `media`, `legal`, `energy`).
 
 ## Report, Evidence und Contracts
 
@@ -292,7 +292,7 @@ Bekannte Simulationstreue-Grenzen:
 
 - Rollenwechsel/Role Leakage in generierten Aktionen; Referenzbefund mindestens 23 von 234 texttragenden Aktionen (~9,8 %) ([#1323](https://github.com/arn0ld87/agora/issues/1323)).
 - Twitter-Recommender nutzt in OASIS einen problematischen `twhin-bert`-Pooler mit nicht trainierten/neu initialisierten Gewichten; dadurch sind Rankingqualität und Cross-Run-Reproduzierbarkeit fragwürdig ([#1236](https://github.com/arn0ld87/agora/issues/1236)).
-- Persona-Domänendrift und Alias-/Koreferenzprobleme (#1471/#1470).
+- Alias-/Koreferenzprobleme der Entitätsauflösung bleiben offen ([#1470](https://github.com/arn0ld87/agora/issues/1470)). Die Domänendrift-Erkennung selbst wurde für Persona-Hauptdomänen verschärft (#1471, siehe Abschnitt „Persona-Erzeugung"); ob die Taxonomie und die Heuristik jeden realen Fall abdecken, bleibt Erfahrungswert.
 
 Reproduzierbarkeit:
 
@@ -306,7 +306,7 @@ Priorität vor neuen Features:
 
 1. #1472 — **Teil erledigt.** Ein per SIGTERM abgeschnittener Prepare-/Report-/Graph-Build-Job wird beim nächsten Start als verwaist erkannt und auf `failed`/`process_restart` korrigiert, statt für immer auf `processing` zu stehen; die Liveness kommt aus der Prozess-Identität im Manifest (`app/jobs/identity.py`). Für **Graph-Build** gibt es seit Slice 1.3 (#1472b) zusätzlich einen echten Wiederaufnahme-Pfad: ein je Projekt persistierter Chunk-Checkpoint lässt `POST /api/runs/<id>/resume` nur die fehlenden Chunks nachholen statt neu zu beginnen. **Offen bleibt die Wiederaufnahme für Prepare und Report** (Slice 1.4/#1472c u. a.): `_BACKEND` ist weiterhin `"thread"`, es gibt keine persistente Queue und keinen wiederaufnehmbaren Zwischenstand. Eine Queue, die einen nicht-idempotenten Schritt erneut ausführt, verdoppelt Artefakte statt sie zu retten — idempotente Schritte kommen zuerst.
 2. #1417 — **Teil erledigt.** Der Laufzeitpfad folgt der aktiven Store-Konfiguration statt ausschließlich der `.env`, eine Konfiguration, die nicht zum Inhalt des aktiven Index passt, wirft, seit Slice 2.1 lösen Reads und Writes ihre Index- und Property-Namen über den Store auf statt über Literale, und seit Slice 2.2 schaltet der Migrationsservice erst nach erfolgreicher Index-Prüfung gegen Neo4j atomar auf die neue Version um — ein laufender oder fehlgeschlagener Re-Embedding-Lauf schaltet den Betrieb nicht mehr vorzeitig um. **Offen bleiben** die `VECTOR_DIM`-SSoT (Slice 2.3), eine Legacy-View für Bestandsgraphen (Slice 2.4) und der Frontend-Zod-Spiegel für den neuen `building`-Status; ein Modellwechsel über die Oberfläche ist weiterhin nicht möglich — siehe Abschnitt „Embeddings".
-3. #1470/#1471 — Entitätsauflösung und Persona-Domänenkohärenz.
+3. #1470 — Entitätsauflösung (Alias-/Koreferenzauflösung), weiterhin offen. #1471 (Persona-Domänenkohärenz) ist mit Slice 4.1 auf einen Hauptdomänen-Vergleich statt Any-Overlap umgestellt.
 4. #1236/#1323 — Recommender- und Rollen-Konsistenz der Simulation.
 5. #1345/#1240 — Quantoren/Evidence und Eval-Leakage.
 6. #763/#1274 — echtes Manifest und Replay.
