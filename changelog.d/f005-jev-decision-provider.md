@@ -1,0 +1,3 @@
+### Added (JevDecisionProvider-Referenzadapter — 2026-09-21)
+
+- **`JevDecisionProvider` als vierter Referenzadapter des Decision-Provider-Ports:** `backend/app/services/decisions/jev_provider.py` mappt Choice-/Score-/Noul-Fragen auf Jevs eigene Fragenform, prüft die Vollständigkeit der Antwort und berechnet Kosten über die bestehende `PricingRegistry`. `typesafe-sdk` ist bewusst noch keine Produktabhängigkeit — der Adapter nimmt einen bereits konstruierten Client entgegen, analog zu `LLMProvider`/`chat_json`. Kein produktiver Aufrufer ist angebunden; `Config.DECISION_LAYER_MODE` bleibt im Default `disabled`. (f005, ADR-0016/0017)
