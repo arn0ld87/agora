@@ -247,11 +247,35 @@ def test_a_media_marker_fires_without_matching_a_chemical_reaction():
 def test_a_legal_marker_fires_without_matching_spelling_conventions():
     """"Recht" allein steckt auch in "Rechtschreibung" — nicht gemeint."""
     assert "legal" in _domains_in(
-        "Die Rechtsabteilung der Kanzlei übernimmt die Prozessvertretung für den Mandanten."
+        "Die Rechtsabteilung der Anwaltskanzlei übernimmt die Prozessvertretung."
     )
     assert "legal" not in _domains_in(
         "Die Rechtschreibung wird regelmäßig überprüft."
     )
+
+
+def test_a_legal_marker_does_not_fire_on_a_commander_or_a_federal_chancellery():
+    """"mandant" steckt in "Kommandant", "kanzlei" in "Bundeskanzlei".
+
+    Beides sind reale DACH-Berufs- beziehungsweise Behördenbezeichnungen
+    ohne juristischen Bezug. Griffe der Marker dort, meldete
+    ``detect_domain_drift`` einen `legal`-Drift, und der produktive
+    Aufrufer setzt bei Drift ``profession=None`` — ein Kommandant verlöre
+    also seinen Beruf. Deshalb tragen beide Marker nur ihre eindeutige
+    Langform (Codex-Finding, PR #1540).
+    """
+    assert "legal" not in _domains_in(
+        "Der Kommandant der Einheit koordiniert den Einsatz."
+    )
+    assert "legal" not in _domains_in(
+        "Die Kommandantin leitet die Übung."
+    )
+    assert "legal" not in _domains_in(
+        "Die Bundeskanzlei koordiniert die Geschäfte der Verwaltung."
+    )
+    # Die Langformen greifen weiterhin.
+    assert "legal" in _domains_in("Die Mandantschaft wird umfassend beraten.")
+    assert "legal" in _domains_in("Die Anwaltskanzlei vertritt den Fall.")
 
 
 def test_an_energy_marker_fires_without_matching_a_delivery_driver():
