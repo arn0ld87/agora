@@ -107,6 +107,14 @@ und fällt **nicht** auf den globalen `Config.LLM_API_KEY` zurück. Der aufgelö
 Wert geht dort als Umgebungsvariable in einen Subprozess; ein Schlüssel eines
 fremden Providers wäre ein Secret über Provider-Grenzen hinweg.
 
+### Decision Layer (Jev-Pilot): Vertrag, Port und drei Referenzadapter — umgeschaltet ist nichts
+
+Für den Jev-Piloten (f005, ADR-0016/0017) gibt es seit dieser Slice einen eigenen, kleinen Vertrag statt eines generischen LLM-Calls: `app/contracts/decision_contract.py` modelliert `DecisionState` und drei diskriminierte Fragetypen — `ChoiceQuestion`, `ScoreQuestion`, `NoulQuestion` — sowie `DecisionResult` mit `provider="unresolved"` als eigenem Terminalzustand für eine erschöpfte Fallback-Kette. Der Port `DecisionProvider` (`app/repositories/decision_provider.py`) beantwortet genau eine Frage je Aufruf; anders als bei `LlmProfileRepository` gibt es bewusst **keine** Factory, die "den einen aktiven Provider" liefert, weil ein Use Case Rule- und Jev-Pfad gleichzeitig braucht (Rule als Bestandspfad, Jev im Shadow-Modus daneben), nicht einen ausgewählten Adapter.
+
+Drei Referenzadapter in `app/services/decisions/`: `RuleProvider` (deterministisch, keine LLM-Kosten), `FakeProvider` (Tests), `LLMProvider` (ruft ausschließlich `LLMClient.chat_json`, ADR-0017 — kein zweiter roher LLM-Pfad; `cost_micros` bleibt `0`, weil `chat_json` selbst ins Run-Budget-Ledger bucht, ADR-0016). Ein noch nicht implementierter vierter Adapter für den echten Jev-Dienst folgt in einer eigenen Aufgabe dieser Slice.
+
+**Umgeschaltet ist nichts.** `Config.DECISION_LAYER_MODE` (`disabled`/`shadow`/`authoritative`) ist der einzige zentrale Schalter und steht im Default auf `disabled`; kein Use Case ist an den Decision Layer angebunden. `decision_layer_mode(use_case_id)` nimmt die Use-Case-ID bereits entgegen, damit der spätere Umstieg auf Je-Use-Case-Granularität eine Stelle ändert statt jeden Aufrufer.
+
 ## Run- und Simulations-Lifecycle
 
 Die 0.9.5-Stabilisierung hat mehrere vorher stille Zustandsfehler geschlossen:
