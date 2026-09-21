@@ -245,7 +245,7 @@ case "$SCOPE" in
   backend)  run_leak; run_backend ;;
   frontend) run_leak; run_frontend ;;
   schemas)  run_leak; run_schemas ;;
-  routing)  run_routing ;;
+  routing)  run_leak; run_routing ;;
   *)        echo "usage: $0 [all|backend|frontend|schemas|routing]" >&2; exit 2 ;;
 esac
 
