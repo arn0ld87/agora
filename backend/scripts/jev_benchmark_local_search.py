@@ -227,7 +227,15 @@ def run() -> list[CaseOutcome]:
     return outcomes
 
 
-def _print_report(outcomes: list[CaseOutcome]) -> None:
+def _print_report(outcomes: list[CaseOutcome]) -> bool:
+    """Gibt den Bericht aus und meldet zurück, ob er verwertbar ist.
+
+    ``False`` heißt: der Jev-Arm wurde versucht, ist aber (teilweise oder
+    ganz) fehlgeschlagen — das Ergebnis taugt dann nicht als Vergleich,
+    und der Aufrufer beendet den Prozess mit einem Fehlercode. Ein
+    übersprungener Jev-Arm (kein Key gebunden) ist dagegen kein Fehler,
+    sondern der dokumentierte Normalfall ohne Zugang.
+    """
     jev_ran = any(o.jev_result is not None or o.jev_error is not None for o in outcomes)
 
     print(f"# Jev-Benchmark: local-search-relevance ({len(outcomes)} Fälle)\n")
@@ -253,18 +261,32 @@ def _print_report(outcomes: list[CaseOutcome]) -> None:
         print(
             "\nJev übersprungen: kein API-Key im Provider-Secret-Store unter 'jev' gebunden."
         )
-        return
+        return True
 
     jev_evaluated = [o for o in outcomes if o.jev_correct is not None]
     jev_errors = [o for o in outcomes if o.jev_error is not None]
+
+    if jev_errors:
+        # Kein Vergleich auf Teilmengen: die Rule-Accuracy steht über allen
+        # Fällen, eine Jev-Accuracy über nur den geglückten Aufrufen wäre
+        # eine andere Grundgesamtheit. Nebeneinander gedruckt sähen beide
+        # Zahlen vergleichbar aus, ohne es zu sein — genau die stille
+        # Falschaussage, die dieser Lauf nicht produzieren darf.
+        print(
+            f"\nFEHLGESCHLAGEN: {len(jev_errors)} von {len(outcomes)} Jev-Aufrufen "
+            "sind fehlgeschlagen. Es wird bewusst KEINE Jev-Accuracy ausgewiesen — "
+            "eine Quote über nur die geglückten Aufrufe wäre nicht mit der "
+            "Rule-Baseline über alle Fälle vergleichbar."
+        )
+        print(f"\nJev-Fehler ({len(jev_errors)}):")
+        for o in jev_errors:
+            print(f"  - {o.case.case_id}: {o.jev_error}")
+        return False
+
     if jev_evaluated:
         jev_correct_count = sum(1 for o in jev_evaluated if o.jev_correct)
         jev_accuracy = jev_correct_count / len(jev_evaluated)
-        print(
-            f"Jev-Accuracy: {jev_accuracy:.0%} "
-            f"({jev_correct_count}/{len(jev_evaluated)}, "
-            f"{len(jev_errors)} Fehler)"
-        )
+        print(f"Jev-Accuracy: {jev_accuracy:.0%} ({jev_correct_count}/{len(jev_evaluated)})")
         latencies = [o.jev_latency_ms for o in jev_evaluated if o.jev_latency_ms is not None]
         costs = [o.jev_cost_micros for o in jev_evaluated if o.jev_cost_micros is not None]
         if latencies:
@@ -274,14 +296,15 @@ def _print_report(outcomes: list[CaseOutcome]) -> None:
             )
         if costs:
             print(f"Jev-Gesamtkosten: {sum(costs)} Mikro-USD über {len(costs)} Aufrufe")
-    if jev_errors:
-        print(f"\nJev-Fehler ({len(jev_errors)}):")
-        for o in jev_errors:
-            print(f"  - {o.case.case_id}: {o.jev_error}")
+    return True
 
 
 if __name__ == "__main__":
     t0 = time.monotonic()
     results = run()
-    _print_report(results)
+    usable = _print_report(results)
     print(f"\nGesamtlaufzeit: {time.monotonic() - t0:.1f}s")
+    # Exit-Code statt nur Text: ein fehlgeschlagener Jev-Arm darf nicht als
+    # erfolgreicher Lauf durchgehen, wenn dieses Skript aus einem Wrapper
+    # oder einer Pipeline heraus aufgerufen wird.
+    raise SystemExit(0 if usable else 1)

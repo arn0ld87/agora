@@ -40,6 +40,15 @@ Für **local-search-relevance** ist Jev auf dieser kleinen Stichprobe der Keywor
 
 **Kein Ausgang dieser Bewertung ist "Reject"** — die Ergebnisse sind ermutigend genug, um eine größere, maintainer-verifizierte Stichprobe zu rechtfertigen, sobald sie priorisiert wird.
 
+## Failure-Injection: was der Review am Runner gefunden hat
+
+Der Review-Task dieses Slices hat den Runner mit einem ungültigen Key gegen die echte API laufen lassen (alle zwölf Aufrufe → `TypeSafeAuthenticationError`, HTTP 401, keine Retries — Auth-Fehler sind korrekterweise nicht transient). Dabei fielen zwei echte Mängel am Runner auf, beide behoben:
+
+1. **Exit-Code 0 trotz komplett fehlgeschlagenem Jev-Arm.** Die Fehler standen zwar im Text, aber ein Wrapper oder eine Pipeline hätte den Lauf als erfolgreich gelesen. Der Runner gibt jetzt Exit-Code 1 zurück, wenn der Jev-Arm versucht wurde und fehlschlug; ein *übersprungener* Arm (kein Key gebunden) bleibt Exit-Code 0, weil das der dokumentierte Normalfall ohne Zugang ist.
+2. **Teilausfall hätte eine nicht vergleichbare Quote gedruckt.** Bei z. B. sechs von zwölf geglückten Aufrufen wäre eine Jev-Accuracy über diese sechs neben der Rule-Accuracy über alle zwölf gestanden — zwei verschiedene Grundgesamtheiten, nebeneinander gedruckt und dadurch scheinbar vergleichbar. Der Runner weist jetzt bei *jedem* Fehler überhaupt keine Jev-Accuracy mehr aus und sagt explizit, warum.
+
+Festgenagelt in `backend/tests/scripts/test_jev_benchmark_report.py` (vier Fälle: übersprungen, vollständig fehlgeschlagen, teilweise fehlgeschlagen, sauber). Verifiziert wurden alle drei Pfade gegen die echte API: gültiger Key → Exit 0 mit Bericht, ungültiger Key → Exit 1 ohne Quote, kein Key → Exit 0 mit Hinweis.
+
 ## Bekannte Grenzen dieses Piloten
 
 - 12 Fälle, ein einziger Lauf, keine Wiederholung (keine Varianzabschätzung über mehrere Läufe).
