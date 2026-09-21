@@ -86,20 +86,25 @@ DOMAIN_MARKERS: Dict[str, FrozenSet[str]] = {
     # "recht" allein steckt auch in "Rechtschreibung" — nur die
     # vollständigen Fachkomposita zählen.
     #
-    # Dieselbe Falle, eine Ebene tiefer: "mandant" steckt in "Kommandant"
-    # und "Kommandantin", "kanzlei" in "Bundeskanzlei" — letztere ist
-    # Verwaltung, keine Anwaltskanzlei, und im DACH-Raum alles andere als
-    # selten. Beide deshalb nur in ihrer eindeutigen Langform, obwohl
-    # "Mandant" und "Kanzlei" die gebräuchlicheren Wörter wären: ein
-    # fälschlich als `legal` erkannter Kommandant verliert seinen Beruf,
-    # weil der Aufrufer bei Drift `profession=None` setzt.
+    # Dieselbe Falle, eine Ebene tiefer: "kanzlei" steckt in "Bundeskanzlei"
+    # (Verwaltung, keine Anwaltskanzlei, im DACH-Raum alles andere als
+    # selten) — deshalb nur in der Langform "anwaltskanzlei".
+    #
+    # Die "Mandant"-Familie fehlt hier GANZ, und das ist Absicht: "mandant"
+    # steckt in "Kommandant"/"Kommandantin", und jede Langform steckt in
+    # deren Kompositum gleich mit — "mandantschaft" in "Kommandantschaft",
+    # "mandantengespräch" in "Kommandantengespräch", "mandantenakte" in
+    # "Kommandantenakte". Mit der Substring-Suche in ``_domains_in`` gibt es
+    # keine Form dieses Wortstamms, die sich sicher machen liesse. Ein
+    # verpasster Treffer bleibt folgenlos; ein fälschlich als `legal`
+    # erkannter Kommandant verliert seinen Beruf, weil der Aufrufer bei
+    # Drift ``profession=None`` setzt. Die uebrigen Marker decken die
+    # Domaene ausreichend ab.
     "legal": frozenset({
-        "anwaltskanzlei", "rechtsanwaltskanzlei", "mandantschaft",
-        "mandantengespräch", "mandantengespraech", "mandantenakte",
-        "rechtsanwalt", "rechtsanwältin", "rechtsanwaeltin",
-        "gerichtsverfahren", "klageschrift", "vertragsrecht",
-        "rechtsabteilung", "rechtsberatung", "prozessvertretung",
-        "justiziar", "justiziarin",
+        "anwaltskanzlei", "rechtsanwalt", "rechtsanwältin",
+        "rechtsanwaeltin", "gerichtsverfahren", "klageschrift",
+        "vertragsrecht", "rechtsabteilung", "rechtsberatung",
+        "prozessvertretung", "justiziar", "justiziarin",
     }),
     # "kraft" allein steckt in "Arbeitskraft", "Kraftfahrer" — nur die
     # vollständigen Energie-Komposita zählen.
