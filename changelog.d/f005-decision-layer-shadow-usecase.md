@@ -1,0 +1,3 @@
+### Added (Decision-Layer-Shadow-Pilot: lokale Keyword-Relevanzbewertung — 2026-09-21)
+
+- **Erster produktiver Aufrufer des Decision-Provider-Ports, im Shadow-Modus:** `app/services/graph/graph_reader.py::local_search` trifft nach der bestehenden Keyword-Suche genau eine zusätzliche, rein telemetrierte Relevanzentscheidung über den bestbewerteten Treffer (`app/services/decisions/local_search_shadow.py`), sobald `AGORA_DECISION_LAYER_MODE=shadow` gesetzt ist. Standardmäßig (`disabled`) und im vorhandenen `shadow`-Testfall bleibt das Rückgabeverhalten von `local_search` unverändert. Ein Fehler in der Decision Layer kann die Suche nicht stören. (f005, ADR-0016/0017)
