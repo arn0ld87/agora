@@ -23,7 +23,7 @@ from __future__ import annotations
 import json
 import os
 import traceback
-from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
 from ..contracts import (
     PersonaQuotaPlan,
@@ -43,11 +43,13 @@ from .simulation_config_generator import SimulationConfigGenerator
 
 if TYPE_CHECKING:
     from .entity_reader import EntityNode
+    from .oasis_profile_models import PersonaDemographicSlot
     from .simulation_manager import SimulationManager, SimulationState
 
 from . import prepare_llm as _prepare_llm
 from . import prepare_entities as _prepare_entities
 from . import prepare_quota as _prepare_quota
+from . import prepare_checkpoint as _prepare_checkpoint
 
 logger = get_logger("agora.prepare")
 
@@ -105,6 +107,173 @@ def _phase_read_entities(state: SimulationState, storage: Any, defined_entity_ty
     return _prepare_entities._phase_read_entities(state, storage, defined_entity_types, max_agents, progress_callback, degradations)
 
 
+def _phase_read_entities_from_checkpoint(
+    state: SimulationState,
+    storage: Any,
+    checkpoint: "_prepare_checkpoint.PreparePersonaCheckpoint",
+    progress_callback: Optional[Callable] = None,
+):
+    """Resume-Variante von Phase 1 (Issue #1472c) — siehe ``prepare_entities.py``."""
+    return _prepare_entities._phase_read_entities_from_checkpoint(
+        state, storage, checkpoint, progress_callback
+    )
+
+
+def _lookup_expanded_entities_from_checkpoint(
+    storage: Any, checkpoint: "_prepare_checkpoint.PreparePersonaCheckpoint"
+):
+    """Rekonstruiert die eingefrorene Generierungsliste (Issue #1472c)."""
+    return _prepare_entities._lookup_expanded_entities_from_checkpoint(storage, checkpoint)
+
+
+def _entity_uuids_or_none(entities: List[Any]) -> Optional[List[str]]:
+    """Extrahiert ``uuid``-Strings für den Checkpoint, oder ``None`` bei Fremdkörpern.
+
+    Issue #1472c: Checkpointing setzt echte ``EntityNode.uuid``-Strings
+    voraus (Pydantic-Contract, ``extra="forbid"`` + ``str``-Typisierung).
+    Test-Doubles unterhalb dieser Ebene reichen teils Objekte ohne
+    (echtes) ``uuid``-Attribut herein — für die wird das Checkpointing
+    dieses Aufrufs deaktiviert statt mit einer ``ValidationError``
+    abzubrechen (siehe Aufrufer).
+    """
+    uuids: List[str] = []
+    for entity in entities:
+        uuid = getattr(entity, "uuid", None)
+        if not isinstance(uuid, str) or not uuid:
+            return None
+        uuids.append(uuid)
+    return uuids
+
+
+def _build_profile_checkpoint_hooks(
+    *,
+    state: SimulationState,
+    filtered: Any,
+    entities: List[Any],
+    sim_dir: str,
+    defined_entity_types: Optional[List[str]],
+    max_agents: Optional[int],
+    persona_floor: int,
+    use_llm_for_profiles: bool,
+    quota_plan: Optional[PersonaQuotaPlan],
+    resume_checkpoint: Optional["_prepare_checkpoint.PreparePersonaCheckpoint"],
+    generator: OasisProfileGenerator,
+    llm_model: Optional[str] = None,
+    language: Optional[str] = None,
+) -> Tuple[
+    Optional[Dict[int, OasisAgentProfile]],
+    Optional[Callable[[int, OasisAgentProfile], None]],
+    Optional[List["PersonaDemographicSlot"]],
+]:
+    """Baut ``already_done``/``on_profile_saved``/Slot-Plan für ``_phase_generate_profiles`` (Issue #1472c).
+
+    Ausgelagert in eine eigene Funktion statt inline in
+    ``_phase_generate_profiles`` — Lehre aus Slice 1.3: zusätzliche
+    Resume-Zweige direkt in der Phasenfunktion kippen deren zyklomatische
+    Komplexität schnell über den Radon-Schwellenwert; ein neuer Eintrag in
+    ``radon-allowlist.txt`` ist keine Lösung, eine Auslagerung schon.
+
+    Checkpointing ist eine Zusatzabsicherung, kein hartes Erfordernis für
+    die Generierung selbst: fehlt ``state.simulation_id`` (Test-Doubles
+    unterhalb dieser Ebene) oder tragen die Entities kein echtes
+    ``uuid``-Attribut, liefert diese Funktion ``(None, None, None)`` — die
+    Generierung läuft normal weiter, nur ohne Checkpoint (und die
+    demografischen Slots werden wie vor Issue #1472c pro Aufruf neu
+    gewürfelt).
+
+    Der dritte Rückgabewert (Codex-Finding P1, PR #1539) ist der fixierte
+    demografische Slot-Plan: bei einem Resume der aus dem Checkpoint
+    übernommene Plan (siehe ``PreparePersonaCheckpoint``-Docstring — ein
+    Resume darf ihn NIE neu würfeln), bei einem neuen Versuch ein frisch
+    gewürfelter Plan, der zusammen mit der Auswahl im Checkpoint landet.
+    """
+    # Bewusst als ``str | None`` gefuehrt und vor jeder Checkpoint-Schreibung
+    # geprueft: Test-Doubles tragen nicht zwingend eine ``simulation_id``, und
+    # der Artefakt-Store weist eine fehlende hart zurueck. ``isinstance`` statt
+    # blosser Truthiness, weil ein ``MagicMock`` truthy ist und sonst bis in
+    # den Store durchschlagen wuerde.
+    _raw_simulation_id = getattr(state, "simulation_id", None)
+    simulation_id: Optional[str] = (
+        _raw_simulation_id if isinstance(_raw_simulation_id, str) and _raw_simulation_id else None
+    )
+
+    if resume_checkpoint is not None:
+        already_done = _prepare_checkpoint.completed_profiles_from_checkpoint(
+            resume_checkpoint
+        )
+        logger.info(
+            "Prepare-Resume: %d/%d Personas aus Checkpoint übernommen für %s",
+            len(already_done),
+            len(entities),
+            simulation_id,
+        )
+        checkpoint_box: List[Any] = [resume_checkpoint]
+        demographic_slots = _prepare_checkpoint.demographic_slots_from_checkpoint(
+            resume_checkpoint
+        )
+    elif simulation_id:
+        primary_uuids = _entity_uuids_or_none(filtered.entities)
+        reserve_uuids = _entity_uuids_or_none(
+            getattr(filtered, "reserve_entities", None) or []
+        )
+        expanded_uuids = _entity_uuids_or_none(entities)
+        if primary_uuids is None or reserve_uuids is None or expanded_uuids is None:
+            logger.debug(
+                "Prepare-Checkpoint übersprungen für %s: Entities ohne "
+                "echtes uuid-Attribut (Test-/Fake-Pfad)",
+                simulation_id,
+            )
+            return None, None, None
+        # Codex-Finding P1 (PR #1539): EINMAL würfeln, dann sowohl an den
+        # Checkpoint als auch an die Generierung reichen — sonst würfelt
+        # ``generate_profiles_from_entities`` intern ein zweites Mal und der
+        # Checkpoint hielte einen Plan fest, der nie tatsächlich verwendet
+        # wurde.
+        demographic_slots = generator._build_demographic_slots(entities)
+        checkpoint_box = [
+            _prepare_checkpoint.new_checkpoint(
+                simulation_id=simulation_id,
+                graph_id=state.graph_id,
+                defined_entity_types=defined_entity_types,
+                max_agents=max_agents,
+                persona_floor=persona_floor,
+                use_llm_for_profiles=use_llm_for_profiles,
+                effective_quota_plan=(
+                    quota_plan.model_dump() if quota_plan is not None else None
+                ),
+                primary_entity_uuids=primary_uuids,
+                reserve_entity_uuids=reserve_uuids,
+                expanded_entity_uuids=expanded_uuids,
+                entities_count=state.entities_count,
+                entity_types=state.entity_types,
+                llm_model=llm_model,
+                language=language,
+                demographic_slots=[
+                    _prepare_checkpoint.demographic_slot_to_dict(slot)
+                    for slot in demographic_slots
+                ],
+            )
+        ]
+        already_done = None
+    else:
+        return None, None, None
+
+    # Ab hier steht fest, dass eine ``simulation_id`` vorliegt: der
+    # ``resume_checkpoint``-Zweig traegt sie im Checkpoint, der ``elif``-Zweig
+    # hat sie geprueft, und jeder andere Fall ist oben mit ``None, None, None``
+    # ausgestiegen. Die eigene Bindung macht das fuer die Closure explizit,
+    # statt sich auf ein Narrowing zu verlassen, das dort nicht mehr greift.
+    checkpoint_simulation_id: str = simulation_id or checkpoint_box[0].simulation_id
+
+    def _on_profile_saved(index: int, profile: OasisAgentProfile) -> None:
+        checkpoint_box[0] = checkpoint_box[0].with_completed_profile(
+            index, _prepare_checkpoint.profile_to_dict(profile)
+        )
+        _prepare_checkpoint.save_checkpoint(checkpoint_simulation_id, checkpoint_box[0])
+
+    return already_done, _on_profile_saved, demographic_slots
+
+
 def _phase_generate_profiles(
     state: SimulationState,
     storage: Any,
@@ -122,6 +291,9 @@ def _phase_generate_profiles(
     persona_floor: int = MIN_PERSONA_TABLE_ROWS,
     max_agents: Optional[int] = None,
     degradations: Optional[DegradationCollector] = None,
+    defined_entity_types: Optional[List[str]] = None,
+    resume_checkpoint: Optional[_prepare_checkpoint.PreparePersonaCheckpoint] = None,
+    precomputed_entities: Optional[List[Any]] = None,
 ) -> Tuple[List[Any], List[Any]]:
     """Phase 2: OASIS-Profiles generieren und im Sim-Dir ablegen.
 
@@ -135,20 +307,37 @@ def _phase_generate_profiles(
     ``_expand_entities_for_quota`` auf die Quota expandiert (Round-Robin
     auf zu kleinen Pools). Ohne Plan bleibt das Verhalten "1 Persona pro
     Entity" unverändert.
+
+    Issue #1472c (Prepare-Resume): ``precomputed_entities`` überspringt die
+    Expansion komplett — die Auswahl ist dann bereits im Checkpoint
+    fixiert (siehe ``prepare_checkpoint_contract``). Ohne ``resume_checkpoint``
+    wird ein neuer Checkpoint angelegt und nach jedem generierten Profil
+    inkrementell fortgeschrieben (``on_profile_saved``); mit
+    ``resume_checkpoint`` läuft die Generierung nur für die noch fehlenden
+    Indizes (``already_done`` überspringt den LLM-Call für bereits
+    vorliegende Profile).
     """
-    entities = _expand_entities_for_quota(filtered.entities, quota_plan)
-    if quota_plan is None:
-        entities = _apply_persona_floor_to_entities(entities, minimum=persona_floor)
-    # Issue #1034: Der Nenner des Fortschrittszählers kommt aus derselben
-    # Funktion, die auch die Preview-Antwort füllt. Vorher stand hier
-    # ``len(entities)`` — richtig, aber eben nur hier: die UI bekam den
-    # Vor-Floor-Wert aus einer zweiten Berechnung und zeigte „22 / 7“.
-    total_entities = compute_persona_target(
-        len(filtered.entities),
-        max_agents=max_agents,
-        quota_plan=quota_plan,
-        floor=persona_floor,
-    ).persona_target_count
+    if precomputed_entities is not None:
+        # Resume: die Cap-/Quota-Auswahl steht bereits fest — NICHT neu
+        # berechnen (siehe Moduldocstring ``prepare_checkpoint.py``: der
+        # Graph-Lesepfad hat kein ``ORDER BY``, ein erneuter Read könnte
+        # eine andere Typ-Verteilung liefern).
+        entities = precomputed_entities
+        total_entities = len(entities)
+    else:
+        entities = _expand_entities_for_quota(filtered.entities, quota_plan)
+        if quota_plan is None:
+            entities = _apply_persona_floor_to_entities(entities, minimum=persona_floor)
+        # Issue #1034: Der Nenner des Fortschrittszählers kommt aus derselben
+        # Funktion, die auch die Preview-Antwort füllt. Vorher stand hier
+        # ``len(entities)`` — richtig, aber eben nur hier: die UI bekam den
+        # Vor-Floor-Wert aus einer zweiten Berechnung und zeigte „22 / 7“.
+        total_entities = compute_persona_target(
+            len(filtered.entities),
+            max_agents=max_agents,
+            quota_plan=quota_plan,
+            floor=persona_floor,
+        ).persona_target_count
 
     if progress_callback:
         progress_callback(
@@ -205,6 +394,25 @@ def _phase_generate_profiles(
         realtime_output_path = os.path.join(sim_dir, "twitter_profiles.csv")
         realtime_platform = "twitter"
 
+    # Issue #1472c (Prepare-Resume): Checkpoint aufsetzen bzw. fortsetzen.
+    # Ausgelagert in ``_build_profile_checkpoint_hooks`` (Komplexitäts-
+    # Gründe, siehe deren Docstring).
+    already_done, on_profile_saved, demographic_slots = _build_profile_checkpoint_hooks(
+        state=state,
+        filtered=filtered,
+        entities=entities,
+        sim_dir=sim_dir,
+        defined_entity_types=defined_entity_types,
+        max_agents=max_agents,
+        persona_floor=persona_floor,
+        use_llm_for_profiles=use_llm_for_profiles,
+        quota_plan=quota_plan,
+        resume_checkpoint=resume_checkpoint,
+        generator=generator,
+        llm_model=llm_model,
+        language=language,
+    )
+
     profiles = generator.generate_profiles_from_entities(
         entities=entities,
         use_llm=use_llm_for_profiles,
@@ -213,17 +421,38 @@ def _phase_generate_profiles(
         parallel_count=parallel_profile_count,
         realtime_output_path=realtime_output_path,
         output_platform=realtime_platform,
+        # Codex-Finding P1 (PR #1539, Issue #1472c): fixierter Slot-Plan
+        # (neu gewürfelt oder aus dem Checkpoint übernommen) — verhindert,
+        # dass ein Resume die demografische Mischung neu würfelt.
+        demographic_slots=demographic_slots,
         # Issue #1034: Der Parameter existiert seit #1029 (Slice 12,
         # regelbasierte Fallback-Profile), wurde aus dem produktiven
         # Prepare-Pfad aber nie gefüllt — ``_report_persona_degradation``
         # lief damit nie. Ohne diese Zeile bleibt die Meldung dort tot.
         degradations=degradations,
+        already_done=already_done,
+        on_profile_saved=on_profile_saved,
         # Issue #1247: Nachrücker für Kandidaten, die der Generator als nicht
         # personenfähig zurückweist.
         reserve_entities=getattr(filtered, "reserve_entities", None),
     )
 
     state.profiles_count = len(profiles)
+
+    # Issue #1472c: Phase 2 ist regulär beendet (erfolgreich oder
+    # kooperativ abgebrochen, siehe ``PrepareCancelledError`` — beide Fälle
+    # erreichen diese Zeile normal, nur ein SIGTERM/Absturz MITTEN in der
+    # Generierung tut das nicht). Der Checkpoint hat seinen Zweck erfüllt;
+    # ein Retry nach Cancel/Erfolg startet Phase 2 wie bisher komplett neu.
+    # ``getattr`` wie in ``_build_profile_checkpoint_hooks``: Test-Doubles
+    # tragen nicht zwingend eine ``simulation_id``, und ohne sie gibt es auch
+    # keinen Checkpoint, der aufzuraeumen waere.
+    # ``isinstance``, nicht blosse Truthiness: ein ``MagicMock`` aus einem
+    # Test-Double ist truthy und kaeme bis in den Artefakt-Store, der ihn
+    # zu Recht als ungueltige ``simulation_id`` zurueckweist.
+    _cleanup_simulation_id = getattr(state, "simulation_id", None)
+    if isinstance(_cleanup_simulation_id, str) and _cleanup_simulation_id:
+        _prepare_checkpoint.clear_checkpoint(_cleanup_simulation_id)
 
     # Save Profile files (Note: Twitter uses CSV format, Reddit uses JSON format)
     # Reddit has been saved in real-time during generation, save once more here to ensure completeness
@@ -377,6 +606,98 @@ def _validate_persona_quota(plan: PersonaQuotaPlan, profiles: List[OasisAgentPro
     return _prepare_quota._validate_persona_quota(plan, profiles)
 
 
+def _resolve_phase1_result(
+    *,
+    state: SimulationState,
+    storage: Any,
+    simulation_id: str,
+    sim_dir: str,
+    defined_entity_types: Optional[List[str]],
+    max_agents: Optional[int],
+    persona_floor: int,
+    use_llm_for_profiles: bool,
+    effective_quota_plan_snapshot: Optional[Dict[str, Any]],
+    progress_callback: Optional[Callable],
+    degradations: Optional[DegradationCollector],
+    llm_model: Optional[str] = None,
+    language: Optional[str] = None,
+) -> Tuple[Any, Optional["_prepare_checkpoint.PreparePersonaCheckpoint"], Optional[List[Any]]]:
+    """Phase 1 oder deren Resume-Variante (Issue #1472c).
+
+    Ausgelagert aus ``prepare_simulation`` — die Resume-Erkennung (Checkpoint
+    laden, Gültigkeit prüfen, zwei Rückfallpfade) hob dessen zyklomatische
+    Komplexität über den Radon-Schwellenwert (Rank D). Ein neuer Eintrag in
+    ``radon-allowlist.txt`` ist dafür keine Lösung, eine Auslagerung schon.
+
+    Liefert ``(filtered, resume_checkpoint, precomputed_entities)``:
+    ``resume_checkpoint``/``precomputed_entities`` sind nur bei einem
+    tatsächlich verwertbaren Checkpoint gesetzt (sonst beide ``None`` und
+    ``filtered`` kommt aus einer regulär ausgeführten Phase 1).
+    """
+    existing_checkpoint = _prepare_checkpoint.load_checkpoint(simulation_id)
+    resumable = _prepare_checkpoint.checkpoint_is_resumable(
+        existing_checkpoint,
+        simulation_id=simulation_id,
+        graph_id=state.graph_id,
+        defined_entity_types=defined_entity_types,
+        max_agents=max_agents,
+        persona_floor=persona_floor,
+        use_llm_for_profiles=use_llm_for_profiles,
+        effective_quota_plan=effective_quota_plan_snapshot,
+        llm_model=llm_model,
+        language=language,
+    )
+
+    if resumable:
+        # ``checkpoint_is_resumable`` liefert nur dann True, wenn
+        # ``checkpoint is not None`` geprüft wurde (erste Zeile der
+        # Funktion) — die Invariante gilt per Konstruktion, mypy kann sie
+        # nur nicht über den Funktionsaufruf hinweg herleiten.
+        assert existing_checkpoint is not None
+
+        # Resume: die Cap-/Quota-Auswahl steht bereits fest — Phase 1
+        # berechnet NICHTS neu, sie schlägt nur per UUID nach (der
+        # Graph-Lesepfad hat kein ``ORDER BY``, ein erneuter Read könnte
+        # eine andere Typ-Verteilung liefern, siehe
+        # ``prepare_checkpoint.py`` Moduldocstring).
+        filtered = _phase_read_entities_from_checkpoint(
+            state, storage, existing_checkpoint, progress_callback=progress_callback
+        )
+        precomputed_entities = (
+            _lookup_expanded_entities_from_checkpoint(storage, existing_checkpoint)
+            if filtered is not None
+            else None
+        )
+        if filtered is not None and precomputed_entities is not None:
+            logger.info(
+                "Prepare-Resume erkannt für %s: %d/%d Personas aus Checkpoint übernommen",
+                simulation_id,
+                len(existing_checkpoint.completed_profiles),
+                len(existing_checkpoint.expanded_entity_uuids),
+            )
+            return filtered, existing_checkpoint, precomputed_entities
+        # Checkpoint verwertet sich doch nicht (z. B. eine fixierte Entity
+        # wurde im Graphen gelöscht) — auf den regulären Pfad zurückfallen
+        # statt mit einer beschädigten Auswahl weiterzumachen.
+
+    if existing_checkpoint is not None:
+        # Nicht verwertbar (Parameter-Mismatch oder verschwundene Entity)
+        # — als Altlast entfernen. Sonst läse
+        # ``resolve_interruption_status`` beim nächsten Absturz diese
+        # stale Datei fälschlich als Resume-Angebot.
+        _prepare_checkpoint.clear_checkpoint(simulation_id)
+
+    filtered = _phase_read_entities(
+        state,
+        storage,
+        defined_entity_types,
+        max_agents,
+        progress_callback=progress_callback,
+        degradations=degradations,
+    )
+    return filtered, None, None
+
+
 class PrepareCancelledError(Exception):
     """Signalisiert kooperativen Abbruch während ``prepare_simulation()``.
 
@@ -415,6 +736,7 @@ def prepare_simulation(
     quota_plan: Optional[PersonaQuotaPlan] = None,
     run_id: Optional[str] = None,
     degradations: Optional[DegradationCollector] = None,
+    force_regenerate: bool = False,
 ) -> SimulationState:
     """Orchestrator für die drei Prepare-Phasen.
 
@@ -427,6 +749,14 @@ def prepare_simulation(
     ``report_agent/workflow.py``. Bereits geschriebene Artefakte (Profildatei
     aus Phase 2, Entity-Zählung aus Phase 1) bleiben unangetastet stehen;
     nur der FSM-Status wechselt auf ``CANCELLED_PARTIAL`` statt ``READY``.
+
+    ``force_regenerate`` (Codex-Finding P2 auf PR #1539, Issue #1472c): ein
+    Aufrufer, der ausdrücklich eine vollständige Neugenerierung verlangt,
+    darf keine Teilergebnisse aus einem alten Checkpoint erben. Der
+    Checkpoint wird deshalb VOR der Resume-Erkennung gelöscht — nicht erst
+    ignoriert —, sonst würde ein Absturz mitten in diesem "frischen"
+    Versuch beim nächsten Restart wieder den alten, jetzt fachlich
+    überholten Zwischenstand anbieten.
     """
     from .simulation_manager import SimulationStatus
     from .sim.cancel_flag import is_cancel_requested
@@ -434,6 +764,9 @@ def prepare_simulation(
     state = manager._load_simulation_state(simulation_id)
     if not state:
         raise ValueError(f"Simulation does not exist: {simulation_id}")
+
+    if force_regenerate:
+        _prepare_checkpoint.clear_checkpoint(simulation_id)
 
     def _raise_if_cancelled() -> None:
         if run_id and is_cancel_requested(run_id):
@@ -445,16 +778,49 @@ def prepare_simulation(
 
         sim_dir = manager._get_simulation_dir(simulation_id)
 
+        # Effektiver Persona-Floor (Task: 50-Personas-Minimum dynamisch):
+        # Der Report-Contract verlangt MIN_PERSONA_TABLE_ROWS, aber ein
+        # explizit kleineres max_agents gewinnt (Nutzer-Wunsch schlägt
+        # Contract). Der Wert wird im State persistiert, damit das
+        # Report-Gate in workflow.py denselben Floor prüft.
+        #
+        # Issue #1472c: dieser Block steht bewusst VOR Phase 1 (vorher
+        # danach) — die Checkpoint-Gültigkeitsprüfung unten braucht
+        # ``persona_floor`` und den floor-adjustierten ``quota_plan``, und
+        # beide hängen nur von ``max_agents``/dem rohen Plan ab, nie von
+        # den gelesenen Entities. Funktional identisch, nur früher berechnet.
+        persona_floor = MIN_PERSONA_TABLE_ROWS
+        if max_agents is not None and max_agents > 0:
+            persona_floor = min(persona_floor, max_agents)
+        state.persona_floor = persona_floor
+        manager._save_simulation_state(state)
+
+        quota_plan = _apply_persona_floor_to_quota_plan(
+            quota_plan, minimum=persona_floor
+        )
+        effective_quota_plan_snapshot = (
+            quota_plan.model_dump() if quota_plan is not None else None
+        )
+
+        # Issue #1472c (Prepare-Resume): Phase 1 oder deren Resume-Variante
+        # — ausgelagert in ``_resolve_phase1_result`` (Komplexitätsgründe,
+        # siehe deren Docstring).
         _raise_if_cancelled()
 
-        # Phase 1: Read & filter entities
-        filtered = _phase_read_entities(
-            state,
-            storage,
-            defined_entity_types,
-            max_agents,
+        filtered, resume_checkpoint, precomputed_entities = _resolve_phase1_result(
+            state=state,
+            storage=storage,
+            simulation_id=simulation_id,
+            sim_dir=sim_dir,
+            defined_entity_types=defined_entity_types,
+            max_agents=max_agents,
+            persona_floor=persona_floor,
+            use_llm_for_profiles=use_llm_for_profiles,
+            effective_quota_plan_snapshot=effective_quota_plan_snapshot,
             progress_callback=progress_callback,
             degradations=degradations,
+            llm_model=llm_model,
+            language=language,
         )
 
         if filtered.filtered_count == 0:
@@ -469,21 +835,6 @@ def prepare_simulation(
             parallel_profile_count = int(
                 _get_settings().effective_value('AGORA_PARALLEL_PERSONA_COUNT')
             )
-
-        # Effektiver Persona-Floor (Task: 50-Personas-Minimum dynamisch):
-        # Der Report-Contract verlangt MIN_PERSONA_TABLE_ROWS, aber ein
-        # explizit kleineres max_agents gewinnt (Nutzer-Wunsch schlägt
-        # Contract). Der Wert wird im State persistiert, damit das
-        # Report-Gate in workflow.py denselben Floor prüft.
-        persona_floor = MIN_PERSONA_TABLE_ROWS
-        if max_agents is not None and max_agents > 0:
-            persona_floor = min(persona_floor, max_agents)
-        state.persona_floor = persona_floor
-        manager._save_simulation_state(state)
-
-        quota_plan = _apply_persona_floor_to_quota_plan(
-            quota_plan, minimum=persona_floor
-        )
 
         _raise_if_cancelled()
 
@@ -504,6 +855,9 @@ def prepare_simulation(
             max_agents=max_agents,
             run_id=run_id,
             degradations=degradations,
+            defined_entity_types=defined_entity_types,
+            resume_checkpoint=resume_checkpoint,
+            precomputed_entities=precomputed_entities,
         )
 
         # Review-Finding (PR #1371, Befund 2): der Cancel-Check MUSS vor der

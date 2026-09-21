@@ -37,6 +37,10 @@ class SimulationStatus(str, Enum):
     CANCELLED_PARTIAL = "cancelled_partial"  # Cooperative cancel — partial report available
     COMPLETED = "completed"       # Simulation completed naturally
     FAILED = "failed"
+    # Issue #1472c: Prepare wurde mit verwertbarem Zwischenstand unterbrochen
+    # (Checkpoint mit mindestens einem generierten Profil) — kein endgültiges
+    # FAILED, sondern ein Resume-Angebot analog CANCELLED_PARTIAL.
+    INTERRUPTED = "interrupted"
 
 
 class PlatformType(str, Enum):
@@ -312,6 +316,7 @@ class SimulationManager:
         quota_plan: Optional["PersonaQuotaPlan"] = None,
         run_id: Optional[str] = None,
         degradations: Optional["DegradationCollector"] = None,
+        force_regenerate: bool = False,
     ) -> SimulationState:
         return prepare_service.prepare_simulation(
             self,
@@ -330,6 +335,7 @@ class SimulationManager:
             quota_plan=quota_plan,
             run_id=run_id,
             degradations=degradations,
+            force_regenerate=force_regenerate,
         )
 
     

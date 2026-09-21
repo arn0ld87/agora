@@ -6,9 +6,11 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from . import prepare_service as _legacy
 from .degradation_collector import DegradationCollector
+from .entity_reader import FilteredEntities
 
 if TYPE_CHECKING:
-    from .entity_reader import EntityNode
+    from .entity_reader import EntityNode, EntityReader
+    from .prepare_checkpoint import PreparePersonaCheckpoint
     from .simulation_manager import SimulationState
 
 def _strip_leading_article (tokens :list [str ])->list [str ]:
@@ -263,3 +265,140 @@ degradations :Optional [DegradationCollector ]=None ,
         )
 
     return filtered
+
+
+def _build_eligible_uuid_pool(
+    reader: "EntityReader",
+    graph_id: str,
+    defined_entity_types: Optional[List[str]],
+) -> Dict[str, "EntityNode"]:
+    """Liest den aktuellen eignungsgefilterten Entity-Pool, geschlüsselt per UUID.
+
+    Issue #1472c (Resume): anders als der normale Phase-1-Pfad wird hier
+    NICHT dedupliziert und NICHT gecappt — der Aufrufer sucht ausschließlich
+    per UUID nach, die Auswahl selbst kommt bereits fixiert aus dem
+    Checkpoint (siehe Moduldocstring ``prepare_checkpoint_contract``).
+    """
+    filtered = reader.filter_defined_entities(
+        graph_id=graph_id,
+        defined_entity_types=defined_entity_types,
+        enrich_with_edges=True,
+    )
+    eligibility = _legacy.filter_eligible_entities(filtered.entities, degradations=None)
+    pool = eligibility.eligible if eligibility.exclusions else filtered.entities
+    return {entity.uuid: entity for entity in pool}
+
+
+def _lookup_entities_by_uuid(
+    by_uuid: Dict[str, "EntityNode"], uuids: List[str]
+) -> List[Optional["EntityNode"]]:
+    """Bildet eine UUID-Liste (Reihenfolge und Wiederholungen erhalten) auf Entities ab.
+
+    Liefert ``None`` an Positionen, deren UUID im aktuellen Pool nicht mehr
+    existiert (z. B. Entity wurde zwischenzeitlich gelöscht) — der Aufrufer
+    entscheidet, ob das den Checkpoint entwertet.
+    """
+    return [by_uuid.get(uuid) for uuid in uuids]
+
+
+def _phase_read_entities_from_checkpoint(
+    state: "SimulationState",
+    storage: Any,
+    checkpoint: "PreparePersonaCheckpoint",
+    progress_callback: Optional[Callable] = None,
+) -> Optional[FilteredEntities]:
+    """Resume-Variante von Phase 1 (Issue #1472c).
+
+    Berechnet die Cap-/Quota-Auswahl NICHT neu — der Graph-Lesepfad hat
+    kein ``ORDER BY`` (siehe ``_cap_entities_across_types``), ein erneuter
+    Read könnte eine andere Typ-Verteilung liefern. Stattdessen werden die
+    im Checkpoint fixierten Entity-UUIDs (``primary_entity_uuids`` /
+    ``reserve_entity_uuids``) nur noch nachgeschlagen.
+
+    Gibt ``None`` zurück, wenn mindestens eine der primären, im Checkpoint
+    fixierten Entitäten im Graphen nicht mehr gefunden wird — der Checkpoint
+    gilt dann als entwertet, der Aufrufer fällt auf den regulären
+    (Neu-)Startpfad zurück.
+    """
+    if progress_callback:
+        progress_callback("reading", 0, "Resuming entity selection from checkpoint...")
+
+    if not storage:
+        raise ValueError("storage (GraphStorage) is required for prepare_simulation")
+    reader = _legacy.EntityReader(storage)
+
+    by_uuid = _build_eligible_uuid_pool(
+        reader, checkpoint.graph_id, checkpoint.defined_entity_types
+    )
+    primary_raw = _lookup_entities_by_uuid(by_uuid, checkpoint.primary_entity_uuids)
+    if any(entity is None for entity in primary_raw):
+        _legacy.logger.warning(
+            "Prepare-Resume: mindestens eine im Checkpoint fixierte "
+            "Entitaet wurde im Graphen nicht mehr gefunden — Checkpoint "
+            "gilt als entwertet, Auswahl wird neu berechnet."
+        )
+        return None
+    # mypy kann den ``any()``-Check oben nicht auf den Listentyp durchreichen
+    # (weiterhin ``List[EntityNode | None]``) — die Filter-Comprehension
+    # narrowt explizit auf ``List[EntityNode]``; laufzeitseitig ein No-Op,
+    # da oben bereits sichergestellt ist, dass kein Eintrag ``None`` ist.
+    primary: List["EntityNode"] = [entity for entity in primary_raw if entity is not None]
+    reserve = [
+        entity
+        for entity in _lookup_entities_by_uuid(by_uuid, checkpoint.reserve_entity_uuids)
+        if entity is not None
+    ]
+
+    filtered = FilteredEntities(
+        entities=list(primary),
+        entity_types=set(checkpoint.entity_types),
+        total_count=len(primary),
+        filtered_count=len(primary),
+        reserve_entities=reserve,
+    )
+
+    state.entities_count = checkpoint.entities_count
+    state.entity_types = list(checkpoint.entity_types)
+
+    if progress_callback:
+        progress_callback(
+            "reading",
+            100,
+            f"Resumed, total {filtered.filtered_count} entities",
+            current=filtered.filtered_count,
+            total=filtered.filtered_count,
+        )
+
+    return filtered
+
+
+def _lookup_expanded_entities_from_checkpoint(
+    storage: Any, checkpoint: "PreparePersonaCheckpoint"
+) -> Optional[List["EntityNode"]]:
+    """Rekonstruiert die eingefrorene, quota-expandierte Generierungsliste.
+
+    Issue #1472c: das ist exakt die Liste, die der ursprüngliche Versuch
+    an ``generate_profiles_from_entities`` übergeben hat (nach
+    ``_expand_entities_for_quota``/``_apply_persona_floor_to_entities``) —
+    inklusive Wiederholungen derselben Entity (Quota-Expansion dupliziert
+    kleine Segmentpools per Round-Robin). Reihenfolge ist bedeutungstragend:
+    der Index ist der ``user_id``/Generierungs-Index, den
+    ``completed_profiles`` referenziert.
+
+    Gibt ``None`` zurück, wenn eine der UUIDs nicht mehr auffindbar ist —
+    der Checkpoint gilt dann als entwertet.
+    """
+    reader = _legacy.EntityReader(storage)
+    by_uuid = _build_eligible_uuid_pool(
+        reader, checkpoint.graph_id, checkpoint.defined_entity_types
+    )
+    expanded_raw = _lookup_entities_by_uuid(by_uuid, checkpoint.expanded_entity_uuids)
+    if any(entity is None for entity in expanded_raw):
+        _legacy.logger.warning(
+            "Prepare-Resume: mindestens eine im Checkpoint fixierte "
+            "Generierungs-Entitaet wurde im Graphen nicht mehr gefunden — "
+            "Checkpoint gilt als entwertet, Auswahl wird neu berechnet."
+        )
+        return None
+    # Narrowing-Comprehension wie in ``_phase_read_entities_from_checkpoint``.
+    return [entity for entity in expanded_raw if entity is not None]

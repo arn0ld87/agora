@@ -41,6 +41,10 @@ _ARTIFACT_FILENAMES: dict[str, str] = {
     "reddit_profiles": "reddit_profiles.json",
     "persona_library": "persona_library.json",
     "env_status": "env_status.json",
+    # Issue #1472c: Zwischenstand der Persona-Generierung, damit ein
+    # abgebrochener Prepare fortgesetzt werden kann statt von vorn zu
+    # beginnen. Interner Laufzeitzustand, nie Teil einer API-Antwort.
+    "prepare_checkpoint": "prepare_persona_checkpoint.json",
 }
 
 _IPC_COMMAND_DIR = "ipc_commands"

@@ -9,7 +9,7 @@ Optimization improvements:
 """
 
 import re
-from typing import TYPE_CHECKING, Dict, Any, List, Optional
+from typing import TYPE_CHECKING, Callable, Dict, Any, List, Optional
 
 from ..config import Config
 from ..contracts import PersonaQuotaPlan
@@ -394,8 +394,8 @@ class OasisProfileGenerator:
     def _cancel_checkpoint(self, completed: int, total: int, path: str) -> bool:
         return _oasis_profile_batch_results._cancel_checkpoint(self, completed, total, path)
 
-    def generate_profiles_from_entities(self, entities: List[EntityNode], use_llm: bool=True, progress_callback: Optional[callable]=None, graph_id: Optional[str]=None, parallel_count: Optional[int]=None, realtime_output_path: Optional[str]=None, output_platform: str='reddit', degradations: Optional['DegradationCollector']=None, reserve_entities: Optional[List[EntityNode]]=None) -> List[OasisAgentProfile]:
-        return _oasis_profile_batch.generate_profiles_from_entities(self, entities, use_llm, progress_callback, graph_id, parallel_count, realtime_output_path, output_platform, degradations, reserve_entities)
+    def generate_profiles_from_entities(self, entities: List[EntityNode], use_llm: bool=True, progress_callback: Optional[callable]=None, graph_id: Optional[str]=None, parallel_count: Optional[int]=None, realtime_output_path: Optional[str]=None, output_platform: str='reddit', degradations: Optional['DegradationCollector']=None, reserve_entities: Optional[List[EntityNode]]=None, already_done: Optional[Dict[int, OasisAgentProfile]]=None, on_profile_saved: Optional[Callable[[int, OasisAgentProfile], None]]=None, demographic_slots: Optional[List[PersonaDemographicSlot]]=None) -> List[OasisAgentProfile]:
+        return _oasis_profile_batch.generate_profiles_from_entities(self, entities, use_llm, progress_callback, graph_id, parallel_count, realtime_output_path, output_platform, degradations, reserve_entities, already_done, on_profile_saved, demographic_slots)
 
     def _print_generated_profile(self, entity_name: str, entity_type: str, profile: OasisAgentProfile):
         return _oasis_profile_persistence._print_generated_profile(self, entity_name, entity_type, profile)

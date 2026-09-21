@@ -12,11 +12,45 @@ from . import oasis_profile_generator as _legacy
 if TYPE_CHECKING:
     from .degradation_collector import DegradationCollector
 import json
-from typing import List, Optional
+from typing import Callable, Dict, List, Optional
 from .entity_reader import EntityNode
-from .oasis_profile_models import OasisAgentProfile, PersonaIneligible
+from .oasis_profile_models import OasisAgentProfile, PersonaDemographicSlot, PersonaIneligible
 from .run_budget import BudgetExceededError
 from .settings_layer import get_default_service as _get_settings
+
+
+def _resolve_demographic_slots (
+generator :Any ,
+entities :List [EntityNode ],
+demographic_slots :Optional [List [PersonaDemographicSlot ]],
+total :int ,
+)->List [PersonaDemographicSlot ]:
+    """Liefert den zu verwendenden Slot-Plan (Codex-Finding P1, PR #1539).
+
+    Ein vom Aufrufer fixierter Plan (Resume, oder frisch gewuerfelt UND im
+    Checkpoint persistiert — siehe
+    ``prepare_service._build_profile_checkpoint_hooks``) wird UNVERAENDERT
+    uebernommen statt neu gewuerfelt zu werden. Sonst verzerrt ein
+    teilweise fortgesetzter Lauf die vorgegebene demografische
+    Gesamtverteilung: die uebernommenen Profile tragen ihre Slots aus dem
+    ersten Versuch, die neu erzeugten welche aus einer zweiten Mischung.
+
+    Fehlt der Plan (Aufrufer ausserhalb von ``prepare_service``, Tests),
+    bleibt das Verhalten unveraendert: frisch wuerfeln.
+
+    Ausgelagert statt inline, weil ``generate_profiles_from_entities`` mit
+    cc=40 am Allowlist-Limit steht — die Vorbedingungspruefung haette es
+    gerissen.
+    """
+    if demographic_slots is None :
+        return generator ._build_demographic_slots (entities )
+    if len (demographic_slots )!=total :
+        raise ValueError (
+        f"demographic_slots length ({len (demographic_slots )}) does not match "
+        f"entities length ({total })"
+        )
+    return demographic_slots
+
 
 def generate_profiles_from_entities (
 self: Any ,
@@ -29,6 +63,9 @@ realtime_output_path :Optional [str ]=None ,
 output_platform :str ="reddit",
 degradations :Optional ["DegradationCollector"]=None ,
 reserve_entities :Optional [List [EntityNode ]]=None ,
+already_done :Optional [Dict [int ,OasisAgentProfile ]]=None ,
+on_profile_saved :Optional [Callable [[int ,OasisAgentProfile ],None ]]=None ,
+demographic_slots :Optional [List [PersonaDemographicSlot ]]=None ,
 )->List [OasisAgentProfile ]:
     """
     Generate Agent Profiles in batch from entities (supports parallel generation)
@@ -68,7 +105,9 @@ reserve_entities :Optional [List [EntityNode ]]=None ,
     profiles =[None ]*total # Pre-allocate list to maintain order
     completed_count =[0 ]# Use list for modification in closure
     lock =Lock ()
-    demographic_slots =self ._build_demographic_slots (entities )
+    demographic_slots =_resolve_demographic_slots (
+    self ,entities ,demographic_slots ,total
+    )
     # Issue #1247: abgelehnte Kandidaten, gesammelt fuer die Nachbesetzung.
     rejected :List [PersonaIneligible ]=[]
 
@@ -119,6 +158,17 @@ reserve_entities :Optional [List [EntityNode ]]=None ,
     def generate_single_profile (idx :int ,entity :EntityNode )->tuple :
         """Worker function to generate single profile"""
         entity_type =entity .get_entity_type ()or "Entity"
+
+        # Issue #1472c (Prepare-Resume): fuer diesen Generierungs-Index
+        # liegt aus einem frueheren, unterbrochenen Versuch bereits ein
+        # Profil vor — kein erneuter LLM-Call. Schluessel ist der Index,
+        # NICHT die Entity-UUID: dieselbe Entity kann durch Quota-Expansion
+        # mehrfach im Pool stehen, und jede Wiederholung hat einen eigenen
+        # demografischen Slot (siehe ``already_done``-Docstring oben).
+        if already_done is not None and idx in already_done :
+            cached_profile =already_done [idx ]
+            self ._print_generated_profile (entity .name ,entity_type ,cached_profile )
+            return idx ,cached_profile ,None
 
         try :
             profile =self .generate_profile_from_entity (
@@ -200,6 +250,21 @@ reserve_entities :Optional [List [EntityNode ]]=None ,
         with lock :
             completed_count [0 ]+=1
             current =completed_count [0 ]
+
+            # Issue #1472c (Prepare-Resume): Checkpoint-Schreiben unter
+            # demselben Lock wie der Fortschrittszaehler — nur fuer frisch
+            # generierte Profile, nicht fuer aus dem Checkpoint uebernommene
+            # (sonst wuerde jeder Prozess-Restart den Checkpoint erneut mit
+            # denselben Eintraegen beschreiben, ohne Mehrwert). Ein
+            # ``None``-Profil (Ablehnung) wird NICHT gecheckpointet — die
+            # Ablehnung ist kein abgeschlossenes Ergebnis, ein Resume soll
+            # sie erneut versuchen (moeglicherweise mit anderem Ausgang).
+            if (
+            profile is not None
+            and on_profile_saved is not None
+            and (already_done is None or result_idx not in already_done )
+            ):
+                on_profile_saved (result_idx ,profile )
 
             # Real-time file writing
         save_profiles_realtime ()

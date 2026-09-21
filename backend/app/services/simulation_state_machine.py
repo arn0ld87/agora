@@ -8,11 +8,14 @@ und werden gegen :func:`assert_valid_transition` geprüft.
 Erlaubte Übergänge:
 
 - ``create_simulation`` → ``CREATED``
-- ``prepare_simulation`` → ``PREPARING``, dann ``READY`` (Erfolg), ``FAILED``
-  oder ``CANCELLED_PARTIAL`` (Nutzerabbruch, Issue B2)
+- ``prepare_simulation`` → ``PREPARING``, dann ``READY`` (Erfolg), ``FAILED``,
+  ``CANCELLED_PARTIAL`` (Nutzerabbruch, Issue B2) oder ``INTERRUPTED``
+  (Prozessende mit verwertbarem Persona-Checkpoint, Issue #1472c)
 - Retry nach Fehler: ``FAILED`` → ``PREPARING`` (User triggert prepare nochmal)
 - Retry nach Abbruch: ``CANCELLED_PARTIAL`` → ``PREPARING`` (User triggert
   prepare nochmal, gleiches Muster wie der FAILED-Retry)
+- Resume nach Unterbrechung: ``INTERRUPTED`` → ``PREPARING`` (setzt die
+  Persona-Generierung anhand des Checkpoints fort statt neu zu starten)
 - Branching erzeugt einen READY-Branch in zwei Schritten: ``CREATED`` →
   ``PREPARING`` → ``READY`` (siehe ``branching_service.create_branch``)
 - ``start_simulation`` → ``RUNNING``
@@ -47,6 +50,10 @@ ALLOWED_TRANSITIONS: dict[SimulationStatus, frozenset[SimulationStatus]] = {
             # simulation_run — Teilergebnisse (z. B. die bereits geschriebene
             # Profildatei) bleiben erhalten, es ist kein FAILED.
             SimulationStatus.CANCELLED_PARTIAL,
+            # Issue #1472c: Prozess wurde mit einem verwertbaren
+            # Persona-Checkpoint unterbrochen (SIGTERM/Absturz mitten in
+            # Phase 2) — Resume-Angebot statt endgültigem FAILED.
+            SimulationStatus.INTERRUPTED,
         }
     ),
     # FAILED ist *fast* terminal: User darf einen fehlgeschlagenen Prepare
@@ -87,6 +94,11 @@ ALLOWED_TRANSITIONS: dict[SimulationStatus, frozenset[SimulationStatus]] = {
     ),
     SimulationStatus.COMPLETED: frozenset(),
     SimulationStatus.FAILED: frozenset({SimulationStatus.PREPARING}),
+    # Issue #1472c: Retry-Pfad symmetrisch zu FAILED -> PREPARING und
+    # CANCELLED_PARTIAL -> PREPARING — der Nutzer stößt den unterbrochenen
+    # Prepare erneut an, ``prepare_simulation`` erkennt den Checkpoint und
+    # setzt die Persona-Generierung fort statt sie neu zu starten.
+    SimulationStatus.INTERRUPTED: frozenset({SimulationStatus.PREPARING}),
 }
 
 TERMINAL_STATES: frozenset[SimulationStatus] = frozenset(

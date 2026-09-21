@@ -85,6 +85,7 @@ def make_prepare_job(
     run_record: "dict[str, Any]",
     progress_callback_factory: "Callable[..., Callable[..., None]]",
     finish_cancelled_prepare_run: "Callable[..., None]",
+    force_regenerate: bool = False,
 ) -> "Callable[[], None]":
     """Phase 9 — den Hintergrund-Job bauen, der die Vorbereitung ausführt."""
     from ..models.task import TaskStatus
@@ -124,6 +125,12 @@ def make_prepare_job(
                 # LLM-Clients damit run-gebunden statt budgetfrei.
                 run_id=run_record["run_id"],
                 degradations=degradations,
+                # Codex-Finding P2 (PR #1539, Issue #1472c): ein
+                # force_regenerate muss den Checkpoint-Pfad erreichen, sonst
+                # uebernimmt ein passender alter Checkpoint stillschweigend
+                # Teilergebnisse, obwohl der Aufrufer eine vollstaendige
+                # Neugenerierung verlangt hat.
+                force_regenerate=force_regenerate,
             )
 
             task_manager.complete_task(

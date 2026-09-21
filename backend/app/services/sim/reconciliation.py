@@ -381,19 +381,33 @@ def reconcile_stale_runs(
 
 
 def _default_fail_simulation_state(simulation_id: str, error: str) -> None:
-    """Schiebt einen auf ``PREPARING`` haengengebliebenen State nach ``FAILED``.
+    """Terminalisiert einen auf ``PREPARING`` haengengebliebenen State.
+
+    Issue #1472c: nicht mehr ausschliesslich ``FAILED`` — liegt ein
+    Prepare-Persona-Checkpoint mit mindestens einem generierten Profil vor
+    (``prepare_checkpoint.py``), landet der State auf ``INTERRUPTED`` und
+    bietet einen Resume an. Dieselbe Entscheidung trifft der
+    SIGTERM/atexit-Shutdown-Hook (``simulation_runner.register_cleanup``) —
+    ein verwaister Prozess ohne ordentlichen Shutdown (Absturz, kill -9)
+    verdient keine schlechtere Behandlung als ein sauber terminalisierter.
 
     Lazy importiert, damit dieses Modul von beiden Startup-Hooks aus ohne
     Flask-App-Kontext importierbar bleibt (siehe ``run_startup_reconciliation``).
     """
+    from ..prepare_checkpoint import resolve_interruption_status
     from ..simulation_manager import SimulationManager, SimulationStatus
 
     manager = SimulationManager()
     state = manager.get_simulation(simulation_id)
     if state is None or state.status != SimulationStatus.PREPARING:
         return
+    target_status = (
+        SimulationStatus.INTERRUPTED
+        if resolve_interruption_status(simulation_id) == "interrupted"
+        else SimulationStatus.FAILED
+    )
     state.error = error
-    manager._set_status(state, SimulationStatus.FAILED)
+    manager._set_status(state, target_status)
 
 
 def reconcile_stale_jobs(
@@ -426,11 +440,15 @@ def reconcile_stale_jobs(
     ``simulation_id``, Terminal-Propagationssperre, Schreibreihenfolge) haengen
     alle am ``run_state.json``, das es hier gar nicht gibt.
 
-    Kein neuer Statuswert: ``failed``/``process_restart`` ist derselbe
-    Endzustand, den ``reconcile_stale_runs`` fuer denselben Sachverhalt
-    schreibt, und ``PREPARING -> FAILED`` ist im FSM bereits erlaubt. Ein
-    eigener ``interrupted``-Status haette Frontend, FSM und jeden Consumer
-    beruehrt, ohne mehr auszusagen als der Grund es schon tut.
+    Kein neuer Run-Registry-Statuswert: das Manifest bleibt
+    ``failed``/``process_restart``, derselbe Endzustand, den
+    ``reconcile_stale_runs`` fuer denselben Sachverhalt schreibt. Der
+    ``SimulationState`` von ``simulation_prepare``-Jobs kann seit Issue
+    #1472c abweichen: ``_default_fail_simulation_state`` (bzw.
+    ``fail_simulation_state``) setzt ihn auf ``INTERRUPTED`` statt
+    ``FAILED``, wenn ein Persona-Checkpoint mit verwertbarem Zwischenstand
+    vorliegt — das Run-Manifest bleibt davon unberuehrt, nur der
+    FSM-Zustand der Simulation traegt den Unterschied.
 
     Args:
         registry: ``RunRegistry``-Instanz (oder Stub mit ``list_runs``/``update_run``).
