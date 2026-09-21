@@ -85,11 +85,21 @@ DOMAIN_MARKERS: Dict[str, FrozenSet[str]] = {
     }),
     # "recht" allein steckt auch in "Rechtschreibung" — nur die
     # vollständigen Fachkomposita zählen.
+    #
+    # Dieselbe Falle, eine Ebene tiefer: "mandant" steckt in "Kommandant"
+    # und "Kommandantin", "kanzlei" in "Bundeskanzlei" — letztere ist
+    # Verwaltung, keine Anwaltskanzlei, und im DACH-Raum alles andere als
+    # selten. Beide deshalb nur in ihrer eindeutigen Langform, obwohl
+    # "Mandant" und "Kanzlei" die gebräuchlicheren Wörter wären: ein
+    # fälschlich als `legal` erkannter Kommandant verliert seinen Beruf,
+    # weil der Aufrufer bei Drift `profession=None` setzt.
     "legal": frozenset({
-        "kanzlei", "mandant", "mandantin", "rechtsanwalt", "rechtsanwältin",
-        "rechtsanwaeltin", "gerichtsverfahren", "klageschrift",
-        "vertragsrecht", "rechtsabteilung", "rechtsberatung",
-        "prozessvertretung", "justiziar", "justiziarin",
+        "anwaltskanzlei", "rechtsanwaltskanzlei", "mandantschaft",
+        "mandantengespräch", "mandantengespraech", "mandantenakte",
+        "rechtsanwalt", "rechtsanwältin", "rechtsanwaeltin",
+        "gerichtsverfahren", "klageschrift", "vertragsrecht",
+        "rechtsabteilung", "rechtsberatung", "prozessvertretung",
+        "justiziar", "justiziarin",
     }),
     # "kraft" allein steckt in "Arbeitskraft", "Kraftfahrer" — nur die
     # vollständigen Energie-Komposita zählen.
