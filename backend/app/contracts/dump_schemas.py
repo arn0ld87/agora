@@ -83,6 +83,7 @@ from app.contracts.embedding_contract import (
     EmbeddingConfigurationResponse,
     EmbeddingConfigurationUpsertRequest,
     EmbeddingIndexVersion,
+    EmbeddingIndexVersionListResponse,
     EmbeddingMigrationJob,
     EmbeddingMigrationJobResponse,
     EmbeddingModelMetadata,
@@ -175,6 +176,7 @@ CONTRACTS: dict[str, type] = {
     "embedding-migration-job.schema.json": EmbeddingMigrationJob,
     "embedding-migration-job-response.schema.json": EmbeddingMigrationJobResponse,
     "embedding-index-version.schema.json": EmbeddingIndexVersion,
+    "embedding-index-version-list-response.schema.json": EmbeddingIndexVersionListResponse,
     "embedding-model-metadata.schema.json": EmbeddingModelMetadata,
     # Interview-Envelope (Issue #1005)
     "interview-envelope.schema.json": InterviewEnvelope,

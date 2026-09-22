@@ -369,6 +369,22 @@ class EmbeddingIndexVersion(BaseModel):
         return self
 
 
+class EmbeddingIndexVersionListResponse(BaseModel):
+    """Antwort-Wrapper fuer die Liste aller Index-Versionen (f006, Slice
+    ``embedding-ssot``, Task ``modellwechsel-ui``).
+
+    Vorher hatte die Oberflaeche keinen API-Zugriff auf
+    ``EmbeddingConfigurationStore.list_index_versions()`` — sie kannte nur
+    den Migrations-Job-Status, nicht den ``building``-Status der
+    Ziel-Indexversion selbst und nicht, dass die Quell-Version waehrend
+    einer laufenden Migration unveraendert ``active`` bleibt (Slice 2.2).
+    """
+
+    model_config = _STRICT
+
+    versions: list[EmbeddingIndexVersion]
+
+
 # ----------------------------------------------------------------------
 # Helpers: Konsistenz mit dem Provider-Connection-Literal
 # ----------------------------------------------------------------------
@@ -400,6 +416,7 @@ __all__ = [
     "EmbeddingMigrationJob",
     "EmbeddingMigrationJobResponse",
     "EmbeddingIndexVersion",
+    "EmbeddingIndexVersionListResponse",
     "embedding_provider_kinds",
     "provider_kind_supports_embeddings",
 ]

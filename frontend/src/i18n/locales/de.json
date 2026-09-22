@@ -1680,6 +1680,19 @@
       "failed": "Fehlgeschlagen",
       "unknown": "Unbekannt"
     },
+    "indexStatus": {
+      "building": "Wird befüllt",
+      "active": "Aktiv",
+      "superseded": "Abgelöst",
+      "rolled_back": "Zurückgerollt",
+      "retired": "Außer Betrieb"
+    },
+    "indexVersions": {
+      "title": "Betriebsindex",
+      "legacyHint": "Keine aufgezeichnete Indexversion — der Betrieb läuft über den unversionierten Legacy-Index.",
+      "servesTraffic": "bedient Reads und Writes.",
+      "notServingYet": "wird noch befüllt, bedient den Betrieb noch nicht. Der Altindex bleibt bis zum erfolgreichen Cutover aktiv."
+    },
     "list": {
       "error": "Konfigurationen konnten nicht geladen werden",
       "empty": "Noch keine Embedding-Konfigurationen vorhanden."

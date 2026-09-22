@@ -84,6 +84,29 @@ class ResolvedEmbeddingRoute:
     dimensions: int
 
 
+def resolve_operational_vector_dim() -> int:
+    """Loest die kanonische Dimension des Betriebsindex auf (#1417, Slice 2.3).
+
+    Nach einem abgeschlossenen Cutover (Slice 2.2) traegt die aktive
+    ``EmbeddingIndexVersion`` die tatsaechliche Dimension des Index, den
+    Reads und Writes ueber ``resolve_active_entity_index``/
+    ``resolve_active_fact_index`` ansprechen. ``Config.VECTOR_DIM`` ist ein
+    Env-Wert, der nach einer Migration auf ein Modell anderer Dimension
+    stehen bleibt — er aendert sich nicht mit dem Cutover. Ohne aktive
+    Indexversion (Legacy-/Bootstrap-Zustand, siehe
+    ``resolve_active_entity_index``) bleibt ``Config.VECTOR_DIM`` die
+    einzige Quelle, weil dann kein Nachweis ueber den Inhalt des
+    vorhandenen Legacy-Index existiert, der ihn ersetzen koennte.
+    """
+    from ...config import Config
+    from ..embedding_configuration_store import EmbeddingConfigurationStore
+
+    active_index = EmbeddingConfigurationStore().get_active_index_version()
+    if active_index is not None:
+        return active_index.dimensions
+    return Config.VECTOR_DIM
+
+
 def resolve_active_embedding_route() -> Optional[ResolvedEmbeddingRoute]:
     """Loest die aktive globale Embedding-Konfiguration auf.
 
@@ -207,4 +230,5 @@ __all__ = [
     "EmbeddingRuntimeConfigurationError",
     "ResolvedEmbeddingRoute",
     "resolve_active_embedding_route",
+    "resolve_operational_vector_dim",
 ]

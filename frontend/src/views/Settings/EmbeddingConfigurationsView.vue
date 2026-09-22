@@ -27,6 +27,7 @@ import { listProviderConnections } from '@/api/providerConnections'
 import type { ProviderConnection } from '@/contracts/aiProviderContract'
 import type {
   EmbeddingConfiguration,
+  EmbeddingIndexVersion,
   EmbeddingMigrationJob,
   EmbeddingProviderKind,
 } from '@/contracts/embeddingContract'
@@ -53,6 +54,24 @@ const STATUS_LABEL_KEY: Record<string, string> = {
   active: 'embedding.status.active',
   rolled_back: 'embedding.status.rolled_back',
   failed: 'embedding.status.failed',
+}
+
+// EmbeddingIndexVersion.status ist ein eigener Zustandsraum, getrennt von
+// EmbeddingConfigurationStatus oben — "building" hat dort keine Entsprechung.
+const INDEX_STATUS_TONE: Record<string, 'gray' | 'green' | 'orange' | 'red' | 'blue' | 'teal'> = {
+  building: 'blue',
+  active: 'green',
+  superseded: 'gray',
+  rolled_back: 'orange',
+  retired: 'gray',
+}
+
+const INDEX_STATUS_LABEL_KEY: Record<string, string> = {
+  building: 'embedding.indexStatus.building',
+  active: 'embedding.indexStatus.active',
+  superseded: 'embedding.indexStatus.superseded',
+  rolled_back: 'embedding.indexStatus.rolled_back',
+  retired: 'embedding.indexStatus.retired',
 }
 
 // Ollama-Download-Wizard (Modal)
@@ -279,6 +298,7 @@ onMounted(async () => {
     store.loadConfigurations(),
     store.loadActiveConfiguration(),
     listProviderConnections(),
+    store.loadIndexVersions(),
   ]);
   providerConnections.value = connectionsResp.items;
 });
@@ -389,6 +409,35 @@ function errorMessage(err: unknown): string {
             {{ $t('embedding.adopt.open', 'Uebernehmen') }}
           </button>
         </template>
+      </Card>
+
+      <Card
+        v-if="!store.indexVersionsLoading"
+        :title="$t('embedding.indexVersions.title', 'Betriebsindex')"
+      >
+        <p v-if="!store.activeIndexVersion" class="text-muted">
+          {{ $t('embedding.indexVersions.legacyHint', 'Keine aufgezeichnete Indexversion — der Betrieb läuft über den unversionierten Legacy-Index.') }}
+        </p>
+        <div v-else class="index-version-row" data-testid="active-index-version">
+          <Badge :tone="INDEX_STATUS_TONE[store.activeIndexVersion.status] || 'neutral'">
+            {{ $t(INDEX_STATUS_LABEL_KEY[store.activeIndexVersion.status] || 'embedding.status.unknown') }}
+          </Badge>
+          <span>
+            v{{ store.activeIndexVersion.version }} · {{ store.activeIndexVersion.model_id }}
+            ({{ store.activeIndexVersion.dimensions }}d) —
+            {{ $t('embedding.indexVersions.servesTraffic', 'bedient Reads und Writes.') }}
+          </span>
+        </div>
+        <div v-if="store.buildingIndexVersion" class="index-version-row" data-testid="building-index-version">
+          <Badge :tone="INDEX_STATUS_TONE[store.buildingIndexVersion.status] || 'neutral'">
+            {{ $t(INDEX_STATUS_LABEL_KEY[store.buildingIndexVersion.status] || 'embedding.status.unknown') }}
+          </Badge>
+          <span>
+            v{{ store.buildingIndexVersion.version }} · {{ store.buildingIndexVersion.model_id }}
+            ({{ store.buildingIndexVersion.dimensions }}d) —
+            {{ $t('embedding.indexVersions.notServingYet', 'wird noch befüllt, bedient den Betrieb noch nicht. Der Altindex bleibt bis zum erfolgreichen Cutover aktiv.') }}
+          </span>
+        </div>
       </Card>
 
       <Card
@@ -711,6 +760,12 @@ function errorMessage(err: unknown): string {
   border-top: 1px solid var(--hairline);
 }
 .migration-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+.index-version-row {
   display: flex;
   align-items: center;
   gap: 0.5rem;

@@ -16,6 +16,7 @@ import * as migrationApi from "@/api/embeddingMigrations";
 import type {
   EmbeddingConfiguration,
   EmbeddingConfigurationScope,
+  EmbeddingIndexVersion,
   EmbeddingMigrationJob,
   EmbeddingProviderKind,
   OllamaPullReport,
@@ -57,6 +58,16 @@ interface EmbeddingConfigurationsState {
       actual_dimensions: number | null;
     }
   >;
+
+  /**
+   * Alle EmbeddingIndexVersion-Datensätze, neueste zuerst (f006, Slice
+   * embedding-ssot). Macht sichtbar, welcher Index gerade `building`
+   * ist und welcher als Quelle unverändert `active` bleibt, solange
+   * eine Migration läuft (Slice 2.2, #1417).
+   */
+  indexVersions: EmbeddingIndexVersion[];
+  indexVersionsLoading: boolean;
+  indexVersionsError: string | null;
 }
 
 export const useEmbeddingConfigurationsStore = defineStore(
@@ -73,6 +84,9 @@ export const useEmbeddingConfigurationsStore = defineStore(
       migrationByConfiguration: {},
       lastOllamaPull: null,
       probeByConfiguration: {},
+      indexVersions: [],
+      indexVersionsLoading: false,
+      indexVersionsError: null,
     }),
 
     getters: {
@@ -83,6 +97,23 @@ export const useEmbeddingConfigurationsStore = defineStore(
       },
       hasActiveConfiguration(state): boolean {
         return state.activeConfiguration !== null;
+      },
+      /**
+       * Die Indexversion, die Reads/Writes aktuell tatsächlich bedient.
+       * `null`, solange keine Version je aufgezeichnet wurde (Legacy-
+       * Betrieb ohne Migration, siehe `resolve_active_entity_index()`).
+       */
+      activeIndexVersion(state): EmbeddingIndexVersion | null {
+        return state.indexVersions.find((v) => v.status === "active") ?? null;
+      },
+      /**
+       * Die gerade befüllte Zielversion einer laufenden Migration —
+       * `building` heißt: existiert schon, bedient den Betrieb aber noch
+       * nicht. Die `active`-Version bleibt bis zum Cutover unverändert
+       * die Quelle für Reads/Writes (Slice 2.2, #1417).
+       */
+      buildingIndexVersion(state): EmbeddingIndexVersion | null {
+        return state.indexVersions.find((v) => v.status === "building") ?? null;
       },
     },
 
@@ -205,6 +236,22 @@ export const useEmbeddingConfigurationsStore = defineStore(
       },
 
       // ----------------------------------------------------------------
+      // Index-Versionen (f006, Slice embedding-ssot)
+      // ----------------------------------------------------------------
+
+      async loadIndexVersions(): Promise<void> {
+        this.indexVersionsLoading = true;
+        this.indexVersionsError = null;
+        try {
+          this.indexVersions = await api.listEmbeddingIndexVersions();
+        } catch (err) {
+          this.indexVersionsError = errorMessage(err);
+        } finally {
+          this.indexVersionsLoading = false;
+        }
+      },
+
+      // ----------------------------------------------------------------
       // Migrations (Slice 4.3)
       // ----------------------------------------------------------------
 
@@ -215,6 +262,10 @@ export const useEmbeddingConfigurationsStore = defineStore(
           configuration_id: configurationId,
         });
         this.migrationByConfiguration[configurationId] = job;
+        // start() legt die Ziel-Indexversion sofort mit Status
+        // "building" an (Slice 2.2) — ohne Reload zeigt die Oberfläche
+        // die neue Version erst nach dem nächsten Poll.
+        await this.loadIndexVersions();
         return job;
       },
 
@@ -223,12 +274,14 @@ export const useEmbeddingConfigurationsStore = defineStore(
         const configId = job.configuration_id;
         this.migrationByConfiguration[configId] = job;
         // Gemini-Finding (HIGH): Bei completed schaltet das Backend die
-        // aktive Konfiguration auf den neuen Index. Active und Liste
-        // muessen neu geladen werden, damit die UI den Wechsel
+        // aktive Konfiguration auf den neuen Index. Active, Liste und
+        // Indexversionen muessen neu geladen werden, damit die UI den
+        // Wechsel (inklusive Cutover von "building" auf "active")
         // sofort zeigt.
         await Promise.all([
           this.loadActiveConfiguration(),
           this.loadConfigurations(),
+          this.loadIndexVersions(),
         ]);
         return job;
       },
@@ -237,6 +290,9 @@ export const useEmbeddingConfigurationsStore = defineStore(
         const job = await migrationApi.cancelEmbeddingMigration(jobId);
         const configId = job.configuration_id;
         this.migrationByConfiguration[configId] = job;
+        // cancel() setzt die Ziel-Indexversion auf "rolled_back" zurück —
+        // die Quell-Version bleibt "active" (Slice 2.2).
+        await this.loadIndexVersions();
         return job;
       },
 

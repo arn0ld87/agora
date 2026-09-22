@@ -445,8 +445,10 @@ class TestValidateEmbeddingConfigurationFollowsTheRoute:
     ``storage/neo4j_storage.py`` + ``services/report_agent/evidence.py``)
     gegen das Store-Modell einbettete. Diese Klasse sichert die seither
     geltende Praezedenz: ausdrueckliche Argumente > aktive Store-Konfiguration
-    > ``Config.*`` — sowie die bewusste Ausnahme ``vector_dim``, das an
-    ``Config.VECTOR_DIM`` haengen bleibt.
+    > ``Config.*``. ``vector_dim`` folgt einer eigenen Praezedenz (#1417,
+    Slice 2.3): nicht der zu pruefenden Route (das waere eine Tautologie),
+    sondern ``resolve_operational_vector_dim()`` — aktive Indexversion, wenn
+    vorhanden, sonst ``Config.VECTOR_DIM`` als Legacy-Ansicht.
     """
 
     @staticmethod
@@ -505,13 +507,15 @@ class TestValidateEmbeddingConfigurationFollowsTheRoute:
         assert actual_dim == 42
 
     def test_vector_dim_is_not_taken_from_the_route(self, monkeypatch) -> None:
-        """``vector_dim`` bleibt bewusst an ``Config.VECTOR_DIM`` haengen
+        """``vector_dim`` wird nicht aus der zu pruefenden Route genommen
         (Docstring von ``validate_embedding_configuration``): eine aktive
         Route mit einem Modell bekannter Dimension darf die Abweichung vom
-        Betriebsindex nicht verschweigen. Unter dem alten Code (Route wurde
-        nie befragt, ``effective_model`` blieb bei ``Config.EMBEDDING_MODEL``
-        ohne bekannte Dimension) haette dieser Fall gar keine Exception
-        ausgeloest — der Test waere rot."""
+        Betriebsindex nicht verschweigen. Ohne aktive Indexversion (dieser
+        Test setzt keine) loest ``resolve_operational_vector_dim()`` auf
+        ``Config.VECTOR_DIM`` auf — dieselbe Legacy-Ansicht wie vor Slice
+        2.3. Unter dem alten Code (Route wurde nie befragt, ``effective_model``
+        blieb bei ``Config.EMBEDDING_MODEL`` ohne bekannte Dimension) haette
+        dieser Fall gar keine Exception ausgeloest — der Test waere rot."""
         from app.config import Config
         from app.storage.embedding_service import validate_embedding_configuration
 
@@ -530,7 +534,7 @@ class TestValidateEmbeddingConfigurationFollowsTheRoute:
         monkeypatch.setattr(Config, "VECTOR_DIM", 768)
 
         with pytest.raises(
-            EmbeddingRuntimeConfigurationError, match=r"auf 768 \(VECTOR_DIM\)"
+            EmbeddingRuntimeConfigurationError, match=r"auf 768 Dimensionen angelegt"
         ):
             validate_embedding_configuration()
 
@@ -599,3 +603,51 @@ class TestValidateEmbeddingConfigurationFollowsTheRoute:
             "api_key": "env-key",
         }
         assert actual_dim == 11
+
+
+class TestResolveOperationalVectorDim:
+    """#1417, Slice 2.3: ``Config.VECTOR_DIM`` ist ein Env-Wert, der nach
+    einem erfolgreichen Cutover auf ein Modell anderer Dimension stehen
+    bleibt — er aendert sich nicht mit der Migration. Die kanonische
+    Dimension des Betriebsindex muss deshalb aus der aktiven
+    ``EmbeddingIndexVersion`` kommen, sobald eine existiert."""
+
+    def test_falls_back_to_config_without_an_active_index_version(
+        self, monkeypatch
+    ) -> None:
+        from app.config import Config
+        from app.services.embedding_configurations.runtime import (
+            resolve_operational_vector_dim,
+        )
+
+        monkeypatch.setattr(Config, "VECTOR_DIM", 768)
+
+        assert resolve_operational_vector_dim() == 768
+
+    def test_uses_the_active_index_version_after_a_cutover(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        """Regressionstest fuer den eigentlichen Bug: vor Slice 2.3 haette
+        dieser Test ``768`` (den stehengebliebenen Env-Wert) geliefert,
+        obwohl der aktive Index laengst auf 1536 Dimensionen migriert ist."""
+        from app.config import Config
+        from app.services.embedding_configuration_store import (
+            EmbeddingConfigurationStore,
+        )
+        from app.services.embedding_configurations.runtime import (
+            resolve_operational_vector_dim,
+        )
+
+        monkeypatch.setattr(Config, "VECTOR_DIM", 768)
+        store = EmbeddingConfigurationStore(data_dir=tmp_path)
+        store.upsert_index_version(
+            version=1,
+            provider_connection_id="conn_1",
+            model_id="text-embedding-3-large",
+            dimensions=1536,
+            index_name="entity_embedding_v1",
+            property_key="embedding_v1",
+            status="active",
+        )
+
+        assert resolve_operational_vector_dim() == 1536

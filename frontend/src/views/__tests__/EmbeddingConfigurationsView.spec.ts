@@ -35,6 +35,8 @@ const storeState = reactive<{
   activeSource: 'none',
 })
 
+const indexVersionsArr = reactive<unknown[]>([])
+
 const storeMock = {
   get configurations() { return configurationsArr },
   get configurationsLoading() { return false },
@@ -43,8 +45,18 @@ const storeMock = {
   get activeSource() { return storeState.activeSource },
   get migrationByConfiguration() { return migrationByConfigurationObj },
   get probeByConfiguration() { return probeByConfigurationObj },
+  get indexVersions() { return indexVersionsArr },
+  get indexVersionsLoading() { return false },
+  get indexVersionsError() { return null },
+  get activeIndexVersion() {
+    return (indexVersionsArr as Array<{ status?: string }>).find((v) => v.status === 'active') ?? null
+  },
+  get buildingIndexVersion() {
+    return (indexVersionsArr as Array<{ status?: string }>).find((v) => v.status === 'building') ?? null
+  },
   loadConfigurations: vi.fn().mockResolvedValue(undefined),
   loadActiveConfiguration: vi.fn().mockResolvedValue(undefined),
+  loadIndexVersions: vi.fn().mockResolvedValue(undefined),
   upsertConfiguration: vi.fn(),
   testConfiguration: vi.fn().mockResolvedValue(undefined),
   syncLegacy: vi.fn(),
@@ -100,10 +112,12 @@ function makeRouter() {
 
 async function mountView(initial: { connections?: unknown[] } = {}) {
   configurationsArr.length = 0
+  indexVersionsArr.length = 0
   for (const k of Object.keys(migrationByConfigurationObj)) delete migrationByConfigurationObj[k]
 
   storeMock.loadConfigurations.mockClear()
   storeMock.loadActiveConfiguration.mockClear()
+  storeMock.loadIndexVersions.mockClear()
   storeMock.upsertConfiguration.mockClear()
   storeMock.testConfiguration.mockClear()
   storeMock.upsertConfiguration.mockResolvedValue({ id: 'cfg-new-1' })
