@@ -46,6 +46,7 @@ nachweise vor Aktivierung“, noch offen).
 
 from __future__ import annotations
 
+import hashlib
 import time
 from typing import Any
 
@@ -116,17 +117,22 @@ def _shape(value: Any) -> str:
     return type(value).__name__
 
 
-def _bounded(value: Any, limit: int = 80) -> str:
-    """Gekürzte Wertdarstellung für Fälle, in denen genau der Wert die
-    Diagnose IST — etwa eine Kategorie außerhalb der gesendeten Optionen.
+def _digest(value: Any) -> str:
+    """Diagnose für Fälle, in denen der Wert selbst die Diagnose IST — etwa
+    eine Kategorie außerhalb der gesendeten Optionen.
 
-    Bewusste Abwägung gegen :func:`_shape`: ohne den Wert ist "unbekannte
-    Kategorie" nicht debuggbar, mit dem vollen Wert wäre eine gespiegelte
-    Anfrage vollständig im Log. Die Grenze begrenzt den Schaden auf einen
-    Ausschnitt.
+    Review-Befund (Codex, PR #1547): eine gekürzte Wertdarstellung (vormals
+    bis zu 80 Zeichen) reicht aus, um ein gespiegeltes Secret oder
+    vertrauliches Fragment zu leaken — Kürzung ist keine Redaktion. Diese
+    Funktion gibt deshalb NIE einen Ausschnitt des Werts zurück, nur Typ,
+    Länge und einen irreversiblen Hash-Prefix zur Korrelation über mehrere
+    Vorkommen hinweg, ohne ihn je offenzulegen. Identisch zu
+    ``llm_provider._digest`` — bewusst dupliziert statt geteilt, siehe
+    Entscheidung ``mapping-duplication-kept`` im Plan.
     """
-    text = repr(value)
-    return text if len(text) <= limit else f"{text[:limit]}…"
+    text = str(value)
+    digest = hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()[:12]
+    return f"{type(value).__name__}(len={len(text)}, sha256={digest})"
 
 
 def _question_payload(question: DecisionQuestion) -> dict[str, Any]:
@@ -185,7 +191,7 @@ def _result_from_answer(
         choice = answer.get("choice")
         if choice not in question.options:
             raise DecisionJevResponseError(
-                f"Jev-Antwort {_bounded(choice)} liegt außerhalb der gesendeten "
+                f"Jev-Antwort {_digest(choice)} liegt außerhalb der gesendeten "
                 f"Optionen {question.options!r}."
             )
         return DecisionResult(
@@ -204,7 +210,7 @@ def _result_from_answer(
         stage = answer.get("stage")
         if not isinstance(stage, int) or not (question.min_stage <= stage <= question.max_stage):
             raise DecisionJevResponseError(
-                f"Jev-Antwort-Stufe {_bounded(stage)} außerhalb "
+                f"Jev-Antwort-Stufe {_digest(stage)} außerhalb "
                 f"[{question.min_stage}, {question.max_stage}]."
             )
         return DecisionResult(

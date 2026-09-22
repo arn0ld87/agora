@@ -48,6 +48,23 @@ class _FailingProvider:
         raise RuntimeError("boom")
 
 
+class _UnknownCostProvider:
+    """Liefert ``cost_micros=None`` — der reale Fall für einen injizierten
+    ``LLMProvider`` ohne ``run_id`` oder eine Jev-Antwort ohne ``usage``."""
+
+    def decide(self, state: DecisionState, question: NoulQuestion) -> DecisionResult:
+        return DecisionResult(
+            use_case_id=state.use_case_id,
+            provider="fake",
+            answer=None,
+            probability_yes=0.5,
+            confidence=0.5,
+            cost_micros=None,
+            latency_ms=0,
+            shadow=False,
+        )
+
+
 @pytest.fixture(autouse=True)
 def _default_mode_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "disabled")
@@ -96,6 +113,30 @@ class TestShadowRelevanceCheckShadowMode:
         assert state.use_case_id == _USE_CASE_ID
         assert state.state == {"top_score": 100}
         assert "decision_layer_shadow" in caplog.text
+
+    def test_unknown_cost_still_logs_the_successful_result(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Review-Befund (Codex, PR #1547): das Log-Format nutzte `%d` für
+        `cost_micros`, das laut Vertrag `int | None` ist. `%d % None` wirft
+        einen `TypeError`, den der äußere `try/except` als Fehlschlag
+        loggt — der erfolgreiche Shadow-Aufruf hätte in genau den
+        Unbekannt-Kosten-Fällen keine Telemetrie erzeugt, die der Vertrag
+        bewusst sichtbar machen soll."""
+        monkeypatch.setattr(logging.getLogger("agora"), "propagate", True)
+        monkeypatch.setattr(
+            logging.getLogger("agora.decisions.local_search_shadow"), "propagate", True
+        )
+        monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "shadow")
+
+        with caplog.at_level(logging.INFO, logger="agora.decisions.local_search_shadow"):
+            shadow_relevance_check(
+                "Bundeskanzleramt", "ein Fakt", 100, provider=_UnknownCostProvider()
+            )
+
+        assert "decision_layer_shadow use_case=" in caplog.text
+        assert "cost_micros=None" in caplog.text
+        assert "decision_layer_shadow failed" not in caplog.text
 
     def test_provider_failure_is_swallowed_and_logged(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture

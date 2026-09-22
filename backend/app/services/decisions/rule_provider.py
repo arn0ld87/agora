@@ -15,22 +15,14 @@ mit ``result.model_copy(update={"shadow": True})``.
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
 from typing import Callable, Optional
 
-from ...contracts.decision_contract import DecisionQuestion, DecisionResult, DecisionState
-
-
-@dataclass(frozen=True)
-class RuleOutcome:
-    """Das reine Entscheidungsergebnis einer Regelfunktion — ohne
-    Provider-/Timing-/Shadow-Metadaten, die ``RuleProvider`` selbst füllt."""
-
-    answer: str | int | float | None
-    confidence: float
-    distribution: Optional[dict[str, float]] = None
-    probability_yes: Optional[float] = None
-
+from ...contracts.decision_contract import (
+    DecisionQuestion,
+    DecisionResult,
+    DecisionState,
+    RuleOutcome,
+)
 
 RuleFn = Callable[[DecisionState, DecisionQuestion], RuleOutcome]
 

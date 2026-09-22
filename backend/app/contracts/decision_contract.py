@@ -200,6 +200,27 @@ class DecisionResult(BaseModel):
         return self
 
 
+class RuleOutcome(BaseModel):
+    """Das reine Entscheidungsergebnis einer in ``RuleProvider`` injizierten
+    Regelfunktion — ohne Provider-/Timing-/Shadow-Metadaten, die
+    ``RuleProvider`` selbst füllt.
+
+    Review-Befund (Codex, PR #1547): dieser Typ ist die exportierte Grenze
+    zwischen aufrufereigenen Regelfunktionen und dem Adapter — genau die
+    Art von API-Grenze, die Contracts-first für einen validierten Vertrag
+    statt eines Dataclasses vorschreibt (AGENTS.md, Contracts-first).
+    Vorher als ``@dataclass(frozen=True)`` in ``services/decisions/
+    rule_provider.py`` geführt, hierher verschoben, keine Feldänderung.
+    """
+
+    model_config = _STRICT
+
+    answer: str | int | float | None
+    confidence: float = Field(ge=0.0, le=1.0)
+    distribution: dict[str, float] | None = None
+    probability_yes: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
 __all__ = [
     "DecisionState",
     "ChoiceQuestion",
@@ -207,4 +228,5 @@ __all__ = [
     "NoulQuestion",
     "DecisionQuestion",
     "DecisionResult",
+    "RuleOutcome",
 ]

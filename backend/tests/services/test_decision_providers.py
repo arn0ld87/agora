@@ -151,6 +151,24 @@ class TestLLMProvider:
         with pytest.raises(DecisionLLMResponseError):
             provider.decide(_STATE, ChoiceQuestion(options=["Person", "Organisation"]))
 
+    def test_out_of_range_value_never_appears_in_the_error_even_truncated(self) -> None:
+        """Review-Befund (Codex, PR #1547): eine auf 80 Zeichen gekürzte
+        Wertdarstellung reicht aus, um ein gespiegeltes Secret zu leaken —
+        Kürzung ist keine Redaktion. Der Fehler darf nur Typ/Länge/Hash
+        zeigen, nie einen Ausschnitt des tatsächlichen Werts."""
+        secret_looking_choice = "sk-live-AKIAEXAMPLESECRETVALUE1234567890"
+        client = MagicMock(spec=["chat_json", "model"])
+        client.chat_json.return_value = {"choice": secret_looking_choice, "confidence": 0.5}
+        provider = LLMProvider(client)
+
+        with pytest.raises(DecisionLLMResponseError) as excinfo:
+            provider.decide(_STATE, ChoiceQuestion(options=["Person", "Organisation"]))
+
+        message = str(excinfo.value)
+        assert secret_looking_choice not in message
+        assert secret_looking_choice[:20] not in message
+        assert "str(len=" in message
+
     def test_score_question_maps_stage_and_validates_range(self) -> None:
         client = MagicMock(spec=["chat_json", "model"])
         client.chat_json.return_value = {"stage": 4, "confidence": 0.6}

@@ -25,6 +25,7 @@ Fälle statt pauschal ``0`` zu melden:
 
 from __future__ import annotations
 
+import hashlib
 import time
 from typing import Any, Literal
 
@@ -54,13 +55,20 @@ def _shape(value: Any) -> str:
     return type(value).__name__
 
 
-def _bounded(value: Any, limit: int = 80) -> str:
-    """Gekürzte Wertdarstellung, wo genau der Wert die Diagnose IST — etwa
-    eine Kategorie außerhalb der gesendeten Optionen. Abwägung wie in
-    ``jev_provider._bounded``: ohne Wert nicht debuggbar, mit vollem Wert
-    stünde eine gespiegelte Anfrage im Log."""
-    text = repr(value)
-    return text if len(text) <= limit else f"{text[:limit]}…"
+def _digest(value: Any) -> str:
+    """Diagnose für Fälle, in denen der Wert selbst die Diagnose IST — etwa
+    eine Kategorie außerhalb der gesendeten Optionen.
+
+    Review-Befund (Codex, PR #1547): eine gekürzte Wertdarstellung (vormals
+    bis zu 80 Zeichen) reicht aus, um ein gespiegeltes Secret oder
+    vertrauliches Fragment zu leaken — Kürzung ist keine Redaktion. Diese
+    Funktion gibt deshalb NIE einen Ausschnitt des Werts zurück, nur Typ,
+    Länge und einen irreversiblen Hash-Prefix zur Korrelation über mehrere
+    Vorkommen hinweg (»ist das zweimal derselbe falsche Wert?«), ohne ihn
+    je offenzulegen."""
+    text = str(value)
+    digest = hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()[:12]
+    return f"{type(value).__name__}(len={len(text)}, sha256={digest})"
 
 
 class DecisionLLMResponseError(RuntimeError):
@@ -152,7 +160,7 @@ def _result_from_response(
         choice = response.get("choice")
         if choice not in question.options:
             raise DecisionLLMResponseError(
-                f"LLM-Antwort {_bounded(choice)} liegt außerhalb der gesendeten "
+                f"LLM-Antwort {_digest(choice)} liegt außerhalb der gesendeten "
                 f"Optionen {question.options!r}."
             )
         return DecisionResult(
@@ -170,7 +178,7 @@ def _result_from_response(
         stage = response.get("stage")
         if not isinstance(stage, int) or not (question.min_stage <= stage <= question.max_stage):
             raise DecisionLLMResponseError(
-                f"LLM-Antwort-Stufe {_bounded(stage)} außerhalb "
+                f"LLM-Antwort-Stufe {_digest(stage)} außerhalb "
                 f"[{question.min_stage}, {question.max_stage}]."
             )
         return DecisionResult(

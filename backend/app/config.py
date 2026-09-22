@@ -195,12 +195,32 @@ DECISION_LAYER_MODES = frozenset({'disabled', 'shadow', 'authoritative'})
 
 def validate_decision_layer_mode(mode: str) -> list[str]:
     """Prüft AGORA_DECISION_LAYER_MODE. Modulfunktion aus demselben Grund
-    wie `validate_project_backend`."""
+    wie `validate_project_backend`.
+
+    Review-Befund (Codex, PR #1547): `authoritative` war ein erkannter,
+    aber unbenutzter Wert — Startvalidierung akzeptierte ihn, obwohl der
+    einzige verdrahtete Use Case (`local_search_shadow.py`) bei jedem
+    Wert außer `shadow` sofort zurückkehrt. Ein Betreiber, der
+    `AGORA_DECISION_LAYER_MODE=authoritative` setzt, hätte einen
+    erfolgreichen Start und einen still inaktiven Decision Layer bekommen
+    — genau die Verwechslung von Zustand und Anzeige, die ADR-0002 an
+    anderer Stelle ausschließt. `authoritative` bleibt ein gültiger Wert
+    im Vokabular (`DECISION_LAYER_MODES`), wird aber als Konfigurationsfehler
+    abgelehnt, bis ein echter Handler existiert (erst nach bestandenem
+    Benchmark und `jev-choice`-Gate, siehe Moduldoc oben)."""
     normalized = (mode or '').strip().lower()
     if normalized not in DECISION_LAYER_MODES:
         return [
             f"AGORA_DECISION_LAYER_MODE has unknown value '{normalized}' "
             f"(expected one of: {', '.join(sorted(DECISION_LAYER_MODES))})"
+        ]
+    if normalized == 'authoritative':
+        return [
+            "AGORA_DECISION_LAYER_MODE=authoritative is not usable yet: no "
+            "wired use case has an authoritative handler (jev-choice gate "
+            "not passed). Starting with this value would succeed while the "
+            "Decision Layer silently stays inactive, which is worse than "
+            "refusing to start. Use 'shadow' or 'disabled' instead."
         ]
     return []
 

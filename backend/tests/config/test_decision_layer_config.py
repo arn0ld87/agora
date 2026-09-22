@@ -22,9 +22,22 @@ def test_disabled_mode_is_accepted():
     assert validate_decision_layer_mode("disabled") == []
 
 
-def test_shadow_and_authoritative_modes_are_accepted():
+def test_shadow_mode_is_accepted():
     assert validate_decision_layer_mode("shadow") == []
-    assert validate_decision_layer_mode("authoritative") == []
+
+
+def test_authoritative_is_a_recognized_but_not_yet_usable_value():
+    """Review-Befund (Codex, PR #1547): kein verdrahteter Use Case hat einen
+    authoritative-Handler. Vorher wurde der Wert klaglos akzeptiert, obwohl
+    local_search_shadow.py bei jedem Wert außer 'shadow' sofort zurückkehrt
+    — ein Start mit diesem Wert hätte den Betreiber glauben lassen, der
+    Decision Layer sei aktiv, während er still inaktiv blieb."""
+    errors = validate_decision_layer_mode("authoritative")
+
+    assert len(errors) == 1
+    assert "not usable yet" in errors[0]
+    # Bleibt im Vokabular, nur (noch) nicht startbar.
+    assert "authoritative" in DECISION_LAYER_MODES
 
 
 def test_unknown_mode_is_rejected():

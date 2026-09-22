@@ -116,6 +116,27 @@ class TestJevDecisionProvider:
         with pytest.raises(DecisionJevResponseError):
             provider.decide(_STATE, ChoiceQuestion(options=["Person", "Organisation"]))
 
+    def test_out_of_range_value_never_appears_in_the_error_even_truncated(self) -> None:
+        """Review-Befund (Codex, PR #1547): eine auf 80 Zeichen gekürzte
+        Wertdarstellung reicht aus, um ein gespiegeltes Secret zu leaken —
+        Kürzung ist keine Redaktion. Der Fehler darf nur Typ/Länge/Hash
+        zeigen, nie einen Ausschnitt des tatsächlichen Werts."""
+        secret_looking_choice = "sk-live-AKIAEXAMPLESECRETVALUE1234567890"
+        client = MagicMock(spec=["system_one"])
+        client.system_one.return_value = {
+            "answers": [{"id": "q1", "choice": secret_looking_choice, "confidence": 0.5}],
+            "model": "jev-1.13.0",
+        }
+        provider = JevDecisionProvider(client)
+
+        with pytest.raises(DecisionJevResponseError) as excinfo:
+            provider.decide(_STATE, ChoiceQuestion(options=["Person", "Organisation"]))
+
+        message = str(excinfo.value)
+        assert secret_looking_choice not in message
+        assert secret_looking_choice[:20] not in message
+        assert "str(len=" in message
+
     def test_missing_confidence_field_is_a_response_error(self) -> None:
         client = MagicMock(spec=["system_one"])
         client.system_one.return_value = {

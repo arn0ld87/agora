@@ -98,7 +98,7 @@ def shadow_relevance_check(
         shadow_result = result.model_copy(update={"shadow": True})
         logger.info(
             "decision_layer_shadow use_case=%s provider=%s probability_yes=%s "
-            "confidence=%s model_version=%s cost_micros=%d latency_ms=%d "
+            "confidence=%s model_version=%s cost_micros=%s latency_ms=%d "
             "request_id=%s context_hash=%s",
             shadow_result.use_case_id,
             shadow_result.provider,
