@@ -322,6 +322,15 @@ export const EmbeddingIndexVersionSchema = z
   })
 export type EmbeddingIndexVersion = z.infer<typeof EmbeddingIndexVersionSchema>
 
+export const EmbeddingIndexVersionListResponseSchema = z
+  .object({
+    versions: z.array(EmbeddingIndexVersionSchema),
+  })
+  .strict()
+export type EmbeddingIndexVersionListResponse = z.infer<
+  typeof EmbeddingIndexVersionListResponseSchema
+>
+
 // ----------------------------------------------------------------------
 // Ollama-Pull-Report
 // ----------------------------------------------------------------------

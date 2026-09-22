@@ -7,9 +7,19 @@ import {
   EmbeddingMigrationStatusSchema,
   EmbeddingIndexStatusSchema,
   EmbeddingIndexVersionSchema,
+  EmbeddingIndexVersionListResponseSchema,
   EmbeddingProviderKindSchema,
   EmbeddingConfigurationScopeSchema,
 } from '../embeddingContract'
+import embeddingIndexVersionListResponseSchemaJson from '../../../../schemas/embedding-index-version-list-response.schema.json'
+
+function propertyKeys(schema: { properties?: Record<string, unknown> }) {
+  return Object.keys(schema.properties ?? {}).sort()
+}
+
+function shapeKeys(schema: { shape: Record<string, unknown> }) {
+  return Object.keys(schema.shape).sort()
+}
 
 describe('embeddingContract — Zod-Spiegel der Backend-Contracts', () => {
   it('akzeptiert alle 6 EmbeddingProviderKind-Werte', () => {
@@ -85,6 +95,45 @@ describe('embeddingContract — Zod-Spiegel der Backend-Contracts', () => {
       retired_at: null,
     })
     expect(parsed.status).toBe('building')
+  })
+
+  it('EmbeddingIndexVersionListResponse spiegelt die Backend-Property-Keys (f006, embedding-ssot)', () => {
+    // Vorher hatte die Oberflaeche keinen API-Zugriff auf die
+    // Index-Versionsliste — GET /embedding/index-versions macht den
+    // building-Status und die weiterhin aktive Quell-Version sichtbar.
+    expect(shapeKeys(EmbeddingIndexVersionListResponseSchema)).toEqual(
+      propertyKeys(embeddingIndexVersionListResponseSchemaJson),
+    )
+  })
+
+  it('EmbeddingIndexVersionListResponse: akzeptiert eine gemischte Liste aus active und building', () => {
+    const parsed = EmbeddingIndexVersionListResponseSchema.parse({
+      versions: [
+        {
+          version: 2,
+          provider_connection_id: 'conn-1',
+          model_id: 'mxbai-embed-large',
+          dimensions: 1024,
+          index_name: 'entity_embedding_v2',
+          property_key: 'embedding_v2',
+          status: 'building',
+          created_at: '2026-09-22T08:00:00+00:00',
+          retired_at: null,
+        },
+        {
+          version: 1,
+          provider_connection_id: 'conn-1',
+          model_id: 'nomic-embed-text',
+          dimensions: 768,
+          index_name: 'entity_embedding_v1',
+          property_key: 'embedding_v1',
+          status: 'active',
+          created_at: '2026-09-01T08:00:00+00:00',
+          retired_at: null,
+        },
+      ],
+    })
+    expect(parsed.versions.map((v) => v.status)).toEqual(['building', 'active'])
   })
 
   it('EmbeddingConfiguration: scope=project erfordert project_id', () => {

@@ -50,11 +50,17 @@ def validate_embedding_configuration(
     eingebettet wurde gegen das Store-Modell. Genau die Divergenz, gegen die
     #1417 antritt, nur eine Ebene hoeher.
 
-    ``vector_dim`` bleibt bewusst an ``Config.VECTOR_DIM`` haengen und wird
-    *nicht* aus der Route genommen: ``VECTOR_DIM`` definiert die Dimension des
-    Betriebsindex (``storage/neo4j_schema.py``). Gegen die Route zu pruefen
-    haette bedeutet, Modell und Index gegeneinander zu validieren und die
-    Abweichung genau dann zu verschweigen, wenn sie zaehlt.
+    ``vector_dim`` wird *nicht* aus der zu pruefenden Route genommen: das
+    waere eine Tautologie und wuerde Modell und Index gegeneinander
+    validieren, obwohl beide aus demselben Kandidaten stammen — genau die
+    Abweichung verschweigen, die diese Pruefung aufdecken soll. Stattdessen
+    loest ``resolve_operational_vector_dim()`` (#1417, Slice 2.3) die
+    Dimension des tatsaechlichen Betriebsindex kanonisch auf: aus der
+    aktiven ``EmbeddingIndexVersion``, wenn ein Cutover (Slice 2.2)
+    stattgefunden hat, sonst aus ``Config.VECTOR_DIM`` als Legacy-Ansicht.
+    Vorher haengte dieser Wert *immer* an ``Config.VECTOR_DIM`` — ein Env-
+    Wert, der nach einer Migration auf ein Modell anderer Dimension
+    stehenbleibt, waehrend der Betriebsindex laengst umgeschaltet hat.
 
     Raises:
         EmbeddingError: Env-seitige Fehlkonfiguration — fatal, nur ueber
@@ -78,7 +84,7 @@ def validate_embedding_configuration(
         route = _embedding_runtime.resolve_active_embedding_route()
 
     effective_model = model or (route.model if route else None) or Config.EMBEDDING_MODEL
-    effective_dim = vector_dim or Config.VECTOR_DIM
+    effective_dim = vector_dim or _embedding_runtime.resolve_operational_vector_dim()
     effective_base_url = (
         base_url or (route.base_url if route else None) or Config.EMBEDDING_BASE_URL
     )
@@ -97,7 +103,7 @@ def validate_embedding_configuration(
             raise EmbeddingRuntimeConfigurationError(
                 f"Die aktive Embedding-Konfiguration {route.configuration_id} nutzt "
                 f"'{effective_model}' mit {expected_dim} Dimensionen, der "
-                f"Betriebsindex ist auf {effective_dim} (VECTOR_DIM) angelegt. Bitte "
+                f"Betriebsindex ist auf {effective_dim} Dimensionen angelegt. Bitte "
                 "unter Einstellungen → Embedding-Konfiguration eine passende "
                 "Konfiguration aktivieren oder die Re-Embedding-Migration fahren."
             )
@@ -121,7 +127,7 @@ def validate_embedding_configuration(
             raise EmbeddingRuntimeConfigurationError(
                 f"Die aktive Embedding-Konfiguration {route.configuration_id} "
                 f"({effective_model}) liefert {actual_dim} Dimensionen, der "
-                f"Betriebsindex ist auf {effective_dim} (VECTOR_DIM) angelegt."
+                f"Betriebsindex ist auf {effective_dim} Dimensionen angelegt."
             )
         raise EmbeddingError(
             f"Embedding probe for model '{effective_model}' returned dimension {actual_dim}, "

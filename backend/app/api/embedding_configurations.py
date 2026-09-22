@@ -15,6 +15,11 @@ Routen unter ``/api/llm/embedding/configurations``:
 * ``POST /sync-legacy`` uebernimmt ``Config.EMBEDDING_*`` als neue,
   persistente Konfiguration (Status ``proposed``), sofern noch keine
   aktive globale Konfiguration existiert.
+* ``GET /index-versions`` (unter ``/api/llm/embedding``) listet alle
+  ``EmbeddingIndexVersion``-Datensaetze, neueste zuerst — macht den
+  ``building``-Status einer laufenden Migration und die weiterhin
+  ``active`` bleibende Quell-Version sichtbar (f006, Slice
+  ``embedding-ssot``).
 
 Die Routen folgen dem Slice-3-Stil: ``handle_api_errors``-Decorator,
 ``json_success``/``json_error``, ``pydantic.ValidationError`` → 400,
@@ -116,6 +121,28 @@ def list_embedding_configurations():
                 c.model_dump(mode="json") for c in configs
             ],
         }
+    )
+
+
+@llm_bp.route("/embedding/index-versions", methods=["GET"])
+@handle_api_errors(logger=logger)
+def list_embedding_index_versions():
+    """Listet alle ``EmbeddingIndexVersion``-Datensaetze (f006, Slice
+    ``embedding-ssot``, Task ``modellwechsel-ui``).
+
+    Vorher hatte die Oberflaeche keinen Zugriff auf diesen Zustand — sie
+    konnte den Migrations-Job-Status zeigen, aber nicht, dass die
+    Quell-Indexversion waehrend einer laufenden Migration unveraendert
+    ``active`` bleibt (Slice 2.2) oder dass eine Zielversion ``building``
+    ist. Sortiert nach Version absteigend, damit die neueste zuerst steht.
+    """
+    versions = sorted(
+        get_embedding_configuration_store().list_index_versions(),
+        key=lambda v: v.version,
+        reverse=True,
+    )
+    return json_success(
+        {"versions": [v.model_dump(mode="json") for v in versions]}
     )
 
 

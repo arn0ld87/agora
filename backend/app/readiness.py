@@ -12,7 +12,8 @@ Beispielantwort bei vollständig gesundem Stack:
         "neo4j": {"ok": true,  "detail": "ok"},
         "redis": {"ok": true,  "detail": "ok"},
         "upload_dir": {"ok": true, "detail": "/app/backend/uploads"},
-        "embedding_config": {"ok": true, "detail": "qwen3-embedding:4b → dim=2560"}
+        "embedding_config": {"ok": true, "detail": "qwen3-embedding:4b → dim=2560"},
+        "embedding_index_version": {"ok": true, "detail": "no active index version (legacy view)"}
     }}
 
 Beispielantwort bei kaputtem Neo4j:
@@ -150,6 +151,58 @@ def _check_embedding_config() -> CheckResult:
     return True, f"{model} → dim={dim_int}"
 
 
+def _check_embedding_index_version() -> CheckResult:
+    """Prueft eine als ``active`` behauptete ``EmbeddingIndexVersion`` gegen
+    die Neo4j-Realitaet (#1417, Slice 2.4 — "Legacy-View fuer Bestandsgraphen").
+
+    Ohne aktive Indexversion gilt die Legacy-Ansicht aus ``Config.*``
+    (bereits durch ``_check_embedding_config`` abgedeckt) — dann ist hier
+    nichts zu pruefen. Existiert eine aktive Indexversion, muss der
+    behauptete Index in Neo4j tatsaechlich ``ONLINE`` sein: ein
+    Bestandssystem, dessen Migration vor Slice 2.2 mit dem alten
+    Sofort-Umschalt-Verhalten gestartet wurde, traegt eine ``active``-
+    Version, die nie fertig migriert oder validiert wurde, unveraendert
+    weiter — Slice 2.2 repariert das nicht rueckwirkend. Reads/Writes
+    wuerden dann still gegen einen unvollstaendigen oder nicht
+    existierenden Index laufen (genau die Korruption, vor der #1417
+    warnt), ohne dass dieser Check dies laut macht.
+    """
+    from .services.embedding_configuration_store import EmbeddingConfigurationStore
+
+    # Der Store liest eine JSON-Datei und wirft ``RuntimeError``, wenn sie
+    # unlesbar oder kaputt ist. Ohne diesen Guard wuerde daraus eine 500
+    # statt der 503, die /readyz zusagt — und der Healthcheck koennte den
+    # Unterschied zwischen "nicht bereit" und "Endpoint selbst kaputt"
+    # nicht mehr melden.
+    try:
+        active = EmbeddingConfigurationStore().get_active_index_version()
+    except Exception as exc:  # noqa: BLE001 — Probe-Fehler werden im Body sichtbar
+        return _safe_probe_failure("embedding_index_version", exc)
+    if active is None:
+        return True, "no active index version (legacy view)"
+
+    storage = current_app.extensions.get("neo4j_storage")
+    if storage is None:
+        return False, (
+            f"cannot verify active index version v{active.version} "
+            f"({active.index_name!r}) — neo4j_storage not initialized"
+        )
+    probe = getattr(storage, "index_state", None)
+    if probe is None:
+        return False, "neo4j_storage has no index_state()"
+    try:
+        state = probe(active.index_name)
+    except Exception as exc:  # noqa: BLE001 — Probe-Fehler werden im Body sichtbar
+        return _safe_probe_failure("embedding_index_version", exc)
+    if state != "ONLINE":
+        return False, (
+            f"active index version v{active.version} ({active.index_name!r}) "
+            f"is not ONLINE in Neo4j (state={state!r}) — possibly a migration "
+            "started before Slice 2.2 that was never validated (#1417)"
+        )
+    return True, f"v{active.version} ({active.index_name}) ONLINE"
+
+
 def _run_checks() -> dict[str, Any]:
     """Führt alle Probes aus und packt das Ergebnis in das /readyz-Format."""
     results: dict[str, CheckResult] = {
@@ -157,6 +210,7 @@ def _run_checks() -> dict[str, Any]:
         "redis": _check_redis(),
         "upload_dir": _check_upload_dir(),
         "embedding_config": _check_embedding_config(),
+        "embedding_index_version": _check_embedding_index_version(),
     }
     return {
         "status": "ready" if all(ok for ok, _ in results.values()) else "not_ready",

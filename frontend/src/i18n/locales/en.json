@@ -1680,6 +1680,19 @@
       "failed": "Failed",
       "unknown": "Unknown"
     },
+    "indexStatus": {
+      "building": "Building",
+      "active": "Active",
+      "superseded": "Superseded",
+      "rolled_back": "Rolled back",
+      "retired": "Retired"
+    },
+    "indexVersions": {
+      "title": "Operational index",
+      "legacyHint": "No recorded index version — the operation runs on the unversioned legacy index.",
+      "servesTraffic": "serves reads and writes.",
+      "notServingYet": "is still being filled and does not serve traffic yet. The old index stays active until the cutover succeeds."
+    },
     "list": {
       "error": "Configurations could not be loaded",
       "empty": "No embedding configurations yet."
