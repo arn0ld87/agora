@@ -6,6 +6,14 @@ Pflicht-Lesepfad bei Änderungen:
 2. backend/tests/contracts/ (Verträge sind Testbar)
 3. schemas/*.schema.json (auto-generiert via dump_schemas)
 """
+from .decision_contract import (
+    ChoiceQuestion,
+    DecisionQuestion,
+    DecisionResult,
+    DecisionState,
+    NoulQuestion,
+    ScoreQuestion,
+)
 from .report_contract import (
     ClaimEvidenceBindingModel,
     ConfidenceLabel,
@@ -187,8 +195,12 @@ __all__ = [
     "ClusterShift",
     "ClusterSummary",
     "ClaimEvidenceBindingModel",
+    "ChoiceQuestion",
     "ComparisonDeltas",
     "ConfidenceLabel",
+    "DecisionQuestion",
+    "DecisionResult",
+    "DecisionState",
     "DegradationKind",
     "DegradationSeverity",
     "EdgeData",
@@ -211,6 +223,7 @@ __all__ = [
     "LlmProfileCreateRequest",
     "LlmProfileListResponse",
     "NodePropertyShift",
+    "NoulQuestion",
     "PersonaEntityContext",
     "PersonaModel",
     "PipelineDegradationModel",
@@ -238,6 +251,7 @@ __all__ = [
     "RunsListResponse",
     "RunStatus",
     "RunSummary",
+    "ScoreQuestion",
     "SegmentReach",
     "VoiceRegister",
     "ALL_PROVIDER_TYPES",

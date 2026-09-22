@@ -181,6 +181,50 @@ def validate_project_backend(
     return []
 
 
+#: f005 (ADR-0016): globaler Zustand der Decision-Layer-Pilotierung. Ein
+#: einziger Pilot-Use-Case in dieser Slice — je-Use-Case-Granularitaet ist
+#: ausdruecklich zukuenftige Arbeit (ADR-0016, "Was dieser Entwurf nicht
+#: entscheidet"), kein vorgezogener Mechanismus dafuer.
+#: 'disabled': kein Provider wird aufgerufen, bestehendes Verhalten
+#:   unveraendert (Default).
+#: 'shadow': ein Kandidat (z. B. Jev) laeuft parallel zur bestehenden
+#:   autoritativen Entscheidung, ergebnis wird NICHT verwendet.
+#: 'authoritative': erst nach bestandenem Benchmark und jev-choice-Gate.
+DECISION_LAYER_MODES = frozenset({'disabled', 'shadow', 'authoritative'})
+
+
+def validate_decision_layer_mode(mode: str) -> list[str]:
+    """Prüft AGORA_DECISION_LAYER_MODE. Modulfunktion aus demselben Grund
+    wie `validate_project_backend`.
+
+    Review-Befund (Codex, PR #1547): `authoritative` war ein erkannter,
+    aber unbenutzter Wert — Startvalidierung akzeptierte ihn, obwohl der
+    einzige verdrahtete Use Case (`local_search_shadow.py`) bei jedem
+    Wert außer `shadow` sofort zurückkehrt. Ein Betreiber, der
+    `AGORA_DECISION_LAYER_MODE=authoritative` setzt, hätte einen
+    erfolgreichen Start und einen still inaktiven Decision Layer bekommen
+    — genau die Verwechslung von Zustand und Anzeige, die ADR-0002 an
+    anderer Stelle ausschließt. `authoritative` bleibt ein gültiger Wert
+    im Vokabular (`DECISION_LAYER_MODES`), wird aber als Konfigurationsfehler
+    abgelehnt, bis ein echter Handler existiert (erst nach bestandenem
+    Benchmark und `jev-choice`-Gate, siehe Moduldoc oben)."""
+    normalized = (mode or '').strip().lower()
+    if normalized not in DECISION_LAYER_MODES:
+        return [
+            f"AGORA_DECISION_LAYER_MODE has unknown value '{normalized}' "
+            f"(expected one of: {', '.join(sorted(DECISION_LAYER_MODES))})"
+        ]
+    if normalized == 'authoritative':
+        return [
+            "AGORA_DECISION_LAYER_MODE=authoritative is not usable yet: no "
+            "wired use case has an authoritative handler (jev-choice gate "
+            "not passed). Starting with this value would succeed while the "
+            "Decision Layer silently stays inactive, which is worse than "
+            "refusing to start. Use 'shadow' or 'disabled' instead."
+        ]
+    return []
+
+
 def infer_vector_dim_for_model(model_name: str | None) -> int | None:
     """Infer a known vector dimension from the embedding model name."""
     normalized = (model_name or '').strip().lower()
@@ -291,6 +335,12 @@ class Config:
     # diesem Schalter nie betroffen.
     PROJECT_BACKEND = os.environ.get(
         'AGORA_PROJECT_BACKEND', 'file'
+    ).strip().lower()
+
+    # f005 (ADR-0016): Decision-Layer-Pilotierung, Default 'disabled' haelt
+    # jeden bestehenden Use-Case-Pfad unveraendert.
+    DECISION_LAYER_MODE = os.environ.get(
+        'AGORA_DECISION_LAYER_MODE', 'disabled'
     ).strip().lower()
 
     # Agent tool-use during simulation. Experimental and intentionally opt-in.
@@ -598,6 +648,8 @@ class Config:
         errors.extend(
             validate_project_backend(cls.PROJECT_BACKEND, cls.DATABASE_URL)
         )
+        # Decision-Layer-Pilotierung (f005, ADR-0016).
+        errors.extend(validate_decision_layer_mode(cls.DECISION_LAYER_MODE))
 
         expected_dim = infer_vector_dim_for_model(cls.EMBEDDING_MODEL)
         if expected_dim and cls.VECTOR_DIM != expected_dim:

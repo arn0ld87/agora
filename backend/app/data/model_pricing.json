@@ -33,6 +33,9 @@
       { "match": "minimax-m2", "input": 300000, "output": 1200000 },
       { "match": "minimax-m1", "input": 550000, "output": 2200000 },
       { "match": "abab6.5", "input": 100000, "output": 100000 }
+    ],
+    "jev": [
+      { "match": "jev-1.13.0", "input": 42000, "output": 0 }
     ]
   }
 }
