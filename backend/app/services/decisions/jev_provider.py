@@ -49,9 +49,9 @@ from __future__ import annotations
 
 import hashlib
 import time
-from typing import Any
+from typing import Any, cast
 
-from typesafe_sdk import Choice, Noul, Score, TypeSafeClient
+from typesafe_sdk import Choice, JSONContent, Noul, Score, TypeSafeClient
 
 from ...contracts.decision_contract import (
     ChoiceQuestion,
@@ -291,7 +291,14 @@ class JevDecisionProvider:
         # reicht das unverändert an den Aufrufer weiter — siehe
         # Moduldocstring zu verschachtelten Retry-Schleifen.
         response = self._client.system_one(
-            state=state.state,
+            # DecisionState.state ist bewusst als `str | dict[str, object] |
+            # list[object]` typisiert (Vertrag, gilt für alle Provider), das
+            # SDK verlangt das engere `JSONContent`. Ein Aufrufer, der hier
+            # nicht-JSON-serialisierbare Objekte einfüllt, bekommt den Fehler
+            # zur Laufzeit vom SDK/HTTP-Client — dieser Cast erweitert den
+            # Vertrag nicht, er löst nur den mypy-Konflikt zwischen zwei
+            # bewusst unterschiedlich engen Signaturen auf.
+            state=cast(JSONContent, state.state),
             questions={_QUESTION_NAME: _question_for(question)},
         )
         latency_ms = int((time.monotonic() - t0) * 1000)
