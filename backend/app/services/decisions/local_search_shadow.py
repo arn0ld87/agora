@@ -37,7 +37,7 @@ from __future__ import annotations
 import hashlib
 from typing import Optional
 
-from app.contracts.decision_contract import DecisionState, NoulQuestion
+from app.contracts.decision_contract import DecisionQuestion, DecisionState, NoulQuestion
 from app.repositories.decision_provider import DecisionProvider, decision_layer_mode
 from app.services.decisions.rule_provider import RuleOutcome, RuleProvider
 from app.utils.logger import get_logger
@@ -52,9 +52,17 @@ _USE_CASE_ID = "local-search-relevance"
 _RELEVANCE_THRESHOLD = 10
 
 
-def _relevance_rule(state: DecisionState, _question: NoulQuestion) -> RuleOutcome:
-    """Regel: Score des bestbewerteten Treffers >= Schwelle → wahrscheinlich Ja."""
-    top_score = state.state.get("top_score", 0) if isinstance(state.state, dict) else 0
+def _relevance_rule(state: DecisionState, _question: DecisionQuestion) -> RuleOutcome:
+    """Regel: Score des bestbewerteten Treffers >= Schwelle → wahrscheinlich Ja.
+
+    ``_question`` nimmt bewusst ``DecisionQuestion`` (die volle Union) statt
+    nur ``NoulQuestion``, obwohl dieser Use Case nur mit ``NoulQuestion``
+    aufruft: ``RuleProvider.rule_fn`` ist als ``Callable[[DecisionState,
+    DecisionQuestion], RuleOutcome]`` typisiert (Funktionsparameter sind
+    kontravariant), eine auf ``NoulQuestion`` verengte Regelfunktion ist
+    damit kein gültiges Argument."""
+    raw_top_score = state.state.get("top_score", 0) if isinstance(state.state, dict) else 0
+    top_score = raw_top_score if isinstance(raw_top_score, (int, float)) else 0
     probability_yes = 1.0 if float(top_score) >= _RELEVANCE_THRESHOLD else 0.0
     return RuleOutcome(answer=None, confidence=1.0, probability_yes=probability_yes)
 
