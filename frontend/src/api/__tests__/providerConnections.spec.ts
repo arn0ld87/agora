@@ -105,6 +105,29 @@ describe("providerConnections api client", () => {
     warnSpy.mockRestore();
   });
 
+  it("listProviderConnections toleriert einen unbekannten lokalen Provider mit Loopback-URL (#1414)", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const unknownLocalConnection = {
+      ...OPENAI_CONNECTION,
+      id: "lmstudio",
+      provider_kind: "lmstudio",
+      display_name: "LM Studio",
+      transport: "local",
+      auth_mode: "none",
+      base_url: "http://localhost:1234/v1",
+      secret_ref: null,
+    };
+    serviceMock.get.mockResolvedValueOnce({
+      success: true,
+      data: { items: [OPENAI_CONNECTION, unknownLocalConnection], total: 2 },
+    });
+
+    const result = await listProviderConnections();
+
+    expect(result.items.find((c) => c.id === "lmstudio")?.base_url).toBe("http://localhost:1234/v1");
+    warnSpy.mockRestore();
+  });
+
   it("listProviderConnections wirft strukturiert bei Schema-Drift statt leer zu rendern", async () => {
     serviceMock.get.mockResolvedValueOnce({
       success: true,

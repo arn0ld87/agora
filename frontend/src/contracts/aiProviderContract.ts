@@ -127,15 +127,26 @@ export const ProviderConnectionBaseSchema = z.object({
   last_tested_at: NullableDateTimeSchema,
 }).strict()
 
-export const ProviderConnectionSchema = ProviderConnectionBaseSchema.superRefine((value, context) => {
+function refineConnectionBaseUrl(
+  value: z.infer<typeof ProviderConnectionBaseSchema>,
+  context: z.RefinementCtx,
+  { localTransportIsLocal }: { localTransportIsLocal: boolean },
+): void {
   if (value.base_url === null) return
-  const baseUrlSchema = value.provider_kind === 'ollama'
-    ? LocalOllamaBaseUrlSchema
-    : PublicBaseUrlSchema
+  // Issue #1414: ein auf `unknown` normalisierter Eintrag verliert seinen
+  // eigentlichen Kind; für `transport: "local"` entscheidet dann der Transport
+  // über die URL-Prüfung statt pauschal die Public-URL-Regel.
+  const isLocal = value.provider_kind === 'ollama'
+    || (localTransportIsLocal && value.provider_kind === 'unknown' && value.transport === 'local')
+  const baseUrlSchema = isLocal ? LocalOllamaBaseUrlSchema : PublicBaseUrlSchema
   const result = baseUrlSchema.safeParse(value.base_url)
   if (!result.success) {
     context.addIssue({ code: 'custom', path: ['base_url'], message: result.error.issues[0]?.message ?? 'invalid base_url' })
   }
+}
+
+export const ProviderConnectionSchema = ProviderConnectionBaseSchema.superRefine((value, context) => {
+  refineConnectionBaseUrl(value, context, { localTransportIsLocal: false })
 })
 export type ProviderConnection = z.infer<typeof ProviderConnectionSchema>
 
@@ -196,7 +207,12 @@ function tolerateUnknownProviderKind(raw: unknown): unknown {
 }
 
 export const ProviderConnectionsListResponseSchema = z.object({
-  items: z.array(z.preprocess(tolerateUnknownProviderKind, ProviderConnectionSchema)),
+  items: z.array(z.preprocess(
+    tolerateUnknownProviderKind,
+    ProviderConnectionBaseSchema.superRefine((value, context) => {
+      refineConnectionBaseUrl(value, context, { localTransportIsLocal: true })
+    }),
+  )),
   total: z.number().int().nonnegative(),
 }).strict()
 export type ProviderConnectionsListResponse = z.infer<typeof ProviderConnectionsListResponseSchema>
