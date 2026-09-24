@@ -12,6 +12,7 @@ import type {
   AvailableModelsResponse as AvailableModelsResponseContract,
   ModelPreset as ModelPresetContract,
 } from '../contracts/modelPresetContract'
+import type { PrepareMessageKey } from '../contracts/prepareStatusContract'
 
 // --- Local types --------------------------------------------------------
 
@@ -54,6 +55,14 @@ export interface TaskStatusData {
   status?: string
   progress?: number
   message?: string
+  /**
+   * Maschinenlesbarer i18n-Schluessel fuer ``message`` (#1174, Muster aus
+   * #1458). Nur die literalen Kurzschluesse setzen ihn (siehe
+   * `contracts/prepareStatusContract.ts`); der Live-Task-Zweig traegt
+   * `message_key: null` (Task-Fallback) oder `undefined`, deshalb bleibt der
+   * String-Typ als Fallback erhalten statt nur den literalen Key zuzulassen.
+   */
+  message_key?: PrepareMessageKey | string | null
   error?: string | null
   already_prepared?: boolean
   expected_entities_count?: number
