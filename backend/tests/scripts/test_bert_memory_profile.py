@@ -776,3 +776,106 @@ def test_real_twhin_bert_is_deterministic_across_process_restarts(
         "dasselbe Ergebnis liefern — sonst haengt das Ranking weiterhin an "
         "einer Zufallsinitialisierung."
     )
+
+
+@pytest.fixture
+def reset_recsys_globals():
+    """``rec_sys_personalized_twh`` haelt seinen Zustand in Modul-Globals
+    (``t_items``, ``user_profiles``, ``date_score``, ``twhin_model``, …), die
+    ueber Aufrufe hinweg akkumulieren. Fuer einen fairen "zweiter Lauf"-
+    Vergleich muessen sie zurueckgesetzt werden — inklusive ``twhin_model``,
+    damit das Modell (und damit der Pooler) wie in einem neuen Prozess frisch
+    geladen wird.
+    """
+    from oasis.social_platform import recsys
+
+    def _reset() -> None:
+        recsys.user_previous_post_all = {}
+        recsys.user_previous_post = {}
+        recsys.user_profiles = []
+        recsys.t_items = {}
+        recsys.u_items = {}
+        recsys.date_score = []
+        recsys.twhin_model = None
+        recsys.twhin_tokenizer = None
+
+    _reset()
+    yield recsys, _reset
+    _reset()
+
+
+@pytest.mark.llm
+def test_real_rec_matrix_is_deterministic_and_actually_personalized(
+    restore_process_batch, reset_recsys_globals
+) -> None:
+    """Akzeptanzkriterium aus #1236 auf der Ebene der echten ``rec``-Matrix,
+    nicht nur der Vektoren: zwei Laeufe mit identischem Seed liefern dieselbe
+    Matrix.
+
+    Wichtige Praezisierung, die beim Messen sichtbar wurde: Determinismus
+    allein ist ein SCHWACHES Kriterium. Ohne den Fix kollabieren alle
+    Nutzer- und Post-Vektoren durch die Zufallsprojektion plus saettigenden
+    ``tanh`` auf nahezu dieselbe Richtung — die Matrix wird degeneriert
+    (jeder Nutzer bekommt denselben Feed) und ist dabei *manchmal* stabil,
+    weil ein Beinahe-Gleichstand konstant gleich aufgeloest wird. Gemessen:
+    ungepatcht kippte die Matrix in einem von zwei Prozessen sogar zwischen
+    zwei Laeufen, in dem anderen nicht.
+
+    Der harte Diskriminator ist deshalb die PERSONALISIERUNG: Nutzer i muss
+    die Posts zu seinem eigenen Thema bekommen. Ungepatcht liefert der Pfad
+    reproduzierbar ``[[2, 5], [2, 5], [2, 5]]`` — dieselben zwei Posts fuer
+    alle drei Nutzer — und faellt damit deterministisch durch.
+    """
+    import random
+
+    recsys, reset = reset_recsys_globals
+    install_recsys_mean_pooling_patch()
+
+    def _one_run() -> list[list[int]]:
+        reset()
+        random.seed(4242)
+        users = [
+            {
+                "user_id": i,
+                "agent_id": i,
+                "num_followers": i * 2,
+                "bio": f"User {i} cares about topic {i}",
+            }
+            for i in range(3)
+        ]
+        posts = [
+            {
+                "post_id": p,
+                "user_id": p % 3,
+                "content": f"Post {p} about topic {p % 3}",
+                "created_at": 1,
+            }
+            for p in range(6)
+        ]
+        return recsys.rec_sys_personalized_twh(
+            user_table=users,
+            post_table=posts,
+            latest_post_count=len(posts),
+            trace_table=[],
+            rec_matrix=[[] for _ in users],
+            max_rec_post_len=2,
+            current_time=2,
+        )
+
+    first, second = _one_run(), _one_run()
+
+    assert first == second, (
+        f"Zwei Laeufe mit identischem Seed muessen dieselbe rec-Matrix "
+        f"liefern: {first} vs {second}"
+    )
+
+    # Personalisierung: Post p gehoert zu Thema ``p % 3``, Nutzer i zu Thema i.
+    # Jeder Nutzer muss ausschliesslich Posts seines eigenen Themas sehen.
+    for user_index, recommended in enumerate(first):
+        topics = {post_id % 3 for post_id in recommended}
+        assert topics == {user_index}, (
+            f"Nutzer {user_index} muss Posts zu Thema {user_index} bekommen, "
+            f"bekam Posts {recommended} (Themen {topics}). Eine fuer alle "
+            f"Nutzer identische Empfehlung ist das Symptom der "
+            f"Zufallsprojektion. Vollstaendige Matrix: {first}"
+        )
