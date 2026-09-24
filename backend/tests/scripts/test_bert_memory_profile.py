@@ -52,6 +52,7 @@ if str(_SCRIPTS_DIR) not in sys.path:
 
 from _sim_common import install_bert_memory_profile  # noqa: E402
 from _sim_common import install_memory_sampler  # noqa: E402
+from _sim_common import install_recsys_mean_pooling_patch  # noqa: E402
 
 
 @pytest.fixture
@@ -575,3 +576,203 @@ def test_auto_profile_boundary_exact_threshold(
     patched("Twitter/twhin-bert-base")
     kwargs = captured_calls[0]["kwargs"]
     assert "torch_dtype" not in kwargs  # >= threshold -> fp32
+
+
+# ---------------------------------------------------------------------------
+# Issue #1236 — TWHIN-BERT-Recommender rankt ueber zufaellig initialisierte
+# Pooler-Gewichte. Mean-Pooling ueber ``last_hidden_state`` ersetzt
+# ``pooler_output`` (siehe Modul-Docstring von
+# ``install_recsys_mean_pooling_patch`` in ``_sim_common.py``).
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def restore_process_batch():
+    """``install_recsys_mean_pooling_patch`` patcht das ECHTE, importierte
+    ``oasis.social_platform.process_recsys_posts``-Modul in-place (kein
+    ``sys.modules``-Overlay wie beim Memory-Profil-Test moeglich, weil der
+    Patch absichtlich unabhaengig von der Importreihenfolge wirken muss —
+    siehe Docstring). Ohne Teardown wuerde der Patch ueber diesen Test
+    hinaus im Prozess bestehen bleiben und andere Tests verunreinigen.
+    """
+    from oasis.social_platform import process_recsys_posts
+
+    original = process_recsys_posts.process_batch
+    yield process_recsys_posts
+    process_recsys_posts.process_batch = original
+
+
+def test_patch_returns_false_when_oasis_not_importable(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(sys.modules, "oasis.social_platform", None)
+
+    assert install_recsys_mean_pooling_patch() is False
+
+
+def test_patch_replaces_process_batch_and_is_idempotent(restore_process_batch) -> None:
+    process_recsys_posts = restore_process_batch
+
+    first_result = install_recsys_mean_pooling_patch()
+    patched_once = process_recsys_posts.process_batch
+
+    assert first_result is True
+    assert getattr(patched_once, "_agora_mean_pooling_applied", False) is True
+
+    second_result = install_recsys_mean_pooling_patch()
+
+    assert second_result is True
+    # Kein Doppel-Wrapping: der zweite Aufruf erkennt das Flag auf dem
+    # bereits gepatchten Callable und laesst es unangetastet.
+    assert process_recsys_posts.process_batch is patched_once
+
+
+def test_patched_process_batch_uses_attention_masked_mean_pooling(
+    restore_process_batch,
+) -> None:
+    """Beweist die Mean-Pooling-Arithmetik mit echtem ``torch``, aber einem
+    Fake-Modell/-Tokenizer — kein Netzwerk, kein Modell-Download noetig.
+
+    Zwei Tokens, davon einer per Attention-Maske ausgeblendet: das Ergebnis
+    muss exakt dem unmaskierten Token entsprechen, nicht dem Mittel beider
+    (das waere der Fehler, den eine Maske ohne Wirkung erzeugen wuerde).
+    """
+    import torch
+
+    process_recsys_posts = restore_process_batch
+    install_recsys_mean_pooling_patch()
+
+    hidden = torch.tensor([[[1.0, 2.0], [100.0, 200.0]]])  # (batch=1, seq=2, dim=2)
+    mask = torch.tensor([[1, 0]])  # zweites Token ausgeblendet
+
+    class _FakeOutputs:
+        last_hidden_state = hidden
+
+    class _FakeModel:
+        def __call__(self, **kwargs):
+            return _FakeOutputs()
+
+    class _FakeTokenizer:
+        def __call__(self, texts, return_tensors, padding, truncation):
+            return {"input_ids": torch.zeros(1, 2, dtype=torch.long), "attention_mask": mask}
+
+    result = process_recsys_posts.process_batch(_FakeModel(), _FakeTokenizer(), ["irrelevant"])
+
+    assert torch.allclose(result, torch.tensor([[1.0, 2.0]])), (
+        "Maskiertes Token darf das Ergebnis nicht beeinflussen — "
+        f"bekam {result}, erwartet [[1.0, 2.0]]"
+    )
+
+
+def test_patched_process_batch_masks_each_batch_row_independently(
+    restore_process_batch,
+) -> None:
+    """Review-Befund: der Fall oben deckt nur ``batch_size=1`` ab. Der
+    Produktionspfad ruft ``process_batch`` immer mit mehreren Texten
+    gleichzeitig auf (``generate_post_vector``), und jede Batch-Zeile hat
+    typischerweise eine ANDERE Anzahl an Padding-Positionen. Ein
+    Broadcasting-Fehler, der die Maske ueber die Batch-Dimension vermischt,
+    waere mit nur einer Zeile unsichtbar."""
+    import torch
+
+    process_recsys_posts = restore_process_batch
+    install_recsys_mean_pooling_patch()
+
+    # Zeile 0: 1 echtes Token (Wert 10), 2 Padding-Tokens (Werte 999, die
+    # NICHT einfliessen duerfen). Zeile 1: alle 3 Tokens echt.
+    hidden = torch.tensor(
+        [
+            [[10.0, 20.0], [999.0, 999.0], [999.0, 999.0]],
+            [[1.0, 1.0], [3.0, 3.0], [5.0, 5.0]],
+        ]
+    )  # (batch=2, seq=3, dim=2)
+    mask = torch.tensor([[1, 0, 0], [1, 1, 1]])
+
+    class _FakeOutputs:
+        last_hidden_state = hidden
+
+    class _FakeModel:
+        def __call__(self, **kwargs):
+            return _FakeOutputs()
+
+    class _FakeTokenizer:
+        def __call__(self, texts, return_tensors, padding, truncation):
+            return {"input_ids": torch.zeros(2, 3, dtype=torch.long), "attention_mask": mask}
+
+    result = process_recsys_posts.process_batch(
+        _FakeModel(), _FakeTokenizer(), ["short", "longer text"]
+    )
+
+    expected = torch.tensor([[10.0, 20.0], [3.0, 3.0]])  # Zeile 1: Mittel von 1,3,5 = 3
+    assert torch.allclose(result, expected), (
+        "Jede Batch-Zeile muss ihre EIGENE Maske anwenden, ohne mit anderen "
+        f"Zeilen zu vermischen — bekam {result}, erwartet {expected}"
+    )
+
+
+@pytest.mark.llm
+def test_real_twhin_bert_orders_semantically_similar_texts_closer(
+    restore_process_batch,
+) -> None:
+    """Akzeptanzkriterium aus #1236: Regressionstest gegen zwei semantisch
+    nahe und zwei semantisch ferne Texte, Aehnlichkeitsordnung assertiert —
+    gegen den unge patchten ``pooler_output``-Pfad instabil (Zufallsgewichte).
+
+    Laedt das echte ``Twitter/twhin-bert-base`` (Netzwerk/Cache noetig) —
+    deshalb ``@pytest.mark.llm`` (per Default ausgeschlossen, siehe
+    pyproject.toml ``addopts``). Ausfuehren mit: ``pytest -m llm``.
+    """
+    from transformers import AutoModel, AutoTokenizer
+
+    process_recsys_posts = restore_process_batch
+    install_recsys_mean_pooling_patch()
+
+    model = AutoModel.from_pretrained("Twitter/twhin-bert-base")
+    tokenizer = AutoTokenizer.from_pretrained("Twitter/twhin-bert-base")
+
+    anchor = "The central bank raised interest rates today."
+    near = "The federal reserve increased borrowing costs this week."
+    far = "My cat knocked a plant off the windowsill."
+
+    vectors = process_recsys_posts.process_batch(model, tokenizer, [anchor, near, far])
+    anchor_vec, near_vec, far_vec = vectors[0], vectors[1], vectors[2]
+
+    import torch
+
+    sim_near = torch.nn.functional.cosine_similarity(anchor_vec, near_vec, dim=0)
+    sim_far = torch.nn.functional.cosine_similarity(anchor_vec, far_vec, dim=0)
+
+    assert sim_near > sim_far, (
+        f"Semantisch nahe Texte sollten aehnlicher sein als ferne: "
+        f"sim_near={sim_near.item():.4f}, sim_far={sim_far.item():.4f}"
+    )
+
+
+@pytest.mark.llm
+def test_real_twhin_bert_is_deterministic_across_process_restarts(
+    restore_process_batch,
+) -> None:
+    """Akzeptanzkriterium aus #1236: zwei Laeufe mit identischer Simulation
+    liefern identische ``rec``-Matrizen. Simuliert einen zweiten
+    Prozessstart durch ein frisches ``AutoModel.from_pretrained`` — vor
+    diesem Fix haette das eine neue Zufallsinitialisierung des Poolers
+    bedeutet und damit ein anderes Ergebnis fuer denselben Text."""
+    from transformers import AutoModel, AutoTokenizer
+
+    process_recsys_posts = restore_process_batch
+    install_recsys_mean_pooling_patch()
+
+    tokenizer = AutoTokenizer.from_pretrained("Twitter/twhin-bert-base")
+    text = ["Reproducibility matters for comparing simulation runs."]
+
+    model_run_a = AutoModel.from_pretrained("Twitter/twhin-bert-base")
+    vector_a = process_recsys_posts.process_batch(model_run_a, tokenizer, text)
+
+    model_run_b = AutoModel.from_pretrained("Twitter/twhin-bert-base")
+    vector_b = process_recsys_posts.process_batch(model_run_b, tokenizer, text)
+
+    import torch
+
+    assert torch.allclose(vector_a, vector_b, atol=1e-5), (
+        "Zwei frisch geladene Modellinstanzen muessen fuer denselben Text "
+        "dasselbe Ergebnis liefern — sonst haengt das Ranking weiterhin an "
+        "einer Zufallsinitialisierung."
+    )
