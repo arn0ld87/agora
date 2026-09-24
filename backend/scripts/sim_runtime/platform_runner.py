@@ -105,6 +105,27 @@ _cleanup_done = False
 logger = logging.getLogger(__name__)
 
 
+async def agent_observation(agent: Any) -> str:
+    """Timeline-/Umgebungstext, den OASIS dem Agenten als Situation zeigt.
+
+    camel-oasis 0.2.5 hat weder ``OasisEnv.get_observation`` noch
+    ``SocialAgent.observation``; die Observation entsteht asynchron ueber
+    ``agent.env.to_text_prompt()`` (``SocialEnvironment``). Die fruehere
+    Abfrage dieser nicht existierenden Attribute lieferte immer ``""`` —
+    der Tool-Loop sah die Timeline nie (#1224, Codex-Finding PR #1559).
+    Der Text ist untrusted und wird in ``build_agent_prompt_with_tools``
+    gekapselt.
+    """
+    env = getattr(agent, "env", None)
+    to_text_prompt = getattr(env, "to_text_prompt", None)
+    if to_text_prompt is None:
+        return ""
+    result = to_text_prompt()
+    if asyncio.iscoroutine(result):
+        result = await result
+    return str(result or "")
+
+
 def setup_signal_handlers():
     """
     Set signal handlers to ensure proper exit when receiving SIGTERM/SIGINT
@@ -609,12 +630,7 @@ class SinglePlatformRunner:
                 actions = {}
                 for agent_id, agent in active_agents:
                     try:
-                        # Get observation from OASIS environment
-                        observation = ""
-                        if hasattr(self.env, 'get_observation'):
-                            observation = self.env.get_observation(agent)
-                        elif hasattr(agent, 'observation'):
-                            observation = str(agent.observation)
+                        observation = await agent_observation(agent)
 
                         # Get agent profile info
                         agent_name = getattr(agent, 'username', f"Agent_{agent_id}")

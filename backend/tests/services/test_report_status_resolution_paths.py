@@ -100,6 +100,36 @@ class TestRunRegistryPath:
         assert result["simulation_id"] == "sim_1"
         assert result["progress"] == 42
 
+    # #1174 (Finding 2): Der Run-Registry-Pfad (Stufe 0, hoehere Prioritaet
+    # als die literalen Kurzschluesse in den anderen drei Stufen) reichte
+    # ``message`` bisher roh durch — ohne ``message_key``. "paused"/"stopped"
+    # tragen bewusst (noch) keinen Schluessel: beide sind Randzustaende
+    # ausserhalb dieses Fixes, das Frontend faellt fuer sie auf ``message``
+    # zurueck wie vor #1174.
+    @pytest.mark.parametrize(
+        ("run_status", "expected_message_key"),
+        [
+            ("completed", "report.generated"),
+            ("failed", "report.failed"),
+            ("processing", "report.generating"),
+            ("pending", "report.generating"),
+            ("paused", "report.generating"),
+            ("stopped", None),
+        ],
+    )
+    def test_run_registry_path_carries_message_key(self, run_status, expected_message_key):
+        run = {
+            "run_id": "run_1",
+            "status": run_status,
+            "progress": 42,
+            "message": "Task completed",
+            "linked_ids": {"simulation_id": "sim_1"},
+        }
+        with _layer(run=run, report=_report(ReportStatus.GENERATING)):
+            result = ReportStatusService.get_status(report_id="rep_1")
+
+        assert result.get("message_key") == expected_message_key
+
     def test_unknown_run_status_falls_through_to_later_stages(self):
         """Ein Status außerhalb der bekannten Menge beendet die Kette *nicht*."""
         run = {"run_id": "r", "status": "some_new_status", "linked_ids": {}}
@@ -135,7 +165,11 @@ class TestRunRegistryPath:
         with _layer(run=run, report=_report(ReportStatus.GENERATING), sections=sections):
             result = ReportStatusService.get_status(report_id="rep_1")
 
-        assert result["sections"] == {1: {"content": "eins"}, 2: {"content": "zwei"}}
+        # #1174: `sections` laeuft jetzt ueber `ReportStatusResponse.model_dump
+        # (mode="json")` — JSON-Objektschluessel sind immer Strings (so auch
+        # zuvor schon auf dem Wire nach `jsonify()`; nur die Python-Zwischenform
+        # hatte int-Keys).
+        assert result["sections"] == {"1": {"content": "eins"}, "2": {"content": "zwei"}}
 
     def test_simulation_id_argument_is_fallback_when_run_has_none(self):
         run = {"run_id": "r", "status": "processing", "linked_ids": {}}
@@ -161,6 +195,7 @@ class TestPersistedReportPath:
             "status": "completed",
             "progress": 100,
             "message": "Report generated",
+            "message_key": "report.generated",
             "already_completed": True,
         }
 
@@ -260,7 +295,11 @@ class TestSimulationPath:
             result = ReportStatusService.get_status(simulation_id="sim_10")
 
         assert result["status"] == "generating"
-        assert result["report_id"] is None
+        # #1174: `_acknowledge_polling` laeuft jetzt ueber `ReportStatusResponse
+        # .model_dump(..., exclude_none=True)` — ein None-wertiges `report_id`
+        # fehlt jetzt als Schluessel statt `null` zu sein (kein Consumer
+        # unterscheidet das, siehe test_fallback_acknowledges_polling).
+        assert result.get("report_id") is None
 
     def test_simulation_path_is_skipped_when_report_id_is_known(self):
         """Mit report_id greift Stufe 3 nicht — sonst käme ein fremder Report."""
@@ -281,12 +320,17 @@ class TestFallbackAndValidation:
         with _layer():
             result = ReportStatusService.get_status(report_id="rep_12")
 
+        # #1174: der Payload laeuft jetzt ueber `ReportStatusResponse.model_dump
+        # (..., exclude_none=True)` — ein None-wertiges `simulation_id` fehlt
+        # jetzt als Schluessel statt als `null` zu erscheinen. Kein Consumer
+        # unterscheidet fehlenden Key von `null` (kein `'simulation_id' in
+        # data`-Check im Frontend), daher unveraendertes Verhalten am Draht.
         assert result == {
-            "simulation_id": None,
             "report_id": "rep_12",
             "status": "generating",
             "progress": 0,
             "message": "Task handle unknown — waiting for report completion",
+            "message_key": "report.awaiting_task",
         }
 
     def test_without_any_identifier_it_raises(self):

@@ -338,9 +338,7 @@ Nicht automatisch „Tests grün“ daraus machen. In mehreren September-PRs wur
 
 ### NLTK Advisory
 
-[#661](https://github.com/arn0ld87/agora/issues/661) bleibt als Upstream-Risiko offen. Dass Scanner eine Version außerhalb `last_affected` nicht mehr melden, ist nicht automatisch ein dokumentierter Upstream-Fix.
-
-Aktueller Hardstop: **28.09.2026** laut Dependency-Risk-Register.
+PYSEC-2026-597 / CVE-2026-12243 ist ab nltk 3.10.0 gefixt (GitHub Advisory GHSA-m42h-3232-vpv3), [#661](https://github.com/arn0ld87/agora/issues/661) ist geschlossen und der Hardstop 28.09.2026 entfällt. nltk ist seit #1410 ohnehin nicht mehr im Lock; die neueren nltk-Advisories ohne Fix (u. a. GHSA-8mgp-746c-j5xp) sind der Grund dafür, siehe Dependency-Risk-Register.
 
 ### `ImportError: Blocked import of regex ...`
 

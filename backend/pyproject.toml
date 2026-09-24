@@ -356,10 +356,10 @@ override-dependencies = [
     # GHSA-p4gq-832x-fm9v / CVE-2026-54293 / PYSEC-2026-2078 (Path Traversal
     # in nltk.data.load()): fixed upstream in nltk 3.10.0. Bump auf 3.10.1
     # (aktuell, 2026-08-01) loest diese Advisory auf (#995).
-    # PYSEC-2026-597 / CVE-2026-12243 bleibt unberuehrt: laut OSV existiert
-    # dafuer kein offizielles "fixed"-Event, aber last_affected: 3.9.4 — ab
-    # 3.10.0 faellt das Paket aus dem affected-Set, pip-audit meldet die
-    # Advisory dann nicht mehr, ohne dass ein echter Fix vorliegt (#661).
+    # PYSEC-2026-597 / CVE-2026-12243 (Alias GHSA-m42h-3232-vpv3) ist ebenfalls
+    # ab 3.10.0 gefixt: das reviewte GitHub Advisory fuehrt seit 2026-08-13
+    # first_patched_version 3.10.0; der OSV-PYSEC-Eintrag nennt weiterhin nur
+    # last_affected 3.9.4, schliesst >= 3.10.0 also ebenso aus (#661, geschlossen).
     # nltk ist seit #1410 kein Bestandteil des Lock mehr (Begruendung bei
     # project.dependencies: GHSA-8mgp-746c-j5xp trifft <= 3.10.3 ohne Fix).
     # Dieser Override wirkt deshalb aktuell auf nichts. Er bleibt als Riegel

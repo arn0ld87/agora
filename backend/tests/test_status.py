@@ -205,6 +205,11 @@ class TestStatusFunctions:
         mock_driver = Mock()
         mock_driver.verify_connectivity = Mock()
         mock_storage._driver = mock_driver
+        # #1466: reale Neo4jStorage-Instanzen liefern hier echte bool/str-Werte
+        # — ohne diese Fixierung generiert Mock() Attribut-Mocks statt bool/str
+        # und die strikte SystemStatusNeo4j-Validierung schlaegt fehl.
+        mock_storage.is_connected = True
+        mock_storage.last_success_ts = None
         app.extensions['neo4j_storage'] = mock_storage
 
         with app.app_context():
@@ -230,6 +235,9 @@ class TestStatusFunctions:
         mock_storage.verify_connectivity = Mock(
             side_effect=Exception("Connection refused")
         )
+        # #1466: siehe Begründung in test_get_neo4j_status_reachable oben.
+        mock_storage.is_connected = False
+        mock_storage.last_success_ts = None
         app.extensions['neo4j_storage'] = mock_storage
 
         with app.app_context():
@@ -681,3 +689,109 @@ class TestOllamaStatusErrorShape:
         assert validated.error == StatusCheckError(code=StatusErrorCode.UNREACHABLE)
         # Kein Rohtext ("refused") mehr in der serialisierten Antwort.
         assert 'refused' not in str(result)
+
+
+class TestNeo4jStatusContractShape:
+    """Issue #1466: ``_get_neo4j_status`` serialisiert jetzt ueber
+    ``SystemStatusNeo4j`` statt eines handgeschriebenen Dicts. Diese Tests
+    bewachen das exakte, bisherige Wire-Format je Zweig — insbesondere, dass
+    der "kein Storage"-Zweig ``is_connected``/``last_success_ts`` weiterhin
+    ganz auslaesst statt sie als ``null`` zu senden.
+    """
+
+    def test_no_storage_branch_matches_previous_dict_shape(self):
+        from flask import Flask
+        from app.contracts.system_status_contract import SystemStatusNeo4j
+
+        app = Flask(__name__)
+        with app.app_context():
+            app.extensions = {}
+            result = _get_neo4j_status()
+
+        assert result == {
+            "reachable": False,
+            "error": {"code": StatusErrorCode.UNREACHABLE.value},
+            "uri": Config.NEO4J_URI,
+        }
+        assert set(result.keys()) == {"reachable", "error", "uri"}
+        SystemStatusNeo4j.model_validate(result)
+
+    def test_reachable_branch_matches_previous_dict_shape(self):
+        from flask import Flask
+        from app.contracts.system_status_contract import SystemStatusNeo4j
+
+        app = Flask(__name__)
+        app.extensions = {}
+        mock_storage = Mock()
+        mock_storage.verify_connectivity = Mock()
+        mock_storage.last_success_ts = None
+        mock_storage.is_connected = True
+        app.extensions['neo4j_storage'] = mock_storage
+
+        with app.app_context():
+            result = _get_neo4j_status()
+
+        assert result == {
+            "reachable": True,
+            "error": None,
+            "uri": Config.NEO4J_URI,
+            "is_connected": True,
+            "last_success_ts": None,
+        }
+        SystemStatusNeo4j.model_validate(result)
+
+    def test_unreachable_branch_matches_previous_dict_shape(self):
+        from flask import Flask
+        from app.contracts.system_status_contract import SystemStatusNeo4j
+
+        app = Flask(__name__)
+        app.extensions = {}
+        mock_storage = Mock()
+        mock_storage.verify_connectivity = Mock(side_effect=Exception("refused"))
+        mock_storage.last_error = None
+        mock_storage.is_connected = False
+        mock_storage.last_success_ts = None
+        app.extensions['neo4j_storage'] = mock_storage
+
+        with app.app_context():
+            result = _get_neo4j_status()
+
+        assert result == {
+            "reachable": False,
+            "error": {"code": StatusErrorCode.UNEXPECTED.value},
+            "uri": Config.NEO4J_URI,
+            "is_connected": False,
+            "last_success_ts": None,
+        }
+        SystemStatusNeo4j.model_validate(result)
+
+
+class TestDiskStatusContractShape:
+    """Issue #1466: ``_get_disk_status`` serialisiert jetzt ueber
+    ``SystemStatusDisk`` statt eines handgeschriebenen Dicts."""
+
+    def test_success_branch_matches_previous_dict_shape(self):
+        from app.contracts.system_status_contract import SystemStatusDisk
+
+        result = _get_disk_status()
+
+        assert set(result.keys()) == {"uploads"}
+        assert set(result["uploads"].keys()) == {"path", "total_bytes", "free_bytes", "used_pct"}
+        assert "error" not in result["uploads"]
+        SystemStatusDisk.model_validate(result)
+
+    def test_failure_branch_matches_previous_dict_shape(self, monkeypatch):
+        from app.contracts.system_status_contract import SystemStatusDisk
+
+        def _raise(_path):
+            raise PermissionError("[Errno 13] Permission denied: '/some/secret/path'")
+
+        monkeypatch.setattr('app.api.status.shutil.disk_usage', _raise)
+
+        result = _get_disk_status()
+
+        assert result["uploads"]["total_bytes"] is None
+        assert result["uploads"]["free_bytes"] is None
+        assert result["uploads"]["used_pct"] is None
+        assert result["uploads"]["error"] == {"code": StatusErrorCode.AUTH.value}
+        SystemStatusDisk.model_validate(result)

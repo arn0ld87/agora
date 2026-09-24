@@ -1,0 +1,186 @@
+{
+  "$defs": {
+    "AiModelRef": {
+      "additionalProperties": false,
+      "description": "Kanonische (Provider-Connection, Modell)-Referenz \u2014 Backend-Spiegel des\nFrontend-``AiModelRefSchema`` (``frontend/src/contracts/aiModelRef.ts``).\n\nBewusst klein: identifiziert genau die vom UI gew\u00e4hlte Route. Gr\u00f6\u00dfere\nMetadaten (Capabilities, Status) bleiben in der ``ProviderConnection`` bzw.\nim Model-Katalog. Tr\u00e4gt keine Secrets.",
+      "properties": {
+        "capability_filter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Capability Filter"
+        },
+        "fallback_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fallback Reason"
+        },
+        "model_id": {
+          "minLength": 1,
+          "title": "Model Id",
+          "type": "string"
+        },
+        "provider_connection_id": {
+          "minLength": 1,
+          "title": "Provider Connection Id",
+          "type": "string"
+        },
+        "source": {
+          "default": "explicit",
+          "enum": [
+            "stage-override",
+            "run-override",
+            "project-default",
+            "workspace-default",
+            "explicit",
+            "fallback"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider_connection_id",
+        "model_id"
+      ],
+      "title": "AiModelRef",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/branch-overrides.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Override-Parameter f\u00fcr einen Simulation-Branch.\n\nAlle Felder optional \u2014 nur gesetzte Felder \u00fcberschreiben die\nSource-Simulation. Eine leere Zeichenkette gilt wie bisher als\nNicht-Override (siehe ``branching_service.create_branch``).",
+  "properties": {
+    "ai_model_ref": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AiModelRef"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "enable_reddit": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Enable Reddit"
+    },
+    "enable_twitter": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Enable Twitter"
+    },
+    "language": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Language"
+    },
+    "llm_model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Llm Model"
+    },
+    "max_agents": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Agents"
+    },
+    "persona_additions": {
+      "anyOf": [
+        {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Persona Additions"
+    },
+    "persona_removals": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Persona Removals"
+    },
+    "time_config": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Time Config"
+    }
+  },
+  "title": "BranchOverrides",
+  "type": "object"
+}

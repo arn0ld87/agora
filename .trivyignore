@@ -26,12 +26,13 @@
 #
 # - GHSA-p4gq-832x-fm9v (Alias CVE-2026-54293, PYSEC-2026-2078): echter
 #   Upstream-Fix in nltk 3.10.0. Real resolved.
-# - PYSEC-2026-597 (Alias CVE-2026-12243): KEIN echter Upstream-Fix — OSV
-#   weist kein "fixed"-Event aus, nur last_affected: 3.9.4. Ab nltk 3.10.0
-#   fällt das installierte Paket aus dem affected-Set; Trivy/pip-audit
-#   melden den Fund deshalb nicht mehr, obwohl die zugrunde liegende
-#   Schwachstelle nicht behoben ist. Aufschub durch Versions-Drift, keine
-#   Behebung. Tracking bleibt offen: Issue #661.
+# - PYSEC-2026-597 (Alias CVE-2026-12243, GHSA-m42h-3232-vpv3): Upstream-Fix
+#   in nltk 3.10.0 laut reviewtem GitHub Advisory (first_patched_version
+#   3.10.0, Stand 2026-08-13); OSV führt last_affected 3.9.4. Resolved,
+#   Issue #661 geschlossen.
+# nltk ist seit #1410 ohnehin nicht mehr im Lock. Die davon unabhängigen,
+# neueren nltk-Advisories (u. a. GHSA-8mgp-746c-j5xp, <= 3.10.3 ohne Fix)
+# sind in backend/pyproject.toml bei project.dependencies dokumentiert.
 #
 # Details: docs/dependency-risk-register.md, Abschnitt "nltk-Baseline".
 

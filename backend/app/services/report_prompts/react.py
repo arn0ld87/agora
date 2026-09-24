@@ -13,13 +13,15 @@ Called tools {tool_calls_count}/{max_tool_calls} times (Used: {used_tools_str}){
 ═══════════════════════════════════════════════════════════════"""
 
 REACT_INSUFFICIENT_TOOLS_MSG = (
-    "[Notice] You have only called {tool_calls_count} tools, need at least {min_tool_calls}. "
-    "Please call tools again to get more simulation data, then output Final Answer. {unused_hint}"
+    "[Notice] Coverage gap: the evidence available so far ({tool_calls_count} tool calls) "
+    "does not cover the statements of your draft. "
+    "Call a tool to retrieve the missing evidence for this section, then output Final Answer. {unused_hint}"
 )
 
 REACT_INSUFFICIENT_TOOLS_MSG_ALT = (
-    "Currently called {tool_calls_count} tools, need at least {min_tool_calls}. "
-    "Please call tools to get simulation data. {unused_hint}"
+    "Coverage gap: the evidence available so far ({tool_calls_count} tool calls) "
+    "does not cover this section. "
+    "Please call a tool to retrieve the missing evidence. {unused_hint}"
 )
 
 REACT_TOOL_LIMIT_MSG = (

@@ -71,6 +71,10 @@ Zum Typ-Gate: `pyproject.toml` schaltet mypy für `app`, `app.config`, `app.cont
 - Vue 3 / TypeScript / Vite / Pinia.
 - Die v4-Routen sind die einzige produktive Oberfläche; historische Parallel-Views sind entfernt oder Redirects.
 - Pydantic-Verträge werden im Frontend durch Zod-Spiegel und eingecheckte JSON-Schemas abgesichert. **Der Spiegel ist nicht lückenlos**: das Gate `zod-mirror-drift` führt die vorhandenen Vertragstests aus, es erzwingt aber nicht, dass es zu einem Backend-Vertrag überhaupt einen Spiegel gibt. Wo einer fehlt und stattdessen ein handgeschriebenes Interface mit `[key: string]: unknown` steht, ist Drift unsichtbar — genau so zeigte das Projektregal jahrelang die rohe `project_id` statt des Namens (`useShelf` las `project_name`, das Backend liefert `name`). Projekte haben seitdem einen Spiegel (`contracts/projectContract.ts`, `.strict()`).
+- Seit #1466 haben auch der Neo4j-/Disk-Teilbaum von `/api/status` (`SystemStatusNeo4j`/`SystemStatusDisk`, vorher handgeschriebene Dicts, nur Ollama/E2E waren seit #955/#1458 abgedeckt) sowie `GET /api/graph/task/<id>`/`GET /api/graph/tasks` (`TaskStatusResponse`, Spiegel von `Task.to_dict()`) einen Pydantic-Vertrag samt Zod-Spiegel (`contracts/systemStatusContract.ts`, `contracts/taskStatusContract.ts`) und Drift-Test. `_get_neo4j_status`/`_get_disk_status` serialisieren mit `exclude_unset=True`, um die zweigabhängige, bisherige Feldmenge (z. B. `is_connected`/`last_success_ts` fehlen ganz, solange kein Storage initialisiert ist) byte-genau zu erhalten. Dabei aufgedeckt: `GET /api/graph/tasks` rief bislang `t.to_dict()` auf den bereits von `TaskManager.list_tasks()` konvertierten Dicts auf — ein `AttributeError`, sobald der Endpunkt mit tatsächlich vorhandenen Tasks aufgerufen wurde; kein Test deckte diesen Pfad ab. Jetzt behoben, mit Regressionstest.
+- Die Provider-Connection-Liste toleriert einen dem Frontend unbekannten `provider_kind` pro Eintrag: er wird auf `unknown` normalisiert (lokaler Transport behält die Loopback-URL-Prüfung), statt die ganze Liste zu verwerfen; andere Vertragsverstöße bleiben harte Fehler (#1414).
+- Die Modellwahl läuft in allen Schritten ausschließlich über `AiModelRef`/`AiModelPicker`. `useEnvForm` ist seit #903 nur noch Loader für Sprache und Runtime-Metadaten; die frühere Modellwahl-API (`modelOption`, `customModel`, `modelOptions`, `effectiveModel()`) ist entfernt.
+- Seit #886 tragen auch Branch-Overrides (`POST /api/simulation/<id>/branch`) eine kanonische `ai_model_ref` (`BranchOverrides`-Contract, `backend/app/contracts/branch_request_contract.py`); der reine `llm_model`-String bleibt als deprecated Legacy-Key erhalten, die Kombination beider ist HTTP 400. Replay (`POST /api/runs/<id>/replay`) reicht seither das volle `AiModelRef` an `create_branch` durch statt nur die `model_id`.
 - Das Premium-Redesign ist abgeschlossen; die Nachlese #1459 hat Radius-Tokens, Titel-Truncation, i18n und strukturierte Statusfehler bereinigt.
 
 ### Backend
@@ -92,6 +96,8 @@ Kanonische Begriffe und Pfade:
 - Modellauswahl: `AiModelPicker.vue`
 
 Unterstützte Transportklassen sind `http`, `local` und `cli`. `codex_cli` ist ein echter CLI-/Session-Transport ohne HTTP-Base-URL und API-Key; der Fix für den früheren Persona-Route-Mix mit `.env` ist gemergt (#1418/#1422), ebenso der Codex-CLI-Transport für OASIS-Simulationsrunden (#1423/#1424). `claude_cli` (Claude-Abo statt Pay-per-Token-API) ist der zweite `cli`-Transport-Provider — anders als `codex_cli` mit `auth_mode="api_key"` (Langzeit-Token aus `claude setup-token`, kein Verzeichnis-Mount) und isoliertem `HOME` pro Subprozess-Aufruf statt einer gemounteten Login-Session.
+
+`PUT /api/llm/active-config` übernimmt die `base_url` einer gespeicherten, aktivierten `ProviderConnection` (sonst Registry-Default) und prüft die Modell-Capabilities gegen genau diesen Endpunkt; eine `base_url` im Request-Body bleibt ignoriert, `cli`-/Session-Provider bekommen nie eine (#1289).
 
 Ob ein Provider ohne eigenen Secret auskommt, entscheidet seit dem Fix für den
 verworfenen `claude_cli`-Token ausschließlich `LlmProviderRegistry.uses_session_auth`
@@ -172,6 +178,11 @@ Offen bleiben Qualitätsthemen der Entitätsauflösung: Alias-/Koreferenzauflös
 - Contract-invalid Reports dürfen nicht als normal `completed` ausgeliefert werden.
 - Teilberichte aus Cancel-, Section-Failure- oder Fallback-Outline-Pfaden werden als `INCOMPLETE` klassifiziert; Resume bewahrt die Degradationsmarker und kann einen temporären Fallback-Outline neu planen (#1479).
 - Ein `INCOMPLETE`-Report kann weiterhin auslieferbar sein; der tatsächliche Reportstatus steht in der Run-Metadaten-Sicht.
+
+### Abschnittsgenerierung (Section-ReACT)
+
+- Ob ein Abschnittsentwurf angenommen wird oder der Loop weiteres Retrieval anfordert, entscheidet die Evidence-Deckung, nicht die Zahl der Tool-Calls (#1294): angenommen wird, wenn das Retrieval des Abschnitts bindbare Evidence registriert hat oder jede prüfbare Aussage des Entwurfs thematisch in der vorab geladenen Evidence (`global_evidence_refs`) vorkommt. Geprüft werden dieselben Claim-Einheiten wie beim Binding, gleiche Zahlen ohne thematische Überlappung zählen nicht, ein Entwurf ohne prüfbare Aussage ist nie gedeckt. Ein ergebnisloser Tool-Call genügt nicht mehr, ein gedeckter Entwurf braucht keinen.
+- Erschöpft der Loop seine Iterationen, bleibt ein gültiger, nur mangels Deckung zurückgewiesener Entwurf stehen, statt durch eine erneute Endgenerierung ersetzt zu werden; der Abschnitt bleibt als `forced_final` markiert.
 
 ### Persistenz
 
@@ -299,12 +310,12 @@ Aktueller Schwerpunkt:
 - API-Token/API-Key-Scope-Modell und signierte Tickets.
 - Secrets-at-rest für Provider-Keys; keine Klartext-Provider-Keys in Reports/Run-Manifests.
 - strukturierte `/api/status`-Fehler statt roher Exception-Strings (#1459).
-- Dependency-Risk-Register mit Hardstops; NLTK/PYSEC-2026-597 bleibt bis zur Upstream-Klärung verfolgt (#661, Hardstop 28.09.2026).
+- Dependency-Risk-Register mit Hardstops; NLTK/PYSEC-2026-597 ist ab nltk 3.10.0 gefixt (GitHub Advisory, #661 geschlossen), nltk ist seit #1410 nicht mehr im Lock.
 - Outbound-Fetches mit agenten-/modellgelieferten URLs laufen zentral über `backend/app/security/outbound_http.py` (Adressklassen, Redirect-Revalidierung, IP-Pinning, Byte-Limit). Der zuvor ungeschützte Pfad `scripts/agent_tools.py::web_fetch` ist damit geschlossen ([#1485](https://github.com/arn0ld87/agora/issues/1485)).
 - Statische Security-Scans in CI: CodeQL für Python, JS/TS und GitHub-Actions-Workflows (Injection in `run:`-Blöcken), Ruff mit flake8-bandit-Regeln (`S`, Baseline-Ignores für S101/S110/S112/S311/S603/S607 in `backend/pyproject.toml`), Trivy für das Container-Image (blockierend ab HIGH) und für Dockerfile/Compose-Konfiguration (Kategorie `trivy-config`, vorerst nur berichtend).
 - Eine Ablehnung durch dieselbe Policy gibt die untrusted URL nicht mehr weiter: `OutboundRequestBlocked` trägt in der Message nur den Grund und in `.url` nur die sichere Herkunft (Schema, Host, ggf. Port). Die frühere Userinfo-Redaktion ließ Token in Query, Fragment und Pfad stehen.
 
-Bekannt offen: Simulation-`observation` wird noch nicht überall so strikt als untrusted Prompt-Input getrennt, wie für Prompt-Injection-Härtung gewünscht ([#1224](https://github.com/arn0ld87/agora/issues/1224)).
+Der Single-Platform-Tool-Loop (`ToolAwareActionLoop.decide_action` in `backend/scripts/agent_tools.py`, genutzt von `run_twitter_simulation.py`/`run_reddit_simulation.py` bei aktivierten Agent-Tools) liest seit [#1224](https://github.com/arn0ld87/agora/issues/1224) die echte OASIS-Timeline (`agent.env.to_text_prompt()`; vorher kam dort immer ein leerer String an) und kapselt sowohl diese Observation als auch Tool-Ergebnisse (`web_search`/`web_fetch`) in `<untrusted_data source="...">...</untrusted_data>` und neutralisiert darin eingeschleuste Loop-Steuer-Tags sowie bare `{"action": ...}`-JSON, bevor der Prompt an das Modell geht. **Nicht abgedeckt** bleibt der parallele Simulationspfad (`run_parallel_simulation.py`, `tool_loop = None`): dort laufen Agentenaktionen über natives CAMEL-`LLMAction()` statt über diese Agora-Prompt-Assembly, eine dort fehlende Trust-Boundary wäre OASIS-intern und nicht Teil dieses Fixes.
 
 ## Simulationstreue und Reproduzierbarkeit
 

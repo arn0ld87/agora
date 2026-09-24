@@ -16,10 +16,13 @@ import sys
 from pathlib import Path
 
 from app.contracts.branch_comparison import BranchComparison
+from app.contracts.branch_request_contract import BranchOverrides
 from app.contracts.graph_diff import GraphDiff
 from app.contracts.persona_contract import PersonaModel, PersonaQuotaPlan
 from app.contracts.persona_entity_context import PersonaEntityContext
 from app.contracts.persona_target_contract import PersonaTargetContract
+from app.contracts.prepare_status_contract import PrepareStatusResponse
+from app.contracts.report_status_contract import ReportStatusResponse
 from app.contracts.pipeline_degradation_contract import (
     PipelineDegradationModel,
     PipelineDegradationReport,
@@ -38,7 +41,14 @@ from app.contracts.run_budget_contract import (
     RunUsage,
 )
 from app.contracts.runs_contract import RunDetail, RunsListResponse, RunSummary
-from app.contracts.system_status_contract import SystemStatusE2E, SystemStatusOllama
+from app.contracts.system_status_contract import (
+    SystemStatusDisk,
+    SystemStatusDiskUploads,
+    SystemStatusE2E,
+    SystemStatusNeo4j,
+    SystemStatusOllama,
+)
+from app.contracts.task_status_contract import TaskStatusResponse
 from app.contracts.llm_routing_contract import (
     RuntimeLlmRouting,
     ProviderDescriptor,
@@ -110,6 +120,8 @@ OUT_DIR = Path(__file__).resolve().parents[3] / "schemas"
 
 CONTRACTS: dict[str, type] = {
     "branch-comparison.schema.json": BranchComparison,
+    # Branch-Overrides fuer POST /api/simulation/<id>/branch (Issue #886)
+    "branch-overrides.schema.json": BranchOverrides,
     "graph-diff.schema.json": GraphDiff,
     "persona-entity-context.schema.json": PersonaEntityContext,
     # Pipeline-Degradierung (Issue #1029)
@@ -124,6 +136,9 @@ CONTRACTS: dict[str, type] = {
     "persona-quota-plan.schema.json": PersonaQuotaPlan,
     # Persona-Ziel für den Fortschrittszähler (Issue #1034)
     "persona-target.schema.json": PersonaTargetContract,
+    # Status-Antworten mit message_key (Issue #1174, Muster aus #1458)
+    "prepare-status-response.schema.json": PrepareStatusResponse,
+    "report-status-response.schema.json": ReportStatusResponse,
     "report-v3.schema.json": ReportV3,
     "run-summary.schema.json": RunSummary,
     "runs-list-response.schema.json": RunsListResponse,
@@ -169,6 +184,12 @@ CONTRACTS: dict[str, type] = {
     "onboarding-status-response.schema.json": OnboardingStatusResponse,
     "system-status-ollama.schema.json": SystemStatusOllama,
     "system-status-e2e.schema.json": SystemStatusE2E,
+    # Neo4j-/Disk-Teilbaeume von /api/status (Issue #1466)
+    "system-status-neo4j.schema.json": SystemStatusNeo4j,
+    "system-status-disk.schema.json": SystemStatusDisk,
+    "system-status-disk-uploads.schema.json": SystemStatusDiskUploads,
+    # Task-Status-Item fuer /api/graph/task/<id> und /api/graph/tasks (Issue #1466)
+    "task-status-response.schema.json": TaskStatusResponse,
     # Embedding (Slice 4.1)
     "embedding-configuration.schema.json": EmbeddingConfiguration,
     "embedding-configuration-upsert-request.schema.json": EmbeddingConfigurationUpsertRequest,

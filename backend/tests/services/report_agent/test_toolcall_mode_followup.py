@@ -126,8 +126,8 @@ def test_workflow_unknown_mode_uses_default_native_path() -> None:
     agent = MagicMock()
     agent.simulation_requirement = "test"
     agent.MAX_TOOL_CALLS_PER_SECTION = 3
-    agent.REACT_INSUFFICIENT_TOOLS_MSG = "more tools {tool_calls_count}/{min_tool_calls}{unused_hint}"
-    agent.REACT_INSUFFICIENT_TOOLS_MSG_ALT = "alt {tool_calls_count}/{min_tool_calls}{unused_hint}"
+    agent.REACT_INSUFFICIENT_TOOLS_MSG = "more tools {tool_calls_count}{unused_hint}"
+    agent.REACT_INSUFFICIENT_TOOLS_MSG_ALT = "alt {tool_calls_count}{unused_hint}"
     agent.REACT_TOOL_LIMIT_MSG = "limit {tool_calls_count}/{max_tool_calls}"
     agent.REACT_OBSERVATION_TEMPLATE = "obs {tool_name}{result}{tool_calls_count}{max_tool_calls}{used_tools_str}{unused_hint}"
     agent.REACT_UNUSED_TOOLS_HINT = " unused: {unused_list}"
@@ -177,8 +177,8 @@ def test_workflow_native_mode_case_insensitive() -> None:
     agent = MagicMock()
     agent.simulation_requirement = "test"
     agent.MAX_TOOL_CALLS_PER_SECTION = 3
-    agent.REACT_INSUFFICIENT_TOOLS_MSG = "{tool_calls_count}{min_tool_calls}{unused_hint}"
-    agent.REACT_INSUFFICIENT_TOOLS_MSG_ALT = "{tool_calls_count}{min_tool_calls}{unused_hint}"
+    agent.REACT_INSUFFICIENT_TOOLS_MSG = "{tool_calls_count}{unused_hint}"
+    agent.REACT_INSUFFICIENT_TOOLS_MSG_ALT = "{tool_calls_count}{unused_hint}"
     agent.REACT_TOOL_LIMIT_MSG = "{tool_calls_count}{max_tool_calls}"
     agent.REACT_OBSERVATION_TEMPLATE = "{tool_name}{result}{tool_calls_count}{max_tool_calls}{used_tools_str}{unused_hint}"
     agent.REACT_UNUSED_TOOLS_HINT = "{unused_list}"

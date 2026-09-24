@@ -1,6 +1,7 @@
 import type { ElementHandle, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { checkTabOrder } from './tabOrder';
 
 /**
  * Slice 7.2 — Accessibility-Gate Helper.
@@ -415,6 +416,11 @@ export async function checkAccessibilityGate(page: Page, route: string, options:
 
   // Keyboard
   await checkKeyboardNavigation(page);
+
+  // Tab-Reihenfolge (Issue #1088) — läuft NACH checkKeyboardNavigation, weil
+  // beide denselben Fokus-Ablauf brauchen (Tab-Presses ab dem aktuellen
+  // Fokus); die Reihenfolge der Prüfungen selbst ist unkritisch.
+  await checkTabOrder(page);
 
   // Focus visible
   await checkFocusVisible(page);
