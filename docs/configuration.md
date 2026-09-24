@@ -110,14 +110,15 @@ Beide Provider brauchen weder eine Base-URL noch einen klassischen API-Key im Ag
 
 ## Metadaten-Backend (Supabase/PostgreSQL, optional)
 
-Drei unabhängige Schalter steuern, ob einzelne Stores von Datei/SQLite auf PostgreSQL wechseln. Sie werden **einzeln** umgestellt, nicht gemeinsam. Default in allen drei Fällen: PostgreSQL ist verfügbar, aber nicht aktiv — die JSON-/SQLite-Dateien bleiben die Wahrheit, bis der Operator bewusst umschaltet.
+Vier unabhängige Schalter steuern, ob einzelne Stores von Datei/SQLite auf PostgreSQL wechseln. Sie werden **einzeln** umgestellt, nicht gemeinsam. Default in allen vier Fällen: PostgreSQL ist verfügbar, aber nicht aktiv — die JSON-/SQLite-Dateien bleiben die Wahrheit, bis der Operator bewusst umschaltet.
 
 | Variable | Default | Werte | Zweck |
 |---|---|---|---|
 | `AGORA_METADATA_BACKEND` | `legacy` | `legacy`, `postgres` | Dateisystem/Neo4j vs. PostgreSQL für allgemeine Metadaten |
 | `AGORA_PROJECT_BACKEND` | `file` | `file`, `postgres` | `uploads/projects/<project_id>/project.json` vs. PostgreSQL |
+| `AGORA_SIMULATION_BACKEND` | `file` | `file`, `postgres` | `uploads/simulations/<simulation_id>/state.json` vs. PostgreSQL; `postgres` verlangt `AGORA_PROJECT_BACKEND=postgres` |
 | `AGORA_LLM_PROFILE_BACKEND` | `sqlite` | `sqlite`, `postgres` | `instance/llm_profiles.db` vs. PostgreSQL |
-| `DATABASE_URL` 🔐 | leer, kein Default | `postgresql+psycopg://user:password@host:5432/dbname` | Pflicht, sobald einer der drei Schalter auf `postgres` steht |
+| `DATABASE_URL` 🔐 | leer, kein Default | `postgresql+psycopg://user:password@host:5432/dbname` | Pflicht, sobald einer der Schalter auf `postgres` steht |
 
 Steht mindestens ein Schalter auf `postgres`, prüft `create_app` beim Start die Alembic-Revision (#1582). Der Verbindungsaufbau dafür ist auf `AGORA_SCHEMA_GATE_CONNECT_TIMEOUT` Sekunden begrenzt (Default `10`), damit ein nicht erreichbarer Datenbankhost den Start schnell abbricht statt rund 130 s zu hängen.
 

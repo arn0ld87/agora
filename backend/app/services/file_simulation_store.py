@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any, List, Optional, cast
 
 from ..contracts.simulation_record_contract import SimulationRecord
 from ..services.artifact_store import (
@@ -169,9 +169,10 @@ def get_file_simulation_repository(
     ``store`` ist ein optionaler ``SimulationArtifactStore``; er wird bei
     Tests injiziert, um in-memory zu arbeiten.
     """
-    artifact_store: Optional[SimulationArtifactStore] = (
-        store if isinstance(store, SimulationArtifactStore) else None  # type: ignore[arg-type]
-    )
+    # Kein isinstance-Filter: Aufrufer reichen auch strukturell passende
+    # Stores herein (Tests, API-Module mit eigenem Store). Ein Filter liesse
+    # sie still auf den Default-Store zurueckfallen.
+    artifact_store = cast(Optional[SimulationArtifactStore], store)
     return FileSimulationRepository(
         simulations_dir=simulations_dir,
         store=artifact_store,

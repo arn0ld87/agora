@@ -285,7 +285,9 @@ def test_the_migration_can_be_taken_back(postgres_database_url, monkeypatch):
     try:
         assert 'projects' in inspect(engine).get_table_names(schema='agora')
 
-        command.downgrade(config, '-1')
+        # Ausdruecklich auf die Revision vor den Projekten, nicht ``-1``:
+        # seit #1585 liegt ``agora.simulations`` darueber.
+        command.downgrade(config, 'b5d2c0a41f7e')
         tabellen = inspect(engine).get_table_names(schema='agora')
         assert 'projects' not in tabellen
         # Die Revision davor bleibt stehen — sie gehoert einem anderen PR.

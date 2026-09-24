@@ -21,21 +21,32 @@ sortiert.
 wie die gegebene Simulation (einschliesslich der Simulation selbst, falls sie
 Root ist). Sortierung: adapterabhaengig.
 
-``save`` schreibt den Datensatz und setzt ``updated_at`` auf jetzt. Auf eine
-Simulation, die es nicht gibt, schlaegt ``save`` mit einem adapterabhaengigen
-Fehler fehl — kein Adapter erfindet einen Datensatz als Nebeneffekt.
+``save`` schreibt den Datensatz und setzt ``updated_at`` auf jetzt. Gibt es
+die Simulation noch nicht, legt ``save`` sie an: der Port hat keinen eigenen
+Anlegepfad, und ``SimulationManager.create_simulation`` schreibt den ersten
+Datensatz genau darueber (#1585 hat die fruehere, gegenteilige Formulierung
+hier an das tatsaechliche Verhalten beider Adapter angeglichen).
 
 Die Fabrik ``get_simulation_repository`` ist die einzige Stelle, an der ein
-Consumer an ein Repository kommt. Heute liefert sie ausschliesslich den
-Dateiadapter; der PostgreSQL-Adapter folgt in #1585 ohne Konfigurationsschalter
-in diesem Commit.
+Consumer an ein Repository kommt. ``AGORA_SIMULATION_BACKEND`` waehlt zwischen
+Dateiadapter (Default ``file``) und PostgreSQL-Adapter (#1585).
 """
 
 from __future__ import annotations
 
 from typing import List, Optional, Protocol, runtime_checkable
 
+from ..config import SIMULATION_BACKENDS, Config
 from ..contracts.simulation_record_contract import SimulationRecord
+
+
+class SimulationBackendUnavailable(RuntimeError):
+    """``AGORA_SIMULATION_BACKEND`` traegt einen Wert, den keine Ablage bedient.
+
+    ``Config.validate()`` lehnt ihn beim Start ab; dieser Fehler faengt den
+    Weg ohne Validierung ab (Test, Skript), statt still auf die Datei
+    zurueckzufallen.
+    """
 
 
 @runtime_checkable
@@ -46,9 +57,8 @@ class SimulationRepository(Protocol):
         """Schreibt den Datensatz und setzt ``updated_at`` auf jetzt.
 
         Das Stempeln gehoert hierher: sonst haengt es davon ab, ob ein
-        Aufrufer daran gedacht hat. Auf eine Simulation, die es nicht gibt,
-        schlaegt ``save`` mit einem adapterabhaengigen Fehler fehl — kein
-        Adapter erfindet einen Datensatz als Nebeneffekt eines Schreibvorgangs.
+        Aufrufer daran gedacht hat. Eine noch unbekannte Simulation wird
+        angelegt — das ist der Anlegepfad von ``create_simulation``.
         """
         ...
 
@@ -92,9 +102,23 @@ def get_simulation_repository(
     ``store`` ist ein optionaler ``SimulationArtifactStore``. Wird er nicht
     angegeben, baut sich der Adapter selbst einen.
 
-    Heute wird ausschliesslich der Dateiadapter geliefert. Ein Konfigurationsschalter
-    kommt nicht — der PostgreSQL-Adapter folgt in #1585.
+    ``AGORA_SIMULATION_BACKEND=postgres`` liefert den PostgreSQL-Adapter;
+    ``simulations_dir`` und ``store`` bleiben dann unbenutzt; die Laufzeit-Artefakte
+    daneben verwaltet ``SimulationManager`` selbst.
     """
+    backend = Config.SIMULATION_BACKEND
+    if backend not in SIMULATION_BACKENDS:
+        raise SimulationBackendUnavailable(
+            f"AGORA_SIMULATION_BACKEND has unknown value '{backend}' "
+            f'(expected one of: {", ".join(sorted(SIMULATION_BACKENDS))})'
+        )
+    if backend == 'postgres':
+        from ..infrastructure.postgres.repositories import (
+            PostgresSimulationRepository,
+        )
+
+        return PostgresSimulationRepository()
+
     from ..services.file_simulation_store import get_file_simulation_repository
 
     return get_file_simulation_repository(simulations_dir=simulations_dir, store=store)

@@ -548,20 +548,26 @@ class SimulationRunner:
 
     @classmethod
     def _mark_store_state_stopped(cls, simulation_id: str) -> None:
-        """Set ``state.json`` status=stopped for a simulation (cleanup helper)."""
+        """Setzt den Simulationsstatus auf ``stopped`` (Cleanup-Helfer).
+
+        Laeuft ueber das ``SimulationRepository``, nicht direkt ueber
+        ``state.json``: mit ``AGORA_SIMULATION_BACKEND=postgres`` bliebe der
+        Datensatz in ``agora.simulations`` sonst auf dem alten Status stehen
+        (CodeRabbit-Review auf #1598).
+        """
+        from ..repositories.simulation_repository import get_simulation_repository
+
         try:
-            store = _store()
-            if store.exists(simulation_id, "state"):
-                state_data = store.read_json(simulation_id, "state", default=None)
-                if state_data:
-                    state_data["status"] = "stopped"
-                    state_data["updated_at"] = datetime.now().isoformat()
-                    store.write_json(simulation_id, "state", state_data)
-                    logger.info(f"Updated state.json status to stopped: {simulation_id}")
-            else:
-                logger.warning(f"state.json does not exist for {simulation_id}")
+            repository = get_simulation_repository(store=_store())
+            record = repository.get(simulation_id)
+            if record is None:
+                logger.warning(f"Simulation state does not exist for {simulation_id}")
+                return
+            record.status = "stopped"
+            repository.save(record)
+            logger.info(f"Updated simulation status to stopped: {simulation_id}")
         except Exception as state_err:  # noqa: BLE001 — exception is logged; swallowed intentionally
-            logger.warning(f"Failed to update state.json: {simulation_id}, error={state_err}")
+            logger.warning(f"Failed to update simulation state: {simulation_id}, error={state_err}")
 
     @classmethod
     def cleanup_all_simulations(cls) -> None:
