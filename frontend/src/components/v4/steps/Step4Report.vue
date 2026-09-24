@@ -14,6 +14,7 @@ import { getAgentLog, getConsoleLog, getReportEvidence } from '../../../api/repo
 import type { GenerateReportData, EvidenceEnvelope } from '../../../api/report'
 import { isApiError } from '../../../api/envelope'
 import { createSimulationBranch } from '../../../api/simulation'
+import type { BranchOverrides } from '../../../contracts/branchOverrides'
 import { getRun } from '../../../api/runs'
 import { getRunLlmRouting } from '../../../api/llmRouting'
 import { buildReportReaderView } from '@/composables/useReportReaderView'
@@ -54,7 +55,7 @@ import {
   type ReportMode,
 } from '../../../contracts/reportV3Contract'
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const router = useRouter()
 
 const props = defineProps({
@@ -414,6 +415,7 @@ const reportGeneration = useReportGeneration({
   reportId: () => props.reportId,
   simulationId: () => props.simulationId,
   t,
+  te,
   addLog,
   onLifecycleChange: (status) => emit('update-status', status),
   recordSchemaError,
@@ -687,14 +689,24 @@ const {
 })
 
 async function createBranchFromReport(branchForm: {
-  branch_name: string; llm_model: string; language: string; max_agents: string
+  branch_name: string; llm_model: string; language: string; max_agents: string; ai_model_ref: AiModelRef | null
 }) {
   const simulationId = resolvedSimulationId.value || props.simulationId
   if (!simulationId || !branchForm.branch_name.trim()) return
   branchBusy.value = true
   try {
-    const overrides: Record<string, unknown> = {}
-    if (branchForm.llm_model.trim()) overrides.llm_model = branchForm.llm_model.trim()
+    const overrides: BranchOverrides = {}
+    // Issue #886: die kanonische Referenz nur senden, wenn sie noch aktuell
+    // ist — d.h. der Picker-Pick wurde nicht durch einen späteren
+    // Freitext-Edit in ReportBranchControls überschrieben (siehe deren
+    // Docstring). Trifft das zu, ersetzt sie llm_model vollständig; das
+    // Backend lehnt die Kombination ohnehin ab (#886).
+    const modelTextInSync = branchForm.ai_model_ref?.model_id === branchForm.llm_model.trim()
+    if (branchForm.ai_model_ref && modelTextInSync) {
+      overrides.ai_model_ref = branchForm.ai_model_ref
+    } else if (branchForm.llm_model.trim()) {
+      overrides.llm_model = branchForm.llm_model.trim()
+    }
     if (branchForm.language.trim()) overrides.language = branchForm.language.trim()
     if (branchForm.max_agents !== '') overrides.max_agents = Number(branchForm.max_agents)
     // Kein Cast mehr noetig: createSimulationBranch deklariert die

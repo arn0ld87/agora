@@ -1162,7 +1162,14 @@ def _replay_simulation_run(run: dict, run_id: str, overrides):
     llm_model_override = None
     ai_model_ref = overrides.ai_model_ref if overrides is not None else None
     if ai_model_ref is not None:
-        branch_overrides["llm_model"] = ai_model_ref.model_id
+        # Issue #886: volles AiModelRef durchreichen statt nur model_id —
+        # create_branch leitet daraus sowohl config["ai_model_ref"] als auch
+        # das Legacy-Anzeigefeld config["llm_model"] ab (siehe
+        # branching_service.create_branch). Dieselbe Modell-ID kann auf
+        # mehreren Provider-Connections liegen; ohne die Connection-ID wäre
+        # der Branch-Config-Snapshot nicht eindeutig.
+        # JSON-Form, weil create_branch die Overrides in branch_meta persistiert.
+        branch_overrides["ai_model_ref"] = ai_model_ref.model_dump(mode="json")
         llm_model_override = ai_model_ref.model_id
 
     branch_state = manager.create_branch(
