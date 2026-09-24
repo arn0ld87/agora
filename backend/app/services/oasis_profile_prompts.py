@@ -12,6 +12,7 @@ import json
 from typing import Dict, Optional
 from .oasis_profile_models import PersonaDemographicSlot
 from .persona_demographics import build_name_quota_prompt_block, build_name_quota_prompt_block_en
+from .persona_domain_coherence import has_domain_markers
 from .persona_quota_defaults import build_industry_quota_prompt_block, build_industry_quota_prompt_block_en
 
 def _get_system_prompt (self: Any ,is_individual :bool )->str :
@@ -46,8 +47,22 @@ def _build_individual_persona_prompt (
         attrs_str =json .dumps (entity_attributes ,ensure_ascii =False )if entity_attributes else "Keine"
         context_str =context [:detail ['context_limit']]if context else "Keine zusätzlichen Informationen"
 
+        # Nachtrag #1471: die Branchenquote soll nur lenken, wo die Persona
+        # ihre Branche sonst erfinden muesste. Traegt Zusammenfassung oder
+        # Kontext bereits erkennbares Fachvokabular (die Entitaet ist
+        # "quellengebunden", z. B. eine BFW-Sicherheitsverantwortliche), bleibt
+        # der Block weg — sonst deutet die Quote den Beruf in eine fremde
+        # Branche um, und die spaetere Kohaerenzpruefung meldet Drift.
+        _source_text =" ".join (
+        part for part in (entity_summary or "",context or "")if part
+        )
+        _source_bound =has_domain_markers (_source_text )
+
         _quota_block_de =build_name_quota_prompt_block ()
-        _industry_block_de =build_industry_quota_prompt_block (self ._industry_quota_plan )
+        _industry_block_de =(
+        ""if _source_bound
+        else build_industry_quota_prompt_block (self ._industry_quota_plan )
+        )
         _slot_block =(
         self ._build_demographic_slot_prompt_block (demographic_slot )
         if demographic_slot is not None
@@ -107,7 +122,10 @@ Wichtig:
 """
 
         _quota_block_en =build_name_quota_prompt_block_en ()
-        _industry_block_en =build_industry_quota_prompt_block_en (self ._industry_quota_plan )
+        _industry_block_en =(
+        ""if _source_bound
+        else build_industry_quota_prompt_block_en (self ._industry_quota_plan )
+        )
 
         return f"""Generate a detailed social media user persona for the entity, maximizing restoration of existing reality.
 

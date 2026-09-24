@@ -10,7 +10,12 @@ from typing import Any
 from . import oasis_profile_generator as _legacy
 import json
 from typing import Dict, List, Optional
-from .oasis_profile_models import CollectivePersonaSchema, PersonaDemographicSlot, PersonaProfileSchema
+from .oasis_profile_models import (
+    CollectivePersonaSchema,
+    PersonaDemographicSlot,
+    PersonaDriftCorrectionSchema,
+    PersonaProfileSchema,
+)
 from .run_budget import BudgetExceededError
 from .oasis_profile_generator import VOICE_REGISTERS
 
@@ -175,6 +180,88 @@ demographic_slot :Optional [PersonaDemographicSlot ]=None ,
     f"LLM-Generierung nach {max_attempts } Versuchen fehlgeschlagen: "
     f"{str (last_error )[:160 ]}"
     ),
+    )
+
+
+def _regenerate_persona_after_drift (
+self: Any ,
+*,
+entity_name :str ,
+entity_type :str ,
+persona_kind :str ,
+profession :str ,
+bio :str ,
+persona_text :str ,
+drifted_domains :List [str ],
+source_text :str ,
+)->Dict [str ,Any ]:
+    """Laesst Beruf, Bio und Freitext bei erkannter Domaenendrift neu erzeugen (#1471).
+
+    Vorher leerte die Kohaerenzpruefung bei Drift nur ``profession``; der
+    Freitext behielt sein fachfremdes Vokabular. Diese Funktion schickt die
+    bisherige Vita zusammen mit der erkannten Fremd-Domaene und der Quelle
+    an dasselbe ``LLMClient.chat_json`` wie die Erstgenerierung — mit einem
+    schlankeren Schema, weil Name, Alter, Geschlecht und MBTI-Typ unveraendert
+    bleiben.
+
+    Scheitert die Korrektur nach drei Versuchen, wirft diese Funktion weiter;
+    der Aufrufer entscheidet ueber die sichtbare Degradation (Beruf leeren,
+    ``generation_error`` setzen). Ein ``BudgetExceededError`` verlaesst sie
+    unveraendert — dieselbe Linie wie ``_generate_profile_with_llm``.
+    """
+    prompt =(
+    f"Die Biografie der Persona \"{entity_name }\" ({entity_type }) traegt "
+    f"Fachvokabular aus {', '.join (drifted_domains )}, das in der Quelle "
+    "nicht vorkommt.\n\n"
+    f"Bisheriger Beruf: {profession or '(keiner)'}\n"
+    f"Bisherige Bio: {bio }\n"
+    f"Bisheriger Freitext: {persona_text }\n\n"
+    f"Quelle:\n{source_text [:2000 ]}\n\n"
+    "Schreibe Beruf, Bio und Freitext so um, dass sie zur Fachdomäne der "
+    "Quelle passen. Ändere nur das Fach, nicht Name, Alter, Geschlecht oder "
+    "MBTI-Typ der Person. Ist aus der Quelle kein Beruf ableitbar, liefere "
+    "einen leeren String für profession statt einen zu erfinden."
+    )
+
+    from ..llm .client import LLMClient as _LLMClient
+
+    llm =_LLMClient (
+    api_key =self .api_key ,
+    base_url =self .base_url ,
+    model =self .model_name ,
+    run_id =self .run_id ,
+    provider_type =self .provider_type ,
+    )
+    messages =[
+    {"role":"system","content":self ._get_system_prompt (True )},
+    {"role":"user","content":prompt },
+    ]
+
+    max_attempts =3
+    last_error :Optional [Exception ]=None
+    for attempt in range (max_attempts ):
+        try :
+            return llm .chat_json (
+            messages =messages ,
+            temperature =0.4 ,
+            max_tokens =800 ,
+            schema =PersonaDriftCorrectionSchema ,
+            schema_name ="persona_drift_correction",
+            context ="persona",
+            force_no_thinking =True ,
+            )
+        except BudgetExceededError :
+            raise
+        except Exception as e :# noqa: BLE001 — exception is logged; caller decides degradation
+            _legacy .logger .warning (
+            f"Drift-Korrektur fehlgeschlagen (Versuch {attempt +1 }): {str (e )[:80 ]}"
+            )
+            last_error =e
+            import time
+            time .sleep (1 *(attempt +1 ))# Exponential backoff
+
+    raise RuntimeError (
+    f"Drift-Korrektur nach {max_attempts } Versuchen fehlgeschlagen: {last_error }"
     )
 
 

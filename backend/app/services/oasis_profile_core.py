@@ -119,22 +119,32 @@ demographic_slot :Optional [PersonaDemographicSlot ]=None ,
         # der degradierte Pfad nichts abzuleiten wusste, reichte er ihn woertlich
         # durch — "AIProvider", "WorkingGroup", "TechnologyVendor". Lieber keine
         # Angabe als eine falsche.
-    profession =profile_data .get ("profession")
-    if isinstance (profession ,str )and profession .strip ().lower ()==entity_type .strip ().lower ():
-        _legacy .logger .debug (
-        "Persona-Beruf verworfen: entity_type wurde als profession durchgereicht (%s)",
-        entity_type ,
-        )
-        profession =None
+    profession =_profession_without_entity_type (
+    profile_data .get ("profession"),entity_type
+    )
 
-    profession =self ._profession_after_coherence_check (
+    bio =profile_data .get ("bio",f"{entity_type }: {name }")
+    resolution =self ._persona_after_coherence_check (
     entity_type =entity_type ,
     entity_name =name ,
     persona_kind =persona_kind ,
     profession =profession ,
+    bio =bio ,
     persona_text =persona_text ,
     entity_summary =entity .summary ,
     entity_context =context ,
+    use_llm =use_llm ,
+    )
+    profession =resolution .profession
+    bio =resolution .bio
+    persona_text =resolution .persona_text
+    if not is_collective :
+    # Die Korrektur kann den Eroeffnungsnamen des Freitexts veraendern;
+    # dieselbe Angleichung wie bei der Erstgenerierung, idempotent wenn
+    # sich nichts geaendert hat.
+        persona_text =self ._align_persona_identity (persona_text ,name )
+    generation_error =_merge_generation_error (
+    profile_data .get ("generation_error"),resolution .generation_error
     )
 
     # Segment = entity_type string for PersonaQuotaPlan validation.
@@ -145,7 +155,7 @@ demographic_slot :Optional [PersonaDemographicSlot ]=None ,
     user_id =user_id ,
     user_name =user_name ,
     name =name ,
-    bio =profile_data .get ("bio",f"{entity_type }: {name }"),
+    bio =bio ,
     persona =persona_text ,
     karma =profile_data .get ("karma",random .randint (500 ,5000 )),
     friend_count =profile_data .get ("friend_count",random .randint (50 ,500 )),
@@ -165,8 +175,34 @@ demographic_slot :Optional [PersonaDemographicSlot ]=None ,
     # Issue #1029: Default "llm" — nur der regelbasierte Pfad setzt
     # den Schlüssel, und er setzt ihn immer.
     generation_source =profile_data .get ("generation_source","llm"),
-    generation_error =profile_data .get ("generation_error"),
+    generation_error =generation_error ,
     )
+
+
+def _profession_without_entity_type (
+profession :Any ,entity_type :str
+)->Optional [str ]:
+    """Issue #1246 (P3): Der Entitaetstyp ist keine Berufsbezeichnung. Wo der
+    degradierte Pfad nichts abzuleiten wusste, reichte er ihn woertlich durch
+    — "AIProvider", "WorkingGroup", "TechnologyVendor". Lieber keine Angabe
+    als eine falsche."""
+    if isinstance (profession ,str )and profession .strip ().lower ()==entity_type .strip ().lower ():
+        _legacy .logger .debug (
+        "Persona-Beruf verworfen: entity_type wurde als profession durchgereicht (%s)",
+        entity_type ,
+        )
+        return None
+    return profession
+
+
+def _merge_generation_error (
+existing :Optional [str ],coherence_error :Optional [str ]
+)->Optional [str ]:
+    """Der Fehler der Erstgenerierung und der der Drift-Korrektur bleiben
+    beide sichtbar."""
+    if not coherence_error :
+        return existing
+    return f"{existing }; {coherence_error }"if existing else coherence_error
 
 
 def _generate_username (self: Any ,name :str )->str :

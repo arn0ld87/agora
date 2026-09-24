@@ -26,6 +26,7 @@ from ..llm.json_mode import _try_repair_truncated_json as _try_repair_truncated_
 from .oasis_profile_models import (
     CollectivePersonaSchema as CollectivePersonaSchema,
     OasisAgentProfile as OasisAgentProfile,
+    PersonaCoherenceResolution as PersonaCoherenceResolution,
     PersonaDemographicSlot as PersonaDemographicSlot,
     PersonaIneligible as PersonaIneligible,
     PersonaProfileSchema as PersonaProfileSchema,
@@ -322,9 +323,8 @@ class OasisProfileGenerator:
     def _align_persona_identity(cls, persona: str, display_name: str) -> str:
         return _oasis_profile_context._align_persona_identity(cls, persona, display_name)
 
-    @staticmethod
-    def _profession_after_coherence_check(*, entity_type: str, entity_name: str, persona_kind: str, profession: Optional[str], persona_text: str, entity_summary: Optional[str], entity_context: Optional[str]) -> Optional[str]:
-        return _oasis_profile_context._profession_after_coherence_check(entity_type=entity_type, entity_name=entity_name, persona_kind=persona_kind, profession=profession, persona_text=persona_text, entity_summary=entity_summary, entity_context=entity_context)
+    def _persona_after_coherence_check(self, *, entity_type: str, entity_name: str, persona_kind: str, profession: Optional[str], bio: str, persona_text: str, entity_summary: Optional[str], entity_context: Optional[str], use_llm: bool) -> PersonaCoherenceResolution:
+        return _oasis_profile_context._persona_after_coherence_check(self, entity_type=entity_type, entity_name=entity_name, persona_kind=persona_kind, profession=profession, bio=bio, persona_text=persona_text, entity_summary=entity_summary, entity_context=entity_context, use_llm=use_llm)
 
     def _is_individual_entity(self, entity_type: str) -> bool:
         return _oasis_profile_context._is_individual_entity(self, entity_type)
@@ -346,6 +346,9 @@ class OasisProfileGenerator:
 
     def _validate_profile_metadata(self, result: Dict[str, Any], *, is_collective: bool=False) -> List[str]:
         return _oasis_profile_llm._validate_profile_metadata(self, result, is_collective=is_collective)
+
+    def _regenerate_persona_after_drift(self, *, entity_name: str, entity_type: str, persona_kind: str, profession: str, bio: str, persona_text: str, drifted_domains: List[str], source_text: str) -> Dict[str, Any]:
+        return _oasis_profile_llm._regenerate_persona_after_drift(self, entity_name=entity_name, entity_type=entity_type, persona_kind=persona_kind, profession=profession, bio=bio, persona_text=persona_text, drifted_domains=drifted_domains, source_text=source_text)
 
     def _try_fix_json(self, content: str, entity_name: str, entity_type: str, entity_summary: str='') -> Dict[str, Any]:
         return _oasis_profile_llm._try_fix_json(self, content, entity_name, entity_type, entity_summary)
