@@ -130,6 +130,9 @@ def _status_from_persisted_report(query: _StatusQuery) -> Optional[dict[str, Any
             "status": "completed",
             "progress": 100,
             "message": "Report generated",
+            # Maschinenlesbarer i18n-Schluessel (#1174, Muster aus #1458) —
+            # ``message`` bleibt Fallback fuer Consumer ohne Key-Uebersetzung.
+            "message_key": "report.generated",
             "already_completed": True,
         }
     if existing_report.status == ReportStatus.FAILED:
@@ -139,6 +142,7 @@ def _status_from_persisted_report(query: _StatusQuery) -> Optional[dict[str, Any
             "status": "failed",
             "progress": 0,
             "message": "Report generation failed",
+            "message_key": "report.failed",
             "error": getattr(existing_report, "error", "") or "",
         }
     query.simulation_id = sim_id
@@ -221,6 +225,7 @@ def _status_from_simulation(query: _StatusQuery) -> Optional[dict[str, Any]]:
         "status": "completed",
         "progress": 100,
         "message": "Report generated",
+        "message_key": "report.generated",
         "already_completed": True,
     }
 
@@ -235,6 +240,7 @@ def _acknowledge_polling(query: _StatusQuery) -> Optional[dict[str, Any]]:
         "status": "generating",
         "progress": 0,
         "message": "Task handle unknown — waiting for report completion",
+        "message_key": "report.awaiting_task",
     }
 
 

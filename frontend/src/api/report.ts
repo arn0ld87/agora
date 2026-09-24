@@ -59,6 +59,8 @@ export interface ReportStatusData {
   status: string
   progress?: number
   message?: string
+  /** Maschinenlesbarer i18n-Schluessel fuer ``message`` (#1174, Muster aus #1458). */
+  message_key?: string | null
   report_id?: string
   simulation_id?: string
   error?: string | null

@@ -164,6 +164,10 @@ def _already_prepared_response(simulation_id: str):
         "simulation_id": simulation_id,
         "status": "ready",
         "message": "Preparation already completed, no need to regenerate",
+        # Maschinenlesbarer i18n-Schluessel (#1174, Muster aus #1458) — das
+        # Frontend uebersetzt ihn zentral, ``message`` bleibt Fallback fuer
+        # Consumer, die den Schluessel noch nicht kennen.
+        "message_key": "prepare.already_completed",
         "already_prepared": True,
         "prepare_info": prepare_info,
     })
@@ -482,6 +486,7 @@ def _build_prepare_response(
         "run_id": run_record["run_id"],
         "status": "preparing",
         "message": "Preparation task started; query progress via /api/simulation/prepare/status",
+        "message_key": "prepare.task_started",
         "already_prepared": False,
         "expected_entities_count": state.entities_count,
         "entity_types": state.entity_types,
@@ -664,6 +669,7 @@ def get_prepare_status():
                 "status": "ready",
                 "progress": 100,
                 "message": "Preparation already completed",
+                "message_key": "prepare.already_completed",
                 "already_prepared": True,
                 "prepare_info": prepare_info,
             })
@@ -675,6 +681,7 @@ def get_prepare_status():
                 "status": "not_started",
                 "progress": 0,
                 "message": "Preparation not started yet, please call /api/simulation/prepare",
+                "message_key": "prepare.not_started",
                 "already_prepared": False,
             })
         return json_error(
@@ -695,6 +702,7 @@ def get_prepare_status():
                     "status": "ready",
                     "progress": 100,
                     "message": "Task complete (PrepareWork already exists)",
+                    "message_key": "prepare.already_completed",
                     "already_prepared": True,
                     "prepare_info": prepare_info,
                 })

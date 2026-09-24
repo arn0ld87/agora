@@ -54,7 +54,7 @@ import {
   type ReportMode,
 } from '../../../contracts/reportV3Contract'
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const router = useRouter()
 
 const props = defineProps({
@@ -414,6 +414,7 @@ const reportGeneration = useReportGeneration({
   reportId: () => props.reportId,
   simulationId: () => props.simulationId,
   t,
+  te,
   addLog,
   onLifecycleChange: (status) => emit('update-status', status),
   recordSchemaError,

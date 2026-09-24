@@ -54,6 +54,8 @@ export interface TaskStatusData {
   status?: string
   progress?: number
   message?: string
+  /** Maschinenlesbarer i18n-Schluessel fuer ``message`` (#1174, Muster aus #1458). */
+  message_key?: string | null
   error?: string | null
   already_prepared?: boolean
   expected_entities_count?: number

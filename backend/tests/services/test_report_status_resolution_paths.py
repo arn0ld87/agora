@@ -161,6 +161,7 @@ class TestPersistedReportPath:
             "status": "completed",
             "progress": 100,
             "message": "Report generated",
+            "message_key": "report.generated",
             "already_completed": True,
         }
 
@@ -287,6 +288,7 @@ class TestFallbackAndValidation:
             "status": "generating",
             "progress": 0,
             "message": "Task handle unknown — waiting for report completion",
+            "message_key": "report.awaiting_task",
         }
 
     def test_without_any_identifier_it_raises(self):
