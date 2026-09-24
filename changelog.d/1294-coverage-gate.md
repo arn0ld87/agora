@@ -9,7 +9,10 @@ Die Entscheidung trifft jetzt `report_agent/section_coverage.py` gegen den
 Pool, an den der Abschnitt danach gebunden wird: Gedeckt ist ein Entwurf, wenn
 das Retrieval des Abschnitts bindbare Evidence registriert hat oder jede
 prüfbare Aussage thematisch in den vorab geladenen `global_evidence_refs`
-vorkommt (dieselbe Schwelle wie `data_gap.classify_claim_gap`). Bei einer
+vorkommt (`data_gap.topic_present_in_pool`, dieselbe Schwelle wie
+`classify_claim_gap`, aber ohne dessen Zahlen-Kurzschluss). Geprüft werden
+dieselben Einheiten, die der Binder später bindet (inklusive
+`split_claim_chunks`); ein Entwurf ohne prüfbare Aussage ist nie gedeckt. Bei einer
 Lücke fordert der Loop wie bisher gezielt Retrieval nach; die Hinweistexte
 sprechen jetzt von einer Deckungslücke statt von einer Mindestzahl.
 

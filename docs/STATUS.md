@@ -178,7 +178,7 @@ Offen bleiben Qualitätsthemen der Entitätsauflösung: Alias-/Koreferenzauflös
 
 ### Abschnittsgenerierung (Section-ReACT)
 
-- Ob ein Abschnittsentwurf angenommen wird oder der Loop weiteres Retrieval anfordert, entscheidet die Evidence-Deckung, nicht die Zahl der Tool-Calls (#1294): angenommen wird, wenn das Retrieval des Abschnitts bindbare Evidence registriert hat oder jede prüfbare Aussage des Entwurfs thematisch in der vorab geladenen Evidence (`global_evidence_refs`) vorkommt. Ein ergebnisloser Tool-Call genügt nicht mehr, ein gedeckter Entwurf braucht keinen.
+- Ob ein Abschnittsentwurf angenommen wird oder der Loop weiteres Retrieval anfordert, entscheidet die Evidence-Deckung, nicht die Zahl der Tool-Calls (#1294): angenommen wird, wenn das Retrieval des Abschnitts bindbare Evidence registriert hat oder jede prüfbare Aussage des Entwurfs thematisch in der vorab geladenen Evidence (`global_evidence_refs`) vorkommt. Geprüft werden dieselben Claim-Einheiten wie beim Binding, gleiche Zahlen ohne thematische Überlappung zählen nicht, ein Entwurf ohne prüfbare Aussage ist nie gedeckt. Ein ergebnisloser Tool-Call genügt nicht mehr, ein gedeckter Entwurf braucht keinen.
 - Erschöpft der Loop seine Iterationen, bleibt ein gültiger, nur mangels Deckung zurückgewiesener Entwurf stehen, statt durch eine erneute Endgenerierung ersetzt zu werden; der Abschnitt bleibt als `forced_final` markiert.
 
 ### Persistenz

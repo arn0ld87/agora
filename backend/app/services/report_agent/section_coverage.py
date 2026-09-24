@@ -10,13 +10,18 @@ Die Entscheidung hier fragt stattdessen die Evidence, gegen die der
 Abschnitt anschließend gebunden wird — denselben Pool wie
 ``ReportAgent._build_claims_for_section``: die für den Abschnitt erhobenen
 Items plus die ``global_evidence_refs`` der Evidence-Map. Ausreichend ist
-ein Abschnitt, wenn
+ein Abschnitt, wenn der Entwurf mindestens eine prüfbare Aussage enthält und
 
 1. das Retrieval dieses Abschnitts bindbare Evidence registriert hat, oder
 2. jede prüfbare Aussage des Entwurfs thematisch im vorab geladenen Pool
-   vorkommt — gemessen mit :func:`classify_claim_gap`, also mit derselben
+   vorkommt — gemessen mit :func:`topic_present_in_pool`, also mit derselben
    Schwelle, mit der ``data_gap`` "Information vorhanden" von "fehlt in den
    Quellen" trennt.
+
+Bewusst nicht :func:`classify_claim_gap`: dessen Zahlen-Kurzschluss beantwortet
+"könnte Retrieval das finden?" und lässt "90 Prozent der Lehrkräfte" durch
+"90 Prozent Regenwahrscheinlichkeit" gedeckt erscheinen. Hier zählt nur die
+thematische Deckung.
 
 Die Entscheidung ersetzt keines der nachgelagerten Gates: Bindung,
 Entailment und Prosa-Prüfung laufen unverändert über jeden Claim. Sie
@@ -30,7 +35,8 @@ from collections.abc import Mapping
 from typing import Any, Dict, List, Optional, Sequence
 
 from ...contracts.report_contract import FORBIDDEN_EVIDENCE_TYPES
-from .data_gap import ClaimGapKind, classify_claim_gap
+from ..claim_atomizer import split_claim_chunks
+from .data_gap import topic_present_in_pool
 from .sections import (
     atomize_claim_chunk,
     is_atomic_claim,
@@ -62,9 +68,11 @@ def preloaded_evidence(evidence_map: Any) -> List[Dict[str, Any]]:
 def draft_claim_units(draft: str) -> List[str]:
     """Prüfbare Aussagen eines Entwurfs.
 
-    Dieselben Filter wie S3a/S3b in ``_build_claims_for_section``:
+    Dieselbe Zerlegung wie S3a–S3c in ``_build_claims_for_section``:
     Strukturmarkup fällt weg, Mehrsatz-Absätze werden atomisiert,
-    Gliederungssätze ohne Substanz zählen nicht (#1316).
+    Gliederungssätze ohne Substanz zählen nicht (#1316), Sammelclaims
+    werden in ihre Teilaussagen gespalten (#1346) — jede Einheit, die der
+    Binder später einzeln prüft, wird auch hier einzeln geprüft.
     """
     units: List[str] = []
     for chunk in re.split(r"\n\s*\n", (draft or "").strip()):
@@ -76,7 +84,7 @@ def draft_claim_units(draft: str) -> List[str]:
             units.extend(atoms)
         elif not is_discourse_sentence(chunk):
             units.append(chunk)
-    return units
+    return split_claim_chunks(units)
 
 
 def section_has_sufficient_evidence(
@@ -89,20 +97,16 @@ def section_has_sufficient_evidence(
 
     ``section_evidence`` ist ``agent._active_section_evidence`` — was das
     Retrieval dieses Abschnitts registriert hat. Ein Entwurf ohne prüfbare
-    Aussage ist nicht gedeckt: es gibt nichts, woran die Deckung zu messen
-    wäre, und ein weiterer Retrieval-Schritt ist dann der richtige Weg.
+    Aussage ist nie gedeckt, auch nicht mit registrierter Evidence: es gibt
+    nichts, woran der Beleg hängen könnte.
     """
+    units = draft_claim_units(draft)
+    if not units:
+        return False
     if _bindable(section_evidence):
         return True
     pool = preloaded_evidence(evidence_map)
-    units = draft_claim_units(draft)
-    if not pool or not units:
-        return False
-    return all(
-        classify_claim_gap(unit, related_evidence_count=0, evidence_pool=pool)
-        is ClaimGapKind.BINDING_FAILURE
-        for unit in units
-    )
+    return bool(pool) and all(topic_present_in_pool(unit, pool) for unit in units)
 
 
 __all__ = [

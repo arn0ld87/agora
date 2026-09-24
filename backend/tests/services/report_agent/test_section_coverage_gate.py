@@ -156,6 +156,43 @@ def test_draft_without_checkable_statement_is_not_covered() -> None:
     )
 
 
+def test_discourse_only_draft_is_a_gap_even_with_section_evidence() -> None:
+    """PR #1563 (Codex P2): der Fast-Path über registrierte Abschnitts-Evidence
+    ließ einen Entwurf ohne jede prüfbare Aussage durch."""
+    discourse = "Im Folgenden werden die Reaktionsmuster der Stakeholder ausführlich dargestellt."
+    assert not section_has_sufficient_evidence(
+        discourse,
+        section_evidence=[{"evidence_id": "ev-1", "type": "graph_fact"}],
+        evidence_map=None,
+    )
+
+
+def test_compound_claim_is_checked_per_binder_unit() -> None:
+    """PR #1563 (Codex P2): ``während`` hielt beide Teilaussagen in einer
+    Einheit; die gedeckte Hälfte trug die ungedeckte mit. Der Binder spaltet
+    per ``split_claim_chunks`` — das Gate muss dieselben Einheiten prüfen."""
+    compound = (
+        "Die Lehrkräfte in Sachsen lehnen das Pflichtfach ab, während die "
+        "Elternverbände die geplante Einführung ausdrücklich unterstützen."
+    )
+    assert len(draft_claim_units(compound)) == 2
+    assert not section_has_sufficient_evidence(
+        compound, section_evidence=[], evidence_map=_evidence_map(COVERING_SNIPPETS[:1]),
+    )
+
+
+def test_matching_number_without_topic_overlap_is_a_gap() -> None:
+    """PR #1563 (Codex P2): ``classify_claim_gap`` schließt über gleiche Zahlen
+    kurz — für das Gate ist "90 Prozent Regenwahrscheinlichkeit" kein Beleg
+    für "90 Prozent der Lehrkräfte"."""
+    numeric = "90 Prozent der Lehrkräfte in Sachsen lehnen das Pflichtfach ab."
+    assert not section_has_sufficient_evidence(
+        numeric,
+        section_evidence=[],
+        evidence_map=_evidence_map(["90 Prozent Regenwahrscheinlichkeit am Wochenende."]),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Matrix auf dem produktiven Loop
 # ---------------------------------------------------------------------------
