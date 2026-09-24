@@ -49,6 +49,26 @@ Liveness-Probe für Container/Proxy. Keine tiefe fachliche Readiness-Prüfung.
 curl -fsS http://localhost:5001/health
 ```
 
+### `GET /readyz`
+
+Readiness-Probe (getrennt von `/health`): prüft Neo4j, Redis (nur bei aktivem
+Redis-Backend), Upload-Verzeichnis, Embedding-Konfig — und seit #1581
+`postgres`. Der Postgres-Check trägt zusätzlich `state`:
+
+- `disabled` — kein `AGORA_*_BACKEND` steht auf `postgres`; es wird keine
+  Verbindung aufgebaut. Macht `/readyz` nicht rot.
+- `ok` — mindestens ein Backend ist aktiv, `SELECT 1` gelingt.
+- `unavailable` — mindestens ein Backend ist aktiv, die Probe schlägt fehl.
+  Macht `/readyz` rot (503).
+
+Fehlerdetails sind immer generisch; Host, Port, User, Passwort und
+Datenbankname aus `DATABASE_URL` erscheinen weder im Response-Body noch im
+Log.
+
+```bash
+curl -fsS http://localhost:5001/readyz
+```
+
 ### `GET /api/status`
 
 Aggregierte Komponenten-Sicht. In geschütztem Betrieb authentifizieren:

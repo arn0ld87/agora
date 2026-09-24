@@ -275,6 +275,22 @@ def create_app(config_class=Config):
         if not Config.DEBUG:
             raise RuntimeError(f"Critical configuration missing: {', '.join(config_errors)}")
 
+    # Fail fast bei Alembic-Drift (#1582): steht irgendeine Ablage auf
+    # `postgres`, muss die Revision in der Datenbank dem Head aus
+    # `backend/migrations/` entsprechen — sonst startet der Prozess gegen ein
+    # unvollstaendiges Schema, ohne dass das hier auffaellt (siehe
+    # docs/runbooks/llm-profile-postgres-umstellung.md). Legacy-Defaults lösen
+    # `any_postgres_backend` mit False aus und bauen dabei keine Verbindung.
+    from .infrastructure.postgres.backends import any_postgres_backend
+    from .infrastructure.postgres.schema_gate import SchemaDriftError, verify_schema_at_head
+
+    if any_postgres_backend(Config):
+        try:
+            verify_schema_at_head(Config.DATABASE_URL)
+        except SchemaDriftError as exc:
+            logger.error("Schema drift: %s", exc)
+            raise
+
     # Fail fast on embedding misconfiguration or unavailable embedding backend.
     # Keep startup checks crisp and local — small nod to alexle135.de.
     _validate_embedding_at_startup(app, logger, should_log_startup=should_log_startup)
