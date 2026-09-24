@@ -58,6 +58,7 @@ from typing import Any, Callable, Dict, List, Optional, Protocol
 
 from pydantic import BaseModel, ConfigDict
 
+from ...contracts.job_lease_contract import JobLease
 from ...jobs.identity import owns_run
 from ...utils.logger import get_logger
 from .run_state_store import RunnerStatus, load_run_state, save_run_state
@@ -410,11 +411,26 @@ def _default_fail_simulation_state(simulation_id: str, error: str) -> None:
     manager._set_status(state, target_status)
 
 
+def _lease_expired(metadata: Optional[Dict[str, Any]]) -> bool:
+    """True, wenn ``metadata`` eine Lease traegt UND diese abgelaufen ist.
+
+    Kein Lease-Feld im Manifest (Altbestand, siehe ``JobLease.from_metadata``)
+    gilt NICHT als abgelaufen — das ist der Rueckwaertskompatibilitaetsfall
+    (Anforderung 5 des Slices): ein alter Stempel ohne Heartbeat/TTL verhaelt
+    sich wie vor diesem Slice, ausschliesslich ueber ``owns_run`` entschieden.
+    """
+    lease = JobLease.from_metadata(metadata)
+    if lease is None:
+        return False
+    return lease.is_expired()
+
+
 def reconcile_stale_jobs(
     registry: _RunRegistryProtocol,
     *,
     enabled: bool = True,
     owns: Callable[[Optional[Dict[str, Any]]], bool] = owns_run,
+    lease_expired: Callable[[Optional[Dict[str, Any]]], bool] = _lease_expired,
     fail_simulation_state: Optional[Callable[[str, str], None]] = None,
 ) -> ReconciliationResult:
     """Markiert verwaiste In-Process-Jobs als ``failed``/``process_restart``.
@@ -455,6 +471,12 @@ def reconcile_stale_jobs(
         enabled: ``False`` laesst jeden Run unangetastet
             (``AGORA_STARTUP_RECONCILIATION=false``).
         owns: Liveness-Pruefung gegen die Manifest-Metadaten, injizierbar.
+        lease_expired: Prueft die Lease-TTL gegen ``heartbeat_at``,
+            injizierbar (Issue #1472, Architekturentscheidung 2026-09-24).
+            Eine abgelaufene Lease gilt als verwaist, AUCH WENN ``owns``
+            wahr ist — ein haengender Thread ohne frischen Heartbeat aendert
+            ``worker_token`` nicht, muss aber trotzdem als tot erkannt
+            werden.
         fail_simulation_state: Wird fuer ``simulation_prepare`` mit
             ``(simulation_id, error)`` gerufen, damit auch der
             ``SimulationState`` aus ``preparing`` herauskommt. ``None``
@@ -478,7 +500,8 @@ def reconcile_stale_jobs(
             run_id = run.get("run_id")
             if not run_id:
                 continue
-            if owns(run.get("metadata") or {}):
+            metadata = run.get("metadata") or {}
+            if owns(metadata) and not lease_expired(metadata):
                 logger.debug(
                     "reconcile_stale_jobs: run=%s (%s) laeuft in diesem Prozess",
                     run_id, run_type,
@@ -486,10 +509,17 @@ def reconcile_stale_jobs(
                 skipped.append(run_id)
                 continue
 
-            logger.warning(
-                "reconcile_stale_jobs: run=%s (%s) verwaist — markiere failed/%s",
-                run_id, run_type, _TERMINATION_REASON,
-            )
+            if owns(metadata):
+                logger.warning(
+                    "reconcile_stale_jobs: run=%s (%s) Lease abgelaufen trotz "
+                    "passender Prozessidentitaet — markiere failed/%s",
+                    run_id, run_type, _TERMINATION_REASON,
+                )
+            else:
+                logger.warning(
+                    "reconcile_stale_jobs: run=%s (%s) verwaist — markiere failed/%s",
+                    run_id, run_type, _TERMINATION_REASON,
+                )
 
             # Dieselbe Schreibreihenfolge wie in ``reconcile_stale_runs``
             # (F1, PR #1476 Runde 5): der zweite Zustand zuerst, das Manifest

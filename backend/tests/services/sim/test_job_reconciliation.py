@@ -149,6 +149,77 @@ class TestLiveJobsAreLeftAlone:
         assert registry.updates == []
 
 
+class TestLeaseExpiryOverridesOwnership:
+    """Issue #1472, Architekturentscheidung 2026-09-24: eine abgelaufene
+    Lease gilt als verwaist, AUCH WENN die Prozessidentitaet (``owns_run``)
+    formal noch passt — ein haengender Thread aendert ``worker_token`` nicht,
+    ein fehlender Heartbeat schon."""
+
+    def test_expired_lease_is_reconciled_even_though_owns_run_is_true(self) -> None:
+        from datetime import UTC, datetime, timedelta
+
+        from app.contracts.job_lease_contract import JobLease
+
+        stale_heartbeat = datetime.now(UTC) - timedelta(seconds=999)
+        lease = JobLease(
+            owner_pid=os.getpid(),
+            owner_token="irrelevant-fuer-diesen-test",
+            heartbeat_at=stale_heartbeat,
+            lease_ttl_s=90,
+        )
+        registry = _FakeRegistry([_run("run_a", metadata=lease.to_metadata())])
+
+        # owns() sagt "ja, das ist meiner" — trotzdem muss die abgelaufene
+        # Lease den Run als verwaist erkennen.
+        result = reconcile_stale_jobs(registry, owns=lambda _meta: True)
+
+        assert result.reconciled_run_ids == ["run_a"]
+        assert registry.updates[0]["status"] == "failed"
+        assert registry.updates[0]["termination_reason"] == "process_restart"
+
+    def test_fresh_lease_is_skipped_when_owns_run_is_true(self) -> None:
+        from datetime import UTC, datetime
+
+        from app.contracts.job_lease_contract import JobLease
+
+        lease = JobLease(
+            owner_pid=os.getpid(),
+            owner_token="egal",
+            heartbeat_at=datetime.now(UTC),
+            lease_ttl_s=90,
+        )
+        registry = _FakeRegistry([_run("run_a", metadata=lease.to_metadata())])
+
+        result = reconcile_stale_jobs(registry, owns=lambda _meta: True)
+
+        assert result.reconciled_run_ids == []
+        assert result.skipped_run_ids == ["run_a"]
+        assert registry.updates == []
+
+    def test_a_manifest_without_a_lease_is_unaffected_by_the_ttl_check(self) -> None:
+        """Rueckwaertskompatibilitaet (Anforderung 5): Altbestand traegt nur
+        den alten Stempel, kein ``heartbeat_at``/``lease_ttl_s`` — die
+        TTL-Pruefung greift dann nicht, nur ``owns_run`` entscheidet (wie vor
+        #1472)."""
+        registry = _FakeRegistry([_run("run_a", metadata=current_worker_identity())])
+
+        result = reconcile_stale_jobs(registry)
+
+        assert result.reconciled_run_ids == []
+        assert result.skipped_run_ids == ["run_a"]
+
+    def test_custom_lease_expired_callable_is_honoured(self) -> None:
+        """``lease_expired`` ist injizierbar wie ``owns`` — deterministische
+        Fake-Clock-Tests ohne echtes Sleep."""
+        registry = _FakeRegistry([_run("run_a", metadata=current_worker_identity())])
+
+        result = reconcile_stale_jobs(
+            registry, owns=lambda _meta: True, lease_expired=lambda _meta: True
+        )
+
+        assert result.reconciled_run_ids == ["run_a"]
+
+
 class TestSimulationStateFollows:
     """Der Prepare-Job haelt zwei Zustaende: das Registry-Manifest und den
     ``SimulationState``. Bleibt letzterer auf ``preparing``, zeigt die

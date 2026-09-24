@@ -517,6 +517,20 @@ class Config:
         os.environ.get('AGORA_STARTUP_RECONCILIATION', 'true').lower() in ('true', '1', 'yes')
     )
 
+    # Job-Lease mit Heartbeat und TTL (Issue #1472, Architekturentscheidung
+    # 2026-09-24): ersetzt den alten PID+Token-Stempel ohne Ablauf. Das
+    # Heartbeat-Intervall liegt bewusst deutlich unter der TTL (hier: 4.5x),
+    # damit ein einzelner verpasster Heartbeat (Gevent-Jitter, GC-Pause,
+    # kurzzeitige Registry-Contention) nicht sofort zum faelschlichen
+    # "verwaist" fuehrt. Defaults spiegeln
+    # ``app.contracts.job_lease_contract.DEFAULT_LEASE_TTL_S`` /
+    # ``DEFAULT_HEARTBEAT_INTERVAL_S`` (bewusst als Literal dupliziert,
+    # ``config.py`` haengt nicht von ``contracts/`` ab).
+    AGORA_JOB_LEASE_TTL_SECONDS = int(os.environ.get('AGORA_JOB_LEASE_TTL_SECONDS', '90'))
+    AGORA_JOB_LEASE_HEARTBEAT_INTERVAL_SECONDS = int(
+        os.environ.get('AGORA_JOB_LEASE_HEARTBEAT_INTERVAL_SECONDS', '20')
+    )
+
     # Ontology mutation (Issue #11) — how to handle novel entity types that
     # the NER pipeline flags during simulation:
     #   disabled (default) → drop the signal, ontology never changes

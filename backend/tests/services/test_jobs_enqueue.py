@@ -265,3 +265,128 @@ def test_identity_survives_a_restart_as_orphaned(monkeypatch):
     assert result.reconciled_run_ids == ["run_abc"]
     assert after.updates[0][1]["status"] == "failed"
     assert after.updates[0][1]["termination_reason"] == "process_restart"
+
+
+# ---------------------------------------------------------------------------
+# Lease-Heartbeat (Issue #1472, Architekturentscheidung 2026-09-24)
+#
+# Alle Tests setzen das Heartbeat-Intervall auf einen sehr kleinen Wert
+# (0.02s statt des Produktions-Defaults) und warten mit kurzen, begrenzten
+# ``time.sleep``/``Event.wait``-Aufrufen (< 0.2s) — kein echtes Sleep über
+# Sekunden.
+# ---------------------------------------------------------------------------
+
+
+def test_enqueue_writes_a_lease_with_heartbeat_and_ttl(monkeypatch):
+    """enqueue() schreibt seit #1472 eine vollstaendige Lease, nicht mehr nur
+    den reinen PID+Token-Stempel."""
+    from app.jobs import enqueue
+    from app.jobs.identity import worker_token
+
+    registry = _patched_registry(monkeypatch)
+    done = threading.Event()
+
+    enqueue("simulation_prepare", done.set, run_id="run_lease")
+    done.wait(timeout=5)
+
+    run_id, updates = registry.calls[0]
+    metadata = updates["metadata"]
+    assert run_id == "run_lease"
+    assert metadata["worker_token"] == worker_token()
+    assert metadata["worker_pid"] > 0
+    assert "heartbeat_at" in metadata
+    assert metadata["lease_ttl_s"] > 0
+
+
+def test_heartbeat_updates_metadata_while_the_job_is_running(monkeypatch):
+    import time
+
+    from app.config import Config
+    from app.jobs import enqueue
+
+    registry = _patched_registry(monkeypatch)
+    monkeypatch.setattr(Config, "AGORA_JOB_LEASE_HEARTBEAT_INTERVAL_SECONDS", 0.02)
+
+    job_running = threading.Event()
+    release_job = threading.Event()
+
+    def slow_job():
+        job_running.set()
+        release_job.wait(timeout=2)
+
+    enqueue("simulation_prepare", slow_job, run_id="run_hb_tick")
+    assert job_running.wait(timeout=2), "Job-Target lief nie an"
+
+    time.sleep(0.08)  # mindestens ein Heartbeat-Tick bei 0.02s Intervall
+    release_job.set()
+
+    heartbeat_only_updates = [
+        upd
+        for rid, upd in registry.calls
+        if rid == "run_hb_tick"
+        and set(upd.get("metadata", {}).keys()) == {"heartbeat_at"}
+    ]
+    assert heartbeat_only_updates, (
+        "kein periodisches heartbeat_at-Update waehrend der Job lief beobachtet"
+    )
+
+
+def test_heartbeat_thread_stops_after_the_job_completes(monkeypatch):
+    """Heartbeat endet mit dem Job — Erfolgsfall."""
+    import time
+
+    from app.config import Config
+    from app.jobs import enqueue
+
+    _patched_registry(monkeypatch)
+    monkeypatch.setattr(Config, "AGORA_JOB_LEASE_HEARTBEAT_INTERVAL_SECONDS", 0.02)
+    done = threading.Event()
+
+    enqueue("simulation_prepare", done.set, run_id="run_hb_ok")
+    assert done.wait(timeout=5)
+    time.sleep(0.1)  # dem _wrapper()-finally-Block Zeit zum Join geben
+
+    alive = [t for t in threading.enumerate() if t.name == "agora-job-heartbeat-run_hb_ok"]
+    assert alive == [], f"Heartbeat-Thread laeuft nach Job-Ende noch: {alive}"
+
+
+def test_heartbeat_thread_stops_after_the_job_raises(monkeypatch):
+    """Heartbeat endet mit dem Job — auch im Exception-Fall (Anforderung 2)."""
+    import time
+
+    from app.config import Config
+    from app.jobs import enqueue
+
+    _patched_registry(monkeypatch)
+    monkeypatch.setattr(Config, "AGORA_JOB_LEASE_HEARTBEAT_INTERVAL_SECONDS", 0.02)
+    done = threading.Event()
+
+    def boom():
+        done.set()
+        raise RuntimeError("intentional heartbeat-lifecycle test failure")
+
+    enqueue("simulation_prepare", boom, run_id="run_hb_boom")
+    assert done.wait(timeout=5)
+    time.sleep(0.1)
+
+    alive = [t for t in threading.enumerate() if t.name == "agora-job-heartbeat-run_hb_boom"]
+    assert alive == [], f"Heartbeat-Thread laeuft nach Exception noch: {alive}"
+
+
+def test_heartbeat_loop_stops_immediately_once_the_stop_event_is_set():
+    """Direkter Unit-Test von ``_heartbeat_loop`` ohne den vollen enqueue()-Pfad:
+    ``stop_event.wait`` liefert sofort True, kein Warten auf das naechste
+    Intervall (Anforderung: Heartbeat-Intervall deutlich kleiner als TTL, aber
+    der Stop selbst darf nicht am Intervall haengen)."""
+    from app.jobs import _heartbeat_loop
+
+    stop_event = threading.Event()
+    stop_event.set()  # bereits vor dem ersten Tick gesetzt
+
+    thread = threading.Thread(
+        target=_heartbeat_loop, args=("run_x", stop_event, 30.0), daemon=True
+    )
+    thread.start()
+    thread.join(timeout=1)
+
+    assert not thread.is_alive(), "Loop haette sofort beenden muessen"

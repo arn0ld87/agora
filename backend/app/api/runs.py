@@ -17,6 +17,7 @@ from pydantic import ValidationError
 
 from . import runs_bp
 from ..config import Config
+from ..contracts.job_lease_contract import JobLease
 from ..contracts.runs_contract import (
     RunDetail,
     RunsAggregation,
@@ -77,6 +78,44 @@ def _get_run_or_404(run_id: str):
     if not run:
         return None, json_error(f"Run does not exist: {run_id}", status=404)
     return run, None
+
+
+#: Nur diese Registry-Status gelten fuer den Lease-Guard als "laeuft noch"
+#: (Issue #1472, Architekturentscheidung 2026-09-24). ``paused`` bewusst
+#: NICHT enthalten — der Guard schuetzt gegen einen echten Doppelstart eines
+#: In-Process-Jobs, nicht gegen jede Nicht-Endstatus-Variante.
+_LEASE_GUARD_ACTIVE_STATUSES = {"pending", "processing"}
+
+
+def _reject_if_lease_active(run: Mapping[str, Any]):
+    """409, wenn ``run`` nicht-terminal ist UND eine gueltige Lease traegt.
+
+    Issue #1472, Architekturentscheidung 2026-09-24 (Korrektur des
+    urspruenglichen Slices): ein Run mit TERMINALEM Status — insbesondere
+    ``failed``/``process_restart``, von ``reconcile_stale_jobs`` ehrlich als
+    verwaist markiert — darf trotz einer rechnerisch noch nicht abgelaufenen
+    Lease fortgesetzt werden. Sonst waere ein bereits korrekt
+    terminalisierter Job bis zu ``lease_ttl_s`` Sekunden lang blockiert,
+    obwohl er nachweislich nicht mehr laeuft. Nur ein Run, der laut Registry
+    noch "laeuft" (``pending``/``processing``) UND eine unabgelaufene Lease
+    traegt, ist ein echter Doppelstart-Kandidat — unabhaengig davon, ob die
+    Lease diesem Prozess oder einem fremden gehoert (beide Faelle heissen:
+    irgendjemand koennte den Job gerade noch ausfuehren).
+    """
+    if run.get("status") not in _LEASE_GUARD_ACTIVE_STATUSES:
+        return None
+
+    lease = JobLease.from_metadata(run.get("metadata"))
+    if lease is None or lease.is_expired():
+        return None
+
+    return json_error(
+        f"Run {run.get('run_id')} has an active job lease "
+        f"(owner_pid={lease.owner_pid}) — resume is blocked until the lease "
+        "expires or the run reaches a terminal status",
+        status=409,
+        code="job_lease_active",
+    )
 
 
 def _get_run_by_run_or_simulation_id(identifier: str):
@@ -1396,6 +1435,10 @@ def resume_run(run_id: str):
     run, error = _get_run_or_404(run_id)
     if error:
         return error
+
+    lease_error = _reject_if_lease_active(run)
+    if lease_error:
+        return lease_error
 
     run_type = run.get("run_type")
     if run_type == "graph_build":
