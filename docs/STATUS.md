@@ -303,7 +303,7 @@ Aktueller Schwerpunkt:
 - Statische Security-Scans in CI: CodeQL für Python, JS/TS und GitHub-Actions-Workflows (Injection in `run:`-Blöcken), Ruff mit flake8-bandit-Regeln (`S`, Baseline-Ignores für S101/S110/S112/S311/S603/S607 in `backend/pyproject.toml`), Trivy für das Container-Image (blockierend ab HIGH) und für Dockerfile/Compose-Konfiguration (Kategorie `trivy-config`, vorerst nur berichtend).
 - Eine Ablehnung durch dieselbe Policy gibt die untrusted URL nicht mehr weiter: `OutboundRequestBlocked` trägt in der Message nur den Grund und in `.url` nur die sichere Herkunft (Schema, Host, ggf. Port). Die frühere Userinfo-Redaktion ließ Token in Query, Fragment und Pfad stehen.
 
-Bekannt offen: Simulation-`observation` wird noch nicht überall so strikt als untrusted Prompt-Input getrennt, wie für Prompt-Injection-Härtung gewünscht ([#1224](https://github.com/arn0ld87/agora/issues/1224)).
+Der Single-Platform-Tool-Loop (`ToolAwareActionLoop.decide_action` in `backend/scripts/agent_tools.py`, genutzt von `run_twitter_simulation.py`/`run_reddit_simulation.py` bei aktivierten Agent-Tools) kapselt seit [#1224](https://github.com/arn0ld87/agora/issues/1224) sowohl die OASIS-Observation als auch Tool-Ergebnisse (`web_search`/`web_fetch`) in `<untrusted_data source="...">...</untrusted_data>` und neutralisiert darin eingeschleuste Loop-Steuer-Tags sowie bare `{"action": ...}`-JSON, bevor der Prompt an das Modell geht. **Nicht abgedeckt** bleibt der parallele Simulationspfad (`run_parallel_simulation.py`, `tool_loop = None`): dort laufen Agentenaktionen über natives CAMEL-`LLMAction()` statt über diese Agora-Prompt-Assembly, eine dort fehlende Trust-Boundary wäre OASIS-intern und nicht Teil dieses Fixes.
 
 ## Simulationstreue und Reproduzierbarkeit
 
