@@ -581,6 +581,11 @@ class TestPostgresBackupAndRestore:
 
     #: Kein AGORA_*_BACKEND=postgres, keine DATABASE_URL — der Normalfall, in
     #: dem dieses Skript heute lief (Default ueberall Legacy).
+    _ACTIVE_POSTGRES_ENV = {
+        "AGORA_PROJECT_BACKEND": "postgres",
+        "DATABASE_URL": "postgresql+psycopg://user:geheim@127.0.0.1:5432/agora",
+    }
+
     _NO_POSTGRES_ENV = {
         "AGORA_METADATA_BACKEND": None,
         "AGORA_LLM_PROFILE_BACKEND": None,
@@ -588,7 +593,10 @@ class TestPostgresBackupAndRestore:
         "DATABASE_URL": None,
     }
 
-    def test_pg_restore_is_part_of_the_documented_all_sequence(self, tmp_path) -> None:
+    def test_postgres_restore_runs_before_the_application_starts(self, tmp_path) -> None:
+        """Codex-Review auf #1602: der PostgreSQL-Restore gehoert in die
+        Restore-Phase vor ``docker compose up -d`` — sonst startet die App
+        gegen ein leeres oder halb restauriertes Schema."""
         protocol = tmp_path / "drill.log"
 
         result = _run(
@@ -597,18 +605,16 @@ class TestPostgresBackupAndRestore:
             *_targets(tmp_path),
             "--protocol", str(protocol),
             "--dry-run",
-            env=self._NO_POSTGRES_ENV,
+            env=self._ACTIVE_POSTGRES_ENV,
         )
 
         assert result.returncode == 0, result.stdout + result.stderr
         text = protocol.read_text(encoding="utf-8")
-        order = [
-            text.index("Phase 1/5 — Backup"),
-            text.index("Phase 2/5 — Restore"),
-            text.index("PostgreSQL-Restore (#1583)"),
-            text.index("Phase 3/5 — Verifikation"),
-        ]
-        assert order == sorted(order), "pg_restore steht nicht zwischen Restore und Verifikation"
+        restore = text.index("Phase 2/5 — Restore")
+        pg_restore = text.index("pg_restore --host=", restore)
+        app_start = text.index("$ docker compose up -d\n", restore)
+        verify = text.index("Phase 3/5 — Verifikation")
+        assert restore < pg_restore < app_start < verify
 
     def test_pg_restore_is_a_no_op_without_an_active_postgres_backend(
         self, tmp_path
@@ -625,7 +631,7 @@ class TestPostgresBackupAndRestore:
 
         assert result.returncode == 0, result.stdout + result.stderr
         text = protocol.read_text(encoding="utf-8")
-        assert "uebersprungen: kein AGORA_*_BACKEND=postgres aktiv" in text
+        assert "PostgreSQL-Restore uebersprungen: kein AGORA_*_BACKEND=postgres aktiv" in text
         assert "pg_restore --host=" not in text
 
     def test_backup_skips_postgres_without_an_active_backend(self, tmp_path) -> None:
@@ -666,8 +672,8 @@ class TestPostgresBackupAndRestore:
         text = protocol.read_text(encoding="utf-8")
         assert "Aktive PostgreSQL-Backends: PROJECT_BACKEND" in text
         assert "pg_dump --host=" in text
-        assert "-n agora -Fc" in text
-        assert "postgres_backup_manifest.py" in text
+        assert "-n agora -Fc --snapshot=" in text
+        assert "postgres-manifest.json" in text
         # Das Passwort aus DATABASE_URL darf im Dry-Run nirgendwo auftauchen —
         # die Zerlegung ueber pg_cli laeuft im Dry-Run erst gar nicht.
         assert "geheim" not in text
@@ -692,6 +698,7 @@ class TestPostgresBackupAndRestore:
         text = protocol.read_text(encoding="utf-8")
         assert "pg_restore --host=" in text
         assert "--clean --if-exists" in text
+        assert "alembic stamp" in text
         assert "geheim" not in text
 
     def test_backup_fails_hard_when_active_but_database_url_is_missing(
@@ -712,6 +719,15 @@ class TestPostgresBackupAndRestore:
 
         assert result.returncode == 1
         assert "DATABASE_URL ist nicht gesetzt" in protocol.read_text(encoding="utf-8")
+
+    def test_verify_omits_the_manifest_option_for_an_old_verifier(self, tmp_path) -> None:
+        """Codex-Review auf #1602: nach ``--rollback-ref`` auf einen Stand vor
+        #1583 kennt restore_verify.py ``--postgres-manifest`` nicht. Das
+        Skript reicht die Option nur weiter, wenn der Pruefer sie kennt."""
+        script = (REPO_ROOT / "scripts" / "restore-drill.sh").read_text(encoding="utf-8")
+
+        assert "grep -q -- '--postgres-manifest'" in script
+        assert 'verify_args+=(--postgres-manifest' in script
 
 
 class TestRedaction:

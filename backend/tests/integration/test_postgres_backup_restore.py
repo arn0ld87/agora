@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 import uuid
 from pathlib import Path
 from typing import Iterator
@@ -33,7 +34,6 @@ from app.infrastructure.postgres.repositories.project_repository import (
     PostgresProjectRepository,
 )
 from app.infrastructure.postgres.session import Database
-from scripts.postgres_backup_manifest import build_manifest
 from scripts.restore_verify import run_verification
 
 pytestmark = pytest.mark.integration
@@ -107,29 +107,36 @@ def source_db(postgres_database_url: str) -> Iterator[Database]:
         database.dispose()
 
 
-def _run_pg_cli(tool: str, database_url: str, dump_path: Path) -> None:
-    """Derselbe Weg wie ``restore-drill.sh``: ``pg_cli`` startet das Werkzeug
-    selbst, das Passwort geht nur über ``PGPASSWORD`` an den Kindprozess."""
-    with mock.patch.dict(os.environ, {'DATABASE_URL': database_url}):
-        assert pg_cli.main([tool, '--file', str(dump_path)]) == 0
+def _run_pg_cli(tool: str, database_url: str, dump_path: Path, manifest_path: Path) -> None:
+    """Derselbe Weg wie ``restore-drill.sh``: ``pg_cli`` liest ``DATABASE_URL``
+    aus ``Config`` und startet das Werkzeug selbst."""
+    with mock.patch.object(Config, 'DATABASE_URL', database_url):
+        assert pg_cli.main(
+            [tool, '--file', str(dump_path), '--manifest', str(manifest_path)]
+        ) == 0
 
 
-def _dump(source_url: str, dump_path: Path) -> None:
-    _run_pg_cli('dump', source_url, dump_path)
+def _dump(source_url: str, dump_path: Path, manifest_path: Path) -> dict:
+    """Dump und Manifest aus einem Snapshot (``pg_cli dump``)."""
+    _run_pg_cli('dump', source_url, dump_path, manifest_path)
+    return json.loads(manifest_path.read_text(encoding='utf-8'))
 
 
-def _restore(target_url: str, dump_path: Path) -> None:
-    _run_pg_cli('restore', target_url, dump_path)
+def _restore(target_url: str, dump_path: Path, manifest_path: Path) -> None:
+    """``pg_restore`` plus Nachstempeln der Revision (``pg_cli restore``)."""
+    _run_pg_cli('restore', target_url, dump_path, manifest_path)
 
 
-def _stamp(target_url: str, revision: str, monkeypatch) -> None:
-    """Was ``restore-drill.sh`` nach ``pg_restore`` tut: ``alembic_version``
-    liegt in ``public`` und ist nicht im Dump, also wird die Revision aus dem
-    Manifest nachgestempelt."""
-    config = AlembicConfig(str(MIGRATIONS_DIR / 'alembic.ini'))
-    config.set_main_option('script_location', str(MIGRATIONS_DIR))
-    monkeypatch.setenv('DATABASE_URL', target_url)
-    command.stamp(config, revision)
+def _restore_without_stamp(target_url: str, dump_path: Path) -> None:
+    """Nur ``pg_restore`` — der Zustand, vor dem die Verifikation warnen muss."""
+    params = pg_cli.parse_connection_params(target_url)
+    result = subprocess.run(
+        pg_cli.build_command('restore', params, str(dump_path)),
+        env={**os.environ, **params.environ()},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def _write_project_directory(root: Path, project_id: str) -> None:
@@ -156,14 +163,11 @@ class TestRoundtrip:
         uploads = tmp_path / 'uploads'
         _write_project_directory(uploads, project.project_id)
 
-        manifest = build_manifest(str(source_db._url))  # noqa: SLF001 - Testzugriff auf den Adapter
         manifest_path = tmp_path / 'postgres-manifest.json'
-        manifest_path.write_text(json.dumps(manifest), encoding='utf-8')
-
         dump_path = tmp_path / 'postgres.dump'
-        _dump(str(source_db._url), dump_path)  # noqa: SLF001
-        _restore(target_database_url, dump_path)
-        _stamp(target_database_url, manifest['revision'], monkeypatch)
+        manifest = _dump(str(source_db._url), dump_path, manifest_path)  # noqa: SLF001
+        assert manifest['row_counts']['projects'] == 1
+        _restore(target_database_url, dump_path, manifest_path)
 
         monkeypatch.setattr(Config, 'DATABASE_URL', target_database_url)
         monkeypatch.setattr(Config, 'PROJECT_BACKEND', 'postgres')
@@ -201,13 +205,13 @@ class TestRoundtripCatchesDrift:
         uploads = tmp_path / 'uploads'
         _write_project_directory(uploads, project.project_id)
 
-        manifest = build_manifest(str(source_db._url))  # noqa: SLF001
-
         dump_path = tmp_path / 'postgres.dump'
-        _dump(str(source_db._url), dump_path)  # noqa: SLF001
-        _restore(target_database_url, dump_path)
+        dump_manifest = tmp_path / 'dump-manifest.json'
+        manifest = _dump(str(source_db._url), dump_path, dump_manifest)  # noqa: SLF001
         if stamp:
-            _stamp(target_database_url, manifest['revision'], monkeypatch)
+            _restore(target_database_url, dump_path, dump_manifest)
+        else:
+            _restore_without_stamp(target_database_url, dump_path)
 
         return uploads, manifest
 
@@ -348,3 +352,63 @@ class TestRoundtripCatchesDrift:
         )
         assert not check.ok
         assert 'Datenbank=keine' in check.detail
+
+
+class TestSnapshotConsistency:
+    def test_a_write_during_the_dump_does_not_skew_the_manifest(
+        self, tmp_path, source_db, target_database_url, monkeypatch
+    ) -> None:
+        """Codex-Review auf #1602: Dump und Manifest stammen aus demselben
+        Snapshot. Ein Schreibvorgang, während pg_dump läuft, taucht in keinem
+        von beiden auf — die Verifikation nach dem Restore bleibt grün."""
+        _require_pg_binaries()
+        PostgresProjectRepository(database=source_db).add_existing(
+            Project(
+                project_id='proj_1583snapvor',
+                name='vorher',
+                created_at='2026-01-01T00:00:00',
+                updated_at='2026-01-01T00:00:00',
+            )
+        )
+        uploads = tmp_path / 'uploads'
+        _write_project_directory(uploads, 'proj_1583snapvor')
+
+        real_run = subprocess.run
+
+        def run_with_concurrent_write(cmd, **kwargs):
+            if cmd and cmd[0] == 'pg_dump':
+                PostgresProjectRepository(database=source_db).add_existing(
+                    Project(
+                        project_id='proj_1583snapdanach',
+                        name='waehrend des Dumps',
+                        created_at='2026-01-02T00:00:00',
+                        updated_at='2026-01-02T00:00:00',
+                    )
+                )
+            return real_run(cmd, **kwargs)
+
+        monkeypatch.setattr(pg_cli.subprocess, 'run', run_with_concurrent_write)
+        manifest_path = tmp_path / 'postgres-manifest.json'
+        dump_path = tmp_path / 'postgres.dump'
+        manifest = _dump(str(source_db._url), dump_path, manifest_path)  # noqa: SLF001
+        monkeypatch.setattr(pg_cli.subprocess, 'run', real_run)
+
+        assert manifest['row_counts']['projects'] == 1
+        _restore(target_database_url, dump_path, manifest_path)
+
+        monkeypatch.setattr(Config, 'DATABASE_URL', target_database_url)
+        reset_database()
+        try:
+            report = run_verification(
+                uploads,
+                uploads,
+                postgres_manifest=manifest_path,
+                migrations_dir=MIGRATIONS_DIR,
+                require_postgres=True,
+            )
+        finally:
+            reset_database()
+
+        checks = {c.name: c for c in report.checks if c.section == 'PostgreSQL'}
+        for name, check in checks.items():
+            assert check.ok, f'{name}: {check.detail}'

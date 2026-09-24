@@ -45,27 +45,61 @@ def test_commands_carry_no_password():
     assert not any('geheim' in arg for arg in dump + restore)
 
 
-def test_main_passes_password_only_via_child_environment(monkeypatch, capsys):
+def test_main_passes_password_only_via_child_environment(monkeypatch, capsys, tmp_path):
     """CodeQL-Befund auf #1602: das Passwort darf nie auf stdout landen."""
-    monkeypatch.setenv('DATABASE_URL', 'postgresql+psycopg://agora:geheim@db:5432/agora')
+    from app.config import Config
+
+    monkeypatch.setattr(
+        Config, 'DATABASE_URL', 'postgresql+psycopg://agora:geheim@db:5432/agora'
+    )
+    manifest = tmp_path / 'postgres-manifest.json'
+    manifest.write_text('{"revision": "abc123", "row_counts": {}}', encoding='utf-8')
     calls = []
+    stamped = []
 
     def fake_run(cmd, env, check):
         calls.append((cmd, env))
         return subprocess.CompletedProcess(cmd, 0)
 
-    with mock.patch.object(pg_cli.subprocess, 'run', fake_run):
-        assert pg_cli.main(['dump', '--file', '/b/postgres.dump']) == 0
+    with mock.patch.object(pg_cli.subprocess, 'run', fake_run), mock.patch(
+        'alembic.command.stamp', lambda config, revision: stamped.append(revision)
+    ):
+        assert pg_cli.main(
+            ['restore', '--file', '/b/postgres.dump', '--manifest', str(manifest)]
+        ) == 0
 
     (cmd, env), = calls
     assert env['PGPASSWORD'] == 'geheim'
     assert 'DATABASE_URL' not in env
     assert not any('geheim' in arg for arg in cmd)
+    assert stamped == ['abc123']
     out = capsys.readouterr()
     assert 'geheim' not in out.out and 'geheim' not in out.err
 
 
 def test_main_without_database_url_fails(monkeypatch):
-    monkeypatch.delenv('DATABASE_URL', raising=False)
+    from app.config import Config
 
-    assert pg_cli.main(['restore', '--file', '/b/postgres.dump']) == 1
+    monkeypatch.setattr(Config, 'DATABASE_URL', '')
+
+    assert pg_cli.main(['restore', '--file', '/b/x.dump', '--manifest', '/b/m.json']) == 1
+
+
+def test_status_reports_missing_url_for_an_active_backend(monkeypatch, capsys):
+    """Codex-Review auf #1602: die Entscheidung kommt aus ``Config`` (inkl.
+    ``.env``), nicht aus der Umgebung der aufrufenden Shell."""
+    from app.config import Config
+
+    monkeypatch.setattr(Config, 'PROJECT_BACKEND', 'postgres')
+    monkeypatch.setattr(Config, 'DATABASE_URL', '')
+
+    assert pg_cli.main(['status']) == pg_cli.EXIT_MISSING_URL
+    assert 'PROJECT_BACKEND' in capsys.readouterr().out
+
+
+def test_dump_command_pins_the_exported_snapshot():
+    params = parse_connection_params('postgresql+psycopg://agora@db:5432/agora')
+
+    command = build_command('dump', params, '/b/postgres.dump', snapshot='00000003-1')
+
+    assert '--snapshot=00000003-1' in command

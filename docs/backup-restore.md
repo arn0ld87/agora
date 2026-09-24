@@ -144,11 +144,11 @@ pg_dump --host=<host> --port=<port> --username=<user> --dbname=<db> \
   -n agora -Fc -f postgres.dump
 ```
 
-Nur das Fachschema `agora` — kein Cluster-Dump, keine Rollen, kein `public`. Das Passwort geht ausschließlich über die Umgebungsvariable `PGPASSWORD` an `pg_dump`, nie als Kommandozeilenargument und nie ins Protokoll (`app/infrastructure/postgres/pg_cli.py` zerlegt `DATABASE_URL` dafür in seine Bestandteile).
+Nur das Fachschema `agora` — kein Cluster-Dump, keine Rollen, kein `public`. `DATABASE_URL` kommt aus der Umgebung oder der `.env` des Repositorys, wie für die Anwendung. Das Passwort geht ausschließlich über die Umgebungsvariable `PGPASSWORD` an `pg_dump`, nie als Kommandozeilenargument, nie über `stdout` und nie ins Protokoll: `app/infrastructure/postgres/pg_cli.py` startet die Werkzeuge selbst.
 
-Direkt danach entsteht `postgres-manifest.json` (`backend/scripts/postgres_backup_manifest.py`): die Alembic-Revision, auf der die Quelldatenbank *zum Zeitpunkt des Backups* tatsächlich stand, und die Zeilenzahl je Tabelle in `agora`. `restore_verify.py` prüft nach dem Restore genau dagegen — ohne dieses Manifest könnte es nur feststellen, DASS eine Datenbank existiert, nicht ob sie den erwarteten Stand hat.
+Zusammen mit dem Dump entsteht `postgres-manifest.json` (`app/infrastructure/postgres/backup_manifest.py`): die Alembic-Revision und die Zeilenzahl je Tabelle in `agora`. `pg_cli dump` exportiert dafür in einer `REPEATABLE READ`-Transaktion einen Snapshot, lässt `pg_dump --snapshot` darauf laufen und erhebt das Manifest in derselben Transaktion — Dump und Manifest beschreiben denselben Stand, auch wenn währenddessen geschrieben wird. `restore_verify.py` prüft nach dem Restore genau dagegen.
 
-**Die Alembic-Revision wird nach dem Restore nachgestempelt.** Die Versionstabelle `alembic_version` liegt in `public`, nicht in `agora` (`backend/migrations/env.py`), und ist deshalb nie Teil von `pg_dump -n agora`. Ohne sie verweigert das Start-Gate (#1582) den App-Start. Die Phase `pg_restore` führt deshalb nach dem Restore `alembic stamp <revision aus postgres-manifest.json>` aus; `restore_verify.py` prüft anschließend, dass Manifest-Revision, Revision der restaurierten Datenbank und Code-Head übereinstimmen.
+**Die Alembic-Revision wird nach dem Restore nachgestempelt.** Die Versionstabelle `alembic_version` liegt in `public`, nicht in `agora` (`backend/migrations/env.py`), und ist deshalb nie Teil von `pg_dump -n agora`. Ohne sie verweigert das Start-Gate (#1582) den App-Start. Der Restore-Schritt (`pg_cli restore`, in `--phase restore` vor dem App-Start) stempelt deshalb danach die Revision aus `postgres-manifest.json`; `restore_verify.py` prüft anschließend, dass Manifest-Revision, Revision der restaurierten Datenbank und Code-Head übereinstimmen.
 
 Sekundäre Secrets im Fachschema — verschlüsselte Referenzen, keine Klartext-Master-Keys — laufen mit dem Dump; `AGORA_SECRET_KEY` selbst nicht (siehe oben).
 
