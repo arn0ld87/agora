@@ -14,10 +14,10 @@ from __future__ import annotations
 import json
 import os
 import shutil
-import subprocess
 import uuid
 from pathlib import Path
 from typing import Iterator
+from unittest import mock
 
 import pytest
 from alembic import command
@@ -28,7 +28,7 @@ from sqlalchemy.engine import make_url
 from app.config import Config
 from app.contracts import Project
 from app.infrastructure.postgres import reset_database
-from app.infrastructure.postgres.pg_cli import parse_connection_params
+from app.infrastructure.postgres import pg_cli
 from app.infrastructure.postgres.repositories.project_repository import (
     PostgresProjectRepository,
 )
@@ -107,41 +107,19 @@ def source_db(postgres_database_url: str) -> Iterator[Database]:
         database.dispose()
 
 
+def _run_pg_cli(tool: str, database_url: str, dump_path: Path) -> None:
+    """Derselbe Weg wie ``restore-drill.sh``: ``pg_cli`` startet das Werkzeug
+    selbst, das Passwort geht nur über ``PGPASSWORD`` an den Kindprozess."""
+    with mock.patch.dict(os.environ, {'DATABASE_URL': database_url}):
+        assert pg_cli.main([tool, '--file', str(dump_path)]) == 0
+
+
 def _dump(source_url: str, dump_path: Path) -> None:
-    params = parse_connection_params(source_url)
-    env = dict(os.environ)
-    env.update(params.environ())
-    result = subprocess.run(
-        [
-            _PG_DUMP,
-            *params.cli_args(),
-            '-n', 'agora',
-            '-Fc',
-            '-f', str(dump_path),
-        ],
-        capture_output=True,
-        text=True,
-        env=env,
-    )
-    assert result.returncode == 0, result.stderr
+    _run_pg_cli('dump', source_url, dump_path)
 
 
 def _restore(target_url: str, dump_path: Path) -> None:
-    params = parse_connection_params(target_url)
-    env = dict(os.environ)
-    env.update(params.environ())
-    result = subprocess.run(
-        [
-            _PG_RESTORE,
-            *params.cli_args(),
-            '--clean', '--if-exists',
-            str(dump_path),
-        ],
-        capture_output=True,
-        text=True,
-        env=env,
-    )
-    assert result.returncode == 0, result.stderr
+    _run_pg_cli('restore', target_url, dump_path)
 
 
 def _stamp(target_url: str, revision: str, monkeypatch) -> None:

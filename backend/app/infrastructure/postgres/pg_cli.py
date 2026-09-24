@@ -9,18 +9,20 @@ geloggt.
 
 Aufruf aus der Shell (siehe ``scripts/restore-drill.sh``)::
 
-    uv run python -m app.infrastructure.postgres.pg_cli
+    uv run python -m app.infrastructure.postgres.pg_cli dump --file postgres.dump
+    uv run python -m app.infrastructure.postgres.pg_cli restore --file postgres.dump
 
 liest ``DATABASE_URL`` aus der Umgebung (bewusst nicht aus ``argv`` — sonst
-stünde das Passwort in jeder Prozessliste) und schreibt fünf Zeilen auf
-``stdout``: ``host``, ``port``, ``user``, ``dbname``, ``password``. Der
-Aufrufer liest sie in Variablen ein und darf sie an keiner Stelle selbst
-loggen oder als Kommandozeilenargument weiterreichen.
+stünde das Passwort in jeder Prozessliste) und startet ``pg_dump`` bzw.
+``pg_restore`` selbst. Das Passwort verlässt diesen Prozess ausschließlich
+über die Umgebung des Kindprozesses — nie über ``stdout``, nie als Argument.
 """
 
 from __future__ import annotations
 
+import argparse
 import os
+import subprocess
 import sys
 from dataclasses import dataclass
 
@@ -73,20 +75,37 @@ def parse_connection_params(database_url: str) -> PgConnectionParams:
     )
 
 
-def main() -> int:
-    """CLI-Einstieg für ``restore-drill.sh``: fünf Zeilen auf ``stdout``."""
+def build_command(tool: str, params: PgConnectionParams, dump_file: str) -> list[str]:
+    """Die Befehlszeile für ``pg_dump``/``pg_restore`` — ohne Passwort."""
+    if tool == 'dump':
+        return ['pg_dump', *params.cli_args(), '-n', 'agora', '-Fc', '-f', dump_file]
+    if tool == 'restore':
+        return ['pg_restore', *params.cli_args(), '--clean', '--if-exists', dump_file]
+    raise ValueError(f'unbekanntes Werkzeug: {tool}')
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI-Einstieg für ``restore-drill.sh``: führt ``pg_dump``/``pg_restore`` aus."""
+    parser = argparse.ArgumentParser(description='pg_dump/pg_restore für das Schema agora')
+    parser.add_argument('tool', choices=('dump', 'restore'))
+    parser.add_argument('--file', required=True, help='Pfad des Custom-Format-Archivs')
+    args = parser.parse_args(argv)
+
     raw = os.environ.get('DATABASE_URL', '')
     if not raw.strip():
-        print('DATABASE_URL is not set', file=sys.stderr)
+        sys.stderr.write('DATABASE_URL is not set\n')
         return 1
     try:
         params = parse_connection_params(raw)
     except Exception as exc:  # noqa: BLE001 - Fehlermeldung ohne Rohwert der URL
-        print(f'DATABASE_URL konnte nicht zerlegt werden: {type(exc).__name__}', file=sys.stderr)
+        sys.stderr.write(f'DATABASE_URL konnte nicht zerlegt werden: {type(exc).__name__}\n')
         return 1
-    for value in (params.host, params.port, params.user, params.dbname, params.password):
-        print(value)
-    return 0
+
+    env = {**os.environ, **params.environ()}
+    # DATABASE_URL trägt das Passwort ebenfalls; der Kindprozess braucht sie nicht.
+    env.pop('DATABASE_URL', None)
+    completed = subprocess.run(build_command(args.tool, params, args.file), env=env, check=False)
+    return completed.returncode
 
 
 if __name__ == '__main__':

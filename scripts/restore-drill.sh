@@ -46,7 +46,8 @@
 # steht (app/infrastructure/postgres/backends.py::any_postgres_backend).
 # `DATABASE_URL` muss dafür gesetzt sein. Das Passwort geht ausschließlich
 # über die Umgebungsvariable `PGPASSWORD` an `pg_dump`/`pg_restore` — nie als
-# Kommandozeilenargument, nie ins Protokoll.
+# Kommandozeilenargument, nie ins Protokoll (pg_cli startet die Werkzeuge
+# selbst und reicht das Passwort nur an den Kindprozess weiter).
 #
 # Exit-Codes:
 #   0  Drill vollständig grün
@@ -312,21 +313,11 @@ backup_postgres() {
     return 0
   fi
 
-  # DATABASE_URL zerlegen, ohne das Passwort je als Argument oder auf stdout
-  # (ausser in diese Variablen) zu haben. `postgresql+psycopg://` versteht
-  # kein pg_dump — pg_cli liest deshalb nur die Bestandteile aus.
-  local conn pg_host pg_port pg_user pg_db pg_pass
-  mapfile -t conn < <(cd "$REPO_ROOT/backend" && uv run python -m app.infrastructure.postgres.pg_cli)
-  if [ "${#conn[@]}" -lt 5 ]; then
-    fail "DATABASE_URL konnte nicht zerlegt werden (pg_cli lieferte ${#conn[@]} Zeile(n))"
-  fi
-  pg_host="${conn[0]}"; pg_port="${conn[1]}"; pg_user="${conn[2]}"
-  pg_db="${conn[3]}"; pg_pass="${conn[4]}"
-
-  export PGPASSWORD="$pg_pass"
-  run pg_dump --host="$pg_host" --port="$pg_port" --username="$pg_user" --dbname="$pg_db" \
-    -n agora -Fc -f "$BACKUP_DIR/postgres.dump"
-  unset PGPASSWORD
+  # pg_cli ruft pg_dump selbst auf: DATABASE_URL wird in Python zerlegt, das
+  # Passwort erreicht pg_dump nur über PGPASSWORD im Kindprozess — nie über
+  # stdout, nie als Argument, nie ins Protokoll.
+  (cd "$REPO_ROOT/backend" && run uv run python -m app.infrastructure.postgres.pg_cli \
+    dump --file "$BACKUP_DIR/postgres.dump")
   [ -f "$BACKUP_DIR/postgres.dump" ] || fail "pg_dump hat keine Datei erzeugt: $BACKUP_DIR/postgres.dump"
   chmod 0600 "$BACKUP_DIR/postgres.dump"
 
@@ -434,18 +425,8 @@ phase_pg_restore() {
     log "    Prüfsumme bestätigt: postgres.dump"
   fi
 
-  local conn pg_host pg_port pg_user pg_db pg_pass
-  mapfile -t conn < <(cd "$REPO_ROOT/backend" && uv run python -m app.infrastructure.postgres.pg_cli)
-  if [ "${#conn[@]}" -lt 5 ]; then
-    fail "DATABASE_URL konnte nicht zerlegt werden (pg_cli lieferte ${#conn[@]} Zeile(n))"
-  fi
-  pg_host="${conn[0]}"; pg_port="${conn[1]}"; pg_user="${conn[2]}"
-  pg_db="${conn[3]}"; pg_pass="${conn[4]}"
-
-  export PGPASSWORD="$pg_pass"
-  run pg_restore --host="$pg_host" --port="$pg_port" --username="$pg_user" --dbname="$pg_db" \
-    --clean --if-exists "$BACKUP_DIR/postgres.dump"
-  unset PGPASSWORD
+  (cd "$REPO_ROOT/backend" && run uv run python -m app.infrastructure.postgres.pg_cli \
+    restore --file "$BACKUP_DIR/postgres.dump")
 
   # alembic_version liegt in `public` und ist nicht im Dump (-n agora). Ohne
   # Nachstempeln verweigert das Start-Gate (#1582) den App-Start. Die
