@@ -63,7 +63,7 @@ Backup-Verzeichnis und Archive entstehen mit `0700` beziehungsweise `0600`. Sie 
 
 `llm_profiles.db` läuft mit `journal_mode=WAL`. Zur Laufzeit besteht sie aus `.db`, `.db-wal` und `.db-shm`; ein reines `tar` würde den Zwischenzustand einfrieren, in dem die letzten Schreibvorgänge noch im WAL stehen. Die Backup-Phase setzt deshalb vorher `PRAGMA wal_checkpoint(TRUNCATE)`. Fehlt `sqlite3` auf dem Host, steht eine Warnung im Protokoll und das Archiv ist entsprechend weniger wert.
 
-Einzelne Phasen (`--phase backup|restore|verify|upgrade|rollback`) lassen sich getrennt fahren, wenn ein Durchgang abbricht und nur ein Teil zu wiederholen ist.
+Einzelne Phasen (`--phase backup|restore|pg_restore|verify|upgrade|rollback`) lassen sich getrennt fahren, wenn ein Durchgang abbricht und nur ein Teil zu wiederholen ist.
 
 ### Was gesichert wird
 
@@ -76,6 +76,18 @@ Drei Verzeichnisse, je ein Archiv — dieselben, die `docs/backup-restore.md` mi
 | `--instance-dir` | `backend/instance` | `instance.tar.gz` | Instanzsettings |
 
 Die Restore-Phase spielt sie in der dokumentierten Recovery-Reihenfolge zurück (Stores, Instanz, Artefakte, dann Neo4j) und kopiert den Neo4j-Dump vor dem `database load` zurück in den neu gestarteten Container — `docker compose down` nimmt den alten mitsamt seinem `/backups` mit.
+
+### PostgreSQL (#1583)
+
+Nur wenn mindestens ein `AGORA_*_BACKEND` auf `postgres` steht (`app/infrastructure/postgres/backends.py::any_postgres_backend`) — Default ist überall Legacy, dann ist dieser Teil ein reiner No-Op und das Protokoll sagt das auch so.
+
+`--phase backup` sichert zusätzlich zu den drei Archiven `postgres.dump` (`pg_dump -n agora -Fc`, nur das Fachschema) und `postgres-manifest.json` (Alembic-Revision der Quelldatenbank zum Backup-Zeitpunkt plus Zeilenzahl je Tabelle in `agora`, aus `backend/scripts/postgres_backup_manifest.py`). Beide bekommen dieselben Rechte (`0600`) und denselben Prüfsummen-Eintrag im Manifest wie die drei Tarballs.
+
+`--phase pg_restore` — eine eigene Phase, nicht Teil von `--phase restore`, weil sie eine erreichbare Datenbank statt eines Compose-Stacks braucht — spielt `postgres.dump` per `pg_restore --clean --if-exists` zurück und stempelt danach die Alembic-Revision aus `postgres-manifest.json` (`alembic stamp`), weil `public.alembic_version` nicht im Dump liegt — ohne sie verweigert das Start-Gate aus #1582 den App-Start. Sie läuft in der `all`-Sequenz zwischen `restore` und `verify`, denn PostgreSQL muss restauriert sein, **bevor** die App startet.
+
+`--phase verify` reicht `postgres-manifest.json` an `restore_verify.py` weiter (`--postgres-manifest`); das Skript prüft Revision (Manifest, restaurierte Datenbank, Code-Head), Zeilenzahlen und Metadaten-→Datei-Referenzen nur, wenn Postgres tatsächlich aktiv ist.
+
+Das Passwort aus `DATABASE_URL` geht in beiden Phasen ausschließlich über `PGPASSWORD` an `pg_dump`/`pg_restore` — nie als Kommandozeilenargument, nie ins Protokoll. `app/infrastructure/postgres/pg_cli.py` zerlegt die URL dafür; die Zerlegung selbst läuft nie im Dry-Run, dort steht nur die Befehlszeile mit Platzhaltern im Protokoll.
 
 ### Vor dem Lauf prüfen
 

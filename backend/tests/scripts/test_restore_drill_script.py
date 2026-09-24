@@ -571,6 +571,149 @@ class TestRestoreRejectsCorruptedArchive:
         assert "Prüfsumme weicht ab" in protocol.read_text(encoding="utf-8")
 
 
+class TestPostgresBackupAndRestore:
+    """PostgreSQL-Phasen (#1583). Ein echter pg_dump/pg_restore-Durchlauf
+    braucht eine erreichbare Datenbank — der lebt in
+    ``backend/tests/integration/test_postgres_backup_restore.py``. Hier laeuft
+    nur der Ablauf: Skip ohne aktiven Postgres-Backend, Dry-Run-Kommandos mit
+    aktivem Backend, und dass ohne ``DATABASE_URL`` hart fehlgeschlagen wird
+    statt stillschweigend uebersprungen."""
+
+    #: Kein AGORA_*_BACKEND=postgres, keine DATABASE_URL — der Normalfall, in
+    #: dem dieses Skript heute lief (Default ueberall Legacy).
+    _NO_POSTGRES_ENV = {
+        "AGORA_METADATA_BACKEND": None,
+        "AGORA_LLM_PROFILE_BACKEND": None,
+        "AGORA_PROJECT_BACKEND": None,
+        "DATABASE_URL": None,
+    }
+
+    def test_pg_restore_is_part_of_the_documented_all_sequence(self, tmp_path) -> None:
+        protocol = tmp_path / "drill.log"
+
+        result = _run(
+            "--phase", "all",
+            "--backup-dir", str(tmp_path / "backup"),
+            *_targets(tmp_path),
+            "--protocol", str(protocol),
+            "--dry-run",
+            env=self._NO_POSTGRES_ENV,
+        )
+
+        assert result.returncode == 0, result.stdout + result.stderr
+        text = protocol.read_text(encoding="utf-8")
+        order = [
+            text.index("Phase 1/5 — Backup"),
+            text.index("Phase 2/5 — Restore"),
+            text.index("PostgreSQL-Restore (#1583)"),
+            text.index("Phase 3/5 — Verifikation"),
+        ]
+        assert order == sorted(order), "pg_restore steht nicht zwischen Restore und Verifikation"
+
+    def test_pg_restore_is_a_no_op_without_an_active_postgres_backend(
+        self, tmp_path
+    ) -> None:
+        protocol = tmp_path / "drill.log"
+
+        result = _run(
+            "--phase", "pg_restore",
+            "--backup-dir", str(tmp_path / "backup"),
+            "--protocol", str(protocol),
+            "--dry-run",
+            env=self._NO_POSTGRES_ENV,
+        )
+
+        assert result.returncode == 0, result.stdout + result.stderr
+        text = protocol.read_text(encoding="utf-8")
+        assert "uebersprungen: kein AGORA_*_BACKEND=postgres aktiv" in text
+        assert "pg_restore --host=" not in text
+
+    def test_backup_skips_postgres_without_an_active_backend(self, tmp_path) -> None:
+        protocol = tmp_path / "drill.log"
+
+        result = _run(
+            "--phase", "backup",
+            "--backup-dir", str(tmp_path / "backup"),
+            *_targets(tmp_path),
+            "--protocol", str(protocol),
+            "--dry-run",
+            env=self._NO_POSTGRES_ENV,
+        )
+
+        assert result.returncode == 0, result.stdout + result.stderr
+        text = protocol.read_text(encoding="utf-8")
+        assert "PostgreSQL-Backup uebersprungen: kein AGORA_*_BACKEND=postgres aktiv" in text
+        assert "pg_dump --host=" not in text
+
+    def test_backup_shows_the_pg_dump_command_when_a_backend_is_active(
+        self, tmp_path
+    ) -> None:
+        protocol = tmp_path / "drill.log"
+
+        result = _run(
+            "--phase", "backup",
+            "--backup-dir", str(tmp_path / "backup"),
+            *_targets(tmp_path),
+            "--protocol", str(protocol),
+            "--dry-run",
+            env={
+                "AGORA_PROJECT_BACKEND": "postgres",
+                "DATABASE_URL": "postgresql+psycopg://user:geheim@127.0.0.1:5432/agora",
+            },
+        )
+
+        assert result.returncode == 0, result.stdout + result.stderr
+        text = protocol.read_text(encoding="utf-8")
+        assert "Aktive PostgreSQL-Backends: PROJECT_BACKEND" in text
+        assert "pg_dump --host=" in text
+        assert "-n agora -Fc" in text
+        assert "postgres_backup_manifest.py" in text
+        # Das Passwort aus DATABASE_URL darf im Dry-Run nirgendwo auftauchen —
+        # die Zerlegung ueber pg_cli laeuft im Dry-Run erst gar nicht.
+        assert "geheim" not in text
+
+    def test_pg_restore_shows_the_command_when_a_backend_is_active(
+        self, tmp_path
+    ) -> None:
+        protocol = tmp_path / "drill.log"
+
+        result = _run(
+            "--phase", "pg_restore",
+            "--backup-dir", str(tmp_path / "backup"),
+            "--protocol", str(protocol),
+            "--dry-run",
+            env={
+                "AGORA_PROJECT_BACKEND": "postgres",
+                "DATABASE_URL": "postgresql+psycopg://user:geheim@127.0.0.1:5432/agora",
+            },
+        )
+
+        assert result.returncode == 0, result.stdout + result.stderr
+        text = protocol.read_text(encoding="utf-8")
+        assert "pg_restore --host=" in text
+        assert "--clean --if-exists" in text
+        assert "geheim" not in text
+
+    def test_backup_fails_hard_when_active_but_database_url_is_missing(
+        self, tmp_path
+    ) -> None:
+        """Ein aktiver Postgres-Schalter ohne DATABASE_URL ist ein
+        Konfigurationsfehler, kein Grund zum stillen Uebergehen."""
+        protocol = tmp_path / "drill.log"
+
+        result = _run(
+            "--phase", "backup",
+            "--backup-dir", str(tmp_path / "backup"),
+            *_targets(tmp_path),
+            "--protocol", str(protocol),
+            "--dry-run",
+            env={"AGORA_PROJECT_BACKEND": "postgres", "DATABASE_URL": None},
+        )
+
+        assert result.returncode == 1
+        assert "DATABASE_URL ist nicht gesetzt" in protocol.read_text(encoding="utf-8")
+
+
 class TestRedaction:
     def test_a_bearer_token_never_reaches_the_protocol(self, tmp_path) -> None:
         """Verhindert, dass ein per Copy-Paste in ``run()`` geratener

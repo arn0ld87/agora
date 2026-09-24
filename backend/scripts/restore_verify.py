@@ -29,6 +29,23 @@ Aufruf::
 Verzeichnisse sind: ``provider_connections.json`` liegt im zweiten, und ein
 Pruefer, dem man nur das erste zeigt, ueberspringt den gesamten
 Provider/Secrets-Abschnitt — schweigend.
+
+PostgreSQL (#1583)
+------------------
+Zusaetzlich, nur wenn mindestens ein ``AGORA_*_BACKEND`` auf ``postgres``
+steht (oder ``--postgres`` das erzwingt): der Alembic-Head aus dem
+Backup-Manifest (``scripts/postgres_backup_manifest.py``) gegen
+``backend/migrations/`` (``alembic.script.ScriptDirectory``), die Zeilenzahl
+je Tabelle im Schema ``agora`` gegen dasselbe Manifest, und ob jede in
+``agora.projects`` referenzierte Kennung ein Projektverzeichnis unter
+``--data-dir/projects/<id>/`` hat.
+
+Die Versionstabelle ``alembic_version`` liegt in ``public``
+(``migrations/env.py``) und ist deshalb nie Teil von ``pg_dump -n agora``.
+Der Restore stempelt sie aus dem Manifest nach (``alembic stamp``, Phase
+``pg_restore`` in ``scripts/restore-drill.sh``). Geprueft wird, dass
+Manifest-Revision, Revision der restaurierten Datenbank und Code-Head
+uebereinstimmen.
 """
 
 from __future__ import annotations
@@ -312,12 +329,159 @@ def verify_secrets(store_dir: Path, report: VerificationReport) -> None:
 
 
 # ---------------------------------------------------------------------------
+# PostgreSQL (#1583)
+# ---------------------------------------------------------------------------
+
+
+def _postgres_active(require_postgres: bool) -> bool:
+    """Dieselbe Entscheidung wie beim Backup: irgendein ``AGORA_*_BACKEND``
+    auf ``postgres``, oder ausdruecklich per ``--postgres`` erzwungen."""
+    if require_postgres:
+        return True
+    from app.config import Config
+    from app.infrastructure.postgres.backends import any_postgres_backend
+
+    return any_postgres_backend(Config)
+
+
+def verify_postgres(
+    data_dir: Path,
+    report: VerificationReport,
+    *,
+    postgres_manifest: Optional[Path],
+    migrations_dir: Optional[Path],
+    require_postgres: bool = False,
+) -> None:
+    """Alembic-Head, Zeilenzahlen und Metadaten-Referenzen gegen die
+    restaurierte PostgreSQL-Datenbank.
+
+    Bleibt vollstaendig aus (kein einziger Check-Eintrag), solange kein
+    ``AGORA_*_BACKEND`` auf ``postgres`` steht und ``--postgres`` nicht
+    gesetzt ist — das haelt bestehende Restores ohne PostgreSQL unveraendert
+    gruen, statt sie mit einem irrelevanten SKIP zu belasten.
+    """
+    if not _postgres_active(require_postgres):
+        return
+
+    section = "PostgreSQL"
+
+    manifest: Optional[Dict[str, Any]] = None
+    if postgres_manifest is not None and postgres_manifest.is_file():
+        try:
+            manifest = json.loads(postgres_manifest.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001 — unten je Check gemeldet
+            manifest = None
+
+    def _alembic_head_matches() -> tuple:
+        if manifest is None:
+            return False, f"kein lesbares Manifest unter {postgres_manifest}", True
+        expected = manifest.get("revision")
+        if not expected:
+            return False, "Manifest enthaelt keine Revision", True
+        script_dir = migrations_dir or (Path(__file__).resolve().parents[1] / "migrations")
+        from alembic.runtime.migration import MigrationContext
+        from alembic.script import ScriptDirectory
+        from app.infrastructure.postgres.session import get_database
+
+        heads = ScriptDirectory(str(script_dir)).get_heads()
+        if len(heads) != 1:
+            return False, f"kein eindeutiger Code-Head: {heads!r}", False
+        code_head = heads[0]
+        # Die restaurierte Datenbank selbst: ``alembic_version`` liegt in
+        # ``public`` und ist nicht im Dump; der Restore stempelt sie aus dem
+        # Manifest nach (restore-drill.sh, Phase pg_restore). Fehlt das,
+        # verweigert das Start-Gate aus #1582 den App-Start.
+        with get_database().engine.connect() as connection:
+            db_heads = MigrationContext.configure(connection).get_current_heads()
+        db_revision = ", ".join(db_heads) or "keine"
+        return (
+            code_head == expected and tuple(db_heads) == (expected,),
+            f"Manifest={expected} Datenbank={db_revision} Code-Head={code_head}",
+            False,
+        )
+
+    _check(report, section, "Alembic-Head stimmt mit Backup-Manifest ueberein")(
+        _alembic_head_matches
+    )
+
+    def _row_counts_match() -> tuple:
+        if manifest is None:
+            return False, f"kein lesbares Manifest unter {postgres_manifest}", True
+        expected_counts = manifest.get("row_counts") or {}
+        if not expected_counts:
+            return True, "keine Tabellen im Manifest verzeichnet", False
+
+        from app.infrastructure.postgres.models import AGORA_SCHEMA
+        from app.infrastructure.postgres.session import get_database
+        from sqlalchemy import text
+
+        mismatches = []
+        with get_database().session() as session:
+            for table, expected in expected_counts.items():
+                # Tabellennamen kommen aus dem eigenen Backup-Manifest, nicht
+                # aus Nutzereingabe.
+                actual = session.execute(
+                    text(f'SELECT COUNT(*) FROM {AGORA_SCHEMA}."{table}"')  # noqa: S608
+                ).scalar_one()
+                if actual != expected:
+                    mismatches.append(f"{table}: erwartet {expected}, gefunden {actual}")
+        return (
+            not mismatches,
+            "alle Zeilenzahlen stimmen" if not mismatches else "; ".join(mismatches),
+            False,
+        )
+
+    _check(report, section, "Zeilenzahl je Tabelle stimmt mit Manifest ueberein")(
+        _row_counts_match
+    )
+
+    def _project_directories_exist() -> tuple:
+        from app.infrastructure.postgres.models import AGORA_SCHEMA
+        from app.infrastructure.postgres.session import get_database
+        from app.utils.validation import join_within
+        from sqlalchemy import text
+
+        with get_database().session() as session:
+            # AGORA_SCHEMA ist eine feste Konstante, keine Nutzereingabe.
+            project_ids = (
+                session.execute(text(f'SELECT id FROM {AGORA_SCHEMA}.projects'))  # noqa: S608
+                .scalars()
+                .all()
+            )
+        if not project_ids:
+            return True, f"keine Projekte in {AGORA_SCHEMA}.projects", False
+
+        projects_root = str(data_dir / "projects")
+        missing = [
+            project_id
+            for project_id in project_ids
+            if not Path(join_within(projects_root, project_id)).is_dir()
+        ]
+        return (
+            not missing,
+            "alle Projektverzeichnisse vorhanden"
+            if not missing
+            else f"{len(missing)} fehlend: {', '.join(missing[:5])}",
+            False,
+        )
+
+    _check(
+        report, section, "agora.projects referenziert vorhandene Projektverzeichnisse"
+    )(_project_directories_exist)
+
+
+# ---------------------------------------------------------------------------
 
 
 def run_verification(
-    data_dir: Path, store_dir: Optional[Path] = None
+    data_dir: Path,
+    store_dir: Optional[Path] = None,
+    *,
+    postgres_manifest: Optional[Path] = None,
+    migrations_dir: Optional[Path] = None,
+    require_postgres: bool = False,
 ) -> VerificationReport:
-    """Faehrt alle drei Abschnitte ab.
+    """Faehrt alle Abschnitte ab.
 
     ``store_dir`` faellt auf ``data_dir`` zurueck, damit aeltere Aufrufe mit
     einem einzigen Pfad weiter funktionieren; im Drill zeigt es auf
@@ -327,6 +491,13 @@ def run_verification(
     verify_artifacts(data_dir, report)
     verify_reconciliation(data_dir, report)
     verify_secrets(store_dir if store_dir is not None else data_dir, report)
+    verify_postgres(
+        data_dir,
+        report,
+        postgres_manifest=postgres_manifest,
+        migrations_dir=migrations_dir,
+        require_postgres=require_postgres,
+    )
     return report
 
 
@@ -384,9 +555,38 @@ def main(argv: Optional[List[str]] = None) -> int:
         ),
     )
     parser.add_argument("--json", action="store_true", help="Protokoll als JSON ausgeben")
+    parser.add_argument(
+        "--postgres-manifest",
+        type=Path,
+        default=None,
+        help=(
+            "Pfad zu postgres-manifest.json aus dem Backup "
+            "(scripts/postgres_backup_manifest.py)"
+        ),
+    )
+    parser.add_argument(
+        "--migrations-dir",
+        type=Path,
+        default=None,
+        help="Alembic migrations/-Verzeichnis (Default: backend/migrations)",
+    )
+    parser.add_argument(
+        "--postgres",
+        action="store_true",
+        help=(
+            "PostgreSQL-Pruefungen erzwingen, unabhaengig von AGORA_*_BACKEND "
+            "(#1583)"
+        ),
+    )
     args = parser.parse_args(argv)
 
-    report = run_verification(args.data_dir, args.store_dir)
+    report = run_verification(
+        args.data_dir,
+        args.store_dir,
+        postgres_manifest=args.postgres_manifest,
+        migrations_dir=args.migrations_dir,
+        require_postgres=args.postgres,
+    )
     print(json.dumps(report.to_dict(), indent=2) if args.json else render(report))
     if report.failed:
         return _EXIT_FAILED
