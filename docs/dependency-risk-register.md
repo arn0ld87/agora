@@ -219,7 +219,7 @@ Fließtext. Künftig gehört **jede** `.trivyignore`-Zeile auch in die JSON.
 | Paket | Pinned Version | Upstream-Pin | Erklaerung |
 |---|---|---|---|
 | `transformers` | `>=5.3.0` | — | Upgrade auf v5 via `tool.uv.override-dependencies` unblocked durch `sentence-transformers>=5.3.0`. Behebt CVE-2026-4372, CVE-2026-1839 und PYSEC-2025-217. |
-| `nltk` | `3.10.1` | — (kein Upstream-Pin) | Override-Pin `nltk==3.10.1` (2026-08-02, #995) löst GHSA-p4gq-832x-fm9v (echter Fix in 3.10.0) real auf. PYSEC-2026-597 bleibt ohne echten Upstream-Fix (kein `fixed`-Event in OSV), fällt aber ab 3.10.0 aus dem affected-Set (`last_affected: 3.9.4`) und wird deshalb nicht mehr geflaggt — Tracking bleibt offen in #661. Agora nutzt nltk weiterhin nur transitiv (via `unstructured`/`camel-oasis`). |
+| `nltk` | `3.10.1` | — (kein Upstream-Pin) | Override-Pin `nltk==3.10.1` (2026-08-02, #995) löst GHSA-p4gq-832x-fm9v (echter Fix in 3.10.0) real auf. PYSEC-2026-597 ist ebenfalls ab 3.10.0 gefixt (GitHub Advisory GHSA-m42h-3232-vpv3, `first_patched_version: 3.10.0`; #661 geschlossen). **Seit #1410 ist nltk nicht mehr im Lock**; der Override steht jetzt auf `nltk==3.10.3` und wirkt nur, falls nltk transitiv zurückkehrt (Begründung im Abschnitt „nltk-Baseline“). |
 | `camel-oasis` / `camel-ai` | `camel-oasis==0.2.5` / `camel-ai==0.2.78` | `camel-ai==0.2.78` (Upstream-Pin in `camel-oasis`) | `camel-oasis` pinnt exakt `camel-ai==0.2.78`. Alle bisherigen PyPI-Releases (0.2.0 bis 0.2.5) erzwingen diese Version. Dies blockiert das Upgrade auf `camel-ai>=0.2.90` und verhindert automatische Dependabot-Bumps (z. B. PR #793). Die Replacement-Evaluation für `camel-oasis` wurde im August 2026 aktiviert. |
 
 ---
