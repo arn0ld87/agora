@@ -338,6 +338,17 @@ def _apply_override(
         # global_default des Runs zurückfallen statt None zu persistieren.
         effective_provider_id = route_provider_id or config.global_default.provider_id
         effective_model = llm_model_override or config.global_default.model
+        # Issue #1284 Codex-Finding: dieser Legacy-Override-Pfad (z. B.
+        # ``llm_provider={"provider": "custom_openai", "base_url": "https://
+        # api.anthropic.com"}``) laeuft NIE ueber eine ProviderConnection —
+        # weder ``_resolve_selected_connection`` noch
+        # ``resolve_profile_connection`` sehen ihn. Fuer OASIS-Simulationen
+        # geht die Route zudem direkt in ``build_route_subprocess_env``, ohne
+        # je einen ``LLMClient`` (und damit den dortigen Transport-Guard) zu
+        # durchlaufen. Zentrale ``detect_provider``-Erkennung, keine zweite
+        # Heuristik.
+        if detect_provider(runtime.base_url, effective_model, mode="http") == "anthropic":
+            raise ValueError(ANTHROPIC_CHAT_TRANSPORT_UNSUPPORTED)
         config.stage_overrides[stage_id] = StageLLMRoute(
             provider_id=effective_provider_id,
             model=effective_model,
@@ -611,6 +622,16 @@ def build_route_subprocess_env(
         or store_base_url_for_provider(route.provider_id)
         or (provider.base_url if provider else None)
     )
+    # Issue #1284 Codex-Finding: Transport-Guard als zweite Verteidigungslinie
+    # hinter ``_apply_override``/``_resolve_selected_connection``, analog zum
+    # ``LLMClient``-Guard fuer den direkten HTTP-Pfad. Faengt eine bereits
+    # persistierte oder wiederaufgenommene Route ab (z. B. ein vor diesem Fix
+    # gespeicherter ``stage_override``), die die frueheren Gates umgangen hat
+    # — die OASIS-Subprozess-Route baut nie einen ``LLMClient`` und wuerde den
+    # dortigen Guard sonst nicht durchlaufen. Zentrale ``detect_provider``-
+    # Erkennung, keine zweite Heuristik.
+    if detect_provider(base_url, route.model, mode="http") == "anthropic":
+        raise ValueError(ANTHROPIC_CHAT_TRANSPORT_UNSUPPORTED)
     definition = LlmProviderRegistry.connection_definition(route.provider_id)
     is_cli_transport = definition is not None and definition.transport == "cli"
     if is_cli_transport:

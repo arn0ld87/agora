@@ -72,6 +72,33 @@ def test_seed_run_stage_routing_persists_stage_override(mock_run_dir, tmp_path):
 
 
 @patch("app.utils.artifact_locator.ArtifactLocator.run_dir")
+def test_legacy_custom_openai_override_with_anthropic_base_url_fails_loud(mock_run_dir, tmp_path):
+    """Issue #1284 Codex-Finding: der Legacy-Override-Pfad
+    (``llm_provider={"provider": "custom_openai", "base_url": "https://api.
+    anthropic.com"}``) laeuft nie ueber eine ProviderConnection — weder
+    ``_resolve_selected_connection`` noch ``resolve_profile_connection``
+    sehen ihn. Ohne eigenes Gate haette die OASIS-Simulation ueber
+    ``build_route_subprocess_env`` unbemerkt einen ungueltigen Request an
+    Anthropic geschickt."""
+    run_id = "run_legacy_anthropic_override"
+    run_dir = tmp_path / "runs" / run_id
+    run_dir.mkdir(parents=True)
+    mock_run_dir.return_value = str(run_dir)
+
+    with pytest.raises(ValueError, match="Anthropic"):
+        seed_run_stage_routing(
+            run_id,
+            "simulation_rounds",
+            llm_model_override="claude-sonnet-5",
+            llm_runtime=RuntimeLlmConfig(
+                provider="custom_openai",
+                api_key="session-secret",
+                base_url="https://api.anthropic.com",
+            ),
+        )
+
+
+@patch("app.utils.artifact_locator.ArtifactLocator.run_dir")
 def test_seed_run_stage_routing_keeps_server_default_without_override(mock_run_dir, tmp_path):
     run_id = "run_seed_default"
     run_dir = tmp_path / "runs" / run_id
@@ -280,6 +307,23 @@ def test_build_route_subprocess_env_uses_resolved_route_values():
     assert env["OPENAI_API_KEY"] == "server-key"
     assert env["LLM_BASE_URL"] == "https://api.openai.com/v1"
     assert env["LLM_MODEL_NAME"] == "gpt-4o-mini"
+
+
+def test_build_route_subprocess_env_rejects_anthropic_base_url():
+    """Issue #1284 Codex-Finding: Transport-Guard fuer die OASIS-Subprozess-
+    Route — sie baut nie einen ``LLMClient`` und muss deshalb ihren eigenen
+    Guard haben. Faengt insbesondere eine bereits persistierte/
+    wiederaufgenommene Route ab, die ``_apply_override`` umgangen hat."""
+    route = ResolvedRoute(
+        stage="simulation_rounds",
+        provider_id="openai_compatible",
+        model="claude-sonnet-5",
+        base_url_sanitized="https://api.anthropic.com",
+        routing_version=1,
+    )
+
+    with pytest.raises(ValueError, match="Anthropic"):
+        build_route_subprocess_env(route, api_key="server-key", run_id="run_anthropic_subprocess")
 
 
 def test_build_route_subprocess_env_injects_google_api_key_for_gemini():
