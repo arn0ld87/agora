@@ -31,12 +31,23 @@
 #   --instance-dir  Instanzsettings           (Vorgabe backend/instance)
 #
 # Phasen:
-#   backup    Backup des laufenden Stacks erzeugen
-#   restore   Backup in die Zielinstallation zurückspielen
-#   verify    Restore-Verifikation (backend/scripts/restore_verify.py)
-#   upgrade   Zielversion ziehen, neu starten, erneut verifizieren
-#   rollback  auf die vorherige Version zurück, erneut verifizieren
-#   all       alle fünf in dieser Reihenfolge
+#   backup      Backup des laufenden Stacks erzeugen
+#   restore     Backup in die Zielinstallation zurückspielen
+#   pg_restore  nur den PostgreSQL-Teil des Restores wiederholen (#1583;
+#               Anwendung vorher stoppen)
+#   verify      Restore-Verifikation (backend/scripts/restore_verify.py)
+#   upgrade     Zielversion ziehen, neu starten, erneut verifizieren
+#   rollback    auf die vorherige Version zurück, erneut verifizieren
+#   all         backup, restore, verify, upgrade, rollback in dieser Reihenfolge
+#
+# PostgreSQL (#1583), nur wenn mindestens ein `AGORA_*_BACKEND` auf `postgres`
+# steht (app/infrastructure/postgres/backends.py): `backup` sichert zusätzlich
+# `pg_dump -n agora -Fc` plus postgres-manifest.json aus demselben Snapshot;
+# `restore` spielt beides vor dem App-Start zurück und stempelt die
+# Alembic-Revision nach. `DATABASE_URL` kommt aus der Umgebung oder der .env
+# des Repositorys. Das Passwort geht ausschließlich über `PGPASSWORD` an
+# `pg_dump`/`pg_restore` — nie als Argument, nie ins Protokoll (pg_cli
+# startet die Werkzeuge selbst).
 #
 # Exit-Codes:
 #   0  Drill vollständig grün
@@ -87,7 +98,7 @@ ROLLBACK_REF=""
 ALLOW_REPO_TARGET=0
 
 usage() {
-  sed -n '2,46p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,56p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
   exit "${1:-2}"
 }
 
@@ -109,7 +120,7 @@ while [ $# -gt 0 ]; do
 done
 
 case "$PHASE" in
-  backup|restore|verify|upgrade|rollback|all) ;;
+  backup|restore|pg_restore|verify|upgrade|rollback|all) ;;
   *) echo "Unbekannte Phase: $PHASE" >&2; usage 2 ;;
 esac
 
@@ -177,6 +188,29 @@ else
   _sha256()       { shasum -a 256 "$@"; }
   _sha256_check() { shasum -a 256 -c "$@"; }
 fi
+
+# PostgreSQL (#1583). Welche AGORA_*_BACKEND-Schalter aktuell auf `postgres`
+# stehen — aus Config, also einschliesslich der .env des Repositorys, genau
+# wie die Anwendung sie sieht (app/infrastructure/postgres/backends.py). Nur
+# Attribute, keine Verbindung: sicher auch im Dry-Run. Steht ein Backend auf
+# postgres und fehlt DATABASE_URL (weder Umgebung noch .env), bricht der
+# Drill ab, statt still zu ueberspringen.
+_pg_cli() {
+  ( cd "$REPO_ROOT/backend" && uv run python -m app.infrastructure.postgres.pg_cli "$@" )
+}
+
+_postgres_backends() {
+  local active rc
+  set +e
+  active=$(_pg_cli status)
+  rc=$?
+  set -e
+  case "$rc" in
+    0) printf '%s' "$active" ;;
+    3) fail "AGORA_*_BACKEND=postgres aktiv ($active), aber DATABASE_URL ist nicht gesetzt (weder Umgebung noch .env)" ;;
+    *) fail "PostgreSQL-Backend-Erkennung fehlgeschlagen (Exit $rc)" ;;
+  esac
+}
 
 archive() {
   local name="$1" dir="$2"
@@ -261,7 +295,45 @@ phase_backup() {
   log "  prüfen (docs/backup-restore.md). Dieses Skript pinnt sie bewusst nicht."
   run docker compose exec -T neo4j neo4j-admin database dump neo4j --to-path=/backups
   run docker compose cp neo4j:/backups "$BACKUP_DIR/neo4j"
+  backup_postgres
   log "  Backup abgelegt unter $BACKUP_DIR"
+}
+
+# PostgreSQL-Backup (#1583). Nur wenn mindestens ein AGORA_*_BACKEND=postgres
+# aktiv ist — Default ist ueberall Legacy, dann bleibt dieser Schritt ein
+# reiner No-Op. Das Passwort geht ausschliesslich ueber PGPASSWORD an
+# pg_dump, nie als Argument — `run()` loggt "$*", und ein Passwort dort waere
+# sofort im weitergegebenen Protokoll.
+backup_postgres() {
+  local active
+  active=$(_postgres_backends)
+  if [ -z "$active" ]; then
+    log "  PostgreSQL-Backup uebersprungen: kein AGORA_*_BACKEND=postgres aktiv"
+    return 0
+  fi
+  log "  Aktive PostgreSQL-Backends: $active"
+
+  # pg_cli exportiert einen Snapshot, laesst pg_dump darauf laufen und erhebt
+  # das Manifest (Revision, Zeilenzahlen) in derselben Transaktion — Dump und
+  # Manifest beschreiben denselben Stand. Das Passwort erreicht pg_dump nur
+  # ueber PGPASSWORD im Kindprozess.
+  if [ "$DRY_RUN" = "1" ]; then
+    log "    \$ pg_dump --host=<host> --port=<port> --username=<user> --dbname=<db> -n agora -Fc --snapshot=<snapshot> -f $BACKUP_DIR/postgres.dump"
+    log "      + Manifest unter demselben Snapshot: $BACKUP_DIR/postgres-manifest.json"
+    log "      (dry-run: nicht ausgeführt)"
+    return 0
+  fi
+
+  run _pg_cli dump --file "$BACKUP_DIR/postgres.dump" \
+    --manifest "$BACKUP_DIR/postgres-manifest.json"
+  local artefact digest
+  for artefact in postgres.dump postgres-manifest.json; do
+    [ -f "$BACKUP_DIR/$artefact" ] || fail "PostgreSQL-Backup unvollstaendig: $artefact fehlt"
+    chmod 0600 "$BACKUP_DIR/$artefact"
+    digest=$(cd "$BACKUP_DIR" && _sha256 "$artefact") \
+      || fail "Prüfsumme für $artefact fehlgeschlagen"
+    printf '%s\n' "$digest" >>"$MANIFEST"
+  done
 }
 
 # Die Vorgabewerte für die drei Zielverzeichnisse zeigen auf den eigenen
@@ -305,7 +377,54 @@ phase_restore() {
     || fail "Neo4j-Dump fehlt: $BACKUP_DIR/neo4j"
   run docker compose cp "$BACKUP_DIR/neo4j/." neo4j:/backups
   run docker compose exec -T neo4j neo4j-admin database load neo4j --from-path=/backups --overwrite-destination=true
+  # PostgreSQL vor dem App-Start (#1583, docs/backup-restore.md Schritt 7).
+  restore_postgres
   run docker compose up -d
+}
+
+# PostgreSQL-Restore (#1583). Laeuft innerhalb von phase_restore, bevor die
+# Anwendung startet — sonst liefe sie gegen ein leeres oder halb
+# restauriertes Schema, scheiterte am Start-Gate (#1582) oder schriebe
+# waehrend `pg_restore --clean` (Codex-Review auf #1602). pg_cli stempelt
+# danach die Revision aus dem Manifest nach, weil `public.alembic_version`
+# nicht im Dump liegt. --clean --if-exists macht den Schritt idempotent.
+restore_postgres() {
+  local active
+  active=$(_postgres_backends)
+  if [ -z "$active" ]; then
+    log "  PostgreSQL-Restore uebersprungen: kein AGORA_*_BACKEND=postgres aktiv"
+    return 0
+  fi
+  log "  Aktive PostgreSQL-Backends: $active"
+
+  if [ "$DRY_RUN" = "1" ]; then
+    log "    \$ pg_restore --host=<host> --port=<port> --username=<user> --dbname=<db> --clean --if-exists $BACKUP_DIR/postgres.dump"
+    log "      + alembic stamp <revision aus $BACKUP_DIR/postgres-manifest.json>"
+    log "      (dry-run: nicht ausgeführt)"
+    return 0
+  fi
+
+  local artefact
+  for artefact in postgres.dump postgres-manifest.json; do
+    [ -f "$BACKUP_DIR/$artefact" ] || fail "PostgreSQL-Backup unvollstaendig: $artefact fehlt"
+    if [ -f "$MANIFEST" ]; then
+      (cd "$BACKUP_DIR" && grep " $artefact\$" "$(basename "$MANIFEST")" \
+        | _sha256_check -) >/dev/null 2>&1 \
+        || fail "Prüfsumme weicht ab oder fehlt im Manifest: $artefact"
+      log "    Prüfsumme bestätigt: $artefact"
+    fi
+  done
+
+  run _pg_cli restore --file "$BACKUP_DIR/postgres.dump" \
+    --manifest "$BACKUP_DIR/postgres-manifest.json"
+}
+
+# Einzeln aufrufbar, etwa um nur den PostgreSQL-Teil zu wiederholen. Die
+# Anwendung muss dabei gestoppt sein (docker compose stop backend) — in der
+# all-Sequenz erledigt das phase_restore.
+phase_pg_restore() {
+  step "PostgreSQL-Restore (#1583)"
+  restore_postgres
 }
 
 phase_verify() {
@@ -314,8 +433,17 @@ phase_verify() {
   # --store-dir zeigt auf backend/data: provider_connections.json liegt dort,
   # nicht unter uploads (app/services/data_dir.py::resolve_data_dir). Ohne den
   # Pfad übersprang der Prüfer den gesamten Provider/Secrets-Abschnitt.
+  # --postgres-manifest zeigt auf das beim Backup erzeugte Manifest (#1583);
+  # restore_verify.py prueft es nur, wenn Postgres ueberhaupt aktiv ist.
+  # Nach `--rollback-ref` auf einen Stand vor #1583 kennt restore_verify.py
+  # die Option noch nicht; argparse bräche mit Exit 2 ab (Codex-Review auf
+  # #1602). Deshalb nur übergeben, wenn der ausgecheckte Prüfer sie kennt.
+  local verify_args=(--data-dir "$DATA_DIR" --store-dir "$STORE_DIR")
+  if grep -q -- '--postgres-manifest' "$REPO_ROOT/backend/scripts/restore_verify.py"; then
+    verify_args+=(--postgres-manifest "$BACKUP_DIR/postgres-manifest.json")
+  fi
   if [ "$DRY_RUN" = "1" ]; then
-    log "    \$ uv run python scripts/restore_verify.py --data-dir $DATA_DIR --store-dir $STORE_DIR"
+    log "    \$ uv run python scripts/restore_verify.py ${verify_args[*]}"
     log "      (dry-run: nicht ausgeführt)"
     return 0
   fi
@@ -325,8 +453,7 @@ phase_verify() {
   # Klartextwert, aber der Filter darf nicht an der einen Stelle fehlen, an der
   # eine spaetere Erweiterung ihn braeuchte.
   ( cd "$REPO_ROOT/backend" \
-      && uv run python scripts/restore_verify.py \
-           --data-dir "$DATA_DIR" --store-dir "$STORE_DIR" ) \
+      && uv run python scripts/restore_verify.py "${verify_args[@]}" ) \
     | redact | tee -a "$PROTOCOL"
   rc=${PIPESTATUS[0]}
   set -e
@@ -367,11 +494,12 @@ log "Instanz:   $INSTANCE_DIR"
 log "Repo: $REPO_ROOT"
 
 case "$PHASE" in
-  backup)   phase_backup ;;
-  restore)  phase_restore ;;
-  verify)   phase_verify ;;
-  upgrade)  phase_upgrade ;;
-  rollback) phase_rollback ;;
+  backup)     phase_backup ;;
+  restore)    phase_restore ;;
+  pg_restore) phase_pg_restore ;;
+  verify)     phase_verify ;;
+  upgrade)    phase_upgrade ;;
+  rollback)   phase_rollback ;;
   all)
     phase_backup
     phase_restore

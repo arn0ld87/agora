@@ -63,7 +63,7 @@ Backup-Verzeichnis und Archive entstehen mit `0700` beziehungsweise `0600`. Sie 
 
 `llm_profiles.db` läuft mit `journal_mode=WAL`. Zur Laufzeit besteht sie aus `.db`, `.db-wal` und `.db-shm`; ein reines `tar` würde den Zwischenzustand einfrieren, in dem die letzten Schreibvorgänge noch im WAL stehen. Die Backup-Phase setzt deshalb vorher `PRAGMA wal_checkpoint(TRUNCATE)`. Fehlt `sqlite3` auf dem Host, steht eine Warnung im Protokoll und das Archiv ist entsprechend weniger wert.
 
-Einzelne Phasen (`--phase backup|restore|verify|upgrade|rollback`) lassen sich getrennt fahren, wenn ein Durchgang abbricht und nur ein Teil zu wiederholen ist.
+Einzelne Phasen (`--phase backup|restore|pg_restore|verify|upgrade|rollback`) lassen sich getrennt fahren, wenn ein Durchgang abbricht und nur ein Teil zu wiederholen ist. Nach `--rollback-ref` auf einen Stand vor #1583 reicht `verify` `--postgres-manifest` nur weiter, wenn der ausgecheckte `restore_verify.py` die Option kennt.
 
 ### Was gesichert wird
 
@@ -76,6 +76,18 @@ Drei Verzeichnisse, je ein Archiv — dieselben, die `docs/backup-restore.md` mi
 | `--instance-dir` | `backend/instance` | `instance.tar.gz` | Instanzsettings |
 
 Die Restore-Phase spielt sie in der dokumentierten Recovery-Reihenfolge zurück (Stores, Instanz, Artefakte, dann Neo4j) und kopiert den Neo4j-Dump vor dem `database load` zurück in den neu gestarteten Container — `docker compose down` nimmt den alten mitsamt seinem `/backups` mit.
+
+### PostgreSQL (#1583)
+
+Nur wenn mindestens ein `AGORA_*_BACKEND` auf `postgres` steht (`app/infrastructure/postgres/backends.py::any_postgres_backend`) — Default ist überall Legacy, dann ist dieser Teil ein reiner No-Op und das Protokoll sagt das auch so.
+
+`--phase backup` sichert zusätzlich zu den drei Archiven `postgres.dump` (`pg_dump -n agora -Fc`, nur das Fachschema) und `postgres-manifest.json` (Alembic-Revision plus Zeilenzahl je Tabelle in `agora`), beide aus demselben exportierten Snapshot (`pg_cli dump`). Beide bekommen dieselben Rechte (`0600`) und denselben Prüfsummen-Eintrag im Manifest wie die drei Tarballs.
+
+`--phase restore` spielt `postgres.dump` per `pg_restore --clean --if-exists` zurück, **bevor** die Anwendung mit `docker compose up -d` startet, und stempelt danach die Alembic-Revision aus `postgres-manifest.json` nach (`public.alembic_version` liegt nicht im Dump; ohne sie verweigert das Start-Gate aus #1582 den Start). `--phase pg_restore` wiederholt nur diesen Teil; die Anwendung muss dabei gestoppt sein (`docker compose stop backend`).
+
+`--phase verify` reicht `postgres-manifest.json` an `restore_verify.py` weiter (`--postgres-manifest`); das Skript prüft Revision (Manifest, restaurierte Datenbank, Code-Head), Zeilenzahlen und Metadaten-→Datei-Referenzen nur, wenn Postgres tatsächlich aktiv ist.
+
+`DATABASE_URL` kommt aus der Umgebung oder der `.env` des Repositorys (`Config`), wie für die Anwendung. Das Passwort geht in beiden Phasen ausschließlich über `PGPASSWORD` an `pg_dump`/`pg_restore` — nie als Kommandozeilenargument, nie über `stdout`, nie ins Protokoll; `app/infrastructure/postgres/pg_cli.py` startet die Werkzeuge selbst. Im Dry-Run steht nur die Befehlszeile mit Platzhaltern im Protokoll.
 
 ### Vor dem Lauf prüfen
 

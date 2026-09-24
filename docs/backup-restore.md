@@ -25,6 +25,7 @@ Verwandt:
 | Reports + Evidence/Audit | `backend/uploads/reports/` | **hoch** |
 | Provider-/Routing-/App-Stores | `backend/data/` | **hoch** |
 | Instanzsettings | `backend/instance/` | **hoch** |
+| PostgreSQL-Fachschema `agora` | Nur wenn ein `AGORA_*_BACKEND=postgres` aktiv ist | **hoch** |
 | `.env` / Master-Keys | Repo-Root, nicht versioniert | **kritisch** |
 | Redis | kurzlebiger Event-/Ticketzustand | niedrig; nicht als kanonisches Backup behandeln |
 | HuggingFace-/Model-Cache | Cache | niedrig; rekonstruierbar |
@@ -55,7 +56,7 @@ Mindestens:
 
 ### Master-Key-Bedeutung
 
-- `AGORA_SECRET_KEY` entschlüsselt gespeicherte LLM-Provider-Secrets.
+- `AGORA_SECRET_KEY` entschlüsselt gespeicherte LLM-Provider-Secrets **und** den Fernet-Store der LLM-Profil-Secrets (#1583). Er gehört ins Secret-Backup — niemals in den PostgreSQL-Dump, der nur verschlüsselte Referenzen/Ciphertexte trägt, nie den Schlüssel selbst.
 - `AGORA_FERNET_KEY` schützt persistierte Agora-API-Key-Daten bzw. zugehörige Secret-/Hash-Pfade.
 
 Ein Restore der verschlüsselten JSON-Datei **ohne den zugehörigen Master-Key** ist kein Restore, sondern eine besonders ordentlich archivierte Form von Datenverlust.
@@ -132,6 +133,27 @@ Wichtig: Redis/Event Bus ist aktuell auch **keine persistente Jobqueue** für Pr
 
 ---
 
+## PostgreSQL-Backup (#1583)
+
+**Nur relevant, wenn mindestens ein `AGORA_*_BACKEND` auf `postgres` steht** (`app/infrastructure/postgres/backends.py::any_postgres_backend`). Solange alles auf dem Legacy-Default steht (`docs/plans/supabase.md`, „Umgeschaltet ist nichts"), ist dieser Abschnitt ein No-Op — `scripts/restore-drill.sh` überspringt ihn dann und protokolliert das.
+
+Ist ein Backend aktiv, sichert `scripts/restore-drill.sh` zusätzlich zu den drei Dateiverzeichnissen:
+
+```bash
+pg_dump --host=<host> --port=<port> --username=<user> --dbname=<db> \
+  -n agora -Fc -f postgres.dump
+```
+
+Nur das Fachschema `agora` — kein Cluster-Dump, keine Rollen, kein `public`. `DATABASE_URL` kommt aus der Umgebung oder der `.env` des Repositorys, wie für die Anwendung. Das Passwort geht ausschließlich über die Umgebungsvariable `PGPASSWORD` an `pg_dump`, nie als Kommandozeilenargument, nie über `stdout` und nie ins Protokoll: `app/infrastructure/postgres/pg_cli.py` startet die Werkzeuge selbst.
+
+Zusammen mit dem Dump entsteht `postgres-manifest.json` (`app/infrastructure/postgres/backup_manifest.py`): die Alembic-Revision und die Zeilenzahl je Tabelle in `agora`. `pg_cli dump` exportiert dafür in einer `REPEATABLE READ`-Transaktion einen Snapshot, lässt `pg_dump --snapshot` darauf laufen und erhebt das Manifest in derselben Transaktion — Dump und Manifest beschreiben denselben Stand, auch wenn währenddessen geschrieben wird. `restore_verify.py` prüft nach dem Restore genau dagegen.
+
+**Die Alembic-Revision wird nach dem Restore nachgestempelt.** Die Versionstabelle `alembic_version` liegt in `public`, nicht in `agora` (`backend/migrations/env.py`), und ist deshalb nie Teil von `pg_dump -n agora`. Ohne sie verweigert das Start-Gate (#1582) den App-Start. Der Restore-Schritt (`pg_cli restore`, in `--phase restore` vor dem App-Start) stempelt deshalb danach die Revision aus `postgres-manifest.json`; `restore_verify.py` prüft anschließend, dass Manifest-Revision, Revision der restaurierten Datenbank und Code-Head übereinstimmen.
+
+Sekundäre Secrets im Fachschema — verschlüsselte Referenzen, keine Klartext-Master-Keys — laufen mit dem Dump; `AGORA_SECRET_KEY` selbst nicht (siehe oben).
+
+---
+
 ## Recovery-Reihenfolge
 
 Worst-Case auf einem frischen Host:
@@ -142,12 +164,14 @@ Worst-Case auf einem frischen Host:
 4. `backend/instance/` restaurieren,
 5. `backend/uploads/` restaurieren,
 6. Neo4j-Datenbank/Volume konsistent restaurieren,
-7. Dateirechte für den Container prüfen,
-8. Stack starten,
-9. Health/Status prüfen,
-10. Provider-Secret-Store entschlüsseln/testen,
-11. Graph/Run/Report eines Referenzfalls öffnen,
-12. erst danach produktive neue Runs zulassen.
+7. **falls ein `AGORA_*_BACKEND=postgres` aktiv ist:** PostgreSQL-Restore (`pg_restore --clean --if-exists`, danach `alembic stamp <revision aus postgres-manifest.json>`) — **vor** dem App-Start, damit die Anwendung nie gegen ein halb restauriertes Schema startet,
+8. Dateirechte für den Container prüfen,
+9. Stack starten,
+10. Health/Status prüfen,
+11. Provider-Secret-Store entschlüsseln/testen,
+12. `backend/scripts/restore_verify.py` — bei aktivem PostgreSQL-Backend mit `--postgres-manifest`,
+13. Graph/Run/Report eines Referenzfalls öffnen,
+14. erst danach produktive neue Runs zulassen.
 
 ### Reihenfolge der Secrets
 
@@ -159,10 +183,12 @@ Master-Keys müssen **vor** dem ersten produktiven Zugriff auf die verschlüssel
 
 Ein Restore gilt erst als brauchbar, wenn mindestens folgende Checks grün sind.
 
-Die Punkte unter „Artefakte", „Provider/Secrets" und „Reconciliation" prüft [`backend/scripts/restore_verify.py`](../backend/scripts/restore_verify.py) maschinell und schreibt ein Protokoll mit Zeitstempel und Exit-Code:
+Die Punkte unter „Artefakte", „Provider/Secrets", „Reconciliation" und — bei aktivem PostgreSQL-Backend — „PostgreSQL" prüft [`backend/scripts/restore_verify.py`](../backend/scripts/restore_verify.py) maschinell und schreibt ein Protokoll mit Zeitstempel und Exit-Code:
 
 ```bash
 cd backend && uv run python scripts/restore_verify.py --data-dir uploads --store-dir data
+cd backend && uv run python scripts/restore_verify.py --data-dir uploads --store-dir data \
+  --postgres-manifest /pfad/postgres-manifest.json
 ```
 
 `--data-dir` ist das Artefaktverzeichnis, `--store-dir` das der JSON-Stores (`backend/data` bzw. `AGORA_DATA_DIR`) — `provider_connections.json` liegt dort, nicht unter `uploads`.
@@ -191,6 +217,12 @@ curl -fsS \
 - Secret-Store lässt sich mit dem restaurierten `AGORA_SECRET_KEY` entschlüsseln
 - gespeicherte Agora-API-Keys/Scope-Daten sind mit `AGORA_FERNET_KEY` lesbar, soweit der Pfad genutzt wird
 - keine Secrets in Logs ausgeben
+
+### PostgreSQL (#1583, nur bei aktivem `AGORA_*_BACKEND=postgres`)
+
+- Revision aus dem Backup-Manifest, Revision der restaurierten Datenbank und Code-Head aus `backend/migrations/` stimmen überein
+- Zeilenzahl je Tabelle im Schema `agora` stimmt mit dem Manifest überein
+- jede in `agora.projects` referenzierte Kennung hat ein Projektverzeichnis unter `uploads/projects/<id>/`
 
 ### Artefakte
 
