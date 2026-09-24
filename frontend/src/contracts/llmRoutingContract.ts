@@ -53,6 +53,9 @@ export const ProviderDescriptorSchema = z.object({
   api_key_ref: z.string().optional().nullable(),
   supports_models_endpoint: z.boolean().default(false),
   fallback_models: z.array(z.string()).default([]),
+  // Issue #1415: Registry-Matrix liefert Transport und Auth-Modus mit.
+  transport: z.enum(["http", "local", "cli"]).default("http"),
+  auth_mode: z.enum(["none", "api_key", "oauth", "session"]).default("api_key"),
 }).strict();
 export type ProviderDescriptor = z.infer<typeof ProviderDescriptorSchema>;
 

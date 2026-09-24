@@ -99,6 +99,8 @@ Unterstützte Transportklassen sind `http`, `local` und `cli`. `codex_cli` ist e
 
 `PUT /api/llm/active-config` übernimmt die `base_url` einer gespeicherten, aktivierten `ProviderConnection` (sonst Registry-Default) und prüft die Modell-Capabilities gegen genau diesen Endpunkt; eine `base_url` im Request-Body bleibt ignoriert, `cli`-/Session-Provider bekommen nie eine (#1289).
 
+`frontend/src/views/Settings/LlmProvidersView.vue` rendert CLI-/Session-Provider seit #1415 nicht mehr wie HTTP-Provider: `codex_cli` (`auth_mode="session"`) zeigt weder Key- noch Base-URL-Feld, nur einen Hinweis auf die lokale `codex login`-Session; `claude_cli` (`auth_mode="api_key"`) behält das Key-Feld, verliert aber das Base-URL-Feld. `transport`/`auth_mode` liefert der `ProviderDescriptor` aus der Registry-Matrix; eine gespeicherte Connection gewinnt.
+
 Ob ein Provider ohne eigenen Secret auskommt, entscheidet seit dem Fix für den
 verworfenen `claude_cli`-Token ausschließlich `LlmProviderRegistry.uses_session_auth`
 (`auth_mode == "session"`), nicht mehr der Transport. Vorher sprangen

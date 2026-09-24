@@ -1192,6 +1192,12 @@
         },
         "list": {
           "ariaLabel": "Providers"
+        },
+        "session": {
+          "notice": "Sign-in happens through the local CLI session:",
+          "loginCommand": "codex login",
+          "tokenHint": "Long-lived token from:",
+          "tokenCommand": "claude setup-token"
         }
       }
     }
