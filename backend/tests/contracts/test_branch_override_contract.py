@@ -339,6 +339,25 @@ class TestOverrideTakesEffect:
         config = branch_config(manager, branch.simulation_id)
         assert config["llm_model"] == "branch-model"
 
+    def test_legacy_llm_model_clears_inherited_ai_model_ref(
+        self, manager: SimulationManager, source_id: str
+    ) -> None:
+        """Codex-Fund PR #1560: trägt die Quelle schon eine ``ai_model_ref``,
+        darf ein reiner ``llm_model``-Override sie nicht stehen lassen — sonst
+        gewinnt zur Laufzeit die geerbte Referenz und der Override wirkt nicht."""
+        source_config = branch_config(manager, source_id)
+        source_config["ai_model_ref"] = {
+            "provider_connection_id": "conn-source",
+            "model_id": "source-model",
+        }
+        manager._store.write_json(source_id, "simulation_config", source_config)
+        branch = branching_service.create_branch(
+            manager, source_id, "b", overrides={"llm_model": "legacy-model"}
+        )
+        config = branch_config(manager, branch.simulation_id)
+        assert config["llm_model"] == "legacy-model"
+        assert "ai_model_ref" not in config
+
     def test_source_stays_untouched(self, manager: SimulationManager, source_id: str) -> None:
         """Overrides wirken auf den Branch, nie zurück auf die Quelle."""
         branching_service.create_branch(

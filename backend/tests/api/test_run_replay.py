@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from typing import Any
 
@@ -439,11 +440,12 @@ def test_replay_forwards_full_ai_model_ref_to_create_branch(env, monkeypatch):
     assert resp.status_code == 202, resp.get_json()
     call_kwargs = manager.create_branch.call_args.kwargs
     forwarded = call_kwargs["overrides"]["ai_model_ref"]
-    assert isinstance(forwarded, AiModelRef), (
-        "create_branch muss das volle AiModelRef bekommen, nicht nur model_id"
-    )
-    assert forwarded.provider_connection_id == "conn-gemini"
-    assert forwarded.model_id == "gemini-2.5-pro"
+    # JSON-Form (Codex-Fund PR #1560): create_branch persistiert die Overrides
+    # in branch_meta, ein Pydantic-Objekt dort bricht json.dump.
+    assert isinstance(forwarded, dict), "create_branch braucht JSON-serialisierbare Overrides"
+    json.dumps(call_kwargs["overrides"])
+    assert AiModelRef.model_validate(forwarded).provider_connection_id == "conn-gemini"
+    assert forwarded["model_id"] == "gemini-2.5-pro"
 
 
 def test_replay_rejects_seed_document_override_not_yet_supported(env):

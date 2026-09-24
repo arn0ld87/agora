@@ -70,6 +70,11 @@ def _apply_config_overrides(config: Dict[str, Any], overrides: Dict[str, Any]) -
             ai_model_ref_override = AiModelRef.model_validate(ai_model_ref_override)
         config["ai_model_ref"] = ai_model_ref_override.model_dump(mode="json")
         config["llm_model"] = ai_model_ref_override.model_id
+    elif overrides.get("llm_model") not in (None, ""):
+        # Legacy-Override ohne kanonische Referenz: eine aus der Quell-Simulation
+        # geerbte ai_model_ref würde zur Laufzeit gewinnen und den Override
+        # stillschweigend aushebeln.
+        config.pop("ai_model_ref", None)
 
     if "time_config" in overrides and isinstance(overrides["time_config"], dict):
         existing = config.get("time_config", {}) or {}

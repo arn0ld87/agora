@@ -1168,7 +1168,8 @@ def _replay_simulation_run(run: dict, run_id: str, overrides):
         # branching_service.create_branch). Dieselbe Modell-ID kann auf
         # mehreren Provider-Connections liegen; ohne die Connection-ID wäre
         # der Branch-Config-Snapshot nicht eindeutig.
-        branch_overrides["ai_model_ref"] = ai_model_ref
+        # JSON-Form, weil create_branch die Overrides in branch_meta persistiert.
+        branch_overrides["ai_model_ref"] = ai_model_ref.model_dump(mode="json")
         llm_model_override = ai_model_ref.model_id
 
     branch_state = manager.create_branch(
