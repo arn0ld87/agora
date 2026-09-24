@@ -47,6 +47,9 @@ class TestUsesMaxCompletionTokensGpt5Family:
             "gpt-5.4-thinking",
             "gpt-5-turbo",
             "GPT-5.4-MINI",
+            "gpt-6",
+            "gpt-6-luna",
+            "gpt-6.1-mini",
         ],
     )
     def test_gpt5_models_use_max_completion_tokens(self, model: str) -> None:
@@ -83,6 +86,8 @@ class TestUsesMaxCompletionTokensLegacyOpenAI:
             "gpt-4-turbo",
             "gpt-4",
             "gpt-3.5-turbo",
+            "gpt-500",
+            "gpt-60",
         ],
     )
     def test_legacy_openai_uses_max_tokens(self, model: str) -> None:

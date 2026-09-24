@@ -1,0 +1,3 @@
+### Fixed
+
+- **`gpt-6`-Modelle lösten pro LLM-Call vier statt einen HTTP-Request aus.** Die `max_completion_tokens`-/`temperature`-Heuristik in `app/llm/providers/openai.py` (`uses_max_completion_tokens`, `omits_temperature`) und in `scripts/_sim_common.py::uses_max_completion_tokens` kannte nur `gpt-5`/`o1`/`o3`/`o4`; jeder Call gegen `gpt-6-luna` musste erst zwei 400er (Token-Key, Temperature) mit Retry durchlaufen, bevor der Request durchging. Beide Heuristiken erkennen jetzt proaktiv die gesamte einstellige Reasoning-Major-Version `gpt-5`…`gpt-9` (`^gpt-[5-9](?:$|[-.])`), sodass künftige Modellgenerationen nicht erst nach einem eigenen Incident nachgezogen werden müssen. (#1572)

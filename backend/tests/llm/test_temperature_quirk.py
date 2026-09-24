@@ -36,6 +36,9 @@ from app.utils.llm_client import LLMClient
         "gpt-5",
         "gpt-5-nano",
         "gpt-5.6-luna",
+        "gpt-6",
+        "gpt-6-luna",
+        "gpt-6.1-mini",
         "o1-preview",
         "o3",
         "o4.1",
@@ -50,6 +53,7 @@ def test_omits_temperature_matches_reasoning_family(model: str) -> None:
     [
         "gpt-4o",
         "gpt-500",  # striktes Prefix-Matching — kein Match auf "gpt-5"
+        "gpt-60",  # striktes Prefix-Matching — kein Match auf "gpt-6"
         "qwen3:8b",
         "",
     ],
@@ -247,7 +251,7 @@ def test_chat_retries_without_temperature_on_400(fake_client) -> None:
     temperature, bekommt den unsupported_value-400 und retried einmalig ohne
     ``temperature`` — kein dritter Versuch, keine Endlosschleife.
     """
-    fake_client.model = "gpt-6-preview"  # (noch) nicht in omits_temperature()
+    fake_client.model = "gpt-10-preview"  # (noch) nicht in omits_temperature() (#1572: gpt-5..9 abgedeckt)
     completions = _FlakyCompletions(
         fail_first_with=(
             "Unsupported value: 'temperature' does not support 0.7 with "
@@ -298,7 +302,7 @@ def test_chat_json_does_not_fall_back_to_json_object_on_temperature_400(fake_cli
     Providerattempt muss weiterhin im json_schema-Modus laufen, nicht
     json_object.
     """
-    fake_client.model = "gpt-6-preview"
+    fake_client.model = "gpt-10-preview"  # (noch) nicht in omits_temperature() (#1572: gpt-5..9 abgedeckt)
     completions = _FlakyCompletions(
         fail_first_with=(
             "Unsupported value: 'temperature' does not support 0.3 with "

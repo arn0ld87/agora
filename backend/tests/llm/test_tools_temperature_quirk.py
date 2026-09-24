@@ -199,7 +199,7 @@ def test_chat_with_tools_retries_without_temperature_on_400(fake_client) -> None
     sendet temperature, bekommt den unsupported_value-400 und retried
     einmalig ohne ``temperature`` — kein dritter Versuch.
     """
-    fake_client.model = "gpt-6-preview"  # (noch) nicht in omits_temperature()
+    fake_client.model = "gpt-10-preview"  # (noch) nicht in omits_temperature() (#1572: gpt-5..9 abgedeckt)
     completions = _FlakyCompletions(_make_temperature_400("0.5"))
     fake_client.client = _FakeOpenAI(completions)
 

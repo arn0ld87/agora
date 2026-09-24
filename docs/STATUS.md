@@ -99,6 +99,8 @@ Unterstützte Transportklassen sind `http`, `local` und `cli`. `codex_cli` ist e
 
 `PUT /api/llm/active-config` übernimmt die `base_url` einer gespeicherten, aktivierten `ProviderConnection` (sonst Registry-Default) und prüft die Modell-Capabilities gegen genau diesen Endpunkt; eine `base_url` im Request-Body bleibt ignoriert, `cli`-/Session-Provider bekommen nie eine (#1289).
 
+Die `max_completion_tokens`-/`temperature`-Heuristik (`app/llm/providers/openai.py`, gespiegelt in `scripts/_sim_common.py`) deckt die gesamte GPT-Reasoning-Major-Version `gpt-5`…`gpt-9` proaktiv sowie `o1`/`o3`/`o4` ab, statt jede neue Modellgeneration erst nach einem eigenen 400er-Incident nachzuziehen (#1572).
+
 `frontend/src/views/Settings/LlmProvidersView.vue` rendert CLI-/Session-Provider seit #1415 nicht mehr wie HTTP-Provider: `codex_cli` (`auth_mode="session"`) zeigt weder Key- noch Base-URL-Feld, nur einen Hinweis auf die lokale `codex login`-Session; `claude_cli` (`auth_mode="api_key"`) behält das Key-Feld, verliert aber das Base-URL-Feld. `transport`/`auth_mode` liefert der `ProviderDescriptor` aus der Registry-Matrix; eine gespeicherte Connection gewinnt.
 
 Ob ein Provider ohne eigenen Secret auskommt, entscheidet seit dem Fix für den
