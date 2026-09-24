@@ -2,6 +2,7 @@ import service, { requestWithRetry } from './index'
 import type { ApiResponse } from '../types/run'
 import type { AiModelRefPayload } from './report'
 import type { Project } from '../contracts/projectContract'
+import type { TaskStatusResponse as TaskStatusResponseContract } from '../contracts/taskStatusContract'
 
 // --- Local types --------------------------------------------------------
 
@@ -29,15 +30,17 @@ export interface BuildGraphResponse {
   run_id?: string
 }
 
-export interface TaskStatusResponse {
-  task_id: string
-  status: string
-  progress?: number
-  message?: string
-  error?: string | null
-  result?: Record<string, unknown> | null
-  progress_detail?: BuildProgressDetail | null
-}
+/**
+ * Antwortform von `GET /api/graph/task/<task_id>` und je Element von
+ * `GET /api/graph/tasks`.
+ *
+ * Abgeleitet aus dem Zod-Spiegel in `../contracts/taskStatusContract`, nicht
+ * mehr von Hand deklariert (Issue #1466). Das vorherige Interface hatte
+ * `progress`/`message` als optional, obwohl `Task.to_dict()` beide immer
+ * setzt, und kannte `task_type`/`created_at`/`updated_at`/`message_key`/
+ * `metadata` gar nicht.
+ */
+export type TaskStatusResponse = TaskStatusResponseContract
 
 export interface GraphDataResponse {
   graph_id: string

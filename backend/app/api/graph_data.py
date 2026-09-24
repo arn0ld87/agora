@@ -5,6 +5,7 @@ Graph API: Data retrieval, snapshot, diff, and export endpoints.
 from flask import Response, request
 from . import graph_bp
 from ..container import get_container
+from ..contracts.task_status_contract import TaskStatusResponse
 from ..models.graph import GraphDataDTO
 from ..models.task import TaskManager
 from ..utils.validation import validate_graph_id, validate_task_id
@@ -25,14 +26,21 @@ def get_task(task_id: str):
     if not task:
         return json_error(ApiErrorCode.NOT_FOUND, status=404, message=f"Task does not exist: {task_id}")
 
-    return json_success(task.to_dict())
+    response = TaskStatusResponse.model_validate(task.to_dict())
+    return json_success(response.model_dump(mode="json"))
 
 @graph_bp.route('/tasks', methods=['GET'])
 @handle_api_errors
 def list_tasks():
     """List all tasks"""
+    # ``TaskManager.list_tasks()`` liefert bereits ``Task.to_dict()``-Dicts
+    # (siehe ``app/models/task.py::TaskManager.list_tasks``) — ein erneutes
+    # ``t.to_dict()`` hier waere ein ``AttributeError`` auf einem Dict.
+    # Vor #1466 unbemerkt, weil kein Test diesen Endpunkt mit befuellten
+    # Tasks aufrief.
     tasks = TaskManager().list_tasks()
-    return json_success([t.to_dict() for t in tasks], count=len(tasks))
+    responses = [TaskStatusResponse.model_validate(t) for t in tasks]
+    return json_success([r.model_dump(mode="json") for r in responses], count=len(responses))
 
 @graph_bp.route('/data/<graph_id>', methods=['GET'])
 @require_scope("graph:read")

@@ -1,0 +1,91 @@
+{
+  "$defs": {
+    "StatusCheckError": {
+      "additionalProperties": false,
+      "description": "Strukturierter Fehler-Shape f\u00fcr Probe-Fehler in ``/api/status``.\n\nErsetzt den rohen ``str(exc)``, der bislang an drei Stellen (neo4j,\nollama, disk) direkt in die HTTP-Antwort floss.",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/StatusErrorCode"
+        }
+      },
+      "required": [
+        "code"
+      ],
+      "title": "StatusCheckError",
+      "type": "object"
+    },
+    "StatusErrorCode": {
+      "description": "Geschlossene Fehlerklassifikation f\u00fcr Probe-Fehler in ``/api/status``.\n\nDer rohe Exception-Text (Dateipfade, Hostnamen, Treiberdetails) ist ein\nInformationsleck und f\u00fcr ein Frontend nicht darstellbar (Python-\nTraceback-Prosa) \u2014 er bleibt im strukturierten Log. Hier wandert nur ein\nCode, den das Frontend in einen lesbaren Satz \u00fcbersetzt.\n\nBewusst nicht ein Code je Exception-Klasse, sondern eine Klassifikation\ndanach, wie ein Nutzer reagieren w\u00fcrde:\n\n* ``unreachable`` \u2014 Ziel (Host, Pfad) ist nicht erreichbar/vorhanden.\n* ``timeout`` \u2014 Probe hat das Zeitbudget \u00fcberschritten.\n* ``auth`` \u2014 Authentifizierung/Berechtigung fehlgeschlagen.\n* ``unexpected`` \u2014 alles andere; Catch-all, damit ein neuer,\n  unklassifizierter Fehler nicht crasht.",
+      "enum": [
+        "unreachable",
+        "timeout",
+        "auth",
+        "unexpected"
+      ],
+      "title": "StatusErrorCode",
+      "type": "string"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/system-status-neo4j.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Neo4j-Teilbaum von ``/api/status`` (Issue #1466).\n\n``_get_neo4j_status`` hat drei Zweige mit unterschiedlicher Feldmenge:\n\n* ``storage is None`` \u2014 ``is_connected``/``last_success_ts`` werden nie\n  gesetzt (kein Verbindungsversuch je unternommen).\n* Erfolgreiche Probe \u2014 alle Felder gesetzt, ``error`` ist ``None``.\n* Fehlgeschlagene Probe \u2014 alle Felder gesetzt, ``error`` strukturiert\n  (``StatusCheckError``, seit #1458).\n\n``_get_neo4j_status`` serialisiert deshalb mit ``exclude_unset=True``\nstatt ``exclude_none=True``: nur explizit gesetzte Felder wandern in die\nAntwort, damit der erste Zweig ``is_connected``/``last_success_ts``\nweiterhin ganz ausl\u00e4sst statt sie als ``null`` zu senden \u2014 exakt das\nbisherige, handgeschriebene Wire-Format.",
+  "properties": {
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/StatusCheckError"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "is_connected": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Is Connected"
+    },
+    "last_success_ts": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Success Ts"
+    },
+    "reachable": {
+      "title": "Reachable",
+      "type": "boolean"
+    },
+    "uri": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Uri"
+    }
+  },
+  "required": [
+    "reachable"
+  ],
+  "title": "SystemStatusNeo4j",
+  "type": "object"
+}
