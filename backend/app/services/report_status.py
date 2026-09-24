@@ -23,6 +23,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from ..contracts.report_status_contract import ReportMessageKey, ReportStatusResponse
 from ..services.report_agent import ReportManager, ReportStatus
 from ..services.report_export import ReportExportService
 from ..services.run_registry import RunRegistry
@@ -42,6 +43,19 @@ _CONCLUSIVE_RUN_STATUSES = {
     "stopped",
     "processing",
     "pending",
+}
+
+# #1174 (Finding 2): der Run-Registry-Pfad reichte ``run.get("message")``
+# roh durch — typischerweise Englisch ("Task completed"). Nur die drei
+# Zustände, die auch anderswo in dieser Kette einen Key tragen, werden hier
+# normalisiert; "incomplete"/"stopped" sind Randzustände ohne eigenen Key
+# und fallen wie vor #1174 auf den Klartext zurück.
+_RUN_REGISTRY_MESSAGE_KEYS: dict[str, ReportMessageKey] = {
+    "completed": "report.generated",
+    "failed": "report.failed",
+    "pending": "report.generating",
+    "processing": "report.generating",
+    "paused": "report.generating",
 }
 
 
@@ -108,7 +122,14 @@ def _status_from_run_registry(query: _StatusQuery) -> Optional[dict[str, Any]]:
         data["status"] = "incomplete"
 
     if run.get("status") in _CONCLUSIVE_RUN_STATUSES:
-        return data
+        # #1174 (Finding 2): dieser Pfad reichte ``message`` bisher roh durch
+        # (typischerweise Englisch, z. B. "Task completed") — ohne den
+        # ``message_key``, den die anderen drei Stufen dieser Kette schon
+        # tragen. ``data["status"]`` ist an dieser Stelle final (inkl. der
+        # INCOMPLETE-Umschreibung oben).
+        message_key = _RUN_REGISTRY_MESSAGE_KEYS.get(data["status"])
+        payload = ReportStatusResponse(**data, message_key=message_key)
+        return payload.model_dump(mode="json", exclude_none=True)
     return None
 
 
@@ -124,27 +145,29 @@ def _status_from_persisted_report(query: _StatusQuery) -> Optional[dict[str, Any
 
     sim_id = existing_report.simulation_id or query.simulation_id
     if existing_report.status == ReportStatus.COMPLETED:
-        return {
-            "simulation_id": sim_id,
-            "report_id": query.report_id,
-            "status": "completed",
-            "progress": 100,
-            "message": "Report generated",
+        payload = ReportStatusResponse(
+            simulation_id=sim_id,
+            report_id=query.report_id,
+            status="completed",
+            progress=100,
+            message="Report generated",
             # Maschinenlesbarer i18n-Schluessel (#1174, Muster aus #1458) —
             # ``message`` bleibt Fallback fuer Consumer ohne Key-Uebersetzung.
-            "message_key": "report.generated",
-            "already_completed": True,
-        }
+            message_key="report.generated",
+            already_completed=True,
+        )
+        return payload.model_dump(mode="json", exclude_none=True)
     if existing_report.status == ReportStatus.FAILED:
-        return {
-            "simulation_id": sim_id,
-            "report_id": query.report_id,
-            "status": "failed",
-            "progress": 0,
-            "message": "Report generation failed",
-            "message_key": "report.failed",
-            "error": getattr(existing_report, "error", "") or "",
-        }
+        payload = ReportStatusResponse(
+            simulation_id=sim_id,
+            report_id=query.report_id,
+            status="failed",
+            progress=0,
+            message="Report generation failed",
+            message_key="report.failed",
+            error=getattr(existing_report, "error", "") or "",
+        )
+        return payload.model_dump(mode="json", exclude_none=True)
     query.simulation_id = sim_id
     return None
 
@@ -219,29 +242,31 @@ def _status_from_simulation(query: _StatusQuery) -> Optional[dict[str, Any]]:
     existing_report = ReportManager.get_report_by_simulation(query.simulation_id)
     if not existing_report or existing_report.status != ReportStatus.COMPLETED:
         return None
-    return {
-        "simulation_id": query.simulation_id,
-        "report_id": existing_report.report_id,
-        "status": "completed",
-        "progress": 100,
-        "message": "Report generated",
-        "message_key": "report.generated",
-        "already_completed": True,
-    }
+    payload = ReportStatusResponse(
+        simulation_id=query.simulation_id,
+        report_id=existing_report.report_id,
+        status="completed",
+        progress=100,
+        message="Report generated",
+        message_key="report.generated",
+        already_completed=True,
+    )
+    return payload.model_dump(mode="json", exclude_none=True)
 
 
 def _acknowledge_polling(query: _StatusQuery) -> Optional[dict[str, Any]]:
     """Stufe 4 — nichts gefunden, aber die Frage war zulässig."""
     if not (query.report_id or query.simulation_id):
         return None
-    return {
-        "simulation_id": query.simulation_id,
-        "report_id": query.report_id,
-        "status": "generating",
-        "progress": 0,
-        "message": "Task handle unknown — waiting for report completion",
-        "message_key": "report.awaiting_task",
-    }
+    payload = ReportStatusResponse(
+        simulation_id=query.simulation_id,
+        report_id=query.report_id,
+        status="generating",
+        progress=0,
+        message="Task handle unknown — waiting for report completion",
+        message_key="report.awaiting_task",
+    )
+    return payload.model_dump(mode="json", exclude_none=True)
 
 
 class ReportStatusService:

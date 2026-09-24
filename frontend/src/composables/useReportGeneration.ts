@@ -37,6 +37,7 @@ import {
   type ReportOutline,
 } from '../contracts/reportContract'
 import type { ReportMode } from '../contracts/reportV3Contract'
+import type { ReportMessageKey } from '../contracts/reportStatusContract'
 import { usePolling, type UsePollingReturn } from './usePolling'
 import { resolveStatusMessage } from '../i18n/statusMessage'
 
@@ -69,8 +70,13 @@ export type ReportLifecycleStatus = 'processing' | 'completed' | 'incomplete' | 
  */
 export interface ReportGenerationStatusData {
   message?: string
-  /** Maschinenlesbarer i18n-Schluessel fuer ``message`` (#1174, Muster aus #1458). */
-  message_key?: string | null
+  /**
+   * Maschinenlesbarer i18n-Schluessel fuer ``message`` (#1174, Muster aus
+   * #1458) — siehe `contracts/reportStatusContract.ts`. Der Live-Task-Zweig
+   * kennt kein `message_key`, deshalb bleibt der String-Typ als Fallback
+   * erhalten statt nur den literalen Key zuzulassen.
+   */
+  message_key?: ReportMessageKey | string | null
   outline?: unknown
   sections?: Record<string, unknown>
   current_section_index?: number

@@ -10,6 +10,7 @@ import {
 } from '../contracts/reportContract'
 import type { ReportMode } from '../contracts/reportV3Contract'
 import type { AiModelRef } from '../contracts/aiModelRef'
+import type { ReportMessageKey } from '../contracts/reportStatusContract'
 
 // --- Local payload/data types -------------------------------------------
 // These describe the `data` field inside the API envelope, not the envelope itself.
@@ -59,8 +60,14 @@ export interface ReportStatusData {
   status: string
   progress?: number
   message?: string
-  /** Maschinenlesbarer i18n-Schluessel fuer ``message`` (#1174, Muster aus #1458). */
-  message_key?: string | null
+  /**
+   * Maschinenlesbarer i18n-Schluessel fuer ``message`` (#1174, Muster aus
+   * #1458). Nur vier der fuenf Stufen von `ReportStatusService.get_status`
+   * setzen ihn (siehe `contracts/reportStatusContract.ts`); der Live-Task-
+   * Zweig kennt kein `message_key`, deshalb bleibt der String-Typ als
+   * Fallback erhalten statt nur den literalen Key zuzulassen.
+   */
+  message_key?: ReportMessageKey | string | null
   report_id?: string
   simulation_id?: string
   error?: string | null
