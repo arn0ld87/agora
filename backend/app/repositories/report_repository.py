@@ -64,6 +64,15 @@ class ReportRepository(Protocol):
         """
         ...
 
+    def list_ids(self) -> List[str]:
+        """Ablageschluessel aller Reports, wie ``get`` sie erwartet.
+
+        Nicht zwingend gleich der ``report_id`` im Datensatz: ein Altbestand
+        kann unter einem anderen Ordnernamen liegen, und die Report-Inhalte
+        daneben findet nur dieser Schluessel. Reihenfolge: adapterabhaengig.
+        """
+        ...
+
     def list(self, simulation_id: Optional[str] = None) -> List[ReportRecord]:
         """Alle Reports, optional gefiltert nach Simulation.
 

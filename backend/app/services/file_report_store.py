@@ -97,15 +97,14 @@ class FileReportRepository:
         write_json_atomic(self._meta_path(record.report_id), record.to_dict())
         return record
 
-    def list(self, simulation_id: Optional[str] = None) -> List[ReportRecord]:
-        """Alle Reports, optional gefiltert nach Simulation.
+    def list_ids(self) -> List[str]:
+        """Ablageschluessel aller Reports: Ordnernamen (aktuelles Format) und
+        ``<id>.json`` ohne Endung (Legacy-Flachformat).
 
-        Zaehlt Kandidaten-IDs aus genau einem Durchlauf durch
-        ``os.listdir(reports_dir)`` — dieselbe Quelle, die
-        ``ReportManager.list_reports``/``get_report_by_simulation`` bisher
-        direkt abliefen: Verzeichniseintraege (Ordnerformat) und
-        ``*.json``-Dateien (Legacy-Flachformat). Reihenfolge:
-        adapterabhaengig.
+        Der Schluessel ist nicht zwingend die ``report_id`` im Manifest: ein
+        Altbestand kann unter ``report_deepseek_<hex>/`` liegen und
+        ``report_<hex>`` eintragen (Codex-Review auf #1601). Die Artefakte
+        daneben (Outline, Markdown, Evidence-Map) findet nur der Schluessel.
         """
         ensure_reports_dir(self.reports_dir)
 
@@ -116,9 +115,15 @@ class FileReportRepository:
                 candidate_ids.setdefault(item, None)
             elif item.endswith(".json"):
                 candidate_ids.setdefault(item[:-5], None)
+        return list(candidate_ids)
 
+    def list(self, simulation_id: Optional[str] = None) -> List[ReportRecord]:
+        """Alle Reports, optional gefiltert nach Simulation.
+
+        Reihenfolge: adapterabhaengig.
+        """
         records: list[ReportRecord] = []
-        for report_id in candidate_ids:
+        for report_id in self.list_ids():
             record = self.get(report_id)
             if record is None:
                 continue

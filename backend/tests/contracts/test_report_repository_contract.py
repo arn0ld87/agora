@@ -349,3 +349,23 @@ def test_get_report_repository_returns_file_adapter(tmp_path):
     repository: ReportRepository = get_report_repository(reports_dir=str(tmp_path / "reports"))
 
     assert isinstance(repository, FileReportRepository)
+
+
+def test_list_ids_returns_storage_keys_not_manifest_ids(repo, tmp_path):
+    """Codex-Review auf #1601: der Ablageschluessel eines Altbestands kann
+    von der ``report_id`` im Manifest abweichen; ``get`` braucht den
+    Schluessel."""
+    reports_dir = tmp_path / "reports"
+    folder = reports_dir / "report_deepseek_7ce9e4882bae"
+    folder.mkdir(parents=True)
+    record = _make_record(report_id="report_7ce9e4882bae", simulation_id="sim_legacy")
+    (folder / "meta.json").write_text(json.dumps(record.to_dict()), encoding="utf-8")
+    (reports_dir / "report_flach00001.json").write_text(
+        json.dumps(_make_record(report_id="report_flach00001").to_dict()), encoding="utf-8"
+    )
+
+    keys = set(repo.list_ids())
+
+    assert keys == {"report_deepseek_7ce9e4882bae", "report_flach00001"}
+    loaded = repo.get("report_deepseek_7ce9e4882bae")
+    assert loaded is not None and loaded.report_id == "report_7ce9e4882bae"

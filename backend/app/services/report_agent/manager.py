@@ -1151,6 +1151,24 @@ class ReportManager:
         return cls._build_report_from_record(report_id, record)
 
     @classmethod
+    def _stored_records(cls) -> List[tuple[str, ReportRecord]]:
+        """``(Ablageschluessel, Datensatz)`` fuer jeden lesbaren Report.
+
+        Die Artefakte werden ueber den Schluessel gesucht, nicht ueber die
+        ``report_id`` im Manifest — bei Altbestaenden mit abweichendem
+        Ordnernamen (z. B. ``report_deepseek_<hex>/`` mit ``report_<hex>``
+        im Manifest) fehlten sonst Outline, Markdown und Evidence-Map
+        (Codex-Review auf #1601). Dasselbe Verhalten wie vor dem Port.
+        """
+        repository = cls._get_repository()
+        stored: List[tuple[str, ReportRecord]] = []
+        for key in repository.list_ids():
+            record = repository.get(key)
+            if record is not None:
+                stored.append((key, record))
+        return stored
+
+    @classmethod
     def _build_report_from_record(
         cls, report_id: str, record: ReportRecord
     ) -> Optional[Report]:
@@ -1224,8 +1242,10 @@ class ReportManager:
         """based onsimulationIDgetreport"""
         # Issue #1580: die Kandidaten-Aufzaehlung (Ordner- + Legacy-
         # Flachformat) lebt jetzt im Repository-Adapter.
-        for record in cls._get_repository().list(simulation_id=simulation_id):
-            report = cls._build_report_from_record(record.report_id, record)
+        for key, record in cls._stored_records():
+            if record.simulation_id != simulation_id:
+                continue
+            report = cls._build_report_from_record(key, record)
             if report:
                 return report
 
@@ -1239,8 +1259,10 @@ class ReportManager:
         # Erstellzeit bleibt hier — sie ist eine Eigenschaft des Domain-
         # Objekts, kein Zusagenteil des Ports.
         reports = []
-        for record in cls._get_repository().list(simulation_id=simulation_id):
-            report = cls._build_report_from_record(record.report_id, record)
+        for key, record in cls._stored_records():
+            if simulation_id is not None and record.simulation_id != simulation_id:
+                continue
+            report = cls._build_report_from_record(key, record)
             if report:
                 reports.append(report)
 

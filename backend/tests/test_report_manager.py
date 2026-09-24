@@ -877,3 +877,35 @@ def test_clean_section_content_renders_simulated_quote_marker() -> None:
     assert "seed_anchor: seed_doc:robert_krasniqi_statement" in cleaned
     assert "Meine Generation will keine 5-Tage-Woche mehr." in cleaned
     assert "<simulated_quote" not in cleaned
+
+
+def test_legacy_folder_name_differing_from_report_id_keeps_its_artifacts(tmp_path, monkeypatch):
+    """Codex-Review auf #1601: ein Altbestand liegt unter
+    ``report_deepseek_<hex>/``, das Manifest traegt ``report_<hex>``. Die
+    Artefakte daneben muessen ueber den Ordnernamen gefunden werden, wie vor
+    dem Repository-Port."""
+    monkeypatch.setattr(ReportManager, 'REPORTS_DIR', str(tmp_path))
+    folder = tmp_path / 'report_deepseek_7ce9e4882bae'
+    folder.mkdir()
+    (folder / 'meta.json').write_text(
+        json.dumps(
+            {
+                'report_id': 'report_7ce9e4882bae',
+                'simulation_id': 'sim_legacy',
+                'graph_id': 'graph_legacy',
+                'simulation_requirement': 'Frage',
+                'status': 'completed',
+                'created_at': '2026-08-11T10:00:00',
+            }
+        ),
+        encoding='utf-8',
+    )
+    (folder / 'full_report.md').write_text('# Altbestand-Inhalt', encoding='utf-8')
+
+    listed = ReportManager.list_reports(simulation_id='sim_legacy')
+    by_sim = ReportManager.get_report_by_simulation('sim_legacy')
+
+    assert len(listed) == 1
+    assert listed[0].markdown_content == '# Altbestand-Inhalt'
+    assert by_sim is not None
+    assert by_sim.markdown_content == '# Altbestand-Inhalt'
