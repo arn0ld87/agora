@@ -724,7 +724,16 @@
     "simulation_run_queued": "Simulation run queued.",
     "simulation_run_started": "Simulation run started.",
     "pause_requested": "Pause requested.",
-    "run_resumed": "Run resumed."
+    "run_resumed": "Run resumed.",
+    "runner_status_idle": "Runner idle.",
+    "runner_status_starting": "Simulation starting…",
+    "runner_status_running": "Simulation running.",
+    "runner_status_paused": "Simulation paused.",
+    "runner_status_stopping": "Simulation stopping…",
+    "runner_status_stopped": "Simulation stopped.",
+    "runner_status_completed": "Simulation completed.",
+    "runner_status_failed": "Simulation failed.",
+    "runner_status_ready": "Runner ready."
   },
   "step5": {
     "kicker": "№ 05 — CONVERSATION",

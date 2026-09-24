@@ -724,7 +724,16 @@
     "simulation_run_queued": "Simulationslauf eingereiht.",
     "simulation_run_started": "Simulationslauf gestartet.",
     "pause_requested": "Pause angefordert.",
-    "run_resumed": "Lauf fortgesetzt."
+    "run_resumed": "Lauf fortgesetzt.",
+    "runner_status_idle": "Runner wartet.",
+    "runner_status_starting": "Simulation startet…",
+    "runner_status_running": "Simulation läuft.",
+    "runner_status_paused": "Simulation pausiert.",
+    "runner_status_stopping": "Simulation wird gestoppt…",
+    "runner_status_stopped": "Simulation gestoppt.",
+    "runner_status_completed": "Simulation abgeschlossen.",
+    "runner_status_failed": "Simulation fehlgeschlagen.",
+    "runner_status_ready": "Runner bereit."
   },
   "step5": {
     "kicker": "№ 05 — GESPRÄCH",
