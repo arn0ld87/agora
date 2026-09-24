@@ -5,7 +5,11 @@ Werkzeuge: [`backend/scripts/migrate_llm_profiles_to_postgres.py`](../../backend
 
 ## Warum dieses Runbook existiert
 
-Das Umlegen von `AGORA_LLM_PROFILE_BACKEND` ist eine Zeile in der Umgebung und dauert eine Sekunde. Was davor passieren muss, dauert länger, und genau daran hängt, ob die Anwendung danach dieselben Profile sieht wie vorher. Ein Schalter, der vor der Migration umgelegt wird, zeigt auf eine leere Tabelle — die Anwendung startet, meldet keinen Fehler und hat keine einzige Route mehr.
+Das Umlegen von `AGORA_LLM_PROFILE_BACKEND` ist eine Zeile in der Umgebung und dauert eine Sekunde. Was davor passieren muss, dauert länger, und genau daran hängt, ob die Anwendung danach dieselben Profile sieht wie vorher.
+
+Fehlt `alembic upgrade head` ganz, bricht der Start seit Issue #1582 selbst ab: `create_app` prüft bei jedem `AGORA_*_BACKEND=postgres`, ob die Revision in der Datenbank dem Alembic-Head aus `backend/migrations/` entspricht, und meldet dabei beide Revisionen (siehe `app/infrastructure/postgres/schema_gate.py`). Kein stiller Fall mehr, bei dem die Anwendung startet und erst jede Route mit einem Fehler antwortet.
+
+Das Gate prüft nur das *Schema*, nicht die *Daten*: eine Tabelle, die per Migration existiert, aber deren Inhalt noch nicht per Migrationsskript (siehe unten) übertragen wurde, lässt den Start weiterhin zu — nur eben mit einer leeren Tabelle statt Profilen.
 
 ## Was sich dabei nicht ändert
 

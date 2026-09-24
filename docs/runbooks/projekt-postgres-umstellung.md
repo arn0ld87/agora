@@ -49,6 +49,8 @@ uv run alembic -c migrations/alembic.ini upgrade head
 
 Legt `agora.projects` an. Die Revision ist `7a3c1e84f209`.
 
+Wird dieser Schritt vor dem Umschalten von `AGORA_PROJECT_BACKEND` vergessen, startet Agora seit Issue #1582 nicht mehr still gegen die fehlende Tabelle — `create_app` prüft beim Start die Alembic-Revision der Datenbank gegen den Head aus `backend/migrations/` und bricht mit einer Meldung ab, die beide Revisionen nennt (`app/infrastructure/postgres/schema_gate.py`). Vorher hätte die Anwendung anstandslos gestartet und wäre erst beim ersten Projektzugriff mit einem Datenbankfehler gescheitert.
+
 ### 2. Agora anhalten
 
 ```bash
