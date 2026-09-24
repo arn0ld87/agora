@@ -12,6 +12,16 @@
   `AGORA_JOB_LEASE_HEARTBEAT_INTERVAL_SECONDS`/`AGORA_JOB_LEASE_TTL_SECONDS`
   konfigurierbar) und endet zuverlässig mit dem Job, auch bei einer
   Exception im Job-Target.
+- Der Heartbeat ist an Fortschritt gekoppelt, nicht nur an den lebenden
+  Thread: er erneuert die Lease nur, solange der Job innerhalb von
+  `AGORA_JOB_LEASE_MAX_STALL_SECONDS` (Default 1800s) ein neues Run-Event
+  geschrieben hat (Status-/Progress-/Message-Write, auch über
+  `TaskManager`). Ein hängender Job-Target (Deadlock, blockierender Call)
+  verliert seine Lease damit spätestens nach Stall-Grenze plus TTL, statt
+  `/resume` dauerhaft mit `409` zu blockieren.
+- `Config.validate()` prüft die Lease-Zeiten beim Start: TTL, Intervall und
+  Stall-Grenze müssen > 0 sein, das Heartbeat-Intervall höchstens die halbe
+  TTL.
 - `reconcile_stale_jobs` markiert einen In-Process-Job jetzt auch dann als
   `failed`/`process_restart`, wenn die Prozessidentität formal noch passt
   (`owns_run() == True`), die Lease aber abgelaufen ist — ein hängender

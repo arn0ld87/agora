@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import os
 import threading
+import time
 import uuid
 from datetime import UTC, datetime
 from typing import Any, Callable, Optional
@@ -32,8 +33,24 @@ logger = get_logger("agora.jobs")
 _BACKEND: str = "thread"
 
 
-def _heartbeat_loop(run_id: str, stop_event: threading.Event, interval_s: float) -> None:
-    """Erneuert ``heartbeat_at`` periodisch, solange der Job-Thread lebt (#1472).
+def _progress_marker(run: Optional[dict[str, Any]]) -> int:
+    """Anzahl der Run-Events — waechst mit jedem Fortschritts-Write des Jobs.
+
+    Jeder Status-/Progress-/Message-/Error-Write ueber ``update_run`` (auch
+    der Durchschreibpfad ``TaskManager`` → ``RunRegistry.sync_task``) haengt
+    ein Event an. Der Heartbeat selbst schreibt nur ``metadata`` und haengt
+    keines an, zaehlt also nie als eigener Fortschritt.
+    """
+    return len((run or {}).get("events") or [])
+
+
+def _heartbeat_loop(
+    run_id: str,
+    stop_event: threading.Event,
+    interval_s: float,
+    max_stall_s: float,
+) -> None:
+    """Erneuert ``heartbeat_at``, solange der Job Fortschritt meldet (#1472).
 
     Laeuft als eigener Daemon-Thread — dasselbe Modell wie der Job-Thread
     selbst (siehe ``_enqueue_thread``): funktioniert unveraendert unter
@@ -45,15 +62,36 @@ def _heartbeat_loop(run_id: str, stop_event: threading.Event, interval_s: float)
     ``stop_event.set()`` aufgerufen wird (kein Warten auf das naechste
     Intervall), sonst nach ``interval_s`` ``False``.
 
+    Der Heartbeat ist an Fortschritt gekoppelt, nicht nur an die Existenz
+    des Threads (Codex-P1, PR #1555): ein haengender ``target``
+    (Deadlock, blockierender Call) hielte die Lease sonst ewig am Leben,
+    und ``/resume`` lieferte dauerhaft ``409 job_lease_active``. Seit dem
+    letzten neuen Run-Event (``_progress_marker``) darf hoechstens
+    ``max_stall_s`` vergangen sein; danach bleibt die Erneuerung aus und die
+    Lease verfaellt ``lease_ttl_s`` spaeter. ``max_stall_s`` liegt bewusst
+    weit ueber der TTL, damit ein einzelner langer LLM-Call ohne
+    Zwischenmeldung einen lebenden Job nicht zum Doppelstart freigibt.
+    Meldet der Job danach wieder Fortschritt, wird die Lease erneut
+    erneuert.
+
     Best effort: ein Registry-Fehler beendet den Heartbeat nicht, er
     versucht es beim naechsten Intervall erneut — der Job selbst darf davon
     nicht abhaengen.
     """
+    last_marker: Optional[int] = None
+    last_progress = time.monotonic()
     while not stop_event.wait(interval_s):
         try:
             from ..services.run_registry import RunRegistry
 
-            RunRegistry().update_run(
+            registry = RunRegistry()
+            marker = _progress_marker(registry.get_run(run_id))
+            if marker != last_marker:
+                last_marker = marker
+                last_progress = time.monotonic()
+            if time.monotonic() - last_progress > max_stall_s:
+                continue
+            registry.update_run(
                 run_id, metadata={HEARTBEAT_AT_KEY: datetime.now(UTC).isoformat()}
             )
         except Exception as exc:  # noqa: BLE001 - Heartbeat darf den Job nie stoppen
@@ -78,12 +116,17 @@ def _enqueue_thread(
     ``_wrapper`` zurueckkehrt (``try/finally``), auch wenn ``target`` wirft —
     eine haengenbleibende Lease nach einer Exception waere sonst bis zum
     Ablauf der TTL ein falsches "laeuft noch".
+
+    Der Heartbeat startet nur, wenn ``_wrapper`` tatsaechlich im eigenen
+    Job-Thread laeuft. Wird er synchron ausgefuehrt (Tests ersetzen
+    ``Thread.start`` durch ``run``), liefe auch der Heartbeat-Loop synchron
+    vor ``target`` und kehrte nie zurueck.
     """
 
     def _wrapper() -> None:
         stop_heartbeat: Optional[threading.Event] = None
         heartbeat_thread: Optional[threading.Thread] = None
-        if run_id:
+        if run_id and thread.is_alive():
             stop_heartbeat = threading.Event()
             heartbeat_thread = threading.Thread(
                 target=_heartbeat_loop,
@@ -91,6 +134,7 @@ def _enqueue_thread(
                     run_id,
                     stop_heartbeat,
                     Config.AGORA_JOB_LEASE_HEARTBEAT_INTERVAL_SECONDS,
+                    Config.AGORA_JOB_LEASE_MAX_STALL_SECONDS,
                 ),
                 daemon=True,
                 name=f"agora-job-heartbeat-{run_id}",
