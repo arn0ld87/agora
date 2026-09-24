@@ -56,7 +56,7 @@ const emit = defineEmits<{
   'update:reportMode': [value: ReportMode]
   regenerate: []
   navigate: [anchor: string]
-  'create-branch': [branchForm: { branch_name: string; llm_model: string; language: string; max_agents: string }]
+  'create-branch': [branchForm: { branch_name: string; llm_model: string; language: string; max_agents: string; ai_model_ref: AiModelRef | null }]
   'go-conversation': []
   'copy-markdown': []
   'download-markdown': []

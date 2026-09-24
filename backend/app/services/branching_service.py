@@ -15,6 +15,7 @@ import shutil
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from ..config import Config
+from ..contracts.ai_provider_contract import AiModelRef
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.logger import get_logger
 from .run_registry import RunRegistry
@@ -46,6 +47,36 @@ def list_branches(
     return branches
 
 
+def _apply_config_overrides(config: Dict[str, Any], overrides: Dict[str, Any]) -> None:
+    """Schreibt die skalaren und strukturierten Branch-Overrides in ``config``.
+
+    Aus ``create_branch`` extrahiert (radon-Komplexitäts-Gate, Issue #886):
+    ``ai_model_ref`` kam als weiterer Zweig dazu und hätte die Funktion sonst
+    über die Allowlist-Obergrenze gehoben.
+    """
+    for key in ("llm_model", "language", "max_agents"):
+        if key in overrides and overrides[key] not in (None, ""):
+            config[key] = overrides[key]
+
+    ai_model_ref_override = overrides.get("ai_model_ref")
+    if ai_model_ref_override is not None:
+        # Issue #886: kanonische Referenz gewinnt ueber einen gleichzeitig
+        # gesetzten ``llm_model``-Key. Die API-Schicht lehnt die Kombination
+        # bereits per Contract-Validator ab; dieser Guard greift nur, wenn
+        # create_branch direkt aufgerufen wird (Tests, Replay-Pfad) und hält
+        # config["llm_model"] konsistent mit der Connection statt mit einem
+        # veralteten String.
+        if not isinstance(ai_model_ref_override, AiModelRef):
+            ai_model_ref_override = AiModelRef.model_validate(ai_model_ref_override)
+        config["ai_model_ref"] = ai_model_ref_override.model_dump(mode="json")
+        config["llm_model"] = ai_model_ref_override.model_id
+
+    if "time_config" in overrides and isinstance(overrides["time_config"], dict):
+        existing = config.get("time_config", {}) or {}
+        existing.update(overrides["time_config"])
+        config["time_config"] = existing
+
+
 def create_branch(
     manager: SimulationManager,
     simulation_id: str,
@@ -74,6 +105,7 @@ def create_branch(
         "enable_reddit",
         "persona_additions",
         "persona_removals",
+        "ai_model_ref",
     }
     overrides = overrides or {}
     unknown = sorted(set(overrides.keys()) - allowed_override_keys)
@@ -135,13 +167,7 @@ def create_branch(
         "branch_name": branch_name,
         "branch_depth": branch.branch_depth,
     }
-    for key in ("llm_model", "language", "max_agents"):
-        if key in overrides and overrides[key] not in (None, ""):
-            config[key] = overrides[key]
-    if "time_config" in overrides and isinstance(overrides["time_config"], dict):
-        existing = config.get("time_config", {}) or {}
-        existing.update(overrides["time_config"])
-        config["time_config"] = existing
+    _apply_config_overrides(config, overrides)
     config["enable_twitter"] = enable_twitter
     config["enable_reddit"] = enable_reddit
 

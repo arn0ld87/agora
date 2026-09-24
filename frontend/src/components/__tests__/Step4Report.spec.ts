@@ -136,6 +136,7 @@ import {
   getReportEvidence,
   exportReport,
 } from '../../api/report'
+import { createSimulationBranch } from '../../api/simulation'
 import { useIncrementalLogPolling } from '../../composables/useIncrementalLogPolling'
 import { REPORT_STATUS_POLL_INTERVAL_MS } from '../../composables/useReportGeneration'
 import Step4Report from '@/components/v4/steps/Step4Report.vue'
@@ -1357,6 +1358,95 @@ describe('Step4Report — runId ueberlebt die Report-Navigation (PR #975)', () =
 
     expect(router.currentRoute.value.name).toBe('Report')
     expect(router.currentRoute.value.query.runId).toBeUndefined()
+  })
+})
+
+// Issue #886: Branch-Overrides mit kanonischer ai_model_ref. ReportBranchControls
+// sendet jetzt zusätzlich die volle Picker-Auswahl; createBranchFromReport
+// entscheidet, ob sie oder der Legacy-llm_model-String rausgeht (siehe
+// Docstring von ReportBranchControls.vue: "letzte Bearbeitung gewinnt").
+describe('Step4Report — Branch-Overrides mit ai_model_ref (Issue #886)', () => {
+  type BranchForm = {
+    branch_name: string
+    llm_model: string
+    language: string
+    max_agents: string
+    ai_model_ref: { provider_connection_id: string; model_id: string; source: string } | null
+  }
+
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    localStorageMock.clear()
+    resetMockSelection()
+    ;(createSimulationBranch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: { simulation_id: 'sim_branch_001' },
+    })
+    await router.push('/')
+  })
+
+  it('sendet die kanonische ai_model_ref statt llm_model, wenn Picker-Pick und Freitext übereinstimmen', async () => {
+    const wrapper = mountComponent({ simulationId: 'sim_test01' })
+    await wrapper.vm.$nextTick()
+
+    await (wrapper.vm as unknown as { createBranchFromReport: (form: BranchForm) => Promise<void> })
+      .createBranchFromReport({
+        branch_name: 'variant-a',
+        llm_model: 'gpt-4o',
+        language: '',
+        max_agents: '',
+        ai_model_ref: { provider_connection_id: 'conn-a', model_id: 'gpt-4o', source: 'explicit' },
+      })
+    await flushPromises()
+
+    expect(createSimulationBranch).toHaveBeenCalledWith(
+      'sim_test01',
+      expect.objectContaining({
+        overrides: {
+          ai_model_ref: { provider_connection_id: 'conn-a', model_id: 'gpt-4o', source: 'explicit' },
+        },
+      }),
+    )
+  })
+
+  it('fällt auf den Legacy-llm_model-String zurück, wenn Freitext vom Picker-Pick abweicht', async () => {
+    const wrapper = mountComponent({ simulationId: 'sim_test01' })
+    await wrapper.vm.$nextTick()
+
+    await (wrapper.vm as unknown as { createBranchFromReport: (form: BranchForm) => Promise<void> })
+      .createBranchFromReport({
+        branch_name: 'variant-b',
+        llm_model: 'custom-typed-model',
+        language: '',
+        max_agents: '',
+        ai_model_ref: { provider_connection_id: 'conn-a', model_id: 'gpt-4o', source: 'explicit' },
+      })
+    await flushPromises()
+
+    expect(createSimulationBranch).toHaveBeenCalledWith(
+      'sim_test01',
+      expect.objectContaining({ overrides: { llm_model: 'custom-typed-model' } }),
+    )
+  })
+
+  it('bleibt beim reinen Legacy-Pfad ohne jede ai_model_ref-Auswahl', async () => {
+    const wrapper = mountComponent({ simulationId: 'sim_test01' })
+    await wrapper.vm.$nextTick()
+
+    await (wrapper.vm as unknown as { createBranchFromReport: (form: BranchForm) => Promise<void> })
+      .createBranchFromReport({
+        branch_name: 'variant-c',
+        llm_model: 'legacy-only',
+        language: '',
+        max_agents: '',
+        ai_model_ref: null,
+      })
+    await flushPromises()
+
+    expect(createSimulationBranch).toHaveBeenCalledWith(
+      'sim_test01',
+      expect.objectContaining({ overrides: { llm_model: 'legacy-only' } }),
+    )
   })
 })
 
