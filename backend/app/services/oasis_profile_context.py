@@ -9,7 +9,7 @@ from typing import Any
 
 from . import oasis_profile_generator as _legacy
 import re
-from typing import Dict, List, Optional
+from typing import Dict, Iterable, List, Optional
 from .entity_reader import EntityNode
 from .oasis_profile_models import PersonaCoherenceResolution
 from .persona_domain_coherence import (
@@ -257,8 +257,13 @@ use_llm :bool ,
 
     Codex-Finding F5 auf PR #1573: Bio trug bisher kein eigenes Gewicht in
     der Drift-Pruefung — eine Persona mit sauberem Beruf und Freitext, aber
-    fachfremder Bio, erreichte den Korrekturpfad nie. Beruf, Freitext *und*
-    Bio bilden jetzt gemeinsam den geprueften Text.
+    fachfremder Bio, erreichte den Korrekturpfad nie. Codex P2 auf PR #1575:
+    Beruf, Freitext und Bio werden dabei *einzeln* geprueft, nicht als ein
+    zusammengeklebter Text — ``detect_domain_drift`` nimmt die dominante
+    Domaene seines gesamten Inputs als massgeblich, und eine markerreiche,
+    quellentreue Bio haette sonst einen fachfremden Freitext ueberdeckt
+    (und umgekehrt). :func:`_drifted_domains_per_field` vereinigt die
+    Befunde der Felder.
 
     Codex-Finding F4 auf PR #1573: eine schema-gueltige Korrekturantwort ist
     kein Beleg fuer eine fachlich passende. :func:`_resolution_after_correction`
@@ -269,16 +274,18 @@ use_llm :bool ,
     source_text =" ".join (
     part for part in (entity_summary or "",entity_context or "")if part
     )
-    combined_persona_text =" ".join (part for part in (persona_text ,bio )if part )
     findings =coherence_findings (
     entity_type =entity_type ,
     entity_name =entity_name ,
     persona_kind =persona_kind ,
     profession =profession or "",
-    persona_text =combined_persona_text ,
+    persona_text =persona_text ,
     source_text =source_text ,
     )
-    if not findings :
+    drifted_domains =_drifted_domains_per_field (
+    (profession or "",persona_text ,bio ),source_text
+    )
+    if not findings and not drifted_domains :
         return PersonaCoherenceResolution (profession ,persona_text ,bio ,None )
         # Der Entitaetsname bleibt draussen: er traegt einen Personen- oder
         # Organisationsnamen, und Logs verlassen den Prozess (dieselbe Linie
@@ -288,19 +295,18 @@ use_llm :bool ,
     _legacy .logger .warning (
     "persona coherence: type=%r befunde=%s",
     entity_type ,
-    "; ".join (finding ["kind"]for finding in findings ),
+    "; ".join (
+    [finding ["kind"]for finding in findings ]
+    +(["domain_drift"]if drifted_domains else [])
+    ),
     )
-    if not any (finding ["kind"]=="domain_drift"for finding in findings ):
+    if not drifted_domains :
         return PersonaCoherenceResolution (profession ,persona_text ,bio ,None )
 
     cleared_profession =None if profession else profession
     if not use_llm :
         return PersonaCoherenceResolution (cleared_profession ,persona_text ,bio ,None )
 
-    drift =detect_domain_drift (
-    " ".join (part for part in (profession or "",combined_persona_text )if part ),
-    source_text ,
-    )
     try :
         corrected =self ._regenerate_persona_after_drift (
         entity_name =entity_name ,
@@ -309,7 +315,7 @@ use_llm :bool ,
         profession =profession or "",
         bio =bio ,
         persona_text =persona_text ,
-        drifted_domains =drift .drifted ,
+        drifted_domains =drifted_domains ,
         source_text =source_text ,
         )
     except BudgetExceededError :
@@ -317,7 +323,7 @@ use_llm :bool ,
     except Exception as e :# noqa: BLE001 — Degradation wird ueber generation_error sichtbar gemacht
         return _drift_correction_failed (
         error =e ,
-        drifted_domains =drift .drifted ,
+        drifted_domains =drifted_domains ,
         profession =cleared_profession ,
         bio =bio ,
         persona_text =persona_text ,
@@ -328,9 +334,26 @@ use_llm :bool ,
     persona_kind =persona_kind ,
     bio =bio ,
     persona_text =persona_text ,
-    drifted_domains =drift .drifted ,
+    drifted_domains =drifted_domains ,
     source_text =source_text ,
     )
+
+
+def _drifted_domains_per_field (fields :Iterable [str ],source_text :str )->List [str ]:
+    """Fachfremde Domaenen je Feld, vereinigt in Reihenfolge des ersten Auftretens.
+
+    Jedes Feld laeuft einzeln durch :func:`detect_domain_drift`, damit die
+    dominante Domaene eines Feldes nicht die Drift eines anderen ueberdeckt
+    (Codex P2 auf PR #1575).
+    """
+    seen :List [str ]=[]
+    for field in fields :
+        if not field :
+            continue
+        for domain in detect_domain_drift (field ,source_text ).drifted :
+            if domain not in seen :
+                seen .append (domain )
+    return seen
 
 
 def _drift_correction_failed (
@@ -397,20 +420,16 @@ source_text :str ,
     resolution =_resolution_from_correction (
     corrected ,persona_kind =persona_kind ,bio =bio ,persona_text =persona_text
     )
-    remaining =detect_domain_drift (
-    " ".join (
-    part for part in (
-    resolution .profession or "",resolution .persona_text ,resolution .bio ,
-    )if part
-    ),
+    remaining =_drifted_domains_per_field (
+    (resolution .profession or "",resolution .persona_text ,resolution .bio ),
     source_text ,
     )
-    if not remaining .drifted :
+    if not remaining :
         return resolution
 
     _legacy .logger .warning (
     "persona coherence: Korrektur weiterhin driftend, Beruf wird geleert: %s",
-    ", ".join (remaining .drifted ),
+    ", ".join (remaining ),
     )
     return PersonaCoherenceResolution (
     None ,
@@ -418,7 +437,7 @@ source_text :str ,
     bio ,
     (
     f"Domänendrift erkannt ({', '.join (drifted_domains )}), Korrektur "
-    f"weiterhin driftend ({', '.join (remaining .drifted )})"
+    f"weiterhin driftend ({', '.join (remaining )})"
     ),
     )
 

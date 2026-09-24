@@ -446,3 +446,71 @@ def test_f5_bio_only_domain_drift_reaches_the_correction_path():
     assert gen._regenerate_persona_after_drift.call_args.kwargs["drifted_domains"] == ["manufacturing"]
     assert resolution.generation_error is None
     assert resolution.bio == "Arbeitet in der Notaufnahme."
+
+
+def test_p2_source_true_bio_does_not_mask_drifting_persona_text():
+    """Codex P2 auf PR #1575: Felder werden einzeln geprueft. Eine markerreiche,
+    quellentreue Bio darf einen fachfremden Freitext nicht ueberdecken — als
+    zusammengeklebter Text waere Healthcare die dominante Domaene gewesen und
+    die Fertigungs-Drift des Freitexts unsichtbar."""
+    gen = _make_generator()
+    gen._regenerate_persona_after_drift = MagicMock(return_value={
+        "bio": "Arbeitet in der Notaufnahme.",
+        "persona": "Koordiniert die Pflege auf der Station.",
+        "profession": "",
+        "voice_register": "neutral-de",
+    })
+
+    resolution = gen._persona_after_coherence_check(
+        entity_type="Person",
+        entity_name="Teammitglied",
+        persona_kind="individual",
+        profession="",
+        bio=(
+            "Seit Jahren in der Klinik, in der Pflege und in der Notaufnahme "
+            "tätig; kennt Station, Ärzte und Patienten."
+        ),
+        persona_text="Leitet die Fertigungsplanung und die Produktionslinie.",
+        entity_summary=DRIFT_SOURCE_TEXT,
+        entity_context="",
+        use_llm=True,
+    )
+
+    gen._regenerate_persona_after_drift.assert_called_once()
+    assert gen._regenerate_persona_after_drift.call_args.kwargs["drifted_domains"] == ["manufacturing"]
+    assert resolution.generation_error is None
+    assert resolution.persona_text == "Koordiniert die Pflege auf der Station."
+
+
+def test_p2_correction_with_drifting_bio_behind_clean_persona_is_rejected():
+    """Codex P2 auf PR #1575, Gegenrichtung: Die Rest-Drift-Pruefung der
+    Korrektur prueft die Bio einzeln — ein langer, sauberer Freitext darf eine
+    fachfremde korrigierte Bio nicht verstecken."""
+    gen = _make_generator()
+    gen._regenerate_persona_after_drift = MagicMock(return_value={
+        "bio": "Zuständig für die Fertigungsplanung.",
+        "persona": (
+            "Koordiniert die Pflege auf der Station, spricht täglich mit "
+            "Ärzten und Patienten in der Klinik und der Notaufnahme."
+        ),
+        "profession": "",
+        "voice_register": "neutral-de",
+    })
+
+    resolution = gen._persona_after_coherence_check(
+        entity_type="Person",
+        entity_name="Teammitglied",
+        persona_kind="individual",
+        profession="",
+        bio="Zuständig für die Fertigungsplanung.",
+        persona_text="Arbeitet seit Jahren im Team.",
+        entity_summary=DRIFT_SOURCE_TEXT,
+        entity_context="",
+        use_llm=True,
+    )
+
+    assert resolution.generation_error is not None
+    assert "weiterhin driftend (manufacturing)" in resolution.generation_error
+    assert resolution.bio == "Zuständig für die Fertigungsplanung."
+    assert resolution.persona_text == "Arbeitet seit Jahren im Team."
+
