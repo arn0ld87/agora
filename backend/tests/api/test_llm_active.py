@@ -1,8 +1,11 @@
 import pytest
 from unittest.mock import patch
 from flask import Flask
+
 from app.api import llm_bp
+from app.contracts.ai_provider_contract import ProviderConnectionUpsertRequest
 from app.contracts.llm_routing_contract import ModelEntry
+from app.services.provider_connection_store import ProviderConnectionStore
 
 @pytest.fixture
 def app(monkeypatch):
@@ -90,3 +93,92 @@ def test_unknown_model_passes_gate(client):
         })
         assert resp.status_code == 200
         mock_save.assert_called_once()
+
+
+def test_active_config_uses_stored_connection_base_url(client):
+    """Issue #1289: eine gespeicherte Connection-base_url gewinnt beim Aktivieren."""
+    ProviderConnectionStore().upsert_connection(
+        ProviderConnectionUpsertRequest(
+            display_name="MiniMax EU",
+            provider_kind="minimax",
+            base_url="https://eu.minimax.example/v1",
+        )
+    )
+
+    with patch("app.api.llm_active._model_catalog.get_models") as mock_get_models, \
+         patch("app.api.llm_active.SecretResolver.get_api_key") as mock_key:
+        mock_get_models.return_value = []
+        mock_key.return_value = "dummy"
+
+        resp = client.put("/api/llm/active-config", json={
+            "provider_id": "minimax",
+            "model": "some-model",
+        })
+
+    assert resp.status_code == 200
+    assert resp.json["data"]["base_url"] == "https://eu.minimax.example/v1"
+
+
+def test_active_config_falls_back_to_registry_default_without_connection(client):
+    """Ohne gespeicherte Connection bleibt der Registry-Default der Fallback."""
+    with patch("app.api.llm_active._model_catalog.get_models") as mock_get_models, \
+         patch("app.api.llm_active.SecretResolver.get_api_key") as mock_key:
+        mock_get_models.return_value = []
+        mock_key.return_value = "dummy"
+
+        resp = client.put("/api/llm/active-config", json={
+            "provider_id": "minimax",
+            "model": "some-model",
+        })
+
+    assert resp.status_code == 200
+    assert resp.json["data"]["base_url"] == "https://api.minimax.io/v1"
+
+
+def test_active_config_ignores_body_base_url(client):
+    """SSRF-Haertung (PR #478) bleibt: der Request-Body kann base_url nicht setzen."""
+    ProviderConnectionStore().upsert_connection(
+        ProviderConnectionUpsertRequest(
+            display_name="MiniMax EU",
+            provider_kind="minimax",
+            base_url="https://eu.minimax.example/v1",
+        )
+    )
+
+    with patch("app.api.llm_active._model_catalog.get_models") as mock_get_models, \
+         patch("app.api.llm_active.SecretResolver.get_api_key") as mock_key:
+        mock_get_models.return_value = []
+        mock_key.return_value = "dummy"
+
+        resp = client.put("/api/llm/active-config", json={
+            "provider_id": "minimax",
+            "model": "some-model",
+            "base_url": "https://attacker.example/v1",
+        })
+
+    assert resp.status_code == 200
+    assert resp.json["data"]["base_url"] == "https://eu.minimax.example/v1"
+
+
+def test_active_config_never_invents_base_url_for_cli_provider(client):
+    """codex_cli (transport='cli', auth_mode='session') bekommt nie eine base_url."""
+    ProviderConnectionStore().upsert_connection(
+        ProviderConnectionUpsertRequest(
+            display_name="Codex CLI",
+            provider_kind="codex_cli",
+            base_url="https://should-be-ignored.example/v1",
+        )
+    )
+
+    with patch("app.api.llm_active._model_catalog.get_models") as mock_get_models, \
+         patch("app.api.llm_active.SecretResolver.get_api_key") as mock_key:
+        mock_get_models.return_value = []
+        mock_key.return_value = None
+
+        resp = client.put("/api/llm/active-config", json={
+            "provider_id": "codex_cli",
+            "model": "gpt-5-codex",
+        })
+
+    assert resp.status_code == 200
+    assert "base_url" not in resp.json["data"]
