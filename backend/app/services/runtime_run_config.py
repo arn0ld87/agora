@@ -10,6 +10,7 @@ from urllib.parse import urlparse, urlunparse
 from typing import Optional, Dict, Any
 from ..contracts import (
     ANTHROPIC_CHAT_TRANSPORT_UNSUPPORTED,
+    PROVIDER_BEDROCK,
     PROVIDER_GOOGLE,
     PROVIDER_MINIMAX,
     PROVIDER_OLLAMA_CLOUD,
@@ -87,6 +88,14 @@ _HTTP_DETECTION_TO_PROVIDER_ID = {
     # behavior (it never had a distinct local-Ollama branch).
     "ollama": PROVIDER_OPENAI_COMPATIBLE,
     "unknown": PROVIDER_OPENAI_COMPATIBLE,
+    # Issue #1567 — detect_provider(mode="http") learned "bedrock" as a
+    # return value (#1282) but this mapping never followed, so the dict
+    # lookup below raised a raw KeyError for legacy Bedrock server config
+    # (Config.LLM_BASE_URL set to a bedrock-mantle/-runtime host without a
+    # persisted runtime_llm_routing.json). Bedrock speaks OpenAI-compatible
+    # chat via its own provider adapter, so it maps to PROVIDER_BEDROCK
+    # rather than the generic openai_compatible fallback.
+    "bedrock": PROVIDER_BEDROCK,
 }
 
 
@@ -118,7 +127,15 @@ def _detect_default_provider_id(base_url: Optional[str], model_name: Optional[st
         # exakt das stille Misrouting, das dieser Fix verhindert. Ohne
         # diesen Zweig wirft der Dict-Lookup unten ein rohes ``KeyError``.
         raise ValueError(ANTHROPIC_CHAT_TRANSPORT_UNSUPPORTED)
-    return _HTTP_DETECTION_TO_PROVIDER_ID[detected]
+    try:
+        return _HTTP_DETECTION_TO_PROVIDER_ID[detected]
+    except KeyError:
+        # Fail loud instead of a raw KeyError (Issue #1567): every value of
+        # HttpDetectedProvider must be mapped or explicitly rejected here.
+        raise ValueError(
+            f"_detect_default_provider_id: kein Provider-Mapping fuer "
+            f"detect_provider(mode='http')-Ergebnis {detected!r}."
+        ) from None
 
 
 class RuntimeRunConfig:
