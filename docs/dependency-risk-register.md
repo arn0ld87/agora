@@ -14,11 +14,10 @@ Automation: [.github/workflows/cve-monitor.yml](../.github/workflows/cve-monitor
 > bleibt unberührt. — **Nachtrag 2026-07-31:** Die Trivy-Baseline ist inzwischen aufgelöst
 > (Issue #772), ihr Hardstop 2026-08-30 entfällt ersatzlos. Siehe Abschnitt unten.
 > — **Nachtrag 2026-08-02:** Beide nltk-Advisories sind aufgelöst (nltk 3.9.4 → 3.10.1,
-> Issue #995), der Hardstop 2026-09-28 entfällt für sie. GHSA-p4gq-832x-fm9v hat einen
-> echten Upstream-Fix (nltk 3.10.0). PYSEC-2026-597 hat **keinen** — es fällt nur aus dem
-> affected-Set der Advisory-DB (OSV `last_affected: 3.9.4`), Tooling flaggt es deshalb
-> nicht mehr, ohne dass die Schwachstelle behoben wäre. Tracking bleibt offen in
-> [#661](https://github.com/arn0ld87/agora/issues/661); [#672](https://github.com/arn0ld87/agora/issues/672)
+> Issue #995), der Hardstop 2026-09-28 entfällt für sie. Beide haben einen echten
+> Upstream-Fix in nltk 3.10.0; für PYSEC-2026-597 ist das seit 2026-08-13 im reviewten
+> GitHub Advisory belegt (siehe unten), [#661](https://github.com/arn0ld87/agora/issues/661)
+> ist damit geschlossen. Seit #1410 ist nltk ohnehin nicht mehr im Lock; [#672](https://github.com/arn0ld87/agora/issues/672)
 > war die ursprüngliche Konsolidierungs-Referenz und ist seit 2026-07-27 geschlossen.
 > Details unten unter „nltk-Baseline“.
 Supply-Chain-Baseline: [.github/workflows/scorecard.yml](../.github/workflows/scorecard.yml) läuft wöchentlich Mo 04:30 UTC und auf `push` nach `main`. SARIF-Ergebnisse werden ins Code-Scanning-Dashboard hochgeladen; der erste Remote-Run nach Merge ist die Scorecard-Baseline.
@@ -75,32 +74,36 @@ betroffenen Advisories lösen sich dabei unterschiedlich ehrlich auf:
 | Advisory | Schweregrad | Auflösung | Status | Issue |
 |---|---|---|---|---|
 | GHSA-p4gq-832x-fm9v (Alias CVE-2026-54293, PYSEC-2026-2078) | High | Echter Upstream-Fix in nltk 3.10.0. | resolved | [#995](https://github.com/arn0ld87/agora/issues/995) |
-| PYSEC-2026-597 (Alias CVE-2026-12243) | unbekannt | **Kein echter Upstream-Fix.** OSV weist weiterhin kein `fixed`-Event aus, nur `last_affected: 3.9.4`. Ab nltk 3.10.0 fällt das installierte Paket aus dem affected-Set, pip-audit/Trivy melden den Fund deshalb nicht mehr — das ist eine Aufschubentscheidung durch Versions-Drift, keine Behebung der Schwachstelle. | resolved (Tooling flaggt nicht mehr) — **Issue bleibt offen** | [#661](https://github.com/arn0ld87/agora/issues/661) (offen) |
+| PYSEC-2026-597 (Alias CVE-2026-12243, GHSA-m42h-3232-vpv3) | High | Echter Upstream-Fix in nltk 3.10.0 (GitHub Advisory `first_patched_version: 3.10.0`, Stand 2026-08-13). | resolved | [#661](https://github.com/arn0ld87/agora/issues/661) (geschlossen) |
 
 `#672` war die ursprüngliche Konsolidierungs-Referenz für beide Advisories und ist
 seit 2026-07-27 geschlossen; beide Zeiger sind jetzt auf die jeweils zutreffenden
 Issues korrigiert (#995 bzw. #661).
 
-#### Warum #661 offen bleibt, obwohl es plausibel mit behoben ist
+#### #661: Fix für PYSEC-2026-597 belegt (Nachtrag 2026-09-24)
 
-Beide Advisories beschreiben eine Path Traversal in derselben Funktion,
-`nltk.data.load()`; PYSEC-2026-597 wird ausdrücklich als *unvollständiger Fix*
-einer früheren Lücke geführt. Es ist deshalb plausibel, dass der Upstream-Fix in
-3.10.0 beide erledigt.
+Stand 2026-08-02 war der Fix nur plausibel, nicht belegt: OSV und die PyPA
+advisory-database führten für PYSEC-2026-597 kein `fixed`-Event, nur
+`last_affected: 3.9.4`. Gegen die Primärquellen erneut geprüft am 2026-09-24:
 
-**Belegt ist das nicht.** Gegen die Primärquellen geprüft am 2026-08-02:
-
+* [GitHub Advisory `GHSA-m42h-3232-vpv3`](https://github.com/advisories/GHSA-m42h-3232-vpv3)
+  (Alias CVE-2026-12243, reviewt) — `vulnerable_version_range: < 3.10.0`,
+  **`first_patched_version: 3.10.0`**, `updated_at: 2026-08-13`.
 * [OSV `PYSEC-2026-597`](https://osv.dev/vulnerability/PYSEC-2026-597) —
-  `events: [{introduced: "0"}, {last_affected: "3.9.4"}]`, **kein `fixed`-Event**,
-  `modified: 2026-07-01`.
-* [PyPA advisory-database, `vulns/nltk/PYSEC-2026-597.yaml`](https://github.com/pypa/advisory-database/blob/main/vulns/nltk/PYSEC-2026-597.yaml)
-  — identischer Stand, ebenfalls ohne `fixed`.
+  unverändert `last_affected: 3.9.4` ohne `fixed`-Event (`modified: 2026-08-19`),
+  schließt 3.10.0 aber ebenfalls aus.
 
-Sekundärquellen behaupten teilweise einen Fix in 3.10.0 und übertragen dabei den
-Fix der *anderen* Advisory (GHSA-p4gq-832x-fm9v / CVE-2026-54293) auf diese; ein
-automatisierter Review von PR #1024 ist genau darauf hereingefallen. Solange die
-Advisory-DB kein `fixed`-Event führt, bleibt die Aussage „behoben“ unbelegt —
-#661 bleibt offen und wird geschlossen, sobald OSV nachzieht.
+Damit ist der Fix in 3.10.0 durch eine Primärquelle belegt und #661 geschlossen.
+Davon getrennt zu halten sind die neueren nltk-Advisories (u. a.
+GHSA-8mgp-746c-j5xp, `<= 3.10.3` ohne Fix): sie sind der Grund, warum nltk seit
+#1410 gar nicht mehr im Lock steht (Begründung in `backend/pyproject.toml` bei
+`project.dependencies`, abgesichert durch `test_nltk_is_absent_from_uv_lock`).
+
+**Override `nltk==3.10.3`:** wirkt derzeit auf nichts, weil nltk nicht im Lock
+ist. Er bleibt bewusst stehen — kehrt nltk transitiv zurück, landet es auf der
+höchsten Release statt auf einer älteren mit zusätzlichen kritischen CVEs, und
+`test_nltk_is_absent_from_uv_lock` schlägt trotzdem an und erzwingt eine
+Neubewertung. `test_pyproject_and_uv_lock_nltk_pin_match` liest diesen Pin.
 
 ### Nebenwirkung des Bumps: `NLTK_DISABLE_IMPORT_SECURITY=1`
 

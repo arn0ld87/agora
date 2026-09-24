@@ -297,7 +297,7 @@ Aktueller Schwerpunkt:
 - API-Token/API-Key-Scope-Modell und signierte Tickets.
 - Secrets-at-rest für Provider-Keys; keine Klartext-Provider-Keys in Reports/Run-Manifests.
 - strukturierte `/api/status`-Fehler statt roher Exception-Strings (#1459).
-- Dependency-Risk-Register mit Hardstops; NLTK/PYSEC-2026-597 bleibt bis zur Upstream-Klärung verfolgt (#661, Hardstop 28.09.2026).
+- Dependency-Risk-Register mit Hardstops; NLTK/PYSEC-2026-597 ist ab nltk 3.10.0 gefixt (GitHub Advisory, #661 geschlossen), nltk ist seit #1410 nicht mehr im Lock.
 - Outbound-Fetches mit agenten-/modellgelieferten URLs laufen zentral über `backend/app/security/outbound_http.py` (Adressklassen, Redirect-Revalidierung, IP-Pinning, Byte-Limit). Der zuvor ungeschützte Pfad `scripts/agent_tools.py::web_fetch` ist damit geschlossen ([#1485](https://github.com/arn0ld87/agora/issues/1485)).
 - Statische Security-Scans in CI: CodeQL für Python, JS/TS und GitHub-Actions-Workflows (Injection in `run:`-Blöcken), Ruff mit flake8-bandit-Regeln (`S`, Baseline-Ignores für S101/S110/S112/S311/S603/S607 in `backend/pyproject.toml`), Trivy für das Container-Image (blockierend ab HIGH) und für Dockerfile/Compose-Konfiguration (Kategorie `trivy-config`, vorerst nur berichtend).
 - Eine Ablehnung durch dieselbe Policy gibt die untrusted URL nicht mehr weiter: `OutboundRequestBlocked` trägt in der Message nur den Grund und in `.url` nur die sichere Herkunft (Schema, Host, ggf. Port). Die frühere Userinfo-Redaktion ließ Token in Query, Fragment und Pfad stehen.
