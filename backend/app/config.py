@@ -235,6 +235,49 @@ def validate_simulation_backend(
     return []
 
 
+#: Ablagen, die `AGORA_RUN_BACKEND` kennt (Issue #1587,
+#: docs/plans/supabase.md §11, PR 8).
+RUN_BACKENDS = frozenset({'file', 'postgres'})
+
+
+def validate_run_backend(
+    run_backend: str,
+    database_url: str = '',
+    simulation_backend: str = 'file',
+) -> list[str]:
+    """Prueft AGORA_RUN_BACKEND.
+
+    Modulfunktion aus demselben Grund wie `validate_simulation_backend`.
+    `postgres` verlangt `AGORA_SIMULATION_BACKEND=postgres`: die Tabelle
+    `agora.runs` traegt eine Fremdschluessel-Spalte auf
+    `agora.simulations(id)` — stuenden die Simulationen weiter nur in der
+    Datei, scheiterte jeder Run mit Simulationsbezug am Fremdschluessel.
+    """
+    backend = (run_backend or '').strip().lower()
+    if backend not in RUN_BACKENDS:
+        # Ein Tippfehler darf nicht still auf die Dateiablage zurueckfallen.
+        return [
+            f"AGORA_RUN_BACKEND has unknown value '{backend}' "
+            f"(expected one of: {', '.join(sorted(RUN_BACKENDS))})"
+        ]
+
+    if backend == 'postgres':
+        normalized_simulation_backend = (simulation_backend or '').strip().lower()
+        if normalized_simulation_backend != 'postgres':
+            return [
+                'AGORA_RUN_BACKEND=postgres requires '
+                "AGORA_SIMULATION_BACKEND=postgres (agora.runs.simulation_id "
+                'is a foreign key into agora.simulations)'
+            ]
+        if not (database_url or '').strip():
+            return [
+                'AGORA_RUN_BACKEND=postgres requires DATABASE_URL '
+                f'({DATABASE_URL_PREFIX}user:password@host:5432/dbname)'
+            ]
+
+    return []
+
+
 #: f005 (ADR-0016): globaler Zustand der Decision-Layer-Pilotierung. Ein
 #: einziger Pilot-Use-Case in dieser Slice — je-Use-Case-Granularitaet ist
 #: ausdruecklich zukuenftige Arbeit (ADR-0016, "Was dieser Entwurf nicht
@@ -424,6 +467,14 @@ class Config:
     # 'postgres' setzt AGORA_PROJECT_BACKEND=postgres voraus (Fremdschluessel).
     SIMULATION_BACKEND = os.environ.get(
         'AGORA_SIMULATION_BACKEND', 'file'
+    ).strip().lower()
+
+    # Ablage der Run-Manifeste (docs/plans/supabase.md §11, PR 8). Eigener
+    # Schalter wie bei den Simulationen. Default 'file' — die Manifeste unter
+    # uploads/run_registry/<run_id>.json bleiben die Wahrheit.
+    # 'postgres' setzt AGORA_SIMULATION_BACKEND=postgres voraus (Fremdschluessel).
+    RUN_BACKEND = os.environ.get(
+        'AGORA_RUN_BACKEND', 'file'
     ).strip().lower()
 
     # f005 (ADR-0016): Decision-Layer-Pilotierung, Default 'disabled' haelt
@@ -761,6 +812,11 @@ class Config:
         errors.extend(
             validate_simulation_backend(
                 cls.SIMULATION_BACKEND, cls.DATABASE_URL, cls.PROJECT_BACKEND
+            )
+        )
+        errors.extend(
+            validate_run_backend(
+                cls.RUN_BACKEND, cls.DATABASE_URL, cls.SIMULATION_BACKEND
             )
         )
         # Decision-Layer-Pilotierung (f005, ADR-0016).

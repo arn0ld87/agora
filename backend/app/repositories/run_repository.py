@@ -22,14 +22,25 @@ ein hohes Limit.  Korrupte/nicht lesbare Einträge werden übersprungen (wie
 
 Der Import des Adapters steht bewusst in ``get_run_repository``, damit ein
 Modul, das nur den Port braucht, die Ablage nicht mitlädt.
+``AGORA_RUN_BACKEND`` wählt zwischen Dateiadapter (Default ``file``) und
+PostgreSQL-Adapter (#1587).
 """
 from __future__ import annotations
 
 import os
 from typing import Optional, Protocol, runtime_checkable
 
-from ..config import Config
+from ..config import RUN_BACKENDS, Config
 from ..contracts.run_record_contract import RunRecord
+
+
+class RunBackendUnavailable(RuntimeError):
+    """``AGORA_RUN_BACKEND`` trägt einen Wert, den keine Ablage bedient.
+
+    ``Config.validate()`` lehnt ihn beim Start ab; dieser Fehler fängt den
+    Weg ohne Validierung ab (Test, Skript), statt still auf die Datei
+    zurückzufallen.
+    """
 
 
 @runtime_checkable
@@ -68,9 +79,22 @@ def get_run_repository(registry_dir: str | None = None) -> RunRepository:
 
     ``registry_dir`` ist der Ablageort für den File-Adapter.  Ohne Angabe
     fällt er auf ``<UPLOAD_FOLDER>/run_registry`` zurück — denselben Pfad,
-    den ``RunRegistry.REGISTRY_DIR`` bildet.  Ein zukünftiger Postgres-Adapter
-    ignoriert den Wert.
+    den ``RunRegistry.REGISTRY_DIR`` bildet.
+
+    ``AGORA_RUN_BACKEND=postgres`` liefert den PostgreSQL-Adapter;
+    ``registry_dir`` bleibt dann unbenutzt.
     """
+    backend = Config.RUN_BACKEND
+    if backend not in RUN_BACKENDS:
+        raise RunBackendUnavailable(
+            f"AGORA_RUN_BACKEND has unknown value '{backend}' "
+            f"(expected one of: {', '.join(sorted(RUN_BACKENDS))})"
+        )
+    if backend == "postgres":
+        from ..infrastructure.postgres.repositories import PostgresRunRepository
+
+        return PostgresRunRepository()
+
     if registry_dir is None:
         registry_dir = os.path.join(Config.UPLOAD_FOLDER, "run_registry")
     from ..services.file_run_store import FileRunRepository
