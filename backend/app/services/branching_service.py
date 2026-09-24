@@ -9,13 +9,13 @@ einzige Eintrittstelle für Caller, delegiert aber an dieses Modul.
 from __future__ import annotations
 
 import csv
-import json
 import os
 import shutil
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from ..config import Config
 from ..contracts.ai_provider_contract import AiModelRef
+from ..repositories.report_repository import get_report_repository
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.logger import get_logger
 from .run_registry import RunRegistry
@@ -199,30 +199,27 @@ def create_branch(
             )
 
     if copy_report_artifacts:
+        # Issue #1588: Report-Metadaten laufen ueber den Port statt per
+        # os.listdir + open(meta.json) direkt gelesen zu werden — im
+        # kuenftigen Postgres-Adapter gibt es diese Datei nicht mehr. Der
+        # Ablageschluessel (``key``, aus ``list_ids()``) bestimmt den
+        # Quellordner, NICHT ``record.report_id``: beide koennen bei
+        # Altbestaenden abweichen (Codex-Review auf #1601).
         reports_dir = os.path.join(Config.UPLOAD_FOLDER, "reports")
-        if os.path.isdir(reports_dir):
-            for report_folder in os.listdir(reports_dir):
-                meta_path = os.path.join(reports_dir, report_folder, "meta.json")
-                if not os.path.exists(meta_path):
-                    continue
-                # Reports live outside the SimulationArtifactStore namespace
-                # (separate ReportStore is on the roadmap, Issue #46). Inline
-                # JSON read is the explicit boundary; no json_io leak into
-                # services/.
-                try:
-                    with open(meta_path, "r", encoding="utf-8") as handle:
-                        report_meta = json.load(handle)
-                except (json.JSONDecodeError, OSError) as exc:
-                    logger.warning(f"Skipping unreadable report meta {meta_path}: {exc}")
-                    continue
-                if not report_meta or report_meta.get("simulation_id") != simulation_id:
-                    continue
-                branch_report_dir = os.path.join(branch_dir, "reports", report_folder)
-                shutil.copytree(
-                    os.path.join(reports_dir, report_folder),
-                    branch_report_dir,
-                    dirs_exist_ok=True,
-                )
+        repo = get_report_repository(reports_dir)
+        for key in repo.list_ids():
+            record = repo.get(key)
+            if record is None or record.simulation_id != simulation_id:
+                continue
+            source_report_dir = os.path.join(reports_dir, key)
+            if not os.path.isdir(source_report_dir):
+                continue
+            branch_report_dir = os.path.join(branch_dir, "reports", key)
+            shutil.copytree(
+                source_report_dir,
+                branch_report_dir,
+                dirs_exist_ok=True,
+            )
 
     manager._set_status(branch, SimulationStatus.READY)
     RunRegistry().create_run(
