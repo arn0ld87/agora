@@ -28,7 +28,7 @@ und Blobs haben noch keinen Adapter (siehe Tabelle).
 | PR 3 | LLM-Profil-Modell und Repository-Port | gemergt (#1507, #1511, #1515) |
 | PR 4 | Postgres-Adapter LLM-Profile, Datenmigration | gemergt (#1517), Fernet-Store pro Profil (#1516) |
 | PR 6 | Projekt-Vertrag, Port, Postgres-Adapter, Datenmigration | gemergt (#1519, #1522) |
-| PR 7 | Simulationsmetadaten | Port gemergt (#1595, Issue #1578), Adapter und Datenmigration gebaut (Issue #1585, PR offen) |
+| PR 7 | Simulationsmetadaten | Port gemergt (#1595, Issue #1578), Adapter und Datenmigration gemergt (#1598, Issue #1585) |
 | PR 8 | Run-Registry | Port gemergt (#1596, Issue #1579), Adapter: #1587 |
 | PR 9 | Report-Metadaten | Port: #1580, Adapter: #1588 |
 | PR 13/14 | Blob-Store-Port, Supabase-Storage-Adapter | #1584, #1586 (optional) |
