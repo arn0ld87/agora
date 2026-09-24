@@ -9,7 +9,7 @@ from typing import Any
 
 from . import oasis_profile_generator as _legacy
 import json
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 from .oasis_profile_models import PersonaDemographicSlot
 from .persona_demographics import build_name_quota_prompt_block, build_name_quota_prompt_block_en
 from .persona_domain_coherence import has_domain_markers
@@ -291,3 +291,78 @@ Important:
 - persona must be coherent, no newlines.
 - voice_register MUST be one of the four exact values listed above.
 - Use English."""
+
+
+def _build_drift_correction_prompt (
+    self: Any ,
+    *,
+    entity_name :str ,
+    entity_type :str ,
+    persona_kind :str ,
+    profession :str ,
+    bio :str ,
+    persona_text :str ,
+    drifted_domains :List [str ],
+    source_text :str ,
+    )->str :
+        """Build the drift-correction prompt — language- and collective-aware (#1471, F2/F3).
+
+        Vorher forderte dieser Prompt immer einen Beruf an und sprach immer von
+        "der Person" — auch fuer Kollektiv-Personas, die keines von beidem
+        haben (Codex-Finding F2 auf PR #1573). Der Kollektiv-Zweig beschreibt
+        jetzt die Organisation/Gruppe selbst, fordert keinen Beruf und keine
+        Demografie an — dieselbe Trennung wie zwischen
+        ``_build_individual_persona_prompt`` und ``_build_group_persona_prompt``.
+
+        Vorher war der Prompt zudem immer Deutsch, unabhaengig von
+        ``self.language`` (Codex-Finding F3).
+        """
+
+        is_collective =persona_kind =="collective"
+        domains =", ".join (drifted_domains )
+        source_excerpt =source_text [:2000 ]
+
+        if self .language =="de":
+            if is_collective :
+                return f"""Die Beschreibung des Kollektivs "{entity_name }" ({entity_type }) trägt Fachvokabular aus {domains }, das in der Quelle nicht vorkommt.
+
+Bisherige Bio: {bio }
+Bisheriger Freitext: {persona_text }
+
+Quelle:
+{source_excerpt }
+
+Schreibe Bio und Freitext so um, dass sie zur Fachdomäne der Quelle passen. Das Kollektiv spricht weiterhin als Organisation/Gruppe — kein erfundener Name, kein Alter, kein Geschlecht, kein MBTI-Typ, keine Berufsbezeichnung. Liefere für profession einen leeren String."""
+
+            return f"""Die Biografie der Persona "{entity_name }" ({entity_type }) trägt Fachvokabular aus {domains }, das in der Quelle nicht vorkommt.
+
+Bisheriger Beruf: {profession or '(keiner)'}
+Bisherige Bio: {bio }
+Bisheriger Freitext: {persona_text }
+
+Quelle:
+{source_excerpt }
+
+Schreibe Beruf, Bio und Freitext so um, dass sie zur Fachdomäne der Quelle passen. Ändere nur das Fach, nicht Name, Alter, Geschlecht oder MBTI-Typ der Person. Ist aus der Quelle kein Beruf ableitbar, liefere einen leeren String für profession statt einen zu erfinden."""
+
+        if is_collective :
+            return f"""The description of the collective "{entity_name }" ({entity_type }) carries vocabulary from {domains }, which does not appear in the source.
+
+Previous bio: {bio }
+Previous free text: {persona_text }
+
+Source:
+{source_excerpt }
+
+Rewrite the bio and free text so they fit the source's domain. The collective keeps speaking as an organization/group — no invented name, no age, no gender, no MBTI type, no profession. Return an empty string for profession."""
+
+        return f"""The biography of the persona "{entity_name }" ({entity_type }) carries vocabulary from {domains }, which does not appear in the source.
+
+Previous profession: {profession or '(none)'}
+Previous bio: {bio }
+Previous free text: {persona_text }
+
+Source:
+{source_excerpt }
+
+Rewrite profession, bio and free text so they fit the source's domain. Change only the field, not the person's name, age, gender or MBTI type. If no profession can be derived from the source, return an empty string for profession instead of inventing one."""

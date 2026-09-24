@@ -254,16 +254,28 @@ use_llm :bool ,
     wird geleert, der Freitext bleibt stehen. Ein ``BudgetExceededError``
     verlaesst diese Funktion unveraendert — kein Fallback bei erschoepftem
     Budget.
+
+    Codex-Finding F5 auf PR #1573: Bio trug bisher kein eigenes Gewicht in
+    der Drift-Pruefung — eine Persona mit sauberem Beruf und Freitext, aber
+    fachfremder Bio, erreichte den Korrekturpfad nie. Beruf, Freitext *und*
+    Bio bilden jetzt gemeinsam den geprueften Text.
+
+    Codex-Finding F4 auf PR #1573: eine schema-gueltige Korrekturantwort ist
+    kein Beleg fuer eine fachlich passende. :func:`_resolution_after_correction`
+    prueft den korrigierten Endstand erneut gegen die Quelle, bevor er
+    uebernommen wird — kein zweiter LLM-Versuch, nur dieselbe konservative
+    Linie wie bei einer gescheiterten Korrektur.
     """
     source_text =" ".join (
     part for part in (entity_summary or "",entity_context or "")if part
     )
+    combined_persona_text =" ".join (part for part in (persona_text ,bio )if part )
     findings =coherence_findings (
     entity_type =entity_type ,
     entity_name =entity_name ,
     persona_kind =persona_kind ,
     profession =profession or "",
-    persona_text =persona_text ,
+    persona_text =combined_persona_text ,
     source_text =source_text ,
     )
     if not findings :
@@ -286,7 +298,7 @@ use_llm :bool ,
         return PersonaCoherenceResolution (cleared_profession ,persona_text ,bio ,None )
 
     drift =detect_domain_drift (
-    " ".join (part for part in (profession or "",persona_text )if part ),
+    " ".join (part for part in (profession or "",combined_persona_text )if part ),
     source_text ,
     )
     try :
@@ -311,8 +323,13 @@ use_llm :bool ,
         persona_text =persona_text ,
         )
 
-    return _resolution_from_correction (
-    corrected ,persona_kind =persona_kind ,bio =bio ,persona_text =persona_text
+    return _resolution_after_correction (
+    corrected ,
+    persona_kind =persona_kind ,
+    bio =bio ,
+    persona_text =persona_text ,
+    drifted_domains =drift .drifted ,
+    source_text =source_text ,
     )
 
 
@@ -356,6 +373,53 @@ persona_text :str ,
     corrected_persona_text =(corrected .get ("persona")or "").strip ()or persona_text
     return PersonaCoherenceResolution (
     corrected_profession ,corrected_persona_text ,corrected_bio ,None
+    )
+
+
+def _resolution_after_correction (
+corrected :Dict [str ,Any ],
+*,
+persona_kind :str ,
+bio :str ,
+persona_text :str ,
+drifted_domains :List [str ],
+source_text :str ,
+)->PersonaCoherenceResolution :
+    """Prueft die Korrektur auf Rest-Drift, bevor sie uebernommen wird (#1471, F4).
+
+    Eine schema-gueltige Antwort ist kein Beleg fuer eine fachlich passende:
+    das Modell kann Beruf, Bio und Freitext liefern, die immer noch nicht zur
+    Quelle passen. Kein zweiter LLM-Versuch (Budget) — bei Rest-Drift gilt
+    dieselbe konservative Linie wie bei einer gescheiterten Korrektur: der
+    Beruf wird geleert, der *urspruengliche* (nicht der neu erfundene)
+    Freitext und die urspruengliche Bio bleiben stehen.
+    """
+    resolution =_resolution_from_correction (
+    corrected ,persona_kind =persona_kind ,bio =bio ,persona_text =persona_text
+    )
+    remaining =detect_domain_drift (
+    " ".join (
+    part for part in (
+    resolution .profession or "",resolution .persona_text ,resolution .bio ,
+    )if part
+    ),
+    source_text ,
+    )
+    if not remaining .drifted :
+        return resolution
+
+    _legacy .logger .warning (
+    "persona coherence: Korrektur weiterhin driftend, Beruf wird geleert: %s",
+    ", ".join (remaining .drifted ),
+    )
+    return PersonaCoherenceResolution (
+    None ,
+    persona_text ,
+    bio ,
+    (
+    f"Domänendrift erkannt ({', '.join (drifted_domains )}), Korrektur "
+    f"weiterhin driftend ({', '.join (remaining .drifted )})"
+    ),
     )
 
 

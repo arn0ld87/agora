@@ -362,6 +362,9 @@ class OasisProfileGenerator:
     def _build_group_persona_prompt(self, entity_name: str, entity_type: str, entity_summary: str, entity_attributes: Dict[str, Any], context: str, detail_level: Optional[dict]=None, demographic_slot: Optional[PersonaDemographicSlot]=None) -> str:
         return _oasis_profile_prompts._build_group_persona_prompt(self, entity_name, entity_type, entity_summary, entity_attributes, context, detail_level, demographic_slot)
 
+    def _build_drift_correction_prompt(self, *, entity_name: str, entity_type: str, persona_kind: str, profession: str, bio: str, persona_text: str, drifted_domains: List[str], source_text: str) -> str:
+        return _oasis_profile_prompts._build_drift_correction_prompt(self, entity_name=entity_name, entity_type=entity_type, persona_kind=persona_kind, profession=profession, bio=bio, persona_text=persona_text, drifted_domains=drifted_domains, source_text=source_text)
+
     @staticmethod
     def _rule_based_voice_register(entity_type: str, profession: str='') -> str:
         return _oasis_profile_rule_based._rule_based_voice_register(entity_type, profession)

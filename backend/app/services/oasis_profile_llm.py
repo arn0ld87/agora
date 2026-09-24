@@ -10,10 +10,10 @@ from typing import Any
 from . import oasis_profile_generator as _legacy
 import json
 from typing import Dict, List, Optional
+from ..contracts.persona_drift_contract import PersonaDriftCorrectionSchema
 from .oasis_profile_models import (
     CollectivePersonaSchema,
     PersonaDemographicSlot,
-    PersonaDriftCorrectionSchema,
     PersonaProfileSchema,
 )
 from .run_budget import BudgetExceededError
@@ -208,19 +208,22 @@ source_text :str ,
     der Aufrufer entscheidet ueber die sichtbare Degradation (Beruf leeren,
     ``generation_error`` setzen). Ein ``BudgetExceededError`` verlaesst sie
     unveraendert — dieselbe Linie wie ``_generate_profile_with_llm``.
+
+    Codex-Findings F2/F3 auf PR #1573: der Korrekturprompt war immer Deutsch
+    und sprach immer von einer Einzelperson mit Beruf und Demografie — auch
+    fuer Kollektiv-Personas, die keines von beidem haben. ``self._build_
+    drift_correction_prompt`` ist jetzt so sprach- und kollektivbewusst wie
+    ``_build_individual_persona_prompt``/``_build_group_persona_prompt``.
     """
-    prompt =(
-    f"Die Biografie der Persona \"{entity_name }\" ({entity_type }) traegt "
-    f"Fachvokabular aus {', '.join (drifted_domains )}, das in der Quelle "
-    "nicht vorkommt.\n\n"
-    f"Bisheriger Beruf: {profession or '(keiner)'}\n"
-    f"Bisherige Bio: {bio }\n"
-    f"Bisheriger Freitext: {persona_text }\n\n"
-    f"Quelle:\n{source_text [:2000 ]}\n\n"
-    "Schreibe Beruf, Bio und Freitext so um, dass sie zur Fachdomäne der "
-    "Quelle passen. Ändere nur das Fach, nicht Name, Alter, Geschlecht oder "
-    "MBTI-Typ der Person. Ist aus der Quelle kein Beruf ableitbar, liefere "
-    "einen leeren String für profession statt einen zu erfinden."
+    prompt =self ._build_drift_correction_prompt (
+    entity_name =entity_name ,
+    entity_type =entity_type ,
+    persona_kind =persona_kind ,
+    profession =profession ,
+    bio =bio ,
+    persona_text =persona_text ,
+    drifted_domains =drifted_domains ,
+    source_text =source_text ,
     )
 
     from ..llm .client import LLMClient as _LLMClient
@@ -233,7 +236,7 @@ source_text :str ,
     provider_type =self .provider_type ,
     )
     messages =[
-    {"role":"system","content":self ._get_system_prompt (True )},
+    {"role":"system","content":self ._get_system_prompt (persona_kind =="individual")},
     {"role":"user","content":prompt },
     ]
 

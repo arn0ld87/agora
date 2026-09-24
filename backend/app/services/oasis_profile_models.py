@@ -12,6 +12,13 @@ from typing import Any, Dict, List, Literal, NamedTuple, Optional
 from pydantic import BaseModel, Field
 
 from ..contracts.persona_contract import VoiceRegister
+# Codex-Finding F1 auf PR #1573: die Drift-Korrektur ist eine LLM-Antwort und
+# gehoert nach Repo-Regel "Contracts-first" in ``app/contracts/``, nicht in
+# dieses Service-Modul. Reexportiert, damit bestehende Importe (dieses Modul
+# war bisher die einzige Definitionsstelle) unveraendert weiterlaufen.
+from ..contracts.persona_drift_contract import (
+    PersonaDriftCorrectionSchema as PersonaDriftCorrectionSchema,
+)
 
 # Geschlossene Wertemengen der Persona-Anreicherung. Sie standen bisher nur in
 # Prompttexten und in Laufzeitpruefungen — als ``str`` im Schema konnte jeder
@@ -78,27 +85,6 @@ class PersonaProfileSchema(BaseModel):
         description="True if this entity cannot have a human bearer and must not become a persona",
     )
     ineligible_reason: str = Field("", description="Short reason when ineligible is true")
-
-
-class PersonaDriftCorrectionSchema(BaseModel):
-    """Antwortvertrag für die Drift-Korrektur (#1471, Nachtrag).
-
-    Bei erkannter Domänendrift leerte ``_profession_after_coherence_check``
-    bisher nur ``profession``; Bio und Freitext behielten ihr fachfremdes
-    Vokabular. Dieses Schema trägt die vom Modell korrigierte Fassung —
-    schlanker als ``PersonaProfileSchema``, weil Name, Alter, Geschlecht und
-    MBTI-Typ der Persona unverändert bleiben und nicht neu angefordert
-    werden.
-    """
-
-    bio: str = Field("", description="Korrigierte Social-Media-Bio, <=200 Zeichen")
-    persona: str = Field("", description="Korrigierter Freitext, durchgehend Fließtext")
-    profession: str = Field(
-        "", description="Korrigierter Beruf; leerer String, wenn aus der Quelle keiner ableitbar ist"
-    )
-    voice_register: Optional[VoiceRegister] = Field(
-        None, description="One of formal-de/neutral-de/technical-de/skeptisch-de"
-    )
 
 
 class PersonaCoherenceResolution(NamedTuple):
