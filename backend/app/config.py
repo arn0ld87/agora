@@ -181,6 +181,60 @@ def validate_project_backend(
     return []
 
 
+#: Ablagen, die `AGORA_SIMULATION_BACKEND` kennt (Issue #1585,
+#: docs/plans/supabase.md §11, PR 7).
+SIMULATION_BACKENDS = frozenset({'file', 'postgres'})
+
+
+def validate_simulation_backend(
+    simulation_backend: str,
+    database_url: str = '',
+    project_backend: str = 'file',
+) -> list[str]:
+    """Prueft AGORA_SIMULATION_BACKEND.
+
+    Modulfunktion aus demselben Grund wie `validate_project_backend`: die
+    Verzweigungen sollen nicht auf das Komplexitaetsbudget von
+    `Config.validate()` gehen.
+
+    Eine Besonderheit gegenueber `validate_project_backend`: `postgres`
+    verlangt zusaetzlich `AGORA_PROJECT_BACKEND=postgres`. Die Tabelle
+    `agora.simulations` traegt eine Fremdschluessel-Spalte auf
+    `agora.projects(id)` — stuenden die Projekte weiter nur in der Datei,
+    zeigte der Fremdschluessel bei jeder Simulation ins Leere.
+    """
+    backend = (simulation_backend or '').strip().lower()
+    if backend not in SIMULATION_BACKENDS:
+        # Ein Tippfehler darf nicht still auf die Dateiablage zurueckfallen —
+        # sonst arbeitet die Installation weiter auf der Datei, waehrend der
+        # Betreiber glaubt, er habe umgeschaltet.
+        return [
+            f"AGORA_SIMULATION_BACKEND has unknown value '{backend}' "
+            f"(expected one of: {', '.join(sorted(SIMULATION_BACKENDS))})"
+        ]
+
+    if backend == 'postgres':
+        normalized_project_backend = (project_backend or '').strip().lower()
+        if normalized_project_backend != 'postgres':
+            # Die FK-Spalte agora.simulations.project_id zeigt sonst auf eine
+            # Tabelle, die niemand befuellt.
+            return [
+                'AGORA_SIMULATION_BACKEND=postgres requires '
+                "AGORA_PROJECT_BACKEND=postgres (agora.simulations.project_id "
+                'is a foreign key into agora.projects)'
+            ]
+        if not (database_url or '').strip():
+            # Ohne URL scheiterte es sonst erst beim ersten Simulationszugriff,
+            # und der Fehler sähe dann nach einem Verbindungsproblem aus statt
+            # nach einer fehlenden Einstellung.
+            return [
+                'AGORA_SIMULATION_BACKEND=postgres requires DATABASE_URL '
+                f'({DATABASE_URL_PREFIX}user:password@host:5432/dbname)'
+            ]
+
+    return []
+
+
 #: f005 (ADR-0016): globaler Zustand der Decision-Layer-Pilotierung. Ein
 #: einziger Pilot-Use-Case in dieser Slice — je-Use-Case-Granularitaet ist
 #: ausdruecklich zukuenftige Arbeit (ADR-0016, "Was dieser Entwurf nicht
@@ -362,6 +416,14 @@ class Config:
     # diesem Schalter nie betroffen.
     PROJECT_BACKEND = os.environ.get(
         'AGORA_PROJECT_BACKEND', 'file'
+    ).strip().lower()
+
+    # Ablage der Simulationsmetadaten (docs/plans/supabase.md §11, PR 7).
+    # Eigener Schalter wie bei den Projekten. Default 'file' — der Inhalt von
+    # uploads/simulations/<simulation_id>/state.json bleibt die Wahrheit.
+    # 'postgres' setzt AGORA_PROJECT_BACKEND=postgres voraus (Fremdschluessel).
+    SIMULATION_BACKEND = os.environ.get(
+        'AGORA_SIMULATION_BACKEND', 'file'
     ).strip().lower()
 
     # f005 (ADR-0016): Decision-Layer-Pilotierung, Default 'disabled' haelt
@@ -695,6 +757,11 @@ class Config:
         # Ablage der Projekt-Metadaten (§11, PR 6).
         errors.extend(
             validate_project_backend(cls.PROJECT_BACKEND, cls.DATABASE_URL)
+        )
+        errors.extend(
+            validate_simulation_backend(
+                cls.SIMULATION_BACKEND, cls.DATABASE_URL, cls.PROJECT_BACKEND
+            )
         )
         # Decision-Layer-Pilotierung (f005, ADR-0016).
         errors.extend(validate_decision_layer_mode(cls.DECISION_LAYER_MODE))

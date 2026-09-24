@@ -9,8 +9,9 @@ und die Branch-Logik von ``list_branches`` nur Prosa im Docstring: ein zweiter
 Adapter mit falschem Verhalten ginge durch, ohne dass ein Test anschlaegt.
 
 Jede Instanz bekommt ihren eigenen ``InMemoryArtifactStore``, damit kein Test
-ins Dateisystem schreibt. #1585 ergaenzt den Postgres-Adapter als weiteren
-``pytest.mark.parametrize``-Parameter.
+ins Dateisystem schreibt. Den Postgres-Adapter prueft
+``tests/integration/test_postgres_simulation_repository.py`` gegen dieselben
+Zusagen (#1585).
 """
 
 from __future__ import annotations
