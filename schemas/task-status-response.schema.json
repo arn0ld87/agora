@@ -1,0 +1,106 @@
+{
+  "$defs": {
+    "TaskStatusValue": {
+      "description": "Spiegel von ``app.models.task.TaskStatus``.\n\nBewusst dupliziert statt importiert: Contracts in diesem Paket haengen\nnicht von ``app.models`` ab (siehe z. B. ``ProjectStatus`` in\n``project_contract.py``, ``ReportStatus`` in ``report_contract.py``) \u2014\ndas haelt die Vertragsebene unabhaengig von der internen\nModell-Implementierung.",
+      "enum": [
+        "pending",
+        "processing",
+        "completed",
+        "failed"
+      ],
+      "title": "TaskStatusValue",
+      "type": "string"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/task-status-response.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Wire-Form von ``Task.to_dict()``.\n\nItem-Form fuer ``GET /api/graph/task/<task_id>`` (ein Item) und\n``GET /api/graph/tasks`` (Liste desselben Shapes je Element).\n``Task.to_dict()`` setzt alle Felder immer explizit (keine bedingte\nAuslassung), daher genuegt ``model_dump(mode=\"json\")`` ohne\n``exclude_unset``/``exclude_none`` fuer eine byte-genaue Wire-Format-\nErhaltung.",
+  "properties": {
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    },
+    "message": {
+      "title": "Message",
+      "type": "string"
+    },
+    "message_key": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Message Key"
+    },
+    "metadata": {
+      "additionalProperties": true,
+      "title": "Metadata",
+      "type": "object"
+    },
+    "progress": {
+      "title": "Progress",
+      "type": "integer"
+    },
+    "progress_detail": {
+      "additionalProperties": true,
+      "title": "Progress Detail",
+      "type": "object"
+    },
+    "result": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Result"
+    },
+    "status": {
+      "$ref": "#/$defs/TaskStatusValue"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "task_type": {
+      "title": "Task Type",
+      "type": "string"
+    },
+    "updated_at": {
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "task_id",
+    "task_type",
+    "status",
+    "created_at",
+    "updated_at",
+    "progress",
+    "message"
+  ],
+  "title": "TaskStatusResponse",
+  "type": "object"
+}

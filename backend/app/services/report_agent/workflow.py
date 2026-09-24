@@ -66,6 +66,7 @@ from .search_dedup import (
     query_of,
     registry_for,
 )
+from .section_coverage import section_has_sufficient_evidence
 from .simulation_snapshot import capture_simulation_snapshot
 from .text_verification import verify_prose
 from .threshold_deviation import prior_threshold_lines, threshold_conflict_findings
@@ -661,6 +662,82 @@ def _finalize_content(
     return sanitized.content
 
 
+def _draft_content(response: Optional[str]) -> str:
+    """Berichtsinhalt eines Entwurfs, ohne ``_finalize_content``-Nebenwirkung.
+
+    Leer, wenn der Final-Content-Contract den Output ablehnt — ein solcher
+    Entwurf ist weder deckungsfähig noch als Rückfall für Forced-Final
+    brauchbar.
+    """
+    if response is None:
+        return ""
+    try:
+        content = sanitize_final_content(response).content
+    except FinalContentRejected:
+        return ""
+    return "" if is_fallback_content(content) else content
+
+
+def _section_has_sufficient_evidence(agent: Any, draft: str) -> bool:
+    """Issue #1294: Deckung statt Tool-Call-Anzahl entscheidet über Retrieval."""
+    return section_has_sufficient_evidence(
+        draft,
+        section_evidence=getattr(agent, "_active_section_evidence", None),
+        evidence_map=getattr(agent, "evidence_map", None),
+    )
+
+
+def _request_coverage_retrieval(
+    messages: List[Dict[str, str]],
+    response: str,
+    template: str,
+    tool_calls_count: int,
+    unused_tools: set,
+) -> None:
+    """Weist den ungedeckten Entwurf zurück und fordert gezieltes Retrieval an."""
+    unused_hint = (
+        f"(These tools have not been used, recommend using them: {', '.join(unused_tools)})"
+        if unused_tools else ""
+    )
+    messages.append({"role": "assistant", "content": response})
+    messages.append({
+        "role": "user",
+        "content": template.format(
+            tool_calls_count=tool_calls_count,
+            unused_hint=unused_hint,
+        ),
+    })
+
+
+def _forced_final_response(
+    agent: Any,
+    messages: List[Dict[str, str]],
+    toolcall_mode: str,
+    pending_draft: Optional[str],
+) -> Optional[str]:
+    """Antwort für den Abschnitt, nachdem die Iterationen erschöpft sind.
+
+    Issue #1294: liegt ein gültiger, nur mangels Deckung zurückgewiesener
+    Entwurf vor, bleibt er stehen. Eine erneute Endgenerierung kann ihn
+    nicht verbessern — die inzwischen erhobene Evidence wird ohnehin an
+    seine Claims gebunden —, aber leer oder unbrauchbar ausfallen.
+    """
+    if pending_draft is not None:
+        return pending_draft
+    messages.append({"role": "user", "content": agent.REACT_FORCE_FINAL_MSG})
+    if toolcall_mode == "native":
+        force_result = agent.llm.chat_with_tools(
+            messages=messages,
+            tools=agent._get_openai_tools_schema(),
+            tool_choice="none",
+            temperature=0.5,
+            max_tokens=4096,
+            context="report",
+        )
+        return force_result["content"]
+    return agent.llm.chat(messages=messages, temperature=0.5, max_tokens=4096)
+
+
 def _safe_generate_section_react(
     agent: Any,
     section,
@@ -764,7 +841,9 @@ def generate_section_react(
 
     tool_calls_count = 0
     max_iterations = 5
-    min_tool_calls = 1
+    # Issue #1294: letzter gültiger Entwurf, der nur mangels Deckung
+    # zurückgewiesen wurde — Forced-Final darf ihn nicht verschlechtern.
+    pending_draft: Optional[str] = None
     conflict_retries = 0
     # Issue #1191: die Merkliste ergebnisloser Suchen gilt pro Abschnitt. Ein
     # anderer Abschnitt darf dieselbe Suche erneut versuchen — sein Kontext ist
@@ -907,18 +986,18 @@ def generate_section_react(
             )
 
         if has_final_answer:
-            if tool_calls_count < min_tool_calls:
-                messages.append({"role": "assistant", "content": response})
-                unused_tools = all_tools - used_tools
-                unused_hint = f"(These tools have not been used, recommend using them: {', '.join(unused_tools)})" if unused_tools else ""
-                messages.append({
-                    "role": "user",
-                    "content": agent.REACT_INSUFFICIENT_TOOLS_MSG.format(
-                        tool_calls_count=tool_calls_count,
-                        min_tool_calls=min_tool_calls,
-                        unused_hint=unused_hint,
-                    ),
-                })
+            # Issue #1294: nicht die Zahl der Tool-Calls entscheidet, sondern ob
+            # vorhandene Evidence den Entwurf deckt (siehe section_coverage).
+            draft = _draft_content(response)
+            if not _section_has_sufficient_evidence(agent, draft):
+                pending_draft = response if draft else pending_draft
+                _request_coverage_retrieval(
+                    messages,
+                    response,
+                    agent.REACT_INSUFFICIENT_TOOLS_MSG,
+                    tool_calls_count,
+                    all_tools - used_tools,
+                )
                 continue
 
             final_answer = _finalize_content(
@@ -1017,18 +1096,16 @@ def generate_section_react(
             })
             continue
 
-        messages.append({"role": "assistant", "content": response})
-        if tool_calls_count < min_tool_calls:
-            unused_tools = all_tools - used_tools
-            unused_hint = f"(These tools have not been used, recommend using them: {', '.join(unused_tools)})" if unused_tools else ""
-            messages.append({
-                "role": "user",
-                "content": agent.REACT_INSUFFICIENT_TOOLS_MSG_ALT.format(
-                    tool_calls_count=tool_calls_count,
-                    min_tool_calls=min_tool_calls,
-                    unused_hint=unused_hint,
-                ),
-            })
+        draft = _draft_content(response)
+        if not _section_has_sufficient_evidence(agent, draft):
+            pending_draft = response if draft else pending_draft
+            _request_coverage_retrieval(
+                messages,
+                response,
+                agent.REACT_INSUFFICIENT_TOOLS_MSG_ALT,
+                tool_calls_count,
+                all_tools - used_tools,
+            )
             continue
 
         # Kein "Final Answer:"-Präfix: der Output geht trotzdem durch den
@@ -1064,19 +1141,7 @@ def generate_section_react(
     # nur im Log — der Leser sah einen Abschnitt, dem er nicht ansehen konnte,
     # dass dem Agenten die Schritte ausgegangen waren.
     mark_forced_final(agent, section_index)
-    messages.append({"role": "user", "content": agent.REACT_FORCE_FINAL_MSG})
-    if _toolcall_mode == "native":
-        force_result = agent.llm.chat_with_tools(
-            messages=messages,
-            tools=agent._get_openai_tools_schema(),
-            tool_choice="none",
-            temperature=0.5,
-            max_tokens=4096,
-            context="report",
-        )
-        response = force_result["content"]
-    else:
-        response = agent.llm.chat(messages=messages, temperature=0.5, max_tokens=4096)
+    response = _forced_final_response(agent, messages, _toolcall_mode, pending_draft)
     if response is None:
         final_answer = SECTION_EMPTY_RESPONSE_BODY
     else:
