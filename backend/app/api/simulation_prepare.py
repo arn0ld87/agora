@@ -18,6 +18,7 @@ from ..services.llm_routing_seed import (
     resolve_route_api_key,
     seed_run_stage_routing,
 )
+from ..contracts.prepare_status_contract import PrepareStatusResponse
 from ..services.persona_eligibility import filter_eligible_entities
 from ..services.prepare_service import compute_persona_target
 from ..services.report_agent import MIN_SIMULATION_AGENTS as MIN_SIMULATION_AGENTS
@@ -160,13 +161,18 @@ def _already_prepared_response(simulation_id: str):
         return None
 
     logger.info(f"Simulation {simulation_id} has preparation complete, no need to regenerate")
-    return json_success({
-        "simulation_id": simulation_id,
-        "status": "ready",
-        "message": "Preparation already completed, no need to regenerate",
-        "already_prepared": True,
-        "prepare_info": prepare_info,
-    })
+    payload = PrepareStatusResponse(
+        simulation_id=simulation_id,
+        status="ready",
+        message="Preparation already completed, no need to regenerate",
+        # Maschinenlesbarer i18n-Schluessel (#1174, Muster aus #1458) — das
+        # Frontend uebersetzt ihn zentral, ``message`` bleibt Fallback fuer
+        # Consumer, die den Schluessel noch nicht kennen.
+        message_key="prepare.already_completed",
+        already_prepared=True,
+        prepare_info=prepare_info,
+    )
+    return json_success(payload.model_dump(mode="json", exclude_none=True))
 
 
 
@@ -476,25 +482,27 @@ def _build_prepare_response(
     inputs: _PrepareInputs,
 ) -> "dict[str, Any]":
     """Phase 10 — Antwort-Payload des angestoßenen Vorbereitungslaufs."""
-    return {
-        "simulation_id": simulation_id,
-        "task_id": task_id,
-        "run_id": run_record["run_id"],
-        "status": "preparing",
-        "message": "Preparation task started; query progress via /api/simulation/prepare/status",
-        "already_prepared": False,
-        "expected_entities_count": state.entities_count,
-        "entity_types": state.entity_types,
+    payload = PrepareStatusResponse(
+        simulation_id=simulation_id,
+        task_id=task_id,
+        run_id=run_record["run_id"],
+        status="preparing",
+        message="Preparation task started; query progress via /api/simulation/prepare/status",
+        message_key="prepare.task_started",
+        already_prepared=False,
+        expected_entities_count=state.entities_count,
+        entity_types=state.entity_types,
         # Issue #1034: Der Fortschrittszähler zählt Personas, nicht
         # Entitäten. `expected_entities_count` bleibt die Entitätenzahl;
         # den Nenner liefert `persona_target` aus derselben Funktion, die
         # auch `_phase_generate_profiles` im Laufpfad verwendet.
-        "persona_target": compute_persona_target(
+        persona_target=compute_persona_target(
             state.entities_count,
             max_agents=inputs.max_agents,
             quota_plan=inputs.quota_plan,
-        ).model_dump(mode="json"),
-    }
+        ),
+    )
+    return payload.model_dump(mode="json", exclude_none=True)
 
 
 def _prepare_simulation_under_start_lock(
@@ -659,24 +667,28 @@ def get_prepare_status():
     if simulation_id:
         is_prepared, prepare_info = _check_simulation_prepared(simulation_id)
         if is_prepared:
-            return json_success({
-                "simulation_id": simulation_id,
-                "status": "ready",
-                "progress": 100,
-                "message": "Preparation already completed",
-                "already_prepared": True,
-                "prepare_info": prepare_info,
-            })
+            payload = PrepareStatusResponse(
+                simulation_id=simulation_id,
+                status="ready",
+                progress=100,
+                message="Preparation already completed",
+                message_key="prepare.already_completed",
+                already_prepared=True,
+                prepare_info=prepare_info,
+            )
+            return json_success(payload.model_dump(mode="json", exclude_none=True))
 
     if not task_id:
         if simulation_id:
-            return json_success({
-                "simulation_id": simulation_id,
-                "status": "not_started",
-                "progress": 0,
-                "message": "Preparation not started yet, please call /api/simulation/prepare",
-                "already_prepared": False,
-            })
+            payload = PrepareStatusResponse(
+                simulation_id=simulation_id,
+                status="not_started",
+                progress=0,
+                message="Preparation not started yet, please call /api/simulation/prepare",
+                message_key="prepare.not_started",
+                already_prepared=False,
+            )
+            return json_success(payload.model_dump(mode="json", exclude_none=True))
         return json_error(
             ApiErrorCode.VALIDATION_FAILED,
             status=400,
@@ -689,15 +701,17 @@ def get_prepare_status():
         if simulation_id:
             is_prepared, prepare_info = _check_simulation_prepared(simulation_id)
             if is_prepared:
-                return json_success({
-                    "simulation_id": simulation_id,
-                    "task_id": task_id,
-                    "status": "ready",
-                    "progress": 100,
-                    "message": "Task complete (PrepareWork already exists)",
-                    "already_prepared": True,
-                    "prepare_info": prepare_info,
-                })
+                payload = PrepareStatusResponse(
+                    simulation_id=simulation_id,
+                    task_id=task_id,
+                    status="ready",
+                    progress=100,
+                    message="Task complete (PrepareWork already exists)",
+                    message_key="prepare.already_completed",
+                    already_prepared=True,
+                    prepare_info=prepare_info,
+                )
+                return json_success(payload.model_dump(mode="json", exclude_none=True))
 
         return json_error(
             ApiErrorCode.NOT_FOUND,

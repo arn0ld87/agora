@@ -1,0 +1,175 @@
+{
+  "$defs": {
+    "PersonaTargetContract": {
+      "additionalProperties": false,
+      "description": "Persona-Generierungsziel einer Simulation-Vorbereitung.\n\n``persona_target_count`` ist der korrekte Nenner f\u00fcr den\nFortschrittsz\u00e4hler \u2014 nicht ``entity_count``.",
+      "properties": {
+        "entity_count": {
+          "description": "Entit\u00e4ten nach Eignungsfilter und max_agents-Cap \u2014 die Basis, die der Floor bei Bedarf hochskaliert.",
+          "minimum": 0,
+          "title": "Entity Count",
+          "type": "integer"
+        },
+        "floor": {
+          "description": "Der wirksame Floor: MIN_PERSONA_TABLE_ROWS, gedeckelt durch ein gesetztes max_agents > 0.",
+          "minimum": 0,
+          "title": "Floor",
+          "type": "integer"
+        },
+        "floor_applied": {
+          "description": "Wahr, wenn der Persona-Floor das Ziel \u00fcber die Entit\u00e4tenzahl angehoben hat \u2014 der Fall, der den Z\u00e4hler-Nenner-Defekt ausl\u00f6ste.",
+          "title": "Floor Applied",
+          "type": "boolean"
+        },
+        "persona_target_count": {
+          "description": "Das tats\u00e4chliche Generierungsziel: mit Quota-Plan dessen Total nach Floor-Anhebung, sonst max(entity_count, floor).",
+          "minimum": 0,
+          "title": "Persona Target Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "entity_count",
+        "persona_target_count",
+        "floor_applied",
+        "floor"
+      ],
+      "title": "PersonaTargetContract",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/prepare-status-response.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Statusantwort der literalen Prepare-Kurzschluesse.\n\n``message`` bleibt neben ``message_key`` als Klartext-Fallback fuer\nConsumer, die den Schluessel noch nicht kennen (Rueckwaertskompat.).",
+  "properties": {
+    "already_prepared": {
+      "title": "Already Prepared",
+      "type": "boolean"
+    },
+    "entity_types": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Entity Types"
+    },
+    "expected_entities_count": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expected Entities Count"
+    },
+    "message": {
+      "title": "Message",
+      "type": "string"
+    },
+    "message_key": {
+      "enum": [
+        "prepare.already_completed",
+        "prepare.task_started",
+        "prepare.not_started"
+      ],
+      "title": "Message Key",
+      "type": "string"
+    },
+    "persona_target": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PersonaTargetContract"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "prepare_info": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Prepare Info"
+    },
+    "progress": {
+      "anyOf": [
+        {
+          "maximum": 100,
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Progress"
+    },
+    "run_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Run Id"
+    },
+    "simulation_id": {
+      "title": "Simulation Id",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "ready",
+        "preparing",
+        "not_started"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "task_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Task Id"
+    }
+  },
+  "required": [
+    "simulation_id",
+    "status",
+    "message",
+    "message_key",
+    "already_prepared"
+  ],
+  "title": "PrepareStatusResponse",
+  "type": "object"
+}

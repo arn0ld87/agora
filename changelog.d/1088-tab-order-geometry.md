@@ -1,0 +1,3 @@
+### Added
+
+- Konservativer Tab-Reihenfolge-Check ersetzt den wegen False Positives zurückgezogenen `findReadingOrderViolations`-Ansatz: Verglichen werden nur aufeinanderfolgende Tab-Stops im selben Landmark und derselben visuellen Spalte (horizontale Überlappung ≥ 50 %), gemeldet wird nur ein echter Sprung nach oben (`next.bottom <= prev.top - 8px`). Spaltenwechsel, gleiche Zeile und unterschiedlich hohe Controls bleiben grün. `findTabOrderViolations` (reine Geometrie-Funktion) und `checkTabOrder` (Playwright-Collector) leben in `frontend/tests/e2e/helpers/tabOrder.ts`, verkabelt in `checkAccessibilityGate` und im AiModelPicker-Gate der Golden-Gate-Accessibility-Smoke. (#1088)

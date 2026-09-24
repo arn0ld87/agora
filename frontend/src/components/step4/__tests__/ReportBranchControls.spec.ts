@@ -21,6 +21,9 @@
  * 4. Deselektion (null) setzt llm_model auf ''.
  * 5. Freitext, danach Picker-Pick → Picker gewinnt (letzte Bearbeitung).
  * 6. Picker-Pick, danach Freitext → Freitext gewinnt (letzte Bearbeitung).
+ * 7. Issue #886: create-Emit trägt zusätzlich die volle ai_model_ref (oder
+ *    null ohne Auswahl) — Step4Report.vue entscheidet daraus, ob die
+ *    kanonische Referenz oder der Legacy-llm_model-String gesendet wird.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
@@ -147,6 +150,36 @@ describe('ReportBranchControls (Issue #834 — AiModelPicker-Migration)', () => 
     expect(emitted).toBeTruthy()
     const form = emitted![emitted!.length - 1][0] as Record<string, unknown>
     expect(form.llm_model).toBe('gpt-4o-mini')
+  })
+
+  it('create-Emit trägt zusätzlich die volle ai_model_ref aus der Picker-Auswahl (Issue #886)', async () => {
+    const w = mountRBC()
+    const picker = w.findComponent(aiPickerStub)
+    await picker.vm.$emit('update:modelValue', {
+      provider_connection_id: 'conn-openai-1',
+      model_id: 'gpt-4o-mini',
+      source: 'explicit',
+    })
+    await w.vm.$nextTick()
+
+    await w.find('button').trigger('click')
+
+    const emitted = w.emitted('create')
+    const form = emitted![emitted!.length - 1][0] as Record<string, unknown>
+    expect(form.ai_model_ref).toEqual({
+      provider_connection_id: 'conn-openai-1',
+      model_id: 'gpt-4o-mini',
+      source: 'explicit',
+    })
+  })
+
+  it('create-Emit trägt ai_model_ref=null ohne jede Picker-Auswahl', async () => {
+    const w = mountRBC()
+    await w.find('button').trigger('click')
+
+    const emitted = w.emitted('create')
+    const form = emitted![emitted!.length - 1][0] as Record<string, unknown>
+    expect(form.ai_model_ref).toBeNull()
   })
 
   it('Picker-Auswahl, danach Freitext eingeben → create-Emit trägt den Freitext, nicht das Picker-Modell', async () => {

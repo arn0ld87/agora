@@ -9,10 +9,13 @@ from datetime import datetime, timezone
 from typing import Any
 
 from flask import current_app, request, send_file
+from pydantic import ValidationError
 
 from . import simulation_bp
 from ..config import Config
 from ..contracts import PersonaEntityContext
+from ..contracts.branch_request_contract import BranchOverrides
+from ..services.llm_routing_seed import prevalidate_ai_model_ref_with_discovery
 from ..services.persona_entity_context_service import PersonaEntityContextService
 from ..services.persona_library import PersonaLibrary
 from ..services.persona_quality_service import PersonaQualityService
@@ -31,6 +34,28 @@ from .simulation_common import get_artifact_store, logger
 
 def _persona_review_service() -> PersonaReviewService:
     return PersonaReviewService(get_artifact_store())
+
+
+def _validate_branch_overrides(raw_overrides: object) -> dict[str, Any]:
+    """Parst und prüft ``overrides`` gegen den kanonischen Branch-Contract.
+
+    ``ai_model_ref`` + ``llm_model`` gemeinsam lehnt der Contract-Validator
+    ab (Issue #886). Eine gesetzte ``ai_model_ref`` wird zusätzlich über die
+    bestehende Routing-SSoT vorab geprüft (analog
+    ``app/api/graph_build.py::_validate_ai_model_ref_payload``) — eine
+    unbekannte oder deaktivierte Connection darf keinen Branch anlegen.
+    """
+    try:
+        overrides = BranchOverrides.model_validate(raw_overrides or {})
+    except ValidationError as exc:
+        first = exc.errors()[0]
+        message = str(first.get("msg", "")).removeprefix("Value error, ")
+        raise ValueError(f"overrides ist ungültig: {message}") from exc
+
+    if overrides.ai_model_ref is not None:
+        prevalidate_ai_model_ref_with_discovery(overrides.ai_model_ref)
+
+    return overrides.model_dump(exclude_none=True, mode="json")
 
 
 @simulation_bp.route('/<simulation_id>/branch', methods=['POST'])
@@ -52,13 +77,15 @@ def create_simulation_branch(simulation_id: str):
             message="branch_name is required",
         )
 
+    overrides = _validate_branch_overrides(data.get("overrides"))
+
     manager = SimulationManager()
     branch = manager.create_branch(
         simulation_id=simulation_id,
         branch_name=branch_name,
         copy_profiles=data.get("copy_profiles", True),
         copy_report_artifacts=data.get("copy_report_artifacts", False),
-        overrides=data.get("overrides") or {},
+        overrides=overrides,
     )
 
     return json_success(branch.to_dict())

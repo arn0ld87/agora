@@ -16,10 +16,13 @@ import sys
 from pathlib import Path
 
 from app.contracts.branch_comparison import BranchComparison
+from app.contracts.branch_request_contract import BranchOverrides
 from app.contracts.graph_diff import GraphDiff
 from app.contracts.persona_contract import PersonaModel, PersonaQuotaPlan
 from app.contracts.persona_entity_context import PersonaEntityContext
 from app.contracts.persona_target_contract import PersonaTargetContract
+from app.contracts.prepare_status_contract import PrepareStatusResponse
+from app.contracts.report_status_contract import ReportStatusResponse
 from app.contracts.pipeline_degradation_contract import (
     PipelineDegradationModel,
     PipelineDegradationReport,
@@ -110,6 +113,8 @@ OUT_DIR = Path(__file__).resolve().parents[3] / "schemas"
 
 CONTRACTS: dict[str, type] = {
     "branch-comparison.schema.json": BranchComparison,
+    # Branch-Overrides fuer POST /api/simulation/<id>/branch (Issue #886)
+    "branch-overrides.schema.json": BranchOverrides,
     "graph-diff.schema.json": GraphDiff,
     "persona-entity-context.schema.json": PersonaEntityContext,
     # Pipeline-Degradierung (Issue #1029)
@@ -124,6 +129,9 @@ CONTRACTS: dict[str, type] = {
     "persona-quota-plan.schema.json": PersonaQuotaPlan,
     # Persona-Ziel für den Fortschrittszähler (Issue #1034)
     "persona-target.schema.json": PersonaTargetContract,
+    # Status-Antworten mit message_key (Issue #1174, Muster aus #1458)
+    "prepare-status-response.schema.json": PrepareStatusResponse,
+    "report-status-response.schema.json": ReportStatusResponse,
     "report-v3.schema.json": ReportV3,
     "run-summary.schema.json": RunSummary,
     "runs-list-response.schema.json": RunsListResponse,
