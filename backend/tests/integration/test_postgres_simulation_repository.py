@@ -254,6 +254,36 @@ def test_deleting_the_project_detaches_its_simulations(repo, migrated_db):
     assert loaded.project_id == ''
 
 
+def test_stale_state_after_project_deletion_still_saves(repo, migrated_db):
+    """Codex-Review auf #1598: ``SimulationManager`` hält den Zustand im
+    Speicher. Wird das Projekt währenddessen gelöscht, trägt der nächste
+    ``save`` die alte Projektkennung — er darf daran nicht scheitern, und die
+    gelöste Zuordnung bleibt gelöst."""
+    stale = _record('sim_laeuftnoch01', project_id=PROJECT_B)
+    repo.save(stale)
+    assert PostgresProjectRepository(database=migrated_db).delete(PROJECT_B) is True
+
+    stale.status = 'completed'
+    repo.save(stale)
+
+    loaded = repo.get('sim_laeuftnoch01')
+    assert loaded is not None
+    assert loaded.status == 'completed'
+    assert loaded.project_id == ''
+
+
+def test_detached_simulation_can_be_reattached_to_an_existing_project(repo, migrated_db):
+    record = _record('sim_neuzuordnen1', project_id=PROJECT_B)
+    repo.save(record)
+    PostgresProjectRepository(database=migrated_db).delete(PROJECT_B)
+
+    record.project_id = PROJECT_A
+    repo.save(record)
+
+    loaded = repo.get('sim_neuzuordnen1')
+    assert loaded is not None and loaded.project_id == PROJECT_A
+
+
 def test_unreadable_row_does_not_break_the_list(repo, migrated_db):
     repo.save(_record('sim_gut000000001'))
     with migrated_db.session() as session:

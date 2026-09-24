@@ -34,6 +34,7 @@ from sqlalchemy.exc import IntegrityError
 
 from ....contracts.simulation_record_contract import SimulationRecord
 from ....utils.logger import get_logger
+from ..models.project import ProjectModel
 from ..models.simulation import SimulationModel
 from ..session import Database, get_database
 
@@ -96,6 +97,23 @@ def _to_contract(row: SimulationModel) -> SimulationRecord:
     return SimulationRecord.from_dict(data)
 
 
+def _was_detached_from_deleted_project(
+    session: Any, row: SimulationModel, values: dict[str, Any]
+) -> bool:
+    """Die Zeile hat ``project_id = NULL``, der Datensatz nennt noch ein
+    Projekt, das es nicht mehr gibt.
+
+    Genau das hinterlässt ``ON DELETE SET NULL``, wenn ein Projekt gelöscht
+    wird, während ``SimulationManager`` die Simulation noch im Speicher hält
+    (Codex-Review auf #1598). Ein Projekt, das existiert, wird dagegen neu
+    verknüpft — die Prüfung greift nur für ein fehlendes.
+    """
+    wanted = values['project_id']
+    if row.project_id is not None or wanted is None:
+        return False
+    return session.get(ProjectModel, wanted) is None
+
+
 def _is_project_fk_violation(exc: IntegrityError) -> bool:
     return 'fk_simulations_project_id_projects' in str(exc.orig)
 
@@ -123,6 +141,17 @@ class PostgresSimulationRepository:
                 if row is None:
                     session.add(SimulationModel(**values))
                     return
+                if _was_detached_from_deleted_project(session, row, values):
+                    # ``ON DELETE SET NULL`` hat den Verweis gelöst, während
+                    # ein laufender Vorgang noch den alten Zustand hält. Der
+                    # nächste Statuswechsel darf daran nicht scheitern.
+                    logger.info(
+                        'Simulation %s keeps its detached project reference '
+                        '(project %s was deleted)',
+                        record.simulation_id,
+                        values['project_id'],
+                    )
+                    values['project_id'] = None
                 for column, value in values.items():
                     setattr(row, column, value)
         except IntegrityError as exc:

@@ -152,6 +152,9 @@ Das löscht `agora.simulations` samt Inhalt; `agora.projects` bleibt stehen.
   als "kein Projekt" (in der Spalte `NULL`). Wird ein Projekt gelöscht, bleibt
   die Simulation stehen und verliert den Verweis — mit `RESTRICT` bliebe
   `delete_project` nach dem Entfernen der Artefakte an der Zeile hängen.
+  Speichert ein noch laufender Vorgang danach seinen alten Zustand mit der
+  gelöschten Projektkennung, bleibt der Verweis gelöst, statt den Speichervorgang
+  scheitern zu lassen.
 - **Kein Check-Constraint auf `status`.** Die Statuswerte leben in
   `SimulationStatus`, nicht im Vertrag; eine zweite Liste im Schema prüfte
   niemand gegen die erste.
