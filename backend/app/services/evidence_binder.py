@@ -97,6 +97,7 @@ def bind_evidence_to_claim(
     """
     from .evidence_entailment import EntailmentVerdict, classify_evidence  # noqa: PLC0415
     from .numeric_evidence import shares_numeric_fact  # noqa: PLC0415
+    from .quantifier_claims import aggregate_quantifier_support  # noqa: PLC0415
 
     if not (claim_text or "").strip() or not candidates:
         return []
@@ -157,6 +158,7 @@ def bind_evidence_to_claim(
     )
 
     results: List[Dict[str, Any]] = []
+    classified: List[Tuple[Dict[str, Any], Dict[str, Any], List[str]]] = []
     for bound, item, _numeric_hit in scored[:top_k]:
         result = classify_evidence(
             claim_text,
@@ -170,6 +172,11 @@ def bind_evidence_to_claim(
         if result.verdict is EntailmentVerdict.CONTRADICTED:
             bound["contradicts_claim"] = True
         results.append(bound)
+        classified.append((bound, item, result.checks))
+    # Ein Quantor („nahezu alle", „die meisten", „niemand") ist von keiner
+    # einzelnen Quelle belegbar. Erst die Zählung über die Stimmen dieses
+    # Claims entscheidet, ob die Kern-Belege ihn gemeinsam tragen (#1345).
+    aggregate_quantifier_support(claim_text, classified)
     return results
 
 
