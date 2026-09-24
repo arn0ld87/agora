@@ -6,6 +6,44 @@
 
 ---
 
+## Umsetzungsstand (24.09.2026)
+
+Der Plantext unten ist der Entwurf vom 21.08.2026 und wird nicht rückwirkend
+umgeschrieben. Offene Checkboxen in den Phasenabschnitten sind **kein**
+Fortschrittsanzeiger. Maßgeblich sind diese Tabelle, [`docs/STATUS.md`](../STATUS.md)
+und das Epic [#1576](https://github.com/arn0ld87/agora/issues/1576).
+
+**Umgeschaltet ist nichts.** Gebaut sind bisher genau zwei PostgreSQL-Adapter,
+`PostgresLlmProfileRepository` und `PostgresProjectRepository`; beide sind per
+Default inaktiv (`AGORA_METADATA_BACKEND=legacy`, `AGORA_LLM_PROFILE_BACKEND=sqlite`,
+`AGORA_PROJECT_BACKEND=file`). Simulationen, Runs, Reports und Blobs haben noch
+keinen Adapter (siehe Tabelle).
+
+| Plan (§38) | Inhalt | Stand |
+|---|---|---|
+| Phase 0 | Baseline, Restore-Drill | gemergt (#1514) |
+| PR 1 | Self-hosted Supabase als eigenes Compose-Projekt | gemergt (#1504) |
+| PR 2 | SQLAlchemy + Alembic | gemergt (#1505, #1508), ADR-0014 (#1518) |
+| PR 3 | LLM-Profil-Modell und Repository-Port | gemergt (#1507, #1511, #1515) |
+| PR 4 | Postgres-Adapter LLM-Profile, Datenmigration | gemergt (#1517), Fernet-Store pro Profil (#1516) |
+| PR 6 | Projekt-Vertrag, Port, Postgres-Adapter, Datenmigration | gemergt (#1519, #1522) |
+| PR 7 | Simulationsmetadaten | Port gemergt (#1595, Issue #1578), Adapter: #1585 |
+| PR 8 | Run-Registry | Port gemergt (#1596, Issue #1579), Adapter: #1587 |
+| PR 9 | Report-Metadaten | Port: #1580, Adapter: #1588 |
+| PR 13/14 | Blob-Store-Port, Supabase-Storage-Adapter | #1584, #1586 (optional) |
+| PR 15 | Cutover Metadaten-Backend | Prüfskript #1590, Cutover armserver #1592 |
+| — | CI-Postgres, Readiness, Alembic-Drift, Backup, Rollback-Gate | CI gemergt (#1594, Issue #1577); offen: #1581, #1582, #1583, #1589 |
+
+**Zurückgestellt (ROADMAP: nicht vor 1.0):** PR 5 und §16 (Workspaces), PR 10–12
+und §14/15/17/18 (Supabase Auth, JWT, RLS), §22/23 (Frontend-Client, Realtime),
+§24/25 (pgvector, `PostgresGraphStorage`), §26 (LLM-Secrets in DB/Vault).
+
+**Abstimmung mit 0.10.0:** [`plans/active/0.10.0-rc-plan.md`](active/0.10.0-rc-plan.md)
+führt die Linie unter E5 als pausiert (19.09.2026) und außerhalb des 0.10.0-Scopes.
+Die Tickets unter #1576 laufen daneben, nicht als Teil der 0.10.0-Gates.
+
+---
+
 ## 1. Entscheidung in einem Satz
 
 Nicht „Agora auf Supabase umschreiben“, sondern:

@@ -298,7 +298,7 @@ Die Supabase-Konfigurationsdateien (DB-Init-SQL, Envoy-Routing, Supavisor-Config
 
 ### PostgreSQL-Grundlage: installiert, im Default ungenutzt
 
-`sqlalchemy`, `psycopg[binary]` und `alembic` sind Backend-Abhängigkeiten. Der zentrale Adapter liegt in `backend/app/infrastructure/postgres/` (`Database.session()` als einziger vorgesehener Weg zu einer Verbindung), Alembic unter `backend/migrations/` mit zwei Migrationen: die erste legt das Fachschema `agora` an, die zweite die Tabelle `agora.llm_profiles`.
+`sqlalchemy`, `psycopg[binary]` und `alembic` sind Backend-Abhängigkeiten. Der zentrale Adapter liegt in `backend/app/infrastructure/postgres/` (`Database.session()` als einziger vorgesehener Weg zu einer Verbindung), Alembic unter `backend/migrations/` mit drei Migrationen: die erste legt das Fachschema `agora` an, die zweite die Tabelle `agora.llm_profiles`, die dritte die Tabelle `agora.projects`.
 
 Wirksam wird davon im Default nichts: `AGORA_METADATA_BACKEND=legacy` ist gesetzt, und solange er gilt, wird keine Verbindung aufgebaut. `DATABASE_URL` hat bewusst keinen Default; `Config.validate()` lehnt `AGORA_METADATA_BACKEND=postgres` ohne URL, einen unbekannten Backend-Wert und ein `postgresql://`-Schema (psycopg2 ist nicht installiert) beim Start ab.
 
