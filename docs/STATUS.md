@@ -353,6 +353,12 @@ persistierten Manifest-Felder; Lease-Felder (`worker_pid`, `worker_token`,
 des Port-Vertrags.  `RunRegistry` bleibt Fassade (Singleton, Lock,
 canonical_status, Events, Aggregation).  Der PostgreSQL-Adapter folgt in #1587.
 
+### Readiness: `/readyz` kennt den PostgreSQL-Zustand
+
+Seit #1581 trägt `/readyz` (`backend/app/readiness.py`) einen zusätzlichen Check `postgres` mit einem maschinenlesbaren `state` (`ok`/`unavailable`/`disabled`, Vertrag `app/contracts/readiness_contract.py::PostgresReadinessCheck`). `disabled` gilt, solange kein `AGORA_*_BACKEND` auf `postgres` steht — dann wird **keine** Verbindung aufgebaut, nicht einmal eine Engine, und der Check macht `/readyz` nicht rot. Steht mindestens ein Backend auf `postgres`, probt der Check `SELECT 1` über eine kurzlebige `Database`-Instanz mit kleinem Verbindungs-Timeout (statt des langlebigen Prozess-Singletons) und meldet bei Fehlschlag `unavailable` (503). Fehlerdetails im Response-Body sind immer generisch — Host, Port, User, Passwort und Datenbankname aus `DATABASE_URL` tauchen weder dort noch im Log auf.
+
+**Umgeschaltet ist nichts.** In dieser Installation ist der Legacy-Default aktiv, der Check meldet `disabled`. `active_postgres_backends()`/`any_postgres_backend()` (`backend/app/infrastructure/postgres/backends.py`) sind die einzige Stelle, die alle `*_BACKEND`-Schalter kennt — Alembic-Drift-Gate (#1582) und Backup (#1583) nutzen dieselbe Funktion.
+
 ## Security
 
 Aktueller Schwerpunkt:
