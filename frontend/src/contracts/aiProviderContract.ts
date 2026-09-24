@@ -127,15 +127,26 @@ export const ProviderConnectionBaseSchema = z.object({
   last_tested_at: NullableDateTimeSchema,
 }).strict()
 
-export const ProviderConnectionSchema = ProviderConnectionBaseSchema.superRefine((value, context) => {
+function refineConnectionBaseUrl(
+  value: z.infer<typeof ProviderConnectionBaseSchema>,
+  context: z.RefinementCtx,
+  { localTransportIsLocal }: { localTransportIsLocal: boolean },
+): void {
   if (value.base_url === null) return
-  const baseUrlSchema = value.provider_kind === 'ollama'
-    ? LocalOllamaBaseUrlSchema
-    : PublicBaseUrlSchema
+  // Issue #1414: ein auf `unknown` normalisierter Eintrag verliert seinen
+  // eigentlichen Kind; für `transport: "local"` entscheidet dann der Transport
+  // über die URL-Prüfung statt pauschal die Public-URL-Regel.
+  const isLocal = value.provider_kind === 'ollama'
+    || (localTransportIsLocal && value.provider_kind === 'unknown' && value.transport === 'local')
+  const baseUrlSchema = isLocal ? LocalOllamaBaseUrlSchema : PublicBaseUrlSchema
   const result = baseUrlSchema.safeParse(value.base_url)
   if (!result.success) {
     context.addIssue({ code: 'custom', path: ['base_url'], message: result.error.issues[0]?.message ?? 'invalid base_url' })
   }
+}
+
+export const ProviderConnectionSchema = ProviderConnectionBaseSchema.superRefine((value, context) => {
+  refineConnectionBaseUrl(value, context, { localTransportIsLocal: false })
 })
 export type ProviderConnection = z.infer<typeof ProviderConnectionSchema>
 
@@ -162,8 +173,46 @@ export const ProviderConnectionResponseSchema = z.object({
 }).strict()
 export type ProviderConnectionResponse = z.infer<typeof ProviderConnectionResponseSchema>
 
+// Issue #1414: Bekannte provider_kind-Werte laut ProviderConnectionKindSchema.
+// `unknown` gehört selbst dazu und ist bereits das Ziel der Normalisierung
+// unten — kein Sonderfall nötig.
+const KNOWN_PROVIDER_CONNECTION_KINDS = new Set<string>(ProviderConnectionKindSchema.options)
+
+/**
+ * Issue #1414: Ein einzelner Listen-Eintrag mit einem noch unbekannten
+ * `provider_kind` (additiver Backend-Enum-Wert vor einem Frontend-Rollout,
+ * konkret ausgelöst durch `codex_cli` #1405/#1406) darf wegen `.strict()`
+ * nicht die komplette Provider-Liste verwerfen. `unknown` ist bereits ein
+ * regulärer Enum-Wert und wird von Konsumenten (u. a. `LlmProfileManager.vue`)
+ * bereits als „kein Connection-Match" behandelt — deshalb wird der rohe Wert
+ * hier vor der eigentlichen Validierung auf `unknown` normalisiert statt den
+ * Eintrag zu verwerfen. Andere Verstöße (fehlende Pflichtfelder, geleakte
+ * Secrets etc.) bleiben unverändert harte Fehler, siehe
+ * `frontend/src/api/__tests__/providerConnections.spec.ts`.
+ */
+function tolerateUnknownProviderKind(raw: unknown): unknown {
+  if (
+    raw === null ||
+    typeof raw !== 'object' ||
+    typeof (raw as { provider_kind?: unknown }).provider_kind !== 'string' ||
+    KNOWN_PROVIDER_CONNECTION_KINDS.has((raw as { provider_kind: string }).provider_kind)
+  ) {
+    return raw
+  }
+  const { id, provider_kind } = raw as { id?: unknown; provider_kind: string }
+  console.warn(
+    `[providerConnections] unbekannter provider_kind "${provider_kind}" (id=${String(id ?? 'unknown')}) wird als "unknown" behandelt`,
+  )
+  return { ...raw, provider_kind: 'unknown' }
+}
+
 export const ProviderConnectionsListResponseSchema = z.object({
-  items: z.array(ProviderConnectionSchema),
+  items: z.array(z.preprocess(
+    tolerateUnknownProviderKind,
+    ProviderConnectionBaseSchema.superRefine((value, context) => {
+      refineConnectionBaseUrl(value, context, { localTransportIsLocal: true })
+    }),
+  )),
   total: z.number().int().nonnegative(),
 }).strict()
 export type ProviderConnectionsListResponse = z.infer<typeof ProviderConnectionsListResponseSchema>

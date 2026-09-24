@@ -143,6 +143,22 @@ describe('aiModels — llmProviders-Teil', () => {
     expect(store.isConnectionConfigured('conn-ollama')).toBe(true)
   })
 
+  it('loadConnections() behält bekannte Connections trotz eines unbekannten provider_kind und wirft nicht (#1414)', async () => {
+    mock(listProviderConnections).mockResolvedValue({
+      items: [
+        makeConnection(),
+        makeConnection({ id: 'conn-unknown-kind', provider_kind: 'unknown' }),
+      ],
+      total: 2,
+    })
+    const store = useLlmProvidersStore()
+
+    await expect(store.loadConnections()).resolves.toBeUndefined()
+
+    expect(store.connections['conn-ollama']?.provider_kind).toBe('ollama')
+    expect(store.connections['conn-unknown-kind']?.provider_kind).toBe('unknown')
+  })
+
   it('upsertConnection() speichert Connection und räumt busy ab', async () => {
     const conn = makeConnection({ id: 'conn-new' })
     mock(upsertProviderConnection).mockResolvedValue(conn)
