@@ -96,8 +96,14 @@ def _to_row_values(record: RunRecord) -> dict[str, Any]:
 
 
 def _to_contract(row: RunModel) -> RunRecord:
-    """Zeile → Vertrag, allein aus dem Manifest."""
-    return RunRecord(**dict(row.payload or {}))
+    """Zeile → Vertrag, allein aus dem Manifest.
+
+    Die Spalte erzwingt kein JSON-Objekt; ein Skalar oder eine Liste zählt
+    als unlesbar wie ein kaputtes Manifest (Codex-Review auf #1605).
+    """
+    if not isinstance(row.payload, dict):
+        raise ValueError(f'payload of run {row.id} is not a JSON object')
+    return RunRecord(**row.payload)
 
 
 def _is_simulation_fk_violation(exc: IntegrityError) -> bool:
@@ -147,11 +153,17 @@ class PostgresRunRepository:
         Der Weg für die Datenmigration: ein vorhandener Datensatz wird nicht
         überschrieben, damit ein zweiter Lauf nach dem Umschalten keine
         inzwischen in PostgreSQL geänderten Runs zurückdreht. Ein fehlender
-        Simulationsverweis scheitert mit ``RunSimulationMissing``.
+        Simulationsverweis scheitert mit ``RunSimulationMissing`` — aber erst
+        nach der Prüfung auf eine vorhandene Zeile: wurde die Simulation nach
+        der ersten Migration gelöscht (``ON DELETE SET NULL``), zählt der Run
+        bei einer Wiederholung als "schon da", nicht als Fehler
+        (Codex-Review auf #1605).
         """
         values = _to_row_values(record)
         try:
             with self.db.session() as session:
+                if session.get(RunModel, values['id']) is not None:
+                    return False
                 if (
                     values['simulation_id'] is not None
                     and session.get(SimulationModel, values['simulation_id']) is None

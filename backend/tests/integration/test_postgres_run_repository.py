@@ -375,6 +375,36 @@ def test_add_existing_is_idempotent_and_does_not_overwrite(repo):
     assert loaded.status == 'completed'
 
 
+def test_add_existing_counts_a_detached_run_as_existing(repo, migrated_db):
+    """Codex-Review auf #1605: wurde die Simulation nach der ersten Migration
+    gelöscht, muss eine Wiederholung den Run als "schon da" melden, nicht mit
+    ``RunSimulationMissing`` scheitern."""
+    record = _record('run_wiederholt01', simulation_id=SIM_B)
+    assert repo.add_existing(record) is True
+    with migrated_db.session() as session:
+        session.execute(text(f"DELETE FROM agora.simulations WHERE id = '{SIM_B}'"))
+
+    assert repo.add_existing(record) is False
+
+
+@pytest.mark.parametrize('payload', ['1', 'true', '"text"', '[1, 2]', 'null'])
+def test_non_object_payload_counts_as_unreadable(repo, migrated_db, payload):
+    """Codex-Review auf #1605: die JSONB-Spalte erzwingt kein Objekt. Ein
+    Skalar darf ``get``/``list_all`` nicht abbrechen."""
+    repo.save(_record('run_gut000000002', updated_at='2026-09-01T00:00:00'))
+    with migrated_db.session() as session:
+        session.execute(
+            text(
+                'INSERT INTO agora.runs (id, updated_at, payload) '
+                "VALUES ('run_skalar000001', '2026-09-09T00:00:00', "
+                f"'{payload}'::jsonb)"
+            )
+        )
+
+    assert repo.get('run_skalar000001') is None
+    assert [r.run_id for r in repo.list_all()] == ['run_gut000000002']
+
+
 # -- Alembic ---------------------------------------------------------------
 
 
