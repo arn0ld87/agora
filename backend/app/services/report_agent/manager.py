@@ -13,6 +13,7 @@ from ...contracts.report_v3 import DataGap as ReportV3DataGap
 from ...contracts.report_v3 import Hypothesis as ReportV3Hypothesis
 from ...contracts.report_v3 import RED_TEAM_FINDINGS_LIMIT, ModelAttribution
 from ...contracts.report_v3 import SimulationContribution
+from ...contracts.report_record_contract import ReportRecord
 from .claim_dedup import dedup_claims, duplicate_report
 from .metadata_merge import merge_section_metadata
 from .threshold_provenance import bind_threshold_provenance, dedup_thresholds
@@ -20,6 +21,7 @@ from .threshold_deviation import drop_unresolvable_deviations
 from .simulation_contribution import compute_simulation_contribution
 from ...config import Config
 from ...models.report import Report, ReportOutline, ReportSection, ReportStatus
+from ...repositories.report_repository import ReportRepository, get_report_repository
 from ...utils.logger import get_logger
 from ..evidence_migrations import normalize_persisted_evidence_map
 from .evidence import text_confidence_label_of
@@ -263,7 +265,19 @@ class ReportManager:
     def _ensure_reports_dir(cls):
         """ensurereportroot directory exists"""
         ensure_reports_dir(cls.REPORTS_DIR)
-    
+
+    @classmethod
+    def _get_repository(cls) -> ReportRepository:
+        """Report-Repository fuer die Metadaten-Datei (Issue #1580).
+
+        Baut den Adapter bei jedem Aufruf neu aus ``cls.REPORTS_DIR`` statt
+        ihn zwischenzuspeichern: Tests biegen ``REPORTS_DIR`` als
+        Klassenattribut auf ein temporaeres Verzeichnis um (siehe
+        ``RunRegistry._repo`` fuer dasselbe Muster), und ein einmalig
+        gebauter Adapter wuerde an diesen Patches vorbeilaufen.
+        """
+        return get_report_repository(reports_dir=cls.REPORTS_DIR)
+
     @classmethod
     def _get_report_folder(cls, report_id: str) -> str:
         """getreportfolderpath"""
@@ -1101,8 +1115,9 @@ class ReportManager:
         report.has_evidence = bool(evidence_map and evidence_map.get("sections"))
         report.evidence_sections = len((evidence_map or {}).get("sections", []))
 
-        # savemetainformationJSON
-        cls._write_json_atomic(cls._get_report_path(report.report_id), report.to_dict())
+        # savemetainformationJSON — Issue #1580: laeuft ueber das
+        # ReportRepository statt direkt ueber write_json_atomic.
+        cls._get_repository().save(ReportRecord.from_dict(report.to_dict()))
 
         # saveoutline
         if report.outline:
@@ -1126,20 +1141,44 @@ class ReportManager:
     @classmethod
     def get_report(cls, report_id: str) -> Optional[Report]:
         """getreport"""
-        path = cls._get_report_path(report_id)
-        
-        if not os.path.exists(path):
-            # backward-compatible format: check for files stored directly in the reports directory
-            old_path = os.path.join(cls.REPORTS_DIR, f"{report_id}.json")
-            if os.path.exists(old_path):
-                path = old_path
-            else:
-                return None
-        
-        data = cls._read_json_safe(path)
-        if not data:
+        # Issue #1580: die Metadaten-Datei (meta.json inkl. Legacy-Flachformat-
+        # Fallback) wird ueber das ReportRepository gelesen; der Rest der
+        # Rekonstruktion (Outline-/Markdown-Fallback, Evidence-Map) bleibt
+        # unveraendert in ``_build_report_from_record``.
+        record = cls._get_repository().get(report_id)
+        if record is None:
             return None
-        
+        return cls._build_report_from_record(report_id, record)
+
+    @classmethod
+    def _stored_records(cls) -> List[tuple[str, ReportRecord]]:
+        """``(Ablageschluessel, Datensatz)`` fuer jeden lesbaren Report.
+
+        Die Artefakte werden ueber den Schluessel gesucht, nicht ueber die
+        ``report_id`` im Manifest — bei Altbestaenden mit abweichendem
+        Ordnernamen (z. B. ``report_deepseek_<hex>/`` mit ``report_<hex>``
+        im Manifest) fehlten sonst Outline, Markdown und Evidence-Map
+        (Codex-Review auf #1601). Dasselbe Verhalten wie vor dem Port.
+        """
+        repository = cls._get_repository()
+        stored: List[tuple[str, ReportRecord]] = []
+        for key in repository.list_ids():
+            record = repository.get(key)
+            if record is not None:
+                stored.append((key, record))
+        return stored
+
+    @classmethod
+    def _build_report_from_record(
+        cls, report_id: str, record: ReportRecord
+    ) -> Optional[Report]:
+        """Baut das ``Report``-Domain-Objekt aus einem ``ReportRecord``.
+
+        Unveraendert gegenueber dem frueheren ``get_report``: nur die Quelle
+        von ``data`` hat sich geaendert (Repository statt direktem JSON-Read).
+        """
+        data = record.to_dict()
+
         # rebuildReportobject
         outline_data = data.get('outline')
         if not outline_data:
@@ -1201,49 +1240,35 @@ class ReportManager:
     @classmethod
     def get_report_by_simulation(cls, simulation_id: str) -> Optional[Report]:
         """based onsimulationIDgetreport"""
-        cls._ensure_reports_dir()
-        
-        for item in os.listdir(cls.REPORTS_DIR):
-            item_path = os.path.join(cls.REPORTS_DIR, item)
-            # new format: report is a folder
-            if os.path.isdir(item_path):
-                report = cls.get_report(item)
-                if report and report.simulation_id == simulation_id:
-                    return report
-            # Backward-compatible format: single JSON file
-            elif item.endswith('.json'):
-                report_id = item[:-5]
-                report = cls.get_report(report_id)
-                if report and report.simulation_id == simulation_id:
-                    return report
-        
+        # Issue #1580: die Kandidaten-Aufzaehlung (Ordner- + Legacy-
+        # Flachformat) lebt jetzt im Repository-Adapter.
+        for key, record in cls._stored_records():
+            if record.simulation_id != simulation_id:
+                continue
+            report = cls._build_report_from_record(key, record)
+            if report:
+                return report
+
         return None
-    
+
     @classmethod
     def list_reports(cls, simulation_id: Optional[str] = None, limit: int = 50) -> List[Report]:
         """columnappearreport"""
-        cls._ensure_reports_dir()
-        
+        # Issue #1580: die Kandidaten-Aufzaehlung (Ordner- + Legacy-
+        # Flachformat) lebt jetzt im Repository-Adapter; die Sortierung nach
+        # Erstellzeit bleibt hier — sie ist eine Eigenschaft des Domain-
+        # Objekts, kein Zusagenteil des Ports.
         reports = []
-        for item in os.listdir(cls.REPORTS_DIR):
-            item_path = os.path.join(cls.REPORTS_DIR, item)
-            # new format: report is a folder
-            if os.path.isdir(item_path):
-                report = cls.get_report(item)
-                if report:
-                    if simulation_id is None or report.simulation_id == simulation_id:
-                        reports.append(report)
-            # Backward-compatible format: single JSON file
-            elif item.endswith('.json'):
-                report_id = item[:-5]
-                report = cls.get_report(report_id)
-                if report:
-                    if simulation_id is None or report.simulation_id == simulation_id:
-                        reports.append(report)
-        
+        for key, record in cls._stored_records():
+            if simulation_id is not None and record.simulation_id != simulation_id:
+                continue
+            report = cls._build_report_from_record(key, record)
+            if report:
+                reports.append(report)
+
         # sorted by creation time descending
         reports.sort(key=lambda r: r.created_at, reverse=True)
-        
+
         return reports[:limit]
     
     @classmethod

@@ -359,6 +359,24 @@ persistierten Manifest-Felder; Lease-Felder (`worker_pid`, `worker_token`,
 des Port-Vertrags.  `RunRegistry` bleibt Fassade (Singleton, Lock,
 canonical_status, Events, Aggregation).  Der PostgreSQL-Adapter folgt in #1587.
 
+### Report-Metadaten: Vertrag und Port — ein Adapter
+
+`ReportManager` delegiert seit #1580 das Lesen/Schreiben der Metadaten-Datei
+(`meta.json`, inkl. Legacy-Flachformat-Fallback `<report_id>.json`) an
+`FileReportRepository` (`backend/app/services/file_report_store.py`), hinter
+dem `ReportRepository`-Protocol (`backend/app/repositories/report_repository.py`).
+Das Pydantic-v2-Modell `ReportRecord`
+(`backend/app/contracts/report_record_contract.py`) beschreibt die
+persistierten Metadatenfelder verlustfrei (inkl. `outline` und
+`simulation_snapshot` als generische Dicts). Report-Inhalte (`report-v3.json`,
+`outline.json`, `section_XX.md`, Logs; Plan §11 Klasse B) bleiben Dateien und
+laufen NICHT über den Port — sie werden weiterhin direkt über
+`report_agent/storage.py` gelesen/geschrieben. `ReportManager` bleibt Fassade;
+keine Aufrufstelle außerhalb von `ReportManager` wurde angefasst. Der Port
+liefert neben `list()` auch `list_ids()` mit den Ablageschlüsseln: Altbestände
+mit abweichendem Ordnernamen finden ihre Artefakte weiter über den Ordner, nicht
+über die `report_id` im Manifest. Der PostgreSQL-Adapter folgt in #1588.
+
 ### Readiness: `/readyz` kennt den PostgreSQL-Zustand
 
 Seit #1581 trägt `/readyz` (`backend/app/readiness.py`) einen zusätzlichen Check `postgres` mit einem maschinenlesbaren `state` (`ok`/`unavailable`/`disabled`, Vertrag `app/contracts/readiness_contract.py::PostgresReadinessCheck`). `disabled` gilt, solange kein `AGORA_*_BACKEND` auf `postgres` steht — dann wird **keine** Verbindung aufgebaut, nicht einmal eine Engine, und der Check macht `/readyz` nicht rot. Steht mindestens ein Backend auf `postgres`, probt der Check `SELECT 1` über eine kurzlebige `Database`-Instanz mit kleinem Verbindungs-Timeout (statt des langlebigen Prozess-Singletons) und meldet bei Fehlschlag `unavailable` (503). Fehlerdetails im Response-Body sind immer generisch — Host, Port, User, Passwort und Datenbankname aus `DATABASE_URL` tauchen weder dort noch im Log auf.
