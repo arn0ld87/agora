@@ -64,6 +64,7 @@ def build_engine(
     pool_recycle: int = 1800,
     echo: bool = False,
     use_pool: bool = True,
+    connect_timeout: float | None = None,
 ) -> Engine:
     """Baut eine Engine. Verbindet noch nicht — das passiert beim ersten Use.
 
@@ -80,8 +81,15 @@ def build_engine(
     `use_pool=False` (NullPool) ist für kurzlebige Prozesse gedacht — Alembic,
     Wartungsskripte, Tests. Dort ist ein Pool nur eine Quelle offen bleibender
     Verbindungen.
+
+    `connect_timeout` (Sekunden, an psycopg durchgereicht) ist für kurzlebige
+    Healthcheck-Probes gedacht (`/readyz`, #1581): ohne ihn kann ein TCP-Connect
+    gegen eine tote Adresse je nach OS-Timeout Minuten hängen, statt den
+    Readiness-Check schnell als `unavailable` zu melden. `None` (Default) lässt
+    den Treiber-Default unverändert — bestehende Aufrufer sind unbetroffen.
     """
     normalized = normalize_database_url(url)
+    connect_args = {'connect_timeout': connect_timeout} if connect_timeout is not None else {}
 
     if not use_pool:
         return create_engine(
@@ -90,6 +98,7 @@ def build_engine(
             pool_pre_ping=True,
             echo=echo,
             future=True,
+            connect_args=connect_args,
         )
 
     return create_engine(
@@ -101,4 +110,5 @@ def build_engine(
         pool_pre_ping=True,
         echo=echo,
         future=True,
+        connect_args=connect_args,
     )

@@ -5,7 +5,8 @@ Readiness. ``/health`` muss grün bleiben, solange der Prozess lebt —
 ``/readyz`` muss rot werden, sobald eine kritische Abhängigkeit kippt:
 Neo4j, Redis (nur wenn aktiv genutzt), Upload-Verzeichnis, Embedding-Konfig.
 
-Beispielantwort bei vollständig gesundem Stack:
+Beispielantwort bei vollständig gesundem Stack (Legacy-Default, kein
+``AGORA_*_BACKEND`` auf ``postgres``):
 
     GET /readyz → 200
     {"status": "ready", "checks": {
@@ -13,7 +14,8 @@ Beispielantwort bei vollständig gesundem Stack:
         "redis": {"ok": true,  "detail": "ok"},
         "upload_dir": {"ok": true, "detail": "/app/backend/uploads"},
         "embedding_config": {"ok": true, "detail": "qwen3-embedding:4b → dim=2560"},
-        "embedding_index_version": {"ok": true, "detail": "no active index version (legacy view)"}
+        "embedding_index_version": {"ok": true, "detail": "no active index version (legacy view)"},
+        "postgres": {"ok": true, "detail": "no AGORA_*_BACKEND is set to postgres", "state": "disabled"}
     }}
 
 Beispielantwort bei kaputtem Neo4j:
@@ -32,6 +34,13 @@ Design-Entscheidungen:
 * Redis-Check wird übersprungen, wenn der konfigurierte Event-Bus nicht
   das Redis-Backend ist. Damit kann ein bewusster
   ``EVENT_BUS_BACKEND=file``-Betrieb nicht von /readyz rotgemacht werden.
+* PostgreSQL-Check (#1581, docs/plans/supabase.md §29): trägt zusätzlich
+  ``state`` (``ok``/``unavailable``/``disabled``, siehe
+  ``app.contracts.readiness_contract.PostgresReadinessCheck``). Solange kein
+  ``AGORA_*_BACKEND`` auf ``postgres`` steht, ist der Zustand ``disabled`` —
+  es wird dann auch keine Engine gebaut; ``disabled`` macht /readyz NICHT rot.
+  Erst wenn mindestens ein Backend aktiv ist, probt der Check `SELECT 1` und
+  wird bei Fehlschlag zu ``unavailable`` (macht /readyz rot).
 * Keine Authentifizierung — die Routen werden außerhalb der
   Blueprint-Guards registriert (analog zum bestehenden ``/health``).
 * Probe-Funktionen sind klein und stateless, damit Tests Fakes via
@@ -46,11 +55,19 @@ from typing import Any, Tuple
 
 from flask import Flask, Response, current_app, jsonify
 
-from .config import infer_vector_dim_for_model
+from .config import Config, infer_vector_dim_for_model
+from .contracts.readiness_contract import PostgresReadinessCheck
+from .infrastructure.postgres import Database
+from .infrastructure.postgres.backends import any_postgres_backend
 from .utils.logger import get_logger
 
 CheckResult = Tuple[bool, str]
 logger = get_logger("agora.readiness")
+
+#: Kurzes Verbindungs-Timeout (Sekunden) für die /readyz-Postgres-Probe. Ohne
+#: dieses Limit kann ein TCP-Connect gegen eine tote Adresse je nach OS-Timeout
+#: Minuten hängen, statt den Check schnell als ``unavailable`` zu melden.
+_POSTGRES_READINESS_CONNECT_TIMEOUT = 2.0
 
 
 def _safe_probe_failure(check_name: str, exc: Exception) -> CheckResult:
@@ -203,6 +220,61 @@ def _check_embedding_index_version() -> CheckResult:
     return True, f"v{active.version} ({active.index_name}) ONLINE"
 
 
+def _check_postgres() -> PostgresReadinessCheck:
+    """PostgreSQL-Zustand für /readyz (docs/plans/supabase.md §29, Issue #1581).
+
+    Drei Zustände, über ``state`` maschinenlesbar:
+
+    * ``disabled``    — kein ``AGORA_*_BACKEND`` steht auf ``postgres``. Es
+      wird KEINE Verbindung aufgebaut, nicht einmal eine Engine — der
+      Legacy-Default bleibt unberührt. ``ok=True``, macht /readyz nicht rot.
+    * ``ok``          — mindestens ein Backend ist aktiv, `SELECT 1` gelingt.
+    * ``unavailable`` — mindestens ein Backend ist aktiv, die Probe scheitert.
+      ``ok=False`` macht /readyz rot (503).
+
+    Aktuell hält kein Store dauerhaft eine Engine in ``app.extensions`` — noch
+    ist kein Adapter umgeschaltet (docs/plans/supabase.md, Umsetzungsstand).
+    Deshalb baut dieser Check bei Bedarf eine kurzlebige ``Database`` mit
+    kleinem Verbindungs-Timeout und disposed sie danach wieder, statt den
+    langlebigen Prozess-Singleton (``get_database()``) zu benutzen oder gar
+    offen zu halten.
+
+    ``detail`` bleibt in jedem Zweig generisch: psycopg-Fehlertexte tragen
+    häufig Host, Port, User oder Datenbanknamen im Klartext (z. B.
+    ``password authentication failed for user "agora"``). Diese Funktion
+    reicht so einen Text nie an den Response-Body durch — analog
+    ``_safe_probe_failure`` für die anderen Checks. Nur der generische
+    Fehlertyp wird geloggt, nie die Verbindungszeichenkette.
+    """
+    if not any_postgres_backend(Config):
+        return PostgresReadinessCheck(
+            ok=True,
+            detail="no AGORA_*_BACKEND is set to postgres",
+            state="disabled",
+        )
+
+    database = Database(
+        Config.DATABASE_URL,
+        use_pool=False,
+        connect_timeout=_POSTGRES_READINESS_CONNECT_TIMEOUT,
+    )
+    try:
+        healthy = database.check_connection()
+    except Exception as exc:  # noqa: BLE001 — Probe-Fehler werden generisch gemeldet
+        logger.warning("postgres readiness probe failed: %s", type(exc).__name__, exc_info=True)
+        healthy = False
+    finally:
+        database.dispose()
+
+    if healthy:
+        return PostgresReadinessCheck(ok=True, detail="ok", state="ok")
+    return PostgresReadinessCheck(
+        ok=False,
+        detail="postgres connectivity probe failed",
+        state="unavailable",
+    )
+
+
 def _run_checks() -> dict[str, Any]:
     """Führt alle Probes aus und packt das Ergebnis in das /readyz-Format."""
     results: dict[str, CheckResult] = {
@@ -212,11 +284,15 @@ def _run_checks() -> dict[str, Any]:
         "embedding_config": _check_embedding_config(),
         "embedding_index_version": _check_embedding_index_version(),
     }
+    postgres_check = _check_postgres()
+    checks: dict[str, dict[str, Any]] = {
+        name: {"ok": ok, "detail": detail} for name, (ok, detail) in results.items()
+    }
+    checks["postgres"] = postgres_check.model_dump()
+    all_ok = all(ok for ok, _ in results.values()) and postgres_check.ok
     return {
-        "status": "ready" if all(ok for ok, _ in results.values()) else "not_ready",
-        "checks": {
-            name: {"ok": ok, "detail": detail} for name, (ok, detail) in results.items()
-        },
+        "status": "ready" if all_ok else "not_ready",
+        "checks": checks,
     }
 
 
