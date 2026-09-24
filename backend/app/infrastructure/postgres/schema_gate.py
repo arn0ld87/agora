@@ -16,6 +16,7 @@ Lebenszyklus nicht vorwegnehmen.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from alembic.config import Config as AlembicConfig
@@ -29,6 +30,24 @@ from .engine import normalize_database_url
 
 #: ``backend/migrations`` — dieselbe Linie, die ``alembic upgrade head`` anwendet.
 MIGRATIONS_DIR = Path(__file__).resolve().parents[3] / 'migrations'
+
+
+#: Verbindungs-Timeout (Sekunden) für das Start-Gate. Ohne ihn wartet
+#: psycopg bei einem stumm verworfenen Verbindungsaufbau rund 130 s — länger
+#: als die ``start-period`` des Container-Healthchecks (Codex-Review auf
+#: #1599). Überschreibbar per ``AGORA_SCHEMA_GATE_CONNECT_TIMEOUT``.
+DEFAULT_CONNECT_TIMEOUT = 10
+
+
+def _connect_timeout() -> int:
+    raw = os.environ.get('AGORA_SCHEMA_GATE_CONNECT_TIMEOUT', '').strip()
+    if not raw:
+        return DEFAULT_CONNECT_TIMEOUT
+    try:
+        value = int(raw)
+    except ValueError:
+        return DEFAULT_CONNECT_TIMEOUT
+    return value if value > 0 else DEFAULT_CONNECT_TIMEOUT
 
 
 class SchemaDriftError(RuntimeError):
@@ -60,7 +79,12 @@ def _current_heads(database: str | Engine) -> tuple[str, ...]:
             return MigrationContext.configure(connection).get_current_heads()
 
     normalized = normalize_database_url(database)
-    engine = create_engine(normalized, poolclass=NullPool, future=True)
+    engine = create_engine(
+        normalized,
+        poolclass=NullPool,
+        future=True,
+        connect_args={'connect_timeout': _connect_timeout()},
+    )
     try:
         with engine.connect() as connection:
             return MigrationContext.configure(connection).get_current_heads()
