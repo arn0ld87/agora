@@ -12,6 +12,11 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 
+from ..contracts.simulation_record_contract import SimulationRecord
+from ..repositories.simulation_repository import (
+    SimulationRepository,
+    get_simulation_repository,
+)
 from ..utils.logger import get_logger
 from .artifact_store import SimulationArtifactStore, resolve_default_store
 from . import branching_service, prepare_service
@@ -158,7 +163,11 @@ class SimulationManager:
         '../../uploads/simulations'
     )
     
-    def __init__(self, store: Optional[SimulationArtifactStore] = None):
+    def __init__(
+        self,
+        store: Optional[SimulationArtifactStore] = None,
+        repository: Optional[SimulationRepository] = None,
+    ):
         # Ensure directory exists
         os.makedirs(self.SIMULATION_DATA_DIR, exist_ok=True)
 
@@ -169,6 +178,16 @@ class SimulationManager:
         # ziehen wir den App-weiten Store; outside Flask context fällt der
         # Resolver auf einen Default-LocalAdapter zurück.
         self._store = store or resolve_default_store()
+
+        # SimulationRepository (Issue #1578). Falls keiner injiziert wird,
+        # bauen wir den Dateiadapter ueber die Fabrik.
+        self._repository: SimulationRepository = (
+            repository
+            or get_simulation_repository(
+                simulations_dir=self.SIMULATION_DATA_DIR,
+                store=self._store,
+            )
+        )
     
     def _get_simulation_dir(self, simulation_id: str) -> str:
         """Get simulation data directory"""
@@ -182,8 +201,10 @@ class SimulationManager:
         # generator writes via filesystem path); the store itself also creates it.
         self._get_simulation_dir(state.simulation_id)
 
-        state.updated_at = datetime.now().isoformat()
-        self._store.write_json(state.simulation_id, "state", state.to_dict())
+        record = SimulationRecord.from_dict(state.to_dict())
+        self._repository.save(record)
+        # updated_at wurde vom Repository gesetzt — in den State uebernehmen
+        state.updated_at = record.updated_at
 
         self._simulations[state.simulation_id] = state
 
@@ -227,38 +248,35 @@ class SimulationManager:
         # after a fresh install where only state.json exists in the store.
         self._get_simulation_dir(simulation_id)
 
-        if not self._store.exists(simulation_id, "state"):
+        record = self._repository.get(simulation_id)
+        if record is None:
             return None
 
-        data = self._store.read_json(simulation_id, "state", default=None)
-        if not data:
-            return None
-        
         state = SimulationState(
             simulation_id=simulation_id,
-            project_id=data.get("project_id", ""),
-            graph_id=data.get("graph_id", ""),
-            enable_twitter=data.get("enable_twitter", True),
-            enable_reddit=data.get("enable_reddit", True),
-            status=SimulationStatus(data.get("status", "created")),
-            entities_count=data.get("entities_count", 0),
-            profiles_count=data.get("profiles_count", 0),
-            entity_types=data.get("entity_types", []),
-            config_generated=data.get("config_generated", False),
-            config_reasoning=data.get("config_reasoning", ""),
-            current_round=data.get("current_round", 0),
-            twitter_status=data.get("twitter_status", "not_started"),
-            reddit_status=data.get("reddit_status", "not_started"),
-            created_at=data.get("created_at", datetime.now().isoformat()),
-            updated_at=data.get("updated_at", datetime.now().isoformat()),
-            error=data.get("error"),
-            source_simulation_id=data.get("source_simulation_id"),
-            root_simulation_id=data.get("root_simulation_id"),
-            branch_name=data.get("branch_name"),
-            branch_depth=int(data.get("branch_depth", 0) or 0),
-            persona_floor=data.get("persona_floor"),
+            project_id=record.project_id,
+            graph_id=record.graph_id,
+            enable_twitter=record.enable_twitter,
+            enable_reddit=record.enable_reddit,
+            status=SimulationStatus(record.status),
+            entities_count=record.entities_count,
+            profiles_count=record.profiles_count,
+            entity_types=list(record.entity_types),
+            config_generated=record.config_generated,
+            config_reasoning=record.config_reasoning,
+            current_round=record.current_round,
+            twitter_status=record.twitter_status,
+            reddit_status=record.reddit_status,
+            created_at=record.created_at,
+            updated_at=record.updated_at,
+            error=record.error,
+            source_simulation_id=record.source_simulation_id,
+            root_simulation_id=record.root_simulation_id,
+            branch_name=record.branch_name,
+            branch_depth=int(record.branch_depth or 0),
+            persona_floor=record.persona_floor,
         )
-        
+
         self._simulations[simulation_id] = state
         return state
     
