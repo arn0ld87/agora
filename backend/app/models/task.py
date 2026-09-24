@@ -222,7 +222,13 @@ class TaskManager:
                     task.progress = progress
                 if message is not None:
                     task.message = message
-                if message_key is not None:
+                    # Issue #1557: message_key faehrt IMMER mit message mit
+                    # (auch als expliziter Reset auf None) — sonst bliebe der
+                    # Schluessel eines frueheren Updates an einer neuen,
+                    # unpassenden Nachricht haengen (RunRegistry.update_run
+                    # spiegelt dieselbe Kopplung fuer den Registry-Pfad).
+                    task.message_key = message_key
+                elif message_key is not None:
                     task.message_key = message_key
                 if result is not None:
                     task.result = result

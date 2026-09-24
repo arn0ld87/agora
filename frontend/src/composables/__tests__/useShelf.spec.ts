@@ -36,7 +36,7 @@ vi.mock('../../api/report', () => reportApi)
 vi.mock('../../api/graph', () => graphApi)
 vi.mock('../../api/simulation', () => simulationApi)
 
-import { endeavorKey, nextActionFor, buildShelfObjects, formatShelfDate, useShelf } from '../useShelf'
+import { endeavorKey, nextActionFor, buildShelfObjects, formatShelfDate, jobStatusMessage, useShelf } from '../useShelf'
 
 // --- t-Stub: gibt Schluessel (+ JSON der Values) zurueck, Assertions laufen ueber Schluessel ---
 const t = (key: string, values?: Record<string, unknown>): string =>
@@ -67,6 +67,7 @@ function makeRun(overrides: Partial<RunDetail> = {}): RunDetail {
     eta_seconds: null,
     log_tail: null,
     metrics: null,
+    message_key: null,
     ...overrides,
   }
 }
@@ -304,6 +305,37 @@ describe('Gruppierung ueber die ganze Pipeline', () => {
   })
 })
 
+describe('jobStatusMessage (Issue #1557)', () => {
+  it('loest messageKey ueber eine vorhandene Uebersetzung auf', () => {
+    const tt = (key: string) => (key === 'run.simulation_stopped' ? 'Simulation gestoppt.' : key)
+    const te = (key: string) => key === 'run.simulation_stopped'
+
+    const result = jobStatusMessage(
+      { message: 'Simulation stopped', messageKey: 'run.simulation_stopped', status: 'stopped' },
+      tt,
+      te,
+    )
+
+    expect(result).toBe('Simulation gestoppt.')
+  })
+
+  it('faellt bei unbekanntem Schluessel auf den Klartext message zurueck', () => {
+    const result = jobStatusMessage(
+      { message: 'Custom text', messageKey: 'run.unknown_key', status: 'processing' },
+      t,
+    )
+
+    expect(result).toBe('Custom text')
+  })
+
+  it('faellt ohne messageKey und ohne message-Text auf das generische Statuslabel zurueck', () => {
+    const result = jobStatusMessage({ message: '', messageKey: null, status: 'completed' }, t)
+
+    // statusText faellt bei fehlender Uebersetzung auf den Rohwert zurueck.
+    expect(result).toBe('completed')
+  })
+})
+
 describe('buildShelfObjects', () => {
   it('zwei Jobs mit derselben simulation_id ergeben eine Lauf-Zeile mit Status des juengsten Jobs und Job-Zaehler', () => {
     const older = makeRun({
@@ -399,6 +431,45 @@ describe('buildShelfObjects', () => {
     const [obj] = buildShelfObjects([older, newer], [], [], [], t)
     expect(obj.jobs?.map((j) => j.runId)).toEqual(['run_new', 'run_old'])
     expect(obj.jobs?.[0].linkedIds).toEqual({ project_id: 'proj_1', simulation_id: 'sim_1', report_id: 'rep_1' })
+  })
+
+  it('jobs traegt message_key als messageKey durch (Issue #1557)', () => {
+    const run = makeRun({ linked_ids: { simulation_id: 'sim_1' }, message_key: 'run.simulation_stopped' })
+    const [obj] = buildShelfObjects([run], [], [], [], t)
+    expect(obj.jobs?.[0].messageKey).toBe('run.simulation_stopped')
+  })
+
+  it('statusLine loest message_key des juengsten Jobs ueber resolveStatusMessage auf (Issue #1557)', () => {
+    const run = makeRun({
+      status: 'stopped',
+      message: 'Simulation stopped',
+      message_key: 'run.simulation_stopped',
+      linked_ids: { simulation_id: 'sim_1' },
+    })
+    const tt = (key: string, values?: Record<string, unknown>) =>
+      key === 'run.simulation_stopped'
+        ? 'Simulation gestoppt.'
+        : values
+          ? `${key}:${JSON.stringify(values)}`
+          : key
+    const te = (key: string) => key === 'run.simulation_stopped'
+
+    const [obj] = buildShelfObjects([run], [], [], [], tt, te)
+
+    expect(obj.statusLine).toBe('Simulation gestoppt.')
+  })
+
+  it('statusLine faellt bei unbekanntem message_key auf den Klartext message zurueck (Issue #1557)', () => {
+    const run = makeRun({
+      status: 'processing',
+      message: 'Custom progress text',
+      message_key: 'run.does_not_exist_yet',
+      linked_ids: { simulation_id: 'sim_1' },
+    })
+
+    const [obj] = buildShelfObjects([run], [], [], [], t)
+
+    expect(obj.statusLine).toBe('Custom progress text')
   })
 
   it('Projekt, dessen project_id von einem Job beansprucht ist, bekommt kein eigenes Graph-Objekt; unbeanspruchtes Projekt schon', () => {

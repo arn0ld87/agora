@@ -266,7 +266,7 @@
           <li v-for="job in props.object.jobs" :key="job.runId" class="dossier__timeline-item">
             <time class="dossier__timeline-time" :datetime="job.updatedAt">{{ formatUpdatedAt(job.updatedAt) }}</time>
             <span class="dossier__timeline-type">{{ job.runType }}</span>
-            <span class="dossier__timeline-status">{{ job.message || statusText(t, `shelf.status.${job.status}`, job.status) }}</span>
+            <span class="dossier__timeline-status">{{ jobStatusMessage(job, t, te) }}</span>
           </li>
         </ol>
       </section>
@@ -314,7 +314,7 @@ import { useObjectDetail } from '../../composables/useObjectDetail'
 import { useDeriveSimulation } from '../../composables/useDeriveSimulation'
 import { useStartFromPersona } from '../../composables/useStartFromPersona'
 import { useSystemStatus, statusErrorKey } from '../../composables/useSystemStatus'
-import { formatShelfDate, statusText, type useShelf } from '../../composables/useShelf'
+import { formatShelfDate, jobStatusMessage, type useShelf } from '../../composables/useShelf'
 import type { ConfidenceLabel } from '../../contracts/reportContract'
 
 /**
@@ -334,7 +334,7 @@ import type { ConfidenceLabel } from '../../contracts/reportContract'
 
 const props = defineProps<{ object: ShelfObject | null; shelf: ReturnType<typeof useShelf> }>()
 
-const { t, locale } = useI18n()
+const { t, te, locale } = useI18n()
 const router = useRouter()
 const cancelAction = useCancelAction()
 

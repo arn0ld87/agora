@@ -491,6 +491,7 @@ def _begin_start_run(req: _StartRequest, state) -> RunLifecycle:
         failure_message="Simulation start failed: {exc_type}",
         progress=0,
         message="Simulation run queued",
+        message_key="run.simulation_run_queued",
         linked_ids={"simulation_id": req.simulation_id, "project_id": state.project_id},
         artifacts=_simulation_run_artifacts(req.simulation_id),
         resume_capability=_simulation_resume_capability(req.simulation_id, state),
@@ -752,6 +753,7 @@ def start_simulation():
                 status="processing",
                 progress=0,
                 message="Simulation run started",
+                message_key="run.simulation_run_started",
                 resume_capability=_simulation_resume_capability(req.simulation_id, state),
             )
 
@@ -808,6 +810,7 @@ def stop_simulation():
                 status="stopped",
                 progress=run_state.to_dict().get("progress_percent", 0),
                 message="Simulation stopped",
+                message_key="run.simulation_stopped",
                 artifacts=_simulation_run_artifacts(simulation_id),
                 resume_capability=_simulation_resume_capability(simulation_id, state),
             )
@@ -844,6 +847,7 @@ def pause_simulation(simulation_id: str):
             run["run_id"],
             status="paused",
             message="Pause requested",
+            message_key="run.pause_requested",
             artifacts=_simulation_run_artifacts(simulation_id),
             resume_capability=_simulation_resume_capability(simulation_id, sim_state),
         )
@@ -880,6 +884,7 @@ def resume_simulation(simulation_id: str):
             run["run_id"],
             status="processing",
             message="Run resumed",
+            message_key="run.run_resumed",
             artifacts=_simulation_run_artifacts(simulation_id),
             resume_capability=_simulation_resume_capability(simulation_id, sim_state),
         )

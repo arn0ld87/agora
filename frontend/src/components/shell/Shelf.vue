@@ -126,7 +126,7 @@
           <tr v-for="job in props.shelf.jobs.value" :key="job.runId">
             <td class="shelf__jobs-id">{{ job.runId }}</td>
             <td>{{ job.runType }}</td>
-            <td>{{ job.message || statusText(t, `shelf.status.${job.status}`, job.status) }}</td>
+            <td>{{ jobStatusMessage(job, t, te) }}</td>
             <td class="shelf__jobs-time">{{ formatUpdatedAt(job.updatedAt) }}</td>
           </tr>
         </tbody>
@@ -235,7 +235,7 @@ import { useRouter } from 'vue-router'
 import DataTable, { type DataTableColumn } from '../v4/data/DataTable.vue'
 import { ShelfTableTestId, ShelfTestId } from '../../contracts/testIds'
 import { SHELF_KIND_TAG, type ShelfFilter, type ShelfObject } from '../../types/shelf'
-import { formatShelfDate, statusText, type useShelf } from '../../composables/useShelf'
+import { formatShelfDate, jobStatusMessage, statusText, type useShelf } from '../../composables/useShelf'
 import { useCancelAction } from './useCancelAction'
 import { useStartFromPersona } from '../../composables/useStartFromPersona'
 
@@ -266,7 +266,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{ select: [obj: ShelfObject]; filterChange: [filter: ShelfFilter] }>()
 
-const { t, locale } = useI18n()
+const { t, te, locale } = useI18n()
 const router = useRouter()
 const cancelAction = useCancelAction()
 const startFromPersonaAction = useStartFromPersona()
@@ -398,7 +398,7 @@ const jobTableRows = computed<JobTableRow[]>(() =>
     id: job.runId,
     runType: job.runType,
     status: statusText(t, `shelf.status.${job.status}`, job.status),
-    message: job.message,
+    message: jobStatusMessage(job, t, te),
     progress: job.progress,
     updatedAt: formatUpdatedAt(job.updatedAt),
   })),

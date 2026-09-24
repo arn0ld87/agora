@@ -51,6 +51,14 @@ class RunDetail(BaseModel):
     status: RunStatus
     progress: int = Field(ge=0, le=100)
     message: str = ""
+    # Stabiler i18n-Schluessel fuer ``message`` (Issue #1557, Muster aus
+    # #1174/#1458). Bewusst ``str`` statt Literal — die Werte kommen aus
+    # ``app/api/runs.py``/``simulation_run.py`` (Praefix ``run.*``) UND aus
+    # ``TaskManager`` (``task.completed``/``task.failed``, via
+    # ``RunRegistry.sync_task``); ein geschlossenes Enum hier muesste beide
+    # Quellen kennen und mit jeder neuen Task-Kuerzelmeldung mitwachsen.
+    # ``message`` bleibt daneben als Klartext-Fallback (Rueckwaertskompat.).
+    message_key: Optional[str] = None
     error: Optional[str] = None
     started_at: str
     updated_at: str

@@ -701,6 +701,31 @@
       "noMetricsHint": "Keine Token-/Latenz-Metriken erfasst."
     }
   },
+  "run": {
+    "simulation_stopped": "Simulation gestoppt.",
+    "cancelled_before_start": "Vom Nutzer abgebrochen, bevor die Simulation gestartet war.",
+    "cancel_requested": "Abbruch angefordert — aktuelle Stufe wird noch beendet.",
+    "graph_build_restart_queued": "Neustart des Graph-Builds eingereiht.",
+    "graph_build_cancelled": "Vom Nutzer abgebrochen — bereits geschriebene Entitäten und Relationen bleiben im Graphen erhalten, der Graph gilt als unvollständig.",
+    "graph_build_initializing": "Graph-Build-Dienst wird initialisiert…",
+    "graph_build_chunking": "Text wird in Abschnitte zerlegt…",
+    "graph_build_creating_graph": "Graph wird angelegt…",
+    "graph_build_setting_ontology": "Ontologie-Definition wird gesetzt…",
+    "graph_build_retrieving": "Graphdaten werden abgerufen…",
+    "graph_build_completed": "Graph-Build abgeschlossen.",
+    "prepare_restart_queued": "Neustart der Simulationsvorbereitung eingereiht.",
+    "prepare_starting": "Simulationsumgebung wird vorbereitet…",
+    "prepare_completed": "Simulationsvorbereitung abgeschlossen.",
+    "simulation_resumed": "Simulation fortgesetzt.",
+    "simulation_restart_queued": "Neustart der Simulation eingereiht.",
+    "simulation_restarted": "Simulation neu gestartet.",
+    "report_initializing": "Report-Agent wird initialisiert…",
+    "report_resumed": "Berichterstellung fortgesetzt.",
+    "simulation_run_queued": "Simulationslauf eingereiht.",
+    "simulation_run_started": "Simulationslauf gestartet.",
+    "pause_requested": "Pause angefordert.",
+    "run_resumed": "Lauf fortgesetzt."
+  },
   "step5": {
     "kicker": "№ 05 — GESPRÄCH",
     "title": "Sprich mit den Agenten.",

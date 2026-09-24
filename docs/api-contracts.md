@@ -225,7 +225,7 @@ Ein handgeschriebenes Dict für eine neue oder geänderte JSON-Grenze bleibt tro
 
 ### Status-Meldungen: `message_key`
 
-`PrepareStatusResponse`, `ReportStatusResponse` und `TaskStatusResponse` tragen seit [#1174](https://github.com/arn0ld87/agora/issues/1174) neben dem Klartext `message` einen stabilen `message_key` (Muster aus #1458, z. B. `prepare.already_completed`, `prepare.task_started`, `prepare.not_started`, `report.generated`, `report.failed`, `report.awaiting_task`). `message` bleibt als Fallback erhalten; das Frontend löst bekannte Schlüssel zentral auf (`frontend/src/i18n/statusMessage.ts::resolveStatusMessage`), ein unbekannter oder fehlender Schlüssel fällt auf `message` zurück.
+`PrepareStatusResponse`, `ReportStatusResponse` und `TaskStatusResponse` tragen seit [#1174](https://github.com/arn0ld87/agora/issues/1174) neben dem Klartext `message` einen stabilen `message_key` (Muster aus #1458, z. B. `prepare.already_completed`, `prepare.task_started`, `prepare.not_started`, `report.generated`, `report.failed`, `report.awaiting_task`). `message` bleibt als Fallback erhalten; das Frontend löst bekannte Schlüssel zentral auf (`frontend/src/i18n/statusMessage.ts::resolveStatusMessage`), ein unbekannter oder fehlender Schlüssel fällt auf `message` zurück. Seit [#1557](https://github.com/arn0ld87/agora/issues/1557) gilt das auch für `RunDetail` (`GET /api/runs`, `/api/runs/<id>`): Lifecycle-Meldungen aus `runs.py`/`simulation_run.py` tragen `run.*`-Schlüssel, Regal und Dossier lösen sie über dieselbe Funktion auf. Ein Update mit neuer `message`, aber ohne Schlüssel, räumt den alten Schlüssel ab.
 
 ---
 

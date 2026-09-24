@@ -46,6 +46,11 @@ export const RunDetailSchema = z
     status: RunStatusSchema,
     progress: z.number().int().min(0).max(100),
     message: z.string().default(""),
+    // Stabiler i18n-Schluessel fuer `message` (Issue #1557, Muster aus
+    // #1174/#1458). Bewusst z.string() statt Enum — Werte kommen aus
+    // `app/api/runs.py`/`simulation_run.py` (Praefix `run.*`) UND aus
+    // `TaskManager` (`task.completed`/`task.failed`).
+    message_key: z.string().nullable().optional(),
     error: z.string().nullable().optional(),
     started_at: z.string(),
     updated_at: z.string(),

@@ -104,3 +104,30 @@ def test_update_task_can_set_message_key_explicitly():
     assert task is not None
     assert task.message == "Chunking text..."
     assert task.message_key == "task.chunking"
+
+
+def test_update_task_clears_stale_message_key_when_message_changes_without_new_key():
+    """Issue #1557: ein neues ``message`` ohne eigenen ``message_key`` darf den
+    Schlüssel eines FRÜHEREN Updates nicht "sticky" mitführen — sonst zeigt das
+    Frontend die Übersetzung des alten Schlüssels statt der aktuellen
+    (z. B. dynamischen) Nachricht.
+    """
+    task_id = TaskManager().create_task("graph_build")
+
+    TaskManager().update_task(
+        task_id,
+        status=TaskStatus.PROCESSING,
+        message="Setting ontology definition...",
+        message_key="run.graph_build_setting_ontology",
+    )
+    TaskManager().update_task(
+        task_id,
+        status=TaskStatus.FAILED,
+        message="Build failed: boom",
+        error="boom",
+    )
+
+    task = TaskManager().get_task(task_id)
+    assert task is not None
+    assert task.message == "Build failed: boom"
+    assert task.message_key is None
