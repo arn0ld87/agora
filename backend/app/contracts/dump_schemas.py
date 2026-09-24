@@ -22,6 +22,7 @@ from app.contracts.persona_contract import PersonaModel, PersonaQuotaPlan
 from app.contracts.persona_entity_context import PersonaEntityContext
 from app.contracts.persona_target_contract import PersonaTargetContract
 from app.contracts.prepare_status_contract import PrepareStatusResponse
+from app.contracts.readiness_contract import PostgresReadinessCheck
 from app.contracts.report_status_contract import ReportStatusResponse
 from app.contracts.pipeline_degradation_contract import (
     PipelineDegradationModel,
@@ -138,6 +139,8 @@ CONTRACTS: dict[str, type] = {
     "persona-target.schema.json": PersonaTargetContract,
     # Status-Antworten mit message_key (Issue #1174, Muster aus #1458)
     "prepare-status-response.schema.json": PrepareStatusResponse,
+    # /readyz-Postgres-Check mit Literal-Zustand (Issue #1581)
+    "readiness-postgres-check.schema.json": PostgresReadinessCheck,
     "report-status-response.schema.json": ReportStatusResponse,
     "report-v3.schema.json": ReportV3,
     "run-summary.schema.json": RunSummary,

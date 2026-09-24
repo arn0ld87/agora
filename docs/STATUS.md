@@ -306,6 +306,8 @@ Wirksam wird davon im Default nichts: `AGORA_METADATA_BACKEND=legacy` ist gesetz
 
 Ab hier gilt die Regel aus Phase 2 des Plans: **das Datenbankschema wird ausschließlich über versionierte Migrationen geändert.** Kein `CREATE TABLE IF NOT EXISTS` in fachlichen Stores.
 
+Seit [#1582](https://github.com/arn0ld87/agora/issues/1582) erzwingt `create_app` das auch beim Start: steht irgendein `AGORA_*_BACKEND` auf `postgres`, muss die Alembic-Revision in der Datenbank dem Head aus `backend/migrations/` entsprechen — sonst bricht der Start mit einer Meldung ab, die beide Revisionen nennt (`app/infrastructure/postgres/schema_gate.py::verify_schema_at_head`, Exception `SchemaDriftError`). Mehrere Alembic-Heads oder eine leere Versionstabelle zählen ebenfalls als Drift. Legacy-Defaults bauen dabei weiterhin keine Verbindung auf.
+
 Für den Nachweis, dass eine Migration nichts verliert, existiert `backend/scripts/migration_baseline.py`: es erhebt je Objektklasse Anzahl, IDs, Zeitstempel, Statuswerte und Referenzen plus eine Prüfsumme je Artefaktdatei und vergleicht zwei solche Manifeste (Runbook: [`runbooks/migration-baseline.md`](runbooks/migration-baseline.md)). Erhoben wurde damit bisher nur der Ist-Stand; **kein Vorher/Nachher-Vergleich über eine echte Migrationsphase liegt vor**, weil noch keine gelaufen ist.
 
 Die erste Fachtabelle existiert als Definition: `agora.llm_profiles` (SQLAlchemy-Modell `LlmProfileModel` plus Migration) hält LLM-Profil-Metadaten — Name, Provider, Basis-URL, Modellname, ein partieller Unique-Index, der höchstens ein Default-Profil erlaubt. Provider-Secrets bleiben im Fernet-Store, Workspace- und Auth-Spalten sind bewusst nicht vorgezogen. Solange `AGORA_METADATA_BACKEND=legacy` gilt, liest und schreibt die Tabelle niemand — das ist Phase 4.
@@ -352,6 +354,12 @@ persistierten Manifest-Felder; Lease-Felder (`worker_pid`, `worker_token`,
 `heartbeat_at`, `lease_ttl_s`) bleiben in `metadata` und sind kein Bestandteil
 des Port-Vertrags.  `RunRegistry` bleibt Fassade (Singleton, Lock,
 canonical_status, Events, Aggregation).  Der PostgreSQL-Adapter folgt in #1587.
+
+### Readiness: `/readyz` kennt den PostgreSQL-Zustand
+
+Seit #1581 trägt `/readyz` (`backend/app/readiness.py`) einen zusätzlichen Check `postgres` mit einem maschinenlesbaren `state` (`ok`/`unavailable`/`disabled`, Vertrag `app/contracts/readiness_contract.py::PostgresReadinessCheck`). `disabled` gilt, solange kein `AGORA_*_BACKEND` auf `postgres` steht — dann wird **keine** Verbindung aufgebaut, nicht einmal eine Engine, und der Check macht `/readyz` nicht rot. Steht mindestens ein Backend auf `postgres`, probt der Check `SELECT 1` über eine kurzlebige `Database`-Instanz mit kleinem Verbindungs-Timeout (statt des langlebigen Prozess-Singletons) und meldet bei Fehlschlag `unavailable` (503). Fehlerdetails im Response-Body sind immer generisch — Host, Port, User, Passwort und Datenbankname aus `DATABASE_URL` tauchen weder dort noch im Log auf.
+
+**Umgeschaltet ist nichts.** In dieser Installation ist der Legacy-Default aktiv, der Check meldet `disabled`. `active_postgres_backends()`/`any_postgres_backend()` (`backend/app/infrastructure/postgres/backends.py`) sind die einzige Stelle, die alle `*_BACKEND`-Schalter kennt — Alembic-Drift-Gate (#1582) und Backup (#1583) nutzen dieselbe Funktion.
 
 ## Security
 

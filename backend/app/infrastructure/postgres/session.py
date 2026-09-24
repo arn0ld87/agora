@@ -45,10 +45,18 @@ class Database:
     (`AGORA_METADATA_BACKEND=legacy`) wird er nie benutzt.
     """
 
-    def __init__(self, url: str, *, use_pool: bool = True, echo: bool = False) -> None:
+    def __init__(
+        self,
+        url: str,
+        *,
+        use_pool: bool = True,
+        echo: bool = False,
+        connect_timeout: float | None = None,
+    ) -> None:
         self._url = url
         self._use_pool = use_pool
         self._echo = echo
+        self._connect_timeout = connect_timeout
         self._engine: Engine | None = None
         self._session_factory: sessionmaker[Session] | None = None
         self._lock = threading.Lock()
@@ -60,7 +68,10 @@ class Database:
             with self._lock:
                 if self._engine is None:
                     self._engine = build_engine(
-                        self._url, use_pool=self._use_pool, echo=self._echo
+                        self._url,
+                        use_pool=self._use_pool,
+                        echo=self._echo,
+                        connect_timeout=self._connect_timeout,
                     )
                     self._session_factory = sessionmaker(
                         bind=self._engine,

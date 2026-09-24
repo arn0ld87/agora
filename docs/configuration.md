@@ -119,6 +119,8 @@ Drei unabhängige Schalter steuern, ob einzelne Stores von Datei/SQLite auf Post
 | `AGORA_LLM_PROFILE_BACKEND` | `sqlite` | `sqlite`, `postgres` | `instance/llm_profiles.db` vs. PostgreSQL |
 | `DATABASE_URL` 🔐 | leer, kein Default | `postgresql+psycopg://user:password@host:5432/dbname` | Pflicht, sobald einer der drei Schalter auf `postgres` steht |
 
+Steht mindestens ein Schalter auf `postgres`, prüft `create_app` beim Start die Alembic-Revision (#1582). Der Verbindungsaufbau dafür ist auf `AGORA_SCHEMA_GATE_CONNECT_TIMEOUT` Sekunden begrenzt (Default `10`), damit ein nicht erreichbarer Datenbankhost den Start schnell abbricht statt rund 130 s zu hängen.
+
 `DATABASE_URL` hat bewusst **keinen** aktiven Default — ein geratener `localhost`-Wert wäre genau der Legacy-Fallback, den die Architekturregel verbietet. Das Schema-Präfix `postgresql+psycopg://` ist Pflicht (nicht `postgresql://`), weil SQLAlchemy sonst `psycopg2` wählt, das hier nicht installiert ist; der Fehler fiele sonst erst beim ersten Verbindungsversuch. Details: `docs/plans/supabase.md`.
 
 ---
