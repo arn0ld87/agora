@@ -117,6 +117,34 @@ def test_active_config_uses_stored_connection_base_url(client):
 
     assert resp.status_code == 200
     assert resp.json["data"]["base_url"] == "https://eu.minimax.example/v1"
+    # Codex-Fund PR #1561: das Capability-Gate fragt denselben Endpunkt ab,
+    # den die Runtime nutzt, nicht den Registry-Default.
+    assert mock_get_models.call_args.args[2] == "https://eu.minimax.example/v1"
+
+
+def test_active_config_ignores_disabled_connection_base_url(client):
+    """Codex-Fund PR #1561: eine deaktivierte Connection liefert keine URL."""
+    ProviderConnectionStore().upsert_connection(
+        ProviderConnectionUpsertRequest(
+            display_name="MiniMax EU",
+            provider_kind="minimax",
+            base_url="https://eu.minimax.example/v1",
+            enabled=False,
+        )
+    )
+
+    with patch("app.api.llm_active._model_catalog.get_models") as mock_get_models, \
+         patch("app.api.llm_active.SecretResolver.get_api_key") as mock_key:
+        mock_get_models.return_value = []
+        mock_key.return_value = "dummy"
+
+        resp = client.put("/api/llm/active-config", json={
+            "provider_id": "minimax",
+            "model": "some-model",
+        })
+
+    assert resp.status_code == 200
+    assert resp.json["data"]["base_url"] == "https://api.minimax.io/v1"
 
 
 def test_active_config_falls_back_to_registry_default_without_connection(client):

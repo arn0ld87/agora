@@ -94,6 +94,8 @@ Kanonische Begriffe und Pfade:
 
 Unterstützte Transportklassen sind `http`, `local` und `cli`. `codex_cli` ist ein echter CLI-/Session-Transport ohne HTTP-Base-URL und API-Key; der Fix für den früheren Persona-Route-Mix mit `.env` ist gemergt (#1418/#1422), ebenso der Codex-CLI-Transport für OASIS-Simulationsrunden (#1423/#1424). `claude_cli` (Claude-Abo statt Pay-per-Token-API) ist der zweite `cli`-Transport-Provider — anders als `codex_cli` mit `auth_mode="api_key"` (Langzeit-Token aus `claude setup-token`, kein Verzeichnis-Mount) und isoliertem `HOME` pro Subprozess-Aufruf statt einer gemounteten Login-Session.
 
+`PUT /api/llm/active-config` übernimmt die `base_url` einer gespeicherten, aktivierten `ProviderConnection` (sonst Registry-Default) und prüft die Modell-Capabilities gegen genau diesen Endpunkt; eine `base_url` im Request-Body bleibt ignoriert, `cli`-/Session-Provider bekommen nie eine (#1289).
+
 Ob ein Provider ohne eigenen Secret auskommt, entscheidet seit dem Fix für den
 verworfenen `claude_cli`-Token ausschließlich `LlmProviderRegistry.uses_session_auth`
 (`auth_mode == "session"`), nicht mehr der Transport. Vorher sprangen

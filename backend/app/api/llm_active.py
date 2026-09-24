@@ -94,7 +94,9 @@ def _resolve_active_base_url(provider_id: str, registry_base_url: Optional[str])
         (c for c in ProviderConnectionStore().list_connections() if c.id == provider_id),
         None,
     )
-    if connection is not None and connection.base_url:
+    # Deaktivierte Connections liefern keine URL (analog zu den anderen
+    # Resolution-Pfaden, die auf ``enabled`` filtern).
+    if connection is not None and connection.enabled and connection.base_url:
         return connection.base_url
     return registry_base_url
 
@@ -150,11 +152,15 @@ def put_active_config():
     if not provider:
         return json_error(f"Unknown provider: {provider_id}", status=404, code="provider_not_found")
 
+    # Einmal aufloesen und fuer Gate UND Persistenz nutzen: sonst klassifiziert
+    # das Gate Modelle eines anderen Endpunkts als die Runtime nutzt.
+    effective_base_url = _resolve_active_base_url(provider_id, provider.base_url)
+
     # Capability-Gate (Issue #557): check if model supports tools
     if not force:
         resolver = SecretResolver()
         api_key = resolver.get_api_key(provider_id, provider.type)
-        models = _model_catalog.get_models(provider_id, provider.type, provider.base_url, api_key)
+        models = _model_catalog.get_models(provider_id, provider.type, effective_base_url, api_key)
         target_model = next((m for m in models if m.id == model), None)
 
         if target_model and not target_model.supports_tools:
@@ -165,6 +171,6 @@ def put_active_config():
                 code="unsupported_capability",
             )
 
-    saved = save_active_config(provider_id, model, _resolve_active_base_url(provider_id, provider.base_url))
+    saved = save_active_config(provider_id, model, effective_base_url)
     logger.info("Active LLM config updated: provider=%s model=%s force=%s", provider_id, model, force)
     return json_success(saved)
