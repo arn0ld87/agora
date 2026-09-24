@@ -16,7 +16,12 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from ..contracts import LEGACY_GEMINI, PROVIDER_GOOGLE
+from ..contracts import (
+    ANTHROPIC_CHAT_TRANSPORT_UNSUPPORTED,
+    LEGACY_GEMINI,
+    PROVIDER_ANTHROPIC,
+    PROVIDER_GOOGLE,
+)
 from ..repositories.llm_profile_repository import get_llm_profile_repository
 
 _PROFILE_PREFIX = "profile:"
@@ -25,7 +30,6 @@ _PROFILE_PROVIDER_TO_RUNTIME = {
     "openai": "openai",
     LEGACY_GEMINI: PROVIDER_GOOGLE,
     "ollama": "custom_openai",
-    "anthropic": "custom_openai",
     "custom": "custom_openai",
 }
 
@@ -37,6 +41,15 @@ def expand_profile_in_data(data: Any) -> None:
     `profile:`, or if the referenced profile cannot be resolved. Existing
     explicit `llm_provider` fields from the request override the profile
     values — request still wins over profile, profile fills the gaps.
+
+    Raises:
+        ValueError: If the resolved profile's provider is ``anthropic``
+            (Issue #1284). There is no native Anthropic chat transport — the
+            old mapping silently rerouted it through ``custom_openai`` onto
+            a base URL (``https://api.anthropic.com``) the OpenAI-compatible
+            client can't actually speak to, producing a 403/404 at request
+            time instead of a clear error here. Callers propagate this as
+            HTTP 400 (see e.g. ``@handle_api_errors``).
     """
     if not isinstance(data, Mapping):
         return
@@ -52,6 +65,8 @@ def expand_profile_in_data(data: Any) -> None:
         return
     if profile is None:
         return
+    if (profile.provider or "").strip().lower() == PROVIDER_ANTHROPIC:
+        raise ValueError(ANTHROPIC_CHAT_TRANSPORT_UNSUPPORTED)
 
     data["llm_model"] = profile.model_name
 

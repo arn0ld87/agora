@@ -12,7 +12,12 @@ from typing import Optional
 
 from ..contracts.ai_provider_contract import AiModelRef, ProviderConnection
 from ..contracts.llm_routing_contract import ResolvedRoute, RuntimeLlmRouting, StageId, StageLLMRoute
-from ..contracts.provider_types import PROVIDER_CLAUDE_CLI, PROVIDER_CODEX_CLI
+from ..contracts.provider_types import (
+    ANTHROPIC_CHAT_TRANSPORT_UNSUPPORTED,
+    PROVIDER_ANTHROPIC,
+    PROVIDER_CLAUDE_CLI,
+    PROVIDER_CODEX_CLI,
+)
 from ..llm.providers.codex_cli import (
     CLI_PROVIDER_ENV_KEY,
     CLI_TRANSPORT_VALUE,
@@ -66,12 +71,25 @@ def map_runtime_provider_to_route_provider(provider: str) -> Optional[str]:
     return _PROVIDER_ID_MAP.get((provider or "default").strip().lower())
 
 
+def _reject_anthropic_connection(connection: ProviderConnection) -> None:
+    """Faellt laut aus, wenn ``connection`` eine Anthropic-Connection ist (#1284).
+
+    Gemeinsames Gate fuer beide Connection-Aufloesungspfade in diesem Modul
+    (``ai_model_ref`` ueber :func:`_resolve_selected_connection` und
+    ``llm_profile_id`` ueber ``resolve_profile_connection``) — kein nativer
+    Anthropic-Chat-Transport, Discovery/CRUD der Connection bleiben
+    unberuehrt. Siehe Modul-Konstante ``ANTHROPIC_CHAT_TRANSPORT_UNSUPPORTED``.
+    """
+    if connection.provider_kind == PROVIDER_ANTHROPIC:
+        raise ValueError(ANTHROPIC_CHAT_TRANSPORT_UNSUPPORTED)
+
+
 def _resolve_selected_connection(connection_id: str) -> ProviderConnection:
     """Resolve an explicitly selected ProviderConnection by id.
 
-    Raises ``ValueError`` when the connection is unknown or disabled, so the
-    caller can surface an HTTP 400/422 instead of silently falling back to a
-    different route.
+    Raises ``ValueError`` when the connection is unknown, disabled, or an
+    unsupported Anthropic chat transport (#1284), so the caller can surface
+    an HTTP 400/422 instead of silently falling back to a different route.
     """
     match = next(
         (c for c in ProviderConnectionStore().list_connections() if c.id == connection_id),
@@ -81,6 +99,7 @@ def _resolve_selected_connection(connection_id: str) -> ProviderConnection:
         raise ValueError(f"ProviderConnection {connection_id!r} nicht gefunden")
     if not match.enabled:
         raise ValueError(f"ProviderConnection {connection_id!r} ist deaktiviert")
+    _reject_anthropic_connection(match)
     return match
 
 
@@ -443,6 +462,7 @@ def seed_run_stage_routing(
                 "ProviderConnection"
             )
         connection = resolved.connection
+        _reject_anthropic_connection(connection)
         provider_options: dict[str, object] = {"base_url": resolved.base_url}
         # Auth-Semantik der ProviderConnection ist maßgeblich (SSoT): api_key-
         # Connections werden an ihr gebundenes Secret gekoppelt und ohne Secret

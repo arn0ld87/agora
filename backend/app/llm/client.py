@@ -18,7 +18,11 @@ from openai import OpenAI
 from pydantic import BaseModel
 
 from ..config import Config
-from ..contracts.provider_types import PROVIDER_CLAUDE_CLI, PROVIDER_CODEX_CLI
+from ..contracts.provider_types import (
+    ANTHROPIC_CHAT_TRANSPORT_UNSUPPORTED,
+    PROVIDER_CLAUDE_CLI,
+    PROVIDER_CODEX_CLI,
+)
 from ..contracts.llm_routing_contract import ResolvedRoute, ReasoningEffort
 from ..utils.logger import get_logger
 from ..utils.retry import llm_call_with_retry
@@ -375,6 +379,17 @@ class LLMClient:
         # OpenAI(...)-Client-Bau laufen, sonst geht der erste Request schon
         # unverschluesselt raus.
         ensure_credentialed_transport_security(self.base_url, self.api_key)
+        # Issue #1284: Transport-Guard als zweite Verteidigungslinie hinter
+        # der Routing-Validierung (``llm_profile_resolver.py``,
+        # ``llm_routing_seed.py``). ``from_route()`` ist der einzige
+        # produktive Konstruktionspfad fuer eine gerouteten Stage/Run-
+        # Connection — jede persistierte oder wiederaufgenommene Route, die
+        # die frueheren Gates umgangen hat (z. B. ein vor diesem Fix
+        # gespeicherter ``stage_override``), landet spaetestens hier. Nutzt
+        # ausschliesslich ``detect_provider`` (registry.py) — keine zweite
+        # Heuristik.
+        if self._detect_provider() == "anthropic":
+            raise ValueError(ANTHROPIC_CHAT_TRANSPORT_UNSUPPORTED)
         # Issue #1072: ``self.base_url`` bleibt bewusst roh — Provider-
         # Detection (``_detect_provider``), das Invocation-Log und der native
         # Ollama-Pfad (``/api/chat``) haengen daran. Nur der OpenAI-SDK-Client
@@ -597,7 +612,7 @@ class LLMClient:
 
     def _detect_provider(
         self, *, model: Optional[str] = None
-    ) -> Literal["ollama", "cloud", "minimax", "openai", "google", "unknown"]:
+    ) -> Literal["ollama", "cloud", "minimax", "openai", "google", "anthropic", "unknown"]:
         """
         Identify the LLM provider associated with the configured endpoint and model.
 
@@ -610,7 +625,7 @@ class LLMClient:
 
         Returns:
             str: The provider name: ``"ollama"``, ``"cloud"``, ``"minimax"``,
-                ``"openai"``, ``"google"``, or ``"unknown"``.
+                ``"openai"``, ``"google"``, ``"anthropic"``, or ``"unknown"``.
         """
         # codex_cli wird nie aus einer base_url erraten (verboten laut
         # AGENTS.md: keine Detection-Heuristik neben registry.py::

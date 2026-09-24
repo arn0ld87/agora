@@ -94,6 +94,7 @@ from .project_contract import (
 )
 from .provider_types import (
     ALL_PROVIDER_TYPES,
+    ANTHROPIC_CHAT_TRANSPORT_UNSUPPORTED,
     LEGACY_GEMINI,
     PROVIDER_ANTHROPIC,
     PROVIDER_BEDROCK,
@@ -271,6 +272,7 @@ __all__ = [
     "SegmentReach",
     "VoiceRegister",
     "ALL_PROVIDER_TYPES",
+    "ANTHROPIC_CHAT_TRANSPORT_UNSUPPORTED",
     "LEGACY_GEMINI",
     "PROVIDER_ANTHROPIC",
     "PROVIDER_BEDROCK",
