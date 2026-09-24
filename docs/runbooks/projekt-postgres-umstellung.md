@@ -165,10 +165,11 @@ PostgreSQL schreibt.
 Das Schema lässt sich zurücknehmen, wenn es sein muss:
 
 ```bash
-uv run alembic -c migrations/alembic.ini downgrade -1
+uv run alembic -c migrations/alembic.ini downgrade b5d2c0a41f7e
 ```
 
-Das löscht `agora.projects` samt Inhalt. Nur sinnvoll, solange noch nichts
+Das löscht `agora.projects` samt Inhalt — und, weil die Revision darüber liegt,
+auch `agora.simulations` (#1585). Nur sinnvoll, solange noch nichts
 umgeschaltet war.
 
 ## Was die Tabelle bewusst nicht hat
