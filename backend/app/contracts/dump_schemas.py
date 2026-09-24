@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 from app.contracts.branch_comparison import BranchComparison
+from app.contracts.branch_request_contract import BranchOverrides
 from app.contracts.graph_diff import GraphDiff
 from app.contracts.persona_contract import PersonaModel, PersonaQuotaPlan
 from app.contracts.persona_entity_context import PersonaEntityContext
@@ -112,6 +113,8 @@ OUT_DIR = Path(__file__).resolve().parents[3] / "schemas"
 
 CONTRACTS: dict[str, type] = {
     "branch-comparison.schema.json": BranchComparison,
+    # Branch-Overrides fuer POST /api/simulation/<id>/branch (Issue #886)
+    "branch-overrides.schema.json": BranchOverrides,
     "graph-diff.schema.json": GraphDiff,
     "persona-entity-context.schema.json": PersonaEntityContext,
     # Pipeline-Degradierung (Issue #1029)

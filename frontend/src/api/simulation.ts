@@ -4,6 +4,7 @@ import type { LlmRuntimePayload } from './llmRuntime'
 import type { PersonaQuotaPlan } from '../contracts/personaQuotaContract'
 import type { AiModelRefPayload } from './report'
 import type { ApiEnvelope } from './envelope'
+import type { BranchOverrides as BranchOverridesContract } from '../contracts/branchOverrides'
 import {
   PostCreatedEventSchema,
   type PostCreatedEvent,
@@ -237,6 +238,10 @@ export type AvailableModelsResponse = AvailableModelsResponseContract
 
 export interface BranchData {
   branch_name?: string
+  copy_profiles?: boolean
+  copy_report_artifacts?: boolean
+  /** Kanonischer Vertrag: siehe contracts/branchOverrides.ts (Issue #886). */
+  overrides?: BranchOverridesContract
   [key: string]: unknown
 }
 

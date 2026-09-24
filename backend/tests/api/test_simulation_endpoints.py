@@ -119,6 +119,121 @@ def test_create_branch_missing_branch_name_returns_validation_failed(client):
     assert response.get_json()["code"] == "validation_failed"
 
 
+# --- Branch-Overrides: ai_model_ref (Issue #886) ------------------------------
+
+
+def test_create_branch_rejects_ai_model_ref_combined_with_llm_model(client):
+    """Der Contract-Validator (``BranchOverrides``) lehnt die Kombination ab,
+    bevor überhaupt eine Connection aufgelöst wird."""
+    response = client.post(
+        f"/api/simulation/{VALID_SIM_ID}/branch",
+        json={
+            "branch_name": "b",
+            "overrides": {
+                "llm_model": "gpt-4o",
+                "ai_model_ref": {"provider_connection_id": "conn-a", "model_id": "m"},
+            },
+        },
+    )
+    assert response.status_code == 400
+    body = response.get_data(as_text=True)
+    assert "ai_model_ref darf nicht mit llm_model kombiniert werden" in body
+
+
+def test_create_branch_rejects_unknown_provider_connection(client, monkeypatch):
+    """Eine ``ai_model_ref`` auf eine unbekannte Connection darf keinen Branch
+    anlegen — Vorvalidierung über dieselbe Routing-SSoT wie
+    ``app/api/graph_build.py`` (``prevalidate_ai_model_ref_with_discovery``)."""
+
+    def _raise(_ref):
+        raise ValueError("ProviderConnection 'conn-unknown' nicht gefunden")
+
+    monkeypatch.setattr(
+        "app.api.simulation_profiles.prevalidate_ai_model_ref_with_discovery",
+        _raise,
+    )
+    response = client.post(
+        f"/api/simulation/{VALID_SIM_ID}/branch",
+        json={
+            "branch_name": "b",
+            "overrides": {
+                "ai_model_ref": {
+                    "provider_connection_id": "conn-unknown",
+                    "model_id": "m",
+                }
+            },
+        },
+    )
+    assert response.status_code == 400
+    assert "conn-unknown" in response.get_data(as_text=True)
+
+
+def test_create_branch_forwards_full_ai_model_ref_after_prevalidation(client, monkeypatch):
+    """Eine gültige, vorvalidierte ``ai_model_ref`` landet vollständig — nicht
+    nur als ``model_id`` — in den Overrides, die an ``SimulationManager.create_branch``
+    gehen."""
+    from app.api.simulation_profiles import SimulationManager
+
+    monkeypatch.setattr(
+        "app.api.simulation_profiles.prevalidate_ai_model_ref_with_discovery",
+        lambda _ref: MagicMock(name="ValidatedProviderConnection"),
+    )
+    captured: dict = {}
+
+    def _create_branch(self, **kwargs):
+        captured.update(kwargs)
+        state = MagicMock()
+        state.to_dict.return_value = {"simulation_id": "sim_branch_ok"}
+        return state
+
+    monkeypatch.setattr(SimulationManager, "create_branch", _create_branch)
+
+    response = client.post(
+        f"/api/simulation/{VALID_SIM_ID}/branch",
+        json={
+            "branch_name": "b",
+            "overrides": {
+                "ai_model_ref": {
+                    "provider_connection_id": "conn-a",
+                    "model_id": "gpt-4o",
+                    "source": "explicit",
+                }
+            },
+        },
+    )
+    assert response.status_code == 200, response.get_json()
+    assert captured["overrides"] == {
+        "ai_model_ref": {
+            "provider_connection_id": "conn-a",
+            "model_id": "gpt-4o",
+            "source": "explicit",
+        }
+    }
+
+
+def test_create_branch_still_accepts_legacy_llm_model(client, monkeypatch):
+    """Rückwärtskompatibilität: ``llm_model`` allein bleibt gültig (deprecated,
+    aber nicht entfernt)."""
+    from app.api.simulation_profiles import SimulationManager
+
+    captured: dict = {}
+
+    def _create_branch(self, **kwargs):
+        captured.update(kwargs)
+        state = MagicMock()
+        state.to_dict.return_value = {"simulation_id": "sim_branch_legacy"}
+        return state
+
+    monkeypatch.setattr(SimulationManager, "create_branch", _create_branch)
+
+    response = client.post(
+        f"/api/simulation/{VALID_SIM_ID}/branch",
+        json={"branch_name": "b", "overrides": {"llm_model": "gpt-4o-mini"}},
+    )
+    assert response.status_code == 200, response.get_json()
+    assert captured["overrides"] == {"llm_model": "gpt-4o-mini"}
+
+
 def test_persona_library_missing_payload_returns_validation_failed(client):
     response = client.post("/api/simulation/persona-library", json={})
     assert response.status_code == 400
