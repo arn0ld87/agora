@@ -43,6 +43,9 @@ def _no_token_floor(monkeypatch: pytest.MonkeyPatch) -> None:
         "gpt-5.4-mini",         # Punkt-Separator (Regression: war kein Match)
         "gpt-5.4",
         "gpt-5.4-thinking",
+        "gpt-6",                # #1572: gpt-6..gpt-9 proaktiv abgedeckt
+        "gpt-6-luna",
+        "gpt-6.1-mini",
         "o1",
         "o1-preview",
         "o3",
@@ -70,6 +73,7 @@ def test_models_that_require_max_completion_tokens(model: str) -> None:
         # Substring-Anfang ohne Trennzeichen enthalten, sind KEIN GPT-5.
         "gpt-500",
         "gpt-50",
+        "gpt-60",    # #1572: striktes Prefix-Matching — kein Match auf "gpt-6"
         "o10-experimental",
         "o42-mini",
         "",          # leerer Modellname → Fallback auf max_tokens

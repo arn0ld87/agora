@@ -20,6 +20,7 @@ Zwei Rollen koexistieren in diesem Modul, klar getrennt:
    Fallback-Heuristik).
 """
 
+import re
 from typing import Any, Dict, Optional
 
 from app.llm.providers.base import (
@@ -34,26 +35,45 @@ from app.llm.providers.base import (
 # ----------------------------------------------------------------------
 
 
-def uses_max_completion_tokens(model: str) -> bool:
-    """Whether *model* requires ``max_completion_tokens`` instead of ``max_tokens``.
+_REASONING_GPT_MAJOR_RE = re.compile(r"^gpt-[5-9](?:$|[-.])")
 
-    GPT-5 / o1 / o3 / o4 verlangen max_completion_tokens; OpenAI antwortet
-    sonst 400 "Unsupported parameter: 'max_tokens'". Heuristik gespiegelt
-    aus backend/scripts/_sim_common.py::uses_max_completion_tokens —
-    Single Source of Truth bleibt dort, hier nur die zweite Stelle.
-    Striktes Prefix-Matching ("gpt-5", "gpt-5-…") verhindert
-    Mismatches wie hypothetisches "gpt-500".
 
-    Bekannte, testfixierte Divergenz: ``scripts/_sim_common.py::
-    uses_max_completion_tokens`` matcht ``gpt-5`` per ``startswith`` (ohne
-    Wortgrenze) und kennt keine ``.``-Grenze fuer o1/o3/o4 — Vereinheitlichung
-    ist ein Follow-up, kein Teil dieses Refactorings.
+def _is_reasoning_family(model: str) -> bool:
+    """Whether *model* belongs to the GPT-5..GPT-9-/o1-/o3-/o4-Reasoning-Familie.
+
+    Gemeinsamer Helper fuer :func:`uses_max_completion_tokens` und
+    :func:`omits_temperature` (#1572) — beide Quirks (Token-Key, temperature)
+    teilen dieselbe Modellfamilie und damit dieselbe Erkennungsregel.
+
+    Matcht ``gpt-5`` bis ``gpt-9`` (einstellige Major-Version, mit ``-``/``.``-
+    Grenze oder Stringende — also ``gpt-6``, ``gpt-6-luna``, ``gpt-6.1-x``,
+    aber NICHT ``gpt-500``, ``gpt-4o``, ``gpt-60``) sowie ``o1``/``o3``/``o4``
+    (exaktes Prefix-Matching mit ``-``/``.``-Grenze).
     """
     lowered = (model or "").strip().lower()
-    for prefix in ("gpt-5", "o1", "o3", "o4"):
+    if _REASONING_GPT_MAJOR_RE.match(lowered):
+        return True
+    for prefix in ("o1", "o3", "o4"):
         if lowered == prefix or lowered.startswith(f"{prefix}-") or lowered.startswith(f"{prefix}."):
             return True
     return False
+
+
+def uses_max_completion_tokens(model: str) -> bool:
+    """Whether *model* requires ``max_completion_tokens`` instead of ``max_tokens``.
+
+    GPT-5..GPT-9 / o1 / o3 / o4 verlangen max_completion_tokens; OpenAI
+    antwortet sonst 400 "Unsupported parameter: 'max_tokens'". Delegiert an
+    :func:`_is_reasoning_family` (#1572, deckt proaktiv auch gpt-6..gpt-9 ab,
+    statt erst nach jedem neuen Modell-Release nachzuziehen). Heuristik
+    gespiegelt aus backend/scripts/_sim_common.py::uses_max_completion_tokens
+    — Single Source of Truth bleibt dort, hier nur die zweite Stelle.
+
+    Bekannte, testfixierte Divergenz: ``scripts/_sim_common.py::
+    uses_max_completion_tokens`` kennt keine ``.``-Grenze fuer o1/o3/o4 —
+    Vereinheitlichung ist ein Follow-up, kein Teil dieses Refactorings.
+    """
+    return _is_reasoning_family(model)
 
 
 def is_token_key_400(exc: Exception) -> bool:
@@ -111,18 +131,13 @@ def swap_token_kwargs(kwargs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 def omits_temperature(model: str) -> bool:
     """Whether *model* rejects any non-default ``temperature`` value (#1096).
 
-    GPT-5 / o1 / o3 / o4 akzeptieren ausschliesslich den Default (1) und
-    antworten sonst 400 "Unsupported value: 'temperature' does not support
-    0.7 with this model. Only the default (1) value is supported." Gleiche
-    Prefix-Grenzen-Logik wie :func:`uses_max_completion_tokens` — bewusst
-    dupliziert statt geteilt, um die bestehende Token-Key-Heuristik nicht
-    anzufassen (Scope #1096: nur der ``temperature``-Quirk).
+    GPT-5..GPT-9 / o1 / o3 / o4 akzeptieren ausschliesslich den Default (1)
+    und antworten sonst 400 "Unsupported value: 'temperature' does not
+    support 0.7 with this model. Only the default (1) value is supported."
+    Delegiert an :func:`_is_reasoning_family`, geteilt mit
+    :func:`uses_max_completion_tokens` (#1572).
     """
-    lowered = (model or "").strip().lower()
-    for prefix in ("gpt-5", "o1", "o3", "o4"):
-        if lowered == prefix or lowered.startswith(f"{prefix}-") or lowered.startswith(f"{prefix}."):
-            return True
-    return False
+    return _is_reasoning_family(model)
 
 
 def is_temperature_400(exc: Exception) -> bool:

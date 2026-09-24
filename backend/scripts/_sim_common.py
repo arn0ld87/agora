@@ -165,10 +165,13 @@ def resolve_camel_ollama_url(base_url: str | None) -> str | None:
     return ensure_v1_suffix(base_url)
 
 
+_REASONING_GPT_MAJOR_RE = re.compile(r"^gpt-[5-9](?:$|[-.])")
+
+
 def uses_max_completion_tokens(model: str) -> bool:
     """True wenn das Modell ``max_completion_tokens`` statt ``max_tokens`` verlangt.
 
-    Hintergrund: Die OpenAI GPT-5-Familie und die Reasoning-Modelle
+    Hintergrund: Die OpenAI GPT-5..GPT-9-Familie und die Reasoning-Modelle
     ``o1`` / ``o3`` / ``o4`` haben ``max_tokens`` deprecated und
     antworten 400 ``Unsupported parameter: 'max_tokens' is not supported
     with this model. Use 'max_completion_tokens' instead.``, sobald der
@@ -177,11 +180,14 @@ def uses_max_completion_tokens(model: str) -> bool:
     (Qwen, Llama, Claude, DeepSeek, Mistral, Ollama-Modelle) nutzen
     weiterhin ``max_tokens``.
 
-    Heuristik: Modellname (case-insensitiv, getrimmt) beginnt mit
-    ``gpt-5`` oder einem ``o<n>``-Prefix gefolgt von ``-`` oder Ende.
+    Heuristik (#1572): Modellname (case-insensitiv, getrimmt) matcht
+    ``gpt-<N>`` fuer eine einstellige Major-Version N ∈ 5..9 (mit ``-``/``.``-
+    Grenze oder Stringende — deckt proaktiv auch noch unveroeffentlichte
+    GPT-6..GPT-9-Modelle ab, statt erst nach jedem Release nachzuziehen)
+    oder einen ``o<n>``-Prefix gefolgt von ``-`` oder Ende.
     """
     lowered = model.strip().lower()
-    if lowered.startswith("gpt-5"):
+    if _REASONING_GPT_MAJOR_RE.match(lowered):
         return True
     for prefix in ("o1", "o3", "o4"):
         if lowered == prefix or lowered.startswith(f"{prefix}-"):
