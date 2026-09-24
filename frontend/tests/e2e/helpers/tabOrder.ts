@@ -13,7 +13,8 @@ import { expect } from '@playwright/test';
  *
  * Verletzungsdefinition:
  * - Verglichen werden nur AUFEINANDERFOLGENDE Tab-Stops im SELBEN Landmark
- *   (`main`, `nav`, `header`, `footer`, `aside`, `[role=...]`).
+ *   (`main`, `nav`, `header`, `footer`, `aside` bzw. die entsprechenden
+ *   Landmark-Rollen; Widget-Rollen wie `button` zaehlen nicht).
  * - Beide Stops muessen in derselben visuellen SPALTE liegen: horizontale
  *   Ueberlappung >= 50% der Breite des schmaleren Elements.
  * - Verletzung nur, wenn der spaetere Stop deutlich OBERHALB des frueheren
@@ -120,7 +121,13 @@ async function readTabStop(page: Page): Promise<TabStopProbe> {
       return { kind: 'excluded' } as const;
     }
 
-    const landmarkEl = el.closest('main, nav, header, footer, aside, [role]') as HTMLElement | null;
+    // Nur echte Landmarks: ein nacktes `[role]` wuerde jedes Widget mit
+    // role="button"/"tab"/"listitem" zu einem eigenen "Landmark" machen,
+    // und dann wuerde fast nichts mehr verglichen.
+    const landmarkEl = el.closest(
+      'main, nav, header, footer, aside, [role="main"], [role="navigation"], [role="banner"], ' +
+        '[role="contentinfo"], [role="complementary"], [role="region"], [role="form"], [role="search"]',
+    ) as HTMLElement | null;
     let landmark = 'document';
     if (landmarkEl) {
       const registry = window as unknown as {
