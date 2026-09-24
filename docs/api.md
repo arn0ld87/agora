@@ -46,7 +46,7 @@ Module:
 - `graph_build.py` — Graph-Build und Ontologie-Generierung
 - `graph_data.py` — Graphdaten, Snapshots, Diff, Export und Task-Sichten
 
-Langlaufende Graph-Jobs werden über die Run-/Task-Infrastruktur sichtbar gemacht. Restart-/SIGTERM-Semantik für daemonisierte Graph-Build-Threads ist als Teil von #1472 noch nicht vollständig gelöst.
+Langlaufende Graph-Jobs werden über die Run-/Task-Infrastruktur sichtbar gemacht. Restart-/SIGTERM-Semantik für daemonisierte Graph-Build-Threads ist als Teil von #1472 noch nicht vollständig gelöst. `GET /api/graph/task/<task_id>` und `GET /api/graph/tasks` serialisieren seit #1466 über den Pydantic-Vertrag `TaskStatusResponse` (Spiegel von `Task.to_dict()`, inklusive `message_key`).
 
 ### Simulation — `/api/simulation`
 
@@ -74,6 +74,8 @@ Wichtige Konfliktcodes:
 
 Nutzer-Stop und Infrastrukturabbruch sind unterschiedliche Zustände: ein expliziter Stop wird als `stopped` mit `termination_reason="user_stop"` geführt; stale Prozesse nach Worker-/Container-Restart können durch Startup-Reconciliation als `failed/process_restart` markiert werden.
 
+`POST /api/simulation/<id>/branch` akzeptiert seit #886 eine kanonische `ai_model_ref` (Provider-Connection + Modell, `BranchOverrides`-Contract, `backend/app/contracts/branch_request_contract.py`) statt nur des Legacy-Strings `llm_model`; eine unbekannte oder deaktivierte Connection antwortet mit HTTP 400, die Kombination beider Felder ebenso. `llm_model` bleibt als deprecated Key erhalten. `POST /api/runs/<id>/replay` reicht seither die volle `AiModelRef` an `create_branch` durch statt nur die `model_id`.
+
 ### Report — `/api/report`
 
 Wichtige Bereiche:
@@ -94,6 +96,8 @@ Nach Completion (`completed`, `failed`, `stopped`) ist ein neuer Start wieder er
 #### Reportstatus
 
 `COMPLETED` und `INCOMPLETE` sind fachlich verschieden. Ein nutzbarer Teilreport kann `INCOMPLETE` sein und trotzdem ausgeliefert werden. Cancel-, Section-Failure-, Requirement- und Fallback-Outline-Degradierungen dürfen nicht durch einen generischen „completed“-Status verschluckt werden (#1479).
+
+`POST /api/simulation/prepare`/`/prepare/status` und `POST /api/report/generate/status` liefern seit #1174 neben dem Klartext `message` einen stabilen `message_key` (z. B. `prepare.already_completed`, `report.generated`, `report.failed`); das Frontend löst bekannte Schlüssel zentral auf, ein unbekannter Schlüssel fällt auf `message` zurück. Details: [`api-contracts.md`](api-contracts.md#status-meldungen-message_key).
 
 #### Evidence-Endpunkt
 
@@ -143,6 +147,10 @@ Transportklassen:
 - `local` (lokaler HTTP-Dienst, z. B. Ollama)
 - `cli` — `codex_cli` (ChatGPT-Abo, #1405) und `claude_cli` (Claude-Abo, #1531), beide Session-Auth, keine Base-URL
 
+`PUT /api/llm/active-config` übernimmt seit #1289 die `base_url` einer gespeicherten, aktivierten `ProviderConnection` und prüft die Modell-Capabilities gegen genau diesen Endpunkt; ohne gespeicherte Connection (bzw. ohne dort gesetzte `base_url`) greift weiterhin der Registry-Default. Eine `base_url` im Request-Body bleibt ignoriert, `cli`-/Session-Provider bekommen nie eine erfundene Base-URL.
+
+`GET /api/llm/providers` liefert je `ProviderDescriptor` seit #1415 auch `transport` und `auth_mode` aus der Registry-Matrix; die Provider-Einstellungen blenden damit für `cli`-Provider das Base-URL-Feld und für Session-Auth (`codex_cli`) auch das API-Key-Feld aus.
+
 Details: [`provider-runtime-settings.md`](provider-runtime-settings.md).
 
 ### Settings — `/api/settings`
@@ -158,7 +166,7 @@ Details: [`provider-runtime-settings.md`](provider-runtime-settings.md).
 - `/api/logs` — Logs
 - `/api/logs/stream` — Live-Stream
 
-`/api/status` gibt bei internen Provider-/Disk-/Neo4j-Fehlern keine rohen `str(exception)`-Details mehr an den Client weiter; maschinenlesbare Codes werden geloggt/gespiegelt (#1459).
+`/api/status` gibt bei internen Provider-/Disk-/Neo4j-Fehlern keine rohen `str(exception)`-Details mehr an den Client weiter; maschinenlesbare Codes werden geloggt/gespiegelt (#1459). Der Neo4j- und der Disk-Teilbaum haben seit #1466 einen eigenen Pydantic-Vertrag (`SystemStatusNeo4j`/`SystemStatusDisk`); Details in [`api-contracts.md`](api-contracts.md#status--und-task-contracts).
 
 ---
 

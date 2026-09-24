@@ -135,11 +135,10 @@ Der aktuelle Bedrock-Provider verwendet den OpenAI-kompatiblen Mantle-Pfad. Kata
 
 - native Anthropic-/bestimmte GPT-5.x-Bedrock-Modelle können den separaten Converse/SigV4-Pfad benötigen (#1287)
 - regionale Kataloge unterscheiden sich
-- Base-URL-/Region-Override kann zusätzlich von #1289 betroffen sein
 
-### ProviderConnection gespeichert, aktive Base-URL trotzdem Default
+### ProviderConnection gespeichert, aktive Base-URL trotzdem Default (historisch, seit #1289 behoben)
 
-Siehe [#1289](https://github.com/arn0ld87/agora/issues/1289). Ein gespeicherter Connection-Override und die Active-Config sind unterschiedliche Persistenzpfade. Bis zur Behebung den tatsächlich aufgelösten Runtime-Endpoint prüfen, nicht nur das Eingabefeld in der UI.
+`put_active_config` liest `base_url` seit [#1289](https://github.com/arn0ld87/agora/issues/1289) zuerst aus einer gespeicherten, **aktivierten** Connection im `ProviderConnectionStore`; ohne Connection, bei deaktivierter Connection (`enabled=false`) oder ohne dort gesetzte `base_url` gilt der Registry-Default. Weicht die aktive Base-URL bei aktivierter Connection trotzdem vom Connection-Record ab, ist das auf aktuellem `main` eine Regression.
 
 ---
 

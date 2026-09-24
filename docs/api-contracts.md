@@ -219,9 +219,13 @@ Der Zweck ist nicht, jeden Fehler mit einem neuen Status zu erschlagen, sondern 
 
 ## Status- und Task-Contracts
 
-Nicht jede historische API-Grenze ist bereits vollständig contracts-first. [#1466](https://github.com/arn0ld87/agora/issues/1466) verfolgt verbleibende Bereiche wie die vollständigen Neo4j-/Disk-Teilbäume von `/api/status` und Task-Responses.
+Seit [#1466](https://github.com/arn0ld87/agora/issues/1466) haben auch der Neo4j- und der Disk-Teilbaum von `/api/status` (`SystemStatusNeo4j`/`SystemStatusDisk`, `backend/app/contracts/system_status_contract.py`) sowie `GET /api/graph/task/<task_id>`/`GET /api/graph/tasks` (`TaskStatusResponse`, `backend/app/contracts/task_status_contract.py`, ein Spiegel von `Task.to_dict()`) einen Pydantic-Vertrag samt Zod-Spiegel (`frontend/src/contracts/systemStatusContract.ts`, `frontend/src/contracts/taskStatusContract.ts`) und Drift-Test — zuvor waren nur der Ollama-Teilbaum und die E2E-Contracts (#955/#1458) abgedeckt. `_get_neo4j_status`/`_get_disk_status` serialisieren über `model_dump(mode="json", exclude_unset=True)`, damit ihr zweigabhängiges Wire-Format byte-genau erhalten bleibt; die Task-Routen nutzen ein normales `model_dump(mode="json")`, weil `Task.to_dict()` jedes Feld liefert.
 
-Das ist ein **offener Architektur-Slice**, kein Grund, neue untypisierte Dict-Grenzen hinzuzufügen.
+Ein handgeschriebenes Dict für eine neue oder geänderte JSON-Grenze bleibt trotzdem keine Option — die Contract-Regel oben gilt unverändert.
+
+### Status-Meldungen: `message_key`
+
+`PrepareStatusResponse`, `ReportStatusResponse` und `TaskStatusResponse` tragen seit [#1174](https://github.com/arn0ld87/agora/issues/1174) neben dem Klartext `message` einen stabilen `message_key` (Muster aus #1458, z. B. `prepare.already_completed`, `prepare.task_started`, `prepare.not_started`, `report.generated`, `report.failed`, `report.awaiting_task`). `message` bleibt als Fallback erhalten; das Frontend löst bekannte Schlüssel zentral auf (`frontend/src/i18n/statusMessage.ts::resolveStatusMessage`), ein unbekannter oder fehlender Schlüssel fällt auf `message` zurück.
 
 ---
 

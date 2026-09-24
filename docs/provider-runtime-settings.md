@@ -119,9 +119,9 @@ Der frühere Persona-Fehler aus #1418 war genau ein solcher Mix: Modell aus der 
 
 ## Active Config und Connection-Base-URL
 
-Die aktive Auswahl und eine gespeicherte `ProviderConnection` sind unterschiedliche Objekte. Für Base-URL-Overrides existiert weiterhin technische Schuld: [#1289](https://github.com/arn0ld87/agora/issues/1289) beschreibt einen Pfad, bei dem beim Aktivieren ein Registry-Default statt der gespeicherten Connection-Base-URL gewinnen kann.
+Die aktive Auswahl und eine gespeicherte `ProviderConnection` sind unterschiedliche Objekte. `put_active_config` liest `base_url` seit [#1289](https://github.com/arn0ld87/agora/issues/1289) zuerst aus dem `ProviderConnectionStore` und fällt erst ohne gespeicherte Connection (bzw. ohne dort gesetzte `base_url`) auf den Registry-Default zurück. Der Request-Body bleibt für `base_url` weiterhin ignoriert — Body-Input und persistierter Connection-Record sind zwei verschiedene Vertrauensstufen.
 
-Besonders bei Amazon Bedrock ist das relevant, weil die Region Teil der Host-Subdomain ist. Ein UI-Edit der Connection ist deshalb bis zur vollständigen Behebung nicht automatisch ein Beweis dafür, dass exakt dieser Endpoint im Active-Config-Pfad verwendet wird.
+Besonders bei Amazon Bedrock ist das relevant, weil die Region Teil der Host-Subdomain ist. Ein UI-Edit der Connection wirkt jetzt tatsächlich auf den Endpoint, den der Active-Config-Pfad verwendet.
 
 ## Amazon Bedrock
 
