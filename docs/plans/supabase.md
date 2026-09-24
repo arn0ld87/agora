@@ -29,10 +29,10 @@ keinen Adapter (siehe Tabelle).
 | PR 6 | Projekt-Vertrag, Port, Postgres-Adapter, Datenmigration | gemergt (#1519, #1522) |
 | PR 7 | Simulationsmetadaten | Port gemergt (#1595, Issue #1578), Adapter: #1585 |
 | PR 8 | Run-Registry | Port gemergt (#1596, Issue #1579), Adapter: #1587 |
-| PR 9 | Report-Metadaten | Port gebaut (Issue #1580, PR offen), Adapter: #1588 |
+| PR 9 | Report-Metadaten | Port gemergt (#1601, Issue #1580), Adapter: #1588 |
 | PR 13/14 | Blob-Store-Port, Supabase-Storage-Adapter | #1584, #1586 (optional) |
 | PR 15 | Cutover Metadaten-Backend | Prüfskript #1590, Cutover armserver #1592 |
-| — | CI-Postgres, Readiness, Alembic-Drift, Backup, Rollback-Gate | CI gemergt (#1594, Issue #1577); offen: #1581, #1582, #1583, #1589 |
+| — | CI-Postgres, Readiness, Alembic-Drift, Backup, Rollback-Gate | CI gemergt (#1594, Issue #1577); Readiness gemergt (#1600, Issue #1581); Alembic-Drift-Startgate gemergt (#1599, Issue #1582); offen: #1583, #1589 |
 
 **Zurückgestellt (ROADMAP: nicht vor 1.0):** PR 5 und §16 (Workspaces), PR 10–12
 und §14/15/17/18 (Supabase Auth, JWT, RLS), §22/23 (Frontend-Client, Realtime),
