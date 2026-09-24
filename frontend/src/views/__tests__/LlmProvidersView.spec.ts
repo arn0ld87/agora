@@ -24,6 +24,16 @@
  * 16. disconnect() ruft removeConnection und loescht draft
  * 17. Busy-State ist pro Aktion: nur der aktive Button zeigt aria-busy,
  *     die anderen bleiben nur disabled (Review PR #1439)
+ *
+ * Issue #1415: CLI-/Session-Provider (transport="cli") duerfen nicht wie
+ * HTTP-Provider gerendert werden (Key-Feld + Base-URL-Feld mit
+ * "https://api.example.com/v1"-Platzhalter waere fuer sie irrefuehrend).
+ * 18. HTTP-Provider (openai): Key- UND Base-URL-Feld sichtbar
+ * 19. codex_cli (transport=cli, auth_mode=session): weder Key- noch
+ *     Base-URL-Feld, stattdessen Session-Hinweis mit `codex login`
+ * 20. claude_cli (transport=cli, auth_mode=api_key): Key-Feld sichtbar,
+ *     Base-URL-Feld nicht, Hinweis auf `claude setup-token`
+ * 21. opencode_go bleibt unveraendert "nicht unterstuetzt"
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -187,6 +197,12 @@ function makeI18n() {
                 disconnect: 'Verbindung trennen',
               },
               list: { ariaLabel: 'Provider' },
+              session: {
+                notice: 'Die Anmeldung erfolgt ueber die lokale CLI-Session:',
+                loginCommand: 'codex login',
+                tokenHint: 'Langzeit-Token aus:',
+                tokenCommand: 'claude setup-token',
+              },
             },
           },
         },
@@ -199,12 +215,14 @@ function makeI18n() {
 async function mountView(initial: {
   globalDefault?: unknown
   connections?: Record<string, unknown>
+  extraProviders?: unknown[]
 } = {}) {
   providersArr.length = 0
   providersArr.push(
     { id: 'ollama', label: 'Lokales Ollama', type: 'ollama', base_url: 'http://localhost:11434', supports_models_endpoint: true, fallback_models: [] },
     { id: 'openai', label: 'OpenAI', type: 'openai', base_url: null, supports_models_endpoint: true, fallback_models: [] },
     { id: 'opencode_go', label: 'OpenCode Go', type: 'opencode_go', base_url: null, supports_models_endpoint: false, fallback_models: [] },
+    ...(initial.extraProviders ?? []),
   )
   for (const k of Object.keys(connectionsObj)) delete connectionsObj[k]
   for (const k of Object.keys(connectionModelsObj)) delete connectionModelsObj[k]
@@ -443,5 +461,47 @@ describe('LlmProvidersView (Redesign PR 9, Liste + Detail)', () => {
     await flushPromises()
     expect(saveBtn.attributes('aria-busy')).toBeUndefined()
     expect(testBtn.attributes('disabled')).toBeUndefined()
+  })
+
+  const cliProviders = [
+    { id: 'codex_cli', label: 'Codex CLI (ChatGPT-Abo)', type: 'codex_cli', base_url: null, supports_models_endpoint: true, fallback_models: [] },
+    { id: 'claude_cli', label: 'Claude Code (Abo)', type: 'claude_cli', base_url: null, supports_models_endpoint: true, fallback_models: [] },
+  ]
+
+  it('HTTP-Provider (openai): Key- UND Base-URL-Feld sichtbar', async () => {
+    const w = await mountView({ extraProviders: cliProviders })
+    await selectRow(w, 'openai')
+    const inputs = w.findAllComponents(inputStub)
+    expect(inputs.length).toBe(2)
+    expect(w.find(`[data-testid="${LlmProviderListTestId.sessionNotice}"]`).exists()).toBe(false)
+    expect(w.find(`[data-testid="${LlmProviderListTestId.cliKeyHint}"]`).exists()).toBe(false)
+  })
+
+  it('codex_cli (transport=cli, auth_mode=session): kein Key-, kein Base-URL-Feld, Session-Hinweis mit codex login', async () => {
+    const w = await mountView({ extraProviders: cliProviders })
+    await selectRow(w, 'codex_cli')
+    const inputs = w.findAllComponents(inputStub)
+    expect(inputs.length).toBe(0)
+    const notice = w.find(`[data-testid="${LlmProviderListTestId.sessionNotice}"]`)
+    expect(notice.exists()).toBe(true)
+    expect(notice.text()).toContain('codex login')
+  })
+
+  it('claude_cli (transport=cli, auth_mode=api_key): Key-Feld sichtbar, Base-URL-Feld nicht, Hinweis auf claude setup-token', async () => {
+    const w = await mountView({ extraProviders: cliProviders })
+    await selectRow(w, 'claude_cli')
+    const inputs = w.findAllComponents(inputStub)
+    expect(inputs.length).toBe(1)
+    expect(w.find(`[data-testid="${LlmProviderListTestId.sessionNotice}"]`).exists()).toBe(false)
+    const hint = w.find(`[data-testid="${LlmProviderListTestId.cliKeyHint}"]`)
+    expect(hint.exists()).toBe(true)
+    expect(hint.text()).toContain('claude setup-token')
+  })
+
+  it('opencode_go bleibt unveraendert "nicht unterstuetzt"', async () => {
+    const w = await mountView({ extraProviders: cliProviders })
+    await selectRow(w, 'opencode_go')
+    expect(w.find(`[data-testid="provider-unsupported-notice"]`).exists()).toBe(true)
+    expect(w.findAllComponents(inputStub).length).toBe(0)
   })
 })

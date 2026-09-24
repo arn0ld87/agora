@@ -1192,6 +1192,12 @@
         },
         "list": {
           "ariaLabel": "Provider"
+        },
+        "session": {
+          "notice": "Die Anmeldung erfolgt über die lokale CLI-Session:",
+          "loginCommand": "codex login",
+          "tokenHint": "Langzeit-Token aus:",
+          "tokenCommand": "claude setup-token"
         }
       }
     }

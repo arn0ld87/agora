@@ -87,6 +87,30 @@ function isOllama(p: ProviderDescriptor): boolean {
   return p.type === 'ollama'
 }
 
+/**
+ * Issue #1415: `GET /api/llm/providers` (ProviderDescriptor) liefert kein
+ * `transport`/`auth_mode` — die Registry-Matrix (`llm_provider_registry.py`)
+ * ordnet diese Felder statisch je `provider_kind` zu, genau wie
+ * `supports_models_endpoint`. `codex_cli`/`claude_cli` sind aktuell die
+ * einzigen `transport="cli"`-Eintraege; sobald eine Connection existiert,
+ * gewinnt deren tatsaechlicher `transport`/`auth_mode` (vorhandene Quelle
+ * statt Typ-Heuristik).
+ */
+const CLI_TRANSPORT_PROVIDER_TYPES: ReadonlySet<string> = new Set(['codex_cli', 'claude_cli'])
+const CLI_SESSION_PROVIDER_TYPES: ReadonlySet<string> = new Set(['codex_cli'])
+
+function isCliTransport(p: ProviderDescriptor): boolean {
+  const connection = providersStore.connections[p.id]
+  if (connection) return connection.transport === 'cli'
+  return CLI_TRANSPORT_PROVIDER_TYPES.has(p.type)
+}
+
+function isSessionAuth(p: ProviderDescriptor): boolean {
+  const connection = providersStore.connections[p.id]
+  if (connection) return connection.auth_mode === 'session'
+  return CLI_SESSION_PROVIDER_TYPES.has(p.type)
+}
+
 function statusTone(p: ProviderDescriptor): 'gray' | 'green' | 'orange' | 'red' {
   if (isUnsupported(p)) return 'gray'
   const connection = providersStore.connections[p.id]
@@ -316,14 +340,31 @@ onBeforeUnmount(() => {
           <template v-else>
             <div class="llm-key-form">
               <Input
-                v-if="!isOllama(selectedProvider)"
+                v-if="!isOllama(selectedProvider) && !isSessionAuth(selectedProvider)"
                 v-model="ensureDraft(selectedProvider).apiKey"
                 type="password"
                 autocomplete="off"
                 spellcheck="false"
                 :placeholder="t('settings.v4.llmProviders.keyPlaceholder', 'Neuen API-Key einfügen …')"
               />
+              <p
+                v-if="isSessionAuth(selectedProvider)"
+                class="llm-session-notice"
+                :data-testid="LlmProviderListTestId.sessionNotice"
+              >
+                {{ t('settings.v4.llmProviders.session.notice', 'Die Anmeldung erfolgt über die lokale CLI-Session:') }}
+                <code>{{ t('settings.v4.llmProviders.session.loginCommand', 'codex login') }}</code>
+              </p>
+              <p
+                v-else-if="isCliTransport(selectedProvider)"
+                class="llm-cli-key-hint"
+                :data-testid="LlmProviderListTestId.cliKeyHint"
+              >
+                {{ t('settings.v4.llmProviders.session.tokenHint', 'Langzeit-Token aus:') }}
+                <code>{{ t('settings.v4.llmProviders.session.tokenCommand', 'claude setup-token') }}</code>
+              </p>
               <Input
+                v-if="!isCliTransport(selectedProvider)"
                 v-model="ensureDraft(selectedProvider).baseUrl"
                 :placeholder="isOllama(selectedProvider)
                   ? t('settings.v4.llmProviders.localBaseUrlPlaceholder', 'http://localhost:11434')
@@ -505,10 +546,21 @@ onBeforeUnmount(() => {
   color: var(--text-tertiary);
 }
 
-.llm-unsupported-notice {
+.llm-unsupported-notice,
+.llm-session-notice,
+.llm-cli-key-hint {
   margin: 0;
   font-size: var(--fs-small);
   color: var(--text-secondary);
+}
+
+.llm-session-notice code,
+.llm-cli-key-hint code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono);
+  background: var(--surface-hover);
+  padding: 1px 6px;
+  border-radius: var(--r-2, 4px);
 }
 
 .llm-key-form {
