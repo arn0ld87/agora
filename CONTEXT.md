@@ -104,6 +104,8 @@ Der geroutete Provider ist für die Persona-Generierung kanonisch. Eine aufgelö
 
 Vollständige regelbasierte Fallback-Personas gelten als Degradation und dürfen nicht als normaler Erfolg verschleiert werden.
 
+Die Branchenquote lenkt nur bewusst synthetische Personas; trägt die Quelle einer Entität bereits erkennbares Fachvokabular, bleibt ihr Fach erhalten. Erkannte Domänendrift wird über den regulären LLM-Pfad korrigiert (Beruf, Bio, Freitext); eine fehlgeschlagene Korrektur ist als `generation_error` sichtbar (#1471).
+
 ### Phase 3 — Simulation
 
 OASIS/CAMEL läuft in einem **separaten Subprozess**. Twitter- und Reddit-Simulationen besitzen unterschiedliche Aktionsräume. Redis und dateibasierte Artefakte verbinden Laufzeit, Webprozess und UI.
@@ -279,7 +281,7 @@ Die verbindliche Priorisierung steht in [`docs/STATUS.md`](docs/STATUS.md) und [
 |---|---|
 | Webprozess-Jobs nach Restart | #1472 |
 | Embedding Runtime SSoT | #1417 |
-| Entitätsauflösung / Persona-Domäne | #1470 / #1471 |
+| Entitätsauflösung | #1470 |
 | Role Leakage | #1323 |
 | Twitter-Recommender / Reproduzierbarkeit | #1236 |
 | Quantoren vs. Evidence | #1345 |

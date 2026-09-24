@@ -11,7 +11,13 @@ from . import oasis_profile_generator as _legacy
 import re
 from typing import Dict, List, Optional
 from .entity_reader import EntityNode
-from .persona_domain_coherence import coherence_findings, is_collective_entity_type
+from .oasis_profile_models import PersonaCoherenceResolution
+from .persona_domain_coherence import (
+    coherence_findings,
+    detect_domain_drift,
+    is_collective_entity_type,
+)
+from .run_budget import BudgetExceededError
 
 def _search_graph_for_entity (self: Any ,entity :EntityNode )->Dict [str ,Any ]:
     """
@@ -219,27 +225,35 @@ def _align_persona_identity (cls: Any ,persona :str ,display_name :str )->str :
     return aligned
 
 
-def _profession_after_coherence_check (
+def _persona_after_coherence_check (
+self :Any ,
 *,
 entity_type :str ,
 entity_name :str ,
 persona_kind :str ,
 profession :Optional [str ],
+bio :str ,
 persona_text :str ,
 entity_summary :Optional [str ],
 entity_context :Optional [str ],
-)->Optional [str ]:
-    """Prueft Domaenen-Kohaerenz und leert einen fachfremden Beruf.
+use_llm :bool ,
+)->PersonaCoherenceResolution :
+    """Prueft Domaenen-Kohaerenz und korrigiert Beruf, Bio und Freitext bei Drift.
 
     Im Referenzlauf report_cc2ef45da5e9 wurde aus einer EmployeeGroup eines
     Klinik-Rollouts eine "Sachbearbeiterin in der Fertigungsplanung" und aus
     einem PatientAdvisoryCouncil ein "Schichtleiter Maschinenbau" —
     plausible Vitae aus einem Fach, das in keiner Quelle vorkam.
 
-    Bereinigt wird nur der Beruf und nur bei eindeutigem Drift: dieselbe
-    Linie wie beim nicht ableitbaren Beruf (#1246) — lieber leer als
-    erfunden. Der Freitext bleibt stehen; ihn zu beschneiden wuerde mehr
-    zerstoeren als retten, und der Befund steht im Log.
+    Nachtrag #1471: Bis hierher leerte diese Pruefung bei Drift nur den
+    Beruf und liess den Freitext unangetastet stehen — "lieber leer als
+    erfunden" (#1246), aber eben nur fuer ein Feld. Jetzt laesst
+    :func:`_regenerate_persona_after_drift` Beruf, Bio und Freitext ueber den
+    bestehenden LLM-Pfad korrigieren. Ohne LLM (``use_llm=False``) oder wenn
+    die Korrektur scheitert, bleibt die alte, konservative Linie: der Beruf
+    wird geleert, der Freitext bleibt stehen. Ein ``BudgetExceededError``
+    verlaesst diese Funktion unveraendert — kein Fallback bei erschoepftem
+    Budget.
     """
     source_text =" ".join (
     part for part in (entity_summary or "",entity_context or "")if part
@@ -253,7 +267,7 @@ entity_context :Optional [str ],
     source_text =source_text ,
     )
     if not findings :
-        return profession
+        return PersonaCoherenceResolution (profession ,persona_text ,bio ,None )
         # Der Entitaetsname bleibt draussen: er traegt einen Personen- oder
         # Organisationsnamen, und Logs verlassen den Prozess (dieselbe Linie
         # wie beim producer_key, CodeRabbit PR #1151). Typ und Befundart
@@ -264,11 +278,85 @@ entity_context :Optional [str ],
     entity_type ,
     "; ".join (finding ["kind"]for finding in findings ),
     )
-    if profession and any (
-    finding ["kind"]=="domain_drift"for finding in findings
-    ):
-        return None
-    return profession
+    if not any (finding ["kind"]=="domain_drift"for finding in findings ):
+        return PersonaCoherenceResolution (profession ,persona_text ,bio ,None )
+
+    cleared_profession =None if profession else profession
+    if not use_llm :
+        return PersonaCoherenceResolution (cleared_profession ,persona_text ,bio ,None )
+
+    drift =detect_domain_drift (
+    " ".join (part for part in (profession or "",persona_text )if part ),
+    source_text ,
+    )
+    try :
+        corrected =self ._regenerate_persona_after_drift (
+        entity_name =entity_name ,
+        entity_type =entity_type ,
+        persona_kind =persona_kind ,
+        profession =profession or "",
+        bio =bio ,
+        persona_text =persona_text ,
+        drifted_domains =drift .drifted ,
+        source_text =source_text ,
+        )
+    except BudgetExceededError :
+        raise
+    except Exception as e :# noqa: BLE001 — Degradation wird ueber generation_error sichtbar gemacht
+        return _drift_correction_failed (
+        error =e ,
+        drifted_domains =drift .drifted ,
+        profession =cleared_profession ,
+        bio =bio ,
+        persona_text =persona_text ,
+        )
+
+    return _resolution_from_correction (
+    corrected ,persona_kind =persona_kind ,bio =bio ,persona_text =persona_text
+    )
+
+
+def _drift_correction_failed (
+*,
+error :Exception ,
+drifted_domains :Any ,
+profession :Optional [str ],
+bio :str ,
+persona_text :str ,
+)->PersonaCoherenceResolution :
+    """Konservative Linie bei gescheiterter Korrektur: Beruf leer, Freitext
+    bleibt, Degradation sichtbar in ``generation_error``."""
+    detail =str (error )[:160 ]
+    _legacy .logger .warning (
+    "persona coherence: Drift-Korrektur fehlgeschlagen, Beruf wird geleert: %s",
+    detail ,
+    )
+    return PersonaCoherenceResolution (
+    profession ,
+    persona_text ,
+    bio ,
+    f"Domänendrift erkannt ({', '.join (drifted_domains )}), Korrektur fehlgeschlagen: {detail }",
+    )
+
+
+def _resolution_from_correction (
+corrected :Dict [str ,Any ],
+*,
+persona_kind :str ,
+bio :str ,
+persona_text :str ,
+)->PersonaCoherenceResolution :
+    """Leere Felder der Korrektur fallen auf den bisherigen Wert zurueck."""
+    corrected_profession =(corrected .get ("profession")or "").strip ()or None
+    if persona_kind =="collective":
+    # Eine Kollektiv-Persona hat keinen Beruf (#1246) — auch nicht nach
+    # einer Korrektur, die das Schema trotzdem anfordert.
+        corrected_profession =None
+    corrected_bio =(corrected .get ("bio")or "").strip ()or bio
+    corrected_persona_text =(corrected .get ("persona")or "").strip ()or persona_text
+    return PersonaCoherenceResolution (
+    corrected_profession ,corrected_persona_text ,corrected_bio ,None
+    )
 
 
 def _is_individual_entity (self: Any ,entity_type :str )->bool :

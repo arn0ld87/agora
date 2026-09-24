@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, NamedTuple, Optional
 
 from pydantic import BaseModel, Field
 
@@ -78,6 +78,42 @@ class PersonaProfileSchema(BaseModel):
         description="True if this entity cannot have a human bearer and must not become a persona",
     )
     ineligible_reason: str = Field("", description="Short reason when ineligible is true")
+
+
+class PersonaDriftCorrectionSchema(BaseModel):
+    """Antwortvertrag für die Drift-Korrektur (#1471, Nachtrag).
+
+    Bei erkannter Domänendrift leerte ``_profession_after_coherence_check``
+    bisher nur ``profession``; Bio und Freitext behielten ihr fachfremdes
+    Vokabular. Dieses Schema trägt die vom Modell korrigierte Fassung —
+    schlanker als ``PersonaProfileSchema``, weil Name, Alter, Geschlecht und
+    MBTI-Typ der Persona unverändert bleiben und nicht neu angefordert
+    werden.
+    """
+
+    bio: str = Field("", description="Korrigierte Social-Media-Bio, <=200 Zeichen")
+    persona: str = Field("", description="Korrigierter Freitext, durchgehend Fließtext")
+    profession: str = Field(
+        "", description="Korrigierter Beruf; leerer String, wenn aus der Quelle keiner ableitbar ist"
+    )
+    voice_register: Optional[VoiceRegister] = Field(
+        None, description="One of formal-de/neutral-de/technical-de/skeptisch-de"
+    )
+
+
+class PersonaCoherenceResolution(NamedTuple):
+    """Ergebnis der Kohärenzprüfung: Beruf, Bio und Freitext nach Drift-Korrektur.
+
+    ``generation_error`` bleibt ``None``, solange keine Korrektur nötig war
+    oder sie gelungen ist. Es wird nur bei einer fehlgeschlagenen Korrektur
+    gesetzt — die sichtbare Degradation, die ``BudgetExceededError`` nie
+    verdecken darf (#1471, Nachtrag).
+    """
+
+    profession: Optional[str]
+    persona_text: str
+    bio: str
+    generation_error: Optional[str]
 
 
 class PersonaIneligible(Exception):

@@ -122,6 +122,19 @@ def is_collective_entity_type(entity_type: str) -> bool:
     return head in COLLECTIVE_HEAD_NOUNS or head.rstrip("s") in COLLECTIVE_HEAD_NOUNS
 
 
+def has_domain_markers(text: str) -> bool:
+    """Trägt ``text`` erkennbares Fachvokabular einer Domäne (#1471, Nachtrag)?
+
+    Trennt "quellengebundene" Akteure — die Quelle legt ihr Fach bereits fest
+    — von "bewusst synthetischen", deren Domäne erst erfunden werden muss.
+    Die Branchenquote (``build_industry_quota_prompt_block``) darf Letztere
+    lenken, ohne einer Person oder Organisation mit erkennbarem Quellfach
+    (etwa der BFW-Sicherheitsverantwortlichen aus der Spezifikation) ein
+    fremdes Fach aufzudrängen.
+    """
+    return bool(_domains_in(text))
+
+
 def _domains_in(text: str) -> FrozenSet[str]:
     tokens = {
         token for token in _TOKEN_RE.split((text or "").lower()) if len(token) > 3
@@ -272,5 +285,6 @@ __all__ = [
     "coherence_findings",
     "detect_domain_drift",
     "drifted_professions",
+    "has_domain_markers",
     "is_collective_entity_type",
 ]
