@@ -9,6 +9,7 @@ import tempfile
 from urllib.parse import urlparse, urlunparse
 from typing import Optional, Dict, Any
 from ..contracts import (
+    ANTHROPIC_CHAT_TRANSPORT_UNSUPPORTED,
     PROVIDER_GOOGLE,
     PROVIDER_MINIMAX,
     PROVIDER_OLLAMA_CLOUD,
@@ -109,6 +110,14 @@ def _detect_default_provider_id(base_url: Optional[str], model_name: Optional[st
        ``_is_ollama_cloud_tag`` recognizes both forms.
     """
     detected = detect_provider(base_url, model_name, mode="http")
+    if detected == "anthropic":
+        # Issue #1284: kein nativer Chat-Transport. Diese Legacy-Synthese
+        # (Config.LLM_BASE_URL ohne persistierte runtime_llm_routing.json,
+        # oder eine Route ohne eigene provider_connection_id) darf nicht in
+        # den generischen "openai_compatible"-Fallback kippen — das waere
+        # exakt das stille Misrouting, das dieser Fix verhindert. Ohne
+        # diesen Zweig wirft der Dict-Lookup unten ein rohes ``KeyError``.
+        raise ValueError(ANTHROPIC_CHAT_TRANSPORT_UNSUPPORTED)
     return _HTTP_DETECTION_TO_PROVIDER_ID[detected]
 
 

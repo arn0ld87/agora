@@ -13,6 +13,21 @@ PROVIDER_GITHUB_COPILOT = "github_copilot"
 PROVIDER_BEDROCK = "bedrock"
 PROVIDER_CLOUD = "cloud"
 PROVIDER_UNKNOWN = "unknown"
+
+# Issue #1284: nativer Anthropic-Chat-Transport (roher HTTP-POST im
+# OpenAI-Format an https://api.anthropic.com) wird nicht unterstuetzt — die
+# Base-URL hat kein "/v1"-Suffix fuer den Chat-Pfad, und der OpenAI-SDK-Client
+# spricht das Anthropic-Messages-Format ohnehin nicht. Claude laeuft
+# stattdessen ueber die Bedrock-Connection (PROVIDER_BEDROCK, #1282). Jede
+# Chat-Routing-Aufloesung, die bei diesem Provider landet, muss laut
+# scheitern statt still auf custom_openai umzurouten (siehe
+# llm_profile_resolver.py, llm_routing_seed.py, llm/client.py). Modell-
+# Discovery bleibt unberuehrt (adapter_kind="anthropic" in
+# llm_provider_registry.py).
+ANTHROPIC_CHAT_TRANSPORT_UNSUPPORTED = (
+    "Nativer Anthropic-Chat-Transport wird nicht unterstützt (#1284) — "
+    "Claude über die Bedrock-Connection nutzen."
+)
 # Issue #1405: Subprozess-Bridge zur lokal eingeloggten Codex-CLI (ChatGPT-
 # Abo). Anders als OpenCode Go (rein HTTP, nur ohne dokumentierten Header-
 # Vertrag) spricht dieser Provider gar kein HTTP — ``transport="cli"`` in

@@ -63,6 +63,17 @@ _CONNECTION_DEFINITIONS: tuple[ProviderConnectionDefinition, ...] = (
         PROVIDER_OPENAI, "OpenAI", "http", "api_key", "https://api.openai.com/v1",
         "openai", "OPENAI_API_KEY", True, ("gpt-4o", "gpt-4o-mini", "o1-preview"),
     ),
+    # Issue #1284 — chat-transport DEPRECATED: es gibt keinen nativen
+    # Anthropic-Chat-Adapter, und die Base-URL traegt kein "/v1"-Suffix fuer
+    # einen OpenAI-kompatiblen Chat-Pfad. Der Eintrag bleibt trotzdem
+    # bestehen (kein Feld fuer "deprecated" in ``ProviderConnectionDefinition``)
+    # — Rueckwaertskompatibilitaet fuer bereits gespeicherte Connections/
+    # Pricing-Daten und weil ``adapter_kind="anthropic"`` die Modell-Discovery
+    # (``GET /v1/models`` mit ``X-Api-Key``) weiterhin bedient. Chat-Routing,
+    # das hier landet, faellt laut aus (``llm_profile_resolver.py``,
+    # ``llm_routing_seed.py``, ``llm/client.py``) statt still auf
+    # ``custom_openai`` umzurouten. Claude fuer Chat laeuft stattdessen ueber
+    # die Bedrock-Connection (PROVIDER_BEDROCK, #1282).
     ProviderConnectionDefinition(
         PROVIDER_ANTHROPIC, "Anthropic", "http", "api_key", "https://api.anthropic.com",
         "anthropic", "ANTHROPIC_API_KEY", True,

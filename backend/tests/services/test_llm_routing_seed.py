@@ -8,9 +8,11 @@ import pytest
 from app.contracts.ai_provider_contract import AiModel, AiModelRef, ProviderConnection
 from app.contracts.llm_profile_contract import LlmProfile
 from app.contracts.llm_routing_contract import ResolvedRoute
+from app.contracts.provider_types import PROVIDER_ANTHROPIC
 from app.services.llm_routing_seed import (
     build_route_subprocess_env,
     build_runtime_llm_config,
+    prevalidate_ai_model_ref,
     resolve_route_api_key,
     seed_run_stage_routing,
 )
@@ -67,6 +69,33 @@ def test_seed_run_stage_routing_persists_stage_override(mock_run_dir, tmp_path):
     assert override.provider_id == "openai_compatible"
     assert override.model == "gpt-4o-mini"
     assert override.provider_options == {"base_url": "https://gateway.example/v1"}
+
+
+@patch("app.utils.artifact_locator.ArtifactLocator.run_dir")
+def test_legacy_custom_openai_override_with_anthropic_base_url_fails_loud(mock_run_dir, tmp_path):
+    """Issue #1284 Codex-Finding: der Legacy-Override-Pfad
+    (``llm_provider={"provider": "custom_openai", "base_url": "https://api.
+    anthropic.com"}``) laeuft nie ueber eine ProviderConnection — weder
+    ``_resolve_selected_connection`` noch ``resolve_profile_connection``
+    sehen ihn. Ohne eigenes Gate haette die OASIS-Simulation ueber
+    ``build_route_subprocess_env`` unbemerkt einen ungueltigen Request an
+    Anthropic geschickt."""
+    run_id = "run_legacy_anthropic_override"
+    run_dir = tmp_path / "runs" / run_id
+    run_dir.mkdir(parents=True)
+    mock_run_dir.return_value = str(run_dir)
+
+    with pytest.raises(ValueError, match="Anthropic"):
+        seed_run_stage_routing(
+            run_id,
+            "simulation_rounds",
+            llm_model_override="claude-sonnet-5",
+            llm_runtime=RuntimeLlmConfig(
+                provider="custom_openai",
+                api_key="session-secret",
+                base_url="https://api.anthropic.com",
+            ),
+        )
 
 
 @patch("app.utils.artifact_locator.ArtifactLocator.run_dir")
@@ -278,6 +307,23 @@ def test_build_route_subprocess_env_uses_resolved_route_values():
     assert env["OPENAI_API_KEY"] == "server-key"
     assert env["LLM_BASE_URL"] == "https://api.openai.com/v1"
     assert env["LLM_MODEL_NAME"] == "gpt-4o-mini"
+
+
+def test_build_route_subprocess_env_rejects_anthropic_base_url():
+    """Issue #1284 Codex-Finding: Transport-Guard fuer die OASIS-Subprozess-
+    Route — sie baut nie einen ``LLMClient`` und muss deshalb ihren eigenen
+    Guard haben. Faengt insbesondere eine bereits persistierte/
+    wiederaufgenommene Route ab, die ``_apply_override`` umgangen hat."""
+    route = ResolvedRoute(
+        stage="simulation_rounds",
+        provider_id="openai_compatible",
+        model="claude-sonnet-5",
+        base_url_sanitized="https://api.anthropic.com",
+        routing_version=1,
+    )
+
+    with pytest.raises(ValueError, match="Anthropic"):
+        build_route_subprocess_env(route, api_key="server-key", run_id="run_anthropic_subprocess")
 
 
 def test_build_route_subprocess_env_injects_google_api_key_for_gemini():
@@ -692,6 +738,128 @@ def test_build_runtime_llm_config_maps_resolved_route_for_legacy_callers():
     assert cfg.provider == "custom_openai"
     assert cfg.api_key == "local-key"
     assert cfg.base_url == "http://localhost:11434/v1"
+
+
+# ---------------------------------------------------------------------------
+# Issue #1284: kein nativer Anthropic-Chat-Transport — Routing, das bei einer
+# Anthropic-ProviderConnection landet, muss laut scheitern statt still über
+# custom_openai an eine Route ohne "/v1" (und ohne Anthropic-Messages-Format)
+# geroutet zu werden.
+# ---------------------------------------------------------------------------
+
+
+def _anthropic_connection() -> ProviderConnection:
+    return ProviderConnection(
+        id="conn-anthropic",
+        provider_kind=PROVIDER_ANTHROPIC,
+        display_name="Anthropic",
+        transport="http",
+        auth_mode="api_key",
+        base_url="https://api.anthropic.com",
+        secret_ref="conn-anthropic",
+        enabled=True,
+    )
+
+
+def test_prevalidate_ai_model_ref_rejects_anthropic_connection(monkeypatch):
+    """Frueheste Validierung (#1284): Prepare-/Simulation-Start-Endpunkte
+    rufen diese Variante vor der Run-Erzeugung — kein verwaister
+    pending-Run fuer eine Route, die es gar nicht geben kann."""
+    connection_store = MagicMock()
+    connection_store.list_connections.return_value = [_anthropic_connection()]
+    monkeypatch.setattr(
+        "app.services.llm_routing_seed.ProviderConnectionStore",
+        lambda: connection_store,
+    )
+
+    ref = AiModelRef(
+        provider_connection_id="conn-anthropic", model_id="claude-sonnet-5", source="explicit"
+    )
+    with pytest.raises(ValueError, match="Anthropic"):
+        prevalidate_ai_model_ref(ref)
+
+
+@patch("app.utils.artifact_locator.ArtifactLocator.run_dir")
+def test_ai_model_ref_anthropic_connection_fails_loud(mock_run_dir, monkeypatch, tmp_path):
+    """seed_run_stage_routing muss vor jeder Live-Discovery abbrechen — sonst
+    haette eine erfolgreiche Discovery (funktioniert fuer Anthropic) den
+    kaputten Chat-Transport verdeckt."""
+    run_id = "run_anthropic_ref"
+    run_dir = tmp_path / "runs" / run_id
+    run_dir.mkdir(parents=True)
+    mock_run_dir.return_value = str(run_dir)
+
+    connection_store = MagicMock()
+    connection_store.list_connections.return_value = [_anthropic_connection()]
+    monkeypatch.setattr(
+        "app.services.llm_routing_seed.ProviderConnectionStore",
+        lambda: connection_store,
+    )
+    probe_service = MagicMock()
+    probe_service.probe.side_effect = AssertionError(
+        "Discovery darf fuer eine abgelehnte Anthropic-Connection nie laufen"
+    )
+    monkeypatch.setattr(
+        "app.services.llm_routing_seed.ProviderConnectionService",
+        lambda **kwargs: probe_service,
+    )
+
+    ref = AiModelRef(
+        provider_connection_id="conn-anthropic", model_id="claude-sonnet-5", source="explicit"
+    )
+    with pytest.raises(ValueError, match="Anthropic"):
+        seed_run_stage_routing(
+            run_id,
+            "report_generation",
+            llm_model_override=None,
+            llm_runtime=RuntimeLlmConfig(),
+            ai_model_ref=ref,
+        )
+
+
+@patch("app.utils.artifact_locator.ArtifactLocator.run_dir")
+def test_llm_profile_id_anthropic_connection_fails_loud(mock_run_dir, monkeypatch, tmp_path):
+    """Der llm_profile_id-Zweig loest die Connection ueber
+    ``resolve_profile_connection`` auf — ein eigener Pfad, der NICHT durch
+    ``_resolve_selected_connection`` laeuft und deshalb sein eigenes Gate
+    braucht (#1284)."""
+    run_id = "run_anthropic_profile"
+    run_dir = tmp_path / "runs" / run_id
+    run_dir.mkdir(parents=True)
+    mock_run_dir.return_value = str(run_dir)
+
+    now = datetime.now(UTC)
+    profile = LlmProfile(
+        id="profile-anthropic",
+        name="Claude Profile",
+        provider=PROVIDER_ANTHROPIC,
+        base_url="https://api.anthropic.com",
+        model_name="claude-sonnet-5",
+        api_key="must-not-enter-route",
+        created_at=now,
+        updated_at=now,
+    )
+    profile_store = MagicMock()
+    profile_store.get.return_value = profile
+    connection_store = MagicMock()
+    connection_store.list_connections.return_value = [_anthropic_connection()]
+    monkeypatch.setattr(
+        "app.services.llm_routing_seed.get_llm_profile_repository",
+        lambda: profile_store,
+    )
+    monkeypatch.setattr(
+        "app.services.llm_routing_seed.ProviderConnectionStore",
+        lambda: connection_store,
+    )
+
+    with pytest.raises(ValueError, match="Anthropic"):
+        seed_run_stage_routing(
+            run_id,
+            "graph_build",
+            llm_model_override=None,
+            llm_runtime=RuntimeLlmConfig(),
+            llm_profile_id="profile-anthropic",
+        )
 
 
 # ---------------------------------------------------------------------------
