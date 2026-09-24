@@ -13,9 +13,11 @@ umgeschrieben. Offene Checkboxen in den Phasenabschnitten sind **kein**
 Fortschrittsanzeiger. Maßgeblich sind diese Tabelle, [`docs/STATUS.md`](../STATUS.md)
 und das Epic [#1576](https://github.com/arn0ld87/agora/issues/1576).
 
-**Umgeschaltet ist nichts.** Alle PostgreSQL-Adapter sind gebaut, aber per Default
-inaktiv (`AGORA_METADATA_BACKEND=legacy`, `AGORA_LLM_PROFILE_BACKEND=sqlite`,
-`AGORA_PROJECT_BACKEND=file`).
+**Umgeschaltet ist nichts.** Gebaut sind bisher genau zwei PostgreSQL-Adapter,
+`PostgresLlmProfileRepository` und `PostgresProjectRepository`; beide sind per
+Default inaktiv (`AGORA_METADATA_BACKEND=legacy`, `AGORA_LLM_PROFILE_BACKEND=sqlite`,
+`AGORA_PROJECT_BACKEND=file`). Simulationen, Runs, Reports und Blobs haben noch
+keinen Adapter (siehe Tabelle).
 
 | Plan (§38) | Inhalt | Stand |
 |---|---|---|

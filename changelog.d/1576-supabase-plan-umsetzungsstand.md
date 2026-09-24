@@ -1,4 +1,4 @@
-### Documentation
+### Changed
 
 - `docs/plans/supabase.md` hat einen Abschnitt „Umsetzungsstand“ bekommen. Er ordnet
   die PR-Reihenfolge aus §38 den gemergten PRs und den offenen Tickets unter Epic
