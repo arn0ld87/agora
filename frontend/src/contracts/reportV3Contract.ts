@@ -299,9 +299,38 @@ export const ThresholdSchema = z
     ]),
     evidence_status: z.enum(["verified", "derived", "heuristic"]).default("heuristic"),
     evidence_refs: z.array(EvidenceIdSchema).default([]),
+    // Issue #1359: Eine gewollte Abweichung verweist auf den anderen Wert
+    // derselben Größe und begründet sich. Nullable mit Default — Bestands-
+    // artefakte ohne die Felder bleiben gültig.
+    deviates_from: z.string().nullable().default(null),
+    deviation_rationale: z.string().nullable().default(null),
   })
   .strict()
   .superRefine((value, ctx) => {
+    // Spiegelt Threshold.deviation_is_explained (#1359): ein Verweis ohne
+    // Begründung verbindet nichts, und kein Wert weicht von sich selbst ab.
+    if (value.deviates_from !== null) {
+      if (!value.deviates_from.trim()) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["deviates_from"],
+          message: "deviates_from darf nicht leer sein — sonst null.",
+        });
+      } else if (value.deviates_from === value.id) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["deviates_from"],
+          message: "deviates_from verweist auf den Schwellenwert selbst.",
+        });
+      } else if (!(value.deviation_rationale ?? "").trim()) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["deviation_rationale"],
+          message: "deviates_from verlangt eine deviation_rationale.",
+        });
+      }
+    }
+
     // Spiegelt Threshold.verified_needs_an_evidence_ref: eine Zahl als belegt
     // auszuweisen, ohne einen Beleg zu nennen, ist genau die Behauptung, die
     // #1160 E adressiert.
@@ -527,6 +556,19 @@ export const ReportV3Schema = z
         });
       });
     }
+
+    // Spiegelt ReportV3.validate_threshold_deviation_targets (#1359): ein
+    // Verweis ins Leere behauptet eine Abweichung ohne Bezugswert.
+    const thresholdIds = new Set(value.thresholds.map((threshold) => threshold.id));
+    value.thresholds.forEach((threshold, index) => {
+      if (threshold.deviates_from !== null && !thresholdIds.has(threshold.deviates_from)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["thresholds", index, "deviates_from"],
+          message: `Unbekannter Schwellenwert '${threshold.deviates_from}'.`,
+        });
+      }
+    });
   });
 export type ReportV3 = z.infer<typeof ReportV3Schema>;
 

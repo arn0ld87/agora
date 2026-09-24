@@ -195,6 +195,13 @@ Offen bleiben Qualitätsthemen der Entitätsauflösung: Alias-/Koreferenzauflös
 - Ausgeschriebene Zahlwörter („sechs Angebote") sind prüfbare Fakten. `ein`/`eine` bleibt bewusst ausgenommen — im Deutschen weit öfter unbestimmter Artikel als Zahlwort; mitgezählt entstünde aus „eine Lehrkraft berichtet" eine Mengenbehauptung, die der Satz nicht aufstellt.
 - Zahlenspannen („sechs bis neun Stunden", „zwischen 40 und 60 Prozent") erzeugen **keinen** Punktfakt. Die Vergleichslogik kennt nur Punktwerte und Schranken; eine Spanne als `EXACT` zu führen war eine Genauigkeit, die der Satz nicht behauptet. `bis zu` bleibt eine Obergrenze und damit ein vollwertiger Fakt.
 
+### Operative Zahlen: Abweichungen verbunden oder sichtbar
+
+- Schwellenwerte tragen eine berichtsweite Kennung nach dem Claim-Muster (`T7_01` = erster Schwellenwert aus Abschnitt 7). Vorher deduplizierte der Metadaten-Merge über die pro Abschnitt frei gewählte Modell-ID; zwei Abschnitte mit `thr_01` verloren still den zweiten Wert — auch wenn er dem ersten widersprach ([#1359](https://github.com/arn0ld87/agora/issues/1359)).
+- `Threshold.deviates_from` + `deviation_rationale` verbinden eine gewollte Abweichung mit dem anderen Wert derselben Größe; ohne Begründung, als Selbstverweis oder ins Leere ist der Verweis vertragswidrig (Pydantic und Zod). Die Metadaten-Extraktion eines Abschnitts sieht die bereits erfassten Zahlen früherer Abschnitte samt Kennung.
+- Dieselbe Größe (Label-Stichworte, Einheit, Rolle) mit verschiedenen Werten ohne Verbindung wird deterministisch erkannt: als Warnung unter der Tabelle „Operative Zahlen“ im Markdown und als Red-Team-Befund — unabhängig vom Intent-Gate des LLM-Red-Teams. Der Reportstatus bleibt davon unberührt; es ist ein Inhaltsbefund, keine Pipeline-Degradation.
+- Grenze: Die Erkennung vergleicht nur Einträge mit gleichen Label-Stichworten. „Pilotdauer“ und „Dauer des Pilotbetriebs“ gelten als verschiedene Größen; solche Fälle bleiben dem LLM-Red-Team überlassen.
+
 ### Weiter offene Trust-Themen
 
 - Quantifizierte Aussagen können noch Evidence referenzieren, die den Quantor nicht trägt ([#1345](https://github.com/arn0ld87/agora/issues/1345)).

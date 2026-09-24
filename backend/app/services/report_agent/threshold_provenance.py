@@ -148,19 +148,71 @@ def _merge_pair(kept: Threshold, other: Threshold) -> Threshold:
             (kept.origin, other.origin),
             key=lambda value: _ORIGIN_STRENGTH.get(value, 0),
         )
-    return kept.model_copy(
-        update={"evidence_refs": refs, "evidence_status": status, "origin": origin}
-    )
+    update: Dict[str, Any] = {
+        "evidence_refs": refs,
+        "evidence_status": status,
+        "origin": origin,
+    }
+    # Issue #1359: Eine begründete Abweichung geht beim Zusammenführen nicht
+    # verloren — sie gilt für den Wert, und der ist bei beiden derselbe.
+    if kept.deviates_from is None and other.deviates_from is not None:
+        update["deviates_from"] = other.deviates_from
+        update["deviation_rationale"] = other.deviation_rationale
+    return kept.model_copy(update=update)
+
+
+def _redirect_deviation(threshold: Threshold, alias: Dict[str, str]) -> Threshold:
+    """Lenkt einen Abweichungsverweis auf den überlebenden Schwellenwert um."""
+    target = threshold.deviates_from
+    if target is None or target not in alias:
+        return threshold
+    target = alias[target]
+    if target == threshold.id:
+        # Beide Werte sind zu einem verschmolzen — ein Wert weicht nicht von
+        # sich selbst ab.
+        return threshold.model_copy(
+            update={"deviates_from": None, "deviation_rationale": None}
+        )
+    return threshold.model_copy(update={"deviates_from": target})
 
 
 def dedup_thresholds(thresholds: Sequence[Threshold]) -> List[Threshold]:
-    """Eine Zahl je Sachverhalt, in der Reihenfolge des ersten Auftretens."""
+    """Eine Zahl je Sachverhalt, in der Reihenfolge des ersten Auftretens.
+
+    Issue #1359: Die id einer verschmolzenen Dublette verschwindet. Ein
+    ``deviates_from``, das auf sie zeigte, zeigt danach auf den Eintrag, in
+    dem sie aufgegangen ist — sonst verwiese eine begründete Abweichung ins
+    Leere.
+    """
     merged: Dict[tuple[Any, ...], Threshold] = {}
+    alias: Dict[str, str] = {}
     for threshold in thresholds:
         key = canonical_threshold_key(threshold)
         existing = merged.get(key)
-        merged[key] = threshold if existing is None else _merge_pair(existing, threshold)
-    return list(merged.values())
+        if existing is None:
+            merged[key] = threshold
+            continue
+        merged[key] = _merge_pair(existing, threshold)
+        alias[threshold.id] = existing.id
+    return [_redirect_deviation(threshold, alias) for threshold in merged.values()]
+
+
+def threshold_measure_key(threshold: Threshold) -> tuple[Any, ...] | None:
+    """Die fachliche Größe hinter einer Zahl — der Kanonschlüssel ohne Wert.
+
+    Issue #1359: Zwei Einträge mit gleichem Schlüssel, aber verschiedenem Wert
+    beschreiben dieselbe Größe unterschiedlich. Die Rolle bleibt Teil des
+    Schlüssels: Alarmschwelle und Zielwert derselben Kennzahl dürfen
+    verschieden sein, ohne einander zu widersprechen. Ein Label ohne
+    tragfähiges Stichwort („KPI“) liefert None — sonst fielen alle kurzen
+    Labels auf einen Schlüssel.
+    """
+    tokens = _label_tokens(threshold.label)
+    if not tokens:
+        return None
+    if threshold.kind == "date":
+        return (tokens, "date", threshold.purpose)
+    return (tokens, normalize_unit(threshold.unit or ""), threshold.purpose)
 
 
 #: Quellengattungen, die einen Schwellenwert *belegen* können.
@@ -290,4 +342,5 @@ __all__ = [
     "canonical_threshold_key",
     "dedup_thresholds",
     "normalize_unit",
+    "threshold_measure_key",
 ]
