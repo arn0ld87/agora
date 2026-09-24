@@ -21,6 +21,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
+from pydantic import ValidationError
 
 from app.services.oasis_profile_generator import (
     PERSONA_DETAIL_LEVELS,
@@ -316,3 +317,200 @@ def test_regenerate_persona_after_drift_lets_budget_exceeded_error_through(monke
             drifted_domains=["manufacturing"],
             source_text=DRIFT_SOURCE_TEXT,
         )
+
+
+# --- Codex-Review-Findings auf PR #1573 (F1–F5) -----------------------------
+
+
+def test_f1_persona_drift_correction_schema_lives_in_contracts_and_is_strict():
+    """F1: LLM-Antwortvertrag gehört nach app.contracts (Contracts-first), nicht
+    in ein Service-Modul — und ist so streng wie seine Nachbarn dort."""
+    from app.contracts.persona_drift_contract import (
+        PersonaDriftCorrectionSchema as ContractSchema,
+    )
+
+    # Reexport aus oasis_profile_models.py bleibt dieselbe Klasse.
+    assert ContractSchema is PersonaDriftCorrectionSchema
+    assert ContractSchema.model_config.get("extra") == "forbid"
+    with pytest.raises(ValidationError):
+        ContractSchema(bio="x", persona="y", profession="z", unexpected_field="nope")
+
+
+def test_f2_collective_drift_prompt_has_no_profession_or_demographics_wording():
+    """F2: Der Kollektiv-Korrekturprompt fordert keinen Beruf und keine Demografie an."""
+    gen = _make_generator()
+    prompt = gen._build_drift_correction_prompt(
+        entity_name="Belegschaftsrat Fertigung",
+        entity_type="EmployeeGroup",
+        persona_kind="collective",
+        profession="",
+        bio="Vertritt die Fertigungsplanung.",
+        persona_text="Spricht für die Sachbearbeiterinnen der Fertigungsplanung.",
+        drifted_domains=["manufacturing"],
+        source_text=DRIFT_SOURCE_TEXT,
+    )
+    assert "Bisheriger Beruf" not in prompt
+    assert "kein Alter, kein Geschlecht, kein MBTI-Typ, keine Berufsbezeichnung" in prompt
+
+
+def test_f2_individual_drift_prompt_asks_for_a_profession():
+    """F2: Der Individuen-Korrekturprompt fordert weiterhin einen Beruf an."""
+    gen = _make_generator()
+    prompt = gen._build_drift_correction_prompt(
+        entity_name="Schichtleiter Maschinenbau",
+        entity_type="Person",
+        persona_kind="individual",
+        profession="Schichtleiter Maschinenbau",
+        bio="Leitet die Produktionsplanung.",
+        persona_text="Verantwortet die Produktionsleitung in der Werkhalle.",
+        drifted_domains=["manufacturing"],
+        source_text=DRIFT_SOURCE_TEXT,
+    )
+    assert "Bisheriger Beruf" in prompt
+
+
+def test_f3_english_language_generator_gets_an_english_drift_prompt():
+    """F3: ``language="en"`` erzeugt einen englischen statt eines immer-deutschen Prompts."""
+    gen = OasisProfileGenerator(
+        api_key="test-key", base_url="https://example.test/v1", language="en",
+    )
+    prompt = gen._build_drift_correction_prompt(
+        entity_name="Schichtleiter Maschinenbau",
+        entity_type="Person",
+        persona_kind="individual",
+        profession="Shift lead manufacturing",
+        bio="Leads production planning.",
+        persona_text="Runs production in the factory hall.",
+        drifted_domains=["manufacturing"],
+        source_text=DRIFT_SOURCE_TEXT,
+    )
+    assert "Rewrite profession, bio and free text" in prompt
+    assert "Schreibe" not in prompt
+
+
+def test_f4_a_correction_that_is_still_drifting_is_rejected_and_keeps_old_values():
+    """F4: eine schema-gültige, aber weiterhin driftende Korrektur wird verworfen —
+    kein zweiter LLM-Versuch, der alte Freitext und die alte Bio bleiben stehen."""
+    gen = _make_generator()
+    gen._regenerate_persona_after_drift = MagicMock(return_value={
+        "bio": "Weiterhin zuständig für die Fertigungsplanung.",
+        "persona": "Leitet weiterhin die Produktionsplanung in der Werkhalle.",
+        "profession": "Schichtleiter Maschinenbau",
+        "voice_register": "neutral-de",
+    })
+
+    resolution = gen._persona_after_coherence_check(
+        entity_type="Person",
+        entity_name="Schichtleiter Maschinenbau",
+        persona_kind="individual",
+        profession="Schichtleiter Maschinenbau",
+        bio="Leitet die Produktionsplanung.",
+        persona_text="Verantwortet die Produktionsleitung in der Werkhalle.",
+        entity_summary=DRIFT_SOURCE_TEXT,
+        entity_context="",
+        use_llm=True,
+    )
+
+    assert resolution.profession is None
+    assert resolution.persona_text == "Verantwortet die Produktionsleitung in der Werkhalle."
+    assert resolution.bio == "Leitet die Produktionsplanung."
+    assert resolution.generation_error is not None
+    assert "weiterhin driftend" in resolution.generation_error
+    gen._regenerate_persona_after_drift.assert_called_once()
+
+
+def test_f5_bio_only_domain_drift_reaches_the_correction_path():
+    """F5: Drift ausschließlich in der Bio (Beruf und Freitext sauber) erreicht
+    jetzt ebenfalls den Korrekturpfad."""
+    gen = _make_generator()
+    gen._regenerate_persona_after_drift = MagicMock(return_value={
+        "bio": "Arbeitet in der Notaufnahme.",
+        "persona": "Arbeitet seit Jahren im Team.",
+        "profession": "",
+        "voice_register": "neutral-de",
+    })
+
+    resolution = gen._persona_after_coherence_check(
+        entity_type="Person",
+        entity_name="Teammitglied",
+        persona_kind="individual",
+        profession="",
+        bio="Zuständig für die Fertigungsplanung.",
+        persona_text="Arbeitet seit Jahren im Team.",
+        entity_summary=DRIFT_SOURCE_TEXT,
+        entity_context="",
+        use_llm=True,
+    )
+
+    gen._regenerate_persona_after_drift.assert_called_once()
+    assert gen._regenerate_persona_after_drift.call_args.kwargs["drifted_domains"] == ["manufacturing"]
+    assert resolution.generation_error is None
+    assert resolution.bio == "Arbeitet in der Notaufnahme."
+
+
+def test_p2_source_true_bio_does_not_mask_drifting_persona_text():
+    """Codex P2 auf PR #1575: Felder werden einzeln geprueft. Eine markerreiche,
+    quellentreue Bio darf einen fachfremden Freitext nicht ueberdecken — als
+    zusammengeklebter Text waere Healthcare die dominante Domaene gewesen und
+    die Fertigungs-Drift des Freitexts unsichtbar."""
+    gen = _make_generator()
+    gen._regenerate_persona_after_drift = MagicMock(return_value={
+        "bio": "Arbeitet in der Notaufnahme.",
+        "persona": "Koordiniert die Pflege auf der Station.",
+        "profession": "",
+        "voice_register": "neutral-de",
+    })
+
+    resolution = gen._persona_after_coherence_check(
+        entity_type="Person",
+        entity_name="Teammitglied",
+        persona_kind="individual",
+        profession="",
+        bio=(
+            "Seit Jahren in der Klinik, in der Pflege und in der Notaufnahme "
+            "tätig; kennt Station, Ärzte und Patienten."
+        ),
+        persona_text="Leitet die Fertigungsplanung und die Produktionslinie.",
+        entity_summary=DRIFT_SOURCE_TEXT,
+        entity_context="",
+        use_llm=True,
+    )
+
+    gen._regenerate_persona_after_drift.assert_called_once()
+    assert gen._regenerate_persona_after_drift.call_args.kwargs["drifted_domains"] == ["manufacturing"]
+    assert resolution.generation_error is None
+    assert resolution.persona_text == "Koordiniert die Pflege auf der Station."
+
+
+def test_p2_correction_with_drifting_bio_behind_clean_persona_is_rejected():
+    """Codex P2 auf PR #1575, Gegenrichtung: Die Rest-Drift-Pruefung der
+    Korrektur prueft die Bio einzeln — ein langer, sauberer Freitext darf eine
+    fachfremde korrigierte Bio nicht verstecken."""
+    gen = _make_generator()
+    gen._regenerate_persona_after_drift = MagicMock(return_value={
+        "bio": "Zuständig für die Fertigungsplanung.",
+        "persona": (
+            "Koordiniert die Pflege auf der Station, spricht täglich mit "
+            "Ärzten und Patienten in der Klinik und der Notaufnahme."
+        ),
+        "profession": "",
+        "voice_register": "neutral-de",
+    })
+
+    resolution = gen._persona_after_coherence_check(
+        entity_type="Person",
+        entity_name="Teammitglied",
+        persona_kind="individual",
+        profession="",
+        bio="Zuständig für die Fertigungsplanung.",
+        persona_text="Arbeitet seit Jahren im Team.",
+        entity_summary=DRIFT_SOURCE_TEXT,
+        entity_context="",
+        use_llm=True,
+    )
+
+    assert resolution.generation_error is not None
+    assert "weiterhin driftend (manufacturing)" in resolution.generation_error
+    assert resolution.bio == "Zuständig für die Fertigungsplanung."
+    assert resolution.persona_text == "Arbeitet seit Jahren im Team."
+
