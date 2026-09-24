@@ -121,13 +121,45 @@ async function readTabStop(page: Page): Promise<TabStopProbe> {
       return { kind: 'excluded' } as const;
     }
 
-    // Nur echte Landmarks: ein nacktes `[role]` wuerde jedes Widget mit
-    // role="button"/"tab"/"listitem" zu einem eigenen "Landmark" machen,
-    // und dann wuerde fast nichts mehr verglichen.
-    const landmarkEl = el.closest(
-      'main, nav, header, footer, aside, [role="main"], [role="navigation"], [role="banner"], ' +
-        '[role="contentinfo"], [role="complementary"], [role="region"], [role="form"], [role="search"]',
-    ) as HTMLElement | null;
+    // Effektive Landmark-Semantik statt Tag-Liste: ein nacktes `[role]`
+    // wuerde jedes Widget (role="button"/"tab") zum Landmark machen; ein
+    // `header`/`footer` innerhalb von article/aside/main/nav/section ist
+    // generisch, kein banner/contentinfo; eine explizite Nicht-Landmark-Rolle
+    // (z. B. `<nav role="tablist">`) hebt die implizite Rolle auf. Sonst
+    // wuerden Stops beiderseits solcher Grenzen nie verglichen.
+    const LANDMARK_ROLES = new Set([
+      'main', 'navigation', 'banner', 'contentinfo', 'complementary', 'region', 'form', 'search',
+    ]);
+    const hasAccessibleName = (node: Element): boolean =>
+      Boolean(node.getAttribute('aria-label')?.trim() || node.getAttribute('aria-labelledby')?.trim());
+    const isLandmark = (node: Element): boolean => {
+      const explicitRole = node.getAttribute('role')?.trim().split(/\s+/)[0];
+      if (explicitRole) {
+        if (!LANDMARK_ROLES.has(explicitRole)) return false;
+        return explicitRole === 'region' || explicitRole === 'form' ? hasAccessibleName(node) : true;
+      }
+      switch (node.tagName.toLowerCase()) {
+        case 'main':
+        case 'nav':
+        case 'aside':
+          return true;
+        case 'header':
+        case 'footer':
+          return !node.parentElement?.closest('article, aside, main, nav, section');
+        case 'section':
+        case 'form':
+          return hasAccessibleName(node);
+        default:
+          return false;
+      }
+    };
+    let landmarkEl: HTMLElement | null = null;
+    for (let node = el.parentElement; node; node = node.parentElement) {
+      if (isLandmark(node)) {
+        landmarkEl = node;
+        break;
+      }
+    }
     let landmark = 'document';
     if (landmarkEl) {
       const registry = window as unknown as {
@@ -231,13 +263,28 @@ export async function checkTabOrder(page: Page, options: TabStopCollectOptions =
   // kann den Fokus bereits mehrere Tab-Stops tief bewegt haben. Ohne Reset
   // wuerde die Sammlung erst mittendrin einsetzen und die ersten Stops der
   // Seite nie miteinander vergleichen.
+  //
+  // `blur()` allein reicht nicht: Chromium behaelt den Startpunkt der
+  // sequenziellen Fokusnavigation, der naechste Tab ginge hinter dem zuletzt
+  // fokussierten Control weiter. Deshalb ein nicht tabbarer Sentinel
+  // (tabindex=-1) ganz vorn im Body: fokussiert setzt er den Startpunkt,
+  // der naechste Tab landet auf dem ersten echten Tab-Stop der Seite.
   await page.evaluate(() => {
-    if (document.activeElement instanceof HTMLElement) {
-      document.activeElement.blur();
-    }
+    const sentinel = document.createElement('span');
+    sentinel.setAttribute('tabindex', '-1');
+    sentinel.setAttribute('data-tab-order-sentinel', '');
+    document.body.prepend(sentinel);
+    sentinel.focus();
   });
 
-  const stops = await collectTabStops(page, options);
+  let stops: TabStopRect[];
+  try {
+    stops = await collectTabStops(page, options);
+  } finally {
+    await page.evaluate(() => {
+      document.querySelector('[data-tab-order-sentinel]')?.remove();
+    });
+  }
   const violations = findTabOrderViolations(stops);
 
   expect(violations, formatViolations(violations)).toEqual([]);
