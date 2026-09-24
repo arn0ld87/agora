@@ -287,6 +287,6 @@ Die verbindliche Priorisierung steht in [`docs/STATUS.md`](docs/STATUS.md) und [
 | vollständiges Manifest / Replay | #763 / #1274 |
 | Backup/Restore/Upgrade-Nachweis | #766 |
 | Baseline-/Produktvalidierung | #765 |
-| Prompt Injection aus untrusted Observation — teilweise adressiert: Single-Platform-Tool-Loop kapselt und neutralisiert seit #1224, paralleler Simulationspfad (natives CAMEL-`LLMAction()`) nicht | #1224 |
+| Prompt Injection aus untrusted Observation — teilweise adressiert: Single-Platform-Tool-Loop kapselt und neutralisiert seit #1224, paralleler Simulationspfad und Fallback-Runden (natives CAMEL-`LLMAction()`) nicht | #1224 |
 
 Historische Referenzläufe und Audits sind Belege ihres damaligen Zustands. Sie dürfen nicht als automatische Aussage über den aktuellen `main` gelesen werden.

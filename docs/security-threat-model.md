@@ -193,7 +193,7 @@ Beispiele:
 - Sanitizer/Validatoren auf strukturierten Übergängen,
 - Evidence-Gates statt blindem Vertrauen in Modellprosa.
 
-**Teilweise adressiert:** #1224 kapselt OASIS-Observation und Tool-Ergebnisse im Single-Platform-Tool-Loop (`backend/scripts/agent_tools.py`) in `<untrusted_data>` und neutralisiert eingeschleuste Loop-Steuer-Tags. Der parallele Simulationspfad (`run_parallel_simulation.py`, natives CAMEL-`LLMAction()`) läuft nicht über diese Kapselung. Diese Grenze ist nicht vollständig „gelöst“, nur weil JSON-Schemas existieren.
+**Teilweise adressiert:** #1224 kapselt OASIS-Observation und Tool-Ergebnisse im Single-Platform-Tool-Loop (`backend/scripts/agent_tools.py`) in `<untrusted_data>` und neutralisiert eingeschleuste Loop-Steuer-Tags. Der parallele Simulationspfad (`run_parallel_simulation.py`) und Fallback-Runden des Single-Platform-Loops (natives CAMEL-`LLMAction()`) laufen nicht über diese Kapselung. Diese Grenze ist nicht vollständig „gelöst“, nur weil JSON-Schemas existieren.
 
 ### A5 — Path Traversal / Dateimanipulation
 
@@ -318,7 +318,7 @@ Ein gespeicherter Seed allein kontrolliert noch nicht alle Zufalls-/Modell-/Prom
 ## 7. Bekannte Restrisiken vor 1.0
 
 1. **Shared Admin-Token:** kein Human-IAM/RBAC; Master-Token bleibt Vollzugriff.
-2. **Prompt Injection:** untrusted Quellen/Observation sind seit #1224 im Single-Platform-Tool-Loop gekapselt und neutralisiert, aber nicht überall — der parallele Simulationspfad bleibt offen.
+2. **Prompt Injection:** untrusted Quellen/Observation sind seit #1224 im Single-Platform-Tool-Loop gekapselt und neutralisiert, aber nicht überall — der parallele Simulationspfad und Fallback-Runden mit nativem `LLMAction()` bleiben offen.
 3. **Webprozess-Langläufer:** Prepare/Report/Graph sind noch nicht vollständig restart-sicher (#1472).
 4. **Embedding-SSoT:** UI-aktive Konfiguration kann von Runtime-Env abweichen (#1417).
 5. **Simulationstreue:** Role Leakage/Recommender-Probleme (#1323/#1236).

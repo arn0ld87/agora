@@ -227,7 +227,7 @@ Aktuelle Sicherheitsgrundlagen:
 - loopback-orientierte Produktionsdefaults und gehärtete Compose-Overrides,
 - Dependency-Scanning und ein explizites Dependency-Risk-Register.
 
-Prompt Injection aus nicht vertrauenswürdigen Modellbeobachtungen/Quellinhalten ist teilweise adressiert: Der Single-Platform-Tool-Loop kapselt und neutralisiert sie (#1224), der parallele Simulationspfad (natives CAMEL-`LLMAction()`) nicht.
+Prompt Injection aus nicht vertrauenswürdigen Modellbeobachtungen/Quellinhalten ist teilweise adressiert: Der Single-Platform-Tool-Loop kapselt und neutralisiert sie (#1224), der parallele Simulationspfad und Fallback-Runden mit nativem CAMEL-`LLMAction()` nicht.
 
 Siehe [`SECURITY.md`](./SECURITY.md), [`docs/auth.md`](./docs/auth.md), [`docs/security-threat-model.md`](./docs/security-threat-model.md) und [`docs/dependency-risk-register.md`](./docs/dependency-risk-register.md).
 
