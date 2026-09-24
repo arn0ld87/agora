@@ -71,6 +71,40 @@ describe("providerConnections api client", () => {
     expect(result.items[0]).toMatchObject({ id: "openai", status: "connected" });
   });
 
+  it("listProviderConnections toleriert einen unbekannten provider_kind statt die ganze Liste zu verwerfen (#1414)", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const unknownKindConnection = {
+      id: "codex-cli",
+      provider_kind: "codex_gateway",
+      display_name: "Codex Gateway",
+      transport: "cli",
+      auth_mode: "session",
+      base_url: null,
+      enabled: true,
+      status: "connected",
+      status_message: null,
+      secret_ref: null,
+      capabilities: {},
+      created_at: "2026-07-12T10:00:00+00:00",
+      updated_at: "2026-07-12T10:00:00+00:00",
+      last_tested_at: null,
+    };
+    serviceMock.get.mockResolvedValueOnce({
+      success: true,
+      data: { items: [OPENAI_CONNECTION, unknownKindConnection], total: 2 },
+    });
+
+    const result = await listProviderConnections();
+
+    expect(result.total).toBe(2);
+    expect(result.items).toHaveLength(2);
+    expect(result.items.find((c) => c.id === "openai")?.provider_kind).toBe("openai");
+    expect(result.items.find((c) => c.id === "codex-cli")?.provider_kind).toBe("unknown");
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('codex_gateway"'));
+
+    warnSpy.mockRestore();
+  });
+
   it("listProviderConnections wirft strukturiert bei Schema-Drift statt leer zu rendern", async () => {
     serviceMock.get.mockResolvedValueOnce({
       success: true,
