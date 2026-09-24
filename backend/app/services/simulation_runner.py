@@ -83,6 +83,20 @@ def _store():
 logger = get_logger('agora.simulation_runner')
 
 
+def _runner_status_message_key(status: RunnerStatus) -> str:
+    """i18n-Schlüssel für die Runner-Status-Synchronisation (#1557).
+
+    ``monitor_simulation`` ruft alle zwei Sekunden ``save_state`` auf, und der
+    Registry-Callback schrieb dabei ``message="Runner status: …"`` ohne
+    ``message_key``. Seit ``update_run`` einen fehlenden Schlüssel bei neuer
+    Meldung bewusst leert, hätte jeder Poll den beim Start gesetzten Schlüssel
+    verworfen — Shelf und Dossier wären nach dem ersten Poll wieder englisch.
+    Ein Schlüssel je ``RunnerStatus``-Wert; die Übersetzungen stehen unter
+    ``run.runner_status_<wert>`` in den Frontend-Locales.
+    """
+    return f"run.runner_status_{status.value}"
+
+
 class SimulationRunner:
     """Orchestrator for OASIS simulation subprocesses.
 
@@ -184,6 +198,7 @@ class SimulationRunner:
                     status=state.runner_status.value,
                     progress=data.get("progress_percent", 0),
                     message=f"Runner status: {state.runner_status.value}",
+                    message_key=_runner_status_message_key(state.runner_status),
                     artifacts={"simulation": {
                         "run_state": os.path.join(cls.RUN_STATE_DIR, simulation_id, "run_state.json"),
                         "simulation_log": os.path.join(cls.RUN_STATE_DIR, simulation_id, "simulation.log"),
@@ -288,6 +303,7 @@ class SimulationRunner:
                     target["run_id"],
                     status=state.runner_status.value,
                     message=f"Runner status: {state.runner_status.value}",
+                    message_key=_runner_status_message_key(state.runner_status),
                     error=state.error,
                     termination_reason="process_restart",
                 )

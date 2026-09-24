@@ -28,9 +28,11 @@ logger = get_logger("agora.run_registry")
 _MISSING = object()
 
 # ``update_run``-Felder, die ohne Truthy-/Typ-Sonderfall 1:1 aus ``updates``
-# ins Manifest durchgereicht werden (siehe ``update_run``).
+# ins Manifest durchgereicht werden (siehe ``update_run``). ``message_key``
+# ist bewusst NICHT hier: er wird zusammen mit ``message`` behandelt (Issue
+# #1557), sonst bliebe ein alter Schluessel an einer neuen Nachricht ohne
+# eigenen Schluessel haengen (Erst-Schluessel "sticky" ueber Folge-Updates).
 _RUN_PASSTHROUGH_FIELDS = (
-    "message_key",
     "error",
     "parent_run_id",
     "replayed_from_run_id",
@@ -114,6 +116,7 @@ class RunRegistry:
         status: str = "pending",
         progress: int = 0,
         message: str = "",
+        message_key: Optional[str] = None,
         error: Optional[str] = None,
         artifacts: Optional[Dict[str, Any]] = None,
         resume_capability: Optional[Dict[str, Any]] = None,
@@ -133,6 +136,7 @@ class RunRegistry:
                 "status": self.canonical_status(status),
                 "progress": progress,
                 "message": message or "",
+                "message_key": message_key,
                 "error": error,
                 "started_at": now,
                 "updated_at": now,
@@ -196,6 +200,17 @@ class RunRegistry:
                 manifest["progress"] = int(updates["progress"])
             if "message" in updates and updates["message"] is not None:
                 manifest["message"] = updates["message"]
+                # Issue #1557: ``message_key`` wird IMMER zusammen mit
+                # ``message`` gesetzt — fehlt er in diesem Aufruf, wird er
+                # explizit auf None geraeumt statt den Schluessel eines
+                # frueheren (moeglicherweise inhaltlich anderen) Updates
+                # stehen zu lassen. Sonst zeigte das Frontend nach einem
+                # unkeyed Folge-Update (z. B. eine dynamische Fehlermeldung)
+                # weiter die Uebersetzung des alten Schluessels statt der
+                # aktuellen Nachricht.
+                manifest["message_key"] = updates.get("message_key")
+            elif "message_key" in updates:
+                manifest["message_key"] = updates["message_key"]
             if "entity_id" in updates and updates["entity_id"]:
                 manifest["entity_id"] = updates["entity_id"]
             # Skalarfelder, die ohne Truthy-/Typ-Sonderfall 1:1 durchgereicht

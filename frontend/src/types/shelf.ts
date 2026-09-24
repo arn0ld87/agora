@@ -101,6 +101,8 @@ export interface ShelfLaufJob {
   runType: string
   status: string
   message: string
+  /** Stabiler i18n-Schluessel fuer `message` (Issue #1557), Aufloesung via `resolveStatusMessage`. */
+  messageKey?: string | null
   updatedAt: string
   /** Fuer die Bestandteile-Verlinkung (project_id/simulation_id/report_id). */
   linkedIds: Record<string, unknown>
@@ -119,6 +121,8 @@ export interface ShelfJobRow {
   runType: string
   status: string
   message: string
+  /** Stabiler i18n-Schluessel fuer `message` (Issue #1557), Aufloesung via `resolveStatusMessage`. */
+  messageKey?: string | null
   updatedAt: string
   progress: number
 }

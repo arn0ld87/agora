@@ -207,6 +207,29 @@ def test_get_run_returns_summary(env):
     assert data["summary"]["model"] == "qwen3-coder-next:cloud"
 
 
+def test_get_run_returns_message_key(env):
+    """Issue #1557: ``message_key`` faehrt vom Manifest bis in die
+    ``RunDetail``-HTTP-Antwort durch — das Frontend loest ihn ueber
+    ``resolveStatusMessage`` auf statt den (haeufig englischen) Klartext
+    aus ``message`` direkt anzuzeigen.
+    """
+    run = env["registry"].create_run(
+        run_type="simulation_run",
+        entity_id="sim_test",
+        status="processing",
+        message="Simulation run started",
+        message_key="run.simulation_run_started",
+        linked_ids={"simulation_id": "sim_test", "project_id": "proj_test"},
+    )
+
+    response = env["client"].get(f"/api/runs/{run['run_id']}")
+
+    assert response.status_code == 200
+    data = response.get_json()["data"]
+    assert data["message"] == "Simulation run started"
+    assert data["message_key"] == "run.simulation_run_started"
+
+
 def test_get_run_returns_404_for_unknown_id(env):
     response = env["client"].get("/api/runs/run_000000000000")
 

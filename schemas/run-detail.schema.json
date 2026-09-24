@@ -562,6 +562,18 @@
       "title": "Message",
       "type": "string"
     },
+    "message_key": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Message Key"
+    },
     "metadata": {
       "additionalProperties": true,
       "title": "Metadata",
