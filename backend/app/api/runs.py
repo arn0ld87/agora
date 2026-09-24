@@ -381,6 +381,7 @@ def stop_run(run_id: str):
             status="stopped",
             progress=run_state.to_dict().get("progress_percent", 0),
             message="Simulation stopped",
+            message_key="run.simulation_stopped",
             artifacts=_simulation_artifacts(simulation_id),
             resume_capability={"available": True, "action": "restart", "label": "Restart run"},
         )
@@ -438,6 +439,7 @@ def cancel_run(run_id: str):
             resolved_run_id,
             status="failed",
             message="Vom Nutzer abgebrochen, bevor die Simulation gestartet war",
+            message_key="run.cancelled_before_start",
         )
         from flask import jsonify, make_response
 
@@ -483,6 +485,7 @@ def cancel_run(run_id: str):
     RunRegistry().update_run(
         resolved_run_id,
         message="Cancel requested — finishing current stage before stopping",
+        message_key="run.cancel_requested",
     )
 
     logger.info(
@@ -624,6 +627,7 @@ def _restart_graph_build(run: dict):
         failure_message="Graph build restart failed: {exc_type}",
         progress=0,
         message="Graph build restart queued",
+        message_key="run.graph_build_restart_queued",
         linked_ids={"project_id": project_id},
         artifacts=ArtifactLocator.existing_paths({"project_dir": ProjectManager._get_project_dir(project_id)}),
         resume_capability={"available": True, "action": "restart", "label": "Restart graph build"},
@@ -705,6 +709,7 @@ def _restart_graph_build(run: dict):
                         "und Relationen bleiben im Graphen erhalten, der Graph "
                         "gilt als unvollständig"
                     ),
+                    message_key="run.graph_build_cancelled",
                     artifacts=ArtifactLocator.existing_paths({"project_dir": ProjectManager._get_project_dir(project_id)}),
                     resume_capability={"available": True, "action": "restart", "label": "Restart graph build"},
                 )
@@ -727,18 +732,18 @@ def _restart_graph_build(run: dict):
             builder = None
             graph_id = None
             try:
-                task_manager.update_task(task_id, status=TaskStatus.PROCESSING, message="Initializing graph build service...")
+                task_manager.update_task(task_id, status=TaskStatus.PROCESSING, message="Initializing graph build service...", message_key="run.graph_build_initializing")
                 builder = container.graph_builder()
-                task_manager.update_task(task_id, message="Chunking text...", progress=5)
+                task_manager.update_task(task_id, message="Chunking text...", message_key="run.graph_build_chunking", progress=5)
                 from ..services.text_processor import TextProcessor
                 chunks = TextProcessor.split_text(text, chunk_size=chunk_size, overlap=chunk_overlap)
                 total_chunks = len(chunks)
-                task_manager.update_task(task_id, message="Creating graph...", progress=10)
+                task_manager.update_task(task_id, message="Creating graph...", message_key="run.graph_build_creating_graph", progress=10)
                 graph_id = builder.create_graph(name=graph_name)
                 project.graph_id = graph_id
                 ProjectManager.save_project(project)
                 run_registry.update_run(new_run["run_id"], linked_ids={"graph_id": graph_id}, entity_id=graph_id)
-                task_manager.update_task(task_id, message="Setting ontology definition...", progress=15)
+                task_manager.update_task(task_id, message="Setting ontology definition...", message_key="run.graph_build_setting_ontology", progress=15)
                 builder.set_ontology(graph_id, ontology)
 
                 def add_progress_callback(msg, progress_ratio):
@@ -765,7 +770,7 @@ def _restart_graph_build(run: dict):
                     _finish_cancelled_restart(graph_id, cancel_exc.episode_uuids, builder)
                     return
 
-                task_manager.update_task(task_id, message="Retrieving graph data...", progress=95)
+                task_manager.update_task(task_id, message="Retrieving graph data...", message_key="run.graph_build_retrieving", progress=95)
                 graph_data = builder.get_graph_data(graph_id)
                 project.status = ProjectStatus.GRAPH_COMPLETED
                 ProjectManager.save_project(project)
@@ -773,6 +778,7 @@ def _restart_graph_build(run: dict):
                     task_id,
                     status=TaskStatus.COMPLETED,
                     message="Graph build completed",
+                    message_key="run.graph_build_completed",
                     progress=100,
                     result={
                         "project_id": project_id,
@@ -788,6 +794,7 @@ def _restart_graph_build(run: dict):
                     status="completed",
                     progress=100,
                     message="Graph build completed",
+                    message_key="run.graph_build_completed",
                     artifacts=ArtifactLocator.existing_paths({"project_dir": ProjectManager._get_project_dir(project_id)}),
                 )
             except Exception as exc:  # noqa: BLE001 — exception reported to task/run registry
@@ -835,6 +842,7 @@ def _restart_simulation_prepare(run: dict):
         failure_message="Simulation preparation restart failed: {exc_type}",
         progress=0,
         message="Simulation preparation restart queued",
+        message_key="run.prepare_restart_queued",
         linked_ids={"simulation_id": simulation_id, "project_id": state.project_id},
         artifacts=_simulation_artifacts(simulation_id),
         resume_capability={"available": True, "action": "restart", "label": "Restart preparation"},
@@ -896,7 +904,7 @@ def _restart_simulation_prepare(run: dict):
             from ..services.prepare_service import PrepareCancelledError
 
             try:
-                task_manager.update_task(task_id, status=TaskStatus.PROCESSING, progress=0, message="Start preparing simulation environment...")
+                task_manager.update_task(task_id, status=TaskStatus.PROCESSING, progress=0, message="Start preparing simulation environment...", message_key="run.prepare_starting")
 
                 def progress_callback(stage, progress, message, **kwargs):
                     stage_weights = {
@@ -940,6 +948,7 @@ def _restart_simulation_prepare(run: dict):
                     status="completed",
                     progress=100,
                     message="Simulation preparation completed",
+                    message_key="run.prepare_completed",
                     artifacts=_simulation_artifacts(simulation_id),
                     resume_capability={"available": True, "action": "restart", "label": "Restart preparation"},
                 )
@@ -985,6 +994,7 @@ def _resume_or_restart_simulation_run(run: dict):
             run["run_id"],
             status="processing",
             message="Simulation resumed",
+            message_key="run.simulation_resumed",
             artifacts=_simulation_artifacts(simulation_id),
             resume_capability={"available": True, "action": "resume", "label": "Resume run"},
         )
@@ -1001,6 +1011,7 @@ def _resume_or_restart_simulation_run(run: dict):
         failure_message="Simulation restart failed: {exc_type}",
         progress=0,
         message="Simulation restart queued",
+        message_key="run.simulation_restart_queued",
         linked_ids={"simulation_id": simulation_id, "project_id": state.project_id},
         artifacts=_simulation_artifacts(simulation_id),
         resume_capability={"available": True, "action": "resume", "label": "Resume run"},
@@ -1019,7 +1030,7 @@ def _resume_or_restart_simulation_run(run: dict):
         )
         state.status = SimulationStatus.RUNNING
         manager._save_simulation_state(state)
-        lifecycle.succeed(status="processing", message="Simulation restarted")
+        lifecycle.succeed(status="processing", message="Simulation restarted", message_key="run.simulation_restarted")
     return {"run_id": new_run["run_id"], "status": new_run_state.runner_status.value, "message": "Simulation restarted"}
 
 
@@ -1102,7 +1113,7 @@ def _resume_report_generate(run: dict):
 
     def run_generate():
         try:
-            task_manager.update_task(task_id, status=TaskStatus.PROCESSING, progress=0, message="Initializing Report Agent...")
+            task_manager.update_task(task_id, status=TaskStatus.PROCESSING, progress=0, message="Initializing Report Agent...", message_key="run.report_initializing")
             agent = ReportAgent(
                 graph_id=graph_id,
                 simulation_id=simulation_id,
@@ -1172,7 +1183,7 @@ def _resume_report_generate(run: dict):
             run_registry.update_run(run["run_id"], status="failed", message=str(exc), error=str(exc))
             task_manager.fail_task(task_id, str(exc))
 
-    run_registry.update_run(run["run_id"], status="processing", progress=0, message="Report generation resumed")
+    run_registry.update_run(run["run_id"], status="processing", progress=0, message="Report generation resumed", message_key="run.report_resumed")
     threading.Thread(target=run_generate, daemon=True).start()
     return {"run_id": run["run_id"], "task_id": task_id, "status": "processing"}
 

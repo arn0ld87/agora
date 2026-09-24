@@ -73,6 +73,7 @@ Zum Typ-Gate: `pyproject.toml` schaltet mypy für `app`, `app.config`, `app.cont
 - Pydantic-Verträge werden im Frontend durch Zod-Spiegel und eingecheckte JSON-Schemas abgesichert. **Der Spiegel ist nicht lückenlos**: das Gate `zod-mirror-drift` führt die vorhandenen Vertragstests aus, es erzwingt aber nicht, dass es zu einem Backend-Vertrag überhaupt einen Spiegel gibt. Wo einer fehlt und stattdessen ein handgeschriebenes Interface mit `[key: string]: unknown` steht, ist Drift unsichtbar — genau so zeigte das Projektregal jahrelang die rohe `project_id` statt des Namens (`useShelf` las `project_name`, das Backend liefert `name`). Projekte haben seitdem einen Spiegel (`contracts/projectContract.ts`, `.strict()`).
 - Seit #1466 haben auch der Neo4j-/Disk-Teilbaum von `/api/status` (`SystemStatusNeo4j`/`SystemStatusDisk`, vorher handgeschriebene Dicts, nur Ollama/E2E waren seit #955/#1458 abgedeckt) sowie `GET /api/graph/task/<id>`/`GET /api/graph/tasks` (`TaskStatusResponse`, Spiegel von `Task.to_dict()`) einen Pydantic-Vertrag samt Zod-Spiegel (`contracts/systemStatusContract.ts`, `contracts/taskStatusContract.ts`) und Drift-Test. `_get_neo4j_status`/`_get_disk_status` serialisieren mit `exclude_unset=True`, um die zweigabhängige, bisherige Feldmenge (z. B. `is_connected`/`last_success_ts` fehlen ganz, solange kein Storage initialisiert ist) byte-genau zu erhalten. Dabei aufgedeckt: `GET /api/graph/tasks` rief bislang `t.to_dict()` auf den bereits von `TaskManager.list_tasks()` konvertierten Dicts auf — ein `AttributeError`, sobald der Endpunkt mit tatsächlich vorhandenen Tasks aufgerufen wurde; kein Test deckte diesen Pfad ab. Jetzt behoben, mit Regressionstest.
 - Die Provider-Connection-Liste toleriert einen dem Frontend unbekannten `provider_kind` pro Eintrag: er wird auf `unknown` normalisiert (lokaler Transport behält die Loopback-URL-Prüfung), statt die ganze Liste zu verwerfen; andere Vertragsverstöße bleiben harte Fehler (#1414).
+- Statusmeldungen von Prepare, Report, Graph-Tasks und seit #1557 auch der Run-Lifecycle (`RunDetail`, Regal/Dossier) tragen einen stabilen `message_key`; das Frontend übersetzt ihn über `resolveStatusMessage`, der Klartext bleibt Fallback. Auch der Runner-Sync aus `monitor_simulation` und die Restart-Reconciliation tragen einen Schlüssel (`run.runner_status_<status>`), sodass der Startschlüssel nicht beim ersten Poll verworfen wird.
 - Die Modellwahl läuft in allen Schritten ausschließlich über `AiModelRef`/`AiModelPicker`. `useEnvForm` ist seit #903 nur noch Loader für Sprache und Runtime-Metadaten; die frühere Modellwahl-API (`modelOption`, `customModel`, `modelOptions`, `effectiveModel()`) ist entfernt.
 - Seit #886 tragen auch Branch-Overrides (`POST /api/simulation/<id>/branch`) eine kanonische `ai_model_ref` (`BranchOverrides`-Contract, `backend/app/contracts/branch_request_contract.py`); der reine `llm_model`-String bleibt als deprecated Legacy-Key erhalten, die Kombination beider ist HTTP 400. Replay (`POST /api/runs/<id>/replay`) reicht seither das volle `AiModelRef` an `create_branch` durch statt nur die `model_id`.
 - Das Premium-Redesign ist abgeschlossen; die Nachlese #1459 hat Radius-Tokens, Titel-Truncation, i18n und strukturierte Statusfehler bereinigt.
@@ -127,6 +128,14 @@ die auf eine Anthropic-Connection zeigt — Legacy-Profil-Token, `AiModelRef`,
 gerouteten/wiederaufgenommene Stage — scheitert absichtlich mit einem
 klaren Fehler statt still über `custom_openai` zu misrouten. Claude läuft
 für Chat stattdessen über die Bedrock-Connection (#1282).
+
+**Bedrock-Legacy-Config lädt (#1567).** Eine Server-Config mit Bedrock-
+`LLM_BASE_URL` und ohne persistiertes `runtime_llm_routing.json` wird beim
+Laden auf die Bedrock-Provider-ID gemappt statt mit `KeyError('bedrock')`
+abzustürzen. Jeder Rückgabewert von `detect_provider(mode="http")` ist in
+`_HTTP_DETECTION_TO_PROVIDER_ID` entweder gemappt oder — wie `anthropic`
+(#1284) — bewusst als `ValueError` abgelehnt; ein roher `KeyError` ist nicht
+mehr möglich.
 
 ### Decision Layer (Jev-Pilot): Vertrag, Port und vier Referenzadapter — umgeschaltet ist nichts
 

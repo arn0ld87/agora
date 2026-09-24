@@ -3,12 +3,14 @@ import { listRuns } from '../api/runs'
 import { listReports } from '../api/report'
 import { listProjects } from '../api/graph'
 import { listPersonaTemplates, type PersonaTemplateRecord } from '../api/simulation'
+import { resolveStatusMessage } from '../i18n/statusMessage'
 import type { RunDetail } from '../contracts/runsContract'
 import type { Report } from '../contracts/reportContract'
 import type { ProjectResponse } from '../api/graph'
 import type { NextAction, ShelfFilter, ShelfJobRow, ShelfObject } from '../types/shelf'
 
 type Translate = (key: string, values?: Record<string, unknown>) => string
+type TranslateExists = (key: string) => boolean
 
 /**
  * Datenschicht der Ablage (Block B3).
@@ -131,6 +133,24 @@ export function statusText(t: Translate, key: string, raw: string): string {
 }
 
 /**
+ * Statusmeldung eines einzelnen Jobs — loest ``messageKey``/``message``
+ * ueber ``resolveStatusMessage`` auf (Issue #1557), faellt bei fehlendem
+ * Schluessel/Text auf das generische Statuslabel zurueck (Muster aus
+ * `job.message || statusText(...)`, das vor diesem Fix in Shelf.vue/
+ * Dossier.vue direkt stand).
+ */
+export function jobStatusMessage(
+  job: { message: string; messageKey?: string | null; status: string },
+  t: Translate,
+  te?: TranslateExists,
+): string {
+  return (
+    resolveStatusMessage({ message: job.message, message_key: job.messageKey }, t, te) ||
+    statusText(t, `shelf.status.${job.status}`, job.status)
+  )
+}
+
+/**
  * Meta-Datum einer Zeile (Block B3, Redesign PR 3: „Datum bei aelteren
  * Objekten"). Heute → Uhrzeit, gestern → das Wort „Gestern"/„Yesterday",
  * sonst tt.mm. — sonst verschwimmen mehrtaegige Ablagen zu reiner
@@ -202,8 +222,8 @@ export function nextActionFor(latest: RunDetail, t: Translate): NextAction | nul
 }
 
 /** Statuszeile: nennt den Zustand als Text (Systemregel des Entwurfs). */
-function statusLineFor(latest: RunDetail, jobCount: number, t: Translate): string {
-  const base = latest.message || t(`shelf.status.${latest.status}`)
+function statusLineFor(latest: RunDetail, jobCount: number, t: Translate, te?: TranslateExists): string {
+  const base = resolveStatusMessage(latest, t, te) || t(`shelf.status.${latest.status}`)
   return jobCount > 1 ? `${base} · ${t('shelf.status.jobs', { n: jobCount })}` : base
 }
 
@@ -214,6 +234,7 @@ export function buildShelfObjects(
   projects: ProjectResponse[],
   templates: PersonaTemplateRecord[],
   t: Translate,
+  te?: TranslateExists,
 ): ShelfObject[] {
   const objects: ShelfObject[] = []
 
@@ -239,7 +260,7 @@ export function buildShelfObjects(
       kind: 'lauf',
       id: key,
       title: latest.summary?.document_name || latest.summary?.graph_name || key,
-      statusLine: statusLineFor(latest, jobs.length, t),
+      statusLine: statusLineFor(latest, jobs.length, t, te),
       updatedAt: latest.updated_at,
       metaId: key,
       nextAction: nextActionFor(latest, t),
@@ -258,6 +279,7 @@ export function buildShelfObjects(
         runType: j.run_type,
         status: j.status,
         message: j.message,
+        messageKey: j.message_key,
         updatedAt: j.updated_at,
         linkedIds: j.linked_ids as Record<string, unknown>,
       })),
@@ -330,7 +352,7 @@ export function buildShelfObjects(
   return objects
 }
 
-export function useShelf(t: Translate) {
+export function useShelf(t: Translate, te?: TranslateExists) {
   const objects = ref<ShelfObject[]>([])
   const jobs = ref<ShelfJobRow[]>([])
   const filter = ref<ShelfFilter>('alle')
@@ -377,13 +399,14 @@ export function useShelf(t: Translate) {
     const failures = [runsRes, reportsRes, projectsRes, templatesRes].filter((r) => r.status === 'rejected').length
     if (failures > 0) error.value = t('shelf.partialLoad', { n: failures })
 
-    objects.value = buildShelfObjects(runs, Array.isArray(reports) ? reports : [], Array.isArray(projects) ? projects : [], Array.isArray(templates) ? templates : [], t)
+    objects.value = buildShelfObjects(runs, Array.isArray(reports) ? reports : [], Array.isArray(projects) ? projects : [], Array.isArray(templates) ? templates : [], t, te)
     jobs.value = runs
       .map((r) => ({
         runId: r.run_id,
         runType: r.run_type,
         status: r.status,
         message: r.message,
+        messageKey: r.message_key,
         updatedAt: r.updated_at,
         progress: r.progress,
       }))

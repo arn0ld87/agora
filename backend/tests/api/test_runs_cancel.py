@@ -94,6 +94,9 @@ def test_cancel_accepts_simulation_id_and_sets_flag(env):
     assert payload["run_id"] == run["run_id"]
     assert payload["run_id"].startswith("run_")
     assert is_cancel_requested(run["run_id"]) is True
+    # Issue #1557: die "Cancel requested"-Meldung traegt einen stabilen
+    # i18n-Schluessel, den das Frontend ueber resolveStatusMessage aufloest.
+    assert env["registry"].get_run(run["run_id"])["message_key"] == "run.cancel_requested"
 
     clear_cancel(run["run_id"])
 
@@ -181,7 +184,10 @@ def test_cancel_beendet_einen_pending_run(env):
 
     assert resp.status_code == 200, resp.data
     assert resp.get_json()["status"] == "cancelled"
-    assert env["registry"].get_run(run["run_id"])["status"] == "failed"
+    updated = env["registry"].get_run(run["run_id"])
+    assert updated["status"] == "failed"
+    # Issue #1557: stabiler i18n-Schluessel fuer die Abbruchmeldung.
+    assert updated["message_key"] == "run.cancelled_before_start"
 
 
 def test_cancel_lehnt_einen_bereits_beendeten_run_weiterhin_ab(env):

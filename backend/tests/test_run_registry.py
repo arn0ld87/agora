@@ -145,6 +145,75 @@ def test_sync_task_persists_message_key(tmp_path, monkeypatch):
     assert updated["message_key"] == "task.chunking"
 
 
+def test_create_run_persists_message_key(tmp_path, monkeypatch):
+    """Issue #1557: ``create_run`` nimmt ``message_key`` als eigenen
+    Parameter entgegen, damit die initiale Statusmeldung eines Runs
+    (z. B. "queued") von Anfang an einen stabilen i18n-Schlüssel traegt.
+    """
+    registry = _reset_registry(tmp_path, monkeypatch)
+
+    run = registry.create_run(
+        run_type="simulation_run",
+        entity_id="sim_1",
+        message="Simulation run queued",
+        message_key="run.simulation_run_queued",
+    )
+
+    assert run["message_key"] == "run.simulation_run_queued"
+
+
+def test_update_run_clears_stale_message_key_when_message_changes_without_new_key(tmp_path, monkeypatch):
+    """Issue #1557: ein neues ``message`` ohne eigenen ``message_key`` darf den
+    Schlüssel eines FRÜHEREN Updates nicht stehen lassen — sonst zeigt das
+    Frontend weiter die Übersetzung des alten Schlüssels statt der aktuellen
+    (hier: dynamischen, exception-abgeleiteten) Nachricht.
+    """
+    registry = _reset_registry(tmp_path, monkeypatch)
+
+    run = registry.create_run(
+        run_type="graph_build",
+        entity_id="proj_1",
+        linked_ids={"project_id": "proj_1"},
+    )
+    registry.update_run(
+        run["run_id"],
+        message="Setting ontology definition...",
+        message_key="run.graph_build_setting_ontology",
+    )
+
+    updated = registry.update_run(
+        run["run_id"],
+        status="failed",
+        message="Build failed: boom",
+        error="boom",
+    )
+
+    assert updated is not None
+    assert updated["message"] == "Build failed: boom"
+    assert updated["message_key"] is None
+
+
+def test_update_run_without_message_leaves_message_key_untouched(tmp_path, monkeypatch):
+    """Ein Update, das ``message`` gar nicht anfasst (z. B. reine Metadaten-
+    oder linked_ids-Aktualisierung), darf den bestehenden ``message_key``
+    nicht loeschen — nur ein neues ``message`` entscheidet ueber den Key.
+    """
+    registry = _reset_registry(tmp_path, monkeypatch)
+
+    run = registry.create_run(
+        run_type="graph_build",
+        entity_id="proj_1",
+        message="Chunking text...",
+        message_key="run.graph_build_chunking",
+    )
+
+    updated = registry.update_run(run["run_id"], linked_ids={"graph_id": "graph_1"})
+
+    assert updated is not None
+    assert updated["message"] == "Chunking text..."
+    assert updated["message_key"] == "run.graph_build_chunking"
+
+
 def test_list_runs_skips_corrupt_manifest(tmp_path, monkeypatch):
     registry = _reset_registry(tmp_path, monkeypatch)
 

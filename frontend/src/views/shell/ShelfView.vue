@@ -35,10 +35,10 @@ import type { ShelfFilter, ShelfObject, ShelfObjectKind } from '../../types/shel
  * neu laden (usePolling, pausiert automatisch im Hintergrund-Tab).
  */
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const route = useRoute()
 const router = useRouter()
-const shelf = useShelf(t)
+const shelf = useShelf(t, te)
 
 const selected = computed<ShelfObject | null>(() => {
   const kind = route.params.kind as ShelfObjectKind | undefined
