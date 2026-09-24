@@ -229,7 +229,7 @@ Current security foundations include:
 - loopback-oriented production defaults and hardened Compose overrides,
 - dependency scanning and an explicit dependency-risk register.
 
-Prompt injection from untrusted model observations/source material remains an active hardening area ([#1224](https://github.com/arn0ld87/agora/issues/1224)).
+Prompt injection from untrusted model observations/source material is partially hardened: the single-platform tool loop wraps and neutralizes it (#1224), the parallel simulation path (native CAMEL `LLMAction()`) does not.
 
 See [`SECURITY.md`](./SECURITY.md), [`docs/auth.md`](./docs/auth.md), [`docs/security-threat-model.md`](./docs/security-threat-model.md), and [`docs/dependency-risk-register.md`](./docs/dependency-risk-register.md).
 

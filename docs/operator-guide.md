@@ -370,7 +370,7 @@ Weitere konkrete Fehlerbilder: [`troubleshooting.md`](troubleshooting.md).
 - Logs vor externer Weitergabe auf Secrets/Personendaten prüfen
 - offene Dependency-Risiken über [`dependency-risk-register.md`](dependency-risk-register.md) behandeln
 
-Prompt-Injection-Härtung der Simulations-`observation` ist als #1224 noch offen.
+Prompt-Injection-Härtung der Simulations-`observation` ist seit #1224 für den Single-Platform-Tool-Loop umgesetzt (Kapselung + Tag-Neutralisierung); der parallele Simulationspfad über natives CAMEL-`LLMAction()` bleibt offen.
 
 ---
 

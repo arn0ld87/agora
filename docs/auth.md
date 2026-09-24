@@ -222,4 +222,4 @@ Funktioniert weiterhin, ist aber nicht die bevorzugte Form für neue Integration
 - Keys nach Leak-Verdacht widerrufen/rotieren.
 - `AGORA_FERNET_KEY` und `AGORA_AUTH_TOKEN` getrennt sichern.
 - Public Exposure nur hinter dem gehärteten Deployment-/TLS-/VPN-Konzept aus [`deployment-prod-like.md`](deployment-prod-like.md).
-- Authentifizierung ersetzt keine Prompt-Injection-Härtung von untrusted Inhalten (#1224).
+- Authentifizierung ersetzt keine Prompt-Injection-Härtung von untrusted Inhalten. Der Single-Platform-Tool-Loop kapselt und neutralisiert sie seit #1224, der parallele Simulationspfad nicht.

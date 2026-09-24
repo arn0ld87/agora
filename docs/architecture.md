@@ -321,7 +321,7 @@ Seit `docs/plans/supabase.md` steht eine SQLAlchemy-/Alembic-Grundlage (`backend
 - Upload-/Modellinhalte sind untrusted Daten, nicht Instruktionen.
 - OASIS- und CLI-Subprozesse sind eigene Prozessgrenzen, aber keine Sandbox gegen den Benutzeraccount des Backends.
 
-Prompt Injection aus untrusted Observation/Quellinhalt bleibt ein offenes Härtungsthema (#1224).
+Prompt Injection aus untrusted Observation/Quellinhalt ist für den Single-Platform-Tool-Loop seit #1224 durch Kapselung und Tag-Neutralisierung gehärtet (siehe [`agent-tools.md`](agent-tools.md#7-prompt-observation-sicherheit)); der parallele Simulationspfad über natives CAMEL-`LLMAction()` bleibt außen vor.
 
 Siehe [`security-threat-model.md`](security-threat-model.md).
 

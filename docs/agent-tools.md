@@ -138,7 +138,7 @@ Sie können enthalten:
 - manipulierte Agentenposts,
 - falsche oder widersprüchliche externe Informationen.
 
-Das Modell darf solche Inhalte als Daten verwenden, aber nicht als neue Systemregeln interpretieren. Zusätzliche Härtung von untrusted Observation wird unter #1224 verfolgt.
+Das Modell darf solche Inhalte als Daten verwenden, aber nicht als neue Systemregeln interpretieren. Seit #1224 kapseln `build_agent_prompt_with_tools` und `ToolAwareActionLoop.decide_action` (`backend/scripts/agent_tools.py`) die OASIS-Observation und Tool-Ergebnisse in `<untrusted_data source="...">...</untrusted_data>`, kürzen sie vorher auf ein festes Zeichenlimit (1500 für die Observation, 4000 pro Tool-Ergebnis) und neutralisieren eingeschleuste Loop-Steuer-Tags (`<action>`, `<tool_call>`, `<untrusted_data…>`) sowie bare `{"action": ...}`-JSON. Nicht abgedeckt bleibt der parallele Simulationspfad (`run_parallel_simulation.py`), der über natives CAMEL-`LLMAction()` läuft statt über diese Agora-Prompt-Assembly.
 
 ---
 
