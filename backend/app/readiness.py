@@ -51,6 +51,7 @@ Design-Entscheidungen:
 from __future__ import annotations
 
 import os
+import threading
 from typing import Any, Tuple
 
 from flask import Flask, Response, current_app, jsonify
@@ -68,6 +69,13 @@ logger = get_logger("agora.readiness")
 #: dieses Limit kann ein TCP-Connect gegen eine tote Adresse je nach OS-Timeout
 #: Minuten hängen, statt den Check schnell als ``unavailable`` zu melden.
 _POSTGRES_READINESS_CONNECT_TIMEOUT = 2.0
+
+#: Harte Frist (Sekunden) für die gesamte Probe. ``connect_timeout`` greift
+#: nur beim Verbindungsaufbau; nimmt der Server die Verbindung an und
+#: antwortet dann nicht mehr, hinge ``SELECT 1`` sonst unbegrenzt (Codex-Review
+#: auf #1600). psycopg wartet unter gevent kooperativ (ADR-0014), der
+#: Worker-Thread ist dort ein Greenlet und blockiert den Hub nicht.
+_POSTGRES_READINESS_DEADLINE = 3.0
 
 
 def _safe_probe_failure(check_name: str, exc: Exception) -> CheckResult:
@@ -220,6 +228,23 @@ def _check_embedding_index_version() -> CheckResult:
     return True, f"v{active.version} ({active.index_name}) ONLINE"
 
 
+def _probe_postgres(database: Database, outcome: dict[str, bool]) -> None:
+    """``SELECT 1`` im Worker-Thread; legt das Ergebnis in ``outcome`` ab.
+
+    Geloggt wird nur der Fehlertyp, **ohne** ``exc_info``: der
+    Redaktionsfilter des Loggers läuft vor der Traceback-Formatierung und
+    würde eine Exception-Message mit Zugangsdaten nicht zuverlässig
+    schwärzen (Codex-Review auf #1600).
+    """
+    try:
+        outcome["healthy"] = database.check_connection()
+    except Exception as exc:  # noqa: BLE001 — Probe-Fehler werden generisch gemeldet
+        logger.warning("postgres readiness probe failed: %s", type(exc).__name__)
+        outcome["healthy"] = False
+    finally:
+        database.dispose()
+
+
 def _check_postgres() -> PostgresReadinessCheck:
     """PostgreSQL-Zustand für /readyz (docs/plans/supabase.md §29, Issue #1581).
 
@@ -258,13 +283,22 @@ def _check_postgres() -> PostgresReadinessCheck:
         use_pool=False,
         connect_timeout=_POSTGRES_READINESS_CONNECT_TIMEOUT,
     )
-    try:
-        healthy = database.check_connection()
-    except Exception as exc:  # noqa: BLE001 — Probe-Fehler werden generisch gemeldet
-        logger.warning("postgres readiness probe failed: %s", type(exc).__name__, exc_info=True)
-        healthy = False
-    finally:
-        database.dispose()
+    outcome: dict[str, bool] = {}
+    worker = threading.Thread(
+        target=_probe_postgres,
+        args=(database, outcome),
+        name="readyz-postgres-probe",
+        daemon=True,
+    )
+    worker.start()
+    worker.join(_POSTGRES_READINESS_DEADLINE)
+    if worker.is_alive():
+        # Der Worker räumt seine Database selbst ab, sobald er zurückkehrt.
+        logger.warning(
+            "postgres readiness probe exceeded %.1fs deadline",
+            _POSTGRES_READINESS_DEADLINE,
+        )
+    healthy = outcome.get("healthy", False)
 
     if healthy:
         return PostgresReadinessCheck(ok=True, detail="ok", state="ok")

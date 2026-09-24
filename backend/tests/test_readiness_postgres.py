@@ -194,3 +194,58 @@ def test_postgres_check_never_leaks_url_parts_when_the_driver_exception_contains
         "detail": "postgres connectivity probe failed",
         "state": "unavailable",
     }
+
+
+def test_hanging_probe_is_cut_off_by_the_deadline(client, monkeypatch):
+    """Codex-Review auf #1600: nimmt der Server die Verbindung an und
+    antwortet nicht mehr, darf /readyz nicht unbegrenzt hängen."""
+    import threading as _threading
+
+    import app.readiness as readiness
+
+    release = _threading.Event()
+    monkeypatch.setattr(Config, "PROJECT_BACKEND", "postgres")
+    monkeypatch.setattr(Config, "DATABASE_URL", _FAKE_DATABASE_URL)
+    monkeypatch.setattr(readiness, "_POSTGRES_READINESS_DEADLINE", 0.2)
+    monkeypatch.setattr(Database, "check_connection", lambda self: release.wait(5) or True)
+
+    try:
+        resp = client.get("/readyz")
+    finally:
+        release.set()
+
+    assert resp.status_code == 503
+    assert resp.get_json()["checks"]["postgres"]["state"] == "unavailable"
+
+
+def test_probe_failure_is_logged_without_traceback(client, monkeypatch):
+    """Codex-Review auf #1600: kein ``exc_info`` — der Traceback trüge die
+    Exception-Message mit Zugangsdaten am Redaktionsfilter vorbei ins Log."""
+    import logging
+
+    import app.readiness as readiness
+
+    records: list[logging.LogRecord] = []
+
+    class _Collect(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            records.append(record)
+
+    def _raise(self):
+        raise RuntimeError("postgresql://agora:geheim@db.intern:5432/agora")
+
+    monkeypatch.setattr(Config, "PROJECT_BACKEND", "postgres")
+    monkeypatch.setattr(Config, "DATABASE_URL", _FAKE_DATABASE_URL)
+    monkeypatch.setattr(Database, "check_connection", _raise)
+    handler = _Collect(level=logging.WARNING)
+    readiness.logger.addHandler(handler)
+    try:
+        client.get("/readyz")
+    finally:
+        readiness.logger.removeHandler(handler)
+
+    probe_records = [r for r in records if "readiness probe failed" in r.getMessage()]
+    assert probe_records
+    for record in probe_records:
+        assert record.exc_info is None
+        assert "geheim" not in record.getMessage()
