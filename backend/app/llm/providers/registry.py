@@ -52,7 +52,7 @@ if TYPE_CHECKING:
 
 # Teilmengen von app.contracts.provider_types.ProviderType
 HttpDetectedProvider = Literal[
-    "ollama", "cloud", "minimax", "openai", "google", "bedrock", "unknown"
+    "ollama", "cloud", "minimax", "openai", "google", "bedrock", "anthropic", "unknown"
 ]
 OasisDetectedProvider = Literal["google", "ollama", "openai"]
 DetectionMode = Literal["http", "oasis"]
@@ -140,6 +140,16 @@ def _detect_http(base_url: Optional[str], model: Optional[str]) -> HttpDetectedP
     _bedrock_host = urlparse(base).hostname
     if _bedrock_host and _is_bedrock_host(_bedrock_host):
         return "bedrock"
+    # Issue #1284 — api.anthropic.com trägt keinen nativen Chat-Adapter.
+    # Hostname-basiert wie Minimax/Bedrock (CodeQL #750): ein Drittanbieter-
+    # Host mit „anthropic“ im Namen darf nicht matchen. Erkannt wird
+    # ausschließlich, damit ``LLMClient``/``get_adapter`` laut scheitern
+    # können statt den OpenAI-kompatiblen Client stillschweigend gegen eine
+    # Route ohne "/v1" und ohne Anthropic-Messages-Format laufen zu lassen —
+    # siehe :func:`_is_anthropic_host`.
+    _anthropic_host = urlparse(base).hostname
+    if _anthropic_host and _is_anthropic_host(_anthropic_host):
+        return "anthropic"
     return "unknown"
 
 
@@ -464,6 +474,21 @@ def _is_bedrock_host(host: str) -> bool:
         (host.startswith("bedrock-mantle.") and host.endswith(".api.aws"))
         or (host.startswith("bedrock-runtime.") and host.endswith(".amazonaws.com"))
     )
+
+
+def _is_anthropic_host(host: str) -> bool:
+    """Praezise Anthropic-Host-Erkennung, Spiegel des MiniMax-/Bedrock-Zweigs.
+
+    Akzeptiert nur den echten Anthropic-API-Host ``api.anthropic.com``
+    (Issue #1284). Ein reiner Substring-Check wuerde auch Drittanbieter-Hosts
+    wie ``api.anthropic.com.attacker.test`` akzeptieren — dieselbe
+    Praezision wie :func:`_is_bedrock_host` (Suffix-Pruefung statt
+    Praefix-Substring).
+
+    ``host`` muss kleingeschrieben sein; der einzige Aufrufer (:func:`_detect_http`)
+    lowercased den Hostnamen vor dem Aufruf.
+    """
+    return host == "api.anthropic.com" or host.endswith(".api.anthropic.com")
 
 
 def _has_bedrock_url_signal(base_url: Optional[str]) -> bool:

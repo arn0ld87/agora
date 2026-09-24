@@ -12,7 +12,12 @@ from typing import Optional
 
 from ..contracts.ai_provider_contract import AiModelRef, ProviderConnection
 from ..contracts.llm_routing_contract import ResolvedRoute, RuntimeLlmRouting, StageId, StageLLMRoute
-from ..contracts.provider_types import PROVIDER_CLAUDE_CLI, PROVIDER_CODEX_CLI
+from ..contracts.provider_types import (
+    ANTHROPIC_CHAT_TRANSPORT_UNSUPPORTED,
+    PROVIDER_ANTHROPIC,
+    PROVIDER_CLAUDE_CLI,
+    PROVIDER_CODEX_CLI,
+)
 from ..llm.providers.codex_cli import (
     CLI_PROVIDER_ENV_KEY,
     CLI_TRANSPORT_VALUE,
@@ -66,12 +71,25 @@ def map_runtime_provider_to_route_provider(provider: str) -> Optional[str]:
     return _PROVIDER_ID_MAP.get((provider or "default").strip().lower())
 
 
+def _reject_anthropic_connection(connection: ProviderConnection) -> None:
+    """Faellt laut aus, wenn ``connection`` eine Anthropic-Connection ist (#1284).
+
+    Gemeinsames Gate fuer beide Connection-Aufloesungspfade in diesem Modul
+    (``ai_model_ref`` ueber :func:`_resolve_selected_connection` und
+    ``llm_profile_id`` ueber ``resolve_profile_connection``) — kein nativer
+    Anthropic-Chat-Transport, Discovery/CRUD der Connection bleiben
+    unberuehrt. Siehe Modul-Konstante ``ANTHROPIC_CHAT_TRANSPORT_UNSUPPORTED``.
+    """
+    if connection.provider_kind == PROVIDER_ANTHROPIC:
+        raise ValueError(ANTHROPIC_CHAT_TRANSPORT_UNSUPPORTED)
+
+
 def _resolve_selected_connection(connection_id: str) -> ProviderConnection:
     """Resolve an explicitly selected ProviderConnection by id.
 
-    Raises ``ValueError`` when the connection is unknown or disabled, so the
-    caller can surface an HTTP 400/422 instead of silently falling back to a
-    different route.
+    Raises ``ValueError`` when the connection is unknown, disabled, or an
+    unsupported Anthropic chat transport (#1284), so the caller can surface
+    an HTTP 400/422 instead of silently falling back to a different route.
     """
     match = next(
         (c for c in ProviderConnectionStore().list_connections() if c.id == connection_id),
@@ -81,6 +99,7 @@ def _resolve_selected_connection(connection_id: str) -> ProviderConnection:
         raise ValueError(f"ProviderConnection {connection_id!r} nicht gefunden")
     if not match.enabled:
         raise ValueError(f"ProviderConnection {connection_id!r} ist deaktiviert")
+    _reject_anthropic_connection(match)
     return match
 
 
@@ -319,6 +338,17 @@ def _apply_override(
         # global_default des Runs zurückfallen statt None zu persistieren.
         effective_provider_id = route_provider_id or config.global_default.provider_id
         effective_model = llm_model_override or config.global_default.model
+        # Issue #1284 Codex-Finding: dieser Legacy-Override-Pfad (z. B.
+        # ``llm_provider={"provider": "custom_openai", "base_url": "https://
+        # api.anthropic.com"}``) laeuft NIE ueber eine ProviderConnection —
+        # weder ``_resolve_selected_connection`` noch
+        # ``resolve_profile_connection`` sehen ihn. Fuer OASIS-Simulationen
+        # geht die Route zudem direkt in ``build_route_subprocess_env``, ohne
+        # je einen ``LLMClient`` (und damit den dortigen Transport-Guard) zu
+        # durchlaufen. Zentrale ``detect_provider``-Erkennung, keine zweite
+        # Heuristik.
+        if detect_provider(runtime.base_url, effective_model, mode="http") == "anthropic":
+            raise ValueError(ANTHROPIC_CHAT_TRANSPORT_UNSUPPORTED)
         config.stage_overrides[stage_id] = StageLLMRoute(
             provider_id=effective_provider_id,
             model=effective_model,
@@ -443,6 +473,7 @@ def seed_run_stage_routing(
                 "ProviderConnection"
             )
         connection = resolved.connection
+        _reject_anthropic_connection(connection)
         provider_options: dict[str, object] = {"base_url": resolved.base_url}
         # Auth-Semantik der ProviderConnection ist maßgeblich (SSoT): api_key-
         # Connections werden an ihr gebundenes Secret gekoppelt und ohne Secret
@@ -591,6 +622,16 @@ def build_route_subprocess_env(
         or store_base_url_for_provider(route.provider_id)
         or (provider.base_url if provider else None)
     )
+    # Issue #1284 Codex-Finding: Transport-Guard als zweite Verteidigungslinie
+    # hinter ``_apply_override``/``_resolve_selected_connection``, analog zum
+    # ``LLMClient``-Guard fuer den direkten HTTP-Pfad. Faengt eine bereits
+    # persistierte oder wiederaufgenommene Route ab (z. B. ein vor diesem Fix
+    # gespeicherter ``stage_override``), die die frueheren Gates umgangen hat
+    # — die OASIS-Subprozess-Route baut nie einen ``LLMClient`` und wuerde den
+    # dortigen Guard sonst nicht durchlaufen. Zentrale ``detect_provider``-
+    # Erkennung, keine zweite Heuristik.
+    if detect_provider(base_url, route.model, mode="http") == "anthropic":
+        raise ValueError(ANTHROPIC_CHAT_TRANSPORT_UNSUPPORTED)
     definition = LlmProviderRegistry.connection_definition(route.provider_id)
     is_cli_transport = definition is not None and definition.transport == "cli"
     if is_cli_transport:

@@ -95,7 +95,7 @@ Supported transport classes are:
 
 | Transport | Meaning | Example |
 |---|---|---|
-| `http` | remote or local HTTP API | OpenAI, Anthropic, Gemini, MiniMax, Amazon Bedrock (Mantle) |
+| `http` | remote or local HTTP API | OpenAI, Gemini, MiniMax, Amazon Bedrock (Mantle; also Claude). Anthropic: model discovery only, native chat is rejected (#1284) |
 | `local` | local HTTP service without API-key auth | Ollama |
 | `cli` | local authenticated CLI subprocess | Codex CLI, Claude Code CLI |
 

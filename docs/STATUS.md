@@ -115,6 +115,17 @@ und fällt **nicht** auf den globalen `Config.LLM_API_KEY` zurück. Der aufgelö
 Wert geht dort als Umgebungsvariable in einen Subprozess; ein Schlüssel eines
 fremden Providers wäre ein Secret über Provider-Grenzen hinweg.
 
+**Anthropic: nur Modell-Discovery, kein Chat-Transport (#1284).** Der
+Registry-Eintrag (`adapter_kind="anthropic"`) bedient ausschließlich
+`GET /v1/models` mit `X-Api-Key` — es gibt keinen nativen Anthropic-Chat-
+Adapter, und die Base-URL (`https://api.anthropic.com`) trägt kein `/v1`-
+Suffix für einen OpenAI-kompatiblen Chat-Pfad. Jede Chat-Routing-Auflösung,
+die auf eine Anthropic-Connection zeigt — Legacy-Profil-Token, `AiModelRef`,
+`llm_profile_id`, Legacy-`llm_provider`-Override oder eine bereits
+gerouteten/wiederaufgenommene Stage — scheitert absichtlich mit einem
+klaren Fehler statt still über `custom_openai` zu misrouten. Claude läuft
+für Chat stattdessen über die Bedrock-Connection (#1282).
+
 ### Decision Layer (Jev-Pilot): Vertrag, Port und vier Referenzadapter — umgeschaltet ist nichts
 
 Für den Jev-Piloten (f005, ADR-0016/0017) gibt es seit dieser Slice einen eigenen, kleinen Vertrag statt eines generischen LLM-Calls: `app/contracts/decision_contract.py` modelliert `DecisionState` und drei diskriminierte Fragetypen — `ChoiceQuestion`, `ScoreQuestion`, `NoulQuestion` — sowie `DecisionResult` mit `provider="unresolved"` als eigenem Terminalzustand für eine erschöpfte Fallback-Kette. Der Port `DecisionProvider` (`app/repositories/decision_provider.py`) beantwortet genau eine Frage je Aufruf; anders als bei `LlmProfileRepository` gibt es bewusst **keine** Factory, die "den einen aktiven Provider" liefert. Der Grund ist der geplante Benchmark, nicht der heutige Code: dort muss ein Use Case Bestandspfad und Kandidat nebeneinander laufen lassen, um sie zu vergleichen. Der aktuell verdrahtete Use Case nutzt pro Aufruf genau einen Provider — die Adapter bleiben deshalb einzeln konstruierbar, statt hinter einer Auswahl zu verschwinden.

@@ -16,7 +16,8 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from ..contracts import LEGACY_GEMINI, PROVIDER_GOOGLE
+from ..contracts import ANTHROPIC_CHAT_TRANSPORT_UNSUPPORTED, LEGACY_GEMINI, PROVIDER_GOOGLE
+from ..llm.providers.registry import detect_provider
 from ..repositories.llm_profile_repository import get_llm_profile_repository
 
 _PROFILE_PREFIX = "profile:"
@@ -25,7 +26,6 @@ _PROFILE_PROVIDER_TO_RUNTIME = {
     "openai": "openai",
     LEGACY_GEMINI: PROVIDER_GOOGLE,
     "ollama": "custom_openai",
-    "anthropic": "custom_openai",
     "custom": "custom_openai",
 }
 
@@ -37,6 +37,20 @@ def expand_profile_in_data(data: Any) -> None:
     `profile:`, or if the referenced profile cannot be resolved. Existing
     explicit `llm_provider` fields from the request override the profile
     values — request still wins over profile, profile fills the gaps.
+
+    Raises:
+        ValueError: If the *effective* route — profile values merged with
+            any explicit request override — still resolves to Anthropic's
+            native API (Issue #1284). There is no native Anthropic chat
+            transport: the old mapping silently rerouted it through
+            ``custom_openai`` onto a base URL (``https://api.anthropic.com``)
+            the OpenAI-compatible client can't actually speak to, producing a
+            403/404 at request time instead of a clear error here. The check
+            runs *after* the merge, not on the bare profile provider, so an
+            explicit request override (e.g. onto Bedrock) that wins against
+            the profile per the precedence documented above is not blocked
+            by a profile-only gate that ignores it. Callers propagate this
+            as HTTP 400 (see e.g. ``@handle_api_errors``).
     """
     if not isinstance(data, Mapping):
         return
@@ -53,8 +67,6 @@ def expand_profile_in_data(data: Any) -> None:
     if profile is None:
         return
 
-    data["llm_model"] = profile.model_name
-
     runtime_provider = _PROFILE_PROVIDER_TO_RUNTIME.get(
         (profile.provider or "").lower(), "custom_openai"
     )
@@ -69,4 +81,14 @@ def expand_profile_in_data(data: Any) -> None:
         for k, v in existing.items():
             if v not in (None, "", {}):
                 merged[k] = v
+
+    # Issue #1284: decide on the merged base URL, not the bare profile
+    # provider — an explicit request override already won above, so this
+    # sees exactly what would actually be dialed. Central detect_provider
+    # (registry.py) — no second heuristic. Nothing in `data` is mutated
+    # before this check, so a rejected request leaves the payload untouched.
+    if detect_provider(merged.get("base_url"), profile.model_name, mode="http") == "anthropic":
+        raise ValueError(ANTHROPIC_CHAT_TRANSPORT_UNSUPPORTED)
+
+    data["llm_model"] = profile.model_name
     data["llm_provider"] = merged

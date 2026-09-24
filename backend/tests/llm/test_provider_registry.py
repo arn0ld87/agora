@@ -78,6 +78,18 @@ HTTP_CASES = [
     # Tokens an einen Nicht-AWS-Host). Suffix-Pruefung wie der MiniMax-Zweig.
     ("https://bedrock-mantle.attacker.example/v1", "anthropic.claude-sonnet-5", "unknown"),
     ("https://bedrock-runtime.attacker.example/v1", "openai.gpt-5.6-sol", "unknown"),
+    # Issue #1284 — api.anthropic.com traegt keinen nativen Chat-Adapter;
+    # erkannt wird nur, damit LLMClient/get_adapter laut scheitern koennen
+    # statt den OpenAI-kompatiblen Client stillschweigend gegen eine Route
+    # ohne "/v1" laufen zu lassen. Hostbasiert wie MiniMax/Bedrock.
+    ("https://api.anthropic.com", "claude-sonnet-5", "anthropic"),
+    ("https://api.anthropic.com/v1", "claude-opus-4-8", "anthropic"),
+    ("HTTPS://API.ANTHROPIC.COM", "claude-sonnet-5", "anthropic"),  # case-insensitive
+    ("https://foo.api.anthropic.com", "claude-sonnet-5", "anthropic"),  # Subdomain
+    # Kein Substring-False-Positive: Drittanbieter-Host mit „anthropic.com“ im
+    # Namen ist nicht der echte Anthropic-Host — CodeQL #750-Stil.
+    ("https://api.anthropic.com.attacker.test/v1", "claude-sonnet-5", "unknown"),
+    ("https://example.com/api.anthropic.com/v1", "claude-sonnet-5", "unknown"),
 ]
 
 

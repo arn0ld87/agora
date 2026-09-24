@@ -223,7 +223,7 @@ Kanonische Bausteine:
 
 Transportarten:
 
-- `http` (u. a. OpenAI, Anthropic, Gemini, MiniMax, Amazon Bedrock über den OpenAI-kompatiblen Mantle-Pfad, Default-Region `eu-central-1`, #1282)
+- `http` (u. a. OpenAI, Gemini, MiniMax, Amazon Bedrock über den OpenAI-kompatiblen Mantle-Pfad, Default-Region `eu-central-1`, #1282); Anthropic nur für Modell-Discovery, nativer Anthropic-Chat wird laut abgelehnt — Claude läuft über Bedrock (#1284)
 - `local` (lokaler HTTP-Dienst, z. B. Ollama)
 - `cli`: zwei Provider sprechen eine lokale CLI per Subprozess statt Pay-per-Token-API an — `codex_cli` (ChatGPT-Abo, `auth_mode="session"`, lokale CLI-Login-Session) und `claude_cli` (Claude-Abo, #1531, Langzeit-Token `CLAUDE_CODE_OAUTH_TOKEN` im Fernet-Secret-Store, isoliertes `HOME` pro Aufruf). Eine aufgelöste `cli`-Route darf nicht mit `.env`-HTTP-Endpunkt oder fremdem API-Key vermischt werden (#1418/#1422).
 

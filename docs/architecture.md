@@ -55,7 +55,7 @@ graph TD
     CONTRACTS --> ZOD[JSON Schemas / Zod Mirrors]
 
     API --> ROUTING[LLM Routing / Provider Registry]
-    ROUTING --> HTTP[HTTP Providers: OpenAI/Anthropic/Google/MiniMax/Bedrock]
+    ROUTING --> HTTP[HTTP Providers: OpenAI/Google/MiniMax/Bedrock incl. Claude]
     ROUTING --> LOCAL[Local HTTP: Ollama]
     ROUTING --> CLI[CLI Providers: Codex CLI, Claude CLI]
 
