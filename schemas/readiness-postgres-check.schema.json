@@ -1,0 +1,32 @@
+{
+  "$id": "https://alexle135.de/schemas/readiness-postgres-check.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Ein Eintrag im ``postgres``-Schl\u00fcssel der `/readyz`-Antwort.",
+  "properties": {
+    "detail": {
+      "title": "Detail",
+      "type": "string"
+    },
+    "ok": {
+      "title": "Ok",
+      "type": "boolean"
+    },
+    "state": {
+      "enum": [
+        "ok",
+        "unavailable",
+        "disabled"
+      ],
+      "title": "State",
+      "type": "string"
+    }
+  },
+  "required": [
+    "ok",
+    "detail",
+    "state"
+  ],
+  "title": "PostgresReadinessCheck",
+  "type": "object"
+}
