@@ -559,7 +559,7 @@ jobs:
         run: bun run build
 
   integration:
-    name: Integration tests (echtes Neo4j/Redis)
+    name: Integration tests (echtes Neo4j/Redis/PostgreSQL)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # Slice 9 (Tech-Review 2026-09-07): laeuft NUR auf push:main und
@@ -576,6 +576,10 @@ jobs:
       AGORA_TEST_NEO4J_URI: bolt://localhost:7687
       AGORA_TEST_NEO4J_USER: neo4j
       AGORA_TEST_NEO4J_PASSWORD: agora-itest-ci-password
+      # Issue #1577: ohne diese URL failen die PostgreSQL-Integrationstests
+      # hart (AGORA_TEST_REQUIRE_SERVICES=1). Der Admin-Zugang legt pro Test
+      # eine eigene Wegwerf-Datenbank an (tests/integration/conftest.py).
+      AGORA_TEST_POSTGRES_URL: postgresql+psycopg://postgres:agora-itest-ci-password@localhost:5432/postgres
     services:
       redis:
         image: redis:7
@@ -597,6 +601,18 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
+      postgres:
+        # Dieselbe Hauptversion wie der Supabase-Stack (supabase/).
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: agora-itest-ci-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1

@@ -1,0 +1,3 @@
+### Fixed (Integration-Job startet PostgreSQL — 2026-09-24)
+
+- **Die PostgreSQL-Integrationstests laufen wieder in CI:** Der Job `integration` setzt `AGORA_TEST_REQUIRE_SERVICES=1`, hatte aber seit den PostgreSQL-Adaptern (#1517, #1522) weder einen PostgreSQL-Service noch `AGORA_TEST_POSTGRES_URL` — die Fixture failte dort hart, der Job war auf `main` rot und die PostgreSQL-Integrationstests liefen nirgends automatisch. Der Job startet jetzt `postgres:17` (Hauptversion des Supabase-Stacks) und setzt die URL; `tests/contracts/test_ci_integration_env.py` prüft im PR-Gate, dass der Job jede `AGORA_TEST_*`-Variable setzt, die die Integrations-Fixtures lesen. (#1577)
