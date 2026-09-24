@@ -708,6 +708,41 @@ def test_patched_process_batch_masks_each_batch_row_independently(
     )
 
 
+def test_patched_process_batch_preserves_fp16_dtype(restore_process_batch) -> None:
+    """Codex-Finding (PR #1549, P2): Im fp16-Speicherprofil
+    (``install_bert_memory_profile``, Kleincontainer-Schutz) laedt TWHIN-BERT
+    in fp16. Ein hartes ``.float()`` auf die Maske haette
+    ``last_hidden_state * mask`` auf fp32 hochgecastet und damit den
+    fp16-Speichervorteil — den einzigen Zweck des Profils — auf genau diesem
+    Pfad unterlaufen. Die Maske muss dem dtype von ``last_hidden_state``
+    folgen, nicht umgekehrt."""
+    import torch
+
+    process_recsys_posts = restore_process_batch
+    install_recsys_mean_pooling_patch()
+
+    hidden = torch.tensor([[[1.0, 2.0], [3.0, 4.0]]], dtype=torch.float16)
+    mask = torch.tensor([[1, 1]])
+
+    class _FakeOutputs:
+        last_hidden_state = hidden
+
+    class _FakeModel:
+        def __call__(self, **kwargs):
+            return _FakeOutputs()
+
+    class _FakeTokenizer:
+        def __call__(self, texts, return_tensors, padding, truncation):
+            return {"input_ids": torch.zeros(1, 2, dtype=torch.long), "attention_mask": mask}
+
+    result = process_recsys_posts.process_batch(_FakeModel(), _FakeTokenizer(), ["x"])
+
+    assert result.dtype == torch.float16, (
+        f"Ergebnis muss im fp16-Profil fp16 bleiben, war {result.dtype} — "
+        "eine .float()-Maske haette hier auf fp32 hochgecastet."
+    )
+
+
 @pytest.mark.llm
 def test_real_twhin_bert_orders_semantically_similar_texts_closer(
     restore_process_batch,

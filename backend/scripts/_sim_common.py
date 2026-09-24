@@ -873,7 +873,15 @@ def install_recsys_mean_pooling_patch() -> bool:
         inputs = tokenizer(batch_texts, return_tensors="pt", padding=True, truncation=True)
         inputs = {key: value.to(device) for key, value in inputs.items()}
         outputs = model(**inputs)
-        mask = inputs["attention_mask"].unsqueeze(-1).float()
+        # Codex-Finding (PR #1549): Maske auf das dtype von last_hidden_state
+        # casten, nicht auf float32 fix. Im fp16-Speicherprofil
+        # (install_bert_memory_profile, Kleincontainer-Schutz) laedt das
+        # Modell in fp16 — ein hartes .float() haette die Multiplikation
+        # und damit den groessten Pooling-Zwischenwert (und das
+        # zurueckgegebene Embedding) auf fp32 hochgecastet und den
+        # fp16-Speichervorteil auf genau dem Pfad unterlaufen, fuer den er
+        # gedacht ist.
+        mask = inputs["attention_mask"].unsqueeze(-1).to(outputs.last_hidden_state.dtype)
         return (outputs.last_hidden_state * mask).sum(1) / mask.sum(1).clamp(min=1e-9)
 
     _mean_pooled_process_batch._agora_mean_pooling_applied = True  # type: ignore[attr-defined]
