@@ -24,6 +24,7 @@ import {
   checkFocusVisible,
   checkReducedMotion,
 } from './helpers/accessibility';
+import { checkTabOrder } from './helpers/tabOrder';
 import { LlmRoutingTestId } from './helpers/testIds';
 import { assertStubModeActive } from './helpers/diagnostics';
 import { uploadMarkdown } from './helpers/upload';
@@ -123,6 +124,9 @@ test.describe('Slice 7.2 · Golden-Gate Accessibility Gates', () => {
 
       // Keyboard
       await checkKeyboardNavigation(page);
+
+      // Tab-Reihenfolge (Issue #1088)
+      await checkTabOrder(page);
 
       // Focus visible
       await checkFocusVisible(page);
