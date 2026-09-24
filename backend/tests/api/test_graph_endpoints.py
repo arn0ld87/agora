@@ -145,6 +145,49 @@ def test_get_task_not_found_returns_not_found_code(client, monkeypatch):
     assert response.get_json()["code"] == "not_found"
 
 
+# --- TASK_STATUS_CONTRACT (Issue #1466) --------------------------------------
+
+
+def test_get_task_returns_task_status_contract_shape(client):
+    from app.contracts.task_status_contract import TaskStatusResponse
+    from app.models.task import TaskManager
+
+    task_id = TaskManager().create_task("graph_build_1466_get")
+
+    response = client.get(f"/api/graph/task/{task_id}")
+    payload = response.get_json()
+
+    assert response.status_code == 200
+    data = payload["data"]
+    TaskStatusResponse.model_validate(data)
+    assert data["task_id"] == task_id
+    assert data["task_type"] == "graph_build_1466_get"
+    assert data["status"] == "pending"
+
+
+def test_list_tasks_returns_task_status_contract_shape_for_each_item(client):
+    """Regression: ``list_tasks`` rief bisher ``t.to_dict()`` auf Dicts auf
+    (``TaskManager.list_tasks()`` liefert bereits Dicts) — das haette bei
+    jedem befuellten Aufruf mit ``AttributeError: 'dict' object has no
+    attribute 'to_dict'`` gecrasht. Kein Test rief diesen Endpunkt bislang
+    mit tatsaechlich vorhandenen Tasks auf."""
+    from app.contracts.task_status_contract import TaskStatusResponse
+    from app.models.task import TaskManager
+
+    unique_task_type = "graph_build_1466_list"
+    task_id = TaskManager().create_task(unique_task_type)
+
+    response = client.get("/api/graph/tasks")
+    payload = response.get_json()
+
+    assert response.status_code == 200
+    matching = [item for item in payload["data"] if item["task_id"] == task_id]
+    assert len(matching) == 1
+    TaskStatusResponse.model_validate(matching[0])
+    assert matching[0]["task_type"] == unique_task_type
+    assert payload["count"] == len(payload["data"])
+
+
 # --- UNSUPPORTED_FORMAT ------------------------------------------------------
 
 
