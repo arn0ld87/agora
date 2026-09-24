@@ -16,16 +16,11 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from ..config import Config
-from ..utils.json_io import read_json_file, write_json_atomic
+from ..contracts.run_record_contract import RunRecord
+from ..repositories.run_repository import get_run_repository
 from ..utils.logger import get_logger
-from ..utils.path_safety import safe_join_within_root, validate_path_id
 
 logger = get_logger("agora.run_registry")
-
-# Sentinel returned by ``read_json_file`` on missing files. A corrupt file
-# also returns this default, so we distinguish the two cases by a preceding
-# ``os.path.exists`` check.
-_MISSING = object()
 
 # ``update_run``-Felder, die ohne Truthy-/Typ-Sonderfall 1:1 aus ``updates``
 # ins Manifest durchgereicht werden (siehe ``update_run``). ``message_key``
@@ -54,8 +49,14 @@ class RunRegistry:
                     cls._instance = super().__new__(cls)
                     cls._instance._cache: Dict[str, Dict[str, Any]] = {}
                     cls._instance._lock = threading.Lock()
-                    os.makedirs(cls.REGISTRY_DIR, exist_ok=True)
         return cls._instance
+
+    @property
+    def _repo(self):
+        # Read REGISTRY_DIR from the class each time: tests patch it as a class
+        # attribute on RunRegistry AFTER the module-level singleton was created.
+        # A fixed reference captured in __new__ would point to the pre-patch path.
+        return get_run_repository(registry_dir=self.__class__.REGISTRY_DIR)
 
     @staticmethod
     def canonical_status(raw_status: Optional[str]) -> str:
@@ -80,28 +81,19 @@ class RunRegistry:
         }
         return mapping.get(value, "pending")
 
-    def _run_path(self, run_id: str) -> str:
-        validate_path_id(run_id, field_name="run_id")
-        return safe_join_within_root(self.REGISTRY_DIR, f"{run_id}.json")
-
     def _read_run(self, run_id: str) -> Optional[Dict[str, Any]]:
         if run_id in self._cache:
             return deepcopy(self._cache[run_id])
-        path = self._run_path(run_id)
-        if not os.path.exists(path):
+        record = self._repo.get(run_id)
+        if record is None:
             return None
-        data = read_json_file(path, default=_MISSING, logger=logger, description=f"run manifest {run_id}")
-        if data is _MISSING or not isinstance(data, dict):
-            # Corrupt or unreadable — treat as absent so list_runs et al. keep
-            # working instead of crashing the whole history endpoint.
-            return None
+        data = record.to_manifest()
         self._cache[run_id] = data
         return deepcopy(data)
 
     def _write_run(self, data: Dict[str, Any]) -> Dict[str, Any]:
         run_id = data["run_id"]
-        path = self._run_path(run_id)
-        write_json_atomic(path, data)
+        self._repo.save(RunRecord(**data))
         self._cache[run_id] = deepcopy(data)
         return deepcopy(data)
 
@@ -332,8 +324,6 @@ class RunRegistry:
         ``offset`` and ``limit`` implement basic pagination over the sorted
         result set.
         """
-        os.makedirs(self.REGISTRY_DIR, exist_ok=True)
-
         # Normalise status filter to a set of canonical values.
         canonical_statuses: Optional[set[str]] = None
         if statuses:
@@ -343,15 +333,10 @@ class RunRegistry:
 
         manifests: List[Dict[str, Any]] = []
         with self._lock:
-            for filename in os.listdir(self.REGISTRY_DIR):
-                if not filename.endswith(".json"):
-                    continue
-                # Skip tempfiles from atomic writes (.tmp-json-*.json).
-                if filename.startswith("."):
-                    continue
-                run = self._read_run(filename[:-5])
-                if not run:
-                    continue
+            # _repo.list_all() handles the file scan, skip-logic for corrupt/temp
+            # files, and sorting by updated_at desc. Filtering stays here.
+            for record in self._repo.list_all(limit=500_000):
+                run = record.to_manifest()
                 linked = run.get("linked_ids", {})
                 metadata = run.get("metadata", {})
                 if project_id and linked.get("project_id") != project_id and metadata.get("project_id") != project_id:
@@ -370,8 +355,7 @@ class RunRegistry:
                     continue
                 manifests.append(run)
 
-        manifests.sort(key=lambda item: item.get("updated_at") or item.get("started_at") or "", reverse=True)
-        # Apply offset + limit for pagination.
+        # list_all already sorts; preserve order and only apply pagination.
         return manifests[offset: offset + limit]
 
     def aggregate_by_status(

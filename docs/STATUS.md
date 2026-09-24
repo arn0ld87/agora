@@ -340,6 +340,17 @@ Bedingung dafür ist die Importreihenfolge: `gevent.monkey.patch_all()` muss vor
 
 Ungeprüft bleibt das Verhalten hinter Supavisor unter Last. Der HARDSTOP `--workers 1` bleibt aus den in `backend/gunicorn.conf.py` genannten Gründen unberührt.
 
+### Run-Registry: Vertrag und Port — ein Adapter
+
+`RunRegistry` delegiert seit #1579 die Datei-I/O an `FileRunRepository`
+(`backend/app/services/file_run_store.py`), hinter dem `RunRepository`-Protocol
+(`backend/app/repositories/run_repository.py`).  Das Pydantic-v2-Modell
+`RunRecord` (`backend/app/contracts/run_record_contract.py`) beschreibt die
+persistierten Manifest-Felder; Lease-Felder (`worker_pid`, `worker_token`,
+`heartbeat_at`, `lease_ttl_s`) bleiben in `metadata` und sind kein Bestandteil
+des Port-Vertrags.  `RunRegistry` bleibt Fassade (Singleton, Lock,
+canonical_status, Events, Aggregation).  Der PostgreSQL-Adapter folgt in #1587.
+
 ## Security
 
 Aktueller Schwerpunkt:
