@@ -14,6 +14,7 @@ from ...contracts.report_v3 import (
     Threshold,
     TrustSignal,
 )
+from .threshold_deviation import describe_conflict_values, find_threshold_conflicts
 
 
 def _cell(value: object) -> str:
@@ -197,6 +198,27 @@ _THRESHOLD_EVIDENCE_STATUS_LABELS = {
 }
 
 
+def _deviation_cell(threshold: Threshold, by_id: dict[str, Threshold]) -> str:
+    """Issue #1359: Eine gewollte Abweichung nennt den anderen Wert und warum."""
+    target = by_id.get(threshold.deviates_from or "")
+    if target is None:
+        return "-"
+    return (
+        f"Weicht bewusst ab von {target.display_value} ({target.label}): "
+        f"{threshold.deviation_rationale}"
+    )
+
+
+def _threshold_conflict_notes(thresholds: list[Threshold]) -> list[str]:
+    """Issue #1359: Widersprüche ohne Verweis bleiben sichtbar, nicht still."""
+    return [
+        f"> **Widersprüchliche Werte ohne Begründung:** „{_cell(group[0].label)}“ "
+        f"steht mit {describe_conflict_values(group)} im Bericht. Keine Nennung "
+        "verweist auf die andere; welcher Wert gilt, lässt der Bericht offen."
+        for group in find_threshold_conflicts(thresholds)
+    ]
+
+
 def render_threshold_table(thresholds: list[Threshold]) -> str:
     """Operative Zahlen mit ihrer Herkunft — Issue #1160 E.
 
@@ -204,9 +226,15 @@ def render_threshold_table(thresholds: list[Threshold]) -> str:
     unabhaengig davon, ob sie aus dem Auftragsdokument, aus gemessenen Daten
     oder aus einem Modellvorschlag stammen. Diese Tabelle macht den
     Unterschied lesbar; der Fliesstext bleibt unangetastet.
+
+    Issue #1359: Zwei Werte fuer dieselbe Groesse stehen nicht mehr
+    unverbunden nebeneinander — eine begruendete Abweichung nennt den anderen
+    Wert samt Begruendung, eine unbegruendete erscheint als Warnung unter der
+    Tabelle.
     """
-    return _table(
-        ["Bezeichnung", "Wert", "Rolle", "Herkunft", "Beleglage", "Evidence"],
+    by_id = {threshold.id: threshold for threshold in thresholds}
+    table = _table(
+        ["Bezeichnung", "Wert", "Rolle", "Herkunft", "Beleglage", "Evidence", "Abweichung"],
         [
             [
                 threshold.label,
@@ -220,11 +248,13 @@ def render_threshold_table(thresholds: list[Threshold]) -> str:
                     threshold.evidence_status, threshold.evidence_status
                 ),
                 _list_cell(threshold.evidence_refs),
+                _deviation_cell(threshold, by_id),
             ]
             for threshold in thresholds
         ],
         "Keine operativen Zahlen im ReportV3-Artefakt.",
     )
+    return "\n\n".join([table, *_threshold_conflict_notes(thresholds)])
 
 
 def _render_generic_table(title: str, rows: list[list[object]], headers: list[str]) -> str:

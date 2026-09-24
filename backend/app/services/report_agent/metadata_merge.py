@@ -31,6 +31,7 @@ from ...contracts.report_v3 import (
     Threshold,
     TrustSignal,
 )
+from .threshold_deviation import namespace_section_thresholds, section_number
 
 logger = logging.getLogger(__name__)
 
@@ -112,19 +113,28 @@ def merge_section_metadata(sections: Iterable[Dict[str, Any]]) -> MergedMetadata
 
     Abschnitte werden in ihrer Reihenfolge verarbeitet; gleiche IDs aus
     mehreren Abschnitten erscheinen nur einmal.
+
+    Issue #1359: Schwellenwerte bekommen vorher eine berichtsweite Kennung
+    (``T7_01``). Ihre Modell-IDs sind pro Abschnitt frei gewählt — zwei
+    Abschnitte mit ``thr_01`` hätten den zweiten Wert sonst verworfen, auch
+    wenn er dem ersten widersprach.
     """
     merged = MergedMetadata()
     seen_ids: set[str] = set()
 
-    for section in sections or []:
+    for position, section in enumerate(sections or [], start=1):
         if not isinstance(section, dict):
             continue
         metadata = section.get("structured_metadata")
         if not isinstance(metadata, dict):
             continue
+        section_index = section_number(section, position)
         for slot, model in STRUCTURED_SLOTS.items():
+            raw_items = metadata.get(slot)
+            if slot == "thresholds":
+                raw_items = namespace_section_thresholds(raw_items, section_index)
             items = _coerce_items(
-                metadata.get(slot),
+                raw_items,
                 model,
                 slot=slot,
                 seen_ids=seen_ids,
