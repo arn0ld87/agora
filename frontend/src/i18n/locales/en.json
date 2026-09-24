@@ -681,7 +681,15 @@
       }
     }
   },
+  "prepare": {
+    "already_completed": "Preparation already completed.",
+    "task_started": "Preparation started.",
+    "not_started": "Preparation not started yet."
+  },
   "report": {
+    "generated": "Report generated.",
+    "failed": "Report generation failed.",
+    "awaiting_task": "Waiting for report generation…",
     "provenance": {
       "title": "Model provenance",
       "stage": "Stage",

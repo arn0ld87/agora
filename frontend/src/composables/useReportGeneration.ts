@@ -37,7 +37,9 @@ import {
   type ReportOutline,
 } from '../contracts/reportContract'
 import type { ReportMode } from '../contracts/reportV3Contract'
+import type { ReportMessageKey } from '../contracts/reportStatusContract'
 import { usePolling, type UsePollingReturn } from './usePolling'
+import { resolveStatusMessage } from '../i18n/statusMessage'
 
 /** Poll-Intervall der Report-Statusabfrage. Die Log-Polls des Aufrufers
  *  takten bewusst im selben Raster (Sub-Slice J.3). */
@@ -68,6 +70,13 @@ export type ReportLifecycleStatus = 'processing' | 'completed' | 'incomplete' | 
  */
 export interface ReportGenerationStatusData {
   message?: string
+  /**
+   * Maschinenlesbarer i18n-Schluessel fuer ``message`` (#1174, Muster aus
+   * #1458) — siehe `contracts/reportStatusContract.ts`. Der Live-Task-Zweig
+   * kennt kein `message_key`, deshalb bleibt der String-Typ als Fallback
+   * erhalten statt nur den literalen Key zuzulassen.
+   */
+  message_key?: ReportMessageKey | string | null
   outline?: unknown
   sections?: Record<string, unknown>
   current_section_index?: number
@@ -127,6 +136,10 @@ export interface UseReportGenerationOptions {
   /** i18n-Uebersetzer des Aufrufers. Injiziert, damit die Statusmaschine
    *  ohne App-Instanz laeuft. */
   t: (key: string) => string
+  /** Optionale vue-i18n `te`-Funktion — vermeidet die "not found"-Warnung
+   *  von `t()` bei einem im Katalog fehlenden `message_key` (#1174, Muster
+   *  aus Issue #1023, Befund B-04). */
+  te?: (key: string) => boolean
   addLog: (message: string) => void
   /** Meldet Lebenszyklus-Wechsel nach oben (in Step4Report ein `update-status`-Emit). */
   onLifecycleChange: (status: ReportLifecycleStatus) => void
@@ -307,7 +320,7 @@ export function useReportGeneration(
 
       const st = res.data
       lastStatus.value = st
-      message.value = st.message || ''
+      message.value = resolveStatusMessage(st, options.t, options.te)
       if (st.outline) {
         try {
           outline.value = ReportOutlineSchema.parse(st.outline)

@@ -162,6 +162,16 @@ from .pipeline_degradation_contract import (
     PipelineDegradationReport,
 )
 from .persona_target_contract import PersonaTargetContract
+from .prepare_status_contract import (
+    PrepareMessageKey,
+    PrepareStatusResponse,
+    PrepareStatusValue,
+)
+from .report_status_contract import (
+    ReportMessageKey,
+    ReportStatusResponse,
+    ReportStatusValue,
+)
 from .report_v3 import (
     Claim,
     ChangeRecommendation,
@@ -237,14 +247,20 @@ __all__ = [
     "PersonaQuotaActual",
     "PersonaQuotaPlan",
     "PersonaTargetContract",
+    "PrepareMessageKey",
+    "PrepareStatusResponse",
+    "PrepareStatusValue",
     "ReportClaimModel",
     "ReportContractModel",
     "ReportModel",
+    "ReportMessageKey",
     "ReportOutlineModel",
     "ReportSectionDataGapModel",
     "ReportSectionHypothesisModel",
     "ReportSectionModel",
     "ReportStatus",
+    "ReportStatusResponse",
+    "ReportStatusValue",
     "RunDetail",
     "RunsAggregation",
     "RunsFilterQuery",

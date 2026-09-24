@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from typing import Any
 
@@ -412,6 +413,39 @@ def test_replay_passes_provider_connection_id_to_routing(env, monkeypatch):
     assert passed_ref is not None, "ai_model_ref wurde gar nicht durchgereicht"
     assert passed_ref.provider_connection_id == "conn-gemini"
     assert passed_ref.model_id == "gemini-2.5-pro"
+
+
+def test_replay_forwards_full_ai_model_ref_to_create_branch(env, monkeypatch):
+    """Issue #886: ``create_branch`` bekommt das volle ``AiModelRef``-Objekt,
+    nicht nur die bereits vorher geprüfte ``model_id`` — sonst verliert
+    ``branching_service.create_branch`` die Connection-Bindung im
+    persistierten ``simulation_config["ai_model_ref"]``."""
+    from app.contracts.ai_provider_contract import AiModelRef
+
+    manager, _runner = _stub_replay_infra(monkeypatch)
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+
+    resp = env["client"].post(
+        f"/api/runs/{run['run_id']}/replay",
+        json={
+            "overrides": {
+                "ai_model_ref": {
+                    "provider_connection_id": "conn-gemini",
+                    "model_id": "gemini-2.5-pro",
+                }
+            }
+        },
+    )
+
+    assert resp.status_code == 202, resp.get_json()
+    call_kwargs = manager.create_branch.call_args.kwargs
+    forwarded = call_kwargs["overrides"]["ai_model_ref"]
+    # JSON-Form (Codex-Fund PR #1560): create_branch persistiert die Overrides
+    # in branch_meta, ein Pydantic-Objekt dort bricht json.dump.
+    assert isinstance(forwarded, dict), "create_branch braucht JSON-serialisierbare Overrides"
+    json.dumps(call_kwargs["overrides"])
+    assert AiModelRef.model_validate(forwarded).provider_connection_id == "conn-gemini"
+    assert forwarded["model_id"] == "gemini-2.5-pro"
 
 
 def test_replay_rejects_seed_document_override_not_yet_supported(env):

@@ -681,7 +681,15 @@
       }
     }
   },
+  "prepare": {
+    "already_completed": "Vorbereitung bereits abgeschlossen.",
+    "task_started": "Vorbereitung gestartet.",
+    "not_started": "Vorbereitung noch nicht gestartet."
+  },
   "report": {
+    "generated": "Bericht erstellt.",
+    "failed": "Berichterstellung fehlgeschlagen.",
+    "awaiting_task": "Warte auf Berichterstellung…",
     "provenance": {
       "title": "Modell-Provenance",
       "stage": "Stage",

@@ -1,0 +1,173 @@
+{
+  "$id": "https://alexle135.de/schemas/report-status-response.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Statusantwort der vier literal-/registry-basierten Stufen von\n``ReportStatusService.get_status``.\n\n``message`` bleibt neben ``message_key`` als Klartext-Fallback fuer\nConsumer, die den Schluessel noch nicht kennen (Rueckwaertskompat.).",
+  "properties": {
+    "already_completed": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Already Completed"
+    },
+    "current_section_index": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Current Section Index"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    },
+    "message": {
+      "title": "Message",
+      "type": "string"
+    },
+    "message_key": {
+      "anyOf": [
+        {
+          "enum": [
+            "report.generated",
+            "report.failed",
+            "report.awaiting_task",
+            "report.generating"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Message Key"
+    },
+    "missing_sections": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Missing Sections"
+    },
+    "outline": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Outline"
+    },
+    "progress": {
+      "maximum": 100,
+      "minimum": 0,
+      "title": "Progress",
+      "type": "integer"
+    },
+    "report_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Report Id"
+    },
+    "run_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Run Id"
+    },
+    "sections": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sections"
+    },
+    "simulation_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Simulation Id"
+    },
+    "status": {
+      "enum": [
+        "pending",
+        "processing",
+        "paused",
+        "completed",
+        "failed",
+        "stopped",
+        "incomplete",
+        "generating"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "status",
+    "progress",
+    "message"
+  ],
+  "title": "ReportStatusResponse",
+  "type": "object"
+}

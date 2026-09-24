@@ -19,8 +19,12 @@ Diese Suite hält drei Dinge fest:
    eines Keys rot wird (verhaltensbasiert nicht erkennbar, der Key-Raum ist
    unendlich).
 
-Bewusst nur Ist-Zustand: ob ``ai_model_ref`` in die Whitelist gehört, entscheidet
-#886. Dieser Slice ändert keinen Produktivcode.
+Issue #886 hat entschieden: ``ai_model_ref`` gehört in die Whitelist. Die
+Wirkung ist unten in ``TestOverrideTakesEffect.test_ai_model_ref`` gepinnt;
+die Ablehnung von ``ai_model_ref`` + ``llm_model`` läuft am Contract
+(``app/contracts/branch_request_contract.py::BranchOverrides``), nicht mehr
+hier — dieses Modul testet ausschließlich die dict-basierte
+``branching_service.create_branch``-Schicht darunter.
 
 Verortung in ``tests/contracts/``, weil dieses Verzeichnis im verpflichtenden
 PR-Smoke-Gate und im Pre-Push-Gate läuft (``pytest tests/contracts/ -x -q``).
@@ -47,7 +51,7 @@ from app.services.run_registry import RunRegistry
 from app.services.simulation_manager import SimulationManager, SimulationStatus
 
 # ---------------------------------------------------------------------------
-# Gepinnter Ist-Zustand (Stand main d43e4d27, Issue #887)
+# Gepinnter Ist-Zustand (Issue #887, erweitert um ai_model_ref in #886)
 # ---------------------------------------------------------------------------
 
 EXPECTED_OVERRIDE_KEYS: Set[str] = {
@@ -59,6 +63,7 @@ EXPECTED_OVERRIDE_KEYS: Set[str] = {
     "enable_reddit",
     "persona_additions",
     "persona_removals",
+    "ai_model_ref",
 }
 
 # Gegensätzliche Ausgangswerte, damit jeder Plattform-Override den Source-Wert
@@ -301,6 +306,58 @@ class TestOverrideTakesEffect:
         profiles = manager._store.read_json(branch.simulation_id, "reddit_profiles", default=[])
         assert [p["username"] for p in profiles] == ["alice", "carol"]
 
+    def test_ai_model_ref(self, manager: SimulationManager, source_id: str) -> None:
+        """Issue #886: die kanonische Referenz landet vollständig in der Config
+        UND setzt das Legacy-Anzeigefeld ``llm_model`` auf ihre ``model_id``."""
+        ref = {
+            "provider_connection_id": "conn-branch",
+            "model_id": "branch-model",
+            "source": "explicit",
+        }
+        branch = branching_service.create_branch(
+            manager, source_id, "b", overrides={"ai_model_ref": ref}
+        )
+        config = branch_config(manager, branch.simulation_id)
+        assert config["ai_model_ref"]["provider_connection_id"] == "conn-branch"
+        assert config["ai_model_ref"]["model_id"] == "branch-model"
+        assert config["llm_model"] == "branch-model"
+
+    def test_ai_model_ref_overrides_a_stray_llm_model_key(
+        self, manager: SimulationManager, source_id: str
+    ) -> None:
+        """Werden beide Keys gleichzeitig an ``create_branch`` durchgereicht
+        (die API-Schicht lehnt das per Contract ab, ein Direktaufruf nicht),
+        gewinnt die kanonische Referenz — die Config bleibt intern konsistent
+        statt zwei widersprüchliche Modellangaben zu tragen."""
+        ref = {"provider_connection_id": "conn-branch", "model_id": "branch-model"}
+        branch = branching_service.create_branch(
+            manager,
+            source_id,
+            "b",
+            overrides={"llm_model": "stray-string", "ai_model_ref": ref},
+        )
+        config = branch_config(manager, branch.simulation_id)
+        assert config["llm_model"] == "branch-model"
+
+    def test_legacy_llm_model_clears_inherited_ai_model_ref(
+        self, manager: SimulationManager, source_id: str
+    ) -> None:
+        """Codex-Fund PR #1560: trägt die Quelle schon eine ``ai_model_ref``,
+        darf ein reiner ``llm_model``-Override sie nicht stehen lassen — sonst
+        gewinnt zur Laufzeit die geerbte Referenz und der Override wirkt nicht."""
+        source_config = branch_config(manager, source_id)
+        source_config["ai_model_ref"] = {
+            "provider_connection_id": "conn-source",
+            "model_id": "source-model",
+        }
+        manager._store.write_json(source_id, "simulation_config", source_config)
+        branch = branching_service.create_branch(
+            manager, source_id, "b", overrides={"llm_model": "legacy-model"}
+        )
+        config = branch_config(manager, branch.simulation_id)
+        assert config["llm_model"] == "legacy-model"
+        assert "ai_model_ref" not in config
+
     def test_source_stays_untouched(self, manager: SimulationManager, source_id: str) -> None:
         """Overrides wirken auf den Branch, nie zurück auf die Quelle."""
         branching_service.create_branch(
@@ -320,8 +377,8 @@ class TestUnknownOverrideIsRejected:
     @pytest.mark.parametrize(
         "unknown_key",
         [
-            # Kandidaten aus #886: heute NICHT in der Whitelist.
-            "ai_model_ref",
+            # llm_profile_id/model_id: verworfene Alternativkandidaten aus #886
+            # (die Entscheidung fiel auf ai_model_ref, siehe TestOverrideTakesEffect).
             "llm_profile_id",
             "model_id",
             "totally_made_up",
@@ -363,7 +420,11 @@ def test_unknown_override_surfaces_as_http_400(monkeypatch, tmp_path) -> None:
     """End-to-End über ``handle_api_errors``: ValueError → HTTP 400.
 
     Der Whitelist-Guard läuft vor dem Existenz-Check der Simulation, deshalb
-    genügt eine gültig formatierte ID ohne echten Datensatz.
+    genügt eine gültig formatierte ID ohne echten Datensatz. Seit #886
+    validiert die Route ``overrides`` zuerst gegen den ``BranchOverrides``-
+    Contract (unbekannte Top-Level-Keys fallen dort schon raus, nicht erst
+    in ``branching_service.create_branch``) — der Testkey darf deshalb kein
+    gültiges Contract-Feld sein.
     """
     monkeypatch.delenv("AGORA_AUTH_TOKEN", raising=False)
     monkeypatch.setattr(
@@ -376,10 +437,10 @@ def test_unknown_override_surfaces_as_http_400(monkeypatch, tmp_path) -> None:
 
     response = app.test_client().post(
         "/api/simulation/sim_0123456789ab/branch",
-        json={"branch_name": "b", "overrides": {"ai_model_ref": "openai:gpt-4o"}},
+        json={"branch_name": "b", "overrides": {"totally_made_up": "x"}},
     )
 
     assert response.status_code == 400
     payload = response.get_json()
     assert payload["success"] is False
-    assert "Unsupported branch overrides" in str(payload)
+    assert "overrides ist ungültig" in str(payload)

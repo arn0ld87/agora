@@ -134,14 +134,11 @@ _CONNECTION_DEFINITIONS: tuple[ProviderConnectionDefinition, ...] = (
     #    ``tests/llm/test_bedrock_model_catalog.py`` jedes Preset mit einem
     #    echten Chat-Call statt nur die Katalog-Mitgliedschaft zu pruefen.
     #
-    # Die Region ist Teil der Host-Subdomain. Sie im Connection-UI zu
-    # aendern reicht derzeit NICHT: der Wert landet zwar in
-    # ``ProviderConnection.base_url``, aber ``api/llm_active.py::
-    # put_active_config`` schreibt beim Aktivieren den Registry-Default hier
-    # aus der Definition in die Active-Config — und genau die steuert die
-    # Laufzeit (``llm/client.py``). Wer die Region wirklich wechseln will,
-    # aendert bis zur Behebung von #1289 diesen Default. Der Trugschluss hat
-    # die Bedrock-Diagnose mehrere Runden gekostet.
+    # Die Region ist Teil der Host-Subdomain und im Connection-UI editierbar:
+    # ``ProviderConnection.base_url`` gewinnt seit #1289 beim Aktivieren vor
+    # diesem Registry-Default (``api/llm_active.py::put_active_config``), und
+    # genau die Active-Config steuert die Laufzeit (``llm/client.py``). Der
+    # Default hier bleibt nur der Fallback ohne gespeicherte Connection.
     #
     # ``default_base_url`` enthaelt bereits
     # ``/v1``: die Discovery haengt ``/models`` an (→ ``…/v1/models``), und der

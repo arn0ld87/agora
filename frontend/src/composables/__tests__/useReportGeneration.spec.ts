@@ -440,3 +440,40 @@ describe('useReportGeneration — stop()', () => {
     expect(h.logStream.polling.stop).toHaveBeenCalled()
   })
 })
+
+// Issue #1174: `/api/report/generate/status` liefert neben `message` jetzt
+// auch `message_key` (Muster aus #1458). Vorher stand der englische
+// Backend-Klartext unuebersetzt in `status.message` — auch bei Locale `de`.
+describe('useReportGeneration — message_key Aufloesung (#1174)', () => {
+  it('bevorzugt die Uebersetzung eines bekannten message_key gegenueber message', async () => {
+    const catalog: Record<string, string> = { 'report.generated': 'Bericht erstellt.' }
+    const h = setup({
+      t: (key) => catalog[key] ?? key,
+      te: (key) => key in catalog,
+    })
+    h.api.getReportStatus.mockResolvedValue({
+      success: true,
+      data: { status: 'generating', message: 'Report generated', message_key: 'report.generated' },
+    })
+
+    await h.generation.bootstrap()
+
+    expect(h.generation.status.message.value).toBe('Bericht erstellt.')
+  })
+
+  it('faellt bei unbekanntem message_key auf den Klartext message zurueck', async () => {
+    const h = setup()
+    h.api.getReportStatus.mockResolvedValue({
+      success: true,
+      data: {
+        status: 'generating',
+        message: 'Legacy status text',
+        message_key: 'report.unbekannt',
+      },
+    })
+
+    await h.generation.bootstrap()
+
+    expect(h.generation.status.message.value).toBe('Legacy status text')
+  })
+})
