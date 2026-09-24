@@ -464,8 +464,8 @@ describe('LlmProvidersView (Redesign PR 9, Liste + Detail)', () => {
   })
 
   const cliProviders = [
-    { id: 'codex_cli', label: 'Codex CLI (ChatGPT-Abo)', type: 'codex_cli', base_url: null, supports_models_endpoint: true, fallback_models: [] },
-    { id: 'claude_cli', label: 'Claude Code (Abo)', type: 'claude_cli', base_url: null, supports_models_endpoint: true, fallback_models: [] },
+    { id: 'codex_cli', label: 'Codex CLI (ChatGPT-Abo)', type: 'codex_cli', base_url: null, supports_models_endpoint: true, fallback_models: [], transport: 'cli', auth_mode: 'session' },
+    { id: 'claude_cli', label: 'Claude Code (Abo)', type: 'claude_cli', base_url: null, supports_models_endpoint: true, fallback_models: [], transport: 'cli', auth_mode: 'api_key' },
   ]
 
   it('HTTP-Provider (openai): Key- UND Base-URL-Feld sichtbar', async () => {

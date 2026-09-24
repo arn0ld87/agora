@@ -88,27 +88,17 @@ function isOllama(p: ProviderDescriptor): boolean {
 }
 
 /**
- * Issue #1415: `GET /api/llm/providers` (ProviderDescriptor) liefert kein
- * `transport`/`auth_mode` — die Registry-Matrix (`llm_provider_registry.py`)
- * ordnet diese Felder statisch je `provider_kind` zu, genau wie
- * `supports_models_endpoint`. `codex_cli`/`claude_cli` sind aktuell die
- * einzigen `transport="cli"`-Eintraege; sobald eine Connection existiert,
- * gewinnt deren tatsaechlicher `transport`/`auth_mode` (vorhandene Quelle
- * statt Typ-Heuristik).
+ * Issue #1415: `transport`/`auth_mode` kommen aus der Registry-Matrix
+ * (`ProviderDescriptor`); eine gespeicherte Connection gewinnt.
  */
-const CLI_TRANSPORT_PROVIDER_TYPES: ReadonlySet<string> = new Set(['codex_cli', 'claude_cli'])
-const CLI_SESSION_PROVIDER_TYPES: ReadonlySet<string> = new Set(['codex_cli'])
-
 function isCliTransport(p: ProviderDescriptor): boolean {
   const connection = providersStore.connections[p.id]
-  if (connection) return connection.transport === 'cli'
-  return CLI_TRANSPORT_PROVIDER_TYPES.has(p.type)
+  return (connection?.transport ?? p.transport) === 'cli'
 }
 
 function isSessionAuth(p: ProviderDescriptor): boolean {
   const connection = providersStore.connections[p.id]
-  if (connection) return connection.auth_mode === 'session'
-  return CLI_SESSION_PROVIDER_TYPES.has(p.type)
+  return (connection?.auth_mode ?? p.auth_mode) === 'session'
 }
 
 function statusTone(p: ProviderDescriptor): 'gray' | 'green' | 'orange' | 'red' {
