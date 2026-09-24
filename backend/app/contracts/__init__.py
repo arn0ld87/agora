@@ -6,6 +6,14 @@ Pflicht-Lesepfad bei Änderungen:
 2. backend/tests/contracts/ (Verträge sind Testbar)
 3. schemas/*.schema.json (auto-generiert via dump_schemas)
 """
+from .decision_contract import (
+    ChoiceQuestion,
+    DecisionQuestion,
+    DecisionResult,
+    DecisionState,
+    NoulQuestion,
+    ScoreQuestion,
+)
 from .report_contract import (
     ClaimEvidenceBindingModel,
     ConfidenceLabel,
@@ -154,6 +162,16 @@ from .pipeline_degradation_contract import (
     PipelineDegradationReport,
 )
 from .persona_target_contract import PersonaTargetContract
+from .prepare_status_contract import (
+    PrepareMessageKey,
+    PrepareStatusResponse,
+    PrepareStatusValue,
+)
+from .report_status_contract import (
+    ReportMessageKey,
+    ReportStatusResponse,
+    ReportStatusValue,
+)
 from .report_v3 import (
     Claim,
     ChangeRecommendation,
@@ -187,8 +205,12 @@ __all__ = [
     "ClusterShift",
     "ClusterSummary",
     "ClaimEvidenceBindingModel",
+    "ChoiceQuestion",
     "ComparisonDeltas",
     "ConfidenceLabel",
+    "DecisionQuestion",
+    "DecisionResult",
+    "DecisionState",
     "DegradationKind",
     "DegradationSeverity",
     "EdgeData",
@@ -211,6 +233,7 @@ __all__ = [
     "LlmProfileCreateRequest",
     "LlmProfileListResponse",
     "NodePropertyShift",
+    "NoulQuestion",
     "PersonaEntityContext",
     "PersonaModel",
     "PipelineDegradationModel",
@@ -224,20 +247,27 @@ __all__ = [
     "PersonaQuotaActual",
     "PersonaQuotaPlan",
     "PersonaTargetContract",
+    "PrepareMessageKey",
+    "PrepareStatusResponse",
+    "PrepareStatusValue",
     "ReportClaimModel",
     "ReportContractModel",
     "ReportModel",
+    "ReportMessageKey",
     "ReportOutlineModel",
     "ReportSectionDataGapModel",
     "ReportSectionHypothesisModel",
     "ReportSectionModel",
     "ReportStatus",
+    "ReportStatusResponse",
+    "ReportStatusValue",
     "RunDetail",
     "RunsAggregation",
     "RunsFilterQuery",
     "RunsListResponse",
     "RunStatus",
     "RunSummary",
+    "ScoreQuestion",
     "SegmentReach",
     "VoiceRegister",
     "ALL_PROVIDER_TYPES",

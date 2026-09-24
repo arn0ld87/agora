@@ -252,6 +252,28 @@ class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, Neo4jSearchMixin, GraphStora
         "RETURN options.indexConfig.`vector.dimensions` AS dim"
     )
 
+    _SHOW_INDEX_STATE_QUERY = (
+        "SHOW INDEXES YIELD name, state "
+        "WHERE name = $name "
+        "RETURN state AS state"
+    )
+
+    def index_state(self, index_name: str) -> str | None:
+        """Liest den ``state`` (z. B. ``ONLINE``/``POPULATING``/``FAILED``)
+        eines benannten Index aus Neo4j, oder ``None`` wenn er nicht existiert.
+
+        Dieselbe Abfrageform wie ``Neo4jReEmbedder.index_is_online()``
+        (Slice 2.2, #1417), hier ueber den bereits offenen App-Verbindungs-
+        Pool statt eines eigenen kurzlebigen Drivers — fuer den Readiness-
+        Check (Slice 2.4), der die Behauptung einer aktiven
+        ``EmbeddingIndexVersion`` gegen die Neo4j-Realitaet prueft, nicht
+        fuer den Migrationslauf selbst.
+        """
+        with self._get_session() as session:
+            result = session.run(self._SHOW_INDEX_STATE_QUERY, name=index_name)
+            row = result.single()
+        return row["state"] if row is not None else None
+
     def _ensure_vector_index_dim(self, session, index_name: str, expected_dim: int) -> None:
         """Drop a vector index whose stored dimension differs from *expected_dim*.
 

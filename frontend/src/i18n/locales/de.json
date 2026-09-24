@@ -681,7 +681,15 @@
       }
     }
   },
+  "prepare": {
+    "already_completed": "Vorbereitung bereits abgeschlossen.",
+    "task_started": "Vorbereitung gestartet.",
+    "not_started": "Vorbereitung noch nicht gestartet."
+  },
   "report": {
+    "generated": "Bericht erstellt.",
+    "failed": "Berichterstellung fehlgeschlagen.",
+    "awaiting_task": "Warte auf Berichterstellung…",
     "provenance": {
       "title": "Modell-Provenance",
       "stage": "Stage",
@@ -1679,6 +1687,19 @@
       "rolled_back": "Zurückgerollt",
       "failed": "Fehlgeschlagen",
       "unknown": "Unbekannt"
+    },
+    "indexStatus": {
+      "building": "Wird befüllt",
+      "active": "Aktiv",
+      "superseded": "Abgelöst",
+      "rolled_back": "Zurückgerollt",
+      "retired": "Außer Betrieb"
+    },
+    "indexVersions": {
+      "title": "Betriebsindex",
+      "legacyHint": "Keine aufgezeichnete Indexversion — der Betrieb läuft über den unversionierten Legacy-Index.",
+      "servesTraffic": "bedient Reads und Writes.",
+      "notServingYet": "wird noch befüllt, bedient den Betrieb noch nicht. Der Altindex bleibt bis zum erfolgreichen Cutover aktiv."
     },
     "list": {
       "error": "Konfigurationen konnten nicht geladen werden",

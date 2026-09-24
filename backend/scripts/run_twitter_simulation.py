@@ -35,6 +35,7 @@ try:
         install_bert_memory_profile,
         install_max_tokens_warning_filter,
         install_memory_sampler,
+        install_recsys_mean_pooling_patch,
         install_script_paths,
         load_project_env,
         make_default_memory_sink,
@@ -54,6 +55,7 @@ except ImportError:  # direct script execution
         install_bert_memory_profile,
         install_max_tokens_warning_filter,
         install_memory_sampler,
+        install_recsys_mean_pooling_patch,
         install_script_paths,
         load_project_env,
         make_default_memory_sink,
@@ -92,6 +94,10 @@ def _install_runtime_profile() -> None:
     _bert_profile = install_bert_memory_profile()
     _memory_stop = install_memory_sampler(make_default_memory_sink(_runtime_paths.project_root))
     logging.getLogger("agora.run_twitter_simulation").info("bert-memory profile = %s", _bert_profile)
+    _mean_pooling_patched = install_recsys_mean_pooling_patch()
+    logging.getLogger("agora.run_twitter_simulation").info(
+        "twhin-bert mean-pooling patch installed = %s (#1236)", _mean_pooling_patched
+    )
     _camel_context_floor = apply_camel_context_floor()
     logging.getLogger("agora.run_twitter_simulation").info("context-patch token_limit floor = %s", _camel_context_floor)
 

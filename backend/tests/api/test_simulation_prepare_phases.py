@@ -269,6 +269,8 @@ def test_already_prepared_response_short_circuits(app_ctx, monkeypatch):
     payload = response.get_json()
     assert payload["data"]["already_prepared"] is True
     assert payload["data"]["status"] == "ready"
+    # #1174: stabiler i18n-Schluessel neben dem Klartext-Fallback (Muster #1458).
+    assert payload["data"]["message_key"] == "prepare.already_completed"
 
 
 # ---------------------------------------------------------------------------
@@ -780,6 +782,8 @@ def test_build_prepare_response_reports_queued_run(app_ctx):
     assert payload["task_id"] == "task-1"
     assert payload["run_id"] == "run-1"
     assert payload["status"] == "preparing"
+    # #1174: stabiler i18n-Schluessel neben dem Klartext-Fallback (Muster #1458).
+    assert payload["message_key"] == "prepare.task_started"
     assert payload["already_prepared"] is False
     assert payload["expected_entities_count"] == 12
     assert payload["entity_types"] == ["Person", "Org"]

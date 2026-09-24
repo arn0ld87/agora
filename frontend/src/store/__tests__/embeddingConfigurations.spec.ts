@@ -18,6 +18,7 @@ vi.mock("../../api/embeddingConfigurations", () => ({
   testEmbeddingConfiguration: vi.fn(),
   activateEmbeddingConfiguration: vi.fn(),
   syncLegacyEmbeddingConfiguration: vi.fn(),
+  listEmbeddingIndexVersions: vi.fn(),
 }));
 vi.mock("../../api/embeddingMigrations", () => ({
   startEmbeddingMigration: vi.fn(),
@@ -27,8 +28,13 @@ vi.mock("../../api/embeddingMigrations", () => ({
 }));
 
 import * as api from "../../api/embeddingConfigurations";
+import * as migrationApi from "../../api/embeddingMigrations";
 import { useEmbeddingConfigurationsStore } from "../embeddingConfigurations";
-import type { EmbeddingConfiguration } from "../../contracts/embeddingContract";
+import type {
+  EmbeddingConfiguration,
+  EmbeddingIndexVersion,
+  EmbeddingMigrationJob,
+} from "../../contracts/embeddingContract";
 
 type MockFn = ReturnType<typeof vi.fn>;
 const mock = (fn: unknown): MockFn => fn as unknown as MockFn;
@@ -52,6 +58,40 @@ function makeConfiguration(
     last_validated_at: null,
     ...overrides,
   } as EmbeddingConfiguration;
+}
+
+function makeIndexVersion(
+  overrides: Partial<EmbeddingIndexVersion> = {},
+): EmbeddingIndexVersion {
+  return {
+    version: 1,
+    provider_connection_id: "ollama",
+    model_id: "nomic-embed-text",
+    dimensions: 768,
+    index_name: "entity_embedding_v1",
+    property_key: "embedding_v1",
+    status: "active",
+    created_at: "2026-08-10T10:00:00+00:00",
+    retired_at: null,
+    ...overrides,
+  } as EmbeddingIndexVersion;
+}
+
+function makeMigrationJob(
+  overrides: Partial<EmbeddingMigrationJob> = {},
+): EmbeddingMigrationJob {
+  return {
+    id: "job-1",
+    configuration_id: "cfg-1",
+    source_index_version: 1,
+    target_index_version: 2,
+    status: "pending",
+    progress: { total: 0, processed: 0, failed: 0, last_processed_id: null, phase: "entity", started_at: null, finished_at: null },
+    error_message: null,
+    created_at: "2026-09-22T08:00:00+00:00",
+    updated_at: "2026-09-22T08:00:00+00:00",
+    ...overrides,
+  } as EmbeddingMigrationJob;
 }
 
 beforeEach(() => {
@@ -111,5 +151,79 @@ describe("embeddingConfigurations store — testConfiguration() Probe-Tracking",
 
     expect(result.probe).toEqual(probe);
     expect(store.probeByConfiguration["cfg-probed"]).toEqual(probe);
+  });
+});
+
+describe("embeddingConfigurations store — Index-Versionen (f006, embedding-ssot)", () => {
+  it("loadIndexVersions() befuellt indexVersions aus der API", async () => {
+    const versions = [
+      makeIndexVersion({ version: 2, status: "building", model_id: "mxbai-embed-large" }),
+      makeIndexVersion({ version: 1, status: "active" }),
+    ];
+    mock(api.listEmbeddingIndexVersions).mockResolvedValue(versions);
+
+    const store = useEmbeddingConfigurationsStore();
+    await store.loadIndexVersions();
+
+    expect(store.indexVersions).toEqual(versions);
+    expect(store.indexVersionsError).toBeNull();
+  });
+
+  it("loadIndexVersions() setzt indexVersionsError bei einem Fehler, statt zu werfen", async () => {
+    mock(api.listEmbeddingIndexVersions).mockRejectedValue(new Error("boom"));
+
+    const store = useEmbeddingConfigurationsStore();
+    await store.loadIndexVersions();
+
+    expect(store.indexVersionsError).toContain("boom");
+    expect(store.indexVersions).toEqual([]);
+  });
+
+  it("activeIndexVersion liefert die Version mit status=active", async () => {
+    mock(api.listEmbeddingIndexVersions).mockResolvedValue([
+      makeIndexVersion({ version: 2, status: "building" }),
+      makeIndexVersion({ version: 1, status: "active" }),
+    ]);
+    const store = useEmbeddingConfigurationsStore();
+    await store.loadIndexVersions();
+
+    expect(store.activeIndexVersion?.version).toBe(1);
+    expect(store.buildingIndexVersion?.version).toBe(2);
+  });
+
+  it("activeIndexVersion ist null ohne jede aufgezeichnete Version (Legacy-Betrieb)", () => {
+    const store = useEmbeddingConfigurationsStore();
+    expect(store.activeIndexVersion).toBeNull();
+    expect(store.buildingIndexVersion).toBeNull();
+  });
+
+  it("startMigration() laedt die Indexversionen neu, damit die neue building-Version sofort sichtbar ist", async () => {
+    const job = makeMigrationJob({ status: "pending" });
+    mock(migrationApi.startEmbeddingMigration).mockResolvedValue(job);
+    mock(api.listEmbeddingIndexVersions).mockResolvedValue([
+      makeIndexVersion({ version: 2, status: "building" }),
+      makeIndexVersion({ version: 1, status: "active" }),
+    ]);
+
+    const store = useEmbeddingConfigurationsStore();
+    await store.startMigration("cfg-1");
+
+    expect(api.listEmbeddingIndexVersions).toHaveBeenCalled();
+    expect(store.buildingIndexVersion?.status).toBe("building");
+  });
+
+  it("cancelMigration() laedt die Indexversionen neu, damit der Rollback sichtbar wird", async () => {
+    const job = makeMigrationJob({ status: "rolled_back" });
+    mock(migrationApi.cancelEmbeddingMigration).mockResolvedValue(job);
+    mock(api.listEmbeddingIndexVersions).mockResolvedValue([
+      makeIndexVersion({ version: 1, status: "active" }),
+    ]);
+
+    const store = useEmbeddingConfigurationsStore();
+    await store.cancelMigration("job-1");
+
+    expect(api.listEmbeddingIndexVersions).toHaveBeenCalled();
+    expect(store.activeIndexVersion?.version).toBe(1);
+    expect(store.buildingIndexVersion).toBeNull();
   });
 });

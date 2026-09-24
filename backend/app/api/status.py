@@ -23,7 +23,10 @@ from ..config import Config
 from ..contracts.system_status_contract import (
     StatusCheckError,
     StatusErrorCode,
+    SystemStatusDisk,
+    SystemStatusDiskUploads,
     SystemStatusE2E,
+    SystemStatusNeo4j,
     SystemStatusOllama,
 )
 from ..llm.json_mode import _read_active_config_safely
@@ -153,11 +156,12 @@ def _get_neo4j_status():
                 "Neo4j storage unavailable at status check",
                 extra={"neo4j_uri": Config.NEO4J_URI, "error": init_error},
             )
-        return {
-            "reachable": False,
-            "error": StatusCheckError(code=StatusErrorCode.UNREACHABLE).model_dump(mode="json"),
-            "uri": Config.NEO4J_URI,
-        }
+        status = SystemStatusNeo4j(
+            reachable=False,
+            error=StatusCheckError(code=StatusErrorCode.UNREACHABLE),
+            uri=Config.NEO4J_URI,
+        )
+        return status.model_dump(mode="json", exclude_unset=True)
 
     try:
         # Go through the storage's public probe so the fork-reset
@@ -166,29 +170,29 @@ def _get_neo4j_status():
         # 'verify_connectivity'" right after a gunicorn worker fork.
         storage.verify_connectivity()
         last_success = getattr(storage, 'last_success_ts', None)
-        return {
-            "reachable": True,
-            "error": None,
-            "uri": Config.NEO4J_URI,
-            "is_connected": getattr(storage, 'is_connected', True),
-            "last_success_ts": last_success.isoformat() if last_success else None,
-        }
+        status = SystemStatusNeo4j(
+            reachable=True,
+            error=None,
+            uri=Config.NEO4J_URI,
+            is_connected=getattr(storage, 'is_connected', True),
+            last_success_ts=last_success.isoformat() if last_success else None,
+        )
+        return status.model_dump(mode="json", exclude_unset=True)
     except Exception as e:  # noqa: BLE001 — probe result; exc used in status dict
         last_error = getattr(storage, 'last_error', None) or e
         logger.warning(
             "Neo4j connectivity probe failed",
             extra={"neo4j_uri": Config.NEO4J_URI, "error": str(last_error)},
         )
-        return {
-            "reachable": False,
-            "error": StatusCheckError(
-                code=_classify_status_error(last_error)
-            ).model_dump(mode="json"),
-            "uri": Config.NEO4J_URI,
-            "is_connected": getattr(storage, 'is_connected', False),
-            "last_success_ts": (storage.last_success_ts.isoformat()
-                                if getattr(storage, 'last_success_ts', None) else None),
-        }
+        status = SystemStatusNeo4j(
+            reachable=False,
+            error=StatusCheckError(code=_classify_status_error(last_error)),
+            uri=Config.NEO4J_URI,
+            is_connected=getattr(storage, 'is_connected', False),
+            last_success_ts=(storage.last_success_ts.isoformat()
+                              if getattr(storage, 'last_success_ts', None) else None),
+        )
+        return status.model_dump(mode="json", exclude_unset=True)
 
 
 def _get_ollama_status():
@@ -283,30 +287,30 @@ def _get_disk_status():
 
     try:
         usage = shutil.disk_usage(uploads_path)
-        return {
-            "uploads": {
-                "path": uploads_path,
-                "total_bytes": usage.total,
-                "free_bytes": usage.free,
-                "used_pct": round((usage.used / usage.total * 100), 2) if usage.total > 0 else 0,
-            }
-        }
+        status = SystemStatusDisk(
+            uploads=SystemStatusDiskUploads(
+                path=uploads_path,
+                total_bytes=usage.total,
+                free_bytes=usage.free,
+                used_pct=round((usage.used / usage.total * 100), 2) if usage.total > 0 else 0,
+            )
+        )
+        return status.model_dump(mode="json", exclude_unset=True)
     except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.warning(
             "Could not check disk usage",
             extra={"uploads_path": uploads_path, "error": str(e)},
         )
-        return {
-            "uploads": {
-                "path": uploads_path,
-                "total_bytes": None,
-                "free_bytes": None,
-                "used_pct": None,
-                "error": StatusCheckError(
-                    code=_classify_status_error(e)
-                ).model_dump(mode="json"),
-            }
-        }
+        status = SystemStatusDisk(
+            uploads=SystemStatusDiskUploads(
+                path=uploads_path,
+                total_bytes=None,
+                free_bytes=None,
+                used_pct=None,
+                error=StatusCheckError(code=_classify_status_error(e)),
+            )
+        )
+        return status.model_dump(mode="json", exclude_unset=True)
 
 
 @status_bp.route('', methods=['GET'])

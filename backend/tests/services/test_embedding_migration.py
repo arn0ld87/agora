@@ -9,6 +9,7 @@ import pytest
 
 from app.contracts.embedding_contract import (
     EmbeddingConfiguration,
+    EmbeddingMigrationJob,
     EmbeddingMigrationStatus,
 )
 from app.services.embedding_configuration_store import EmbeddingConfigurationStore
@@ -449,3 +450,211 @@ def test_cancel_during_second_migration_keeps_old_index_active(
     v2 = store.get_index_version(2)
     assert v1 is not None and v1.status == "active"
     assert v2 is not None and v2.status == "rolled_back"
+
+
+# ----------------------------------------------------------------------
+# Cutover-Sicherheit auf dem LESEPFAD (f006, Slice ``embedding-ssot``,
+# Task ``cutover-sicher``).
+#
+# Die Tests oben belegen die Statusfelder der Indexversionen. Das ist
+# nicht dieselbe Zusage: ein Bestandsgraph bleibt nur dann lesbar, wenn
+# die *Aufloesung* nach dem Fehlschlag weiterhin auf die alten Namen und
+# die alte Dimension zeigt. Genau das wurde bisher nur fuer den
+# laufenden und den erfolgreichen Fall geprueft, nie nach einem Abbruch.
+#
+# Zusaetzlich haengt seit Slice 2.3 ``resolve_operational_vector_dim()``
+# an der aktiven Indexversion. Folgte sie einem abgebrochenen Ziel,
+# wuerde die Startup-Probe nach einem gescheiterten Modellwechsel gegen
+# eine Dimension pruefen, die im Index nie angekommen ist.
+# ----------------------------------------------------------------------
+
+
+_SECOND_TARGET_DIMENSIONS = 1024
+
+#: Bewusst weder 768 (aktive Version) noch 1024 (abgebrochenes Ziel). Ohne
+#: diesen Pin liefe die Dimensions-Assertion auf einer Maschine mit
+#: ``VECTOR_DIM=768`` ins Leere: sie wuerde auch dann bestehen, wenn die
+#: Aufloesung die aktive Indexversion gar nicht liest und still auf den
+#: Env-Wert zurueckfaellt.
+_UNRELATED_ENV_DIMENSIONS = 4242
+
+
+def _start_second_migration_to_other_dimensions(
+    store: EmbeddingConfigurationStore,
+    fixed_now: datetime,
+    monkeypatch: pytest.MonkeyPatch,
+    **service_kwargs: object,
+) -> tuple[EmbeddingMigrationService, EmbeddingMigrationJob]:
+    """Version 1 (768d) aktiv, danach eine zweite Migration auf ein
+    Modell anderer Dimension starten. Die abweichende Dimension ist der
+    Punkt: sie macht sichtbar, ob die Aufloesung dem abgebrochenen Ziel
+    folgt oder der weiterhin aktiven Quelle.
+    """
+    from app.config import Config
+
+    monkeypatch.setattr(Config, "VECTOR_DIM", _UNRELATED_ENV_DIMENSIONS)
+    _run_first_migration_to_active(store, fixed_now)
+    store.upsert_configuration(
+        configuration_id="emb-1",
+        provider_connection_id="conn-1",
+        provider_kind="ollama",
+        model_id="mxbai-embed-large",
+        dimensions=_SECOND_TARGET_DIMENSIONS,
+        scope="global",
+        project_id=None,
+        status="probed",
+    )
+    service = EmbeddingMigrationService(
+        store=store, now=lambda: fixed_now, **service_kwargs  # type: ignore[arg-type]
+    )
+    return service, service.start("emb-1")
+
+
+def _assert_reads_still_resolve_to_version_one(
+    store: EmbeddingConfigurationStore,
+) -> None:
+    from app.services.embedding_configurations.runtime import (
+        resolve_operational_vector_dim,
+    )
+
+    v1 = store.get_index_version(1)
+    assert v1 is not None and v1.status == "active"
+    v2 = store.get_index_version(2)
+    assert v2 is not None and v2.status == "rolled_back"
+
+    active = store.get_active_index_version()
+    assert active is not None and active.version == 1
+
+    assert store.resolve_active_entity_index() == (v1.index_name, v1.property_key)
+    assert store.resolve_active_fact_index() == (
+        "fact_embedding_v1",
+        "fact_embedding_v1",
+    )
+    assert resolve_operational_vector_dim() == 768, (
+        "Die Betriebsdimension muss der aktiven Version folgen, nicht dem "
+        f"abgebrochenen Ziel ({_SECOND_TARGET_DIMENSIONS}d)."
+    )
+
+
+def test_reembedder_exception_leaves_the_read_path_on_version_one(
+    store: EmbeddingConfigurationStore,
+    fixed_now: datetime,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Exploder:
+        def run(self, *args, **kwargs) -> EmbeddingMigrationStatus:
+            raise RuntimeError("simulated neo4j failure")
+
+    service, job = _start_second_migration_to_other_dimensions(
+        store, fixed_now, monkeypatch, re_embedder=_Exploder()
+    )
+
+    assert service.run(job.id).status == "failed"
+    _assert_reads_still_resolve_to_version_one(store)
+
+
+def test_failed_reembedder_result_leaves_the_read_path_on_version_one(
+    store: EmbeddingConfigurationStore,
+    fixed_now: datetime,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Failing:
+        def run(self, *args, **kwargs) -> EmbeddingMigrationStatus:
+            return "failed"
+
+    service, job = _start_second_migration_to_other_dimensions(
+        store, fixed_now, monkeypatch, re_embedder=_Failing()
+    )
+
+    assert service.run(job.id).status == "failed"
+    _assert_reads_still_resolve_to_version_one(store)
+
+
+def test_failed_progress_validation_leaves_the_read_path_on_version_one(
+    store: EmbeddingConfigurationStore,
+    fixed_now: datetime,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Der fuenfte Rollback-Pfad: der Re-Embedder meldet ``completed``,
+    sein persistierter Fortschritt ist aber in sich widerspruechlich
+    (``failed`` > ``total``). Auch dann darf nicht umgeschaltet werden.
+    """
+
+    class _InconsistentProgress:
+        def run(self, *args, **kwargs) -> EmbeddingMigrationStatus:
+            progress = kwargs["progress"] if "progress" in kwargs else args[3]
+            kwargs["checkpoint"](
+                progress.model_copy(update={"total": 1, "processed": 0, "failed": 2})
+            )
+            return "completed"
+
+    service, job = _start_second_migration_to_other_dimensions(
+        store, fixed_now, monkeypatch, re_embedder=_InconsistentProgress()
+    )
+
+    final = service.run(job.id)
+    assert final.status == "failed"
+    assert "Validierung" in (final.error_message or "")
+    _assert_reads_still_resolve_to_version_one(store)
+
+
+def test_offline_target_index_leaves_the_read_path_on_version_one(
+    store: EmbeddingConfigurationStore,
+    fixed_now: datetime,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, job = _start_second_migration_to_other_dimensions(
+        store, fixed_now, monkeypatch, index_validator=lambda index_name: False
+    )
+
+    assert service.run(job.id).status == "failed"
+    _assert_reads_still_resolve_to_version_one(store)
+
+
+def test_operator_cancel_leaves_the_read_path_on_version_one(
+    store: EmbeddingConfigurationStore,
+    fixed_now: datetime,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, job = _start_second_migration_to_other_dimensions(
+        store, fixed_now, monkeypatch
+    )
+
+    assert service.cancel(job.id).status == "rolled_back"
+    _assert_reads_still_resolve_to_version_one(store)
+
+
+def test_failed_cold_start_migration_leaves_the_legacy_view_intact(
+    store: EmbeddingConfigurationStore,
+    fixed_now: datetime,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bestandsgraph ohne je aufgezeichnete Indexversion: scheitert die
+    allererste Migration, darf nicht plötzlich eine Version als aktiv
+    gelten. Die Legacy-Aufloesung (unversionierte Namen, ``VECTOR_DIM``)
+    muss unveraendert weitergelten — sonst laufen Reads eines
+    Bestandsgraphen nach einem Fehlversuch ins Leere.
+    """
+    from app.config import Config
+    from app.services.embedding_configurations.runtime import (
+        resolve_operational_vector_dim,
+    )
+
+    monkeypatch.setattr(Config, "VECTOR_DIM", 768)
+    _seed_probed_configuration(store)
+
+    class _Failing:
+        def run(self, *args, **kwargs) -> EmbeddingMigrationStatus:
+            return "failed"
+
+    service = EmbeddingMigrationService(
+        store=store, re_embedder=_Failing(), now=lambda: fixed_now
+    )
+    job = service.start("emb-1")
+
+    assert service.run(job.id).status == "failed"
+
+    assert store.get_active_index_version() is None
+    assert store.resolve_active_entity_index() == ("entity_embedding", "embedding")
+    assert store.resolve_active_fact_index() == ("fact_embedding", "fact_embedding")
+    assert resolve_operational_vector_dim() == 768

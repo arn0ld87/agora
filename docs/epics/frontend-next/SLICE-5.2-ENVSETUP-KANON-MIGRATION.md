@@ -189,6 +189,11 @@ Modellpersistenzlogik mehr" bewusst nur zur Hälfte erfüllt: Persistenz ja, Mod
 Die Restschuld hängt an der Ablösung von `useRuntimeLlmOptions` (bereits `@deprecated`,
 Slice 5.5) und wird in [Issue #903](https://github.com/arn0ld87/agora/issues/903) geführt.
 
+**Nachtrag 2026-09-24 (#903):** Aufgelöst. `useRuntimeLlmOptions` existiert nicht mehr, Step 2
+sendet ausschließlich `ai_model_ref`. `modelOption`, `customModel`, `modelOptions` und
+`effectiveModel()` sind aus `useEnvForm` entfernt; das Composable ist ein reiner Loader für
+Sprache und Runtime-Metadaten.
+
 ### Auflösung Risiko B (OASIS-Runtime-Provider)
 
 Geprüft und entschieden: Der Runtime-Provider-Override wird **nicht** auf `AiModelRef`

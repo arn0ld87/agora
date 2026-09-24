@@ -48,12 +48,10 @@ PROMPT_SPECS = [
     ]),
     ("REACT_INSUFFICIENT_TOOLS_MSG", [
         "{tool_calls_count}",
-        "{min_tool_calls}",
         "{unused_hint}",
     ]),
     ("REACT_INSUFFICIENT_TOOLS_MSG_ALT", [
         "{tool_calls_count}",
-        "{min_tool_calls}",
         "{unused_hint}",
     ]),
     ("REACT_TOOL_LIMIT_MSG", [

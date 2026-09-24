@@ -59,6 +59,16 @@ class _FakeFileEventBus:
     übersprungen. Spiegelt die ``FilePollingEventBus``-Realität."""
 
 
+class _FakeNeo4jStorageWithIndexState(_FakeNeo4jStorageOk):
+    """Erweitert den Happy-Path-Fake um ``index_state()`` (Slice 2.4, #1417)."""
+
+    def __init__(self, state: str | None) -> None:
+        self._state = state
+
+    def index_state(self, index_name: str) -> str | None:
+        return self._state
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -117,6 +127,10 @@ def test_readyz_returns_ready_when_all_checks_pass(client):
     assert checks["redis"]["ok"] is True
     assert checks["upload_dir"]["ok"] is True
     assert checks["embedding_config"]["ok"] is True
+    # Kein aktiver EmbeddingIndexVersion-Datensatz in einem frischen
+    # Test-Data-Dir → Legacy-Ansicht, nichts gegen Neo4j zu prüfen.
+    assert checks["embedding_index_version"]["ok"] is True
+    assert "legacy view" in checks["embedding_index_version"]["detail"]
 
 
 # ---------------------------------------------------------------------------
@@ -225,3 +239,113 @@ def test_readyz_returns_503_on_embedding_config_mismatch(app, client):
     assert "vector_dim" in detail.lower()
     assert "768" in detail
     assert "2560" in detail
+
+
+# ---------------------------------------------------------------------------
+# Readiness — aktive EmbeddingIndexVersion gegen Neo4j-Realität (Slice 2.4, #1417)
+# ---------------------------------------------------------------------------
+
+
+def _seed_active_index_version(monkeypatch, tmp_path) -> None:
+    """Legt eine ``active`` Indexversion im Test-Data-Dir an, wie sie eine
+    abgeschlossene (oder pre-Slice-2.2 gestartete) Migration hinterlässt."""
+    monkeypatch.setenv("AGORA_DATA_DIR", str(tmp_path))
+    from app.services.embedding_configuration_store import EmbeddingConfigurationStore
+
+    EmbeddingConfigurationStore(data_dir=tmp_path).upsert_index_version(
+        version=1,
+        provider_connection_id="conn_1",
+        model_id="text-embedding-3-large",
+        dimensions=1536,
+        index_name="entity_embedding_v1",
+        property_key="embedding_v1",
+        status="active",
+    )
+
+
+def test_readyz_passes_when_the_active_index_version_is_online(
+    app, client, tmp_path, monkeypatch
+):
+    _seed_active_index_version(monkeypatch, tmp_path)
+    app.extensions["neo4j_storage"] = _FakeNeo4jStorageWithIndexState("ONLINE")
+
+    response = client.get("/readyz")
+
+    assert response.status_code == 200
+    detail = response.get_json()["checks"]["embedding_index_version"]
+    assert detail["ok"] is True
+    assert "v1" in detail["detail"]
+    assert "ONLINE" in detail["detail"]
+
+
+def test_readyz_fails_when_the_active_index_version_is_not_online(
+    app, client, tmp_path, monkeypatch
+):
+    """Regressionstest für die Bestandsgraph-Lücke: eine Migration, die vor
+    Slice 2.2 mit dem alten Sofort-Umschalt-Verhalten gestartet wurde, trägt
+    eine ``active``-Version, die nie fertig migriert wurde. Vorher blieb das
+    unsichtbar — Reads/Writes liefen still gegen einen unvollständigen Index."""
+    _seed_active_index_version(monkeypatch, tmp_path)
+    app.extensions["neo4j_storage"] = _FakeNeo4jStorageWithIndexState("POPULATING")
+
+    response = client.get("/readyz")
+
+    assert response.status_code == 503
+    detail = response.get_json()["checks"]["embedding_index_version"]
+    assert detail["ok"] is False
+    assert "not ONLINE" in detail["detail"]
+    assert "1417" in detail["detail"]
+    # Andere Checks bleiben grün — nur dieser eine Punkt ist rot.
+    assert response.get_json()["checks"]["neo4j"]["ok"] is True
+
+
+def test_readyz_fails_when_the_claimed_index_does_not_exist_in_neo4j(
+    app, client, tmp_path, monkeypatch
+):
+    """Ein fehlender Index liefert ``state=None`` über ``index_state()`` —
+    derselbe Fehlerpfad wie ein Index in einem Nicht-ONLINE-Zustand."""
+    _seed_active_index_version(monkeypatch, tmp_path)
+    app.extensions["neo4j_storage"] = _FakeNeo4jStorageWithIndexState(None)
+
+    response = client.get("/readyz")
+
+    assert response.status_code == 503
+    detail = response.get_json()["checks"]["embedding_index_version"]
+    assert detail["ok"] is False
+    assert "not ONLINE" in detail["detail"]
+
+
+def test_readyz_reports_not_ready_instead_of_500_when_the_store_is_unreadable(
+    app, client, tmp_path, monkeypatch
+):
+    """Der Store liest eine JSON-Datei und wirft bei kaputtem Inhalt. Ohne
+    Guard würde daraus eine 500 — dann kann der Healthcheck nicht mehr
+    zwischen "nicht bereit" und "Endpoint selbst kaputt" unterscheiden."""
+    monkeypatch.setenv("AGORA_DATA_DIR", str(tmp_path))
+    (tmp_path / "embedding_index_versions.json").write_text(
+        "{kein gültiges JSON", encoding="utf-8"
+    )
+
+    response = client.get("/readyz")
+
+    assert response.status_code == 503
+    detail = response.get_json()["checks"]["embedding_index_version"]
+    assert detail["ok"] is False
+    assert detail["detail"] == "embedding_index_version connectivity probe failed"
+
+
+def test_readyz_fails_loudly_when_storage_cannot_verify_the_index(
+    app, client, tmp_path, monkeypatch
+):
+    """Ein ``neo4j_storage``-Fake ohne ``index_state()`` (älterer Adapter)
+    darf die Behauptung einer aktiven Indexversion nicht stillschweigend
+    durchwinken."""
+    _seed_active_index_version(monkeypatch, tmp_path)
+    app.extensions["neo4j_storage"] = _FakeNeo4jStorageOk()
+
+    response = client.get("/readyz")
+
+    assert response.status_code == 503
+    detail = response.get_json()["checks"]["embedding_index_version"]
+    assert detail["ok"] is False
+    assert "index_state" in detail["detail"]

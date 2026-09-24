@@ -1,5 +1,5 @@
 /**
- * useEnvForm — Composable for Model/Language/Agent-Tools-Config state (Sub-Slice 37, Refs #203).
+ * useEnvForm — Composable for Language + Runtime-Metadata of Step 2 (Sub-Slice 37, Refs #203).
  *
  * Extracted from Step2EnvSetup.vue (lines 38–115) to reduce that component below 800 LOC.
  *
@@ -11,12 +11,11 @@
  *   - agentToolsEnabled ref (feature flag from backend)
  *   - maxToolCallsPerAction ref
  *   - loadingModels ref
- *   - modelOption ref ('default' | preset name | 'custom')
- *   - customModel ref (model name string when modelOption === 'custom')
  *   - language ref ('de' | 'en' | ...)
- *   - modelOptions computed (option list for Select component)
  *   - loadModels() action
- *   - effectiveModel() helper
+ *
+ * Keine Modellwahl: die kanonische Senke ist Step2EnvSetup.selectedModelRef
+ * (AiModelRef via AiModelPicker). Die fruehere Modellwahl-API ist entfernt (#903).
  *
  * localStorage-Keys are exported as constants for tests and sibling modules.
  *
@@ -26,7 +25,6 @@
 
 import { ref, computed, watch, type Ref, type ComputedRef } from 'vue'
 import { getAvailableModels, type ModelPreset } from '../api/simulation'
-import { resolvePresetLabel } from '../i18n/modelPresetLabel'
 
 // Der Preset-Typ gehoert dem API-Vertrag; hier stand bis zum Review von
 // PR #1390 eine zweite, driftfaehige Kopie. Re-Export, weil `ModelPreset`
@@ -43,20 +41,9 @@ export const STORAGE_LANG = 'agora.agentLanguage'
 // Types
 // ---------------------------------------------------------------------------
 
-export interface ModelOption {
-  value: string
-  label: string
-}
-
 export interface UseEnvFormOptions {
   /** vue-i18n t() injected so tests don't need a provider. */
   t: (key: string, params?: Record<string, unknown>) => string
-  /**
-   * Optionale vue-i18n te() — verhindert "not found"-Warnungen, wenn ein
-   * Backend einen Preset-Schluessel liefert, den der Katalog nicht kennt
-   * (Issue #1290). Ohne sie greift der Key-Gleichheits-Fallback.
-   */
-  te?: (key: string) => boolean
   /** Called when loadModels() encounters a network/API error. */
   onError?: (msg: string) => void
 }
@@ -73,12 +60,8 @@ export interface UseEnvFormReturn {
   agentToolsEnabled: Ref<boolean>
   maxToolCallsPerAction: Ref<number>
   loadingModels: Ref<boolean>
-  modelOption: Ref<string>
-  customModel: Ref<string>
   language: Ref<string>
-  modelOptions: ComputedRef<ModelOption[]>
   loadModels: () => Promise<void>
-  effectiveModel: () => string | null
 }
 
 // ---------------------------------------------------------------------------
@@ -97,7 +80,7 @@ function _loadStoredLang(): string {
 // Composable
 // ---------------------------------------------------------------------------
 
-export function useEnvForm({ t, te, onError }: UseEnvFormOptions): UseEnvFormReturn {
+export function useEnvForm({ t, onError }: UseEnvFormOptions): UseEnvFormReturn {
   // --- State ---
 
   const ollamaModels = ref<ModelPreset[]>([])
@@ -109,31 +92,7 @@ export function useEnvForm({ t, te, onError }: UseEnvFormOptions): UseEnvFormRet
   const agentToolsEnabled = ref<boolean>(false)
   const maxToolCallsPerAction = ref<number>(2)
   const loadingModels = ref<boolean>(true)
-  const modelOption = ref<string>('default')
-  const customModel = ref<string>('')
   const language = ref<string>(_loadStoredLang())
-
-  // --- Computed ---
-
-  const modelOptions = computed<ModelOption[]>(() => {
-    const opts: ModelOption[] = []
-    opts.push({
-      value: 'default',
-      label: `${t('step2.model.default')} — ${defaultModel.value || '?'}`,
-    })
-    for (const p of presetModels.value) {
-      opts.push({ value: p.name, label: resolvePresetLabel(p, t, te) })
-    }
-    for (const m of ollamaModels.value) {
-      if (presetModels.value.some((p) => p.name === m.name)) continue
-      opts.push({
-        value: m.name,
-        label: t('step2.model.ollamaOption', { model: resolvePresetLabel(m, t, te) }),
-      })
-    }
-    opts.push({ value: 'custom', label: t('step2.model.customGroup') })
-    return opts
-  })
 
   watch(language, (val) => {
     try {
@@ -180,12 +139,6 @@ export function useEnvForm({ t, te, onError }: UseEnvFormOptions): UseEnvFormRet
     }
   }
 
-  function effectiveModel(): string | null {
-    if (modelOption.value === 'default') return null
-    if (modelOption.value === 'custom') return customModel.value.trim() || null
-    return modelOption.value
-  }
-
   return {
     ollamaModels,
     presetModels,
@@ -196,11 +149,7 @@ export function useEnvForm({ t, te, onError }: UseEnvFormOptions): UseEnvFormRet
     agentToolsEnabled,
     maxToolCallsPerAction,
     loadingModels,
-    modelOption,
-    customModel,
     language,
-    modelOptions,
     loadModels,
-    effectiveModel,
   }
 }

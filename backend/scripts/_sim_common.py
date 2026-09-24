@@ -807,6 +807,88 @@ def install_bert_memory_profile(profile: str | None = None) -> str:
     return effective
 
 
+# ---------------------------------------------------------------------------
+# Issue #1236 — TWHIN-BERT-Recommender rankt ueber zufaellig initialisierte
+# Pooler-Gewichte
+# ---------------------------------------------------------------------------
+# ``Twitter/twhin-bert-base`` ist ein Masked-LM-Checkpoint ohne Pooler-Gewichte
+# (verifiziert per Live-Load: ``pooler.dense.weight``/``.bias`` erscheinen im
+# Transformers-Load-Report als ``MISSING``, also bei jedem Prozessstart neu
+# zufallsinitialisiert). ``oasis.social_platform.process_recsys_posts
+# .process_batch`` liest trotzdem ``outputs.pooler_output`` — der Twitter-
+# Recommender rankt damit auf einer Zufallsprojektion, die sich pro
+# Prozessstart aendert. Reddit ist nicht betroffen (``rec_sys_reddit`` nutzt
+# kein BERT, ``oasis/social_platform/env.py``).
+#
+# Fix: Mean-Pooling ueber ``last_hidden_state`` mit Attention-Maske statt
+# ``pooler_output`` — der Standardweg fuer Satz-Embeddings aus einem Encoder
+# ohne trainierten Pooler, braucht keine zusaetzlichen Gewichte. Das Modell
+# laedt per Default in Eval-Modus (``model.training is False``, verifiziert),
+# Dropout ist also bereits inaktiv; ohne die zufaelligen Pooler-Gewichte im
+# Pfad ist der Forward damit bei festen Encoder-Gewichten und festem Input
+# vollstaendig deterministisch — kein manueller Seed noetig.
+#
+# Patch-Ziel ist die Modul-Funktion ``process_batch`` selbst, nicht (wie beim
+# Memory-Profil) eine Transformers-Klassenmethode: ``recsys.py`` importiert
+# nur ``generate_post_vector``/``generate_post_vector_openai`` aus
+# ``process_recsys_posts`` (kein direkter ``process_batch``-Import), und
+# ``generate_post_vector`` ruft ``process_batch`` innerhalb desselben Moduls
+# auf — die Namensaufloesung passiert also bei jedem Aufruf frisch ueber die
+# Globals von ``process_recsys_posts``. Der Patch wirkt deshalb unabhaengig
+# davon, wann relativ zu ``import oasis`` er installiert wird.
+
+
+def install_recsys_mean_pooling_patch() -> bool:
+    """
+    Ersetzt ``process_recsys_posts.process_batch`` durch Mean-Pooling über
+    ``last_hidden_state`` statt den zufallsinitialisierten ``pooler_output``.
+
+    Kein ENV-Schalter (anders als das Memory-Profil): der Random-Pooler-Pfad
+    ist kein Kompromiss, den ein Betreiber bewusst waehlen wuerde — er macht
+    das Ranking bei jedem Prozessstart anders, ohne dass irgendein
+    Konfigurationswert das ausdrueckt.
+
+    Returns:
+        ``True``, wenn der Patch installiert wurde (oder bereits war),
+        ``False`` wenn ``oasis`` nicht importierbar ist (Aufrufer laeuft ohne
+        Twitter-Simulation, z. B. reine Reddit-Runs oder Tests).
+    """
+    try:
+        from oasis.social_platform import process_recsys_posts  # type: ignore[import-not-found]
+    except ImportError:
+        return False
+
+    original = process_recsys_posts.process_batch
+    if getattr(original, "_agora_mean_pooling_applied", False):
+        return True
+
+    import torch  # type: ignore[import-not-found]
+
+    @torch.no_grad()
+    def _mean_pooled_process_batch(model: Any, tokenizer: Any, batch_texts: list[str]) -> Any:
+        """Wie das Original (siehe Modul-Docstring oben), aber Mean-Pooling
+        statt ``pooler_output`` — keine zufallsinitialisierten Gewichte im Pfad.
+        """
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        inputs = tokenizer(batch_texts, return_tensors="pt", padding=True, truncation=True)
+        inputs = {key: value.to(device) for key, value in inputs.items()}
+        outputs = model(**inputs)
+        # Codex-Finding (PR #1549): Maske auf das dtype von last_hidden_state
+        # casten, nicht auf float32 fix. Im fp16-Speicherprofil
+        # (install_bert_memory_profile, Kleincontainer-Schutz) laedt das
+        # Modell in fp16 — ein hartes .float() haette die Multiplikation
+        # und damit den groessten Pooling-Zwischenwert (und das
+        # zurueckgegebene Embedding) auf fp32 hochgecastet und den
+        # fp16-Speichervorteil auf genau dem Pfad unterlaufen, fuer den er
+        # gedacht ist.
+        mask = inputs["attention_mask"].unsqueeze(-1).to(outputs.last_hidden_state.dtype)
+        return (outputs.last_hidden_state * mask).sum(1) / mask.sum(1).clamp(min=1e-9)
+
+    _mean_pooled_process_batch._agora_mean_pooling_applied = True  # type: ignore[attr-defined]
+    process_recsys_posts.process_batch = _mean_pooled_process_batch
+    return True
+
+
 def _read_rss_mb_linux() -> float | None:
     """Liest ``VmRSS`` aus ``/proc/self/status`` (Linux-Container).
 

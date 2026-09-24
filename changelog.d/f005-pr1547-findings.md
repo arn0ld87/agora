@@ -1,0 +1,6 @@
+### Fixed (Decision-Layer-Pilot: PR-#1547-Review — 2026-09-22)
+
+- **Shadow-Telemetrie bei unbekannten Kosten:** `local_search_shadow.py` formatierte `cost_micros` mit `%d`; bei `None` warf das einen `TypeError`, den der äußere `try/except` als Fehlschlag loggte — der erfolgreiche Aufruf blieb in genau den Unbekannt-Kosten-Fällen ohne Telemetrie. Jetzt `%s`. (f005)
+- **Exception-Digests ohne Wert-Ausschnitt:** `llm_provider.py`/`jev_provider.py` gaben über eine truncated `repr()` bei kurzen Werten den vollen Inhalt preis. `_digest()` liefert jetzt ausschließlich Typ, Länge und einen irreversiblen SHA-256-Hash-Prefix. (f005)
+- **`RuleOutcome` als Pydantic-Vertrag statt Dataclass:** verschoben von `rule_provider.py` nach `app/contracts/decision_contract.py` — es ist die exportierte Grenze zwischen aufruferdefinierten Regelfunktionen und dem Adapter, also Contracts-first-pflichtig. (f005)
+- **`AGORA_DECISION_LAYER_MODE=authoritative` wird abgelehnt:** kein Use Case hat einen authoritativen Handler (`jev-choice`-Gate nicht bestanden); ein Start mit diesem Wert wäre erfolgreich gewesen, während die Decision Layer still inaktiv geblieben wäre. `validate_decision_layer_mode()` lehnt ihn jetzt mit erklärender Fehlermeldung ab. (f005)

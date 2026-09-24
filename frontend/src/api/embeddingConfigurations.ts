@@ -19,6 +19,8 @@ import {
   EmbeddingConfigurationsListResponse,
   EmbeddingConfigurationsListResponseSchema,
   EmbeddingConfigurationScope,
+  EmbeddingIndexVersion,
+  EmbeddingIndexVersionListResponseSchema,
 } from "../contracts/embeddingContract";
 import { ApiSuccessEnvelope } from "./envelope";
 import { unwrapAndParse } from "./parse";
@@ -113,4 +115,17 @@ export async function syncLegacyEmbeddingConfiguration(
     { provider_connection_id: providerConnectionId },
   );
   return unwrapAndParse(resp, EmbeddingConfigurationResponseSchema).configuration;
+}
+
+/**
+ * Listet alle EmbeddingIndexVersion-Datensätze, neueste zuerst (f006,
+ * Slice embedding-ssot). Macht den `building`-Status einer laufenden
+ * Migration und die weiterhin aktive Quell-Version sichtbar — vorher
+ * hatte die Oberfläche dafür keinen API-Zugriff.
+ */
+export async function listEmbeddingIndexVersions(): Promise<EmbeddingIndexVersion[]> {
+  const resp = await service.get<ApiSuccessEnvelope<unknown>>(
+    "/api/llm/embedding/index-versions",
+  );
+  return unwrapAndParse(resp, EmbeddingIndexVersionListResponseSchema).versions;
 }

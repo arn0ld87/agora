@@ -12,6 +12,7 @@ from app.contracts.embedding_contract import (
     EmbeddingConfiguration,
     EmbeddingConfigurationScope,
     EmbeddingConfigurationStatus,
+    EmbeddingIndexVersion,
     EmbeddingProviderKind,
 )
 from app.services.embedding_configurations.adapters import EmbeddingProbeResult
@@ -103,6 +104,9 @@ class _FakeConfigurationStore:
 
     def delete_configuration(self, configuration_id: str) -> bool:
         return self._items.pop(configuration_id, None) is not None
+
+    def list_index_versions(self) -> list:
+        return list(getattr(self, "_index_versions", []))
 
 
 class _FakeConnectionStore:
@@ -581,3 +585,52 @@ def test_activate_endpoint_invokes_service(
     )
     assert response.status_code == 200
     assert stub.activate_calls == ["emb-1"]
+
+
+# ----------------------------------------------------------------------
+# GET /embedding/index-versions (f006, Slice embedding-ssot, modellwechsel-ui)
+# ----------------------------------------------------------------------
+
+
+def _make_index_version(
+    *, version: int, status: str, model_id: str = "nomic-embed-text"
+) -> EmbeddingIndexVersion:
+    return EmbeddingIndexVersion(
+        version=version,
+        provider_connection_id="conn-1",
+        model_id=model_id,
+        dimensions=768,
+        index_name=f"entity_embedding_v{version}",
+        property_key=f"embedding_v{version}",
+        status=status,  # type: ignore[arg-type]
+        created_at=datetime.now(timezone.utc),
+    )
+
+
+def test_list_index_versions_returns_empty_list_without_any_version(
+    client: object,
+) -> None:
+    response = client.get("/api/llm/embedding/index-versions")  # type: ignore[attr-defined]
+
+    assert response.status_code == 200
+    assert response.get_json()["data"]["versions"] == []
+
+
+def test_list_index_versions_sorts_newest_first_and_includes_building(
+    client: object, fake_store: _FakeConfigurationStore
+) -> None:
+    """Kernbefund dieses Tasks: die Oberflaeche muss ``building`` sehen
+    koennen, waehrend die Quell-Version unveraendert ``active`` bleibt
+    (Slice 2.2) — vorher gab es dafuer keinen API-Zugriff."""
+    fake_store._index_versions = [
+        _make_index_version(version=1, status="active"),
+        _make_index_version(version=2, status="building", model_id="mxbai-embed-large"),
+    ]
+
+    response = client.get("/api/llm/embedding/index-versions")  # type: ignore[attr-defined]
+
+    assert response.status_code == 200
+    versions = response.get_json()["data"]["versions"]
+    assert [v["version"] for v in versions] == [2, 1]
+    assert versions[0]["status"] == "building"
+    assert versions[1]["status"] == "active"

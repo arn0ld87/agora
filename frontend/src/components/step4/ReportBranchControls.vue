@@ -21,12 +21,15 @@
  * jetzt getestetes Verhalten (siehe ReportBranchControls.spec.ts), keine
  * UX-Empfehlung.
  *
- * Ausserdem verwirft die Auswahl `provider_connection_id` — es wird nur
- * `model_id` als String gesendet, weil `allowed_override_keys` im
- * Branch-Override backend-seitig keine Connection-Referenz kennt, nur den
- * `llm_model`-String. Der Picker suggeriert optisch eine connection-
- * gebundene Route, die im Branch-Override nicht ankommt — diese Lücke
- * trägt Issue #886.
+ * Issue #886: die Picker-Auswahl geht jetzt zusätzlich als volle
+ * `ai_model_ref` im `create`-Emit mit (`provider_connection_id` inklusive).
+ * `Step4Report.vue::createBranchFromReport` entscheidet, welches der beiden
+ * Felder gesendet wird — nur wenn `llm_model` noch exakt dem Picker-Pick
+ * entspricht (kein späterer Freitext-Edit dazwischen), gilt die Auswahl als
+ * aktuell und die kanonische Referenz geht raus; sonst bleibt es beim
+ * Legacy-`llm_model`-String. So bleibt "letzte Bearbeitung gewinnt" auch für
+ * den neuen Sink erhalten, statt einen zweiten, unsynchronisierten
+ * Quellenkanal zu eröffnen.
  */
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -42,6 +45,7 @@ const emit = defineEmits<{
     llm_model: string
     language: string
     max_agents: string
+    ai_model_ref: AiModelRef | null
   }]
 }>()
 
@@ -100,7 +104,7 @@ watch(modelRef, (val) => {
       variant="ghost"
       :loading="branchBusy"
       :disabled="branchBusy"
-      @click="emit('create', { ...branchForm })"
+      @click="emit('create', { ...branchForm, ai_model_ref: modelRef })"
     >
       {{ t('step4.branch.create') }}
     </Button>

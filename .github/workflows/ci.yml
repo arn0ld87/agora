@@ -486,6 +486,11 @@ jobs:
       - name: STATUS.md drift check
         run: bash scripts/sync-status.sh --check --skip-counts
 
+      # Spiegelt run_leak in scripts/pre-push-gate.sh: der lokal von PandaOS
+      # gepflegte managed Block in AGENTS.md darf nie ins Repo (PR #1539).
+      - name: Kein PandaOS-managed-Block im Repo
+        run: bash scripts/check_pandaos_managed_leak.sh
+
       # Spiegelt scripts/pre-push-gate.sh: die generierten JSON-Schemas unter
       # schemas/ muessen byte-genau zu den Pydantic-Contracts passen. Ohne
       # diesen Step faellt Schema-Drift erst im push:main-Lauf auf.

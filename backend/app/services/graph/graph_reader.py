@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 
 from app.storage.graph_storage import GraphStorage
 from app.services.graph.graph_dtos import EdgeInfo, NodeInfo, SearchResult
+from app.services.decisions.local_search_shadow import shadow_relevance_check
 
 logger = logging.getLogger(__name__)
 
@@ -246,6 +247,21 @@ def local_search(
                 if provenance is not None:
                     projected.update(provenance)
                 edges_result.append(projected)
+
+            # f005-Decision-Layer-Pilot (Slice `decision-pilot`, Task
+            # `shadow-usecase`): genau eine zusätzliche, rein telemetrierte
+            # Relevanzentscheidung über den bestbewerteten Treffer, no-op
+            # solange AGORA_DECISION_LAYER_MODE nicht "shadow" ist. Wirft
+            # nie und ändert weder Score noch Reihenfolge noch Rückgabewert.
+            #
+            # Fakt und Score stammen aus DERSELBEN Kante: ``facts`` über-
+            # springt Kanten mit leerem ``fact`` (oben), ``scored_edges``
+            # nicht — ``facts[0]`` wäre bei einer Top-Kante, die nur über
+            # ``name`` matcht, der Fakt einer niedriger bewerteten Kante,
+            # und die Telemetrie paarte einen Score mit einem fremden Fakt.
+            if scored_edges:
+                top_score, top_edge = scored_edges[0]
+                shadow_relevance_check(query, top_edge.get("fact") or None, top_score)
 
         if scope in ["nodes", "both"]:
             all_nodes = storage.get_all_nodes(graph_id)

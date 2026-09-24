@@ -681,7 +681,15 @@
       }
     }
   },
+  "prepare": {
+    "already_completed": "Preparation already completed.",
+    "task_started": "Preparation started.",
+    "not_started": "Preparation not started yet."
+  },
   "report": {
+    "generated": "Report generated.",
+    "failed": "Report generation failed.",
+    "awaiting_task": "Waiting for report generation…",
     "provenance": {
       "title": "Model provenance",
       "stage": "Stage",
@@ -1679,6 +1687,19 @@
       "rolled_back": "Rolled back",
       "failed": "Failed",
       "unknown": "Unknown"
+    },
+    "indexStatus": {
+      "building": "Building",
+      "active": "Active",
+      "superseded": "Superseded",
+      "rolled_back": "Rolled back",
+      "retired": "Retired"
+    },
+    "indexVersions": {
+      "title": "Operational index",
+      "legacyHint": "No recorded index version — the operation runs on the unversioned legacy index.",
+      "servesTraffic": "serves reads and writes.",
+      "notServingYet": "is still being filled and does not serve traffic yet. The old index stays active until the cutover succeeds."
     },
     "list": {
       "error": "Configurations could not be loaded",
