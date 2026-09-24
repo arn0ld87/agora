@@ -66,8 +66,10 @@ from .search_dedup import (
     query_of,
     registry_for,
 )
+from .section_coverage import section_has_sufficient_evidence
 from .simulation_snapshot import capture_simulation_snapshot
 from .text_verification import verify_prose
+from .threshold_deviation import prior_threshold_lines, threshold_conflict_findings
 from .schemas import (
     EvidenceMapModel,
     _section_schema_for,
@@ -337,13 +339,14 @@ _RED_TEAM_SYSTEM_PROMPT = (
 _RED_TEAM_USER_TEMPLATE = (
     "Berichtsentwurf:\n\n{report_excerpt}\n\n"
     "Die Kennung vor jedem Eintrag nennt den Abschnitt: C3_02 ist der zweite "
-    "Claim aus Abschnitt 3. Widersprüche zwischen weit auseinanderliegenden "
+    "Claim aus Abschnitt 3, T7_01 der erste Schwellenwert aus Abschnitt 7. "
+    "Widersprüche zwischen weit auseinanderliegenden "
     "Abschnitten sind besonders zu prüfen — dort fallen sie beim Lesen am "
     "wenigsten auf.\n\n"
     "Identifiziere:\n"
     "(a) Widersprüche zwischen den Claims\n"
     "(b) Widersprüchliche operative Zahlen (zwei Schwellen für dieselbe Größe "
-    "mit unterschiedlichen Werten)\n"
+    "mit unterschiedlichen Werten, ohne vermerkte begründete Abweichung)\n"
     "(c) Verfrühten Konsens (Claims, die ohne ausreichende Cross-Segment-Reaktionen "
     "als hoch-konfident markiert sind)\n"
     "(d) Fehlende Cross-Segment-Reaktionen\n\n"
@@ -395,13 +398,22 @@ def _build_red_team_excerpt(report_v3: ReportV3) -> str:
     # genau dort weg, wo sie am nötigsten sind.
     lines: List[str] = []
     for threshold in report_v3.thresholds or []:
+        # Issue #1359: eine begründete Abweichung steht mit im Entwurf —
+        # sonst meldet der Reviewer sie als Widerspruch.
+        deviation = (
+            f"; weicht begründet ab von [{threshold.deviates_from}]: "
+            f"{threshold.deviation_rationale}"
+            if threshold.deviates_from
+            else ""
+        )
         # display_value statt f"{value:g} {unit}" (#1343): ein Datum trägt
         # keine Einheit, und ':g' an einem ISO-String würde den Entwurf
         # mitten in der Review-Vorbereitung sprengen.
         lines.append(
             f"- [{threshold.id}] [schwelle: {threshold.purpose}] {threshold.label}: "
             f"{threshold.display_value} "
-            f"(Herkunft: {threshold.origin}, Beleglage: {threshold.evidence_status})"
+            f"(Herkunft: {threshold.origin}, Beleglage: {threshold.evidence_status}"
+            f"{deviation})"
         )
     for claim in report_v3.claims or []:
         lines.append(f"- [{claim.id}] [{claim.confidence}] {claim.statement}")
@@ -494,6 +506,12 @@ def _run_red_team_review(
 
     Slice 5 (Issue #497), Intent-Gate aus dem Evidence-Chain-Audit (#1160).
     """
+    # Issue #1359: Dieselbe Größe mit zwei Werten ohne begründete Abweichung
+    # lässt sich abzählen — das Modell kann sie übersehen, die Prüfung nicht.
+    deterministic_findings = [
+        *deterministic_findings,
+        *threshold_conflict_findings(report_v3.thresholds),
+    ]
     # Die deterministischen Befunde hängen nicht am Intent-Gate: sie kosten
     # keinen LLM-Call und gelten für jeden Lauf.
     if not _red_team_required(intent, echo_index):
@@ -644,6 +662,82 @@ def _finalize_content(
     return sanitized.content
 
 
+def _draft_content(response: Optional[str]) -> str:
+    """Berichtsinhalt eines Entwurfs, ohne ``_finalize_content``-Nebenwirkung.
+
+    Leer, wenn der Final-Content-Contract den Output ablehnt — ein solcher
+    Entwurf ist weder deckungsfähig noch als Rückfall für Forced-Final
+    brauchbar.
+    """
+    if response is None:
+        return ""
+    try:
+        content = sanitize_final_content(response).content
+    except FinalContentRejected:
+        return ""
+    return "" if is_fallback_content(content) else content
+
+
+def _section_has_sufficient_evidence(agent: Any, draft: str) -> bool:
+    """Issue #1294: Deckung statt Tool-Call-Anzahl entscheidet über Retrieval."""
+    return section_has_sufficient_evidence(
+        draft,
+        section_evidence=getattr(agent, "_active_section_evidence", None),
+        evidence_map=getattr(agent, "evidence_map", None),
+    )
+
+
+def _request_coverage_retrieval(
+    messages: List[Dict[str, str]],
+    response: str,
+    template: str,
+    tool_calls_count: int,
+    unused_tools: set,
+) -> None:
+    """Weist den ungedeckten Entwurf zurück und fordert gezieltes Retrieval an."""
+    unused_hint = (
+        f"(These tools have not been used, recommend using them: {', '.join(unused_tools)})"
+        if unused_tools else ""
+    )
+    messages.append({"role": "assistant", "content": response})
+    messages.append({
+        "role": "user",
+        "content": template.format(
+            tool_calls_count=tool_calls_count,
+            unused_hint=unused_hint,
+        ),
+    })
+
+
+def _forced_final_response(
+    agent: Any,
+    messages: List[Dict[str, str]],
+    toolcall_mode: str,
+    pending_draft: Optional[str],
+) -> Optional[str]:
+    """Antwort für den Abschnitt, nachdem die Iterationen erschöpft sind.
+
+    Issue #1294: liegt ein gültiger, nur mangels Deckung zurückgewiesener
+    Entwurf vor, bleibt er stehen. Eine erneute Endgenerierung kann ihn
+    nicht verbessern — die inzwischen erhobene Evidence wird ohnehin an
+    seine Claims gebunden —, aber leer oder unbrauchbar ausfallen.
+    """
+    if pending_draft is not None:
+        return pending_draft
+    messages.append({"role": "user", "content": agent.REACT_FORCE_FINAL_MSG})
+    if toolcall_mode == "native":
+        force_result = agent.llm.chat_with_tools(
+            messages=messages,
+            tools=agent._get_openai_tools_schema(),
+            tool_choice="none",
+            temperature=0.5,
+            max_tokens=4096,
+            context="report",
+        )
+        return force_result["content"]
+    return agent.llm.chat(messages=messages, temperature=0.5, max_tokens=4096)
+
+
 def _safe_generate_section_react(
     agent: Any,
     section,
@@ -747,7 +841,9 @@ def generate_section_react(
 
     tool_calls_count = 0
     max_iterations = 5
-    min_tool_calls = 1
+    # Issue #1294: letzter gültiger Entwurf, der nur mangels Deckung
+    # zurückgewiesen wurde — Forced-Final darf ihn nicht verschlechtern.
+    pending_draft: Optional[str] = None
     conflict_retries = 0
     # Issue #1191: die Merkliste ergebnisloser Suchen gilt pro Abschnitt. Ein
     # anderer Abschnitt darf dieselbe Suche erneut versuchen — sein Kontext ist
@@ -890,18 +986,18 @@ def generate_section_react(
             )
 
         if has_final_answer:
-            if tool_calls_count < min_tool_calls:
-                messages.append({"role": "assistant", "content": response})
-                unused_tools = all_tools - used_tools
-                unused_hint = f"(These tools have not been used, recommend using them: {', '.join(unused_tools)})" if unused_tools else ""
-                messages.append({
-                    "role": "user",
-                    "content": agent.REACT_INSUFFICIENT_TOOLS_MSG.format(
-                        tool_calls_count=tool_calls_count,
-                        min_tool_calls=min_tool_calls,
-                        unused_hint=unused_hint,
-                    ),
-                })
+            # Issue #1294: nicht die Zahl der Tool-Calls entscheidet, sondern ob
+            # vorhandene Evidence den Entwurf deckt (siehe section_coverage).
+            draft = _draft_content(response)
+            if not _section_has_sufficient_evidence(agent, draft):
+                pending_draft = response if draft else pending_draft
+                _request_coverage_retrieval(
+                    messages,
+                    response,
+                    agent.REACT_INSUFFICIENT_TOOLS_MSG,
+                    tool_calls_count,
+                    all_tools - used_tools,
+                )
                 continue
 
             final_answer = _finalize_content(
@@ -1000,18 +1096,16 @@ def generate_section_react(
             })
             continue
 
-        messages.append({"role": "assistant", "content": response})
-        if tool_calls_count < min_tool_calls:
-            unused_tools = all_tools - used_tools
-            unused_hint = f"(These tools have not been used, recommend using them: {', '.join(unused_tools)})" if unused_tools else ""
-            messages.append({
-                "role": "user",
-                "content": agent.REACT_INSUFFICIENT_TOOLS_MSG_ALT.format(
-                    tool_calls_count=tool_calls_count,
-                    min_tool_calls=min_tool_calls,
-                    unused_hint=unused_hint,
-                ),
-            })
+        draft = _draft_content(response)
+        if not _section_has_sufficient_evidence(agent, draft):
+            pending_draft = response if draft else pending_draft
+            _request_coverage_retrieval(
+                messages,
+                response,
+                agent.REACT_INSUFFICIENT_TOOLS_MSG_ALT,
+                tool_calls_count,
+                all_tools - used_tools,
+            )
             continue
 
         # Kein "Final Answer:"-Präfix: der Output geht trotzdem durch den
@@ -1047,19 +1141,7 @@ def generate_section_react(
     # nur im Log — der Leser sah einen Abschnitt, dem er nicht ansehen konnte,
     # dass dem Agenten die Schritte ausgegangen waren.
     mark_forced_final(agent, section_index)
-    messages.append({"role": "user", "content": agent.REACT_FORCE_FINAL_MSG})
-    if _toolcall_mode == "native":
-        force_result = agent.llm.chat_with_tools(
-            messages=messages,
-            tools=agent._get_openai_tools_schema(),
-            tool_choice="none",
-            temperature=0.5,
-            max_tokens=4096,
-            context="report",
-        )
-        response = force_result["content"]
-    else:
-        response = agent.llm.chat(messages=messages, temperature=0.5, max_tokens=4096)
+    response = _forced_final_response(agent, messages, _toolcall_mode, pending_draft)
     if response is None:
         final_answer = SECTION_EMPTY_RESPONSE_BODY
     else:
@@ -1157,6 +1239,32 @@ def _record_metadata_truncation_degradation(
     )
 
 
+def _prior_thresholds_prompt(
+    agent: Any, schema_cls: type, section_index: int
+) -> str:
+    """Issue #1359: Zahlen früherer Abschnitte, auf die ein Wert verweisen kann.
+
+    Ohne sie kennt die Extraktion nur den eigenen Abschnitt — eine gewollte
+    Abweichung von einem Wert aus Abschnitt 1 ließe sich in Abschnitt 7 gar
+    nicht ausdrücken.
+    """
+    if "thresholds" not in getattr(schema_cls, "model_fields", {}):
+        return ""
+    evidence_map = getattr(agent, "evidence_map", None)
+    sections = evidence_map.get("sections") if isinstance(evidence_map, dict) else None
+    lines = prior_threshold_lines(sections, section_index)
+    if not lines:
+        return ""
+    return (
+        "\n\n## Bereits erfasste operative Zahlen früherer Abschnitte\n"
+        + "\n".join(lines)
+        + "\n\nNur als Bezug für deviates_from: nicht in die eigene Liste "
+        "übernehmen. Nennt dieser Abschnitt für dieselbe Größe einen anderen "
+        "Wert und begründet ihn, setze deviates_from auf die Kennung in "
+        "eckigen Klammern und übernimm die Begründung in deviation_rationale."
+    )
+
+
 def generate_section_metadata(
     agent: Any,
     section_title: str,
@@ -1218,7 +1326,7 @@ def generate_section_metadata(
     user_msg = (
         f"## Abschnittstitel\n{section_title}\n\n"
         f"## Inhalt\n{section_content[:METADATA_MAX_CONTENT_CHARS]}"
-    )
+    ) + _prior_thresholds_prompt(agent, schema_cls, section_index)
 
     try:
         result = agent.llm.chat_json(

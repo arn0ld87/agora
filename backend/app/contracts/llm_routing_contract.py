@@ -126,6 +126,10 @@ class ProviderDescriptor(BaseModel):
     supports_models_endpoint: bool = False
     supports_tools: bool = False
     fallback_models: List[str] = Field(default_factory=list)
+    # Issue #1415: aus derselben Registry-Matrix, damit die UI CLI-/Session-
+    # Provider nicht per eigener Typ-Liste erkennen muss.
+    transport: Literal["http", "local", "cli"] = "http"
+    auth_mode: Literal["none", "api_key", "oauth", "session"] = "api_key"
 
 
 class ResolvedRoute(BaseModel):

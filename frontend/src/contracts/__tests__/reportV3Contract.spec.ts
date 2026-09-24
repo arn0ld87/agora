@@ -380,6 +380,75 @@ describe("ReportV3Schema (Zod-Spiegel)", () => {
     }
   });
 
+  // Issue #1359: gewollte Abweichungen verweisen auf den anderen Wert.
+  const pilotBase = {
+    id: "T1_01",
+    label: "Pilotdauer",
+    value: 4,
+    unit: "weeks",
+    purpose: "target",
+    origin: "model_proposal",
+  } as const;
+  const pilotDeviation = {
+    ...pilotBase,
+    id: "T7_01",
+    value: 8,
+    deviates_from: "T1_01",
+    deviation_rationale: "Nach dem Ausfall im Testbetrieb verlängert.",
+  };
+
+  it("lädt Bestands-Thresholds ohne Verweis mit null-Defaults", () => {
+    const parsed = ThresholdSchema.safeParse(pilotBase);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.deviates_from).toBeNull();
+      expect(parsed.data.deviation_rationale).toBeNull();
+    }
+  });
+
+  it("weist einen Verweis ohne Begründung ab", () => {
+    expect(
+      ThresholdSchema.safeParse({ ...pilotDeviation, deviation_rationale: null }).success,
+    ).toBe(false);
+    expect(
+      ThresholdSchema.safeParse({ ...pilotDeviation, deviation_rationale: "  " }).success,
+    ).toBe(false);
+  });
+
+  it("weist einen Verweis auf sich selbst ab", () => {
+    expect(
+      ThresholdSchema.safeParse({ ...pilotDeviation, deviates_from: "T7_01" }).success,
+    ).toBe(false);
+  });
+
+  it("akzeptiert einen begründeten Verweis im Bericht und lehnt einen ins Leere ab", () => {
+    const report = {
+      schema_version: 4,
+      report_id: "r-1359",
+      generated_at: "2026-09-24T00:00:00Z",
+      thresholds: [pilotBase, pilotDeviation],
+    };
+    expect(ReportV3Schema.safeParse(report).success).toBe(true);
+    expect(
+      ReportV3Schema.safeParse({ ...report, thresholds: [pilotDeviation] }).success,
+    ).toBe(false);
+  });
+
+  it("weist doppelte Threshold-IDs ab (Review PR #1566)", () => {
+    const result = ReportV3Schema.safeParse({
+      schema_version: 4,
+      report_id: "r-1359-dup",
+      generated_at: "2026-09-24T00:00:00Z",
+      thresholds: [pilotBase, { ...pilotBase, value: 8 }, pilotDeviation],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.message.includes("nicht eindeutig"))).toBe(
+        true,
+      );
+    }
+  });
+
   it("rejects Claim with invalid confidence value", () => {
     const badClaim = {
       id: "c1",

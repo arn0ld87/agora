@@ -413,8 +413,8 @@ class TestReactLoopNativeToolCalls:
         agent.SECTION_USER_PROMPT_TEMPLATE = (
             "User {previous_content} {section_title}"
         )
-        agent.REACT_INSUFFICIENT_TOOLS_MSG = "Insufficient tools {tool_calls_count} {min_tool_calls} {unused_hint}"
-        agent.REACT_INSUFFICIENT_TOOLS_MSG_ALT = "Alt {tool_calls_count} {min_tool_calls} {unused_hint}"
+        agent.REACT_INSUFFICIENT_TOOLS_MSG = "Insufficient tools {tool_calls_count} {unused_hint}"
+        agent.REACT_INSUFFICIENT_TOOLS_MSG_ALT = "Alt {tool_calls_count} {unused_hint}"
         agent.REACT_TOOL_LIMIT_MSG = "Limit {tool_calls_count} {max_tool_calls}"
         agent.REACT_UNUSED_TOOLS_HINT = "Unused {unused_list}"
         agent.REACT_OBSERVATION_TEMPLATE = (
@@ -438,7 +438,16 @@ class TestReactLoopNativeToolCalls:
                 },
             }
         ]
-        agent._execute_tool.return_value = "Tool result stub"
+        # Wie der echte ``_execute_tool`` registriert jeder Aufruf ein
+        # Evidence-Item für den Abschnitt — das Deckungs-Gate (#1294) liest
+        # ``_active_section_evidence``, nicht die Zahl der Aufrufe.
+        def _execute_tool(name, parameters, report_context=""):
+            agent._active_section_evidence.append(
+                {"evidence_id": f"ev-{name}", "type": "graph_fact", "snippet": "Tool result stub"}
+            )
+            return "Tool result stub"
+
+        agent._execute_tool.side_effect = _execute_tool
         agent._parse_tool_calls.return_value = []
         return agent
 
@@ -460,7 +469,7 @@ class TestReactLoopNativeToolCalls:
         agent = self._make_minimal_agent()
 
         # Erster Call: tool_call zurückgeben
-        # Zweiter-Vierter Call: weitere tool_calls (min_tool_calls=3)
+        # Zweiter und dritter Call: weitere tool_calls
         # Fünfter Call: Final Answer
         tool_calls_sequence = [
             {
@@ -519,7 +528,7 @@ class TestReactLoopNativeToolCalls:
         assert agent._execute_tool.call_count >= 3
 
     def test_react_loop_accepts_final_answer_after_one_tool_call(self) -> None:
-        """min_tool_calls=1: Final Answer nach genau 1 Tool-Call wird akzeptiert."""
+        """Final Answer nach genau 1 Tool-Call mit registrierter Evidence wird akzeptiert."""
         from app.services.report_agent.workflow import generate_section_react
 
         agent = self._make_minimal_agent()
@@ -581,7 +590,7 @@ class TestReactLoopNativeToolCalls:
         agent = self._make_minimal_agent()
 
         # Erster Call: content=None, tool_calls=[] (z. B. erschöpftes max_tokens
-        # oder Safety-Filter). Danach drei Tool-Calls (min_tool_calls=3) und
+        # oder Safety-Filter). Danach drei Tool-Calls und
         # schließlich der Final Answer.
         tool_calls_sequence = [
             {

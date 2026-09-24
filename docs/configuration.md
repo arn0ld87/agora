@@ -159,8 +159,11 @@ Persistente Konfigurationen liegen im `EmbeddingConfigurationStore`; Migrationen
 | `REDIS_URL` | Redis für Event-/Live-Infrastruktur |
 | `EVENT_BUS_BACKEND` | `auto`/`redis`/`file` gemäß Event-Bus-Implementierung |
 | `AGORA_STARTUP_RECONCILIATION` | stale Simulations-Runs beim App-/Workerstart prüfen; Default `true` (#1476) |
+| `AGORA_JOB_LEASE_TTL_SECONDS` | Lease-TTL für In-Process-Jobs (Prepare/Report/Graph); Default `90` (#1472) |
+| `AGORA_JOB_LEASE_HEARTBEAT_INTERVAL_SECONDS` | Heartbeat-Intervall; höchstens TTL/2, Default `20` (#1472) |
+| `AGORA_JOB_LEASE_MAX_STALL_SECONDS` | Heartbeat erneuert die Lease nur, solange der Job innerhalb dieser Frist ein Run-Event geschrieben hat; danach verfällt sie nach TTL, Default `1800` (#1472) |
 
-Startup-Reconciliation korrigiert persistierte Simulation-Runs mit toter PID. Sie ersetzt **keine** persistente Jobqueue für Prepare/Report/Graph; siehe #1472.
+Startup-Reconciliation korrigiert persistierte Simulation-Runs mit toter PID. Sie ersetzt **keine** persistente Jobqueue für Prepare/Report/Graph. Diese Jobs tragen seit #1472 eine Lease mit Heartbeat und TTL; eine verfallene Lease macht einen hängenden oder nach Restart verschwundenen Job per `/resume` wiederaufnehmbar.
 
 ---
 

@@ -94,6 +94,60 @@ class SystemStatusOllama(BaseModel):
     error: StatusCheckError | None = None
 
 
+class SystemStatusNeo4j(BaseModel):
+    """Neo4j-Teilbaum von ``/api/status`` (Issue #1466).
+
+    ``_get_neo4j_status`` hat drei Zweige mit unterschiedlicher Feldmenge:
+
+    * ``storage is None`` — ``is_connected``/``last_success_ts`` werden nie
+      gesetzt (kein Verbindungsversuch je unternommen).
+    * Erfolgreiche Probe — alle Felder gesetzt, ``error`` ist ``None``.
+    * Fehlgeschlagene Probe — alle Felder gesetzt, ``error`` strukturiert
+      (``StatusCheckError``, seit #1458).
+
+    ``_get_neo4j_status`` serialisiert deshalb mit ``exclude_unset=True``
+    statt ``exclude_none=True``: nur explizit gesetzte Felder wandern in die
+    Antwort, damit der erste Zweig ``is_connected``/``last_success_ts``
+    weiterhin ganz auslässt statt sie als ``null`` zu senden — exakt das
+    bisherige, handgeschriebene Wire-Format.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    reachable: bool
+    error: StatusCheckError | None = None
+    uri: str | None = None
+    is_connected: bool | None = None
+    last_success_ts: str | None = None
+
+
+class SystemStatusDiskUploads(BaseModel):
+    """``uploads``-Teilbaum von ``SystemStatusDisk`` (Issue #1466).
+
+    Im Erfolgsfall fehlt ``error`` ganz (kein ``null``-Feld); im Fehlerfall
+    sind ``total_bytes``/``free_bytes``/``used_pct`` explizit ``null`` und
+    ``error`` strukturiert gesetzt (seit #1458). ``_get_disk_status``
+    serialisiert mit ``exclude_unset=True``, damit beide Zweige ihr
+    bisheriges Wire-Format behalten.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+    total_bytes: int | None = None
+    free_bytes: int | None = None
+    used_pct: float | None = None
+    error: StatusCheckError | None = None
+
+
+class SystemStatusDisk(BaseModel):
+    """Disk-Teilbaum von ``/api/status`` (Issue #1466)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    uploads: SystemStatusDiskUploads
+
+
 class SystemStatusE2E(BaseModel):
     """E2E-Harness-Teilbaum von ``/api/status``.
 

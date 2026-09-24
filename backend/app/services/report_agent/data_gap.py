@@ -72,6 +72,17 @@ def _pool_texts(evidence_pool: Sequence[Dict[str, Any]]) -> list[str]:
     return texts
 
 
+def topic_present_in_pool(
+    claim_text: str,
+    evidence_pool: Sequence[Dict[str, Any]],
+) -> bool:
+    """Kommt das Thema des Claims inhaltlich in einer Quelle des Pools vor?"""
+    return any(
+        coverage_ratio(claim_text, text) >= TOPIC_PRESENCE_THRESHOLD
+        for text in _pool_texts(evidence_pool)
+    )
+
+
 def classify_claim_gap(
     claim_text: str,
     *,
@@ -99,9 +110,8 @@ def classify_claim_gap(
     if source_mentions_claim_numbers(claim, pool):
         return ClaimGapKind.BINDING_FAILURE
 
-    for text in _pool_texts(pool):
-        if coverage_ratio(claim, text) >= TOPIC_PRESENCE_THRESHOLD:
-            return ClaimGapKind.BINDING_FAILURE
+    if topic_present_in_pool(claim, pool):
+        return ClaimGapKind.BINDING_FAILURE
 
     return ClaimGapKind.SOURCE_INFORMATION_ABSENT
 
@@ -110,4 +120,5 @@ __all__ = [
     "TOPIC_PRESENCE_THRESHOLD",
     "ClaimGapKind",
     "classify_claim_gap",
+    "topic_present_in_pool",
 ]

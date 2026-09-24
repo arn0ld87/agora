@@ -249,6 +249,8 @@ class LlmProviderRegistry:
                 supports_models_endpoint=definition.adapter_kind != "unsupported",
                 supports_tools=definition.supports_tools,
                 fallback_models=list(definition.fallback_models),
+                transport=definition.transport,
+                auth_mode=definition.auth_mode,
             )
             for definition in _CONNECTION_DEFINITIONS
         ]

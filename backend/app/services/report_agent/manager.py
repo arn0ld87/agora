@@ -16,6 +16,7 @@ from ...contracts.report_v3 import SimulationContribution
 from .claim_dedup import dedup_claims, duplicate_report
 from .metadata_merge import merge_section_metadata
 from .threshold_provenance import bind_threshold_provenance, dedup_thresholds
+from .threshold_deviation import drop_unresolvable_deviations
 from .simulation_contribution import compute_simulation_contribution
 from ...config import Config
 from ...models.report import Report, ReportOutline, ReportSection, ReportStatus
@@ -151,9 +152,13 @@ def _bind_and_dedup_thresholds(metadata_kwargs: dict, evidence_index: dict) -> N
     """
     if not metadata_kwargs.get("thresholds"):
         return
-    metadata_kwargs["thresholds"] = dedup_thresholds(
-        bind_threshold_provenance(
-            metadata_kwargs["thresholds"], list(evidence_index.values())
+    # Issue #1359: erst nach der Deduplizierung steht fest, welche Kennungen
+    # es im Bericht gibt — ein Verweis auf eine verworfene zeigte ins Leere.
+    metadata_kwargs["thresholds"] = drop_unresolvable_deviations(
+        dedup_thresholds(
+            bind_threshold_provenance(
+                metadata_kwargs["thresholds"], list(evidence_index.values())
+            )
         )
     )
 

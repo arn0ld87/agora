@@ -12,8 +12,10 @@ Liefert:
 - Deterministischen Tool-Return für die vier registrierten Report-Agent-Tools.
 - Generisches {"ok": true, "stub": true} als Fallback.
 - e2e_stub_chat_response: deterministischer String-Return für chat()-Aufrufe
-  (ReACT-Loop in generate_section_react — min_tool_calls=1 wird durch
-  Zählen der assistant-Nachrichten in der Message-History erfüllt).
+  (ReACT-Loop in generate_section_react — ein Tool-Call, danach Final
+  Answer; gezählt über die assistant-Nachrichten in der Message-History.
+  Ob der Loop den Entwurf annimmt, entscheidet die Evidence-Deckung
+  (Issue #1294, ``section_coverage``), nicht die Zahl der Tool-Calls).
 """
 from __future__ import annotations
 
@@ -422,8 +424,11 @@ def e2e_stub_chat_response(
     """Deterministischer String-Return für LLMClient.chat() im Stub-Modus.
 
     Entscheidungslogik für den ReACT-Loop in generate_section_react:
-    - Die erste ≥ min_tool_calls (= 1) Iterationen geben Tool-Call-Strings zurück.
+    - Die erste Iteration gibt einen Tool-Call-String zurück.
     - Ab der zweiten Iteration wird "Final Answer:" zurückgegeben.
+      Weist der Loop den Entwurf mangels Evidence-Deckung zurück (#1294),
+      bleibt die Antwort gleich; nach erschöpften Iterationen behält der
+      Loop diesen Entwurf.
 
     Die Entscheidung basiert auf dem Zählen vorhandener assistant-Nachrichten
     in der Message-History — kein globaler Zustand nötig.
@@ -431,7 +436,7 @@ def e2e_stub_chat_response(
     Kein I/O, kein Sleep, kein Random.
     """
     assistant_count = _count_assistant_messages(messages)
-    # min_tool_calls im Workflow = 1 — nach 1 Tool-Call kommt Final Answer
+    # Ein Tool-Call, danach Final Answer (Deckungs-Gate siehe Docstring)
     if assistant_count < 1:
         idx = assistant_count % len(_STUB_TOOL_CALL_SEQUENCE)
         return _STUB_TOOL_CALL_SEQUENCE[idx]

@@ -110,6 +110,8 @@ export const LlmProviderListTestId = {
   testButton: 'llm-provider-test',
   refreshModelsButton: 'llm-provider-refresh-models',
   disconnectButton: 'llm-provider-disconnect',
+  sessionNotice: 'llm-provider-session-notice',
+  cliKeyHint: 'llm-provider-cli-key-hint',
 } as const
 
 export type LlmProviderListTestId = (typeof LlmProviderListTestId)[keyof typeof LlmProviderListTestId]
