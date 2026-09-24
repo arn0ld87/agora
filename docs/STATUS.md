@@ -177,6 +177,11 @@ Offen bleiben Qualitätsthemen der Entitätsauflösung: Alias-/Koreferenzauflös
 - Teilberichte aus Cancel-, Section-Failure- oder Fallback-Outline-Pfaden werden als `INCOMPLETE` klassifiziert; Resume bewahrt die Degradationsmarker und kann einen temporären Fallback-Outline neu planen (#1479).
 - Ein `INCOMPLETE`-Report kann weiterhin auslieferbar sein; der tatsächliche Reportstatus steht in der Run-Metadaten-Sicht.
 
+### Abschnittsgenerierung (Section-ReACT)
+
+- Ob ein Abschnittsentwurf angenommen wird oder der Loop weiteres Retrieval anfordert, entscheidet die Evidence-Deckung, nicht die Zahl der Tool-Calls (#1294): angenommen wird, wenn das Retrieval des Abschnitts bindbare Evidence registriert hat oder jede prüfbare Aussage des Entwurfs thematisch in der vorab geladenen Evidence (`global_evidence_refs`) vorkommt. Geprüft werden dieselben Claim-Einheiten wie beim Binding, gleiche Zahlen ohne thematische Überlappung zählen nicht, ein Entwurf ohne prüfbare Aussage ist nie gedeckt. Ein ergebnisloser Tool-Call genügt nicht mehr, ein gedeckter Entwurf braucht keinen.
+- Erschöpft der Loop seine Iterationen, bleibt ein gültiger, nur mangels Deckung zurückgewiesener Entwurf stehen, statt durch eine erneute Endgenerierung ersetzt zu werden; der Abschnitt bleibt als `forced_final` markiert.
+
 ### Persistenz
 
 - Sektions-Evidence wird **vor** Markdown persistiert; Markdown ist der Commit-Marker.
