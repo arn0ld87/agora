@@ -27,12 +27,12 @@ keinen Adapter (siehe Tabelle).
 | PR 3 | LLM-Profil-Modell und Repository-Port | gemergt (#1507, #1511, #1515) |
 | PR 4 | Postgres-Adapter LLM-Profile, Datenmigration | gemergt (#1517), Fernet-Store pro Profil (#1516) |
 | PR 6 | Projekt-Vertrag, Port, Postgres-Adapter, Datenmigration | gemergt (#1519, #1522) |
-| PR 7 | Simulationsmetadaten | Port: #1578 (Draft-PR #1595), Adapter: #1585 |
-| PR 8 | Run-Registry | Port: #1579 (Draft-PR #1596), Adapter: #1587 |
+| PR 7 | Simulationsmetadaten | Port gemergt (#1595, Issue #1578), Adapter: #1585 |
+| PR 8 | Run-Registry | Port gemergt (#1596, Issue #1579), Adapter: #1587 |
 | PR 9 | Report-Metadaten | Port: #1580, Adapter: #1588 |
 | PR 13/14 | Blob-Store-Port, Supabase-Storage-Adapter | #1584, #1586 (optional) |
 | PR 15 | Cutover Metadaten-Backend | Prüfskript #1590, Cutover armserver #1592 |
-| — | CI-Postgres, Readiness, Alembic-Drift, Backup, Rollback-Gate | #1577 (Draft-PR #1594), #1581, #1582, #1583, #1589 |
+| — | CI-Postgres, Readiness, Alembic-Drift, Backup, Rollback-Gate | CI gemergt (#1594, Issue #1577); offen: #1581, #1582, #1583, #1589 |
 
 **Zurückgestellt (ROADMAP: nicht vor 1.0):** PR 5 und §16 (Workspaces), PR 10–12
 und §14/15/17/18 (Supabase Auth, JWT, RLS), §22/23 (Frontend-Client, Realtime),

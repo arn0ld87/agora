@@ -290,7 +290,7 @@ Backup/Restore ist dokumentiert, und seit [#766](https://github.com/arn0ld87/ago
 
 Unter [`supabase/`](../supabase/README.md) liegt ein **eigenes** Compose-Projekt mit self-hosted Supabase (PostgreSQL 17, Supavisor, GoTrue, PostgREST, Storage, postgres-meta, Studio, Envoy-Gateway). Realtime, Edge Runtime, imgproxy und Analytics laufen bewusst nicht mit.
 
-Das ist Phase 1 des Migrationsplans [`plans/supabase.md`](plans/supabase.md) §7 und **ausschließlich Infrastruktur**. Der PostgreSQL-Code im Backend (Adapter, Alembic, Feature-Flags) ist in den Abschnitten darunter beschrieben und im Default nicht aktiv; dieser Stack ist nur die Instanz, gegen die er laufen soll. Der Agora-Stack startet und läuft unverändert ohne diesen Stack; die Kopplung ans gemeinsame Docker-Netz `agora-backend` ist ein zusätzliches Overlay ([`deploy/compose/docker-compose.supabase.yml`](../deploy/compose/docker-compose.supabase.yml)), nie die Basis-`docker-compose.yml`.
+Das ist Phase 1 des Migrationsplans [`plans/supabase.md`](plans/supabase.md) §7 und **ausschließlich Infrastruktur**. Der PostgreSQL-Code im Backend (Adapter, Alembic, Feature-Flags) ist in den Abschnitten darunter beschrieben und im Default nicht aktiv; dieser Stack ist nur die Instanz, gegen die er später laufen soll. Der Agora-Stack startet und läuft unverändert ohne diesen Stack; die Kopplung ans gemeinsame Docker-Netz `agora-backend` ist ein zusätzliches Overlay ([`deploy/compose/docker-compose.supabase.yml`](../deploy/compose/docker-compose.supabase.yml)), nie die Basis-`docker-compose.yml`.
 
 Daraus folgt ausdrücklich **nicht**, dass Agora Postgres nutzt, dass Multi-User näher rückt oder dass Auth sich geändert hat. `AGORA_AUTH_TOKEN` und das API-Key-Scope-Modell sind unverändert die Auth-Wahrheit; GoTrue läuft mit `DISABLE_SIGNUP=true` mit und wird von nichts aufgerufen.
 
@@ -310,7 +310,7 @@ Die erste Fachtabelle existiert als Definition: `agora.llm_profiles` (SQLAlchemy
 
 Für die LLM-Profile existiert seit PR 3 ein Port (`app/repositories/llm_profile_repository.py`) mit genau einem Adapter: `SqliteLlmProfileRepository`, die umbenannte bisherige Klasse auf derselben `instance/llm_profiles.db`. `AGORA_LLM_PROFILE_BACKEND` schaltet die Ablage getrennt von `AGORA_METADATA_BACKEND` und steht im Default auf `sqlite`. Seit PR 4 existiert mit `PostgresLlmProfileRepository` ein zweiter Adapter: Metadaten aus `agora.llm_profiles`, Schlüssel aus dem Fernet-Store, IDs weiterhin als 32-Zeichen-`hex`, damit gespeicherte `profile:<id>`-Referenzen weiter zeigen. `backend/scripts/migrate_llm_profiles_to_postgres.py` überträgt den Bestand und lässt die SQLite unberührt; Ablauf und Rückweg stehen in [`runbooks/llm-profile-postgres-umstellung.md`](runbooks/llm-profile-postgres-umstellung.md).
 
-**Umgeschaltet ist nichts.** Der Default bleibt `sqlite`, und in dieser Installation ist keine Migration gelaufen. Der Adapter ist gegen eine echte PostgreSQL-Instanz verifiziert (16 Integrationstests), nicht gegen einen produktiven Bestand.
+**Umgeschaltet ist nichts.** Der Default bleibt `sqlite`, und in dieser Installation ist keine Migration gelaufen. Der Adapter ist gegen eine echte PostgreSQL-Instanz verifiziert (16 Integrationstests), nicht gegen einen produktiven Bestand. Seit #1577 laufen alle PostgreSQL-Integrationstests im CI-Job `integration` gegen einen `postgres:17`-Service (auf `push:main` und `workflow_dispatch`); vorher fehlten dort Service und `AGORA_TEST_POSTGRES_URL`, und der Job war rot.
 
 Dazu gehört ein zweiter Baustein: `LlmProfileSecretsStore` (`app/services/llm_profile_secrets_store.py`) legt die API-Keys **pro Profil** Fernet-verschlüsselt unter `AGORA_DATA_DIR` ab, weil `agora.llm_profiles` bewusst keine `api_key`-Spalte hat und der bestehende Provider-Secret-Store pro **Provider** ablegt — zwei Profile desselben Providers dürfen aber verschiedene Schlüssel tragen. `backend/scripts/migrate_profile_secrets.py` füllt den Store aus der SQLite (read-only, `--verify` vergleicht feldweise). **Kein Lesepfad nutzt ihn bisher**: die SQLite bleibt die Wahrheit, der Store ist die Ablage, die PR 4 vorfinden wird.
 
@@ -326,6 +326,12 @@ Seit dem zweiten Teil von PR 6 gibt es den zweiten Adapter: `PostgresProjectRepo
 
 Drei Festlegungen des Schemas: `project_id` behält sein Format `proj_<12 Hexstellen>` und wird **keine** `uuid`, weil es der Verzeichnisname unter `uploads/projects/` ist — die Kennung erzeugt seitdem der Port, damit beide Adapter dieselbe Form liefern. `created_at`/`updated_at` sind `text` und nicht `timestamptz`, weil der Vertrag ISO-Zeichenketten führt und ein Umweg über `timestamptz` beim Lesen eine andere Zeichenkette ergäbe. Und `workspace_id` kommt nicht vor, weil Multi-User eine eigene, freizugebende Phase ist.
 
+### Simulationsmetadaten: Vertrag und Port — ein Adapter
+
+Simulationsmetadaten (`state.json`) wurden bis hierher direkt in `SimulationManager._save_simulation_state` und `_load_simulation_state` gelesen und geschrieben — ohne Vertrag, ohne Port. Seit #1578 liegt der Vertrag in `app/contracts/simulation_record_contract.py` (`SimulationRecord`, Pydantic v2, kein Schema-Dump — interner Persistenzvertrag), und ein Port `SimulationRepository` (`app/repositories/simulation_repository.py`) mit genau einem Adapter, `FileSimulationRepository` (`app/services/file_simulation_store.py`) — die bisherige Dateilogik, umstrukturiert, nicht neu geschrieben. `SimulationManager` bleibt Fassade und delegiert seine Metadatenzugriffe (`save`/`get`/`list`/`list_branches`) an das Repository; `simulation_config.json`, Profile, Logs und `run_instructions` bleiben unverändert dateibasiert. Keine Aufrufstelle außerhalb von `SimulationManager` wurde angefasst.
+
+Der Adapter nutzt `SimulationArtifactStore` für den eigentlichen I/O und kennt kein direktes `open()`. Der PostgreSQL-Adapter folgt in #1585; heute liefert die Fabrik `get_simulation_repository()` ausschließlich den Dateiadapter — ohne Konfigurationsschalter.
+
 ### psycopg unter gevent: geprüft, kooperativ
 
 Bis PR 4 stand hier als offener Punkt, psycopg 3 sei im Synchronmodus nicht gevent-kooperativ, während der Webprozess unter einem gunicorn-Worker mit gevent-Worker-Klasse läuft. **Die Annahme war falsch, und sie ist jetzt gemessen statt vermutet.** Acht gleichzeitige `SELECT pg_sleep(1)` in acht Greenlets brauchen 1,08 s direkt über psycopg und 1,04 s über `build_engine()`; seriell wären es acht. Die Gegenprobe ohne `gevent.monkey.patch_all()` braucht 8,19 s — der Unterschied liegt um eine Größenordnung auseinander, nicht im Messrauschen. Bei gepatchtem `select` wählt psycopg die Wartefunktion auf Python-Ebene; das ist die von psycopg ab 3.1.14 dokumentierte gevent-Unterstützung, `psycogreen` entfällt. Der Mindest-Pin liegt mit `>=3.2.0` darüber.
@@ -333,6 +339,17 @@ Bis PR 4 stand hier als offener Punkt, psycopg 3 sei im Synchronmodus nicht geve
 Bedingung dafür ist die Importreihenfolge: `gevent.monkey.patch_all()` muss vor dem ersten psycopg-Import laufen. Das ist keine neue Auflage, sondern dieselbe, die seit [#529](https://github.com/arn0ld87/agora/issues/529) `requests`/`ssl` schützt — `backend/wsgi.py` patcht als erstes Statement, das `Dockerfile` startet `wsgi:app`. Festgehalten wird das durch `backend/tests/integration/test_gevent_psycopg_cooperation.py`, nicht durch diese Notiz. Begründung und Grenzen: [ADR-0014](decisions/0014-psycopg-under-gevent-worker.md).
 
 Ungeprüft bleibt das Verhalten hinter Supavisor unter Last. Der HARDSTOP `--workers 1` bleibt aus den in `backend/gunicorn.conf.py` genannten Gründen unberührt.
+
+### Run-Registry: Vertrag und Port — ein Adapter
+
+`RunRegistry` delegiert seit #1579 die Datei-I/O an `FileRunRepository`
+(`backend/app/services/file_run_store.py`), hinter dem `RunRepository`-Protocol
+(`backend/app/repositories/run_repository.py`).  Das Pydantic-v2-Modell
+`RunRecord` (`backend/app/contracts/run_record_contract.py`) beschreibt die
+persistierten Manifest-Felder; Lease-Felder (`worker_pid`, `worker_token`,
+`heartbeat_at`, `lease_ttl_s`) bleiben in `metadata` und sind kein Bestandteil
+des Port-Vertrags.  `RunRegistry` bleibt Fassade (Singleton, Lock,
+canonical_status, Events, Aggregation).  Der PostgreSQL-Adapter folgt in #1587.
 
 ## Security
 

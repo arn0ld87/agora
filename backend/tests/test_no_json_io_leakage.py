@@ -1,8 +1,8 @@
 """Constraint guard for Issue #13: services/ and api/ may not import json_io.
 
 Only the SimulationArtifactStore adapter (``services/artifact_store.py``) and
-the explicitly-out-of-scope ``services/run_registry.py`` (separate refactor PR)
-are allowed consumers. The smoke test fails fast if anything else starts
+the Run-Registry file adapter ``services/file_run_store.py`` (#1579; the I/O
+moved there out of ``run_registry.py``) are allowed consumers. The smoke test fails fast if anything else starts
 calling ``utils.json_io`` directly again.
 """
 
@@ -19,9 +19,10 @@ SCAN_DIRS = [REPO_ROOT / "app" / "services", REPO_ROOT / "app" / "api"]
 # Files that are explicitly allowed to import json_io. Keep this list tiny.
 ALLOWED = {
     REPO_ROOT / "app" / "services" / "artifact_store.py",
-    # run_registry is migrated in a separate PR (different storage root, own
-    # concurrency model). Tracked in the Issue #13 plan as out-of-scope.
-    REPO_ROOT / "app" / "services" / "run_registry.py",
+    # Run-Registry-Adapter hinter dem RunRepository-Port (#1579): eigenes
+    # Ablageverzeichnis, eigenes Nebenlaeufigkeitsmodell. run_registry.py
+    # selbst importiert json_io seitdem nicht mehr.
+    REPO_ROOT / "app" / "services" / "file_run_store.py",
 }
 
 
