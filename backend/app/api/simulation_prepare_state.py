@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 
 from ..config import Config
+from ..repositories.simulation_repository import get_simulation_repository
 from .simulation_common import get_artifact_store, logger
 
 def check_simulation_prepared(simulation_id: str) -> tuple:
@@ -16,11 +17,24 @@ def check_simulation_prepared(simulation_id: str) -> tuple:
         return False, {"reason": "Simulation directory does not exist"}
 
     store = get_artifact_store()
+    # Die Metadaten laufen ueber das Repository (#1585): mit
+    # AGORA_SIMULATION_BACKEND=postgres gibt es keine state.json mehr, und
+    # ein direkter Store-Zugriff saehe dort nichts.
+    repository = get_simulation_repository(store=store)
+    try:
+        state_record = repository.get(simulation_id)
+    except Exception as exc:  # noqa: BLE001 — wie ein unlesbarer Datensatz behandelt
+        logger.warning(f"Failed to read simulation state {simulation_id}: {type(exc).__name__}")
+        state_record = None
 
     # JSON-Artefakte gehen über den Store; CSV (twitter_profiles) bleibt FS-direkt
-    # (out of scope für Issue #13).
+    # (out of scope für Issue #13). "state.json" bleibt als Name im Ergebnis,
+    # zaehlt aber auch als vorhanden, wenn der Datensatz aus der Datenbank kommt.
     json_artifacts = {
-        "state.json": ("state", lambda: store.exists(simulation_id, "state")),
+        "state.json": (
+            "state",
+            lambda: state_record is not None or store.exists(simulation_id, "state"),
+        ),
         "simulation_config.json": (
             "simulation_config",
             lambda: store.exists(simulation_id, "simulation_config"),
@@ -53,9 +67,9 @@ def check_simulation_prepared(simulation_id: str) -> tuple:
         }
 
     try:
-        state_data = store.read_json(simulation_id, "state", default=None)
-        if not state_data:
+        if state_record is None:
             return False, {"reason": "State file is unreadable or temporarily incomplete"}
+        state_data = state_record.to_dict()
 
         status = state_data.get("status", "")
         config_generated = state_data.get("config_generated", False)
@@ -76,13 +90,9 @@ def check_simulation_prepared(simulation_id: str) -> tuple:
                 # persistiert und nur bei Erfolg ein positives Ergebnis
                 # gemeldet; der Fehlerfall wird als "nicht vorbereitet"
                 # zurueckgegeben statt still verschluckt.
-                from datetime import datetime
-
-                promoted = dict(state_data)
-                promoted["status"] = "ready"
-                promoted["updated_at"] = datetime.now().isoformat()
+                state_record.status = "ready"
                 try:
-                    store.write_json(simulation_id, "state", promoted)
+                    repository.save(state_record)
                 except Exception as exc:  # noqa: BLE001 — Storefehler sind nicht typisiert
                     logger.error(
                         f"Failed to persist auto status update for {simulation_id}: {exc}"
@@ -93,7 +103,7 @@ def check_simulation_prepared(simulation_id: str) -> tuple:
                         "config_generated": config_generated,
                     }
                 logger.info(f"Auto update simulation status: {simulation_id} preparing -> ready")
-                state_data = promoted
+                state_data = state_record.to_dict()
                 status = "ready"
 
             logger.info(

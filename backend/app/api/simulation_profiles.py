@@ -6,7 +6,7 @@ import io
 import os
 import zipfile
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 from flask import current_app, request, send_file
 from pydantic import ValidationError
@@ -31,6 +31,18 @@ from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_success, json_error
 from .simulation_common import get_artifact_store, logger
 
+
+
+def _read_state(simulation_id: str, store: Any) -> Optional[dict]:
+    """Simulationsmetadaten ueber das Repository (#1585).
+
+    Mit ``AGORA_SIMULATION_BACKEND=postgres`` gibt es keine ``state.json``;
+    ein direkter Store-Zugriff saehe dort nichts.
+    """
+    from ..repositories.simulation_repository import get_simulation_repository
+
+    record = get_simulation_repository(store=store).get(simulation_id)
+    return record.to_dict() if record is not None else None
 
 def _persona_review_service() -> PersonaReviewService:
     return PersonaReviewService(get_artifact_store())
@@ -224,7 +236,7 @@ def get_simulation_profiles_realtime(simulation_id: str):
 
     is_generating = False
     total_expected = None
-    state_data = store.read_json(simulation_id, "state", default=None)
+    state_data = _read_state(simulation_id, store)
     if state_data:
         status = state_data.get("status", "")
         is_generating = status == "preparing"
@@ -613,7 +625,7 @@ def get_simulation_config_realtime(simulation_id: str):
     is_generating = False
     generation_stage = None
     config_generated = False
-    state_data = store.read_json(simulation_id, "state", default=None)
+    state_data = _read_state(simulation_id, store)
     if state_data:
         status = state_data.get("status", "")
         is_generating = status == "preparing"

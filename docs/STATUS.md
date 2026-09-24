@@ -298,7 +298,7 @@ Die Supabase-Konfigurationsdateien (DB-Init-SQL, Envoy-Routing, Supavisor-Config
 
 ### PostgreSQL-Grundlage: installiert, im Default ungenutzt
 
-`sqlalchemy`, `psycopg[binary]` und `alembic` sind Backend-Abhängigkeiten. Der zentrale Adapter liegt in `backend/app/infrastructure/postgres/` (`Database.session()` als einziger vorgesehener Weg zu einer Verbindung), Alembic unter `backend/migrations/` mit drei Migrationen: die erste legt das Fachschema `agora` an, die zweite die Tabelle `agora.llm_profiles`, die dritte die Tabelle `agora.projects`.
+`sqlalchemy`, `psycopg[binary]` und `alembic` sind Backend-Abhängigkeiten. Der zentrale Adapter liegt in `backend/app/infrastructure/postgres/` (`Database.session()` als einziger vorgesehener Weg zu einer Verbindung), Alembic unter `backend/migrations/` mit vier Migrationen: die erste legt das Fachschema `agora` an, die zweite die Tabelle `agora.llm_profiles`, die dritte die Tabelle `agora.projects`, die vierte die Tabelle `agora.simulations`.
 
 Wirksam wird davon im Default nichts: `AGORA_METADATA_BACKEND=legacy` ist gesetzt, und solange er gilt, wird keine Verbindung aufgebaut. `DATABASE_URL` hat bewusst keinen Default; `Config.validate()` lehnt `AGORA_METADATA_BACKEND=postgres` ohne URL, einen unbekannten Backend-Wert und ein `postgresql://`-Schema (psycopg2 ist nicht installiert) beim Start ab.
 
@@ -334,7 +334,7 @@ Der Adapter nutzt `SimulationArtifactStore` für den eigentlichen I/O und kennt 
 
 Seit #1585 gibt es den zweiten Adapter: `PostgresSimulationRepository` (`app/infrastructure/postgres/repositories/simulation_repository.py`) auf `agora.simulations` (Revision `c4e8a1d93b56`, linear auf `7a3c1e84f209`). Kernspalten `id`, `project_id`, `graph_id`, `status`, `source_simulation_id`, `root_simulation_id`, `created_at`, `updated_at`, der Rest aus `SimulationRecord.to_dict()` abgeleitet in `payload jsonb`. `project_id` ist Fremdschlüssel auf `agora.projects(id)` (nullable, `ON DELETE SET NULL`; `''` im Vertrag ist `NULL` in der Spalte). `save` legt eine unbekannte Simulation an — so schreibt `create_simulation` den ersten Datensatz; die gegenteilige Formulierung im Port-Docstring war falsch und ist korrigiert. `backend/scripts/migrate_simulations_to_postgres.py` überträgt den Bestand mit `--dry-run`/`--verify`, idempotent, Dateien unberührt, Fehler (fehlendes Projekt, unlesbare `state.json`) einzeln; Ablauf und Rückweg in [`runbooks/simulation-postgres-umstellung.md`](runbooks/simulation-postgres-umstellung.md).
 
-**Umgeschaltet ist nichts.** `AGORA_SIMULATION_BACKEND` steht im Default auf `file`. `Config.validate()` lehnt `postgres` bei `AGORA_PROJECT_BACKEND=file` (der Fremdschlüssel zeigte ins Leere) und ohne `DATABASE_URL` ab. Der Adapter ist gegen eine echte PostgreSQL-Instanz verifiziert (Integrationstests für Adapter und Migrations-Roundtrip), nicht gegen einen produktiven Bestand.
+**Umgeschaltet ist nichts.** `AGORA_SIMULATION_BACKEND` steht im Default auf `file`. `Config.validate()` lehnt `postgres` bei `AGORA_PROJECT_BACKEND=file` (der Fremdschlüssel zeigte ins Leere) und ohne `DATABASE_URL` ab. Der Adapter ist gegen eine echte PostgreSQL-Instanz verifiziert (Integrationstests für Adapter und Migrations-Roundtrip), nicht gegen einen produktiven Bestand. Alle Metadatenzugriffe laufen über das Repository — auch der Stop-Status im Runner-Cleanup und die Prüfung/Hochstufung in `check_simulation_prepared`, die vorher direkt `state.json` lasen und schrieben.
 
 ### psycopg unter gevent: geprüft, kooperativ
 
